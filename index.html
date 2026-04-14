@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KJC Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0c0c0e;
+      --bg-surface: #141416;
+      --bg-card: #1a1a1e;
+      --border: rgba(255,255,255,0.07);
+      --text-primary: #f0f0f0;
+      --text-secondary: #8a8a96;
+      --accent: #4f7eff;
+      --accent-hover: #6b93ff;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: "Noto Sans KR", "Roboto", sans-serif;
+      font-weight: 300;
+      line-height: 1.7;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 60px;
+      height: 68px;
+      background: rgba(12,12,14,0.85);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+
+    .nav-logo span { color: var(--accent); }
+
+    .nav-links {
+      display: flex;
+      gap: 36px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--text-primary); }
+
+    .nav-cta {
+      background: var(--accent);
+      color: #fff !important;
+      padding: 8px 20px;
+      border-radius: 6px;
+      font-weight: 500 !important;
+      transition: background 0.2s !important;
+    }
+
+    .nav-cta:hover { background: var(--accent-hover) !important; color: #fff !important; }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 0 60px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      top: -200px; right: -200px;
+      width: 700px; height: 700px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(79,126,255,0.12) 0%, transparent 65%);
+      pointer-events: none;
+    }
+
+    .hero-tag {
+      display: inline-block;
+      font-size: 0.78rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.8rem, 6vw, 5.2rem);
+      font-weight: 700;
+      line-height: 1.12;
+      letter-spacing: -0.02em;
+      max-width: 780px;
+    }
+
+    .hero h1 .line-dim { color: var(--text-secondary); font-weight: 300; }
+
+    .hero-desc {
+      margin-top: 28px;
+      max-width: 520px;
+      font-size: 1rem;
+      color: var(--text-secondary);
+      line-height: 1.8;
+    }
+
+    .hero-actions {
+      margin-top: 44px;
+      display: flex;
+      gap: 16px;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      padding: 14px 32px;
+      border-radius: 8px;
+      font-size: 0.92rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: background 0.2s, transform 0.15s;
+    }
+
+    .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+
+    .btn-secondary {
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 14px 32px;
+      border-radius: 8px;
+      font-size: 0.92rem;
+      font-weight: 400;
+      text-decoration: none;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    .btn-secondary:hover { border-color: rgba(255,255,255,0.25); color: var(--text-primary); }
+
+    .hero-scroll {
+      position: absolute;
+      bottom: 36px;
+      left: 60px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.78rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    .hero-scroll::before {
+      content: "";
+      display: block;
+      width: 36px; height: 1px;
+      background: var(--text-secondary);
+    }
+
+    /* ── SECTIONS COMMON ── */
+    section {
+      padding: 100px 60px;
+    }
+
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 18px;
+    }
+
+    .section-title {
+      font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+    }
+
+    .section-desc {
+      margin-top: 16px;
+      max-width: 580px;
+      color: var(--text-secondary);
+      font-size: 0.97rem;
+    }
+
+    .divider {
+      width: 100%;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── ABOUT ── */
+    .about {
+      background: var(--bg-surface);
+    }
+
+    .about-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+    }
+
+    .about-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      margin-top: 48px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px 24px;
+    }
+
+    .stat-num {
+      font-size: 2.4rem;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .stat-label {
+      margin-top: 8px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .about-visual {
+      position: relative;
+    }
+
+    .about-visual-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      height: 380px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 5rem;
+      letter-spacing: -0.05em;
+      font-weight: 700;
+      color: rgba(79,126,255,0.15);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .about-visual-box::after {
+      content: "KJC";
+      position: absolute;
+      font-size: 7rem;
+      font-weight: 700;
+      color: rgba(79,126,255,0.06);
+      letter-spacing: -0.05em;
+    }
+
+    .about-visual-tag {
+      position: absolute;
+      bottom: -16px;
+      right: -16px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 10px 18px;
+      border-radius: 10px;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── SERVICES ── */
+    .services-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .services-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 56px;
+    }
+
+    .services-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+    }
+
+    .service-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 28px;
+      transition: border-color 0.25s, transform 0.25s;
+      cursor: default;
+    }
+
+    .service-card:hover {
+      border-color: rgba(79,126,255,0.4);
+      transform: translateY(-4px);
+    }
+
+    .service-icon {
+      width: 48px; height: 48px;
+      background: rgba(79,126,255,0.1);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      margin-bottom: 22px;
+    }
+
+    .service-card h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .service-card p {
+      font-size: 0.86rem;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    /* ── CONTACT ── */
+    .contact {
+      background: var(--bg-surface);
+    }
+
+    .contact-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+    }
+
+    .contact-info-list {
+      margin-top: 40px;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .contact-info-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 18px;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .contact-info-list li:first-child { border-top: 1px solid var(--border); }
+
+    .ci-label {
+      width: 80px;
+      flex-shrink: 0;
+      font-size: 0.8rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      padding-top: 2px;
+    }
+
+    .ci-value {
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+    }
+
+    .contact-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .form-group input,
+    .form-group textarea {
+      width: 100%;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 13px 16px;
+      font-family: inherit;
+      font-size: 0.93rem;
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color 0.2s;
+      resize: none;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .form-group textarea { height: 120px; }
+
+    .form-submit {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 14px;
+      font-family: inherit;
+      font-size: 0.93rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 4px;
+    }
+
+    .form-submit:hover { background: var(--accent-hover); }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 44px 60px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-logo {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+    }
+
+    .footer-logo span { color: var(--accent); }
+
+    .footer-copy {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 960px) {
+      nav { padding: 0 28px; }
+      .nav-links { display: none; }
+      .hero { padding: 0 28px; }
+      .hero-scroll { left: 28px; }
+      section { padding: 72px 28px; }
+      .about-inner,
+      .contact-inner { grid-template-columns: 1fr; gap: 48px; }
+      .services-grid { grid-template-columns: 1fr 1fr; }
+      .services-header { flex-direction: column; align-items: flex-start; gap: 16px; }
+      footer { flex-direction: column; gap: 12px; text-align: center; padding: 32px 28px; }
+    }
+
+    @media (max-width: 560px) {
+      .services-grid { grid-template-columns: 1fr; }
+      .about-stats { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <a class="nav-logo" href="#">KJC<span>.</span>STUDIO</a>
+    <ul class="nav-links">
+      <li><a href="#about">회사소개</a></li>
+      <li><a href="#services">서비스</a></li>
+      <li><a href="#contact">연락처</a></li>
+      <li><a href="#contact" class="nav-cta">문의하기</a></li>
+    </ul>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <span class="hero-tag">Creative Digital Studio</span>
+    <h1>
+      디자인과 기술로<br>
+      <span class="line-dim">브랜드의 가치를</span><br>
+      높입니다
+    </h1>
+    <p class="hero-desc">
+      KJC Studio는 사용자 중심의 디자인과 최신 기술을 결합해<br>
+      기업의 디지털 경험을 새롭게 정의합니다.
+    </p>
+    <div class="hero-actions">
+      <a href="#services" class="btn-primary">서비스 보기</a>
+      <a href="#contact" class="btn-secondary">문의하기</a>
+    </div>
+    <div class="hero-scroll">Scroll</div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ABOUT -->
+  <section class="about" id="about">
+    <div class="about-inner">
+      <div>
+        <p class="section-label">About Us</p>
+        <h2 class="section-title">종합 크리에이티브<br>스튜디오</h2>
+        <p class="section-desc">
+          KJC Studio는 웹사이트 제작, 브랜딩, 디지털 마케팅, UI/UX 디자인을 아우르는
+          종합 크리에이티브 스튜디오입니다. 전문 팀이 고객사의 목표를 함께 이루는
+          진정한 파트너가 됩니다.
+        </p>
+        <div class="about-stats">
+          <div class="stat-card">
+            <div class="stat-num">120<span style="font-size:1.4rem">+</span></div>
+            <div class="stat-label">완료 프로젝트</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num">80<span style="font-size:1.4rem">+</span></div>
+            <div class="stat-label">고객사</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num">5<span style="font-size:1.4rem">년</span></div>
+            <div class="stat-label">업력</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num">98<span style="font-size:1.4rem">%</span></div>
+            <div class="stat-label">고객 만족도</div>
+          </div>
+        </div>
+      </div>
+      <div class="about-visual">
+        <div class="about-visual-box"></div>
+        <div class="about-visual-tag">Since 2021</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- SERVICES -->
+  <section id="services">
+    <div class="services-inner">
+      <div class="services-header">
+        <div>
+          <p class="section-label">Services</p>
+          <h2 class="section-title">제공 서비스</h2>
+        </div>
+        <a href="#contact" class="btn-secondary">전체 서비스 문의 →</a>
+      </div>
+      <div class="services-grid">
+        <div class="service-card">
+          <div class="service-icon">🌐</div>
+          <h3>웹사이트 제작</h3>
+          <p>반응형 웹, 브랜드 사이트, 쇼핑몰, 랜딩 페이지를 기획부터 배포까지 원스톱으로 제작합니다.</p>
+        </div>
+        <div class="service-card">
+          <div class="service-icon">✦</div>
+          <h3>브랜딩</h3>
+          <p>로고 디자인, 시각 아이덴티티, 브랜드 전략 수립으로 일관된 브랜드 이미지를 구축합니다.</p>
+        </div>
+        <div class="service-card">
+          <div class="service-icon">📈</div>
+          <h3>디지털 마케팅</h3>
+          <p>SNS 콘텐츠 기획, 광고 캠페인, SEO 최적화로 브랜드 인지도와 전환율을 높입니다.</p>
+        </div>
+        <div class="service-card">
+          <div class="service-icon">🎨</div>
+          <h3>UI/UX 디자인</h3>
+          <p>사용자 경험 설계, 인터페이스 디자인, 프로토타입 제작으로 직관적인 제품을 만듭니다.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- CONTACT -->
+  <section class="contact" id="contact">
+    <div class="contact-inner">
+      <div>
+        <p class="section-label">Contact</p>
+        <h2 class="section-title">함께 시작할<br>준비가 됐나요?</h2>
+        <p class="section-desc">새로운 프로젝트, 협업 제안 또는 궁금한 점이 있다면 편하게 연락주세요.</p>
+        <ul class="contact-info-list">
+          <li>
+            <span class="ci-label">Company</span>
+            <span class="ci-value">KJC Studio</span>
+          </li>
+          <li>
+            <span class="ci-label">Email</span>
+            <span class="ci-value">contact@kjcstudio.kr</span>
+          </li>
+          <li>
+            <span class="ci-label">Phone</span>
+            <span class="ci-value">02-1234-5678</span>
+          </li>
+          <li>
+            <span class="ci-label">Address</span>
+            <span class="ci-value">서울특별시 강남구 테헤란로 123, KJC 빌딩 5층</span>
+          </li>
+        </ul>
+      </div>
+      <div>
+        <div class="contact-form">
+          <div class="form-group">
+            <label>이름</label>
+            <input type="text" placeholder="홍길동" />
+          </div>
+          <div class="form-group">
+            <label>이메일</label>
+            <input type="email" placeholder="example@email.com" />
+          </div>
+          <div class="form-group">
+            <label>문의 내용</label>
+            <textarea placeholder="프로젝트나 협업에 대해 간략히 설명해주세요."></textarea>
+          </div>
+          <button class="form-submit">문의 보내기</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-logo">KJC<span>.</span>STUDIO</div>
+    <div class="footer-copy">© 2026 KJC Studio. All rights reserved.</div>
+  </footer>
+
+
+  <!-- PASSWORD OVERLAY -->
+  <div id="pw-overlay" style="
+    position:fixed; inset:0; z-index:9999;
+    background:#0c0c0e;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    font-family:'Noto Sans KR','Roboto',sans-serif;
+  ">
+    <div style="text-align:center;">
+      <div style="font-size:1.1rem; font-weight:700; letter-spacing:0.12em; color:#f0f0f0; margin-bottom:8px;">
+        KJC<span style="color:#4f7eff;">.</span>STUDIO
+      </div>
+      <div style="font-size:0.82rem; color:#8a8a96; letter-spacing:0.08em; margin-bottom:36px;">
+        접근하려면 비밀번호를 입력하세요
+      </div>
+      <input id="pw-input" type="password" placeholder="비밀번호" style="
+        width:260px; padding:13px 16px;
+        background:#1a1a1e; border:1px solid rgba(255,255,255,0.07);
+        border-radius:10px; color:#f0f0f0;
+        font-family:inherit; font-size:0.95rem;
+        outline:none; text-align:center;
+        letter-spacing:0.2em;
+        transition:border-color 0.2s;
+      " />
+      <div id="pw-error" style="
+        height:20px; margin-top:10px;
+        font-size:0.8rem; color:#ff5f5f;
+        opacity:0; transition:opacity 0.2s;
+      ">비밀번호가 올바르지 않습니다.</div>
+      <button onclick="checkPassword()" style="
+        display:block; width:260px; margin-top:6px;
+        background:#4f7eff; color:#fff; border:none;
+        border-radius:10px; padding:13px;
+        font-family:inherit; font-size:0.93rem; font-weight:500;
+        cursor:pointer; transition:background 0.2s;
+      " onmouseover="this.style.background='#6b93ff'" onmouseout="this.style.background='#4f7eff'">
+        입장하기
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const PW = "4123";
+
+    document.getElementById("pw-input").addEventListener("keydown", function(e) {
+      if (e.key === "Enter") checkPassword();
+    });
+
+    document.getElementById("pw-input").addEventListener("focus", function() {
+      this.style.borderColor = "#4f7eff";
+    });
+
+    document.getElementById("pw-input").addEventListener("blur", function() {
+      this.style.borderColor = "rgba(255,255,255,0.07)";
+    });
+
+    function checkPassword() {
+      const val = document.getElementById("pw-input").value;
+      const err = document.getElementById("pw-error");
+      if (val === PW) {
+        document.getElementById("pw-overlay").style.display = "none";
+      } else {
+        err.style.opacity = "1";
+        document.getElementById("pw-input").value = "";
+        setTimeout(() => { err.style.opacity = "0"; }, 2000);
+      }
+    }
+  </script>
+</body>
+</html>
