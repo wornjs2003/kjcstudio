@@ -1815,7 +1815,7 @@
 
       <!-- 헤더 -->
       <div class="sm-header">
-        <div class="sm-title">📊 주식 분석 <span class="sm-badge">Sample UI</span></div>
+        <div class="sm-title">📊 주식 분석 <span class="sm-badge">Beta</span> <span id="liveStatus" style="font-size:0.72rem;margin-left:4px;color:#8a8a96;">○ 샘플 데이터</span></div>
         <button class="sm-close" onclick="closeStockModal()">✕</button>
       </div>
 
@@ -1855,7 +1855,7 @@
           <!-- 국내 -->
           <div class="sm-index-group">
             <div class="sm-index-group-title">🇰🇷 국내</div>
-            <div class="sm-index-row">
+            <div class="sm-index-row" id="idx-kospi">
               <div class="sm-tooltip"><div class="tt-name">KOSPI</div>한국거래소(KRX)에 상장된 대형주 중심의 종합주가지수. 국내 증시의 전반적인 흐름을 나타내는 대표 지표입니다.</div>
               <span class="sm-index-name">KOSPI</span>
               <div class="sm-index-vals">
@@ -1863,7 +1863,7 @@
                 <div class="sm-index-change up">▲ 18.45 (+0.70%)</div>
               </div>
             </div>
-            <div class="sm-index-row">
+            <div class="sm-index-row" id="idx-kosdaq">
               <div class="sm-tooltip"><div class="tt-name">KOSDAQ</div>중소·벤처·기술주 중심의 주가지수. IT, 바이오, 게임 등 성장 기업들이 주로 상장되어 있습니다.</div>
               <span class="sm-index-name">KOSDAQ</span>
               <div class="sm-index-vals">
@@ -1884,7 +1884,7 @@
           <!-- 미국 주요 지수 -->
           <div class="sm-index-group">
             <div class="sm-index-group-title">🇺🇸 미국</div>
-            <div class="sm-index-row">
+            <div class="sm-index-row" id="idx-sp500">
               <div class="sm-tooltip"><div class="tt-name">S&P 500</div>미국 뉴욕증권거래소·나스닥 상장 대형주 500개로 구성된 지수. 미국 경제 전체를 가장 잘 대표하는 지표로 꼽힙니다.</div>
               <span class="sm-index-name">S&P 500</span>
               <div class="sm-index-vals">
@@ -1892,7 +1892,7 @@
                 <div class="sm-index-change up">▲ 42.30 (+0.81%)</div>
               </div>
             </div>
-            <div class="sm-index-row">
+            <div class="sm-index-row" id="idx-nasdaq">
               <div class="sm-tooltip"><div class="tt-name">NASDAQ</div>기술주·성장주 중심의 미국 전자거래소 종합지수. 애플, 엔비디아, 마이크로소프트 등 빅테크 기업 비중이 높습니다.</div>
               <span class="sm-index-name">NASDAQ</span>
               <div class="sm-index-vals">
@@ -1900,7 +1900,7 @@
                 <div class="sm-index-change up">▲ 183.40 (+1.12%)</div>
               </div>
             </div>
-            <div class="sm-index-row">
+            <div class="sm-index-row" id="idx-dow">
               <div class="sm-tooltip"><div class="tt-name">DOW (다우존스)</div>미국 주요 산업을 대표하는 30개 우량주로 구성된 지수. 역사가 가장 오래된 미국 주가지수입니다.</div>
               <span class="sm-index-name">DOW</span>
               <div class="sm-index-vals">
@@ -1942,7 +1942,7 @@
           <!-- 원자재/환율 -->
           <div class="sm-index-group">
             <div class="sm-index-group-title">💱 환율 · 원자재</div>
-            <div class="sm-index-row">
+            <div class="sm-index-row" id="idx-usd">
               <div class="sm-tooltip"><div class="tt-name">USD/KRW (달러-원)</div>미국 달러 1달러를 사는 데 필요한 원화 금액. 환율이 오르면 수출 기업에 유리하고, 수입 물가는 상승합니다.</div>
               <span class="sm-index-name">USD/KRW</span>
               <div class="sm-index-vals">
@@ -1950,7 +1950,7 @@
                 <div class="sm-index-change dn">▼ 4.20 (-0.30%)</div>
               </div>
             </div>
-            <div class="sm-index-row">
+            <div class="sm-index-row" id="idx-wti">
               <div class="sm-tooltip"><div class="tt-name">WTI 원유</div>미국 서부 텍사스산 원유 가격(달러/배럴). 글로벌 에너지 가격의 기준이 되며, 물가와 경기에 직접적인 영향을 줍니다.</div>
               <span class="sm-index-name">WTI 원유</span>
               <div class="sm-index-vals">
@@ -1958,7 +1958,7 @@
                 <div class="sm-index-change up">▲ 0.68 (+0.83%)</div>
               </div>
             </div>
-            <div class="sm-index-row">
+            <div class="sm-index-row" id="idx-gold">
               <div class="sm-tooltip"><div class="tt-name">금 (Gold)</div>안전자산의 대표 지표(달러/트로이온스). 불확실성이 높을수록 가격이 오르는 경향이 있어 시장 심리를 파악하는 데 유용합니다.</div>
               <span class="sm-index-name">금 (Gold)</span>
               <div class="sm-index-vals">
@@ -1971,7 +1971,7 @@
           <!-- 금리 -->
           <div class="sm-index-group">
             <div class="sm-index-group-title">🏦 금리</div>
-            <div class="sm-index-row">
+            <div class="sm-index-row" id="idx-10y">
               <div class="sm-tooltip"><div class="tt-name">미국 10년물 국채금리</div>주식 밸류에이션의 할인율로 직결됩니다. 금리가 오르면 주식의 상대적 매력이 떨어져 증시 하락 압력이 생깁니다. 4% 이상이면 주식 시장에 부담입니다.</div>
               <span class="sm-index-name">미국 10년물</span>
               <div class="sm-index-vals">
@@ -2392,11 +2392,119 @@
       document.getElementById("indicesWrap").classList.toggle("collapsed");
     }
 
+    // ─── 실시간 데이터 (Yahoo Finance) ───────────────────────────────
+    const STOCK_SYMBOLS_YF = kospi200.map(s => s.code + '.KS').join(',');
+    const INDEX_SYMBOLS_YF = '^KS11,^KQ11,^GSPC,^IXIC,^DJI,^TNX,KRW=X,GC=F,CL=F';
+
+    async function yfFetch(symbols) {
+      const urls = [
+        'https://query1.finance.yahoo.com/v7/finance/quote?symbols=' + symbols,
+        'https://query2.finance.yahoo.com/v7/finance/quote?symbols=' + symbols,
+      ];
+      for (const url of urls) {
+        try {
+          const r = await fetch('https://corsproxy.io/?' + encodeURIComponent(url), { cache: 'no-store' });
+          if (!r.ok) continue;
+          const j = await r.json();
+          const results = j.quoteResponse?.result;
+          if (results?.length) return results;
+        } catch {}
+      }
+      return [];
+    }
+
+    function numFmt(n, dec = 0) {
+      return n != null ? n.toLocaleString('ko-KR', { maximumFractionDigits: dec }) : '-';
+    }
+
+    function setStatus(s) {
+      const el = document.getElementById('liveStatus');
+      if (!el) return;
+      const map = {
+        loading: ['⟳ 불러오는 중...', '#f59e0b'],
+        live:    ['● 실시간',         '#22c55e'],
+        fail:    ['○ 샘플 데이터',    '#8a8a96'],
+      };
+      const [text, color] = map[s] || map.fail;
+      el.textContent = text;
+      el.style.color = color;
+    }
+
+    async function loadLiveStocks() {
+      setStatus('loading');
+      const quotes = await yfFetch(STOCK_SYMBOLS_YF);
+      if (!quotes.length) { setStatus('fail'); return; }
+
+      quotes.forEach(q => {
+        const code = q.symbol.replace('.KS', '');
+        const s = kospi200.find(x => x.code === code);
+        if (!s) return;
+        s.price = numFmt(q.regularMarketPrice);
+        s.chg   = Math.abs(q.regularMarketChangePercent ?? 0).toFixed(2);
+        s.up    = (q.regularMarketChangePercent ?? 0) >= 0;
+        s._raw  = q;
+      });
+
+      renderStockList(kospi200);
+      setStatus('live');
+      updateSelectedStockLive();
+    }
+
+    async function loadLiveIndices() {
+      const quotes = await yfFetch(INDEX_SYMBOLS_YF);
+      if (!quotes.length) return;
+      const m = Object.fromEntries(quotes.map(q => [q.symbol, q]));
+
+      const rows = [
+        ['idx-kospi',  m['^KS11'],  false],
+        ['idx-kosdaq', m['^KQ11'],  false],
+        ['idx-sp500',  m['^GSPC'],  false],
+        ['idx-nasdaq', m['^IXIC'],  false],
+        ['idx-dow',    m['^DJI'],   false],
+        ['idx-usd',    m['KRW=X'],  true ],
+        ['idx-gold',   m['GC=F'],   true ],
+        ['idx-wti',    m['CL=F'],   true ],
+        ['idx-10y',    m['^TNX'],   true ],
+      ];
+
+      rows.forEach(([id, q, dec2]) => {
+        if (!q) return;
+        const el = document.getElementById(id);
+        if (!el) return;
+        const p   = q.regularMarketPrice;
+        const pct = q.regularMarketChangePercent ?? 0;
+        const amt = q.regularMarketChange ?? 0;
+        const up  = pct >= 0;
+        const cls = up ? 'up' : 'dn';
+        const sign = up ? '▲' : '▼';
+        const pe = el.querySelector('.sm-index-price');
+        const ce = el.querySelector('.sm-index-change');
+        if (pe) { pe.className = 'sm-index-price ' + cls; pe.textContent = numFmt(p, dec2 ? 2 : 0); }
+        if (ce) { ce.className = 'sm-index-change ' + cls; ce.textContent = `${sign} ${numFmt(Math.abs(amt), dec2 ? 2 : 0)} (${Math.abs(pct).toFixed(2)}%)`; }
+      });
+    }
+
+    function updateSelectedStockLive() {
+      const s = kospi200.find(x => x.code === '005930');
+      if (!s?._raw) return;
+      const q   = s._raw;
+      const pct = q.regularMarketChangePercent ?? 0;
+      const amt = q.regularMarketChange ?? 0;
+      const up  = pct >= 0;
+      const pe  = document.querySelector('.sm-price');
+      const ce  = document.querySelector('.sm-price-change');
+      if (pe) { pe.className = 'sm-price ' + (up ? 'up' : 'down'); pe.textContent = numFmt(q.regularMarketPrice) + '원'; }
+      if (ce) { ce.style.color = up ? '#ff5f5f' : '#4f9eff'; ce.textContent = `${up ? '▲' : '▼'} ${numFmt(Math.abs(amt))} (${Math.abs(pct).toFixed(2)}%)`; }
+    }
+    // ─────────────────────────────────────────────────────────────────
+
     // 주식 모달
     function openStockModal() {
       document.getElementById("stockModal").classList.add("open");
       document.body.style.overflow = "hidden";
       renderStockList(kospi200);
+      loadLiveStocks();
+      loadLiveIndices();
     }
 
     function closeStockModal() {
