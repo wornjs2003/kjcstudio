@@ -2392,25 +2392,38 @@
       document.getElementById("indicesWrap").classList.toggle("collapsed");
     }
 
-    // ─── 실시간 데이터 (Yahoo Finance) ───────────────────────────────
+    // ─── 실시간 데이터 (Yahoo Finance spark) ─────────────────────────
     const STOCK_SYMBOLS_YF = kospi200.map(s => s.code + '.KS').join(',');
     const INDEX_SYMBOLS_YF = '^KS11,^KQ11,^GSPC,^IXIC,^DJI,^TNX,KRW=X,GC=F,CL=F';
+    const PROXY = 'https://corsproxy.io/?';
 
-    async function yfFetch(symbols) {
-      const urls = [
-        'https://query1.finance.yahoo.com/v7/finance/quote?symbols=' + symbols,
-        'https://query2.finance.yahoo.com/v7/finance/quote?symbols=' + symbols,
-      ];
-      for (const url of urls) {
-        try {
-          const r = await fetch('https://corsproxy.io/?' + encodeURIComponent(url), { cache: 'no-store' });
-          if (!r.ok) continue;
-          const j = await r.json();
-          const results = j.quoteResponse?.result;
-          if (results?.length) return results;
-        } catch {}
-      }
-      return [];
+    async function sparkFetchChunk(syms) {
+      const url = 'https://query2.finance.yahoo.com/v7/finance/spark?symbols=' + syms + '&range=1d&interval=1d';
+      try {
+        const r = await fetch(PROXY + encodeURIComponent(url), { cache: 'no-store' });
+        if (!r.ok) return {};
+        const j = await r.json();
+        const map = {};
+        (j.spark?.result || []).forEach(item => {
+          const meta = item.response?.[0]?.meta;
+          if (!meta) return;
+          const price = meta.regularMarketPrice;
+          const prev  = meta.chartPreviousClose || price;
+          const amt   = price - prev;
+          const pct   = prev ? (amt / prev * 100) : 0;
+          map[item.symbol] = { price, prev, amt, pct };
+        });
+        return map;
+      } catch { return {}; }
+    }
+
+    async function sparkFetch(symbols) {
+      const arr = symbols.split(',');
+      const SIZE = 10;
+      const chunks = [];
+      for (let i = 0; i < arr.length; i += SIZE) chunks.push(arr.slice(i, i + SIZE).join(','));
+      const results = await Promise.all(chunks.map(sparkFetchChunk));
+      return Object.assign({}, ...results);
     }
 
     function numFmt(n, dec = 0) {
@@ -2426,23 +2439,21 @@
         fail:    ['○ 샘플 데이터',    '#8a8a96'],
       };
       const [text, color] = map[s] || map.fail;
-      el.textContent = text;
-      el.style.color = color;
+      el.textContent = text; el.style.color = color;
     }
 
     async function loadLiveStocks() {
       setStatus('loading');
-      const quotes = await yfFetch(STOCK_SYMBOLS_YF);
-      if (!quotes.length) { setStatus('fail'); return; }
+      const data = await sparkFetch(STOCK_SYMBOLS_YF);
+      if (!Object.keys(data).length) { setStatus('fail'); return; }
 
-      quotes.forEach(q => {
-        const code = q.symbol.replace('.KS', '');
-        const s = kospi200.find(x => x.code === code);
-        if (!s) return;
-        s.price = numFmt(q.regularMarketPrice);
-        s.chg   = Math.abs(q.regularMarketChangePercent ?? 0).toFixed(2);
-        s.up    = (q.regularMarketChangePercent ?? 0) >= 0;
-        s._raw  = q;
+      kospi200.forEach(s => {
+        const d = data[s.code + '.KS'];
+        if (!d) return;
+        s.price = numFmt(d.price);
+        s.chg   = Math.abs(d.pct).toFixed(2);
+        s.up    = d.pct >= 0;
+        s._live = d;
       });
 
       renderStockList(kospi200);
@@ -2451,50 +2462,44 @@
     }
 
     async function loadLiveIndices() {
-      const quotes = await yfFetch(INDEX_SYMBOLS_YF);
-      if (!quotes.length) return;
-      const m = Object.fromEntries(quotes.map(q => [q.symbol, q]));
+      const data = await sparkFetch(INDEX_SYMBOLS_YF);
+      if (!Object.keys(data).length) return;
 
       const rows = [
-        ['idx-kospi',  m['^KS11'],  false],
-        ['idx-kosdaq', m['^KQ11'],  false],
-        ['idx-sp500',  m['^GSPC'],  false],
-        ['idx-nasdaq', m['^IXIC'],  false],
-        ['idx-dow',    m['^DJI'],   false],
-        ['idx-usd',    m['KRW=X'],  true ],
-        ['idx-gold',   m['GC=F'],   true ],
-        ['idx-wti',    m['CL=F'],   true ],
-        ['idx-10y',    m['^TNX'],   true ],
+        ['idx-kospi',  data['^KS11'],  false],
+        ['idx-kosdaq', data['^KQ11'],  false],
+        ['idx-sp500',  data['^GSPC'],  false],
+        ['idx-nasdaq', data['^IXIC'],  false],
+        ['idx-dow',    data['^DJI'],   false],
+        ['idx-usd',    data['KRW=X'],  true ],
+        ['idx-gold',   data['GC=F'],   true ],
+        ['idx-wti',    data['CL=F'],   true ],
+        ['idx-10y',    data['^TNX'],   true ],
       ];
 
-      rows.forEach(([id, q, dec2]) => {
-        if (!q) return;
+      rows.forEach(([id, d, dec2]) => {
+        if (!d) return;
         const el = document.getElementById(id);
         if (!el) return;
-        const p   = q.regularMarketPrice;
-        const pct = q.regularMarketChangePercent ?? 0;
-        const amt = q.regularMarketChange ?? 0;
-        const up  = pct >= 0;
-        const cls = up ? 'up' : 'dn';
+        const up   = d.pct >= 0;
+        const cls  = up ? 'up' : 'dn';
         const sign = up ? '▲' : '▼';
         const pe = el.querySelector('.sm-index-price');
         const ce = el.querySelector('.sm-index-change');
-        if (pe) { pe.className = 'sm-index-price ' + cls; pe.textContent = numFmt(p, dec2 ? 2 : 0); }
-        if (ce) { ce.className = 'sm-index-change ' + cls; ce.textContent = `${sign} ${numFmt(Math.abs(amt), dec2 ? 2 : 0)} (${Math.abs(pct).toFixed(2)}%)`; }
+        if (pe) { pe.className = 'sm-index-price ' + cls; pe.textContent = numFmt(d.price, dec2 ? 2 : 0); }
+        if (ce) { ce.className = 'sm-index-change ' + cls; ce.textContent = `${sign} ${numFmt(Math.abs(d.amt), dec2 ? 2 : 0)} (${Math.abs(d.pct).toFixed(2)}%)`; }
       });
     }
 
     function updateSelectedStockLive() {
       const s = kospi200.find(x => x.code === '005930');
-      if (!s?._raw) return;
-      const q   = s._raw;
-      const pct = q.regularMarketChangePercent ?? 0;
-      const amt = q.regularMarketChange ?? 0;
-      const up  = pct >= 0;
-      const pe  = document.querySelector('.sm-price');
-      const ce  = document.querySelector('.sm-price-change');
-      if (pe) { pe.className = 'sm-price ' + (up ? 'up' : 'down'); pe.textContent = numFmt(q.regularMarketPrice) + '원'; }
-      if (ce) { ce.style.color = up ? '#ff5f5f' : '#4f9eff'; ce.textContent = `${up ? '▲' : '▼'} ${numFmt(Math.abs(amt))} (${Math.abs(pct).toFixed(2)}%)`; }
+      if (!s?._live) return;
+      const d  = s._live;
+      const up = d.pct >= 0;
+      const pe = document.querySelector('.sm-price');
+      const ce = document.querySelector('.sm-price-change');
+      if (pe) { pe.className = 'sm-price ' + (up ? 'up' : 'down'); pe.textContent = numFmt(d.price) + '원'; }
+      if (ce) { ce.style.color = up ? '#ff5f5f' : '#4f9eff'; ce.textContent = `${up ? '▲' : '▼'} ${numFmt(Math.abs(d.amt))} (${Math.abs(d.pct).toFixed(2)}%)`; }
     }
     // ─────────────────────────────────────────────────────────────────
 
