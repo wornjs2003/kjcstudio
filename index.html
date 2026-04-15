@@ -84,6 +84,83 @@
 
     .nav-cta:hover { background: var(--accent-hover) !important; color: #fff !important; }
 
+    /* ── NAV DROPDOWN ── */
+    .nav-item { position: relative; }
+
+    .nav-item:hover .nav-dropdown { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
+
+    .nav-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%) translateY(-4px);
+      padding-top: 14px;
+      background: transparent;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 200;
+      min-width: 190px;
+    }
+
+    .nav-dropdown-inner {
+      background: #1e1e24;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px;
+      padding: 8px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+    }
+
+    .nav-dropdown-inner::before {
+      content: "";
+      position: absolute;
+      top: 8px; left: 50%;
+      transform: translateX(-50%);
+      border-left: 7px solid transparent;
+      border-right: 7px solid transparent;
+      border-bottom: 7px solid rgba(255,255,255,0.1);
+    }
+
+    .nav-dropdown a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem !important;
+      color: var(--text-secondary) !important;
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s !important;
+      white-space: nowrap;
+    }
+
+    .nav-dropdown a:hover {
+      background: rgba(79,126,255,0.1);
+      color: var(--text-primary) !important;
+    }
+
+    .nav-dropdown a .dd-icon {
+      font-size: 1rem;
+      width: 24px;
+      text-align: center;
+    }
+
+    .nav-dropdown .dd-new {
+      font-size: 0.65rem;
+      background: rgba(79,126,255,0.2);
+      color: #7aa3ff;
+      padding: 2px 7px;
+      border-radius: 10px;
+      margin-left: auto;
+      font-weight: 600;
+    }
+
+    .nav-dropdown-inner hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 6px 0;
+    }
+
     /* ── HERO ── */
     .hero {
       min-height: 100vh;
@@ -460,6 +537,907 @@
 
     .form-submit:hover { background: var(--accent-hover); }
 
+    /* ── STOCK MODAL ── */
+    .stock-modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 500;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+      padding: 20px;
+    }
+
+    .stock-modal-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .stock-modal {
+      background: #111114;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 1380px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      transform: translateY(20px);
+      transition: transform 0.25s;
+      overflow: hidden;
+    }
+
+    .stock-modal-overlay.open .stock-modal {
+      transform: translateY(0);
+    }
+
+    /* 모달 바디 레이아웃 */
+    .sm-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── 사이드바 ── */
+    .sm-sidebar {
+      width: 230px;
+      flex-shrink: 0;
+      background: #0e0e11;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sm-sidebar-header {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sm-sidebar-title {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .sm-sidebar-search {
+      position: relative;
+    }
+
+    .sm-sidebar-search input {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 7px 10px 7px 28px;
+      font-family: inherit;
+      font-size: 0.78rem;
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .sm-sidebar-search input:focus { border-color: var(--accent); }
+
+    .sm-sidebar-search::before {
+      content: "🔍";
+      position: absolute;
+      left: 8px; top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.7rem;
+      pointer-events: none;
+    }
+
+    .sm-sidebar-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 0;
+    }
+
+    .sm-sidebar-list::-webkit-scrollbar { width: 4px; }
+    .sm-sidebar-list::-webkit-scrollbar-track { background: transparent; }
+    .sm-sidebar-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+    .sm-stock-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 14px;
+      cursor: pointer;
+      transition: background 0.15s;
+      gap: 6px;
+    }
+
+    .sm-stock-item:hover { background: rgba(255,255,255,0.04); }
+    .sm-stock-item.active { background: rgba(79,126,255,0.12); }
+    .sm-stock-item.active .ssi-name { color: #7aa3ff; }
+
+    .ssi-rank {
+      font-size: 0.65rem;
+      color: #555;
+      width: 16px;
+      flex-shrink: 0;
+      text-align: right;
+    }
+
+    .ssi-info { flex: 1; min-width: 0; }
+
+    .ssi-name {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ssi-cap {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      margin-top: 1px;
+    }
+
+    .ssi-change {
+      font-size: 0.75rem;
+      font-weight: 500;
+      flex-shrink: 0;
+      text-align: right;
+    }
+
+    /* ── 메인 콘텐츠 ── */
+    .sm-main {
+      flex: 1;
+      overflow-y: auto;
+      min-width: 0;
+    }
+
+    .sm-main::-webkit-scrollbar { width: 6px; }
+    .sm-main::-webkit-scrollbar-track { background: transparent; }
+    .sm-main::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+    /* 모달 헤더 */
+    .sm-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: #111114;
+      flex-shrink: 0;
+    }
+
+    .sm-title {
+      font-size: 1rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sm-title .sm-badge {
+      font-size: 0.72rem;
+      background: rgba(79,126,255,0.15);
+      color: #7aa3ff;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-weight: 500;
+    }
+
+    .sm-close {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.06);
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .sm-close:hover { background: rgba(255,255,255,0.12); }
+
+    /* 모달 바디 */
+    .sm-body { padding: 20px 24px; }
+
+    /* 주요 지수 바 */
+    .sm-indices-wrap { margin-bottom: 24px; }
+
+    .sm-indices-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      margin-bottom: 12px;
+      transition: background 0.2s, border-color 0.2s;
+      user-select: none;
+    }
+
+    .sm-indices-toggle:hover {
+      background: rgba(79,126,255,0.06);
+      border-color: rgba(79,126,255,0.25);
+    }
+
+    .sm-indices-toggle-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: 0.04em;
+    }
+
+    .sm-indices-toggle-left .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 6px #22c55e;
+      animation: pulse-dot 2s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .sm-indices-toggle-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+    }
+
+    .sm-indices-arrow {
+      width: 22px; height: 22px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      transition: transform 0.25s, background 0.2s;
+      color: var(--text-secondary);
+    }
+
+    .sm-indices-wrap.collapsed .sm-indices-arrow { transform: rotate(-90deg); }
+
+    .sm-indices-body {
+      overflow: hidden;
+      max-height: 600px;
+      transition: max-height 0.35s ease, opacity 0.25s;
+      opacity: 1;
+    }
+
+    .sm-indices-wrap.collapsed .sm-indices-body {
+      max-height: 0;
+      opacity: 0;
+    }
+
+    .sm-indices {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .sm-index-group {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+
+    .sm-index-group-title {
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sm-index-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+      position: relative;
+      cursor: default;
+      border-radius: 6px;
+      transition: background 0.15s;
+    }
+
+    .sm-index-row:hover { background: rgba(255,255,255,0.04); padding-left: 6px; padding-right: 4px; }
+
+    .sm-index-row + .sm-index-row {
+      border-top: 1px solid rgba(255,255,255,0.04);
+    }
+
+    /* 툴팁 */
+    .sm-tooltip {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2a2a32;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      padding: 10px 14px;
+      min-width: 220px;
+      max-width: 260px;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.18s, transform 0.18s;
+      transform: translateX(-50%) translateY(4px);
+      z-index: 999;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+      white-space: normal;
+    }
+
+    .sm-tooltip::after {
+      content: "";
+      position: absolute;
+      top: 100%; left: 50%;
+      transform: translateX(-50%);
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 6px solid rgba(255,255,255,0.12);
+    }
+
+    .sm-tooltip .tt-name {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 5px;
+    }
+
+    .sm-index-row:hover .sm-tooltip {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .sm-index-name {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .sm-index-vals {
+      text-align: right;
+    }
+
+    .sm-index-price {
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .sm-index-change {
+      font-size: 0.72rem;
+      margin-top: 1px;
+    }
+
+    .up { color: #ff5f5f; }
+    .dn { color: #4f9eff; }
+    .neu-c { color: var(--text-secondary); }
+
+    /* 검색창 */
+    .sm-search {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .sm-search input {
+      flex: 1;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 0.93rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .sm-search input:focus { border-color: var(--accent); }
+
+    .sm-search button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 22px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .sm-search button:hover { background: var(--accent-hover); }
+
+    /* 종목 헤더 */
+    .sm-stock-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .sm-stock-name {
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    .sm-stock-code {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .sm-price-block { text-align: right; }
+
+    .sm-price {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #ff5f5f;
+    }
+
+    .sm-price.up { color: #ff5f5f; }
+    .sm-price.down { color: #4f9eff; }
+
+    .sm-price-change {
+      font-size: 0.88rem;
+      color: #ff5f5f;
+      margin-top: 4px;
+    }
+
+    /* 그리드 레이아웃 */
+    .sm-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .sm-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .sm-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+
+    .sm-card-title {
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+    }
+
+    /* 차트 영역 */
+    .sm-chart-area {
+      height: 180px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .sm-chart-svg { width: 100%; height: 100%; }
+
+    .chart-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 14px;
+    }
+
+    .chart-tab {
+      font-size: 0.75rem;
+      padding: 4px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+
+    .chart-tab.active {
+      background: rgba(79,126,255,0.15);
+      border-color: rgba(79,126,255,0.4);
+      color: #7aa3ff;
+    }
+
+    /* 지표 카드 */
+    .sm-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .sm-metric {
+      background: rgba(255,255,255,0.03);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+
+    .sm-metric-label {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .sm-metric-value {
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    /* 뉴스 */
+    .sm-news-list { display: flex; flex-direction: column; gap: 0; }
+
+    .sm-news-item {
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .sm-news-item:last-child { border-bottom: none; }
+
+    .sm-news-sentiment {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 6px;
+    }
+
+    .sentiment-pos { background: #22c55e; }
+    .sentiment-neg { background: #ff5f5f; }
+    .sentiment-neu { background: #8a8a96; }
+
+    .sm-news-title {
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .sm-news-date {
+      font-size: 0.75rem;
+      color: #555;
+      margin-top: 3px;
+    }
+
+    /* AI 분석 */
+    .sm-ai-box {
+      background: rgba(79,126,255,0.06);
+      border: 1px solid rgba(79,126,255,0.2);
+      border-radius: 14px;
+      padding: 20px;
+    }
+
+    .sm-ai-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #7aa3ff;
+    }
+
+    .sm-ai-text {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      line-height: 1.8;
+    }
+
+    .sm-ai-score {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .sm-ai-score-label {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+    }
+
+    .sm-ai-score-bar {
+      flex: 1;
+      height: 6px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .sm-ai-score-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent), #22c55e);
+    }
+
+    .sm-ai-score-num {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #7aa3ff;
+    }
+
+    @media (max-width: 1000px) {
+      .sm-indices { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 700px) {
+      .sm-sidebar { display: none; }
+      .sm-indices { grid-template-columns: 1fr 1fr; }
+      .sm-grid, .sm-grid-3 { grid-template-columns: 1fr; }
+      .sm-metrics { grid-template-columns: repeat(2, 1fr); }
+      .sm-body { padding: 16px; }
+    }
+
+    @media (max-width: 480px) {
+      .sm-indices { grid-template-columns: 1fr; }
+    }
+
+    /* ── ROADMAP ── */
+    .roadmap-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .roadmap-header {
+      margin-bottom: 56px;
+    }
+
+    /* 월별 캘린더 그리드 */
+    .calendar-months {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+      margin-bottom: 48px;
+    }
+
+    .cal-month {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      transition: border-color 0.25s, transform 0.25s;
+    }
+
+    .cal-month.active {
+      border-color: rgba(79,126,255,0.5);
+    }
+
+    .cal-month-header {
+      background: rgba(79,126,255,0.08);
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .cal-month-header .month-name {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .cal-month-header .month-year {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .cal-month.active .cal-month-header {
+      background: rgba(79,126,255,0.18);
+    }
+
+    .cal-month.active .month-name {
+      color: #7aa3ff;
+    }
+
+    .cal-tasks {
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .cal-task {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .cal-task-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+      margin-top: 5px;
+    }
+
+    .cal-task-dot.done { background: #22c55e; }
+    .cal-task-dot.pending { background: #f59e0b; }
+
+    /* 타임라인 */
+    .timeline {
+      position: relative;
+      padding-left: 32px;
+    }
+
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 7px; top: 0; bottom: 0;
+      width: 2px;
+      background: var(--border);
+    }
+
+    .timeline-item {
+      position: relative;
+      margin-bottom: 32px;
+    }
+
+    .timeline-item:last-child { margin-bottom: 0; }
+
+    .timeline-dot {
+      position: absolute;
+      left: -29px;
+      top: 4px;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--bg-card);
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .timeline-dot.active {
+      border-color: var(--accent);
+      background: rgba(79,126,255,0.2);
+    }
+
+    .timeline-dot.done {
+      border-color: #22c55e;
+      background: rgba(34,197,94,0.2);
+    }
+
+    .timeline-dot-inner {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--border);
+    }
+
+    .timeline-dot.active .timeline-dot-inner { background: var(--accent); }
+    .timeline-dot.done .timeline-dot-inner { background: #22c55e; }
+
+    .timeline-content {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 24px;
+      transition: border-color 0.2s;
+    }
+
+    .timeline-item.active .timeline-content {
+      border-color: rgba(79,126,255,0.35);
+    }
+
+    .timeline-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .timeline-phase {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .timeline-date {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+    }
+
+    .timeline-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .timeline-tasks {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .timeline-tasks li {
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .timeline-tasks li::before {
+      content: "—";
+      color: var(--border);
+      flex-shrink: 0;
+    }
+
+    .status-badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 500;
+      padding: 3px 10px;
+      border-radius: 20px;
+      margin-left: 8px;
+    }
+
+    .badge-progress {
+      background: rgba(79,126,255,0.15);
+      color: #7aa3ff;
+    }
+
+    .badge-upcoming {
+      background: rgba(245,158,11,0.12);
+      color: #f59e0b;
+    }
+
+    .badge-done {
+      background: rgba(34,197,94,0.12);
+      color: #22c55e;
+    }
+
+    @media (max-width: 960px) {
+      .calendar-months { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 560px) {
+      .calendar-months { grid-template-columns: 1fr; }
+    }
+
     /* ── FOOTER ── */
     footer {
       padding: 44px 60px;
@@ -509,7 +1487,20 @@
     <a class="nav-logo" href="#">KJC<span>.</span>STUDIO</a>
     <ul class="nav-links">
       <li><a href="#about">회사소개</a></li>
-      <li><a href="#services">서비스</a></li>
+      <li class="nav-item">
+        <a href="#services">서비스</a>
+        <div class="nav-dropdown">
+          <div class="nav-dropdown-inner">
+            <a href="#services"><span class="dd-icon">🌐</span> 웹사이트 제작</a>
+            <a href="#services"><span class="dd-icon">✦</span> 브랜딩</a>
+            <a href="#services"><span class="dd-icon">📈</span> 디지털 마케팅</a>
+            <a href="#services"><span class="dd-icon">🎨</span> UI/UX 디자인</a>
+            <hr>
+            <a href="#" onclick="openStockModal(); return false;"><span class="dd-icon">📊</span> 주식 분석 <span class="dd-new">NEW</span></a>
+          </div>
+        </div>
+      </li>
+      <li><a href="#roadmap">로드맵</a></li>
       <li><a href="#contact">연락처</a></li>
       <li><a href="#contact" class="nav-cta">문의하기</a></li>
     </ul>
@@ -612,6 +1603,159 @@
 
   <div class="divider"></div>
 
+  <!-- ROADMAP -->
+  <section id="roadmap">
+    <div class="roadmap-inner">
+      <div class="roadmap-header">
+        <p class="section-label">Roadmap</p>
+        <h2 class="section-title">주식 분석 서비스<br>개발 로드맵</h2>
+        <p class="section-desc">한국 주식 종합 분석 서비스를 단계별로 개발합니다. 현재 Phase 1 진행 중입니다.</p>
+      </div>
+
+      <!-- 월별 캘린더 -->
+      <div class="calendar-months">
+        <div class="cal-month active">
+          <div class="cal-month-header">
+            <span class="month-name">4월 <span class="status-badge badge-progress">진행중</span></span>
+            <span class="month-year">2026</span>
+          </div>
+          <div class="cal-tasks">
+            <div class="cal-task"><div class="cal-task-dot"></div>주식 UI 설계</div>
+            <div class="cal-task"><div class="cal-task-dot"></div>홈페이지 섹션 추가</div>
+            <div class="cal-task"><div class="cal-task-dot"></div>로드맵 캘린더 제작</div>
+          </div>
+        </div>
+        <div class="cal-month">
+          <div class="cal-month-header">
+            <span class="month-name">5월 <span class="status-badge badge-upcoming">예정</span></span>
+            <span class="month-year">2026</span>
+          </div>
+          <div class="cal-tasks">
+            <div class="cal-task"><div class="cal-task-dot pending"></div>Mac Studio 구매</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>Tailscale 설치</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>서버 환경 구성</div>
+          </div>
+        </div>
+        <div class="cal-month">
+          <div class="cal-month-header">
+            <span class="month-name">6월 <span class="status-badge badge-upcoming">예정</span></span>
+            <span class="month-year">2026</span>
+          </div>
+          <div class="cal-tasks">
+            <div class="cal-task"><div class="cal-task-dot pending"></div>한국투자증권 API</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>재무데이터 연동</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>실시간 차트</div>
+          </div>
+        </div>
+        <div class="cal-month">
+          <div class="cal-month-header">
+            <span class="month-name">7월 <span class="status-badge badge-upcoming">예정</span></span>
+            <span class="month-year">2026</span>
+          </div>
+          <div class="cal-tasks">
+            <div class="cal-task"><div class="cal-task-dot pending"></div>Claude AI 연동</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>뉴스 감성 분석</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>종목 리포트 생성</div>
+          </div>
+        </div>
+        <div class="cal-month">
+          <div class="cal-month-header">
+            <span class="month-name">8월 <span class="status-badge badge-upcoming">예정</span></span>
+            <span class="month-year">2026</span>
+          </div>
+          <div class="cal-tasks">
+            <div class="cal-task"><div class="cal-task-dot pending"></div>테스트 및 버그 수정</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>도메인 연결</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>서비스 오픈</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 타임라인 -->
+      <div class="timeline">
+        <div class="timeline-item active">
+          <div class="timeline-dot active"><div class="timeline-dot-inner"></div></div>
+          <div class="timeline-content">
+            <div class="timeline-top">
+              <span class="timeline-phase">Phase 1</span>
+              <span class="timeline-date">2026년 4월</span>
+            </div>
+            <div class="timeline-title">UI 제작 <span class="status-badge badge-progress">진행중</span></div>
+            <ul class="timeline-tasks">
+              <li>홈페이지에 주식 섹션 추가</li>
+              <li>종목 검색창 및 기본 레이아웃 구성</li>
+              <li>차트, 재무 카드, 뉴스 UI 설계</li>
+              <li>로드맵 캘린더 제작</li>
+            </ul>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot"><div class="timeline-dot-inner"></div></div>
+          <div class="timeline-content">
+            <div class="timeline-top">
+              <span class="timeline-phase">Phase 2</span>
+              <span class="timeline-date">2026년 5월</span>
+            </div>
+            <div class="timeline-title">서버 환경 세팅 <span class="status-badge badge-upcoming">예정</span></div>
+            <ul class="timeline-tasks">
+              <li>Mac Studio 구매 및 초기 설정</li>
+              <li>Tailscale 설치 및 원격 접속 구성</li>
+              <li>Python 백엔드 환경 구성</li>
+            </ul>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot"><div class="timeline-dot-inner"></div></div>
+          <div class="timeline-content">
+            <div class="timeline-top">
+              <span class="timeline-phase">Phase 3</span>
+              <span class="timeline-date">2026년 6월</span>
+            </div>
+            <div class="timeline-title">데이터 API 연동 <span class="status-badge badge-upcoming">예정</span></div>
+            <ul class="timeline-tasks">
+              <li>한국투자증권 API 발급 및 실시간 주가 연동</li>
+              <li>OpenDartReader 재무제표 연동</li>
+              <li>네이버 뉴스 API 연동</li>
+              <li>실시간 차트 구현</li>
+            </ul>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot"><div class="timeline-dot-inner"></div></div>
+          <div class="timeline-content">
+            <div class="timeline-top">
+              <span class="timeline-phase">Phase 4</span>
+              <span class="timeline-date">2026년 7월</span>
+            </div>
+            <div class="timeline-title">AI 분석 기능 <span class="status-badge badge-upcoming">예정</span></div>
+            <ul class="timeline-tasks">
+              <li>Claude API 연동</li>
+              <li>뉴스 감성 분석 (긍정/부정)</li>
+              <li>종목 종합 리포트 자동 생성</li>
+            </ul>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot"><div class="timeline-dot-inner"></div></div>
+          <div class="timeline-content">
+            <div class="timeline-top">
+              <span class="timeline-phase">Phase 5</span>
+              <span class="timeline-date">2026년 8월</span>
+            </div>
+            <div class="timeline-title">서비스 오픈 <span class="status-badge badge-upcoming">예정</span></div>
+            <ul class="timeline-tasks">
+              <li>전체 테스트 및 버그 수정</li>
+              <li>커스텀 도메인 연결</li>
+              <li>서비스 정식 오픈</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
   <!-- CONTACT -->
   <section class="contact" id="contact">
     <div class="contact-inner">
@@ -665,8 +1809,432 @@
   </footer>
 
 
+  <!-- STOCK MODAL -->
+  <div class="stock-modal-overlay" id="stockModal">
+    <div class="stock-modal">
+
+      <!-- 헤더 -->
+      <div class="sm-header">
+        <div class="sm-title">📊 주식 분석 <span class="sm-badge">Sample UI</span></div>
+        <button class="sm-close" onclick="closeStockModal()">✕</button>
+      </div>
+
+      <!-- 사이드바 + 메인 레이아웃 -->
+      <div class="sm-layout">
+
+        <!-- 왼쪽 사이드바: KOSPI200 종목 -->
+        <div class="sm-sidebar">
+          <div class="sm-sidebar-header">
+            <div class="sm-sidebar-title">KOSPI 200 · 시가총액순</div>
+            <div class="sm-sidebar-search">
+              <input type="text" id="sidebarSearch" placeholder="종목 검색..." oninput="filterStocks(this.value)" />
+            </div>
+          </div>
+          <div class="sm-sidebar-list" id="stockList"></div>
+        </div>
+
+        <!-- 오른쪽 메인 -->
+        <div class="sm-main">
+      <div class="sm-body">
+
+        <!-- 주요 지수 -->
+        <div class="sm-indices-wrap" id="indicesWrap">
+          <div class="sm-indices-toggle" onclick="toggleIndices()">
+            <div class="sm-indices-toggle-left">
+              <span class="dot"></span>
+              주요 지수 · 금리 · 시장 심리 · 수급
+            </div>
+            <div class="sm-indices-toggle-right">
+              <span>접기 / 펼치기</span>
+              <div class="sm-indices-arrow">▼</div>
+            </div>
+          </div>
+          <div class="sm-indices-body">
+        <div class="sm-indices">
+
+          <!-- 국내 -->
+          <div class="sm-index-group">
+            <div class="sm-index-group-title">🇰🇷 국내</div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">KOSPI</div>한국거래소(KRX)에 상장된 대형주 중심의 종합주가지수. 국내 증시의 전반적인 흐름을 나타내는 대표 지표입니다.</div>
+              <span class="sm-index-name">KOSPI</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price up">2,634.82</div>
+                <div class="sm-index-change up">▲ 18.45 (+0.70%)</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">KOSDAQ</div>중소·벤처·기술주 중심의 주가지수. IT, 바이오, 게임 등 성장 기업들이 주로 상장되어 있습니다.</div>
+              <span class="sm-index-name">KOSDAQ</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price dn">748.31</div>
+                <div class="sm-index-change dn">▼ 3.12 (-0.42%)</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">KOSPI200</div>KOSPI 상장 종목 중 시가총액·거래량 상위 200개 종목으로 구성된 지수. 선물·옵션의 기준 지수로 활용됩니다.</div>
+              <span class="sm-index-name">KOSPI200</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price up">348.70</div>
+                <div class="sm-index-change up">▲ 2.10 (+0.61%)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 미국 주요 지수 -->
+          <div class="sm-index-group">
+            <div class="sm-index-group-title">🇺🇸 미국</div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">S&P 500</div>미국 뉴욕증권거래소·나스닥 상장 대형주 500개로 구성된 지수. 미국 경제 전체를 가장 잘 대표하는 지표로 꼽힙니다.</div>
+              <span class="sm-index-name">S&P 500</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price up">5,282.70</div>
+                <div class="sm-index-change up">▲ 42.30 (+0.81%)</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">NASDAQ</div>기술주·성장주 중심의 미국 전자거래소 종합지수. 애플, 엔비디아, 마이크로소프트 등 빅테크 기업 비중이 높습니다.</div>
+              <span class="sm-index-name">NASDAQ</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price up">16,478.90</div>
+                <div class="sm-index-change up">▲ 183.40 (+1.12%)</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">DOW (다우존스)</div>미국 주요 산업을 대표하는 30개 우량주로 구성된 지수. 역사가 가장 오래된 미국 주가지수입니다.</div>
+              <span class="sm-index-name">DOW</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price dn">39,412.20</div>
+                <div class="sm-index-change dn">▼ 54.80 (-0.14%)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 선물 -->
+          <div class="sm-index-group">
+            <div class="sm-index-group-title">📦 선물</div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">KOSPI200 선물</div>KOSPI200 지수를 미래 특정 시점에 사고팔기로 약정하는 파생상품. 현물 시장의 방향성을 미리 가늠하는 데 활용됩니다.</div>
+              <span class="sm-index-name">KOSPI200 F</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price up">349.50</div>
+                <div class="sm-index-change up">▲ 2.30 (+0.66%)</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">S&P500 선물</div>S&P500 지수를 기초자산으로 하는 선물 계약. 미국 증시 개장 전 투자 심리와 시장 방향을 파악하는 핵심 지표입니다.</div>
+              <span class="sm-index-name">S&P500 F</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price up">5,291.00</div>
+                <div class="sm-index-change up">▲ 38.50 (+0.73%)</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">NASDAQ100 선물</div>나스닥 상위 100개 기술주를 기초자산으로 하는 선물. 빅테크 흐름을 선행적으로 반영합니다.</div>
+              <span class="sm-index-name">NAS100 F</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price up">18,342.00</div>
+                <div class="sm-index-change up">▲ 210.00 (+1.16%)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 원자재/환율 -->
+          <div class="sm-index-group">
+            <div class="sm-index-group-title">💱 환율 · 원자재</div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">USD/KRW (달러-원)</div>미국 달러 1달러를 사는 데 필요한 원화 금액. 환율이 오르면 수출 기업에 유리하고, 수입 물가는 상승합니다.</div>
+              <span class="sm-index-name">USD/KRW</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price dn">1,378.50</div>
+                <div class="sm-index-change dn">▼ 4.20 (-0.30%)</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">WTI 원유</div>미국 서부 텍사스산 원유 가격(달러/배럴). 글로벌 에너지 가격의 기준이 되며, 물가와 경기에 직접적인 영향을 줍니다.</div>
+              <span class="sm-index-name">WTI 원유</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price up">82.14</div>
+                <div class="sm-index-change up">▲ 0.68 (+0.83%)</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">금 (Gold)</div>안전자산의 대표 지표(달러/트로이온스). 불확실성이 높을수록 가격이 오르는 경향이 있어 시장 심리를 파악하는 데 유용합니다.</div>
+              <span class="sm-index-name">금 (Gold)</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price up">3,228.40</div>
+                <div class="sm-index-change up">▲ 12.80 (+0.40%)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 금리 -->
+          <div class="sm-index-group">
+            <div class="sm-index-group-title">🏦 금리</div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">미국 10년물 국채금리</div>주식 밸류에이션의 할인율로 직결됩니다. 금리가 오르면 주식의 상대적 매력이 떨어져 증시 하락 압력이 생깁니다. 4% 이상이면 주식 시장에 부담입니다.</div>
+              <span class="sm-index-name">미국 10년물</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price dn">4.32%</div>
+                <div class="sm-index-change dn">▲ 0.04%p</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">미국 2년물 국채금리</div>단기 금리로 연준(Fed)의 기준금리 방향을 가장 민감하게 반영합니다. 10년물보다 높으면 장단기 금리 역전(경기침체 신호)입니다.</div>
+              <span class="sm-index-name">미국 2년물</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price dn">3.98%</div>
+                <div class="sm-index-change dn">▲ 0.02%p</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">장단기 금리차 (10년-2년)</div>10년물에서 2년물 금리를 뺀 값. 음수(역전) 상태가 지속되면 경기침체의 신호로 해석됩니다. 현재 +0.34%p로 정상 복귀 중입니다.</div>
+              <span class="sm-index-name">금리차 (10Y-2Y)</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price up">+0.34%p</div>
+                <div class="sm-index-change up">정상 구간</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">한국 기준금리</div>한국은행이 결정하는 정책금리. 기준금리가 높으면 대출 부담 증가로 소비·투자가 위축되고, 낮추면 경기 부양 효과가 있습니다.</div>
+              <span class="sm-index-name">한국 기준금리</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price neu-c">2.75%</div>
+                <div class="sm-index-change neu-c">동결</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 시장 심리 -->
+          <div class="sm-index-group">
+            <div class="sm-index-group-title">🧠 시장 심리</div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">VIX (공포지수)</div>향후 30일간 S&P500의 예상 변동성. 20 이하는 안정, 20~30은 불안, 30 이상은 공포, 60 이상은 극단적 위기입니다. 주가와 반대로 움직이는 경향이 있습니다.</div>
+              <span class="sm-index-name">VIX</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price up">18.72</div>
+                <div class="sm-index-change up">▼ 1.34 (안정)</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">VKOSPI (한국 공포지수)</div>KOSPI200 옵션을 기반으로 산출한 국내판 공포지수. 20 이하 안정, 25 이상 주의, 30 이상 경계입니다.</div>
+              <span class="sm-index-name">VKOSPI</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price up">16.45</div>
+                <div class="sm-index-change up">▼ 0.82 (안정)</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">공포탐욕지수 (Fear & Greed)</div>0~100 사이 값으로 시장 심리를 표현. 0~24 극단적 공포(매수 기회), 25~44 공포, 45~54 중립, 55~74 탐욕, 75~100 극단적 탐욕(조정 신호).</div>
+              <span class="sm-index-name">공포탐욕지수</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price up" style="color:#f59e0b">62</div>
+                <div class="sm-index-change" style="color:#f59e0b">탐욕 구간</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">달러 인덱스 (DXY)</div>주요 6개국 통화 대비 달러 강세를 나타내는 지수. 달러 강세(상승)는 신흥국 자금 이탈을 유발해 한국 증시에 부담이 됩니다.</div>
+              <span class="sm-index-name">달러 인덱스 (DXY)</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price dn">103.42</div>
+                <div class="sm-index-change dn">▼ 0.38 (-0.37%)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 수급 -->
+          <div class="sm-index-group">
+            <div class="sm-index-group-title">💰 수급</div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">외국인 순매수 (KOSPI)</div>외국인이 오늘 얼마나 사고팔았는지를 나타냅니다. 지속적인 순매수는 강세 신호, 순매도는 약세 신호입니다. 한국 시장에서 외국인 영향력이 매우 큽니다.</div>
+              <span class="sm-index-name">외국인 순매수</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price up">+2,847억</div>
+                <div class="sm-index-change up">3일 연속 순매수</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">기관 순매수 (KOSPI)</div>국내 기관투자자(펀드, 연기금 등)의 매매 동향. 외국인과 기관이 동시에 순매수하면 강한 상승 신호입니다.</div>
+              <span class="sm-index-name">기관 순매수</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price dn">-1,203억</div>
+                <div class="sm-index-change dn">차익 실현</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">신용융자 잔고</div>투자자들이 증권사에서 빌려서 주식을 산 금액. 잔고가 급증하면 시장 과열 신호이며, 주가 하락 시 반대매매 리스크가 있습니다.</div>
+              <span class="sm-index-name">신용융자 잔고</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price" style="color:#f59e0b">19.3조</div>
+                <div class="sm-index-change" style="color:#f59e0b">주의 구간</div>
+              </div>
+            </div>
+            <div class="sm-index-row">
+              <div class="sm-tooltip"><div class="tt-name">공매도 잔고 비율</div>전체 상장 주식 중 공매도로 빌려간 비율. 높을수록 하락 베팅이 많다는 의미로, 급격히 감소하면 숏 커버링(매수)으로 주가가 급등할 수 있습니다.</div>
+              <span class="sm-index-name">공매도 잔고비율</span>
+              <div class="sm-index-vals">
+                <div class="sm-index-price neu-c">0.68%</div>
+                <div class="sm-index-change neu-c">보통 수준</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+          </div><!-- sm-indices-body -->
+        </div><!-- sm-indices-wrap -->
+
+        <!-- 검색 -->
+        <div class="sm-search">
+          <input type="text" placeholder="종목명 또는 종목코드 검색 (예: 삼성전자, 005930)" value="삼성전자" />
+          <button>검색</button>
+        </div>
+
+        <!-- 종목 헤더 -->
+        <div class="sm-stock-header">
+          <div>
+            <div class="sm-stock-name">삼성전자 <span style="font-size:0.9rem;color:#8a8a96;font-weight:400">005930</span></div>
+            <div class="sm-stock-code">KOSPI · 반도체 · 2026.04.15 기준</div>
+          </div>
+          <div class="sm-price-block">
+            <div class="sm-price up">76,500원</div>
+            <div class="sm-price-change">▲ 1,200 (+1.59%)</div>
+          </div>
+        </div>
+
+        <!-- 차트 + 재무 -->
+        <div class="sm-grid">
+          <!-- 차트 -->
+          <div class="sm-card" style="grid-column: span 1;">
+            <div class="sm-card-title">주가 차트</div>
+            <div class="chart-tabs">
+              <button class="chart-tab active">1일</button>
+              <button class="chart-tab">1주</button>
+              <button class="chart-tab">1개월</button>
+              <button class="chart-tab">3개월</button>
+              <button class="chart-tab">1년</button>
+            </div>
+            <div class="sm-chart-area">
+              <svg class="sm-chart-svg" viewBox="0 0 500 160" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#4f7eff" stop-opacity="0.3"/>
+                    <stop offset="100%" stop-color="#4f7eff" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <path d="M0,120 L40,110 L80,95 L120,105 L160,85 L200,90 L240,70 L280,60 L320,75 L360,55 L400,40 L440,45 L500,30"
+                  fill="none" stroke="#4f7eff" stroke-width="2" stroke-linecap="round"/>
+                <path d="M0,120 L40,110 L80,95 L120,105 L160,85 L200,90 L240,70 L280,60 L320,75 L360,55 L400,40 L440,45 L500,30 L500,160 L0,160 Z"
+                  fill="url(#chartGrad)"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- 투자 지표 -->
+          <div class="sm-card">
+            <div class="sm-card-title">주요 투자 지표</div>
+            <div class="sm-metrics">
+              <div class="sm-metric">
+                <div class="sm-metric-label">PER</div>
+                <div class="sm-metric-value">13.2x</div>
+              </div>
+              <div class="sm-metric">
+                <div class="sm-metric-label">PBR</div>
+                <div class="sm-metric-value">1.4x</div>
+              </div>
+              <div class="sm-metric">
+                <div class="sm-metric-label">ROE</div>
+                <div class="sm-metric-value" style="color:#22c55e">10.8%</div>
+              </div>
+              <div class="sm-metric">
+                <div class="sm-metric-label">시가총액</div>
+                <div class="sm-metric-value">457조</div>
+              </div>
+              <div class="sm-metric">
+                <div class="sm-metric-label">배당수익률</div>
+                <div class="sm-metric-value" style="color:#4f7eff">2.3%</div>
+              </div>
+              <div class="sm-metric">
+                <div class="sm-metric-label">52주 최고</div>
+                <div class="sm-metric-value">88,800</div>
+              </div>
+              <div class="sm-metric">
+                <div class="sm-metric-label">52주 최저</div>
+                <div class="sm-metric-value" style="color:#ff5f5f">58,400</div>
+              </div>
+              <div class="sm-metric">
+                <div class="sm-metric-label">거래량</div>
+                <div class="sm-metric-value">12.4M</div>
+              </div>
+              <div class="sm-metric">
+                <div class="sm-metric-label">외국인 비중</div>
+                <div class="sm-metric-value">51.2%</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI 분석 + 뉴스 -->
+        <div class="sm-grid">
+          <!-- AI 분석 -->
+          <div class="sm-ai-box">
+            <div class="sm-ai-header">🤖 AI 종합 분석</div>
+            <div class="sm-ai-text">
+              삼성전자는 반도체 업황 회복과 HBM 수요 증가로 2026년 실적 개선이 기대됩니다.
+              외국인 순매수세가 지속되고 있으며, 현재 PER 13.2배는 역사적 평균 대비 저평가 구간에 위치합니다.
+              단기 조정 가능성이 있으나 중장기 매수 관점에서 긍정적입니다.
+            </div>
+            <div class="sm-ai-score">
+              <span class="sm-ai-score-label">종합 점수</span>
+              <div class="sm-ai-score-bar"><div class="sm-ai-score-fill" style="width:74%"></div></div>
+              <span class="sm-ai-score-num">74 / 100</span>
+            </div>
+          </div>
+
+          <!-- 뉴스 -->
+          <div class="sm-card">
+            <div class="sm-card-title">관련 뉴스</div>
+            <div class="sm-news-list">
+              <div class="sm-news-item">
+                <div class="sm-news-sentiment sentiment-pos"></div>
+                <div>
+                  <div class="sm-news-title">삼성전자, HBM4 양산 일정 앞당겨…엔비디아 공급 기대</div>
+                  <div class="sm-news-date">2026.04.15 · 긍정</div>
+                </div>
+              </div>
+              <div class="sm-news-item">
+                <div class="sm-news-sentiment sentiment-pos"></div>
+                <div>
+                  <div class="sm-news-title">1분기 영업이익 8.2조 전망…시장 예상치 상회</div>
+                  <div class="sm-news-date">2026.04.14 · 긍정</div>
+                </div>
+              </div>
+              <div class="sm-news-item">
+                <div class="sm-news-sentiment sentiment-neu"></div>
+                <div>
+                  <div class="sm-news-title">이재용 회장, 반도체 투자 확대 방침 재확인</div>
+                  <div class="sm-news-date">2026.04.13 · 중립</div>
+                </div>
+              </div>
+              <div class="sm-news-item">
+                <div class="sm-news-sentiment sentiment-neg"></div>
+                <div>
+                  <div class="sm-news-title">미국 반도체 수출 규제 확대…영향 제한적 전망</div>
+                  <div class="sm-news-date">2026.04.12 · 부정</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- sm-body -->
+        </div><!-- sm-main -->
+
+      </div><!-- sm-layout -->
+    </div><!-- stock-modal -->
+  </div><!-- stock-modal-overlay -->
+
   <!-- PASSWORD OVERLAY -->
-  <div id="pw-overlay" style="
+  <div id="pw-overlay" style="display:none !important;
     position:fixed; inset:0; z-index:9999;
     background:#0c0c0e;
     display:flex; flex-direction:column;
@@ -707,6 +2275,151 @@
   </div>
 
   <script>
+    // KOSPI200 종목 데이터 (시가총액순)
+    const kospi200 = [
+      { rank:1,  name:"삼성전자",       code:"005930", cap:"457조", price:"76,500",  chg:"+1.59", up:true,  desc:"글로벌 반도체·스마트폰·가전 대표 기업. DRAM·낸드플래시 세계 1위. 코스피 시총 비중 약 20%." },
+      { rank:2,  name:"SK하이닉스",     code:"000660", cap:"131조", price:"192,300", chg:"+2.34", up:true,  desc:"DRAM·낸드플래시 글로벌 2위 메모리 반도체 기업. AI 붐으로 HBM(고대역폭메모리) 수요가 폭발적으로 증가 중." },
+      { rank:3,  name:"LG에너지솔루션", code:"373220", cap:"88조",  price:"388,000", chg:"-0.77", up:false, desc:"글로벌 EV 배터리 2위. GM·현대차·BMW 등에 공급. 배터리 업황과 전기차 보급률에 주가가 민감하게 반응." },
+      { rank:4,  name:"삼성바이오로직스",code:"207940", cap:"85조",  price:"1,204,000",chg:"+0.42",up:true,  desc:"글로벌 CMO(위탁생산) 1위 바이오 기업. 대형 제약사 바이오의약품을 수탁 생산하며 안정적 매출 성장 중." },
+      { rank:5,  name:"현대차",         code:"005380", cap:"55조",  price:"259,500", chg:"+1.17", up:true,  desc:"국내 1위 완성차 기업. EV·수소차 전환을 주도하며 북미·유럽 시장 점유율 확대 중. 기아와 함께 현대차그룹 양대 축." },
+      { rank:6,  name:"기아",           code:"000270", cap:"43조",  price:"106,800", chg:"+0.85", up:true,  desc:"현대차그룹 산하 글로벌 완성차 기업. SUV·EV 라인업 강화로 글로벌 판매 호조. 주주환원 정책이 부각된 종목." },
+      { rank:7,  name:"셀트리온",       code:"068270", cap:"39조",  price:"193,200", chg:"-1.23", up:false, desc:"국내 바이오시밀러(바이오의약품 복제약) 선두 기업. 자가면역·항암 분야 제품을 글로벌에 직접 판매." },
+      { rank:8,  name:"POSCO홀딩스",    code:"005490", cap:"35조",  price:"403,500", chg:"+0.62", up:true,  desc:"국내 최대 철강 기업 포스코의 지주사. 리튬·니켈 등 이차전지 소재 사업을 신성장 축으로 공격적 투자 중." },
+      { rank:9,  name:"삼성SDI",        code:"006400", cap:"33조",  price:"480,500", chg:"-0.93", up:false, desc:"삼성그룹 계열 배터리·에너지 소재 전문 기업. 소형·중대형 배터리 및 반도체 소재를 글로벌에 공급." },
+      { rank:10, name:"LG화학",         code:"051910", cap:"31조",  price:"220,500", chg:"-1.45", up:false, desc:"석유화학·첨단소재·배터리 소재 복합 기업. LG에너지솔루션 지분 보유로 배터리 업황과 동조화 경향." },
+      { rank:11, name:"삼성물산",       code:"028260", cap:"29조",  price:"155,300", chg:"+0.32", up:true,  desc:"삼성그룹 지주 역할을 하는 건설·상사·패션 복합 기업. 삼성전자 등 주요 계열사 지분 보유로 지주사 디스카운트 논의 지속." },
+      { rank:12, name:"KB금융",         code:"105560", cap:"27조",  price:"106,700", chg:"+1.04", up:true,  desc:"KB국민은행을 핵심으로 한 국내 1위 금융지주. 금리 상승기 이자이익 증가 수혜. 주주환원율 제고가 핵심 투자 포인트." },
+      { rank:13, name:"신한지주",       code:"055550", cap:"25조",  price:"55,200",  chg:"+0.73", up:true,  desc:"신한은행·신한투자증권 등을 거느린 금융지주. 베트남 등 해외 사업 비중이 국내 금융사 중 가장 높은 편." },
+      { rank:14, name:"현대모비스",     code:"012330", cap:"24조",  price:"256,000", chg:"+0.39", up:true,  desc:"현대·기아차 핵심 부품 독점 공급사. AS 부품 사업으로 안정적 수익을 내며, 전동화 부품 사업으로 전환 중." },
+      { rank:15, name:"LG전자",         code:"066570", cap:"23조",  price:"141,200", chg:"-0.56", up:false, desc:"가전·TV·전장(차량 부품) 사업을 영위하는 종합 가전 기업. 가전 프리미엄 브랜드와 전장 사업 성장이 핵심 모멘텀." },
+      { rank:16, name:"SK이노베이션",   code:"096770", cap:"22조",  price:"191,400", chg:"+1.81", up:true,  desc:"정유·화학·배터리 사업을 영위. SK온(배터리 자회사) 흑자 전환 여부가 기업가치에 핵심 변수." },
+      { rank:17, name:"하나금융지주",   code:"086790", cap:"21조",  price:"70,300",  chg:"+0.86", up:true,  desc:"KEB하나은행이 핵심인 금융지주. 외환 업무 강점 보유. 밸류업 정책 수혜 금융주로 주목받는 종목." },
+      { rank:18, name:"우리금융지주",   code:"316140", cap:"18조",  price:"16,850",  chg:"+0.60", up:true,  desc:"우리은행을 중심으로 한 금융지주. 타 금융지주 대비 저평가 매력 부각. 증권·보험사 인수로 종합 금융사 전환 중." },
+      { rank:19, name:"카카오",         code:"035720", cap:"17조",  price:"39,850",  chg:"-2.08", up:false, desc:"카카오톡 플랫폼 기반 IT 대기업. 핀테크·콘텐츠·AI 사업 영위. 각종 규제 이슈와 수익성 개선이 주가 핵심 변수." },
+      { rank:20, name:"NAVER",          code:"035420", cap:"17조",  price:"256,000", chg:"-0.39", up:false, desc:"국내 최대 검색·커머스 플랫폼 기업. 클라우드·AI·웹툰 등 글로벌 사업 확장 중. AI 검색 경쟁이 가장 큰 리스크." },
+      { rank:21, name:"SK텔레콤",       code:"017670", cap:"16조",  price:"62,300",  chg:"+0.49", up:true,  desc:"국내 1위 통신사. 안정적 배당 수익이 매력. AI 데이터센터·구독 서비스로 신사업 확장 중." },
+      { rank:22, name:"두산에너빌리티", code:"034020", cap:"15조",  price:"28,150",  chg:"+3.48", up:true,  desc:"원자력·가스터빈 등 발전 설비 전문 기업. SMR(소형모듈원전) 수주 기대감으로 원전 관련 대표 수혜주." },
+      { rank:23, name:"고려아연",       code:"010130", cap:"14조",  price:"730,000", chg:"+0.83", up:true,  desc:"세계 1위 아연 제련 기업. 니켈·코발트 등 이차전지 소재 사업 확장 중. 경영권 분쟁 이슈로 시장 주목." },
+      { rank:24, name:"삼성전기",       code:"009150", cap:"14조",  price:"184,200", chg:"-0.65", up:false, desc:"MLCC(적층세라믹커패시터) 등 전자 부품 전문 기업. 스마트폰·전장 부품 수요와 연동. IT 사이클에 민감한 종목." },
+      { rank:25, name:"KT&G",          code:"033780", cap:"13조",  price:"96,800",  chg:"+0.21", up:true,  desc:"국내 담배 시장 점유율 1위 기업. 안정적 현금창출과 고배당이 매력. 전자담배·건강기능식품으로 사업 다각화 중." },
+      { rank:26, name:"한국전력",       code:"015760", cap:"13조",  price:"20,350",  chg:"-0.97", up:false, desc:"국내 유일 전력 공기업. 전기요금 정책에 수익성이 직결. 연료비 상승 시 적자 위험. 요금 현실화 여부가 핵심 변수." },
+      { rank:27, name:"LG",            code:"003550", cap:"12조",  price:"88,400",  chg:"+0.34", up:true,  desc:"LG전자·LG화학·LG에너지솔루션 등을 지배하는 LG그룹 최상위 지주사. 자회사 가치 대비 할인 거래 중." },
+      { rank:28, name:"한화에어로스페이스",code:"012450",cap:"12조",price:"654,000", chg:"+4.21", up:true,  desc:"항공기 엔진·방산 장비 전문 기업. K-방산 수출 붐과 함께 급성장 중. 최근 유상증자로 성장 투자 확대." },
+      { rank:29, name:"포스코퓨처엠",   code:"003670", cap:"11조",  price:"152,300", chg:"-1.30", up:false, desc:"포스코 계열 이차전지 양·음극재 소재 전문 기업. 배터리 업황 회복과 함께 실적 반등 기대가 높은 종목." },
+      { rank:30, name:"SK",            code:"034730", cap:"11조",  price:"198,500", chg:"+0.76", up:true,  desc:"SK그룹 최상위 지주사. SK하이닉스·SKT·SK이노베이션 등 지분 보유. 자회사 합산가치 대비 지주사 할인 적용 중." },
+      { rank:31, name:"엔씨소프트",     code:"036570", cap:"10조",  price:"234,500", chg:"-0.85", up:false, desc:"리니지 시리즈 기반 국내 대형 게임사. 기존 IP 매출 감소와 신작 흥행이 핵심 변수. AI 게임 기술 개발 진행 중." },
+      { rank:32, name:"HMM",           code:"011200", cap:"10조",  price:"19,830",  chg:"+1.28", up:true,  desc:"국내 최대 해운 기업. 컨테이너 운임 지수(SCFI)에 실적이 직결. 민영화 이슈와 운임 변동성이 핵심 투자 포인트." },
+      { rank:33, name:"KT",            code:"030200", cap:"9.8조", price:"43,600",  chg:"+0.46", up:true,  desc:"국내 2위 통신사. B2B·데이터센터·클라우드 사업을 신성장 축으로 육성 중. 안정적 배당과 자산 가치가 매력." },
+      { rank:34, name:"한미반도체",     code:"042700", cap:"9.5조", price:"128,400", chg:"+5.23", up:true,  desc:"HBM 등 AI 반도체 패키징 장비 전문 기업. 엔비디아향 TC본더 공급으로 AI 반도체 최대 수혜주 중 하나." },
+      { rank:35, name:"롯데케미칼",     code:"011170", cap:"9.1조", price:"99,300",  chg:"-1.58", up:false, desc:"국내 주요 석유화학 기업. 에틸렌·화학 제품 생산. 업황 부진과 수익성 회복 시점이 주가의 핵심 변수." },
+      { rank:36, name:"현대건설",       code:"000720", cap:"8.8조", price:"39,700",  chg:"+0.51", up:true,  desc:"현대차그룹 계열 국내 대형 건설사. 원전·수소 인프라 등 에너지 플랜트 수주가 새로운 성장 동력." },
+      { rank:37, name:"메리츠금융지주", code:"138040", cap:"8.5조", price:"112,300", chg:"+1.99", up:true,  desc:"메리츠화재·메리츠증권을 거느린 금융지주. 업계 최고 수준의 ROE와 적극적 주주환원으로 국내외 투자자에게 주목." },
+      { rank:38, name:"기업은행",       code:"024110", cap:"8.2조", price:"16,230",  chg:"+0.37", up:true,  desc:"중소기업 특화 국책은행. 정책금융 역할로 안정적 여신 성장. 정부 지분이 60% 이상으로 공기업 특성 보유." },
+      { rank:39, name:"GS칼텍스",      code:"078930", cap:"8.0조", price:"71,200",  chg:"-0.42", up:false, desc:"국내 2위 정유사. 정제마진과 국제 유가 흐름에 수익이 직결. 친환경 에너지 전환 투자를 병행 중." },
+      { rank:40, name:"넷마블",         code:"251270", cap:"7.8조", price:"64,300",  chg:"-1.07", up:false, desc:"모바일 게임 대형 퍼블리셔. 마블·세븐나이츠 등 다수의 IP 보유. 신작 흥행 여부와 비용 효율화가 핵심 과제." },
+      { rank:41, name:"코웨이",         code:"021240", cap:"7.5조", price:"64,900",  chg:"+0.93", up:true,  desc:"정수기·공기청정기 등 생활가전 렌탈 선두 기업. 구독 기반의 안정적 현금흐름이 강점. 동남아 시장 공략 확대 중." },
+      { rank:42, name:"현대제철",       code:"004020", cap:"7.2조", price:"36,850",  chg:"+0.68", up:true,  desc:"현대차그룹 계열 철강사. 자동차용 강판을 핵심으로 공급. 철강 업황과 자동차 생산량에 연동되는 종목." },
+      { rank:43, name:"에코프로비엠",   code:"247540", cap:"7.0조", price:"193,200", chg:"-2.34", up:false, desc:"양극재 전문 기업으로 EV 배터리 소재 핵심 공급사. 배터리 업황 회복과 고객사 수주 확대가 실적 반등의 열쇠." },
+      { rank:44, name:"LS일렉트릭",    code:"010120", cap:"6.8조", price:"186,500", chg:"+1.36", up:true,  desc:"전력 기기·자동화 솔루션 전문 기업. 데이터센터·신재생에너지 인프라 확대로 전력 설비 수요 급증 수혜주." },
+      { rank:45, name:"크래프톤",       code:"259960", cap:"6.6조", price:"341,500", chg:"+2.17", up:true,  desc:"배틀그라운드(PUBG) 개발·퍼블리셔. 글로벌 PC·모바일 게임 시장에서 독보적 IP 보유. 인도 시장이 새로운 성장 축." },
+      { rank:46, name:"SK바이오팜",     code:"326030", cap:"6.4조", price:"108,700", chg:"-0.55", up:false, desc:"SK그룹 계열 신약 개발 기업. 뇌전증 신약 세노바메이트를 직접 미국에서 판매 중. 추가 적응증 확대가 성장 모멘텀." },
+      { rank:47, name:"한국항공우주",   code:"047810", cap:"6.2조", price:"79,800",  chg:"+3.38", up:true,  desc:"군용 항공기·헬기 제조 국내 방산 대표 기업. T-50 훈련기 등의 수출이 증가하며 K-방산 수혜를 대표하는 종목." },
+      { rank:48, name:"오리온",         code:"271560", cap:"6.0조", price:"94,300",  chg:"+0.21", up:true,  desc:"초코파이로 유명한 제과 기업. 중국·베트남·러시아 등 해외 매출 비중이 절반 이상. 현지화 전략으로 꾸준한 성장." },
+      { rank:49, name:"삼성증권",       code:"016360", cap:"5.8조", price:"50,200",  chg:"+0.80", up:true,  desc:"삼성그룹 계열 대형 증권사. 증시 거래 활성화와 IB(기업금융) 수수료 수입이 핵심. 고배당 금융주로 분류." },
+      { rank:50, name:"LG유플러스",     code:"032640", cap:"5.5조", price:"12,750",  chg:"-0.39", up:false, desc:"LG그룹 계열 통신사. 5G·IPTV·기업 솔루션 사업 영위. 안정적 배당과 낮은 밸류에이션이 방어주적 매력." },
+    ];
+
+    function renderStockList(list) {
+      const el = document.getElementById("stockList");
+      el.innerHTML = list.map((s, i) => `
+        <div class="sm-stock-item ${i === 0 ? 'active' : ''}" onclick="selectStock(this, '${s.name}')"
+          data-desc="${s.desc || ''}" data-name="${s.name}"
+          onmouseenter="showStockTooltip(event, this)"
+          onmouseleave="hideStockTooltip()">
+          <span class="ssi-rank">${s.rank}</span>
+          <div class="ssi-info">
+            <div class="ssi-name">${s.name}</div>
+            <div class="ssi-cap">${s.cap}</div>
+          </div>
+          <div class="ssi-change ${s.up ? 'up' : 'dn'}">${s.up ? '▲' : '▼'} ${s.chg}%</div>
+        </div>
+      `).join("");
+    }
+
+    function showStockTooltip(e, el) {
+      const tip = document.getElementById("stockTooltip");
+      const desc = el.dataset.desc;
+      const name = el.dataset.name;
+      if (!desc) return;
+      tip.querySelector(".stt-name").textContent = name;
+      tip.querySelector(".stt-desc").textContent = desc;
+      tip.style.display = "block";
+      positionStockTooltip(e, tip);
+    }
+
+    function positionStockTooltip(e, tip) {
+      const margin = 12;
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      let x = e.clientX + margin;
+      let y = e.clientY - th / 2;
+      if (x + tw > window.innerWidth - 8) x = e.clientX - tw - margin;
+      if (y < 8) y = 8;
+      if (y + th > window.innerHeight - 8) y = window.innerHeight - th - 8;
+      tip.style.left = x + "px";
+      tip.style.top = y + "px";
+    }
+
+    function hideStockTooltip() {
+      document.getElementById("stockTooltip").style.display = "none";
+    }
+
+    function filterStocks(query) {
+      const filtered = kospi200.filter(s =>
+        s.name.includes(query) || s.code.includes(query)
+      );
+      renderStockList(filtered);
+    }
+
+    function selectStock(el, name) {
+      document.querySelectorAll(".sm-stock-item").forEach(i => i.classList.remove("active"));
+      el.classList.add("active");
+      // 추후 실제 데이터 연동 시 종목명으로 조회
+    }
+
+    // 지수 접기/펼치기
+    function toggleIndices() {
+      document.getElementById("indicesWrap").classList.toggle("collapsed");
+    }
+
+    // 주식 모달
+    function openStockModal() {
+      document.getElementById("stockModal").classList.add("open");
+      document.body.style.overflow = "hidden";
+      renderStockList(kospi200);
+    }
+
+    function closeStockModal() {
+      document.getElementById("stockModal").classList.remove("open");
+      document.body.style.overflow = "";
+    }
+
+    document.getElementById("stockModal").addEventListener("click", function(e) {
+      if (e.target === this) closeStockModal();
+    });
+
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "Escape") closeStockModal();
+    });
+
+    // 차트 탭
+    document.querySelectorAll(".chart-tab").forEach(tab => {
+      tab.addEventListener("click", function() {
+        document.querySelectorAll(".chart-tab").forEach(t => t.classList.remove("active"));
+        this.classList.add("active");
+      });
+    });
+
     const PW = "4123";
 
     document.getElementById("pw-input").addEventListener("keydown", function(e) {
@@ -733,5 +2446,12 @@
       }
     }
   </script>
+  <!-- 종목 호버 툴팁 (전역 고정 위치) -->
+  <div id="stockTooltip" style="display:none; position:fixed; z-index:9999; pointer-events:none;
+    background:#2a2a32; border:1px solid rgba(255,255,255,0.12); border-radius:10px;
+    padding:10px 14px; max-width:260px; box-shadow:0 12px 30px rgba(0,0,0,0.5);">
+    <div class="stt-name" style="font-size:0.85rem; font-weight:600; color:#e8e8f0; margin-bottom:5px;"></div>
+    <div class="stt-desc" style="font-size:0.78rem; color:#8888aa; line-height:1.6;"></div>
+  </div>
 </body>
 </html>
