@@ -1013,6 +1013,18 @@
       color: #ff5f5f;
       margin-top: 4px;
     }
+    .sm-price-time {
+      font-size: 0.68rem;
+      color: #6a6a78;
+      margin-top: 6px;
+      letter-spacing: 0.02em;
+    }
+    @keyframes priceFlashUp   { 0% { background: rgba(255,95,95,0.22); } 100% { background: transparent; } }
+    @keyframes priceFlashDown { 0% { background: rgba(79,158,255,0.22); } 100% { background: transparent; } }
+    .sm-price.flash-up   { animation: priceFlashUp   0.8s ease-out; }
+    .sm-price.flash-down { animation: priceFlashDown 0.8s ease-out; }
+    .sm-stock-item.flash-up   { animation: priceFlashUp   0.8s ease-out; }
+    .sm-stock-item.flash-down { animation: priceFlashDown 0.8s ease-out; }
 
     /* 그리드 레이아웃 */
     .sm-grid {
@@ -1047,12 +1059,23 @@
 
     /* 차트 영역 */
     .sm-chart-area {
-      height: 180px;
+      height: 260px;
       position: relative;
       overflow: hidden;
     }
 
-    .sm-chart-svg { width: 100%; height: 100%; }
+    .sm-chart-svg { width: 100%; height: 100%; display: block; }
+    .sm-chart-svg .axis-text { fill: #8a8a96; font-size: 10px; font-family: inherit; }
+    .sm-chart-svg .axis-text.y { text-anchor: end; }
+    .sm-chart-svg .axis-text.x { text-anchor: middle; }
+    .sm-chart-svg .grid-line { stroke: rgba(255,255,255,0.05); stroke-width: 1; }
+    .sm-chart-svg .candle-up   { fill: #ff5f5f; stroke: #ff5f5f; }
+    .sm-chart-svg .candle-down { fill: #4f9eff; stroke: #4f9eff; }
+    .sm-chart-svg .candle-flat { fill: #8a8a96; stroke: #8a8a96; }
+    .sm-chart-svg .wick { stroke-width: 1; }
+    .sm-chart-svg .last-price-bg { fill: #1c1c22; stroke: rgba(255,255,255,0.1); }
+    .sm-chart-svg .last-price-text { fill: #e5e5ea; font-size: 10px; font-family: inherit; text-anchor: middle; font-weight: 600; }
+    .sm-chart-svg .last-price-line { stroke-dasharray: 3 3; stroke-width: 1; opacity: 0.5; }
 
     .chart-tabs {
       display: flex;
@@ -2030,12 +2053,12 @@
                 <div class="sm-index-change up">▼ 0.82 (안정)</div>
               </div>
             </div>
-            <div class="sm-index-row">
+            <div class="sm-index-row" id="idx-fng">
               <div class="sm-tooltip"><div class="tt-name">공포탐욕지수 (Fear & Greed)</div>0~100 사이 값으로 시장 심리를 표현. 0~24 극단적 공포(매수 기회), 25~44 공포, 45~54 중립, 55~74 탐욕, 75~100 극단적 탐욕(조정 신호).</div>
               <span class="sm-index-name">공포탐욕지수</span>
               <div class="sm-index-vals">
-                <div class="sm-index-price up" style="color:#f59e0b">62</div>
-                <div class="sm-index-change" style="color:#f59e0b">탐욕 구간</div>
+                <div class="sm-index-price" style="color:#f59e0b">-</div>
+                <div class="sm-index-change" style="color:#f59e0b">로딩중…</div>
               </div>
             </div>
             <div class="sm-index-row" id="idx-dxy">
@@ -2086,6 +2109,10 @@
           </div>
 
         </div>
+        <div style="padding:10px 16px 14px; color:#6a6a78; font-size:0.72rem; line-height:1.6;">
+          ※ 실시간 데이터: 주요 지수 · 환율 · 원자재 · 금리(10Y) · VIX · DXY · 개별 종목 주가·재무 · 공포탐욕지수 · 뉴스<br/>
+          ※ 정적 기준일 표기: VKOSPI · KOSPI200 선물 · 한국 2Y금리 · 수급(외국인/기관/신용/공매도) · 한국 기준금리 (공개 무료 API 제약)
+        </div>
           </div><!-- sm-indices-body -->
         </div><!-- sm-indices-wrap -->
 
@@ -2104,6 +2131,7 @@
           <div class="sm-price-block">
             <div class="sm-price up" id="samsung-price">76,500원</div>
             <div class="sm-price-change" id="samsung-change">▲ 1,200 (+1.59%)</div>
+            <div class="sm-price-time" id="samsung-price-time">—</div>
           </div>
         </div>
 
@@ -2113,25 +2141,12 @@
           <div class="sm-card" style="grid-column: span 1;">
             <div class="sm-card-title">주가 차트</div>
             <div class="chart-tabs">
-              <button class="chart-tab active">1일</button>
-              <button class="chart-tab">1주</button>
-              <button class="chart-tab">1개월</button>
-              <button class="chart-tab">3개월</button>
-              <button class="chart-tab">1년</button>
+              <button class="chart-tab active" data-range="day">일</button>
+              <button class="chart-tab" data-range="week">주</button>
+              <button class="chart-tab" data-range="month">월</button>
             </div>
             <div class="sm-chart-area">
-              <svg id="samsung-chart-svg" class="sm-chart-svg" viewBox="0 0 500 160" preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#4f7eff" stop-opacity="0.3"/>
-                    <stop offset="100%" stop-color="#4f7eff" stop-opacity="0"/>
-                  </linearGradient>
-                </defs>
-                <path id="samsung-chart-line" d="M0,120 L40,110 L80,95 L120,105 L160,85 L200,90 L240,70 L280,60 L320,75 L360,55 L400,40 L440,45 L500,30"
-                  fill="none" stroke="#4f7eff" stroke-width="2" stroke-linecap="round"/>
-                <path id="samsung-chart-area" d="M0,120 L40,110 L80,95 L120,105 L160,85 L200,90 L240,70 L280,60 L320,75 L360,55 L400,40 L440,45 L500,30 L500,160 L0,160 Z"
-                  fill="url(#chartGrad)"/>
-              </svg>
+              <svg id="samsung-chart-svg" class="sm-chart-svg" viewBox="0 0 600 260" preserveAspectRatio="xMidYMid meet"></svg>
             </div>
           </div>
 
@@ -2141,15 +2156,15 @@
             <div class="sm-metrics">
               <div class="sm-metric">
                 <div class="sm-metric-label">PER</div>
-                <div class="sm-metric-value need-check">확인필요</div>
+                <div class="sm-metric-value" id="samsung-per">-</div>
               </div>
               <div class="sm-metric">
                 <div class="sm-metric-label">PBR</div>
-                <div class="sm-metric-value need-check">확인필요</div>
+                <div class="sm-metric-value" id="samsung-pbr">-</div>
               </div>
               <div class="sm-metric">
                 <div class="sm-metric-label">ROE</div>
-                <div class="sm-metric-value need-check">확인필요</div>
+                <div class="sm-metric-value" id="samsung-roe">-</div>
               </div>
               <div class="sm-metric">
                 <div class="sm-metric-label">시가총액</div>
@@ -2157,7 +2172,7 @@
               </div>
               <div class="sm-metric">
                 <div class="sm-metric-label">배당수익률</div>
-                <div class="sm-metric-value need-check">확인필요</div>
+                <div class="sm-metric-value" id="samsung-div">-</div>
               </div>
               <div class="sm-metric">
                 <div class="sm-metric-label">52주 최고</div>
@@ -2173,7 +2188,9 @@
               </div>
               <div class="sm-metric">
                 <div class="sm-metric-label">외국인 비중</div>
-                <div class="sm-metric-value need-check">확인필요</div>
+                <div class="sm-metric-value" id="samsung-foreign">
+                  <a id="samsung-naver-link" href="https://finance.naver.com/item/main.naver?code=005930" target="_blank" rel="noopener" style="color:#7aa3ff; text-decoration:none; font-size:0.8rem;">네이버 금융 →</a>
+                </div>
               </div>
             </div>
           </div>
@@ -2198,35 +2215,8 @@
           <!-- 뉴스 -->
           <div class="sm-card">
             <div class="sm-card-title">관련 뉴스</div>
-            <div class="sm-news-list">
-              <div class="sm-news-item">
-                <div class="sm-news-sentiment sentiment-pos"></div>
-                <div>
-                  <div class="sm-news-title">삼성전자, HBM4 양산 일정 앞당겨…엔비디아 공급 기대</div>
-                  <div class="sm-news-date">2026.04.15 · 긍정</div>
-                </div>
-              </div>
-              <div class="sm-news-item">
-                <div class="sm-news-sentiment sentiment-pos"></div>
-                <div>
-                  <div class="sm-news-title">1분기 영업이익 8.2조 전망…시장 예상치 상회</div>
-                  <div class="sm-news-date">2026.04.14 · 긍정</div>
-                </div>
-              </div>
-              <div class="sm-news-item">
-                <div class="sm-news-sentiment sentiment-neu"></div>
-                <div>
-                  <div class="sm-news-title">이재용 회장, 반도체 투자 확대 방침 재확인</div>
-                  <div class="sm-news-date">2026.04.13 · 중립</div>
-                </div>
-              </div>
-              <div class="sm-news-item">
-                <div class="sm-news-sentiment sentiment-neg"></div>
-                <div>
-                  <div class="sm-news-title">미국 반도체 수출 규제 확대…영향 제한적 전망</div>
-                  <div class="sm-news-date">2026.04.12 · 부정</div>
-                </div>
-              </div>
+            <div class="sm-news-list" id="newsList">
+              <div style="color:#8a8a96; font-size:0.85rem; padding:12px;">뉴스 로딩중…</div>
             </div>
           </div>
         </div>
@@ -2356,21 +2346,36 @@
       return numToJo(liveCap);
     }
 
+    let liveState = 'loading'; // 'loading' | 'ok' | 'fail'
     function renderStockList(list) {
       const el = document.getElementById("stockList");
-      el.innerHTML = list.map((s, i) => `
-        <div class="sm-stock-item ${i === 0 ? 'active' : ''}" onclick="selectStock(this, '${s.code}')"
+      const isFail = liveState === 'fail';
+      const isLoading = liveState === 'loading';
+      el.innerHTML = list.map((s) => {
+        const hasLive  = !!s._live;
+        const priceTxt = hasLive ? numFmt(s._live.price) + '원'
+                         : isFail    ? '…'
+                         : isLoading ? '로딩중'
+                         : (s.price ? s.price + '원' : '—');
+        const capTxt   = hasLive ? getLiveCap(s) : (isFail ? '…' : s.cap);
+        const cls      = s.up ? 'up' : 'dn';
+        const chg      = typeof s.chg === 'string' ? s.chg.replace(/^[+\-]/, '') : s.chg;
+        const chgTxt   = hasLive ? `${s.up ? '▲' : '▼'} ${chg}%` : (isFail ? '…' : (isLoading ? '' : `${s.up ? '▲' : '▼'} ${chg}%`));
+        const isActive = s.code === selectedCode;
+        const dim      = hasLive ? '' : 'opacity:0.55;';
+        return `
+        <div class="sm-stock-item ${isActive ? 'active' : ''}" style="${dim}" onclick="selectStock(this, '${s.code}')"
           data-desc="${s.desc || ''}" data-name="${s.name}" data-code="${s.code}"
           onmouseenter="showStockTooltip(event, this)"
           onmouseleave="hideStockTooltip()">
           <span class="ssi-rank">${s.rank}</span>
           <div class="ssi-info">
             <div class="ssi-name">${s.name}</div>
-            <div class="ssi-cap">${s._live ? `<span class="${s.up ? 'up' : 'dn'}">${numFmt(s._live.price)}원</span> · ${getLiveCap(s)}` : s.cap}</div>
+            <div class="ssi-cap"><span class="${cls}">${priceTxt}</span> · ${capTxt}</div>
           </div>
-          <div class="ssi-change ${s.up ? 'up' : 'dn'}">${s.up ? '▲' : '▼'} ${s.chg}%</div>
-        </div>
-      `).join("");
+          <div class="ssi-change ${cls}">${chgTxt}</div>
+        </div>`;
+      }).join("");
     }
 
     function showStockTooltip(e, el) {
@@ -2447,20 +2452,62 @@
       const capEl = document.getElementById('samsung-cap');
       if (capEl) capEl.textContent = getLiveCap(s);
 
-      // 52주 고저 / 거래량 초기화 (로딩 중)
-      const hiEl = document.getElementById('samsung-high');
-      const loEl = document.getElementById('samsung-low');
-      const volEl = document.getElementById('samsung-vol');
-      if (hiEl) hiEl.textContent = '로딩중…';
-      if (loEl) loEl.textContent = '로딩중…';
-      if (volEl) volEl.textContent = '로딩중…';
+      // 캐시 확인 - 있으면 즉시 렌더, 없으면 로딩중 표시
+      const cached = detailCache[code];
+      const chartCached = cached?.chart?.[currentRange];
+      if (chartCached) {
+        renderChartFromData(code, chartCached.meta, chartCached.quotes, chartCached.ts);
+      } else {
+        // 차트 영역에 로딩중 표시 (이전 종목 차트가 보이지 않도록)
+        setChartMessage('차트 로딩중…');
+        ['samsung-high','samsung-low','samsung-vol'].forEach(id => {
+          const e = document.getElementById(id);
+          if (e) e.textContent = '로딩중…';
+        });
+      }
+      if (cached?.financials) {
+        renderFinancialsFromData(code, cached.financials);
+      } else {
+        ['samsung-per','samsung-pbr','samsung-div'].forEach(id => {
+          const e = document.getElementById(id);
+          if (e) e.textContent = '로딩중…';
+        });
+      }
+      const roeEl = document.getElementById('samsung-roe');
+      if (!cached?.financials && roeEl) roeEl.innerHTML = `<a href="https://finance.naver.com/item/coinfo.naver?code=${s.code}" target="_blank" rel="noopener" style="color:#7aa3ff; text-decoration:none; font-size:0.8rem;">네이버 금융 →</a>`;
+      const foreignEl = document.getElementById('samsung-foreign');
+      if (foreignEl) foreignEl.innerHTML = `<a href="https://finance.naver.com/item/frgn.naver?code=${s.code}" target="_blank" rel="noopener" style="color:#7aa3ff; text-decoration:none; font-size:0.8rem;">네이버 금융 →</a>`;
 
       // AI 분석 텍스트
       const aiEl = document.getElementById('detail-ai-text');
-      if (aiEl) aiEl.textContent = `${s.name}의 실시간 데이터를 불러오는 중입니다. 세부 재무 지표(PER·PBR·ROE) 연동 후 AI 분석이 업데이트될 예정입니다.`;
+      if (aiEl) aiEl.textContent = `${s.name}의 실시간 주가·재무 데이터를 불러오고 있습니다. 업데이트가 완료되면 최신 지표 기반 분석이 표시됩니다.`;
 
-      // 차트 + 상세 데이터 로드
+      // 뉴스 - 캐시 있으면 즉시 표시
+      const newsEl = document.getElementById('newsList');
+      if (cached?.news) {
+        renderNewsFromData(code, cached.news);
+      } else if (newsEl) {
+        newsEl.innerHTML = '<div style="color:#8a8a96; font-size:0.85rem; padding:12px;">뉴스 로딩중…</div>';
+      }
+
+      // 단일 종목 실시간 가격 즉시 갱신 (batch 대기 없이)
+      fetchSingleQuote(code).then(q => {
+        if (!q || selectedCode !== code) return;
+        const s2 = kospi200.find(x => x.code === code);
+        if (!s2) return;
+        s2._live = q;
+        s2.chg = Math.abs(q.pct).toFixed(2);
+        s2.up  = q.pct >= 0;
+        updateSelectedStockLive();
+        // 리스트의 해당 행만 살짝 플래시
+        const li = document.querySelector(`.sm-stock-item[data-code="${code}"]`);
+        if (li) flash(li, s2.up);
+      });
+
+      // 차트 + 상세 데이터 로드 (병렬)
       loadStockDetail(code);
+      loadStockFinancials(code);
+      loadStockNews(code, s.name);
     }
 
     // 지수 접기/펼치기
@@ -2468,16 +2515,330 @@
       document.getElementById("indicesWrap").classList.toggle("collapsed");
     }
 
+    // ─── 영구 캐시 (localStorage) ─────────────────────────────────────
+    const CACHE_NS = 'kjc:v1:';
+    function cacheGet(key, ttlMs) {
+      try {
+        const raw = localStorage.getItem(CACHE_NS + key);
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (!obj || typeof obj.ts !== 'number') return null;
+        if (Date.now() - obj.ts > ttlMs) return null;
+        return obj.data;
+      } catch { return null; }
+    }
+    function cacheSet(key, data) {
+      try {
+        localStorage.setItem(CACHE_NS + key, JSON.stringify({ ts: Date.now(), data }));
+      } catch {}
+    }
+    // TTL 정의 (ms)
+    const TTL = {
+      financials: 24 * 60 * 60 * 1000,    // 1일
+      chartDay:    6 * 60 * 60 * 1000,    // 6시간 (장중에도 갱신되도록)
+      chartWeek:  24 * 60 * 60 * 1000,    // 1일
+      chartMonth: 24 * 60 * 60 * 1000,    // 1일
+      news:       30 * 60 * 1000,         // 30분
+      fng:        60 * 60 * 1000,         // 1시간
+      proxy:      30 * 60 * 1000,         // 프록시 순위 30분
+    };
+    function chartTtl(range) {
+      if (range === 'week')  return TTL.chartWeek;
+      if (range === 'month') return TTL.chartMonth;
+      return TTL.chartDay;
+    }
+
     // ─── 실시간 데이터 (Yahoo Finance spark) ─────────────────────────
     const STOCK_SYMBOLS_YF = kospi200.map(s => s.code + '.KS').join(',');
     const INDEX_SYMBOLS_YF = '^KS11,^KQ11,^KS200,^GSPC,^IXIC,^DJI,^TNX,KRW=X,GC=F,CL=F,^VIX,DX-Y.NYB,ES=F,NQ=F';
-    const PROXY = 'https://corsproxy.io/?';
+    // 여러 CORS 프록시 (성공 인덱스를 캐시해 다음 호출의 1순위로 시도)
+    const PROXIES = [
+      u => 'https://corsproxy.io/?' + encodeURIComponent(u),
+      u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+      u => 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u),
+      u => 'https://cors.eu.org/' + u,
+    ];
+    const PROXY = 'https://corsproxy.io/?'; // 레거시 호환
 
+    function getProxyOrder() {
+      const cached = cacheGet('proxy:rank', TTL.proxy);
+      const order = [];
+      if (Array.isArray(cached)) cached.forEach(i => { if (i >= 0 && i < PROXIES.length) order.push(i); });
+      for (let i = 0; i < PROXIES.length; i++) if (!order.includes(i)) order.push(i);
+      return order;
+    }
+    function recordProxySuccess(idx) {
+      const order = getProxyOrder();
+      const reordered = [idx, ...order.filter(i => i !== idx)];
+      cacheSet('proxy:rank', reordered);
+    }
+
+    async function proxiedFetch(rawUrl, timeoutMs = 4000) {
+      const order = getProxyOrder();
+      for (const idx of order) {
+        const wrap = PROXIES[idx];
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+        try {
+          const r = await fetch(wrap(rawUrl), { cache: 'no-store', signal: ctrl.signal });
+          clearTimeout(timer);
+          if (r.ok) {
+            recordProxySuccess(idx);
+            return r;
+          }
+        } catch {
+          clearTimeout(timer);
+        }
+      }
+      return null;
+    }
+
+    // 종목별 상세 캐시 (클릭 즉시 이전 결과로 렌더, 백그라운드로 refresh)
+    const detailCache = {}; // code -> { chart: {range: {meta,quotes,ts}}, financials, news, ts }
+    let currentRange = 'day'; // day | week | month
+
+    // 차트 메타 + 인트라데이 → DOM 렌더
+    function renderChartFromData(code, meta, quotes, ts) {
+      if (!meta) return;
+      if (meta.regularMarketPrice != null && selectedCode === code) {
+        const s = kospi200.find(x => x.code === code);
+        if (s) {
+          const price = meta.regularMarketPrice;
+          const prev  = meta.chartPreviousClose || meta.previousClose || price;
+          const amt   = price - prev;
+          const pct   = prev ? (amt / prev * 100) : 0;
+          s._live = { price, prev, amt, pct };
+          s.chg = Math.abs(pct).toFixed(2);
+          s.up  = pct >= 0;
+          updateSelectedStockLive();
+        }
+      }
+      const hiEl = document.getElementById('samsung-high');
+      const loEl = document.getElementById('samsung-low');
+      if (hiEl && meta.fiftyTwoWeekHigh) hiEl.textContent = numFmt(meta.fiftyTwoWeekHigh);
+      if (loEl && meta.fiftyTwoWeekLow)  loEl.textContent = numFmt(meta.fiftyTwoWeekLow);
+      const volEl = document.getElementById('samsung-vol');
+      if (volEl && meta.regularMarketVolume) {
+        const v = meta.regularMarketVolume;
+        volEl.textContent = v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v;
+      }
+      renderCandleChart(code, meta, quotes, ts, currentRange);
+    }
+
+    // ─── 캔들 차트 ─────────────────────────────────────────────────────
+    function setChartMessage(text, color) {
+      const svg = document.getElementById('samsung-chart-svg');
+      if (!svg) return;
+      const c = color || '#8a8a96';
+      svg.innerHTML = `<text x="300" y="130" text-anchor="middle" fill="${c}" font-size="13" font-family="inherit">${text}</text>`;
+    }
+    const WEEKDAY_KR = ['일','월','화','수','목','금','토'];
+    function fmtAxisLabel(date, range) {
+      const Y = date.getFullYear();
+      const M = date.getMonth() + 1;
+      const D = date.getDate();
+      if (range === 'day')   return M + '/' + D;
+      if (range === 'week')  return String(Y).slice(2) + '.' + M;
+      if (range === 'month') return Y;
+      return M + '/' + D;
+    }
+    function fmtVolume(v) {
+      if (v == null || !isFinite(v)) return '';
+      if (v >= 1e8) return (v / 1e8).toFixed(1) + '억';
+      if (v >= 1e4) return Math.round(v / 1e4).toLocaleString('ko-KR') + '만';
+      return v.toLocaleString('ko-KR');
+    }
+    function numFmtShort(n) {
+      if (n == null || isNaN(n)) return '-';
+      return Math.round(n).toLocaleString('ko-KR');
+    }
+    function renderCandleChart(code, meta, quotes, ts, range) {
+      const svg = document.getElementById('samsung-chart-svg');
+      if (!svg) return;
+      // 뷰박스 (가격 + 거래량 2단)
+      const W = 600, H = 260;
+      const PAD_L = 48, PAD_R = 60, PAD_T = 10, PAD_B = 22;
+      const GAP = 8;
+      const VOL_H = 56; // 거래량 영역 높이
+      const priceTop = PAD_T;
+      const priceBot = H - PAD_B - VOL_H - GAP;
+      const priceH = priceBot - priceTop;
+      const volTop = priceBot + GAP;
+      const volBot = H - PAD_B;
+      const volH = volBot - volTop;
+      const plotW = W - PAD_L - PAD_R;
+
+      if (!ts || !quotes?.close) { svg.innerHTML = ''; return; }
+      const bars = [];
+      for (let i = 0; i < ts.length; i++) {
+        const o = quotes.open?.[i], h = quotes.high?.[i], l = quotes.low?.[i], c = quotes.close?.[i];
+        if (o == null || h == null || l == null || c == null) continue;
+        bars.push({ t: ts[i], o, h, l, c, v: quotes.volume?.[i] || 0 });
+      }
+      if (bars.length < 2) { svg.innerHTML = ''; return; }
+
+      const highs = bars.map(b => b.h);
+      const lows  = bars.map(b => b.l);
+      let minP = Math.min(...lows);
+      let maxP = Math.max(...highs);
+      const pad = (maxP - minP) * 0.05 || maxP * 0.01;
+      minP -= pad; maxP += pad;
+      const rangeP = maxP - minP || 1;
+      const maxV = Math.max(...bars.map(b => b.v)) || 1;
+
+      const yOfP = (p) => priceTop + (1 - (p - minP) / rangeP) * priceH;
+      const yOfV = (v) => volBot - (v / maxV) * volH;
+      const xOf = (i) => PAD_L + (bars.length === 1 ? plotW/2 : (i / (bars.length - 1)) * plotW);
+      const bodyW = Math.max(2, Math.min(12, plotW / bars.length * 0.72));
+
+      // 가격 Y축 틱 (4개)
+      const yTicks = 4;
+      let yLines = '';
+      for (let i = 0; i <= yTicks; i++) {
+        const p = minP + (rangeP * i / yTicks);
+        const y = yOfP(p);
+        yLines += `<line class="grid-line" x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}"/>`;
+        yLines += `<text class="axis-text y" x="${PAD_L - 6}" y="${y + 3}">${numFmtShort(p)}</text>`;
+      }
+      // 거래량 Y축 상단 라벨
+      yLines += `<line class="grid-line" x1="${PAD_L}" y1="${volBot}" x2="${W - PAD_R}" y2="${volBot}"/>`;
+      yLines += `<text class="axis-text y" x="${PAD_L - 6}" y="${volTop + 9}">${fmtVolume(maxV)}</text>`;
+
+      // X축 라벨 (최대 6개)
+      const nLabel = Math.min(6, bars.length);
+      let xLabels = '';
+      for (let i = 0; i < nLabel; i++) {
+        const idx = Math.round((bars.length - 1) * i / (nLabel - 1 || 1));
+        const b = bars[idx];
+        const d = new Date(b.t * 1000);
+        const x = xOf(idx);
+        xLabels += `<text class="axis-text x" x="${x}" y="${H - PAD_B + 14}">${fmtAxisLabel(d, range)}</text>`;
+      }
+
+      // 캔들 + 거래량 바
+      let candles = '';
+      let vols = '';
+      bars.forEach((b, i) => {
+        const x = xOf(i);
+        const cls = b.c > b.o ? 'candle-up' : b.c < b.o ? 'candle-down' : 'candle-flat';
+        const yH = yOfP(b.h), yL = yOfP(b.l);
+        const yTop = yOfP(Math.max(b.o, b.c));
+        const yBot = yOfP(Math.min(b.o, b.c));
+        const bH = Math.max(1, yBot - yTop);
+        candles += `<line class="wick ${cls}" x1="${x}" y1="${yH}" x2="${x}" y2="${yL}"/>`;
+        candles += `<rect class="${cls}" x="${x - bodyW/2}" y="${yTop}" width="${bodyW}" height="${bH}"/>`;
+        // 거래량 바 (색: 양봉/음봉과 동일)
+        const yV = yOfV(b.v);
+        const vH = Math.max(0.5, volBot - yV);
+        vols += `<rect class="${cls}" x="${x - bodyW/2}" y="${yV}" width="${bodyW}" height="${vH}" opacity="0.75"/>`;
+      });
+
+      // 현재가 라인 + 라벨 (우측)
+      const lastClose = bars[bars.length - 1].c;
+      const lastUp = meta.regularMarketPrice != null ? meta.regularMarketPrice >= (meta.chartPreviousClose || meta.previousClose || lastClose) : bars[bars.length-1].c >= bars[bars.length-1].o;
+      const lastColor = lastUp ? '#ff5f5f' : '#4f9eff';
+      const yLast = yOfP(meta.regularMarketPrice || lastClose);
+      const lastPriceTxt = numFmtShort(meta.regularMarketPrice || lastClose);
+      const labelW = 54, labelH = 18;
+      const labelX = W - PAD_R + 2;
+      const labelY = Math.max(priceTop, Math.min(priceBot - labelH, yLast - labelH/2));
+      const lastLine = `<line class="last-price-line" x1="${PAD_L}" y1="${yLast}" x2="${W - PAD_R}" y2="${yLast}" stroke="${lastColor}"/>`;
+      const lastBox = `<rect class="last-price-bg" x="${labelX}" y="${labelY}" width="${labelW}" height="${labelH}" rx="3" stroke="${lastColor}"/>
+                       <text class="last-price-text" x="${labelX + labelW/2}" y="${labelY + labelH - 5}" fill="${lastColor}">${lastPriceTxt}</text>`;
+
+      svg.innerHTML = yLines + xLabels + candles + vols + lastLine + lastBox;
+    }
+
+    function renderFinancialsFromData(code, data) {
+      const perEl = document.getElementById('samsung-per');
+      const pbrEl = document.getElementById('samsung-pbr');
+      const divEl = document.getElementById('samsung-div');
+      const capEl = document.getElementById('samsung-cap');
+      const roeEl = document.getElementById('samsung-roe');
+      const naverLink = document.getElementById('samsung-naver-link');
+      if (naverLink) naverLink.href = `https://finance.naver.com/item/main.naver?code=${code}`;
+      if (!data) return false;
+      const sd = data.summaryDetail || {};
+      const ks = data.defaultKeyStatistics || {};
+      const fd = data.financialData || {};
+      const pr = data.price || {};
+      if (perEl) perEl.textContent = fmtRatio(sd.trailingPE?.raw ?? ks.trailingPE?.raw);
+      if (pbrEl) pbrEl.textContent = fmtRatio(ks.priceToBook?.raw);
+      if (divEl) divEl.textContent = fmtPct(sd.dividendYield?.raw ?? sd.trailingAnnualDividendYield?.raw);
+      if (roeEl) roeEl.textContent = fmtPct(fd.returnOnEquity?.raw);
+      const cap = pr.marketCap?.raw ?? ks.marketCap?.raw;
+      if (capEl && cap) capEl.textContent = fmtCapKr(cap);
+      return true;
+    }
+
+    function renderNewsFromData(code, items) {
+      const el = document.getElementById('newsList');
+      if (!el) return false;
+      if (!items || !items.length) return false;
+      el.innerHTML = items.map(n => {
+        const date = n.providerPublishTime
+          ? new Date(n.providerPublishTime * 1000).toLocaleDateString('ko-KR', {year:'numeric',month:'2-digit',day:'2-digit'}).replace(/\s/g,'')
+          : '';
+        const pub = n.publisher || '';
+        return `
+          <a class="sm-news-item" href="${n.link}" target="_blank" rel="noopener" style="text-decoration:none; color:inherit;">
+            <div class="sm-news-sentiment sentiment-neu"></div>
+            <div>
+              <div class="sm-news-title">${n.title}</div>
+              <div class="sm-news-date">${date}${pub ? ' · ' + pub : ''}</div>
+            </div>
+          </a>`;
+      }).join('');
+      return true;
+    }
+
+    // ─── 네이버 금융 실시간 시세 (국내 주식용) ─────────────────────────
+    // polling.finance.naver.com/api/realtime 은 장중 실시간, 장외는 마감가 반환
+    async function naverPollChunk(codes) {
+      // codes: ['005930','000660',...]
+      const query = codes.map(c => 'SERVICE_ITEM:' + c).join(',');
+      const url = 'https://polling.finance.naver.com/api/realtime?query=' + encodeURIComponent(query) + '&_t=' + Date.now();
+      try {
+        const r = await proxiedFetch(url, 5000);
+        if (!r) return {};
+        const j = await r.json();
+        const datas = j?.result?.areas?.[0]?.datas || [];
+        const map = {};
+        datas.forEach(d => {
+          // nv: 현재가, cv: 전일대비(절대값), cr: 등락률, rf: '1'/'2'상승 '4'/'5'하락
+          const price = Number(d.nv);
+          const cv = Number(d.cv || 0);
+          const rf = String(d.rf || '3');
+          const isDown = rf === '4' || rf === '5';
+          const amt = isDown ? -Math.abs(cv) : Math.abs(cv);
+          const pct = Number(d.cr || 0) * (isDown ? -1 : 1);
+          const prev = price - amt;
+          map[d.cd] = { price, prev, amt, pct };
+        });
+        return map;
+      } catch { return {}; }
+    }
+
+    async function naverPollBatch(codes) {
+      const SIZE = 30;
+      const chunks = [];
+      for (let i = 0; i < codes.length; i += SIZE) chunks.push(codes.slice(i, i + SIZE));
+      const results = await Promise.all(chunks.map(naverPollChunk));
+      return Object.assign({}, ...results);
+    }
+
+    // 단일 종목 실시간 가격 (클릭 즉시 반영용)
+    async function fetchSingleQuote(code) {
+      const map = await naverPollChunk([code]);
+      return map[code] || null;
+    }
+
+    // ─── Yahoo spark (지수/환율/원자재/선물용) ────────────────────────
     async function sparkFetchChunk(syms) {
       const url = 'https://query2.finance.yahoo.com/v7/finance/spark?symbols=' + syms + '&range=1d&interval=1d&_t=' + Date.now();
       try {
-        const r = await fetch(PROXY + encodeURIComponent(url), { cache: 'no-store' });
-        if (!r.ok) return {};
+        const r = await proxiedFetch(url);
+        if (!r) return {};
         const j = await r.json();
         const map = {};
         (j.spark?.result || []).forEach(item => {
@@ -2492,7 +2853,6 @@
         return map;
       } catch { return {}; }
     }
-
     async function sparkFetch(symbols) {
       const arr = symbols.split(',');
       const SIZE = 10;
@@ -2520,19 +2880,47 @@
     }
 
     async function loadLiveStocks() {
-      const data = await sparkFetch(STOCK_SYMBOLS_YF);
-      if (!Object.keys(data).length) { setStatus('fail'); return; }
+      setStatus('loading');
+      liveState = 'loading';
+      const codes = kospi200.map(s => s.code);
+      const data = await naverPollBatch(codes);
+      const nKeys = Object.keys(data).length;
+      console.log('[KJC] loadLiveStocks (Naver) fetched', nKeys, 'symbols');
+      if (!nKeys) {
+        setStatus('fail');
+        liveState = 'fail';
+        renderStockList(kospi200);
+        // 갱신 실패 표시: 선택된 종목 가격 "…"
+        const priceEl = document.getElementById('samsung-price');
+        const changeEl = document.getElementById('samsung-change');
+        if (priceEl) { priceEl.textContent = '…'; priceEl.className = 'sm-price'; }
+        if (changeEl) { changeEl.textContent = '갱신 실패 · 재시도 중'; changeEl.style.color = '#8a8a96'; }
+        return;
+      }
+      liveState = 'ok';
 
+      const changed = {}; // code -> {up}
       kospi200.forEach(s => {
-        const d = data[s.code + '.KS'];
+        const d = data[s.code];
         if (!d) return;
-        if (!s._origPrice) s._origPrice = priceStrToNum(s.price); // 원래 정적 가격 보존
+        if (!s._origPrice) s._origPrice = priceStrToNum(s.price);
+        const prevLivePrice = s._live?.price;
+        if (prevLivePrice != null && prevLivePrice !== d.price) {
+          changed[s.code] = { up: d.price > prevLivePrice };
+        }
         s.chg   = Math.abs(d.pct).toFixed(2);
         s.up    = d.pct >= 0;
         s._live = d;
       });
 
       renderStockList(kospi200);
+
+      // 변경된 종목에 플래시
+      Object.entries(changed).forEach(([code, {up}]) => {
+        const el = document.querySelector(`.sm-stock-item[data-code="${code}"]`);
+        if (el) flash(el, up);
+      });
+
       const now = new Date();
       const timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0') + ':' + now.getSeconds().toString().padStart(2,'0');
       setStatus('live', timeStr);
@@ -2574,6 +2962,14 @@
       });
     }
 
+    function flash(el, up) {
+      if (!el) return;
+      el.classList.remove('flash-up','flash-down');
+      // force reflow
+      void el.offsetWidth;
+      el.classList.add(up ? 'flash-up' : 'flash-down');
+    }
+
     function updateSelectedStockLive() {
       const s = kospi200.find(x => x.code === selectedCode);
       if (!s?._live) return;
@@ -2581,68 +2977,278 @@
       const up = d.pct >= 0;
       const pe = document.getElementById('samsung-price');
       const ce = document.getElementById('samsung-change');
-      if (pe) { pe.className = 'sm-price ' + (up ? 'up' : 'down'); pe.textContent = numFmt(d.price) + '원'; }
+      const te = document.getElementById('samsung-price-time');
+      const newTxt = numFmt(d.price) + '원';
+      if (pe) {
+        const prevTxt = pe.textContent;
+        pe.className = 'sm-price ' + (up ? 'up' : 'down');
+        pe.textContent = newTxt;
+        if (prevTxt !== newTxt) flash(pe, up);
+      }
       if (ce) { ce.style.color = up ? '#ff5f5f' : '#4f9eff'; ce.textContent = `${up ? '▲' : '▼'} ${numFmt(Math.abs(d.amt))} (${Math.abs(d.pct).toFixed(2)}%)`; }
+      if (te) {
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2,'0');
+        const mm = String(now.getMinutes()).padStart(2,'0');
+        const ss = String(now.getSeconds()).padStart(2,'0');
+        te.textContent = `실시간 · ${hh}:${mm}:${ss}`;
+      }
       const capEl = document.getElementById('samsung-cap');
       if (capEl) capEl.textContent = getLiveCap(s);
     }
 
-    async function loadStockDetail(code) {
-      try {
-        const yfCode = code + '.KS';
-        const url = `https://query2.finance.yahoo.com/v8/finance/chart/${yfCode}?interval=5m&range=1d&_t=${Date.now()}`;
-        const r = await fetch(PROXY + encodeURIComponent(url), { cache: 'no-store' });
-        if (!r.ok) return;
-        const j = await r.json();
-        const meta = j.chart?.result?.[0]?.meta;
-        const quotes = j.chart?.result?.[0]?.indicators?.quote?.[0];
-        const ts = j.chart?.result?.[0]?.timestamp;
-        if (!meta) return;
-
-        // 52주 고저 업데이트
-        const hiEl = document.getElementById('samsung-high');
-        const loEl = document.getElementById('samsung-low');
-        if (hiEl && meta.fiftyTwoWeekHigh) hiEl.textContent = numFmt(meta.fiftyTwoWeekHigh);
-        if (loEl && meta.fiftyTwoWeekLow)  loEl.textContent = numFmt(meta.fiftyTwoWeekLow);
-
-        // 거래량 업데이트
-        const volEl = document.getElementById('samsung-vol');
-        if (volEl && meta.regularMarketVolume) {
-          const v = meta.regularMarketVolume;
-          volEl.textContent = v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v;
-        }
-
-        // 차트 렌더링 (인트라데이)
-        if (ts && quotes?.close) {
-          const closes = quotes.close.filter(v => v !== null);
-          const times  = ts.filter((_, i) => quotes.close[i] !== null);
-          if (closes.length > 1) {
-            const W = 500, H = 160, PAD = 10;
-            const minP = Math.min(...closes);
-            const maxP = Math.max(...closes);
-            const range = maxP - minP || 1;
-            const pts = closes.map((p, i) => {
-              const x = (i / (closes.length - 1)) * W;
-              const y = PAD + (1 - (p - minP) / range) * (H - PAD * 2);
-              return `${x},${y}`;
-            });
-            const lineD = 'M' + pts.join(' L');
-            const areaD = lineD + ` L${W},${H} L0,${H} Z`;
-            const up = closes[closes.length-1] >= closes[0];
-            const color = up ? '#ff5f5f' : '#4f9eff';
-            const linePath = document.getElementById('samsung-chart-line');
-            const areaPath = document.getElementById('samsung-chart-area');
-            const grad = document.getElementById('chartGrad');
-            if (linePath) { linePath.setAttribute('d', lineD); linePath.setAttribute('stroke', color); }
-            if (areaPath) { areaPath.setAttribute('d', areaD); }
-            if (grad) {
-              grad.children[0].setAttribute('stop-color', color);
-              grad.children[1].setAttribute('stop-color', color);
-            }
-          }
-        }
-      } catch(e) {}
+    // range → (Yahoo) interval 매핑 (폴백용)
+    const RANGE_INTERVAL = {
+      'day':   '1d',
+      'week':  '1wk',
+      'month': '1mo',
+    };
+    // range → 네이버 siseJson 파라미터
+    function naverSiseRangeParams(range) {
+      const now = new Date();
+      const fmt = d => d.getFullYear().toString() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+      const end = fmt(now);
+      const start = new Date(now);
+      let timeframe = 'day';
+      if (range === 'day')        { start.setMonth(start.getMonth()-4); timeframe = 'day'; }
+      else if (range === 'week')  { start.setFullYear(start.getFullYear()-2); timeframe = 'week'; }
+      else if (range === 'month') { start.setFullYear(start.getFullYear()-10); timeframe = 'month'; }
+      else                        { start.setMonth(start.getMonth()-4); timeframe = 'day'; }
+      return { startTime: fmt(start), endTime: end, timeframe };
     }
+    async function fetchNaverChart(code, range) {
+      const p = naverSiseRangeParams(range);
+      const url = `https://api.finance.naver.com/siseJson.naver?symbol=${code}&requestType=1&startTime=${p.startTime}&endTime=${p.endTime}&timeframe=${p.timeframe}`;
+      const r = await proxiedFetch(url, 5000);
+      if (!r) return null;
+      try {
+        const txt = await r.text();
+        // 네이버 응답: 작은따옴표 JSON 유사 포맷. 따옴표 변환 후 파싱
+        const cleaned = txt.replace(/'/g, '"').replace(/\s+/g, '');
+        const arr = JSON.parse(cleaned);
+        if (!Array.isArray(arr) || arr.length < 2) return null;
+        // 첫 행 헤더, 나머지 데이터
+        const rows = arr.slice(1);
+        const ts = [], open = [], high = [], low = [], close = [], volume = [];
+        rows.forEach(row => {
+          // row[0]: "20250101" 또는 숫자 20250101
+          const dStr = String(row[0]);
+          const y = +dStr.slice(0,4), mo = +dStr.slice(4,6)-1, d = +dStr.slice(6,8);
+          const t = Math.floor(new Date(y, mo, d).getTime() / 1000);
+          ts.push(t);
+          open.push(Number(row[1]));
+          high.push(Number(row[2]));
+          low.push(Number(row[3]));
+          close.push(Number(row[4]));
+          volume.push(Number(row[5] || 0));
+        });
+        if (!ts.length) return null;
+        const last = close[close.length-1];
+        const prev = close.length > 1 ? close[close.length-2] : last;
+        return {
+          meta: {
+            regularMarketPrice: last,
+            chartPreviousClose: prev,
+            fiftyTwoWeekHigh: Math.max(...high),
+            fiftyTwoWeekLow:  Math.min(...low),
+          },
+          quotes: { open, high, low, close, volume },
+          ts,
+        };
+      } catch(e) { console.warn('[KJC] naver chart parse fail', e); return null; }
+    }
+    async function loadStockDetail(code, range) {
+      range = range || currentRange || 'day';
+      const inFocus = () => selectedCode === code && currentRange === range;
+
+      // localStorage 캐시 확인 → 즉시 렌더
+      const diskCached = cacheGet(`chart:${code}:${range}`, chartTtl(range));
+      if (diskCached) {
+        if (!detailCache[code]) detailCache[code] = {};
+        if (!detailCache[code].chart) detailCache[code].chart = {};
+        detailCache[code].chart[range] = diskCached;
+        if (inFocus()) renderChartFromData(code, diskCached.meta, diskCached.quotes, diskCached.ts);
+        // 일봉은 백그라운드 새로고침, 주/월은 캐시로 충분
+        if (range !== 'day') return;
+      } else if (inFocus() && !detailCache[code]?.chart?.[range]) {
+        setChartMessage('차트 로딩중…');
+      }
+
+      try {
+        const nv = await fetchNaverChart(code, range);
+        if (!nv || !nv.ts || nv.ts.length < 2) {
+          if (inFocus() && !detailCache[code]?.chart?.[range]) setChartMessage('차트 데이터를 불러올 수 없습니다');
+          return;
+        }
+        const payload = { meta: nv.meta, quotes: nv.quotes, ts: nv.ts };
+        if (!detailCache[code]) detailCache[code] = {};
+        if (!detailCache[code].chart) detailCache[code].chart = {};
+        detailCache[code].chart[range] = payload;
+        detailCache[code].ts = Date.now();
+        cacheSet(`chart:${code}:${range}`, payload);
+        if (!inFocus()) return;
+        renderChartFromData(code, nv.meta, nv.quotes, nv.ts);
+      } catch(e) {
+        console.warn('[KJC] loadStockDetail error', e);
+        if (inFocus() && !detailCache[code]?.chart?.[range]) setChartMessage('차트 데이터를 불러올 수 없습니다');
+      }
+    }
+    // ─── 재무 지표 (Yahoo quoteSummary) ───────────────────────────────
+    function fmtPct(v) { return v != null ? (v * 100).toFixed(2) + '%' : '-'; }
+    function fmtRatio(v) { return v != null ? v.toFixed(2) : '-'; }
+    function fmtCapKr(v) {
+      if (v == null) return '-';
+      const 조 = 1e12, 억 = 1e8;
+      if (v >= 조) return (v / 조).toFixed(v >= 10 * 조 ? 0 : 1) + '조';
+      if (v >= 억) return Math.round(v / 억).toLocaleString('ko-KR') + '억';
+      return v.toLocaleString('ko-KR');
+    }
+
+    async function loadStockFinancials(code) {
+      // 디스크 캐시 즉시 반영
+      const diskCached = cacheGet(`fin:${code}`, TTL.financials);
+      if (diskCached) {
+        if (!detailCache[code]) detailCache[code] = {};
+        detailCache[code].financials = diskCached;
+        if (selectedCode === code) renderFinancialsFromData(code, diskCached);
+        return; // 1일 캐시이므로 굳이 새로 안 받음
+      }
+      // 네이버 금융 통합 API
+      const url = `https://m.stock.naver.com/api/stock/${code}/integration`;
+      let data = null;
+      try {
+        const r = await proxiedFetch(url);
+        if (r) {
+          const j = await r.json();
+          // 네이버 응답을 Yahoo 호환 구조로 변환
+          const cur  = j.dealTrendInfos?.[0] || {};
+          const tot  = j.totalInfos || [];
+          const find = key => {
+            const e = tot.find(x => x.key === key || x.code === key);
+            return e ? e.value : null;
+          };
+          const num = v => {
+            if (v == null) return null;
+            const s = String(v).replace(/[,%원조억만]/g,'').trim();
+            const n = parseFloat(s);
+            return isNaN(n) ? null : n;
+          };
+          // 시총: '시가총액' 키, 단위 '억'
+          const capStr = find('marketValue') || find('시가총액');
+          let cap = null;
+          if (capStr) {
+            const n = num(capStr);
+            if (n != null) cap = n * 1e8; // 네이버는 억 단위
+          }
+          const per = num(find('per') || find('PER') || find('eps')); // PER
+          const pbr = num(find('pbr') || find('PBR'));
+          const div = num(find('dividendRatio') || find('배당수익률')); // %
+          const roe = num(find('roe') || find('ROE')); // %
+          data = {
+            summaryDetail: { trailingPE: per != null ? {raw: per} : null, dividendYield: div != null ? {raw: div / 100} : null },
+            defaultKeyStatistics: { priceToBook: pbr != null ? {raw: pbr} : null, marketCap: cap != null ? {raw: cap} : null },
+            financialData: { returnOnEquity: roe != null ? {raw: roe / 100} : null },
+            price: { marketCap: cap != null ? {raw: cap} : null },
+          };
+        }
+      } catch(e) { console.warn('[KJC] naver financials parse fail', e); }
+
+      if (data) {
+        if (!detailCache[code]) detailCache[code] = {};
+        detailCache[code].financials = data;
+        detailCache[code].ts = Date.now();
+        cacheSet(`fin:${code}`, data);
+      }
+      if (selectedCode !== code) return;
+      const ok = renderFinancialsFromData(code, data);
+      if (!ok) {
+        [['samsung-per','per'],['samsung-pbr','per'],['samsung-div','main']].forEach(([id, p]) => {
+          const e = document.getElementById(id);
+          if (e) e.innerHTML = `<a href="https://finance.naver.com/item/${p === 'per' ? 'coinfo' : 'main'}.naver?code=${code}" target="_blank" rel="noopener" style="color:#7aa3ff;text-decoration:none;font-size:0.8rem;">네이버 →</a>`;
+        });
+      }
+    }
+
+    // ─── 공포탐욕지수 (CNN) ───────────────────────────────────────────
+    function renderFng(score, rating) {
+      const el = document.getElementById('idx-fng');
+      if (!el) return;
+      const pe = el.querySelector('.sm-index-price');
+      const ce = el.querySelector('.sm-index-change');
+      const ratingMap = {
+        'extreme fear': ['극단적 공포', '#ef4444'],
+        'fear':         ['공포',        '#f59e0b'],
+        'neutral':      ['중립',        '#8a8a96'],
+        'greed':        ['탐욕',        '#f59e0b'],
+        'extreme greed':['극단적 탐욕', '#ef4444'],
+      };
+      const [label, color] = ratingMap[rating] || ['-', '#f59e0b'];
+      if (pe) { pe.textContent = Math.round(score); pe.style.color = color; }
+      if (ce) { ce.textContent = label + ' 구간'; ce.style.color = color; }
+    }
+    async function loadFearGreed() {
+      // 1시간 캐시
+      const diskCached = cacheGet('fng', TTL.fng);
+      if (diskCached) {
+        renderFng(diskCached.score, diskCached.rating);
+        return;
+      }
+      const url = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata';
+      try {
+        const r = await proxiedFetch(url);
+        if (!r) return;
+        const j = await r.json();
+        const score = j.fear_and_greed?.score;
+        const rating = j.fear_and_greed?.rating;
+        if (score == null) return;
+        cacheSet('fng', { score, rating });
+        renderFng(score, rating);
+      } catch {}
+    }
+
+    // ─── 뉴스 (네이버 금융) ───────────────────────────────────────────
+    async function loadStockNews(code, stockName) {
+      const el = document.getElementById('newsList');
+      if (!el) return;
+      // 디스크 캐시 확인 (30분)
+      const diskCached = cacheGet(`news:${code}`, TTL.news);
+      if (diskCached && diskCached.length) {
+        if (!detailCache[code]) detailCache[code] = {};
+        detailCache[code].news = diskCached;
+        if (selectedCode === code) renderNewsFromData(code, diskCached);
+        return;
+      }
+      const url = `https://m.stock.naver.com/api/news/stock/${code}?pageSize=10&page=1`;
+      try {
+        const r = await proxiedFetch(url);
+        if (!r) throw 0;
+        const j = await r.json();
+        // 네이버 응답 구조: [{items: [{title, datetime, officeName, articleId, officeId}, ...]}, ...]
+        const rawItems = [];
+        const collect = arr => {
+          (arr || []).forEach(g => (g.items || []).forEach(it => rawItems.push(it)));
+        };
+        collect(Array.isArray(j) ? j : (j.items ? [j] : []));
+        const items = rawItems.slice(0, 5).map(it => ({
+          title: it.title,
+          link: `https://n.news.naver.com/mnews/article/${it.officeId}/${it.articleId}`,
+          publisher: it.officeName,
+          providerPublishTime: it.datetime ? Math.floor(new Date(it.datetime.replace(/(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6')).getTime() / 1000) : null,
+        }));
+        if (!items.length) throw 0;
+        if (!detailCache[code]) detailCache[code] = {};
+        detailCache[code].news = items;
+        detailCache[code].ts = Date.now();
+        cacheSet(`news:${code}`, items);
+        if (selectedCode !== code) return;
+        renderNewsFromData(code, items);
+      } catch(e) {
+        console.warn('[KJC] naver news fail', e);
+        const naver = `https://finance.naver.com/item/news.naver?code=${code}`;
+        el.innerHTML = `<div style="padding:12px;"><a href="${naver}" target="_blank" rel="noopener" style="color:#7aa3ff; text-decoration:none; font-size:0.9rem;">📰 네이버 금융 뉴스에서 보기 →</a></div>`;
+      }
+    }
+
     // ─────────────────────────────────────────────────────────────────
 
     // 주식 모달
@@ -2655,10 +3261,14 @@
       loadLiveStocks();
       loadLiveIndices();
       loadStockDetail(selectedCode);
+      loadStockFinancials(selectedCode);
+      loadStockNews(selectedCode, (kospi200.find(x => x.code === selectedCode) || {}).name || '');
+      loadFearGreed();
       liveTimer = setInterval(() => {
         loadLiveStocks();
         loadLiveIndices();
         loadStockDetail(selectedCode);
+        loadFearGreed();
       }, 10000);
     }
 
@@ -2677,11 +3287,20 @@
       if (e.key === "Escape") closeStockModal();
     });
 
-    // 차트 탭
+    // 차트 탭 - 기간 변경 시 새로 로드
     document.querySelectorAll(".chart-tab").forEach(tab => {
       tab.addEventListener("click", function() {
         document.querySelectorAll(".chart-tab").forEach(t => t.classList.remove("active"));
         this.classList.add("active");
+        currentRange = this.dataset.range || '1d';
+        // 캐시 있으면 즉시, 없으면 로드
+        const cached = detailCache[selectedCode]?.chart?.[currentRange];
+        if (cached) {
+          renderChartFromData(selectedCode, cached.meta, cached.quotes, cached.ts);
+        } else {
+          setChartMessage('차트 로딩중…');
+        }
+        loadStockDetail(selectedCode, currentRange);
       });
     });
 
