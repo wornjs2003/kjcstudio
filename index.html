@@ -1101,6 +1101,12 @@
       font-size: 1rem;
       font-weight: 600;
     }
+    .need-check {
+      color: #8a8a96;
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.03em;
+    }
 
     /* 뉴스 */
     .sm-news-list { display: flex; flex-direction: column; gap: 0; }
@@ -1871,7 +1877,7 @@
                 <div class="sm-index-change dn">▼ 3.12 (-0.42%)</div>
               </div>
             </div>
-            <div class="sm-index-row">
+            <div class="sm-index-row" id="idx-kospi200">
               <div class="sm-tooltip"><div class="tt-name">KOSPI200</div>KOSPI 상장 종목 중 시가총액·거래량 상위 200개 종목으로 구성된 지수. 선물·옵션의 기준 지수로 활용됩니다.</div>
               <span class="sm-index-name">KOSPI200</span>
               <div class="sm-index-vals">
@@ -1921,7 +1927,7 @@
                 <div class="sm-index-change up">▲ 2.30 (+0.66%)</div>
               </div>
             </div>
-            <div class="sm-index-row">
+            <div class="sm-index-row" id="idx-sp500f">
               <div class="sm-tooltip"><div class="tt-name">S&P500 선물</div>S&P500 지수를 기초자산으로 하는 선물 계약. 미국 증시 개장 전 투자 심리와 시장 방향을 파악하는 핵심 지표입니다.</div>
               <span class="sm-index-name">S&P500 F</span>
               <div class="sm-index-vals">
@@ -1929,7 +1935,7 @@
                 <div class="sm-index-change up">▲ 38.50 (+0.73%)</div>
               </div>
             </div>
-            <div class="sm-index-row">
+            <div class="sm-index-row" id="idx-nas100f">
               <div class="sm-tooltip"><div class="tt-name">NASDAQ100 선물</div>나스닥 상위 100개 기술주를 기초자산으로 하는 선물. 빅테크 흐름을 선행적으로 반영합니다.</div>
               <span class="sm-index-name">NAS100 F</span>
               <div class="sm-index-vals">
@@ -2008,7 +2014,7 @@
           <!-- 시장 심리 -->
           <div class="sm-index-group">
             <div class="sm-index-group-title">🧠 시장 심리</div>
-            <div class="sm-index-row">
+            <div class="sm-index-row" id="idx-vix">
               <div class="sm-tooltip"><div class="tt-name">VIX (공포지수)</div>향후 30일간 S&P500의 예상 변동성. 20 이하는 안정, 20~30은 불안, 30 이상은 공포, 60 이상은 극단적 위기입니다. 주가와 반대로 움직이는 경향이 있습니다.</div>
               <span class="sm-index-name">VIX</span>
               <div class="sm-index-vals">
@@ -2032,7 +2038,7 @@
                 <div class="sm-index-change" style="color:#f59e0b">탐욕 구간</div>
               </div>
             </div>
-            <div class="sm-index-row">
+            <div class="sm-index-row" id="idx-dxy">
               <div class="sm-tooltip"><div class="tt-name">달러 인덱스 (DXY)</div>주요 6개국 통화 대비 달러 강세를 나타내는 지수. 달러 강세(상승)는 신흥국 자금 이탈을 유발해 한국 증시에 부담이 됩니다.</div>
               <span class="sm-index-name">달러 인덱스 (DXY)</span>
               <div class="sm-index-vals">
@@ -2085,19 +2091,19 @@
 
         <!-- 검색 -->
         <div class="sm-search">
-          <input type="text" placeholder="종목명 또는 종목코드 검색 (예: 삼성전자, 005930)" value="삼성전자" />
+          <input id="detail-search" type="text" placeholder="종목명 또는 종목코드 검색 (예: 삼성전자, 005930)" value="삼성전자" />
           <button>검색</button>
         </div>
 
         <!-- 종목 헤더 -->
         <div class="sm-stock-header">
           <div>
-            <div class="sm-stock-name">삼성전자 <span style="font-size:0.9rem;color:#8a8a96;font-weight:400">005930</span></div>
-            <div class="sm-stock-code">KOSPI · 반도체 · 2026.04.15 기준</div>
+            <div class="sm-stock-name" id="detail-name">삼성전자 <span style="font-size:0.9rem;color:#8a8a96;font-weight:400">005930</span></div>
+            <div class="sm-stock-code" id="detail-sector">KOSPI · 2026.04.15 기준</div>
           </div>
           <div class="sm-price-block">
-            <div class="sm-price up">76,500원</div>
-            <div class="sm-price-change">▲ 1,200 (+1.59%)</div>
+            <div class="sm-price up" id="samsung-price">76,500원</div>
+            <div class="sm-price-change" id="samsung-change">▲ 1,200 (+1.59%)</div>
           </div>
         </div>
 
@@ -2114,16 +2120,16 @@
               <button class="chart-tab">1년</button>
             </div>
             <div class="sm-chart-area">
-              <svg class="sm-chart-svg" viewBox="0 0 500 160" preserveAspectRatio="none">
+              <svg id="samsung-chart-svg" class="sm-chart-svg" viewBox="0 0 500 160" preserveAspectRatio="none">
                 <defs>
                   <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stop-color="#4f7eff" stop-opacity="0.3"/>
                     <stop offset="100%" stop-color="#4f7eff" stop-opacity="0"/>
                   </linearGradient>
                 </defs>
-                <path d="M0,120 L40,110 L80,95 L120,105 L160,85 L200,90 L240,70 L280,60 L320,75 L360,55 L400,40 L440,45 L500,30"
+                <path id="samsung-chart-line" d="M0,120 L40,110 L80,95 L120,105 L160,85 L200,90 L240,70 L280,60 L320,75 L360,55 L400,40 L440,45 L500,30"
                   fill="none" stroke="#4f7eff" stroke-width="2" stroke-linecap="round"/>
-                <path d="M0,120 L40,110 L80,95 L120,105 L160,85 L200,90 L240,70 L280,60 L320,75 L360,55 L400,40 L440,45 L500,30 L500,160 L0,160 Z"
+                <path id="samsung-chart-area" d="M0,120 L40,110 L80,95 L120,105 L160,85 L200,90 L240,70 L280,60 L320,75 L360,55 L400,40 L440,45 L500,30 L500,160 L0,160 Z"
                   fill="url(#chartGrad)"/>
               </svg>
             </div>
@@ -2135,39 +2141,39 @@
             <div class="sm-metrics">
               <div class="sm-metric">
                 <div class="sm-metric-label">PER</div>
-                <div class="sm-metric-value">13.2x</div>
+                <div class="sm-metric-value need-check">확인필요</div>
               </div>
               <div class="sm-metric">
                 <div class="sm-metric-label">PBR</div>
-                <div class="sm-metric-value">1.4x</div>
+                <div class="sm-metric-value need-check">확인필요</div>
               </div>
               <div class="sm-metric">
                 <div class="sm-metric-label">ROE</div>
-                <div class="sm-metric-value" style="color:#22c55e">10.8%</div>
+                <div class="sm-metric-value need-check">확인필요</div>
               </div>
               <div class="sm-metric">
                 <div class="sm-metric-label">시가총액</div>
-                <div class="sm-metric-value">457조</div>
+                <div class="sm-metric-value" id="samsung-cap">457조</div>
               </div>
               <div class="sm-metric">
                 <div class="sm-metric-label">배당수익률</div>
-                <div class="sm-metric-value" style="color:#4f7eff">2.3%</div>
+                <div class="sm-metric-value need-check">확인필요</div>
               </div>
               <div class="sm-metric">
                 <div class="sm-metric-label">52주 최고</div>
-                <div class="sm-metric-value">88,800</div>
+                <div class="sm-metric-value" id="samsung-high">88,800</div>
               </div>
               <div class="sm-metric">
                 <div class="sm-metric-label">52주 최저</div>
-                <div class="sm-metric-value" style="color:#ff5f5f">58,400</div>
+                <div class="sm-metric-value" id="samsung-low" style="color:#ff5f5f">58,400</div>
               </div>
               <div class="sm-metric">
                 <div class="sm-metric-label">거래량</div>
-                <div class="sm-metric-value">12.4M</div>
+                <div class="sm-metric-value" id="samsung-vol">12.4M</div>
               </div>
               <div class="sm-metric">
                 <div class="sm-metric-label">외국인 비중</div>
-                <div class="sm-metric-value">51.2%</div>
+                <div class="sm-metric-value need-check">확인필요</div>
               </div>
             </div>
           </div>
@@ -2178,10 +2184,9 @@
           <!-- AI 분석 -->
           <div class="sm-ai-box">
             <div class="sm-ai-header">🤖 AI 종합 분석</div>
-            <div class="sm-ai-text">
+            <div class="sm-ai-text" id="detail-ai-text">
               삼성전자는 반도체 업황 회복과 HBM 수요 증가로 2026년 실적 개선이 기대됩니다.
-              외국인 순매수세가 지속되고 있으며, 현재 PER 13.2배는 역사적 평균 대비 저평가 구간에 위치합니다.
-              단기 조정 가능성이 있으나 중장기 매수 관점에서 긍정적입니다.
+              외국인 순매수세가 지속되고 있으며, 단기 조정 가능성이 있으나 중장기 매수 관점에서 긍정적입니다.
             </div>
             <div class="sm-ai-score">
               <span class="sm-ai-score-label">종합 점수</span>
@@ -2329,17 +2334,39 @@
       { rank:50, name:"LG유플러스",     code:"032640", cap:"5.5조", price:"12,750",  chg:"-0.39", up:false, desc:"LG그룹 계열 통신사. 5G·IPTV·기업 솔루션 사업 영위. 안정적 배당과 낮은 밸류에이션이 방어주적 매력." },
     ];
 
+    function capToNum(str) {
+      const m = str.match(/([0-9.]+)조/);
+      return m ? parseFloat(m[1]) * 1e12 : 0;
+    }
+    function priceStrToNum(str) {
+      return parseFloat((str + '').replace(/,/g, '')) || 0;
+    }
+    function numToJo(n) {
+      if (n >= 1e12) return (n / 1e12).toFixed(1) + '조';
+      if (n >= 1e8)  return Math.round(n / 1e8) + '억';
+      return '-';
+    }
+    function getLiveCap(s) {
+      if (!s._live) return s.cap;
+      const staticCap   = capToNum(s.cap);
+      const staticPrice = s._origPrice || priceStrToNum(s.price);
+      if (!staticCap || !staticPrice) return s.cap;
+      const shares  = staticCap / staticPrice;
+      const liveCap = shares * s._live.price;
+      return numToJo(liveCap);
+    }
+
     function renderStockList(list) {
       const el = document.getElementById("stockList");
       el.innerHTML = list.map((s, i) => `
-        <div class="sm-stock-item ${i === 0 ? 'active' : ''}" onclick="selectStock(this, '${s.name}')"
-          data-desc="${s.desc || ''}" data-name="${s.name}"
+        <div class="sm-stock-item ${i === 0 ? 'active' : ''}" onclick="selectStock(this, '${s.code}')"
+          data-desc="${s.desc || ''}" data-name="${s.name}" data-code="${s.code}"
           onmouseenter="showStockTooltip(event, this)"
           onmouseleave="hideStockTooltip()">
           <span class="ssi-rank">${s.rank}</span>
           <div class="ssi-info">
             <div class="ssi-name">${s.name}</div>
-            <div class="ssi-cap">${s.cap}</div>
+            <div class="ssi-cap">${s._live ? `<span class="${s.up ? 'up' : 'dn'}">${numFmt(s._live.price)}원</span> · ${getLiveCap(s)}` : s.cap}</div>
           </div>
           <div class="ssi-change ${s.up ? 'up' : 'dn'}">${s.up ? '▲' : '▼'} ${s.chg}%</div>
         </div>
@@ -2381,10 +2408,59 @@
       renderStockList(filtered);
     }
 
-    function selectStock(el, name) {
+    let selectedCode = '005930';
+
+    function selectStock(el, code) {
       document.querySelectorAll(".sm-stock-item").forEach(i => i.classList.remove("active"));
       el.classList.add("active");
-      // 추후 실제 데이터 연동 시 종목명으로 조회
+      selectedCode = code;
+      updateDetailPanel(code);
+    }
+
+    function updateDetailPanel(code) {
+      const s = kospi200.find(x => x.code === code);
+      if (!s) return;
+
+      // 헤더 업데이트
+      const nameEl = document.getElementById('detail-name');
+      const sectorEl = document.getElementById('detail-sector');
+      const searchEl = document.getElementById('detail-search');
+      const today = new Date().toLocaleDateString('ko-KR', {year:'numeric',month:'2-digit',day:'2-digit'}).replace(/\s/g,'');
+      if (nameEl) nameEl.innerHTML = `${s.name} <span style="font-size:0.9rem;color:#8a8a96;font-weight:400">${s.code}</span>`;
+      if (sectorEl) sectorEl.textContent = `KOSPI · ${today} 기준`;
+      if (searchEl) searchEl.value = s.name;
+
+      // 가격 업데이트
+      const priceEl = document.getElementById('samsung-price');
+      const changeEl = document.getElementById('samsung-change');
+      if (s._live) {
+        const up = s._live.pct >= 0;
+        if (priceEl) { priceEl.className = 'sm-price ' + (up ? 'up' : 'down'); priceEl.textContent = numFmt(s._live.price) + '원'; }
+        if (changeEl) { changeEl.style.color = up ? '#ff5f5f' : '#4f9eff'; changeEl.textContent = `${up ? '▲' : '▼'} ${numFmt(Math.abs(s._live.amt))} (${Math.abs(s._live.pct).toFixed(2)}%)`; }
+      } else {
+        const upStatic = s.up;
+        if (priceEl) { priceEl.className = 'sm-price ' + (upStatic ? 'up' : 'down'); priceEl.textContent = s.price + '원'; }
+        if (changeEl) { changeEl.style.color = upStatic ? '#ff5f5f' : '#4f9eff'; changeEl.textContent = `${upStatic ? '▲' : '▼'} ${s.chg}%`; }
+      }
+
+      // 시가총액
+      const capEl = document.getElementById('samsung-cap');
+      if (capEl) capEl.textContent = getLiveCap(s);
+
+      // 52주 고저 / 거래량 초기화 (로딩 중)
+      const hiEl = document.getElementById('samsung-high');
+      const loEl = document.getElementById('samsung-low');
+      const volEl = document.getElementById('samsung-vol');
+      if (hiEl) hiEl.textContent = '로딩중…';
+      if (loEl) loEl.textContent = '로딩중…';
+      if (volEl) volEl.textContent = '로딩중…';
+
+      // AI 분석 텍스트
+      const aiEl = document.getElementById('detail-ai-text');
+      if (aiEl) aiEl.textContent = `${s.name}의 실시간 데이터를 불러오는 중입니다. 세부 재무 지표(PER·PBR·ROE) 연동 후 AI 분석이 업데이트될 예정입니다.`;
+
+      // 차트 + 상세 데이터 로드
+      loadStockDetail(code);
     }
 
     // 지수 접기/펼치기
@@ -2392,124 +2468,205 @@
       document.getElementById("indicesWrap").classList.toggle("collapsed");
     }
 
-    // ─── 실시간 데이터 (Yahoo Finance) ───────────────────────────────
+    // ─── 실시간 데이터 (Yahoo Finance spark) ─────────────────────────
     const STOCK_SYMBOLS_YF = kospi200.map(s => s.code + '.KS').join(',');
-    const INDEX_SYMBOLS_YF = '^KS11,^KQ11,^GSPC,^IXIC,^DJI,^TNX,KRW=X,GC=F,CL=F';
+    const INDEX_SYMBOLS_YF = '^KS11,^KQ11,^KS200,^GSPC,^IXIC,^DJI,^TNX,KRW=X,GC=F,CL=F,^VIX,DX-Y.NYB,ES=F,NQ=F';
+    const PROXY = 'https://corsproxy.io/?';
 
-    async function yfFetch(symbols) {
-      const urls = [
-        'https://query1.finance.yahoo.com/v7/finance/quote?symbols=' + symbols,
-        'https://query2.finance.yahoo.com/v7/finance/quote?symbols=' + symbols,
-      ];
-      for (const url of urls) {
-        try {
-          const r = await fetch('https://corsproxy.io/?' + encodeURIComponent(url), { cache: 'no-store' });
-          if (!r.ok) continue;
-          const j = await r.json();
-          const results = j.quoteResponse?.result;
-          if (results?.length) return results;
-        } catch {}
-      }
-      return [];
+    async function sparkFetchChunk(syms) {
+      const url = 'https://query2.finance.yahoo.com/v7/finance/spark?symbols=' + syms + '&range=1d&interval=1d&_t=' + Date.now();
+      try {
+        const r = await fetch(PROXY + encodeURIComponent(url), { cache: 'no-store' });
+        if (!r.ok) return {};
+        const j = await r.json();
+        const map = {};
+        (j.spark?.result || []).forEach(item => {
+          const meta = item.response?.[0]?.meta;
+          if (!meta) return;
+          const price = meta.regularMarketPrice;
+          const prev  = meta.chartPreviousClose || price;
+          const amt   = price - prev;
+          const pct   = prev ? (amt / prev * 100) : 0;
+          map[item.symbol] = { price, prev, amt, pct };
+        });
+        return map;
+      } catch { return {}; }
+    }
+
+    async function sparkFetch(symbols) {
+      const arr = symbols.split(',');
+      const SIZE = 10;
+      const chunks = [];
+      for (let i = 0; i < arr.length; i += SIZE) chunks.push(arr.slice(i, i + SIZE).join(','));
+      const results = await Promise.all(chunks.map(sparkFetchChunk));
+      return Object.assign({}, ...results);
     }
 
     function numFmt(n, dec = 0) {
       return n != null ? n.toLocaleString('ko-KR', { maximumFractionDigits: dec }) : '-';
     }
 
-    function setStatus(s) {
+    function setStatus(s, time) {
       const el = document.getElementById('liveStatus');
       if (!el) return;
       const map = {
-        loading: ['⟳ 불러오는 중...', '#f59e0b'],
-        live:    ['● 실시간',         '#22c55e'],
-        fail:    ['○ 샘플 데이터',    '#8a8a96'],
+        loading: ['⟳ 로딩중',      '#f59e0b'],
+        live:    ['● 실시간',       '#22c55e'],
+        fail:    ['○ 샘플 데이터',  '#8a8a96'],
       };
       const [text, color] = map[s] || map.fail;
-      el.textContent = text;
+      el.textContent = time ? text + ' ' + time : text;
       el.style.color = color;
     }
 
     async function loadLiveStocks() {
-      setStatus('loading');
-      const quotes = await yfFetch(STOCK_SYMBOLS_YF);
-      if (!quotes.length) { setStatus('fail'); return; }
+      const data = await sparkFetch(STOCK_SYMBOLS_YF);
+      if (!Object.keys(data).length) { setStatus('fail'); return; }
 
-      quotes.forEach(q => {
-        const code = q.symbol.replace('.KS', '');
-        const s = kospi200.find(x => x.code === code);
-        if (!s) return;
-        s.price = numFmt(q.regularMarketPrice);
-        s.chg   = Math.abs(q.regularMarketChangePercent ?? 0).toFixed(2);
-        s.up    = (q.regularMarketChangePercent ?? 0) >= 0;
-        s._raw  = q;
+      kospi200.forEach(s => {
+        const d = data[s.code + '.KS'];
+        if (!d) return;
+        if (!s._origPrice) s._origPrice = priceStrToNum(s.price); // 원래 정적 가격 보존
+        s.chg   = Math.abs(d.pct).toFixed(2);
+        s.up    = d.pct >= 0;
+        s._live = d;
       });
 
       renderStockList(kospi200);
-      setStatus('live');
+      const now = new Date();
+      const timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0') + ':' + now.getSeconds().toString().padStart(2,'0');
+      setStatus('live', timeStr);
       updateSelectedStockLive();
     }
 
     async function loadLiveIndices() {
-      const quotes = await yfFetch(INDEX_SYMBOLS_YF);
-      if (!quotes.length) return;
-      const m = Object.fromEntries(quotes.map(q => [q.symbol, q]));
+      const data = await sparkFetch(INDEX_SYMBOLS_YF);
+      if (!Object.keys(data).length) return;
 
       const rows = [
-        ['idx-kospi',  m['^KS11'],  false],
-        ['idx-kosdaq', m['^KQ11'],  false],
-        ['idx-sp500',  m['^GSPC'],  false],
-        ['idx-nasdaq', m['^IXIC'],  false],
-        ['idx-dow',    m['^DJI'],   false],
-        ['idx-usd',    m['KRW=X'],  true ],
-        ['idx-gold',   m['GC=F'],   true ],
-        ['idx-wti',    m['CL=F'],   true ],
-        ['idx-10y',    m['^TNX'],   true ],
+        ['idx-kospi',    data['^KS11'],     false],
+        ['idx-kosdaq',   data['^KQ11'],     false],
+        ['idx-kospi200', data['^KS200'],    false],
+        ['idx-sp500',    data['^GSPC'],     false],
+        ['idx-nasdaq',   data['^IXIC'],     false],
+        ['idx-dow',      data['^DJI'],      false],
+        ['idx-usd',      data['KRW=X'],     true ],
+        ['idx-gold',     data['GC=F'],      true ],
+        ['idx-wti',      data['CL=F'],      true ],
+        ['idx-10y',      data['^TNX'],      true ],
+        ['idx-vix',      data['^VIX'],      true ],
+        ['idx-dxy',      data['DX-Y.NYB'],  true ],
+        ['idx-sp500f',   data['ES=F'],      false],
+        ['idx-nas100f',  data['NQ=F'],      false],
       ];
 
-      rows.forEach(([id, q, dec2]) => {
-        if (!q) return;
+      rows.forEach(([id, d, dec2]) => {
+        if (!d) return;
         const el = document.getElementById(id);
         if (!el) return;
-        const p   = q.regularMarketPrice;
-        const pct = q.regularMarketChangePercent ?? 0;
-        const amt = q.regularMarketChange ?? 0;
-        const up  = pct >= 0;
-        const cls = up ? 'up' : 'dn';
+        const up   = d.pct >= 0;
+        const cls  = up ? 'up' : 'dn';
         const sign = up ? '▲' : '▼';
         const pe = el.querySelector('.sm-index-price');
         const ce = el.querySelector('.sm-index-change');
-        if (pe) { pe.className = 'sm-index-price ' + cls; pe.textContent = numFmt(p, dec2 ? 2 : 0); }
-        if (ce) { ce.className = 'sm-index-change ' + cls; ce.textContent = `${sign} ${numFmt(Math.abs(amt), dec2 ? 2 : 0)} (${Math.abs(pct).toFixed(2)}%)`; }
+        if (pe) { pe.className = 'sm-index-price ' + cls; pe.textContent = numFmt(d.price, dec2 ? 2 : 0); }
+        if (ce) { ce.className = 'sm-index-change ' + cls; ce.textContent = `${sign} ${numFmt(Math.abs(d.amt), dec2 ? 2 : 0)} (${Math.abs(d.pct).toFixed(2)}%)`; }
       });
     }
 
     function updateSelectedStockLive() {
-      const s = kospi200.find(x => x.code === '005930');
-      if (!s?._raw) return;
-      const q   = s._raw;
-      const pct = q.regularMarketChangePercent ?? 0;
-      const amt = q.regularMarketChange ?? 0;
-      const up  = pct >= 0;
-      const pe  = document.querySelector('.sm-price');
-      const ce  = document.querySelector('.sm-price-change');
-      if (pe) { pe.className = 'sm-price ' + (up ? 'up' : 'down'); pe.textContent = numFmt(q.regularMarketPrice) + '원'; }
-      if (ce) { ce.style.color = up ? '#ff5f5f' : '#4f9eff'; ce.textContent = `${up ? '▲' : '▼'} ${numFmt(Math.abs(amt))} (${Math.abs(pct).toFixed(2)}%)`; }
+      const s = kospi200.find(x => x.code === selectedCode);
+      if (!s?._live) return;
+      const d  = s._live;
+      const up = d.pct >= 0;
+      const pe = document.getElementById('samsung-price');
+      const ce = document.getElementById('samsung-change');
+      if (pe) { pe.className = 'sm-price ' + (up ? 'up' : 'down'); pe.textContent = numFmt(d.price) + '원'; }
+      if (ce) { ce.style.color = up ? '#ff5f5f' : '#4f9eff'; ce.textContent = `${up ? '▲' : '▼'} ${numFmt(Math.abs(d.amt))} (${Math.abs(d.pct).toFixed(2)}%)`; }
+      const capEl = document.getElementById('samsung-cap');
+      if (capEl) capEl.textContent = getLiveCap(s);
+    }
+
+    async function loadStockDetail(code) {
+      try {
+        const yfCode = code + '.KS';
+        const url = `https://query2.finance.yahoo.com/v8/finance/chart/${yfCode}?interval=5m&range=1d&_t=${Date.now()}`;
+        const r = await fetch(PROXY + encodeURIComponent(url), { cache: 'no-store' });
+        if (!r.ok) return;
+        const j = await r.json();
+        const meta = j.chart?.result?.[0]?.meta;
+        const quotes = j.chart?.result?.[0]?.indicators?.quote?.[0];
+        const ts = j.chart?.result?.[0]?.timestamp;
+        if (!meta) return;
+
+        // 52주 고저 업데이트
+        const hiEl = document.getElementById('samsung-high');
+        const loEl = document.getElementById('samsung-low');
+        if (hiEl && meta.fiftyTwoWeekHigh) hiEl.textContent = numFmt(meta.fiftyTwoWeekHigh);
+        if (loEl && meta.fiftyTwoWeekLow)  loEl.textContent = numFmt(meta.fiftyTwoWeekLow);
+
+        // 거래량 업데이트
+        const volEl = document.getElementById('samsung-vol');
+        if (volEl && meta.regularMarketVolume) {
+          const v = meta.regularMarketVolume;
+          volEl.textContent = v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v;
+        }
+
+        // 차트 렌더링 (인트라데이)
+        if (ts && quotes?.close) {
+          const closes = quotes.close.filter(v => v !== null);
+          const times  = ts.filter((_, i) => quotes.close[i] !== null);
+          if (closes.length > 1) {
+            const W = 500, H = 160, PAD = 10;
+            const minP = Math.min(...closes);
+            const maxP = Math.max(...closes);
+            const range = maxP - minP || 1;
+            const pts = closes.map((p, i) => {
+              const x = (i / (closes.length - 1)) * W;
+              const y = PAD + (1 - (p - minP) / range) * (H - PAD * 2);
+              return `${x},${y}`;
+            });
+            const lineD = 'M' + pts.join(' L');
+            const areaD = lineD + ` L${W},${H} L0,${H} Z`;
+            const up = closes[closes.length-1] >= closes[0];
+            const color = up ? '#ff5f5f' : '#4f9eff';
+            const linePath = document.getElementById('samsung-chart-line');
+            const areaPath = document.getElementById('samsung-chart-area');
+            const grad = document.getElementById('chartGrad');
+            if (linePath) { linePath.setAttribute('d', lineD); linePath.setAttribute('stroke', color); }
+            if (areaPath) { areaPath.setAttribute('d', areaD); }
+            if (grad) {
+              grad.children[0].setAttribute('stop-color', color);
+              grad.children[1].setAttribute('stop-color', color);
+            }
+          }
+        }
+      } catch(e) {}
     }
     // ─────────────────────────────────────────────────────────────────
 
     // 주식 모달
+    let liveTimer = null;
+
     function openStockModal() {
       document.getElementById("stockModal").classList.add("open");
       document.body.style.overflow = "hidden";
       renderStockList(kospi200);
       loadLiveStocks();
       loadLiveIndices();
+      loadStockDetail(selectedCode);
+      liveTimer = setInterval(() => {
+        loadLiveStocks();
+        loadLiveIndices();
+        loadStockDetail(selectedCode);
+      }, 10000);
     }
 
     function closeStockModal() {
       document.getElementById("stockModal").classList.remove("open");
       document.body.style.overflow = "";
+      clearInterval(liveTimer);
+      liveTimer = null;
     }
 
     document.getElementById("stockModal").addEventListener("click", function(e) {
