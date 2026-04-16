@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1280, initial-scale=0.3, minimum-scale=0.2, maximum-scale=3.0, user-scalable=yes" />
+  <title>KJC Holdings — 내 주식 정리실</title>
+  <meta name="description" content="관심종목·뉴스·공시·재무를 한 곳에서 보고 정리하는 개인 투자 도구" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="./css/base.css" />
+  <link rel="stylesheet" href="./css/layout.css" />
+  <link rel="stylesheet" href="./css/components.css" />
+</head>
+<body>
+  <div class="kh-app">
+    <!-- 좌측 사이드바 -->
+    <aside class="kh-sidebar" id="kh-sidebar" aria-label="주 내비게이션"></aside>
+
+    <!-- 메인 -->
+    <main class="kh-main">
+      <!-- 상단바 -->
+      <div class="kh-topbar">
+        <div class="kh-topbar-search">
+          <div class="kh-search">
+            <span class="kh-search-icon">⌕</span>
+            <input class="kh-search-input" type="text" placeholder="종목 검색 · 코드 / 이름" />
+            <span class="kh-search-key">/</span>
+          </div>
+        </div>
+        <div class="kh-topbar-actions">
+          <button class="kh-btn kh-btn-icon" title="알림">🔔</button>
+          <button class="kh-btn kh-btn-icon" title="설정">⚙</button>
+          <button class="kh-btn">재권님</button>
+        </div>
+      </div>
+
+      <!-- 콘텐츠 -->
+      <div class="kh-content">
+        <!-- 지수 스트립 -->
+        <div id="kh-index-strip"></div>
+
+        <!-- 대시보드 그리드 -->
+        <div class="kh-dash-grid">
+          <section class="kh-card" id="kh-watchlist" aria-label="관심종목"></section>
+          <section class="kh-card" id="kh-feed" aria-label="뉴스·공시"></section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- 상세 패널 + 백드롭 -->
+  <div class="kh-detail-backdrop" id="kh-detail-backdrop"></div>
+  <aside class="kh-detail" id="kh-detail" aria-label="종목 상세"></aside>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

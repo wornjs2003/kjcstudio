@@ -1,0 +1,447 @@
+/* ==========================================================================
+   KJC Holdings — Components
+   ========================================================================== */
+
+/* ───── 사이드바 내비 아이템 ───── */
+.kh-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--kh-radius-md);
+  color: var(--kh-text-muted);
+  font-size: 1.15rem;
+  transition: background var(--kh-transition-fast), color var(--kh-transition-fast);
+  position: relative;
+  cursor: pointer;
+}
+
+.kh-nav-item:hover {
+  background: var(--kh-bg-hover);
+  color: var(--kh-text-primary);
+}
+
+.kh-nav-item.is-active {
+  background: var(--kh-accent-dim);
+  color: var(--kh-accent);
+}
+
+.kh-nav-item[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--kh-bg-card);
+  border: 1px solid var(--kh-border);
+  padding: 4px 10px;
+  border-radius: var(--kh-radius-sm);
+  font-size: 0.75rem;
+  color: var(--kh-text-primary);
+  white-space: nowrap;
+  z-index: 100;
+  pointer-events: none;
+}
+
+/* ───── 검색 ───── */
+.kh-search {
+  display: flex;
+  align-items: center;
+  gap: var(--kh-space-2);
+  height: 32px;
+  padding: 0 var(--kh-space-3);
+  background: var(--kh-bg-card);
+  border: 1px solid var(--kh-border);
+  border-radius: var(--kh-radius-md);
+  transition: border-color var(--kh-transition-fast);
+}
+
+.kh-search:focus-within {
+  border-color: var(--kh-accent);
+}
+
+.kh-search-icon { color: var(--kh-text-muted); flex-shrink: 0; }
+
+.kh-search-input {
+  flex: 1;
+  font-size: 0.85rem;
+}
+.kh-search-input::placeholder { color: var(--kh-text-muted); }
+
+.kh-search-key {
+  color: var(--kh-text-muted);
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border: 1px solid var(--kh-border);
+  border-radius: 4px;
+  font-family: var(--kh-font-mono);
+}
+
+/* ───── 버튼 ───── */
+.kh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--kh-space-1);
+  height: 30px;
+  padding: 0 var(--kh-space-3);
+  background: var(--kh-bg-card);
+  border: 1px solid var(--kh-border);
+  border-radius: var(--kh-radius-sm);
+  font-size: 0.8rem;
+  color: var(--kh-text-secondary);
+  transition: all var(--kh-transition-fast);
+}
+.kh-btn:hover {
+  background: var(--kh-bg-hover);
+  color: var(--kh-text-primary);
+}
+.kh-btn-icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  justify-content: center;
+  border-radius: var(--kh-radius-md);
+}
+
+/* ───── 카드 ───── */
+.kh-card {
+  background: var(--kh-bg-surface);
+  border: 1px solid var(--kh-border);
+  border-radius: var(--kh-radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.kh-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--kh-space-3) var(--kh-space-4);
+  border-bottom: 1px solid var(--kh-border);
+  flex-shrink: 0;
+}
+
+.kh-card-title {
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.kh-card-subtitle {
+  font-size: 0.75rem;
+  color: var(--kh-text-muted);
+  margin-left: var(--kh-space-2);
+}
+
+.kh-card-body {
+  padding: 0;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.kh-card-actions {
+  display: flex;
+  gap: var(--kh-space-1);
+}
+
+/* ───── 지수 스트립 ───── */
+.kh-index-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--kh-space-6);
+  padding: var(--kh-space-3) var(--kh-space-4);
+  background: var(--kh-bg-surface);
+  border: 1px solid var(--kh-border);
+  border-radius: var(--kh-radius-lg);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.kh-index-item {
+  display: flex;
+  align-items: center;
+  gap: var(--kh-space-2);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.kh-index-name {
+  color: var(--kh-text-secondary);
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+}
+
+.kh-index-value {
+  font-family: var(--kh-font-mono);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.kh-index-change {
+  font-family: var(--kh-font-mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ───── 테이블 ───── */
+.kh-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.kh-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--kh-bg-surface);
+  font-weight: 500;
+  color: var(--kh-text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: left;
+  padding: var(--kh-space-2) var(--kh-space-3);
+  border-bottom: 1px solid var(--kh-border);
+  z-index: 1;
+}
+.kh-table thead th.kh-align-right { text-align: right; }
+
+.kh-table tbody td {
+  padding: var(--kh-space-3);
+  border-bottom: 1px solid var(--kh-border);
+  vertical-align: middle;
+}
+
+.kh-table tbody tr {
+  transition: background var(--kh-transition-fast);
+  cursor: pointer;
+}
+
+.kh-table tbody tr:hover {
+  background: var(--kh-bg-hover);
+}
+
+.kh-table tbody tr.is-selected {
+  background: var(--kh-accent-dim);
+}
+
+.kh-align-right { text-align: right; }
+
+.kh-stock-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.kh-stock-name-main { font-weight: 500; }
+.kh-stock-name-code {
+  font-size: 0.7rem;
+  color: var(--kh-text-muted);
+  font-family: var(--kh-font-mono);
+}
+
+.kh-price {
+  font-family: var(--kh-font-mono);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.kh-change-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: var(--kh-font-mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  min-width: 60px;
+  text-align: right;
+}
+.kh-change-pill.up { background: var(--kh-up-dim); color: var(--kh-up); }
+.kh-change-pill.down { background: var(--kh-down-dim); color: var(--kh-down); }
+.kh-change-pill.flat { background: transparent; color: var(--kh-flat); }
+
+.kh-volume {
+  font-family: var(--kh-font-mono);
+  font-size: 0.78rem;
+  color: var(--kh-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.kh-memo-cell {
+  color: var(--kh-text-muted);
+  font-size: 0.75rem;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ───── 뉴스 피드 ───── */
+.kh-feed-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--kh-space-1);
+  padding: var(--kh-space-3) var(--kh-space-4);
+  border-bottom: 1px solid var(--kh-border);
+  transition: background var(--kh-transition-fast);
+  cursor: pointer;
+}
+
+.kh-feed-item:hover { background: var(--kh-bg-hover); }
+
+.kh-feed-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--kh-space-2);
+  font-size: 0.7rem;
+  color: var(--kh-text-muted);
+}
+
+.kh-feed-time { font-family: var(--kh-font-mono); }
+
+.kh-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.kh-tag-notice { background: rgba(245,177,80,0.15); color: var(--kh-tag-notice); }
+.kh-tag-news { background: rgba(111,210,184,0.12); color: var(--kh-tag-news); }
+.kh-tag-dart { background: rgba(196,139,255,0.15); color: var(--kh-tag-dart); }
+
+.kh-feed-ticker {
+  font-size: 0.7rem;
+  color: var(--kh-text-secondary);
+}
+
+.kh-feed-title {
+  font-size: 0.85rem;
+  color: var(--kh-text-primary);
+  line-height: 1.4;
+}
+
+/* ───── 상세 패널 ───── */
+.kh-detail-close {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--kh-radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--kh-text-muted);
+  transition: all var(--kh-transition-fast);
+}
+.kh-detail-close:hover {
+  background: var(--kh-bg-hover);
+  color: var(--kh-text-primary);
+}
+
+.kh-detail-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--kh-space-3);
+}
+
+.kh-detail-name { font-size: 1.05rem; font-weight: 500; }
+.kh-detail-code {
+  font-family: var(--kh-font-mono);
+  font-size: 0.75rem;
+  color: var(--kh-text-muted);
+  margin-left: var(--kh-space-2);
+}
+
+.kh-detail-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--kh-space-3);
+}
+
+.kh-detail-price {
+  font-family: var(--kh-font-mono);
+  font-size: 1.8rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.kh-detail-volume {
+  font-family: var(--kh-font-mono);
+  font-size: 0.78rem;
+  color: var(--kh-text-muted);
+  margin-top: var(--kh-space-1);
+}
+
+.kh-tab {
+  padding: var(--kh-space-3) var(--kh-space-2);
+  font-size: 0.8rem;
+  color: var(--kh-text-muted);
+  border-bottom: 2px solid transparent;
+  transition: all var(--kh-transition-fast);
+}
+.kh-tab:hover { color: var(--kh-text-primary); }
+.kh-tab.is-active {
+  color: var(--kh-text-primary);
+  border-bottom-color: var(--kh-accent);
+}
+
+.kh-section {
+  margin-bottom: var(--kh-space-5);
+}
+
+.kh-section-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--kh-text-muted);
+  margin-bottom: var(--kh-space-2);
+}
+
+.kh-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--kh-space-1) var(--kh-space-4);
+}
+
+.kh-metric-row {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--kh-space-2) 0;
+  border-bottom: 1px solid var(--kh-border);
+  font-size: 0.8rem;
+}
+
+.kh-metric-label { color: var(--kh-text-muted); }
+.kh-metric-value { font-family: var(--kh-font-mono); font-variant-numeric: tabular-nums; }
+
+.kh-memo-box {
+  width: 100%;
+  min-height: 80px;
+  background: var(--kh-bg-card);
+  border: 1px solid var(--kh-border);
+  border-radius: var(--kh-radius-md);
+  padding: var(--kh-space-3);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  resize: vertical;
+  transition: border-color var(--kh-transition-fast);
+}
+.kh-memo-box:focus { border-color: var(--kh-accent); }
+
+/* ───── 빈 상태 ───── */
+.kh-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--kh-space-8);
+  color: var(--kh-text-muted);
+  gap: var(--kh-space-2);
+  font-size: 0.85rem;
+}
+.kh-empty-icon { font-size: 2rem; opacity: 0.5; }

@@ -1,0 +1,148 @@
+/* ==========================================================================
+   KJC Holdings — Base Styles
+   Reset · Variables · Typography
+   네임스페이스: kh- (KJC Holdings)
+   ========================================================================== */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* 컬러 팔레트 - 다크 테마 (KJC Studio 톤 계승) */
+  --kh-bg:           #0c0c0e;
+  --kh-bg-surface:   #141416;
+  --kh-bg-card:      #1a1a1e;
+  --kh-bg-hover:     #22222a;
+  --kh-bg-active:    #2a2a34;
+
+  --kh-border:       rgba(255,255,255,0.08);
+  --kh-border-strong:rgba(255,255,255,0.16);
+
+  --kh-text-primary:   #f0f0f0;
+  --kh-text-secondary: #9a9aa6;
+  --kh-text-muted:     #6a6a76;
+  --kh-text-dim:       #4a4a56;
+
+  --kh-accent:       #4f7eff;
+  --kh-accent-hover: #6b93ff;
+  --kh-accent-dim:   rgba(79,126,255,0.12);
+
+  /* 등락 컬러 (한국 관례) */
+  --kh-up:   #ff5f5f;
+  --kh-up-dim: rgba(255,95,95,0.12);
+  --kh-down: #4f9eff;
+  --kh-down-dim: rgba(79,158,255,0.12);
+  --kh-flat: #9a9aa6;
+
+  /* 태그 컬러 */
+  --kh-tag-notice:   #f5b150;
+  --kh-tag-news:     #6fd2b8;
+  --kh-tag-dart:     #c48bff;
+
+  /* 타이포 */
+  --kh-font-sans: "Noto Sans KR", "Pretendard", "Roboto", -apple-system, BlinkMacSystemFont, sans-serif;
+  --kh-font-mono: "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* 공간 */
+  --kh-space-1: 4px;
+  --kh-space-2: 8px;
+  --kh-space-3: 12px;
+  --kh-space-4: 16px;
+  --kh-space-5: 20px;
+  --kh-space-6: 24px;
+  --kh-space-8: 32px;
+
+  /* 라운드 */
+  --kh-radius-sm: 6px;
+  --kh-radius-md: 10px;
+  --kh-radius-lg: 14px;
+
+  /* 트랜지션 */
+  --kh-transition-fast: 120ms ease;
+  --kh-transition: 200ms ease;
+
+  /* 레이아웃 */
+  --kh-sidebar-width: 64px;
+  --kh-sidebar-width-expanded: 220px;
+  --kh-detail-width: 520px;
+  --kh-header-height: 48px;
+}
+
+html, body {
+  background: var(--kh-bg);
+  color: var(--kh-text-primary);
+  font-family: var(--kh-font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 타이포 기본 */
+h1, h2, h3, h4, h5, h6 { font-weight: 500; letter-spacing: -0.01em; }
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.2rem; }
+h3 { font-size: 1.05rem; }
+h4 { font-size: 0.95rem; }
+h5 { font-size: 0.85rem; }
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+input, textarea, select {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+
+/* 스크롤바 */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.08);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.16);
+}
+
+/* 유틸리티 */
+.kh-mono { font-family: var(--kh-font-mono); font-variant-numeric: tabular-nums; }
+.kh-up   { color: var(--kh-up); }
+.kh-down { color: var(--kh-down); }
+.kh-flat { color: var(--kh-flat); }
+.kh-muted { color: var(--kh-text-muted); }
+.kh-secondary { color: var(--kh-text-secondary); }
+
+.kh-sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}

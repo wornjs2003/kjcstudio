@@ -1,0 +1,169 @@
+/* ==========================================================================
+   KJC Holdings — Layout
+   앱 셸, 사이드바, 메인, 상세 패널 그리드
+   ========================================================================== */
+
+.kh-app {
+  display: grid;
+  grid-template-columns: var(--kh-sidebar-width) 1fr;
+  grid-template-rows: 100vh;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ───── 사이드바 ───── */
+.kh-sidebar {
+  background: var(--kh-bg-surface);
+  border-right: 1px solid var(--kh-border);
+  display: flex;
+  flex-direction: column;
+  padding: var(--kh-space-3) 0;
+  z-index: 20;
+}
+
+.kh-sidebar-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  margin-bottom: var(--kh-space-4);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  color: var(--kh-accent);
+}
+
+.kh-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--kh-space-1);
+  padding: 0 var(--kh-space-2);
+  flex: 1;
+}
+
+.kh-sidebar-footer {
+  padding: 0 var(--kh-space-2);
+}
+
+/* ───── 메인 ───── */
+.kh-main {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--kh-bg);
+  min-width: 0;
+}
+
+.kh-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--kh-space-4);
+  height: var(--kh-header-height);
+  padding: 0 var(--kh-space-5);
+  border-bottom: 1px solid var(--kh-border);
+  background: var(--kh-bg-surface);
+}
+
+.kh-topbar-search {
+  flex: 1;
+  max-width: 480px;
+}
+
+.kh-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--kh-space-2);
+}
+
+.kh-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--kh-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--kh-space-4);
+}
+
+/* ───── 대시보드 그리드 ───── */
+.kh-dash-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: var(--kh-space-4);
+  flex: 1;
+  min-height: 0;
+}
+
+.kh-dash-grid > * {
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ───── 상세 패널 (슬라이드 인) ───── */
+.kh-detail {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: var(--kh-detail-width);
+  height: 100vh;
+  background: var(--kh-bg-surface);
+  border-left: 1px solid var(--kh-border-strong);
+  z-index: 50;
+  transform: translateX(100%);
+  transition: transform var(--kh-transition);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -20px 0 40px rgba(0,0,0,0.4);
+}
+
+.kh-detail.is-open {
+  transform: translateX(0);
+}
+
+.kh-detail-header {
+  padding: var(--kh-space-4) var(--kh-space-5);
+  border-bottom: 1px solid var(--kh-border);
+  flex-shrink: 0;
+}
+
+.kh-detail-tabs {
+  display: flex;
+  gap: var(--kh-space-2);
+  padding: 0 var(--kh-space-5);
+  border-bottom: 1px solid var(--kh-border);
+  flex-shrink: 0;
+}
+
+.kh-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--kh-space-5);
+}
+
+/* 상세 패널 열렸을 때 메인 영역 딤 오버레이 (선택적) */
+.kh-detail-backdrop {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  background: rgba(0,0,0,0.3);
+  z-index: 40;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--kh-transition);
+}
+
+.kh-detail-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ───── 반응형 (간단) ───── */
+@media (max-width: 900px) {
+  .kh-dash-grid {
+    grid-template-columns: 1fr;
+  }
+  .kh-detail {
+    width: 100vw;
+  }
+}
