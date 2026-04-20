@@ -1,0 +1,33 @@
+{
+  "featured": "3d-modeling",
+  "list": [
+    {
+      "id": "3d-modeling",
+      "label": "3D Modeling",
+      "order": 1,
+      "kicker": "Works · 01",
+      "description": "캐릭터, 환경, 프롭. 실사에서 스타일라이즈드까지. 모델링부터 라이팅, 리깅, 렌더까지 일관된 파이프라인으로 다룹니다."
+    },
+    {
+      "id": "ai-work",
+      "label": "AI Work",
+      "order": 2,
+      "kicker": "Works · 02",
+      "description": "AI 이미지·영상·툴링 실험. 신기술을 실무에 녹여내는 작업을 모읍니다."
+    },
+    {
+      "id": "web-interactive",
+      "label": "Web · Interactive",
+      "order": 3,
+      "kicker": "Works · 03",
+      "description": "웹 인터랙션, 3D 웹, 모션 프로토타입. 브라우저에서 살아 움직이는 것들."
+    },
+    {
+      "id": "branding",
+      "label": "Branding",
+      "order": 4,
+      "kicker": "Works · 04",
+      "description": "로고, 아이덴티티, 키 비주얼. 브랜드의 첫 인상을 설계합니다."
+    }
+  ]
+}

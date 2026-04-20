@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contact — KJC Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400;1,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/base.css" />
+  <link rel="stylesheet" href="assets/css/layout.css" />
+  <link rel="stylesheet" href="assets/css/page.css" />
+</head>
+<body data-nav="contact" data-site-root="">
+  <div id="site-nav"></div>
+
+  <main class="page">
+    <section class="page-hero">
+      <p class="kicker">Contact</p>
+      <h1>Let's talk<span class="dot">.</span></h1>
+      <p class="lead">
+        새로운 프로젝트, 협업 제안 또는 궁금한 점이 있다면 편하게 연락주세요.
+      </p>
+    </section>
+
+    <section class="content-block">
+      <div class="contact-grid">
+        <div class="contact-info">
+          <dl>
+            <div>
+              <dt>Company</dt>
+              <dd>KJC Studio</dd>
+            </div>
+            <div>
+              <dt>Email</dt>
+              <dd><a href="mailto:contact@kjcstudio.kr">contact@kjcstudio.kr</a></dd>
+            </div>
+            <div>
+              <dt>Phone</dt>
+              <dd><a href="tel:+8221234567">02-1234-5678</a></dd>
+            </div>
+            <div>
+              <dt>Address</dt>
+              <dd>서울특별시 강남구 테헤란로 123<br>KJC 빌딩 5층</dd>
+            </div>
+          </dl>
+        </div>
+
+        <form class="contact-form" onsubmit="event.preventDefault(); alert('문의해주셔서 감사합니다. 빠른 시일 내 회신드리겠습니다.');">
+          <div class="field">
+            <label for="c-name">이름</label>
+            <input id="c-name" type="text" placeholder="홍길동" required />
+          </div>
+          <div class="field">
+            <label for="c-email">이메일</label>
+            <input id="c-email" type="email" placeholder="example@email.com" required />
+          </div>
+          <div class="field">
+            <label for="c-topic">문의 분류</label>
+            <select id="c-topic">
+              <option>프로젝트 의뢰</option>
+              <option>협업 제안</option>
+              <option>일반 문의</option>
+              <option>기타</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="c-msg">문의 내용</label>
+            <textarea id="c-msg" placeholder="프로젝트나 협업에 대해 간략히 설명해주세요." required></textarea>
+          </div>
+          <button type="submit" class="btn-primary">문의 보내기 →</button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+  <script src="assets/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,355 @@
+============================================================
+  KJC Studio · 정의 (프로젝트 룰 & 기억용 메모)
+  작성일: 2026년 4월 20일
+============================================================
+
+이 파일은 재권님이 KJC Studio 프로젝트를 기억하고 빠르게
+찾아보기 위한 요약본입니다. 자세한 규칙은 CLAUDE.md 참조.
+
+
+────────────────────────────────────────────────────────────
+1. 오늘 한 일 요약
+────────────────────────────────────────────────────────────
+
+- 기존의 단일 파일(index.html 132KB) 구조를 포트폴리오형으로 전면 재편
+- 레퍼런스: https://0yanggang.imweb.me/21 (레이아웃 차용, 다크 테마 유지)
+- 상단 메뉴: 3D Modeling / AI Work / Web·Interactive / Branding / Holdings↗ / ⋯
+- ⋯ 안에 About / Services / Contact
+- Holdings 폴더는 독립 프로젝트 구조로 분리 (나중에 별도 레포로 뗄 예정)
+- 주식 모달 → holdings/analysis/ 로 승격
+- KJCEngine 문서 → holdings/engine/ 으로 이동
+- Roadmap → holdings/roadmap.html 로 이동
+- 실행 커맨드 3개 + 작업물 자동 갱신 스크립트 1개 완성
+- 비밀번호(4123) 제거, 기존 start.command/preview.command/preview-holdings.html 삭제
+- 기존 index.html 은 안전상 _legacy-index-2026-04-16.html.bak 로 보존 중
+  (확인 완료되면 삭제해도 됨)
+
+
+────────────────────────────────────────────────────────────
+2. 폴더 구조와 각 폴더의 역할
+────────────────────────────────────────────────────────────
+
+KJCStudio/
+│
+├── index.html                  ← 메인 (대표 카테고리 = 3D Modeling 갤러리)
+├── about.html                  ← ⋯ 더보기 메뉴
+├── services.html               ← ⋯ 더보기 메뉴
+├── contact.html                ← ⋯ 더보기 메뉴
+├── CLAUDE.md                   ← 상세 프로젝트 규칙
+├── 정의.txt                    ← 이 파일
+│
+├── category/                   ← 카테고리 페이지 4개 (쌍둥이 템플릿)
+│   ├── 3d-modeling.html
+│   ├── ai-work.html
+│   ├── web-interactive.html
+│   └── branding.html
+│
+├── assets/                     ← 메인 사이트 전용 리소스
+│   ├── css/
+│   │   ├── base.css            · CSS 변수, reset, 타이포 기본
+│   │   ├── layout.css          · 네비/푸터/공통 레이아웃
+│   │   ├── gallery.css         · 매저너리 그리드, 라이트박스
+│   │   └── page.css            · about/services/contact 공통
+│   ├── js/
+│   │   ├── main.js             · partials 동적 주입, 활성 메뉴 표시
+│   │   └── gallery.js          · works.json 읽어서 갤러리 렌더
+│   ├── images/
+│   │   └── works/              ← ★ 작업물 이미지 드롭하는 곳
+│   │       ├── 3d-modeling/
+│   │       ├── ai-work/
+│   │       ├── web-interactive/
+│   │       └── branding/
+│   └── fonts/                  · 커스텀 폰트 (현재는 Google Fonts만 사용)
+│
+├── data/                       ← 데이터 (이곳을 수정하면 사이트 즉시 반영)
+│   ├── categories.json         · 카테고리 목록, 대표 카테고리 지정
+│   └── works.json              · 모든 작업물 데이터 ★
+│
+├── partials/                   ← 공통 UI 조각 (한 곳만 수정하면 전 페이지 반영)
+│   ├── nav.html                · 상단 네비게이션
+│   └── footer.html             · 하단 푸터
+│
+├── tools/
+│   └── refresh-works.py        · 이미지 폴더 스캔 → works.json 자동 생성
+│
+├── studio-preview.command      ← 메인 사이트 로컬 실행 (포트 8080)
+├── holdings-preview.command    ← holdings 로컬 실행 단축 (포트 8765)
+├── refresh-works.command       ← 이미지 드롭 후 이거 더블클릭
+│
+└── holdings/                   ═══ 독립 프로젝트 구역 ═══
+    │
+    ├── index.html              · 보유 종목 대시보드 (기존 유지)
+    ├── CLAUDE.md               · holdings 전용 규칙
+    ├── preview.command         · 독립 실행 (분리 시 따라감)
+    ├── sw.js                   · 서비스 워커
+    │
+    ├── analysis/
+    │   └── index.html          · 주식 분석 페이지 (구 모달 승격)
+    ├── roadmap.html            · 주식 분석 서비스 로드맵
+    │
+    ├── engine/                 · 구 KJCEngine 문서
+    │   ├── CLAUDE.md
+    │   ├── ROADMAP.md
+    │   ├── SETUP.md
+    │   └── docs/
+    │
+    ├── css/                    · 대시보드 스타일 + h-page.css (서브 페이지용)
+    ├── js/                     · 대시보드 JS (module 방식)
+    ├── partials/               · nav.html, footer.html (h-nav 용)
+    └── data/                   · 지수/관심종목 초기값
+
+
+────────────────────────────────────────────────────────────
+3. 디자인 규칙 (지키면 됨)
+────────────────────────────────────────────────────────────
+
+- 테마: 다크 유지 (흰 배경 금지)
+- 배경색: #0c0c0e
+- accent 색상: #4f7eff
+- 폰트: Noto Sans KR, Roboto (Roboto italic 사용 가능)
+- 카테고리 제목: 거대 이탤릭 타이포
+- 작업물 갤러리: 매저너리(비정형) 그리드
+- 스타일 기조: 미니멀, 프로페셔널
+
+
+────────────────────────────────────────────────────────────
+4. 실행 커맨드 (맥에서 더블클릭)
+────────────────────────────────────────────────────────────
+
+studio-preview.command       ← 메인 사이트 실행, 포트 8080
+                               Chrome 새 창으로 http://localhost:8080/ 열림
+
+holdings-preview.command     ← holdings 실행 단축, 포트 8765
+                               http://localhost:8765/ 열림
+
+holdings/preview.command     ← holdings 독립 실행 (폴더 분리 시 따라감)
+                               holdings 폴더 안에 위치
+
+refresh-works.command        ← 이미지 드롭 후 더블클릭
+                               assets/images/works/ 폴더 스캔해서
+                               data/works.json 자동 갱신
+
+종료: Control+C 또는 터미널 창 닫기
+브라우저: Chrome 우선, 없으면 기본 브라우저
+
+
+────────────────────────────────────────────────────────────
+5. 작업물(이미지) 추가 방법  ★ 제일 자주 쓸 작업
+────────────────────────────────────────────────────────────
+
+◆ 기본 흐름 (한 줄 요약)
+
+  카테고리 폴더에 드롭 → refresh-works.command 더블클릭 → 끝
+
+  ⚠ refresh-works.command 안 돌리면 사이트에 안 뜹니다.
+    이미지 파일만 넣고 끝내면 data/works.json 에 항목이
+    추가되지 않아서 갤러리에 나타나지 않습니다.
+
+
+◆ 규칙 1. 어느 폴더에 넣어야 하나 (4개 중 하나)
+
+   assets/images/works/3d-modeling/       ← 3D 캐릭터, 프롭, 환경
+   assets/images/works/ai-work/           ← AI 생성 이미지/영상
+   assets/images/works/web-interactive/   ← 웹 인터랙션, 3D 웹
+   assets/images/works/branding/          ← 로고, 아이덴티티, 키 비주얼
+
+
+◆ 규칙 2. 파일 포맷
+
+   JPG   · 사진/3D 렌더 기본 (권장)
+   PNG   · 투명 배경 필요할 때
+   WebP  · 용량 최소화 원할 때 (최신 브라우저만 지원)
+   GIF, AVIF 도 인식되지만 썸네일 용도라면 JPG 권장.
+
+
+◆ 규칙 3. 파일 크기·해상도
+
+   가로 1200~1800px  (매저너리 그리드 2~3열 기준 충분)
+   장당 500KB 이하    (GitHub Pages 로딩 속도 고려)
+   sRGB 색공간        (웹 표준)
+
+   너무 크면 TinyPNG (https://tinypng.com) 같은 도구로
+   압축 후 업로드.
+
+
+◆ 규칙 4. 파일명 규칙 (선택 사항, 안 지켜도 됨)
+
+   elf-warrior.jpg             → 제목 "Elf Warrior", span 자동
+   01_elf-warrior.jpg          → 순서 1번으로 배치
+   elf-warrior_tall.jpg        → 세로 긴 카드 강제
+   elf-warrior_wide.jpg        → 가로 긴 카드 강제
+   elf-warrior_square.jpg      → 정사각 카드 강제
+   elf-warrior_large.jpg       → 중간 크기 카드 강제 (기본값)
+   02_엘프전사_wide.jpg        → 순서 2 + 한글 제목 + wide 조합
+
+   공백은 - 또는 _ 로 대체. 한글 파일명 OK.
+
+
+◆ 규칙 5. 업로드 후 필수 동작 (순서대로)
+
+   1) 이미지 파일을 카테고리 폴더에 드래그 드롭
+   2) refresh-works.command 더블클릭
+   3) 결과 확인 (터미널에 추가/유지/제거 개수 표시됨)
+   4) studio-preview.command 실행
+   5) 브라우저 새로고침 (Cmd+Shift+R 권장)
+
+
+◆ 규칙 6. 자동 처리되는 것들
+
+   신규 이미지 발견    → 새 엔트리 자동 추가
+                         (파일명에서 제목 자동 추출)
+   기존 이미지 유지    → 그대로 유지
+                         (직접 편집한 title/year 값 보존)
+   삭제된 이미지       → 엔트리 자동 제거 (orphan 청소)
+   카테고리 첫 이미지  → 플레이스홀더 자동 제거
+
+
+◆ 자주 쓰는 시나리오
+
+   · 같은 파일명으로 덮어쓰기 OK
+     → 썸네일만 바뀌고 메타데이터(제목/연도)는 유지됨
+
+   · 제목/연도만 수정하고 싶을 때
+     → data/works.json 열어서 해당 항목의 "title", "year" 직접 편집
+     → refresh 돌려도 편집 값 보존됨
+     → (thumbnail 경로가 실존 파일을 가리키고 있어야 함)
+
+   · 순서 재배치
+     → 파일명 앞에 01_, 02_, 03_ 붙이거나
+     → works.json 의 "order" 값을 직접 수정
+
+   · 임시로 숨기고 싶을 때
+     → 이미지 파일을 카테고리 폴더 밖으로 잠깐 이동
+     → refresh 돌리면 해당 항목 제거됨
+     → 다시 폴더에 넣고 refresh 하면 복원
+
+
+◆ 현재 제약 사항
+
+   · Pillow 라이브러리가 없으면 span 자동 판정이 안 됨
+     → 기본값 "large" 적용
+     → 파일명 접미사 (_tall, _wide, _square) 로 수동 지정 가능
+     → 설치는 터미널에 한 번만:
+       pip3 install --break-system-packages Pillow
+
+   · 라이트박스 이미지는 현재 썸네일 그대로 확대
+     → 고해상도 원본을 따로 두고 싶으면 나중에 업데이트 요청
+       (works.json 에 images: ["..."] 필드 추가)
+
+
+◆ 수동 편집도 가능 (스크립트 안 써도 됨)
+
+   data/works.json 파일을 직접 열어서 항목 추가/수정 가능.
+   refresh-works.command 를 다시 돌려도 수동 편집한 값은 보존됨
+   (단, thumbnail 경로가 실존 파일을 가리키고 있어야 함).
+
+   예시 항목:
+   {
+     "id": "3dm-my-work",
+     "category": "3d-modeling",
+     "title": "내 작업 제목",
+     "year": 2026,
+     "thumbnail": "assets/images/works/3d-modeling/mywork.jpg",
+     "span": "tall",
+     "order": 1
+   }
+
+
+────────────────────────────────────────────────────────────
+6. 카테고리 추가하는 법 (드물게)
+────────────────────────────────────────────────────────────
+
+1) data/categories.json 에 새 카테고리 항목 추가
+2) category/ 폴더에 기존 HTML 하나 복사 후 이름/data-category 변경
+3) tools/refresh-works.py 의 CATEGORIES 리스트에 추가
+4) assets/images/works/<새카테고리>/ 폴더 생성
+5) partials/nav.html, partials/footer.html 에 메뉴 추가
+
+
+────────────────────────────────────────────────────────────
+7. 공통 UI 변경 (네비/푸터)
+────────────────────────────────────────────────────────────
+
+- 상단 네비 수정: partials/nav.html 한 곳만 고치면 전 페이지 반영
+- 푸터 수정: partials/footer.html 한 곳만 고치면 전 페이지 반영
+- JS 가 fetch 해서 주입하므로 로컬 서버로 열어야 함 (file:// 은 CORS 에러)
+  → 반드시 studio-preview.command 로 띄워서 확인
+
+
+────────────────────────────────────────────────────────────
+8. Holdings 규칙 (중요) - 절대 지킬 것
+────────────────────────────────────────────────────────────
+
+holdings 폴더는 나중에 별도 레포/사이트로 분리할 예정이므로
+자립 구조를 반드시 유지해야 합니다.
+
+   ★ 금지:
+   - holdings/ 안에서 ../assets/, ../data/, ../partials/ 참조
+   - holdings 가 부모 사이트 CSS/JS 에 의존
+
+   ★ 허용:
+   - 메인 사이트 → holdings 링크 (나가는 방향)
+   - holdings 안에서 메인 사이트로 돌아가는 링크 (../index.html)
+
+   ★ 디자인 변수 공유 방식:
+   - 단일 소스 import 금지. holdings/ 에 복제해서 소유
+   - 색/폰트 바뀌면 메인 + holdings 양쪽 다 수정
+
+주식 데이터 규칙:
+
+   - 국내 주식의 모든 실시간 데이터는 네이버 금융 API 만 사용
+   - Yahoo Finance 등 해외 API 는 국내 주식에 사용 금지
+   - 예외: 해외 지수/환율/원자재 (네이버 미지원 항목)
+
+
+────────────────────────────────────────────────────────────
+9. 배포 (GitHub Pages)
+────────────────────────────────────────────────────────────
+
+GitHub 저장소: https://github.com/wornjs2003/kjcstudio
+배포 주소:     https://wornjs2003.github.io/kjcstudio/
+
+변경 사항을 GitHub 에 푸시하면 자동 반영됩니다.
+
+
+────────────────────────────────────────────────────────────
+10. 빠른 체크리스트 (자주 막히는 부분)
+────────────────────────────────────────────────────────────
+
+[ ] 이미지 넣었는데 안 보임
+    → refresh-works.command 돌렸는지 확인
+    → studio-preview.command 띄우고 새로고침 (Cmd+Shift+R 강제)
+    → assets/images/works/<카테고리>/ 에 실제로 파일이 있는지 확인
+
+[ ] 네비가 안 보임
+    → file:// 로 열면 partials fetch 실패. 반드시 .command 로 서버 띄울 것
+
+[ ] Holdings 링크 누르면 404
+    → holdings/index.html 이 있는지 확인 (기존 대시보드 파일)
+
+[ ] 주식 분석 페이지 데이터 로딩 안 됨
+    → 인터넷 연결 확인 (네이버/프록시 API 호출)
+    → 브라우저 콘솔에서 에러 메시지 확인
+
+[ ] 포트 충돌 (Port already in use)
+    → 각 .command 파일이 실행 전에 해당 포트 프로세스 자동 정리함
+    → 그래도 안 되면 터미널에서 lsof -ti tcp:8080 | xargs kill -9
+
+
+────────────────────────────────────────────────────────────
+11. 파일 한 장 요약 (외워둘 것)
+────────────────────────────────────────────────────────────
+
+  메인 사이트 데이터는 :  data/works.json  (직접 수정 OK)
+  이미지는                :  assets/images/works/<카테고리>/
+  공통 UI 는              :  partials/nav.html, partials/footer.html
+  실행은                  :  studio-preview.command 더블클릭
+  이미지 갱신은           :  refresh-works.command 더블클릭
+  주식/보유종목은         :  holdings/ 안 (독립 프로젝트)
+  나중에 떼어낼 것은      :  holdings/ 폴더 통째로
+
+
+────────────────────────────────────────────────────────────
+  문의/보수는 CLAUDE (대화) 로 요청.
+  이 파일은 상황 바뀌면 수시로 업데이트.
+============================================================

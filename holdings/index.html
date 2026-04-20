@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1280, initial-scale=0.3, minimum-scale=0.2, maximum-scale=3.0, user-scalable=yes" />
+  <title>KJC Holdings — 내 주식 정리실</title>
+  <meta name="description" content="관심종목·뉴스·공시·재무를 한 곳에서 보고 정리하는 개인 투자 도구" />
+
+  <!-- 개발용 캐시 무효화 meta (서비스 워커와 병행) -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- 개발용 캐시 버스팅: 페이지 로드마다 CSS에 버전 쿼리 자동 부여 -->
+  <script>
+    (function () {
+      var v = Date.now();
+      window.__KH_BUILD = String(v);
+      ['./css/base.css', './css/layout.css', './css/components.css'].forEach(function (href) {
+        var l = document.createElement('link');
+        l.rel = 'stylesheet';
+        l.href = href + '?v=' + v;
+        document.head.appendChild(l);
+      });
+    })();
+  </script>
+
+  <!-- 부팅 오버레이: 외부 CSS 로드 전에도 즉시 보이도록 인라인 -->
+  <style>
+    html, body { background: #0c0c0e; margin: 0; }
+    .kh-boot { position: fixed; inset: 0; background: #0c0c0e;
+               display: flex; align-items: center; justify-content: center;
+               z-index: 9999; }
+    .kh-boot-inner { display: flex; flex-direction: column;
+                     align-items: center; gap: 18px;
+                     font-family: 'Noto Sans KR', -apple-system, sans-serif; }
+    .kh-boot-logo { font-size: 1.3rem; font-weight: 500; color: #f0f0f0;
+                    letter-spacing: 0.04em; }
+    .kh-boot-logo span { color: #4f7eff; margin-left: 6px; font-weight: 400; }
+    .kh-boot-spinner { width: 36px; height: 36px; border-radius: 50%;
+                       border: 2px solid rgba(255,255,255,0.1);
+                       border-top-color: #4f7eff;
+                       animation: kh-boot-spin 0.8s linear infinite; }
+    .kh-boot-text { font-size: 0.85rem; color: #6a6a76; }
+    @keyframes kh-boot-spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <!-- 초기 로딩 오버레이: main.js 로드 완료 시 제거 -->
+  <div class="kh-boot" id="kh-boot" aria-live="polite">
+    <div class="kh-boot-inner">
+      <div class="kh-boot-logo">KJC<span>Holdings</span></div>
+      <div class="kh-boot-spinner" aria-hidden="true"></div>
+      <div class="kh-boot-text">관심종목 불러오는 중…</div>
+    </div>
+  </div>
+
+  <div class="kh-app">
+    <!-- 좌측 사이드바 -->
+    <aside class="kh-sidebar" id="kh-sidebar" aria-label="주 내비게이션"></aside>
+
+    <!-- 메인 -->
+    <main class="kh-main">
+      <!-- 상단바 -->
+      <div class="kh-topbar">
+        <div class="kh-topbar-search">
+          <div class="kh-search">
+            <span class="kh-search-icon">⌕</span>
+            <input class="kh-search-input" type="text" placeholder="종목 검색 · 코드 / 이름" />
+            <span class="kh-search-key">/</span>
+          </div>
+        </div>
+        <div class="kh-topbar-actions">
+          <button class="kh-btn kh-btn-icon" title="알림">🔔</button>
+          <button class="kh-btn kh-btn-icon" title="설정">⚙</button>
+          <button class="kh-btn">재권님</button>
+        </div>
+      </div>
+
+      <!-- 콘텐츠 -->
+      <div class="kh-content">
+        <!-- 상단 그리드: 지수 스트립 + 세계 주요 이슈 -->
+        <div class="kh-top-grid">
+          <div id="kh-index-strip"></div>
+          <section class="kh-card" id="kh-global-issues" aria-label="세계 주요 이슈"></section>
+        </div>
+
+        <!-- 대시보드 그리드 -->
+        <div class="kh-dash-grid">
+          <section class="kh-card" id="kh-watchlist" aria-label="관심종목"></section>
+          <section class="kh-card" id="kh-feed" aria-label="뉴스·공시"></section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- 상세 패널 + 백드롭 -->
+  <div class="kh-detail-backdrop" id="kh-detail-backdrop"></div>
+  <aside class="kh-detail" id="kh-detail" aria-label="종목 상세"></aside>
+
+  <!-- 개발용 캐시 버스팅: 서비스 워커 등록 + main.js 동적 로드 -->
+  <script>
+    (function () {
+      // 서비스 워커: 동일 출처의 모든 자원 캐시 우회 (JS 서브 모듈까지 자동 무효화)
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js').catch(function () { /* 무시 */ });
+      }
+      // main.js 자체는 쿼리 버전 부여해서 즉시 최신판 로드
+      var v = window.__KH_BUILD || String(Date.now());
+      var s = document.createElement('script');
+      s.type = 'module';
+      s.src = './js/main.js?v=' + v;
+      document.body.appendChild(s);
+    })();
+  </script>
+</body>
+</html>

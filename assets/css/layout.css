@@ -1,0 +1,243 @@
+/* ==========================================================================
+   KJC Studio · layout.css
+   네비게이션, 푸터, 공통 페이지 레이아웃
+   ========================================================================== */
+
+/* ── Navigation ─────────────────────────────── */
+.site-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--nav-height);
+  padding: 0 var(--page-gutter);
+  background: rgba(12, 12, 14, 0.72);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-logo {
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+
+.nav-logo .dot {
+  color: var(--accent);
+}
+
+.nav-menu {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+  list-style: none;
+}
+
+.nav-menu a {
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  position: relative;
+}
+
+.nav-menu a:hover,
+.nav-menu a.active {
+  color: var(--text-primary);
+}
+
+.nav-menu a.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -8px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+/* Holdings 메뉴는 별도 프로젝트 느낌 */
+.nav-menu a.external::after {
+  content: " ↗";
+  color: var(--accent);
+  font-size: 0.85em;
+  margin-left: 2px;
+}
+
+.nav-menu a.external.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -8px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+  margin-left: 0;
+}
+
+/* More 메뉴 (⋯) */
+.nav-more {
+  position: relative;
+}
+
+.nav-more-btn {
+  font-size: 1.3rem;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.nav-more-btn:hover {
+  color: var(--text-primary);
+  background: var(--border);
+}
+
+.nav-more-panel {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  min-width: 180px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.nav-more:hover .nav-more-panel,
+.nav-more.open .nav-more-panel {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.nav-more-panel a {
+  display: block;
+  padding: 10px 14px;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  border-radius: 8px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nav-more-panel a:hover {
+  background: var(--border);
+  color: var(--text-primary);
+}
+
+/* ── Footer ─────────────────────────────── */
+.site-footer {
+  margin-top: 160px;
+  padding: 80px var(--page-gutter) 48px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.footer-inner {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr 1fr;
+  gap: 48px;
+}
+
+.footer-brand h3 {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-bottom: 14px;
+}
+
+.footer-brand p {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.7;
+}
+
+.footer-col h4 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  font-weight: 500;
+}
+
+.footer-col ul {
+  list-style: none;
+}
+
+.footer-col li {
+  margin-bottom: 10px;
+}
+
+.footer-col a {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  transition: color 0.15s ease;
+}
+
+.footer-col a:hover {
+  color: var(--accent);
+}
+
+.footer-bottom {
+  max-width: var(--page-max);
+  margin: 48px auto 0;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* ── Page container ─────────────────────────────── */
+.page {
+  padding-top: var(--nav-height);
+}
+
+.page-inner {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 0 var(--page-gutter);
+}
+
+/* ── 반응형 ─────────────────────────────── */
+@media (max-width: 1200px) {
+  .nav-menu {
+    gap: 24px;
+  }
+  .footer-inner {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .nav-menu {
+    display: none; /* 모바일은 햄버거로 대체 예정 (1단계 범위 밖) */
+  }
+  .footer-inner {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+  .footer-bottom {
+    flex-direction: column;
+    gap: 8px;
+  }
+}

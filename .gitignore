@@ -1,0 +1,31 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# 에디터/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code 로컬 캐시
+.claude/
+
+# 레거시 백업 (확인 후 수동 삭제)
+_legacy-*.html.bak
+
+# 로그
+*.log
+
+# 파이썬 캐시
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# Node (혹시 모를 상황 대비)
+node_modules/
+npm-debug.log*

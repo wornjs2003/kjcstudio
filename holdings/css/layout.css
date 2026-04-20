@@ -1,0 +1,235 @@
+/* ==========================================================================
+   KJC Holdings — Layout
+   앱 셸, 사이드바, 메인, 상세 패널 그리드
+   ========================================================================== */
+
+.kh-app {
+  display: grid;
+  grid-template-columns: var(--kh-sidebar-width) 1fr;
+  width: 100%;
+  min-height: 100vh;
+  position: relative;
+  /* 전체 페이지 스크롤 — overflow/고정 높이 제거 */
+}
+
+/* ───── 사이드바 ───── */
+.kh-sidebar {
+  background: var(--kh-bg-surface);
+  border-right: 1px solid var(--kh-border);
+  display: flex;
+  flex-direction: column;
+  padding: var(--kh-space-3) 0;
+  z-index: 20;
+  /* 페이지 스크롤 시에도 사이드바는 뷰포트에 고정 */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  align-self: start;
+}
+
+.kh-sidebar-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  margin-bottom: var(--kh-space-4);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  color: var(--kh-accent);
+}
+
+.kh-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--kh-space-1);
+  padding: 0 var(--kh-space-2);
+  flex: 1;
+}
+
+.kh-sidebar-footer {
+  padding: 0 var(--kh-space-2);
+}
+
+/* ───── 메인 ───── */
+.kh-main {
+  display: flex;
+  flex-direction: column;
+  background: var(--kh-bg);
+  min-width: 0;
+  /* 고정 높이/overflow 없음 — 페이지 전체 스크롤 */
+}
+
+.kh-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--kh-space-4);
+  height: var(--kh-header-height);
+  padding: 0 var(--kh-space-5);
+  border-bottom: 1px solid var(--kh-border);
+  background: var(--kh-bg-surface);
+  /* 스크롤 시 상단 고정 */
+  position: sticky;
+  top: 0;
+  z-index: 15;
+}
+
+.kh-topbar-search {
+  flex: 1;
+  max-width: 480px;
+}
+
+.kh-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--kh-space-2);
+}
+
+.kh-content {
+  padding: var(--kh-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--kh-space-4);
+  /* 내부 스크롤 제거 — 페이지 전체가 마우스 휠로 스크롤되도록 */
+}
+
+/* ───── 상단 그리드: 지수 스트립 + 세계 이슈 ───── */
+.kh-top-grid {
+  display: grid;
+  /* 하단 대시보드 그리드와 열 너비 통일 (1.4 : 1) */
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: var(--kh-space-4);
+  align-items: start;
+}
+
+.kh-top-grid > * {
+  min-width: 0;
+}
+
+/* ───── 대시보드 그리드 ───── */
+.kh-dash-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: var(--kh-space-4);
+  align-items: start;
+}
+
+.kh-dash-grid > * {
+  min-width: 0;
+}
+
+/* ───── 상세 패널 (슬라이드 인) ───── */
+.kh-detail {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: var(--kh-detail-width);
+  height: 100vh;
+  background: var(--kh-bg-surface);
+  border-left: 1px solid var(--kh-border-strong);
+  z-index: 50;
+  transform: translateX(100%);
+  transition: transform var(--kh-transition);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -20px 0 40px rgba(0,0,0,0.4);
+  /* 2단 레이아웃: 내부에서 컬럼별로 스크롤 */
+  overflow: hidden;
+}
+
+.kh-detail.is-open {
+  transform: translateX(0);
+}
+
+.kh-detail-header {
+  padding: var(--kh-space-4) var(--kh-space-5);
+  border-bottom: 1px solid var(--kh-border);
+  flex-shrink: 0;
+  background: var(--kh-bg-surface);
+}
+
+/* 2단 레이아웃: 좌(차트) / 우(요약·재무·뉴스 탭) */
+.kh-detail-split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.kh-detail-left {
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-right: 1px solid var(--kh-border);
+  min-width: 0;
+  min-height: 0;
+}
+
+.kh-detail-right {
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.kh-detail-tabs {
+  display: flex;
+  gap: var(--kh-space-2);
+  padding: 0 var(--kh-space-5);
+  border-bottom: 1px solid var(--kh-border);
+  flex-shrink: 0;
+  background: var(--kh-bg-surface);
+  /* 우측 컬럼 스크롤 중에도 탭은 상단 고정 */
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.kh-detail-body {
+  padding: var(--kh-space-5);
+  flex: 1;
+  min-height: 0;
+}
+
+/* 상세 패널 열렸을 때 메인 영역 딤 오버레이 (선택적) */
+.kh-detail-backdrop {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  background: rgba(0,0,0,0.3);
+  z-index: 40;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--kh-transition);
+}
+
+.kh-detail-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ───── 반응형 (간단) ───── */
+@media (max-width: 900px) {
+  .kh-dash-grid {
+    grid-template-columns: 1fr;
+  }
+  .kh-detail {
+    width: 100vw;
+  }
+  /* 좁은 화면에서는 2단 → 1단 세로 */
+  .kh-detail-split {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    overflow-y: auto;
+  }
+  .kh-detail-left,
+  .kh-detail-right {
+    overflow-y: visible;
+    border-right: none;
+  }
+  .kh-detail-left {
+    border-bottom: 1px solid var(--kh-border);
+  }
+}

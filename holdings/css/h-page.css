@@ -1,0 +1,187 @@
+/* ==========================================================================
+   KJC Holdings · h-page.css
+   analysis, roadmap 등 신규 서브 페이지 공통 스타일
+   (기존 dashboard UI 인 index.html 에는 영향 없음)
+   ========================================================================== */
+
+:root {
+  /* holdings 디자인 토큰 (메인 사이트에서 복제하여 소유) */
+  --h-bg: #0c0c0e;
+  --h-surface: #141416;
+  --h-card: #1a1a1e;
+  --h-border: rgba(255,255,255,0.07);
+  --h-border-strong: rgba(255,255,255,0.14);
+  --h-text: #f0f0f0;
+  --h-text-sub: #8a8a96;
+  --h-text-muted: #5c5c66;
+  --h-accent: #4f7eff;
+  --h-accent-hover: #6b93ff;
+  --h-up: #ff5f5f;
+  --h-down: #4f9dff;
+  --h-nav-h: 72px;
+  --h-gutter: 48px;
+  --h-max: 1440px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--h-bg);
+  color: var(--h-text);
+  font-family: "Noto Sans KR", "Roboto", sans-serif;
+  font-weight: 300;
+  line-height: 1.7;
+}
+
+a { color: inherit; text-decoration: none; }
+img { display: block; max-width: 100%; height: auto; }
+button { font-family: inherit; background: none; border: none; color: inherit; cursor: pointer; }
+
+/* ── Holdings 전용 네비 ─────────────────────────────── */
+.h-nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--h-nav-h);
+  padding: 0 var(--h-gutter);
+  background: rgba(12,12,14,0.78);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--h-border);
+}
+
+.h-nav-logo {
+  font-weight: 500;
+  font-size: 1.15rem;
+  color: var(--h-text);
+  letter-spacing: 0.04em;
+}
+.h-nav-logo span {
+  color: var(--h-accent);
+  margin-left: 6px;
+  font-weight: 400;
+}
+
+.h-nav-menu {
+  display: flex;
+  gap: 28px;
+  list-style: none;
+}
+.h-nav-menu a {
+  font-size: 0.92rem;
+  color: var(--h-text-sub);
+  transition: color 0.2s ease;
+  position: relative;
+}
+.h-nav-menu a:hover,
+.h-nav-menu a.active {
+  color: var(--h-text);
+}
+.h-nav-menu a.active::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -8px;
+  height: 2px;
+  background: var(--h-accent);
+  border-radius: 2px;
+}
+
+.h-nav-back {
+  font-size: 0.85rem;
+  color: var(--h-text-sub);
+  padding: 8px 14px;
+  border: 1px solid var(--h-border);
+  border-radius: 8px;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+.h-nav-back:hover {
+  border-color: var(--h-accent);
+  color: var(--h-accent);
+}
+
+/* ── 페이지 공통 ─────────────────────────────── */
+.h-page { padding-top: var(--h-nav-h); }
+
+.h-hero {
+  max-width: var(--h-max);
+  margin: 0 auto;
+  padding: 80px var(--h-gutter) 48px;
+}
+.h-hero .kicker {
+  font-size: 0.78rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--h-text-muted);
+  margin-bottom: 16px;
+}
+.h-hero h1 {
+  font-family: "Roboto", "Noto Sans KR", serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(2.4rem, 6vw, 5rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.h-hero h1 .dot { color: var(--h-accent); }
+.h-hero .lead {
+  max-width: 640px;
+  margin-top: 24px;
+  color: var(--h-text-sub);
+  font-size: 1rem;
+}
+
+.h-section {
+  max-width: var(--h-max);
+  margin: 0 auto;
+  padding: 40px var(--h-gutter);
+}
+
+/* ── Footer ─────────────────────────────── */
+.h-footer {
+  margin-top: 120px;
+  padding: 48px var(--h-gutter);
+  border-top: 1px solid var(--h-border);
+  background: var(--h-surface);
+}
+.h-footer-inner {
+  max-width: var(--h-max);
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.h-footer-brand {
+  font-size: 1.05rem;
+  font-weight: 500;
+}
+.h-footer-brand span {
+  color: var(--h-accent);
+  margin-left: 5px;
+  font-weight: 400;
+}
+.h-footer-brand p {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  color: var(--h-text-sub);
+  font-weight: 300;
+}
+.h-footer-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: var(--h-text-muted);
+  text-align: right;
+}
+
+@media (max-width: 900px) {
+  :root { --h-gutter: 24px; }
+  .h-nav-menu { gap: 18px; }
+  .h-footer-inner { flex-direction: column; align-items: flex-start; }
+  .h-footer-meta { text-align: left; }
+}

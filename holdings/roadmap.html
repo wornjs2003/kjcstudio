@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>로드맵 — KJC Holdings</title>
+  <meta name="description" content="KJC Holdings 주식 분석 서비스 개발 로드맵" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400;1,500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/h-page.css" />
+
+  <style>
+    /* 로드맵 페이지 전용 */
+    .roadmap-wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px var(--h-gutter) 80px;
+    }
+
+    /* 월별 캘린더 */
+    .calendar-months {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+      margin-bottom: 60px;
+    }
+    .cal-month {
+      background: var(--h-card);
+      border: 1px solid var(--h-border);
+      border-radius: 14px;
+      padding: 20px 18px;
+      transition: border-color 0.25s ease, transform 0.25s ease;
+    }
+    .cal-month:hover {
+      border-color: var(--h-accent);
+      transform: translateY(-3px);
+    }
+    .cal-month.active {
+      border-color: var(--h-accent);
+      background: linear-gradient(135deg, rgba(79,126,255,0.08), rgba(79,126,255,0.02));
+    }
+    .cal-month-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--h-border);
+    }
+    .month-name {
+      font-size: 1.1rem;
+      font-weight: 500;
+      color: var(--h-text);
+    }
+    .month-year {
+      font-size: 0.78rem;
+      color: var(--h-text-muted);
+    }
+    .status-badge {
+      font-size: 0.68rem;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-weight: 500;
+      margin-left: 6px;
+      letter-spacing: 0.03em;
+    }
+    .badge-progress {
+      background: rgba(79,126,255,0.18);
+      color: var(--h-accent);
+    }
+    .badge-upcoming {
+      background: rgba(255,255,255,0.06);
+      color: var(--h-text-sub);
+    }
+    .cal-tasks { display: flex; flex-direction: column; gap: 9px; }
+    .cal-task {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.84rem;
+      color: var(--h-text-sub);
+    }
+    .cal-task-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--h-accent);
+      flex-shrink: 0;
+    }
+    .cal-task-dot.pending {
+      background: rgba(255,255,255,0.15);
+    }
+
+    /* 타임라인 */
+    .timeline {
+      position: relative;
+      padding-left: 32px;
+    }
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 8px; top: 10px; bottom: 10px;
+      width: 2px;
+      background: var(--h-border);
+    }
+    .timeline-item {
+      position: relative;
+      padding: 16px 0 32px 20px;
+    }
+    .timeline-dot {
+      position: absolute;
+      left: -30px; top: 20px;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--h-surface);
+      border: 2px solid var(--h-border-strong);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .timeline-dot-inner {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--h-text-muted);
+    }
+    .timeline-dot.active {
+      border-color: var(--h-accent);
+      box-shadow: 0 0 12px rgba(79,126,255,0.4);
+    }
+    .timeline-dot.active .timeline-dot-inner {
+      background: var(--h-accent);
+    }
+    .timeline-content {
+      background: var(--h-card);
+      border: 1px solid var(--h-border);
+      border-radius: 14px;
+      padding: 22px 26px;
+      transition: border-color 0.25s ease;
+    }
+    .timeline-item.active .timeline-content {
+      border-color: var(--h-accent);
+    }
+    .timeline-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 10px;
+    }
+    .timeline-phase {
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--h-accent);
+    }
+    .timeline-date {
+      font-size: 0.85rem;
+      color: var(--h-text-muted);
+    }
+    .timeline-title {
+      font-size: 1.15rem;
+      font-weight: 500;
+      margin-bottom: 14px;
+      color: var(--h-text);
+    }
+    .timeline-tasks {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .timeline-tasks li {
+      font-size: 0.9rem;
+      color: var(--h-text-sub);
+      padding-left: 16px;
+      position: relative;
+    }
+    .timeline-tasks li::before {
+      content: "—";
+      position: absolute;
+      left: 0;
+      color: var(--h-text-muted);
+    }
+
+    @media (max-width: 1000px) {
+      .calendar-months { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 600px) {
+      .calendar-months { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body data-nav="roadmap">
+
+  <div id="h-nav"></div>
+
+  <main class="h-page">
+    <section class="h-hero">
+      <p class="kicker">Holdings · Roadmap</p>
+      <h1>Development<br>Roadmap<span class="dot">.</span></h1>
+      <p class="lead">
+        한국 주식 종합 분석 서비스를 단계별로 개발합니다. 현재 Phase 1 진행 중입니다.
+      </p>
+    </section>
+
+    <div class="roadmap-wrap">
+      <!-- 월별 캘린더 -->
+      <div class="calendar-months">
+        <div class="cal-month active">
+          <div class="cal-month-header">
+            <span class="month-name">4월 <span class="status-badge badge-progress">진행중</span></span>
+            <span class="month-year">2026</span>
+          </div>
+          <div class="cal-tasks">
+            <div class="cal-task"><div class="cal-task-dot"></div>주식 UI 설계</div>
+            <div class="cal-task"><div class="cal-task-dot"></div>홈페이지 섹션 추가</div>
+            <div class="cal-task"><div class="cal-task-dot"></div>로드맵 캘린더 제작</div>
+          </div>
+        </div>
+        <div class="cal-month">
+          <div class="cal-month-header">
+            <span class="month-name">5월 <span class="status-badge badge-upcoming">예정</span></span>
+            <span class="month-year">2026</span>
+          </div>
+          <div class="cal-tasks">
+            <div class="cal-task"><div class="cal-task-dot pending"></div>Mac Studio 구매</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>Tailscale 설치</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>서버 환경 구성</div>
+          </div>
+        </div>
+        <div class="cal-month">
+          <div class="cal-month-header">
+            <span class="month-name">6월 <span class="status-badge badge-upcoming">예정</span></span>
+            <span class="month-year">2026</span>
+          </div>
+          <div class="cal-tasks">
+            <div class="cal-task"><div class="cal-task-dot pending"></div>한국투자증권 API</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>재무데이터 연동</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>실시간 차트</div>
+          </div>
+        </div>
+        <div class="cal-month">
+          <div class="cal-month-header">
+            <span class="month-name">7월 <span class="status-badge badge-upcoming">예정</span></span>
+            <span class="month-year">2026</span>
+          </div>
+          <div class="cal-tasks">
+            <div class="cal-task"><div class="cal-task-dot pending"></div>Claude AI 연동</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>뉴스 감성 분석</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>종목 리포트 생성</div>
+          </div>
+        </div>
+        <div class="cal-month">
+          <div class="cal-month-header">
+            <span class="month-name">8월 <span class="status-badge badge-upcoming">예정</span></span>
+            <span class="month-year">2026</span>
+          </div>
+          <div class="cal-tasks">
+            <div class="cal-task"><div class="cal-task-dot pending"></div>테스트 및 버그 수정</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>도메인 연결</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>서비스 오픈</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 타임라인 -->
+      <div class="timeline">
+        <div class="timeline-item active">
+          <div class="timeline-dot active"><div class="timeline-dot-inner"></div></div>
+          <div class="timeline-content">
+            <div class="timeline-top">
+              <span class="timeline-phase">Phase 1</span>
+              <span class="timeline-date">2026년 4월</span>
+            </div>
+            <div class="timeline-title">UI 제작 <span class="status-badge badge-progress">진행중</span></div>
+            <ul class="timeline-tasks">
+              <li>홈페이지에 주식 섹션 추가</li>
+              <li>종목 검색창 및 기본 레이아웃 구성</li>
+              <li>차트, 재무 카드, 뉴스 UI 설계</li>
+              <li>로드맵 캘린더 제작</li>
+            </ul>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot"><div class="timeline-dot-inner"></div></div>
+          <div class="timeline-content">
+            <div class="timeline-top">
+              <span class="timeline-phase">Phase 2</span>
+              <span class="timeline-date">2026년 5월</span>
+            </div>
+            <div class="timeline-title">서버 환경 세팅 <span class="status-badge badge-upcoming">예정</span></div>
+            <ul class="timeline-tasks">
+              <li>Mac Studio 구매 및 초기 설정</li>
+              <li>Tailscale 설치 및 원격 접속 구성</li>
+              <li>Python 백엔드 환경 구성</li>
+            </ul>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot"><div class="timeline-dot-inner"></div></div>
+          <div class="timeline-content">
+            <div class="timeline-top">
+              <span class="timeline-phase">Phase 3</span>
+              <span class="timeline-date">2026년 6월</span>
+            </div>
+            <div class="timeline-title">데이터 API 연동 <span class="status-badge badge-upcoming">예정</span></div>
+            <ul class="timeline-tasks">
+              <li>한국투자증권 API 발급 및 실시간 주가 연동</li>
+              <li>OpenDartReader 재무제표 연동</li>
+              <li>네이버 뉴스 API 연동</li>
+              <li>실시간 차트 구현</li>
+            </ul>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot"><div class="timeline-dot-inner"></div></div>
+          <div class="timeline-content">
+            <div class="timeline-top">
+              <span class="timeline-phase">Phase 4</span>
+              <span class="timeline-date">2026년 7월</span>
+            </div>
+            <div class="timeline-title">AI 분석 기능 <span class="status-badge badge-upcoming">예정</span></div>
+            <ul class="timeline-tasks">
+              <li>Claude API 연동</li>
+              <li>뉴스 감성 분석 (긍정/부정)</li>
+              <li>종목 종합 리포트 자동 생성</li>
+            </ul>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot"><div class="timeline-dot-inner"></div></div>
+          <div class="timeline-content">
+            <div class="timeline-top">
+              <span class="timeline-phase">Phase 5</span>
+              <span class="timeline-date">2026년 8월</span>
+            </div>
+            <div class="timeline-title">서비스 오픈 <span class="status-badge badge-upcoming">예정</span></div>
+            <ul class="timeline-tasks">
+              <li>전체 테스트 및 버그 수정</li>
+              <li>커스텀 도메인 연결</li>
+              <li>서비스 정식 오픈</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="h-footer"></div>
+
+  <script src="js/h-page.js"></script>
+</body>
+</html>

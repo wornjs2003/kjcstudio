@@ -1,0 +1,77 @@
+{
+  "_comment": "작업물은 refresh-works.command 로 자동 갱신됩니다. 수동 편집 가능. 필드: id(고유), category(3d-modeling/ai-work/web-interactive/branding), title, year, client, thumbnail(이미지 경로, 없으면 플레이스홀더), images(상세용 배열), span(tall/large/wide/square), order(숫자).",
+  "works": [
+    {
+      "id": "3dm-sample-1",
+      "category": "3d-modeling",
+      "title": "Sample Slot A",
+      "year": 2026,
+      "thumbnail": "",
+      "span": "tall",
+      "order": 1
+    },
+    {
+      "id": "3dm-sample-2",
+      "category": "3d-modeling",
+      "title": "Sample Slot B",
+      "year": 2026,
+      "thumbnail": "",
+      "span": "large",
+      "order": 2
+    },
+    {
+      "id": "3dm-sample-3",
+      "category": "3d-modeling",
+      "title": "Sample Slot C",
+      "year": 2026,
+      "thumbnail": "",
+      "span": "large",
+      "order": 3
+    },
+    {
+      "id": "3dm-sample-4",
+      "category": "3d-modeling",
+      "title": "Sample Slot D",
+      "year": 2026,
+      "thumbnail": "",
+      "span": "wide",
+      "order": 4
+    },
+    {
+      "id": "3dm-sample-5",
+      "category": "3d-modeling",
+      "title": "Sample Slot E",
+      "year": 2026,
+      "thumbnail": "",
+      "span": "tall",
+      "order": 5
+    },
+    {
+      "id": "3dm-sample-6",
+      "category": "3d-modeling",
+      "title": "Sample Slot F",
+      "year": 2026,
+      "thumbnail": "",
+      "span": "square",
+      "order": 6
+    },
+    {
+      "id": "3dm-sample-7",
+      "category": "3d-modeling",
+      "title": "Sample Slot G",
+      "year": 2026,
+      "thumbnail": "",
+      "span": "wide",
+      "order": 7
+    },
+    {
+      "id": "3dm-sample-8",
+      "category": "3d-modeling",
+      "title": "Sample Slot H",
+      "year": 2026,
+      "thumbnail": "",
+      "span": "tall",
+      "order": 8
+    }
+  ]
+}
