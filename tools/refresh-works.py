@@ -126,7 +126,8 @@ def load_json(path: Path) -> dict:
 
 def save_json(path: Path, doc: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
+    # newline="\n": Windows 에서 실행해도 줄바꿈을 LF 로 고정 (Mac 과 diff 안 나게)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(doc, f, ensure_ascii=False, indent=2)
         f.write("\n")
 

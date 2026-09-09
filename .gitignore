@@ -29,3 +29,10 @@ venv/
 # Node (혹시 모를 상황 대비)
 node_modules/
 npm-debug.log*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk

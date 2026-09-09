@@ -1,0 +1,22 @@
+# 줄바꿈 통일 (Mac ↔ Windows 혼용 시 전체 파일이 변경된 것처럼 보이는 문제 방지)
+* text=auto eol=lf
+
+# Windows 전용 실행 스크립트는 CRLF 유지
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Mac 전용 실행 스크립트는 LF 유지
+*.command text eol=lf
+
+# 바이너리
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.pdf binary

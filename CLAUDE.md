@@ -61,11 +61,23 @@
 - holdings 관련 룰은 `holdings/CLAUDE.md` 참조
 
 ## 실행 커맨드
-- `studio-preview.command` : 메인 사이트 실행 (포트 8080)
-- `holdings-preview.command` : holdings 실행 단축 (포트 8765)
-- `holdings/preview.command` : holdings 독립 실행 (분리 시 따라감)
-- `refresh-works.command` : 이미지 폴더 스캔해서 `data/works.json` 자동 갱신
+Mac 은 `.command` 더블클릭, Windows 는 같은 이름의 `.bat` 더블클릭. 동작은 동일.
+
+| 용도 | Mac | Windows |
+|---|---|---|
+| 메인 사이트 (포트 8080) | `studio-preview.command` | `studio-preview.bat` |
+| holdings 단축 (포트 8765) | `holdings-preview.command` | `holdings-preview.bat` |
+| holdings 독립 실행 | `holdings/preview.command` | `holdings/preview.bat` |
+| 작업물 목록 갱신 | `refresh-works.command` | `refresh-works.bat` |
+
 - 브라우저: Chrome 우선, 없으면 기본 브라우저
+- 두 OS 모두 Python 3 필요 (Windows: Python 3.13 + Pillow 설치됨)
+
+## 작업 환경 (2대 병행)
+- Mac 과 Windows PC(`C:\work\KJCStudio`) 양쪽에서 작업. 동기화는 GitHub 저장소 기준
+- 다른 PC 로 옮겨 작업 시작 전 `git pull`, 끝나면 `git push` 로 맞출 것
+- 줄바꿈은 `.gitattributes` 로 LF 고정 (`.bat` 만 CRLF). OS 바꿔도 전체 파일이 변경된 것처럼 보이지 않음
+- `tools/refresh-works.py` 는 `newline="\n"` 으로 저장하므로 Windows 에서 돌려도 diff 가 깨지지 않음
 
 ## 이미지 최적화 권장
 - 포맷: JPG (사진/렌더) · PNG (투명도 필요 시) · WebP (최고 압축률)
