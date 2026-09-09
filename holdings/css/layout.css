@@ -233,3 +233,118 @@
     border-bottom: 1px solid var(--kh-border);
   }
 }
+
+
+/* ==========================================================================
+   모바일 대응 (900px 이하)
+   - 데스크톱 2단 그리드 → 1단
+   - 좌측 세로 사이드바 → 하단 고정 탭바
+   ========================================================================== */
+@media (max-width: 900px) {
+  /* 앱 셸: 사이드바 열 제거 */
+  .kh-app {
+    grid-template-columns: 1fr;
+  }
+
+  /* 상단 그리드도 1단으로 (기존엔 dash-grid 만 처리돼 있었음) */
+  .kh-top-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* 사이드바 → 화면 하단 고정 탭바 */
+  .kh-sidebar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+    padding: 6px 4px;
+    border-right: none;
+    border-top: 1px solid var(--kh-border);
+    /* iOS 홈 인디케이터 영역 확보 */
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+    background: rgba(20, 20, 22, 0.96);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    z-index: 60;
+  }
+
+  /* 탭바에서는 로고 숨김 */
+  .kh-sidebar-logo {
+    display: none;
+  }
+
+  .kh-sidebar-nav {
+    flex-direction: row;
+    justify-content: space-around;
+    flex: 1;
+    padding: 0;
+    gap: 0;
+  }
+
+  .kh-sidebar-footer {
+    padding: 0;
+  }
+
+  /* 하단 탭바에 콘텐츠가 가리지 않도록 여백 */
+  .kh-main {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* 상단바: 검색과 버튼이 좁은 폭에서 겹치지 않도록 */
+  .kh-topbar {
+    gap: var(--kh-space-2);
+    padding: 0 var(--kh-space-3);
+  }
+
+  .kh-topbar-search {
+    max-width: none;
+  }
+
+  .kh-content {
+    padding: var(--kh-space-3);
+    gap: var(--kh-space-3);
+  }
+
+  /* 넓은 표는 카드 안에서 가로 스크롤 */
+  .kh-card {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .kh-table {
+    min-width: 560px;
+  }
+
+  /* 상세 패널: 전체 화면 */
+  .kh-detail {
+    width: 100vw;
+    height: 100dvh;
+  }
+}
+
+/* ── 480px 이하: 더 좁은 화면 ─────────────────────────────── */
+@media (max-width: 480px) {
+  /* 상단바 액션 중 텍스트 버튼은 숨기고 아이콘만 */
+  .kh-topbar-actions .kh-btn:not(.kh-btn-icon) {
+    display: none;
+  }
+
+  .kh-content {
+    padding: var(--kh-space-2);
+  }
+
+  /* 지수 차트가 화면 절반이면 너무 작아 전체 폭 사용 */
+  .kh-index-detail-chart {
+    max-width: 100%;
+  }
+
+  /* 상세 헤더 통계는 2열로 */
+  .kh-detail-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

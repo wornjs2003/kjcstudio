@@ -23,10 +23,14 @@
   font-family: var(--font-display);
   font-style: italic;
   font-weight: 500;
-  font-size: clamp(4rem, 11vw, 12rem);
+  /* 모바일에서 한 단어가 화면보다 넓어지지 않도록 하한을 vw 기준으로 */
+  font-size: clamp(2.6rem, 11vw, 12rem);
   line-height: 0.95;
   letter-spacing: -0.03em;
   color: var(--text-primary);
+  /* 긴 영문 제목이 좁은 화면에서 잘리지 않고 줄바꿈되도록 */
+  overflow-wrap: break-word;
+  word-break: keep-all;
 }
 
 .category-title .dot {
@@ -240,5 +244,47 @@
 
 @media (max-width: 520px) {
   .gallery { column-count: 1; }
-  .category-hero { padding-top: 80px; }
+  .category-hero {
+    padding-top: 80px;
+    padding-bottom: 32px;
+  }
+  .category-desc {
+    font-size: 0.95rem;
+  }
+  /* 라이트박스: 좁은 화면에서 여백 축소 + 닫기 버튼 위치 조정 */
+  .lightbox {
+    padding: 16px;
+  }
+  .lightbox img {
+    max-height: 70vh;
+  }
+  .lightbox-close {
+    top: 12px;
+    right: 12px;
+  }
+  .lightbox-caption {
+    bottom: 20px;
+    width: 90%;
+    font-size: 0.85rem;
+  }
+  /* 터치 기기는 hover 가 없으므로 제목 오버레이를 항상 노출 */
+  .gallery-item-info {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 터치 기기 전반: hover 효과 제거 (탭 후 잔상 방지) */
+@media (hover: none) {
+  .gallery-item:hover {
+    transform: none;
+    box-shadow: none;
+  }
+  .gallery-item:hover .gallery-item-media img {
+    transform: none;
+  }
+  .gallery-item-info {
+    opacity: 1;
+    transform: none;
+  }
 }

@@ -230,7 +230,7 @@
 
 @media (max-width: 768px) {
   .nav-menu {
-    display: none; /* 모바일은 햄버거로 대체 예정 (1단계 범위 밖) */
+    display: none; /* 데스크톱 메뉴 숨김 → .nav-burger 로 대체 */
   }
   .footer-inner {
     grid-template-columns: 1fr;
@@ -239,5 +239,123 @@
   .footer-bottom {
     flex-direction: column;
     gap: 8px;
+  }
+}
+
+
+/* ── 모바일 햄버거 버튼 ─────────────────────────────── */
+.nav-burger {
+  display: none; /* 데스크톱에서는 숨김 (768px 이하에서 flex) */
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  margin-right: -8px;
+  align-items: center;
+}
+
+.nav-burger span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: var(--text-primary);
+  border-radius: 2px;
+  transition: transform 0.25s ease, opacity 0.2s ease;
+}
+
+/* 열린 상태 → X 아이콘 */
+.nav-burger.open span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+.nav-burger.open span:nth-child(2) {
+  opacity: 0;
+}
+.nav-burger.open span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+/* ── 모바일 전체화면 메뉴 ─────────────────────────────── */
+.nav-mobile {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(12, 12, 14, 0.97);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: calc(var(--nav-height) + 24px) var(--page-gutter) 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  /* 메뉴가 길어지면 메뉴 안에서 스크롤 */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.nav-mobile.open {
+  opacity: 1;
+}
+
+.nav-mobile-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-mobile-list a {
+  display: block;
+  padding: 14px 0;
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-mobile-list a.active {
+  color: var(--text-primary);
+}
+
+.nav-mobile-list a.external::after {
+  content: " ↗";
+  color: var(--accent);
+  font-size: 0.7em;
+}
+
+/* About / Services / Contact 는 작게 */
+.nav-mobile-sub a {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 400;
+  padding: 11px 0;
+  color: var(--text-muted);
+}
+
+/* 메뉴 열렸을 때 뒤 페이지 스크롤 잠금 */
+body.nav-open {
+  overflow: hidden;
+}
+
+/* hidden 속성이 display:flex 에 덮이지 않도록 (덮이면 투명 오버레이가
+   화면 전체를 가려 스크롤·터치가 먹지 않는다) */
+.nav-mobile[hidden] {
+  display: none !important;
+}
+
+/* 데스크톱으로 넓히면 모바일 메뉴·햄버거 모두 숨김 */
+@media (min-width: 769px) {
+  .nav-mobile {
+    display: none !important;
+  }
+}
+
+/* 모바일에서만 햄버거 노출 — 기본값(display:none) 뒤에 와야 적용된다 */
+@media (max-width: 768px) {
+  .nav-burger {
+    display: flex;
   }
 }

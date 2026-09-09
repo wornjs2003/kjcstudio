@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=1280, initial-scale=0.3, minimum-scale=0.2, maximum-scale=3.0, user-scalable=yes" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
   <title>KJC Holdings — 내 주식 정리실</title>
   <meta name="description" content="관심종목·뉴스·공시·재무를 한 곳에서 보고 정리하는 개인 투자 도구" />
 
@@ -114,6 +114,19 @@
       s.type = 'module';
       s.src = './js/main.js?v=' + v;
       document.body.appendChild(s);
+
+      // 안전장치: main.js 로드/실행이 실패해도 로딩 오버레이가 화면을 영구히
+      // 덮지 않도록 8초 뒤 강제 해제한다. (모바일 네트워크 불안정 대비)
+      window.setTimeout(function () {
+        var boot = document.getElementById('kh-boot');
+        if (!boot) return;
+        var t = boot.querySelector('.kh-boot-text');
+        if (t) t.textContent = '일부 데이터를 불러오지 못했습니다. 화면을 표시합니다.';
+        boot.classList.add('is-hidden');
+        window.setTimeout(function () {
+          if (boot.parentNode) boot.parentNode.removeChild(boot);
+        }, 500);
+      }, 8000);
     })();
   </script>
 </body>

@@ -228,3 +228,19 @@
   }
   .page-hero { padding-top: 80px; }
 }
+
+/* ── 모바일: 거대 타이포가 화면 밖으로 넘치지 않도록 ── */
+@media (max-width: 520px) {
+  .page-hero h1 {
+    font-size: clamp(2.4rem, 12vw, 4rem);
+    overflow-wrap: break-word;
+    word-break: keep-all;
+  }
+  .content-block h2 {
+    font-size: clamp(1.6rem, 7vw, 2.4rem);
+  }
+  .two-col,
+  .contact-grid {
+    gap: 32px;
+  }
+}

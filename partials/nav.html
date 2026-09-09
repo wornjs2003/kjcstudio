@@ -16,4 +16,26 @@
       </div>
     </li>
   </ul>
+
+  <!-- 모바일 햄버거 버튼 (768px 이하에서만 표시) -->
+  <button class="nav-burger" type="button" aria-label="메뉴 열기"
+          aria-expanded="false" aria-controls="nav-mobile-panel">
+    <span></span><span></span><span></span>
+  </button>
 </nav>
+
+<!-- 모바일 전체화면 메뉴 -->
+<div class="nav-mobile" id="nav-mobile-panel" hidden>
+  <ul class="nav-mobile-list">
+    <li><a href="{{BASE}}category/3d-modeling.html" data-nav="3d-modeling">3D Modeling</a></li>
+    <li><a href="{{BASE}}category/ai-work.html" data-nav="ai-work">AI Work</a></li>
+    <li><a href="{{BASE}}category/web-interactive.html" data-nav="web-interactive">Web · Interactive</a></li>
+    <li><a href="{{BASE}}category/branding.html" data-nav="branding">Branding</a></li>
+    <li><a href="{{BASE}}holdings/" class="external" data-nav="holdings">Holdings</a></li>
+  </ul>
+  <ul class="nav-mobile-list nav-mobile-sub">
+    <li><a href="{{BASE}}about.html" data-nav="about">About</a></li>
+    <li><a href="{{BASE}}services.html" data-nav="services">Services</a></li>
+    <li><a href="{{BASE}}contact.html" data-nav="contact">Contact</a></li>
+  </ul>
+</div>

@@ -85,6 +85,59 @@
   }
 
   /**
+   * 모바일 햄버거 메뉴 토글
+   * - 버튼(.nav-burger) ↔ 전체화면 패널(.nav-mobile)
+   * - 열려 있는 동안 body 스크롤 잠금, 링크 클릭/ESC/리사이즈 시 닫힘
+   */
+  function setupMobileMenu() {
+    const burger = document.querySelector(".nav-burger");
+    const panel = document.querySelector(".nav-mobile");
+    if (!burger || !panel) return;
+
+    let isOpen = false;
+
+    function open() {
+      isOpen = true;
+      panel.hidden = false;
+      // hidden 해제 직후 클래스를 붙여야 페이드 트랜지션이 동작한다
+      requestAnimationFrame(() => panel.classList.add("open"));
+      burger.classList.add("open");
+      burger.setAttribute("aria-expanded", "true");
+      burger.setAttribute("aria-label", "메뉴 닫기");
+      document.body.classList.add("nav-open");
+    }
+
+    function close() {
+      isOpen = false;
+      panel.classList.remove("open");
+      burger.classList.remove("open");
+      burger.setAttribute("aria-expanded", "false");
+      burger.setAttribute("aria-label", "메뉴 열기");
+      document.body.classList.remove("nav-open");
+      // 페이드 아웃이 끝난 뒤 hidden 처리
+      window.setTimeout(() => {
+        if (!isOpen) panel.hidden = true;
+      }, 250);
+    }
+
+    burger.addEventListener("click", () => (isOpen ? close() : open()));
+
+    // 메뉴 항목을 누르면 바로 닫기 (같은 페이지 앵커 이동 대비)
+    panel.querySelectorAll("a").forEach((a) => {
+      a.addEventListener("click", close);
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && isOpen) close();
+    });
+
+    // 가로 회전 등으로 데스크톱 폭이 되면 잠금 해제
+    window.addEventListener("resize", () => {
+      if (isOpen && window.innerWidth > 768) close();
+    });
+  }
+
+  /**
    * 초기화
    */
   async function init() {
@@ -98,6 +151,7 @@
 
     markActiveNav();
     setupMoreMenu();
+    setupMobileMenu();
   }
 
   if (document.readyState === "loading") {
