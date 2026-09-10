@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>회사 설립 체크리스트 · KJC Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Roboto:ital,wght@0,400;0,700;1,900&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   KJC Studio · 회사 설립 체크리스트
+   메인 사이트와 같은 다크 테마를 쓰되, 이 폴더 안에서 독립 동작합니다.
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0c0c0e;
+  --bg-surface: #141416;
+  --bg-card: #1a1a1e;
+  --bg-elevated: #202025;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text-primary: #f0f0f0;
+  --text-secondary: #8a8a96;
+  --text-muted: #5c5c66;
+  --accent: #4f7eff;
+  --accent-hover: #6b93ff;
+  --accent-faint: rgba(79, 126, 255, 0.12);
+  --done: #3ecf8e;
+  --font-body: "Noto Sans KR", "Roboto", "Apple SD Gothic Neo", sans-serif;
+  --font-display: "Roboto", "Noto Sans KR", serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-weight: 300;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 980px; margin: 0 auto; padding: 72px 28px 120px; }
+
+/* ── 헤더 ─────────────────────────────── */
+.eyebrow {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 18px;
+}
+.eyebrow a { color: inherit; text-decoration: none; }
+.eyebrow a:hover { color: var(--accent); }
+
+h1 {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: clamp(38px, 7vw, 68px);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin-bottom: 14px;
+}
+.subtitle { color: var(--text-secondary); font-size: 15px; }
+
+/* ── 전체 진행률 ─────────────────────────────── */
+.overview {
+  margin-top: 44px;
+  padding: 26px 28px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.overview-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.overview-count { font-size: 14px; color: var(--text-secondary); }
+.overview-count strong { color: var(--text-primary); font-weight: 500; }
+.overview-pct {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 34px;
+  line-height: 1;
+  color: var(--accent);
+}
+.bar { height: 8px; background: var(--bg-elevated); border-radius: 99px; overflow: hidden; }
+.bar-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+  border-radius: 99px;
+  transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bar-fill.complete { background: linear-gradient(90deg, var(--done), #6fe3ab); }
+
+/* ── 안내 문구 ─────────────────────────────── */
+.note {
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: var(--accent-faint);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+/* ── 도구 막대 ─────────────────────────────── */
+.tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 28px 0 36px; }
+.btn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 9px 18px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.btn:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.btn.on { color: var(--accent); border-color: var(--accent); background: var(--accent-faint); }
+.btn.danger:hover { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.4); }
+
+/* 저장 완료 표시 */
+.saved {
+  font-size: 12px;
+  color: var(--done);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+.saved.show { opacity: 1; }
+
+/* ── 섹션 ─────────────────────────────── */
+.section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  margin-bottom: 14px;
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+.section.done { border-color: rgba(62, 207, 142, 0.28); }
+
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 22px 26px;
+  cursor: pointer;
+  user-select: none;
+}
+.section-head:hover { background: rgba(255, 255, 255, 0.02); }
+
+.section-no {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 30px;
+  line-height: 1;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+}
+.section.done .section-no { color: var(--done); }
+
+.section-info { flex: 1; min-width: 0; }
+.section-title { font-size: 18px; font-weight: 500; letter-spacing: -0.01em; }
+.section-summary { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+
+.section-meta { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+.section-count { font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.section.done .section-count { color: var(--done); }
+.mini-bar { width: 62px; height: 4px; background: var(--bg-elevated); border-radius: 99px; overflow: hidden; }
+.mini-fill { height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width 0.35s ease; }
+.section.done .mini-fill { background: var(--done); }
+.chev {
+  width: 10px; height: 10px;
+  border-right: 1.5px solid var(--text-muted);
+  border-bottom: 1.5px solid var(--text-muted);
+  transform: rotate(45deg);
+  transition: transform 0.25s ease;
+  margin-bottom: 3px;
+}
+.section.collapsed .chev { transform: rotate(-135deg); margin-bottom: -3px; }
+
+.section-body { border-top: 1px solid var(--border); }
+.section.collapsed .section-body { display: none; }
+
+/* ── 항목 ─────────────────────────────── */
+.item {
+  display: flex;
+  gap: 15px;
+  padding: 16px 26px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.035);
+  transition: background 0.15s ease;
+}
+.item:last-child { border-bottom: none; }
+.item:hover { background: rgba(255, 255, 255, 0.02); }
+
+/* 체크박스와 제목 줄만 클릭 대상 (메모는 제외) */
+.item-click { display: flex; gap: 15px; cursor: pointer; }
+
+.box {
+  width: 20px; height: 20px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 6px;
+  flex-shrink: 0;
+  margin-top: 3px;
+  position: relative;
+  transition: all 0.18s ease;
+}
+.item-click:hover .box { border-color: var(--accent); }
+.box::after {
+  content: "";
+  position: absolute;
+  left: 6px; top: 2px;
+  width: 5px; height: 10px;
+  border-right: 2px solid #0c0c0e;
+  border-bottom: 2px solid #0c0c0e;
+  transform: rotate(45deg) scale(0);
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.item.checked .box { background: var(--done); border-color: var(--done); }
+.item.checked .box::after { transform: rotate(45deg) scale(1); }
+
+.item-main { flex: 1; min-width: 0; }
+.item-title { font-size: 15px; font-weight: 400; transition: color 0.18s ease; }
+.item.checked .item-title { color: var(--text-muted); text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, 0.2); }
+.item-desc { font-size: 13px; color: var(--text-muted); margin-top: 4px; line-height: 1.6; }
+.item.checked .item-desc { opacity: 0.45; }
+.item-link {
+  display: inline-block;
+  margin-top: 7px;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(79, 126, 255, 0.3);
+  padding-bottom: 1px;
+}
+.item-link:hover { color: var(--accent-hover); border-color: var(--accent-hover); }
+
+/* ── 메모 입력칸 (체크박스 아래 들여쓰기) ─────────────────────────────── */
+.memo-wrap {
+  margin-top: 10px;
+  padding-left: 14px;
+  border-left: 2px solid var(--border);
+  transition: border-color 0.2s ease;
+}
+.memo-wrap.filled { border-left-color: var(--accent); }
+
+.memo {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  resize: none;
+  overflow: hidden;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 300;
+  line-height: 1.65;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 7px 11px;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+.memo::placeholder { color: var(--text-muted); }
+.memo:hover { border-color: var(--border); }
+.memo:focus { outline: none; border-color: var(--accent); background: var(--bg-surface); }
+
+/* 미완료만 보기 */
+body.only-todo .item.checked { display: none; }
+body.only-todo .section.done { display: none; }
+
+/* 메모 숨기기 */
+body.hide-memo .memo-wrap { display: none; }
+
+/* ── 푸터 ─────────────────────────────── */
+.foot {
+  margin-top: 44px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.foot code { font-size: 11px; color: var(--text-secondary); }
+
+/* ── 인쇄 ─────────────────────────────── */
+@media print {
+  body { background: #fff; color: #111; }
+  .tools, .chev, .foot, .note { display: none; }
+  .wrap { padding: 0; max-width: none; }
+  .section, .overview { background: #fff; border: 1px solid #ddd; break-inside: avoid; }
+  .section.collapsed .section-body { display: block; }
+  .item-title, .section-title, h1 { color: #111; }
+  .item-desc, .section-summary, .subtitle { color: #555; }
+  .memo { background: #fff; border: 1px solid #ddd; color: #111; }
+  .memo-wrap.empty { display: none; }   /* 빈 메모는 인쇄에서 제외 */
+}
+
+@media (max-width: 640px) {
+  .wrap { padding: 48px 18px 90px; }
+  .section-head { padding: 18px; gap: 13px; }
+  .section-no { font-size: 24px; }
+  .section-summary { display: none; }
+  .mini-bar { display: none; }
+  .item { padding: 14px 18px; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="eyebrow"><a href="../index.html">← KJC Studio</a></div>
+  <h1 id="pageTitle">회사 설립 체크리스트</h1>
+  <p class="subtitle" id="pageSubtitle"></p>
+
+  <div class="overview">
+    <div class="overview-top">
+      <div class="overview-count"><strong id="doneCount">0</strong> / <span id="totalCount">0</span> 완료</div>
+      <div class="overview-pct" id="pctText">0%</div>
+    </div>
+    <div class="bar"><div class="bar-fill" id="barFill"></div></div>
+  </div>
+
+  <p class="note" id="noteText"></p>
+
+  <div class="tools">
+    <button class="btn" id="btnTodo">미완료만 보기</button>
+    <button class="btn" id="btnMemo">메모 숨기기</button>
+    <button class="btn" id="btnToggle">전체 접기</button>
+    <button class="btn" id="btnPrint">인쇄</button>
+    <button class="btn danger" id="btnReset">전체 초기화</button>
+    <span class="saved" id="savedTag">저장됨</span>
+  </div>
+
+  <div id="list"></div>
+
+  <div class="foot">
+    <span>체크와 메모는 입력 즉시 이 브라우저에 자동 저장됩니다.</span>
+    <span>항목 수정: <code>company-setup/data/checklist.js</code></span>
+  </div>
+</div>
+
+<script src="data/checklist.js"></script>
+<script>
+/* ==========================================================================
+   체크 상태와 메모는 localStorage 에 저장합니다.
+   데이터 파일을 고쳐도 id 를 바꾸지 않으면 기존 내용이 유지됩니다.
+   ========================================================================== */
+const STORE_KEY = "kjc-company-setup-v1";       /* 체크 상태 */
+const MEMO_KEY  = "kjc-company-setup-memo-v1";  /* 메모 내용 */
+const FOLD_KEY  = "kjc-company-setup-fold-v1";  /* 접기 상태 */
+
+let state  = load(STORE_KEY);
+let memos  = load(MEMO_KEY);
+let folded = load(FOLD_KEY);
+
+function load(key) {
+  try { return JSON.parse(localStorage.getItem(key)) || {}; }
+  catch (e) { return {}; }
+}
+
+/* 저장 표시를 잠깐 띄웠다 지웁니다 */
+const savedTag = document.getElementById("savedTag");
+let savedTimer = null;
+
+function save(flash) {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    localStorage.setItem(MEMO_KEY,  JSON.stringify(memos));
+    localStorage.setItem(FOLD_KEY,  JSON.stringify(folded));
+  } catch (e) {
+    return;  /* 저장이 막힌 환경이어도 화면은 정상 동작 */
+  }
+  if (flash === false) return;
+  savedTag.classList.add("show");
+  clearTimeout(savedTimer);
+  savedTimer = setTimeout(function () { savedTag.classList.remove("show"); }, 1100);
+}
+
+const listEl = document.getElementById("list");
+const sectionRefs = [];   /* 섹션별 DOM 참조 (부분 갱신용) */
+
+/* ── 화면 그리기 ─────────────────────────────── */
+function render() {
+  document.getElementById("pageTitle").textContent    = CHECKLIST.meta.title;
+  document.getElementById("pageSubtitle").textContent = CHECKLIST.meta.subtitle;
+  document.getElementById("noteText").textContent     = CHECKLIST.meta.note;
+
+  listEl.innerHTML = "";
+  sectionRefs.length = 0;
+
+  CHECKLIST.sections.forEach(function (sec) {
+    const secEl = document.createElement("section");
+    secEl.className = "section" + (folded[sec.id] ? " collapsed" : "");
+
+    /* 카테고리 헤더 */
+    const head = document.createElement("div");
+    head.className = "section-head";
+    head.innerHTML =
+      '<div class="section-no">' + sec.no + '</div>'
+      + '<div class="section-info">'
+      +   '<div class="section-title"></div>'
+      +   '<div class="section-summary"></div>'
+      + '</div>'
+      + '<div class="section-meta">'
+      +   '<div class="section-count"></div>'
+      +   '<div class="mini-bar"><div class="mini-fill"></div></div>'
+      +   '<div class="chev"></div>'
+      + '</div>';
+    head.querySelector(".section-title").textContent   = sec.title;
+    head.querySelector(".section-summary").textContent = sec.summary;
+
+    head.addEventListener("click", function () {
+      folded[sec.id] = !secEl.classList.contains("collapsed");
+      secEl.classList.toggle("collapsed");
+      save(false);
+    });
+    secEl.appendChild(head);
+
+    /* 하위 항목 */
+    const body = document.createElement("div");
+    body.className = "section-body";
+
+    sec.items.forEach(function (it) {
+      body.appendChild(buildItem(it));
+    });
+
+    secEl.appendChild(body);
+    listEl.appendChild(secEl);
+
+    sectionRefs.push({
+      sec: sec,
+      el: secEl,
+      countEl: head.querySelector(".section-count"),
+      fillEl: head.querySelector(".mini-fill")
+    });
+
+    updateSection(sectionRefs[sectionRefs.length - 1]);
+  });
+
+  updateOverview();
+}
+
+/* ── 항목 하나 만들기 ─────────────────────────────── */
+function buildItem(it) {
+  const row = document.createElement("div");
+  row.className = "item" + (state[it.id] ? " checked" : "");
+
+  /* 체크박스 + 제목 (여기를 누르면 체크) */
+  const click = document.createElement("div");
+  click.className = "item-click";
+  click.innerHTML = '<div class="box"></div><div class="item-main"></div>';
+
+  const main = click.querySelector(".item-main");
+
+  const titleEl = document.createElement("div");
+  titleEl.className = "item-title";
+  titleEl.textContent = it.title;
+  main.appendChild(titleEl);
+
+  if (it.desc) {
+    const descEl = document.createElement("div");
+    descEl.className = "item-desc";
+    descEl.textContent = it.desc;
+    main.appendChild(descEl);
+  }
+
+  if (it.link) {
+    const linkEl = document.createElement("a");
+    linkEl.className = "item-link";
+    linkEl.href = it.link.url;
+    linkEl.target = "_blank";
+    linkEl.rel = "noopener";
+    linkEl.textContent = it.link.label + " ↗";
+    linkEl.addEventListener("click", function (e) { e.stopPropagation(); });
+    main.appendChild(linkEl);
+  }
+
+  click.addEventListener("click", function () {
+    state[it.id] = !state[it.id];
+    row.classList.toggle("checked", !!state[it.id]);
+    save();
+    refreshCounts();
+  });
+
+  row.appendChild(click);
+
+  /* 메모 입력칸 — 체크박스 폭만큼 들여쓰기해서 제목 아래에 붙습니다 */
+  const memoWrap = document.createElement("div");
+  memoWrap.className = "memo-wrap";
+  memoWrap.style.marginLeft = "35px";   /* 체크박스 20px + 간격 15px */
+
+  const memo = document.createElement("textarea");
+  memo.className = "memo";
+  memo.rows = 1;
+  memo.placeholder = "메모 — 날짜, 담당자, 금액, 다음 할 일 등";
+  memo.value = memos[it.id] || "";
+
+  memo.addEventListener("input", function () {
+    const v = memo.value;
+    if (v.trim()) { memos[it.id] = v; }
+    else { delete memos[it.id]; }
+    autoGrow(memo);
+    markFilled(memoWrap, v);
+    save();
+  });
+
+  memoWrap.appendChild(memo);
+  row.appendChild(memoWrap);
+
+  markFilled(memoWrap, memo.value);
+  /* 첫 렌더에서 내용 높이에 맞춰 늘려 둡니다 */
+  requestAnimationFrame(function () { autoGrow(memo); });
+
+  return row;
+}
+
+/* 입력 길이에 따라 높이 자동 조절 */
+function autoGrow(el) {
+  el.style.height = "auto";
+  el.style.height = el.scrollHeight + "px";
+}
+
+/* 내용이 있으면 왼쪽 선을 accent 색으로 */
+function markFilled(wrap, value) {
+  const has = !!value.trim();
+  wrap.classList.toggle("filled", has);
+  wrap.classList.toggle("empty", !has);
+}
+
+/* ── 진행률 갱신 ─────────────────────────────── */
+function refreshCounts() {
+  sectionRefs.forEach(updateSection);
+  updateOverview();
+}
+
+function updateSection(ref) {
+  const done  = ref.sec.items.filter(function (it) { return state[it.id]; }).length;
+  const total = ref.sec.items.length;
+
+  ref.countEl.textContent = done + "/" + total;
+  ref.fillEl.style.width  = (total ? (done / total) * 100 : 0) + "%";
+  ref.el.classList.toggle("done", done === total);
+}
+
+function updateOverview() {
+  const all  = CHECKLIST.sections.reduce(function (acc, s) { return acc.concat(s.items); }, []);
+  const done = all.filter(function (it) { return state[it.id]; }).length;
+  const pct  = all.length ? Math.round((done / all.length) * 100) : 0;
+
+  document.getElementById("doneCount").textContent  = done;
+  document.getElementById("totalCount").textContent = all.length;
+  document.getElementById("pctText").textContent    = pct + "%";
+
+  const fill = document.getElementById("barFill");
+  fill.style.width = pct + "%";
+  fill.classList.toggle("complete", pct === 100);
+}
+
+/* ── 도구 버튼 ─────────────────────────────── */
+document.getElementById("btnTodo").addEventListener("click", function (e) {
+  const on = document.body.classList.toggle("only-todo");
+  e.currentTarget.classList.toggle("on", on);
+});
+
+document.getElementById("btnMemo").addEventListener("click", function (e) {
+  const on = document.body.classList.toggle("hide-memo");
+  e.currentTarget.classList.toggle("on", on);
+  e.currentTarget.textContent = on ? "메모 보이기" : "메모 숨기기";
+});
+
+document.getElementById("btnToggle").addEventListener("click", function (e) {
+  const anyOpen = CHECKLIST.sections.some(function (s) { return !folded[s.id]; });
+  CHECKLIST.sections.forEach(function (s) { folded[s.id] = anyOpen; });
+  e.currentTarget.textContent = anyOpen ? "전체 펼치기" : "전체 접기";
+  save(false);
+  render();
+});
+
+document.getElementById("btnPrint").addEventListener("click", function () { window.print(); });
+
+document.getElementById("btnReset").addEventListener("click", function () {
+  if (!confirm("체크와 메모를 모두 지웁니다. 되돌릴 수 없습니다. 계속할까요?")) return;
+  state = {};
+  memos = {};
+  save();
+  render();
+});
+
+render();
+</script>
+
+</body>
+</html>
