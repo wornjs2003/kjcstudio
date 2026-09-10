@@ -36,8 +36,8 @@ echo "  종료: Control+C 또는 이 창 닫기"
 echo "────────────────────────────────────────────"
 echo ""
 
-# Python 내장 서버 백그라운드 시작
-python3 -m http.server ${PORT} >/dev/null 2>&1 &
+# 로컬 서버 백그라운드 시작 (KIS 중계 포함, secrets.json 없으면 정적 서버로 동작)
+python3 "server/kis_proxy.py" --port ${PORT} &
 SERVER_PID=$!
 
 # 브라우저 오픈 (Chrome 우선, 없으면 기본 브라우저)

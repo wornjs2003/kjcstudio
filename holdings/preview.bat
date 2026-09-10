@@ -34,7 +34,7 @@ echo.
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%PORT%" ^| findstr "LISTENING"') do taskkill /F /PID %%a >nul 2>&1
 
 start "" "%URL%"
-%PY% -m http.server %PORT%
+%PY% "server\kis_proxy.py" --port %PORT%
 
 echo.
 echo   서버가 종료되었습니다.

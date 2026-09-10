@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KJC Holdings · 연결 상태</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0c0c0e; --panel:#151519; --border:#26262c;
+    --text:#e8e8ea; --muted:#8a8a96; --accent:#4f7eff;
+    --ok:#3ecf8e; --warn:#f5a623; --bad:#ff5f5f;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'Noto Sans KR',system-ui,sans-serif;
+    padding:32px 20px; line-height:1.6;
+  }
+  .wrap{max-width:760px;margin:0 auto;}
+  h1{font-size:1.35rem;margin:0 0 4px;font-weight:700;}
+  .sub{color:var(--muted);font-size:0.85rem;margin-bottom:24px;}
+  .card{
+    background:var(--panel);border:1px solid var(--border);
+    border-radius:12px;padding:20px;margin-bottom:16px;
+  }
+  .card h2{
+    font-size:0.8rem;text-transform:uppercase;letter-spacing:0.06em;
+    color:var(--muted);margin:0 0 14px;font-weight:500;
+  }
+  .row{
+    display:flex;justify-content:space-between;align-items:baseline;
+    padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);
+  }
+  .row:last-child{border-bottom:none;}
+  .row .k{color:var(--muted);font-size:0.88rem;}
+  .row .v{font-family:var(--mono);font-size:0.95rem;font-weight:500;}
+  .big{font-size:1.9rem;font-family:var(--mono);font-weight:500;}
+  .ok{color:var(--ok);} .warn{color:var(--warn);} .bad{color:var(--bad);}
+  .muted{color:var(--muted);}
+  .bar{
+    height:9px;background:#000;border-radius:5px;overflow:hidden;
+    margin:10px 0 6px;border:1px solid var(--border);
+  }
+  .bar > i{display:block;height:100%;background:var(--ok);transition:width .4s ease;}
+  .bar.warn > i{background:var(--warn);} .bar.bad > i{background:var(--bad);}
+  .note{font-size:0.8rem;color:var(--muted);margin-top:6px;}
+  .links a{
+    color:var(--accent);text-decoration:none;font-size:0.9rem;
+    margin-right:18px;
+  }
+  .links a:hover{text-decoration:underline;}
+  .dot{
+    display:inline-block;width:8px;height:8px;border-radius:50%;
+    margin-right:7px;vertical-align:middle;
+  }
+  .dot.on{background:var(--ok);box-shadow:0 0 8px rgba(62,207,142,0.6);}
+  .dot.off{background:var(--bad);}
+  table{width:100%;border-collapse:collapse;font-size:0.88rem;}
+  th,td{text-align:left;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);}
+  th{color:var(--muted);font-weight:500;font-size:0.8rem;}
+  td.num{font-family:var(--mono);text-align:right;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>KJC Holdings · 연결 상태</h1>
+  <div class="sub">한국투자증권 API 연결과 사용량을 보여줍니다. 2초마다 자동 갱신됩니다.</div>
+
+  <div class="card">
+    <h2>연결</h2>
+    <div class="row">
+      <span class="k">상태</span>
+      <span class="v" id="conn"><span class="dot off"></span>확인 중…</span>
+    </div>
+    <div class="row">
+      <span class="k">계좌 구분</span>
+      <span class="v" id="mode">—</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>API 사용량</h2>
+    <div class="big" id="persec">—</div>
+    <div class="note" id="persec-note">최근 1분 기준 초당 호출</div>
+
+    <div style="margin-top:18px;">
+      <div class="row" style="border:none;padding-bottom:2px;">
+        <span class="k">설정 예산 대비</span>
+        <span class="v" id="budget-pct">—</span>
+      </div>
+      <div class="bar" id="budget-bar"><i style="width:0%"></i></div>
+      <div class="note" id="budget-note">—</div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <div class="row" style="border:none;padding-bottom:2px;">
+        <span class="k">전체 한도 대비</span>
+        <span class="v" id="limit-pct">—</span>
+      </div>
+      <div class="bar" id="limit-bar"><i style="width:0%"></i></div>
+      <div class="note" id="limit-note">—</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>상세</h2>
+    <table>
+      <tr><th>항목</th><th style="text-align:right;">값</th></tr>
+      <tr><td>최근 10초 호출</td><td class="num" id="c10">—</td></tr>
+      <tr><td>최근 1분 호출</td><td class="num" id="c60">—</td></tr>
+      <tr><td>최근 1시간 호출</td><td class="num" id="c1h">—</td></tr>
+      <tr><td>캐시로 받아낸 요청</td><td class="num" id="cache">—</td></tr>
+      <tr><td>캐시 유지 시간</td><td class="num" id="ttl">—</td></tr>
+      <tr><td>호출 최소 간격</td><td class="num" id="gap">—</td></tr>
+    </table>
+    <div class="note">
+      캐시로 받아낸 요청이 많을수록 KIS 를 덜 부릅니다.
+      호출 최소 간격은 서버가 강제하므로 예산을 넘을 수 없습니다.
+    </div>
+  </div>
+
+  <div class="card links">
+    <a href="/">← 대시보드</a>
+    <a href="/analysis/">주식 분석</a>
+    <a href="/api/kis/stats" target="_blank">원본 데이터(JSON)</a>
+  </div>
+</div>
+
+<script>
+function pctClass(p){ return p >= 100 ? 'bad' : (p >= 70 ? 'warn' : 'ok'); }
+
+async function tick(){
+  try{
+    const r = await fetch('/api/kis/stats', { cache:'no-store' });
+    const j = await r.json();
+    if(!j || !j.ok) throw new Error('no data');
+    const d = j.data;
+
+    // 연결 상태
+    const h = await (await fetch('/api/kis/health', { cache:'no-store' })).json();
+    const on = !!(h && h.ok && h.configured);
+    document.getElementById('conn').innerHTML =
+      '<span class="dot ' + (on?'on':'off') + '"></span>' +
+      (on ? '<span class="ok">연결됨</span>' : '<span class="bad">연결 안 됨</span>');
+    document.getElementById('mode').textContent = h.modeLabel || '—';
+
+    // 사용량
+    document.getElementById('persec').textContent = d.perSec60s.toFixed(2) + ' 건/초';
+    document.getElementById('persec-note').textContent =
+      '최근 1분 기준 · 예산 초당 ' + d.budgetPerSec.toFixed(1) + '건 (한도 ' + d.limitPerSec + '건의 ' + (d.budgetRatio*100) + '%)';
+
+    const bp = d.budgetUsedPct, lp = d.limitUsedPct;
+    const bEl = document.getElementById('budget-pct'), bBar = document.getElementById('budget-bar');
+    bEl.textContent = bp.toFixed(1) + '%';
+    bEl.className = 'v ' + pctClass(bp);
+    bBar.className = 'bar ' + pctClass(bp);
+    bBar.firstElementChild.style.width = Math.min(100, bp) + '%';
+    document.getElementById('budget-note').textContent =
+      '설정한 예산(초당 ' + d.budgetPerSec.toFixed(1) + '건) 중 사용 비율';
+
+    const lEl = document.getElementById('limit-pct'), lBar = document.getElementById('limit-bar');
+    lEl.textContent = lp.toFixed(1) + '%';
+    lEl.className = 'v ' + pctClass(lp);
+    lBar.className = 'bar ' + pctClass(lp);
+    lBar.firstElementChild.style.width = Math.min(100, lp) + '%';
+    document.getElementById('limit-note').textContent =
+      'KIS 전체 한도(초당 ' + d.limitPerSec + '건) 중 사용 비율';
+
+    document.getElementById('c10').textContent = d.calls10s + '회';
+    document.getElementById('c60').textContent = d.calls60s + '회';
+    document.getElementById('c1h').textContent = d.calls1h.toLocaleString('ko-KR') + '회';
+    document.getElementById('cache').textContent = d.cacheHits.toLocaleString('ko-KR') + '회';
+    document.getElementById('ttl').textContent = d.priceCacheTtl + '초';
+    document.getElementById('gap').textContent = d.minIntervalSec.toFixed(2) + '초';
+  }catch(e){
+    document.getElementById('conn').innerHTML =
+      '<span class="dot off"></span><span class="bad">서버에 연결할 수 없습니다</span>';
+  }
+}
+
+tick();
+setInterval(tick, 2000);
+</script>
+</body>
+</html>

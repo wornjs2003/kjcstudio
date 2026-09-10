@@ -13,6 +13,15 @@
 # Claude Code 로컬 캐시
 .claude/
 
+# API 키 (절대 커밋 금지) — 한국투자증권 앱키, OpenDART 인증키 등
+secrets.json
+**/secrets.json
+.env
+**/.env
+*.key
+.kis-token-cache.json
+**/.kis-token-cache.json
+
 # 레거시 백업 (확인 후 수동 삭제)
 _legacy-*.html.bak
 

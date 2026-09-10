@@ -1,0 +1,14 @@
+# holdings 를 독립 레포로 분리해도 키가 새지 않도록 자체 보유하는 규칙
+# (부모 레포의 .gitignore 와 중복되어도 무방 — 자립 원칙)
+
+# API 키 (절대 커밋 금지)
+secrets.json
+.env
+*.key
+
+# 토큰 캐시 (KIS 접근토큰 24시간 캐싱)
+.kis-token-cache.json
+
+# 파이썬 캐시
+__pycache__/
+*.py[cod]
