@@ -5,6 +5,7 @@
    ========================================================================== */
 
 import { fmtPct, changeDirection } from '../utils/format.js';
+import { applyTicks } from '../utils/tick.js';
 import { getState, setSelectedIndex, subscribe } from '../store/state.js';
 
 /* 지수 값 포맷: 원/달러만 정수, 나머지는 소수 둘째 자리 */
@@ -106,7 +107,7 @@ function renderStripMarkup(indices, selectedCode) {
     return `
       <button type="button" class="kh-index-tab ${active}" data-index="${idx.code}">
         <span class="kh-index-name">${idx.name}</span>
-        <span class="kh-index-value kh-mono">${fmtIndexValue(idx.value, idx.unit)}</span>
+        <span class="kh-index-value kh-mono kh-${dir}" data-tick-key="idx-${idx.code}" data-tick-value="${idx.value}" data-tick-live="${idx.source === 'KIS' ? '1' : '0'}">${fmtIndexValue(idx.value, idx.unit)}</span>
         <span class="kh-index-change kh-${dir}">${fmtPct(idx.changePct)}</span>
       </button>
     `;
@@ -121,7 +122,9 @@ function renderStripMarkup(indices, selectedCode) {
         <div class="kh-index-detail-head">
           <div class="kh-index-detail-name">${selected.name}</div>
           <div class="kh-index-detail-value-row">
-            <span class="kh-index-detail-value kh-mono kh-${selDir}">
+            <span class="kh-index-detail-value kh-mono kh-${selDir}"
+                  data-tick-key="idxmain-${selected.code}" data-tick-value="${selected.value}"
+                  data-tick-live="${selected.source === 'KIS' ? '1' : '0'}">
               ${fmtIndexValue(selected.value, selected.unit)}
             </span>
             <span class="kh-index-detail-change kh-${selDir}">
@@ -130,7 +133,9 @@ function renderStripMarkup(indices, selectedCode) {
             </span>
           </div>
           <div class="kh-index-detail-meta">
-            60거래일 추이 · 목업 데이터
+            ${selected.source === 'KIS'
+              ? '60거래일 추이 · 한국투자증권 실시간'
+              : '60거래일 추이 · 목업 데이터'}
           </div>
         </div>
         <div class="kh-index-detail-chart">
@@ -142,10 +147,15 @@ function renderStripMarkup(indices, selectedCode) {
 }
 
 /* 컴포넌트 마운트 — 지수 탭 클릭 이벤트 + 상태 구독 */
+let _indices = [];
+let _rerender = null;
+
 export function mountIndexStrip(hostEl, indices) {
+  _indices = indices;
+
   function render() {
     const { selectedIndex } = getState();
-    hostEl.innerHTML = renderStripMarkup(indices, selectedIndex);
+    hostEl.innerHTML = renderStripMarkup(_indices, selectedIndex);
 
     // 탭 클릭 이벤트 연결
     hostEl.querySelectorAll('.kh-index-tab').forEach(btn => {
@@ -153,10 +163,26 @@ export function mountIndexStrip(hostEl, indices) {
         setSelectedIndex(btn.dataset.index);
       });
     });
+
+    applyTicks(hostEl);   // 값이 바뀐 숫자에 갱신 표시
   }
 
+  _rerender = render;
   render();
   subscribe(render);
+}
+
+/* 실시간 지수가 도착하면 목업 자리를 대체한다.
+   실제로 받은 지수만 갈아끼우고, 나머지(해외 지수 등)는 그대로 둔다. */
+export function updateIndices(liveIndices) {
+  if (!Array.isArray(liveIndices) || !liveIndices.length) return;
+  const byCode = new Map(liveIndices.map(i => [i.code, i]));
+  _indices = _indices.map(old => byCode.get(old.code) || old);
+  // 목록에 없던 지수는 앞쪽에 추가
+  liveIndices.forEach(li => {
+    if (!_indices.some(i => i.code === li.code)) _indices.unshift(li);
+  });
+  if (_rerender) _rerender();
 }
 
 /* 하위호환 — 기존 renderIndexStrip 호출부가 있으면 경고만 */

@@ -2,10 +2,12 @@
    KJC Holdings — 메인 엔트리
    ========================================================================== */
 
-import { MOCK_INDICES, MOCK_STOCKS } from './data/mock.js';
-import { setStocks, openDetail, closeDetail, getState } from './store/state.js';
+import { MOCK_INDICES, MOCK_STOCKS, MOCK_MARKET_STOCKS } from './data/mock.js';
+import { fetchLiveIndices, fetchLivePrices, applyLiveToStock, LIVE_CODES } from './data/live.js';
+import { markRefresh, endRefresh } from './utils/tick.js';
+import { setStocks, openDetail, closeDetail, getState, setState } from './store/state.js';
 import { mountSidebar } from './components/sidebar.js';
-import { mountIndexStrip } from './components/index-strip.js';
+import { mountIndexStrip, updateIndices } from './components/index-strip.js';
 import { mountWatchlistTable } from './components/watchlist-table.js';
 import { mountNewsFeed } from './components/news-feed.js';
 import { mountGlobalIssues } from './components/global-issues.js';
@@ -37,6 +39,56 @@ mountStockDetail(
 
 /* ── 백드롭 클릭 시 닫기 ── */
 document.getElementById('kh-detail-backdrop').addEventListener('click', closeDetail);
+
+/* ──────────────────────────────────────────────────────────────────────────
+   실시간 데이터 적용 (한국투자증권)
+   지수(KOSPI/KOSDAQ/KOSPI200)와 삼성전자·SK하이닉스만 실제 값으로 바꾼다.
+   나머지 항목은 아직 목업이며, 중계 서버가 없으면 전부 목업으로 남는다.
+   ────────────────────────────────────────────────────────────────────────── */
+/* 갱신 주기(ms).
+   1회 갱신에 KIS 호출 5회(지수 3 + 종목 2)가 든다.
+   서버 예산이 초당 1건(한도의 1/10)이므로 5초가 예산을 꽉 채우는 값이고,
+   10초면 예산의 절반만 쓴다. 종목 클릭 같은 즉석 조회에 여유를 두려고 10초로 잡았다. */
+const LIVE_REFRESH_MS = 10000;
+
+async function refreshLiveData() {
+  if (document.hidden) return;   // 다른 탭을 보고 있으면 호출하지 않는다
+
+  const [indices, prices] = await Promise.all([
+    fetchLiveIndices(),
+    fetchLivePrices(LIVE_CODES),
+  ]);
+
+  if (!indices && !prices) return;
+
+  // 이 구간에서 그려지는 실시간 숫자는 값이 그대로여도 깜빡인다.
+  // (갱신이 돌고 있다는 걸 눈으로 확인할 수 있게)
+  markRefresh();
+  try {
+    if (indices) updateIndices(indices);
+
+    if (prices) {
+      // 상세 패널용 목록과 시세 테이블용 목록 양쪽 모두 같은 종목을 갱신한다
+      [MOCK_STOCKS, MOCK_MARKET_STOCKS].forEach(list => {
+        if (!Array.isArray(list)) return;
+        list.forEach(s => {
+          const live = prices[s.code];
+          if (live) applyLiveToStock(s, live);
+        });
+      });
+      setStocks(MOCK_STOCKS);      // 구독자에게 갱신 알림
+      setState({});                // 열려 있는 상세 패널도 다시 그리도록
+    }
+  } finally {
+    endRefresh();
+  }
+}
+
+refreshLiveData();
+setInterval(refreshLiveData, LIVE_REFRESH_MS);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) refreshLiveData();
+});
 
 /* ── 초기 부팅 오버레이 제거 — 웹폰트 로드 대기 + 최소 노출 시간 ── */
 (function removeBoot() {

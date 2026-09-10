@@ -3,6 +3,7 @@ import { fmtPrice, fmtPct, fmtChange, fmtVolume, changeDirection,
          fmtMoneyM, fmtMoneyMSigned, fmtShares, fmtKrw } from '../utils/format.js';
 import { getState, subscribe, closeDetail, setDetailTab,
          setTradeSubTab, toggleInstExpanded, setChartPeriod } from '../store/state.js';
+import { applyTicks } from '../utils/tick.js';
 import { getMemo, setMemo } from '../store/memo.js';
 import { generateMockCandles, generateMockTrading,
          generateMockTimeSeries, generateMockIndicators,
@@ -64,7 +65,7 @@ export function mountStockDetail(panelEl, backdropEl) {
         <div class="kh-detail-price-main">
           <div class="kh-detail-price-col">
             <div class="kh-detail-price-row">
-              <span class="kh-detail-price kh-${dir}">${fmtPrice(s.price)}</span>
+              <span class="kh-detail-price kh-${dir}" data-tick-key="detail-${s.code}" data-tick-value="${s.price}" data-tick-live="${s.isLive ? '1' : '0'}">${fmtPrice(s.price)}</span>
               <span class="kh-change-pill ${dir}">${fmtChange(s.change)} (${fmtPct(s.changePct)})</span>
             </div>
             <div class="kh-detail-marketcap">시총 ${s.marketCap}</div>
@@ -130,6 +131,8 @@ export function mountStockDetail(panelEl, backdropEl) {
     if (memoEl) {
       memoEl.addEventListener('input', () => setMemo(s.code, memoEl.value));
     }
+
+    applyTicks(panelEl);   // 값이 바뀐 숫자에 갱신 표시
   }
 
   render();

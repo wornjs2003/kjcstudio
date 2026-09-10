@@ -487,12 +487,30 @@
       margin-top: 6px;
       letter-spacing: 0.02em;
     }
+    /* 목록 항목: 배경만 살짝 깜빡 */
     @keyframes priceFlashUp   { 0% { background: rgba(255,95,95,0.22); } 100% { background: transparent; } }
     @keyframes priceFlashDown { 0% { background: rgba(79,158,255,0.22); } 100% { background: transparent; } }
-    .sm-price.flash-up   { animation: priceFlashUp   0.8s ease-out; }
-    .sm-price.flash-down { animation: priceFlashDown 0.8s ease-out; }
     .sm-stock-item.flash-up   { animation: priceFlashUp   0.8s ease-out; }
     .sm-stock-item.flash-down { animation: priceFlashDown 0.8s ease-out; }
+
+    /* 현재가: 갱신되면 숫자가 잠깐 커졌다 돌아온다 (배경도 함께 깜빡) */
+    @keyframes priceTickUp {
+      0%   { background: rgba(255,95,95,0.22); transform: scale(1); }
+      28%  { transform: scale(1.18); }
+      100% { background: transparent; transform: scale(1); }
+    }
+    @keyframes priceTickDown {
+      0%   { background: rgba(79,158,255,0.22); transform: scale(1); }
+      28%  { transform: scale(1.18); }
+      100% { background: transparent; transform: scale(1); }
+    }
+    .sm-price.flash-up   { animation: priceTickUp   0.6s ease-out; transform-origin: right center; }
+    .sm-price.flash-down { animation: priceTickDown 0.6s ease-out; transform-origin: right center; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .sm-price.flash-up, .sm-price.flash-down,
+      .sm-stock-item.flash-up, .sm-stock-item.flash-down { animation: none; }
+    }
 
     /* 그리드 레이아웃 */
     .sm-grid {
@@ -1227,6 +1245,79 @@
           <div class="ssi-change ${cls}">${chgTxt}</div>
         </div>`;
       }).join("");
+      setupStockObserver();
+    }
+
+    // ─── 화면에 보이는 종목만 추적 ─────────────────────────────────────
+    // 목록 50종목을 전부 갱신하면 API 호출이 과하므로,
+    // 실제로 눈에 보이는 종목(+ 선택한 종목)만 조회한다.
+    const visibleCodes = new Set();
+    let stockObserver = null;
+
+    function setupStockObserver() {
+      const listEl = document.getElementById("stockList");
+      if (!listEl || !('IntersectionObserver' in window)) return;
+      if (stockObserver) stockObserver.disconnect();
+      stockObserver = new IntersectionObserver((entries) => {
+        let needLoad = false;
+        entries.forEach(en => {
+          const code = en.target.dataset.code;
+          if (!code) return;
+          if (en.isIntersecting) {
+            visibleCodes.add(code);
+            const s = kospi200.find(x => x.code === code);
+            if (s && !s._live) needLoad = true;   // 스크롤로 새로 보인 종목
+          } else {
+            visibleCodes.delete(code);
+          }
+        });
+        if (needLoad) scheduleLazyLoad();
+      }, { root: listEl, rootMargin: "200px 0px" });  // 살짝 여유를 둬 스크롤이 끊기지 않게
+      listEl.querySelectorAll(".sm-stock-item").forEach(el => stockObserver.observe(el));
+    }
+
+    // 스크롤로 새로 보인 종목을 모아서 한 번에 가져온다 (스크롤 중 연속 호출 방지)
+    let lazyTimer = null, lazyLoading = false;
+    function scheduleLazyLoad() {
+      clearTimeout(lazyTimer);
+      lazyTimer = setTimeout(() => {
+        const need = [...visibleCodes].filter(c => {
+          const s = kospi200.find(x => x.code === c);
+          return s && !s._live;
+        });
+        if (need.length) loadStocksFor(need);
+      }, 400);
+    }
+
+    async function loadStocksFor(codes) {
+      if (lazyLoading) return;
+      lazyLoading = true;
+      try {
+        const data = await naverPollBatch(codes);
+        let changed = false;
+        kospi200.forEach(s => {
+          const d = data[s.code];
+          if (!d) return;
+          s._live = d;
+          s.chg = Math.abs(d.pct).toFixed(2);
+          s.up = d.pct >= 0;
+          changed = true;
+        });
+        if (changed) {
+          renderStockList(kospi200);
+          updateSelectedStockLive();
+        }
+      } finally {
+        lazyLoading = false;
+      }
+    }
+
+    // 이번에 조회할 종목 = 보이는 것 + 선택한 것 (없으면 상위 12개)
+    function codesToFetch() {
+      const codes = new Set(visibleCodes);
+      if (selectedCode) codes.add(selectedCode);
+      if (!codes.size) kospi200.slice(0, 12).forEach(s => codes.add(s.code));
+      return [...codes];
     }
 
     function showStockTooltip(e, el) {
@@ -1266,11 +1357,29 @@
 
     let selectedCode = '005930';
 
-    function selectStock(el, code) {
+    async function selectStock(el, code) {
       document.querySelectorAll(".sm-stock-item").forEach(i => i.classList.remove("active"));
       el.classList.add("active");
       selectedCode = code;
       updateDetailPanel(code);
+
+      // 아직 실시간 시세를 못 받은 종목이면 그 자리에서 바로 가져온다.
+      // (이 처리가 없으면 코드에 박혀 있는 예전 값이 그대로 보인다)
+      const s = kospi200.find(x => x.code === code);
+      if (s && !s._live) {
+        const priceEl = document.getElementById('samsung-price');
+        if (priceEl) priceEl.textContent = '불러오는 중…';
+        const q = await fetchSingleQuote(code);
+        if (q && selectedCode === code) {
+          s._live = q;
+          s.chg = Math.abs(q.pct).toFixed(2);
+          s.up = q.pct >= 0;
+          updateDetailPanel(code);
+          renderStockList(kospi200);
+        } else if (!q && priceEl) {
+          priceEl.textContent = '시세 없음';
+        }
+      }
     }
 
     function updateDetailPanel(code) {
@@ -1643,9 +1752,42 @@
       return true;
     }
 
-    // ─── 네이버 금융 실시간 시세 (국내 주식용) ─────────────────────────
-    // polling.finance.naver.com/api/realtime 은 장중 실시간, 장외는 마감가 반환
+    // ─── 시세 조회: 한국투자증권(KIS) 우선, 네이버 폴백 ────────────────
+    // preview.bat 으로 띄운 로컬 서버에서는 KIS 실시간 시세를 쓴다.
+    // GitHub Pages 배포본에는 중계 서버가 없으므로 자동으로 네이버로 넘어간다.
+    let _kisReady = null;
+    async function kisReady() {
+      if (_kisReady !== null) return _kisReady;
+      try {
+        const r = await fetch('/api/kis/health', { cache: 'no-store' });
+        const j = await r.json();
+        _kisReady = !!(j && j.ok && j.configured);
+        if (_kisReady) console.info('[시세] 한국투자증권 API 사용 (' + (j.modeLabel || '') + ')');
+      } catch { _kisReady = false; }
+      if (!_kisReady) console.info('[시세] 네이버 금융 사용 (KIS 중계 서버 없음)');
+      return _kisReady;
+    }
+
+    async function kisPollChunk(codes) {
+      if (!(await kisReady())) return null;
+      try {
+        const r = await fetch('/api/kis/prices?codes=' + codes.join(','), { cache: 'no-store' });
+        if (!r.ok) return null;
+        const j = await r.json();
+        if (!j || !j.ok || !j.data || !Object.keys(j.data).length) return null;
+        return j.data;
+      } catch { return null; }
+    }
+
     async function naverPollChunk(codes) {
+      const viaKis = await kisPollChunk(codes);
+      if (viaKis) return viaKis;
+      return naverPollChunkRaw(codes);
+    }
+
+    // ─── 네이버 금융 실시간 시세 (폴백용) ──────────────────────────────
+    // polling.finance.naver.com/api/realtime 은 장중 실시간, 장외는 마감가 반환
+    async function naverPollChunkRaw(codes) {
       // codes: ['005930','000660',...]
       const query = codes.map(c => 'SERVICE_ITEM:' + c).join(',');
       const url = 'https://polling.finance.naver.com/api/realtime?query=' + encodeURIComponent(query) + '&_t=' + Date.now();
@@ -1733,10 +1875,10 @@
     async function loadLiveStocks() {
       setStatus('loading');
       liveState = 'loading';
-      const codes = kospi200.map(s => s.code);
+      const codes = codesToFetch();
       const data = await naverPollBatch(codes);
       const nKeys = Object.keys(data).length;
-      console.log('[KJC] loadLiveStocks (Naver) fetched', nKeys, 'symbols');
+      console.log('[KJC] 시세 갱신: 요청', codes.length, '종목 / 수신', nKeys);
       if (!nKeys) {
         setStatus('fail');
         liveState = 'fail';
@@ -1831,10 +1973,10 @@
       const te = document.getElementById('samsung-price-time');
       const newTxt = numFmt(d.price) + '원';
       if (pe) {
-        const prevTxt = pe.textContent;
         pe.className = 'sm-price ' + (up ? 'up' : 'down');
         pe.textContent = newTxt;
-        if (prevTxt !== newTxt) flash(pe, up);
+        // 값이 그대로여도 갱신할 때마다 깜빡인다 (갱신되고 있음을 알 수 있게)
+        flash(pe, up);
       }
       if (ce) { ce.style.color = up ? '#ff5f5f' : '#4f9eff'; ce.textContent = `${up ? '▲' : '▼'} ${numFmt(Math.abs(d.amt))} (${Math.abs(d.pct).toFixed(2)}%)`; }
       if (te) {
@@ -2105,6 +2247,20 @@
     // 주식 모달
     let liveTimer = null;
 
+    // 시세 갱신 주기(ms).
+    // 이 화면은 보이는 종목 약 12개를 부르므로 1회 갱신에 KIS 호출이 12회 든다.
+    // 서버 예산이 초당 1건(한도의 1/10)이라 30초면 초당 0.4건 수준이다.
+    // 대시보드를 같이 띄워도 예산 안에 들어오도록 잡은 값.
+    const LIVE_REFRESH_MS = 30000;
+
+    // 탭을 다시 보면 즉시 한 번 갱신
+    function onVisibleRefresh() {
+      if (document.hidden || !liveTimer) return;
+      loadLiveStocks();
+      loadLiveIndices();
+      loadStockDetail(selectedCode);
+    }
+
     function openStockModal() {
       document.getElementById("stockModal").classList.add("open");
       document.body.style.overflow = "hidden";
@@ -2115,12 +2271,19 @@
       loadStockFinancials(selectedCode);
       loadStockNews(selectedCode, (kospi200.find(x => x.code === selectedCode) || {}).name || '');
       loadFearGreed();
+      // 갱신 주기. 종목 50개를 한 번에 부르므로 너무 짧으면 API 부담이 커진다.
+      // 서버(kis_proxy.py)도 같은 길이로 캐시하므로 이보다 짧게 잡을 이유가 없다.
       liveTimer = setInterval(() => {
+        // 다른 탭을 보고 있으면 갱신하지 않는다 (불필요한 호출 차단)
+        if (document.hidden) return;
         loadLiveStocks();
         loadLiveIndices();
         loadStockDetail(selectedCode);
         loadFearGreed();
-      }, 10000);
+      }, LIVE_REFRESH_MS);
+
+      // 탭으로 돌아왔을 때 한 번 즉시 갱신 (그동안 멈춰 있었으므로)
+      document.addEventListener('visibilitychange', onVisibleRefresh);
     }
 
     function closeStockModal() {
@@ -2128,6 +2291,7 @@
       document.body.style.overflow = "";
       clearInterval(liveTimer);
       liveTimer = null;
+      document.removeEventListener('visibilitychange', onVisibleRefresh);
     }
 
     document.getElementById("stockModal").addEventListener("click", function(e) {

@@ -5,6 +5,7 @@
    ========================================================================== */
 
 import { fmtPrice, fmtPct, fmtVolume, fmtKrw, changeDirection } from '../utils/format.js';
+import { applyTicks } from '../utils/tick.js';
 import { openDetail, getState, subscribe, setWatchlistView } from '../store/state.js';
 import { getMemo } from '../store/memo.js';
 import { MOCK_MARKET_STOCKS, fmtMarketCapNum } from '../data/mock.js';
@@ -163,6 +164,8 @@ export function mountWatchlistTable(el) {
         if (stock) openDetail(hydrateStock(stock));
       });
     });
+
+    applyTicks(el);   // 값이 바뀐 숫자에 갱신 표시
   }
   render();
   subscribe(render);
@@ -194,7 +197,7 @@ function row(s, i, selected, lastCol, showRank) {
           <span class="kh-stock-name-code">${s.code}</span>
         </div>
       </td>
-      <td class="kh-align-right"><span class="kh-price">${fmtPrice(s.price)}</span></td>
+      <td class="kh-align-right"><span class="kh-price kh-${dir}" data-tick-key="wl-${s.code}" data-tick-value="${s.price}" data-tick-live="${s.isLive ? '1' : '0'}">${fmtPrice(s.price)}</span></td>
       <td class="kh-align-right"><span class="kh-change-pill ${dir}">${fmtPct(s.changePct)}</span></td>
       <td class="kh-align-right"><span class="kh-volume">${fmtVolume(s.volume)}</span></td>
       <td${lastCol.key === 'memo' ? '' : ' class="kh-align-right"'}>${lastColValue(s, lastCol.key)}</td>

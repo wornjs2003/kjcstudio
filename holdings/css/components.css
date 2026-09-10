@@ -979,3 +979,27 @@
   /* 주제 칸 비워두되 너비 유지 */
   visibility: hidden;
 }
+
+/* ==========================================================================
+   시세 갱신 표시
+   값이 바뀌면 숫자가 잠깐 커졌다 돌아와서 갱신을 눈으로 알 수 있게 한다.
+   ========================================================================== */
+@keyframes kh-tick {
+  0%   { transform: scale(1); }
+  28%  { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+.kh-tick {
+  display: inline-block;          /* transform 이 적용되도록 */
+  animation: kh-tick 0.45s ease-out;
+  transform-origin: center;
+}
+
+/* 관심종목 테이블 가격은 오른쪽 정렬이라 기준점을 오른쪽으로 */
+.kh-align-right .kh-tick { transform-origin: right center; }
+
+/* 애니메이션을 줄이도록 설정한 사용자는 제외 */
+@media (prefers-reduced-motion: reduce) {
+  .kh-tick { animation: none; }
+}
