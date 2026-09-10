@@ -105,3 +105,47 @@ https://thekjcstudio.com/api/kis/health
 - 시세 응답은 10초, 지수 일봉은 10분 동안 Cloudflare 엣지에서 캐시됩니다.
 - 종목 조회는 순차 처리하여 KIS 초당 건수 제한을 넘지 않게 했습니다.
 - 실제 호출량은 Cloudflare 대시보드 → Workers → 해당 Worker → 분석에서 확인합니다.
+
+---
+
+# 남은 작업
+
+## 1. 로그인 실패 시 재시도 문제 (추후 수정 필요)
+
+**증상**: 이메일을 잘못 입력했거나, 인증 코드를 다시 받았을 때 접속이 되지 않는 경우가 있음.
+
+**확인된 사실** (Cloudflare 공식 문서 기준)
+- PIN 은 요청 후 **10분** 후 만료된다
+- PIN 은 일회용이며, 새 PIN 을 요청하면 이전 PIN 은 무효화된다
+- 잘못된 코드 → `That account does not have access.`
+- 이미 쓴 코드 → `This One-Time PIN has already been used`
+- 새 코드는 `Request new code` 버튼으로 재요청
+
+**확인하지 못한 것**
+- 재시도 횟수 제한 여부 (문서에 명시 없음)
+- 연속 실패 시 일시 차단 여부 (문서에 언급 없음)
+
+**해야 할 일**
+- 실제로 재현해서 어느 지점에서 막히는지 확인
+- 메일 오타 시의 동작 확인 (정책에 없는 주소를 넣으면 코드 자체가 안 오는지)
+- 필요하면 안내 문구를 커스텀 로그인 페이지에 추가
+
+## 2. API 경로 정리
+
+- 현재 `thekjcstudio.com/api/kis/*`
+- `thekjcstudio.com/holdings/api/kis/*` 로 옮길 예정 (holdings 를 별도 레포로 분리할 때를 대비)
+- 고쳐야 할 곳: Worker 코드의 경로 판단, `js/data/live.js`, `analysis/index.html`, Cloudflare Route 패턴
+
+## 3. Access 애플리케이션 분리
+
+- 지금은 사이트 전체가 한 덩어리라, 이메일을 추가하면 그 사람이 주식창·설립 체크리스트·API 까지 전부 접근한다
+- 포트폴리오만 공개하려면 애플리케이션을 둘로 나눠야 한다
+  - 포트폴리오: `/` (holdings·api 제외) — 보여줄 사람들
+  - 개인 도구: `/holdings/*`, `/api/*` — 재권님만
+- **외부에 링크를 주기 전에 처리할 것**
+
+## 4. workers.dev 재활성화 주의
+
+- Worker 코드를 수정해 다시 배포하면 `workers.dev` 주소가 되살아날 수 있다
+  (Cloudflare 문서: 대시보드에서 껐어도 Wrangler 설정이 없으면 배포 시 다시 켜짐)
+- 코드 배포 후에는 `Settings > Domains & Routes` 에서 비활성 상태인지 확인할 것
