@@ -75,6 +75,31 @@
       background: rgba(255,255,255,0.06);
       color: var(--h-text-sub);
     }
+    .badge-done {
+      background: rgba(62,207,142,0.16);
+      color: #3ecf8e;
+    }
+    /* 완료된 단계의 점 */
+    .timeline-dot.done {
+      border-color: #3ecf8e;
+      background: rgba(62,207,142,0.14);
+    }
+    .timeline-dot.done .timeline-dot-inner {
+      background: #3ecf8e;
+    }
+    /* 항목 아래 덧붙이는 배경 설명 */
+    .timeline-tasks li.note {
+      list-style: none;
+      margin-top: 6px;
+      padding: 9px 12px;
+      background: rgba(255,255,255,0.035);
+      border-left: 2px solid rgba(79,126,255,0.5);
+      border-radius: 0 6px 6px 0;
+      color: var(--h-text-muted);
+      font-size: 0.82rem;
+      line-height: 1.6;
+    }
+    .timeline-tasks li.note::before { content: none; }
     .cal-tasks { display: flex; flex-direction: column; gap: 9px; }
     .cal-task {
       display: flex;
@@ -201,16 +226,17 @@
       <p class="kicker">Holdings · Roadmap</p>
       <h1>Development<br>Roadmap<span class="dot">.</span></h1>
       <p class="lead">
-        한국 주식 종합 분석 서비스를 단계별로 개발합니다. 현재 Phase 1 진행 중입니다.
+        한국 주식 종합 분석 서비스를 단계별로 개발합니다.
+        시세 연동과 배포 환경까지 마쳤고, 현재 Phase 4 데이터 저장 계층을 진행 중입니다.
       </p>
     </section>
 
     <div class="roadmap-wrap">
       <!-- 월별 캘린더 -->
       <div class="calendar-months">
-        <div class="cal-month active">
+        <div class="cal-month">
           <div class="cal-month-header">
-            <span class="month-name">4월 <span class="status-badge badge-progress">진행중</span></span>
+            <span class="month-name">4월 <span class="status-badge badge-done">완료</span></span>
             <span class="month-year">2026</span>
           </div>
           <div class="cal-tasks">
@@ -219,31 +245,43 @@
             <div class="cal-task"><div class="cal-task-dot"></div>로드맵 캘린더 제작</div>
           </div>
         </div>
-        <div class="cal-month">
+        <div class="cal-month active">
           <div class="cal-month-header">
-            <span class="month-name">5월 <span class="status-badge badge-upcoming">예정</span></span>
+            <span class="month-name">9월 <span class="status-badge badge-progress">진행중</span></span>
             <span class="month-year">2026</span>
           </div>
           <div class="cal-tasks">
-            <div class="cal-task"><div class="cal-task-dot pending"></div>Mac Studio 구매</div>
-            <div class="cal-task"><div class="cal-task-dot pending"></div>Tailscale 설치</div>
-            <div class="cal-task"><div class="cal-task-dot pending"></div>서버 환경 구성</div>
+            <div class="cal-task"><div class="cal-task-dot"></div>도메인 · HTTPS</div>
+            <div class="cal-task"><div class="cal-task-dot"></div>접근 제한 (Access)</div>
+            <div class="cal-task"><div class="cal-task-dot"></div>한국투자증권 연동</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>데이터 저장 계층</div>
           </div>
         </div>
         <div class="cal-month">
           <div class="cal-month-header">
-            <span class="month-name">6월 <span class="status-badge badge-upcoming">예정</span></span>
+            <span class="month-name">10월 <span class="status-badge badge-upcoming">예정</span></span>
             <span class="month-year">2026</span>
           </div>
           <div class="cal-tasks">
-            <div class="cal-task"><div class="cal-task-dot pending"></div>한국투자증권 API</div>
-            <div class="cal-task"><div class="cal-task-dot pending"></div>재무데이터 연동</div>
-            <div class="cal-task"><div class="cal-task-dot pending"></div>실시간 차트</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>캔들 차트</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>거래량 · 이동평균</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>보조지표</div>
           </div>
         </div>
         <div class="cal-month">
           <div class="cal-month-header">
-            <span class="month-name">7월 <span class="status-badge badge-upcoming">예정</span></span>
+            <span class="month-name">11월 <span class="status-badge badge-upcoming">예정</span></span>
+            <span class="month-year">2026</span>
+          </div>
+          <div class="cal-tasks">
+            <div class="cal-task"><div class="cal-task-dot pending"></div>OpenDART 재무 · 공시</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>KRX 종목 마스터</div>
+            <div class="cal-task"><div class="cal-task-dot pending"></div>뉴스 연동</div>
+          </div>
+        </div>
+        <div class="cal-month">
+          <div class="cal-month-header">
+            <span class="month-name">12월 <span class="status-badge badge-upcoming">예정</span></span>
             <span class="month-year">2026</span>
           </div>
           <div class="cal-tasks">
@@ -252,29 +290,18 @@
             <div class="cal-task"><div class="cal-task-dot pending"></div>종목 리포트 생성</div>
           </div>
         </div>
-        <div class="cal-month">
-          <div class="cal-month-header">
-            <span class="month-name">8월 <span class="status-badge badge-upcoming">예정</span></span>
-            <span class="month-year">2026</span>
-          </div>
-          <div class="cal-tasks">
-            <div class="cal-task"><div class="cal-task-dot pending"></div>테스트 및 버그 수정</div>
-            <div class="cal-task"><div class="cal-task-dot pending"></div>도메인 연결</div>
-            <div class="cal-task"><div class="cal-task-dot pending"></div>서비스 오픈</div>
-          </div>
-        </div>
       </div>
 
       <!-- 타임라인 -->
       <div class="timeline">
-        <div class="timeline-item active">
-          <div class="timeline-dot active"><div class="timeline-dot-inner"></div></div>
+        <div class="timeline-item">
+          <div class="timeline-dot done"><div class="timeline-dot-inner"></div></div>
           <div class="timeline-content">
             <div class="timeline-top">
               <span class="timeline-phase">Phase 1</span>
               <span class="timeline-date">2026년 4월</span>
             </div>
-            <div class="timeline-title">UI 제작 <span class="status-badge badge-progress">진행중</span></div>
+            <div class="timeline-title">UI 제작 <span class="status-badge badge-done">완료</span></div>
             <ul class="timeline-tasks">
               <li>홈페이지에 주식 섹션 추가</li>
               <li>종목 검색창 및 기본 레이아웃 구성</li>
@@ -284,48 +311,51 @@
           </div>
         </div>
         <div class="timeline-item">
-          <div class="timeline-dot"><div class="timeline-dot-inner"></div></div>
+          <div class="timeline-dot done"><div class="timeline-dot-inner"></div></div>
           <div class="timeline-content">
             <div class="timeline-top">
               <span class="timeline-phase">Phase 2</span>
-              <span class="timeline-date">2026년 5월</span>
+              <span class="timeline-date">2026년 9월</span>
             </div>
-            <div class="timeline-title">서버 환경 세팅 <span class="status-badge badge-upcoming">예정</span></div>
+            <div class="timeline-title">서버 · 배포 환경 <span class="status-badge badge-done">완료</span></div>
             <ul class="timeline-tasks">
-              <li>Mac Studio 구매 및 초기 설정</li>
-              <li>Tailscale 설치 및 원격 접속 구성</li>
-              <li>Python 백엔드 환경 구성</li>
+              <li>도메인 등록 (thekjcstudio.com) · HTTPS 적용</li>
+              <li>Cloudflare Access 로 사이트 전체 접근 제한 (이메일 인증)</li>
+              <li>KIS 중계 서버를 Cloudflare Workers 로 배포</li>
+              <li>앱키를 Secret 으로 분리 · 무인증 통로 차단</li>
+              <li class="note">당초 Mac Studio + Tailscale 계획이었으나, 상시 켜둘 필요가 없는 클라우드 방식으로 변경</li>
             </ul>
           </div>
         </div>
         <div class="timeline-item">
-          <div class="timeline-dot"><div class="timeline-dot-inner"></div></div>
+          <div class="timeline-dot done"><div class="timeline-dot-inner"></div></div>
           <div class="timeline-content">
             <div class="timeline-top">
               <span class="timeline-phase">Phase 3</span>
-              <span class="timeline-date">2026년 6월</span>
+              <span class="timeline-date">2026년 9월</span>
             </div>
-            <div class="timeline-title">데이터 API 연동 <span class="status-badge badge-upcoming">예정</span></div>
+            <div class="timeline-title">시세 연동 <span class="status-badge badge-done">완료</span></div>
             <ul class="timeline-tasks">
-              <li>한국투자증권 API 발급 및 실시간 주가 연동</li>
-              <li>OpenDartReader 재무제표 연동</li>
-              <li>네이버 뉴스 API 연동</li>
-              <li>실시간 차트 구현</li>
+              <li>한국투자증권 API 발급 · 실전 계좌 연동</li>
+              <li>지수(KOSPI · KOSDAQ · KOSPI200) 실시간 반영</li>
+              <li>삼성전자 · SK하이닉스 실시간 시세 반영</li>
+              <li>호출량 제어 (캐시 · 호출 간격 · 보이는 종목만 조회)</li>
             </ul>
           </div>
         </div>
-        <div class="timeline-item">
-          <div class="timeline-dot"><div class="timeline-dot-inner"></div></div>
+        <div class="timeline-item active">
+          <div class="timeline-dot active"><div class="timeline-dot-inner"></div></div>
           <div class="timeline-content">
             <div class="timeline-top">
               <span class="timeline-phase">Phase 4</span>
-              <span class="timeline-date">2026년 7월</span>
+              <span class="timeline-date">2026년 9월~</span>
             </div>
-            <div class="timeline-title">AI 분석 기능 <span class="status-badge badge-upcoming">예정</span></div>
+            <div class="timeline-title">데이터 저장 계층 <span class="status-badge badge-progress">진행중</span></div>
             <ul class="timeline-tasks">
-              <li>Claude API 연동</li>
-              <li>뉴스 감성 분석 (긍정/부정)</li>
-              <li>종목 종합 리포트 자동 생성</li>
+              <li>Cloudflare D1 데이터베이스 도입</li>
+              <li>일봉 · 재무 · 종목정보를 받아서 저장 (매번 API 를 부르지 않도록)</li>
+              <li>종목 마스터 구축 — 전 종목 검색 가능하게</li>
+              <li class="note">전문 차트의 전제 조건. 과거 데이터를 쌓아두지 않으면 호출량이 감당되지 않는다</li>
             </ul>
           </div>
         </div>
@@ -334,13 +364,59 @@
           <div class="timeline-content">
             <div class="timeline-top">
               <span class="timeline-phase">Phase 5</span>
-              <span class="timeline-date">2026년 8월</span>
+              <span class="timeline-date">2026년 10월</span>
             </div>
-            <div class="timeline-title">서비스 오픈 <span class="status-badge badge-upcoming">예정</span></div>
+            <div class="timeline-title">전문 차트 <span class="status-badge badge-upcoming">예정</span></div>
             <ul class="timeline-tasks">
-              <li>전체 테스트 및 버그 수정</li>
-              <li>커스텀 도메인 연결</li>
-              <li>서비스 정식 오픈</li>
+              <li>TradingView Lightweight Charts 도입</li>
+              <li>캔들 · 거래량 · 이동평균선</li>
+              <li>보조지표 (RSI · MACD · 볼린저밴드)</li>
+              <li>기간 전환 (일 · 주 · 월 · 분봉)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot"><div class="timeline-dot-inner"></div></div>
+          <div class="timeline-content">
+            <div class="timeline-top">
+              <span class="timeline-phase">Phase 6</span>
+              <span class="timeline-date">2026년 11월</span>
+            </div>
+            <div class="timeline-title">데이터 소스 확장 <span class="status-badge badge-upcoming">예정</span></div>
+            <ul class="timeline-tasks">
+              <li>OpenDART — 재무제표 · 공시 (분기 1회 갱신)</li>
+              <li>KRX Open API — 종목 마스터 · 지수 (하루 1회)</li>
+              <li>네이버 — 뉴스</li>
+              <li class="note">KIS 하나로 모두 받으려던 구조를 소스별 역할 분담으로 전환. 호출량이 줄고 정보량은 늘어난다</li>
+            </ul>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot"><div class="timeline-dot-inner"></div></div>
+          <div class="timeline-content">
+            <div class="timeline-top">
+              <span class="timeline-phase">Phase 7</span>
+              <span class="timeline-date">2026년 12월</span>
+            </div>
+            <div class="timeline-title">AI 분석 <span class="status-badge badge-upcoming">예정</span></div>
+            <ul class="timeline-tasks">
+              <li>Claude API 연동</li>
+              <li>뉴스 감성 분석 (긍정 / 부정)</li>
+              <li>종목 종합 리포트 자동 생성</li>
+            </ul>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot"><div class="timeline-dot-inner"></div></div>
+          <div class="timeline-content">
+            <div class="timeline-top">
+              <span class="timeline-phase">Phase 8</span>
+              <span class="timeline-date">미정</span>
+            </div>
+            <div class="timeline-title">실시간 (검토 중) <span class="status-badge badge-upcoming">보류</span></div>
+            <ul class="timeline-tasks">
+              <li>KIS 웹소켓 — 세션당 41종목 구독, 호출 횟수 제한 없음</li>
+              <li class="note">상시 켜져 있는 서버가 필요해 인프라가 바뀐다. 분석·기록이 목적이라면 지금의 10초 갱신으로 충분하므로, 단타 매매가 필요해질 때 판단</li>
             </ul>
           </div>
         </div>
