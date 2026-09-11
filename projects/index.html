@@ -69,12 +69,22 @@ h1 {
 .sum-value.done { color: var(--pj-done); }
 .sum-unit { font-size: 14px; font-weight: 600; color: var(--pj-text-dim); margin-left: 3px; }
 
+/* 저장 상태 표시 — 서버까지 갔는지 브라우저에만 있는지 구분해서 보여줍니다 */
 .saved {
-  font-size: 13px; font-weight: 600; color: var(--pj-done);
-  opacity: 0; transition: opacity 0.25s ease; white-space: nowrap;
-  margin-left: auto; align-self: center;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; color: var(--pj-text-muted);
+  white-space: nowrap; margin-left: auto; align-self: center;
+  padding: 6px 12px; border-radius: var(--pj-radius-sm);
+  background: var(--pj-bg-elevated);
+  transition: color 0.2s ease, background 0.2s ease, opacity 0.2s ease;
 }
-.saved.show { opacity: 1; }
+.saved::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; flex-shrink: 0;
+}
+.saved.ok   { color: var(--pj-done); background: var(--pj-done-faint); }
+.saved.warn { color: var(--pj-warn); background: var(--pj-warn-faint); }
+.saved.busy { color: var(--pj-accent); background: var(--pj-accent-faint); }
 
 /* ══════════════════════════════════════════
    프로젝트 탭 — 새로 만들면 오른쪽으로 붙습니다
@@ -261,7 +271,7 @@ h1 {
 <div class="wrap">
   <div class="topbar">
     <a class="back" href="../index.html">← KJC Studio</a>
-    <span class="saved" id="savedTag">저장됨</span>
+    <span class="saved" id="savedTag">불러오는 중…</span>
   </div>
 
   <div class="head-block">
@@ -352,18 +362,100 @@ projects = load();
 try { activeId = localStorage.getItem(ACTIVE_KEY) || null; } catch (e) { activeId = null; }
 if (!byId(activeId) && projects.length) activeId = projects[0].id;
 
-const savedTag = document.getElementById("savedTag");
-let savedTimer = null;
+/* ══════════════════════════════════════════
+   저장
+     1. 브라우저에 즉시 저장 (전기가 나가도 안 잃게)
+     2. 서버에는 1초 모아서 한 번 보냄 (타이핑마다 부르지 않으려고)
+     서버가 없거나 실패해도 화면은 그대로 동작합니다.
+   ══════════════════════════════════════════ */
+const API = "/api/board";
+const SYNC_DELAY = 1000;
 
-function save(flash) {
+const savedTag = document.getElementById("savedTag");
+let syncTimer = null;
+let syncing = false;
+let pending = false;      /* 저장 중에 또 바뀌었는지 */
+let serverAlive = null;   /* null 아직 모름 · true 서버 저장됨 · false 브라우저만 */
+
+function setStatus(text, cls) {
+  savedTag.textContent = text;
+  savedTag.className = "saved" + (cls ? " " + cls : "");
+}
+
+function persistLocal() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(projects));
     if (activeId) localStorage.setItem(ACTIVE_KEY, activeId);
-  } catch (e) { return; }
-  if (flash === false) return;
-  savedTag.classList.add("show");
-  clearTimeout(savedTimer);
-  savedTimer = setTimeout(function () { savedTag.classList.remove("show"); }, 1100);
+  } catch (e) { /* 저장이 막힌 환경이어도 화면은 동작합니다 */ }
+}
+
+function save(flash) {
+  persistLocal();
+  scheduleSync();
+  if (flash !== false && serverAlive !== false) setStatus("저장 중…", "busy");
+}
+
+function scheduleSync() {
+  if (syncing) { pending = true; return; }
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(syncToServer, SYNC_DELAY);
+}
+
+function syncToServer() {
+  syncing = true;
+  pending = false;
+
+  fetch(API, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ data: { projects: projects, activeId: activeId } })
+  })
+    .then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    })
+    .then(function () {
+      serverAlive = true;
+      setStatus("서버에 저장됨", "ok");
+    })
+    .catch(function () {
+      serverAlive = false;
+      setStatus("이 브라우저에만 저장됨", "warn");
+    })
+    .then(function () {
+      syncing = false;
+      if (pending) scheduleSync();
+    });
+}
+
+/* 서버에서 불러오기 — 실패하면 브라우저에 있던 내용으로 갑니다 */
+function loadFromServer() {
+  return fetch(API, { headers: { accept: "application/json" } })
+    .then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    })
+    .then(function (body) {
+      serverAlive = true;
+
+      if (body && body.ok && body.data && Array.isArray(body.data.projects)) {
+        projects = body.data.projects;
+        if (body.data.activeId) activeId = body.data.activeId;
+        if (!byId(activeId) && projects.length) activeId = projects[0].id;
+        persistLocal();
+        setStatus("서버에서 불러옴", "ok");
+        render();
+        return;
+      }
+
+      /* 서버에 아직 아무것도 없으면, 이 브라우저에 있던 내용을 올려 둡니다 */
+      setStatus("서버 연결됨", "ok");
+      if (projects.length) scheduleSync();
+    })
+    .catch(function () {
+      serverAlive = false;
+      setStatus("이 브라우저에만 저장됨", "warn");
+    });
 }
 
 /* ── 보조 함수 ─────────────────────────────── */
@@ -732,6 +824,7 @@ function updateSummary() {
 }
 
 render();
+loadFromServer();
 </script>
 
 </body>
