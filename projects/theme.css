@@ -1,0 +1,92 @@
+/* ==========================================================================
+   KJC Studio · 프로젝트 보드 — 색상 토큰 (단일 기준)
+
+   ── 이 페이지의 모든 색은 여기서만 정합니다.
+      색을 바꾸려면 이 파일만 고치면 화면 전체에 반영됩니다.
+
+   ── 값의 출처: holdings/css/theme.css 의 --kh-* 팔레트 (주식 페이지)
+      "각 구역이 각자 소유하되 구조는 같게" 규칙에 따라
+      참조하지 않고 값을 복제해 두었습니다.
+      주식 페이지 색이 바뀌면 아래 대응표를 보고 같이 맞추면 됩니다.
+
+   ── 구역별 theme.css (파일명·변수명·대응표 주석 구조를 통일, 접두사만 다름)
+        assets/css/theme.css      메인 포트폴리오   접두사 없음
+        holdings/css/theme.css    주식 페이지       --kh-*
+        company-setup/theme.css   설립 체크리스트   --cs-*
+        projects/theme.css        프로젝트 보드     --pj-*   ← 이 파일
+
+   ┌ 이 파일 ──────────┬ holdings/css/theme.css ────┐
+   │ --pj-bg              │ --kh-bg                    │
+   │ --pj-bg-surface      │ --kh-bg-surface            │
+   │ --pj-bg-card         │ --kh-bg-card               │
+   │ --pj-bg-elevated     │ --kh-bg-hover              │
+   │ --pj-border          │ --kh-border                │
+   │ --pj-border-strong   │ --kh-border-strong         │
+   │ --pj-text-primary    │ --kh-text-primary          │
+   │ --pj-text-secondary  │ --kh-text-secondary        │
+   │ --pj-text-muted      │ --kh-text-muted            │
+   │ --pj-accent          │ --kh-accent                │
+   │ --pj-accent-hover    │ --kh-accent-hover          │
+   │ --pj-accent-faint    │ --kh-accent-dim            │
+   │ --pj-done            │ --kh-tag-news              │
+   │ --pj-warn            │ --kh-tag-notice            │
+   │ --pj-danger          │ --kh-up                    │
+   │ --pj-shadow-*     │ --kh-shadow-*              │
+   └───────────────────┴────────────────────────────┘
+   ========================================================================== */
+
+:root {
+  /* ── 바탕 ─────────────────────────────── */
+  --pj-bg:          #fbfbfc;
+  --pj-bg-surface:  #f4f4f6;
+  --pj-bg-card:     #ffffff;
+  --pj-bg-elevated: #f0f0f3;
+  --pj-bg-active:   #e7e7ec;
+
+  /* ── 테두리 ─────────────────────────────── */
+  --pj-border:        rgba(0, 0, 0, 0.09);
+  --pj-border-strong: rgba(0, 0, 0, 0.18);
+
+  /* ── 글자 ─────────────────────────────── */
+  --pj-text-primary:   #17171b;
+  --pj-text-secondary: #5e5e6a;
+  --pj-text-muted:     #8c8c98;
+  --pj-text-dim:       #b2b2bd;
+  --pj-text-on-fill:   #ffffff;   /* 색이 깔린 위에 얹는 글자 */
+
+  /* ── 강조 ─────────────────────────────── */
+  --pj-accent:       #3a6ae8;
+  --pj-accent-hover: #2b55c9;
+  --pj-accent-faint: rgba(58, 106, 232, 0.10);
+
+  /* ── 상태 ─────────────────────────────── */
+  --pj-done:       #0f7a5f;
+  --pj-done-faint: rgba(15, 122, 95, 0.12);
+  --pj-warn:       #b25e09;
+  --pj-warn-faint: rgba(178, 94, 9, 0.12);
+  --pj-danger:     #d92d20;
+  --pj-danger-faint: rgba(217, 45, 32, 0.10);
+
+  /* ── 모달 뒷배경 (어둡게 깔아야 카드가 떠 보임) ── */
+  --pj-scrim: rgba(23, 23, 27, 0.45);
+
+  /* ── 그림자 (밝은 바탕이라 옅게) ─────────── */
+  --pj-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --pj-shadow-md: 0 6px 20px rgba(0, 0, 0, 0.08);
+  --pj-shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.10);
+
+  /* ── 덧막 (구분선 대용) ─────────────────── */
+  --pj-overlay-faint:  rgba(0, 0, 0, 0.015);
+  --pj-overlay-subtle: rgba(0, 0, 0, 0.04);
+
+  /* ── 카테고리 색 (주식 페이지 태그 팔레트에서 가져옴) ── */
+  --pj-cat-3d:       #3a6ae8;   /* --kh-accent      */
+  --pj-cat-ai:       #7c3aed;   /* --kh-tag-dart    */
+  --pj-cat-web:      #0f7a5f;   /* --kh-tag-news    */
+  --pj-cat-branding: #b25e09;   /* --kh-tag-notice  */
+  --pj-cat-etc:      #7a7a86;   /* --kh-flat        */
+
+  /* ── 글꼴 ─────────────────────────────── */
+  --pj-font-body:    "Noto Sans KR", "Pretendard", "Roboto", "Apple SD Gothic Neo", sans-serif;
+  --pj-font-display: "Roboto", "Noto Sans KR", serif;
+}
