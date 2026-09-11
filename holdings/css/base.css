@@ -28,9 +28,10 @@
   --kh-space-8: 32px;
 
   /* 라운드 */
-  --kh-radius-sm: 6px;
-  --kh-radius-md: 10px;
-  --kh-radius-lg: 14px;
+  /* 토스 실제 사용 빈도 순: 8px > 12px > 16px */
+  --kh-radius-sm: 8px;
+  --kh-radius-md: 12px;
+  --kh-radius-lg: 16px;
 
   /* 트랜지션 */
   --kh-transition-fast: 120ms ease;

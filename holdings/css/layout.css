@@ -14,7 +14,7 @@
 
 /* ───── 사이드바 ───── */
 .kh-sidebar {
-  background: var(--kh-bg-surface);
+  background: var(--kh-bg-card);
   border-right: 1px solid var(--kh-border);
   display: flex;
   flex-direction: column;
@@ -67,7 +67,7 @@
   height: var(--kh-header-height);
   padding: 0 var(--kh-space-5);
   border-bottom: 1px solid var(--kh-border);
-  background: var(--kh-bg-surface);
+  background: var(--kh-bg-card);
   /* 스크롤 시 상단 고정 */
   position: sticky;
   top: 0;
@@ -125,7 +125,7 @@
   right: 0;
   width: var(--kh-detail-width);
   height: 100vh;
-  background: var(--kh-bg-surface);
+  background: var(--kh-bg-card);
   border-left: 1px solid var(--kh-border-strong);
   z-index: 50;
   transform: translateX(100%);
@@ -145,7 +145,7 @@
   padding: var(--kh-space-4) var(--kh-space-5);
   border-bottom: 1px solid var(--kh-border);
   flex-shrink: 0;
-  background: var(--kh-bg-surface);
+  background: var(--kh-bg-card);
 }
 
 /* 2단 레이아웃: 좌(차트) / 우(요약·재무·뉴스 탭) */

@@ -7,8 +7,8 @@
 
    쓰는 법
      import { color, alpha } from '../theme.js';
-     color('up')            → '#d92d20'          (--kh-up)
-     alpha('up', 0.3)       → 'rgba(217,45,32,0.3)'  (--kh-up-rgb 기준)
+     color('up')            → '#f04452'          (--kh-up)
+     alpha('up', 0.3)       → 'rgba(240,68,82,0.3)'  (--kh-up-rgb 기준)
 
    fallback 이 붙어 있는 이유
      CSS 로드가 끝나기 전에 호출되면 빈 문자열이 돌아옵니다. 그때 화면이
@@ -17,26 +17,26 @@
    ========================================================================== */
 
 const FALLBACK = {
-  'up': '#d92d20', 'down': '#0b63ce', 'flat': '#7a7a86',
-  'accent': '#3a6ae8',
-  'text-primary': '#17171b', 'text-secondary': '#5e5e6a',
-  'text-muted': '#8c8c98', 'text-dim': '#b2b2bd',
-  'bg-card': '#ffffff', 'border': 'rgba(0,0,0,0.09)',
-  'chart-grid': 'rgba(0,0,0,0.06)', 'chart-border': 'rgba(0,0,0,0.10)',
-  'chart-axis': '#6a6a76', 'chart-crosshair': 'rgba(0,0,0,0.28)',
-  'chart-label-bg': '#3a3a44', 'chart-label-fg': '#ffffff',
-  'ma5': '#b25e09', 'ma20': '#3a6ae8', 'ma60': '#7c3aed',
-  'ind-1': '#3a6ae8', 'ind-2': '#b25e09', 'ind-3': '#7c3aed',
-  'ind-4': '#d92d20', 'ind-5': '#6a6a76',
-  'topic-war': '#d92d20', 'topic-ai': '#3a6ae8', 'topic-defense': '#b25e09',
-  'topic-arctic': '#0f7a5f', 'topic-ship': '#7c3aed',
+  'up': '#f04452', 'down': '#3182f6', 'flat': '#8b95a1',
+  'accent': '#3182f6',
+  'text-primary': '#101013', 'text-secondary': '#4e5968',
+  'text-muted': '#8b95a1', 'text-dim': '#b0b8c1',
+  'bg-card': '#ffffff', 'border': '#f2f4f6',
+  'chart-grid': 'rgba(16,16,19,0.06)', 'chart-border': '#f2f4f6',
+  'chart-axis': '#8b95a1', 'chart-crosshair': 'rgba(16,16,19,0.28)',
+  'chart-label-bg': '#101013', 'chart-label-fg': '#ffffff',
+  'ma5': '#f29300', 'ma20': '#3182f6', 'ma60': '#8b5cf6',
+  'ind-1': '#3182f6', 'ind-2': '#f29300', 'ind-3': '#8b5cf6',
+  'ind-4': '#f04452', 'ind-5': '#8b95a1',
+  'topic-war': '#f04452', 'topic-ai': '#3182f6', 'topic-defense': '#f29300',
+  'topic-arctic': '#02a262', 'topic-ship': '#8b5cf6',
 };
 
 /* 반투명 계산의 기준이 되는 삼원색 (--kh-*-rgb) */
 const FALLBACK_RGB = {
-  'ink': '0 0 0', 'paper': '255 255 255', 'accent': '58 106 232',
-  'up': '217 45 32', 'down': '11 99 206',
-  'ok': '15 122 95', 'warn': '178 94 9',
+  'ink': '16 16 19', 'paper': '255 255 255', 'accent': '49 130 246',
+  'up': '240 68 82', 'down': '49 130 246',
+  'ok': '2 162 98', 'warn': '242 147 0',
 };
 
 const cache = new Map();

@@ -177,7 +177,7 @@
 
 /* ───── 카드 ───── */
 .kh-card {
-  background: var(--kh-bg-surface);
+  background: var(--kh-bg-card);
   border: 1px solid var(--kh-border);
   border-radius: var(--kh-radius-lg);
   overflow: hidden;
@@ -270,7 +270,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--kh-space-3);
-  background: var(--kh-bg-surface);
+  background: var(--kh-bg-card);
   border: 1px solid var(--kh-border);
   border-radius: var(--kh-radius-lg);
   padding: var(--kh-space-3) var(--kh-space-4);

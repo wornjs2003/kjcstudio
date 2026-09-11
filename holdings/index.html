@@ -31,23 +31,23 @@
   <!-- 부팅 오버레이: 외부 CSS 가 로드되기 전에도 즉시 보여야 해서 인라인이다.
        그래서 여기만은 theme.css 변수를 쓸 수 없고 값을 직접 적는다.
        theme.css 의 색을 바꾸면 아래 값도 함께 맞춰야 첫 화면이 깜빡이지 않는다.
-         --bg #fbfbfc · --text-primary #17171b · --accent #3a6ae8 · --text-muted #8c8c98 -->
+         --bg #f6f7f9 · --text-primary #101013 · --accent #3182f6 · --text-muted #8b95a1 -->
   <style>
-    html, body { background: #fbfbfc; margin: 0; }
-    .kh-boot { position: fixed; inset: 0; background: #fbfbfc;
+    html, body { background: #f6f7f9; margin: 0; }
+    .kh-boot { position: fixed; inset: 0; background: #f6f7f9;
                display: flex; align-items: center; justify-content: center;
                z-index: 9999; }
     .kh-boot-inner { display: flex; flex-direction: column;
                      align-items: center; gap: 18px;
                      font-family: 'Noto Sans KR', -apple-system, sans-serif; }
-    .kh-boot-logo { font-size: 1.3rem; font-weight: 500; color: #17171b;
+    .kh-boot-logo { font-size: 1.3rem; font-weight: 500; color: #101013;
                     letter-spacing: 0.04em; }
-    .kh-boot-logo span { color: #3a6ae8; margin-left: 6px; font-weight: 400; }
+    .kh-boot-logo span { color: #3182f6; margin-left: 6px; font-weight: 400; }
     .kh-boot-spinner { width: 36px; height: 36px; border-radius: 50%;
                        border: 2px solid rgba(0,0,0,0.08);
-                       border-top-color: #3a6ae8;
+                       border-top-color: #3182f6;
                        animation: kh-boot-spin 0.8s linear infinite; }
-    .kh-boot-text { font-size: 0.85rem; color: #8c8c98; }
+    .kh-boot-text { font-size: 0.85rem; color: #8b95a1; }
     @keyframes kh-boot-spin { to { transform: rotate(360deg); } }
   </style>
 </head>
