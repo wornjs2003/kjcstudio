@@ -9,7 +9,7 @@ import { applyTicks } from '../utils/tick.js';
 import { liveOnly, liveClass, liveTitle } from '../utils/live-value.js';
 import { openDetail, getState, subscribe, setWatchlistView } from '../store/state.js';
 import { getMemo } from '../store/memo.js';
-import { MOCK_MARKET_STOCKS, fmtMarketCapNum } from '../data/mock.js';
+import { MARKET_STOCKS, fmtMarketCapNum } from '../data/market.js';
 
 const VIEW_TABS = [
   { id: 'kospi',        label: '코스피' },
@@ -24,78 +24,67 @@ const VIEW_TABS = [
 
 /* 뷰별 정렬·필터 + 5번째 컬럼 정의 */
 function getRows(view, watchlistStocks) {
-  const top = (arr, n = 20) => arr.slice(0, n);
   switch (view) {
     case 'watchlist':
       return { rows: watchlistStocks, lastCol: { key: 'memo', label: '메모' } };
+
+    /* 시장 전체 목록 — 시세는 서버가 채운다.
+       순서는 목록에 적힌 순서 그대로다. 시가총액순으로 세우려면
+       시가총액(= 상장주식수 × 현재가)을 받아와야 한다. */
     case 'kospi':
-      // 코스피 전 종목 — 시가총액 내림차순
       return {
-        rows: MOCK_MARKET_STOCKS
-          .filter(s => s.market === 'KOSPI')
-          .slice()
-          .sort((a, b) => b.marketCapNum - a.marketCapNum),
+        rows: MARKET_STOCKS.filter(s => s.market === 'KOSPI'),
         lastCol: { key: 'marketCap', label: '시가총액' },
       };
     case 'kosdaq':
-      // 코스닥 전 종목 — 시가총액 내림차순
       return {
-        rows: MOCK_MARKET_STOCKS
-          .filter(s => s.market === 'KOSDAQ')
-          .slice()
-          .sort((a, b) => b.marketCapNum - a.marketCapNum),
+        rows: MARKET_STOCKS.filter(s => s.market === 'KOSDAQ'),
         lastCol: { key: 'marketCap', label: '시가총액' },
       };
+
+    /* 아래 탭들은 순위를 매길 기준값 자체가 없다. 예전에는 예시 숫자로
+       순위를 만들어 보여줬는데 실제 순위처럼 보여서 오해를 부른다.
+       기준값이 붙기 전까지는 비워 두고, 무엇이 필요한지 화면에 적는다.
+       ─ 할 일: KIS 국내주식 순위분석 (거래대금·등락률) · 상장주식수 · KRX 공매도 통계 */
     case 'topVolume':
-      return {
-        rows: top([...MOCK_MARKET_STOCKS].sort((a, b) => b.volume - a.volume)),
-        lastCol: { key: 'tradeValue', label: '거래대금' },
-      };
+      return { rows: [], notReady: ['거래상위', 'KIS 순위분석 (거래대금)'],
+               lastCol: { key: 'tradeValue', label: '거래대금' } };
     case 'topGainers':
-      return {
-        rows: top([...MOCK_MARKET_STOCKS].sort((a, b) => b.changePct - a.changePct)),
-        lastCol: { key: 'marketCap', label: '시가총액' },
-      };
+      return { rows: [], notReady: ['상승상위', 'KIS 순위분석 (등락률)'],
+               lastCol: { key: 'marketCap', label: '시가총액' } };
     case 'topLosers':
-      return {
-        rows: top([...MOCK_MARKET_STOCKS].sort((a, b) => a.changePct - b.changePct)),
-        lastCol: { key: 'marketCap', label: '시가총액' },
-      };
+      return { rows: [], notReady: ['하락상위', 'KIS 순위분석 (등락률)'],
+               lastCol: { key: 'marketCap', label: '시가총액' } };
     case 'topMarketCap':
-      return {
-        rows: top([...MOCK_MARKET_STOCKS].sort((a, b) => b.marketCapNum - a.marketCapNum)),
-        lastCol: { key: 'marketCap', label: '시가총액' },
-      };
+      return { rows: [], notReady: ['시가총액 순위', '상장주식수 (KIS 기본조회 또는 KRX)'],
+               lastCol: { key: 'marketCap', label: '시가총액' } };
     case 'topShort':
-      return {
-        rows: top([...MOCK_MARKET_STOCKS].sort((a, b) => b.shortRatio - a.shortRatio)),
-        lastCol: { key: 'shortRatio', label: '공매비율' },
-      };
+      return { rows: [], notReady: ['공매상위', '공매도 잔고비율 (KRX 공매도 통계)'],
+               lastCol: { key: 'shortRatio', label: '공매비율' } };
+
     default:
       return { rows: watchlistStocks, lastCol: { key: 'memo', label: '메모' } };
   }
 }
 
 function lastColValue(s, key) {
+  const none = '<span class="kh-nodata">—</span>';
   switch (key) {
     case 'memo': {
-      const memo = getMemo(s.code) || s.memo || '';
+      const memo = getMemo(s.code) || '';
       return `<span class="kh-memo-cell" title="${memo}">${memo}</span>`;
     }
-    case 'tradeValue': {
-      const value = s.price * s.volume;
-      return `<span class="kh-mono">${fmtKrw(value)}</span>`;
-    }
-    case 'marketCap': {
-      const mc = s.marketCapNum
-        ? fmtMarketCapNum(s.marketCapNum)
-        : (s.marketCap || '');
-      return `<span class="kh-mono">${mc}</span>`;
-    }
-    case 'shortRatio': {
-      const r = typeof s.shortRatio === 'number' ? s.shortRatio.toFixed(2) : '0.00';
-      return `<span class="kh-mono">${r}%</span>`;
-    }
+    case 'tradeValue':
+      // 거래대금 = 현재가 × 거래량. 둘 다 받아온 값일 때만 계산한다
+      return (s.isLive && s.price != null && s.volume != null)
+        ? `<span class="kh-mono">${fmtKrw(s.price * s.volume)}</span>` : none;
+    case 'marketCap':
+      // 시가총액 = 상장주식수 × 현재가. 상장주식수를 아직 받아오지 않는다
+      return s.marketCapNum != null
+        ? `<span class="kh-mono">${fmtMarketCapNum(s.marketCapNum)}</span>` : none;
+    case 'shortRatio':
+      return typeof s.shortRatio === 'number'
+        ? `<span class="kh-mono">${s.shortRatio.toFixed(2)}%</span>` : none;
     default:
       return '';
   }
@@ -104,7 +93,7 @@ function lastColValue(s, key) {
 export function mountWatchlistTable(el) {
   function render() {
     const { stocks: watchlist, selectedStock, watchlistView } = getState();
-    const { rows, lastCol } = getRows(watchlistView, watchlist);
+    const { rows, lastCol, notReady } = getRows(watchlistView, watchlist);
     const showRank = watchlistView !== 'watchlist';
     const activeTab = VIEW_TABS.find(t => t.id === watchlistView) || VIEW_TABS[0];
 
@@ -123,7 +112,7 @@ export function mountWatchlistTable(el) {
             <button class="kh-btn" title="추가">+ 추가</button>
             <button class="kh-btn" title="정렬">정렬</button>
           ` : `
-            <span class="kh-card-subtitle">상위 ${rows.length}개</span>
+            <span class="kh-card-subtitle">${rows.length ? `상위 ${rows.length}개` : ''}</span>
           `}
         </div>
       </div>
@@ -142,7 +131,10 @@ export function mountWatchlistTable(el) {
           <tbody>
             ${rows.length === 0
               ? `<tr><td colspan="${showRank ? 6 : 5}" class="kh-empty-row">
-                   목록이 비어있어요. 종목을 추가해보세요.
+                   ${notReady
+                     ? `${notReady[0]} — 아직 연결하지 않았습니다
+                        <div class="kh-empty-todo">붙일 것: ${notReady[1]}</div>`
+                     : '목록이 비어있어요. 종목을 추가해보세요.'}
                  </td></tr>`
               : rows.map((s, i) => row(s, i, selectedStock?.code === s.code, lastCol, showRank)).join('')}
           </tbody>
@@ -155,11 +147,11 @@ export function mountWatchlistTable(el) {
       btn.addEventListener('click', () => setWatchlistView(btn.dataset.view));
     });
 
-    // 행 클릭 → 상세 열기 (관심종목은 watchlist 에서, 랭킹은 MOCK_MARKET_STOCKS 에서)
+    // 행 클릭 → 상세 열기 (관심종목은 watchlist 에서, 그 외는 MARKET_STOCKS 에서)
     el.querySelectorAll('tbody tr[data-code]').forEach(tr => {
       tr.addEventListener('click', () => {
         const code = tr.dataset.code;
-        const pool = activeTab.id === 'watchlist' ? watchlist : MOCK_MARKET_STOCKS;
+        const pool = activeTab.id === 'watchlist' ? watchlist : MARKET_STOCKS;
         const stock = pool.find(s => s.code === code);
         // 랭킹 종목은 메모·일부 지표가 없을 수 있으므로 기본값 채움
         if (stock) openDetail(hydrateStock(stock));

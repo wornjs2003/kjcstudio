@@ -3,11 +3,14 @@
 
    preview.bat 으로 띄운 로컬 서버에서만 동작한다.
    GitHub Pages 배포본에는 중계 서버가 없으므로 조회가 실패하고,
-   호출한 쪽은 null 을 받아 기존 목업 데이터를 그대로 쓰게 된다.
+   호출한 쪽은 null 을 받고, 화면에는 '불러오는 중' 또는 '—' 이 남는다.
    ========================================================================== */
 
-/* 실제로 연결된 종목 — 나머지는 아직 목업이다 */
-export const LIVE_CODES = ['005930', '000660'];
+/* 시세를 받아오는 종목 — 관심종목 전체.
+   목록에 없는 종목(시장 전체 탭 등)은 화면에 '—' 로 남는다.
+   종목이 늘면 호출량도 느니, 갱신 주기(main.js)와 함께 보고 정할 것. */
+import { WATCHLIST } from './market.js';
+export const LIVE_CODES = WATCHLIST.map(s => s.code);
 
 let _ready = null;
 
@@ -22,7 +25,7 @@ async function kisReady() {
   } catch {
     _ready = false;
   }
-  if (!_ready) console.info('[KJC] 중계 서버 없음 — 목업 데이터로 표시합니다');
+  if (!_ready) console.info('[KJC] 중계 서버 없음 — 시세 칸은 비워 둡니다');
   return _ready;
 }
 

@@ -10,8 +10,10 @@ import { liveOnly, liveClass, liveTitle } from '../utils/live-value.js';
 import { getState, setSelectedIndex, subscribe } from '../store/state.js';
 import { alpha } from '../theme.js';
 
-/* 지수 값 포맷: 원/달러만 정수, 나머지는 소수 둘째 자리 */
+/* 지수 값 포맷: 원/달러만 정수, 나머지는 소수 둘째 자리.
+   목록에는 코드·이름만 있고 값은 서버에서 온다. 아직 안 왔으면 null 이다. */
 function fmtIndexValue(v, unit) {
+  if (v == null) return null;
   if (unit === '원') {
     return v.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
   }
@@ -140,7 +142,7 @@ function renderStripMarkup(indices, selectedCode) {
           <div class="kh-index-detail-meta">
             ${selected.source === 'KIS'
               ? '60거래일 추이 · 한국투자증권 실시간'
-              : '60거래일 추이 · 목업 데이터'}
+              : '추이 — 아직 받아오지 않음'}
           </div>
         </div>
         <div class="kh-index-detail-chart">
@@ -177,8 +179,8 @@ export function mountIndexStrip(hostEl, indices) {
   subscribe(render);
 }
 
-/* 실시간 지수가 도착하면 목업 자리를 대체한다.
-   실제로 받은 지수만 갈아끼우고, 나머지(해외 지수 등)는 그대로 둔다. */
+/* 서버에서 지수가 도착하면 빈 자리를 채운다.
+   실제로 받은 지수만 갈아끼우고, 나머지(해외 지수 등)는 빈 채로 둔다. */
 export function updateIndices(liveIndices) {
   if (!Array.isArray(liveIndices) || !liveIndices.length) return;
   const byCode = new Map(liveIndices.map(i => [i.code, i]));

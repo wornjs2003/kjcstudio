@@ -1048,10 +1048,27 @@
 
 /* ==========================================================================
    실데이터가 없는 값
-   주식 화면에서 목업 숫자가 실제처럼 보이면 안 되므로, 값 대신 표시되는
+   주식 화면에서 받아오지 못한 값이 실제처럼 보이면 안 되므로, 값 대신 표시되는
    자리임을 흐린 색으로 알린다.
    ========================================================================== */
 .kh-nodata {
   color: var(--kh-text-dim);
   font-variant-numeric: tabular-nums;
+}
+
+/* ───── 아직 연결하지 않은 자리 ─────
+   예시 데이터를 채우는 대신 무엇이 비어 있는지 적어 둔다.
+   (js/components/empty-state.js 참고) */
+.kh-empty {
+  padding: var(--kh-space-5) var(--kh-space-4);
+  text-align: center;
+}
+.kh-empty-title {
+  font-size: 0.85rem;
+  color: var(--kh-text-muted);
+}
+.kh-empty-todo {
+  margin-top: 6px;
+  font-size: 0.76rem;
+  color: var(--kh-text-dim);
 }

@@ -1,37 +1,14 @@
 /* ==========================================================================
    세계 주요 이슈 — 주제별 아코디언
-   주제: 전쟁 / AI / 방산 / 북극항로 / 조선 (추후 확장)
-   높이: 지수 스트립에 맞춤, 주제 추가 시 내부 스크롤
+
+   예전에는 예시 기사 제목을 넣어 두었는데, 읽는 사람 입장에서는 실제
+   뉴스와 구분이 되지 않았다. 받아올 곳을 붙이기 전까지는 비워 둔다.
    ========================================================================== */
 
-import { MOCK_GLOBAL_ISSUES } from '../data/mock.js';
-import { color } from '../theme.js';
-
-/* 주제 색은 css/theme.css 의 --kh-topic-* 에서 가져온다 */
-const TOPIC_VAR = {
-  '전쟁':     'topic-war',
-  'AI':       'topic-ai',
-  '방산':     'topic-defense',
-  '북극항로': 'topic-arctic',
-  '조선':     'topic-ship',
-};
-const topicColor = (topic) => color(TOPIC_VAR[topic] || 'text-muted');
-
-/* 주제별 그룹핑 (등장 순서 유지) */
-function groupByTopic(issues) {
-  const map = new Map();
-  for (const item of issues) {
-    if (!map.has(item.topic)) map.set(item.topic, []);
-    map.get(item.topic).push(item);
-  }
-  return map;
-}
+import { notConnected } from './empty-state.js';
 
 export function mountGlobalIssues(el) {
-  const groups = groupByTopic(MOCK_GLOBAL_ISSUES);
-  const expandedSet = new Set();
-
-  /* 지수 스트립 높이에 카드 높이 동기화 */
+  /* 지수 스트립 높이에 카드 높이 맞추기 */
   function syncHeight() {
     const strip = document.getElementById('kh-index-strip');
     if (!strip) return;
@@ -39,66 +16,16 @@ export function mountGlobalIssues(el) {
     if (h > 0) el.style.height = h + 'px';
   }
 
-  function render() {
-    const rows = [];
-    for (const [topic, items] of groups) {
-      const isOpen = expandedSet.has(topic);
-      const topicHex = topicColor(topic);
-      const extra = items.length - 1;
+  el.innerHTML = `
+    <div class="kh-card-header">
+      <h3 class="kh-card-title">세계 주요 이슈</h3>
+    </div>
+    <div class="kh-card-body">
+      ${notConnected('세계 주요 이슈', '뉴스 수집 (주제별 분류)')}
+    </div>
+  `;
 
-      rows.push(`
-        <li class="kh-gi-row">
-          <span class="kh-gi-topic" style="color:${topicHex}">${topic}</span>
-          <span class="kh-gi-title">${items[0].title}</span>
-          ${extra > 0 ? `
-            <button type="button" class="kh-gi-toggle" data-topic="${topic}"
-                    title="${isOpen ? '접기' : extra + '건 더보기'}">
-              ${isOpen ? '−' : '+' + extra}
-            </button>
-          ` : ''}
-        </li>
-      `);
-
-      if (isOpen) {
-        for (let i = 1; i < items.length; i++) {
-          rows.push(`
-            <li class="kh-gi-row kh-gi-sub">
-              <span class="kh-gi-topic" style="color:${topicHex}"></span>
-              <span class="kh-gi-title">${items[i].title}</span>
-            </li>
-          `);
-        }
-      }
-    }
-
-    el.innerHTML = `
-      <div class="kh-card-header">
-        <h3 class="kh-card-title">세계 주요 이슈</h3>
-      </div>
-      <div class="kh-gi-scroll">
-        <ul class="kh-gi-list">
-          ${rows.join('')}
-        </ul>
-      </div>
-    `;
-
-    syncHeight();
-
-    el.querySelectorAll('.kh-gi-toggle').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const t = btn.dataset.topic;
-        if (expandedSet.has(t)) expandedSet.delete(t);
-        else expandedSet.add(t);
-        render();
-      });
-    });
-  }
-
-  render();
-
-  /* 지수 스트립 크기 변동 → 높이 재동기화 */
-  const strip = document.getElementById('kh-index-strip');
-  if (strip && typeof ResizeObserver !== 'undefined') {
-    new ResizeObserver(() => syncHeight()).observe(strip);
-  }
+  syncHeight();
+  window.addEventListener('resize', syncHeight);
+  setTimeout(syncHeight, 100);
 }

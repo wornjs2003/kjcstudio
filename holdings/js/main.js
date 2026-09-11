@@ -2,7 +2,7 @@
    KJC Holdings — 메인 엔트리
    ========================================================================== */
 
-import { MOCK_INDICES, MOCK_STOCKS, MOCK_MARKET_STOCKS } from './data/mock.js';
+import { INDEX_LIST, WATCHLIST, MARKET_STOCKS } from './data/market.js';
 import { fetchLiveIndices, fetchLivePrices, applyLiveToStock, LIVE_CODES } from './data/live.js';
 import { markRefresh, endRefresh } from './utils/tick.js';
 import { markLoaded } from './utils/live-value.js';
@@ -14,14 +14,16 @@ import { mountNewsFeed } from './components/news-feed.js';
 import { mountGlobalIssues } from './components/global-issues.js';
 import { mountStockDetail } from './components/stock-detail.js';
 
-/* ── 초기 데이터 로드 ── */
-setStocks(MOCK_STOCKS);
+/* ── 종목 목록 ──
+   목록에는 코드·이름·섹터만 들어 있다. 시세는 아래 refreshLiveData 가
+   서버에서 받아 채우고, 못 받으면 화면에 '불러오는 중' 또는 '—' 이 남는다. */
+setStocks(WATCHLIST);
 
 /* ── 사이드바 ── */
 mountSidebar(document.getElementById('kh-sidebar'));
 
 /* ── 상단 지수 스트립 + 차트 패널 ── */
-mountIndexStrip(document.getElementById('kh-index-strip'), MOCK_INDICES);
+mountIndexStrip(document.getElementById('kh-index-strip'), INDEX_LIST);
 
 /* ── 세계 주요 이슈 ── */
 mountGlobalIssues(document.getElementById('kh-global-issues'));
@@ -44,13 +46,13 @@ document.getElementById('kh-detail-backdrop').addEventListener('click', closeDet
 /* ──────────────────────────────────────────────────────────────────────────
    실시간 데이터 적용 (한국투자증권)
    지수(KOSPI/KOSDAQ/KOSPI200)와 삼성전자·SK하이닉스만 실제 값으로 바꾼다.
-   나머지 항목은 아직 목업이며, 중계 서버가 없으면 전부 목업으로 남는다.
+   나머지 항목은 아직 받아올 곳이 없어 화면에 '—' 로 남는다.
    ────────────────────────────────────────────────────────────────────────── */
 /* 갱신 주기(ms).
-   1회 갱신에 KIS 호출 5회(지수 3 + 종목 2)가 든다.
-   서버 예산이 초당 1건(한도의 1/10)이므로 5초가 예산을 꽉 채우는 값이고,
-   10초면 예산의 절반만 쓴다. 종목 클릭 같은 즉석 조회에 여유를 두려고 10초로 잡았다. */
-const LIVE_REFRESH_MS = 10000;
+   1회 갱신에 드는 KIS 호출 = 지수 3 + 관심종목 수(현재 8) = 11회.
+   서버 예산은 초당 1건(한도의 1/10)이라 15초면 초당 0.73건으로 예산 안에 든다.
+   관심종목을 늘리면 이 값도 같이 늘려야 한다. */
+const LIVE_REFRESH_MS = 15000;
 
 async function refreshLiveData() {
   if (document.hidden) return;   // 다른 탭을 보고 있으면 호출하지 않는다
@@ -70,14 +72,14 @@ async function refreshLiveData() {
 
     if (prices) {
       // 상세 패널용 목록과 시세 테이블용 목록 양쪽 모두 같은 종목을 갱신한다
-      [MOCK_STOCKS, MOCK_MARKET_STOCKS].forEach(list => {
+      [WATCHLIST, MARKET_STOCKS].forEach(list => {
         if (!Array.isArray(list)) return;
         list.forEach(s => {
           const live = prices[s.code];
           if (live) applyLiveToStock(s, live);
         });
       });
-      setStocks(MOCK_STOCKS);      // 구독자에게 갱신 알림
+      setStocks(WATCHLIST);      // 구독자에게 갱신 알림
       setState({});                // 열려 있는 상세 패널도 다시 그리도록
     }
   } finally {
