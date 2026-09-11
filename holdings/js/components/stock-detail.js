@@ -333,7 +333,7 @@ function renderPriceVolumeChart(stock, periodId) {
   // 상승/하락 색상 — 구간 전체 기준 (시작 → 끝)
   const isUp = points[points.length - 1].price >= points[0].price;
   const lineColor = isUp ? 'var(--kh-up)' : 'var(--kh-down)';
-  const areaColor = isUp ? 'rgba(255,95,95,0.12)' : 'rgba(79,158,255,0.12)';
+  const areaColor = isUp ? 'rgb(var(--kh-up-rgb) / 12%)' : 'rgb(var(--kh-down-rgb) / 12%)';
 
   // 가격 눈금 (5칸)
   const yTicks = 5;
@@ -375,8 +375,8 @@ function renderPriceVolumeChart(stock, periodId) {
     const y = volY(p.volume);
     const h = (priceH + gap + volH) - y;
     const up = i > 0 ? p.price >= points[i - 1].price : true;
-    const color = up ? 'rgba(255,95,95,0.6)' : 'rgba(79,158,255,0.6)';
-    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" fill="${color}"/>`;
+    const barColor = up ? 'rgb(var(--kh-up-rgb) / 60%)' : 'rgb(var(--kh-down-rgb) / 60%)';
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" fill="${barColor}"/>`;
   }).join('');
 
   // 가격·거래량 구분선
@@ -432,23 +432,23 @@ function renderIndicatorCharts(stock) {
       subtitle: '외국인 / 외국인+기관 — 최근 90일',
       svg: chartOwnership(ind),
       legend: `
-        <span class="kh-ind-legend-item"><i style="background:#4f9eff"></i>외국인</span>
-        <span class="kh-ind-legend-item"><i style="background:#f5a623"></i>외국인+기관</span>
+        <span class="kh-ind-legend-item"><i style="background:var(--kh-ind-1)"></i>외국인</span>
+        <span class="kh-ind-legend-item"><i style="background:var(--kh-ind-2)"></i>외국인+기관</span>
       `,
     })}
     ${indicatorBlock({
       title: '심리도 (Psychology Line)',
       subtitle: '최근 12일 중 상승일 비율 — 75↑ 과열 / 25↓ 침체',
       svg: chartPsychology(ind),
-      legend: `<span class="kh-ind-legend-item"><i style="background:#7b61ff"></i>심리도</span>`,
+      legend: `<span class="kh-ind-legend-item"><i style="background:var(--kh-ind-3)"></i>심리도</span>`,
     })}
     ${indicatorBlock({
       title: '스토캐스틱 (Slow %K, %D)',
       subtitle: '%K(14,3), %D(3) — 80↑ 과매수 / 20↓ 과매도',
       svg: chartStochastic(ind),
       legend: `
-        <span class="kh-ind-legend-item"><i style="background:#ff5f5f"></i>%K</span>
-        <span class="kh-ind-legend-item"><i style="background:#4f9eff"></i>%D</span>
+        <span class="kh-ind-legend-item"><i style="background:var(--kh-ind-4)"></i>%K</span>
+        <span class="kh-ind-legend-item"><i style="background:var(--kh-ind-1)"></i>%D</span>
       `,
     })}
     ${indicatorBlock({
@@ -456,9 +456,9 @@ function renderIndicatorCharts(stock) {
       subtitle: 'MACD · Signal · Histogram',
       svg: chartMacd(ind),
       legend: `
-        <span class="kh-ind-legend-item"><i style="background:#4f9eff"></i>MACD</span>
-        <span class="kh-ind-legend-item"><i style="background:#f5a623"></i>Signal</span>
-        <span class="kh-ind-legend-item"><i style="background:#6a6a76"></i>Histogram</span>
+        <span class="kh-ind-legend-item"><i style="background:var(--kh-ind-1)"></i>MACD</span>
+        <span class="kh-ind-legend-item"><i style="background:var(--kh-ind-2)"></i>Signal</span>
+        <span class="kh-ind-legend-item"><i style="background:var(--kh-ind-5)"></i>Histogram</span>
       `,
     })}
   `;
@@ -515,7 +515,7 @@ function _plotLines({ series, dates, yMin, yMax, W, plotH, padL, padR, padT, pad
       const x = plotX(i) - barW / 2;
       const y = v >= 0 ? yAt(v) : zeroY;
       const h = Math.abs(yAt(v) - zeroY);
-      const color = histColorFn ? histColorFn(v, i) : (v >= 0 ? 'rgba(255,95,95,0.55)' : 'rgba(79,158,255,0.55)');
+      const color = histColorFn ? histColorFn(v, i) : (v >= 0 ? 'rgb(var(--kh-up-rgb) / 55%)' : 'rgb(var(--kh-down-rgb) / 55%)');
       return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" fill="${color}"/>`;
     }).join('');
   }
@@ -574,8 +574,8 @@ function chartOwnership(ind) {
 
   const { gridSvg, yTicksSvg, linesSvg, xLabelsSvg } = _plotLines({
     series: [
-      { values: ownership.foreign,  color: '#4f9eff', width: 1.6 },
-      { values: ownership.combined, color: '#f5a623', width: 1.6 },
+      { values: ownership.foreign,  color: 'var(--kh-ind-1)', width: 1.6 },
+      { values: ownership.combined, color: 'var(--kh-ind-2)', width: 1.6 },
     ],
     dates, yMin, yMax, W, plotH: H, padL, padR, padT, padB,
     refLines: [],
@@ -590,12 +590,12 @@ function chartPsychology(ind) {
   // 추가 축소 (H 88→44 — 기존의 50%)
   const W = 640, H = 44, padL = 42, padR = 8, padT = 4, padB = 12;
   const { gridSvg, yTicksSvg, linesSvg, xLabelsSvg } = _plotLines({
-    series: [{ values: psychology, color: '#7b61ff', width: 1.6 }],
+    series: [{ values: psychology, color: 'var(--kh-ind-3)', width: 1.6 }],
     dates, yMin: 0, yMax: 100, W, plotH: H, padL, padR, padT, padB,
     refLines: [
-      { v: 75, label: '75 과열', color: 'rgba(255,95,95,0.4)' },
-      { v: 25, label: '25 침체', color: 'rgba(79,158,255,0.4)' },
-      { v: 50, color: 'rgba(255,255,255,0.08)', dash: '1 3' },
+      { v: 75, label: '75 과열', color: 'rgb(var(--kh-up-rgb) / 40%)' },
+      { v: 25, label: '25 침체', color: 'rgb(var(--kh-down-rgb) / 40%)' },
+      { v: 50, color: 'rgb(var(--kh-ink-rgb) / 8%)', dash: '1 3' },
     ],
   });
   return `<svg class="kh-ind-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
@@ -609,13 +609,13 @@ function chartStochastic(ind) {
   const W = 640, H = 48, padL = 42, padR = 8, padT = 4, padB = 12;
   const { gridSvg, yTicksSvg, linesSvg, xLabelsSvg } = _plotLines({
     series: [
-      { values: stochastic.k, color: '#ff5f5f', width: 1.6 },
-      { values: stochastic.d, color: '#4f9eff', width: 1.4 },
+      { values: stochastic.k, color: 'var(--kh-ind-4)', width: 1.6 },
+      { values: stochastic.d, color: 'var(--kh-ind-1)', width: 1.4 },
     ],
     dates, yMin: 0, yMax: 100, W, plotH: H, padL, padR, padT, padB,
     refLines: [
-      { v: 80, label: '80 과매수', color: 'rgba(255,95,95,0.4)' },
-      { v: 20, label: '20 과매도', color: 'rgba(79,158,255,0.4)' },
+      { v: 80, label: '80 과매수', color: 'rgb(var(--kh-up-rgb) / 40%)' },
+      { v: 20, label: '20 과매도', color: 'rgb(var(--kh-down-rgb) / 40%)' },
     ],
   });
   return `<svg class="kh-ind-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
@@ -638,17 +638,17 @@ function chartMacd(ind) {
 
   const { gridSvg, yTicksSvg, histSvg, linesSvg, xLabelsSvg } = _plotLines({
     series: [
-      { values: macd.macd,   color: '#4f9eff', width: 1.6 },
-      { values: macd.signal, color: '#f5a623', width: 1.4 },
+      { values: macd.macd,   color: 'var(--kh-ind-1)', width: 1.6 },
+      { values: macd.signal, color: 'var(--kh-ind-2)', width: 1.4 },
     ],
     dates, yMin, yMax, W, plotH: H, padL, padR, padT, padB,
-    refLines: [{ v: 0, color: 'rgba(255,255,255,0.15)' }],
+    refLines: [{ v: 0, color: 'rgb(var(--kh-ink-rgb) / 15%)' }],
     histogram: macd.histogram,
     histColorFn: (v, i) => {
       const prev = macd.histogram[i - 1];
       const rising = prev == null ? true : v >= prev;
-      if (v >= 0) return rising ? 'rgba(255,95,95,0.7)' : 'rgba(255,95,95,0.35)';
-      return rising ? 'rgba(79,158,255,0.35)' : 'rgba(79,158,255,0.7)';
+      if (v >= 0) return rising ? 'rgb(var(--kh-up-rgb) / 70%)' : 'rgb(var(--kh-up-rgb) / 35%)';
+      return rising ? 'rgb(var(--kh-down-rgb) / 35%)' : 'rgb(var(--kh-down-rgb) / 70%)';
     },
   });
   return `<svg class="kh-ind-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">

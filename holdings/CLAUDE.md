@@ -17,7 +17,8 @@
 - `analysis/index.html` : 주식 분석 페이지 (구 KJCEngine 모달이 페이지로 승격)
 - `roadmap.html` : 주식 분석 서비스 로드맵
 - `engine/` : 구 KJCEngine 문서 (CLAUDE.md, ROADMAP.md, SETUP.md, docs/)
-- `css/base.css`, `css/layout.css`, `css/components.css` : 대시보드용 기존 스타일
+- `css/theme.css` : **색상 토큰 단일 기준** (이 파일만 고치면 주식 화면 전체 반영)
+- `css/base.css`, `css/layout.css`, `css/components.css` : 대시보드용 기존 스타일 (색 정의 없음)
 - `css/h-page.css` : analysis/roadmap 서브 페이지 공통 스타일
 - `js/main.js` : 대시보드 엔트리 (ES module, components/ 로드)
 - `js/components/` : 대시보드 컴포넌트 (sidebar, index-strip, news-feed 등)
@@ -31,9 +32,10 @@
 
 ## 디자인 규칙
 - 테마: **라이트 테마** (#fbfbfc) — 2026-09-11 변경
-- 색상 하드코딩 금지. `css/base.css` 의 `--kh-*`, `css/h-page.css` 의 `--h-*` 변수만 쓴다
+- **색은 `css/theme.css` 한 곳에서만 정한다.** base/layout/components/h-page 에는 색 정의를 두지 않는다
+- 색상 하드코딩 금지. `--kh-*`(대시보드) · `--h-*`(서브 페이지) 변수만 `var()` 로 쓴다
 - 차트 색(`js/chart.js`)은 canvas 라 CSS 를 상속받지 못하므로 따로 맞춰야 한다
-- accent: #4f7eff
+- accent: #3a6ae8 (흰 바탕에서 대비를 확보한 파랑)
 - 폰트: Noto Sans KR, Roboto
 - 메인 사이트와 시각적 일관성 유지하되, 파일은 별도 소유
 

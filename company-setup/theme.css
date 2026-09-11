@@ -1,0 +1,37 @@
+/* ==========================================================================
+   KJC Studio · 회사 설립 체크리스트 — 색상 토큰 (단일 기준)
+
+   ── 이 구역의 모든 색은 여기서만 정합니다.
+      이 파일만 고치면 체크리스트 화면 전체에 반영됩니다.
+
+   ── 같은 구조를 쓰는 다른 구역 (구역마다 접두사만 다르고 이름·값은 동일)
+      assets/css/theme.css      메인 포트폴리오   접두사 없음
+      holdings/css/theme.css    주식 페이지       --kh-*
+      projects/theme.css        프로젝트 보드     --pj-*
+      한 곳의 값을 바꾸면 나머지도 같은 이름의 값을 맞춰 주세요.
+   ========================================================================== */
+
+:root {
+  /* 반투명하게 쓸 때 기준이 되는 삼원색 — `rgb(var(--cs-ink-rgb) / 5%)` 처럼 쓴다 */
+  --cs-ink-rgb:    0 0 0;
+  --cs-accent-rgb: 58 106 232;
+  --cs-done-rgb:   15 122 95;
+  --cs-danger-rgb: 217 45 32;
+
+  --cs-bg: #fbfbfc;
+  --cs-bg-surface: #f4f4f6;
+  --cs-bg-card: #ffffff;
+  --cs-bg-elevated: #eeeef1;
+  --cs-border: rgba(0, 0, 0, 0.09);
+  --cs-border-strong: rgba(0, 0, 0, 0.18);
+  --cs-text-primary: #17171b;
+  --cs-text-secondary: #5e5e6a;
+  --cs-text-muted: #8c8c98;
+  --cs-accent: #3a6ae8;
+  --cs-accent-hover: #2b55c9;
+  --cs-accent-faint: rgba(58, 106, 232, 0.10);
+  --cs-done: #0f7a5f;
+  --cs-danger: #d92d20;
+  --cs-on-fill: #ffffff;   /* 색이 깔린 위에 얹는 표시(체크 표시 등) */
+  --cs-paper: #ffffff;     /* 인쇄 용지 */
+}

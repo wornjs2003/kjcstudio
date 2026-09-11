@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
 
+  <link rel="stylesheet" href="../css/theme.css" />
   <link rel="stylesheet" href="../css/h-page.css" />
 
   <style>
@@ -33,15 +34,15 @@
       --down: var(--h-down);
 
       /* 상태 색 — 밝은 바탕에서 읽히도록 진하게 */
-      --link:   #3a6ae8;
-      --warn:   #b25e09;
-      --ok:     #0f7a5f;
-      --danger: #d92d20;
+      --link:   var(--h-link);
+      --warn:   var(--h-warn);
+      --ok:     var(--h-ok);
+      --danger: var(--h-danger);
 
       /* 패널·구분선 */
       --panel:     var(--h-card);
-      --panel-alt: #f4f4f6;
-      --panel-deep:#eeeef1;
+      --panel-alt: var(--h-surface);
+      --panel-deep:var(--h-elevated);
       --line:      var(--h-border);
     }
 
@@ -54,7 +55,7 @@
     }
     .stock-modal {
       background: var(--bg);
-      border: 1px solid rgba(0,0,0,0.08);
+      border: 1px solid rgb(var(--h-ink-rgb) / 8%);
       border-radius: 20px;
       display: flex;
       flex-direction: column;
@@ -99,7 +100,7 @@
 
     .sm-sidebar-search input {
       width: 100%;
-      background: rgba(0,0,0,0.035);
+      background: rgb(var(--h-ink-rgb) / 3.5%);
       border: 1px solid var(--border);
       border-radius: 7px;
       padding: 7px 10px 7px 28px;
@@ -129,7 +130,7 @@
 
     .sm-sidebar-list::-webkit-scrollbar { width: 4px; }
     .sm-sidebar-list::-webkit-scrollbar-track { background: transparent; }
-    .sm-sidebar-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.07); border-radius: 2px; }
+    .sm-sidebar-list::-webkit-scrollbar-thumb { background: rgb(var(--h-ink-rgb) / 7%); border-radius: 2px; }
 
     .sm-stock-item {
       display: flex;
@@ -141,8 +142,8 @@
       gap: 6px;
     }
 
-    .sm-stock-item:hover { background: rgba(0,0,0,0.035); }
-    .sm-stock-item.active { background: rgba(58,106,232,0.12); }
+    .sm-stock-item:hover { background: rgb(var(--h-ink-rgb) / 3.5%); }
+    .sm-stock-item.active { background: rgb(var(--h-accent-rgb) / 12%); }
     .sm-stock-item.active .ssi-name { color: var(--link); }
 
     .ssi-rank {
@@ -186,7 +187,7 @@
 
     .sm-main::-webkit-scrollbar { width: 6px; }
     .sm-main::-webkit-scrollbar-track { background: transparent; }
-    .sm-main::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 3px; }
+    .sm-main::-webkit-scrollbar-thumb { background: rgb(var(--h-ink-rgb) / 8%); border-radius: 3px; }
 
     /* 모달 헤더 */
     .sm-header {
@@ -209,7 +210,7 @@
 
     .sm-title .sm-badge {
       font-size: 0.72rem;
-      background: rgba(58,106,232,0.15);
+      background: rgb(var(--h-accent-rgb) / 15%);
       color: var(--link);
       padding: 3px 10px;
       border-radius: 20px;
@@ -219,7 +220,7 @@
     .sm-close {
       width: 32px; height: 32px;
       border-radius: 8px;
-      background: rgba(0,0,0,0.05);
+      background: rgb(var(--h-ink-rgb) / 5%);
       border: none;
       color: var(--text-secondary);
       cursor: pointer;
@@ -230,7 +231,7 @@
       transition: background 0.2s;
     }
 
-    .sm-close:hover { background: rgba(0,0,0,0.10); }
+    .sm-close:hover { background: rgb(var(--h-ink-rgb) / 10%); }
 
     /* 모달 바디 */
     .sm-body { padding: 20px 24px; }
@@ -253,8 +254,8 @@
     }
 
     .sm-indices-toggle:hover {
-      background: rgba(58,106,232,0.06);
-      border-color: rgba(58,106,232,0.25);
+      background: rgb(var(--h-accent-rgb) / 6%);
+      border-color: rgb(var(--h-accent-rgb) / 25%);
     }
 
     .sm-indices-toggle-left {
@@ -291,7 +292,7 @@
     .sm-indices-arrow {
       width: 22px; height: 22px;
       border-radius: 6px;
-      background: rgba(0,0,0,0.04);
+      background: rgb(var(--h-ink-rgb) / 4%);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -349,10 +350,10 @@
       transition: background 0.15s;
     }
 
-    .sm-index-row:hover { background: rgba(0,0,0,0.035); padding-left: 6px; padding-right: 4px; }
+    .sm-index-row:hover { background: rgb(var(--h-ink-rgb) / 3.5%); padding-left: 6px; padding-right: 4px; }
 
     .sm-index-row + .sm-index-row {
-      border-top: 1px solid rgba(0,0,0,0.035);
+      border-top: 1px solid rgb(var(--h-ink-rgb) / 3.5%);
     }
 
     /* 툴팁 */
@@ -362,7 +363,7 @@
       left: 50%;
       transform: translateX(-50%);
       background: var(--panel-deep);
-      border: 1px solid rgba(0,0,0,0.10);
+      border: 1px solid rgb(var(--h-ink-rgb) / 10%);
       border-radius: 10px;
       padding: 10px 14px;
       min-width: 220px;
@@ -375,7 +376,7 @@
       transition: opacity 0.18s, transform 0.18s;
       transform: translateX(-50%) translateY(4px);
       z-index: 999;
-      box-shadow: 0 12px 30px rgba(0,0,0,0.12);
+      box-shadow: 0 12px 30px rgb(var(--h-ink-rgb) / 12%);
       white-space: normal;
     }
 
@@ -386,7 +387,7 @@
       transform: translateX(-50%);
       border-left: 6px solid transparent;
       border-right: 6px solid transparent;
-      border-top: 6px solid rgba(0,0,0,0.10);
+      border-top: 6px solid rgb(var(--h-ink-rgb) / 10%);
     }
 
     .sm-tooltip .tt-name {
@@ -505,19 +506,19 @@
       letter-spacing: 0.02em;
     }
     /* 목록 항목: 배경만 살짝 깜빡 */
-    @keyframes priceFlashUp   { 0% { background: rgba(217,45,32,0.22); } 100% { background: transparent; } }
-    @keyframes priceFlashDown { 0% { background: rgba(11,99,206,0.22); } 100% { background: transparent; } }
+    @keyframes priceFlashUp   { 0% { background: rgb(var(--h-up-rgb) / 22%); } 100% { background: transparent; } }
+    @keyframes priceFlashDown { 0% { background: rgb(var(--h-down-rgb) / 22%); } 100% { background: transparent; } }
     .sm-stock-item.flash-up   { animation: priceFlashUp   0.8s ease-out; }
     .sm-stock-item.flash-down { animation: priceFlashDown 0.8s ease-out; }
 
     /* 현재가: 갱신되면 숫자가 잠깐 커졌다 돌아온다 (배경도 함께 깜빡) */
     @keyframes priceTickUp {
-      0%   { background: rgba(217,45,32,0.22); transform: scale(1); }
+      0%   { background: rgb(var(--h-up-rgb) / 22%); transform: scale(1); }
       28%  { transform: scale(1.18); }
       100% { background: transparent; transform: scale(1); }
     }
     @keyframes priceTickDown {
-      0%   { background: rgba(11,99,206,0.22); transform: scale(1); }
+      0%   { background: rgb(var(--h-down-rgb) / 22%); transform: scale(1); }
       28%  { transform: scale(1.18); }
       100% { background: transparent; transform: scale(1); }
     }
@@ -571,12 +572,12 @@
     .sm-chart-svg .axis-text { fill: var(--text-secondary); font-size: 10px; font-family: inherit; }
     .sm-chart-svg .axis-text.y { text-anchor: end; }
     .sm-chart-svg .axis-text.x { text-anchor: middle; }
-    .sm-chart-svg .grid-line { stroke: rgba(0,0,0,0.04); stroke-width: 1; }
+    .sm-chart-svg .grid-line { stroke: rgb(var(--h-ink-rgb) / 4%); stroke-width: 1; }
     .sm-chart-svg .candle-up   { fill: var(--up); stroke: var(--up); }
     .sm-chart-svg .candle-down { fill: var(--down); stroke: var(--down); }
     .sm-chart-svg .candle-flat { fill: var(--text-secondary); stroke: var(--text-secondary); }
     .sm-chart-svg .wick { stroke-width: 1; }
-    .sm-chart-svg .last-price-bg { fill: var(--panel-alt); stroke: rgba(0,0,0,0.08); }
+    .sm-chart-svg .last-price-bg { fill: var(--panel-alt); stroke: rgb(var(--h-ink-rgb) / 8%); }
     .sm-chart-svg .last-price-text { fill: var(--line); font-size: 10px; font-family: inherit; text-anchor: middle; font-weight: 600; }
     .sm-chart-svg .last-price-line { stroke-dasharray: 3 3; stroke-width: 1; opacity: 0.5; }
 
@@ -599,8 +600,8 @@
     }
 
     .chart-tab.active {
-      background: rgba(58,106,232,0.15);
-      border-color: rgba(58,106,232,0.4);
+      background: rgb(var(--h-accent-rgb) / 15%);
+      border-color: rgb(var(--h-accent-rgb) / 40%);
       color: var(--link);
     }
 
@@ -612,7 +613,7 @@
     }
 
     .sm-metric {
-      background: rgba(0,0,0,0.025);
+      background: rgb(var(--h-ink-rgb) / 2.5%);
       border-radius: 10px;
       padding: 12px 14px;
     }
@@ -672,8 +673,8 @@
 
     /* AI 분석 */
     .sm-ai-box {
-      background: rgba(58,106,232,0.06);
-      border: 1px solid rgba(58,106,232,0.2);
+      background: rgb(var(--h-accent-rgb) / 6%);
+      border: 1px solid rgb(var(--h-accent-rgb) / 20%);
       border-radius: 14px;
       padding: 20px;
     }
@@ -709,7 +710,7 @@
     .sm-ai-score-bar {
       flex: 1;
       height: 6px;
-      background: rgba(0,0,0,0.05);
+      background: rgb(var(--h-ink-rgb) / 5%);
       border-radius: 3px;
       overflow: hidden;
     }
@@ -1148,7 +1149,7 @@
   <div id="h-footer"></div>
 
   <!-- Stock tooltip (hover) -->
-  <div id="stockTooltip" style="display:none;position:fixed;z-index:9999;background:var(--panel-deep);border:1px solid rgba(0,0,0,0.10);border-radius:10px;padding:10px 14px;max-width:260px;font-size:0.78rem;color:var(--text-secondary);line-height:1.6;box-shadow:0 12px 30px rgba(0,0,0,0.12);pointer-events:none;">
+  <div id="stockTooltip" style="display:none;position:fixed;z-index:9999;background:var(--panel-deep);border:1px solid rgb(var(--h-ink-rgb) / 10%);border-radius:10px;padding:10px 14px;max-width:260px;font-size:0.78rem;color:var(--text-secondary);line-height:1.6;box-shadow:0 12px 30px rgb(var(--h-ink-rgb) / 12%);pointer-events:none;">
     <div class="stt-name" style="font-size:0.85rem;font-weight:600;color:var(--text-primary);margin-bottom:5px;"></div>
     <div class="stt-desc"></div>
   </div>

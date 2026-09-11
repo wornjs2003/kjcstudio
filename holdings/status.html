@@ -5,11 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>KJC Holdings · 연결 상태</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/theme.css" />
 <style>
+  /* 색은 css/theme.css 한 곳에서만 정한다. 여기서는 이 페이지가 쓰는
+     이름으로 연결만 한다. */
   :root{
-    --bg:#fbfbfc; --panel:#ffffff; --border:rgba(0,0,0,0.10);
-    --text:#17171b; --muted:#6a6a76; --accent:#3a6ae8;
-    --ok:#0f7a5f; --warn:#b25e09; --bad:#d92d20;
+    --bg:     var(--kh-bg);
+    --panel:  var(--kh-bg-card);
+    --border: var(--kh-border);
+    --text:   var(--kh-text-primary);
+    --muted:  var(--kh-text-muted);
+    --accent: var(--kh-accent);
+    --ok:     var(--kh-tag-news);
+    --warn:   var(--kh-tag-notice);
+    --bad:    var(--kh-up);
     --mono:'JetBrains Mono',ui-monospace,monospace;
   }
   *{box-sizing:border-box;}
@@ -31,7 +40,7 @@
   }
   .row{
     display:flex;justify-content:space-between;align-items:baseline;
-    padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.035);
+    padding:9px 0;border-bottom:1px solid var(--kh-overlay-subtle);
   }
   .row:last-child{border-bottom:none;}
   .row .k{color:var(--muted);font-size:0.88rem;}
@@ -40,7 +49,7 @@
   .ok{color:var(--ok);} .warn{color:var(--warn);} .bad{color:var(--bad);}
   .muted{color:var(--muted);}
   .bar{
-    height:9px;background:rgba(0,0,0,0.06);border-radius:5px;overflow:hidden;
+    height:9px;background:var(--kh-overlay-soft);border-radius:5px;overflow:hidden;
     margin:10px 0 6px;border:1px solid var(--border);
   }
   .bar > i{display:block;height:100%;background:var(--ok);transition:width .4s ease;}
@@ -55,10 +64,10 @@
     display:inline-block;width:8px;height:8px;border-radius:50%;
     margin-right:7px;vertical-align:middle;
   }
-  .dot.on{background:var(--ok);box-shadow:0 0 8px rgba(15,122,95,0.45);}
+  .dot.on{background:var(--ok);box-shadow:0 0 8px rgb(var(--kh-ok-rgb) / 45%);}
   .dot.off{background:var(--bad);}
   table{width:100%;border-collapse:collapse;font-size:0.88rem;}
-  th,td{text-align:left;padding:7px 0;border-bottom:1px solid rgba(0,0,0,0.035);}
+  th,td{text-align:left;padding:7px 0;border-bottom:1px solid var(--kh-overlay-subtle);}
   th{color:var(--muted);font-weight:500;font-size:0.8rem;}
   td.num{font-family:var(--mono);text-align:right;}
 </style>

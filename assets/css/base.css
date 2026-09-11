@@ -11,43 +11,7 @@
 
 :root {
   /* ── Color tokens ─────────────────────────────── */
-  /* 라이트 테마 — 오래 봐도 눈이 편하도록 순백 대신 아주 옅은 회색을 바탕으로 쓴다 */
-  --bg: #fbfbfc;
-  --bg-surface: #f4f4f6;
-  --bg-card: #ffffff;
-  --bg-elevated: #eeeef1;
-  --border: rgba(0, 0, 0, 0.09);
-  --border-strong: rgba(0, 0, 0, 0.18);
-  --text-primary: #17171b;
-  --text-secondary: #5e5e6a;
-  --text-muted: #8c8c98;
-  --accent: #3a6ae8;          /* 흰 바탕에서 대비를 확보한 파랑 */
-  --accent-hover: #2b55c9;
-  --accent-faint: rgba(58, 106, 232, 0.10);
-
-  /* 그림자 — 밝은 바탕에서는 진한 그림자가 탁해 보이므로 옅게 */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.12);
-
-  /* 이미지가 없을 때 자리를 채우는 그라데이션 */
-  --placeholder-from: #ececed;
-  --placeholder-to:   #dcdce1;
-
-  /* 이미지 위에 글자를 얹을 때 쓰는 반투명 막.
-     바탕이 밝아져도 이건 어두워야 사진 위 글자가 읽힌다. */
-  --scrim: rgba(0, 0, 0, 0.45);
-  --scrim-strong: rgba(0, 0, 0, 0.72);
-  --on-scrim: #ffffff;                       /* 막 위에 얹는 글자색 */
-  --on-scrim-dim: rgba(255, 255, 255, 0.78);
-
-  /* 이미지를 크게 볼 때(라이트박스) 배경 — 사진에 집중되도록 어둡게 유지 */
-  --overlay-bg: rgba(18, 18, 20, 0.94);
-  --overlay-control: rgba(255, 255, 255, 0.12);
-
-  /* 스크롤 시 떠 있는 네비 바탕 (반투명) */
-  --nav-bg: rgba(251, 251, 252, 0.82);
-  --nav-bg-solid: rgba(251, 251, 252, 0.97);
+  /* 색은 assets/css/theme.css 에서 정한다. 여기에는 색을 두지 않는다. */
 
   /* ── Layout tokens ─────────────────────────────── */
   --nav-height: 96px;
@@ -118,7 +82,7 @@ h1, h2, h3, h4 {
 /* ── 셀렉션 ─────────────────────────────── */
 ::selection {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-scrim);   /* 강조색 위에 얹는 글자 */
 }
 
 /* ── 스크롤바 ─────────────────────────────── */

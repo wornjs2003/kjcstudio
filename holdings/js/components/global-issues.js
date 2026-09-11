@@ -5,14 +5,17 @@
    ========================================================================== */
 
 import { MOCK_GLOBAL_ISSUES } from '../data/mock.js';
+import { color } from '../theme.js';
 
-const TOPIC_COLOR = {
-  '전쟁':     '#ff5f5f',
-  'AI':       '#4f7eff',
-  '방산':     '#f5a623',
-  '북극항로': '#6fd2b8',
-  '조선':     '#c48bff',
+/* 주제 색은 css/theme.css 의 --kh-topic-* 에서 가져온다 */
+const TOPIC_VAR = {
+  '전쟁':     'topic-war',
+  'AI':       'topic-ai',
+  '방산':     'topic-defense',
+  '북극항로': 'topic-arctic',
+  '조선':     'topic-ship',
 };
+const topicColor = (topic) => color(TOPIC_VAR[topic] || 'text-muted');
 
 /* 주제별 그룹핑 (등장 순서 유지) */
 function groupByTopic(issues) {
@@ -40,12 +43,12 @@ export function mountGlobalIssues(el) {
     const rows = [];
     for (const [topic, items] of groups) {
       const isOpen = expandedSet.has(topic);
-      const color = TOPIC_COLOR[topic] || 'var(--kh-text-muted)';
+      const topicHex = topicColor(topic);
       const extra = items.length - 1;
 
       rows.push(`
         <li class="kh-gi-row">
-          <span class="kh-gi-topic" style="color:${color}">${topic}</span>
+          <span class="kh-gi-topic" style="color:${topicHex}">${topic}</span>
           <span class="kh-gi-title">${items[0].title}</span>
           ${extra > 0 ? `
             <button type="button" class="kh-gi-toggle" data-topic="${topic}"
@@ -60,7 +63,7 @@ export function mountGlobalIssues(el) {
         for (let i = 1; i < items.length; i++) {
           rows.push(`
             <li class="kh-gi-row kh-gi-sub">
-              <span class="kh-gi-topic" style="color:${color}"></span>
+              <span class="kh-gi-topic" style="color:${topicHex}"></span>
               <span class="kh-gi-title">${items[i].title}</span>
             </li>
           `);

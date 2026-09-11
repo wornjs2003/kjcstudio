@@ -8,17 +8,22 @@
    같은 종목을 여러 번 열어도 KIS 호출은 하루 한 번뿐이다.
    ========================================================================== */
 
-/* 밝은 바탕에 맞춘 색. CSS 변수를 읽어오지 않는 이유는
-   차트가 canvas 로 그려져 CSS 상속을 받지 못하기 때문이다. */
+import { color, alpha } from './theme.js';
+
+/* 차트는 canvas 라 CSS 를 상속받지 못해 색을 문자열로 넘겨야 한다.
+   그 값은 theme.js 가 css/theme.css 에서 읽어 오므로, 색을 바꿀 곳은
+   여전히 css/theme.css 한 곳뿐이다. */
 const COLOR = {
-  up: '#d92d20',          // 한국식: 상승 빨강
-  down: '#0b63ce',        // 하락 파랑
-  text: '#6a6a76',
-  grid: 'rgba(0,0,0,0.06)',
-  border: 'rgba(0,0,0,0.10)',
-  ma5: '#b25e09',
-  ma20: '#3a6ae8',
-  ma60: '#7c3aed',
+  get up()     { return color('up'); },        // 한국식: 상승 빨강
+  get down()   { return color('down'); },      // 하락 파랑
+  get text()   { return color('chart-axis'); },
+  get grid()   { return color('chart-grid'); },
+  get border() { return color('chart-border'); },
+  get cross()  { return color('chart-crosshair'); },
+  get label()  { return color('chart-label-bg'); },
+  get ma5()    { return color('ma5'); },
+  get ma20()   { return color('ma20'); },
+  get ma60()   { return color('ma60'); },
 };
 
 /* 화면의 기간 버튼 → 서버가 쓰는 기간 코드 */
@@ -112,8 +117,8 @@ export function createStockChart(container, candles, opts = {}) {
     },
     crosshair: {
       mode: LC.CrosshairMode.Normal,
-      vertLine: { color: 'rgba(0,0,0,0.28)', labelBackgroundColor: '#3a3a44' },
-      horzLine: { color: 'rgba(0,0,0,0.28)', labelBackgroundColor: '#3a3a44' },
+      vertLine: { color: COLOR.cross, labelBackgroundColor: COLOR.label },
+      horzLine: { color: COLOR.cross, labelBackgroundColor: COLOR.label },
     },
     localization: {
       locale: 'ko-KR',
@@ -152,7 +157,7 @@ export function createStockChart(container, candles, opts = {}) {
     volumeSeries.setData(candles.map((c) => ({
       time: toChartTime(c.ts, period),
       value: c.volume,
-      color: c.close >= c.open ? 'rgba(217,45,32,0.30)' : 'rgba(11,99,206,0.30)',
+      color: c.close >= c.open ? alpha('up', 0.30) : alpha('down', 0.30),
     })));
   }
 

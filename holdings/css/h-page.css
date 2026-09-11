@@ -6,20 +6,7 @@
 
 :root {
   /* holdings 디자인 토큰 (메인 사이트에서 복제하여 소유) */
-  --h-bg: #fbfbfc;
-  --h-surface: #f4f4f6;
-  --h-card: #ffffff;
-  --h-border: rgba(0,0,0,0.09);
-  --h-border-strong: rgba(0,0,0,0.18);
-  --h-text: #17171b;
-  --h-text-sub: #5e5e6a;
-  --h-text-muted: #8c8c98;
-  --h-accent: #3a6ae8;
-  --h-accent-hover: #2b55c9;
-  --h-up: #d92d20;
-  --h-down: #0b63ce;
-  --h-ok:   #0f7a5f;
-  --h-warn: #b25e09;
+  /* 색은 css/theme.css 에서 정한다. 여기에는 색을 두지 않는다. */
   --h-nav-h: 72px;
   --h-gutter: 48px;
   --h-max: 1440px;
@@ -49,7 +36,7 @@ button { font-family: inherit; background: none; border: none; color: inherit; c
   justify-content: space-between;
   height: var(--h-nav-h);
   padding: 0 var(--h-gutter);
-  background: rgba(251,251,252,0.82);
+  background: var(--h-float);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--h-border);

@@ -36,6 +36,7 @@
 - `index.html` : 메인 (대표 카테고리 갤러리 = 3D Modeling)
 - `category/` : 카테고리 페이지 (3d-modeling, ai-work, web-interactive, branding)
 - `about.html`, `services.html`, `contact.html` : 서브 페이지 (상단 ⋯ 더보기 접근)
+- `assets/css/theme.css` : **색상 토큰 단일 기준** (구역마다 같은 구조의 theme.css 를 따로 소유)
 - `assets/css/`, `assets/js/`, `assets/images/`, `assets/fonts/` : 메인 사이트 전용 리소스
 - `data/categories.json` : 카테고리 목록, 대표 카테고리 지정
 - `data/works.json` : 모든 작업물 데이터 (이곳만 수정하면 갤러리 자동 반영)

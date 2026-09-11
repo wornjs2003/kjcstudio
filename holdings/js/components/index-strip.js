@@ -8,6 +8,7 @@ import { fmtPct, changeDirection } from '../utils/format.js';
 import { applyTicks } from '../utils/tick.js';
 import { liveOnly, liveClass, liveTitle } from '../utils/live-value.js';
 import { getState, setSelectedIndex, subscribe } from '../store/state.js';
+import { alpha } from '../theme.js';
 
 /* 지수 값 포맷: 원/달러만 정수, 나머지는 소수 둘째 자리 */
 function fmtIndexValue(v, unit) {
@@ -50,7 +51,7 @@ function renderIndexChart(series, isUp) {
     ` L${plotX(0).toFixed(1)},${(padT + plotH).toFixed(1)} Z`;
 
   const lineColor = isUp ? 'var(--kh-up)' : 'var(--kh-down)';
-  const areaColor = isUp ? 'rgba(255,95,95,0.12)' : 'rgba(79,158,255,0.12)';
+  const areaColor = isUp ? alpha('up', 0.12) : alpha('down', 0.12);
 
   // Y축 눈금 5개
   const yTicks = 5;

@@ -12,53 +12,7 @@
 
 :root {
   /* 컬러 팔레트 - 다크 테마 (KJC Studio 톤 계승) */
-  --kh-bg:           #fbfbfc;
-  --kh-bg-surface:   #f4f4f6;
-  --kh-bg-card:      #ffffff;
-  --kh-bg-hover:     #f0f0f3;
-  --kh-bg-active:    #e7e7ec;
-
-  --kh-border:       rgba(0,0,0,0.09);
-  --kh-border-strong:rgba(0,0,0,0.18);
-
-  --kh-text-primary:   #17171b;
-  --kh-text-secondary: #5e5e6a;
-  --kh-text-muted:     #8c8c98;
-  --kh-text-dim:       #b2b2bd;
-
-  --kh-accent:       #3a6ae8;
-  --kh-accent-hover: #2b55c9;
-  --kh-accent-dim:   rgba(58,106,232,0.10);
-
-  /* 등락 컬러 (한국 관례) */
-  --kh-up:   #d92d20;
-  --kh-up-dim: rgba(217,45,32,0.10);
-  --kh-down: #0b63ce;
-  --kh-down-dim: rgba(11,99,206,0.10);
-  --kh-flat: #7a7a86;
-
-  /* 태그 컬러 */
-  --kh-tag-notice:   #b25e09;
-  --kh-tag-news:     #0f7a5f;
-  --kh-tag-dart:     #7c3aed;
-
-  /* 태그 배경 (옅게 깐 색) */
-  --kh-tag-notice-dim: rgba(178,94,9,0.12);
-  --kh-tag-news-dim:   rgba(15,122,95,0.12);
-  --kh-tag-dart-dim:   rgba(124,58,237,0.12);
-
-  /* 그림자 — 밝은 바탕에서는 옅게 */
-  --kh-shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
-  --kh-shadow-md: 0 6px 20px rgba(0,0,0,0.08);
-  --kh-shadow-lg: 0 20px 60px rgba(0,0,0,0.10);
-
-  /* 위에 살짝 덧대는 막 (구분선 대용) */
-  --kh-overlay-faint:  rgba(0,0,0,0.015);
-  --kh-overlay-subtle: rgba(0,0,0,0.04);
-  --kh-overlay-soft:   rgba(0,0,0,0.06);
-
-  /* 스크롤 시 떠 있는 바탕 (반투명) */
-  --kh-bg-float: rgba(251,251,252,0.97);
+  /* 색은 css/theme.css 에서 정한다. 여기에는 색을 두지 않는다. */
 
   /* 타이포 */
   --kh-font-sans: "Noto Sans KR", "Pretendard", "Roboto", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -139,11 +93,11 @@ input, textarea, select {
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.08);
+  background: var(--kh-border-strong);
   border-radius: 5px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255,255,255,0.16);
+  background: var(--kh-accent);
 }
 
 /* 유틸리티 */

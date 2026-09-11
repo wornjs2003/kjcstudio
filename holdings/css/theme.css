@@ -1,0 +1,144 @@
+/* ==========================================================================
+   KJC Holdings · 주식 페이지 — 색상 토큰 (단일 기준)
+
+   ── 이 구역의 모든 색은 여기서만 정합니다.
+      이 파일만 고치면 주식 화면 전체에 반영됩니다.
+
+   ── 다른 구역과 값은 같지만 파일은 따로 소유합니다.
+      holdings/CLAUDE.md 의 "디자인 변수는 복제해서 소유, 단일 소스 의존 금지"
+      규칙 때문입니다. holdings 를 별도 저장소로 분리해도 이 파일만 따라가면
+      그대로 동작합니다.
+
+   ── 같은 구조를 쓰는 다른 구역 (구역마다 접두사만 다르고 이름·값은 동일)
+      assets/css/theme.css      메인 포트폴리오   접두사 없음
+      company-setup/theme.css   설립 체크리스트   --cs-*
+      projects/theme.css        프로젝트 보드     --pj-*
+      한 곳의 값을 바꾸면 나머지도 같은 이름의 값을 맞춰 주세요.
+
+   ┌ 이 파일 ─────────────┬ 다른 구역 대응 ──────────┐
+   │ --kh-bg              │ --bg / --pj-bg           │
+   │ --kh-bg-card         │ --bg-card / --pj-bg-card │
+   │ --kh-text-primary    │ --text-primary           │
+   │ --kh-accent          │ --accent / --pj-accent   │
+   │ --kh-up / --kh-down  │ (주식 전용)              │
+   └──────────────────────┴──────────────────────────┘
+   ========================================================================== */
+
+:root {
+  /* ── 반투명하게 쓸 때 기준이 되는 삼원색 ──
+     `rgb(var(--kh-ink-rgb) / 6%)` 처럼 씁니다. 아래 *-dim 값들과
+     js/theme.js 가 모두 이 값을 읽어가므로, 색을 바꿀 때 여기만 고치면 됩니다. */
+  --kh-ink-rgb:    0 0 0;
+  --kh-paper-rgb:  255 255 255;
+  --kh-accent-rgb: 58 106 232;
+  --kh-up-rgb:     217 45 32;
+  --kh-down-rgb:   11 99 206;
+  --kh-ok-rgb:     15 122 95;
+  --kh-warn-rgb:   178 94 9;
+
+  /* ── 바탕 ─────────────────────────────── */
+  --kh-bg:          #fbfbfc;   /* 순백 대신 옅은 회색. 순백은 눈이 부시다 */
+  --kh-bg-surface:  #f4f4f6;
+  --kh-bg-card:     #ffffff;
+  --kh-bg-hover:    #f0f0f3;
+  --kh-bg-active:   #e7e7ec;
+  --kh-bg-float:    rgb(251 251 252 / 97%);   /* 떠 있는 바탕(반투명) */
+
+  /* ── 테두리 ─────────────────────────────── */
+  --kh-border:        rgb(var(--kh-ink-rgb) / 9%);
+  --kh-border-strong: rgb(var(--kh-ink-rgb) / 18%);
+
+  /* ── 글자 ─────────────────────────────── */
+  --kh-text-primary:   #17171b;
+  --kh-text-secondary: #5e5e6a;
+  --kh-text-muted:     #8c8c98;
+  --kh-text-dim:       #b2b2bd;   /* 값이 없을 때 표시하는 '—' 등 */
+  --kh-text-on-fill:   #ffffff;   /* 색이 깔린 위에 얹는 글자 */
+
+  /* ── 강조 ─────────────────────────────── */
+  --kh-accent:       #3a6ae8;     /* 흰 바탕에서 대비를 확보한 파랑 */
+  --kh-accent-hover: #2b55c9;
+  --kh-accent-dim:   rgb(var(--kh-accent-rgb) / 10%);
+
+  /* ── 시세 (한국식: 상승 빨강 / 하락 파랑) ──
+     밝은 바탕에서는 채도가 높으면 뜨고 흐려 보이므로 다크용보다 진하게 쓴다 */
+  --kh-up:       #d92d20;
+  --kh-up-dim:   rgb(var(--kh-up-rgb) / 10%);
+  --kh-down:     #0b63ce;
+  --kh-down-dim: rgb(var(--kh-down-rgb) / 10%);
+  --kh-flat:     #7a7a86;
+
+  /* ── 태그·상태 ─────────────────────────── */
+  --kh-tag-notice:     #b25e09;
+  --kh-tag-notice-dim: rgb(var(--kh-warn-rgb) / 12%);
+  --kh-tag-news:       #0f7a5f;
+  --kh-tag-news-dim:   rgb(var(--kh-ok-rgb) / 12%);
+  --kh-tag-dart:       #7c3aed;
+  --kh-tag-dart-dim:   rgb(124 58 237 / 12%);
+
+  /* ── 그림자 — 밝은 바탕에서는 옅게 ─────── */
+  --kh-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --kh-shadow-md: 0 6px 20px rgba(0, 0, 0, 0.08);
+  --kh-shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.10);
+
+  /* ── 겹쳐 까는 막 ─────────────────────── */
+  --kh-overlay-faint:  rgb(var(--kh-ink-rgb) / 1.5%);
+  --kh-overlay-subtle: rgb(var(--kh-ink-rgb) / 4%);
+  --kh-overlay-soft:   rgb(var(--kh-ink-rgb) / 6%);
+  --kh-scrim:          rgba(23, 23, 27, 0.45);   /* 모달 뒷배경 — 어둡게 유지 */
+
+  /* ── 차트 색 ──
+     canvas·SVG 는 CSS 를 상속받지 못해서 js/theme.js 가 이 값을 읽어 씁니다.
+     그래도 색을 정하는 곳은 여기 한 곳입니다. */
+  --kh-chart-grid:      rgb(var(--kh-ink-rgb) / 6%);
+  --kh-chart-border:    rgb(var(--kh-ink-rgb) / 10%);
+  --kh-chart-axis:      #6a6a76;   /* 눈금 글자 */
+  --kh-chart-crosshair: rgb(var(--kh-ink-rgb) / 28%);
+  --kh-chart-label-bg:  #3a3a44;   /* 십자선 끝 라벨 — 바탕이 밝아 어둡게 둔다 */
+  --kh-chart-label-fg:  #ffffff;
+
+  /* 이동평균 */
+  --kh-ma5:  #b25e09;
+  --kh-ma20: #3a6ae8;
+  --kh-ma60: #7c3aed;
+
+  /* 보조지표 선 (외국인·기관·심리도·스토캐스틱·MACD) */
+  --kh-ind-1: #3a6ae8;
+  --kh-ind-2: #b25e09;
+  --kh-ind-3: #7c3aed;
+  --kh-ind-4: #d92d20;
+  --kh-ind-5: #6a6a76;
+
+  /* ── 세계 이슈 주제 태그 ─────────────── */
+  --kh-topic-war:     #d92d20;
+  --kh-topic-ai:      #3a6ae8;
+  --kh-topic-defense: #b25e09;
+  --kh-topic-arctic:  #0f7a5f;
+  --kh-topic-ship:    #7c3aed;
+
+  /* ── 서브 페이지(analysis·roadmap)가 쓰는 이름 ──
+     값은 위와 같고 이름만 다르다. h-page.css 계열에서 참조한다. */
+  --h-bg:            var(--kh-bg);
+  --h-surface:       var(--kh-bg-surface);
+  --h-card:          var(--kh-bg-card);
+  --h-border:        var(--kh-border);
+  --h-border-strong: var(--kh-border-strong);
+  --h-text:          var(--kh-text-primary);
+  --h-text-sub:      var(--kh-text-secondary);
+  --h-text-muted:    var(--kh-text-muted);
+  --h-accent:        var(--kh-accent);
+  --h-accent-hover:  var(--kh-accent-hover);
+  --h-up:            var(--kh-up);
+  --h-down:          var(--kh-down);
+  --h-ok:            var(--kh-tag-news);
+  --h-warn:          var(--kh-tag-notice);
+  --h-danger:        var(--kh-up);
+  --h-link:          var(--kh-accent);
+  --h-float:         var(--kh-bg-float);
+  --h-elevated:      var(--kh-bg-active);
+  --h-ink-rgb:       var(--kh-ink-rgb);
+  --h-accent-rgb:    var(--kh-accent-rgb);
+  --h-up-rgb:        var(--kh-up-rgb);
+  --h-down-rgb:      var(--kh-down-rgb);
+  --h-ok-rgb:        var(--kh-ok-rgb);
+}
