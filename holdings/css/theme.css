@@ -136,6 +136,23 @@
   --kh-topic-arctic:  #02a262;   /* [추출] */
   --kh-topic-ship:    #8b5cf6;   /* [파생] */
 
+  /* ── 모서리 ──
+     토스 실제 사용 빈도: 8px(76) > 12px(53) > 6px(40) > 10px(38) > 16px(19).
+     토스는 카드가 작아서 16px 로도 충분히 둥글어 보이는데, 우리 카드는 훨씬 커서
+     같은 값이면 각져 보인다. 그래서 큰 면에는 그보다 키운 값을 쓴다.
+
+     이 값이 theme.css 에 있어야 하는 이유: base.css 에만 두면 theme.css 만 읽는
+     화면에서 값을 못 찾아 모서리가 0px(각진 사각형)이 된다. */
+  --kh-radius-sm: 8px;    /* 버튼 · 칩 · 탭 */
+  --kh-radius-md: 12px;   /* 작은 카드 · 입력칸 */
+  --kh-radius-lg: 20px;   /* 카드 */
+  --kh-radius-xl: 24px;   /* 아주 큰 면 */
+
+  /* ── 글꼴 ─────────────────────────────── */
+  --kh-font-sans: "Noto Sans KR", "Pretendard", "Roboto",
+                  -apple-system, BlinkMacSystemFont, sans-serif;
+  --kh-font-mono: "JetBrains Mono", "SF Mono", Menlo, Monaco, Consolas, monospace;
+
   /* ── 서브 페이지(analysis·roadmap)가 쓰는 이름 ──
      값은 위와 같고 이름만 다르다. h-page.css 계열에서 참조한다. */
   --h-bg:            var(--kh-bg);

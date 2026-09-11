@@ -204,6 +204,16 @@ https://thekjcstudio.com/api/kis/health
   - 개인 도구: `/holdings/*`, `/api/*` — 재권님만
 - **외부에 링크를 주기 전에 처리할 것**
 
+## 5. Route 가 겹칠 때 — 구체적인 패턴이 이긴다
+
+저희 Route 는 `thekjcstudio.com/api/*` 라서 `/api/board` 같은 다른 경로도 범위에 듭니다.
+Cloudflare 공식 문서(Workers > Configuration > Routing > Routes)에 따르면
+**더 구체적인 패턴이 이깁니다** — `example.com/hello/*` 가 `example.com/*` 를 이깁니다.
+
+그래서 다른 Worker 가 `thekjcstudio.com/api/board*` 로 등록하면 그쪽 요청만 그 Worker 로 가고,
+`/api/kis/*` 는 이 Worker 가 계속 처리합니다. 이쪽에서 바꿀 것은 없습니다.
+(2026-09-11, projects 보드 작업 세션이 문서에서 확인해 공유)
+
 ## 4. workers.dev 재활성화 주의
 
 - Worker 코드를 수정해 다시 배포하면 `workers.dev` 주소가 되살아날 수 있다

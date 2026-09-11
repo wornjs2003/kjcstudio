@@ -13,22 +13,34 @@
 - 이 폴더를 통째로 다른 레포에 복사해도 그대로 동작해야 함
 
 ## 파일 구조 (holdings 를 루트로 간주)
-- `index.html` : 보유 종목 대시보드 (진입점, 기존 sidebar 앱 UI 유지)
-- `analysis/index.html` : 주식 분석 페이지 (구 KJCEngine 모달이 페이지로 승격)
-- `roadmap.html` : 주식 분석 서비스 로드맵
-- `engine/` : 구 KJCEngine 문서 (CLAUDE.md, ROADMAP.md, SETUP.md, docs/)
-- `css/theme.css` : **색상 토큰 단일 기준** (이 파일만 고치면 주식 화면 전체 반영)
-- `css/base.css`, `css/layout.css`, `css/components.css` : 대시보드용 기존 스타일 (색 정의 없음)
-- `css/h-page.css` : analysis/roadmap 서브 페이지 공통 스타일
-- `js/main.js` : 대시보드 엔트리 (ES module, components/ 로드)
-- `js/components/` : 대시보드 컴포넌트 (sidebar, index-strip, news-feed 등)
-- `js/store/`, `js/utils/`, `js/data/` : 상태/유틸/목업 데이터
-- `js/h-page.js` : 서브 페이지(analysis/roadmap) 공통 nav/footer 주입
-- `js/analysis.js` : 주식 분석 페이지 로직 (네이버 금융)
-- `partials/nav.html`, `partials/footer.html` : 서브 페이지용 네비/푸터 조각
-- `data/` : 지수/관심종목 초기값 등
-- `sw.js` : 서비스 워커
-- `preview.command` : 독립 실행 파일 (분리 시 따라감)
+
+화면은 두 장입니다. 토스증권 구성을 참고해 잡았습니다 (2026-09-11).
+
+- `index.html` : **첫 화면** — 지수 · 종목 목록 · 고른 종목 미리보기
+- `stock.html` : **종목 화면** — `?code=005930` 으로 종목을 정한다. 차트 · 호가 · 매매 기록 · 메모
+- `analysis/index.html` : 주식 분석 (구 KJCEngine)
+- `roadmap.html` : 개발 로드맵 · `status.html` : 연결 상태 확인
+
+CSS — 색과 모서리는 `css/theme.css` 한 곳에서만 정한다
+- `css/theme.css`  : **색 · 모서리 · 글꼴 단일 기준**
+- `css/frame.css`  : 두 화면이 함께 쓰는 틀 (관심 사이드바 · 세로 바 · 시세 띠)
+- `css/home.css`   : 첫 화면 전용 · `css/stock.css` : 종목 화면 전용
+- `css/h-page.css` : analysis · roadmap 서브 페이지용
+
+JS
+- `js/home.js`  : 첫 화면 엔트리 · `js/stock.js` : 종목 화면 엔트리
+- `js/components/frame.js` : 관심 사이드바 · 세로 바 · 시세 띠 · 시세 갱신 루프
+- `js/chart.js` : 캔들 차트 (TradingView Lightweight Charts)
+- `js/theme.js` : 차트가 쓸 색을 theme.css 에서 읽어온다
+- `js/data/market.js` : 종목·지수 **목록** (코드·이름·섹터·회사색). 시세는 여기 두지 않는다
+- `js/data/live.js`   : 서버(/api/kis/*) 에서 시세 받아오기
+- `js/store/memo.js`  : 종목 메모 (브라우저 저장)
+- `js/utils/format.js`: 숫자 표기 (원 · 조원 · 배 · 만주 · ▲▼)
+- `js/h-page.js` : 서브 페이지 nav/footer 주입
+
+그 밖
+- `partials/` : 서브 페이지용 네비·푸터 · `sw.js` : 개발용 서비스 워커
+- `server/kis_proxy.py` : 로컬 개발 서버 + KIS 중계 · `worker/` : 배포용 Cloudflare Worker
 
 ## 디자인 규칙
 - 테마: **라이트 테마** — 토스증권 팔레트 (바탕 #f6f7f9 · 카드 #ffffff), 2026-09-11 변경

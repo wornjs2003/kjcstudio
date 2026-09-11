@@ -1,0 +1,173 @@
+/* ==========================================================================
+   KJC Holdings · 종목 화면 (stock.html)
+
+   종목 헤더 · 탭 · 위젯 격자(차트 / 호가 / 매매 기록 / 메모 / 시세 / 수급 …)
+   색과 모서리는 css/theme.css 에서만 정합니다.
+   ========================================================================== */
+
+/* ── 종목 헤더 ──────────────────────────── */
+.kh-head { padding: 18px 22px; }
+.kh-head-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.kh-head-top .kh-ic { width: 32px; height: 32px; font-size: 0.66rem; }
+.kh-head-name { font-size: 1.08rem; font-weight: 700; }
+.kh-head-code { color: var(--kh-text-muted); font-size: 0.82rem; }
+.kh-caret { color: var(--kh-text-muted); font-size: 0.8rem; }
+.kh-chip-btn {
+  border: 1px solid var(--kh-border-strong);
+  border-radius: var(--kh-radius-sm);
+  padding: 5px 11px; font-size: 0.79rem;
+  color: var(--kh-text-secondary); cursor: pointer;
+  background: none; font-family: inherit;
+}
+
+.kh-head-main { display: flex; align-items: flex-end; gap: 22px; }
+.kh-price { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.03em; }
+.kh-price-sub { font-size: 0.85rem; font-weight: 500; padding-bottom: 5px; }
+
+.kh-head-stats {
+  margin-left: auto;
+  display: grid; grid-template-columns: repeat(4, auto);
+  gap: 7px 30px; font-size: 0.78rem;
+}
+.kh-st { display: flex; align-items: center; gap: 10px; }
+.kh-st > span:first-child { color: var(--kh-text-muted); white-space: nowrap; }
+.kh-st b { font-weight: 500; margin-left: auto; }
+
+/* 범위 막대 — 현재가가 범위 어디쯤인지 점으로 */
+.kh-rng { display: flex; align-items: center; gap: 7px; }
+.kh-rng-bar {
+  width: 72px; height: 3px; background: var(--kh-bg-active);
+  border-radius: 2px; position: relative;
+}
+.kh-rng-bar i {
+  position: absolute; top: -2.5px; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--kh-text-primary);
+}
+
+.kh-head .kh-tabs { margin-top: 16px; }
+.kh-edit { margin-left: auto; font-size: 0.8rem; color: var(--kh-text-secondary); cursor: pointer; }
+
+/* ── 위젯 격자 ──────────────────────────── */
+.kh-grid { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 14px; margin-top: 14px; }
+
+.kh-w {
+  background: var(--kh-bg-card);
+  border-radius: var(--kh-radius-lg);
+  display: flex; flex-direction: column;
+  min-height: 0; overflow: hidden;
+}
+.kh-w-head { display: flex; align-items: center; gap: 8px; padding: 13px 16px; }
+.kh-w-grip { color: var(--kh-text-dim); font-size: 0.8rem; cursor: grab; }
+.kh-w-title { font-size: 0.88rem; font-weight: 600; }
+.kh-w-x { color: var(--kh-text-dim); font-size: 0.88rem; cursor: pointer; }
+.kh-w-plus { margin-left: auto; color: var(--kh-text-dim); font-size: 0.95rem; cursor: pointer; }
+.kh-w-body { padding: 0 16px 16px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* 어디서 온 값인지 */
+.kh-bd { font-size: 0.67rem; padding: 3px 8px; border-radius: 999px; font-weight: 500; }
+.kh-bd-on   { background: rgb(var(--kh-ok-rgb) / 12%); color: var(--kh-tag-news); }
+.kh-bd-soon { background: var(--kh-bg-surface); color: var(--kh-text-muted); }
+
+/* 차트 */
+.kh-per { display: flex; align-items: center; gap: 3px; margin-bottom: 10px; }
+.kh-per button {
+  padding: 6px 12px; border: 0; border-radius: var(--kh-radius-sm);
+  background: transparent; color: var(--kh-text-secondary);
+  font-family: inherit; font-size: 0.82rem; cursor: pointer;
+}
+.kh-per button.is-active {
+  background: var(--kh-text-primary); color: var(--kh-text-on-fill); font-weight: 500;
+}
+.kh-per-tools { margin-left: auto; display: flex; gap: 11px; color: var(--kh-text-dim); font-size: 0.9rem; }
+.kh-chart-box { flex: 1; min-height: 250px; border-radius: var(--kh-radius-md); overflow: hidden; }
+
+/* 투자 지표 */
+.kh-mgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+.kh-m { background: var(--kh-bg-surface); border-radius: var(--kh-radius-md); padding: 11px 13px; }
+.kh-m-l { font-size: 0.75rem; color: var(--kh-text-muted); margin-bottom: 3px; }
+.kh-m-v { font-size: 0.97rem; font-weight: 600; }
+
+/* 매매 기록 — 토스의 주문 패널 자리.
+   여기서는 주문을 넣지 않고, 내가 사고판 내역을 적어 둔다. */
+.kh-ord { display: flex; flex-direction: column; gap: 11px; }
+.kh-ord-row { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; }
+.kh-ord-l { width: 62px; color: var(--kh-text-muted); flex-shrink: 0; }
+.kh-ord-in {
+  flex: 1; background: var(--kh-bg-surface);
+  border-radius: var(--kh-radius-sm); padding: 9px 12px;
+  color: var(--kh-text-dim); font-size: 0.82rem;
+  border: 0; font-family: inherit; width: 100%;
+}
+.kh-ord-in:focus { outline: 1px solid var(--kh-accent); color: var(--kh-text-primary); }
+.kh-ord-seg {
+  flex: 1; display: flex; background: var(--kh-bg-surface);
+  border-radius: var(--kh-radius-sm); padding: 3px;
+}
+.kh-ord-seg span {
+  flex: 1; text-align: center; padding: 6px; font-size: 0.8rem;
+  border-radius: calc(var(--kh-radius-sm) - 2px);
+  color: var(--kh-text-secondary); cursor: pointer;
+}
+.kh-ord-seg span.is-active {
+  background: var(--kh-bg-card); color: var(--kh-text-primary); font-weight: 600;
+}
+.kh-ord-pcts { display: flex; gap: 6px; }
+.kh-ord-pcts span {
+  flex: 1; text-align: center; padding: 7px; font-size: 0.78rem;
+  background: var(--kh-bg-surface); border-radius: var(--kh-radius-sm);
+  color: var(--kh-text-secondary); cursor: pointer;
+}
+.kh-ord-btn {
+  margin-top: 4px; padding: 13px; text-align: center;
+  border-radius: var(--kh-radius-md);
+  background: var(--kh-up); color: var(--kh-text-on-fill);
+  font-weight: 600; font-size: 0.9rem; cursor: pointer;
+  border: 0; font-family: inherit; width: 100%;
+}
+
+/* 수급 */
+.kh-flow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 0.81rem; }
+.kh-flow-l { width: 46px; color: var(--kh-text-secondary); }
+.kh-flow-v { width: 62px; text-align: right; }
+.kh-flow-bar { flex: 1; height: 5px; background: var(--kh-bg-surface); border-radius: 3px; }
+
+/* 실시간 / 일별 전환 */
+.kh-seg2 {
+  display: flex; background: var(--kh-bg-surface);
+  border-radius: var(--kh-radius-sm); padding: 3px; margin-bottom: 10px;
+}
+.kh-seg2 span {
+  flex: 1; text-align: center; padding: 6px; font-size: 0.8rem;
+  border-radius: calc(var(--kh-radius-sm) - 2px);
+  color: var(--kh-text-secondary); cursor: pointer;
+}
+.kh-seg2 span.is-active {
+  background: var(--kh-bg-card); color: var(--kh-text-primary); font-weight: 600;
+}
+
+/* 메모 */
+.kh-memo {
+  flex: 1; min-height: 118px; width: 100%;
+  background: var(--kh-bg-surface); border: 0;
+  border-radius: var(--kh-radius-md); padding: 12px 14px;
+  font-family: inherit; font-size: 0.84rem; line-height: 1.7;
+  color: var(--kh-text-primary); resize: none;
+}
+.kh-memo:focus { outline: 1px solid var(--kh-accent); }
+.kh-memo::placeholder { color: var(--kh-text-dim); }
+
+/* ── 좁은 화면 ──────────────────────────── */
+@media (max-width: 1500px) {
+  .kh-head-stats { grid-template-columns: repeat(2, auto); }
+}
+@media (max-width: 1100px) {
+  .kh-grid { grid-template-columns: 1fr 1fr; }
+  .kh-grid > .kh-w:first-child { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .kh-grid { grid-template-columns: 1fr; }
+  .kh-grid > .kh-w:first-child { grid-column: auto; }
+  .kh-head-main { flex-direction: column; align-items: flex-start; gap: 14px; }
+  .kh-head-stats { margin-left: 0; width: 100%; }
+  .kh-mgrid { grid-template-columns: repeat(2, 1fr); }
+}

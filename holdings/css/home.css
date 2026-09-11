@@ -1,0 +1,175 @@
+/* ==========================================================================
+   KJC Holdings · 첫 화면 (index.html)
+
+   공지 배너 · 지수(큰 차트 + 3×3 격자 + 주요 일정) · 순위 표 · 종목 미리보기
+   색과 모서리는 css/theme.css 에서만 정합니다.
+   ========================================================================== */
+
+/* ── 공지 배너 ───────────────────────────── */
+.kh-notice {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 12px; font-size: 0.86rem; margin-bottom: 14px;
+}
+.kh-notice-btn {
+  border: 1px solid var(--kh-border-strong);
+  border-radius: var(--kh-radius-sm);
+  padding: 5px 12px; font-size: 0.8rem; color: var(--kh-text-secondary);
+  cursor: pointer;
+}
+.kh-notice-x { color: var(--kh-text-muted); cursor: pointer; }
+
+/* ── 지수 영역 ──────────────────────────── */
+.kh-top { display: grid; grid-template-columns: 296px 1fr 276px; gap: 14px; }
+
+.kh-big { padding: 18px 20px; display: flex; flex-direction: column; }
+.kh-big-n { font-size: 0.86rem; color: var(--kh-text-secondary); font-weight: 500; }
+.kh-big-v { font-size: 1.85rem; font-weight: 700; letter-spacing: -0.03em; margin-top: 6px; }
+.kh-big-c { font-size: 0.86rem; font-weight: 500; }
+.kh-big-chart { flex: 1; min-height: 92px; margin-top: 10px; }
+.kh-big-foot {
+  display: flex; justify-content: space-between;
+  font-size: 0.74rem; color: var(--kh-text-muted);
+  margin-top: 8px; border-top: 1px solid var(--kh-border); padding-top: 9px;
+}
+
+/* 3×3 격자 — 칸 사이 선은 한 장의 카드 위에 가상요소로 그린다.
+   바깥쪽(카드 테두리에 닿는 쪽)만 여유를 두고, 안쪽 교차점은 십자로 만난다. */
+.kh-igrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  background: var(--kh-bg-card);
+  border-radius: var(--kh-radius-lg);
+  overflow: hidden;
+}
+.kh-ig {
+  position: relative;
+  padding: 12px 16px;
+  display: flex; align-items: center; gap: 11px;
+}
+/* 세로선 (1·2열 오른쪽) */
+.kh-ig::after {
+  content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 1px;
+  background: var(--kh-border);
+}
+.kh-ig:nth-child(3n)::after { display: none; }        /* 맨 오른쪽 열은 없음 */
+.kh-ig:nth-child(-n+3)::after { top: 14px; }          /* 맨 윗줄 — 위쪽만 여유 */
+.kh-ig:nth-last-child(-n+3)::after { bottom: 14px; }  /* 맨 아랫줄 — 아래쪽만 여유 */
+/* 가로선 (1·2행 아래쪽) */
+.kh-ig::before {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+  background: var(--kh-border);
+}
+.kh-ig:nth-last-child(-n+3)::before { display: none; } /* 맨 아랫줄은 없음 */
+.kh-ig:nth-child(3n+1)::before { left: 16px; }         /* 맨 왼쪽 열 — 왼쪽만 여유 */
+.kh-ig:nth-child(3n)::before { right: 16px; }          /* 맨 오른쪽 열 — 오른쪽만 여유 */
+
+.kh-ig-spark { width: 52px; height: 28px; flex-shrink: 0; }
+.kh-ig-txt { min-width: 0; flex: 1; }
+.kh-ig-n {
+  font-size: 0.78rem; color: var(--kh-text-secondary);
+  display: flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.kh-ig-v { font-size: 0.98rem; font-weight: 600; margin-top: 2px; letter-spacing: -0.01em; }
+.kh-ig-c { font-size: 0.74rem; font-weight: 500; }
+.kh-ig-go { font-size: 0.78rem; color: var(--kh-accent); margin-top: 3px; }
+.kh-ig-wait { font-size: 0.74rem; color: var(--kh-text-dim); margin-top: 3px; }
+
+/* 오른쪽 — 오늘의 한 줄 + 주요 일정 */
+.kh-rightcol { display: flex; flex-direction: column; gap: 10px; }
+.kh-aibtn {
+  align-self: flex-end; font-size: 0.78rem; color: var(--kh-accent);
+  background: var(--kh-accent-dim); padding: 7px 13px; border-radius: 999px;
+}
+.kh-sched { flex: 1; padding: 16px 18px; }
+.kh-sched-h {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.88rem; font-weight: 600; margin-bottom: 8px;
+}
+.kh-sched-s { font-size: 0.78rem; color: var(--kh-text-secondary); line-height: 1.6; margin-bottom: 12px; }
+.kh-sched-i {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.78rem; color: var(--kh-text-muted); padding: 4px 0;
+}
+.kh-sched-i .d {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--kh-tag-news); flex-shrink: 0;
+}
+
+/* ── 순위 + 미리보기 ────────────────────── */
+.kh-rank { margin-top: 14px; display: grid; grid-template-columns: 1fr 352px; gap: 14px; }
+
+.kh-rank .kh-tabs { padding: 15px 18px 10px; }
+.kh-rank .kh-tab.is-active { background: none; font-weight: 700; }
+.kh-fold { margin-left: auto; font-size: 0.78rem; color: var(--kh-text-secondary); cursor: pointer; }
+
+.kh-chips { display: flex; gap: 6px; padding: 0 18px 10px; flex-wrap: wrap; align-items: center; }
+.kh-chip {
+  font-size: 0.78rem; padding: 6px 12px; border-radius: 999px;
+  background: var(--kh-bg-surface); color: var(--kh-text-secondary);
+  cursor: pointer; border: 0; font-family: inherit;
+}
+.kh-chip.is-active { background: var(--kh-text-primary); color: var(--kh-text-on-fill); font-weight: 500; }
+.kh-chip.is-check { background: var(--kh-accent-dim); color: var(--kh-accent); font-weight: 500; }
+.kh-chip-sep { width: 1px; height: 15px; background: var(--kh-border-strong); margin: 0 3px; }
+.kh-asof { padding: 0 18px 8px; font-size: 0.75rem; color: var(--kh-text-muted); }
+
+/* 순위 표 */
+.kh-rank table { width: 100%; border-collapse: collapse; }
+.kh-rank th {
+  color: var(--kh-text-muted); font-weight: 400; text-align: right;
+  padding: 8px 16px; font-size: 0.76rem;
+}
+.kh-rank th.l, .kh-rank td.l { text-align: left; }
+.kh-rank td { padding: 11px 16px; text-align: right; font-size: 0.86rem; }
+.kh-rank tbody tr { cursor: pointer; }
+.kh-rank tbody tr:hover { background: var(--kh-bg-hover); }
+.kh-rank tbody tr.is-active { background: var(--kh-accent-dim); }
+.kh-rank tbody tr + tr td { border-top: 1px solid var(--kh-border); }
+.kh-rk { width: 20px; color: var(--kh-text-muted); font-size: 0.8rem; }
+.kh-nm { display: flex; align-items: center; gap: 10px; }
+.kh-nm .kh-ic { width: 28px; height: 28px; font-size: 0.6rem; }
+.kh-nm b { font-weight: 500; }
+.kh-ratio { display: flex; align-items: center; gap: 7px; justify-content: flex-end; font-size: 0.76rem; }
+.kh-ratio-bar { width: 86px; height: 3px; background: var(--kh-bg-active); border-radius: 2px; }
+.kh-sect { font-size: 0.76rem; color: var(--kh-text-secondary); }
+
+/* 미리보기 */
+.kh-pv { padding: 18px; }
+.kh-pv-h { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.kh-pv-h .kh-ic { width: 36px; height: 36px; font-size: 0.66rem; }
+.kh-pv-n { font-size: 0.98rem; font-weight: 600; }
+.kh-pv-v { font-size: 1.05rem; font-weight: 600; margin-top: 1px; }
+.kh-pv-lb { font-size: 0.78rem; color: var(--kh-text-secondary); margin: 10px 0 4px; }
+.kh-pv-chart { height: 168px; }
+.kh-pv-why { margin-top: 14px; }
+.kh-pv-why-h {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.88rem; font-weight: 600; margin-bottom: 8px;
+}
+.kh-pv-why-h span { font-size: 0.74rem; color: var(--kh-text-muted); font-weight: 400; }
+.kh-pv-why-b {
+  display: flex; align-items: flex-start; gap: 9px;
+  background: var(--kh-bg-surface); border-radius: var(--kh-radius-md);
+  padding: 12px 14px; font-size: 0.8rem; line-height: 1.6;
+}
+.kh-pv-why-b .sp { color: var(--kh-accent); flex-shrink: 0; }
+
+/* ── 좁은 화면 ──────────────────────────── */
+@media (max-width: 1500px) {
+  .kh-top { grid-template-columns: 260px 1fr; }
+  .kh-rightcol { grid-column: 1 / -1; flex-direction: row; align-items: stretch; }
+  .kh-aibtn { align-self: center; }
+}
+@media (max-width: 1100px) {
+  .kh-top { grid-template-columns: 1fr; }
+  .kh-igrid { grid-template-columns: repeat(2, 1fr); grid-template-rows: auto; }
+  /* 2열이 되면 선 규칙도 2열 기준으로 */
+  .kh-ig::after, .kh-ig::before { display: none; }
+  .kh-ig { border-right: 1px solid var(--kh-border); border-bottom: 1px solid var(--kh-border); }
+  .kh-rank { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .kh-igrid { grid-template-columns: 1fr; }
+  .kh-rank th:nth-child(n+5), .kh-rank td:nth-child(n+5) { display: none; }
+}

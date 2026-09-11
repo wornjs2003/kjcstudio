@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+  <title>종목 — KJC Holdings</title>
+
+  <!-- 개발용 캐시 무효화 (서비스 워커와 병행) -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="./css/theme.css" />
+  <link rel="stylesheet" href="./css/frame.css" />
+  <link rel="stylesheet" href="./css/stock.css" />
+</head>
+<body>
+
+<div class="kh-app">
+  <main class="kh-main">
+    <!-- 종목 헤더 -->
+    <header class="kh-card kh-head">
+      <div class="kh-head-top">
+        <a href="./index.html" class="kh-chip-btn" style="margin-right:2px">← 목록</a>
+        <span class="kh-ic" id="kh-ic"></span>
+        <span class="kh-head-name" id="kh-name">—</span>
+        <span class="kh-head-code kh-num" id="kh-code"></span>
+        <span class="kh-caret">⌄</span>
+      </div>
+
+      <div class="kh-head-main">
+        <div style="display:flex;align-items:flex-end;gap:13px">
+          <div class="kh-price kh-num" id="kh-price">불러오는 중</div>
+          <div class="kh-price-sub kh-num" id="kh-price-sub"></div>
+        </div>
+        <div class="kh-head-stats">
+          <div class="kh-st"><span>1일 범위</span><span class="kh-rng" id="kh-r1">—</span></div>
+          <div class="kh-st"><span>거래대금</span><b class="kh-num" id="kh-amt">—</b></div>
+          <div class="kh-st"><span>외국인 순매수</span><b class="kh-mut">연결 예정</b></div>
+          <div class="kh-st"><span>시가총액 순위</span><b class="kh-mut">연결 예정</b></div>
+          <div class="kh-st"><span>52주 범위</span><span class="kh-rng" id="kh-r52">—</span></div>
+          <div class="kh-st"><span>거래량</span><b class="kh-num" id="kh-vol">—</b></div>
+          <div class="kh-st"><span>기관 순매수</span><b class="kh-mut">연결 예정</b></div>
+          <div class="kh-st"><span>시가총액</span><b class="kh-num" id="kh-cap">—</b></div>
+        </div>
+      </div>
+
+      <div class="kh-tabs">
+        <button class="kh-tab is-active">차트 · 호가</button>
+        <button class="kh-tab">종목정보</button>
+        <button class="kh-tab">뉴스 · 공시</button>
+        <button class="kh-tab">거래현황</button>
+        <button class="kh-tab">내 메모</button>
+        <span class="kh-edit">⚙ 패널 편집</span>
+      </div>
+    </header>
+
+    <!-- 1행: 차트 / 호가 / 매매 기록 -->
+    <section class="kh-grid" aria-label="차트와 시세">
+      <div class="kh-w">
+        <div class="kh-w-head">
+          <span class="kh-w-grip">⠿</span><span class="kh-w-title">차트</span>
+          <span class="kh-w-x">✕</span><span class="kh-bd kh-bd-on">한국투자증권</span>
+          <span class="kh-w-plus" id="kh-chart-legend"></span>
+        </div>
+        <div class="kh-w-body">
+          <div class="kh-per" id="kh-per"></div>
+          <div class="kh-chart-box" id="kh-chart"></div>
+        </div>
+      </div>
+
+      <div class="kh-w">
+        <div class="kh-w-head">
+          <span class="kh-w-grip">⠿</span><span class="kh-w-title">호가</span>
+          <span class="kh-w-x">✕</span><span class="kh-bd kh-bd-soon">연결 예정</span>
+          <span class="kh-w-plus">＋</span>
+        </div>
+        <div class="kh-w-body"><div class="kh-soon">
+          <div class="kh-soon-t">매수 · 매도 10단계</div>
+          <div class="kh-soon-s">붙일 것: KIS 주식현재가 호가</div>
+        </div></div>
+      </div>
+
+      <!-- 토스의 '일반주문' 자리 — 여기서는 사고판 내역을 적어 둔다 -->
+      <div class="kh-w">
+        <div class="kh-w-head">
+          <span class="kh-w-grip">⠿</span><span class="kh-w-title">매매 기록</span>
+          <span class="kh-bd kh-bd-on">브라우저 저장</span>
+          <span class="kh-w-plus">＋</span>
+        </div>
+        <div class="kh-w-body"><div class="kh-ord">
+          <div class="kh-ord-row"><span class="kh-ord-l">구분</span>
+            <span class="kh-ord-seg"><span class="is-active">매수</span><span>매도</span></span></div>
+          <div class="kh-ord-row"><span class="kh-ord-l">단가</span>
+            <input class="kh-ord-in kh-num" id="kh-ord-price" placeholder="단가" /></div>
+          <div class="kh-ord-row"><span class="kh-ord-l">수량</span>
+            <input class="kh-ord-in kh-num" placeholder="수량 입력" /></div>
+          <div class="kh-ord-pcts"><span>10주</span><span>50주</span><span>100주</span><span>직접</span></div>
+          <div class="kh-ord-row"><span class="kh-ord-l">금액</span>
+            <input class="kh-ord-in kh-num" placeholder="자동 계산" readonly /></div>
+          <button class="kh-ord-btn">기록에 추가하기</button>
+        </div></div>
+      </div>
+    </section>
+
+    <!-- 2행: 내 메모 / 시세 / 수급 -->
+    <section class="kh-grid" aria-label="메모와 수급">
+      <div class="kh-w">
+        <div class="kh-w-head">
+          <span class="kh-w-grip">⠿</span><span class="kh-w-title">내 메모</span>
+          <span class="kh-w-x">✕</span><span class="kh-bd kh-bd-on">브라우저 저장</span>
+          <span class="kh-w-plus">＋</span>
+        </div>
+        <div class="kh-w-body">
+          <textarea class="kh-memo" id="kh-memo"
+            placeholder="이 종목을 왜 담았는지 적어 둡니다"></textarea>
+        </div>
+      </div>
+
+      <div class="kh-w">
+        <div class="kh-w-head">
+          <span class="kh-w-grip">⠿</span><span class="kh-w-title">시세</span>
+          <span class="kh-w-x">✕</span><span class="kh-bd kh-bd-soon">연결 예정</span>
+          <span class="kh-w-plus">＋</span>
+        </div>
+        <div class="kh-w-body">
+          <div class="kh-seg2"><span class="is-active">실시간</span><span>일별</span></div>
+          <div class="kh-soon" style="min-height:86px">
+            <div class="kh-soon-t">체결가 · 체결량 · 등락률</div>
+            <div class="kh-soon-s">붙일 것: KIS 주식현재가 체결</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="kh-w">
+        <div class="kh-w-head">
+          <span class="kh-w-grip">⠿</span><span class="kh-w-title">개인 · 외국인 · 기관</span>
+          <span class="kh-w-x">✕</span><span class="kh-bd kh-bd-soon">연결 예정</span>
+          <span class="kh-w-plus">＋</span>
+        </div>
+        <div class="kh-w-body">
+          <div class="kh-flow"><span class="kh-flow-l">개인</span>
+            <span class="kh-flow-v kh-num kh-mut">—</span><span class="kh-flow-bar"></span></div>
+          <div class="kh-flow"><span class="kh-flow-l">외국인</span>
+            <span class="kh-flow-v kh-num kh-mut">—</span><span class="kh-flow-bar"></span></div>
+          <div class="kh-flow"><span class="kh-flow-l">기관</span>
+            <span class="kh-flow-v kh-num kh-mut">—</span><span class="kh-flow-bar"></span></div>
+          <div class="kh-soon-s" style="margin-top:14px">
+            붙일 것: 네이버 종목 통합 (일별 매매동향)</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3행: 투자 지표 / 뉴스·공시 -->
+    <section class="kh-grid" aria-label="지표와 소식">
+      <div class="kh-w">
+        <div class="kh-w-head">
+          <span class="kh-w-grip">⠿</span><span class="kh-w-title">투자 지표</span>
+          <span class="kh-w-x">✕</span><span class="kh-bd kh-bd-on">한국투자증권</span>
+          <span class="kh-w-plus">＋</span>
+        </div>
+        <div class="kh-w-body"><div class="kh-mgrid">
+          <div class="kh-m"><div class="kh-m-l">PER</div><div class="kh-m-v kh-num" id="kh-m-per">—</div></div>
+          <div class="kh-m"><div class="kh-m-l">PBR</div><div class="kh-m-v kh-num" id="kh-m-pbr">—</div></div>
+          <div class="kh-m"><div class="kh-m-l">시가총액</div><div class="kh-m-v kh-num" id="kh-m-cap">—</div></div>
+          <div class="kh-m"><div class="kh-m-l">52주 최고</div><div class="kh-m-v kh-num" id="kh-m-hi">—</div></div>
+          <div class="kh-m"><div class="kh-m-l">52주 최저</div><div class="kh-m-v kh-num" id="kh-m-lo">—</div></div>
+          <div class="kh-m"><div class="kh-m-l">거래량</div><div class="kh-m-v kh-num" id="kh-m-vol">—</div></div>
+        </div></div>
+      </div>
+
+      <div class="kh-w" style="grid-column:span 2">
+        <div class="kh-w-head">
+          <span class="kh-w-grip">⠿</span><span class="kh-w-title">뉴스 · 공시</span>
+          <span class="kh-w-x">✕</span><span class="kh-bd kh-bd-soon">연결 예정</span>
+          <span class="kh-w-plus">＋</span>
+        </div>
+        <div class="kh-w-body"><div class="kh-soon" style="min-height:86px">
+          <div class="kh-soon-t">종목 뉴스 · DART 공시</div>
+          <div class="kh-soon-s">붙일 것: 네이버 종목 뉴스 · OpenDART</div>
+        </div></div>
+      </div>
+    </section>
+  </main>
+
+  <aside class="kh-side" id="kh-side" aria-label="관심종목"></aside>
+  <nav class="kh-vbar" id="kh-vbar" aria-label="화면 전환"></nav>
+</div>
+
+<div class="kh-foot" id="kh-foot" aria-label="시세 띠"></div>
+
+<script src="./js/vendor/lightweight-charts.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(function () { /* 무시 */ });
+  }
+</script>
+<script type="module" src="./js/stock.js"></script>
+</body>
+</html>

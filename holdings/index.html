@@ -4,138 +4,127 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
   <title>KJC Holdings — 내 주식 정리실</title>
-  <meta name="description" content="관심종목·뉴스·공시·재무를 한 곳에서 보고 정리하는 개인 투자 도구" />
+  <meta name="description" content="관심종목·시세·차트를 한 곳에서 보고 정리하는 개인 투자 도구" />
 
-  <!-- 개발용 캐시 무효화 meta (서비스 워커와 병행) -->
+  <!-- 개발용 캐시 무효화 (서비스 워커와 병행) -->
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-  <!-- 개발용 캐시 버스팅: 페이지 로드마다 CSS에 버전 쿼리 자동 부여 -->
-  <script>
-    (function () {
-      var v = Date.now();
-      window.__KH_BUILD = String(v);
-      ['./css/theme.css', './css/base.css', './css/layout.css', './css/components.css'].forEach(function (href) {
-        var l = document.createElement('link');
-        l.rel = 'stylesheet';
-        l.href = href + '?v=' + v;
-        document.head.appendChild(l);
-      });
-    })();
-  </script>
-
-  <!-- 부팅 오버레이: 외부 CSS 가 로드되기 전에도 즉시 보여야 해서 인라인이다.
-       그래서 여기만은 theme.css 변수를 쓸 수 없고 값을 직접 적는다.
-       theme.css 의 색을 바꾸면 아래 값도 함께 맞춰야 첫 화면이 깜빡이지 않는다.
-         --bg #f6f7f9 · --text-primary #101013 · --accent #3182f6 · --text-muted #8b95a1 -->
-  <style>
-    html, body { background: #f6f7f9; margin: 0; }
-    .kh-boot { position: fixed; inset: 0; background: #f6f7f9;
-               display: flex; align-items: center; justify-content: center;
-               z-index: 9999; }
-    .kh-boot-inner { display: flex; flex-direction: column;
-                     align-items: center; gap: 18px;
-                     font-family: 'Noto Sans KR', -apple-system, sans-serif; }
-    .kh-boot-logo { font-size: 1.3rem; font-weight: 500; color: #101013;
-                    letter-spacing: 0.04em; }
-    .kh-boot-logo span { color: #3182f6; margin-left: 6px; font-weight: 400; }
-    .kh-boot-spinner { width: 36px; height: 36px; border-radius: 50%;
-                       border: 2px solid rgba(0,0,0,0.08);
-                       border-top-color: #3182f6;
-                       animation: kh-boot-spin 0.8s linear infinite; }
-    .kh-boot-text { font-size: 0.85rem; color: #8b95a1; }
-    @keyframes kh-boot-spin { to { transform: rotate(360deg); } }
-  </style>
+  <!-- 색·모서리는 theme.css 한 곳에서 정한다 -->
+  <link rel="stylesheet" href="./css/theme.css" />
+  <link rel="stylesheet" href="./css/frame.css" />
+  <link rel="stylesheet" href="./css/home.css" />
 </head>
 <body>
-  <!-- 초기 로딩 오버레이: main.js 로드 완료 시 제거 -->
-  <div class="kh-boot" id="kh-boot" aria-live="polite">
-    <div class="kh-boot-inner">
-      <div class="kh-boot-logo">KJC<span>Holdings</span></div>
-      <div class="kh-boot-spinner" aria-hidden="true"></div>
-      <div class="kh-boot-text">관심종목 불러오는 중…</div>
+
+<div class="kh-app">
+  <main class="kh-main">
+    <!-- 공지 -->
+    <div class="kh-card kh-notice" id="kh-notice">
+      <span>📊 한국투자증권 API 로 시세를 받아오는 중입니다</span>
+      <span class="kh-notice-btn">자세히 보기</span>
+      <span class="kh-notice-x" id="kh-notice-x">✕</span>
     </div>
-  </div>
 
-  <div class="kh-app">
-    <!-- 좌측 사이드바 -->
-    <aside class="kh-sidebar" id="kh-sidebar" aria-label="주 내비게이션"></aside>
+    <!-- 지수 -->
+    <section class="kh-top" aria-label="주요 지수">
+      <div class="kh-card kh-big">
+        <div class="kh-big-n">코스피</div>
+        <div class="kh-big-v kh-num" id="kh-big-v">불러오는 중</div>
+        <div class="kh-big-c kh-num" id="kh-big-c"></div>
+        <div class="kh-big-chart" id="kh-big-chart"></div>
+        <div class="kh-big-foot">
+          <span>60거래일 추이</span><span>한국투자증권 실시간</span>
+        </div>
+      </div>
 
-    <!-- 메인 -->
-    <main class="kh-main">
-      <!-- 상단바 -->
-      <div class="kh-topbar">
-        <div class="kh-topbar-search">
-          <div class="kh-search">
-            <span class="kh-search-icon">⌕</span>
-            <input class="kh-search-input" type="text" placeholder="종목 검색 · 코드 / 이름" />
-            <span class="kh-search-key">/</span>
+      <div class="kh-igrid" id="kh-igrid"></div>
+
+      <div class="kh-rightcol">
+        <span class="kh-aibtn">✨ 오늘의 한 줄</span>
+        <div class="kh-card kh-sched">
+          <div class="kh-sched-h"><span>주요 일정</span><span class="kh-mut">›</span></div>
+          <div class="kh-sched-s">이번 주 발표되는 지표와 공시 일정을 모아 보여줍니다.</div>
+          <div class="kh-sched-i"><span class="d"></span>연결 예정 — 한국은행 경제통계</div>
+          <div class="kh-sched-i"><span class="d"></span>연결 예정 — DART 공시 일정</div>
+          <div class="kh-sched-i"><span class="d"></span>연결 예정 — 실적 발표 일정</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 순위 + 미리보기 -->
+    <section class="kh-rank" aria-label="종목 목록">
+      <div class="kh-card">
+        <div class="kh-tabs">
+          <button class="kh-tab is-active">실시간 순위</button>
+          <button class="kh-tab">지금 뜨는 산업</button>
+          <button class="kh-tab">외국인 · 기관 매매</button>
+          <span class="kh-fold">▤ 요약 접기</span>
+        </div>
+        <div class="kh-chips">
+          <button class="kh-chip is-active">국내</button>
+          <button class="kh-chip">해외</button>
+          <span class="kh-chip-sep"></span>
+          <button class="kh-chip">관심종목</button>
+          <button class="kh-chip">거래대금</button>
+          <button class="kh-chip">거래량</button>
+          <button class="kh-chip">급상승</button>
+          <button class="kh-chip">급하락</button>
+          <span class="kh-chip-sep"></span>
+          <button class="kh-chip">실시간 ⌄</button>
+          <button class="kh-chip is-check">✓ 관리종목 숨기기</button>
+        </div>
+        <div class="kh-asof" id="kh-asof">· 오늘 기준</div>
+        <table>
+          <thead>
+            <tr>
+              <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
+              <th>거래대금 순</th><th>시가총액</th><th>매수 · 매도 비율</th><th class="l">산업</th>
+            </tr>
+          </thead>
+          <tbody id="kh-rows"></tbody>
+        </table>
+      </div>
+
+      <div class="kh-card kh-pv">
+        <div class="kh-pv-h">
+          <span class="kh-ic" id="kh-pv-ic"></span>
+          <div>
+            <div class="kh-pv-n" id="kh-pv-n"></div>
+            <div class="kh-pv-v kh-num" id="kh-pv-v">불러오는 중</div>
           </div>
+          <a class="kh-fold" id="kh-pv-link" href="./stock.html" style="margin-left:auto">자세히 ›</a>
         </div>
-        <div class="kh-topbar-actions">
-          <button class="kh-btn kh-btn-icon" title="알림">🔔</button>
-          <button class="kh-btn kh-btn-icon" title="설정">⚙</button>
-          <button class="kh-btn">재권님</button>
-        </div>
-      </div>
-
-      <!-- 콘텐츠 -->
-      <div class="kh-content">
-        <!-- 상단 그리드: 지수 스트립 + 세계 주요 이슈 -->
-        <div class="kh-top-grid">
-          <div id="kh-index-strip"></div>
-          <section class="kh-card" id="kh-global-issues" aria-label="세계 주요 이슈"></section>
-        </div>
-
-        <!-- 대시보드 그리드 -->
-        <div class="kh-dash-grid">
-          <section class="kh-card" id="kh-watchlist" aria-label="관심종목"></section>
-          <section class="kh-card" id="kh-feed" aria-label="뉴스·공시"></section>
+        <div class="kh-pv-lb">5분봉</div>
+        <div class="kh-pv-chart" id="kh-pv-chart"></div>
+        <div class="kh-pv-why">
+          <div class="kh-pv-why-h"><span>왜 움직였을까?</span><span>연결 예정</span></div>
+          <div class="kh-pv-why-b"><span class="sp">✨</span>
+            <span class="kh-mut">붙일 것: 네이버 종목 뉴스 · DART 공시 —
+              그날 나온 소식을 모아 한 줄로 보여줍니다.</span></div>
         </div>
       </div>
-    </main>
-  </div>
+    </section>
+  </main>
 
-  <!-- 상세 패널 + 백드롭 -->
-  <div class="kh-detail-backdrop" id="kh-detail-backdrop"></div>
-  <aside class="kh-detail" id="kh-detail" aria-label="종목 상세"></aside>
+  <aside class="kh-side" id="kh-side" aria-label="관심종목"></aside>
+  <nav class="kh-vbar" id="kh-vbar" aria-label="화면 전환"></nav>
+</div>
 
-  <!-- 차트 라이브러리 (TradingView Lightweight Charts)
-       holdings 자립 원칙에 따라 CDN 대신 내부 파일로 둔다. main.js 보다 먼저 로드해야
-       window.LightweightCharts 를 쓸 수 있다. -->
-  <script src="./js/vendor/lightweight-charts.js"></script>
+<div class="kh-foot" id="kh-foot" aria-label="시세 띠"></div>
 
-  <!-- 개발용 캐시 버스팅: 서비스 워커 등록 + main.js 동적 로드 -->
-  <script>
-    (function () {
-      // 서비스 워커: 동일 출처의 모든 자원 캐시 우회 (JS 서브 모듈까지 자동 무효화)
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js').catch(function () { /* 무시 */ });
-      }
-      // main.js 자체는 쿼리 버전 부여해서 즉시 최신판 로드
-      var v = window.__KH_BUILD || String(Date.now());
-      var s = document.createElement('script');
-      s.type = 'module';
-      s.src = './js/main.js?v=' + v;
-      document.body.appendChild(s);
-
-      // 안전장치: main.js 로드/실행이 실패해도 로딩 오버레이가 화면을 영구히
-      // 덮지 않도록 8초 뒤 강제 해제한다. (모바일 네트워크 불안정 대비)
-      window.setTimeout(function () {
-        var boot = document.getElementById('kh-boot');
-        if (!boot) return;
-        var t = boot.querySelector('.kh-boot-text');
-        if (t) t.textContent = '일부 데이터를 불러오지 못했습니다. 화면을 표시합니다.';
-        boot.classList.add('is-hidden');
-        window.setTimeout(function () {
-          if (boot.parentNode) boot.parentNode.removeChild(boot);
-        }, 500);
-      }, 8000);
-    })();
-  </script>
+<!-- 차트 라이브러리 — holdings 자립 원칙에 따라 내부 파일로 둔다 -->
+<script src="./js/vendor/lightweight-charts.js"></script>
+<script>
+  // 개발용: 서비스 워커로 캐시를 우회해 수정이 바로 반영되게 한다
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(function () { /* 무시 */ });
+  }
+</script>
+<script type="module" src="./js/home.js"></script>
 </body>
 </html>

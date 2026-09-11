@@ -1,0 +1,196 @@
+/* ==========================================================================
+   KJC Holdings · 공통 틀
+
+   홈(index.html)과 종목(stock.html)이 함께 쓰는 뼈대입니다.
+     본문 | 관심종목 사이드바 | 세로 아이콘 바     + 아래 시세 띠
+
+   색과 모서리는 css/theme.css 에서만 정합니다. 여기에는 값을 두지 않습니다.
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--kh-bg);
+  color: var(--kh-text-primary);
+  font-family: var(--kh-font-sans);
+  font-size: 14px;
+  padding-bottom: 46px;          /* 하단 시세 띠 자리 */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 숫자는 자리가 흔들리지 않게 */
+.kh-num { font-variant-numeric: tabular-nums; }
+
+.kh-up   { color: var(--kh-up); }
+.kh-down { color: var(--kh-down); }
+.kh-mut  { color: var(--kh-text-muted); }
+
+.kh-card { background: var(--kh-bg-card); border-radius: var(--kh-radius-lg); }
+
+/* 종목 아이콘 — 회사 색 위에 이름 두 글자 */
+.kh-ic {
+  border-radius: 50%;
+  flex-shrink: 0;
+  color: var(--kh-text-on-fill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+/* ── 전체 틀 ─────────────────────────────── */
+.kh-app {
+  display: grid;
+  grid-template-columns: 1fr 316px 52px;
+  max-width: 1800px;
+  margin: 0 auto;
+}
+.kh-main { padding: 14px 16px; min-width: 0; }
+
+/* ── 탭 (홈·종목 공용) ─────────────────────── */
+.kh-tabs { display: flex; align-items: center; gap: 2px; }
+.kh-tab {
+  padding: 8px 14px;
+  border-radius: var(--kh-radius-sm);
+  font-size: 0.88rem;
+  color: var(--kh-text-secondary);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  font-family: inherit;
+}
+.kh-tab.is-active {
+  background: var(--kh-bg-surface);
+  color: var(--kh-text-primary);
+  font-weight: 600;
+}
+
+/* ── 아직 연결하지 않은 자리 ─────────────────
+   예시 데이터를 채우는 대신 무엇이 비어 있는지 적어 둔다. */
+.kh-soon {
+  height: 100%;
+  min-height: 98px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  text-align: center;
+}
+.kh-soon-t { font-size: 0.84rem; color: var(--kh-text-muted); }
+.kh-soon-s { font-size: 0.75rem; color: var(--kh-text-dim); }
+
+/* ── 관심종목 사이드바 ───────────────────── */
+.kh-side {
+  background: var(--kh-bg-card);
+  padding: 16px 14px;
+  min-height: 100vh;
+  border-left: 1px solid var(--kh-border);
+}
+.kh-side-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+.kh-side-head b { font-size: 1rem; font-weight: 700; }
+.kh-side-toggle {
+  font-size: 0.74rem; color: var(--kh-text-muted);
+  background: var(--kh-bg-surface); border-radius: 999px; padding: 3px 9px;
+}
+.kh-side-title { font-size: 0.9rem; font-weight: 700; }
+.kh-side-sub   { font-size: 0.76rem; color: var(--kh-text-muted); margin: 2px 0 8px; }
+
+.kh-wl {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 4px; border-radius: var(--kh-radius-md);
+  cursor: pointer; text-decoration: none; color: inherit;
+}
+.kh-wl:hover { background: var(--kh-bg-hover); }
+.kh-wl.is-active { background: var(--kh-accent-dim); }
+.kh-wl .kh-ic { width: 30px; height: 30px; font-size: 0.6rem; }
+.kh-wl-name {
+  font-size: 0.84rem; flex: 1; min-width: 0; font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.kh-wl-price { text-align: right; }
+.kh-wl-v { font-size: 0.84rem; font-weight: 500; display: block; }
+.kh-wl-c { font-size: 0.75rem; font-weight: 500; display: block; }
+.kh-wl-heart { color: var(--kh-text-dim); font-size: 0.9rem; width: 16px; text-align: center; }
+
+.kh-side-add {
+  display: flex; align-items: center; gap: 9px;
+  padding: 11px 4px; font-size: 0.84rem; color: var(--kh-text-secondary);
+  cursor: pointer;
+}
+.kh-side-add .plus {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--kh-bg-surface);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--kh-text-muted);
+}
+
+/* 오늘의 한 줄 — 아직 연결 전 */
+.kh-oneline {
+  background: var(--kh-bg-surface);
+  border-radius: var(--kh-radius-md);
+  padding: 12px 13px;
+  margin-bottom: 16px;
+}
+.kh-oneline-h {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.82rem; font-weight: 600;
+  color: var(--kh-accent); margin-bottom: 5px;
+}
+.kh-oneline-b { font-size: 0.78rem; color: var(--kh-text-muted); line-height: 1.5; }
+
+/* ── 세로 아이콘 바 ─────────────────────── */
+.kh-vbar {
+  background: var(--kh-bg-card);
+  border-left: 1px solid var(--kh-border);
+  display: flex; flex-direction: column; align-items: center;
+  gap: 18px; padding: 16px 0;
+  position: sticky; top: 0; align-self: start; max-height: 100vh;
+}
+.kh-vb {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  font-size: 0.62rem; color: var(--kh-text-muted);
+  cursor: pointer; text-decoration: none;
+}
+.kh-vb .sq { font-size: 1rem; }
+.kh-vb:hover { color: var(--kh-text-secondary); }
+.kh-vb.is-active { color: var(--kh-text-primary); font-weight: 600; }
+
+/* ── 하단 시세 띠 ───────────────────────── */
+.kh-foot {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 46px; z-index: 50;
+  background: var(--kh-bg-float);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid var(--kh-border);
+  display: flex; align-items: center; gap: 26px;
+  padding: 0 20px; font-size: 0.79rem; overflow-x: auto;
+  scrollbar-width: none;
+}
+.kh-foot::-webkit-scrollbar { display: none; }
+.kh-foot-warn { color: var(--kh-text-muted); font-size: 0.76rem; flex-shrink: 0; }
+.kh-fi { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.kh-fi > span:first-child { color: var(--kh-text-muted); }
+.kh-fi b { font-weight: 600; }
+.kh-foot-arrows { margin-left: auto; color: var(--kh-text-dim); flex-shrink: 0; }
+
+/* ── 좁은 화면 ──────────────────────────── */
+@media (max-width: 1280px) {
+  .kh-app { grid-template-columns: 1fr 52px; }
+  .kh-side { display: none; }
+}
+@media (max-width: 900px) {
+  .kh-app { grid-template-columns: 1fr; }
+  .kh-vbar {
+    position: fixed; left: 0; right: 0; bottom: 46px; top: auto;
+    flex-direction: row; justify-content: space-around;
+    gap: 0; padding: 6px 4px;
+    border-left: 0; border-top: 1px solid var(--kh-border);
+    z-index: 49;
+  }
+  body { padding-bottom: 106px; }
+}

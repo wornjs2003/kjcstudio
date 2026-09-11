@@ -82,3 +82,49 @@ export function fmtKrw(won) {
   }
   return `${sign}${abs.toLocaleString('ko-KR')}원`;
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   토스식 표기 — 단위를 끝에 붙이고, 조 단위는 소수 한 자리까지
+     fmtWon(262000)      → "262,000원"
+     fmtMoneyKr(15317250)→ "1,531.7조원"   (입력 단위: 억원)
+     fmtMoneyKr(2019)    → "2,019억원"
+     dirClass(-1.2)      → "kh-down"
+   ────────────────────────────────────────────────────────────────────────── */
+
+export function fmtNum(v, digits = 0) {
+  if (v == null || Number.isNaN(v)) return '—';
+  return v.toLocaleString('ko-KR', {
+    minimumFractionDigits: digits, maximumFractionDigits: digits,
+  });
+}
+
+export function fmtWon(v) {
+  return v == null ? '—' : fmtNum(v) + '원';
+}
+
+/* 입력 단위는 억원 (KIS 의 시가총액 hts_avls 가 억원 단위로 온다) */
+export function fmtMoneyKr(eok) {
+  if (eok == null) return '—';
+  if (eok >= 10000) return fmtNum(eok / 10000, 1) + '조원';
+  return fmtNum(Math.round(eok)) + '억원';
+}
+
+/* 주식 수 — 만 단위로 줄여 읽는다 */
+export function fmtShareCount(n) {
+  if (n == null) return '—';
+  if (n >= 10000) return fmtNum(Math.round(n / 10000)) + '만주';
+  return fmtNum(n) + '주';
+}
+
+/* 오를 때 빨강, 내릴 때 파랑 (한국식) */
+export function dirClass(n) {
+  if (n == null) return 'kh-mut';
+  return n >= 0 ? 'kh-up' : 'kh-down';
+}
+
+/* 증감 표기 — "▲ 1,200원 (1.59%)" */
+export function fmtDelta(amount, pct, unit = '원', digits = 0) {
+  if (amount == null || pct == null) return '';
+  const mark = amount >= 0 ? '▲' : '▼';
+  return `${mark} ${fmtNum(Math.abs(amount), digits)}${unit} (${Math.abs(pct).toFixed(2)}%)`;
+}
