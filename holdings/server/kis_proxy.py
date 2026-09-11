@@ -28,6 +28,7 @@
 import argparse
 import json
 import os
+import sqlite3
 import sys
 import threading
 import time
@@ -52,6 +53,13 @@ HOSTS = {
     "prod": "https://openapi.koreainvestment.com:9443",      # 실전투자
 }
 MODE_LABEL = {"vts": "모의투자", "prod": "실전투자"}
+
+# 시장 구분
+#   J  = KRX 정규장만 (09:00~15:30)
+#   NX = 넥스트레이드(대체거래소)만
+#   UN = 통합 — 정규장 + 넥스트레이드. 08:00~20:00 내내 값이 움직인다.
+# 통합을 쓰면 거래량도 양쪽이 합산된다.
+MARKET_DIV = "UN"
 
 # 토큰 발급은 1분에 1회 이상 시도하면 차단된다. 최소 간격을 강제한다.
 TOKEN_MIN_INTERVAL = 70
@@ -433,7 +441,7 @@ def fetch_price(cfg, code):
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-price",
-        {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code},
+        {"FID_COND_MRKT_DIV_CODE": MARKET_DIV, "FID_INPUT_ISCD": code},
         "FHKST01010100",
     )
     o = data.get("output") or {}
@@ -459,6 +467,258 @@ def fetch_price(cfg, code):
         "source": "KIS",
         "mode": cfg["mode"],
     }
+
+
+# ---------------------------------------------------------------- 저장 계층 (SQLite)
+# 배포본은 Cloudflare D1 을 쓰고, 로컬은 같은 구조를 SQLite 파일로 둔다.
+# 차트는 과거 데이터가 필요한데 볼 때마다 KIS 를 부르면 호출량을 감당할 수 없다.
+
+DB_PATH = os.path.join(HOLDINGS_DIR, "market.db")
+_db_lock = threading.Lock()
+
+# ts 형식: 일/주/월/년봉은 YYYYMMDD, 분봉은 YYYYMMDDHHMM
+# period: D(일) W(주) M(월) Y(년) 1m(1분) 5m(5분)
+SCHEMA = [
+    """CREATE TABLE IF NOT EXISTS candles (
+         code   TEXT    NOT NULL,
+         period TEXT    NOT NULL,
+         ts     TEXT    NOT NULL,
+         open   INTEGER,
+         high   INTEGER,
+         low    INTEGER,
+         close  INTEGER,
+         volume INTEGER,
+         PRIMARY KEY (code, period, ts)
+       )""",
+    "CREATE INDEX IF NOT EXISTS idx_candles ON candles (code, period, ts DESC)",
+    """CREATE TABLE IF NOT EXISTS sync_meta (
+         key TEXT PRIMARY KEY, value TEXT, updated_at TEXT
+       )""",
+]
+
+# 기간별 설정
+#   fresh_sec : 이 시간이 지나면 최근 구간을 다시 받는다 (장중 당일 캔들 갱신용)
+PERIODS = {
+    "D":  {"kis": "D", "label": "일",  "fresh_sec": 60,  "span_days": 400},
+    "W":  {"kis": "W", "label": "주",  "fresh_sec": 300, "span_days": 2000},
+    "M":  {"kis": "M", "label": "월",  "fresh_sec": 600, "span_days": 4000},
+    "Y":  {"kis": "Y", "label": "년",  "fresh_sec": 3600, "span_days": 8000},
+    "1m": {"kis": None, "label": "1분", "fresh_sec": 30, "span_days": 1},
+    "5m": {"kis": None, "label": "5분", "fresh_sec": 30, "span_days": 1},
+}
+
+# 분봉 수집 범위 (분 단위). 통합 시장 기준 08:00~20:00
+MINUTE_DAY_START = 8 * 60
+MINUTE_DAY_END = 20 * 60
+
+
+def db_conn():
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def db_init():
+    with _db_lock, db_conn() as conn:
+        for sql in SCHEMA:
+            conn.execute(sql)
+    return {"created": len(SCHEMA)}
+
+
+def db_status():
+    with _db_lock, db_conn() as conn:
+        r = conn.execute(
+            """SELECT COUNT(*) AS rows, COUNT(DISTINCT code) AS codes,
+                      MIN(ts) AS firstTs, MAX(ts) AS lastTs
+                 FROM candles"""
+        ).fetchone()
+        per = conn.execute(
+            "SELECT period, COUNT(*) AS n FROM candles GROUP BY period"
+        ).fetchall()
+    return {
+        "rows": r["rows"], "codes": r["codes"],
+        "firstTs": r["firstTs"], "lastTs": r["lastTs"],
+        "byPeriod": {p["period"]: p["n"] for p in per},
+    }
+
+
+def _meta_get(key):
+    with _db_lock, db_conn() as conn:
+        r = conn.execute("SELECT value FROM sync_meta WHERE key = ?", (key,)).fetchone()
+    return r["value"] if r else None
+
+
+def _meta_set(key, value):
+    import datetime
+    with _db_lock, db_conn() as conn:
+        conn.execute(
+            """INSERT INTO sync_meta (key, value, updated_at) VALUES (?, ?, ?)
+               ON CONFLICT(key) DO UPDATE SET value=excluded.value,
+                                             updated_at=excluded.updated_at""",
+            (key, str(value), datetime.datetime.now().isoformat(timespec="seconds")),
+        )
+
+
+def fetch_bars_from_kis(cfg, code, period, date_from, date_to):
+    """일/주/월/년봉. 같은 API 에서 기간 구분 코드만 바뀐다 (한 번에 최대 100개)."""
+    data = kis_get(
+        cfg,
+        "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+        {
+            "FID_COND_MRKT_DIV_CODE": MARKET_DIV, "FID_INPUT_ISCD": code,
+            "FID_INPUT_DATE_1": date_from, "FID_INPUT_DATE_2": date_to,
+            "FID_PERIOD_DIV_CODE": PERIODS[period]["kis"], "FID_ORG_ADJ_PRC": "0",
+        },
+        "FHKST03010100",
+    )
+    out = []
+    for r in data.get("output2") or []:
+        d = r.get("stck_bsop_date")
+        close = _num(r.get("stck_clpr"), int)
+        if not d or close is None:
+            continue
+        out.append({
+            "ts": str(d),
+            "open": _num(r.get("stck_oprc"), int),
+            "high": _num(r.get("stck_hgpr"), int),
+            "low": _num(r.get("stck_lwpr"), int),
+            "close": close,
+            "volume": _num(r.get("acml_vol"), int),
+        })
+    return out
+
+
+def fetch_minutes_from_kis(cfg, code, hour="153000"):
+    """1분봉. 별도 API 이며 기준 시각부터 과거 30개만 돌려준다."""
+    data = kis_get(
+        cfg,
+        "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
+        {
+            "FID_ETC_CLS_CODE": "", "FID_COND_MRKT_DIV_CODE": MARKET_DIV,
+            "FID_INPUT_ISCD": code, "FID_INPUT_HOUR_1": hour,
+            "FID_PW_DATA_INCU_YN": "Y",
+        },
+        "FHKST03010200",
+    )
+    out = []
+    for r in data.get("output2") or []:
+        d, t = r.get("stck_bsop_date"), r.get("stck_cntg_hour")
+        close = _num(r.get("stck_prpr"), int)
+        if not d or not t or close is None:
+            continue
+        out.append({
+            "ts": "%s%s" % (d, str(t)[:4]),          # YYYYMMDDHHMM
+            "open": _num(r.get("stck_oprc"), int),
+            "high": _num(r.get("stck_hgpr"), int),
+            "low": _num(r.get("stck_lwpr"), int),
+            "close": close,
+            "volume": _num(r.get("cntg_vol"), int),
+        })
+    return out
+
+
+def fetch_minutes_day(cfg, code):
+    """하루치 1분봉을 모은다.
+
+    KIS 분봉 API 는 기준 시각부터 과거 30개만 돌려주므로, 시각을 30분씩
+    거슬러 올라가며 여러 번 부른다. 통합 시장이라 넥스트레이드 시간대
+    (~20:00)까지 포함한다. 한 번 받아 저장하면 이후에는 최근 구간만 갱신한다.
+    """
+    bars = {}
+    t = MINUTE_DAY_END
+    while t >= MINUTE_DAY_START:
+        hour = "%02d%02d00" % (t // 60, t % 60)
+        try:
+            for b in fetch_minutes_from_kis(cfg, code, hour):
+                bars[b["ts"]] = b
+        except RuntimeError:
+            pass          # 해당 구간에 데이터가 없을 수 있다. 계속 진행.
+        t -= 30
+    return sorted(bars.values(), key=lambda x: x["ts"])
+
+
+def aggregate_minutes(bars, minutes):
+    """1분봉을 N분봉으로 묶는다 (KIS 는 5분봉을 직접 주지 않는다)."""
+    buckets = {}
+    for b in sorted(bars, key=lambda x: x["ts"]):
+        hhmm = b["ts"][8:12]
+        slot = (int(hhmm[:2]) * 60 + int(hhmm[2:])) // minutes * minutes
+        key = b["ts"][:8] + "%02d%02d" % (slot // 60, slot % 60)
+        g = buckets.get(key)
+        if not g:
+            buckets[key] = {"ts": key, "open": b["open"], "high": b["high"],
+                            "low": b["low"], "close": b["close"],
+                            "volume": b["volume"] or 0}
+        else:
+            g["high"] = max(g["high"], b["high"])
+            g["low"] = min(g["low"], b["low"])
+            g["close"] = b["close"]
+            g["volume"] += (b["volume"] or 0)
+    return [buckets[k] for k in sorted(buckets)]
+
+
+def save_candles(code, period, candles):
+    if not candles:
+        return 0
+    with _db_lock, db_conn() as conn:
+        conn.executemany(
+            """INSERT INTO candles (code, period, ts, open, high, low, close, volume)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(code, period, ts) DO UPDATE SET
+                 open=excluded.open, high=excluded.high, low=excluded.low,
+                 close=excluded.close, volume=excluded.volume""",
+            [(code, period, c["ts"], c["open"], c["high"], c["low"], c["close"], c["volume"])
+             for c in candles],
+        )
+    return len(candles)
+
+
+def read_candles(code, period, limit):
+    with _db_lock, db_conn() as conn:
+        rows = conn.execute(
+            """SELECT ts, open, high, low, close, volume
+                 FROM candles WHERE code = ? AND period = ?
+                 ORDER BY ts DESC LIMIT ?""",
+            (code, period, limit),
+        ).fetchall()
+    return [dict(r) for r in reversed(rows)]   # 차트는 과거 -> 최신 순
+
+
+def get_chart(cfg, code, period, limit):
+    """DB 를 먼저 보고, 최근 구간이 오래됐으면 KIS 에서 받아 덮어쓴다.
+
+    당일(또는 최근) 캔들은 장중에 계속 바뀌므로, 마지막 갱신으로부터
+    fresh_sec 이 지나면 다시 받아온다. 과거 캔들은 변하지 않으므로 그대로 둔다.
+    """
+    import datetime
+    db_init()
+    conf = PERIODS[period]
+    rows = read_candles(code, period, limit)
+
+    mkey = "sync:%s:%s" % (code, period)
+    last_sync = float(_meta_get(mkey) or 0)
+    stale = (time.time() - last_sync) > conf["fresh_sec"]
+
+    fetched = 0
+    if not rows or stale:
+        if conf["kis"]:                      # 일/주/월/년
+            today = datetime.date.today()
+            start = today - datetime.timedelta(days=conf["span_days"])
+            bars = fetch_bars_from_kis(cfg, code, period,
+                                       start.strftime("%Y%m%d"), today.strftime("%Y%m%d"))
+        else:                                # 분봉
+            # 처음이면 하루치를 모으고(호출 여러 번), 이후에는 최근 구간만 갱신한다
+            if rows:
+                raw = fetch_minutes_from_kis(cfg, code)
+            else:
+                raw = fetch_minutes_day(cfg, code)
+            bars = aggregate_minutes(raw, 5) if period == "5m" else raw
+        fetched = save_candles(code, period, bars)
+        _meta_set(mkey, time.time())
+        if fetched:
+            rows = read_candles(code, period, limit)
+
+    return rows, fetched, ("KIS+DB" if fetched else "DB")
 
 
 # ---------------------------------------------------------------- HTTP 핸들러
@@ -539,6 +799,43 @@ class Handler(SimpleHTTPRequestHandler):
 
             if route == "stats":
                 self._send_json({"ok": True, "data": usage_stats()})
+                return
+
+            if route == "db/init":
+                self._send_json({"ok": True, "data": db_init()})
+                return
+
+            if route == "db/status":
+                db_init()
+                self._send_json({"ok": True, "data": db_status()})
+                return
+
+            if route == "chart":
+                code = (qs.get("code") or [""])[0].strip()
+                if not code.isdigit() or len(code) != 6:
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                period = (qs.get("period") or ["D"])[0].strip()
+                if period not in PERIODS:
+                    self._send_json({
+                        "ok": False,
+                        "error": "period 는 %s 중 하나여야 합니다." % ", ".join(PERIODS),
+                    }, 400)
+                    return
+                try:
+                    limit = int((qs.get("limit") or qs.get("days") or ["240"])[0])
+                except ValueError:
+                    limit = 240
+                limit = max(1, min(limit, 1000))
+                rows, fetched, source = get_chart(cfg, code, period, limit)
+                self._send_json({
+                    "ok": True,
+                    "data": {"code": code, "period": period, "candles": rows},
+                    "meta": {
+                        "count": len(rows), "fetched": fetched, "source": source,
+                        "label": PERIODS[period]["label"],
+                    },
+                })
                 return
 
             if route == "indices":

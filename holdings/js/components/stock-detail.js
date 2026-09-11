@@ -4,6 +4,7 @@ import { fmtPrice, fmtPct, fmtChange, fmtVolume, changeDirection,
 import { getState, subscribe, closeDetail, setDetailTab,
          setTradeSubTab, toggleInstExpanded, setChartPeriod } from '../store/state.js';
 import { applyTicks } from '../utils/tick.js';
+import { fetchCandles, createStockChart, maLegend } from '../chart.js';
 import { getMemo, setMemo } from '../store/memo.js';
 import { generateMockCandles, generateMockTrading,
          generateMockTimeSeries, generateMockIndicators,
@@ -87,8 +88,15 @@ export function mountStockDetail(panelEl, backdropEl) {
               ${CHART_PERIODS.map(p => `
                 <button class="kh-chart-period ${selectedChartPeriod === p.id ? 'is-active' : ''}" data-period="${p.id}">${p.label}</button>
               `).join('')}
+              <span class="kh-chart-legend" id="kh-chart-legend"></span>
             </div>
-            ${renderPriceVolumeChart(s, selectedChartPeriod)}
+            <!-- 실제 일봉 차트가 붙는 자리. 데이터가 없으면 아래 목업 SVG 로 대체된다 -->
+            <div class="kh-chart-live" id="kh-chart-live" data-code="${s.code}">
+              <div class="kh-chart-loading">차트 불러오는 중…</div>
+            </div>
+            <div class="kh-chart-fallback" id="kh-chart-fallback" hidden>
+              ${renderPriceVolumeChart(s, selectedChartPeriod)}
+            </div>
           </div>
           <div class="kh-detail-indicators">
             ${renderIndicatorCharts(s)}
@@ -133,10 +141,59 @@ export function mountStockDetail(panelEl, backdropEl) {
     }
 
     applyTicks(panelEl);   // 값이 바뀐 숫자에 갱신 표시
+    mountLiveChart(panelEl, s.code, selectedChartPeriod);
   }
 
   render();
   subscribe(render);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   실제 일봉 차트 마운트
+
+   패널은 innerHTML 로 통째로 다시 그려지므로, 그릴 때마다 이전 차트를 정리하고
+   새로 만든다. 차트 데이터를 못 받으면(중계 서버가 없는 배포본 등)
+   기존 목업 SVG 를 대신 보여준다.
+   ────────────────────────────────────────────────────────────────────────── */
+let _chart = null;
+let _chartKey = null;
+
+async function mountLiveChart(panelEl, code, periodId) {
+  if (_chart) { _chart.destroy(); _chart = null; }
+
+  const host = panelEl.querySelector('#kh-chart-live');
+  const fallback = panelEl.querySelector('#kh-chart-fallback');
+  const legend = panelEl.querySelector('#kh-chart-legend');
+  if (!host) return;
+
+  const useFallback = (msg) => {
+    host.hidden = true;
+    if (fallback) fallback.hidden = false;
+    if (legend) legend.textContent = msg || '';
+  };
+
+  if (!window.LightweightCharts) return useFallback('목업 데이터');
+
+  const key = `${code}|${periodId}`;
+  _chartKey = key;
+  try {
+    const { candles, meta, period } = await fetchCandles(code, periodId, 300);
+    if (_chartKey !== key) return;     // 그 사이 종목이나 기간이 바뀜
+    if (!candles.length) return useFallback('데이터 없음');
+
+    host.innerHTML = '';
+    host.hidden = false;
+    if (fallback) fallback.hidden = true;
+
+    _chart = createStockChart(host, candles, { period });
+    if (legend) {
+      legend.innerHTML = maLegend(_chart.maSeries) +
+        `<span class="kh-chart-src">${meta.label || ''}봉 · ${meta.source === 'DB' ? '저장됨' : '갱신됨'}</span>`;
+    }
+  } catch (e) {
+    console.warn('[KJC] 차트 실패:', e.message);
+    useFallback('목업 데이터');
+  }
 }
 
 function renderTabContent(s, tab) {

@@ -101,6 +101,11 @@
   <div class="kh-detail-backdrop" id="kh-detail-backdrop"></div>
   <aside class="kh-detail" id="kh-detail" aria-label="종목 상세"></aside>
 
+  <!-- 차트 라이브러리 (TradingView Lightweight Charts)
+       holdings 자립 원칙에 따라 CDN 대신 내부 파일로 둔다. main.js 보다 먼저 로드해야
+       window.LightweightCharts 를 쓸 수 있다. -->
+  <script src="./js/vendor/lightweight-charts.js"></script>
+
   <!-- 개발용 캐시 버스팅: 서비스 워커 등록 + main.js 동적 로드 -->
   <script>
     (function () {

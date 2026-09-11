@@ -316,11 +316,11 @@ function _buildTrading(stock) {
 const _chartCache = new Map();
 
 export const CHART_PERIODS = [
-  { id: '5m', label: '5분봉' },
-  { id: '1d', label: '1일'   },
-  { id: '1w', label: '1주일' },
-  { id: '1M', label: '1개월' },
-  { id: '1y', label: '1년'   },
+  { id: '5m', label: '5분' },
+  { id: '1d', label: '일'  },
+  { id: '1w', label: '주'  },
+  { id: '1M', label: '월'  },
+  { id: '1y', label: '년'  },
 ];
 
 export function generateMockTimeSeries(stock, periodId) {

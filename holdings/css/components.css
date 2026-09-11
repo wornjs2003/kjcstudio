@@ -1003,3 +1003,45 @@
 @media (prefers-reduced-motion: reduce) {
   .kh-tick { animation: none; }
 }
+
+/* ==========================================================================
+   실제 일봉 차트 (TradingView Lightweight Charts)
+   ========================================================================== */
+.kh-chart-live {
+  width: 100%;
+  height: 260px;
+  position: relative;
+}
+
+.kh-chart-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--kh-text-muted);
+  font-size: 0.85rem;
+}
+
+/* 기간 버튼 줄 오른쪽에 붙는 범례 */
+.kh-chart-legend {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--kh-text-muted);
+  font-family: var(--kh-font-mono, monospace);
+}
+
+.kh-chart-src {
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.05);
+  color: var(--kh-text-muted);
+  font-size: 0.68rem;
+}
+
+/* 차트 안의 툴팁·라벨이 밝은 테마로 뜨지 않도록 */
+.kh-chart-live table { background: transparent !important; }

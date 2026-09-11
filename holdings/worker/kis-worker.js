@@ -24,6 +24,27 @@ const HOSTS = {
 };
 const MODE_LABEL = { prod: "실전투자", vts: "모의투자" };
 
+// 시장 구분
+//   J  = KRX 정규장만 (09:00~15:30)
+//   NX = 넥스트레이드(대체거래소)만
+//   UN = 통합 — 정규장 + 넥스트레이드. 08:00~20:00 내내 값이 움직이고 거래량도 합산된다.
+const MARKET_DIV = "UN";
+
+// 기간별 설정
+//   freshSec : 이 시간이 지나면 최근 구간을 다시 받는다 (장중 캔들 갱신용)
+const PERIODS = {
+  D:    { kis: "D", label: "일",  freshSec: 60,   spanDays: 400 },
+  W:    { kis: "W", label: "주",  freshSec: 300,  spanDays: 2000 },
+  M:    { kis: "M", label: "월",  freshSec: 600,  spanDays: 4000 },
+  Y:    { kis: "Y", label: "년",  freshSec: 3600, spanDays: 8000 },
+  "1m": { kis: null, label: "1분", freshSec: 30,  spanDays: 1 },
+  "5m": { kis: null, label: "5분", freshSec: 30,  spanDays: 1 },
+};
+
+// 분봉 수집 범위 (분 단위). 통합 시장 기준 08:00~20:00
+const MINUTE_DAY_START = 8 * 60;
+const MINUTE_DAY_END = 20 * 60;
+
 // 시세 응답을 이 시간(초) 동안 캐시한다. KIS 호출량을 줄이는 핵심 장치.
 const QUOTE_CACHE_TTL = 10;
 // 지수 일봉은 자주 바뀌지 않으므로 길게 캐시한다.
@@ -165,7 +186,7 @@ async function fetchPrice(cfg, env, code) {
   const data = await kisGet(
     cfg, env,
     "/uapi/domestic-stock/v1/quotations/inquire-price",
-    { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code },
+    { FID_COND_MRKT_DIV_CODE: MARKET_DIV, FID_INPUT_ISCD: code },
     "FHKST01010100",
     QUOTE_CACHE_TTL
   );
@@ -283,19 +304,20 @@ async function fetchIndices(cfg, env, withChart = true) {
    한 번 받은 일봉을 여기 쌓아두고, 이후에는 DB 에서 바로 꺼내 쓴다.
    ─────────────────────────────────────────────────────────── */
 
+// ts 형식: 일/주/월/년봉은 YYYYMMDD, 분봉은 YYYYMMDDHHMM
 const SCHEMA = [
-  `CREATE TABLE IF NOT EXISTS daily_prices (
+  `CREATE TABLE IF NOT EXISTS candles (
      code   TEXT    NOT NULL,
-     date   TEXT    NOT NULL,
+     period TEXT    NOT NULL,
+     ts     TEXT    NOT NULL,
      open   INTEGER,
      high   INTEGER,
      low    INTEGER,
      close  INTEGER,
      volume INTEGER,
-     PRIMARY KEY (code, date)
+     PRIMARY KEY (code, period, ts)
    )`,
-  `CREATE INDEX IF NOT EXISTS idx_daily_code_date
-     ON daily_prices (code, date DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_candles ON candles (code, period, ts DESC)`,
   `CREATE TABLE IF NOT EXISTS sync_meta (
      key        TEXT PRIMARY KEY,
      value      TEXT,
@@ -321,28 +343,41 @@ async function dbStatus(env) {
   // 테이블이 아직 없으면 여기서 오류가 난다 -> init 이 필요하다는 뜻
   const rows = await db.prepare(
     `SELECT COUNT(*) AS rows, COUNT(DISTINCT code) AS codes,
-            MIN(date) AS firstDate, MAX(date) AS lastDate
-       FROM daily_prices`
+            MIN(ts) AS firstTs, MAX(ts) AS lastTs
+       FROM candles`
   ).first();
   return {
     rows: rows?.rows ?? 0,
     codes: rows?.codes ?? 0,
-    firstDate: rows?.firstDate ?? null,
-    lastDate: rows?.lastDate ?? null,
+    firstTs: rows?.firstTs ?? null,
+    lastTs: rows?.lastTs ?? null,
   };
 }
 
-/* KIS 일봉 조회 (한 번에 최대 100일치) */
-async function fetchDailyFromKis(cfg, env, code, from, to) {
+async function metaGet(env, key) {
+  const r = await requireDb(env)
+    .prepare(`SELECT value FROM sync_meta WHERE key = ?`).bind(key).first();
+  return r?.value ?? null;
+}
+
+async function metaSet(env, key, value) {
+  await requireDb(env).prepare(
+    `INSERT INTO sync_meta (key, value, updated_at) VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`
+  ).bind(key, String(value), new Date().toISOString()).run();
+}
+
+/* 일/주/월/년봉. 같은 API 에서 기간 구분 코드만 바뀐다 (한 번에 최대 100개) */
+async function fetchBarsFromKis(cfg, env, code, period, from, to) {
   const data = await kisGet(
     cfg, env,
     "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
     {
-      FID_COND_MRKT_DIV_CODE: "J",
+      FID_COND_MRKT_DIV_CODE: MARKET_DIV,
       FID_INPUT_ISCD: code,
       FID_INPUT_DATE_1: from,
       FID_INPUT_DATE_2: to,
-      FID_PERIOD_DIV_CODE: "D",
+      FID_PERIOD_DIV_CODE: PERIODS[period].kis,
       FID_ORG_ADJ_PRC: "0",       // 0 = 수정주가 반영
     },
     "FHKST03010100",
@@ -351,7 +386,7 @@ async function fetchDailyFromKis(cfg, env, code, from, to) {
   return (data.output2 || [])
     .filter((r) => r.stck_bsop_date && num(r.stck_clpr) != null)
     .map((r) => ({
-      date: String(r.stck_bsop_date),
+      ts: String(r.stck_bsop_date),
       open: num(r.stck_oprc),
       high: num(r.stck_hgpr),
       low: num(r.stck_lwpr),
@@ -360,54 +395,128 @@ async function fetchDailyFromKis(cfg, env, code, from, to) {
     }));
 }
 
-async function saveDaily(env, code, candles) {
+/* 1분봉. 별도 API 이며 기준 시각부터 과거 30개만 돌려준다 */
+async function fetchMinutesFromKis(cfg, env, code, hour = "200000") {
+  const data = await kisGet(
+    cfg, env,
+    "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
+    {
+      FID_ETC_CLS_CODE: "",
+      FID_COND_MRKT_DIV_CODE: MARKET_DIV,
+      FID_INPUT_ISCD: code,
+      FID_INPUT_HOUR_1: hour,
+      FID_PW_DATA_INCU_YN: "Y",
+    },
+    "FHKST03010200",
+    QUOTE_CACHE_TTL
+  );
+  return (data.output2 || [])
+    .filter((r) => r.stck_bsop_date && r.stck_cntg_hour && num(r.stck_prpr) != null)
+    .map((r) => ({
+      ts: `${r.stck_bsop_date}${String(r.stck_cntg_hour).slice(0, 4)}`,
+      open: num(r.stck_oprc),
+      high: num(r.stck_hgpr),
+      low: num(r.stck_lwpr),
+      close: num(r.stck_prpr),
+      volume: num(r.cntg_vol),
+    }));
+}
+
+/* 하루치 1분봉. 30분씩 거슬러 올라가며 여러 번 부른다 */
+async function fetchMinutesDay(cfg, env, code) {
+  const bars = new Map();
+  for (let t = MINUTE_DAY_END; t >= MINUTE_DAY_START; t -= 30) {
+    const hour = `${String(Math.floor(t / 60)).padStart(2, "0")}${String(t % 60).padStart(2, "0")}00`;
+    try {
+      for (const b of await fetchMinutesFromKis(cfg, env, code, hour)) bars.set(b.ts, b);
+    } catch {
+      // 해당 구간에 데이터가 없을 수 있다. 계속 진행.
+    }
+  }
+  return [...bars.values()].sort((a, b) => a.ts.localeCompare(b.ts));
+}
+
+/* 1분봉을 N분봉으로 묶는다 (KIS 는 5분봉을 직접 주지 않는다) */
+function aggregateMinutes(bars, minutes) {
+  const buckets = new Map();
+  for (const b of [...bars].sort((x, y) => x.ts.localeCompare(y.ts))) {
+    const hhmm = b.ts.slice(8, 12);
+    const slot = Math.floor((Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(2))) / minutes) * minutes;
+    const key = b.ts.slice(0, 8)
+      + String(Math.floor(slot / 60)).padStart(2, "0")
+      + String(slot % 60).padStart(2, "0");
+    const g = buckets.get(key);
+    if (!g) {
+      buckets.set(key, { ts: key, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume || 0 });
+    } else {
+      g.high = Math.max(g.high, b.high);
+      g.low = Math.min(g.low, b.low);
+      g.close = b.close;
+      g.volume += (b.volume || 0);
+    }
+  }
+  return [...buckets.values()].sort((a, b) => a.ts.localeCompare(b.ts));
+}
+
+async function saveCandles(env, code, period, candles) {
   if (!candles.length) return 0;
   const db = requireDb(env);
-  // 같은 날짜가 다시 오면 덮어쓴다 (당일 시세는 장중에 계속 바뀐다)
   const stmt = db.prepare(
-    `INSERT INTO daily_prices (code, date, open, high, low, close, volume)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(code, date) DO UPDATE SET
+    `INSERT INTO candles (code, period, ts, open, high, low, close, volume)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(code, period, ts) DO UPDATE SET
        open=excluded.open, high=excluded.high, low=excluded.low,
        close=excluded.close, volume=excluded.volume`
   );
-  const batch = candles.map((c) =>
-    stmt.bind(code, c.date, c.open, c.high, c.low, c.close, c.volume)
-  );
-  await db.batch(batch);
+  // D1 batch 는 한 번에 보낼 수 있는 양에 한계가 있어 나눠 보낸다
+  const CHUNK = 100;
+  for (let i = 0; i < candles.length; i += CHUNK) {
+    await db.batch(candles.slice(i, i + CHUNK).map((c) =>
+      stmt.bind(code, period, c.ts, c.open, c.high, c.low, c.close, c.volume)
+    ));
+  }
   return candles.length;
 }
 
-async function readDaily(env, code, days) {
-  const db = requireDb(env);
-  const res = await db.prepare(
-    `SELECT date, open, high, low, close, volume
-       FROM daily_prices WHERE code = ?
-       ORDER BY date DESC LIMIT ?`
-  ).bind(code, days).all();
+async function readCandles(env, code, period, limit) {
+  const res = await requireDb(env).prepare(
+    `SELECT ts, open, high, low, close, volume
+       FROM candles WHERE code = ? AND period = ?
+       ORDER BY ts DESC LIMIT ?`
+  ).bind(code, period, limit).all();
   // 차트는 과거 -> 최신 순서가 필요하다
   return (res.results || []).reverse();
 }
 
 function ymdOffset(daysAgo) {
-  const d = new Date(Date.now() - daysAgo * 86400000);
-  return ymd(d);
+  return ymd(new Date(Date.now() - daysAgo * 86400000));
 }
 
-/* 차트 데이터: DB 를 먼저 보고, 없거나 오래됐으면 KIS 에서 받아 채운다 */
-async function getChart(cfg, env, code, days) {
-  let rows = await readDaily(env, code, days);
-  const today = ymd(new Date());
-  const last = rows.length ? rows[rows.length - 1].date : null;
+/* 차트 데이터: DB 를 먼저 보고, 최근 구간이 오래됐으면 KIS 에서 받아 덮어쓴다.
+   당일 캔들은 장중에 계속 바뀌므로 freshSec 이 지나면 다시 받는다. */
+async function getChart(cfg, env, code, period, limit) {
+  const conf = PERIODS[period];
+  let rows = await readCandles(env, code, period, limit);
 
-  // 비어 있거나, 마지막 저장일이 오늘이 아니면 갱신한다.
-  // (주말·휴장일에는 최신 거래일과 오늘이 다르므로 하루 한 번만 헛호출된다)
+  const mkey = `sync:${code}:${period}`;
+  const lastSync = Number(await metaGet(env, mkey)) || 0;
+  const stale = Date.now() - lastSync > conf.freshSec * 1000;
+
   let fetched = 0;
-  if (!rows.length || last !== today) {
-    const from = rows.length ? last : ymdOffset(Math.max(days, 100) * 2);
-    const candles = await fetchDailyFromKis(cfg, env, code, from, today);
-    fetched = await saveDaily(env, code, candles);
-    if (fetched) rows = await readDaily(env, code, days);
+  if (!rows.length || stale) {
+    let bars;
+    if (conf.kis) {                       // 일/주/월/년
+      bars = await fetchBarsFromKis(cfg, env, code, period, ymdOffset(conf.spanDays), ymd(new Date()));
+    } else {                              // 분봉
+      // 처음이면 하루치를 모으고, 이후에는 최근 구간만 갱신한다
+      const raw = rows.length
+        ? await fetchMinutesFromKis(cfg, env, code)
+        : await fetchMinutesDay(cfg, env, code);
+      bars = period === "5m" ? aggregateMinutes(raw, 5) : raw;
+    }
+    fetched = await saveCandles(env, code, period, bars);
+    await metaSet(env, mkey, Date.now());
+    if (fetched) rows = await readCandles(env, code, period, limit);
   }
   return { rows, fetched, source: fetched ? "KIS+DB" : "DB" };
 }
@@ -523,15 +632,18 @@ export default {
         if (!/^\d{6}$/.test(code)) {
           return fail("code 는 6자리 숫자여야 합니다.", 400);
         }
-        const days = Math.min(
-          Math.max(parseInt(url.searchParams.get("days") || "120", 10) || 120, 1),
-          1000
-        );
-        const { rows, fetched, source } = await getChart(cfg, env, code, days);
+        const period = (url.searchParams.get("period") || "D").trim();
+        if (!PERIODS[period]) {
+          return fail(`period 는 ${Object.keys(PERIODS).join(", ")} 중 하나여야 합니다.`, 400);
+        }
+        const raw = url.searchParams.get("limit") || url.searchParams.get("days") || "240";
+        const limit = Math.min(Math.max(parseInt(raw, 10) || 240, 1), 1000);
+
+        const { rows, fetched, source } = await getChart(cfg, env, code, period, limit);
         return json({
           ok: true,
-          data: { code, candles: rows },
-          meta: { count: rows.length, fetched, source },
+          data: { code, period, candles: rows },
+          meta: { count: rows.length, fetched, source, label: PERIODS[period].label },
         });
       }
 
