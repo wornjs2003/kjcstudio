@@ -62,6 +62,48 @@ Worker 화면 → **Bindings** → **Add binding** → **KV namespace**
 
 ---
 
+## 4-2. D1 데이터베이스 연결 (차트·재무 저장용)
+
+차트는 과거 데이터가 필요한데 볼 때마다 KIS 를 부르면 호출량을 감당할 수 없다.
+한 번 받은 일봉을 D1 에 쌓아두고 이후에는 DB 에서 꺼내 쓴다.
+
+**만들기**
+
+Cloudflare 대시보드 → D1 SQL database → **Create Database**
+
+| 항목 | 값 |
+|---|---|
+| 이름 | `kjc-stock-db` |
+
+**연결하기**
+
+Worker 화면 → **Bindings** → **Add binding** → **D1 database**
+
+| 항목 | 값 |
+|---|---|
+| Variable name | `KJC_DB` |
+| D1 database | `kjc-stock-db` |
+
+이름이 정확히 `KJC_DB` 여야 코드가 찾는다.
+
+**테이블 만들기** (최초 1회)
+
+```
+https://thekjcstudio.com/api/kis/db/init
+```
+
+`{"ok":true,"data":{"created":3}}` 가 나오면 완료.
+
+**무료 한도** (공식 문서 확인)
+
+| 항목 | 한도 |
+|---|---|
+| 읽기 | 500만 / 일 |
+| 쓰기 | 10만 / 일 |
+| 저장 | 5 GB |
+
+---
+
 ## 5. 도메인에 연결 (Route)
 
 Worker 화면 → **Settings** → **Domains & Routes** → **Add** → **Route**
@@ -82,6 +124,24 @@ Worker 화면 → **Settings** → **Domains & Routes** → **Add** → **Route*
 ```
 https://thekjcstudio.com/api/kis/health
 ```
+
+## 엔드포인트 목록
+
+| 경로 | 하는 일 |
+|---|---|
+| `/api/kis/health` | 연결·토큰·DB 상태 |
+| `/api/kis/price?code=005930` | 종목 현재가 |
+| `/api/kis/prices?codes=005930,000660` | 여러 종목 현재가 |
+| `/api/kis/indices` | 지수 (KOSPI·KOSDAQ·KOSPI200) + 일봉 |
+| `/api/kis/chart?code=005930&days=120` | 일봉 캔들 (DB 우선, 없으면 KIS 에서 받아 저장) |
+| `/api/kis/db/init` | 테이블 생성 (최초 1회) |
+| `/api/kis/db/status` | 저장 현황 (행 수·종목 수·기간) |
+| `/api/kis/stats` | 캐시 설정값 |
+
+`chart` 응답의 `meta.source` 로 어디서 온 데이터인지 알 수 있다.
+
+- `KIS+DB` — KIS 에서 새로 받아 저장함
+- `DB` — 저장된 것에서 바로 응답 (KIS 호출 0회)
 
 정상이면 이런 응답이 보입니다.
 

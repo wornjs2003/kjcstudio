@@ -278,6 +278,140 @@ async function fetchIndices(cfg, env, withChart = true) {
   return { data: out, errors };
 }
 
+/* ── 저장 계층 (Cloudflare D1) ──────────────────────────────
+   차트는 과거 데이터가 필요한데 볼 때마다 KIS 를 부르면 호출량을 감당할 수 없다.
+   한 번 받은 일봉을 여기 쌓아두고, 이후에는 DB 에서 바로 꺼내 쓴다.
+   ─────────────────────────────────────────────────────────── */
+
+const SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS daily_prices (
+     code   TEXT    NOT NULL,
+     date   TEXT    NOT NULL,
+     open   INTEGER,
+     high   INTEGER,
+     low    INTEGER,
+     close  INTEGER,
+     volume INTEGER,
+     PRIMARY KEY (code, date)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_daily_code_date
+     ON daily_prices (code, date DESC)`,
+  `CREATE TABLE IF NOT EXISTS sync_meta (
+     key        TEXT PRIMARY KEY,
+     value      TEXT,
+     updated_at TEXT
+   )`,
+];
+
+function requireDb(env) {
+  if (!env.KJC_DB) {
+    throw new Error("D1 바인딩(KJC_DB)이 없습니다. Worker 설정에서 연결해 주세요.");
+  }
+  return env.KJC_DB;
+}
+
+async function dbInit(env) {
+  const db = requireDb(env);
+  for (const sql of SCHEMA) await db.prepare(sql).run();
+  return { created: SCHEMA.length };
+}
+
+async function dbStatus(env) {
+  const db = requireDb(env);
+  // 테이블이 아직 없으면 여기서 오류가 난다 -> init 이 필요하다는 뜻
+  const rows = await db.prepare(
+    `SELECT COUNT(*) AS rows, COUNT(DISTINCT code) AS codes,
+            MIN(date) AS firstDate, MAX(date) AS lastDate
+       FROM daily_prices`
+  ).first();
+  return {
+    rows: rows?.rows ?? 0,
+    codes: rows?.codes ?? 0,
+    firstDate: rows?.firstDate ?? null,
+    lastDate: rows?.lastDate ?? null,
+  };
+}
+
+/* KIS 일봉 조회 (한 번에 최대 100일치) */
+async function fetchDailyFromKis(cfg, env, code, from, to) {
+  const data = await kisGet(
+    cfg, env,
+    "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+    {
+      FID_COND_MRKT_DIV_CODE: "J",
+      FID_INPUT_ISCD: code,
+      FID_INPUT_DATE_1: from,
+      FID_INPUT_DATE_2: to,
+      FID_PERIOD_DIV_CODE: "D",
+      FID_ORG_ADJ_PRC: "0",       // 0 = 수정주가 반영
+    },
+    "FHKST03010100",
+    QUOTE_CACHE_TTL
+  );
+  return (data.output2 || [])
+    .filter((r) => r.stck_bsop_date && num(r.stck_clpr) != null)
+    .map((r) => ({
+      date: String(r.stck_bsop_date),
+      open: num(r.stck_oprc),
+      high: num(r.stck_hgpr),
+      low: num(r.stck_lwpr),
+      close: num(r.stck_clpr),
+      volume: num(r.acml_vol),
+    }));
+}
+
+async function saveDaily(env, code, candles) {
+  if (!candles.length) return 0;
+  const db = requireDb(env);
+  // 같은 날짜가 다시 오면 덮어쓴다 (당일 시세는 장중에 계속 바뀐다)
+  const stmt = db.prepare(
+    `INSERT INTO daily_prices (code, date, open, high, low, close, volume)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(code, date) DO UPDATE SET
+       open=excluded.open, high=excluded.high, low=excluded.low,
+       close=excluded.close, volume=excluded.volume`
+  );
+  const batch = candles.map((c) =>
+    stmt.bind(code, c.date, c.open, c.high, c.low, c.close, c.volume)
+  );
+  await db.batch(batch);
+  return candles.length;
+}
+
+async function readDaily(env, code, days) {
+  const db = requireDb(env);
+  const res = await db.prepare(
+    `SELECT date, open, high, low, close, volume
+       FROM daily_prices WHERE code = ?
+       ORDER BY date DESC LIMIT ?`
+  ).bind(code, days).all();
+  // 차트는 과거 -> 최신 순서가 필요하다
+  return (res.results || []).reverse();
+}
+
+function ymdOffset(daysAgo) {
+  const d = new Date(Date.now() - daysAgo * 86400000);
+  return ymd(d);
+}
+
+/* 차트 데이터: DB 를 먼저 보고, 없거나 오래됐으면 KIS 에서 받아 채운다 */
+async function getChart(cfg, env, code, days) {
+  let rows = await readDaily(env, code, days);
+  const today = ymd(new Date());
+  const last = rows.length ? rows[rows.length - 1].date : null;
+
+  // 비어 있거나, 마지막 저장일이 오늘이 아니면 갱신한다.
+  // (주말·휴장일에는 최신 거래일과 오늘이 다르므로 하루 한 번만 헛호출된다)
+  let fetched = 0;
+  if (!rows.length || last !== today) {
+    const from = rows.length ? last : ymdOffset(Math.max(days, 100) * 2);
+    const candles = await fetchDailyFromKis(cfg, env, code, from, today);
+    fetched = await saveDaily(env, code, candles);
+    if (fetched) rows = await readDaily(env, code, days);
+  }
+  return { rows, fetched, source: fetched ? "KIS+DB" : "DB" };
+}
+
 /* ── 라우팅 ────────────────────────────────────────────────── */
 
 export default {
@@ -313,6 +447,18 @@ export default {
           tokenOk = false;
           error = String(e.message || e);
         }
+        // 저장 계층 상태도 함께 알려준다
+        let db = { bound: !!env.KJC_DB, ready: false, error: null };
+        if (env.KJC_DB) {
+          try {
+            Object.assign(db, { ready: true }, await dbStatus(env));
+          } catch (e) {
+            db.error = String(e.message || e);   // 테이블 미생성 등
+          }
+        } else {
+          db.error = "D1 바인딩(KJC_DB)이 없습니다.";
+        }
+
         return json({
           ok: tokenOk,
           configured: true,
@@ -320,6 +466,7 @@ export default {
           modeLabel: MODE_LABEL[cfg.mode],
           tokenOk,
           error,
+          db,
           runtime: "workers",
         });
       }
@@ -360,6 +507,31 @@ export default {
           data,
           errors: Object.keys(errors).length ? errors : null,
           meta: { requested: codes.length, cacheTtl: QUOTE_CACHE_TTL },
+        });
+      }
+
+      if (route === "db/init") {
+        return json({ ok: true, data: await dbInit(env) });
+      }
+
+      if (route === "db/status") {
+        return json({ ok: true, data: await dbStatus(env) });
+      }
+
+      if (route === "chart") {
+        const code = (url.searchParams.get("code") || "").trim();
+        if (!/^\d{6}$/.test(code)) {
+          return fail("code 는 6자리 숫자여야 합니다.", 400);
+        }
+        const days = Math.min(
+          Math.max(parseInt(url.searchParams.get("days") || "120", 10) || 120, 1),
+          1000
+        );
+        const { rows, fetched, source } = await getChart(cfg, env, code, days);
+        return json({
+          ok: true,
+          data: { code, candles: rows },
+          meta: { count: rows.length, fetched, source },
         });
       }
 
