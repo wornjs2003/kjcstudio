@@ -6,6 +6,7 @@
 
 import { fmtPct, changeDirection } from '../utils/format.js';
 import { applyTicks } from '../utils/tick.js';
+import { liveOnly, liveClass, liveTitle } from '../utils/live-value.js';
 import { getState, setSelectedIndex, subscribe } from '../store/state.js';
 
 /* 지수 값 포맷: 원/달러만 정수, 나머지는 소수 둘째 자리 */
@@ -100,6 +101,7 @@ function renderStripMarkup(indices, selectedCode) {
   const selected = indices.find(i => i.code === selectedCode) || indices[0];
   const selDir = changeDirection(selected.change);
   const isUp = selected.change >= 0;
+  const selLive = selected.source === 'KIS';
 
   const tabs = indices.map(idx => {
     const dir = changeDirection(idx.change);
@@ -107,8 +109,8 @@ function renderStripMarkup(indices, selectedCode) {
     return `
       <button type="button" class="kh-index-tab ${active}" data-index="${idx.code}">
         <span class="kh-index-name">${idx.name}</span>
-        <span class="kh-index-value kh-mono kh-${dir}" data-tick-key="idx-${idx.code}" data-tick-value="${idx.value}" data-tick-live="${idx.source === 'KIS' ? '1' : '0'}">${fmtIndexValue(idx.value, idx.unit)}</span>
-        <span class="kh-index-change kh-${dir}">${fmtPct(idx.changePct)}</span>
+        <span class="kh-index-value kh-mono ${idx.source === 'KIS' ? 'kh-' + dir : 'kh-nodata'}" title="${liveTitle(idx.source === 'KIS')}" data-tick-key="idx-${idx.code}" data-tick-value="${idx.value}" data-tick-live="${idx.source === 'KIS' ? '1' : '0'}">${liveOnly(idx.source === 'KIS', fmtIndexValue(idx.value, idx.unit))}</span>
+        <span class="kh-index-change ${idx.source === 'KIS' ? 'kh-' + dir : 'kh-nodata'}">${liveOnly(idx.source === 'KIS', fmtPct(idx.changePct))}</span>
       </button>
     `;
   }).join('');
@@ -122,14 +124,16 @@ function renderStripMarkup(indices, selectedCode) {
         <div class="kh-index-detail-head">
           <div class="kh-index-detail-name">${selected.name}</div>
           <div class="kh-index-detail-value-row">
-            <span class="kh-index-detail-value kh-mono kh-${selDir}"
+            <span class="kh-index-detail-value kh-mono ${selLive ? 'kh-' + selDir : 'kh-nodata'}"
+                  title="${liveTitle(selLive)}"
                   data-tick-key="idxmain-${selected.code}" data-tick-value="${selected.value}"
-                  data-tick-live="${selected.source === 'KIS' ? '1' : '0'}">
-              ${fmtIndexValue(selected.value, selected.unit)}
+                  data-tick-live="${selLive ? '1' : '0'}">
+              ${liveOnly(selLive, fmtIndexValue(selected.value, selected.unit))}
             </span>
-            <span class="kh-index-detail-change kh-${selDir}">
-              ${selected.change >= 0 ? '+' : ''}${selected.change.toFixed(2)}
-              (${fmtPct(selected.changePct)})
+            <span class="kh-index-detail-change ${selLive ? 'kh-' + selDir : 'kh-nodata'}">
+              ${selLive
+                ? `${selected.change >= 0 ? '+' : ''}${selected.change.toFixed(2)} (${fmtPct(selected.changePct)})`
+                : liveOnly(false, null)}
             </span>
           </div>
           <div class="kh-index-detail-meta">

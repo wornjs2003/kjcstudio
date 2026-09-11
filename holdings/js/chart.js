@@ -8,15 +8,17 @@
    같은 종목을 여러 번 열어도 KIS 호출은 하루 한 번뿐이다.
    ========================================================================== */
 
+/* 밝은 바탕에 맞춘 색. CSS 변수를 읽어오지 않는 이유는
+   차트가 canvas 로 그려져 CSS 상속을 받지 못하기 때문이다. */
 const COLOR = {
-  up: '#ff5f5f',          // 한국식: 상승 빨강
-  down: '#4f9eff',        // 하락 파랑
-  text: '#8a8a96',
-  grid: 'rgba(255,255,255,0.05)',
-  border: 'rgba(255,255,255,0.08)',
-  ma5: '#f5a623',
-  ma20: '#4f7eff',
-  ma60: '#a78bfa',
+  up: '#d92d20',          // 한국식: 상승 빨강
+  down: '#0b63ce',        // 하락 파랑
+  text: '#6a6a76',
+  grid: 'rgba(0,0,0,0.06)',
+  border: 'rgba(0,0,0,0.10)',
+  ma5: '#b25e09',
+  ma20: '#3a6ae8',
+  ma60: '#7c3aed',
 };
 
 /* 화면의 기간 버튼 → 서버가 쓰는 기간 코드 */
@@ -110,8 +112,8 @@ export function createStockChart(container, candles, opts = {}) {
     },
     crosshair: {
       mode: LC.CrosshairMode.Normal,
-      vertLine: { color: 'rgba(255,255,255,0.25)', labelBackgroundColor: '#2a2a32' },
-      horzLine: { color: 'rgba(255,255,255,0.25)', labelBackgroundColor: '#2a2a32' },
+      vertLine: { color: 'rgba(0,0,0,0.28)', labelBackgroundColor: '#3a3a44' },
+      horzLine: { color: 'rgba(0,0,0,0.28)', labelBackgroundColor: '#3a3a44' },
     },
     localization: {
       locale: 'ko-KR',
@@ -150,7 +152,7 @@ export function createStockChart(container, candles, opts = {}) {
     volumeSeries.setData(candles.map((c) => ({
       time: toChartTime(c.ts, period),
       value: c.volume,
-      color: c.close >= c.open ? 'rgba(255,95,95,0.35)' : 'rgba(79,158,255,0.35)',
+      color: c.close >= c.open ? 'rgba(217,45,32,0.30)' : 'rgba(11,99,206,0.30)',
     })));
   }
 

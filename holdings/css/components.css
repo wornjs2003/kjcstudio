@@ -6,7 +6,7 @@
 .kh-boot {
   position: fixed;
   inset: 0;
-  background: var(--kh-bg, #0c0c0e);
+  background: var(--kh-bg, var(--kh-bg));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -29,11 +29,11 @@
   font-family: var(--kh-font-mono, 'JetBrains Mono', monospace);
   font-size: 1.3rem;
   font-weight: 500;
-  color: var(--kh-text-primary, #f0f0f0);
+  color: var(--kh-text-primary, var(--kh-text-primary));
   letter-spacing: 0.04em;
 }
 .kh-boot-logo span {
-  color: var(--kh-accent, #4f7eff);
+  color: var(--kh-accent, var(--kh-accent));
   margin-left: 6px;
   font-weight: 400;
 }
@@ -41,13 +41,13 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.1);
-  border-top-color: var(--kh-accent, #4f7eff);
+  border: 2px solid var(--kh-overlay-soft);
+  border-top-color: var(--kh-accent, var(--kh-accent));
   animation: kh-boot-spin 0.8s linear infinite;
 }
 .kh-boot-text {
   font-size: 0.85rem;
-  color: var(--kh-text-muted, #6a6a76);
+  color: var(--kh-text-muted, var(--kh-text-muted));
   letter-spacing: 0.03em;
 }
 @keyframes kh-boot-spin {
@@ -62,7 +62,7 @@
   justify-content: center;
   gap: 12px;
   padding: 48px 24px;
-  color: var(--kh-text-muted, #6a6a76);
+  color: var(--kh-text-muted, var(--kh-text-muted));
 }
 .kh-detail-loading .kh-boot-spinner {
   width: 28px;
@@ -310,7 +310,7 @@
 .kh-index-tab.is-active {
   background: var(--kh-bg-card);
   border-color: var(--kh-accent);
-  box-shadow: 0 0 0 1px rgba(79, 126, 255, 0.15) inset;
+  box-shadow: 0 0 0 1px var(--kh-accent-dim) inset;
 }
 
 .kh-index-name {
@@ -518,9 +518,9 @@
   font-weight: 500;
   letter-spacing: 0.02em;
 }
-.kh-tag-notice { background: rgba(245,177,80,0.15); color: var(--kh-tag-notice); }
-.kh-tag-news { background: rgba(111,210,184,0.12); color: var(--kh-tag-news); }
-.kh-tag-dart { background: rgba(196,139,255,0.15); color: var(--kh-tag-dart); }
+.kh-tag-notice { background: var(--kh-tag-notice-dim); color: var(--kh-tag-notice); }
+.kh-tag-news { background: var(--kh-tag-news-dim); color: var(--kh-tag-news); }
+.kh-tag-dart { background: var(--kh-tag-dart-dim); color: var(--kh-tag-dart); }
 
 .kh-feed-ticker {
   font-size: 0.7rem;
@@ -656,9 +656,9 @@
   border-color: var(--kh-text-muted);
 }
 .kh-chart-period.is-active {
-  background: var(--kh-accent, #4f7eff);
-  border-color: var(--kh-accent, #4f7eff);
-  color: #fff;
+  background: var(--kh-accent, var(--kh-accent));
+  border-color: var(--kh-accent, var(--kh-accent));
+  color: var(--kh-bg-card);
 }
 .kh-chart-svg {
   width: 100%;
@@ -810,7 +810,7 @@
 .kh-subtab.is-active {
   background: var(--kh-bg-surface);
   color: var(--kh-text-primary);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  box-shadow: 0 1px 2px var(--kh-overlay-soft);
 }
 
 .kh-trade-date {
@@ -856,7 +856,7 @@
 
 .kh-trade-table tbody tr.kh-inst-sub td {
   color: var(--kh-text-muted);
-  background: rgba(255,255,255,0.015);
+  background: var(--kh-overlay-faint);
 }
 
 .kh-inv-name {
@@ -959,7 +959,7 @@
   font-family: var(--kh-font-mono);
   color: var(--kh-accent);
   background: var(--kh-accent-dim);
-  border: 1px solid rgba(79,126,255,0.2);
+  border: 1px solid var(--kh-accent-dim);
   border-radius: 3px;
   padding: 0 5px;
   line-height: 1.6;
@@ -968,7 +968,7 @@
   transition: background var(--kh-transition-fast);
 }
 .kh-gi-toggle:hover {
-  background: rgba(79,126,255,0.2);
+  background: var(--kh-accent-dim);
 }
 
 /* 펼쳐진 서브행 */
@@ -1038,10 +1038,20 @@
 .kh-chart-src {
   padding: 2px 7px;
   border-radius: 4px;
-  background: rgba(255,255,255,0.05);
+  background: var(--kh-overlay-subtle);
   color: var(--kh-text-muted);
   font-size: 0.68rem;
 }
 
 /* 차트 안의 툴팁·라벨이 밝은 테마로 뜨지 않도록 */
 .kh-chart-live table { background: transparent !important; }
+
+/* ==========================================================================
+   실데이터가 없는 값
+   주식 화면에서 목업 숫자가 실제처럼 보이면 안 되므로, 값 대신 표시되는
+   자리임을 흐린 색으로 알린다.
+   ========================================================================== */
+.kh-nodata {
+  color: var(--kh-text-dim);
+  font-variant-numeric: tabular-nums;
+}

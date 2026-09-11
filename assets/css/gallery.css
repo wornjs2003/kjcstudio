@@ -67,14 +67,14 @@
 
 .gallery-item:hover {
   transform: translateY(-4px);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
 }
 
 .gallery-item-media {
   position: relative;
   width: 100%;
   overflow: hidden;
-  background: linear-gradient(135deg, #1c1c22 0%, #2a2a32 100%);
+  background: linear-gradient(135deg, var(--placeholder-from) 0%, var(--placeholder-to) 100%);
 }
 
 .gallery-item-media img {
@@ -96,14 +96,14 @@
   justify-content: center;
   position: relative;
   background:
-    linear-gradient(135deg, #1c1c22 0%, #2a2a32 100%);
+    linear-gradient(135deg, var(--placeholder-from) 0%, var(--placeholder-to) 100%);
 }
 
 .gallery-item-placeholder::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 30% 20%, rgba(79,126,255,0.08), transparent 60%);
+  background: radial-gradient(circle at 30% 20%, var(--accent-faint), transparent 60%);
 }
 
 .gallery-item-placeholder span {
@@ -122,7 +122,7 @@
   right: 0;
   bottom: 0;
   padding: 20px 22px 18px;
-  background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.75) 100%);
+  background: linear-gradient(180deg, transparent 0%, var(--scrim-strong) 100%);
   opacity: 0;
   transform: translateY(8px);
   transition: opacity 0.3s ease, transform 0.3s ease;
@@ -136,13 +136,13 @@
 .gallery-item-title {
   font-size: 1rem;
   font-weight: 500;
-  color: #fff;
+  color: var(--on-scrim);
   margin-bottom: 4px;
 }
 
 .gallery-item-meta {
   font-size: 0.78rem;
-  color: rgba(255,255,255,0.7);
+  color: var(--on-scrim-dim);
   letter-spacing: 0.04em;
 }
 
@@ -171,7 +171,7 @@
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: rgba(0, 0, 0, 0.92);
+  background: var(--overlay-bg);
   display: none;
   align-items: center;
   justify-content: center;
@@ -194,7 +194,7 @@
   max-width: 100%;
   max-height: 85vh;
   border-radius: 12px;
-  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-lg);
 }
 
 .lightbox-close {
@@ -202,7 +202,7 @@
   top: 32px;
   right: 40px;
   font-size: 2rem;
-  color: #fff;
+  color: var(--on-scrim);
   opacity: 0.75;
   padding: 8px 14px;
   border-radius: 50%;
@@ -211,7 +211,7 @@
 
 .lightbox-close:hover {
   opacity: 1;
-  background: rgba(255,255,255,0.1);
+  background: var(--overlay-control);
 }
 
 .lightbox-caption {
@@ -220,14 +220,14 @@
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
-  color: rgba(255,255,255,0.85);
+  color: var(--on-scrim-dim);
   font-size: 0.95rem;
 }
 
 .lightbox-caption strong {
   display: block;
   font-size: 1.15rem;
-  color: #fff;
+  color: var(--on-scrim);
   margin-bottom: 4px;
   font-weight: 500;
 }

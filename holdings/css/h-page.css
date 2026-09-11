@@ -6,18 +6,20 @@
 
 :root {
   /* holdings 디자인 토큰 (메인 사이트에서 복제하여 소유) */
-  --h-bg: #0c0c0e;
-  --h-surface: #141416;
-  --h-card: #1a1a1e;
-  --h-border: rgba(255,255,255,0.07);
-  --h-border-strong: rgba(255,255,255,0.14);
-  --h-text: #f0f0f0;
-  --h-text-sub: #8a8a96;
-  --h-text-muted: #5c5c66;
-  --h-accent: #4f7eff;
-  --h-accent-hover: #6b93ff;
-  --h-up: #ff5f5f;
-  --h-down: #4f9dff;
+  --h-bg: #fbfbfc;
+  --h-surface: #f4f4f6;
+  --h-card: #ffffff;
+  --h-border: rgba(0,0,0,0.09);
+  --h-border-strong: rgba(0,0,0,0.18);
+  --h-text: #17171b;
+  --h-text-sub: #5e5e6a;
+  --h-text-muted: #8c8c98;
+  --h-accent: #3a6ae8;
+  --h-accent-hover: #2b55c9;
+  --h-up: #d92d20;
+  --h-down: #0b63ce;
+  --h-ok:   #0f7a5f;
+  --h-warn: #b25e09;
   --h-nav-h: 72px;
   --h-gutter: 48px;
   --h-max: 1440px;
@@ -47,7 +49,7 @@ button { font-family: inherit; background: none; border: none; color: inherit; c
   justify-content: space-between;
   height: var(--h-nav-h);
   padding: 0 var(--h-gutter);
-  background: rgba(12,12,14,0.78);
+  background: rgba(251,251,252,0.82);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--h-border);

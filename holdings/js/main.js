@@ -5,6 +5,7 @@
 import { MOCK_INDICES, MOCK_STOCKS, MOCK_MARKET_STOCKS } from './data/mock.js';
 import { fetchLiveIndices, fetchLivePrices, applyLiveToStock, LIVE_CODES } from './data/live.js';
 import { markRefresh, endRefresh } from './utils/tick.js';
+import { markLoaded } from './utils/live-value.js';
 import { setStocks, openDetail, closeDetail, getState, setState } from './store/state.js';
 import { mountSidebar } from './components/sidebar.js';
 import { mountIndexStrip, updateIndices } from './components/index-strip.js';
@@ -81,6 +82,7 @@ async function refreshLiveData() {
     }
   } finally {
     endRefresh();
+    markLoaded();   // 이제부터 값이 없으면 '로딩중' 대신 '—' 로 표시
   }
 }
 

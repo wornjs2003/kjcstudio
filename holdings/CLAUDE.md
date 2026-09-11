@@ -30,7 +30,9 @@
 - `preview.command` : 독립 실행 파일 (분리 시 따라감)
 
 ## 디자인 규칙
-- 테마: 다크 테마 (#0c0c0e)
+- 테마: **라이트 테마** (#fbfbfc) — 2026-09-11 변경
+- 색상 하드코딩 금지. `css/base.css` 의 `--kh-*`, `css/h-page.css` 의 `--h-*` 변수만 쓴다
+- 차트 색(`js/chart.js`)은 canvas 라 CSS 를 상속받지 못하므로 따로 맞춰야 한다
 - accent: #4f7eff
 - 폰트: Noto Sans KR, Roboto
 - 메인 사이트와 시각적 일관성 유지하되, 파일은 별도 소유

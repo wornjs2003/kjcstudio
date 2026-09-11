@@ -9,11 +9,18 @@
 ## 사이트 성격
 - 크리에이티브 스튜디오 포트폴리오 사이트
 - 메인페이지 열면 대표 카테고리 작업물 갤러리가 바로 보임
-- 참고 레퍼런스: https://0yanggang.imweb.me/21 (레이아웃 차용, 테마는 다크 유지)
+- 참고 레퍼런스: https://0yanggang.imweb.me/21 (레이아웃만 차용, 색은 라이트로)
 
 ## 디자인 규칙
-- 테마: 다크 테마 유지 (흰 배경 사용 금지)
-- 배경색: #0c0c0e
+- 테마: **라이트 테마** (검은 배경 사용 금지 — 오래 보면 눈이 피로하고 기분이 가라앉는다, 2026-09-11 변경)
+- 배경색: #fbfbfc (순백 대신 아주 옅은 회색. 순백은 눈이 부시다)
+- 카드/패널: #ffffff · 본문 글자: #17171b
+- **색상 하드코딩 금지.** 모든 색은 각 구역의 `:root` 변수로 정의하고 `var(--…)` 로만 쓴다.
+  변수 한 곳만 고치면 전체 색이 바뀌어야 한다
+- 예외로 어둡게 유지하는 것: 사진 위 캡션 막(`--scrim`), 이미지 확대 배경(`--overlay-bg`).
+  밝게 바꾸면 사진 위 흰 글자가 안 읽힌다
+- 상승/하락 색은 한국식(상승 빨강 #d92d20 / 하락 파랑 #0b63ce).
+  밝은 바탕에서는 채도가 높으면 뜨므로 다크용보다 진하게 쓴다
 - accent 색상: #4f7eff
 - 폰트: Noto Sans KR, Roboto
 - 카테고리 제목: 거대 이탤릭 타이포
@@ -35,7 +42,7 @@
 - `partials/nav.html`, `partials/footer.html` : 공통 네비/푸터 (fetch로 동적 주입)
 - `holdings/` : 독립 프로젝트 구역 (주식 분석, 보유 종목 — 별도 관리)
 - `company-setup/` : 회사 설립 체크리스트 (독립 구역, 항목 데이터는 `company-setup/data/checklist.js`)
-- `projects/` : 프로젝트 관리 (독립 구역, 단계 정의는 `projects/data/stages.js`, 데이터는 localStorage + JSON 내보내기)
+- `projects/` : 프로젝트 보드 (독립 구역, 칼럼·카테고리 정의는 `projects/data/config.js`, 데이터는 localStorage + JSON 내보내기)
 
 ## 상단 메뉴 구성
 - 3D Modeling / AI Work / Web·Interactive / Branding / Holdings → / ⋯(더보기)
@@ -72,7 +79,7 @@ Mac 은 `.command` 더블클릭, Windows 는 같은 이름의 `.bat` 더블클�
 | 메인 사이트 (포트 8080) | `studio-preview.command` | `studio-preview.bat` |
 | holdings 단축 (포트 8765) | `holdings-preview.command` | `holdings-preview.bat` |
 | 설립 체크리스트 (포트 8090) | `company-setup/preview.command` | `company-setup/preview.bat` |
-| 프로젝트 관리 (포트 8091) | `projects/preview.command` | `projects/preview.bat` |
+| 프로젝트 보드 (포트 8091) | `projects/preview.command` | `projects/preview.bat` |
 | holdings 독립 실행 | `holdings/preview.command` | `holdings/preview.bat` |
 | 작업물 목록 갱신 | `refresh-works.command` | `refresh-works.bat` |
 

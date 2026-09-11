@@ -132,7 +132,7 @@
   transition: transform var(--kh-transition);
   display: flex;
   flex-direction: column;
-  box-shadow: -20px 0 40px rgba(0,0,0,0.4);
+  box-shadow: -20px 0 40px var(--kh-overlay-soft);
   /* 2단 레이아웃: 내부에서 컬럼별로 스크롤 */
   overflow: hidden;
 }
@@ -198,7 +198,7 @@
   position: fixed;
   top: 0; left: 0;
   width: 100vw; height: 100vh;
-  background: rgba(0,0,0,0.3);
+  background: var(--kh-overlay-subtle);
   z-index: 40;
   opacity: 0;
   pointer-events: none;
@@ -267,7 +267,7 @@
     border-top: 1px solid var(--kh-border);
     /* iOS 홈 인디케이터 영역 확보 */
     padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
-    background: rgba(20, 20, 22, 0.96);
+    background: var(--kh-bg-float);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     z-index: 60;

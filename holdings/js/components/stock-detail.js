@@ -4,6 +4,7 @@ import { fmtPrice, fmtPct, fmtChange, fmtVolume, changeDirection,
 import { getState, subscribe, closeDetail, setDetailTab,
          setTradeSubTab, toggleInstExpanded, setChartPeriod } from '../store/state.js';
 import { applyTicks } from '../utils/tick.js';
+import { liveOnly, liveClass, liveTitle } from '../utils/live-value.js';
 import { fetchCandles, createStockChart, maLegend } from '../chart.js';
 import { getMemo, setMemo } from '../store/memo.js';
 import { generateMockCandles, generateMockTrading,
@@ -66,18 +67,20 @@ export function mountStockDetail(panelEl, backdropEl) {
         <div class="kh-detail-price-main">
           <div class="kh-detail-price-col">
             <div class="kh-detail-price-row">
-              <span class="kh-detail-price kh-${dir}" data-tick-key="detail-${s.code}" data-tick-value="${s.price}" data-tick-live="${s.isLive ? '1' : '0'}">${fmtPrice(s.price)}</span>
-              <span class="kh-change-pill ${dir}">${fmtChange(s.change)} (${fmtPct(s.changePct)})</span>
+              <span class="kh-detail-price ${s.isLive ? 'kh-' + dir : 'kh-nodata'}" title="${liveTitle(s.isLive)}" data-tick-key="detail-${s.code}" data-tick-value="${s.price}" data-tick-live="${s.isLive ? '1' : '0'}">${liveOnly(s.isLive, fmtPrice(s.price))}</span>
+              ${s.isLive
+                ? `<span class="kh-change-pill ${dir}">${fmtChange(s.change)} (${fmtPct(s.changePct)})</span>`
+                : `<span class="kh-nodata">${liveOnly(false, null)}</span>`}
             </div>
-            <div class="kh-detail-marketcap">시총 ${s.marketCap}</div>
+            <div class="kh-detail-marketcap ${liveClass(s.isLive)}">시총 ${liveOnly(s.isLive, s.marketCap)}</div>
           </div>
           <dl class="kh-detail-stats">
-            <div class="kh-stat"><dt>전일</dt><dd>${fmtPrice(s.prevClose)}</dd></div>
-            <div class="kh-stat"><dt>시가</dt><dd>${fmtPrice(s.open)}</dd></div>
-            <div class="kh-stat"><dt>고가</dt><dd class="kh-up">${fmtPrice(s.high)}</dd></div>
-            <div class="kh-stat"><dt>저가</dt><dd class="kh-down">${fmtPrice(s.low)}</dd></div>
-            <div class="kh-stat"><dt>거래량</dt><dd>${fmtVolume(s.volume)}</dd></div>
-            <div class="kh-stat"><dt>거래대금</dt><dd>${fmtKrw(tradingValueWon)}</dd></div>
+            <div class="kh-stat"><dt>전일</dt><dd class="${liveClass(s.isLive)}">${liveOnly(s.isLive, fmtPrice(s.prevClose))}</dd></div>
+            <div class="kh-stat"><dt>시가</dt><dd class="${liveClass(s.isLive)}">${liveOnly(s.isLive, fmtPrice(s.open))}</dd></div>
+            <div class="kh-stat"><dt>고가</dt><dd class="${s.isLive ? 'kh-up' : 'kh-nodata'}">${liveOnly(s.isLive, fmtPrice(s.high))}</dd></div>
+            <div class="kh-stat"><dt>저가</dt><dd class="${s.isLive ? 'kh-down' : 'kh-nodata'}">${liveOnly(s.isLive, fmtPrice(s.low))}</dd></div>
+            <div class="kh-stat"><dt>거래량</dt><dd class="${liveClass(s.isLive)}">${liveOnly(s.isLive, fmtVolume(s.volume))}</dd></div>
+            <div class="kh-stat"><dt>거래대금</dt><dd class="${liveClass(s.isLive)}">${liveOnly(s.isLive, fmtKrw(tradingValueWon))}</dd></div>
           </dl>
         </div>
       </div>

@@ -15,7 +15,7 @@
   justify-content: space-between;
   height: var(--nav-height);
   padding: 0 var(--page-gutter);
-  background: rgba(12, 12, 14, 0.72);
+  background: var(--nav-bg);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--border);
@@ -115,7 +115,7 @@
   visibility: hidden;
   transform: translateY(-4px);
   transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-lg);
 }
 
 .nav-more:hover .nav-more-panel,
@@ -281,7 +281,7 @@
   position: fixed;
   inset: 0;
   z-index: 90;
-  background: rgba(12, 12, 14, 0.97);
+  background: var(--nav-bg-solid);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   padding: calc(var(--nav-height) + 24px) var(--page-gutter) 40px;

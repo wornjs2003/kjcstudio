@@ -6,6 +6,7 @@
 
 import { fmtPrice, fmtPct, fmtVolume, fmtKrw, changeDirection } from '../utils/format.js';
 import { applyTicks } from '../utils/tick.js';
+import { liveOnly, liveClass, liveTitle } from '../utils/live-value.js';
 import { openDetail, getState, subscribe, setWatchlistView } from '../store/state.js';
 import { getMemo } from '../store/memo.js';
 import { MOCK_MARKET_STOCKS, fmtMarketCapNum } from '../data/mock.js';
@@ -197,9 +198,9 @@ function row(s, i, selected, lastCol, showRank) {
           <span class="kh-stock-name-code">${s.code}</span>
         </div>
       </td>
-      <td class="kh-align-right"><span class="kh-price kh-${dir}" data-tick-key="wl-${s.code}" data-tick-value="${s.price}" data-tick-live="${s.isLive ? '1' : '0'}">${fmtPrice(s.price)}</span></td>
-      <td class="kh-align-right"><span class="kh-change-pill ${dir}">${fmtPct(s.changePct)}</span></td>
-      <td class="kh-align-right"><span class="kh-volume">${fmtVolume(s.volume)}</span></td>
+      <td class="kh-align-right"><span class="kh-price ${s.isLive ? 'kh-' + dir : 'kh-nodata'}" title="${liveTitle(s.isLive)}" data-tick-key="wl-${s.code}" data-tick-value="${s.price}" data-tick-live="${s.isLive ? '1' : '0'}">${liveOnly(s.isLive, fmtPrice(s.price))}</span></td>
+      <td class="kh-align-right">${s.isLive ? `<span class="kh-change-pill ${dir}">${fmtPct(s.changePct)}</span>` : `<span class="kh-nodata">${liveOnly(false, null)}</span>`}</td>
+      <td class="kh-align-right"><span class="kh-volume ${liveClass(s.isLive)}">${liveOnly(s.isLive, fmtVolume(s.volume))}</span></td>
       <td${lastCol.key === 'memo' ? '' : ' class="kh-align-right"'}>${lastColValue(s, lastCol.key)}</td>
     </tr>
   `;

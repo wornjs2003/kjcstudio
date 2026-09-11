@@ -40,7 +40,7 @@
     }
     .cal-month.active {
       border-color: var(--h-accent);
-      background: linear-gradient(135deg, rgba(79,126,255,0.08), rgba(79,126,255,0.02));
+      background: linear-gradient(135deg, rgba(58,106,232,0.08), rgba(58,106,232,0.02));
     }
     .cal-month-header {
       display: flex;
@@ -68,32 +68,32 @@
       letter-spacing: 0.03em;
     }
     .badge-progress {
-      background: rgba(79,126,255,0.18);
+      background: rgba(58,106,232,0.18);
       color: var(--h-accent);
     }
     .badge-upcoming {
-      background: rgba(255,255,255,0.06);
+      background: rgba(0,0,0,0.05);
       color: var(--h-text-sub);
     }
     .badge-done {
-      background: rgba(62,207,142,0.16);
-      color: #3ecf8e;
+      background: rgba(15,122,95,0.12);
+      color: var(--h-ok);
     }
     /* 완료된 단계의 점 */
     .timeline-dot.done {
-      border-color: #3ecf8e;
-      background: rgba(62,207,142,0.14);
+      border-color: var(--h-ok);
+      background: rgba(15,122,95,0.10);
     }
     .timeline-dot.done .timeline-dot-inner {
-      background: #3ecf8e;
+      background: var(--h-ok);
     }
     /* 항목 아래 덧붙이는 배경 설명 */
     .timeline-tasks li.note {
       list-style: none;
       margin-top: 6px;
       padding: 9px 12px;
-      background: rgba(255,255,255,0.035);
-      border-left: 2px solid rgba(79,126,255,0.5);
+      background: rgba(0,0,0,0.03);
+      border-left: 2px solid rgba(58,106,232,0.5);
       border-radius: 0 6px 6px 0;
       color: var(--h-text-muted);
       font-size: 0.82rem;
@@ -115,7 +115,7 @@
       flex-shrink: 0;
     }
     .cal-task-dot.pending {
-      background: rgba(255,255,255,0.15);
+      background: rgba(0,0,0,0.12);
     }
 
     /* 타임라인 */
@@ -152,7 +152,7 @@
     }
     .timeline-dot.active {
       border-color: var(--h-accent);
-      box-shadow: 0 0 12px rgba(79,126,255,0.4);
+      box-shadow: 0 0 12px rgba(58,106,232,0.4);
     }
     .timeline-dot.active .timeline-dot-inner {
       background: var(--h-accent);
