@@ -8,11 +8,13 @@
          새로 만들 때는 새 id 를 쓰세요.
    ========================================================================== */
 
-/* 보드 칼럼 — 왼쪽부터 순서대로 놓입니다 */
+/* 보드 칼럼 — 왼쪽부터 순서대로 놓입니다
+   tone : 제목을 감싸는 배지 색 (neutral 회색 · accent 파랑 · done 초록)
+          색 자체는 theme.css 에서 고칩니다 */
 const COLUMNS = [
-  { id: "todo",  label: "할 일" },
-  { id: "doing", label: "진행중" },
-  { id: "done",  label: "완료" }
+  { id: "todo",  label: "할 일",  tone: "neutral" },
+  { id: "doing", label: "진행중", tone: "accent"  },
+  { id: "done",  label: "완료",   tone: "done"    }
 ];
 
 /* 작업 카테고리 — 카드 위쪽 색 띠로 표시됩니다
@@ -25,7 +27,7 @@ const CATEGORIES = [
   { id: "etc",             label: "기타",               color: "var(--pj-cat-etc)" }
 ];
 
-/* 기본 할 일 세트 — 카드 상세에서 "기본 할 일 불러오기" 로 한 번에 넣습니다 */
+/* 기본 작업 세트 — 프로젝트에서 "기본 세트" 를 누르면 할 일 칸에 한 번에 들어갑니다 */
 const TODO_TEMPLATE = [
   "레퍼런스 정리",
   "견적 발송",

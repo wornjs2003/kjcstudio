@@ -4,89 +4,81 @@
    ── 이 페이지의 모든 색은 여기서만 정합니다.
       색을 바꾸려면 이 파일만 고치면 화면 전체에 반영됩니다.
 
-   ── 값의 출처: holdings/css/theme.css 의 --kh-* 팔레트 (주식 페이지)
-      "각 구역이 각자 소유하되 구조는 같게" 규칙에 따라
-      참조하지 않고 값을 복제해 두었습니다.
-      주식 페이지 색이 바뀌면 아래 대응표를 보고 같이 맞추면 됩니다.
+   ── 값의 출처: 토스증권(tossinvest.com) 실제 배포 CSS 에서 추출한 값입니다.
+      2026-09-11 기준, assets/v2/_next/static/css/*.css 4개 파일에서
+      사용 빈도 순으로 뽑았습니다. 추측한 값이 아니라 실제로 쓰이는 색입니다.
+
+      [추출] 표시가 있는 값 = 토스 CSS 에 그대로 있는 값
+      [파생] 표시가 있는 값 = 위 값들 사이를 메우려고 만든 값
 
    ── 구역별 theme.css (파일명·변수명·대응표 주석 구조를 통일, 접두사만 다름)
         assets/css/theme.css      메인 포트폴리오   접두사 없음
         holdings/css/theme.css    주식 페이지       --kh-*
         company-setup/theme.css   설립 체크리스트   --cs-*
         projects/theme.css        프로젝트 보드     --pj-*   ← 이 파일
-
-   ┌ 이 파일 ──────────┬ holdings/css/theme.css ────┐
-   │ --pj-bg              │ --kh-bg                    │
-   │ --pj-bg-surface      │ --kh-bg-surface            │
-   │ --pj-bg-card         │ --kh-bg-card               │
-   │ --pj-bg-elevated     │ --kh-bg-hover              │
-   │ --pj-border          │ --kh-border                │
-   │ --pj-border-strong   │ --kh-border-strong         │
-   │ --pj-text-primary    │ --kh-text-primary          │
-   │ --pj-text-secondary  │ --kh-text-secondary        │
-   │ --pj-text-muted      │ --kh-text-muted            │
-   │ --pj-accent          │ --kh-accent                │
-   │ --pj-accent-hover    │ --kh-accent-hover          │
-   │ --pj-accent-faint    │ --kh-accent-dim            │
-   │ --pj-done            │ --kh-tag-news              │
-   │ --pj-warn            │ --kh-tag-notice            │
-   │ --pj-danger          │ --kh-up                    │
-   │ --pj-shadow-*     │ --kh-shadow-*              │
-   └───────────────────┴────────────────────────────┘
    ========================================================================== */
 
 :root {
   /* ── 바탕 ─────────────────────────────── */
-  --pj-bg:          #fbfbfc;
-  --pj-bg-surface:  #f4f4f6;
-  --pj-bg-card:     #ffffff;
-  --pj-bg-elevated: #f0f0f3;
-  --pj-bg-active:   #e7e7ec;
+  --pj-bg:          #f6f7f9;   /* [추출] 토스 페이지 바탕 — 흰색이 아닌 옅은 회색 */
+  --pj-bg-surface:  #f2f4f6;   /* [추출] 칼럼처럼 한 단 들어간 면 */
+  --pj-bg-card:     #ffffff;   /* [추출] 카드는 순백 — 회색 바탕과 대비로 떠 보임 */
+  --pj-bg-elevated: #f2f4f6;   /* [추출] 입력칸 */
+  --pj-bg-active:   #e8ebed;   /* [파생] 눌린 상태 */
+  --pj-bg-subtle:   #f9fafb;   /* [추출] 아주 옅은 면 */
 
   /* ── 테두리 ─────────────────────────────── */
-  --pj-border:        rgba(0, 0, 0, 0.09);
-  --pj-border-strong: rgba(0, 0, 0, 0.18);
+  --pj-border:        #f2f4f6;   /* [추출] 토스는 테두리를 거의 안 씁니다. 아주 옅게 */
+  --pj-border-strong: #d1d6db;   /* [추출] */
 
   /* ── 글자 ─────────────────────────────── */
-  --pj-text-primary:   #17171b;
-  --pj-text-secondary: #5e5e6a;
-  --pj-text-muted:     #8c8c98;
-  --pj-text-dim:       #b2b2bd;
-  --pj-text-on-fill:   #ffffff;   /* 색이 깔린 위에 얹는 글자 */
+  --pj-text-primary:   #101013;   /* [추출] 순검정이 아닌 아주 짙은 회색 */
+  --pj-text-strong:    #333d4b;   /* [추출] 중간 굵기 글자 */
+  --pj-text-secondary: #4e5968;   /* [추출] */
+  --pj-text-muted:     #8b95a1;   /* [파생] secondary 와 dim 사이 */
+  --pj-text-dim:       #b0b8c1;   /* [추출] */
+  --pj-text-on-fill:   #ffffff;   /* [추출] 색 위에 얹는 글자 */
 
-  /* ── 강조 ─────────────────────────────── */
-  --pj-accent:       #3a6ae8;
-  --pj-accent-hover: #2b55c9;
-  --pj-accent-faint: rgba(58, 106, 232, 0.10);
+  /* ── 강조 (토스 블루) ─────────────────────── */
+  --pj-accent:       #3182f6;              /* [추출] 토스 대표 파랑 */
+  --pj-accent-hover: #2272eb;              /* [추출] 눌렀을 때 */
+  --pj-accent-light: #90c2ff;              /* [추출] 옅은 파랑 */
+  --pj-accent-faint: rgba(49, 130, 246, 0.10);  /* [파생] 배경용 */
 
   /* ── 상태 ─────────────────────────────── */
-  --pj-done:       #0f7a5f;
-  --pj-done-faint: rgba(15, 122, 95, 0.12);
-  --pj-warn:       #b25e09;
-  --pj-warn-faint: rgba(178, 94, 9, 0.12);
-  --pj-danger:     #d92d20;
-  --pj-danger-faint: rgba(217, 45, 32, 0.10);
+  --pj-done:         #02a262;                   /* [추출] 초록 */
+  --pj-done-faint:   rgba(2, 162, 98, 0.10);    /* [파생] */
+  --pj-warn:         #f29300;                   /* [추출] 주황 */
+  --pj-warn-faint:   rgba(242, 147, 0, 0.10);   /* [파생] */
+  --pj-danger:       #f04452;                   /* [추출] 빨강 */
+  --pj-danger-faint: rgba(240, 68, 82, 0.10);   /* [파생] */
 
-  /* ── 모달 뒷배경 (어둡게 깔아야 카드가 떠 보임) ── */
-  --pj-scrim: rgba(23, 23, 27, 0.45);
+  /* ── 모달 뒷배경 ─────────────────────────── */
+  --pj-scrim: rgba(16, 16, 19, 0.5);   /* [파생] text-primary 를 반투명으로 */
 
-  /* ── 그림자 (밝은 바탕이라 옅게) ─────────── */
-  --pj-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --pj-shadow-md: 0 6px 20px rgba(0, 0, 0, 0.08);
-  --pj-shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.10);
+  /* ── 그림자 (토스는 그림자를 거의 안 씁니다. 회색 바탕 + 흰 카드로 대비를 냅니다) ── */
+  --pj-shadow-sm: none;
+  --pj-shadow-md: 0 2px 8px rgba(16, 16, 19, 0.06);   /* [파생] 마우스 올렸을 때만 */
+  --pj-shadow-lg: 0 8px 32px rgba(16, 16, 19, 0.14);  /* [파생] 모달 */
 
-  /* ── 덧막 (구분선 대용) ─────────────────── */
-  --pj-overlay-faint:  rgba(0, 0, 0, 0.015);
-  --pj-overlay-subtle: rgba(0, 0, 0, 0.04);
+  /* ── 카테고리 색 (토스 팔레트에서 골랐습니다) ── */
+  --pj-cat-3d:       #3182f6;   /* [추출] 파랑 */
+  --pj-cat-ai:       #8b5cf6;   /* [파생] 보라 — 토스 CSS 에 보라 계열이 없어 맞춰 만듦 */
+  --pj-cat-web:      #02a262;   /* [추출] 초록 */
+  --pj-cat-branding: #f29300;   /* [추출] 주황 */
+  --pj-cat-etc:      #8b95a1;   /* [파생] 회색 */
 
-  /* ── 카테고리 색 (주식 페이지 태그 팔레트에서 가져옴) ── */
-  --pj-cat-3d:       #3a6ae8;   /* --kh-accent      */
-  --pj-cat-ai:       #7c3aed;   /* --kh-tag-dart    */
-  --pj-cat-web:      #0f7a5f;   /* --kh-tag-news    */
-  --pj-cat-branding: #b25e09;   /* --kh-tag-notice  */
-  --pj-cat-etc:      #7a7a86;   /* --kh-flat        */
+  /* ── 모서리 (토스 실제 사용 빈도 순: 8px > 12px > 6px > 10px > 16px) ── */
+  --pj-radius-sm: 8px;
+  --pj-radius-md: 12px;
+  --pj-radius-lg: 16px;
+  --pj-radius-xl: 20px;
 
   /* ── 글꼴 ─────────────────────────────── */
-  --pj-font-body:    "Noto Sans KR", "Pretendard", "Roboto", "Apple SD Gothic Neo", sans-serif;
-  --pj-font-display: "Roboto", "Noto Sans KR", serif;
+  /* 토스는 자체 폰트(Toss Product Sans)를 쓰는데 외부에서 못 씁니다.
+     토스 CSS 의 대체 순서를 그대로 따라 Noto Sans KR 로 받습니다. */
+  --pj-font-body:    -apple-system, BlinkMacSystemFont, "Noto Sans KR",
+                     "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif;
+  --pj-font-display: -apple-system, BlinkMacSystemFont, "Noto Sans KR",
+                     "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif;
 }
