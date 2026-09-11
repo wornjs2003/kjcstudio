@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>프로젝트 관리 · KJC Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Roboto:ital,wght@0,400;0,700;1,900&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   KJC Studio · 프로젝트 관리
+   메인 사이트와 같은 다크 테마를 쓰되, 이 폴더 안에서 독립 동작합니다.
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0c0c0e;
+  --bg-surface: #141416;
+  --bg-card: #1a1a1e;
+  --bg-elevated: #202025;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text-primary: #f0f0f0;
+  --text-secondary: #8a8a96;
+  --text-muted: #5c5c66;
+  --accent: #4f7eff;
+  --accent-hover: #6b93ff;
+  --accent-faint: rgba(79, 126, 255, 0.12);
+  --done: #3ecf8e;
+  --warn: #ffa94d;
+  --danger: #ff6b6b;
+  --font-body: "Noto Sans KR", "Roboto", "Apple SD Gothic Neo", sans-serif;
+  --font-display: "Roboto", "Noto Sans KR", serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-weight: 300;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 1120px; margin: 0 auto; padding: 62px 28px 120px; }
+
+/* ── 헤더 ─────────────────────────────── */
+.eyebrow {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+.eyebrow a { color: inherit; text-decoration: none; }
+.eyebrow a:hover { color: var(--accent); }
+
+h1 {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: clamp(36px, 6.5vw, 62px);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+}
+.subtitle { color: var(--text-secondary); font-size: 15px; }
+
+/* ── 요약 카드 ─────────────────────────────── */
+.summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 38px 0 28px;
+}
+.sum-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+.sum-label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+.sum-value {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.sum-value.accent { color: var(--accent); }
+.sum-value.warn   { color: var(--warn); }
+.sum-value.done   { color: var(--done); }
+.sum-unit { font-size: 13px; font-weight: 400; color: var(--text-secondary); margin-left: 2px; }
+
+/* ── 도구 막대 ─────────────────────────────── */
+.tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 26px; }
+.btn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 9px 18px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+.btn:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.btn.on { color: var(--accent); border-color: var(--accent); background: var(--accent-faint); }
+.btn.primary { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 500; }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.danger:hover { color: var(--danger); border-color: rgba(255, 107, 107, 0.4); }
+.spacer { flex: 1; }
+.saved { font-size: 12px; color: var(--done); opacity: 0; transition: opacity 0.25s ease; white-space: nowrap; }
+.saved.show { opacity: 1; }
+
+/* ── 프로젝트 카드 ─────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 24px;
+  margin-bottom: 14px;
+  transition: border-color 0.2s ease, opacity 0.2s ease;
+}
+.card.done { border-color: rgba(62, 207, 142, 0.26); }
+.card.hold { opacity: 0.55; }
+.card.overdue { border-color: rgba(255, 107, 107, 0.32); }
+
+.card-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+
+/* 입력 필드 공통 */
+.f {
+  font-family: inherit;
+  font-weight: 300;
+  color: var(--text-primary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 4px 8px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.f:hover { border-color: var(--border); }
+.f:focus { outline: none; border-color: var(--accent); background: var(--bg-elevated); }
+.f::placeholder { color: var(--text-muted); }
+
+.f-client { font-size: 13px; color: var(--text-secondary); width: 160px; }
+.f-title  { font-size: 20px; font-weight: 400; width: 100%; letter-spacing: -0.01em; margin-bottom: 12px; }
+.card.done .f-title { color: var(--text-muted); text-decoration: line-through; text-decoration-color: rgba(255,255,255,0.2); }
+.f-sel    { font-size: 12px; color: var(--text-secondary); cursor: pointer; }
+.f-sel option { background: var(--bg-elevated); color: var(--text-primary); }
+.f-date   { font-size: 13px; color: var(--text-secondary); color-scheme: dark; }
+.f-amount { font-size: 13px; color: var(--text-secondary); width: 130px; text-align: right; font-variant-numeric: tabular-nums; }
+
+.dday {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.dday.soon { color: var(--warn); background: rgba(255, 169, 77, 0.12); }
+.dday.over { color: var(--danger); background: rgba(255, 107, 107, 0.12); }
+.dday.ok   { color: var(--accent); background: var(--accent-faint); }
+
+/* ── 진행 단계 ─────────────────────────────── */
+.stages { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 12px; }
+.stage {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border: 1px solid transparent;
+  border-radius: 99px;
+  padding: 5px 13px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.16s ease;
+  white-space: nowrap;
+}
+.stage:hover { border-color: var(--border-strong); color: var(--text-secondary); }
+.stage.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.stage.on.money { background: var(--done); border-color: var(--done); color: #0c0c0e; font-weight: 500; }
+
+.prog-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.prog-bar { flex: 1; height: 5px; background: var(--bg-elevated); border-radius: 99px; overflow: hidden; }
+.prog-fill { height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width 0.35s ease; }
+.card.done .prog-fill { background: var(--done); }
+.prog-text { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ── 메모 ─────────────────────────────── */
+.memo-wrap { padding-left: 12px; border-left: 2px solid var(--border); transition: border-color 0.2s ease; }
+.memo-wrap.filled { border-left-color: var(--accent); }
+.memo {
+  display: block;
+  width: 100%;
+  min-height: 32px;
+  resize: none;
+  overflow: hidden;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 300;
+  line-height: 1.65;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 7px 11px;
+  transition: border-color 0.18s ease;
+}
+.memo::placeholder { color: var(--text-muted); }
+.memo:hover { border-color: var(--border); }
+.memo:focus { outline: none; border-color: var(--accent); background: var(--bg-surface); }
+
+.card-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.mini {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+.mini:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.mini.del:hover { color: var(--danger); border-color: rgba(255, 107, 107, 0.4); }
+
+/* ── 빈 상태 ─────────────────────────────── */
+.empty {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-strong);
+  border-radius: 14px;
+}
+.empty-title { font-size: 16px; color: var(--text-secondary); margin-bottom: 8px; }
+.empty-desc { font-size: 13px; }
+
+/* ── 푸터 ─────────────────────────────── */
+.foot {
+  margin-top: 44px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media print {
+  body { background: #fff; color: #111; }
+  .tools, .card-foot, .foot { display: none; }
+  .wrap { padding: 0; max-width: none; }
+  .card, .sum-card { background: #fff; border: 1px solid #ddd; break-inside: avoid; }
+  h1, .f-title, .sum-value { color: #111; }
+  .f { color: #111; }
+  .memo { background: #fff; border: 1px solid #ddd; color: #111; }
+}
+
+@media (max-width: 860px) {
+  .summary { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .wrap { padding: 44px 18px 90px; }
+  .card { padding: 18px; }
+  .f-client { width: 120px; }
+  .f-title { font-size: 17px; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="eyebrow"><a href="../index.html">← KJC Studio</a></div>
+  <h1>프로젝트 관리</h1>
+  <p class="subtitle">클라이언트 작업별 진행 단계 · 마감 · 입금 상태</p>
+
+  <div class="summary">
+    <div class="sum-card">
+      <div class="sum-label">진행중</div>
+      <div class="sum-value accent" id="sumActive">0<span class="sum-unit">건</span></div>
+    </div>
+    <div class="sum-card">
+      <div class="sum-label">마감 임박 (7일 이내)</div>
+      <div class="sum-value warn" id="sumSoon">0<span class="sum-unit">건</span></div>
+    </div>
+    <div class="sum-card">
+      <div class="sum-label">미입금 (잔금 기준)</div>
+      <div class="sum-value" id="sumMoney">0<span class="sum-unit">원</span></div>
+    </div>
+    <div class="sum-card">
+      <div class="sum-label">완료</div>
+      <div class="sum-value done" id="sumDone">0<span class="sum-unit">건</span></div>
+    </div>
+  </div>
+
+  <div class="tools">
+    <button class="btn primary" id="btnAdd">+ 새 프로젝트</button>
+    <button class="btn on" data-filter="all">전체</button>
+    <button class="btn" data-filter="active">진행중</button>
+    <button class="btn" data-filter="done">완료</button>
+    <button class="btn" data-filter="hold">보류</button>
+    <button class="btn" id="btnSort">마감일순</button>
+    <div class="spacer"></div>
+    <button class="btn" id="btnExport">내보내기</button>
+    <button class="btn" id="btnImport">가져오기</button>
+    <button class="btn" id="btnPrint">인쇄</button>
+    <span class="saved" id="savedTag">저장됨</span>
+  </div>
+
+  <div id="list"></div>
+
+  <div class="foot">
+    <span>입력 즉시 이 브라우저에 자동 저장됩니다. 다른 PC 로 옮기려면 <strong>내보내기</strong> 를 쓰세요.</span>
+    <span>단계 수정: <code>projects/data/stages.js</code></span>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="application/json" hidden>
+
+<script src="data/stages.js"></script>
+<script>
+/* ==========================================================================
+   프로젝트 목록은 localStorage 에 저장합니다.
+   ========================================================================== */
+const STORE_KEY = "kjc-projects-v1";
+
+let projects = [];
+let filter = "all";
+let sortBy = "due";          /* due | created */
+
+try { projects = JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch (e) { projects = []; }
+
+const savedTag = document.getElementById("savedTag");
+let savedTimer = null;
+
+function save(flash) {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(projects)); }
+  catch (e) { return; }
+  if (flash === false) return;
+  savedTag.classList.add("show");
+  clearTimeout(savedTimer);
+  savedTimer = setTimeout(function () { savedTag.classList.remove("show"); }, 1100);
+}
+
+/* ── 날짜 계산 ─────────────────────────────── */
+function daysLeft(dateStr) {
+  if (!dateStr) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(dateStr + "T00:00:00");
+  if (isNaN(due)) return null;
+  return Math.round((due - today) / 86400000);
+}
+
+function ddayText(d) {
+  if (d === null) return { text: "마감일 없음", cls: "" };
+  if (d < 0)  return { text: "D+" + Math.abs(d) + " 지남", cls: "over" };
+  if (d === 0) return { text: "D-DAY", cls: "over" };
+  if (d <= DUE_SOON_DAYS) return { text: "D-" + d, cls: "soon" };
+  return { text: "D-" + d, cls: "ok" };
+}
+
+function won(n) {
+  const v = Number(n) || 0;
+  return v.toLocaleString("ko-KR");
+}
+
+/* ── 화면 그리기 ─────────────────────────────── */
+const listEl = document.getElementById("list");
+
+function render() {
+  listEl.innerHTML = "";
+
+  let rows = projects.slice();
+  if (filter !== "all") rows = rows.filter(function (p) { return (p.status || "active") === filter; });
+
+  rows.sort(function (a, b) {
+    if (sortBy === "due") {
+      if (!a.due && !b.due) return (b.createdAt || 0) - (a.createdAt || 0);
+      if (!a.due) return 1;
+      if (!b.due) return -1;
+      return a.due.localeCompare(b.due);
+    }
+    return (b.createdAt || 0) - (a.createdAt || 0);
+  });
+
+  if (!rows.length) {
+    const e = document.createElement("div");
+    e.className = "empty";
+    e.innerHTML = '<div class="empty-title">표시할 프로젝트가 없습니다</div>'
+      + '<div class="empty-desc">위의 <strong>+ 새 프로젝트</strong> 를 눌러 추가하세요.</div>';
+    listEl.appendChild(e);
+  } else {
+    rows.forEach(function (p) { listEl.appendChild(buildCard(p)); });
+  }
+
+  updateSummary();
+}
+
+/* ── 카드 하나 ─────────────────────────────── */
+function buildCard(p) {
+  const card = document.createElement("div");
+  const d = daysLeft(p.due);
+  const status = p.status || "active";
+
+  card.className = "card " + status
+    + (status === "active" && d !== null && d < 0 ? " overdue" : "");
+
+  /* 윗줄 — 클라이언트 / 카테고리 / 상태 / 마감 */
+  const top = document.createElement("div");
+  top.className = "card-top";
+
+  const client = document.createElement("input");
+  client.className = "f f-client";
+  client.placeholder = "클라이언트명";
+  client.value = p.client || "";
+  client.addEventListener("input", function () { p.client = client.value; save(); });
+  top.appendChild(client);
+
+  const cat = document.createElement("select");
+  cat.className = "f f-sel";
+  CATEGORIES.forEach(function (c) {
+    const o = document.createElement("option");
+    o.value = c.id; o.textContent = c.label;
+    if ((p.category || "etc") === c.id) o.selected = true;
+    cat.appendChild(o);
+  });
+  cat.addEventListener("change", function () { p.category = cat.value; save(); });
+  top.appendChild(cat);
+
+  const st = document.createElement("select");
+  st.className = "f f-sel";
+  STATUSES.forEach(function (s) {
+    const o = document.createElement("option");
+    o.value = s.id; o.textContent = s.label;
+    if (status === s.id) o.selected = true;
+    st.appendChild(o);
+  });
+  st.addEventListener("change", function () { p.status = st.value; save(); render(); });
+  top.appendChild(st);
+
+  const sp = document.createElement("div");
+  sp.style.flex = "1";
+  top.appendChild(sp);
+
+  const due = document.createElement("input");
+  due.type = "date";
+  due.className = "f f-date";
+  due.value = p.due || "";
+  due.addEventListener("change", function () { p.due = due.value; save(); render(); });
+  top.appendChild(due);
+
+  const dd = document.createElement("span");
+  const info = ddayText(d);
+  dd.className = "dday " + info.cls;
+  dd.textContent = info.text;
+  top.appendChild(dd);
+
+  card.appendChild(top);
+
+  /* 프로젝트명 */
+  const title = document.createElement("input");
+  title.className = "f f-title";
+  title.placeholder = "프로젝트명을 입력하세요";
+  title.value = p.title || "";
+  title.addEventListener("input", function () { p.title = title.value; save(); });
+  card.appendChild(title);
+
+  /* 진행 단계 */
+  if (!p.steps) p.steps = {};
+  const stages = document.createElement("div");
+  stages.className = "stages";
+
+  STAGES.forEach(function (s) {
+    const chip = document.createElement("div");
+    chip.className = "stage" + (p.steps[s.id] ? " on" : "") + (s.money ? " money" : "");
+    chip.textContent = s.label;
+    chip.title = s.money ? "입금 단계" : "진행 단계";
+    chip.addEventListener("click", function () {
+      p.steps[s.id] = !p.steps[s.id];
+      save();
+      render();
+    });
+    stages.appendChild(chip);
+  });
+  card.appendChild(stages);
+
+  /* 진행률 */
+  const doneCount = STAGES.filter(function (s) { return p.steps[s.id]; }).length;
+  const pct = Math.round((doneCount / STAGES.length) * 100);
+
+  const progRow = document.createElement("div");
+  progRow.className = "prog-row";
+  progRow.innerHTML = '<div class="prog-bar"><div class="prog-fill" style="width:' + pct + '%"></div></div>'
+    + '<div class="prog-text">' + doneCount + '/' + STAGES.length + ' · ' + pct + '%</div>';
+
+  const amount = document.createElement("input");
+  amount.className = "f f-amount";
+  amount.placeholder = "금액";
+  amount.value = p.amount ? won(p.amount) : "";
+  amount.addEventListener("input", function () {
+    const raw = amount.value.replace(/[^0-9]/g, "");
+    p.amount = raw ? Number(raw) : 0;
+    amount.value = raw ? won(raw) : "";
+    save();
+    updateSummary();
+  });
+  progRow.appendChild(amount);
+
+  const wonLabel = document.createElement("span");
+  wonLabel.className = "prog-text";
+  wonLabel.textContent = "원";
+  progRow.appendChild(wonLabel);
+
+  card.appendChild(progRow);
+
+  /* 메모 */
+  const memoWrap = document.createElement("div");
+  memoWrap.className = "memo-wrap" + ((p.memo || "").trim() ? " filled" : "");
+
+  const memo = document.createElement("textarea");
+  memo.className = "memo";
+  memo.rows = 1;
+  memo.placeholder = "메모 — 요청사항, 수정 내역, 다음 할 일 등";
+  memo.value = p.memo || "";
+  memo.addEventListener("input", function () {
+    p.memo = memo.value;
+    memoWrap.classList.toggle("filled", !!memo.value.trim());
+    autoGrow(memo);
+    save();
+  });
+  memoWrap.appendChild(memo);
+  card.appendChild(memoWrap);
+  requestAnimationFrame(function () { autoGrow(memo); });
+
+  /* 아래 버튼 */
+  const foot = document.createElement("div");
+  foot.className = "card-foot";
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "mini del";
+  delBtn.textContent = "삭제";
+  delBtn.addEventListener("click", function () {
+    const name = p.title || p.client || "이 프로젝트";
+    if (!confirm(name + " 를(을) 삭제합니다. 되돌릴 수 없습니다. 계속할까요?")) return;
+    projects = projects.filter(function (x) { return x.id !== p.id; });
+    save();
+    render();
+  });
+  foot.appendChild(delBtn);
+
+  card.appendChild(foot);
+  return card;
+}
+
+function autoGrow(el) {
+  el.style.height = "auto";
+  el.style.height = el.scrollHeight + "px";
+}
+
+/* ── 요약 ─────────────────────────────── */
+function updateSummary() {
+  const active = projects.filter(function (p) { return (p.status || "active") === "active"; });
+  const doneN  = projects.filter(function (p) { return p.status === "done"; }).length;
+
+  const soon = active.filter(function (p) {
+    const d = daysLeft(p.due);
+    return d !== null && d <= DUE_SOON_DAYS;
+  }).length;
+
+  /* 잔금 단계가 체크되지 않은 진행중 프로젝트의 금액 합계 */
+  const unpaid = active.reduce(function (sum, p) {
+    const paid = p.steps && p.steps.balance;
+    return paid ? sum : sum + (Number(p.amount) || 0);
+  }, 0);
+
+  document.getElementById("sumActive").innerHTML = active.length + '<span class="sum-unit">건</span>';
+  document.getElementById("sumSoon").innerHTML   = soon + '<span class="sum-unit">건</span>';
+  document.getElementById("sumMoney").innerHTML  = won(unpaid) + '<span class="sum-unit">원</span>';
+  document.getElementById("sumDone").innerHTML   = doneN + '<span class="sum-unit">건</span>';
+}
+
+/* ── 도구 버튼 ─────────────────────────────── */
+document.getElementById("btnAdd").addEventListener("click", function () {
+  projects.unshift({
+    id: "p" + Date.now(),
+    client: "",
+    title: "",
+    category: "3d-modeling",
+    status: "active",
+    due: "",
+    amount: 0,
+    steps: {},
+    memo: "",
+    createdAt: Date.now()
+  });
+  filter = "all";
+  document.querySelectorAll("[data-filter]").forEach(function (b) {
+    b.classList.toggle("on", b.dataset.filter === "all");
+  });
+  save();
+  render();
+  const first = listEl.querySelector(".f-title");
+  if (first) first.focus();
+});
+
+document.querySelectorAll("[data-filter]").forEach(function (b) {
+  b.addEventListener("click", function () {
+    filter = b.dataset.filter;
+    document.querySelectorAll("[data-filter]").forEach(function (x) { x.classList.remove("on"); });
+    b.classList.add("on");
+    render();
+  });
+});
+
+document.getElementById("btnSort").addEventListener("click", function (e) {
+  sortBy = sortBy === "due" ? "created" : "due";
+  e.currentTarget.textContent = sortBy === "due" ? "마감일순" : "등록순";
+  render();
+});
+
+document.getElementById("btnPrint").addEventListener("click", function () { window.print(); });
+
+/* 내보내기 — JSON 파일로 저장 */
+document.getElementById("btnExport").addEventListener("click", function () {
+  const blob = new Blob([JSON.stringify(projects, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const d = new Date();
+  const stamp = d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0");
+  a.href = url;
+  a.download = "kjc-projects-" + stamp + ".json";
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+/* 가져오기 — JSON 파일 읽어서 합치기 */
+const fileInput = document.getElementById("fileInput");
+document.getElementById("btnImport").addEventListener("click", function () { fileInput.click(); });
+
+fileInput.addEventListener("change", function () {
+  const file = fileInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function () {
+    let data;
+    try { data = JSON.parse(reader.result); }
+    catch (e) { alert("읽을 수 없는 파일입니다. 내보내기로 만든 JSON 파일인지 확인하세요."); return; }
+    if (!Array.isArray(data)) { alert("프로젝트 목록 형식이 아닙니다."); return; }
+
+    const mode = confirm(
+      "불러온 프로젝트 " + data.length + "건.\n\n"
+      + "[확인] 기존 목록에 합치기 (같은 항목은 덮어씀)\n"
+      + "[취소] 기존 목록을 지우고 이것만 쓰기"
+    );
+
+    if (mode) {
+      data.forEach(function (item) {
+        const i = projects.findIndex(function (p) { return p.id === item.id; });
+        if (i >= 0) projects[i] = item; else projects.push(item);
+      });
+    } else {
+      projects = data;
+    }
+    save();
+    render();
+    alert("불러왔습니다.");
+  };
+  reader.readAsText(file);
+  fileInput.value = "";
+});
+
+render();
+</script>
+
+</body>
+</html>

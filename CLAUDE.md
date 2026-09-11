@@ -35,12 +35,14 @@
 - `partials/nav.html`, `partials/footer.html` : 공통 네비/푸터 (fetch로 동적 주입)
 - `holdings/` : 독립 프로젝트 구역 (주식 분석, 보유 종목 — 별도 관리)
 - `company-setup/` : 회사 설립 체크리스트 (독립 구역, 항목 데이터는 `company-setup/data/checklist.js`)
+- `projects/` : 프로젝트 관리 (독립 구역, 단계 정의는 `projects/data/stages.js`, 데이터는 localStorage + JSON 내보내기)
 
 ## 상단 메뉴 구성
 - 3D Modeling / AI Work / Web·Interactive / Branding / Holdings → / ⋯(더보기)
 - ⋯ 안에 About / Services / Contact
 - Holdings는 `holdings/` 로 외부 이동 느낌 (화살표 아이콘)
 - Setup 은 `company-setup/` 으로 외부 이동 느낌 (화살표 아이콘)
+- Projects 는 `projects/` 로 외부 이동 느낌 (화살표 아이콘)
 
 ## 확장 규칙
 - 작업물 추가(권장): 이미지를 `assets/images/works/<카테고리>/` 에 드롭 → 루트 `refresh-works.command` 더블클릭 → `data/works.json` 자동 갱신
@@ -70,6 +72,7 @@ Mac 은 `.command` 더블클릭, Windows 는 같은 이름의 `.bat` 더블클�
 | 메인 사이트 (포트 8080) | `studio-preview.command` | `studio-preview.bat` |
 | holdings 단축 (포트 8765) | `holdings-preview.command` | `holdings-preview.bat` |
 | 설립 체크리스트 (포트 8090) | `company-setup/preview.command` | `company-setup/preview.bat` |
+| 프로젝트 관리 (포트 8091) | `projects/preview.command` | `projects/preview.bat` |
 | holdings 독립 실행 | `holdings/preview.command` | `holdings/preview.bat` |
 | 작업물 목록 갱신 | `refresh-works.command` | `refresh-works.bat` |
 
