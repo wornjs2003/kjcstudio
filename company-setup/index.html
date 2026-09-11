@@ -197,6 +197,7 @@
     /* ── 항목 ─────────────────────────────── */
     .item {
     display: flex;
+    flex-wrap: wrap;     /* 메모칸이 제목 옆이 아니라 아래로 내려가도록 */
     gap: 15px;
     padding: 16px 26px;
     border-bottom: 1px solid rgb(var(--ink-rgb) / 6%);
@@ -205,7 +206,7 @@
     .item:last-child { border-bottom: none; }
     .item:hover { background: rgb(var(--ink-rgb) / 2.5%); }
     /* 체크박스와 제목 줄만 클릭 대상 (메모는 제외) */
-    .item-click { display: flex; gap: 15px; cursor: pointer; }
+    .item-click { display: flex; gap: 15px; cursor: pointer; flex: 1 1 100%; }
     .box {
     width: 20px; height: 20px;
     border: 1.5px solid var(--border-strong);
@@ -245,7 +246,9 @@
     .item-link:hover { color: var(--accent-hover); border-color: var(--accent-hover); }
     /* ── 메모 입력칸 (체크박스 아래 들여쓰기) ─────────────────────────────── */
     .memo-wrap {
+    flex: 1 1 100%;
     margin-top: 10px;
+    margin-left: 35px;   /* 체크박스 20px + 간격 15px 만큼 들여쓴다 */
     padding-left: 14px;
     border-left: 2px solid var(--border);
     transition: border-color 0.2s ease;
@@ -308,6 +311,9 @@
     .section-summary { display: none; }
     .mini-bar { display: none; }
     .item { padding: 14px 18px; }
+    /* 좁은 화면에서는 들여쓰기까지 하면 메모칸이 너무 좁아진다 */
+    .memo-wrap { margin-left: 0; }
+    .btn { white-space: nowrap; }
     }
     </style>
     </head>
@@ -481,8 +487,7 @@ function buildItem(it) {
 
   /* 메모 입력칸 — 체크박스 폭만큼 들여쓰기해서 제목 아래에 붙습니다 */
   const memoWrap = document.createElement("div");
-  memoWrap.className = "memo-wrap";
-  memoWrap.style.marginLeft = "35px";   /* 체크박스 20px + 간격 15px */
+  memoWrap.className = "memo-wrap";   /* 들여쓰기는 .memo-wrap 규칙이 맡는다 */
 
   const memo = document.createElement("textarea");
   memo.className = "memo";

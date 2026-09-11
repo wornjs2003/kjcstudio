@@ -741,6 +741,21 @@
 
     @media (max-width: 480px) {
       .sm-indices { grid-template-columns: 1fr; }
+
+      /* 좁은 화면에서 글자가 "검/색" 처럼 세로로 쪼개지던 것들 */
+      .sm-search button,
+      .chart-tab,
+      .sm-indices-toggle-right span { white-space: nowrap; }
+
+      .sm-search button { flex-shrink: 0; padding: 12px 18px; }
+
+      /* 제목줄이 길어서 오른쪽 버튼을 짓누르지 않도록 줄을 나눈다 */
+      .sm-indices-toggle { flex-wrap: wrap; gap: 6px; }
+      .sm-indices-toggle-left { flex: 1 1 100%; }
+
+      .sm-header { flex-wrap: wrap; gap: 8px; }
+      .sm-title { flex: 1 1 auto; min-width: 0; }
+      .sm-metrics { grid-template-columns: 1fr; }
     }
   </style>
 </head>

@@ -174,3 +174,37 @@ button { font-family: inherit; background: none; border: none; color: inherit; c
   .h-footer-inner { flex-direction: column; align-items: flex-start; }
   .h-footer-meta { text-align: left; }
 }
+
+/* ── 좁은 화면(핸드폰) ──────────────────────────────
+   메뉴 글자가 "대시/보드" 처럼 두 줄로 쪼개지던 것을 막는다.
+   폭이 모자라면 네비가 가로로 스크롤된다. */
+@media (max-width: 600px) {
+  :root { --h-gutter: 16px; --h-nav-h: 60px; }
+
+  .h-nav {
+    gap: 12px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .h-nav::-webkit-scrollbar { display: none; }
+
+  .h-nav-logo,
+  .h-nav-right { flex-shrink: 0; }
+
+  .h-nav-menu {
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  .h-nav-menu a,
+  .h-nav-back {
+    white-space: nowrap;
+  }
+  .h-nav-back { padding: 6px 10px; }
+
+  /* 로고의 'Holdings' 를 접어 메뉴가 한 화면에 들어오게 한다 */
+  .h-nav-logo span { display: none; }
+
+  /* 히어로 여백이 좁은 화면에서는 과해서 줄인다 */
+  .h-hero { padding: 44px var(--h-gutter) 28px; }
+}

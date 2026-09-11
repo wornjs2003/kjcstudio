@@ -310,8 +310,12 @@
     gap: var(--kh-space-3);
   }
 
-  /* 넓은 표는 카드 안에서 가로 스크롤 */
-  .kh-card {
+  /* 넓은 표는 '표만' 가로 스크롤한다.
+     카드 전체에 걸면 헤더의 탭과 버튼까지 함께 늘어나
+     "+ 추/가", "정/렬" 처럼 글자가 세로로 쪼개진다. */
+  .kh-card { overflow-x: visible; }
+
+  .kh-card-body {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
@@ -319,6 +323,16 @@
   .kh-table {
     min-width: 560px;
   }
+
+  /* 카드 헤더: 탭 줄은 접히게, 버튼 글자는 쪼개지지 않게 */
+  .kh-card-header {
+    flex-wrap: wrap;
+    gap: var(--kh-space-2);
+  }
+
+  .kh-card-actions { flex-shrink: 0; }
+
+  .kh-btn { white-space: nowrap; }
 
   /* 상세 패널: 전체 화면 */
   .kh-detail {
@@ -347,4 +361,13 @@
   .kh-detail-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  /* 표: 옆으로 밀어야 보이던 뒤쪽 두 열(거래량·마지막 열)을 접는다.
+     핸드폰에서는 종목·현재가·등락만 보이고 화면 안에 딱 맞는다.
+     접힌 값은 종목을 눌러 상세에서 볼 수 있다. */
+  .kh-table th:nth-last-child(-n+2),
+  .kh-table td:nth-last-child(-n+2) {
+    display: none;
+  }
+  .kh-table { min-width: 0; }
 }
