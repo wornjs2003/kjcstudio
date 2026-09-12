@@ -73,6 +73,7 @@
   --pj-radius-md: 12px;
   --pj-radius-lg: 16px;
   --pj-radius-xl: 20px;
+  --pj-radius-pill: 99px;   /* 버튼·배지는 완전히 둥글게 (네모는 딱딱해 보임) */
 
   /* ── 글꼴 ─────────────────────────────── */
   /* 토스는 자체 폰트(Toss Product Sans)를 쓰는데 외부에서 못 씁니다.
