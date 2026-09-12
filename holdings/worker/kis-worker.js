@@ -28,7 +28,28 @@ const MODE_LABEL = { prod: "실전투자", vts: "모의투자" };
 //   J  = KRX 정규장만 (09:00~15:30)
 //   NX = 넥스트레이드(대체거래소)만
 //   UN = 통합 — 정규장 + 넥스트레이드. 08:00~20:00 내내 값이 움직이고 거래량도 합산된다.
-const MARKET_DIV = "UN";
+//
+// 차트는 통합으로 고정한다. 과거 봉이라 "지금 몇 시인가"를 따질 일이 없다.
+const MARKET_DIV_CHART = "UN";
+
+/* 시세를 어느 시장 기준으로 볼지 정한다 (CLAUDE.md 의 시세 표기 규칙).
+
+   정규장 중에는 KRX 값을 그대로 쓴다. 남들이 보는 숫자와 같아야 하기 때문이다.
+   장이 끝나면 통합으로 넘겨서, 넥스트레이드에서 더 움직인 값이 있으면 그것을 쓴다.
+
+   통합(UN)을 그냥 써도 되는 이유 — 넥스트레이드에 거래가 없으면 KRX 종가를
+   그대로 돌려준다. 2026-09-12 에 실제로 호출해 확인했다.
+     삼성전자우 193300 / 흥아해운 1878 / 동양3우B 5750  (NX 는 셋 다 0)
+
+   Workers 는 UTC 로 돈다. 한국 시각은 +9 시간이라 직접 더해서 본다.
+   공휴일은 가리지 못하지만, 휴장일에는 어느 쪽을 봐도 전일 값이라 문제되지 않는다. */
+function quoteMarketDiv(now = new Date()) {
+  const kst = new Date(now.getTime() + 9 * 3600 * 1000);
+  const day = kst.getUTCDay();                 // 0 일요일 · 6 토요일
+  if (day === 0 || day === 6) return "UN";
+  const mins = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  return mins >= 9 * 60 && mins < 15 * 60 + 30 ? "J" : "UN";
+}
 
 // 기간별 설정
 //   freshSec : 이 시간이 지나면 최근 구간을 다시 받는다 (장중 캔들 갱신용)
@@ -186,7 +207,7 @@ async function fetchPrice(cfg, env, code) {
   const data = await kisGet(
     cfg, env,
     "/uapi/domestic-stock/v1/quotations/inquire-price",
-    { FID_COND_MRKT_DIV_CODE: MARKET_DIV, FID_INPUT_ISCD: code },
+    { FID_COND_MRKT_DIV_CODE: quoteMarketDiv(), FID_INPUT_ISCD: code },
     "FHKST01010100",
     QUOTE_CACHE_TTL
   );
@@ -373,7 +394,7 @@ async function fetchBarsFromKis(cfg, env, code, period, from, to) {
     cfg, env,
     "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
     {
-      FID_COND_MRKT_DIV_CODE: MARKET_DIV,
+      FID_COND_MRKT_DIV_CODE: MARKET_DIV_CHART,
       FID_INPUT_ISCD: code,
       FID_INPUT_DATE_1: from,
       FID_INPUT_DATE_2: to,
@@ -402,7 +423,7 @@ async function fetchMinutesFromKis(cfg, env, code, hour = "200000") {
     "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
     {
       FID_ETC_CLS_CODE: "",
-      FID_COND_MRKT_DIV_CODE: MARKET_DIV,
+      FID_COND_MRKT_DIV_CODE: MARKET_DIV_CHART,
       FID_INPUT_ISCD: code,
       FID_INPUT_HOUR_1: hour,
       FID_PW_DATA_INCU_YN: "Y",

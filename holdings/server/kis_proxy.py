@@ -35,6 +35,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # Windows 기본 콘솔(cp949)에서 한글·기호 출력에 실패해 서버가 죽지 않도록 고정한다.
@@ -59,7 +60,37 @@ MODE_LABEL = {"vts": "모의투자", "prod": "실전투자"}
 #   NX = 넥스트레이드(대체거래소)만
 #   UN = 통합 — 정규장 + 넥스트레이드. 08:00~20:00 내내 값이 움직인다.
 # 통합을 쓰면 거래량도 양쪽이 합산된다.
-MARKET_DIV = "UN"
+#
+# 차트는 통합으로 고정한다. 과거 봉이라 "지금 몇 시인가"를 따질 일이 없다.
+MARKET_DIV_CHART = "UN"
+
+# 정규장 시간대 (KRX)
+KRX_OPEN  = (9, 0)
+KRX_CLOSE = (15, 30)
+KST = timezone(timedelta(hours=9))
+
+
+def quote_market_div(now=None):
+    """시세를 어느 시장 기준으로 볼지 정한다 (CLAUDE.md 의 시세 표기 규칙).
+
+    정규장 중에는 KRX 값을 그대로 쓴다. 남들이 보는 숫자와 같아야 하기 때문이다.
+    장이 끝나면 통합으로 넘겨서, 넥스트레이드에서 더 움직인 값이 있으면 그것을 쓴다.
+
+    통합(UN)을 그냥 써도 되는 이유 — 넥스트레이드에 거래가 없으면 KRX 종가를
+    그대로 돌려준다. 2026-09-12 에 실제로 호출해 확인했다.
+        삼성전자우 193300 / 흥아해운 1878 / 동양3우B 5750  (NX 는 셋 다 0)
+    그래서 종목마다 두 번 부를 필요가 없다.
+
+    공휴일은 가리지 못한다. 휴장일 낮에는 KRX 기준(전일 종가)이 나오는데,
+    장이 열리지 않은 날이라 어느 쪽을 봐도 전일 값이므로 문제되지 않는다.
+    """
+    now = now or datetime.now(KST)
+    if now.weekday() >= 5:            # 토·일
+        return "UN"
+    hm = (now.hour, now.minute)
+    if KRX_OPEN <= hm < KRX_CLOSE:
+        return "J"
+    return "UN"
 
 # 토큰 발급은 1분에 1회 이상 시도하면 차단된다. 최소 간격을 강제한다.
 TOKEN_MIN_INTERVAL = 70
@@ -444,11 +475,12 @@ def _num(v, cast=float):
 
 
 def fetch_price(cfg, code):
-    """국내 주식 현재가 조회."""
+    """국내 주식 현재가 조회. 시장 기준은 지금 시각에 따라 정해진다."""
+    div = quote_market_div()
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-price",
-        {"FID_COND_MRKT_DIV_CODE": MARKET_DIV, "FID_INPUT_ISCD": code},
+        {"FID_COND_MRKT_DIV_CODE": div, "FID_INPUT_ISCD": code},
         "FHKST01010100",
     )
     o = data.get("output") or {}
@@ -572,7 +604,7 @@ def fetch_bars_from_kis(cfg, code, period, date_from, date_to):
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
         {
-            "FID_COND_MRKT_DIV_CODE": MARKET_DIV, "FID_INPUT_ISCD": code,
+            "FID_COND_MRKT_DIV_CODE": MARKET_DIV_CHART, "FID_INPUT_ISCD": code,
             "FID_INPUT_DATE_1": date_from, "FID_INPUT_DATE_2": date_to,
             "FID_PERIOD_DIV_CODE": PERIODS[period]["kis"], "FID_ORG_ADJ_PRC": "0",
         },
@@ -601,7 +633,7 @@ def fetch_minutes_from_kis(cfg, code, hour="153000"):
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
         {
-            "FID_ETC_CLS_CODE": "", "FID_COND_MRKT_DIV_CODE": MARKET_DIV,
+            "FID_ETC_CLS_CODE": "", "FID_COND_MRKT_DIV_CODE": MARKET_DIV_CHART,
             "FID_INPUT_ISCD": code, "FID_INPUT_HOUR_1": hour,
             "FID_PW_DATA_INCU_YN": "Y",
         },

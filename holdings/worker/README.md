@@ -214,6 +214,34 @@ Cloudflare 공식 문서(Workers > Configuration > Routing > Routes)에 따르�
 `/api/kis/*` 는 이 Worker 가 계속 처리합니다. 이쪽에서 바꿀 것은 없습니다.
 (2026-09-11, projects 보드 작업 세션이 문서에서 확인해 공유)
 
+## 5. 종목명이 업종명으로 나오는 문제 (미루기로 함 — 2026-09-12 지시)
+
+`server/kis_proxy.py` 의 `fetch_price` 가 종목명 자리에 **업종명**을 담는다.
+
+```python
+"name": o.get("bstp_kor_isnm"),   # 삼성전자·SK하이닉스 둘 다 "전기·전자"
+```
+
+**확인한 것** — `inquire-price`(FHKST01010100) 응답 80개 필드를 전수 확인했다.
+**종목명 필드가 아예 없다.** 이름처럼 보이는 것은 넷뿐이고 전부 다른 값이다.
+
+| 필드 | 값 | 정체 |
+|---|---|---|
+| `rprs_mrkt_kor_name` | KOSPI200 | 대표 시장명 |
+| `bstp_kor_isnm` | 전기·전자 | 업종명 (지금 잘못 쓰는 것) |
+| `fcam_cnnm` | 100 | 액면가 |
+| `cpfn_cnnm` | 7,780 억 | 자본금 |
+
+**확인하지 못한 것** — 종목명을 주는 KIS API(국내주식 기본조회)의 경로·`tr_id`.
+공식 문서로 확인한 뒤 진행할 것.
+
+**지금 화면에는 영향 없음** — `index.html`·`stock.html` 은 종목명을 `js/data/market.js`
+목록에서 가져온다. 서버 응답만 틀린 값을 담고 있다.
+
+**할 일** — 로드맵 Phase 4 의 "종목 마스터 구축" 과 같은 작업이므로 거기서 함께 처리한다.
+그 전까지 급하면 `name` 을 `None` 으로 두는 편이 낫다
+(holdings/CLAUDE.md 의 "없으면 없다고 적는다" 규칙).
+
 ## 4. workers.dev 재활성화 주의
 
 - Worker 코드를 수정해 다시 배포하면 `workers.dev` 주소가 되살아날 수 있다
