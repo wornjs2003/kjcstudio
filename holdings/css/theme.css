@@ -30,7 +30,7 @@
         holdings/css/theme.css    주식 페이지       --kh-*   ← 이 파일
         company-setup/theme.css   설립 체크리스트   --cs-*
         projects/theme.css        프로젝트 보드     --pj-*
-      holdings 와 projects 는 토스 팔레트, 나머지 둘은 기존 팔레트입니다.
+      2026-09-12 부터 네 구역 모두 이 토스 팔레트로 통일했습니다.
 
    ┌ 이 파일 ─────────────┬ 다른 구역 대응 ──────────┐
    │ --kh-bg              │ --bg / --pj-bg           │

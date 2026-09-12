@@ -1,0 +1,229 @@
+/* ==========================================================================
+   KJC Studio · home.css
+   메인 페이지 전용 — 첫 화면을 꽉 채우는 인트로 + 카테고리 입구 목록
+
+   갤러리 스타일은 여기 없다. 작업물은 category/*.html 이 gallery.css 로 그린다.
+   ========================================================================== */
+
+/* ── 1) 인트로 ─────────────────────────────── */
+.intro {
+  /* 주소창이 들락거리는 모바일에서 100vh 는 화면보다 커진다. svh 를 먼저 쓰고
+     지원하지 않는 브라우저는 vh 로 떨어진다. */
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: var(--nav-height) var(--page-gutter) 80px;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.intro-kicker {
+  font-size: 0.82rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+  font-weight: 500;
+}
+
+.intro-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  /* 모바일에서 한 단어가 화면보다 넓어지지 않도록 하한을 vw 기준으로 */
+  font-size: clamp(2.8rem, 12vw, 13rem);
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  overflow-wrap: break-word;
+  word-break: keep-all;
+}
+
+.intro-title .dot {
+  color: var(--accent);
+}
+
+.intro-lead {
+  margin-top: 32px;
+  max-width: 620px;
+  color: var(--text-secondary);
+  font-size: 1.05rem;
+  line-height: 1.8;
+}
+
+/* 아래로 유도하는 링크 — 인트로 바닥에 붙는다 */
+.intro-scroll {
+  margin-top: 72px;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  width: fit-content;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 500;
+  transition: color 0.25s ease;
+}
+
+.intro-scroll:hover {
+  color: var(--accent);
+}
+
+/* 아래를 가리키는 선 — 글자 옆에서 위아래로 천천히 움직인다 */
+.intro-scroll-arrow {
+  width: 1px;
+  height: 34px;
+  background: currentColor;
+  animation: intro-bob 2.2s ease-in-out infinite;
+}
+
+@keyframes intro-bob {
+  0%, 100% { transform: translateY(0);    opacity: 0.45; }
+  50%      { transform: translateY(10px); opacity: 1; }
+}
+
+/* ── 2) 카테고리 입구 목록 ─────────────────────────────── */
+.cat-list {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 0 var(--page-gutter) 140px;
+}
+
+.cat-item {
+  display: grid;
+  grid-template-columns: 72px 1fr 40px;
+  align-items: center;
+  gap: 24px;
+  padding: 44px 0;
+  /* --border 는 토스식이라 아주 옅다. 목록 구분선으로는 약해서 잉크를 조금 섞는다 */
+  border-top: 1px solid rgb(var(--ink-rgb) / 8%);
+  transition: color 0.25s ease;
+}
+
+.cat-item:last-child {
+  border-bottom: 1px solid rgb(var(--ink-rgb) / 8%);
+}
+
+.cat-num {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  align-self: start;
+  padding-top: 0.7em;
+  transition: color 0.25s ease;
+}
+
+.cat-body {
+  display: block;
+  min-width: 0;
+}
+
+.cat-name {
+  display: block;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(2rem, 6.5vw, 5.4rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  overflow-wrap: break-word;
+  word-break: keep-all;
+  transition: color 0.25s ease;
+}
+
+.cat-name .dot {
+  color: var(--accent);
+}
+
+.cat-desc {
+  display: block;
+  margin-top: 14px;
+  max-width: 620px;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.75;
+}
+
+/* 오른쪽 화살표 — CSS 로 그린다 (폰트에 따라 글리프 폭이 달라지는 걸 피하려고) */
+.cat-arrow {
+  justify-self: end;
+  width: 26px;
+  height: 26px;
+  border-top: 1px solid var(--text-muted);
+  border-right: 1px solid var(--text-muted);
+  transform: rotate(45deg);
+  transition: transform 0.25s ease, border-color 0.25s ease;
+}
+
+.cat-item:hover .cat-name,
+.cat-item:hover .cat-num {
+  color: var(--accent);
+}
+
+.cat-item:hover .cat-arrow {
+  border-color: var(--accent);
+  transform: rotate(45deg) translate(4px, -4px);
+}
+
+/* 키보드로 옮겨 다닐 때도 마우스와 같게 보이도록 */
+.cat-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 6px;
+}
+
+.cat-empty {
+  padding: 80px 0;
+  color: var(--text-muted);
+}
+
+.cat-empty strong {
+  display: block;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.6rem;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+/* ── 반응형 ─────────────────────────────── */
+@media (max-width: 768px) {
+  .intro {
+    padding-bottom: 56px;
+  }
+  .intro-lead {
+    margin-top: 24px;
+    font-size: 0.95rem;
+  }
+  .intro-scroll {
+    margin-top: 48px;
+  }
+  .cat-item {
+    grid-template-columns: 44px 1fr;
+    gap: 16px;
+    padding: 32px 0;
+  }
+  /* 좁은 화면에서는 화살표를 빼고 제목 크기로 위계를 준다 */
+  .cat-arrow {
+    display: none;
+  }
+  .cat-desc {
+    margin-top: 10px;
+    font-size: 0.88rem;
+  }
+  .cat-list {
+    padding-bottom: 90px;
+  }
+}
+
+/* 움직임을 줄여달라고 설정한 사용자에게는 화살표를 흔들지 않는다 */
+@media (prefers-reduced-motion: reduce) {
+  .intro-scroll-arrow {
+    animation: none;
+    opacity: 0.6;
+  }
+}

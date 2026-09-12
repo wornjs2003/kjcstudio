@@ -17,29 +17,36 @@
   <link rel="stylesheet" href="assets/css/theme.css" />
   <link rel="stylesheet" href="assets/css/base.css" />
   <link rel="stylesheet" href="assets/css/layout.css" />
-  <link rel="stylesheet" href="assets/css/gallery.css" />
+  <link rel="stylesheet" href="assets/css/home.css" />
 </head>
-<body data-nav="3d-modeling" data-site-root="">
+<body data-nav="home" data-site-root="">
 
   <!-- Nav (동적 주입) -->
   <div id="site-nav"></div>
 
-  <main class="page">
-    <!-- 카테고리 히어로 -->
-    <section class="category-hero">
-      <p class="category-kicker">Works · 01</p>
-      <h1 class="category-title">3D Modeling<span class="dot">.</span></h1>
-      <p class="category-desc">캐릭터, 환경, 프롭. 실사에서 스타일라이즈드까지. 모델링부터 라이팅, 리깅, 렌더까지 일관된 파이프라인으로 다룹니다.</p>
+  <main class="home">
+    <!-- 1) 첫 화면을 꽉 채우는 인트로 -->
+    <section class="intro">
+      <p class="intro-kicker">Creative Digital Studio</p>
+      <h1 class="intro-title">KJC Studio<span class="dot">.</span></h1>
+      <p class="intro-lead">
+        3D 모델링부터 AI, 웹 인터랙션, 브랜딩까지.<br>
+        만드는 일 전반을 하나의 파이프라인으로 다룹니다.
+      </p>
+      <a class="intro-scroll" href="#works">
+        <span class="intro-scroll-label">Works</span>
+        <span class="intro-scroll-arrow" aria-hidden="true"></span>
+      </a>
     </section>
 
-    <!-- 매저너리 갤러리 (JS 가 채움) -->
-    <section class="gallery" aria-label="3D Modeling 작업물"></section>
+    <!-- 2) 카테고리 목록 (home.js 가 categories.json 으로 채움) -->
+    <section class="cat-list" id="works" aria-label="작업 카테고리"></section>
   </main>
 
   <!-- Footer (동적 주입) -->
   <div id="site-footer"></div>
 
   <script src="assets/js/main.js"></script>
-  <script src="assets/js/gallery.js"></script>
+  <script src="assets/js/home.js"></script>
 </body>
 </html>
