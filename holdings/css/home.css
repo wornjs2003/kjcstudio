@@ -187,3 +187,167 @@
   .kh-igrid { grid-template-columns: 1fr; }
   .kh-rank th:nth-child(n+5), .kh-rank td:nth-child(n+5) { display: none; }
 }
+
+/* ══ 지수 영역 (2026-09-14 개편) ═══════════════════════════
+   네이버 증권 메인의 코스피 영역을 참고해 다시 잡았다.
+   시안의 색은 전부 theme.css 변수로 바꿔 넣었다 — 색 하드코딩 금지 규칙.
+
+   지금 값이 오는 것은 코스피·코스닥·코스피200 셋뿐이다. 나머지 일곱 칸과
+   오른쪽 패널 넷은 받아올 곳이 없어 "연결 예정" 으로 비워 둔다. 숫자를
+   지어 넣으면 연결이 안 된 건지 시세가 그런 건지 구분할 수 없다. */
+
+/* ── 카테고리 탭 ── */
+.kh-cat {
+  display: flex; gap: 30px; align-items: center;
+  border-bottom: 1px solid var(--kh-border-strong);
+  margin: -2px 0 14px; padding: 0 4px;
+}
+.kh-cat a {
+  padding: 0 0 12px; font-size: 0.98rem; font-weight: 500;
+  color: var(--kh-text-muted); text-decoration: none;
+  position: relative; white-space: nowrap;
+}
+.kh-cat a:hover { color: var(--kh-text-secondary); }
+.kh-cat a.is-on { color: var(--kh-text-primary); font-weight: 700; }
+.kh-cat a.is-on::after {
+  content: ""; position: absolute; left: -2px; right: -2px; bottom: -1px;
+  height: 2.5px; background: var(--kh-text-primary); border-radius: 2px;
+}
+.kh-cat-my {
+  margin-left: auto; color: var(--kh-text-secondary);
+  font-weight: 700; font-size: 0.92rem; padding-bottom: 12px;
+}
+
+/* ── 장 상태 줄 ── */
+.kh-mkt {
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  font-size: 0.82rem; color: var(--kh-text-secondary);
+  margin-bottom: 13px; padding-left: 4px;
+}
+.kh-mkt > span { display: inline-flex; align-items: center; gap: 7px; }
+.kh-mkt b { font-weight: 500; color: var(--kh-text-primary); }
+.kh-chip {
+  background: var(--kh-bg-surface); border-radius: var(--kh-radius-sm);
+  padding: 3px 8px; font-size: 0.73rem; color: var(--kh-text-secondary); font-weight: 500;
+}
+.kh-chip.live { background: var(--kh-tag-news-dim); color: var(--kh-tag-news); }
+.kh-pdot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--kh-tag-news); position: relative; flex: 0 0 auto;
+}
+.kh-pdot::after {
+  content: ""; position: absolute; inset: -3px; border-radius: 50%;
+  background: var(--kh-tag-news); opacity: 0.28;
+  animation: kh-pulse 1.8s ease-out infinite;
+}
+.kh-pdot.off { background: var(--kh-text-dim); }
+.kh-pdot.off::after { display: none; }
+@keyframes kh-pulse {
+  0%   { transform: scale(.6); opacity: .45; }
+  70%  { transform: scale(1.5); opacity: 0; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .kh-pdot::after { animation: none; } }
+
+/* ── 지수 띠 ── */
+.kh-strip-wrap { position: relative; margin-bottom: 14px; }
+.kh-strip {
+  display: flex; gap: 10px; overflow-x: auto;
+  scroll-behavior: smooth; scroll-snap-type: x proximity;
+  padding: 2px 1px;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.kh-strip::-webkit-scrollbar { display: none; }
+
+/* 고르지 않은 칸은 한 톤 가라앉힌다 — 고른 것만 흰 카드로 떠 보이게 */
+.kh-ix {
+  flex: 0 0 252px; scroll-snap-align: start;
+  background: var(--kh-bg-active); border-radius: var(--kh-radius-lg);
+  padding: 14px 16px 13px; cursor: pointer;
+  border: 1.5px solid transparent;
+  display: flex; flex-direction: column; gap: 9px;
+  transition: background .18s, box-shadow .18s, transform .18s;
+}
+.kh-ix:hover {
+  background: var(--kh-bg-hover);
+  box-shadow: var(--kh-shadow-md); transform: translateY(-1px);
+}
+.kh-ix.is-on {
+  background: var(--kh-bg-card); border-color: var(--kh-accent);
+  box-shadow: 0 0 0 4px var(--kh-accent-dim), var(--kh-shadow-md);
+  transform: none;
+}
+.kh-ix-h { display: flex; align-items: center; gap: 8px; }
+.kh-ix-n {
+  font-size: 0.86rem; font-weight: 600; color: var(--kh-text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.kh-ix-h .kh-bd { margin-left: auto; flex-shrink: 0; }
+.kh-ix-b { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+.kh-ix-v { font-size: 1.32rem; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; }
+.kh-ix-c { font-size: 0.8rem; font-weight: 500; margin-top: 2px; white-space: nowrap; }
+/* 스파크라인은 크기를 정해 준다. sparkSvg 는 width/height 100% 라
+   자리를 안 잡아 주면 카드를 뚫고 나간다. */
+.kh-ix-s { flex-shrink: 0; width: 74px; height: 30px; opacity: .9; }
+
+/* 좌우 이동 버튼 — 카드 밖으로 반쯤 걸치게 */
+.kh-strip-btn {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 5;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--kh-bg-card); border: 1px solid var(--kh-bg-active);
+  box-shadow: var(--kh-shadow-lg);
+  display: grid; place-items: center; cursor: pointer;
+  font-size: 1.1rem; color: var(--kh-text-secondary); font-family: inherit;
+  transition: opacity .2s, transform .15s;
+}
+.kh-strip-btn:hover { transform: translateY(-50%) scale(1.06); }
+.kh-strip-btn.prev { left: -13px; }
+.kh-strip-btn.next { right: -13px; }
+.kh-strip-btn[disabled] { opacity: 0; pointer-events: none; }
+
+/* 양 끝 흐리기 — 오른쪽만 쓴다.
+   왼쪽에도 두었더니 첫 카드(코스피)가 흐려 보였다 (2026-09-14 지시로 제거).
+   왼쪽은 맨 앞이라 잘릴 것도 없어서 흐릴 이유가 없다. */
+.kh-fade { position: absolute; top: 0; bottom: 0; width: 46px; pointer-events: none; z-index: 3; }
+.kh-fade.l { display: none; }
+.kh-fade.r { right: 0; background: linear-gradient(270deg, var(--kh-bg), transparent); }
+
+/* ── 고른 지수 + 오른쪽 패널 ── */
+.kh-idx { display: grid; grid-template-columns: 1fr 340px; gap: 14px; }
+.kh-idx-main { padding: 18px 20px 14px; display: flex; flex-direction: column; }
+.kh-idx-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+.kh-idx-name { font-size: 1.28rem; font-weight: 700; }
+.kh-idx-caret { color: var(--kh-text-muted); }
+.kh-idx-ai {
+  margin-left: 8px; font-size: 0.8rem; color: var(--kh-accent);
+  background: var(--kh-accent-dim); border-radius: 999px; padding: 5px 12px;
+}
+.kh-idx-chart { flex: 1; min-height: 300px; }
+
+/* 오른쪽 패널 — 넷 다 아직 비어 있다 */
+.kh-idxp { padding: 16px 18px; display: flex; flex-direction: column; gap: 2px; }
+.kh-idxp-s { padding: 13px 0; border-bottom: 1px solid var(--kh-border); }
+.kh-idxp-s:last-child { border-bottom: 0; }
+.kh-idxp-h {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.9rem; font-weight: 700; margin-bottom: 7px;
+}
+.kh-idxp-h .kh-bd { margin-left: auto; }
+.kh-idxp-i { width: 19px; height: 19px; border-radius: 6px; flex-shrink: 0; }
+.kh-idxp-i.ok { background: var(--kh-tag-news-dim); }
+.kh-idxp-i.ac { background: var(--kh-accent-dim); }
+.kh-idxp-i.wn { background: var(--kh-tag-notice-dim); }
+.kh-idxp-i.mu { background: var(--kh-bg-surface); }
+.kh-idxp-b { font-size: 0.8rem; color: var(--kh-text-secondary); line-height: 1.7; }
+
+/* ── 좁은 화면 ── */
+@media (max-width: 1100px) {
+  .kh-idx { grid-template-columns: 1fr; }
+  .kh-idx-chart { min-height: 220px; }
+}
+@media (max-width: 700px) {
+  .kh-cat { gap: 18px; overflow-x: auto; scrollbar-width: none; }
+  .kh-cat::-webkit-scrollbar { display: none; }
+  .kh-ix { flex-basis: 210px; }
+  .kh-strip-btn { display: none; }   /* 손가락으로 밀면 된다 */
+}

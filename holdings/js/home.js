@@ -13,16 +13,22 @@ import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, dirClass, marketPhase }
 import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop } from './components/frame.js';
 import { tickClass } from './utils/tick.js';
 import { mountDisclosures } from './components/disclosures.js';
+import { indexChartSvg } from './index-chart.js';
+import { fetchIndexMinutes } from './data/live.js';
 
-/* 서버가 주는 지수 3개 + 아직 받아올 곳이 없는 것들.
-   ─ 할 일: 해외 지수·환율·원자재를 우리 서버가 야후에서 받아 중계하기 */
+/* 지수 띠에 놓을 칸.
+   code 가 있는 셋만 서버에서 값이 온다. 나머지는 아직 받아올 곳이 없어
+   "연결 예정" 으로 남는다. 무엇을 붙이면 채워지는지 wait 에 적어 둔다.
+   ─ 할 일: 해외 지수·환율·원자재를 우리 서버가 야후에서 받아 중계하기
+     (한 번 부르면 13종이 한꺼번에 온다. docs/data-sources.md 참고) */
 const INDEX_CELLS = [
+  { code: 'KOSPI',    name: '코스피' },
   { code: 'KOSDAQ',   name: '코스닥' },
   { code: 'KOSPI200', name: '코스피200' },
-  { name: '나스닥',    wait: '야후 ^IXIC' },
+  { name: '미국 USD',  wait: '야후 KRW=X' },
   { name: 'S&P 500',  wait: '야후 ^GSPC' },
+  { name: '나스닥 종합', wait: '야후 ^IXIC' },
   { name: '다우존스',  wait: '야후 ^DJI' },
-  { name: '달러 환율', wait: '야후 KRW=X' },
   { name: 'VIX',      wait: '야후 ^VIX' },
   { name: 'WTI 원유',  wait: '야후 CL=F' },
   { name: '금',       wait: '야후 GC=F' },
@@ -70,49 +76,153 @@ function paintClock() {
 
   /* 지수는 정규장에만 산출된다. 프리마켓·애프터마켓에는 0.00% 로 멈춰 있는데,
      고장이 아니라는 걸 적어 둔다. */
+  /* 차트 아래 문구는 paintBigChart 가 맡는다.
+     여기서도 건드렸더니 30초마다 서로 덮어써서 문구가 왔다 갔다 했다. */
+}
+
+/* ── 지수 띠 ─────────────────────────────
+   카드를 누르면 아래 큰 차트가 그 지수로 바뀐다. */
+let pickedIndex = 'KOSPI';
+let lastIndices = null;
+
+function paintMkt() {
+  const el = $('kh-mkt');
+  if (!el) return;
+  const phase = marketPhase();
+  const live = phase.id === 'regular';
+  el.innerHTML = `
+    <span><i class="kh-pdot ${live ? '' : 'off'}"></i>국내
+      <span class="kh-chip ${live ? 'live' : ''}">${phase.label}</span>
+      <b>${phase.note}</b></span>
+    <span><i class="kh-pdot off"></i>해외
+      <span class="kh-chip">연결 예정</span></span>`;
+}
+
+function paintStrip(indices) {
+  const byCode = Object.fromEntries((indices || []).map(i => [i.code, i]));
+  const host = $('kh-strip');
+  if (!host) return;
+
+  host.innerHTML = INDEX_CELLS.map(cell => {
+    const i = cell.code ? byCode[cell.code] : null;
+    const on = cell.code === pickedIndex;
+    if (!i) {
+      /* 둘을 구분해 적는다.
+         받아올 곳이 아직 없는 칸  → "연결 예정" · 값은 "—"
+         연결은 됐는데 안 온 칸    → "불러오는 중"
+         섞어 쓰면 연결이 안 된 건지 아직 안 온 건지 알 수 없다. */
+      const soon = !cell.code;
+      return `<div class="kh-ix ${on ? 'is-on' : ''}" ${cell.code ? `data-idx="${cell.code}"` : ''}>
+        <div class="kh-ix-h"><span class="kh-ix-n">${cell.name}</span>
+          ${soon ? '<span class="kh-bd kh-bd-soon">연결 예정</span>' : ''}</div>
+        <div class="kh-ix-v kh-num kh-mut"
+          style="${soon ? '' : 'font-size:.9rem;font-weight:500'}"
+          >${soon ? '—' : '불러오는 중'}</div>
+        <div class="kh-ix-c kh-mut">${cell.wait || ''}</div>
+      </div>`;
+    }
+    const cls = dirClass(i.changePct);
+    return `<div class="kh-ix ${on ? 'is-on' : ''}" data-idx="${i.code}">
+      <div class="kh-ix-h"><span class="kh-ix-n">${cell.name}</span>
+        <span class="kh-bd kh-bd-on">실시간</span></div>
+      <div class="kh-ix-b">
+        <div>
+          <div class="kh-ix-v kh-num ${cls} ${tickClass('idx:' + i.code, i.value)}"
+            >${fmtNum(i.value, 2)}</div>
+          <div class="kh-ix-c kh-num ${cls}">${fmtDelta(i.change, i.changePct, '', 2)}</div>
+        </div>
+        <div class="kh-ix-s">${sparkSvg(i.series, i.changePct >= 0, 74, 30)}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  host.querySelectorAll('.kh-ix[data-idx]').forEach(el =>
+    el.addEventListener('click', () => {
+      pickedIndex = el.dataset.idx;
+      paintStrip(lastIndices);
+      paintBigChart();
+    }));
+
+  /* 방금 innerHTML 을 바꿨으므로 폭이 아직 잡히지 않았다. 한 프레임 뒤에
+     다시 재야 맨 왼쪽에서 '이전' 버튼이 제대로 숨는다. */
+  updateStripButtons();
+  requestAnimationFrame(updateStripButtons);
+}
+
+/* 좌우 이동 — 카드 폭만큼 밀어 준다. 끝에 닿으면 버튼을 숨긴다. */
+function updateStripButtons() {
+  const st = $('kh-strip');
+  const prev = $('kh-strip-prev');
+  const next = $('kh-strip-next');
+  if (!st || !prev || !next) return;
+  /* 딱 0 / 딱 최대가 되지 않는다. 띠에 준 1px 안쪽 여백과 스크롤 스냅 때문에
+     맨 왼쪽에서도 scrollLeft 가 1 로 잡힌다 (2026-09-14 재서 확인).
+     여유를 두지 않으면 '이전' 버튼이 안 숨어 첫 카드의 숫자를 가린다. */
+  const EDGE = 6;
+  const max = st.scrollWidth - st.clientWidth;
+  prev.disabled = st.scrollLeft <= EDGE;
+  next.disabled = st.scrollLeft >= max - EDGE;
+}
+
+function setupStrip() {
+  const st = $('kh-strip');
+  if (!st) return;
+  const step = () => Math.max(262, Math.round(st.clientWidth * 0.8));
+  $('kh-strip-prev')?.addEventListener('click',
+    () => st.scrollBy({ left: -step(), behavior: 'smooth' }));
+  $('kh-strip-next')?.addEventListener('click',
+    () => st.scrollBy({ left: step(), behavior: 'smooth' }));
+  st.addEventListener('scroll', updateStripButtons, { passive: true });
+  window.addEventListener('resize', updateStripButtons);
+}
+
+/* 고른 지수의 큰 차트 — 당일 5분 흐름.
+   시간 눈금과 지표줄을 그리려면 분 단위 값이 필요해서 따로 받아온다.
+   못 받으면 60거래일 일봉으로 물러선다. */
+let bigChartKey = null;
+
+async function paintBigChart() {
+  const key = pickedIndex;
+  bigChartKey = key;
+
+  const name = (INDEX_CELLS.find(c => c.code === key) || {}).name || '';
+  const nameEl = $('kh-idx-name');
+  if (nameEl) nameEl.textContent = name;
+
+  const host = $('kh-big-chart');
   const foot = $('kh-big-foot');
+  if (!host) return;
+
+  const bars = await fetchIndexMinutes(key);
+  if (bigChartKey !== key) return;            // 그 사이 다른 지수를 골랐다
+
+  const svg = bars ? indexChartSvg(bars) : '';
+  if (svg) {
+    host.innerHTML = svg;
+    if (foot) {
+      foot.innerHTML = `<span>오늘 5분 흐름 · 어제 구간은 흐리게</span>
+        <span>한국투자증권 실시간</span>`;
+    }
+    return;
+  }
+
+  /* 물러서기 — 일봉이라도 보여 준다 */
+  const i = (lastIndices || []).find(x => x.code === key);
+  if (!i) {
+    host.innerHTML = `<div class="kh-soon"><div class="kh-soon-t">불러오는 중</div></div>`;
+    return;
+  }
+  host.innerHTML = sparkSvg(i.series, i.changePct >= 0, 1000, 300);
   if (foot) {
-    foot.innerHTML = phase.id === 'regular' || phase.id === 'closed'
-      ? `<span>60거래일 추이</span><span>한국투자증권 실시간</span>`
-      : `<span>60거래일 추이</span>
-         <span class="kh-mut">지수는 정규장(09:00~15:30)에만 움직입니다</span>`;
+    foot.innerHTML = `<span>60거래일 추이</span>
+      <span class="kh-mut">당일 흐름을 불러오지 못했습니다</span>`;
   }
 }
 
-/* ── 지수 ───────────────────────────────── */
 function paintIndices(indices) {
-  const byCode = Object.fromEntries((indices || []).map(i => [i.code, i]));
-
-  const kospi = byCode.KOSPI;
-  if (kospi) {
-    const cls = dirClass(kospi.changePct);
-    $('kh-big-v').className = 'kh-big-v kh-num ' + cls + ' ' + tickClass('idx:KOSPI', kospi.value);
-    $('kh-big-v').textContent = fmtNum(kospi.value, 2);
-    $('kh-big-c').className = 'kh-big-c kh-num ' + cls;
-    $('kh-big-c').textContent = fmtDelta(kospi.change, kospi.changePct, '', 2);
-    $('kh-big-chart').innerHTML = sparkSvg(kospi.series, kospi.changePct >= 0, 300, 92);
-  }
-
-  $('kh-igrid').innerHTML = INDEX_CELLS.map(cell => {
-    const i = cell.code ? byCode[cell.code] : null;
-    if (!i) {
-      return `<div class="kh-ig">
-        <div class="kh-ig-spark"></div>
-        <div class="kh-ig-txt">
-          <div class="kh-ig-n">${cell.name}</div>
-          <div class="kh-ig-go">실시간 시세 보기 ›</div>
-          <div class="kh-ig-wait">${cell.wait || '불러오는 중'}</div>
-        </div></div>`;
-    }
-    const cls = dirClass(i.changePct);
-    return `<div class="kh-ig">
-      <div class="kh-ig-spark">${sparkSvg(i.series, i.changePct >= 0, 52, 28)}</div>
-      <div class="kh-ig-txt">
-        <div class="kh-ig-n">${cell.name}</div>
-        <div class="kh-ig-v kh-num ${cls} ${tickClass('idx:' + i.code, i.value)}">${fmtNum(i.value, 2)}</div>
-        <div class="kh-ig-c kh-num ${cls}">${fmtDelta(i.change, i.changePct, '', 2)}</div>
-      </div></div>`;
-  }).join('');
+  lastIndices = indices;
+  paintStrip(indices);
+  paintBigChart();
 }
 
 /* ── 순위 표 ────────────────────────────── */
@@ -198,11 +308,29 @@ function selectStock(code) {
 let lastPrices = null;
 
 const side = mountWatchSide($('kh-side'), { activeCode: null });
+
+/* 주요 일정 · 최근 공시는 관심종목 아래에 둔다 (2026-09-14 지시).
+   사이드바는 시세가 들어와도 목록만 다시 그리므로 여기 넣은 것은 깜빡이지 않는다. */
+if (side.slot) {
+  side.slot.innerHTML = `
+    <div class="kh-side-sec">
+      <div class="kh-sched-h"><span>주요 일정</span><span class="kh-mut">›</span></div>
+      <div class="kh-sched-i"><span class="d"></span>연결 예정 — 한국은행 경제통계</div>
+      <div class="kh-sched-i"><span class="d"></span>연결 예정 — 실적 발표 일정</div>
+    </div>
+    <div class="kh-side-sec">
+      <div class="kh-sched-h"><span>최근 공시</span><span class="kh-mut">OpenDART</span></div>
+      <div class="kh-dc" id="kh-dc-all"></div>
+    </div>`;
+}
 mountVBar($('kh-vbar'), 'watch');
 const foot = mountFootStrip($('kh-foot'));
 
 paintClock();
 setInterval(paintClock, 30000);
+paintMkt();
+setInterval(paintMkt, 30000);
+setupStrip();
 paintIndices(null);
 paintRows(null);
 paintPreview(null);

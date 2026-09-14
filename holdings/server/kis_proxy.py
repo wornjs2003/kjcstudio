@@ -467,6 +467,54 @@ def fetch_index_series(cfg, code, days=60):
     return series
 
 
+# 지수 당일 흐름 (5분 간격).
+#
+#   FID_INPUT_HOUR_1 은 시각이 아니라 **초 단위 간격**이다. 여기서 한참 헤맸다.
+#   "150000"(15시) 처럼 시각을 넣으면 날짜별 요약이 돌아오고,
+#   "300"(300초=5분)을 넣으면 09:00~15:30 하루치가 99건으로 온다.
+#   (2026-09-14 직접 호출해 확인. 공식 문서에는 값이 적혀 있지 않았다)
+#
+#   한 번에 101건까지 온다. 5분 간격이면 505분이라 정규장(390분)을 다 덮는다.
+INDEX_MINUTE_STEP = "300"        # 5분
+INDEX_MINUTE_TTL = 30            # 장중에는 계속 바뀌므로 짧게
+_idx_min_cache = {}              # code -> (저장시각, bars)
+
+
+def fetch_index_minutes(cfg, code):
+    """지수의 당일 5분 흐름. [{ts, open, high, low, close}, ...] 옛것부터."""
+    hit = _idx_min_cache.get(code)
+    if hit and (time.time() - hit[0]) < INDEX_MINUTE_TTL:
+        return hit[1]
+
+    data = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-time-indexchartprice", {
+        "FID_COND_MRKT_DIV_CODE": "U",
+        "FID_INPUT_ISCD": code,
+        "FID_INPUT_HOUR_1": INDEX_MINUTE_STEP,
+        "FID_PW_DATA_INCU_YN": "Y",
+        "FID_ETC_CLS_CODE": "0",
+    }, "FHKUP03500200")
+
+    bars = []
+    for r in (data.get("output2") or []):
+        hhmmss = (r.get("stck_cntg_hour") or "").strip()
+        # 888888 · 999999 는 시각이 아니라 요약 표시다. 버린다.
+        if not hhmmss.isdigit() or hhmmss in ("888888", "999999"):
+            continue
+        close = _num(r.get("bstp_nmix_prpr"))
+        if close is None:
+            continue
+        bars.append({
+            "ts": (r.get("stck_bsop_date") or "") + hhmmss[:4],
+            "open": _num(r.get("bstp_nmix_oprc")),
+            "high": _num(r.get("bstp_nmix_hgpr")),
+            "low": _num(r.get("bstp_nmix_lwpr")),
+            "close": close,
+        })
+    bars.sort(key=lambda b: b["ts"])
+    _idx_min_cache[code] = (time.time(), bars)
+    return bars
+
+
 def fetch_indices(cfg, with_chart=True):
     out, errors = [], {}
     for code, name in INDEX_DEFS:
@@ -1000,6 +1048,23 @@ class Handler(SimpleHTTPRequestHandler):
                         "count": len(rows), "fetched": fetched, "source": source,
                         "label": PERIODS[period]["label"],
                     },
+                })
+                return
+
+            if route == "index-minutes":
+                name = (qs.get("code") or ["KOSPI"])[0].strip().upper()
+                found = next((c for c, n in INDEX_DEFS if n == name), None)
+                if not found:
+                    self._send_json({
+                        "ok": False,
+                        "error": "code 는 %s 중 하나여야 합니다." % ", ".join(n for _, n in INDEX_DEFS),
+                    }, 400)
+                    return
+                bars = fetch_index_minutes(cfg, found)
+                self._send_json({
+                    "ok": True,
+                    "data": {"code": name, "bars": bars},
+                    "meta": {"count": len(bars), "stepSec": int(INDEX_MINUTE_STEP)},
                 })
                 return
 

@@ -81,3 +81,19 @@ export function applyLiveToStock(stock, live) {
   stock.isLive = true;
   return stock;
 }
+
+/* 지수의 당일 5분 흐름. 큰 차트가 쓴다.
+   실패하면 null — 부르는 쪽이 일봉으로 물러선다. */
+export async function fetchIndexMinutes(code) {
+  if (!(await kisReady())) return null;
+  try {
+    const r = await fetch('/api/kis/index-minutes?code=' + encodeURIComponent(code),
+      { cache: 'no-store' });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j || !j.ok || !Array.isArray(j.data?.bars) || !j.data.bars.length) return null;
+    return j.data.bars;
+  } catch {
+    return null;
+  }
+}

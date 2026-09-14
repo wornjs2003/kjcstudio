@@ -33,38 +33,72 @@
       <span class="kh-notice-x" id="kh-notice-x">✕</span>
     </div>
 
-    <!-- 지수 -->
-    <section class="kh-top" aria-label="주요 지수">
-      <div class="kh-card kh-big">
-        <div class="kh-big-n">코스피</div>
-        <div class="kh-big-v kh-num" id="kh-big-v">불러오는 중</div>
-        <div class="kh-big-c kh-num" id="kh-big-c"></div>
-        <div class="kh-big-chart" id="kh-big-chart"></div>
+    <!-- 카테고리 탭 — 아직 어디로도 가지 않는다 (연결 예정) -->
+    <nav class="kh-cat" aria-label="카테고리">
+      <a class="is-on" href="#">홈</a>
+      <a href="#">국내</a>
+      <a href="#">미국 · 글로벌</a>
+      <a href="#">가상자산</a>
+      <a href="#">시장지표</a>
+      <a href="#">뉴스 · 공시</a>
+      <a href="#">리서치</a>
+      <span class="kh-cat-my">내 기록</span>
+    </nav>
+
+    <!-- 장 상태 -->
+    <div class="kh-mkt" id="kh-mkt"></div>
+
+    <!-- 지수 띠 — 좌우로 넘긴다 -->
+    <div class="kh-strip-wrap">
+      <button class="kh-strip-btn prev" id="kh-strip-prev" aria-label="이전">‹</button>
+      <div class="kh-fade l"></div>
+      <div class="kh-strip" id="kh-strip"></div>
+      <div class="kh-fade r"></div>
+      <button class="kh-strip-btn next" id="kh-strip-next" aria-label="다음">›</button>
+    </div>
+
+    <!-- 고른 지수 + 오른쪽 패널 -->
+    <section class="kh-idx" aria-label="지수 상세">
+      <div class="kh-card kh-idx-main">
+        <div class="kh-idx-head">
+          <b class="kh-idx-name" id="kh-idx-name">코스피</b>
+          <span class="kh-idx-caret">›</span>
+          <span class="kh-idx-ai">✨ AI <span class="kh-mut">연결 예정</span></span>
+        </div>
+        <div class="kh-idx-chart" id="kh-big-chart"></div>
         <div class="kh-big-foot" id="kh-big-foot">
           <span>60거래일 추이</span><span>한국투자증권 실시간</span>
         </div>
       </div>
 
-      <div class="kh-igrid" id="kh-igrid"></div>
-
-      <div class="kh-rightcol">
-        <span class="kh-aibtn">✨ 오늘의 한 줄</span>
-        <div class="kh-card kh-sched">
-          <div class="kh-sched-h"><span>주요 일정</span><span class="kh-mut">›</span></div>
-          <div class="kh-sched-s">이번 주 발표되는 지표와 공시 일정을 모아 보여줍니다.</div>
-          <div class="kh-sched-i"><span class="d"></span>연결 예정 — 한국은행 경제통계</div>
-          <div class="kh-sched-i"><span class="d"></span>연결 예정 — 실적 발표 일정</div>
+      <!-- 오른쪽 패널 — 넷 다 아직 받아올 곳이 없다.
+           숫자를 지어 넣지 않고 무엇을 붙이면 채워지는지만 적어 둔다. -->
+      <aside class="kh-card kh-idxp" aria-label="시장 정보">
+        <div class="kh-idxp-s">
+          <div class="kh-idxp-h"><i class="kh-idxp-i ok"></i>시장 현황
+            <span class="kh-bd kh-bd-soon">연결 예정</span></div>
+          <div class="kh-idxp-b">상승 · 보합 · 하락 종목 수<br>
+            <span class="kh-mut">붙일 것: KRX 또는 네이버</span></div>
         </div>
-
-        <!-- 감시 대상(코스피 시가총액 상위 200) 에서 오늘 올라온 공시 -->
-        <div class="kh-card kh-recent">
-          <div class="kh-sched-h">
-            <span>최근 공시</span>
-            <span class="kh-mut" id="kh-dc-src">OpenDART</span>
-          </div>
-          <div class="kh-dc" id="kh-dc-all"></div>
+        <div class="kh-idxp-s">
+          <div class="kh-idxp-h"><i class="kh-idxp-i ac"></i>52주 최저 · 최고
+            <span class="kh-bd kh-bd-soon">연결 예정</span></div>
+          <div class="kh-idxp-b">지수의 1년 범위<br>
+            <span class="kh-mut">붙일 것: 지수 일봉에서 계산</span></div>
         </div>
-      </div>
+        <div class="kh-idxp-s">
+          <div class="kh-idxp-h"><i class="kh-idxp-i wn"></i>투자자 정보
+            <span class="kh-bd kh-bd-soon">연결 예정</span></div>
+          <div class="kh-idxp-b">외국인 · 기관 · 개인<br>
+            <span class="kh-mut">붙일 것: 네이버 (KIS 무료 범위 밖)</span></div>
+        </div>
+        <div class="kh-idxp-s">
+          <div class="kh-idxp-h"><i class="kh-idxp-i mu"></i>프로그램 매매
+            <span class="kh-bd kh-bd-soon">연결 예정</span></div>
+          <div class="kh-idxp-b">차익 · 비차익<br>
+            <span class="kh-mut">붙일 것: KRX</span></div>
+        </div>
+      </aside>
     </section>
 
     <!-- 순위 + 미리보기 -->
@@ -129,9 +163,20 @@
 <!-- 차트 라이브러리 — holdings 안에 둔다. 이 구역만 쓰기 때문이다 -->
 <script src="./js/vendor/lightweight-charts.js"></script>
 <script>
-  // 개발용: 서비스 워커로 캐시를 우회해 수정이 바로 반영되게 한다
+  // 개발용: 서비스 워커로 캐시를 우회해 수정이 바로 반영되게 한다.
+  //
+  // 등록 전에 이 폴더 밖에서 등록된 옛 워커를 지운다. 주소가
+  // localhost:8765/ 에서 localhost:8765/holdings/ 로 바뀌면서, 예전에
+  // 스코프 "/" 로 등록해 둔 워커가 남아 새 요청까지 가로챘다. 그래서
+  // 화면이 옛 파일로 보이고 지수 카드가 한 개만 나왔다 (2026-09-14).
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(function () { /* 무시 */ });
+    var here = location.origin + '/holdings/';
+    navigator.serviceWorker.getRegistrations().then(function (regs) {
+      regs.forEach(function (r) {
+        if (r.scope.indexOf(here) !== 0) r.unregister();
+      });
+      return navigator.serviceWorker.register('./sw.js');
+    }).catch(function () { /* 무시 */ });
   }
 </script>
 <script type="module" src="./js/home.js"></script>

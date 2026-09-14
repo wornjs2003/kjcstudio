@@ -15,24 +15,38 @@ const FOOT_NOT_READY = ['달러 인덱스', '달러 환율', '나스닥', 'S&P 5
 
 /* ── 관심종목 사이드바 ───────────────────── */
 export function mountWatchSide(el, { activeCode } = {}) {
-  if (!el) return { update() {} };
+  if (!el) return { update() {}, slot: null };
+
+  /* 뼈대는 한 번만 그린다. 시세가 들어올 때마다 통째로 갈아치우면
+     아래 붙여 둔 것(주요 일정·최근 공시)이 5초마다 다시 그려져 깜빡인다.
+     그래서 종목 목록만 따로 갱신한다. (2026-09-14) */
+  el.innerHTML = `
+    <div class="kh-side-head">
+      <b>관심</b>
+      <span class="kh-side-toggle">₩ 원</span>
+    </div>
+
+    <div class="kh-oneline">
+      <div class="kh-oneline-h">✨ 오늘의 한 줄</div>
+      <div class="kh-oneline-b">연결 예정 — 관심종목에서 가장 크게 움직인 종목을
+        한 줄로 알려줍니다.</div>
+    </div>
+
+    <div class="kh-side-title">관심 주식 TOP ${WATCHLIST.length}</div>
+    <div class="kh-side-sub">관심 그룹에 담아보세요</div>
+
+    <div class="kh-wl-list"></div>
+
+    <div class="kh-side-add"><span class="plus">＋</span>추가하기</div>
+
+    <!-- 부르는 쪽이 채워 넣는 자리 (첫 화면: 주요 일정 · 최근 공시) -->
+    <div class="kh-side-slot"></div>
+  `;
+
+  const list = el.querySelector('.kh-wl-list');
 
   function render(priceMap) {
-    el.innerHTML = `
-      <div class="kh-side-head">
-        <b>관심</b>
-        <span class="kh-side-toggle">₩ 원</span>
-      </div>
-
-      <div class="kh-oneline">
-        <div class="kh-oneline-h">✨ 오늘의 한 줄</div>
-        <div class="kh-oneline-b">연결 예정 — 관심종목에서 가장 크게 움직인 종목을
-          한 줄로 알려줍니다.</div>
-      </div>
-
-      <div class="kh-side-title">관심 주식 TOP ${WATCHLIST.length}</div>
-      <div class="kh-side-sub">관심 그룹에 담아보세요</div>
-
+    list.innerHTML = `
       ${WATCHLIST.map(s => {
         const live = priceMap && priceMap[s.code];
         const cls = live ? dirClass(live.pct) : 'kh-mut';
@@ -49,13 +63,11 @@ export function mountWatchSide(el, { activeCode } = {}) {
             <span class="kh-wl-heart">♡</span>
           </a>`;
       }).join('')}
-
-      <div class="kh-side-add"><span class="plus">＋</span>추가하기</div>
     `;
   }
 
   render(null);
-  return { update: render };
+  return { update: render, slot: el.querySelector('.kh-side-slot') };
 }
 
 /* ── 세로 아이콘 바 ─────────────────────── */

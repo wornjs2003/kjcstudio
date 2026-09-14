@@ -312,3 +312,24 @@ body {
 .kh-side {
   min-height: calc(100vh - var(--nav-height));
 }
+
+/* ── 관심종목 아래에 붙는 것 (주요 일정 · 최근 공시) ──
+   2026-09-14 지시로 지수 영역에 있던 두 칸을 이리로 옮겼다.
+   사이드바는 시세가 들어와도 종목 목록만 다시 그리므로 여기는 깜빡이지 않는다. */
+.kh-side-sec {
+  margin-top: 18px; padding-top: 16px;
+  border-top: 1px solid var(--kh-border);
+}
+.kh-side-sec .kh-sched-h {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.88rem; font-weight: 600; margin-bottom: 9px;
+}
+.kh-side-sec .kh-sched-i {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.78rem; color: var(--kh-text-muted); padding: 4px 0;
+}
+.kh-side-sec .kh-sched-i .d {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--kh-tag-news); flex-shrink: 0;
+}
+.kh-side-sec .kh-dc { max-height: 260px; }
