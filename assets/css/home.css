@@ -227,3 +227,77 @@
     opacity: 0.6;
   }
 }
+
+
+/* ── 3) 대표 카테고리 작업물 ───────────────────────────────
+   그리드 자체는 gallery.css 가 그린다. 여기서는 그 위에 얹는 머리말만 맡는다. */
+.home-works {
+  border-top: 1px solid rgb(var(--ink-rgb) / 8%);
+}
+
+.home-works-head {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 96px var(--page-gutter) 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.home-works-kicker {
+  font-size: 0.82rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+/* gallery.js 가 채우는 제목. 카테고리 페이지의 거대 타이포보다 한 단 작게 둔다 —
+   여기서는 주인공이 작업물이지 제목이 아니다. */
+.home-works .category-title {
+  font-size: clamp(1.8rem, 5vw, 3.6rem);
+  margin: 0;
+}
+
+.home-works-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  border-bottom: 1px solid var(--border-strong);
+  transition: color 0.25s ease, border-color 0.25s ease;
+}
+
+.home-works-more::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-top: 1px solid currentColor;
+  border-right: 1px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.home-works-more:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* 머리말 바로 아래에 붙으므로 그리드 위쪽 여백을 줄인다 */
+.home-works .gallery {
+  padding-top: 28px;
+}
+
+@media (max-width: 768px) {
+  .home-works-head {
+    padding-top: 64px;
+  }
+  .home-works .gallery {
+    padding-top: 20px;
+  }
+}

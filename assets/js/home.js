@@ -63,6 +63,11 @@
       return;
     }
 
+    /* 대표 작업물 구역의 "전체 보기" 링크를 featured 카테고리로 맞춘다.
+       제목과 그리드는 gallery.js 가 채운다. 여기서는 링크만 손댄다. */
+    const moreLink = document.querySelector('.home-works-more');
+    if (moreLink && doc.featured) moreLink.href = `${base}category/${doc.featured}.html`;
+
     const list = (doc.list || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
     if (!list.length) {
       container.innerHTML = `
