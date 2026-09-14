@@ -730,6 +730,73 @@ async function getChart(cfg, env, code, period, limit) {
   return { rows, fetched, warn, source: fetched ? "KIS+DB" : "DB" };
 }
 
+/* ── 여러 종목을 한 번에 ────────────────────────────────────────────────
+   현재가 API(inquire-price)는 한 번에 한 종목만 준다. 순위표처럼 수십 종목을
+   보여주는 화면에서는 그만큼 호출이 곱해져 한참 걸린다.
+
+     30종목을 받을 때   단건 조회 30번 7.9초  vs  멀티 조회 1번 2.1초
+
+   관심종목(멀티종목) 시세조회는 **한 번에 30종목까지** 준다.
+   40개를 보내면 앞 30개만 돌아온다 (2026-09-14 직접 호출해 확인).
+
+   주는 항목이 단건보다 적다. 시가총액·PER·PBR·52주 최고저가 없다. 그래서
+   종목 화면은 단건 조회를 쓰고, 이것은 목록용이다.
+
+   server/kis_proxy.py 의 fetch_quotes_multi 와 **같은 모양으로 돌려줘야 한다.**
+   화면은 같은 코드로 로컬과 배포본을 함께 읽는다. */
+const MULTI_MAX = 30;
+
+async function fetchQuotesMulti(cfg, env, codes) {
+  const div = quoteMarketDiv();
+  const out = {};
+  const errors = {};
+
+  for (let i = 0; i < codes.length; i += MULTI_MAX) {
+    const chunk = codes.slice(i, i + MULTI_MAX);
+    const params = {};
+    chunk.forEach((code, n) => {
+      params[`FID_COND_MRKT_DIV_CODE_${n + 1}`] = div;
+      params[`FID_INPUT_ISCD_${n + 1}`] = code;
+    });
+
+    let data;
+    try {
+      /* kisGet 이 kisPace() 로 호출 간격을 지킨다. 그것을 건너뛰면 분봉 때처럼
+         초당 한도에 걸려 조용히 빈 값이 돌아온다. */
+      data = await kisGet(
+        cfg, env,
+        "/uapi/domestic-stock/v1/quotations/intstock-multprice",
+        params, "FHKST11300006",
+        QUOTE_CACHE_TTL_FAST          // 목록은 자주 바뀌므로 짧게
+      );
+    } catch (e) {
+      for (const code of chunk) errors[code] = safeMessage(e, env);
+      continue;
+    }
+
+    for (const r of data.output || []) {
+      const code = String(r.inter_shrn_iscd || "").trim();
+      if (!code) continue;
+      const price = num(r.inter2_prpr);
+      out[code] = {
+        price,
+        prev: num(r.inter2_prdy_clpr),
+        amt: num(r.inter2_prdy_vrss),
+        pct: num(r.prdy_ctrt),
+        name: String(r.inter_kor_isnm || "").trim(),
+        open: num(r.inter2_oprc),
+        high: num(r.inter2_hgpr),
+        low: num(r.inter2_lwpr),
+        volume: num(r.acml_vol),
+        // 거래대금은 실제 값이 온다. 현재가×거래량으로 어림하지 않아도 된다.
+        value: num(r.acml_tr_pbmn),
+        source: "KIS",
+      };
+    }
+  }
+  return { data: out, errors };
+}
+
 /* ══ 공시 (OpenDART) ═════════════════════════════════════════
    로컬은 server/dart.py 가 같은 일을 한다. 두 곳이 같은 판단을 해야 한다.
 
@@ -1261,6 +1328,22 @@ export default {
           return fail("code 는 6자리 숫자여야 합니다.", 400);
         }
         return json({ ok: true, data: await fetchPrice(cfg, env, code) });
+      }
+
+      if (route === "quotes") {
+        const raw = url.searchParams.get("codes") || "";
+        let codes = raw.split(",").map((c) => c.trim()).filter((c) => /^\d{6}$/.test(c));
+        codes = [...new Set(codes)].slice(0, 120);   // 멀티 4묶음까지
+        if (!codes.length) {
+          return fail("codes 에 6자리 종목코드가 없습니다.", 400);
+        }
+        const { data, errors } = await fetchQuotesMulti(cfg, env, codes);
+        return json({
+          ok: true,
+          data,
+          errors: Object.keys(errors).length ? errors : null,
+          meta: { requested: codes.length, perCall: MULTI_MAX },
+        });
       }
 
       if (route === "prices") {
