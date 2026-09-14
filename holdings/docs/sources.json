@@ -83,14 +83,38 @@
         "시가총액 순위"
       ],
       "endpoints": [
-        "polling.finance.naver.com/api/realtime",
-        "m.stock.naver.com/api/stock/{code}/integration",
-        "api.finance.naver.com/siseJson.naver",
-        "m.stock.naver.com/api/news/stock/{code}",
-        "m.stock.naver.com/api/stocks/marketValue/KOSPI?page=N&pageSize=100"
+        "polling.finance.naver.com/api/realtime  — 실시간 시세",
+        "m.stock.naver.com/api/stock/{code}/basic  — 현재가·장상태·거래정지 (가볍다, 4KB)",
+        "m.stock.naver.com/api/stock/{code}/integration  — 수급·투자정보·컨센서스·리포트 (9KB)",
+        "m.stock.naver.com/api/news/stock/{code}  — 종목 뉴스",
+        "api.finance.naver.com/siseJson.naver?symbol={code}&requestType=1&startTime=YYYYMMDD&endTime=YYYYMMDD&timeframe=day  — 일/주/월봉",
+        "m.stock.naver.com/api/stocks/marketValue/KOSPI?page=N&pageSize=100  — 시총 순위"
       ],
       "note": "브라우저에서 직접 못 부른다(CORS). 반드시 우리 서버가 대신 불러야 한다. 공개 문서가 없는 내부 주소라 예고 없이 막힐 수 있다. 시가총액 순위는 공시 감시 대상 200종목을 고르는 데만 쓴다 — 시세가 아니라서 순위가 조금 틀려도 판단을 그르치지 않는다. 막히면 직전 목록을 그대로 쓰고, KIS 순위 API(30건 한계)로 줄여서 버틴다.",
-      "verified": "2026-09-14 네 주소 모두 200 확인. 종목 통합 응답에 stockName 있음 — KIS 에 없는 종목명을 여기서 받을 수 있다"
+      "verified": "2026-09-14 서버에서 실제 호출. API 6개 정상, 옛 HTML 4개는 전부 쓸 수 없음(deadEndpoints 참고). CORS 는 전부 없어 브라우저 직접 호출 불가 — 우리 서버가 대신 불러야 한다. 종목 통합 응답에 stockName 이 있어 KIS 에 없는 종목명을 여기서 받을 수 있다.",
+      "deadEndpoints": {
+        "_설명": "예전에 HTML 을 긁던 주소들. 2026-09-14 확인 결과 전부 쓸 수 없다.",
+        "주소": [
+          "finance.naver.com/item/main.naver",
+          "finance.naver.com/item/coinfo.naver",
+          "finance.naver.com/item/frgn.naver",
+          "finance.naver.com/item/news.naver"
+        ],
+        "왜": "네이버페이 증권으로 개편되면서 stock.naver.com 으로 302 되고, 서버가 빈 껍데기만 준다. 본문에 종목명조차 없고(어떤 인코딩으로도) no_today·blind·__NEXT_DATA__ 같은 기준점이 전멸했다.",
+        "함정": "상태 200 에 121KB 가 돌아와서 살아있는 것처럼 보인다. 상태코드만 보면 놓친다.",
+        "대안": "여기서 긁던 항목은 integration + news API 에 다 있다. 되살릴 이유가 없다."
+      },
+      "integration이_주는_것": {
+        "dealTrendInfos": "투자자별 수급 5영업일치 — 외국인·기관·개인 순매수 수량, 외국인 보유율, 종가",
+        "totalInfos": "투자정보 18종 — 전일·시가·고가·저가·거래량·대금·시총·외인소진율·52주최고저·PER·EPS·추정PER·추정EPS·PBR·BPS·배당수익률·주당배당금",
+        "consensusInfo": "투자의견 평균 · 목표주가 평균",
+        "industryCompareInfo": "동종업계 6종목 비교",
+        "researches": "증권사 리포트 5건",
+        "!! 값이 전부 문자열": "부호·쉼표·단위가 붙어서 온다 (\"+3,643,746\" · \"46.64%\" · \"4조 1,489억\" · \"11.28배\"). 계산에 쓰려면 파싱해야 한다.",
+        "!! 당일 수급은 없다": "전일까지만 채워진다. 2026-09-14 13시에 최신이 09-11 이었다. 화면에 \"9/11 기준\" 같은 날짜를 반드시 적어야 한다.",
+        "!! PER 을 여기서 받지 말 것": "네이버 11.28배 · KIS 39.91배로 3.5배 차이가 난다. 계산 기준이 달라 둘 다 틀린 값은 아니지만 섞이면 안 된다. fieldOwner 대로 PER·PBR·시총·52주는 kis 에서 받는다.",
+        "description": "기업개요 서술형 텍스트. 005930 에서는 null 이었다. 필요하면 별도 출처가 있어야 한다."
+      }
     },
     "opendart": {
       "label": "OpenDART (금융감독원)",
@@ -246,7 +270,8 @@
     },
     "개인·외국인·기관": {
       "from": "naver",
-      "difficulty": "중계 한 번"
+      "difficulty": "중계 한 번",
+      "note": "integration 의 dealTrendInfos 에 5영업일치가 그대로 있다. 당일분은 없으니 날짜 표기 필요."
     },
     "호가·실시간 체결": {
       "from": "kis",
