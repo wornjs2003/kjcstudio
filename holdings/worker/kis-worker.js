@@ -131,17 +131,30 @@ function fail(message, status = 502) {
    외부 호출의 오류 메시지를 사람에게 보여줄 때는 반드시 이 함수를 거친다. */
 const SECRET_QS = /([?&](?:crtfc_key|appkey|app_key|appsecret|app_secret|api_key|access_token|token|secret)=)[^&\s"']*/gi;
 
+// 값을 지울 최소 길이. 너무 짧은 것까지 지우면 (예: KIS_MODE = "prod")
+// 멀쩡한 문구가 알아볼 수 없게 된다.
+const MIN_SECRET_LEN = 8;
+
+/* env 에 든 문자열 값 전부. 이름을 가려 받지 않는다.
+   이름으로 골라내면 Secret 이 늘었을 때 그것만 빠진다. 실제로 로컬에서
+   알림을 끄며 bot_token 을 _off_bot_token 으로 옮겨둔 적이 있는데,
+   이름으로 찾는 방식이었다면 그 토큰은 안 가려졌다 (2026-09-14 확인).
+   D1·KV 바인딩은 객체라 저절로 걸러진다. */
+function envSecrets(env) {
+  if (!env) return [];
+  const out = [];
+  for (const v of Object.values(env)) {
+    if (typeof v === "string" && v.length >= MIN_SECRET_LEN) out.push(v);
+  }
+  // 긴 것부터 지운다. 짧은 값이 긴 값의 일부일 때 반쪽만 지워지는 것을 막는다.
+  return out.sort((a, b) => b.length - a.length);
+}
+
 function scrub(text, env) {
   let s = String(text ?? "");
   s = s.replace(SECRET_QS, "$1<가림>");
-  // 설정값이 쿼리스트링이 아닌 형태로 섞여 있을 수도 있다
-  const secrets = [
-    env?.DART_API_KEY, env?.KIS_APP_KEY, env?.KIS_APP_SECRET,
-    env?.TELEGRAM_BOT_TOKEN, env?.TELEGRAM_CHAT_ID,
-  ];
-  for (const v of secrets) {
-    const t = v ? String(v) : "";
-    if (t.length >= 8) s = s.split(t).join("<가림>");
+  for (const v of envSecrets(env)) {
+    if (s.includes(v)) s = s.split(v).join("<가림>");
   }
   return s;
 }

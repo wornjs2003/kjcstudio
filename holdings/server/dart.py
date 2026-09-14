@@ -31,6 +31,9 @@ import xml.etree.ElementTree as ET
 import zipfile
 from datetime import datetime, timedelta, timezone
 
+# 오류 문구에서 비밀을 지운다. 왜 필요한지는 그 파일 머리말에 적혀 있다.
+from secrets_guard import safe_message, scrub
+
 KST = timezone(timedelta(hours=9))
 
 HOLDINGS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -136,50 +139,6 @@ def _meta_set(key, value):
 
 def _today():
     return datetime.now(KST).strftime("%Y%m%d")
-
-
-# 오류 문구에서 비밀을 지운다.
-#   2026-09-14 에 배포본(Cloudflare Worker)에서 인증키가 실제로 새어 나갔다.
-#   외부 호출이 실패했을 때 런타임이 요청 URL 을 오류 메시지에 붙이는데,
-#   그 URL 에 crtfc_key 가 들어 있었다. 그것을 그대로 저장하고 /api/dart/status
-#   로 돌려줘서 누구나 볼 수 있었다.
-#   여기(로컬)는 localhost 라 위험이 덜하지만, 같은 실수를 두 번 하지 않도록 막아둔다.
-_SECRET_QS = re.compile(
-    r"([?&](?:crtfc_key|appkey|app_key|appsecret|app_secret|api_key|access_token|token|secret)=)[^&\s\"']*",
-    re.IGNORECASE,
-)
-
-
-def scrub(text):
-    s = str(text if text is not None else "")
-    s = _SECRET_QS.sub(lambda m: m.group(1) + "<가림>", s)   # 값만 지운다
-    for v in _all_secrets():
-        if v and len(v) >= 8:
-            s = s.replace(v, "<가림>")
-    return s
-
-
-def _all_secrets():
-    """secrets.json 에 든 값들. 오류 문구에 섞여 나가면 안 되는 것들이다."""
-    path = os.path.join(HOLDINGS_DIR, "secrets.json")
-    if not os.path.exists(path):
-        return []
-    try:
-        with open(path, encoding="utf-8") as f:
-            d = json.load(f)
-    except ValueError:
-        return []
-    tg = d.get("telegram") or {}
-    kis = d.get("kis") or {}
-    return [str(v) for v in (
-        (d.get("dart") or {}).get("api_key"),
-        kis.get("app_key"), kis.get("app_secret"),
-        tg.get("bot_token"), tg.get("chat_id"),
-    ) if v]
-
-
-def safe_message(e, limit=160):
-    return scrub(e)[:limit]
 
 
 def get_key():

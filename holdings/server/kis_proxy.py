@@ -38,8 +38,11 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
-# 같은 폴더(server/)의 공시 수집 모듈. 스크립트로 실행하므로 바로 잡힌다.
+# 같은 폴더(server/)의 모듈들. 스크립트로 실행하므로 바로 잡힌다.
 import dart
+# 오류 문구에서 비밀을 지운다. 외부 호출 오류를 사람에게 보여줄 때는
+# 반드시 이것을 거친다 (2026-09-14 에 인증키가 실제로 샜다).
+from secrets_guard import safe_message, scrub
 
 # Windows 기본 콘솔(cp949)에서 한글·기호 출력에 실패해 서버가 죽지 않도록 고정한다.
 for _stream in ("stdout", "stderr"):
@@ -214,7 +217,7 @@ def load_secrets():
         with open(SECRETS_PATH, encoding="utf-8") as f:
             data = json.load(f)
     except ValueError as e:
-        raise RuntimeError("secrets.json 형식이 잘못되었습니다: %s" % e)
+        raise RuntimeError("secrets.json 형식이 잘못되었습니다: %s" % safe_message(e))
 
     kis = data.get("kis") or {}
     missing = [k for k in ("app_key", "app_secret") if not kis.get(k)]
@@ -286,10 +289,10 @@ def get_token(cfg):
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", "replace")[:300]
+        detail = scrub(e.read().decode("utf-8", "replace"))[:300]
         raise RuntimeError("토큰 발급 실패 (HTTP %s): %s" % (e.code, detail))
     except urllib.error.URLError as e:
-        raise RuntimeError("토큰 발급 실패 (네트워크): %s" % e.reason)
+        raise RuntimeError("토큰 발급 실패 (네트워크): %s" % safe_message(e.reason))
 
     token = data.get("access_token")
     if not token:
@@ -317,14 +320,14 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", "replace")[:300]
+        detail = scrub(e.read().decode("utf-8", "replace"))[:300]
         # 초당 건수 초과(EGW00201)는 잠깐 쉬었다 한 번만 다시 시도한다.
         if "EGW00201" in detail and _retry > 0:
             time.sleep(1.0)
             return kis_get(cfg, path, params, tr_id, _retry - 1)
         raise RuntimeError("KIS 호출 실패 (HTTP %s): %s" % (e.code, detail))
     except urllib.error.URLError as e:
-        raise RuntimeError("KIS 호출 실패 (네트워크): %s" % e.reason)
+        raise RuntimeError("KIS 호출 실패 (네트워크): %s" % safe_message(e.reason))
 
     if str(data.get("rt_cd", "0")) != "0":
         if data.get("msg_cd") == "EGW00201" and _retry > 0:
@@ -364,7 +367,7 @@ def fetch_prices(cfg, codes):
             _stats["kis_calls"] += 1
             return code, fetch_price(cfg, code), None
         except RuntimeError as e:
-            return code, None, str(e)
+            return code, None, safe_message(e)
 
     # 동시 실행을 2 로 제한해 KIS 초당 호출 제한에 여유를 둔다.
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -484,7 +487,7 @@ def fetch_indices(cfg, with_chart=True):
             out.append(row)
             _cache_put(cache_key, row)
         except RuntimeError as e:
-            errors[name] = str(e)
+            errors[name] = safe_message(e)
     return out, errors
 
 
@@ -910,7 +913,7 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             cfg = load_secrets()
         except RuntimeError as e:
-            self._send_json({"ok": False, "error": str(e)}, 500)
+            self._send_json({"ok": False, "error": safe_message(e)}, 500)
             return
 
         if route == "health":
@@ -925,7 +928,7 @@ class Handler(SimpleHTTPRequestHandler):
                 get_token(cfg)
                 token_ok, token_err = True, None
             except RuntimeError as e:
-                token_ok, token_err = False, str(e)
+                token_ok, token_err = False, safe_message(e)
             self._send_json({
                 "ok": token_ok,
                 "configured": True,
@@ -1026,7 +1029,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             self._send_json({"ok": False, "error": "알 수 없는 경로입니다: %s" % route}, 404)
         except RuntimeError as e:
-            self._send_json({"ok": False, "error": str(e)}, 502)
+            self._send_json({"ok": False, "error": safe_message(e)}, 502)
         except Exception as e:  # 예기치 못한 오류도 앱키가 새지 않게 요약만
             self._send_json({"ok": False, "error": "서버 오류: %s" % type(e).__name__}, 500)
 
@@ -1042,7 +1045,7 @@ def main():
         cfg = load_secrets()
     except RuntimeError as e:
         cfg = None
-        print("  [경고] %s" % e)
+        print("  [경고] %s" % safe_message(e))
 
     print("-" * 52)
     print("  KJC Holdings - 로컬 서버")

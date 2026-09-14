@@ -16,6 +16,11 @@ import sys
 import urllib.parse
 import urllib.request
 
+# 오류 문구에서 비밀을 지운다. 이 파일은 인증키를 주소에 담아 부르므로,
+# 예외 문구에 주소가 섞이면 키가 화면에 찍힌다.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from secrets_guard import forget, safe_message
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 HOLDINGS_DIR = os.path.dirname(HERE)
 SECRETS = os.path.join(HOLDINGS_DIR, "secrets.json")
@@ -55,7 +60,7 @@ def check(key):
         with urllib.request.urlopen(url, timeout=15) as r:
             body = json.loads(r.read().decode("utf-8"))
     except Exception as e:
-        return None, "연결 실패: %s" % str(e)[:80]
+        return None, "연결 실패: %s" % safe_message(e, 80)
 
     status = body.get("status")
     message = body.get("message") or ""
@@ -119,6 +124,7 @@ def main():
 
     data.setdefault("dart", {})["api_key"] = key
     save(data)
+    forget()        # 방금 넣은 키도 이제부터 가려야 한다
     print("  [성공] 키가 살아 있습니다.")
     print("  저장 완료: secrets.json  (깃에 올라가지 않습니다)")
     print()

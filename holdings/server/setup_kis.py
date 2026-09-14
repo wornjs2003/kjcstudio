@@ -22,7 +22,8 @@ for _stream in ("stdout", "stderr"):
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import kis_proxy  # noqa: E402
+import kis_proxy
+from secrets_guard import forget, safe_message  # noqa: E402
 
 SECRETS_PATH = kis_proxy.SECRETS_PATH
 
@@ -108,7 +109,7 @@ def run_check():
     try:
         cfg = kis_proxy.load_secrets()
     except RuntimeError as e:
-        print("  [실패] %s" % e)
+        print("  [실패] %s" % safe_message(e))
         return 1
 
     if not cfg:
