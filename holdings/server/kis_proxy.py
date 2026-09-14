@@ -645,8 +645,16 @@ def fetch_bars_from_kis(cfg, code, period, date_from, date_to):
     return out
 
 
-def fetch_minutes_from_kis(cfg, code, hour="153000"):
-    """1분봉. 별도 API 이며 기준 시각부터 과거 30개만 돌려준다."""
+def fetch_minutes_from_kis(cfg, code, hour=None):
+    """1분봉. 별도 API 이며 기준 시각부터 과거 30개만 돌려준다.
+
+    hour 를 주지 않으면 '지금까지' 를 기준으로 삼는다. 예전에는 기본값이
+    "153000" 이어서, 장중에 최근 구간을 갱신할 때마다 15:00~15:30 자리에
+    현재가로 채워진 가짜 봉이 생겼다 (2026-09-14 확인).
+    """
+    if hour is None:
+        m = minute_scan_start()
+        hour = "%02d%02d00" % (m // 60, m % 60)
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
@@ -674,15 +682,39 @@ def fetch_minutes_from_kis(cfg, code, hour="153000"):
     return out
 
 
+def minute_scan_start(now=None):
+    """분봉을 어느 시각부터 거슬러 내려갈지 정한다.
+
+    **아직 오지 않은 시각은 묻지 않는다.** 장중에 20:00 같은 미래 시각을
+    요청하면 KIS 가 마지막 체결값을 그 시각의 봉인 것처럼 돌려준다.
+    그대로 저장하면 아직 체결되지도 않은 시간대에 가짜 봉이 생긴다.
+
+    2026-09-14 11:52 에 실제로 그랬다. 11:55~20:00 구간에 현재가로 채워진
+    봉이 종목당 98개씩(합계 693개) 들어가 있었고, 종목을 열 때마다 늘어났다.
+
+    장이 다 끝난 뒤나 주말에는 하루치를 통째로 받아도 된다. 그때는 20:00 이
+    이미 지난 시각이라 미래가 아니다.
+    """
+    now = now or datetime.now(KST)
+    if now.weekday() >= 5:
+        return MINUTE_DAY_END                 # 주말 — 지난 거래일 하루치
+    cur = now.hour * 60 + now.minute
+    if cur >= MINUTE_DAY_END:
+        return MINUTE_DAY_END                 # 20:00 이후 — 하루치
+    return cur                                # 그 밖에는 지금 시각까지만
+
+
 def fetch_minutes_day(cfg, code):
     """하루치 1분봉을 모은다.
 
     KIS 분봉 API 는 기준 시각부터 과거 30개만 돌려주므로, 시각을 30분씩
-    거슬러 올라가며 여러 번 부른다. 통합 시장이라 넥스트레이드 시간대
+    거슬러 내려가며 여러 번 부른다. 통합 시장이라 넥스트레이드 시간대
     (~20:00)까지 포함한다. 한 번 받아 저장하면 이후에는 최근 구간만 갱신한다.
+
+    시작 시각은 minute_scan_start() 가 정한다. 미래를 묻지 않기 위해서다.
     """
     bars = {}
-    t = MINUTE_DAY_END
+    t = minute_scan_start()
     while t >= MINUTE_DAY_START:
         hour = "%02d%02d00" % (t // 60, t % 60)
         try:
@@ -764,7 +796,8 @@ def get_chart(cfg, code, period, limit):
             bars = fetch_bars_from_kis(cfg, code, period,
                                        start.strftime("%Y%m%d"), today.strftime("%Y%m%d"))
         else:                                # 분봉
-            # 처음이면 하루치를 모으고(호출 여러 번), 이후에는 최근 구간만 갱신한다
+            # 처음이면 하루치를 모으고(호출 여러 번), 이후에는 최근 구간만 갱신한다.
+            # 기준 시각을 넘기지 않으면 '지금까지' 로 잡힌다 (미래 봉 방지)
             if rows:
                 raw = fetch_minutes_from_kis(cfg, code)
             else:

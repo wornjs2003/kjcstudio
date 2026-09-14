@@ -428,7 +428,14 @@ async function fetchBarsFromKis(cfg, env, code, period, from, to) {
 }
 
 /* 1분봉. 별도 API 이며 기준 시각부터 과거 30개만 돌려준다 */
-async function fetchMinutesFromKis(cfg, env, code, hour = "200000") {
+/* hour 를 주지 않으면 '지금까지' 를 기준으로 삼는다.
+   예전 기본값은 "200000"(20:00) 이라, 장중에 최근 구간을 갱신할 때마다
+   아직 오지 않은 시각에 가짜 봉이 생겼다. 서버(kis_proxy.py)와 같은 규칙이다. */
+async function fetchMinutesFromKis(cfg, env, code, hour = null) {
+  if (hour === null) {
+    const m = minuteScanStart();
+    hour = String(Math.floor(m / 60)).padStart(2, "0") + String(m % 60).padStart(2, "0") + "00";
+  }
   const data = await kisGet(
     cfg, env,
     "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
@@ -455,9 +462,27 @@ async function fetchMinutesFromKis(cfg, env, code, hour = "200000") {
 }
 
 /* 하루치 1분봉. 30분씩 거슬러 올라가며 여러 번 부른다 */
+/* 분봉을 어느 시각부터 거슬러 내려갈지 정한다.
+
+   아직 오지 않은 시각은 묻지 않는다. 장중에 20:00 같은 미래 시각을 요청하면
+   KIS 가 마지막 체결값을 그 시각의 봉인 것처럼 돌려주고, 그대로 저장하면
+   체결되지도 않은 시간대에 가짜 봉이 생긴다.
+   (2026-09-14 11:52 에 로컬 서버에서 종목당 98개씩 확인)
+
+   서버(kis_proxy.py)의 minute_scan_start() 와 같은 판단을 해야 한다.
+   한쪽만 고치면 로컬과 배포본의 캔들이 갈린다. */
+function minuteScanStart(now = new Date()) {
+  const kst = new Date(now.getTime() + 9 * 3600 * 1000);
+  const day = kst.getUTCDay();
+  if (day === 0 || day === 6) return MINUTE_DAY_END;      // 주말 — 하루치
+  const cur = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  if (cur >= MINUTE_DAY_END) return MINUTE_DAY_END;       // 20:00 이후 — 하루치
+  return cur;                                             // 그 밖에는 지금까지만
+}
+
 async function fetchMinutesDay(cfg, env, code) {
   const bars = new Map();
-  for (let t = MINUTE_DAY_END; t >= MINUTE_DAY_START; t -= 30) {
+  for (let t = minuteScanStart(); t >= MINUTE_DAY_START; t -= 30) {
     const hour = `${String(Math.floor(t / 60)).padStart(2, "0")}${String(t % 60).padStart(2, "0")}00`;
     try {
       for (const b of await fetchMinutesFromKis(cfg, env, code, hour)) bars.set(b.ts, b);
