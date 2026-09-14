@@ -8,6 +8,33 @@ KIS 워커(`holdings/worker/`)를 만드실 때와 **거의 같은 절차**입�
 
 ---
 
+## 이미 설정을 마쳤습니다 (2026-09-14)
+
+아래 값으로 배포되어 동작 중입니다. 새로 만들 때만 아래 절차를 따르면 됩니다.
+
+| 항목 | 확정값 |
+|---|---|
+| Worker 이름 | `kjc-board-api` |
+| 데이터베이스 | `kjc-board-db` |
+| D1 바인딩 이름 | `BOARD_DB` |
+| Route | `thekjcstudio.com/api/board*` |
+| `ACCESS_TEAM` | `snowy-breeze-0626` |
+| `ACCESS_AUD` | 저장소에 적지 않음 — 아래 4단계 참고 |
+| 확인 주소 | `https://thekjcstudio.com/api/board/health` |
+| Worker 직접 주소 | `https://kjc-board-api.wornjs2003.workers.dev` |
+
+`ACCESS_AUD` 는 Access 애플리케이션 식별값이라 일부러 남기지 않았습니다.
+필요할 때 4단계 방법으로 다시 복사해 오면 됩니다.
+
+**상태 확인은 로그인한 브라우저에서** 확인 주소를 열면 됩니다.
+`signedInAs` 에 본인 이메일이 나오면 정상입니다.
+
+> Worker 직접 주소(`workers.dev`)는 Access 뒤에 있지 않습니다.
+> 설정이 붙었는지만 확인하는 용도로 쓰고, 실제 사용은 `thekjcstudio.com` 쪽으로 합니다.
+> 이 주소로는 로그인 정보가 없어 `signedInAs` 가 항상 `null` 로 나옵니다.
+
+---
+
 ## 준비물 확인
 
 이미 되어 있는 것 (따로 하실 일 없음)
@@ -35,12 +62,23 @@ KIS 워커(`holdings/worker/`)를 만드실 때와 **거의 같은 절차**입�
 ## 2. Worker 만들기
 
 1. Cloudflare 대시보드 → **Workers & Pages**
-2. **Create application** → **Create Worker**
-3. 이름: `kjc-board-api`
+2. **Create application** → **Start with Hello World!**
+   (예전의 `Create Worker` 자리입니다. 화면이 바뀌었습니다 — 2026-09-14 확인)
+3. **이름을 `kjc-board-api` 로 바꿉니다.** 이 칸을 그냥 넘기면
+   `polished-darkness-4c63` 같은 자동 이름이 그대로 굳습니다.
+   Cloudflare 는 이름 변경이 안 돼서 지우고 다시 만들어야 합니다
 4. **Deploy** (기본 코드 그대로 일단 배포)
 5. 배포 후 **Edit code**
 6. 편집기 내용을 전부 지우고 `board-api.js` 전체를 붙여넣기
 7. **Deploy**
+
+**제대로 들어갔는지 바로 확인하는 법** — Worker 주소를 열었을 때 이 문구가 나오면 성공입니다.
+
+```json
+{"ok":false,"error":"여기는 보드 저장 서버입니다. /api/board 로 요청하세요."}
+```
+
+`Hello World!` 가 나오면 기본 코드가 남아 있는 것이니 다시 붙여넣고 배포합니다.
 
 > 로컬 파일 위치: `projects/worker/board-api.js`
 
@@ -61,28 +99,42 @@ Worker 화면 → **Bindings** → **Add binding** → **D1 database**
 
 ## 4. 변수 두 개 넣기
 
-Worker 화면 → **Settings** → **Variables and Secrets**
+Worker 화면 → **Settings** → **Runtime variables and secrets** → **+ Add variable**
 
 **Secret 이 아니라 일반 Text 로** 넣습니다. 비밀번호가 아니라 식별용 값입니다.
+
+**변수는 두 개, 즉 줄이 두 개**입니다. 한 줄에 몰아넣는 것이 아닙니다.
 
 | 이름 | 종류 | 값 |
 |---|---|---|
 | `ACCESS_TEAM` | Text | 팀 이름 (아래 설명) |
 | `ACCESS_AUD` | Text | Application Audience 태그 (아래 설명) |
 
-### ACCESS_TEAM 찾는 법
+> **넣은 뒤 `Deploy` 를 반드시 누릅니다.** 입력만 하고 배포하지 않으면
+> 화면에는 보여도 서버는 못 읽습니다. 확인 주소에서 `false` 로 나옵니다.
 
-사이트에 로그인할 때 뜨는 **Cloudflare Access 로그인 화면의 주소**를 보시면 됩니다.
+### ACCESS_TEAM — 현재 값은 `snowy-breeze-0626`
+
+사이트에 로그인할 때 뜨는 **Cloudflare Access 로그인 화면의 주소** 앞부분입니다.
 
 ```
-https://무언가.cloudflareaccess.com/...
-        ^^^^^^  ← 이 부분이 팀 이름
+https://snowy-breeze-0626.cloudflareaccess.com/...
+        ^^^^^^^^^^^^^^^^^  ← 이 부분이 팀 이름
 ```
 
-이 값만 넣습니다. `.cloudflareaccess.com` 은 빼고 앞부분만입니다.
+`.cloudflareaccess.com` 은 빼고 앞부분만 넣습니다.
 
-> 대시보드 어느 메뉴에 표시되는지는 제가 공식 문서에서 확인하지 못했습니다.
-> 위 방법이 확실하니 그걸로 확인해 주세요.
+**맞는 값인지 확인하는 법** — 아래 주소를 열어서 공개키 목록(`{"keys":[...]}`)이 나오면 맞습니다.
+
+```
+https://snowy-breeze-0626.cloudflareaccess.com/cdn-cgi/access/certs
+```
+
+서버가 토큰 서명을 검증할 때 실제로 부르는 주소입니다.
+
+> 대시보드 어느 메뉴에 표시되는지는 공식 문서에서 확인하지 못했습니다.
+> 위 방법이 확실합니다. 이미 로그인되어 로그인 화면이 안 뜨면
+> 시크릿 창으로 사이트를 열면 나옵니다.
 
 ### ACCESS_AUD 찾는 법 (공식 문서 확인)
 
