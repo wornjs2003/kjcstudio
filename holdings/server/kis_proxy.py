@@ -99,16 +99,32 @@ _last_token_attempt = 0.0
 # 시세 캐시: KIS 호출량을 줄이는 핵심 장치.
 # 같은 종목을 이 시간 안에 다시 요청하면 KIS 를 부르지 않고 캐시로 답한다.
 # 값을 키우면 호출이 줄고, 줄이면 더 자주 갱신된다.
-PRICE_CACHE_TTL = 10
+#
+# TTL 은 화면 갱신 주기보다 1~5초 짧게 잡는다. 그래야 자기 탭은 늘 새 값을 받고,
+# 같은 종목을 거의 동시에 묻는 다른 탭만 캐시가 받아낸다. 창을 여러 개 띄워도
+# KIS 호출이 곱해지지 않는다.
+#   전에는 TTL 10초 < 갱신 15초라 부르러 올 때마다 이미 만료돼 있어서
+#   캐시가 사실상 놀고 있었다 (적중률 18%).
+#
+# 갈래는 js/components/frame.js 와 짝을 이룬다. FAST_CODES 는 그쪽
+# PRIORITY_CODES 와 같아야 한다.
+FAST_CODES = {"005930", "000660"}   # 5초마다 갱신 — 삼성전자 · SK하이닉스
+PRICE_CACHE_TTL_FAST = 4            # 빠른 갈래 (갱신 5초)
+PRICE_CACHE_TTL = 25                # 느린 갈래 · 지수 (갱신 30초)
 _price_cache = {}          # code -> (저장시각, 데이터)
 _cache_lock = threading.Lock()
 _stats = {"kis_calls": 0, "cache_hits": 0}
 
 
+def _cache_ttl(code):
+    """종목이 어느 갈래인지에 따라 캐시 수명을 정한다."""
+    return PRICE_CACHE_TTL_FAST if code in FAST_CODES else PRICE_CACHE_TTL
+
+
 def _cache_get(code):
     with _cache_lock:
         hit = _price_cache.get(code)
-        if hit and (time.time() - hit[0]) < PRICE_CACHE_TTL:
+        if hit and (time.time() - hit[0]) < _cache_ttl(code):
             _stats["cache_hits"] += 1
             return hit[1]
     return None
@@ -180,6 +196,8 @@ def usage_stats():
         "cacheHits": _stats["cache_hits"],
         "totalCalls": _stats["kis_calls"],
         "priceCacheTtl": PRICE_CACHE_TTL,
+        "priceCacheTtlFast": PRICE_CACHE_TTL_FAST,
+        "fastCodes": sorted(FAST_CODES),
     }
 
 
@@ -903,6 +921,7 @@ class Handler(SimpleHTTPRequestHandler):
                         "fromCache": len(codes) - called,
                         "kisCalls": called,
                         "cacheTtl": PRICE_CACHE_TTL,
+                        "cacheTtlFast": PRICE_CACHE_TTL_FAST,
                         "totalKisCalls": _stats["kis_calls"],
                     },
                 })

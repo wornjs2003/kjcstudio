@@ -67,7 +67,18 @@ const MINUTE_DAY_START = 8 * 60;
 const MINUTE_DAY_END = 20 * 60;
 
 // 시세 응답을 이 시간(초) 동안 캐시한다. KIS 호출량을 줄이는 핵심 장치.
-const QUOTE_CACHE_TTL = 10;
+//
+// TTL 은 화면 갱신 주기보다 1~5초 짧게 잡는다. 그래야 자기 탭은 늘 새 값을 받고,
+// 같은 종목을 거의 동시에 묻는 다른 탭만 캐시가 받아낸다.
+// 갈래는 js/components/frame.js 의 PRIORITY_CODES 와 짝을 이룬다.
+const FAST_CODES = new Set(["005930", "000660"]);   // 5초마다 갱신 — 삼성전자 · SK하이닉스
+const QUOTE_CACHE_TTL_FAST = 4;                     // 빠른 갈래 (갱신 5초)
+const QUOTE_CACHE_TTL = 25;                         // 느린 갈래 · 지수 (갱신 30초)
+
+/* 종목이 어느 갈래인지에 따라 캐시 수명을 정한다. */
+function quoteCacheTtl(code) {
+  return FAST_CODES.has(code) ? QUOTE_CACHE_TTL_FAST : QUOTE_CACHE_TTL;
+}
 // 지수 일봉은 자주 바뀌지 않으므로 길게 캐시한다.
 const CHART_CACHE_TTL = 600;
 // 한 번에 조회할 수 있는 종목 수 상한 (과다 요청 방지)
@@ -209,7 +220,7 @@ async function fetchPrice(cfg, env, code) {
     "/uapi/domestic-stock/v1/quotations/inquire-price",
     { FID_COND_MRKT_DIV_CODE: quoteMarketDiv(), FID_INPUT_ISCD: code },
     "FHKST01010100",
-    QUOTE_CACHE_TTL
+    quoteCacheTtl(code)
   );
   const o = data.output || {};
   const price = num(o.stck_prpr);
@@ -609,6 +620,8 @@ export default {
           data: {
             runtime: "workers",
             quoteCacheTtl: QUOTE_CACHE_TTL,
+            quoteCacheTtlFast: QUOTE_CACHE_TTL_FAST,
+            fastCodes: [...FAST_CODES],
             chartCacheTtl: CHART_CACHE_TTL,
             note: "호출량은 Cloudflare 대시보드 > Workers > 분석에서 확인하세요.",
           },
@@ -636,7 +649,11 @@ export default {
           ok: true,
           data,
           errors: Object.keys(errors).length ? errors : null,
-          meta: { requested: codes.length, cacheTtl: QUOTE_CACHE_TTL },
+          meta: {
+            requested: codes.length,
+            cacheTtl: QUOTE_CACHE_TTL,
+            cacheTtlFast: QUOTE_CACHE_TTL_FAST,
+          },
         });
       }
 

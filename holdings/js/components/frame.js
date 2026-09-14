@@ -5,7 +5,7 @@
    못 받으면 '—' 나 '연결 예정' 이 남습니다. 예시 숫자는 두지 않습니다.
    ========================================================================== */
 
-import { WATCHLIST } from '../data/market.js';
+import { WATCHLIST, PRIORITY_CODES } from '../data/market.js';
 import { fetchLivePrices, fetchLiveIndices, applyLiveToStock } from '../data/live.js';
 import { fmtWon, fmtPct, fmtNum, dirClass } from '../utils/format.js';
 
@@ -104,31 +104,60 @@ export function mountFootStrip(el) {
 /* ──────────────────────────────────────────────────────────────────────────
    시세 갱신 — 한 화면에서 한 번만 돌린다.
 
-   1회 갱신에 드는 KIS 호출 = 지수 3 + 관심종목 수.
-   서버 예산이 초당 1건(한도의 1/10)이라 15초 간격이면 예산 안에 든다.
+   두 갈래로 나눠 돈다 (2026-09-14 지시).
+     빠른 쪽 : PRIORITY_CODES 2종목만 5초마다
+     느린 쪽 : 나머지 관심종목 + 지수 3개를 30초마다
+
+   분당 호출은 2×12 + 9×2 = 42건으로, 전부 15초마다 부르던 44건보다 적다.
+   자주 볼 필요 없는 종목의 주기를 늘려 그 몫을 앞의 둘로 옮긴 것이다.
+
+   호출 간격은 서버가 1초씩 벌려 주므로(_rate_limit), 빠른 쪽 2건은 2초,
+   느린 쪽 9건은 9초가 걸린다. 둘 다 자기 주기 안에 든다.
    ────────────────────────────────────────────────────────────────────────── */
-const REFRESH_MS = 15000;
+const REFRESH_FAST_MS = 5000;
+const REFRESH_SLOW_MS = 30000;
 
 export function startLiveLoop({ onPrices, onIndices } = {}) {
-  const codes = WATCHLIST.map(s => s.code);
+  const fastCodes = WATCHLIST.filter(s => PRIORITY_CODES.includes(s.code)).map(s => s.code);
+  const slowCodes = WATCHLIST.filter(s => !PRIORITY_CODES.includes(s.code)).map(s => s.code);
 
-  async function tick() {
-    if (document.hidden) return;          // 다른 탭을 보고 있으면 쉬어간다
-    const [indices, prices] = await Promise.all([
-      fetchLiveIndices(),
-      fetchLivePrices(codes),
-    ]);
-    if (indices && onIndices) onIndices(indices);
-    if (prices) {
-      WATCHLIST.forEach(s => {
-        const live = prices[s.code];
-        if (live) applyLiveToStock(s, live);
-      });
-      if (onPrices) onPrices(prices);
-    }
+  /* 갈래마다 일부 종목만 받아오지만, 화면에는 항상 전체를 넘겨야 한다.
+     받은 것을 여기에 쌓아 두고 합쳐서 전달한다. */
+  const latest = {};
+
+  function applyPrices(prices) {
+    if (!prices) return;
+    Object.assign(latest, prices);
+    WATCHLIST.forEach(s => {
+      const live = latest[s.code];
+      if (live) applyLiveToStock(s, live);
+    });
+    if (onPrices) onPrices(latest);
   }
 
-  tick();
-  setInterval(tick, REFRESH_MS);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+  async function tickFast() {
+    if (document.hidden) return;          // 다른 탭을 보고 있으면 쉬어간다
+    if (!fastCodes.length) return;
+    applyPrices(await fetchLivePrices(fastCodes));
+  }
+
+  async function tickSlow() {
+    if (document.hidden) return;
+    const [indices, prices] = await Promise.all([
+      fetchLiveIndices(),
+      slowCodes.length ? fetchLivePrices(slowCodes) : Promise.resolve(null),
+    ]);
+    if (indices && onIndices) onIndices(indices);
+    applyPrices(prices);
+  }
+
+  tickFast();
+  tickSlow();
+  setInterval(tickFast, REFRESH_FAST_MS);
+  setInterval(tickSlow, REFRESH_SLOW_MS);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    tickFast();
+    tickSlow();
+  });
 }
