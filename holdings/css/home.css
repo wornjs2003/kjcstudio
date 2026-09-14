@@ -81,7 +81,14 @@
   align-self: flex-end; font-size: 0.78rem; color: var(--kh-accent);
   background: var(--kh-accent-dim); padding: 7px 13px; border-radius: 999px;
 }
-.kh-sched { flex: 1; padding: 16px 18px; }
+/* 주요 일정 · 최근 공시 — 오른쪽 열에 나란히 놓인 두 카드.
+   일정은 아직 붙일 데가 없어 짧고, 공시가 남는 자리를 가져간다. */
+.kh-sched { padding: 16px 18px; }
+.kh-recent {
+  flex: 1; min-height: 148px; padding: 16px 18px;
+  display: flex; flex-direction: column;
+}
+.kh-recent .kh-dc { flex: 1; }
 .kh-sched-h {
   display: flex; align-items: center; justify-content: space-between;
   font-size: 0.88rem; font-weight: 600; margin-bottom: 8px;
@@ -160,9 +167,16 @@
   .kh-top { grid-template-columns: 260px 1fr; }
   .kh-rightcol { grid-column: 1 / -1; flex-direction: row; align-items: stretch; }
   .kh-aibtn { align-self: center; }
+  .kh-sched, .kh-recent { flex: 1; }
+  .kh-recent { min-height: 168px; }
 }
 @media (max-width: 1100px) {
   .kh-top { grid-template-columns: 1fr; }
+  /* 가로로 눕혀 두면 카드가 손가락 두 개 폭까지 눌린다. 다시 세로로 쌓는다. */
+  .kh-rightcol { flex-direction: column; }
+  .kh-aibtn { align-self: flex-end; }
+  /* 세로로 쌓을 때는 늘리지 않는다. 늘리면 내용 없는 카드에 빈 칸만 길어진다. */
+  .kh-sched, .kh-recent { flex: none; }
   .kh-igrid { grid-template-columns: repeat(2, 1fr); grid-template-rows: auto; }
   /* 2열이 되면 선 규칙도 2열 기준으로 */
   .kh-ig::after, .kh-ig::before { display: none; }

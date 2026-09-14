@@ -38,6 +38,9 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
+# 같은 폴더(server/)의 공시 수집 모듈. 스크립트로 실행하므로 바로 잡힌다.
+import dart
+
 # Windows 기본 콘솔(cp949)에서 한글·기호 출력에 실패해 서버가 죽지 않도록 고정한다.
 for _stream in ("stdout", "stderr"):
     try:
@@ -835,7 +838,69 @@ class Handler(SimpleHTTPRequestHandler):
         if (self.path or "").startswith("/api/kis/"):
             self._handle_kis()
             return
+        if (self.path or "").startswith("/api/dart/"):
+            self._handle_dart()
+            return
         super().do_GET()
+
+    # ── 공시 (OpenDART) ──
+    # KIS 와 키도 한도도 다르므로 경로를 나눠 둔다. 키가 없으면 503 으로 답하고,
+    # 화면은 "연결 예정" 을 그대로 보여준다.
+    def _handle_dart(self):
+        parsed = urllib.parse.urlparse(self.path)
+        route = parsed.path[len("/api/dart/"):].strip("/")
+        qs = urllib.parse.parse_qs(parsed.query)
+
+        try:
+            if route == "status":
+                self._send_json({"ok": True, "data": dart.status()})
+                return
+
+            key = dart.get_key()
+            if not key:
+                self._send_json({
+                    "ok": False,
+                    "error": "OpenDART 인증키가 없습니다. setup-dart.bat 을 실행해 주세요.",
+                }, 503)
+                return
+
+            if route == "disclosures":
+                code = (qs.get("code") or [""])[0].strip()
+                if code and (not code.isdigit() or len(code) != 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                try:
+                    limit = int((qs.get("limit") or ["30"])[0])
+                except ValueError:
+                    limit = 30
+                rows = dart.read_disclosures(code or None, limit)
+                self._send_json({
+                    "ok": True,
+                    "data": rows,
+                    "meta": {"count": len(rows), "code": code or None,
+                             "lastPollAt": dart._meta_get("dart_last_poll")},
+                })
+                return
+
+            if route == "poll":          # 5분을 기다리지 않고 지금 한 번 받아온다
+                self._send_json({"ok": True, "data": dart.poll_once(key)})
+                return
+
+            if route == "universe":
+                with dart._db_lock, dart.db_conn() as conn:
+                    rows = conn.execute(
+                        """SELECT rank, stock_code, name, market_cap
+                             FROM dart_universe ORDER BY rank"""
+                    ).fetchall()
+                self._send_json({"ok": True, "data": [
+                    {"rank": r["rank"], "code": r["stock_code"],
+                     "name": r["name"], "cap": r["market_cap"]} for r in rows
+                ]})
+                return
+
+            self._send_json({"ok": False, "error": "알 수 없는 경로입니다: %s" % route}, 404)
+        except Exception as e:
+            self._send_json({"ok": False, "error": "서버 오류: %s" % type(e).__name__}, 500)
 
     def _handle_kis(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -989,6 +1054,15 @@ def main():
         print("  상태 확인 : http://localhost:%d/api/kis/health" % args.port)
     else:
         print("  KIS 연동  : 꺼짐 (secrets.json 없음, 정적 서버로만 동작)")
+
+    if dart.start_poller():
+        print("  공시 수집 : 사용 (코스피 상위 %d종목 · %d분마다)"
+              % (dart.UNIVERSE_SIZE, dart.POLL_INTERVAL // 60))
+        print("  알림      : %s"
+              % ("텔레그램 켜짐 (관심종목 %d개)" % len(dart.WATCH_CODES)
+                 if dart.telegram_config() else "꺼짐 (secrets.json 의 telegram 없음)"))
+    else:
+        print("  공시 수집 : 꺼짐 (setup-dart.bat 으로 인증키를 넣어주세요)")
     print("  종료      : Ctrl+C")
     print("-" * 52)
     sys.stdout.flush()

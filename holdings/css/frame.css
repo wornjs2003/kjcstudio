@@ -235,3 +235,53 @@ body {
   .kh-tick-up   { animation: kh-tick-up-bg 800ms ease-out; }
   .kh-tick-down { animation: kh-tick-down-bg 800ms ease-out; }
 }
+
+/* ── 공시 목록 ──────────────────────────────
+   첫 화면(오른쪽 '최근 공시')과 종목 화면('뉴스 · 공시')이 함께 쓴다.
+   한 줄이 통째로 링크이고, 누르면 DART 원문이 새 창으로 열린다. */
+.kh-dc {
+  display: flex; flex-direction: column;
+  overflow-y: auto; min-height: 0;
+}
+.kh-dc-i {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 7px 0; text-decoration: none; color: inherit;
+  border-bottom: 1px solid var(--kh-border);
+}
+.kh-dc-i:last-child { border-bottom: 0; }
+.kh-dc-i:hover { background: var(--kh-bg-hover); }
+
+/* 회사 이름 — 종목 화면에서는 이미 아는 회사라 감춘다 */
+.kh-dc-n {
+  flex-shrink: 0; width: 84px;
+  font-size: 0.76rem; font-weight: 600; color: var(--kh-text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.kh-dc-t {
+  flex: 1; min-width: 0;
+  font-size: 0.78rem; color: var(--kh-text-secondary); line-height: 1.5;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* [기재정정] 같은 앞머리 꼬리표 */
+.kh-dc-tag {
+  display: inline-block; margin-right: 5px; padding: 1px 5px;
+  border-radius: var(--kh-radius-sm);
+  background: var(--kh-tag-dart-dim); color: var(--kh-tag-dart);
+  font-size: 0.68rem; font-style: normal; font-weight: 600;
+}
+.kh-dc-d {
+  flex-shrink: 0; font-size: 0.72rem; color: var(--kh-text-muted);
+}
+
+/* 없을 때 · 못 받았을 때 — 둘을 구분해 적는다 */
+.kh-dc-empty {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 18px 0; text-align: center;
+  font-size: 0.78rem; color: var(--kh-text-muted);
+}
+.kh-dc-empty-s { font-size: 0.72rem; color: var(--kh-text-dim); }
+
+@media (max-width: 640px) {
+  .kh-dc-n { width: 64px; font-size: 0.72rem; }
+  .kh-dc-t { font-size: 0.74rem; }
+}

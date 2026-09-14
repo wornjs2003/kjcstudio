@@ -13,6 +13,7 @@ import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtShareCount, fmtDelta, dirClass }
   from './utils/format.js';
 import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop } from './components/frame.js';
 import { tickClass } from './utils/tick.js';
+import { mountDisclosures } from './components/disclosures.js';
 
 const $ = id => document.getElementById(id);
 
@@ -126,6 +127,11 @@ paintHead(null);
 paintPeriods();
 drawChart();
 setupMemo();
+
+/* 이 종목의 공시. 서버가 5분마다 받아 두므로 화면도 그 주기에 맞춰 다시 읽는다 */
+const disclosures = mountDisclosures(document.getElementById('kh-dc'),
+  { code: stock.code, limit: 12, showName: false });
+setInterval(() => disclosures.reload(), 5 * 60 * 1000);
 
 /* 관심종목에 없는 종목도 헤더 시세는 받아온다 */
 const inWatchlist = WATCHLIST.some(s => s.code === stock.code);

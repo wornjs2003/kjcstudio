@@ -50,8 +50,16 @@
           <div class="kh-sched-h"><span>주요 일정</span><span class="kh-mut">›</span></div>
           <div class="kh-sched-s">이번 주 발표되는 지표와 공시 일정을 모아 보여줍니다.</div>
           <div class="kh-sched-i"><span class="d"></span>연결 예정 — 한국은행 경제통계</div>
-          <div class="kh-sched-i"><span class="d"></span>연결 예정 — DART 공시 일정</div>
           <div class="kh-sched-i"><span class="d"></span>연결 예정 — 실적 발표 일정</div>
+        </div>
+
+        <!-- 감시 대상(코스피 시가총액 상위 200) 에서 오늘 올라온 공시 -->
+        <div class="kh-card kh-recent">
+          <div class="kh-sched-h">
+            <span>최근 공시</span>
+            <span class="kh-mut" id="kh-dc-src">OpenDART</span>
+          </div>
+          <div class="kh-dc" id="kh-dc-all"></div>
         </div>
       </div>
     </section>
@@ -102,10 +110,8 @@
         <div class="kh-pv-lb">5분봉</div>
         <div class="kh-pv-chart" id="kh-pv-chart"></div>
         <div class="kh-pv-why">
-          <div class="kh-pv-why-h"><span>왜 움직였을까?</span><span>연결 예정</span></div>
-          <div class="kh-pv-why-b"><span class="sp">✨</span>
-            <span class="kh-mut">붙일 것: 네이버 종목 뉴스 · DART 공시 —
-              그날 나온 소식을 모아 한 줄로 보여줍니다.</span></div>
+          <div class="kh-pv-why-h"><span>이 종목 공시</span><span>OpenDART</span></div>
+          <div class="kh-dc" id="kh-dc-one" style="max-height:118px"></div>
         </div>
       </div>
     </section>

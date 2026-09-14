@@ -170,6 +170,23 @@ https://thekjcstudio.com/api/kis/health
 
 # 남은 작업
 
+## 0. 공시(OpenDART)가 배포본에는 없다 — 2026-09-14 추가
+
+로컬 서버(`server/dart.py`)에만 붙어 있다. 배포본에서 `index.html` 과
+`stock.html` 의 공시 칸은 "불러오지 못했습니다" 로 남는다.
+
+**왜 그대로 두었나** — 공시 수집은 5분마다 도는 배경 작업이라 요청이 올 때만
+깨어나는 Worker 와 구조가 맞지 않는다. Cron Trigger + D1 로 옮겨야 한다.
+
+**옮길 때 해야 할 일**
+- `dart_corps` · `dart_universe` · `dart_disclosures` 세 테이블을 D1 에 만든다
+  (스키마는 `server/dart.py` 의 `SCHEMA` 를 그대로 쓴다)
+- Cron Trigger 로 5분마다 `list.json` 을 부르는 핸들러를 둔다
+- `/api/dart/disclosures` · `/api/dart/status` 두 경로를 Worker 에 추가한다
+- OpenDART 인증키와 텔레그램 토큰을 `wrangler secret` 으로 넣는다
+- 로컬과 배포본이 **같은 감시 대상**을 보게 해야 한다. 네이버 시가총액 순위를
+  양쪽이 따로 부르면 순위가 어긋날 수 있다
+
 ## 1. 로그인 실패 시 재시도 문제 (추후 수정 필요)
 
 **증상**: 이메일을 잘못 입력했거나, 인증 코드를 다시 받았을 때 접속이 되지 않는 경우가 있음.

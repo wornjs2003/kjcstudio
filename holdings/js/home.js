@@ -12,6 +12,7 @@ import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, dirClass, marketPhase }
   from './utils/format.js';
 import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop } from './components/frame.js';
 import { tickClass } from './utils/tick.js';
+import { mountDisclosures } from './components/disclosures.js';
 
 /* 서버가 주는 지수 3개 + 아직 받아올 곳이 없는 것들.
    ─ 할 일: 해외 지수·환율·원자재를 우리 서버가 야후에서 받아 중계하기 */
@@ -100,7 +101,7 @@ function paintIndices(indices) {
         <div class="kh-ig-txt">
           <div class="kh-ig-n">${cell.name}</div>
           <div class="kh-ig-go">실시간 시세 보기 ›</div>
-          <div class="kh-ig-wait">${cell.wait}</div>
+          <div class="kh-ig-wait">${cell.wait || '불러오는 중'}</div>
         </div></div>`;
     }
     const cls = dirClass(i.changePct);
@@ -190,6 +191,7 @@ function selectStock(code) {
     tr.classList.toggle('is-active', tr.dataset.code === code));
   paintPreview(lastPrices);
   drawPreviewChart();
+  drawPickedDisclosures();
 }
 
 /* ── 시작 ───────────────────────────────── */
@@ -205,6 +207,18 @@ paintIndices(null);
 paintRows(null);
 paintPreview(null);
 drawPreviewChart();
+
+/* ── 공시 ──
+   서버(server/dart.py)가 5분마다 받아 두므로 화면도 같은 주기로 다시 읽는다.
+   오른쪽은 감시 대상 200종목 전체, 미리보기 안쪽은 지금 고른 종목만. */
+const dcAll = mountDisclosures($('kh-dc-all'), { limit: 10, showName: true });
+let dcOne = null;
+function drawPickedDisclosures() {
+  dcOne = mountDisclosures($('kh-dc-one'),
+    { code: selectedCode, limit: 6, showName: false });
+}
+drawPickedDisclosures();
+setInterval(() => { dcAll.reload(); dcOne && dcOne.reload(); }, 5 * 60 * 1000);
 
 startLiveLoop({
   onIndices(indices) { paintIndices(indices); foot.update(indices); },
