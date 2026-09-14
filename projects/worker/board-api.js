@@ -31,6 +31,20 @@ const SCHEMA = `
   )
 `;
 
+/* 보드가 여러 개일 때 쓰는 표.
+   위 board 표는 사람당 한 줄뿐이라 화면이 둘 이상이면 서로 덮어씁니다.
+   그래서 문서 이름을 함께 열쇠로 쓰는 표를 따로 둡니다.
+   기존 /api/board 는 그대로 두었으므로 프로젝트 보드는 영향받지 않습니다. */
+const SCHEMA_DOCS = `
+  CREATE TABLE IF NOT EXISTS docs (
+    owner      TEXT NOT NULL,
+    doc        TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (owner, doc)
+  )
+`;
+
 /* ── 응답 도우미 ─────────────────────────────── */
 function json(body, status) {
   return new Response(JSON.stringify(body), {
@@ -159,6 +173,40 @@ async function readBoard(env, owner) {
   return { data: JSON.parse(row.data), updatedAt: row.updated_at };
 }
 
+/* ── 이름이 붙은 문서 (보드가 여러 개일 때) ─────────── */
+let docsReady = false;
+async function ensureDocs(env) {
+  if (docsReady) return;
+  await requireDb(env).prepare(SCHEMA_DOCS).run();
+  docsReady = true;
+}
+
+async function readDoc(env, owner, doc) {
+  await ensureDocs(env);
+  const row = await requireDb(env)
+    .prepare("SELECT data, updated_at FROM docs WHERE owner = ? AND doc = ?")
+    .bind(owner, doc)
+    .first();
+
+  if (!row) return { data: null, updatedAt: null };
+  return { data: JSON.parse(row.data), updatedAt: row.updated_at };
+}
+
+async function writeDoc(env, owner, doc, data) {
+  await ensureDocs(env);
+  const now = new Date().toISOString();
+
+  await requireDb(env)
+    .prepare(
+      `INSERT INTO docs (owner, doc, data, updated_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(owner, doc) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`
+    )
+    .bind(owner, doc, JSON.stringify(data), now)
+    .run();
+
+  return now;
+}
+
 async function writeBoard(env, owner, data) {
   await ensureTable(env);
   const now = new Date().toISOString();
@@ -209,6 +257,30 @@ export default {
 
     if (!owner) {
       return fail(401, "로그인 정보를 확인하지 못했습니다. 사이트에 다시 로그인해 주세요.");
+    }
+
+    /* 이름이 붙은 문서 — /api/board/doc/<이름>
+       보드가 여러 개라 서로 덮어쓰지 않게 칸을 나눕니다. */
+    const docMatch = url.pathname.match(/^\/api\/board\/doc\/([A-Za-z0-9_-]{1,40})\/?$/);
+    if (docMatch) {
+      const name = docMatch[1];
+      try {
+        if (request.method === "GET") {
+          const got = await readDoc(env, owner, name);
+          return json({ ok: true, owner: owner, doc: name, data: got.data, updatedAt: got.updatedAt });
+        }
+        if (request.method === "PUT") {
+          const body = await request.json();
+          if (!body || typeof body !== "object" || !("data" in body)) {
+            return fail(400, "저장할 내용(data)이 없습니다.");
+          }
+          const at = await writeDoc(env, owner, name, body.data);
+          return json({ ok: true, doc: name, updatedAt: at });
+        }
+        return fail(405, "GET 또는 PUT 만 됩니다.");
+      } catch (e) {
+        return fail(500, String(e.message || e));
+      }
     }
 
     try {
