@@ -8,8 +8,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<!-- 색상·모서리 값은 theme.css 한 곳에서만 정합니다 -->
-<link rel="stylesheet" href="theme.css">
+<!-- 색·모서리·글꼴은 루트 theme.css 한 곳에서 정합니다 (네 구역 공용)
+     상단 메뉴 모양은 nav.css 에 있습니다 -->
+<link rel="stylesheet" href="../assets/css/theme.css">
+<link rel="stylesheet" href="../assets/css/nav.css">
 
 <style>
 /* ==========================================================================
@@ -37,16 +39,14 @@ body {
   letter-spacing: -0.01em;
 }
 
-.wrap { max-width: 1400px; margin: 0 auto; padding: 32px 24px 80px; }
+/* 상단 메뉴가 화면에 고정되어 있어, 그 높이만큼 본문을 내려 둡니다 */
+.wrap {
+  max-width: 1400px; margin: 0 auto;
+  padding: calc(var(--nav-height) + 20px) 24px 80px;
+}
 
 /* ── 상단 ─────────────────────────────── */
-.topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-.back {
-  font-size: 14px; font-weight: 500; color: var(--pj-text-secondary);
-  text-decoration: none; padding: 7px 14px; border-radius: var(--pj-radius-pill);
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.back:hover { background: var(--pj-bg-surface); color: var(--pj-text-primary); }
+.topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; min-height: 30px; }
 
 h1 {
   font-size: clamp(24px, 3.5vw, 30px);
@@ -522,16 +522,18 @@ h1 {
   .lanes { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
-  .wrap { padding: 24px 14px 70px; }
+  .wrap { padding: calc(var(--nav-height) + 14px) 14px 70px; }
   .panel { padding: 18px 15px 16px; }
 }
 </style>
 </head>
-<body>
+<body data-nav="projects" data-site-root="../">
+
+<!-- 상단 메뉴 — main.js 가 partials/nav.html 을 불러와 채웁니다 -->
+<div id="site-nav"></div>
 
 <div class="wrap">
   <div class="topbar">
-    <a class="back" href="../index.html">← KJC Studio</a>
     <span class="saved" id="savedTag">불러오는 중…</span>
   </div>
 
@@ -1598,6 +1600,8 @@ function updateSummary() {
 render();
 loadFromServer();
 </script>
+
+<script src="../assets/js/main.js"></script>
 
 </body>
 </html>
