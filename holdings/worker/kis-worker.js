@@ -118,6 +118,39 @@ function fail(message, status = 502) {
   return json({ ok: false, error: message }, status);
 }
 
+/* ── 오류 메시지에서 비밀을 지운다 ────────────────────────────
+   2026-09-14 에 실제로 인증키가 새어 나갔다. OpenDART 호출이 실패했을 때
+   Cloudflare 런타임이 "Too many redirects.<요청 URL>" 처럼 요청 URL 을
+   메시지에 붙이는데, 그 URL 에 crtfc_key 가 들어 있었다. 그것을 그대로
+   저장하고 /api/dart/status 로 돌려줘서, 그 주소를 여는 사람이면
+   누구나 40자 인증키를 볼 수 있었다.
+
+   길이를 자르는 것으로는 막지 못한다(앞쪽에 키가 온다). 내용을 지워야 한다.
+   저장할 때와 돌려줄 때 양쪽에서 거른다 — 이미 저장된 값도 가려야 하기 때문이다.
+
+   외부 호출의 오류 메시지를 사람에게 보여줄 때는 반드시 이 함수를 거친다. */
+const SECRET_QS = /([?&](?:crtfc_key|appkey|app_key|appsecret|app_secret|api_key|access_token|token|secret)=)[^&\s"']*/gi;
+
+function scrub(text, env) {
+  let s = String(text ?? "");
+  s = s.replace(SECRET_QS, "$1<가림>");
+  // 설정값이 쿼리스트링이 아닌 형태로 섞여 있을 수도 있다
+  const secrets = [
+    env?.DART_API_KEY, env?.KIS_APP_KEY, env?.KIS_APP_SECRET,
+    env?.TELEGRAM_BOT_TOKEN, env?.TELEGRAM_CHAT_ID,
+  ];
+  for (const v of secrets) {
+    const t = v ? String(v) : "";
+    if (t.length >= 8) s = s.split(t).join("<가림>");
+  }
+  return s;
+}
+
+/* 예외를 사람이 볼 문구로. 비밀은 지우고 길이도 줄인다. */
+function safeMessage(e, env, max = 160) {
+  return scrub((e && e.message) || e, env).slice(0, max);
+}
+
 /* ── 설정 읽기 ─────────────────────────────────────────────── */
 
 function readConfig(env) {
@@ -160,7 +193,7 @@ async function getToken(cfg, env) {
 
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`토큰 발급 실패 (HTTP ${res.status}): ${text.slice(0, 200)}`);
+    throw new Error(`토큰 발급 실패 (HTTP ${res.status}): ${scrub(text, env).slice(0, 200)}`);
   }
 
   let data;
@@ -232,7 +265,7 @@ async function kisGet(cfg, env, path, params, trId, cacheTtl) {
   const text = await res.text();
   if (!res.ok) {
     // 초당 건수 초과는 호출한 쪽이 알아볼 수 있게 그대로 전달
-    throw new Error(`KIS 호출 실패 (HTTP ${res.status}): ${text.slice(0, 200)}`);
+    throw new Error(`KIS 호출 실패 (HTTP ${res.status}): ${scrub(text, env).slice(0, 200)}`);
   }
 
   let data;
@@ -293,7 +326,7 @@ async function fetchPrices(cfg, env, codes) {
     try {
       data[code] = await fetchPrice(cfg, env, code);
     } catch (e) {
-      errors[code] = String(e.message || e);
+      errors[code] = safeMessage(e, env);
     }
   }
   return { data, errors };
@@ -365,7 +398,7 @@ async function fetchIndices(cfg, env, withChart = true) {
       }
       out.push({ code: name, name, unit: "pt", ...info, series, source: "KIS" });
     } catch (e) {
-      errors[name] = String(e.message || e);
+      errors[name] = safeMessage(e, env);
     }
   }
   return { data: out, errors };
@@ -536,7 +569,7 @@ async function fetchMinutesDay(cfg, env, code) {
       for (const b of await fetchMinutesFromKis(cfg, env, code, hour)) bars.set(b.ts, b);
     } catch (e) {
       failed++;
-      lastError = (e && e.message) || String(e);
+      lastError = safeMessage(e, env);
     }
   }
   return {
@@ -745,7 +778,7 @@ async function refreshUniverse(env, size = UNIVERSE_SIZE) {
   try {
     items = await fetchKospiTop(size);
   } catch (e) {
-    return { ok: false, error: `시가총액 순위를 받지 못했습니다: ${(e && e.message) || e}` };
+    return { ok: false, error: `시가총액 순위를 받지 못했습니다: ${safeMessage(e, env)}` };
   }
   if (items.length < 50) {
     return { ok: false, error: `받은 종목이 ${items.length}개뿐이라 반영하지 않았습니다.` };
@@ -786,7 +819,31 @@ async function fetchDartList(key, bgn, end, corpCls = "Y", maxPages = 12) {
       crtfc_key: key, bgn_de: bgn, end_de: end,
       corp_cls: corpCls, page_no: String(page), page_count: "100",
     });
-    const res = await fetch(`${DART_API}/list.json?${qs}`);
+
+    /* redirect:"manual" 로 둔다. 기본값(follow)으로 두었더니 배포본에서
+       "Too many redirects" 가 났고, 그 오류 메시지에 요청 URL 이 통째로
+       들어가면서 인증키가 새어 나갔다 (2026-09-14).
+
+       왜 Workers 에서만 리다이렉트가 도는지는 확인하지 못했다. 같은 호출이
+       로컬 파이썬과 Node 에서는 헤더 유무·redirect 설정과 무관하게 바로 200 이
+       온다. Cloudflare 공식 문서에도 fetch 의 리다이렉트 한도나 동작이 적혀
+       있지 않았다.
+
+       그래서 원인을 모른 채로도 안전하도록, 따라가지 않고 그 자리에서 멈춘다.
+       루프가 생기지 않고, 어디로 보내려 했는지가 오류 문구에 남아 다음에
+       원인을 좁힐 수 있다. 로컬 파이썬과 같은 헤더도 함께 보낸다. */
+    const res = await fetch(`${DART_API}/list.json?${qs}`, {
+      redirect: "manual",
+      headers: {
+        "user-agent": "KJC-Holdings/1.0",
+        accept: "application/json",
+      },
+    });
+
+    if (res.status >= 300 && res.status < 400) {
+      const to = res.headers.get("location") || "(Location 없음)";
+      throw new Error(`OpenDART 가 ${res.status} 로 다른 곳을 가리킵니다: ${to}`);
+    }
     if (!res.ok) throw new Error(`OpenDART HTTP ${res.status}`);
     const body = await res.json();
 
@@ -957,7 +1014,7 @@ async function dartPollOnce(env, quietFirstRun = true) {
   try {
     items = await fetchDartList(key, today, today);
   } catch (e) {
-    const msg = String((e && e.message) || e).slice(0, 120);
+    const msg = safeMessage(e, env);
     await metaSet(env, "dart_last_error", msg);
     return { ok: false, error: msg };
   }
@@ -983,7 +1040,7 @@ async function dartStatus(env) {
     disclosures = d.n;
     lastReceivedAt = d.t;
   } catch (e) {
-    dbError = String((e && e.message) || e);
+    dbError = safeMessage(e, env);
   }
   // status 는 화면이 "공시를 쓸 수 있는가" 를 판단하는 곳이다. 절대 터지면 안 된다.
   // D1 바인딩이 없으면 위에서 dbError 가 잡히는데, 그 상태로 메모를 읽으면 또 터진다.
@@ -991,7 +1048,10 @@ async function dartStatus(env) {
   let lastPollError = null;
   try {
     lastPollAt = await metaGet(env, "dart_last_poll");
-    lastPollError = (await metaGet(env, "dart_last_error")) || null;
+    const stored = await metaGet(env, "dart_last_error");
+    // 저장할 때 이미 걸렀지만, 고치기 전에 저장된 값이 남아 있을 수 있어
+    // 돌려줄 때 한 번 더 거른다.
+    lastPollError = stored ? scrub(stored, env) : null;
   } catch {
     // dbError 에 이미 사유가 담겨 있다
   }
@@ -1018,7 +1078,7 @@ export default {
       try {
         await dartPollOnce(env);
       } catch (e) {
-        try { await metaSet(env, "dart_last_error", String((e && e.message) || e)); } catch {}
+        try { await metaSet(env, "dart_last_error", safeMessage(e, env)); } catch {}
       }
     })());
   },
@@ -1064,7 +1124,7 @@ export default {
         }
         return fail(`알 수 없는 경로입니다: ${dartRoute}`, 404);
       } catch (e) {
-        return fail(String((e && e.message) || e), 500);
+        return fail(safeMessage(e, env), 500);
       }
     }
 
@@ -1081,9 +1141,9 @@ export default {
       cfg = readConfig(env);
     } catch (e) {
       if (route === "health") {
-        return json({ ok: false, configured: false, error: String(e.message || e) });
+        return json({ ok: false, configured: false, error: safeMessage(e, env) });
       }
-      return fail(String(e.message || e), 503);
+      return fail(safeMessage(e, env), 503);
     }
 
     try {
@@ -1094,7 +1154,7 @@ export default {
           await getToken(cfg, env);
         } catch (e) {
           tokenOk = false;
-          error = String(e.message || e);
+          error = safeMessage(e, env);
         }
         // 저장 계층 상태도 함께 알려준다
         let db = { bound: !!env.KJC_DB, ready: false, error: null };
@@ -1102,7 +1162,7 @@ export default {
           try {
             Object.assign(db, { ready: true }, await dbStatus(env));
           } catch (e) {
-            db.error = String(e.message || e);   // 테이블 미생성 등
+            db.error = safeMessage(e, env);   // 테이블 미생성 등
           }
         } else {
           db.error = "D1 바인딩(KJC_DB)이 없습니다.";
@@ -1209,7 +1269,7 @@ export default {
       return fail(`알 수 없는 경로입니다: ${route}`, 404);
     } catch (e) {
       // 예기치 못한 오류에도 앱키가 새지 않도록 메시지만 전달
-      return fail(String(e.message || e), 502);
+      return fail(safeMessage(e, env), 502);
     }
   },
 };

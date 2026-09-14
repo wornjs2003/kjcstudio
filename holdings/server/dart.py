@@ -138,6 +138,50 @@ def _today():
     return datetime.now(KST).strftime("%Y%m%d")
 
 
+# 오류 문구에서 비밀을 지운다.
+#   2026-09-14 에 배포본(Cloudflare Worker)에서 인증키가 실제로 새어 나갔다.
+#   외부 호출이 실패했을 때 런타임이 요청 URL 을 오류 메시지에 붙이는데,
+#   그 URL 에 crtfc_key 가 들어 있었다. 그것을 그대로 저장하고 /api/dart/status
+#   로 돌려줘서 누구나 볼 수 있었다.
+#   여기(로컬)는 localhost 라 위험이 덜하지만, 같은 실수를 두 번 하지 않도록 막아둔다.
+_SECRET_QS = re.compile(
+    r"([?&](?:crtfc_key|appkey|app_key|appsecret|app_secret|api_key|access_token|token|secret)=)[^&\s\"']*",
+    re.IGNORECASE,
+)
+
+
+def scrub(text):
+    s = str(text if text is not None else "")
+    s = _SECRET_QS.sub(lambda m: m.group(1) + "<가림>", s)   # 값만 지운다
+    for v in _all_secrets():
+        if v and len(v) >= 8:
+            s = s.replace(v, "<가림>")
+    return s
+
+
+def _all_secrets():
+    """secrets.json 에 든 값들. 오류 문구에 섞여 나가면 안 되는 것들이다."""
+    path = os.path.join(HOLDINGS_DIR, "secrets.json")
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, encoding="utf-8") as f:
+            d = json.load(f)
+    except ValueError:
+        return []
+    tg = d.get("telegram") or {}
+    kis = d.get("kis") or {}
+    return [str(v) for v in (
+        (d.get("dart") or {}).get("api_key"),
+        kis.get("app_key"), kis.get("app_secret"),
+        tg.get("bot_token"), tg.get("chat_id"),
+    ) if v]
+
+
+def safe_message(e, limit=160):
+    return scrub(e)[:limit]
+
+
 def get_key():
     """secrets.json 의 dart.api_key. 없으면 None — 공시 기능만 조용히 꺼진다."""
     path = os.path.join(HOLDINGS_DIR, "secrets.json")
@@ -166,7 +210,7 @@ def refresh_corps(key):
 
     # 키가 틀리면 ZIP 이 아니라 XML 로 오류가 온다
     if not raw.startswith(b"PK"):
-        msg = raw.decode("utf-8", "replace")[:200]
+        msg = scrub(raw.decode("utf-8", "replace"))[:200]
         raise RuntimeError("기업 대응표를 받지 못했습니다: %s" % msg)
 
     with zipfile.ZipFile(io.BytesIO(raw)) as z:
@@ -251,7 +295,7 @@ def refresh_universe(size=UNIVERSE_SIZE):
         items = fetch_kospi_top(size)
     except Exception as e:
         return {"ok": False, "count": universe_size(),
-                "error": "시가총액 순위를 받지 못했습니다: %s" % str(e)[:80]}
+                "error": "시가총액 순위를 받지 못했습니다: %s" % safe_message(e, 80)}
     if len(items) < 50:
         return {"ok": False, "count": universe_size(),
                 "error": "받은 종목이 %d개뿐이라 반영하지 않았습니다." % len(items)}
@@ -397,7 +441,8 @@ def status():
         "disclosures": n_disc,
         "lastReceivedAt": last,
         "lastPollAt": _meta_get("dart_last_poll"),
-        "lastPollError": _meta_get("dart_last_error") or None,
+        # 고치기 전에 저장된 값이 남아 있을 수 있어 돌려줄 때 한 번 더 거른다
+        "lastPollError": scrub(_meta_get("dart_last_error")) or None,
         "watchCodes": WATCH_CODES,
     }
 
@@ -435,7 +480,8 @@ def telegram_send(text):
             body = json.loads(r.read().decode("utf-8"))
         return bool(body.get("ok")), body.get("description") or ""
     except Exception as e:
-        return False, str(e)[:100]
+        # 주소에 봇 토큰이 들어 있다. 예외 문구에 URL 이 섞이면 토큰이 샌다.
+        return False, safe_message(e, 100)
 
 
 def format_message(row):
@@ -480,7 +526,7 @@ def poll_once(key, quiet_first_run=True):
         try:
             refresh_corps(key)
         except Exception as e:
-            _meta_set("dart_last_error", "대응표: %s" % str(e)[:120])
+            _meta_set("dart_last_error", "대응표: %s" % safe_message(e, 120))
     if _meta_get("dart_universe_date") != today or universe_size() == 0:
         refresh_universe()
 
@@ -492,8 +538,9 @@ def poll_once(key, quiet_first_run=True):
     try:
         items = fetch_list(key, today, today)
     except Exception as e:
-        _meta_set("dart_last_error", str(e)[:120])
-        return {"ok": False, "error": str(e)[:120]}
+        msg = safe_message(e, 120)
+        _meta_set("dart_last_error", msg)
+        return {"ok": False, "error": msg}
 
     # 처음 켜는 날이면 오늘 치가 한꺼번에 들어온다. 그건 알리지 않는다.
     first_run = _meta_get("dart_last_poll") is None
