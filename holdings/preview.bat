@@ -18,7 +18,7 @@ if not defined PY (
 )
 
 set PORT=8765
-set URL=http://localhost:%PORT%/
+set URL=http://localhost:%PORT%/holdings/
 
 echo ------------------------------------------------
 echo   KJC Holdings - 독립 실행

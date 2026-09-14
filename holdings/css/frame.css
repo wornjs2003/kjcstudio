@@ -4,7 +4,7 @@
    홈(index.html)과 종목(stock.html)이 함께 쓰는 뼈대입니다.
      본문 | 관심종목 사이드바 | 세로 아이콘 바     + 아래 시세 띠
 
-   색과 모서리는 css/theme.css 에서만 정합니다. 여기에는 값을 두지 않습니다.
+   색과 모서리는 ../assets/css/theme.css 에서만 정합니다. 여기에는 값을 두지 않습니다.
    ========================================================================== */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -284,4 +284,31 @@ body {
 @media (max-width: 640px) {
   .kh-dc-n { width: 64px; font-size: 0.72rem; }
   .kh-dc-t { font-size: 0.74rem; }
+}
+
+/* ── 루트 상단 메뉴와의 자리 맞추기 ──────────────
+   2026-09-14 에 네 구역이 상단 메뉴를 함께 쓰게 되면서 생긴 조정이다.
+   ../assets/css/nav.css 의 .site-nav 는 position:fixed · top:0 이라
+   그냥 두면 공지 배너와 지수 카드를 덮는다.
+
+   --nav-height 는 nav.css 가 정한다(96px, 좁은 화면 72px). 값을 적지 않고
+   변수로 두었으므로 메뉴 높이가 바뀌면 여기도 따라간다. */
+.kh-app {
+  padding-top: var(--nav-height);
+}
+/* 세로 아이콘바는 붙어 따라다닌다. 기준점을 메뉴 아래로 내린다.
+
+   넓은 화면에서만이다. 좁은 화면(900px 이하)에서 이 바는 세로가 아니라
+   화면 아래쪽 가로 막대로 바뀌고 top:auto 로 눕는다. 그런데 이 파일 끝에
+   그냥 적으면 위쪽 미디어쿼리보다 나중에 선언되어 top:auto 를 덮어버린다.
+   그러면 아래 있어야 할 막대가 위로 올라와 공지 배너를 가린다
+   (2026-09-14 모바일 촬영에서 확인). 그래서 폭을 정해 가둔다. */
+@media (min-width: 901px) {
+  .kh-vbar {
+    top: var(--nav-height);
+  }
+}
+/* 관심 사이드바가 화면을 꽉 채우면 메뉴 높이만큼 넘쳐 스크롤이 생긴다. */
+.kh-side {
+  min-height: calc(100vh - var(--nav-height));
 }

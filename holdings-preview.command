@@ -8,7 +8,7 @@
 cd "$(dirname "$0")/holdings"
 
 PORT=8765
-URL="http://localhost:${PORT}/"
+URL="http://localhost:${PORT}/holdings/"
 
 # 기존 포트 정리
 lsof -ti tcp:${PORT} | xargs kill -9 2>/dev/null

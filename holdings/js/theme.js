@@ -2,8 +2,8 @@
    KJC Holdings — 차트용 색 읽기
 
    canvas 와 SVG 는 CSS 를 상속받지 못합니다. 그래서 차트 색만은 JS 가
-   직접 문자열로 넘겨야 하는데, 그 값을 여기서 css/theme.css 를 읽어 가져옵니다.
-   결과적으로 색을 정하는 곳은 css/theme.css 한 곳뿐입니다.
+   직접 문자열로 넘겨야 하는데, 그 값을 여기서 ../assets/css/theme.css 를 읽어 가져옵니다.
+   결과적으로 색을 정하는 곳은 ../assets/css/theme.css 한 곳뿐입니다.
 
    쓰는 법
      import { color, alpha } from '../theme.js';

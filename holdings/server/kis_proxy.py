@@ -52,6 +52,13 @@ for _stream in ("stdout", "stderr"):
         pass
 
 HOLDINGS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# 정적 파일은 저장소 루트에서 내보낸다. holdings 만 내보내면 화면이
+# 함께 쓰는 ../assets/ · ../partials/ 가 404 가 된다 (2026-09-14).
+# 배포본도 /holdings/index.html 기준이라, 이렇게 두면 로컬과 배포의
+# 경로가 같아진다. 키·DB 경로는 그대로 holdings 안을 가리킨다.
+SITE_ROOT = os.path.dirname(HOLDINGS_DIR)
+
 SECRETS_PATH = os.path.join(HOLDINGS_DIR, "secrets.json")
 TOKEN_CACHE_PATH = os.path.join(HOLDINGS_DIR, ".kis-token-cache.json")
 
@@ -821,7 +828,7 @@ def get_chart(cfg, code, period, limit):
 
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=HOLDINGS_DIR, **kwargs)
+        super().__init__(*args, directory=SITE_ROOT, **kwargs)
 
     def log_message(self, fmt, *args):
         # 정적 파일 요청 로그는 조용히, API 만 표시
@@ -1050,8 +1057,9 @@ def main():
     print("-" * 52)
     print("  KJC Holdings - 로컬 서버")
     print("-" * 52)
-    print("  대시보드  : http://localhost:%d/" % args.port)
-    print("  주식 분석 : http://localhost:%d/analysis/" % args.port)
+    print("  대시보드  : http://localhost:%d/holdings/" % args.port)
+    print("  주식 분석 : http://localhost:%d/holdings/analysis/" % args.port)
+    print("  메인 사이트: http://localhost:%d/" % args.port)
     if cfg:
         print("  KIS 연동  : 사용 (%s)" % MODE_LABEL[cfg["mode"]])
         print("  상태 확인 : http://localhost:%d/api/kis/health" % args.port)

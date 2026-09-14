@@ -1,16 +1,31 @@
 # KJC Holdings 프로젝트
 
 ## 성격
-- KJC Studio 메인 사이트의 하위 구역이지만 **독립 프로젝트**로 취급
-- 보유 종목 관리 + 주식 분석 서비스(구 KJCEngine)
-- 나중에 별도 레포/사이트로 분리 예정 (서브도메인 or 전용 GitHub Pages)
+- KJC Studio 사이트의 한 구역. 보유 종목 관리 + 주식 분석 서비스(구 KJCEngine)
+- **별도 저장소로 떼어내지 않는다** (2026-09-14 지시). 전에는 분리 예정이었다
 
-## 자립 원칙 (중요)
-- holdings 내부에서는 `../assets/`, `../data/`, `../partials/` 등 **부모 사이트 리소스 절대 참조 금지**
-- 모든 CSS/JS/이미지/데이터는 `holdings/` 내부에만 존재
-- 디자인 변수는 부모 사이트에서 **복사**해 사용 (공유 link 금지)
-- 메인 사이트로 돌아가는 링크는 허용 (`../index.html` 또는 절대 URL)
-- 이 폴더를 통째로 다른 레포에 복사해도 그대로 동작해야 함
+## 공유 규칙 (중요) — 2026-09-14 변경
+
+전에는 자립 원칙이 있었다. 언젠가 떼어낼 것으로 보고 부모 사이트 자원을 참조하지 못하게
+막았고, 그래서 같은 것을 복제했다. 분리하지 않기로 정했으므로 복제를 끝낸다.
+
+### 루트에서 가져다 쓰는 것
+
+| 무엇 | 어디 |
+|---|---|
+| 색·모서리·글꼴 (`--kh-*` 포함) | `../assets/css/theme.css` |
+| 상단 메뉴·푸터 | `../partials/nav.html` · `../partials/footer.html` |
+| 메뉴 주입·모바일 메뉴 | `../assets/js/main.js` |
+
+- `holdings/css/theme.css` 는 **없앴다.** 변수는 전부 루트 `theme.css` 로 옮겼다
+- `--kh-*` 접두사는 그대로다. 이름을 바꾸려면 205곳을 고쳐야 해서 두었다
+- 색을 바꿀 일이 생기면 루트 `theme.css` 를 고친다. **네 구역이 함께 바뀐다**
+
+### holdings 안에 두는 것
+
+- `css/frame.css` · `css/home.css` · `css/stock.css` — 이 구역 전용 배치
+- `js/` · `server/` · `worker/` · `docs/` · `data/` — 전부 그대로
+- 상단 메뉴는 루트 것을 쓰므로 `partials/` 에 자체 nav 를 두지 않는다
 
 ## 파일 구조 (holdings 를 루트로 간주)
 
@@ -21,8 +36,8 @@
 - `analysis/index.html` : 주식 분석 (구 KJCEngine)
 - `roadmap.html` : 개발 로드맵 · `status.html` : 연결 상태 확인
 
-CSS — 색과 모서리는 `css/theme.css` 한 곳에서만 정한다
-- `css/theme.css`  : **색 · 모서리 · 글꼴 단일 기준**
+CSS — 색과 모서리는 루트 `../assets/css/theme.css` 한 곳에서만 정한다
+- (`css/theme.css` 는 2026-09-14 에 없앴다. 변수는 루트로 옮겼고 `--kh-*` 이름은 그대로다)
 - `css/frame.css`  : 두 화면이 함께 쓰는 틀 (관심 사이드바 · 세로 바 · 시세 띠)
 - `css/home.css`   : 첫 화면 전용 · `css/stock.css` : 종목 화면 전용
 - `css/h-page.css` : analysis · roadmap 서브 페이지용
@@ -31,7 +46,7 @@ JS
 - `js/home.js`  : 첫 화면 엔트리 · `js/stock.js` : 종목 화면 엔트리
 - `js/components/frame.js` : 관심 사이드바 · 세로 바 · 시세 띠 · 시세 갱신 루프
 - `js/chart.js` : 캔들 차트 (TradingView Lightweight Charts)
-- `js/theme.js` : 차트가 쓸 색을 theme.css 에서 읽어온다
+- `js/theme.js` : 차트가 쓸 색을 루트 theme.css 에서 읽어온다
 - `js/data/market.js` : 종목·지수 **목록** (코드·이름·섹터·회사색). 시세는 여기 두지 않는다
 - `js/data/live.js`   : 서버(/api/kis/*) 에서 시세 받아오기
 - `js/data/dart.js`   : 서버(/api/dart/*) 에서 공시 받아오기
@@ -47,7 +62,7 @@ JS
 
 ## 디자인 규칙
 - 테마: **라이트 테마** — 토스증권 팔레트 (바탕 #f6f7f9 · 카드 #ffffff), 2026-09-11 변경
-- **색은 `css/theme.css` 한 곳에서만 정한다.** base/layout/components/h-page 에는 색 정의를 두지 않는다
+- **색은 루트 `../assets/css/theme.css` 한 곳에서만 정한다.** holdings 안에는 색 정의를 두지 않는다
 - 색상 하드코딩 금지. `--kh-*`(대시보드) · `--h-*`(서브 페이지) 변수만 `var()` 로 쓴다
 - 차트 색(`js/chart.js`)은 canvas 라 CSS 를 상속받지 못하므로 따로 맞춰야 한다
 - accent: #3182f6 (토스 블루). 하락색도 같은 파랑 — 토스 팔레트에 파랑이 하나뿐
@@ -56,6 +71,24 @@ JS
 - 폰트: Noto Sans KR, Roboto
 - 메인 사이트와 시각적 일관성 유지하되, 파일은 별도 소유
 
+
+## 상단 메뉴 (2026-09-14 추가)
+
+첫 화면(`index.html`)과 종목 화면(`stock.html`)은 루트 메뉴를 쓴다. 네 구역이 같다.
+
+    <body data-nav="holdings" data-site-root="../">
+    <div id="site-nav"></div>                        화면 맨 위
+    <script src="../assets/js/main.js"></script>     </body> 직전
+
+`../assets/css/nav.css` 의 `.site-nav` 는 `position:fixed` 라 그냥 두면 화면 맨 위를
+덮는다. `css/frame.css` 끝에서 자리를 맞춰 두었다 — `.kh-app` 에 `padding-top`,
+세로 아이콘바 기준점, 관심 사이드바 높이 셋이다.
+
+**세로 아이콘바 규칙은 `@media (min-width: 901px)` 로 가둬야 한다.** 좁은 화면에서
+이 바는 화면 아래쪽 가로 막대(`top:auto`)로 바뀌는데, 파일 끝에 그냥 적으면 나중에
+선언되어 그것을 덮어버리고 막대가 위로 올라와 공지 배너를 가린다.
+
+`analysis/index.html` 과 `roadmap.html` 은 아직 `js/h-page.js` 가 넣는 자체 메뉴를 쓴다.
 
 ## 데이터 규칙 (중요)
 - **예시 데이터를 화면에 두지 않는다.** 받아온 값만 보여주고, 없으면 없다고 적는다
@@ -89,8 +122,13 @@ KRX 259,500 vs 통합 262,000). 실시간성은 살리되 정규장 중에는 �
 
 ## 실행
 - 루트에서 단축: `../holdings-preview.command`
-- 독립 실행: `./preview.command` (이 파일은 분리 시 함께 이동)
-- 포트: 8765
+- 독립 실행: `./preview.command`
+- 포트: 8765 · 주소: **http://localhost:8765/holdings/**
+
+로컬 서버(`server/kis_proxy.py`)는 **저장소 루트를 내보낸다.** holdings 만 내보내면
+화면이 함께 쓰는 `../assets/` · `../partials/` 가 404 가 된다 (2026-09-14 확인).
+배포본도 `/holdings/index.html` 기준이라, 이렇게 두면 로컬과 배포의 경로가 같다.
+키와 DB 경로는 그대로 holdings 안을 가리킨다.
 
 ## 응답 규칙
 - 사용자 호칭은 항상 "재권님"

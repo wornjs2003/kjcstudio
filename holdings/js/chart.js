@@ -11,8 +11,8 @@
 import { color, alpha } from './theme.js';
 
 /* 차트는 canvas 라 CSS 를 상속받지 못해 색을 문자열로 넘겨야 한다.
-   그 값은 theme.js 가 css/theme.css 에서 읽어 오므로, 색을 바꿀 곳은
-   여전히 css/theme.css 한 곳뿐이다. */
+   그 값은 theme.js 가 ../assets/css/theme.css 에서 읽어 오므로, 색을 바꿀
+   곳은 여전히 그 한 곳뿐이다. */
 const COLOR = {
   get up()     { return color('up'); },        // 한국식: 상승 빨강
   get down()   { return color('down'); },      // 하락 파랑

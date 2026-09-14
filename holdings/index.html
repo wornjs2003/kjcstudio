@@ -15,11 +15,14 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
   <!-- 색·모서리는 theme.css 한 곳에서 정한다 -->
-  <link rel="stylesheet" href="./css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/nav.css" />
   <link rel="stylesheet" href="./css/frame.css" />
   <link rel="stylesheet" href="./css/home.css" />
 </head>
-<body>
+<body data-nav="holdings" data-site-root="../">
+
+<div id="site-nav"></div>
 
 <div class="kh-app">
   <main class="kh-main">
@@ -123,7 +126,7 @@
 
 <div class="kh-foot" id="kh-foot" aria-label="시세 띠"></div>
 
-<!-- 차트 라이브러리 — holdings 자립 원칙에 따라 내부 파일로 둔다 -->
+<!-- 차트 라이브러리 — holdings 안에 둔다. 이 구역만 쓰기 때문이다 -->
 <script src="./js/vendor/lightweight-charts.js"></script>
 <script>
   // 개발용: 서비스 워커로 캐시를 우회해 수정이 바로 반영되게 한다
@@ -132,5 +135,6 @@
   }
 </script>
 <script type="module" src="./js/home.js"></script>
+<script src="../assets/js/main.js"></script>
 </body>
 </html>

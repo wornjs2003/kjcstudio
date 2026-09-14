@@ -6,7 +6,7 @@
 
 :root {
   /* holdings 디자인 토큰 (메인 사이트에서 복제하여 소유) */
-  /* 색은 css/theme.css 에서 정한다. 여기에는 색을 두지 않는다. */
+  /* 색은 ../assets/css/theme.css 에서 정한다. 여기에는 색을 두지 않는다. */
   --h-nav-h: 72px;
   --h-gutter: 48px;
   --h-max: 1440px;

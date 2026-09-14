@@ -13,11 +13,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="./css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/nav.css" />
   <link rel="stylesheet" href="./css/frame.css" />
   <link rel="stylesheet" href="./css/stock.css" />
 </head>
-<body>
+<body data-nav="holdings" data-site-root="../">
+
+<div id="site-nav"></div>
 
 <div class="kh-app">
   <main class="kh-main">
@@ -199,5 +202,6 @@
   }
 </script>
 <script type="module" src="./js/stock.js"></script>
+<script src="../assets/js/main.js"></script>
 </body>
 </html>
