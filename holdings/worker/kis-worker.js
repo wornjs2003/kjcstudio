@@ -8,7 +8,7 @@
  * 즉 로그인한 사람만 호출할 수 있다.
  *
  * 두 가지를 맡는다.
- *   /api/kis/...   시세 · 지수 · 캔들 (한국투자증권)
+ *   /api/kis/...   시세 · 지수 · 캔들 · 지수 당일 흐름 (한국투자증권)
  *   /api/dart/...  공시 (OpenDART) — 5분마다 Cron 으로 받아 D1 에 쌓는다
  *
  * ── 필요한 설정 ────────────────────────────────────────────────
@@ -393,6 +393,52 @@ async function fetchIndexSeries(cfg, env, code, days = 60) {
     .sort((a, b) => String(a.stck_bsop_date).localeCompare(String(b.stck_bsop_date)))
     .map((r) => num(r.bstp_nmix_prpr))
     .slice(-days);
+}
+
+/* 지수 당일 흐름 (5분 간격).
+
+   FID_INPUT_HOUR_1 은 시각이 아니라 **초 단위 간격**이다. 여기서 한참 헤맸다.
+   "150000"(15시) 처럼 시각을 넣으면 날짜별 요약이 돌아오고,
+   "300"(300초=5분)을 넣으면 09:00~15:30 하루치가 99건으로 온다.
+   (2026-09-14 직접 호출해 확인. 공식 문서에는 값이 적혀 있지 않았다)
+
+   한 번에 101건까지 온다. 5분 간격이면 505분이라 정규장(390분)을 다 덮는다.
+   로컬(server/kis_proxy.py)의 fetch_index_minutes 와 같은 값을 써야 한다. */
+const INDEX_MINUTE_STEP = "300";      // 5분
+const INDEX_MINUTE_TTL = 30;          // 장중에는 계속 바뀌므로 짧게
+
+async function fetchIndexMinutes(cfg, env, code) {
+  const data = await kisGet(
+    cfg, env,
+    "/uapi/domestic-stock/v1/quotations/inquire-time-indexchartprice",
+    {
+      FID_COND_MRKT_DIV_CODE: "U",
+      FID_INPUT_ISCD: code,
+      FID_INPUT_HOUR_1: INDEX_MINUTE_STEP,
+      FID_PW_DATA_INCU_YN: "Y",
+      FID_ETC_CLS_CODE: "0",
+    },
+    "FHKUP03500200",
+    INDEX_MINUTE_TTL
+  );
+
+  const bars = [];
+  for (const r of data.output2 || []) {
+    const hhmmss = String(r.stck_cntg_hour || "").trim();
+    // 888888 · 999999 는 시각이 아니라 요약 표시다. 버린다.
+    if (!/^\d+$/.test(hhmmss) || hhmmss === "888888" || hhmmss === "999999") continue;
+    const close = num(r.bstp_nmix_prpr);
+    if (close == null) continue;
+    bars.push({
+      ts: String(r.stck_bsop_date || "") + hhmmss.slice(0, 4),
+      open: num(r.bstp_nmix_oprc),
+      high: num(r.bstp_nmix_hgpr),
+      low: num(r.bstp_nmix_lwpr),
+      close,
+    });
+  }
+  bars.sort((a, b) => a.ts.localeCompare(b.ts));
+  return bars;
 }
 
 async function fetchIndices(cfg, env, withChart = true) {
@@ -1266,6 +1312,21 @@ export default {
           // 차트가 왜 비는지 알 수 없었다 (2026-09-14).
           meta: { count: rows.length, fetched, source, warn: warn || null,
                   label: PERIODS[period].label },
+        });
+      }
+
+      if (route === "index-minutes") {
+        const name = (url.searchParams.get("code") || "KOSPI").trim().toUpperCase();
+        const found = (INDEX_DEFS.find(([, n]) => n === name) || [])[0];
+        if (!found) {
+          return fail(
+            `code 는 ${INDEX_DEFS.map(([, n]) => n).join(", ")} 중 하나여야 합니다.`, 400);
+        }
+        const bars = await fetchIndexMinutes(cfg, env, found);
+        return json({
+          ok: true,
+          data: { code: name, bars },
+          meta: { count: bars.length, stepSec: Number(INDEX_MINUTE_STEP) },
         });
       }
 
