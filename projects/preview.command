@@ -1,9 +1,11 @@
 #!/bin/bash
 # KJC Studio - 프로젝트 관리 (포트 8091)
-cd "$(dirname "$0")"
+# 저장소 루트에서 내보낸다. 화면이 ../assets/ · ../partials/ 를 함께 쓰기 때문이다.
+# 이 폴더만 내보내면 색과 메뉴가 404 가 된다 (2026-09-14).
+cd "$(dirname "$0")/.."
 
 PORT=8091
-URL="http://localhost:$PORT/"
+URL="http://localhost:$PORT/projects/"
 
 echo "------------------------------------------------"
 echo "  KJC Studio - 프로젝트 관리"
