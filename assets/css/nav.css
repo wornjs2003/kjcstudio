@@ -1,0 +1,377 @@
+/* ==========================================================================
+   KJC Studio · nav.css
+   상단 메뉴와 푸터. **네 구역이 함께 쓴다** (루트 · holdings · company-setup · projects).
+
+   2026-09-14 에 layout.css 에서 떼어냈다. 그 전에는 메뉴가 루트에만 있어서
+   holdings · company-setup · projects 로 들어가면 메뉴가 사라졌고, holdings 는
+   돌아올 링크조차 없어 주소창을 고쳐야 나올 수 있었다.
+
+   layout.css 를 통째로 싣지 않고 이 파일만 따로 둔 이유 — layout.css 에는
+   페이지 레이아웃이 함께 들어 있어서, 자체 스타일을 가진 구역(특히
+   company-setup)에 넣으면 기존 화면이 흔들린다.
+
+   색은 assets/css/theme.css 가 정한다. 여기서는 배치만 맡는다.
+   ========================================================================== */
+
+:root {
+  /* base.css 에도 같은 값이 있다. base.css 를 싣지 않는 구역에서도
+     메뉴가 제 높이로 서도록 여기 한 번 더 둔다. 값을 바꿀 때는 양쪽을 맞춘다. */
+  --nav-height: 96px;
+  --page-gutter: 60px;
+  --page-max: 1680px;
+
+  /* 메뉴 로고와 푸터가 쓰는 글꼴. base.css 와 같은 값이다. */
+  --font-body: "Noto Sans KR", "Roboto", "Apple SD Gothic Neo", sans-serif;
+  --font-display: "Roboto", "Noto Sans KR", serif;
+}
+
+@media (max-width: 1200px) { :root { --page-gutter: 40px; } }
+@media (max-width: 768px)  { :root { --page-gutter: 20px; --nav-height: 72px; } }
+
+/* ── Navigation ─────────────────────────────── */
+.site-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 80;   /* 창보다 아래. 상세창·확인창이 뜨면 그것들이 메뉴를 덮어야 한다
+                    (2026-09-14: 보드 상세창 z-index 90 이 메뉴 100 에 가려졌다) */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--nav-height);
+  padding: 0 var(--page-gutter);
+  background: var(--nav-bg);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-logo {
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+
+.nav-logo .dot {
+  color: var(--accent);
+}
+
+.nav-menu {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+  list-style: none;
+}
+
+.nav-menu a {
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+  position: relative;
+}
+
+.nav-menu a:hover,
+.nav-menu a.active {
+  color: var(--text-primary);
+}
+
+.nav-menu a.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -8px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+/* Holdings 메뉴는 별도 프로젝트 느낌 */
+.nav-menu a.external::after {
+  content: " ↗";
+  color: var(--accent);
+  font-size: 0.85em;
+  margin-left: 2px;
+}
+
+.nav-menu a.external.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -8px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+  margin-left: 0;
+}
+
+/* More 메뉴 (⋯) */
+.nav-more {
+  position: relative;
+}
+
+.nav-more-btn {
+  font-size: 1.3rem;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.nav-more-btn:hover {
+  color: var(--text-primary);
+  background: var(--border);
+}
+
+.nav-more-panel {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  min-width: 180px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+  box-shadow: var(--shadow-lg);
+}
+
+.nav-more:hover .nav-more-panel,
+.nav-more.open .nav-more-panel {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.nav-more-panel a {
+  display: block;
+  padding: 10px 14px;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  border-radius: 8px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nav-more-panel a:hover {
+  background: var(--border);
+  color: var(--text-primary);
+}
+
+/* ── Footer ─────────────────────────────── */
+.site-footer {
+  margin-top: 160px;
+  padding: 80px var(--page-gutter) 48px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.footer-inner {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr 1fr;
+  gap: 48px;
+}
+
+.footer-brand h3 {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-bottom: 14px;
+}
+
+.footer-brand p {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.7;
+}
+
+.footer-col h4 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  font-weight: 500;
+}
+
+.footer-col ul {
+  list-style: none;
+}
+
+.footer-col li {
+  margin-bottom: 10px;
+}
+
+.footer-col a {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  transition: color 0.15s ease;
+}
+
+.footer-col a:hover {
+  color: var(--accent);
+}
+
+.footer-bottom {
+  max-width: var(--page-max);
+  margin: 48px auto 0;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* ── 반응형 ─────────────────────────────── */
+@media (max-width: 1200px) {
+  .nav-menu {
+    gap: 24px;
+  }
+  .footer-inner {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .nav-menu {
+    display: none; /* 데스크톱 메뉴 숨김 → .nav-burger 로 대체 */
+  }
+  .footer-inner {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+  .footer-bottom {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+
+/* ── 모바일 햄버거 버튼 ─────────────────────────────── */
+.nav-burger {
+  display: none; /* 데스크톱에서는 숨김 (768px 이하에서 flex) */
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  margin-right: -8px;
+  align-items: center;
+}
+
+.nav-burger span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: var(--text-primary);
+  border-radius: 2px;
+  transition: transform 0.25s ease, opacity 0.2s ease;
+}
+
+/* 열린 상태 → X 아이콘 */
+.nav-burger.open span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+.nav-burger.open span:nth-child(2) {
+  opacity: 0;
+}
+.nav-burger.open span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+/* ── 모바일 전체화면 메뉴 ─────────────────────────────── */
+.nav-mobile {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: var(--nav-bg-solid);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: calc(var(--nav-height) + 24px) var(--page-gutter) 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  /* 메뉴가 길어지면 메뉴 안에서 스크롤 */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.nav-mobile.open {
+  opacity: 1;
+}
+
+.nav-mobile-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-mobile-list a {
+  display: block;
+  padding: 14px 0;
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-mobile-list a.active {
+  color: var(--text-primary);
+}
+
+.nav-mobile-list a.external::after {
+  content: " ↗";
+  color: var(--accent);
+  font-size: 0.7em;
+}
+
+/* About / Services / Contact 는 작게 */
+.nav-mobile-sub a {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 400;
+  padding: 11px 0;
+  color: var(--text-muted);
+}
+
+/* 메뉴 열렸을 때 뒤 페이지 스크롤 잠금 */
+body.nav-open {
+  overflow: hidden;
+}
+
+/* hidden 속성이 display:flex 에 덮이지 않도록 (덮이면 투명 오버레이가
+   화면 전체를 가려 스크롤·터치가 먹지 않는다) */
+.nav-mobile[hidden] {
+  display: none !important;
+}
+
+/* 데스크톱으로 넓히면 모바일 메뉴·햄버거 모두 숨김 */
+@media (min-width: 769px) {
+  .nav-mobile {
+    display: none !important;
+  }
+}
+
+/* 모바일에서만 햄버거 노출 — 기본값(display:none) 뒤에 와야 적용된다 */
+@media (max-width: 768px) {
+  .nav-burger {
+    display: flex;
+  }
+}
+

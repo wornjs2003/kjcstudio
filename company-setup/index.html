@@ -7,7 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Roboto:ital,wght@0,400;0,700;1,900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="theme.css" />
+<link rel="stylesheet" href="../assets/css/theme.css" />
+<link rel="stylesheet" href="../assets/css/nav.css" />
   <style>
 /* ==========================================================================
    KJC Studio · 회사 설립 체크리스트
@@ -317,9 +318,9 @@
     }
     </style>
     </head>
-    <body>
+    <body data-nav="company-setup" data-site-root="../">
     <div class="wrap">
-    <div class="eyebrow"><a href="../index.html">← KJC Studio</a></div>
+    <div id="site-nav"></div>
     <h1 id="pageTitle">회사 설립 체크리스트</h1>
     <p class="subtitle" id="pageSubtitle"></p>
     <div class="overview">
@@ -589,5 +590,6 @@ document.getElementById("btnReset").addEventListener("click", function () {
 render();
 </script>
 
+  <script src="../assets/js/main.js"></script>
 </body>
 </html>

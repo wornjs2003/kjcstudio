@@ -1,7 +1,9 @@
 @echo off
 chcp 65001 >nul
 title KJC Studio - 회사 설립 체크리스트 (포트 8090)
-cd /d "%~dp0"
+rem 저장소 루트에서 내보낸다. 화면이 ../assets/ · ../partials/ 를 함께 쓰기 때문이다.
+rem 이 폴더만 내보내면 색과 메뉴가 404 가 된다 (2026-09-14).
+cd /d "%~dp0.."
 
 set PY=
 python --version >nul 2>&1 && set PY=python
@@ -14,7 +16,7 @@ if not defined PY (
 )
 
 set PORT=8090
-set URL=http://localhost:%PORT%/
+set URL=http://localhost:%PORT%/company-setup/
 
 echo ------------------------------------------------
 echo   KJC Studio - 회사 설립 체크리스트
