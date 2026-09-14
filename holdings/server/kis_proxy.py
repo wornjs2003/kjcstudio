@@ -160,13 +160,23 @@ def _cache_put(code, data):
 # 지금 쓰는 양은 실제 한도의 5% 수준이다. 자세한 내용은 docs/data-sources.md 참고.
 #
 #   KIS_LIMIT_PER_SEC : 계정에 허용된다고 보는 한도 (기준값)
-#   BUDGET_RATIO      : 그중 실제로 쓸 비율. 0.1 = 한도의 10%
+#   BUDGET_RATIO      : 그중 실제로 쓸 비율. 0.5 = 한도의 50%
+#
+# 2026-09-14 에 0.1(초당 1건) 에서 0.5(초당 5건) 로 올렸다.
+# 순위표를 15종목으로 늘리려니 첫 조회에 28.8초가 걸렸다(실측). 한국투자증권
+# 제한이 아니라 이 값 때문이었다. 초당 5건이면 같은 조회가 3초 안에 끝난다.
+# 기준값 10 도 실제 한도(20)보다 낮게 잡아 둔 것이라, 실제로는 한도의 1/4 이다.
+# 배포본(worker/kis-worker.js 의 kisPace)도 200ms = 초당 5건으로 같다.
 #
 # 이 두 값만 바꾸면 호출량 전체가 조절된다.
 KIS_LIMIT_PER_SEC = 10.0
-BUDGET_RATIO = 0.1                                  # 한도의 1/10 만 사용
+BUDGET_RATIO = 0.5                                  # 한도의 1/2 만 사용
 KIS_CALLS_PER_SEC = KIS_LIMIT_PER_SEC * BUDGET_RATIO   # = 초당 1건
 KIS_MIN_INTERVAL = 1.0 / KIS_CALLS_PER_SEC             # = 1.0초 간격
+
+# 동시에 진행할 호출 수. 초당 건수와는 별개다 — 간격은 _rate_limit() 이 지키고,
+# 이 값은 응답을 기다리는 시간을 몇 개까지 겹칠지를 정한다.
+KIS_MAX_PARALLEL = 8
 
 _rate_lock = threading.Lock()
 _last_call_at = 0.0
@@ -174,19 +184,32 @@ _call_times = []                 # 최근 호출 시각 (사용량 측정용)
 
 
 def _rate_limit():
-    """KIS 호출 사이에 최소 간격을 강제한다. 모든 스레드가 공유한다."""
+    """KIS 호출 사이 간격을 지킨다. 기다리는 동안 남을 막지 않는다.
+
+    전에는 자물쇠를 쥔 채로 기다렸다. 그래서 아래 ThreadPoolExecutor 로 동시에
+    부르려 해도 결국 한 줄로 섰고, 허용량의 1/4 도 못 쓰면서 17종목에 10.5초가
+    걸렸다 (2026-09-14 실측).
+
+    이제는 자물쇠 안에서 "내 차례 시각" 만 받아 오고, 기다리는 것은 자물쇠를
+    놓은 뒤에 한다. 여러 호출이 각자 다른 시각을 배정받아 겹쳐 진행되므로,
+    초당 건수는 그대로 지키면서 KIS 응답을 기다리는 시간이 서로 가려진다.
+    """
     global _last_call_at
     with _rate_lock:
-        wait = _last_call_at + KIS_MIN_INTERVAL - time.monotonic()
-        if wait > 0:
-            time.sleep(wait)
-        _last_call_at = time.monotonic()
+        now_m = time.monotonic()
+        # 내 차례는 '직전 차례 + 간격' 과 '지금' 중 늦은 쪽
+        start_at = max(now_m, _last_call_at + KIS_MIN_INTERVAL)
+        _last_call_at = start_at
         now = time.time()
         _call_times.append(now)
         # 1시간보다 오래된 기록은 버린다
         cutoff = now - 3600
         while _call_times and _call_times[0] < cutoff:
             _call_times.pop(0)
+
+    wait = start_at - time.monotonic()
+    if wait > 0:
+        time.sleep(wait)
 
 
 def usage_stats():
@@ -376,8 +399,10 @@ def fetch_prices(cfg, codes):
         except RuntimeError as e:
             return code, None, safe_message(e)
 
-    # 동시 실행을 2 로 제한해 KIS 초당 호출 제한에 여유를 둔다.
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    # 동시에 몇 개까지 진행할지. 초당 건수는 _rate_limit() 이 따로 지키므로
+    # 이 값은 "KIS 응답을 기다리는 시간을 몇 개까지 겹칠 것인가" 를 뜻한다.
+    # 2 였을 때는 _rate_limit 이 자물쇠를 쥐고 기다려서 사실상 1 이었다.
+    with ThreadPoolExecutor(max_workers=KIS_MAX_PARALLEL) as pool:
         for code, info, err in pool.map(one, missing):
             if info:
                 # 프론트가 쓰는 형태로 맞춘다 (price / prev / amt / pct)
@@ -585,6 +610,68 @@ def fetch_price(cfg, code):
         "source": "KIS",
         "mode": cfg["mode"],
     }
+
+
+# ── 여러 종목을 한 번에 ────────────────────────────────────────────────
+# 현재가 API(inquire-price)는 한 번에 한 종목만 준다. 순위표처럼 수십 종목을
+# 보여주는 화면에서는 그만큼 호출이 곱해져 한참 걸린다.
+#
+#   30종목을 받을 때   단건 조회 30번  vs  멀티 조회 1번
+#
+# 관심종목(멀티종목) 시세조회는 **한 번에 30종목까지** 준다.
+# 2026-09-14 에 직접 호출해 확인했다 (40개를 보내면 앞 30개만 돌아온다).
+#
+# 다만 단건 조회보다 주는 항목이 적다. 시가총액·PER·PBR·52주 최고저가 없다.
+# 그래서 종목 화면(stock.html)은 여전히 단건 조회를 쓰고, 이것은 목록용이다.
+MULTI_MAX = 30
+MULTI_CACHE_TTL = 4          # 목록은 자주 바뀌므로 짧게
+
+
+def fetch_quotes_multi(cfg, codes):
+    """목록용 시세. 30종목씩 묶어 부른다. {code: {...}} 로 돌려준다."""
+    div = quote_market_div()
+    out, errors = {}, {}
+
+    for i in range(0, len(codes), MULTI_MAX):
+        chunk = codes[i:i + MULTI_MAX]
+        params = {}
+        for n, code in enumerate(chunk, start=1):
+            params["FID_COND_MRKT_DIV_CODE_%d" % n] = div
+            params["FID_INPUT_ISCD_%d" % n] = code
+        try:
+            _stats["kis_calls"] += 1
+            data = kis_get(
+                cfg,
+                "/uapi/domestic-stock/v1/quotations/intstock-multprice",
+                params, "FHKST11300006",
+            )
+        except RuntimeError as e:
+            for code in chunk:
+                errors[code] = safe_message(e)
+            continue
+
+        for r in (data.get("output") or []):
+            code = (r.get("inter_shrn_iscd") or "").strip()
+            if not code:
+                continue
+            price = _num(r.get("inter2_prpr"), int)
+            amt = _num(r.get("inter2_prdy_vrss"), int)
+            prev = _num(r.get("inter2_prdy_clpr"), int)
+            out[code] = {
+                "price": price,
+                "prev": prev,
+                "amt": amt,
+                "pct": _num(r.get("prdy_ctrt")),
+                "name": (r.get("inter_kor_isnm") or "").strip(),
+                "open": _num(r.get("inter2_oprc"), int),
+                "high": _num(r.get("inter2_hgpr"), int),
+                "low": _num(r.get("inter2_lwpr"), int),
+                "volume": _num(r.get("acml_vol"), int),
+                # 거래대금은 실제 값이 온다. 현재가×거래량으로 어림하지 않아도 된다.
+                "value": _num(r.get("acml_tr_pbmn"), int),
+                "source": "KIS",
+            }
+    return out, errors
 
 
 # ---------------------------------------------------------------- 저장 계층 (SQLite)
@@ -892,6 +979,19 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def end_headers(self):
+        """화면 파일도 캐시하지 않게 한다.
+
+        개발 서버인데 Cache-Control 을 안 붙이고 있었다. 그래서 브라우저가
+        Last-Modified 만 보고 옛 JS·CSS 를 계속 썼다. 고친 것이 화면에 안
+        나타나 "값이 하나도 안 나온다" 는 말을 듣게 된다 (2026-09-14).
+
+        API 응답에는 _send_json 이 이미 붙이고 있다. 여기는 정적 파일 몫이다.
+        """
+        if not (self.path or "").startswith("/api/"):
+            self.send_header("Cache-Control", "no-store, must-revalidate")
+        super().end_headers()
+
     def do_GET(self):
         if (self.path or "").startswith("/api/kis/"):
             self._handle_kis()
@@ -1072,6 +1172,28 @@ class Handler(SimpleHTTPRequestHandler):
                 with_chart = (qs.get("chart") or ["1"])[0] != "0"
                 data, errors = fetch_indices(cfg, with_chart)
                 self._send_json({"ok": bool(data), "data": data, "errors": errors or None})
+                return
+
+            if route == "quotes":
+                raw = (qs.get("codes") or [""])[0]
+                codes = [c.strip() for c in raw.split(",") if c.strip()]
+                codes = [c for c in codes if c.isdigit() and len(c) == 6]
+                codes = list(dict.fromkeys(codes))[:120]   # 멀티 4묶음까지
+                if not codes:
+                    self._send_json({"ok": False, "error": "codes 에 6자리 종목코드가 없습니다."}, 400)
+                    return
+                before = _stats["kis_calls"]
+                data, errors = fetch_quotes_multi(cfg, codes)
+                self._send_json({
+                    "ok": True,
+                    "data": data,
+                    "errors": errors or None,
+                    "meta": {
+                        "requested": len(codes),
+                        "kisCalls": _stats["kis_calls"] - before,
+                        "perCall": MULTI_MAX,
+                    },
+                })
                 return
 
             if route == "prices":

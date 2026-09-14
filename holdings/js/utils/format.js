@@ -126,8 +126,24 @@ export function dirClass(n) {
 /* 증감 표기 — "▲ 1,200원 (1.59%)" */
 export function fmtDelta(amount, pct, unit = '원', digits = 0) {
   if (amount == null || pct == null) return '';
-  const mark = amount >= 0 ? '▲' : '▼';
-  return `${mark} ${fmtNum(Math.abs(amount), digits)}${unit} (${Math.abs(pct).toFixed(2)}%)`;
+  return `${dirMark(amount)} ${fmtNum(Math.abs(amount), digits)}${unit} (${Math.abs(pct).toFixed(2)}%)`;
+}
+
+/* 방향 표시. 한국 증시 표기를 따른다.
+     ▲ 오름 · ▼ 내림 · ─ 보합
+   0 을 ▲ 로 쓰면 오르지도 않았는데 오른 것처럼 보인다. */
+export function dirMark(n) {
+  if (n == null) return '';
+  if (n === 0) return '─';
+  return n > 0 ? '▲' : '▼';
+}
+
+/* 등락금액만. 화살표를 붙이고 부호는 떼어 낸다 (▼ 가 이미 내림을 뜻한다).
+   위쪽 fmtChange 는 부호(+/-)만 붙이는 다른 함수다. 이름이 겹치지 않게 둔다. */
+export function fmtDeltaAmount(amount, unit = '원', digits = 0) {
+  if (amount == null) return '—';
+  if (amount === 0) return `─ 0${unit}`;
+  return `${dirMark(amount)} ${fmtNum(Math.abs(amount), digits)}${unit}`;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────

@@ -7,7 +7,7 @@
 
 import { WATCHLIST, PRIORITY_CODES } from '../data/market.js';
 import { fetchLivePrices, fetchLiveIndices, applyLiveToStock } from '../data/live.js';
-import { fmtWon, fmtPct, fmtNum, dirClass } from '../utils/format.js';
+import { fmtWon, fmtPct, fmtNum, dirClass, fmtDeltaAmount } from '../utils/format.js';
 import { tickClass } from '../utils/tick.js';
 
 /* 아직 받아올 곳이 없는 시세 띠 항목 */
@@ -45,28 +45,48 @@ export function mountWatchSide(el, { activeCode } = {}) {
 
   const list = el.querySelector('.kh-wl-list');
 
+  /* 줄은 한 번만 만든다 */
+  list.innerHTML = WATCHLIST.map(s => `
+    <a class="kh-wl ${s.code === activeCode ? 'is-active' : ''}"
+       data-code="${s.code}" href="./stock.html?code=${s.code}">
+      <span class="kh-ic" style="background:${s.brand}">${s.name.slice(0, 2)}</span>
+      <span class="kh-wl-name">${s.name}</span>
+      <span class="kh-wl-price">
+        <span class="kh-wl-v kh-num">—</span>
+        <span class="kh-wl-c kh-num kh-mut"></span>
+      </span>
+      <span class="kh-wl-heart">♡</span>
+    </a>`).join('');
+
+  /* 줄마다 마지막으로 그린 값. 같으면 손대지 않는다.
+     예전에는 update 때마다 목록 전체를 innerHTML 로 다시 썼다. 시세를 0.2초마다
+     받게 되면서 값이 그대로인데도 계속 다시 그려졌고, 깜빡임 표시가 매번 돌아
+     글자가 쉬지 않고 흔들렸다 (2026-09-14 지적). */
+  const shown = {};
+
   function render(priceMap) {
-    list.innerHTML = `
-      ${WATCHLIST.map(s => {
-        const live = priceMap && priceMap[s.code];
-        const cls = live ? dirClass(live.pct) : 'kh-mut';
-        return `
-          <a class="kh-wl ${s.code === activeCode ? 'is-active' : ''}"
-             href="./stock.html?code=${s.code}">
-            <span class="kh-ic" style="background:${s.brand}">${s.name.slice(0, 2)}</span>
-            <span class="kh-wl-name">${s.name}</span>
-            <span class="kh-wl-price">
-              <span class="kh-wl-v kh-num ${live ? tickClass('side:' + s.code, live.price) : ''}"
-                >${live ? fmtWon(live.price) : '—'}</span>
-              <span class="kh-wl-c kh-num ${cls}">${live ? fmtPct(live.pct) : ''}</span>
-            </span>
-            <span class="kh-wl-heart">♡</span>
-          </a>`;
-      }).join('')}
-    `;
+    if (!priceMap) return;
+    for (const s of WATCHLIST) {
+      const live = priceMap[s.code];
+      if (!live || live.price == null) continue;
+
+      const stamp = `${live.price}|${live.pct}`;
+      if (shown[s.code] === stamp) continue;
+      shown[s.code] = stamp;
+
+      const row = list.querySelector(`a[data-code="${s.code}"]`);
+      if (!row) continue;
+      const cls = dirClass(live.pct);
+      const v = row.querySelector('.kh-wl-v');
+      const c = row.querySelector('.kh-wl-c');
+      v.className = 'kh-num kh-wl-v ' + tickClass('side:' + s.code, live.price);
+      v.textContent = fmtWon(live.price);
+      c.className = 'kh-wl-c kh-num ' + cls;
+      /* 등락금액을 등락률 앞에 (2026-09-14 지시). 순위표와 같은 표기다. */
+      c.textContent = `${fmtDeltaAmount(live.amt)} ${fmtPct(live.pct)}`;
+    }
   }
 
-  render(null);
   return { update: render, slot: el.querySelector('.kh-side-slot') };
 }
 
@@ -131,7 +151,13 @@ export function mountFootStrip(el) {
 const REFRESH_FAST_MS = 5000;
 const REFRESH_SLOW_MS = 30000;
 
-export function startLiveLoop({ onPrices, onIndices } = {}) {
+/* 시세 갱신 루프.
+
+   prices: false 로 두면 종목 시세는 받지 않고 지수만 받는다.
+   첫 화면은 순위표가 멀티 조회(한 번에 30종목)로 관심종목까지 함께 받으므로,
+   여기서 또 받으면 같은 값을 두 경로로 부르게 된다 (2026-09-14 정리).
+   종목 화면(stock.html)은 순위표가 없으므로 기본값 그대로 쓴다. */
+export function startLiveLoop({ onPrices, onIndices, prices = true } = {}) {
   const fastCodes = WATCHLIST.filter(s => PRIORITY_CODES.includes(s.code)).map(s => s.code);
   const slowCodes = WATCHLIST.filter(s => !PRIORITY_CODES.includes(s.code)).map(s => s.code);
 
@@ -139,9 +165,9 @@ export function startLiveLoop({ onPrices, onIndices } = {}) {
      받은 것을 여기에 쌓아 두고 합쳐서 전달한다. */
   const latest = {};
 
-  function applyPrices(prices) {
-    if (!prices) return;
-    Object.assign(latest, prices);
+  function applyPrices(map) {
+    if (!map) return;
+    Object.assign(latest, map);
     WATCHLIST.forEach(s => {
       const live = latest[s.code];
       if (live) applyLiveToStock(s, live);
@@ -150,6 +176,7 @@ export function startLiveLoop({ onPrices, onIndices } = {}) {
   }
 
   async function tickFast() {
+    if (!prices) return;
     if (document.hidden) return;          // 다른 탭을 보고 있으면 쉬어간다
     if (!fastCodes.length) return;
     applyPrices(await fetchLivePrices(fastCodes));
@@ -157,12 +184,12 @@ export function startLiveLoop({ onPrices, onIndices } = {}) {
 
   async function tickSlow() {
     if (document.hidden) return;
-    const [indices, prices] = await Promise.all([
+    const [indices, quotes] = await Promise.all([
       fetchLiveIndices(),
-      slowCodes.length ? fetchLivePrices(slowCodes) : Promise.resolve(null),
+      prices && slowCodes.length ? fetchLivePrices(slowCodes) : Promise.resolve(null),
     ]);
     if (indices && onIndices) onIndices(indices);
-    applyPrices(prices);
+    applyPrices(quotes);
   }
 
   tickFast();

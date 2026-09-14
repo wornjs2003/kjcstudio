@@ -109,3 +109,69 @@ export function fmtMarketCapNum(num) {
   if (조 >= 1) return 조.toFixed(조 >= 10 ? 0 : 1) + '조';
   return Math.round(num).toLocaleString('ko-KR') + '억';
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   종목 아이콘 색
+
+   순위표가 코스피 상위 200종목을 보여주게 되면서 필요해졌습니다. 위 목록에
+   실제 대표색을 적어 둔 회사는 40개뿐이고, 나머지 160여 개는 색이 없습니다.
+
+   세 단계로 정합니다.
+     1. 위 목록에 있는 회사        → 적어 둔 대표색 그대로
+     2. 같은 그룹으로 읽히는 회사   → 그룹 색 (삼성전자우 → 삼성 파랑)
+     3. 그 밖                     → 이름에서 만든 색
+
+   3번은 진짜 대표색이 아닙니다. 다만 같은 종목은 언제나 같은 색이 나오고
+   서로 구분되기 때문에, 회색으로 전부 같게 두는 것보다 알아보기 쉽습니다.
+   실제 색을 알게 되면 위 목록에 적어 넣으면 1번이 그것을 씁니다.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* 이름이 이것으로 시작하면 그 그룹으로 본다. 긴 것부터 본다
+   (SK텔레콤이 SK보다 먼저 걸려야 제 색이 나온다). */
+const BRAND_GROUPS = [
+  ['삼성바이오', '#0d4a9a'],
+  ['삼성',       '#1428a0'],
+  ['SK텔레콤',   '#ea1917'],
+  ['SK이노베이션', '#e60012'],
+  ['SK',         '#e5231b'],
+  ['LG',         '#a50034'],
+  ['현대',       '#002c5f'],
+  ['POSCO',      '#00a5e5'],
+  ['포스코',      '#00a5e5'],
+  ['NAVER',      '#03c75a'],
+  ['카카오',      '#f7e600'],
+  ['셀트리온',    '#00a0e9'],
+  ['신한',       '#0046ff'],
+  ['하나',       '#008485'],
+  ['KB',         '#544f4b'],
+  ['고려아연',    '#004098'],
+];
+
+/* 위 목록(WATCHLIST · MARKET_STOCKS)에서 코드→색 표를 한 번 만들어 둔다 */
+const KNOWN_BRANDS = (() => {
+  const map = {};
+  for (const s of [...WATCHLIST, ...MARKET_STOCKS]) {
+    /* #8b95a1 은 "모른다" 는 뜻으로 넣어 둔 회색이다. 진짜 대표색이 아니므로
+       아래 그룹·이름 규칙이 대신 정하게 둔다. */
+    if (s.brand && s.brand.toLowerCase() !== '#8b95a1') map[s.code] = s.brand;
+  }
+  return map;
+})();
+
+/* 이름에서 만든 색. 같은 이름이면 언제나 같은 색이 나온다. */
+function colorFromName(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  const hue = h % 360;
+  /* 채도·밝기는 고정한다. 아이콘 위에 흰 글자를 얹으므로 너무 밝으면 안 읽힌다. */
+  return `hsl(${hue} 42% 42%)`;
+}
+
+export function brandColor(code, name) {
+  if (KNOWN_BRANDS[code]) return KNOWN_BRANDS[code];
+  const n = (name || '').trim();
+  for (const [prefix, color] of BRAND_GROUPS) {
+    if (n.startsWith(prefix)) return color;
+  }
+  return colorFromName(n || code || '');
+}

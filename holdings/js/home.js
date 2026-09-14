@@ -5,16 +5,16 @@
    값은 서버(/api/kis/*)에서 받고, 못 받으면 '—' 또는 '연결 예정' 이 남습니다.
    ========================================================================== */
 
-import { WATCHLIST } from './data/market.js';
+import { WATCHLIST, brandColor } from './data/market.js';
 import { fetchCandles, createStockChart } from './chart.js';
 import { color } from './theme.js';
-import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, dirClass, marketPhase }
+import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, dirClass, marketPhase }
   from './utils/format.js';
 import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop } from './components/frame.js';
 import { tickClass } from './utils/tick.js';
 import { mountDisclosures } from './components/disclosures.js';
 import { indexChartSvg } from './index-chart.js';
-import { fetchIndexMinutes } from './data/live.js';
+import { fetchIndexMinutes, fetchQuotes } from './data/live.js';
 
 /* 지수 띠에 놓을 칸.
    code 가 있는 셋만 서버에서 값이 온다. 나머지는 아직 받아올 곳이 없어
@@ -22,17 +22,29 @@ import { fetchIndexMinutes } from './data/live.js';
    ─ 할 일: 해외 지수·환율·원자재를 우리 서버가 야후에서 받아 중계하기
      (한 번 부르면 13종이 한꺼번에 온다. docs/data-sources.md 참고) */
 const INDEX_CELLS = [
-  { code: 'KOSPI',    name: '코스피' },
-  { code: 'KOSDAQ',   name: '코스닥' },
-  { code: 'KOSPI200', name: '코스피200' },
-  { name: '미국 USD',  wait: '야후 KRW=X' },
-  { name: 'S&P 500',  wait: '야후 ^GSPC' },
-  { name: '나스닥 종합', wait: '야후 ^IXIC' },
-  { name: '다우존스',  wait: '야후 ^DJI' },
-  { name: 'VIX',      wait: '야후 ^VIX' },
-  { name: 'WTI 원유',  wait: '야후 CL=F' },
-  { name: '금',       wait: '야후 GC=F' },
+  { code: 'KOSPI',    name: '코스피',     icon: 'kr' },
+  { code: 'KOSDAQ',   name: '코스닥',     icon: 'kr' },
+  { code: 'KOSPI200', name: '코스피200',  icon: 'kr' },
+  { name: '미국 USD',  wait: '야후 KRW=X', icon: 'us' },
+  { name: 'S&P 500',  wait: '야후 ^GSPC', icon: 'us' },
+  { name: '나스닥 종합', wait: '야후 ^IXIC', icon: 'us' },
+  { name: '다우존스',  wait: '야후 ^DJI',  icon: 'us' },
+  { name: 'VIX',      wait: '야후 ^VIX',  icon: 'vix' },
+  { name: 'WTI 원유',  wait: '야후 CL=F',  icon: 'oil' },
+  { name: '금',       wait: '야후 GC=F',  icon: 'au' },
 ];
+
+/* 칸 앞에 붙는 표시.
+   국기는 <use> 로 꺼내 쓰고(index.html 맨 위에 정의), 나머지는 글자 배지로 만든다.
+   이모지를 쓰면 윈도우에서 "KR" 같은 지역코드 글자로 나와서 직접 그렸다. */
+function cellIcon(kind) {
+  if (kind === 'kr' || kind === 'us') {
+    return `<svg class="kh-ix-flag" viewBox="0 0 24 24" aria-hidden="true"
+      ><use href="#kh-flag-${kind}"/></svg>`;
+  }
+  const badge = { vix: 'V', oil: '油', au: 'Au' }[kind];
+  return badge ? `<span class="kh-ix-badge ${kind}" aria-hidden="true">${badge}</span>` : '';
+}
 
 const $ = id => document.getElementById(id);
 let selectedCode = WATCHLIST[0].code;
@@ -113,7 +125,7 @@ function paintStrip(indices) {
          섞어 쓰면 연결이 안 된 건지 아직 안 온 건지 알 수 없다. */
       const soon = !cell.code;
       return `<div class="kh-ix ${on ? 'is-on' : ''}" ${cell.code ? `data-idx="${cell.code}"` : ''}>
-        <div class="kh-ix-h"><span class="kh-ix-n">${cell.name}</span>
+        <div class="kh-ix-h">${cellIcon(cell.icon)}<span class="kh-ix-n">${cell.name}</span>
           ${soon ? '<span class="kh-bd kh-bd-soon">연결 예정</span>' : ''}</div>
         <div class="kh-ix-v kh-num kh-mut"
           style="${soon ? '' : 'font-size:.9rem;font-weight:500'}"
@@ -123,7 +135,7 @@ function paintStrip(indices) {
     }
     const cls = dirClass(i.changePct);
     return `<div class="kh-ix ${on ? 'is-on' : ''}" data-idx="${i.code}">
-      <div class="kh-ix-h"><span class="kh-ix-n">${cell.name}</span>
+      <div class="kh-ix-h">${cellIcon(cell.icon)}<span class="kh-ix-n">${cell.name}</span>
         <span class="kh-bd kh-bd-on">실시간</span></div>
       <div class="kh-ix-b">
         <div>
@@ -226,24 +238,77 @@ function paintIndices(indices) {
 }
 
 /* ── 순위 표 ────────────────────────────── */
+/* ── 순위표 ─────────────────────────────
+   코스피 시가총액 상위 200종목. 목록은 서버가 하루 한 번 받아 DB 에 넣어 둔 것을
+   읽는다 (공시 감시 대상과 같은 목록이다).
+
+   **줄은 200개를 처음부터 다 깔고, 시세는 보이는 것만 받는다.**
+   그래야 스크롤바 길이가 처음부터 맞고, 위로 올리든 아래로 내리든 그 자리 것이
+   채워진다. "더 보기" 로 끊어 붙이면 스크롤이 중간에 걸리고, 위로 올라갔을 때
+   할 일이 없어진다 (2026-09-14 지시).
+
+   200종목 시세를 한꺼번에 받으면 한국투자증권을 200번 불러야 한다. 보이는 것은
+   열 몇 개뿐이라 그 몫만 받는다. */
+
+let universe = null;        // [{code, name, rank, cap}]
+
+/* 화면이 함께 보는 시세 한 곳.
+
+   전에는 관심 사이드바와 순위표가 따로 받았다. 조회 방식도 주기도 달라서
+   같은 삼성전자인데 두 자리의 숫자가 어긋났다 (8종목 중 2개가 달랐다,
+   2026-09-14 확인). 어느 쪽이 받든 여기에 모으고 두 화면이 이것을 쓴다. */
+let rowPrices = {};
+const asked = new Set();          // 이미 부탁한 종목 (두 번 부르지 않게)
+
+async function loadUniverse() {
+  try {
+    const r = await fetch('/api/dart/universe', { cache: 'no-store' });
+    const j = await r.json();
+    if (j && j.ok && Array.isArray(j.data) && j.data.length) { universe = j.data; return; }
+  } catch { /* 아래에서 관심종목으로 물러선다 */ }
+  universe = null;
+}
+
+/* 시가총액은 목록(dart_universe)이 갖고 있다. 네이버 시총 순위에서 온 값이고
+   단위는 억원이라 fmtMoneyKr 이 그대로 받는다. */
+function capOf(code) {
+  if (!universe) return null;
+  const hit = universe.find(x => x.code === code);
+  return hit ? hit.cap : null;
+}
+
+function rowList() {
+  if (!universe) return WATCHLIST.map((s, i) => ({ ...s, rank: i + 1 }));
+  return universe.map(x => ({
+    code: x.code, name: x.name, sector: '',
+    brand: brandColor(x.code, x.name), rank: x.rank,
+  }));
+}
+
 function paintRows(priceMap) {
-  $('kh-rows').innerHTML = WATCHLIST.map((s, idx) => {
+  const list = rowList();
+  $('kh-rows').innerHTML = list.map(s => {
     const live = priceMap && priceMap[s.code];
     const cls = live ? dirClass(live.pct) : 'kh-mut';
-    const value = live ? fmtMoneyKr(Math.round(live.price * live.volume / 1e8)) : '—';
+    /* 거래대금은 멀티 조회가 실제 값(value)을 준다. 없으면 현재가×거래량으로 어림한다. */
+    const value = live
+      ? fmtMoneyKr(Math.round((live.value ?? live.price * live.volume) / 1e8))
+      : '—';
     return `<tr data-code="${s.code}" class="${s.code === selectedCode ? 'is-active' : ''}">
-      <td class="kh-rk">${idx + 1}</td>
+      <td class="kh-rk">${s.rank}</td>
       <td class="l"><span class="kh-nm">
-        <span class="kh-ic" style="background:${s.brand}">${s.name.slice(0, 2)}</span>
+        <span class="kh-ic" style="background:${s.brand || 'var(--kh-bg-active)'}"
+          >${(s.name || '').slice(0, 2)}</span>
         <b>${s.name}</b></span></td>
       <td class="kh-num"><span class="${tickClass('row:' + s.code, live && live.price)}"
-        >${live ? fmtWon(live.price) : '—'}</span></td>
+        >${live ? fmtWon(live.price) : '···'}</span></td>
+      <td class="kh-num ${cls}">${live ? fmtDeltaAmount(live.amt) : '—'}</td>
       <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(live.pct) : '—'}</td>
       <td class="kh-num">${value}</td>
-      <td class="kh-num">${live ? fmtMoneyKr(live.marketCap) : '—'}</td>
+      <td class="kh-num">${capOf(s.code) != null ? fmtMoneyKr(capOf(s.code)) : '—'}</td>
       <td><span class="kh-ratio"><span class="kh-mut">연결 예정</span>
         <span class="kh-ratio-bar"></span></span></td>
-      <td class="l"><span class="kh-sect">${s.sector}</span></td>
+      <td class="l"><span class="kh-sect kh-mut">연결 예정</span></td>
     </tr>`;
   }).join('');
 
@@ -253,7 +318,203 @@ function paintRows(priceMap) {
       location.href = `./stock.html?code=${tr.dataset.code}`;
     });
   });
+  watchRows();
+  paintRowFoot();
 }
+
+function paintRowFoot() {
+  const host = $('kh-more');
+  if (!host) return;
+  const total = rowList().length;
+  const got = Object.keys(rowPrices).length;
+  host.innerHTML = got >= total
+    ? `<span class="kh-mut">${total}종목</span>`
+    : `<span class="kh-mut">${total}종목 · 보이는 것부터 채웁니다 (${got})</span>`;
+}
+
+/* 지금 상자 안에 보이는 줄을 직접 잰다.
+
+   처음에는 IntersectionObserver 를 썼는데, 스크롤한 뒤 새 줄을 잡아내지 못했다
+   (100위가 보이는데 1~17위만 채워졌다, 2026-09-14 확인). 원인을 더 파는 대신
+   자리를 직접 재는 쪽으로 바꿨다. 줄이 200개뿐이고 스크롤이 멈춘 뒤에만 재므로
+   부담이 없고, 무엇이 보이는지 눈으로 확인하기도 쉽다. */
+const LOOK_AHEAD = 400;      // 화면 밖 이만큼까지 미리 받아 둔다
+/* 한 묶음을 받는 간격. 다섯 묶음이니 전체는 1초에 한 바퀴.
+   한국투자증권 응답은 0.18초, 0.2초 간격 연속 호출도 통과한다 (2026-09-14 실측). */
+const ROW_REFRESH_MS = 200;
+
+function visibleCodeList() {
+  const box = $('kh-rank-scroll');
+  const body = $('kh-rows');
+  if (!box || !body) return [];
+  const br = box.getBoundingClientRect();
+  const top = br.top - LOOK_AHEAD;
+  const bottom = br.bottom + LOOK_AHEAD;
+  const out = [];
+  for (const tr of body.children) {
+    const r = tr.getBoundingClientRect();
+    if (r.bottom >= top && r.top <= bottom) out.push(tr.dataset.code);
+    else if (r.top > bottom) break;          // 아래로는 더 볼 것 없다
+  }
+  return out;
+}
+
+function watchRows() {
+  const box = $('kh-rank-scroll');
+  if (!box) return;
+  if (!box.dataset.bound) {
+    box.addEventListener('scroll', scheduleFetch, { passive: true });
+    window.addEventListener('resize', scheduleFetch);
+    box.dataset.bound = '1';
+  }
+  scheduleFetch();
+}
+
+/* 스크롤 중에는 계속 바뀐다. 멈춘 뒤 한 번만 부른다.
+   움직일 때마다 부르면 같은 종목을 몇 번씩 묻게 된다. */
+let fetchTimer = null;
+function scheduleFetch() {
+  clearTimeout(fetchTimer);
+  fetchTimer = setTimeout(fetchVisible, 180);
+}
+
+const PRICE_CHUNK = 30;
+let fetching = false;
+
+async function fetchVisible() {
+  if (fetching) return;
+  /* 다른 탭을 보고 있으면 부르지 않는다. 창을 여러 개 띄워 두면 그만큼
+     호출이 곱해지고, 정작 보고 있는 창의 차례가 뒤로 밀린다 (2026-09-14 지시). */
+  if (document.hidden) return;
+  /* 관심종목은 늘 함께 받는다. 오른쪽 사이드바에 계속 떠 있으므로,
+     빼면 그쪽만 옛 값으로 남아 순위표와 어긋난다. */
+  const watch = WATCHLIST.map(s => s.code);
+  const visible = [...new Set([...watch, ...visibleCodeList()])];
+  const want = visible.filter(c => !asked.has(c));
+  if (!want.length) return;
+  fetching = true;
+  try {
+    for (let i = 0; i < want.length; i += PRICE_CHUNK) {
+      const chunk = want.slice(i, i + PRICE_CHUNK);
+      chunk.forEach(c => asked.add(c));
+      const map = await fetchQuotes(chunk);
+      if (!map) { chunk.forEach(c => asked.delete(c)); continue; }  // 실패하면 다시 묻게
+      applyPrices(map);
+    }
+  } finally {
+    fetching = false;
+    /* 받는 동안 더 스크롤했을 수 있다. 남은 것이 있으면 한 번 더 돈다. */
+    if (visibleCodeList().some(c => !asked.has(c))) scheduleFetch();
+  }
+}
+
+/* 새로 받은 값을 모으고 양쪽 화면에 반영한다. */
+function applyPrices(map) {
+  if (!map) return;
+  rowPrices = { ...rowPrices, ...map };
+  updateRowCells(map);
+  side.update(rowPrices);          // 관심 사이드바
+  paintPreview(rowPrices);         // 옆의 미리보기 카드
+}
+
+/* 값이 들어온 줄만 고쳐 쓴다. 표를 통째로 다시 그리면 스크롤 위치가 튀고
+   지켜보던 줄도 전부 다시 걸어야 한다. */
+const lastShown = {};        // 줄마다 마지막으로 그린 값
+
+/* 한 번에 받은 것을 한꺼번에 그리지 않고 위에서 아래로 조금씩 밀어 준다.
+   30줄이 동시에 번쩍이면 눈이 어디를 봐야 할지 모른다. 위에서부터 물결처럼
+   번지면 무엇이 바뀌었는지 따라가기 쉽다 (2026-09-14 지시).
+
+   값이 늦게 보이는 것은 아니다. 받은 값은 이미 갖고 있고, 화면에 칠하는
+   순서만 미룬다. */
+const STAGGER_MS = 14;        // 줄 사이 간격
+const STAGGER_MAX = 150;      // 아무리 많아도 이 시간 안에는 다 칠한다
+                              // (한 묶음이 6줄쯤이라 0.2초 주기 안에 여유롭게 끝난다)
+
+function updateRowCells(map) {
+  /* 실제로 값이 바뀐 줄만 추린다.
+     1초(나중에는 0.2초)마다 받는데 대부분은 그 사이 움직이지 않는다.
+     그래도 매번 고쳐 쓰면 화면만 바쁘고 깜빡임도 의미 없이 계속 돈다. */
+  const changed = [];
+  for (const [code, live] of Object.entries(map)) {
+    if (!live) continue;
+    const stamp = `${live.price}|${live.pct}|${live.volume}|${live.value}`;
+    if (lastShown[code] === stamp) continue;
+    lastShown[code] = stamp;
+    changed.push([code, live]);
+  }
+  if (!changed.length) { paintRowFoot(); return; }
+
+  /* 화면에 보이는 순서(위→아래)대로 칠한다 */
+  const order = [...$('kh-rows').children].map(tr => tr.dataset.code);
+  changed.sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
+
+  const step = Math.min(STAGGER_MS, STAGGER_MAX / changed.length);
+  changed.forEach(([code, live], i) => {
+    if (i === 0) { paintOneRow(code, live); return; }
+    setTimeout(() => paintOneRow(code, live), i * step);
+  });
+  paintRowFoot();
+}
+
+function paintOneRow(code, live) {
+  {
+    const tr = $('kh-rows').querySelector(`tr[data-code="${code}"]`);
+    if (!tr || !live) return;
+    const cls = dirClass(live.pct);
+    tr.children[2].innerHTML =
+      `<span class="${tickClass('row:' + code, live.price)}">${fmtWon(live.price)}</span>`;
+    tr.children[3].className = 'kh-num ' + cls;
+    tr.children[3].textContent = fmtDeltaAmount(live.amt);
+    tr.children[4].className = 'kh-num ' + cls;
+    tr.children[4].style.fontWeight = '500';
+    tr.children[4].textContent = fmtPct(live.pct);
+    tr.children[5].textContent =
+      fmtMoneyKr(Math.round((live.value ?? live.price * live.volume) / 1e8));
+    /* 시가총액은 멀티 조회에 없다. 목록을 받을 때 함께 온 값을 쓴다. */
+    const cap = capOf(code);
+    tr.children[6].textContent = cap != null ? fmtMoneyKr(cap) : '—';
+  }
+}
+
+/* ── 돌아가며 갱신 ──────────────────────
+   보이는 종목을 다섯 묶음으로 나눠 0.2초마다 한 묶음씩 다시 받는다.
+   전체는 1초에 한 바퀴 돈다 (2026-09-14 지시).
+
+   한꺼번에 받아 한꺼번에 칠하면 1초마다 화면 전체가 번쩍인다. 나눠 돌리면
+   종목별로 차례차례 깜빡여서 어디가 움직였는지 눈에 들어온다.
+   호출은 0.2초마다 1건 = 초당 5건으로, 한국투자증권 한도(초당 20건)의 1/4 이다.
+
+   받은 값은 applyPrices 가 순위표·관심 주식·미리보기 세 곳에 함께 넣는다. */
+const ROTATE_GROUPS = 5;
+let rotateAt = 0;
+let rotating = false;
+
+async function rotateTick() {
+  if (document.hidden || rotating) return;
+  const watch = WATCHLIST.map(x => x.code);
+  const codes = [...new Set([...watch, ...visibleCodeList()])];
+  if (!codes.length) return;
+
+  const size = Math.ceil(codes.length / ROTATE_GROUPS);
+  const start = (rotateAt % ROTATE_GROUPS) * size;
+  rotateAt++;
+  const chunk = codes.slice(start, start + size);
+  if (!chunk.length) return;
+
+  rotating = true;
+  try {
+    applyPrices(await fetchQuotes(chunk));
+  } finally {
+    rotating = false;
+  }
+}
+
+/* 다른 탭에 갔다 돌아오면 곧바로 한 번 받는다.
+   다음 차례까지 기다리면 멈춘 값을 한동안 보게 된다. */
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) { asked.clear(); scheduleFetch(); }
+});
 
 /* ── 미리보기 ───────────────────────────── */
 let chartKey = null;
@@ -269,14 +530,23 @@ function paintPreview(priceMap) {
   $('kh-pv-link').href = `./stock.html?code=${s.code}`;
 
   const el = $('kh-pv-v');
-  if (live) {
-    el.className = 'kh-pv-v kh-num ' + dirClass(live.pct) + ' ' + tickClass('pv:' + s.code, live.price);
-    el.textContent = `${fmtWon(live.price)}  ${fmtPct(live.pct)}`;
-  } else {
+  if (!live) {
     el.className = 'kh-pv-v kh-num kh-mut';
     el.textContent = '불러오는 중';
+    return;
   }
+
+  /* 값이 그대로면 손대지 않는다. 0.2초마다 받는데 매번 클래스를 다시 붙이면
+     깜빡임이 계속 돌아 숫자가 쉬지 않고 흔들린다 (2026-09-14 지적). */
+  const stamp = `${s.code}|${live.price}|${live.pct}`;
+  if (pvShown === stamp) return;
+  pvShown = stamp;
+
+  el.className = 'kh-pv-v kh-num ' + dirClass(live.pct) + ' ' + tickClass('pv:' + s.code, live.price);
+  el.textContent = `${fmtWon(live.price)}  ${fmtPct(live.pct)}`;
 }
+
+let pvShown = null;
 
 async function drawPreviewChart() {
   const key = selectedCode;
@@ -299,13 +569,12 @@ function selectStock(code) {
   selectedCode = code;
   document.querySelectorAll('#kh-rows tr').forEach(tr =>
     tr.classList.toggle('is-active', tr.dataset.code === code));
-  paintPreview(lastPrices);
+  paintPreview(rowPrices);
   drawPreviewChart();
   drawPickedDisclosures();
 }
 
 /* ── 시작 ───────────────────────────────── */
-let lastPrices = null;
 
 const side = mountWatchSide($('kh-side'), { activeCode: null });
 
@@ -333,6 +602,15 @@ setInterval(paintMkt, 30000);
 setupStrip();
 paintIndices(null);
 paintRows(null);
+
+/* 순위표 목록을 받아 200줄을 깐다. 시세는 보이는 줄부터 채워진다.
+   목록을 못 받으면 관심종목으로 물러선다 (rowList 안에서 처리). */
+loadUniverse().then(() => {
+  paintRows(rowPrices);
+  /* 보고 있는 것만 주기적으로 다시 받는다. 시세 띠·관심 사이드바와 별개다. */
+  /* 0.2초마다 다섯 묶음 중 하나씩. 전체는 1초에 한 바퀴 돈다. */
+  setInterval(rotateTick, ROW_REFRESH_MS);
+});
 paintPreview(null);
 drawPreviewChart();
 
@@ -348,14 +626,18 @@ function drawPickedDisclosures() {
 drawPickedDisclosures();
 setInterval(() => { dcAll.reload(); dcOne && dcOne.reload(); }, 5 * 60 * 1000);
 
+/* 종목 시세는 받지 않는다(prices: false). 순위표가 멀티 조회로
+   관심종목까지 함께 받아 한 곳에 모으기 때문이다. 여기서 또 받으면
+   같은 값을 두 경로로 부르게 된다 (2026-09-14 정리). */
 startLiveLoop({
+  prices: false,
   onIndices(indices) { paintIndices(indices); foot.update(indices); },
   onPrices(prices)   {
     lastTickAt = new Date();
-    lastPrices = prices;
     paintClock();                 // 받은 시각을 바로 반영
-    paintRows(prices);
-    side.update(prices);
+    /* 관심 사이드바도 순위표와 같은 값을 써야 한다. 여기서 따로 받은 값을
+       바로 넣으면 두 자리의 숫자가 어긋난다. 모으는 곳을 거친다. */
+    applyPrices(prices);
     paintPreview(prices);
   },
 });

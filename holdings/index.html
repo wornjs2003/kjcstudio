@@ -22,6 +22,42 @@
 </head>
 <body data-nav="holdings" data-site-root="../">
 
+<!-- 국기·지표 아이콘 — 화면에는 안 보이고, 아래에서 <use> 로 꺼내 쓴다.
+     이모지(🇰🇷)를 쓰면 윈도우에서 "KR" 같은 지역코드 글자로 나온다. 그래서 직접 그렸다.
+     여기 색은 실제 국기 색이라 theme.css 변수를 쓰지 않는다. 테마가 바뀌어도
+     태극기는 태극기여야 한다 (색 하드코딩 금지 규칙의 의도적 예외). -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="kh-flag-kr" viewBox="0 0 24 24">
+    <rect width="24" height="24" fill="#fff"/>
+    <g transform="translate(12,12) rotate(-33)">
+      <circle r="5.4" fill="#cd2e3a"/>
+      <path d="M-5.4,0 A2.7,2.7 0 0 1 0,0 A2.7,2.7 0 0 0 5.4,0 A5.4,5.4 0 0 1 -5.4,0" fill="#0047a0"/>
+    </g>
+    <g fill="#000" transform="translate(12,12)">
+      <g transform="rotate(-56) translate(0,-8.6)"><rect x="-2.4" y="-.45" width="4.8" height=".9"/><rect x="-2.4" y="1" width="4.8" height=".9"/></g>
+      <g transform="rotate(56) translate(0,-8.6)"><rect x="-2.4" y="-.45" width="4.8" height=".9"/><rect x="-2.4" y="1" width="4.8" height=".9"/></g>
+      <g transform="rotate(-124) translate(0,-8.6)"><rect x="-2.4" y="-.45" width="4.8" height=".9"/><rect x="-2.4" y="1" width="4.8" height=".9"/></g>
+      <g transform="rotate(124) translate(0,-8.6)"><rect x="-2.4" y="-.45" width="4.8" height=".9"/><rect x="-2.4" y="1" width="4.8" height=".9"/></g>
+    </g>
+  </symbol>
+  <symbol id="kh-flag-us" viewBox="0 0 24 24">
+    <rect width="24" height="24" fill="#fff"/>
+    <g fill="#b22234">
+      <rect y="0" width="24" height="1.85"/><rect y="3.7" width="24" height="1.85"/>
+      <rect y="7.4" width="24" height="1.85"/><rect y="11.1" width="24" height="1.85"/>
+      <rect y="14.8" width="24" height="1.85"/><rect y="18.5" width="24" height="1.85"/>
+      <rect y="22.2" width="24" height="1.8"/>
+    </g>
+    <rect width="11" height="12.95" fill="#3c3b6e"/>
+    <g fill="#fff">
+      <circle cx="2" cy="2.2" r=".72"/><circle cx="5.5" cy="2.2" r=".72"/><circle cx="9" cy="2.2" r=".72"/>
+      <circle cx="3.75" cy="4.7" r=".72"/><circle cx="7.25" cy="4.7" r=".72"/>
+      <circle cx="2" cy="7.2" r=".72"/><circle cx="5.5" cy="7.2" r=".72"/><circle cx="9" cy="7.2" r=".72"/>
+      <circle cx="3.75" cy="9.7" r=".72"/><circle cx="7.25" cy="9.7" r=".72"/>
+    </g>
+  </symbol>
+</svg>
+
 <div id="site-nav"></div>
 
 <div class="kh-app">
@@ -124,15 +160,21 @@
           <button class="kh-chip is-check">✓ 관리종목 숨기기</button>
         </div>
         <div class="kh-asof" id="kh-asof">· 오늘 기준</div>
+        <!-- 표는 제 안에서 스크롤된다. 페이지가 통째로 내려가면
+             지수와 차트가 화면 밖으로 밀려난다 (2026-09-14 지시) -->
+        <div class="kh-rank-scroll" id="kh-rank-scroll">
         <table>
           <thead>
             <tr>
-              <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
+              <th></th><th class="l">종목</th><th>현재가</th><th>전일대비</th><th>등락률</th>
               <th>거래대금 순</th><th>시가총액</th><th>매수 · 매도 비율</th><th class="l">산업</th>
             </tr>
           </thead>
           <tbody id="kh-rows"></tbody>
         </table>
+        <!-- 아래로 내리면 다음 15개가 이어 붙는다 -->
+        <div class="kh-more" id="kh-more"></div>
+        </div>
       </div>
 
       <div class="kh-card kh-pv">

@@ -185,7 +185,9 @@
 }
 @media (max-width: 700px) {
   .kh-igrid { grid-template-columns: 1fr; }
-  .kh-rank th:nth-child(n+5), .kh-rank td:nth-child(n+5) { display: none; }
+  /* 좁은 화면에서는 거래대금부터 감춘다. 전일대비 열이 생기면서 한 칸 밀렸다.
+     5 로 두면 등락률까지 잘려서 오르내림을 알 수 없게 된다 (2026-09-14). */
+  .kh-rank th:nth-child(n+6), .kh-rank td:nth-child(n+6) { display: none; }
 }
 
 /* ══ 지수 영역 (2026-09-14 개편) ═══════════════════════════
@@ -351,3 +353,54 @@
   .kh-ix { flex-basis: 210px; }
   .kh-strip-btn { display: none; }   /* 손가락으로 밀면 된다 */
 }
+
+/* ── 지수 칸 앞 표시 ──
+   국기는 index.html 맨 위의 <symbol> 을 <use> 로 꺼내 쓴다.
+   배지 색은 그 지표가 가리키는 것을 그대로 쓴다(금은 금색). 테마와 무관하다. */
+.kh-ix-flag {
+  width: 17px; height: 17px; flex-shrink: 0;
+  border-radius: 3px; box-shadow: 0 0 0 1px rgb(var(--kh-ink-rgb) / 8%);
+}
+.kh-ix-badge {
+  width: 17px; height: 17px; flex-shrink: 0;
+  border-radius: 4px; display: grid; place-items: center;
+  font-size: 0.6rem; font-weight: 700; letter-spacing: -0.02em;
+  color: var(--kh-text-on-fill);
+}
+.kh-ix-badge.vix { background: var(--kh-text-muted); }
+.kh-ix-badge.oil { background: var(--kh-text-primary); }
+.kh-ix-badge.au  { background: #c9a227; }   /* 금색 — 금 시세를 가리키는 표시 */
+
+/* ── 순위표 더 보기 ── */
+.kh-more {
+  display: flex; justify-content: center; align-items: center;
+  padding: 14px 0 18px; font-size: 0.82rem; color: var(--kh-text-muted);
+}
+.kh-more button {
+  border: 0; font-family: inherit; cursor: pointer;
+  background: var(--kh-bg-surface); color: var(--kh-text-secondary);
+  border-radius: 999px; padding: 9px 18px; font-size: 0.82rem; font-weight: 500;
+}
+.kh-more button:hover { background: var(--kh-bg-active); }
+
+/* ── 순위표는 제 안에서 스크롤한다 ──
+   페이지가 통째로 내려가면 지수와 차트가 화면 밖으로 밀려난다.
+   목록만 움직이고 위쪽은 그대로 있어야 한다 (2026-09-14 지시). */
+.kh-rank-scroll {
+  max-height: 620px;
+  overflow-y: auto;
+  overscroll-behavior: contain;     /* 끝에 닿아도 페이지가 따라 움직이지 않게 */
+}
+/* 머리글은 스크롤해도 붙어 있는다 */
+.kh-rank thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--kh-bg-card);
+}
+
+/* 숫자가 두 줄로 깨지면 줄이 높아져 한 화면에 몇 개 안 들어간다 */
+.kh-rank td.kh-num, .kh-rank th { white-space: nowrap; }
+.kh-rank .kh-ratio { white-space: nowrap; }
+
+/* "연결 예정" 이 두 줄로 깨지면 줄이 높아져 한 화면에 몇 개 못 담는다 */
+.kh-rank .kh-sect { white-space: nowrap; }
+.kh-rank td { vertical-align: middle; }

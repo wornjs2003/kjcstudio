@@ -97,3 +97,25 @@ export async function fetchIndexMinutes(code) {
     return null;
   }
 }
+
+/* 목록용 시세 — 한 번에 30종목씩 받는다.
+
+   현재가 API 는 한 종목씩만 주지만, 관심종목(멀티종목) 시세조회는 30개를
+   한 번에 준다. 순위표처럼 수십 종목을 보여주는 곳은 이것을 써야 한다.
+     30종목 기준  단건 30번 7.9초  →  멀티 1번 2.1초 (2026-09-14 실측)
+
+   주는 항목이 단건보다 적다. 시가총액·PER·PBR·52주 최고저가 없으므로,
+   그런 값이 필요한 종목 화면은 fetchLivePrices 를 그대로 쓴다. */
+export async function fetchQuotes(codes) {
+  if (!codes || !codes.length) return null;
+  if (!(await kisReady())) return null;
+  try {
+    const r = await fetch('/api/kis/quotes?codes=' + codes.join(','), { cache: 'no-store' });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j || !j.ok || !j.data) return null;
+    return j.data;
+  } catch {
+    return null;
+  }
+}
