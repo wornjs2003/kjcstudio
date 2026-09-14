@@ -7,14 +7,26 @@
  * 이 Worker 는 thekjcstudio.com/api/* 에 붙으므로 Cloudflare Access 뒤에 놓인다.
  * 즉 로그인한 사람만 호출할 수 있다.
  *
+ * 두 가지를 맡는다.
+ *   /api/kis/...   시세 · 지수 · 캔들 (한국투자증권)
+ *   /api/dart/...  공시 (OpenDART) — 5분마다 Cron 으로 받아 D1 에 쌓는다
+ *
  * ── 필요한 설정 ────────────────────────────────────────────────
  *  Secret (암호화 저장, 대시보드에서 직접 입력)
- *    KIS_APP_KEY      발급받은 App Key
- *    KIS_APP_SECRET   발급받은 App Secret
+ *    KIS_APP_KEY         발급받은 App Key
+ *    KIS_APP_SECRET      발급받은 App Secret
+ *    DART_API_KEY        OpenDART 인증키 40자 — 없으면 공시만 꺼진다
+ *    TELEGRAM_BOT_TOKEN  알림 봇 — 없으면 알림만 꺼진다 (화면에는 쌓인다)
+ *    TELEGRAM_CHAT_ID    알림을 받을 대화방
  *  Variable (일반 변수)
  *    KIS_MODE         "prod" = 실전투자, "vts" = 모의투자
  *  KV 바인딩
  *    KIS_KV           접근토큰 보관용 (24시간)
+ *  D1 바인딩
+ *    KJC_DB           캔들 · 공시 저장
+ *  Cron Trigger
+ *    5분마다. Settings > Triggers > Cron Triggers 에서 건다.
+ *    UTC 로 돌기 때문에 한국 시각 판단은 dartShouldPoll() 이 맡는다.
  * ─────────────────────────────────────────────────────────────
  */
 
@@ -172,8 +184,36 @@ async function getToken(cfg, env) {
 
 /* ── KIS 호출 ──────────────────────────────────────────────── */
 
+/* ── 호출 간격 ──────────────────────────────────────────────
+   KIS 는 초당 호출 건수를 제한한다(초과 시 EGW00201). 기본 한도는 초당 20건이다.
+
+   이 장치가 없어서 차트가 안 나왔다 (2026-09-14 확인). 메인 화면은 열릴 때
+   지수 3건 + 시세 8건 + 분봉 채우기 13~24건을 한꺼번에 쏜다. 분봉 쪽이 한도에
+   걸려 전부 실패했고, 아래 fetchMinutesDay 의 catch 가 그 실패를 삼켜서
+   "데이터가 없나 보다" 하고 넘어갔다. 그래서 D1 에 봉이 한 개도 쌓이지 않았다.
+
+   200ms = 초당 5건. 기본 한도의 1/4 이다. 로컬(server/kis_proxy.py)은 1초
+   간격이지만, 분봉 24번이면 24초라 화면이 못 기다린다. 여기만 다르게 잡는다.
+
+   Workers 는 요청마다 격리되지만 한 요청 안의 순차 호출은 같은 isolate 에서
+   돌기 때문에, 아래 약속 사슬로 줄을 세우면 간격이 지켜진다. */
+const KIS_MIN_INTERVAL_MS = 200;
+let _kisChain = Promise.resolve();
+let _kisLastAt = 0;
+
+function kisPace() {
+  const turn = _kisChain.then(async () => {
+    const wait = _kisLastAt + KIS_MIN_INTERVAL_MS - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    _kisLastAt = Date.now();
+  });
+  _kisChain = turn.catch(() => {});   // 한 번 실패해도 줄이 끊기지 않게
+  return turn;
+}
+
 async function kisGet(cfg, env, path, params, trId, cacheTtl) {
   const token = await getToken(cfg, env);
+  await kisPace();
   const url = `${cfg.host}${path}?${new URLSearchParams(params)}`;
 
   // 같은 URL 요청은 Cloudflare 엣지 캐시가 받아낸다 -> KIS 호출이 줄어든다
@@ -480,17 +520,29 @@ function minuteScanStart(now = new Date()) {
   return cur;                                             // 그 밖에는 지금까지만
 }
 
+/* 실패를 삼키지 않는다. 구간마다 진짜로 데이터가 없을 수도 있으므로 한 번
+   실패했다고 전체를 접지는 않지만, 몇 번 실패했고 마지막 이유가 무엇인지는
+   응답에 실어 보낸다. 예전에는 조용히 넘어가서 차트가 왜 비는지 알 수 없었다. */
 async function fetchMinutesDay(cfg, env, code) {
   const bars = new Map();
+  let tried = 0;
+  let failed = 0;
+  let lastError = null;
+
   for (let t = minuteScanStart(); t >= MINUTE_DAY_START; t -= 30) {
     const hour = `${String(Math.floor(t / 60)).padStart(2, "0")}${String(t % 60).padStart(2, "0")}00`;
+    tried++;
     try {
       for (const b of await fetchMinutesFromKis(cfg, env, code, hour)) bars.set(b.ts, b);
-    } catch {
-      // 해당 구간에 데이터가 없을 수 있다. 계속 진행.
+    } catch (e) {
+      failed++;
+      lastError = (e && e.message) || String(e);
     }
   }
-  return [...bars.values()].sort((a, b) => a.ts.localeCompare(b.ts));
+  return {
+    bars: [...bars.values()].sort((a, b) => a.ts.localeCompare(b.ts)),
+    tried, failed, lastError,
+  };
 }
 
 /* 1분봉을 N분봉으로 묶는다 (KIS 는 5분봉을 직접 주지 않는다) */
@@ -560,30 +612,461 @@ async function getChart(cfg, env, code, period, limit) {
   const stale = Date.now() - lastSync > conf.freshSec * 1000;
 
   let fetched = 0;
+  let warn = null;          // 받아오다 일부 실패했으면 이유를 남긴다
   if (!rows.length || stale) {
     let bars;
     if (conf.kis) {                       // 일/주/월/년
       bars = await fetchBarsFromKis(cfg, env, code, period, ymdOffset(conf.spanDays), ymd(new Date()));
     } else {                              // 분봉
       // 처음이면 하루치를 모으고, 이후에는 최근 구간만 갱신한다
-      const raw = rows.length
-        ? await fetchMinutesFromKis(cfg, env, code)
-        : await fetchMinutesDay(cfg, env, code);
+      let raw;
+      if (rows.length) {
+        raw = await fetchMinutesFromKis(cfg, env, code);
+      } else {
+        const day = await fetchMinutesDay(cfg, env, code);
+        raw = day.bars;
+        if (day.failed) {
+          warn = `분봉 ${day.tried}구간 중 ${day.failed}구간 실패 (${day.lastError || "이유 없음"})`;
+        }
+      }
       bars = period === "5m" ? aggregateMinutes(raw, 5) : raw;
     }
     fetched = await saveCandles(env, code, period, bars);
     await metaSet(env, mkey, Date.now());
     if (fetched) rows = await readCandles(env, code, period, limit);
   }
-  return { rows, fetched, source: fetched ? "KIS+DB" : "DB" };
+  return { rows, fetched, warn, source: fetched ? "KIS+DB" : "DB" };
+}
+
+/* ══ 공시 (OpenDART) ═════════════════════════════════════════
+   로컬은 server/dart.py 가 같은 일을 한다. 두 곳이 같은 판단을 해야 한다.
+
+   여기서는 기업 대응표(corpCode.xml)를 받지 않는다. 그것은 ZIP 이라
+   Workers 에서 풀려면 압축 해제를 직접 구현해야 하는데, 정작 화면에는
+   쓰이지 않는다. 공시 목록(list.json)이 종목코드와 회사명을 이미 준다.
+
+   필요한 설정
+     Secret    DART_API_KEY         OpenDART 인증키 (40자)
+     Secret    TELEGRAM_BOT_TOKEN   알림을 보낼 봇 (없으면 알림만 꺼진다)
+     Secret    TELEGRAM_CHAT_ID     받을 대화방
+     Cron      5분마다 (분 자리에 "*" 와 "/5" 를 붙여 쓴다). UTC 기준으로 돈다
+   ══════════════════════════════════════════════════════════ */
+
+const DART_API = "https://opendart.fss.or.kr/api";
+const DART_VIEWER = "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=";
+const UNIVERSE_SIZE = 200;          // 코스피 시가총액 상위 몇 종목을 볼 것인가
+
+/* 텔레그램을 보낼 종목. server/dart.py 의 WATCH_CODES 와 같아야 한다.
+   순위(200종목)가 양쪽에서 조금 달라져도 알림은 이 목록에만 가므로 영향이 없다. */
+const DART_WATCH_CODES = [
+  "005930", "000660", "035420", "035720",
+  "005380", "373220", "207940", "068270",
+];
+
+const DART_SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS dart_universe (
+     stock_code TEXT PRIMARY KEY,
+     name       TEXT,
+     rank       INTEGER,
+     market_cap INTEGER,
+     updated_at TEXT
+   )`,
+  `CREATE TABLE IF NOT EXISTS dart_disclosures (
+     rcept_no    TEXT PRIMARY KEY,
+     corp_code   TEXT,
+     stock_code  TEXT,
+     corp_name   TEXT,
+     report_nm   TEXT,
+     flr_nm      TEXT,
+     rcept_dt    TEXT,
+     rm          TEXT,
+     received_at TEXT,
+     notified    INTEGER DEFAULT 0
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_disc_stock ON dart_disclosures (stock_code, rcept_no DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_disc_recent ON dart_disclosures (rcept_no DESC)`,
+];
+
+async function dartInit(env) {
+  const db = requireDb(env);
+  // sync_meta 는 시세 쪽 SCHEMA 에 있지만, 공시가 먼저 돌 수도 있으므로 여기서도 보장한다
+  await db.prepare(`CREATE TABLE IF NOT EXISTS sync_meta (
+     key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)`).run();
+  for (const sql of DART_SCHEMA) await db.prepare(sql).run();
+  return db;
+}
+
+/* 한국 시각 기준 오늘 (YYYYMMDD). Workers 는 UTC 로 돈다. */
+function kstToday(now = new Date()) {
+  const kst = new Date(now.getTime() + 9 * 3600 * 1000);
+  return `${kst.getUTCFullYear()}${String(kst.getUTCMonth() + 1).padStart(2, "0")}${String(kst.getUTCDate()).padStart(2, "0")}`;
+}
+
+/* 물어볼 시간대인가. DART 접수는 평일에만 있다.
+   server/dart.py 의 _should_poll() 과 같은 판단이어야 한다. */
+function dartShouldPoll(now = new Date()) {
+  const kst = new Date(now.getTime() + 9 * 3600 * 1000);
+  const day = kst.getUTCDay();
+  if (day === 0 || day === 6) return false;
+  const mins = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  return mins >= 7 * 60 && mins < 20 * 60;
+}
+
+/* ── 감시 대상 200종목 (네이버 시가총액 순위) ──
+   공식 API 가 아니다. 한국투자증권 순위 API 는 30건까지만 주기 때문에
+   200종목을 만들 수 없어서 이쪽을 쓴다. 못 받으면 기존 목록을 그대로 둔다. */
+async function fetchKospiTop(size = UNIVERSE_SIZE) {
+  const out = [];
+  for (let page = 1; out.length < size && page <= 10; page++) {
+    const res = await fetch(
+      `https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=${page}&pageSize=100`,
+      { headers: { "user-agent": "Mozilla/5.0", referer: "https://m.stock.naver.com/" } }
+    );
+    if (!res.ok) throw new Error(`네이버 시가총액 순위 HTTP ${res.status}`);
+    const body = await res.json();
+    const items = body.stocks || [];
+    if (!items.length) break;
+    for (const it of items) {
+      const code = String(it.itemCode || "").trim();
+      if (!/^\d{6}$/.test(code)) continue;
+      out.push({
+        code,
+        name: String(it.stockName || "").trim(),
+        cap: parseInt(String(it.marketValue ?? "").replace(/[^0-9-]/g, ""), 10) || null,
+      });
+    }
+  }
+  return out.slice(0, size);
+}
+
+async function refreshUniverse(env, size = UNIVERSE_SIZE) {
+  const db = await dartInit(env);
+  let items;
+  try {
+    items = await fetchKospiTop(size);
+  } catch (e) {
+    return { ok: false, error: `시가총액 순위를 받지 못했습니다: ${(e && e.message) || e}` };
+  }
+  if (items.length < 50) {
+    return { ok: false, error: `받은 종목이 ${items.length}개뿐이라 반영하지 않았습니다.` };
+  }
+
+  const now = new Date().toISOString();
+  const stmt = db.prepare(
+    `INSERT INTO dart_universe (stock_code, name, rank, market_cap, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(stock_code) DO UPDATE SET
+       name=excluded.name, rank=excluded.rank,
+       market_cap=excluded.market_cap, updated_at=excluded.updated_at`
+  );
+  await db.prepare(`DELETE FROM dart_universe`).run();
+  const CHUNK = 100;
+  for (let i = 0; i < items.length; i += CHUNK) {
+    await db.batch(items.slice(i, i + CHUNK).map((it, j) =>
+      stmt.bind(it.code, it.name, i + j + 1, it.cap, now)
+    ));
+  }
+  await metaSet(env, "dart_universe_date", kstToday());
+  return { ok: true, count: items.length };
+}
+
+async function universeCodes(env) {
+  const db = await dartInit(env);
+  const res = await db.prepare(`SELECT stock_code FROM dart_universe`).all();
+  return new Set((res.results || []).map((r) => r.stock_code));
+}
+
+/* ── 공시 목록 ──
+   corp_cls  Y=유가증권(코스피) K=코스닥 N=코넥스 E=기타
+   status    000 정상 · 013 데이터 없음 · 020 하루 한도 초과 · 800 점검 */
+async function fetchDartList(key, bgn, end, corpCls = "Y", maxPages = 12) {
+  const out = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const qs = new URLSearchParams({
+      crtfc_key: key, bgn_de: bgn, end_de: end,
+      corp_cls: corpCls, page_no: String(page), page_count: "100",
+    });
+    const res = await fetch(`${DART_API}/list.json?${qs}`);
+    if (!res.ok) throw new Error(`OpenDART HTTP ${res.status}`);
+    const body = await res.json();
+
+    if (body.status === "013") break;              // 아직 공시가 없다
+    if (body.status !== "000") {
+      throw new Error(`${body.status} ${body.message || ""}`);
+    }
+    out.push(...(body.list || []));
+    if (page >= Number(body.total_page || 1)) break;
+  }
+  return out;
+}
+
+/* 감시 대상 것만 저장하고, 새로 들어온 것만 돌려준다.
+   notified=1 로 넣으면 '이미 알린 것으로 친다'. 처음 켤 때 쌓여 있던 것을
+   전부 보내면 텔레그램이 도배된다. */
+async function saveDisclosures(env, items, onlyCodes, notified = 0) {
+  const db = await dartInit(env);
+  const fresh = [];
+  const rows = [];
+
+  for (const it of items) {
+    const code = String(it.stock_code || "").trim();
+    if (!onlyCodes.has(code)) continue;
+    const rcept = String(it.rcept_no || "").trim();
+    if (!rcept) continue;
+    rows.push({
+      rcept_no: rcept,
+      corp_code: String(it.corp_code || "").trim(),
+      stock_code: code,
+      corp_name: String(it.corp_name || "").trim(),
+      report_nm: String(it.report_nm || "").trim(),
+      flr_nm: String(it.flr_nm || "").trim(),
+      rcept_dt: String(it.rcept_dt || "").trim(),
+      rm: String(it.rm || "").trim(),
+    });
+  }
+  if (!rows.length) return fresh;
+
+  // 이미 있는 것을 한 번에 가려낸다 (건마다 묻지 않는다)
+  const known = new Set();
+  const CHECK = 100;
+  for (let i = 0; i < rows.length; i += CHECK) {
+    const slice = rows.slice(i, i + CHECK);
+    const marks = slice.map(() => "?").join(",");
+    const res = await db.prepare(
+      `SELECT rcept_no FROM dart_disclosures WHERE rcept_no IN (${marks})`
+    ).bind(...slice.map((r) => r.rcept_no)).all();
+    for (const r of res.results || []) known.add(r.rcept_no);
+  }
+
+  const now = new Date().toISOString();
+  const stmt = db.prepare(
+    `INSERT INTO dart_disclosures
+       (rcept_no, corp_code, stock_code, corp_name, report_nm,
+        flr_nm, rcept_dt, rm, received_at, notified)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(rcept_no) DO NOTHING`
+  );
+  const todo = rows.filter((r) => !known.has(r.rcept_no));
+  for (let i = 0; i < todo.length; i += CHECK) {
+    await db.batch(todo.slice(i, i + CHECK).map((r) =>
+      stmt.bind(r.rcept_no, r.corp_code, r.stock_code, r.corp_name,
+                r.report_nm, r.flr_nm, r.rcept_dt, r.rm, now, notified)
+    ));
+  }
+  fresh.push(...todo);
+  return fresh;
+}
+
+async function readDisclosures(env, code, limit) {
+  const db = await dartInit(env);
+  const n = Math.min(Math.max(parseInt(limit, 10) || 30, 1), 200);
+  const res = code
+    ? await db.prepare(
+        `SELECT rcept_no, stock_code, corp_name, report_nm, flr_nm, rcept_dt, rm
+           FROM dart_disclosures WHERE stock_code = ?
+           ORDER BY rcept_no DESC LIMIT ?`).bind(code, n).all()
+    : await db.prepare(
+        `SELECT rcept_no, stock_code, corp_name, report_nm, flr_nm, rcept_dt, rm
+           FROM dart_disclosures ORDER BY rcept_no DESC LIMIT ?`).bind(n).all();
+
+  return (res.results || []).map((r) => ({
+    rceptNo: r.rcept_no,
+    code: r.stock_code,
+    name: r.corp_name,
+    title: r.report_nm,
+    filer: r.flr_nm,
+    date: r.rcept_dt,
+    note: r.rm,
+    url: DART_VIEWER + r.rcept_no,
+  }));
+}
+
+/* ── 텔레그램 ── */
+
+function telegramConfig(env) {
+  if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
+    return { token: env.TELEGRAM_BOT_TOKEN, chat: String(env.TELEGRAM_CHAT_ID) };
+  }
+  return null;
+}
+
+async function telegramSend(env, text) {
+  const cfg = telegramConfig(env);
+  if (!cfg) return false;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${cfg.token}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        chat_id: cfg.chat, text, disable_web_page_preview: "true",
+      }),
+    });
+    const body = await res.json();
+    return !!body.ok;
+  } catch {
+    return false;
+  }
+}
+
+function dartMessage(row) {
+  const dt = row.rcept_dt || "";
+  const when = dt.length === 8 ? `${dt.slice(4, 6)}-${dt.slice(6, 8)}` : dt;
+  const lines = [`📢 ${row.corp_name} (${row.stock_code})`, row.report_nm];
+  if (row.flr_nm && row.flr_nm !== row.corp_name) lines.push(`제출: ${row.flr_nm}`);
+  lines.push(`접수 ${when}`);
+  lines.push(DART_VIEWER + row.rcept_no);
+  return lines.join("\n");
+}
+
+/* 관심종목 공시만 보낸다. 보낸 것은 표시해 두어 두 번 보내지 않는다. */
+async function dartNotify(env, rows) {
+  const db = requireDb(env);
+  let sent = 0;
+  for (const row of rows) {
+    if (!DART_WATCH_CODES.includes(row.stock_code)) continue;
+    const ok = await telegramSend(env, dartMessage(row));
+    await db.prepare(`UPDATE dart_disclosures SET notified = ? WHERE rcept_no = ?`)
+      .bind(ok ? 1 : 0, row.rcept_no).run();
+    if (ok) sent++;
+  }
+  return sent;
+}
+
+/* ── 한 바퀴 ── */
+
+async function dartPollOnce(env, quietFirstRun = true) {
+  const key = env.DART_API_KEY;
+  if (!key) return { ok: false, error: "DART_API_KEY 가 설정되지 않았습니다." };
+
+  await dartInit(env);
+  const today = kstToday();
+
+  if ((await metaGet(env, "dart_universe_date")) !== today) {
+    const u = await refreshUniverse(env);
+    if (!u.ok) await metaSet(env, "dart_last_error", u.error);
+  }
+
+  const codes = await universeCodes(env);
+  if (!codes.size) {
+    const msg = "감시 대상 목록이 비어 있습니다";
+    await metaSet(env, "dart_last_error", msg);
+    return { ok: false, error: msg };
+  }
+
+  let items;
+  try {
+    items = await fetchDartList(key, today, today);
+  } catch (e) {
+    const msg = String((e && e.message) || e).slice(0, 120);
+    await metaSet(env, "dart_last_error", msg);
+    return { ok: false, error: msg };
+  }
+
+  const firstRun = !(await metaGet(env, "dart_last_poll"));
+  const mark = firstRun && quietFirstRun ? 1 : 0;
+
+  const fresh = await saveDisclosures(env, items, codes, mark);
+  const notified = mark ? 0 : await dartNotify(env, fresh);
+
+  await metaSet(env, "dart_last_poll", new Date().toISOString());
+  await metaSet(env, "dart_last_error", "");
+  return { ok: true, received: items.length, matched: fresh.length, notified, firstRun };
+}
+
+async function dartStatus(env) {
+  let universe = 0, disclosures = 0, lastReceivedAt = null, dbError = null;
+  try {
+    const db = await dartInit(env);
+    universe = (await db.prepare(`SELECT COUNT(*) n FROM dart_universe`).first()).n;
+    const d = await db.prepare(
+      `SELECT COUNT(*) n, MAX(received_at) t FROM dart_disclosures`).first();
+    disclosures = d.n;
+    lastReceivedAt = d.t;
+  } catch (e) {
+    dbError = String((e && e.message) || e);
+  }
+  // status 는 화면이 "공시를 쓸 수 있는가" 를 판단하는 곳이다. 절대 터지면 안 된다.
+  // D1 바인딩이 없으면 위에서 dbError 가 잡히는데, 그 상태로 메모를 읽으면 또 터진다.
+  let lastPollAt = null;
+  let lastPollError = null;
+  try {
+    lastPollAt = await metaGet(env, "dart_last_poll");
+    lastPollError = (await metaGet(env, "dart_last_error")) || null;
+  } catch {
+    // dbError 에 이미 사유가 담겨 있다
+  }
+
+  return {
+    configured: !!env.DART_API_KEY,
+    telegram: !!telegramConfig(env),
+    universe, disclosures, lastReceivedAt,
+    lastPollAt, lastPollError,
+    watchCodes: DART_WATCH_CODES,
+    dbError,
+    runtime: "workers",
+  };
 }
 
 /* ── 라우팅 ────────────────────────────────────────────────── */
 
 export default {
+  // Cron Trigger 진입점. 대시보드에서 5분마다로 건다 (표현식은 이 파일 위쪽 설명 참고).
+  // Cron 은 UTC 로 돌기 때문에, 한국 시각·요일 판단은 dartShouldPoll() 이 맡는다.
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil((async () => {
+      if (!dartShouldPoll()) return;
+      try {
+        await dartPollOnce(env);
+      } catch (e) {
+        try { await metaSet(env, "dart_last_error", String((e && e.message) || e)); } catch {}
+      }
+    })());
+  },
+
   async fetch(request, env) {
     const url = new URL(request.url);
     const route = url.pathname.replace(/^\/api\/kis\/?/, "").replace(/\/$/, "");
+
+    // ── 공시 ──
+    if (url.pathname.startsWith("/api/dart")) {
+      if (request.method !== "GET") return fail("GET 요청만 지원합니다.", 405);
+      const dartRoute = url.pathname.replace(/^\/api\/dart\/?/, "").replace(/\/$/, "");
+      try {
+        if (dartRoute === "status") {
+          return json({ ok: true, data: await dartStatus(env) });
+        }
+        if (!env.DART_API_KEY) {
+          return fail("OpenDART 인증키(DART_API_KEY)가 설정되지 않았습니다.", 503);
+        }
+        if (dartRoute === "disclosures") {
+          const code = (url.searchParams.get("code") || "").trim();
+          if (code && !/^\d{6}$/.test(code)) {
+            return fail("code 는 6자리 숫자여야 합니다.", 400);
+          }
+          const rows = await readDisclosures(env, code || null, url.searchParams.get("limit") || "30");
+          return json({
+            ok: true,
+            data: rows,
+            meta: { count: rows.length, code: code || null,
+                    lastPollAt: await metaGet(env, "dart_last_poll") },
+          });
+        }
+        if (dartRoute === "poll") {       // 5분을 기다리지 않고 지금 한 번
+          return json({ ok: true, data: await dartPollOnce(env) });
+        }
+        if (dartRoute === "universe") {
+          const db = await dartInit(env);
+          const res = await db.prepare(
+            `SELECT rank, stock_code, name, market_cap FROM dart_universe ORDER BY rank`).all();
+          return json({ ok: true, data: (res.results || []).map((r) => ({
+            rank: r.rank, code: r.stock_code, name: r.name, cap: r.market_cap,
+          })) });
+        }
+        return fail(`알 수 없는 경로입니다: ${dartRoute}`, 404);
+      } catch (e) {
+        return fail(String((e && e.message) || e), 500);
+      }
+    }
 
     if (!url.pathname.startsWith("/api/kis")) {
       return fail("알 수 없는 경로입니다.", 404);
@@ -702,11 +1185,14 @@ export default {
         const raw = url.searchParams.get("limit") || url.searchParams.get("days") || "240";
         const limit = Math.min(Math.max(parseInt(raw, 10) || 240, 1), 1000);
 
-        const { rows, fetched, source } = await getChart(cfg, env, code, period, limit);
+        const { rows, fetched, warn, source } = await getChart(cfg, env, code, period, limit);
         return json({
           ok: true,
           data: { code, period, candles: rows },
-          meta: { count: rows.length, fetched, source, label: PERIODS[period].label },
+          // warn — 받아오다 일부 실패했으면 이유가 담긴다. 예전에는 조용히 삼켜서
+          // 차트가 왜 비는지 알 수 없었다 (2026-09-14).
+          meta: { count: rows.length, fetched, source, warn: warn || null,
+                  label: PERIODS[period].label },
         });
       }
 

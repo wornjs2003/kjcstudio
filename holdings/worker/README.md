@@ -170,22 +170,64 @@ https://thekjcstudio.com/api/kis/health
 
 # 남은 작업
 
-## 0. 공시(OpenDART)가 배포본에는 없다 — 2026-09-14 추가
+## 0. 배포해야 반영됩니다 — 2026-09-14 기준 두 가지가 밀려 있습니다
 
-로컬 서버(`server/dart.py`)에만 붙어 있다. 배포본에서 `index.html` 과
-`stock.html` 의 공시 칸은 "불러오지 못했습니다" 로 남는다.
+`worker/kis-worker.js` 는 고쳐져 있지만 **대시보드에 붙여넣어 Deploy 해야** 실제로 바뀝니다.
+아래 둘이 아직 배포되지 않았습니다.
 
-**왜 그대로 두었나** — 공시 수집은 5분마다 도는 배경 작업이라 요청이 올 때만
-깨어나는 Worker 와 구조가 맞지 않는다. Cron Trigger + D1 로 옮겨야 한다.
+### (1) 차트가 안 나오던 것 — 고침
 
-**옮길 때 해야 할 일**
-- `dart_corps` · `dart_universe` · `dart_disclosures` 세 테이블을 D1 에 만든다
-  (스키마는 `server/dart.py` 의 `SCHEMA` 를 그대로 쓴다)
-- Cron Trigger 로 5분마다 `list.json` 을 부르는 핸들러를 둔다
-- `/api/dart/disclosures` · `/api/dart/status` 두 경로를 Worker 에 추가한다
-- OpenDART 인증키와 텔레그램 토큰을 `wrangler secret` 으로 넣는다
-- 로컬과 배포본이 **같은 감시 대상**을 보게 해야 한다. 네이버 시가총액 순위를
-  양쪽이 따로 부르면 순위가 어긋날 수 있다
+메인 화면에서 미리보기 차트만 안 나오고 종목 화면은 나오던 문제입니다.
+
+**원인** — Worker 에 KIS 호출 간격 제어가 없었습니다. 메인 화면은 열릴 때
+지수 3건 + 시세 8건 + 분봉 채우기 13~24건을 한꺼번에 쏩니다. 분봉 쪽이 초당 한도에
+걸려 실패했고, `fetchMinutesDay` 의 `catch {}` 가 그 실패를 삼켜서 "데이터가 없나 보다"
+하고 넘어갔습니다. 그래서 D1 에 봉이 한 개도 쌓이지 않았습니다
+(2026-09-14 `/api/kis/health` 에서 `rows: 0` 확인).
+
+**고친 것**
+- `kisPace()` — KIS 호출 사이 200ms(초당 5건). 기본 한도 20건의 1/4
+- `fetchMinutesDay` 가 실패 건수와 마지막 이유를 돌려주고, 차트 응답 `meta.warn` 에 실린다
+
+로컬(`server/kis_proxy.py`)은 1초 간격이라 이 문제가 없었습니다. 그래서 로컬만 보면
+멀쩡해 보였습니다.
+
+### (2) 공시 — 붙임
+
+`/api/dart/disclosures` · `/api/dart/status` · `/api/dart/poll` · `/api/dart/universe`
+네 경로와 `scheduled()` 핸들러가 들어갔습니다.
+
+**로컬(server/dart.py)과 다른 점 하나** — 기업 대응표(`corpCode.xml`)를 받지 않습니다.
+ZIP 이라 Workers 에서 풀려면 압축 해제를 직접 구현해야 하는데, 정작 화면에 쓰이지 않습니다.
+공시 목록(`list.json`)이 종목코드와 회사명을 이미 줍니다.
+
+### 배포 절차 (대시보드)
+
+1. `worker/kis-worker.js` 전체를 복사해 Worker 편집기에 붙여넣고 **Deploy**
+2. **Settings > Variables and Secrets** 에 Secret 세 개 추가
+   `DART_API_KEY` · `TELEGRAM_BOT_TOKEN` · `TELEGRAM_CHAT_ID`
+   (키는 재권님이 직접 입력하십시오. 세션 간 메시지로 주고받지 않습니다)
+3. **Settings > Triggers > Cron Triggers** 에 5분마다 실행을 추가
+   — 반영까지 **최대 15분** 걸립니다. 바로 안 돌아도 고장이 아닙니다
+4. 배포 후 `workers.dev` 가 Disabled 인지 확인
+5. `/api/dart/status` 로 `configured` · `telegram` · `universe` 확인
+
+wrangler 는 쓰지 않습니다. `wrangler.toml` 없이 배포하면 Route·환경변수가 날아가고
+`workers.dev` 가 되살아납니다 (2026-09-14 공식 문서 확인).
+
+### 알림이 두 번 갈 수 있습니다
+
+배포하면 **로컬 서버와 Worker 가 둘 다** 텔레그램을 보냅니다. 같은 공시를 두 번 받게 됩니다.
+Worker 는 24시간 돌고 로컬은 PC 를 켰을 때만 도니, **Worker 쪽만 남기는 편**이 맞습니다.
+로컬을 끄려면 `holdings/secrets.json` 의 `telegram` 항목을 지우면 됩니다
+(수집과 화면은 그대로 돌고 알림만 꺼집니다).
+
+### 감시 대상 200종목이 양쪽에서 조금 다를 수 있습니다
+
+로컬과 Worker 가 네이버 시가총액 순위를 따로 부르므로 경계(200위 근처)가 몇 종목
+어긋날 수 있습니다. **알림에는 영향이 없습니다** — 알림은 관심종목 8개
+(`DART_WATCH_CODES` / `WATCH_CODES`)에만 가고, 그 목록은 양쪽에 같은 값으로 박혀 있습니다.
+차이가 나는 것은 화면에 보이는 "최근 공시" 목록의 가장자리뿐입니다.
 
 ## 1. 로그인 실패 시 재시도 문제 (추후 수정 필요)
 
