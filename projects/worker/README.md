@@ -21,17 +21,14 @@ KIS 워커(`holdings/worker/`)를 만드실 때와 **거의 같은 절차**입�
 | `ACCESS_TEAM` | `snowy-breeze-0626` |
 | `ACCESS_AUD` | 저장소에 적지 않음 — 아래 4단계 참고 |
 | 확인 주소 | `https://thekjcstudio.com/api/board/health` |
-| Worker 직접 주소 | `https://kjc-board-api.wornjs2003.workers.dev` |
+| `workers.dev` 주소 | **꺼 두었습니다** (2026-09-14) |
 
-`ACCESS_AUD` 는 Access 애플리케이션 식별값이라 일부러 남기지 않았습니다.
-필요할 때 4단계 방법으로 다시 복사해 오면 됩니다.
+`ACCESS_AUD` 는 저장소에 적을 필요가 없어서 뺐습니다. 비밀 값이라서가 아닙니다.
+Access 로그인 주소의 `kid` 파라미터에 그대로 드러나 있고, 알려져도 서명은
+공개키로 검증하므로 위조되지 않습니다. 그저 적어서 득 될 게 없는 값입니다.
 
 **상태 확인은 로그인한 브라우저에서** 확인 주소를 열면 됩니다.
 `signedInAs` 에 본인 이메일이 나오면 정상입니다.
-
-> Worker 직접 주소(`workers.dev`)는 Access 뒤에 있지 않습니다.
-> 설정이 붙었는지만 확인하는 용도로 쓰고, 실제 사용은 `thekjcstudio.com` 쪽으로 합니다.
-> 이 주소로는 로그인 정보가 없어 `signedInAs` 가 항상 `null` 로 나옵니다.
 
 ---
 
@@ -72,13 +69,16 @@ KIS 워커(`holdings/worker/`)를 만드실 때와 **거의 같은 절차**입�
 6. 편집기 내용을 전부 지우고 `board-api.js` 전체를 붙여넣기
 7. **Deploy**
 
-**제대로 들어갔는지 바로 확인하는 법** — Worker 주소를 열었을 때 이 문구가 나오면 성공입니다.
+**제대로 들어갔는지 바로 확인하는 법** — 방금 만든 Worker 는 `workers.dev` 주소가 켜진 채로 시작합니다.
+그 주소(`kjc-board-api.<계정>.workers.dev`)를 열었을 때 이 문구가 나오면 성공입니다.
 
 ```json
 {"ok":false,"error":"여기는 보드 저장 서버입니다. /api/board 로 요청하세요."}
 ```
 
 `Hello World!` 가 나오면 기본 코드가 남아 있는 것이니 다시 붙여넣고 배포합니다.
+
+> 이 주소는 **5단계까지 마친 뒤 반드시 꺼야 합니다.** 아래 5단계 끝에 적어 두었습니다.
 
 > 로컬 파일 위치: `projects/worker/board-api.js`
 
@@ -154,6 +154,18 @@ Worker 화면 → **Settings** → **Domains & Routes** → **Add** → **Route*
 | Zone | `thekjcstudio.com` |
 
 `www` 도 쓰신다면 `www.thekjcstudio.com/api/board*` 를 하나 더 추가합니다.
+
+### 그리고 workers.dev 를 끕니다 (빠뜨리기 쉬움)
+
+같은 화면 **Domains & Routes** 안에 `workers.dev` 항목이 있습니다. **Disable** 로 끕니다.
+
+Worker 를 만들면 이 주소가 자동으로 켜지는데, **Access 를 거치지 않는 통로**입니다.
+도메인 Route 로 이미 동작하므로 꺼도 아무 영향이 없습니다.
+
+껐는지 확인하려면 그 주소를 열어 보세요. `error code: 1042` 가 나오면 닫힌 것입니다.
+
+> 나중에 **Wrangler** 로 배포하시게 되면 설정에 `workers_dev = false` 가 없는 한
+> 배포할 때마다 되살아납니다. 지금처럼 대시보드에 붙여넣는 방식에서는 해당 없습니다.
 
 ### KIS 워커와 겹치지 않는 이유
 
@@ -259,6 +271,7 @@ D1 (kjc-board-db)  — 보드 전체를 한 줄에 저장
 
 - 이 Worker 는 `thekjcstudio.com/api/board*` 에 붙으므로 **Cloudflare Access 뒤**에 있습니다. 로그인하지 않은 사람은 호출할 수 없습니다.
 - 그 위에 **토큰 서명 검증**을 한 겹 더 넣었습니다. 공식 문서에 "헤더만 확인하는 것으로는 충분하지 않으며, 신원 위조를 막으려면 JWT 와 서명을 반드시 검증해야 한다" 고 되어 있기 때문입니다.
+- **`workers.dev` 주소는 꺼 두었습니다** (2026-09-14). 켜져 있으면 Access 를 거치지 않고 Worker 에 닿을 수 있습니다. 서명 검증이 있어서 데이터는 `401` 로 막혔지만, 통로 자체를 없애는 편이 맞습니다. 코드를 고쳐 다시 배포한 뒤에는 **꺼진 상태가 유지되는지 확인**하세요.
 - **주의할 점**: 지금 Access 는 사이트 전체가 **하나의 애플리케이션**으로 묶여 있습니다. 누군가의 이메일을 추가하면 그 사람이 포트폴리오·주식창·설립 체크리스트·프로젝트 보드를 **전부** 보게 됩니다. 보드만 따로 공유하시려면 Access 애플리케이션을 먼저 분리해야 합니다.
 
 ---
