@@ -33,14 +33,21 @@
         "해외 시세"
       ],
       "endpoints": [
-        "/uapi/domestic-stock/v1/quotations/inquire-price",
-        "/uapi/domestic-stock/v1/quotations/inquire-index-price",
-        "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
-        "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
-        "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice"
+        "/uapi/domestic-stock/v1/quotations/inquire-price  — 종목 현재가",
+        "/uapi/domestic-stock/v1/quotations/inquire-index-price  — 지수 현재가",
+        "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice  — 종목 일/주/월/년봉",
+        "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice  — 종목 분봉 (FID_INPUT_HOUR_1 = 기준 시각)",
+        "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice  — 지수 일봉",
+        "/uapi/domestic-stock/v1/quotations/inquire-time-indexchartprice  — 지수 분봉 (tr_id FHKUP03500200)"
       ],
       "note": "시장구분은 시각에 따라 자동으로 갈린다 (평일 09:00~15:30 J=KRX, 그 외 UN=통합). holdings/CLAUDE.md 「시세 표기 규칙」 참고.",
-      "verified": "2026-09-14 실측. 삼성전자 250,000원 정상 수신"
+      "verified": "2026-09-14 실측. 삼성전자 250,000원 정상 수신 지수 분봉은 2026-09-14 에 확인 — FID_INPUT_HOUR_1=\"300\" 으로 하루치 99건 수신.",
+      "!! 같은 이름 다른 뜻": {
+        "무엇": "FID_INPUT_HOUR_1 은 API 마다 뜻이 다르다. 이름만 보면 둘 다 '입력 시각' 이다.",
+        "종목 분봉": "시각이다. \"153000\" 이면 15:30 기준으로 과거 30개를 준다.",
+        "지수 분봉": "초 단위 간격이다. \"300\" 이면 5분 간격으로 하루치 99건이 온다. \"150000\" 을 넣으면 시각으로 읽히지 않고 날짜별 요약이 돌아온다.",
+        "왜 적어두나": "공식 문서에 값이 적혀 있지 않다. 2026-09-14 에 여러 값을 직접 넣어 찾았다. 그전에는 '지수 분봉은 받을 수 없다' 고 잘못 판단했고, 그래서 지수 차트를 포기할 뻔했다. 이 줄이 없으면 같은 결론으로 되돌아간다."
+      }
     },
     "toss": {
       "label": "토스증권",
