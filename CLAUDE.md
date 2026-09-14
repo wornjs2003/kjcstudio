@@ -59,8 +59,20 @@
 - `projects/` : 프로젝트 보드 (독립 구역, 칼럼·카테고리 정의는 `projects/data/config.js`, 데이터는 localStorage + JSON 내보내기)
 
 ## 상단 메뉴 구성
-- 3D Modeling / AI Work / Web·Interactive / Branding / Holdings → / ⋯(더보기)
-- ⋯ 안에 About / Services / Contact
+- 3D Modeling / AI Work / Web·Interactive / Holdings → / Setup → / Projects → / ⋯(더보기)
+- ⋯ 안에 **Branding** / About / Services / Contact
+- Branding 은 2026-09-14 에 메뉴 줄에서 ⋯ 안으로 옮겼다. 그 자리에 **API** 가 들어올 예정이다
+  - 주소는 **`/api-board/`** 다. `/api/` 가 아니다 — KIS 워커 Route 가
+    `thekjcstudio.com/api/*` 라서 `/api/` 에 페이지를 두면 워커의 JSON 404 가 뜰 수 있다.
+    와일드카드라 `/api/` 와 `/api/index.html` 도 그 범위에 들어간다.
+    Access 뒤라 실증은 못 했고, 위험을 피하는 쪽을 골랐다 (2026-09-14 판단)
+  - 메뉴 이름은 `API`, 주소만 `/api-board/` 다. 나중에 `/api/` 로 "정리" 하지 말 것
+  - 페이지(`category/branding.html`)와 `data/categories.json` 의 항목은 **그대로 둔다.**
+    메뉴에서만 뺐다. 지우면 되돌리기 번거로워 "우선 옮겨놓는" 것으로 정했다 (지시)
+  - 그래서 메인 페이지의 카테고리 입구 목록에는 Branding 이 아직 4개 중 하나로 남아 있다.
+    API 페이지가 나오면 그때 함께 정리한다
+- **메뉴를 고칠 때는 `partials/nav.html` 의 두 곳을 같이 고친다.**
+  데스크톱 목록과 모바일 전체화면 목록이 따로 있다. 한 곳만 고치면 폰과 PC 가 달라진다
 - Holdings는 `holdings/` 로 외부 이동 느낌 (화살표 아이콘)
 - Setup 은 `company-setup/` 으로 외부 이동 느낌 (화살표 아이콘)
 - Projects 는 `projects/` 로 외부 이동 느낌 (화살표 아이콘)
