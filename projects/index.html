@@ -205,19 +205,70 @@ h1 {
 .task {
   background: var(--pj-bg-card);
   border-radius: var(--pj-radius-sm);
-  padding: 9px 10px;
+  padding: 10px 11px 8px;
   margin-bottom: 6px;
-  display: flex; align-items: flex-start; gap: 6px;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
+.task:hover { box-shadow: 0 0 0 2px var(--pj-accent); transform: translateY(-1px); }
+
+.task-line { display: flex; align-items: flex-start; gap: 7px; }
 .task-text {
-  flex: 1; font-family: inherit; font-size: 13px; font-weight: 500;
-  line-height: 1.5; color: var(--pj-text-primary);
-  background: transparent; border: none; border-radius: 5px; padding: 2px 3px;
-  resize: none; overflow: hidden; min-height: 21px;
+  flex: 1; font-size: 13px; font-weight: 500;
+  line-height: 1.5; color: var(--pj-text-primary); word-break: break-word;
 }
-.task-text:focus { outline: none; box-shadow: inset 0 0 0 2px var(--pj-accent); }
-.task-text::placeholder { color: var(--pj-text-dim); font-weight: 400; }
 .task.is-done .task-text { color: var(--pj-text-dim); text-decoration: line-through; }
+.task-empty { color: var(--pj-text-dim); font-weight: 400; }
+
+/* 우선순위 높음만 점으로 표시 */
+.task-flag {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--pj-danger); flex-shrink: 0; margin-top: 5px;
+}
+
+/* 카드 안 체크리스트 — 창을 열지 않고 바로 체크합니다 */
+.card-subs { margin-top: 8px; }
+.card-sub {
+  display: flex; align-items: flex-start; gap: 7px;
+  padding: 3px 4px; border-radius: 6px;
+  transition: background 0.13s ease;
+}
+.card-sub:hover { background: var(--pj-bg-elevated); }
+
+.card-sub-box {
+  width: 15px; height: 15px; border: 2px solid var(--pj-border-strong);
+  border-radius: 5px; flex-shrink: 0; margin-top: 2px;
+  position: relative; cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.card-sub-box:hover { border-color: var(--pj-accent); }
+.card-sub-box::after {
+  content: ""; position: absolute; left: 3px; top: 0;
+  width: 4px; height: 8px;
+  border-right: 2px solid var(--pj-text-on-fill); border-bottom: 2px solid var(--pj-text-on-fill);
+  transform: rotate(45deg) scale(0); transition: transform 0.16s cubic-bezier(0.34,1.56,0.64,1);
+}
+.card-sub.on .card-sub-box { background: var(--pj-accent); border-color: var(--pj-accent); }
+.card-sub.on .card-sub-box::after { transform: rotate(45deg) scale(1); }
+
+.card-sub-text {
+  flex: 1; font-size: 12px; font-weight: 500; line-height: 1.45;
+  color: var(--pj-text-secondary); word-break: break-word;
+}
+.card-sub.on .card-sub-text { color: var(--pj-text-dim); text-decoration: line-through; }
+
+/* 카드 겉면 요약 — 창을 열지 않아도 보이게 */
+.task-mini { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 7px; }
+.mini-chip {
+  font-size: 11px; font-weight: 600; padding: 2px 8px;
+  border-radius: var(--pj-radius-pill);
+  background: var(--pj-bg-elevated); color: var(--pj-text-secondary);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.mini-chip.full { background: var(--pj-done-faint); color: var(--pj-done); }
+.mini-chip.soon { background: var(--pj-warn-faint); color: var(--pj-warn); }
+.mini-chip.over { background: var(--pj-danger-faint); color: var(--pj-danger); }
+.mini-chip.ok   { background: var(--pj-accent-faint); color: var(--pj-accent); }
 
 .task-btns { display: flex; gap: 2px; flex-shrink: 0; }
 .tb {
@@ -241,6 +292,162 @@ h1 {
 }
 .memo::placeholder { color: var(--pj-text-dim); font-weight: 400; }
 .memo:focus { outline: none; box-shadow: inset 0 0 0 2px var(--pj-accent); }
+
+/* ══════════════════════════════════════════
+   작업 상세창 — 카드를 누르면 가운데에 뜹니다
+   ══════════════════════════════════════════ */
+.tm-overlay {
+  position: fixed; inset: 0; background: var(--pj-scrim);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 40px 20px; overflow-y: auto; z-index: 90;
+}
+.tm-overlay[hidden] { display: none !important; }
+
+.tm {
+  background: var(--pj-bg-card);
+  border-radius: var(--pj-radius-xl);
+  box-shadow: var(--pj-shadow-lg);
+  width: 100%; max-width: 460px;
+  padding: 22px 22px 18px;
+}
+
+.tm-top { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.tm-lane {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600;
+  padding: 5px 12px; border-radius: var(--pj-radius-pill);
+  background: var(--pj-bg-elevated); color: var(--pj-text-strong);
+}
+.tm-lane.tone-accent { background: var(--pj-accent-faint); color: var(--pj-accent); }
+.tm-lane.tone-done   { background: var(--pj-done-faint);   color: var(--pj-done); }
+.tm-lane::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; flex-shrink: 0;
+}
+.tm-path { font-size: 12px; font-weight: 500; color: var(--pj-text-dim); }
+.tm-x {
+  margin-left: auto; font-family: inherit; font-size: 17px; line-height: 1;
+  color: var(--pj-text-dim); background: transparent; border: none;
+  border-radius: var(--pj-radius-pill); padding: 5px 9px; cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.tm-x:hover { background: var(--pj-bg-elevated); color: var(--pj-text-primary); }
+
+.tm-title {
+  display: block; width: 100%; resize: none; overflow: hidden;
+  font-family: inherit; font-size: 19px; font-weight: 700; line-height: 1.4;
+  letter-spacing: -0.03em; color: var(--pj-text-primary);
+  background: var(--pj-bg-elevated); border: none;
+  border-radius: var(--pj-radius-md); padding: 11px 13px; margin-bottom: 16px;
+  transition: box-shadow 0.15s ease;
+}
+.tm-title:focus { outline: none; box-shadow: inset 0 0 0 2px var(--pj-accent); }
+.tm-title::placeholder { color: var(--pj-text-dim); font-weight: 700; }
+
+.tm-row { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; flex-wrap: wrap; }
+.tm-lbl { font-size: 13px; font-weight: 500; color: var(--pj-text-secondary); width: 60px; flex-shrink: 0; }
+
+.tm-seg { display: flex; gap: 3px; background: var(--pj-bg-elevated); border-radius: var(--pj-radius-md); padding: 3px; }
+.tm-seg button {
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  color: var(--pj-text-secondary); background: transparent;
+  border: none; border-radius: var(--pj-radius-sm);
+  padding: 7px 13px; cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.tm-seg button:hover { color: var(--pj-text-primary); }
+.tm-seg button.on { background: var(--pj-bg-card); color: var(--pj-accent); }
+.tm-seg button.on.hot { color: var(--pj-danger); }
+
+.tm-sec { display: flex; align-items: center; gap: 9px; margin: 20px 0 8px; }
+.tm-sec b { font-size: 14px; font-weight: 600; }
+.tm-bar { flex: 1; height: 6px; background: var(--pj-bg-elevated); border-radius: 99px; overflow: hidden; }
+.tm-fill { height: 100%; width: 0; background: var(--pj-accent); border-radius: 99px; transition: width 0.3s ease; }
+.tm-fill.full { background: var(--pj-done); }
+.tm-pct { font-size: 12px; font-weight: 600; color: var(--pj-text-muted); font-variant-numeric: tabular-nums; }
+
+/* 세부 항목 */
+.sub {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 8px; border-radius: var(--pj-radius-sm);
+  transition: background 0.13s ease;
+}
+.sub:hover { background: var(--pj-bg-elevated); }
+.sub-box {
+  width: 18px; height: 18px; border: 2px solid var(--pj-border-strong);
+  border-radius: 6px; flex-shrink: 0; position: relative; cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.sub-box:hover { border-color: var(--pj-accent); }
+.sub-box::after {
+  content: ""; position: absolute; left: 4px; top: 0;
+  width: 5px; height: 10px;
+  border-right: 2px solid var(--pj-text-on-fill); border-bottom: 2px solid var(--pj-text-on-fill);
+  transform: rotate(45deg) scale(0); transition: transform 0.16s cubic-bezier(0.34,1.56,0.64,1);
+}
+.sub.on .sub-box { background: var(--pj-accent); border-color: var(--pj-accent); }
+.sub.on .sub-box::after { transform: rotate(45deg) scale(1); }
+
+.sub-text {
+  flex: 1; font-family: inherit; font-size: 13px; font-weight: 500;
+  color: var(--pj-text-primary); background: transparent;
+  border: none; border-radius: 6px; padding: 3px 5px;
+}
+.sub-text:focus { outline: none; box-shadow: inset 0 0 0 2px var(--pj-accent); background: var(--pj-bg-card); }
+.sub.on .sub-text { color: var(--pj-text-dim); text-decoration: line-through; }
+
+.sub-del {
+  font-family: inherit; font-size: 15px; line-height: 1; color: var(--pj-text-dim);
+  background: transparent; border: none; cursor: pointer; padding: 3px 7px;
+  border-radius: var(--pj-radius-pill); opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.sub:hover .sub-del { opacity: 1; }
+.sub-del:hover { color: var(--pj-danger); background: var(--pj-danger-faint); }
+
+.tm-add {
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  color: var(--pj-text-muted); background: transparent;
+  border: none; border-radius: var(--pj-radius-pill);
+  width: 100%; padding: 8px 10px; cursor: pointer; text-align: left;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.tm-add:hover { background: var(--pj-accent-faint); color: var(--pj-accent); }
+
+.tm-in {
+  font-family: inherit; font-size: 13px; font-weight: 500;
+  color: var(--pj-text-primary); background: var(--pj-bg-elevated);
+  border: none; border-radius: var(--pj-radius-sm);
+  padding: 9px 11px; width: 100%;
+  transition: box-shadow 0.15s ease;
+}
+.tm-in:focus { outline: none; box-shadow: inset 0 0 0 2px var(--pj-accent); }
+.tm-in::placeholder { color: var(--pj-text-dim); font-weight: 400; }
+
+/* 참고 링크 */
+.lnk { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--pj-radius-sm); }
+.lnk:hover { background: var(--pj-bg-elevated); }
+.lnk a {
+  flex: 1; font-size: 13px; font-weight: 500; color: var(--pj-accent);
+  text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lnk a:hover { text-decoration: underline; }
+
+.tm-memo {
+  display: block; width: 100%; min-height: 60px; resize: vertical;
+  font-family: inherit; font-size: 13px; font-weight: 500; line-height: 1.6;
+  color: var(--pj-text-primary); background: var(--pj-bg-elevated);
+  border: none; border-radius: var(--pj-radius-md); padding: 10px 12px;
+  transition: box-shadow 0.15s ease;
+}
+.tm-memo::placeholder { color: var(--pj-text-dim); font-weight: 400; }
+.tm-memo:focus { outline: none; box-shadow: inset 0 0 0 2px var(--pj-accent); }
+
+.tm-stamp {
+  font-size: 11.5px; color: var(--pj-text-dim);
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--pj-bg-elevated);
+}
+.tm-foot { display: flex; gap: 7px; justify-content: flex-end; margin-top: 12px; }
 
 /* ══════════════════════════════════════════
    확인창 — 추가·삭제 모두 같은 모양을 씁니다
@@ -356,6 +563,11 @@ h1 {
   <div id="panelHost"></div>
 </div>
 
+<!-- 작업 상세창 -->
+<div class="tm-overlay" id="tmOverlay" hidden>
+  <div class="tm" id="tm"></div>
+</div>
+
 <!-- 확인창 (추가·삭제 공용) -->
 <div class="dlg-overlay" id="dlgOverlay" hidden>
   <div class="dlg">
@@ -384,9 +596,6 @@ const ACTIVE_KEY = "kjc-projects-active-v2";
 
 let projects = [];
 let activeId = null;
-
-/* 지금 입력 중인 작업 id — 화면을 다시 그려도 커서를 잃지 않게 기억해 둡니다 */
-let focusedTaskId = null;
 
 /* ── 불러오기 (예전 구조는 자동 변환) ─────────────────────────────── */
 function load() {
@@ -620,6 +829,24 @@ function byId(id) {
 
 function lastColId() { return COLUMNS[COLUMNS.length - 1].id; }
 
+/* ── 마감일 ─────────────────────────────── */
+function daysLeft(dateStr) {
+  if (!dateStr) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(dateStr + "T00:00:00");
+  if (isNaN(due)) return null;
+  return Math.round((due - today) / 86400000);
+}
+
+function ddayInfo(d) {
+  if (d === null) return null;
+  if (d < 0)   return { text: "D+" + Math.abs(d), cls: "over" };
+  if (d === 0) return { text: "D-DAY", cls: "over" };
+  if (d <= DUE_SOON_DAYS) return { text: "D-" + d, cls: "soon" };
+  return { text: "D-" + d, cls: "ok" };
+}
+
 /* 어느 칸에 든 작업이 몇 개인지 (전체 프로젝트 합계) */
 function countIn(colId) {
   return projects.reduce(function (s, p) {
@@ -651,20 +878,6 @@ function render() {
   drawTabs();
   drawPanel();
   updateSummary();
-  restoreFocus();
-}
-
-/* 화면을 다시 그린 뒤, 입력 중이던 작업으로 커서를 되돌립니다.
-   (어떤 이유로든 다시 그려져도 글 쓰던 칸에서 튕겨 나가지 않게 하는 안전장치) */
-function restoreFocus() {
-  if (!focusedTaskId) return;
-  const el = panelHost.querySelector('[data-task-id="' + focusedTaskId + '"]');
-  if (!el || document.activeElement === el) return;
-  el.focus();
-  try {
-    const n = el.value.length;
-    el.setSelectionRange(n, n);
-  } catch (e) { /* 커서 위치 지정을 못 해도 포커스는 살아 있습니다 */ }
 }
 
 /* ── 탭 줄 ─────────────────────────────── */
@@ -841,45 +1054,56 @@ function buildLane(p, col, colIdx) {
 }
 
 /* ── 작업 카드 ─────────────────────────────── */
+/* 예전에 만든 작업에는 없던 칸을 채워 둡니다 (그대로 두면 undefined 가 됩니다) */
+function fillTask(t) {
+  if (!t.subs)  t.subs = [];
+  if (!t.links) t.links = [];
+  if (typeof t.due !== "string")      t.due = "";
+  if (typeof t.memo !== "string")     t.memo = "";
+  if (!t.priority)                    t.priority = "normal";
+  if (!t.createdAt)                   t.createdAt = Date.now();
+  return t;
+}
+
+function subStat(t) {
+  const list = t.subs || [];
+  const done = list.filter(function (s) { return s.done; }).length;
+  return { done: done, total: list.length, pct: list.length ? Math.round(done / list.length * 100) : 0 };
+}
+
+function touch(t) { t.updatedAt = Date.now(); }
+
+function stampText(t) {
+  function fmt(ms) {
+    if (!ms) return "—";
+    const d = new Date(ms);
+    return (d.getMonth() + 1) + "월 " + d.getDate() + "일";
+  }
+  return "만든 날 " + fmt(t.createdAt) + " · 마지막 수정 " + fmt(t.updatedAt || t.createdAt);
+}
+
 function buildTask(p, t, colIdx) {
+  fillTask(t);
+
   const el = document.createElement("div");
   el.className = "task" + (t.column === lastColId() ? " is-done" : "");
+  el.title = "눌러서 자세히 보기";
 
-  const txt = document.createElement("textarea");
-  txt.className = "task-text";
-  txt.rows = 1;
-  txt.placeholder = "작업 내용";
-  txt.value = t.text || "";
-  txt.dataset.taskId = t.id;
+  /* 윗줄 — 우선순위 점 + 내용 + 이동 버튼 */
+  const line = document.createElement("div");
+  line.className = "task-line";
 
-  txt.addEventListener("input", function () {
-    t.text = txt.value;
-    autoGrow(txt);
-    save();
-  });
+  if (t.priority === "high") {
+    const flag = document.createElement("span");
+    flag.className = "task-flag";
+    flag.title = "우선순위 높음";
+    line.appendChild(flag);
+  }
 
-  /* 입력 중인 칸을 기억해 둡니다 */
-  txt.addEventListener("focus", function () { focusedTaskId = t.id; });
-
-  /* 내용을 비워도 자동으로 지우지 않습니다.
-     삭제는 확인창을 거치는 것으로 규칙을 통일했습니다. */
-  txt.addEventListener("blur", function () {
-    if (focusedTaskId === t.id) focusedTaskId = null;
-  });
-
-  txt.addEventListener("keydown", function (e) {
-    if (e.key !== "Enter") return;
-    /* 한글 조합 중의 Enter 는 글자를 확정하는 키라 건드리지 않습니다 */
-    if (e.isComposing || e.keyCode === 229) return;
-    if (e.shiftKey) return;              /* Shift+Enter 는 줄바꿈 */
-    e.preventDefault();
-    t.text = txt.value;
-    save();
-    txt.blur();                          /* 저장하고 칸에서 빠져나옵니다 */
-  });
-
-  el.appendChild(txt);
-  requestAnimationFrame(function () { autoGrow(txt); });
+  const txt = document.createElement("div");
+  txt.className = "task-text" + (t.text ? "" : " task-empty");
+  txt.textContent = t.text || "내용 없음";
+  line.appendChild(txt);
 
   const btns = document.createElement("div");
   btns.className = "task-btns";
@@ -889,9 +1113,10 @@ function buildTask(p, t, colIdx) {
   left.textContent = "‹";
   left.title = "왼쪽 칸으로";
   left.disabled = colIdx === 0;
-  left.addEventListener("click", function () {
+  left.addEventListener("click", function (e) {
+    e.stopPropagation();                 /* 카드 열기와 겹치지 않게 */
     t.column = COLUMNS[colIdx - 1].id;
-    save(); render();
+    touch(t); save(); render();
   });
   btns.appendChild(left);
 
@@ -900,16 +1125,366 @@ function buildTask(p, t, colIdx) {
   right.textContent = "›";
   right.title = "오른쪽 칸으로";
   right.disabled = colIdx === COLUMNS.length - 1;
-  right.addEventListener("click", function () {
+  right.addEventListener("click", function (e) {
+    e.stopPropagation();
     t.column = COLUMNS[colIdx + 1].id;
-    save(); render();
+    touch(t); save(); render();
   });
   btns.appendChild(right);
 
+  line.appendChild(btns);
+  el.appendChild(line);
+
+  /* 세부 항목 — 카드에 펼쳐서 보여주고, 여기서 바로 체크합니다 */
+  if ((t.subs || []).length) {
+    const box = document.createElement("div");
+    box.className = "card-subs";
+
+    t.subs.forEach(function (s) {
+      const row = document.createElement("div");
+      row.className = "card-sub" + (s.done ? " on" : "");
+
+      const chk = document.createElement("span");
+      chk.className = "card-sub-box";
+      chk.title = s.done ? "체크 해제" : "체크";
+      chk.addEventListener("click", function (e) {
+        e.stopPropagation();          /* 카드가 열리지 않게 */
+        s.done = !s.done;
+        touch(t);
+        save();
+        render();
+      });
+      row.appendChild(chk);
+
+      const txt = document.createElement("span");
+      txt.className = "card-sub-text";
+      txt.textContent = s.text || "";
+      row.appendChild(txt);
+
+      /* 글자를 누르면 카드가 열립니다 (수정은 창에서) */
+      box.appendChild(row);
+    });
+
+    el.appendChild(box);
+  }
+
+  /* 아랫줄 — 창을 열지 않아도 보이는 요약 */
+  const mini = document.createElement("div");
+  mini.className = "task-mini";
+
+  const st = subStat(t);
+  if (st.total) {
+    const c = document.createElement("span");
+    c.className = "mini-chip" + (st.done === st.total ? " full" : "");
+    c.textContent = "☑ " + st.done + "/" + st.total;
+    mini.appendChild(c);
+  }
+
+  const dd = ddayInfo(daysLeft(t.due));
+  if (dd && t.column !== lastColId()) {
+    const c = document.createElement("span");
+    c.className = "mini-chip " + dd.cls;
+    c.textContent = dd.text;
+    mini.appendChild(c);
+  }
+
+  if ((t.links || []).length) {
+    const c = document.createElement("span");
+    c.className = "mini-chip";
+    c.textContent = "🔗 " + t.links.length;
+    mini.appendChild(c);
+  }
+
+  if ((t.memo || "").trim()) {
+    const c = document.createElement("span");
+    c.className = "mini-chip";
+    c.textContent = "메모";
+    mini.appendChild(c);
+  }
+
+  if (mini.children.length) el.appendChild(mini);
+
+  el.addEventListener("click", function () { openTask(p, t); });
+  return el;
+}
+
+/* ══════════════════════════════════════════
+   작업 상세창
+     카드를 누르면 뜹니다. 수정은 전부 여기서 합니다.
+   ══════════════════════════════════════════ */
+const tmOverlay = document.getElementById("tmOverlay");
+const tmBox = document.getElementById("tm");
+let openTaskRef = null;   /* { p, t } */
+
+function openTask(p, t) {
+  openTaskRef = { p: p, t: fillTask(t) };
+  drawTask();
+  tmOverlay.hidden = false;
+}
+
+function closeTask() {
+  openTaskRef = null;
+  tmOverlay.hidden = true;
+  render();               /* 카드 겉면 요약을 갱신합니다 */
+}
+
+tmOverlay.addEventListener("click", function (e) {
+  if (e.target === tmOverlay) closeTask();
+});
+
+document.addEventListener("keydown", function (e) {
+  if (tmOverlay.hidden) return;
+  if (!dlg.overlay.hidden) return;       /* 확인창이 위에 떠 있으면 그쪽이 먼저 */
+  if (e.key === "Escape") { e.preventDefault(); closeTask(); }
+});
+
+function drawTask() {
+  if (!openTaskRef) return;
+  const p = openTaskRef.p;
+  const t = openTaskRef.t;
+
+  tmBox.innerHTML = "";
+
+  /* ── 윗줄: 현재 칸 · 프로젝트 · 닫기 ── */
+  const col = COLUMNS.filter(function (c) { return c.id === t.column; })[0] || COLUMNS[0];
+
+  const top = document.createElement("div");
+  top.className = "tm-top";
+  top.innerHTML = '<span class="tm-lane tone-' + (col.tone || "neutral") + '"></span>'
+    + '<span class="tm-path"></span>'
+    + '<button class="tm-x" title="닫기">✕</button>';
+  top.querySelector(".tm-lane").textContent = col.label;
+  top.querySelector(".tm-path").textContent = p.name || "이름 없는 프로젝트";
+  top.querySelector(".tm-x").addEventListener("click", closeTask);
+  tmBox.appendChild(top);
+
+  /* ── 제목 (여기서 수정) ── */
+  const title = document.createElement("textarea");
+  title.className = "tm-title";
+  title.rows = 1;
+  title.placeholder = "작업 내용";
+  title.value = t.text || "";
+  title.addEventListener("input", function () {
+    t.text = title.value;
+    autoGrow(title);
+    touch(t); save();
+  });
+  title.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    if (e.isComposing || e.keyCode === 229) return;   /* 한글 조합 확정 */
+    if (e.shiftKey) return;
+    e.preventDefault();
+    title.blur();
+  });
+  tmBox.appendChild(title);
+  requestAnimationFrame(function () { autoGrow(title); });
+
+  /* ── 상태 ── */
+  const rState = document.createElement("div");
+  rState.className = "tm-row";
+  rState.innerHTML = '<span class="tm-lbl">상태</span>';
+  const segState = document.createElement("div");
+  segState.className = "tm-seg";
+  COLUMNS.forEach(function (c) {
+    const b = document.createElement("button");
+    b.className = t.column === c.id ? "on" : "";
+    b.textContent = c.label;
+    b.addEventListener("click", function () {
+      t.column = c.id;
+      touch(t); save();
+      drawTask();
+    });
+    segState.appendChild(b);
+  });
+  rState.appendChild(segState);
+  tmBox.appendChild(rState);
+
+  /* ── 마감일 ── */
+  const rDue = document.createElement("div");
+  rDue.className = "tm-row";
+  rDue.innerHTML = '<span class="tm-lbl">마감</span>';
+
+  const due = document.createElement("input");
+  due.type = "date";
+  due.className = "tm-in";
+  due.style.width = "150px";
+  due.value = t.due || "";
+  due.addEventListener("change", function () {
+    t.due = due.value;
+    touch(t); save();
+    drawTask();
+  });
+  rDue.appendChild(due);
+
+  const dd = ddayInfo(daysLeft(t.due));
+  const ddChip = document.createElement("span");
+  ddChip.className = "mini-chip " + (dd ? dd.cls : "");
+  ddChip.textContent = dd ? dd.text : "없음";
+  rDue.appendChild(ddChip);
+  tmBox.appendChild(rDue);
+
+  /* ── 우선순위 ── */
+  const rPrio = document.createElement("div");
+  rPrio.className = "tm-row";
+  rPrio.innerHTML = '<span class="tm-lbl">우선순위</span>';
+  const segPrio = document.createElement("div");
+  segPrio.className = "tm-seg";
+  [["low", "낮음"], ["normal", "보통"], ["high", "높음"]].forEach(function (pair) {
+    const b = document.createElement("button");
+    b.className = (t.priority === pair[0] ? "on" : "") + (pair[0] === "high" ? " hot" : "");
+    b.textContent = pair[1];
+    b.addEventListener("click", function () {
+      t.priority = pair[0];
+      touch(t); save();
+      drawTask();
+    });
+    segPrio.appendChild(b);
+  });
+  rPrio.appendChild(segPrio);
+  tmBox.appendChild(rPrio);
+
+  /* ── 세부 항목 ── */
+  const st = subStat(t);
+  const secSub = document.createElement("div");
+  secSub.className = "tm-sec";
+  secSub.innerHTML = '<b>세부 항목</b>'
+    + '<div class="tm-bar"><div class="tm-fill"></div></div>'
+    + '<span class="tm-pct"></span>';
+  const fill = secSub.querySelector(".tm-fill");
+  fill.style.width = st.pct + "%";
+  fill.classList.toggle("full", st.total > 0 && st.done === st.total);
+  secSub.querySelector(".tm-pct").textContent = st.total ? st.done + "/" + st.total + " · " + st.pct + "%" : "없음";
+  tmBox.appendChild(secSub);
+
+  t.subs.forEach(function (s) {
+    const row = document.createElement("div");
+    row.className = "sub" + (s.done ? " on" : "");
+
+    const box = document.createElement("div");
+    box.className = "sub-box";
+    box.addEventListener("click", function () {
+      s.done = !s.done;
+      touch(t); save();
+      drawTask();
+      render();          /* 뒤에 있는 카드도 같이 갱신 */
+    });
+    row.appendChild(box);
+
+    const txt = document.createElement("input");
+    txt.className = "sub-text";
+    txt.value = s.text || "";
+    txt.addEventListener("input", function () { s.text = txt.value; touch(t); save(); });
+    row.appendChild(txt);
+
+    const del = document.createElement("button");
+    del.className = "sub-del";
+    del.textContent = "×";
+    del.title = "이 항목 삭제";
+    del.addEventListener("click", function () {
+      t.subs = t.subs.filter(function (x) { return x.id !== s.id; });
+      touch(t); save();
+      drawTask();
+    });
+    row.appendChild(del);
+
+    tmBox.appendChild(row);
+  });
+
+  /* 세부 항목 추가 — 적고 Enter 로 계속 넣습니다 */
+  const subAdd = document.createElement("input");
+  subAdd.className = "tm-in";
+  subAdd.placeholder = "세부 항목을 적고 Enter";
+  subAdd.style.marginTop = "6px";
+  subAdd.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    if (e.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    const v = subAdd.value.trim();
+    if (!v) return;
+    t.subs.push({ id: "s" + Date.now() + Math.random().toString(36).slice(2, 5), text: v, done: false });
+    touch(t); save();
+    drawTask();
+    const box = tmBox.querySelector(".tm-in[placeholder^='세부']");
+    if (box) box.focus();
+  });
+  tmBox.appendChild(subAdd);
+
+  /* ── 참고 링크 ── */
+  const secLink = document.createElement("div");
+  secLink.className = "tm-sec";
+  secLink.innerHTML = '<b>참고 링크</b>';
+  tmBox.appendChild(secLink);
+
+  t.links.forEach(function (l) {
+    const row = document.createElement("div");
+    row.className = "lnk";
+
+    const a = document.createElement("a");
+    a.href = l.url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = "🔗 " + (l.url || "");
+    row.appendChild(a);
+
+    const del = document.createElement("button");
+    del.className = "sub-del";
+    del.style.opacity = "1";
+    del.textContent = "×";
+    del.title = "이 링크 삭제";
+    del.addEventListener("click", function () {
+      t.links = t.links.filter(function (x) { return x.id !== l.id; });
+      touch(t); save();
+      drawTask();
+    });
+    row.appendChild(del);
+
+    tmBox.appendChild(row);
+  });
+
+  const linkAdd = document.createElement("input");
+  linkAdd.className = "tm-in";
+  linkAdd.placeholder = "주소를 붙여넣고 Enter";
+  linkAdd.style.marginTop = "6px";
+  linkAdd.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    if (e.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    let v = linkAdd.value.trim();
+    if (!v) return;
+    if (!/^https?:\/\//i.test(v)) v = "https://" + v;   /* http 가 없으면 붙여 줍니다 */
+    t.links.push({ id: "l" + Date.now() + Math.random().toString(36).slice(2, 5), url: v });
+    touch(t); save();
+    drawTask();
+  });
+  tmBox.appendChild(linkAdd);
+
+  /* ── 메모 ── */
+  const secMemo = document.createElement("div");
+  secMemo.className = "tm-sec";
+  secMemo.innerHTML = '<b>메모</b>';
+  tmBox.appendChild(secMemo);
+
+  const memo = document.createElement("textarea");
+  memo.className = "tm-memo";
+  memo.placeholder = "이 작업에 대한 메모";
+  memo.value = t.memo || "";
+  memo.addEventListener("input", function () { t.memo = memo.value; touch(t); save(); });
+  tmBox.appendChild(memo);
+
+  /* ── 날짜 ── */
+  const stamp = document.createElement("div");
+  stamp.className = "tm-stamp";
+  stamp.textContent = stampText(t);
+  tmBox.appendChild(stamp);
+
+  /* ── 아래 버튼 ── */
+  const foot = document.createElement("div");
+  foot.className = "tm-foot";
+
   const del = document.createElement("button");
-  del.className = "tb del";
-  del.textContent = "×";
-  del.title = "이 작업 삭제";
+  del.className = "btn";
+  del.style.color = "var(--pj-danger)";
+  del.textContent = "삭제";
   del.addEventListener("click", function () {
     ask({
       title: "작업 삭제",
@@ -920,13 +1495,19 @@ function buildTask(p, t, colIdx) {
     }).then(function (ok) {
       if (!ok) return;
       p.tasks = p.tasks.filter(function (x) { return x.id !== t.id; });
-      save(); render();
+      save();
+      closeTask();
     });
   });
-  btns.appendChild(del);
+  foot.appendChild(del);
 
-  el.appendChild(btns);
-  return el;
+  const close = document.createElement("button");
+  close.className = "btn primary";
+  close.textContent = "확인";
+  close.addEventListener("click", closeTask);
+  foot.appendChild(close);
+
+  tmBox.appendChild(foot);
 }
 
 /* ── 추가 ─────────────────────────────── */
