@@ -119,7 +119,8 @@ export function fmtShareCount(n) {
 /* 오를 때 빨강, 내릴 때 파랑 (한국식) */
 export function dirClass(n) {
   if (n == null) return 'kh-mut';
-  return n >= 0 ? 'kh-up' : 'kh-down';
+  if (n === 0) return 'kh-flat';   // 보합 — 빨강도 파랑도 아니다
+  return n > 0 ? 'kh-up' : 'kh-down';
 }
 
 /* 증감 표기 — "▲ 1,200원 (1.59%)" */
@@ -128,3 +129,50 @@ export function fmtDelta(amount, pct, unit = '원', digits = 0) {
   const mark = amount >= 0 ? '▲' : '▼';
   return `${mark} ${fmtNum(Math.abs(amount), digits)}${unit} (${Math.abs(pct).toFixed(2)}%)`;
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   지금이 어느 장인가
+
+   넥스트레이드(대체거래소)가 생기면서 08:00 부터 20:00 까지 거래가 이어집니다.
+   정규장 밖에서는 종목 값은 움직이지만 **지수는 움직이지 않습니다.**
+   지수가 0.00% 로 멈춰 있는 게 고장이 아니라는 걸 화면에 적어주기 위한 함수입니다.
+
+   확인한 것 (2026-09-14)
+     넥스트레이드 프리마켓 08:00~08:50 · 전체 운영 08:00~20:00
+   판단 기준은 한국 시각(KST)이다. 보는 사람 PC 시계와 무관하다.
+
+   확인하지 못한 것
+     애프터마켓 시작 시각. 공식 페이지가 자바스크립트로 그려져 읽지 못했습니다.
+     그래서 정규장이 끝난 뒤(15:30~20:00)를 뭉뚱그려 '애프터마켓' 으로 봅니다.
+     공휴일도 가리지 못합니다.
+   ────────────────────────────────────────────────────────────────────────── */
+
+export function marketPhase(now = new Date()) {
+  /* 한국 시각으로 고정한다. 보는 사람의 PC 시계가 무엇이든 같은 답이 나와야 한다.
+     서버(kis_proxy.py)와 배포용 워커(kis-worker.js)도 KST 로 판단하므로,
+     여기만 브라우저 로컬 시각을 쓰면 화면 문구와 실제 시세 기준이 어긋난다.
+     실제로 PC 를 UTC 로 두고 돌려보면 한국 09:00~15:00 내내
+     화면은 "장 마감", 서버는 정규장(J)으로 조회한다.
+     보정 방식은 kis-worker.js 의 quoteMarketDiv 와 같게 맞췄다. */
+  const kst = new Date(now.getTime() + 9 * 3600 * 1000);
+  const day = kst.getUTCDay();                 // 0 일요일 · 6 토요일
+  if (day === 0 || day === 6) {
+    return { id: 'closed', label: '주말 · 장 마감', note: '다음 개장 월요일 09:00' };
+  }
+
+  const hm = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  if (hm >= 480 && hm < 530) {      // 08:00 ~ 08:50
+    return { id: 'pre', label: '프리마켓', note: '넥스트레이드 · 08:50까지' };
+  }
+  if (hm >= 530 && hm < 540) {      // 08:50 ~ 09:00 — 프리마켓은 끝났고 정규장 전
+    return { id: 'preclose', label: '개장 전', note: '09:00 개장' };
+  }
+  if (hm >= 540 && hm < 930) {      // 09:00 ~ 15:30
+    return { id: 'regular', label: '장중', note: '15:30까지' };
+  }
+  if (hm >= 930 && hm < 1200) {     // 15:30 ~ 20:00
+    return { id: 'after', label: '애프터마켓', note: '넥스트레이드 · 20:00까지' };
+  }
+  return { id: 'closed', label: '장 마감', note: '다음 개장 09:00' };
+}
+

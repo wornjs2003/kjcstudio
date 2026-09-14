@@ -8,8 +8,10 @@
 import { WATCHLIST } from './data/market.js';
 import { fetchCandles, createStockChart } from './chart.js';
 import { color } from './theme.js';
-import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, dirClass } from './utils/format.js';
+import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, dirClass, marketPhase }
+  from './utils/format.js';
 import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop } from './components/frame.js';
+import { tickClass } from './utils/tick.js';
 
 /* 서버가 주는 지수 3개 + 아직 받아올 곳이 없는 것들.
    ─ 할 일: 해외 지수·환율·원자재를 우리 서버가 야후에서 받아 중계하기 */
@@ -28,6 +30,11 @@ const INDEX_CELLS = [
 const $ = id => document.getElementById(id);
 let selectedCode = WATCHLIST[0].code;
 
+/* 마지막으로 시세를 받은 시각.
+   가격이 한동안 그대로일 때가 있어서(체결이 같은 값에 머무는 구간),
+   "언제 받았는지" 를 보여줘야 갱신이 돌고 있다는 걸 알 수 있다. */
+let lastTickAt = null;
+
 /* ── 작은 추이선 ─────────────────────────── */
 function sparkSvg(series, isUp, w, h) {
   if (!series || series.length < 2) return '';
@@ -44,10 +51,31 @@ function sparkSvg(series, isUp, w, h) {
 
 /* ── 장 상태 · 기준 시각 ─────────────────── */
 function paintClock() {
-  const d = new Date();
+  const now = new Date();
   const p = x => String(x).padStart(2, '0');
+  const phase = marketPhase(now);
+
+  /* "· 10:05:32 받음 · 장중 (15:30까지)"
+     앞쪽은 시세를 마지막으로 받은 시각(초까지), 괄호 안은 장이 언제까지인지.
+     괄호는 흐리게 — 장 이름이 먼저 눈에 들어와야 한다. */
   const el = $('kh-asof');
-  if (el) el.textContent = `· 오늘 ${p(d.getHours())}:${p(d.getMinutes())} 기준`;
+  if (el) {
+    const got = lastTickAt
+      ? `${p(lastTickAt.getHours())}:${p(lastTickAt.getMinutes())}:${p(lastTickAt.getSeconds())} 받음`
+      : '불러오는 중';
+    el.innerHTML = `· ${got} · ${phase.label}` +
+      `<span class="kh-mut"> (${phase.note})</span>`;
+  }
+
+  /* 지수는 정규장에만 산출된다. 프리마켓·애프터마켓에는 0.00% 로 멈춰 있는데,
+     고장이 아니라는 걸 적어 둔다. */
+  const foot = $('kh-big-foot');
+  if (foot) {
+    foot.innerHTML = phase.id === 'regular' || phase.id === 'closed'
+      ? `<span>60거래일 추이</span><span>한국투자증권 실시간</span>`
+      : `<span>60거래일 추이</span>
+         <span class="kh-mut">지수는 정규장(09:00~15:30)에만 움직입니다</span>`;
+  }
 }
 
 /* ── 지수 ───────────────────────────────── */
@@ -57,7 +85,7 @@ function paintIndices(indices) {
   const kospi = byCode.KOSPI;
   if (kospi) {
     const cls = dirClass(kospi.changePct);
-    $('kh-big-v').className = 'kh-big-v kh-num ' + cls;
+    $('kh-big-v').className = 'kh-big-v kh-num ' + cls + ' ' + tickClass('idx:KOSPI', kospi.value);
     $('kh-big-v').textContent = fmtNum(kospi.value, 2);
     $('kh-big-c').className = 'kh-big-c kh-num ' + cls;
     $('kh-big-c').textContent = fmtDelta(kospi.change, kospi.changePct, '', 2);
@@ -80,7 +108,7 @@ function paintIndices(indices) {
       <div class="kh-ig-spark">${sparkSvg(i.series, i.changePct >= 0, 52, 28)}</div>
       <div class="kh-ig-txt">
         <div class="kh-ig-n">${cell.name}</div>
-        <div class="kh-ig-v kh-num ${cls}">${fmtNum(i.value, 2)}</div>
+        <div class="kh-ig-v kh-num ${cls} ${tickClass('idx:' + i.code, i.value)}">${fmtNum(i.value, 2)}</div>
         <div class="kh-ig-c kh-num ${cls}">${fmtDelta(i.change, i.changePct, '', 2)}</div>
       </div></div>`;
   }).join('');
@@ -97,7 +125,8 @@ function paintRows(priceMap) {
       <td class="l"><span class="kh-nm">
         <span class="kh-ic" style="background:${s.brand}">${s.name.slice(0, 2)}</span>
         <b>${s.name}</b></span></td>
-      <td class="kh-num">${live ? fmtWon(live.price) : '—'}</td>
+      <td class="kh-num"><span class="${tickClass('row:' + s.code, live && live.price)}"
+        >${live ? fmtWon(live.price) : '—'}</span></td>
       <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(live.pct) : '—'}</td>
       <td class="kh-num">${value}</td>
       <td class="kh-num">${live ? fmtMoneyKr(live.marketCap) : '—'}</td>
@@ -130,7 +159,7 @@ function paintPreview(priceMap) {
 
   const el = $('kh-pv-v');
   if (live) {
-    el.className = 'kh-pv-v kh-num ' + dirClass(live.pct);
+    el.className = 'kh-pv-v kh-num ' + dirClass(live.pct) + ' ' + tickClass('pv:' + s.code, live.price);
     el.textContent = `${fmtWon(live.price)}  ${fmtPct(live.pct)}`;
   } else {
     el.className = 'kh-pv-v kh-num kh-mut';
@@ -179,7 +208,14 @@ drawPreviewChart();
 
 startLiveLoop({
   onIndices(indices) { paintIndices(indices); foot.update(indices); },
-  onPrices(prices)   { lastPrices = prices; paintRows(prices); side.update(prices); paintPreview(prices); },
+  onPrices(prices)   {
+    lastTickAt = new Date();
+    lastPrices = prices;
+    paintClock();                 // 받은 시각을 바로 반영
+    paintRows(prices);
+    side.update(prices);
+    paintPreview(prices);
+  },
 });
 
 /* 공지 배너 닫기 */

@@ -23,6 +23,7 @@ body {
 
 .kh-up   { color: var(--kh-up); }
 .kh-down { color: var(--kh-down); }
+.kh-flat { color: var(--kh-flat); }
 .kh-mut  { color: var(--kh-text-muted); }
 
 .kh-card { background: var(--kh-bg-card); border-radius: var(--kh-radius-lg); }
@@ -193,4 +194,44 @@ body {
     z-index: 49;
   }
   body { padding-bottom: 106px; }
+}
+
+/* ── 값이 새로 들어왔다는 표시 ──────────────
+   갱신될 때마다 숫자가 살짝 커졌다 돌아오고, 값이 바뀌었으면
+   방향에 따라 배경이 한 번 물든다. (js/utils/tick.js 가 클래스를 붙인다) */
+@keyframes kh-tick-pop {
+  from { transform: scale(1.07); }
+  to   { transform: scale(1); }
+}
+@keyframes kh-tick-up-bg {
+  from { background: rgb(var(--kh-up-rgb) / 20%); }
+  to   { background: transparent; }
+}
+@keyframes kh-tick-down-bg {
+  from { background: rgb(var(--kh-down-rgb) / 20%); }
+  to   { background: transparent; }
+}
+
+.kh-tick {
+  animation: kh-tick-pop 380ms ease-out;
+  display: inline-block;          /* transform 이 먹으려면 필요하다 */
+}
+.kh-tick-up {
+  animation: kh-tick-pop 380ms ease-out, kh-tick-up-bg 800ms ease-out;
+  border-radius: 5px;
+  padding: 0 3px;
+  margin: 0 -3px;                 /* 배경만 넓히고 자리는 그대로 */
+}
+.kh-tick-down {
+  animation: kh-tick-pop 380ms ease-out, kh-tick-down-bg 800ms ease-out;
+  border-radius: 5px;
+  padding: 0 3px;
+  margin: 0 -3px;
+}
+
+/* 움직임을 줄여 달라고 설정한 분에게는 배경만 잠깐 물들인다 */
+@media (prefers-reduced-motion: reduce) {
+  .kh-tick { animation: none; }
+  .kh-tick-up   { animation: kh-tick-up-bg 800ms ease-out; }
+  .kh-tick-down { animation: kh-tick-down-bg 800ms ease-out; }
 }
