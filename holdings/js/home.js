@@ -784,15 +784,26 @@ const side = mountWatchSide($('kh-side'), { activeCode: null });
 /* 주요 일정 · 최근 공시는 관심종목 아래에 둔다 (2026-09-14 지시).
    사이드바는 시세가 들어와도 목록만 다시 그리므로 여기 넣은 것은 깜빡이지 않는다. */
 if (side.slot) {
+  /* 두 칸 다 '더보기' 로 뉴스·공시 화면에 간다 (2026-09-15 지시).
+     여기 보이는 것은 맛보기고, 전체는 그 화면에 있다. */
   side.slot.innerHTML = `
     <div class="kh-side-sec">
       <div class="kh-sched-h"><span>주요 일정</span><span class="kh-mut">›</span></div>
-      <div class="kh-sched-i"><span class="d"></span>연결 예정 — 한국은행 경제통계</div>
-      <div class="kh-sched-i"><span class="d"></span>연결 예정 — 실적 발표 일정</div>
+      <div class="kh-sched-b">
+        <div class="kh-sched-i"><span class="d"></span>연결 예정 — 한국은행 경제통계</div>
+        <div class="kh-sched-i"><span class="d"></span>연결 예정 — 실적 발표 일정</div>
+      </div>
+      <a class="kh-sec-more" href="./news.html">더보기</a>
     </div>
     <div class="kh-side-sec">
-      <div class="kh-sched-h"><span>최근 공시</span><span class="kh-mut">OpenDART</span></div>
-      <div class="kh-dc" id="kh-dc-all"></div>
+      <div class="kh-sched-h"><span>뉴스</span><span class="kh-mut">구글 뉴스</span></div>
+      <div class="kh-sched-b" id="kh-side-news"></div>
+      <a class="kh-sec-more" href="./news.html">더보기</a>
+    </div>
+    <div class="kh-side-sec">
+      <div class="kh-sched-h"><span>공시</span><span class="kh-mut">OpenDART</span></div>
+      <div class="kh-sched-b"><div class="kh-dc" id="kh-dc-all"></div></div>
+      <a class="kh-sec-more" href="./news.html">더보기</a>
     </div>`;
 }
 mountVBar($('kh-vbar'), 'watch');
@@ -842,6 +853,46 @@ drawPreviewChart();
    서버(server/dart.py)가 5분마다 받아 두므로 화면도 같은 주기로 다시 읽는다.
    오른쪽은 감시 대상 200종목 전체, 미리보기 안쪽은 지금 고른 종목만. */
 const dcAll = mountDisclosures($('kh-dc-all'), { limit: 10, showName: true });
+
+/* ── 사이드바 뉴스 ──
+   맛보기로 몇 줄만 보여준다. 전체는 '더보기' 로 뉴스·공시 화면에서 본다
+   (2026-09-15 지시). 주제어와 걸러내는 규칙은 서버가 쥐고 있으므로
+   여기서는 받아서 줄만 그린다. */
+const SIDE_NEWS_N = 5;
+const SIDE_NEWS_MS = 180_000;        // 서버 캐시와 같은 주기. 더 자주 물을 이유가 없다
+
+function esc(t) {
+  return String(t == null ? '' : t).replace(/[&<>"]/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+async function drawSideNews() {
+  const host = $('kh-side-news');
+  if (!host) return;
+  let rows = null;
+  try {
+    const r = await fetch('/api/news/issues', { cache: 'no-store' });
+    const j = await r.json();
+    if (j && j.ok && Array.isArray(j.data)) rows = j.data;
+  } catch { /* 아래에서 못 받았다고 적는다 */ }
+
+  if (!rows) {
+    host.innerHTML = `<div class="kh-sched-i kh-mut">뉴스를 불러오지 못했습니다</div>`;
+    return;
+  }
+  if (!rows.length) {
+    host.innerHTML = `<div class="kh-sched-i kh-mut">받은 뉴스가 없습니다</div>`;
+    return;
+  }
+  host.innerHTML = rows.slice(0, SIDE_NEWS_N).map(x => `
+    <a class="kh-side-news-i" href="${esc(x.link)}" target="_blank" rel="noopener">
+      <i>${esc(x.topicLabel || '')}</i>
+      <span>${esc(x.title)}</span>
+    </a>`).join('');
+}
+
+drawSideNews();
+setInterval(() => { if (!document.hidden) drawSideNews(); }, SIDE_NEWS_MS);
 let dcOne = null;
 function drawPickedDisclosures() {
   dcOne = mountDisclosures($('kh-dc-one'),

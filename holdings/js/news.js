@@ -331,6 +331,20 @@ function paintDc() {
     : `<div class="kh-soon"><div class="kh-soon-t">해당하는 공시가 없습니다</div></div>`;
 }
 
+/* ── 주요 일정 ──────────────────────────────────────────────
+
+   아직 받아올 곳을 붙이지 않았다. 무엇이 비어 있고 무엇을 붙이면 채워지는지
+   화면에 적어 둔다 (CLAUDE.md 데이터 규칙 — 그럴듯한 숫자를 박아두지 않는다). */
+function paintSched() {
+  const host = $('kh-nw-sched');
+  if (!host) return;
+  host.innerHTML = `
+    <div class="kh-soon">
+      <div class="kh-soon-t">실적 발표 · 지표 발표 일정</div>
+      <div class="kh-soon-s">붙일 것: 한국은행 경제통계 · 거래소 실적 일정</div>
+    </div>`;
+}
+
 /* ── 머리말 ─────────────────────────────────────────────── */
 
 function paintHead() {
@@ -356,6 +370,7 @@ async function refresh() {
   paintNews();
   paintDcChips();
   paintDc();
+  paintSched();
   paintHead();
 }
 

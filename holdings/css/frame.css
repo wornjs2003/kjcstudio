@@ -299,7 +299,52 @@ body {
   width: 5px; height: 5px; border-radius: 50%;
   background: var(--kh-tag-news); flex-shrink: 0;
 }
-.kh-side-sec .kh-dc { max-height: 260px; }
+
+/* 주요 일정과 최근 공시의 키를 맞춘다 (2026-09-15 지시).
+
+   전에는 일정이 두 줄이라 짧고 공시는 260px 까지 늘어나, 두 칸이 서로
+   다른 크기로 붙어 있었다. 같은 높이로 두고 넘치면 그 안에서 스크롤한다.
+   전체는 '더보기' 로 뉴스·공시 화면에서 본다. */
+.kh-side-sec .kh-sched-b {
+  height: 148px; overflow-y: auto;
+}
+.kh-side-sec .kh-dc { max-height: none; }
+
+/* 사이드바 뉴스 한 줄. 제목이 길어도 두 줄에서 끊는다 (2026-09-15) */
+.kh-side-news-i {
+  display: block; text-decoration: none; color: inherit;
+  padding: 5px 0; font-size: 0.78rem; line-height: 1.45;
+}
+.kh-side-news-i:hover { color: var(--kh-accent); }
+.kh-side-news-i i {
+  font-style: normal; font-size: 0.7rem; margin-right: 5px;
+  color: var(--kh-text-muted);
+}
+.kh-side-news-i span {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 더보기 — 이 칸에 다 못 담은 것을 보러 간다.
+   순위표의 국내·해외 칩(.kh-chip)과 같은 모양으로 맞췄다 (2026-09-15 지시).
+
+   이름이 kh-sec-more 인 이유 — css/home.css 에 순위표용 .kh-more 가 이미
+   있었다. 같은 이름을 쓰면 나중에 읽히는 home.css 가 이것을 덮는다.
+   실제로 그래서 버튼이 폭을 다 채운 채로 나왔다. */
+.kh-sec-more {
+  display: inline-block; margin-top: 10px;
+  padding: 6px 12px; border-radius: 999px; text-decoration: none;
+  background: var(--kh-bg-surface); color: var(--kh-text-secondary);
+  font-size: 0.78rem;
+}
+.kh-sec-more:hover { color: var(--kh-text-primary); }
+
+/* 패널 머리에 붙는 더보기 (종목 화면의 뉴스·공시) */
+.kh-w-more {
+  margin-left: auto; text-decoration: none;
+  font-size: 0.73rem; font-weight: 500; color: var(--kh-text-secondary);
+}
+.kh-w-more:hover { color: var(--kh-accent); }
 
 
 /* ==========================================================================

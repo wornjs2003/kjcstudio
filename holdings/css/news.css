@@ -42,9 +42,18 @@
 
 /* ── 좌우 반반 ──────────────────────────────────────────── */
 
+/* 뉴스 · 공시 · 주요 일정을 가로로 나란히 (2026-09-15 지시).
+
+   뉴스가 절반, 나머지 절반을 공시와 주요 일정이 나눠 쓴다.
+
+   키를 여기서 한 번 정한다. 정하지 않으면 안쪽 목록이 내용만큼 늘어나
+   세 칸의 아래가 들쭉날쭉해진다. 정해두면 각자 그 안에서 스크롤한다. */
 .kh-nw-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
-  align-items: start;
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-rows: 660px;
+  gap: 14px;
+  align-items: stretch;
 }
 
 /* ── 갈래 고르기 (시장 이슈 / 종목 움직임) ──────────────── */
@@ -85,10 +94,14 @@
 
 /* ── 목록 ───────────────────────────────────────────────── */
 
+/* 목록은 칸 안에서 스크롤한다. 높이는 칸이 정한다 —
+   뉴스 칸은 오른쪽 두 칸을 합친 만큼 늘어나고, 목록이 그 안을 채운다. */
 .kh-nw-list {
-  max-height: 620px; overflow-y: auto;
+  flex: 1; min-height: 0; overflow-y: auto;
   display: flex; flex-direction: column;
 }
+/* 주요 일정은 연결 전이라 담을 것이 없다. 자리만 차지하지 않게 짧게. */
+#kh-nw-sched { flex: none; }
 .kh-nw-i {
   display: block; text-decoration: none; color: inherit;
   padding: 11px 10px; border-radius: var(--kh-radius-md);
@@ -161,8 +174,16 @@
 
 /* ── 좁은 화면 ──────────────────────────────────────────── */
 
+@media (max-width: 1400px) {
+  /* 좁아지면 주요 일정을 아래로 내리고 위 두 칸이 반반을 쓴다 */
+  .kh-nw-grid { grid-template-columns: 1fr 1fr; grid-template-rows: 620px auto; }
+  .kh-nw-grid > .kh-w:last-child { grid-column: 1 / -1; }
+}
 @media (max-width: 1100px) {
-  .kh-nw-grid { grid-template-columns: 1fr; }
+  /* 더 좁아지면 한 줄로 세운다. 정해둔 키도 푼다. */
+  .kh-nw-grid { grid-template-columns: 1fr; grid-template-rows: none; }
+  .kh-nw-grid > .kh-w:last-child { grid-column: auto; }
+  .kh-nw-list { max-height: 520px; }
   .kh-nw-stats { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 560px) {
