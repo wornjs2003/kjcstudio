@@ -6,6 +6,7 @@
    ========================================================================== */
 
 import { WATCHLIST, brandColor } from './data/market.js';
+import * as lastSeen from './store/last-seen.js';
 import { fetchCandles, createStockChart } from './chart.js';
 import { color } from './theme.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, dirClass, marketPhase }
@@ -416,13 +417,26 @@ let universe = null;        // [{code, name, rank, cap}]
 let rowPrices = {};
 const asked = new Set();          // 이미 부탁한 종목 (두 번 부르지 않게)
 
+/* 200종목 목록을 받는다.
+
+   들어오자마자 빈 표를 보여주지 않으려고, 지난번에 받아둔 것이 있으면
+   그것부터 깔고 새로 받는다. 목록(이름·순위·시가총액)은 하루에 한 번
+   바뀌므로 몇 시간 묵어도 쓸 만하다 — 그래서 slow 로 저장한다.
+   시세는 여기 들어 있지 않다. 빈 칸으로 깔리고 곧 채워진다. */
 async function loadUniverse() {
+  const kept = lastSeen.load('universe');
+  if (kept) universe = kept.value;
+
   try {
     const r = await fetch('/api/dart/universe', { cache: 'no-store' });
     const j = await r.json();
-    if (j && j.ok && Array.isArray(j.data) && j.data.length) { universe = j.data; return; }
+    if (j && j.ok && Array.isArray(j.data) && j.data.length) {
+      universe = j.data;
+      lastSeen.save('universe', j.data, { slow: true });
+      return;
+    }
   } catch { /* 아래에서 관심종목으로 물러선다 */ }
-  universe = null;
+  if (!kept) universe = null;      // 받아둔 것도 없으면 관심종목으로 간다
 }
 
 /* 시가총액은 목록(dart_universe)이 갖고 있다. 네이버 시총 순위에서 온 값이고
@@ -590,6 +604,12 @@ async function fetchVisible() {
 function applyPrices(map) {
   if (!map) return;
   rowPrices = { ...rowPrices, ...map };
+  /* 다시 들어왔을 때 빈 칸부터 시작하지 않도록 남겨 둔다.
+
+     frame.js 도 같은 키에 저장한다. 거기는 관심종목 8개뿐이고 여기는
+     순위표 200종목까지 모여 있어, 둘 다 합쳐서 넣도록 해 두었다.
+     어느 쪽이 나중에 쓰든 값이 줄지 않는다. */
+  lastSeen.save('prices', rowPrices);
   updateRowCells(map);
   side.update(rowPrices);          // 관심 사이드바
   paintPreview(rowPrices);         // 옆의 미리보기 카드
@@ -785,8 +805,23 @@ paintMkt();
 setInterval(paintMkt, 30000);
 setupStrip();
 paintIndexPeriods();
+
+/* 지난번에 본 값이 남아 있으면 그것부터 그린다 (2026-09-15).
+
+   화면을 오갈 때마다 "불러오는 중" 이 몇 초씩 떠 있었다. 서버에서 값이
+   오기까지의 그 시간을, 조금 묵었더라도 숫자로 채운다. 곧 새 값이 덮는다.
+
+   남은 것이 없으면(처음 열었거나 1분이 지났으면) 전과 같이 빈 칸이다.
+   묵은 값을 실시간인 양 보여주지 않도록, 1분이 넘으면 last-seen 이
+   스스로 버린다. */
+const keptPrices = lastSeen.load('prices');
+if (keptPrices) rowPrices = keptPrices.value;
+
+/* 지수는 startLiveLoop 이 남은 값으로 한 번 불러 주므로 여기서는 비워 둔다.
+   그쪽이 세 화면 공통이라 한 곳에서만 하는 편이 맞다. */
 paintIndices(null);
-paintRows(null);
+paintRows(keptPrices ? rowPrices : null);
+if (keptPrices) { side.update(rowPrices); paintPreview(rowPrices); }
 
 /* 순위표 목록을 받아 200줄을 깐다. 시세는 보이는 줄부터 채워진다.
    목록을 못 받으면 관심종목으로 물러선다 (rowList 안에서 처리). */
