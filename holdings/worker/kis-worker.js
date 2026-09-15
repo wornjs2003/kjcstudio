@@ -745,11 +745,21 @@ const NEWS_TOPICS = [
 // 자동으로 찍어내는 시세 기사. 읽을 것이 없어 버린다.
 const NEWS_DROP = ["소폭 상승세", "소폭 하락세", "상승폭 확대", "하락폭 확대", "특징주", "상위 20종목", "상승률 상위", "하락률 상위", "기술적 분석", "인기검색"];
 
-const GOOGLE_RSS = "https://news.google.com/rss/search";
+/* 받아올 곳. data/news-topics.json 의 feeds 와 같아야 한다.
+   tools/check-news-topics.py 가 대조한다. */
+const NEWS_FEEDS = [
+  { id: "yna", label: "연합뉴스", url: "https://www.yna.co.kr/rss/economy.xml" },
+  { id: "hk", label: "한국경제", url: "https://www.hankyung.com/feed/finance" },
+  { id: "mk", label: "매일경제", url: "https://www.mk.co.kr/rss/50200011/" }
+];
+
 const NEWS_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) KJC-Holdings/1.0";
 
-// 한 주제에서 몇 건까지. 구글은 100건 가까이 주는데 화면에 다 못 담는다.
-const PER_TOPIC = 12;
+// 한 출처에서 몇 건까지 볼 것인가. 주제어에 걸리는 것만 남으므로 넉넉히.
+const PER_FEED = 150;
+
+// 화면에 몇 건까지 보낼 것인가. 그보다 많아도 아래는 안 읽힌다.
+const MAX_ROWS = 80;
 
 const NEWS_TTL = 180;      // 뉴스는 초 단위로 바뀌지 않는다
 const MOVES_TTL = 60;      // 장중에 빨리 바뀌므로 짧게
@@ -790,57 +800,73 @@ function toKst(pubdate) {
   return new Date(d.getTime() + 9 * 3600000).toISOString().replace("Z", "+09:00");
 }
 
-async function fetchTopicNews(topic) {
-  const q = (topic.keywords || [topic.label]).join(" OR ");
-  const url = `${GOOGLE_RSS}?${new URLSearchParams({
-    q, hl: "ko", gl: "KR", ceid: "KR:ko" })}`;
-  const res = await fetch(url, { headers: { "user-agent": NEWS_UA } });
-  if (!res.ok) throw new Error(`구글 뉴스 응답 ${res.status}`);
+/* 제목에 주제어가 들어 있으면 그 주제를 돌려준다. 없으면 null.
+   앞에 적힌 주제부터 본다 — 여러 주제에 걸리면 먼저 적힌 것이 이긴다. */
+function pickTopic(title, topics) {
+  for (const t of topics) {
+    for (const kw of t.keywords || []) {
+      if (kw && title.includes(kw)) return t;
+    }
+  }
+  return null;
+}
+
+/* 한 출처를 받아 주제어에 걸리는 것만 돌려준다.
+
+   주제가 없는 기사는 버린다. 경제지라도 절반 넘게는 주가와 상관없는
+   일반 기사다 (2026-09-15 실측: 100건 중 20건만 걸렸다). */
+async function fetchFeedNews(feed, topics) {
+  const res = await fetch(feed.url, { headers: { "user-agent": NEWS_UA } });
+  if (!res.ok) throw new Error(`${feed.label} 응답 ${res.status}`);
   const xml = await res.text();
 
   const out = [];
+  let seen = 0;
   for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
-    if (out.length >= PER_TOPIC) break;
+    if (++seen > PER_FEED) break;
     const block = m[1];
     const pick = (tag) => {
       const hit = block.match(RSS_TAG[tag]);
       return hit ? unescapeXml(hit[1]) : "";
     };
-    let title = pick("title");
+    const title = pick("title");
     if (!title || newsDropped(title)) continue;
+    const topic = pickTopic(title, topics);
+    if (!topic) continue;
 
-    // 구글은 "제목 - 언론사" 로 준다. 뒤쪽을 떼어 출처로 쓴다.
-    let source = pick("source");
-    if (!source && title.includes(" - ")) {
-      const at = title.lastIndexOf(" - ");
-      source = title.slice(at + 3);
-      title = title.slice(0, at);
-    }
     out.push({
-      title: title.trim(), link: pick("link"), at: toKst(pick("pubDate")),
-      source: source.trim(), topic: topic.id, topicLabel: topic.label,
+      title, link: pick("link"), at: toKst(pick("pubDate")),
+      source: feed.label || feed.id || "",
+      topic: topic.id, topicLabel: topic.label,
     });
   }
   return out;
 }
 
-/* 켜져 있는 주제를 모두 받아 시각 역순으로 합친다.
-   한 주제가 실패해도 나머지는 보여준다. */
+/* 켜져 있는 출처를 모두 받아 시각 역순으로 합친다.
+   한 곳이 실패해도 나머지는 보여준다. */
 async function fetchNewsIssues(env) {
   return memo("news:issues", NEWS_TTL, async () => {
     const on = NEWS_TOPICS.filter((t) => t.on !== false);
     const rows = [];
     const errors = {};
-    for (const t of on) {
+    const seen = new Set();
+
+    for (const f of NEWS_FEEDS) {
       try {
-        rows.push(...(await fetchTopicNews(t)));
+        for (const row of await fetchFeedNews(f, on)) {
+          // 같은 기사가 여러 곳에 실린다. 제목으로 한 번만 담는다.
+          if (seen.has(row.title)) continue;
+          seen.add(row.title);
+          rows.push(row);
+        }
       } catch (e) {
-        errors[t.id] = safeMessage(e, env);
+        errors[f.id] = safeMessage(e, env);
       }
     }
     rows.sort((a, b) => String(b.at).localeCompare(String(a.at)));
     return {
-      rows,
+      rows: rows.slice(0, MAX_ROWS),
       errors: Object.keys(errors).length ? errors : null,
       topics: on.map((t) => ({ id: t.id, label: t.label, color: t.color })),
     };

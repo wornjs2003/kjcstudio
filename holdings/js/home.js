@@ -794,7 +794,7 @@ if (side.slot) {
       <a class="kh-sec-more" href="./news.html">더보기</a>
     </div>
     <div class="kh-side-sec">
-      <div class="kh-sched-h"><span>뉴스</span><span class="kh-mut">구글 뉴스</span></div>
+      <div class="kh-sched-h"><span>뉴스</span><span class="kh-mut">경제지</span></div>
       <div class="kh-sched-b" id="kh-side-news"></div>
       <a class="kh-sec-more" href="./news.html">더보기</a>
     </div>

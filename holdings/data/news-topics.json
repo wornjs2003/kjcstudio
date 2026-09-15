@@ -1,10 +1,23 @@
 {
   "설명": "뉴스 화면이 쓰는 주제어 목록. 여기만 고치면 수집과 화면 칩이 함께 바뀐다.",
-  "쓰는곳": "server/kis_proxy.py 의 fetch_news · js/news.js 의 필터 칩",
+  "쓰는곳": "server/news.py · worker/kis-worker.js · js/news.js 의 필터 칩",
   "늘리는법": "topics 에 묶음을 하나 더 적는다. 코드는 건드리지 않는다.",
   "색": "color 는 assets/css/theme.css 의 --kh-cat-<이름> 을 가리킨다. 안 적으면 id 로 자동 배정한다.",
   "끄는법": "지우지 말고 on 을 false 로 둔다. 되살리기 쉽다.",
   "갱신일": "2026-09-15",
+
+  "왜구글이아닌가": [
+    "구글 뉴스 RSS 는 검색이라 주제별로 받기 좋았지만 배포본에서 503 이 난다.",
+    "워커에서 헤더를 네 가지로 바꿔 시험했는데 전부 막혔다 (2026-09-15 실측).",
+    "본문이 구글의 'Sorry...' 차단 페이지라 IP 차단으로 보인다. 로컬은 통과한다.",
+    "로컬과 배포본이 다르게 도는 것이 가장 나쁘므로 양쪽 다 언론사 RSS 로 간다."
+  ],
+
+  "feeds": [
+    { "id": "yna",  "label": "연합뉴스", "url": "https://www.yna.co.kr/rss/economy.xml" },
+    { "id": "hk",   "label": "한국경제", "url": "https://www.hankyung.com/feed/finance" },
+    { "id": "mk",   "label": "매일경제", "url": "https://www.mk.co.kr/rss/50200011/" }
+  ],
 
   "topics": [
     {
