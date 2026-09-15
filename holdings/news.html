@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+  <title>뉴스 · 공시 — KJC Holdings</title>
+
+  <!-- 개발용 캐시 무효화 (서비스 워커와 병행) -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/nav.css" />
+  <link rel="stylesheet" href="./css/frame.css" />
+  <link rel="stylesheet" href="./css/home.css" />
+  <link rel="stylesheet" href="./css/news.css" />
+</head>
+<body data-nav="holdings" data-site-root="../">
+
+<div id="site-nav"></div>
+
+<div class="kh-app">
+  <main class="kh-main">
+
+    <!-- 카테고리 탭 — 첫 화면과 같은 줄 -->
+    <nav class="kh-cat" aria-label="카테고리">
+      <a href="./index.html">홈</a>
+      <a href="#">국내</a>
+      <a href="#">미국 · 글로벌</a>
+      <a href="#">가상자산</a>
+      <a href="#">시장지표</a>
+      <a class="is-on" href="./news.html">뉴스 · 공시</a>
+      <a href="#">데일리분석</a>
+      <span class="kh-cat-my">내 기록</span>
+    </nav>
+
+    <header class="kh-nw-head">
+      <div>
+        <h1 class="kh-nw-title">뉴스 · 공시</h1>
+        <p class="kh-nw-sub" id="kh-nw-sub">불러오는 중</p>
+      </div>
+      <span class="kh-nw-when" id="kh-nw-when"></span>
+    </header>
+
+    <!-- 통계 4칸 -->
+    <section class="kh-nw-stats" id="kh-nw-stats" aria-label="요약"></section>
+
+    <!-- 좌우 반반 -->
+    <section class="kh-nw-grid">
+
+      <div class="kh-w">
+        <div class="kh-w-head">
+          <span class="kh-w-grip">⠿</span><span class="kh-w-title">뉴스</span>
+          <span class="kh-bd kh-bd-on" id="kh-nw-src">구글 뉴스 · 한국투자증권</span>
+        </div>
+        <div class="kh-w-body">
+          <!-- 갈래 두 개. 성격이 달라 섞지 않는다 -->
+          <div class="kh-nw-seg" id="kh-nw-seg">
+            <button data-k="issues" class="is-on">시장 이슈</button>
+            <button data-k="moves">종목 움직임</button>
+          </div>
+          <!-- 주제 칩 — data/news-topics.json 이 만든다 -->
+          <div class="kh-nw-chips" id="kh-nw-chips"></div>
+          <div class="kh-nw-list" id="kh-nw-news"></div>
+        </div>
+      </div>
+
+      <div class="kh-w">
+        <div class="kh-w-head">
+          <span class="kh-w-grip">⠿</span><span class="kh-w-title">오늘 공시</span>
+          <span class="kh-bd kh-bd-on">OpenDART</span>
+        </div>
+        <div class="kh-w-body">
+          <div class="kh-nw-chips" id="kh-dc-chips"></div>
+          <div class="kh-nw-list" id="kh-nw-dc"></div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <aside class="kh-side" id="kh-side" aria-label="관심종목"></aside>
+  <nav class="kh-vbar" id="kh-vbar" aria-label="화면 전환"></nav>
+</div>
+
+<div class="kh-foot" id="kh-foot" aria-label="시세 띠"></div>
+
+<!-- 서비스 워커는 개발 중에만 등록한다. 배포본에서는 지운다.
+     세 화면이 같은 코드를 들고 있던 것을 js/sw-boot.js 로 모았다 (2026-09-15) -->
+<script type="module">
+  import { bootServiceWorker } from './js/sw-boot.js';
+  bootServiceWorker();
+</script>
+<script type="module" src="./js/news.js"></script>
+<script src="../assets/js/main.js"></script>
+</body>
+</html>

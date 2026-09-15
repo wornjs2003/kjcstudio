@@ -40,6 +40,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 같은 폴더(server/)의 모듈들. 스크립트로 실행하므로 바로 잡힌다.
 import dart
+import news
 # 오류 문구에서 비밀을 지운다. 외부 호출 오류를 사람에게 보여줄 때는
 # 반드시 이것을 거친다 (2026-09-14 에 인증키가 실제로 샜다).
 from secrets_guard import safe_message, scrub
@@ -1179,16 +1180,25 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def end_headers(self):
-        """화면 파일도 캐시하지 않게 한다.
+        """화면 파일은 받아두되 쓰기 전에 매번 물어보게 한다.
 
-        개발 서버인데 Cache-Control 을 안 붙이고 있었다. 그래서 브라우저가
-        Last-Modified 만 보고 옛 JS·CSS 를 계속 썼다. 고친 것이 화면에 안
-        나타나 "값이 하나도 안 나온다" 는 말을 듣게 된다 (2026-09-14).
+        Cache-Control 을 아예 안 붙이던 때가 있었다. 브라우저가 Last-Modified
+        만 보고 옛 JS·CSS 를 계속 써서, 고친 것이 화면에 안 나타났다
+        (2026-09-14). 그래서 no-store 를 붙였다.
+
+        그런데 no-store 는 **받아둔 것을 버리라**는 뜻이라 매번 전부 다시
+        내려받는다. 다른 화면에 갔다 오면 처음부터 다시 불러오게 된다
+        (2026-09-15 지적).
+
+        no-cache 는 다르다. 받아두되 쓰기 전에 서버에 묻는다. 안 바뀌었으면
+        304 로 끝나고 본문은 다시 안 내려온다. 고친 것은 그대로 반영되고,
+        안 고친 것은 다시 받지 않는다. 둘 다 얻는다.
 
         API 응답에는 _send_json 이 이미 붙이고 있다. 여기는 정적 파일 몫이다.
+        worker/kis-worker.js 도 같은 값이어야 한다.
         """
         if not (self.path or "").startswith("/api/"):
-            self.send_header("Cache-Control", "no-store, must-revalidate")
+            self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
     def do_GET(self):
@@ -1198,7 +1208,50 @@ class Handler(SimpleHTTPRequestHandler):
         if (self.path or "").startswith("/api/dart/"):
             self._handle_dart()
             return
+        if (self.path or "").startswith("/api/news/"):
+            self._handle_news()
+            return
         super().do_GET()
+
+    # ── 뉴스 ──
+    # 두 갈래를 따로 받는다. 자세한 이유는 server/news.py 머리말에 있다.
+    #   issues  구글 뉴스 RSS · 주제어별 · 원문 링크 있음
+    #   moves   KIS news-title · 종목코드 붙음 · 링크 없음
+    def _handle_news(self):
+        parsed = urllib.parse.urlparse(self.path)
+        route = parsed.path[len("/api/news/"):].strip("/")
+
+        try:
+            if route == "topics":
+                self._send_json({"ok": True, "data": news.load_topics()["topics"]})
+                return
+
+            if route == "issues":
+                r = news.fetch_issues()
+                self._send_json({"ok": True, "data": r["rows"],
+                                 "meta": {"topics": r["topics"], "errors": r["errors"]}})
+                return
+
+            if route == "moves":
+                cfg = load_secrets()
+                r = news.fetch_moves(kis_get, cfg)
+                self._send_json({"ok": True, "data": r["rows"],
+                                 "meta": {"errors": r["errors"]}})
+                return
+
+            if route == "feed":          # 화면이 한 번에 받아가는 자리
+                cfg = load_secrets()
+                iss = news.fetch_issues()
+                mov = news.fetch_moves(kis_get, cfg)
+                self._send_json({"ok": True, "data": {
+                    "issues": iss["rows"], "moves": mov["rows"],
+                    "topics": iss["topics"],
+                }, "meta": {"errors": {"issues": iss["errors"], "moves": mov["errors"]}}})
+                return
+
+            self._send_json({"ok": False, "error": "알 수 없는 경로입니다: " + route}, 404)
+        except Exception as e:
+            self._send_json({"ok": False, "error": safe_message(e)}, 500)
 
     # ── 공시 (OpenDART) ──
     # KIS 와 키도 한도도 다르므로 경로를 나눠 둔다. 키가 없으면 503 으로 답하고,

@@ -96,6 +96,7 @@ export function mountVBar(el, active) {
   /* href 가 있는 항목은 실제로 이동한다. 없는 항목은 아직 만들지 않은 화면이다. */
   const ITEMS = [
     { id: 'watch',    icon: '♥', label: '관심',   href: './index.html' },
+    { id: 'news',     icon: '◰', label: '뉴스',   href: './news.html' },
     { id: 'analysis', icon: '▤', label: '분석',   href: './analysis/' },
     { id: 'roadmap',  icon: '◫', label: '로드맵', href: './roadmap.html' },
     { id: 'record',   icon: '▥', label: '내 기록' },

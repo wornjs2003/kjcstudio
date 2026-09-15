@@ -333,3 +333,29 @@ body {
   background: var(--kh-tag-news); flex-shrink: 0;
 }
 .kh-side-sec .kh-dc { max-height: 260px; }
+
+
+/* ==========================================================================
+   패널 — 화면들이 함께 쓰는 흰 카드
+
+   종목 화면 전용(css/stock.css)에 있던 것을 옮겨 왔다 (2026-09-15).
+   뉴스 화면이 생기면서 셋이 같은 카드를 쓰게 되었다. 복제하지 않고 옮겼다.
+   ========================================================================== */
+
+.kh-w {
+  background: var(--kh-bg-card);
+  border-radius: var(--kh-radius-lg);
+  display: flex; flex-direction: column;
+  min-height: 0; overflow: hidden;
+}
+.kh-w-head { display: flex; align-items: center; gap: 8px; padding: 13px 16px; }
+.kh-w-grip { color: var(--kh-text-dim); font-size: 0.8rem; cursor: grab; }
+.kh-w-title { font-size: 0.88rem; font-weight: 600; }
+.kh-w-x { color: var(--kh-text-dim); font-size: 0.88rem; cursor: pointer; }
+.kh-w-plus { margin-left: auto; color: var(--kh-text-dim); font-size: 0.95rem; cursor: pointer; }
+.kh-w-body { padding: 0 16px 16px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* 어디서 온 값인지 */
+.kh-bd { font-size: 0.67rem; padding: 3px 8px; border-radius: 999px; font-weight: 500; }
+.kh-bd-on   { background: rgb(var(--kh-ok-rgb) / 12%); color: var(--kh-tag-news); }
+.kh-bd-soon { background: var(--kh-bg-surface); color: var(--kh-text-muted); }

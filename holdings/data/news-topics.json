@@ -1,0 +1,63 @@
+{
+  "설명": "뉴스 화면이 쓰는 주제어 목록. 여기만 고치면 수집과 화면 칩이 함께 바뀐다.",
+  "쓰는곳": "server/kis_proxy.py 의 fetch_news · js/news.js 의 필터 칩",
+  "늘리는법": "topics 에 묶음을 하나 더 적는다. 코드는 건드리지 않는다.",
+  "색": "color 는 assets/css/theme.css 의 --kh-cat-<이름> 을 가리킨다. 안 적으면 id 로 자동 배정한다.",
+  "끄는법": "지우지 말고 on 을 false 로 둔다. 되살리기 쉽다.",
+  "갱신일": "2026-09-15",
+
+  "topics": [
+    {
+      "id": "semi", "color": "indigo",
+      "label": "반도체",
+      "keywords": ["반도체", "HBM", "파운드리", "엔비디아"],
+      "on": true
+    },
+    {
+      "id": "commodity", "color": "amber",
+      "label": "원자재",
+      "keywords": ["유가", "WTI", "금값"],
+      "on": true
+    },
+    {
+      "id": "rate", "color": "violet",
+      "label": "금리·환율",
+      "keywords": ["금리", "연준", "원달러 환율"],
+      "on": true
+    },
+    {
+      "id": "trade", "color": "teal",
+      "label": "무역",
+      "keywords": ["관세", "미중 무역", "수출규제"],
+      "on": true
+    },
+    {
+      "id": "sector", "color": "rose",
+      "label": "업종",
+      "keywords": ["이차전지", "바이오", "조선", "방산"],
+      "on": true
+    },
+    {
+      "id": "market", "color": "slate",
+      "label": "시장",
+      "keywords": ["코스피", "외국인 순매수", "공매도"],
+      "on": true
+    }
+  ],
+
+  "버릴제목": {
+    "설명": "제목에 이 말이 들어가면 버린다. 자동으로 찍어내는 시세 기사라 읽을 것이 없다.",
+    "말": [
+      "소폭 상승세",
+      "소폭 하락세",
+      "상승폭 확대",
+      "하락폭 확대",
+      "특징주",
+      "상위 20종목",
+      "상승률 상위",
+      "하락률 상위",
+      "기술적 분석",
+      "인기검색"
+    ]
+  }
+}

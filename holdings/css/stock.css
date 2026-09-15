@@ -50,23 +50,8 @@
 /* ── 위젯 격자 ──────────────────────────── */
 .kh-grid { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 14px; margin-top: 14px; }
 
-.kh-w {
-  background: var(--kh-bg-card);
-  border-radius: var(--kh-radius-lg);
-  display: flex; flex-direction: column;
-  min-height: 0; overflow: hidden;
-}
-.kh-w-head { display: flex; align-items: center; gap: 8px; padding: 13px 16px; }
-.kh-w-grip { color: var(--kh-text-dim); font-size: 0.8rem; cursor: grab; }
-.kh-w-title { font-size: 0.88rem; font-weight: 600; }
-.kh-w-x { color: var(--kh-text-dim); font-size: 0.88rem; cursor: pointer; }
-.kh-w-plus { margin-left: auto; color: var(--kh-text-dim); font-size: 0.95rem; cursor: pointer; }
-.kh-w-body { padding: 0 16px 16px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
-
-/* 어디서 온 값인지 */
-.kh-bd { font-size: 0.67rem; padding: 3px 8px; border-radius: 999px; font-weight: 500; }
-.kh-bd-on   { background: rgb(var(--kh-ok-rgb) / 12%); color: var(--kh-tag-news); }
-.kh-bd-soon { background: var(--kh-bg-surface); color: var(--kh-text-muted); }
+/* 패널(.kh-w*)과 출처 배지(.kh-bd*)는 css/frame.css 로 옮겼다
+   (2026-09-15). 뉴스 화면까지 셋이 함께 쓰게 되어 공용으로 뺐다. */
 
 /* 차트 */
 .kh-per { display: flex; align-items: center; gap: 3px; margin-bottom: 10px; }

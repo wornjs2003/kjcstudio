@@ -1,0 +1,171 @@
+/* ==========================================================================
+   뉴스 · 공시 화면 전용
+
+   색은 루트 ../assets/css/theme.css 의 --kh-* 만 쓴다. 하드코딩하지 않는다.
+   상승·하락 색은 공용 클래스(.kh-up/.kh-down)가 정한다 — 여기서 color 로
+   덮지 않는다 (CLAUDE.md 「상승·하락 색은 공용 클래스가 정한다」).
+   ========================================================================== */
+
+/* ── 머리말 ─────────────────────────────────────────────── */
+
+.kh-nw-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; margin: 4px 0 18px; padding-left: 4px;
+}
+.kh-nw-title { font-size: 1.5rem; font-weight: 700; margin: 0 0 5px; }
+.kh-nw-sub { font-size: 0.83rem; color: var(--kh-text-secondary); margin: 0; }
+.kh-nw-when {
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  background: var(--kh-tag-news-dim); color: var(--kh-tag-news);
+  border-radius: 999px; padding: 6px 12px;
+  font-size: 0.76rem; font-weight: 500; white-space: nowrap;
+}
+
+/* ── 통계 4칸 ───────────────────────────────────────────── */
+
+.kh-nw-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 12px; margin-bottom: 16px;
+}
+.kh-nw-stat {
+  background: var(--kh-bg-card); border-radius: var(--kh-radius-lg);
+  padding: 16px 18px;
+}
+.kh-nw-stat-l {
+  font-size: 0.78rem; color: var(--kh-text-secondary); margin-bottom: 7px;
+}
+.kh-nw-stat-v { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; }
+.kh-nw-stat-v span {
+  font-size: 0.8rem; font-weight: 500;
+  color: var(--kh-text-secondary); margin-left: 4px;
+}
+
+/* ── 좌우 반반 ──────────────────────────────────────────── */
+
+.kh-nw-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  align-items: start;
+}
+
+/* ── 갈래 고르기 (시장 이슈 / 종목 움직임) ──────────────── */
+
+.kh-nw-seg {
+  display: inline-flex; gap: 3px; margin-bottom: 12px;
+  background: var(--kh-bg-surface); border-radius: var(--kh-radius-sm); padding: 3px;
+}
+.kh-nw-seg button {
+  border: 0; background: none; cursor: pointer;
+  padding: 6px 14px; border-radius: calc(var(--kh-radius-sm) - 2px);
+  font-family: inherit; font-size: 0.8rem; font-weight: 500;
+  color: var(--kh-text-secondary);
+}
+.kh-nw-seg button.is-on {
+  background: var(--kh-bg-card); color: var(--kh-text-primary); font-weight: 600;
+}
+
+/* ── 필터 칩 ────────────────────────────────────────────── */
+
+.kh-nw-chips {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;
+}
+.kh-nw-chips:empty { display: none; }
+.kh-nw-chips button {
+  display: inline-flex; align-items: center; gap: 5px;
+  border: 0; background: var(--kh-bg-surface); cursor: pointer;
+  padding: 6px 11px; border-radius: 999px;
+  font-family: inherit; font-size: 0.76rem; font-weight: 500;
+  color: var(--kh-text-secondary); white-space: nowrap;
+}
+.kh-nw-chips button i {
+  font-style: normal; font-size: 0.72rem; opacity: 0.75;
+}
+.kh-nw-chips button.is-on {
+  background: var(--kh-text-primary); color: var(--kh-bg-card);
+}
+
+/* ── 목록 ───────────────────────────────────────────────── */
+
+.kh-nw-list {
+  max-height: 620px; overflow-y: auto;
+  display: flex; flex-direction: column;
+}
+.kh-nw-i {
+  display: block; text-decoration: none; color: inherit;
+  padding: 11px 10px; border-radius: var(--kh-radius-md);
+}
+.kh-nw-i:hover { background: var(--kh-bg-surface); }
+
+/* 관심종목이 걸린 줄은 한눈에 보이게 (시안 지시) */
+.kh-nw-i.is-mine { background: var(--kh-up-dim); }
+.kh-nw-i.is-mine:hover { background: var(--kh-up-dim); filter: brightness(0.97); }
+
+.kh-nw-i-top {
+  display: flex; align-items: center; gap: 7px;
+  margin-bottom: 5px; font-size: 0.73rem;
+}
+.kh-nw-i-top i { font-style: normal; }
+
+.kh-nw-topic {
+  background: var(--kh-bg-surface); color: var(--kh-text-secondary);
+  border-radius: var(--kh-radius-sm); padding: 2px 7px; font-weight: 500;
+  flex: none;
+  /* 공시 종류는 "임원ㆍ주요주주특정증권등소유상황" 처럼 길다.
+     자르지 않으면 종목명을 밀어내고 시각과 겹친다 (2026-09-15). */
+  max-width: 13em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 카테고리 색 — 값은 여기 없다. ../assets/css/theme.css 의 --kh-cat-* 이다.
+   어느 이름을 쓸지는 data/news-topics.json · data/disclosure-tags.json 이 정하고,
+   js/news.js 가 is-<이름> 클래스로 붙인다. 색을 늘리려면 theme.css 에 한 쌍을
+   더 만들고 여기 두 줄을 더한다 (2026-09-15). */
+.kh-nw-topic.is-indigo { color: var(--kh-cat-indigo); background: var(--kh-cat-indigo-dim); }
+.kh-nw-topic.is-amber  { color: var(--kh-cat-amber);  background: var(--kh-cat-amber-dim); }
+.kh-nw-topic.is-violet { color: var(--kh-cat-violet); background: var(--kh-cat-violet-dim); }
+.kh-nw-topic.is-teal   { color: var(--kh-cat-teal);   background: var(--kh-cat-teal-dim); }
+.kh-nw-topic.is-rose   { color: var(--kh-cat-rose);   background: var(--kh-cat-rose-dim); }
+.kh-nw-topic.is-slate  { color: var(--kh-cat-slate);  background: var(--kh-cat-slate-dim); }
+
+/* 칩은 고르지 않았을 때만 색을 입는다. 고른 칩은 검은 바탕이라
+   그대로 두면 글자가 안 읽힌다. */
+.kh-nw-chips button.is-indigo:not(.is-on) { color: var(--kh-cat-indigo); background: var(--kh-cat-indigo-dim); }
+.kh-nw-chips button.is-amber:not(.is-on)  { color: var(--kh-cat-amber);  background: var(--kh-cat-amber-dim); }
+.kh-nw-chips button.is-violet:not(.is-on) { color: var(--kh-cat-violet); background: var(--kh-cat-violet-dim); }
+.kh-nw-chips button.is-teal:not(.is-on)   { color: var(--kh-cat-teal);   background: var(--kh-cat-teal-dim); }
+.kh-nw-chips button.is-rose:not(.is-on)   { color: var(--kh-cat-rose);   background: var(--kh-cat-rose-dim); }
+.kh-nw-chips button.is-slate:not(.is-on)  { color: var(--kh-cat-slate);  background: var(--kh-cat-slate-dim); }
+
+.kh-nw-src, .kh-nw-more { color: var(--kh-text-muted); }
+/* 종목명도 길면 자른다. 한화에어로스페이스가 제목과 겹쳐 보였다 */
+.kh-nw-stock {
+  font-weight: 600;
+  max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.kh-nw-code { color: var(--kh-text-muted); }
+.kh-nw-mine {
+  background: var(--kh-up-dim); color: var(--kh-up);
+  border-radius: var(--kh-radius-sm); padding: 2px 7px; font-weight: 600;
+}
+/* 시각은 오른쪽 끝에 붙인다 */
+.kh-nw-at { margin-left: auto; color: var(--kh-text-muted); flex: none; }
+
+.kh-nw-i-t {
+  display: block; font-size: 0.86rem; line-height: 1.45;
+  /* 제목이 길어도 두 줄에서 끊는다. 종목명과 겹쳐 보이던 것을 막는다 */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.kh-nw-i-t .kh-dc-tag {
+  font-style: normal; font-size: 0.74rem; font-weight: 600;
+  color: var(--kh-tag-notice); background: var(--kh-tag-notice-dim);
+  border-radius: var(--kh-radius-sm); padding: 1px 6px; margin-right: 5px;
+}
+
+/* ── 좁은 화면 ──────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .kh-nw-grid { grid-template-columns: 1fr; }
+  .kh-nw-stats { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .kh-nw-stats { grid-template-columns: 1fr 1fr; }
+  .kh-nw-head { flex-direction: column; gap: 10px; }
+}
