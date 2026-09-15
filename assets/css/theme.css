@@ -143,6 +143,8 @@
   --kh-tag-news-dim:   rgb(var(--kh-ok-rgb) / 12%);
   --kh-tag-dart:       #8b5cf6;   /* [파생] 토스 CSS 에 보라가 없어 맞춰 만듦 */
   --kh-tag-dart-dim:   rgb(139 92 246 / 12%);
+  --kh-badge-au:       #c9a227;   /* [파생] 금 시세 배지. 나머지 배지는 text-muted·
+                                     text-primary 를 쓰는데 금만 제 색이 필요했다 */
 
   /* ── 그림자 ──
      토스는 그림자를 거의 쓰지 않습니다. 회색 바탕 + 흰 카드로 대비를 냅니다. */
