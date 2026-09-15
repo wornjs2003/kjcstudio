@@ -5,7 +5,7 @@
     "원칙": "항목마다 주인(fieldOwner)을 하나만 정한다. 받을 곳을 바꿀 때는 이 파일부터 고친다.",
     "지금은": "사람이 보는 정리용이다. 코드는 아직 이 파일을 읽지 않는다 (2026-09-14 판단).",
     "자세한조사": "같은 폴더의 data-sources.md 에 한도 · 확인 방법 · 못 쓰는 곳까지 적혀 있다.",
-    "갱신일": "2026-09-14"
+    "갱신일": "2026-09-15"
   },
   "sources": {
     "kis": {
@@ -22,7 +22,14 @@
         "PBR",
         "시가총액",
         "52주 최고저",
-        "거래량"
+        "거래량",
+        "해외지수(S&P500·나스닥)",
+        "원/달러 환율",
+        "VIX",
+        "코스피200 선물",
+        "상승·보합·하락 종목 수",
+        "연중 최고·최저",
+        "지수 분봉·캔들"
       ],
       "notProvides": [
         "종목명",
@@ -30,7 +37,10 @@
         "BPS",
         "배당",
         "투자자별 매매동향",
-        "해외 시세"
+        "다우존스(코드 못 찾음)",
+        "WTI·금",
+        "야간선물(웹소켓만)",
+        "시장 전체 투자자매매동향(값이 0으로 옴)"
       ],
       "endpoints": [
         "/uapi/domestic-stock/v1/quotations/inquire-price  — 종목 현재가",
@@ -38,9 +48,14 @@
         "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice  — 종목 일/주/월/년봉",
         "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice  — 종목 분봉 (FID_INPUT_HOUR_1 = 기준 시각)",
         "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice  — 지수 일봉",
-        "/uapi/domestic-stock/v1/quotations/inquire-time-indexchartprice  — 지수 분봉 (tr_id FHKUP03500200)"
+        "/uapi/domestic-stock/v1/quotations/inquire-time-indexchartprice  — 지수 분봉 (tr_id FHKUP03500200)",
+        "/uapi/overseas-price/v1/quotations/inquire-daily-chartprice  해외지수·환율 (N/X)",
+        "/uapi/domestic-stock/v1/quotations/inquire-time-indexchartprice  지수 분봉",
+        "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice  지수 캔들",
+        "/uapi/domestic-futureoption/v1/quotations/inquire-price  선물 (코드 10100000)",
+        "/uapi/domestic-stock/v1/quotations/intstock-multprice  멀티 시세 (30종목)"
       ],
-      "note": "시장구분은 시각에 따라 자동으로 갈린다 (평일 09:00~15:30 J=KRX, 그 외 UN=통합). holdings/CLAUDE.md 「시세 표기 규칙」 참고.",
+      "note": "시장구분은 시각에 따라 자동으로 갈린다 (평일 09:00~15:30 J=KRX, 그 외 UN=통합). holdings/CLAUDE.md 「시세 표기 규칙」 참고. 2026-09-15: 해외지수·환율·VIX 를 국내 계약으로 받을 수 있음을 실측으로 확인했다. 이 등록부에 '해외 시세는 못 받음' 이라고 적혀 있던 것은 사실과 달랐다.",
       "verified": "2026-09-14 실측. 삼성전자 250,000원 정상 수신 지수 분봉은 2026-09-14 에 확인 — FID_INPUT_HOUR_1=\"300\" 으로 하루치 99건 수신.",
       "!! 같은 이름 다른 뜻": {
         "무엇": "FID_INPUT_HOUR_1 은 API 마다 뜻이 다르다. 이름만 보면 둘 다 '입력 시각' 이다.",
@@ -253,27 +268,36 @@
     "공시": "opendart",
     "최대주주": "opendart",
     "감사의견": "opendart",
-    "해외지수": "yahoo",
-    "환율": "yahoo",
+    "해외지수": "kis",
+    "환율": "kis",
     "원자재": "yahoo",
-    "VIX": "yahoo",
+    "VIX": "kis",
     "미국금리": "yahoo",
     "기준금리": "ecos",
     "국고채": "ecos",
     "공포탐욕지수": "cnn",
     "암호화폐": "upbit",
     "종목마스터": "krx",
-    "공시 감시 대상 (코스피 시총 상위 200)": "naver"
+    "공시 감시 대상 (코스피 시총 상위 200)": "naver",
+    "해외지수 (S&P500 · 나스닥)": "kis",
+    "환율 (원/달러)": "kis",
+    "다우존스": "yahoo (KIS 코드 못 찾음)",
+    "원자재 (WTI · 금)": "yahoo (KIS 코드 못 찾음)",
+    "코스피200 선물": "kis",
+    "상승·보합·하락 종목 수": "kis",
+    "연중 최고·최저": "kis"
   },
   "pending": {
     "_설명": "화면에 '연결 예정' 으로 비어 있는 자리와 채울 곳.",
     "지수 격자 6칸": {
-      "from": "yahoo",
-      "difficulty": "중계 한 번"
+      "from": "kis (일부 완료) + yahoo",
+      "difficulty": "다우·원유·금만 남음",
+      "note": "나스닥·S&P500·환율·VIX 는 2026-09-15 에 KIS 로 붙였다"
     },
     "하단 시세 띠": {
-      "from": "yahoo",
-      "difficulty": "위와 같은 호출"
+      "from": "kis (일부 완료) + yahoo",
+      "difficulty": "다우·원유·금만 남음",
+      "note": "나스닥·S&P500·환율·VIX 는 2026-09-15 에 KIS 로 붙였다"
     },
     "개인·외국인·기관": {
       "from": "naver",
