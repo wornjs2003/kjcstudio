@@ -18,6 +18,7 @@ CHECKS = [
     ("색 (theme.css ↔ theme.js)",        "check-theme-sync.py"),
     ("관심종목 (세 곳)",                  "check-watchlist-sync.py"),
     ("설정값 (서버 ↔ 워커)",              "check-kis-consts.py"),
+    ("뉴스 주제어 (JSON ↔ 워커)",         "check-news-topics.py"),
 ]
 
 

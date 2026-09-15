@@ -710,6 +710,201 @@ async function fetchIndices(cfg, env, withChart = true) {
   return { data: out, errors };
 }
 
+
+/* ── 뉴스 ───────────────────────────────────────────────────
+
+   두 갈래를 따로 받는다. 성격이 달라 섞으면 둘 다 안 읽힌다.
+
+     시장 이슈    구글 뉴스 RSS · 주제어마다 한 번씩
+                  반도체·유가·금리처럼 주가에 영향을 주는 것. 원문 링크가 있다
+     종목 움직임  KIS news-title · 시장구분 01(코스피) 02(코스닥)
+                  지금 움직이는 종목. 링크는 없지만 종목코드가 정확히 붙어 온다
+
+   왜 나눴는지는 server/news.py 머리말에 자세히 적혀 있다.
+
+   ★ 아래 NEWS_TOPICS 는 data/news-topics.json 의 복제다.
+     워커는 대시보드에 코드만 붙여넣는 방식이라 파일을 같이 올릴 수 없다.
+     합칠 수 없는 복제이므로 tools/check-news-topics.py 가 대조한다.
+     주제를 늘릴 때는 JSON 과 여기를 함께 고친다.                          */
+
+const NEWS_TOPICS = [
+  { id: "semi", color: "indigo", label: "반도체",
+    keywords: ["반도체", "HBM", "파운드리", "엔비디아"], on: true },
+  { id: "commodity", color: "amber", label: "원자재",
+    keywords: ["유가", "WTI", "금값"], on: true },
+  { id: "rate", color: "violet", label: "금리·환율",
+    keywords: ["금리", "연준", "원달러 환율"], on: true },
+  { id: "trade", color: "teal", label: "무역",
+    keywords: ["관세", "미중 무역", "수출규제"], on: true },
+  { id: "sector", color: "rose", label: "업종",
+    keywords: ["이차전지", "바이오", "조선", "방산"], on: true },
+  { id: "market", color: "slate", label: "시장",
+    keywords: ["코스피", "외국인 순매수", "공매도"], on: true },
+];
+
+// 자동으로 찍어내는 시세 기사. 읽을 것이 없어 버린다.
+const NEWS_DROP = ["소폭 상승세", "소폭 하락세", "상승폭 확대", "하락폭 확대", "특징주", "상위 20종목", "상승률 상위", "하락률 상위", "기술적 분석", "인기검색"];
+
+const GOOGLE_RSS = "https://news.google.com/rss/search";
+const NEWS_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) KJC-Holdings/1.0";
+
+// 한 주제에서 몇 건까지. 구글은 100건 가까이 주는데 화면에 다 못 담는다.
+const PER_TOPIC = 12;
+
+const NEWS_TTL = 180;      // 뉴스는 초 단위로 바뀌지 않는다
+const MOVES_TTL = 60;      // 장중에 빨리 바뀌므로 짧게
+
+const NEWS_PATH = "/uapi/domestic-stock/v1/quotations/news-title";
+const NEWS_TR = "FHKST01011800";
+const MOVE_MARKETS = ["01", "02"];
+
+function newsDropped(title) {
+  return NEWS_DROP.some((w) => w && title.includes(w));
+}
+
+/* RSS 한 항목에서 뽑아낼 것들.
+
+   정규식을 문자열로 조립하지 않고 리터럴로 둔다. 템플릿 문자열
+   `<${tag}[^>]*>([\s\S]*?)` 로 만들면 \s 가 s 로 뭉개져 ([sS]*?) 가 되고
+   아무것도 안 잡힌다. 2026-09-15 에 그래서 뉴스가 0건이었다. */
+const RSS_TAG = {
+  title:  /<title[^>]*>([\s\S]*?)<\/title>/,
+  link:   /<link[^>]*>([\s\S]*?)<\/link>/,
+  pubDate: /<pubDate[^>]*>([\s\S]*?)<\/pubDate>/,
+  source: /<source[^>]*>([\s\S]*?)<\/source>/,
+};
+
+function unescapeXml(s) {
+  let t = String(s || "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1");
+  for (const [a, b] of [["&lt;", "<"], ["&gt;", ">"], ["&quot;", '"'],
+                        ["&#39;", "'"], ["&apos;", "'"], ["&amp;", "&"]]) {
+    t = t.split(a).join(b);
+  }
+  return t.replace(/<[^>]+>/g, "").trim();
+}
+
+/* RSS 의 GMT 시각을 한국 시각 문자열로. 못 읽으면 원문을 그대로 둔다. */
+function toKst(pubdate) {
+  const d = new Date(pubdate);
+  if (isNaN(d)) return pubdate || "";
+  return new Date(d.getTime() + 9 * 3600000).toISOString().replace("Z", "+09:00");
+}
+
+async function fetchTopicNews(topic) {
+  const q = (topic.keywords || [topic.label]).join(" OR ");
+  const url = `${GOOGLE_RSS}?${new URLSearchParams({
+    q, hl: "ko", gl: "KR", ceid: "KR:ko" })}`;
+  const res = await fetch(url, { headers: { "user-agent": NEWS_UA } });
+  if (!res.ok) throw new Error(`구글 뉴스 응답 ${res.status}`);
+  const xml = await res.text();
+
+  const out = [];
+  for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
+    if (out.length >= PER_TOPIC) break;
+    const block = m[1];
+    const pick = (tag) => {
+      const hit = block.match(RSS_TAG[tag]);
+      return hit ? unescapeXml(hit[1]) : "";
+    };
+    let title = pick("title");
+    if (!title || newsDropped(title)) continue;
+
+    // 구글은 "제목 - 언론사" 로 준다. 뒤쪽을 떼어 출처로 쓴다.
+    let source = pick("source");
+    if (!source && title.includes(" - ")) {
+      const at = title.lastIndexOf(" - ");
+      source = title.slice(at + 3);
+      title = title.slice(0, at);
+    }
+    out.push({
+      title: title.trim(), link: pick("link"), at: toKst(pick("pubDate")),
+      source: source.trim(), topic: topic.id, topicLabel: topic.label,
+    });
+  }
+  return out;
+}
+
+/* 켜져 있는 주제를 모두 받아 시각 역순으로 합친다.
+   한 주제가 실패해도 나머지는 보여준다. */
+async function fetchNewsIssues(env) {
+  return memo("news:issues", NEWS_TTL, async () => {
+    const on = NEWS_TOPICS.filter((t) => t.on !== false);
+    const rows = [];
+    const errors = {};
+    for (const t of on) {
+      try {
+        rows.push(...(await fetchTopicNews(t)));
+      } catch (e) {
+        errors[t.id] = safeMessage(e, env);
+      }
+    }
+    rows.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    return {
+      rows,
+      errors: Object.keys(errors).length ? errors : null,
+      topics: on.map((t) => ({ id: t.id, label: t.label, color: t.color })),
+    };
+  });
+}
+
+/* 20260915 + 121741 → 2026-09-15T12:17:41+09:00 */
+function newsStamp(d, t) {
+  if (!d || d.length !== 8) return "";
+  const hm = (String(t || "") + "000000").slice(0, 6);
+  return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
+       + `T${hm.slice(0, 2)}:${hm.slice(2, 4)}:${hm.slice(4, 6)}+09:00`;
+}
+
+async function fetchNewsMoves(cfg, env) {
+  return memo("news:moves", MOVES_TTL, async () => {
+    const rows = [];
+    const errors = {};
+    const seen = new Set();
+
+    for (const mk of MOVE_MARKETS) {
+      let data;
+      try {
+        data = await kisGet(cfg, env, NEWS_PATH, {
+          FID_NEWS_OFER_ENTP_CODE: "", FID_COND_MRKT_CLS_CODE: mk,
+          FID_INPUT_ISCD: "", FID_TITL_CNTT: "",
+          FID_INPUT_DATE_1: "", FID_INPUT_HOUR_1: "",
+          FID_RANK_SORT_CLS_CODE: "", FID_INPUT_SRNO: "",
+        }, NEWS_TR, MOVES_TTL);
+      } catch (e) {
+        errors[mk] = safeMessage(e, env);
+        continue;
+      }
+
+      for (const r of data.output || []) {
+        const srno = String(r.cntt_usiq_srno || "").trim();
+        if (!srno || seen.has(srno)) continue;
+        const title = String(r.hts_pbnt_titl_cntt || "").trim();
+        if (!title) continue;
+
+        // 관련 종목은 최대 10개까지 코드와 이름이 따로 온다
+        const stocks = [];
+        for (let i = 1; i <= 10; i++) {
+          const c = String(r[`iscd${i}`] || "").trim();
+          if (!c) continue;
+          stocks.push({ code: c, name: String(r[`kor_isnm${i}`] || "").trim() });
+        }
+        if (!stocks.length) continue;   // 종목이 안 붙었으면 이 갈래의 몫이 아니다
+
+        seen.add(srno);
+        rows.push({
+          id: srno, title,
+          at: newsStamp(String(r.data_dt || "").trim(), String(r.data_tm || "").trim()),
+          source: String(r.dorg || "").trim(),
+          market: mk === "01" ? "코스피" : "코스닥",
+          stocks,
+        });
+      }
+    }
+    rows.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    return { rows, errors: Object.keys(errors).length ? errors : null };
+  });
+}
+
 /* ── 저장 계층 (Cloudflare D1) ──────────────────────────────
    차트는 과거 데이터가 필요한데 볼 때마다 KIS 를 부르면 호출량을 감당할 수 없다.
    한 번 받은 일봉을 여기 쌓아두고, 이후에는 DB 에서 바로 꺼내 쓴다.
@@ -1491,6 +1686,42 @@ export default {
     const route = url.pathname.replace(/^\/api\/kis\/?/, "").replace(/\/$/, "");
 
     // ── 공시 ──
+    /* ── 뉴스 ──
+       두 갈래를 따로 받는다. server/kis_proxy.py 의 _handle_news 와 같은 경로다. */
+    if (url.pathname.startsWith("/api/news")) {
+      if (request.method !== "GET") return fail("GET 요청만 지원합니다.", 405);
+      const newsRoute = url.pathname.replace(/^\/api\/news\/?/, "").replace(/\/$/, "");
+      try {
+        if (newsRoute === "topics") {
+          return json({ ok: true, data: NEWS_TOPICS.filter((t) => t.on !== false) });
+        }
+        if (newsRoute === "issues") {
+          const r = await fetchNewsIssues(env);
+          return json({ ok: true, data: r.rows,
+                        meta: { topics: r.topics, errors: r.errors } });
+        }
+
+        const cfg = readConfig(env);
+        if (newsRoute === "moves") {
+          const r = await fetchNewsMoves(cfg, env);
+          return json({ ok: true, data: r.rows, meta: { errors: r.errors } });
+        }
+        if (newsRoute === "feed") {        // 화면이 한 번에 받아가는 자리
+          const [iss, mov] = await Promise.all([
+            fetchNewsIssues(env), fetchNewsMoves(cfg, env),
+          ]);
+          return json({
+            ok: true,
+            data: { issues: iss.rows, moves: mov.rows, topics: iss.topics },
+            meta: { errors: { issues: iss.errors, moves: mov.errors } },
+          });
+        }
+        return fail(`알 수 없는 경로입니다: ${newsRoute}`, 404);
+      } catch (e) {
+        return fail(safeMessage(e, env), 500);
+      }
+    }
+
     if (url.pathname.startsWith("/api/dart")) {
       if (request.method !== "GET") return fail("GET 요청만 지원합니다.", 405);
       const dartRoute = url.pathname.replace(/^\/api\/dart\/?/, "").replace(/\/$/, "");
