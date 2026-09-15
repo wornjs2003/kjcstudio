@@ -12,7 +12,6 @@ import { color } from './theme.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, dirClass, marketPhase }
   from './utils/format.js';
 import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop } from './components/frame.js';
-import { tickClass } from './utils/tick.js';
 import { mountDisclosures } from './components/disclosures.js';
 import { fetchIndexMinutes, fetchIndexCandles, fetchQuotes } from './data/live.js';
 
@@ -218,7 +217,7 @@ function paintStrip(indices) {
           >${badge.text}</span></div>
       <div class="kh-ix-b">
         <div>
-          <div class="kh-ix-v kh-num ${cls} ${tickClass('idx:' + i.code, i.value)}"
+          <div class="kh-ix-v kh-num ${cls}"
             >${fmtNum(i.value, 2)}</div>
           <div class="kh-ix-c kh-num ${cls}">${fmtDelta(i.change, i.changePct, '', 2)}</div>
         </div>
@@ -470,7 +469,7 @@ function paintRows(priceMap) {
         <span class="kh-ic" style="background:${s.brand || 'var(--kh-bg-active)'}"
           >${(s.name || '').slice(0, 2)}</span>
         <b>${s.name}</b></span></td>
-      <td class="kh-num"><span class="${tickClass('row:' + s.code, live && live.price)}"
+      <td class="kh-num"><span
         >${live ? fmtWon(live.price) : '···'}</span></td>
       <td class="kh-num ${cls}">${live ? fmtDeltaAmount(live.amt) : '—'}</td>
       <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(live.pct) : '—'}</td>
@@ -661,7 +660,7 @@ function paintOneRow(code, live) {
     if (!tr || !live) return;
     const cls = dirClass(live.pct);
     tr.children[2].innerHTML =
-      `<span class="${tickClass('row:' + code, live.price)}">${fmtWon(live.price)}</span>`;
+      `<span>${fmtWon(live.price)}</span>`;
     tr.children[3].className = 'kh-num ' + cls;
     tr.children[3].textContent = fmtDeltaAmount(live.amt);
     tr.children[4].className = 'kh-num ' + cls;
@@ -746,7 +745,7 @@ function paintPreview(priceMap) {
   if (pvShown === stamp) return;
   pvShown = stamp;
 
-  el.className = 'kh-pv-v kh-num ' + dirClass(live.pct) + ' ' + tickClass('pv:' + s.code, live.price);
+  el.className = 'kh-pv-v kh-num ' + dirClass(live.pct);
   el.textContent = `${fmtWon(live.price)}  ${fmtPct(live.pct)}`;
 }
 

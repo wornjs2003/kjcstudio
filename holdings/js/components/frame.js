@@ -9,7 +9,6 @@ import { WATCHLIST, PRIORITY_CODES } from '../data/market.js';
 import * as lastSeen from '../store/last-seen.js';
 import { fetchLivePrices, fetchLiveIndices, applyLiveToStock } from '../data/live.js';
 import { fmtWon, fmtPct, fmtNum, dirClass, fmtDeltaAmount } from '../utils/format.js';
-import { tickClass } from '../utils/tick.js';
 
 /* 아직 받아올 곳이 없는 시세 띠 항목 */
 const FOOT_NOT_READY = ['달러 인덱스', '달러 환율', '나스닥', 'S&P 500', '필라델피아 반도체'];
@@ -80,7 +79,7 @@ export function mountWatchSide(el, { activeCode } = {}) {
       const cls = dirClass(live.pct);
       const v = row.querySelector('.kh-wl-v');
       const c = row.querySelector('.kh-wl-c');
-      v.className = 'kh-num kh-wl-v ' + tickClass('side:' + s.code, live.price);
+      v.className = 'kh-num kh-wl-v';
       v.textContent = fmtWon(live.price);
       c.className = 'kh-wl-c kh-num ' + cls;
       /* 등락금액을 등락률 앞에 (2026-09-14 지시). 순위표와 같은 표기다. */

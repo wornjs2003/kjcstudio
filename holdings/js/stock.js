@@ -12,7 +12,6 @@ import { getMemo, setMemo } from './store/memo.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtShareCount, fmtDelta, dirClass }
   from './utils/format.js';
 import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop } from './components/frame.js';
-import { tickClass } from './utils/tick.js';
 import { mountDisclosures } from './components/disclosures.js';
 
 const $ = id => document.getElementById(id);
@@ -41,7 +40,7 @@ function paintHead(live) {
     return;
   }
   const cls = dirClass(live.pct);
-  price.className = 'kh-price kh-num ' + cls + ' ' + tickClass('head:' + stock.code, live.price);
+  price.className = 'kh-price kh-num ' + cls;
   price.textContent = fmtWon(live.price);
   sub.className = 'kh-price-sub kh-num ' + cls;
   sub.textContent = '어제보다 ' + fmtDelta(live.amt, live.pct);

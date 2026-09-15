@@ -196,43 +196,12 @@ body {
   body { padding-bottom: 106px; }
 }
 
-/* ── 값이 새로 들어왔다는 표시 ──────────────
-   값이 바뀌었으면 방향에 따라 배경이 한 번 물든다.
-   (js/utils/tick.js 가 클래스를 붙인다)
+/* 값이 새로 들어왔다는 표시가 여기 있었다 — 갱신될 때 숫자가 살짝 커졌다
+   돌아오고, 값이 바뀌면 방향에 따라 배경이 한 번 물들었다.
 
-   전에는 갱신될 때마다 숫자가 살짝 커졌다 돌아오는 것(scale 1.07)도 있었다.
-   0.2초마다 값이 들어오므로 글자 크기가 끊임없이 흔들려 읽기 나빴다.
-   뺐다 (2026-09-15 지시). 방향을 알려주는 배경만 남긴다. */
-@keyframes kh-tick-up-bg {
-  from { background: rgb(var(--kh-up-rgb) / 20%); }
-  to   { background: transparent; }
-}
-@keyframes kh-tick-down-bg {
-  from { background: rgb(var(--kh-down-rgb) / 20%); }
-  to   { background: transparent; }
-}
-
-/* 값만 새로 들어오고 숫자는 그대로일 때. 지금은 표시하지 않는다.
-   클래스는 js/utils/tick.js 가 계속 붙이므로 자리만 남겨 둔다. */
-.kh-tick {
-  display: inline-block;
-}
-.kh-tick-up {
-  animation: kh-tick-up-bg 800ms ease-out;
-  border-radius: 5px;
-  padding: 0 3px;
-  margin: 0 -3px;                 /* 배경만 넓히고 자리는 그대로 */
-}
-.kh-tick-down {
-  animation: kh-tick-down-bg 800ms ease-out;
-  border-radius: 5px;
-  padding: 0 3px;
-  margin: 0 -3px;
-}
-
-/* 움직임을 줄여 달라는 설정을 위한 블록이 여기 있었다. 크기 변화를 빼고
-   나니 기본과 같은 내용이 되어 지웠다 (2026-09-15). 남은 것은 배경이
-   한 번 물드는 것뿐이라 움직임이라 할 것이 없다. */
+   둘 다 뺐다 (2026-09-15 지시). 값이 0.2초마다 들어오므로 글자가 끊임없이
+   흔들리고 빨강·파랑 네모가 계속 깜빡였다. 갱신이 도는지는 숫자가 바뀌는
+   것으로 충분히 보인다. js/utils/tick.js 도 함께 지웠다. */
 
 /* ── 공시 목록 ──────────────────────────────
    첫 화면(오른쪽 '최근 공시')과 종목 화면('뉴스 · 공시')이 함께 쓴다.
