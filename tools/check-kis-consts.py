@@ -52,6 +52,7 @@ PAIRS = [
     ("공시 수집 시장",       "COLLECT_MARKETS",     "COLLECT_MARKETS",      "list"),
     ("공시 보관 일수",       "RETENTION_DAYS",      "RETENTION_DAYS",       None),
     ("지수 구성종목 목록",   "INDEX_LISTS",         "INDEX_LISTS",          "list"),
+    ("알림 예약",            "REMINDERS",           "REMINDERS",            "list"),
 ]
 
 # 어긋남을 알릴 때 "올림이라 괜찮은 것" 인지 곁들이려고 미리 모아 둔다
@@ -61,6 +62,7 @@ CEIL_NOTE = {w for w, _, _, c in PAIRS if c == "ceil"}
 PY_ALT = {
     "UNIVERSE_SIZE":   "holdings/server/dart.py",
     "INDEX_LISTS":     "holdings/server/dart.py",
+    "REMINDERS":       "holdings/server/dart.py",
     "COLLECT_MARKETS": "holdings/server/dart.py",
     "RETENTION_DAYS":  "holdings/server/dart.py",
 }
@@ -69,18 +71,40 @@ PY_ALT = {
 def read_consts(rel):
     """파일에서 최상위 상수를 이름→값 으로 읽는다.
 
-    파이썬은 `NAME = 값`, 자바스크립트는 `const NAME = 값;` 형태만 본다.
-    줄 끝 주석은 버린다. 8 * 60 처럼 간단한 곱셈은 계산한다."""
+    파이썬은 `NAME = 값`, 자바스크립트는 `const NAME = 값;` 형태를 본다.
+    줄 끝 주석은 버린다. 8 * 60 처럼 간단한 곱셈은 계산한다.
+
+    **여러 줄에 걸친 배열도 읽는다.** 전에는 첫 줄만 읽어서 `REMINDERS = [`
+    의 `[` 만 잡혔고, 양쪽이 똑같이 빈 값이 되어 무엇을 고쳐도 늘 통과했다.
+    도구가 통과한다고 믿을 수 없게 되는 종류의 구멍이라, 일부러 어긋나게
+    해서 잡히는지 확인하고 고쳤다 (2026-09-15).
+    """
     path = os.path.join(ROOT, rel)
     if not os.path.exists(path):
         return None
+    lines = io.open(path, encoding="utf-8").read().splitlines()
     out = {}
-    for line in io.open(path, encoding="utf-8"):
+
+    for i, line in enumerate(lines):
         m = re.match(r"^(?:const\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(.+)$", line)
         if not m:
             continue
         name, raw = m.group(1), m.group(2)
-        raw = re.sub(r"\s*(#|//).*$", "", raw).strip().rstrip(";").strip()
+        raw = re.sub(r"\s*(#|//).*$", "", raw).strip()
+
+        # 대괄호가 열린 채 줄이 끝나면 닫힐 때까지 이어 붙인다
+        if raw.count("[") > raw.count("]"):
+            buf = [raw]
+            depth = raw.count("[") - raw.count("]")
+            for nxt in lines[i + 1:]:
+                cut = re.sub(r"\s*(#|//).*$", "", nxt)
+                buf.append(cut.strip())
+                depth += cut.count("[") - cut.count("]")
+                if depth <= 0:
+                    break
+            raw = " ".join(buf)
+
+        raw = raw.rstrip(";").strip()
         out[name] = parse_value(raw)
     return out
 
@@ -98,9 +122,19 @@ def parse_value(raw):
     return raw
 
 
+# 사전 키로 쓰인 따옴표. 파이썬은 {"id": ...} 처럼 키를 따옴표로 쓰지만
+# 자바스크립트는 { id: ... } 로 쓴다. 그대로 비교하면 늘 어긋난다.
+DICT_KEY = re.compile(r"""["'](\w+)["']\s*:""")
+
+
 def as_list(v):
-    """["Y", "K"] 든 ["Y","K"] 든 같게 보도록 따옴표 안만 뽑는다."""
-    return re.findall(r"""["']([^"']*)["']""", str(v))
+    """["Y", "K"] 든 ["Y","K"] 든 같게 보도록 따옴표 안의 값만 뽑는다.
+
+    사전 키는 뺀다 — 파이썬 {"at": "..."} 와 자바스크립트 { at: "..." } 가
+    같은 것으로 읽혀야 한다.
+    """
+    text = DICT_KEY.sub(":", str(v))
+    return re.findall(r"""["']([^"']*)["']""", text)
 
 
 def same(a, b):

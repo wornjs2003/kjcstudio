@@ -335,6 +335,18 @@ def get_token(cfg):
 
 # ---------------------------------------------------------------- KIS 호출
 
+def out_rows(data, key):
+    """KIS 응답에서 배열을 꺼낸다.
+
+    `data.get("output") or []` 로 쓰면 output 이 객체로 왔을 때 키를 순회해
+    문자열이 나오고, 그 뒤 r.get(...) 에서 터진다. 워커 쪽에서는 같은 자리가
+    "object is not iterable" 로 500 이 됐다 (2026-09-15).
+    배열이 아니면 빈 배열로 친다. worker/kis-worker.js 의 outRows 와 같다.
+    """
+    v = (data or {}).get(key)
+    return v if isinstance(v, list) else []
+
+
 def kis_get(cfg, path, params, tr_id, _retry=1):
     token = get_token(cfg)
     _rate_limit()
@@ -495,7 +507,7 @@ def fetch_index_series(cfg, code, days=60):
         },
         "FHKUP03500100",
     )
-    rows = data.get("output2") or []
+    rows = out_rows(data, "output2")
     pairs = []
     for r in rows:
         v = _num(r.get("bstp_nmix_prpr"))
@@ -538,7 +550,7 @@ def fetch_index_minutes(cfg, code):
     }, "FHKUP03500200")
 
     bars = []
-    for r in (data.get("output2") or []):
+    for r in out_rows(data, "output2"):
         hhmmss = (r.get("stck_cntg_hour") or "").strip()
         # 888888 · 999999 는 시각이 아니라 요약 표시다. 버린다.
         if not hhmmss.isdigit() or hhmmss in ("888888", "999999"):
@@ -606,7 +618,7 @@ def fetch_index_candles(cfg, code, period):
         "FHKUP03500100",
     )
     out = []
-    for r in (data.get("output2") or []):
+    for r in out_rows(data, "output2"):
         day = (r.get("stck_bsop_date") or "").strip()
         close = _num(r.get("bstp_nmix_prpr"))
         if not day or close is None:
@@ -699,7 +711,7 @@ def fetch_overseas(cfg):
                 continue
             # 언제 기준 값인지. 해외장은 국내 낮 시간에 닫혀 있어서, 이것을 안 적으면
             # 어제 종가를 실시간인 줄 알게 된다 (2026-09-15 지적).
-            rows_sorted = sorted(data.get("output2") or [],
+            rows_sorted = sorted(out_rows(data, "output2"),
                                  key=lambda r: r.get("stck_bsop_date") or "")
             as_of = (rows_sorted[-1].get("stck_bsop_date") if rows_sorted else None)
 
@@ -712,7 +724,7 @@ def fetch_overseas(cfg):
                 "series": [
                     v for v in (
                         _num(r.get("ovrs_nmix_prpr"))
-                        for r in sorted(data.get("output2") or [],
+                        for r in sorted(out_rows(data, "output2"),
                                         key=lambda r: r.get("stck_bsop_date") or "")
                     ) if v
                 ][-60:],
@@ -850,7 +862,7 @@ def fetch_quotes_multi(cfg, codes):
                 errors[code] = safe_message(e)
             continue
 
-        for r in (data.get("output") or []):
+        for r in out_rows(data, "output"):
             code = (r.get("inter_shrn_iscd") or "").strip()
             if not code:
                 continue
@@ -977,7 +989,7 @@ def fetch_bars_from_kis(cfg, code, period, date_from, date_to):
         "FHKST03010100",
     )
     out = []
-    for r in data.get("output2") or []:
+    for r in out_rows(data, "output2"):
         d = r.get("stck_bsop_date")
         close = _num(r.get("stck_clpr"), int)
         if not d or close is None:
@@ -1014,7 +1026,7 @@ def fetch_minutes_from_kis(cfg, code, hour=None):
         "FHKST03010200",
     )
     out = []
-    for r in data.get("output2") or []:
+    for r in out_rows(data, "output2"):
         d, t = r.get("stck_bsop_date"), r.get("stck_cntg_hour")
         close = _num(r.get("stck_prpr"), int)
         if not d or not t or close is None:

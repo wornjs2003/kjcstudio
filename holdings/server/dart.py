@@ -648,6 +648,50 @@ def poll_once(key, quiet_first_run=True):
             "notified": sent, "purged": purged, "firstRun": first_run}
 
 
+# ── 알림 예약 ────────────────────────────────────────────────
+#
+# 정해둔 시각이 지나면 텔레그램으로 한 번 보낸다. 5분마다 도는 루프가
+# 확인하므로 정각이 아니라 그 안쪽 어딘가에 도착한다.
+#
+# 보낸 것은 sync_meta 에 적어 두 번 가지 않게 한다 — 공시가 "오늘 보냈나"를
+# 기억하는 것과 같은 방식이다. 지나간 것은 지운다.
+#
+# worker/kis-worker.js 의 REMINDERS 와 같아야 한다. 한쪽만 있으면 로컬을
+# 켜둔 날과 아닌 날의 동작이 달라진다.
+REMINDERS = [
+    {"id": "20260916-0900", "at": "2026-09-16T09:00",
+     "text": "오늘 할 일 — 숫자 깜빡임 제거 부분 수정"},
+]
+
+
+def _kst_stamp(now=None):
+    """지금 한국 시각을 '2026-09-16T09:00' 꼴로.
+
+    문자열끼리 비교하면 시간대 계산을 한 번 더 하지 않아도 된다.
+    """
+    return (now or datetime.now(KST)).strftime("%Y-%m-%dT%H:%M")
+
+
+def send_reminders():
+    """때가 된 알림을 보낸다. 보낸 건수를 돌려준다."""
+    if not REMINDERS:
+        return 0
+    db_init()
+    now = _kst_stamp()
+    sent = 0
+    for r in REMINDERS:
+        if now < r["at"]:
+            continue                      # 아직 때가 아니다
+        key = "remind_" + r["id"]
+        if _meta_get(key):
+            continue                      # 이미 보냈다
+        ok, _err = telegram_send(r["text"])
+        if ok:
+            _meta_set(key, now)
+            sent += 1
+    return sent
+
+
 def _should_poll(now=None):
     now = now or datetime.now(KST)
     if now.weekday() >= 5:
@@ -666,6 +710,14 @@ def start_poller():
         time.sleep(5)            # 서버가 막 뜬 참이라 잠깐 기다렸다 시작한다
         while True:
             try:
+                # 공시와 별개로 먼저 본다. 주말·장 시간과 무관하게 가야 한다.
+                try:
+                    n = send_reminders()
+                    if n:
+                        print("  [알림] 예약 알림 %d건 보냄" % n)
+                except Exception:
+                    pass
+
                 if _should_poll():
                     r = poll_once(key)
                     if r.get("ok") and r.get("matched"):

@@ -312,6 +312,17 @@ function kisPace() {
   return turn;
 }
 
+/* KIS 응답에서 배열을 꺼낸다.
+
+   `data.output || []` 로 쓰면 output 이 객체나 빈 문자열로 왔을 때
+   for...of 가 "object is not iterable" 로 터지고, 그 요청 전체가 500 이
+   된다. 한 종목이 이상해서 순위표와 지수가 통째로 비는 일이 생긴다
+   (2026-09-15). 배열이 아니면 빈 배열로 친다. */
+function outRows(data, key) {
+  const v = data && data[key];
+  return Array.isArray(v) ? v : [];
+}
+
 async function kisGet(cfg, env, path, params, trId, cacheTtl) {
   const token = await getToken(cfg, env);
   await kisPace();
@@ -466,8 +477,7 @@ async function fetchIndexSeriesLive(cfg, env, code, days = 60) {
     "FHKUP03500100",
     CHART_CACHE_TTL
   );
-  const rows = data.output2 || [];
-  return rows
+  return outRows(data, "output2")
     .filter((r) => r.stck_bsop_date && num(r.bstp_nmix_prpr) != null)
     .sort((a, b) => String(a.stck_bsop_date).localeCompare(String(b.stck_bsop_date)))
     .map((r) => num(r.bstp_nmix_prpr))
@@ -506,7 +516,7 @@ async function fetchIndexMinutesLive(cfg, env, code) {
   );
 
   const bars = [];
-  for (const r of data.output2 || []) {
+  for (const r of outRows(data, "output2")) {
     const hhmmss = String(r.stck_cntg_hour || "").trim();
     // 888888 · 999999 는 시각이 아니라 요약 표시다. 버린다.
     if (!/^\d+$/.test(hhmmss) || hhmmss === "888888" || hhmmss === "999999") continue;
@@ -571,7 +581,7 @@ async function fetchIndexCandlesLive(cfg, env, code, period) {
     INDEX_CANDLE_TTL
   );
   const out = [];
-  for (const r of data.output2 || []) {
+  for (const r of outRows(data, "output2")) {
     const day = String(r.stck_bsop_date || "").trim();
     const close = num(r.bstp_nmix_prpr);
     if (!day || close == null) continue;
@@ -658,7 +668,7 @@ async function fetchOverseasLive(cfg, env) {
         errors[key] = "값이 오지 않았습니다";
         continue;
       }
-      const series = (data.output2 || [])
+      const series = outRows(data, "output2")
         .slice()
         .sort((a, b) => String(a.stck_bsop_date || "").localeCompare(String(b.stck_bsop_date || "")))
         .map((r) => num(r.ovrs_nmix_prpr))
@@ -667,7 +677,7 @@ async function fetchOverseasLive(cfg, env) {
 
       /* 언제 기준 값인지. 해외장은 국내 낮 시간에 닫혀 있어서, 이것을 안 적으면
          어제 종가를 실시간인 줄 알게 된다 (2026-09-15 지적). */
-      const last = (data.output2 || [])
+      const last = outRows(data, "output2")
         .map((r) => String(r.stck_bsop_date || ""))
         .filter(Boolean)
         .sort()
@@ -928,7 +938,7 @@ async function fetchNewsMoves(cfg, env) {
         continue;
       }
 
-      for (const r of data.output || []) {
+      for (const r of outRows(data, "output")) {
         const srno = String(r.cntt_usiq_srno || "").trim();
         if (!srno || seen.has(srno)) continue;
         const title = String(r.hts_pbnt_titl_cntt || "").trim();
@@ -1042,7 +1052,7 @@ async function fetchBarsFromKis(cfg, env, code, period, from, to) {
     "FHKST03010100",
     QUOTE_CACHE_TTL
   );
-  return (data.output2 || [])
+  return outRows(data, "output2")
     .filter((r) => r.stck_bsop_date && num(r.stck_clpr) != null)
     .map((r) => ({
       ts: String(r.stck_bsop_date),
@@ -1076,7 +1086,7 @@ async function fetchMinutesFromKis(cfg, env, code, hour = null) {
     "FHKST03010200",
     QUOTE_CACHE_TTL
   );
-  return (data.output2 || [])
+  return outRows(data, "output2")
     .filter((r) => r.stck_bsop_date && r.stck_cntg_hour && num(r.stck_prpr) != null)
     .map((r) => ({
       ts: `${r.stck_bsop_date}${String(r.stck_cntg_hour).slice(0, 4)}`,
@@ -1269,7 +1279,7 @@ async function fetchQuotesMulti(cfg, env, codes) {
       continue;
     }
 
-    for (const r of data.output || []) {
+    for (const r of outRows(data, "output")) {
       const code = String(r.inter_shrn_iscd || "").trim();
       if (!code) continue;
       const price = num(r.inter2_prpr);
@@ -1368,6 +1378,47 @@ async function dartInit(env) {
 }
 
 /* 한국 시각 기준 오늘 (YYYYMMDD). Workers 는 UTC 로 돈다. */
+/* ── 알림 예약 ───────────────────────────────────────────────
+
+   정해둔 시각이 지나면 텔레그램으로 한 번 보낸다. Cron 이 5분마다 도므로
+   정각이 아니라 그 안쪽 어딘가에 도착한다.
+
+   보낸 것은 sync_meta 에 적어 두 번 가지 않게 한다 — 공시가 "오늘 보냈나"를
+   기억하는 것과 같은 방식이다.
+
+   지나간 것은 지운다. 목록이 쌓이면 무엇이 살아 있는지 알 수 없다.        */
+
+const REMINDERS = [
+  { id: "20260916-0900", at: "2026-09-16T09:00",
+    text: "오늘 할 일 — 숫자 깜빡임 제거 부분 수정" },
+];
+
+/* 지금 한국 시각을 '2026-09-16T09:00' 꼴로. 문자열끼리 비교하면
+   시간대 계산을 한 번 더 하지 않아도 된다. */
+function kstStamp(now = new Date()) {
+  const k = new Date(now.getTime() + 9 * 3600 * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${k.getUTCFullYear()}-${p(k.getUTCMonth() + 1)}-${p(k.getUTCDate())}`
+       + `T${p(k.getUTCHours())}:${p(k.getUTCMinutes())}`;
+}
+
+async function sendReminders(env) {
+  if (!REMINDERS.length) return 0;
+  const now = kstStamp();
+  let sent = 0;
+  for (const r of REMINDERS) {
+    if (now < r.at) continue;                       // 아직 때가 아니다
+    const key = `remind_${r.id}`;
+    if (await metaGet(env, key)) continue;          // 이미 보냈다
+    const ok = await telegramSend(env, r.text);
+    if (ok) {
+      await metaSet(env, key, now);
+      sent++;
+    }
+  }
+  return sent;
+}
+
 function kstToday(now = new Date()) {
   const kst = new Date(now.getTime() + 9 * 3600 * 1000);
   return `${kst.getUTCFullYear()}${String(kst.getUTCMonth() + 1).padStart(2, "0")}${String(kst.getUTCDate()).padStart(2, "0")}`;
@@ -1821,6 +1872,9 @@ export default {
   // Cron 은 UTC 로 돌기 때문에, 한국 시각·요일 판단은 dartShouldPoll() 이 맡는다.
   async scheduled(controller, env, ctx) {
     ctx.waitUntil((async () => {
+      // 공시와 별개로 먼저 본다. 주말·장 시간과 무관하게 가야 한다.
+      try { await sendReminders(env); } catch {}
+
       if (!dartShouldPoll()) return;
       try {
         await dartPollOnce(env);
