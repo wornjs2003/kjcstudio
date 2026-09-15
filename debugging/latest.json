@@ -1,9 +1,9 @@
 {
-  "at": "2026-09-15T18:29:49+09:00",
+  "at": "2026-09-15T20:11:26+09:00",
   "mode": "manual",
   "counts": {
-    "pass": 10,
-    "mismatch": 0,
+    "pass": 9,
+    "mismatch": 1,
     "changed": 0,
     "todo": 1,
     "ignored": 1
@@ -20,9 +20,9 @@
       "title": "문서가 가리키는 파일이 실제로 있는가",
       "scope": "CLAUDE.md 안의 `경로` 전부",
       "expected": "문서가 적어둔 경로가 모두 저장소에 있음",
-      "status": "pass",
-      "actual": "27개 모두 있음",
-      "detail": "문서가 가리키는 경로 27개 전부 저장소에 있습니다"
+      "status": "mismatch",
+      "actual": "1개 없음",
+      "detail": "문서에만 있고 저장소에 없음 — server/kis_proxy.py"
     },
     {
       "id": "md-no-area-theme",

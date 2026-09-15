@@ -372,8 +372,16 @@ let history = [];
 let filter = "all";
 let live = false;          /* 로컬 서버가 붙었는가 */
 
+/* 배포본에는 검사 서버가 없습니다. 그런데도 부르면 콘솔에 404 가 남습니다.
+   실패해도 읽기 전용으로 잘 넘어가지만, 빨간 줄이 쌓이면 진짜 오류가 묻힙니다.
+   holdings/js/sw-boot.js 가 쓰는 판정과 같은 방식입니다. */
+const isLocal = location.hostname === "localhost"
+             || location.hostname === "127.0.0.1"
+             || location.hostname === "[::1]";
+
 /* ── 서버 호출 ─────────────────────────── */
 function post(action, body) {
+  if (!isLocal) return Promise.reject(new Error("배포본에는 검사 서버가 없습니다"));
   return fetch("/debugging/api/" + action, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -385,6 +393,7 @@ function post(action, body) {
 }
 
 function loadHistory() {
+  if (!isLocal) { live = false; history = []; return Promise.resolve(); }
   return fetch("/debugging/api/history")
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function (b) { live = true; history = b.items || []; })
@@ -510,6 +519,8 @@ function drawFilters() {
   run.className = "run-btn";
   run.id = "runBtn";
   run.textContent = "▶ 지금 검사하기";
+  run.disabled = !isLocal;
+  run.title = isLocal ? "" : "검사는 로컬에서만 돌립니다";
   run.addEventListener("click", function () { runNow(run); });
   box.appendChild(run);
 }
@@ -627,6 +638,8 @@ function mkBtn(label, cls, fn) {
   const b = document.createElement("button");
   b.className = "mini " + cls;
   b.textContent = label;
+  b.disabled = !isLocal;
+  b.title = isLocal ? "" : "승인은 로컬에서만 합니다";
   b.addEventListener("click", fn);
   return b;
 }
@@ -636,6 +649,7 @@ function mkBtn(label, cls, fn) {
    실제로 그랬습니다 — 폴더 이름을 바꾸느라 서버를 잠깐 껐더니, 열려 있던 탭의
    버튼이 잠긴 채로 남아 "안 눌러진다" 가 됐습니다 (2026-09-15). */
 function ensureLive() {
+  if (!isLocal) { live = false; return Promise.resolve(false); }
   return fetch("/debugging/api/history", { cache: "no-store" })
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function (b) { live = true; history = b.items || []; return true; })
@@ -647,12 +661,20 @@ function withLive(fn) {
   return ensureLive().then(function (ok) {
     showOffline(!ok);
     if (ok) return fn();
+  }).catch(function () {
+    /* 여기서 다시 던지면 호출부가 받지 않아 Uncaught (in promise) 가 콘솔에
+       남습니다. 404 빨간 줄을 없애려다 다른 빨간 줄을 만드는 셈입니다.
+       서버가 없거나 응답이 실패한 것이므로 배너로 알리고 끝냅니다. */
+    showOffline(true);
   });
 }
 
 function showOffline(on) {
   const el = document.getElementById("offline");
-  if (el) el.hidden = !on;
+  if (!el) return;
+  /* 배포본에서는 켤 서버가 없으므로 「서버를 켜세요」 가 말이 안 됩니다.
+     그 상황은 아래 안내 문구가 대신 알립니다. */
+  el.hidden = !on || !isLocal;
 }
 
 function applyReport(res) {
@@ -703,7 +725,9 @@ function drawSide() {
 
   document.getElementById("hint").textContent = live
     ? "「의도함」 을 누르면 지금 값이 새 기준이 됩니다. 「오탐」 은 검사에서 빼고 이유를 남깁니다."
-    : "읽기 전용으로 보고 있습니다. 버튼을 쓰려면 debugging/debugging.bat 을 더블클릭해서 여세요.";
+    : isLocal
+      ? "읽기 전용으로 보고 있습니다. 버튼을 쓰려면 debugging/debugging.bat 을 더블클릭해서 여세요."
+      : "배포본에서는 마지막 검사 결과만 봅니다. 검사와 승인은 로컬에서 합니다.";
 }
 
 /* 회차 하나를 펼쳤을 때 — 그때 검사한 항목들을 보여줍니다 */
@@ -713,6 +737,11 @@ function drawHistDetail(box, h) {
 
   if (!h.file) {
     box.innerHTML = '<div class="hd-empty">이 회차의 기록을 찾지 못했습니다</div>';
+    return;
+  }
+
+  if (!isLocal) {
+    box.innerHTML = '<div class="hd-empty">회차 기록은 로컬에만 남습니다</div>';
     return;
   }
 
@@ -848,7 +877,6 @@ function runNow(btn) {
   withLive(function () {
     return post("run", { mode: "manual" }).then(applyReport);
   })
-    .catch(function () { showOffline(true); })
     .then(function () {
       const b = document.getElementById("runBtn");
       if (b) { b.textContent = "▶ 지금 검사하기"; b.disabled = false; }
@@ -862,12 +890,12 @@ const BAT_KEY = "kjc-debugging-bat";
 
 function fillBatPath() {
   const el = document.getElementById("batPath");
-  if (!el) return;
+  if (!el || !isLocal) return;
 
   /* 지난번에 받아 둔 경로를 먼저 띄웁니다. 서버가 꺼진 채로 열었을 때
      물어볼 곳이 없기 때문입니다. */
   try { el.textContent = localStorage.getItem(BAT_KEY) || ""; } catch (e) {}
-  if (!el.textContent) el.textContent = "debugging\debugging.bat";
+  if (!el.textContent) el.textContent = "debugging\\debugging.bat";
 
   fetch("/debugging/api/where", { cache: "no-store" })
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })

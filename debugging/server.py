@@ -36,6 +36,37 @@ KST = timezone(timedelta(hours=9))
 QA_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(QA_DIR)
 BAT_NAME = "debugging.bat" if os.name == "nt" else "debugging.command"
+
+# ── 남의 구역은 본진으로 보냅니다 ──────────────────────────
+#
+# 이 서버는 저장소 루트를 내보냅니다. 화면이 ../assets/ 와 ../partials/ 를
+# 쓰기 때문입니다. 그 바람에 holdings 나 projects 화면까지 여기서 열립니다.
+# 열리기는 하는데 /api/* 가 없어서 숫자가 하나도 안 나옵니다.
+#
+# 실제로 그랬습니다 — 이 서버에서 Holdings 메뉴를 눌렀더니 화면은 떴는데
+# 시세·공시·차트 요청이 전부 404 였습니다 (2026-09-15).
+#
+# "이 서버에서는 메뉴를 누르지 않는다" 는 규칙으로 둘 수도 있지만, 규칙은
+# 기억해야 지켜집니다. 눌러도 되도록 만드는 편이 낫습니다.
+
+MAIN_PORT = 8765                      # holdings-preview — 여섯 구역과 API 가 다 있는 서버
+MINE = ("/debugging", "/assets", "/partials", "/favicon.ico")
+
+
+def is_mine(path):
+    """이 서버가 직접 내보낼 경로인가. 나머지는 본진으로 넘깁니다."""
+    head = path.split("?")[0]
+    return any(head == m or head.startswith(m + "/") for m in MINE)
+
+
+def main_alive():
+    """본진이 떠 있는가. 죽어 있으면 보내봐야 연결 실패만 봅니다."""
+    import socket
+    try:
+        with socket.create_connection(("127.0.0.1", MAIN_PORT), timeout=0.15):
+            return True
+    except OSError:
+        return False
 HISTORY_DIR = os.path.join(QA_DIR, "history")
 EXPECTED_PATH = os.path.join(QA_DIR, "expected.json")
 LATEST_PATH = os.path.join(QA_DIR, "latest.json")
@@ -160,8 +191,58 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception:
             return {}
 
+    # ── 남의 구역 넘기기 ───────────────────
+    def _handoff(self):
+        """내 것이 아니면 본진으로 보냅니다. 보냈으면 True."""
+        if is_mine(self.path):
+            return False
+
+        if not main_alive():
+            return self._need_main()
+
+        self.send_response(302)
+        self.send_header("Location", "http://localhost:%d%s" % (MAIN_PORT, self.path))
+        self.send_header("cache-control", "no-store")
+        self.end_headers()
+        return True
+
+    def _need_main(self):
+        """본진이 꺼져 있을 때 — 연결 실패 화면 대신 무엇을 해야 하는지 알려 줍니다."""
+        bat = os.path.join(ROOT, "holdings-preview.bat" if os.name == "nt"
+                                 else "holdings-preview.command")
+        html = ("""<!doctype html><meta charset="utf-8">
+<title>본진 서버가 꺼져 있습니다</title>
+<style>
+ body { font-family: "Noto Sans KR", system-ui, sans-serif; background: #f6f7f9;
+        color: #101013; margin: 0; display: grid; place-items: center; min-height: 100vh; }
+ .box { background: #fff; border-radius: 16px; padding: 34px 38px; max-width: 620px; }
+ h1 { font-size: 20px; margin: 0 0 10px; }
+ p { color: #4e5968; line-height: 1.7; margin: 0 0 16px; font-size: 14px; }
+ code { background: #f2f4f6; border-radius: 6px; padding: 7px 12px;
+        display: inline-block; font-size: 13px; }
+ a { color: #3182f6; }
+</style>
+<div class="box">
+  <h1>이 화면은 %d 번 서버에 있습니다</h1>
+  <p>지금 보고 계신 %d 번은 Debugging 보드 전용이라 주식 데이터를 가져오지
+     못합니다. 화면은 열리지만 숫자가 비어 있게 됩니다.</p>
+  <p>아래 파일을 더블클릭하면 여섯 구역과 데이터가 전부 도는 서버가 뜹니다.</p>
+  <p><code>%s</code></p>
+  <p>띄우신 뒤 <a href="http://localhost:%d%s">여기</a> 를 누르시면 됩니다.</p>
+</div>""" % (MAIN_PORT, PORT, bat, MAIN_PORT, self.path)).encode("utf-8")
+
+        self.send_response(503)
+        self.send_header("content-type", "text/html; charset=utf-8")
+        self.send_header("content-length", str(len(html)))
+        self.send_header("cache-control", "no-store")
+        self.end_headers()
+        self.wfile.write(html)
+        return True
+
     # ── GET ───────────────────────────────
     def do_GET(self):
+        if self._handoff():
+            return
         if self.path.startswith("/debugging/api/history"):
             return self._json({"ok": True, "items": history_list()})
         if self.path.startswith("/debugging/api/where"):
