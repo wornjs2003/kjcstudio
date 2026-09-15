@@ -47,6 +47,16 @@ VIEWER = "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=%s"
 # 감시 대상 — 코스피 시가총액 상위 몇 종목까지 볼 것인가
 UNIVERSE_SIZE = 200
 
+# 어느 시장의 공시를 받을 것인가 (2026-09-15 지시로 넓혔다).
+#   Y 유가증권(코스피) · K 코스닥 · N 코넥스 · E 기타
+# 코넥스는 하루 한 건 남짓이고, 기타는 75건 중 68건이 비상장·펀드라
+# 종목코드가 없다. 종목코드가 없으면 화면에 붙일 종목이 없어 쓸 수 없다.
+COLLECT_MARKETS = ["Y", "K"]
+
+# 며칠 치를 들고 있을 것인가. 넘긴 것은 폴링할 때 지운다.
+# 전 종목으로 넓히면서 하루 400~600건이 쌓인다. 30일이면 1.5만 건쯤이다.
+RETENTION_DAYS = 30
+
 # 텔레그램을 보낼 종목.
 # js/data/market.js 의 WATCHLIST 와 같아야 한다. 한쪽만 고치면 어긋난다.
 WATCH_CODES = [
@@ -317,8 +327,26 @@ def fetch_list(key, bgn, end, corp_cls="Y", max_pages=12):
     return out
 
 
-def save_disclosures(items, only_codes, notified=0):
-    """감시 대상 것만 저장한다. 새로 들어온 것만 돌려준다.
+def purge_old(days=RETENTION_DAYS):
+    """보관 기간이 지난 공시를 지운다. 지운 건수를 돌려준다.
+
+    rcept_dt 는 'YYYYMMDD' 문자열이라 문자열 비교로 자를 수 있다.
+    """
+    cut = (datetime.now(KST) - timedelta(days=days)).strftime("%Y%m%d")
+    db_init()
+    with _db_lock, db_conn() as conn:
+        cur = conn.execute("DELETE FROM dart_disclosures WHERE rcept_dt < ?", (cut,))
+        return cur.rowcount or 0
+
+
+def save_disclosures(items, only_codes=None, notified=0):
+    """공시를 저장한다. 새로 들어온 것만 돌려준다.
+
+    only_codes 가 None 이면 **종목코드가 있는 것을 전부** 담는다
+    (2026-09-15 지시). 목록을 주면 그것만 담는다.
+
+    종목코드가 없는 공시는 버린다. 비상장·펀드라 화면에 붙일 종목이 없고,
+    눌러도 갈 곳이 없다.
 
     notified=1 로 넣으면 '이미 알린 것으로 친다'. 처음 켤 때 오늘 치를
     한꺼번에 받아 오는데, 그걸 전부 보내면 텔레그램이 도배된다.
@@ -328,7 +356,9 @@ def save_disclosures(items, only_codes, notified=0):
     with _db_lock, db_conn() as conn:
         for it in items:
             code = (it.get("stock_code") or "").strip()
-            if code not in only_codes:
+            if not code:
+                continue                      # 비상장·펀드
+            if only_codes is not None and code not in only_codes:
                 continue
             rcept = (it.get("rcept_no") or "").strip()
             if not rcept:
@@ -476,7 +506,10 @@ def notify(rows):
 # ---------------------------------------------------------------- 한 바퀴
 
 def poll_once(key, quiet_first_run=True):
-    """오늘 공시를 받아 감시 대상만 저장하고, 새 것 중 관심종목을 알린다."""
+    """오늘 공시를 시장마다 받아 저장하고, 새 것 중 관심종목을 알린다.
+
+    저장은 종목코드 있는 것 전부, 텔레그램은 관심종목만이다 (2026-09-15).
+    """
     db_init()
     today = _today()
 
@@ -489,29 +522,33 @@ def poll_once(key, quiet_first_run=True):
     if _meta_get("dart_universe_date") != today or universe_size() == 0:
         refresh_universe()
 
-    codes = universe_codes()
-    if not codes:
-        _meta_set("dart_last_error", "감시 대상 목록이 비어 있습니다")
-        return {"ok": False, "error": "감시 대상 목록이 비어 있습니다"}
-
-    try:
-        items = fetch_list(key, today, today)
-    except Exception as e:
-        msg = safe_message(e, 120)
-        _meta_set("dart_last_error", msg)
-        return {"ok": False, "error": msg}
+    # 시장마다 한 번씩 받는다. 기간 조회라 종목 수와 무관하게 호출이 일정하다.
+    items = []
+    for cls in COLLECT_MARKETS:
+        try:
+            items.extend(fetch_list(key, today, today, corp_cls=cls))
+        except Exception as e:
+            # 한 시장이 막혀도 나머지는 담는다. 전부 실패했을 때만 오류로 친다.
+            msg = "%s: %s" % (cls, safe_message(e, 100))
+            _meta_set("dart_last_error", msg)
+            if cls == COLLECT_MARKETS[-1] and not items:
+                return {"ok": False, "error": msg}
 
     # 처음 켜는 날이면 오늘 치가 한꺼번에 들어온다. 그건 알리지 않는다.
     first_run = _meta_get("dart_last_poll") is None
     mark = 1 if (first_run and quiet_first_run) else 0
 
-    fresh = save_disclosures(items, codes, notified=mark)
+    # 종목코드가 있는 것은 전부 담는다 (2026-09-15 지시).
+    # 텔레그램은 그대로 관심종목만 간다 — notify() 가 WATCH_CODES 로 거른다.
+    fresh = save_disclosures(items, notified=mark)
     sent = 0 if mark else notify(fresh)
+
+    purged = purge_old()
 
     _meta_set("dart_last_poll", datetime.now(KST).isoformat(timespec="seconds"))
     _meta_set("dart_last_error", "")
     return {"ok": True, "received": len(items), "matched": len(fresh),
-            "notified": sent, "firstRun": first_run}
+            "notified": sent, "purged": purged, "firstRun": first_run}
 
 
 def _should_poll(now=None):

@@ -27,6 +27,7 @@ JS = "holdings/worker/kis-worker.js"
 # (무엇인지, 파이썬 이름, 워커 이름, 비교 방식)
 #
 #   None     값이 똑같아야 한다
+#   "list"   ["Y", "K"] 같은 목록. 따옴표 안의 값만 순서대로 비교한다
 #   "ceil"   파이썬 값을 올림한 것과 워커 값이 같으면 통과.
 #            워커는 Cloudflare 엣지 캐시(cf.cacheTtl)를 쓰는데 공식 문서가
 #            소수를 받는지 밝히지 않아, 소수 초는 워커에서 올림해 넣는다
@@ -38,6 +39,7 @@ PAIRS = [
     ("시세 캐시 (빠름)",     "PRICE_CACHE_TTL_FAST", "QUOTE_CACHE_TTL_FAST", None),
     ("시세 캐시 (느림)",     "PRICE_CACHE_TTL",     "QUOTE_CACHE_TTL",      None),
     ("종목 차트 캐시",       "INDEX_CHART_TTL",     "CHART_CACHE_TTL",      None),
+    ("지수 추이 캐시",       "INDEX_CHART_TTL",     "SERIES_TTL",           None),
     ("지수 분봉 간격",       "INDEX_MINUTE_STEP",   "INDEX_MINUTE_STEP",    None),
     ("지수 분봉 캐시",       "INDEX_MINUTE_TTL",    "INDEX_MINUTE_TTL",     None),
     ("해외지수 캐시",        "OVERSEAS_TTL",        "OVERSEAS_TTL",         None),
@@ -47,13 +49,19 @@ PAIRS = [
     ("지수 캐시",            "INDEX_TTL",           "INDEX_TTL",            "ceil"),
     ("멀티 조회 최대",       "MULTI_MAX",           "MULTI_MAX",            None),
     ("공시 감시 종목 수",    "UNIVERSE_SIZE",       "UNIVERSE_SIZE",        None),
+    ("공시 수집 시장",       "COLLECT_MARKETS",     "COLLECT_MARKETS",      "list"),
+    ("공시 보관 일수",       "RETENTION_DAYS",      "RETENTION_DAYS",       None),
 ]
 
 # 어긋남을 알릴 때 "올림이라 괜찮은 것" 인지 곁들이려고 미리 모아 둔다
 CEIL_NOTE = {w for w, _, _, c in PAIRS if c == "ceil"}
 
 # 공시 상수는 dart.py 에 있다. 파일이 다른 것만 따로 적는다.
-PY_ALT = {"UNIVERSE_SIZE": "holdings/server/dart.py"}
+PY_ALT = {
+    "UNIVERSE_SIZE":   "holdings/server/dart.py",
+    "COLLECT_MARKETS": "holdings/server/dart.py",
+    "RETENTION_DAYS":  "holdings/server/dart.py",
+}
 
 
 def read_consts(rel):
@@ -88,6 +96,11 @@ def parse_value(raw):
     return raw
 
 
+def as_list(v):
+    """["Y", "K"] 든 ["Y","K"] 든 같게 보도록 따옴표 안만 뽑는다."""
+    return re.findall(r"""["']([^"']*)["']""", str(v))
+
+
 def same(a, b):
     if isinstance(a, float) and isinstance(b, float):
         return abs(a - b) < 1e-9
@@ -120,14 +133,17 @@ def main():
     for what, pname, jname, conv in PAIRS:
         src = alt.get(pname, py)
         if pname not in src:
-            missing.append((what, "kis_proxy.py 에 %s 가 없습니다" % pname))
+            where = os.path.basename(PY_ALT.get(pname, PY))
+            missing.append((what, "%s 에 %s 가 없습니다" % (where, pname)))
             continue
         if jname not in js:
             missing.append((what, "kis-worker.js 에 %s 가 없습니다" % jname))
             continue
         a = src[pname]
         b = js[jname]
-        if conv == "ceil":
+        if conv == "list":
+            hit = as_list(a) == as_list(b)
+        elif conv == "ceil":
             hit = isinstance(a, float) and isinstance(b, float) and math.ceil(a) == b
         else:
             hit = same(a, b)

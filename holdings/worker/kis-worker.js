@@ -97,6 +97,48 @@ const QUOTE_CACHE_TTL = 25;                         // 느린 갈래 · 지수 (
    받는지 밝히지 않았다 (2026-09-15 확인). 확인 못 한 값을 넣지 않는다.
    화면이 1초 주기라 1초면 충분하다. tools/check-kis-consts.py 가
    이 차이를 알고 비교한다. */
+/* ── 워커 자체 캐시 ─────────────────────────────────────────
+
+   엣지 캐시(cf.cacheTtl)에만 기대고 있었다. 그런데 Cloudflare 무료 요금제는
+   엣지 캐시 최소 보관이 2시간이라, 여기서 주는 1초·60초·600초가 전부
+   무시된다 (2026-09-15 확인). 캐시가 하나도 안 먹은 채로 돌았다.
+
+   그래서 지수 응답 한 번에 KIS 를 11번 부르고(국내 3×2 + 해외 4 + 선물 1),
+   kisPace 가 호출마다 200ms 를 강제하니 2.2초가 걸렸다. 화면은 1초마다
+   부르므로 줄이 계속 밀렸다. "한 번 갱신되고 멈춘다" 가 이것이었다.
+
+   로컬 서버(server/kis_proxy.py)는 처음부터 자기 메모리에 들고 있어서
+   멀쩡했다. 같은 방식을 여기에도 둔다. Worker 는 isolate 가 사는 동안
+   전역을 유지하므로 이것이 실제로 받아낸다.
+
+   cf.cacheTtl 은 지우지 않는다. 엣지가 먹히는 환경에서는 그것대로 이득이고,
+   안 먹혀도 이 캐시가 앞에서 받는다.                                       */
+
+const _mem = new Map();
+
+/* isolate 가 오래 살면 키가 쌓인다. 지수·해외처럼 키가 몇 개뿐이라 커질
+   일은 없지만, 종목별 키가 섞여 들어올 때를 대비해 위쪽을 막아 둔다. */
+const MEM_MAX = 500;
+
+async function memo(key, ttlSec, make) {
+  const now = Date.now();
+  const hit = _mem.get(key);
+  if (hit && now - hit.at < ttlSec * 1000) return hit.v;
+
+  const v = await make();
+  if (_mem.size >= MEM_MAX) {
+    // 가장 오래 전에 넣은 것부터 버린다 (Map 은 넣은 순서를 지킨다)
+    const oldest = _mem.keys().next().value;
+    _mem.delete(oldest);
+  }
+  _mem.set(key, { at: now, v });
+  return v;
+}
+
+/* 지수 추이(작은 꺾은선). 60일치 과거 일봉이라 하루에 한 번 바뀐다.
+   1초마다 다시 받을 이유가 없다. server/kis_proxy.py 의 INDEX_CHART_TTL 과 같다. */
+const SERIES_TTL = 600;
+
 const INDEX_TTL = 1;
 const FUTURES_TTL = 1;
 
@@ -365,6 +407,10 @@ async function fetchPrices(cfg, env, codes) {
    ─────────────────────────────────────────────────────────── */
 
 async function fetchIndex(cfg, env, code) {
+  return memo(`index:${code}`, INDEX_TTL, () => fetchIndexLive(cfg, env, code));
+}
+
+async function fetchIndexLive(cfg, env, code) {
   const data = await kisGet(
     cfg, env,
     "/uapi/domestic-stock/v1/quotations/inquire-index-price",
@@ -400,6 +446,11 @@ function ymd(d) {
 }
 
 async function fetchIndexSeries(cfg, env, code, days = 60) {
+  return memo(`series:${code}:${days}`, SERIES_TTL,
+              () => fetchIndexSeriesLive(cfg, env, code, days));
+}
+
+async function fetchIndexSeriesLive(cfg, env, code, days = 60) {
   const end = new Date();
   const start = new Date(end.getTime() - (days * 2 + 30) * 86400000); // 휴장일 감안
   const data = await kisGet(
@@ -436,6 +487,10 @@ const INDEX_MINUTE_STEP = "300";      // 5분
 const INDEX_MINUTE_TTL = 30;          // 장중에는 계속 바뀌므로 짧게
 
 async function fetchIndexMinutes(cfg, env, code) {
+  return memo(`minutes:${code}`, INDEX_MINUTE_TTL, () => fetchIndexMinutesLive(cfg, env, code));
+}
+
+async function fetchIndexMinutesLive(cfg, env, code) {
   const data = await kisGet(
     cfg, env,
     "/uapi/domestic-stock/v1/quotations/inquire-time-indexchartprice",
@@ -498,6 +553,10 @@ const INDEX_CANDLE_TTL = 300;
 const INDEX_SPAN_DAYS = { D: 400, W: 1500, M: 4000, Y: 12000 };
 
 async function fetchIndexCandles(cfg, env, code, period) {
+  return memo(`candles:${code}:${period}`, INDEX_CANDLE_TTL, () => fetchIndexCandlesLive(cfg, env, code, period));
+}
+
+async function fetchIndexCandlesLive(cfg, env, code, period) {
   const now = new Date();
   const data = await kisGet(
     cfg, env,
@@ -539,6 +598,10 @@ async function fetchIndexCandles(cfg, env, code, period) {
 const FUTURES_CODE = "10100000";
 
 async function fetchFutures(cfg, env) {
+  return memo("futures", FUTURES_TTL, () => fetchFuturesLive(cfg, env));
+}
+
+async function fetchFuturesLive(cfg, env) {
   let data;
   try {
     data = await kisGet(
@@ -565,6 +628,10 @@ async function fetchFutures(cfg, env) {
 }
 
 async function fetchOverseas(cfg, env) {
+  return memo("overseas", OVERSEAS_TTL, () => fetchOverseasLive(cfg, env));
+}
+
+async function fetchOverseasLive(cfg, env) {
   const out = [];
   const errors = {};
   const now = new Date();
@@ -995,6 +1062,16 @@ const DART_API = "https://opendart.fss.or.kr/api";
 const DART_VIEWER = "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=";
 const UNIVERSE_SIZE = 200;          // 코스피 시가총액 상위 몇 종목을 볼 것인가
 
+/* 어느 시장의 공시를 받을 것인가 (2026-09-15 지시로 넓혔다).
+     Y 유가증권(코스피) · K 코스닥 · N 코넥스 · E 기타
+   코넥스는 하루 한 건 남짓이고, 기타는 75건 중 68건이 비상장·펀드라
+   종목코드가 없다. 종목코드가 없으면 화면에 붙일 종목이 없어 쓸 수 없다.
+   server/dart.py 의 COLLECT_MARKETS 와 같아야 한다. */
+const COLLECT_MARKETS = ["Y", "K"];
+
+// 며칠 치를 들고 있을 것인가. 넘긴 것은 폴링할 때 지운다.
+const RETENTION_DAYS = 30;
+
 /* 텔레그램을 보낼 종목. server/dart.py 의 WATCH_CODES 와 같아야 한다.
    순위(200종목)가 양쪽에서 조금 달라져도 알림은 이 목록에만 가므로 영향이 없다. */
 const DART_WATCH_CODES = [
@@ -1166,14 +1243,17 @@ async function fetchDartList(key, bgn, end, corpCls = "Y", maxPages = 12) {
 /* 감시 대상 것만 저장하고, 새로 들어온 것만 돌려준다.
    notified=1 로 넣으면 '이미 알린 것으로 친다'. 처음 켤 때 쌓여 있던 것을
    전부 보내면 텔레그램이 도배된다. */
-async function saveDisclosures(env, items, onlyCodes, notified = 0) {
+/* onlyCodes 가 null 이면 종목코드가 있는 것을 전부 담는다 (2026-09-15 지시).
+   목록을 주면 그것만 담는다. server/dart.py 의 save_disclosures 와 같다. */
+async function saveDisclosures(env, items, onlyCodes = null, notified = 0) {
   const db = await dartInit(env);
   const fresh = [];
   const rows = [];
 
   for (const it of items) {
     const code = String(it.stock_code || "").trim();
-    if (!onlyCodes.has(code)) continue;
+    if (!code) continue;                            // 비상장·펀드
+    if (onlyCodes && !onlyCodes.has(code)) continue;
     const rcept = String(it.rcept_no || "").trim();
     if (!rcept) continue;
     rows.push({
@@ -1297,6 +1377,19 @@ async function dartNotify(env, rows) {
 
 /* ── 한 바퀴 ── */
 
+/* 보관 기간이 지난 공시를 지운다. 지운 건수를 돌려준다.
+
+   rcept_dt 는 'YYYYMMDD' 문자열이라 문자열 비교로 자를 수 있다.
+   server/dart.py 의 purge_old 와 같다. */
+async function purgeOldDisclosures(env, days = RETENTION_DAYS) {
+  const db = await dartInit(env);
+  const cut = new Date(Date.now() - days * 86400000)
+    .toISOString().slice(0, 10).replace(/-/g, "");
+  const res = await db.prepare(
+    `DELETE FROM dart_disclosures WHERE rcept_dt < ?`).bind(cut).run();
+  return (res.meta && res.meta.changes) || 0;
+}
+
 async function dartPollOnce(env, quietFirstRun = true) {
   const key = env.DART_API_KEY;
   if (!key) return { ok: false, error: "DART_API_KEY 가 설정되지 않았습니다." };
@@ -1309,31 +1402,35 @@ async function dartPollOnce(env, quietFirstRun = true) {
     if (!u.ok) await metaSet(env, "dart_last_error", u.error);
   }
 
-  const codes = await universeCodes(env);
-  if (!codes.size) {
-    const msg = "감시 대상 목록이 비어 있습니다";
-    await metaSet(env, "dart_last_error", msg);
-    return { ok: false, error: msg };
-  }
-
-  let items;
-  try {
-    items = await fetchDartList(key, today, today);
-  } catch (e) {
-    const msg = safeMessage(e, env);
-    await metaSet(env, "dart_last_error", msg);
-    return { ok: false, error: msg };
+  // 시장마다 한 번씩 받는다. 기간 조회라 종목 수와 무관하게 호출이 일정하다.
+  const items = [];
+  for (const cls of COLLECT_MARKETS) {
+    try {
+      items.push(...(await fetchDartList(key, today, today, cls)));
+    } catch (e) {
+      // 한 시장이 막혀도 나머지는 담는다. 전부 실패했을 때만 오류로 친다.
+      const msg = `${cls}: ${safeMessage(e, env)}`;
+      await metaSet(env, "dart_last_error", msg);
+      if (cls === COLLECT_MARKETS[COLLECT_MARKETS.length - 1] && !items.length) {
+        return { ok: false, error: msg };
+      }
+    }
   }
 
   const firstRun = !(await metaGet(env, "dart_last_poll"));
   const mark = firstRun && quietFirstRun ? 1 : 0;
 
-  const fresh = await saveDisclosures(env, items, codes, mark);
+  /* 종목코드가 있는 것은 전부 담는다 (2026-09-15 지시).
+     텔레그램은 그대로 관심종목만 간다 — dartNotify 가 DART_WATCH_CODES 로 거른다. */
+  const fresh = await saveDisclosures(env, items, null, mark);
   const notified = mark ? 0 : await dartNotify(env, fresh);
+
+  const purged = await purgeOldDisclosures(env);
 
   await metaSet(env, "dart_last_poll", new Date().toISOString());
   await metaSet(env, "dart_last_error", "");
-  return { ok: true, received: items.length, matched: fresh.length, notified, firstRun };
+  return { ok: true, received: items.length, matched: fresh.length,
+           notified, purged, firstRun };
 }
 
 async function dartStatus(env) {
