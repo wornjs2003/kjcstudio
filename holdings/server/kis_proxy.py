@@ -453,6 +453,23 @@ def fetch_index(cfg, code):
         "open": _num(o.get("bstp_nmix_oprc")),
         "high": _num(o.get("bstp_nmix_hgpr")),
         "low": _num(o.get("bstp_nmix_lwpr")),
+
+        # 아래 둘은 이미 이 응답에 들어 있었는데 쓰지 않고 버리던 것이다.
+        # 따로 부르지 않아도 되므로 호출이 늘지 않는다 (2026-09-15).
+
+        # 상승·보합·하락 종목 수. 화면 맨 위 장 상태 줄에 쓴다.
+        "up": _num(o.get("ascn_issu_cnt"), int),
+        "flat": _num(o.get("stnr_issu_cnt"), int),
+        "down": _num(o.get("down_issu_cnt"), int),
+        "upperLimit": _num(o.get("uplm_issu_cnt"), int),
+        "lowerLimit": _num(o.get("lslm_issu_cnt"), int),
+
+        # 연중 최고·최저. 52주가 아니라 '올해 들어' 기준이다(dryy = during year).
+        # 화면에도 그렇게 적어야 한다.
+        "yearHigh": _num(o.get("dryy_bstp_nmix_hgpr")),
+        "yearHighDate": (o.get("dryy_bstp_nmix_hgpr_date") or "").strip() or None,
+        "yearLow": _num(o.get("dryy_bstp_nmix_lwpr")),
+        "yearLowDate": (o.get("dryy_bstp_nmix_lwpr_date") or "").strip() or None,
     }
 
 
@@ -540,6 +557,125 @@ def fetch_index_minutes(cfg, code):
     return bars
 
 
+# ── 해외 지수·환율 ──────────────────────────────────────────────────
+# 국내 계약으로도 받아진다. 2026-09-15 에 직접 호출해 확인했다.
+# docs/data-sources.md 에 "KIS 국내 계약으로는 해외를 못 받는다" 고 적혀 있는데
+# 그것은 사실과 다르다. 야후를 붙일 필요가 없다.
+#
+#   시장구분 N = 해외지수 · X = 환율
+#
+# 다우존스는 코드를 찾지 못했다. DJI · .DJI · DJIA 를 네 가지 시장구분으로
+# 시도했지만 모두 0 이 온다 (DOW 는 다우社 주식이라 28원이 나온다).
+# WTI·금도 이 API 로는 안 나온다 — 해외선물 쪽을 따로 봐야 한다.
+OVERSEAS_DEFS = [
+    ("USDKRW", "X", "FX@KRW",  "미국 USD", "원"),
+    ("SPX",    "N", "SPX",     "S&P 500",  "pt"),
+    ("NASDAQ", "N", "COMP",    "나스닥 종합", "pt"),
+    ("VIX",    "N", "VIX",     "VIX",      "pt"),
+]
+OVERSEAS_TTL = 60          # 해외장은 국내 장중에 거의 멈춰 있다
+_ovs_cache = {}
+
+
+# ── 코스피200 선물 ──────────────────────────────────────────────────
+# 종목코드 "10100000" 이 최근월물을 가리킨다. 응답의 hts_kor_isnm 에
+# "F 202612" 처럼 어느 월물인지 적혀 온다.
+#
+# 코드를 찾는 데 한참 걸렸다. 101W09 · 101U6000 같은 월물 표기를 여러 개
+# 넣어 봤지만 전부 output1(선물 자리)이 비어 오고 output2(기초자산 = 코스피
+# 지수)만 돌아왔다. 8자리 "10100000" 이 맞다 (2026-09-15 확인).
+FUTURES_CODE = "10100000"
+FUTURES_TTL = 5
+_fut_cache = {}
+
+
+def fetch_futures(cfg):
+    """코스피200 선물 최근월물. 못 받으면 None — 화면은 그 칸만 비운다."""
+    hit = _fut_cache.get("k200")
+    if hit and (time.time() - hit[0]) < FUTURES_TTL:
+        return hit[1]
+    try:
+        _stats["kis_calls"] += 1
+        data = kis_get(
+            cfg,
+            "/uapi/domestic-futureoption/v1/quotations/inquire-price",
+            {"FID_COND_MRKT_DIV_CODE": "F", "FID_INPUT_ISCD": FUTURES_CODE},
+            "FHMIF10000000",
+        )
+    except RuntimeError:
+        return None
+
+    o = data.get("output1") or {}
+    price = _num(o.get("futs_prpr"))
+    if price is None:
+        return None
+    row = {
+        "name": (o.get("hts_kor_isnm") or "").strip(),   # 예: "F 202612"
+        "price": price,
+        "change": _num(o.get("futs_prdy_vrss")),
+        "changePct": _num(o.get("futs_prdy_ctrt")),
+        "volume": _num(o.get("acml_vol"), int),
+        "source": "KIS",
+    }
+    _fut_cache["k200"] = (time.time(), row)
+    return row
+
+
+def fetch_overseas(cfg):
+    """해외 지수와 환율. 하나가 실패해도 나머지는 돌려준다."""
+    out, errors = [], {}
+    for key, div, code, name, unit in OVERSEAS_DEFS:
+        hit = _ovs_cache.get(key)
+        if hit and (time.time() - hit[0]) < OVERSEAS_TTL:
+            out.append(hit[1])
+            continue
+        try:
+            _stats["kis_calls"] += 1
+            # 기간을 넓게 잡아 현재값과 추이를 한 번에 받는다.
+            # output1 에 현재값, output2 에 일봉이 함께 온다 — 두 번 부를 필요가 없다.
+            now = datetime.now(KST)
+            data = kis_get(
+                cfg,
+                "/uapi/overseas-price/v1/quotations/inquire-daily-chartprice",
+                {"FID_COND_MRKT_DIV_CODE": div, "FID_INPUT_ISCD": code,
+                 "FID_INPUT_DATE_1": (now - timedelta(days=100)).strftime("%Y%m%d"),
+                 "FID_INPUT_DATE_2": now.strftime("%Y%m%d"),
+                 "FID_PERIOD_DIV_CODE": "D"},
+                "FHKST03030100",
+            )
+            o = data.get("output1") or {}
+            value = _num(o.get("ovrs_nmix_prpr"))
+            if value in (None, 0):
+                errors[key] = "값이 오지 않았습니다"
+                continue
+            # 언제 기준 값인지. 해외장은 국내 낮 시간에 닫혀 있어서, 이것을 안 적으면
+            # 어제 종가를 실시간인 줄 알게 된다 (2026-09-15 지적).
+            rows_sorted = sorted(data.get("output2") or [],
+                                 key=lambda r: r.get("stck_bsop_date") or "")
+            as_of = (rows_sorted[-1].get("stck_bsop_date") if rows_sorted else None)
+
+            row = {
+                "code": key, "name": name, "unit": unit,
+                "value": value, "asOf": as_of, "market": "overseas",
+                "change": _num(o.get("ovrs_nmix_prdy_vrss")),
+                "changePct": _num(o.get("prdy_ctrt")),
+                # 카드의 작은 그래프가 쓴다. 옛것부터 차례로 담는다.
+                "series": [
+                    v for v in (
+                        _num(r.get("ovrs_nmix_prpr"))
+                        for r in sorted(data.get("output2") or [],
+                                        key=lambda r: r.get("stck_bsop_date") or "")
+                    ) if v
+                ][-60:],
+                "source": "KIS",
+            }
+            out.append(row)
+            _ovs_cache[key] = (time.time(), row)
+        except RuntimeError as e:
+            errors[key] = safe_message(e)
+    return out, errors
+
+
 def fetch_indices(cfg, with_chart=True):
     out, errors = [], {}
     for code, name in INDEX_DEFS:
@@ -558,11 +694,12 @@ def fetch_indices(cfg, with_chart=True):
                     series = fetch_index_series(cfg, code)
                 except RuntimeError:
                     series = []          # 차트만 실패해도 현재값은 보여준다
+            # fetch_index 가 준 것을 그대로 싣는다. 전에는 값·등락만 골라 담고
+            # 나머지를 버려서, 시장현황·연중최고저를 추가해도 화면까지 오지 않았다.
             row = {
+                **info,
                 "code": name, "name": name, "unit": "pt",
-                "value": info["value"], "change": info["change"],
-                "changePct": info["changePct"], "series": series,
-                "source": "KIS",
+                "series": series, "source": "KIS",
             }
             out.append(row)
             _cache_put(cache_key, row)
@@ -1171,7 +1308,14 @@ class Handler(SimpleHTTPRequestHandler):
             if route == "indices":
                 with_chart = (qs.get("chart") or ["1"])[0] != "0"
                 data, errors = fetch_indices(cfg, with_chart)
-                self._send_json({"ok": bool(data), "data": data, "errors": errors or None})
+                # 해외 지수·환율도 같은 응답에 실어 보낸다. 화면이 한 번만 부르면 된다.
+                if (qs.get("overseas") or ["1"])[0] != "0":
+                    ovs, ovs_err = fetch_overseas(cfg)
+                    data = data + ovs
+                    errors.update(ovs_err)
+                futures = fetch_futures(cfg)
+                self._send_json({"ok": bool(data), "data": data,
+                                 "futures": futures, "errors": errors or None})
                 return
 
             if route == "quotes":

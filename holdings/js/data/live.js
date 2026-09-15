@@ -37,6 +37,9 @@ export async function fetchLiveIndices() {
     if (!r.ok) return null;
     const j = await r.json();
     if (!j || !j.ok || !Array.isArray(j.data) || !j.data.length) return null;
+    /* 선물은 목록이 아니라 따로 온다. 배열에 실어 보내면 지수 카드가 하나 더
+       생겨 버리므로, 목록에 표시만 달아 둔다. */
+    j.data.futures = j.futures || null;
     return j.data;
   } catch {
     return null;

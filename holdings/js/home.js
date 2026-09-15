@@ -25,13 +25,17 @@ const INDEX_CELLS = [
   { code: 'KOSPI',    name: '코스피',     icon: 'kr' },
   { code: 'KOSDAQ',   name: '코스닥',     icon: 'kr' },
   { code: 'KOSPI200', name: '코스피200',  icon: 'kr' },
-  { name: '미국 USD',  wait: '야후 KRW=X', icon: 'us' },
-  { name: 'S&P 500',  wait: '야후 ^GSPC', icon: 'us' },
-  { name: '나스닥 종합', wait: '야후 ^IXIC', icon: 'us' },
-  { name: '다우존스',  wait: '야후 ^DJI',  icon: 'us' },
-  { name: 'VIX',      wait: '야후 ^VIX',  icon: 'vix' },
-  { name: 'WTI 원유',  wait: '야후 CL=F',  icon: 'oil' },
-  { name: '금',       wait: '야후 GC=F',  icon: 'au' },
+  { code: 'USDKRW', name: '미국 USD',  icon: 'us' },
+  { code: 'SPX',    name: 'S&P 500',  icon: 'us' },
+  { code: 'NASDAQ', name: '나스닥 종합', icon: 'us' },
+  { code: 'VIX',    name: 'VIX',      icon: 'vix' },
+  /* 아래 셋은 KIS 에서 못 찾았다.
+     다우존스 — DJI · .DJI · DJIA 를 네 가지 시장구분으로 시도했지만 전부 0 이다
+                (DOW 는 다우社 주식이라 28원이 나온다)
+     WTI · 금  — 해외선물 쪽 API 를 따로 봐야 한다 */
+  { name: '다우존스',  wait: '코드 찾는 중', icon: 'us' },
+  { name: 'WTI 원유',  wait: '해외선물 API', icon: 'oil' },
+  { name: '금',       wait: '해외선물 API', icon: 'au' },
 ];
 
 /* 칸 앞에 붙는 표시.
@@ -55,7 +59,10 @@ let selectedCode = WATCHLIST[0].code;
 let lastTickAt = null;
 
 /* ── 작은 추이선 ─────────────────────────── */
-function sparkSvg(series, isUp, w, h) {
+/* 작은 추이 그래프.
+   색은 한국식으로 — 오름 빨강 · 내림 파랑 · 보합 검정.
+   전에는 `changePct >= 0` 으로 넘겨서 0.00% 일 때도 빨강이 됐다 (2026-09-15). */
+function sparkSvg(series, pct, w, h) {
   if (!series || series.length < 2) return '';
   const lo = Math.min(...series), hi = Math.max(...series);
   const range = Math.max(1e-9, hi - lo);
@@ -64,7 +71,8 @@ function sparkSvg(series, isUp, w, h) {
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
             style="width:100%;height:100%;display:block">
             <polyline points="${pts.join(' ')}" fill="none"
-              stroke="${isUp ? color('up') : color('down')}"
+              stroke="${pct == null || pct === 0 ? color('flat')
+                        : (pct > 0 ? color('up') : color('down'))}"
               stroke-width="1.6" stroke-linejoin="round"/></svg>`;
 }
 
@@ -102,12 +110,76 @@ function paintMkt() {
   if (!el) return;
   const phase = marketPhase();
   const live = phase.id === 'regular';
+
+  /* 시장 현황(상승·보합·하락 종목 수)을 장 상태 바로 옆에 둔다 (2026-09-15 지시).
+     지수 조회 응답에 이미 들어 있어서 따로 부르지 않는다.
+     코스피 기준이다 — 코스닥을 고르면 그쪽 숫자로 바뀐다. */
+  const idx = (lastIndices || []).find(x => x.code === pickedIndex)
+           || (lastIndices || [])[0];
+  const counts = idx && idx.up != null ? `
+    <span class="kh-mkt-cnt">
+      <b class="kh-up">${fmtNum(idx.up)}</b><span class="kh-mut">상승</span>
+      <b class="kh-flat">${fmtNum(idx.flat)}</b><span class="kh-mut">보합</span>
+      <b class="kh-down">${fmtNum(idx.down)}</b><span class="kh-mut">하락</span>
+      ${idx.upperLimit ? `<span class="kh-mut">상한 ${idx.upperLimit}</span>` : ''}
+      ${idx.lowerLimit ? `<span class="kh-mut">하한 ${idx.lowerLimit}</span>` : ''}
+    </span>` : '';
+
+  /* 현물 · 선물 · 야간 (2026-09-15 지시).
+
+       현물   코스피200 지수. 이미 카드로 받고 있는 값을 그대로 쓴다
+       선물   코스피200 최근월물. 지수보다 먼저 움직여 방향을 가늠하는 데 쓴다
+       야간   아직 코드를 못 찾았다. 자리만 만들어 둔다
+
+     선물은 월물 이름("F 202612")을 함께 보여줘 어느 월물인지 알 수 있게 한다. */
+  const spot = (lastIndices || []).find(x => x.code === 'KOSPI200');
+  const f = (lastIndices || {}).futures;
+
+  const one = (label, value, pct, change, note) => `
+    <span class="kh-fut-1">
+      <span class="kh-mut">${label}</span>
+      ${value == null
+        ? '<span class="kh-mut">연결 예정</span>'
+        : `<b class="kh-num ${dirClass(pct)}">${fmtNum(value, 2)}</b>
+           <span class="kh-num ${dirClass(pct)}">${fmtPct(pct)}</span>`}
+      ${note ? `<span class="kh-mut">${note}</span>` : ''}
+    </span>`;
+
+  const futures = `
+    <span class="kh-mkt-fut">
+      ${one('현물', spot ? spot.value : null, spot && spot.changePct)}
+      ${one('선물', f ? f.price : null, f && f.changePct, null, f ? f.name : '')}
+      ${one('야간', null, null, null, '코드 찾는 중')}
+    </span>`;
+
   el.innerHTML = `
     <span><i class="kh-pdot ${live ? '' : 'off'}"></i>국내
       <span class="kh-chip ${live ? 'live' : ''}">${phase.label}</span>
       <b>${phase.note}</b></span>
-    <span><i class="kh-pdot off"></i>해외
-      <span class="kh-chip">연결 예정</span></span>`;
+    ${counts}${futures}`;
+}
+
+/* 카드에 붙일 표시. 무엇을 보고 있는지가 한눈에 들어와야 한다. */
+function badgeFor(i) {
+  if (i.market === 'overseas') {
+    const d = i.asOf || '';
+    /* 20260914 → "09.14 종가" */
+    const label = d.length === 8 ? `${d.slice(4, 6)}.${d.slice(6, 8)} 종가` : '해외장';
+    return { live: false, text: label };
+  }
+  /* 국내는 셋으로만 나눈다 (2026-09-15 지시).
+
+       실시간   09:00~15:30  KRX 정규장. 값이 계속 움직인다
+       넥장     08:00~08:50 · 15:30~20:00  넥스트레이드에서만 거래된다
+       장마감   그 밖. 값이 멈춰 있다
+
+     08:50~09:00 은 프리마켓이 끝나고 정규장 전이라 거래가 없다. 장마감으로 묶는다.
+     이 구분은 시세를 어느 시장 기준으로 받는지와 짝이 맞는다
+     (정규장은 KRX, 그 밖은 통합 — CLAUDE.md 의 시세 표기 규칙). */
+  const phase = marketPhase();
+  if (phase.id === 'regular') return { live: true, text: '실시간' };
+  if (phase.id === 'pre' || phase.id === 'after') return { live: false, text: '넥장' };
+  return { live: false, text: '장마감' };
 }
 
 function paintStrip(indices) {
@@ -134,16 +206,23 @@ function paintStrip(indices) {
       </div>`;
     }
     const cls = dirClass(i.changePct);
+    /* 언제 기준 값인지 적는다.
+       국내는 지금 장이 열려 있으면 실시간, 아니면 장 상태 그대로.
+       해외는 국내 낮 시간에 닫혀 있으므로 받은 값의 날짜를 적는다.
+       전에는 값만 있으면 무조건 "실시간" 이라 어제 종가도 실시간으로 보였다
+       (2026-09-15 지적). */
+    const badge = badgeFor(i);
     return `<div class="kh-ix ${on ? 'is-on' : ''}" data-idx="${i.code}">
       <div class="kh-ix-h">${cellIcon(cell.icon)}<span class="kh-ix-n">${cell.name}</span>
-        <span class="kh-bd kh-bd-on">실시간</span></div>
+        <span class="kh-bd ${badge.live ? 'kh-bd-on' : (badge.text === '넥장' ? 'kh-bd-nx' : '')}"
+          >${badge.text}</span></div>
       <div class="kh-ix-b">
         <div>
           <div class="kh-ix-v kh-num ${cls} ${tickClass('idx:' + i.code, i.value)}"
             >${fmtNum(i.value, 2)}</div>
           <div class="kh-ix-c kh-num ${cls}">${fmtDelta(i.change, i.changePct, '', 2)}</div>
         </div>
-        <div class="kh-ix-s">${sparkSvg(i.series, i.changePct >= 0, 74, 30)}</div>
+        <div class="kh-ix-s">${sparkSvg(i.series, i.changePct, 74, 30)}</div>
       </div>
     </div>`;
   }).join('');
@@ -224,7 +303,7 @@ async function paintBigChart() {
     host.innerHTML = `<div class="kh-soon"><div class="kh-soon-t">불러오는 중</div></div>`;
     return;
   }
-  host.innerHTML = sparkSvg(i.series, i.changePct >= 0, 1000, 300);
+  host.innerHTML = sparkSvg(i.series, i.changePct, 1000, 300);
   if (foot) {
     foot.innerHTML = `<span>60거래일 추이</span>
       <span class="kh-mut">당일 흐름을 불러오지 못했습니다</span>`;
@@ -235,6 +314,7 @@ function paintIndices(indices) {
   lastIndices = indices;
   paintStrip(indices);
   paintBigChart();
+  paintMkt();          // 상승·하락 종목 수가 여기 들어 있다
 }
 
 /* ── 순위 표 ────────────────────────────── */
@@ -342,6 +422,7 @@ const LOOK_AHEAD = 400;      // 화면 밖 이만큼까지 미리 받아 둔다
 /* 한 묶음을 받는 간격. 다섯 묶음이니 전체는 1초에 한 바퀴.
    한국투자증권 응답은 0.18초, 0.2초 간격 연속 호출도 통과한다 (2026-09-14 실측). */
 const ROW_REFRESH_MS = 200;
+const INDEX_CHART_MS = 30000;   // 큰 차트를 다시 받는 주기 (분봉이 5분 간격이다)
 
 function visibleCodeList() {
   const box = $('kh-rank-scroll');
@@ -513,7 +594,10 @@ async function rotateTick() {
 /* 다른 탭에 갔다 돌아오면 곧바로 한 번 받는다.
    다음 차례까지 기다리면 멈춘 값을 한동안 보게 된다. */
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) { asked.clear(); scheduleFetch(); }
+  if (document.hidden) return;
+  asked.clear();
+  scheduleFetch();
+  paintBigChart();        // 그 사이 장이 움직였을 수 있다
 });
 
 /* ── 미리보기 ───────────────────────────── */
@@ -610,6 +694,11 @@ loadUniverse().then(() => {
   /* 보고 있는 것만 주기적으로 다시 받는다. 시세 띠·관심 사이드바와 별개다. */
   /* 0.2초마다 다섯 묶음 중 하나씩. 전체는 1초에 한 바퀴 돈다. */
   setInterval(rotateTick, ROW_REFRESH_MS);
+
+  /* 큰 차트도 계속 다시 받는다. 전에는 지수를 바꿀 때만 그려서, 한 번 그린 뒤
+     장이 진행돼도 선이 멈춰 있었다 (2026-09-15 지적).
+     지수 분봉은 5분 간격이라 그보다 자주 부를 이유가 없다. */
+  setInterval(() => { if (!document.hidden) paintBigChart(); }, INDEX_CHART_MS);
 });
 paintPreview(null);
 drawPreviewChart();

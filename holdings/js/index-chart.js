@@ -20,6 +20,20 @@ import { color } from './theme.js';
 const W = 1000, H = 342;
 const PLOT = { x0: 0, x1: 920, y0: 20, y1: 310 };   // 오른쪽 80 은 값 라벨 자리
 
+/* 데이터는 플롯 영역의 이만큼까지만 그린다. 나머지는 앞으로 올 시간의 자리다.
+
+   전에는 마지막 점이 오른쪽 끝에 딱 붙어서, 현재가 표시와 시각 라벨이 잘려
+   나갔다. 지금 시각이 90% 자리에 오면 오른쪽에 숨 쉴 틈이 생기고, 장이 진행될수록
+   선이 그쪽으로 채워지는 것이 보인다 (2026-09-15 지시). */
+const DATA_RIGHT = 0.9;
+
+/* 어제 구간이 차지할 최대 폭.
+
+   장이 막 열린 09:19 에는 어제 봉이 80개, 오늘 봉이 4개다. 개수대로 그리면
+   화면의 95%가 어제 것이 되어 "어제 것만 나온다" 고 보인다. 어제는 왼쪽
+   한 귀퉁이로 밀어 두고 오늘에 자리를 내준다. */
+const PAST_MAX = 0.22;
+
 const fmt = n => n.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /* "202609141530" → 분(0~1439) */
@@ -44,14 +58,34 @@ export function indexChartSvg(bars) {
   const top = hi + pad, bot = lo - pad;
   const span = Math.max(1e-9, top - bot);
 
-  const px = i => PLOT.x0 + (i / (bars.length - 1)) * (PLOT.x1 - PLOT.x0);
   const py = v => PLOT.y1 - ((v - bot) / span) * (PLOT.y1 - PLOT.y0);
 
   /* ── 어제 / 오늘 나누기 ──
      마지막 봉의 날짜가 오늘이다. 그 앞 날짜는 전부 어제 구간으로 본다. */
   const today = bars[bars.length - 1].ts.slice(0, 8);
   const firstToday = bars.findIndex(b => b.ts.slice(0, 8) === today);
-  const boundary = firstToday > 0 ? px(firstToday) : null;
+  const hasPast = firstToday > 0;
+
+  /* 어제와 오늘에 폭을 나눠 준다.
+     어제는 개수와 상관없이 PAST_MAX 안쪽으로 눌러 담고, 남은 자리를 오늘이 쓴다.
+     오늘 구간은 09:00~15:30 을 기준으로 시간에 비례해 자리를 잡으므로,
+     장 초반에는 왼쪽에만 선이 있고 시간이 갈수록 오른쪽으로 채워진다. */
+  const W_ALL = (PLOT.x1 - PLOT.x0) * DATA_RIGHT;
+  const pastW = hasPast ? Math.min(W_ALL * PAST_MAX, W_ALL * (firstToday / bars.length)) : 0;
+  const todayW = W_ALL - pastW;
+  const DAY_OPEN = 9 * 60, DAY_CLOSE = 15 * 60 + 30;
+
+  function px(i) {
+    if (!hasPast) return PLOT.x0 + (i / Math.max(1, bars.length - 1)) * W_ALL;
+    if (i < firstToday) {
+      return PLOT.x0 + (i / Math.max(1, firstToday - 1)) * pastW;
+    }
+    const m = minutesOf(bars[i].ts);
+    const r = Math.max(0, Math.min(1, (m - DAY_OPEN) / (DAY_CLOSE - DAY_OPEN)));
+    return PLOT.x0 + pastW + r * todayW;
+  }
+
+  const boundary = hasPast ? PLOT.x0 + pastW : null;
 
   /* 전일 종가 — 어제 마지막 봉. 없으면 선을 그리지 않는다 */
   const prevClose = firstToday > 0 ? bars[firstToday - 1].close : null;
@@ -87,7 +121,9 @@ export function indexChartSvg(bars) {
     /* 날짜 경계 자리는 날짜 라벨("09.14.")이 쓴다. 시간까지 넣으면 겹쳐서
        "09.14." 와 "09:00" 이 서로 뭉개진다. */
     if (i === firstToday) return;
-    if (x - lastLabelX < 34) return;             // 너무 붙으면 건너뛴다
+    /* 어제 구간은 왼쪽에 눌러 담아 폭이 좁다. 같은 간격으로 두면 라벨이 겹쳐
+       "15:0012:0014:00" 처럼 뭉친다 (2026-09-15 확인). 더 드물게 찍는다. */
+    if (x - lastLabelX < (isToday ? 34 : 52)) return;
     lastLabelX = x;
     const hh = String(Math.floor(m / 60)).padStart(2, '0');
     const mm = String(m % 60).padStart(2, '0');
@@ -112,6 +148,7 @@ export function indexChartSvg(bars) {
   /* ── 선과 면 ── */
   const pts = bars.map((b, i) => `${px(i).toFixed(1)},${py(b.close).toFixed(1)}`).join(' ');
   const area = `${PLOT.x0},${PLOT.y1} ${pts} ${px(bars.length - 1).toFixed(1)},${PLOT.y1}`;
+  const lastX = px(bars.length - 1);
 
   /* ── 전일 종가선 + 오른쪽 말풍선 ── */
   let prevLine = '';
@@ -128,11 +165,17 @@ export function indexChartSvg(bars) {
 
   /* ── 최고 · 최저 · 현재 ── */
   const iHi = closes.indexOf(hi), iLo = closes.indexOf(lo);
-  const dot = (i, v, label, below) => `
-    <circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}" r="3.5"
-      fill="${color('bg-card')}" stroke="${color('text-primary')}" stroke-width="2"/>
-    <text x="${px(i).toFixed(1)}" y="${(py(v) + (below ? 20 : -12)).toFixed(1)}" font-size="12"
-      fill="${color('text-secondary')}" text-anchor="middle">${label} ${fmt(v)}</text>`;
+  /* 라벨이 그림 밖으로 나가면 글자가 잘린다("6,932.07" → "5,932.07" 처럼 보였다).
+     왼쪽 끝에서는 오른쪽으로, 오른쪽 끝에서는 왼쪽으로 붙인다. */
+  const dot = (i, v, label, below) => {
+    const x = px(i);
+    const anchor = x < 60 ? 'start' : (x > PLOT.x1 - 60 ? 'end' : 'middle');
+    return `
+      <circle cx="${x.toFixed(1)}" cy="${py(v).toFixed(1)}" r="3.5"
+        fill="${color('bg-card')}" stroke="${color('text-primary')}" stroke-width="2"/>
+      <text x="${x.toFixed(1)}" y="${(py(v) + (below ? 20 : -12)).toFixed(1)}" font-size="12"
+        fill="${color('text-secondary')}" text-anchor="${anchor}">${label} ${fmt(v)}</text>`;
+  };
 
   const iEnd = bars.length - 1;
   const endDot = `

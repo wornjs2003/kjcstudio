@@ -364,6 +364,21 @@ async function fetchIndex(cfg, env, code) {
     value: num(o.bstp_nmix_prpr),
     change: num(o.bstp_nmix_prdy_vrss),
     changePct: num(o.bstp_nmix_prdy_ctrt),
+
+    /* 아래 둘은 이미 이 응답에 들어 있었는데 쓰지 않고 버리던 것이다.
+       따로 부르지 않아도 되므로 호출이 늘지 않는다 (2026-09-15).
+       server/kis_proxy.py 의 fetch_index 와 같은 이름으로 내보내야 한다. */
+    up: num(o.ascn_issu_cnt),
+    flat: num(o.stnr_issu_cnt),
+    down: num(o.down_issu_cnt),
+    upperLimit: num(o.uplm_issu_cnt),
+    lowerLimit: num(o.lslm_issu_cnt),
+
+    /* 연중 최고·최저. 52주가 아니라 '올해 들어' 기준이다 (dryy = during year). */
+    yearHigh: num(o.dryy_bstp_nmix_hgpr),
+    yearHighDate: String(o.dryy_bstp_nmix_hgpr_date || "").trim() || null,
+    yearLow: num(o.dryy_bstp_nmix_lwpr),
+    yearLowDate: String(o.dryy_bstp_nmix_lwpr_date || "").trim() || null,
   };
 }
 
@@ -439,6 +454,118 @@ async function fetchIndexMinutes(cfg, env, code) {
   }
   bars.sort((a, b) => a.ts.localeCompare(b.ts));
   return bars;
+}
+
+/* ── 해외 지수·환율 ──────────────────────────────────────────────────
+   국내 계약으로도 받아진다 (2026-09-15 직접 호출해 확인).
+   docs/data-sources.md 의 "KIS 국내 계약으로는 해외를 못 받는다" 는 사실과 다르다.
+
+     시장구분 N = 해외지수 · X = 환율
+
+   다우존스는 코드를 못 찾았다. DJI · .DJI · DJIA 를 네 가지 시장구분으로
+   시도했지만 전부 0 이다 (DOW 는 다우社 주식이라 28원이 나온다).
+   WTI·금은 해외선물 쪽을 따로 봐야 한다.
+
+   server/kis_proxy.py 의 fetch_overseas 와 같은 모양으로 돌려줘야 한다. */
+const OVERSEAS_DEFS = [
+  ["USDKRW", "X", "FX@KRW", "미국 USD", "원"],
+  ["SPX",    "N", "SPX",    "S&P 500",  "pt"],
+  ["NASDAQ", "N", "COMP",   "나스닥 종합", "pt"],
+  ["VIX",    "N", "VIX",    "VIX",      "pt"],
+];
+const OVERSEAS_TTL = 60;      // 해외장은 국내 장중에 거의 멈춰 있다
+
+/* ── 코스피200 선물 ──────────────────────────────────────────────────
+   종목코드 "10100000" 이 최근월물을 가리킨다. 응답의 hts_kor_isnm 에
+   "F 202612" 처럼 어느 월물인지 적혀 온다.
+
+   101W09 · 101U6000 같은 월물 표기는 전부 output1(선물 자리)이 비어 오고
+   output2(기초자산 = 코스피 지수)만 돌아온다. 8자리가 맞다 (2026-09-15 확인).
+   server/kis_proxy.py 의 fetch_futures 와 같은 모양으로 돌려줘야 한다. */
+const FUTURES_CODE = "10100000";
+const FUTURES_TTL = 5;
+
+async function fetchFutures(cfg, env) {
+  let data;
+  try {
+    data = await kisGet(
+      cfg, env,
+      "/uapi/domestic-futureoption/v1/quotations/inquire-price",
+      { FID_COND_MRKT_DIV_CODE: "F", FID_INPUT_ISCD: FUTURES_CODE },
+      "FHMIF10000000",
+      FUTURES_TTL
+    );
+  } catch {
+    return null;         // 못 받으면 그 칸만 비운다
+  }
+  const o = data.output1 || {};
+  const price = num(o.futs_prpr);
+  if (price == null) return null;
+  return {
+    name: String(o.hts_kor_isnm || "").trim(),
+    price,
+    change: num(o.futs_prdy_vrss),
+    changePct: num(o.futs_prdy_ctrt),
+    volume: num(o.acml_vol),
+    source: "KIS",
+  };
+}
+
+async function fetchOverseas(cfg, env) {
+  const out = [];
+  const errors = {};
+  const now = new Date();
+  const to = ymd(now);
+  const from = ymd(new Date(now.getTime() - 100 * 86400000));
+
+  for (const [key, div, code, name, unit] of OVERSEAS_DEFS) {
+    try {
+      /* 기간을 넓게 잡아 현재값(output1)과 추이(output2)를 한 번에 받는다 */
+      const data = await kisGet(
+        cfg, env,
+        "/uapi/overseas-price/v1/quotations/inquire-daily-chartprice",
+        {
+          FID_COND_MRKT_DIV_CODE: div, FID_INPUT_ISCD: code,
+          FID_INPUT_DATE_1: from, FID_INPUT_DATE_2: to,
+          FID_PERIOD_DIV_CODE: "D",
+        },
+        "FHKST03030100",
+        OVERSEAS_TTL
+      );
+      const o = data.output1 || {};
+      const value = num(o.ovrs_nmix_prpr);
+      if (value == null || value === 0) {
+        errors[key] = "값이 오지 않았습니다";
+        continue;
+      }
+      const series = (data.output2 || [])
+        .slice()
+        .sort((a, b) => String(a.stck_bsop_date || "").localeCompare(String(b.stck_bsop_date || "")))
+        .map((r) => num(r.ovrs_nmix_prpr))
+        .filter((v) => v)
+        .slice(-60);
+
+      /* 언제 기준 값인지. 해외장은 국내 낮 시간에 닫혀 있어서, 이것을 안 적으면
+         어제 종가를 실시간인 줄 알게 된다 (2026-09-15 지적). */
+      const last = (data.output2 || [])
+        .map((r) => String(r.stck_bsop_date || ""))
+        .filter(Boolean)
+        .sort()
+        .pop() || null;
+
+      out.push({
+        code: key, name, unit, value,
+        asOf: last, market: "overseas",
+        change: num(o.ovrs_nmix_prdy_vrss),
+        changePct: num(o.prdy_ctrt),
+        series,
+        source: "KIS",
+      });
+    } catch (e) {
+      errors[key] = safeMessage(e, env);
+    }
+  }
+  return { data: out, errors };
 }
 
 async function fetchIndices(cfg, env, withChart = true) {
@@ -1415,10 +1542,18 @@ export default {
 
       if (route === "indices") {
         const withChart = url.searchParams.get("chart") !== "0";
-        const { data, errors } = await fetchIndices(cfg, env, withChart);
+        let { data, errors } = await fetchIndices(cfg, env, withChart);
+        // 해외 지수·환율도 같은 응답에 실어 보낸다. 화면이 한 번만 부르면 된다.
+        if (url.searchParams.get("overseas") !== "0") {
+          const ovs = await fetchOverseas(cfg, env);
+          data = data.concat(ovs.data);
+          errors = { ...errors, ...ovs.errors };
+        }
+        const futures = await fetchFutures(cfg, env);
         return json({
           ok: data.length > 0,
           data,
+          futures,
           errors: Object.keys(errors).length ? errors : null,
         });
       }

@@ -404,3 +404,25 @@
 /* "연결 예정" 이 두 줄로 깨지면 줄이 높아져 한 화면에 몇 개 못 담는다 */
 .kh-rank .kh-sect { white-space: nowrap; }
 .kh-rank td { vertical-align: middle; }
+
+/* 장 상태 줄 옆의 상승·보합·하락 종목 수 (2026-09-15 지시로 우측 패널에서 옮겨 옴) */
+.kh-mkt-cnt { display: inline-flex; align-items: center; gap: 6px; }
+.kh-mkt-cnt b { font-weight: 700; }
+.kh-mkt-cnt .kh-mut { font-size: 0.76rem; margin-right: 4px; }
+
+/* 넥장(넥스트레이드) — 정규장은 아니지만 거래가 도는 시간이라
+   장마감 회색과는 구분해 준다 (2026-09-15) */
+.kh-bd.kh-bd-nx {
+  background: var(--kh-tag-notice-dim);
+  color: var(--kh-tag-notice);
+}
+
+/* 장 상태 줄의 코스피200 선물 (2026-09-15 지시) */
+.kh-mkt-fut {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding-left: 14px; border-left: 1px solid var(--kh-border-strong);
+}
+.kh-mkt-fut b { font-weight: 700; }
+.kh-mkt-fut .kh-mut { font-size: 0.76rem; }
+.kh-fut-1 { display: inline-flex; align-items: center; gap: 5px; margin-right: 12px; }
+.kh-fut-1:last-child { margin-right: 0; }
