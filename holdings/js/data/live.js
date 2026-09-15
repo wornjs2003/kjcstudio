@@ -122,3 +122,19 @@ export async function fetchQuotes(codes) {
     return null;
   }
 }
+
+/* 지수 캔들 (일·주·월·년). 5분봉은 fetchIndexMinutes 가 맡는다.
+   실패하면 null — 부르는 쪽이 화면을 비운다. */
+export async function fetchIndexCandles(code, period) {
+  if (!(await kisReady())) return null;
+  try {
+    const qs = new URLSearchParams({ code, period });
+    const r = await fetch('/api/kis/index-candles?' + qs, { cache: 'no-store' });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j || !j.ok || !Array.isArray(j.data?.bars) || !j.data.bars.length) return null;
+    return j.data.bars;
+  } catch {
+    return null;
+  }
+}

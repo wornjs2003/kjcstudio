@@ -227,7 +227,10 @@
   margin-bottom: 13px; padding-left: 4px;
 }
 .kh-mkt > span { display: inline-flex; align-items: center; gap: 7px; }
-.kh-mkt b { font-weight: 500; color: var(--kh-text-primary); }
+/* 색을 여기서 정하지 않는다. 공용 클래스(.kh-up/.kh-down/.kh-flat)가
+   태그 선택자에 밀려 묻혔다 (2026-09-15). 굵기만 여기서 준다. */
+.kh-mkt b { font-weight: 500; }
+.kh-mkt b.kh-mkt-note { color: var(--kh-text-primary); }
 .kh-chip {
   background: var(--kh-bg-surface); border-radius: var(--kh-radius-sm);
   padding: 3px 8px; font-size: 0.73rem; color: var(--kh-text-secondary); font-weight: 500;
@@ -369,7 +372,7 @@
 }
 .kh-ix-badge.vix { background: var(--kh-text-muted); }
 .kh-ix-badge.oil { background: var(--kh-text-primary); }
-.kh-ix-badge.au  { background: #c9a227; }   /* 금색 — 금 시세를 가리키는 표시 */
+.kh-ix-badge.au  { background: var(--kh-badge-au); }   /* 금 시세를 가리키는 표시 */
 
 /* ── 순위표 더 보기 ── */
 .kh-more {
@@ -426,3 +429,28 @@
 .kh-mkt-fut .kh-mut { font-size: 0.76rem; }
 .kh-fut-1 { display: inline-flex; align-items: center; gap: 5px; margin-right: 12px; }
 .kh-fut-1:last-child { margin-right: 0; }
+
+/* 큰 차트의 기간 고르기 (2026-09-15 지시) */
+/* 이름 아래 줄에 둔다. 전에는 오른쪽 끝에 붙여 두었다 (2026-09-15 지시) */
+.kh-idx-per { display: flex; gap: 2px; margin: -2px 0 10px -4px; }
+.kh-idx-per button {
+  border: 0; font-family: inherit; cursor: pointer;
+  background: none; color: var(--kh-text-muted);
+  font-size: 0.82rem; font-weight: 500;
+  padding: 6px 11px; border-radius: var(--kh-radius-sm);
+}
+.kh-idx-per button:hover { background: var(--kh-bg-surface); color: var(--kh-text-secondary); }
+.kh-idx-per button.is-on {
+  background: var(--kh-text-primary); color: var(--kh-text-on-fill); font-weight: 600;
+}
+
+/* 연중 최저·최고 막대 */
+.kh-yr { display: flex; align-items: center; gap: 9px; font-size: 0.8rem; }
+.kh-yr-bar {
+  position: relative; flex: 1; height: 5px; border-radius: 3px;
+  background: linear-gradient(90deg, var(--kh-down-dim), var(--kh-up-dim));
+}
+.kh-yr-bar i {
+  position: absolute; top: -4px; width: 10px; height: 13px;
+  border-radius: 3px; background: var(--kh-text-primary);
+}

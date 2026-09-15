@@ -101,6 +101,8 @@
           <span class="kh-idx-caret">›</span>
           <span class="kh-idx-ai">✨ AI <span class="kh-mut">연결 예정</span></span>
         </div>
+        <!-- 기간 고르기 — 이름 아래 줄에 둔다 (2026-09-15 지시) -->
+        <div class="kh-idx-per" id="kh-idx-per"></div>
         <div class="kh-idx-chart" id="kh-big-chart"></div>
         <div class="kh-big-foot" id="kh-big-foot">
           <span>60거래일 추이</span><span>한국투자증권 실시간</span>
@@ -110,17 +112,11 @@
       <!-- 오른쪽 패널 — 넷 다 아직 받아올 곳이 없다.
            숫자를 지어 넣지 않고 무엇을 붙이면 채워지는지만 적어 둔다. -->
       <aside class="kh-card kh-idxp" aria-label="시장 정보">
+        <!-- 시장 현황은 2026-09-15 지시로 코스피 위 장 상태 줄로 옮겼다 -->
         <div class="kh-idxp-s">
-          <div class="kh-idxp-h"><i class="kh-idxp-i ok"></i>시장 현황
-            <span class="kh-bd kh-bd-soon">연결 예정</span></div>
-          <div class="kh-idxp-b">상승 · 보합 · 하락 종목 수<br>
-            <span class="kh-mut">붙일 것: KRX 또는 네이버</span></div>
-        </div>
-        <div class="kh-idxp-s">
-          <div class="kh-idxp-h"><i class="kh-idxp-i ac"></i>52주 최저 · 최고
-            <span class="kh-bd kh-bd-soon">연결 예정</span></div>
-          <div class="kh-idxp-b">지수의 1년 범위<br>
-            <span class="kh-mut">붙일 것: 지수 일봉에서 계산</span></div>
+          <div class="kh-idxp-h"><i class="kh-idxp-i ac"></i>연중 최저 · 최고
+            <span class="kh-bd kh-bd-on">한국투자증권</span></div>
+          <div class="kh-idxp-b" id="kh-year-range">불러오는 중</div>
         </div>
         <div class="kh-idxp-s">
           <div class="kh-idxp-h"><i class="kh-idxp-i wn"></i>투자자 정보

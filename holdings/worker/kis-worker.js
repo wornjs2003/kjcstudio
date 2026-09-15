@@ -87,6 +87,19 @@ const FAST_CODES = new Set(["005930", "000660"]);   // 5초마다 갱신 — 삼
 const QUOTE_CACHE_TTL_FAST = 4;                     // 빠른 갈래 (갱신 5초)
 const QUOTE_CACHE_TTL = 25;                         // 느린 갈래 · 지수 (갱신 30초)
 
+/* 지수·선물 캐시.
+
+   화면이 1초마다 다시 받는다. 종목 시세 캐시(25초)를 함께 쓰고 있었는데
+   그건 화면이 30초마다 묻던 시절 값이라, 새로 받아도 묵은 값이 나왔다.
+
+   서버(server/kis_proxy.py)는 0.7 초다. 여기만 1 인 이유 —
+   워커는 Cloudflare 엣지 캐시(cf.cacheTtl)를 쓰는데 공식 문서가 소수를
+   받는지 밝히지 않았다 (2026-09-15 확인). 확인 못 한 값을 넣지 않는다.
+   화면이 1초 주기라 1초면 충분하다. tools/check-kis-consts.py 가
+   이 차이를 알고 비교한다. */
+const INDEX_TTL = 1;
+const FUTURES_TTL = 1;
+
 /* 종목이 어느 갈래인지에 따라 캐시 수명을 정한다. */
 function quoteCacheTtl(code) {
   return FAST_CODES.has(code) ? QUOTE_CACHE_TTL_FAST : QUOTE_CACHE_TTL;
@@ -357,7 +370,7 @@ async function fetchIndex(cfg, env, code) {
     "/uapi/domestic-stock/v1/quotations/inquire-index-price",
     { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: code },
     "FHPUP02100000",
-    QUOTE_CACHE_TTL
+    INDEX_TTL
   );
   const o = data.output || {};
   return {
@@ -475,6 +488,47 @@ const OVERSEAS_DEFS = [
 ];
 const OVERSEAS_TTL = 60;      // 해외장은 국내 장중에 거의 멈춰 있다
 
+/* ── 지수 캔들 ───────────────────────────────────────────────────────
+   첫 화면 큰 차트가 쓴다. 5분봉은 fetchIndexMinutes 가 맡고, 일·주·월·년봉은
+   여기서 받는다. 네 기간 모두 시·고·저·종이 온다 (2026-09-15 확인).
+   server/kis_proxy.py 의 fetch_index_candles 와 같은 모양이어야 한다. */
+const INDEX_PERIODS = { D: "일", W: "주", M: "월", Y: "년" };
+const INDEX_CANDLE_TTL = 300;
+// 년봉은 한 해에 한 개라 기간을 아주 넓게 잡아야 한다
+const INDEX_SPAN_DAYS = { D: 400, W: 1500, M: 4000, Y: 12000 };
+
+async function fetchIndexCandles(cfg, env, code, period) {
+  const now = new Date();
+  const data = await kisGet(
+    cfg, env,
+    "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice",
+    {
+      FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: code,
+      FID_INPUT_DATE_1: ymd(new Date(now.getTime() - INDEX_SPAN_DAYS[period] * 86400000)),
+      FID_INPUT_DATE_2: ymd(now),
+      FID_PERIOD_DIV_CODE: period,
+    },
+    "FHKUP03500100",
+    INDEX_CANDLE_TTL
+  );
+  const out = [];
+  for (const r of data.output2 || []) {
+    const day = String(r.stck_bsop_date || "").trim();
+    const close = num(r.bstp_nmix_prpr);
+    if (!day || close == null) continue;
+    out.push({
+      ts: day,
+      open: num(r.bstp_nmix_oprc),
+      high: num(r.bstp_nmix_hgpr),
+      low: num(r.bstp_nmix_lwpr),
+      close,
+      volume: num(r.acml_vol) || 0,
+    });
+  }
+  out.sort((a, b) => a.ts.localeCompare(b.ts));
+  return out;
+}
+
 /* ── 코스피200 선물 ──────────────────────────────────────────────────
    종목코드 "10100000" 이 최근월물을 가리킨다. 응답의 hts_kor_isnm 에
    "F 202612" 처럼 어느 월물인지 적혀 온다.
@@ -483,7 +537,6 @@ const OVERSEAS_TTL = 60;      // 해외장은 국내 장중에 거의 멈춰 있
    output2(기초자산 = 코스피 지수)만 돌아온다. 8자리가 맞다 (2026-09-15 확인).
    server/kis_proxy.py 의 fetch_futures 와 같은 모양으로 돌려줘야 한다. */
 const FUTURES_CODE = "10100000";
-const FUTURES_TTL = 5;
 
 async function fetchFutures(cfg, env) {
   let data;
@@ -1522,6 +1575,22 @@ export default {
           // 차트가 왜 비는지 알 수 없었다 (2026-09-14).
           meta: { count: rows.length, fetched, source, warn: warn || null,
                   label: PERIODS[period].label },
+        });
+      }
+
+      if (route === "index-candles") {
+        const name = (url.searchParams.get("code") || "KOSPI").trim().toUpperCase();
+        const found = (INDEX_DEFS.find(([, n]) => n === name) || [])[0];
+        if (!found) return fail("code 가 올바르지 않습니다.", 400);
+        const period = (url.searchParams.get("period") || "D").trim().toUpperCase();
+        if (!INDEX_PERIODS[period]) {
+          return fail(`period 는 ${Object.keys(INDEX_PERIODS).join(", ")} 중 하나여야 합니다.`, 400);
+        }
+        const bars = await fetchIndexCandles(cfg, env, found, period);
+        return json({
+          ok: true,
+          data: { code: name, period, bars },
+          meta: { count: bars.length, label: INDEX_PERIODS[period] },
         });
       }
 

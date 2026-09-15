@@ -13,8 +13,7 @@ import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, dirClass,
 import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop } from './components/frame.js';
 import { tickClass } from './utils/tick.js';
 import { mountDisclosures } from './components/disclosures.js';
-import { indexChartSvg } from './index-chart.js';
-import { fetchIndexMinutes, fetchQuotes } from './data/live.js';
+import { fetchIndexMinutes, fetchIndexCandles, fetchQuotes } from './data/live.js';
 
 /* 지수 띠에 놓을 칸.
    code 가 있는 셋만 서버에서 값이 온다. 나머지는 아직 받아올 곳이 없어
@@ -155,7 +154,7 @@ function paintMkt() {
   el.innerHTML = `
     <span><i class="kh-pdot ${live ? '' : 'off'}"></i>국내
       <span class="kh-chip ${live ? 'live' : ''}">${phase.label}</span>
-      <b>${phase.note}</b></span>
+      <b class="kh-mkt-note">${phase.note}</b></span>
     ${counts}${futures}`;
 }
 
@@ -267,16 +266,49 @@ function setupStrip() {
   window.addEventListener('resize', updateStripButtons);
 }
 
-/* 고른 지수의 큰 차트 — 당일 5분 흐름.
-   시간 눈금과 지표줄을 그리려면 분 단위 값이 필요해서 따로 받아온다.
-   못 받으면 60거래일 일봉으로 물러선다. */
+/* ── 고른 지수의 큰 차트 ─────────────────────
+   기간을 고를 수 있다 (2026-09-15 지시).
+
+     5분  당일 흐름. 선으로 그린다 — 5분 간격이라 캔들로 그리면 몸통이 거의 없다
+     일·주·월·년  캔들. 종목 화면과 같은 그림(js/chart.js)을 쓴다
+
+   선 그림은 어제 구간을 눌러 담고 시간에 비례해 자리를 잡는 등 당일용으로
+   따로 만든 것이라, 5분봉에서만 쓴다. */
+const INDEX_PERIODS = [
+  { id: '5m', label: '5분' },
+  { id: 'D',  label: '일'  },
+  { id: 'W',  label: '주'  },
+  { id: 'M',  label: '월'  },
+  { id: 'Y',  label: '년'  },
+];
+let indexPeriod = '5m';
+let bigChart = null;          // 캔들일 때 만들어 둔 것 (지울 때 필요)
 let bigChartKey = null;
 
+function paintIndexPeriods() {
+  const host = $('kh-idx-per');
+  if (!host) return;
+  host.innerHTML = INDEX_PERIODS.map(p =>
+    `<button data-p="${p.id}" class="${p.id === indexPeriod ? 'is-on' : ''}">${p.label}</button>`
+  ).join('');
+  host.querySelectorAll('button').forEach(b =>
+    b.addEventListener('click', () => {
+      indexPeriod = b.dataset.p;
+      paintIndexPeriods();
+      paintBigChart();
+    }));
+}
+
+/* 캔들을 지운다. 새로 그리기 전과 선 그림으로 돌아갈 때 부른다. */
+function dropBigChart() {
+  if (bigChart) { bigChart.destroy(); bigChart = null; }
+}
+
 async function paintBigChart() {
-  const key = pickedIndex;
+  const key = pickedIndex + ':' + indexPeriod;
   bigChartKey = key;
 
-  const name = (INDEX_CELLS.find(c => c.code === key) || {}).name || '';
+  const name = (INDEX_CELLS.find(c => c.code === pickedIndex) || {}).name || '';
   const nameEl = $('kh-idx-name');
   if (nameEl) nameEl.textContent = name;
 
@@ -284,29 +316,51 @@ async function paintBigChart() {
   const foot = $('kh-big-foot');
   if (!host) return;
 
-  const bars = await fetchIndexMinutes(key);
-  if (bigChartKey !== key) return;            // 그 사이 다른 지수를 골랐다
+  /* 다섯 기간 모두 캔들로 그린다 (2026-09-15 지시).
+     5분봉만 선으로 두었더니 "왜 캔들이 아니냐" 는 물음을 받았다.
+     전일 종가선은 캔들에서도 살려 둔다 — 오늘 오르내림의 기준선이다. */
+  const bars = indexPeriod === '5m'
+    ? await fetchIndexMinutes(pickedIndex)
+    : await fetchIndexCandles(pickedIndex, indexPeriod);
+  if (bigChartKey !== key) return;          // 그 사이 다른 것을 골랐다
 
-  const svg = bars ? indexChartSvg(bars) : '';
-  if (svg) {
-    host.innerHTML = svg;
-    if (foot) {
-      foot.innerHTML = `<span>오늘 5분 흐름 · 어제 구간은 흐리게</span>
-        <span>한국투자증권 실시간</span>`;
+  if (!bars) {
+    dropBigChart();
+    host.innerHTML = `<div class="kh-soon">
+      <div class="kh-soon-t">차트를 불러오지 못했습니다</div></div>`;
+    return;
+  }
+
+  dropBigChart();
+  host.innerHTML = '';
+  /* 지수는 거래량을 함께 보여줄 만한 값이 아니라 끈다.
+     ts 는 일봉 YYYYMMDD · 분봉 YYYYMMDDHHMM 로 종목 캔들과 같은 형식이다. */
+  bigChart = createStockChart(host, bars, { period: indexPeriod, showVolume: false });
+
+  /* 5분봉에는 전일 종가선을 그어 둔다. 오늘 올랐는지 내렸는지의 기준이다.
+     어제 마지막 봉의 종가가 그 값이다. */
+  if (indexPeriod === '5m' && bigChart && bigChart.candleSeries) {
+    const today = bars[bars.length - 1].ts.slice(0, 8);
+    const firstToday = bars.findIndex(b => b.ts.slice(0, 8) === today);
+    if (firstToday > 0) {
+      try {
+        bigChart.candleSeries.createPriceLine({
+          price: bars[firstToday - 1].close,
+          color: color('text-muted'),
+          lineWidth: 1,
+          lineStyle: 2,               // 점선
+          axisLabelVisible: true,
+          title: '전일',
+        });
+      } catch { /* 라이브러리 버전이 다르면 선만 생략한다 */ }
     }
-    return;
   }
 
-  /* 물러서기 — 일봉이라도 보여 준다 */
-  const i = (lastIndices || []).find(x => x.code === key);
-  if (!i) {
-    host.innerHTML = `<div class="kh-soon"><div class="kh-soon-t">불러오는 중</div></div>`;
-    return;
-  }
-  host.innerHTML = sparkSvg(i.series, i.changePct, 1000, 300);
   if (foot) {
-    foot.innerHTML = `<span>60거래일 추이</span>
-      <span class="kh-mut">당일 흐름을 불러오지 못했습니다</span>`;
+    const label = (INDEX_PERIODS.find(p => p.id === indexPeriod) || {}).label || '';
+    foot.innerHTML = indexPeriod === '5m'
+      ? `<span>오늘 5분봉 · 점선은 전일 종가</span><span>한국투자증권 실시간</span>`
+      : `<span>${label}봉 ${bars.length}개</span><span>한국투자증권</span>`;
   }
 }
 
@@ -315,6 +369,28 @@ function paintIndices(indices) {
   paintStrip(indices);
   paintBigChart();
   paintMkt();          // 상승·하락 종목 수가 여기 들어 있다
+  paintYearRange();
+}
+
+/* 연중 최저·최고. 52주가 아니라 '올해 들어' 기준이라 그렇게 적는다.
+   지수 조회 응답에 날짜까지 함께 온다. */
+function paintYearRange() {
+  const el = $('kh-year-range');
+  if (!el) return;
+  const i = (lastIndices || []).find(x => x.code === pickedIndex);
+  if (!i || i.yearHigh == null) { el.textContent = '불러오는 중'; return; }
+  const day = d => (d && d.length === 8) ? `${d.slice(4, 6)}.${d.slice(6, 8)}` : '';
+  const cur = i.value;
+  const lo = i.yearLow, hi = i.yearHigh;
+  const at = Math.max(0, Math.min(1, (cur - lo) / Math.max(1e-9, hi - lo)));
+  el.innerHTML = `
+    <div class="kh-yr">
+      <span class="kh-num kh-down">${fmtNum(lo, 2)}</span>
+      <span class="kh-yr-bar"><i style="left:calc(${(at * 100).toFixed(1)}% - 5px)"></i></span>
+      <span class="kh-num kh-up">${fmtNum(hi, 2)}</span>
+    </div>
+    <div class="kh-mut" style="margin-top:6px">
+      ${i.name} · 최저 ${day(i.yearLowDate)} · 최고 ${day(i.yearHighDate)}</div>`;
 }
 
 /* ── 순위 표 ────────────────────────────── */
@@ -684,6 +760,7 @@ setInterval(paintClock, 30000);
 paintMkt();
 setInterval(paintMkt, 30000);
 setupStrip();
+paintIndexPeriods();
 paintIndices(null);
 paintRows(null);
 
@@ -720,6 +797,11 @@ setInterval(() => { dcAll.reload(); dcOne && dcOne.reload(); }, 5 * 60 * 1000);
    같은 값을 두 경로로 부르게 된다 (2026-09-14 정리). */
 startLiveLoop({
   prices: false,
+  /* 지수·선물을 1초마다 받는다. 전에는 30초였다 — 관심종목과 함께 받던
+     느린 갈래에 묶여 있었기 때문이다. 순위표는 0.2초인데 지수만 30초라
+     같은 화면에서 갱신 속도가 제각각이었다 (2026-09-15 지적).
+     해외 지수는 서버가 60초 캐시로 받아내므로 호출이 늘지 않는다. */
+  indexMs: 1000,
   onIndices(indices) { paintIndices(indices); foot.update(indices); },
   onPrices(prices)   {
     lastTickAt = new Date();

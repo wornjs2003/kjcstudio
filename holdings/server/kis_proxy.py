@@ -577,6 +577,52 @@ OVERSEAS_TTL = 60          # 해외장은 국내 장중에 거의 멈춰 있다
 _ovs_cache = {}
 
 
+# ── 지수 캔들 ───────────────────────────────────────────────────────
+# 첫 화면 큰 차트가 쓴다. 5분봉은 위의 fetch_index_minutes 가 맡고,
+# 일·주·월·년봉은 여기서 받는다. 네 기간 모두 시·고·저·종이 온다
+# (2026-09-15 확인). 종목 캔들과 같은 모양으로 돌려줘 화면이 같은 코드로 읽는다.
+INDEX_PERIODS = {"D": "일", "W": "주", "M": "월", "Y": "년"}
+INDEX_CANDLE_TTL = 300
+_idx_candle_cache = {}
+
+
+def fetch_index_candles(cfg, code, period):
+    key = code + ":" + period
+    hit = _idx_candle_cache.get(key)
+    if hit and (time.time() - hit[0]) < INDEX_CANDLE_TTL:
+        return hit[1]
+
+    # 년봉은 한 해에 한 개라 기간을 아주 넓게 잡아야 한다
+    span = {"D": 400, "W": 1500, "M": 4000, "Y": 12000}[period]
+    now = datetime.now(KST)
+    data = kis_get(
+        cfg,
+        "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice",
+        {"FID_COND_MRKT_DIV_CODE": "U", "FID_INPUT_ISCD": code,
+         "FID_INPUT_DATE_1": (now - timedelta(days=span)).strftime("%Y%m%d"),
+         "FID_INPUT_DATE_2": now.strftime("%Y%m%d"),
+         "FID_PERIOD_DIV_CODE": period},
+        "FHKUP03500100",
+    )
+    out = []
+    for r in (data.get("output2") or []):
+        day = (r.get("stck_bsop_date") or "").strip()
+        close = _num(r.get("bstp_nmix_prpr"))
+        if not day or close is None:
+            continue
+        out.append({
+            "ts": day,
+            "open": _num(r.get("bstp_nmix_oprc")),
+            "high": _num(r.get("bstp_nmix_hgpr")),
+            "low": _num(r.get("bstp_nmix_lwpr")),
+            "close": close,
+            "volume": _num(r.get("acml_vol"), int) or 0,
+        })
+    out.sort(key=lambda b: b["ts"])
+    _idx_candle_cache[key] = (time.time(), out)
+    return out
+
+
 # ── 코스피200 선물 ──────────────────────────────────────────────────
 # 종목코드 "10100000" 이 최근월물을 가리킨다. 응답의 hts_kor_isnm 에
 # "F 202612" 처럼 어느 월물인지 적혀 온다.
@@ -585,7 +631,9 @@ _ovs_cache = {}
 # 넣어 봤지만 전부 output1(선물 자리)이 비어 오고 output2(기초자산 = 코스피
 # 지수)만 돌아왔다. 8자리 "10100000" 이 맞다 (2026-09-15 확인).
 FUTURES_CODE = "10100000"
-FUTURES_TTL = 5
+# 화면이 1초마다 물어보므로 그보다 짧게 잡는다. 그래야 자기 탭은 늘 새 값을 받고,
+# 같은 것을 거의 동시에 묻는 다른 탭만 캐시가 받아낸다.
+FUTURES_TTL = 0.7
 _fut_cache = {}
 
 
@@ -676,11 +724,25 @@ def fetch_overseas(cfg):
     return out, errors
 
 
+# 지수 캐시. 종목 시세 캐시(25초)를 함께 쓰고 있었는데, 그건 화면이 30초마다
+# 물어보던 시절 값이다. 지수·선물은 1초마다 받으므로 그보다 짧아야 한다.
+INDEX_TTL = 0.7
+_index_cache = {}
+
+
+def _index_cache_get(key):
+    hit = _index_cache.get(key)
+    if hit and (time.time() - hit[0]) < INDEX_TTL:
+        _stats["cache_hits"] += 1
+        return hit[1]
+    return None
+
+
 def fetch_indices(cfg, with_chart=True):
     out, errors = [], {}
     for code, name in INDEX_DEFS:
         cache_key = "IDX:" + code
-        cached = _cache_get(cache_key)
+        cached = _index_cache_get(cache_key)
         if cached is not None:
             out.append(cached)
             continue
@@ -702,7 +764,7 @@ def fetch_indices(cfg, with_chart=True):
                 "series": series, "source": "KIS",
             }
             out.append(row)
-            _cache_put(cache_key, row)
+            _index_cache[cache_key] = (time.time(), row)
         except RuntimeError as e:
             errors[name] = safe_message(e)
     return out, errors
@@ -1285,6 +1347,27 @@ class Handler(SimpleHTTPRequestHandler):
                         "count": len(rows), "fetched": fetched, "source": source,
                         "label": PERIODS[period]["label"],
                     },
+                })
+                return
+
+            if route == "index-candles":
+                name = (qs.get("code") or ["KOSPI"])[0].strip().upper()
+                found = next((c for c, n in INDEX_DEFS if n == name), None)
+                if not found:
+                    self._send_json({"ok": False, "error": "code 가 올바르지 않습니다."}, 400)
+                    return
+                period = (qs.get("period") or ["D"])[0].strip().upper()
+                if period not in INDEX_PERIODS:
+                    self._send_json({
+                        "ok": False,
+                        "error": "period 는 %s 중 하나여야 합니다." % ", ".join(INDEX_PERIODS),
+                    }, 400)
+                    return
+                bars = fetch_index_candles(cfg, found, period)
+                self._send_json({
+                    "ok": True,
+                    "data": {"code": name, "period": period, "bars": bars},
+                    "meta": {"count": len(bars), "label": INDEX_PERIODS[period]},
                 })
                 return
 

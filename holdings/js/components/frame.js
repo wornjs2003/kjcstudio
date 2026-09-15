@@ -157,7 +157,7 @@ const REFRESH_SLOW_MS = 30000;
    첫 화면은 순위표가 멀티 조회(한 번에 30종목)로 관심종목까지 함께 받으므로,
    여기서 또 받으면 같은 값을 두 경로로 부르게 된다 (2026-09-14 정리).
    종목 화면(stock.html)은 순위표가 없으므로 기본값 그대로 쓴다. */
-export function startLiveLoop({ onPrices, onIndices, prices = true } = {}) {
+export function startLiveLoop({ onPrices, onIndices, prices = true, indexMs } = {}) {
   const fastCodes = WATCHLIST.filter(s => PRIORITY_CODES.includes(s.code)).map(s => s.code);
   const slowCodes = WATCHLIST.filter(s => !PRIORITY_CODES.includes(s.code)).map(s => s.code);
 
@@ -196,6 +196,15 @@ export function startLiveLoop({ onPrices, onIndices, prices = true } = {}) {
   tickSlow();
   setInterval(tickFast, REFRESH_FAST_MS);
   setInterval(tickSlow, REFRESH_SLOW_MS);
+  /* 지수만 따로 더 자주 받고 싶을 때 (첫 화면). 값을 주지 않으면 위 느린
+     갈래가 30초마다 함께 받는 그대로다. */
+  if (indexMs) {
+    setInterval(async () => {
+      if (document.hidden) return;
+      const indices = await fetchLiveIndices();
+      if (indices && onIndices) onIndices(indices);
+    }, indexMs);
+  }
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     tickFast();
