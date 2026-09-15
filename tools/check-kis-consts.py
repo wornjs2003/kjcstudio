@@ -51,6 +51,7 @@ PAIRS = [
     ("공시 감시 종목 수",    "UNIVERSE_SIZE",       "UNIVERSE_SIZE",        None),
     ("공시 수집 시장",       "COLLECT_MARKETS",     "COLLECT_MARKETS",      "list"),
     ("공시 보관 일수",       "RETENTION_DAYS",      "RETENTION_DAYS",       None),
+    ("지수 구성종목 목록",   "INDEX_LISTS",         "INDEX_LISTS",          "list"),
 ]
 
 # 어긋남을 알릴 때 "올림이라 괜찮은 것" 인지 곁들이려고 미리 모아 둔다
@@ -59,6 +60,7 @@ CEIL_NOTE = {w for w, _, _, c in PAIRS if c == "ceil"}
 # 공시 상수는 dart.py 에 있다. 파일이 다른 것만 따로 적는다.
 PY_ALT = {
     "UNIVERSE_SIZE":   "holdings/server/dart.py",
+    "INDEX_LISTS":     "holdings/server/dart.py",
     "COLLECT_MARKETS": "holdings/server/dart.py",
     "RETENTION_DAYS":  "holdings/server/dart.py",
 }

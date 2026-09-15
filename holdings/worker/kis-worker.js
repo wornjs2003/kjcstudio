@@ -1275,6 +1275,13 @@ const DART_WATCH_CODES = [
 ];
 
 const DART_SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS index_members (
+     stock_code TEXT NOT NULL,
+     index_code TEXT NOT NULL,
+     name       TEXT,
+     updated_at TEXT,
+     PRIMARY KEY (stock_code, index_code)
+   )`,
   `CREATE TABLE IF NOT EXISTS dart_universe (
      stock_code TEXT PRIMARY KEY,
      name       TEXT,
@@ -1348,6 +1355,92 @@ async function fetchKospiTop(size = UNIVERSE_SIZE) {
     }
   }
   return out.slice(0, size);
+}
+
+/* 지수 구성종목. server/dart.py 의 INDEX_LISTS 와 같아야 한다.
+
+   네이버에서 받는다 — KIS 에 구성종목을 주는 API 를 찾지 못했다
+   (2026-09-15 확인). 분기에 한 번 바뀌는 값이라 하루 한 번만 받는다. */
+const INDEX_LISTS = [["KPI200", "코스피200"], ["KQI150", "코스닥150"]];
+
+const MEMBER_ROW = /code=(\d{6})[^>]*>\s*([^<]+?)\s*<\/a>/g;
+
+async function fetchIndexMembers(indexCode, maxPage = 25) {
+  const out = [];
+  const seen = new Set();
+  for (let page = 1; page <= maxPage; page++) {
+    const url = "https://finance.naver.com/sise/entryJongmok.naver"
+              + `?&type=${indexCode}&page=${page}`;
+    const res = await fetch(url, {
+      headers: {
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        referer: "https://finance.naver.com/",
+      },
+    });
+    if (!res.ok) throw new Error(`네이버 응답 ${res.status}`);
+    // 이 페이지는 EUC-KR 이다. 그대로 읽으면 이름이 깨진다.
+    const body = new TextDecoder("euc-kr").decode(await res.arrayBuffer());
+
+    let fresh = 0;
+    for (const m of body.matchAll(MEMBER_ROW)) {
+      const code = m[1];
+      if (seen.has(code)) continue;
+      seen.add(code);
+      out.push({ code, name: unescapeXml(m[2]) });
+      fresh++;
+    }
+    if (!fresh) break;
+  }
+  return out;
+}
+
+async function refreshIndexMembers(env) {
+  const db = await dartInit(env);
+  const now = new Date().toISOString();
+  const done = {};
+  for (const [indexCode, label] of INDEX_LISTS) {
+    let rows;
+    try {
+      rows = await fetchIndexMembers(indexCode);
+    } catch (e) {
+      await metaSet(env, "dart_last_error", `${label}: ${safeMessage(e, env)}`);
+      continue;
+    }
+    if (!rows.length) continue;
+    await db.prepare(`DELETE FROM index_members WHERE index_code = ?`)
+      .bind(indexCode).run();
+    const stmt = db.prepare(
+      `INSERT INTO index_members (stock_code, index_code, name, updated_at)
+       VALUES (?, ?, ?, ?)`);
+    // D1 batch 는 한 번에 보낼 수 있는 양에 한계가 있어 나눠 보낸다
+    for (let i = 0; i < rows.length; i += 50) {
+      await db.batch(rows.slice(i, i + 50).map(
+        (r) => stmt.bind(r.code, indexCode, r.name, now)));
+    }
+    done[indexCode] = rows.length;
+  }
+  if (Object.keys(done).length) await metaSet(env, "dart_members_date", kstToday());
+  return done;
+}
+
+async function indexMembersMap(env) {
+  const db = await dartInit(env);
+  const res = await db.prepare(
+    `SELECT stock_code, index_code FROM index_members`).all();
+  const out = {};
+  for (const r of res.results || []) {
+    (out[r.stock_code] = out[r.stock_code] || []).push(r.index_code);
+  }
+  return out;
+}
+
+async function indexMembersCount(env) {
+  const db = await dartInit(env);
+  const res = await db.prepare(
+    `SELECT index_code, COUNT(*) n FROM index_members GROUP BY index_code`).all();
+  const out = {};
+  for (const r of res.results || []) out[r.index_code] = r.n;
+  return out;
 }
 
 async function refreshUniverse(env, size = UNIVERSE_SIZE) {
@@ -1596,6 +1689,9 @@ async function dartPollOnce(env, quietFirstRun = true) {
     const u = await refreshUniverse(env);
     if (!u.ok) await metaSet(env, "dart_last_error", u.error);
   }
+  if ((await metaGet(env, "dart_members_date")) !== today) {
+    await refreshIndexMembers(env);
+  }
 
   // 시장마다 한 번씩 받는다. 기간 조회라 종목 수와 무관하게 호출이 일정하다.
   const items = [];
@@ -1747,6 +1843,15 @@ export default {
         }
         if (dartRoute === "poll") {       // 5분을 기다리지 않고 지금 한 번
           return json({ ok: true, data: await dartPollOnce(env) });
+        }
+        if (dartRoute === "members") {
+          // 지수 구성종목. 화면이 IR 을 걸러낼 때 쓴다 (2026-09-15).
+          return json({
+            ok: true,
+            data: await indexMembersMap(env),
+            meta: { counts: await indexMembersCount(env),
+                    updatedAt: await metaGet(env, "dart_members_date") },
+          });
         }
         if (dartRoute === "universe") {
           const db = await dartInit(env);

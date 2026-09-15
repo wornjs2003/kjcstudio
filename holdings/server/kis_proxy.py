@@ -1296,6 +1296,16 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": True, "data": dart.poll_once(key)})
                 return
 
+            if route == "members":
+                # 지수 구성종목. 화면이 IR 을 걸러낼 때 쓴다 (2026-09-15).
+                self._send_json({
+                    "ok": True,
+                    "data": dart.index_members_map(),
+                    "meta": {"counts": dart.index_members_count(),
+                             "updatedAt": dart._meta_get("dart_members_date")},
+                })
+                return
+
             if route == "universe":
                 with dart._db_lock, dart.db_conn() as conn:
                     rows = conn.execute(

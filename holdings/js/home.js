@@ -13,6 +13,7 @@ import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, dirClass,
   from './utils/format.js';
 import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop } from './components/frame.js';
 import { mountDisclosures } from './components/disclosures.js';
+import { mountSchedule } from './components/schedule.js';
 import { fetchIndexMinutes, fetchIndexCandles, fetchQuotes } from './data/live.js';
 
 /* 지수 띠에 놓을 칸.
@@ -788,11 +789,8 @@ if (side.slot) {
      여기 보이는 것은 맛보기고, 전체는 그 화면에 있다. */
   side.slot.innerHTML = `
     <div class="kh-side-sec">
-      <div class="kh-sched-h"><span>주요 일정</span><span class="kh-mut">›</span></div>
-      <div class="kh-sched-b">
-        <div class="kh-sched-i"><span class="d"></span>연결 예정 — 한국은행 경제통계</div>
-        <div class="kh-sched-i"><span class="d"></span>연결 예정 — 실적 발표 일정</div>
-      </div>
+      <div class="kh-sched-h"><span>주요 일정</span><span class="kh-mut">2주</span></div>
+      <div class="kh-sched-b" id="kh-side-sched"></div>
       <a class="kh-sec-more" href="./news.html">더보기</a>
     </div>
     <div class="kh-side-sec">
@@ -853,6 +851,13 @@ drawPreviewChart();
    서버(server/dart.py)가 5분마다 받아 두므로 화면도 같은 주기로 다시 읽는다.
    오른쪽은 감시 대상 200종목 전체, 미리보기 안쪽은 지금 고른 종목만. */
 const dcAll = mountDisclosures($('kh-dc-all'), { limit: 10, showName: true });
+
+/* 주요 일정 — 금리·물가·실적 발표 중 앞으로 2주 안의 것.
+   사이드바는 좁으므로 설명을 빼고 네 줄만 (전체는 '더보기'). */
+const sched = mountSchedule($('kh-side-sched'), {
+  compact: true, limit: 4, watch: WATCHLIST.map(s => s.code),
+});
+setInterval(() => { if (!document.hidden) sched.refresh(); }, 10 * 60 * 1000);
 
 /* ── 사이드바 뉴스 ──
    맛보기로 몇 줄만 보여준다. 전체는 '더보기' 로 뉴스·공시 화면에서 본다

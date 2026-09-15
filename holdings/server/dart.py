@@ -17,6 +17,7 @@
   실시간 푸시는 없다. 주기적으로 물어보는 수밖에 없다.
 """
 
+import html
 import io
 import json
 import os
@@ -89,6 +90,13 @@ SCHEMA = [
     "CREATE INDEX IF NOT EXISTS idx_corps_stock ON dart_corps (stock_code)",
 
     # 감시 대상 — 코스피 시가총액 순위
+    """CREATE TABLE IF NOT EXISTS index_members (
+         stock_code  TEXT NOT NULL,
+         index_code  TEXT NOT NULL,        -- KPI200 | KQI150
+         name        TEXT,
+         updated_at  TEXT,
+         PRIMARY KEY (stock_code, index_code)
+       )""",
     """CREATE TABLE IF NOT EXISTS dart_universe (
          stock_code  TEXT PRIMARY KEY,
          name        TEXT,
@@ -218,6 +226,88 @@ def _to_int(v):
         return None
     s = re.sub(r"[^0-9-]", "", str(v))
     return int(s) if s not in ("", "-") else None
+
+
+# 지수 구성종목. 네이버에서 받는다 — KIS 에 구성종목을 주는 API 를 찾지
+# 못했다 (2026-09-15 확인). 시총 순위와 같은 곳이라 새로 뚫을 것이 없다.
+#
+# 분기에 한 번 바뀌는 값이라 하루 한 번만 받는다.
+INDEX_LISTS = [("KPI200", "코스피200"), ("KQI150", "코스닥150")]
+
+NAVER_MEMBERS = "https://finance.naver.com/sise/entryJongmok.naver?&type=%s&page=%d"
+MEMBER_ROW = re.compile(r'code=(\d{6})[^>]*>\s*([^<]+?)\s*</a>')
+
+
+def fetch_index_members(index_code, max_page=25):
+    """지수 구성종목을 받는다. [(코드, 이름), ...]
+
+    페이지당 10종목이고, 같은 것이 또 나오면 끝으로 본다.
+    """
+    out, seen = [], set()
+    for page in range(1, max_page + 1):
+        url = NAVER_MEMBERS % (index_code, page)
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Referer": "https://finance.naver.com/",
+        })
+        with urllib.request.urlopen(req, timeout=20) as r:
+            body = r.read().decode("euc-kr", "replace")
+        rows = MEMBER_ROW.findall(body)
+        if not rows:
+            break
+        fresh = 0
+        for code, name in rows:
+            if code in seen:
+                continue
+            seen.add(code)
+            out.append((code, html.unescape(name).strip()))
+            fresh += 1
+        if fresh == 0:
+            break
+    return out
+
+
+def refresh_index_members():
+    """두 지수의 구성종목을 받아 저장한다. 실패한 지수는 옛 목록을 그대로 둔다."""
+    db_init()
+    now = datetime.now(KST).isoformat(timespec="seconds")
+    done = {}
+    for index_code, label in INDEX_LISTS:
+        try:
+            rows = fetch_index_members(index_code)
+        except Exception as e:
+            _meta_set("dart_last_error", "%s: %s" % (label, safe_message(e, 90)))
+            continue
+        if not rows:
+            continue
+        with _db_lock, db_conn() as conn:
+            conn.execute("DELETE FROM index_members WHERE index_code = ?", (index_code,))
+            conn.executemany(
+                """INSERT INTO index_members (stock_code, index_code, name, updated_at)
+                   VALUES (?, ?, ?, ?)""",
+                [(c, index_code, n, now) for c, n in rows])
+        done[index_code] = len(rows)
+    if done:
+        _meta_set("dart_members_date", _today())
+    return done
+
+
+def index_members_map():
+    """{종목코드: [지수코드, ...]} 를 돌려준다. 화면이 걸러낼 때 쓴다."""
+    db_init()
+    out = {}
+    with _db_lock, db_conn() as conn:
+        for row in conn.execute("SELECT stock_code, index_code FROM index_members"):
+            out.setdefault(row["stock_code"], []).append(row["index_code"])
+    return out
+
+
+def index_members_count():
+    db_init()
+    with _db_lock, db_conn() as conn:
+        rows = conn.execute(
+            "SELECT index_code, COUNT(*) n FROM index_members GROUP BY index_code")
+        return {r["index_code"]: r["n"] for r in rows}
 
 
 def fetch_kospi_top(size=UNIVERSE_SIZE):
@@ -521,6 +611,8 @@ def poll_once(key, quiet_first_run=True):
             _meta_set("dart_last_error", "대응표: %s" % safe_message(e, 120))
     if _meta_get("dart_universe_date") != today or universe_size() == 0:
         refresh_universe()
+    if _meta_get("dart_members_date") != today or not index_members_count():
+        refresh_index_members()
 
     # 시장마다 한 번씩 받는다. 기간 조회라 종목 수와 무관하게 호출이 일정하다.
     items = []
