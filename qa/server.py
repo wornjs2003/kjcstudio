@@ -170,7 +170,9 @@ class Handler(SimpleHTTPRequestHandler):
 
         if action == "run":
             code, out = run_check(body.get("mode", "manual"))
-            if code != 0:
+            # 0 전부 통과 · 1 손볼 것이 있다 — 둘 다 검사는 제대로 돈 것이다.
+            # 2 이상만 검사기가 못 돈 것으로 본다 (check.py 끝 주석 참조).
+            if code > 1:
                 return self._json({"ok": False, "error": out.strip()[-400:]}, 500)
             return self._json({"ok": True, "report": load_json(LATEST_PATH), "log": out.strip()})
 

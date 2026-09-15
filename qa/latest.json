@@ -1,0 +1,88 @@
+{
+  "at": "2026-09-15T15:04:45+09:00",
+  "mode": "manual",
+  "counts": {
+    "pass": 6,
+    "mismatch": 0,
+    "changed": 0,
+    "todo": 0,
+    "ignored": 1
+  },
+  "diff": {
+    "new": [],
+    "fixed": [],
+    "note": "직전과 같음"
+  },
+  "results": [
+    {
+      "id": "nav-links",
+      "group": "문구·구조",
+      "title": "메뉴 링크가 실제로 존재하는가",
+      "scope": "partials/nav.html 의 href 전부",
+      "expected": "모든 링크 대상이 저장소에 있음",
+      "status": "pass",
+      "actual": "13개 모두 정상",
+      "detail": "index.html · category/3d-modeling.html · category/ai-work.html · qa/ · api-board/ · holdings/"
+    },
+    {
+      "id": "doc-accent",
+      "group": "디자인 토큰",
+      "title": "문서의 accent 색 = 코드의 토큰",
+      "scope": "CLAUDE.md 의 accent 줄 ↔ assets/css/theme.css 의 --accent 정의",
+      "expected": "두 값이 같음",
+      "status": "pass",
+      "actual": "#3182f6",
+      "detail": "assets/css/theme.css · --accent"
+    },
+    {
+      "id": "doc-bg",
+      "group": "디자인 토큰",
+      "title": "문서의 배경색 = 코드의 토큰",
+      "scope": "CLAUDE.md 의 배경색 줄 ↔ assets/css/theme.css 의 --bg 정의",
+      "expected": "두 값이 같음",
+      "status": "pass",
+      "actual": "#f6f7f9",
+      "detail": "assets/css/theme.css · --bg"
+    },
+    {
+      "id": "pair-kis",
+      "group": "쌍 파일",
+      "title": "중계 서버 두 벌이 같은 주소를 들고 있는가",
+      "scope": "kis_proxy.py 의 route == \"…\" ↔ kis-worker.js 의 route === \"…\"",
+      "expected": "양쪽 경로 목록이 같음",
+      "status": "ignored",
+      "actual": "어긋남 4개",
+      "detail": "오탐 — 검사기가 아직 구역을 못 가림 — kis_proxy.py 에만: disclosures, poll, status, universe"
+    },
+    {
+      "id": "raw-color-projects",
+      "group": "디자인 토큰",
+      "title": "프로젝트 보드에 색을 직접 박았는가",
+      "scope": "projects/index.html · 주석 제외",
+      "expected": "0곳 — 전부 theme.css 토큰 사용",
+      "status": "pass",
+      "actual": "0곳",
+      "detail": "검사한 파일 1개"
+    },
+    {
+      "id": "raw-color-apiboard",
+      "group": "디자인 토큰",
+      "title": "API 보드에 색을 직접 박았는가",
+      "scope": "api-board/index.html · 주석 제외",
+      "expected": "0곳 — 전부 theme.css 토큰 사용",
+      "status": "pass",
+      "actual": "0곳",
+      "detail": "검사한 파일 1개"
+    },
+    {
+      "id": "qa-self",
+      "group": "문구·구조",
+      "title": "QA 보드 자신의 파일이 갖춰졌는가",
+      "scope": "qa/ 폴더",
+      "expected": "검사기·기준값·화면이 모두 있음",
+      "status": "pass",
+      "actual": "3개 모두 있음",
+      "detail": "qa/check.py · qa/expected.json · qa/index.html"
+    }
+  ]
+}
