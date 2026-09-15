@@ -196,18 +196,11 @@
 <div class="kh-foot" id="kh-foot" aria-label="시세 띠"></div>
 
 <script src="./js/vendor/lightweight-charts.js"></script>
-<script>
-  // 등록 전에 이 폴더 밖에서 등록된 옛 워커를 지운다. 주소가 /holdings/ 로
-  // 바뀌면서 예전 "/" 스코프 워커가 남아 새 요청까지 가로챘다 (2026-09-14).
-  if ('serviceWorker' in navigator) {
-    var here = location.origin + '/holdings/';
-    navigator.serviceWorker.getRegistrations().then(function (regs) {
-      regs.forEach(function (r) {
-        if (r.scope.indexOf(here) !== 0) r.unregister();
-      });
-      return navigator.serviceWorker.register('./sw.js');
-    }).catch(function () { /* 무시 */ });
-  }
+<!-- 서비스 워커는 개발 중에만 등록한다. 배포본에서는 지운다.
+     세 화면이 같은 코드를 들고 있던 것을 js/sw-boot.js 로 모았다 (2026-09-15) -->
+<script type="module">
+  import { bootServiceWorker } from './js/sw-boot.js';
+  bootServiceWorker();
 </script>
 <script type="module" src="./js/stock.js"></script>
 <script src="../assets/js/main.js"></script>
