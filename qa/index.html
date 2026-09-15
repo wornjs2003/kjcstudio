@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QA 보드 · KJC Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="../assets/css/theme.css">
+<link rel="stylesheet" href="../assets/css/nav.css">
+
+<style>
+/* ==========================================================================
+   KJC Studio · QA 보드
+   의도한 값과 지금 코드를 대조합니다.
+   색·모서리 값은 이 파일에 직접 쓰지 않습니다. 전부 theme.css 의 변수를 씁니다.
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--pj-bg); color: var(--pj-text-primary);
+  font-family: var(--pj-font-body); font-weight: 400; line-height: 1.6;
+  letter-spacing: -0.01em; -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 1400px; margin: 0 auto; padding: calc(var(--nav-height) + 12px) 24px 80px; }
+
+/* ── 머리 ─────────────────────────────── */
+.head { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035em; line-height: 1.25; }
+.subtitle { color: var(--pj-text-secondary); font-size: 13px; margin-top: 3px; }
+.head-right { margin-left: auto; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; font-weight: 600;
+  border-radius: var(--pj-radius-pill); padding: 6px 13px; white-space: nowrap;
+  background: var(--pj-bg-elevated); color: var(--pj-text-muted);
+}
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.warn { background: var(--pj-warn-faint); color: var(--pj-warn); }
+.pill.ok   { background: var(--pj-done-faint); color: var(--pj-done); }
+.pill.bad  { background: var(--pj-danger-faint); color: var(--pj-danger); }
+
+/* ── 통계 ─────────────────────────────── */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.stat { background: var(--pj-bg-card); border-radius: var(--pj-radius-md); padding: 11px 16px; border-top: 1px solid transparent;
+        display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.stat.pass     { border-top-color: var(--pj-done); }
+.stat.changed  { border-top-color: var(--pj-warn); }
+.stat.mismatch { border-top-color: var(--pj-danger); }
+.stat-label { font-size: 12.5px; font-weight: 500; color: var(--pj-text-secondary); }
+.stat-value { font-size: 21px; font-weight: 700; line-height: 1.2; letter-spacing: -0.03em;
+              font-variant-numeric: tabular-nums; margin-left: auto; }
+.stat-value.pass { color: var(--pj-text-primary); }   /* 테두리가 초록이라 숫자는 검게 */
+.stat-value.changed { color: var(--pj-warn); }
+.stat-value.mismatch { color: var(--pj-danger); }
+.stat-unit { font-size: 14px; font-weight: 600; color: var(--pj-text-dim); margin-left: 3px; }
+.stat-note { font-size: 11.5px; color: var(--pj-text-dim); width: 100%; }
+
+/* ── 본문 배치 ─────────────────────────── */
+.cols { display: grid; grid-template-columns: 1fr 372px; gap: 16px; align-items: start; }
+
+/* ── 필터 ─────────────────────────────── */
+.filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.filters .spacer { flex: 1; }
+.chip {
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  color: var(--pj-text-secondary); background: var(--pj-bg-card);
+  border: none; border-radius: var(--pj-radius-pill);
+  padding: 8px 15px; cursor: pointer; transition: all 0.15s ease;
+}
+.chip:hover { background: var(--pj-bg-active); }
+.chip.on { background: var(--pj-text-primary); color: var(--pj-bg-card); }
+.chip b { font-weight: 700; margin-left: 4px; }
+
+/* 이번 검사가 언제 것인지 — 아래 목록이 어느 회차인지 분명히 합니다 */
+.now-bar {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 9px 15px; margin-bottom: 10px;
+  background: var(--pj-bg-card); border-radius: var(--pj-radius-md);
+  font-size: 13px;
+}
+.now-bar b { font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.now-bar .tag {
+  font-size: 11px; font-weight: 600; padding: 2px 8px;
+  border-radius: var(--pj-radius-pill);
+  background: var(--pj-bg-elevated); color: var(--pj-text-secondary);
+}
+.now-bar .note { margin-left: auto; color: var(--pj-text-muted); font-weight: 500; }
+.now-bar .note.new { color: var(--pj-danger); font-weight: 600; }
+.now-bar .note.fixed { color: var(--pj-done); font-weight: 600; }
+
+/* ── 그룹 ─────────────────────────────── */
+/* 위쪽 통계 칸과 같은 방식으로 윗선에 색을 줍니다 — 묶음 상태가 테두리로 보입니다 */
+.group {
+  background: var(--pj-bg-card); border-radius: var(--pj-radius-lg);
+  margin-bottom: 12px; overflow: hidden;
+  border-top: 1px solid var(--pj-border-strong);   /* 이상 없을 때는 거의 안 보이게 */
+}
+.group.bad { border-top-color: var(--pj-danger); }
+.group-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 15px 18px;
+  background: var(--pj-bg-surface);
+  border-bottom: 1px solid var(--pj-border-strong);
+}
+/* 묶음 이름 — 왼쪽에 색 막대를 세워 눈에 걸리게 합니다 */
+.group-name {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 17px; font-weight: 700; letter-spacing: -0.03em;
+}
+.group-name::before {
+  content: ""; width: 2px; height: 19px; border-radius: 99px;
+  background: var(--pj-text-dim); flex-shrink: 0;
+}
+.group-head.bad .group-name::before { background: var(--pj-danger); }
+.group-head.bad .group-name { color: var(--pj-danger); }
+.group-meta { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.group-when {
+  font-size: 12.5px; font-weight: 700; color: var(--pj-text-strong);
+  font-variant-numeric: tabular-nums;
+  background: var(--pj-bg-elevated); border-radius: var(--pj-radius-pill);
+  padding: 4px 11px; white-space: nowrap;
+}
+.group-count {
+  font-size: 12.5px; font-weight: 700; color: var(--pj-text-secondary);
+  background: var(--pj-bg-elevated); border-radius: var(--pj-radius-pill);
+  padding: 4px 11px; white-space: nowrap;
+}
+.group-count.bad { background: var(--pj-danger-faint); color: var(--pj-danger); }
+
+/* ── 검사 한 줄 ─────────────────────────── */
+.row { display: flex; align-items: center; gap: 12px; padding: 11px 18px; border-bottom: 1px solid var(--pj-bg-elevated); }
+.row:last-child { border-bottom: none; }
+.row.mismatch { background: var(--pj-danger-faint); }
+.row.changed  { background: var(--pj-warn-faint); }
+.row.ignored  { opacity: 0.6; }
+
+.row-state { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; width: 76px; flex-shrink: 0; }
+.row-state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.row-state.pass     { color: var(--pj-done); }
+.row-state.mismatch { color: var(--pj-danger); }
+.row-state.changed  { color: var(--pj-warn); }
+.row-state.todo     { color: var(--pj-text-dim); }
+.row-state.ignored  { color: var(--pj-text-dim); }
+
+.row-main { flex: 1; min-width: 0; }
+.row-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.row-scope { font-size: 12px; color: var(--pj-text-dim); margin-top: 2px; word-break: break-all; }
+
+.row-vals { display: flex; align-items: center; gap: 7px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; max-width: 330px; }
+.val {
+  font-size: 11.5px; font-weight: 600; padding: 3px 9px;
+  border-radius: var(--pj-radius-pill); background: var(--pj-bg-elevated);
+  color: var(--pj-text-primary); white-space: nowrap;
+  max-width: 200px; overflow: hidden; text-overflow: ellipsis;
+}
+.val.now { background: var(--pj-bg-surface); }
+.val.ok  { background: var(--pj-done-faint); color: var(--pj-text-primary); }   /* 의도와 맞음 — 바탕만 초록 */
+.val.bad { background: var(--pj-danger-faint); color: var(--pj-text-primary); }
+.arrow { font-size: 12px; color: var(--pj-text-dim); }
+
+.row-act { display: flex; gap: 5px; flex-shrink: 0; }
+.mini {
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  color: var(--pj-text-on-fill); background: var(--pj-text-primary);
+  border: none; border-radius: var(--pj-radius-pill);
+  padding: 7px 13px; cursor: pointer; white-space: nowrap;
+  transition: opacity 0.15s ease;
+}
+.mini:hover { opacity: 0.82; }
+.mini.ghost { background: var(--pj-bg-elevated); color: var(--pj-text-secondary); }
+.mini:disabled { opacity: 0.4; cursor: default; }
+
+/* ── 실행 이력 ─────────────────────────── */
+.side { background: var(--pj-bg-card); border-radius: var(--pj-radius-lg); padding: 18px; position: sticky; top: calc(var(--nav-height) + 16px); }
+.side h2 { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 13px; }
+
+/* 검사 버튼 — 필터 줄 맨 오른쪽에 둡니다 */
+.run-btn {
+  font-family: inherit; font-size: 13px; font-weight: 700;
+  color: var(--pj-text-on-fill); background: var(--pj-text-primary);
+  border: none; border-radius: var(--pj-radius-pill);
+  padding: 9px 18px; cursor: pointer; white-space: nowrap;
+  transition: opacity 0.15s ease;
+}
+.run-btn:hover { opacity: 0.85; }
+.run-btn:disabled { opacity: 0.5; cursor: default; }
+
+.bars { display: flex; align-items: flex-end; gap: 4px; height: 42px; margin: 14px 0 6px; }
+.bar { flex: 1; border-radius: 3px; background: var(--pj-done); min-height: 6px; }
+.bar.bad { background: var(--pj-danger); }
+.bar.warn { background: var(--pj-warn); }
+.bar.none { background: var(--pj-bg-elevated); }
+.bars-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--pj-text-dim); margin-bottom: 14px; }
+
+/* 회차 — 누르면 그때 검사한 내용이 아래로 펼쳐집니다 */
+.hist { border-top: 1px solid var(--pj-bg-elevated); }
+.hist-btn {
+  width: 100%; font-family: inherit; text-align: left;
+  background: transparent; border: none; cursor: pointer;
+  padding: 11px 6px; border-radius: var(--pj-radius-sm);
+  transition: background 0.13s ease;
+}
+.hist-btn:hover { background: var(--pj-bg-elevated); }
+.hist-btn .chev {
+  float: right; font-size: 11px; color: var(--pj-text-dim);
+  transition: transform 0.2s ease; display: inline-block;
+}
+.hist.open .hist-btn .chev { transform: rotate(90deg); }
+
+.hist-detail { padding: 2px 6px 12px; }
+.hist-detail[hidden] { display: none !important; }
+.hd-row {
+  display: flex; align-items: flex-start; gap: 7px;
+  padding: 5px 7px; border-radius: 6px; font-size: 12px;
+}
+.hd-row + .hd-row { margin-top: 1px; }
+.hd-row.mismatch { background: var(--pj-danger-faint); }
+.hd-row.changed  { background: var(--pj-warn-faint); }
+.hd-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+.hd-dot.pass { background: var(--pj-done); }
+.hd-dot.mismatch { background: var(--pj-danger); }
+.hd-dot.changed { background: var(--pj-warn); }
+.hd-dot.todo, .hd-dot.ignored { background: var(--pj-text-dim); }
+.hd-name { flex: 1; font-weight: 600; color: var(--pj-text-strong); }
+.hd-val { color: var(--pj-text-muted); font-weight: 500; text-align: right; max-width: 130px; word-break: break-all; }
+.hd-empty { font-size: 12px; color: var(--pj-text-dim); padding: 6px 7px; }
+
+.hist-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.hist-when { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.hist-mode { font-size: 11px; font-weight: 600; color: var(--pj-text-dim); background: var(--pj-bg-elevated); border-radius: var(--pj-radius-pill); padding: 2px 8px; }
+.hist-counts { margin-left: auto; display: flex; gap: 4px; }
+/* 회차가 어느 묶음을 훑었는지 */
+.hist-groups { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.gchip {
+  font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: var(--pj-radius-pill);
+  background: var(--pj-bg-elevated); color: var(--pj-text-secondary);
+  white-space: nowrap;
+}
+.gchip.bad { background: var(--pj-danger-faint); color: var(--pj-danger); }
+
+.hist-note { font-size: 12px; color: var(--pj-text-muted); margin-top: 4px; }
+.hist-note.new { color: var(--pj-danger); font-weight: 600; }
+.hist-note.fixed { color: var(--pj-done); font-weight: 600; }
+
+.tiny { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: var(--pj-radius-pill); background: var(--pj-bg-elevated); color: var(--pj-text-secondary); }
+.tiny.bad { background: var(--pj-danger-faint); color: var(--pj-danger); }
+.tiny.warn { background: var(--pj-warn-faint); color: var(--pj-warn); }
+.tiny.ok { background: var(--pj-done-faint); color: var(--pj-done); }
+
+.hint { margin-top: 14px; font-size: 12px; color: var(--pj-text-dim); line-height: 1.6; }
+
+.foot { margin-top: 24px; font-size: 13px; color: var(--pj-text-muted); }
+.foot code { font-size: 12px; background: var(--pj-bg-surface); padding: 2px 6px; border-radius: 5px; }
+
+@media (max-width: 1100px) { .cols { grid-template-columns: 1fr; } .side { position: static; } }
+@media (max-width: 900px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) {
+  .wrap { padding: calc(var(--nav-height) + 14px) 14px 70px; }
+  .stats { grid-template-columns: 1fr; }
+  .row { flex-wrap: wrap; }
+  .row-vals { max-width: none; justify-content: flex-start; }
+}
+</style>
+</head>
+<body data-nav="qa" data-site-root="../">
+
+<div id="site-nav"></div>
+
+<div class="wrap">
+
+  <div class="head">
+    <div>
+      <h1>QA 보드</h1>
+      <p class="subtitle">의도한 값과 지금 코드를 대조합니다 · 바뀐 것이 버그인지 의도인지 여기서 가립니다</p>
+    </div>
+    <div class="head-right"><span class="pill" id="topPill">불러오는 중…</span></div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="cols">
+    <div>
+      <div class="filters" id="filters"></div>
+      <div class="now-bar" id="nowBar"></div>
+      <div id="groups"></div>
+    </div>
+
+    <div class="side">
+      <h2>실행 이력</h2>
+      <div class="bars" id="bars"></div>
+      <div class="bars-label"><span id="barFrom"></span><span>최근 14회</span></div>
+
+      <div id="hist"></div>
+
+      <p class="hint" id="hint"></p>
+    </div>
+  </div>
+
+  <div class="foot">
+    기준값 <code>qa/expected.json</code> · 검사기 <code>qa/check.py</code> ·
+    회차 기록 <code>qa/history/</code>
+  </div>
+
+</div>
+
+<script>
+/* ==========================================================================
+   버튼이 동작하려면 로컬 서버(qa/server.py)가 떠 있어야 합니다.
+   서버 없이 열면 마지막 검사 결과만 읽기 전용으로 보여줍니다.
+   ========================================================================== */
+
+const STATE_LABEL = {
+  pass: "통과", mismatch: "불일치", changed: "변경 감지", todo: "미구현", ignored: "검사 제외"
+};
+
+let report = null;
+let history = [];
+let filter = "all";
+let live = false;          /* 로컬 서버가 붙었는가 */
+
+/* ── 서버 호출 ─────────────────────────── */
+function post(action, body) {
+  return fetch("/qa/api/" + action, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body || {})
+  }).then(function (r) {
+    if (!r.ok) throw new Error(r.status);
+    return r.json();
+  });
+}
+
+function loadHistory() {
+  return fetch("/qa/api/history")
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (b) { live = true; history = b.items || []; })
+    .catch(function () { live = false; history = []; });
+}
+
+function loadLatest() {
+  return fetch("latest.json", { cache: "no-store" })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (b) { report = b; })
+    .catch(function () { report = null; });
+}
+
+/* ── 그리기 ─────────────────────────── */
+function drawAll() {
+  drawStats();
+  drawFilters();
+  drawNowBar();
+  drawGroups();
+  drawSide();
+}
+
+/* 지금 화면에 펼쳐진 것이 어느 회차인지 */
+function drawNowBar() {
+  const bar = document.getElementById("nowBar");
+  bar.innerHTML = "";
+  if (!report) { bar.style.display = "none"; return; }
+  bar.style.display = "";
+
+  const label = document.createElement("span");
+  label.textContent = "이번 검사";
+  bar.appendChild(label);
+
+  const when = document.createElement("b");
+  when.textContent = fullWhen(report.at);
+  bar.appendChild(when);
+
+  const tag = document.createElement("span");
+  tag.className = "tag";
+  tag.textContent = (report.mode === "auto" ? "자동" : "수동");
+  bar.appendChild(tag);
+
+  /* 이번 회차 건수 — 오른쪽 이력 줄과 같은 모양으로 맞춥니다 */
+  const c = report.counts || {};
+  bar.appendChild(tiny("통과 " + (c.pass || 0), "ok"));
+  if (c.changed) bar.appendChild(tiny("변경 " + c.changed, "warn"));
+  if (c.mismatch) bar.appendChild(tiny("불일치 " + c.mismatch, "bad"));
+  if (!c.changed && !c.mismatch) bar.appendChild(tiny("이상 없음", "ok"));
+
+  const note = report.diff && report.diff.note ? report.diff.note : "";
+  if (note) {
+    const n = document.createElement("span");
+    const isNew = note.indexOf("새로 생김") === 0;
+    const isFix = note.indexOf("해결됨") === 0;
+    n.className = "note" + (isNew ? " new" : (isFix ? " fixed" : ""));
+    n.textContent = note;
+    bar.appendChild(n);
+  }
+}
+
+function drawStats() {
+  const c = (report && report.counts) || {};
+  const rows = [
+    { k: "pass",     label: "통과",            v: c.pass || 0 },
+    { k: "changed",  label: "변경 감지 · 승인 대기", v: c.changed || 0 },
+    { k: "mismatch", label: "불일치",          v: c.mismatch || 0 },
+    { k: "",         label: "미구현 · 검사 제외", v: (c.todo || 0) + (c.ignored || 0),
+      note: (c.todo || 0) + "건 미구현 · " + (c.ignored || 0) + "건 제외" }
+  ];
+
+  const box = document.getElementById("stats");
+  box.innerHTML = "";
+  rows.forEach(function (r) {
+    const el = document.createElement("div");
+    el.className = "stat " + r.k;
+    el.innerHTML = '<div class="stat-label"></div>'
+      + '<div class="stat-value ' + r.k + '">' + r.v + '<span class="stat-unit">건</span></div>'
+      + (r.note ? '<div class="stat-note"></div>' : "");
+    el.querySelector(".stat-label").textContent = r.label;
+    if (r.note) el.querySelector(".stat-note").textContent = r.note;
+    box.appendChild(el);
+  });
+
+  const need = (c.mismatch || 0) + (c.changed || 0);
+  const pill = document.getElementById("topPill");
+  if (!report) { pill.className = "pill"; pill.textContent = "검사 결과 없음"; }
+  else if (need) { pill.className = "pill warn"; pill.textContent = "손봐야 할 것 " + need + "건"; }
+  else { pill.className = "pill ok"; pill.textContent = "이상 없음"; }
+}
+
+function drawFilters() {
+  const c = (report && report.counts) || {};
+  const all = (report && report.results || []).length;
+  const defs = [
+    { id: "all", label: "전체", n: all },
+    { id: "mismatch", label: "불일치", n: c.mismatch || 0 },
+    { id: "changed", label: "변경 감지", n: c.changed || 0 },
+    { id: "todo", label: "미구현", n: c.todo || 0 },
+    { id: "pass", label: "통과", n: c.pass || 0 },
+    { id: "ignored", label: "검사 제외", n: c.ignored || 0 }
+  ];
+
+  const box = document.getElementById("filters");
+  box.innerHTML = "";
+  defs.forEach(function (d) {
+    const b = document.createElement("button");
+    b.className = "chip" + (filter === d.id ? " on" : "");
+    b.innerHTML = "";
+    b.appendChild(document.createTextNode(d.label));
+    const n = document.createElement("b");
+    n.textContent = d.n;
+    b.appendChild(n);
+    b.addEventListener("click", function () { filter = d.id; drawFilters(); drawGroups(); });
+    box.appendChild(b);
+  });
+
+  /* 검사 버튼은 이 줄 맨 오른쪽 */
+  const sp = document.createElement("div");
+  sp.className = "spacer";
+  box.appendChild(sp);
+
+  const run = document.createElement("button");
+  run.className = "run-btn";
+  run.id = "runBtn";
+  run.textContent = "▶ 지금 검사하기";
+  run.disabled = !live;
+  run.title = live ? "" : "qa/qa.bat 으로 열어야 누를 수 있습니다";
+  run.addEventListener("click", function () { runNow(run); });
+  box.appendChild(run);
+}
+
+function drawGroups() {
+  const box = document.getElementById("groups");
+  box.innerHTML = "";
+  if (!report) {
+    box.innerHTML = '<div class="group"><div class="row"><div class="row-main">'
+      + '<div class="row-title">검사 결과가 없습니다</div>'
+      + '<div class="row-scope">qa/qa.bat 을 더블클릭하면 검사하고 이 화면이 열립니다</div>'
+      + '</div></div></div>';
+    return;
+  }
+
+  const rows = report.results.filter(function (r) { return filter === "all" || r.status === filter; });
+
+  const order = [];
+  rows.forEach(function (r) { if (order.indexOf(r.group) === -1) order.push(r.group); });
+
+  order.forEach(function (g) {
+    const mine = rows.filter(function (r) { return r.group === g; });
+    const need = mine.filter(function (r) { return r.status === "mismatch" || r.status === "changed"; }).length;
+
+    const el = document.createElement("div");
+    el.className = "group" + (need ? " bad" : "");
+
+    const head = document.createElement("div");
+    head.className = "group-head" + (need ? " bad" : "");
+    head.innerHTML = '<span class="group-name"></span><span class="group-meta">'
+      + '<span class="group-when"></span><span class="group-count"></span></span>';
+    head.querySelector(".group-name").textContent = g;
+    /* 어느 회차의 결과인지 묶음마다 적어 둡니다. 안 그러면 위 요약과 따로 노는 것처럼 보입니다 */
+    head.querySelector(".group-when").textContent = fullWhen(report.at) + " 검사";
+    const cntEl = head.querySelector(".group-count");
+    cntEl.textContent = mine.length + "개" + (need ? " · " + need + "건 손봐야 함" : "");
+    cntEl.classList.toggle("bad", !!need);
+    el.appendChild(head);
+
+    mine.forEach(function (r) { el.appendChild(buildRow(r)); });
+    box.appendChild(el);
+  });
+}
+
+function buildRow(r) {
+  const row = document.createElement("div");
+  row.className = "row " + r.status;
+
+  const st = document.createElement("div");
+  st.className = "row-state " + r.status;
+  st.appendChild(document.createTextNode(STATE_LABEL[r.status] || r.status));
+  row.appendChild(st);
+
+  const main = document.createElement("div");
+  main.className = "row-main";
+  const t = document.createElement("div");
+  t.className = "row-title";
+  t.textContent = r.title;
+  main.appendChild(t);
+  const s = document.createElement("div");
+  s.className = "row-scope";
+  s.textContent = r.detail || r.scope || "";
+  main.appendChild(s);
+  row.appendChild(main);
+
+  const vals = document.createElement("div");
+  vals.className = "row-vals";
+  const okTone = (r.status === "pass") ? " ok" : "";   /* 의도와 맞으면 초록 바탕 */
+  if (r.expected) {
+    const a = document.createElement("span");
+    a.className = "val" + okTone;
+    a.textContent = "의도 " + r.expected;
+    vals.appendChild(a);
+    const ar = document.createElement("span");
+    ar.className = "arrow";
+    ar.textContent = (r.status === "pass" ? "=" : "→");
+    vals.appendChild(ar);
+  }
+  const b = document.createElement("span");
+  b.className = "val now" + okTone + (r.status === "mismatch" ? " bad" : "");
+  b.textContent = "지금 " + r.actual;
+  vals.appendChild(b);
+  row.appendChild(vals);
+
+  /* 손봐야 하는 줄에만 버튼을 답니다 */
+  const act = document.createElement("div");
+  act.className = "row-act";
+
+  if (r.status === "mismatch" || r.status === "changed") {
+    act.appendChild(mkBtn("의도함", "", function () {
+      if (!confirmLive()) return;
+      post("approve", { id: r.id, value: r.actual }).then(applyReport);
+    }));
+    act.appendChild(mkBtn("오탐", "ghost", function () {
+      if (!confirmLive()) return;
+      const why = prompt("왜 오탐인가요? 나중에 같은 걸 또 올리지 않도록 남깁니다.", "오탐 — ");
+      if (why === null) return;
+      post("ignore", { id: r.id, why: why }).then(applyReport);
+    }));
+  } else if (r.status === "ignored") {
+    act.appendChild(mkBtn("제외 해제", "ghost", function () {
+      if (!confirmLive()) return;
+      post("unignore", { id: r.id }).then(applyReport);
+    }));
+  }
+
+  if (act.children.length) row.appendChild(act);
+  return row;
+}
+
+function mkBtn(label, cls, fn) {
+  const b = document.createElement("button");
+  b.className = "mini " + cls;
+  b.textContent = label;
+  b.disabled = !live;
+  b.title = live ? "" : "qa/qa.bat 으로 열어야 누를 수 있습니다";
+  b.addEventListener("click", fn);
+  return b;
+}
+
+function confirmLive() {
+  if (live) return true;
+  alert("이 버튼은 로컬에서만 동작합니다.\n\nqa/qa.bat 을 더블클릭해서 여세요.");
+  return false;
+}
+
+function applyReport(res) {
+  if (res && res.ok && res.report) report = res.report;
+  return loadHistory().then(drawAll);
+}
+
+/* ── 실행 이력 ─────────────────────────── */
+function drawSide() {
+  /* 지금 위에 펼쳐 놓은 회차는 이력에서 뺍니다.
+     다시 검사하면 그 회차가 여기로 내려오고, 새 결과가 위로 올라갑니다. */
+  const past = history.filter(function (h) { return !report || h.at !== report.at; });
+
+  /* 막대 — 회차별로 손봐야 할 것이 있었는지 */
+  const bars = document.getElementById("bars");
+  bars.innerHTML = "";
+  const items = past.slice().reverse();
+
+  if (!items.length) {
+    for (var i = 0; i < 8; i++) {
+      const b = document.createElement("div");
+      b.className = "bar none";
+      bars.appendChild(b);
+    }
+  } else {
+    items.forEach(function (h) {
+      const c = h.counts || {};
+      const b = document.createElement("div");
+      const bad = c.mismatch || 0, ch = c.changed || 0;
+      b.className = "bar" + (bad ? " bad" : (ch ? " warn" : ""));
+      b.style.height = (bad || ch) ? "100%" : "30%";
+      b.title = shortWhen(h.at) + " · " + (bad ? "불일치 " + bad : (ch ? "변경 " + ch : "이상 없음"));
+      bars.appendChild(b);
+    });
+  }
+  document.getElementById("barFrom").textContent = items.length ? shortWhen(items[0].at) : "";
+
+  /* 회차 목록 — 한 줄을 누르면 그때 검사한 내용이 아래로 펼쳐집니다 */
+  const box = document.getElementById("hist");
+  box.innerHTML = "";
+
+  if (!past.length) {
+    box.innerHTML = '<div class="hd-empty">지난 회차가 아직 없습니다. '
+      + '다시 검사하면 지금 결과가 여기로 내려옵니다.</div>';
+  }
+
+  past.forEach(function (h) { box.appendChild(buildHistRow(h, false)); });
+
+  document.getElementById("hint").textContent = live
+    ? "「의도함」 을 누르면 지금 값이 새 기준이 됩니다. 「오탐」 은 검사에서 빼고 이유를 남깁니다."
+    : "읽기 전용으로 보고 있습니다. 버튼을 쓰려면 qa/qa.bat 을 더블클릭해서 여세요.";
+}
+
+/* 회차 하나를 펼쳤을 때 — 그때 검사한 항목들을 보여줍니다 */
+function drawHistDetail(box, h) {
+  box.dataset.loaded = "1";
+  box.innerHTML = '<div class="hd-empty">불러오는 중…</div>';
+
+  if (!h.file) {
+    box.innerHTML = '<div class="hd-empty">이 회차의 기록을 찾지 못했습니다</div>';
+    return;
+  }
+
+  fetch("history/" + h.file, { cache: "no-store" })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (d) {
+      const rows = d.results || [];
+      if (!rows.length) {
+        box.innerHTML = '<div class="hd-empty">검사 항목이 없습니다</div>';
+        return;
+      }
+
+      /* 손봐야 할 것을 위로 올립니다 */
+      const rank = { mismatch: 0, changed: 1, todo: 2, ignored: 3, pass: 4 };
+      rows.sort(function (a, b) { return (rank[a.status] || 9) - (rank[b.status] || 9); });
+
+      box.innerHTML = "";
+      rows.forEach(function (r) {
+        const row = document.createElement("div");
+        row.className = "hd-row " + r.status;
+
+        const dot = document.createElement("span");
+        dot.className = "hd-dot " + r.status;
+        row.appendChild(dot);
+
+        const name = document.createElement("span");
+        name.className = "hd-name";
+        name.textContent = r.title;
+        row.appendChild(name);
+
+        const val = document.createElement("span");
+        val.className = "hd-val";
+        val.textContent = r.status === "pass" ? "통과" : (STATE_LABEL[r.status] + " · " + r.actual);
+        row.appendChild(val);
+
+        box.appendChild(row);
+      });
+    })
+    .catch(function () {
+      box.innerHTML = '<div class="hd-empty">기록을 읽지 못했습니다</div>';
+    });
+}
+
+/* 회차 한 줄 — 가운데 패널과 오른쪽 이력이 같은 모양을 씁니다 */
+function buildHistRow(h, highlight) {
+  const c = h.counts || {};
+  const el = document.createElement("div");
+  el.className = "hist" + (highlight ? " newest" : "");
+
+  const btn = document.createElement("button");
+  btn.className = "hist-btn";
+
+  const top = document.createElement("div");
+  top.className = "hist-top";
+  top.innerHTML = '<span class="hist-when"></span><span class="hist-mode"></span>'
+    + '<span class="hist-counts"></span><span class="chev">▶</span>';
+  top.querySelector(".hist-when").textContent = fullWhen(h.at);
+  top.querySelector(".hist-mode").textContent = (h.mode === "auto" ? "자동" : "수동");
+
+  const cnt = top.querySelector(".hist-counts");
+  cnt.appendChild(tiny("통과 " + (c.pass || 0), "ok"));
+  if (c.changed) cnt.appendChild(tiny("변경 " + c.changed, "warn"));
+  if (c.mismatch) cnt.appendChild(tiny("불일치 " + c.mismatch, "bad"));
+  if (!c.changed && !c.mismatch) cnt.appendChild(tiny("이상 없음", "ok"));
+  btn.appendChild(top);
+
+  /* 어느 묶음을 훑었는지 — 펼치지 않아도 보이게 */
+  if ((h.groups || []).length) {
+    const gs = document.createElement("div");
+    gs.className = "hist-groups";
+    h.groups.forEach(function (g) {
+      const s = document.createElement("span");
+      s.className = "gchip" + (g.bad ? " bad" : "");
+      s.textContent = g.name + " " + g.total;
+      s.title = g.bad ? g.bad + "건 손봐야 함" : "이상 없음";
+      gs.appendChild(s);
+    });
+    btn.appendChild(gs);
+  }
+
+  if (h.note) {
+    const n = document.createElement("div");
+    const isNew = h.note.indexOf("새로 생김") === 0;
+    const isFix = h.note.indexOf("해결됨") === 0;
+    n.className = "hist-note" + (isNew ? " new" : (isFix ? " fixed" : ""));
+    n.textContent = h.note;
+    btn.appendChild(n);
+  }
+
+  el.appendChild(btn);
+
+  const detail = document.createElement("div");
+  detail.className = "hist-detail";
+  detail.hidden = true;
+  el.appendChild(detail);
+
+  btn.addEventListener("click", function () {
+    const opening = detail.hidden;
+    detail.hidden = !opening;
+    el.classList.toggle("open", opening);
+    if (opening && !detail.dataset.loaded) drawHistDetail(detail, h);
+  });
+
+  return el;
+}
+
+function tiny(text, cls) {
+  const s = document.createElement("span");
+  s.className = "tiny " + (cls || "");
+  s.textContent = text;
+  return s;
+}
+
+function shortWhen(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return (d.getMonth() + 1) + "/" + d.getDate();
+}
+
+/* 회차 줄에는 날짜와 시각을 함께 박습니다 */
+function fullWhen(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = function (n) { return String(n).padStart(2, "0"); };
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
+    + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+}
+
+/* ── 지금 검사하기 ─────────────────────── */
+function runNow(btn) {
+  btn.disabled = true;
+  btn.textContent = "검사 중…";
+  post("run", { mode: "manual" })
+    .then(applyReport)
+    .catch(function () { alert("검사를 실행하지 못했습니다."); })
+    .then(function () {
+      const b = document.getElementById("runBtn");
+      if (b) { b.textContent = "▶ 지금 검사하기"; b.disabled = !live; }
+    });
+}
+
+/* ── 시작 ─────────────────────────── */
+Promise.all([loadLatest(), loadHistory()]).then(drawAll);
+</script>
+
+<script src="../assets/js/main.js"></script>
+
+</body>
+</html>

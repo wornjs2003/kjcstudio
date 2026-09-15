@@ -1,0 +1,117 @@
+{
+  "_읽는법": [
+    "의도한 값을 적어두는 파일입니다. 검사기(check.py)가 이 파일과 지금 저장소를 대조합니다.",
+    "",
+    "checks  : 무엇을 어떻게 검사할지. scope 에 '어느 파일의 어느 부분을 보는지' 를 반드시 적습니다.",
+    "approved: 「의도함」 을 누른 기록. 그때의 값이 새 기준이 됩니다.",
+    "ignored : 오탐으로 판정해 검사에서 뺀 항목. 왜 뺐는지 남겨서 같은 걸 또 올리지 않습니다.",
+    "",
+    "지금은 참·거짓이 분명한 항목만 넣었습니다.",
+    "색상이나 문구처럼 '의도인지 아닌지' 가 사람 판단인 항목은 틀이 검증된 뒤에 넓힙니다.",
+    "실제로 오탐이 네 번 났고, 원인은 주석을 코드로 착각·지시가 바뀐 걸 모름·정의된 토큰을 박은 값으로 착각이었습니다."
+  ],
+
+  "checks": [
+    {
+      "id": "nav-links",
+      "group": "문구·구조",
+      "title": "메뉴 링크가 실제로 존재하는가",
+      "scope": "partials/nav.html 의 href 전부",
+      "expected": "모든 링크 대상이 저장소에 있음",
+      "type": "nav_links",
+      "file": "partials/nav.html"
+    },
+
+    {
+      "id": "doc-accent",
+      "group": "디자인 토큰",
+      "title": "문서의 accent 색 = 코드의 토큰",
+      "scope": "CLAUDE.md 의 accent 줄 ↔ assets/css/theme.css 의 --accent 정의",
+      "expected": "두 값이 같음",
+      "type": "doc_token",
+      "docFile": "CLAUDE.md",
+      "docPattern": "accent 색상:\\s*(#[0-9a-fA-F]{6})",
+      "cssFile": "assets/css/theme.css",
+      "token": "accent"
+    },
+
+    {
+      "id": "doc-bg",
+      "group": "디자인 토큰",
+      "title": "문서의 배경색 = 코드의 토큰",
+      "scope": "CLAUDE.md 의 배경색 줄 ↔ assets/css/theme.css 의 --bg 정의",
+      "expected": "두 값이 같음",
+      "type": "doc_token",
+      "docFile": "CLAUDE.md",
+      "docPattern": "배경색:\\s*(#[0-9a-fA-F]{6})",
+      "cssFile": "assets/css/theme.css",
+      "token": "bg"
+    },
+
+    {
+      "id": "pair-kis",
+      "group": "쌍 파일",
+      "title": "중계 서버 두 벌이 같은 주소를 들고 있는가",
+      "scope": "kis_proxy.py 의 route == \"…\" ↔ kis-worker.js 의 route === \"…\"",
+      "expected": "양쪽 경로 목록이 같음",
+      "_주의": "두 파일이 경로를 적는 방식이 같아 보이지만 다릅니다. 파일별 패턴을 따로 둡니다. 같은 패턴을 쓰면 오탐이 납니다 (2026-09-15 실제로 남).",
+      "type": "pair_sync",
+      "fileA": "holdings/server/kis_proxy.py",
+      "fileB": "holdings/worker/kis-worker.js",
+      "kindA": "py",
+      "kindB": "js",
+      "patternA": "route\\s*==\\s*\"([a-z0-9/-]+)\"",
+      "patternB": "route\\s*===\\s*\"([a-z0-9/-]+)\""
+    },
+
+    {
+      "id": "raw-color-projects",
+      "group": "디자인 토큰",
+      "title": "프로젝트 보드에 색을 직접 박았는가",
+      "scope": "projects/index.html · 주석 제외",
+      "expected": "0곳 — 전부 theme.css 토큰 사용",
+      "type": "raw_color",
+      "files": ["projects/index.html"]
+    },
+
+    {
+      "id": "raw-color-apiboard",
+      "group": "디자인 토큰",
+      "title": "API 보드에 색을 직접 박았는가",
+      "scope": "api-board/index.html · 주석 제외",
+      "expected": "0곳 — 전부 theme.css 토큰 사용",
+      "type": "raw_color",
+      "files": ["api-board/index.html"]
+    },
+
+    {
+      "id": "qa-self",
+      "group": "문구·구조",
+      "title": "QA 보드 자신의 파일이 갖춰졌는가",
+      "scope": "qa/ 폴더",
+      "expected": "검사기·기준값·화면이 모두 있음",
+      "type": "file_exists",
+      "files": ["qa/check.py", "qa/expected.json", "qa/index.html"]
+    }
+  ],
+
+  "approved": {},
+
+  "ignored": {
+    "pair-kis": {
+      "at": "2026-09-15",
+      "why": "오탐 — 검사기가 아직 구역을 못 가림",
+      "_경위": [
+        "두 파일 다 route == \"…\" 로 경로를 적지만, KIS 구역과 DART 구역이 섞여 있습니다.",
+        "kis_proxy.py 는 _handle_dart 안에서 같은 문법으로 DART 경로를 적고,",
+        "kis-worker.js 는 DART 를 다른 구조로 처리합니다.",
+        "파일 전체를 한 번에 훑으면 '한쪽에만 있다' 가 4건 뜨는데 전부 오탐입니다.",
+        "제대로 하려면 구역(KIS/DART)을 나눠 읽어야 합니다. 틀이 검증된 뒤에 다시 넣습니다.",
+        "",
+        "이 항목을 만들면서 오탐이 두 번 났습니다.",
+        "  1차 — 양쪽에 같은 정규식을 써서. 파일별 패턴으로 나눠 고쳤습니다.",
+        "  2차 — 구역 구분을 못 해서. 이건 아직 못 고쳐서 제외합니다."
+      ]
+    }
+  }
+}
