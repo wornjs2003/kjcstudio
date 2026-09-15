@@ -46,9 +46,13 @@ function toChartTime(ts, period) {
   if (!MINUTE_PERIODS.has(period) || s.length < 12) return date;
   const hh = Number(s.slice(8, 10));
   const mm = Number(s.slice(10, 12));
-  // 한국 시간 기준으로 만든 뒤 UTC 초로 변환
+  /* 한국 시각을 그대로 UTC 자리에 넣는다.
+     라이브러리는 받은 초를 UTC 로 읽어 눈금에 적는다. 그래서 09:00(한국)을
+     진짜 UTC(00:00)로 바꿔 넣으면 눈금에 00:00 이 찍힌다. 실제로 장 마감
+     15:30 자리에 05:00 이 나왔다 (2026-09-15 확인). 옮기지 않고 넣어야
+     눈금이 한국 시각으로 읽힌다. 이 값은 눈금과 순서에만 쓰인다. */
   return Math.floor(
-    Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8), hh - 9, mm) / 1000
+    Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8), hh, mm) / 1000
   );
 }
 
