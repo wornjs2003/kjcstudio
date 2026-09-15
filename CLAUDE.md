@@ -276,16 +276,61 @@ canvas 는 CSS 를 상속받지 못한다. 그래서 `holdings/js/theme.js` 가 
 holdings 관련 룰은 `holdings/CLAUDE.md` 참조.
 
 ## 실행 커맨드
+
+### 로컬은 8765 하나로 본다 (2026-09-15 지시)
+
+**`holdings-preview` 하나만 띄운다.** 여섯 구역과 모든 API 가 거기서 돈다.
+
+    http://localhost:8765/              메인
+                        /holdings/      주식
+                        /projects/      프로젝트 보드
+                        /company-setup/ 설립 체크리스트
+                        /api-board/     API 보드
+                        /debugging/     Debugging 보드
+                        /api/kis/*  /api/dart/*  /api/news/*
+
+**왜 하나로 모으나** — 서버가 여럿이면 상단 메뉴로 구역을 오갈 때 404 가 쏟아진다.
+`holdings/server/kis_proxy.py` 만 API 를 갖고 있는데, 다른 서버들도 저장소 루트를 통째로
+내보내므로 **화면은 열리고 API 만 죽는다.**
+
+    8093(Debugging) 에서 Holdings 메뉴 클릭
+      → 8093/holdings/ 로 이동. 포트는 안 바뀐다
+      → /api/kis/* · /api/dart/* · /api/news/* 전부 404
+      → 시세도 공시도 뉴스도 하나도 안 나온다
+
+2026-09-15 에 재권님이 F12 로 찾으셨다. 포트별로 재보니 이랬다.
+
+    포트    /holdings/  /api/kis/*
+    8080      200         404
+    8091      200         404
+    8093      200         404
+    8765      200         200      ← 이것만 온전하다
+
+**배포본에는 이 문제가 없다.** 서버가 하나고 `/api/*` 는 워커가 다 받는다.
+로컬에서만 나는 문제다.
+
+프로젝트 보드의 `/api/board/*` 는 **로컬에 아예 없다.** 배포본 워커에만 있고,
+로컬에서는 `이 브라우저에만 저장됨` 으로 물러선다. 설계가 그렇다.
+
+### 명령 목록
+
 Mac 은 `.command` 더블클릭, Windows 는 같은 이름의 `.bat` 더블클릭. 동작은 동일.
 
 | 용도 | Mac | Windows |
 |---|---|---|
-| 메인 사이트 (포트 8080) | `studio-preview.command` | `studio-preview.bat` |
-| holdings 단축 (포트 8765) | `holdings-preview.command` | `holdings-preview.bat` |
-| 설립 체크리스트 (포트 8090) | `company-setup/preview.command` | `company-setup/preview.bat` |
-| 프로젝트 보드 (포트 8091) | `projects/preview.command` | `projects/preview.bat` |
-| holdings 독립 실행 | `holdings/preview.command` | `holdings/preview.bat` |
+| **전체 (포트 8765) — 이것만 쓰면 된다** | `holdings-preview.command` | `holdings-preview.bat` |
 | 작업물 목록 갱신 | `refresh-works.command` | `refresh-works.bat` |
+
+아래는 남겨 두지만 **평소에는 쓰지 않는다.** 그 구역만 따로 볼 일이 있을 때만 쓰고,
+띄운 채로 메뉴를 눌러 다른 구역에 가지 않는다.
+
+| 용도 | Mac | Windows |
+|---|---|---|
+| 메인만 (8080) | `studio-preview.command` | `studio-preview.bat` |
+| 설립 체크리스트만 (8090) | `company-setup/preview.command` | `company-setup/preview.bat` |
+| 프로젝트 보드만 (8091) | `projects/preview.command` | `projects/preview.bat` |
+| Debugging 보드만 (8093) | — | `debugging/debugging.bat` |
+| holdings 독립 실행 | `holdings/preview.command` | `holdings/preview.bat` |
 
 - 브라우저: Chrome 우선, 없으면 기본 브라우저
 - 두 OS 모두 Python 3 필요 (Windows: Python 3.13 + Pillow 설치됨)
