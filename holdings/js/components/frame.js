@@ -6,6 +6,7 @@
    ========================================================================== */
 
 import { WATCHLIST, PRIORITY_CODES } from '../data/market.js';
+import * as lastSeen from '../store/last-seen.js';
 import { fetchLivePrices, fetchLiveIndices, applyLiveToStock } from '../data/live.js';
 import { fmtWon, fmtPct, fmtNum, dirClass, fmtDeltaAmount } from '../utils/format.js';
 import { tickClass } from '../utils/tick.js';
@@ -158,6 +159,28 @@ const REFRESH_SLOW_MS = 30000;
    첫 화면은 순위표가 멀티 조회(한 번에 30종목)로 관심종목까지 함께 받으므로,
    여기서 또 받으면 같은 값을 두 경로로 부르게 된다 (2026-09-14 정리).
    종목 화면(stock.html)은 순위표가 없으므로 기본값 그대로 쓴다. */
+/* ── 지난 값 표시 ───────────────────────────────────────────
+
+   화면을 오갈 때 빈 칸 대신 지난 값을 먼저 그린다 (2026-09-15). 그동안은
+   그것이 지난 값임을 화면에 적어 둔다. 새 값이 오면 스스로 사라진다. */
+
+let staleBar = null;
+
+function markStale(ageMs) {
+  if (staleBar) return;
+  const sec = Math.max(1, Math.round(ageMs / 1000));
+  staleBar = document.createElement('div');
+  staleBar.className = 'kh-stale';
+  staleBar.innerHTML = `<i></i>${sec}초 전 값입니다 · 새로 받는 중`;
+  document.body.appendChild(staleBar);
+}
+
+function clearStale() {
+  if (!staleBar) return;
+  staleBar.remove();
+  staleBar = null;
+}
+
 export function startLiveLoop({ onPrices, onIndices, prices = true, indexMs } = {}) {
   const fastCodes = WATCHLIST.filter(s => PRIORITY_CODES.includes(s.code)).map(s => s.code);
   const slowCodes = WATCHLIST.filter(s => !PRIORITY_CODES.includes(s.code)).map(s => s.code);
@@ -166,13 +189,38 @@ export function startLiveLoop({ onPrices, onIndices, prices = true, indexMs } = 
      받은 것을 여기에 쌓아 두고 합쳐서 전달한다. */
   const latest = {};
 
+  /* 지난번에 본 값이 남아 있으면 그것부터 깔고 시작한다 (2026-09-15).
+     서버에서 첫 값이 오기까지 사이드바와 시세 띠가 "—" 로 비어 있었다.
+     세 화면이 이 함수를 함께 쓰므로 여기 한 번만 두면 모두 해결된다.
+     묵은 값은 last-seen 이 스스로 버리므로 오래된 숫자가 남지 않는다. */
+  const kept = lastSeen.load('prices');
+  if (kept) Object.assign(latest, kept.value);
+
+  const keptIdx = lastSeen.load('indices');
+  if (keptIdx && onIndices) onIndices(keptIdx.value);
+
+  /* 지난 값을 보여주는 동안은 그렇다고 적는다.
+
+     데이터 규칙 — 받아온 값만 보여주고, 없으면 없다고 적는다. 묵은 숫자를
+     실시간인 양 두면 연결이 끊긴 건지 시세가 안 움직이는 건지 알 수 없다.
+     첫 새 값이 들어오면 이 표시는 스스로 사라진다. */
+  if (kept || keptIdx) markStale(Math.min(
+    kept ? kept.ageMs : Infinity,
+    keptIdx ? keptIdx.ageMs : Infinity,
+  ));
+
   function applyPrices(map) {
     if (!map) return;
+    clearStale();
     Object.assign(latest, map);
     WATCHLIST.forEach(s => {
       const live = latest[s.code];
       if (live) applyLiveToStock(s, live);
     });
+    /* 다음에 들어올 때 쓰도록 남긴다. 첫 화면은 순위표 200종목까지 모아서
+       따로 저장하므로, 여기서 덮어써 8종목만 남기지 않도록 합쳐서 넣는다. */
+    const before = lastSeen.load('prices');
+    lastSeen.save('prices', { ...(before ? before.value : {}), ...latest });
     if (onPrices) onPrices(latest);
   }
 
@@ -189,9 +237,12 @@ export function startLiveLoop({ onPrices, onIndices, prices = true, indexMs } = 
       fetchLiveIndices(),
       prices && slowCodes.length ? fetchLivePrices(slowCodes) : Promise.resolve(null),
     ]);
+    if (indices) { lastSeen.save('indices', indices); clearStale(); }
     if (indices && onIndices) onIndices(indices);
     applyPrices(quotes);
   }
+
+  if (kept && onPrices) onPrices(latest);   // 남은 값으로 먼저 한 번
 
   tickFast();
   tickSlow();
@@ -203,6 +254,7 @@ export function startLiveLoop({ onPrices, onIndices, prices = true, indexMs } = 
     setInterval(async () => {
       if (document.hidden) return;
       const indices = await fetchLiveIndices();
+      if (indices) { lastSeen.save('indices', indices); clearStale(); }
       if (indices && onIndices) onIndices(indices);
     }, indexMs);
   }
