@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-15T15:04:45+09:00",
+  "at": "2026-09-15T15:44:27+09:00",
   "mode": "manual",
   "counts": {
     "pass": 6,
@@ -22,7 +22,7 @@
       "expected": "모든 링크 대상이 저장소에 있음",
       "status": "pass",
       "actual": "13개 모두 정상",
-      "detail": "index.html · category/3d-modeling.html · category/ai-work.html · qa/ · api-board/ · holdings/"
+      "detail": "index.html · category/3d-modeling.html · category/ai-work.html · debugging/ · api-board/ · holdings/"
     },
     {
       "id": "doc-accent",
@@ -51,8 +51,8 @@
       "scope": "kis_proxy.py 의 route == \"…\" ↔ kis-worker.js 의 route === \"…\"",
       "expected": "양쪽 경로 목록이 같음",
       "status": "ignored",
-      "actual": "어긋남 4개",
-      "detail": "오탐 — 검사기가 아직 구역을 못 가림 — kis_proxy.py 에만: disclosures, poll, status, universe"
+      "actual": "어긋남 8개",
+      "detail": "오탐 — 검사기가 아직 구역을 못 가림 — kis_proxy.py 에만: disclosures, feed, issues, moves, poll, status, topics, universe"
     },
     {
       "id": "raw-color-projects",
@@ -77,12 +77,12 @@
     {
       "id": "qa-self",
       "group": "문구·구조",
-      "title": "QA 보드 자신의 파일이 갖춰졌는가",
+      "title": "Debugging 자신의 파일이 갖춰졌는가",
       "scope": "qa/ 폴더",
       "expected": "검사기·기준값·화면이 모두 있음",
       "status": "pass",
       "actual": "3개 모두 있음",
-      "detail": "qa/check.py · qa/expected.json · qa/index.html"
+      "detail": "debugging/check.py · debugging/expected.json · debugging/index.html"
     }
   ]
 }

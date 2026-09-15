@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QA 보드 · KJC Studio</title>
+<title>Debugging · KJC Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -13,9 +13,13 @@
 
 <style>
 /* ==========================================================================
-   KJC Studio · QA 보드
+   KJC Studio · Debugging
    의도한 값과 지금 코드를 대조합니다.
    색·모서리 값은 이 파일에 직접 쓰지 않습니다. 전부 theme.css 의 변수를 씁니다.
+
+   색 쓰는 규칙은 루트 CLAUDE.md 「디자인 규칙」 을 따릅니다.
+   (바탕에 색이 있으면 글씨는 그 색의 진한 버전 · 바탕이 흰색이면 검정)
+   여기에 규칙 본문을 적어두면 다른 화면을 만들 때 안 보여서 갈라집니다.
    ========================================================================== */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -47,17 +51,15 @@ h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035
 
 /* ── 통계 ─────────────────────────────── */
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
-.stat { background: var(--pj-bg-card); border-radius: var(--pj-radius-md); padding: 11px 16px; border-top: 1px solid transparent;
+.stat { background: var(--pj-bg-card); border-radius: var(--pj-radius-md); padding: 11px 16px;
         display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
-.stat.pass     { border-top-color: var(--pj-done); }
-.stat.changed  { border-top-color: var(--pj-warn); }
-.stat.mismatch { border-top-color: var(--pj-danger); }
 .stat-label { font-size: 12.5px; font-weight: 500; color: var(--pj-text-secondary); }
 .stat-value { font-size: 21px; font-weight: 700; line-height: 1.2; letter-spacing: -0.03em;
               font-variant-numeric: tabular-nums; margin-left: auto; }
-.stat-value.pass { color: var(--pj-text-primary); }   /* 테두리가 초록이라 숫자는 검게 */
-.stat-value.changed { color: var(--pj-warn); }
-.stat-value.mismatch { color: var(--pj-danger); }
+.stat-value.pass { color: var(--pj-text-primary); }
+/* 흰 바탕이니 세 칸 모두 검정. 무슨 칸인지는 위 테두리가 알린다 (CLAUDE.md 색 규칙) */
+.stat-value.changed { color: var(--pj-text-primary); }
+.stat-value.mismatch { color: var(--pj-text-primary); }
 .stat-unit { font-size: 14px; font-weight: 600; color: var(--pj-text-dim); margin-left: 3px; }
 .stat-note { font-size: 11.5px; color: var(--pj-text-dim); width: 100%; }
 
@@ -91,22 +93,28 @@ h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035
   background: var(--pj-bg-elevated); color: var(--pj-text-secondary);
 }
 .now-bar .note { margin-left: auto; color: var(--pj-text-muted); font-weight: 500; }
-.now-bar .note.new { color: var(--pj-danger); font-weight: 600; }
-.now-bar .note.fixed { color: var(--pj-done); font-weight: 600; }
+/* 흰 바탕이라 글씨는 검정. 새로 생겼는지 고쳐졌는지는 앞의 점이 알린다 (CLAUDE.md 색 규칙) */
+.now-bar .note.new,
+.now-bar .note.fixed { color: var(--pj-text-primary); font-weight: 600; }
+.now-bar .note.new::before,
+.now-bar .note.fixed::before {
+  content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  margin-right: 6px; vertical-align: 1px;
+}
+.now-bar .note.new::before { background: var(--pj-danger); }
+.now-bar .note.fixed::before { background: var(--pj-done); }
 
 /* ── 그룹 ─────────────────────────────── */
-/* 위쪽 통계 칸과 같은 방식으로 윗선에 색을 줍니다 — 묶음 상태가 테두리로 보입니다 */
+/* 흰 카드라 선을 두지 않습니다. 회색 바탕과의 대비로 이미 나뉩니다 (CLAUDE.md 선 규칙) */
 .group {
   background: var(--pj-bg-card); border-radius: var(--pj-radius-lg);
   margin-bottom: 12px; overflow: hidden;
-  border-top: 1px solid var(--pj-border-strong);   /* 이상 없을 때는 거의 안 보이게 */
 }
-.group.bad { border-top-color: var(--pj-danger); }
 .group-head {
   display: flex; align-items: center; gap: 10px;
   padding: 15px 18px;
   background: var(--pj-bg-surface);
-  border-bottom: 1px solid var(--pj-border-strong);
+  border-bottom: 1px solid var(--pj-border);
 }
 /* 묶음 이름 — 왼쪽에 색 막대를 세워 눈에 걸리게 합니다 */
 .group-name {
@@ -118,7 +126,8 @@ h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035
   background: var(--pj-text-dim); flex-shrink: 0;
 }
 .group-head.bad .group-name::before { background: var(--pj-danger); }
-.group-head.bad .group-name { color: var(--pj-danger); }
+/* 바탕이 무채색이라 글씨는 검정. 이상 여부는 위의 빨간 막대가 알린다 (CLAUDE.md 색 규칙) */
+.group-head.bad .group-name { color: var(--pj-text-primary); }
 .group-meta { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 .group-when {
   font-size: 12.5px; font-weight: 700; color: var(--pj-text-strong);
@@ -134,7 +143,7 @@ h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035
 .group-count.bad { background: var(--pj-danger-faint); color: var(--pj-danger); }
 
 /* ── 검사 한 줄 ─────────────────────────── */
-.row { display: flex; align-items: center; gap: 12px; padding: 11px 18px; border-bottom: 1px solid var(--pj-bg-elevated); }
+.row { display: flex; align-items: center; gap: 12px; padding: 11px 18px; border-bottom: 1px solid var(--pj-border); }
 .row:last-child { border-bottom: none; }
 .row.mismatch { background: var(--pj-danger-faint); }
 .row.changed  { background: var(--pj-warn-faint); }
@@ -142,7 +151,10 @@ h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035
 
 .row-state { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; width: 76px; flex-shrink: 0; }
 .row-state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-.row-state.pass     { color: var(--pj-done); }
+/* 「불일치」·「변경」은 줄 바탕이 연한 색이라 같은 색의 진한 글씨가 규칙에 맞다.
+   「통과」는 줄에 바탕색이 없어 흰 바탕이므로 글씨는 검정, 색은 점에 남긴다 (CLAUDE.md 색 규칙) */
+.row-state.pass     { color: var(--pj-text-primary); }
+.row-state.pass::before { background: var(--pj-done); }
 .row-state.mismatch { color: var(--pj-danger); }
 .row-state.changed  { color: var(--pj-warn); }
 .row-state.todo     { color: var(--pj-text-dim); }
@@ -160,8 +172,8 @@ h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035
   max-width: 200px; overflow: hidden; text-overflow: ellipsis;
 }
 .val.now { background: var(--pj-bg-surface); }
-.val.ok  { background: var(--pj-done-faint); color: var(--pj-text-primary); }   /* 의도와 맞음 — 바탕만 초록 */
-.val.bad { background: var(--pj-danger-faint); color: var(--pj-text-primary); }
+.val.ok  { background: var(--pj-done-faint); color: var(--pj-done); }   /* 초록 바탕이니 글씨도 진한 초록 */
+.val.bad { background: var(--pj-danger-faint); color: var(--pj-danger); }
 .arrow { font-size: 12px; color: var(--pj-text-dim); }
 
 .row-act { display: flex; gap: 5px; flex-shrink: 0; }
@@ -191,7 +203,8 @@ h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035
 .run-btn:hover { opacity: 0.85; }
 .run-btn:disabled { opacity: 0.5; cursor: default; }
 
-.bars { display: flex; align-items: flex-end; gap: 4px; height: 42px; margin: 14px 0 6px; }
+/* 30개가 들어가므로 간격을 좁힙니다 */
+.bars { display: flex; align-items: flex-end; gap: 2px; height: 42px; margin: 14px 0 6px; }
 .bar { flex: 1; border-radius: 3px; background: var(--pj-done); min-height: 6px; }
 .bar.bad { background: var(--pj-danger); }
 .bar.warn { background: var(--pj-warn); }
@@ -199,7 +212,7 @@ h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035
 .bars-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--pj-text-dim); margin-bottom: 14px; }
 
 /* 회차 — 누르면 그때 검사한 내용이 아래로 펼쳐집니다 */
-.hist { border-top: 1px solid var(--pj-bg-elevated); }
+.hist { border-top: 1px solid var(--pj-border); }
 .hist-btn {
   width: 100%; font-family: inherit; text-align: left;
   background: transparent; border: none; cursor: pointer;
@@ -246,8 +259,16 @@ h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035
 .gchip.bad { background: var(--pj-danger-faint); color: var(--pj-danger); }
 
 .hist-note { font-size: 12px; color: var(--pj-text-muted); margin-top: 4px; }
-.hist-note.new { color: var(--pj-danger); font-weight: 600; }
-.hist-note.fixed { color: var(--pj-done); font-weight: 600; }
+/* 흰 바탕이라 글씨는 검정. 새로 생겼는지 고쳐졌는지는 앞의 점이 알린다 (CLAUDE.md 색 규칙) */
+.hist-note.new,
+.hist-note.fixed { color: var(--pj-text-primary); font-weight: 600; }
+.hist-note.new::before,
+.hist-note.fixed::before {
+  content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  margin-right: 5px; vertical-align: 1px;
+}
+.hist-note.new::before { background: var(--pj-danger); }
+.hist-note.fixed::before { background: var(--pj-done); }
 
 .tiny { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: var(--pj-radius-pill); background: var(--pj-bg-elevated); color: var(--pj-text-secondary); }
 .tiny.bad { background: var(--pj-danger-faint); color: var(--pj-danger); }
@@ -269,7 +290,7 @@ h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035
 }
 </style>
 </head>
-<body data-nav="qa" data-site-root="../">
+<body data-nav="debugging" data-site-root="../">
 
 <div id="site-nav"></div>
 
@@ -277,7 +298,7 @@ h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035
 
   <div class="head">
     <div>
-      <h1>QA 보드</h1>
+      <h1>Debugging</h1>
       <p class="subtitle">의도한 값과 지금 코드를 대조합니다 · 바뀐 것이 버그인지 의도인지 여기서 가립니다</p>
     </div>
     <div class="head-right"><span class="pill" id="topPill">불러오는 중…</span></div>
@@ -295,7 +316,7 @@ h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035
     <div class="side">
       <h2>실행 이력</h2>
       <div class="bars" id="bars"></div>
-      <div class="bars-label"><span id="barFrom"></span><span>최근 14회</span></div>
+      <div class="bars-label"><span id="barFrom"></span><span>최근 30회</span></div>
 
       <div id="hist"></div>
 
@@ -304,15 +325,15 @@ h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035
   </div>
 
   <div class="foot">
-    기준값 <code>qa/expected.json</code> · 검사기 <code>qa/check.py</code> ·
-    회차 기록 <code>qa/history/</code>
+    기준값 <code>debugging/expected.json</code> · 검사기 <code>debugging/check.py</code> ·
+    회차 기록 <code>debugging/history/</code>
   </div>
 
 </div>
 
 <script>
 /* ==========================================================================
-   버튼이 동작하려면 로컬 서버(qa/server.py)가 떠 있어야 합니다.
+   버튼이 동작하려면 로컬 서버(debugging/server.py)가 떠 있어야 합니다.
    서버 없이 열면 마지막 검사 결과만 읽기 전용으로 보여줍니다.
    ========================================================================== */
 
@@ -327,7 +348,7 @@ let live = false;          /* 로컬 서버가 붙었는가 */
 
 /* ── 서버 호출 ─────────────────────────── */
 function post(action, body) {
-  return fetch("/qa/api/" + action, {
+  return fetch("/debugging/api/" + action, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body || {})
@@ -338,7 +359,7 @@ function post(action, body) {
 }
 
 function loadHistory() {
-  return fetch("/qa/api/history")
+  return fetch("/debugging/api/history")
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function (b) { live = true; history = b.items || []; })
     .catch(function () { live = false; history = []; });
@@ -464,7 +485,7 @@ function drawFilters() {
   run.id = "runBtn";
   run.textContent = "▶ 지금 검사하기";
   run.disabled = !live;
-  run.title = live ? "" : "qa/qa.bat 으로 열어야 누를 수 있습니다";
+  run.title = live ? "" : "debugging/debugging.bat 으로 열어야 누를 수 있습니다";
   run.addEventListener("click", function () { runNow(run); });
   box.appendChild(run);
 }
@@ -475,7 +496,7 @@ function drawGroups() {
   if (!report) {
     box.innerHTML = '<div class="group"><div class="row"><div class="row-main">'
       + '<div class="row-title">검사 결과가 없습니다</div>'
-      + '<div class="row-scope">qa/qa.bat 을 더블클릭하면 검사하고 이 화면이 열립니다</div>'
+      + '<div class="row-scope">debugging/debugging.bat 을 더블클릭하면 검사하고 이 화면이 열립니다</div>'
       + '</div></div></div>';
     return;
   }
@@ -580,14 +601,14 @@ function mkBtn(label, cls, fn) {
   b.className = "mini " + cls;
   b.textContent = label;
   b.disabled = !live;
-  b.title = live ? "" : "qa/qa.bat 으로 열어야 누를 수 있습니다";
+  b.title = live ? "" : "debugging/debugging.bat 으로 열어야 누를 수 있습니다";
   b.addEventListener("click", fn);
   return b;
 }
 
 function confirmLive() {
   if (live) return true;
-  alert("이 버튼은 로컬에서만 동작합니다.\n\nqa/qa.bat 을 더블클릭해서 여세요.");
+  alert("이 버튼은 로컬에서만 동작합니다.\n\ndebugging/debugging.bat 을 더블클릭해서 여세요.");
   return false;
 }
 
@@ -639,7 +660,7 @@ function drawSide() {
 
   document.getElementById("hint").textContent = live
     ? "「의도함」 을 누르면 지금 값이 새 기준이 됩니다. 「오탐」 은 검사에서 빼고 이유를 남깁니다."
-    : "읽기 전용으로 보고 있습니다. 버튼을 쓰려면 qa/qa.bat 을 더블클릭해서 여세요.";
+    : "읽기 전용으로 보고 있습니다. 버튼을 쓰려면 debugging/debugging.bat 을 더블클릭해서 여세요.";
 }
 
 /* 회차 하나를 펼쳤을 때 — 그때 검사한 항목들을 보여줍니다 */

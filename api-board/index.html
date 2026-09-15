@@ -63,12 +63,10 @@ h1 { font-size: clamp(24px, 3.5vw, 30px); font-weight: 700; letter-spacing: -0.0
 
 /* ── 통계 ─────────────────────────────── */
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 26px; }
+/* 흰 카드라 선을 두지 않고, 숫자도 검정입니다. 어느 칸인지는 위의 라벨이 알립니다 */
 .stat { background: var(--pj-bg-card); border-radius: var(--pj-radius-lg); padding: 18px 20px; }
 .stat-label { font-size: 13px; font-weight: 500; color: var(--pj-text-secondary); margin-bottom: 6px; }
 .stat-value { font-size: 26px; font-weight: 700; line-height: 1.2; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-.stat-value.live { color: var(--pj-done); }
-.stat-value.key  { color: var(--pj-accent); }
-.stat-value.warn { color: var(--pj-warn); }
 .stat-unit { font-size: 14px; font-weight: 600; color: var(--pj-text-dim); margin-left: 3px; }
 
 /* ── 구역 제목 ─────────────────────────── */
@@ -106,7 +104,7 @@ h1 { font-size: clamp(24px, 3.5vw, 30px); font-weight: 700; letter-spacing: -0.0
   background: var(--pj-bg-elevated); color: var(--pj-text-secondary);
 }
 .src-limit {
-  margin-top: auto; padding-top: 11px; border-top: 1px solid var(--pj-bg-elevated);
+  margin-top: auto; padding-top: 11px; border-top: 1px solid var(--pj-border);
   display: flex; gap: 8px; font-size: 11.5px; color: var(--pj-text-dim); font-weight: 500;
 }
 .src-limit span:last-child { margin-left: auto; text-align: right; }
@@ -118,12 +116,12 @@ table { width: 100%; border-collapse: collapse; min-width: 760px; }
 thead th {
   font-size: 13px; font-weight: 700; color: var(--pj-text-primary);
   padding: 14px 12px; text-align: center; white-space: nowrap;
-  border-bottom: 1px solid var(--pj-bg-elevated);
+  border-bottom: 1px solid var(--pj-border);
 }
 thead th:first-child { text-align: left; width: 168px; }
 
 tbody td {
-  padding: 0; border-bottom: 1px solid var(--pj-bg-elevated);
+  padding: 0; border-bottom: 1px solid var(--pj-border);
   vertical-align: middle;
 }
 tbody tr:last-child td { border-bottom: none; }
@@ -146,7 +144,8 @@ td.owner { background: var(--pj-done-faint); }
   transition: background 0.13s ease;
 }
 .cell:hover { background: var(--pj-bg-elevated); }
-.cell.on { color: var(--pj-done); }
+/* 흰 바탕이라 글씨는 검정. 켜졌다는 것은 왼쪽 체크박스가 초록으로 차서 알린다 (CLAUDE.md 색 규칙) */
+.cell.on { color: var(--pj-text-primary); }
 
 .cbox {
   width: 16px; height: 16px; border: 2px solid var(--pj-border-strong);
@@ -177,7 +176,12 @@ td.owner { background: var(--pj-done-faint); }
   display: flex; align-items: center; justify-content: center;
   padding: 11px 10px; font-size: 12.5px; font-weight: 600; color: var(--pj-text-secondary);
 }
-.cell-plain.warn { color: var(--pj-warn); }
+/* 흰 바탕이라 글씨는 검정. 주의 표시는 앞의 점이 한다 (CLAUDE.md 색 규칙) */
+.cell-plain.warn { color: var(--pj-text-primary); }
+.cell-plain.warn::before {
+  content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  margin-right: 6px; background: var(--pj-warn); flex-shrink: 0;
+}
 
 /* ── 범례 ─────────────────────────────── */
 .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 16px; font-size: 12.5px; color: var(--pj-text-muted); }

@@ -58,15 +58,13 @@ h1 {
 
 /* ── 요약 타일 ─────────────────────────────── */
 .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+/* 흰 카드라 선을 두지 않고, 숫자도 검정입니다. 어느 칸인지는 위의 라벨이 알립니다 */
 .sum-card { background: var(--pj-bg-card); border-radius: var(--pj-radius-lg); padding: 18px 20px; }
 .sum-label { font-size: 13px; font-weight: 500; color: var(--pj-text-secondary); margin-bottom: 6px; }
 .sum-value {
   font-size: 24px; font-weight: 700; line-height: 1.2;
   letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
 }
-.sum-value.accent { color: var(--pj-accent); }
-.sum-value.warn { color: var(--pj-warn); }
-.sum-value.done { color: var(--pj-done); }
 .sum-unit { font-size: 14px; font-weight: 600; color: var(--pj-text-dim); margin-left: 3px; }
 
 /* 저장 상태 표시 — 서버까지 갔는지 브라우저에만 있는지 구분해서 보여줍니다 */
@@ -356,8 +354,9 @@ h1 {
   transition: background 0.15s ease, color 0.15s ease;
 }
 .tm-seg button:hover { color: var(--pj-text-primary); }
-.tm-seg button.on { background: var(--pj-bg-card); color: var(--pj-accent); }
-.tm-seg button.on.hot { color: var(--pj-danger); }
+/* 흰 알약 위 글씨는 검정. 골랐다는 것은 알약 자체가, 「높음」은 빨간 테두리가 알린다 */
+.tm-seg button.on { background: var(--pj-bg-card); color: var(--pj-text-primary); }
+.tm-seg button.on.hot { box-shadow: inset 0 0 0 1px var(--pj-danger); }
 
 .tm-sec { display: flex; align-items: center; gap: 9px; margin: 20px 0 8px; }
 .tm-sec b { font-size: 14px; font-weight: 600; }
@@ -445,7 +444,7 @@ h1 {
 
 .tm-stamp {
   font-size: 11.5px; color: var(--pj-text-dim);
-  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--pj-bg-elevated);
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--pj-border);
 }
 .tm-foot { display: flex; gap: 7px; justify-content: flex-end; margin-top: 12px; }
 
@@ -545,11 +544,11 @@ h1 {
   <div class="summary">
     <div class="sum-card">
       <div class="sum-label">전체 프로젝트</div>
-      <div class="sum-value accent" id="sumTotal">0<span class="sum-unit">개</span></div>
+      <div class="sum-value" id="sumTotal">0<span class="sum-unit">개</span></div>
     </div>
     <div class="sum-card">
       <div class="sum-label">진행중 작업</div>
-      <div class="sum-value warn" id="sumDoing">0<span class="sum-unit">개</span></div>
+      <div class="sum-value" id="sumDoing">0<span class="sum-unit">개</span></div>
     </div>
     <div class="sum-card">
       <div class="sum-label">남은 작업</div>
@@ -557,7 +556,7 @@ h1 {
     </div>
     <div class="sum-card">
       <div class="sum-label">완료된 프로젝트</div>
-      <div class="sum-value done" id="sumDone">0<span class="sum-unit">개</span></div>
+      <div class="sum-value" id="sumDone">0<span class="sum-unit">개</span></div>
     </div>
   </div>
 

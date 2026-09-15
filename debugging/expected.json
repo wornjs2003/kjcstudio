@@ -87,11 +87,11 @@
     {
       "id": "qa-self",
       "group": "문구·구조",
-      "title": "QA 보드 자신의 파일이 갖춰졌는가",
+      "title": "Debugging 자신의 파일이 갖춰졌는가",
       "scope": "qa/ 폴더",
       "expected": "검사기·기준값·화면이 모두 있음",
       "type": "file_exists",
-      "files": ["qa/check.py", "qa/expected.json", "qa/index.html"]
+      "files": ["debugging/check.py", "debugging/expected.json", "debugging/index.html"]
     }
   ],
 

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-KJC Studio · QA 검사기
+KJC Studio · Debugging 검사기
 
   의도한 값(expected.json)과 지금 저장소 상태를 대조합니다.
-  결과를 qa/latest.json 과 qa/history/ 에 남기고, 직전 회차와 비교해 무엇이
+  결과를 debugging/latest.json 과 debugging/history/ 에 남기고, 직전 회차와 비교해 무엇이
   새로 생기고 무엇이 해결됐는지 적습니다.
 
   혼자서도 돌아갑니다.
-      python qa/check.py
-      python qa/check.py --auto      자동 실행으로 기록
+      python debugging/check.py
+      python debugging/check.py --auto      자동 실행으로 기록
 
   ── 만들 때 지킨 것 ─────────────────────────────
   거짓 경보가 쌓이면 아무도 안 보게 됩니다. 그래서 이렇게 했습니다.

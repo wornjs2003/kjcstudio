@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-KJC Studio · QA 보드 로컬 서버
+KJC Studio · Debugging 로컬 서버
 
   보드 화면의 버튼이 실제로 동작하려면 파일을 읽고 쓸 수 있어야 합니다.
   브라우저만으로는 저장소를 뒤질 수 없어서, 검사와 승인을 대신 처리하는
@@ -10,12 +10,12 @@ KJC Studio · QA 보드 로컬 서버
   저장소 루트를 내보냅니다. 화면이 ../assets/ 와 ../partials/ 를 함께 쓰기 때문입니다.
 
   주소
-    /qa/                     보드 화면
-    POST /qa/api/run         지금 검사하기
-    POST /qa/api/approve     「의도함」 — 지금 값을 새 기준으로
-    POST /qa/api/ignore      「검사 제외」 — 오탐으로 판정
-    POST /qa/api/unignore    제외 되돌리기
-    GET  /qa/api/history     회차 목록
+    /debugging/                     보드 화면
+    POST /debugging/api/run         지금 검사하기
+    POST /debugging/api/approve     「의도함」 — 지금 값을 새 기준으로
+    POST /debugging/api/ignore      「검사 제외」 — 오탐으로 판정
+    POST /debugging/api/unignore    제외 되돌리기
+    GET  /debugging/api/history     회차 목록
 
   이 서버는 로컬 전용입니다. 배포 사이트에서는 버튼이 동작하지 않고
   마지막 검사 결과만 읽기 전용으로 보입니다.
@@ -75,8 +75,12 @@ def run_check(mode="manual"):
     return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
 
 
-def history_list(limit=14):
-    """최근 회차를 새 것부터 돌려줍니다."""
+def history_list(limit=30):
+    """최근 회차를 새 것부터 돌려줍니다.
+
+    30회까지 봅니다. 하루에 몇 번씩 돌리면 2주 남짓이 남고,
+    "어제까지는 멀쩡했는데" 를 되짚기에 그 정도면 충분합니다 (2026-09-15 지시).
+    """
     if not os.path.isdir(HISTORY_DIR):
         return []
     names = sorted((n for n in os.listdir(HISTORY_DIR) if n.endswith(".json")), reverse=True)
@@ -156,16 +160,16 @@ class Handler(SimpleHTTPRequestHandler):
 
     # ── GET ───────────────────────────────
     def do_GET(self):
-        if self.path.startswith("/qa/api/history"):
+        if self.path.startswith("/debugging/api/history"):
             return self._json({"ok": True, "items": history_list()})
         return super().do_GET()
 
     # ── POST ──────────────────────────────
     def do_POST(self):
-        if not self.path.startswith("/qa/api/"):
+        if not self.path.startswith("/debugging/api/"):
             return self._json({"ok": False, "error": "없는 주소입니다"}, 404)
 
-        action = self.path[len("/qa/api/"):].split("?")[0].strip("/")
+        action = self.path[len("/debugging/api/"):].split("?")[0].strip("/")
         body = self._body()
 
         if action == "run":
@@ -216,10 +220,10 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main():
-    url = "http://localhost:%d/qa/" % PORT
+    url = "http://localhost:%d/debugging/" % PORT
 
     print("-" * 52)
-    print("  KJC Studio · QA 보드")
+    print("  KJC Studio · Debugging")
     print("-" * 52)
     print()
     print("  주소 : " + url)
