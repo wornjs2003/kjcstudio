@@ -340,6 +340,18 @@ a.kh-sc-i:hover { color: var(--kh-accent); }
   padding-left: 44px; margin-top: -3px;
 }
 .kh-sc-d { color: var(--kh-text-muted); flex: none; }
+
+/* 아직 못 붙인 것. 날짜가 없으니 흐리게 두어 실제 일정과 구분한다 */
+.kh-sc-i.is-soon { opacity: 0.62; }
+.kh-sc-i.is-soon .kh-sc-u {
+  background: var(--kh-bg-surface); color: var(--kh-text-muted);
+  border-radius: 999px; padding: 2px 8px; font-size: 0.7rem;
+}
+.kh-sc-sep {
+  margin: 12px 0 4px; padding-top: 10px;
+  border-top: 1px solid var(--kh-border);
+  font-size: 0.72rem; color: var(--kh-text-muted);
+}
 /* '3일 뒤' — 언제인지가 날짜보다 빨리 읽힌다 */
 .kh-sc-u {
   flex: none; font-size: 0.72rem; font-weight: 500;

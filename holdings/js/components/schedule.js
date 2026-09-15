@@ -179,10 +179,24 @@ export async function collectSchedule({ days = AHEAD_DAYS, watch = null } = {}) 
   return {
     rows, stale: !!cal && future === 0, calOk: !!cal,
     irAll, irKept: rows.filter((r) => r.kind === '실적').length,
+    /* 받아올 곳을 아직 못 찾은 것. 날짜가 없어 rows 에 못 섞고 따로 준다.
+       화면 맨 아래에 '연결 예정' 으로 적는다 — 무엇이 비어 있는지 보이지
+       않으면 없는 건지 못 받는 건지 알 수 없다 (2026-09-15 지시). */
+    soon: (cal && cal['연결예정']) || [],
   };
 }
 
 /* ── 그리기 ─────────────────────────────────────────────── */
+
+/* 아직 못 붙인 것 한 줄. 날짜가 없으므로 자리만 적어 둔다. */
+function soonHtml(r) {
+  return `<div class="kh-sc-i is-soon">
+    <i class="kh-sc-kind">${esc(r.kind || '일정')}</i>
+    <span class="kh-sc-t">${esc(r.title || '')}</span>
+    <span class="kh-sc-u">연결 예정</span>
+    ${r.note ? `<span class="kh-sc-n">${esc(r.note)}</span>` : ''}
+  </div>`;
+}
 
 function rowHtml(r, { compact }) {
   /* 한 줄에 종류·제목·날짜·남은 날을 놓고, 설명만 아래로 내린다.
@@ -221,6 +235,7 @@ export function mountSchedule(host, { compact = false, limit = 0, watch = null,
   if (!host) return { refresh() {} };
   let picked = '';
   let all = [];
+  let soon = [];
 
   function paintChips() {
     if (!chipHost) return;
@@ -241,18 +256,28 @@ export function mountSchedule(host, { compact = false, limit = 0, watch = null,
   function paintRows() {
     const f = FILTERS.find((x) => x.id === picked) || FILTERS[0];
     const rows = all.filter(f.hit);
+
+    /* 아직 못 붙인 것은 맨 아래에. 좁은 사이드바에서는 자리가 없어 뺀다 —
+       거기는 '더보기' 로 넓은 화면에 가서 본다. */
+    const tail = (!compact && soon.length)
+      ? `<div class="kh-sc-sep">아직 붙이지 못한 것</div>`
+        + soon.map(soonHtml).join('')
+      : '';
+
     if (!rows.length) {
       host.innerHTML = `<div class="kh-soon">
-        <div class="kh-soon-t">해당하는 일정이 없습니다</div></div>`;
+        <div class="kh-soon-t">해당하는 일정이 없습니다</div></div>` + tail;
       return;
     }
     const show = limit > 0 ? rows.slice(0, limit) : rows;
-    host.innerHTML = show.map((r) => rowHtml(r, { compact })).join('');
+    host.innerHTML = show.map((r) => rowHtml(r, { compact })).join('') + tail;
   }
 
   async function refresh() {
-    const { rows, stale, calOk } = await collectSchedule({ watch });
+    const got = await collectSchedule({ watch });
+    const { rows, stale, calOk } = got;
     all = rows;
+    soon = got.soon;
 
     if (!calOk) {
       host.innerHTML = `<div class="kh-soon">
