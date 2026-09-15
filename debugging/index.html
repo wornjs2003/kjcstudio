@@ -277,6 +277,22 @@ h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035
 
 .hint { margin-top: 14px; font-size: 12px; color: var(--pj-text-dim); line-height: 1.6; }
 
+/* 서버 꺼짐 안내 — 연한 주황 바탕이라 글씨는 같은 색의 진한 값 (CLAUDE.md 색 규칙) */
+.offline {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 13px 16px; margin-bottom: 12px;
+  background: var(--pj-warn-faint); border-radius: var(--pj-radius-md);
+  color: var(--pj-warn); font-size: 13px;
+}
+.offline-main { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.offline b { font-weight: 700; }
+.offline span { font-weight: 500; }
+.offline code {
+  margin-left: auto; font-size: 12.5px; font-weight: 600;
+  background: var(--pj-bg-card); border-radius: var(--pj-radius-sm);
+  padding: 5px 10px; white-space: nowrap; color: var(--pj-text-primary);
+}
+
 .foot { margin-top: 24px; font-size: 13px; color: var(--pj-text-muted); }
 .foot code { font-size: 12px; background: var(--pj-bg-surface); padding: 2px 6px; border-radius: 5px; }
 
@@ -302,6 +318,16 @@ h1 { font-size: clamp(22px, 3vw, 26px); font-weight: 700; letter-spacing: -0.035
       <p class="subtitle">의도한 값과 지금 코드를 대조합니다 · 바뀐 것이 버그인지 의도인지 여기서 가립니다</p>
     </div>
     <div class="head-right"><span class="pill" id="topPill">불러오는 중…</span></div>
+  </div>
+
+  <!-- 로컬 서버가 없을 때만 보입니다. 버튼을 눌렀는데 서버가 없으면 여기로 알립니다 -->
+  <div class="offline" id="offline" hidden>
+    <div class="offline-main">
+      <b>로컬 서버가 꺼져 있습니다</b>
+      <span>이 파일을 더블클릭하면 서버가 뜨고 화면도 자동으로 열립니다.</span>
+    </div>
+    <code id="batPath"></code>
+    <button class="mini" id="copyBat">경로 복사</button>
   </div>
 
   <div class="stats" id="stats"></div>
@@ -484,8 +510,6 @@ function drawFilters() {
   run.className = "run-btn";
   run.id = "runBtn";
   run.textContent = "▶ 지금 검사하기";
-  run.disabled = !live;
-  run.title = live ? "" : "debugging/debugging.bat 으로 열어야 누를 수 있습니다";
   run.addEventListener("click", function () { runNow(run); });
   box.appendChild(run);
 }
@@ -576,19 +600,22 @@ function buildRow(r) {
 
   if (r.status === "mismatch" || r.status === "changed") {
     act.appendChild(mkBtn("의도함", "", function () {
-      if (!confirmLive()) return;
-      post("approve", { id: r.id, value: r.actual }).then(applyReport);
+      withLive(function () {
+        return post("approve", { id: r.id, value: r.actual }).then(applyReport);
+      });
     }));
     act.appendChild(mkBtn("오탐", "ghost", function () {
-      if (!confirmLive()) return;
-      const why = prompt("왜 오탐인가요? 나중에 같은 걸 또 올리지 않도록 남깁니다.", "오탐 — ");
-      if (why === null) return;
-      post("ignore", { id: r.id, why: why }).then(applyReport);
+      withLive(function () {
+        const why = prompt("왜 오탐인가요? 나중에 같은 걸 또 올리지 않도록 남깁니다.", "오탐 — ");
+        if (why === null) return;
+        return post("ignore", { id: r.id, why: why }).then(applyReport);
+      });
     }));
   } else if (r.status === "ignored") {
     act.appendChild(mkBtn("제외 해제", "ghost", function () {
-      if (!confirmLive()) return;
-      post("unignore", { id: r.id }).then(applyReport);
+      withLive(function () {
+        return post("unignore", { id: r.id }).then(applyReport);
+      });
     }));
   }
 
@@ -600,16 +627,32 @@ function mkBtn(label, cls, fn) {
   const b = document.createElement("button");
   b.className = "mini " + cls;
   b.textContent = label;
-  b.disabled = !live;
-  b.title = live ? "" : "debugging/debugging.bat 으로 열어야 누를 수 있습니다";
   b.addEventListener("click", fn);
   return b;
 }
 
-function confirmLive() {
-  if (live) return true;
-  alert("이 버튼은 로컬에서만 동작합니다.\n\ndebugging/debugging.bat 을 더블클릭해서 여세요.");
-  return false;
+/* 버튼을 잠그지 않고, 누른 그 순간에 서버를 다시 확인합니다.
+   페이지를 열 때 한 번만 보면 그 뒤에 서버가 살아나도 그 탭은 영영 모릅니다.
+   실제로 그랬습니다 — 폴더 이름을 바꾸느라 서버를 잠깐 껐더니, 열려 있던 탭의
+   버튼이 잠긴 채로 남아 "안 눌러진다" 가 됐습니다 (2026-09-15). */
+function ensureLive() {
+  return fetch("/debugging/api/history", { cache: "no-store" })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (b) { live = true; history = b.items || []; return true; })
+    .catch(function () { live = false; return false; });
+}
+
+/* 서버가 붙어 있을 때만 fn 을 돌립니다. 없으면 배너로 알립니다. */
+function withLive(fn) {
+  return ensureLive().then(function (ok) {
+    showOffline(!ok);
+    if (ok) return fn();
+  });
+}
+
+function showOffline(on) {
+  const el = document.getElementById("offline");
+  if (el) el.hidden = !on;
 }
 
 function applyReport(res) {
@@ -802,17 +845,54 @@ function fullWhen(iso) {
 function runNow(btn) {
   btn.disabled = true;
   btn.textContent = "검사 중…";
-  post("run", { mode: "manual" })
-    .then(applyReport)
-    .catch(function () { alert("검사를 실행하지 못했습니다."); })
+  withLive(function () {
+    return post("run", { mode: "manual" }).then(applyReport);
+  })
+    .catch(function () { showOffline(true); })
     .then(function () {
       const b = document.getElementById("runBtn");
-      if (b) { b.textContent = "▶ 지금 검사하기"; b.disabled = !live; }
+      if (b) { b.textContent = "▶ 지금 검사하기"; b.disabled = false; }
     });
 }
 
+/* ── 서버 꺼짐 배너 ─────────────────────── */
+/* 경로는 서버가 알려줍니다. 저장소를 다른 자리에 두어도 맞는 경로가 나옵니다.
+   서버가 꺼져 있으면 물어볼 곳이 없으므로 화면 주소에서 만들어 씁니다. */
+const BAT_KEY = "kjc-debugging-bat";
+
+function fillBatPath() {
+  const el = document.getElementById("batPath");
+  if (!el) return;
+
+  /* 지난번에 받아 둔 경로를 먼저 띄웁니다. 서버가 꺼진 채로 열었을 때
+     물어볼 곳이 없기 때문입니다. */
+  try { el.textContent = localStorage.getItem(BAT_KEY) || ""; } catch (e) {}
+  if (!el.textContent) el.textContent = "debugging\debugging.bat";
+
+  fetch("/debugging/api/where", { cache: "no-store" })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (b) {
+      el.textContent = b.bat;
+      try { localStorage.setItem(BAT_KEY, b.bat); } catch (e) {}
+    })
+    .catch(function () {});
+}
+
+document.getElementById("copyBat").addEventListener("click", function (e) {
+  const t = document.getElementById("batPath").textContent;
+  const b = e.currentTarget;
+  navigator.clipboard.writeText(t).then(function () {
+    b.textContent = "복사됨";
+    setTimeout(function () { b.textContent = "경로 복사"; }, 1400);
+  }).catch(function () { b.textContent = "복사 실패"; });
+});
+
 /* ── 시작 ─────────────────────────── */
-Promise.all([loadLatest(), loadHistory()]).then(drawAll);
+fillBatPath();
+Promise.all([loadLatest(), loadHistory()]).then(function () {
+  showOffline(!live);
+  drawAll();
+});
 </script>
 
 <script src="../assets/js/main.js"></script>

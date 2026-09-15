@@ -1,11 +1,11 @@
 {
-  "at": "2026-09-15T15:44:27+09:00",
+  "at": "2026-09-15T18:29:49+09:00",
   "mode": "manual",
   "counts": {
-    "pass": 6,
+    "pass": 10,
     "mismatch": 0,
     "changed": 0,
-    "todo": 0,
+    "todo": 1,
     "ignored": 1
   },
   "diff": {
@@ -14,6 +14,56 @@
     "note": "직전과 같음"
   },
   "results": [
+    {
+      "id": "md-doc-paths",
+      "group": "MD 룰 검증",
+      "title": "문서가 가리키는 파일이 실제로 있는가",
+      "scope": "CLAUDE.md 안의 `경로` 전부",
+      "expected": "문서가 적어둔 경로가 모두 저장소에 있음",
+      "status": "pass",
+      "actual": "27개 모두 있음",
+      "detail": "문서가 가리키는 경로 27개 전부 저장소에 있습니다"
+    },
+    {
+      "id": "md-no-area-theme",
+      "group": "MD 룰 검증",
+      "title": "없애기로 한 구역별 theme.css 가 되살아났는가",
+      "scope": "holdings · company-setup · projects 세 구역",
+      "expected": "셋 다 없음 — 색은 루트 assets/css/theme.css 한 곳에만",
+      "status": "pass",
+      "actual": "3개 모두 없음",
+      "detail": "없어야 할 파일 3개가 전부 없습니다"
+    },
+    {
+      "id": "md-nav-pair",
+      "group": "MD 룰 검증",
+      "title": "PC 메뉴와 모바일 메뉴가 같은가",
+      "scope": "partials/nav.html 의 두 목록",
+      "expected": "양쪽이 같은 메뉴를 들고 있음",
+      "status": "pass",
+      "actual": "12개 양쪽 같음",
+      "detail": "PC 와 모바일이 같은 메뉴 12개를 들고 있습니다"
+    },
+    {
+      "id": "md-line-color",
+      "group": "MD 룰 검증",
+      "title": "면을 나누는 선에 상태 색을 썼는가",
+      "scope": "세 보드 · 주석 제외",
+      "expected": "0곳 — 선은 구조용 회색만, 상태는 글자와 점으로",
+      "status": "pass",
+      "actual": "0곳",
+      "detail": "검사한 파일 3개"
+    },
+    {
+      "id": "md-brand-pending",
+      "group": "MD 룰 검증",
+      "title": "아직 안 채운 브랜드 색이 몇 개 남았는가",
+      "scope": "holdings/js/data/market.js 의 brand",
+      "expected": "0개 — 로고를 받아 실제 대표색으로 채움",
+      "status": "todo",
+      "actual": "19개 남음",
+      "detail": "로고를 받아 실제 대표색으로 채울 자리입니다 (2026-09-16 예정)"
+    },
     {
       "id": "nav-links",
       "group": "문구·구조",
@@ -51,8 +101,8 @@
       "scope": "kis_proxy.py 의 route == \"…\" ↔ kis-worker.js 의 route === \"…\"",
       "expected": "양쪽 경로 목록이 같음",
       "status": "ignored",
-      "actual": "어긋남 8개",
-      "detail": "오탐 — 검사기가 아직 구역을 못 가림 — kis_proxy.py 에만: disclosures, feed, issues, moves, poll, status, topics, universe"
+      "actual": "어긋남 9개",
+      "detail": "오탐 — 검사기가 아직 구역을 못 가림 — kis_proxy.py 에만: disclosures, feed, issues, members, moves, poll, status, topics, universe"
     },
     {
       "id": "raw-color-projects",

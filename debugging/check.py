@@ -77,7 +77,11 @@ def strip_comments(text, kind):
         # 문자열 안의 // 를 지우지 않으려고 줄 앞쪽만 봅니다
         return re.sub(r"(?m)^\s*//.*$", " ", text)
     if kind == "html":
-        return re.sub(r"<!--.*?-->", " ", text, flags=re.S)
+        # 우리 화면 파일은 HTML·CSS·JS 가 한 파일에 같이 있습니다.
+        # <!-- --> 만 지우면 <style> 안의 /* */ 주석이 그대로 남아 오탐이 납니다.
+        text = re.sub(r"<!--.*?-->", " ", text, flags=re.S)
+        text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
+        return re.sub(r"(?m)^\s*//.*$", " ", text)
     if kind == "py":
         return re.sub(r"(?m)^\s*#.*$", " ", text)
     if kind == "md":
@@ -212,7 +216,147 @@ def check_file_exists(spec):
     return "todo", str(len(missing)) + "개 없음", " · ".join(missing)
 
 
+# ── 문서가 가리키는 경로 ─────────────────────────────────
+# CLAUDE.md 는 파일 경로를 자주 적습니다. 파일을 옮기거나 이름을 바꾸면
+# 문서만 옛 경로로 남는데, 화면은 멀쩡해 보여서 눈으로는 못 찾습니다.
+#
+# 경로로 볼 것을 좁게 잡습니다. 안 좁히면 오탐이 납니다 (2026-09-15 실제로 8건).
+#   `theme.css`          폴더가 없다. 파일명만 적은 것이라 어느 파일인지 모른다
+#   `/api/index.html`    / 로 시작. "여기에 두지 말 것" 이라는 설명 속 주소다
+#   `holdings/js/vendor/*`  * 는 하나를 가리키지 않는다
+# 그래서 「폴더가 하나 이상 들어간 상대경로」만 봅니다.
+
+PATH_IN_DOC = re.compile(
+    r"`((?!/)[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*/[A-Za-z0-9_.-]+"
+    r"\.(?:html|css|js|json|py|md|command|bat))`"
+)
+
+
+def check_doc_paths(spec):
+    """문서가 가리키는 파일이 저장소에 실제로 있는가."""
+    text = read(spec["docFile"])
+    if text is None:
+        return "mismatch", "문서 없음", spec["docFile"] + " 를 찾지 못했습니다"
+
+    paths = sorted(set(PATH_IN_DOC.findall(text)))
+    if not paths:
+        return "mismatch", "경로 0개", "문서에서 경로를 하나도 못 찾았습니다 — 정규식을 확인하세요"
+
+    missing = [p for p in paths if not exists(p)]
+    if not missing:
+        return "pass", str(len(paths)) + "개 모두 있음",             "문서가 가리키는 경로 " + str(len(paths)) + "개 전부 저장소에 있습니다"
+    return "mismatch", str(len(missing)) + "개 없음",         "문서에만 있고 저장소에 없음 — " + " · ".join(missing[:5]) +         (" 외 " + str(len(missing) - 5) + "개" if len(missing) > 5 else "")
+
+
+# ── 없애기로 한 파일 ─────────────────────────────────────
+# 합치거나 지우기로 정한 파일이 되살아났는지 봅니다. 되살아나도 화면은
+# 멀쩡하고, 값이 두 곳으로 갈린 뒤에야 증상이 나옵니다.
+
+def check_file_absent(spec):
+    """있으면 안 되는 파일이 정말 없는가."""
+    back = [f for f in spec["files"] if exists(f)]
+    if not back:
+        return "pass", str(len(spec["files"])) + "개 모두 없음",             "없어야 할 파일 " + str(len(spec["files"])) + "개가 전부 없습니다"
+    return "mismatch", str(len(back)) + "개 되살아남",         "없애기로 했는데 있음 — " + " · ".join(back)
+
+
+# ── 두 벌로 적힌 메뉴 ────────────────────────────────────
+# nav.html 에는 목록이 두 벌 있습니다. 위는 PC, 아래는 폰에서 펼치는 전체화면입니다.
+# 한 벌만 고치면 폰과 PC 의 메뉴가 달라지는데, 자기 기기에서는 멀쩡해 보여서
+# 눈으로는 못 찾습니다. CLAUDE.md 가 「두 곳을 같이 고친다」 고 적어둔 자리입니다.
+#
+# 로고 링크는 data-nav 가 없어서 저절로 빠집니다. 메뉴 항목만 비교합니다.
+
+NAV_ITEM = re.compile(r'href="([^"]+)"[^>]*data-nav="([^"]+)"')
+
+
+def check_nav_pair(spec):
+    """PC 목록과 모바일 목록이 같은 메뉴를 들고 있는가."""
+    text = read(spec["file"])
+    if text is None:
+        return "mismatch", "파일 없음", spec["file"] + " 를 찾지 못했습니다"
+
+    mark = spec["splitAt"]
+    at = text.find(mark)
+    if at < 0:
+        return "mismatch", "구간을 못 찾음", "「" + mark + "」 가 없습니다 — 구조가 바뀌었는지 보세요"
+
+    pc = set(NAV_ITEM.findall(text[:at]))
+    mo = set(NAV_ITEM.findall(text[at:]))
+    if not pc or not mo:
+        return "mismatch", "항목 0개", "한쪽에서 메뉴를 하나도 못 찾았습니다 — 정규식을 확인하세요"
+
+    if pc == mo:
+        return "pass", str(len(pc)) + "개 양쪽 같음",             "PC 와 모바일이 같은 메뉴 " + str(len(pc)) + "개를 들고 있습니다"
+
+    # 이름이 양쪽에 다 있으면 주소가 다른 것입니다. 빠진 것과 구분해서 알립니다.
+    name_pc = {n for _, n in pc}
+    name_mo = {n for _, n in mo}
+    diff_url = sorted(n for _, n in pc - mo if n in name_mo)
+    only_pc = sorted(n for _, n in pc - mo if n not in name_mo)
+    only_mo = sorted(n for _, n in mo - pc if n not in name_pc)
+
+    parts = []
+    if only_pc:
+        parts.append("PC 에만: " + " · ".join(only_pc))
+    if only_mo:
+        parts.append("모바일에만: " + " · ".join(only_mo))
+    if diff_url:
+        parts.append("주소가 다름: " + " · ".join(diff_url))
+    n = len(only_pc) + len(only_mo) + len(diff_url)
+    return "mismatch", str(n) + "개 어긋남", "  ".join(parts)
+
+
+# ── 선에 쓴 상태 색 ──────────────────────────────────────
+# 「흰 카드에는 선을 넣지 않는다 · 선에 상태 색을 쓰지 않는다」 (2026-09-15 지시).
+#
+# 한쪽 변에만 긋는 선(border-top·bottom·left·right)만 봅니다. 그것이 면을
+# 나누는 선이기 때문입니다. 네 변을 다 두르는 border / border-color 는
+# 체크박스 같은 컨트롤의 생김새라 대상이 아닙니다.
+
+STATE_LINE = re.compile(
+    r"border-(?:top|bottom|left|right)(?:-color)?\s*:[^;{}]*"
+    r"var\(--[a-z-]*(?:done|warn|danger|accent|up|down)"
+)
+
+
+def check_line_color(spec):
+    """면을 나누는 선에 상태 색을 썼는가."""
+    found = []
+    for rel in spec["files"]:
+        text = read(rel)
+        if text is None:
+            continue
+        for m in STATE_LINE.finditer(strip_comments(text, "html")):
+            found.append((rel, m.group(0).split(":")[0].strip()))
+    if not found:
+        return "pass", "0곳", "검사한 파일 " + str(len(spec["files"])) + "개"
+    where = sorted(set(f for f, _ in found))
+    return "mismatch", str(len(found)) + "곳",         "선에 상태 색을 썼습니다 — " + ", ".join(where[:3])
+
+
+# ── 아직 안 채운 임시값 ──────────────────────────────────
+# 「나중에 채운다」 고 넣어 둔 자리는 잊힙니다. 몇 개 남았는지 세어서
+# 0 이 될 때까지 화면에 띄워 둡니다. 개수가 아니라 진행률입니다.
+
+def check_pending(spec):
+    """임시로 넣어 둔 값이 몇 개 남았는가. 0 이 되면 통과."""
+    text = read(spec["file"])
+    if text is None:
+        return "mismatch", "파일 없음", spec["file"] + " 를 찾지 못했습니다"
+
+    n = len(re.findall(spec["pattern"], strip_comments(text, spec.get("kind", "js"))))
+    if n == 0:
+        return "pass", "0개 남음", spec.get("doneNote", "전부 채웠습니다")
+    return "todo", str(n) + "개 남음", spec.get("todoNote", "아직 채우지 않은 자리가 있습니다")
+
+
 CHECKERS = {
+    "nav_pair":    check_nav_pair,
+    "line_color":  check_line_color,
+    "pending":     check_pending,
+    "doc_paths":   check_doc_paths,
+    "file_absent": check_file_absent,
     "nav_links":   check_nav_links,
     "doc_token":   check_doc_token,
     "pair_sync":   check_pair_sync,

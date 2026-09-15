@@ -10,8 +10,70 @@
     "색상이나 문구처럼 '의도인지 아닌지' 가 사람 판단인 항목은 틀이 검증된 뒤에 넓힙니다.",
     "실제로 오탐이 네 번 났고, 원인은 주석을 코드로 착각·지시가 바뀐 걸 모름·정의된 토큰을 박은 값으로 착각이었습니다."
   ],
-
   "checks": [
+    {
+      "id": "md-doc-paths",
+      "group": "MD 룰 검증",
+      "title": "문서가 가리키는 파일이 실제로 있는가",
+      "scope": "CLAUDE.md 안의 `경로` 전부",
+      "expected": "문서가 적어둔 경로가 모두 저장소에 있음",
+      "_주의": "경로로 볼 것을 좁게 잡습니다. 폴더가 하나 이상 들어간 상대경로만 봅니다. 안 좁히면 오탐이 납니다 — 파일명만 적은 `theme.css`, 「두지 말 것」이라는 설명 속 `/api/index.html`, 묶음을 가리키는 `holdings/js/vendor/*` 가 걸렸습니다 (2026-09-15 실제로 8건).",
+      "type": "doc_paths",
+      "docFile": "CLAUDE.md"
+    },
+    {
+      "id": "md-no-area-theme",
+      "group": "MD 룰 검증",
+      "title": "없애기로 한 구역별 theme.css 가 되살아났는가",
+      "scope": "holdings · company-setup · projects 세 구역",
+      "expected": "셋 다 없음 — 색은 루트 assets/css/theme.css 한 곳에만",
+      "_근거": "CLAUDE.md 「공통 자원은 루트에 하나만 둔다」 — 2026-09-14 에 네 파일을 루트로 합쳤습니다. 되살아나면 구역마다 색이 갈리고, 화면을 오갈 때 이음매가 보입니다.",
+      "type": "file_absent",
+      "files": [
+        "holdings/css/theme.css",
+        "company-setup/theme.css",
+        "projects/theme.css"
+      ]
+    },
+    {
+      "id": "md-nav-pair",
+      "group": "MD 룰 검증",
+      "title": "PC 메뉴와 모바일 메뉴가 같은가",
+      "scope": "partials/nav.html 의 두 목록",
+      "expected": "양쪽이 같은 메뉴를 들고 있음",
+      "_근거": "CLAUDE.md 「메뉴를 고칠 때는 nav.html 의 두 곳을 같이 고친다 — 한 곳만 고치면 폰과 PC 가 달라진다」. 자기 기기에서는 멀쩡해 보여서 눈으로는 못 찾습니다.",
+      "type": "nav_pair",
+      "file": "partials/nav.html",
+      "splitAt": "<div class=\"nav-mobile\""
+    },
+    {
+      "id": "md-line-color",
+      "group": "MD 룰 검증",
+      "title": "면을 나누는 선에 상태 색을 썼는가",
+      "scope": "세 보드 · 주석 제외",
+      "expected": "0곳 — 선은 구조용 회색만, 상태는 글자와 점으로",
+      "_주의": "한쪽 변에만 긋는 선(border-top·bottom·left·right)만 봅니다. 그것이 면을 나누는 선입니다. 네 변을 다 두르는 border / border-color 는 체크박스 같은 컨트롤의 생김새라 대상이 아닙니다.",
+      "type": "line_color",
+      "files": [
+        "debugging/index.html",
+        "projects/index.html",
+        "api-board/index.html"
+      ]
+    },
+    {
+      "id": "md-brand-pending",
+      "group": "MD 룰 검증",
+      "title": "아직 안 채운 브랜드 색이 몇 개 남았는가",
+      "scope": "holdings/js/data/market.js 의 brand",
+      "expected": "0개 — 로고를 받아 실제 대표색으로 채움",
+      "_경위": "#8b95a1 은 색이 아니라 「모른다」 는 표시입니다. 2026-09-16 에 로고를 받아 채우기로 했습니다 (재권님 지시). 개수가 아니라 진행률이라, 0 이 될 때까지 「미구현」 으로 화면에 남습니다. 채우는 것은 주식페이지_개발 몫입니다.",
+      "type": "pending",
+      "file": "holdings/js/data/market.js",
+      "pattern": "brand: *'#8b95a1'",
+      "kind": "js",
+      "todoNote": "로고를 받아 실제 대표색으로 채울 자리입니다 (2026-09-16 예정)",
+      "doneNote": "브랜드 색을 전부 채웠습니다 — CLAUDE.md 의 로고 작업 문단을 지워도 됩니다"
+    },
     {
       "id": "nav-links",
       "group": "문구·구조",
@@ -21,7 +83,6 @@
       "type": "nav_links",
       "file": "partials/nav.html"
     },
-
     {
       "id": "doc-accent",
       "group": "디자인 토큰",
@@ -34,7 +95,6 @@
       "cssFile": "assets/css/theme.css",
       "token": "accent"
     },
-
     {
       "id": "doc-bg",
       "group": "디자인 토큰",
@@ -47,7 +107,6 @@
       "cssFile": "assets/css/theme.css",
       "token": "bg"
     },
-
     {
       "id": "pair-kis",
       "group": "쌍 파일",
@@ -63,7 +122,6 @@
       "patternA": "route\\s*==\\s*\"([a-z0-9/-]+)\"",
       "patternB": "route\\s*===\\s*\"([a-z0-9/-]+)\""
     },
-
     {
       "id": "raw-color-projects",
       "group": "디자인 토큰",
@@ -71,9 +129,10 @@
       "scope": "projects/index.html · 주석 제외",
       "expected": "0곳 — 전부 theme.css 토큰 사용",
       "type": "raw_color",
-      "files": ["projects/index.html"]
+      "files": [
+        "projects/index.html"
+      ]
     },
-
     {
       "id": "raw-color-apiboard",
       "group": "디자인 토큰",
@@ -81,9 +140,10 @@
       "scope": "api-board/index.html · 주석 제외",
       "expected": "0곳 — 전부 theme.css 토큰 사용",
       "type": "raw_color",
-      "files": ["api-board/index.html"]
+      "files": [
+        "api-board/index.html"
+      ]
     },
-
     {
       "id": "qa-self",
       "group": "문구·구조",
@@ -91,12 +151,14 @@
       "scope": "qa/ 폴더",
       "expected": "검사기·기준값·화면이 모두 있음",
       "type": "file_exists",
-      "files": ["debugging/check.py", "debugging/expected.json", "debugging/index.html"]
+      "files": [
+        "debugging/check.py",
+        "debugging/expected.json",
+        "debugging/index.html"
+      ]
     }
   ],
-
   "approved": {},
-
   "ignored": {
     "pair-kis": {
       "at": "2026-09-15",

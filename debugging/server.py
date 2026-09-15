@@ -16,6 +16,7 @@ KJC Studio · Debugging 로컬 서버
     POST /debugging/api/ignore      「검사 제외」 — 오탐으로 판정
     POST /debugging/api/unignore    제외 되돌리기
     GET  /debugging/api/history     회차 목록
+    GET  /debugging/api/where       서버를 다시 켤 실행 파일의 전체 경로
 
   이 서버는 로컬 전용입니다. 배포 사이트에서는 버튼이 동작하지 않고
   마지막 검사 결과만 읽기 전용으로 보입니다.
@@ -34,6 +35,7 @@ KST = timezone(timedelta(hours=9))
 
 QA_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(QA_DIR)
+BAT_NAME = "debugging.bat" if os.name == "nt" else "debugging.command"
 HISTORY_DIR = os.path.join(QA_DIR, "history")
 EXPECTED_PATH = os.path.join(QA_DIR, "expected.json")
 LATEST_PATH = os.path.join(QA_DIR, "latest.json")
@@ -162,6 +164,10 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/debugging/api/history"):
             return self._json({"ok": True, "items": history_list()})
+        if self.path.startswith("/debugging/api/where"):
+            # 서버를 다시 켤 때 더블클릭할 파일의 전체 경로.
+            # 화면이 이것을 받아 두었다가, 서버가 꺼지면 그때 보여 줍니다.
+            return self._json({"ok": True, "bat": os.path.join(QA_DIR, BAT_NAME)})
         return super().do_GET()
 
     # ── POST ──────────────────────────────
