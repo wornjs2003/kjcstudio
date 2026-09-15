@@ -729,17 +729,17 @@ async function fetchIndices(cfg, env, withChart = true) {
 
 const NEWS_TOPICS = [
   { id: "semi", color: "indigo", label: "반도체",
-    keywords: ["반도체", "HBM", "파운드리", "엔비디아"], on: true },
+    keywords: ["반도체", "HBM", "파운드리", "엔비디아", "메모리", "D램", "칩"], on: true },
   { id: "commodity", color: "amber", label: "원자재",
-    keywords: ["유가", "WTI", "금값"], on: true },
+    keywords: ["유가", "WTI", "금값", "원유", "국제유가", "구리", "천연가스"], on: true },
   { id: "rate", color: "violet", label: "금리·환율",
-    keywords: ["금리", "연준", "원달러 환율"], on: true },
+    keywords: ["금리", "연준", "원달러 환율", "환율", "FOMC", "금통위", "국채"], on: true },
   { id: "trade", color: "teal", label: "무역",
-    keywords: ["관세", "미중 무역", "수출규제"], on: true },
+    keywords: ["관세", "미중 무역", "수출규제", "수출", "수입", "무역", "통상", "교역"], on: true },
   { id: "sector", color: "rose", label: "업종",
-    keywords: ["이차전지", "바이오", "조선", "방산"], on: true },
+    keywords: ["이차전지", "바이오", "조선", "방산", "배터리", "제약", "자동차", "원전"], on: true },
   { id: "market", color: "slate", label: "시장",
-    keywords: ["코스피", "외국인 순매수", "공매도"], on: true },
+    keywords: ["코스피", "외국인 순매수", "공매도", "코스닥", "증시", "상장", "실적"], on: true }
 ];
 
 // 자동으로 찍어내는 시세 기사. 읽을 것이 없어 버린다.
@@ -748,9 +748,12 @@ const NEWS_DROP = ["소폭 상승세", "소폭 하락세", "상승폭 확대", "
 /* 받아올 곳. data/news-topics.json 의 feeds 와 같아야 한다.
    tools/check-news-topics.py 가 대조한다. */
 const NEWS_FEEDS = [
-  { id: "yna", label: "연합뉴스", url: "https://www.yna.co.kr/rss/economy.xml" },
   { id: "hk", label: "한국경제", url: "https://www.hankyung.com/feed/finance" },
-  { id: "mk", label: "매일경제", url: "https://www.mk.co.kr/rss/50200011/" }
+  { id: "hk-ec", label: "한국경제", url: "https://www.hankyung.com/feed/economy" },
+  { id: "mk", label: "매일경제", url: "https://www.mk.co.kr/rss/50200011/" },
+  { id: "mk-ec", label: "매일경제", url: "https://www.mk.co.kr/rss/30100041/" },
+  { id: "asiae", label: "아시아경제", url: "https://www.asiae.co.kr/rss/economy.htm" },
+  { id: "mt", label: "머니투데이", url: "https://rss.mt.co.kr/mt_news.xml" }
 ];
 
 const NEWS_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) KJC-Holdings/1.0";
@@ -784,11 +787,35 @@ const RSS_TAG = {
   source: /<source[^>]*>([\s\S]*?)<\/source>/,
 };
 
+/* CDATA 를 벗기고 HTML 문자표기를 푼다.
+
+   손으로 목록을 만들다 &#039; 를 빠뜨려 제목에 그대로 남았다 (2026-09-15).
+   숫자로 쓴 것(&#039; &#x27;)까지 한 번에 다루도록 정규식으로 바꿨다.
+
+   일부 언론사는 두 번 감싸 &amp;#039; 로 보낸다. 바뀌지 않을 때까지
+   되풀이하되, 끝없이 돌지 않도록 세 번에서 멈춘다.
+   server/news.py 의 _unescape 와 같은 동작이어야 한다. */
+const XML_NAMED = { lt: "<", gt: ">", quot: '"', apos: "'", amp: "&", nbsp: " " };
+
+function unescapeOnce(t) {
+  return t.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (all, body) => {
+    if (body[0] === "#") {
+      const code = body[1] === "x" || body[1] === "X"
+        ? parseInt(body.slice(2), 16)
+        : parseInt(body.slice(1), 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : all;
+    }
+    const hit = XML_NAMED[body.toLowerCase()];
+    return hit === undefined ? all : hit;
+  });
+}
+
 function unescapeXml(s) {
   let t = String(s || "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1");
-  for (const [a, b] of [["&lt;", "<"], ["&gt;", ">"], ["&quot;", '"'],
-                        ["&#39;", "'"], ["&apos;", "'"], ["&amp;", "&"]]) {
-    t = t.split(a).join(b);
+  for (let i = 0; i < 3; i++) {
+    const once = unescapeOnce(t);
+    if (once === t) break;
+    t = once;
   }
   return t.replace(/<[^>]+>/g, "").trim();
 }

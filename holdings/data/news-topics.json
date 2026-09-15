@@ -5,59 +5,144 @@
   "색": "color 는 assets/css/theme.css 의 --kh-cat-<이름> 을 가리킨다. 안 적으면 id 로 자동 배정한다.",
   "끄는법": "지우지 말고 on 을 false 로 둔다. 되살리기 쉽다.",
   "갱신일": "2026-09-15",
-
   "왜구글이아닌가": [
     "구글 뉴스 RSS 는 검색이라 주제별로 받기 좋았지만 배포본에서 503 이 난다.",
     "워커에서 헤더를 네 가지로 바꿔 시험했는데 전부 막혔다 (2026-09-15 실측).",
     "본문이 구글의 'Sorry...' 차단 페이지라 IP 차단으로 보인다. 로컬은 통과한다.",
     "로컬과 배포본이 다르게 도는 것이 가장 나쁘므로 양쪽 다 언론사 RSS 로 간다."
   ],
-
-  "feeds": [
-    { "id": "yna",  "label": "연합뉴스", "url": "https://www.yna.co.kr/rss/economy.xml" },
-    { "id": "hk",   "label": "한국경제", "url": "https://www.hankyung.com/feed/finance" },
-    { "id": "mk",   "label": "매일경제", "url": "https://www.mk.co.kr/rss/50200011/" }
+  "왜연합뉴스가없나": [
+    "배포본에서 525(SSL 악수 실패)가 났다. 매경·한경은 200 인데 연합뉴스만이다.",
+    "로컬에서도 세 번에 한 번꼴로 끊긴다. TLS 가 구식이다 (TLSv1.2 · AES256-SHA384).",
+    "한 곳이 실패해도 화면은 돌지만, 늘 실패하는 곳을 목록에 두면 오류가 늘 떠 있다.",
+    "대신 아시아경제·머니투데이·한경 경제·매경 경제를 넣었다. 건수는 더 늘었다."
   ],
-
+  "feeds": [
+    {
+      "id": "hk",
+      "label": "한국경제",
+      "url": "https://www.hankyung.com/feed/finance"
+    },
+    {
+      "id": "hk-ec",
+      "label": "한국경제",
+      "url": "https://www.hankyung.com/feed/economy"
+    },
+    {
+      "id": "mk",
+      "label": "매일경제",
+      "url": "https://www.mk.co.kr/rss/50200011/"
+    },
+    {
+      "id": "mk-ec",
+      "label": "매일경제",
+      "url": "https://www.mk.co.kr/rss/30100041/"
+    },
+    {
+      "id": "asiae",
+      "label": "아시아경제",
+      "url": "https://www.asiae.co.kr/rss/economy.htm"
+    },
+    {
+      "id": "mt",
+      "label": "머니투데이",
+      "url": "https://rss.mt.co.kr/mt_news.xml"
+    }
+  ],
   "topics": [
     {
-      "id": "semi", "color": "indigo",
+      "id": "semi",
+      "color": "indigo",
       "label": "반도체",
-      "keywords": ["반도체", "HBM", "파운드리", "엔비디아"],
+      "keywords": [
+        "반도체",
+        "HBM",
+        "파운드리",
+        "엔비디아",
+        "메모리",
+        "D램",
+        "칩"
+      ],
       "on": true
     },
     {
-      "id": "commodity", "color": "amber",
+      "id": "commodity",
+      "color": "amber",
       "label": "원자재",
-      "keywords": ["유가", "WTI", "금값"],
+      "keywords": [
+        "유가",
+        "WTI",
+        "금값",
+        "원유",
+        "국제유가",
+        "구리",
+        "천연가스"
+      ],
       "on": true
     },
     {
-      "id": "rate", "color": "violet",
+      "id": "rate",
+      "color": "violet",
       "label": "금리·환율",
-      "keywords": ["금리", "연준", "원달러 환율"],
+      "keywords": [
+        "금리",
+        "연준",
+        "원달러 환율",
+        "환율",
+        "FOMC",
+        "금통위",
+        "국채"
+      ],
       "on": true
     },
     {
-      "id": "trade", "color": "teal",
+      "id": "trade",
+      "color": "teal",
       "label": "무역",
-      "keywords": ["관세", "미중 무역", "수출규제"],
+      "keywords": [
+        "관세",
+        "미중 무역",
+        "수출규제",
+        "수출",
+        "수입",
+        "무역",
+        "통상",
+        "교역"
+      ],
       "on": true
     },
     {
-      "id": "sector", "color": "rose",
+      "id": "sector",
+      "color": "rose",
       "label": "업종",
-      "keywords": ["이차전지", "바이오", "조선", "방산"],
+      "keywords": [
+        "이차전지",
+        "바이오",
+        "조선",
+        "방산",
+        "배터리",
+        "제약",
+        "자동차",
+        "원전"
+      ],
       "on": true
     },
     {
-      "id": "market", "color": "slate",
+      "id": "market",
+      "color": "slate",
       "label": "시장",
-      "keywords": ["코스피", "외국인 순매수", "공매도"],
+      "keywords": [
+        "코스피",
+        "외국인 순매수",
+        "공매도",
+        "코스닥",
+        "증시",
+        "상장",
+        "실적"
+      ],
       "on": true
     }
   ],
-
   "버릴제목": {
     "설명": "제목에 이 말이 들어가면 버린다. 자동으로 찍어내는 시세 기사라 읽을 것이 없다.",
     "말": [
@@ -72,5 +157,6 @@
       "기술적 분석",
       "인기검색"
     ]
-  }
+  },
+  "주제어를넓힌이유": "좁게 잡았더니 448건 중 37건만 걸리고 무역은 0건이었다. '수출'·'교역' 같은 흔한 말이 빠져 있었다. 넓혀서 63건이 되었다 (2026-09-15 실측)."
 }

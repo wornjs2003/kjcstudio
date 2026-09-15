@@ -30,6 +30,7 @@ KIS 뉴스도 재봤지만 주제어에 걸리는 것이 6% 였고 그나마 절
 주제어와 받아올 곳은 data/news-topics.json 에 있다. 코드는 안 고쳐도 된다.
 """
 
+import html
 import json
 import os
 import re
@@ -48,14 +49,13 @@ TOPICS_PATH = os.path.join(os.path.dirname(HERE), "data", "news-topics.json")
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) KJC-Holdings/1.0"
 
-# 한 출처에서 몇 건까지 볼 것인가. 연합뉴스가 120건쯤 주는데 그중 주제어에
-# 걸리는 것만 남으므로 넉넉히 둔다.
+# 한 출처에서 몇 건까지 볼 것인가. 주제어에 걸리는 것만 남으므로 넉넉히 둔다.
 PER_FEED = 150
 
 # 화면에 몇 건까지 보낼 것인가. 그보다 많아도 아래는 안 읽힌다.
 MAX_ROWS = 80
 
-# 출처 수만큼만 부른다 (지금 3곳). 뉴스는 초 단위로 바뀌지 않는다.
+# 출처 수만큼만 부른다. 뉴스는 초 단위로 바뀌지 않는다.
 NEWS_TTL = 180
 
 # KIS 종목 움직임. 이쪽은 장중에 빨리 바뀌므로 짧게 둔다.
@@ -134,10 +134,20 @@ _TAG = {
 
 
 def _unescape(s):
+    """CDATA 를 벗기고 HTML 문자표기를 푼다.
+
+    손으로 치환하다 &#039; 를 빠뜨려 제목에 그대로 남았다 (2026-09-15).
+    숫자로 쓴 것까지 다루려면 html.unescape 를 쓰는 편이 낫다.
+
+    일부 언론사는 두 번 감싸 &amp;#039; 로 보낸다. 바뀌지 않을 때까지
+    되풀이하되, 끝없이 돌지 않도록 세 번에서 멈춘다.
+    """
     s = re.sub(r"<!\[CDATA\[(.*?)\]\]>", r"\1", s or "", flags=re.S)
-    for a, b in (("&lt;", "<"), ("&gt;", ">"), ("&quot;", '"'),
-                 ("&#39;", "'"), ("&apos;", "'"), ("&amp;", "&")):
-        s = s.replace(a, b)
+    for _ in range(3):
+        once = html.unescape(s)
+        if once == s:
+            break
+        s = once
     return re.sub(r"<[^>]+>", "", s).strip()
 
 
