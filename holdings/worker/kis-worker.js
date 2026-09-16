@@ -482,8 +482,17 @@ async function fetchIndexLive(cfg, env, code) {
   };
 }
 
+/* 날짜를 YYYYMMDD 로. **한국 날짜로 찍는다.**
+ *
+ * Workers 는 UTC 로 돈다. getFullYear 계열을 그냥 쓰면 KST 00:00~09:00 사이에
+ * 하루 전 날짜가 나온다 — 로컬 서버(datetime.now(KST))와 갈린다.
+ * 지금은 그 시간대에 장이 안 열려 결과가 같지만, 장중에 도는 자리가 하나
+ * 붙으면 그때 깨진다. 위 quoteMarketDiv 가 쓰는 방법과 맞춘다 (2026-09-16).
+ */
 function ymd(d) {
-  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  const kst = new Date(d.getTime() + 9 * 3600 * 1000);
+  return `${kst.getUTCFullYear()}${String(kst.getUTCMonth() + 1).padStart(2, "0")}`
+       + `${String(kst.getUTCDate()).padStart(2, "0")}`;
 }
 
 async function fetchIndexSeries(cfg, env, code, days = 60) {
