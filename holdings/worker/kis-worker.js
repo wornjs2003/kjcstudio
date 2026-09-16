@@ -526,8 +526,28 @@ async function fetchIndexSeriesLive(cfg, env, code, days = 60) {
 const INDEX_MINUTE_STEP = "300";      // 5분
 const INDEX_MINUTE_TTL = 30;          // 장중에는 계속 바뀌므로 짧게
 
+/* 지수 5분봉. **받아둔 것을 D1 에 쌓아 며칠치를 들고 있는다** (2026-09-16 지시).
+
+   KIS 는 한 번에 100건쯤 준다. 그것만 쓰면 하루 조금 넘는 분량이라
+   200일선이 안 그려지고, 워커가 새로 뜨면 그만큼으로 되돌아간다.
+   받은 것을 버리지 않고 합치면 날이 갈수록 쌓인다. **호출은 안 늘어난다** —
+   지금도 부르고 있고, 그 결과를 저장만 하는 것이다. */
 async function fetchIndexMinutes(cfg, env, code) {
-  return memo(`minutes:${code}`, INDEX_MINUTE_TTL, () => fetchIndexMinutesLive(cfg, env, code));
+  await dbInit(env);
+  const keep = INDEX_KEEP["5m"];
+  let rows = await readCandles(env, code, "5m", keep);
+
+  const mkey = `idx:${code}:5m`;
+  const stale = (Date.now() / 1000 - Number((await metaGet(env, mkey)) || 0)) > INDEX_MINUTE_TTL;
+  if (rows.length && !stale) return rows;
+
+  const bars = await fetchIndexMinutesLive(cfg, env, code);
+  if (bars.length) {
+    await saveCandles(env, code, "5m", bars);
+    rows = await readCandles(env, code, "5m", keep);
+  }
+  await metaSet(env, mkey, Date.now() / 1000);
+  return rows;
 }
 
 async function fetchIndexMinutesLive(cfg, env, code) {
@@ -558,6 +578,7 @@ async function fetchIndexMinutesLive(cfg, env, code) {
       high: num(r.bstp_nmix_hgpr),
       low: num(r.bstp_nmix_lwpr),
       close,
+      volume: 0,          // 지수 분봉에는 거래량이 없다. 표가 요구해서 채운다
     });
   }
   bars.sort((a, b) => a.ts.localeCompare(b.ts));
@@ -588,27 +609,44 @@ const OVERSEAS_TTL = 60;      // 해외장은 국내 장중에 거의 멈춰 있
    여기서 받는다. 네 기간 모두 시·고·저·종이 온다 (2026-09-15 확인).
    server/kis_proxy.py 의 fetch_index_candles 와 같은 모양이어야 한다. */
 const INDEX_PERIODS = { D: "일", W: "주", M: "월", Y: "년" };
-const INDEX_CANDLE_TTL = 300;
-// 년봉은 한 해에 한 개라 기간을 아주 넓게 잡아야 한다
+
+/* 봉마다 얼마나 받아 두는가 (2026-09-16 지시).
+
+   200일 이동평균을 그리려면 봉이 200개 넘게 있어야 한다. 그런데 KIS 는
+   **한 번에 50개까지만** 준다 — 400일을 달라고 해도 50개다 (실측).
+   그래서 구간을 뒤로 밀어가며 여러 번 받아 채운다.
+
+       일  300개  약 1년 3개월
+       주  260개  약 5년
+       월  250개  약 21년
+       년   40개  1993년부터가 34개뿐이다. **MA200 을 못 그린다** —
+                  자료가 없는 것이지 덜 받는 것이 아니다. 화면이 그렇게 적는다 */
+const INDEX_KEEP = { "5m": 400, D: 300, W: 260, M: 250, Y: 40 };
+//                    ↑ 5분봉은 하루 78봉이라 400개면 약 닷새다 (2026-09-16 지시)
+
+// 한 번에 오는 개수 (KIS 제한, 2026-09-16 실측)
+const INDEX_PAGE = 50;
+
+// 나눠 받을 때 최대 몇 번까지. 끝없이 도는 것을 막는다
+const INDEX_PAGES = 8;
+
+// 얼마나 지나면 다시 받나. 과거 봉은 변하지 않으므로 오늘 것만 새로 온다
+const INDEX_FRESH = { D: 60, W: 300, M: 600, Y: 3600 };
+
+// 한 번 부를 때 훑는 기간. 어차피 50개만 오지만, 좁으면 그보다 적게 온다
 const INDEX_SPAN_DAYS = { D: 400, W: 1500, M: 4000, Y: 12000 };
 
-async function fetchIndexCandles(cfg, env, code, period) {
-  return memo(`candles:${code}:${period}`, INDEX_CANDLE_TTL, () => fetchIndexCandlesLive(cfg, env, code, period));
-}
-
-async function fetchIndexCandlesLive(cfg, env, code, period) {
-  const now = new Date();
+/* 한 구간을 받아 온다. 최대 INDEX_PAGE 개. */
+async function indexBarsFromKis(cfg, env, code, period, from, to) {
   const data = await kisGet(
     cfg, env,
     "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice",
     {
       FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: code,
-      FID_INPUT_DATE_1: ymd(new Date(now.getTime() - INDEX_SPAN_DAYS[period] * 86400000)),
-      FID_INPUT_DATE_2: ymd(now),
+      FID_INPUT_DATE_1: ymd(from), FID_INPUT_DATE_2: ymd(to),
       FID_PERIOD_DIV_CODE: period,
     },
-    "FHKUP03500100",
-    INDEX_CANDLE_TTL
+    "FHKUP03500100"
   );
   const out = [];
   for (const r of outRows(data, "output2")) {
@@ -626,6 +664,55 @@ async function fetchIndexCandlesLive(cfg, env, code, period) {
   }
   out.sort((a, b) => a.ts.localeCompare(b.ts));
   return out;
+}
+
+/* 구간을 뒤로 밀어가며 want 개가 모일 때까지 받는다. */
+async function indexBackfill(cfg, env, code, period, want) {
+  const span = INDEX_SPAN_DAYS[period] * 86400000;
+  const got = new Map();
+  let to = new Date();
+  for (let i = 0; i < INDEX_PAGES; i++) {
+    const bars = await indexBarsFromKis(cfg, env, code, period, new Date(to.getTime() - span), to);
+    if (!bars.length) break;                    // 더 옛날 자료가 없다
+    for (const b of bars) got.set(b.ts, b);
+    if (got.size >= want) break;
+    const oldest = bars[0].ts;                  // 오름차순이라 첫 개가 가장 옛것
+    to = new Date(Date.UTC(+oldest.slice(0, 4), +oldest.slice(4, 6) - 1, +oldest.slice(6, 8)) - 86400000);
+  }
+  return [...got.values()].sort((a, b) => a.ts.localeCompare(b.ts));
+}
+
+/* 지수 봉. **받아둔 것을 D1 에서 읽고, 모자라거나 묵었을 때만 부른다.**
+
+   전에는 메모리 캐시 5분짜리만 있어서 워커가 새로 뜨면 사라졌고, 매번
+   새로 받은 50개로 그렸다. 그래서 MA60 부터 조용히 빠졌다 (2026-09-16).
+
+   종목 봉이 쓰는 candles 표를 그대로 쓴다. 지수 코드(0001)는 네 자리라
+   종목코드 여섯 자리와 겹치지 않는다. */
+async function fetchIndexCandles(cfg, env, code, period) {
+  await dbInit(env);
+  const want = INDEX_KEEP[period];
+  let rows = await readCandles(env, code, period, want);
+
+  const mkey = `idx:${code}:${period}`;
+  const stale = (Date.now() / 1000 - Number((await metaGet(env, mkey)) || 0)) > INDEX_FRESH[period];
+  if (rows.length >= want && !stale) return rows;
+
+  let bars;
+  if (rows.length < want) {
+    bars = await indexBackfill(cfg, env, code, period, want);   // 처음이거나 모자라다
+  } else {
+    const now = new Date();
+    const span = INDEX_SPAN_DAYS[period] * 86400000;
+    bars = await indexBarsFromKis(cfg, env, code, period, new Date(now.getTime() - span), now);
+  }
+
+  if (bars.length) {
+    await saveCandles(env, code, period, bars);
+    rows = await readCandles(env, code, period, want);
+  }
+  await metaSet(env, mkey, Date.now() / 1000);
+  return rows;
 }
 
 /* ── 코스피200 선물 ──────────────────────────────────────────────────

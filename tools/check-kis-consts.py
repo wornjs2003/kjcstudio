@@ -33,6 +33,10 @@ JS = "holdings/worker/kis-worker.js"
 #
 #   None     값이 똑같아야 한다
 #   "list"   ["Y", "K"] 같은 목록. 따옴표 안의 값만 순서대로 비교한다
+#   "dict"   {"D": 300} 같은 사전. 키와 값을 짝지어 비교한다.
+#            파이썬은 키를 따옴표로 쓰고 자바스크립트는 안 쓰는데, 그 차이는
+#            무시한다. 값까지 봐야 하므로 "list" 로는 대조가 안 된다
+#            (list 는 따옴표 안만 보는데, 사전은 값이 숫자라 하나도 안 잡힌다)
 #   "ceil"   파이썬 값을 올림한 것과 워커 값이 같으면 통과.
 #            워커는 Cloudflare 엣지 캐시(cf.cacheTtl)를 쓰는데 공식 문서가
 #            소수를 받는지 밝히지 않아, 소수 초는 워커에서 올림해 넣는다
@@ -48,7 +52,11 @@ PAIRS = [
     ("지수 분봉 간격",       "INDEX_MINUTE_STEP",   "INDEX_MINUTE_STEP",    None),
     ("지수 분봉 캐시",       "INDEX_MINUTE_TTL",    "INDEX_MINUTE_TTL",     None),
     ("해외지수 캐시",        "OVERSEAS_TTL",        "OVERSEAS_TTL",         None),
-    ("지수 캔들 캐시",       "INDEX_CANDLE_TTL",    "INDEX_CANDLE_TTL",     None),
+    ("지수 봉 보관량",       "INDEX_KEEP",          "INDEX_KEEP",           "dict"),
+    ("지수 봉 갱신 주기",    "INDEX_FRESH",         "INDEX_FRESH",          "dict"),
+    ("지수 봉 훑는 기간",    "INDEX_SPAN",          "INDEX_SPAN_DAYS",      "dict"),
+    ("지수 봉 한 번에",      "INDEX_PAGE",          "INDEX_PAGE",           None),
+    ("지수 봉 나눠받기 횟수", "INDEX_PAGES",         "INDEX_PAGES",          None),
     ("선물 종목코드",        "FUTURES_CODE",        "FUTURES_CODE",         None),
     ("선물 캐시",            "FUTURES_TTL",         "FUTURES_TTL",          "ceil"),
     ("지수 캐시",            "INDEX_TTL",           "INDEX_TTL",            "ceil"),
@@ -143,6 +151,18 @@ def as_list(v):
     return re.findall(r"""["']([^"']*)["']""", text)
 
 
+# 사전의 키:값 한 쌍. 키는 따옴표가 있어도 없어도 같게 본다.
+DICT_PAIR = re.compile(r"""["']?([A-Za-z0-9_]+)["']?\s*:\s*([\d.]+)""")
+
+
+def as_dict(v):
+    """{"D": 300, "W": 260} 과 { D: 300, W: 260 } 을 같게 본다.
+
+    값이 숫자인 사전만 다룬다. 문자열 값이 섞이면 as_list 를 쓴다.
+    """
+    return {k: float(n) for k, n in DICT_PAIR.findall(str(v))}
+
+
 def same(a, b):
     if isinstance(a, float) and isinstance(b, float):
         return abs(a - b) < 1e-9
@@ -185,6 +205,8 @@ def main():
         b = js[jname]
         if conv == "list":
             hit = as_list(a) == as_list(b)
+        elif conv == "dict":
+            hit = as_dict(a) == as_dict(b) and bool(as_dict(a))
         elif conv == "ceil":
             hit = isinstance(a, float) and isinstance(b, float) and math.ceil(a) == b
         else:

@@ -7,7 +7,7 @@
 
 import { WATCHLIST, brandColor } from './data/market.js';
 import * as lastSeen from './store/last-seen.js';
-import { fetchCandles, createStockChart } from './chart.js';
+import { fetchCandles, createStockChart, maLegend } from './chart.js';
 import { color } from './theme.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, dirClass, marketPhase }
   from './utils/format.js';
@@ -363,9 +363,12 @@ async function paintBigChart() {
 
   if (foot) {
     const label = (INDEX_PERIODS.find(p => p.id === indexPeriod) || {}).label || '';
+    /* 이동평균 범례를 함께 둔다. 어느 선이 그려졌는지, 봉이 모자라 못 그린
+       선이 무엇인지 여기서 보인다 (2026-09-16). */
+    const ma = bigChart ? maLegend(bigChart.maSeries) : '';
     foot.innerHTML = indexPeriod === '5m'
-      ? `<span>오늘 5분봉 · 점선은 전일 종가</span><span>한국투자증권 실시간</span>`
-      : `<span>${label}봉 ${bars.length}개</span><span>한국투자증권</span>`;
+      ? `<span>${ma} · 점선은 전일 종가</span><span>한국투자증권 실시간</span>`
+      : `<span>${ma} · ${label}봉 ${bars.length}개</span><span>한국투자증권</span>`;
   }
 }
 

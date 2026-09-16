@@ -630,15 +630,37 @@ def fetch_index_series(cfg, code, days=60):
 #   한 번에 101건까지 온다. 5분 간격이면 505분이라 정규장(390분)을 다 덮는다.
 INDEX_MINUTE_STEP = "300"        # 5분
 INDEX_MINUTE_TTL = 30            # 장중에는 계속 바뀌므로 짧게
-_idx_min_cache = {}              # code -> (저장시각, bars)
 
 
 def fetch_index_minutes(cfg, code):
-    """지수의 당일 5분 흐름. [{ts, open, high, low, close}, ...] 옛것부터."""
-    hit = _idx_min_cache.get(code)
-    if hit and (time.time() - hit[0]) < INDEX_MINUTE_TTL:
-        return hit[1]
+    """지수 5분봉. **받아둔 것을 DB 에 쌓아 며칠치를 들고 있는다** (2026-09-16 지시).
 
+    KIS 는 한 번에 100건쯤 준다. 그것만 쓰면 하루 조금 넘는 분량이라
+    200일선이 안 그려지고, 서버를 껐다 켜면 그만큼으로 되돌아간다.
+    받은 것을 버리지 않고 합치면 날이 갈수록 쌓인다. **호출은 안 늘어난다** —
+    지금도 부르고 있고, 그 결과를 저장만 하는 것이다.
+
+    종목 5분봉이 쓰는 candles 표를 그대로 쓴다.
+    """
+    db_init()
+    keep = INDEX_KEEP["5m"]
+    rows = read_candles(code, "5m", keep)
+
+    mkey = "idx:%s:5m" % code
+    stale = (time.time() - float(_meta_get(mkey) or 0)) > INDEX_MINUTE_TTL
+    if rows and not stale:
+        return rows
+
+    bars = _index_minutes_from_kis(cfg, code)
+    if bars:
+        save_candles(code, "5m", bars)
+        rows = read_candles(code, "5m", keep)
+    _meta_set(mkey, time.time())
+    return rows
+
+
+def _index_minutes_from_kis(cfg, code):
+    """한 번 받아 온다. 100건쯤 온다."""
     data = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-time-indexchartprice", {
         "FID_COND_MRKT_DIV_CODE": "U",
         "FID_INPUT_ISCD": code,
@@ -662,9 +684,9 @@ def fetch_index_minutes(cfg, code):
             "high": _num(r.get("bstp_nmix_hgpr")),
             "low": _num(r.get("bstp_nmix_lwpr")),
             "close": close,
+            "volume": 0,           # 지수 분봉에는 거래량이 없다. 표가 요구해서 채운다
         })
     bars.sort(key=lambda b: b["ts"])
-    _idx_min_cache[code] = (time.time(), bars)
     return bars
 
 
@@ -693,25 +715,43 @@ _ovs_cache = {}
 # 일·주·월·년봉은 여기서 받는다. 네 기간 모두 시·고·저·종이 온다
 # (2026-09-15 확인). 종목 캔들과 같은 모양으로 돌려줘 화면이 같은 코드로 읽는다.
 INDEX_PERIODS = {"D": "일", "W": "주", "M": "월", "Y": "년"}
-INDEX_CANDLE_TTL = 300
-_idx_candle_cache = {}
 
 
-def fetch_index_candles(cfg, code, period):
-    key = code + ":" + period
-    hit = _idx_candle_cache.get(key)
-    if hit and (time.time() - hit[0]) < INDEX_CANDLE_TTL:
-        return hit[1]
+# 봉마다 얼마나 받아 두는가 (2026-09-16 지시).
+#
+# 200일 이동평균을 그리려면 봉이 200개 넘게 있어야 한다. 그런데 KIS 는
+# **한 번에 50개까지만** 준다 — 400일을 달라고 해도 50개다 (실측).
+# 그래서 구간을 뒤로 밀어가며 여러 번 받아 채운다.
+#
+#     일  300개  약 1년 3개월
+#     주  260개  약 5년
+#     월  250개  약 21년
+#     년   40개  1993년부터가 34개뿐이다. **MA200 을 못 그린다** —
+#                자료가 없는 것이지 덜 받는 것이 아니다. 화면이 그렇게 적는다
+INDEX_KEEP = {"5m": 400, "D": 300, "W": 260, "M": 250, "Y": 40}
+#              ↑ 5분봉은 하루 78봉이라 400개면 약 닷새다 (2026-09-16 지시)
 
-    # 년봉은 한 해에 한 개라 기간을 아주 넓게 잡아야 한다
-    span = {"D": 400, "W": 1500, "M": 4000, "Y": 12000}[period]
-    now = datetime.now(KST)
+# 한 번에 오는 개수 (KIS 제한, 2026-09-16 실측)
+INDEX_PAGE = 50
+
+# 나눠 받을 때 최대 몇 번까지. 끝없이 도는 것을 막는다
+INDEX_PAGES = 8
+
+# 얼마나 지나면 다시 받나. 과거 봉은 변하지 않으므로 오늘 것만 새로 온다
+INDEX_FRESH = {"D": 60, "W": 300, "M": 600, "Y": 3600}
+
+# 한 번 부를 때 훑는 기간. 어차피 50개만 오지만, 좁으면 그보다 적게 온다
+INDEX_SPAN = {"D": 400, "W": 1500, "M": 4000, "Y": 12000}
+
+
+def _index_bars_from_kis(cfg, code, period, date_from, date_to):
+    """한 구간을 받아 온다. 최대 INDEX_PAGE 개."""
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice",
         {"FID_COND_MRKT_DIV_CODE": "U", "FID_INPUT_ISCD": code,
-         "FID_INPUT_DATE_1": (now - timedelta(days=span)).strftime("%Y%m%d"),
-         "FID_INPUT_DATE_2": now.strftime("%Y%m%d"),
+         "FID_INPUT_DATE_1": date_from.strftime("%Y%m%d"),
+         "FID_INPUT_DATE_2": date_to.strftime("%Y%m%d"),
          "FID_PERIOD_DIV_CODE": period},
         "FHKUP03500100",
     )
@@ -730,8 +770,57 @@ def fetch_index_candles(cfg, code, period):
             "volume": _num(r.get("acml_vol"), int) or 0,
         })
     out.sort(key=lambda b: b["ts"])
-    _idx_candle_cache[key] = (time.time(), out)
     return out
+
+
+def _index_backfill(cfg, code, period, want):
+    """구간을 뒤로 밀어가며 want 개가 모일 때까지 받는다."""
+    span = timedelta(days=INDEX_SPAN[period])
+    got = {}
+    to = datetime.now(KST)
+    for _ in range(INDEX_PAGES):
+        bars = _index_bars_from_kis(cfg, code, period, to - span, to)
+        if not bars:
+            break                       # 더 옛날 자료가 없다
+        for b in bars:
+            got[b["ts"]] = b
+        if len(got) >= want:
+            break
+        oldest = min(b["ts"] for b in bars)
+        to = datetime.strptime(oldest, "%Y%m%d").replace(tzinfo=KST) - timedelta(days=1)
+    return sorted(got.values(), key=lambda b: b["ts"])
+
+
+def fetch_index_candles(cfg, code, period):
+    """지수 봉. **받아둔 것을 DB 에서 읽고, 모자라거나 묵었을 때만 부른다.**
+
+    전에는 메모리 캐시 5분짜리만 있어서 서버를 껐다 켜면 사라졌고, 매번
+    새로 받은 50개로 그렸다. 그래서 MA60 부터 조용히 빠졌다 (2026-09-16).
+
+    종목 봉이 쓰는 candles 표를 그대로 쓴다. 지수 코드(0001)는 네 자리라
+    종목코드 여섯 자리와 겹치지 않는다.
+    """
+    db_init()
+    want = INDEX_KEEP[period]
+    rows = read_candles(code, period, want)
+
+    mkey = "idx:%s:%s" % (code, period)
+    stale = (time.time() - float(_meta_get(mkey) or 0)) > INDEX_FRESH[period]
+    if len(rows) >= want and not stale:
+        return rows
+
+    if len(rows) < want:
+        bars = _index_backfill(cfg, code, period, want)      # 처음이거나 모자라다
+    else:
+        span = timedelta(days=INDEX_SPAN[period])
+        now = datetime.now(KST)
+        bars = _index_bars_from_kis(cfg, code, period, now - span, now)   # 새 봉만
+
+    if bars:
+        save_candles(code, period, bars)
+        rows = read_candles(code, period, want)
+    _meta_set(mkey, time.time())
+    return rows
 
 
 # ── 코스피200 선물 ──────────────────────────────────────────────────

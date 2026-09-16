@@ -25,7 +25,12 @@ const COLOR = {
   get ma5()    { return color('ma5'); },
   get ma20()   { return color('ma20'); },
   get ma60()   { return color('ma60'); },
+  get ma200()  { return color('ma200'); },
 };
+
+/* 그릴 이동평균선. 늘리려면 여기 한 줄과 theme.css·theme.js 의 색만 더한다.
+   (2026-09-16 지시 — 5 · 20 · 60 · 200) */
+const MA_LINES = [[5, 'ma5'], [20, 'ma20'], [60, 'ma60'], [200, 'ma200']];
 
 /* 화면의 기간 버튼 → 서버가 쓰는 기간 코드 */
 export const PERIOD_MAP = {
@@ -194,11 +199,20 @@ export function createStockChart(container, candles, opts = {}) {
     })));
   }
 
-  // 이동평균선
+  /* 이동평균선 — 5 · 20 · 60 · 200 (2026-09-16 지시).
+   *
+   * **봉이 모자라면 그렇게 적는다.** 전에는 조용히 건너뛰었는데, 지수 봉이
+   * 50개만 오는 바람에 MA60 부터 안 그려지는 것을 아무도 몰랐다. 안 나오는
+   * 것과 못 그리는 것은 다르고, 화면이 그 차이를 말해야 한다
+   * (holdings/CLAUDE.md 데이터 규칙). */
   const maSeries = [];
   if (showMA) {
-    [[5, COLOR.ma5], [20, COLOR.ma20], [60, COLOR.ma60]].forEach(([maPeriod, color]) => {
-      if (candles.length < maPeriod) return;
+    MA_LINES.forEach(([maPeriod, key]) => {
+      const color = COLOR[key];
+      if (candles.length < maPeriod) {
+        maSeries.push({ period: maPeriod, color, series: null, short: candles.length });
+        return;
+      }
       const s = chart.addSeries(LC.LineSeries, {
         color, lineWidth: 1,
         priceLineVisible: false, lastValueVisible: false,
@@ -225,6 +239,10 @@ export function createStockChart(container, candles, opts = {}) {
 /* 범례용 — 어떤 이동평균이 그려졌는지 */
 export function maLegend(maSeries) {
   return maSeries
-    .map((m) => `<span style="color:${m.color}">MA${m.period}</span>`)
+    .map((m) => (m.short != null
+      /* 못 그린 선은 왜 없는지 적는다. 빠뜨린 것과 자료가 모자란 것은 다르다 */
+      ? `<span class="kh-mut" title="봉이 ${m.short}개뿐입니다. ${m.period}개가 있어야 그립니다"
+           >MA${m.period} 봉 부족</span>`
+      : `<span style="color:${m.color}">MA${m.period}</span>`))
     .join(' · ');
 }

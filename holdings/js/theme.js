@@ -25,7 +25,7 @@ const FALLBACK = {
   'chart-grid': 'rgba(16,16,19,0.06)', 'chart-border': '#f2f4f6',
   'chart-axis': '#8b95a1', 'chart-crosshair': 'rgba(16,16,19,0.28)',
   'chart-label-bg': '#101013', 'chart-label-fg': '#ffffff',
-  'ma5': '#f29300', 'ma20': '#3182f6', 'ma60': '#8b5cf6',
+  'ma5': '#f29300', 'ma20': '#3182f6', 'ma60': '#8b5cf6', 'ma200': '#4e5968',
   'ind-1': '#3182f6', 'ind-2': '#f29300', 'ind-3': '#8b5cf6',
   'ind-4': '#f04452', 'ind-5': '#8b95a1',
   'topic-war': '#f04452', 'topic-ai': '#3182f6', 'topic-defense': '#f29300',
