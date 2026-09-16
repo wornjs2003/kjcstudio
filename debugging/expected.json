@@ -126,22 +126,54 @@
       "id": "raw-color-projects",
       "group": "디자인 토큰",
       "title": "프로젝트 보드에 색을 직접 박았는가",
-      "scope": "projects/index.html · 주석 제외",
+      "scope": "projects/ 의 css·html 전부 · 주석 제외",
       "expected": "0곳 — 전부 theme.css 토큰 사용",
       "type": "raw_color",
       "files": [
-        "projects/index.html"
+        "projects/*.html",
+        "projects/css/*.css"
       ]
     },
     {
       "id": "raw-color-apiboard",
       "group": "디자인 토큰",
       "title": "API 보드에 색을 직접 박았는가",
-      "scope": "api-board/index.html · 주석 제외",
+      "scope": "api-board/ 의 css·html 전부 · 주석 제외",
       "expected": "0곳 — 전부 theme.css 토큰 사용",
       "type": "raw_color",
       "files": [
-        "api-board/index.html"
+        "api-board/*.html",
+        "api-board/css/*.css"
+      ]
+    },
+    {
+      "id": "raw-color-holdings",
+      "group": "디자인 토큰",
+      "title": "주식 화면에 색을 직접 박았는가",
+      "scope": "holdings/ 의 css·html 전부 · 주석 제외 · 국기 규정색 4개는 예외",
+      "expected": "0곳 — 전부 theme.css 토큰 사용",
+      "type": "raw_color",
+      "files": [
+        "holdings/css/*.css",
+        "holdings/*.html"
+      ],
+      "allow": [
+        "#cd2e3a",
+        "#0047a0",
+        "#b22234",
+        "#3c3b6e"
+      ]
+    },
+    {
+      "id": "raw-color-setup",
+      "group": "디자인 토큰",
+      "title": "설립 체크리스트에 색을 직접 박았는가",
+      "scope": "company-setup/ 의 css·html 전부 · 주석 제외",
+      "expected": "0곳 — 전부 theme.css 토큰 사용",
+      "type": "raw_color",
+      "files": [
+        "company-setup/*.html",
+        "company-setup/css/*.css"
       ]
     },
     {

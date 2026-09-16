@@ -25,6 +25,7 @@ KJC Studio · Debugging 검사기
        어느 파일의 어느 부분을 보는지 분명해야 오탐을 줄일 수 있습니다.
 """
 
+import glob
 import json
 import os
 import re
@@ -182,30 +183,89 @@ def check_pair_sync(spec):
     return "mismatch", "어긋남 " + str(len(only_a) + len(only_b)) + "개", " / ".join(parts)
 
 
+def resolve_files(spec):
+    """files 의 항목을 글로브로 펼칩니다. 새 파일이 생기면 저절로 들어옵니다.
+
+    파일 이름을 하나씩 적어두면 **새로 만든 파일이 검사에서 조용히 빠집니다.**
+    2026-09-16 에 holdings/css/daily.css 와 modal.css 가 그렇게 빠졌고,
+    daily.css 에 박힌 색 두 곳을 이 검사가 아무것도 못 잡았습니다.
+    그날 이 검사가 보던 것은 projects/index.html 과 api-board/index.html
+    딱 둘뿐이었습니다.
+
+    폴더로 적으면 그 일이 다시 나지 않습니다.
+    """
+    out = []
+    for pat in spec["files"]:
+        if any(ch in pat for ch in "*?["):
+            hits = glob.glob(os.path.join(ROOT, pat))
+            out.extend(sorted(os.path.relpath(h, ROOT).replace(os.sep, "/") for h in hits))
+        else:
+            out.append(pat)
+
+    skip = set(spec.get("exclude", []))
+    seen, files = set(), []
+    for rel in out:
+        if rel in skip or rel in seen:
+            continue
+        seen.add(rel)
+        files.append(rel)
+    return files
+
+
+def token_for(color):
+    """이 색을 이미 담고 있는 theme.css 토큰 이름을 찾아 줍니다.
+
+    **걸렸을 때 고치는 법까지 같이 알려주려고** 있습니다. "색을 박지 마라" 만으로는
+    무엇으로 바꿔야 하는지 알 수 없고, 이름을 짐작해 찾다가 못 찾으면 또 박게 됩니다.
+
+    2026-09-16 에 실제로 그랬습니다 — 초록·주황이 필요해서 --kh-ok 와 --kh-warn 을
+    찾았는데 -rgb 짜리만 나왔습니다. 진한 값은 --kh-tag-news · --kh-tag-notice 라는
+    **다른 이름** 아래 있었습니다. 있는 줄 모르고 #02a262 · #f29300 을 직접 적었습니다.
+    """
+    css = read("assets/css/theme.css")
+    pairs = re.findall(r"(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})\b", css)
+    return [name for name, value in pairs if value.lower() == color.lower()]
+
+
 def check_raw_color(spec):
     """토큰을 쓰지 않고 색을 직접 박은 곳이 있는가.
 
     주석을 지우고 봅니다. 토큰을 정의하는 파일 자체는 당연히 색이 있으므로 제외합니다.
+
+    files 에 글로브를 쓸 수 있습니다 (resolve_files 참조).
+    allow 에 적은 색은 세지 않습니다 — 국기 규정색처럼 **데이터로서의 색**입니다
+    (CLAUDE.md 「하드코딩 금지의 예외」). 파일째 빼지 않고 색만 빼므로,
+    그 파일에 다른 색이 새로 들어오면 그때는 걸립니다.
     """
+    files = resolve_files(spec)
+    allow = set(c.lower() for c in spec.get("allow", []))
+
     found = []
-    for rel in spec["files"]:
-        path = os.path.join(ROOT, rel)
-        if not os.path.isfile(path):
-            continue
-        if rel in spec.get("exclude", []):
+    for rel in files:
+        if not os.path.isfile(os.path.join(ROOT, rel)):
             continue
         kind = "css" if rel.endswith(".css") else ("html" if rel.endswith(".html") else "js")
         body = strip_comments(read(rel), kind)
         for m in re.finditer(r"#[0-9a-fA-F]{6}\b", body):
-            found.append((rel, m.group(0).lower()))
+            color = m.group(0).lower()
+            if color in allow:
+                continue
+            found.append((rel, color))
 
     if not found:
-        return "pass", "0곳", "검사한 파일 " + str(len(spec["files"])) + "개"
+        return "pass", "0곳", "검사한 파일 " + str(len(files)) + "개"
 
     colors = sorted(set(c for _, c in found))
     where = sorted(set(f for f, _ in found))
+
+    # 바꿔 쓸 토큰이 이미 있으면 같이 알려줍니다. 외워 두지 않아도 됩니다.
+    hints = []
+    for c in colors[:4]:
+        names = token_for(c)
+        hints.append(c + (" → " + names[0] if names else " → 토큰 없음"))
+
     return "changed", str(len(found)) + "곳 · " + str(len(colors)) + "종", \
-        " · ".join(colors[:4]) + (" 외" if len(colors) > 4 else "") + "  (" + ", ".join(where[:3]) + ")"
+        " · ".join(hints) + (" 외" if len(colors) > 4 else "") + "  (" + ", ".join(where[:3]) + ")"
 
 
 def check_file_exists(spec):
