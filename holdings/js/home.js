@@ -13,6 +13,8 @@ import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, dirClass,
   from './utils/format.js';
 import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop } from './components/frame.js';
 import { iconHtml, paintIcon } from './components/stock-icon.js';
+import { openModal, closeModal } from './components/modal.js';
+import { loadStockMain, mountStockView } from './components/stock-view.js';
 import { mountDisclosures } from './components/disclosures.js';
 import { mountSchedule } from './components/schedule.js';
 import { fetchIndexMinutes, fetchIndexCandles, fetchQuotes } from './data/live.js';
@@ -484,9 +486,7 @@ function paintRows(priceMap) {
 
   $('kh-rows').querySelectorAll('tr[data-code]').forEach(tr => {
     tr.addEventListener('click', () => selectStock(tr.dataset.code));
-    tr.addEventListener('dblclick', () => {
-      location.href = `./stock.html?code=${tr.dataset.code}`;
-    });
+    tr.addEventListener('dblclick', () => openStockModal(tr.dataset.code));
   });
   watchRows();
   paintRowFoot();
@@ -730,7 +730,15 @@ function paintPreview(priceMap) {
 
   paintIcon($('kh-pv-ic'), s);
   $('kh-pv-n').textContent = s.name;
-  $('kh-pv-link').href = `./stock.html?code=${s.code}`;
+  /* 「자세히 ›」 는 모달을 연다. 주소는 남겨 둔다 — 가운데 단추로 눌러
+     새 탭에서 열거나 링크를 복사하는 길이 막히지 않게 한다. */
+  const link = $('kh-pv-link');
+  link.href = `./stock.html?code=${s.code}`;
+  link.onclick = e => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    openStockModal(s.code);
+  };
 
   const el = $('kh-pv-v');
   if (!live) {
@@ -767,6 +775,83 @@ async function drawPreviewChart() {
       <div class="kh-soon-t">차트를 불러오지 못했습니다</div></div>`;
   }
 }
+
+/* ── 종목 모달 ───────────────────────────
+   목록에서 종목을 눌렀을 때 페이지를 옮기지 않고 그 자리에 띄운다
+   (2026-09-16 지시). 담기는 것은 stock.html 의 본문 그대로다 —
+   마크업도 그리는 코드도 한 곳에만 둔다.
+
+   시세 루프를 새로 돌리지 않는다. 이 화면이 이미 돌고 있으므로 그 값을
+   넘겨준다. 같은 화면에서 루프가 둘이 되면 KIS 를 겹쳐 부르게 되고,
+   2026-09-16 에 그것으로 서버가 터졌다. */
+let stockModal = null;
+
+async function openStockModal(code, { push = true } = {}) {
+  const stock = rowList().find(s => s.code === code)
+             || WATCHLIST.find(s => s.code === code);
+  if (!stock || (stockModal && stockModal.code === code)) return;
+
+  let main;
+  try {
+    main = await loadStockMain();
+  } catch (e) {
+    /* 본문을 못 받으면 예전처럼 페이지를 옮긴다. 아무 일도 안 일어나는 것보다 낫다 */
+    location.href = `./stock.html?code=${code}`;
+    return;
+  }
+
+  if (push) history.pushState({ stock: code }, '', `?code=${code}`);
+
+  const { body } = openModal({
+    label: `${stock.name} 종목 정보`,
+    /* 양옆 서랍. 처음에는 접혀 있고, 한 번 펼치면 기억한다 (2026-09-16 지시).
+       key 는 펼친 상태를 적어 두는 이름이라 화면 글자와 따로 둔다 —
+       이름을 바꿔도 펼쳐둔 것이 풀리지 않는다. */
+    drawers: {
+      left:  { key: 'stock-memo', label: '내 메모' },
+      right: { key: 'stock-news', label: '뉴스 · 공시' },
+    },
+    onToggle() {
+      /* 모달 폭이 바뀌었으니 차트도 다시 재야 한다. 캔버스는 CSS 로 늘어나지
+         않아서, 이 줄이 없으면 차트만 옛 폭으로 남는다. */
+      if (stockModal) stockModal.view.resize();
+    },
+    onClose() {
+      if (stockModal) { stockModal.view.destroy(); stockModal = null; }
+      /* 닫기 단추·Esc·바깥 누르기로 닫혔으면 주소도 되돌린다.
+         뒤로가기로 닫힌 경우에는 이미 빠져 있어 아무 일도 하지 않는다. */
+      if (history.state && history.state.stock) history.back();
+    },
+  });
+
+  body.appendChild(main);
+  addModalActions(main, code);
+
+  const view = mountStockView(main, stock, { onBack: closeModal });
+  stockModal = { code, view };
+  view.paint(rowPrices[code] || null);
+}
+
+/* 머리 오른쪽에 「전체 화면」과 닫기를 붙인다. stock.html 에는 없는 것이라
+   — 그 화면은 이미 전체 화면이다 — 모달에서만 더한다. */
+function addModalActions(main, code) {
+  const top = main.querySelector('.kh-head-top');
+  if (!top || top.querySelector('.kh-head-act')) return;
+  const act = document.createElement('div');
+  act.className = 'kh-head-act';
+  act.innerHTML = `
+    <a class="kh-chip-btn" href="./stock.html?code=${code}">전체 화면 ↗</a>
+    <button class="kh-modal-x" title="닫기 (Esc)" aria-label="닫기">✕</button>`;
+  act.querySelector('.kh-modal-x').addEventListener('click', closeModal);
+  top.appendChild(act);
+}
+
+/* 뒤로가기로도 닫힌다. 주소를 복사해 두면 그 종목이 열린 채로 뜬다. */
+window.addEventListener('popstate', () => {
+  const code = history.state && history.state.stock;
+  if (code) openStockModal(code, { push: false });
+  else closeModal();
+});
 
 function selectStock(code) {
   selectedCode = code;
@@ -939,8 +1024,23 @@ startLiveLoop({
        바로 넣으면 두 자리의 숫자가 어긋난다. 모으는 곳을 거친다. */
     applyPrices(prices);
     paintPreview(prices);
+    /* 모달이 떠 있으면 같은 값을 넘긴다. 모달이 따로 받으면 두 자리의
+       숫자가 어긋나고 KIS 를 겹쳐 부르게 된다. */
+    if (stockModal && prices[stockModal.code]) {
+      stockModal.view.paint(prices[stockModal.code]);
+    }
   },
 });
 
 /* 공지 배너 닫기 */
 $('kh-notice-x')?.addEventListener('click', () => $('kh-notice')?.remove());
+
+/* 주소에 ?code= 가 붙어 있으면 그 종목을 열어 둔 채로 시작한다.
+   모달 주소를 복사해 두었거나 새로고침한 경우다. */
+{
+  const code = new URLSearchParams(location.search).get('code');
+  if (code) {
+    history.replaceState({ stock: code }, '', location.href);
+    openStockModal(code, { push: false });
+  }
+}
