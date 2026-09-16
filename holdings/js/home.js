@@ -18,6 +18,7 @@ import { loadStockMain, mountStockView } from './components/stock-view.js';
 import { mountDisclosures } from './components/disclosures.js';
 import { mountSchedule } from './components/schedule.js';
 import { fetchIndexMinutes, fetchIndexCandles, fetchQuotes } from './data/live.js';
+import { apiFetch } from './data/api.js';
 
 /* 지수 띠에 놓을 칸.
    code 가 있는 셋만 서버에서 값이 온다. 나머지는 아직 받아올 곳이 없어
@@ -431,7 +432,8 @@ async function loadUniverse() {
   if (kept) universe = kept.value;
 
   try {
-    const r = await fetch('/api/dart/universe', { cache: 'no-store' });
+    const r = await apiFetch('/api/dart/universe', { cache: 'no-store' });
+    if (!r) return null;   // 로그인이 풀렸다
     const j = await r.json();
     if (j && j.ok && Array.isArray(j.data) && j.data.length) {
       universe = j.data;
@@ -1047,7 +1049,8 @@ async function drawSideNews() {
   if (!host) return;
   let rows = null;
   try {
-    const r = await fetch('/api/news/issues', { cache: 'no-store' });
+    const r = await apiFetch('/api/news/issues', { cache: 'no-store' });
+    if (!r) return null;   // 로그인이 풀렸다
     const j = await r.json();
     if (j && j.ok && Array.isArray(j.data)) rows = j.data;
   } catch { /* 아래에서 못 받았다고 적는다 */ }

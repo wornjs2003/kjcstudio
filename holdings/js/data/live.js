@@ -10,6 +10,7 @@
    목록에 없는 종목(시장 전체 탭 등)은 화면에 '—' 로 남는다.
    종목이 늘면 호출량도 느니, 갱신 주기(main.js)와 함께 보고 정할 것. */
 import { WATCHLIST } from './market.js';
+import { apiFetch } from './api.js';
 export const LIVE_CODES = WATCHLIST.map(s => s.code);
 
 let _ready = null;
@@ -18,7 +19,8 @@ let _ready = null;
 async function kisReady() {
   if (_ready !== null) return _ready;
   try {
-    const r = await fetch('/api/kis/health', { cache: 'no-store' });
+    const r = await apiFetch('/api/kis/health', { cache: 'no-store' });
+    if (!r) return null;   // 로그인이 풀렸다
     const j = await r.json();
     _ready = !!(j && j.ok && j.configured);
     if (_ready) console.info('[KJC] 한국투자증권 API 연결됨 (' + (j.modeLabel || '') + ')');
@@ -33,8 +35,8 @@ async function kisReady() {
 export async function fetchLiveIndices() {
   if (!(await kisReady())) return null;
   try {
-    const r = await fetch('/api/kis/indices', { cache: 'no-store' });
-    if (!r.ok) return null;
+    const r = await apiFetch('/api/kis/indices', { cache: 'no-store' });
+    if (!r || !r.ok) return null;
     const j = await r.json();
     if (!j || !j.ok || !Array.isArray(j.data) || !j.data.length) return null;
     /* 선물은 목록이 아니라 따로 온다. 배열에 실어 보내면 지수 카드가 하나 더
@@ -50,8 +52,8 @@ export async function fetchLiveIndices() {
 export async function fetchLivePrices(codes = LIVE_CODES) {
   if (!(await kisReady())) return null;
   try {
-    const r = await fetch('/api/kis/prices?codes=' + codes.join(','), { cache: 'no-store' });
-    if (!r.ok) return null;
+    const r = await apiFetch('/api/kis/prices?codes=' + codes.join(','), { cache: 'no-store' });
+    if (!r || !r.ok) return null;
     const j = await r.json();
     if (!j || !j.ok || !j.data || !Object.keys(j.data).length) return null;
     return j.data;
@@ -90,9 +92,9 @@ export function applyLiveToStock(stock, live) {
 export async function fetchIndexMinutes(code) {
   if (!(await kisReady())) return null;
   try {
-    const r = await fetch('/api/kis/index-minutes?code=' + encodeURIComponent(code),
+    const r = await apiFetch('/api/kis/index-minutes?code=' + encodeURIComponent(code),
       { cache: 'no-store' });
-    if (!r.ok) return null;
+    if (!r || !r.ok) return null;
     const j = await r.json();
     if (!j || !j.ok || !Array.isArray(j.data?.bars) || !j.data.bars.length) return null;
     return j.data.bars;
@@ -113,8 +115,8 @@ export async function fetchQuotes(codes) {
   if (!codes || !codes.length) return null;
   if (!(await kisReady())) return null;
   try {
-    const r = await fetch('/api/kis/quotes?codes=' + codes.join(','), { cache: 'no-store' });
-    if (!r.ok) return null;
+    const r = await apiFetch('/api/kis/quotes?codes=' + codes.join(','), { cache: 'no-store' });
+    if (!r || !r.ok) return null;
     const j = await r.json();
     if (!j || !j.ok || !j.data) return null;
     return j.data;
@@ -129,8 +131,8 @@ export async function fetchIndexCandles(code, period) {
   if (!(await kisReady())) return null;
   try {
     const qs = new URLSearchParams({ code, period });
-    const r = await fetch('/api/kis/index-candles?' + qs, { cache: 'no-store' });
-    if (!r.ok) return null;
+    const r = await apiFetch('/api/kis/index-candles?' + qs, { cache: 'no-store' });
+    if (!r || !r.ok) return null;
     const j = await r.json();
     if (!j || !j.ok || !Array.isArray(j.data?.bars) || !j.data.bars.length) return null;
     return j.data.bars;

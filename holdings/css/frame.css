@@ -464,3 +464,43 @@ a.kh-sc-i:hover { color: var(--kh-accent); }
 @media (prefers-reduced-motion: reduce) {
   .kh-stale i { animation: none; }
 }
+
+
+/* ==========================================================================
+   로그인 만료 띠 (2026-09-16)
+
+   배포본은 Cloudflare Access 뒤에 있어, 화면을 켜 둔 채로 로그인이 풀리면
+   값이 더 오지 않는다. 지난 값 띠(.kh-stale)와 달리 **눌러야 한다** —
+   그래서 pointer-events 를 막지 않고, 더 눈에 띄는 자리에 둔다.
+   띄우는 것은 js/data/api.js 한 곳이다.
+   ========================================================================== */
+
+.kh-authbar {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: 96px;                       /* 지난 값 띠(62px) 위 */
+  z-index: 300;                       /* 모달(200)보다 위 — 모달이 떠 있어도 보여야 한다 */
+  display: inline-flex; align-items: center; gap: 10px;
+  background: var(--kh-tag-notice); color: var(--kh-text-on-fill);
+  border-radius: 999px; padding: 10px 12px 10px 16px;
+  font-size: 0.79rem; font-weight: 500; white-space: nowrap;
+  box-shadow: var(--kh-shadow-lg);
+  max-width: calc(100vw - 32px);
+}
+
+.kh-authbar i {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; flex-shrink: 0;
+}
+
+.kh-authbar span {
+  overflow: hidden; text-overflow: ellipsis;
+}
+
+.kh-authbar button {
+  border: 0; border-radius: 999px;
+  padding: 6px 13px;
+  background: var(--kh-bg-card); color: var(--kh-tag-notice);
+  font-family: inherit; font-size: 0.78rem; font-weight: 600;
+  cursor: pointer; flex-shrink: 0;
+}
+.kh-authbar button:hover { background: var(--kh-bg); }

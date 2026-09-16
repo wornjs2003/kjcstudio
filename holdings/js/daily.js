@@ -23,6 +23,7 @@
 import { mountVBar, mountFootStrip, startLiveLoop }
   from './components/frame.js';
 import { collectSchedule } from './components/schedule.js';
+import { apiFetch } from './data/api.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -99,8 +100,8 @@ function todayLabel() {
 
 async function loadIndices() {
   try {
-    const r = await fetch('/api/kis/indices', { cache: 'no-store' });
-    if (!r.ok) throw new Error(r.status);
+    const r = await apiFetch('/api/kis/indices', { cache: 'no-store' });
+    if (!r || !r.ok) throw new Error(r.status);
     const b = await r.json();
     indices = Array.isArray(b.data) ? b.data : [];
   } catch {
@@ -110,8 +111,8 @@ async function loadIndices() {
 
 async function loadNews() {
   try {
-    const r = await fetch('/api/news/feed', { cache: 'no-store' });
-    if (!r.ok) throw new Error(r.status);
+    const r = await apiFetch('/api/news/feed', { cache: 'no-store' });
+    if (!r || !r.ok) throw new Error(r.status);
     const b = await r.json();
     /* 서버는 {ok, data:{issues, moves, topics}} 로 준다. news.js 와 같은 자리를 읽는다. */
     issues = (b.data && Array.isArray(b.data.issues)) ? b.data.issues : [];
@@ -139,7 +140,7 @@ async function loadSchedule() {
      고쳐지면 이 함수를 지운다. */
   try {
     const r = await fetch('./data/market-calendar.json', { cache: 'no-store' });
-    if (!r.ok) return;
+    if (!r || !r.ok) return;
     const cal = await r.json();
     const t0 = new Date(); t0.setHours(0, 0, 0, 0);
     const already = new Set(schedule.map((e) => e.title));

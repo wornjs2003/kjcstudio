@@ -15,6 +15,7 @@ import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop }
   from './components/frame.js';
 import { WATCHLIST } from './data/market.js';
 import { mountSchedule } from './components/schedule.js';
+import { apiFetch } from './data/api.js';
 
 const $ = (id) => document.getElementById(id);
 const WATCH = new Set(WATCHLIST.map((s) => s.code));
@@ -109,7 +110,8 @@ function dcGroupColor(label) {
 
 async function loadFeed() {
   try {
-    const r = await fetch('/api/news/feed', { cache: 'no-store' });
+    const r = await apiFetch('/api/news/feed', { cache: 'no-store' });
+    if (!r) return;                         // 로그인이 풀렸다
     const j = await r.json();
     if (j && j.ok && j.data) feed = j.data;
   } catch { /* 그대로 둔다 — 화면에 "불러오지 못함" 이 남는다 */ }
@@ -127,7 +129,8 @@ async function loadDcTags() {
 
 async function loadDisclosures() {
   try {
-    const r = await fetch('/api/dart/disclosures?limit=200', { cache: 'no-store' });
+    const r = await apiFetch('/api/dart/disclosures?limit=200', { cache: 'no-store' });
+    if (!r) { disclosures = null; return; } // 로그인이 풀렸다
     const j = await r.json();
     disclosures = (j && j.ok && Array.isArray(j.data)) ? j.data : null;
   } catch {

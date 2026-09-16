@@ -9,6 +9,7 @@
    ========================================================================== */
 
 import { color, alpha } from './theme.js';
+import { apiFetch } from './data/api.js';
 
 /* 차트는 canvas 라 CSS 를 상속받지 못해 색을 문자열로 넘겨야 한다.
    그 값은 theme.js 가 ../assets/css/theme.css 에서 읽어 오므로, 색을 바꿀
@@ -94,10 +95,11 @@ export async function fetchCandles(code, periodId = '1d', limit = 240) {
   const hit = _candleCache.get(key);
   if (hit && Date.now() - hit.at < CANDLE_TTL_MS) return hit.value;
 
-  const r = await fetch(
+  const r = await apiFetch(
     `/api/kis/chart?code=${code}&period=${period}&limit=${limit}`,
     { cache: 'no-store' }
   );
+  if (!r) throw new Error('로그인이 만료되었습니다');
   if (!r.ok) throw new Error(`차트 데이터를 불러오지 못했습니다 (${r.status})`);
   const j = await r.json();
   if (!j || !j.ok) throw new Error(j?.error || '차트 데이터를 불러오지 못했습니다');

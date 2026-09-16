@@ -16,6 +16,8 @@
    첫 화면 사이드바와 뉴스·공시 화면이 이 부품을 함께 쓴다.
    ========================================================================== */
 
+import { apiFetch } from '../data/api.js';
+
 /* 앞으로 며칠 치를 보여줄 것인가. 지난 것은 보여주지 않는다 —
    일정 칸은 "앞으로 뭐가 있나" 를 보는 자리다 (2026-09-15 지시). */
 export const AHEAD_DAYS = 14;
@@ -77,6 +79,7 @@ function dayLabel(d) {
 async function loadCalendar() {
   try {
     const r = await fetch(CAL_PATH, { cache: 'no-store' });
+    if (!r) return null;   // 로그인이 풀렸다
     const j = await r.json();
     return j && Array.isArray(j.events) ? j : null;
   } catch {
@@ -86,7 +89,8 @@ async function loadCalendar() {
 
 async function loadEarnings() {
   try {
-    const r = await fetch('/api/dart/disclosures?limit=200', { cache: 'no-store' });
+    const r = await apiFetch('/api/dart/disclosures?limit=200', { cache: 'no-store' });
+    if (!r) return null;   // 로그인이 풀렸다
     const j = await r.json();
     if (!j || !j.ok || !Array.isArray(j.data)) return null;
     return j.data.filter((d) => IR_WORDS.some((w) => (d.title || '').includes(w)));
@@ -105,7 +109,8 @@ let membersCache = null;
 async function loadMembers() {
   if (membersCache) return membersCache;
   try {
-    const r = await fetch('/api/dart/members', { cache: 'no-store' });
+    const r = await apiFetch('/api/dart/members', { cache: 'no-store' });
+    if (!r) return null;   // 로그인이 풀렸다
     const j = await r.json();
     membersCache = (j && j.ok && j.data) ? j.data : {};
   } catch {

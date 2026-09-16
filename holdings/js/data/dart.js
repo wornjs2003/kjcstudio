@@ -7,12 +7,15 @@
    중계 서버가 없으면(배포본 등) null 을 돌려준다. 화면은 비워 둔다.
    ========================================================================== */
 
+import { apiFetch } from './api.js';
+
 let _ready = null;
 
 async function dartReady() {
   if (_ready !== null) return _ready;
   try {
-    const r = await fetch('/api/dart/status', { cache: 'no-store' });
+    const r = await apiFetch('/api/dart/status', { cache: 'no-store' });
+    if (!r) return null;   // 로그인이 풀렸다
     const j = await r.json();
     _ready = !!(j && j.ok && j.data && j.data.configured);
     if (_ready) {
@@ -33,8 +36,8 @@ export async function fetchDisclosures(code = null, limit = 20) {
   const qs = new URLSearchParams({ limit: String(limit) });
   if (code) qs.set('code', code);
   try {
-    const r = await fetch('/api/dart/disclosures?' + qs, { cache: 'no-store' });
-    if (!r.ok) return null;
+    const r = await apiFetch('/api/dart/disclosures?' + qs, { cache: 'no-store' });
+    if (!r || !r.ok) return null;
     const j = await r.json();
     if (!j || !j.ok || !Array.isArray(j.data)) return null;
     return j.data;
@@ -45,7 +48,8 @@ export async function fetchDisclosures(code = null, limit = 20) {
 
 export async function fetchDartStatus() {
   try {
-    const r = await fetch('/api/dart/status', { cache: 'no-store' });
+    const r = await apiFetch('/api/dart/status', { cache: 'no-store' });
+    if (!r) return null;   // 로그인이 풀렸다
     const j = await r.json();
     return j && j.ok ? j.data : null;
   } catch {
