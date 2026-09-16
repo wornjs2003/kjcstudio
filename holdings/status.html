@@ -131,8 +131,11 @@
   </div>
 
   <div class="card links">
-    <a href="/">← 대시보드</a>
-    <a href="/analysis/">주식 분석</a>
+    <!-- 이 화면은 /holdings/ 안에 있으므로 상대 경로로 쓴다.
+         "/" 로 두면 루트 포트폴리오 메인으로 가고, "/analysis/" 는
+         404(그런 주소 없음)가 된다 (2026-09-16 수정) -->
+    <a href="./">← 대시보드</a>
+    <a href="./analysis/">주식 분석</a>
     <a href="/api/kis/stats" target="_blank">원본 데이터(JSON)</a>
   </div>
 </div>
