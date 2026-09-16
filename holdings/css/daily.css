@@ -24,7 +24,7 @@
   margin-left: auto; white-space: nowrap;
   font-size: 12px; font-weight: 600;
   padding: 5px 12px; border-radius: var(--kh-radius-pill, 99px);
-  background: rgb(var(--kh-ok-rgb) / 10%); color: #02a262;
+  background: rgb(var(--kh-ok-rgb) / 10%); color: var(--kh-tag-news);
 }
 .kh-dl-chip::before {
   content: ""; display: inline-block; width: 6px; height: 6px;
@@ -66,7 +66,7 @@
   font-size: 12px; font-weight: 700; color: var(--kh-text-secondary);
   width: 74px; flex-shrink: 0;
 }
-.kh-dl-sch-row.is-now .kh-dl-sch-when { color: #f29300; }
+.kh-dl-sch-row.is-now .kh-dl-sch-when { color: var(--kh-tag-notice); }
 .kh-dl-sch-kind {
   font-size: 11px; font-weight: 600; padding: 3px 9px;
   border-radius: var(--kh-radius-pill, 99px);
@@ -100,6 +100,7 @@
 }
 .kh-dl-idx-sub {
   font-size: 11px; color: var(--kh-text-muted); margin-top: 7px;
+  overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
 .kh-dl-up { color: var(--kh-up); }
@@ -121,7 +122,13 @@
   flex-shrink: 0; min-width: 66px; text-align: center;
   background: var(--kh-bg-surface); color: var(--kh-text-secondary);
 }
-.kh-dl-news-t { font-size: 13.5px; font-weight: 500; line-height: 1.45; }
+/* flex item 은 기본 min-width 가 auto 라 긴 제목이 줄바꿈 대신 넘친다.
+   폰에서 오른쪽이 잘려 읽을 수 없었다 (2026-09-16). */
+.kh-dl-news-row > span { min-width: 0; }
+.kh-dl-news-t {
+  font-size: 13.5px; font-weight: 500; line-height: 1.45;
+  overflow-wrap: anywhere;
+}
 .kh-dl-news-m { font-size: 11.5px; color: var(--kh-text-dim); margin-top: 3px; }
 
 /* ── 아직 연결 안 된 자리 ───────────────── */
@@ -136,14 +143,50 @@
 .kh-dl-todo.is-wide { margin-bottom: 16px; }
 
 /* ── 텔레그램 미리보기 ──────────────────── */
-.kh-dl-side { width: 332px; flex-shrink: 0; }
-@media (max-width: 1100px) { .kh-dl-side { width: auto; } }
+/* 폭은 .kh-app 의 그리드 칸(316px)이 정한다. 여기서 따로 잡지 않는다. */
+
+/* grid 칸은 기본 min-width 가 auto 라, 안의 글이 길면 칸이 밀려 늘어난다.
+   그러면 문안이 줄바꿈 대신 옆으로 퍼져 오른쪽이 잘린다. frame.css 의
+   .kh-main 에는 min-width: 0 이 있는데 .kh-side 에는 없다 (2026-09-16). */
+.kh-dl-side, .kh-dl-tg-b { min-width: 0; }
+
+/* 본문이 길어서 그냥 두면 문안이 위로 지나가 버린다. 화면의 결과물이라
+   스크롤해도 따라오게 붙여 둔다. */
+.kh-dl-side { align-self: start; position: sticky; top: var(--nav-height, 56px); }
+.kh-dl-side .kh-dl-tg-b { max-height: 52vh; overflow-y: auto; }
+
+/* 좁은 화면에서 이 칸을 살린다.
+   frame.css:196 이 1280px 이하에서 .kh-app 의 칸을 없애고 .kh-side 를 숨긴다.
+   관심종목이라면 맞는 동작이다 — 좁은 화면에서 부차적인 목록이니까.
+   그런데 이 화면의 그 자리는 「폰에 이렇게 도착합니다」 다. 데일리분석의
+   결과물이라 없어지면 화면의 절반이 사라진다.
+
+   숨기는 대신 본문 아래로 내린다. 316px 짜리를 옆에 붙여 두면 본문이 너무 좁다.
+   frame.css 는 고치지 않는다 — 네 화면이 함께 쓰고, 관심종목에는 지금 동작이 맞다. */
+@media (max-width: 1280px) {
+  .kh-daily .kh-main            { grid-column: 1; grid-row: 1; }
+  .kh-daily .kh-side.kh-dl-side {
+    display: block;
+    grid-column: 1; grid-row: 2;
+    min-height: 0;
+    border-left: 0;
+    border-top: 1px solid var(--kh-border);
+    position: static;
+  }
+  .kh-daily .kh-dl-side .kh-dl-tg-b { max-height: none; }
+  .kh-daily .kh-vbar { grid-column: 2; grid-row: 1 / -1; }
+}
+/* 900px 이하에서는 세로바가 화면 아래 가로 막대로 빠져 칸이 하나가 된다.
+   위에서 박아 둔 자리를 풀어 자동 배치에 맡긴다. */
+@media (max-width: 900px) {
+  .kh-daily .kh-vbar { grid-column: auto; grid-row: auto; }
+}
 
 /* 보낼 문안 — 사이드바가 흰 면이라 문안은 한 단 들어간 회색으로 띄운다 */
 .kh-dl-tg-b {
   background: var(--kh-bg-surface); border-radius: var(--kh-radius-md);
   padding: 15px 16px; font-size: 12.5px; line-height: 1.72;
-  white-space: pre-wrap; word-break: break-word;
+  white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
 
@@ -152,3 +195,85 @@
   font-size: 17px; font-weight: 700; letter-spacing: -0.03em; margin: 26px 0 5px;
 }
 .kh-dl-sect-s { font-size: 12.5px; color: var(--kh-text-muted); margin: 0 0 13px; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   폰 (2026-09-16 지시 — 다시 만듦)
+
+   1280px 규칙은 「칸을 아래로 내리는」 것이고, 폰에서 읽히는 화면은 그것과
+   다르다. 390px 안팎에서 하나씩 보고 고쳤다.
+
+   가장 큰 결정은 순서다. 폰에서는 보낼 문안을 맨 위로 올린다.
+   이 화면의 결과물이고, 폰을 열었을 때 먼저 보고 싶은 것이 그것이다.
+   아래 카드들은 그 근거다. 본문 뒤에 두면 「지난 분석」 보다도 아래라
+   한참 스크롤해야 닿는다.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  /* 문안이 맨 위.
+     1280px 규칙에서 grid-row 로 자리를 못박아 두었는데, 명시 배치가 있으면
+     order 가 무시된다. 그래서 먼저 풀고 순서를 준다. */
+  .kh-daily .kh-main,
+  .kh-daily .kh-side.kh-dl-side,
+  .kh-daily .kh-vbar { grid-column: auto; grid-row: auto; }
+  .kh-daily .kh-dl-side { order: -1; }
+  .kh-daily .kh-main    { order: 0; }
+
+  .kh-daily .kh-side.kh-dl-side {
+    border-top: 0;
+    border-bottom: 1px solid var(--kh-border);
+    padding: 14px 16px;
+  }
+
+  /* 탭이 페이지를 가로로 넓히고 있었다.
+     home.css 의 .kh-cat 은 flex 에 gap 30px, 항목마다 white-space: nowrap 인데
+     overflow-x 가 없다. 폰에서 일곱 개가 한 줄에 늘어서면서 문서 폭이 커지고,
+     그 바람에 본문도 문안도 오른쪽이 잘렸다. 문안 칸만 고쳐도 안 되던 이유다.
+     home.css 는 네 화면이 함께 쓰므로 여기서만 스크롤로 바꾼다 (2026-09-16). */
+  .kh-daily .kh-cat {
+    overflow-x: auto; gap: 20px;
+    scrollbar-width: none; -ms-overflow-style: none;
+  }
+  .kh-daily .kh-cat::-webkit-scrollbar { display: none; }
+
+  /* 머리말 — 발송 상태가 제목 옆에 끼면 둘 다 좁아진다. 아래로 내린다 */
+  .kh-dl-head { flex-wrap: wrap; gap: 9px; margin-bottom: 15px; }
+  .kh-dl-chip { margin-left: 0; }
+
+  .kh-dl-card { padding: 16px 15px; margin-bottom: 12px; }
+
+  /* 카드 제목 줄 — 셋이 한 줄에 들어가지 않는다.
+     「무엇을 보는 칸인지」 와 「어디서 온 값인지」 를 다음 줄로 내린다 */
+  .kh-dl-ch { gap: 6px; margin-bottom: 12px; }
+  .kh-dl-ch b { width: 100%; }
+  .kh-dl-why { order: 2; }
+  /* market-calendar.json 처럼 긴 이름이 잘려 「mark…」 로만 보였다.
+     출처는 확인용이라 폰에서는 접는다. */
+  .kh-dl-src { display: none; }
+
+  /* 일정 — when 이 74px 로 박혀 있어 옆이 밀렸다. 폭을 풀고 위아래로 쌓는다 */
+  .kh-dl-sch-row { flex-wrap: wrap; gap: 7px 9px; padding: 11px 13px; }
+  .kh-dl-sch-when { width: auto; }
+  .kh-dl-sch-t { width: 100%; order: 3; }
+  .kh-dl-sch-n { width: 100%; order: 4; margin-left: 0; text-align: left; }
+
+  /* 지수 — 168px 칸에 이름·값·등락이 다 들어가 잘렸다.
+     폰에서는 두 칸으로 고정하고 여백을 줄인다 */
+  .kh-dl-idx { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .kh-dl-idx-c { padding: 11px 12px; }
+  .kh-dl-idx-n { font-size: 11.5px; }
+  .kh-dl-idx-v { font-size: 17px; }
+  .kh-dl-idx-d { font-size: 11.5px; }
+  .kh-dl-idx-sub { font-size: 10.5px; margin-top: 5px; }
+
+  /* 뉴스 — 주제 칩이 66px 을 차지해 제목이 두세 글자씩 끊겼다. 칩을 위로 */
+  .kh-dl-news-row { flex-direction: column; gap: 6px; padding: 12px 0; }
+  .kh-dl-topic { min-width: 0; align-self: flex-start; }
+
+  .kh-dl-todo { padding: 14px 15px; }
+  .kh-dl-sect { margin: 20px 0 4px; font-size: 16px; }
+}
+
+/* 아주 좁은 폰 (360px 이하) — 지수 두 칸도 빠듯해진다 */
+@media (max-width: 380px) {
+  .kh-dl-idx { grid-template-columns: minmax(0, 1fr); }
+  .kh-dl-tg-b { font-size: 12px; padding: 13px 14px; }
+}

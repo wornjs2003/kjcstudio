@@ -122,8 +122,12 @@ async function loadNews() {
 
 async function loadSchedule() {
   try {
-    /* 오늘과 앞으로 사흘치만. 데일리분석은 「그날」 이 중심이라 2주는 길다. */
-    schedule = await collectSchedule({ days: 3 });
+    /* 오늘과 앞으로 사흘치만. 데일리분석은 「그날」 이 중심이라 2주는 길다.
+       돌려주는 것은 배열이 아니라 { rows, stale, calOk, … } 다.
+       배열인 줄 알고 그대로 받았다가 schedule.filter 에서 터졌다 — 화면은
+       멀쩡한데 문안만 비어 있었다 (2026-09-16). */
+    const got = await collectSchedule({ days: 3 });
+    schedule = Array.isArray(got) ? got : (got && got.rows) || [];
   } catch {
     schedule = [];
   }
@@ -276,9 +280,19 @@ function buildTelegram() {
     (e) => e.ongoing || (e.when && e.when.toDateString() === today));
   if (todayEvents.length) {
     L.push('', '오늘 일정');
-    for (const e of todayEvents) {
+    /* 실적 발표는 하루에 여러 건이 몰린다. 다섯 줄을 그대로 적으면 폰에서
+       문안이 화면 하나를 넘어간다. 시장 전체가 보는 것만 줄로 적고
+       나머지는 개수로 묶는다. */
+    const big = todayEvents.filter((e) => e.kind !== '실적');
+    const ir = todayEvents.filter((e) => e.kind === '실적');
+    for (const e of big) {
       L.push(`· ${e.title}${e.ongoing ? ' (진행 중)' : ''}`);
       if (e.note) L.push(`  → ${e.note}`);
+    }
+    if (ir.length) {
+      const names = ir.slice(0, 2).map((e) => e.title.replace(/\s*기업설명회$/, ''));
+      L.push(`· 기업설명회 ${ir.length}건 — ${names.join(' · ')}`
+        + (ir.length > names.length ? ` 외 ${ir.length - names.length}` : ''));
     }
   }
 
@@ -309,7 +323,8 @@ function buildTelegram() {
       const key = it.topic || '';
       if (key && seen.has(key)) continue;
       if (key) seen.add(key);
-      L.push(`· ${it.topicLabel ? `${it.topicLabel} — ` : ''}${it.title}`);
+      const t = it.title.length > 34 ? `${it.title.slice(0, 33)}…` : it.title;
+      L.push(`· ${it.topicLabel ? `${it.topicLabel} — ` : ''}${t}`);
       if (++n >= 3) break;
     }
   }
@@ -325,15 +340,23 @@ function buildTelegram() {
 function drawTelegram() {
   const box = $('kh-dl-tg');
   if (box) box.textContent = buildTelegram();
+  /* 폰에서는 이 칸이 화면 제목보다 위에 온다. 어느 날 것인지 여기 적는다. */
+  const cap = $('kh-dl-tg-cap');
+  if (cap) cap.textContent = `데일리분석 ${todayLabel()} · 폰에 이렇게 도착합니다`;
 }
 
 /* ── 그리기 ─────────────────────────────── */
 
 function drawAll() {
-  drawSchedule();
-  drawIndices();
-  drawNews();
-  drawTelegram();
+  /* 한 칸이 터져도 나머지는 그려지게 따로따로 부른다.
+     전에는 drawTelegram 이 맨 끝이라, 앞에서 무엇이 잘못되면 문안만 조용히
+     비어 있고 다른 칸은 멀쩡해 보였다. 어느 칸이 문제인지 알 수 없다. */
+  for (const [name, fn] of [
+    ['일정', drawSchedule], ['지수', drawIndices],
+    ['뉴스', drawNews], ['문안', drawTelegram],
+  ]) {
+    try { fn(); } catch (e) { console.error(`[데일리분석] ${name} 칸을 그리지 못했습니다`, e); }
+  }
 
   const sub = $('kh-dl-sub');
   if (sub) {
