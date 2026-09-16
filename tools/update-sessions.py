@@ -14,6 +14,7 @@ resume-sessions.bat 은 실행될 때 스스로 이 스크립트를 먼저 부�
 이름은 `/rename` 을 쓴 기록에서 찾는다. 이름이 없는 세션은 목록에서 뺀다.
 """
 import io
+import json
 import os
 import re
 import sys
@@ -32,12 +33,43 @@ RENAME = re.compile(r"Session renamed to: ([가-힣A-Za-z0-9_\-. ]{1,30})")
 
 
 def find_name(path):
-    """파일 전체에서 마지막 rename 기록을 찾는다. 큰 파일이라 조각내서 읽는다."""
+    """마지막 rename 기록을 찾는다. 기록 줄의 **종류까지** 본다.
+
+    전에는 파일 전체를 글자로 훑어 마지막 매치를 썼다. 그러다 세션 하나가
+    **남의 이름을 달았다.** 2026-09-16 에 `작업우선순위` 세션이 목록에
+    `홈페이지_정리` 로 올라왔다. 그 세션 기록을 세어보니 이랬다.
+
+        '작업우선순위'   1회   ← 진짜 자기 이름
+        '홈페이지_정리'   2회   ← 남의 기록을 읽다가 들어온 것
+
+    그 세션은 **다른 세션의 기록을 읽는 것이 일**이라, 읽은 내용이 자기
+    대화에 남는다. 글자만 보면 남 얘기와 자기 이름을 구분할 수 없다.
+
+    진짜 rename 은 이렇게 생겼다.
+
+        {"type":"system","subtype":"local_command",
+         "content":"<local-command-stdout>Session renamed to: 개념정의</...>"}
+
+    읽다가 들어온 것은 `"type":"tool_use"` 안의 명령 문자열이다.
+    그래서 **`type` 이 `system` 인 줄만** 인정한다.
+
+    예전에 이름이 `([^` 로 잡혔던 것도 같은 뿌리였다. 그때는 정규식을
+    좁혀 막았는데, 이름 규칙에 맞는 남의 이름은 그것으로 못 거른다.
+    """
     name = ""
     try:
         with io.open(path, encoding="utf-8", errors="ignore") as fp:
-            for chunk in iter(lambda: fp.read(1 << 20), ""):
-                for m in RENAME.finditer(chunk):
+            for line in fp:
+                if "Session renamed to:" not in line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue          # 잘린 줄은 버린다
+                if row.get("type") != "system":
+                    continue          # 대화에 섞여 들어온 남의 기록
+                m = RENAME.search(str(row.get("content", "")))
+                if m:
                     name = m.group(1).strip()
     except OSError:
         pass
@@ -258,10 +290,23 @@ def open_windows(rows):
             print(f"  건너뜀 {r['name']} — 이미 열려 있음")
             skipped += 1
             continue
+        # `start` 를 쓰지 않는다. 창 제목을 첫 인자로 넘겼는데, `start` 는
+        # **따옴표가 붙어 있을 때만** 그것을 제목으로 본다. 세션 이름에는
+        # 공백이 없어서 subprocess 가 따옴표를 안 붙였고, 그래서 `start` 가
+        # 이름을 실행 대상으로 읽었다 (2026-09-16).
+        #
+        #     열기   홈페이지_정리
+        #     파일 홈페이지_정리을(를) 찾을 수 없습니다.
+        #
+        # 창은 뜨지 않았는데 「열었습니다」 로 셌다. 전에는 네 세션이 전부
+        # 이미 떠 있어 이 줄을 지나갈 일이 없었던 터라 드러나지 않았다.
+        # `startup.bat` 이 부르는 자리이므로 재부팅 때마다 지나간다.
+        #
+        # CREATE_NEW_CONSOLE 이면 `start` 없이 바로 새 콘솔이 열린다.
+        # 제목은 cmd 의 `title` 로 단다.
         subprocess.Popen(
-            ["cmd", "/c", "start", r["name"], "cmd", "/k",
-             f'cd /d "{REPO}" && claude --resume {r["id"]}'],
-            shell=False,
+            ["cmd", "/k", f'title {r["name"]} && cd /d "{REPO}" && claude --resume {r["id"]}'],
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
         print(f"  열기   {r['name']}")
         opened += 1
