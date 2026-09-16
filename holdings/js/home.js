@@ -786,6 +786,25 @@ async function drawPreviewChart() {
    2026-09-16 에 그것으로 서버가 터졌다. */
 let stockModal = null;
 
+/* 다른 종목으로 갈아타는 중인가.
+   새 모달을 열면 openModal 이 옛 모달부터 닫는데, 그때 옛 모달의 onClose 가
+   주소까지 되돌리면 방금 밀어 넣은 새 종목을 도로 뱉는다. 갈아타는 동안에는
+   주소를 새 모달에 맡긴다. */
+let switchingStock = false;
+
+/* 브라우저가 히스토리를 이미 옮겼나 (뒤로가기·앞으로가기).
+   그 경우 닫으면서 back() 을 또 부르면 **한 칸 더 나가 페이지를 떠난다.**
+   주소도 브라우저가 이미 바꿔 놓았으므로 손댈 것이 없다. */
+let historyMoved = false;
+
+/** 주소에서 ?code= 만 뺀다. 다른 값이 붙어 있어도 건드리지 않는다. */
+function dropCodeFromUrl() {
+  const u = new URL(location.href);
+  if (!u.searchParams.has('code')) return;
+  u.searchParams.delete('code');
+  history.replaceState(null, '', u.pathname + u.search + u.hash);
+}
+
 async function openStockModal(code, { push = true } = {}) {
   const stock = rowList().find(s => s.code === code)
              || WATCHLIST.find(s => s.code === code);
@@ -800,8 +819,13 @@ async function openStockModal(code, { push = true } = {}) {
     return;
   }
 
+  /* 이 모달이 히스토리에 항목을 **밀어 넣었나**. 닫을 때 뒤로 갈지,
+     주소만 털지를 가른다. history.state 로는 알 수 없다 — 그 값은 지금
+     어디인지를 말할 뿐 내가 밀어 넣었는지를 말하지 않는다 (2026-09-16). */
+  const pushedHere = push;
   if (push) history.pushState({ stock: code }, '', `?code=${code}`);
 
+  switchingStock = true;
   const { body } = openModal({
     label: `${stock.name} 종목 정보`,
     /* 양옆 서랍. 처음에는 접혀 있고, 한 번 펼치면 기억한다 (2026-09-16 지시).
@@ -817,12 +841,29 @@ async function openStockModal(code, { push = true } = {}) {
       if (stockModal) stockModal.view.resize();
     },
     onClose() {
-      if (stockModal) { stockModal.view.destroy(); stockModal = null; }
-      /* 닫기 단추·Esc·바깥 누르기로 닫혔으면 주소도 되돌린다.
-         뒤로가기로 닫힌 경우에는 이미 빠져 있어 아무 일도 하지 않는다. */
-      if (history.state && history.state.stock) history.back();
+      if (stockModal && stockModal.code === code) {
+        stockModal.view.destroy();
+        stockModal = null;
+      }
+
+      /* 갈아타는 중이면 주소는 새 모달이 들고 있다. 여기서 건드리면 안 된다 */
+      if (switchingStock) return;
+
+      /* 뒤로가기로 닫힌 것이면 히스토리도 주소도 이미 제자리다 */
+      if (historyMoved) return;
+
+      if (pushedHere) {
+        /* 목록에서 연 것이다. 되돌아갈 자리가 있다 */
+        history.back();
+      } else {
+        /* 주소로 바로 들어왔거나 뒤로가기로 열린 것이다. 되돌아갈 자리가
+           없으므로 back() 하면 **모달이 아니라 페이지를 떠난다.**
+           주소에서 ?code= 만 턴다 — 안 그러면 새로고침 때 또 열린다. */
+        dropCodeFromUrl();
+      }
     },
   });
+  switchingStock = false;
 
   body.appendChild(main);
   addModalActions(main, code);
@@ -849,8 +890,12 @@ function addModalActions(main, code) {
 /* 뒤로가기로도 닫힌다. 주소를 복사해 두면 그 종목이 열린 채로 뜬다. */
 window.addEventListener('popstate', () => {
   const code = history.state && history.state.stock;
-  if (code) openStockModal(code, { push: false });
-  else closeModal();
+  if (code) { openStockModal(code, { push: false }); return; }
+
+  /* 히스토리는 브라우저가 이미 옮겼다. 닫기만 하고 주소는 건드리지 않는다 */
+  historyMoved = true;
+  closeModal();
+  historyMoved = false;
 });
 
 function selectStock(code) {
