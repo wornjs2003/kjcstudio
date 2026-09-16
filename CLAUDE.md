@@ -183,6 +183,25 @@ canvas 는 CSS 를 상속받지 못한다. 그래서 `holdings/js/theme.js` 가 
     python tools/check-all.py
 
 **새로 복제를 만들 때는 대조 도구도 같이 만든다.** 주석만 달고 넘어가지 않는다.
+
+### 한글을 출력하는 파이썬 도구에는 이 두 줄을 넣는다 (2026-09-16)
+
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+윈도우 콘솔은 기본이 `cp949` 라 `—` 같은 글자에서 **`UnicodeEncodeError` 로 죽는다.**
+계산은 다 맞고 출력 한 줄에서 죽으므로, 부르는 쪽은 그냥 실패로 읽는다.
+
+**개발 중에는 멀쩡해 보인다.** 환경변수 `PYTHONIOENCODING` 이 걸린 셸에서
+돌리면 콘솔이 UTF-8 이라 아무 일도 안 일어난다. 그 변수가 없는 곳 —
+**`.bat` 이 부르는 `cmd` 가 정확히 그 자리다** — 에서만 터진다.
+2026-09-16 에 `tools/show-window.py` 가 이렇게 나갔고, 다른 세션이 잡았다.
+
+그래서 **시험은 환경변수를 지우고 한다.**
+
+    cmd /c "set PYTHONIOENCODING=& chcp 949 > nul & python tools\<도구>.py"
+
+같은 날 `tools/` 의 도구 아홉 중 여섯에 이 두 줄이 없었다. 지금은 전부 있다.
 - 상승/하락 색은 한국식(상승 빨강 #f04452 / 하락 파랑 #3182f6). 토스 팔레트 값
 - accent 색상: #3182f6 (토스 블루). 네 구역 모두 같은 값
 - 폰트: Noto Sans KR, Roboto
@@ -392,7 +411,7 @@ Mac 은 `.command` 더블클릭, Windows 는 같은 이름의 `.bat` 더블클�
 
 | 세션 이름 | 맡은 일 | 건드리는 곳 |
 |---|---|---|
-| `홈페이지_정리` | **검증 담당.** 다른 세션의 작업을 교차 확인한다 | 루트(`index.html`·`category/`·`assets/`·`partials/`·`data/`) · `company-setup/` |
+| `홈페이지_정리` | **검증 담당.** 다른 세션의 작업을 교차 확인한다 | 루트(`index.html`·`category/`·`assets/`·`partials/`·`data/`) · `company-setup/` · `.claude/commands/` |
 | `주식페이지_개발` | 주식 페이지 개발 | `holdings/` |
 | `스케줄_툴개발` | 프로젝트 보드 개발 | `projects/` |
 | `개념정의` | 개념·용어 정의 · 기술 조사 · PC 환경 설정 · **문서 담당** | 아래 문서 목록 · `tools/` |
@@ -410,9 +429,13 @@ Mac 은 `.command` 더블클릭, Windows 는 같은 이름의 `.bat` 더블클�
 |---|---|
 | `CLAUDE.md` | 이 파일 |
 | `holdings/CLAUDE.md` | 주식 구역 룰 |
-| `.claude/commands/*.md` | 슬래시 명령 |
 | `holdings/worker/README.md` · `projects/worker/README.md` | 워커 배포 절차 |
 | `company-setup/README.md` | 설립 체크리스트 안내 |
+
+**`.claude/commands/crosscheck.md` 는 예외로 `홈페이지_정리` 가 든다 (2026-09-16 지시).**
+그 파일은 룰이라기보다 **검증할 때 따라가는 그쪽의 작업 절차서**다. 검증하다 구멍을
+찾으면 그 자리에서 항목을 더하게 되는데, 문서 레인을 거치면 손이 한 번 더 간다.
+**쓰는 쪽이 고치는 것이 맞다.**
 
 - **문서를 고쳤으면 커밋 전에 `python debugging/check.py` 를 돌린다.**
   통과 10 · 불일치 0 이어야 한다. 경로를 잘못 적으면 여기서 걸린다

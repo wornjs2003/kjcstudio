@@ -31,6 +31,11 @@ import re
 import sys
 from pathlib import Path
 
+# 윈도우 콘솔은 기본이 cp949 라 '—' 같은 글자에서 죽는다.
+# 출력만 UTF-8 로 바꾼다 (tools/check-theme-sync.py 와 같은 처리).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 # ── 경로/상수 ────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parent.parent
 IMG_ROOT = ROOT / "assets" / "images" / "works"

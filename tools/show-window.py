@@ -67,6 +67,40 @@ def windows():
     return found
 
 
+def close_matching(title_part):
+    """제목이 맞는 창을 닫는다. 같은 파일이 두 번 열리지 않게 하려는 것이다.
+
+    재권님 지시 (2026-09-16): "열려있으면 닫고 다시 연다"
+    앞으로 열어 두면 내용이 옛것일 수 있다. 메모장은 파일이 바뀌어도
+    스스로 갱신하지 않는다. 그래서 닫고 새로 연다.
+
+    `WM_CLOSE` 는 **닫아 달라는 요청**이지 강제 종료가 아니다. 저장하지 않은
+    내용이 있으면 그 프로그램이 평소대로 물어보고, 판단은 재권님이 하신다.
+
+    **닫는 것은 여는 것보다 위험하다.** 그래서 둘을 막아 두었다.
+      - 제목 조각이 너무 짧으면(3글자 미만) 아무것도 닫지 않는다
+      - 닫을 것이 5개를 넘으면 멈춘다. 그 정도면 조각이 헐거운 것이다
+    """
+    WM_CLOSE = 0x0010
+
+    if len(title_part) < 3:
+        print(f"  닫지 않음 — 제목 조각이 너무 짧습니다 ('{title_part}')")
+        return 0
+
+    hits = [(h, t) for h, t in windows() if title_part in t]
+    if not hits:
+        return 0
+    if len(hits) > 5:
+        print(f"  닫지 않음 — {len(hits)}개나 걸립니다. 제목 조각이 헐겁습니다")
+        return 0
+
+    for hwnd, title in hits:
+        u32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
+        print(f"  닫음   {title}")
+    time.sleep(0.8)
+    return len(hits)
+
+
 def raise_only(title_part, before):
     """제목이 맞는 창 하나만 앞으로. 못 찾으면 아무것도 하지 않는다.
 
@@ -104,6 +138,13 @@ def main():
 
     # 제목 조각을 안 주면 파일명에서 뽑는다
     hint = sys.argv[2] if len(sys.argv) > 2 else os.path.splitext(os.path.basename(path))[0]
+
+    # 같은 파일 창이 이미 있으면 닫는다. 그래야 창이 쌓이지 않고,
+    # 보시는 내용이 항상 최신이다 (2026-09-16 지시).
+    #
+    # 2026-09-16 에 이 도구를 시험하는 동안 CLAUDE.md 창이 16개까지 쌓였다.
+    # 두 세션이 각자 정당한 작업을 하고 있었는데도 그랬다.
+    close_matching(hint)
 
     before = windows()
 
