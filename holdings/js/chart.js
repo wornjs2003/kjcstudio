@@ -70,9 +70,30 @@ function movingAverage(candles, period, barPeriod) {
   return out;
 }
 
+/* 받아둔 봉을 잠깐 쥐고 있는다.
+ *
+ * 목록에 마우스를 올리면 미리보기가 그 종목으로 바뀌는데(2026-09-16 지시),
+ * 목록을 훑으면 종목 수만큼 요청이 나간다. **5분봉은 서버에 캐시가 없어
+ * 부를 때마다 KIS 로 간다.** 오늘 배포본이 터진 것이 동시 요청 때문이었다.
+ *
+ * 화면에서 잠깐 쥐면 같은 종목에 다시 올려도 안 부른다. 종목 화면에서
+ * 기간 단추를 왔다 갔다 할 때도 함께 덕을 본다.
+ *
+ * 서버에도 캐시를 두는 편이 근본이지만 kis_proxy.py 와 kis-worker.js 를
+ * 같이 고쳐야 한다. 그것은 따로 잡는다.
+ */
+const CANDLE_TTL_MS = 60_000;
+const CANDLE_MAX = 60;              // 이보다 쌓이면 오래된 것부터 버린다
+const _candleCache = new Map();
+
 /* 서버에서 캔들 가져오기. periodId 는 화면 버튼 값('1d','5m' 등) */
 export async function fetchCandles(code, periodId = '1d', limit = 240) {
   const period = PERIOD_MAP[periodId] || 'D';
+  const key = `${code}:${period}:${limit}`;
+
+  const hit = _candleCache.get(key);
+  if (hit && Date.now() - hit.at < CANDLE_TTL_MS) return hit.value;
+
   const r = await fetch(
     `/api/kis/chart?code=${code}&period=${period}&limit=${limit}`,
     { cache: 'no-store' }
@@ -80,7 +101,13 @@ export async function fetchCandles(code, periodId = '1d', limit = 240) {
   if (!r.ok) throw new Error(`차트 데이터를 불러오지 못했습니다 (${r.status})`);
   const j = await r.json();
   if (!j || !j.ok) throw new Error(j?.error || '차트 데이터를 불러오지 못했습니다');
-  return { candles: j.data.candles || [], meta: j.meta || {}, period };
+
+  const value = { candles: j.data.candles || [], meta: j.meta || {}, period };
+  _candleCache.set(key, { at: Date.now(), value });
+  if (_candleCache.size > CANDLE_MAX) {
+    _candleCache.delete(_candleCache.keys().next().value);
+  }
+  return value;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────

@@ -484,9 +484,23 @@ function paintRows(priceMap) {
     </tr>`;
   }).join('');
 
+  /* 마우스를 올리면 미리보기가 바뀌고, 한 번 누르면 모달이 뜬다
+     (2026-09-16 지시).
+
+       올림   가볍게 훑어보기 — 오른쪽 미리보기가 그 종목으로
+       클릭   자세히 보기 — 모달
+
+     전에는 한 번이 「고르기」, 두 번이 「열기」였는데 **만든 사람 말고는
+     두 번 누를 생각을 안 한다.** 고르기는 올림 쪽으로 옮겼다. */
   $('kh-rows').querySelectorAll('tr[data-code]').forEach(tr => {
-    tr.addEventListener('click', () => selectStock(tr.dataset.code));
-    tr.addEventListener('dblclick', () => openStockModal(tr.dataset.code));
+    tr.addEventListener('click', () => {
+      selectStock(tr.dataset.code);
+      openStockModal(tr.dataset.code);
+    });
+    if (HOVER_OK) {
+      tr.addEventListener('mouseenter', () => hoverPreview(tr.dataset.code));
+      tr.addEventListener('mouseleave', cancelHoverPreview);
+    }
   });
   watchRows();
   paintRowFoot();
@@ -774,6 +788,34 @@ async function drawPreviewChart() {
     host.innerHTML = `<div class="kh-soon">
       <div class="kh-soon-t">차트를 불러오지 못했습니다</div></div>`;
   }
+}
+
+/* ── 마우스를 올리면 미리보기가 바뀐다 (2026-09-16 지시) ──
+ *
+ * **머무를 때만 바꾼다.** 지나가기만 한 줄까지 받아오면 목록을 한 번
+ * 훑을 때 종목 수만큼 요청이 나간다. 오늘 배포본이 터진 것이 동시 요청
+ * 때문이었고, 5분봉은 서버에 캐시가 없어 부를 때마다 KIS 로 간다.
+ * (받아온 봉은 chart.js 가 60초 쥐고 있다 — 같은 종목에 다시 올리면 안 부른다.)
+ *
+ * 목록 밖으로 나가면 **마지막 것을 그대로 둔다.** 되돌리면 그때 또 부른다.
+ */
+const HOVER_DELAY_MS = 250;
+
+/* 마우스가 있는 기기에서만. 터치 기기는 hover 가 없거나 한 번 누를 때
+   hover 로 잡혔다가 클릭으로 이어져서, 미리보기만 바뀌고 모달이 안 열릴 수 있다. */
+const HOVER_OK = window.matchMedia && window.matchMedia('(hover: hover)').matches;
+
+let hoverTimer = null;
+
+function hoverPreview(code) {
+  if (!code || code === selectedCode) return;
+  clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => selectStock(code), HOVER_DELAY_MS);
+}
+
+function cancelHoverPreview() {
+  clearTimeout(hoverTimer);
+  hoverTimer = null;
 }
 
 /* ── 종목 모달 ───────────────────────────
