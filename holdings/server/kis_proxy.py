@@ -31,6 +31,7 @@ import os
 import sqlite3
 import sys
 import threading
+import socket
 import time
 import urllib.error
 import urllib.parse
@@ -334,6 +335,76 @@ def get_token(cfg):
 
 
 # ---------------------------------------------------------------- KIS 호출
+
+# ── Debugging(검사) 보드로 넘기기 ─────────────────────────────
+#
+# 로컬 서버가 다섯인데 상단 메뉴는 포트를 바꾸지 않는다. 그래서 8765
+# (holdings 미리보기)에서 Debugging 보드를 열면 화면은 뜨지만 검사 API 가
+# 없어 404(그런 주소 없음)가 쏟아졌다 (2026-09-15 재권님 지적).
+#
+# 「로컬은 8765 하나로 본다」로 정했으므로, /debugging/ 로 오는 것은
+# 8093(Debugging 보드 전용)으로 넘긴다. 8093 은 반대로 /holdings/ 를
+# 8765 로 넘긴다 — 대칭이다.
+DEBUGGING_PORT = 8093
+DEBUGGING_BASE = "http://localhost:%d" % DEBUGGING_PORT
+
+# 8093 이 살아 있는지. 매 요청마다 확인하면 느리므로 잠깐 기억해 둔다.
+_dbg_alive = {"at": 0.0, "ok": False}
+DEBUGGING_PROBE_TTL = 3.0
+
+
+# 8093 이 꺼져 있을 때 보여줄 안내. 연결 실패 화면 대신 무엇을 켜야 하는지
+# 적어 준다. 숫자에는 뜻을 괄호로 붙인다 (CLAUDE.md 「응답 규칙」).
+DEBUGGING_OFF_HTML = r"""<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<title>Debugging 보드가 꺼져 있습니다</title>
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center;
+         justify-content: center; background: #f6f7f9; color: #101013;
+         font-family: "Noto Sans KR", -apple-system, sans-serif; }
+  .box { background: #fff; border-radius: 16px; padding: 40px 44px;
+         max-width: 520px; }
+  h1 { font-size: 1.15rem; margin: 0 0 14px; }
+  p { font-size: 0.88rem; line-height: 1.65; color: #4e5968; margin: 0 0 10px; }
+  code { background: #f2f4f6; border-radius: 6px; padding: 2px 7px;
+         font-family: "JetBrains Mono", monospace; font-size: 0.85rem; }
+  .why { margin-top: 20px; padding-top: 16px; border-top: 1px solid #f2f4f6;
+         font-size: 0.8rem; color: #8b95a1; }
+</style></head><body>
+<div class="box">
+  <h1>Debugging 보드가 꺼져 있습니다</h1>
+  <p>이 화면은 <code>8093</code>(Debugging 보드 전용) 서버가 켜져 있어야 보입니다.
+     아래 파일을 더블클릭해 주세요.</p>
+  <p><code>debugging\debugging.bat</code></p>
+  <p>켠 뒤 이 페이지를 새로고침하면 넘어갑니다.</p>
+  <div class="why">
+    지금 보고 계신 것은 <code>8765</code>(holdings 미리보기)입니다.
+    검사 기능은 <code>8093</code>에만 있어서, 여기서 열면
+    「지금 검사하기」가 <code>404</code>(그런 주소 없음)로 끝납니다.
+    그래서 넘기도록 해 두었습니다.
+  </div>
+</div></body></html>"""
+
+
+def debugging_alive():
+    """8093 이 떠 있나. 포트만 두드려 본다 (요청은 보내지 않는다).
+
+    꺼져 있는데 넘기면 브라우저가 '연결 실패' 화면을 낸다. 그러느니
+    무엇을 켜야 하는지 적어 주는 편이 낫다.
+    """
+    now = time.time()
+    if now - _dbg_alive["at"] < DEBUGGING_PROBE_TTL:
+        return _dbg_alive["ok"]
+    ok = False
+    try:
+        with socket.create_connection(("127.0.0.1", DEBUGGING_PORT), timeout=0.25):
+            ok = True
+    except OSError:
+        ok = False
+    _dbg_alive.update(at=now, ok=ok)
+    return ok
+
 
 def out_rows(data, key):
     """KIS 응답에서 배열을 꺼낸다.
@@ -836,12 +907,44 @@ def fetch_price(cfg, code):
 # 다만 단건 조회보다 주는 항목이 적다. 시가총액·PER·PBR·52주 최고저가 없다.
 # 그래서 종목 화면(stock.html)은 여전히 단건 조회를 쓰고, 이것은 목록용이다.
 MULTI_MAX = 30
-MULTI_CACHE_TTL = 4          # 목록은 자주 바뀌므로 짧게
+
+# 목록 시세를 몇 초 동안 들고 있을 것인가.
+#
+# 순위표가 0.2초마다 다섯 묶음 중 하나씩 도므로 같은 묶음은 1초마다 다시
+# 온다. 캐시를 1초로 두면 매번 아슬아슬하게 만료되어 효과가 없다. 2초면
+# 한 번 걸러 내보내므로 KIS 호출이 절반이 된다 (2026-09-16 지시).
+#
+# 값이 최대 2초 묵는다. 그 대신 초당 호출이 여유를 갖는다 — 배포본에서
+# 요청이 겹쳐 워커가 1101(예외로 죽음)로 떨어지는 일을 막는다.
+#
+# 이 상수는 여태 선언만 되고 쓰이지 않았다. 로컬은 요청이 적어 드러나지
+# 않았을 뿐, 배포본과 같은 구멍이었다.
+MULTI_CACHE_TTL = 2
+
+_multi_cache = {}
+_multi_lock = threading.Lock()
+
+
+def _multi_key(codes, div):
+    """묶음이 같으면 같은 키. 순서가 달라도 같은 것으로 본다."""
+    return div + ":" + ",".join(sorted(codes))
 
 
 def fetch_quotes_multi(cfg, codes):
-    """목록용 시세. 30종목씩 묶어 부른다. {code: {...}} 로 돌려준다."""
+    """목록용 시세. 30종목씩 묶어 부른다. {code: {...}} 로 돌려준다.
+
+    같은 묶음을 MULTI_CACHE_TTL 초 안에 다시 물으면 받아둔 값을 준다.
+    화면이 부르는 횟수는 그대로이고 KIS 호출만 줄어든다.
+    """
     div = quote_market_div()
+    key = _multi_key(codes, div)
+    now = time.time()
+    with _multi_lock:
+        hit = _multi_cache.get(key)
+        if hit and (now - hit[0]) < MULTI_CACHE_TTL:
+            _stats["cache_hits"] += 1
+            return hit[1]
+
     out, errors = {}, {}
 
     for i in range(0, len(codes), MULTI_MAX):
@@ -883,6 +986,16 @@ def fetch_quotes_multi(cfg, codes):
                 "value": _num(r.get("acml_tr_pbmn"), int),
                 "source": "KIS",
             }
+
+    # 받아둔다. 오류만 있고 값이 하나도 없으면 담지 않는다 — 다음 요청이
+    # 다시 시도해야 한다.
+    if out:
+        with _multi_lock:
+            _multi_cache[key] = (time.time(), (out, errors))
+            # 순위표를 오르내리면 묶음이 계속 바뀐다. 위쪽을 막아 둔다.
+            if len(_multi_cache) > 200:
+                for k in list(_multi_cache)[:50]:
+                    _multi_cache.pop(k, None)
     return out, errors
 
 
@@ -1223,7 +1336,28 @@ class Handler(SimpleHTTPRequestHandler):
         if (self.path or "").startswith("/api/news/"):
             self._handle_news()
             return
+        if (self.path or "").startswith("/debugging/"):
+            self._handle_debugging()
+            return
         super().do_GET()
+
+    # ── Debugging(검사) 보드 ──
+    # 8093 으로 넘긴다. 꺼져 있으면 무엇을 켜야 하는지 적어 준다.
+    def _handle_debugging(self):
+        if debugging_alive():
+            self.send_response(302)
+            self.send_header("Location", DEBUGGING_BASE + self.path)
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
+
+        body = DEBUGGING_OFF_HTML.encode("utf-8")
+        self.send_response(503)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
 
     # ── 뉴스 ──
     # 두 갈래를 따로 받는다. 자세한 이유는 server/news.py 머리말에 있다.

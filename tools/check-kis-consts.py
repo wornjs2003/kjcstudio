@@ -48,6 +48,7 @@ PAIRS = [
     ("선물 캐시",            "FUTURES_TTL",         "FUTURES_TTL",          "ceil"),
     ("지수 캐시",            "INDEX_TTL",           "INDEX_TTL",            "ceil"),
     ("멀티 조회 최대",       "MULTI_MAX",           "MULTI_MAX",            None),
+    ("목록 시세 캐시",       "MULTI_CACHE_TTL",     "MULTI_CACHE_TTL",      None),
     ("공시 감시 종목 수",    "UNIVERSE_SIZE",       "UNIVERSE_SIZE",        None),
     ("공시 수집 시장",       "COLLECT_MARKETS",     "COLLECT_MARKETS",      "list"),
     ("공시 보관 일수",       "RETENTION_DAYS",      "RETENTION_DAYS",       None),

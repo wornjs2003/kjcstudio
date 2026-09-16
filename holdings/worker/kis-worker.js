@@ -1251,7 +1251,30 @@ async function getChart(cfg, env, code, period, limit) {
    화면은 같은 코드로 로컬과 배포본을 함께 읽는다. */
 const MULTI_MAX = 30;
 
+/* 목록 시세를 몇 초 동안 들고 있을 것인가.
+
+   순위표가 0.2초마다 다섯 묶음 중 하나씩 도므로 같은 묶음은 1초마다 다시
+   온다. 캐시를 1초로 두면 매번 아슬아슬하게 만료되어 효과가 없다. 2초면
+   한 번 걸러 내보내므로 KIS 호출이 절반이 된다 (2026-09-16 지시).
+
+   값이 최대 2초 묵는다. 그 대신 요청이 겹쳐도 워커가 1101(예외로 죽음)로
+   떨어지지 않는다. 2026-09-16 에 실제로 그랬다 — 화면 한 장이 30초에
+   102번을 부르는데 quotes 에만 캐시가 없었다.
+
+   server/kis_proxy.py 의 MULTI_CACHE_TTL 과 같아야 한다. */
+const MULTI_CACHE_TTL = 2;
+
+/* 묶음이 같으면 같은 키. 순서가 달라도 같은 것으로 본다. */
+function quotesKey(codes, div) {
+  return `quotes:${div}:${[...codes].sort().join(",")}`;
+}
+
 async function fetchQuotesMulti(cfg, env, codes) {
+  return memo(quotesKey(codes, quoteMarketDiv()), MULTI_CACHE_TTL,
+              () => fetchQuotesMultiLive(cfg, env, codes));
+}
+
+async function fetchQuotesMultiLive(cfg, env, codes) {
   const div = quoteMarketDiv();
   const out = {};
   const errors = {};
