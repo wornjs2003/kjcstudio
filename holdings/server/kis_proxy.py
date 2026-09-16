@@ -111,6 +111,12 @@ def quote_market_div(now=None):
 TOKEN_MIN_INTERVAL = 70
 _last_token_attempt = 0.0
 
+# 발급은 한 번에 하나만 들어간다. 이 서버는 요청을 동시에 처리하므로
+# (ThreadingHTTPServer) 토큰이 없는 상태로 화면을 열면 prices·quotes·
+# indices·index-minutes 가 한꺼번에 발급을 시도한다. 자물쇠가 없으면
+# 하나만 성공하고 나머지는 위 간격에 걸려 500(서버가 터짐)이 된다.
+_token_lock = threading.Lock()
+
 # 시세 캐시: KIS 호출량을 줄이는 핵심 장치.
 # 같은 종목을 이 시간 안에 다시 요청하면 KIS 를 부르지 않고 캐시로 답한다.
 # 값을 키우면 호출이 줄고, 줄이면 더 자주 갱신된다.
@@ -293,7 +299,28 @@ def _write_token_cache(mode, token, expires_in):
 
 
 def get_token(cfg):
-    """접근토큰을 얻는다. 캐시가 유효하면 재사용한다."""
+    """접근토큰을 얻는다. 캐시가 유효하면 재사용한다.
+
+    캐시를 두 번 본다. 자물쇠 **밖**에서 한 번 — 토큰이 있는 평소에는
+    줄을 서지 않아야 느려지지 않는다. 자물쇠 **안**에서 다시 한 번 —
+    기다리는 동안 먼저 들어간 쪽이 받아 두었으면 그것을 쓴다.
+
+    2026-09-16 에 자물쇠가 없어 났던 일: 서버를 새로 띄운 직후 첫 화면에서
+    요청 넷이 동시에 발급을 시도해 하나만 성공하고 셋이 500(서버가 터짐)이
+    되었다. 동시 5건으로 재현했다 — 성공 1 · 실패 4.
+    """
+    global _last_token_attempt
+
+    cached = _read_token_cache(cfg["mode"])
+    if cached:
+        return cached
+
+    with _token_lock:
+        return _issue_token(cfg)
+
+
+def _issue_token(cfg):
+    """실제 발급. _token_lock 을 쥔 상태에서만 부른다."""
     global _last_token_attempt
 
     cached = _read_token_cache(cfg["mode"])
