@@ -232,7 +232,10 @@ function readConfig(env) {
   if (!HOSTS[mode]) {
     throw new Error('KIS_MODE 는 "prod"(실전) 또는 "vts"(모의) 여야 합니다.');
   }
-  return { appKey, appSecret, mode, host: HOSTS[mode] };
+  /* pace 는 이 요청 몫의 호출 간격 지킴이다. readConfig 가 요청마다 불리므로
+     요청별로 하나씩 생긴다. 전역으로 두면 요청 사이를 넘나들며 멈춘다
+     (위 makeKisPacer 설명 참조). */
+  return { appKey, appSecret, mode, host: HOSTS[mode], pace: makeKisPacer() };
 }
 
 /* ── 접근토큰 (KV 에 24시간 보관) ───────────────────────────── */
@@ -299,17 +302,42 @@ async function getToken(cfg, env) {
    Workers 는 요청마다 격리되지만 한 요청 안의 순차 호출은 같은 isolate 에서
    돌기 때문에, 아래 약속 사슬로 줄을 세우면 간격이 지켜진다. */
 const KIS_MIN_INTERVAL_MS = 200;
-let _kisChain = Promise.resolve();
-let _kisLastAt = 0;
 
-function kisPace() {
-  const turn = _kisChain.then(async () => {
-    const wait = _kisLastAt + KIS_MIN_INTERVAL_MS - Date.now();
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    _kisLastAt = Date.now();
-  });
-  _kisChain = turn.catch(() => {});   // 한 번 실패해도 줄이 끊기지 않게
-  return turn;
+/* ⚠️ 줄은 요청 하나 안에서만 세운다. 전역으로 두면 안 된다.
+
+   전에는 _kisChain 을 모듈 전역에 두고 모든 요청이 그 사슬에 붙었다.
+   위 설명대로 "한 요청 안의 순차 호출" 만 생각한 것인데, 전역이라 요청
+   **사이**로도 넘어갔다. 그래서 이런 일이 생겼다.
+
+     요청 A  타이머를 걸고 기다린다
+     요청 A  응답 끝 → Workers 가 A 의 실행 환경을 정리 → 그 타이머도 사라짐
+     요청 B  사슬을 기다린다 = 사라진 타이머를 기다린다 → 영원히 안 끝남
+
+   Cloudflare 가 그 요청을 끊으며 로그에 이렇게 남겼다 (2026-09-16 원문).
+
+     The Workers runtime canceled this request because it detected that
+     your Worker's code had hung and would never generate a response.
+
+   한 시간에 성공 1,203 · 오류 2,350 이었다. 혼자 부르면 8종목짜리도
+   성공하고 겹칠 때만 멈춘 것이 증거였다 — 양이 아니라 동시성 문제다.
+
+   그래서 페이서를 요청마다 새로 만든다. readConfig 가 요청마다 불리므로
+   cfg 에 얹어 두면 그 요청 안에서만 줄을 선다. 요청끼리는 서로 기다리지
+   않는다. KIS 초당 한도는 캐시(MULTI_CACHE_TTL 등)가 막는다.
+
+   로컬(server/kis_proxy.py)은 한 프로세스라 전역 락이 맞다. 거기는 그대로 둔다. */
+function makeKisPacer() {
+  let chain = Promise.resolve();
+  let lastAt = 0;
+  return function pace() {
+    const turn = chain.then(async () => {
+      const wait = lastAt + KIS_MIN_INTERVAL_MS - Date.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      lastAt = Date.now();
+    });
+    chain = turn.catch(() => {});     // 한 번 실패해도 줄이 끊기지 않게
+    return turn;
+  };
 }
 
 /* KIS 응답에서 배열을 꺼낸다.
@@ -325,7 +353,9 @@ function outRows(data, key) {
 
 async function kisGet(cfg, env, path, params, trId, cacheTtl) {
   const token = await getToken(cfg, env);
-  await kisPace();
+  /* 이 요청 몫의 페이서. 없으면(예전 경로로 불렸으면) 기다리지 않는다 —
+     전역으로 물러서면 다시 요청 사이를 넘나들게 된다. */
+  if (cfg && cfg.pace) await cfg.pace();
   const url = `${cfg.host}${path}?${new URLSearchParams(params)}`;
 
   // 같은 URL 요청은 Cloudflare 엣지 캐시가 받아낸다 -> KIS 호출이 줄어든다
@@ -1289,7 +1319,7 @@ async function fetchQuotesMultiLive(cfg, env, codes) {
 
     let data;
     try {
-      /* kisGet 이 kisPace() 로 호출 간격을 지킨다. 그것을 건너뛰면 분봉 때처럼
+      /* kisGet 이 cfg.pace() 로 호출 간격을 지킨다. 그것을 건너뛰면 분봉 때처럼
          초당 한도에 걸려 조용히 빈 값이 돌아온다. */
       data = await kisGet(
         cfg, env,
