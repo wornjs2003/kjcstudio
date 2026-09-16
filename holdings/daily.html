@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+  <title>데일리분석 — KJC Holdings</title>
+
+  <!-- 개발용 캐시 무효화 (서비스 워커와 병행) -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/nav.css" />
+  <link rel="stylesheet" href="./css/frame.css" />
+  <link rel="stylesheet" href="./css/home.css" />
+  <link rel="stylesheet" href="./css/daily.css" />
+</head>
+<body data-nav="holdings" data-site-root="../">
+
+<div id="site-nav"></div>
+
+<div class="kh-app">
+  <main class="kh-main">
+
+    <!-- 카테고리 탭 — 다른 화면과 같은 줄 -->
+    <nav class="kh-cat" aria-label="카테고리">
+      <a href="./index.html">홈</a>
+      <a href="#">국내</a>
+      <a href="#">미국 · 글로벌</a>
+      <a href="#">가상자산</a>
+      <a href="#">시장지표</a>
+      <a href="./news.html">뉴스 · 공시</a>
+      <a class="is-on" href="./daily.html">데일리분석</a>
+      <span class="kh-cat-my">내 기록</span>
+    </nav>
+
+    <header class="kh-dl-head">
+      <div>
+        <h1 class="kh-dl-title">데일리분석</h1>
+        <p class="kh-dl-sub" id="kh-dl-sub">불러오는 중</p>
+      </div>
+      <!-- 미정: 아침 07:30 자동 발송은 아직 없다. 워커에 telegramSend 와 5분 Cron 이
+           이미 있으므로 "07:30 인가 · 오늘 안 보냈나" 판단만 붙이면 된다.
+           붙기 전까지 빨간 바탕으로 둔다 (CLAUDE.md 「아직 안 정해진 자리」). -->
+      <span class="kh-dl-chip is-todo" id="kh-dl-send">발송 예정</span>
+    </header>
+
+    <div class="kh-dl-body">
+
+        <!-- ① 오늘 일정 -->
+        <section class="kh-dl-card">
+          <div class="kh-dl-ch">
+            <b>오늘 일정</b>
+            <span class="kh-dl-why">날짜가 미리 정해진 것만</span>
+            <span class="kh-dl-src">market-calendar.json</span>
+          </div>
+          <div class="kh-dl-sch" id="kh-dl-sch"></div>
+        </section>
+
+        <!-- ② 주요 지수 -->
+        <section class="kh-dl-card">
+          <div class="kh-dl-ch">
+            <b>주요 지수</b>
+            <span class="kh-dl-why">국내는 오늘 마감 · 해외는 현지 마감</span>
+            <span class="kh-dl-src">KIS</span>
+          </div>
+          <div class="kh-dl-idx" id="kh-dl-idx"></div>
+        </section>
+
+        <!-- ③ 오늘 뉴스 -->
+        <section class="kh-dl-card">
+          <div class="kh-dl-ch">
+            <b>오늘 뉴스</b>
+            <span class="kh-dl-why">주제로 묶어 최근 순서로</span>
+            <span class="kh-dl-src" id="kh-dl-news-src">경제지 RSS</span>
+          </div>
+          <div class="kh-dl-news" id="kh-dl-news"></div>
+        </section>
+
+        <!-- ④ 주도 섹터 -->
+        <section class="kh-dl-card">
+          <div class="kh-dl-ch">
+            <b>주도 섹터</b>
+            <span class="kh-dl-why">업종 지수 등락</span>
+            <span class="kh-dl-src">KIS 업종별 시세</span>
+          </div>
+          <!-- 미정: 업종별 시세를 받아올 곳을 확정하지 못했다.
+               국내는 inquire-index-category-price, 미국은 industry-theme
+               (HHDFS76370000) 이 후보이고 실측이 남았다. -->
+          <div class="kh-dl-todo">
+            <b>아직 연결하지 않았습니다</b>
+            <span>국내·미국 업종 지수를 받아올 곳을 확정하는 중입니다.
+                  붙으면 오늘 어느 업종이 움직였는지 순서대로 나옵니다.</span>
+          </div>
+        </section>
+
+    </div>
+
+    <h2 class="kh-dl-sect">지난 분석</h2>
+    <p class="kh-dl-sect-s">30일이 지난 것은 자동으로 지워집니다</p>
+    <!-- 미정: 위 「보관」 과 같은 자리다. 저장이 붙으면 여기에 카드가 쌓인다. -->
+    <div class="kh-dl-todo is-wide">
+      <b>아직 없습니다</b>
+      <span>저장이 붙으면 날짜별 카드가 여기에 쌓입니다.</span>
+    </div>
+
+  </main>
+
+  <!-- 오른쪽 칸 — 이 화면에서는 관심종목 대신 보낼 문안을 둔다.
+       본문과 같은 데이터로 만들기 때문에 나란히 놓고 보면 어긋난 곳이 바로 보인다. -->
+  <aside class="kh-side kh-dl-side" id="kh-side" aria-label="보낼 문안">
+    <div class="kh-side-head">
+      <b>텔레그램</b>
+      <span class="kh-side-toggle" id="kh-dl-tg-w">아직 보내지 않았습니다</span>
+    </div>
+    <p class="kh-side-sub">폰에 이렇게 도착합니다</p>
+    <div class="kh-dl-tg-b" id="kh-dl-tg"></div>
+
+    <div class="kh-side-sec">
+      <div class="kh-sched-h"><span>보관</span><span>30일</span></div>
+      <!-- 미정: 날짜별로 쌓아 두는 자리가 아직 없다. 워커 D1 에 표를 하나
+           만들면 되고, 30일이 지난 것은 지운다. -->
+      <div class="kh-dl-todo">
+        <b>아직 쌓이지 않습니다</b>
+        <span>매일 아침 하나씩 저장하고 30일이 지나면 지우는 자리입니다.
+              지금은 오늘 것만 그때그때 만들어 보여 줍니다.</span>
+      </div>
+    </div>
+  </aside>
+  <nav class="kh-vbar" id="kh-vbar" aria-label="화면 전환"></nav>
+</div>
+
+<div class="kh-foot" id="kh-foot" aria-label="시세 띠"></div>
+
+<!-- 서비스 워커는 개발 중에만 등록한다. 배포본에서는 지운다. -->
+<script type="module">
+  import { bootServiceWorker } from './js/sw-boot.js';
+  bootServiceWorker();
+</script>
+<script type="module" src="./js/daily.js"></script>
+<script src="../assets/js/main.js"></script>
+</body>
+</html>

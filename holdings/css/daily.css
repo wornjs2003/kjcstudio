@@ -1,0 +1,154 @@
+/* ==========================================================================
+   데일리분석 화면
+
+   그날의 일정 · 지수 · 뉴스를 한 장으로 모아 두고, 아침에 텔레그램으로 같은
+   내용을 보낸다. 오른쪽 미리보기는 폰에 도착하는 모습 그대로다.
+
+   색은 전부 ../../assets/css/theme.css 의 --kh-* 를 쓴다.
+   흰 카드에는 선을 두지 않고, 흰 바탕 위 글씨는 검정이다 (CLAUDE.md 색·선 규칙).
+   ========================================================================== */
+
+/* ── 머리말 ─────────────────────────────── */
+.kh-dl-head {
+  display: flex; align-items: flex-end; gap: 14px;
+  margin: 0 0 20px;
+}
+.kh-dl-title {
+  font-size: clamp(22px, 3vw, 27px); font-weight: 700;
+  letter-spacing: -0.04em; line-height: 1.2; margin: 0;
+}
+.kh-dl-sub {
+  color: var(--kh-text-secondary); font-size: 13.5px; margin: 5px 0 0;
+}
+.kh-dl-chip {
+  margin-left: auto; white-space: nowrap;
+  font-size: 12px; font-weight: 600;
+  padding: 5px 12px; border-radius: var(--kh-radius-pill, 99px);
+  background: rgb(var(--kh-ok-rgb) / 10%); color: #02a262;
+}
+.kh-dl-chip::before {
+  content: ""; display: inline-block; width: 6px; height: 6px;
+  border-radius: 50%; background: currentColor;
+  margin-right: 6px; vertical-align: 1px;
+}
+/* 아직 안 정해진 자리 — 빨간 바탕으로 남긴다 (CLAUDE.md 2026-09-15 지시) */
+.kh-dl-chip.is-todo { background: var(--kh-up-dim); color: var(--kh-up); }
+
+/* ── 본문 ──────────────────────────────── */
+/* 오른쪽 칸을 따로 두지 않는다. 보낼 문안은 관심종목 자리(.kh-side)로 갔다.
+   같은 화면에 오른쪽 칸이 둘이면 어느 쪽이 사이드바인지 알 수 없다. */
+.kh-dl-body { display: block; }
+
+.kh-dl-card {
+  background: var(--kh-bg-card); border-radius: var(--kh-radius-lg, 16px);
+  padding: 20px 22px; margin-bottom: 16px;
+}
+.kh-dl-ch {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  margin-bottom: 15px;
+}
+.kh-dl-ch b { font-size: 15.5px; font-weight: 700; letter-spacing: -0.03em; }
+.kh-dl-why { font-size: 12px; color: var(--kh-text-muted); font-weight: 500; }
+.kh-dl-src {
+  margin-left: auto; font-size: 11.5px; color: var(--kh-text-dim); font-weight: 500;
+}
+
+/* ── ① 오늘 일정 ────────────────────────── */
+.kh-dl-sch { display: flex; flex-direction: column; gap: 9px; }
+.kh-dl-sch-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px;
+  background: var(--kh-bg-surface); border-radius: var(--kh-radius-md);
+}
+/* 오늘·진행 중인 것만 눈에 걸리게 — 연한 주황 바탕에 진한 주황 글씨 */
+.kh-dl-sch-row.is-now { background: rgb(var(--kh-warn-rgb) / 10%); }
+.kh-dl-sch-when {
+  font-size: 12px; font-weight: 700; color: var(--kh-text-secondary);
+  width: 74px; flex-shrink: 0;
+}
+.kh-dl-sch-row.is-now .kh-dl-sch-when { color: #f29300; }
+.kh-dl-sch-kind {
+  font-size: 11px; font-weight: 600; padding: 3px 9px;
+  border-radius: var(--kh-radius-pill, 99px);
+  background: var(--kh-bg-card); color: var(--kh-text-secondary); flex-shrink: 0;
+}
+.kh-dl-sch-t { font-weight: 600; font-size: 13.5px; }
+.kh-dl-sch-n {
+  font-size: 12px; color: var(--kh-text-muted);
+  margin-left: auto; text-align: right;
+}
+
+/* ── ② 주요 지수 ────────────────────────── */
+.kh-dl-idx {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 10px;
+}
+.kh-dl-idx-c {
+  background: var(--kh-bg-surface); border-radius: var(--kh-radius-md);
+  padding: 13px 15px;
+}
+.kh-dl-idx-n {
+  font-size: 12px; color: var(--kh-text-secondary); font-weight: 500; margin-bottom: 5px;
+}
+.kh-dl-idx-v {
+  font-size: 19px; font-weight: 700; letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.kh-dl-idx-d {
+  font-size: 12px; font-weight: 600; margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.kh-dl-idx-sub {
+  font-size: 11px; color: var(--kh-text-muted); margin-top: 7px;
+  font-variant-numeric: tabular-nums;
+}
+.kh-dl-up { color: var(--kh-up); }
+.kh-dl-down { color: var(--kh-down); }
+.kh-dl-flat { color: var(--kh-text-muted); }
+
+/* ── ③ 오늘 뉴스 ────────────────────────── */
+.kh-dl-news { display: flex; flex-direction: column; }
+.kh-dl-news-row {
+  display: flex; align-items: flex-start; gap: 11px;
+  padding: 11px 0; border-bottom: 1px solid var(--kh-border);
+  text-decoration: none; color: inherit;
+}
+.kh-dl-news-row:last-child { border-bottom: none; }
+.kh-dl-news-row:hover { background: var(--kh-bg-hover); }
+.kh-dl-topic {
+  font-size: 11px; font-weight: 600; padding: 3px 9px;
+  border-radius: var(--kh-radius-pill, 99px);
+  flex-shrink: 0; min-width: 66px; text-align: center;
+  background: var(--kh-bg-surface); color: var(--kh-text-secondary);
+}
+.kh-dl-news-t { font-size: 13.5px; font-weight: 500; line-height: 1.45; }
+.kh-dl-news-m { font-size: 11.5px; color: var(--kh-text-dim); margin-top: 3px; }
+
+/* ── 아직 연결 안 된 자리 ───────────────── */
+/* 「나중에 정할 것」을 문서에만 적으면 아무도 다시 안 읽는다. 화면에 남긴다. */
+.kh-dl-todo {
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 16px 18px; border-radius: var(--kh-radius-md);
+  background: var(--kh-up-dim); color: var(--kh-up);
+}
+.kh-dl-todo b { font-size: 13.5px; font-weight: 700; }
+.kh-dl-todo span { font-size: 12.5px; font-weight: 500; line-height: 1.6; }
+.kh-dl-todo.is-wide { margin-bottom: 16px; }
+
+/* ── 텔레그램 미리보기 ──────────────────── */
+.kh-dl-side { width: 332px; flex-shrink: 0; }
+@media (max-width: 1100px) { .kh-dl-side { width: auto; } }
+
+/* 보낼 문안 — 사이드바가 흰 면이라 문안은 한 단 들어간 회색으로 띄운다 */
+.kh-dl-tg-b {
+  background: var(--kh-bg-surface); border-radius: var(--kh-radius-md);
+  padding: 15px 16px; font-size: 12.5px; line-height: 1.72;
+  white-space: pre-wrap; word-break: break-word;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 지난 분석 ──────────────────────────── */
+.kh-dl-sect {
+  font-size: 17px; font-weight: 700; letter-spacing: -0.03em; margin: 26px 0 5px;
+}
+.kh-dl-sect-s { font-size: 12.5px; color: var(--kh-text-muted); margin: 0 0 13px; }
