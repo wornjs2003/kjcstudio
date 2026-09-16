@@ -31,6 +31,15 @@ import sys
 import time
 from ctypes import wintypes
 
+# 윈도우 콘솔은 기본이 cp949 라 '—' 같은 글자에서 죽는다.
+# 출력만 UTF-8 로 바꾼다 (tools/check-theme-sync.py 와 같은 처리).
+#
+# 이 두 줄이 없어도 개발 중에는 멀쩡해 보였다. 환경변수 PYTHONIOENCODING 이
+# 걸린 셸에서만 돌려봤기 때문이다. 그것이 없는 곳 — 특히 .bat 이 부르는
+# cmd — 에서는 판단이 맞아도 출력에서 죽어, 부르는 쪽은 실패로 읽는다.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 u32 = ctypes.windll.user32
 
 SW_RESTORE = 9
