@@ -12,6 +12,7 @@ import { getMemo, setMemo } from './store/memo.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtShareCount, fmtDelta, dirClass }
   from './utils/format.js';
 import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop } from './components/frame.js';
+import { paintIcon } from './components/stock-icon.js';
 import { mountDisclosures } from './components/disclosures.js';
 
 const $ = id => document.getElementById(id);
@@ -26,8 +27,7 @@ document.title = `${stock.name} — KJC Holdings`;
 
 /* ── 헤더 ───────────────────────────────── */
 function paintHead(live) {
-  $('kh-ic').style.background = stock.brand;
-  $('kh-ic').textContent = stock.name.slice(0, 2);
+  paintIcon($('kh-ic'), stock);
   $('kh-name').textContent = stock.name;
   $('kh-code').textContent = stock.code;
 

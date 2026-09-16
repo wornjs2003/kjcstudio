@@ -12,6 +12,7 @@ import { color } from './theme.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, dirClass, marketPhase }
   from './utils/format.js';
 import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop } from './components/frame.js';
+import { iconHtml, paintIcon } from './components/stock-icon.js';
 import { mountDisclosures } from './components/disclosures.js';
 import { mountSchedule } from './components/schedule.js';
 import { fetchIndexMinutes, fetchIndexCandles, fetchQuotes } from './data/live.js';
@@ -467,8 +468,7 @@ function paintRows(priceMap) {
     return `<tr data-code="${s.code}" class="${s.code === selectedCode ? 'is-active' : ''}">
       <td class="kh-rk">${s.rank}</td>
       <td class="l"><span class="kh-nm">
-        <span class="kh-ic" style="background:${s.brand || 'var(--kh-bg-active)'}"
-          >${(s.name || '').slice(0, 2)}</span>
+        ${iconHtml(s)}
         <b>${s.name}</b></span></td>
       <td class="kh-num"><span
         >${live ? fmtWon(live.price) : '···'}</span></td>
@@ -728,8 +728,7 @@ function paintPreview(priceMap) {
   if (!s) return;
   const live = priceMap && priceMap[s.code];
 
-  $('kh-pv-ic').style.background = s.brand;
-  $('kh-pv-ic').textContent = s.name.slice(0, 2);
+  paintIcon($('kh-pv-ic'), s);
   $('kh-pv-n').textContent = s.name;
   $('kh-pv-link').href = `./stock.html?code=${s.code}`;
 

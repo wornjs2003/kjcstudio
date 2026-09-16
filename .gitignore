@@ -42,6 +42,12 @@ venv/
 node_modules/
 npm-debug.log*
 
+# 종목 아이콘 — 받는 도구(tools/fetch-stock-icons.py)만 담고 그림은 담지 않는다
+# (2026-09-16 지시). 저장소가 공개라 회사 로고를 올리지 않고, git 은 PNG 를
+# 델타 압축하지 못해 한 번 담으면 기록에서 뺄 수 없다. 기계를 옮기면 도구를
+# 한 번 돌린다. 폴더 설명은 uidata/README.md 에 있다
+uidata/icons/
+
 # Windows
 Thumbs.db
 ehthumbs.db

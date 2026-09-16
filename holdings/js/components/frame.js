@@ -9,6 +9,7 @@ import { WATCHLIST, PRIORITY_CODES } from '../data/market.js';
 import * as lastSeen from '../store/last-seen.js';
 import { fetchLivePrices, fetchLiveIndices, applyLiveToStock } from '../data/live.js';
 import { fmtWon, fmtPct, fmtNum, dirClass, fmtDeltaAmount } from '../utils/format.js';
+import { iconHtml } from './stock-icon.js';
 
 /* 아직 받아올 곳이 없는 시세 띠 항목 */
 const FOOT_NOT_READY = ['달러 인덱스', '달러 환율', '나스닥', 'S&P 500', '필라델피아 반도체'];
@@ -49,7 +50,7 @@ export function mountWatchSide(el, { activeCode } = {}) {
   list.innerHTML = WATCHLIST.map(s => `
     <a class="kh-wl ${s.code === activeCode ? 'is-active' : ''}"
        data-code="${s.code}" href="./stock.html?code=${s.code}">
-      <span class="kh-ic" style="background:${s.brand}">${s.name.slice(0, 2)}</span>
+      ${iconHtml(s)}
       <span class="kh-wl-name">${s.name}</span>
       <span class="kh-wl-price">
         <span class="kh-wl-v kh-num">—</span>
