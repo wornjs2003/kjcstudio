@@ -279,7 +279,21 @@ holdings 관련 룰은 `holdings/CLAUDE.md` 참조.
 
 ### 로컬은 8765 하나로 본다 (2026-09-15 지시)
 
-**`holdings-preview` 하나만 띄운다.** 여섯 구역과 모든 API 가 거기서 돈다.
+**`holdings/preview` 하나만 띄운다.** 여섯 구역과 모든 API 가 거기서 돈다.
+
+⚠️ **`holdings-preview.bat`(루트) 이 아니다.** 이름이 비슷한데 하는 일이 다르다.
+
+    holdings-preview.bat    python -m http.server 8765    화면만 열린다. API 가 없다
+    holdings/preview.bat    kis_proxy.py --port 8765      이것이 맞다
+
+루트 것은 정적 서버라 `/holdings/` 는 200(정상)으로 열리지만 `/api/kis/*` ·
+`/api/dart/*` · `/api/news/*` 가 전부 404(그런 주소 없음)가 되어 **시세도 공시도
+뉴스도 하나도 안 나온다.** 2026-09-16 에 이 문서가 루트 것을 가리키고 있어서
+실제로 그렇게 됐다.
+
+확인은 이렇게 한다.
+
+    curl http://localhost:8765/api/kis/health     →  200 · ok:true
 
     http://localhost:8765/              메인
                         /holdings/      주식
@@ -312,13 +326,42 @@ holdings 관련 룰은 `holdings/CLAUDE.md` 참조.
 프로젝트 보드의 `/api/board/*` 는 **로컬에 아예 없다.** 배포본 워커에만 있고,
 로컬에서는 `이 브라우저에만 저장됨` 으로 물러선다. 설계가 그렇다.
 
+### 재부팅하면 로컬 서버는 항상 떠 있게 둔다 (2026-09-16 지시)
+
+**매번 손으로 띄우지 않는다.** 루트 `startup.bat` 이 그 일을 하고, Windows
+시작프로그램에 `KJC Studio 자동 시작` 이라는 이름으로 등록되어 있다.
+
+- 띄우는 것은 `holdings/server/kis_proxy.py` 다. 위에 적은 대로 루트
+  `holdings-preview.bat` 이 아니다
+- 이미 떠 있으면 건너뛴다. 여러 번 실행해도 서버가 겹치지 않는다
+- 서버 → 브라우저 → 세션 창 순서로 띄운다
+
+### `.bat` 안에는 한글을 쓰지 않는다 (2026-09-16)
+
+`cmd` 는 배치 파일을 **한 줄 실행할 때마다 파일을 다시 열어 바이트 위치로 되짚는다.**
+`chcp 65001` 로 코드페이지를 바꾸면 그 바이트 셈이 달라져서, 아래쪽에 한글이 있으면
+위치가 밀려 **줄 한복판부터 실행된다.** 2026-09-16 에 실제로 이렇게 나왔다.
+
+    '/*' is not recognized as an internal or external command
+    'n' is not recognized as an internal or external command
+
+세션 여는 단계까지 가지도 못하고 끝났다. 전에 "창이 하나 덜 열렸는데" 하신 것도
+같은 원인일 가능성이 크다 — `resume-sessions.bat` 의 주석에 세션 이름이 한글로
+박혀 있었다.
+
+- `.bat` 본문은 **ASCII 로만 쓴다.** 한글 안내가 필요하면 파이썬 등에 맡기고
+  `.bat` 은 그것을 부르기만 한다
+- **`timeout /t N` 을 쓰지 않는다.** 입력이 리다이렉트된 채 실행되면
+  `Input redirection is not supported` 로 즉시 죽는다.
+  `ping -n N 127.0.0.1 > nul` 로 대신한다
+
 ### 명령 목록
 
 Mac 은 `.command` 더블클릭, Windows 는 같은 이름의 `.bat` 더블클릭. 동작은 동일.
 
 | 용도 | Mac | Windows |
 |---|---|---|
-| **전체 (포트 8765) — 이것만 쓰면 된다** | `holdings-preview.command` | `holdings-preview.bat` |
+| **전체 (포트 8765) — 이것만 쓰면 된다** | `holdings/preview.command` | `holdings/preview.bat` |
 | 작업물 목록 갱신 | `refresh-works.command` | `refresh-works.bat` |
 
 아래는 남겨 두지만 **평소에는 쓰지 않는다.** 그 구역만 따로 볼 일이 있을 때만 쓰고,
@@ -330,7 +373,10 @@ Mac 은 `.command` 더블클릭, Windows 는 같은 이름의 `.bat` 더블클�
 | 설립 체크리스트만 (8090) | `company-setup/preview.command` | `company-setup/preview.bat` |
 | 프로젝트 보드만 (8091) | `projects/preview.command` | `projects/preview.bat` |
 | Debugging 보드만 (8093) | — | `debugging/debugging.bat` |
-| holdings 독립 실행 | `holdings/preview.command` | `holdings/preview.bat` |
+| ~~홀딩스 정적 서버 (8765, API 없음)~~ | ~~`holdings-preview.command`~~ | ~~`holdings-preview.bat`~~ |
+
+마지막 줄은 **쓰지 않는다.** 위 「전체」 와 포트가 같아서 먼저 띄운 쪽이 이기는데,
+이쪽이 이기면 화면만 열리고 API 가 전부 죽는다. 이름이 비슷해 헷갈리기 쉽다.
 
 - 브라우저: Chrome 우선, 없으면 기본 브라우저
 - 두 OS 모두 Python 3 필요 (Windows: Python 3.13 + Pillow 설치됨)
