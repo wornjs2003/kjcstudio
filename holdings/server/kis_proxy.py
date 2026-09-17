@@ -1235,6 +1235,32 @@ def fetch_bars_from_kis(cfg, code, period, date_from, date_to):
     return out
 
 
+def minute_market_div(hour):
+    """분봉을 어느 시장에서 받을까. **구간의 시각으로 정한다.**
+
+        정규장 09:00~15:30   J  (KRX)
+        그 밖                UN (통합)
+
+    일봉과 달리 **분봉은 한쪽만으로는 못 채운다** (2026-09-17 실측).
+
+        08:30 프리마켓   J  0개      UN 30개   ← 넥스트레이드는 통합에만 있다
+        10:30 장중       J 30개      UN 30개
+        우선주 장중      J 30개      UN  0개   ← 통합은 값이 비어 온다
+
+    삼성전자우 5분봉이 하루 종일 194,600원에 거래량 0 이었던 것이 이 때문이다.
+    통합으로 받아 놓고 "거래가 없는 종목" 으로 보고 있었는데, KRX 로 부르면
+    193,200원에 거래량이 정상으로 온다.
+
+    시세 표기 규칙(CLAUDE.md)이 현재가를 가르는 방식과 같다.
+    """
+    try:
+        m = int(hour[:2]) * 60 + int(hour[2:4])
+    except Exception:
+        return MARKET_DIV_CHART
+    hm = (m // 60, m % 60)
+    return "J" if KRX_OPEN <= hm < KRX_CLOSE else MARKET_DIV_CHART
+
+
 def fetch_minutes_from_kis(cfg, code, hour=None):
     """1분봉. 별도 API 이며 기준 시각부터 과거 30개만 돌려준다.
 
@@ -1249,7 +1275,7 @@ def fetch_minutes_from_kis(cfg, code, hour=None):
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
         {
-            "FID_ETC_CLS_CODE": "", "FID_COND_MRKT_DIV_CODE": MARKET_DIV_CHART,
+            "FID_ETC_CLS_CODE": "", "FID_COND_MRKT_DIV_CODE": minute_market_div(hour),
             "FID_INPUT_ISCD": code, "FID_INPUT_HOUR_1": hour,
             "FID_PW_DATA_INCU_YN": "Y",
         },
@@ -1319,6 +1345,65 @@ def fetch_minutes_day(cfg, code):
 # 마지막 봉이 이보다 오래됐으면 최근 구간만 받지 않고 하루치를 다시 모은다.
 # 장중 한 시간이면 12개가 비는 셈이라, 그 정도면 통째로 받는 편이 낫다.
 MINUTE_REFILL_GAP = 60
+
+
+# ── 5분봉 미리 받아두기 ────────────────────────────────────────────
+#
+# 화면이 종목을 처음 열 때 하루치를 받으면 **3.1초**가 걸린다 (2026-09-17 실측).
+# 30분씩 거슬러 올라가며 여러 번 부르기 때문이고, 저녁일수록 구간이 늘어
+# 더 느려진다. 마우스로 순위표를 훑으면 종목마다 그만큼 걸린다.
+#
+# 그래서 **뒤에서 미리 받아 둔다** (2026-09-17 지시 — "5분봉은 지난거는
+# 미리 다운받아서 가지고 있다가 마우스 올리면 보여지는거지?").
+# 코스피 시가총액 상위 순으로 간다.
+#
+# ⚠️ **화면이 느려지면 안 된다.** 모든 KIS 호출이 초당 5건 줄에 서므로,
+# 미리 받기가 연달아 부르면 그 뒤에 온 화면 요청이 밀린다. 종목 사이에
+# 쉬어서 그 틈으로 화면 요청이 들어가게 한다.
+PREFILL_TOP = 100          # 코스피 상위 몇 종목까지
+PREFILL_REST_SEC = 2.0     # 종목 하나를 마치고 쉬는 시간 — 화면에 양보한다
+PREFILL_START_SEC = 20     # 서버가 뜨고 이만큼 뒤에 시작 (첫 화면에 양보)
+PREFILL_ROUND_SEC = 1800   # 한 바퀴 돌고 쉬는 시간. 실제 호출은 dayfill 이 막는다
+
+
+def _prefill_codes():
+    """미리 받을 종목. 코스피 시가총액 상위 순서."""
+    try:
+        with dart._db_lock, dart.db_conn() as conn:
+            rows = conn.execute(
+                "SELECT stock_code FROM dart_universe ORDER BY rank LIMIT ?",
+                (PREFILL_TOP,),
+            ).fetchall()
+        codes = [r["stock_code"] for r in rows]
+    except Exception:
+        codes = []
+    if not codes:                      # 순위가 아직 없으면 관심종목이라도
+        codes = list(dart.WATCH_CODES)
+    return codes
+
+
+def start_prefill(cfg):
+    """뒤에서 5분봉을 미리 채운다. 키가 없으면 아무것도 하지 않는다."""
+    if not cfg:
+        return False
+
+    def loop():
+        time.sleep(PREFILL_START_SEC)
+        while True:
+            try:
+                for code in _prefill_codes():
+                    try:
+                        # dayfill 이 오늘 것을 이미 받았으면 안쪽에서 건너뛴다
+                        get_chart(cfg, code, "5m", 1)
+                    except Exception:
+                        pass           # 한 종목이 실패해도 나머지는 간다
+                    time.sleep(PREFILL_REST_SEC)
+            except Exception:
+                pass
+            time.sleep(PREFILL_ROUND_SEC)
+
+    threading.Thread(target=loop, daemon=True, name="prefill-5m").start()
+    return True
 
 
 def _today_kst():
@@ -1854,6 +1939,10 @@ def main():
         print("  상태 확인 : http://localhost:%d/api/kis/health" % args.port)
     else:
         print("  KIS 연동  : 꺼짐 (secrets.json 없음, 정적 서버로만 동작)")
+
+    if start_prefill(cfg):
+        print("  5분봉 준비 : 코스피 상위 %d종목을 뒤에서 미리 받습니다"
+              % PREFILL_TOP)
 
     if dart.start_poller():
         print("  공시 수집 : 사용 (코스피 상위 %d종목 · %d분마다)"

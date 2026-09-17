@@ -798,18 +798,39 @@ function paintPreview(priceMap) {
 
 let pvShown = null;
 
+/* 지금 그려져 있는 미리보기 차트.
+ *
+ * **반드시 destroy 해야 한다.** innerHTML 을 비우면 그림은 사라지지만
+ * 차트 객체는 살아서 크기 감시와 그리기를 계속한다. 마우스로 종목을
+ * 옮길 때마다 하나씩 쌓여, 어느 순간부터 **새 차트가 아예 안 그려졌다**
+ * (2026-09-17 — "내렸다가 보는데 안나오는 종목들이 있고 다시 위로 올려서
+ * 삼성전자 볼려고 하니까 안나온다").
+ *
+ * 큰 차트(dropBigChart)와 종목 화면(stock-view)은 처음부터 정리하고
+ * 있었는데 여기만 빠져 있었다. */
+let previewChart = null;
+
+function dropPreviewChart() {
+  if (previewChart) { previewChart.destroy(); previewChart = null; }
+}
+
 async function drawPreviewChart() {
   const key = selectedCode;
   chartKey = key;
   const host = $('kh-pv-chart');
+  dropPreviewChart();
   host.innerHTML = '';
   try {
     const { candles, period } = await fetchCandles(key, '5m', 90);
     if (chartKey !== key) return;                 // 그 사이 다른 종목을 골랐다
     if (!candles.length) throw new Error('빈 응답');
-    createStockChart(host, candles, { period, showVolume: true });
+    /* 기다리는 사이에 다른 차트가 그려졌을 수 있다. 치우고 시작한다 */
+    dropPreviewChart();
+    host.innerHTML = '';
+    previewChart = createStockChart(host, candles, { period, showVolume: true });
   } catch {
     if (chartKey !== key) return;
+    dropPreviewChart();
     host.innerHTML = `<div class="kh-soon">
       <div class="kh-soon-t">차트를 불러오지 못했습니다</div></div>`;
   }

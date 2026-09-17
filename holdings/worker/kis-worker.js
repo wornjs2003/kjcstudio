@@ -55,12 +55,18 @@ const MARKET_DIV_CHART = "UN";
 
    Workers 는 UTC 로 돈다. 한국 시각은 +9 시간이라 직접 더해서 본다.
    공휴일은 가리지 못하지만, 휴장일에는 어느 쪽을 봐도 전일 값이라 문제되지 않는다. */
+/* 정규장 시각 (분). 시세 판정과 분봉 시장구분이 같이 쓴다 —
+   두 곳에 숫자를 적어 두면 한쪽만 고쳐진다.
+   server/kis_proxy.py 의 KRX_OPEN · KRX_CLOSE 와 같아야 한다. */
+const KRX_OPEN_MIN = 9 * 60;              // 09:00
+const KRX_CLOSE_MIN = 15 * 60 + 30;       // 15:30
+
 function quoteMarketDiv(now = new Date()) {
   const kst = new Date(now.getTime() + 9 * 3600 * 1000);
   const day = kst.getUTCDay();                 // 0 일요일 · 6 토요일
   if (day === 0 || day === 6) return "UN";
   const mins = kst.getUTCHours() * 60 + kst.getUTCMinutes();
-  return mins >= 9 * 60 && mins < 15 * 60 + 30 ? "J" : "UN";
+  return mins >= KRX_OPEN_MIN && mins < KRX_CLOSE_MIN ? "J" : "UN";
 }
 
 // 기간별 설정
@@ -1190,6 +1196,26 @@ async function fetchBarsFromKis(cfg, env, code, period, from, to) {
     }));
 }
 
+/* 분봉을 어느 시장에서 받을까. **구간의 시각으로 정한다.**
+
+       정규장 09:00~15:30   J  (KRX)
+       그 밖                UN (통합)
+
+   일봉과 달리 **분봉은 한쪽만으로는 못 채운다** (2026-09-17 실측).
+
+       08:30 프리마켓   J  0개      UN 30개   ← 넥스트레이드는 통합에만 있다
+       10:30 장중       J 30개      UN 30개
+       우선주 장중      J 30개      UN  0개   ← 통합은 값이 비어 온다
+
+   삼성전자우 5분봉이 하루 종일 194,600원에 거래량 0 이었던 것이 이 때문이다.
+   server/kis_proxy.py 의 minute_market_div 와 같은 규칙이어야 한다. */
+function minuteMarketDiv(hour) {
+  const m = parseInt(String(hour).slice(0, 2), 10) * 60
+          + parseInt(String(hour).slice(2, 4), 10);
+  if (!Number.isFinite(m)) return MARKET_DIV_CHART;
+  return (m >= KRX_OPEN_MIN && m < KRX_CLOSE_MIN) ? "J" : MARKET_DIV_CHART;
+}
+
 /* 1분봉. 별도 API 이며 기준 시각부터 과거 30개만 돌려준다 */
 /* hour 를 주지 않으면 '지금까지' 를 기준으로 삼는다.
    예전 기본값은 "200000"(20:00) 이라, 장중에 최근 구간을 갱신할 때마다
@@ -1204,7 +1230,7 @@ async function fetchMinutesFromKis(cfg, env, code, hour = null) {
     "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
     {
       FID_ETC_CLS_CODE: "",
-      FID_COND_MRKT_DIV_CODE: MARKET_DIV_CHART,
+      FID_COND_MRKT_DIV_CODE: minuteMarketDiv(hour),
       FID_INPUT_ISCD: code,
       FID_INPUT_HOUR_1: hour,
       FID_PW_DATA_INCU_YN: "Y",
@@ -1969,6 +1995,50 @@ async function purgeOldDisclosures(env, days = RETENTION_DAYS) {
   return (res.meta && res.meta.changes) || 0;
 }
 
+/* ── 5분봉 미리 받아두기 ──────────────────────────────────────────
+ *
+ * 화면이 종목을 처음 열 때 하루치를 받으면 **3.1초**가 걸린다 (2026-09-17 실측).
+ * 30분씩 거슬러 올라가며 여러 번 부르기 때문이고, 저녁일수록 구간이 늘어
+ * 더 느려진다. 마우스로 순위표를 훑으면 종목마다 그만큼 걸린다.
+ *
+ * 그래서 **Cron 이 돌 때마다 몇 종목씩 미리 받아 둔다** (2026-09-17 지시).
+ * 코스피 시가총액 상위 순으로 간다.
+ *
+ * 로컬(server/kis_proxy.py)은 스레드로 한 바퀴씩 돌지만, 워커는 한 번에
+ * 오래 못 돈다. **어디까지 했는지 메타에 적어 두고 이어서 간다.**
+ */
+const PREFILL_TOP = 100;        // 코스피 상위 몇 종목까지
+const PREFILL_PER_RUN = 5;      // Cron 한 번에 몇 종목씩
+
+async function prefillMinutes(cfg, env) {
+  let codes;
+  try {
+    const res = await requireDb(env).prepare(
+      "SELECT stock_code FROM dart_universe ORDER BY rank LIMIT ?"
+    ).bind(PREFILL_TOP).all();
+    codes = (res.results || []).map((r) => r.stock_code);
+  } catch {
+    codes = [];
+  }
+  if (!codes.length) codes = DART_WATCH_CODES.slice();
+  if (!codes.length) return 0;
+
+  /* 어디까지 했는지 이어서 간다. 한 바퀴 돌면 처음으로 */
+  let at = Number((await metaGet(env, "prefill_at")) || 0);
+  if (!Number.isFinite(at) || at < 0 || at >= codes.length) at = 0;
+
+  let done = 0;
+  for (let i = 0; i < PREFILL_PER_RUN && at < codes.length; i++, at++) {
+    try {
+      /* dayfill 이 오늘 것을 이미 받았으면 안쪽에서 건너뛴다 */
+      await getChart(cfg, env, codes[at], "5m", 1);
+      done++;
+    } catch { /* 한 종목이 실패해도 나머지는 간다 */ }
+  }
+  await metaSet(env, "prefill_at", at >= codes.length ? 0 : at);
+  return done;
+}
+
 async function dartPollOnce(env, quietFirstRun = true) {
   const key = env.DART_API_KEY;
   if (!key) return { ok: false, error: "DART_API_KEY 가 설정되지 않았습니다." };
@@ -2062,12 +2132,18 @@ export default {
       // 공시와 별개로 먼저 본다. 주말·장 시간과 무관하게 가야 한다.
       try { await sendReminders(env); } catch {}
 
+      /* 5분봉을 몇 종목씩 미리 받아 둔다. 화면이 기다리지 않게 하려는 것이라
+         공시보다 먼저 두지 않는다 — 실패해도 공시는 돌아야 한다. */
       if (!dartShouldPoll()) return;
       try {
         await dartPollOnce(env);
       } catch (e) {
         try { await metaSet(env, "dart_last_error", safeMessage(e, env)); } catch {}
       }
+      try {
+        const cfg = readConfig(env);
+        if (cfg) await prefillMinutes(cfg, env);
+      } catch {}
     })());
   },
 
