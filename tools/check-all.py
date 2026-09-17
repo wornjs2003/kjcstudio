@@ -13,17 +13,20 @@ import subprocess
 import sys
 
 # 윈도우 콘솔은 기본이 cp949 라 '—' 같은 글자에서 죽는다.
-# 출력만 UTF-8 로 바꾼다 (tools/check-theme-sync.py 와 같은 처리).
+# 출력만 UTF-8 로 바꾼다 (holdings/tools/check-theme-sync.py 와 같은 처리).
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+# 네 도구는 holdings/tools/ 에 있다 (2026-09-17 지시). 보는 대상이 전부
+# holdings 안이라 그 구역 세션이 들도록 옮겼다. 훅도 경로로 레인을 가르므로
+# 그 자리에 있어야 주식페이지_개발 것으로 잡힌다.
 CHECKS = [
-    ("색 (theme.css ↔ theme.js)",        "check-theme-sync.py"),
-    ("관심종목 (세 곳)",                  "check-watchlist-sync.py"),
-    ("설정값 (서버 ↔ 워커)",              "check-kis-consts.py"),
-    ("뉴스 주제어 (JSON ↔ 워커)",         "check-news-topics.py"),
+    ("색 (theme.css ↔ theme.js)",        "../holdings/tools/check-theme-sync.py"),
+    ("관심종목 (세 곳)",                  "../holdings/tools/check-watchlist-sync.py"),
+    ("설정값 (서버 ↔ 워커)",              "../holdings/tools/check-kis-consts.py"),
+    ("뉴스 주제어 (JSON ↔ 워커)",         "../holdings/tools/check-news-topics.py"),
 ]
 
 

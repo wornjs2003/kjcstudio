@@ -101,7 +101,7 @@ const QUOTE_CACHE_TTL = 25;                         // 느린 갈래 · 지수 (
    서버(server/kis_proxy.py)는 0.7 초다. 여기만 1 인 이유 —
    워커는 Cloudflare 엣지 캐시(cf.cacheTtl)를 쓰는데 공식 문서가 소수를
    받는지 밝히지 않았다 (2026-09-15 확인). 확인 못 한 값을 넣지 않는다.
-   화면이 1초 주기라 1초면 충분하다. tools/check-kis-consts.py 가
+   화면이 1초 주기라 1초면 충분하다. holdings/tools/check-kis-consts.py 가
    이 차이를 알고 비교한다. */
 /* ── 워커 자체 캐시 ─────────────────────────────────────────
 
@@ -866,7 +866,7 @@ async function fetchIndices(cfg, env, withChart = true) {
 
    ★ 아래 NEWS_TOPICS 는 data/news-topics.json 의 복제다.
      워커는 대시보드에 코드만 붙여넣는 방식이라 파일을 같이 올릴 수 없다.
-     합칠 수 없는 복제이므로 tools/check-news-topics.py 가 대조한다.
+     합칠 수 없는 복제이므로 holdings/tools/check-news-topics.py 가 대조한다.
      주제를 늘릴 때는 JSON 과 여기를 함께 고친다.                          */
 
 const NEWS_TOPICS = [
@@ -888,7 +888,7 @@ const NEWS_TOPICS = [
 const NEWS_DROP = ["소폭 상승세", "소폭 하락세", "상승폭 확대", "하락폭 확대", "특징주", "상위 20종목", "상승률 상위", "하락률 상위", "기술적 분석", "인기검색"];
 
 /* 받아올 곳. data/news-topics.json 의 feeds 와 같아야 한다.
-   tools/check-news-topics.py 가 대조한다. */
+   holdings/tools/check-news-topics.py 가 대조한다. */
 const NEWS_FEEDS = [
   { id: "hk", label: "한국경제", url: "https://www.hankyung.com/feed/finance" },
   { id: "hk-ec", label: "한국경제", url: "https://www.hankyung.com/feed/economy" },

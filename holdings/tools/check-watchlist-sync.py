@@ -24,7 +24,10 @@ import sys
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# holdings/tools/ 로 옮겨서 한 단계가 깊어졌다 (2026-09-17).
+# 이 도구들이 보는 경로는 **저장소 루트 기준**이라 루트를 정확히 잡아야 한다.
+HERE = os.path.dirname(os.path.abspath(__file__))        # holdings/tools
+ROOT = os.path.dirname(os.path.dirname(HERE))            # 저장소 루트
 
 # (표시 이름, 파일, 배열이 시작되는 문구)
 SOURCES = [

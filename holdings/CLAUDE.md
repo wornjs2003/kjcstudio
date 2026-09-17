@@ -281,7 +281,7 @@ IR 은 하루 평균 **15건**쯤 올라온다 (5영업일 실측: 14·19·7·13
 `KQI150` 은 문서에 없는 이름이라 후보를 직접 호출해 찾았다
 (`KDQ150`·`KOSDAQ150`·`KQ150` 은 빈 결과). 분기에 한 번 바뀌는 값이라 하루 한 번만
 받는다. `server/dart.py` 의 `INDEX_LISTS` 와 `worker/kis-worker.js` 가 같아야 하고,
-`tools/check-kis-consts.py` 가 대조한다.
+`holdings/tools/check-kis-consts.py` 가 대조한다.
 
 화면에서는 공시 칸과 같은 모양의 **필터 칩**으로 나눠 본다 — 전체 · 관심종목 ·
 코스피200 · 코스닥150 · 금리 · 물가. 실제로 들어온 것만 칩이 생긴다.

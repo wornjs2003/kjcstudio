@@ -202,7 +202,7 @@ canvas 는 CSS 를 상속받지 못한다. 그래서 `holdings/js/theme.js` 가 
 복제해 두었다. **합칠 수 없는 복제다.** 어긋나면 차트만 옛 색으로 남고 화면은
 멀쩡해 보여서 눈으로는 못 찾는다.
 
-    python tools/check-theme-sync.py      맞으면 0, 어긋나면 1 + 어긋난 항목
+    python holdings/tools/check-theme-sync.py      맞으면 0, 어긋나면 1 + 어긋난 항목
 
 `theme.css` 의 `--kh-*` 를 고쳤으면 이것을 돌린다. 2026-09-15 기준 36개 전부 일치.
 
@@ -217,13 +217,13 @@ canvas 는 CSS 를 상속받지 못한다. 그래서 `holdings/js/theme.js` 가 
 **합칠 수 없는 복제라면 — 주석 대신 대조 도구를 만든다.**
 
 "같아야 한다" 는 주석은 지켜지지 않는다. 어긋나도 화면은 멀쩡해 보이고,
-숫자만 조용히 갈린다. 눈으로는 못 찾는다. 선례가 `tools/check-theme-sync.py` 다.
+숫자만 조용히 갈린다. 눈으로는 못 찾는다. 선례가 `holdings/tools/check-theme-sync.py` 다.
 
 | 복제 | 왜 못 합치나 | 대조 도구 |
 |---|---|---|
-| `theme.css` ↔ `holdings/js/theme.js` 의 `FALLBACK` | canvas 가 CSS 를 못 읽는다 | `tools/check-theme-sync.py` |
-| 관심종목 8개 — `market.js` · `dart.py` · `kis-worker.js` | 세 언어·세 실행 환경 | `tools/check-watchlist-sync.py` |
-| 주기·한도 — `kis_proxy.py` ↔ `kis-worker.js` | 파이썬과 자바스크립트 | `tools/check-kis-consts.py` |
+| `theme.css` ↔ `holdings/js/theme.js` 의 `FALLBACK` | canvas 가 CSS 를 못 읽는다 | `holdings/tools/check-theme-sync.py` |
+| 관심종목 8개 — `market.js` · `dart.py` · `kis-worker.js` | 세 언어·세 실행 환경 | `holdings/tools/check-watchlist-sync.py` |
+| 주기·한도 — `kis_proxy.py` ↔ `kis-worker.js` | 파이썬과 자바스크립트 | `holdings/tools/check-kis-consts.py` |
 
 값을 고쳤으면 해당 도구를 돌린다. 전부 한 번에 보려면:
 
@@ -763,7 +763,7 @@ Mac 은 `.command` 더블클릭, Windows 는 같은 이름의 `.bat` 더블클�
 지금은 반대다. 파일이 하나라 어긋날 일은 없고, **공용 값을 무심코 바꾸면
 네 구역이 한꺼번에 바뀌는** 것이 위험이다.
 
-`--kh-*` 를 바꿨으면 `python tools/check-theme-sync.py` 로 차트 색까지 맞는지 본다.
+`--kh-*` 를 바꿨으면 `python holdings/tools/check-theme-sync.py` 로 차트 색까지 맞는지 본다.
 
 ### 왜 이렇게 하나
 
