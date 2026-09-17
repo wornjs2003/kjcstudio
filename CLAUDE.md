@@ -287,6 +287,9 @@ canvas 는 CSS 를 상속받지 못한다. 그래서 `holdings/js/theme.js` 가 
 - `holdings/` : 독립 프로젝트 구역 (주식 분석, 보유 종목 — 별도 관리)
 - `company-setup/` : 회사 설립 체크리스트 (독립 구역, 항목 데이터는 `company-setup/data/checklist.js`)
 - `projects/` : 프로젝트 보드 (독립 구역, 칼럼·카테고리 정의는 `projects/data/config.js`, 데이터는 localStorage + JSON 내보내기)
+- `ai-work/` : AI 작업 프로세스를 정하는 판 (독립 구역, 단계·도구 데이터는 `ai-work/data/pipeline.json`)
+  - 상단 메뉴의 **AI Work** 는 이곳으로 간다. `category/ai-work.html` 은 그대로 두는데,
+    작업물이 생기면 쓸 갤러리라서다. 메뉴에는 하나만 걸 수 있어 **지금 볼 것이 있는 쪽**을 골랐다 (2026-09-17)
 - `uidata/` : 화면이 쓰는 **그림 파일**. `data/` 와 헷갈리기 쉬운데 성격이 다르다 —
   `data/` 는 JSON 이고 저장소에 담지만, **`uidata/` 는 담지 않는다**
   - `uidata/icons/` 종목 아이콘. `.gitignore` 에 있어 **내려받아도 저장소에 안 올라간다.**
@@ -478,7 +481,7 @@ Mac 은 `.command` 더블클릭, Windows 는 같은 이름의 `.bat` 더블클�
 |---|---|---|
 | `홈페이지_정리` | **검증 담당.** 다른 세션의 작업을 교차 확인한다 | 루트(`index.html`·`category/`·`assets/`·`partials/`·`data/`) · `company-setup/` · `.claude/commands/` |
 | `주식페이지_개발` | 주식 페이지 개발 | `holdings/` |
-| `스케줄_툴개발` | 프로젝트 보드 개발 | `projects/` |
+| `스케줄_툴개발` | 프로젝트 보드 · AI 작업 프로세스 | `projects/` · `ai-work/` |
 | `개념정의` | 개념·용어 정의 · 기술 조사 · PC 환경 설정 · **문서 담당** | 아래 문서 목록 · `tools/` · `.claude/`(`commands/` 제외) · `.githooks/` |
 | `작업우선순위` | **현황 담당.** 지시를 받아 나누고, 진행 상황을 재권님께 알린다 | **저장소 파일을 고치지 않는다 (읽기 전용)** |
 | 그 밖 | 각자 창에서 하던 일 | — |

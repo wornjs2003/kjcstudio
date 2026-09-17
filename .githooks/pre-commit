@@ -30,7 +30,7 @@ lanes=$(printf '%s\n' "$files" | awk -F/ '
   NF < 2 { next }                                   # 루트 파일은 건너뛴다
 
   $1 == "holdings"                      { print "주식페이지_개발"; next }
-  $1 == "projects"                      { print "스케줄_툴개발";   next }
+  $1 == "projects" || $1 == "ai-work"   { print "스케줄_툴개발";   next }
 
   $1 == ".claude" && $2 == "commands"   { print "홈페이지_정리";   next }
   $1 == "assets" || $1 == "category" ||
