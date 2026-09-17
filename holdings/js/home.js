@@ -231,7 +231,10 @@ function paintStrip(indices) {
   const host = $('kh-strip');
   if (!host) return;
 
-  host.innerHTML = INDEX_CELLS.map(cell => {
+  /* 자주 보는 넷은 장 상태 줄 위에, 나머지는 「주요 지수」 카드에 (2026-09-17 지시).
+     같은 그림을 두 자리에 나눠 그린다 — 만드는 코드는 하나다. */
+  const top = $('kh-top-ix');
+  const draw = cells => cells.map(cell => {
     const i = cell.code ? byCode[cell.code] : null;
     if (!i) {
       /* 둘을 구분해 적는다.
@@ -274,38 +277,51 @@ function paintStrip(indices) {
      바꿨는데, 그 자리가 종목 차트가 되어 눌러도 갈 곳이 없어졌다.
      지수 화면을 만들면 그때 다시 붙인다 — 동작하지 않는 단추를 남기지 않는다. */
 
-  /* 방금 innerHTML 을 바꿨으므로 폭이 아직 잡히지 않았다. 한 프레임 뒤에
-     다시 재야 맨 왼쪽에서 '이전' 버튼이 제대로 숨는다. */
-  updateStripButtons();
-  requestAnimationFrame(updateStripButtons);
+  if (top) top.innerHTML = draw(INDEX_CELLS.filter(c => TOP_CELLS.includes(c.name)));
+  host.innerHTML = draw(INDEX_CELLS.filter(c => !TOP_CELLS.includes(c.name)));
+  paintIxFilter();
 }
 
-/* 좌우 이동 — 카드 폭만큼 밀어 준다. 끝에 닿으면 버튼을 숨긴다. */
-function updateStripButtons() {
-  const st = $('kh-strip');
-  const prev = $('kh-strip-prev');
-  const next = $('kh-strip-next');
-  if (!st || !prev || !next) return;
-  /* 딱 0 / 딱 최대가 되지 않는다. 띠에 준 1px 안쪽 여백과 스크롤 스냅 때문에
-     맨 왼쪽에서도 scrollLeft 가 1 로 잡힌다 (2026-09-14 재서 확인).
-     여유를 두지 않으면 '이전' 버튼이 안 숨어 첫 카드의 숫자를 가린다. */
-  const EDGE = 6;
-  const max = st.scrollWidth - st.clientWidth;
-  prev.disabled = st.scrollLeft <= EDGE;
-  next.disabled = st.scrollLeft >= max - EDGE;
+/* 장 상태 줄 위에 올리는 넷. 이름으로 고른다 — INDEX_CELLS 의 name 과 같다. */
+const TOP_CELLS = ['코스피', '코스닥', '나스닥 종합', 'S&P 500'];
+
+/* 카드 안의 지수를 칩으로 거른다.
+
+     국내  코스피200 · KRX100          (국기 kr)
+     미국  USD · 나스닥100 · 필라델피아 반도체 · VIX   (국기 us · 배지 vix)
+     해외  유로STOXX50 · 홍콩H         (배지 eu · hk)
+     기타  WTI 원유 · 금               (배지 oil · au)
+
+   무리는 칸 앞의 표시로 가른다. 목록을 따로 두면 INDEX_CELLS 와 두 곳이 된다. */
+const IX_GROUP = { kr: 'kr', us: 'us', vix: 'us', eu: 'ov', hk: 'ov', oil: 'etc', au: 'etc' };
+let ixGroup = 'kr';
+
+function ixGroupOf(cell) {
+  if (cell.icon === 'kr' || cell.icon === 'us') return cell.icon;
+  return IX_GROUP[cell.icon] || 'etc';
 }
 
-function setupStrip() {
-  const st = $('kh-strip');
-  if (!st) return;
-  const step = () => Math.max(262, Math.round(st.clientWidth * 0.8));
-  $('kh-strip-prev')?.addEventListener('click',
-    () => st.scrollBy({ left: -step(), behavior: 'smooth' }));
-  $('kh-strip-next')?.addEventListener('click',
-    () => st.scrollBy({ left: step(), behavior: 'smooth' }));
-  st.addEventListener('scroll', updateStripButtons, { passive: true });
-  window.addEventListener('resize', updateStripButtons);
+function paintIxFilter() {
+  const host = $('kh-strip');
+  if (!host) return;
+  const cells = INDEX_CELLS.filter(c => !TOP_CELLS.includes(c.name));
+  [...host.children].forEach((el, i) => {
+    el.hidden = cells[i] ? ixGroupOf(cells[i]) !== ixGroup : true;
+  });
 }
+
+function setupIxChips() {
+  const chips = document.querySelectorAll('.kh-ix-chips .kh-chip');
+  chips.forEach(b => b.addEventListener('click', () => {
+    chips.forEach(x => x.classList.remove('is-active'));
+    b.classList.add('is-active');
+    ixGroup = b.dataset.g;
+    paintIxFilter();
+  }));
+}
+
+/* 좌우로 미는 단추는 2026-09-17 에 없앴다. 지수가 카드 안으로 들어가면서
+   줄을 바꿔 다 보이게 됐고, 많으면 칩으로 거른다. */
 
 /* ── 고른 지수의 큰 차트 ─────────────────────
    기간을 고를 수 있다 (2026-09-15 지시).
@@ -1086,7 +1102,7 @@ paintClock();
 setInterval(paintClock, 30000);
 paintMkt();
 setInterval(paintMkt, 30000);
-setupStrip();
+setupIxChips();
 paintBigPeriods();
 
 /* 지난번에 본 값이 남아 있으면 그것부터 그린다 (2026-09-15).

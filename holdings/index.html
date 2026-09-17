@@ -84,16 +84,14 @@
     </nav>
 
     <!-- 장 상태 -->
+    <!-- 자주 보는 넷(코스피 · 코스닥 · 나스닥 종합 · S&P 500)은 장 상태 줄 위에.
+         나머지는 아래 「주요 지수」 카드에 들어간다 (2026-09-17 지시). -->
+    <div class="kh-top-ix" id="kh-top-ix"></div>
     <div class="kh-mkt" id="kh-mkt"></div>
 
     <!-- 지수 띠 — 좌우로 넘긴다 -->
-    <div class="kh-strip-wrap">
-      <button class="kh-strip-btn prev" id="kh-strip-prev" aria-label="이전">‹</button>
-      <div class="kh-fade l"></div>
-      <div class="kh-strip" id="kh-strip"></div>
-      <div class="kh-fade r"></div>
-      <button class="kh-strip-btn next" id="kh-strip-next" aria-label="다음">›</button>
-    </div>
+    <!-- 지수 띠는 2026-09-17 에 아래 「주요 지수」 카드로 옮겼다.
+         좌우로 밀어 보던 것을 칩(국내·미국·해외·기타)으로 거르는 방식으로 바꿨다. -->
 
     <!-- 고른 종목 + 오른쪽 패널
 
@@ -186,6 +184,19 @@
         <div class="kh-asof">업종 38개 · 테마 100개</div>
         <div class="kh-idxp-b" style="padding:0 18px 18px">
           <span class="kh-mut">붙일 것: KIS 업종 API</span></div>
+      </div>
+
+      <!-- 주요 지수 — 위 띠에 있던 것이 여기로 왔다.
+           칩으로 걸러 보고, 칸이 길어지지 않게 안에서만 굴러간다. -->
+      <div class="kh-card">
+        <div class="kh-tabs"><button class="kh-tab is-active">주요 지수</button>
+          <span class="kh-chips kh-ix-chips">
+            <button class="kh-chip is-active" data-g="kr">국내</button>
+            <button class="kh-chip" data-g="us">미국</button>
+            <button class="kh-chip" data-g="ov">해외</button>
+            <button class="kh-chip" data-g="etc">기타</button>
+          </span></div>
+        <div class="kh-ix-scroll"><div class="kh-strip" id="kh-strip"></div></div>
       </div>
 
       <div class="kh-card kh-sec-card">
