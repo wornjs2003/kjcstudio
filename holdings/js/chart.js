@@ -151,6 +151,7 @@ export async function fetchCandles(code, periodId = '1d', limit = 240) {
    반환값의 destroy() 를 호출해 정리한다 (화면을 다시 그릴 때 필요).
    ────────────────────────────────────────────────────────────────────────── */
 export function createStockChart(container, candles, opts = {}) {
+  /* candles 는 setData 로 바뀐다 (인자를 그대로 쓰지 않는다) */
   const LC = window.LightweightCharts;
   if (!LC) throw new Error('차트 라이브러리를 불러오지 못했습니다');
   if (!candles || !candles.length) throw new Error('표시할 데이터가 없습니다');
@@ -158,7 +159,8 @@ export function createStockChart(container, candles, opts = {}) {
   const showVolume = opts.showVolume !== false;
   const showMA = opts.showMA !== false;
   const showLegend = opts.showLegend !== false;
-  const period = opts.period || 'D';
+  /* candles · period 는 setData 로 갈아끼운다. 그래서 const 가 아니다 */
+  let period = opts.period || 'D';
   const isMinute = MINUTE_PERIODS.has(period);
 
   const chart = LC.createChart(container, {
@@ -212,10 +214,11 @@ export function createStockChart(container, candles, opts = {}) {
     wickUpColor: COLOR.up,
     wickDownColor: COLOR.down,
   });
-  candleSeries.setData(candles.map((c) => ({
+  const fillCandles = () => candleSeries.setData(candles.map((c) => ({
     time: toChartTime(c.ts, period),
     open: c.open, high: c.high, low: c.low, close: c.close,
   })));
+  fillCandles();
 
   // 거래량 (아래쪽에 겹쳐 표시)
   let volumeSeries = null;
@@ -230,6 +233,11 @@ export function createStockChart(container, candles, opts = {}) {
       scaleMargins: { top: 0.78, bottom: 0 },
       visible: false,
     });
+    fillVolume();
+  }
+
+  function fillVolume() {
+    if (!volumeSeries) return;
     volumeSeries.setData(candles.map((c) => ({
       time: toChartTime(c.ts, period),
       value: c.volume,
@@ -244,7 +252,9 @@ export function createStockChart(container, candles, opts = {}) {
    * 것과 못 그리는 것은 다르고, 화면이 그 차이를 말해야 한다
    * (holdings/CLAUDE.md 데이터 규칙). */
   const maSeries = [];
-  if (showMA) {
+  buildMA();
+  function buildMA() {
+    if (!showMA) return;
     MA_LINES.forEach(([maPeriod, key]) => {
       const color = COLOR[key];
       if (candles.length < maPeriod) {
@@ -273,16 +283,69 @@ export function createStockChart(container, candles, opts = {}) {
 
   showLastBars(chart, candles.length);
 
-  const legend = showLegend
+  let legend = showLegend
     ? mountLegend(container, chart, { candles, period, maSeries, showVolume })
     : null;
 
-  return {
+  /* 부르는 쪽이 그은 선(전일 종가선 등)을 여기서 들고 있는다.
+     봉을 갈아끼울 때 지워야 하는데, 라이브러리가 「이 시리즈의 선 목록」을
+     돌려주지 않아 만든 것을 우리가 적어 둔다. */
+  const priceLines = [];
+
+  const api = {
     chart,
     candleSeries,
     volumeSeries,
     maSeries,
     legend,
+
+    /** 선을 긋는다. 다음 setData 때 저절로 지워진다. */
+    addPriceLine(o) {
+      try {
+        const line = candleSeries.createPriceLine(o);
+        priceLines.push(line);
+        return line;
+      } catch { return null; }      // 라이브러리 버전이 다르면 선만 생략
+    },
+
+    /** 봉만 갈아끼운다 (2026-09-17 지시).
+     *
+     * **차트를 없애고 새로 만들지 않는다.** 만드는 일이 가장 비싸고,
+     * 없애는 것을 한 번이라도 빠뜨리면 객체가 쌓여 어느 순간부터 새 차트가
+     * 아예 안 그려진다 (2026-09-17 아침에 실제로 그랬다).
+     *
+     * 이동평균은 다시 만든다. 봉 수가 달라지면 「봉이 모자라 못 그리는 선」이
+     * 바뀌기 때문이다 — 200봉짜리에서 50봉짜리로 가면 MA60·MA200 이 사라져야 한다.
+     * 범례도 봉과 이동평균을 클로저로 쥐고 있어 다시 건다.
+     */
+    setData(nextCandles, nextPeriod) {
+      if (!nextCandles || !nextCandles.length) return;
+      candles = nextCandles;
+      if (nextPeriod && nextPeriod !== period) {
+        period = nextPeriod;
+        chart.applyOptions({ timeScale: { timeVisible: MINUTE_PERIODS.has(period) } });
+      }
+
+      priceLines.forEach((l) => { try { candleSeries.removePriceLine(l); } catch {} });
+      priceLines.length = 0;
+
+      fillCandles();
+      fillVolume();
+
+      maSeries.forEach((m) => {
+        if (m.series) { try { chart.removeSeries(m.series); } catch {} }
+      });
+      maSeries.length = 0;
+      buildMA();
+
+      showLastBars(chart, candles.length);
+
+      if (showLegend) {
+        if (legend) legend.destroy();
+        legend = mountLegend(container, chart, { candles, period, maSeries, showVolume });
+        api.legend = legend;
+      }
+    },
 
     /** 보는 창을 처음 상태로 되돌린다. 칸 크기가 바뀐 뒤에 부른다 —
      *  여기서 fitContent 를 부르면 봉 크기가 종목마다 다시 갈린다. */
@@ -293,6 +356,7 @@ export function createStockChart(container, candles, opts = {}) {
       try { chart.remove(); } catch { /* 이미 정리됨 */ }
     },
   };
+  return api;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────

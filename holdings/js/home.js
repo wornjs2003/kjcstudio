@@ -450,30 +450,36 @@ async function paintBigChart() {
     return;
   }
 
-  /* 기다리는 사이에 다른 차트가 그려졌을 수 있다. 치우고 시작한다.
-     **destroy 를 빠뜨리면 차트 객체가 살아남아 쌓인다.** 마우스로 종목을
-     옮길 때마다 하나씩 늘어, 어느 순간부터 새 차트가 아예 안 그려졌다
-     (2026-09-17 — "위로 올려서 삼성전자 볼려고 하니까 안나온다"). */
-  dropBigChart();
-  host.innerHTML = '';
-  bigChart = createStockChart(host, candles, { period, showVolume: true });
+  /* **차트를 다시 만들지 않는다 (2026-09-17 지시).** 이미 있으면 봉만
+     갈아끼운다. 만드는 일이 가장 비싸고, 없애는 것을 한 번이라도 빠뜨리면
+     객체가 쌓여 어느 순간부터 새 차트가 아예 안 그려진다
+     (2026-09-17 아침 — "위로 올려서 삼성전자 볼려고 하니까 안나온다").
+
+     칸이 비어 있으면(오류 문구를 띄웠던 자리) 새로 만든다. */
+  if (bigChart && host.querySelector('canvas')) {
+    bigChart.setData(candles, period);
+  } else {
+    dropBigChart();
+    host.innerHTML = '';
+    bigChart = createStockChart(host, candles, { period, showVolume: true });
+  }
 
   /* 5분봉에는 전일 종가선을 그어 둔다. 오늘 올랐는지 내렸는지의 기준이다.
      어제 마지막 봉의 종가가 그 값이다. */
-  if (bigPeriod === '5m' && bigChart && bigChart.candleSeries) {
+  /* addPriceLine 으로 긋는다 — 다음에 봉을 갈아끼울 때 저절로 지워진다.
+     직접 createPriceLine 을 부르면 종목을 옮길 때마다 선이 쌓인다. */
+  if (bigPeriod === '5m' && bigChart) {
     const today = candles[candles.length - 1].ts.slice(0, 8);
     const firstToday = candles.findIndex(b => b.ts.slice(0, 8) === today);
     if (firstToday > 0) {
-      try {
-        bigChart.candleSeries.createPriceLine({
-          price: candles[firstToday - 1].close,
-          color: color('text-muted'),
-          lineWidth: 1,
-          lineStyle: 2,               // 점선
-          axisLabelVisible: true,
-          title: '전일',
-        });
-      } catch { /* 라이브러리 버전이 다르면 선만 생략한다 */ }
+      bigChart.addPriceLine({
+        price: candles[firstToday - 1].close,
+        color: color('text-muted'),
+        lineWidth: 1,
+        lineStyle: 2,               // 점선
+        axisLabelVisible: true,
+        title: '전일',
+      });
     }
   }
 

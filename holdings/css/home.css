@@ -142,9 +142,11 @@
 }
 .kh-rank th.l, .kh-rank td.l { text-align: left; }
 .kh-rank td { padding: 11px 16px; text-align: right; font-size: 0.86rem; }
-/* 줄 위에서 커서 모양은 그대로 둔다 (2026-09-17 지시).
-   누르면 차트가 바뀌지만 어디로 가는 링크가 아니라, 손가락 모양은 오히려
-   「눌러서 이동한다」 로 읽힌다. 창은 「자세히 ›」 로만 뜬다. */
+/* 줄 위에서 커서 모양이 안 바뀌게 한다 (2026-09-17 지시).
+   손가락(pointer)만 지웠더니 글자 위에서 I 모양(글자 고르기)이 됐다.
+   기본값이 auto 라 글자를 만나면 그렇게 된다. 화살표로 못 박는다.
+   글자를 끌어 고를 일도 없는 목록이라 그것도 막는다. */
+.kh-rank tbody tr, .kh-rank tbody tr * { cursor: default; user-select: none; }
 .kh-rank tbody tr:hover { background: var(--kh-bg-hover); }
 
 /* 고른 줄 — 왼쪽 파란 막대와 파란 글씨로 어디를 보고 있는지 알린다.
@@ -543,6 +545,9 @@
   flex-direction: row; align-items: center; gap: 8px;
   padding: 6px 4px;
   background: none; border: 0; box-shadow: none;
+  /* 눌러도 아무 일이 없다. 손가락 모양이면 누를 수 있는 것처럼 보인다
+     — 지수를 눌러 큰 차트를 바꾸던 동작은 2026-09-17 에 없앴다. */
+  cursor: default;
 }
 .kh-ix:hover { background: none; box-shadow: none; transform: none; }
 /* 글자 크기는 아래 「현물 · 선물 · 야간」 줄과 같다 (.kh-mkt 의 0.82rem) */
