@@ -1,34 +1,24 @@
 /* ==========================================================================
-   AI Work — 작업 프로세스를 정하는 판
+   AI Work — AI 로 컨셉·모델링을 만드는 순서를 짜는 판
 
-   완성작을 거는 화면이 아니다. 어느 도구를 어디에 쓸지 정하고, 직접 돌려본
-   결과를 남긴다. 그래서 「작업물 개수」가 아니라 「정해야 할 질문」과
-   「아직 모르는 것」이 화면의 중심이다.
+   프로젝트 보드(projects/)와 같은 규칙으로 움직인다 (2026-09-17 지시).
+   갈래 탭 → 할 일 · 진행중 · 완료 → 작업 카드 → 상세창.
+   프로젝트 대신 갈래가 탭이 되는 것만 다르다.
 
    색은 전부 ../../assets/css/theme.css 의 토큰이다.
    공용(접두사 없음) + 이 구역용(--aw-) 을 쓴다. 하드코딩은 두지 않는다.
-   흰 카드에는 선을 두지 않고, 흰 바탕 위 글씨는 검정이다 (CLAUDE.md 색·선 규칙).
+   흰 카드에는 선을 두지 않고, 연한 바탕 위 글씨는 같은 색의 진한 값이다
+   (CLAUDE.md 색·선 규칙).
    ========================================================================== */
 
 .aw-wrap {
-  /* 상단 메뉴가 고정이라 그 높이만큼 비운다. 값을 적지 않고 nav.css 가 정한
-     --nav-height 를 쓴다 — 좁은 화면에서 96 → 72 로 바뀌는 것까지 따라간다.
-     holdings/css/frame.css 가 쓰는 방식과 같다.
-
-     좌우 여백도 --page-gutter 를 쓴다. 30px 를 직접 적었더니 메뉴의 로고보다
-     본문 제목이 17px 안쪽에서 시작해 기준선이 어긋났다 (2026-09-17).
-     메뉴(.site-nav)가 max-width 없이 전체 폭에 같은 여백을 쓰므로,
-     본문도 그렇게 두면 두 줄이 정확히 맞는다. */
+  /* 상단 메뉴가 고정이라 그 높이만큼 비운다. 좌우도 --page-gutter 를 쓴다 —
+     값을 직접 적었더니 메뉴 로고보다 본문이 17px 안쪽에서 시작했다 (2026-09-17). */
   padding: calc(var(--nav-height) + 24px) var(--page-gutter) 48px;
 }
 
 /* ── 머리말 ──────────────────────────────── */
-.aw-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 20px;
-}
+.aw-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
 .aw-head h1 {
   font-family: Roboto, "Noto Sans KR", sans-serif;
   font-style: italic;
@@ -47,172 +37,360 @@
 }
 .aw-sub b { color: var(--text-primary); font-weight: 600; }
 
-/* 지금 어디까지 왔는지 한 줄로. 연한 바탕이라 글씨는 같은 색의 진한 값 */
-.aw-stamp {
+.aw-saved {
   margin-left: auto;
   white-space: nowrap;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 12px; font-weight: 600;
   padding: 6px 13px;
   border-radius: 999px;
-  background: var(--aw-warn-faint);
-  color: var(--aw-warn);
-}
-.aw-stamp::before {
-  content: "";
-  display: inline-block;
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  margin-right: 6px;
-  vertical-align: 1px;
-}
-/* 돌려본 것이 하나라도 생기면 초록으로 바뀐다 */
-.aw-stamp.is-going { background: var(--aw-ok-faint); color: var(--aw-ok); }
-
-/* ── 통계 ────────────────────────────────── */
-.aw-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 13px;
-  margin-bottom: 16px;
-}
-.aw-stat {
-  background: var(--bg-card);
-  border-radius: 16px;
-  padding: 16px 20px;
-}
-.aw-stat .k {
-  font-size: 12.5px;
-  color: var(--text-secondary);
-  font-weight: 500;
-  margin-bottom: 6px;
-}
-.aw-stat .v {
-  font-size: 25px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  font-variant-numeric: tabular-nums;
-}
-.aw-stat .v small {
-  font-size: 12.5px;
-  font-weight: 600;
+  background: var(--bg-surface);
   color: var(--text-muted);
-  margin-left: 4px;
 }
-.aw-stat .n { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+.aw-saved.is-ok   { background: var(--aw-ok-faint);   color: var(--aw-ok); }
+.aw-saved.is-warn { background: var(--aw-warn-faint); color: var(--aw-warn); }
+.aw-saved.is-busy { background: var(--accent-faint);  color: var(--accent); }
 
-/* ── 단계 창 ─────────────────────────────── */
-.aw-panes {
+/* ── 칸 ─────────────────────────────────── */
+/* 프로젝트 보드의 「할 일 · 진행중 · 완료」 자리다. 칸 수가 pipeline.json 에
+   달려 있으므로 개수를 박지 않고 auto-fit 으로 둔다. */
+.aw-lanes {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 14px;
   align-items: start;
 }
-.aw-pane {
+.aw-lane {
   background: var(--bg-card);
   border-radius: 16px;
-  padding: 16px 18px;
+  padding: 14px 15px;
   min-width: 0;
 }
-.aw-pane-h { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
-.aw-pane-h b { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
-.aw-pane-h .no {
+.aw-lane.is-over { background: var(--accent-faint); }
+.aw-lane-h { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; }
+.aw-lane-no {
   font-family: Roboto, sans-serif;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10.5px; font-weight: 700;
   color: var(--text-muted);
-}
-.aw-pane-d {
-  font-size: 11.5px;
-  color: var(--text-muted);
-  line-height: 1.55;
-  margin: 0 0 13px;
 }
 
-/* 이 단계에서 정해야 할 것. 작업물 개수보다 이것이 먼저다 */
-.aw-q {
+/* 이 칸에서 정해야 할 것 — 작업을 쌓기 전에 읽힌다 */
+.aw-lane-q {
+  font-size: 11.5px; line-height: 1.5;
+  color: var(--text-secondary);
   background: var(--bg-surface);
   border-radius: 10px;
-  padding: 11px 13px;
-  margin-bottom: 13px;
+  padding: 9px 11px;
+  margin-bottom: 10px;
 }
-.aw-q-k {
-  font-size: 10.5px;
-  font-weight: 700;
+.aw-lane-q-k {
+  display: block;
+  font-size: 10px; font-weight: 700;
   color: var(--text-muted);
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
-.aw-q-v { font-size: 12.5px; font-weight: 600; line-height: 1.5; }
 
-/* ── 도구 한 줄 ──────────────────────────── */
-.aw-tool {
-  background: var(--bg-surface);
-  border-radius: 11px;
-  padding: 11px 13px;
-  margin-bottom: 8px;
-}
-.aw-tool-h { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
-.aw-tool-h b { font-size: 13px; font-weight: 700; }
-.aw-tool-m { font-size: 11px; color: var(--text-secondary); line-height: 1.55; }
-.aw-tool-m strong { font-weight: 600; color: var(--text-primary); }
-.aw-tool-m em { font-style: normal; font-weight: 600; color: var(--aw-stop); }
-
-/* 상태 — 연한 바탕에 같은 색의 진한 글씨 (CLAUDE.md 색 규칙) */
-.aw-st {
-  margin-left: auto;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 8px;
+/* 칸 제목 — 연한 바탕에 같은 색의 진한 글씨 (CLAUDE.md 색 규칙) */
+.aw-lane-t {
+  font-size: 12.5px; font-weight: 700;
+  padding: 5px 12px;
   border-radius: 999px;
-  white-space: nowrap;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
 }
-.aw-st.is-read  { background: var(--bg-card);        color: var(--text-muted); }
-.aw-st.is-tried { background: var(--aw-warn-faint);  color: var(--aw-warn); }
-.aw-st.is-use   { background: var(--aw-ok-faint);    color: var(--aw-ok); }
-.aw-st.is-no    { background: var(--aw-stop-faint);  color: var(--aw-stop); }
+.aw-lane-t.tone-accent { background: var(--accent-faint); color: var(--accent); }
+.aw-lane-t.tone-done   { background: var(--aw-ok-faint);  color: var(--aw-ok); }
 
-/* ── 아직 모르는 것 ──────────────────────── */
-/* 문서에만 적어두면 다시 안 읽게 된다. 화면에 빨간 자국으로 남긴다. */
-.aw-unknown {
-  background: var(--aw-stop-faint);
-  border-radius: 11px;
-  padding: 12px 13px;
-  color: var(--aw-stop);
+/* 막힌 곳 · 후보 도구는 칸 안에 들어간다 */
+.aw-lane .aw-blocker { margin: 0 0 10px; padding: 10px 11px; }
+.aw-lane .aw-blocker b { font-size: 11.5px; }
+.aw-lane .aw-blocker span { font-size: 11px; }
+.aw-lane .aw-cands { margin-top: 10px; }
+.aw-lane .aw-cands-b { grid-template-columns: minmax(0, 1fr); }
+.aw-lane-n {
+  margin-left: auto;
+  font-size: 11.5px; font-weight: 700;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
-.aw-unknown b { font-size: 12.5px; font-weight: 700; display: block; margin-bottom: 5px; }
-.aw-unknown span { font-size: 11.5px; line-height: 1.6; display: block; }
-.aw-unknown strong { font-weight: 700; }
-.aw-unknown em { font-style: italic; font-weight: 600; }
+.aw-lane-b { display: flex; flex-direction: column; gap: 8px; min-height: 40px; }
+.aw-lane-empty {
+  font-size: 11.5px; color: var(--text-muted);
+  text-align: center; padding: 16px 6px;
+  background: var(--bg-surface);
+  border-radius: 10px;
+}
+.aw-lane-add {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%;
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  color: var(--text-muted);
+  background: transparent; border: 0;
+  padding: 10px; border-radius: 10px;
+  margin-top: 8px;
+  cursor: pointer;
+}
+.aw-lane-add:hover { background: var(--accent-faint); color: var(--accent); }
 
-/* ── 확인된 것 · 모르는 것 ───────────────── */
-.aw-next {
-  background: var(--bg-card);
-  border-radius: 16px;
-  padding: 18px 22px;
-  margin-top: 16px;
-}
-.aw-next h2 { font-size: 14px; font-weight: 700; margin: 0 0 4px; }
-.aw-next-s { font-size: 12px; color: var(--text-muted); margin: 0 0 14px; }
-.aw-next-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.aw-next-c {
+/* ── 작업 카드 ──────────────────────────── */
+.aw-card {
   background: var(--bg-surface);
   border-radius: 12px;
-  padding: 13px 15px;
+  padding: 11px 13px;
+  cursor: pointer;
 }
-.aw-next-c b { font-size: 12.5px; font-weight: 700; display: block; margin-bottom: 7px; }
-.aw-next-c ul {
-  margin: 0;
-  padding-left: 16px;
-  font-size: 12px;
+.aw-card:hover { background: var(--bg-elevated); }
+.aw-card.is-dragging { opacity: 0.45; }
+.aw-card-t {
+  font-size: 13px; font-weight: 600; line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.aw-card-m { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 7px; }
+.aw-chip {
+  font-size: 10.5px; font-weight: 600;
+  background: var(--bg-card);
   color: var(--text-secondary);
-  line-height: 1.85;
+  border-radius: 999px;
+  padding: 2px 8px;
 }
-.aw-next-c strong { font-weight: 600; color: var(--text-primary); }
-.aw-next-c.is-todo { background: var(--aw-stop-faint); }
-.aw-next-c.is-todo b,
-.aw-next-c.is-todo ul,
-.aw-next-c.is-todo strong { color: var(--aw-stop); }
+
+/* 하위 항목은 카드에서도 바로 체크한다 — 프로젝트 보드와 같다 */
+.aw-card-sub {
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 5px;
+}
+.aw-card-s {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11.5px; color: var(--text-secondary);
+  cursor: pointer; line-height: 1.4;
+}
+.aw-card-box {
+  width: 13px; height: 13px; flex-shrink: 0;
+  border-radius: 4px;
+  border: 2px solid var(--border-strong);
+  position: relative;
+}
+.aw-card-s.is-on .aw-card-box {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.aw-card-s.is-on .aw-card-box::after {
+  content: "";
+  position: absolute;
+  left: 3px; top: 0px;
+  width: 3px; height: 7px;
+  border-right: 2px solid var(--bg-card);
+  border-bottom: 2px solid var(--bg-card);
+  transform: rotate(45deg);
+}
+.aw-card-s.is-on { color: var(--text-muted); text-decoration: line-through; }
+
+/* ── 상세창 ─────────────────────────────── */
+/* hidden 일 때는 아예 없어야 한다.
+   display:flex 가 브라우저 기본 [hidden]{display:none} 보다 구체적이라
+   그냥 두면 덮어쓴다 — 실제로 빈 오버레이가 화면 전체를 덮었다 (2026-09-17). */
+.aw-detail[hidden] { display: none; }
+
+.aw-detail {
+  position: fixed; inset: 0; z-index: 90;
+  background: var(--scrim, rgba(16, 16, 19, 0.38));
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.aw-modal {
+  background: var(--bg-card);
+  border-radius: 18px;
+  padding: 20px 22px;
+  width: 100%; max-width: 520px;
+  max-height: 86vh; overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+.aw-m-h { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.aw-m-no { font-size: 11px; font-weight: 700; color: var(--text-muted); }
+.aw-m-x {
+  margin-left: auto;
+  font-family: inherit; font-size: 14px;
+  color: var(--text-muted);
+  background: transparent; border: 0;
+  cursor: pointer; padding: 2px 6px;
+}
+.aw-m-x:hover { color: var(--text-primary); }
+.aw-m-title {
+  width: 100%;
+  font-family: inherit;
+  font-size: 17px; font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 0; border-radius: 10px;
+  padding: 11px 13px;
+  margin-bottom: 16px;
+}
+.aw-m-title:focus { outline: 2px solid var(--accent); }
+
+.aw-m-row { margin-bottom: 15px; }
+.aw-m-k {
+  font-size: 10.5px; font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.aw-m-cnt { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+.aw-m-seg { display: flex; gap: 4px; background: var(--bg-surface); border-radius: 10px; padding: 3px; }
+.aw-seg-b {
+  flex: 1;
+  font-family: inherit; font-size: 12px; font-weight: 500;
+  color: var(--text-muted);
+  background: transparent; border: 0;
+  padding: 7px; border-radius: 8px;
+  cursor: pointer;
+}
+.aw-seg-b.is-on { background: var(--bg-card); color: var(--text-primary); font-weight: 700; }
+
+.aw-m-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.aw-chip-b {
+  font-family: inherit;
+  font-size: 11.5px; font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 0; border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.aw-chip-b.is-on { background: var(--accent); color: var(--text-on-fill, #fff); }
+.aw-chip-b.is-add { color: var(--text-muted); font-weight: 500; }
+.aw-chip-b.is-add:hover { background: var(--accent-faint); color: var(--accent); }
+
+.aw-m-subs { display: flex; flex-direction: column; gap: 5px; }
+.aw-m-sub {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--bg-surface);
+  border-radius: 9px;
+  padding: 8px 11px;
+  font-size: 12.5px;
+}
+.aw-m-box {
+  width: 15px; height: 15px; flex-shrink: 0;
+  border-radius: 4px;
+  border: 2px solid var(--border-strong);
+  position: relative; cursor: pointer;
+}
+.aw-m-sub.is-on .aw-m-box { background: var(--accent); border-color: var(--accent); }
+.aw-m-sub.is-on .aw-m-box::after {
+  content: "";
+  position: absolute;
+  left: 4px; top: 0px;
+  width: 3px; height: 8px;
+  border-right: 2px solid var(--bg-card);
+  border-bottom: 2px solid var(--bg-card);
+  transform: rotate(45deg);
+}
+.aw-m-st { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.aw-m-sub.is-on .aw-m-st { color: var(--text-muted); text-decoration: line-through; }
+.aw-m-subx {
+  font-family: inherit; font-size: 11px;
+  color: var(--text-muted);
+  background: transparent; border: 0;
+  cursor: pointer; padding: 0 2px;
+  opacity: 0;
+}
+.aw-m-sub:hover .aw-m-subx { opacity: 1; }
+.aw-m-subx:hover { color: var(--aw-stop); }
+.aw-m-empty {
+  font-size: 11.5px; color: var(--text-muted);
+  background: var(--bg-surface);
+  border-radius: 9px;
+  padding: 11px; text-align: center;
+}
+.aw-m-addsub {
+  width: 100%;
+  font-family: inherit; font-size: 11.5px; font-weight: 600;
+  color: var(--text-muted);
+  background: transparent; border: 0;
+  padding: 8px; border-radius: 9px;
+  margin-top: 6px;
+  cursor: pointer;
+}
+.aw-m-addsub:hover { background: var(--accent-faint); color: var(--accent); }
+
+.aw-m-memo {
+  width: 100%;
+  font-family: inherit; font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 0; border-radius: 10px;
+  padding: 11px 13px;
+  min-height: 78px;
+  resize: vertical;
+}
+.aw-m-memo:focus { outline: 2px solid var(--accent); }
+
+.aw-m-foot {
+  display: flex; gap: 8px;
+  margin-top: 18px; padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.aw-m-del {
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  color: var(--aw-stop);
+  background: var(--aw-stop-faint);
+  border: 0; border-radius: 9px;
+  padding: 9px 14px;
+  cursor: pointer;
+}
+.aw-m-done {
+  margin-left: auto;
+  font-family: inherit; font-size: 12.5px; font-weight: 700;
+  color: var(--text-on-fill, #fff);
+  background: var(--accent);
+  border: 0; border-radius: 9px;
+  padding: 9px 22px;
+  cursor: pointer;
+}
+
+/* ── 확인 대화상자 ──────────────────────── */
+/* 추가도 삭제도 이것을 거친다 — 프로젝트 보드와 같은 규칙 */
+.aw-ask-back {
+  position: fixed; inset: 0; z-index: 100;
+  background: var(--scrim, rgba(16, 16, 19, 0.38));
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.aw-ask {
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 22px 24px;
+  width: 100%; max-width: 380px;
+  box-shadow: var(--shadow-lg);
+}
+.aw-ask-t { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+.aw-ask-d { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.aw-ask-in {
+  width: 100%;
+  font-family: inherit; font-size: 13.5px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 0; border-radius: 10px;
+  padding: 11px 13px;
+  margin-top: 14px;
+}
+.aw-ask-in:focus { outline: 2px solid var(--accent); }
+.aw-ask-q {
+  font-size: 12.5px; color: var(--text-secondary);
+  margin-top: 14px;
+}
+.aw-ask-btns { display: flex; gap: 8px; margin-top: 18px; }
+.aw-ask-no, .aw-ask-ok {
+  flex: 1;
+  font-family: inherit; font-size: 12.5px; font-weight: 700;
+  border: 0; border-radius: 10px;
+  padding: 11px;
+  cursor: pointer;
+}
+.aw-ask-no { background: var(--bg-surface); color: var(--text-secondary); }
+.aw-ask-ok { background: var(--accent); color: var(--text-on-fill, #fff); }
+.aw-ask-ok.is-danger { background: var(--aw-stop); }
 
 /* ── 못 읽었을 때 ────────────────────────── */
 .aw-fail {
@@ -220,23 +398,17 @@
   color: var(--aw-stop);
   border-radius: 14px;
   padding: 22px;
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 13px; line-height: 1.7;
   grid-column: 1 / -1;
 }
 .aw-fail b { display: block; font-weight: 700; margin-bottom: 5px; }
 
 /* ── 좁은 화면 ───────────────────────────── */
-@media (max-width: 1280px) {
-  .aw-panes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .aw-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 720px) {
+  .aw-lanes { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 720px) {
   .aw-wrap { padding: calc(var(--nav-height) + 16px) var(--page-gutter) 36px; }
   .aw-head { flex-wrap: wrap; gap: 10px; }
-  .aw-stamp { margin-left: 0; }
-  .aw-panes,
-  .aw-stats,
-  .aw-next-grid { grid-template-columns: minmax(0, 1fr); }
-  .aw-next { padding: 16px 16px; }
+  .aw-saved { margin-left: 0; }
 }
