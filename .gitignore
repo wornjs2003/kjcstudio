@@ -15,6 +15,9 @@
 .claude/*
 # 단, 슬래시 커맨드는 세 세션과 두 PC 가 함께 쓰므로 저장소에 둔다
 !.claude/commands/
+# 금지 명령(deny)도 두 PC 에 함께 적용돼야 하므로 저장소에 둔다.
+# 개인 설정은 settings.local.json 쪽이고 그것은 계속 무시한다
+!.claude/settings.json
 
 # API 키 (절대 커밋 금지) — 한국투자증권 앱키, OpenDART 인증키 등
 secrets.json
@@ -54,3 +57,11 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 *.lnk
+
+# 세션끼리 주고받는 임시 파일 (2026-09-17 지시)
+# 시안 · 조사 스크립트 · 스크린샷처럼 저장소에 남길 것이 아닌 것을 둔다.
+# 세션마다 제 임시 폴더가 따로 있어 서로 못 읽어서, 저장소 안에 한 자리를 둔다.
+# 디렉토리째 무시하면 안쪽을 되살릴 수 없으므로 temp/* 로 적는다 (.claude 와 같은 이유).
+temp/*
+# 단, 무엇을 두는 곳인지는 저장소에 남긴다
+!temp/README.md
