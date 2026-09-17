@@ -39,6 +39,19 @@ import re
 import sys
 import time
 
+# 윈도우 콘솔은 기본이 cp949 라 '—' 같은 글자에서 죽는다.
+# **이 파일이 그것으로 한 번 죽었다 (2026-09-17).** 알림 문구에 U+2014 가 들어
+# 있었고, 파이프로 불리면 stdout 이 cp949 라 UnicodeEncodeError 가 났다.
+# 아래 `except` 가 그것을 삼켜서 **아무 일도 안 일어난 것처럼 보였다** —
+# 값을 세 번째 굴릴 때 알리려던 것이 바로 그 순간 조용히 사라졌다.
+#
+# 만들면서 시험할 때 `PYTHONIOENCODING=utf-8` 을 붙였다.
+# CLAUDE.md 가 「시험은 환경변수를 지우고 한다」 고 적어둔 그대로 어겼다.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 WINDOW_SEC = 600      # 10분 안에
 THRESHOLD = 3         # 세 번째면 알린다
 KEEP = 400            # 기록은 이만큼만 남긴다
@@ -64,7 +77,11 @@ def main():
     norm = re.sub(r"\d+", "#", new.strip())[:200]
     key = os.path.basename(path) + "|" + norm
 
-    root = data.get("cwd") or os.getcwd()
+    # 기록은 **이 스크립트 위치**를 기준으로 둔다. 넘어오는 `cwd` 를 쓰지 않는다 —
+    # 셸에 따라 `/c/work/...` 같은 형식으로 올 수 있고, 그러면 윈도우 파이썬이
+    # `C:\c\work\...` 로 해석해 엉뚱한 폴더에 쌓는다 (2026-09-17 에 실제로 그랬다).
+    # 조용히 다른 곳에 쌓이면 세는 값이 틀리는데 화면에는 아무 표시도 안 난다.
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     log = os.path.join(root, ".claude", "edit-churn.jsonl")
 
     now = time.time()
@@ -115,6 +132,12 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
-        pass          # 감시가 편집을 막는 일은 없어야 한다
+    except Exception as e:
+        # 편집은 막지 않는다 — `PreToolUse` 는 `exit 2` 만 막으므로 stderr 에
+        # 써도 안전하다. 다만 **조용히 삼키지는 않는다.**
+        # 그냥 `pass` 로 두었다가 이 도구가 죽은 채로 도는 것을 못 봤다.
+        try:
+            sys.stderr.write("hook-edit-churn: %s: %s\n" % (type(e).__name__, e))
+        except Exception:
+            pass
     sys.exit(0)
