@@ -11,12 +11,15 @@
    ========================================================================== */
 
 .aw-wrap {
-  max-width: 1720px;
-  margin: 0 auto;
   /* 상단 메뉴가 고정이라 그 높이만큼 비운다. 값을 적지 않고 nav.css 가 정한
      --nav-height 를 쓴다 — 좁은 화면에서 96 → 72 로 바뀌는 것까지 따라간다.
-     holdings/css/frame.css 가 쓰는 방식과 같다. */
-  padding: calc(var(--nav-height) + 24px) 30px 48px;
+     holdings/css/frame.css 가 쓰는 방식과 같다.
+
+     좌우 여백도 --page-gutter 를 쓴다. 30px 를 직접 적었더니 메뉴의 로고보다
+     본문 제목이 17px 안쪽에서 시작해 기준선이 어긋났다 (2026-09-17).
+     메뉴(.site-nav)가 max-width 없이 전체 폭에 같은 여백을 쓰므로,
+     본문도 그렇게 두면 두 줄이 정확히 맞는다. */
+  padding: calc(var(--nav-height) + 24px) var(--page-gutter) 48px;
 }
 
 /* ── 머리말 ──────────────────────────────── */
@@ -229,7 +232,7 @@
   .aw-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 720px) {
-  .aw-wrap { padding: calc(var(--nav-height) + 16px) 16px 36px; }
+  .aw-wrap { padding: calc(var(--nav-height) + 16px) var(--page-gutter) 36px; }
   .aw-head { flex-wrap: wrap; gap: 10px; }
   .aw-stamp { margin-left: 0; }
   .aw-panes,
