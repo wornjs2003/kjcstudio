@@ -489,7 +489,7 @@ Mac 은 `.command` 더블클릭, Windows 는 같은 이름의 `.bat` 더블클�
 |---|---|---|
 | `홈페이지_정리` | **검증 담당.** 다른 세션의 작업을 교차 확인한다 | 루트(`index.html`·`category/`·`assets/`·`partials/`·`data/`) · `company-setup/` · `.claude/commands/` |
 | `주식페이지_개발` | 주식 페이지 개발 | `holdings/` |
-| `스케줄_툴개발` | 프로젝트 보드 · AI 작업 프로세스 | `projects/` · `ai-work/` |
+| `스케줄_툴개발` | **보드 셋** — 프로젝트 · AI 작업 · 검증 | `projects/` · `ai-work/` · `debugging/` |
 | `개념정의` | 개념·용어 정의 · 기술 조사 · PC 환경 설정 · **문서 담당** | 아래 문서 목록 · `tools/` · `.claude/`(`commands/` 제외) · `.githooks/` |
 | `작업우선순위` | **현황 담당.** 지시를 받아 나누고, 진행 상황을 재권님께 알린다 | **저장소 파일을 고치지 않는다 (읽기 전용)** |
 | 그 밖 | 각자 창에서 하던 일 | — |
