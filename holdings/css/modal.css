@@ -62,7 +62,13 @@
 .kh-modal {
   position: relative;             /* 손잡이를 이 안 가장자리에 붙인다 */
   width: min(calc(1400px + var(--kh-w-left) + var(--kh-w-right)), 100vw - 52px);
-  max-height: 92vh;
+
+  /* **높이를 고정한다.** 안의 격자가 이 높이를 나눠 가지므로 차트가 창 밖으로
+     나가지 않는다 (2026-09-17 지시 — "모달 창 밖으로 이미지가 나가면 안될거같은데").
+     전에는 차트 패널에 min-height 를 박아서 반대로 창을 밀어내고 있었다.
+
+     92vh 는 너무 컸고 62vh 는 작았다. 가운데로 잡았다 (2026-09-17 지시). */
+  height: 77vh;
   background: var(--kh-bg);
   border-radius: var(--kh-radius-xl);
   overflow: hidden;               /* 모서리 밖으로 내용이 삐져나오지 않게 */
@@ -74,7 +80,7 @@
 /* 굴러가는 것은 이 칸이다. 손잡이는 바깥(.kh-modal)에 붙어 있어
    스크롤을 내려도 제자리에 남는다. */
 .kh-modal-scroll {
-  max-height: 92vh;
+  height: 100%;
   overflow: auto;
 }
 
@@ -118,20 +124,30 @@
 
    ── 네 가지 모양 ──
 
-   처음 열면 서랍 둘이 접혀 있다. 그래서 「내 메모」와 「뉴스 · 공시」는
-   본문에 없다 (2026-09-16 지시). 손잡이를 누르면 그 칸이 옆에 나온다. */
+   **모달은 차트를 보는 자리다** (2026-09-17 지시). 가운데는 차트 하나뿐이고,
+   나머지는 양옆 서랍으로 갔다.
+
+       가운데   차트
+       왼쪽     투자 지표 · 시세
+       오른쪽   뉴스 · 공시 · 개인/외국인/기관
+
+   **호가 · 매매 기록 · 내 메모는 모달에서 뺐다.** stock.html(전체 화면)에는
+   그대로 있다 — 마크업은 거기 하나뿐이고 여기서는 안 보이게만 한다.
+
+   **접으면 그 서랍 것이 다 숨는다.** 처음 열면 차트만 보인다.
+   재권님이 그대로 가기로 정하셨다 (2026-09-17). */
 .kh-modal .kh-main {
   max-width: none;
   margin: 0;
   padding: 0 34px 22px;   /* 34 = 손잡이 5 + 22 + 틈 7 */
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-height: 100%;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
-    "head   head   head   head"
-    "chart  chart  chart  chart"
-    "ask    trade  tick   flow"
-    "metric metric metric metric";
+    "head"
+    "chart";
 }
 
 .kh-modal .kh-grid { display: contents; }
@@ -143,49 +159,62 @@
 .kh-modal [data-p="flow"]   { grid-area: flow; }
 .kh-modal [data-p="metric"] { grid-area: metric; }
 
-/* 접혀 있을 때는 아예 자리를 차지하지 않는다 */
-.kh-modal [data-p="memo"],
+/* 모달에서 아예 빼는 것. stock.html 에는 그대로 있다 (2026-09-17 지시) */
+.kh-modal [data-p="ask"],
+.kh-modal [data-p="trade"],
+.kh-modal [data-p="memo"] { display: none !important; }
+
+/* 서랍에 든 것. 접혀 있으면 자리를 차지하지 않는다 */
+.kh-modal [data-p="metric"],
+.kh-modal [data-p="tick"],
+.kh-modal [data-p="flow"],
 .kh-modal [data-p="news"] { display: none; }
 
 /* 종목 페이지에서는 두 칸을 차지하라는 인라인 값이 붙어 있다.
    여기서는 자리 이름으로 잡으므로 그것을 눌러 둔다. */
 .kh-modal [data-p="news"] { grid-area: news; grid-column: news !important; }
-.kh-modal [data-p="memo"] { grid-area: memo; }
 
-/* 왼쪽만 펼침 — 내 메모 */
-.kh-stage.has-left  .kh-modal [data-p="memo"] { display: flex; }
+/* 왼쪽만 펼침 — 투자 지표 · 시세 */
+.kh-stage.has-left  .kh-modal [data-p="metric"],
+.kh-stage.has-left  .kh-modal [data-p="tick"] { display: flex; }
 .kh-stage.has-left  .kh-modal .kh-main {
-  grid-template-columns: var(--kh-drawer) repeat(4, minmax(0, 1fr));
+  grid-template-columns: var(--kh-drawer) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
-    "head head   head   head   head"
-    "memo chart  chart  chart  chart"
-    "memo ask    trade  tick   flow"
-    "memo metric metric metric metric";
+    "head   head"
+    "metric chart"
+    "tick   chart";
 }
 
-/* 오른쪽만 펼침 — 뉴스 · 공시 */
-.kh-stage.has-right .kh-modal [data-p="news"] { display: flex; }
+/* 오른쪽만 펼침 — 뉴스 · 공시 · 개인/외국인/기관 */
+.kh-stage.has-right .kh-modal [data-p="news"],
+.kh-stage.has-right .kh-modal [data-p="flow"] { display: flex; }
 .kh-stage.has-right .kh-modal .kh-main {
-  grid-template-columns: repeat(4, minmax(0, 1fr)) var(--kh-drawer);
+  grid-template-columns: minmax(0, 1fr) var(--kh-drawer);
+  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
-    "head   head   head   head   head"
-    "chart  chart  chart  chart  news"
-    "ask    trade  tick   flow   news"
-    "metric metric metric metric news";
+    "head  head"
+    "chart news"
+    "chart flow";
 }
 
 /* 둘 다 펼침 */
+.kh-stage.has-left.has-right .kh-modal [data-p="metric"],
+.kh-stage.has-left.has-right .kh-modal [data-p="tick"],
+.kh-stage.has-left.has-right .kh-modal [data-p="flow"],
+.kh-stage.has-left.has-right .kh-modal [data-p="news"] { display: flex; }
 .kh-stage.has-left.has-right .kh-modal .kh-main {
-  grid-template-columns: var(--kh-drawer) repeat(4, minmax(0, 1fr)) var(--kh-drawer);
+  grid-template-columns: var(--kh-drawer) minmax(0, 1fr) var(--kh-drawer);
+  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
-    "head head   head   head   head   head"
-    "memo chart  chart  chart  chart  news"
-    "memo ask    trade  tick   flow   news"
-    "memo metric metric metric metric news";
+    "head   head  head"
+    "metric chart news"
+    "tick   chart flow";
 }
 
-/* 서랍 칸은 세로로 길다. 안쪽이 키를 다 쓰게 한다 */
-.kh-modal [data-p="memo"] .kh-memo { min-height: 260px; }
+/* 지표 여섯이 서랍 폭(320px)에 들어간다. 종목 화면은 3열인데 여기서는 좁아
+   글자가 줄바꿈된다. 2열로 놓는다 (2026-09-17). */
+.kh-modal [data-p="metric"] .kh-mgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 /* ── 옆 손잡이 ────────────────────────────
    창 안 양 끝에 붙인다 (2026-09-16 지시). 창 바깥에 두었더니 창이 넓어질 때
@@ -226,14 +255,24 @@
   color: var(--kh-text-on-fill);
 }
 
-/* 차트는 크게. 폭을 다 쓰므로 봉이 넉넉히 들어간다 */
-.kh-modal [data-p="chart"] .kh-chart-box { height: 470px; }
+/* 차트 칸은 남은 높이를 다 쓴다.
+ *
+ * ⚠️ 여기에 height 를 주면 안 먹는다 —
+ *
+ *     stock.css:71   .kh-chart-box { flex: 1; min-height: 250px; }
+ *
+ * `flex: 1` 은 `flex-basis: 0%` 를 품고 있어서, flex 항목의 높이는 `height`
+ * 가 아니라 flex 규칙이 정한다. 2026-09-17 에 470 → 620 → 1240 으로 올린
+ * 값이 한 번도 안 먹고 있었던 것을 알았다.
+ *
+ * 그래서 높이를 **위에서 내려준다** — 창 높이(92vh)를 격자 행이 나눠 갖고,
+ * 차트는 두 줄을 차지하니 저절로 가장 크다. 창 밖으로 나갈 일도 없다.
+ * stock.css 의 min-height 250px 만 바닥으로 남는다. */
+.kh-modal [data-p="chart"] .kh-chart-box { min-height: 0; }
 
-/* 아직 안 붙인 패널이 납작해지지 않게 */
-.kh-modal [data-p="ask"],
+/* 아직 값이 안 붙은 패널이 납작해지지 않게 */
 .kh-modal [data-p="tick"],
 .kh-modal [data-p="flow"] { min-height: 210px; }
-.kh-modal [data-p="memo"] { min-height: 180px; }
 
 /* 머리 오른쪽 — 닫기와 전체 화면 */
 .kh-head-act { margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -263,18 +302,25 @@
   .kh-stage.has-right .kh-modal .kh-main,
   .kh-stage.has-left.has-right .kh-modal .kh-main {
     padding: 0 28px 16px;   /* 좁은 화면도 손잡이 자리를 비운다 */
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* 여기서는 위아래로 쌓이므로 행을 나눠 갖지 않는다. 각자 제 높이를
+       쓰고 넘치면 스크롤한다 — 좁은 화면에서 창 높이에 맞추면 다 납작해진다 */
+    min-height: 0;
+    grid-template-rows: none;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "head   head"
-      "chart  chart"
-      "ask    trade"
-      "tick   flow"
-      "metric metric"
-      "memo   memo"
-      "news   news";
+      "head"
+      "chart"
+      "metric"
+      "tick"
+      "news"
+      "flow";
   }
-  .kh-modal [data-p="chart"] .kh-chart-box { height: 320px; }
 
+  /* 옆에 붙일 자리가 없어 아래로 내려오지만, 여닫는 것은 그대로다 */
+  .kh-stage.has-left  .kh-modal [data-p="metric"],
+  .kh-stage.has-left  .kh-modal [data-p="tick"] { display: flex; }
+  .kh-stage.has-right .kh-modal [data-p="news"],
+  .kh-stage.has-right .kh-modal [data-p="flow"] { display: flex; }
+  .kh-modal [data-p="chart"] { min-height: 420px; }
   .kh-drawer-tab { width: 20px; height: 72px; }
-  .kh-modal [data-p="chart"] .kh-chart-box { height: 320px; }
 }
