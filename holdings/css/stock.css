@@ -160,3 +160,78 @@
   .kh-head-stats { margin-left: 0; width: 100%; }
   .kh-mgrid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ==========================================================================
+   차트 범례 (2026-09-17)
+
+   봉 위에 마우스를 올리면 그 봉의 시·고·저·종·거래량과 그 시점의 이동평균
+   값이 여기 뜬다. 마우스가 차트 밖으로 나가면 마지막 봉으로 되돌아간다.
+
+   만드는 곳은 js/chart.js 한 곳이다. 그래서 종목 화면 · 모달 · 첫 화면의
+   차트가 전부 같은 범례를 갖는다 (첫 화면도 이 파일을 읽는다).
+
+   **차트 칸 안에 겹쳐 둔다.** 칸 밖에 두면 봉을 짚을 때마다 줄이 늘었다
+   줄었다 하면서 차트 높이가 출렁인다.
+
+   좁거나 낮은 칸(미리보기 · 첫 화면 차트)에서는 js 가 .is-compact 를 붙여
+   한 줄만 남긴다 — 거래량과 이동평균 칩을 접는다.
+   ========================================================================== */
+
+.kh-lg-host { position: relative; }
+
+.kh-lg {
+  position: absolute; top: 6px; left: 8px; z-index: 2;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  max-width: calc(100% - 16px);
+  font-size: 0.72rem; line-height: 1.5;
+  pointer-events: none;                 /* 차트를 끌고 확대하는 것을 막지 않는다 */
+}
+
+/* 시·고·저·종·거래량 — 한 덩어리로 묶어 바탕을 깐다.
+   차트 선 위에 얹히므로 반투명 바탕이 없으면 숫자가 안 읽힌다 */
+.kh-lg-ohlc {
+  display: flex; flex-wrap: wrap; gap: 9px;
+  background: var(--kh-bg-float);
+  border-radius: var(--kh-radius-sm);
+  padding: 2px 7px;
+}
+.kh-lg-ohlc span { display: inline-flex; align-items: baseline; gap: 3px; }
+.kh-lg-ohlc i { font-style: normal; color: var(--kh-text-muted); }
+.kh-lg-ohlc b { font-weight: 600; }
+
+/* 이동평균 칩 — 눌러서 끄고 켠다. 범례 전체는 pointer-events 를 막아 두었으므로
+   여기서만 되살린다 */
+.kh-lg-ma { display: flex; flex-wrap: wrap; gap: 4px; pointer-events: auto; }
+
+.kh-lg-c {
+  display: inline-flex; align-items: baseline; gap: 4px;
+  border: 0; border-radius: var(--kh-radius-sm);
+  padding: 2px 7px;
+  background: var(--kh-bg-float);
+  font-family: inherit; font-size: inherit; font-weight: 500;
+  cursor: pointer;
+}
+.kh-lg-c b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.kh-lg-c:hover { background: var(--kh-bg-active); }
+
+/* 「끈 것」과 「값이 없는 것」은 다르게 보여야 한다 (지시).
+   끈 것은 그 선의 색을 그대로 둔 채 흐려서 무엇을 껐는지 알아보게 하고,
+   봉이 모자라 못 그린 것은 회색 글자로 왜인지 적는다. */
+.kh-lg-c.is-off { opacity: 0.38; }
+.kh-lg-c.is-short {
+  color: var(--kh-text-muted); cursor: default; font-weight: 400;
+}
+
+/* 좁은 칸 — 한 줄만 남긴다.
+   미리보기 차트는 높이가 168px 라, 두 줄이면 차트의 3분의 1을 덮는다.
+   시·고·저·종은 봉을 짚는 이유 그 자체라 남기고, 거래량은 아래 막대로도
+   보이며, 이동평균 칩은 큰 차트에서 끄고 켠 것이 여기에도 그대로 미친다. */
+.kh-lg.is-compact { top: 4px; left: 6px; font-size: 0.68rem; }
+.kh-lg.is-compact .kh-lg-ohlc { gap: 7px; }
+.kh-lg.is-compact .kh-lg-vol,
+.kh-lg.is-compact .kh-lg-ma { display: none; }
+
+/* 차트 칸 밖의 범례 (maLegend) — 패널 머리와 차트 아래 줄.
+   어떤 선이 그려졌는지만 알린다. 값과 켜고 끄기는 위 .kh-lg 가 맡는다 */
+.kh-lg-out .kh-lg-n.is-off { opacity: 0.38; }
+.kh-lg-out .kh-lg-short { color: var(--kh-text-muted); }
