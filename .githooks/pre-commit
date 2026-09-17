@@ -1,54 +1,80 @@
 #!/bin/sh
-# 커밋에 여러 구역이 섞였으면 멈춘다.
+# 한 커밋에 **레인 두 개 이상**이 섞였으면 멈춘다.
 #
 # 세션 다섯이 작업 폴더 하나를 함께 쓴다. 장바구니(인덱스)도 하나라,
 # 내 경로만 담아도 남이 미리 담아둔 것이 함께 올라간다.
-# 실제로 projects/ 가 남의 커밋에 딸려 들어갈 뻔했고, 그때는 사람이 눈으로 잡았다.
 #
 # 설치 (PC 마다 한 번):
 #     git config core.hooksPath .githooks
 #
-# 막지 않는 경우:
-#   - 한 구역만 있을 때
-#   - 구역 밖 파일(README 등)만 있을 때
-#   - 판단이 애매할 때 — 통과시킨다. 막아서 작업이 서는 쪽이 더 나쁘다
+# 구역이 아니라 **레인**으로 센다 (2026-09-17).
+# 처음에는 holdings·projects 같은 구역만 셌는데, 첫 실전에서 `temp/README.md`
+# 가 남의 장바구니에서 딸려 들어왔다. 목록에 없는 폴더라 세지 않았다.
+# 지금은 목록에 없는 최상위 폴더도 `(미정)` 이라는 한 레인으로 묶어서 센다.
 #
-# 정당하게 섞어야 하면 (예: 레인 표와 그 구역 코드를 함께 고칠 때):
+# 같은 레인의 여러 폴더를 함께 고치는 것은 정상이므로 통과한다
+# (예: tools/ 와 .claude/ 는 둘 다 개념정의).
+#
+# 정당하게 섞어야 하면:
 #     git commit --no-verify
 #
-# 이것은 자물쇠가 아니라 걸림돌이다. 우회할 수 있고, 우회해도 된다.
+# 자물쇠가 아니라 걸림돌이다. 우회할 수 있고, 우회해도 된다.
 # 다만 우회하려면 한 번 더 생각하게 된다.
 
 files=$(git diff --cached --name-only)
 [ -z "$files" ] && exit 0
 
-areas=$(printf '%s\n' "$files" | awk -F/ '
-  $1 == "holdings"      { print "holdings";      next }
-  $1 == "projects"      { print "projects";      next }
-  $1 == "company-setup" { print "company-setup"; next }
-  $1 == "api-board"     { print "api-board";     next }
-  $1 == "debugging"     { print "debugging";     next }
+# 경로 → 레인. CLAUDE.md 「세션 역할 분담」 표를 따른다.
+# 루트 파일(CLAUDE.md 등)은 어느 레인도 아니므로 세지 않는다.
+lanes=$(printf '%s\n' "$files" | awk -F/ '
+  NF < 2 { next }                                   # 루트 파일은 건너뛴다
+
+  $1 == "holdings"                      { print "주식페이지_개발"; next }
+  $1 == "projects"                      { print "스케줄_툴개발";   next }
+
+  $1 == ".claude" && $2 == "commands"   { print "홈페이지_정리";   next }
+  $1 == "assets" || $1 == "category" ||
+  $1 == "data"   || $1 == "partials" ||
+  $1 == "company-setup"                 { print "홈페이지_정리";   next }
+
+  $1 == "tools" || $1 == ".claude" ||
+  $1 == ".githooks" || $1 == "docs"     { print "개념정의";        next }
+
+  { print "(미정) " $1 }                            # 그 밖의 최상위 폴더
 ' | sort -u)
 
-# 구역에 안 걸리는 파일(루트 문서 등)만 담긴 커밋은 여기서 끝난다.
-# `grep -c` 로 세다가 빈 입력에서 "0" 을 출력하고 exit 1 을 내는 바람에
-# `|| echo 0` 이 덧붙어 "0\n0" 이 되었고, 정상 커밋이 전부 막혔다.
-# 시험하지 않았으면 그대로 들어갔을 버그다 (2026-09-17).
-[ -z "$areas" ] && exit 0
+# 레인에 걸리는 것이 없으면(루트 문서만 담긴 커밋) 그냥 지나간다.
+#
+# 여기서 예전에 사고가 났다. `grep -c .` 로 셌는데, grep 은 빈 입력에서
+# **"0" 을 출력하고 종료코드 1** 을 낸다. 거기에 `|| echo 0` 을 붙여 두어
+# 결과가 "0\n0" 이 되었고, `[ "0\n0" -le 1 ]` 이 숫자가 아니라 오류가 났다.
+# `[` 가 오류를 내면 거짓으로 취급되므로 **통과해야 할 커밋이 전부 막혔다.**
+# 그리고 그 경우가 가장 흔했다 — 루트 문서 한 장만 고치는 커밋이다.
+[ -z "$lanes" ] && exit 0
 
-count=$(printf '%s\n' "$areas" | wc -l | tr -d ' ')
+count=$(printf '%s\n' "$lanes" | wc -l | tr -d ' ')
 [ "$count" -le 1 ] && exit 0
 
 echo ""
-echo "  커밋을 멈췄습니다 — 한 커밋에 구역이 $count 개 섞여 있습니다."
+echo "  커밋을 멈췄습니다 — 한 커밋에 레인이 $count 개 섞여 있습니다."
 echo ""
-printf '%s\n' "$areas" | while read -r a; do
-  [ -z "$a" ] && continue
-  echo "    [$a]"
-  printf '%s\n' "$files" | grep "^$a/" | sed 's/^/        /'
+printf '%s\n' "$lanes" | while IFS= read -r lane; do
+  [ -z "$lane" ] && continue
+  echo "    [$lane]"
+  case "$lane" in
+    "(미정) "*) dir=${lane#"(미정) "} ;;
+    "주식페이지_개발") dir="holdings" ;;
+    "스케줄_툴개발")   dir="projects" ;;
+    *) dir="" ;;
+  esac
+  if [ -n "$dir" ]; then
+    printf '%s\n' "$files" | grep "^$dir/" | sed 's/^/        /'
+  else
+    printf '%s\n' "$files" | grep "/" | sed 's/^/        /'
+  fi
 done
 echo ""
-echo "  구역마다 맡은 세션이 다릅니다 (CLAUDE.md 「세션 역할 분담」)."
+echo "  레인마다 맡은 세션이 다릅니다 (CLAUDE.md 「세션 역할 분담」)."
 echo "  남의 작업이 딸려 들어가는 중일 수 있습니다."
 echo ""
 echo "  자기 것만 담으려면:"
