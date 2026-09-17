@@ -57,6 +57,8 @@ PAIRS = [
     ("지수 봉 훑는 기간",    "INDEX_SPAN",          "INDEX_SPAN_DAYS",      "dict"),
     ("지수 봉 한 번에",      "INDEX_PAGE",          "INDEX_PAGE",           None),
     ("지수 봉 나눠받기 횟수", "INDEX_PAGES",         "INDEX_PAGES",          None),
+    ("분봉 다시받기 간격",   "MINUTE_REFILL_GAP",   "MINUTE_REFILL_GAP",    None),
+    ("5분봉 미리받기 종목수", "PREFILL_TOP",         "PREFILL_TOP",          None),
     ("선물 종목코드",        "FUTURES_CODE",        "FUTURES_CODE",         None),
     ("선물 캐시",            "FUTURES_TTL",         "FUTURES_TTL",          "ceil"),
     ("지수 캐시",            "INDEX_TTL",           "INDEX_TTL",            "ceil"),
