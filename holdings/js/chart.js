@@ -41,15 +41,20 @@ const MA_LINES = [[5, 'ma5'], [20, 'ma20'], [60, 'ma60'], [200, 'ma200']];
  * 개수가 다르면 봉 굵기도 달라졌다 — 삼성전자 300개는 촘촘하고
  * 삼성전자우 47개는 듬성했다. 개수가 아니라 **보는 창을 고정**한다.
  *
- * 봉이 이보다 적으면 있는 만큼만 보인다. 더 많으면 끌어서 과거를 본다.
+ * **봉이 적어도 창은 그대로 둔다.** 왼쪽이 비고 봉 굵기는 늘 같다
+ * (2026-09-17 지시 — "없으면 비워두면되고 크기는 통일").
+ * 처음엔 적을 때 fitContent 로 물러섰는데, 그러면 있는 만큼 펼쳐져
+ * 다시 굵어졌다 — LG화학 98개가 삼성전자 200개보다 눈에 띄게 굵었다.
+ * 빈 자리는 "아직 덜 쌓였다" 를 보여주는 것이라 숨길 이유가 없다.
+ *
  * 5분봉 120개면 10시간, 일봉이면 반년쯤이다.
  */
 const VISIBLE_BARS = 120;
 
 function showLastBars(chart, total) {
   const ts = chart.timeScale();
-  if (total <= VISIBLE_BARS) { ts.fitContent(); return; }
   try {
+    /* from 이 음수여도 된다. 그만큼 왼쪽이 빈다 */
     ts.setVisibleLogicalRange({ from: total - VISIBLE_BARS, to: total - 1 });
   } catch {
     ts.fitContent();          // 라이브러리 판이 다르면 예전대로
@@ -173,7 +178,10 @@ export function createStockChart(container, candles, opts = {}) {
     timeScale: {
       borderColor: COLOR.border,
       rightOffset: 4,
-      fixLeftEdge: true,
+      /* 왼쪽 끝을 묶지 않는다. 봉이 VISIBLE_BARS 보다 적을 때 그만큼
+         왼쪽을 비워야 봉 굵기가 종목마다 같아진다 (showLastBars 참고).
+         묶어 두면 라이브러리가 범위를 데이터 안으로 되돌려 다시 굵어진다. */
+      fixLeftEdge: false,
       timeVisible: isMinute,      // 분봉이면 시:분까지 표시
       secondsVisible: false,
     },
