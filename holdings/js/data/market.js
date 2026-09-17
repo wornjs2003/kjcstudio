@@ -17,7 +17,39 @@
    셋(S&P 500 · NASDAQ · 원/달러)이 이미 화면에 나오고 있었다. */
 
 /* 아이콘에 쓰는 회사 색(brand)은 각 기업이 쓰는 대표색입니다.
-   로고 이미지는 저작권 문제가 있어 쓰지 않고, 색 위에 이름 두 글자를 얹습니다. */
+   그림이 있으면 그림을 깔고, 없으면 이 색 위에 이름 두 글자를 얹습니다
+   (js/components/stock-icon.js).
+
+   ── 색을 어디서 가져왔나 (2026-09-17) ──
+
+   대표색을 모르는 종목에는 #8b95a1 (회색)을 넣어 두었습니다. 그렇게 남아 있던
+   19개를 uidata/icons/<종목코드>.png 에서 뽑아 17개를 채웠습니다.
+   아이콘은 토스 종목 아이콘이고 96px 입니다 (uidata/README.md).
+
+   뽑는 방법입니다.
+     1. 불투명 픽셀만 본다
+     2. 흰 바탕은 뺀다. 안 빼면 어느 로고나 흰색이 나온다
+     3. 채도 있는 픽셀을 색상(hue) 15도 바구니로 나눠, 채도 가중 합이 가장 큰
+        바구니의 중앙값을 쓴다 — 가장 많이 쓰인 색이 아니라 눈에 띄는 색이다
+     4. 유채색이 3% 도 안 되면 회색조 로고로 본다. KT 는 검은 바탕이다
+     5. 흰 바탕에 묻히거나 검정으로 뭉개질 때만 밝기를 당긴다
+        (WCAG 상대휘도 0.015 ~ 0.78. 위 한계는 이미 쓰고 있던 카카오
+         노랑 #f7e600 의 0.763 에 맞췄다)
+
+   아이콘이 그룹 로고를 그대로 쓰는 곳 — 삼성생명·삼성에스디에스는 둘 다
+   SAMSUNG 워드마크입니다 — 은 아이콘이 그룹색을 확인해 준 것으로 보고
+   아래 BRAND_GROUPS 에 이미 있는 값을 그대로 적었습니다. 같은 빨강을 두 가지
+   값으로 적지 않기 위해서입니다 (삼성전자가 전부터 그렇게 되어 있습니다).
+     LG(003550) · SK(034730) · 삼성생명 · 삼성에스디에스 ·
+     카카오뱅크 · 카카오페이 · 현대로템
+
+   아직 #8b95a1 인 두 개 — 이 회색이 곧 "대표색을 모른다" 는 표시입니다.
+     넷마블(251270)           아이콘 바탕이 베이지고 눈에 띄는 색은 마스코트
+                              노랑뿐인데, 카카오 노랑과 구분되지 않고 그 위에
+                              얹는 흰 글자도 안 읽힙니다
+     셀트리온헬스케어(091990)   아이콘이 없습니다. 2023년 셀트리온에 합병되어
+                              시가총액 목록에 아예 없습니다
+                              (uidata/icons/index.json 의 '없음' 에도 없다) */
 
 /* ── 관심종목 ──
    시세는 /api/kis/prices 가 채운다. 메모는 브라우저에 저장된다(store/memo.js). */
@@ -61,29 +93,29 @@ export const MARKET_STOCKS = [
   { code: '012330', name: '현대모비스',          market: 'KOSPI', sector: '자동차', brand: '#002c5f' },
   { code: '028260', name: '삼성물산',            market: 'KOSPI', sector: '건설', brand: '#1428a0' },
   { code: '066570', name: 'LG전자',              market: 'KOSPI', sector: '전기전자', brand: '#a50034' },
-  { code: '003550', name: 'LG',                  market: 'KOSPI', sector: '지주회사', brand: '#8b95a1' },
-  { code: '015760', name: '한국전력',            market: 'KOSPI', sector: '전력', brand: '#8b95a1' },
+  { code: '003550', name: 'LG',                  market: 'KOSPI', sector: '지주회사', brand: '#a50034' },
+  { code: '015760', name: '한국전력',            market: 'KOSPI', sector: '전력', brand: '#ed1c24' },
   { code: '009150', name: '삼성전기',            market: 'KOSPI', sector: '전기전자', brand: '#1428a0' },
-  { code: '034730', name: 'SK',                  market: 'KOSPI', sector: '지주회사', brand: '#8b95a1' },
+  { code: '034730', name: 'SK',                  market: 'KOSPI', sector: '지주회사', brand: '#e5231b' },
   { code: '086790', name: '하나금융지주',        market: 'KOSPI', sector: '금융', brand: '#008485' },
   { code: '096770', name: 'SK이노베이션',        market: 'KOSPI', sector: '에너지', brand: '#e60012' },
   { code: '010130', name: '고려아연',            market: 'KOSPI', sector: '비철금속', brand: '#004098' },
-  { code: '032830', name: '삼성생명',            market: 'KOSPI', sector: '보험', brand: '#8b95a1' },
-  { code: '018260', name: '삼성에스디에스',      market: 'KOSPI', sector: 'IT', brand: '#8b95a1' },
-  { code: '030200', name: 'KT',                  market: 'KOSPI', sector: '통신', brand: '#8b95a1' },
-  { code: '323410', name: '카카오뱅크',          market: 'KOSPI', sector: '금융', brand: '#8b95a1' },
-  { code: '259960', name: '크래프톤',            market: 'KOSPI', sector: '게임', brand: '#8b95a1' },
-  { code: '267260', name: 'HD현대일렉트릭',      market: 'KOSPI', sector: '전기전자', brand: '#8b95a1' },
-  { code: '064350', name: '현대로템',            market: 'KOSPI', sector: '기계', brand: '#8b95a1' },
-  { code: '377300', name: '카카오페이',          market: 'KOSPI', sector: '금융', brand: '#8b95a1' },
-  { code: '024110', name: '기업은행',            market: 'KOSPI', sector: '금융', brand: '#8b95a1' },
+  { code: '032830', name: '삼성생명',            market: 'KOSPI', sector: '보험', brand: '#1428a0' },
+  { code: '018260', name: '삼성에스디에스',      market: 'KOSPI', sector: 'IT', brand: '#1428a0' },
+  { code: '030200', name: 'KT',                  market: 'KOSPI', sector: '통신', brand: '#252525' },
+  { code: '323410', name: '카카오뱅크',          market: 'KOSPI', sector: '금융', brand: '#f7e600' },
+  { code: '259960', name: '크래프톤',            market: 'KOSPI', sector: '게임', brand: '#363245' },
+  { code: '267260', name: 'HD현대일렉트릭',      market: 'KOSPI', sector: '전기전자', brand: '#002f87' },
+  { code: '064350', name: '현대로템',            market: 'KOSPI', sector: '기계', brand: '#002c5f' },
+  { code: '377300', name: '카카오페이',          market: 'KOSPI', sector: '금융', brand: '#f7e600' },
+  { code: '024110', name: '기업은행',            market: 'KOSPI', sector: '금융', brand: '#015198' },
   { code: '251270', name: '넷마블',              market: 'KOSDAQ', sector: '게임', brand: '#8b95a1' },
-  { code: '036570', name: '엔씨소프트',          market: 'KOSDAQ', sector: '게임', brand: '#8b95a1' },
-  { code: '196170', name: '알테오젠',            market: 'KOSDAQ', sector: '바이오', brand: '#8b95a1' },
-  { code: '247540', name: '에코프로비엠',        market: 'KOSDAQ', sector: '2차전지', brand: '#8b95a1' },
-  { code: '086520', name: '에코프로',            market: 'KOSDAQ', sector: '2차전지', brand: '#8b95a1' },
+  { code: '036570', name: '엔씨소프트',          market: 'KOSDAQ', sector: '게임', brand: '#004385' },
+  { code: '196170', name: '알테오젠',            market: 'KOSDAQ', sector: '바이오', brand: '#009ade' },
+  { code: '247540', name: '에코프로비엠',        market: 'KOSDAQ', sector: '2차전지', brand: '#004097' },
+  { code: '086520', name: '에코프로',            market: 'KOSDAQ', sector: '2차전지', brand: '#004097' },
   { code: '091990', name: '셀트리온헬스케어',    market: 'KOSDAQ', sector: '바이오', brand: '#8b95a1' },
-  { code: '042700', name: '한미반도체',          market: 'KOSDAQ', sector: '반도체', brand: '#8b95a1' },
+  { code: '042700', name: '한미반도체',          market: 'KOSDAQ', sector: '반도체', brand: '#14429d' },
 ];
 
 /* ── 차트 기간 버튼 ── */
@@ -107,7 +139,9 @@ export function fmtMarketCapNum(num) {
    종목 아이콘 색
 
    순위표가 코스피 상위 200종목을 보여주게 되면서 필요해졌습니다. 위 목록에
-   실제 대표색을 적어 둔 회사는 40개뿐이고, 나머지 160여 개는 색이 없습니다.
+   실제 대표색을 적어 둔 회사는 마흔 남짓이고, 나머지 160여 개는 색이 없습니다.
+   (개수를 여기 박아두면 목록이 늘 때마다 주석이 어긋납니다. 세려면 위 목록에서
+    brand 가 #8b95a1 이 아닌 줄을 셉니다.)
 
    세 단계로 정합니다.
      1. 위 목록에 있는 회사        → 적어 둔 대표색 그대로
