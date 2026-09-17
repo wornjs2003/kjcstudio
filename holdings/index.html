@@ -63,14 +63,13 @@
 
 <div id="site-nav"></div>
 
-<div class="kh-app">
+<!-- kh-app-wide — 오른쪽 칸이 넓은 배치 (2026-09-17).
+     세로 아이콘 바를 빼고 그 폭을 실시간 순위에 넘겼다. 첫 화면만 이렇다. -->
+<div class="kh-app kh-app-wide">
   <main class="kh-main">
-    <!-- 공지 -->
-    <div class="kh-card kh-notice" id="kh-notice">
-      <span>📊 한국투자증권 API 로 시세를 받아오는 중입니다</span>
-      <span class="kh-notice-btn">자세히 보기</span>
-      <span class="kh-notice-x" id="kh-notice-x">✕</span>
-    </div>
+    <!-- 공지 띠는 2026-09-17 에 뺐다.
+         늘 같은 말이 떠 있어 자리만 먹었고, 없애니 아래 것들이
+         그 높이만큼 올라와 첫 화면에 차트가 더 들어온다. -->
 
     <!-- 카테고리 탭 — 아직 어디로도 가지 않는다 (연결 예정) -->
     <nav class="kh-cat" aria-label="카테고리">
@@ -96,13 +95,28 @@
       <button class="kh-strip-btn next" id="kh-strip-next" aria-label="다음">›</button>
     </div>
 
-    <!-- 고른 지수 + 오른쪽 패널 -->
-    <section class="kh-idx" aria-label="지수 상세">
+    <!-- 고른 종목 + 오른쪽 패널
+
+         **여기는 2026-09-17 까지 지수 차트였다.** 지수는 하루에 몇 번
+         보지 않는데 화면에서 가장 큰 자리를 먹고 있었다 (지시 —
+         "지수차트는 많이 안볼거같으니 지수차트 있는곳에 국내종목에
+         상위에 있는 종목이 나오도록 바꾸고").
+
+         무엇을 보여주나 — 처음 켜면 코스피 1위, 그다음부터는 마지막에
+         마우스를 올렸던 종목이다. 목록에서 마우스를 옮기면 여기가 따라 바뀐다.
+
+         지수 값은 위의 카드 띠에 그대로 있다. -->
+    <section class="kh-idx" aria-label="고른 종목">
       <div class="kh-card kh-idx-main">
         <div class="kh-idx-head">
-          <b class="kh-idx-name" id="kh-idx-name">코스피</b>
-          <span class="kh-idx-caret">›</span>
+          <span class="kh-ic" id="kh-big-ic"></span>
+          <b class="kh-idx-name" id="kh-idx-name">불러오는 중</b>
+          <span class="kh-idx-v kh-num kh-mut" id="kh-big-v"></span>
           <span class="kh-idx-ai">✨ AI <span class="kh-mut">연결 예정</span></span>
+          <!-- 52주 최저·최고는 옆 패널에 있었는데 머리줄로 올렸다 (2026-09-17 지시).
+               칸을 따로 쓰지 않고 그 종목 이름 옆에 붙는다. -->
+          <span class="kh-head-yr" id="kh-year-range">불러오는 중</span>
+          <a class="kh-fold" id="kh-big-link" href="./stock.html">자세히 ›</a>
         </div>
         <!-- 기간 고르기 — 이름 아래 줄에 둔다 (2026-09-15 지시) -->
         <div class="kh-idx-per" id="kh-idx-per"></div>
@@ -112,44 +126,97 @@
         </div>
       </div>
 
-      <!-- 오른쪽 패널 — 넷 다 아직 받아올 곳이 없다.
-           숫자를 지어 넣지 않고 무엇을 붙이면 채워지는지만 적어 둔다. -->
-      <aside class="kh-card kh-idxp" aria-label="시장 정보">
+      <!-- 오른쪽 패널 — 왼쪽 차트의 그 종목 이야기다.
+
+           프로그램 매매(차익·비차익)는 뺐다. 지수 단위로만 나오는 값이라
+           종목 화면에 둘 자리가 아니다. 지수 화면이 생기면 그때 되살린다. -->
+      <aside class="kh-card kh-idxp" aria-label="종목 정보">
         <!-- 시장 현황은 2026-09-15 지시로 코스피 위 장 상태 줄로 옮겼다 -->
+        <!-- 순위표에서 뺀 셋이 여기로 왔다 (2026-09-17 지시).
+             목록에는 종목마다 안 보이고, 고른 종목 것만 여기서 본다.
+             차트 종목이 바뀌면 따라 바뀐다. -->
         <div class="kh-idxp-s">
-          <div class="kh-idxp-h"><i class="kh-idxp-i ac"></i>연중 최저 · 최고
-            <span class="kh-bd kh-bd-on">한국투자증권</span></div>
-          <div class="kh-idxp-b" id="kh-year-range">불러오는 중</div>
+          <div class="kh-idxp-h"><i class="kh-idxp-i ac"></i>매물대
+            <span class="kh-bd kh-bd-soon">연결 예정</span></div>
+          <div class="kh-idxp-b" id="kh-vol-box">불러오는 중</div>
         </div>
         <div class="kh-idxp-s">
-          <div class="kh-idxp-h"><i class="kh-idxp-i wn"></i>투자자 정보
+          <div class="kh-idxp-h"><i class="kh-idxp-i mu"></i>투자자 정보
             <span class="kh-bd kh-bd-soon">연결 예정</span></div>
           <div class="kh-idxp-b">외국인 · 기관 · 개인<br>
             <span class="kh-mut">붙일 것: 네이버 (KIS 무료 범위 밖)</span></div>
         </div>
-        <div class="kh-idxp-s">
-          <div class="kh-idxp-h"><i class="kh-idxp-i mu"></i>프로그램 매매
-            <span class="kh-bd kh-bd-soon">연결 예정</span></div>
-          <div class="kh-idxp-b">차익 · 비차익<br>
-            <span class="kh-mut">붙일 것: KRX</span></div>
-        </div>
       </aside>
     </section>
 
-    <!-- 순위 + 미리보기 -->
-    <section class="kh-rank" aria-label="종목 목록">
+    <!-- 본문 아래 — 카드 다섯.
+         탭 하나에 묶여 있던 「지금 뜨는 산업」·「외국인 · 기관 매매」를 떼어
+         제 카드로 만들었고(2026-09-17 지시), 관심 사이드바에 있던
+         주요 일정·뉴스도 여기로 내렸다. 실시간 순위와 공시는 오른쪽 칸이다. -->
+    <section class="kh-rank" aria-label="시장 정보">
+
       <div class="kh-card">
+        <div class="kh-tabs"><button class="kh-tab is-active">지금 뜨는 산업</button>
+          <span class="kh-bd kh-bd-soon">연결 예정</span></div>
+        <div class="kh-chips">
+          <button class="kh-chip is-active">업종</button>
+          <button class="kh-chip">테마</button>
+          <button class="kh-chip">상승률 TOP</button>
+        </div>
+        <div class="kh-asof">업종 38개 · 테마 100개</div>
+        <div class="kh-idxp-b" style="padding:0 18px 18px">
+          <span class="kh-mut">붙일 것: KIS 업종 API</span></div>
+      </div>
+
+      <div class="kh-card">
+        <div class="kh-tabs"><button class="kh-tab is-active">외국인 · 기관 매매</button>
+          <span class="kh-bd kh-bd-soon">연결 예정</span></div>
+        <div class="kh-chips">
+          <button class="kh-chip is-active">순매수</button>
+          <button class="kh-chip">순매도</button>
+          <button class="kh-chip">30일</button>
+        </div>
+        <div class="kh-asof">오늘 기준</div>
+        <div class="kh-idxp-b" style="padding:0 18px 18px">
+          <span class="kh-mut">붙일 것: KIS 투자자 API</span></div>
+      </div>
+
+      <div class="kh-card kh-sec-card">
+        <div class="kh-sched-h"><span>주요 일정</span><span class="kh-mut">2주</span></div>
+        <div class="kh-sched-b" id="kh-side-sched"></div>
+        <a class="kh-sec-more" href="./news.html">더보기</a>
+      </div>
+
+      <div class="kh-card kh-sec-card">
+        <div class="kh-sched-h"><span>뉴스</span><span class="kh-mut">경제지</span></div>
+        <div class="kh-sched-b" id="kh-side-news"></div>
+        <a class="kh-sec-more" href="./news.html">더보기</a>
+      </div>
+
+      <div class="kh-card kh-sec-card">
+        <div class="kh-sched-h"><span>이 종목 공시</span><span class="kh-mut">OpenDART</span></div>
+        <div class="kh-sched-b"><div class="kh-dc" id="kh-dc-one"></div></div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- 오른쪽 칸 — 실시간 순위와 공시.
+       관심종목 목록이 있던 자리다. 목록이 두 곳에 있을 이유가 없어
+       「관심」 칩으로 순위표 안에 넣었다 (2026-09-17 지시). -->
+  <aside class="kh-side" id="kh-side" aria-label="실시간 순위">
+    <div class="kh-side-wrap">
+
+      <div class="kh-card kh-rank-card">
         <div class="kh-tabs">
           <button class="kh-tab is-active">실시간 순위</button>
-          <button class="kh-tab">지금 뜨는 산업</button>
-          <button class="kh-tab">외국인 · 기관 매매</button>
           <span class="kh-fold">▤ 요약 접기</span>
         </div>
         <div class="kh-chips">
-          <button class="kh-chip is-active">국내</button>
+          <button class="kh-chip is-active">관심</button>
+          <button class="kh-chip">국내</button>
           <button class="kh-chip">해외</button>
           <span class="kh-chip-sep"></span>
-          <button class="kh-chip">관심종목</button>
           <button class="kh-chip">거래대금</button>
           <button class="kh-chip">거래량</button>
           <button class="kh-chip">급상승</button>
@@ -162,41 +229,27 @@
         <!-- 표는 제 안에서 스크롤된다. 페이지가 통째로 내려가면
              지수와 차트가 화면 밖으로 밀려난다 (2026-09-14 지시) -->
         <div class="kh-rank-scroll" id="kh-rank-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th></th><th class="l">종목</th><th>현재가</th><th>전일대비</th><th>등락률</th>
-              <th>거래대금 순</th><th>시가총액</th><th>매수 · 매도 비율</th><th class="l">산업</th>
-            </tr>
-          </thead>
-          <tbody id="kh-rows"></tbody>
-        </table>
-        <!-- 아래로 내리면 다음 15개가 이어 붙는다 -->
-        <div class="kh-more" id="kh-more"></div>
+          <table>
+            <thead>
+              <tr>
+                <th></th><th class="l">종목</th><th>현재가</th><th>전일대비</th><th>등락률</th>
+              </tr>
+            </thead>
+            <tbody id="kh-rows"></tbody>
+          </table>
+          <!-- 아래로 내리면 다음 15개가 이어 붙는다 -->
+          <div class="kh-more" id="kh-more"></div>
         </div>
       </div>
 
-      <div class="kh-card kh-pv">
-        <div class="kh-pv-h">
-          <span class="kh-ic" id="kh-pv-ic"></span>
-          <div>
-            <div class="kh-pv-n" id="kh-pv-n"></div>
-            <div class="kh-pv-v kh-num" id="kh-pv-v">불러오는 중</div>
-          </div>
-          <a class="kh-fold" id="kh-pv-link" href="./stock.html" style="margin-left:auto">자세히 ›</a>
-        </div>
-        <div class="kh-pv-lb">5분봉</div>
-        <div class="kh-pv-chart" id="kh-pv-chart"></div>
-        <div class="kh-pv-why">
-          <div class="kh-pv-why-h"><span>이 종목 공시</span><span>OpenDART</span></div>
-          <div class="kh-dc" id="kh-dc-one" style="max-height:118px"></div>
-        </div>
+      <div class="kh-card kh-sec-card kh-dc-card">
+        <div class="kh-sched-h"><span>공시</span><span class="kh-mut">OpenDART</span></div>
+        <div class="kh-sched-b"><div class="kh-dc" id="kh-dc-all"></div></div>
+        <a class="kh-sec-more" href="./news.html">더보기</a>
       </div>
-    </section>
-  </main>
 
-  <aside class="kh-side" id="kh-side" aria-label="관심종목"></aside>
-  <nav class="kh-vbar" id="kh-vbar" aria-label="화면 전환"></nav>
+    </div>
+  </aside>
 </div>
 
 <div class="kh-foot" id="kh-foot" aria-label="시세 띠"></div>

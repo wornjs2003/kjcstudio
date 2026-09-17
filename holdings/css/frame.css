@@ -504,3 +504,80 @@ a.kh-sc-i:hover { color: var(--kh-accent); }
   cursor: pointer; flex-shrink: 0;
 }
 .kh-authbar button:hover { background: var(--kh-bg); }
+
+
+/* ── 2026-09-17 배치 — 첫 화면 ─────────────────
+   오른쪽 칸이 관심 목록에서 실시간 순위로 바뀌었다.
+   세로 아이콘 바를 감추고 그 폭(52px)을 순위에 넘겨 368px 가 됐다.
+   첫 화면에만 적용한다 — 다른 화면은 관심 목록과 세로바를 그대로 쓴다. */
+/* 316px(사이드바) + 52px(세로바) = 368px */
+.kh-app-wide { grid-template-columns: 1fr 368px; }
+
+/* 오른쪽 칸은 흰 판이 아니라 회색 바탕 위의 카드 둘이다.
+   높이를 본문에 묶는다 — 그냥 두면 표가 길어질수록 칸이 커지고,
+   커진 만큼 줄이 더 보여 또 길어진다. 페이지가 한없이 내려간다. */
+.kh-app-wide .kh-side {
+  background: transparent; border-left: 0;
+  min-height: 0; padding: 0;
+  position: relative; overflow: hidden;
+}
+.kh-side-wrap {
+  position: absolute; top: 14px; bottom: 14px; left: 2px; right: 14px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.kh-side-wrap > .kh-card { display: flex; flex-direction: column; min-height: 0; }
+.kh-side-wrap > .kh-rank-card { flex: 1; padding: 0; }
+.kh-side-wrap > .kh-dc-card { flex: 0 0 auto; }
+
+/* 순위표가 620px 에 묶여 있으면 카드가 늘어나도 목록이 안 늘어난다 */
+.kh-side-wrap .kh-rank-scroll {
+  max-height: none; flex: 1; min-height: 0;
+}
+
+/* 순위를 표가 아니라 목록으로 그린다 (2026-09-17 지시).
+   관심 사이드바가 쓰던 모양과 같다 — 한 줄에
+
+       [번호] [아이콘 이름]          현재가
+                          전일대비  등락률
+
+   368px 에 아홉 열을 밀어 넣으면 뒤쪽이 잘렸다. 열을 줄이는 대신
+   위아래로 쌓아 같은 자리에 더 넣는다. 오른쪽 두 줄은 끝선을 맞춘다. */
+.kh-side-wrap thead { display: none; }
+.kh-side-wrap tbody { display: block; }
+
+.kh-side-wrap tbody tr {
+  display: grid;
+  grid-template-columns: 22px 1fr auto auto;
+  grid-template-areas: "no name price price" "no name amt pct";
+  align-items: center; column-gap: 9px; padding: 7px 12px;
+}
+.kh-side-wrap tbody tr + tr { border-top: 1px solid var(--kh-border); }
+.kh-side-wrap tbody td {
+  padding: 0; border: 0; white-space: nowrap;
+}
+.kh-side-wrap tbody td:nth-child(1) {
+  grid-area: no; text-align: center;
+  font-size: 0.72rem; color: var(--kh-text-muted);
+}
+.kh-side-wrap tbody td:nth-child(2) { grid-area: name; min-width: 0; text-align: left; }
+/* 현재가·등락률은 오른쪽 끝에서 끝난다. -5px 는 카드 안여백을 상쇄한다 */
+.kh-side-wrap tbody td:nth-child(3) {
+  grid-area: price; justify-self: end; text-align: right;
+  font-size: 0.83rem; font-weight: 500; margin-right: -5px;
+}
+.kh-side-wrap tbody td:nth-child(4) {
+  grid-area: amt; justify-self: end; text-align: right; font-size: 0.74rem;
+}
+.kh-side-wrap tbody td:nth-child(5) {
+  grid-area: pct; justify-self: end; text-align: right;
+  font-size: 0.74rem; margin-right: -5px;
+}
+.kh-side-wrap .kh-nm { gap: 8px; }
+.kh-side-wrap .kh-nm .kh-ic { width: 26px; height: 26px; }
+.kh-side-wrap .kh-nm b {
+  display: block; min-width: 0; font-size: 0.83rem; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* 본문 아래 마지막 줄의 밑선을 공시 밑선에 맞춘다 (위 bottom: 54px 과 같은 값) */
+.kh-app-wide .kh-main { padding-bottom: 14px; }
