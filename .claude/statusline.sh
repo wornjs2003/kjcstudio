@@ -1,16 +1,21 @@
 #!/bin/sh
-# 화면 아래에 늘 떠 있는 줄. **재권님이 하셔야 할 것만** 띄운다.
+# 화면 아래에 늘 떠 있는 두 줄. **재권님이 하셔야 할 것만** 띄운다.
 #
 # 만든 이유 (2026-09-17 지시) — 「커밋·푸시·배포 같은 내가 봐야 하는 단어를
 # 눈에 잘 띄도록」. 세션이 답변 끝에 물으면 긴 글에 묻힌다. 실제로 커밋 하나가
 # 세 시간 넘게 푸시를 기다렸고, 그 사이 재권님은 배포본 500 을 그것 때문으로
-# 아셨다. 여기 떠 있으면 답변을 안 읽어도 보인다.
+# 아셨다.
+#
+# 개수만 띄웠더니 「무엇이 대기 중이지」 를 다시 물어야 했다. 그래서 **내용**을
+# 적는다. 클릭해서 보러 가는 방법도 알아봤지만, 푸시 대기 중인 커밋은 아직
+# 원격에 없어서 열 주소가 없다. 적혀 있으면 클릭할 일 자체가 없다.
+#
+#     main  푸시 대기 1  Keep push and deploy state on screen…
+#           미커밋 2  modal.css · latest.json
 #
 # 설정은 .claude/settings.json 의 statusLine 이다.
 # Windows 에서는 Claude Code 가 Git Bash 로 돌리므로 두 PC 가 같은 파일을 쓴다.
 # 경로는 반드시 슬래시로 적는다 — Git Bash 가 백슬래시를 이스케이프로 먹는다.
-#
-# 세션 JSON 이 stdin 으로 들어오지만 쓰지 않는다. 여기 필요한 것은 git 뿐이다.
 
 cd "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || exit 0
 
@@ -20,22 +25,43 @@ branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 [ -z "$branch" ] && exit 0
 
 ahead=$(git rev-list --count '@{u}..HEAD' 2>/dev/null || echo 0)
-dirty=$(git status --porcelain 2>/dev/null | grep -c .)
 
-# 워커가 바뀌었으면 푸시로 끝나지 않는다 — Cloudflare 대시보드에 손으로
-# 붙여넣어야 반영된다 (「커밋 · 푸시 · 배포 규칙」). 재권님만 하실 수 있는 일이라
-# 가장 눈에 띄게 둔다.
-worker=$(git diff --name-only '@{u}..HEAD' 2>/dev/null | grep -c 'worker/.*\.js')
-
-out="${D}${branch}${X}"
+# ── 첫 줄 — 푸시 ──────────────────────────────────
+line1="${D}${branch}${X}"
 
 if [ "$ahead" -gt 0 ]; then
-  out="$out  ${B}${Y}푸시 대기 ${ahead}${X}"
+  line1="$line1  ${B}${Y}푸시 대기 ${ahead}${X}"
+
+  # 가장 오래 기다린 것부터 보여준다. 여럿이면 그것 하나와 「외 N건」.
+  subject=$(git log --format='%s' '@{u}..HEAD' 2>/dev/null | tail -1 | cut -c1-44)
+  if [ -n "$subject" ]; then
+    line1="$line1  ${D}${subject}"
+    [ "$ahead" -gt 1 ] && line1="$line1 외 $((ahead - 1))건"
+    line1="$line1${X}"
+  fi
+
+  # 워커가 바뀌었으면 푸시로 끝나지 않는다 — Cloudflare 대시보드에 손으로
+  # 붙여넣어야 반영된다. 재권님만 하실 수 있는 일이라 가장 눈에 띄게 둔다.
+  worker=$(git diff --name-only '@{u}..HEAD' 2>/dev/null | grep -c 'worker/.*\.js')
+  [ "$worker" -gt 0 ] && line1="$line1  ${B}${R}배포 필요${X}"
 else
-  out="$out  ${G}푸시 끝${X}"
+  line1="$line1  ${G}푸시 끝${X}"
 fi
 
-[ "$worker" -gt 0 ] && out="$out  ${B}${R}배포 필요${X}"
-[ "$dirty" -gt 0 ] && out="$out  ${D}미커밋 ${dirty}${X}"
+printf '%b\n' "$line1"
 
-printf '%b\n' "$out"
+# ── 둘째 줄 — 미커밋 ──────────────────────────────
+# 하나도 없으면 줄을 만들지 않는다. 빈 줄이 남으면 화면만 차지한다.
+dirty=$(git status --porcelain 2>/dev/null | grep -c .)
+[ "$dirty" -eq 0 ] && exit 0
+
+names=$(git status --porcelain 2>/dev/null |
+        sed 's/^...//; s/.*\///' |          # 상태 표시와 경로를 떼고 파일명만
+        head -3 |
+        awk '{ printf "%s%s", sep, $0; sep=" · " }')
+
+line2="      ${D}미커밋 ${dirty}  ${names}"
+[ "$dirty" -gt 3 ] && line2="$line2 외 $((dirty - 3))개"
+line2="$line2${X}"
+
+printf '%b\n' "$line2"
