@@ -107,6 +107,45 @@
     box.classList.add("open");
   }
 
+  /* ── 갈래 탭 ──────────────────────────────
+     카테고리 아래에 갈래를 더 두고 싶을 때 쓴다. categories.json 의 그 항목에
+     groups 를 적으면 탭이 생기고, 없으면 지금까지대로 갤러리 하나만 나온다.
+     그래서 다른 카테고리는 이 코드가 있어도 달라지는 것이 없다.
+
+     AI Work 가 첫 사례다 — 컨셉 · 캐릭터 · 애니메이션 · 배경은 만드는 방식과
+     보는 눈이 서로 달라서 한 판에 섞으면 읽히지 않는다 (2026-09-17 지시). */
+
+  function renderGroupTabs(host, groups, works, onPick) {
+    const counts = {};
+    works.forEach((w) => {
+      const g = w.group || "";
+      if (g) counts[g] = (counts[g] || 0) + 1;
+    });
+
+    const all = [{ id: "", label: "전체" }].concat(groups);
+    host.innerHTML = "";
+
+    all.forEach((g, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "group-tab" + (i === 0 ? " is-on" : "");
+      b.dataset.group = g.id;
+
+      const n = g.id ? (counts[g.id] || 0) : works.length;
+      b.innerHTML = `<span>${g.label}</span><i>${n}</i>`;
+      /* 아직 한 점도 없는 갈래는 눌러도 빈 화면이라, 눌리지만 흐리게 둔다.
+         숨기지 않는 것은 「앞으로 여기에 무엇이 올라오는지」 가 보여야 해서다. */
+      if (n === 0) b.classList.add("is-empty");
+
+      b.addEventListener("click", () => {
+        host.querySelectorAll(".group-tab").forEach((x) => x.classList.remove("is-on"));
+        b.classList.add("is-on");
+        onPick(g.id, g);
+      });
+      host.appendChild(b);
+    });
+  }
+
   function renderEmpty(container, label) {
     container.innerHTML = `
       <div class="gallery-empty">
@@ -156,15 +195,31 @@
       .filter((w) => w.category === activeId)
       .sort((a, b) => (a.order || 0) - (b.order || 0));
 
-    if (works.length === 0) {
-      renderEmpty(container, catMeta?.label || activeId);
-      return;
+    /* 갈래를 정해 둔 카테고리면 탭을 먼저 그린다 */
+    const groups = catMeta?.groups || [];
+    const tabHost = document.querySelector(".group-tabs");
+
+    function draw(groupId, groupMeta) {
+      const list = groupId ? works.filter((w) => w.group === groupId) : works;
+      if (descEl) {
+        descEl.textContent = (groupMeta && groupMeta.description)
+          || catMeta?.description || "";
+      }
+      if (list.length === 0) {
+        renderEmpty(container, (groupMeta && groupMeta.label) || catMeta?.label || activeId);
+        return;
+      }
+      const frag = document.createDocumentFragment();
+      list.forEach((w) => frag.appendChild(renderItem(w)));
+      container.innerHTML = "";
+      container.appendChild(frag);
     }
 
-    const frag = document.createDocumentFragment();
-    works.forEach((w) => frag.appendChild(renderItem(w)));
-    container.innerHTML = "";
-    container.appendChild(frag);
+    if (groups.length && tabHost) {
+      tabHost.hidden = false;
+      renderGroupTabs(tabHost, groups, works, draw);
+    }
+    draw("", null);
   }
 
   if (document.readyState === "loading") {

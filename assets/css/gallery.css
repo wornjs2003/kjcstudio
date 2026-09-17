@@ -288,3 +288,53 @@
     transform: none;
   }
 }
+
+/* ── 갈래 탭 ───────────────────────────────────────────
+   카테고리 안에서 다시 갈래를 나눌 때 쓴다. AI Work 가 첫 사례다.
+   색은 전부 theme.css 토큰이고, 하드코딩은 두지 않는다. */
+.group-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 30px;
+}
+.group-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 16px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.group-tab i {
+  font-style: normal;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.group-tab:hover { background: var(--bg-elevated); color: var(--text-primary); }
+
+/* 고른 갈래 — 색을 꽉 채운 자리라 글씨는 흰색이다 (CLAUDE.md 색 규칙) */
+.group-tab.is-on {
+  background: var(--accent);
+  color: var(--on-scrim, #fff);
+}
+.group-tab.is-on i { color: inherit; opacity: 0.72; }
+
+/* 아직 한 점도 없는 갈래. 숨기지 않는 것은 앞으로 무엇이 올라오는지
+   보여야 하기 때문이다. 누르면 「곧 채워집니다」 가 나온다. */
+.group-tab.is-empty { opacity: 0.55; }
+.group-tab.is-empty.is-on { opacity: 1; }
+
+@media (max-width: 640px) {
+  .group-tabs { gap: 6px; margin-bottom: 22px; }
+  .group-tab { font-size: 0.8rem; padding: 8px 13px; }
+}
