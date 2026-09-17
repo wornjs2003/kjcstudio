@@ -199,10 +199,13 @@ export function mountStockView(root, stock, { onBack } = {}) {
     /** 담긴 칸의 폭이 바뀌었을 때 (모달 서랍을 여닫는 자리).
      *
      * 폭 자체는 차트가 스스로 따라간다 — chart.js 가 `autoSize: true` 로
-     * 만든다. 여기서는 봉이 새 폭에 고르게 퍼지도록 다시 맞추기만 한다. */
+     * 만든다. 여기서는 보는 창을 다시 맞추기만 한다.
+     *
+     * fitContent() 를 부르면 안 된다. 있는 봉을 전부 채워 넣어서 봉 크기가
+     * 종목마다 갈린다 — 그것을 고치려고 chart.js 가 창을 고정해 뒀다. */
     resize() {
-      if (chart && chart.chart) {
-        try { chart.chart.timeScale().fitContent(); } catch { /* 이미 정리됨 */ }
+      if (chart && chart.resetView) {
+        try { chart.resetView(); } catch { /* 이미 정리됨 */ }
       }
     },
 

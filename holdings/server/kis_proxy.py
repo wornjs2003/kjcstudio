@@ -1316,6 +1316,49 @@ def fetch_minutes_day(cfg, code):
     return sorted(bars.values(), key=lambda x: x["ts"])
 
 
+# 마지막 봉이 이보다 오래됐으면 최근 구간만 받지 않고 하루치를 다시 모은다.
+# 장중 한 시간이면 12개가 비는 셈이라, 그 정도면 통째로 받는 편이 낫다.
+MINUTE_REFILL_GAP = 60
+
+
+def _today_kst():
+    """오늘 날짜(한국) YYYYMMDD.
+
+    get_chart 안에 `import datetime`(모듈)이 있어서 그 안에서는 전역의
+    `from datetime import datetime` 이 가려진다. 날짜 만드는 곳을 하나로
+    모아 그 함정을 피한다 (2026-09-17 에 걸렸다).
+    """
+    return datetime.now(KST).strftime("%Y%m%d")
+
+
+def _minutes_need_day(code, period, rows):
+    """하루치를 통째로 받아야 하나.
+
+    **두 가지를 본다. 하나만 보면 구멍이 남는다.**
+
+      1. 오늘 하루치를 아직 안 받았다        → 받는다
+      2. 마지막 봉이 한 시간 넘게 오래됐다   → 받는다
+
+    처음에는 2번만 봤는데, 최근 봉이 있으면 **앞쪽 구멍을 안 메웠다.**
+    삼성전자우가 10:15~10:50 만 있고 09:00~10:15 가 빈 채로 남았다
+    (2026-09-17). 마지막 봉만 보면 "방금 받았으니 됐다" 가 되어 버린다.
+
+    1번은 하루 한 번만 걸린다. 날짜를 값에 넣어 키가 늘어나지 않게 한다.
+    """
+    if _meta_get("dayfill:%s:%s" % (code, period)) != _today_kst():
+        return True
+    if not rows:
+        return True
+    try:
+        ts = rows[-1]["ts"]                      # YYYYMMDDHHMM
+        last = datetime(int(ts[0:4]), int(ts[4:6]), int(ts[6:8]),
+                        int(ts[8:10]), int(ts[10:12]), tzinfo=KST)
+        gap = (datetime.now(KST) - last).total_seconds() / 60
+    except Exception:
+        return True                              # 읽을 수 없으면 다시 받는 쪽으로
+    return gap > MINUTE_REFILL_GAP
+
+
 def aggregate_minutes(bars, minutes):
     """1분봉을 N분봉으로 묶는다 (KIS 는 5분봉을 직접 주지 않는다)."""
     buckets = {}
@@ -1386,12 +1429,18 @@ def get_chart(cfg, code, period, limit):
             bars = fetch_bars_from_kis(cfg, code, period,
                                        start.strftime("%Y%m%d"), today.strftime("%Y%m%d"))
         else:                                # 분봉
-            # 처음이면 하루치를 모으고(호출 여러 번), 이후에는 최근 구간만 갱신한다.
-            # 기준 시각을 넘기지 않으면 '지금까지' 로 잡힌다 (미래 봉 방지)
-            if rows:
-                raw = fetch_minutes_from_kis(cfg, code)
-            else:
+            # 많이 비었으면 하루치를 모으고(호출 여러 번), 조금이면 최근 구간만.
+            #
+            # **「있나 없나」로 가르면 안 된다.** 전에는 rows 가 하나라도 있으면
+            # 최근 구간만 받았는데, 며칠 전 것이 남아 있는 종목은 오늘 것이
+            # 통째로 비었다 — 삼성전자우가 09:00~10:15 가 없이 7개뿐이었다
+            # (2026-09-17). 거래가 잦은 종목만 자주 열려 저절로 채워지고
+            # 있었던 것이라, 종목마다 봉 개수가 크게 갈렸다.
+            if _minutes_need_day(code, period, rows):
                 raw = fetch_minutes_day(cfg, code)
+                _meta_set("dayfill:%s:%s" % (code, period), _today_kst())
+            else:
+                raw = fetch_minutes_from_kis(cfg, code)
             bars = aggregate_minutes(raw, 5) if period == "5m" else raw
         fetched = save_candles(code, period, bars)
         _meta_set(mkey, time.time())

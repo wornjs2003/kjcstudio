@@ -748,8 +748,22 @@ document.addEventListener('visibilitychange', () => {
 /* ── 미리보기 ───────────────────────────── */
 let chartKey = null;
 
+/** 코드로 종목을 찾는다. **순위표에 뜨는 것을 먼저 본다.**
+ *
+ * 순위표(rowList)는 수백 개인데 WATCHLIST 는 관심종목 여덟뿐이다. 좁은 쪽만
+ * 보면 관심종목이 아닌 줄에서 못 찾고 조용히 빠져나간다 — 그래서 마우스를
+ * 올려도 이름·아이콘이 안 바뀌고 차트만 바뀌었다 (2026-09-17).
+ *
+ * 찾는 자리가 둘이라 한쪽만 넓은 목록을 보고 있었다. 한 곳에 모은다.
+ */
+function findStock(code) {
+  return rowList().find(s => s.code === code)
+      || WATCHLIST.find(s => s.code === code)
+      || null;
+}
+
 function paintPreview(priceMap) {
-  const s = WATCHLIST.find(x => x.code === selectedCode);
+  const s = findStock(selectedCode);
   if (!s) return;
   const live = priceMap && priceMap[s.code];
 
@@ -859,8 +873,7 @@ function dropCodeFromUrl() {
 }
 
 async function openStockModal(code, { push = true } = {}) {
-  const stock = rowList().find(s => s.code === code)
-             || WATCHLIST.find(s => s.code === code);
+  const stock = findStock(code);
   if (!stock || (stockModal && stockModal.code === code)) return;
 
   let main;

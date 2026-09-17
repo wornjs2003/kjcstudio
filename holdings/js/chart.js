@@ -32,6 +32,30 @@ const COLOR = {
    (2026-09-16 지시 — 5 · 20 · 60 · 200) */
 const MA_LINES = [[5, 'ma5'], [20, 'ma20'], [60, 'ma60'], [200, 'ma200']];
 
+/* 한 화면에 몇 봉을 보일 것인가.
+ *
+ * **봉 크기를 종목마다 같게 하려고 둔다** (2026-09-17 지시 —
+ * "마우스 움직일때마다 차트 스케일도 각각 다르네").
+ *
+ * 전에는 fitContent() 로 **있는 봉을 전부** 채워 넣었다. 그래서 받아둔
+ * 개수가 다르면 봉 굵기도 달라졌다 — 삼성전자 300개는 촘촘하고
+ * 삼성전자우 47개는 듬성했다. 개수가 아니라 **보는 창을 고정**한다.
+ *
+ * 봉이 이보다 적으면 있는 만큼만 보인다. 더 많으면 끌어서 과거를 본다.
+ * 5분봉 120개면 10시간, 일봉이면 반년쯤이다.
+ */
+const VISIBLE_BARS = 120;
+
+function showLastBars(chart, total) {
+  const ts = chart.timeScale();
+  if (total <= VISIBLE_BARS) { ts.fitContent(); return; }
+  try {
+    ts.setVisibleLogicalRange({ from: total - VISIBLE_BARS, to: total - 1 });
+  } catch {
+    ts.fitContent();          // 라이브러리 판이 다르면 예전대로
+  }
+}
+
 /* 화면의 기간 버튼 → 서버가 쓰는 기간 코드 */
 export const PERIOD_MAP = {
   '5m': '5m',   // 5분봉
@@ -223,13 +247,18 @@ export function createStockChart(container, candles, opts = {}) {
     });
   }
 
-  chart.timeScale().fitContent();
+  showLastBars(chart, candles.length);
 
   return {
     chart,
     candleSeries,
     volumeSeries,
     maSeries,
+
+    /** 보는 창을 처음 상태로 되돌린다. 칸 크기가 바뀐 뒤에 부른다 —
+     *  여기서 fitContent 를 부르면 봉 크기가 종목마다 다시 갈린다. */
+    resetView() { showLastBars(chart, candles.length); },
+
     destroy() {
       try { chart.remove(); } catch { /* 이미 정리됨 */ }
     },
