@@ -61,7 +61,10 @@ SW_RESTORE 는 **내가 방금 연 창에만** 쓴다. 그 창이 최소화된 �
 열렸을 때 펴 주는 용도이고, 다른 창에는 쓰지 않는다.
 """
 import ctypes
+import io
+import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -87,6 +90,78 @@ CHROME = [
 ]
 # 메모장으로 여는 확장자. 연결 프로그램에 맡기지 않는다 (아래 main 주석 참고).
 TEXT_EXT = (".md", ".txt", ".log", ".json", ".csv")
+
+
+def session_name():
+    """이 세션의 이름. 못 알아내면 빈 문자열.
+
+    창을 여럿 띄워 두면 **어느 세션이 띄운 것인지 알 수 없다.** 2026-09-16 에
+    CLAUDE.md 창이 16개 쌓여 재권님이 "이 창 누가 띄웠냐" 고 물으셨다.
+
+    환경변수 `CLAUDE_CODE_SESSION_ID` 로 기록 파일을 찾고, 거기서 마지막
+    `/rename` 을 읽는다. `tools/update-sessions.py` 와 같은 방식이고,
+    같은 이유로 `type` 이 `system` 인 줄만 인정한다 — 남의 기록을 읽는 세션은
+    그 이름이 자기 대화에 남아서, 글자만 보면 남의 이름을 자기 것으로 단다.
+    """
+    sid = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+    if not sid:
+        return ""
+    path = os.path.join(os.path.expanduser("~"), ".claude", "projects",
+                        "C--work-KJCStudio", sid + ".jsonl")
+    pat = re.compile(r"Session renamed to: ([가-힣A-Za-z0-9_\-. ]{1,30})")
+    name = ""
+    try:
+        with io.open(path, encoding="utf-8", errors="ignore") as fp:
+            for line in fp:
+                if "Session renamed to:" not in line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if row.get("type") != "system":
+                    continue
+                m = pat.search(str(row.get("content", "")))
+                if m:
+                    name = m.group(1).strip()
+    except OSError:
+        pass
+    return name
+
+
+def stamp_title(path, who):
+    """HTML 제목 앞에 세션 이름을 붙인다. **임시 파일에만** 손댄다.
+
+    브라우저 탭에 뜨는 것은 파일명이 아니라 `<title>` 이라, 파일명 규칙
+    (`temp/README.md`)만으로는 화면에서 누가 띄웠는지 알 수 없다.
+
+    저장소 파일은 고치지 않는다. 화면에 나가는 제목이고 내 것이 아니다.
+    """
+    if not who or not path.lower().endswith((".html", ".htm")):
+        return
+    try:
+        s = io.open(path, encoding="utf-8").read()
+    except OSError:
+        return
+    m = re.search(r"<title>(.*?)</title>", s, re.S | re.I)
+    if not m:
+        return
+    cur = m.group(1).strip()
+    if who in cur:
+        return                       # 이미 붙어 있다
+
+    # 임시 폴더인가. 저장소 안 파일은 건드리지 않는다.
+    low = path.replace("\\", "/").lower()
+    if "/temp/" not in low and "scratchpad" not in low:
+        print(f"  제목에 세션 이름이 없습니다 — 저장소 파일이라 고치지 않습니다")
+        return
+
+    try:
+        io.open(path, "w", encoding="utf-8", newline="\n").write(
+            s.replace(m.group(0), f"<title>{who} · {cur}</title>", 1))
+        print(f"  제목에 붙임: {who}")
+    except OSError:
+        pass
 
 
 def windows():
@@ -187,6 +262,9 @@ def main():
 
     # 제목 조각을 안 주면 파일명에서 뽑는다
     hint = sys.argv[2] if len(sys.argv) > 2 else os.path.splitext(os.path.basename(path))[0]
+
+    # 누가 띄웠는지 제목에 남긴다. 창이 여럿일 때 구분이 안 되기 때문이다.
+    stamp_title(path, session_name())
 
     before = windows()
 
