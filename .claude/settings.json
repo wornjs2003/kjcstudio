@@ -6,18 +6,20 @@
       "Bash(git add .)",
       "Bash(git stage -A*)",
       "Bash(git stage .)",
-
       "Bash(git checkout .)",
       "Bash(git restore .)",
       "Bash(git restore --staged .)",
-
       "Bash(git reset --hard*)",
       "Bash(git clean -f*)",
       "Bash(git clean -d*)",
       "Bash(git clean --force*)",
-
       "Bash(git commit -a*)",
       "Bash(git commit --all*)"
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "sh \"$(git rev-parse --show-toplevel)/.claude/statusline.sh\"",
+    "padding": 1
   }
 }

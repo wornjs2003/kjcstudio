@@ -18,6 +18,8 @@
 # 금지 명령(deny)도 두 PC 에 함께 적용돼야 하므로 저장소에 둔다.
 # 개인 설정은 settings.local.json 쪽이고 그것은 계속 무시한다
 !.claude/settings.json
+# 상태줄 스크립트도 두 PC 가 같은 것을 쓴다 (Windows 는 Git Bash 로 돈다)
+!.claude/statusline.sh
 
 # API 키 (절대 커밋 금지) — 한국투자증권 앱키, OpenDART 인증키 등
 secrets.json
