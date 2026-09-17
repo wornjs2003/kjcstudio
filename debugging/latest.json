@@ -1,9 +1,9 @@
 {
-  "at": "2026-09-15T20:11:26+09:00",
+  "at": "2026-09-17T20:39:55+09:00",
   "mode": "manual",
   "counts": {
-    "pass": 9,
-    "mismatch": 1,
+    "pass": 12,
+    "mismatch": 0,
     "changed": 0,
     "todo": 1,
     "ignored": 1
@@ -20,9 +20,9 @@
       "title": "문서가 가리키는 파일이 실제로 있는가",
       "scope": "CLAUDE.md 안의 `경로` 전부",
       "expected": "문서가 적어둔 경로가 모두 저장소에 있음",
-      "status": "mismatch",
-      "actual": "1개 없음",
-      "detail": "문서에만 있고 저장소에 없음 — server/kis_proxy.py"
+      "status": "pass",
+      "actual": "45개 모두 있음",
+      "detail": "문서가 가리키는 경로 45개 전부 저장소에 있습니다"
     },
     {
       "id": "md-no-area-theme",
@@ -61,7 +61,7 @@
       "scope": "holdings/js/data/market.js 의 brand",
       "expected": "0개 — 로고를 받아 실제 대표색으로 채움",
       "status": "todo",
-      "actual": "19개 남음",
+      "actual": "2개 남음",
       "detail": "로고를 받아 실제 대표색으로 채울 자리입니다 (2026-09-16 예정)"
     },
     {
@@ -72,7 +72,7 @@
       "expected": "모든 링크 대상이 저장소에 있음",
       "status": "pass",
       "actual": "13개 모두 정상",
-      "detail": "index.html · category/3d-modeling.html · category/ai-work.html · debugging/ · api-board/ · holdings/"
+      "detail": "index.html · category/3d-modeling.html · ai-work/ · debugging/ · api-board/ · holdings/"
     },
     {
       "id": "doc-accent",
@@ -108,7 +108,7 @@
       "id": "raw-color-projects",
       "group": "디자인 토큰",
       "title": "프로젝트 보드에 색을 직접 박았는가",
-      "scope": "projects/index.html · 주석 제외",
+      "scope": "projects/ 의 css·html 전부 · 주석 제외",
       "expected": "0곳 — 전부 theme.css 토큰 사용",
       "status": "pass",
       "actual": "0곳",
@@ -118,7 +118,27 @@
       "id": "raw-color-apiboard",
       "group": "디자인 토큰",
       "title": "API 보드에 색을 직접 박았는가",
-      "scope": "api-board/index.html · 주석 제외",
+      "scope": "api-board/ 의 css·html 전부 · 주석 제외",
+      "expected": "0곳 — 전부 theme.css 토큰 사용",
+      "status": "pass",
+      "actual": "0곳",
+      "detail": "검사한 파일 1개"
+    },
+    {
+      "id": "raw-color-holdings",
+      "group": "디자인 토큰",
+      "title": "주식 화면에 색을 직접 박았는가",
+      "scope": "holdings/ 의 css·html 전부 · 주석 제외 · allow 에 적은 국기 규정색은 예외",
+      "expected": "0곳 — 전부 theme.css 토큰 사용",
+      "status": "pass",
+      "actual": "0곳",
+      "detail": "검사한 파일 13개"
+    },
+    {
+      "id": "raw-color-setup",
+      "group": "디자인 토큰",
+      "title": "설립 체크리스트에 색을 직접 박았는가",
+      "scope": "company-setup/ 의 css·html 전부 · 주석 제외",
       "expected": "0곳 — 전부 theme.css 토큰 사용",
       "status": "pass",
       "actual": "0곳",
