@@ -50,6 +50,10 @@
 /* ── 위젯 격자 ──────────────────────────── */
 .kh-grid { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 14px; margin-top: 14px; }
 
+/* 차트 패널이 이 격자 안에 있다. 칸은 기본이 `min-width: auto` 라 내용이
+   넓으면 밀고 나간다 — 첫 화면 미리보기가 그렇게 옆 칸을 덮었다 (2026-09-17). */
+.kh-grid > * { min-width: 0; }
+
 /* 패널(.kh-w*)과 출처 배지(.kh-bd*)는 css/frame.css 로 옮겼다
    (2026-09-15). 뉴스 화면까지 셋이 함께 쓰게 되어 공용으로 뺐다. */
 

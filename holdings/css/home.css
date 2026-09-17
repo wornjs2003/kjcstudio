@@ -106,6 +106,11 @@
 /* ── 순위 + 미리보기 ────────────────────── */
 .kh-rank { margin-top: 14px; display: grid; grid-template-columns: 1fr 352px; gap: 14px; }
 
+/* 격자 칸은 기본이 `min-width: auto` 라 **안의 내용이 넓으면 칸 밖으로 밀고 나간다.**
+   미리보기 차트가 그렇게 옆 사이드바를 덮었다 (2026-09-17).
+   frame.css 는 .kh-main 에 이미 같은 것을 두고 있는데 여기만 빠져 있었다. */
+.kh-rank > * { min-width: 0; }
+
 .kh-rank .kh-tabs { padding: 15px 18px 10px; }
 .kh-rank .kh-tab.is-active { background: none; font-weight: 700; }
 .kh-fold { margin-left: auto; font-size: 0.78rem; color: var(--kh-text-secondary); cursor: pointer; }
@@ -148,7 +153,10 @@
 .kh-pv-n { font-size: 0.98rem; font-weight: 600; }
 .kh-pv-v { font-size: 1.05rem; font-weight: 600; margin-top: 1px; }
 .kh-pv-lb { font-size: 0.78rem; color: var(--kh-text-secondary); margin: 10px 0 4px; }
-.kh-pv-chart { height: 168px; }
+/* overflow 는 안전망이다. 차트는 autoSize 로 컨테이너를 재는데, 잴 시점에
+   폭이 아직 안 정해졌으면 엉뚱한 값으로 그리고 그대로 남는다. 위 min-width 가
+   근본이고, 그래도 넘치면 여기서 잘라 옆 칸을 안 덮게 한다. */
+.kh-pv-chart { height: 168px; overflow: hidden; }
 .kh-pv-why { margin-top: 14px; }
 .kh-pv-why-h {
   display: flex; align-items: center; justify-content: space-between;
@@ -318,7 +326,10 @@
 .kh-fade.r { right: 0; background: linear-gradient(270deg, var(--kh-bg), transparent); }
 
 /* ── 고른 지수 + 오른쪽 패널 ── */
+/* 큰 지수 차트가 왼쪽 칸이다. 미리보기와 같은 이유로 min-width 를 눌러 둔다
+   (2026-09-17 — 위 .kh-rank 주석 참고) */
 .kh-idx { display: grid; grid-template-columns: 1fr 340px; gap: 14px; }
+.kh-idx > * { min-width: 0; }
 .kh-idx-main { padding: 18px 20px 14px; display: flex; flex-direction: column; }
 .kh-idx-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
 .kh-idx-name { font-size: 1.28rem; font-weight: 700; }
