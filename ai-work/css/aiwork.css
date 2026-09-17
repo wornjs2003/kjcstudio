@@ -1,0 +1,239 @@
+/* ==========================================================================
+   AI Work — 작업 프로세스를 정하는 판
+
+   완성작을 거는 화면이 아니다. 어느 도구를 어디에 쓸지 정하고, 직접 돌려본
+   결과를 남긴다. 그래서 「작업물 개수」가 아니라 「정해야 할 질문」과
+   「아직 모르는 것」이 화면의 중심이다.
+
+   색은 전부 ../../assets/css/theme.css 의 토큰이다.
+   공용(접두사 없음) + 이 구역용(--aw-) 을 쓴다. 하드코딩은 두지 않는다.
+   흰 카드에는 선을 두지 않고, 흰 바탕 위 글씨는 검정이다 (CLAUDE.md 색·선 규칙).
+   ========================================================================== */
+
+.aw-wrap {
+  max-width: 1720px;
+  margin: 0 auto;
+  /* 상단 메뉴가 고정이라 그 높이만큼 비운다. 값을 적지 않고 nav.css 가 정한
+     --nav-height 를 쓴다 — 좁은 화면에서 96 → 72 로 바뀌는 것까지 따라간다.
+     holdings/css/frame.css 가 쓰는 방식과 같다. */
+  padding: calc(var(--nav-height) + 24px) 30px 48px;
+}
+
+/* ── 머리말 ──────────────────────────────── */
+.aw-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.aw-head h1 {
+  font-family: Roboto, "Noto Sans KR", sans-serif;
+  font-style: italic;
+  font-size: clamp(24px, 3.4vw, 30px);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  margin: 0;
+  line-height: 1.15;
+}
+.aw-head h1 .dot { color: var(--accent); font-style: normal; }
+.aw-sub {
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  line-height: 1.65;
+  margin: 7px 0 0;
+}
+.aw-sub b { color: var(--text-primary); font-weight: 600; }
+
+/* 지금 어디까지 왔는지 한 줄로. 연한 바탕이라 글씨는 같은 색의 진한 값 */
+.aw-stamp {
+  margin-left: auto;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 13px;
+  border-radius: 999px;
+  background: var(--aw-warn-faint);
+  color: var(--aw-warn);
+}
+.aw-stamp::before {
+  content: "";
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+/* 돌려본 것이 하나라도 생기면 초록으로 바뀐다 */
+.aw-stamp.is-going { background: var(--aw-ok-faint); color: var(--aw-ok); }
+
+/* ── 통계 ────────────────────────────────── */
+.aw-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 13px;
+  margin-bottom: 16px;
+}
+.aw-stat {
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 16px 20px;
+}
+.aw-stat .k {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+.aw-stat .v {
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.aw-stat .v small {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+.aw-stat .n { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+
+/* ── 단계 창 ─────────────────────────────── */
+.aw-panes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.aw-pane {
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 16px 18px;
+  min-width: 0;
+}
+.aw-pane-h { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.aw-pane-h b { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+.aw-pane-h .no {
+  font-family: Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.aw-pane-d {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin: 0 0 13px;
+}
+
+/* 이 단계에서 정해야 할 것. 작업물 개수보다 이것이 먼저다 */
+.aw-q {
+  background: var(--bg-surface);
+  border-radius: 10px;
+  padding: 11px 13px;
+  margin-bottom: 13px;
+}
+.aw-q-k {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.aw-q-v { font-size: 12.5px; font-weight: 600; line-height: 1.5; }
+
+/* ── 도구 한 줄 ──────────────────────────── */
+.aw-tool {
+  background: var(--bg-surface);
+  border-radius: 11px;
+  padding: 11px 13px;
+  margin-bottom: 8px;
+}
+.aw-tool-h { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.aw-tool-h b { font-size: 13px; font-weight: 700; }
+.aw-tool-m { font-size: 11px; color: var(--text-secondary); line-height: 1.55; }
+.aw-tool-m strong { font-weight: 600; color: var(--text-primary); }
+.aw-tool-m em { font-style: normal; font-weight: 600; color: var(--aw-stop); }
+
+/* 상태 — 연한 바탕에 같은 색의 진한 글씨 (CLAUDE.md 색 규칙) */
+.aw-st {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.aw-st.is-read  { background: var(--bg-card);        color: var(--text-muted); }
+.aw-st.is-tried { background: var(--aw-warn-faint);  color: var(--aw-warn); }
+.aw-st.is-use   { background: var(--aw-ok-faint);    color: var(--aw-ok); }
+.aw-st.is-no    { background: var(--aw-stop-faint);  color: var(--aw-stop); }
+
+/* ── 아직 모르는 것 ──────────────────────── */
+/* 문서에만 적어두면 다시 안 읽게 된다. 화면에 빨간 자국으로 남긴다. */
+.aw-unknown {
+  background: var(--aw-stop-faint);
+  border-radius: 11px;
+  padding: 12px 13px;
+  color: var(--aw-stop);
+}
+.aw-unknown b { font-size: 12.5px; font-weight: 700; display: block; margin-bottom: 5px; }
+.aw-unknown span { font-size: 11.5px; line-height: 1.6; display: block; }
+.aw-unknown strong { font-weight: 700; }
+.aw-unknown em { font-style: italic; font-weight: 600; }
+
+/* ── 확인된 것 · 모르는 것 ───────────────── */
+.aw-next {
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 18px 22px;
+  margin-top: 16px;
+}
+.aw-next h2 { font-size: 14px; font-weight: 700; margin: 0 0 4px; }
+.aw-next-s { font-size: 12px; color: var(--text-muted); margin: 0 0 14px; }
+.aw-next-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.aw-next-c {
+  background: var(--bg-surface);
+  border-radius: 12px;
+  padding: 13px 15px;
+}
+.aw-next-c b { font-size: 12.5px; font-weight: 700; display: block; margin-bottom: 7px; }
+.aw-next-c ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.85;
+}
+.aw-next-c strong { font-weight: 600; color: var(--text-primary); }
+.aw-next-c.is-todo { background: var(--aw-stop-faint); }
+.aw-next-c.is-todo b,
+.aw-next-c.is-todo ul,
+.aw-next-c.is-todo strong { color: var(--aw-stop); }
+
+/* ── 못 읽었을 때 ────────────────────────── */
+.aw-fail {
+  background: var(--aw-stop-faint);
+  color: var(--aw-stop);
+  border-radius: 14px;
+  padding: 22px;
+  font-size: 13px;
+  line-height: 1.7;
+  grid-column: 1 / -1;
+}
+.aw-fail b { display: block; font-weight: 700; margin-bottom: 5px; }
+
+/* ── 좁은 화면 ───────────────────────────── */
+@media (max-width: 1280px) {
+  .aw-panes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .aw-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .aw-wrap { padding: calc(var(--nav-height) + 16px) 16px 36px; }
+  .aw-head { flex-wrap: wrap; gap: 10px; }
+  .aw-stamp { margin-left: 0; }
+  .aw-panes,
+  .aw-stats,
+  .aw-next-grid { grid-template-columns: minmax(0, 1fr); }
+  .aw-next { padding: 16px 16px; }
+}

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+  <title>AI Work — KJC Studio</title>
+
+  <!-- 개발용 캐시 무효화 -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&family=Roboto:ital,wght@0,400;0,500;0,700;1,400;1,700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/nav.css" />
+  <link rel="stylesheet" href="./css/aiwork.css" />
+</head>
+<body data-nav="ai-work" data-site-root="../">
+
+<div id="site-nav"></div>
+
+<main class="aw-wrap">
+
+  <header class="aw-head">
+    <div>
+      <h1>AI Work<span class="dot">.</span></h1>
+      <p class="aw-sub">
+        <b>작업 프로세스를 어떻게 할지 먼저 고민하고 확인해 보는 창입니다.</b><br>
+        완성작을 거는 곳이 아니라, 어느 도구를 어디에 쓸지 정하고 직접 돌려본 결과를 남깁니다.
+      </p>
+    </div>
+    <span class="aw-stamp" id="aw-stamp">불러오는 중</span>
+  </header>
+
+  <!-- 숫자는 pipeline.json 을 세어서 나옵니다. 따로 적지 않습니다. -->
+  <section class="aw-stats" id="aw-stats"></section>
+
+  <!-- 단계 창 -->
+  <section class="aw-panes" id="aw-panes"></section>
+
+  <!-- 확인된 것 · 모르는 것 -->
+  <section class="aw-next">
+    <h2>지금까지 확인한 것과 아직 모르는 것</h2>
+    <p class="aw-next-s">조사만으로 알 수 있는 것은 여기까지입니다. 나머지는 돌려봐야 압니다.</p>
+    <div class="aw-next-grid">
+      <div class="aw-next-c">
+        <b>확인된 것</b>
+        <ul id="aw-known"></ul>
+      </div>
+      <!-- 빨간 바탕 — 「아직 모른다」 를 화면에 남깁니다.
+           문서에만 적어두면 다시 안 읽게 되고 그대로 굳습니다
+           (CLAUDE.md 「아직 안 정해진 자리는 빨간 바탕으로 남긴다」). -->
+      <div class="aw-next-c is-todo">
+        <b>아직 모르는 것 — 돌려봐야 안다</b>
+        <ul id="aw-unknown"></ul>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div id="site-footer"></div>
+
+<script type="module" src="./js/aiwork.js"></script>
+<script src="../assets/js/main.js"></script>
+</body>
+</html>
