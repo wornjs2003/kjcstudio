@@ -556,8 +556,8 @@
 .kh-ix-h { gap: 6px; }
 .kh-ix-b { display: flex; align-items: baseline; gap: 7px; }
 .kh-ix-b > div:first-child { display: flex; align-items: baseline; gap: 7px; }
-/* 등락 그래프는 뺐다 (지시) */
-.kh-ix-s { display: none; }
+/* 등락 그래프(.kh-ix-s)는 2026-09-17 에 아예 안 그리게 했다.
+   CSS 로 가리기만 하던 것을 home.js 에서 빼고, 받아오는 쪽도 껐다. */
 
 /* 칩으로 거를 때 hidden 을 붙이는데, 그것만으로는 안 숨는다.
    [hidden] { display: none } 은 브라우저 기본 스타일이라 위의 display: flex 에 진다 —

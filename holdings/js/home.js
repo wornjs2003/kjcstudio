@@ -99,23 +99,10 @@ let selectedCode = keptStock() || WATCHLIST[0].code;
    "언제 받았는지" 를 보여줘야 갱신이 돌고 있다는 걸 알 수 있다. */
 let lastTickAt = null;
 
-/* ── 작은 추이선 ─────────────────────────── */
-/* 작은 추이 그래프.
-   색은 한국식으로 — 오름 빨강 · 내림 파랑 · 보합 검정.
-   전에는 `changePct >= 0` 으로 넘겨서 0.00% 일 때도 빨강이 됐다 (2026-09-15). */
-function sparkSvg(series, pct, w, h) {
-  if (!series || series.length < 2) return '';
-  const lo = Math.min(...series), hi = Math.max(...series);
-  const range = Math.max(1e-9, hi - lo);
-  const pts = series.map((v, i) =>
-    `${(i / (series.length - 1) * w).toFixed(1)},${((1 - (v - lo) / range) * h).toFixed(1)}`);
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
-            style="width:100%;height:100%;display:block">
-            <polyline points="${pts.join(' ')}" fill="none"
-              stroke="${pct == null || pct === 0 ? color('flat')
-                        : (pct > 0 ? color('up') : color('down'))}"
-              stroke-width="1.6" stroke-linejoin="round"/></svg>`;
-}
+/* 작은 추이선(sparkSvg)은 2026-09-17 에 지웠다 (지시 — "주요지수에 있는건
+   차트는 안쓰니 차트관련된건 필요없고 가격변동과 등락률만 있으면 돼").
+   만들어 놓고 CSS 로 가리고 있었는데, 그리지 않는 편이 맞다.
+   받아오는 쪽도 함께 껐다 — data/live.js 의 chart=0 참고. */
 
 /* ── 장 상태 · 기준 시각 ─────────────────── */
 function paintClock() {
@@ -268,7 +255,6 @@ function paintStrip(indices) {
             >${fmtNum(i.value, 2)}</div>
           <div class="kh-ix-c kh-num ${cls}">${fmtDelta(i.change, i.changePct, '', 2)}</div>
         </div>
-        <div class="kh-ix-s">${sparkSvg(i.series, i.changePct, 74, 30)}</div>
       </div>
     </div>`;
   }).join('');
@@ -277,8 +263,11 @@ function paintStrip(indices) {
      바꿨는데, 그 자리가 종목 차트가 되어 눌러도 갈 곳이 없어졌다.
      지수 화면을 만들면 그때 다시 붙인다 — 동작하지 않는 단추를 남기지 않는다. */
 
+  /* 위 줄은 자주 보는 넷만, 카드는 전부다 (2026-09-17 지시 — "주요지수에
+     코스닥은 안나오네"). 위에 올린 것을 카드에서 빼면 「주요 지수」인데
+     코스피·코스닥이 없는 목록이 된다. */
   if (top) top.innerHTML = draw(INDEX_CELLS.filter(c => TOP_CELLS.includes(c.name)));
-  host.innerHTML = draw(INDEX_CELLS.filter(c => !TOP_CELLS.includes(c.name)));
+  host.innerHTML = draw(INDEX_CELLS);
   paintIxFilter();
 }
 
@@ -304,9 +293,8 @@ function ixGroupOf(cell) {
 function paintIxFilter() {
   const host = $('kh-strip');
   if (!host) return;
-  const cells = INDEX_CELLS.filter(c => !TOP_CELLS.includes(c.name));
   [...host.children].forEach((el, i) => {
-    el.hidden = cells[i] ? ixGroupOf(cells[i]) !== ixGroup : true;
+    el.hidden = INDEX_CELLS[i] ? ixGroupOf(INDEX_CELLS[i]) !== ixGroup : true;
   });
 }
 

@@ -35,7 +35,7 @@ async function kisReady() {
 export async function fetchLiveIndices() {
   if (!(await kisReady())) return null;
   try {
-    const r = await apiFetch('/api/kis/indices', { cache: 'no-store' });
+    const r = await apiFetch('/api/kis/indices?chart=0', { cache: 'no-store' });
     if (!r || !r.ok) return null;
     const j = await r.json();
     if (!j || !j.ok || !Array.isArray(j.data) || !j.data.length) return null;
