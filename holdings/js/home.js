@@ -21,10 +21,20 @@ import { fetchIndexMinutes, fetchIndexCandles, fetchQuotes } from './data/live.j
 import { apiFetch } from './data/api.js';
 
 /* 지수 띠에 놓을 칸.
-   code 가 있는 셋만 서버에서 값이 온다. 나머지는 아직 받아올 곳이 없어
-   "연결 예정" 으로 남는다. 무엇을 붙이면 채워지는지 wait 에 적어 둔다.
-   ─ 할 일: 해외 지수·환율·원자재를 우리 서버가 야후에서 받아 중계하기
-     (한 번 부르면 13종이 한꺼번에 온다. docs/data-sources.md 참고) */
+ *
+ * **다우존스는 뺐다** (2026-09-17 지시 — "받을 수 없는 지수는 메인 UI 상에서도
+ * 없애고 만들지 않는다"). 증권사 두 곳 어디에도 없어서 자리만 차지하고
+ * 있었다. 「아직 안 붙인 것」이 아니라 「받을 수 없는 것」이다.
+ *
+ *     KIS    DJI · .DJI · DJIA · INDU · DJX · US30 · DJ30 · DWJ · DIA
+ *            13개 후보를 네 시장구분으로 훑었는데 전부 0
+ *            (DOW 는 다우社 주식이라 30달러가 나온다)
+ *     토스증권 Open API   개별 주식만 준다. 지수가 없다
+ *
+ * **WTI·금은 남긴다.** 받을 곳은 찾았고 거래소 신청만 하면 된다 —
+ * 못 찾은 것이 아니라 아직 안 붙인 것이다. wait 에 무엇을 하면 채워지는지
+ * 적어 둔다 (holdings/CLAUDE.md 데이터 규칙).
+ */
 const INDEX_CELLS = [
   { code: 'KOSPI',    name: '코스피',     icon: 'kr' },
   { code: 'KOSDAQ',   name: '코스닥',     icon: 'kr' },
@@ -33,13 +43,9 @@ const INDEX_CELLS = [
   { code: 'SPX',    name: 'S&P 500',  icon: 'us' },
   { code: 'NASDAQ', name: '나스닥 종합', icon: 'us' },
   { code: 'VIX',    name: 'VIX',      icon: 'vix' },
-  /* 아래 셋은 KIS 에서 못 찾았다.
-     다우존스 — DJI · .DJI · DJIA 를 네 가지 시장구분으로 시도했지만 전부 0 이다
-                (DOW 는 다우社 주식이라 28원이 나온다)
-     WTI · 금  — 해외선물 쪽 API 를 따로 봐야 한다 */
-  { name: '다우존스',  wait: '코드 찾는 중', icon: 'us' },
-  { name: 'WTI 원유',  wait: '해외선물 API', icon: 'oil' },
-  { name: '금',       wait: '해외선물 API', icon: 'au' },
+  /* NYMEX · COMEX 거래소를 신청하면 채워진다 (EGW00551, 2026-09-17 실측) */
+  { name: 'WTI 원유',  wait: '거래소 신청 필요', icon: 'oil' },
+  { name: '금',       wait: '거래소 신청 필요', icon: 'au' },
 ];
 
 /* 칸 앞에 붙는 표시.
