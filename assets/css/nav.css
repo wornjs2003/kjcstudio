@@ -53,6 +53,23 @@
   cursor: pointer;
 }
 
+/* 목록의 기본 여백도 지운다. `list-style: none` 만으로는 안 지워진다 —
+   브라우저가 `<ul>` 에 `padding-left: 40px` 를 따로 준다.
+
+   그래서 **전역 리셋이 없는 구역에서는 메뉴가 로고보다 40px 안쪽에서
+   시작했다** (2026-09-17, `ai-work/` 에서 드러났다). 로고와 메뉴의 왼쪽 끝을
+   맞춘 것이 그 구역에서만 어긋나 보였다.
+
+   `*, *::before, *::after { margin:0; padding:0 }` 를 갖고 있는 곳은
+   메인(`base.css`) · holdings(`frame.css`) · projects · 설립 · Debugging 이고,
+   `ai-work/` 에는 없었다. **어느 구역이 무엇을 싣는지에 기대지 않는다** —
+   위 `a` · `button` 리셋과 같은 이유다. */
+.site-nav ul,
+.nav-mobile ul {
+  margin: 0;
+  padding: 0;
+}
+
 /* ── Navigation ─────────────────────────────── */
 .site-nav {
   position: fixed;
