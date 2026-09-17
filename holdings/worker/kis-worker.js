@@ -161,6 +161,7 @@ const INDEX_DEFS = [
   ["0001", "KOSPI"],
   ["1001", "KOSDAQ"],
   ["2001", "KOSPI200"],
+  ["4001", "KRX100"],      // 2026-09-17 에 코드를 찾았다. 01xx 대역이 아니라 4xxx 다
 ];
 
 /* ── 응답 헬퍼 ─────────────────────────────────────────────── */
@@ -611,11 +612,19 @@ async function fetchIndexMinutesLive(cfg, env, code) {
    WTI·금은 해외선물 쪽을 따로 봐야 한다.
 
    server/kis_proxy.py 의 fetch_overseas 와 같은 모양으로 돌려줘야 한다. */
+/* 2026-09-17 에 약 70개 심볼을 네 시장구분으로 훑어 받아지는 것만 남겼다.
+   **KIS 해외지수 목록에 몇 개만 들어 있다** — 다우 · 닛케이 · 상해 · FTSE ·
+   DAX · 항셍 · 대만 · 인도는 전부 0 이다. 아시아라서가 아니다(홍콩H·유로는 된다).
+   server/kis_proxy.py 의 OVERSEAS_DEFS 와 같아야 한다. */
 const OVERSEAS_DEFS = [
-  ["USDKRW", "X", "FX@KRW", "미국 USD", "원"],
-  ["SPX",    "N", "SPX",    "S&P 500",  "pt"],
-  ["NASDAQ", "N", "COMP",   "나스닥 종합", "pt"],
-  ["VIX",    "N", "VIX",    "VIX",      "pt"],
+  ["USDKRW", "X", "FX@KRW", "미국 USD",   "원"],
+  ["SPX",    "N", "SPX",    "S&P 500",    "pt"],
+  ["NASDAQ", "N", "COMP",   "나스닥 종합",  "pt"],
+  ["NDX",    "N", "NDX",    "나스닥100",   "pt"],
+  ["SOX",    "N", "SOX",    "필라델피아 반도체", "pt"],
+  ["SX5E",   "N", "SX5E",   "유로STOXX50", "pt"],
+  ["HSCE",   "N", "HSCE",   "홍콩H",       "pt"],
+  ["VIX",    "N", "VIX",    "VIX",        "pt"],
 ];
 const OVERSEAS_TTL = 60;      // 해외장은 국내 장중에 거의 멈춰 있다
 

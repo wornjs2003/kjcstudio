@@ -324,3 +324,120 @@
   .kh-modal [data-p="chart"] { min-height: 420px; }
   .kh-drawer-tab { width: 20px; height: 72px; }
 }
+
+
+/* ==========================================================================
+   폰 (2026-09-17 지시 — 「안 A · 전체화면 시트」)
+
+   여기까지 폰 전용 규칙이 한 줄도 없었다. 분기점이 1180px 하나뿐이라
+   390px 에서도 데스크톱 배치를 썼고, 그래서 이렇게 깨져 있었다.
+
+       ❌ 닫기(✕)가 화면 밖 — **모달을 닫을 수가 없었다**
+       ❌ 오른쪽 가격축이 잘려 숫자를 못 읽음
+       ❌ 탭 다섯이 두 줄로 접힘 — 「차트 · 호 / 가」
+       ❌ 패널 제목도 접힘 — 「차 / 트」 「한국투자 / 증권」
+       ❌ 머리 통계 네 칸이 찌그러져 값이 잘림
+       ❌ 서랍 손잡이가 좌우 28px 씩 먹음
+
+   화면을 꽉 채우되 **아래 시세 띠(46px)는 남긴다.** 모달을 보는 중에도
+   지수는 계속 보인다. 세로 아이콘바는 덮는다 — 모달을 닫고 옮기면 된다.
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  .kh-veil {
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .kh-stage { width: 100%; transform: none; }
+
+  .kh-modal {
+    width: 100%;
+    height: 100vh;
+    height: calc(100dvh - 46px);   /* dvh 를 모르는 브라우저는 위 100vh 로 */
+    max-height: none;
+    margin-bottom: 46px;           /* 시세 띠 자리 */
+    border-radius: 0;
+  }
+
+  .kh-modal-scroll { height: 100%; }
+
+  /* 손잡이는 없앤다. 폰에서는 옆으로 펼칠 자리가 없다 */
+  .kh-drawer-tab { display: none; }
+
+  /* 서랍 것이 아래로 쌓이므로 접힘 여부와 상관없이 다 보인다 */
+  .kh-modal [data-p="metric"],
+  .kh-modal [data-p="tick"],
+  .kh-modal [data-p="flow"],
+  .kh-modal [data-p="news"] { display: flex; }
+
+  .kh-modal .kh-main,
+  .kh-stage.has-left  .kh-modal .kh-main,
+  .kh-stage.has-right .kh-modal .kh-main,
+  .kh-stage.has-left.has-right .kh-modal .kh-main {
+    padding: 0 14px 16px;
+    min-height: 0;
+    gap: 12px;
+    grid-template-rows: none;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "head"
+      "chart"
+      "metric"
+      "tick"
+      "news"
+      "flow";
+  }
+
+  .kh-modal .kh-head {
+    margin: 0 -14px;
+    padding: 12px 14px;
+    border-radius: 0;
+  }
+
+  /* 닫기가 화면 안에 있어야 한다. 「전체 화면 ↗」 은 폰에서 뜻이 없어 숨긴다 */
+  .kh-head-act { gap: 6px; }
+  .kh-head-act .kh-chip-btn { display: none; }
+  .kh-modal-x { width: 34px; height: 34px; }
+
+  /* 탭은 한 줄로. 넘치면 가로로 민다 — 접히면 글자가 쪼개진다 */
+  .kh-modal .kh-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-top: 10px;
+  }
+  .kh-modal .kh-tabs::-webkit-scrollbar { display: none; }
+  .kh-modal .kh-tab { white-space: nowrap; flex: 0 0 auto; }
+  .kh-modal .kh-edit { display: none; }
+
+  /* 머리 통계는 두 칸씩. 네 칸이면 값이 잘린다 */
+  .kh-modal .kh-head-main { flex-wrap: wrap; gap: 10px; }
+  .kh-modal .kh-head-stats {
+    margin-left: 0;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 14px;
+  }
+  .kh-modal .kh-price { font-size: 1.5rem; }
+
+  /* 패널 제목이 쪼개지지 않게 */
+  .kh-modal .kh-w-title,
+  .kh-modal .kh-bd { white-space: nowrap; }
+  .kh-modal .kh-w-head { padding: 11px 13px; gap: 6px; }
+  .kh-modal .kh-w-body { padding: 0 13px 13px; }
+
+  /* 기간 단추를 한 줄에 고르게 */
+  .kh-modal .kh-per { display: flex; gap: 4px; }
+  .kh-modal .kh-per button { flex: 1; min-width: 0; }
+  .kh-modal .kh-per-tools { display: none; }
+
+  /* 차트는 화면 절반쯤. 아래 패널도 스크롤로 닿아야 한다 */
+  .kh-modal [data-p="chart"] { min-height: 320px; }
+  .kh-modal [data-p="tick"],
+  .kh-modal [data-p="flow"] { min-height: 150px; }
+
+  /* 지표는 두 칸 그대로 */
+  .kh-modal [data-p="metric"] .kh-mgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

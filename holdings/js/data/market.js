@@ -10,18 +10,11 @@
    ========================================================================== */
 
 /* ── 지수 ──
-   값·등락·추이는 /api/kis/indices 가 채운다. */
-export const INDEX_LIST = [
-  { code: 'KOSPI',    name: 'KOSPI',    unit: 'pt' },
-  { code: 'KOSDAQ',   name: 'KOSDAQ',   unit: 'pt' },
-  { code: 'KOSPI200', name: 'KOSPI200', unit: 'pt' },
-];
-
-/* 서버가 아직 주지 않는 지수. 목록에서 빼 두고, 받아올 곳이 생기면 위로 옮긴다.
-   ─ 할 일: 해외 지수·환율 (KRX100 · S&P 500 · NASDAQ · 다우 · 닛케이 · 상해 · 원/달러) */
-export const INDEX_NOT_CONNECTED = [
-  'KRX100', 'S&P 500', 'NASDAQ', '다우존스', '닛케이225', '상해종합', '원/달러',
-];
+   지수 목록은 여기 없다. 화면이 쓰는 것은 js/home.js 의 INDEX_CELLS 하나다.
+   전에는 INDEX_LIST · INDEX_NOT_CONNECTED 가 여기 있었는데 **둘 다 아무 데서도
+   import 되지 않는 죽은 목록**이었다 (2026-09-17 확인). 지수 띠 구현이 home.js 로
+   옮겨가면서 남은 것으로 보이고, 내용도 낡아 있었다 — 「아직 안 준다」는 일곱 중
+   셋(S&P 500 · NASDAQ · 원/달러)이 이미 화면에 나오고 있었다. */
 
 /* 아이콘에 쓰는 회사 색(brand)은 각 기업이 쓰는 대표색입니다.
    로고 이미지는 저작권 문제가 있어 쓰지 않고, 색 위에 이름 두 글자를 얹습니다. */

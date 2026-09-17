@@ -39,9 +39,14 @@ const INDEX_CELLS = [
   { code: 'KOSPI',    name: '코스피',     icon: 'kr' },
   { code: 'KOSDAQ',   name: '코스닥',     icon: 'kr' },
   { code: 'KOSPI200', name: '코스피200',  icon: 'kr' },
+  { code: 'KRX100',   name: 'KRX100',   icon: 'kr' },
   { code: 'USDKRW', name: '미국 USD',  icon: 'us' },
   { code: 'SPX',    name: 'S&P 500',  icon: 'us' },
   { code: 'NASDAQ', name: '나스닥 종합', icon: 'us' },
+  { code: 'NDX',    name: '나스닥100',  icon: 'us' },
+  { code: 'SOX',    name: '필라델피아 반도체', icon: 'us' },
+  { code: 'SX5E',   name: '유로STOXX50', icon: 'eu' },
+  { code: 'HSCE',   name: '홍콩H',      icon: 'hk' },
   { code: 'VIX',    name: 'VIX',      icon: 'vix' },
   /* NYMEX · COMEX 거래소를 신청하면 채워진다 (EGW00551, 2026-09-17 실측) */
   { name: 'WTI 원유',  wait: '거래소 신청 필요', icon: 'oil' },
@@ -56,7 +61,7 @@ function cellIcon(kind) {
     return `<svg class="kh-ix-flag" viewBox="0 0 24 24" aria-hidden="true"
       ><use href="#kh-flag-${kind}"/></svg>`;
   }
-  const badge = { vix: 'V', oil: '油', au: 'Au' }[kind];
+  const badge = { vix: 'V', oil: '油', au: 'Au', eu: 'EU', hk: 'HK' }[kind];
   return badge ? `<span class="kh-ix-badge ${kind}" aria-hidden="true">${badge}</span>` : '';
 }
 

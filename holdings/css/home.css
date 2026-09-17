@@ -384,6 +384,9 @@
 .kh-ix-badge.vix { background: var(--kh-text-muted); }
 .kh-ix-badge.oil { background: var(--kh-text-primary); }
 .kh-ix-badge.au  { background: var(--kh-badge-au); }   /* 금 시세를 가리키는 표시 */
+/* 유럽·홍콩은 국기 <symbol> 이 없어 글자 배지로 간다. 색은 그 깃발의 규정색 */
+.kh-ix-badge.eu  { background: var(--kh-badge-eu); letter-spacing: -0.06em; }
+.kh-ix-badge.hk  { background: var(--kh-badge-hk); letter-spacing: -0.06em; }
 
 /* ── 순위표 더 보기 ── */
 .kh-more {

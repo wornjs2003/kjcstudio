@@ -544,6 +544,7 @@ INDEX_DEFS = [
     ("0001", "KOSPI"),
     ("1001", "KOSDAQ"),
     ("2001", "KOSPI200"),
+    ("4001", "KRX100"),      # 2026-09-17 에 코드를 찾았다. 01xx 대역이 아니라 4xxx 다
 ]
 INDEX_CHART_TTL = 600      # 일봉은 자주 바뀌지 않으므로 길게 캐시한다
 _chart_cache = {}          # code -> (저장시각, series)
@@ -701,11 +702,19 @@ def _index_minutes_from_kis(cfg, code):
 # 다우존스는 코드를 찾지 못했다. DJI · .DJI · DJIA 를 네 가지 시장구분으로
 # 시도했지만 모두 0 이 온다 (DOW 는 다우社 주식이라 28원이 나온다).
 # WTI·금도 이 API 로는 안 나온다 — 해외선물 쪽을 따로 봐야 한다.
+# 2026-09-17 에 약 70개 심볼을 네 시장구분으로 훑어 받아지는 것만 남겼다.
+# **KIS 해외지수 목록에 몇 개만 들어 있다** — 다우 · 닛케이 · 상해 · FTSE ·
+# DAX · 항셍 · 대만 · 인도는 전부 0 이다. 아시아라서가 아니다(홍콩H·유로는 된다).
+# 왜 그런지는 확인하지 못했다. 지수 목록을 주는 API 를 못 찾았다.
 OVERSEAS_DEFS = [
-    ("USDKRW", "X", "FX@KRW",  "미국 USD", "원"),
-    ("SPX",    "N", "SPX",     "S&P 500",  "pt"),
-    ("NASDAQ", "N", "COMP",    "나스닥 종합", "pt"),
-    ("VIX",    "N", "VIX",     "VIX",      "pt"),
+    ("USDKRW", "X", "FX@KRW",  "미국 USD",   "원"),
+    ("SPX",    "N", "SPX",     "S&P 500",    "pt"),
+    ("NASDAQ", "N", "COMP",    "나스닥 종합",  "pt"),
+    ("NDX",    "N", "NDX",     "나스닥100",   "pt"),
+    ("SOX",    "N", "SOX",     "필라델피아 반도체", "pt"),
+    ("SX5E",   "N", "SX5E",    "유로STOXX50", "pt"),
+    ("HSCE",   "N", "HSCE",    "홍콩H",       "pt"),
+    ("VIX",    "N", "VIX",     "VIX",        "pt"),
 ]
 OVERSEAS_TTL = 60          # 해외장은 국내 장중에 거의 멈춰 있다
 _ovs_cache = {}
