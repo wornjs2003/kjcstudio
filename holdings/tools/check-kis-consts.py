@@ -70,6 +70,7 @@ PAIRS = [
     ("네이버 캐시",          "TTL",                 "NAVER_TTL",            None),
     ("네이버 목록 개수",     "LIST_SIZE",           "NAVER_LIST_SIZE",      None),
     ("네이버 종목 개수",     "STOCK_SIZE",          "NAVER_STOCK_SIZE",     None),
+    ("네이버 큰 칸 제외",    "MAX_GROUP_COUNT",     "NAVER_MAX_GROUP_COUNT", None),
     ("선물 종목코드",        "FUTURES_CODE",        "FUTURES_CODE",         None),
     ("선물 캐시",            "FUTURES_TTL",         "FUTURES_TTL",          "ceil"),
     ("지수 캐시",            "INDEX_TTL",           "INDEX_TTL",            "ceil"),
@@ -105,6 +106,7 @@ PY_ALT = {
     "TTL":             "holdings/server/naver.py",
     "LIST_SIZE":       "holdings/server/naver.py",
     "STOCK_SIZE":      "holdings/server/naver.py",
+    "MAX_GROUP_COUNT": "holdings/server/naver.py",
 }
 
 

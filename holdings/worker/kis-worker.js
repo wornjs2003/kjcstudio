@@ -1894,6 +1894,14 @@ const NAVER_TTL = 30;           // server/naver.py 의 TTL 과 같은 값
 const NAVER_LIST_SIZE = 20;     // 〃 LIST_SIZE
 const NAVER_STOCK_SIZE = 10;    // 〃 STOCK_SIZE
 
+/* 「기타」 는 업종이 아니다 (2026-09-18).
+   네이버 업종 목록에 `기타`(no=25)가 끼어 있는데 1,538종목이다. 분류가 안 된
+   나머지를 다 모아둔 칸이라 등락률이 시장 평균과 같고, 「지금 뜨는 산업」에
+   올라오면 아무 뜻이 없다. **이름이나 번호가 아니라 크기로 거른다** — 실제
+   업종 중 가장 큰 것이 반도체 171종목이라 아홉 배 넘게 벌어져 있다.
+   server/naver.py 의 MAX_GROUP_COUNT 와 같은 값이어야 한다. */
+const NAVER_MAX_GROUP_COUNT = 1000;
+
 /* 네이버는 "60,700" 처럼 **콤마가 든 문자열**로 준다. 그대로 Number() 에
    넣으면 NaN 이 되므로 여기서 푼다 — 화면이 또 풀지 않게 한다. */
 function naverNum(v) {
@@ -1914,7 +1922,7 @@ async function naverGet(path) {
 async function naverGroups(env, kind) {
   return memo(`nv:g:${kind}`, NAVER_TTL, async () => {
     const j = await naverGet(`/${kind}?page=1&pageSize=${NAVER_LIST_SIZE}`);
-    const rows = (j.groups || []).map((g) => ({
+    const all = (j.groups || []).map((g) => ({
       no: g.no,
       name: g.name,
       pct: naverNum(g.changeRate),
@@ -1923,7 +1931,15 @@ async function naverGroups(env, kind) {
       fall: naverNum(g.fallCount) || 0,
       count: naverNum(g.totalCount) || 0,
     }));
-    return { rows, total: j.totalCount, marketStatus: j.marketStatus };
+    const rows = all.filter((r) => r.count <= NAVER_MAX_GROUP_COUNT);
+    const dropped = all.length - rows.length;
+    /* 거른 만큼 빼서 돌려준다 — 화면이 「79개 중」 이라고 적는데 실제로는
+       하나를 빼고 보여주므로 숫자가 어긋나면 안 된다 */
+    const total = naverNum(j.totalCount);
+    return {
+      rows, dropped, marketStatus: j.marketStatus,
+      total: total == null ? null : total - dropped,
+    };
   });
 }
 
