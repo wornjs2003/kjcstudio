@@ -358,6 +358,13 @@
   --aw-tag:        #8b5cf6;                   /* 갈래 표시 */
   --aw-tag-faint:  rgba(139, 92, 246, 0.10);
 
+  /* 색을 꽉 채운 자리에 얹는 글자. --kh-text-on-fill · --cs-on-fill ·
+     --pj-text-on-fill 과 같은 자리인데 루트 공용에는 없어서,
+     aiwork.css 가 var(--text-on-fill, #fff) 로 없는 토큰을 부르며
+     폴백 #fff 로 버티고 있었다. 루트에 둘지는 네 구역이 걸린 결정이라
+     여기서는 내 접두사로 만든다. */
+  --aw-text-on-fill: #ffffff;
+
   --pj-radius-sm: 8px;
   --pj-radius-md: 12px;
   --pj-radius-lg: 16px;
