@@ -459,6 +459,11 @@ const VP_ALPHA = 0.16;
 /* 칸 높이가 이보다 크면 퍼센트를 적는다. 글씨가 0.66rem 이라 이만큼이면 들어간다 */
 const VP_LABEL_MIN_H = 11;
 
+/* **자리가 좁아도 이 비중을 넘으면 적는다** (2026-09-18 지시 — "글씨보다
+   작아도 10%가 넘으면표기"). 두꺼운 칸은 봐야 하는 값이라, 글씨가 칸보다
+   조금 커서 넘치더라도 적는 편이 낫다. */
+const VP_LABEL_MIN_PCT = 10;
+
 function vpColor(t) {                      // t: 0 = 가장 적음(파랑) ~ 1 = 가장 많음(빨강)
   const rgb = (name) => {
     const m = alpha(name, 1).match(/rgba?\(([^)]+)\)/);
@@ -661,7 +666,7 @@ export function createStockChart(container, candles, opts = {}) {
          기준이라 어떤 칸은 나오고 어떤 칸은 안 나왔다 (2026-09-18 지적).
          칸 높이가 글씨보다 크면 적고, 좁으면 건너뛴다 — 기간을 바꿔 봉이
          촘촘해져도 같은 규칙으로 간다. */
-      if (h >= VP_LABEL_MIN_H) {
+      if (h >= VP_LABEL_MIN_H || b.pct >= VP_LABEL_MIN_PCT) {
         out.push(`<div class="kh-vp-t${here ? ' is-now' : ''}" ` +
                  `style="top:${yTop + h / 2}px">${b.pct.toFixed(1)}%</div>`);
       }
