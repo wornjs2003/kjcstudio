@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """파일을 띄우고, 그 창만 앞으로 꺼낸다.
 
-창을 띄울 일이 있으면 이것을 쓴다. P/Invoke 를 직접 부르지 않는다 —
-아래 네 가지가 이미 들어 있고, 직접 쓰면 그때마다 다시 지켜야 한다.
+창을 띄울 일이 있으면 이것을 쓴다. **직접 열지도, P/Invoke 를 부르지도 않는다** —
+아래 「하지 않는 일」 이 이미 들어 있고, 직접 쓰면 그때마다 다시 지켜야 한다.
+`Start-Process <주소>` 로 열면 이 장치를 통째로 건너뛴다.
 
     python tools/show-window.py <파일경로> [창제목의 일부]
 
@@ -28,19 +29,35 @@
 **제목은 그 파일을 연 다른 프로그램도 갖고 있다.** ② 때문에 문자는 항상
 이 길로 가므로 오히려 더 자주 난다. 그래서 프로그램으로 거른다.
 
-그래서 이 스크립트가 **하지 않는** 일이 넷이다.
+**이 스크립트가 「하지 않는 일」 은 `CLAUDE.md` 의
+「창을 띄울 때 기존 창을 건드리지 않는다」 절에 있다. 여기 다시 적지 않는다.**
 
-  1. 기존 창을 최소화하지 않는다
-  2. 기존 창을 옮기거나 크기를 바꾸지 않는다
-  3. 제목으로 못 찾으면 **아무 창도 건드리지 않는다**
-  4. **기존 창을 닫지 않는다. 항상 새 창으로 연다**
+전에는 그 목록을 여기에도 적어 두었다가 **2026-09-16 에 셋 vs 넷,
+2026-09-18 에 넷 vs 다섯으로 같은 자리가 두 번 갈렸다.**
+대조 도구를 만들자는 이야기가 나왔지만 만들지 않기로 했다 (2026-09-18 지시) —
+값이 아니라 **문장**이라, 한쪽을 더 낫게 고쳐 쓰기만 해도 불일치가 뜬다.
+그것을 줄이려면 항목 수를 박아야 하는데 그건 같은 날 양쪽에서 빼낸 그 숫자다.
+**검사기를 만드는 대신 복제를 없앴다.**
 
-3번이 핵심이다. 2026-09-16 에 제목 매칭이 빗나갔는데, 그때
+아래는 그 목록의 **경위**다. 무엇을 하지 않는지가 아니라 왜 그렇게 됐는지라
+코드 옆에 둔다.
+
+「제목으로 못 찾으면 아무 창도 건드리지 않는다」 가 핵심이다. 2026-09-16 에 제목 매칭이 빗나갔는데, 그때
 「가장 최근에 뜬 Chrome」 을 대신 집어서 재권님이 보고 계시던
 Cloudflare 대시보드를 앞으로 꺼냈다. 못 찾았으면 멈췄어야 했다.
 찾지 못하는 것은 괜찮고, 엉뚱한 창을 집는 것이 사고다.
 
-4번은 한 번 넣었다가 뺐다 (2026-09-16 지시). 같은 파일을 두 번 띄우면
+「이미 띄운 것은 다시 열지 않는다」 가 2026-09-18 에 생겼다. 그 전에는
+「닫지 않는다. **항상 새 창으로 연다**」 한 줄이었고, **그 한 줄이 창을 쌓으라고 시키고 있었다.** 닫지 않는 것과
+매번 새로 여는 것은 다른 이야기인데 묶여 있었다.
+
+  2026-09-16   CLAUDE.md 창 16개
+  2026-09-18   md-diff 창 4개
+
+이제 already_open() 이 먼저 보고, 있으면 열지 않는다. **브라우저를 새로고침시킬
+방법이 없어서** 그 대신 Ctrl+Shift+R 을 부탁드린다고 알린다.
+
+「닫지 않는다」 는 한 번 반대로 넣었다가 뺐다 (2026-09-16 지시). 같은 파일을 두 번 띄우면
 창이 쌓여서, 제목이 맞는 창을 닫고 새로 여는 방식을 넣었었다.
 **그 안전장치가 샜다.** 열려 있던 창 24개로 재보니 이랬다.
 
@@ -213,6 +230,24 @@ def proc_name(hwnd):
     return buf.value.rsplit("\\", 1)[-1] if ok else "?"
 
 
+def already_open(hint, exe):
+    """**이미 띄워 둔 창**이 있나. 있으면 (hwnd, 제목), 없으면 None.
+
+    이것이 없어서 창이 쌓였다. 부를 때마다 새로 열고, 재권님 화면에
+    같은 창이 넷·열여섯 개씩 남았다 (2026-09-16 · 2026-09-18).
+
+    **「닫지 않는다」 와 「매번 새로 연다」 는 다른 이야기인데 한 줄에
+    묶여 있었다.** 닫지 않는 것은 재권님 창을 지키려는 것이고,
+    새로 여는 것은 그 결과가 아니다.
+
+    여럿이면 None 을 준다 — 이미 쌓여 있다는 뜻이라, 거기에 하나 더
+    얹지 않고 부르는 쪽이 판단하게 한다.
+    """
+    hits = [(h, t) for h, t in windows()
+            if hint and hint in t and (not exe or proc_name(h).lower() == exe.lower())]
+    return hits[0] if len(hits) == 1 else (None if not hits else hits)
+
+
 def raise_only(title_part, before, filename="", exe=""):
     """제목이 맞는 창 하나만 앞으로. 못 찾으면 아무것도 하지 않는다.
 
@@ -286,20 +321,44 @@ def main():
     hint = sys.argv[2] if len(sys.argv) > 2 else (doc_title(path)[:40] or
            os.path.splitext(os.path.basename(path))[0])
 
-    before = windows()
+    # 무엇으로 열 것인가. 아래 raise_only 가 후보를 그 프로그램의 창으로
+    # 좁히는 데 쓰고, 열기 전에 already_open 이 같은 기준으로 찾는 데도 쓴다.
+    # os.startfile 로 여는 것은 무엇이 뜰지 모르므로 빈 채로 둔다.
+    if path.lower().endswith((".html", ".htm")):
+        opened_with = "chrome.exe" if any(os.path.exists(c) for c in CHROME) else ""
+    elif path.lower().endswith(TEXT_EXT):
+        opened_with = "notepad.exe"
+    else:
+        opened_with = ""
 
-    # 무엇으로 열었는지 기억해 둔다. 아래 raise_only 가 후보를 그 프로그램의
-    # 창으로 좁히는 데 쓴다. os.startfile 로 연 것은 무엇이 뜰지 모르므로 빈 채로 둔다.
-    opened_with = ""
+    # **이미 띄워 둔 것이 있으면 새로 열지 않는다.**
+    found = already_open(hint, opened_with)
+    if isinstance(found, tuple) and found[0] is not None:
+        hwnd, title = found
+        u32.ShowWindow(hwnd, SW_RESTORE)
+        u32.BringWindowToTop(hwnd)
+        u32.SetForegroundWindow(hwnd)
+        print(f"  이미 떠 있어 앞으로만 꺼냈습니다: {title}")
+        print("  **파일이 바뀌었으면 그 창에서 Ctrl+Shift+R 을 눌러 주십시오.**")
+        print("  (브라우저를 새로고침시킬 방법이 없습니다. 새 창을 또 열지 않습니다)")
+        return
+    if isinstance(found, list):
+        print(f"  같은 창이 이미 {len(found)}개 떠 있습니다. 더 열지 않습니다")
+        for _, t in found[:5]:
+            print(f"      {t}")
+        print("  (하나만 남기고 X 로 닫으신 뒤 다시 불러 주십시오)")
+        return
+
+    before = windows()
 
     if path.lower().endswith((".html", ".htm")):
         exe = next((c for c in CHROME if os.path.exists(c)), None)
         url = "file:///" + path.replace("\\", "/")
         if exe:
             subprocess.Popen([exe, "--new-window", url])
-            opened_with = "chrome.exe"
         else:
             os.startfile(path)
+            opened_with = ""
     elif path.lower().endswith(TEXT_EXT):
         # 메모장을 직접 부른다. os.startfile 로는 안 열린다 —
         # 이 PC 에 .md 연결 프로그램이 없다 (2026-09-16 확인).
@@ -310,7 +369,6 @@ def main():
         # 그동안 문서가 열렸던 것은 부르는 쪽에서 notepad 를 직접 지정했기
         # 때문이고, 이 도구를 거치면 아무 일도 일어나지 않았다.
         subprocess.Popen(["notepad.exe", path])
-        opened_with = "notepad.exe"
     else:
         os.startfile(path)
 
