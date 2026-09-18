@@ -2182,6 +2182,32 @@ class Handler(SimpleHTTPRequestHandler):
                 })
                 return
 
+            # 종목별 뉴스 (2026-09-18 지시 — 「이 종목 공시」를 뉴스로 바꿨다)
+            if route == "news":
+                code = (qs.get("code") or [""])[0].strip()
+                if not (code.isdigit() and len(code) == 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                rows = naver.news(code)
+                self._send_json({
+                    "ok": True, "data": rows,
+                    "meta": {"code": code, "count": len(rows), "source": "네이버"},
+                })
+                return
+
+            # 종목토론 (2026-09-18 지시 — 투자자 정보와 종목 뉴스 사이)
+            if route == "discuss":
+                code = (qs.get("code") or [""])[0].strip()
+                if not (code.isdigit() and len(code) == 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                rows = naver.discuss(code)
+                self._send_json({
+                    "ok": True, "data": rows,
+                    "meta": {"code": code, "count": len(rows), "source": "네이버"},
+                })
+                return
+
             if route == "stocks":
                 no = (qs.get("no") or [""])[0].strip()
                 if not no.isdigit():

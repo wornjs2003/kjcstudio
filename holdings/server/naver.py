@@ -27,6 +27,7 @@ KIS 로는 업종 등락률까지만 됩니다. 화면이 보여주려는 것 �
 조사 기록은 `docs/sector-sources.md` 에 있습니다.
 """
 
+import html
 import json
 import re
 import sys
@@ -68,6 +69,12 @@ STOCK_SIZE = 10
 #
 # 테마에는 이런 칸이 없습니다. 가장 큰 것이 시스템반도체 58종목입니다.
 MAX_GROUP_COUNT = 1000
+
+# 종목별 뉴스에서 받아 둘 묶음 수. 화면은 위에서 몇 개만 쓴다
+NEWS_SIZE = 12
+
+# 종목토론에서 받아 둘 글 수
+DISCUSS_SIZE = 12
 
 _cache = {}
 _lock = threading.Lock()
@@ -139,6 +146,82 @@ def groups(kind="industry"):
         }
 
     return _cached("g:" + kind, make)
+
+
+def news(code, size=NEWS_SIZE):
+    """종목별 뉴스. **바깥이 배열**이고 각 묶음 안에 items 가 있다.
+
+    같은 사건을 여러 언론사가 쓰면 한 묶음으로 온다 — 우리는 묶음마다
+    첫 기사만 쓴다. 그래야 같은 제목이 줄줄이 늘어서지 않는다.
+
+    날짜는 `202609181902` 형태다 (YYYYMMDDHHMM).
+
+    **제목이 HTML 로 이스케이프되어 온다** — `&quot;직접 대화하자&quot;` 처럼.
+    화면은 받은 글자를 다시 이스케이프해 넣으므로 여기서 풀지 않으면
+    `&quot;` 가 그대로 보인다 (2026-09-18 실측).
+    """
+    def make():
+        j = _get("https://m.stock.naver.com/api/news/stock/%s?pageSize=%d&page=1"
+                 % (code, size))
+        rows = []
+        for g in (j if isinstance(j, list) else []):
+            items = g.get("items") or []
+            if not items:
+                continue
+            it = items[0]
+            oid = (it.get("officeId") or "").strip()
+            aid = (it.get("articleId") or "").strip()
+            rows.append({
+                "title": html.unescape((it.get("title") or "").strip()),
+                "office": (it.get("officeName") or "").strip(),
+                "at": (it.get("datetime") or "").strip(),
+                # 같은 사건을 쓴 기사 수. 1 이면 안 적는다
+                "more": max(0, len(items) - 1),
+                "url": ("https://n.news.naver.com/mnews/article/%s/%s" % (oid, aid)
+                        if oid and aid else None),
+            })
+        return rows
+
+    return _cached("n:" + code, make)
+
+
+def discuss(code, size=DISCUSS_SIZE):
+    """종목토론실 글 목록.
+
+    ── 어디서 받나 (2026-09-18 실측) ──
+
+    옛 주소(`finance.naver.com/item/board.naver`)는 302 로
+    `stock.naver.com/domestic/stock/<코드>/discussion` 에 넘어갑니다. 그 화면이
+    부르는 것이 아래 주소이고, **호스트가 `stock.naver.com` 입니다** —
+    이 파일의 다른 호출과 달리 `m.stock` 도 `api.stock` 도 404 였습니다.
+
+        discussionType=DOMESTIC_STOCK   STOCK 은 400(잘못된 값)
+        excludesItemNews=true           토론 목록에 섞여 오는 뉴스는 뺍니다
+
+    `contentSwReplacedButImg` 가 본문인데 **화면에는 제목만 씁니다.** 칸이
+    좁아 본문까지 넣으면 몇 줄 못 보여줍니다.
+    """
+    def make():
+        j = _get("https://stock.naver.com/api/community/discussion/posts"
+                 "?itemCode=%s&discussionType=DOMESTIC_STOCK&isHolderOnly=false"
+                 "&excludesItemNews=true&isItemNewsOnly=false&pageSize=%d"
+                 % (code, size))
+        rows = []
+        for p in (j.get("posts") or []):
+            pid = str(p.get("id") or "").strip()
+            rows.append({
+                "title": html.unescape((p.get("title") or "").strip()),
+                "writer": ((p.get("writer") or {}).get("nickname") or "").strip(),
+                # 2026-09-18T19:16:37 — 화면에서 오늘 것이면 시각으로 적습니다
+                "at": (p.get("writtenAt") or "").strip(),
+                "comments": _num(p.get("commentCount")) or 0,
+                "likes": _num(p.get("recommendCount")) or 0,
+                "url": ("https://stock.naver.com/domestic/stock/%s/discussion/%s"
+                        % (code, pid) if pid else None),
+            })
+        return rows
+
+    return _cached("d:" + code, make)
 
 
 def stocks(kind, no):

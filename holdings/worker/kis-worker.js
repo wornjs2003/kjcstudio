@@ -1968,6 +1968,10 @@ const NAVER_STOCK_SIZE = 10;    // 〃 STOCK_SIZE
    업종 중 가장 큰 것이 반도체 171종목이라 아홉 배 넘게 벌어져 있다.
    server/naver.py 의 MAX_GROUP_COUNT 와 같은 값이어야 한다. */
 const NAVER_MAX_GROUP_COUNT = 1000;
+/* 종목별 뉴스에서 받아 둘 묶음 수. server/naver.py 의 NEWS_SIZE 와 같아야 한다 */
+const NAVER_NEWS_SIZE = 12;
+/* 종목토론에서 받아 둘 글 수. server/naver.py 의 DISCUSS_SIZE 와 같아야 한다 */
+const NAVER_DISCUSS_SIZE = 12;
 
 /* 네이버는 "60,700" 처럼 **콤마가 든 문자열**로 준다. 그대로 Number() 에
    넣으면 NaN 이 되므로 여기서 푼다 — 화면이 또 풀지 않게 한다. */
@@ -2007,6 +2011,77 @@ async function naverGroups(env, kind) {
       rows, dropped, marketStatus: j.marketStatus,
       total: total == null ? null : total - dropped,
     };
+  });
+}
+
+/* 제목이 `&quot;직접 대화하자&quot;` 처럼 HTML 로 이스케이프되어 온다.
+   화면이 다시 이스케이프하므로 여기서 풀어야 글자가 제대로 보인다.
+   워커에는 파이썬의 html.unescape 같은 것이 없어 직접 푼다
+   (server/naver.py 와 같은 결과여야 한다). */
+function unescapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");   /* 마지막에 푼다 — 먼저 풀면 &amp;quot; 가 두 번 풀린다 */
+}
+
+/* 종목별 뉴스. **바깥이 배열**이고 각 묶음 안에 items 가 있다.
+   같은 사건을 여러 언론사가 쓰면 한 묶음으로 오므로 묶음마다 첫 기사만 쓴다.
+   server/naver.py 의 news() 와 같은 판정이어야 한다. */
+async function naverNews(env, code) {
+  return memo(`nv:n:${code}`, NAVER_TTL, async () => {
+    const res = await fetch(
+      `https://m.stock.naver.com/api/news/stock/${code}?pageSize=${NAVER_NEWS_SIZE}&page=1`,
+      { headers: NAVER_HEADERS }
+    );
+    if (!res.ok) throw new Error(`네이버 HTTP ${res.status}`);
+    const j = await res.json();
+    const rows = [];
+    for (const g of (Array.isArray(j) ? j : [])) {
+      const items = g.items || [];
+      if (!items.length) continue;
+      const it = items[0];
+      const oid = String(it.officeId || "").trim();
+      const aid = String(it.articleId || "").trim();
+      rows.push({
+        title: unescapeHtml(String(it.title || "").trim()),
+        office: String(it.officeName || "").trim(),
+        at: String(it.datetime || "").trim(),
+        more: Math.max(0, items.length - 1),
+        url: oid && aid ? `https://n.news.naver.com/mnews/article/${oid}/${aid}` : null,
+      });
+    }
+    return rows;
+  });
+}
+
+/* 종목토론실 글. **호스트가 stock.naver.com 이다** — 이 파일의 다른 네이버
+   호출과 달리 m.stock · api.stock 은 404 다 (2026-09-18 실측).
+   server/naver.py 의 discuss() 와 같은 판정이어야 한다. */
+async function naverDiscuss(env, code) {
+  return memo(`nv:d:${code}`, NAVER_TTL, async () => {
+    const res = await fetch(
+      "https://stock.naver.com/api/community/discussion/posts" +
+      `?itemCode=${code}&discussionType=DOMESTIC_STOCK&isHolderOnly=false` +
+      `&excludesItemNews=true&isItemNewsOnly=false&pageSize=${NAVER_DISCUSS_SIZE}`,
+      { headers: NAVER_HEADERS }
+    );
+    if (!res.ok) throw new Error(`네이버 HTTP ${res.status}`);
+    const j = await res.json();
+    return (j.posts || []).map((p) => {
+      const pid = String(p.id || "").trim();
+      return {
+        title: unescapeHtml(String(p.title || "").trim()),
+        writer: String((p.writer || {}).nickname || "").trim(),
+        at: String(p.writtenAt || "").trim(),
+        comments: Number(p.commentCount) || 0,
+        likes: Number(p.recommendCount) || 0,
+        url: pid ? `https://stock.naver.com/domestic/stock/${code}/discussion/${pid}` : null,
+      };
+    });
   });
 }
 
@@ -2613,6 +2688,22 @@ export default {
                     count: g.rows.length, source: "네이버" },
           });
         }
+        if (nvRoute === "news") {
+          const code = (url.searchParams.get("code") || "").trim();
+          if (!/^\d{6}$/.test(code)) return fail("code 는 6자리 숫자여야 합니다.", 400);
+          const rows = await naverNews(env, code);
+          return json({ ok: true, data: rows,
+                        meta: { code, count: rows.length, source: "네이버" } });
+        }
+
+        if (nvRoute === "discuss") {
+          const code = (url.searchParams.get("code") || "").trim();
+          if (!/^\d{6}$/.test(code)) return fail("code 는 6자리 숫자여야 합니다.", 400);
+          const rows = await naverDiscuss(env, code);
+          return json({ ok: true, data: rows,
+                        meta: { code, count: rows.length, source: "네이버" } });
+        }
+
         if (nvRoute === "stocks") {
           const no = (url.searchParams.get("no") || "").trim();
           if (!/^\d+$/.test(no)) return fail("no 에 묶음 번호가 필요합니다.", 400);
