@@ -542,7 +542,7 @@ def fetch_prices(cfg, codes):
                     "high52": info.get("high52"), "low52": info.get("low52"),
                     "volume": info.get("volume"), "marketCap": info.get("marketCap"),
                     "open": info.get("open"), "high": info.get("high"),
-                    "low": info.get("low"), "name": info.get("name"),
+                    "low": info.get("low"),
                 }
                 out[code] = row
                 _cache_put(code, row)
@@ -1070,7 +1070,19 @@ def fetch_price(cfg, code):
     sign = o.get("prdy_vrss_sign")  # 1상한 2상승 3보합 4하한 5하락
     return {
         "code": code,
-        "name": o.get("bstp_kor_isnm"),
+        # **종목명을 넣지 않는다** (2026-09-18).
+        #
+        # 이 API 는 종목명을 안 준다. 응답 필드 80개를 다 훑었는데 이름은
+        # `bstp_kor_isnm`(업종) 과 `rprs_mrkt_kor_name`(시장) 둘뿐이다.
+        # 그 업종명을 `name` 으로 내보내고 있어서 삼성전자가 「전기·전자」로,
+        # NAVER 가 「IT 서비스」로 나왔다.
+        #
+        # 워커는 이 자리에 `name` 을 아예 안 담는다. **같은 API 인데 응답
+        # 모양이 갈려 있었다.** 빼서 맞춘다.
+        #
+        # 종목명이 필요한 자리는 멀티 조회(intstock-multprice)가 준다 —
+        # 거기는 `inter_kor_isnm` 이라 진짜 종목명이다. 화면은 그것과
+        # 목록(market.js · dart_universe)에서 이름을 가져온다.
         "price": _num(o.get("stck_prpr"), int),
         "change": _num(o.get("prdy_vrss"), int),
         "changePct": _num(o.get("prdy_ctrt")),
