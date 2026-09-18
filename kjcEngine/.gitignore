@@ -3,3 +3,6 @@
 *.obj
 *.pdb
 *.ilk
+
+# 시작하다 막혔을 때 남기는 기록. 실행할 때마다 덮어쓴다
+kjcEngine-error.txt

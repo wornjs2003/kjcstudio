@@ -22,6 +22,10 @@
 #include <DirectXMath.h>
 #include <cstdlib>
 #include <ctime>
+#include <cstdio>
+
+#include "model.h"      // Vertex 구조와 FBX 읽기
+#include "texture.h"    // 이미지 → GPU 텍스처
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3dcompiler.lib")
@@ -37,7 +41,9 @@ using namespace DirectX;
 //    「검은 배경 사용 금지」인데 그것은 웹 사이트 테마 룰이고, 게임 창이
 //    거기 해당하는지는 정해지지 않았다. 밝게 하면 흰 정육면체가 묻힌다.
 //    재권님이 정하시면 이 주석과 함께 지운다.
-static const float BG[4]      = { 0.133f, 0.149f, 0.169f, 1.0f };  // #22262b 배경 — 미정
+// ⚠ 이 값은 선형이다. 화면에 보이는 #22262b 를 편 것 —
+//    PBR 계산은 선형에서 하고, 화면에 낼 때 GPU 가 다시 굽는다
+static const float BG[4]      = { 0.0159f, 0.0194f, 0.0243f, 1.0f }; // #22262b 배경 — 미정
 static const float CUBE_C[4]  = { 1.000f, 1.000f, 1.000f, 1.0f };  // #ffffff 정육면체 — 지시: 흰색
 static const float PLATE_C[4] = { 0.306f, 0.349f, 0.408f, 1.0f };  // #4e5968 바닥판 — 지시: 회색
 
@@ -65,13 +71,37 @@ static const UINT  SHADOW_SIZE  = 2048;   // 깊이 기록장의 한 변. 클수
 static const float SHADOW_RANGE = 24.0f;  // 태양이 훑는 범위. 바닥판(10)보다 넉넉히
 static const float SHADOW_BIAS  = 0.0018f;// 자기 그림자 줄무늬를 막는 여유값
 
+// ─── 모델 ──────────────────────────────────────────────────────────────
+// 정육면체 자리에 이 FBX 를 세운다.
+//
+// 경로를 여기 박아 둔 것은 1단계라서다. 다른 PC 에서는 안 열리므로
+// 나중에 설정 파일이나 명령줄 인자로 뺀다
+static const char* MODEL_PATH =
+    "C:\\Users\\9800X3D\\Desktop\\Work_01\\2025_10\\head\\femaleHead\\head"
+    "\\Assets\\Meshes\\Femalehead_0003_01.fbx";
+static const float MODEL_H = 2.0f;  // 이 높이로 맞춘다. 판(10)의 5분의 1
+
+// 텍스처. FBX 안의 재질은 옛 파일 하나만 가리키고 있어서 여기서 직접 잇는다 —
+// 재권님이 2K 로 줄여 두신 것들이다
+static const char* TEX_DIR =
+    "C:\\Users\\9800X3D\\Desktop\\Work_01\\2025_10\\head\\femaleHead\\head\\Assets\\Textures\\";
+static const char* TEX_ALBEDO = "Face_Albedo.jpg";
+static const char* TEX_NORMAL = "Face_Normal.jpg";
+static const char* TEX_ROUGH  = "Face_Roughness.jpg";
+static const char* TEX_SPEC   = "Face_Specular.jpg";
+
 // ─── 크기와 속도 ───────────────────────────────────────────────────────
 // 2D 판의 비율(네모 10 : 판 100)을 그대로 옮겼다
 static const int   WIN_W = 960, WIN_H = 640;
-static const float CUBE  = 1.0f;    // 정육면체 한 변
 static const float PLATE = 10.0f;   // 바닥판 한 변 — 정육면체의 10배
 static const float SPEED = 4.0f;    // 초당 움직이는 거리
 static const float ORBIT = 0.008f;  // 마우스 1픽셀을 끌 때 카메라가 도는 각도(라디안)
+
+// 휠 줌. 곱하기로 움직여서 가까이서는 잘게, 멀리서는 큼직하게 바뀐다 —
+// 더하기로 하면 붙었을 때 한 칸이 너무 크다
+static const float ZOOM_STEP = 1.12f;
+static const float ZOOM_MIN  = 0.8f;
+static const float ZOOM_MAX  = 30.0f;
 static const float TURN  = 9.0f;    // 정면을 트는 빠르기 (초당 라디안)
 
 // ─── 세모 ──────────────────────────────────────────────────────────────
@@ -116,17 +146,33 @@ cbuffer CB : register(b0) {
     float4   color;
     float4   sun;         // xyz = 태양 방향, w = 번쩍임 세기 (0 이면 평소)
     float4   shadowParam; // x = 기록장 한 칸의 크기, y = 여유값, z = 그늘 밝기,
-                          // w = 1 이면 빛 계산을 건너뛴다 (축 표시용)
+                          // w = 그리는 방식 (아래 PS 참조)
+    float4   camPos;      // xyz = 카메라 자리
+    float4   nrmFlip;     // xyz = 노말맵 채널별 부호 (X · Y · Z 키로 바뀐다)
 };
 
 Texture2D              shadowMap : register(t0);
+Texture2D              albedoMap : register(t1);
+Texture2D              normalMap : register(t2);
+Texture2D              roughMap  : register(t3);
+Texture2D              specMap   : register(t4);
 SamplerComparisonState shadowSmp : register(s0);
+SamplerState           texSmp    : register(s1);
 
-struct VSIn  { float3 pos : POSITION; float3 nrm : NORMAL; };
+struct VSIn  {
+    float3 pos : POSITION;
+    float3 nrm : NORMAL;
+    float4 tan : TANGENT;
+    float2 uv  : TEXCOORD0;
+};
 struct VSOut {
     float4 pos  : SV_POSITION;
     float3 nrm  : NORMAL;
+    float3 tan  : TANGENT;     // 면 위의 가로 방향
+    float3 bit  : BINORMAL;    // 면 위의 세로 방향
     float4 lpos : TEXCOORD0;   // 태양 시점에서 이 점이 어디에 있나
+    float2 uv   : TEXCOORD1;
+    float3 wpos : TEXCOORD2;   // 월드 자리 — 보는 방향을 구하는 데 쓴다
 };
 
 // ── 1패스 — 태양 자리에서 깊이만 기록한다. 색을 안 쓰므로 PS 가 없다
@@ -140,20 +186,99 @@ VSOut VS(VSIn i) {
     float4 wp = mul(float4(i.pos, 1.0), world);
     o.pos  = mul(float4(i.pos, 1.0), wvp);
     o.nrm  = mul(i.nrm, (float3x3)world);
+    o.tan  = mul(i.tan.xyz, (float3x3)world);
+    // 세로 방향은 두 축의 외적으로 그때그때 구한다. 정점에 담아 나르는 것보다
+    // 자리를 덜 쓰고, w 의 부호가 거울로 뒤집힌 자리를 바로잡는다
+    o.bit  = cross(o.nrm, o.tan) * i.tan.w;
     o.lpos = mul(wp, lightVP);
+    o.uv   = i.uv;
+    o.wpos = wp.xyz;
     return o;
 }
 
+// ─── PBR 조각들 ────────────────────────────────────────────────────────
+// 표면을 「아주 작은 거울들이 제각각 기울어 깔린 면」으로 본다.
+// 거칠수록 기울기가 흩어져 반사가 퍼지고, 매끈할수록 한 점에 모인다
+static const float PI = 3.14159265;
+
+// 그 작은 거울들이 얼마나 한 방향을 보고 있나 (GGX 분포)
+float D_GGX(float NoH, float a) {
+    float a2 = a * a;
+    float d  = NoH * NoH * (a2 - 1.0) + 1.0;
+    return a2 / max(PI * d * d, 1e-7);
+}
+
+// 거울들이 서로를 가려 빛이 못 오가는 정도 (Smith)
+float V_Smith(float NoV, float NoL, float a) {
+    float a2 = a * a;
+    float gv = NoL * sqrt(NoV * NoV * (1.0 - a2) + a2);
+    float gl = NoV * sqrt(NoL * NoL * (1.0 - a2) + a2);
+    return 0.5 / max(gv + gl, 1e-5);
+}
+
+// 비스듬히 볼수록 반사가 세진다 (프레넬). 물 위를 멀리 볼 때 하늘이
+// 비치는 것과 같은 현상이다
+float3 F_Schlick(float3 f0, float VoH) {
+    return f0 + (1.0 - f0) * pow(1.0 - VoH, 5.0);
+}
+
+// 코드에 적힌 단색은 화면에서 보이는 값(sRGB)이다. 계산은 선형에서 해야
+// 맞으므로 펴 준다. 텍스처는 GPU 가 읽을 때 이미 펴 준다
+float3 ToLinear(float3 c) { return pow(max(c, 0.0), 2.2); }
+
+// 밝은 쪽이 하얗게 날아가지 않게 눌러 준다 (ACES 근사)
+float3 Tonemap(float3 x) {
+    return saturate((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14));
+}
+
 float4 PS(VSOut i) : SV_TARGET {
-    // 축 표시는 방향을 읽으라고 그리는 것이라 빛을 받지 않는다.
-    // 조명을 먹이면 각도에 따라 어두워져서 무슨 색인지 헷갈린다
-    if (shadowParam.w > 0.5)
-        return float4(lerp(color.rgb, float3(1,1,1), sun.w), 1.0);
+    // shadowParam.w 가 그리는 방식을 가른다
+    //   0  빛을 받는 단색    바닥판 · 세모
+    //   1  빛 없는 단색      축 · 글자 — 조명을 먹이면 무슨 색인지 헷갈린다
+    //   2  빛을 받는 텍스처  모델
+    float mode = shadowParam.w;
 
+    if (mode > 0.5 && mode < 1.5)
+        return float4(lerp(ToLinear(color.rgb), float3(1,1,1), sun.w), 1.0);
+
+    float3 base = (mode > 1.5) ? albedoMap.Sample(texSmp, i.uv).rgb
+                               : ToLinear(color.rgb);
     float3 N = normalize(i.nrm);
-    float3 L = normalize(sun.xyz);
-    float  ndl = saturate(dot(N, L));      // 면이 태양을 마주할수록 1 에 가깝다
 
+    // 거칠기와 반사색. 텍스처가 없는 것(판·세모)은 적당한 값으로 둔다
+    float  rough = 0.6;
+    float3 f0    = 0.04;          // 금속이 아닌 것의 기본 반사율
+
+    if (mode > 1.5) {
+        // 노말맵은 0~1 로 저장돼 있어 -1~1 로 편다
+        float3 nm = normalMap.Sample(texSmp, i.uv).rgb * 2.0 - 1.0;
+
+        // 채널마다 부호를 먹인다. 노말맵에는 여러 방식이 있어서
+        // (OpenGL 은 초록이 위, DirectX 는 아래) 눈으로 맞춘다 — X · Y · Z 키
+        nm *= nrmFlip.xyz;
+
+        // 면 위의 가로·세로·법선 축에 얹어 월드 방향으로 옮긴다
+        N = normalize(nm.x * normalize(i.tan)
+                    + nm.y * normalize(i.bit)
+                    + nm.z * N);
+
+        rough = roughMap.Sample(texSmp, i.uv).r;
+        f0    = specMap.Sample(texSmp, i.uv).rgb;
+    }
+    // 완전히 매끈하면 반사가 한 점에 몰려 깜빡인다. 바닥을 조금 깔아둔다
+    rough = clamp(rough, 0.05, 1.0);
+    float a = rough * rough;
+
+    float3 L = normalize(sun.xyz);
+    float3 V = normalize(camPos.xyz - i.wpos);
+    float3 H = normalize(V + L);
+
+    float NoL = saturate(dot(N, L));
+    float NoV = saturate(dot(N, V)) + 1e-5;
+    float NoH = saturate(dot(N, H));
+    float VoH = saturate(dot(V, H));
+
+    // ── 그림자 ──
     // 태양 시점 좌표를 기록장 위의 자리로 바꾼다.
     // y 를 뒤집는 것은 화면 좌표가 위에서 아래로 늘기 때문이다
     float3 p  = i.lpos.xyz / i.lpos.w;
@@ -176,15 +301,28 @@ float4 PS(VSOut i) : SV_TARGET {
         lit = sum / 9.0;
     }
 
+    // ── 태양빛 ──
+    float3 F    = F_Schlick(f0, VoH);
+    float3 spec = D_GGX(NoH, a) * V_Smith(NoV, NoL, a) * F;
+    // 반사로 튕겨나간 만큼은 속으로 안 들어간다 — 그만큼 확산에서 뺀다
+    float3 diff = base * (1.0 - F) / PI;
+
+    // PI 를 곱하는 것은 태양 세기를 그만큼으로 잡았기 때문이다.
+    // 이렇게 두면 확산 항이 base * NoL 이 되어 눈에 익은 밝기가 나온다
+    float3 col = (diff + spec) * NoL * lit * PI;
+
     // 그늘에서도 완전히 죽지 않게 바닥을 깔아둔다
-    float d = shadowParam.z + ndl * lit * (1.0 - shadowParam.z);
+    col += base * shadowParam.z;
+
+    col = Tonemap(col);
 
     // 세모가 사라진 순간 화면 전체를 흰색 쪽으로 당긴다. 곧 0 으로 돌아온다
-    return float4(lerp(color.rgb * d, float3(1,1,1), sun.w), 1.0);
+    return float4(lerp(col, float3(1,1,1), sun.w), 1.0);
 }
 )";
 
-struct Vertex { XMFLOAT3 pos; XMFLOAT3 nrm; };
+// Vertex 는 model.h 에 있다 — FBX 에서 읽은 것과 여기서 만든 것이
+// 같은 모양이어야 하나의 입력 레이아웃으로 그릴 수 있다
 struct CB {
     XMMATRIX wvp;
     XMMATRIX world;
@@ -192,6 +330,8 @@ struct CB {
     XMFLOAT4 color;
     XMFLOAT4 sun;
     XMFLOAT4 shadowParam;
+    XMFLOAT4 camPos;      // HLSL 쪽 cbuffer 와 순서·자리가 정확히 같아야 한다
+    XMFLOAT4 nrmFlip;
 };
 
 // ─── 전역 ──────────────────────────────────────────────────────────────
@@ -205,9 +345,19 @@ static ID3D11VertexShader*      g_vsDepth   = nullptr;
 static ID3D11PixelShader*       g_ps        = nullptr;
 static ID3D11InputLayout*       g_layout    = nullptr;
 static ID3D11Buffer*            g_cb        = nullptr;
-static ID3D11Buffer*            g_cubeVB    = nullptr;
-static ID3D11Buffer*            g_cubeIB    = nullptr;
 static ID3D11Buffer*            g_plateVB   = nullptr;
+static Model                    g_head;        // FBX 에서 읽은 모델
+static Texture                  g_albedo;      // 얼굴 색 텍스처
+static Texture                  g_normal;      // 얼굴 노말맵
+static Texture                  g_rough;       // 거칠기
+static Texture                  g_spec;        // 반사색 (스페큘러 워크플로)
+
+// 노말맵의 채널별 부호. X · Y · Z 키로 하나씩 뒤집는다.
+// 만든 도구마다 축을 잡는 방식이 달라 문서만 봐서는 알 수 없다 —
+// 화면을 보며 맞추는 것이 가장 빠르고, 지금 상태는 창 제목에 적힌다
+static XMFLOAT3 g_nFlip = XMFLOAT3(1.0f, -1.0f, 1.0f);
+static HWND     g_hwnd  = nullptr;
+static ID3D11SamplerState*      g_texSmp = nullptr;
 static ID3D11Buffer*            g_axisVB    = nullptr;
 static ID3D11Buffer*            g_labelVB   = nullptr;
 static ID3D11Buffer*            g_triVB     = nullptr;
@@ -220,13 +370,15 @@ static ID3D11RasterizerState*    g_rsShadow  = nullptr;
 static ID3D11RasterizerState*    g_rsNormal  = nullptr;
 
 static XMMATRIX g_view, g_proj, g_lightVP;
+static XMFLOAT3 g_camPos;      // 지금 카메라가 있는 자리. PBR 계산에 넘긴다
 
 // ─── 카메라 ────────────────────────────────────────────────────────────
 // 바라보는 점(원점)을 중심으로 구면 위를 돈다. 가운데 단추를 누른 채 끌면
 // yaw(좌우)와 pitch(위아래)가 바뀐다. 거리는 그대로라 물체에서 멀어지지 않는다
 static float g_yaw   = XM_PI;      // 좌우 각도 — 처음에는 -Z 쪽에서 본다
 static float g_pitch = 0.686f;     // 위아래 각도 — 약 39도 위에서 내려다본다
-static float g_dist  = 14.2f;      // 원점에서 떨어진 거리
+static float g_dist  = 5.5f;       // 바라보는 점에서 떨어진 거리. 휠로 바뀐다
+static float g_lookY = 1.0f;       // 바라보는 높이 — 얼굴 한가운데(모델 높이의 절반)
 static bool  g_drag  = false;      // 가운데 단추를 누르고 있나
 static POINT g_last  = {};         // 직전 마우스 자리
 
@@ -351,34 +503,6 @@ static void UpdateTris(float dt) {
     }
 }
 
-// ─── 정육면체 · 바닥판 만들기 ──────────────────────────────────────────
-// 면마다 법선이 달라야 빛을 제대로 받으므로 꼭짓점을 공유하지 않고
-// 여섯 면 × 네 개 = 24개를 따로 둔다
-static void BuildCube(Vertex* v, unsigned short* idx) {
-    const float h = CUBE * 0.5f;
-    const XMFLOAT3 n[6] = {
-        { 0, 0,-1}, { 0, 0, 1}, { 0, 1, 0}, { 0,-1, 0}, {-1, 0, 0}, { 1, 0, 0},
-    };
-    const XMFLOAT3 p[6][4] = {
-        {{-h,-h,-h},{-h, h,-h},{ h, h,-h},{ h,-h,-h}},   // 앞
-        {{ h,-h, h},{ h, h, h},{-h, h, h},{-h,-h, h}},   // 뒤
-        {{-h, h,-h},{-h, h, h},{ h, h, h},{ h, h,-h}},   // 위
-        {{-h,-h, h},{-h,-h,-h},{ h,-h,-h},{ h,-h, h}},   // 아래
-        {{-h,-h, h},{-h, h, h},{-h, h,-h},{-h,-h,-h}},   // 왼쪽
-        {{ h,-h,-h},{ h, h,-h},{ h, h, h},{ h,-h, h}},   // 오른쪽
-    };
-    for (int f = 0; f < 6; ++f)
-        for (int k = 0; k < 4; ++k)
-            v[f * 4 + k] = { p[f][k], n[f] };
-
-    for (int f = 0; f < 6; ++f) {
-        unsigned short b = (unsigned short)(f * 4);
-        unsigned short t[6] = { b, (unsigned short)(b + 1), (unsigned short)(b + 2),
-                                b, (unsigned short)(b + 2), (unsigned short)(b + 3) };
-        memcpy(idx + f * 6, t, sizeof(t));
-    }
-}
-
 // 축 세 개를 선으로. 원점에서 각 방향으로 길이 1 만큼 뻗는다.
 // 법선은 안 쓴다 — 축은 빛 계산을 건너뛴다
 static void BuildAxes(Vertex* v) {
@@ -460,10 +584,11 @@ static void BuildPlate(Vertex* v) {
 // 화면을 돌린 뒤 클릭해도 바닥의 제자리를 집는다
 static void UpdateView() {
     float cp = cosf(g_pitch), sp = sinf(g_pitch);
+    // 원점이 아니라 얼굴 높이를 바라본다. 발치를 보면 얼굴이 화면 위에 걸린다
     XMVECTOR eye = XMVectorSet(g_dist * cp * sinf(g_yaw),
-                               g_dist * sp,
+                               g_dist * sp + g_lookY,
                                g_dist * cp * cosf(g_yaw), 0.0f);
-    XMVECTOR at = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
+    XMVECTOR at = XMVectorSet(0.0f, g_lookY, 0.0f, 0.0f);
 
     // 세모가 사라진 직후에는 카메라를 잔떨림만큼 옮긴다. 보는 점까지 같이
     // 옮겨야 화면이 통째로 떨린다 — 눈만 흔들면 빙 도는 모양이 된다
@@ -478,6 +603,7 @@ static void UpdateView() {
     }
 
     g_view = XMMatrixLookAtLH(eye, at, XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
+    XMStoreFloat3(&g_camPos, eye);
 }
 
 // ─── 태양 시점의 행렬을 구한다 ─────────────────────────────────────────
@@ -522,8 +648,11 @@ static bool PickFloor(int mx, int my, float& outX, float& outZ) {
 
 // ─── 한 물체 그리기 ────────────────────────────────────────────────────
 // depthPass 면 태양 시점으로, 아니면 카메라 시점으로 옮긴다
+// idxFmt 는 인덱스 한 칸의 크기다. 여기서 만든 작은 도형은 16비트면 넉넉하지만,
+// FBX 모델은 정점이 6만 5천을 넘을 수 있어 32비트를 쓴다
 static void DrawOne(ID3D11Buffer* vb, ID3D11Buffer* ib, UINT count,
-                    XMMATRIX world, const float rgba[4], bool depthPass) {
+                    XMMATRIX world, const float rgba[4], bool depthPass,
+                    DXGI_FORMAT idxFmt = DXGI_FORMAT_R16_UINT, float mode = 0.0f) {
     UINT stride = sizeof(Vertex), offset = 0;
     g_ctx->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
 
@@ -534,11 +663,13 @@ static void DrawOne(ID3D11Buffer* vb, ID3D11Buffer* ib, UINT count,
     cb.lightVP     = XMMatrixTranspose(g_lightVP);
     cb.color       = XMFLOAT4(rgba[0], rgba[1], rgba[2], rgba[3]);
     cb.sun         = XMFLOAT4(SUN.x, SUN.y, SUN.z, g_glow);
-    cb.shadowParam = XMFLOAT4(1.0f / SHADOW_SIZE, SHADOW_BIAS, AMBIENT, 0.0f);
+    cb.shadowParam = XMFLOAT4(1.0f / SHADOW_SIZE, SHADOW_BIAS, AMBIENT, mode);
+    cb.camPos      = XMFLOAT4(g_camPos.x, g_camPos.y, g_camPos.z, 0.0f);
+    cb.nrmFlip     = XMFLOAT4(g_nFlip.x, g_nFlip.y, g_nFlip.z, 0.0f);
     g_ctx->UpdateSubresource(g_cb, 0, nullptr, &cb, 0, 0);
 
     if (ib) {
-        g_ctx->IASetIndexBuffer(ib, DXGI_FORMAT_R16_UINT, 0);
+        g_ctx->IASetIndexBuffer(ib, idxFmt, 0);
         g_ctx->DrawIndexed(count, 0, 0);
     } else {
         g_ctx->Draw(count, 0);
@@ -562,6 +693,8 @@ static void DrawAxes(XMMATRIX world, XMMATRIX viewProj) {
         cb.sun         = XMFLOAT4(SUN.x, SUN.y, SUN.z, g_glow);
         cb.shadowParam = XMFLOAT4(1.0f / SHADOW_SIZE, SHADOW_BIAS, AMBIENT,
                                   1.0f);   // 1 = 빛 계산을 건너뛴다
+        cb.camPos      = XMFLOAT4(g_camPos.x, g_camPos.y, g_camPos.z, 0.0f);
+    cb.nrmFlip     = XMFLOAT4(g_nFlip.x, g_nFlip.y, g_nFlip.z, 0.0f);
         g_ctx->UpdateSubresource(g_cb, 0, nullptr, &cb, 0, 0);
         g_ctx->Draw(2, i * 2);             // 축 하나가 정점 두 개다
     }
@@ -595,6 +728,8 @@ static void DrawLabels(XMMATRIX viewProj, XMMATRIX billboard) {
         cb.color       = XMFLOAT4(L[i].color[0], L[i].color[1], L[i].color[2], 1.0f);
         cb.sun         = XMFLOAT4(SUN.x, SUN.y, SUN.z, g_glow);
         cb.shadowParam = XMFLOAT4(1.0f / SHADOW_SIZE, SHADOW_BIAS, AMBIENT, 1.0f);
+        cb.camPos      = XMFLOAT4(g_camPos.x, g_camPos.y, g_camPos.z, 0.0f);
+    cb.nrmFlip     = XMFLOAT4(g_nFlip.x, g_nFlip.y, g_nFlip.z, 0.0f);
         g_ctx->UpdateSubresource(g_cb, 0, nullptr, &cb, 0, 0);
         g_ctx->Draw(L[i].count, L[i].start);
     }
@@ -608,7 +743,7 @@ static void DrawScene(bool depthPass) {
     // 뛰는 중이면 그만큼 떠오르고 좌우로 떤다.
     // 4t(1-t) 는 t 가 0 과 1 에서 0, 한가운데서 1 이 되는 포물선이라
     // 뛰어올랐다 제자리로 내려오는 모양이 저절로 나온다
-    float cx = g_x, cy = CUBE * 0.5f, cz = g_z;
+    float cx = g_x, cy = 0.0f, cz = g_z;   // 모델은 발치가 y=0 이라 띄우지 않는다
     if (g_hop > 0.0f) {
         float t = g_hop / HOP_TIME;
         if (t > 1.0f) t = 1.0f;
@@ -624,7 +759,9 @@ static void DrawScene(bool depthPass) {
                        * XMMatrixTranslation(cx, cy, cz);
 
     DrawOne(g_plateVB, nullptr, 6, XMMatrixIdentity(), PLATE_C, depthPass);
-    DrawOne(g_cubeVB, g_cubeIB, 36, cubeWorld, CUBE_C, depthPass);
+    // 모델은 정점이 많아 32비트 인덱스를 쓰고, 색은 텍스처에서 읽는다(모드 2)
+    DrawOne(g_head.vb, g_head.ib, g_head.indexCount, cubeWorld, CUBE_C, depthPass,
+            DXGI_FORMAT_R32_UINT, 2.0f);
 
     for (int i = 0; i < TRI_N; ++i) {
         if (!g_tri[i].alive) continue;
@@ -637,6 +774,37 @@ static void DrawScene(bool depthPass) {
     if (!depthPass)
         DrawAxes(XMMatrixScaling(AXIS_SELF, AXIS_SELF, AXIS_SELF) * cubeWorld,
                  g_view * g_proj);
+}
+
+// 시작하다 막혔을 때 알린다. 창으로 띄우는 것만으로는 놓칠 수 있어서
+// (백그라운드로 돌리면 안 보인다) 실행 파일 옆에 글로도 남긴다
+static void Fail(HWND hwnd, const char* msg) {
+    FILE* f = nullptr;
+    if (fopen_s(&f, "kjcEngine-error.txt", "w") == 0 && f) {
+        fputs(msg, f);
+        fclose(f);
+    }
+    MessageBoxA(hwnd, msg, "kjcEngine", MB_OK | MB_ICONERROR);
+}
+
+// 지금 상태를 창 제목에 적는다. 노말맵 부호는 눈으로 확인할 방법이 없어서
+// 어딘가에 보여야 한다 — 안 그러면 눌러 놓고도 어느 쪽인지 헷갈린다
+static void UpdateTitle() {
+    if (!g_hwnd) return;
+    char t[256];
+    wsprintfA(t, "kjcEngine - DirectX 11   |   %u verts, %u tris   |   normal  X%c Y%c Z%c",
+              (unsigned)g_head.outVertices, (unsigned)(g_head.indexCount / 3),
+              g_nFlip.x < 0.0f ? '-' : '+',
+              g_nFlip.y < 0.0f ? '-' : '+',
+              g_nFlip.z < 0.0f ? '-' : '+');
+    SetWindowTextA(g_hwnd, t);
+}
+
+// 카메라를 당기고 민다. 휠과 [ ] 키가 같이 쓴다
+static void Zoom(float factor) {
+    g_dist *= factor;
+    if (g_dist < ZOOM_MIN) g_dist = ZOOM_MIN;
+    if (g_dist > ZOOM_MAX) g_dist = ZOOM_MAX;
 }
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -690,8 +858,21 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
 
+    case WM_MOUSEWHEEL:
+        Zoom(GET_WHEEL_DELTA_WPARAM(wp) > 0 ? 1.0f / ZOOM_STEP : ZOOM_STEP);
+        return 0;
+
     case WM_KEYDOWN:
-        if (wp == VK_ESCAPE) PostQuitMessage(0);
+        // 누르고 있으면 저절로 되풀이되므로 따로 처리할 것이 없다
+        switch (wp) {
+        case VK_ESCAPE: PostQuitMessage(0);        break;
+        case VK_OEM_6:  Zoom(1.0f / ZOOM_STEP);    break;   // ]  확대
+        case VK_OEM_4:  Zoom(ZOOM_STEP);           break;   // [  축소
+        // 노말맵 채널을 하나씩 뒤집는다. 지금 상태는 창 제목에 나온다
+        case 'X': g_nFlip.x = -g_nFlip.x; UpdateTitle(); break;
+        case 'Y': g_nFlip.y = -g_nFlip.y; UpdateTitle(); break;
+        case 'Z': g_nFlip.z = -g_nFlip.z; UpdateTitle(); break;
+        }
         return 0;
 
     case WM_DESTROY:
@@ -712,9 +893,20 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     RECT r = { 0, 0, WIN_W, WIN_H };
     DWORD style = WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME & ~WS_MAXIMIZEBOX;
     AdjustWindowRect(&r, style, FALSE);
+    const int winW = r.right - r.left, winH = r.bottom - r.top;
+
+    // 마우스 커서가 있는 모니터 한가운데에 놓는다. CW_USEDEFAULT 로 두면
+    // Windows 가 알아서 고르는데, 화면이 여럿이면 보고 있지 않은 쪽에 뜬다.
+    // 작업 영역(rcWork)을 쓰므로 작업 표시줄에 가리지 않는다
+    POINT cur;
+    GetCursorPos(&cur);
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfo(MonitorFromPoint(cur, MONITOR_DEFAULTTONEAREST), &mi);
+    int wx = mi.rcWork.left + ((mi.rcWork.right  - mi.rcWork.left) - winW) / 2;
+    int wy = mi.rcWork.top  + ((mi.rcWork.bottom - mi.rcWork.top)  - winH) / 2;
+
     HWND hwnd = CreateWindow("kjcEngineDX", "kjcEngine - DirectX 11", style,
-                             CW_USEDEFAULT, CW_USEDEFAULT,
-                             r.right - r.left, r.bottom - r.top,
+                             wx, wy, winW, winH,
                              nullptr, nullptr, hInst, nullptr);
 
     // ── DX11 준비 ──
@@ -732,13 +924,18 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     if (FAILED(D3D11CreateDeviceAndSwapChain(
             nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0,
             D3D11_SDK_VERSION, &sd, &g_swap, &g_dev, nullptr, &g_ctx))) {
-        MessageBox(hwnd, "DirectX 11 device creation failed.", "kjcEngine", MB_OK);
+        Fail(hwnd, "DirectX 11 device creation failed.");
         return 1;
     }
 
+    // 화면에 낼 때 GPU 가 선형 → sRGB 로 구워 주게 한다. 이게 없으면
+    // 계산은 선형인데 화면은 sRGB 로 읽어서 전체가 어둡고 탁해진다
     ID3D11Texture2D* back = nullptr;
     g_swap->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&back);
-    g_dev->CreateRenderTargetView(back, nullptr, &g_rtv);
+    D3D11_RENDER_TARGET_VIEW_DESC rtvd = {};
+    rtvd.Format        = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+    rtvd.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMS;   // 다중표본을 쓰므로
+    g_dev->CreateRenderTargetView(back, &rtvd, &g_rtv);
     back->Release();
 
     // 깊이 버퍼 — 앞의 물체가 뒤를 가리게 한다. 없으면 나중에 그린 것이 위에 온다
@@ -795,6 +992,14 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     smp.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;
     g_dev->CreateSamplerState(&smp, &g_shadowSmp);
 
+    // 색 텍스처용 표본기. 이방성 필터를 쓰면 비스듬히 보이는 면이 덜 뭉갠다
+    D3D11_SAMPLER_DESC ts = {};
+    ts.Filter         = D3D11_FILTER_ANISOTROPIC;
+    ts.MaxAnisotropy  = 8;
+    ts.AddressU = ts.AddressV = ts.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+    ts.MaxLOD         = D3D11_FLOAT32_MAX;
+    g_dev->CreateSamplerState(&ts, &g_texSmp);
+
     // 그림자를 그릴 때만 깊이를 살짝 밀어낸다. 이게 없으면 평평한 면이
     // 자기 자신을 가려서 줄무늬(섀도 애크니)가 생긴다
     D3D11_RASTERIZER_DESC rd = {};
@@ -813,8 +1018,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         if (SUCCEEDED(D3DCompile(HLSL, strlen(HLSL), nullptr, nullptr, nullptr,
                                  entry, target, 0, 0, out, &err)))
             return true;
-        MessageBox(hwnd, err ? (char*)err->GetBufferPointer() : "shader compile failed",
-                   "kjcEngine", MB_OK);
+        Fail(hwnd, err ? (char*)err->GetBufferPointer() : "shader compile failed");
         return false;
     };
     if (!compile("VS",       "vs_5_0", &vsb))  return 1;
@@ -825,19 +1029,20 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     g_dev->CreateVertexShader(vsdb->GetBufferPointer(), vsdb->GetBufferSize(), nullptr, &g_vsDepth);
     g_dev->CreatePixelShader (psb->GetBufferPointer(),  psb->GetBufferSize(),  nullptr, &g_ps);
 
+    // 자리(offset)는 Vertex 구조와 정확히 맞아야 한다 — 어긋나면 화면이
+    // 조용히 이상해지고 오류는 안 난다
     D3D11_INPUT_ELEMENT_DESC il[] = {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,  0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        { "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0,  0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "TANGENT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 40, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     };
-    g_dev->CreateInputLayout(il, 2, vsb->GetBufferPointer(), vsb->GetBufferSize(), &g_layout);
+    g_dev->CreateInputLayout(il, 4, vsb->GetBufferPointer(), vsb->GetBufferSize(), &g_layout);
     vsb->Release();
     vsdb->Release();
     psb->Release();
 
     // ── 정점 · 인덱스 · 상수 버퍼 ──
-    Vertex cubeV[24];
-    unsigned short cubeI[36];
-    BuildCube(cubeV, cubeI);
     Vertex plateV[6];
     BuildPlate(plateV);
     Vertex axisV[6];
@@ -857,12 +1062,37 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         g_dev->CreateBuffer(&bd, &sr, &b);
         return b;
     };
-    g_cubeVB  = makeBuf(cubeV,  sizeof(cubeV),  D3D11_BIND_VERTEX_BUFFER);
-    g_cubeIB  = makeBuf(cubeI,  sizeof(cubeI),  D3D11_BIND_INDEX_BUFFER);
     g_plateVB = makeBuf(plateV, sizeof(plateV), D3D11_BIND_VERTEX_BUFFER);
     g_axisVB  = makeBuf(axisV,  sizeof(axisV),  D3D11_BIND_VERTEX_BUFFER);
     g_labelVB = makeBuf(labelV, sizeof(labelV), D3D11_BIND_VERTEX_BUFFER);
     g_triVB   = makeBuf(triV,   sizeof(triV),   D3D11_BIND_VERTEX_BUFFER);
+
+    // ── FBX 모델 ──
+    // 여기서 막히면 화면에 아무것도 없이 검게만 보인다. 이유를 띄우고 끝낸다
+    char loadErr[1024] = {};
+    if (!LoadFBX(g_dev, MODEL_PATH, MODEL_H, g_head, loadErr, sizeof(loadErr))) {
+        Fail(hwnd, loadErr);
+        return 1;
+    }
+    // ── 텍스처 ──
+    // albedo 는 색이므로 sRGB 로 읽는다 (texture.h 의 설명 참조)
+    char texPath[512];
+    auto loadTex = [&](const char* name, bool srgb, Texture& t) -> bool {
+        lstrcpyA(texPath, TEX_DIR);
+        lstrcatA(texPath, name);
+        if (LoadTexture(g_dev, g_ctx, texPath, srgb, t, loadErr, sizeof(loadErr)))
+            return true;
+        Fail(hwnd, loadErr);
+        return false;
+    };
+    if (!loadTex(TEX_ALBEDO, true,  g_albedo)) return 1;   // 색이므로 sRGB
+    if (!loadTex(TEX_NORMAL, false, g_normal)) return 1;   // 방향 숫자라 그대로
+    if (!loadTex(TEX_ROUGH,  false, g_rough))  return 1;   // 거칠기도 숫자
+    if (!loadTex(TEX_SPEC,   true,  g_spec))   return 1;   // 반사색이라 sRGB
+
+    // 제대로 들어왔는지, 노말맵 부호가 지금 어느 쪽인지 창 제목에서 보이게 한다
+    g_hwnd = hwnd;
+    UpdateTitle();
 
     // 세모를 처음 뿌린다. 매번 다른 자리에 나게 씨앗을 시간으로 준다
     srand((unsigned)time(nullptr));
@@ -982,8 +1212,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         // ── 1패스 — 태양 자리에서 깊이만 기록한다 ──
         // 지난 프레임에 읽던 것을 떼어낸다. 같은 그림을 쓰면서 동시에
         // 그릴 수는 없어서, 안 떼면 이번 기록이 통째로 무시된다
-        ID3D11ShaderResourceView* none = nullptr;
-        g_ctx->PSSetShaderResources(0, 1, &none);
+        ID3D11ShaderResourceView* none[5] = {};
+        g_ctx->PSSetShaderResources(0, 5, none);
 
         g_ctx->OMSetRenderTargets(0, nullptr, g_shadowDSV);
         g_ctx->ClearDepthStencilView(g_shadowDSV, D3D11_CLEAR_DEPTH, 1.0f, 0);
@@ -1006,8 +1236,11 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         g_ctx->RSSetState(g_rsNormal);
         g_ctx->VSSetShader(g_vs, nullptr, 0);
         g_ctx->PSSetShader(g_ps, nullptr, 0);
-        g_ctx->PSSetShaderResources(0, 1, &g_shadowSRV);
-        g_ctx->PSSetSamplers(0, 1, &g_shadowSmp);
+        ID3D11ShaderResourceView* srvs[5] = { g_shadowSRV, g_albedo.srv, g_normal.srv,
+                                             g_rough.srv, g_spec.srv };
+        ID3D11SamplerState*       smps[2] = { g_shadowSmp, g_texSmp };
+        g_ctx->PSSetShaderResources(0, 5, srvs);
+        g_ctx->PSSetSamplers(0, 2, smps);
         DrawScene(false);
 
         // ── 3패스 — 오른쪽 위 방향 표시기 ──
@@ -1043,8 +1276,12 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     if (g_labelVB)   g_labelVB->Release();
     if (g_axisVB)    g_axisVB->Release();
     if (g_plateVB)   g_plateVB->Release();
-    if (g_cubeIB)    g_cubeIB->Release();
-    if (g_cubeVB)    g_cubeVB->Release();
+    g_head.Release();
+    g_albedo.Release();
+    g_normal.Release();
+    g_rough.Release();
+    g_spec.Release();
+    if (g_texSmp) g_texSmp->Release();
     if (g_cb)        g_cb->Release();
     if (g_layout)    g_layout->Release();
     if (g_ps)        g_ps->Release();

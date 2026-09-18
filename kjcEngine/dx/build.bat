@@ -15,7 +15,7 @@ if not exist "%VS%" (
 call "%VS%" >nul
 cd /d "%~dp0"
 
-cl /nologo /EHsc /std:c++17 /utf-8 /O2 main.cpp /Fe:kjcEngine.exe ^
+cl /nologo /EHsc /std:c++17 /utf-8 /O2 /I. main.cpp model.cpp texture.cpp third_party\ufbx.c /Fe:kjcEngine.exe ^
    /link /SUBSYSTEM:WINDOWS user32.lib
 if errorlevel 1 (
   echo.
@@ -25,5 +25,5 @@ if errorlevel 1 (
   exit /b 1
 )
 
-del /q main.obj 2>nul
+del /q *.obj 2>nul
 echo   BUILD OK - kjcEngine.exe
