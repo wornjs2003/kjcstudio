@@ -202,6 +202,11 @@ def _rate_limit():
     놓은 뒤에 한다. 여러 호출이 각자 다른 시각을 배정받아 겹쳐 진행되므로,
     초당 건수는 그대로 지키면서 KIS 응답을 기다리는 시간이 서로 가려진다.
     """
+    # 미리받기는 화면에 자리를 내준다. 급하지 않은 일이라 늦어져도 잃는 것이
+    # 없고, 화면은 기다리면 재권님이 보신다 (2026-09-18).
+    if threading.current_thread().name == PREFILL_THREAD_NAME and _ui_busy():
+        time.sleep(PREFILL_BUSY_CALL_GAP)
+
     global _last_call_at
     with _rate_lock:
         now_m = time.monotonic()
@@ -1638,6 +1643,47 @@ PREFILL_REST_SEC = 3.5
 PREFILL_START_SEC = 20     # 서버가 뜨고 이만큼 뒤에 시작 (첫 화면에 양보)
 PREFILL_ROUND_SEC = 1800   # 한 바퀴 돌고 쉬는 시간. 실제 호출은 dayfill 이 막는다
 
+# ── 화면이 보고 있으면 더 쉰다 (2026-09-18) ────────────────────────
+#
+# 위 3.5 초는 **화면이 없을 때** 기준이다. 종목 하나가 하루치 5분봉을 받느라
+# KIS 를 스물몇 번 부르므로, 쉬는 시간을 그만큼 잡아도 초당 3회쯤을 계속 쓴다.
+# 예산이 초당 5회라 화면 몫이 2회밖에 안 남는다.
+#
+# **실측 (2026-09-18)** — 브라우저를 하나도 안 띄운 상태에서
+#
+#     /api/kis/stats   초당 4.9회 · 예산 사용률 98%
+#     지수 한 번        7 ~ 10초   (2초마다 부르도록 만든 요청이다)
+#
+# 지수는 한 번에 여덟 번을 부르는데(국내 3 + 해외 4 + 선물 1) 그 여덟이
+# 미리받기 뒤에 줄을 서서 이렇게 됐다. 화면에서는 지수가 멈춰 보이고,
+# 브라우저 연결(호스트당 여섯)을 다 물고 있어 **시세까지 밀린다.**
+#
+# 그래서 화면이 최근에 불렀으면 쉬는 시간을 크게 잡는다. 미리받기는
+# 하루 한 번 돌면 되는 일이라 늦어져도 잃는 것이 없다.
+PREFILL_BUSY_REST_SEC = 20.0   # 화면이 보고 있을 때 종목 사이 쉬는 시간
+PREFILL_BUSY_WINDOW = 15.0     # 이 시간 안에 화면이 불렀으면 '보고 있다'로 본다
+
+# **종목 사이만 쉬어서는 모자란다.** 한 종목의 하루치 5분봉이 KIS 를 스무 번
+# 넘게 부르는데, 그 스무 번이 연달아 차례를 가져가기 때문이다. 지수 여덟 번이
+# 그 사이에 한 번씩 끼어드는 꼴이 되어 **10초**가 걸렸다 (2026-09-18 실측 —
+# 종목 사이 20초 양보를 넣은 뒤에도 4.5 → 8.6 → 10.0 → 10.2초).
+#
+# 그래서 **호출 하나하나**를 미룬다. 화면이 조용하면 이 값은 안 쓰인다.
+PREFILL_BUSY_CALL_GAP = 2.0    # 화면이 보고 있을 때 미리받기 호출 사이 여유
+PREFILL_THREAD_NAME = "prefill-5m"
+
+_last_ui_at = 0.0              # 화면이 마지막으로 /api/kis/* 를 부른 시각
+
+
+def _mark_ui_call():
+    """화면이 KIS 를 썼다고 적어 둔다. 미리받기가 이것을 보고 양보한다."""
+    global _last_ui_at
+    _last_ui_at = time.monotonic()
+
+
+def _ui_busy():
+    return (time.monotonic() - _last_ui_at) < PREFILL_BUSY_WINDOW
+
 
 def _prefill_codes():
     """미리 받을 종목. 코스피 시가총액 상위 순서."""
@@ -1670,7 +1716,9 @@ def start_prefill(cfg):
                         get_chart(cfg, code, "5m", 1)
                     except Exception:
                         pass           # 한 종목이 실패해도 나머지는 간다
-                    time.sleep(PREFILL_REST_SEC)
+                    # 화면이 보고 있으면 길게 쉰다. 지수·시세가 먼저다
+                    time.sleep(PREFILL_BUSY_REST_SEC if _ui_busy()
+                               else PREFILL_REST_SEC)
             except Exception:
                 pass
             time.sleep(PREFILL_ROUND_SEC)
@@ -1852,6 +1900,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if (self.path or "").startswith("/api/kis/"):
+            _mark_ui_call()          # 미리받기가 양보하도록 알린다
             self._handle_kis()
             return
         if (self.path or "").startswith("/api/dart/"):
