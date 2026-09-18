@@ -145,7 +145,10 @@ async function memo(key, ttlSec, make) {
    1초마다 다시 받을 이유가 없다. server/kis_proxy.py 의 INDEX_CHART_TTL 과 같다. */
 const SERIES_TTL = 600;
 
-const INDEX_TTL = 1;
+/* 지수 캐시 (2026-09-18 지시 — 5초).
+   화면이 2초마다 부르는데 캐시가 그보다 짧으면 한 번도 안 맞는다.
+   server/kis_proxy.py 의 INDEX_TTL 과 같아야 한다 — check-kis-consts.py 가 본다. */
+const INDEX_TTL = 5;
 const FUTURES_TTL = 1;
 
 /* 종목이 어느 갈래인지에 따라 캐시 수명을 정한다. */
