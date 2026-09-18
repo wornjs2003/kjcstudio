@@ -8,7 +8,7 @@
  * 즉 로그인한 사람만 호출할 수 있다.
  *
  * 두 가지를 맡는다.
- *   /api/kis/...   시세 · 지수 · 캔들 · 지수 당일 흐름 (한국투자증권)
+ *   /api/kis/...   시세 · 지수 · 캔들 · 지수 당일 흐름 · 업종 · 순위 · 투자자 (한국투자증권)
  *   /api/dart/...  공시 (OpenDART) — 5분마다 Cron 으로 받아 D1 에 쌓는다
  *
  * ── 필요한 설정 ────────────────────────────────────────────────
@@ -861,6 +861,224 @@ async function fetchIndices(cfg, env, withChart = true) {
   return { data: out, errors };
 }
 
+
+/* 빈 문자열을 0 이 아니라 null 로 본다.
+
+   워커의 num("") 은 Number("") === 0 이라 **0 을 돌려준다.** 파이썬 쪽
+   _num("") 은 None 이다. 업종의 acml_tr_pbmn_rlim 처럼 KIS 가 빈 값을 주는
+   칸이 있어서, 그대로 두면 로컬은 「값 없음」 인데 배포본은 「0.00%」 로
+   보인다. 2026-09-17 에 워커를 Node 로 돌려 서버 응답과 맞춰보다 찾았다.   */
+function numOrNull(v) {
+  return String(v ?? "").trim() === "" ? null : num(v);
+}
+
+/* ── 업종 · 순위 · 투자자 ────────────────────────────────────
+
+   첫 화면의 「지금 뜨는 산업」 과 「외국인 · 기관 매매」 두 칸이 쓴다.
+   server/kis_proxy.py 의 같은 이름 함수와 **한 쌍**이다. 한쪽만 고치면
+   로컬과 배포본의 숫자가 갈린다 — holdings/tools/check-kis-consts.py 가 대조한다.
+
+   응답 필드와 실제 값은 docs/kis-sector-investor.md 에 있다.              */
+
+// (KIS 시장구분, 우리가 쓰는 이름, 업종 기준 지수코드, 순위 API 의 종목코드)
+const SECTOR_MARKETS = [
+  ["K", "KOSPI", "0001", "0001"],
+  ["Q", "KOSDAQ", "1001", "1001"],
+];
+
+// FID_BLNG_CLS_CODE. 3 이 업종(산업별)이다. 0(전체) 은 파생지수까지 섞여 온다
+const SECTOR_BLNG = "3";
+
+// blng=3 인데도 업종이 아닌 것이 코스피 쪽에 둘 섞여 온다 (2026-09-17 실측)
+const SECTOR_SKIP = ["0244", "2283"];
+
+const SECTOR_TTL = 60;
+const MOVERS_TTL = 30;
+const MOVERS_MAX = 30;          // KIS 가 한 번에 주는 행 수
+const INVESTOR_TOP_TTL = 120;
+const INVESTOR_FLOW_TTL = 600;
+const INVESTOR_FLOW_DAYS = 30;
+
+/* KIS 는 등락률을 양수로 주고 부호를 따로 준다 — 1상한 2상승 3보합 4하한 5하락 */
+function signPct(row, key, value) {
+  if (value === null || value === undefined) return null;
+  const sign = String(row[key] ?? "").trim();
+  return (sign === "4" || sign === "5") && value > 0 ? -value : value;
+}
+
+async function fetchSectors(cfg, env, markets) {
+  const want = SECTOR_MARKETS.filter(([, name]) => !markets || markets.includes(name));
+  const out = [];
+  const errors = {};
+  for (const [mrkt, name, iscd] of want) {
+    try {
+      const rows = await memo(`SECTOR:${name}`, SECTOR_TTL, async () => {
+        const data = await kisGet(
+          cfg, env,
+          "/uapi/domestic-stock/v1/quotations/inquire-index-category-price",
+          { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: iscd,
+            FID_COND_SCR_DIV_CODE: "20214", FID_MRKT_CLS_CODE: mrkt,
+            FID_BLNG_CLS_CODE: SECTOR_BLNG },
+          "FHPUP02140000", SECTOR_TTL,
+        );
+        return outRows(data, "output2")
+          .filter((r) => {
+            const code = String(r.bstp_cls_code || "").trim();
+            return code && !SECTOR_SKIP.includes(code);
+          })
+          .map((r) => ({
+            code: String(r.bstp_cls_code).trim(),
+            name: String(r.hts_kor_isnm || "").trim(),
+            market: name,
+            price: numOrNull(r.bstp_nmix_prpr),
+            amt: signPct(r, "prdy_vrss_sign", numOrNull(r.bstp_nmix_prdy_vrss)),
+            pct: signPct(r, "prdy_vrss_sign", numOrNull(r.bstp_nmix_prdy_ctrt)),
+            volume: numOrNull(r.acml_vol),
+            value: numOrNull(r.acml_tr_pbmn),
+            volShare: numOrNull(r.acml_vol_rlim),
+            valueShare: numOrNull(r.acml_tr_pbmn_rlim),
+            source: "KIS",
+          }));
+      });
+      out.push(...rows);
+    } catch (e) {
+      errors[name] = safeMessage(e, env);
+    }
+  }
+  return { data: out, errors };
+}
+
+async function fetchMovers(cfg, env, direction = "up", market = "all", limit = MOVERS_MAX) {
+  const iscd = market && market !== "all"
+    ? (SECTOR_MARKETS.find(([, n]) => n === market) || [])[3] || "0000"
+    : "0000";
+  const sort = direction === "down" ? "1" : "0";
+  const rows = await memo(`MOVERS:${sort}:${iscd}`, MOVERS_TTL, async () => {
+    const data = await kisGet(
+      cfg, env,
+      "/uapi/domestic-stock/v1/ranking/fluctuation",
+      // fid_prc_cls_code 0 은 저가대비, 1 은 전일종가대비다. 0 으로 두면
+      // 등락률이 마이너스인 종목이 1위로 온다 (2026-09-17 실측). 1 이 맞다.
+      { fid_cond_mrkt_div_code: "J", fid_cond_scr_div_code: "20170",
+        fid_input_iscd: iscd, fid_rank_sort_cls_code: sort,
+        fid_input_cnt_1: "0", fid_prc_cls_code: "1",
+        fid_input_price_1: "", fid_input_price_2: "", fid_vol_cnt: "",
+        fid_trgt_cls_code: "0", fid_trgt_exls_cls_code: "0",
+        fid_div_cls_code: "0", fid_rsfl_rate1: "", fid_rsfl_rate2: "" },
+      "FHPST01700000", MOVERS_TTL,
+    );
+    return outRows(data, "output")
+      .filter((r) => String(r.stck_shrn_iscd || "").trim())
+      .map((r) => ({
+        code: String(r.stck_shrn_iscd).trim(),
+        name: String(r.hts_kor_isnm || "").trim(),
+        rank: numOrNull(r.data_rank),
+        price: numOrNull(r.stck_prpr),
+        amt: signPct(r, "prdy_vrss_sign", numOrNull(r.prdy_vrss)),
+        pct: signPct(r, "prdy_vrss_sign", numOrNull(r.prdy_ctrt)),
+        volume: numOrNull(r.acml_vol),
+        high: numOrNull(r.stck_hgpr),
+        low: numOrNull(r.stck_lwpr),
+        source: "KIS",
+      }));
+  });
+  return rows.slice(0, Math.max(1, Math.min(limit, MOVERS_MAX)));
+}
+
+function investorSide(r, prefix) {
+  return { qty: numOrNull(r[`${prefix}_ntby_qty`]), amt: numOrNull(r[`${prefix}_ntby_tr_pbmn`]) };
+}
+
+/* 시장 전체의 개인 · 외국인 · 기관 일별 순매수.
+
+   FID_INPUT_DATE_1 이 **가장 최근 날짜**이고 거기서 과거로 300영업일이
+   한 번에 온다 (2026-09-17 실측). 30일치도 호출 한 번이다.
+   KIS 는 최근 → 과거 순으로 주는데, 추이선은 왼쪽이 과거여야 해서
+   여기서 뒤집어 돌려준다.                                                */
+async function fetchInvestorFlow(cfg, env, market = "KOSPI", days = INVESTOR_FLOW_DAYS) {
+  const iscd1 = market === "KOSDAQ" ? "KSQ" : "KSP";
+  const iscd = market === "KOSDAQ" ? "1001" : "0001";
+  const rows = await memo(`INVFLOW:${market}`, INVESTOR_FLOW_TTL, async () => {
+    const today = ymd(new Date());
+    const data = await kisGet(
+      cfg, env,
+      "/uapi/domestic-stock/v1/quotations/inquire-investor-daily-by-market",
+      { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: iscd,
+        FID_INPUT_DATE_1: today, FID_INPUT_ISCD_1: iscd1,
+        FID_INPUT_DATE_2: today, FID_INPUT_ISCD_2: iscd },
+      "FHPTJ04040000", INVESTOR_FLOW_TTL,
+    );
+    const list = outRows(data, "output")
+      .filter((r) => String(r.stck_bsop_date || "").trim().length === 8)
+      .map((r) => {
+        const d = String(r.stck_bsop_date).trim();
+        return {
+          date: `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`,
+          index: numOrNull(r.bstp_nmix_prpr),
+          indexAmt: signPct(r, "prdy_vrss_sign", numOrNull(r.bstp_nmix_prdy_vrss)),
+          indexPct: signPct(r, "prdy_vrss_sign", numOrNull(r.bstp_nmix_prdy_ctrt)),
+          retail: investorSide(r, "prsn"),
+          foreign: investorSide(r, "frgn"),
+          inst: investorSide(r, "orgn"),
+          source: "KIS",
+        };
+      });
+    list.reverse();                      // 과거 → 최근
+    return list;
+  });
+  const want = Math.max(1, Math.min(days, rows.length));
+  return rows.slice(rows.length - want);
+}
+
+/* 외국인 · 기관 순매수(순매도) 상위.
+
+   ⚠️ **가집계다.** KIS 공식 설명에 "증권사 직원이 장중에 집계/입력한 자료를
+   단순 누계한 수치" 라고 적혀 있다. 입력 시각은 외국인 09:30·11:20·13:20·14:30,
+   기관 10:00·11:20·13:20·14:30 (±10분). 마감 뒤 확정치와 다를 수 있다.     */
+async function fetchInvestorTop(cfg, env, direction = "buy", market = "all",
+                                by = "qty", limit = 10) {
+  const iscd = market && market !== "all"
+    ? (SECTOR_MARKETS.find(([, n]) => n === market) || [])[3] || "0000"
+    : "0000";
+  const sort = direction === "sell" ? "1" : "0";     // 0 순매수상위 · 1 순매도상위
+  const div = by === "amt" ? "1" : "0";              // 0 수량정렬 · 1 금액정렬
+  const out = {};
+  const errors = {};
+  // FID_ETC_CLS_CODE — 0 전체 · 1 외국인 · 2 기관계 · 3 기타
+  for (const [who, etc] of [["foreign", "1"], ["inst", "2"]]) {
+    try {
+      const rows = await memo(`INVTOP:${who}:${sort}:${div}:${iscd}`, INVESTOR_TOP_TTL, async () => {
+        const data = await kisGet(
+          cfg, env,
+          "/uapi/domestic-stock/v1/quotations/foreign-institution-total",
+          { FID_COND_MRKT_DIV_CODE: "V", FID_COND_SCR_DIV_CODE: "16449",
+            FID_INPUT_ISCD: iscd, FID_DIV_CLS_CODE: div,
+            FID_RANK_SORT_CLS_CODE: sort, FID_ETC_CLS_CODE: etc },
+          "FHPTJ04400000", INVESTOR_TOP_TTL,
+        );
+        return outRows(data, "output")
+          .filter((r) => String(r.mksc_shrn_iscd || "").trim())
+          .map((r) => ({
+            code: String(r.mksc_shrn_iscd).trim(),
+            name: String(r.hts_kor_isnm || "").trim(),
+            price: numOrNull(r.stck_prpr),
+            amt: signPct(r, "prdy_vrss_sign", numOrNull(r.prdy_vrss)),
+            pct: signPct(r, "prdy_vrss_sign", numOrNull(r.prdy_ctrt)),
+            volume: numOrNull(r.acml_vol),
+            // net — 이 줄이 무엇으로 줄 세워졌는지에 해당하는 값
+            net: investorSide(r, who === "foreign" ? "frgn" : "orgn"),
+            foreign: investorSide(r, "frgn"),
+            inst: investorSide(r, "orgn"),
+            source: "KIS",
+          }));
+      });
+      out[who] = rows.slice(0, Math.max(1, Math.min(limit, MOVERS_MAX)));
+    } catch (e) {
+      errors[who] = safeMessage(e, env);
+    }
+  }
+  return { data: out, errors };
+}
 
 /* ── 뉴스 ───────────────────────────────────────────────────
 
@@ -2320,6 +2538,89 @@ export default {
           return fail("code 는 6자리 숫자여야 합니다.", 400);
         }
         return json({ ok: true, data: await fetchPrice(cfg, env, code) });
+      }
+
+      if (route === "sectors") {
+        const want = (url.searchParams.get("market") || "all").trim().toUpperCase();
+        const markets = want === "ALL" || want === "" ? null : [want];
+        const names = SECTOR_MARKETS.map(([, n]) => n);
+        if (markets && !names.includes(markets[0])) {
+          return fail(`market 은 ${names.join(", ")} 중 하나여야 합니다.`, 400);
+        }
+        const { data, errors } = await fetchSectors(cfg, env, markets);
+        return json({
+          ok: data.length > 0,
+          data,
+          errors: Object.keys(errors).length ? errors : null,
+          meta: {
+            count: data.length,
+            markets: markets || names,
+            // 단위는 화면이 되묻지 않게 응답에 적어 보낸다
+            volumeUnit: "천주", valueUnit: "백만원",
+            cacheTtl: SECTOR_TTL,
+          },
+        });
+      }
+
+      if (route === "movers") {
+        const dir = (url.searchParams.get("dir") || "up").trim().toLowerCase();
+        if (dir !== "up" && dir !== "down") {
+          return fail("dir 은 up 또는 down 이어야 합니다.", 400);
+        }
+        let market = (url.searchParams.get("market") || "all").trim().toUpperCase();
+        if (market === "ALL" || market === "") market = "all";
+        const limit = parseInt(url.searchParams.get("limit") || String(MOVERS_MAX), 10) || MOVERS_MAX;
+        const rows = await fetchMovers(cfg, env, dir, market, limit);
+        return json({
+          ok: true,
+          data: rows,
+          meta: { count: rows.length, dir, market, max: MOVERS_MAX, cacheTtl: MOVERS_TTL },
+        });
+      }
+
+      if (route === "investor-flow") {
+        const market = (url.searchParams.get("market") || "KOSPI").trim().toUpperCase();
+        if (market !== "KOSPI" && market !== "KOSDAQ") {
+          return fail("market 은 KOSPI 또는 KOSDAQ 이어야 합니다.", 400);
+        }
+        const days = parseInt(url.searchParams.get("days") || String(INVESTOR_FLOW_DAYS), 10)
+                     || INVESTOR_FLOW_DAYS;
+        const rows = await fetchInvestorFlow(cfg, env, market, days);
+        return json({
+          ok: rows.length > 0,
+          data: rows,
+          meta: { count: rows.length, market, days, order: "과거→최근",
+                  qtyUnit: "천주", amtUnit: "백만원", cacheTtl: INVESTOR_FLOW_TTL },
+        });
+      }
+
+      if (route === "investor-top") {
+        const dir = (url.searchParams.get("dir") || "buy").trim().toLowerCase();
+        if (dir !== "buy" && dir !== "sell") {
+          return fail("dir 은 buy 또는 sell 이어야 합니다.", 400);
+        }
+        const by = (url.searchParams.get("by") || "qty").trim().toLowerCase();
+        if (by !== "qty" && by !== "amt") {
+          return fail("by 는 qty 또는 amt 여야 합니다.", 400);
+        }
+        let market = (url.searchParams.get("market") || "all").trim().toUpperCase();
+        if (market === "ALL" || market === "") market = "all";
+        const limit = parseInt(url.searchParams.get("limit") || "10", 10) || 10;
+        const { data, errors } = await fetchInvestorTop(cfg, env, dir, market, by, limit);
+        return json({
+          ok: Object.keys(data).length > 0,
+          data,
+          errors: Object.keys(errors).length ? errors : null,
+          meta: {
+            dir, by, market,
+            qtyUnit: "주", amtUnit: "백만원",
+            // 확정치가 아니다. 화면에 그대로 적어 주어야 한다
+            provisional: true,
+            note: "증권사 집계 가집계치 — 외국인 09:30·11:20·13:20·14:30, "
+                + "기관 10:00·11:20·13:20·14:30 에 갱신 (±10분)",
+            cacheTtl: INVESTOR_TOP_TTL,
+          },
+        });
       }
 
       if (route === "quotes") {

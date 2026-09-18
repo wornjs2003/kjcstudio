@@ -1125,6 +1125,262 @@ def fetch_quotes_multi(cfg, codes):
     return out, errors
 
 
+# ---------------------------------------------------------------- 업종 · 순위 · 투자자
+# 첫 화면의 「지금 뜨는 산업」 과 「외국인 · 기관 매매」 두 칸이 쓴다.
+# 값은 전부 2026-09-17 에 직접 호출해 확인했다. 응답 필드 이름과 실제 값은
+# docs/kis-sector-investor.md 에 적어 두었다. **추측으로 넣은 것은 없다.**
+#
+#   업종 등락률   inquire-index-category-price   FHPUP02140000
+#   상승/하락률   ranking/fluctuation            FHPST01700000
+#   투자자 추이   inquire-investor-daily-by-market FHPTJ04040000
+#   순매수 상위   foreign-institution-total      FHPTJ04400000
+
+# (KIS 시장구분, 우리가 쓰는 이름, 업종 기준 지수코드, 순위 API 의 종목코드)
+SECTOR_MARKETS = [
+    ("K", "KOSPI",  "0001", "0001"),
+    ("Q", "KOSDAQ", "1001", "1001"),
+]
+
+# FID_BLNG_CLS_CODE. 3 이 업종(산업별)이다. 0(전체) 으로 부르면 파생지수까지
+# 100개가 섞여 온다 — 2026-09-17 에 네 값을 다 불러보고 골랐다.
+SECTOR_BLNG = "3"
+
+# blng=3 인데도 업종이 아닌 것이 코스피 쪽에 둘 섞여 온다 (2026-09-17 실측).
+# 지수 상품이라 「지금 뜨는 산업」 에 올라오면 안 된다. 코스닥 쪽은 깨끗하다.
+SECTOR_SKIP = ["0244", "2283"]
+
+SECTOR_TTL = 60            # 업종 지수는 초 단위로 움직이지 않는다
+MOVERS_TTL = 30            # 상승률 순위는 장중에 자주 바뀐다
+MOVERS_MAX = 30            # KIS 가 한 번에 주는 행 수 (더 달라고 해도 30개다)
+INVESTOR_TOP_TTL = 120     # 가집계라 하루 네 번만 갱신된다 (아래 주석 참조)
+INVESTOR_FLOW_TTL = 600    # 일별 자료라 장중에 한 번 바뀐다
+INVESTOR_FLOW_DAYS = 30    # 화면이 보여주는 기간
+
+_sector_cache = {}
+_movers_cache = {}
+_inv_top_cache = {}
+_inv_flow_cache = {}
+
+
+def _ttl_get(store, key, ttl):
+    hit = store.get(key)
+    if hit and (time.time() - hit[0]) < ttl:
+        _stats["cache_hits"] += 1
+        return hit[1]
+    return None
+
+
+def _sign_pct(row, key_sign, value):
+    """KIS 는 등락률을 늘 양수로 주고 부호를 따로 준다 — 1상한 2상승 3보합 4하한 5하락.
+
+    ranking/fluctuation 은 이미 부호가 붙어 오지만 업종은 안 붙어 오는 날이
+    있어, 두 곳 모두 부호 칸을 보고 맞춘다.
+    """
+    if value is None:
+        return None
+    sign = str(row.get(key_sign) or "").strip()
+    if sign in ("4", "5") and value > 0:
+        return -value
+    return value
+
+
+def fetch_sectors(cfg, markets=None):
+    """업종별 등락률. 시장 하나에 KIS 호출 한 번이다."""
+    want = [m for m in SECTOR_MARKETS if not markets or m[1] in markets]
+    out, errors = [], {}
+    for mrkt, name, iscd, _rank_iscd in want:
+        cached = _ttl_get(_sector_cache, name, SECTOR_TTL)
+        if cached is not None:
+            out.extend(cached)
+            continue
+        try:
+            _stats["kis_calls"] += 1
+            data = kis_get(
+                cfg,
+                "/uapi/domestic-stock/v1/quotations/inquire-index-category-price",
+                {"FID_COND_MRKT_DIV_CODE": "U", "FID_INPUT_ISCD": iscd,
+                 "FID_COND_SCR_DIV_CODE": "20214", "FID_MRKT_CLS_CODE": mrkt,
+                 "FID_BLNG_CLS_CODE": SECTOR_BLNG},
+                "FHPUP02140000",
+            )
+        except RuntimeError as e:
+            errors[name] = safe_message(e)
+            continue
+        rows = []
+        for r in out_rows(data, "output2"):
+            code = (r.get("bstp_cls_code") or "").strip()
+            if not code or code in SECTOR_SKIP:
+                continue
+            rows.append({
+                "code": code,
+                "name": (r.get("hts_kor_isnm") or "").strip(),
+                "market": name,
+                "price": _num(r.get("bstp_nmix_prpr")),
+                "amt": _sign_pct(r, "prdy_vrss_sign", _num(r.get("bstp_nmix_prdy_vrss"))),
+                "pct": _sign_pct(r, "prdy_vrss_sign", _num(r.get("bstp_nmix_prdy_ctrt"))),
+                "volume": _num(r.get("acml_vol"), int),
+                "value": _num(r.get("acml_tr_pbmn"), int),
+                "volShare": _num(r.get("acml_vol_rlim")),
+                "valueShare": _num(r.get("acml_tr_pbmn_rlim")),
+                "source": "KIS",
+            })
+        _sector_cache[name] = (time.time(), rows)
+        out.extend(rows)
+    return out, errors
+
+
+def fetch_movers(cfg, direction="up", market="all", limit=MOVERS_MAX):
+    """등락률 순위. 한 번 부르면 30행이 온다 (더 달라고 해도 늘지 않는다)."""
+    iscd = "0000"
+    if market and market != "all":
+        iscd = next((m[3] for m in SECTOR_MARKETS if m[1] == market), "0000")
+    sort = "1" if direction == "down" else "0"
+    key = "%s:%s" % (sort, iscd)
+    rows = _ttl_get(_movers_cache, key, MOVERS_TTL)
+    if rows is None:
+        _stats["kis_calls"] += 1
+        data = kis_get(
+            cfg,
+            "/uapi/domestic-stock/v1/ranking/fluctuation",
+            # fid_prc_cls_code 는 0 이면 저가대비, 1 이면 전일종가대비다.
+            # 0 으로 두면 「저가에서 얼마나 올랐나」 로 줄이 세워져 등락률이
+            # 마이너스인 종목이 1위로 온다 (2026-09-17 실측). 1 이 맞다.
+            {"fid_cond_mrkt_div_code": "J", "fid_cond_scr_div_code": "20170",
+             "fid_input_iscd": iscd, "fid_rank_sort_cls_code": sort,
+             "fid_input_cnt_1": "0", "fid_prc_cls_code": "1",
+             "fid_input_price_1": "", "fid_input_price_2": "", "fid_vol_cnt": "",
+             "fid_trgt_cls_code": "0", "fid_trgt_exls_cls_code": "0",
+             "fid_div_cls_code": "0", "fid_rsfl_rate1": "", "fid_rsfl_rate2": ""},
+            "FHPST01700000",
+        )
+        rows = []
+        for r in out_rows(data, "output"):
+            code = (r.get("stck_shrn_iscd") or "").strip()
+            if not code:
+                continue
+            rows.append({
+                "code": code,
+                "name": (r.get("hts_kor_isnm") or "").strip(),
+                "rank": _num(r.get("data_rank"), int),
+                "price": _num(r.get("stck_prpr"), int),
+                "amt": _sign_pct(r, "prdy_vrss_sign", _num(r.get("prdy_vrss"), int)),
+                "pct": _sign_pct(r, "prdy_vrss_sign", _num(r.get("prdy_ctrt"))),
+                "volume": _num(r.get("acml_vol"), int),
+                "high": _num(r.get("stck_hgpr"), int),
+                "low": _num(r.get("stck_lwpr"), int),
+                "source": "KIS",
+            })
+        _movers_cache[key] = (time.time(), rows)
+    return rows[:max(1, min(limit, MOVERS_MAX))]
+
+
+def _investor_side(r, prefix):
+    return {
+        "qty": _num(r.get(prefix + "_ntby_qty"), int),
+        "amt": _num(r.get(prefix + "_ntby_tr_pbmn"), int),
+    }
+
+
+def fetch_investor_flow(cfg, market="KOSPI", days=INVESTOR_FLOW_DAYS):
+    """시장 전체의 개인 · 외국인 · 기관 일별 순매수.
+
+    FID_INPUT_DATE_1 이 **가장 최근 날짜**이고, 거기서 과거로 300영업일이
+    한 번에 온다 (2026-09-17 실측 — 20260917 로 부르니 20250630 까지 왔다).
+    그래서 30일치를 받는 데도 호출은 한 번이다.
+
+    **날짜 순서를 뒤집어 돌려준다.** KIS 는 최근 → 과거 순으로 주는데,
+    추이선은 왼쪽이 과거여야 해서 화면마다 뒤집으면 실수가 난다.
+    """
+    iscd_1 = "KSQ" if market == "KOSDAQ" else "KSP"
+    iscd = "1001" if market == "KOSDAQ" else "0001"
+    key = market
+    rows = _ttl_get(_inv_flow_cache, key, INVESTOR_FLOW_TTL)
+    if rows is None:
+        today = _today_kst()
+        _stats["kis_calls"] += 1
+        data = kis_get(
+            cfg,
+            "/uapi/domestic-stock/v1/quotations/inquire-investor-daily-by-market",
+            {"FID_COND_MRKT_DIV_CODE": "U", "FID_INPUT_ISCD": iscd,
+             "FID_INPUT_DATE_1": today, "FID_INPUT_ISCD_1": iscd_1,
+             "FID_INPUT_DATE_2": today, "FID_INPUT_ISCD_2": iscd},
+            "FHPTJ04040000",
+        )
+        rows = []
+        for r in out_rows(data, "output"):
+            date = (r.get("stck_bsop_date") or "").strip()
+            if len(date) != 8:
+                continue
+            rows.append({
+                "date": "%s-%s-%s" % (date[:4], date[4:6], date[6:]),
+                "index": _num(r.get("bstp_nmix_prpr")),
+                "indexAmt": _sign_pct(r, "prdy_vrss_sign", _num(r.get("bstp_nmix_prdy_vrss"))),
+                "indexPct": _sign_pct(r, "prdy_vrss_sign", _num(r.get("bstp_nmix_prdy_ctrt"))),
+                "retail": _investor_side(r, "prsn"),
+                "foreign": _investor_side(r, "frgn"),
+                "inst": _investor_side(r, "orgn"),
+                "source": "KIS",
+            })
+        rows.reverse()                       # 과거 → 최근
+        _inv_flow_cache[key] = (time.time(), rows)
+    want = max(1, min(days, len(rows)))
+    return rows[-want:]
+
+
+def fetch_investor_top(cfg, direction="buy", market="all", by="qty", limit=10):
+    """외국인 · 기관 순매수(순매도) 상위.
+
+    ⚠️ **가집계다.** KIS 공식 설명에 "증권사 직원이 장중에 집계/입력한 자료를
+    단순 누계한 수치" 라고 적혀 있고, 입력 시각은 외국인 09:30 · 11:20 ·
+    13:20 · 14:30, 기관 10:00 · 11:20 · 13:20 · 14:30 이다 (±10분).
+    장 마감 뒤 확정치와 다를 수 있으므로 화면에 「가집계」 임을 적는다.
+    """
+    iscd = "0000"
+    if market and market != "all":
+        iscd = next((m[3] for m in SECTOR_MARKETS if m[1] == market), "0000")
+    sort = "1" if direction == "sell" else "0"      # 0 순매수상위 · 1 순매도상위
+    div = "1" if by == "amt" else "0"               # 0 수량정렬 · 1 금액정렬
+    out, errors = {}, {}
+    # FID_ETC_CLS_CODE — 0 전체 · 1 외국인 · 2 기관계 · 3 기타
+    for who, etc in (("foreign", "1"), ("inst", "2")):
+        key = "%s:%s:%s:%s" % (who, sort, div, iscd)
+        rows = _ttl_get(_inv_top_cache, key, INVESTOR_TOP_TTL)
+        if rows is None:
+            try:
+                _stats["kis_calls"] += 1
+                data = kis_get(
+                    cfg,
+                    "/uapi/domestic-stock/v1/quotations/foreign-institution-total",
+                    {"FID_COND_MRKT_DIV_CODE": "V", "FID_COND_SCR_DIV_CODE": "16449",
+                     "FID_INPUT_ISCD": iscd, "FID_DIV_CLS_CODE": div,
+                     "FID_RANK_SORT_CLS_CODE": sort, "FID_ETC_CLS_CODE": etc},
+                    "FHPTJ04400000",
+                )
+            except RuntimeError as e:
+                errors[who] = safe_message(e)
+                continue
+            rows = []
+            for r in out_rows(data, "output"):
+                code = (r.get("mksc_shrn_iscd") or "").strip()
+                if not code:
+                    continue
+                rows.append({
+                    "code": code,
+                    "name": (r.get("hts_kor_isnm") or "").strip(),
+                    "price": _num(r.get("stck_prpr"), int),
+                    "amt": _sign_pct(r, "prdy_vrss_sign", _num(r.get("prdy_vrss"), int)),
+                    "pct": _sign_pct(r, "prdy_vrss_sign", _num(r.get("prdy_ctrt"))),
+                    "volume": _num(r.get("acml_vol"), int),
+                    # net — 이 줄이 무엇으로 줄 세워졌는지에 해당하는 값
+                    "net": _investor_side(r, "frgn" if who == "foreign" else "orgn"),
+                    "foreign": _investor_side(r, "frgn"),
+                    "inst": _investor_side(r, "orgn"),
+                    "source": "KIS",
+                })
+            _inv_top_cache[key] = (time.time(), rows)
+        out[who] = rows[:max(1, min(limit, MOVERS_MAX))]
+    return out, errors
+
 # ---------------------------------------------------------------- 저장 계층 (SQLite)
 # 배포본은 Cloudflare D1 을 쓰고, 로컬은 같은 구조를 SQLite 파일로 둔다.
 # 차트는 과거 데이터가 필요한데 볼 때마다 KIS 를 부르면 호출량을 감당할 수 없다.
@@ -1876,6 +2132,97 @@ class Handler(SimpleHTTPRequestHandler):
                 futures = fetch_futures(cfg)
                 self._send_json({"ok": bool(data), "data": data,
                                  "futures": futures, "errors": errors or None})
+                return
+
+            if route == "sectors":
+                want = (qs.get("market") or ["all"])[0].strip().upper()
+                markets = None if want in ("", "ALL") else [want]
+                if markets and markets[0] not in [m[1] for m in SECTOR_MARKETS]:
+                    self._send_json({
+                        "ok": False,
+                        "error": "market 은 %s 중 하나여야 합니다." %
+                                 ", ".join(m[1] for m in SECTOR_MARKETS),
+                    }, 400)
+                    return
+                data, errors = fetch_sectors(cfg, markets)
+                self._send_json({
+                    "ok": bool(data), "data": data, "errors": errors or None,
+                    "meta": {
+                        "count": len(data),
+                        "markets": markets or [m[1] for m in SECTOR_MARKETS],
+                        # 단위는 화면이 되묻지 않게 응답에 적어 보낸다
+                        "volumeUnit": "천주", "valueUnit": "백만원",
+                        "cacheTtl": SECTOR_TTL,
+                    },
+                })
+                return
+
+            if route == "movers":
+                direction = (qs.get("dir") or ["up"])[0].strip().lower()
+                if direction not in ("up", "down"):
+                    self._send_json({"ok": False, "error": "dir 은 up 또는 down 이어야 합니다."}, 400)
+                    return
+                market = (qs.get("market") or ["all"])[0].strip().upper()
+                market = "all" if market in ("", "ALL") else market
+                try:
+                    limit = int((qs.get("limit") or [str(MOVERS_MAX)])[0])
+                except ValueError:
+                    limit = MOVERS_MAX
+                rows = fetch_movers(cfg, direction, market, limit)
+                self._send_json({
+                    "ok": True, "data": rows,
+                    "meta": {"count": len(rows), "dir": direction, "market": market,
+                             "max": MOVERS_MAX, "cacheTtl": MOVERS_TTL},
+                })
+                return
+
+            if route == "investor-flow":
+                market = (qs.get("market") or ["KOSPI"])[0].strip().upper()
+                if market not in ("KOSPI", "KOSDAQ"):
+                    self._send_json({"ok": False, "error": "market 은 KOSPI 또는 KOSDAQ 이어야 합니다."}, 400)
+                    return
+                try:
+                    days = int((qs.get("days") or [str(INVESTOR_FLOW_DAYS)])[0])
+                except ValueError:
+                    days = INVESTOR_FLOW_DAYS
+                rows = fetch_investor_flow(cfg, market, days)
+                self._send_json({
+                    "ok": bool(rows), "data": rows,
+                    "meta": {"count": len(rows), "market": market, "days": days,
+                             "order": "과거→최근",
+                             "qtyUnit": "천주", "amtUnit": "백만원",
+                             "cacheTtl": INVESTOR_FLOW_TTL},
+                })
+                return
+
+            if route == "investor-top":
+                direction = (qs.get("dir") or ["buy"])[0].strip().lower()
+                if direction not in ("buy", "sell"):
+                    self._send_json({"ok": False, "error": "dir 은 buy 또는 sell 이어야 합니다."}, 400)
+                    return
+                by = (qs.get("by") or ["qty"])[0].strip().lower()
+                if by not in ("qty", "amt"):
+                    self._send_json({"ok": False, "error": "by 는 qty 또는 amt 여야 합니다."}, 400)
+                    return
+                market = (qs.get("market") or ["all"])[0].strip().upper()
+                market = "all" if market in ("", "ALL") else market
+                try:
+                    limit = int((qs.get("limit") or ["10"])[0])
+                except ValueError:
+                    limit = 10
+                data, errors = fetch_investor_top(cfg, direction, market, by, limit)
+                self._send_json({
+                    "ok": bool(data), "data": data, "errors": errors or None,
+                    "meta": {
+                        "dir": direction, "by": by, "market": market,
+                        "qtyUnit": "주", "amtUnit": "백만원",
+                        # 확정치가 아니다. 화면에 그대로 적어 주어야 한다
+                        "provisional": True,
+                        "note": "증권사 집계 가집계치 — 외국인 09:30·11:20·13:20·14:30, "
+                                "기관 10:00·11:20·13:20·14:30 에 갱신 (±10분)",
+                        "cacheTtl": INVESTOR_TOP_TTL,
+                    },
+                })
                 return
 
             if route == "quotes":
