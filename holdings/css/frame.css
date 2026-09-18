@@ -131,6 +131,19 @@ body {
 .kh-wl-c { font-size: 0.75rem; font-weight: 500; display: block; }
 .kh-wl-heart { color: var(--kh-text-dim); font-size: 0.9rem; width: 16px; text-align: center; }
 
+/* ── 즐겨찾기 하트 (2026-09-18 지시) ─────────
+   순위표와 관심 사이드바가 같은 모양을 쓴다. 담으면 노랑으로 채워진다.
+   목록 줄에는 커서 규칙이 따로 걸려 있어 여기서 되돌린다. */
+.kh-heart {
+  background: none; border: 0; padding: 2px 3px; line-height: 1;
+  font-size: 0.95rem; color: var(--kh-text-muted);
+  cursor: pointer; border-radius: 6px;
+}
+.kh-heart:hover { background: var(--kh-bg-surface); color: var(--kh-fav); }
+.kh-heart.is-on { color: var(--kh-fav); }
+
+.kh-wl-empty { padding: 14px 4px; font-size: 0.82rem; }
+
 .kh-side-add {
   display: flex; align-items: center; gap: 9px;
   padding: 11px 4px; font-size: 0.84rem; color: var(--kh-text-secondary);

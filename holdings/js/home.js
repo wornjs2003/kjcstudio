@@ -9,8 +9,9 @@ import { WATCHLIST, brandColor } from './data/market.js';
 import * as lastSeen from './store/last-seen.js';
 import { fetchCandles, createStockChart, maLegend } from './chart.js';
 import { color } from './theme.js';
-import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, dirClass, marketPhase }
-  from './utils/format.js';
+import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount,
+  dirClass, marketPhase } from './utils/format.js';
+import { favList, isFav, toggleFav, onFavChange } from './store/favorites.js';
 /* mountWatchSide · mountVBar 는 첫 화면에서 안 쓴다 (2026-09-17).
    관심 목록은 순위표의 「관심」 칩으로 들어갔고, 세로 아이콘 바는
    그만큼 오른쪽 칸을 넓히려고 감췄다. 다른 화면은 그대로 쓴다. */
@@ -141,7 +142,7 @@ function paintMkt() {
   const el = $('kh-mkt');
   if (!el) return;
   const phase = marketPhase();
-  const live = phase.id === 'regular';
+  const live = phase.id === 'regular' || phase.id === 'single';
 
   /* 시장 현황(상승·보합·하락 종목 수)을 장 상태 바로 옆에 둔다 (2026-09-15 지시).
      지수 조회 응답에 이미 들어 있어서 따로 부르지 않는다.
@@ -209,7 +210,9 @@ function badgeFor(i) {
      이 구분은 시세를 어느 시장 기준으로 받는지와 짝이 맞는다
      (정규장은 KRX, 그 밖은 통합 — CLAUDE.md 의 시세 표기 규칙). */
   const phase = marketPhase();
-  if (phase.id === 'regular') return { live: true, text: '실시간' };
+  /* 단일가(15:20~15:30)도 KRX 가 도는 시간이라 값이 움직인다.
+     애프터 준비(15:30~15:40)는 주문만 받고 체결이 없어 값이 멈춰 있다. */
+  if (phase.id === 'regular' || phase.id === 'single') return { live: true, text: '실시간' };
   if (phase.id === 'pre' || phase.id === 'after') return { live: false, text: '넥장' };
   return { live: false, text: '장마감' };
 }
@@ -632,12 +635,198 @@ function capOf(code) {
   return hit ? hit.cap : null;
 }
 
+/* ── 순위 단추 (2026-09-18 지시) ─────────────
+ *
+ * **KIS 순위 API 를 안 쓴다.** 넷 다 있지만 30행까지만 주고, 같은 값을 두
+ * 곳에서 받으면 어긋난다 (docs/data-sources.md 의 PER 71% 차이 사례).
+ * 시세 응답에 pct · volume · value 가 이미 다 들어 있어 여기서 줄만 세운다.
+ * 그래서 **단추를 눌러도 서버를 안 부르고**, 30행 제한도 없다.
+ *
+ * 급상승·급하락은 거래대금이 적은 종목을 뺀다. 100원이 130원 되면 +30% 라,
+ * 안 거르면 몇 십 원짜리가 위를 다 차지한다. 기준은 화면에 적는다 —
+ * 보고 고칠 수 있어야 한다.
+ */
+/* 거래대금은 멀티 조회의 value 를 쓰고, 없으면 현재가×거래량으로 어림한다.
+   paintVolBox 와 같은 계산이다. */
+const valueOf = (p) => (p ? (p.value ?? (p.price != null && p.volume != null
+  ? p.price * p.volume : null)) : null);
+
+/* 줄 세운 기준값을 화면에 보여준다 (2026-09-18 지시 —
+   "해당 칩을 클릭하면 해당값들이 보여줘야 할거같은데. 그래야 제대로 되는지
+   확인이 가능할거같아"). 「전일대비」 자리를 이 값이 대신한다.
+
+   급상승·급하락은 등락률로 세우는데 그것은 맨 오른쪽에 이미 있다. 대신
+   **걸러내는 기준인 거래대금**을 보여준다 — 왜 이 종목이 올라왔는지가 보인다. */
+const showValue = (code, p) => {
+  const won = valueOf(p);
+  return won == null ? '—' : fmtMoneyKr(Math.round(won / 1e8));
+};
+
+const SORTS = {
+  cap:  { label: '시가총액', key: null,
+          head: '시가총액', show: (code) => {
+            const c = capOf(code);
+            return c == null ? '—' : fmtMoneyKr(c);
+          } },
+  value:{ label: '거래대금', key: (p) => valueOf(p),
+          head: '거래대금', show: showValue },
+  vol:  { label: '거래량',   key: (p) => p.volume,
+          head: '거래량',   show: (code, p) => (p ? fmtShareCount(p.volume) : '—') },
+  up:   { label: '급상승',   key: (p) => p.pct,  dir: -1, minValue: true,
+          head: '거래대금', show: showValue },
+  down: { label: '급하락',   key: (p) => p.pct,  dir: 1,  minValue: true,
+          head: '거래대금', show: showValue },
+};
+
+/* 급상승·급하락에서 이보다 적게 거래된 종목은 뺀다 (지시 — 1000억) */
+const MIN_VALUE_WON = 1000 * 1e8;
+
+let sortBy = 'cap';
+
 function rowList() {
   if (!universe) return WATCHLIST.map((s, i) => ({ ...s, rank: i + 1 }));
-  return universe.map(x => ({
+
+  const base = universe.map(x => ({
     code: x.code, name: x.name, sector: '',
     brand: brandColor(x.code, x.name), rank: x.rank,
   }));
+
+  const sort = SORTS[sortBy];
+  if (!sort || !sort.key) return base;      // 시가총액은 목록 순서 그대로
+
+  /* 값이 아직 안 온 종목은 뒤로 보낸다. 0 으로 치면 「거래량 0위」 가 된다 */
+  const val = (s) => {
+    const p = rowPrices && rowPrices[s.code];
+    if (!p) return null;
+    if (sort.minValue) {
+      const v = valueOf(p);
+      if (!(v >= MIN_VALUE_WON)) return null;
+    }
+    const n = sort.key(p);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const dir = sort.dir ?? -1;               // 기본은 큰 것부터
+  return base
+    .map(s => ({ s, v: val(s) }))
+    .sort((a, b) => {
+      if (a.v == null && b.v == null) return a.s.rank - b.s.rank;
+      if (a.v == null) return 1;
+      if (b.v == null) return -1;
+      return (a.v - b.v) * dir;
+    })
+    .map(({ s }, i) => ({ ...s, rank: i + 1 }));
+}
+
+/* 단추를 누르면 줄 세우는 기준이 바뀐다. 서버는 안 부른다 —
+   이미 가진 시세로 다시 세우기만 한다. */
+function setupSorts() {
+  const host = $('kh-sorts');
+  if (!host) return;
+  host.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-sort]');
+    if (!b || b.dataset.sort === sortBy) return;
+    sortBy = b.dataset.sort;
+    host.querySelectorAll('[data-sort]').forEach(x =>
+      x.classList.toggle('is-active', x === b));
+    paintRows(rowPrices);
+  });
+}
+
+/* 지금 무엇을 보고 있는지 한 줄로 적는다 (2026-09-18 지시).
+ *
+ * **단추를 눌러도 서버를 안 부르므로 기다릴 일이 없다.** 대신 두 가지가
+ * 뒤처질 수 있어 그것을 적는다 —
+ *
+ *   값이 몇 초 전 것인가     시세는 돌아가며 받으므로 방금 값이 아니다
+ *   몇 종목이나 찼는가       200개가 다 차기 전에는 순서가 불완전하다
+ *
+ * 숫자만 보이면 지금 값인 줄로 읽힌다. 「140/200」 이 보이면 아직 순서를
+ * 믿을 때가 아니라는 걸 알 수 있다.
+ */
+let noteAt = 0;
+
+function paintSortNote() {
+  const el = $('kh-sort-note');
+  if (!el) return;
+  const s = SORTS[sortBy];
+
+  const total = (universe || []).length;
+  const got = (universe || []).filter(x => rowPrices && rowPrices[x.code]).length;
+
+  /* 마지막으로 값이 들어온 때부터 몇 초 지났나 */
+  const sec = lastTickAt ? Math.max(0, Math.round((Date.now() - lastTickAt) / 1000)) : null;
+
+  const bits = [`${s.label} 순`];
+  if (s.minValue) bits.push(`거래대금 ${fmtMoneyKr(MIN_VALUE_WON / 1e8)} 이상만`);
+
+  if (total && got < total) {
+    bits.push(`<b class="kh-accent">${got}/${total}종목 채우는 중</b>`);
+  } else if (sec != null && sec >= 3) {
+    bits.push(`<b class="${sec >= 60 ? 'kh-down' : 'kh-mut'}">${
+      sec >= 60 ? `${Math.floor(sec / 60)}분` : `${sec}초`} 전 값</b>`);
+  }
+  el.innerHTML = bits.join(' <span class="kh-mut">·</span> ');
+  noteAt = Date.now();
+}
+
+/* ── 즐겨찾기 하트 (2026-09-18 지시) ─────────
+ *
+ * 재권님 말씀 — "실시간 순위에 나오는 종목에 즐겨찾기 (하트모양) 이 있고
+ * 이걸 클릭하면 하트모양안에 색이 노란색으로 채워지고 즐겨찾기 목록에
+ * 들어가게 해야할거같아."
+ *
+ * 담긴 것은 `store/favorites.js` 한 곳에 있다. 관심 사이드바도 같은 것을
+ * 보므로 한쪽에서 누르면 다른 쪽이 따라간다.
+ */
+/* **칸을 늘리지 않는다** (2026-09-18 지시 — "하트대신에 숫자를 클릭하면
+   숫자 색이 바뀌는게 더 좋을거같아 추가 안해도 된깐").
+
+   하트 칸을 따로 두었더니 그만큼 종목명이 좁아졌다. 그래서 왼쪽 순위
+   숫자가 그 일을 한다 — 누르면 담기고, 담긴 종목은 숫자가 노래진다. */
+function paintFavCell(td) {
+  const on = isFav(td.dataset.fav);
+  td.classList.toggle('is-fav', on);
+  td.title = on ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기';
+}
+
+/* 그려 둔 순위 숫자에 동작을 건다. 표를 다시 그릴 때마다 부른다 */
+function bindHearts(root) {
+  if (!root) return;
+  root.querySelectorAll('.kh-rk[data-fav]').forEach(td => {
+    td.addEventListener('click', (e) => {
+      e.stopPropagation();          // 줄 고르기로 번지지 않게
+      toggleFav(td.dataset.fav, td.dataset.favName);
+    });
+  });
+}
+
+/* 목록이 바뀌면 화면의 모든 순위 숫자를 맞춘다 — 한 줄만 고치면 같은
+   종목이 다른 자리에 또 있을 때 어긋난다 */
+onFavChange(() => {
+  document.querySelectorAll('.kh-rk[data-fav]').forEach(paintFavCell);
+  paintFavCount();
+});
+
+/* 「N개 담음」 을 순위 단추 줄에 적는다. 담은 것이 어디 갔는지 보여야 한다 */
+function paintFavCount() {
+  const el = $('kh-fav-count');
+  if (!el) return;
+  const n = favList().length;
+  el.textContent = n ? `♥ ${n}개 담음` : '';
+}
+
+/* 지금 줄 세운 기준의 값 한 칸 */
+function sortCell(code, live) {
+  const s = SORTS[sortBy];
+  if (!s || !s.show) return '—';
+  return s.show(code, live);
+}
+
+/* 표 머리글도 기준에 따라 바뀐다 */
+function paintRowHead() {
+  const th = $('kh-th-metric');
+  if (th) th.textContent = (SORTS[sortBy] || {}).head || '전일대비';
 }
 
 function paintRows(priceMap) {
@@ -649,13 +838,15 @@ function paintRows(priceMap) {
        칸이 368px 로 좁아져 아홉 열이 안 들어갔고, 그 넷은 고른 종목 것만
        차트 옆 패널에 보여주기로 했다 (지시). */
     return `<tr data-code="${s.code}" class="${s.code === selectedCode ? 'is-active' : ''}">
-      <td class="kh-rk">${s.rank}</td>
+      <td class="kh-rk${isFav(s.code) ? ' is-fav' : ''}" data-fav="${s.code}"
+        data-fav-name="${s.name}" title="${isFav(s.code) ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기'}"
+        >${s.rank}</td>
       <td class="l"><span class="kh-nm">
         ${iconHtml(s)}
         <b>${s.name}</b></span></td>
       <td class="kh-num"><span
         >${live ? fmtWon(live.price) : '···'}</span></td>
-      <td class="kh-num ${cls}">${live ? fmtDeltaAmount(live.amt) : '—'}</td>
+      <td class="kh-num kh-metric">${sortCell(s.code, live)}</td>
       <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(live.pct) : '—'}</td>
     </tr>`;
   }).join('');
@@ -669,10 +860,19 @@ function paintRows(priceMap) {
      올림으로 바꾸니 목록을 훑기만 해도 차트가 계속 따라와서, 보려던
      종목에 닿기 전에 여러 번 바뀌었다. 누를 때만 바꾸면 그 일이 없다. */
   $('kh-rows').querySelectorAll('tr[data-code]').forEach(tr => {
-    tr.addEventListener('click', () => selectStock(tr.dataset.code));
+    tr.addEventListener('click', (e) => {
+      /* 순위 숫자는 담는 자리라 줄 고르기와 겹치지 않는다. 담으려다
+         차트까지 바뀌면 무엇을 눌렀는지 알 수 없다. */
+      if (e.target.closest('.kh-rk[data-fav]')) return;
+      selectStock(tr.dataset.code);
+    });
   });
+  bindHearts($('kh-rows'));
   watchRows();
+  paintRowHead();
   paintRowFoot();
+  paintSortNote();
+  paintFavCount();
 }
 
 function paintRowFoot() {
@@ -763,24 +963,46 @@ async function fetchVisible() {
   if (document.hidden) return;
   /* 관심종목은 늘 함께 받는다. 오른쪽 사이드바에 계속 떠 있으므로,
      빼면 그쪽만 옛 값으로 남아 순위표와 어긋난다. */
-  const watch = WATCHLIST.map(s => s.code);
-  const visible = [...new Set([...watch, ...visibleCodeList()])];
-  const want = visible.filter(c => !asked.has(c));
-  if (!want.length) return;
+  if (!nextCodes().length) return;
   fetching = true;
   try {
-    for (let i = 0; i < want.length; i += PRICE_CHUNK) {
-      const chunk = want.slice(i, i + PRICE_CHUNK);
+    for (;;) {
+      /* 덩어리마다 다시 고른다. 받는 동안 스크롤했으면 그쪽이 앞으로 온다 */
+      const want = nextCodes();
+      if (!want.length) break;
+      const chunk = want.slice(0, PRICE_CHUNK);
       chunk.forEach(c => asked.add(c));
       const map = await fetchQuotes(chunk);
-      if (!map) { chunk.forEach(c => asked.delete(c)); continue; }  // 실패하면 다시 묻게
+      if (!map) {
+        /* 실패한 것은 다시 묻게 되돌리고 이번 바퀴는 끝낸다.
+           같은 것을 곧바로 또 고르면 무한히 돈다. */
+        chunk.forEach(c => asked.delete(c));
+        break;
+      }
       applyPrices(map);
     }
   } finally {
     fetching = false;
-    /* 받는 동안 더 스크롤했을 수 있다. 남은 것이 있으면 한 번 더 돈다. */
-    if (visibleCodeList().some(c => !asked.has(c))) scheduleFetch();
+    /* 실패로 끊겼거나 그새 줄이 늘었으면 한 번 더 돈다 */
+    if (nextCodes().length) scheduleFetch();
   }
+}
+
+/* 다음에 받을 종목 — **보이는 것이 먼저, 그다음 순위표 나머지**다
+   (2026-09-18 지시).
+
+   순위 단추(거래대금 · 거래량 · 급상승 · 급하락)가 200종목 전체에서 줄을
+   세우려면 값이 다 있어야 한다. 그런데 처음부터 200개를 부르면 첫 화면이
+   한 바퀴(30종목씩 일곱 번)를 기다린다. 그래서 순서를 둔다 — 보이는 줄을
+   먼저 채우고, 나머지를 뒤에서 이어 받는다. **첫 화면 체감은 전과 같다.**
+
+   그 전에는 보이는 줄만 받았다. 그래서 단추를 눌러도 받아 둔 스무남은
+   종목 안에서만 줄이 섰다 (2026-09-18 실측 — 36초가 지나도 23/200). */
+function nextCodes() {
+  const watch = WATCHLIST.map(s => s.code);
+  const rest = (universe || []).map(x => x.code);
+  return [...new Set([...watch, ...visibleCodeList(), ...rest])]
+    .filter(c => !asked.has(c));
 }
 
 /* 새로 받은 값을 모으고 양쪽 화면에 반영한다. */
@@ -845,8 +1067,10 @@ function paintOneRow(code, live) {
     const cls = dirClass(live.pct);
     tr.children[2].innerHTML =
       `<span>${fmtWon(live.price)}</span>`;
-    tr.children[3].className = 'kh-num ' + cls;
-    tr.children[3].textContent = fmtDeltaAmount(live.amt);
+    /* 「전일대비」 자리에는 지금 줄 세운 기준값이 온다. 오르내림이 아니라
+       크기라서 등락 색을 입히지 않는다. */
+    tr.children[3].className = 'kh-num kh-metric';
+    tr.children[3].textContent = sortCell(code, live);
     tr.children[4].className = 'kh-num ' + cls;
     tr.children[4].style.fontWeight = '500';
     tr.children[4].textContent = fmtPct(live.pct);
@@ -893,7 +1117,10 @@ async function rotateTick() {
    다음 차례까지 기다리면 멈춘 값을 한동안 보게 된다. */
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
-  asked.clear();
+  /* **보이는 줄만** 다시 받는다. 통째로 비우면 탭을 오갈 때마다
+     200종목 한 바퀴(30종목씩 일곱 번)가 또 돈다 (2026-09-18). */
+  WATCHLIST.forEach(s => asked.delete(s.code));
+  visibleCodeList().forEach(c => asked.delete(c));
   scheduleFetch();
   paintBigChart();        // 그 사이 장이 움직였을 수 있다
 });
@@ -1066,6 +1293,9 @@ setInterval(paintClock, 30000);
 paintMkt();
 setInterval(paintMkt, 30000);
 setupIxChips();
+setupSorts();
+/* 몇 초 전 값인지는 가만히 있어도 늘어난다. 1초마다 다시 적는다 */
+setInterval(() => { if (!document.hidden) paintSortNote(); }, 1000);
 mountIndicatorMenu(document.querySelector('.kh-ind-menu'));
 paintBigPeriods();
 

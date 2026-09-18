@@ -5,7 +5,8 @@
    못 받으면 '—' 나 '연결 예정' 이 남습니다. 예시 숫자는 두지 않습니다.
    ========================================================================== */
 
-import { WATCHLIST, PRIORITY_CODES } from '../data/market.js';
+import { WATCHLIST, PRIORITY_CODES, brandColor } from '../data/market.js';
+import { favList, toggleFav, onFavChange } from '../store/favorites.js';
 import * as lastSeen from '../store/last-seen.js';
 import { fetchLivePrices, fetchLiveIndices, applyLiveToStock } from '../data/live.js';
 import { fmtWon, fmtPct, fmtNum, dirClass, fmtDeltaAmount } from '../utils/format.js';
@@ -33,8 +34,8 @@ export function mountWatchSide(el, { activeCode } = {}) {
         한 줄로 알려줍니다.</div>
     </div>
 
-    <div class="kh-side-title">관심 주식 TOP ${WATCHLIST.length}</div>
-    <div class="kh-side-sub">관심 그룹에 담아보세요</div>
+    <div class="kh-side-title" id="kh-side-title"></div>
+    <div class="kh-side-sub">순위표의 하트를 누르면 여기에 담깁니다</div>
 
     <div class="kh-wl-list"></div>
 
@@ -45,9 +46,21 @@ export function mountWatchSide(el, { activeCode } = {}) {
   `;
 
   const list = el.querySelector('.kh-wl-list');
+  const title = el.querySelector('#kh-side-title');
 
-  /* 줄은 한 번만 만든다 */
-  list.innerHTML = WATCHLIST.map(s => `
+  /* **목록은 즐겨찾기가 정한다** (2026-09-18 지시).
+     순위표의 하트와 같은 저장을 보므로, 거기서 담으면 여기에 들어온다.
+     전에는 `WATCHLIST` 여덟이 박혀 있어 화면에서 늘리거나 줄일 수 없었다. */
+  function drawList() {
+    const favs = favList();
+    if (title) title.textContent = `관심 주식 ${favs.length}`;
+    if (!favs.length) {
+      list.innerHTML = '<div class="kh-wl-empty kh-mut">담은 종목이 없습니다</div>';
+      return;
+    }
+    list.innerHTML = favs.map(f => {
+      const s = { code: f.code, name: f.name, brand: brandColor(f.code, f.name) };
+      return `
     <a class="kh-wl ${s.code === activeCode ? 'is-active' : ''}"
        data-code="${s.code}" href="./stock.html?code=${s.code}">
       ${iconHtml(s)}
@@ -56,27 +69,48 @@ export function mountWatchSide(el, { activeCode } = {}) {
         <span class="kh-wl-v kh-num">—</span>
         <span class="kh-wl-c kh-num kh-mut"></span>
       </span>
-      <span class="kh-wl-heart">♡</span>
-    </a>`).join('');
+      <button type="button" class="kh-wl-heart kh-heart is-on"
+        data-fav="${s.code}" data-fav-name="${s.name}"
+        title="즐겨찾기에서 빼기">♥</button>
+    </a>`;
+    }).join('');
+
+    /* 하트를 누르면 목록에서 빠진다. 줄을 누르면 종목 화면으로 가므로
+       여기서 멈춰 세운다. */
+    list.querySelectorAll('.kh-heart[data-fav]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleFav(btn.dataset.fav, btn.dataset.favName);
+      });
+    });
+  }
+  drawList();
+
+  /* 순위표에서 담거나 뺐을 때도 여기가 따라간다 */
+  onFavChange(() => { drawList(); render(lastMap); });
 
   /* 줄마다 마지막으로 그린 값. 같으면 손대지 않는다.
      예전에는 update 때마다 목록 전체를 innerHTML 로 다시 썼다. 시세를 0.2초마다
      받게 되면서 값이 그대로인데도 계속 다시 그려졌고, 깜빡임 표시가 매번 돌아
      글자가 쉬지 않고 흔들렸다 (2026-09-14 지적). */
   const shown = {};
+  let lastMap = null;          // 목록을 다시 그린 뒤 값을 되살릴 때 쓴다
 
   function render(priceMap) {
     if (!priceMap) return;
-    for (const s of WATCHLIST) {
+    lastMap = priceMap;
+    for (const s of favList()) {
       const live = priceMap[s.code];
       if (!live || live.price == null) continue;
 
-      const stamp = `${live.price}|${live.pct}`;
-      if (shown[s.code] === stamp) continue;
-      shown[s.code] = stamp;
-
       const row = list.querySelector(`a[data-code="${s.code}"]`);
       if (!row) continue;
+
+      const stamp = `${live.price}|${live.pct}`;
+      if (shown[s.code] === stamp && row.dataset.painted) continue;
+      shown[s.code] = stamp;
+      row.dataset.painted = '1';
       const cls = dirClass(live.pct);
       const v = row.querySelector('.kh-wl-v');
       const c = row.querySelector('.kh-wl-c');

@@ -235,12 +235,18 @@
           <button class="kh-tab is-active">실시간 순위</button>
           <span class="kh-fold">▤ 요약 접기</span>
         </div>
-        <div class="kh-chips">
-          <button class="kh-chip is-active">거래대금</button>
-          <button class="kh-chip">거래량</button>
-          <button class="kh-chip">급상승</button>
-          <button class="kh-chip">급하락</button>
+        <div class="kh-chips" id="kh-sorts">
+          <button class="kh-chip is-active" data-sort="cap">시가총액</button>
+          <button class="kh-chip" data-sort="value">거래대금</button>
+          <button class="kh-chip" data-sort="vol">거래량</button>
+          <button class="kh-chip" data-sort="up">급상승</button>
+          <button class="kh-chip" data-sort="down">급하락</button>
+          <!-- 즐겨찾기로 담은 개수. 하트를 눌렀을 때 어디로 갔는지 보인다 -->
+          <span class="kh-fav-count" id="kh-fav-count"></span>
         </div>
+        <!-- 지금 어느 기준으로 줄 세웠는지, 값이 몇 분 전 것인지 적는다.
+             급상승·급하락은 거래대금이 적은 종목을 빼므로 그 기준도 함께. -->
+        <div class="kh-sort-note" id="kh-sort-note"></div>
         <div class="kh-asof" id="kh-asof">· 오늘 기준</div>
         <!-- 표는 제 안에서 스크롤된다. 페이지가 통째로 내려가면
              지수와 차트가 화면 밖으로 밀려난다 (2026-09-14 지시) -->
@@ -248,7 +254,9 @@
           <table>
             <thead>
               <tr>
-                <th></th><th class="l">종목</th><th>현재가</th><th>전일대비</th><th>등락률</th>
+                <!-- 넷째 칸의 이름은 고른 순위 단추에 따라 바뀐다 (home.js 의 paintRowHead) -->
+                <th></th><th class="l">종목</th><th>현재가</th>
+                <th id="kh-th-metric">시가총액</th><th>등락률</th>
               </tr>
             </thead>
             <tbody id="kh-rows"></tbody>

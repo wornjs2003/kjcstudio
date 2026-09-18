@@ -178,6 +178,35 @@
 .kh-rank-card tbody tr.is-active td:first-child { color: var(--kh-accent); font-weight: 700; }
 .kh-rank-card tbody tr + tr td { border-top: 1px solid var(--kh-border); }
 .kh-rk { width: 20px; color: var(--kh-text-muted); font-size: 0.8rem; }
+
+/* ── 즐겨찾기 = 순위 숫자 (2026-09-18 지시) ───
+   칸을 하나 더 만들면 그만큼 종목명이 좁아진다. 그래서 왼쪽 순위 숫자가
+   그 일을 맡는다 — 누르면 담기고, 담긴 종목은 숫자가 노래진다.
+   줄 전체에 커서 규칙(cursor:default)이 걸려 있어 여기만 되돌린다. */
+/* 선택자를 길게 쓰는 이유 — `frame.css` 의 아래 규칙이 **순위표 첫 칸의
+   색을 못박고 있다.** 짧게 `.kh-rk.is-fav` 로 쓰면 굵기만 먹고 색은 안 먹는다
+   (2026-09-18 실측 — 담은 줄이 회색 `#8b95a1` 그대로였다).
+
+       .kh-side-wrap tbody td:nth-child(1) { color: var(--kh-text-muted) }
+       클래스 1 + 요소 2 + 의사클래스 1 = (0,2,2)  ←  `.kh-rk.is-fav` 는 (0,2,0)
+
+   같은 선언 안의 `font-weight` 는 저쪽에 없어서 먹었다. **한쪽만 먹는 것이
+   특이도 문제의 표시다.** */
+.kh-rank-card tbody td.kh-rk[data-fav] { cursor: pointer; }
+.kh-rank-card tbody td.kh-rk[data-fav]:hover { color: var(--kh-fav); }
+/* `tr` 를 한 번 더 적는 것은 **고른 줄 때문**이다. 위 `tr.is-active
+   td:first-child` 가 (0,3,3) 이라, 요소를 하나 더해 (0,3,4) 로 넘어서야
+   고른 줄에서도 담은 표시가 보인다. 고른 줄인 것은 연한 바탕과 왼쪽
+   파란 막대가 따로 알린다. */
+.kh-rank-card tbody tr td.kh-rk.is-fav { color: var(--kh-fav); font-weight: 700; }
+
+/* 줄 세운 기준값 — 오르내림이 아니라 크기라서 등락 색을 입히지 않는다 */
+.kh-metric { color: var(--kh-text-secondary); }
+
+/* 담은 개수 — 순위 단추 오른쪽 끝 */
+.kh-fav-count {
+  margin-left: auto; font-size: 0.76rem; color: var(--kh-fav); font-weight: 500;
+}
 .kh-nm { display: flex; align-items: center; gap: 10px; }
 .kh-nm .kh-ic { width: 28px; height: 28px; font-size: 0.6rem; }
 .kh-nm b { font-weight: 500; }
@@ -212,9 +241,10 @@
 }
 @media (max-width: 700px) {
   .kh-igrid { grid-template-columns: 1fr; }
-  /* 좁은 화면에서는 거래대금부터 감춘다. 전일대비 열이 생기면서 한 칸 밀렸다.
-     5 로 두면 등락률까지 잘려서 오르내림을 알 수 없게 된다 (2026-09-14). */
-  .kh-rank-card th:nth-child(n+6), .kh-rank-card td:nth-child(n+6) { display: none; }
+  /* 좁은 화면에서는 넷째 칸(줄 세운 기준값)을 감춘다.
+     첫째 칸(순위 숫자)은 담고 빼는 자리라 남긴다 (2026-09-18).
+     등락률까지 자르면 오르내림을 알 수 없으므로 그것은 건드리지 않는다. */
+  .kh-rank-card th:nth-child(4), .kh-rank-card td:nth-child(4) { display: none; }
 }
 
 /* ══ 지수 영역 (2026-09-14 개편) ═══════════════════════════
@@ -602,3 +632,14 @@
 .kh-ix-scroll .kh-ix:first-child { border-top: 0; }
 .kh-ix-scroll .kh-ix-h { flex: 1; min-width: 0; }
 .kh-ix-scroll .kh-ix-b { margin-left: auto; }
+
+
+/* 순위를 무엇으로 세웠는지 적는 줄 (2026-09-18).
+   급상승·급하락의 거르는 기준과, 값이 묵었으면 몇 분 전인지도 여기 나온다. */
+.kh-sort-note {
+  padding: 0 14px 8px;
+  font-size: 0.74rem; color: var(--kh-text-muted);
+}
+.kh-sort-note b { font-weight: 600; }
+/* 아직 채우는 중 — 파랑. 다 차면 사라진다 */
+.kh-sort-note .kh-accent { color: var(--kh-accent); }
