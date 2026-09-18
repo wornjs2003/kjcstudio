@@ -129,19 +129,29 @@ _token_lock = threading.Lock()
 #   전에는 TTL 10초 < 갱신 15초라 부르러 올 때마다 이미 만료돼 있어서
 #   캐시가 사실상 놀고 있었다 (적중률 18%).
 #
-# 갈래는 js/components/frame.js 와 짝을 이룬다. FAST_CODES 는 그쪽
-# PRIORITY_CODES 와 같아야 한다.
-FAST_CODES = {"005930", "000660"}   # 5초마다 갱신 — 삼성전자 · SK하이닉스
-PRICE_CACHE_TTL_FAST = 4            # 빠른 갈래 (갱신 5초)
-PRICE_CACHE_TTL = 25                # 느린 갈래 · 지수 (갱신 30초)
+# ── 모든 종목이 같은 수명을 쓴다 (2026-09-18 지시) ──
+#
+# 재권님 말씀 — "삼성전자 하이닉스도 같은값이여야 할거같은데
+# **모든값은 통일해야해**".
+#
+# 전에는 삼성전자·SK하이닉스만 4초, 나머지는 25초였다. 그러면 **같은 화면에서
+# 종목마다 기준 시각이 다르다** — 순위표처럼 등락률을 나란히 놓고 보는 자리에서
+# 그 둘만 먼저 움직인 것처럼 보인다.
+#
+# 「시세 표기 규칙」이 정규장 중 KRX · 마감 후 넥스트레이드로 기준을 통일해 둔
+# 것과 같은 이야기다 — **기준이 섞이면 무엇을 보고 있는지 알 수 없다.**
+#
+# 그래서 `FAST_CODES` 와 `PRICE_CACHE_TTL_FAST` 를 없앴다. 복제가 세 곳
+# (여기 · kis-worker.js · frame.js 의 PRIORITY_CODES)이었는데 한꺼번에 사라졌다.
+PRICE_CACHE_TTL = 25                # 모든 종목 · 지수 (화면 갱신 30초)
 _price_cache = {}          # code -> (저장시각, 데이터)
 _cache_lock = threading.Lock()
 _stats = {"kis_calls": 0, "cache_hits": 0}
 
 
 def _cache_ttl(code):
-    """종목이 어느 갈래인지에 따라 캐시 수명을 정한다."""
-    return PRICE_CACHE_TTL_FAST if code in FAST_CODES else PRICE_CACHE_TTL
+    """캐시 수명. **모든 종목이 같다** (2026-09-18 지시). 위 주석 참고."""
+    return PRICE_CACHE_TTL
 
 
 def _cache_get(code):
@@ -247,8 +257,7 @@ def usage_stats():
         "cacheHits": _stats["cache_hits"],
         "totalCalls": _stats["kis_calls"],
         "priceCacheTtl": PRICE_CACHE_TTL,
-        "priceCacheTtlFast": PRICE_CACHE_TTL_FAST,
-        "fastCodes": sorted(FAST_CODES),
+
     }
 
 
@@ -2472,7 +2481,6 @@ class Handler(SimpleHTTPRequestHandler):
                         "fromCache": len(codes) - called,
                         "kisCalls": called,
                         "cacheTtl": PRICE_CACHE_TTL,
-                        "cacheTtlFast": PRICE_CACHE_TTL_FAST,
                         "totalKisCalls": _stats["kis_calls"],
                     },
                 })

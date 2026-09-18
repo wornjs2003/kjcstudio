@@ -48,7 +48,7 @@ PAIRS = [
     ("차트 시장구분",        "MARKET_DIV_CHART",    "MARKET_DIV_CHART",     None),
     ("분봉 시작 시각",       "MINUTE_DAY_START",    "MINUTE_DAY_START",     None),
     ("분봉 끝 시각",         "MINUTE_DAY_END",      "MINUTE_DAY_END",       None),
-    ("시세 캐시 (빠름)",     "PRICE_CACHE_TTL_FAST", "QUOTE_CACHE_TTL_FAST", None),
+    # 「빠른 갈래」 는 2026-09-18 에 없앴다 — 모든 종목이 같은 수명을 쓴다
     ("시세 캐시 (느림)",     "PRICE_CACHE_TTL",     "QUOTE_CACHE_TTL",      None),
     ("종목 차트 캐시",       "INDEX_CHART_TTL",     "CHART_CACHE_TTL",      None),
     ("지수 추이 캐시",       "INDEX_CHART_TTL",     "SERIES_TTL",           None),

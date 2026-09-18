@@ -88,10 +88,12 @@ const MINUTE_DAY_END = 20 * 60;
 //
 // TTL 은 화면 갱신 주기보다 1~5초 짧게 잡는다. 그래야 자기 탭은 늘 새 값을 받고,
 // 같은 종목을 거의 동시에 묻는 다른 탭만 캐시가 받아낸다.
-// 갈래는 js/components/frame.js 의 PRIORITY_CODES 와 짝을 이룬다.
-const FAST_CODES = new Set(["005930", "000660"]);   // 5초마다 갱신 — 삼성전자 · SK하이닉스
-const QUOTE_CACHE_TTL_FAST = 4;                     // 빠른 갈래 (갱신 5초)
-const QUOTE_CACHE_TTL = 25;                         // 느린 갈래 · 지수 (갱신 30초)
+// ── 모든 종목이 같은 수명을 쓴다 (2026-09-18 지시) ──
+//
+// 재권님 말씀 — "삼성전자 하이닉스도 같은값이여야 할거같은데 모든값은 통일해야해".
+// 전에는 그 둘만 4초, 나머지는 25초라 **같은 화면에서 종목마다 기준 시각이
+// 달랐다.** 자세한 것은 server/kis_proxy.py 의 PRICE_CACHE_TTL 주석에 있다.
+const QUOTE_CACHE_TTL = 25;                         // 모든 종목 · 지수 (화면 갱신 30초)
 
 /* 지수·선물 캐시.
 
@@ -151,9 +153,9 @@ const SERIES_TTL = 600;
 const INDEX_TTL = 5;
 const FUTURES_TTL = 1;
 
-/* 종목이 어느 갈래인지에 따라 캐시 수명을 정한다. */
-function quoteCacheTtl(code) {
-  return FAST_CODES.has(code) ? QUOTE_CACHE_TTL_FAST : QUOTE_CACHE_TTL;
+/* 캐시 수명. **모든 종목이 같다** (2026-09-18 지시). 위 주석 참고. */
+function quoteCacheTtl() {
+  return QUOTE_CACHE_TTL;
 }
 // 지수 일봉은 자주 바뀌지 않으므로 길게 캐시한다.
 const CHART_CACHE_TTL = 600;
@@ -1715,7 +1717,7 @@ async function fetchQuotesMultiLive(cfg, env, codes) {
         cfg, env,
         "/uapi/domestic-stock/v1/quotations/intstock-multprice",
         params, "FHKST11300006",
-        QUOTE_CACHE_TTL_FAST          // 목록은 자주 바뀌므로 짧게
+        MULTI_CACHE_TTL               // 목록은 자주 바뀌므로 짧게
       );
     } catch (e) {
       for (const code of chunk) errors[code] = safeMessage(e, env);
@@ -2673,8 +2675,6 @@ export default {
           data: {
             runtime: "workers",
             quoteCacheTtl: QUOTE_CACHE_TTL,
-            quoteCacheTtlFast: QUOTE_CACHE_TTL_FAST,
-            fastCodes: [...FAST_CODES],
             chartCacheTtl: CHART_CACHE_TTL,
             note: "호출량은 Cloudflare 대시보드 > Workers > 분석에서 확인하세요.",
           },
@@ -2804,7 +2804,6 @@ export default {
           meta: {
             requested: codes.length,
             cacheTtl: QUOTE_CACHE_TTL,
-            cacheTtlFast: QUOTE_CACHE_TTL_FAST,
           },
         });
       }

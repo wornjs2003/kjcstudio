@@ -5,7 +5,7 @@
    못 받으면 '—' 나 '연결 예정' 이 남습니다. 예시 숫자는 두지 않습니다.
    ========================================================================== */
 
-import { WATCHLIST, PRIORITY_CODES, brandColor } from '../data/market.js';
+import { WATCHLIST, brandColor } from '../data/market.js';
 import { favList, toggleFav, onFavChange } from '../store/favorites.js';
 import * as lastSeen from '../store/last-seen.js';
 import { fetchLivePrices, fetchLiveIndices, applyLiveToStock } from '../data/live.js';
@@ -189,18 +189,22 @@ export function mountFootStrip(el) {
 /* ──────────────────────────────────────────────────────────────────────────
    시세 갱신 — 한 화면에서 한 번만 돌린다.
 
-   두 갈래로 나눠 돈다 (2026-09-14 지시).
-     빠른 쪽 : PRIORITY_CODES 2종목만 5초마다
-     느린 쪽 : 나머지 관심종목 + 지수 3개를 30초마다
+   **한 갈래로 돈다 (2026-09-18 지시).**
 
-   분당 호출은 2×12 + 9×2 = 42건으로, 전부 15초마다 부르던 44건보다 적다.
-   자주 볼 필요 없는 종목의 주기를 늘려 그 몫을 앞의 둘로 옮긴 것이다.
+   재권님 말씀 — "삼성전자 하이닉스도 같은값이여야 할거같은데
+   **모든값은 통일해야해**".
 
-   호출 간격은 서버가 1초씩 벌려 주므로(_rate_limit), 빠른 쪽 2건은 2초,
-   느린 쪽 9건은 9초가 걸린다. 둘 다 자기 주기 안에 든다.
+   전에는 둘로 나눠 돌았다 — PRIORITY_CODES 2종목만 5초, 나머지는 30초.
+   그러면 **같은 화면에서 종목마다 기준 시각이 다르다.** 등락률을 나란히
+   놓고 보는 자리에서 그 둘만 먼저 움직인 것처럼 보인다.
+
+   서버 캐시도 같은 날 하나로 합쳤다(server/kis_proxy.py 의 PRICE_CACHE_TTL).
+   거기 주석에 이유가 적혀 있다.
+
+   **호출은 오히려 줄었다** — 전에는 분당 2×12 + 6×2 = 36건이었고
+   지금은 8×2 = 16건이다.
    ────────────────────────────────────────────────────────────────────────── */
-const REFRESH_FAST_MS = 5000;
-const REFRESH_SLOW_MS = 30000;
+const REFRESH_MS = 30000;
 
 /* 시세 갱신 루프.
 
@@ -231,8 +235,7 @@ function clearStale() {
 }
 
 export function startLiveLoop({ onPrices, onIndices, prices = true, indexMs } = {}) {
-  const fastCodes = WATCHLIST.filter(s => PRIORITY_CODES.includes(s.code)).map(s => s.code);
-  const slowCodes = WATCHLIST.filter(s => !PRIORITY_CODES.includes(s.code)).map(s => s.code);
+  const codes = WATCHLIST.map(s => s.code);      // 전부 같은 주기로 받는다
 
   /* 갈래마다 일부 종목만 받아오지만, 화면에는 항상 전체를 넘겨야 한다.
      받은 것을 여기에 쌓아 두고 합쳐서 전달한다. */
@@ -273,18 +276,11 @@ export function startLiveLoop({ onPrices, onIndices, prices = true, indexMs } = 
     if (onPrices) onPrices(latest);
   }
 
-  async function tickFast() {
-    if (!prices) return;
+  async function tick() {
     if (document.hidden) return;          // 다른 탭을 보고 있으면 쉬어간다
-    if (!fastCodes.length) return;
-    applyPrices(await fetchLivePrices(fastCodes));
-  }
-
-  async function tickSlow() {
-    if (document.hidden) return;
     const [indices, quotes] = await Promise.all([
       fetchLiveIndices(),
-      prices && slowCodes.length ? fetchLivePrices(slowCodes) : Promise.resolve(null),
+      prices && codes.length ? fetchLivePrices(codes) : Promise.resolve(null),
     ]);
     if (indices) { lastSeen.save('indices', indices); clearStale(); }
     if (indices && onIndices) onIndices(indices);
@@ -293,10 +289,8 @@ export function startLiveLoop({ onPrices, onIndices, prices = true, indexMs } = 
 
   if (kept && onPrices) onPrices(latest);   // 남은 값으로 먼저 한 번
 
-  tickFast();
-  tickSlow();
-  setInterval(tickFast, REFRESH_FAST_MS);
-  setInterval(tickSlow, REFRESH_SLOW_MS);
+  tick();
+  setInterval(tick, REFRESH_MS);
   /* 지수만 따로 더 자주 받고 싶을 때 (첫 화면). 값을 주지 않으면 위 느린
      갈래가 30초마다 함께 받는 그대로다. */
   if (indexMs) {
@@ -309,7 +303,6 @@ export function startLiveLoop({ onPrices, onIndices, prices = true, indexMs } = 
   }
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
-    tickFast();
-    tickSlow();
+    tick();
   });
 }
