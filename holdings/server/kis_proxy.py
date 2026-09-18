@@ -1732,6 +1732,25 @@ PREFILL_BUSY_CALL_GAP = 2.0    # 화면이 보고 있을 때 미리받기 호출
 PREFILL_IDLE_CALL_GAP = 0.3    # 화면이 없을 때도 두는 여유
 PREFILL_THREAD_NAME = "prefill-5m"
 
+# ── 새 봉이 생겼을 때만 받는다 (2026-09-18 지시) ──────────────────
+#
+# 재권님 말씀 — "5분봉 미리받기 → 5분봉 갱신될때만 받기 /
+# 5분봉은 선택된 화면만 실시간으로 받기".
+#
+# **5m 의 fresh_sec 은 30초인데 한 바퀴가 6~8분이다.** 돌아왔을 때는 이미
+# 30초를 훌쩍 넘겨서 **매번 다시 받았다.** 「dayfill 이 오늘 것을 이미
+# 받았으면 건너뛴다」 는 주석과 달리 건너뛰는 일이 거의 없었다.
+#
+#     캐시 적중률   66 / 919 = 6.7%      (2026-09-18 실측)
+#     호출          초당 3.2회           화면을 안 보고 있는데도
+#
+# **5분봉은 5분에 한 번만 새 봉이 생긴다.** 그 사이에 다시 받는 것은 같은
+# 값을 또 받는 것이다. 마지막으로 받은 지 이만큼 안 지났으면 건너뛴다.
+#
+# 화면이 직접 여는 종목은 이 길로 오지 않는다. get_chart 가 fresh_sec(30초)
+# 으로 따로 판단하므로 **보고 있는 종목만 실시간**이 된다 — 지시 그대로다.
+PREFILL_FRESH_SEC = 300
+
 _last_ui_at = 0.0              # 화면이 마지막으로 /api/kis/* 를 부른 시각
 
 
@@ -1771,9 +1790,13 @@ def start_prefill(cfg):
         while True:
             try:
                 for code in _prefill_codes():
+                    # 새 봉이 생겼을 때만 받는다. 5분봉은 5분에 하나씩 생긴다
+                    last = float(_meta_get("sync:%s:5m" % code) or 0)
+                    if (time.time() - last) < PREFILL_FRESH_SEC:
+                        continue       # 같은 값을 또 받지 않는다
                     try:
-                        # dayfill 이 오늘 것을 이미 받았으면 안쪽에서 건너뛴다
-                        get_chart(cfg, code, "5m", 1)
+                        # 하루치는 하루 한 번만. 나머지는 최근 구간만 받는다
+                        get_chart(cfg, code, "5m", 1, gap_check=False)
                     except Exception:
                         pass           # 한 종목이 실패해도 나머지는 간다
                     # 화면이 보고 있으면 길게 쉰다. 지수·시세가 먼저다
@@ -1797,7 +1820,7 @@ def _today_kst():
     return datetime.now(KST).strftime("%Y%m%d")
 
 
-def _minutes_need_day(code, period, rows):
+def _minutes_need_day(code, period, rows, gap_check=True):
     """하루치를 통째로 받아야 하나.
 
     **두 가지를 본다. 하나만 보면 구멍이 남는다.**
@@ -1815,6 +1838,17 @@ def _minutes_need_day(code, period, rows):
         return True
     if not rows:
         return True
+    # **미리받기는 2번을 안 본다** (2026-09-18).
+    #
+    # 장이 끝나면 거래가 뜸한 종목은 마지막 봉이 계속 오래된 채로 있다.
+    # 그러면 2번이 **늘 참**이 되어 미리받기가 한 바퀴 돌 때마다 하루치를
+    # 다시 받았다 — 한 종목에 스물몇 번이다. 오늘 실측에서 5분 간격을
+    # 넣고도 초당 4.8회가 그대로였던 것이 이 때문이다.
+    #
+    # 화면이 여는 종목은 그대로 2번을 본다. 앞쪽 구멍을 메워야 하고,
+    # 한 종목이라 부담도 작다.
+    if not gap_check:
+        return False
     try:
         ts = rows[-1]["ts"]                      # YYYYMMDDHHMM
         last = datetime(int(ts[0:4]), int(ts[4:6]), int(ts[6:8]),
@@ -1872,7 +1906,7 @@ def read_candles(code, period, limit):
     return [dict(r) for r in reversed(rows)]   # 차트는 과거 -> 최신 순
 
 
-def get_chart(cfg, code, period, limit):
+def get_chart(cfg, code, period, limit, gap_check=True):
     """DB 를 먼저 보고, 최근 구간이 오래됐으면 KIS 에서 받아 덮어쓴다.
 
     당일(또는 최근) 캔들은 장중에 계속 바뀌므로, 마지막 갱신으로부터
@@ -1902,7 +1936,7 @@ def get_chart(cfg, code, period, limit):
             # 통째로 비었다 — 삼성전자우가 09:00~10:15 가 없이 7개뿐이었다
             # (2026-09-17). 거래가 잦은 종목만 자주 열려 저절로 채워지고
             # 있었던 것이라, 종목마다 봉 개수가 크게 갈렸다.
-            if _minutes_need_day(code, period, rows):
+            if _minutes_need_day(code, period, rows, gap_check):
                 raw = fetch_minutes_day(cfg, code)
                 _meta_set("dayfill:%s:%s" % (code, period), _today_kst())
             else:

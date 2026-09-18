@@ -62,6 +62,14 @@ PAIRS = [
     ("지수 봉 나눠받기 횟수", "INDEX_PAGES",         "INDEX_PAGES",          None),
     ("분봉 다시받기 간격",   "MINUTE_REFILL_GAP",   "MINUTE_REFILL_GAP",    None),
     ("5분봉 미리받기 종목수", "PREFILL_TOP",         "PREFILL_TOP",          None),
+    # 5분봉은 5분에 한 번만 새 봉이 생긴다. 그 사이에 또 받으면 같은 값을
+    # 두 번 받는 것이다. **로컬과 배포본이 앱키를 같이 쓰므로** 한쪽만
+    # 고치면 절반만 고치는 셈이다 (2026-09-18 지시).
+    ("5분봉 미리받기 간격",  "PREFILL_FRESH_SEC",   "PREFILL_FRESH_SEC",    None),
+    # 네이버 업종·테마 — server/naver.py 와 워커가 같은 값을 봐야 한다
+    ("네이버 캐시",          "TTL",                 "NAVER_TTL",            None),
+    ("네이버 목록 개수",     "LIST_SIZE",           "NAVER_LIST_SIZE",      None),
+    ("네이버 종목 개수",     "STOCK_SIZE",          "NAVER_STOCK_SIZE",     None),
     ("선물 종목코드",        "FUTURES_CODE",        "FUTURES_CODE",         None),
     ("선물 캐시",            "FUTURES_TTL",         "FUTURES_TTL",          "ceil"),
     ("지수 캐시",            "INDEX_TTL",           "INDEX_TTL",            "ceil"),
@@ -86,13 +94,17 @@ PAIRS = [
 # 어긋남을 알릴 때 "올림이라 괜찮은 것" 인지 곁들이려고 미리 모아 둔다
 CEIL_NOTE = {w for w, _, _, c in PAIRS if c == "ceil"}
 
-# 공시 상수는 dart.py 에 있다. 파일이 다른 것만 따로 적는다.
+# 공시 상수는 dart.py 에, 네이버 상수는 naver.py 에 있다.
+# 파일이 다른 것만 따로 적는다.
 PY_ALT = {
     "UNIVERSE_SIZE":   "holdings/server/dart.py",
     "INDEX_LISTS":     "holdings/server/dart.py",
     "REMINDERS":       "holdings/server/dart.py",
     "COLLECT_MARKETS": "holdings/server/dart.py",
     "RETENTION_DAYS":  "holdings/server/dart.py",
+    "TTL":             "holdings/server/naver.py",
+    "LIST_SIZE":       "holdings/server/naver.py",
+    "STOCK_SIZE":      "holdings/server/naver.py",
 }
 
 

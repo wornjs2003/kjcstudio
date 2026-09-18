@@ -1877,6 +1877,75 @@ function dartShouldPoll(now = new Date()) {
 /* ── 감시 대상 200종목 (네이버 시가총액 순위) ──
    공식 API 가 아니다. 한국투자증권 순위 API 는 30건까지만 주기 때문에
    200종목을 만들 수 없어서 이쪽을 쓴다. 못 받으면 기존 목록을 그대로 둔다. */
+/* ── 네이버 업종 · 테마 (2026-09-18) ──────────────────────────────
+ *
+ * 「지금 뜨는 산업」 이 쓴다. **server/naver.py 와 같은 판정이어야 한다** —
+ * 로컬과 배포본의 숫자가 갈리면 안 된다. 상수·필드·콤마 처리를 맞춰 두었다.
+ *
+ * KIS 에 없는 둘 때문에 여기서 받는다 — 업종 안에서 몇이 오르내렸는지,
+ * 그리고 그 업종의 종목 목록이다. 테마는 KIS 에 아예 없다.
+ * 조사 기록은 docs/sector-sources.md 에 있다. */
+const NAVER_BASE = "https://m.stock.naver.com/api/stocks";
+const NAVER_HEADERS = { "user-agent": "Mozilla/5.0", referer: "https://m.stock.naver.com/" };
+const NAVER_TTL = 30;           // server/naver.py 의 TTL 과 같은 값
+const NAVER_LIST_SIZE = 20;     // 〃 LIST_SIZE
+const NAVER_STOCK_SIZE = 10;    // 〃 STOCK_SIZE
+
+/* 네이버는 "60,700" 처럼 **콤마가 든 문자열**로 준다. 그대로 Number() 에
+   넣으면 NaN 이 되므로 여기서 푼다 — 화면이 또 풀지 않게 한다. */
+function naverNum(v) {
+  if (v === null || v === undefined) return null;
+  const t = String(v).replace(/[,\s%]/g, "");
+  if (t === "" || t === "-" || t === "+") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+async function naverGet(path) {
+  const res = await fetch(NAVER_BASE + path, { headers: NAVER_HEADERS });
+  if (!res.ok) throw new Error(`네이버 HTTP ${res.status}`);
+  return res.json();
+}
+
+/* 업종 또는 테마 목록. **등락률 내림차순이 기본**이라 그대로 쓴다 */
+async function naverGroups(env, kind) {
+  return memo(`nv:g:${kind}`, NAVER_TTL, async () => {
+    const j = await naverGet(`/${kind}?page=1&pageSize=${NAVER_LIST_SIZE}`);
+    const rows = (j.groups || []).map((g) => ({
+      no: g.no,
+      name: g.name,
+      pct: naverNum(g.changeRate),
+      rise: naverNum(g.riseCount) || 0,
+      steady: naverNum(g.steadyCount) || 0,
+      fall: naverNum(g.fallCount) || 0,
+      count: naverNum(g.totalCount) || 0,
+    }));
+    return { rows, total: j.totalCount, marketStatus: j.marketStatus };
+  });
+}
+
+/* 그 묶음의 종목. **등락률 내림차순**이라 앞에서부터 상승률 TOP 이다 */
+async function naverStocks(env, kind, no) {
+  return memo(`nv:s:${kind}:${no}`, NAVER_TTL, async () => {
+    const j = await naverGet(`/${kind}/${no}?page=1&pageSize=${NAVER_STOCK_SIZE}`);
+    const rows = [];
+    for (const s of (j.stocks || [])) {
+      const code = String(s.itemCode || "").trim();
+      if (code.length !== 6) continue;
+      rows.push({
+        code,
+        name: s.stockName,
+        price: naverNum(s.closePrice),
+        amt: naverNum(s.compareToPreviousClosePrice),
+        pct: naverNum(s.fluctuationsRatio),
+        volume: naverNum(s.accumulatedTradingVolume),
+        value: naverNum(s.accumulatedTradingValue),
+      });
+    }
+    return { rows, name: j.groupName || j.name };
+  });
+}
+
 async function fetchKospiTop(size = UNIVERSE_SIZE) {
   const out = [];
   for (let page = 1; out.length < size && page <= 10; page++) {
@@ -2237,6 +2306,22 @@ async function purgeOldDisclosures(env, days = RETENTION_DAYS) {
 const PREFILL_TOP = 100;        // 코스피 상위 몇 종목까지
 const PREFILL_PER_RUN = 5;      // Cron 한 번에 몇 종목씩
 
+/* 새 봉이 생겼을 때만 받는다 (2026-09-18 지시).
+ *
+ * 재권님 말씀 — "5분봉 미리받기 → 5분봉 갱신될때만 받기".
+ *
+ * 5m 의 freshSec 은 30초인데 한 바퀴는 그보다 훨씬 오래 걸린다. 돌아왔을
+ * 때는 이미 지나 있어 **매번 다시 받았다.** 5분봉은 5분에 한 번만 새 봉이
+ * 생기므로 그 사이에 받는 것은 같은 값을 또 받는 것이다.
+ *
+ * **로컬 서버와 앱키가 같다.** 둘이 같은 한도(초당 10회)를 나눠 쓰므로
+ * 한쪽만 고치면 절반만 고치는 셈이다 — server/kis_proxy.py 의
+ * PREFILL_FRESH_SEC 과 같은 값이어야 하고 check-kis-consts.py 가 대조한다.
+ *
+ * 화면이 직접 여는 종목은 이 길로 오지 않는다. getChart 가 freshSec 으로
+ * 따로 판단하므로 보고 있는 종목만 실시간이 된다. */
+const PREFILL_FRESH_SEC = 300;
+
 async function prefillMinutes(cfg, env) {
   let codes;
   try {
@@ -2256,8 +2341,10 @@ async function prefillMinutes(cfg, env) {
 
   let done = 0;
   for (let i = 0; i < PREFILL_PER_RUN && at < codes.length; i++, at++) {
+    /* 새 봉이 생겼을 때만 받는다. 5분봉은 5분에 하나씩 생긴다 */
+    const last = Number(await metaGet(env, `sync:${codes[at]}:5m`)) || 0;
+    if (Date.now() - last < PREFILL_FRESH_SEC * 1000) continue;
     try {
-      /* dayfill 이 오늘 것을 이미 받았으면 안쪽에서 건너뛴다 */
       await getChart(cfg, env, codes[at], "5m", 1);
       done++;
     } catch { /* 한 종목이 실패해도 나머지는 간다 */ }
@@ -2412,6 +2499,49 @@ export default {
         return fail(`알 수 없는 경로입니다: ${newsRoute}`, 404);
       } catch (e) {
         return fail(safeMessage(e, env), 500);
+      }
+    }
+
+    /* ── 네이버 업종 · 테마 (2026-09-18) ──
+     *
+     * 「지금 뜨는 산업」 이 쓴다. **server/naver.py 와 같은 판정이어야 한다** —
+     * 로컬과 배포본의 값이 갈리면 안 된다. 콤마 푸는 것과 no 가 없을 때의
+     * 400 문구까지 맞춰 두었다.
+     *
+     * 이 계통을 안 만들어서 배포본이 404 로 빌 뻔했다 (2026-09-18, 검증에서
+     * 잡았다). 화면을 새 경로로 바꾸면 워커에도 그 경로가 있어야 한다 —
+     * 2026-09-14 의 `/api/kis/quotes` 와 같은 사고다. */
+    if (url.pathname.startsWith("/api/naver")) {
+      if (request.method !== "GET") return fail("GET 요청만 지원합니다.", 405);
+      const nvRoute = url.pathname.replace(/^\/api\/naver\/?/, "").replace(/\/$/, "");
+      const kind = (url.searchParams.get("kind") || "industry").trim();
+      try {
+        if (kind !== "industry" && kind !== "theme") {
+          return fail("kind 는 industry 또는 theme 여야 합니다.", 400);
+        }
+        if (nvRoute === "groups") {
+          const g = await naverGroups(env, kind);
+          return json({
+            ok: true, data: g.rows,
+            meta: { kind, total: g.total, marketStatus: g.marketStatus,
+                    count: g.rows.length, source: "네이버" },
+          });
+        }
+        if (nvRoute === "stocks") {
+          const no = (url.searchParams.get("no") || "").trim();
+          if (!/^\d+$/.test(no)) return fail("no 에 묶음 번호가 필요합니다.", 400);
+          const r = await naverStocks(env, kind, Number(no));
+          return json({
+            ok: true, data: r.rows,
+            meta: { kind, no: Number(no), name: r.name,
+                    count: r.rows.length, source: "네이버" },
+          });
+        }
+        return fail(`알 수 없는 경로입니다: ${nvRoute}`, 404);
+      } catch (e) {
+        /* 네이버가 막히거나 모양이 바뀐 경우. 화면은 「불러오지 못했습니다」로
+           물러선다 — 엣지에서 네이버가 열리는지는 아직 못 봤다 */
+        return fail(safeMessage(e, env), 502);
       }
     }
 
