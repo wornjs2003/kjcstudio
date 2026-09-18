@@ -1,16 +1,22 @@
 @echo off
 chcp 65001 >nul
-title KJC Studio - 프로젝트 관리 (포트 8091)
-rem 저장소 루트에서 내보낸다. 화면이 ../assets/ · ../partials/ 를 함께 쓰기 때문이다.
-rem 이 폴더만 내보내면 색과 메뉴가 404 가 된다 (2026-09-14).
+title KJC Studio - Projects (port 8091)
+rem Serve from the repository ROOT: the page pulls ../assets/ and ../partials/.
+rem Serving this folder alone makes the colours and the menu 404 (2026-09-14).
+rem
+rem ASCII ONLY below chcp. cmd re-opens this file and seeks by BYTE offset on
+rem every line; chcp 65001 changes that accounting, so non-ASCII text below it
+rem can make cmd resume mid-line. 2026-09-16 it printed
+rem   '/*' is not recognized as an internal or external command
+rem Korean belongs in the Python program, not here (CLAUDE.md).
 cd /d "%~dp0.."
 
 set PY=
 python --version >nul 2>&1 && set PY=python
 if not defined PY py -3 --version >nul 2>&1 && set PY=py -3
 if not defined PY (
-  echo   [오류] 파이썬을 찾을 수 없습니다.
-  echo   https://www.python.org/downloads/ 에서 설치하세요.
+  echo   [ERROR] Python not found.
+  echo   Install from https://www.python.org/downloads/
   pause
   exit /b 1
 )
@@ -19,12 +25,12 @@ set PORT=8091
 set URL=http://localhost:%PORT%/projects/
 
 echo ------------------------------------------------
-echo   KJC Studio - 프로젝트 관리
+echo   KJC Studio - Projects
 echo ------------------------------------------------
 echo.
-echo   주소 : %URL%
+echo   URL   : %URL%
 echo.
-echo   종료 : 이 창을 닫거나 Ctrl+C
+echo   Stop  : close this window, or press Ctrl+C
 echo ------------------------------------------------
 echo.
 
@@ -34,5 +40,5 @@ start "" "%URL%"
 %PY% -m http.server %PORT%
 
 echo.
-echo   서버가 종료되었습니다.
+echo   Server stopped.
 pause
