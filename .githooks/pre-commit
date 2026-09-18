@@ -35,6 +35,8 @@ lanes=$(printf '%s\n' "$files" | awk -F/ '
   # `docs/*.md` 는 여기 넣지 않는다 — 그쪽은 각 레인이 직접 쓴다.
   $NF == "CLAUDE.md"                    { print "개념정의";        next }
 
+  $1 == "kjcEngine"                     { print "엔진_개발";      next }
+
   $1 == "holdings"                      { print "주식페이지_개발"; next }
   $1 == "projects" || $1 == "ai-work" ||
   $1 == "debugging"                     { print "스케줄_툴개발";   next }
