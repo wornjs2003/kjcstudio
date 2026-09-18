@@ -1409,6 +1409,101 @@ def fetch_investor_flow(cfg, market="KOSPI", days=INVESTOR_FLOW_DAYS):
     return rows[-want:]
 
 
+# ── 종목별 투자자 · 호가 (2026-09-18 지시) ────────────────────────
+#
+# 차트 옆 패널의 「투자자 정보」 · 「매수 · 매도 비율」 · 「외국인 · 기관 매매」가
+# 쓴다. **앞의 둘은 한 API 로 된다** — inquire-investor 가 개인 · 외국인 ·
+# 기관을 한 응답에 준다.
+#
+# 이미 붙어 있던 investor-flow · investor-top 과는 다른 것이다.
+#
+#     investor-flow  시장 전체가 오늘 얼마나 샀나
+#     investor-top   순매수 상위 종목 목록 (**가집계**)
+#     여기           **지금 보고 있는 이 종목**을 누가 샀나 (확정치)
+#
+# 종목별은 **확정치**다 (docs/kis-sector-investor.md). 상위 목록 쪽만
+# 가집계라 화면에 그렇게 적는다.
+INVESTOR_DAYS = 30          # 한 번에 오는 일수. 늘릴 수 없다
+ASKING_LEVELS = 10          # 호가 단계
+INVESTOR_TTL = 60           # 일별 자료라 장중에 한 번 바뀐다
+ASKING_TTL = 3              # 호가는 계속 움직인다. 화면이 훑을 때만 짧게 받아낸다
+
+_investor_cache = {}
+_asking_cache = {}
+
+
+def fetch_investor(cfg, code, days=INVESTOR_DAYS):
+    """종목별 투자자 매매. 개인 · 외국인 · 기관이 한 응답에 온다.
+
+    30일치가 한 번에 오고 그보다 길게는 못 받는다 (2026-09-16 실측).
+    """
+    cached = _ttl_get(_investor_cache, code, INVESTOR_TTL)
+    if cached is not None:
+        return cached
+    _stats["kis_calls"] += 1
+    data = kis_get(
+        cfg,
+        "/uapi/domestic-stock/v1/quotations/inquire-investor",
+        {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code},
+        "FHKST01010900",
+    )
+    out = []
+    for r in out_rows(data, "output")[:days]:
+        def side(prefix):
+            return {
+                "net": _num(r.get(prefix + "_ntby_qty"), int),
+                "netAmt": _num(r.get(prefix + "_ntby_tr_pbmn"), int),
+                "buy": _num(r.get(prefix + "_shnu_vol"), int),
+                "sell": _num(r.get(prefix + "_seln_vol"), int),
+            }
+        out.append({
+            "date": r.get("stck_bsop_date"),
+            "close": _num(r.get("stck_clpr"), int),
+            "amt": _num(r.get("prdy_vrss"), int),
+            "person": side("prsn"),
+            "foreign": side("frgn"),
+            "inst": side("orgn"),
+        })
+    _investor_cache[code] = (time.time(), out)
+    return out
+
+
+def fetch_asking(cfg, code):
+    """호가 10단계. **매수 · 매도 비율**은 총잔량으로 낸다.
+
+    비율은 「지금 사자가 얼마나 몰려 있나」다. 체결된 것이 아니라 **대기 중인
+    주문**이므로, 장이 끝나면 의미가 옅어진다 — 화면에 그렇게 적는다.
+    """
+    cached = _ttl_get(_asking_cache, code, ASKING_TTL)
+    if cached is not None:
+        return cached
+    _stats["kis_calls"] += 1
+    data = kis_get(
+        cfg,
+        "/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
+        {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code},
+        "FHKST01010200",
+    )
+    o = data.get("output1") or {}
+    ask, bid = [], []
+    for i in range(1, ASKING_LEVELS + 1):
+        ask.append({"price": _num(o.get("askp%d" % i), int),
+                    "qty": _num(o.get("askp_rsqn%d" % i), int)})
+        bid.append({"price": _num(o.get("bidp%d" % i), int),
+                    "qty": _num(o.get("bidp_rsqn%d" % i), int)})
+    tot_ask = _num(o.get("total_askp_rsqn"), int) or 0
+    tot_bid = _num(o.get("total_bidp_rsqn"), int) or 0
+    both = tot_ask + tot_bid
+    out = {
+        "ask": {"total": tot_ask, "levels": ask},
+        "bid": {"total": tot_bid, "levels": bid},
+        # 사자 비중. 50 보다 크면 사려는 주문이 더 쌓여 있다는 뜻이다
+        "buyPct": round(tot_bid / both * 100, 1) if both else None,
+    }
+    _asking_cache[code] = (time.time(), out)
+    return out
+
+
 def fetch_investor_top(cfg, direction="buy", market="all", by="qty", limit=10):
     """외국인 · 기관 순매수(순매도) 상위.
 
@@ -2447,6 +2542,44 @@ class Handler(SimpleHTTPRequestHandler):
                         "note": "증권사 집계 가집계치 — 외국인 09:30·11:20·13:20·14:30, "
                                 "기관 10:00·11:20·13:20·14:30 에 갱신 (±10분)",
                         "cacheTtl": INVESTOR_TOP_TTL,
+                    },
+                })
+                return
+
+            # ── 지금 보고 있는 그 종목 (2026-09-18 지시) ──
+            # 위 investor-top 과 다르다. 그쪽은 「상위 목록」이고 가집계이며,
+            # 이쪽은 「이 종목」이고 확정치다.
+            if route == "investor":
+                code = (qs.get("code") or [""])[0].strip()
+                if not (code.isdigit() and len(code) == 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                data = fetch_investor(cfg, code)
+                self._send_json({
+                    "ok": bool(data), "data": data,
+                    "meta": {
+                        "code": code, "count": len(data), "days": INVESTOR_DAYS,
+                        "qtyUnit": "주", "amtUnit": "백만원",
+                        # 종목별은 확정치다 (docs/kis-sector-investor.md).
+                        # 상위 목록(investor-top)만 가집계라 거기만 그렇게 적는다.
+                        "provisional": False,
+                    },
+                })
+                return
+
+            if route == "asking":
+                code = (qs.get("code") or [""])[0].strip()
+                if not (code.isdigit() and len(code) == 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                data = fetch_asking(cfg, code)
+                self._send_json({
+                    "ok": True, "data": data,
+                    "meta": {
+                        "code": code, "levels": ASKING_LEVELS, "qtyUnit": "주",
+                        # 체결된 것이 아니라 **대기 중인 주문**이다.
+                        # 장이 끝나면 의미가 옅어진다 — 화면에 적어야 한다.
+                        "resting": True,
                     },
                 })
                 return

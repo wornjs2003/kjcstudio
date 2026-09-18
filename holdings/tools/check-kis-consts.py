@@ -82,6 +82,11 @@ PAIRS = [
     ("업종 캐시",           "SECTOR_TTL",          "SECTOR_TTL",           None),
     ("등락률 순위 캐시",    "MOVERS_TTL",          "MOVERS_TTL",           None),
     ("등락률 순위 최대",    "MOVERS_MAX",          "MOVERS_MAX",           None),
+    # 종목별 투자자 · 호가 (2026-09-18)
+    ("종목별 투자자 일수",  "INVESTOR_DAYS",       "INVESTOR_DAYS",        None),
+    ("종목별 투자자 캐시",  "INVESTOR_TTL",        "INVESTOR_TTL",         None),
+    ("호가 단계",           "ASKING_LEVELS",       "ASKING_LEVELS",        None),
+    ("호가 캐시",           "ASKING_TTL",          "ASKING_TTL",           None),
     ("투자자 상위 캐시",    "INVESTOR_TOP_TTL",    "INVESTOR_TOP_TTL",     None),
     ("투자자 추이 캐시",    "INVESTOR_FLOW_TTL",   "INVESTOR_FLOW_TTL",    None),
     ("투자자 추이 기간",    "INVESTOR_FLOW_DAYS",  "INVESTOR_FLOW_DAYS",   None),

@@ -1040,6 +1040,71 @@ async function fetchInvestorFlow(cfg, env, market = "KOSPI", days = INVESTOR_FLO
    ⚠️ **가집계다.** KIS 공식 설명에 "증권사 직원이 장중에 집계/입력한 자료를
    단순 누계한 수치" 라고 적혀 있다. 입력 시각은 외국인 09:30·11:20·13:20·14:30,
    기관 10:00·11:20·13:20·14:30 (±10분). 마감 뒤 확정치와 다를 수 있다.     */
+/* ── 종목별 투자자 · 호가 (2026-09-18 지시) ────────────────────────
+ *
+ * server/kis_proxy.py 의 fetch_investor · fetch_asking 과 **같은 판정**이어야
+ * 한다. 필드 이름과 계산을 그대로 맞춰 두었다.
+ *
+ * 아래 investor-top 과 다르다 — 그쪽은 「상위 목록」이고 가집계이며,
+ * 이쪽은 「지금 보고 있는 이 종목」이고 확정치다. */
+const INVESTOR_DAYS = 30;       // 한 번에 오는 일수. 늘릴 수 없다
+const ASKING_LEVELS = 10;       // 호가 단계
+const INVESTOR_TTL = 60;        // 일별 자료라 장중에 한 번 바뀐다
+const ASKING_TTL = 3;           // 호가는 계속 움직인다
+
+async function fetchInvestor(cfg, env, code, days = INVESTOR_DAYS) {
+  const data = await kisGet(
+    cfg, env,
+    "/uapi/domestic-stock/v1/quotations/inquire-investor",
+    { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code },
+    "FHKST01010900",
+    INVESTOR_TTL
+  );
+  const rows = outRows(data, "output").slice(0, days);
+  return rows.map((r) => {
+    const side = (p) => ({
+      net: num(r[`${p}_ntby_qty`]),
+      netAmt: num(r[`${p}_ntby_tr_pbmn`]),
+      buy: num(r[`${p}_shnu_vol`]),
+      sell: num(r[`${p}_seln_vol`]),
+    });
+    return {
+      date: r.stck_bsop_date,
+      close: num(r.stck_clpr),
+      amt: num(r.prdy_vrss),
+      person: side("prsn"),
+      foreign: side("frgn"),
+      inst: side("orgn"),
+    };
+  });
+}
+
+async function fetchAsking(cfg, env, code) {
+  const data = await kisGet(
+    cfg, env,
+    "/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
+    { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code },
+    "FHKST01010200",
+    ASKING_TTL
+  );
+  const o = data.output1 || {};
+  const ask = [];
+  const bid = [];
+  for (let i = 1; i <= ASKING_LEVELS; i++) {
+    ask.push({ price: num(o[`askp${i}`]), qty: num(o[`askp_rsqn${i}`]) });
+    bid.push({ price: num(o[`bidp${i}`]), qty: num(o[`bidp_rsqn${i}`]) });
+  }
+  const totAsk = num(o.total_askp_rsqn) || 0;
+  const totBid = num(o.total_bidp_rsqn) || 0;
+  const both = totAsk + totBid;
+  return {
+    ask: { total: totAsk, levels: ask },
+    bid: { total: totBid, levels: bid },
+    /* 사자 비중. 50 보다 크면 사려는 주문이 더 쌓여 있다는 뜻이다 */
+    buyPct: both ? Math.round((totBid / both) * 1000) / 10 : null,
+  };
+}
+
 async function fetchInvestorTop(cfg, env, direction = "buy", market = "all",
                                 by = "qty", limit = 10) {
   const iscd = market && market !== "all"
@@ -2740,6 +2805,39 @@ export default {
           data: rows,
           meta: { count: rows.length, market, days, order: "과거→최근",
                   qtyUnit: "천주", amtUnit: "백만원", cacheTtl: INVESTOR_FLOW_TTL },
+        });
+      }
+
+      /* 지금 보고 있는 그 종목 (2026-09-18 지시).
+         아래 investor-top 과 다르다 — 그쪽은 「상위 목록」이고 가집계이며,
+         이쪽은 「이 종목」이고 확정치다. */
+      if (route === "investor") {
+        const code = (url.searchParams.get("code") || "").trim();
+        if (!/^\d{6}$/.test(code)) return fail("code 는 6자리 숫자여야 합니다.", 400);
+        const data = await fetchInvestor(cfg, env, code);
+        return json({
+          ok: data.length > 0, data,
+          meta: {
+            code, count: data.length, days: INVESTOR_DAYS,
+            qtyUnit: "주", amtUnit: "백만원",
+            /* 종목별은 확정치다. 상위 목록(investor-top)만 가집계다 */
+            provisional: false,
+          },
+        });
+      }
+
+      if (route === "asking") {
+        const code = (url.searchParams.get("code") || "").trim();
+        if (!/^\d{6}$/.test(code)) return fail("code 는 6자리 숫자여야 합니다.", 400);
+        const data = await fetchAsking(cfg, env, code);
+        return json({
+          ok: true, data,
+          meta: {
+            code, levels: ASKING_LEVELS, qtyUnit: "주",
+            /* 체결된 것이 아니라 **대기 중인 주문**이다. 장이 끝나면
+               의미가 옅어진다 — 화면에 적어야 한다 */
+            resting: true,
+          },
         });
       }
 
