@@ -93,12 +93,8 @@
   .kh-veil, .kh-modal { animation: none; }
 }
 
-.kh-modal-scroll::-webkit-scrollbar { width: 10px; }
-.kh-modal-scroll::-webkit-scrollbar-thumb {
-  background: var(--kh-border-strong);
-  border-radius: 999px;
-  border: 3px solid var(--kh-bg);
-}
+/* 스크롤바 모양은 `assets/css/common.css` 한 곳에서 정한다 (2026-09-18 룰).
+   여기 10px 를 따로 두었다가 걷어냈다 — 모달만 굵으면 화면 안에서 두 가지가 된다. */
 
 /* 머리는 스크롤해도 붙어 있는다 — 아래로 내려도 종목명과 현재가가 보여야 한다.
    좌우 여백은 본문이 들고 있으므로, 머리만 음수 여백으로 끝까지 펼친다. */

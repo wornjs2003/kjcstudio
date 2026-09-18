@@ -16,6 +16,7 @@
 
   <!-- 색·모서리는 theme.css 한 곳에서 정한다 -->
   <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/common.css" />
   <link rel="stylesheet" href="../assets/css/nav.css" />
   <link rel="stylesheet" href="./css/frame.css" />
   <link rel="stylesheet" href="./css/home.css" />
@@ -143,36 +144,40 @@
         <!-- 순위표에서 뺀 셋이 여기로 왔다 (2026-09-17 지시).
              목록에는 종목마다 안 보이고, 고른 종목 것만 여기서 본다.
              차트 종목이 바뀌면 따라 바뀐다. -->
+        <!-- 「매물대」 였는데 이름을 바꿨다 (2026-09-18 지시 —
+             "차트옆에 매물대 - 세부사항"). 매물대 자체는 차트에 그려졌으므로
+             이 칸은 거래대금·시가총액을 담는 자리가 됐다. -->
+        <!-- 제목 옆에 그 종목 아이콘을 둔다 (2026-09-18 지시).
+             패널 넷이 다 「고른 종목」 이야기인데 어느 종목인지는 왼쪽
+             차트 머리줄에만 있었다. -->
         <div class="kh-idxp-s">
-          <div class="kh-idxp-h"><i class="kh-idxp-i ac"></i>매물대
-            <span class="kh-bd kh-bd-soon">연결 예정</span></div>
+          <div class="kh-idxp-h"><span class="kh-ic kh-idxp-ic" id="kh-dt-ic"></span>세부사항</div>
+          <!-- 매수·매도 비율이 시가총액 바로 밑에 온다 (2026-09-18 지시).
+               거래대금·시가총액과 같은 「지금 이 종목의 수치」라 한 칸에 둔다. -->
           <div class="kh-idxp-b" id="kh-vol-box">불러오는 중</div>
+          <div id="kh-bs-box" class="kh-bs-wrap">불러오는 중</div>
         </div>
+        <!-- 투자자 정보 — 오늘/5일을 단추로 오간다 (2026-09-18 지시) -->
+        <div class="kh-idxp-s kh-iv-s">
+          <div class="kh-idxp-h">투자자 정보
+            <span class="kh-chips kh-iv-tabs" id="kh-iv-tabs">
+              <button class="kh-chip is-active" data-view="today">오늘</button>
+              <button class="kh-chip" data-view="days">5일</button>
+            </span></div>
+          <div class="kh-idxp-b" id="kh-iv-box">불러오는 중</div>
+        </div>
+        <!-- 종목토론 — 투자자 정보와 종목 뉴스 사이 (2026-09-18 지시) -->
         <div class="kh-idxp-s">
-          <div class="kh-idxp-h"><i class="kh-idxp-i mu"></i>투자자 정보
+          <div class="kh-idxp-h">종목토론
             <span class="kh-bd kh-bd-soon">연결 예정</span></div>
-          <div class="kh-idxp-b">외국인 · 기관 · 개인<br>
-            <span class="kh-mut">붙일 것: 네이버 (KIS 무료 범위 밖)</span></div>
+          <div class="kh-idxp-b kh-mut">붙일 것: 네이버 종목토론실</div>
         </div>
-        <!-- 아래 둘은 본문에 따로 카드로 있었는데 이리로 모았다 (2026-09-17 지시).
-             패널의 넷이 다 「고른 종목」 이야기라 한자리에 있는 편이 낫다. -->
-        <div class="kh-idxp-s">
-          <div class="kh-idxp-h"><i class="kh-idxp-i mu"></i>외국인 · 기관 매매
-            <span class="kh-bd kh-bd-soon">연결 예정</span></div>
-          <div class="kh-idxp-b">
-            <div class="kh-chips" style="padding:0 0 9px">
-              <button class="kh-chip is-active">순매수</button>
-              <button class="kh-chip">순매도</button>
-              <button class="kh-chip">30일</button>
-            </div>
-            순매수 상위 · 30일 추이<br>
-            <span class="kh-mut">붙일 것: KIS 투자자 API</span>
-          </div>
-        </div>
+        <!-- 「이 종목 공시」 였는데 이름과 내용을 함께 뉴스로 바꿨다
+             (2026-09-18 지시). 전체 공시는 오른쪽 칸에 그대로 있다. -->
         <div class="kh-idxp-s kh-idxp-dc">
-          <div class="kh-idxp-h"><i class="kh-idxp-i ok"></i>이 종목 공시
-            <span class="kh-bd kh-bd-on">OpenDART</span></div>
-          <div class="kh-dc" id="kh-dc-one"></div>
+          <div class="kh-idxp-h">종목 뉴스
+            <span class="kh-bd kh-bd-on">네이버</span></div>
+          <div class="kh-dc" id="kh-nw-one">불러오는 중</div>
         </div>
       </aside>
     </section>

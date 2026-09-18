@@ -23,6 +23,8 @@ import { mountDisclosures } from './components/disclosures.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
 import { mountSchedule } from './components/schedule.js';
 import { mountSectors } from './components/sectors.js';
+import { mountInvestor } from './components/investor.js';
+import { mountStockNews } from './components/stock-news.js';
 /* fetchIndexMinutes · fetchIndexCandles 는 여기서 안 쓴다 (2026-09-17).
    큰 차트가 지수에서 종목으로 바뀌면서 종목 캔들(chart.js 의 fetchCandles)로
    갈아탔다. 두 함수는 지수 화면을 만들 때 쓸 수 있게 live.js 에 남겨 뒀다. */
@@ -365,6 +367,9 @@ const BIG_LIMIT = { '5m': 180, '1d': 400, '1w': 300, '1M': 300, '1y': 40 };
    다른 종목 차트를 보고 있는 것처럼 보인다. */
 function paintBigHead(s2) {
   paintIcon($('kh-big-ic'), s2);
+  /* 옆 패널 「세부사항」 제목에도 같은 아이콘을 둔다 (2026-09-18 지시).
+     패널 넷이 다 이 종목 이야기인데 어느 종목인지는 여기 머리줄에만 있었다. */
+  paintIcon($('kh-dt-ic'), s2);
   const nameEl = $('kh-idx-name');
   if (nameEl) nameEl.textContent = s2.name;
 
@@ -569,17 +574,19 @@ function paintVolBox() {
   if (volShown === stamp) return;
   volShown = stamp;
 
-  const won = n => n == null ? '—' : fmtMoneyKr(Math.round(n / 1e8));
+  /* **거래대금만 억 단위까지 적는다** (2026-09-18 지시).
+     fmtMoneyKr 은 1조를 넘으면 「5.5조원」으로 줄이는데, 그러면 억 자리가
+     사라져 어제와 견줄 수 없다.
+     **시가총액은 그대로 조원으로 둔다** — 억으로 펴면 14,966,473억원이라
+     자리만 먹고 읽히지도 않는다 (실측). */
+  const won = (n) => (n == null ? '—' : `${fmtNum(Math.round(n / 1e8))}억원`);
   el.innerHTML = `
     <div class="kh-vol-rows">
       <div class="kh-vol-row"><span>거래대금${exact ? '' : ' <i>어림</i>'}</span>
         <b class="kh-num">${won(amt)}</b></div>
       <div class="kh-vol-row"><span>시가총액</span>
         <b class="kh-num">${cap != null ? fmtMoneyKr(cap) : '—'}</b></div>
-      <div class="kh-vol-row"><span>매수 · 매도</span>
-        <span class="kh-mut">연결 예정</span></div>
-    </div>
-    <div class="kh-mut kh-vol-note">매물대(가격대별 거래량)는 아직 조사 전입니다</div>`;
+    </div>`;
 }
 
 /* ── 순위 표 ────────────────────────────── */
@@ -1277,7 +1284,8 @@ function selectStock(code) {
   paintBigChart();
   paintYearRange();
   paintVolBox();
-  drawPickedDisclosures();
+  if (typeof investor !== 'undefined' && investor) investor.setCode(code);
+  if (typeof oneNews !== 'undefined' && oneNews) oneNews.setCode(code);
   rememberStock(code);
 }
 
@@ -1302,6 +1310,11 @@ mountIndicatorMenu(document.querySelector('.kh-ind-menu'));
 /* 「지금 뜨는 산업」 — 업종 이름 단추를 누르면 그 종목이 나온다 (2026-09-18 지시).
    값은 네이버에서 오고 첫 화면을 막지 않는다 — 목록 한 번이 0.03초다. */
 mountSectors(document.querySelector('.kh-sc-card'));
+
+/* 투자자 정보 · 매수매도 비율 — 고른 종목 것이다 (2026-09-18 지시).
+   차트 종목이 바뀌면 selectStock 이 setCode 로 알린다. */
+const investor = mountInvestor(document.querySelector('.kh-idxp'));
+if (selectedCode) investor.setCode(selectedCode);   // 처음 뜰 때 한 번
 paintBigPeriods();
 
 /* 지난번에 본 값이 남아 있으면 그것부터 그린다 (2026-09-15).
@@ -1334,7 +1347,7 @@ loadUniverse().then(() => {
   paintBigChart();
   paintYearRange();
   paintVolBox();
-  drawPickedDisclosures();
+  oneNews.setCode(selectedCode);
   /* 보고 있는 것만 주기적으로 다시 받는다. 시세 띠·관심 사이드바와 별개다. */
   /* 0.2초마다 다섯 묶음 중 하나씩. 전체는 1초에 한 바퀴 돈다. */
   setInterval(rotateTick, ROW_REFRESH_MS);
@@ -1399,13 +1412,15 @@ async function drawSideNews() {
 
 drawSideNews();
 setInterval(() => { if (!document.hidden) drawSideNews(); }, SIDE_NEWS_MS);
-let dcOne = null;
-function drawPickedDisclosures() {
-  dcOne = mountDisclosures($('kh-dc-one'),
-    { code: selectedCode, limit: 6, showName: false });
-}
-drawPickedDisclosures();
-setInterval(() => { dcAll.reload(); dcOne && dcOne.reload(); }, 5 * 60 * 1000);
+/* 「이 종목 공시」 자리가 「종목 뉴스」 가 됐다 (2026-09-18 지시).
+   공시는 네이버 뉴스로 갈아탔고, 전체 공시(dcAll)는 그대로 있다.
+   뉴스는 공시보다 자주 올라오므로 3분마다 다시 받는다 — 서버 캐시는 30초다. */
+const NEWS_ONE_MS = 180_000;
+const oneNews = mountStockNews($('kh-nw-one'), { limit: 6 });
+if (selectedCode) oneNews.setCode(selectedCode);
+
+setInterval(() => { dcAll.reload(); }, 5 * 60 * 1000);
+setInterval(() => { if (!document.hidden) oneNews.reload(); }, NEWS_ONE_MS);
 
 /* 종목 시세는 받지 않는다(prices: false). 순위표가 멀티 조회로
    관심종목까지 함께 받아 한 곳에 모으기 때문이다. 여기서 또 받으면
