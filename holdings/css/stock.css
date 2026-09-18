@@ -229,17 +229,11 @@
 .kh-lg.is-compact { top: 4px; left: 6px; font-size: 0.68rem; }
 .kh-lg.is-compact .kh-lg-ohlc { gap: 7px; }
 .kh-lg.is-compact .kh-lg-vol,
-.kh-lg.is-compact .kh-lg-ma,
-.kh-lg.is-compact .kh-lg-ind-row { display: none; }
+.kh-lg.is-compact .kh-lg-ma { display: none; }
 
-/* 보조지표 칩 — 이동평균 칩 아랫줄에 놓는다 (2026-09-17).
-   기본은 다 꺼져 있어 흐리다. 누르면 켜지면서 진해진다. */
-.kh-lg-ind-row {
-  display: flex; flex-wrap: wrap; gap: 4px;
-  margin-top: 3px; pointer-events: auto;
-}
-.kh-lg-ind { color: var(--kh-text-secondary); }
-.kh-lg-ind b:empty { display: none; }
+/* 지표 이름 줄(.kh-lg-ind-row)은 2026-09-18 에 없앴다 — 차트 위 글씨가
+   봉을 가렸고, 거래량·MACD·RSI 는 제 칸에 이름표가 따로 있어 중복이었다.
+   켜고 끄는 것은 기간 줄의 「보조지표」 메뉴 한 곳에서 한다. */
 
 /* 차트 칸 밖의 범례 (maLegend) — 패널 머리와 차트 아래 줄.
    어떤 선이 그려졌는지만 알린다. 값과 켜고 끄기는 위 .kh-lg 가 맡는다 */
@@ -265,12 +259,13 @@
   position: absolute; inset: 0; z-index: 0;
   pointer-events: none; overflow: hidden;
 }
+/* 막대 색은 **코드가 정한다** — 가장 많은 칸이 빨강, 가장 적은 칸이 파랑,
+   사이는 섞는다 (2026-09-18 지시). theme.css 의 --kh-up-rgb · --kh-down-rgb 을
+   읽어 만들므로 테마를 바꾸면 따라 바뀐다. 여기서는 모양만 정한다. */
 .kh-vp-b {
   position: absolute; left: 0;
-  background: var(--kh-accent-dim);
   border-radius: 0 2px 2px 0;
 }
-.kh-vp-b.is-now { background: var(--kh-up-dim); }
 .kh-vp-t {
   position: absolute; left: 5px;
   font-size: 0.66rem; color: var(--kh-text-muted);

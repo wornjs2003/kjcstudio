@@ -440,8 +440,37 @@ const PANE_H_DEF = { vol: 110, macd: 110, rsi: 110 };
  * 새 호출이 없다. 화면이 이미 갖고 있는 봉으로 계산한다.
  */
 const VP_BINS = 20;              // 가격을 몇 칸으로 나눌지
-const VP_WIDE = 0.78;            // 막대가 칸 폭의 몇 만큼까지 뻗을지 (2026-09-18 지시 — 더 길게)
-const VP_MIN_LABEL = 3;          // 이 퍼센트 미만은 글씨를 안 적는다 (겹친다)
+/* 가장 긴 막대가 그림 영역 오른쪽 끝에 거의 닿는다 (2026-09-18 지시 —
+   "가장 긴게 차트 화면 오른쪽 거의 끝에맞춰져서 정렬"). 1.0 이면 딱 닿아서
+   가격축 선과 붙어 보이므로 조금 남긴다. */
+const VP_WIDE = 0.97;
+/* ── 막대 색 (2026-09-18 지시) ──
+ *
+ * "가장 많은건 빨간색 가장 적은건 파란색 이고 이두색 사이로 나머지 매물대들
+ * 조절해서 넣어줘."
+ *
+ * 상승 빨강 · 하락 파랑과 **같은 두 색**을 쓴다(`--kh-up` · `--kh-down`).
+ * 색을 직접 박지 않고 theme.css 의 rgb 토큰을 읽어 섞는다 — 테마를 바꾸면
+ * 이것도 따라 바뀐다.
+ *
+ * 배경이라 옅게 깐다. 짙으면 봉이 안 보인다. */
+const VP_ALPHA = 0.16;
+
+/* 칸 높이가 이보다 크면 퍼센트를 적는다. 글씨가 0.66rem 이라 이만큼이면 들어간다 */
+const VP_LABEL_MIN_H = 11;
+
+function vpColor(t) {                      // t: 0 = 가장 적음(파랑) ~ 1 = 가장 많음(빨강)
+  const rgb = (name) => {
+    const m = alpha(name, 1).match(/rgba?\(([^)]+)\)/);
+    const [r, g, b] = (m ? m[1] : '0,0,0').split(/[\s,]+/).map(Number);
+    return [r, g, b];
+  };
+  const lo = rgb('down');
+  const hi = rgb('up');
+  const k = Math.max(0, Math.min(1, t));
+  const mix = lo.map((v, i) => Math.round(v + (hi[i] - v) * k));
+  return `rgba(${mix[0]},${mix[1]},${mix[2]},${VP_ALPHA})`;
+}
 const VP_REFRESH_MS = 2000;      // 다시 그리는 주기 (지시)
 
 /* ── 겹쳐 그리는 것은 세로 축 계산에서 뺀다 ──
@@ -477,9 +506,11 @@ function volumeProfile(candles, bins = VP_BINS) {
   }
   if (!total) return null;
 
+  const max = Math.max(...acc);
+  const min = Math.min(...acc);
   return {
-    total,
-    max: Math.max(...acc),
+    total, max, min,
+    span: max - min,          // 색을 섞는 데 쓴다. 0 이면 전부 같은 값이다
     bins: acc.map((vol, i) => ({
       lo: lo + step * i, hi: lo + step * (i + 1),
       vol, pct: vol / total * 100,
@@ -621,10 +652,16 @@ export function createStockChart(container, candles, opts = {}) {
       const h = Math.max(1, yBot - yTop - 1);
       const bw = prof.max ? b.vol / prof.max * w * VP_WIDE : 0;
       const here = now != null && now >= b.lo && now < b.hi;
+      /* 가장 많은 칸이 빨강, 가장 적은 칸이 파랑. 사이는 섞는다 */
+      const t = prof.span ? (b.vol - prof.min) / prof.span : 1;
 
       out.push(`<div class="kh-vp-b${here ? ' is-now' : ''}" style="top:${yTop}px;` +
-               `height:${h}px;width:${bw}px"></div>`);
-      if (b.pct >= VP_MIN_LABEL) {
+               `height:${h}px;width:${bw}px;background:${vpColor(t)}"></div>`);
+      /* **글씨는 자리가 있으면 적는다.** 전에는 「3% 넘으면」 이라는 임의
+         기준이라 어떤 칸은 나오고 어떤 칸은 안 나왔다 (2026-09-18 지적).
+         칸 높이가 글씨보다 크면 적고, 좁으면 건너뛴다 — 기간을 바꿔 봉이
+         촘촘해져도 같은 규칙으로 간다. */
+      if (h >= VP_LABEL_MIN_H) {
         out.push(`<div class="kh-vp-t${here ? ' is-now' : ''}" ` +
                  `style="top:${yTop + h / 2}px">${b.pct.toFixed(1)}%</div>`);
       }
@@ -1288,14 +1325,12 @@ function maChip(m) {
     ><span>MA${m.period}</span><b data-f="ma${m.period}">—</b></button>`;
 }
 
-/* 보조지표 칩 하나 — **값만 보여준다.**
-   누르면 꺼지던 것을 뺐다 (2026-09-18 지시 — "비활성화 하는 버튼은
-   없애도 될거같아"). 끄고 켜는 것은 기간 줄의 「보조지표」 메뉴 한 곳에서
-   한다. 두 곳에 두면 어느 쪽이 기준인지 헷갈린다. */
-function indChip(x) {
-  return `<span class="kh-lg-c kh-lg-ind" title="${x.tip}"
-    ><span>${x.name}</span><b data-f="ind-${x.key}"></b></span>`;
-}
+/* 보조지표 이름 줄은 **없앴다** (2026-09-18 지시 — "매물대 볼린저밴드
+   이동평균선 거래량 MACD RSI 글씨는 없애줘").
+
+   거래량 · MACD · RSI 는 제 칸에 이름표와 값이 따로 있어 중복이었고,
+   차트 위 글씨가 봉을 가렸다. 켜고 끄는 것은 기간 줄의 「보조지표」 메뉴에서
+   한다. 이동평균 값은 바로 위 MA 줄에 그대로 있다. */
 
 function mountLegend(container, chart, { candles, period, maSeries, showVolume, ind }) {
   container.classList.add('kh-lg-host');
@@ -1316,8 +1351,7 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
       <span><i>종</i><b data-f="close">—</b></span>
       ${showVolume ? '<span class="kh-lg-vol"><i>거래량</i><b data-f="volume">—</b></span>' : ''}
     </div>
-    <div class="kh-lg-ma">${maSeries.map(maChip).join('')}</div>
-    <div class="kh-lg-ind-row">${INDICATORS.map(indChip).join('')}</div>`;
+    <div class="kh-lg-ma">${maSeries.map(maChip).join('')}</div>`;
   container.appendChild(el);
 
   const nodes = {};
@@ -1344,6 +1378,8 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
   }
 
   /* 켜 둔 보조지표의 그 봉 값. 꺼 둔 것은 빈칸이다 */
+  /* 이름 줄을 없앴으므로 붙일 자리가 없다. 부르는 곳이 남아 있어 함수는
+     두되 값이 갈 칸을 못 찾으면 그냥 지나간다. */
   function renderInd(i) {
     INDICATORS.forEach((x) => {
       const n = nodes[`ind-${x.key}`];
