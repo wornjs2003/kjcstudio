@@ -524,8 +524,16 @@ export function createStockChart(container, candles, opts = {}) {
     })));
   }
 
-  /* 가격 그림 위에 얹히는 것만. 봉은 건드리지 않는다 */
+  /* 가격 그림 위에 얹히는 것만. 봉은 건드리지 않는다.
+   *
+   * **채우기 전에 먼저 비운다.** 이 함수가 maSeries·overlay 를 채우는
+   * 유일한 곳이므로 비우는 것도 여기가 맞다. 전에는 dropOverlay 에서만
+   * 비웠는데, build() 는 그것을 안 거쳐서 **1분마다(setData) 넷씩 쌓였다.**
+   * 선은 안 겹쳤지만 범례가 maSeries 를 그대로 그려서 MA 가 네 벌씩 보였다
+   * (2026-09-18). */
   function drawOverlay(ch) {
+    maSeries = [];
+    overlay = [];
     if (indOn().has('bb')) {
       const bb = bollinger(candles, period);
       /* 밴드 안을 옅게 채운다. 라이브러리에 「두 선 사이 채우기」가 없어서,
