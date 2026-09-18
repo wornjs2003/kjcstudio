@@ -42,6 +42,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 같은 폴더(server/)의 모듈들. 스크립트로 실행하므로 바로 잡힌다.
 import dart
+import naver
 import news
 # 오류 문구에서 비밀을 지운다. 외부 호출 오류를 사람에게 보여줄 때는
 # 반드시 이것을 거친다 (2026-09-14 에 인증키가 실제로 샜다).
@@ -1968,6 +1969,10 @@ class Handler(SimpleHTTPRequestHandler):
         if (self.path or "").startswith("/api/news/"):
             self._handle_news()
             return
+        if (self.path or "").startswith("/api/naver/"):
+            _mark_ui_call()          # 화면이 보고 있다는 신호는 여기서도 준다
+            self._handle_naver()
+            return
         if (self.path or "").startswith("/debugging/"):
             self._handle_debugging()
             return
@@ -1995,6 +2000,47 @@ class Handler(SimpleHTTPRequestHandler):
     # 두 갈래를 따로 받는다. 자세한 이유는 server/news.py 머리말에 있다.
     #   issues  구글 뉴스 RSS · 주제어별 · 원문 링크 있음
     #   moves   KIS news-title · 종목코드 붙음 · 링크 없음
+    # ── 네이버 업종 · 테마 (2026-09-18) ──
+    #
+    # 「지금 뜨는 산업」 이 쓴다. KIS 에 없는 둘 때문에 여기서 받는다 —
+    # 업종 안에서 몇이 오르내렸는지, 그리고 그 업종의 종목 목록이다.
+    # 자세한 것은 server/naver.py 머리글과 docs/sector-sources.md 에 있다.
+    def _handle_naver(self):
+        parsed = urllib.parse.urlparse(self.path)
+        route = parsed.path[len("/api/naver/"):].strip("/")
+        qs = urllib.parse.parse_qs(parsed.query)
+        kind = (qs.get("kind") or ["industry"])[0].strip()
+
+        try:
+            if route == "groups":
+                g = naver.groups(kind)
+                self._send_json({
+                    "ok": True, "data": g["rows"],
+                    "meta": {"kind": kind, "total": g["total"],
+                             "marketStatus": g["marketStatus"],
+                             "count": len(g["rows"]), "source": "네이버"},
+                })
+                return
+
+            if route == "stocks":
+                no = (qs.get("no") or [""])[0].strip()
+                if not no.isdigit():
+                    self._send_json({"ok": False, "error": "no 에 묶음 번호가 필요합니다."}, 400)
+                    return
+                s = naver.stocks(kind, no)
+                self._send_json({
+                    "ok": True, "data": s["rows"],
+                    "meta": {"kind": kind, "no": int(no), "name": s["name"],
+                             "count": len(s["rows"]), "source": "네이버"},
+                })
+                return
+
+            self._send_json({"ok": False, "error": "알 수 없는 경로입니다: %s" % route}, 404)
+        except ValueError as e:
+            self._send_json({"ok": False, "error": safe_message(e)}, 400)
+        except Exception as e:                      # 네이버가 막히거나 모양이 바뀐 경우
+            self._send_json({"ok": False, "error": safe_message(e)}, 502)
+
     def _handle_news(self):
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/news/"):].strip("/")
@@ -2435,12 +2481,45 @@ def main():
     print("-" * 52)
     sys.stdout.flush()
 
+    # ── IPv4 와 IPv6 를 **둘 다** 연다 (2026-09-18) ──
+    #
+    # `127.0.0.1` 에만 열려 있었다. 그런데 브라우저와 문서는 `localhost` 를 쓰고,
+    # 윈도우는 그 이름을 **IPv6(::1) 로 먼저** 푼다. 거기 아무도 없으니 실패한
+    # 뒤에야 IPv4 로 넘어가는데, **그 재시도에 2초가 걸린다.**
+    #
+    #     127.0.0.1   0.00 ~ 0.04초
+    #     localhost   2.03초          ← 요청 하나하나에 붙는다
+    #
+    # CSS 한 장에도 붙는다. 화면이 여는 요청이 수십 개이므로 **첫 화면이
+    # 통째로 느려진다.** 오늘 잰 지수 시간에도 이 2초가 섞여 있었다.
+    #
+    # `::1` 하나에 V6ONLY 를 꺼서 묶는 방법은 **안 된다** — IPv6 루프백에만
+    # 묶여서 `127.0.0.1` 이 거절된다(실측). 루프백 둘은 서로 다른 주소라
+    # 소켓을 따로 열어야 한다. `::`(모든 인터페이스)로 열면 한 번에 되지만
+    # 밖에서도 들어올 수 있게 되므로 쓰지 않는다 — 이 서버는 KIS 키를 들고 있다.
+    class _V6Server(ThreadingHTTPServer):
+        address_family = socket.AF_INET6
+
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    srv6 = None
+    try:
+        srv6 = _V6Server(("::1", args.port), Handler)
+        threading.Thread(target=srv6.serve_forever, daemon=True,
+                         name="http-v6").start()
+    except OSError as e:
+        # IPv6 가 꺼져 있는 PC 도 있다. 그래도 IPv4 로는 돌아야 한다.
+        print("  참고      : IPv6(::1) 은 못 열었습니다 — %s" % safe_message(e))
+        print("              localhost 로 열면 요청마다 2초쯤 늦습니다.")
+        print("              127.0.0.1 로 여시면 그 지연이 없습니다.")
+        sys.stdout.flush()
+
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
         print("\n  서버를 종료했습니다.")
         srv.server_close()
+        if srv6:
+            srv6.server_close()
 
 
 if __name__ == "__main__":
