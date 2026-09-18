@@ -325,7 +325,7 @@
 /* 고른 갈래 — 색을 꽉 채운 자리라 글씨는 흰색이다 (CLAUDE.md 색 규칙) */
 .group-tab.is-on {
   background: var(--accent);
-  color: var(--on-scrim, #fff);
+  color: var(--on-scrim);
 }
 .group-tab.is-on i { color: inherit; opacity: 0.72; }
 
