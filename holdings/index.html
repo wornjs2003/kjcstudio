@@ -116,8 +116,16 @@
           <span class="kh-head-yr" id="kh-year-range">불러오는 중</span>
           <a class="kh-fold" id="kh-big-link" href="./stock.html">자세히 ›</a>
         </div>
-        <!-- 기간 고르기 — 이름 아래 줄에 둔다 (2026-09-15 지시) -->
-        <div class="kh-idx-per" id="kh-idx-per"></div>
+        <!-- 기간 고르기 — 이름 아래 줄에 둔다 (2026-09-15 지시).
+             「보조지표」 는 그 오른쪽. 기간 줄 **안**에 넣으면 안 된다 —
+             home.js 가 그 줄을 innerHTML 로 다시 그려서 지워진다 (2026-09-18). -->
+        <div class="kh-per-row">
+          <div class="kh-idx-per" id="kh-idx-per"></div>
+          <div class="kh-ind-menu">
+            <button type="button" class="kh-ind-open">보조지표 <i>⌄</i></button>
+            <div class="kh-ind-list" hidden></div>
+          </div>
+        </div>
         <div class="kh-idx-chart" id="kh-big-chart"></div>
         <div class="kh-big-foot" id="kh-big-foot">
           <span>60거래일 추이</span><span>한국투자증권 실시간</span>
@@ -220,7 +228,7 @@
   <aside class="kh-side" id="kh-side" aria-label="실시간 순위">
     <div class="kh-side-wrap">
 
-      <div class="kh-card kh-rank kh-rank-card">
+      <div class="kh-card kh-rank-card">
         <div class="kh-tabs">
           <button class="kh-tab is-active">실시간 순위</button>
           <span class="kh-fold">▤ 요약 접기</span>

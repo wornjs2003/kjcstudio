@@ -26,6 +26,7 @@ const FALLBACK = {
   'chart-axis': '#8b95a1', 'chart-crosshair': 'rgba(16,16,19,0.28)',
   'chart-label-bg': '#101013', 'chart-label-fg': '#ffffff',
   'ma5': '#f29300', 'ma20': '#3182f6', 'ma60': '#8b5cf6', 'ma200': '#4e5968',
+  'band': '#f5a623', 'rsi': '#9b51e0',
   'ind-1': '#3182f6', 'ind-2': '#f29300', 'ind-3': '#8b5cf6',
   'ind-4': '#f04452', 'ind-5': '#8b95a1',
   'topic-war': '#f04452', 'topic-ai': '#3182f6', 'topic-defense': '#f29300',
@@ -37,6 +38,7 @@ const FALLBACK_RGB = {
   'ink': '16 16 19', 'paper': '255 255 255', 'accent': '49 130 246',
   'up': '240 68 82', 'down': '49 130 246',
   'ok': '2 162 98', 'warn': '242 147 0',
+  'band': '245 166 35', 'rsi': '155 81 224', 'rsi-band': '49 130 246',
 };
 
 const cache = new Map();

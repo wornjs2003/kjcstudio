@@ -26,11 +26,69 @@ const COLOR = {
   get ma20()   { return color('ma20'); },
   get ma60()   { return color('ma60'); },
   get ma200()  { return color('ma200'); },
+  /* 보조지표 — theme.css 에 이미 다섯이 있다 (--kh-ind-1 … 5) */
+  get ind1()   { return color('ind-1'); },     // 파랑
+  get ind2()   { return color('ind-2'); },     // 주황
+  get ind3()   { return color('ind-3'); },     // 보라
+  get ind4()   { return color('ind-4'); },     // 빨강
+  get ind5()   { return color('ind-5'); },     // 회색
+
+  /* 보조지표 전용 */
+  get band()     { return color('band'); },        // 볼린저 실선 (노랑)
+  get bandFill() { return alpha('band', 0.10); },  // 밴드 안 옅은 노랑
+  get cardBg()   { return color('bg-card'); },     // 띠 아래를 덮는 카드 색
+  get rsi()      { return color('rsi'); },
+  get rsiSig()   { return color('ma20'); },
+  get rsiBand()  { return alpha('rsi-band', 0.10); },   // 30~70 띠 — 옅은 파랑
 };
 
 /* 그릴 이동평균선. 늘리려면 여기 한 줄과 theme.css·theme.js 의 색만 더한다.
    (2026-09-16 지시 — 5 · 20 · 60 · 200) */
 const MA_LINES = [[5, 'ma5'], [20, 'ma20'], [60, 'ma60'], [200, 'ma200']];
+
+/* 보조지표 (2026-09-17 지시 — "필요한 보조지표들 추가").
+ *
+ * **기본은 전부 꺼짐이다.** 다섯을 한꺼번에 켜면 선이 열 개를 넘어 봉이 안 보인다.
+ * 켠 것은 localStorage 에 남아 다음에 열 때 이어진다 — 이동평균과 같은 방식이다.
+ *
+ *   pane  price   가격 그림 위에 겹친다
+ *         volume  거래량 칸에 겹친다
+ *         own     제 칸을 아래에 새로 만든다 (그만큼 가격 그림이 줄어든다)
+ */
+export const INDICATORS = [
+  { key: 'bb',   name: '볼린저 밴드', pane: 'price' },
+  { key: 'ma',   name: '이동평균선',  pane: 'price' },
+  { key: 'vol',  name: '거래량',      pane: 'own'   },
+  { key: 'macd', name: 'MACD',       pane: 'own'   },
+  { key: 'rsi',  name: 'RSI',        pane: 'own'   },
+];
+
+/* 같은 화면의 차트들이 함께 맞춘다. 한 곳에서 켜면 나머지도 따라간다 */
+const _indSync = new Set();
+
+const IND_ON_KEY = 'kh.chart.ind-on';
+let _indOn = null;
+
+export function indOn() {
+  if (_indOn) return _indOn;
+  let saved = null;
+  try {
+    const raw = localStorage.getItem(IND_ON_KEY);
+    saved = raw == null ? null : JSON.parse(raw);
+  } catch { /* 저장 못 씀 */ }
+  const names = INDICATORS.map((x) => x.key);
+  _indOn = new Set(Array.isArray(saved)
+    ? saved.filter((k) => names.includes(k))
+    : ['ma', 'vol']);          // 처음 열면 이동평균과 거래량만
+  return _indOn;
+}
+
+function saveIndOn() {
+  try { localStorage.setItem(IND_ON_KEY, JSON.stringify([..._indOn])); } catch { /* 저장 못 씀 */ }
+}
+
+/* 아래 칸 하나가 먹는 높이 비율. 셋이 다 켜지면 가격이 절반 아래로 내려간다 */
+const PANE_H = 0.18;
 
 /* 한 화면에 몇 봉을 보일 것인가.
  *
@@ -105,6 +163,181 @@ function movingAverage(candles, period, barPeriod) {
   return out;
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+   보조지표 계산 (2026-09-17 지시 — "필요한 보조지표들 추가")
+
+   전부 순수 계산이다. 봉 배열을 받아 { time, value } 목록을 돌려준다.
+   값이 아직 없는 앞쪽 구간은 **넣지 않는다** — 라이브러리가 빈 값을 0 으로
+   그려 선이 바닥에서 솟아오르는 것을 막기 위해서다.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* 지수이동평균 — 최근 값에 무게를 더 준다. MACD 가 쓴다. */
+function ema(values, period) {
+  const k = 2 / (period + 1);
+  const out = new Array(values.length).fill(null);
+  let acc = 0;
+  for (let i = 0; i < values.length; i++) {
+    if (i < period - 1) { acc += values[i]; continue; }
+    if (i === period - 1) { acc += values[i]; out[i] = acc / period; continue; }
+    out[i] = values[i] * k + out[i - 1] * (1 - k);
+  }
+  return out;
+}
+
+/* 볼린저 밴드 — 20일 이동평균에서 표준편차 두 배만큼 떨어진 위아래 선.
+   값이 이 띠를 벗어나면 평소 범위 밖이라는 뜻이다.
+   **가운데 선은 안 그린다.** 20일 이동평균과 같은 값이라 MA20 이 이미 그리고 있다. */
+function bollinger(candles, barPeriod, period = 20, mult = 2) {
+  const up = [], lo = [];
+  const vUp = new Array(candles.length).fill(null);
+  const vLo = new Array(candles.length).fill(null);
+  for (let i = period - 1; i < candles.length; i++) {
+    let sum = 0;
+    for (let j = i - period + 1; j <= i; j++) sum += candles[j].close;
+    const mean = sum / period;
+    let sq = 0;
+    for (let j = i - period + 1; j <= i; j++) sq += (candles[j].close - mean) ** 2;
+    const sd = Math.sqrt(sq / period);
+    const t = toChartTime(candles[i].ts, barPeriod);
+    vUp[i] = mean + sd * mult;
+    vLo[i] = mean - sd * mult;
+    up.push({ time: t, value: vUp[i] });
+    lo.push({ time: t, value: vLo[i] });
+  }
+  return { up, lo, vUp, vLo, period };
+}
+
+/* RSI — 오른 폭과 내린 폭의 비를 0~100 으로 (Wilder 방식).
+   70 위면 많이 샀다, 30 아래면 많이 팔았다고 본다. */
+function rsi(candles, barPeriod, period = 14) {
+  const out = [];
+  const vals = new Array(candles.length).fill(null);
+  if (candles.length <= period) return { data: out, values: vals, period };
+
+  let gain = 0, loss = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = candles[i].close - candles[i - 1].close;
+    if (d >= 0) gain += d; else loss -= d;
+  }
+  gain /= period; loss /= period;
+
+  const put = (i) => {
+    const v = loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
+    vals[i] = v;
+    out.push({ time: toChartTime(candles[i].ts, barPeriod), value: v });
+  };
+  put(period);
+
+  for (let i = period + 1; i < candles.length; i++) {
+    const d = candles[i].close - candles[i - 1].close;
+    gain = (gain * (period - 1) + (d > 0 ? d : 0)) / period;
+    loss = (loss * (period - 1) + (d < 0 ? -d : 0)) / period;
+    put(i);
+  }
+  return { data: out, values: vals, period };
+}
+
+/* MACD — 12일선과 26일선의 차이(macd), 그것의 9일 지수이동평균(signal),
+   그리고 둘의 차이(hist). hist 가 0 을 넘나드는 자리가 추세가 바뀌는 자리다. */
+function macd(candles, barPeriod, fast = 12, slow = 26, sig = 9) {
+  const close = candles.map((c) => c.close);
+  const eF = ema(close, fast);
+  const eS = ema(close, slow);
+
+  const diff = close.map((_, i) =>
+    (eF[i] == null || eS[i] == null) ? null : eF[i] - eS[i]);
+
+  /* 신호선은 diff 가 생긴 뒤부터 센다 */
+  const start = diff.findIndex((v) => v != null);
+  const sigRaw = start < 0 ? [] : ema(diff.slice(start).map((v) => v), sig);
+  const signal = new Array(candles.length).fill(null);
+  sigRaw.forEach((v, i) => { if (v != null) signal[start + i] = v; });
+
+  const line = [], sgn = [], hist = [];
+  const vHist = new Array(candles.length).fill(null);
+  for (let i = 0; i < candles.length; i++) {
+    const t = toChartTime(candles[i].ts, barPeriod);
+    if (diff[i] != null) line.push({ time: t, value: diff[i] });
+    if (signal[i] != null) sgn.push({ time: t, value: signal[i] });
+    if (diff[i] != null && signal[i] != null) {
+      const h = diff[i] - signal[i];
+      vHist[i] = h;
+      hist.push({
+        time: t, value: h,
+        color: h >= 0 ? alpha('up', 0.55) : alpha('down', 0.55),
+      });
+    }
+  }
+  return { line, signal: sgn, hist, vLine: diff, vSignal: signal, vHist };
+}
+
+/* 일목균형표 — 다섯 선으로 지지·저항을 본다.
+ *
+ *   전환선   최근 9봉의 (최고+최저)/2
+ *   기준선   최근 26봉의 (최고+최저)/2
+ *   선행1    (전환+기준)/2 를 26봉 **앞으로** 민 것
+ *   선행2    최근 52봉의 (최고+최저)/2 를 26봉 앞으로 민 것
+ *   후행     종가를 26봉 **뒤로** 민 것
+ *
+ * **구름(선행1과 선행2 사이 색칠)은 안 그린다.** 두 선 사이를 채우려면
+ * 라이브러리에 없는 기능이라 따로 만들어야 한다. 선 둘로 경계만 보여준다.
+ * 선행선은 봉보다 앞을 가리키므로, 라이브러리가 모르는 시각이 되지 않도록
+ * **있는 봉 범위 안에서만** 그린다.
+ */
+function ichimoku(candles, barPeriod, a = 9, b = 26, c = 52) {
+  const hl = (from, to) => {
+    let hi = -Infinity, lo = Infinity;
+    for (let i = from; i <= to; i++) {
+      if (candles[i].high > hi) hi = candles[i].high;
+      if (candles[i].low < lo) lo = candles[i].low;
+    }
+    return (hi + lo) / 2;
+  };
+
+  const conv = [], base = [], sp1 = [], sp2 = [], lag = [];
+  const vConv = new Array(candles.length).fill(null);
+  const vBase = new Array(candles.length).fill(null);
+
+  for (let i = 0; i < candles.length; i++) {
+    const t = toChartTime(candles[i].ts, barPeriod);
+    if (i >= a - 1) { vConv[i] = hl(i - a + 1, i); conv.push({ time: t, value: vConv[i] }); }
+    if (i >= b - 1) { vBase[i] = hl(i - b + 1, i); base.push({ time: t, value: vBase[i] }); }
+
+    /* 앞으로 민 선 — i 번째 값이 i+b 자리에 놓인다. 봉이 있는 데까지만 */
+    const fwd = i + b;
+    if (fwd < candles.length) {
+      const ft = toChartTime(candles[fwd].ts, barPeriod);
+      if (vConv[i] != null && vBase[i] != null) {
+        sp1.push({ time: ft, value: (vConv[i] + vBase[i]) / 2 });
+      }
+      if (i >= c - 1) sp2.push({ time: ft, value: hl(i - c + 1, i) });
+    }
+
+    /* 뒤로 민 선 — 지금 종가를 26봉 전 자리에 놓는다 */
+    const bwd = i - b;
+    if (bwd >= 0) {
+      lag.push({ time: toChartTime(candles[bwd].ts, barPeriod), value: candles[i].close });
+    }
+  }
+  return { conv, base, sp1, sp2, lag, vConv, vBase, a, b, c };
+}
+
+/* 거래량 이동평균 — 오늘 거래가 평소보다 많은지 본다 */
+function volumeMA(candles, barPeriod, period = 20) {
+  const out = [];
+  const vals = new Array(candles.length).fill(null);
+  let sum = 0;
+  for (let i = 0; i < candles.length; i++) {
+    sum += candles[i].volume || 0;
+    if (i >= period) sum -= candles[i - period].volume || 0;
+    if (i >= period - 1) {
+      vals[i] = sum / period;
+      out.push({ time: toChartTime(candles[i].ts, barPeriod), value: vals[i] });
+    }
+  }
+  return { data: out, values: vals, period };
+}
+
 /* 받아둔 봉을 잠깐 쥐고 있는다.
  *
  * 목록에 마우스를 올리면 미리보기가 그 종목으로 바뀌는데(2026-09-16 지시),
@@ -150,6 +383,58 @@ export async function fetchCandles(code, periodId = '1d', limit = 240) {
    차트 하나를 만들어 반환한다.
    반환값의 destroy() 를 호출해 정리한다 (화면을 다시 그릴 때 필요).
    ────────────────────────────────────────────────────────────────────────── */
+/* 오른쪽 가격축 폭. **모든 칸이 같은 값을 쓴다.**
+ *
+ * 칸마다 차트를 따로 만들기 때문에, 축 폭을 라이브러리에 맡기면 값의 글자 수를
+ * 따라 저절로 갈린다 — 가격은 「1,402,000」 열 자, RSI 는 「49.82」 다섯 자다.
+ * 그러면 그림이 시작하고 끝나는 자리가 칸마다 달라져 봉과 지표가 세로로 안 맞는다.
+ * 못 박아 두고, 아래 checkAlign 이 어긋나면 화면에 표시한다.
+ * (holdings/CLAUDE.md 「차트 칸의 좌우 끝은 반드시 맞는다」) */
+const AXIS_W = 76;
+
+/* 아래 칸 기본 높이와 최소값. 끌어서 바꾼 값은 브라우저에 남는다 */
+/* 바깥(보조지표 메뉴)이 켜고 끌 때 쓴다. 켠 목록은 여기 한 곳에만 둔다 —
+   그래야 첫 화면·종목 화면·모달이 같은 상태를 본다. */
+export function toggleIndicator(key) {
+  const on = indOn();
+  if (on.has(key)) on.delete(key); else on.add(key);
+  saveIndOn();
+  _indSync.forEach((fn) => fn());
+}
+
+/* 켠 목록이 바뀌면 알려준다 (메뉴의 체크를 맞추는 데 쓴다) */
+export function onIndicatorChange(fn) {
+  _indSync.add(fn);
+  return () => _indSync.delete(fn);
+}
+
+const PANE_H_KEY = 'kh.chart.pane-h';
+const PANE_H_DEF = { vol: 110, macd: 110, rsi: 110 };
+const PANE_MIN = 60, PRICE_MIN = 120;
+
+let _paneH = null;
+function paneH() {
+  if (_paneH) return _paneH;
+  _paneH = { ...PANE_H_DEF };
+  try {
+    const v = JSON.parse(localStorage.getItem(PANE_H_KEY) || '{}');
+    Object.keys(_paneH).forEach((k) => {
+      if (Number.isFinite(v[k]) && v[k] >= PANE_MIN) _paneH[k] = v[k];
+    });
+  } catch { /* 없으면 기본값 */ }
+  return _paneH;
+}
+function savePaneH() {
+  try { localStorage.setItem(PANE_H_KEY, JSON.stringify(_paneH)); } catch { /* 저장 못 씀 */ }
+}
+
+/* 제 칸을 갖는 지표. 순서가 곧 위에서 아래 순서다 */
+const OWN_PANES = [
+  { key: 'vol',  label: '거래량', par: '20' },
+  { key: 'macd', label: 'MACD',  par: '12, 26, 9' },
+  { key: 'rsi',  label: 'RSI',   par: '14' },
+];
+
 export function createStockChart(container, candles, opts = {}) {
   /* candles 는 setData 로 바뀐다 (인자를 그대로 쓰지 않는다) */
   const LC = window.LightweightCharts;
@@ -159,204 +444,506 @@ export function createStockChart(container, candles, opts = {}) {
   const showVolume = opts.showVolume !== false;
   const showMA = opts.showMA !== false;
   const showLegend = opts.showLegend !== false;
-  /* candles · period 는 setData 로 갈아끼운다. 그래서 const 가 아니다 */
   let period = opts.period || 'D';
-  const isMinute = MINUTE_PERIODS.has(period);
 
-  const chart = LC.createChart(container, {
-    layout: {
-      background: { color: 'transparent' },
-      textColor: COLOR.text,
-      fontFamily: "'Noto Sans KR', system-ui, sans-serif",
-      fontSize: 11,
-    },
-    grid: {
-      vertLines: { color: COLOR.grid },
-      horzLines: { color: COLOR.grid },
-    },
-    rightPriceScale: {
-      borderColor: COLOR.border,
-      /* 범례가 왼쪽 위에 겹쳐 앉으므로 그만큼 위를 비워 둔다.
-         안 비우면 높이 오른 봉의 꼭대기가 범례 뒤로 들어간다 */
-      scaleMargins: {
-        top: showLegend ? 0.16 : 0.08,
-        bottom: showVolume ? 0.26 : 0.08,
+  container.classList.add('kh-panes');
+
+  let panes = [];
+  let maSeries = [];
+  let candleSeries = null;
+  let legend = null;
+  const priceLines = [];
+  let syncing = false;
+
+  function mkChart(box, h, axis) {
+    return LC.createChart(box, {
+      width: box.clientWidth || container.clientWidth, height: h,
+      layout: {
+        background: { color: 'transparent' }, textColor: COLOR.text,
+        fontFamily: "'Noto Sans KR', system-ui, sans-serif", fontSize: 11,
       },
-    },
-    timeScale: {
-      borderColor: COLOR.border,
-      rightOffset: 4,
-      /* 왼쪽 끝을 묶지 않는다. 봉이 VISIBLE_BARS 보다 적을 때 그만큼
-         왼쪽을 비워야 봉 굵기가 종목마다 같아진다 (showLastBars 참고).
-         묶어 두면 라이브러리가 범위를 데이터 안으로 되돌려 다시 굵어진다. */
-      fixLeftEdge: false,
-      timeVisible: isMinute,      // 분봉이면 시:분까지 표시
-      secondsVisible: false,
-    },
-    crosshair: {
-      mode: LC.CrosshairMode.Normal,
-      vertLine: { color: COLOR.cross, labelBackgroundColor: COLOR.label },
-      horzLine: { color: COLOR.cross, labelBackgroundColor: COLOR.label },
-    },
-    localization: {
-      locale: 'ko-KR',
-      priceFormatter: (v) => Math.round(v).toLocaleString('ko-KR'),
-    },
-    autoSize: true,
-  });
-
-  // 캔들
-  const candleSeries = chart.addSeries(LC.CandlestickSeries, {
-    upColor: COLOR.up,
-    downColor: COLOR.down,
-    borderUpColor: COLOR.up,
-    borderDownColor: COLOR.down,
-    wickUpColor: COLOR.up,
-    wickDownColor: COLOR.down,
-  });
-  const fillCandles = () => candleSeries.setData(candles.map((c) => ({
-    time: toChartTime(c.ts, period),
-    open: c.open, high: c.high, low: c.low, close: c.close,
-  })));
-  fillCandles();
-
-  // 거래량 (아래쪽에 겹쳐 표시)
-  let volumeSeries = null;
-  if (showVolume) {
-    volumeSeries = chart.addSeries(LC.HistogramSeries, {
-      priceFormat: { type: 'volume' },
-      priceScaleId: 'volume',
-      lastValueVisible: false,
-      priceLineVisible: false,
+      grid: { vertLines: { color: COLOR.grid }, horzLines: { color: COLOR.grid } },
+      rightPriceScale: {
+        borderColor: COLOR.border,
+        scaleMargins: { top: showLegend ? 0.16 : 0.08, bottom: 0.08 },
+        minimumWidth: AXIS_W,            // 좌우 끝을 맞추는 핵심. 위 주석 참고
+      },
+      timeScale: {
+        borderColor: COLOR.border, rightOffset: 4, fixLeftEdge: false,
+        timeVisible: MINUTE_PERIODS.has(period), secondsVisible: false,
+        visible: axis,
+      },
+      crosshair: {
+        mode: LC.CrosshairMode.Normal,
+        vertLine: { color: COLOR.cross, labelBackgroundColor: COLOR.label },
+        horzLine: { color: COLOR.cross, labelBackgroundColor: COLOR.label },
+      },
+      localization: {
+        locale: 'ko-KR',
+        priceFormatter: (v) => Math.round(v).toLocaleString('ko-KR'),
+      },
     });
-    chart.priceScale('volume').applyOptions({
-      scaleMargins: { top: 0.78, bottom: 0 },
-      visible: false,
-    });
-    fillVolume();
   }
 
-  function fillVolume() {
-    if (!volumeSeries) return;
-    volumeSeries.setData(candles.map((c) => ({
+  const addLine = (ch, o) => ch.addSeries(LC.LineSeries, {
+    lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+    crosshairMarkerVisible: false, ...o,
+  });
+
+  /* 값이 없는 앞 구간을 **빈 자리(time 만)** 로 채운다.
+     걸러 내면 칸마다 봉 개수가 달라지고, 시간축을 맞출 때 쓰는 「몇 번째 봉」이
+     어긋나 오른쪽이 잘린다 — MACD 가 앞 25봉이 없어 그랬다 (2026-09-18). */
+  const put = (vals) => vals.map((v, i) =>
+    v == null ? { time: toChartTime(candles[i].ts, period) }
+              : { time: toChartTime(candles[i].ts, period), value: v });
+
+  /* 가격 칸 위에 얹히는 지표(볼린저·이동평균)를 따로 들고 있는다.
+     칸 구성이 안 바뀌는데 통째로 다시 만들면 화면이 깜빡인다 (2026-09-18 지시). */
+  let overlay = [];
+
+  /* 겹침 시리즈와 maSeries 는 한 몸이다. 여기서만 비운다 */
+  function dropOverlay(ch) {
+    overlay.forEach((sr) => { try { ch.removeSeries(sr); } catch { /* 이미 없음 */ } });
+    overlay = [];
+    maSeries = [];
+  }
+
+  /* **봉과 겹침을 따로 만든다 (2026-09-18).**
+     한 함수가 둘을 같이 만들면, 겹침만 바꾸려 할 때 봉이 딸려 온다.
+     전에는 「새로 만든 봉을 지우고 옛 것을 되돌리는」 우회를 썼는데,
+     그 사이 캔들 시리즈가 잠깐 둘이 되어 **세로 축이 두 번 흔들렸다.**
+     볼린저를 켤 때마다 봉이 커졌다 작아진 것이 이 때문이다. */
+  function drawCandle(ch) {
+    candleSeries = ch.addSeries(LC.CandlestickSeries, {
+      upColor: COLOR.up, downColor: COLOR.down, borderUpColor: COLOR.up,
+      borderDownColor: COLOR.down, wickUpColor: COLOR.up, wickDownColor: COLOR.down,
+    });
+    candleSeries.setData(candles.map((c) => ({
       time: toChartTime(c.ts, period),
-      value: c.volume,
-      color: c.close >= c.open ? alpha('up', 0.30) : alpha('down', 0.30),
+      open: c.open, high: c.high, low: c.low, close: c.close,
     })));
   }
 
-  /* 이동평균선 — 5 · 20 · 60 · 200 (2026-09-16 지시).
-   *
-   * **봉이 모자라면 그렇게 적는다.** 전에는 조용히 건너뛰었는데, 지수 봉이
-   * 50개만 오는 바람에 MA60 부터 안 그려지는 것을 아무도 몰랐다. 안 나오는
-   * 것과 못 그리는 것은 다르고, 화면이 그 차이를 말해야 한다
-   * (holdings/CLAUDE.md 데이터 규칙). */
-  const maSeries = [];
-  buildMA();
-  function buildMA() {
-    if (!showMA) return;
-    MA_LINES.forEach(([maPeriod, key]) => {
-      const color = COLOR[key];
-      if (candles.length < maPeriod) {
-        maSeries.push({
-          period: maPeriod, key, color,
-          series: null, values: [], short: candles.length,
-        });
-        return;
-      }
-      const s = chart.addSeries(LC.LineSeries, {
-        color, lineWidth: 1,
-        priceLineVisible: false, lastValueVisible: false,
-        crosshairMarkerVisible: false,
-        /* 전에 끈 선은 끈 채로 연다 (maOff 참고) */
-        visible: !maOff().has(maPeriod),
+  /* 가격 그림 위에 얹히는 것만. 봉은 건드리지 않는다 */
+  function drawOverlay(ch) {
+    if (indOn().has('bb')) {
+      const bb = bollinger(candles, period);
+      /* 밴드 안을 옅게 채운다. 라이브러리에 「두 선 사이 채우기」가 없어서,
+         위 선을 아래로 채운 뒤 아래 선을 카드 색으로 덮어 띠만 남긴다.
+
+         **세로 자동 맞춤에서 뺀다.** 띠는 봉보다 위아래로 넓어서, 안 빼면
+         켜는 순간 값 축이 그만큼 벌어져 봉이 작아진다. */
+      const noScale = { autoscaleInfoProvider: () => null };
+      const up = ch.addSeries(LC.AreaSeries, {
+        lineColor: COLOR.band, lineWidth: 1,
+        topColor: COLOR.bandFill, bottomColor: COLOR.bandFill,
+        priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+        ...noScale,
       });
-      const data = movingAverage(candles, maPeriod, period);
-      s.setData(data);
-      /* 범례가 봉 번호로 값을 찾는다. 앞의 maPeriod-1 개는 아직 값이 없다.
-         라인 시리즈에 물어보면 꺼 둔 선은 답이 없어서 따로 들고 있는다 */
-      const values = new Array(candles.length).fill(null);
-      data.forEach((d, i) => { values[i + maPeriod - 1] = d.value; });
-      maSeries.push({ period: maPeriod, key, color, series: s, values });
+      const lo = ch.addSeries(LC.AreaSeries, {
+        lineColor: COLOR.band, lineWidth: 1,
+        topColor: COLOR.cardBg, bottomColor: COLOR.cardBg,
+        priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+        ...noScale,
+      });
+      up.setData(put(bb.vUp));
+      lo.setData(put(bb.vLo));
+      overlay.push(up, lo);
+    }
+
+    if (showMA && indOn().has('ma')) {
+      MA_LINES.forEach(([p, key]) => {
+        const color = COLOR[key];
+        if (candles.length < p) {
+          maSeries.push({ period: p, key, color, series: null, values: [], short: candles.length });
+          return;
+        }
+        const sr = addLine(ch, { color, visible: !maOff().has(p) });
+        const data = movingAverage(candles, p, period);
+        sr.setData(data);
+        const values = new Array(candles.length).fill(null);
+        data.forEach((d, k) => { values[k + p - 1] = d.value; });
+        maSeries.push({ period: p, key, color, series: sr, values });
+        overlay.push(sr);
+      });
+    }
+  }
+
+  /* 겹침만 갈아끼운다. 봉과 칸은 그대로 둔다 */
+  function redrawOverlay() {
+    const ch = panes[0] && panes[0].chart;
+    if (!ch) return;
+
+    /* 보던 구간을 붙잡아 둔다. 시리즈를 넣고 빼면 라이브러리가 보이는 범위를
+       다시 잡는다 — 46.67~183 이 60~179 로 좁아졌다 (2026-09-18 실측).
+       세로는 봉을 안 건드리니 저절로 그대로다. */
+    let keep = null;
+    try { keep = ch.timeScale().getVisibleLogicalRange(); } catch { /* 없으면 그대로 */ }
+
+    dropOverlay(ch);
+    drawOverlay(ch);
+
+    if (keep) {
+      const back = () => {
+        try { ch.timeScale().setVisibleLogicalRange(keep); } catch { /* 이미 정리됨 */ }
+      };
+      back();
+      requestAnimationFrame(back);   // 라이브러리가 나중에 제 계산을 밀어넣는다
+    }
+
+    if (showLegend && legend) {
+      legend.destroy();
+      legend = mountLegend(panes[0].box, ch,
+        { candles, period, maSeries, showVolume: false, ind: {}, toggleInd });
+      api.legend = legend;
+    }
+  }
+
+  function drawVol(ch) {
+    const h = ch.addSeries(LC.HistogramSeries, {
+      priceFormat: { type: 'volume' }, lastValueVisible: true, priceLineVisible: false,
+    });
+    /* 색을 진하게 두고 오름·내림 대비를 크게 한다 — 투명하면 한 덩어리로 보인다 */
+    h.setData(candles.map((c) => ({
+      time: toChartTime(c.ts, period), value: c.volume,
+      color: c.close >= c.open ? COLOR.up : COLOR.down,
+    })));
+    const v = volumeMA(candles, period);
+    addLine(ch, { color: COLOR.ma20, lineWidth: 2, lastValueVisible: true })
+      .setData(put(v.values));
+    return { values: v.values };
+  }
+
+  function drawMacd(ch) {
+    const m = macd(candles, period);
+    const peak = Math.max(...m.vHist.filter((x) => x != null).map(Math.abs), 1);
+    const hs = ch.addSeries(LC.HistogramSeries, { lastValueVisible: true, priceLineVisible: false });
+    /* 막대 농도로 힘을 나타낸다 — 약하면 12%, 세면 100% */
+    hs.setData(m.vHist.map((v, i) => v == null
+      ? { time: toChartTime(candles[i].ts, period) }
+      : {
+          time: toChartTime(candles[i].ts, period), value: v,
+          color: (v >= 0 ? COLOR.up : COLOR.down) +
+            Math.round(30 + 225 * Math.min(1, Math.abs(v) / peak)).toString(16).padStart(2, '0'),
+        }));
+    addLine(ch, { color: COLOR.ma20, lineWidth: 2, lastValueVisible: true }).setData(put(m.vLine));
+    addLine(ch, { color: COLOR.ma5, lineWidth: 2, lastValueVisible: true }).setData(put(m.vSignal));
+    return m;
+  }
+
+  function drawRsi(ch) {
+    const r = rsi(candles, period);
+    const flat = (v, col) => {
+      const sr = ch.addSeries(LC.AreaSeries, {
+        lineColor: 'transparent', topColor: col, bottomColor: col,
+        priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      });
+      sr.setData(candles.map((c) => ({ time: toChartTime(c.ts, period), value: v })));
+    };
+    flat(70, COLOR.rsiBand);        // 30~70 을 옅게
+    flat(30, COLOR.cardBg);         // 아래를 카드 색으로 덮어 띠만 남긴다
+
+    /* 70 위·30 아래로 넘어간 만큼만 색을 채운다 */
+    const over = ch.addSeries(LC.BaselineSeries, {
+      baseValue: { type: 'price', price: 70 },
+      topFillColor1: COLOR.up + '55', topFillColor2: COLOR.up + '22',
+      bottomFillColor1: 'transparent', bottomFillColor2: 'transparent',
+      topLineColor: 'transparent', bottomLineColor: 'transparent',
+      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+    });
+    over.setData(put(r.values.map((v) => v == null ? null : Math.max(v, 70))));
+
+    const under = ch.addSeries(LC.BaselineSeries, {
+      baseValue: { type: 'price', price: 30 },
+      topFillColor1: 'transparent', topFillColor2: 'transparent',
+      bottomFillColor1: COLOR.down + '22', bottomFillColor2: COLOR.down + '55',
+      topLineColor: 'transparent', bottomLineColor: 'transparent',
+      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+    });
+    under.setData(put(r.values.map((v) => v == null ? null : Math.min(v, 30))));
+
+    const ln = addLine(ch, { color: COLOR.rsi, lineWidth: 2, lastValueVisible: true });
+    ln.setData(put(r.values));
+
+    /* 두 번째 선 — RSI 의 14봉 평균 */
+    const sig = smaOf(r.values, 14);
+    addLine(ch, { color: COLOR.rsiSig, lineWidth: 1, lastValueVisible: true }).setData(put(sig));
+
+    /* 기준선 70 · 50 · 30 은 점선. 오른쪽 축에 배지는 붙이지 않는다 */
+    [70, 50, 30].forEach((v) => {
+      try {
+        ln.createPriceLine({ price: v, color: COLOR.cross, lineWidth: 1,
+          lineStyle: 2, axisLabelVisible: false, title: '' });
+      } catch { /* 라이브러리 버전이 다르면 선만 생략 */ }
+    });
+    return { values: r.values, sig };
+  }
+
+  function build() {
+    /* 보던 자리를 기억했다가 되돌린다. 지표를 켜고 끌 때마다 창이
+       처음으로 돌아가면 보던 구간을 다시 찾아가야 한다 (2026-09-18 지시). */
+    let keep = null;
+    if (panes[0]) {
+      try { keep = panes[0].chart.timeScale().getVisibleLogicalRange(); } catch { /* 없으면 기본 */ }
+    }
+
+    panes.forEach((p) => { try { p.chart.remove(); } catch { /* 이미 정리됨 */ } });
+    panes = [];
+    container.innerHTML = '';
+
+    /* **세 화면이 같은 규칙으로 간다 (2026-09-18 지시).** 좁다고 칸을 빼지 않는다 —
+       종목 화면에서 켠 것이 모달과 첫 화면에도 그대로 있어야 한다. */
+    const own = OWN_PANES.filter((x) =>
+      indOn().has(x.key) && (x.key !== 'vol' || showVolume));
+    const list = [{ key: 'price' }, ...own];
+    const below = own.reduce((a, x) => a + paneH()[x.key], 0);
+
+    list.forEach((p, idx) => {
+      const el = document.createElement('div');
+      el.className = 'kh-pane';
+      const box = document.createElement('div');
+      box.className = 'kh-pane-box';
+      el.appendChild(box);
+      container.appendChild(el);
+
+      const h = p.key === 'price'
+        ? Math.max(PRICE_MIN, container.clientHeight - below)
+        : paneH()[p.key];
+      box.style.height = h + 'px';
+
+      const ch = mkChart(box, h, idx === list.length - 1);
+      const item = { key: p.key, el, box, chart: ch };
+      panes.push(item);
+
+      if (p.key === 'price') { drawCandle(ch); drawOverlay(ch); }
+      if (p.key === 'vol')   item.calc = drawVol(ch);
+      if (p.key === 'macd')  item.calc = drawMacd(ch);
+      if (p.key === 'rsi')   item.calc = drawRsi(ch);
+
+      /* 아래 칸에는 이름표와 닫기, 위쪽 경계에는 끌개 */
+      if (p.key !== 'price') {
+        const def = OWN_PANES.find((x) => x.key === p.key);
+        const tag = document.createElement('div');
+        tag.className = 'kh-pane-tag';
+        tag.innerHTML =
+          '<span class="x" data-pane-close="' + p.key + '" title="닫기">✕</span>' +
+          '<span class="nm" data-doc="' + p.key + '">' + def.label + ' (' + def.par + ')</span>' +
+          '<span class="v" data-pane-v="' + p.key + '"></span>';
+        el.appendChild(tag);
+
+        const grip = document.createElement('div');
+        grip.className = 'kh-grip';
+        grip.dataset.pane = p.key;
+        el.appendChild(grip);
+      }
+
+      if (keep) {
+        try { ch.timeScale().setVisibleLogicalRange(keep); } catch { showLastBars(ch, candles.length); }
+      } else {
+        showLastBars(ch, candles.length);
+      }
+      ch.timeScale().subscribeVisibleLogicalRangeChange((r) => {
+        if (syncing || !r) return;
+        syncing = true;
+        panes.forEach((o) => {
+          if (o.chart !== ch) {
+            try { o.chart.timeScale().setVisibleLogicalRange(r); } catch { /* 아직 없음 */ }
+          }
+        });
+        syncing = false;
+      });
+
+      ch.subscribeCrosshairMove((param) => {
+        const i = (param && param.time != null && param.point)
+          ? byTime.get(timeKey(param.time)) : null;
+        paintPaneTags(i == null ? candles.length - 1 : i);
+      });
+    });
+
+    if (showLegend) {
+      if (legend) legend.destroy();
+      legend = mountLegend(panes[0].box, panes[0].chart,
+        { candles, period, maSeries, showVolume: false, ind: {}, toggleInd });
+      api.legend = legend;
+    }
+    curOwn = ownKeys();
+    paintPaneTags(candles.length - 1);
+    checkAlign();
+  }
+
+  /* 칸의 현재값. 마우스로 짚으면 그 봉, 아니면 마지막 봉 */
+  function paintPaneTags(i) {
+    panes.forEach((p) => {
+      const n = p.el && p.el.querySelector('[data-pane-v="' + p.key + '"]');
+      if (!n || !p.calc) return;
+      if (p.key === 'vol') n.textContent = fmtVol(p.calc.values[i]);
+      if (p.key === 'macd') {
+        const one = (v, col) => '<span style="color:' + col + '">' +
+          (v == null ? '—' : Math.round(v).toLocaleString('ko-KR')) + '</span>';
+        n.innerHTML = [
+          one(p.calc.vLine[i], COLOR.ma20),
+          one(p.calc.vSignal[i], COLOR.ma5),
+          one(p.calc.vHist[i], p.calc.vHist[i] >= 0 ? COLOR.up : COLOR.down),
+        ].join('<span class="kh-mut" style="margin:0 3px">·</span>');
+      }
+      if (p.key === 'rsi') {
+        const f = (v, col) => '<span style="color:' + col + '">' +
+          (v == null ? '—' : v.toFixed(2)) + '</span>';
+        n.innerHTML = f(p.calc.values[i], COLOR.rsi) +
+          '<span class="kh-mut" style="margin:0 3px">·</span>' +
+          f(p.calc.sig[i], COLOR.rsiSig);
+      }
     });
   }
 
-  showLastBars(chart, candles.length);
+  /* 좌우 끝이 맞는지 본다. 어긋나면 화면에 표시한다 —
+     「맞춰 둔다」 는 주석은 지켜지지 않는다 (holdings/CLAUDE.md). */
+  function checkAlign() {
+    const old = container.querySelector('.kh-align-warn');
+    if (old) old.remove();
+    if (panes.length < 2) return;
+    const w = panes.map((p) => {
+      const cv = p.box.querySelector('canvas');
+      return cv ? Math.round(cv.getBoundingClientRect().width) : null;
+    }).filter((v) => v != null);
+    if (!w.length || w.every((x) => Math.abs(x - w[0]) <= 1)) return;
+    const tag = document.createElement('div');
+    tag.className = 'kh-align-warn';
+    tag.textContent = '좌우 끝이 어긋남 — ' + w.join(' · ') + 'px';
+    container.appendChild(tag);
+  }
 
-  let legend = showLegend
-    ? mountLegend(container, chart, { candles, period, maSeries, showVolume })
-    : null;
+  function toggleInd(key) {
+    const on = indOn();
+    if (on.has(key)) on.delete(key); else on.add(key);
+    saveIndOn();
+    _indSync.forEach((fn) => fn());
+  }
+  /* 칸이 늘거나 줄 때만 전부 다시 만든다. 가격 칸 위 지표는 그 자리에서 */
+  function ownKeys() {
+    return OWN_PANES
+      .filter((x) => indOn().has(x.key) && (x.key !== 'vol' || showVolume))
+      .map((x) => x.key).join(',');
+  }
+  let curOwn = '';
 
-  /* 부르는 쪽이 그은 선(전일 종가선 등)을 여기서 들고 있는다.
-     봉을 갈아끼울 때 지워야 하는데, 라이브러리가 「이 시리즈의 선 목록」을
-     돌려주지 않아 만든 것을 우리가 적어 둔다. */
-  const priceLines = [];
+  function syncInd() {
+    if (ownKeys() === curOwn) redrawOverlay();
+    else build();
+  }
+  _indSync.add(syncInd);
+
+  /* ── 칸 높이 끌기 — 그 경계의 위아래 둘만 바뀐다 ── */
+  let drag = null;
+  container.addEventListener('mousedown', (e) => {
+    const g = e.target.closest('.kh-grip');
+    if (!g) return;
+    e.preventDefault();
+    const at = panes.findIndex((p) => p.key === g.dataset.pane);
+    if (at <= 0) return;
+    g.classList.add('is-drag');
+    drag = {
+      g, y: e.clientY, above: panes[at - 1], below: panes[at],
+      aH: panes[at - 1].box.clientHeight, bH: panes[at].box.clientHeight,
+    };
+    document.body.style.userSelect = 'none';
+  });
+
+  function onMove(e) {
+    if (!drag) return;
+    const d = e.clientY - drag.y;
+    const minA = drag.above.key === 'price' ? PRICE_MIN : PANE_MIN;
+    const a = Math.max(minA, Math.min(drag.aH + drag.bH - PANE_MIN, drag.aH + d));
+    setPaneH(drag.above, a);
+    setPaneH(drag.below, drag.aH + drag.bH - a);
+  }
+  function onUp() {
+    if (!drag) return;
+    drag.g.classList.remove('is-drag');
+    drag = null;
+    document.body.style.userSelect = '';
+    savePaneH();
+    checkAlign();
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+
+  function setPaneH(p, h) {
+    p.box.style.height = h + 'px';
+    try { p.chart.applyOptions({ height: h }); } catch { /* 이미 정리됨 */ }
+    if (p.key !== 'price') paneH()[p.key] = h;
+  }
+
+  /* 닫기 단추 */
+  container.addEventListener('click', (e) => {
+    const x = e.target.closest('[data-pane-close]');
+    if (!x) return;
+    toggleInd(x.dataset.paneClose);
+  });
+
+  /* 마우스로 짚은 봉을 찾는 표 */
+  const byTime = new Map();
+  const remap = () => {
+    byTime.clear();
+    candles.forEach((c, i) => byTime.set(timeKey(toChartTime(c.ts, period)), i));
+  };
+  remap();
 
   const api = {
-    chart,
-    candleSeries,
-    volumeSeries,
-    maSeries,
-    legend,
+    get chart() { return panes[0] && panes[0].chart; },
+    get candleSeries() { return candleSeries; },
+    get maSeries() { return maSeries; },
+    legend: null,
 
-    /** 선을 긋는다. 다음 setData 때 저절로 지워진다. */
     addPriceLine(o) {
       try {
-        const line = candleSeries.createPriceLine(o);
-        priceLines.push(line);
-        return line;
-      } catch { return null; }      // 라이브러리 버전이 다르면 선만 생략
+        const l = candleSeries.createPriceLine(o);
+        priceLines.push(l);
+        return l;
+      } catch { return null; }
     },
 
-    /** 봉만 갈아끼운다 (2026-09-17 지시).
-     *
-     * **차트를 없애고 새로 만들지 않는다.** 만드는 일이 가장 비싸고,
-     * 없애는 것을 한 번이라도 빠뜨리면 객체가 쌓여 어느 순간부터 새 차트가
-     * 아예 안 그려진다 (2026-09-17 아침에 실제로 그랬다).
-     *
-     * 이동평균은 다시 만든다. 봉 수가 달라지면 「봉이 모자라 못 그리는 선」이
-     * 바뀌기 때문이다 — 200봉짜리에서 50봉짜리로 가면 MA60·MA200 이 사라져야 한다.
-     * 범례도 봉과 이동평균을 클로저로 쥐고 있어 다시 건다.
-     */
-    setData(nextCandles, nextPeriod) {
-      if (!nextCandles || !nextCandles.length) return;
-      candles = nextCandles;
-      if (nextPeriod && nextPeriod !== period) {
-        period = nextPeriod;
-        chart.applyOptions({ timeScale: { timeVisible: MINUTE_PERIODS.has(period) } });
-      }
-
-      priceLines.forEach((l) => { try { candleSeries.removePriceLine(l); } catch {} });
+    setData(next, nextPeriod) {
+      if (!next || !next.length) return;
+      candles = next;
+      if (nextPeriod) period = nextPeriod;
       priceLines.length = 0;
-
-      fillCandles();
-      fillVolume();
-
-      maSeries.forEach((m) => {
-        if (m.series) { try { chart.removeSeries(m.series); } catch {} }
-      });
-      maSeries.length = 0;
-      buildMA();
-
-      showLastBars(chart, candles.length);
-
-      if (showLegend) {
-        if (legend) legend.destroy();
-        legend = mountLegend(container, chart, { candles, period, maSeries, showVolume });
-        api.legend = legend;
-      }
+      remap();
+      build();
     },
 
-    /** 보는 창을 처음 상태로 되돌린다. 칸 크기가 바뀐 뒤에 부른다 —
-     *  여기서 fitContent 를 부르면 봉 크기가 종목마다 다시 갈린다. */
-    resetView() { showLastBars(chart, candles.length); },
+    resetView() {
+      panes.forEach((p) => showLastBars(p.chart, candles.length));
+      checkAlign();
+    },
 
     destroy() {
+      _indSync.delete(syncInd);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
       if (legend) legend.destroy();
-      try { chart.remove(); } catch { /* 이미 정리됨 */ }
+      panes.forEach((p) => { try { p.chart.remove(); } catch { /* 이미 정리됨 */ } });
+      panes = [];
+      container.classList.remove('kh-panes');
     },
   };
+
+  build();
+
   return api;
+}
+
+/* 값 배열의 단순 이동평균 (RSI 의 두 번째 선이 쓴다) */
+function smaOf(vals, p) {
+  const out = new Array(vals.length).fill(null);
+  let sum = 0, cnt = 0;
+  for (let i = 0; i < vals.length; i++) {
+    const v = vals[i];
+    if (v != null) { sum += v; cnt++; }
+    if (i >= p) { const old = vals[i - p]; if (old != null) { sum -= old; cnt--; } }
+    if (cnt >= p) out[i] = sum / p;
+  }
+  return out;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -446,7 +1033,15 @@ function maChip(m) {
     ><span>MA${m.period}</span><b data-f="ma${m.period}">—</b></button>`;
 }
 
-function mountLegend(container, chart, { candles, period, maSeries, showVolume }) {
+/* 보조지표 칩 하나 */
+function indChip(x) {
+  const on = indOn().has(x.key);
+  return `<button type="button" class="kh-lg-c kh-lg-ind${on ? '' : ' is-off'}"
+    data-ind="${x.key}" title="${x.tip}"
+    ><span>${x.name}</span><b data-f="ind-${x.key}"></b></button>`;
+}
+
+function mountLegend(container, chart, { candles, period, maSeries, showVolume, ind, toggleInd }) {
   container.classList.add('kh-lg-host');
 
   /* 지수는 소수점이 있고 종목은 정수다. 받은 값을 보고 정한다 */
@@ -465,7 +1060,8 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume }
       <span><i>종</i><b data-f="close">—</b></span>
       ${showVolume ? '<span class="kh-lg-vol"><i>거래량</i><b data-f="volume">—</b></span>' : ''}
     </div>
-    <div class="kh-lg-ma">${maSeries.map(maChip).join('')}</div>`;
+    <div class="kh-lg-ma">${maSeries.map(maChip).join('')}</div>
+    <div class="kh-lg-ind-row">${INDICATORS.map(indChip).join('')}</div>`;
   container.appendChild(el);
 
   const nodes = {};
@@ -488,6 +1084,31 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume }
       const n = nodes[`ma${m.period}`];
       if (n) n.textContent = fmtPrice(m.values[i], dec);
     });
+    renderInd(i);
+  }
+
+  /* 켜 둔 보조지표의 그 봉 값. 꺼 둔 것은 빈칸이다 */
+  function renderInd(i) {
+    INDICATORS.forEach((x) => {
+      const n = nodes[`ind-${x.key}`];
+      if (!n) return;
+      const it = ind && ind[x.key];
+      if (!it) { n.textContent = ''; return; }
+      const c = it.calc;
+      let t = '';
+      if (x.key === 'bb' && c.vUp[i] != null) {
+        t = `${fmtPrice(c.vLo[i], dec)}~${fmtPrice(c.vUp[i], dec)}`;
+      } else if (x.key === 'rsi' && c.values[i] != null) {
+        t = c.values[i].toFixed(1);
+      } else if (x.key === 'macd' && c.vHist[i] != null) {
+        t = fmtPrice(c.vHist[i], 2);
+      } else if (x.key === 'vma' && c.values[i] != null) {
+        t = fmtVol(c.values[i]);
+      } else if (x.key === 'ich' && c.vBase[i] != null) {
+        t = `${fmtPrice(c.vConv[i], dec)} / ${fmtPrice(c.vBase[i], dec)}`;
+      }
+      n.textContent = t;
+    });
   }
 
   /* 끈 선을 선·칩 양쪽에 반영한다 */
@@ -503,6 +1124,8 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume }
   _legendSync.add(syncOff);
 
   el.addEventListener('click', (e) => {
+    const iBtn = e.target.closest('[data-ind]');
+    if (iBtn) { if (toggleInd) toggleInd(iBtn.dataset.ind); return; }
     const btn = e.target.closest('[data-ma]');
     if (!btn) return;
     const p = Number(btn.dataset.ma);
@@ -540,6 +1163,15 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume }
   }
 
   return {
+    /* 지표를 켜고 끈 뒤 칩과 값을 다시 칠한다 */
+    refreshInd() {
+      INDICATORS.forEach((x) => {
+        const b = el.querySelector(`[data-ind="${x.key}"]`);
+        if (b) b.classList.toggle('is-off', !indOn().has(x.key));
+      });
+      renderInd(candles.length - 1);
+    },
+
     destroy() {
       _legendSync.delete(syncOff);
       if (ro) ro.disconnect();

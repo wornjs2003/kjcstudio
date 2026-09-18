@@ -13,6 +13,7 @@ import { WATCHLIST, MARKET_STOCKS } from './data/market.js';
 import { fetchLivePrices } from './data/live.js';
 import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop } from './components/frame.js';
 import { mountStockView } from './components/stock-view.js';
+import { mountIndicatorMenu } from './components/indicator-menu.js';
 
 const $ = id => document.getElementById(id);
 
@@ -46,3 +47,5 @@ startLiveLoop({
     if (prices[stock.code]) view.paint(prices[stock.code]);
   },
 });
+
+mountIndicatorMenu(document.querySelector('.kh-ind-menu'));

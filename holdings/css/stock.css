@@ -229,9 +229,113 @@
 .kh-lg.is-compact { top: 4px; left: 6px; font-size: 0.68rem; }
 .kh-lg.is-compact .kh-lg-ohlc { gap: 7px; }
 .kh-lg.is-compact .kh-lg-vol,
-.kh-lg.is-compact .kh-lg-ma { display: none; }
+.kh-lg.is-compact .kh-lg-ma,
+.kh-lg.is-compact .kh-lg-ind-row { display: none; }
+
+/* 보조지표 칩 — 이동평균 칩 아랫줄에 놓는다 (2026-09-17).
+   기본은 다 꺼져 있어 흐리다. 누르면 켜지면서 진해진다. */
+.kh-lg-ind-row {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-top: 3px; pointer-events: auto;
+}
+.kh-lg-ind { color: var(--kh-text-secondary); }
+.kh-lg-ind b:empty { display: none; }
 
 /* 차트 칸 밖의 범례 (maLegend) — 패널 머리와 차트 아래 줄.
    어떤 선이 그려졌는지만 알린다. 값과 켜고 끄기는 위 .kh-lg 가 맡는다 */
 .kh-lg-out .kh-lg-n.is-off { opacity: 0.38; }
 .kh-lg-out .kh-lg-short { color: var(--kh-text-muted); }
+
+
+/* ── 차트 칸 나누기 (2026-09-18) ────────────
+   가격 아래에 거래량 · MACD · RSI 가 제 칸을 갖는다. 칸마다 차트를 따로
+   만들고 시간축을 맞춘다 — 좌우 끝을 맞추는 방법은 js/chart.js 의
+   AXIS_W 주석과 holdings/CLAUDE.md 에 있다. */
+.kh-panes { display: flex; flex-direction: column; }
+.kh-pane { position: relative; }
+.kh-pane + .kh-pane { border-top: 1px solid var(--kh-border); }
+.kh-pane-box { width: 100%; }
+
+/* 칸 이름표 — 그림 위에 겹친다. 닫기 · 이름 · 지금 값 */
+.kh-pane-tag {
+  position: absolute; left: 11px; top: 7px; z-index: 5;
+  display: flex; align-items: center; gap: 7px;
+  font-size: 0.76rem; font-weight: 600;
+  background: rgb(var(--kh-paper-rgb, 255 255 255) / 82%);
+  border-radius: 6px; padding: 2px 7px;
+}
+.kh-pane-tag .x {
+  cursor: pointer; color: var(--kh-text-muted);
+  font-size: 0.85rem; line-height: 1; padding: 0 1px;
+}
+.kh-pane-tag .x:hover { color: var(--kh-text-primary); }
+.kh-pane-tag .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+/* 이름에 마우스를 올리면 설명이 뜬다 (data/indicators.json) */
+.kh-pane-tag .nm { cursor: help; border-bottom: 1px dotted var(--kh-text-dim); }
+
+/* 칸 사이 경계 — 끌어서 높이를 바꾼다.
+   가운데 손잡이는 두지 않는다 (2026-09-18 지시). 선만 두고 올리면 진해진다. */
+.kh-grip {
+  position: absolute; left: 0; right: 0; top: -4px; height: 8px;
+  cursor: row-resize; z-index: 6;
+}
+.kh-grip::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 3px; height: 1px;
+  background: var(--kh-text-dim);
+}
+.kh-grip:hover::before, .kh-grip.is-drag::before {
+  background: var(--kh-text-primary); height: 2px;
+}
+
+/* 좌우 끝이 어긋나면 여기에 뜬다. 뜨면 고쳐야 한다 — 주석은 안 지켜진다 */
+.kh-align-warn {
+  position: absolute; right: 10px; top: 6px; z-index: 20;
+  background: var(--kh-down); color: var(--kh-text-on-fill);
+  border-radius: 6px; padding: 3px 9px;
+  font-size: 0.72rem; font-weight: 700;
+}
+
+
+/* ── 「보조지표」 메뉴 (2026-09-18) ──────────
+   기간 단추 오른쪽. 누르면 목록이 펼쳐진다. */
+.kh-per-row { display: flex; align-items: center; gap: 8px; }
+.kh-per-row .kh-idx-per, .kh-per-row .kh-per { margin-bottom: 0; }
+
+.kh-ind-menu { position: relative; }
+.kh-ind-open {
+  font: inherit; font-size: 0.8rem; padding: 6px 11px;
+  border: 0; border-radius: var(--kh-radius-sm); cursor: pointer;
+  background: var(--kh-bg-surface); color: var(--kh-text-secondary);
+  display: flex; align-items: center; gap: 4px;
+}
+.kh-ind-open:hover { background: var(--kh-bg-active); color: var(--kh-text-primary); }
+.kh-ind-open i { font-style: normal; font-size: 0.7rem; }
+
+.kh-ind-list {
+  position: absolute; left: 0; top: calc(100% + 5px); z-index: 30;
+  background: var(--kh-bg-card); border-radius: var(--kh-radius-md);
+  box-shadow: var(--kh-shadow-md); padding: 6px; min-width: 158px;
+}
+.kh-ind-list[hidden] { display: none; }
+.kh-ind-list label {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 9px; border-radius: var(--kh-radius-sm);
+  font-size: 0.82rem; cursor: pointer;
+}
+.kh-ind-list label:hover { background: var(--kh-bg-hover); }
+.kh-ind-list input { margin: 0; accent-color: var(--kh-accent); }
+
+/* 지표 설명 풍선. 글은 data/indicators.json 에 있다 */
+.kh-ind-tip {
+  position: fixed; z-index: 99; max-width: 330px;
+  background: var(--kh-text-primary); color: var(--kh-text-on-fill);
+  border-radius: 9px; padding: 11px 13px;
+  font-size: 0.78rem; line-height: 1.65; pointer-events: none;
+  box-shadow: var(--kh-shadow-md);
+}
+.kh-ind-tip[hidden] { display: none; }
+.kh-ind-tip b { display: block; font-size: 0.84rem; margin-bottom: 3px; }
+.kh-ind-tip b span { opacity: .6; font-weight: 400; }
+.kh-ind-tip .why { color: var(--kh-ma5); margin-bottom: 6px; }
+.kh-ind-tip p { margin: 0 0 4px; opacity: .88; }
+.kh-ind-tip p:last-child { margin: 0; }

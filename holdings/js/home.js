@@ -19,6 +19,7 @@ import { iconHtml, paintIcon } from './components/stock-icon.js';
 import { openModal, closeModal } from './components/modal.js';
 import { loadStockMain, mountStockView } from './components/stock-view.js';
 import { mountDisclosures } from './components/disclosures.js';
+import { mountIndicatorMenu } from './components/indicator-menu.js';
 import { mountSchedule } from './components/schedule.js';
 /* fetchIndexMinutes · fetchIndexCandles 는 여기서 안 쓴다 (2026-09-17).
    큰 차트가 지수에서 종목으로 바뀌면서 종목 캔들(chart.js 의 fetchCandles)로
@@ -1065,6 +1066,7 @@ setInterval(paintClock, 30000);
 paintMkt();
 setInterval(paintMkt, 30000);
 setupIxChips();
+mountIndicatorMenu(document.querySelector('.kh-ind-menu'));
 paintBigPeriods();
 
 /* 지난번에 본 값이 남아 있으면 그것부터 그린다 (2026-09-15).
