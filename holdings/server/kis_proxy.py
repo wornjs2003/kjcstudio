@@ -37,6 +37,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 같은 폴더(server/)의 모듈들. 스크립트로 실행하므로 바로 잡힌다.
@@ -204,8 +205,8 @@ def _rate_limit():
     """
     # 미리받기는 화면에 자리를 내준다. 급하지 않은 일이라 늦어져도 잃는 것이
     # 없고, 화면은 기다리면 재권님이 보신다 (2026-09-18).
-    if threading.current_thread().name == PREFILL_THREAD_NAME and _ui_busy():
-        time.sleep(PREFILL_BUSY_CALL_GAP)
+    if threading.current_thread().name == PREFILL_THREAD_NAME:
+        time.sleep(PREFILL_BUSY_CALL_GAP if _ui_busy() else PREFILL_IDLE_CALL_GAP)
 
     global _last_call_at
     with _rate_lock:
@@ -489,7 +490,6 @@ def fetch_prices(cfg, codes):
     KIS 현재가 API 는 한 번에 한 종목만 받으므로 서버가 나눠 호출한다.
     호출 제한(실전 20건/초)에 걸리지 않도록 동시 실행 수를 제한한다.
     """
-    from concurrent.futures import ThreadPoolExecutor
 
     out, errors = {}, {}
 
@@ -885,13 +885,28 @@ def fetch_futures(cfg):
 
 
 def fetch_overseas(cfg):
-    """해외 지수와 환율. 하나가 실패해도 나머지는 돌려준다."""
-    out, errors = [], {}
-    for key, div, code, name, unit in OVERSEAS_DEFS:
-        hit = _ovs_cache.get(key)
+    """해외 지수와 환율. 하나가 실패해도 나머지는 돌려준다.
+
+    **넷을 겹쳐 부른다** (2026-09-18). 위 fetch_indices 와 같은 이유다 —
+    초당 건수는 _rate_limit() 이 지키고, 겹치는 것은 기다리는 시간뿐이다.
+    자리를 미리 잡아 두는 것도 같다. OVERSEAS_DEFS 순서가 화면 순서다.
+    """
+    errors = {}
+    slots = [None] * len(OVERSEAS_DEFS)
+    todo = []
+    for i, defn in enumerate(OVERSEAS_DEFS):
+        hit = _ovs_cache.get(defn[0])
         if hit and (time.time() - hit[0]) < OVERSEAS_TTL:
-            out.append(hit[1])
-            continue
+            slots[i] = hit[1]
+        else:
+            todo.append((i, defn))
+    if not todo:
+        return [r for r in slots if r], errors
+
+    get_token(cfg)
+
+    def one(item):
+        i, (key, div, code, name, unit) = item
         try:
             _stats["kis_calls"] += 1
             # 기간을 넓게 잡아 현재값과 추이를 한 번에 받는다.
@@ -909,8 +924,7 @@ def fetch_overseas(cfg):
             o = data.get("output1") or {}
             value = _num(o.get("ovrs_nmix_prpr"))
             if value in (None, 0):
-                errors[key] = "값이 오지 않았습니다"
-                continue
+                return i, key, None, "값이 오지 않았습니다"
             # 언제 기준 값인지. 해외장은 국내 낮 시간에 닫혀 있어서, 이것을 안 적으면
             # 어제 종가를 실시간인 줄 알게 된다 (2026-09-15 지적).
             rows_sorted = sorted(out_rows(data, "output2"),
@@ -932,11 +946,18 @@ def fetch_overseas(cfg):
                 ][-60:],
                 "source": "KIS",
             }
-            out.append(row)
-            _ovs_cache[key] = (time.time(), row)
+            return i, key, row, None
         except RuntimeError as e:
-            errors[key] = safe_message(e)
-    return out, errors
+            return i, key, None, safe_message(e)
+
+    with ThreadPoolExecutor(max_workers=KIS_MAX_PARALLEL) as pool:
+        for i, key, row, err in pool.map(one, todo):
+            if row:
+                slots[i] = row
+                _ovs_cache[key] = (time.time(), row)
+            else:
+                errors[key] = err
+    return [r for r in slots if r], errors
 
 
 # 지수 캐시. 종목 시세 캐시(25초)를 함께 쓰고 있었는데, 그건 화면이 30초마다
@@ -954,13 +975,31 @@ def _index_cache_get(key):
 
 
 def fetch_indices(cfg, with_chart=True):
-    out, errors = [], {}
-    for code, name in INDEX_DEFS:
-        cache_key = "IDX:" + code
-        cached = _index_cache_get(cache_key)
+    """국내 지수. **셋을 겹쳐 부른다** (2026-09-18).
+
+    하나씩 부르면 KIS 응답을 기다리는 시간이 그대로 더해진다. 초당 건수는
+    _rate_limit() 이 따로 지키므로 겹쳐도 한도를 넘지 않는다 — 겹치는 것은
+    **기다리는 시간**뿐이다. quotes 가 진작부터 쓰던 방식이다.
+    """
+    errors = {}
+    # **자리를 미리 잡아 둔다.** 캐시에 있는 것과 새로 받는 것이 섞이면
+    # 순서가 INDEX_DEFS 와 달라진다. 화면이 순서대로 읽는 자리가 있어서
+    # 코스피 자리에 코스닥이 올 수 있다.
+    slots = [None] * len(INDEX_DEFS)
+    todo = []
+    for i, (code, name) in enumerate(INDEX_DEFS):
+        cached = _index_cache_get("IDX:" + code)
         if cached is not None:
-            out.append(cached)
-            continue
+            slots[i] = cached
+        else:
+            todo.append((i, code, name))
+    if not todo:
+        return [r for r in slots if r], errors
+
+    get_token(cfg)          # 동시에 발급을 시도하지 않도록 먼저 받아 둔다
+
+    def one(item):
+        i, code, name = item
         try:
             _stats["kis_calls"] += 1
             info = fetch_index(cfg, code)
@@ -973,16 +1012,22 @@ def fetch_indices(cfg, with_chart=True):
                     series = []          # 차트만 실패해도 현재값은 보여준다
             # fetch_index 가 준 것을 그대로 싣는다. 전에는 값·등락만 골라 담고
             # 나머지를 버려서, 시장현황·연중최고저를 추가해도 화면까지 오지 않았다.
-            row = {
+            return i, code, name, {
                 **info,
                 "code": name, "name": name, "unit": "pt",
                 "series": series, "source": "KIS",
-            }
-            out.append(row)
-            _index_cache[cache_key] = (time.time(), row)
+            }, None
         except RuntimeError as e:
-            errors[name] = safe_message(e)
-    return out, errors
+            return i, code, name, None, safe_message(e)
+
+    with ThreadPoolExecutor(max_workers=KIS_MAX_PARALLEL) as pool:
+        for i, code, name, row, err in pool.map(one, todo):
+            if row:
+                slots[i] = row
+                _index_cache["IDX:" + code] = (time.time(), row)
+            else:
+                errors[name] = err
+    return [r for r in slots if r], errors
 
 
 def _num(v, cast=float):
@@ -1670,6 +1715,20 @@ PREFILL_BUSY_WINDOW = 15.0     # 이 시간 안에 화면이 불렀으면 '보�
 #
 # 그래서 **호출 하나하나**를 미룬다. 화면이 조용하면 이 값은 안 쓰인다.
 PREFILL_BUSY_CALL_GAP = 2.0    # 화면이 보고 있을 때 미리받기 호출 사이 여유
+
+# **화면이 없을 때도 예산을 다 쓰지는 않는다** (2026-09-18).
+#
+# 위 양보는 화면이 부르기 **시작한 뒤**에 걸린다. 그 전에 미리받기가 이미
+# 차례를 예약해 둔 호출들이 있어서, **화면을 막 열었을 때 첫 지수 요청이
+# 그 뒤에 줄을 선다.**
+#
+#     화면이 계속 보고 있을 때   1.05 ~ 1.96초
+#     화면을 막 열었을 때        4.74 ~ 6.42초   ← 이것이 남아 있었다
+#
+# 그래서 평소에도 호출 사이에 이만큼 둔다. 미리받기가 초당 두 번쯤이 되어
+# 예산 다섯 중 셋이 늘 비어 있고, 화면이 열리는 순간 그 자리로 들어간다.
+# 한 바퀴가 느려지지만 하루 한 번 도는 일이라 잃는 것이 없다.
+PREFILL_IDLE_CALL_GAP = 0.3    # 화면이 없을 때도 두는 여유
 PREFILL_THREAD_NAME = "prefill-5m"
 
 _last_ui_at = 0.0              # 화면이 마지막으로 /api/kis/* 를 부른 시각
@@ -2172,13 +2231,20 @@ class Handler(SimpleHTTPRequestHandler):
 
             if route == "indices":
                 with_chart = (qs.get("chart") or ["1"])[0] != "0"
-                data, errors = fetch_indices(cfg, with_chart)
-                # 해외 지수·환율도 같은 응답에 실어 보낸다. 화면이 한 번만 부르면 된다.
-                if (qs.get("overseas") or ["1"])[0] != "0":
-                    ovs, ovs_err = fetch_overseas(cfg)
-                    data = data + ovs
-                    errors.update(ovs_err)
-                futures = fetch_futures(cfg)
+                want_ovs = (qs.get("overseas") or ["1"])[0] != "0"
+                # 국내 · 해외 · 선물을 **함께 진행한다** (2026-09-18).
+                # 하나씩 기다리면 셋의 응답 시간이 그대로 더해졌다.
+                # 해외 지수·환율도 같은 응답에 실어 보낸다 — 화면이 한 번만 부르면 된다.
+                with ThreadPoolExecutor(max_workers=3) as pool:
+                    f_idx = pool.submit(fetch_indices, cfg, with_chart)
+                    f_ovs = pool.submit(fetch_overseas, cfg) if want_ovs else None
+                    f_fut = pool.submit(fetch_futures, cfg)
+                    data, errors = f_idx.result()
+                    if f_ovs is not None:
+                        ovs, ovs_err = f_ovs.result()
+                        data = data + ovs
+                        errors.update(ovs_err)
+                    futures = f_fut.result()
                 self._send_json({"ok": bool(data), "data": data,
                                  "futures": futures, "errors": errors or None})
                 return
