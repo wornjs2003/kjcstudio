@@ -150,19 +150,24 @@
       "id": "raw-color-holdings",
       "group": "디자인 토큰",
       "title": "주식 화면에 색을 직접 박았는가",
-      "scope": "holdings/ 의 css·html 전부 · 주석 제외 · allow 에 적은 국기 규정색은 예외",
+      "scope": "holdings/ 의 css·html 전부 · 주석 제외 · 국기 규정색은 allow 에 적은 파일에서만 예외",
       "expected": "0곳 — 전부 theme.css 토큰 사용",
       "type": "raw_color",
       "files": [
         "holdings/css/*.css",
         "holdings/*.html"
       ],
-      "allow": [
-        "#cd2e3a",
-        "#0047a0",
-        "#b22234",
-        "#3c3b6e"
-      ]
+      "allow": {
+        "holdings/index.html": [
+          "#cd2e3a",
+          "#0047a0",
+          "#b22234",
+          "#3c3b6e",
+          "#fff",
+          "#000"
+        ]
+      },
+      "_주의": "allow 를 목록이 아니라 파일별로 적었습니다. #fff 를 holdings/css/*.css 까지 허용하면 가장 자주 박히는 색이 통째로 열립니다. 국기 SVG 는 index.html 의 숨은 스프라이트 안에만 있어서 그 파일에만 엽니다 (holdings/index.html:28~31 주석)."
     },
     {
       "id": "raw-color-setup",
@@ -174,6 +179,52 @@
       "files": [
         "company-setup/*.html",
         "company-setup/css/*.css"
+      ]
+    },
+    {
+      "id": "raw-color-root",
+      "group": "디자인 토큰",
+      "title": "첫 화면·갤러리에 색을 직접 박았는가",
+      "scope": "루트 html · category/ · assets/ 의 css·js · 주석 제외 · theme.css 는 제외",
+      "expected": "0곳 — 전부 theme.css 토큰 사용",
+      "type": "raw_color",
+      "files": [
+        "index.html",
+        "about.html",
+        "services.html",
+        "contact.html",
+        "category/*.html",
+        "assets/css/*.css",
+        "assets/js/*.js"
+      ],
+      "exclude": [
+        "assets/css/theme.css"
+      ]
+    },
+    {
+      "id": "raw-color-aiwork",
+      "group": "디자인 토큰",
+      "title": "AI 작업 보드에 색을 직접 박았는가",
+      "scope": "ai-work/ 의 html·css·js 전부 · 주석 제외",
+      "expected": "0곳 — 전부 theme.css 토큰 사용",
+      "type": "raw_color",
+      "files": [
+        "ai-work/*.html",
+        "ai-work/css/*.css",
+        "ai-work/js/*.js"
+      ]
+    },
+    {
+      "id": "raw-color-debugging",
+      "group": "디자인 토큰",
+      "title": "검증 보드에 색을 직접 박았는가",
+      "scope": "debugging/ 의 html·css·js 전부 · 주석 제외",
+      "expected": "0곳 — 전부 theme.css 토큰 사용",
+      "type": "raw_color",
+      "files": [
+        "debugging/*.html",
+        "debugging/css/*.css",
+        "debugging/js/*.js"
       ]
     },
     {

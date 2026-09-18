@@ -222,9 +222,28 @@ def token_for(color):
     찾았는데 -rgb 짜리만 나왔습니다. 진한 값은 --kh-tag-news · --kh-tag-notice 라는
     **다른 이름** 아래 있었습니다. 있는 줄 모르고 #02a262 · #f29300 을 직접 적었습니다.
     """
+    # #fff 로 걸린 것도 이름을 찾아야 하므로 6자리로 펴서 맞춥니다.
+    if len(color) == 4:
+        color = "#" + "".join(ch * 2 for ch in color[1:])
+
     css = read("assets/css/theme.css")
     pairs = re.findall(r"(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})\b", css)
     return [name for name, value in pairs if value.lower() == color.lower()]
+
+
+# 색을 적는 형태는 하나가 아닙니다. 6자리만 보면 #fff 가 통째로 안 보입니다.
+# 2026-09-17 에 실제로 그랬습니다 — ai-work/ 를 검사에 넣어도 「0곳」 으로 통과했고,
+# 세어 보니 #fff 가 셋 있었습니다. 구역을 안 봐서가 아니라 **형태를 안 봐서**였습니다.
+RAW_HEX = re.compile(r"#[0-9a-fA-F]{3,8}\b")
+
+# rgb(var(--kh-ok-rgb) / 0.12) 는 토큰을 쓰는 것이라 위반이 아닙니다.
+# **여는 괄호 뒤가 숫자일 때만** 박은 것입니다. 안 가리고 잡으면 오탐이 쏟아집니다 —
+# 2026-09-17 실측으로 이 꼴 29개 중 박은 것은 2개였습니다.
+RAW_FUNC = re.compile(r"\b(?:rgba?|hsla?)\(\s*[0-9.][^)]*\)")
+
+# href="#add" 는 색이 아니라 앵커인데 3자리 hex 와 모양이 같습니다.
+# 지금 저장소에는 없지만, 생기면 색으로 잘못 걸립니다.
+ANCHOR_BEFORE = re.compile(r"(?:xlink:)?href\s*=\s*['\"]$")
 
 
 def check_raw_color(spec):
@@ -238,16 +257,32 @@ def check_raw_color(spec):
     그 파일에 다른 색이 새로 들어오면 그때는 걸립니다.
     """
     files = resolve_files(spec)
-    allow = set(c.lower() for c in spec.get("allow", []))
+
+    # allow 는 목록으로도, 파일별로도 적을 수 있습니다.
+    #   ["#cd2e3a", ...]                      그 검사 전체에 예외
+    #   {"holdings/index.html": ["#fff"]}     그 파일에만 예외
+    # 국기 SVG 처럼 **한 파일에만 있는 데이터 색**을 구역 전체에 열어주지 않으려고
+    # 나눴습니다. #fff 를 css 까지 허용하면 가장 자주 박히는 색이 통째로 열립니다.
+    raw_allow = spec.get("allow", [])
+    if not isinstance(raw_allow, dict):
+        raw_allow = {"*": raw_allow}
 
     found = []
     for rel in files:
         if not os.path.isfile(os.path.join(ROOT, rel)):
             continue
+        allow = set(c.lower() for c in raw_allow.get(rel, raw_allow.get("*", [])))
         kind = "css" if rel.endswith(".css") else ("html" if rel.endswith(".html") else "js")
         body = strip_comments(read(rel), kind)
-        for m in re.finditer(r"#[0-9a-fA-F]{6}\b", body):
+        for m in RAW_HEX.finditer(body):
+            if ANCHOR_BEFORE.search(body[max(0, m.start() - 24):m.start()]):
+                continue
             color = m.group(0).lower()
+            if color in allow:
+                continue
+            found.append((rel, color))
+        for m in RAW_FUNC.finditer(body):
+            color = re.sub(r"\s+", "", m.group(0)).lower()
             if color in allow:
                 continue
             found.append((rel, color))
