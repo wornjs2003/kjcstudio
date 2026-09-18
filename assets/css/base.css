@@ -85,18 +85,6 @@ h1, h2, h3, h4 {
   color: var(--on-scrim);   /* 강조색 위에 얹는 글자 */
 }
 
-/* ── 스크롤바 ─────────────────────────────── */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: var(--bg);
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 5px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--accent);
-}
+/* 스크롤바 모양은 `assets/css/common.css` 로 옮겼다 (2026-09-18).
+   이 파일은 **메인 8장만** 싣는데 구역 여섯은 안 싣는다. 그래서 여기 두면
+   재권님이 말씀하신 「하나로만 적용」이 절반만 됐다. */
