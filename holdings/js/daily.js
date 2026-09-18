@@ -45,6 +45,7 @@ const INDEX_ROWS = [
 let indices = [];
 let issues = [];
 let schedule = [];
+let sectors = [];
 
 /* ── 잔손질 ─────────────────────────────── */
 
@@ -106,6 +107,20 @@ async function loadIndices() {
     indices = Array.isArray(b.data) ? b.data : [];
   } catch {
     indices = [];          /* 화면에 「받지 못했습니다」 가 남는다 */
+  }
+}
+
+/* 업종 등락률. 파라미터 없이 부르면 코스피·코스닥이 함께 온다
+   (2026-09-18 실측 — 41개 · 1.1초). tr_id 와 필드 이름은
+   holdings/docs/kis-sector-investor.md 에 실측으로 적혀 있다. */
+async function loadSectors() {
+  try {
+    const r = await apiFetch('/api/kis/sectors', { cache: 'no-store' });
+    if (!r || !r.ok) throw new Error(r.status);
+    const b = await r.json();
+    sectors = Array.isArray(b.data) ? b.data : [];
+  } catch {
+    sectors = [];
   }
 }
 
@@ -234,6 +249,53 @@ function drawIndices() {
     </div>`;
 }
 
+/* ── ④ 주도 섹터 ────────────────────────── */
+
+/* 41개를 다 적으면 읽을 것만 늘어난다. 오른 쪽과 내린 쪽에서 넷씩만 뽑는다.
+   pct 가 null 인 업종이 섞여 오는 날이 있어 (docs 참조) 걸러낸 뒤 센다. */
+const SECTOR_TOP = 4;
+
+function sectorSides() {
+  const rows = sectors.filter((s) => typeof s.pct === 'number');
+  const byPct = [...rows].sort((a, b) => b.pct - a.pct);
+  return {
+    up: byPct.slice(0, SECTOR_TOP).filter((s) => s.pct > 0),
+    down: byPct.slice(-SECTOR_TOP).reverse().filter((s) => s.pct < 0),
+  };
+}
+
+function drawSectors() {
+  const box = $('kh-dl-sec');
+  if (!box) return;
+
+  if (!sectors.length) {
+    box.innerHTML = '<div class="kh-dl-todo"><b>업종을 받지 못했습니다</b>'
+      + '<span>중계 서버가 꺼져 있으면 이 칸이 비어 있습니다.</span></div>';
+    return;
+  }
+
+  const { up, down } = sectorSides();
+
+  const col = (title, rows, toneName) => {
+    if (!rows.length) {
+      return `<div class="kh-dl-sec-col">
+        <div class="kh-dl-sec-h">${esc(title)}</div>
+        <div class="kh-dl-sec-row"><span class="kh-dl-sec-n kh-dl-flat">없습니다</span></div>
+      </div>`;
+    }
+    return `<div class="kh-dl-sec-col">
+      <div class="kh-dl-sec-h kh-dl-${toneName}">${esc(title)}</div>
+      ${rows.map((s) => `<div class="kh-dl-sec-row">
+        <span class="kh-dl-sec-m">${esc(s.market === 'KOSDAQ' ? '코스닥' : '코스피')}</span>
+        <span class="kh-dl-sec-n">${esc(s.name)}</span>
+        <span class="kh-dl-sec-p kh-dl-${tone(s.pct)}">${pct(s.pct)}</span>
+      </div>`).join('')}
+    </div>`;
+  };
+
+  box.innerHTML = col('오른 업종', up, 'up') + col('내린 업종', down, 'down');
+}
+
 /* ── ③ 오늘 뉴스 ────────────────────────── */
 
 function drawNews() {
@@ -330,9 +392,17 @@ function buildTelegram() {
     }
   }
 
+  if (sectors.length) {
+    const { up, down } = sectorSides();
+    const one = (s) => `${s.name} ${pct(s.pct)}`;
+    L.push('', '주도 섹터 (국내)');
+    if (up.length) L.push(`· 오름 — ${up.slice(0, 3).map(one).join(' · ')}`);
+    if (down.length) L.push(`· 내림 — ${down.slice(0, 3).map(one).join(' · ')}`);
+  }
+
   /* 화면에는 빨간 자국으로 남아 있는 칸들이다. 문안에서 통째로 빼면 폰에서는
      무엇이 빠졌는지 알 수 없다. 붙으면 이 줄을 지운다. */
-  L.push('', '연결 예정', '· 주도 섹터 (국내·미국 업종)', '· 야간선물 · 다우존스');
+  L.push('', '연결 예정', '· 미국 업종', '· 야간선물 · 다우존스');
 
   L.push('', '전문 보기 › thekjcstudio.com/holdings/daily.html');
   return L.join('\n');
@@ -354,7 +424,7 @@ function drawAll() {
      비어 있고 다른 칸은 멀쩡해 보였다. 어느 칸이 문제인지 알 수 없다. */
   for (const [name, fn] of [
     ['일정', drawSchedule], ['지수', drawIndices],
-    ['뉴스', drawNews], ['문안', drawTelegram],
+    ['섹터', drawSectors], ['뉴스', drawNews], ['문안', drawTelegram],
   ]) {
     try { fn(); } catch (e) { console.error(`[데일리분석] ${name} 칸을 그리지 못했습니다`, e); }
   }
@@ -368,15 +438,19 @@ function drawAll() {
 /* ── 시작 ───────────────────────────────── */
 
 async function load() {
-  await Promise.all([loadIndices(), loadNews(), loadSchedule()]);
+  await Promise.all([loadIndices(), loadNews(), loadSchedule(), loadSectors()]);
   drawAll();
+  /* 하단 띠는 mountFootStrip 이 돌려준 손잡이로만 갱신된다. 손잡이를 버리면
+     mount 때 그린 「지수 불러오는 중」 에서 영영 안 바뀐다 — 실제로 그랬다
+     (2026-09-18). home.js·stock.js 는 받아서 쓰고 있었다. */
+  foot.update(indices);
 }
 
 /* 세로 아이콘바에는 아직 이 화면 자리가 없어 아무것도 켜지지 않는다.
    ITEMS 는 components/frame.js 안에 있고 네 화면이 함께 쓴다.
    추가는 주식페이지_개발 에 넘겼다 (2026-09-16). */
 mountVBar($('kh-vbar'), 'daily');
-mountFootStrip($('kh-foot'));
+const foot = mountFootStrip($('kh-foot'));
 startLiveLoop({ prices: true });
 
 load();

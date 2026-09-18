@@ -103,6 +103,37 @@
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
+/* ── ④ 주도 섹터 ────────────────────────── */
+/* 흰 카드 안에 한 단 들어간 면으로 둔다. 카드가 순백(--kh-bg-card)이라
+   선을 그으면 「흰 카드에는 선을 두지 않는다」 를 어긴다. 지수 칸과 같은 방식이다. */
+.kh-dl-sec {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 10px;
+}
+.kh-dl-sec-col {
+  background: var(--kh-bg-surface); border-radius: var(--kh-radius-md);
+  padding: 13px 15px;
+}
+.kh-dl-sec-h {
+  font-size: 12px; font-weight: 600; margin-bottom: 9px;
+}
+.kh-dl-sec-row {
+  display: flex; align-items: center; gap: 8px; padding: 5px 0;
+}
+.kh-dl-sec-m {
+  flex: none; font-size: 10.5px; font-weight: 700; padding: 2px 6px;
+  border-radius: 5px; background: var(--kh-bg-card); color: var(--kh-text-muted);
+}
+.kh-dl-sec-n {
+  font-size: 13px; font-weight: 600; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.kh-dl-sec-p {
+  margin-left: auto; flex: none; font-size: 13px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.kh-dl-sec-todo { margin-top: 10px; }
+
 .kh-dl-up { color: var(--kh-up); }
 .kh-dl-down { color: var(--kh-down); }
 .kh-dl-flat { color: var(--kh-text-muted); }
