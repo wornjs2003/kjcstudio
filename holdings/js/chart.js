@@ -56,6 +56,10 @@ const MA_LINES = [[5, 'ma5'], [20, 'ma20'], [60, 'ma60'], [200, 'ma200']];
  *         own     제 칸을 아래에 새로 만든다 (그만큼 가격 그림이 줄어든다)
  */
 export const INDICATORS = [
+  /* 매물대는 **배경**이다. 가장 먼저 깔리고 그 위에 봉과 보조지표가 온다
+     (2026-09-18 지시). 차트 canvas 가 아니라 그 뒤의 층에 그린다 —
+     캔들 위에 겹치면 봉이 가려진다. */
+  { key: 'vp',   name: '매물대',      pane: 'price' },
   { key: 'bb',   name: '볼린저 밴드', pane: 'price' },
   { key: 'ma',   name: '이동평균선',  pane: 'price' },
   { key: 'vol',  name: '거래량',      pane: 'own'   },
@@ -67,6 +71,9 @@ export const INDICATORS = [
 const _indSync = new Set();
 
 const IND_ON_KEY = 'kh.chart.ind-on';
+/* 사용자가 이미 본 적 있는 지표. 나중에 붙인 것을 한 번 켜 주는 데 쓴다 */
+const IND_SEEN_KEY = 'kh.chart.ind-seen';
+const IND_NEW = ['vp'];          // 2026-09-18 에 붙인 것
 let _indOn = null;
 
 export function indOn() {
@@ -79,7 +86,19 @@ export function indOn() {
   const names = INDICATORS.map((x) => x.key);
   _indOn = new Set(Array.isArray(saved)
     ? saved.filter((k) => names.includes(k))
-    : ['ma', 'vol']);          // 처음 열면 이동평균과 거래량만
+    : ['ma', 'vol', 'vp']);    // 처음 열면 이동평균 · 거래량 · 매물대
+
+  /* **나중에 생긴 지표는 처음 한 번 켜 준다** (2026-09-18).
+     저장된 설정이 있으면 기본값을 안 보므로, 새로 붙인 것이 화면에
+     영영 안 나온다. 「본 적 있는 지표」를 따로 적어 두고 처음 한 번만
+     켠다. 사용자가 끄면 그때부터 꺼진 채로 남는다. */
+  try {
+    const raw2 = localStorage.getItem(IND_SEEN_KEY);
+    const seen = new Set(raw2 == null ? [] : JSON.parse(raw2));
+    if (saved) IND_NEW.forEach((k) => { if (!seen.has(k)) _indOn.add(k); });
+    localStorage.setItem(IND_SEEN_KEY, JSON.stringify(names));
+  } catch { /* 저장 못 써도 화면은 돌아야 한다 */ }
+
   return _indOn;
 }
 
@@ -410,6 +429,63 @@ export function onIndicatorChange(fn) {
 
 const PANE_H_KEY = 'kh.chart.pane-h';
 const PANE_H_DEF = { vol: 110, macd: 110, rsi: 110 };
+
+/* ── 매물대 (2026-09-18 지시) ─────────────────
+ *
+ * 가격을 몇 칸으로 나누고 **각 봉의 거래량을 그 봉의 고가~저가에 고르게
+ * 나눠 담는다.** 그래서 **칸 합계 = 기간 전체 거래량**이 반드시 맞는다 —
+ * 1주라도 어긋나면 버그다. 눈으로 볼 필요 없이 검사로 잡을 수 있는 자리다
+ * (2026-09-18 실측, 삼성전자 일봉 105개로 차이 0).
+ *
+ * 새 호출이 없다. 화면이 이미 갖고 있는 봉으로 계산한다.
+ */
+const VP_BINS = 20;              // 가격을 몇 칸으로 나눌지
+const VP_WIDE = 0.78;            // 막대가 칸 폭의 몇 만큼까지 뻗을지 (2026-09-18 지시 — 더 길게)
+const VP_MIN_LABEL = 3;          // 이 퍼센트 미만은 글씨를 안 적는다 (겹친다)
+const VP_REFRESH_MS = 2000;      // 다시 그리는 주기 (지시)
+
+/* ── 겹쳐 그리는 것은 세로 축 계산에서 뺀다 ──
+ *
+ * 볼린저에만 넣어 두었더니 **MA60 을 껐다 켜면 차트 크기가 바뀌었다**
+ * (2026-09-18 지적 — "일괄로 값빼서 적용이 안된거 같은데"). 이동평균선이
+ * 봉보다 위아래로 넓으면 켜는 순간 값 축이 그만큼 벌어져 봉이 작아진다.
+ *
+ * **한 곳에 두고 겹치는 것 전부가 가져다 쓴다.** 새 겹침을 더할 때도
+ * 이것을 펴 넣으면 된다. */
+const NO_SCALE = { autoscaleInfoProvider: () => null };
+
+function volumeProfile(candles, bins = VP_BINS) {
+  const rows = (candles || []).filter((c) =>
+    Number.isFinite(c.high) && Number.isFinite(c.low));
+  if (rows.length < 2) return null;
+
+  const lo = Math.min(...rows.map((c) => c.low));
+  const hi = Math.max(...rows.map((c) => c.high));
+  if (!(hi > lo)) return null;
+  const step = (hi - lo) / bins;
+
+  const acc = new Array(bins).fill(0);
+  let total = 0;
+  for (const c of rows) {
+    const v = Number(c.volume);
+    if (!Number.isFinite(v) || v <= 0) continue;   // 거래량이 없는 봉은 건너뛴다
+    const a = Math.max(0, Math.min(bins - 1, Math.floor((c.low - lo) / step)));
+    const b = Math.max(0, Math.min(bins - 1, Math.floor((c.high - lo) / step)));
+    const share = v / (b - a + 1);
+    for (let i = a; i <= b; i++) acc[i] += share;
+    total += v;
+  }
+  if (!total) return null;
+
+  return {
+    total,
+    max: Math.max(...acc),
+    bins: acc.map((vol, i) => ({
+      lo: lo + step * i, hi: lo + step * (i + 1),
+      vol, pct: vol / total * 100,
+    })),
+  };
+}
 const PANE_MIN = 60, PRICE_MIN = 120;
 
 let _paneH = null;
@@ -451,6 +527,8 @@ export function createStockChart(container, candles, opts = {}) {
   let panes = [];
   let maSeries = [];
   let candleSeries = null;
+  let vpLayer = null;          // 매물대가 깔리는 층 (가격 칸 뒤)
+  let vpTimer = null;
   let legend = null;
   const priceLines = [];
   let syncing = false;
@@ -513,10 +591,106 @@ export function createStockChart(container, candles, opts = {}) {
      전에는 「새로 만든 봉을 지우고 옛 것을 되돌리는」 우회를 썼는데,
      그 사이 캔들 시리즈가 잠깐 둘이 되어 **세로 축이 두 번 흔들렸다.**
      볼린저를 켤 때마다 봉이 커졌다 작아진 것이 이 때문이다. */
+  /* ── 매물대 그리기 (2026-09-18 지시) ──
+   *
+   * 퍼센트를 **왼쪽**에 적는다. 오른쪽에 두면 가격축이 밀려 아래 보조지표
+   * 칸과 좌우 끝이 어긋난다 — holdings/CLAUDE.md 의 「차트 칸의 좌우 끝은
+   * 반드시 맞는다」 와 부딪히는 자리다. 왼쪽은 그림 영역 안이라 축을
+   * 건드리지 않는다.
+   */
+  function drawProfile() {
+    if (!vpLayer) return;
+    if (!indOn().has('vp') || !candleSeries) { vpLayer.innerHTML = ''; return; }
+
+    const prof = volumeProfile(candles);
+    if (!prof) { vpLayer.innerHTML = ''; return; }
+
+    const w = Math.max(0, vpLayer.clientWidth - AXIS_W);   // 가격축 자리는 비운다
+    const last = candles[candles.length - 1];
+    const now = last ? last.close : null;
+    const out = [];
+
+    for (const b of prof.bins) {
+      let yTop, yBot;
+      try {
+        yTop = candleSeries.priceToCoordinate(b.hi);
+        yBot = candleSeries.priceToCoordinate(b.lo);
+      } catch { return; }                    // 아직 그릴 준비가 안 됐다
+      if (yTop == null || yBot == null) continue;
+
+      const h = Math.max(1, yBot - yTop - 1);
+      const bw = prof.max ? b.vol / prof.max * w * VP_WIDE : 0;
+      const here = now != null && now >= b.lo && now < b.hi;
+
+      out.push(`<div class="kh-vp-b${here ? ' is-now' : ''}" style="top:${yTop}px;` +
+               `height:${h}px;width:${bw}px"></div>`);
+      if (b.pct >= VP_MIN_LABEL) {
+        out.push(`<div class="kh-vp-t${here ? ' is-now' : ''}" ` +
+                 `style="top:${yTop + h / 2}px">${b.pct.toFixed(1)}%</div>`);
+      }
+    }
+    vpLayer.innerHTML = out.join('');
+  }
+
+  /* 2초마다 다시 그린다 (지시). 차트를 끌거나 확대하면 그 자리에서 따라
+     그린다 — 2초를 기다리면 봉과 어긋나 보인다. */
+  function startProfileLoop() {
+    if (vpTimer) clearInterval(vpTimer);
+    vpTimer = setInterval(() => {
+      if (document.hidden) return;           // 안 보이는 탭은 쉰다
+      drawProfile();
+    }, VP_REFRESH_MS);
+  }
+
+  /* **매물대를 켜면 그때 보이던 세로 범위를 그대로 굳힌다** (2026-09-18 지시 —
+     "차트창을 움직이거나 해도 매물대는 고정이여야해").
+
+     차트를 좌우로 끌면 보이는 봉이 달라지고 세로 축이 그때마다 다시 잡힌다.
+     매물대는 가격에 붙어 있으므로 그 축을 따라 **위아래로 출렁였다**
+     (실측 485 → 554px).
+
+     ⚠️ **처음에는 전체 기간(고가~저가)으로 바꾸게 만들었는데 그것이 틀렸다.**
+     켜는 순간 축이 바뀌어 화면이 조절됐다 — 「지표를 켜고 끌 때 차트 크기가
+     바뀌면 안 된다」 는 룰을 정확히 어긴 것이다. 오늘 같은 자리가 세 번째였다
+     (볼린저 · 이동평균 · 매물대).
+
+     **지금 보이던 범위를 그대로 다시 먹인다.** 같은 값이라 켤 때 안 움직이고,
+     그 뒤로는 그 값에 묶여 있어 끌어도 고정이다. 끄면 빈 값을 먹여 예전처럼
+     보이는 구간에 맞춰 움직인다. */
+  let vpRange = null;          // 매물대를 켠 순간의 세로 범위
+
+  function priceFix() {
+    if (!indOn().has('vp') || !vpRange) return { autoscaleInfoProvider: undefined };
+    const { min, max } = vpRange;
+    return { autoscaleInfoProvider: () => ({ priceRange: { minValue: min, maxValue: max } }) };
+  }
+
+  /* 지금 보이는 세로 범위를 재서 굳힌다. 봉이 이미 그려져 있어야 잴 수 있으므로
+     그린 뒤에 부른다.
+
+     **한 번 굳히면 끌 때도 풀지 않는다.** 풀면 자동 스케일이 돌아오면서
+     그 순간 화면이 바뀐다 — 「지표를 켜고 꺼도 차트 크기가 바뀌지 않는다」
+     를 끄는 쪽에서 어기게 된다 (2026-09-18 실측 420 → 484px).
+     차트를 새로 그리거나 종목·기간이 바뀔 때만 다시 잡는다. */
+  function lockPriceRange() {
+    if (!indOn().has('vp')) return;            // 끌 때는 건드리지 않는다
+    if (vpRange) return;                       // 이미 굳혀 두었다
+    const box = panes[0] && panes[0].box;
+    if (!candleSeries || !box) return;
+    try {
+      const top = candleSeries.coordinateToPrice(0);
+      const bot = candleSeries.coordinateToPrice(box.clientHeight);
+      if (top == null || bot == null || !(top > bot)) return;
+      vpRange = { min: bot, max: top };
+      candleSeries.applyOptions(priceFix());
+    } catch { /* 아직 그릴 준비가 안 됐다 */ }
+  }
+
   function drawCandle(ch) {
     candleSeries = ch.addSeries(LC.CandlestickSeries, {
       upColor: COLOR.up, downColor: COLOR.down, borderUpColor: COLOR.up,
       borderDownColor: COLOR.down, wickUpColor: COLOR.up, wickDownColor: COLOR.down,
+      ...priceFix(),      // 이미 굳혀 둔 값이 있으면 그대로, 없으면 자동
     });
     candleSeries.setData(candles.map((c) => ({
       time: toChartTime(c.ts, period),
@@ -541,7 +715,7 @@ export function createStockChart(container, candles, opts = {}) {
 
          **세로 자동 맞춤에서 뺀다.** 띠는 봉보다 위아래로 넓어서, 안 빼면
          켜는 순간 값 축이 그만큼 벌어져 봉이 작아진다. */
-      const noScale = { autoscaleInfoProvider: () => null };
+      const noScale = NO_SCALE;          // 위 공통 상수. 겹침은 전부 이것을 쓴다
       const up = ch.addSeries(LC.AreaSeries, {
         lineColor: COLOR.band, lineWidth: 1,
         topColor: COLOR.bandFill, bottomColor: COLOR.bandFill,
@@ -566,7 +740,7 @@ export function createStockChart(container, candles, opts = {}) {
           maSeries.push({ period: p, key, color, series: null, values: [], short: candles.length });
           return;
         }
-        const sr = addLine(ch, { color, visible: !maOff().has(p) });
+        const sr = addLine(ch, { color, visible: !maOff().has(p), ...NO_SCALE });
         const data = movingAverage(candles, p, period);
         sr.setData(data);
         const values = new Array(candles.length).fill(null);
@@ -582,6 +756,9 @@ export function createStockChart(container, candles, opts = {}) {
     const ch = panes[0] && panes[0].chart;
     if (!ch) return;
 
+    /* 켜기 직전의 세로 범위를 적어 둔다. 다 그린 뒤 견줘서 움직였으면 알린다 */
+    const scaleBefore = readScale();
+
     /* 보던 구간을 붙잡아 둔다. 시리즈를 넣고 빼면 라이브러리가 보이는 범위를
        다시 잡는다 — 46.67~183 이 60~179 로 좁아졌다 (2026-09-18 실측).
        세로는 봉을 안 건드리니 저절로 그대로다. */
@@ -590,6 +767,9 @@ export function createStockChart(container, candles, opts = {}) {
 
     dropOverlay(ch);
     drawOverlay(ch);
+    /* 매물대를 켜고 끄면 세로 축 규칙이 바뀐다. 봉을 새로 만들지 않고
+       옵션만 다시 먹인다 — 다시 만들면 축이 두 번 흔들린다. */
+    lockPriceRange();
 
     if (keep) {
       const back = () => {
@@ -599,10 +779,14 @@ export function createStockChart(container, candles, opts = {}) {
       requestAnimationFrame(back);   // 라이브러리가 나중에 제 계산을 밀어넣는다
     }
 
+    drawProfile();          // 매물대도 새 축에 맞춰 다시 그린다
+    /* 라이브러리가 나중에 제 계산을 밀어넣으므로 한 박자 뒤에 잰다 */
+    requestAnimationFrame(() => checkScale(scaleBefore));
+
     if (showLegend && legend) {
       legend.destroy();
       legend = mountLegend(panes[0].box, ch,
-        { candles, period, maSeries, showVolume: false, ind: {}, toggleInd });
+        { candles, period, maSeries, showVolume: false, ind: {} });
       api.legend = legend;
     }
   }
@@ -711,6 +895,14 @@ export function createStockChart(container, candles, opts = {}) {
       el.className = 'kh-pane';
       const box = document.createElement('div');
       box.className = 'kh-pane-box';
+      /* 매물대 층을 **차트보다 먼저** 넣는다. 배경처럼 가장 아래에 깔리고
+         봉과 보조지표는 차트 canvas 안이라 저절로 그 위에 온다
+         (2026-09-18 지시 — "배경처럼 가장 먼저그려지고 그위에 봉 나오고"). */
+      if (p.key === 'price') {
+        vpLayer = document.createElement('div');
+        vpLayer.className = 'kh-vp';
+        el.appendChild(vpLayer);
+      }
       el.appendChild(box);
       container.appendChild(el);
 
@@ -759,6 +951,9 @@ export function createStockChart(container, candles, opts = {}) {
           }
         });
         syncing = false;
+        /* 봉이 움직이면 매물대도 그 자리에서 따라간다. 2초를 기다리면
+           띠와 봉이 어긋나 보인다 (2026-09-18). */
+        drawProfile();
       });
 
       ch.subscribeCrosshairMove((param) => {
@@ -771,11 +966,18 @@ export function createStockChart(container, candles, opts = {}) {
     if (showLegend) {
       if (legend) legend.destroy();
       legend = mountLegend(panes[0].box, panes[0].chart,
-        { candles, period, maSeries, showVolume: false, ind: {}, toggleInd });
+        { candles, period, maSeries, showVolume: false, ind: {} });
       api.legend = legend;
     }
     curOwn = ownKeys();
     paintPaneTags(candles.length - 1);
+    /* 매물대는 배경이라 칸이 다 그려진 뒤에 얹는다. 자리를 잡으려면
+       가격축이 정해져 있어야 해서 한 박자 뒤에 한 번 더 그린다. */
+    /* 봉이 자리를 잡은 뒤에 세로 범위를 굳힌다. 그려지기 전에 재면 값이 없다 */
+    lockPriceRange();
+    drawProfile();
+    requestAnimationFrame(() => { lockPriceRange(); drawProfile(); });
+    startProfileLoop();
     checkAlign();
   }
 
@@ -806,6 +1008,49 @@ export function createStockChart(container, candles, opts = {}) {
 
   /* 좌우 끝이 맞는지 본다. 어긋나면 화면에 표시한다 —
      「맞춰 둔다」 는 주석은 지켜지지 않는다 (holdings/CLAUDE.md). */
+  /* ── 세로가 움직였는지 검사한다 (2026-09-18 지시) ──
+   *
+   * holdings/CLAUDE.md 「지표를 켜고 꺼도 차트 크기가 바뀌지 않는다」 를
+   * 기계가 잡게 한다. 그 룰은 **코드 주석에만 있고 검사가 없어서** 하루에
+   * 세 번 깨졌다 — 볼린저 · 이동평균 · 매물대. 셋 다 새 지표를 붙이면서 났다.
+   *
+   * 좌우 끝(checkAlign)과 짝이다. 그것은 가로, 이것은 세로다.
+   */
+  function readScale() {
+    const box = panes[0] && panes[0].box;
+    if (!candleSeries || !box || !box.clientHeight) return null;
+    try {
+      const top = candleSeries.coordinateToPrice(0);
+      const bot = candleSeries.coordinateToPrice(box.clientHeight);
+      if (top == null || bot == null || !(top > bot)) return null;
+      return { top, bot };
+    } catch { return null; }
+  }
+
+  /* 켜기 직전과 켠 뒤가 다르면 알린다. 값이 조금씩 흔들리는 것은 넘어가고
+     **눈에 보일 만큼**(범위의 1%) 달라졌을 때만 잡는다. */
+  const SCALE_TOL = 0.01;
+
+  function checkScale(before) {
+    const old = container.querySelector('.kh-scale-warn');
+    if (old) old.remove();
+    if (!before) return;
+    const now = readScale();
+    if (!now) return;
+
+    const span = Math.abs(before.top - before.bot) || 1;
+    const moved = (Math.abs(now.top - before.top) + Math.abs(now.bot - before.bot)) / span;
+    if (moved <= SCALE_TOL) return;
+
+    const tag = document.createElement('div');
+    tag.className = 'kh-scale-warn';
+    tag.textContent = '세로가 움직임 — ' +
+      Math.round(before.bot) + '~' + Math.round(before.top) + ' → ' +
+      Math.round(now.bot) + '~' + Math.round(now.top) +
+      ' (' + (moved * 100).toFixed(1) + '%)';
+    container.appendChild(tag);
+  }
+
   function checkAlign() {
     const old = container.querySelector('.kh-align-warn');
     if (old) old.remove();
@@ -915,6 +1160,7 @@ export function createStockChart(container, candles, opts = {}) {
       if (!next || !next.length) return;
       candles = next;
       if (nextPeriod) period = nextPeriod;
+      vpRange = null;          // 종목·기간이 바뀌면 세로 범위를 다시 잡는다
       priceLines.length = 0;
       remap();
       build();
@@ -927,6 +1173,7 @@ export function createStockChart(container, candles, opts = {}) {
 
     destroy() {
       _indSync.delete(syncInd);
+      if (vpTimer) { clearInterval(vpTimer); vpTimer = null; }   // 매물대 타이머
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       if (legend) legend.destroy();
@@ -1041,15 +1288,16 @@ function maChip(m) {
     ><span>MA${m.period}</span><b data-f="ma${m.period}">—</b></button>`;
 }
 
-/* 보조지표 칩 하나 */
+/* 보조지표 칩 하나 — **값만 보여준다.**
+   누르면 꺼지던 것을 뺐다 (2026-09-18 지시 — "비활성화 하는 버튼은
+   없애도 될거같아"). 끄고 켜는 것은 기간 줄의 「보조지표」 메뉴 한 곳에서
+   한다. 두 곳에 두면 어느 쪽이 기준인지 헷갈린다. */
 function indChip(x) {
-  const on = indOn().has(x.key);
-  return `<button type="button" class="kh-lg-c kh-lg-ind${on ? '' : ' is-off'}"
-    data-ind="${x.key}" title="${x.tip}"
-    ><span>${x.name}</span><b data-f="ind-${x.key}"></b></button>`;
+  return `<span class="kh-lg-c kh-lg-ind" title="${x.tip}"
+    ><span>${x.name}</span><b data-f="ind-${x.key}"></b></span>`;
 }
 
-function mountLegend(container, chart, { candles, period, maSeries, showVolume, ind, toggleInd }) {
+function mountLegend(container, chart, { candles, period, maSeries, showVolume, ind }) {
   container.classList.add('kh-lg-host');
 
   /* 지수는 소수점이 있고 종목은 정수다. 받은 값을 보고 정한다 */
@@ -1131,9 +1379,9 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
   }
   _legendSync.add(syncOff);
 
+  /* 보조지표 칩은 이제 누르는 것이 아니다 — 값만 보여준다.
+     끄고 켜는 것은 「보조지표」 메뉴 한 곳에서 한다 (2026-09-18 지시). */
   el.addEventListener('click', (e) => {
-    const iBtn = e.target.closest('[data-ind]');
-    if (iBtn) { if (toggleInd) toggleInd(iBtn.dataset.ind); return; }
     const btn = e.target.closest('[data-ma]');
     if (!btn) return;
     const p = Number(btn.dataset.ma);
@@ -1171,12 +1419,9 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
   }
 
   return {
-    /* 지표를 켜고 끈 뒤 칩과 값을 다시 칠한다 */
+    /* 지표를 켜고 끈 뒤 값을 다시 칠한다. 칩의 켜짐/꺼짐 표시는 없앴다 —
+       켠 것만 칩이 생기므로 따로 흐리게 할 것이 없다. */
     refreshInd() {
-      INDICATORS.forEach((x) => {
-        const b = el.querySelector(`[data-ind="${x.key}"]`);
-        if (b) b.classList.toggle('is-off', !indOn().has(x.key));
-      });
       renderInd(candles.length - 1);
     },
 

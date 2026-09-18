@@ -254,7 +254,29 @@
 .kh-panes { display: flex; flex-direction: column; }
 .kh-pane { position: relative; }
 .kh-pane + .kh-pane { border-top: 1px solid var(--kh-border); }
-.kh-pane-box { width: 100%; }
+.kh-pane-box { width: 100%; position: relative; z-index: 1; }
+
+/* ── 매물대 (2026-09-18 지시) ─────────────────
+   **배경이다.** 가장 아래에 깔리고 봉과 보조지표는 차트 canvas 안이라
+   저절로 그 위에 온다. 차트 배경이 transparent 라 이 층이 비쳐 보인다.
+   퍼센트를 왼쪽에 적는 것은 오른쪽 가격축을 안 밀어내기 위해서다 —
+   밀면 아래 보조지표 칸과 좌우 끝이 어긋난다. */
+.kh-vp {
+  position: absolute; inset: 0; z-index: 0;
+  pointer-events: none; overflow: hidden;
+}
+.kh-vp-b {
+  position: absolute; left: 0;
+  background: var(--kh-accent-dim);
+  border-radius: 0 2px 2px 0;
+}
+.kh-vp-b.is-now { background: var(--kh-up-dim); }
+.kh-vp-t {
+  position: absolute; left: 5px;
+  font-size: 0.66rem; color: var(--kh-text-muted);
+  transform: translateY(-50%); white-space: nowrap;
+}
+.kh-vp-t.is-now { color: var(--kh-up); font-weight: 700; }
 
 /* 칸 이름표 — 그림 위에 겹친다. 닫기 · 이름 · 지금 값 */
 .kh-pane-tag {
@@ -288,12 +310,19 @@
 }
 
 /* 좌우 끝이 어긋나면 여기에 뜬다. 뜨면 고쳐야 한다 — 주석은 안 지켜진다 */
-.kh-align-warn {
-  position: absolute; right: 10px; top: 6px; z-index: 20;
+/* 좌우 끝이 어긋났을 때 · 세로가 움직였을 때 뜨는 표시.
+   **[hidden] 으로 숨기지 않고 요소를 지운다** — `display` 를 준 규칙이
+   `[hidden]` 을 이겨서 안 숨는 일이 있다 (다른 구역에서 두 번 겪었다).
+   늘 떠 있으면 아무도 안 믿고, 영영 안 뜨면 검사가 없는 것과 같다. */
+.kh-align-warn, .kh-scale-warn {
+  position: absolute; right: 10px; z-index: 20;
   background: var(--kh-down); color: var(--kh-text-on-fill);
   border-radius: 6px; padding: 3px 9px;
   font-size: 0.72rem; font-weight: 700;
 }
+.kh-align-warn { top: 6px; }
+/* 둘이 함께 뜰 수 있으므로 자리를 겹치지 않게 아래로 내린다 */
+.kh-scale-warn { top: 32px; }
 
 
 /* ── 「보조지표」 메뉴 (2026-09-18) ──────────
