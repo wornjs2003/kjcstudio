@@ -18,11 +18,38 @@
    묵은 숫자를 실시간인 양 보여주면 데이터 규칙에 어긋난다.
    ========================================================================== */
 
+import { marketPhase } from '../utils/format.js';
+
 const PREFIX = 'kh:last:';
 
-/* 얼마나 지나면 버릴 것인가. 장중 시세는 금방 낡는다.
-   1분이면 "조금 전 값" 이고, 그보다 오래된 것은 차라리 빈 칸이 낫다. */
-const MAX_AGE_MS = 60_000;
+/* 얼마나 지나면 버릴 것인가 — **장이 도는지에 따라 다르다** (2026-09-18 지시).
+ *
+ *   장중 · 단일가   5분.  값이 계속 바뀌므로 오래된 것은 쓸모가 없다
+ *   그 밖           12시간. 값이 멈춰 있어 어제 것이 오늘 아침까지 맞다
+ *
+ * 전에는 언제나 1분이었다. 그래서 장 마감 뒤에 화면을 열면 **맞는 값을
+ * 버리고 빈 칸**을 보여줬다. 반대로 장중에 1분은 짧아, 잠깐 다른 탭에
+ * 다녀오면 순위가 통째로 빈 칸이 됐다.
+ *
+ * **묵은 값을 쓸 때는 화면에 그렇다고 적어야 한다.** load 가 ageMs 를 함께
+ * 돌려주는 것이 그 때문이다 (아래 주석 참고). 급상승·급하락은 몇 분 만에도
+ * 뒤집히므로, 부르는 쪽이 그 나이를 보고 더 눈에 띄게 적는다.
+ */
+const MAX_AGE_LIVE_MS = 5 * 60_000;
+const MAX_AGE_CLOSED_MS = 12 * 60 * 60 * 1000;
+
+/* 값이 움직이는 시간인가. KRX 가 도는 동안만 참이다 */
+function marketLive() {
+  try {
+    const id = marketPhase().id;
+    return id === 'regular' || id === 'single';
+  } catch { return true; }        // 못 읽으면 짧은 쪽으로 (안전한 쪽)
+}
+
+function maxAge(slow) {
+  if (slow) return MAX_AGE_SLOW_MS;
+  return marketLive() ? MAX_AGE_LIVE_MS : MAX_AGE_CLOSED_MS;
+}
 
 /* 목록은 하루에 한 번 바뀐다. 시세보다 훨씬 오래 들고 있어도 된다. */
 const MAX_AGE_SLOW_MS = 6 * 60 * 60 * 1000;
@@ -55,7 +82,7 @@ export function load(key) {
     const box = JSON.parse(raw);
     if (!box || typeof box.at !== 'number') return null;
     const ageMs = Date.now() - box.at;
-    if (ageMs > (box.slow ? MAX_AGE_SLOW_MS : MAX_AGE_MS)) {
+    if (ageMs > maxAge(box.slow)) {
       sessionStorage.removeItem(PREFIX + key);
       return null;
     }
