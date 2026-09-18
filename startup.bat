@@ -37,6 +37,23 @@ if %errorlevel%==0 (
   ping -n 4 127.0.0.1 > nul
 )
 
+REM --- 1b) staging server 8767 (middle server) -------------------
+REM  Sessions merge here, check the screen, then it goes to main.
+REM  See CLAUDE.md "three places" section. Skipped if the folder
+REM  is missing, so this file still works before the split is set up.
+if exist "C:\work\kjc-staging\holdings\server\kis_proxy.py" (
+  netstat -ano | findstr ":8767" | findstr "LISTENING" > nul 2>&1
+  if %errorlevel%==0 (
+    echo   [skip]  staging server already listening on 8767
+  ) else (
+    echo   [start] staging server 8767
+    start "KJC staging server 8767" /min cmd /c "cd /d C:\work\kjc-staging\holdings && python server/kis_proxy.py --port 8767"
+    ping -n 3 127.0.0.1 > nul
+  )
+) else (
+  echo   [skip]  staging folder not found - split not set up yet
+)
+
 REM --- 2) browser ------------------------------------------------
 echo   [open]  browser
 start "" "http://localhost:8765/"
