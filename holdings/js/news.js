@@ -363,10 +363,14 @@ async function refresh() {
   paintHead();
 }
 
-/* 사이드바·세로바·시세 띠는 다른 화면과 같은 부품을 쓴다 */
-mountWatchSide($('kh-side'), {});
+/* 사이드바·세로바·시세 띠는 다른 화면과 같은 부품을 쓴다.
+
+   **돌려주는 손잡이를 받아 둔다.** 이 둘은 mount 때 한 번 빈 채로 그려지고,
+   값은 update() 로 들어온다. 버리면 부를 방법이 없어 관심 사이드바는 '—',
+   시세 띠는 「지수 불러오는 중」 에서 영영 안 바뀐다 (2026-09-18). */
+const side = mountWatchSide($('kh-side'), {});
 mountVBar($('kh-vbar'), 'news');
-mountFootStrip($('kh-foot'));
+const foot = mountFootStrip($('kh-foot'));
 
 /* 주요 일정 — 여기는 넓으므로 설명과 필터 칩까지 보여준다 */
 const sched = mountSchedule($('kh-nw-sched'), {
@@ -379,5 +383,12 @@ bindSeg();
 refresh();
 setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
 
-/* 관심 사이드바와 시세 띠는 다른 화면과 같은 것을 쓴다 */
-startLiveLoop({ prices: true, indexMs: 0 });
+/* 관심 사이드바와 시세 띠는 다른 화면과 같은 것을 쓴다.
+
+   indexMs 를 안 주는 것은 「지수를 더 자주 받지 않겠다」 는 뜻이고,
+   느린 갈래가 30초마다 함께 받아 온다. 그 값을 띠에 넘긴다. */
+startLiveLoop({
+  prices: true,
+  onIndices(indices) { foot.update(indices); },
+  onPrices(prices)   { side.update(prices); },
+});

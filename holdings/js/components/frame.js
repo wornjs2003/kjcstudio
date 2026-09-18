@@ -12,8 +12,23 @@ import { fetchLivePrices, fetchLiveIndices, applyLiveToStock } from '../data/liv
 import { fmtWon, fmtPct, fmtNum, dirClass, fmtDeltaAmount } from '../utils/format.js';
 import { iconHtml } from './stock-icon.js';
 
-/* 아직 받아올 곳이 없는 시세 띠 항목 */
-const FOOT_NOT_READY = ['달러 인덱스', '달러 환율', '나스닥', 'S&P 500', '필라델피아 반도체'];
+/* 아직 받아올 곳이 없는 시세 띠 항목.
+
+   **다섯이었는데 넷이 그새 들어왔다** (2026-09-18 실측). `/api/kis/indices`
+   가 지금 주는 것과 맞춰 보니 이랬다.
+
+       달러 환율          `미국 USD` 로 온다        1382.8
+       나스닥             `나스닥 종합` · `나스닥100`  26418.3 · 29446.98
+       S&P 500            그 이름 그대로 온다        7637.76
+       필라델피아 반도체    그 이름 그대로 온다        11599.49
+
+   그동안 **위 카드에는 숫자가 뜨고 아래 띠에는 「연결 예정」** 이 떠서 한
+   화면에서 어긋나 있었다. 이 목록은 받아온 값과 상관없이 뒤에 그대로 붙기
+   때문이다(아래 render 참고).
+
+   **달러 인덱스만 남는다.** KIS 해외지수 목록에 없다 —
+   `docs/data-sources.md` 참고. 받을 수 있게 되면 여기서 지운다. */
+const FOOT_NOT_READY = ['달러 인덱스'];
 
 /* ── 관심종목 사이드바 ───────────────────── */
 export function mountWatchSide(el, { activeCode } = {}) {
