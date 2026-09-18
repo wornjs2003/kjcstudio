@@ -22,6 +22,7 @@ import { loadStockMain, mountStockView } from './components/stock-view.js';
 import { mountDisclosures } from './components/disclosures.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
 import { mountSchedule } from './components/schedule.js';
+import { mountSectors } from './components/sectors.js';
 /* fetchIndexMinutes · fetchIndexCandles 는 여기서 안 쓴다 (2026-09-17).
    큰 차트가 지수에서 종목으로 바뀌면서 종목 캔들(chart.js 의 fetchCandles)로
    갈아탔다. 두 함수는 지수 화면을 만들 때 쓸 수 있게 live.js 에 남겨 뒀다. */
@@ -1297,6 +1298,10 @@ setupSorts();
 /* 몇 초 전 값인지는 가만히 있어도 늘어난다. 1초마다 다시 적는다 */
 setInterval(() => { if (!document.hidden) paintSortNote(); }, 1000);
 mountIndicatorMenu(document.querySelector('.kh-ind-menu'));
+
+/* 「지금 뜨는 산업」 — 업종 이름 단추를 누르면 그 종목이 나온다 (2026-09-18 지시).
+   값은 네이버에서 오고 첫 화면을 막지 않는다 — 목록 한 번이 0.03초다. */
+mountSectors(document.querySelector('.kh-sc-card'));
 paintBigPeriods();
 
 /* 지난번에 본 값이 남아 있으면 그것부터 그린다 (2026-09-15).

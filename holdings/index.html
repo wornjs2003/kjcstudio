@@ -183,17 +183,21 @@
          주요 일정·뉴스도 여기로 내렸다. 실시간 순위와 공시는 오른쪽 칸이다. -->
     <section class="kh-rank" aria-label="시장 정보">
 
-      <div class="kh-card">
+      <!-- 지금 뜨는 산업 — 업종 이름을 단추로 놓고, 누르면 그 종목이 아래에
+           나온다 (2026-09-18 지시 · 시안 「나안」).
+           값은 네이버에서 온다 — KIS 에는 「그 업종에서 몇이 올랐나」와
+           「그 업종의 종목 목록」이 없다. js/components/sectors.js 참고. -->
+      <div class="kh-card kh-sc-card">
+        <!-- 업종·테마 고르개는 「주요 지수」 카드처럼 탭 줄 오른쪽에 둔다.
+             줄을 따로 두면 카드가 그만큼 길어지고, 이 줄의 카드 넷이
+             함께 늘어난다 (2026-09-17 지시 — 높이를 유지한다). -->
         <div class="kh-tabs"><button class="kh-tab is-active">지금 뜨는 산업</button>
-          <span class="kh-bd kh-bd-soon">연결 예정</span></div>
-        <div class="kh-chips">
-          <button class="kh-chip is-active">업종</button>
-          <button class="kh-chip">테마</button>
-          <button class="kh-chip">상승률 TOP</button>
-        </div>
-        <div class="kh-asof">업종 38개 · 테마 100개</div>
-        <div class="kh-idxp-b" style="padding:0 18px 18px">
-          <span class="kh-mut">붙일 것: KIS 업종 API</span></div>
+          <span class="kh-chips kh-ix-chips" id="kh-sc-kind">
+            <button class="kh-chip is-active" data-kind="industry">업종</button>
+            <button class="kh-chip" data-kind="theme">테마</button>
+          </span></div>
+        <div class="kh-chips kh-sc-names" id="kh-sc-names"></div>
+        <div class="kh-sc-body" id="kh-sc-body"></div>
       </div>
 
       <!-- 주요 지수 — 위 띠에 있던 것이 여기로 왔다.
