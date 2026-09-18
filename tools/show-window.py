@@ -129,6 +129,18 @@ def session_name():
     return name
 
 
+def doc_title(path):
+    """HTML 의 `<title>` 을 읽는다. **창 제목이 파일명이 아니라 이것이다.**"""
+    if not path.lower().endswith((".html", ".htm")):
+        return ""
+    try:
+        s = io.open(path, encoding="utf-8").read()
+    except OSError:
+        return ""
+    m = re.search(r"<title>(.*?)</title>", s, re.S | re.I)
+    return m.group(1).strip() if m else ""
+
+
 def stamp_title(path, who):
     """HTML 제목 앞에 세션 이름을 붙인다. **임시 파일에만** 손댄다.
 
@@ -260,11 +272,19 @@ def main():
         print(f"  없는 파일입니다: {path}")
         return
 
-    # 제목 조각을 안 주면 파일명에서 뽑는다
-    hint = sys.argv[2] if len(sys.argv) > 2 else os.path.splitext(os.path.basename(path))[0]
-
     # 누가 띄웠는지 제목에 남긴다. 창이 여럿일 때 구분이 안 되기 때문이다.
     stamp_title(path, session_name())
+
+    # 제목 조각. 안 주면 파일명에서 뽑는데, **HTML 은 그러면 못 찾는다** —
+    # 창에 뜨는 것은 파일명이 아니라 `<title>` 이다. 2026-09-18 에 `md-diff.html`
+    # 을 힌트 없이 띄웠더니 「0개 일치」 가 나왔고, 못 찾을 때마다 다시 부르느라
+    # **빈 창이 둘 쌓였다.** 띄우기는 성공하고 꺼내기만 실패해서, 화면에는
+    # 창이 늘어나는데 출력은 「아무것도 안 했다」 고 말한다.
+    #
+    # 길면 앞부분만 쓴다. 창 제목은 뒤에 ` - Chrome` 이 붙고, 세션 이름이
+    # 앞에 붙어 있어 앞 40자만으로도 특정된다.
+    hint = sys.argv[2] if len(sys.argv) > 2 else (doc_title(path)[:40] or
+           os.path.splitext(os.path.basename(path))[0])
 
     before = windows()
 
