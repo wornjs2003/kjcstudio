@@ -63,13 +63,27 @@ struct Model {
     }
 };
 
+// 한 씬에서 나온 메시들을 같은 자리에 놓으려면 변환이 하나여야 한다.
+// 얼굴을 먼저 읽어 이것을 받아 두고, 나머지는 그것을 그대로 쓴다 —
+// 메시마다 따로 가운데를 맞추면 눈썹이 코앞에 떠 버린다
+struct Align {
+    float scale = 1.0f;
+    DirectX::XMFLOAT3 sub = { 0.0f, 0.0f, 0.0f };   // 좌표에서 빼는 값
+    bool  valid = false;                            // false 면 이번에 정한다
+};
+
 // FBX 를 읽어 정점·인덱스 버퍼를 만든다.
 //
 //   targetHeight   이 높이가 되도록 크기를 맞춘다. 바닥(y=0)에 세우고
 //                  가로 한가운데를 원점에 둔다
 //   실패하면       false 를 돌리고 err 에 이유를 적는다
+//   bakeAO         정점마다 광선을 쏴 가림 정도를 굽는다. 정점이 많으면
+//                  몇 분씩 걸리므로, 털 가닥처럼 얻는 것이 적은 메시는 끈다
+//   align          nullptr 이 아니면 — valid 일 때 그 변환을 쓰고,
+//                  아닐 때는 이번에 정한 값을 채워 돌려준다
 bool LoadFBX(ID3D11Device* dev, const char* path, float targetHeight,
-             Model& out, char* err, size_t errSize);
+             Model& out, char* err, size_t errSize,
+             bool bakeAO = true, Align* align = nullptr);
 
 // 버텍스 AO 를 다른 범위로 다시 굽고 GPU 버퍼를 갈아끼운다.
 // 정점 수에 비례해 시간이 걸리므로 (이 모델은 몇 초) 값을 바꿀 때마다가 아니라

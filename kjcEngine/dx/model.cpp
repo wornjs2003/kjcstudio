@@ -177,7 +177,8 @@ static void ComputeVertexAO(std::vector<Vertex>& v,
 }
 
 bool LoadFBX(ID3D11Device* dev, const char* path, float targetHeight,
-             Model& out, char* err, size_t errSize) {
+             Model& out, char* err, size_t errSize,
+             bool bakeAO, Align* align) {
     ufbx_load_opts opts = {};
     // DirectX 는 왼손 좌표계에 Y 가 위다. FBX 는 만든 도구마다 축이 달라서
     // 여기서 한 번에 맞춰 둔다 — 안 맞추면 모델이 눕거나 뒤집혀 들어온다
@@ -255,10 +256,22 @@ bool LoadFBX(ID3D11Device* dev, const char* path, float targetHeight,
     out.scale = (targetHeight > 0.0f && out.rawHeight > 1e-6f)
               ? (targetHeight / out.rawHeight) : 1.0f;
 
-    float cx = (lo.x + hi.x) * 0.5f, cz = (lo.z + hi.z) * 0.5f;
+    float cx = (lo.x + hi.x) * 0.5f, cz = (lo.z + hi.z) * 0.5f, by = lo.y;
+
+    // 앞서 정해 둔 변환이 있으면 그것을 쓴다. 메시마다 제 가운데를 찾으면
+    // 눈썹은 눈썹의 한가운데, 얼굴은 얼굴의 한가운데로 가서 서로 어긋난다
+    if (align && align->valid) {
+        out.scale = align->scale;
+        cx = align->sub.x; by = align->sub.y; cz = align->sub.z;
+    } else if (align) {
+        align->scale = out.scale;
+        align->sub   = DirectX::XMFLOAT3(cx, by, cz);
+        align->valid = true;
+    }
+
     for (Vertex& v : flat) {
         v.pos.x = (v.pos.x - cx) * out.scale;   // 가로는 한가운데로
-        v.pos.y = (v.pos.y - lo.y) * out.scale; // 발치가 y=0 에 오게
+        v.pos.y = (v.pos.y - by) * out.scale;   // 발치가 y=0 에 오게
         v.pos.z = (v.pos.z - cz) * out.scale;
     }
 
@@ -371,7 +384,10 @@ bool LoadFBX(ID3D11Device* dev, const char* path, float targetHeight,
 
     // ── 버텍스 AO 를 굽는다 ──
     // 여기서 시간이 걸린다. 정점 수와 삼각형 수에 따라 1~3초 정도다
-    ComputeVertexAO(flat, indices, targetHeight, out.aoRadius);
+    // 털 가닥처럼 정점이 많고 얻는 것이 적은 메시는 굽지 않는다.
+    // 안 구우면 ao 가 1(훤히 열림)로 남아 아무 영향도 주지 않는다
+    if (bakeAO) ComputeVertexAO(flat, indices, targetHeight, out.aoRadius);
+    else for (Vertex& v : flat) v.ao = 1.0f;
 
     // ── GPU 로 올린다 ──
     D3D11_BUFFER_DESC bd = {};

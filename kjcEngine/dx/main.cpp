@@ -118,12 +118,41 @@ static const float SHADOW_BIAS  = 0.0010f;
 //
 // 경로를 여기 박아 둔 것은 1단계라서다. 다른 PC 에서는 안 열리므로
 // 나중에 설정 파일이나 명령줄 인자로 뺀다
-static const char* MODEL_PATH =
+static const char* MESH_DIR =
     "C:\\Users\\9800X3D\\Desktop\\Work_01\\2025_10\\head\\femaleHead\\head"
-    "\\Assets\\Meshes\\Femalehead_0003_01.fbx";
+    "/";
+static const char* MODEL_FILE = "Assets/Meshes/Femalehead_0003_01.fbx";
+
+// 얼굴에 얹어 함께 그리는 메시들.
+// 마모셋 머티리얼이 텍스처 없이 단색(Color)만 쓰고 있어 색을 여기 적는다 —
+// 털은 가닥 하나하나가 실제 지오메트리라 무늬가 필요 없다.
+// 없는 파일은 조용히 건너뛴다. 눈알·헤어가 오면 여기 한 줄 더한다
+struct Extra {
+    const char* file;
+    float       color[4];    // sRGB. 마모셋의 선형 값을 옮긴 것이다
+    float       mode;        // 0 = 단색, 3 = 눈알 (제 텍스처를 쓴다)
+    Model       model;
+};
+static Extra g_extra[] = {
+    { "Brows_02.fbx",  { 0.309f, 0.254f, 0.254f, 1.0f }, 0.0f },   // 눈썹
+    { "Lashes_02.fbx", { 0.309f, 0.254f, 0.254f, 1.0f }, 0.0f },   // 속눈썹
+
+    // 눈알과 헤어. 텍스처를 붙이기 전이라 중성 회색으로 둔다
+    { "eyeboll_left.fbx",  { 1.0f, 1.0f, 1.0f, 1.0f }, 3.0f },   // 텍스처를 쓴다
+    { "eyeboll_right.fbx", { 1.0f, 1.0f, 1.0f, 1.0f }, 3.0f },
+    { "hair.fbx",          { 1.0f, 1.0f, 1.0f, 1.0f }, 4.0f },   // 텍스처 + 알파
+
+    // 눈알 위에 씌우는 물기막은 아직 뺀다 — 반투명으로 그릴 줄 몰라서,
+    // 넣으면 불투명한 막이 눈알을 덮어 버린다
+    // { "Eye Wet_02.fbx", { 0.700f, 0.700f, 0.720f, 1.0f } },
+};
 // 0 이면 원본 크기 그대로. FBX 를 미터로 읽었으므로 이 모델은 0.34m 다.
 // 이렇게 두어야 1 단위 = 1 미터가 되고, 아래 값들이 실제 치수가 된다
 static const float MODEL_H = 0.0f;
+// 바닥에 딱 붙이면 발치가 판에 파묻혀 어디까지가 모델인지 안 보인다
+static const float MODEL_LIFT = 0.1f;
+// ← → 한 번에 도는 각도. 15도
+static const float TURN_STEP  = 15.0f * 3.14159265f / 180.0f;
 
 // 텍스처. FBX 안의 재질은 옛 파일 하나만 가리키고 있어서 여기서 직접 잇는다 —
 // 재권님이 2K 로 줄여 두신 것들이다
@@ -133,6 +162,14 @@ static const char* TEX_ALBEDO = "Face_Albedo.jpg";
 static const char* TEX_NORMAL = "Face_Normal.jpg";
 static const char* TEX_ROUGH  = "Face_Roughness.jpg";
 static const char* TEX_SPEC   = "Face_Specular.jpg";
+// 눈알. 거칠기·산란 맵은 마모셋 머티리얼에도 nil 이라 상수로 간다
+static const char* EYE_ALBEDO = "Eyes_Balls_Diffuse.jpg";
+static const char* EYE_NORMAL = "Eyes_Balls_Normals.jpg";
+static const char* EYE_SPEC   = "Eyes_Balls_Spec.jpg";
+// 헤어. 알베도의 알파가 가닥 모양을 오려 낸다
+static const char* HAIR_ALBEDO = "Hair_Colour_Opacity.tga";
+static const char* HAIR_NORMAL = "Hair_Normal.tga";
+static const char* HAIR_SPEC   = "Hair_Specular.tga";
 static const char* TEX_SCAT   = "Face_Scatter map.jpg";
 static const char* TEX_MICRO  = "Face_Micro Normal.jpg";
 static const char* TEX_MASK   = "Face_Details_Mask.jpg";
@@ -251,7 +288,9 @@ static Texture                  g_rough;       // 거칠기
 static Texture                  g_spec;        // 반사색 (스페큘러 워크플로)
 static Texture                  g_scatter;     // 빛이 살 속으로 얼마나 들어가나
 static Texture                  g_micro;       // 모공·잔주름 같은 미세 결
-static Texture                  g_mask;        // 그 결을 어디에 얼마나 얹을지
+static Texture                  g_mask;
+static Texture                  g_eyeAlbedo, g_eyeNormal, g_eyeSpec;
+static Texture                  g_hairAlbedo, g_hairNormal, g_hairSpec;        // 그 결을 어디에 얼마나 얹을지
 static Environment              g_env;         // 환경맵에서 구운 것 셋
 static int                      g_envIdx = 0;  // 지금 쓰는 HDR
 static float                    g_envOn  = 1.0f;
@@ -637,14 +676,19 @@ static void UpdateSun() {
 // 원근으로 보면 멀리 있는 것이 작아져서 그림자 크기가 틀어진다
 static void BuildLightMatrix() {
     XMVECTOR dir = XMVector3Normalize(XMLoadFloat3(&SUN));
-    XMVECTOR eye = XMVectorScale(dir, SHADOW_RANGE);   // 그 방향으로 물러선 자리
+
+    // 기록장이 담는 자리를 모델에 맞춰 옮긴다. 원점에 고정해 두면
+    // 모델이 조금만 걸어가도 범위(SHADOW_RANGE) 밖으로 나가 그림자가 끊긴다.
+    // 폭이 1.2m 이라 0.6m 만 벗어나도 그렇게 된다
+    XMVECTOR at  = XMVectorSet(g_x, MODEL_LIFT, g_z, 0.0f);
+    XMVECTOR eye = XMVectorAdd(at, XMVectorScale(dir, SHADOW_RANGE));
 
     // 위쪽 축이 시선과 나란하면 행렬이 무너진다. 태양이 거의 머리 위면 다른 축을 쓴다
     XMVECTOR up = (fabsf(XMVectorGetY(dir)) > 0.99f)
                 ? XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f)
                 : XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 
-    XMMATRIX v = XMMatrixLookAtLH(eye, XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f), up);
+    XMMATRIX v = XMMatrixLookAtLH(eye, at, up);
     XMMATRIX p = XMMatrixOrthographicLH(SHADOW_RANGE, SHADOW_RANGE,
                                         0.1f, SHADOW_RANGE * 2.5f);
     g_lightVP = XMMatrixMultiply(v, p);
@@ -902,7 +946,7 @@ static void DrawScene(bool depthPass) {
     // 뛰는 중이면 그만큼 떠오르고 좌우로 떤다.
     // 4t(1-t) 는 t 가 0 과 1 에서 0, 한가운데서 1 이 되는 포물선이라
     // 뛰어올랐다 제자리로 내려오는 모양이 저절로 나온다
-    float cx = g_x, cy = 0.0f, cz = g_z;   // 모델은 발치가 y=0 이라 띄우지 않는다
+    float cx = g_x, cy = MODEL_LIFT, cz = g_z;   // 판에서 살짝 띄운다
     if (g_hop > 0.0f) {
         float t = g_hop / HOP_TIME;
         if (t > 1.0f) t = 1.0f;
@@ -921,6 +965,38 @@ static void DrawScene(bool depthPass) {
     // 모델은 정점이 많아 32비트 인덱스를 쓰고, 색은 텍스처에서 읽는다(모드 2)
     DrawOne(g_head.vb, g_head.ib, g_head.indexCount, cubeWorld, CUBE_C, depthPass,
             DXGI_FORMAT_R32_UINT, 2.0f);
+    // 눈썹·속눈썹·헤어는 텍스처가 없어 단색(모드 0)으로 간다.
+    // 눈알(모드 3)만 제 텍스처가 있어 그 세 장을 잠깐 갈아 끼운다
+    for (Extra& e : g_extra) {
+        if (!e.model.indexCount) continue;
+        float mode = e.mode;
+        // 제 텍스처가 있는 것만 그 모드로 간다. 없으면 회색으로 떨어뜨린다
+        Texture* set = nullptr;
+        if      (mode > 3.5f) set = g_hairAlbedo.srv ? &g_hairAlbedo : nullptr;
+        else if (mode > 2.5f) set = g_eyeAlbedo.srv  ? &g_eyeAlbedo  : nullptr;
+
+        bool swap = (set != nullptr) && !depthPass;
+        if (swap) {
+            bool hair = (mode > 3.5f);
+            ID3D11ShaderResourceView* t[2] = {
+                hair ? g_hairAlbedo.srv : g_eyeAlbedo.srv,
+                hair ? g_hairNormal.srv : g_eyeNormal.srv };
+            g_ctx->PSSetShaderResources(1, 2, t);
+            ID3D11ShaderResourceView* sp = hair ? g_hairSpec.srv : g_eyeSpec.srv;
+            g_ctx->PSSetShaderResources(4, 1, &sp);
+        } else if (mode > 2.5f) {
+            mode = 0.0f;               // 텍스처가 없으면 회색으로 그린다
+        }
+
+        DrawOne(e.model.vb, e.model.ib, e.model.indexCount, cubeWorld,
+                e.color, depthPass, DXGI_FORMAT_R32_UINT, mode);
+
+        if (swap) {                    // 얼굴 것으로 돌려 놓는다
+            ID3D11ShaderResourceView* t[2] = { g_albedo.srv, g_normal.srv };
+            g_ctx->PSSetShaderResources(1, 2, t);
+            g_ctx->PSSetShaderResources(4, 1, &g_spec.srv);
+        }
+    }
 
     for (int i = 0; i < TRI_N; ++i) {
         if (!g_tri[i].alive) continue;
@@ -1178,6 +1254,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         // F5        셰이더 파일을 다시 읽는다 (빌드 없이 반영된다)
         // Shift+F5  조절 창을 열고 닫는다
         case VK_F5:
+            // 키를 누르고 있으면 WM_KEYDOWN 이 되풀이 들어온다.
+            // 여는 것은 한 번만 — 안 그러면 열렸다 닫혔다 하다 끝난다
+            if (lp & (1 << 30)) break;
             if (GetKeyState(VK_SHIFT) & 0x8000) {
                 PanelToggle();
             } else if (BuildShaders(g_hwnd)) {
@@ -1240,8 +1319,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             UpdateTitle();
         } break;
         // 태양 돌리기. 누르고 있으면 저절로 되풀이된다
-        case VK_LEFT:  g_sunYaw   -= 0.05f; UpdateSun(); UpdateTitle(); break;
-        case VK_RIGHT: g_sunYaw   += 0.05f; UpdateSun(); UpdateTitle(); break;
+        // ← → 는 모델을 돌린다. 태양 좌우는 조절 창의 Sun · Yaw 로 옮겼다
+        case VK_LEFT:  g_facing -= TURN_STEP; break;
+        case VK_RIGHT: g_facing += TURN_STEP; break;
         case VK_UP:    g_sunPitch = min(1.50f, g_sunPitch + 0.04f); UpdateSun(); UpdateTitle(); break;
         case VK_DOWN:  g_sunPitch = max(0.08f, g_sunPitch - 0.04f); UpdateSun(); UpdateTitle(); break;
         case VK_OEM_1:     g_aoRadius = max(0.02f, g_aoRadius - 0.02f); UpdateTitle(); break;
@@ -1515,10 +1595,27 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     // ── FBX 모델 ──
     // 여기서 막히면 화면에 아무것도 없이 검게만 보인다. 이유를 띄우고 끝낸다
     char loadErr[1024] = {};
+    char meshPath[640];
+    auto meshAt = [&](const char* file) -> const char* {
+        lstrcpyA(meshPath, MESH_DIR); lstrcatA(meshPath, file); return meshPath;
+    };
+
+    // 얼굴을 먼저 읽어 정렬을 정하고, 나머지가 그것을 그대로 쓴다
+    Align align;
     g_head.aoRadius = g_vaoR;   // 처음 구울 때도 같은 값으로
-    if (!LoadFBX(g_dev, MODEL_PATH, MODEL_H, g_head, loadErr, sizeof(loadErr))) {
+    if (!LoadFBX(g_dev, meshAt(MODEL_FILE), MODEL_H, g_head,
+                 loadErr, sizeof(loadErr), true, &align)) {
         Fail(hwnd, loadErr);
         return 1;
+    }
+
+    // 얹는 메시들. 버텍스 AO 는 굽지 않는다 — 털은 정점이 열 배가 넘는데
+    // 가닥 사이가 다 뚫려 있어 구워도 거의 1 로 나온다
+    for (Extra& e : g_extra) {
+        char why[512] = {};
+        if (!LoadFBX(g_dev, meshAt(e.file), MODEL_H, e.model,
+                     why, sizeof(why), false, &align))
+            e.model.indexCount = 0;   // 없으면 그냥 안 그린다
     }
     // ── 텍스처 ──
     // albedo 는 색이므로 sRGB 로 읽는다 (texture.h 의 설명 참조)
@@ -1538,6 +1635,13 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     if (!loadTex(TEX_SCAT,   false, g_scatter))return 1;   // 산란 세기, 숫자
     if (!loadTex(TEX_MICRO,  false, g_micro))  return 1;   // 노말이라 숫자
     if (!loadTex(TEX_MASK,   false, g_mask))   return 1;   // 마스크, 숫자
+    // 눈알. 없으면 회색으로 그려지므로 실패해도 멈추지 않는다
+    loadTex(EYE_ALBEDO, true,  g_eyeAlbedo);
+    loadTex(EYE_NORMAL, false, g_eyeNormal);
+    loadTex(EYE_SPEC,   true,  g_eyeSpec);
+    loadTex(HAIR_ALBEDO, true,  g_hairAlbedo);
+    loadTex(HAIR_NORMAL, false, g_hairNormal);
+    loadTex(HAIR_SPEC,   true,  g_hairSpec);
 
     // ── 환경맵 ──
     // 굽는 데 몇 초 걸린다. 실패해도 멈추지는 않는다 — 하늘빛·땅빛 두 색으로
@@ -1592,6 +1696,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
                                   230.0f, 80.0f, 0.0f, 1.0f };
 
     ShowWindow(hwnd, SW_SHOW);
+    PanelToggle();              // 조절 창도 함께 띄운다. Shift+F5 로 껐다 켠다
+    SetForegroundWindow(hwnd);  // 키는 그리는 창이 받아야 한다
 
     // ── 돌린다 ──
     LARGE_INTEGER freq, prev;
@@ -1685,6 +1791,10 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         g_ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         g_ctx->VSSetConstantBuffers(0, 1, &g_cb);
         g_ctx->PSSetConstantBuffers(0, 1, &g_cb);
+
+        // 모델이 걸어다니므로 기록장이 담는 자리도 따라 옮긴다.
+        // 한 번만 잡아 두면 모델이 그 범위를 나가는 순간 그림자가 끊긴다
+        BuildLightMatrix();
 
         // ── 1패스 — 태양 자리에서 깊이만 기록한다 ──
         // 지난 프레임에 읽던 것을 떼어낸다. 같은 그림을 쓰면서 동시에
@@ -1853,7 +1963,14 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
             CB cb = {};
             // 실제 길이를 화면 비율로 바꾼다.
             // 카메라 거리에서 화면 한 폭이 담는 실제 넓이로 나누면 된다
-            float viewM = 2.0f * g_dist * tanf(XM_PIDIV4 * 0.5f);
+            // g_dist 는 카메라가 도는 반지름이지 모델까지의 거리가 아니다.
+            // 모델이 옆으로 걸어가면 실제로는 더 먼데 그대로 쓰면
+            // 화면에서 작아진 얼굴에 같은 폭을 발라 번짐이 과해진다
+            float ex = g_camPos.x - g_x;
+            float ey = g_camPos.y - MODEL_LIFT;
+            float ez = g_camPos.z - g_z;
+            float toModel = sqrtf(ex * ex + ey * ey + ez * ez);
+            float viewM = 2.0f * max(toModel, 0.05f) * tanf(XM_PIDIV4 * 0.5f);
             float uvW   = g_sssWidth / max(viewM, 1e-4f);
             cb.sssParam = XMFLOAT4(uvW, g_sssOn, dx, dy);
             g_ctx->UpdateSubresource(g_cb, 0, nullptr, &cb, 0, 0);
@@ -1919,6 +2036,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     if (g_axisVB)    g_axisVB->Release();
     if (g_plateVB)   g_plateVB->Release();
     g_head.Release();
+    for (Extra& e : g_extra) e.model.Release();
     g_albedo.Release();
     g_normal.Release();
     g_rough.Release();
@@ -1926,6 +2044,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     g_scatter.Release();
     g_micro.Release();
     g_mask.Release();
+    g_eyeAlbedo.Release(); g_eyeNormal.Release(); g_eyeSpec.Release();
+    g_hairAlbedo.Release(); g_hairNormal.Release(); g_hairSpec.Release();
     if (g_texSmp) g_texSmp->Release();
     if (g_cb)        g_cb->Release();
     // 셰이더와 입력 레이아웃은 BuildShaders 가 만든 것이라 함께 놓는다

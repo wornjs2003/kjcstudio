@@ -40,8 +40,13 @@ PSOut PS(VSOut i) {
         return o;
     }
 
-    float3 base = (mode > 1.5) ? albedoMap.Sample(texSmp, i.uv).rgb
-                               : ToLinear(color.rgb);
+    float4 alb  = (mode > 1.5) ? albedoMap.Sample(texSmp, i.uv) : float4(0,0,0,1);
+    float3 base = (mode > 1.5) ? alb.rgb : ToLinear(color.rgb);
+
+    // 헤어(모드 4)는 알베도의 알파가 가닥 모양을 오려 낸다.
+    // 판을 통째로 그리면 네모난 카드가 그대로 보인다.
+    // clip 은 픽셀을 아예 버리는 것이라 섞는 순서를 따질 일이 없다
+    if (mode > 3.5) clip(alb.a - 0.35);
 
     // 디퓨즈를 끄면 피부색이 걷히고 형태와 빛만 남는다.
     // 노말·반사·그림자는 그대로 두므로, 텍스처 무늬에 가려 안 보이던
@@ -52,6 +57,11 @@ PSOut PS(VSOut i) {
     // 거칠기와 반사색. 텍스처가 없는 것(판·세모)은 적당한 값으로 둔다
     float  rough = 0.6;
     float3 f0    = 0.04;          // 금속이 아닌 것의 기본 반사율
+
+    // 눈알(모드 3)은 얼굴과 재질이 다르다. 거칠기·산란 맵이 마모셋에도
+    // 없어서 상수로 가고, 미세 결(모공)도 얹지 않는다
+    bool isEye  = (mode > 2.5 && mode < 3.5);
+    bool isHair = (mode > 3.5);
 
     if (mode > 1.5) {
       // 노말맵을 끄면 아래를 통째로 건너뛴다 — 면 방향이 메시 그대로가 되어
@@ -66,11 +76,13 @@ PSOut PS(VSOut i) {
 
         // 모공·잔주름. UV 를 여러 배로 늘려 촘촘히 깔고, 마스크가
         // 자리마다 세기를 정한다 (이마·볼은 세게, 입술은 약하게)
-        float3 mn = microMap.Sample(texSmp, i.uv * envParam.w).rgb * 2.0 - 1.0;
-        mn *= nrmFlip.xyz;
-        float  mk = maskMap.Sample(texSmp, i.uv).r * camPos.w;
-        mn.xy *= mk;
-        nm = CombineNormals(nm, mn);
+        if (!isEye && !isHair) {
+            float3 mn = microMap.Sample(texSmp, i.uv * envParam.w).rgb * 2.0 - 1.0;
+            mn *= nrmFlip.xyz;
+            float  mk = maskMap.Sample(texSmp, i.uv).r * camPos.w;
+            mn.xy *= mk;
+            nm = CombineNormals(nm, mn);
+        }
 
         // 면 위의 가로·세로·법선 축에 얹어 월드 방향으로 옮긴다
         N = normalize(nm.x * normalize(i.tan)
@@ -78,7 +90,10 @@ PSOut PS(VSOut i) {
                     + nm.z * N);
       }
 
-        rough = roughMap.Sample(texSmp, i.uv).r;
+        // 거칠기 맵이 없는 것들은 마모셋 머티리얼의 상수를 그대로 쓴다
+        rough = isEye  ? 0.391
+              : isHair ? 0.430
+              :          roughMap.Sample(texSmp, i.uv).r;
         f0    = specMap.Sample(texSmp, i.uv).rgb;
     }
     // 완전히 매끈하면 반사가 한 점에 몰려 깜빡인다. 바닥을 조금 깔아둔다
@@ -130,7 +145,8 @@ PSOut PS(VSOut i) {
     //
     // 채널마다 감싸는 정도를 달리해 그 번짐을 흉내 낸다 —
     // 빨강이 가장 깊이 들어가고 파랑이 가장 얕다
-    float  scat    = (mode > 1.5) ? scatterMap.Sample(texSmp, i.uv).r : 0.0;
+    float  scat    = (mode > 1.5 && !isEye && !isHair)
+                   ? scatterMap.Sample(texSmp, i.uv).r : 0.0;
     float3 wrap    = float3(0.45, 0.24, 0.13) * scat * nrmFlip.w;
     float3 wrapNoL = saturate((NoL + wrap) / (1.0 + wrap));
 
