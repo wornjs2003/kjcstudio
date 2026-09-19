@@ -8,20 +8,18 @@ if not exist "%VS%" (
   echo   Visual Studio C++ tools not found at:
   echo   %VS%
   echo.
-  pause
   exit /b 1
 )
 
 call "%VS%" >nul
 cd /d "%~dp0"
 
-cl /nologo /EHsc /std:c++17 /utf-8 /O2 /I. main.cpp model.cpp texture.cpp third_party\ufbx.c /Fe:kjcEngine.exe ^
-   /link /SUBSYSTEM:WINDOWS user32.lib
+cl /nologo /EHsc /std:c++17 /utf-8 /O2 /I. main.cpp model.cpp texture.cpp ibl.cpp panel.cpp third_party\ufbx.c /Fe:kjcEngine.exe ^
+   /link /SUBSYSTEM:WINDOWS user32.lib gdi32.lib comctl32.lib
 if errorlevel 1 (
   echo.
   echo   BUILD FAILED
   echo.
-  pause
   exit /b 1
 )
 

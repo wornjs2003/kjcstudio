@@ -6,3 +6,6 @@
 
 # 시작하다 막혔을 때 남기는 기록. 실행할 때마다 덮어쓴다
 kjcEngine-error.txt
+
+# 마지막으로 보던 자리. PC 마다 다르므로 담지 않는다
+kjcEngine-view.txt

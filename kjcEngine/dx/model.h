@@ -9,6 +9,7 @@
 #include <windows.h>
 #include <d3d11.h>
 #include <DirectXMath.h>
+#include <vector>
 
 // 화면에 그리는 모든 것이 쓰는 정점 모양.
 // uv 는 지금(1단계)은 안 쓰지만 자리를 미리 비워 둔다 — 2단계에서 텍스처를
@@ -23,6 +24,18 @@ struct Vertex {
     // 세로축이 반대로 뒤집힌다
     DirectX::XMFLOAT4 tan;
     DirectX::XMFLOAT2 uv;
+
+    // 이 정점 둘레가 오목한지 볼록한지. 이웃 정점이 법선 쪽으로 몰려 있으면
+    // 양수(오목 — 콧방울 옆·입꼬리·주름), 반대로 퍼져 있으면 음수(볼록).
+    // 모델을 읽을 때 한 번만 재 두면 실시간 비용이 없다.
+    // 마모셋에서 Cavity 라고 부르는 그것이다
+    float cav;
+
+    // 이 정점에 주변 빛이 얼마나 드나. 1 = 훤히 열림, 0 = 꽉 막힘.
+    // 정점에서 사방으로 광선을 쏴 제 메시에 막히는 비율을 센다.
+    // Cavity 가 바로 옆만 보는 것과 달리 이쪽은 형상 전체를 본다 —
+    // 턱 아래 · 귀 뒤 · 목처럼 멀리 있는 것에 가려지는 자리를 잡는다
+    float ao;
 };
 
 struct Model {
@@ -35,6 +48,13 @@ struct Model {
     float scale         = 1.0f;   // 적용한 배율
     size_t srcVertices  = 0;      // 삼각형으로 펼친 뒤의 정점 수
     size_t outVertices  = 0;      // 겹치는 것을 합친 뒤의 정점 수
+
+    // AO 를 다시 구우려면 정점과 삼각형을 CPU 쪽에도 들고 있어야 한다.
+    // 이 모델 기준 약 1MB — GPU 로 올린 뒤 버리면 다시 굽지 못한다
+    std::vector<Vertex>   verts;
+    std::vector<uint32_t> idx;
+    float targetHeight  = 2.0f;   // 맞춰 놓은 높이. 광선 길이를 여기 견준다
+    float aoRadius      = 0.18f;  // 광선을 이 높이의 몇 배까지 쏘나
 
     void Release() {
         if (ib) { ib->Release(); ib = nullptr; }
@@ -50,3 +70,8 @@ struct Model {
 //   실패하면       false 를 돌리고 err 에 이유를 적는다
 bool LoadFBX(ID3D11Device* dev, const char* path, float targetHeight,
              Model& out, char* err, size_t errSize);
+
+// 버텍스 AO 를 다른 범위로 다시 굽고 GPU 버퍼를 갈아끼운다.
+// 정점 수에 비례해 시간이 걸리므로 (이 모델은 몇 초) 값을 바꿀 때마다가 아니라
+// 다 정한 뒤 한 번만 부른다
+void RebakeAO(ID3D11DeviceContext* ctx, Model& m, float radiusScale);
