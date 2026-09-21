@@ -166,11 +166,16 @@
             </span></div>
           <div class="kh-idxp-b" id="kh-iv-box">불러오는 중</div>
         </div>
-        <!-- 종목토론 — 투자자 정보와 종목 뉴스 사이 (2026-09-18 지시) -->
-        <div class="kh-idxp-s">
-          <div class="kh-idxp-h">종목토론
-            <span class="kh-bd kh-bd-soon">연결 예정</span></div>
-          <div class="kh-idxp-b kh-mut">붙일 것: 네이버 종목토론실</div>
+        <!-- AI 분석 — 세션이 써서 파일로 두고 화면은 읽기만 한다 (2026-09-21 지시).
+
+             **화면이 AI 를 부르지 않는다.** 저장소에 그럴 열쇠도 코드도 없다.
+             글은 `data/ai-analysis.json` 에 있고, 세션이 하루 한 번 새로 쓴다.
+
+             관심종목 8개만 있다. 그 밖의 종목을 고르면 「아직 없습니다」가 뜬다. -->
+        <div class="kh-idxp-s kh-ai-s">
+          <div class="kh-idxp-h">AI 분석
+            <span class="kh-bd kh-bd-on" id="kh-ai-when">—</span></div>
+          <div class="kh-idxp-b" id="kh-ai-box">불러오는 중</div>
         </div>
         <!-- 「이 종목 공시」 였는데 이름과 내용을 함께 뉴스로 바꿨다
              (2026-09-18 지시). 전체 공시는 오른쪽 칸에 그대로 있다. -->

@@ -40,8 +40,11 @@ const TICKS_RELOAD_MS = 5 * 1000;
 /* 일별 매매동향은 하루 한 번 바뀐다. 화면을 열어둔 채로도 날짜가 넘어가게 */
 const FLOW_RELOAD_MS = 10 * 60 * 1000;
 
-/* 체결을 몇 줄까지 보일 것인가. 서버는 30줄을 주고, 칸 높이가 그보다 짧다 */
-const TICKS_SHOWN = 12;
+/* 체결을 몇 줄까지 보일 것인가. 서버는 30줄을 준다.
+   **12줄이면 그 줄이 1행보다 76px 길어진다**(2026-09-21 지적 — "또 세로로
+   길어졌는데"). 같은 줄의 「내 메모」·「개인·외국인·기관」이 끌려서 함께
+   커지므로, 1행(차트 줄)에 맞춰 줄인다. 나머지는 칸 안에서 굴러간다. */
+const TICKS_SHOWN = 9;
 
 /* stock.html 을 한 번만 받아 두고 복제해 쓴다. 종목을 바꿀 때마다
    다시 받으면 같은 파일을 되풀이해 내려받게 된다. */
@@ -260,7 +263,17 @@ export function mountStockView(root, stock, { onBack } = {}) {
         setHtml('#kh-foreign', shares(last.foreign));
         setHtml('#kh-inst', shares(last.inst));
       }
-      setText('#kh-rank', d.rank != null ? `${d.rank}위` : '—');
+      /* **배포본에서는 늘 「—」다.** 순위는 공시 수집이 아침마다 받아 두는
+         표(market.db)에서 오는데 워커에는 그 표가 없다. 로컬에서는 숫자가
+         나오므로 그냥 「—」만 두면 **고장으로 읽힌다** (2026-09-21 지적).
+         칸이 좁아 문구를 못 넣으니 마우스를 올렸을 때 이유가 보이게 한다. */
+      const rankEl = $('#kh-rank');
+      if (rankEl) {
+        rankEl.textContent = d.rank != null ? `${d.rank}위` : '—';
+        rankEl.title = d.rank != null
+          ? '코스피 시가총액 순위 (매일 아침 갱신)'
+          : '코스피 200위 밖이거나, 이 PC 의 서버가 아니어서 순위를 모릅니다';
+      }
 
       if (!box) return;
       if (!flow.length) {
