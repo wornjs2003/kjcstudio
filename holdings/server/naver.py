@@ -224,6 +224,79 @@ def discuss(code, size=DISCUSS_SIZE):
     return _cached("d:" + code, make)
 
 
+def integration(code):
+    """종목 한 장 요약 — **일별 매매동향 5일**과 **지표 18개**가 한 번에 온다.
+
+    종목 화면 머리의 「외국인 순매수 · 기관 순매수」 와 아래 「개인·외국인·기관」
+    칸이 이것으로 채워진다 (2026-09-21 지시 — A 종목 화면).
+
+    ── 왜 KIS 가 아니라 네이버인가 ──
+
+    KIS 에도 종목별 투자자(`/api/kis/investor`, 30일)가 있고 이미 붙어 있다.
+    네이버를 쓰는 것은 **외인 보유율과 지표 18개가 함께 오기 때문**이다 —
+    PER·PBR·EPS·BPS·52주·배당까지 한 번에 받는다. KIS 로는 여러 번 불러야 한다.
+    **KIS 예산도 안 쓴다.**
+
+    ── 시가총액 순위는 여기 없다 ──
+
+    응답 어디에도 순위가 없다(2026-09-21 실측 — 「순위」·「rank」 둘 다 0곳).
+    그래서 **공시 수집이 아침마다 받아 두는 표(dart_universe)에서 붙인다.**
+    그 표는 코스피 상위 200종목이라 **그 밖은 순위를 모른다** — None 으로 둔다.
+
+    ── 숫자가 문자열로 온다 ──
+
+    `"-1,673,323"` · `"46.46%"` 처럼 온다. 이 파일의 다른 함수들과 같이
+    `_num()` 으로 풀어서 보낸다.
+    """
+    def make():
+        j = _get("https://m.stock.naver.com/api/stock/%s/integration" % code)
+
+        flow = []
+        for d in (j.get("dealTrendInfos") or [])[:5]:
+            flow.append({
+                "date": d.get("bizdate"),
+                "foreign": _num(d.get("foreignerPureBuyQuant")),
+                "inst": _num(d.get("organPureBuyQuant")),
+                "person": _num(d.get("individualPureBuyQuant")),
+                "foreignRate": _num(d.get("foreignerHoldRatio")),
+                "close": _num(d.get("closePrice")),
+                "volume": _num(d.get("accumulatedTradingVolume")),
+            })
+
+        # 지표는 key/value 목록으로 온다. 화면이 찾기 쉽게 code 를 키로 돌려준다.
+        info = {}
+        for t in (j.get("totalInfos") or []):
+            info[t.get("code")] = {"name": t.get("key"), "value": t.get("value")}
+
+        return {
+            "name": j.get("stockName"),
+            "flow": flow,
+            "info": info,
+            "rank": _cap_rank(code),
+        }
+
+    return _cached("i:" + code, make)
+
+
+def _cap_rank(code):
+    """시가총액 순위. 공시 수집이 아침마다 받아 두는 표에서 읽는다.
+
+    **코스피 상위 200종목뿐이다.** 그 밖이면 None 이고, 화면은 「—」로 적는다.
+    받아오는 것은 `server/dart.py` 이고 여기서는 읽기만 한다.
+    """
+    import os
+    import sqlite3
+    db = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                      "market.db")
+    try:
+        with sqlite3.connect(db, timeout=5) as c:
+            r = c.execute("SELECT rank FROM dart_universe WHERE stock_code = ?",
+                          (code,)).fetchone()
+        return r[0] if r else None
+    except Exception:
+        return None          # 표가 아직 없을 수 있다. 순위만 빠진다
+
+
 def stocks(kind, no):
     """그 업종·테마의 종목. **등락률 내림차순**이라 앞에서부터 상승률 TOP 입니다."""
     if kind not in ("industry", "theme"):

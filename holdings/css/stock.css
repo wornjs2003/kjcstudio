@@ -117,7 +117,9 @@
 /* 수급 */
 .kh-flow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 0.81rem; }
 .kh-flow-l { width: 46px; color: var(--kh-text-secondary); }
-.kh-flow-v { width: 62px; text-align: right; }
+/* 62 → 78px (2026-09-21). 「+274.7만주」 가 62px 에서 두 줄로 접혔다.
+   순매수는 부호까지 붙어 자릿수가 가장 길다 — 접히면 줄 높이가 들쭉날쭉해진다 */
+.kh-flow-v { width: 78px; text-align: right; white-space: nowrap; }
 .kh-flow-bar { flex: 1; height: 5px; background: var(--kh-bg-surface); border-radius: 3px; }
 
 /* 실시간 / 일별 전환 */
@@ -363,3 +365,38 @@
 .kh-ind-tip .why { color: var(--kh-ma5); margin-bottom: 6px; }
 .kh-ind-tip p { margin: 0 0 4px; opacity: .88; }
 .kh-ind-tip p:last-child { margin: 0; }
+
+/* ══ 체결 · 일별 매매동향 (2026-09-21 지시 — A 종목 화면) ═══════════
+
+   체결은 KIS 가 한 번에 30줄을 준다. 칸 높이에 맞춰 위에서 몇 줄만 보인다.
+   숫자가 세로로 줄지어 서므로 자리를 고정한다 — 값이 바뀔 때마다 칸이
+   들썩이면 읽을 수 없다 (루트 CLAUDE.md 「보는 것을 바꿔도 자리는 그대로다」). */
+.kh-tick-h {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.78rem; color: var(--kh-text-secondary); padding-bottom: 9px;
+}
+.kh-tick-h b { font-size: 0.85rem; font-weight: 700; }
+.kh-tick-h i {
+  font-style: normal; font-size: 0.72rem; color: var(--kh-text-muted);
+  margin-left: auto;
+}
+.kh-ticks { display: flex; flex-direction: column; }
+.kh-tick {
+  display: grid; grid-template-columns: 58px 1fr 62px 54px;
+  align-items: center; gap: 8px;
+  font-size: 0.79rem; padding: 4px 0;
+}
+.kh-tick + .kh-tick { border-top: 1px solid var(--kh-border); }
+.kh-tick-t { color: var(--kh-text-muted); font-size: 0.74rem; }
+.kh-tick b { text-align: right; font-weight: 600; }
+.kh-tick-q { text-align: right; color: var(--kh-text-secondary); }
+.kh-tick > span:last-child { text-align: right; font-weight: 600; }
+
+/* 일별 매매동향 — 막대는 닷새 중 가장 큰 값을 100% 로 잡는다 */
+.kh-flow-bar { position: relative; overflow: hidden; }
+.kh-flow-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; }
+.kh-flow-bar i.up { background: var(--kh-up); }
+.kh-flow-bar i.dn { background: var(--kh-down); }
+.kh-flow-note {
+  font-size: 0.72rem; color: var(--kh-text-muted); line-height: 1.6; padding-top: 4px;
+}

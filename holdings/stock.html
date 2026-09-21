@@ -43,11 +43,11 @@
         <div class="kh-head-stats">
           <div class="kh-st"><span>1일 범위</span><span class="kh-rng" id="kh-r1">—</span></div>
           <div class="kh-st"><span>거래대금</span><b class="kh-num" id="kh-amt">—</b></div>
-          <div class="kh-st"><span>외국인 순매수</span><b class="kh-mut">연결 예정</b></div>
-          <div class="kh-st"><span>시가총액 순위</span><b class="kh-mut">연결 예정</b></div>
+          <div class="kh-st"><span>외국인 순매수</span><b class="kh-num" id="kh-foreign">—</b></div>
+          <div class="kh-st"><span>시가총액 순위</span><b class="kh-num" id="kh-rank">—</b></div>
           <div class="kh-st"><span>52주 범위</span><span class="kh-rng" id="kh-r52">—</span></div>
           <div class="kh-st"><span>거래량</span><b class="kh-num" id="kh-vol">—</b></div>
-          <div class="kh-st"><span>기관 순매수</span><b class="kh-mut">연결 예정</b></div>
+          <div class="kh-st"><span>기관 순매수</span><b class="kh-num" id="kh-inst">—</b></div>
           <div class="kh-st"><span>시가총액</span><b class="kh-num" id="kh-cap">—</b></div>
         </div>
       </div>
@@ -130,36 +130,32 @@
         </div>
       </div>
 
+      <!-- 체결 (2026-09-21 지시 — A 종목 화면).
+           KIS 가 한 번에 30줄을 주고 그게 전부다. 더 과거는 안 준다.
+           「일별」 탭은 아직 자리만 있다 — 일별 시세는 받는 곳이 다르다. -->
       <div class="kh-w" data-p="tick">
         <div class="kh-w-head">
-          <span class="kh-w-grip">⠿</span><span class="kh-w-title">시세</span>
-          <span class="kh-w-x">✕</span><span class="kh-bd kh-bd-soon">연결 예정</span>
+          <span class="kh-w-grip">⠿</span><span class="kh-w-title">체결</span>
+          <span class="kh-w-x">✕</span><span class="kh-bd kh-bd-on">한국투자증권</span>
           <span class="kh-w-plus">＋</span>
         </div>
         <div class="kh-w-body">
-          <div class="kh-seg2"><span class="is-active">실시간</span><span>일별</span></div>
-          <div class="kh-soon" style="min-height:86px">
-            <div class="kh-soon-t">체결가 · 체결량 · 등락률</div>
-            <div class="kh-soon-s">붙일 것: KIS 주식현재가 체결</div>
+          <div class="kh-tick-h">
+            <span>체결강도</span><b class="kh-num" id="kh-tick-power">—</b>
+            <i>100 이 기준입니다</i>
           </div>
+          <div class="kh-ticks" id="kh-ticks"><div class="kh-mut">불러오는 중</div></div>
         </div>
       </div>
 
       <div class="kh-w" data-p="flow">
         <div class="kh-w-head">
           <span class="kh-w-grip">⠿</span><span class="kh-w-title">개인 · 외국인 · 기관</span>
-          <span class="kh-w-x">✕</span><span class="kh-bd kh-bd-soon">연결 예정</span>
+          <span class="kh-w-x">✕</span><span class="kh-bd kh-bd-on">네이버</span>
           <span class="kh-w-plus">＋</span>
         </div>
         <div class="kh-w-body">
-          <div class="kh-flow"><span class="kh-flow-l">개인</span>
-            <span class="kh-flow-v kh-num kh-mut">—</span><span class="kh-flow-bar"></span></div>
-          <div class="kh-flow"><span class="kh-flow-l">외국인</span>
-            <span class="kh-flow-v kh-num kh-mut">—</span><span class="kh-flow-bar"></span></div>
-          <div class="kh-flow"><span class="kh-flow-l">기관</span>
-            <span class="kh-flow-v kh-num kh-mut">—</span><span class="kh-flow-bar"></span></div>
-          <div class="kh-soon-s" style="margin-top:14px">
-            붙일 것: 네이버 종목 통합 (일별 매매동향)</div>
+          <div class="kh-flow-box" id="kh-flow"><div class="kh-mut">불러오는 중</div></div>
         </div>
       </div>
     </section>
