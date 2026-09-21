@@ -794,6 +794,20 @@
 }
 .kh-nwdc-t.is-on { color: var(--kh-text-primary); }
 
+/* 머리줄 오른쪽 — 출처와 「자세히」 를 나란히 둔다 (2026-09-21 지시).
+   `.kh-sched-h` 가 `space-between` 이라 자식이 셋이면 가운데가 벌어진다.
+   둘을 한 덩어리로 묶어 오른쪽 끝에 붙인다. */
+.kh-nwdc-side { display: flex; align-items: center; gap: 8px; }
+
+/* 「자세히」 가 칸 아래에서 머리줄로 올라왔다. frame.css 의 `.kh-sec-more` 는
+   **칸 아래에 놓이는 것**을 전제로 `margin-top: 10px` 과 `margin-left: auto` 를
+   갖고 있는데, 머리줄 안에서는 둘 다 필요 없다.
+   **공용 파일을 고치지 않고 여기서만 덮는다** — 그 값은 다른 카드들이 아직 쓴다.
+   머리줄이 두꺼워지면 카드가 길어지므로 **위아래 여백을 줄여 줄 높이를 지킨다.** */
+.kh-nwdc-card > .kh-sched-h .kh-sec-more {
+  margin: 0; padding: 3px 10px;
+}
+
 
 /* 매물대 칸 — 순위표에서 뺀 셋 (2026-09-17) */
 .kh-vol-rows { display: flex; flex-direction: column; gap: 9px; margin-top: 2px; }
