@@ -119,14 +119,26 @@ export function mountInvestor({ box, tabs } = {}) {
 
      한쪽이 최대 50% 다. 그래서 `w` 는 100 이 아니라 50 을 곱한다. */
   function paintToday(d) {
-    const max = Math.max(...SIDES.map((s) => Math.abs((d[s.key] || {}).net || 0))) || 1;
+    /* **`|| 0` 을 쓰지 않는다** (2026-09-21). 서버는 아직 집계 전이면
+       `net: null` 을 준다 — `kis_proxy.py` 의 `_num()` 이 숫자로 못 바꾸면
+       `None` 을 돌려주고 그대로 나간다. `|| 0` 으로 받으면 그 `null` 이
+       **`0.0만주` 로 둔갑해** 「0주 거래됐다」 와 구분되지 않는다.
+
+       `man()` 과 `dirClass()` 에는 이미 `null → 「—」 · 회색` 이 있는데,
+       부르는 쪽이 먼저 0 으로 바꿔서 **죽은 코드**였다.
+
+       **raw 와 숫자를 나눈다.** 글자·색은 raw 가 필요하고(`null` 이면 「—」),
+       막대 폭은 숫자여야 한다(`null` 이면 `NaN` 이 된다). */
+    const net = (s) => { const v = (d[s.key] || {}).net; return v == null ? null : v; };
+    const max = Math.max(...SIDES.map((s) => Math.abs(net(s) ?? 0))) || 1;
     const rows2 = SIDES.map((s) => {
-      const v = (d[s.key] || {}).net || 0;
-      const w = Math.abs(v) / max * 50;      // 가운데에서 한쪽으로 최대 50%
+      const v = net(s);                      // null 일 수 있다 — 글자·색용
+      const n = v ?? 0;                      // 숫자 — 막대 폭·방향용
+      const w = Math.abs(n) / max * 50;      // 가운데에서 한쪽으로 최대 50%
       return `<div class="kh-iv-r2">
         <span class="kh-iv-n2">${s.name}</span>
         <span class="kh-iv-v2 ${dirClass(v)}">${man(v)}</span>
-        <span class="kh-iv-bar">${bar(v, w)}</span></div>`;
+        <span class="kh-iv-bar">${bar(n, w)}</span></div>`;
     }).join('');
     return `<div class="kh-iv-rows">${rows2}</div>
       <div class="kh-iv-note">${dateText(d.date)} 하루치 ·
@@ -141,11 +153,17 @@ export function mountInvestor({ box, tabs } = {}) {
     /* 5일도 가로 막대다. **합계가 아니라 닷새를 더한 값**을 보여준다 —
        오늘 것만 보면 하루 흐름이고, 닷새를 더하면 추세가 읽힌다. */
     const lines = SIDES.map((s) => {
-      const sum = days.reduce((a2, d) => a2 + ((d[s.key] || {}).net || 0), 0);
+      /* **여기서는 `|| 0` 이 맞다** — 더하는 자리라 `null` 을 그냥 두면
+         합이 통째로 `NaN` 이 된다. 다만 **닷새가 전부 `null` 이면**
+         합이 0 이 되어 「0주」 처럼 보이므로, 그때만 「—」 로 낸다. */
+      const vals = days.map((d) => (d[s.key] || {}).net);
+      const any = vals.some((v) => v != null);
+      const sum = vals.reduce((a2, v) => a2 + (v || 0), 0);
+      const shown = any ? sum : null;        // 글자·색용
       const w = Math.min(50, Math.abs(sum) / (max * days.length) * 50);
       return `<div class="kh-iv-r2">
         <span class="kh-iv-n2">${s.name}</span>
-        <span class="kh-iv-v2 ${dirClass(sum)}">${man(sum)}</span>
+        <span class="kh-iv-v2 ${dirClass(shown)}">${man(shown)}</span>
         <span class="kh-iv-bar">${bar(sum, w)}</span></div>`;
     }).join('');
     /* **오른쪽 숫자는 오늘 값이다** — 5일 합계가 아니다 (2026-09-18 지적
