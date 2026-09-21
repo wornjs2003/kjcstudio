@@ -145,6 +145,21 @@ _token_lock = threading.Lock()
 # 그래서 `FAST_CODES` 와 `PRICE_CACHE_TTL_FAST` 를 없앴다. 복제가 세 곳
 # (여기 · kis-worker.js · frame.js 의 PRIORITY_CODES)이었는데 한꺼번에 사라졌다.
 PRICE_CACHE_TTL = 25                # 모든 종목 · 지수 (화면 갱신 30초)
+
+# ── 확인용 서버는 느리게 돈다 — `--slow` (2026-09-21 지시) ────────────
+#
+# 동시 작업을 하면 **세션마다 서버를 띄운다.** 서버가 셋이면 KIS 를 부르는
+# 횟수도 세 배가 되어 한도를 넘긴다. 재권님 승인 그대로다 —
+# **확인용은 시세 5분 · 미리받기 끔**, 재권님이 쓰시는 8765 는 그대로.
+#
+# 확인용 서버는 배치·색을 보는 자리라 값이 묵어도 지장이 없다. 차트를
+# 제대로 봐야 할 때는 8765 에서 본다.
+#
+# **화면 코드는 하나도 안 고친다.** 서버가 「아까 그 값」을 돌려주면
+# 화면이 아무리 자주 물어도 KIS 로는 안 나간다.
+SLOW = False
+SLOW_TTL = 300              # 시세 · 지수 · 업종 … 전부 5분
+SLOW_SHORT_TTL = 60         # 호가처럼 원래 아주 짧던 것도 이만큼은 둔다
 _price_cache = {}          # code -> (저장시각, 데이터)
 _cache_lock = threading.Lock()
 _stats = {"kis_calls": 0, "cache_hits": 0}
@@ -2726,9 +2741,41 @@ class Handler(SimpleHTTPRequestHandler):
 
 # ---------------------------------------------------------------- 진입점
 
+def apply_slow():
+    """확인용 서버로 바꾼다 — 캐시 수명을 전부 길게 잡는다.
+
+    **상수를 갈아 끼우는 방식이다.** 부르는 쪽을 고치지 않아도 되고,
+    한 곳만 보면 무엇이 느려졌는지 알 수 있다.
+
+    안 건드리는 것
+      FUTURES_TTL      0.7초. 야간선물은 이 값으로 화면 한 줄만 채운다
+      DEBUGGING_PROBE_TTL  8093 이 살아 있나 보는 것이라 KIS 와 무관하다
+    """
+    global SLOW
+    global PRICE_CACHE_TTL, INDEX_TTL, INDEX_MINUTE_TTL, OVERSEAS_TTL
+    global MULTI_CACHE_TTL, SECTOR_TTL, MOVERS_TTL
+    global INVESTOR_TOP_TTL, INVESTOR_FLOW_TTL, INVESTOR_TTL, ASKING_TTL
+
+    SLOW = True
+    PRICE_CACHE_TTL = SLOW_TTL          # 25 → 300
+    INDEX_TTL = SLOW_TTL                #  5 → 300
+    INDEX_MINUTE_TTL = SLOW_TTL         # 30 → 300
+    OVERSEAS_TTL = SLOW_TTL             # 60 → 300
+    SECTOR_TTL = SLOW_TTL               # 60 → 300
+    MOVERS_TTL = SLOW_TTL               # 30 → 300
+    INVESTOR_TOP_TTL = SLOW_TTL         # 120 → 300
+    INVESTOR_FLOW_TTL = max(INVESTOR_FLOW_TTL, SLOW_TTL)   # 이미 600 이라 그대로
+    INVESTOR_TTL = SLOW_TTL             # 60 → 300
+    ASKING_TTL = SLOW_SHORT_TTL         #  3 → 60. 호가는 원래 아주 짧다
+    MULTI_CACHE_TTL = SLOW_SHORT_TTL    #  2 → 60. 순위표가 한 번에 훑는 자리다
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--slow", action="store_true",
+                    help="확인용 서버로 띄운다 — 시세를 5분 쥐고, "
+                         "미리받기·공시·뉴스수집을 돌리지 않는다")
     args = ap.parse_args()
 
     try:
@@ -2736,6 +2783,9 @@ def main():
     except RuntimeError as e:
         cfg = None
         print("  [경고] %s" % safe_message(e))
+
+    if args.slow:
+        apply_slow()
 
     print("-" * 52)
     print("  KJC Holdings - 로컬 서버")
@@ -2749,17 +2799,27 @@ def main():
     else:
         print("  KIS 연동  : 꺼짐 (secrets.json 없음, 정적 서버로만 동작)")
 
-    if start_prefill(cfg):
+    # 확인용 서버에서는 셋 다 돌리지 않는다.
+    #
+    #   미리받기  KIS 를 가장 많이 부른다. 여기서 끄는 것이 --slow 의 핵심이다
+    #   공시      OpenDART 하루 한도를 메인 서버와 나눠 쓰게 된다
+    #   뉴스 수집  같은 market.db 에 서버 둘이 쓰고, **텔레그램이 두 번 간다**
+    if SLOW:
+        print("  느린 모드  : 시세 %d초 · 미리받기/공시/뉴스수집 **끔** (--slow)"
+              % SLOW_TTL)
+    elif start_prefill(cfg):
         print("  5분봉 준비 : 코스피 상위 %d종목을 뒤에서 미리 받습니다"
               % PREFILL_TOP)
 
     # 뉴스 쌓기 — **주말·밤에도 돈다.** 공시 폴러와 달리 DART 키가 없어도 돈다
-    if news_store.start_collector():
+    if not SLOW and news_store.start_collector():
         print("  뉴스 수집 : 사용 (%d분마다 · 주말 포함 · 텔레그램 %s)"
               % (news_store.COLLECT_INTERVAL // 60,
                  " · ".join("%02d:%02d" % t for t in news_store.DIGEST_SLOTS)))
 
-    if dart.start_poller():
+    if SLOW:
+        pass                 # 확인용 서버는 공시도 안 받는다 (위 주석 참고)
+    elif dart.start_poller():
         print("  공시 수집 : 사용 (코스피 상위 %d종목 · %d분마다)"
               % (dart.UNIVERSE_SIZE, dart.POLL_INTERVAL // 60))
         print("  알림      : %s"
