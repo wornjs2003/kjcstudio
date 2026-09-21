@@ -1,4 +1,4 @@
-#include "ibl.h"
+#include "gfx/ibl.h"
 
 // 구현부는 texture.cpp 에 있다. 여기서는 선언만 가져온다
 #include "third_party/stb_image.h"

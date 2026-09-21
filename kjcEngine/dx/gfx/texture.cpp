@@ -1,4 +1,4 @@
-#include "texture.h"
+#include "gfx/texture.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_PSD

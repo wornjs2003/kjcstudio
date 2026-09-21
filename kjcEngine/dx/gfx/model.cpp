@@ -1,4 +1,4 @@
-#include "model.h"
+#include "gfx/model.h"
 #include "third_party/ufbx.h"
 
 #include <vector>
