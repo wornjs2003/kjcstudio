@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="./css/home.css" />
   <!-- 모달 안에는 종목 화면이 통째로 들어간다. 그 화면의 CSS 도 함께 필요하다 -->
   <link rel="stylesheet" href="./css/stock.css" />
+  <link rel="stylesheet" href="./css/news.css" />
   <link rel="stylesheet" href="./css/modal.css" />
   <!-- 「데일리분석」 메뉴를 누르면 모달로 뜬다 (2026-09-21 지시). 그 내용의 CSS -->
   <link rel="stylesheet" href="./css/daily.css" />
@@ -83,7 +84,7 @@
       <a href="#">국외</a>
       <a href="#">가상자산</a>
       <a href="#">시장지표</a>
-      <a href="./news.html">뉴스 · 공시</a>
+      <a href="./news.html" data-modal="news">뉴스 · 공시</a>
       <a href="./daily.html" data-modal="daily">데일리분석</a>
       <span class="kh-cat-my">내 기록</span>
     </nav>
@@ -193,17 +194,12 @@
         <div class="kh-ix-scroll"><div class="kh-strip" id="kh-strip"></div></div>
       </div>
 
-      <div class="kh-card kh-sec-card">
-        <div class="kh-sched-h"><span>주요 일정</span><span class="kh-mut">2주</span></div>
-        <div class="kh-sched-b" id="kh-side-sched"></div>
-        <a class="kh-sec-more" href="./news.html">더보기</a>
-      </div>
+      <!-- 뉴스와 주요 일정은 2026-09-21 에 오른쪽 기둥의 「뉴스 | 공시 | 주요일정」
+           칸으로 옮겼다. **여기 두 자리는 빈 채로 둔다** — 재권님 지시로 지금
+           뜨는 산업과 주요 지수를 늘려 채우지 않는다 (「원래로 되돌리고 비워둔다」).
+           그래서 `.kh-rank` 의 칸 수(1fr 1fr 1fr 340px)를 **줄이지 않는다.**
+           줄이면 남은 둘이 넓어진다 — 실제로 263 이 402 가 됐다. -->
 
-      <div class="kh-card kh-sec-card">
-        <div class="kh-sched-h"><span>뉴스</span><span class="kh-mut">경제지</span></div>
-        <div class="kh-sched-b" id="kh-side-news"></div>
-        <a class="kh-sec-more" href="./news.html">더보기</a>
-      </div>
 
     </section>
   </main>
@@ -250,10 +246,26 @@
         </div>
       </div>
 
-      <div class="kh-card kh-sec-card kh-dc-card">
-        <div class="kh-sched-h"><span>공시</span><span class="kh-mut">OpenDART</span></div>
-        <div class="kh-sched-b"><div class="kh-dc" id="kh-dc-all"></div></div>
-        <a class="kh-sec-more" href="./news.html">더보기</a>
+      <!-- 뉴스와 공시를 한 칸에 합쳤다 (2026-09-21 지시 — 「실시간 순위 밑으로 합쳐줘」).
+           전에는 뉴스가 왼쪽 `kh-rank` 줄에, 공시가 여기에 따로 있었다.
+           탭으로 갈아끼우므로 **칸 높이는 둘 중 어느 것을 봐도 같아야 한다**
+           (CLAUDE.md 「보는 것을 바꿔도 자리는 그대로다」). 높이는
+           `.kh-sec-card > .kh-sched-b` 의 천장(150px)이 잡는다. -->
+      <div class="kh-card kh-sec-card kh-dc-card kh-nwdc-card">
+        <div class="kh-sched-h">
+          <span class="kh-nwdc-tabs">
+            <button type="button" class="kh-nwdc-t is-on" data-nwdc="news">뉴스</button>
+            <button type="button" class="kh-nwdc-t" data-nwdc="dc">공시</button>
+            <button type="button" class="kh-nwdc-t" data-nwdc="sched">주요일정</button>
+          </span>
+          <span class="kh-mut" id="kh-nwdc-src">경제지</span>
+        </div>
+        <div class="kh-sched-b">
+          <div id="kh-side-news"></div>
+          <div class="kh-dc" id="kh-dc-all" hidden></div>
+          <div id="kh-side-sched" hidden></div>
+        </div>
+        <a class="kh-sec-more" href="./news.html" data-modal="news">더보기</a>
       </div>
 
     </div>

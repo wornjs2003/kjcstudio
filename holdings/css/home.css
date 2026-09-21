@@ -118,8 +118,15 @@
    탭 규칙 둘만 양쪽에 다 건다 — 컨테이너 안 카드도, 순위 카드도 탭을 쓴다. */
 .kh-rank {
   margin-top: 14px; display: grid;
-  /* 넷이 한 줄에 놓인다 — 지금 뜨는 산업 · 주요 지수 · 주요 일정 · 뉴스.
-     맨 오른쪽(뉴스)은 차트 옆 패널과 같은 폭이라 세로로 줄이 맞는다. */
+  /* **칸은 넷인데 카드는 둘이다** — 지금 뜨는 산업 · 주요 지수.
+     2026-09-21 에 뉴스와 주요 일정이 차례로 오른쪽 기둥의 합친 칸으로 갔다
+     (재권님 지시 — 「실시간 순위밑으로 합치고」 · 「뉴스 공시에 주요일정도」).
+
+     **칸 수를 줄이지 않는다. 뒤 두 자리는 빈 채로 둔다.**
+     「지금뜨는산업이랑 주요지수는 늘리지 말고 없어진 공간만큼 비워둬」 ·
+     「원래로 되돌리고 비워둔다」 (2026-09-21 지시). 칸을 줄이면 남은 둘이
+     그만큼 넓어진다 — 실제로 한 번 `1fr 1fr 340px` 로 줄였다가
+     **263 이 402 가 되어** 되돌렸다. */
   grid-template-columns: 1fr 1fr 1fr 340px; gap: 14px;
 }
 
@@ -736,6 +743,20 @@
   max-height: 150px;
 }
 .kh-sec-card > .kh-sec-more { margin-top: 10px; }
+/* ── 뉴스·공시 합친 칸 (2026-09-21 지시) ──
+   카드 제목 자리에 탭 둘을 둔다. 갈아끼우기이므로 **칸 높이가 바뀌면 안 된다**
+   (CLAUDE.md 「보는 것을 바꿔도 자리는 그대로다」). 높이는 위
+   `.kh-sec-card > .kh-sched-b` 의 천장(150px)이 이미 잡고 있어
+   여기서 따로 정하지 않는다 — 두 곳에서 정하면 한쪽만 고치게 된다. */
+.kh-nwdc-tabs { display: flex; align-items: center; gap: 12px; }
+.kh-nwdc-t {
+  border: 0; background: none; padding: 0; cursor: pointer;
+  font-family: inherit; font-size: 0.88rem; font-weight: 700;
+  /* 흰 바탕이므로 글씨는 검정. 고르지 않은 쪽만 흐리게 둔다
+     (CLAUDE.md 「색 바탕 위의 글씨」 — 흰 바탕엔 검정). */
+  color: var(--kh-text-muted);
+}
+.kh-nwdc-t.is-on { color: var(--kh-text-primary); }
 
 
 /* 매물대 칸 — 순위표에서 뺀 셋 (2026-09-17) */

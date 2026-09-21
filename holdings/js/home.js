@@ -23,6 +23,8 @@ import { mountDisclosures } from './components/disclosures.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
 import { mountSchedule } from './components/schedule.js';
 import { bindDailyMenu } from './components/daily-view.js';
+import { fetchIssues, paintIssues } from './components/news-list.js';
+import { bindNewsModal } from './components/news-modal.js';
 import { mountSectors } from './components/sectors.js';
 import { mountStockPanel } from './components/stock-panel.js';
 import { mountStockDetail } from './components/stock-detail.js';
@@ -1345,43 +1347,54 @@ const sched = mountSchedule($('kh-side-sched'), {
 });
 setInterval(() => { if (!document.hidden) sched.refresh(); }, 10 * 60 * 1000);
 
-/* ── 사이드바 뉴스 ──
-   맛보기로 몇 줄만 보여준다. 전체는 '더보기' 로 뉴스·공시 화면에서 본다
-   (2026-09-15 지시). 주제어와 걸러내는 규칙은 서버가 쥐고 있으므로
-   여기서는 받아서 줄만 그린다. */
+/* ── 뉴스·공시 합친 칸 ──
+   재권님 지시로 뉴스와 공시를 한 칸에 넣었다 (2026-09-21 — "홀딩스 화면에
+   뉴스랑 공시를합쳐줘 실시간 순위밑으로"). 전에는 뉴스가 왼쪽 `kh-rank` 줄에,
+   공시가 오른쪽 기둥에 따로 있었다.
+
+   **그리는 것은 components/news-list.js 가 모달과 함께 쥔다.** 전에는 여기와
+   js/news.js 에 같은 것이 두 벌 있었다 (CLAUDE.md 「같은 값은 한 곳에만 둔다」).
+
+   맛보기로 몇 줄만 보여준다. 전체는 「더보기」 로 모달에서 본다 —
+   **모달이 원본이고 이 칸은 거기서 덜어낸 일부다.** */
 const SIDE_NEWS_N = 5;
 const SIDE_NEWS_MS = 180_000;        // 서버 캐시와 같은 주기. 더 자주 물을 이유가 없다
 
-function esc(t) {
-  return String(t == null ? '' : t).replace(/[&<>"]/g,
-    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-}
-
 async function drawSideNews() {
-  const host = $('kh-side-news');
-  if (!host) return;
-  let rows = null;
-  try {
-    const r = await apiFetch('/api/news/issues', { cache: 'no-store' });
-    if (!r) return null;   // 로그인이 풀렸다
-    const j = await r.json();
-    if (j && j.ok && Array.isArray(j.data)) rows = j.data;
-  } catch { /* 아래에서 못 받았다고 적는다 */ }
-
-  if (!rows) {
-    host.innerHTML = `<div class="kh-sched-i kh-mut">뉴스를 불러오지 못했습니다</div>`;
-    return;
-  }
-  if (!rows.length) {
-    host.innerHTML = `<div class="kh-sched-i kh-mut">받은 뉴스가 없습니다</div>`;
-    return;
-  }
-  host.innerHTML = rows.slice(0, SIDE_NEWS_N).map(x => `
-    <a class="kh-side-news-i" href="${esc(x.link)}" target="_blank" rel="noopener">
-      <i>${esc(x.topicLabel || '')}</i>
-      <span>${esc(x.title)}</span>
-    </a>`).join('');
+  paintIssues($('kh-side-news'), await fetchIssues(),
+              { compact: true, limit: SIDE_NEWS_N });
 }
+
+/* 탭으로 뉴스 ↔ 공시를 갈아끼운다. **칸 높이가 바뀌면 안 된다**
+   (CLAUDE.md 「보는 것을 바꿔도 자리는 그대로다」) — 높이는
+   css/home.css 의 `.kh-sec-card > .kh-sched-b` 천장(150px)이 잡으므로
+   여기서는 무엇을 보일지만 정한다. */
+{
+  const tabs = Array.from(document.querySelectorAll('.kh-nwdc-t'));
+  const src  = $('kh-nwdc-src');
+  /* 셋이 됐다 — 주요일정이 2026-09-21 에 왼쪽 줄에서 넘어왔다 (재권님 지시).
+     새 탭이 붙어도 여기만 늘리면 되게 묶어 둔다. */
+  const pane = {
+    news:  $('kh-side-news'),
+    dc:    $('kh-dc-all'),
+    sched: $('kh-side-sched'),
+  };
+  const SRC = { news: '경제지', dc: 'OpenDART', sched: '앞으로 2주' };
+  for (const b of tabs) {
+    b.addEventListener('click', () => {
+      const k = b.dataset.nwdc;
+      for (const t of tabs) t.classList.toggle('is-on', t === b);
+      for (const [name, el] of Object.entries(pane)) {
+        if (el) el.hidden = (name !== k);
+      }
+      if (src) src.textContent = SRC[k] || '';
+    });
+  }
+}
+
+/* 「더보기」 와 「뉴스 · 공시」 메뉴를 모달로 돌린다 (2026-09-21 지시).
+   `href` 는 그대로 두므로 새 탭·직접 주소로는 news.html 이 열린다. */
+bindNewsModal(document, { watch: WATCHLIST.map(s => s.code) });
 
 drawSideNews();
 setInterval(() => { if (!document.hidden) drawSideNews(); }, SIDE_NEWS_MS);
