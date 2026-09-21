@@ -1051,6 +1051,7 @@ const INVESTOR_DAYS = 30;       // 한 번에 오는 일수. 늘릴 수 없다
 const ASKING_LEVELS = 10;       // 호가 단계
 const INVESTOR_TTL = 60;        // 일별 자료라 장중에 한 번 바뀐다
 const ASKING_TTL = 3;           // 호가는 계속 움직인다
+const TICKS_TTL = 3;            // 체결도 계속 쌓인다. server/kis_proxy.py 와 같아야 한다
 
 async function fetchInvestor(cfg, env, code, days = INVESTOR_DAYS) {
   const data = await kisGet(
@@ -1077,6 +1078,34 @@ async function fetchInvestor(cfg, env, code, days = INVESTOR_DAYS) {
       inst: side("orgn"),
     };
   });
+}
+
+/* 최근 체결 30줄. **한 번에 30줄이 오고 그게 전부다** — 더 과거는 안 준다.
+   server/kis_proxy.py 의 fetch_ticks() 와 같은 판정이어야 한다. */
+async function fetchTicks(cfg, env, code) {
+  const data = await kisGet(
+    cfg, env,
+    "/uapi/domestic-stock/v1/quotations/inquire-ccnl",
+    { FID_COND_MRKT_DIV_CODE: quoteMarketDiv(), FID_INPUT_ISCD: code },
+    "FHKST01010300",
+    TICKS_TTL
+  );
+  const out = (data.output || []).map((o) => {
+    const t = String(o.stck_cntg_hour || "").trim();
+    return {
+      /* 091646 → 09:16:46. 화면에서 자르지 않게 여기서 넣는다 */
+      at: t.length === 6 ? `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}` : t,
+      price: num(o.stck_prpr),
+      volume: num(o.cntg_vol),
+      diff: num(o.prdy_vrss),
+      pct: num(o.prdy_ctrt),
+      /* 1 상한 · 2 상승 · 3 보합 · 4 하한 · 5 하락 (KIS 공통) */
+      dir: String(o.prdy_vrss_sign || "3").trim(),
+    };
+  });
+  /* 체결강도. 100 이 기준이고 넘으면 산 쪽이 세다. 줄마다 같은 값이 온다 */
+  const power = num((data.output || [{}])[0].tday_rltv);
+  return { rows: out, power };
 }
 
 async function fetchAsking(cfg, env, code) {
@@ -2028,6 +2057,37 @@ function unescapeHtml(s) {
     .replace(/&amp;/g, "&");   /* 마지막에 푼다 — 먼저 풀면 &amp;quot; 가 두 번 풀린다 */
 }
 
+/* 종목 한 장 요약 — 일별 매매동향 5일과 지표 18개가 한 번에 온다.
+   server/naver.py 의 integration() 과 같은 판정이어야 한다.
+
+   ⚠️ **시가총액 순위는 여기서 못 준다.** 서버는 공시 수집이 아침마다 받아 두는
+   표(market.db 의 dart_universe)에서 읽는데, **워커에는 그 표가 없다.**
+   그래서 rank 는 늘 null 이고 화면은 「—」로 적는다 — 로컬에서만 순위가 보인다. */
+async function naverIntegration(env, code) {
+  return memo(`nv:i:${code}`, NAVER_TTL, async () => {
+    const res = await fetch(`https://m.stock.naver.com/api/stock/${code}/integration`,
+                            { headers: NAVER_HEADERS });
+    if (!res.ok) throw new Error(`네이버 HTTP ${res.status}`);
+    const j = await res.json();
+
+    const flow = (j.dealTrendInfos || []).slice(0, 5).map((d) => ({
+      date: d.bizdate,
+      foreign: naverNum(d.foreignerPureBuyQuant),
+      inst: naverNum(d.organPureBuyQuant),
+      person: naverNum(d.individualPureBuyQuant),
+      foreignRate: naverNum(d.foreignerHoldRatio),
+      close: naverNum(d.closePrice),
+      volume: naverNum(d.accumulatedTradingVolume),
+    }));
+
+    const info = {};
+    for (const t of (j.totalInfos || [])) {
+      info[t.code] = { name: t.key, value: t.value };
+    }
+    return { name: j.stockName, flow, info, rank: null };
+  });
+}
+
 /* 종목별 뉴스. **바깥이 배열**이고 각 묶음 안에 items 가 있다.
    같은 사건을 여러 언론사가 쓰면 한 묶음으로 오므로 묶음마다 첫 기사만 쓴다.
    server/naver.py 의 news() 와 같은 판정이어야 한다. */
@@ -2688,6 +2748,14 @@ export default {
                     count: g.rows.length, source: "네이버" },
           });
         }
+        if (nvRoute === "integration") {
+          const code = (url.searchParams.get("code") || "").trim();
+          if (!/^\d{6}$/.test(code)) return fail("code 는 6자리 숫자여야 합니다.", 400);
+          const d = await naverIntegration(env, code);
+          return json({ ok: true, data: d,
+                        meta: { code, days: d.flow.length, source: "네이버" } });
+        }
+
         if (nvRoute === "news") {
           const code = (url.searchParams.get("code") || "").trim();
           if (!/^\d{6}$/.test(code)) return fail("code 는 6자리 숫자여야 합니다.", 400);
@@ -2915,6 +2983,15 @@ export default {
             provisional: false,
           },
         });
+      }
+
+      if (route === "ticks") {
+        const code = (url.searchParams.get("code") || "").trim();
+        if (!/^\d{6}$/.test(code)) return fail("code 는 6자리 숫자여야 합니다.", 400);
+        const data = await fetchTicks(cfg, env, code);
+        return json({ ok: true, data: data.rows,
+                      meta: { code, count: data.rows.length, power: data.power,
+                              market: quoteMarketDiv() } });
       }
 
       if (route === "asking") {

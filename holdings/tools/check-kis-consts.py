@@ -73,6 +73,7 @@ PAIRS = [
     ("네이버 큰 칸 제외",    "MAX_GROUP_COUNT",     "NAVER_MAX_GROUP_COUNT", None),
     ("네이버 뉴스 개수",     "NEWS_SIZE",           "NAVER_NEWS_SIZE",      None),
     ("네이버 토론 개수",     "DISCUSS_SIZE",        "NAVER_DISCUSS_SIZE",   None),
+    ("체결 캐시",           "TICKS_TTL",           "TICKS_TTL",            None),
     ("선물 종목코드",        "FUTURES_CODE",        "FUTURES_CODE",         None),
     ("선물 캐시",            "FUTURES_TTL",         "FUTURES_TTL",          "ceil"),
     ("지수 캐시",            "INDEX_TTL",           "INDEX_TTL",            "ceil"),
@@ -116,6 +117,7 @@ PY_ALT = {
     "MAX_GROUP_COUNT": "holdings/server/naver.py",
     "NEWS_SIZE":       "holdings/server/naver.py",
     "DISCUSS_SIZE":    "holdings/server/naver.py",
+    "TICKS_TTL":       "holdings/server/kis_proxy.py",
 }
 
 
