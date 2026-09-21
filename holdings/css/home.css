@@ -191,44 +191,20 @@
 .kh-iv-tabs { padding: 0; margin-left: auto; gap: 4px; flex-wrap: nowrap; }
 .kh-iv-tabs .kh-chip { padding: 3px 8px; font-size: 0.7rem; }
 
-/* 오늘 — 셋을 나란히 */
-.kh-iv-bars { display: flex; gap: 10px; }
-.kh-iv-c { flex: 1; text-align: center; }
-.kh-iv-v { display: block; font-size: 0.71rem; font-weight: 700; margin-bottom: 3px; }
-/* 46 → 69 → **46px** (2026-09-21 지시 — "투자자 정보 세로를 지금보다
-   2/3정도로 줄여줘"). 09-18 에 1.5배로 늘린 것을 그 역으로 되돌린다 */
-.kh-iv-box { position: relative; display: block; height: 46px; }
-.kh-iv-box::before {           /* 0선 */
-  content: ''; position: absolute; left: 0; right: 0; top: 50%;
-  height: 1px; background: var(--kh-border-strong);
-}
-.kh-iv-box i { position: absolute; left: 50%; width: 13px; margin-left: -6.5px; }
-.kh-iv-box i.up { bottom: 50%; background: var(--kh-up); border-radius: 2px 2px 0 0; }
-.kh-iv-box i.dn { top: 50%; background: var(--kh-down); border-radius: 0 0 2px 2px; }
-.kh-iv-n { display: block; font-size: 0.71rem; color: var(--kh-text-secondary); margin-top: 3px; }
+/* **옛 세로막대 규칙을 걷어냈다** (2026-09-21).
 
-/* 5일 — 줄마다 작은 막대 */
-.kh-iv-days { display: flex; flex-direction: column; gap: 2px; }
-.kh-iv-r { display: flex; align-items: center; gap: 7px; font-size: 0.74rem; }
-.kh-iv-rn { width: 38px; color: var(--kh-text-secondary); }
-.kh-iv-rv { width: 68px; text-align: right; font-weight: 600; font-size: 0.72rem; }
-.kh-iv-sp {
-  flex: 1; position: relative; display: flex; align-items: center;
-  gap: 2px; height: 28px;          /* 42 → 28px (2026-09-21 지시 · 2/3) */
-}
-.kh-iv-sp .zero {
-  position: absolute; left: 0; right: 0; top: 50%;
-  height: 1px; background: var(--kh-border-strong);
-}
-.kh-iv-sp i { flex: 1; min-width: 2px; position: relative; }
-.kh-iv-sp i.up {
-  align-self: flex-end; margin-bottom: 14px;      /* 0선까지 = 높이의 절반 */
-  background: var(--kh-up); border-radius: 1px 1px 0 0;
-}
-.kh-iv-sp i.dn {
-  align-self: flex-start; margin-top: 14px;
-  background: var(--kh-down); border-radius: 0 0 1px 1px;
-}
+   2026-09-18 에는 매수가 위·매도가 아래인 **세로** 막대였다. 그것을
+   가로 양방향으로 바꾸면서 investor.js 가 더는 쓰지 않는 클래스가 됐는데
+   (`.kh-iv-bars` · `.kh-iv-c` · `.kh-iv-v` · `.kh-iv-n` · `.kh-iv-days` ·
+   `.kh-iv-r` · `.kh-iv-rn` · `.kh-iv-rv` · `.kh-iv-sp`), **`.kh-iv-box i`
+   하나만은 새 막대에도 걸렸다.**
+
+       frame.css   .kh-iv-bar i     특이도 0,1,1
+       home.css    .kh-iv-box i     특이도 0,1,1   ← 나중에 읽혀 이긴다
+
+   그래서 `left: 50%` 와 `position: absolute` 가 새 막대에 얹혀, 인라인으로
+   준 자리가 안 먹고 **막대가 가운데를 걸쳤다.** 죽은 규칙인 줄 알았는데
+   한 줄이 살아 있었다. 새 모양은 전부 `css/frame.css` 에 있다. */
 
 .kh-iv-note { font-size: 0.7rem; color: var(--kh-text-muted); padding-top: 6px; line-height: 1.6; }
 
@@ -237,19 +213,14 @@
    오늘은 한 덩어리, 5일은 세 줄이라 내용 높이가 다르고, 그대로 두면
    **아래 칸(종목토론·종목 뉴스)이 통째로 밀린다.**
 
-   실측 (2026-09-18, 헤드리스 1600×1200)
+   가로 막대로 바꾼 뒤(2026-09-21)에는 **오늘도 5일도 세 줄**이라 막대 쪽은
+   저절로 같다. 갈리는 것은 **노트 한 줄**뿐이다 — 아래 값은 그래서 실측으로
+   다시 잡았다. 큰 쪽에 맞추고, 적은 쪽은 아래에 빈 자리가 남는다.
 
-       오늘   그래프 114px · 노트 24px(한 줄)   칸 138px
-       5일    그래프 130px · 노트 42px(두 줄)   칸 172px   ← 34px 움직였다
-
-   **큰 쪽에 맞춘다.** 2026-09-21 에 그래프를 2/3 로 줄인 뒤 다시 재니
-   **오늘 91px · 5일 88px** 이라 큰 쪽이 바뀌었다(전에는 5일이 컸다).
-   91 로 잡는다 — 오늘 보기의 값줄·막대칸(46)·이름줄을 더한 값이다.
-   적은 쪽은 아래에 빈 자리가 남는다. */
-.kh-iv-bars, .kh-iv-days { min-height: 91px; }
-/* 노트는 이 칸에서만 두 줄 자리를 잡는다 — 매수·매도 비율 쪽 노트까지
-   늘리면 그 칸이 공연히 커진다 */
-#kh-iv-box .kh-iv-note { min-height: 42px; }
+   **id 가 아니라 클래스로 건다.** 첫 화면과 모달이 같은 한 벌을 쓰면서
+   `#kh-iv-box` 가 사라졌다 — id 로 걸어 두면 그 순간 규칙이 통째로 죽는다. */
+.kh-iv-rows { min-height: 68px; }
+.kh-iv-box .kh-iv-note { min-height: 24px; }
 
 /* 그래도 움직이면 여기에 뜬다. 차트의 `.kh-scale-warn`(css/stock.css)과
    같은 생각이고, **모양은 그 규칙을 그대로 쓰고 자리만 옮긴다.** */

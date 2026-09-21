@@ -669,10 +669,23 @@ a.kh-sc-i:hover { color: var(--kh-accent); }
 .kh-iv-r2 { display: flex; align-items: center; gap: 7px; font-size: 0.76rem; }
 .kh-iv-n2 { width: 38px; flex: none; color: var(--kh-text-secondary); }
 .kh-iv-v2 { width: 74px; flex: none; text-align: right; font-weight: 600; white-space: nowrap; }
+/* **가운데가 0이다** (2026-09-21 지시). 사는 쪽은 오른쪽으로 빨강,
+   파는 쪽은 왼쪽으로 파랑. 길이와 방향을 함께 읽는다. */
 .kh-iv-bar {
-  flex: 1; min-width: 0; height: 5px; border-radius: 3px;
+  flex: 1; min-width: 0; height: 6px; border-radius: 3px;
   background: var(--kh-bg-surface); position: relative;
+  display: flex;                      /* 좌우 반반을 담는다 */
 }
-.kh-iv-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; }
-.kh-iv-bar i.up { background: var(--kh-up); }
-.kh-iv-bar i.dn { background: var(--kh-down); }
+/* 가운데 0선 */
+.kh-iv-bar::before {
+  content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px;
+  width: 1px; background: var(--kh-border-strong);
+}
+/* **좌우 반반.** 왼쪽 반은 오른쪽 끝(가운데)에 붙여 자라고, 오른쪽 반은
+   가운데에서 오른쪽으로 자란다. 자리를 계산하지 않으므로 어긋날 데가 없다. */
+.kh-iv-half { flex: 1; min-width: 0; display: flex; height: 100%; }
+.kh-iv-half.l { justify-content: flex-end; }
+.kh-iv-half.r { justify-content: flex-start; }
+.kh-iv-bar i { display: block; height: 100%; }
+.kh-iv-bar i.up { background: var(--kh-up); border-radius: 0 3px 3px 0; }
+.kh-iv-bar i.dn { background: var(--kh-down); border-radius: 3px 0 0 3px; }
