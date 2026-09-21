@@ -326,9 +326,42 @@ def _measure_once(expect=None):
             if stable < SETTLE_SAME:
                 miss = sorted(set((expect or {}).get(page, {})) - set(cells))
                 if miss:
-                    print("  %s — %d초를 기다렸는데 칸 %d개가 끝내 안 나왔습니다: %s"
-                          % (page, SETTLE_TRIES * SETTLE_STEP, len(miss),
-                             " · ".join(miss[:4]) + (" …" if len(miss) > 4 else "")))
+                    # **「없다」 와 「깊이 밖이라 안 봤다」 를 가른다 (2026-09-21).**
+                    # 둘이 같은 출력이라, 쓰는 쪽이 **자기 CSS 가 잘못된 줄 알고**
+                    # HTML·CSS 를 두 번 확인한 일이 있었다. 실제로는 요소가
+                    # 화면에 멀쩡히 있고 **깊이 4로 밀려난 것**이었다.
+                    #
+                    # 「`0` 이 나오면 범위를 먼저 의심한다」 의 **도구 쪽 사례**다 —
+                    # 「도구가 적어둔 범위도 낡는다」 가 여기에 걸린다.
+                    #
+                    # **화면에 있는지 직접 물어본다.** 깊이 제한과 무관하다.
+                    names = [m.split("#")[0] for m in miss]
+                    expr = ("JSON.stringify(%s.map(n => "
+                            "!!document.querySelector('#'+n) || "
+                            "!!document.querySelector('.'+n)))" % json.dumps(names))
+                    try:
+                        r = call("Runtime.evaluate",
+                                 {"expression": expr, "returnByValue": True})
+                        there = json.loads(r["result"]["result"]["value"])
+                    except Exception:
+                        there = [False] * len(miss)
+                    deep = [m for m, t in zip(miss, there) if t]
+                    gone = [m for m, t in zip(miss, there) if not t]
+                    if deep:
+                        print("  %s — **깊이 밖입니다** (화면에는 있습니다): %s"
+                              % (page, " · ".join(deep[:4])
+                                 + (" …" if len(deep) > 4 else "")))
+                        print("     기준을 잡은 뒤 그 칸이 더 깊이 들어갔습니다. "
+                              "`--save` 로 다시 잡으십시오")
+                    if gone:
+                        print("  %s — %d초를 기다렸는데 칸 %d개가 끝내 안 나왔습니다: %s"
+                              % (page, SETTLE_TRIES * SETTLE_STEP, len(gone),
+                                 " · ".join(gone[:4]) + (" …" if len(gone) > 4 else "")))
+                    if deep and not gone:
+                        # **깊이 밖은 실패가 아니다.** 화면에 있고 기준만 낡은
+                        # 것이라, 다시 붙어도 같은 결과다. 값을 그대로 쓴다.
+                        result[page] = cells
+                        continue
                 else:
                     print("  %s — 아직 그려지는 중입니다 (%d초를 기다렸습니다). "
                           "이 값은 기준으로 삼지 마십시오"
