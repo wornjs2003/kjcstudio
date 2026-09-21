@@ -13,10 +13,20 @@
 
       빈 체크박스가 곧 할 일 목록이 됩니다.
 
-   ── 2026-09-14 기준, 프론트가 실제로 부르는 것은 여섯 개뿐입니다.
-      /api/kis/prices · /api/kis/indices · /api/kis/index-minutes · /api/kis/chart
-      /api/dart/disclosures · /api/dart/status
-      그래서 on 은 세 줄만 켜져 있습니다.
+   ── 몇 개가 켜져 있는지는 여기 적지 않습니다. 세면 나오는 값이라 낡습니다
+      (CLAUDE.md 「세면 나오는 값은 본문에 적지 않는다」).
+
+      지금 무엇을 부르는지는 이렇게 셉니다.
+
+          grep -rhoE "/api/[a-z-]+/[a-z-]+" holdings/js/ | sort -u
+
+      **부르는 것과 되는 것은 다릅니다.** 화면이 부르는데 서버에 경로가
+      없을 수 있으니, 센 다음 하나씩 눌러 봐야 on 인지 알 수 있습니다.
+
+   ── 2026-09-14 에는 여섯 개였고 on 이 세 줄이었습니다. 2026-09-21 에
+      다시 세니 스물셋이었고, **투자자 수급이 「KIS 없음(회색)」 으로 남아
+      있었습니다.** 회색은 「그 API 가 주지 않는다」 는 뜻인데 KIS 가 주고
+      있었고 화면이 이미 쓰고 있었습니다. **일주일이면 이만큼 낡습니다.**
 
    ── 참고: holdings/docs/sources.json 에 같은 취지의 등록부가 있습니다.
       그쪽은 주식 페이지가 쓰는 문서이고 이 파일은 보드 화면용입니다.
@@ -112,10 +122,12 @@ const FIELDS = [
     }
   },
   {
-    label: "투자자 수급", owner: "toss",
+    /* owner 를 toss 에서 kis 로 옮겼다 — 토스를 기다릴 것 없이 KIS 가
+       주고 있고 이미 쓰는 중이다 (2026-09-21 실측). */
+    label: "투자자 수급", owner: "kis",
     cells: {
       toss:  { s: "todo", t: "당일 · 공식" },
-      kis:   { s: "none", t: "없음" },
+      kis:   { s: "on",   t: "종목별 30일", n: "확정치" },
       dart:  { s: "none" },
       naver: { s: "todo", t: "전일까지" }
     }
@@ -148,6 +160,43 @@ const FIELDS = [
     }
   },
   {
+    /* 아래 넷은 2026-09-14 뒤에 붙었다. 그때 표에 없던 것들이다. */
+    label: "호가 · 매수/매도 비율", owner: "kis",
+    cells: {
+      toss:  { s: "todo", t: "있음" },
+      kis:   { s: "on",   t: "10단계 · buyPct" },
+      dart:  { s: "none" },
+      naver: { s: "none" }
+    }
+  },
+  {
+    label: "업종 등락률", owner: "kis",
+    cells: {
+      toss:  { s: "none" },
+      kis:   { s: "on",   t: "코스피·코스닥 전 업종" },
+      dart:  { s: "none" },
+      naver: { s: "todo", t: "테마", n: "KIS 에 테마는 없음" }
+    }
+  },
+  {
+    label: "등락률 순위 · 순매수 상위", owner: "kis",
+    cells: {
+      toss:  { s: "todo", t: "랭킹" },
+      kis:   { s: "on",   t: "30행 고정", n: "순매수 상위는 가집계" },
+      dart:  { s: "none" },
+      naver: { s: "none" }
+    }
+  },
+  {
+    label: "뉴스", owner: "naver",
+    cells: {
+      toss:  { s: "none" },
+      kis:   { s: "none" },
+      dart:  { s: "none", t: "없음" },
+      naver: { s: "on",   t: "종목별 · 주제별", n: "언론사 RSS 도 함께 씀" }
+    }
+  },
+  {
     label: "PER · PBR", owner: "kis",
     cells: {
       toss:  { s: "none", t: "없음" },
@@ -160,7 +209,9 @@ const FIELDS = [
     label: "EPS · BPS", owner: "dart",
     cells: {
       toss:  { s: "none", t: "없음" },
-      kis:   { s: "none", t: "없음" },
+      /* 받고는 있다 — /api/kis/price 가 eps·bps 를 함께 준다.
+         화면이 아직 안 쓴다. 그래서 none 이 아니라 todo 다 (2026-09-21). */
+      kis:   { s: "todo", t: "있음", n: "받는 중 · 화면이 안 씀" },
       dart:  { s: "todo", t: "원천 있음" },
       naver: { s: "todo", t: "있음" }
     }
@@ -214,5 +265,9 @@ const FIELDS = [
 ];
 
 /* 맨 위 통계 — 표에서 셀 수 없는 것만 여기 적습니다 */
-const REVIEWING = 5;            /* 검토 중인 곳 (아직 카드로 만들지 않은 후보) */
-const UPDATED_AT = "2026. 09. 14.";
+const REVIEWING = 5;            /* 검토 중인 곳 (아직 카드로 만들지 않은 후보)
+                                   ⚠️ 손으로 세어 박은 값이다. **무엇을 셌는지가
+                                   어디에도 없어 맞는지 확인할 수 없다.** 후보를
+                                   목록으로 적고 그 길이를 쓰는 편이 낫다
+                                   (2026-09-21). */
+const UPDATED_AT = "2026. 09. 21.";
