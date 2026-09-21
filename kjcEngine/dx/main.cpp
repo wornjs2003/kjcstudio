@@ -24,13 +24,17 @@
 #include <ctime>
 #include <cstdio>
 
-#include "model.h"      // Vertex 구조와 FBX 읽기
-#include "texture.h"    // 이미지 → GPU 텍스처
-#include "ibl.h"        // 환경맵 조명
+#include "gfx/model.h"      // Vertex 구조와 FBX 읽기
+#include "gfx/texture.h"    // 이미지 → GPU 텍스처
+#include "gfx/ibl.h"        // 환경맵 조명
 #include <vector>
-#include "panel.h"      // 셰이더 조절 창
-#include "font.h"       // 화면에 글자 쓰기
-#include "gputime.h"    // 패스마다 걸린 시간
+#include "ui/panel.h"      // 셰이더 조절 창
+#include "gfx/font.h"       // 화면에 글자 쓰기
+#include "ui/gputime.h"    // 패스마다 걸린 시간
+#include "world/monster.h" // 세모 — 나고 떠돌고 사라진다
+#include "world/terrain.h" // 바닥 — 모두가 올라서 있다
+#include "world/player.h"  // 조작하는 것
+#include "world/prop.h"    // 배경에 놓인 것
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3dcompiler.lib")
@@ -50,7 +54,6 @@ using namespace DirectX;
 //    PBR 계산은 선형에서 하고, 화면에 낼 때 GPU 가 다시 굽는다
 static const float BG[4]      = { 0.0159f, 0.0194f, 0.0243f, 1.0f }; // #22262b 배경 — 미정
 static const float CUBE_C[4]  = { 1.000f, 1.000f, 1.000f, 1.0f };  // #ffffff 정육면체 — 지시: 흰색
-static const float PLATE_C[4] = { 0.306f, 0.349f, 0.408f, 1.0f };  // #4e5968 바닥판 — 지시: 회색
 
 static const float TRI_C[4]   = { 0.92f, 0.24f, 0.28f, 1.0f };     // 세모 — 지시: 빨간색
 
@@ -153,7 +156,6 @@ static Extra g_extra[] = {
 // 이렇게 두어야 1 단위 = 1 미터가 되고, 아래 값들이 실제 치수가 된다
 static const float MODEL_H = 0.0f;
 // 바닥에 딱 붙이면 발치가 판에 파묻혀 어디까지가 모델인지 안 보인다
-static const float MODEL_LIFT = 0.1f;
 // ← → 한 번에 도는 각도. 15도
 static const float TURN_STEP  = 15.0f * 3.14159265f / 180.0f;
 
@@ -197,8 +199,6 @@ static const int   AO_W = WIN_W / 2, AO_H = WIN_H / 2;
 // 헤어 깊이를 미리 채울 것인가. 끄면 예전 방식으로 돌아간다 —
 // 값이 정말 줄었는지 견주어 보려고 남겨 둔다
 static const bool  HAIR_PREZ = true;
-static const float PLATE = 2.0f;    // 바닥판 한 변 — 2 m
-static const float SPEED = 0.8f;    // 초당 0.8 m — 걷는 빠르기쯤
 static const float ORBIT = 0.008f;  // 마우스 1픽셀을 끌 때 카메라가 도는 각도(라디안)
 
 // 휠 줌. 곱하기로 움직여서 가까이서는 잘게, 멀리서는 큼직하게 바뀐다 —
@@ -206,26 +206,6 @@ static const float ORBIT = 0.008f;  // 마우스 1픽셀을 끌 때 카메라가
 static const float ZOOM_STEP = 1.12f;
 static const float ZOOM_MIN  = 0.12f;
 static const float ZOOM_MAX  = 6.0f;
-static const float TURN  = 9.0f;    // 정면을 트는 빠르기 (초당 라디안)
-
-// ─── 세모 ──────────────────────────────────────────────────────────────
-static const int   TRI_N     = 2;     // 화면에 늘 있어야 하는 개수 — 지시: 2개
-static const float TRI_SIZE  = 0.12f; // 12 cm
-static const float TRI_GAP   = 0.25f; // 25 cm 는 떨어져 난다
-static const float REACH     = 0.20f; // 20 cm 안에 들면 닿은 것으로 본다
-static const float BORN_WAIT = 1.0f;  // 사라지고 나서 새로 나기까지 — 지시: 1초
-
-// 닿으면 네모가 한 번 뛴다. 이 뜀이 끝나는 순간 세모가 사라진다 —
-// 지시로 「1초 기다렸다 사라진다」를 걷어내고 이 동작으로 바꿨다
-static const float HOP_TIME   = 0.347f; // 뛰어올랐다 내려오기까지 — 지시로 0.52 에서 1.5배 빠르게
-static const float HOP_HEIGHT = 0.10f;  // 10 cm 뛴다
-static const float HOP_WOBBLE = 0.02f;  // 뛰는 동안 2 cm 떤다
-
-// 가만히 있지 않고 조금씩 옮겨 다닌다
-static const float DRIFT_MIN   = 1.0f;  // 다음 걸음까지 기다리는 시간 — 지시: 1~2초
-static const float DRIFT_MAX   = 2.0f;
-static const float DRIFT_STEP  = 0.15f; // 한 걸음에 15 cm
-static const float DRIFT_SPEED = 0.3f;  // 초당 30 cm. 네모보다 느리다
 
 // ─── 세모가 사라질 때의 여운 ───────────────────────────────────────────
 static const float SHAKE_TIME = 0.32f;  // 흔들리는 시간
@@ -289,7 +269,6 @@ static ID3D11VertexShader*      g_vsDepth   = nullptr;
 static ID3D11PixelShader*       g_ps        = nullptr;
 static ID3D11InputLayout*       g_layout    = nullptr;
 static ID3D11Buffer*            g_cb        = nullptr;
-static ID3D11Buffer*            g_plateVB   = nullptr;
 static Model                    g_head;        // FBX 에서 읽은 모델
 static Texture                  g_albedo;      // 얼굴 색 텍스처
 static Texture                  g_normal;      // 얼굴 노말맵
@@ -450,125 +429,19 @@ static int   g_mx = -1, g_my = -1; // 마우스가 지금 어디 있나 (창 안
 static POINT g_last  = {};         // 직전 마우스 자리
 
 // 정육면체가 지금 있는 자리와 가야 할 자리. 판 위(y = 한 변의 절반)에 선다
-static float g_x = 0.0f, g_z = 0.0f;
-static float g_tx = 0.0f, g_tz = 0.0f;
+
+
 
 // 정육면체가 바라보는 쪽. 제 몸의 +Z 가 정면이고, 이 각도만큼 돌아 있다.
 // 정육면체는 어느 쪽에서 봐도 똑같이 생겨서, 붙어 있는 축으로만 방향이 보인다
-static float g_facing = 0.0f;
 
-// ─── 세모들 ────────────────────────────────────────────────────────────
-struct Tri {
-    float x, z;        // 지금 자리
-    float tx, tz;      // 옮겨가는 중인 자리
-    bool  alive;
-    float wait;        // 사라진 뒤 다시 나기까지 남은 시간
-    float drift;       // 다음 걸음을 고르기까지 남은 시간
-};
-static Tri   g_tri[TRI_N] = {};
-static int   g_chase = -1;     // 지금 쫓고 있는 세모 번호. 없으면 -1
-static float g_hop   = 0.0f;   // 뜀이 시작된 뒤 흐른 시간. 0 이면 안 뛰는 중
-
-// 세모가 사라진 순간에 켜지고, 시간이 가면서 잦아든다
-static float g_shake = 0.0f;   // 흔들림에 남은 시간
-static float g_flash = 0.0f;   // 번쩍임에 남은 시간
-static float g_glow  = 0.0f;   // 이 프레임의 밝아진 정도 (0~1). 셰이더로 넘어간다
 
 static float Rand01() { return rand() / (float)RAND_MAX; }
 
-// 회색 판 안에서 자리를 하나 고른다. 네모와도, 다른 세모와도 떨어뜨린다
-static void SpawnTri(int i) {
-    const float half = PLATE * 0.5f - TRI_SIZE;   // 판 밖으로 삐져나가지 않게
-
-    for (int attempt = 0; attempt < 200; ++attempt) {
-        float x = (Rand01() * 2.0f - 1.0f) * half;
-        float z = (Rand01() * 2.0f - 1.0f) * half;
-
-        float dxc = x - g_x, dzc = z - g_z;
-        if (sqrtf(dxc * dxc + dzc * dzc) < TRI_GAP) continue;   // 네모와 겹친다
-
-        bool clash = false;
-        for (int j = 0; j < TRI_N; ++j) {
-            if (j == i || !g_tri[j].alive) continue;
-            float dx = x - g_tri[j].x, dz = z - g_tri[j].z;
-            if (sqrtf(dx * dx + dz * dz) < TRI_GAP) { clash = true; break; }
-        }
-        if (clash) continue;
-
-        g_tri[i].x = g_tri[i].tx = x;
-        g_tri[i].z = g_tri[i].tz = z;
-        g_tri[i].alive = true;
-        g_tri[i].drift = DRIFT_MIN + Rand01() * (DRIFT_MAX - DRIFT_MIN);
-        return;
-    }
-
-    // 200번을 고르고도 빈자리가 없으면 판이 꽉 찬 것이다. 겹치게 두느니
-    // 조금 더 기다렸다 다시 고른다 — 네모가 움직이면 자리가 난다
-    g_tri[i].wait = 0.2f;
-}
-
-// 제자리 둘레에서 한 걸음 갈 자리를 고른다. 판 밖으로는 나가지 않는다
-static void PickDrift(int i) {
-    const float half = PLATE * 0.5f - TRI_SIZE;
-
-    for (int attempt = 0; attempt < 40; ++attempt) {
-        float ang = Rand01() * XM_2PI;
-        float len = DRIFT_STEP * (0.35f + Rand01() * 0.65f);   // 너무 안 움직이지 않게
-        float x = g_tri[i].x + cosf(ang) * len;
-        float z = g_tri[i].z + sinf(ang) * len;
-
-        if (x < -half || x > half || z < -half || z > half) continue;   // 판 밖이다
-
-        // 지금보다 네모에 가까워지는 걸음은 버린다 — 지시: 「네모에게 가까이
-        // 다가가진 않는다」. 절대 거리로 막지 않는 것은, 그러면 네모가 올 때마다
-        // 물러나는 셈이 되어 영영 못 잡기 때문이다. 스스로 다가가지만 않는다
-        float nowX = g_tri[i].x - g_x, nowZ = g_tri[i].z - g_z;
-        float newX = x - g_x,          newZ = z - g_z;
-        if (sqrtf(newX * newX + newZ * newZ) < sqrtf(nowX * nowX + nowZ * nowZ))
-            continue;
-
-        bool clash = false;
-        for (int j = 0; j < TRI_N; ++j) {
-            if (j == i || !g_tri[j].alive) continue;
-            float dx = x - g_tri[j].x, dz = z - g_tri[j].z;
-            if (sqrtf(dx * dx + dz * dz) < TRI_GAP) { clash = true; break; }
-        }
-        if (clash) continue;
-
-        g_tri[i].tx = x;
-        g_tri[i].tz = z;
-        g_tri[i].drift = DRIFT_MIN + Rand01() * (DRIFT_MAX - DRIFT_MIN);
-        return;
-    }
-
-    // 갈 곳이 없으면 제자리에 두고 곧 다시 고른다
-    g_tri[i].tx = g_tri[i].x;
-    g_tri[i].tz = g_tri[i].z;
-    g_tri[i].drift = 0.3f;
-}
-
-// 살아 있는 세모를 제 목표 쪽으로 옮기고, 때가 되면 다음 걸음을 고른다.
-// 네모와의 거리는 보지 않는다 — 다가갈 때마다 밀려나면 영영 못 잡는다
-static void UpdateTris(float dt) {
-    for (int i = 0; i < TRI_N; ++i) {
-        if (!g_tri[i].alive) continue;
-
-        float dx = g_tri[i].tx - g_tri[i].x;
-        float dz = g_tri[i].tz - g_tri[i].z;
-        float d  = sqrtf(dx * dx + dz * dz);
-        float s  = DRIFT_SPEED * dt;
-        if (d <= s) {
-            g_tri[i].x = g_tri[i].tx;
-            g_tri[i].z = g_tri[i].tz;
-        } else {
-            g_tri[i].x += dx / d * s;
-            g_tri[i].z += dz / d * s;
-        }
-
-        g_tri[i].drift -= dt;
-        if (g_tri[i].drift <= 0.0f) PickDrift(i);
-    }
-}
+// 몬스터가 사라진 순간에 켜지고, 시간이 가면서 잦아든다
+static float g_shake = 0.0f;   // 흔들림에 남은 시간
+static float g_flash = 0.0f;   // 번쩍임에 남은 시간
+static float g_glow  = 0.0f;   // 이 프레임의 밝아진 정도 (0~1). 셰이더로 넘어간다
 
 // 축 세 개를 선으로. 원점에서 각 방향으로 길이 1 만큼 뻗는다.
 // 법선은 안 쓴다 — 축은 빛 계산을 건너뛴다
@@ -582,8 +455,8 @@ static void BuildAxes(Vertex* v) {
 // 삼각뿔 — 밑면이 정삼각형이고 꼭대기가 하나. 옆면 셋에 밑면 하나,
 // 면마다 법선이 달라야 해서 꼭짓점을 공유하지 않고 12개를 둔다
 static void BuildTri(Vertex* v) {
-    const float r = TRI_SIZE * 0.62f;   // 밑면 반지름
-    const float h = TRI_SIZE;           // 높이
+    const float r = MonsterSize() * 0.62f;   // 밑면 반지름
+    const float h = MonsterSize();           // 높이
 
     XMFLOAT3 b[3];
     for (int i = 0; i < 3; ++i) {
@@ -654,16 +527,6 @@ static void BuildLabels(Vertex* v) {
     L(-0.4f, -0.5f, -0.4f,  0.5f);
 }
 
-static void BuildPlate(Vertex* v) {
-    const float h = PLATE * 0.5f;
-    const XMFLOAT3 up = { 0, 1, 0 };
-    v[0] = { {-h, 0.0f, -h}, up };
-    v[1] = { {-h, 0.0f,  h}, up };
-    v[2] = { { h, 0.0f,  h}, up };
-    v[3] = { {-h, 0.0f, -h}, up };
-    v[4] = { { h, 0.0f,  h}, up };
-    v[5] = { { h, 0.0f, -h}, up };
-}
 
 // ─── 각도에서 카메라 자리를 다시 구한다 ────────────────────────────────
 // 각도가 바뀔 때마다 이것을 부른다. 레이 피킹도 이 행렬을 쓰므로,
@@ -709,7 +572,9 @@ static void BuildLightMatrix() {
     // 기록장이 담는 자리를 모델에 맞춰 옮긴다. 원점에 고정해 두면
     // 모델이 조금만 걸어가도 범위(SHADOW_RANGE) 밖으로 나가 그림자가 끊긴다.
     // 폭이 1.2m 이라 0.6m 만 벗어나도 그렇게 된다
-    XMVECTOR at  = XMVectorSet(g_x, MODEL_LIFT, g_z, 0.0f);
+    float px, pz;
+    PlayerAt(px, pz);
+    XMVECTOR at  = XMVectorSet(px, PlayerLift(), pz, 0.0f);
     XMVECTOR eye = XMVectorAdd(at, XMVectorScale(dir, SHADOW_RANGE));
 
     // 위쪽 축이 시선과 나란하면 행렬이 무너진다. 태양이 거의 머리 위면 다른 축을 쓴다
@@ -762,7 +627,9 @@ static void PickCenter(int mx, int my) {
 
     // 모델은 둘레를 감싸는 공으로 본다. 머리라 공에 가까워 이만해도 맞는다
     float  hh  = max(g_head.rawHeight, 0.05f) * 0.5f;
-    XMVECTOR c = XMVectorSet(g_x, MODEL_LIFT + hh, g_z, 0.0f);
+    float px, pz;
+    PlayerAt(px, pz);
+    XMVECTOR c = XMVectorSet(px, PlayerLift() + hh, pz, 0.0f);
     XMVECTOR oc = XMVectorSubtract(p0, c);
     float b  = XMVectorGetX(XMVector3Dot(oc, dir));
     float cc = XMVectorGetX(XMVector3Dot(oc, oc)) - (hh * 1.2f) * (hh * 1.2f);
@@ -1016,9 +883,11 @@ static void SetCB(XMMATRIX world, XMMATRIX viewProj,
     cb.fogParam    = XMFLOAT4(g_dist + g_fogNear, g_dist + g_fogFar, g_fogOn, 0.0f);
     cb.fogCol      = XMFLOAT4(FOG_RGB[0], FOG_RGB[1], FOG_RGB[2], 0.0f);
     // 카메라에서 모델까지의 거리로 헤어 안쪽을 얼마나 걷어낼지 정한다
-    float toModel = sqrtf((g_camPos.x - g_x) * (g_camPos.x - g_x)
-                        + (g_camPos.y - MODEL_LIFT) * (g_camPos.y - MODEL_LIFT)
-                        + (g_camPos.z - g_z) * (g_camPos.z - g_z));
+    float pmx, pmz;
+    PlayerAt(pmx, pmz);
+    float toModel = sqrtf((g_camPos.x - pmx) * (g_camPos.x - pmx)
+                        + (g_camPos.y - PlayerLift()) * (g_camPos.y - PlayerLift())
+                        + (g_camPos.z - pmz) * (g_camPos.z - pmz));
     float tCut = (toModel - g_hairNearM) / max(g_hairFarM - g_hairNearM, 1e-4f);
     tCut = tCut < 0.0f ? 0.0f : (tCut > 1.0f ? 1.0f : tCut);
     float hairCut = g_hairCutNear + (g_hairCutFar - g_hairCutNear) * tCut;
@@ -1029,22 +898,6 @@ static void SetCB(XMMATRIX world, XMMATRIX viewProj,
 
 // idxFmt 는 인덱스 한 칸의 크기다. 여기서 만든 작은 도형은 16비트면 넉넉하지만,
 // FBX 모델은 정점이 6만 5천을 넘을 수 있어 32비트를 쓴다
-// 모델이 놓이는 자리. 본 패스와 깊이 프리패스가 **같은 값**을 써야 한다 —
-// 한 치라도 어긋나면 「깊이가 같을 때만」 판정이 통째로 빗나가 헤어가 사라진다
-static XMMATRIX ModelWorld() {
-    float cx = g_x, cy = MODEL_LIFT, cz = g_z;   // 판에서 살짝 띄운다
-    if (g_hop > 0.0f) {
-        float t = g_hop / HOP_TIME;
-        if (t > 1.0f) t = 1.0f;
-        cy += HOP_HEIGHT * 4.0f * t * (1.0f - t);
-        // 주기를 4번과 3번으로 어긋나게 둬서 같은 자리를 되풀이하지 않게 한다
-        cx += HOP_WOBBLE * sinf(t * XM_2PI * 4.0f);
-        cz += HOP_WOBBLE * cosf(t * XM_2PI * 3.0f);
-    }
-    // 정면이 향한 쪽으로 돌려 세운 다음 제자리로 옮긴다. 순서가 반대면
-    // 원점을 중심으로 빙 도는 모양이 된다
-    return XMMatrixRotationY(g_facing) * XMMatrixTranslation(cx, cy, cz);
-}
 
 static void DrawOne(ID3D11Buffer* vb, ID3D11Buffer* ib, UINT count,
                     XMMATRIX world, const float rgba[4], bool depthPass,
@@ -1111,9 +964,17 @@ static void DrawScene(bool depthPass) {
     // 뛰는 중이면 그만큼 떠오르고 좌우로 떤다.
     // 4t(1-t) 는 t 가 0 과 1 에서 0, 한가운데서 1 이 되는 포물선이라
     // 뛰어올랐다 제자리로 내려오는 모양이 저절로 나온다
-    XMMATRIX cubeWorld = ModelWorld();
+    XMMATRIX cubeWorld = PlayerWorld();
 
-    DrawOne(g_plateVB, nullptr, 6, XMMatrixIdentity(), PLATE_C, depthPass);
+    DrawOne(TerrainVB(), nullptr, TerrainVertexCount(),
+            XMMatrixIdentity(), TerrainColor(), depthPass);
+
+    // 배경에 놓인 것들. 안 움직이므로 그리기만 하면 끝이다
+    for (int i = 0; i < PropCount(); ++i) {
+        if (!PropVB(i)) continue;
+        DrawOne(PropVB(i), nullptr, PropVertexCount(i),
+                PropWorld(i), PropColor(i), depthPass);
+    }
     // 모델은 정점이 많아 32비트 인덱스를 쓰고, 색은 텍스처에서 읽는다(모드 2)
     DrawOne(g_head.vb, g_head.ib, g_head.indexCount, cubeWorld, CUBE_C, depthPass,
             DXGI_FORMAT_R32_UINT, 2.0f);
@@ -1157,10 +1018,12 @@ static void DrawScene(bool depthPass) {
         }
     }
 
-    for (int i = 0; i < TRI_N; ++i) {
-        if (!g_tri[i].alive) continue;
+    for (int i = 0; i < MonsterCount(); ++i) {
+        if (!MonsterAlive(i)) continue;
+        float mx, mz;
+        MonsterAt(i, mx, mz);
         DrawOne(g_triVB, nullptr, 12,
-                XMMatrixTranslation(g_tri[i].x, 0.0f, g_tri[i].z), TRI_C, depthPass);
+                XMMatrixTranslation(mx, 0.0f, mz), TRI_C, depthPass);
     }
 
     // 정육면체가 어디를 보는지 알려주는 축. 그림자 기록과 깊이·법선 패스에는
@@ -1476,19 +1339,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
         // 짚은 자리가 어느 세모 위라면 그 세모를 쫓는다.
         // 바닥을 짚었으면 그냥 그 자리로 간다
-        int   hit  = -1;
-        float best = TRI_SIZE;
-        for (int i = 0; i < TRI_N; ++i) {
-            if (!g_tri[i].alive) continue;
-            float dx = fx - g_tri[i].x, dz = fz - g_tri[i].z;
-            float d  = sqrtf(dx * dx + dz * dz);
-            if (d < best) { best = d; hit = i; }
-        }
+        int hit = MonsterNearest(fx, fz, MonsterSize());
 
-        g_chase = hit;
-        g_hop   = 0.0f;
-        if (hit >= 0) { g_tx = g_tri[hit].x; g_tz = g_tri[hit].z; }
-        else          { g_tx = fx;           g_tz = fz;           }
+        if (hit >= 0) PlayerChase(hit);
+        else          PlayerMoveTo(fx, fz);
         return 0;
     }
 
@@ -1666,8 +1520,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         } break;
         // 태양 돌리기. 누르고 있으면 저절로 되풀이된다
         // ← → 는 모델을 돌린다. 태양 좌우는 조절 창의 Sun · Yaw 로 옮겼다
-        case VK_LEFT:  g_facing -= TURN_STEP; break;
-        case VK_RIGHT: g_facing += TURN_STEP; break;
+        case VK_LEFT:  PlayerTurn(-TURN_STEP); break;
+        case VK_RIGHT: PlayerTurn( TURN_STEP); break;
         case VK_UP:    g_sunPitch = min(1.50f, g_sunPitch + 0.04f); UpdateSun(); UpdateTitle(); break;
         case VK_DOWN:  g_sunPitch = max(0.08f, g_sunPitch - 0.04f); UpdateSun(); UpdateTitle(); break;
         case VK_OEM_1:     g_aoRadius = max(0.02f, g_aoRadius - 0.02f); UpdateTitle(); break;
@@ -1939,8 +1793,6 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     g_dev->CreateBlendState(&ad, &g_bsAdd);
 
     // ── 정점 · 인덱스 · 상수 버퍼 ──
-    Vertex plateV[6];
-    BuildPlate(plateV);
     Vertex axisV[6];
     BuildAxes(axisV);
     Vertex labelV[42];
@@ -1958,7 +1810,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         g_dev->CreateBuffer(&bd, &sr, &b);
         return b;
     };
-    g_plateVB = makeBuf(plateV, sizeof(plateV), D3D11_BIND_VERTEX_BUFFER);
+    if (!TerrainInit(g_dev)) { Fail(hwnd, "terrain buffer failed"); return 1; }
+    PropInit(g_dev);
     g_axisVB  = makeBuf(axisV,  sizeof(axisV),  D3D11_BIND_VERTEX_BUFFER);
     g_labelVB = makeBuf(labelV, sizeof(labelV), D3D11_BIND_VERTEX_BUFFER);
     g_triVB   = makeBuf(triV,   sizeof(triV),   D3D11_BIND_VERTEX_BUFFER);
@@ -2038,7 +1891,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
 
     // 세모를 처음 뿌린다. 매번 다른 자리에 나게 씨앗을 시간으로 준다
     srand((unsigned)time(nullptr));
-    for (int i = 0; i < TRI_N; ++i) SpawnTri(i);
+    PlayerInit();
+    {   float px, pz; PlayerAt(px, pz);
+        MonsterInit(TerrainHalf(), px, pz); }
 
     D3D11_BUFFER_DESC cbd = {};
     cbd.Usage     = D3D11_USAGE_DEFAULT;
@@ -2110,67 +1965,22 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         if (g_flash > 0.0f) g_flash -= dt;
         g_glow = (g_flash > 0.0f) ? FLASH_MAX * (g_flash / FLASH_TIME) : 0.0f;
 
-        // ── 세모들이 조금씩 옮겨 다닌다 ──
-        UpdateTris(dt);
+        // ── 몬스터가 조금씩 옮겨 다닌다 ──
+        // ── 세상이 한 걸음 나아간다 ──
+        // 몬스터가 먼저 움직이고, 그 다음 플레이어가 그것을 쫓는다.
+        // 순서가 반대면 한 프레임 낡은 자리를 겨눈다
+        {
+            float px, pz;
+            PlayerAt(px, pz);
+            MonsterUpdate(dt, TerrainHalf(), px, pz);
 
-        // ── 쫓는 중이면 목표를 다시 겨눈다 ──
-        // 세모가 옮겨 다니므로 매 프레임 자리를 고쳐 잡는다.
-        // 이미 닿아 있으면 그 자리에 서서 셈을 이어간다
-        if (g_chase >= 0 && g_tri[g_chase].alive) {
-            float ex = g_x - g_tri[g_chase].x, ez = g_z - g_tri[g_chase].z;
-            if (sqrtf(ex * ex + ez * ez) <= REACH) {
-                g_tx = g_x;                    // 닿았으니 더 다가가지 않는다
-                g_tz = g_z;
-                g_hop += dt;                   // 뛰기 시작한다
-                if (g_hop >= HOP_TIME) {       // 내려앉는 순간 세모가 사라진다
-                    g_tri[g_chase].alive = false;
-                    g_tri[g_chase].wait  = BORN_WAIT;
-                    g_chase = -1;
-                    g_hop   = 0.0f;
-                    g_shake = SHAKE_TIME;      // 사라지는 순간의 여운
-                    g_flash = FLASH_TIME;
-                }
-            } else {
-                g_tx  = g_tri[g_chase].x;      // 옮겨간 자리로 다시 겨눈다
-                g_tz  = g_tri[g_chase].z;
-                g_hop = 0.0f;                  // 멀어졌으면 뜀을 물린다
+            // 잡았으면 화면이 흔들리고 번쩍인다 — 그건 연출이라 여기서 켠다
+            if (PlayerUpdate(dt) >= 0) {
+                g_shake = SHAKE_TIME;
+                g_flash = FLASH_TIME;
             }
-        } else {
-            g_chase = -1;                      // 쫓던 것이 없어졌다
-            g_hop   = 0.0f;
         }
 
-        // 목표를 향해 한 걸음. 남은 거리가 한 걸음보다 짧으면 딱 붙이고 멈춘다 —
-        // 이 처리가 없으면 목표를 지나쳤다 돌아오길 되풀이하며 떤다
-        float dx = g_tx - g_x, dz = g_tz - g_z;
-        float dist = sqrtf(dx * dx + dz * dz);
-        float step = SPEED * dt;
-        if (dist <= step) {
-            g_x = g_tx;
-            g_z = g_tz;
-        } else {
-            g_x += dx / dist * step;
-            g_z += dz / dist * step;
-        }
-
-        // 가는 쪽으로 정면을 튼다. 한 번에 홱 돌지 않고 조금씩 돌린다
-        if (dist > 0.001f) {
-            float want = atan2f(dx, dz);        // 제 몸의 +Z 가 정면이다
-            float diff = want - g_facing;
-            // 가까운 쪽으로 돈다. 350도를 도는 대신 반대로 10도만 돌게 한다
-            while (diff >  XM_PI) diff -= XM_2PI;
-            while (diff < -XM_PI) diff += XM_2PI;
-            float turn = TURN * dt;
-            if (fabsf(diff) <= turn) g_facing = want;
-            else                     g_facing += (diff > 0.0f ? turn : -turn);
-        }
-
-        // ── 사라진 자리에 새로 난다 ──
-        for (int i = 0; i < TRI_N; ++i) {
-            if (g_tri[i].alive) continue;
-            g_tri[i].wait -= dt;
-            if (g_tri[i].wait <= 0.0f) SpawnTri(i);
-        }
 
         UpdateView();              // 끌어서 바뀐 각도를 이 프레임에 반영한다
 
@@ -2278,7 +2088,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
             g_ctx->VSSetShader(g_vs, nullptr, 0);
             g_ctx->PSSetShader(g_psClip, nullptr, 0);
             g_ctx->RSSetState(g_rsNormal);
-            DrawOne(e.model.vb, e.model.ib, e.model.indexCount, ModelWorld(),
+            DrawOne(e.model.vb, e.model.ib, e.model.indexCount, PlayerWorld(),
                     e.color, false, DXGI_FORMAT_R32_UINT, 4.0f);
             g_ctx->PSSetShaderResources(1, 1, &g_albedo.srv);
         }
@@ -2389,9 +2199,11 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
             // g_dist 는 카메라가 도는 반지름이지 모델까지의 거리가 아니다.
             // 모델이 옆으로 걸어가면 실제로는 더 먼데 그대로 쓰면
             // 화면에서 작아진 얼굴에 같은 폭을 발라 번짐이 과해진다
-            float ex = g_camPos.x - g_x;
-            float ey = g_camPos.y - MODEL_LIFT;
-            float ez = g_camPos.z - g_z;
+            float bpx, bpz;
+            PlayerAt(bpx, bpz);
+            float ex = g_camPos.x - bpx;
+            float ey = g_camPos.y - PlayerLift();
+            float ez = g_camPos.z - bpz;
             float toModel = sqrtf(ex * ex + ey * ey + ez * ez);
             float viewM = 2.0f * max(toModel, 0.05f) * tanf(XM_PIDIV4 * 0.5f);
             float uvW   = g_sssWidth / max(viewM, 1e-4f);
@@ -2511,7 +2323,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     if (g_triVB)     g_triVB->Release();
     if (g_labelVB)   g_labelVB->Release();
     if (g_axisVB)    g_axisVB->Release();
-    if (g_plateVB)   g_plateVB->Release();
+    PropShutdown();
+    TerrainShutdown();
     g_head.Release();
     for (Extra& e : g_extra) e.model.Release();
     g_albedo.Release();

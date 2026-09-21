@@ -1,4 +1,4 @@
-#include "panel.h"
+#include "ui/panel.h"
 
 #include <commctrl.h>
 #include <cstdio>
