@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-21T09:39:54+09:00",
+  "at": "2026-09-21T09:58:34+09:00",
   "mode": "manual",
   "counts": {
     "pass": 15,
@@ -10,8 +10,10 @@
   },
   "diff": {
     "new": [],
-    "fixed": [],
-    "note": "직전과 같음"
+    "fixed": [
+      "AI 작업 보드에 색을 직접 박았는가"
+    ],
+    "note": "해결됨 — AI 작업 보드에 색을 직접 박았는가"
   },
   "results": [
     {
@@ -101,8 +103,8 @@
       "scope": "kis_proxy.py 의 route == \"…\" ↔ kis-worker.js 의 route === \"…\"",
       "expected": "양쪽 경로 목록이 같음",
       "status": "ignored",
-      "actual": "어긋남 13개",
-      "detail": "오탐 — 검사기가 아직 구역을 못 가림 — kis_proxy.py 에만: disclosures, discuss, feed, groups, issues, members, moves, news, poll, status, stocks, topics, universe"
+      "actual": "어긋남 15개",
+      "detail": "오탐 — 검사기가 아직 구역을 못 가림 — kis_proxy.py 에만: alerts, disclosures, discuss, feed, groups, issues, members, moves, news, poll, status, stocks, stored, topics, universe"
     },
     {
       "id": "raw-color-projects",

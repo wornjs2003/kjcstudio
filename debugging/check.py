@@ -258,6 +258,13 @@ def check_raw_color(spec):
     """
     files = resolve_files(spec)
 
+    # 글로브가 하나도 안 맞으면 **아무것도 안 보고 통과한다.** 폴더 이름이
+    # 바뀌거나 오타가 나면 검사가 초록으로 남은 채 눈을 감는다.
+    # 0 은 「없다」 가 아니라 「못 찾았다」 일 수 있다 — 둘을 가른다
+    # (2026-09-21. 이 모양이 오늘만 다섯 번 났다).
+    if not files:
+        return "mismatch", "대상 0개",             "files 로 잡히는 파일이 없습니다 — 경로를 확인하세요: "             + " · ".join(spec.get("files") or [])
+
     # allow 는 목록으로도, 파일별로도 적을 수 있습니다.
     #   ["#cd2e3a", ...]                      그 검사 전체에 예외
     #   {"holdings/index.html": ["#fff"]}     그 파일에만 예외
