@@ -23,6 +23,8 @@ import { mountDisclosures } from './components/disclosures.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
 import { mountSchedule } from './components/schedule.js';
 import { bindDailyMenu } from './components/daily-view.js';
+import { fetchIssues, paintIssues } from './components/news-list.js';
+import { bindNewsModal } from './components/news-modal.js';
 import { mountSectors } from './components/sectors.js';
 import { mountStockPanel } from './components/stock-panel.js';
 import { mountStockDetail } from './components/stock-detail.js';
@@ -497,6 +499,42 @@ function paintIndices(indices) {
   lastIndices = indices;
   paintStrip(indices);
   paintMkt();          // 상승·하락 종목 수가 여기 들어 있다
+  paintDailyMini(indices);
+}
+
+/* 데일리분석 칸 — 모달 첫 칸(「주요 지수」)을 세 줄로 줄인 것.
+ *
+ * **새로 부르지 않는다.** 이미 받아 둔 지수를 그대로 쓴다 — 같은 값을
+ * 두 번 부르면 두 자리의 숫자가 어긋나고 KIS 를 겹쳐 부른다
+ * (holdings/CLAUDE.md 「최적화는 멈춘다가 아니라 늦춘다다」 와 같은 자리).
+ */
+const DAILY_MINI = [
+  { code: 'KOSPI',  name: '코스피' },
+  { code: 'KOSDAQ', name: '코스닥' },
+  { code: 'SPX',    name: 'S&P 500' },
+];
+
+function paintDailyMini(indices) {
+  const host = $('kh-dlm');
+  if (!host) return;
+
+  const by = Object.fromEntries((indices || []).map((i) => [i.code, i]));
+  const rows = DAILY_MINI.map((m) => {
+    const i = by[m.code];
+    /* 안 온 것은 「불러오는 중」 으로 둔다. 0 이나 「—」 로 적으면
+       연결이 안 된 건지 값이 그런 건지 구분할 수 없다 (데이터 규칙). */
+    if (!i || i.value == null) {
+      return `<div class="kh-dlm-r"><span class="kh-dlm-n">${m.name}</span>
+        <span class="kh-dlm-v kh-mut" style="font-size:.8rem;font-weight:500"
+          >불러오는 중</span></div>`;
+    }
+    return `<div class="kh-dlm-r"><span class="kh-dlm-n">${m.name}</span>
+      <span class="kh-dlm-v kh-num">${fmtNum(i.value, 2)}</span>
+      <span class="kh-dlm-c ${dirClass(i.changePct)}">${fmtPct(i.changePct)}</span></div>`;
+  }).join('');
+
+  host.innerHTML = rows
+    + '<div class="kh-dlm-note">그날의 일정 · 지수 · 뉴스를 한 장으로 — 자세히 ›</div>';
 }
 
 /* 52주 최저·최고 — 고른 종목 기준.
@@ -799,6 +837,63 @@ function paintRowHead() {
   if (th) th.textContent = (SORTS[sortBy] || {}).head || '전일대비';
 }
 
+/* ── 실시간 순위 모달 ─────────────────────────────────────
+ *
+ * 재권님 지시 — "이 모달창에는 실시간 순위에 있는 정보들을 보면 되고".
+ *
+ * 목록은 칸이 368px 로 좁아 **거래대금·시가총액·거래량을 뺐다**(2026-09-17).
+ * 모달은 넓으니 그 칸들을 되돌린다. holdings/CLAUDE.md 「모달이 원본이고,
+ * 목록·카드는 거기서 덜어낸 일부다」 가 이 모양이다.
+ *
+ * **따로 부르지 않는다.** 목록이 이미 받아 둔 rowPrices 를 그대로 쓴다 —
+ * 모달이 제 것을 따로 받으면 두 자리의 숫자가 어긋나고 KIS 를 겹쳐 부른다.
+ * 그래서 열려 있는 동안에는 paintRows 가 이쪽도 같이 다시 그린다
+ * (「최적화는 멈춘다가 아니라 늦춘다다」 와 같은 자리).
+ *
+ * 산업(섹터)은 넣지 않았다 — universe 가 sector 를 빈 값으로 준다.
+ * 「받을 수 없는 것은 자리도 만들지 않는다」 (holdings/CLAUDE.md).
+ */
+let rankModalBody = null;
+
+function paintRankModal() {
+  if (!rankModalBody) return;
+  const list = rowList();
+  const rows = list.map((s) => {
+    const p = rowPrices && rowPrices[s.code];
+    const cap = capOf(s.code);
+    return `<tr>
+      <td class="kh-rkm-rk">${s.rank}</td>
+      <td class="l"><span class="kh-nm">${iconHtml(s)}<b>${s.name}</b></span></td>
+      <td class="kh-num">${p ? fmtWon(p.price) : '···'}</td>
+      <td class="kh-num ${p ? dirClass(p.pct) : 'kh-mut'}">${p ? fmtPct(p.pct) : '—'}</td>
+      <td class="kh-num">${p ? showValue(s.code, p) : '···'}</td>
+      <td class="kh-num">${cap == null ? '—' : fmtMoneyKr(cap)}</td>
+      <td class="kh-num">${p ? fmtShareCount(p.volume) : '···'}</td>
+    </tr>`;
+  }).join('');
+
+  rankModalBody.innerHTML = `<div class="kh-rkm">
+    <table>
+      <thead><tr>
+        <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
+        <th>거래대금</th><th>시가총액</th><th>거래량</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="kh-rkm-note">목록은 칸이 좁아 거래대금·시가총액·거래량을 뺐습니다.
+      여기서는 다 보입니다 · ${list.length}종목</p>
+  </div>`;
+}
+
+function openRankModal() {
+  const { body } = openModal({
+    label: '실시간 순위',
+    onClose() { rankModalBody = null; },
+  });
+  rankModalBody = body;
+  paintRankModal();
+}
+
 function paintRows(priceMap) {
   const list = rowList();
   $('kh-rows').innerHTML = list.map(s => {
@@ -840,6 +935,7 @@ function paintRows(priceMap) {
   bindHearts($('kh-rows'));
   watchRows();
   paintRowHead();
+  paintRankModal();     // 열려 있으면 같은 값으로 같이 갱신된다
   paintRowFoot();
   paintSortNote();
   paintFavCount();
@@ -1345,43 +1441,54 @@ const sched = mountSchedule($('kh-side-sched'), {
 });
 setInterval(() => { if (!document.hidden) sched.refresh(); }, 10 * 60 * 1000);
 
-/* ── 사이드바 뉴스 ──
-   맛보기로 몇 줄만 보여준다. 전체는 '더보기' 로 뉴스·공시 화면에서 본다
-   (2026-09-15 지시). 주제어와 걸러내는 규칙은 서버가 쥐고 있으므로
-   여기서는 받아서 줄만 그린다. */
+/* ── 뉴스·공시 합친 칸 ──
+   재권님 지시로 뉴스와 공시를 한 칸에 넣었다 (2026-09-21 — "홀딩스 화면에
+   뉴스랑 공시를합쳐줘 실시간 순위밑으로"). 전에는 뉴스가 왼쪽 `kh-rank` 줄에,
+   공시가 오른쪽 기둥에 따로 있었다.
+
+   **그리는 것은 components/news-list.js 가 모달과 함께 쥔다.** 전에는 여기와
+   js/news.js 에 같은 것이 두 벌 있었다 (CLAUDE.md 「같은 값은 한 곳에만 둔다」).
+
+   맛보기로 몇 줄만 보여준다. 전체는 「더보기」 로 모달에서 본다 —
+   **모달이 원본이고 이 칸은 거기서 덜어낸 일부다.** */
 const SIDE_NEWS_N = 5;
 const SIDE_NEWS_MS = 180_000;        // 서버 캐시와 같은 주기. 더 자주 물을 이유가 없다
 
-function esc(t) {
-  return String(t == null ? '' : t).replace(/[&<>"]/g,
-    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-}
-
 async function drawSideNews() {
-  const host = $('kh-side-news');
-  if (!host) return;
-  let rows = null;
-  try {
-    const r = await apiFetch('/api/news/issues', { cache: 'no-store' });
-    if (!r) return null;   // 로그인이 풀렸다
-    const j = await r.json();
-    if (j && j.ok && Array.isArray(j.data)) rows = j.data;
-  } catch { /* 아래에서 못 받았다고 적는다 */ }
-
-  if (!rows) {
-    host.innerHTML = `<div class="kh-sched-i kh-mut">뉴스를 불러오지 못했습니다</div>`;
-    return;
-  }
-  if (!rows.length) {
-    host.innerHTML = `<div class="kh-sched-i kh-mut">받은 뉴스가 없습니다</div>`;
-    return;
-  }
-  host.innerHTML = rows.slice(0, SIDE_NEWS_N).map(x => `
-    <a class="kh-side-news-i" href="${esc(x.link)}" target="_blank" rel="noopener">
-      <i>${esc(x.topicLabel || '')}</i>
-      <span>${esc(x.title)}</span>
-    </a>`).join('');
+  paintIssues($('kh-side-news'), await fetchIssues(),
+              { compact: true, limit: SIDE_NEWS_N });
 }
+
+/* 탭으로 뉴스 ↔ 공시를 갈아끼운다. **칸 높이가 바뀌면 안 된다**
+   (CLAUDE.md 「보는 것을 바꿔도 자리는 그대로다」) — 높이는
+   css/home.css 의 `.kh-sec-card > .kh-sched-b` 천장(150px)이 잡으므로
+   여기서는 무엇을 보일지만 정한다. */
+{
+  const tabs = Array.from(document.querySelectorAll('.kh-nwdc-t'));
+  const src  = $('kh-nwdc-src');
+  /* 셋이 됐다 — 주요일정이 2026-09-21 에 왼쪽 줄에서 넘어왔다 (재권님 지시).
+     새 탭이 붙어도 여기만 늘리면 되게 묶어 둔다. */
+  const pane = {
+    news:  $('kh-side-news'),
+    dc:    $('kh-dc-all'),
+    sched: $('kh-side-sched'),
+  };
+  const SRC = { news: '경제지', dc: 'OpenDART', sched: '앞으로 2주' };
+  for (const b of tabs) {
+    b.addEventListener('click', () => {
+      const k = b.dataset.nwdc;
+      for (const t of tabs) t.classList.toggle('is-on', t === b);
+      for (const [name, el] of Object.entries(pane)) {
+        if (el) el.hidden = (name !== k);
+      }
+      if (src) src.textContent = SRC[k] || '';
+    });
+  }
+}
+
+/* 「더보기」 와 「뉴스 · 공시」 메뉴를 모달로 돌린다 (2026-09-21 지시).
+   `href` 는 그대로 두므로 새 탭·직접 주소로는 news.html 이 열린다. */
+bindNewsModal(document, { watch: WATCHLIST.map(s => s.code) });
 
 drawSideNews();
 setInterval(() => { if (!document.hidden) drawSideNews(); }, SIDE_NEWS_MS);
@@ -1448,3 +1555,6 @@ startLiveLoop({
    `href` 는 그대로 두므로 새 탭·직접 주소로는 전용 화면이 열린다.
    메인에 칸을 만드는 2단계는 따로 지시를 받는다. */
 bindDailyMenu();
+
+/* 실시간 순위 「자세히 ›」 (2026-09-21 지시) */
+$('kh-rank-more')?.addEventListener('click', openRankModal);

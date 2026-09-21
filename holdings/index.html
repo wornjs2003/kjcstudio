@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="./css/home.css" />
   <!-- 모달 안에는 종목 화면이 통째로 들어간다. 그 화면의 CSS 도 함께 필요하다 -->
   <link rel="stylesheet" href="./css/stock.css" />
+  <link rel="stylesheet" href="./css/news.css" />
   <link rel="stylesheet" href="./css/modal.css" />
   <!-- 「데일리분석」 메뉴를 누르면 모달로 뜬다 (2026-09-21 지시). 그 내용의 CSS -->
   <link rel="stylesheet" href="./css/daily.css" />
@@ -83,7 +84,7 @@
       <a href="#">국외</a>
       <a href="#">가상자산</a>
       <a href="#">시장지표</a>
-      <a href="./news.html">뉴스 · 공시</a>
+      <a href="./news.html" data-modal="news">뉴스 · 공시</a>
       <a href="./daily.html" data-modal="daily">데일리분석</a>
       <span class="kh-cat-my">내 기록</span>
     </nav>
@@ -193,16 +194,28 @@
         <div class="kh-ix-scroll"><div class="kh-strip" id="kh-strip"></div></div>
       </div>
 
-      <div class="kh-card kh-sec-card">
-        <div class="kh-sched-h"><span>주요 일정</span><span class="kh-mut">2주</span></div>
-        <div class="kh-sched-b" id="kh-side-sched"></div>
-        <a class="kh-sec-more" href="./news.html">더보기</a>
-      </div>
+      <!-- 뉴스와 주요 일정은 2026-09-21 에 오른쪽 기둥의 「뉴스 | 공시 | 주요일정」
+           칸으로 옮겼다. **여기 두 자리는 빈 채로 둔다** — 재권님 지시로 지금
+           뜨는 산업과 주요 지수를 늘려 채우지 않는다 (「원래로 되돌리고 비워둔다」).
+           그래서 `.kh-rank` 의 칸 수(1fr 1fr 1fr 340px)를 **줄이지 않는다.**
+           줄이면 남은 둘이 넓어진다 — 실제로 263 이 402 가 됐다.
 
-      <div class="kh-card kh-sec-card">
-        <div class="kh-sched-h"><span>뉴스</span><span class="kh-mut">경제지</span></div>
-        <div class="kh-sched-b" id="kh-side-news"></div>
-        <a class="kh-sec-more" href="./news.html">더보기</a>
+           **앞 자리(원래 뉴스)에 데일리분석을 넣었다** (2026-09-21 지시 —
+           "기존에 뉴스였던곳에 넣어줘"). 뒤 340px 는 그대로 비워 둔다. -->
+
+      <!-- 데일리분석 — 모달이 원본이고 이 카드는 거기서 덜어낸 일부다
+           (holdings/CLAUDE.md 「모달이 원본이고, 목록·카드는 거기서 덜어낸 일부다」).
+           모달 첫 칸인 「주요 지수」 를 세 줄로 줄여 놓는다.
+
+           「자세히 ›」 는 차트 머리줄과 같은 모양(.kh-fold)이고, href 가
+           daily.html 이라 daily-view.js 의 bindDailyMenu 가 눌렀을 때 모달로
+           바꾼다. **새로 부르는 코드가 없다** — 그 함수가 문서 전체의
+           a[href$="daily.html"] 를 이미 잡는다 (home.js 끝에서 한 번 부른다).
+           JS 가 죽어도 링크는 살아 화면으로 넘어간다. -->
+      <div class="kh-card">
+        <div class="kh-tabs"><button class="kh-tab is-active">데일리분석</button>
+          <a class="kh-fold" href="./daily.html">자세히 ›</a></div>
+        <div class="kh-dlm" id="kh-dlm">불러오는 중</div>
       </div>
 
     </section>
@@ -217,7 +230,12 @@
       <div class="kh-card kh-rank-card">
         <div class="kh-tabs">
           <button class="kh-tab is-active">실시간 순위</button>
-          <span class="kh-fold">▤ 요약 접기</span>
+          <!-- 「▤ 요약 접기」 였다 (2026-09-21 지시로 바꿈).
+               **아무것도 안 접고 있었다** — kh-fold 가 JS 어디에서도 안 쓰여
+               눌러도 아무 일이 없는 장식이었다. 없애도 잃을 것이 없다.
+               클래스 이름은 남긴다 — 차트 머리줄의 「자세히 ›」 가 같은 것을
+               쓰고 CSS 도 그 이름으로 걸려 있다. -->
+          <button class="kh-fold" id="kh-rank-more" type="button">자세히 ›</button>
         </div>
         <div class="kh-chips" id="kh-sorts">
           <button class="kh-chip is-active" data-sort="cap">시가총액</button>
@@ -250,10 +268,26 @@
         </div>
       </div>
 
-      <div class="kh-card kh-sec-card kh-dc-card">
-        <div class="kh-sched-h"><span>공시</span><span class="kh-mut">OpenDART</span></div>
-        <div class="kh-sched-b"><div class="kh-dc" id="kh-dc-all"></div></div>
-        <a class="kh-sec-more" href="./news.html">더보기</a>
+      <!-- 뉴스와 공시를 한 칸에 합쳤다 (2026-09-21 지시 — 「실시간 순위 밑으로 합쳐줘」).
+           전에는 뉴스가 왼쪽 `kh-rank` 줄에, 공시가 여기에 따로 있었다.
+           탭으로 갈아끼우므로 **칸 높이는 둘 중 어느 것을 봐도 같아야 한다**
+           (CLAUDE.md 「보는 것을 바꿔도 자리는 그대로다」). 높이는
+           `.kh-sec-card > .kh-sched-b` 의 천장(150px)이 잡는다. -->
+      <div class="kh-card kh-sec-card kh-dc-card kh-nwdc-card">
+        <div class="kh-sched-h">
+          <span class="kh-nwdc-tabs">
+            <button type="button" class="kh-nwdc-t is-on" data-nwdc="news">뉴스</button>
+            <button type="button" class="kh-nwdc-t" data-nwdc="dc">공시</button>
+            <button type="button" class="kh-nwdc-t" data-nwdc="sched">주요일정</button>
+          </span>
+          <span class="kh-mut" id="kh-nwdc-src">경제지</span>
+        </div>
+        <div class="kh-sched-b">
+          <div id="kh-side-news"></div>
+          <div class="kh-dc" id="kh-dc-all" hidden></div>
+          <div id="kh-side-sched" hidden></div>
+        </div>
+        <a class="kh-sec-more" href="./news.html" data-modal="news">더보기</a>
       </div>
 
     </div>

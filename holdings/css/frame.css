@@ -650,8 +650,26 @@ a.kh-sc-i:hover { color: var(--kh-accent); }
    (2026-09-21 실측). 높이만 0 으로 두면 가로로 샌다. */
 .kh-p3-s {
   min-height: 0; min-width: 0; display: flex; flex-direction: column; padding: 4px 0;
+  position: relative;          /* 끌기 손잡이(::before)의 기준점 */
 }
 .kh-p3-s + .kh-p3-s { border-top: 1px solid var(--kh-border); }
+
+/* ── 가르는 선을 끌어서 칸 높이를 바꾼다 (2026-09-21 지시) ──────
+   **마크업을 안 늘린다.** 손잡이는 이 의사요소 하나이고, 「선 근처인가」 는
+   `components/stock-panel.js` 가 잰다. 첫 화면과 모달이 같은 마크업을
+   쓰므로 여기 한 곳만 고치면 둘 다 따라온다.
+
+   위아래로 걸치게 둔다 — 1px 선만 노리면 잡기가 너무 어렵다. */
+.kh-p3-s + .kh-p3-s::before {
+  content: ''; position: absolute; left: 0; right: 0; top: -5px; height: 11px;
+  cursor: row-resize; z-index: 2;
+}
+/* `::before` 에는 `:hover` 를 못 붙인다(의사요소 뒤에 의사클래스가 안 온다).
+   그래서 JS 가 `.is-grab` 을 붙였다 뗀다. */
+.kh-p3-s.is-grab::before { background: var(--kh-accent); opacity: .18; }
+.kh-p3-s.is-grab { border-top-color: var(--kh-accent); }
+/* 끄는 동안 글자가 잡히면 파랗게 선택돼 보인다 */
+.kh-p3[data-dragging] { user-select: none; }
 .kh-p3-h { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
 .kh-p3-h b { font-size: 0.85rem; font-weight: 700; }
 .kh-p3-h .kh-bd { margin-left: auto; }
