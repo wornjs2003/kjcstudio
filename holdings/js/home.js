@@ -837,6 +837,63 @@ function paintRowHead() {
   if (th) th.textContent = (SORTS[sortBy] || {}).head || '전일대비';
 }
 
+/* ── 실시간 순위 모달 ─────────────────────────────────────
+ *
+ * 재권님 지시 — "이 모달창에는 실시간 순위에 있는 정보들을 보면 되고".
+ *
+ * 목록은 칸이 368px 로 좁아 **거래대금·시가총액·거래량을 뺐다**(2026-09-17).
+ * 모달은 넓으니 그 칸들을 되돌린다. holdings/CLAUDE.md 「모달이 원본이고,
+ * 목록·카드는 거기서 덜어낸 일부다」 가 이 모양이다.
+ *
+ * **따로 부르지 않는다.** 목록이 이미 받아 둔 rowPrices 를 그대로 쓴다 —
+ * 모달이 제 것을 따로 받으면 두 자리의 숫자가 어긋나고 KIS 를 겹쳐 부른다.
+ * 그래서 열려 있는 동안에는 paintRows 가 이쪽도 같이 다시 그린다
+ * (「최적화는 멈춘다가 아니라 늦춘다다」 와 같은 자리).
+ *
+ * 산업(섹터)은 넣지 않았다 — universe 가 sector 를 빈 값으로 준다.
+ * 「받을 수 없는 것은 자리도 만들지 않는다」 (holdings/CLAUDE.md).
+ */
+let rankModalBody = null;
+
+function paintRankModal() {
+  if (!rankModalBody) return;
+  const list = rowList();
+  const rows = list.map((s) => {
+    const p = rowPrices && rowPrices[s.code];
+    const cap = capOf(s.code);
+    return `<tr>
+      <td class="kh-rkm-rk">${s.rank}</td>
+      <td class="l"><span class="kh-nm">${iconHtml(s)}<b>${s.name}</b></span></td>
+      <td class="kh-num">${p ? fmtWon(p.price) : '···'}</td>
+      <td class="kh-num ${p ? dirClass(p.pct) : 'kh-mut'}">${p ? fmtPct(p.pct) : '—'}</td>
+      <td class="kh-num">${p ? showValue(s.code, p) : '···'}</td>
+      <td class="kh-num">${cap == null ? '—' : fmtMoneyKr(cap)}</td>
+      <td class="kh-num">${p ? fmtShareCount(p.volume) : '···'}</td>
+    </tr>`;
+  }).join('');
+
+  rankModalBody.innerHTML = `<div class="kh-rkm">
+    <table>
+      <thead><tr>
+        <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
+        <th>거래대금</th><th>시가총액</th><th>거래량</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="kh-rkm-note">목록은 칸이 좁아 거래대금·시가총액·거래량을 뺐습니다.
+      여기서는 다 보입니다 · ${list.length}종목</p>
+  </div>`;
+}
+
+function openRankModal() {
+  const { body } = openModal({
+    label: '실시간 순위',
+    onClose() { rankModalBody = null; },
+  });
+  rankModalBody = body;
+  paintRankModal();
+}
+
 function paintRows(priceMap) {
   const list = rowList();
   $('kh-rows').innerHTML = list.map(s => {
@@ -878,6 +935,7 @@ function paintRows(priceMap) {
   bindHearts($('kh-rows'));
   watchRows();
   paintRowHead();
+  paintRankModal();     // 열려 있으면 같은 값으로 같이 갱신된다
   paintRowFoot();
   paintSortNote();
   paintFavCount();
@@ -1497,3 +1555,6 @@ startLiveLoop({
    `href` 는 그대로 두므로 새 탭·직접 주소로는 전용 화면이 열린다.
    메인에 칸을 만드는 2단계는 따로 지시를 받는다. */
 bindDailyMenu();
+
+/* 실시간 순위 「자세히 ›」 (2026-09-21 지시) */
+$('kh-rank-more')?.addEventListener('click', openRankModal);

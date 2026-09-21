@@ -135,6 +135,24 @@
    frame.css 는 .kh-main 에 이미 같은 것을 두고 있는데 여기만 빠져 있었다. */
 .kh-rank > * { min-width: 0; }
 
+/* ── 실시간 순위 모달 ───────────────────────────────────────
+   목록이 368px 로 좁아 뺐던 칸을 여기서 되돌린다 (2026-09-17 주석 참고).
+   모달이 원본이고 목록은 거기서 덜어낸 일부다. */
+.kh-rkm table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.kh-rkm thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--kh-bg-card); text-align: right;
+  padding: 0 10px 9px; font-size: 0.76rem; font-weight: 600;
+  color: var(--kh-text-muted); white-space: nowrap;
+}
+.kh-rkm thead th.l, .kh-rkm tbody td.l { text-align: left; }
+.kh-rkm tbody td { padding: 9px 10px; text-align: right; white-space: nowrap; }
+.kh-rkm tbody tr { border-top: 1px solid var(--kh-border); }
+.kh-rkm tbody tr:hover { background: var(--kh-bg-hover); }
+.kh-rkm .kh-rkm-rk { color: var(--kh-text-dim); font-variant-numeric: tabular-nums; }
+.kh-rkm .kh-nm { display: flex; align-items: center; gap: 7px; }
+.kh-rkm-note { margin-top: 12px; font-size: 0.78rem; color: var(--kh-text-dim); }
+
 /* ── 데일리분석 칸 (kh-rank 줄) ─────────────────────────────
    옆 칸(지금 뜨는 산업·주요 지수)과 높이가 같아야 줄이 가지런하다.
    그 둘은 237px 이고 여기도 안에서만 굴러 같은 높이를 지킨다 —
