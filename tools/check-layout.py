@@ -139,14 +139,42 @@ def _recv(s):
                 raise IOError("CDP 연결이 끊겼습니다")
             b += c
         return b
+    # **프레임 종류를 전부 다룬다 (2026-09-21).** 전에는 `op == 1` 만 보고
+    # 나머지를 버렸는데 그래서 셋이 한꺼번에 샜다 — 두 세션이 코드를 읽고
+    # 같은 자리를 짚었다.
+    #
+    #     FIN    큰 응답이 쪼개지면 **첫 조각만 파싱하고 return** 했다.
+    #            남은 조각이 스트림에 남아 다음 `_recv` 가 그것을 헤더로 읽는다.
+    #            **한 번 어긋나면 그 뒤가 전부 깨진다**
+    #     op 9   ping — **pong 을 안 보내면 크롬이 끊는다**
+    #     op 8   닫기 — 끊긴 것을 모르고 계속 읽었다
+    #
+    # 증상이 맞았다 — 칸이 많은 화면(stock 101 · news 77)에서 나고,
+    # 왕복이 적은 스크립트는 멀쩡하고 60회 루프만 끊겼다.
+    # 「칸 N개가 끝내 안 나왔습니다」 도 **덜 그려진 것이 아니라 잘린 응답**이었다.
+    buf = b""
+    op0 = None
     while True:
         h = rd(2)
-        op, n = h[0] & 0x0F, h[1] & 0x7F
+        fin, op, n = h[0] & 0x80, h[0] & 0x0F, h[1] & 0x7F
         if n == 126:   n = struct.unpack("!H", rd(2))[0]
         elif n == 127: n = struct.unpack("!Q", rd(8))[0]
         payload = rd(n)
-        if op == 1:
-            return json.loads(payload.decode())
+
+        if op == 0x9:                       # ping → 같은 내용으로 pong
+            _frame(s, 0xA, payload)
+            continue
+        if op == 0xA:                       # pong → 무시
+            continue
+        if op == 0x8:                       # 닫기
+            raise IOError("CDP 가 연결을 닫았습니다")
+
+        if op in (0x1, 0x2):
+            buf, op0 = payload, op
+        elif op == 0x0:
+            buf += payload
+        if fin and op0 == 0x1:
+            return json.loads(buf.decode())
 
 
 def measure_all(expect=None):
@@ -301,6 +329,9 @@ def main():
     ap.add_argument("--save", action="store_true", help="지금 화면을 기준으로 삼는다")
     ap.add_argument("--port", type=int, default=PORT_DEFAULT,
                     help="어느 서버를 잴지 (기본 %d)" % PORT_DEFAULT)
+    ap.add_argument("--against", type=int, metavar="PORT",
+                    help="기준 파일 대신 **다른 서버와 견준다** "
+                         "(세션 폴더는 이쪽이 맞는 물음이다)")
     args = ap.parse_args()
 
     # **기준은 포트마다 따로 둔다.** 세션 폴더 화면과 메인 화면은 다른 것이라
@@ -309,6 +340,34 @@ def main():
     BASE = BASE_FMT % args.port
     if args.port != PORT_DEFAULT:
         BASELINE = BASELINE.replace(".json", "-%d.json" % args.port)
+
+
+    # **세션 폴더는 「메인과 다른가」 가 맞는 물음이다 (2026-09-21 · 주식페이지_개발1).**
+    # 기준 파일은 포트마다 따로 잡아야 하는데, 세션이 넷이라 넷을 잡고
+    # 넷을 갱신해야 한다. **두 서버를 각각 재서 대면 기준이 필요 없다.**
+    if args.against:
+        BASE = BASE_FMT % args.against
+        old = measure_all()
+        BASE = BASE_FMT % args.port
+        new = measure_all(old)
+        moved = []
+        for page, cells in (old or {}).items():
+            cur = (new or {}).get(page)
+            if not cells or not cur:
+                print("  %s — 한쪽을 못 쟀습니다" % page)
+                return 2
+            for key, v in cells.items():
+                if key == "(주소)" or key not in cur:
+                    continue
+                if abs(v[1] - cur[key][1]) > TOL:
+                    moved.append((page, key, v[1], cur[key][1]))
+        if not moved:
+            print("%d 과 %d 이 같습니다 — 화면 %d장"
+                  % (args.against, args.port, len(old)))
+            return 0
+        for page, key, a, b in moved:
+            print("%s  %s   %d  →  %d   (%+d)" % (page, key, a, b, b - a))
+        return 1
 
     base = None
     if not args.save and os.path.exists(BASELINE):
@@ -342,7 +401,10 @@ def main():
         if cur is None:
             print("%s — 화면을 못 열었습니다" % page)
             return 2
-        for key, (w, h) in cells.items():
+        for key, v in cells.items():
+            if key == "(주소)":            # 문자열이라 크기 비교가 아니다
+                continue
+            w, h = v
             if key not in cur:
                 gone.append((page, key))
                 continue
@@ -352,8 +414,6 @@ def main():
             # 그대로였고, 폭만 넷이 움직였다(종목 이름·가격 자릿수).
             # 재권님이 말씀하신 「창 크기가 바뀐다」 도 세로 이야기다.
             # 다만 괄호로 표시한 것(문서 전체 · 스크롤바 폭)은 폭도 본다.
-            if key == "(주소)":
-                continue
             watch_w = key.startswith("(")
             if abs(h - h2) > TOL or (watch_w and abs(w - w2) > TOL):
                 moved.append((page, key, (w, h), (w2, h2)))
