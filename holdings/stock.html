@@ -71,13 +71,16 @@
           <span class="kh-w-plus" id="kh-chart-legend"></span>
         </div>
         <div class="kh-w-body">
-  <div class="kh-per-row">
-          <div class="kh-per" id="kh-per"></div>
-          <div class="kh-ind-menu">
-            <button type="button" class="kh-ind-open">보조지표 <i>⌄</i></button>
-            <div class="kh-ind-list" hidden></div>
+          <div class="kh-per-row">
+            <div class="kh-per" id="kh-per"></div>
+            <div class="kh-ind-menu">
+              <button type="button" class="kh-ind-open">보조지표 <i>⌄</i></button>
+              <div class="kh-ind-list" hidden></div>
+            </div>
+            <!-- 세부사항 — 보조지표 옆 (2026-09-21 지시). 첫 화면과 같은 자리다.
+                 components/stock-detail.js 가 채운다. 「자세히」 단추는 없다. -->
+            <div class="kh-dt" id="kh-dt"></div>
           </div>
-        </div>
           <div class="kh-chart-box" id="kh-chart"></div>
         </div>
       </div>
@@ -95,24 +98,14 @@
       </div>
 
       <!-- 토스의 '일반주문' 자리 — 여기서는 사고판 내역을 적어 둔다 -->
-      <div class="kh-w" data-p="trade">
-        <div class="kh-w-head">
-          <span class="kh-w-grip">⠿</span><span class="kh-w-title">매매 기록</span>
-          <span class="kh-bd kh-bd-on">브라우저 저장</span>
-          <span class="kh-w-plus">＋</span>
-        </div>
-        <div class="kh-w-body"><div class="kh-ord">
-          <div class="kh-ord-row"><span class="kh-ord-l">구분</span>
-            <span class="kh-ord-seg"><span class="is-active">매수</span><span>매도</span></span></div>
-          <div class="kh-ord-row"><span class="kh-ord-l">단가</span>
-            <input class="kh-ord-in kh-num" id="kh-ord-price" placeholder="단가" /></div>
-          <div class="kh-ord-row"><span class="kh-ord-l">수량</span>
-            <input class="kh-ord-in kh-num" placeholder="수량 입력" /></div>
-          <div class="kh-ord-pcts"><span>10주</span><span>50주</span><span>100주</span><span>직접</span></div>
-          <div class="kh-ord-row"><span class="kh-ord-l">금액</span>
-            <input class="kh-ord-in kh-num" placeholder="자동 계산" readonly /></div>
-          <button class="kh-ord-btn">기록에 추가하기</button>
-        </div></div>
+      <!-- 고른 종목 패널 — 투자자 정보 · AI 분석 · 종목 뉴스가 1/3씩
+           (2026-09-21 지시). 여기 있던 「뉴스 · 공시」와 위의
+           「개인 · 외국인 · 기관」을 이 셋이 대신한다.
+
+           **마크업을 여기 두지 않는다** — `components/stock-panel.js` 가
+           만들어 첫 화면과 같은 것을 쓴다. 공시는 첫 화면 오른쪽 칸에 있다. -->
+      <div class="kh-w kh-w-p3" data-p="panel3" >
+        <div class="kh-w-body"><div class="kh-p3-host" id="kh-panel3"></div></div>
       </div>
     </section>
 
@@ -148,16 +141,6 @@
         </div>
       </div>
 
-      <div class="kh-w" data-p="flow">
-        <div class="kh-w-head">
-          <span class="kh-w-grip">⠿</span><span class="kh-w-title">개인 · 외국인 · 기관</span>
-          <span class="kh-w-x">✕</span><span class="kh-bd kh-bd-on">네이버</span>
-          <span class="kh-w-plus">＋</span>
-        </div>
-        <div class="kh-w-body">
-          <div class="kh-flow-box" id="kh-flow"><div class="kh-mut">불러오는 중</div></div>
-        </div>
-      </div>
     </section>
 
     <!-- 3행: 투자 지표 / 뉴스·공시 -->
@@ -178,16 +161,24 @@
         </div></div>
       </div>
 
-      <div class="kh-w" data-p="news" style="grid-column:span 2">
+      <div class="kh-w" data-p="trade">
         <div class="kh-w-head">
-          <span class="kh-w-grip">⠿</span><span class="kh-w-title">뉴스 · 공시</span>
-          <span class="kh-w-x">✕</span><span class="kh-bd kh-bd-on">OpenDART</span>
-          <a class="kh-w-more" href="./news.html">더보기</a>
+          <span class="kh-w-grip">⠿</span><span class="kh-w-title">매매 기록</span>
+          <span class="kh-bd kh-bd-on">브라우저 저장</span>
+          <span class="kh-w-plus">＋</span>
         </div>
-        <div class="kh-w-body">
-          <!-- 공시는 붙었다. 뉴스(네이버)는 아직 -->
-          <div class="kh-dc" id="kh-dc" style="max-height:150px"></div>
-        </div>
+        <div class="kh-w-body"><div class="kh-ord">
+          <div class="kh-ord-row"><span class="kh-ord-l">구분</span>
+            <span class="kh-ord-seg"><span class="is-active">매수</span><span>매도</span></span></div>
+          <div class="kh-ord-row"><span class="kh-ord-l">단가</span>
+            <input class="kh-ord-in kh-num" id="kh-ord-price" placeholder="단가" /></div>
+          <div class="kh-ord-row"><span class="kh-ord-l">수량</span>
+            <input class="kh-ord-in kh-num" placeholder="수량 입력" /></div>
+          <div class="kh-ord-pcts"><span>10주</span><span>50주</span><span>100주</span><span>직접</span></div>
+          <div class="kh-ord-row"><span class="kh-ord-l">금액</span>
+            <input class="kh-ord-in kh-num" placeholder="자동 계산" readonly /></div>
+          <button class="kh-ord-btn">기록에 추가하기</button>
+        </div></div>
       </div>
     </section>
   </main>

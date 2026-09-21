@@ -47,11 +47,14 @@ const PARTS = [
   { key: 'news', label: '뉴스' },
 ];
 
-export function mountAiAnalysis(root) {
-  if (!root) return { setCode() {}, destroy() {} };
-
-  const box = root.querySelector('#kh-ai-box');
-  const when = root.querySelector('#kh-ai-when');
+/**
+ * AI 분석을 그린다.
+ *   box  : 글이 들어갈 칸
+ *   when : 언제 쓴 글인지 적는 배지
+ *
+ * **id 로 찾지 않는다** — 첫 화면과 모달이 동시에 떠 있으면 같은 id 가 둘이 된다.
+ */
+export function mountAiAnalysis({ box, when } = {}) {
   if (!box) return { setCode() {}, destroy() {} };
 
   let code = null;

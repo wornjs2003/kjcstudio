@@ -23,9 +23,8 @@ import { mountDisclosures } from './components/disclosures.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
 import { mountSchedule } from './components/schedule.js';
 import { mountSectors } from './components/sectors.js';
-import { mountInvestor } from './components/investor.js';
-import { mountStockNews } from './components/stock-news.js';
-import { mountAiAnalysis } from './components/ai-analysis.js';
+import { mountStockPanel } from './components/stock-panel.js';
+import { mountStockDetail } from './components/stock-detail.js';
 /* fetchIndexMinutes · fetchIndexCandles 는 여기서 안 쓴다 (2026-09-17).
    큰 차트가 지수에서 종목으로 바뀌면서 종목 캔들(chart.js 의 fetchCandles)로
    갈아탔다. 두 함수는 지수 화면을 만들 때 쓸 수 있게 live.js 에 남겨 뒀다. */
@@ -548,47 +547,8 @@ async function paintYearRange() {
       지금 <b>${fmtWon(cur)}</b> · 최저에서 <b>${(at * 100).toFixed(0)}%</b> 자리</div>`;
 }
 
-/* ── 매물대 칸 ───────────────────────────
-   순위표에서 뺀 셋을 고른 종목 기준으로 보여준다 (2026-09-17 지시).
-   목록이 368px 로 좁아져 아홉 열이 안 들어갔고, 그 값들은 한 종목씩
-   보면 되는 것이라 이리로 옮겼다.
-
-   52주와 달리 따로 부르지 않는다 — 시세 루프가 이미 받아 둔 값을 쓴다.
-   거래대금(value)은 멀티 조회가 주고, 시가총액은 목록을 받을 때 함께 온다. */
-let volShown = null;
-
-function paintVolBox() {
-  const el = $('kh-vol-box');
-  if (!el) return;
-  const live = rowPrices && rowPrices[selectedCode];
-  const cap = capOf(selectedCode);
-
-  /* 거래대금은 멀티 조회의 value 를 쓰고, 없으면 현재가×거래량으로 어림한다.
-     어림값인 것을 숨기지 않는다 — 제목에 '어림' 이라고 적는다. */
-  const exact = live && live.value != null;
-  const amt = live
-    ? (live.value ?? (live.price != null && live.volume != null
-        ? live.price * live.volume : null))
-    : null;
-
-  const stamp = `${selectedCode}|${amt}|${cap}`;
-  if (volShown === stamp) return;
-  volShown = stamp;
-
-  /* **거래대금만 억 단위까지 적는다** (2026-09-18 지시).
-     fmtMoneyKr 은 1조를 넘으면 「5.5조원」으로 줄이는데, 그러면 억 자리가
-     사라져 어제와 견줄 수 없다.
-     **시가총액은 그대로 조원으로 둔다** — 억으로 펴면 14,966,473억원이라
-     자리만 먹고 읽히지도 않는다 (실측). */
-  const won = (n) => (n == null ? '—' : `${fmtNum(Math.round(n / 1e8))}억원`);
-  el.innerHTML = `
-    <div class="kh-vol-rows">
-      <div class="kh-vol-row"><span>거래대금${exact ? '' : ' <i>어림</i>'}</span>
-        <b class="kh-num">${won(amt)}</b></div>
-      <div class="kh-vol-row"><span>시가총액</span>
-        <b class="kh-num">${cap != null ? fmtMoneyKr(cap) : '—'}</b></div>
-    </div>`;
-}
+/* 세부사항(거래대금 · 시가총액 · 매수매도)은 차트 머리줄로 갔다 (2026-09-21 지시).
+   그리는 것은 components/stock-detail.js 다. 여기 있던 paintVolBox 는 지웠다. */
 
 /* ── 순위 표 ────────────────────────────── */
 /* ── 순위표 ─────────────────────────────
@@ -656,7 +616,7 @@ function capOf(code) {
  * 보고 고칠 수 있어야 한다.
  */
 /* 거래대금은 멀티 조회의 value 를 쓰고, 없으면 현재가×거래량으로 어림한다.
-   paintVolBox 와 같은 계산이다. */
+   components/stock-detail.js 와 같은 계산이다. */
 const valueOf = (p) => (p ? (p.value ?? (p.price != null && p.volume != null
   ? p.price * p.volume : null)) : null);
 
@@ -1026,7 +986,9 @@ function applyPrices(map) {
   lastSeen.save('prices', rowPrices);
   updateRowCells(map);
   paintBigPrice();                 // 큰 차트 머리줄의 현재가
-  paintVolBox();                   // 매물대 칸(거래대금 · 시가총액)
+  if (typeof detail !== 'undefined' && detail) {
+    detail.update(rowPrices && rowPrices[selectedCode]);   // 거래대금 · 시가총액
+  }
 }
 
 /* 값이 들어온 줄만 고쳐 쓴다. 표를 통째로 다시 그리면 스크롤 위치가 튀고
@@ -1284,10 +1246,11 @@ function selectStock(code) {
     tr.classList.toggle('is-active', tr.dataset.code === code));
   paintBigChart();
   paintYearRange();
-  paintVolBox();
-  if (typeof investor !== 'undefined' && investor) investor.setCode(code);
-  if (typeof oneNews !== 'undefined' && oneNews) oneNews.setCode(code);
-  if (typeof aiBox !== 'undefined' && aiBox) aiBox.setCode(code);
+  if (typeof panel3 !== 'undefined' && panel3) panel3.setCode(code);
+  if (typeof detail !== 'undefined' && detail) {
+    detail.setCode(code);
+    detail.update(rowPrices && rowPrices[code]);   // 받아 둔 시세로 바로 그린다
+  }
   rememberStock(code);
 }
 
@@ -1315,13 +1278,14 @@ mountSectors(document.querySelector('.kh-sc-card'));
 
 /* 투자자 정보 · 매수매도 비율 — 고른 종목 것이다 (2026-09-18 지시).
    차트 종목이 바뀌면 selectStock 이 setCode 로 알린다. */
-const investor = mountInvestor(document.querySelector('.kh-idxp'));
-if (selectedCode) investor.setCode(selectedCode);   // 처음 뜰 때 한 번
+/* 고른 종목 패널 — 투자자 정보 · AI 분석 · 종목 뉴스가 1/3씩 (2026-09-21 지시).
+   **마크업까지 그 컴포넌트가 만든다** — 모달·종목 화면이 같은 것을 쓴다. */
+const panel3 = mountStockPanel($('kh-panel3'), { code: selectedCode });
 
-/* AI 분석 — 세션이 써 둔 글을 읽어 그린다 (2026-09-21 지시).
-   화면이 AI 를 부르는 것이 아니다 — components/ai-analysis.js 머리글 참고. */
-const aiBox = mountAiAnalysis(document.querySelector('.kh-idxp'));
-if (selectedCode) aiBox.setCode(selectedCode);
+/* 세부사항 — 차트 머리줄의 보조지표 옆 */
+const detail = mountStockDetail($('kh-dt'));
+if (selectedCode) detail.setCode(selectedCode);
+
 paintBigPeriods();
 
 /* 지난번에 본 값이 남아 있으면 그것부터 그린다 (2026-09-15).
@@ -1353,9 +1317,9 @@ loadUniverse().then(() => {
   paintRows(rowPrices);
   paintBigChart();
   paintYearRange();
-  paintVolBox();
-  oneNews.setCode(selectedCode);
-  aiBox.setCode(selectedCode);
+  panel3.setCode(selectedCode);
+  detail.setCode(selectedCode);
+  detail.update(rowPrices && rowPrices[selectedCode]);
   /* 보고 있는 것만 주기적으로 다시 받는다. 시세 띠·관심 사이드바와 별개다. */
   /* 0.2초마다 다섯 묶음 중 하나씩. 전체는 1초에 한 바퀴 돈다. */
   setInterval(rotateTick, ROW_REFRESH_MS);
@@ -1420,15 +1384,8 @@ async function drawSideNews() {
 
 drawSideNews();
 setInterval(() => { if (!document.hidden) drawSideNews(); }, SIDE_NEWS_MS);
-/* 「이 종목 공시」 자리가 「종목 뉴스」 가 됐다 (2026-09-18 지시).
-   공시는 네이버 뉴스로 갈아탔고, 전체 공시(dcAll)는 그대로 있다.
-   뉴스는 공시보다 자주 올라오므로 3분마다 다시 받는다 — 서버 캐시는 30초다. */
-const NEWS_ONE_MS = 180_000;
-const oneNews = mountStockNews($('kh-nw-one'), { limit: 6 });
-if (selectedCode) oneNews.setCode(selectedCode);
-
+/* 종목 뉴스는 이제 패널 셋 중 하나다(stock-panel.js). 여기서는 전체 공시만 본다 */
 setInterval(() => { dcAll.reload(); }, 5 * 60 * 1000);
-setInterval(() => { if (!document.hidden) oneNews.reload(); }, NEWS_ONE_MS);
 
 /* 종목 시세는 받지 않는다(prices: false). 순위표가 멀티 조회로
    관심종목까지 함께 받아 한 곳에 모으기 때문이다. 여기서 또 받으면

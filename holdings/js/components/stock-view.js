@@ -28,6 +28,8 @@ import { fmtNum, fmtWon, fmtMoneyKr, fmtShareCount, fmtDelta, dirClass }
   from '../utils/format.js';
 import { paintIcon } from './stock-icon.js';
 import { mountDisclosures } from './disclosures.js';
+import { mountStockPanel } from './stock-panel.js';
+import { mountStockDetail } from './stock-detail.js';
 import { apiFetch } from '../data/api.js';
 
 /* 서버가 5분마다 공시를 받아 두므로 화면도 그 주기에 맞춘다 */
@@ -106,6 +108,8 @@ export function mountStockView(root, stock, { onBack } = {}) {
       sub.className = 'kh-price-sub kh-num ' + cls;
       sub.textContent = '어제보다 ' + fmtDelta(live.amt, live.pct);
     }
+
+    if (typeof detail !== 'undefined' && detail) detail.update(live);
 
     setHtml('#kh-r1',  rangeBar(live.low, live.high, live.price));
     setHtml('#kh-r52', rangeBar(live.low52, live.high52, live.price));
@@ -200,6 +204,8 @@ export function mountStockView(root, stock, { onBack } = {}) {
   setupMemo();
   setupBack();
 
+  /* 공시 칸은 2026-09-21 에 패널 셋으로 바뀌었다. 첫 화면 오른쪽에는
+     그대로 있으므로, 여기서는 **있을 때만** 그린다. */
   const dcHost = $('#kh-dc');
   if (dcHost) {
     disclosures = mountDisclosures(dcHost, { code: stock.code, limit: 12, showName: false });
@@ -275,6 +281,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
           : '코스피 200위 밖이거나, 이 PC 의 서버가 아니어서 순위를 모릅니다';
       }
 
+      /* 칸은 없어졌다(패널 셋이 대신한다). 머리 통계만 채우고 끝낸다 */
       if (!box) return;
       if (!flow.length) {
         box.innerHTML = '<div class="kh-mut">매매동향을 받지 못했습니다</div>';
@@ -315,6 +322,12 @@ export function mountStockView(root, stock, { onBack } = {}) {
     return t.length === 8 ? `${t.slice(4, 6)}.${t.slice(6)}` : t;
   }
 
+  /* 오른쪽 패널 셋 — 첫 화면과 같은 컴포넌트다 (2026-09-21 지시).
+     모달과 종목 페이지가 각자 제 root 안에서 찾으므로 서로 안 겹친다. */
+  const panel3 = mountStockPanel($('#kh-panel3'), { code: stock.code });
+  const detail = mountStockDetail($('#kh-dt'));
+  detail.setCode(stock.code);
+
   loadTicks();
   loadFlow();
   const tickTimer = setInterval(() => { if (!document.hidden && !dead) loadTicks(); }, TICKS_RELOAD_MS);
@@ -344,6 +357,8 @@ export function mountStockView(root, stock, { onBack } = {}) {
       if (reloadTimer) { clearInterval(reloadTimer); reloadTimer = null; }
       clearInterval(tickTimer);
       clearInterval(flowTimer);
+      panel3.destroy();
+      detail.destroy();
     },
   };
 }
