@@ -16,7 +16,7 @@
 크롬을 헤드리스로 띄워 CDP 로 붙는다. 이 PC 에 websocket 라이브러리가
 없어서 표준 라이브러리만으로 프로토콜을 직접 쓴다.
 """
-import sys, os, json, base64, struct, socket, subprocess, time, urllib.request, argparse
+import sys, os, json, base64, struct, socket, subprocess, tempfile, time, urllib.request, argparse
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -94,6 +94,9 @@ MEASURE = r"""
   walk(root, 0);
   out['(문서 전체)'] = [document.documentElement.scrollWidth,
                         document.documentElement.scrollHeight];
+  // **지금 보고 있는 화면이 어디인가.** 이것을 안 보면 앞 화면을 재고도
+  // 모른다 — 2026-09-21 에 두 세션이 각각 그 꼴을 봤다.
+  out['(주소)'] = location.pathname;
   out['(스크롤바 폭)'] = [innerWidth - document.documentElement.clientWidth, 0];
   return JSON.stringify(out);
 })()"""
@@ -136,14 +139,42 @@ def _recv(s):
                 raise IOError("CDP 연결이 끊겼습니다")
             b += c
         return b
+    # **프레임 종류를 전부 다룬다 (2026-09-21).** 전에는 `op == 1` 만 보고
+    # 나머지를 버렸는데 그래서 셋이 한꺼번에 샜다 — 두 세션이 코드를 읽고
+    # 같은 자리를 짚었다.
+    #
+    #     FIN    큰 응답이 쪼개지면 **첫 조각만 파싱하고 return** 했다.
+    #            남은 조각이 스트림에 남아 다음 `_recv` 가 그것을 헤더로 읽는다.
+    #            **한 번 어긋나면 그 뒤가 전부 깨진다**
+    #     op 9   ping — **pong 을 안 보내면 크롬이 끊는다**
+    #     op 8   닫기 — 끊긴 것을 모르고 계속 읽었다
+    #
+    # 증상이 맞았다 — 칸이 많은 화면(stock 101 · news 77)에서 나고,
+    # 왕복이 적은 스크립트는 멀쩡하고 60회 루프만 끊겼다.
+    # 「칸 N개가 끝내 안 나왔습니다」 도 **덜 그려진 것이 아니라 잘린 응답**이었다.
+    buf = b""
+    op0 = None
     while True:
         h = rd(2)
-        op, n = h[0] & 0x0F, h[1] & 0x7F
+        fin, op, n = h[0] & 0x80, h[0] & 0x0F, h[1] & 0x7F
         if n == 126:   n = struct.unpack("!H", rd(2))[0]
         elif n == 127: n = struct.unpack("!Q", rd(8))[0]
         payload = rd(n)
-        if op == 1:
-            return json.loads(payload.decode())
+
+        if op == 0x9:                       # ping → 같은 내용으로 pong
+            _frame(s, 0xA, payload)
+            continue
+        if op == 0xA:                       # pong → 무시
+            continue
+        if op == 0x8:                       # 닫기
+            raise IOError("CDP 가 연결을 닫았습니다")
+
+        if op in (0x1, 0x2):
+            buf, op0 = payload, op
+        elif op == 0x0:
+            buf += payload
+        if fin and op0 == 0x1:
+            return json.loads(buf.decode())
 
 
 def measure_all(expect=None):
@@ -168,7 +199,12 @@ def measure_all(expect=None):
         # 넓게 재지고, 「(스크롤바 폭)」 항목이 늘 0 이 되어 뜻을 잃는다.
         # 두는 편이 재권님 화면과 조건이 가깝고, 덤으로 「스크롤바는 한 벌만
         # 쓴다」 의 6px 이 깨지는 것도 이 도구가 잡는다 (2026-09-21).
+        # **임시 프로필을 준다.** 안 주면 기본 프로필을 잡으려다
+        # `ConnectionResetError` 로 죽는다 — 2026-09-21 에 두 번 연속 났고,
+        # 그때 창 없는 크롬이 여럿 떠 있었다. 재권님 크롬과도 섞이지 않는다.
         [CHROME, "--headless=new", "--disable-gpu",
+         "--user-data-dir=" + tempfile.mkdtemp(prefix="kjc-layout-"),
+         "--no-first-run", "--no-default-browser-check",
          "--remote-debugging-port=%d" % PORT,
          "--window-size=%d,%d" % (VIEW_W, VIEW_H), "about:blank"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -224,6 +260,22 @@ def measure_all(expect=None):
                 cells = measure_once()
                 if cells is None:
                     continue
+
+                # **화면이 정말 바뀌었나 먼저 본다 (2026-09-21).**
+                # `Page.navigate` 는 비동기라 **앞 화면이 그대로 떠 있을 수
+                # 있다.** 전에는 「칸이 나왔나」 만 보고 어느 화면인지는 안 봤다.
+                #
+                # 그래서 `daily.html` 자리에 `index.html` 높이(1306)가,
+                # `news.html` 자리에 데일리 화면(2461 · `kh-dl-*` 26개)이
+                # 들어갔다. **두 세션이 각각 다른 자리에서 같은 꼴을 봤다.**
+                #
+                # **`0` 이 아니라 그럴듯한 숫자가 나오는 쪽**이라 더 위험하다 —
+                # `+1398` 을 보고 「내가 창을 늘렸나」 로 읽게 된다.
+                here = (cells.get("(주소)") or "")
+                if not here.endswith("/" + page):
+                    stable = 0
+                    prev = None
+                    continue
                 cur = shape(cells)
                 want = (expect or {}).get(page)
                 if want is not None:
@@ -256,6 +308,16 @@ def measure_all(expect=None):
                     print("  %s — 아직 그려지는 중입니다 (%d초를 기다렸습니다). "
                           "이 값은 기준으로 삼지 마십시오"
                           % (page, SETTLE_TRIES * SETTLE_STEP))
+                result[page] = None
+                continue
+            # **기다리다 실패했으면 그 화면을 안 넣는다 (2026-09-21).**
+            # 전에는 「안 나왔습니다」 라고 말하고서 **그 시점 화면을 그대로
+            # 넣었다.** 앞 화면이 아직 떠 있으면 그것이 이 화면 값으로 들어가,
+            # `news.html` 자리에 데일리 화면이 재진 일이 있었다 —
+            # 문서 높이가 **+1398** 로 나와 「내가 창을 늘렸나」 로 읽힌다.
+            #
+            # **`0` 이 아니라 그럴듯한 숫자가 나오는 쪽**이라 더 위험하다.
+            # 주식페이지_개발2 가 재서 찾았다.
             result[page] = cells
         return result
     finally:
@@ -267,6 +329,9 @@ def main():
     ap.add_argument("--save", action="store_true", help="지금 화면을 기준으로 삼는다")
     ap.add_argument("--port", type=int, default=PORT_DEFAULT,
                     help="어느 서버를 잴지 (기본 %d)" % PORT_DEFAULT)
+    ap.add_argument("--against", type=int, metavar="PORT",
+                    help="기준 파일 대신 **다른 서버와 견준다** "
+                         "(세션 폴더는 이쪽이 맞는 물음이다)")
     args = ap.parse_args()
 
     # **기준은 포트마다 따로 둔다.** 세션 폴더 화면과 메인 화면은 다른 것이라
@@ -275,6 +340,34 @@ def main():
     BASE = BASE_FMT % args.port
     if args.port != PORT_DEFAULT:
         BASELINE = BASELINE.replace(".json", "-%d.json" % args.port)
+
+
+    # **세션 폴더는 「메인과 다른가」 가 맞는 물음이다 (2026-09-21 · 주식페이지_개발1).**
+    # 기준 파일은 포트마다 따로 잡아야 하는데, 세션이 넷이라 넷을 잡고
+    # 넷을 갱신해야 한다. **두 서버를 각각 재서 대면 기준이 필요 없다.**
+    if args.against:
+        BASE = BASE_FMT % args.against
+        old = measure_all()
+        BASE = BASE_FMT % args.port
+        new = measure_all(old)
+        moved = []
+        for page, cells in (old or {}).items():
+            cur = (new or {}).get(page)
+            if not cells or not cur:
+                print("  %s — 한쪽을 못 쟀습니다" % page)
+                return 2
+            for key, v in cells.items():
+                if key == "(주소)" or key not in cur:
+                    continue
+                if abs(v[1] - cur[key][1]) > TOL:
+                    moved.append((page, key, v[1], cur[key][1]))
+        if not moved:
+            print("%d 과 %d 이 같습니다 — 화면 %d장"
+                  % (args.against, args.port, len(old)))
+            return 0
+        for page, key, a, b in moved:
+            print("%s  %s   %d  →  %d   (%+d)" % (page, key, a, b, b - a))
+        return 1
 
     base = None
     if not args.save and os.path.exists(BASELINE):
@@ -308,7 +401,10 @@ def main():
         if cur is None:
             print("%s — 화면을 못 열었습니다" % page)
             return 2
-        for key, (w, h) in cells.items():
+        for key, v in cells.items():
+            if key == "(주소)":            # 문자열이라 크기 비교가 아니다
+                continue
+            w, h = v
             if key not in cur:
                 gone.append((page, key))
                 continue
