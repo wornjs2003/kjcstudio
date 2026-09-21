@@ -54,6 +54,16 @@ if exist "C:\work\kjc-staging\holdings\server\kis_proxy.py" (
   echo   [skip]  staging folder not found - split not set up yet
 )
 
+REM --- 1c) session servers (split work) --------------------------
+REM  One folder per session, each with its own port. All use --slow:
+REM  long caches, no 5m prefill, no disclosure/news collectors.
+REM  Measured 2026-09-21: 4 KIS calls vs 44 on a normal server.
+REM  Skipped when the folder is missing, so this file still works
+REM  before the split is set up.
+call :startsession stock 8766
+call :startsession daily 8768
+call :startsession home  8769
+
 REM --- 2) browser ------------------------------------------------
 echo   [open]  browser
 start "" "http://localhost:8765/"
@@ -70,3 +80,21 @@ echo   projects  http://localhost:8765/projects/
 echo   setup     http://localhost:8765/company-setup/
 echo ------------------------------------------------
 ping -n 4 127.0.0.1 > nul
+
+goto :eof
+
+:startsession
+REM  %1 = folder suffix (C:\work\kjc-%1)   %2 = port
+if not exist "C:\work\kjc-%~1\holdings\server\kis_proxy.py" (
+  echo   [skip]  kjc-%~1 not found
+  goto :eof
+)
+netstat -ano | findstr ":%~2" | findstr "LISTENING" > nul 2>&1
+if %errorlevel%==0 (
+  echo   [skip]  session server already listening on %~2
+  goto :eof
+)
+echo   [start] session server %~2 ^(kjc-%~1, slow^)
+start "KJC session %~1 %~2" /min cmd /c "cd /d C:\work\kjc-%~1\holdings && python server/kis_proxy.py --port %~2 --slow"
+ping -n 3 127.0.0.1 > nul
+goto :eof
