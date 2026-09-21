@@ -158,6 +158,27 @@ def doc_title(path):
     return m.group(1).strip() if m else ""
 
 
+def url_title(url):
+    """로컬 서버 주소에서 `<title>` 을 받아 온다.
+
+    **주소의 파일명으로는 창을 못 찾는다** — 창에 뜨는 것은 `<title>` 이다.
+    서버가 안 떠 있으면 빈 문자열을 돌려주고, 부르는 쪽이 멈춘다.
+
+    **세션 이름은 못 붙인다.** `stamp_title` 은 파일을 고치는데 이것은
+    서버가 내보내는 것이고 우리 것이 아닐 수도 있다. 그래서 주소로 띄운
+    창은 **누가 띄웠는지 제목에 안 남는다.**
+    """
+    import re
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url, timeout=5) as r:
+            head = r.read(8192).decode("utf-8", "replace")
+    except Exception:
+        return ""
+    m = re.search(r"<title[^>]*>(.*?)</title>", head, re.S | re.I)
+    return m.group(1).strip() if m else ""
+
+
 def stamp_title(path, who):
     """HTML 제목 앞에 세션 이름을 붙인다. **임시 파일에만** 손댄다.
 
@@ -302,13 +323,24 @@ def main():
     if len(sys.argv) < 2:
         print(__doc__)
         return
-    path = os.path.abspath(sys.argv[1])
-    if not os.path.exists(path):
-        print(f"  없는 파일입니다: {path}")
-        return
+    arg = sys.argv[1]
+    is_url = arg.lower().startswith(("http://", "https://"))
 
-    # 누가 띄웠는지 제목에 남긴다. 창이 여럿일 때 구분이 안 되기 때문이다.
-    stamp_title(path, session_name())
+    # **로컬 서버 주소도 받는다 (2026-09-21).** 전에는 파일만 받아서
+    # `http://localhost:8768/...` 이 경로로 해석돼 「없는 파일입니다」 가 났다.
+    # 화면 확인은 거의 다 로컬 서버인데(`daily.html` 은 JS 가 API 를 부르니
+    # `file://` 로 열면 안 된다), 「여는 것도 도구로 한다」 가 룰이라
+    # **룰대로 하면 열 수단이 없는 상태**였다. 주식페이지_개발1 이 찾았다.
+    if is_url:
+        path = arg
+    else:
+        path = os.path.abspath(arg)
+        if not os.path.exists(path):
+            print(f"  없는 파일입니다: {path}")
+            return
+
+        # 누가 띄웠는지 제목에 남긴다. 창이 여럿일 때 구분이 안 되기 때문이다.
+        stamp_title(path, session_name())
 
     # 제목 조각. 안 주면 파일명에서 뽑는데, **HTML 은 그러면 못 찾는다** —
     # 창에 뜨는 것은 파일명이 아니라 `<title>` 이다. 2026-09-18 에 `md-diff.html`
@@ -318,21 +350,38 @@ def main():
     #
     # 길면 앞부분만 쓴다. 창 제목은 뒤에 ` - Chrome` 이 붙고, 세션 이름이
     # 앞에 붙어 있어 앞 40자만으로도 특정된다.
-    hint = sys.argv[2] if len(sys.argv) > 2 else (doc_title(path)[:40] or
-           os.path.splitext(os.path.basename(path))[0])
+    if len(sys.argv) > 2:
+        hint = sys.argv[2]
+    elif is_url:
+        # **주소는 서버에서 `<title>` 을 받아 온다.** 주소의 파일명으로는
+        # 창을 못 찾는다 — 창에 뜨는 것은 `<title>` 이다.
+        hint = url_title(path)[:40]
+        if not hint:
+            print(f"  제목을 못 읽었습니다: {path}")
+            print("  서버가 떠 있는지 보시고, 창제목의 일부를 두 번째 인자로 주십시오")
+            return
+    else:
+        hint = doc_title(path)[:40] or os.path.splitext(os.path.basename(path))[0]
 
     # 무엇으로 열 것인가. 아래 raise_only 가 후보를 그 프로그램의 창으로
     # 좁히는 데 쓰고, 열기 전에 already_open 이 같은 기준으로 찾는 데도 쓴다.
     # os.startfile 로 여는 것은 무엇이 뜰지 모르므로 빈 채로 둔다.
-    if path.lower().endswith((".html", ".htm")):
+    if is_url or path.lower().endswith((".html", ".htm")):
         opened_with = "chrome.exe" if any(os.path.exists(c) for c in CHROME) else ""
     elif path.lower().endswith(TEXT_EXT):
         opened_with = "notepad.exe"
     else:
         opened_with = ""
 
-    # **이미 띄워 둔 것이 있으면 새로 열지 않는다.**
-    found = already_open(hint, opened_with)
+    # **주소로 열 때는 이미 뜬 창을 찾지 않는다 (2026-09-21).**
+    # 창 제목에 포트가 안 나와서, 8765 창과 8768 창을 **가릴 수가 없다** —
+    # 실측으로 `<title>` 이 똑같았다. 세션마다 자기 포트가 있으므로
+    # **남의 포트 창을 꺼내면 「고친 그 화면을 띄운다」 가 깨진다.**
+    # 실제로 한 세션이 안 고친 화면을 보여드릴 뻔했다.
+    #
+    # 「찾지 못하는 것은 괜찮고 **엉뚱한 창을 집는 것이 사고다**」 를 따른다.
+    # 창이 쌓이는 것은 X 를 눌러 닫으면 되고, 잘못 본 화면은 되돌릴 수 없다.
+    found = (None, None) if is_url else already_open(hint, opened_with)
     if isinstance(found, tuple) and found[0] is not None:
         hwnd, title = found
         u32.ShowWindow(hwnd, SW_RESTORE)
@@ -341,6 +390,13 @@ def main():
         print(f"  이미 떠 있어 앞으로만 꺼냈습니다: {title}")
         print("  **파일이 바뀌었으면 그 창에서 Ctrl+Shift+R 을 눌러 주십시오.**")
         print("  (브라우저를 새로고침시킬 방법이 없습니다. 새 창을 또 열지 않습니다)")
+        if is_url:
+            # **포트는 창 제목에 안 나온다.** 2026-09-21 실측 —
+            # 8765 와 8768 의 `daily.html` 이 `<title>` 이 똑같았다.
+            # 세션마다 자기 포트가 있으므로, 남의 포트 창을 꺼낼 수 있다.
+            print("  ⚠ **포트까지는 가리지 못했습니다.** 창 제목에 포트가 안 나옵니다 —")
+            print(f"     보시려던 것이 {path} 가 맞는지 확인해 주십시오.")
+            print("     다른 포트 창이면 그 창을 닫고 다시 부르십시오.")
         return
     if isinstance(found, list):
         print(f"  같은 창이 이미 {len(found)}개 떠 있습니다. 더 열지 않습니다")
@@ -351,9 +407,9 @@ def main():
 
     before = windows()
 
-    if path.lower().endswith((".html", ".htm")):
+    if is_url or path.lower().endswith((".html", ".htm")):
         exe = next((c for c in CHROME if os.path.exists(c)), None)
-        url = "file:///" + path.replace("\\", "/")
+        url = path if is_url else "file:///" + path.replace("\\", "/")
         if exe:
             subprocess.Popen([exe, "--new-window", url])
         else:

@@ -63,6 +63,7 @@ REM  before the split is set up.
 call :startsession stock 8766
 call :startsession daily 8768
 call :startsession home  8769
+call :startsession dev3  8770
 
 REM --- 2) browser ------------------------------------------------
 echo   [open]  browser

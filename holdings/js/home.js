@@ -22,6 +22,7 @@ import { loadStockMain, mountStockView } from './components/stock-view.js';
 import { mountDisclosures } from './components/disclosures.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
 import { mountSchedule } from './components/schedule.js';
+import { bindDailyMenu } from './components/daily-view.js';
 import { mountSectors } from './components/sectors.js';
 import { mountStockPanel } from './components/stock-panel.js';
 import { mountStockDetail } from './components/stock-detail.js';
@@ -1441,3 +1442,9 @@ startLiveLoop({
     openStockModal(code, { push: false });
   }
 }
+
+/* 「데일리분석」 메뉴를 누르면 화면을 떠나지 않고 모달로 띄운다
+   (2026-09-21 지시 — "데일리분석 을 누르면 모델이 올라오고").
+   `href` 는 그대로 두므로 새 탭·직접 주소로는 전용 화면이 열린다.
+   메인에 칸을 만드는 2단계는 따로 지시를 받는다. */
+bindDailyMenu();

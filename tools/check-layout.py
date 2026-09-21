@@ -32,7 +32,11 @@ VIEW_W, VIEW_H = 1600, 1000
 
 # 어디를 재나. 경로만 적고 **무엇을 잴지는 안 적는다**
 PAGES = ["index.html", "stock.html", "daily.html", "news.html"]
-BASE = "http://localhost:8765/holdings/"
+# 어느 서버를 재나. `--port` 로 바꾼다 — 세션마다 자기 포트가 있어서,
+# 8765 로 박아 두면 **세션 폴더 화면을 못 잰다** (2026-09-21 · 주식페이지_개발1).
+PORT_DEFAULT = 8765
+BASE_FMT = "http://localhost:%d/holdings/"
+BASE = BASE_FMT % PORT_DEFAULT
 
 # 칸이 몇 px 까지 달라져도 넘어가나. 0 이면 한 픽셀도 못 바뀐다.
 TOL = 1
@@ -261,7 +265,16 @@ def measure_all(expect=None):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--save", action="store_true", help="지금 화면을 기준으로 삼는다")
+    ap.add_argument("--port", type=int, default=PORT_DEFAULT,
+                    help="어느 서버를 잴지 (기본 %d)" % PORT_DEFAULT)
     args = ap.parse_args()
+
+    # **기준은 포트마다 따로 둔다.** 세션 폴더 화면과 메인 화면은 다른 것이라
+    # 한 파일에 섞으면 서로를 어긋남으로 읽는다.
+    global BASE, BASELINE
+    BASE = BASE_FMT % args.port
+    if args.port != PORT_DEFAULT:
+        BASELINE = BASELINE.replace(".json", "-%d.json" % args.port)
 
     base = None
     if not args.save and os.path.exists(BASELINE):

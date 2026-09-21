@@ -35,16 +35,20 @@ lanes=$(printf '%s\n' "$files" | awk -F/ '
   # `docs/*.md` 는 여기 넣지 않는다 — 그쪽은 각 레인이 직접 쓴다.
   $NF == "CLAUDE.md"                    { print "개념정의";        next }
 
-  $1 == "kjcEngine"                     { print "엔진_개발";      next }
+  # 2026-09-21 에 넷이 통째로 옮겨 갔다. `스케줄_툴개발` 이 `주식페이지_개발3`
+  # 으로 바뀌면서 업무가 `holdings/` 가 되어, 들고 있던 넷이 주인을 잃었다.
+  # **세션 이름이 아니라 레인 이름으로 센다** — 주식 세션이 넷이라 이름으로
+  # 세면 같은 레인이 넷으로 갈린다.
+  $1 == "kjcEngine" || $1 == "ai-work"  { print "엔진_개발";      next }
 
-  $1 == "holdings"                      { print "주식페이지_개발"; next }
-  $1 == "projects" || $1 == "ai-work" ||
-  $1 == "debugging" || $1 == "api-board" { print "스케줄_툴개발";   next }
+  $1 == "holdings"                      { print "주식";           next }
+  $1 == "projects"                      { print "작업우선순위";   next }
+  $1 == "debugging"                     { print "개념정의";        next }
 
   $1 == ".claude" && $2 == "commands"   { print "홈페이지_정리";   next }
   $1 == "assets" || $1 == "category" ||
   $1 == "data"   || $1 == "partials" ||
-  $1 == "company-setup"                 { print "홈페이지_정리";   next }
+  $1 == "company-setup" || $1 == "api-board" { print "홈페이지_정리"; next }
 
   $1 == "tools" || $1 == ".claude" ||
   $1 == ".githooks" || $1 == "docs"     { print "개념정의";        next }
@@ -72,8 +76,8 @@ printf '%s\n' "$lanes" | while IFS= read -r lane; do
   echo "    [$lane]"
   case "$lane" in
     "(미정) "*) dir=${lane#"(미정) "} ;;
-    "주식페이지_개발") dir="holdings" ;;
-    "스케줄_툴개발")   dir="projects" ;;
+    "주식")           dir="holdings" ;;
+    "작업우선순위")   dir="projects" ;;
     *) dir="" ;;
   esac
   if [ -n "$dir" ]; then

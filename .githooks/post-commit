@@ -38,6 +38,56 @@ if [ -n "$layout" ]; then
   echo ""
 fi
 
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+if [ "$branch" = "main" ]; then
+  # **알리지 말고 그 자리에서 내린다 (2026-09-21).** 전에는 「알리십시오」
+  # 라고만 띄웠는데, **그 훅은 커밋한 사람 화면에 뜨고 알리는 것은 여전히
+  # 사람이었다.** 같은 날 세 번 샜고 세 번 다 받아가는 세션이 재서 알았다.
+  #
+  # `--ff-only` 라 판단이 없다. staging 에 따로 쌓인 것이 있으면 **그냥
+  # 멈춘다** — 남의 작업을 덮을 수가 없다. 멈추면 사람이 보면 된다.
+  #
+  # 폴더는 worktree 목록에서 찾는다. 경로를 박으면 PC 마다 낡는다.
+  sdir=$(git worktree list --porcelain 2>/dev/null |
+         awk '/^worktree /{w=substr($0,10)} /^branch refs\/heads\/staging$/{print w}')
+  echo ""
+  if [ -n "$sdir" ] && [ -d "$sdir" ]; then
+    # 실패 이유를 버리지 않는다. 2026-09-21 에 두 번 막혔는데 둘 다
+    # `debugging/latest.json` 이 그쪽 워크트리에서 미커밋이라 그랬다 —
+    # `check.py` 를 돌릴 때마다 바뀌는 파일이다. 이유를 안 보여주면
+    # 「staging 에 뭔가 쌓였나」 를 매번 뒤지게 된다.
+    # **환경변수를 지우고 부른다.** 훅은 `GIT_DIR` · `GIT_INDEX_FILE` 을
+    # 물려받는데, 그 상태로 다른 워크트리를 건드리면 **이 저장소의 인덱스를
+    # 그쪽 것으로 알고** 엉뚱한 자리에 락을 만들려 한다.
+    #
+    #     error: Unable to create '…/kjc-staging/.git/index.lock':
+    #            No such file or directory
+    #
+    # 2026-09-21 에 세 번 막혔다. 처음엔 「staging 에 뭔가 쌓였나」 로 봤고,
+    # 다음엔 「커밋 직후라 락이 걸렸나」 로 봤다. **둘 다 틀렸다** —
+    # 실패 이유를 버리지 않게 고친 그 자리에서 진짜 원인이 나왔다.
+    err=$(env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_PREFIX           git -C "$sdir" merge main --ff-only 2>&1)
+    if [ $? -eq 0 ]; then
+      echo "  ── staging 에도 내렸습니다 (fast-forward) ─────────────"
+      echo "     세션 폴더들이 이제 받을 수 있습니다."
+    else
+      echo "  ── staging 에 못 내렸습니다 ───────────────────────────"
+      echo ""
+      printf '%s
+' "$err" | head -4 | sed 's/^/      /'
+      echo ""
+      echo "  **홈페이지_정리 자리입니다. 알리십시오.**"
+      echo ""
+      echo "      git log --oneline staging..main | wc -l"
+    fi
+  else
+    echo "  ── staging 폴더를 못 찾았습니다 ───────────────────────"
+    echo "  홈페이지_정리에 알리십시오."
+  fi
+  echo "  ──────────────────────────────────────────────────────"
+  echo ""
+fi
+
 changed=$(printf '%s\n' "$files" |
           grep -E '^(CLAUDE\.md|holdings/CLAUDE\.md|\.claude/commands/)')
 [ -z "$changed" ] && exit 0
@@ -53,4 +103,15 @@ echo "  돌고 있는 세션에 알리십시오 — 무엇이 바뀌었는지와
 echo "  받는 쪽은 그 부분을 다시 읽습니다."
 echo "  ──────────────────────────────────────────────────────"
 echo ""
+
+# 세션 폴더들은 `staging` 에서 받는다. **`main` 에 직접 올린 문서는 누가
+# 내려보내지 않으면 거기까지 안 간다.** 「staging 도 두 번 받는다」 는
+# 「작업 시작 전 · 올리기 직전」 인데, 문서 레인이 main 에 직접 올리는
+# 동안에는 **그 두 시점이 안 온다.** 아무도 안 보는 구간이 생긴다.
+#
+# 2026-09-21 에 네 번 났다. 「staging 에서 받으십시오」 라고 말해도
+# staging 자체가 뒤처져 있으면 받을 것이 없다.
+#
+# **브랜치가 main 일 때만 띄운다.** 이 훅은 어느 워크트리에서든 도는데,
+# kjc-staging 이나 세션 폴더에서 커밋할 때도 뜨면 헛경보가 된다.
 exit 0

@@ -23,6 +23,8 @@
   <!-- 모달 안에는 종목 화면이 통째로 들어간다. 그 화면의 CSS 도 함께 필요하다 -->
   <link rel="stylesheet" href="./css/stock.css" />
   <link rel="stylesheet" href="./css/modal.css" />
+  <!-- 「데일리분석」 메뉴를 누르면 모달로 뜬다 (2026-09-21 지시). 그 내용의 CSS -->
+  <link rel="stylesheet" href="./css/daily.css" />
 </head>
 <body data-nav="holdings" data-site-root="../">
 
@@ -82,7 +84,7 @@
       <a href="#">가상자산</a>
       <a href="#">시장지표</a>
       <a href="./news.html">뉴스 · 공시</a>
-      <a href="./daily.html">데일리분석</a>
+      <a href="./daily.html" data-modal="daily">데일리분석</a>
       <span class="kh-cat-my">내 기록</span>
     </nav>
 
