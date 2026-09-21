@@ -35,6 +35,23 @@ const SIDES = [
   { key: 'inst',    name: '기관' },
 ];
 
+/* 막대 한 칸. **자리를 인라인으로 준다** — 왼쪽/오른쪽을 CSS 클래스에
+   맡겼더니 판 쪽이 오른쪽으로 뻗었다 (2026-09-21 실측). 방향이 값에 따라
+   갈리는 자리라, 그리는 쪽에서 직접 정하는 편이 헷갈리지 않는다.
+
+   가운데가 0이므로 한쪽이 최대 50% 다. */
+function bar(v, w) {
+  /* **칸을 좌우 반반으로 나눈다.** 왼쪽 반은 오른쪽 끝(가운데)에 붙여 자라고,
+     오른쪽 반은 왼쪽 끝(가운데)에서 자란다. `position: absolute` 와 퍼센트로
+     자리를 잡으려다 두 번 어긋나서, **자리 계산이 필요 없는 구조**로 바꿨다
+     (2026-09-21). w 는 반쪽 안에서의 비율이라 최대 100 이다. */
+  const pct = Math.min(100, w * 2).toFixed(1);
+  const sell = v < 0 ? `<i class="dn" style="width:${pct}%"></i>` : '';
+  const buy = v >= 0 ? `<i class="up" style="width:${pct}%"></i>` : '';
+  return `<span class="kh-iv-half l">${sell}</span>`
+       + `<span class="kh-iv-half r">${buy}</span>`;
+}
+
 /* 주 → 만주. 칸이 좁아 그대로 쓰면 자리를 다 먹는다 */
 function man(n) {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -42,17 +59,19 @@ function man(n) {
   return `${v > 0 ? '+' : ''}${v.toFixed(1)}만주`;
 }
 
-export function mountInvestor(root) {
-  if (!root) return { setCode() {}, destroy() {} };
-
-  const box = root.querySelector('#kh-iv-box');
-  const tabs = root.querySelector('#kh-iv-tabs');
-  const bsBox = root.querySelector('#kh-bs-box');
+/**
+ * 투자자 정보를 그린다.
+ *   box  : 내용이 들어갈 칸
+ *   tabs : 오늘/5일 단추 줄
+ *
+ * **id 로 찾지 않는다.** 첫 화면과 모달이 동시에 떠 있으면 같은 id 가 둘이
+ * 되어 엉뚱한 칸을 칠한다 (stock-view.js 가 같은 이유로 root 안에서 찾는다).
+ */
+export function mountInvestor({ box, tabs } = {}) {
   if (!box) return { setCode() {}, destroy() {} };
 
   let code = null;
   let rows = null;          // 투자자 30일
-  let asking = null;        // 호가
   let view = 'today';       // today | days
   let timer = null;
   let seq = 0;              // 늦게 온 응답이 새 종목을 덮지 않게
@@ -61,11 +80,9 @@ export function mountInvestor(root) {
   async function load() {
     if (!code) return;
     const mine = ++seq;
-    const [iv, ak] = await Promise.all([get(`/api/kis/investor?code=${code}`),
-                                        get(`/api/kis/asking?code=${code}`)]);
+    const iv = await get(`/api/kis/investor?code=${code}`);
     if (mine !== seq) return;              // 그새 종목이 바뀌었다
     rows = (iv && iv.ok && Array.isArray(iv.data)) ? iv.data : null;
-    asking = (ak && ak.ok && ak.data) ? ak.data : null;
     paint();
   }
 
@@ -90,22 +107,30 @@ export function mountInvestor(root) {
       tabs.querySelectorAll('[data-view]').forEach((b) =>
         b.classList.toggle('is-active', b.dataset.view === view));
     }
-    paintAsking();
   }
 
+  /* **가운데가 0이고 양쪽으로 뻗는다** (2026-09-21 지시 —
+     "중간지점에서 사는게 많으면 빨간색으로 오른쪽으로 보이고
+      파는게 많으면 왼쪽으로 보이고 파란색").
+
+     세로로 세우던 것을 눕혔고(칸이 1/3 로 줄어 세로로는 몇 px 밖에 안 남는다),
+     0선을 **가운데**에 두었다. 길이와 방향을 함께 읽는다 — 색만으로 방향을
+     말하면 빨강·파랑을 알고 있어야 하지만, **어느 쪽으로 뻗었는지는 그냥 보인다.**
+
+     한쪽이 최대 50% 다. 그래서 `w` 는 100 이 아니라 50 을 곱한다. */
   function paintToday(d) {
     const max = Math.max(...SIDES.map((s) => Math.abs((d[s.key] || {}).net || 0))) || 1;
-    const bars = SIDES.map((s) => {
+    const rows2 = SIDES.map((s) => {
       const v = (d[s.key] || {}).net || 0;
-      const h = Math.abs(v) / max * 46;      // 0선 위아래로 각각 46% 까지
-      return `<div class="kh-iv-c">
-        <span class="kh-iv-v ${dirClass(v)}">${man(v)}</span>
-        <span class="kh-iv-box"><i class="${v >= 0 ? 'up' : 'dn'}" style="height:${h}%"></i></span>
-        <span class="kh-iv-n">${s.name}</span></div>`;
+      const w = Math.abs(v) / max * 50;      // 가운데에서 한쪽으로 최대 50%
+      return `<div class="kh-iv-r2">
+        <span class="kh-iv-n2">${s.name}</span>
+        <span class="kh-iv-v2 ${dirClass(v)}">${man(v)}</span>
+        <span class="kh-iv-bar">${bar(v, w)}</span></div>`;
     }).join('');
-    return `<div class="kh-iv-bars">${bars}</div>
-      <div class="kh-iv-note">${dateText(d.date)} 하루치 · <b class="kh-up">위가 순매수</b>
-        · <b class="kh-down">아래가 순매도</b></div>`;
+    return `<div class="kh-iv-rows">${rows2}</div>
+      <div class="kh-iv-note">${dateText(d.date)} 하루치 ·
+        <b class="kh-up">오른쪽이 순매수</b> · <b class="kh-down">왼쪽이 순매도</b></div>`;
   }
 
   function paintDays(days) {
@@ -113,58 +138,27 @@ export function mountInvestor(root) {
     days.forEach((d) => SIDES.forEach((s) => {
       max = Math.max(max, Math.abs((d[s.key] || {}).net || 0));
     }));
+    /* 5일도 가로 막대다. **합계가 아니라 닷새를 더한 값**을 보여준다 —
+       오늘 것만 보면 하루 흐름이고, 닷새를 더하면 추세가 읽힌다. */
     const lines = SIDES.map((s) => {
-      const now = (days[0][s.key] || {}).net || 0;
-      /* 받은 순서가 최신부터라 뒤집어 그린다 — 오른쪽 끝이 오늘이다 */
-      const spark = days.slice().reverse().map((d) => {
-        const v = (d[s.key] || {}).net || 0;
-        return `<i class="${v >= 0 ? 'up' : 'dn'}" style="height:${Math.abs(v) / max * 46}%"></i>`;
-      }).join('');
-      return `<div class="kh-iv-r">
-        <span class="kh-iv-rn">${s.name}</span>
-        <span class="kh-iv-sp"><span class="zero"></span>${spark}</span>
-        <span class="kh-iv-rv ${dirClass(now)}">${man(now)}</span></div>`;
+      const sum = days.reduce((a2, d) => a2 + ((d[s.key] || {}).net || 0), 0);
+      const w = Math.min(50, Math.abs(sum) / (max * days.length) * 50);
+      return `<div class="kh-iv-r2">
+        <span class="kh-iv-n2">${s.name}</span>
+        <span class="kh-iv-v2 ${dirClass(sum)}">${man(sum)}</span>
+        <span class="kh-iv-bar">${bar(sum, w)}</span></div>`;
     }).join('');
     /* **오른쪽 숫자는 오늘 값이다** — 5일 합계가 아니다 (2026-09-18 지적
        — "우측에 있는 수치는 5일치를합친건가?"). 막대는 5일이고 숫자는
        오늘이라 갈리므로 그 사실을 적는다. */
-    return `<div class="kh-iv-days">${lines}</div>
-      <div class="kh-iv-note">막대는 최근 ${days.length}일 · 오른쪽 끝이 오늘
-        · <b>숫자는 오늘 값</b> (5일 합계가 아닙니다)</div>`;
+    return `<div class="kh-iv-rows">${lines}</div>
+      <div class="kh-iv-note">최근 ${days.length}일을 <b>더한 값</b>입니다
+        (오늘 하루가 아닙니다)</div>`;
   }
 
   function dateText(d) {
     if (!d || d.length !== 8) return '';
     return `${d.slice(4, 6)}.${d.slice(6)}`;
-  }
-
-  /* ── 매수 · 매도 비율 ── */
-  function paintAsking() {
-    if (!bsBox) return;
-    if (!asking || asking.buyPct == null) {
-      bsBox.innerHTML = '<span class="kh-mut">불러오지 못했습니다</span>';
-      return;
-    }
-    const buy = asking.buyPct;
-    const sell = Math.round((100 - buy) * 10) / 10;
-    /* 막대 안에는 글씨를 안 넣는다(높이가 7px 라 안 들어간다). **퍼센트는
-       막대 위 줄에 적는다** (2026-09-18 지시 — "매수 매도비율도 퍼센티지가
-       있으면좋을거같음").
-
-       **기간이 없는 값이다** — 투자자 정보와 달리 「오늘」도 「5일」도
-       아니고 지금 이 순간 걸려 있는 주문이다. 그래서 「지금」이라고 적는다
-       (지시 — "매수매도는 하루인지 5일인지 인지가 안됨"). */
-    bsBox.innerHTML =
-      `<div class="kh-bs-h">
-         <span>매수 · 매도 비율<b class="kh-bs-when">지금</b></span>
-         <span class="kh-bs-pct"><b class="kh-up">${buy}%</b>
-           <i>·</i><b class="kh-down">${sell}%</b></span>
-       </div>
-       <div class="kh-bs" title="매수 ${buy}% · 매도 ${sell}%">
-         <i class="buy" style="width:${buy}%"></i>
-         <i class="sell" style="width:${sell}%"></i>
-       </div>
-       <div class="kh-iv-note">지금 <b>걸려 있는 주문</b>입니다 — 체결된 것이 아닙니다</div>`;
   }
 
   /* ── 보는 것을 바꿔도 자리는 그대로다 ──
@@ -213,9 +207,8 @@ export function mountInvestor(root) {
     setCode(next) {
       if (!next || next === code) return;
       code = next;
-      rows = null; asking = null;
+      rows = null;
       box.innerHTML = '<span class="kh-mut">불러오는 중</span>';
-      if (bsBox) bsBox.innerHTML = '<span class="kh-mut">불러오는 중</span>';
       load();
     },
     destroy() { if (timer) clearInterval(timer); },
