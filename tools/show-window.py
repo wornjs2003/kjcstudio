@@ -373,8 +373,15 @@ def main():
     else:
         opened_with = ""
 
-    # **이미 띄워 둔 것이 있으면 새로 열지 않는다.**
-    found = already_open(hint, opened_with)
+    # **주소로 열 때는 이미 뜬 창을 찾지 않는다 (2026-09-21).**
+    # 창 제목에 포트가 안 나와서, 8765 창과 8768 창을 **가릴 수가 없다** —
+    # 실측으로 `<title>` 이 똑같았다. 세션마다 자기 포트가 있으므로
+    # **남의 포트 창을 꺼내면 「고친 그 화면을 띄운다」 가 깨진다.**
+    # 실제로 한 세션이 안 고친 화면을 보여드릴 뻔했다.
+    #
+    # 「찾지 못하는 것은 괜찮고 **엉뚱한 창을 집는 것이 사고다**」 를 따른다.
+    # 창이 쌓이는 것은 X 를 눌러 닫으면 되고, 잘못 본 화면은 되돌릴 수 없다.
+    found = (None, None) if is_url else already_open(hint, opened_with)
     if isinstance(found, tuple) and found[0] is not None:
         hwnd, title = found
         u32.ShowWindow(hwnd, SW_RESTORE)
