@@ -878,8 +878,52 @@ const panelHost = document.getElementById("panelHost");
 
 function render() {
   drawTabs();
+  updateFloor();
   drawPanel();
   updateSummary();
+}
+
+/* ── 탭을 옮겨도 자리는 그대로 ─────────────────────────
+   CLAUDE.md 「보는 것을 바꿔도 자리는 그대로다」(2026-09-18 지시).
+
+   프로젝트마다 할 일 수가 달라 판 높이가 달라진다. 2026-09-21 실측으로
+   할 일 1개짜리 375px · 6개짜리 595px — **220px 이 튀었다.** 아래 것들이
+   그만큼 밀려서 **누르려던 자리가 움직인다.**
+
+   가장 큰 프로젝트에 맞춰 바닥 높이를 잡는다. 적은 쪽에는 빈 자리가
+   남는데, 룰이 말하는 「적은 쪽에 빈 자리를 둔다」 가 그것이다.
+
+   재는 동안에는 min-height 를 걸지 않는다 — 걸어 두고 재면 바닥이
+   제 높이를 다시 재게 되어 한 번 커진 값이 안 줄어든다. */
+let panelFloor = 0;
+let floorStamp = "";
+let measuring = false;
+
+function updateFloor() {
+  /* 할 일 수가 안 바뀌었으면 다시 재지 않는다. 잴 때마다 프로젝트 수만큼
+     그렸다 지우므로, 카드를 하나 누를 때마다 도는 것을 막는다. */
+  const stamp = projects.map(function (p) {
+    return p.id + ":" + ((p.tasks || []).length);
+  }).join(",");
+  if (stamp === floorStamp) return;
+  floorStamp = stamp;
+
+  const keep = activeId;
+  measuring = true;
+  let max = 0;
+  /* 도중에 터지면 activeId 가 남의 것으로 남고 measuring 이 켜진 채 굳는다.
+     그러면 화면이 엉뚱한 프로젝트를 보여준다. 반드시 되돌린다. */
+  try {
+    projects.forEach(function (p) {
+      activeId = p.id;
+      drawPanel();
+      if (panelHost.offsetHeight > max) max = panelHost.offsetHeight;
+    });
+  } finally {
+    measuring = false;
+    activeId = keep;
+  }
+  panelFloor = max;
 }
 
 /* ── 탭 줄 ─────────────────────────────── */
@@ -926,6 +970,8 @@ function drawTabs() {
 /* ── 선택된 프로젝트 패널 ─────────────────────────────── */
 function drawPanel() {
   panelHost.innerHTML = "";
+  /* 재는 중에는 제 높이가 나와야 하므로 바닥을 푼다 (위 updateFloor 참조) */
+  panelHost.style.minHeight = measuring || !panelFloor ? "" : panelFloor + "px";
 
   const p = byId(activeId);
   if (!p) {

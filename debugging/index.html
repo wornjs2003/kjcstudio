@@ -547,6 +547,19 @@ function drawGroups() {
 
   const rows = report.results.filter(function (r) { return filter === "all" || r.status === filter; });
 
+  /* 걸렀더니 하나도 안 남는 일이 흔합니다 — 불일치 0 인 날이 그렇습니다.
+     아무것도 안 그리면 「걸러서 없다」 와 「화면이 망가졌다」 가 구분되지 않습니다.
+     검사 도구라서 빈 화면은 더더욱 고장으로 읽힙니다 (2026-09-21). */
+  if (!rows.length) {
+    const label = { mismatch: "불일치", changed: "변경 감지",
+                    todo: "미구현", pass: "통과", ignored: "검사 제외" }[filter] || "";
+    box.innerHTML = '<div class="group"><div class="row"><div class="row-main">'
+      + '<div class="row-title">' + label + '인 검사가 없습니다</div>'
+      + '<div class="row-scope">걸러서 비어 있는 것입니다. 「전체」 를 누르면 다시 나옵니다</div>'
+      + '</div></div></div>';
+    return;
+  }
+
   const order = [];
   rows.forEach(function (r) { if (order.indexOf(r.group) === -1) order.push(r.group); });
 
