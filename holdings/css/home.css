@@ -195,8 +195,9 @@
 .kh-iv-bars { display: flex; gap: 10px; }
 .kh-iv-c { flex: 1; text-align: center; }
 .kh-iv-v { display: block; font-size: 0.71rem; font-weight: 700; margin-bottom: 3px; }
-/* 높이 1.5배 (2026-09-18 지시 — "지금보다 1.5배 세로로 길게"). 46 → 69px */
-.kh-iv-box { position: relative; display: block; height: 69px; }
+/* 46 → 69 → **46px** (2026-09-21 지시 — "투자자 정보 세로를 지금보다
+   2/3정도로 줄여줘"). 09-18 에 1.5배로 늘린 것을 그 역으로 되돌린다 */
+.kh-iv-box { position: relative; display: block; height: 46px; }
 .kh-iv-box::before {           /* 0선 */
   content: ''; position: absolute; left: 0; right: 0; top: 50%;
   height: 1px; background: var(--kh-border-strong);
@@ -213,7 +214,7 @@
 .kh-iv-rv { width: 68px; text-align: right; font-weight: 600; font-size: 0.72rem; }
 .kh-iv-sp {
   flex: 1; position: relative; display: flex; align-items: center;
-  gap: 2px; height: 42px;          /* 1.5배 (2026-09-18 지시). 28 → 42px */
+  gap: 2px; height: 28px;          /* 42 → 28px (2026-09-21 지시 · 2/3) */
 }
 .kh-iv-sp .zero {
   position: absolute; left: 0; right: 0; top: 50%;
@@ -221,11 +222,11 @@
 }
 .kh-iv-sp i { flex: 1; min-width: 2px; position: relative; }
 .kh-iv-sp i.up {
-  align-self: flex-end; margin-bottom: 21px;      /* 0선까지 = 높이의 절반 */
+  align-self: flex-end; margin-bottom: 14px;      /* 0선까지 = 높이의 절반 */
   background: var(--kh-up); border-radius: 1px 1px 0 0;
 }
 .kh-iv-sp i.dn {
-  align-self: flex-start; margin-top: 21px;
+  align-self: flex-start; margin-top: 14px;
   background: var(--kh-down); border-radius: 0 0 1px 1px;
 }
 
@@ -241,9 +242,11 @@
        오늘   그래프 114px · 노트 24px(한 줄)   칸 138px
        5일    그래프 130px · 노트 42px(두 줄)   칸 172px   ← 34px 움직였다
 
-   **큰 쪽에 맞춘다.** 5일 그래프 130px = 42px 줄 셋 + 2px 틈 둘.
+   **큰 쪽에 맞춘다.** 2026-09-21 에 그래프를 2/3 로 줄인 뒤 다시 재니
+   **오늘 91px · 5일 88px** 이라 큰 쪽이 바뀌었다(전에는 5일이 컸다).
+   91 로 잡는다 — 오늘 보기의 값줄·막대칸(46)·이름줄을 더한 값이다.
    적은 쪽은 아래에 빈 자리가 남는다. */
-.kh-iv-bars, .kh-iv-days { min-height: 130px; }
+.kh-iv-bars, .kh-iv-days { min-height: 91px; }
 /* 노트는 이 칸에서만 두 줄 자리를 잡는다 — 매수·매도 비율 쪽 노트까지
    늘리면 그 칸이 공연히 커진다 */
 #kh-iv-box .kh-iv-note { min-height: 42px; }
@@ -545,7 +548,22 @@
 .kh-idx-chart { flex: none; height: 550px; }
 
 /* 오른쪽 패널 — 왼쪽 차트의 그 종목 이야기다 */
-.kh-idxp { padding: 16px 18px; display: flex; flex-direction: column; gap: 2px; }
+/* **패널은 차트 카드보다 길어지지 않는다** (2026-09-21 지시 — "ai분석 넣으면서
+   세로로 거기가 길어져서 길어진거잖아").
+
+   둘은 같은 줄이라 **패널이 길면 차트 카드가 끌려서 함께 커진다.** 오늘만
+   세 번 그랬다 — 종목토론·종목 뉴스(859) · AI 분석(951).
+
+   그때마다 칸 하나씩 줄여 맞췄는데, **칸을 더할 때마다 또 난다.** 그래서
+   이번에는 **패널 자체에 천장을 둔다.** 넘치는 것은 패널 안에서 굴러간다.
+
+   690px 은 차트 카드가 스스로 필요로 하는 높이다 — 차트 그림 550px 과
+   머리줄·기간 단추·푸터를 더한 값이고, 실측으로 잡았다. 차트 높이를 바꾸면
+   이 값도 같이 봐야 한다. */
+.kh-idxp {
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 2px;
+  max-height: 690px; overflow-y: auto; min-height: 0;
+}
 .kh-idxp-s { padding: 13px 0; border-bottom: 1px solid var(--kh-border); }
 .kh-idxp-s:last-child { border-bottom: 0; }
 .kh-idxp-h {
@@ -831,3 +849,30 @@
 .kh-sort-note b { font-weight: 600; }
 /* 아직 채우는 중 — 파랑. 다 차면 사라진다 */
 .kh-sort-note .kh-accent { color: var(--kh-accent); }
+
+/* ══ AI 분석 (2026-09-21 지시) ═══════════════════════════════
+   세션이 써 둔 글을 읽어 보여주는 칸이다. 줄이 셋(값·수급·뉴스)이고
+   각 줄은 짧은 이름표와 문장으로 나뉜다. */
+.kh-ai-p { display: flex; gap: 8px; padding: 5px 0; font-size: 0.78rem; line-height: 1.65; }
+.kh-ai-p + .kh-ai-p { border-top: 1px solid var(--kh-border); }
+.kh-ai-l {
+  flex: none; width: 34px; font-weight: 700; color: var(--kh-text-secondary);
+  font-size: 0.74rem; padding-top: 1px;
+}
+.kh-ai-s .kh-todo { margin-top: 8px; font-size: 0.74rem; }
+
+/* **칸 높이를 못 박는다** (2026-09-21 지적 — "ai분석 넣으면서 세로로 거기가
+   길어져서 길어진거잖아").
+
+   글은 길이를 미리 알 수 없다. 그대로 두면 패널이 글 길이만큼 늘어나고,
+   **같은 줄의 차트 카드가 끌려서 함께 커진다.**
+
+       넣기 전   AI 자리 77px · 패널 690 · 차트 카드 690
+       넣은 뒤   AI 343px  · 패널 951 · 차트 카드 951      ← 261px 늘었다
+
+   77px 로 되돌리면 글이 한 줄도 안 보인다. **패널이 안 늘어나는 선**까지만
+   준다 — 종목 뉴스 칸이 제 안에서 줄어들며 흡수하는 만큼이다.
+   넘치는 글은 이 칸 안에서 굴러간다. */
+#kh-ai-box { max-height: 150px; overflow-y: auto; }
+/* 언제 쓴 글인지. 값은 움직이는데 글은 안 움직이므로 시각을 늘 보인다 */
+#kh-ai-when { font-variant-numeric: tabular-nums; }

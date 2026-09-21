@@ -25,6 +25,7 @@ import { mountSchedule } from './components/schedule.js';
 import { mountSectors } from './components/sectors.js';
 import { mountInvestor } from './components/investor.js';
 import { mountStockNews } from './components/stock-news.js';
+import { mountAiAnalysis } from './components/ai-analysis.js';
 /* fetchIndexMinutes · fetchIndexCandles 는 여기서 안 쓴다 (2026-09-17).
    큰 차트가 지수에서 종목으로 바뀌면서 종목 캔들(chart.js 의 fetchCandles)로
    갈아탔다. 두 함수는 지수 화면을 만들 때 쓸 수 있게 live.js 에 남겨 뒀다. */
@@ -1286,6 +1287,7 @@ function selectStock(code) {
   paintVolBox();
   if (typeof investor !== 'undefined' && investor) investor.setCode(code);
   if (typeof oneNews !== 'undefined' && oneNews) oneNews.setCode(code);
+  if (typeof aiBox !== 'undefined' && aiBox) aiBox.setCode(code);
   rememberStock(code);
 }
 
@@ -1315,6 +1317,11 @@ mountSectors(document.querySelector('.kh-sc-card'));
    차트 종목이 바뀌면 selectStock 이 setCode 로 알린다. */
 const investor = mountInvestor(document.querySelector('.kh-idxp'));
 if (selectedCode) investor.setCode(selectedCode);   // 처음 뜰 때 한 번
+
+/* AI 분석 — 세션이 써 둔 글을 읽어 그린다 (2026-09-21 지시).
+   화면이 AI 를 부르는 것이 아니다 — components/ai-analysis.js 머리글 참고. */
+const aiBox = mountAiAnalysis(document.querySelector('.kh-idxp'));
+if (selectedCode) aiBox.setCode(selectedCode);
 paintBigPeriods();
 
 /* 지난번에 본 값이 남아 있으면 그것부터 그린다 (2026-09-15).
@@ -1348,6 +1355,7 @@ loadUniverse().then(() => {
   paintYearRange();
   paintVolBox();
   oneNews.setCode(selectedCode);
+  aiBox.setCode(selectedCode);
   /* 보고 있는 것만 주기적으로 다시 받는다. 시세 띠·관심 사이드바와 별개다. */
   /* 0.2초마다 다섯 묶음 중 하나씩. 전체는 1초에 한 바퀴 돈다. */
   setInterval(rotateTick, ROW_REFRESH_MS);

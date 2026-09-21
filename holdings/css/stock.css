@@ -380,7 +380,25 @@
   font-style: normal; font-size: 0.72rem; color: var(--kh-text-muted);
   margin-left: auto;
 }
-.kh-ticks { display: flex; flex-direction: column; }
+/* **칸 높이를 붙이기 전 그대로 둔다** (2026-09-21 지시 — "삼성전자 원래
+   싸이즈랑 달라진거 안됬어").
+
+   체결을 붙이기 전 그 줄은 197px 였고, 12줄을 그리니 428px 이 됐다. 같은
+   줄의 「내 메모」·「개인·외국인·기관」이 끌려서 함께 커진다.
+
+       변경 전   2행 197px · 문서 1148px
+       12줄      2행 428px
+       9줄       2행 344px      ← 아직 147px 길다
+
+   **줄 수로 맞추지 않고 목록 높이를 못 박는다.** 줄 수로 맞추면 글자 크기나
+   종목이 바뀔 때 또 어긋난다. 251 - 147 = 104px 이고, 한 줄이 27px 이라
+   세 줄이 보이고 나머지는 이 안에서 굴러간다.
+
+   막대 모양은 assets/css/common.css 한 곳에서 정한다 (2026-09-21 룰). */
+.kh-ticks {
+  display: flex; flex-direction: column;
+  max-height: 104px; overflow-y: auto; min-height: 0;
+}
 .kh-tick {
   display: grid; grid-template-columns: 58px 1fr 62px 54px;
   align-items: center; gap: 8px;

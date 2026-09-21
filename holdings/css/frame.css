@@ -448,6 +448,24 @@ a.kh-sc-i:hover { color: var(--kh-accent); }
 .kh-bd-on   { background: rgb(var(--kh-ok-rgb) / 12%); color: var(--kh-tag-news); }
 .kh-bd-soon { background: var(--kh-bg-surface); color: var(--kh-text-muted); }
 
+/* ── 아직 안 정해진 자리 (CLAUDE.md 2026-09-15 지시) ─────────────
+   「나중에 정할 것」 을 문서에만 적으면 아무도 다시 안 읽고 그대로 굳는다.
+   **화면에 빨간 자국으로 남겨** 볼 때마다 걸리게 한다. 정해지면 지운다.
+
+   **「연결 예정」 배지와 다르다.** 그것은 「곧 붙을 자리」 이고, 이것은
+   **재권님이 정하셔야 열리는 자리**다. 회색과 빨강으로 갈라 둔다
+   (2026-09-21 — `작업우선순위` 가 둘이 안 갈린다고 지적).
+
+   룰 본문의 예시는 `--pj-danger-*` 인데 그것은 프로젝트 보드 값이다.
+   holdings 에는 `--kh-danger` 가 없고 상승색(`--kh-up`)이 그 자리를 쓴다 —
+   연한 바탕에 진한 글씨 규칙 그대로다. */
+.kh-todo {
+  border-radius: var(--kh-radius-md);
+  background: var(--kh-up-dim); color: var(--kh-up);
+  padding: 11px 13px; font-size: 0.78rem; line-height: 1.6;
+}
+.kh-todo b { display: block; font-weight: 700; margin-bottom: 3px; }
+
 
 /* ==========================================================================
    지난 값 표시 (2026-09-15)
