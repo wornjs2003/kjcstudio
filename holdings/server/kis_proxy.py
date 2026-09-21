@@ -44,6 +44,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import dart
 import naver
 import news
+import news_store
 # 오류 문구에서 비밀을 지운다. 외부 호출 오류를 사람에게 보여줄 때는
 # 반드시 이것을 거친다 (2026-09-14 에 인증키가 실제로 샜다).
 from secrets_guard import safe_message, scrub
@@ -2138,6 +2139,17 @@ class Handler(SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
+    def do_PUT(self):
+        """쓰기는 한 곳뿐이다 — 「중요」 알림 규칙 (2026-09-21 지시).
+
+        재권님이 데일리분석 화면에서 낱말을 넣고 빼는 자리라 저장할 곳이
+        필요했다. **이 서버에서만 된다** — 배포본(워커)에는 파일을 쓸 곳이 없다.
+        """
+        if (self.path or "").startswith("/api/news/"):
+            self._handle_news()
+            return
+        self.send_error(405, "PUT 은 /api/news/alerts 에만 됩니다")
+
     # ── Debugging(검사) 보드 ──
     # 8093 으로 넘긴다. 꺼져 있으면 무엇을 켜야 하는지 적어 준다.
     def _handle_debugging(self):
@@ -2240,6 +2252,37 @@ class Handler(SimpleHTTPRequestHandler):
                 r = news.fetch_issues()
                 self._send_json({"ok": True, "data": r["rows"],
                                  "meta": {"topics": r["topics"], "errors": r["errors"]}})
+                return
+
+            # 쌓아 둔 뉴스 — 묶음 단위 (2026-09-21 지시)
+            #
+            # `issues` 와 다르다. 저쪽은 **지금 RSS 를 받아** 돌려주고,
+            # 이쪽은 **쌓아 둔 것을 읽는다.** 화면이 열릴 때마다 RSS 를
+            # 파싱하지 않으므로 빠르고, 지나간 기사도 남아 있다.
+            if route == "stored":
+                qs = urllib.parse.parse_qs(parsed.query)
+                hours = int((qs.get("hours") or ["24"])[0])
+                limit = int((qs.get("limit") or ["80"])[0])
+                rows = news_store.groups(hours=hours, limit=limit)
+                self._send_json({"ok": True, "data": rows,
+                                 "meta": {"hours": hours, "count": len(rows),
+                                          "topics": news_store.counts(hours),
+                                          "total": news_store.total()}})
+                return
+
+            # 무엇을 「중요」로 볼지. 화면에서 고치는 자리다
+            if route == "alerts":
+                if self.command == "PUT":
+                    n = int(self.headers.get("Content-Length") or 0)
+                    body = json.loads(self.rfile.read(n).decode("utf-8")) if n else None
+                    if not isinstance(body, dict) or "즉시알림" not in body:
+                        self._send_json({"ok": False,
+                                         "error": "즉시알림 목록이 있어야 합니다."}, 400)
+                        return
+                    news_store.save_alerts(body)
+                    self._send_json({"ok": True, "data": news_store.load_alerts()})
+                    return
+                self._send_json({"ok": True, "data": news_store.load_alerts()})
                 return
 
             if route == "moves":
@@ -2691,6 +2734,12 @@ def main():
     if start_prefill(cfg):
         print("  5분봉 준비 : 코스피 상위 %d종목을 뒤에서 미리 받습니다"
               % PREFILL_TOP)
+
+    # 뉴스 쌓기 — **주말·밤에도 돈다.** 공시 폴러와 달리 DART 키가 없어도 돈다
+    if news_store.start_collector():
+        print("  뉴스 수집 : 사용 (%d분마다 · 주말 포함 · 텔레그램 %s)"
+              % (news_store.COLLECT_INTERVAL // 60,
+                 " · ".join("%02d:%02d" % t for t in news_store.DIGEST_SLOTS)))
 
     if dart.start_poller():
         print("  공시 수집 : 사용 (코스피 상위 %d종목 · %d분마다)"
