@@ -14,7 +14,7 @@ if not exist "%VS%" (
 call "%VS%" >nul
 cd /d "%~dp0"
 
-cl /nologo /EHsc /std:c++17 /utf-8 /O2 /I. main.cpp model.cpp texture.cpp ibl.cpp panel.cpp third_party\ufbx.c /Fe:kjcEngine.exe ^
+cl /nologo /EHsc /std:c++17 /utf-8 /O2 /I. main.cpp model.cpp texture.cpp ibl.cpp panel.cpp font.cpp gputime.cpp third_party\ufbx.c /Fe:kjcEngine.exe ^
    /link /SUBSYSTEM:WINDOWS user32.lib gdi32.lib comctl32.lib
 if errorlevel 1 (
   echo.

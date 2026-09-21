@@ -27,7 +27,10 @@
 #include "model.h"      // Vertex 구조와 FBX 읽기
 #include "texture.h"    // 이미지 → GPU 텍스처
 #include "ibl.h"        // 환경맵 조명
+#include <vector>
 #include "panel.h"      // 셰이더 조절 창
+#include "font.h"       // 화면에 글자 쓰기
+#include "gputime.h"    // 패스마다 걸린 시간
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3dcompiler.lib")
@@ -330,7 +333,8 @@ static float g_nrmOn    = 1.0f;   // 끄면 면 방향이 메시 그대로가 �
 static float g_specOn   = 1.0f;   // 끄면 번들거림이 사라진다
 static float g_expo     = 0.46f;  // 노출 — 화면 전체 밝기
 static float g_sunI     = 0.70f;  // 태양 세기. 환경광과 균형을 잡는다
-static float g_bgPow    = 1.0f;   // 배경 밝기. 1 이면 환경맵 그대로   // Gray Diffuse — 피부색을 걷어내고 형태만 본다
+static float g_bgPow    = 1.0f;   // 배경 밝기. 1 이면 환경맵 그대로
+static float g_frameMs  = 0.0f;   // 한 프레임에 걸린 시간. 여러 장 평균이다   // Gray Diffuse — 피부색을 걷어내고 형태만 본다
 
 // ─── 깊이 어둡게 (Fog) ─────────────────────────────────────────────────
 // 카메라에서 멀어질수록 어둡게 해서 모델 자체의 앞뒤를 드러낸다.
@@ -417,7 +421,9 @@ static float g_lookY = 0.26f;      // 26 cm — 눈께
 // 바라보는 지점을 옆으로도 옮긴다 (WASD). 이것이 없으면 물체가 화면
 // 한쪽으로 치우쳤을 때 가운데로 되돌릴 방법이 없다
 static float g_lookX = 0.0f, g_lookZ = 0.0f;
-static bool  g_drag  = false;      // 가운데 단추를 누르고 있나
+static bool  g_drag  = false;      // 가운데 단추를 누르고 있나 (돌리기)
+static bool  g_pan   = false;      // 오른쪽 단추를 누르고 있나 (밀기)
+static int   g_mx = -1, g_my = -1; // 마우스가 지금 어디 있나 (창 안 픽셀)
 static POINT g_last  = {};         // 직전 마우스 자리
 
 // 정육면체가 지금 있는 자리와 가야 할 자리. 판 위(y = 한 변의 절반)에 선다
@@ -718,6 +724,118 @@ static bool PickFloor(int mx, int my, float& outX, float& outZ) {
 
 // ─── 한 물체 그리기 ────────────────────────────────────────────────────
 // depthPass 면 태양 시점으로, 아니면 카메라 시점으로 옮긴다
+// 화면의 한 점을 눌렀을 때 그 자리를 회전의 한가운데로 옮긴다.
+//
+// 카메라 자리는 건드리지 않는다 — 한가운데만 옮기고 각도·거리를 거기에
+// 맞춰 다시 구한다. 안 그러면 누르는 순간 화면이 훌쩍 튄다
+static void PickCenter(int mx, int my) {
+    // 화면 픽셀에서 월드로 나가는 광선을 만든다
+    float ndcX =        2.0f * (float)mx / WIN_W - 1.0f;
+    float ndcY = 1.0f - 2.0f * (float)my / WIN_H;
+    XMMATRIX inv = XMMatrixInverse(nullptr, XMMatrixMultiply(g_view, g_proj));
+    XMVECTOR p0  = XMVector3TransformCoord(XMVectorSet(ndcX, ndcY, 0.0f, 1.0f), inv);
+    XMVECTOR p1  = XMVector3TransformCoord(XMVectorSet(ndcX, ndcY, 1.0f, 1.0f), inv);
+    XMVECTOR dir = XMVector3Normalize(XMVectorSubtract(p1, p0));
+
+    // 모델은 둘레를 감싸는 공으로 본다. 머리라 공에 가까워 이만해도 맞는다
+    float  hh  = max(g_head.rawHeight, 0.05f) * 0.5f;
+    XMVECTOR c = XMVectorSet(g_x, MODEL_LIFT + hh, g_z, 0.0f);
+    XMVECTOR oc = XMVectorSubtract(p0, c);
+    float b  = XMVectorGetX(XMVector3Dot(oc, dir));
+    float cc = XMVectorGetX(XMVector3Dot(oc, oc)) - (hh * 1.2f) * (hh * 1.2f);
+
+    XMVECTOR hit;
+    if (b * b - cc >= 0.0f && -b > 0.0f) {
+        hit = c;                          // 모델을 눌렀다
+    } else {
+        // 아니면 바닥 판(y=0)과 만나는 자리
+        float dy = XMVectorGetY(dir);
+        if (fabsf(dy) < 1e-5f) return;    // 바닥과 나란하면 만날 곳이 없다
+        float t = -XMVectorGetY(p0) / dy;
+        if (t <= 0.0f) return;            // 뒤쪽이면 누른 것이 없다 (하늘)
+        hit = XMVectorAdd(p0, XMVectorScale(dir, t));
+    }
+
+    // 카메라가 있던 자리를 그대로 두고 각도·거리만 새 한가운데에 맞춘다
+    XMVECTOR eye = XMVectorSet(g_camPos.x, g_camPos.y, g_camPos.z, 0.0f);
+    XMVECTOR d   = XMVectorSubtract(eye, hit);
+    float dist   = XMVectorGetX(XMVector3Length(d));
+    if (dist < 0.02f) return;             // 너무 붙으면 각도를 못 구한다
+
+    g_lookX = XMVectorGetX(hit);
+    g_lookY = XMVectorGetY(hit);
+    g_lookZ = XMVectorGetZ(hit);
+    g_dist  = dist;
+    g_pitch = asinf(XMVectorGetY(d) / dist);
+    g_yaw   = atan2f(XMVectorGetX(d), XMVectorGetZ(d));
+    if (g_pitch < 0.05f) g_pitch = 0.05f;
+    if (g_pitch > 1.50f) g_pitch = 1.50f;
+    UpdateView();
+}
+
+// 지금 화면을 그대로 파일에 담는다.
+//
+// 바깥에서 찍는 화면 캡처는 DPI·모니터 자리·창이 겹치는 것에 휘둘려서,
+// 「화면에 안 나온다」 가 정말 안 그려진 것인지 못 찍은 것인지 가려낼 수가
+// 없다. 백버퍼를 직접 읽으면 그 모두와 무관하다
+static void SaveShot(const char* path) {
+    if (!g_swap || !g_dev || !g_ctx) return;
+
+    ID3D11Texture2D* back = nullptr;
+    if (FAILED(g_swap->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&back))) return;
+
+    D3D11_TEXTURE2D_DESC td = {};
+    back->GetDesc(&td);
+    td.Usage          = D3D11_USAGE_STAGING;      // CPU 가 읽을 수 있는 자리로
+    td.BindFlags      = 0;
+    td.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    td.MiscFlags      = 0;
+
+    ID3D11Texture2D* stg = nullptr;
+    if (FAILED(g_dev->CreateTexture2D(&td, nullptr, &stg))) { back->Release(); return; }
+    g_ctx->CopyResource(stg, back);
+
+    D3D11_MAPPED_SUBRESOURCE m = {};
+    if (SUCCEEDED(g_ctx->Map(stg, 0, D3D11_MAP_READ, 0, &m))) {
+        const int W = (int)td.Width, H = (int)td.Height;
+        const int rowBytes = W * 3;
+        const int pad      = (4 - (rowBytes % 4)) % 4;   // BMP 는 행이 4의 배수다
+        const int imgSize  = (rowBytes + pad) * H;
+
+        BITMAPFILEHEADER fh = {};
+        BITMAPINFOHEADER ih = {};
+        fh.bfType      = 0x4D42;                  // 'BM'
+        fh.bfOffBits   = sizeof(fh) + sizeof(ih);
+        fh.bfSize      = fh.bfOffBits + imgSize;
+        ih.biSize      = sizeof(ih);
+        ih.biWidth     = W;
+        ih.biHeight    = H;                       // 양수면 아래에서 위로 쌓는다
+        ih.biPlanes    = 1;
+        ih.biBitCount  = 24;
+        ih.biCompression = BI_RGB;
+
+        FILE* f = nullptr;
+        if (fopen_s(&f, path, "wb") == 0 && f) {
+            fwrite(&fh, sizeof(fh), 1, f);
+            fwrite(&ih, sizeof(ih), 1, f);
+            std::vector<unsigned char> row(rowBytes + pad, 0);
+            for (int y = H - 1; y >= 0; --y) {    // BMP 는 아래 줄부터
+                const unsigned char* src = (const unsigned char*)m.pData + (size_t)y * m.RowPitch;
+                for (int x = 0; x < W; ++x) {
+                    row[x * 3 + 0] = src[x * 4 + 2];   // B
+                    row[x * 3 + 1] = src[x * 4 + 1];   // G
+                    row[x * 3 + 2] = src[x * 4 + 0];   // R
+                }
+                fwrite(row.data(), row.size(), 1, f);
+            }
+            fclose(f);
+        }
+        g_ctx->Unmap(stg, 0);
+    }
+    stg->Release();
+    back->Release();
+}
+
 static void UpdateTitle();   // 아래에 있다
 static void SaveView();
 
@@ -1130,6 +1248,112 @@ static bool BuildShaders(HWND hwnd) {
 
 // 지금 상태를 창 제목에 적는다. 노말맵 부호는 눈으로 확인할 방법이 없어서
 // 어딘가에 보여야 한다 — 안 그러면 눌러 놓고도 어느 쪽인지 헷갈린다
+// ─── 화면 위에 얹는 글자 ───────────────────────────────────────────────
+// 톤매핑이 끝난 뒤에 그린다. 그 전에 그리면 글자까지 색 보정을 먹는다
+// 패스마다 무엇을 하는지. 마우스를 올리면 이것이 나온다.
+// 이름은 GpuTimeMark 에 넘긴 것과 같아야 찾아진다
+struct PassHelp { const wchar_t* name; const wchar_t* text; };
+static const PassHelp PASS_HELP[] = {
+    { L"Shadow",
+      L"태양 자리에서 깊이만 기록한다. 그늘 판정에 쓴다.\n"
+      L"기록장이 4096 이라 넓다 — 조절 창의 Shadow Range 를 좁히면 가벼워진다" },
+    { L"SSAO",
+      L"픽셀마다 둘레를 16번 찔러 막힌 정도를 세고, 얼룩을 문질러 없앤다.\n"
+      L"화면을 덮는 픽셀 수에 그대로 비례한다. 끄면 세 패스가 통째로 사라진다" },
+    { L"Scene",
+      L"메시 여섯을 조명·그림자와 함께 그린다. 색과 확산을 한 번에 두 장으로\n"
+      L"뽑는다(MRT). MSAA 4배. 헤어가 화면을 덮으면 여기가 먼저 무거워진다" },
+    { L"Gizmo",
+      L"오른쪽 위 축 표시와 상태 글자. 선 몇 개라 값이 거의 안 든다" },
+    { L"Resolve",
+      L"MSAA 네 겹을 한 겹으로 푼다. 셰이더가 읽으려면 이 형태여야 한다" },
+    { L"SSS Blur",
+      L"확산만 가로로 한 번, 세로로 한 번 번지게 한다 — 피부 속을 지나는 빛.\n"
+      L"둘로 나누면 계산이 크게 준다. 폭은 조절 창의 SSS Blur Width" },
+    { L"Combine",
+      L"원래 확산을 빼고 번진 것을 넣어 합치고, 톤매핑까지 여기서 한다" },
+    { L"Text",
+      L"이 글자들. 한 프레임 치를 모아 한 번에 그린다" },
+};
+
+static const wchar_t* FindHelp(const wchar_t* name) {
+    for (const PassHelp& h : PASS_HELP)
+        if (wcscmp(h.name, name) == 0) return h.text;
+    return nullptr;
+}
+
+// ─── 화면 위에 얹는 글자 ───────────────────────────────────────────────
+// 톤매핑이 끝난 뒤에 그린다. 그 전에 그리면 글자까지 색 보정을 먹는다
+static void DrawOverlay() {
+    const float SKY [4] = { 0.59f, 0.86f, 1.00f, 1.0f };
+    const float BACK[4] = { 0.09f, 0.10f, 0.12f, 0.88f };   // 설명 칸 바탕
+    const float EDGE[4] = { 0.36f, 0.38f, 0.42f, 0.95f };
+    const float HL  [4] = { 0.20f, 0.15f, 0.13f, 0.85f };   // 올려둔 줄
+    const float TEXT[4] = { 0.78f, 0.80f, 0.83f, 1.0f };
+    wchar_t line[160];
+
+    swprintf(line, 160, L"GPU  %5.2f ms   %.0f fps",
+             GpuTimeTotalMs(), g_frameMs > 0.001f ? 1000.0f / g_frameMs : 0.0f);
+    const float X = 26.0f;
+    float y = 74.0f, lh = FontLineHeight();
+    FontDraw(X, y, line, SKY);
+    y += lh + 2.0f;
+
+    // 가장 무거운 것을 먼저 찾는다. 색은 그것에 견주어 정한다
+    int   n  = GpuTimeCount();
+    float mx = 0.0f;
+    for (int i = 0; i < n; ++i) if (GpuTimeMs(i) > mx) mx = GpuTimeMs(i);
+    if (mx < 0.001f) mx = 0.001f;
+
+    const float ROW_W = 170.0f;
+    int   hover = -1;
+    float hoverY = 0.0f;
+
+    for (int i = 0; i < n; ++i) {
+        // 마우스가 이 줄 위에 있나. 바탕을 먼저 깔아야 글자가 그 위에 온다
+        if (g_mx >= (int)(X - 6) && g_mx <= (int)(X + ROW_W) &&
+            g_my >= (int)y && g_my < (int)(y + lh)) {
+            FontRect(X - 6.0f, y, ROW_W + 6.0f, lh, HL);
+            hover  = i;
+            hoverY = y;
+        }
+        float ms = GpuTimeMs(i);
+        // 무거울수록 빨강이 진해진다. 값을 읽기 전에 어디가 무거운지 보이게
+        float t  = powf(ms / mx, 0.8f);
+        const float col[4] = { 0.67f + 0.33f * t,
+                               0.70f - 0.46f * t,
+                               0.72f - 0.51f * t, 1.0f };
+        FontDraw(X, y, GpuTimeName(i), col);
+        swprintf(line, 160, L"%5.2f", ms);
+        FontDraw(X + 118.0f, y, line, col);
+        y += lh;
+    }
+
+    // ── 올려둔 줄의 설명 ──
+    if (hover < 0) return;
+    const wchar_t* help = FindHelp(GpuTimeName(hover));
+    if (!help) return;
+
+    swprintf(line, 160, L"%s   %.2f ms   %.0f%%", GpuTimeName(hover),
+             GpuTimeMs(hover),
+             GpuTimeTotalMs() > 0.001f ? GpuTimeMs(hover) / GpuTimeTotalMs() * 100.0f : 0.0f);
+
+    float w1 = FontWidth(line), w2 = FontWidth(help);
+    float bw = (w1 > w2 ? w1 : w2) + 28.0f;
+
+    // 설명이 몇 줄인지 세어 높이를 맞춘다. 고정으로 두면 긴 설명이 잘린다
+    int rows = 1;
+    for (const wchar_t* q = help; *q; ++q) if (*q == L'\n') ++rows;
+    float bh = lh * (float)(rows + 1) + 16.0f;    // 머리줄 + 설명
+    float bx = X + ROW_W + 14.0f, by = hoverY - 8.0f;
+    if (bx + bw > WIN_W - 12.0f) bx = (float)WIN_W - 12.0f - bw;
+
+    FontRect(bx - 1.0f, by - 1.0f, bw + 2.0f, bh + 2.0f, EDGE);   // 테두리
+    FontRect(bx, by, bw, bh, BACK);
+    FontDraw(bx + 14.0f, by + 6.0f, line, SKY);
+    FontDraw(bx + 14.0f, by + 8.0f + lh, help, TEXT);
+}
+
 static void UpdateTitle() {
     if (!g_fromPanel) { SettingsFromEngine(); PanelRefresh(g_set); }
 
@@ -1221,6 +1445,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         g_drag   = true;
         g_last.x = (int)(short)LOWORD(lp);
         g_last.y = (int)(short)HIWORD(lp);
+        // 누른 자리를 회전의 한가운데로 삼는다. 모델을 누르면 모델이,
+        // 바닥을 누르면 그 자리가 축이 된다 — 보고 싶은 것을 눌러 돌린다
+        PickCenter(g_last.x, g_last.y);
         SetCapture(hwnd);          // 끌다가 창 밖으로 나가도 계속 따라간다
         return 0;
 
@@ -1229,9 +1456,51 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         ReleaseCapture();
         return 0;
 
+    // 오른쪽 단추로 화면을 잡고 민다. 보는 자리(g_look*)를 옮기는 것이라
+    // 각도와 거리는 그대로고, 모델이 화면 밖으로 나가도 따라갈 수 있다
+    case WM_RBUTTONDOWN:
+        g_pan    = true;
+        g_last.x = (int)(short)LOWORD(lp);
+        g_last.y = (int)(short)HIWORD(lp);
+        SetCapture(hwnd);
+        return 0;
+
+    case WM_RBUTTONUP:
+        g_pan = false;
+        ReleaseCapture();
+        return 0;
+
     case WM_MOUSEMOVE: {
-        if (!g_drag) return 0;
         int mx = (int)(short)LOWORD(lp), my = (int)(short)HIWORD(lp);
+        g_mx = mx; g_my = my;      // 화면 위 글자에 올렸는지 보는 데 쓴다
+
+        if (g_pan) {
+            // 화면 한 픽셀이 실제로 몇 미터인지. 멀리서 볼수록 한 번에
+            // 많이 밀려야 「잡고 끄는」 느낌이 난다
+            float perPx = 2.0f * g_dist * tanf(XM_PIDIV4 * 0.5f) / WIN_H;
+            float dx = (float)(mx - g_last.x) * perPx;
+            float dy = (float)(my - g_last.y) * perPx;
+
+            // 카메라의 가로·세로 축. 뷰 행렬은 월드를 카메라로 옮기는 것이라
+            // 그 열을 읽으면 카메라 축이 월드 어느 쪽을 가리키는지 나온다
+            XMFLOAT4X4 v;
+            XMStoreFloat4x4(&v, g_view);
+            XMFLOAT3 right(v._11, v._21, v._31);
+            XMFLOAT3 up   (v._12, v._22, v._32);
+
+            // 마우스를 오른쪽으로 끌면 화면을 오른쪽에서 당겨 오는 느낌 —
+            // 보는 자리가 오른쪽으로 가고 내용은 왼쪽으로 흐른다
+            g_lookX += right.x * dx - up.x * dy;
+            g_lookY += right.y * dx - up.y * dy;
+            g_lookZ += right.z * dx - up.z * dy;
+
+            UpdateView();
+            g_last.x = mx;
+            g_last.y = my;
+            return 0;
+        }
+
+        if (!g_drag) return 0;
         g_yaw   += (mx - g_last.x) * ORBIT;
         g_pitch += (my - g_last.y) * ORBIT;
         // 위아래로 넘어가지 않게 막는다. 0도면 바닥이 선으로 보이고,
@@ -1262,6 +1531,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             } else if (BuildShaders(g_hwnd)) {
                 SetWindowTextW(g_hwnd, L"kjcEngine   |   셰이더를 다시 읽었습니다");
             }
+            break;
+        case 'P':                                  // 지금 화면을 파일로
+            SaveShot("kjcEngine-shot.bmp");
+            SetWindowTextW(g_hwnd, L"kjcEngine   |   화면을 담았습니다");
             break;
         case VK_OEM_6:  Zoom(1.0f / ZOOM_STEP);    break;   // ]  확대
         case VK_OEM_4:  Zoom(ZOOM_STEP);           break;   // [  축소
@@ -1681,6 +1954,18 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     LoadSettings();
     SettingsFromEngine();
     PanelHost panelHost = { ApplySettings, SaveSettings, RebakeNow };
+    GpuTimeInit(g_dev, g_ctx);
+
+    // 화면에 글자를 쓸 수 있게 해 둔다. 실패해도 그림은 그려지므로 멈추지 않는다
+    char fontErr[1024] = {};
+    if (!FontInit(g_dev, g_ctx, L"Malgun Gothic", 16, fontErr, sizeof(fontErr))) {
+        OutputDebugStringA(fontErr);
+        FILE* ff = nullptr;
+        if (fopen_s(&ff, "kjcEngine-font.txt", "w") == 0 && ff) {
+            fputs(fontErr, ff); fclose(ff);
+        }
+    }
+
     PanelCreate(hInst, hwnd, panelHost, g_set);
 
     LoadView();          // 담아 둔 자리가 있으면 그대로 시작한다
@@ -1717,6 +2002,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         float dt = float(now.QuadPart - prev.QuadPart) / freq.QuadPart;
         prev = now;
         if (dt > 0.1f) dt = 0.1f;          // 창을 끌 때 한 번에 튀지 않게
+        // 한 장씩은 심하게 튄다. 천천히 따라가게 두어야 읽을 수 있다
+        g_frameMs += (dt * 1000.0f - g_frameMs) * 0.05f;
 
         // 여운을 잦아들게 한다. 번쩍임은 켜진 순간이 가장 밝고 곧 0 으로 돌아온다
         if (g_shake > 0.0f) g_shake -= dt;
@@ -1796,6 +2083,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         // 한 번만 잡아 두면 모델이 그 범위를 나가는 순간 그림자가 끊긴다
         BuildLightMatrix();
 
+        GpuTimeBeginFrame();
+
         // ── 1패스 — 태양 자리에서 깊이만 기록한다 ──
         // 지난 프레임에 읽던 것을 떼어낸다. 같은 그림을 쓰면서 동시에
         // 그릴 수는 없어서, 안 떼면 이번 기록이 통째로 무시된다
@@ -1809,6 +2098,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         g_ctx->VSSetShader(g_vsDepth, nullptr, 0);
         g_ctx->PSSetShader(nullptr, nullptr, 0);      // 색은 안 쓴다
         DrawScene(true);
+
+        GpuTimeMark(L"Shadow");
 
         // ── 2~4패스 — SSAO ──
         // 켜져 있을 때만 돈다. 꺼 두면 세 패스를 통째로 건너뛴다
@@ -1851,6 +2142,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
             g_ctx->PSSetShaderResources(10, 1, &nul);
             g_ctx->IASetInputLayout(g_layout);         // 본 렌더용으로 되돌린다
         }
+        GpuTimeMark(L"SSAO");
 
         // ── 5패스 — 화면에 그리면서 그늘을 판정한다 ──
         // 바탕도 함께 밝아져야 화면 전체가 번쩍인 것으로 보인다.
@@ -1908,6 +2200,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         g_ctx->PSSetSamplers(2, 1, &g_pointSmp);
         DrawScene(false);
 
+        GpuTimeMark(L"Scene");
+
         // ── 6패스 — 오른쪽 위 방향 표시기 ──
         // 카메라와 같은 각도에서 보되 자리는 고정이라, 화면을 돌리면
         // 이것도 같이 돈다. 깊이를 지우고 그려서 물체에 가리지 않는다
@@ -1937,6 +2231,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         XMMATRIX spj = XMMatrixOrthographicLH(4.2f, 1.5f, 0.1f, 10.0f);   // 화면 위 표시 — 미터와 무관
         DrawStatus(sv * spj);
 
+        GpuTimeMark(L"Gizmo");
+
         // ── 8패스 — 네 겹을 한 겹으로 푼다 ──
         // 다중표본 판은 셰이더가 그대로 읽지 못한다
         ID3D11ShaderResourceView* nulSSS[3] = {};
@@ -1946,6 +2242,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
                                   DXGI_FORMAT_R16G16B16A16_FLOAT);
         g_ctx->ResolveSubresource(g_diffRes, 0, g_diffMS, 0,
                                   DXGI_FORMAT_R16G16B16A16_FLOAT);
+
+        GpuTimeMark(L"Resolve");
 
         // ── 9·10패스 — 확산을 가로로 한 번, 세로로 한 번 번지게 한다 ──
         g_ctx->RSSetViewports(1, &viewMain);
@@ -1980,6 +2278,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         blurPass(g_blurRTV[0], g_diffSRV,     1.0f, 0.0f);   // 가로
         blurPass(g_blurRTV[1], g_blurSRV[0],  0.0f, 1.0f);   // 세로
 
+        GpuTimeMark(L"SSS Blur");
+
         // ── 11패스 — 다시 합쳐 화면에 낸다 ──
         // 원래 확산을 빼고 번진 확산을 넣는다. 반사는 건드리지 않아
         // 하이라이트가 그대로 살아 있다. 톤매핑도 여기서 한 번에 한다
@@ -1994,8 +2294,20 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         g_ctx->PSSetShaderResources(14, 3, comb);
         g_ctx->PSSetShader(g_psCombine, nullptr, 0);
         g_ctx->Draw(3, 0);
+
+        GpuTimeMark(L"Combine");
+
+        // ── 12패스 — 화면 맨 위에 글자를 얹는다 ──
+        // 톤매핑까지 끝난 뒤라야 글자가 색 보정에 휘둘리지 않는다
+        g_ctx->RSSetViewports(1, &viewMain);
+        FontBegin(WIN_W, WIN_H);
+        DrawOverlay();
+        FontEnd();
         g_ctx->PSSetShaderResources(14, 3, nulSSS);
         g_ctx->IASetInputLayout(g_layout);
+
+        GpuTimeMark(L"Text");
+        GpuTimeEndFrame();
 
         g_swap->Present(1, 0);
     }
@@ -2030,6 +2342,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     if (g_shadowSmp) g_shadowSmp->Release();
     if (g_shadowSRV) g_shadowSRV->Release();
     if (g_shadowDSV) g_shadowDSV->Release();
+    GpuTimeShutdown();
+    FontShutdown();
     PanelDestroy();
     if (g_triVB)     g_triVB->Release();
     if (g_labelVB)   g_labelVB->Release();
