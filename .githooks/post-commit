@@ -56,17 +56,18 @@ if [ "$branch" = "main" ]; then
     # `debugging/latest.json` 이 그쪽 워크트리에서 미커밋이라 그랬다 —
     # `check.py` 를 돌릴 때마다 바뀌는 파일이다. 이유를 안 보여주면
     # 「staging 에 뭔가 쌓였나」 를 매번 뒤지게 된다.
-    # **한 번 더 시도한다.** post-commit 은 git 이 커밋을 마무리하는 중에
-    # 도는데, 그 순간 머지하면 막힌다 — 2026-09-21 에 세 번 그랬고
-    # 곧바로 손으로 다시 하면 전부 성공했다. 1초를 기다린다.
-    err=$(git -C "$sdir" merge main --ff-only 2>&1)
-    ok=$?
-    if [ $ok -ne 0 ]; then
-      sleep 1
-      err=$(git -C "$sdir" merge main --ff-only 2>&1)
-      ok=$?
-    fi
-    if [ $ok -eq 0 ]; then
+    # **환경변수를 지우고 부른다.** 훅은 `GIT_DIR` · `GIT_INDEX_FILE` 을
+    # 물려받는데, 그 상태로 다른 워크트리를 건드리면 **이 저장소의 인덱스를
+    # 그쪽 것으로 알고** 엉뚱한 자리에 락을 만들려 한다.
+    #
+    #     error: Unable to create '…/kjc-staging/.git/index.lock':
+    #            No such file or directory
+    #
+    # 2026-09-21 에 세 번 막혔다. 처음엔 「staging 에 뭔가 쌓였나」 로 봤고,
+    # 다음엔 「커밋 직후라 락이 걸렸나」 로 봤다. **둘 다 틀렸다** —
+    # 실패 이유를 버리지 않게 고친 그 자리에서 진짜 원인이 나왔다.
+    err=$(env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_PREFIX           git -C "$sdir" merge main --ff-only 2>&1)
+    if [ $? -eq 0 ]; then
       echo "  ── staging 에도 내렸습니다 (fast-forward) ─────────────"
       echo "     세션 폴더들이 이제 받을 수 있습니다."
     else
