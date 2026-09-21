@@ -135,6 +135,24 @@
    frame.css 는 .kh-main 에 이미 같은 것을 두고 있는데 여기만 빠져 있었다. */
 .kh-rank > * { min-width: 0; }
 
+/* ── 데일리분석 칸 (kh-rank 줄) ─────────────────────────────
+   옆 칸(지금 뜨는 산업·주요 지수)과 높이가 같아야 줄이 가지런하다.
+   그 둘은 237px 이고 여기도 안에서만 굴러 같은 높이를 지킨다 —
+   「보는 것을 바꿔도 자리는 그대로다」 와 같은 이유다. */
+.kh-dlm { display: flex; flex-direction: column; gap: 7px; overflow-y: auto; }
+.kh-dlm-r {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 7px 9px; border-radius: var(--kh-radius-sm, 8px);
+  background: var(--kh-bg-surface);
+}
+.kh-dlm-n { font-size: 0.78rem; color: var(--kh-text-secondary); font-weight: 500; }
+.kh-dlm-v {
+  margin-left: auto; font-size: 0.92rem; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.kh-dlm-c { font-size: 0.78rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.kh-dlm-note { font-size: 0.72rem; color: var(--kh-text-dim); margin-top: auto; }
+
 .kh-rank .kh-tabs, .kh-rank-card .kh-tabs { padding: 15px 18px 10px; }
 .kh-rank .kh-tab.is-active,
 .kh-rank-card .kh-tab.is-active { background: none; font-weight: 700; }

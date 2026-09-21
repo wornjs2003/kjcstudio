@@ -499,6 +499,42 @@ function paintIndices(indices) {
   lastIndices = indices;
   paintStrip(indices);
   paintMkt();          // 상승·하락 종목 수가 여기 들어 있다
+  paintDailyMini(indices);
+}
+
+/* 데일리분석 칸 — 모달 첫 칸(「주요 지수」)을 세 줄로 줄인 것.
+ *
+ * **새로 부르지 않는다.** 이미 받아 둔 지수를 그대로 쓴다 — 같은 값을
+ * 두 번 부르면 두 자리의 숫자가 어긋나고 KIS 를 겹쳐 부른다
+ * (holdings/CLAUDE.md 「최적화는 멈춘다가 아니라 늦춘다다」 와 같은 자리).
+ */
+const DAILY_MINI = [
+  { code: 'KOSPI',  name: '코스피' },
+  { code: 'KOSDAQ', name: '코스닥' },
+  { code: 'SPX',    name: 'S&P 500' },
+];
+
+function paintDailyMini(indices) {
+  const host = $('kh-dlm');
+  if (!host) return;
+
+  const by = Object.fromEntries((indices || []).map((i) => [i.code, i]));
+  const rows = DAILY_MINI.map((m) => {
+    const i = by[m.code];
+    /* 안 온 것은 「불러오는 중」 으로 둔다. 0 이나 「—」 로 적으면
+       연결이 안 된 건지 값이 그런 건지 구분할 수 없다 (데이터 규칙). */
+    if (!i || i.value == null) {
+      return `<div class="kh-dlm-r"><span class="kh-dlm-n">${m.name}</span>
+        <span class="kh-dlm-v kh-mut" style="font-size:.8rem;font-weight:500"
+          >불러오는 중</span></div>`;
+    }
+    return `<div class="kh-dlm-r"><span class="kh-dlm-n">${m.name}</span>
+      <span class="kh-dlm-v kh-num">${fmtNum(i.value, 2)}</span>
+      <span class="kh-dlm-c ${dirClass(i.changePct)}">${fmtPct(i.changePct)}</span></div>`;
+  }).join('');
+
+  host.innerHTML = rows
+    + '<div class="kh-dlm-note">그날의 일정 · 지수 · 뉴스를 한 장으로 — 자세히 ›</div>';
 }
 
 /* 52주 최저·최고 — 고른 종목 기준.
