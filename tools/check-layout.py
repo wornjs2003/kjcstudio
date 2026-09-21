@@ -37,6 +37,23 @@ BASE = "http://localhost:8765/holdings/"
 # 칸이 몇 px 까지 달라져도 넘어가나. 0 이면 한 픽셀도 못 바뀐다.
 TOL = 1
 
+# 다 그려졌다고 보는 조건 — **높이가 연달아 같게 나오면** 그만 기다린다.
+SETTLE_STEP  = 0.5    # 재는 간격(초)
+SETTLE_SAME  = 3      # 연달아 같아야 하는 횟수
+SETTLE_TRIES = 60     # 최대 이만큼 재고 포기한다 (0.5 x 60 = 30초)
+SETTLE_MIN   = 6      # **이만큼은 무조건 기다린다** (0.5 x 6 = 3초)
+SAVE_MIN     = 30     # 기준을 잡을 때는 이만큼 (0.5 x 30 = 15초)
+
+# SETTLE_MIN 이 왜 필요한가 — 페이지가 열리자마자는 칸이 거의 없는데,
+# **그 빈 상태도 연달아 같게 나온다.** 안정 판정만으로는 빈 화면을
+# 「다 그려졌다」 로 읽는다.
+#
+# **기준을 잡을 때가 가장 위험하다.** 대조할 때는 「기준에 있는 칸이 다
+# 나왔나」 라는 목표가 있는데, 기준을 잡을 때는 그것이 없다. 덜 그려진 채로
+# 박히면 **그 뒤로 늘 그 상태에 맞춰진다** — 덜 그려진 화면이 「정상」 이 되고,
+# 제대로 그려진 날이 「칸이 새로 생겼다」 로 나온다. 2026-09-21 에 실제로 났다.
+# 그래서 `--save` 는 느려도 길게 기다린다. 기준은 가끔만 잡는다.
+
 MEASURE = r"""
 (() => {
   const root = document.querySelector('.kh-app') || document.body;
@@ -117,8 +134,13 @@ def _recv(s):
             return json.loads(payload.decode())
 
 
-def measure_all():
-    """모든 화면을 재서 {화면: {칸: [폭, 높이]}} 를 돌려준다."""
+def measure_all(expect=None):
+    """모든 화면을 재서 {화면: {칸: [폭, 높이]}} 를 돌려준다.
+
+    `expect` 는 기준(이미 잡아 둔 것)이다. 주면 **그 칸이 전부 나타날 때까지**
+    기다린다. 목표를 알고 있으니 「덜 그려진 것」 과 「진짜 없어진 것」 이 갈린다.
+    없으면(`--save`) 높이가 연달아 같아질 때까지만 기다린다.
+    """
     try:
         urllib.request.urlopen(BASE, timeout=5)
     except Exception:
@@ -163,16 +185,66 @@ def measure_all():
                     return m
 
         call("Page.enable")
+
+        def measure_once():
+            r = call("Runtime.evaluate", {"expression": MEASURE, "returnByValue": True})
+            val = r.get("result", {}).get("result", {}).get("value")
+            return json.loads(val) if val else None
+
+        def shape(cells):
+            """안정 판정에 쓰는 모습 — **높이만** 본다.
+
+            폭은 종목 이름·가격의 자릿수를 타서 계속 흔들린다. 그대로 견주면
+            영영 안정되지 않는다. 검사도 높이만 보므로 기준을 맞춘다."""
+            return {k: v[1] for k, v in cells.items()}
+
         result = {}
         for page in PAGES:
             call("Page.navigate", {"url": BASE + page})
-            time.sleep(7)          # 시세·차트가 그려질 때까지
-            r = call("Runtime.evaluate", {"expression": MEASURE, "returnByValue": True})
-            val = r.get("result", {}).get("result", {}).get("value")
-            if not val:
+            # **시간이 아니라 상태로 기다린다.** 초를 세어 기다리면 느린 날에
+            # 덜 그려진 화면을 재고, 그 값이 기준으로 박히면 그 뒤로 늘 어긋난다.
+            # 칸이 몇 개 덜 잡힌 것이 「칸이 사라졌다」 로 나온다
+            # (2026-09-21 · 홈페이지_정리 지적. 같은 날 다른 세션이 AI 분석이
+            #  그려지기 전에 재서 두 번 잘못 보고한 일이 있었다).
+            prev, stable, cells = None, 0, None
+            for tries in range(SETTLE_TRIES):
+                time.sleep(SETTLE_STEP)
+                cells = measure_once()
+                if cells is None:
+                    continue
+                cur = shape(cells)
+                want = (expect or {}).get(page)
+                if want is not None:
+                    # 기준이 있으면 **그 칸이 다 나올 때까지** 기다린다.
+                    # 덜 그려진 화면을 재서 「칸이 없어졌다」 로 내는 것을 막는다 —
+                    # 2026-09-21 에 news.html 의 통계 칸 열셋이 그렇게 빠졌다.
+                    if not (set(want) - set(cells)) and tries >= SETTLE_MIN:
+                        stable += 1
+                        if stable >= SETTLE_SAME:
+                            break
+                    else:
+                        stable = 0
+                elif cur == prev:
+                    stable += 1
+                    if stable >= SETTLE_SAME and tries >= SAVE_MIN:
+                        break
+                else:
+                    stable = 0
+                prev = cur
+            if cells is None:
                 print("  %s — 재지 못했습니다" % page)
                 continue
-            result[page] = json.loads(val)
+            if stable < SETTLE_SAME:
+                miss = sorted(set((expect or {}).get(page, {})) - set(cells))
+                if miss:
+                    print("  %s — %d초를 기다렸는데 칸 %d개가 끝내 안 나왔습니다: %s"
+                          % (page, SETTLE_TRIES * SETTLE_STEP, len(miss),
+                             " · ".join(miss[:4]) + (" …" if len(miss) > 4 else "")))
+                else:
+                    print("  %s — 아직 그려지는 중입니다 (%d초를 기다렸습니다). "
+                          "이 값은 기준으로 삼지 마십시오"
+                          % (page, SETTLE_TRIES * SETTLE_STEP))
+            result[page] = cells
         return result
     finally:
         proc.terminate()
@@ -183,7 +255,12 @@ def main():
     ap.add_argument("--save", action="store_true", help="지금 화면을 기준으로 삼는다")
     args = ap.parse_args()
 
-    now = measure_all()
+    base = None
+    if not args.save and os.path.exists(BASELINE):
+        with open(BASELINE, encoding="utf-8") as f:
+            base = json.load(f)
+
+    now = measure_all(base["pages"] if base else None)
 
     if args.save:
         with open(BASELINE, "w", encoding="utf-8", newline="\n") as f:
@@ -195,12 +272,9 @@ def main():
         print("  %s" % BASELINE)
         return 0
 
-    if not os.path.exists(BASELINE):
+    if base is None:
         print("기준이 없습니다. 먼저 --save 로 잡으십시오")
         return 2
-
-    with open(BASELINE, encoding="utf-8") as f:
-        base = json.load(f)
 
     if base.get("view") != [VIEW_W, VIEW_H]:
         print("기준을 잰 창 크기가 다릅니다 (기준 %s · 지금 %s) — 다시 잡으십시오"
@@ -230,8 +304,22 @@ def main():
             if key not in cells:
                 added.append((page, key))
 
-    if not moved and not added and not gone:
-        cnt = sum(len(v) for v in base["pages"].values())
+    cnt = sum(len(v) for v in base["pages"].values())
+
+    # **칸이 생기고 없어지는 것은 오류가 아니다.** 데이터에 따라 나타나는
+    # 칸이 있다 — 2026-09-21 에 지수 값·변동 칸(`kh-ix-v` · `kh-ix-c`)이
+    # 시세가 안 들어온 시각에 통째로 없었다. 재권님이 말씀하신 것은
+    # **「창 크기가 바뀐다」** 이고, 그것은 **남아 있는 칸의 크기**다.
+    # 칸 유무까지 오류로 잡으면 장중·장후에 따라 매번 걸려서 아무도 안 믿게 된다.
+    if added or gone:
+        for page, key in gone:
+            print("  (알림) %s  %s — 이번엔 안 나왔습니다" % (page, key))
+        for page, key in added:
+            print("  (알림) %s  %s — 이번에 나왔습니다" % (page, key))
+        print("  └ 데이터에 따라 나타나는 칸입니다. 크기 검사와는 별개입니다.")
+        print()
+
+    if not moved:
         print("칸 크기 그대로 — 화면 %d장 · 칸 %d개" % (len(base["pages"]), cnt))
         return 0
 
@@ -239,10 +327,6 @@ def main():
         dw, dh = w2 - w, h2 - h
         print("%s  %s" % (page, key))
         print("    %d x %d  →  %d x %d   (%+d, %+d)" % (w, h, w2, h2, dw, dh))
-    for page, key in gone:
-        print("%s  %s — 없어졌습니다" % (page, key))
-    for page, key in added:
-        print("%s  %s — 새로 생겼습니다" % (page, key))
     print()
     print("바뀐 것이 맞으면 --save 로 기준을 다시 잡으십시오.")
     return 1
