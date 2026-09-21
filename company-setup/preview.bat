@@ -1,16 +1,16 @@
 @echo off
 chcp 65001 >nul
-title KJC Studio - 회사 설립 체크리스트 (포트 8090)
-rem 저장소 루트에서 내보낸다. 화면이 ../assets/ · ../partials/ 를 함께 쓰기 때문이다.
-rem 이 폴더만 내보내면 색과 메뉴가 404 가 된다 (2026-09-14).
+title KJC Studio - Company Setup (port 8090)
+rem Serve from the repo root: the page also uses ../assets/ and ../partials/.
+rem Serving only this folder makes colors and the menu 404 (2026-09-14).
 cd /d "%~dp0.."
 
 set PY=
 python --version >nul 2>&1 && set PY=python
 if not defined PY py -3 --version >nul 2>&1 && set PY=py -3
 if not defined PY (
-  echo   [오류] 파이썬을 찾을 수 없습니다.
-  echo   https://www.python.org/downloads/ 에서 설치하세요.
+  echo   [error] Python not found.
+  echo   Install it from https://www.python.org/downloads/
   pause
   exit /b 1
 )
@@ -19,12 +19,12 @@ set PORT=8090
 set URL=http://localhost:%PORT%/company-setup/
 
 echo ------------------------------------------------
-echo   KJC Studio - 회사 설립 체크리스트
+echo   KJC Studio - Company Setup
 echo ------------------------------------------------
 echo.
-echo   주소 : %URL%
+echo   URL  : %URL%
 echo.
-echo   종료 : 이 창을 닫거나 Ctrl+C
+echo   Stop : close this window or Ctrl+C
 echo ------------------------------------------------
 echo.
 
@@ -34,5 +34,5 @@ start "" "%URL%"
 %PY% -m http.server %PORT%
 
 echo.
-echo   서버가 종료되었습니다.
+echo   Server stopped.
 pause
