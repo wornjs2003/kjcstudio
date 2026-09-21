@@ -2748,12 +2748,17 @@ def apply_slow():
     한 곳만 보면 무엇이 느려졌는지 알 수 있다.
 
     안 건드리는 것
-      FUTURES_TTL      0.7초. 야간선물은 이 값으로 화면 한 줄만 채운다
       DEBUGGING_PROBE_TTL  8093 이 살아 있나 보는 것이라 KIS 와 무관하다
+      INDEX_CHART_TTL      이미 600초라 300 보다 길다
+
+    **FUTURES_TTL 을 한 번 빠뜨렸다** (2026-09-21, `홈페이지_정리` 가 찾음).
+    「야간선물은 화면 한 줄뿐」 이라고 두었는데, 그 한 줄을 화면이 1초마다
+    물어보고 캐시가 0.7초라 **느린 모드에서도 거의 매번 KIS 로 나갔다.**
+    「값이 작다」 와 「자주 안 부른다」 는 다르다.
     """
     global SLOW
     global PRICE_CACHE_TTL, INDEX_TTL, INDEX_MINUTE_TTL, OVERSEAS_TTL
-    global MULTI_CACHE_TTL, SECTOR_TTL, MOVERS_TTL
+    global MULTI_CACHE_TTL, SECTOR_TTL, MOVERS_TTL, FUTURES_TTL
     global INVESTOR_TOP_TTL, INVESTOR_FLOW_TTL, INVESTOR_TTL, ASKING_TTL
 
     SLOW = True
@@ -2767,6 +2772,7 @@ def apply_slow():
     INVESTOR_FLOW_TTL = max(INVESTOR_FLOW_TTL, SLOW_TTL)   # 이미 600 이라 그대로
     INVESTOR_TTL = SLOW_TTL             # 60 → 300
     ASKING_TTL = SLOW_SHORT_TTL         #  3 → 60. 호가는 원래 아주 짧다
+    FUTURES_TTL = SLOW_SHORT_TTL        # 0.7 → 60. 화면이 1초마다 물어보는 자리다
     MULTI_CACHE_TTL = SLOW_SHORT_TTL    #  2 → 60. 순위표가 한 번에 훑는 자리다
 
 
