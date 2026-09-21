@@ -60,10 +60,18 @@ MEASURE = r"""
   const out = {};
   const seen = {};
   const walk = (el, depth) => {
+    // 깊이 3까지만 본다. 2026-09-21 에 6 으로 늘려 보았더니 **작은 글자 칸이
+    // 흔들렸다** — `kh-mut` 하나가 두 번 재는 사이 20px 에서 17px 이 됐다.
+    // 글자 수를 타는 자리라 검사가 못 된다. 칸은 746개에서 다시 줄었다.
     if (depth > 3) return;
     for (const c of el.children) {
+      // **id 가 있으면 id 를 쓴다.** 세션끼리 그 이름으로 부르기 때문이다 —
+      // 2026-09-21 에 class 만 보다가, 다른 세션이 `#kh-iv-box` 라고 넘겨준 칸을
+      // 이 도구는 `kh-idxp-b` 로 부르고 있었다. **같은 칸을 서로 다른 이름으로
+      // 불러서, 재고 있는데도 「기준에 없다」 로 읽혔다.**
       const cn = (typeof c.className === 'string') ? c.className.trim() : '';
-      const cls = cn ? cn.split(/\s+/)[0] : '';
+      const cls = (c.id && /^(kh|h)-/.test(c.id)) ? c.id
+                : (cn ? cn.split(/\s+/)[0] : '');
       const named = cls.startsWith('kh-') || cls.startsWith('h-');
       if (named) {
         seen[cls] = (seen[cls] || 0) + 1;
