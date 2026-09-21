@@ -44,6 +44,15 @@ const INDEX_ROWS = [
 
 let indices = [];
 let issues = [];
+let newsMeta = null;
+
+/* 몇 시간치를 보여줄 것인가. 하루를 넘겨서 봐야 「어제 이슈」가 남는다
+   (2026-09-21 지시 — "그전날 이슈를 놓치지 않게"). */
+const NEWS_HOURS = 36;
+
+/* 한 주제 칸에 몇 줄까지 펼쳐 둘 것인가. 나머지는 접는다 —
+   80줄을 한 줄로 늘어놓으면 못 읽는다. */
+const PER_TOPIC = 3;
 let schedule = [];
 let sectors = [];
 
@@ -124,15 +133,25 @@ async function loadSectors() {
   }
 }
 
+/* **쌓아 둔 것을 읽는다** (2026-09-21 지시 — "받는족족 쌓아놓고 데일리분석에
+   계속 쌓아지게").
+
+   전에는 `/api/news/feed` 로 **그때 RSS 를 받아** 그렸다. 화면을 열 때마다
+   파싱해서 느렸고(0.62초), 화면을 안 열고 있으면 그 사이 기사는 사라졌다.
+   이제 서버가 5분마다 쌓아 두고 **같은 사건끼리 묶어** 둔다 — 화면은 읽기만
+   한다(0.005초 실측).
+
+   한 줄이 묶음 하나다 — 대표 기사 + `more`(같은 사건을 쓴 기사 수). */
 async function loadNews() {
   try {
-    const r = await apiFetch('/api/news/feed', { cache: 'no-store' });
+    const r = await apiFetch(`/api/news/stored?hours=${NEWS_HOURS}`, { cache: 'no-store' });
     if (!r || !r.ok) throw new Error(r.status);
     const b = await r.json();
-    /* 서버는 {ok, data:{issues, moves, topics}} 로 준다. news.js 와 같은 자리를 읽는다. */
-    issues = (b.data && Array.isArray(b.data.issues)) ? b.data.issues : [];
+    issues = Array.isArray(b.data) ? b.data : [];
+    newsMeta = b.meta || null;
   } catch {
     issues = [];
+    newsMeta = null;
   }
 }
 
@@ -308,27 +327,128 @@ function drawNews() {
       + '<span>중계 서버가 꺼져 있으면 이 칸이 비어 있습니다.</span></div>';
     return;
   }
-  if (src) src.textContent = `경제지 RSS · 오늘 ${issues.length}건`;
+  const total = (newsMeta && newsMeta.total && newsMeta.total.count) || issues.length;
+  if (src) src.textContent = `쌓아 둔 것 ${total}건 · 최근 ${NEWS_HOURS}시간 ${issues.length}묶음`;
 
-  /* 주제가 겹치지 않게 앞에서부터 고른다. 같은 주제 기사가 줄줄이 오는 것을 막는다. */
-  const seen = new Set();
-  const picked = [];
+  /* **주제별로 칸을 나눈다** (2026-09-21 지시 — "뉴스별로 정리해서 보면").
+     한 줄로 길게 늘어놓으면 80줄이 되어 무슨 일이 있었는지가 안 읽힌다.
+     칸마다 위에서 PER_TOPIC 줄만 펼치고 나머지는 접는다. */
+  const byTopic = new Map();
   for (const n of issues) {
-    const key = n.topic || n.topicLabel || '';
-    if (key && seen.has(key)) continue;
-    if (key) seen.add(key);
-    picked.push(n);
-    if (picked.length >= 6) break;
+    const key = n.topicLabel || '기타';
+    if (!byTopic.has(key)) byTopic.set(key, []);
+    byTopic.get(key).push(n);
+  }
+  const topics = [...byTopic.entries()].sort((a, b) => b[1].length - a[1].length);
+
+  box.innerHTML = topics.map(([label, rows]) => {
+    const head = rows.slice(0, PER_TOPIC);
+    const rest = rows.slice(PER_TOPIC);
+    const line = (n) => `
+      <a class="kh-dl-news-row" href="${esc(n.link)}" target="_blank" rel="noopener">
+        <span>
+          <span class="kh-dl-news-t">${n.alert ? `<i class="kh-dl-hot">${esc(n.alert)}</i>` : ''}${esc(n.title)}</span>
+          <span class="kh-dl-news-m">${esc(n.source || '')} · ${esc(hhmm(n.at))}${
+            n.more ? ` · <b>외 ${n.more}건</b>` : ''}</span>
+        </span>
+      </a>`;
+    return `
+      <div class="kh-dl-topic-box">
+        <div class="kh-dl-topic-h"><span class="kh-dl-topic">${esc(label)}</span>
+          <i>${rows.length}묶음</i></div>
+        ${head.map(line).join('')}
+        ${rest.length ? `<details class="kh-dl-more">
+          <summary>나머지 ${rest.length}묶음</summary>${rest.map(line).join('')}</details>` : ''}
+      </div>`;
+  }).join('');
+}
+
+/* ── ④ 중요 알림 규칙 ──────────────────────
+
+   **무엇을 바로 받을지 재권님이 여기서 정하신다** (2026-09-21 지시 —
+   "정의 파일은 데일리 분석에다가 공간 만들어서 거기서 지정하거나 타이핑 하게").
+
+   저장되는 곳은 `data/news-alerts.json` 이고, 서버가 그 파일을 읽어 판정한다.
+   **이 PC 의 서버에서만 고칠 수 있다** — 배포본(워커)에는 파일을 쓸 곳이 없다.
+   그래서 저장이 안 되면 그 사실을 칸에 적는다. */
+
+let alertRules = null;
+
+async function loadAlerts() {
+  try {
+    const r = await apiFetch('/api/news/alerts', { cache: 'no-store' });
+    if (!r || !r.ok) throw new Error(r.status);
+    const b = await r.json();
+    alertRules = (b.data && Array.isArray(b.data['즉시알림'])) ? b.data : null;
+  } catch {
+    alertRules = null;
+  }
+}
+
+async function saveAlerts() {
+  const note = $('kh-dl-al-note');
+  try {
+    const r = await apiFetch('/api/news/alerts', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(alertRules),
+    });
+    if (!r || !r.ok) throw new Error(r && r.status);
+    if (note) note.innerHTML = '<b>저장했습니다.</b> 다음 수집(5분 안)부터 걸립니다.';
+  } catch {
+    if (note) {
+      note.innerHTML = '<b>저장하지 못했습니다.</b> 이 PC 의 서버에서만 고칠 수 있습니다'
+        + ' — 배포본에는 파일을 쓸 곳이 없습니다.';
+    }
+  }
+}
+
+function drawAlerts() {
+  const box = $('kh-dl-alerts');
+  if (!box) return;
+  if (!alertRules) {
+    box.innerHTML = '<div class="kh-dl-todo"><b>규칙을 불러오지 못했습니다</b>'
+      + '<span>중계 서버가 꺼져 있으면 이 칸이 비어 있습니다.</span></div>';
+    return;
   }
 
-  box.innerHTML = picked.map((n) => `
-    <a class="kh-dl-news-row" href="${esc(n.link)}" target="_blank" rel="noopener">
-      <span class="kh-dl-topic">${esc(n.topicLabel || '기타')}</span>
-      <span>
-        <span class="kh-dl-news-t">${esc(n.title)}</span>
-        <span class="kh-dl-news-m">${esc(n.source || '')} · ${esc(hhmm(n.at))}</span>
-      </span>
-    </a>`).join('');
+  box.innerHTML = alertRules['즉시알림'].map((rule, ri) => `
+    <div class="kh-dl-al-rule${rule['켬'] === false ? ' is-off' : ''}">
+      <div class="kh-dl-al-h">
+        <label><input type="checkbox" data-rule="${ri}"
+          ${rule['켬'] === false ? '' : 'checked'}> ${esc(rule['이름'] || '이름 없음')}</label>
+        <i>${(rule['제목에'] || []).length}개</i>
+      </div>
+      <div class="kh-dl-al-words">
+        ${(rule['제목에'] || []).map((w, wi) => `
+          <span class="kh-dl-al-w">${esc(w)}
+            <button type="button" data-del="${ri}:${wi}" title="빼기">×</button></span>`).join('')}
+        <input class="kh-dl-al-add" data-add="${ri}" placeholder="낱말을 적고 Enter">
+      </div>
+    </div>`).join('');
+
+  box.querySelectorAll('[data-rule]').forEach((el) => {
+    el.addEventListener('change', () => {
+      alertRules['즉시알림'][Number(el.dataset.rule)]['켬'] = el.checked;
+      drawAlerts(); saveAlerts();
+    });
+  });
+  box.querySelectorAll('[data-del]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const [ri, wi] = el.dataset.del.split(':').map(Number);
+      alertRules['즉시알림'][ri]['제목에'].splice(wi, 1);
+      drawAlerts(); saveAlerts();
+    });
+  });
+  box.querySelectorAll('[data-add]').forEach((el) => {
+    el.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const word = el.value.trim();
+      if (!word) return;
+      alertRules['즉시알림'][Number(el.dataset.add)]['제목에'].push(word);
+      drawAlerts(); saveAlerts();
+    });
+  });
 }
 
 /* ── 텔레그램 문안 ──────────────────────── */
@@ -387,7 +507,7 @@ function buildTelegram() {
       if (key && seen.has(key)) continue;
       if (key) seen.add(key);
       const t = it.title.length > 34 ? `${it.title.slice(0, 33)}…` : it.title;
-      L.push(`· ${it.topicLabel ? `${it.topicLabel} — ` : ''}${t}`);
+      L.push(`· ${it.topicLabel ? `${it.topicLabel} — ` : ''}${t}${it.more ? ` (외 ${it.more}건)` : ''}`);
       if (++n >= 3) break;
     }
   }
@@ -438,8 +558,10 @@ function drawAll() {
 /* ── 시작 ───────────────────────────────── */
 
 async function load() {
-  await Promise.all([loadIndices(), loadNews(), loadSchedule(), loadSectors()]);
+  await Promise.all([loadIndices(), loadNews(), loadSchedule(), loadSectors(),
+                     loadAlerts()]);
   drawAll();
+  drawAlerts();
   /* 하단 띠는 mountFootStrip 이 돌려준 손잡이로만 갱신된다. 손잡이를 버리면
      mount 때 그린 「지수 불러오는 중」 에서 영영 안 바뀐다 — 실제로 그랬다
      (2026-09-18). home.js·stock.js 는 받아서 쓰고 있었다. */

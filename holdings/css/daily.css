@@ -308,3 +308,90 @@
   .kh-dl-idx { grid-template-columns: minmax(0, 1fr); }
   .kh-dl-tg-b { font-size: 12px; padding: 13px 14px; }
 }
+
+/* ══ 뉴스를 주제별로 나눈다 (2026-09-21 지시) ═══════════════
+   재권님 지적 — "쌓여있는 링크를 계속 보여주다 보니 로딩이라든가
+   이런거런 이슈가 있어보이는데. 이걸 뉴스별로 정리해서 보면 더 좋을거같은데".
+
+   80줄을 한 줄로 늘어놓던 것을 칸으로 나눈다. 칸마다 세 줄만 펼치고
+   나머지는 접어 둔다 — 한 번에 그리는 줄이 80 → 20쯤이 된다. */
+.kh-dl-topic-box { padding: 10px 0; border-bottom: 1px solid var(--kh-border); }
+.kh-dl-topic-box:last-child { border-bottom: 0; }
+.kh-dl-topic-h {
+  display: flex; align-items: center; gap: 8px; padding-bottom: 6px;
+}
+.kh-dl-topic-h i { font-style: normal; font-size: 0.72rem; color: var(--kh-text-muted); }
+
+/* 접어 둔 나머지 */
+.kh-dl-more summary {
+  cursor: pointer; font-size: 0.75rem; color: var(--kh-text-secondary);
+  padding: 6px 0 2px;
+}
+.kh-dl-more[open] summary { color: var(--kh-text-primary); }
+
+/* 「중요」로 걸린 줄에 붙는 꼬리표 */
+/* 상승색(빨강)을 쓴다 — theme.css 에 `--kh-danger` 는 없다(2026-09-21 확인).
+   「연한 바탕에 진한 글씨」 룰대로 `-dim` 바탕에 진한 글씨를 얹는다. */
+.kh-dl-hot {
+  font-style: normal; font-size: 0.68rem; font-weight: 700;
+  background: var(--kh-up-dim); color: var(--kh-up);
+  border-radius: 5px; padding: 1px 5px; margin-right: 5px;
+}
+
+/* ══ 중요 알림 규칙 — 여기서 고친다 (2026-09-21 지시) ═══════ */
+.kh-dl-al-rule { padding: 9px 0; border-bottom: 1px solid var(--kh-border); }
+.kh-dl-al-rule:last-child { border-bottom: 0; }
+.kh-dl-al-rule.is-off { opacity: 0.45; }
+.kh-dl-al-h {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.82rem; font-weight: 600; padding-bottom: 7px;
+}
+.kh-dl-al-h label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.kh-dl-al-h i { font-style: normal; font-size: 0.72rem; color: var(--kh-text-muted); }
+.kh-dl-al-words { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.kh-dl-al-w {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--kh-bg-surface); border-radius: 6px;
+  padding: 3px 4px 3px 8px; font-size: 0.75rem;
+}
+.kh-dl-al-w button {
+  border: 0; background: none; cursor: pointer; padding: 0 3px;
+  color: var(--kh-text-muted); font-size: 0.85rem; line-height: 1;
+}
+.kh-dl-al-w button:hover { color: var(--kh-up); }
+.kh-dl-al-add {
+  border: 1px dashed var(--kh-border-strong); border-radius: 6px;
+  padding: 3px 8px; font-size: 0.75rem; min-width: 128px;
+  background: none; color: var(--kh-text-primary);
+}
+.kh-dl-al-note { font-size: 0.72rem; color: var(--kh-text-muted); padding-top: 9px; }
+.kh-dl-al-note code {
+  background: var(--kh-bg-surface); border-radius: 4px; padding: 1px 5px;
+  font-size: 0.72rem;
+}
+
+/* 중요 알림(왼쪽) · 오늘 뉴스(오른쪽) — 한 줄에 나란히 (2026-09-21 지시)
+
+   재권님 말씀 — "중요알람은 오늘뉴스의 왼쪽으로 있어야 할거같은데".
+
+   왼쪽은 낱말 칩이라 폭이 정해져 있고, 오른쪽 뉴스는 제목이 길수록 좋다.
+   그래서 왼쪽만 고정 폭으로 잡고 나머지를 뉴스에 준다. */
+.kh-dl-row {
+  display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px;
+  align-items: start;
+}
+.kh-dl-row > .kh-dl-card { margin-bottom: 16px; }
+
+/* 왼쪽 칸 — 오늘 일정과 중요 알림이 세로로 쌓인다 (2026-09-21 지시
+   — "오늘 일정도 오늘뉴스 옆으로 이동해줘") */
+.kh-dl-col { display: flex; flex-direction: column; min-width: 0; }
+.kh-dl-col > .kh-dl-card:last-child { margin-bottom: 16px; }
+
+/* 좁으면 한 열로 되돌린다 — 340px 칸이 남으면 낱말이 한 줄에 하나씩 된다 */
+@media (max-width: 1100px) {
+  .kh-dl-row { grid-template-columns: 1fr; }
+}
+
+/* 왼쪽 칸에서는 낱말이 세로로 쌓이므로 줄 간격을 조금 넓힌다 */
+.kh-dl-row .kh-dl-al-words { gap: 6px; }
+.kh-dl-row .kh-dl-al-add { min-width: 100%; }
