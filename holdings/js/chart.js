@@ -575,6 +575,11 @@ export function createStockChart(container, candles, opts = {}) {
       layout: {
         background: { color: 'transparent' }, textColor: COLOR.text,
         fontFamily: "'Noto Sans KR', system-ui, sans-serif", fontSize: 11,
+        /* 차트 왼쪽 아래에 라이브러리가 제 로고(TradingView)를 그린다.
+           칸마다 하나씩 생겨 네 칸이면 넷이다 — 봉·거래량·MACD·RSI 위에
+           겹쳐 보인다 (2026-09-21 지시 — "차트에서 어디서 가져와서 표기하는
+           문양 같은거 없애줘"). 라이브러리가 공식으로 주는 옵션이다. */
+        attributionLogo: false,
       },
       grid: { vertLines: { color: COLOR.grid }, horzLines: { color: COLOR.grid } },
       rightPriceScale: {

@@ -16,6 +16,16 @@ import sys
 import urllib.parse
 import urllib.request
 
+# Windows 기본 콘솔(cp949)에서 한글 출력에 실패하지 않도록 고정한다.
+# **없으면 조용히 깨진다** — 2026-09-21 에 setup-dart.bat 을 cp949 셸에서
+# 돌렸더니 「OpenDART 인증키 설정」 이 「OpenDART ����Ű ����」 로 나왔다.
+# setup_kis.py 에는 있고 이 파일에는 없어서 둘이 갈려 있었다.
+for _stream in ("stdout", "stderr"):
+    try:
+        getattr(sys, _stream).reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError, ValueError):
+        pass
+
 # 오류 문구에서 비밀을 지운다. 이 파일은 인증키를 주소에 담아 부르므로,
 # 예외 문구에 주소가 섞이면 키가 화면에 찍힌다.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

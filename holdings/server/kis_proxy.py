@@ -1484,6 +1484,48 @@ def fetch_investor(cfg, code, days=INVESTOR_DAYS):
     return out
 
 
+# 체결은 한 번에 30줄이 온다. 화면이 그보다 많이 보여줄 일이 없다.
+TICKS_TTL = 3              # 장중에는 계속 쌓인다. 화면이 볼 때만 짧게 받아낸다
+_ticks_cache = {}
+
+
+def fetch_ticks(cfg, code):
+    """최근 체결 30줄 (2026-09-21 지시 — A 종목 화면).
+
+    KIS `주식현재가 체결`(FHKST01010300). **한 번에 30줄이 오고 그게 전부다** —
+    더 과거는 안 준다. 화면의 「시세」 칸이 그대로 쓴다.
+
+    `tday_rltv` 가 **체결강도**다. 100 이 기준이고 그보다 크면 산 쪽이 세다.
+    줄마다 같은 값이 와서 머리줄에 한 번만 적는다.
+    """
+    hit = _ticks_cache.get(code)
+    if hit and (time.time() - hit[0]) < TICKS_TTL:
+        return hit[1]
+
+    r = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-ccnl",
+                {"FID_COND_MRKT_DIV_CODE": quote_market_div(),
+                 "FID_INPUT_ISCD": code},
+                "FHKST01010300")
+    rows = []
+    for o in (r.get("output") or []):
+        hhmmss = (o.get("stck_cntg_hour") or "").strip()
+        rows.append({
+            # 091646 → 09:16:46. 화면에서 자르지 않게 여기서 넣는다
+            "at": ("%s:%s:%s" % (hhmmss[:2], hhmmss[2:4], hhmmss[4:6])
+                   if len(hhmmss) == 6 else hhmmss),
+            "price": _num(o.get("stck_prpr")),
+            "volume": _num(o.get("cntg_vol")),
+            "diff": _num(o.get("prdy_vrss")),
+            "pct": _num(o.get("prdy_ctrt")),
+            # 1 상한 · 2 상승 · 3 보합 · 4 하한 · 5 하락 (KIS 공통)
+            "dir": (o.get("prdy_vrss_sign") or "3").strip(),
+        })
+    out = {"rows": rows,
+           "power": _num((r.get("output") or [{}])[0].get("tday_rltv"))}
+    _ticks_cache[code] = (time.time(), out)
+    return out
+
+
 def fetch_asking(cfg, code):
     """호가 10단계. **매수 · 매도 비율**은 총잔량으로 낸다.
 
@@ -2240,6 +2282,18 @@ class Handler(SimpleHTTPRequestHandler):
                 })
                 return
 
+            # 종목 한 장 요약 — 일별 매매동향 5일 + 지표 18개 + 시총 순위
+            if route == "integration":
+                code = (qs.get("code") or [""])[0].strip()
+                if not (code.isdigit() and len(code) == 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                d = naver.integration(code)
+                self._send_json({"ok": True, "data": d,
+                                 "meta": {"code": code, "days": len(d["flow"]),
+                                          "source": "네이버"}})
+                return
+
             # 종목토론 (2026-09-18 지시 — 투자자 정보와 종목 뉴스 사이)
             if route == "discuss":
                 code = (qs.get("code") or [""])[0].strip()
@@ -2666,6 +2720,22 @@ class Handler(SimpleHTTPRequestHandler):
                         # 상위 목록(investor-top)만 가집계라 거기만 그렇게 적는다.
                         "provisional": False,
                     },
+                })
+                return
+
+            # 최근 체결 30줄 (2026-09-21 지시 — A 종목 화면)
+            if route == "ticks":
+                code = (qs.get("code") or [""])[0].strip()
+                if not (code.isdigit() and len(code) == 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                data = fetch_ticks(cfg, code)
+                self._send_json({
+                    "ok": True, "data": data["rows"],
+                    "meta": {"code": code, "count": len(data["rows"]),
+                             # 체결강도. 100 이 기준이고 넘으면 산 쪽이 세다
+                             "power": data["power"],
+                             "market": quote_market_div()},
                 })
                 return
 

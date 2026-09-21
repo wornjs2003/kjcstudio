@@ -46,6 +46,9 @@ let indices = [];
 let issues = [];
 let newsMeta = null;
 
+/* 쌓아 둔 것을 읽었나, RSS 로 물러섰나. 화면이 그 차이를 적는다 */
+let stored = true;
+
 /* 몇 시간치를 보여줄 것인가. 하루를 넘겨서 봐야 「어제 이슈」가 남는다
    (2026-09-21 지시 — "그전날 이슈를 놓치지 않게"). */
 const NEWS_HOURS = 36;
@@ -147,11 +150,36 @@ async function loadNews() {
     const r = await apiFetch(`/api/news/stored?hours=${NEWS_HOURS}`, { cache: 'no-store' });
     if (!r || !r.ok) throw new Error(r.status);
     const b = await r.json();
-    issues = Array.isArray(b.data) ? b.data : [];
+    const rows = Array.isArray(b.data) ? b.data : [];
+    /* **빈 것도 물러선다.** 확인용 서버(--slow)는 뉴스 수집을 안 돌려서
+       표가 비어 있다. 「쌓인 것이 없다」 를 「뉴스가 없다」 로 보여주면
+       그 서버에서는 이 칸이 영영 빈다 (2026-09-21 실측). */
+    if (!rows.length) throw new Error('쌓인 것이 없습니다');
+    issues = rows;
     newsMeta = b.meta || null;
+    stored = true;
+    return;
+  } catch { /* 아래에서 물러선다 */ }
+
+  /* **쌓아 둔 것이 없으면 그때 RSS 를 받는다** (2026-09-21).
+
+     `stored` 는 이 PC 의 market.db 를 읽는 자리라 **워커에는 넣을 수 없다.**
+     배포본에서 열면 404 이고, 그대로 두면 뉴스 칸이 통째로 빈다 —
+     쌓기를 붙이기 전에는 `feed` 로 잘 나오던 자리다. 그래서 물러선다.
+
+     물러선 쪽은 **묶음이 없다.** 서버가 쌓을 때 묶는 것이라 그때그때 받은
+     것에는 `more` 가 없다. 화면이 그 사실을 적는다. */
+  try {
+    const r = await apiFetch('/api/news/feed', { cache: 'no-store' });
+    if (!r || !r.ok) throw new Error(r && r.status);
+    const b = await r.json();
+    issues = (b.data && Array.isArray(b.data.issues)) ? b.data.issues : [];
+    newsMeta = null;
+    stored = false;
   } catch {
     issues = [];
     newsMeta = null;
+    stored = false;
   }
 }
 
@@ -327,8 +355,15 @@ function drawNews() {
       + '<span>중계 서버가 꺼져 있으면 이 칸이 비어 있습니다.</span></div>';
     return;
   }
-  const total = (newsMeta && newsMeta.total && newsMeta.total.count) || issues.length;
-  if (src) src.textContent = `쌓아 둔 것 ${total}건 · 최근 ${NEWS_HOURS}시간 ${issues.length}묶음`;
+  if (src) {
+    if (stored) {
+      const total = (newsMeta && newsMeta.total && newsMeta.total.count) || issues.length;
+      src.textContent = `쌓아 둔 것 ${total}건 · 최근 ${NEWS_HOURS}시간 ${issues.length}묶음`;
+    } else {
+      /* 배포본에서 열면 이쪽이다 — 쌓는 것은 이 PC 의 서버가 한다 */
+      src.textContent = `경제지 RSS ${issues.length}건 · 묶음은 이 PC 에서만 보입니다`;
+    }
+  }
 
   /* **주제별로 칸을 나눈다** (2026-09-21 지시 — "뉴스별로 정리해서 보면").
      한 줄로 길게 늘어놓으면 80줄이 되어 무슨 일이 있었는지가 안 읽힌다.
@@ -407,8 +442,11 @@ function drawAlerts() {
   const box = $('kh-dl-alerts');
   if (!box) return;
   if (!alertRules) {
-    box.innerHTML = '<div class="kh-dl-todo"><b>규칙을 불러오지 못했습니다</b>'
-      + '<span>중계 서버가 꺼져 있으면 이 칸이 비어 있습니다.</span></div>';
+    /* 배포본에서 열면 여기다 — 규칙 파일은 이 PC 에만 있고 워커에는 없다.
+       「못 받았다」 로만 적으면 고장으로 읽힌다 (2026-09-21). */
+    box.innerHTML = '<div class="kh-dl-todo"><b>이 PC 에서만 보입니다</b>'
+      + '<span>중요 낱말은 이 PC 의 서버가 파일로 들고 있습니다. '
+      + '배포본에는 파일을 쓸 곳이 없어 규칙을 보여주거나 고칠 수 없습니다.</span></div>';
     return;
   }
 

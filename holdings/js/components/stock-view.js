@@ -28,9 +28,20 @@ import { fmtNum, fmtWon, fmtMoneyKr, fmtShareCount, fmtDelta, dirClass }
   from '../utils/format.js';
 import { paintIcon } from './stock-icon.js';
 import { mountDisclosures } from './disclosures.js';
+import { apiFetch } from '../data/api.js';
 
 /* 서버가 5분마다 공시를 받아 두므로 화면도 그 주기에 맞춘다 */
 const DISCLOSURE_RELOAD_MS = 5 * 60 * 1000;
+
+/* 체결은 장중에 계속 쌓인다. 서버 캐시가 3초라 그보다 짧게 부를 이유가 없다.
+   **확인용 서버(--slow)에서는 5분 캐시**라 값이 그만큼 묵어 보인다 — 정상이다. */
+const TICKS_RELOAD_MS = 5 * 1000;
+
+/* 일별 매매동향은 하루 한 번 바뀐다. 화면을 열어둔 채로도 날짜가 넘어가게 */
+const FLOW_RELOAD_MS = 10 * 60 * 1000;
+
+/* 체결을 몇 줄까지 보일 것인가. 서버는 30줄을 주고, 칸 높이가 그보다 짧다 */
+const TICKS_SHOWN = 12;
 
 /* stock.html 을 한 번만 받아 두고 복제해 쓴다. 종목을 바꿀 때마다
    다시 받으면 같은 파일을 되풀이해 내려받게 된다. */
@@ -192,6 +203,110 @@ export function mountStockView(root, stock, { onBack } = {}) {
     reloadTimer = setInterval(() => disclosures.reload(), DISCLOSURE_RELOAD_MS);
   }
 
+  /* ── 체결 · 일별 매매동향 (2026-09-21 지시 — A 종목 화면) ──
+
+     둘 다 종목 화면에만 있다. 첫 화면 오른쪽 패널의 「투자자 정보」와
+     겹쳐 보이지만 **출처와 기간이 다르다** —
+
+         첫 화면    KIS · 30일 · 개인/외국인/기관 순매수
+         여기       네이버 · 5일 · 위 셋 + **외인 보유율**
+
+     네이버 쪽은 KIS 예산을 안 쓰고 지표 18개(PER·PBR·52주·배당)가 함께 온다. */
+
+  async function loadTicks() {
+    const box = $('#kh-ticks');
+    if (!box) return;
+    try {
+      const r = await apiFetch(`/api/kis/ticks?code=${stock.code}`, { cache: 'no-store' });
+      if (!r || !r.ok) throw new Error(r && r.status);
+      const b = await r.json();
+      const rows = Array.isArray(b.data) ? b.data : [];
+      const power = b.meta && b.meta.power;
+
+      const p = $('#kh-tick-power');
+      if (p) {
+        p.textContent = power != null ? power.toFixed(2) : '—';
+        /* 100 이 기준이다. 넘으면 산 쪽이 세다 — 상승색으로 읽게 한다 */
+        p.className = 'kh-num ' + (power == null ? '' : dirClass(power - 100));
+      }
+      if (!rows.length) {
+        box.innerHTML = '<div class="kh-mut">체결이 아직 없습니다</div>';
+        return;
+      }
+      box.innerHTML = rows.slice(0, TICKS_SHOWN).map((t) => `
+        <div class="kh-tick">
+          <span class="kh-tick-t">${t.at}</span>
+          <b class="kh-num ${dirClass(t.pct)}">${fmtNum(t.price)}</b>
+          <span class="kh-num kh-tick-q">${fmtNum(t.volume)}</span>
+          <span class="kh-num ${dirClass(t.pct)}">${t.pct > 0 ? '+' : ''}${t.pct.toFixed(2)}%</span>
+        </div>`).join('');
+    } catch {
+      box.innerHTML = '<div class="kh-mut">체결을 불러오지 못했습니다</div>';
+    }
+  }
+
+  async function loadFlow() {
+    const box = $('#kh-flow');
+    try {
+      const r = await apiFetch(`/api/naver/integration?code=${stock.code}`, { cache: 'no-store' });
+      if (!r || !r.ok) throw new Error(r && r.status);
+      const b = await r.json();
+      const d = b.data || {};
+      const flow = Array.isArray(d.flow) ? d.flow : [];
+
+      /* 머리 통계 — 가장 최근 날짜의 순매수와 시총 순위 */
+      const last = flow[0];
+      if (last) {
+        setHtml('#kh-foreign', shares(last.foreign));
+        setHtml('#kh-inst', shares(last.inst));
+      }
+      setText('#kh-rank', d.rank != null ? `${d.rank}위` : '—');
+
+      if (!box) return;
+      if (!flow.length) {
+        box.innerHTML = '<div class="kh-mut">매매동향을 받지 못했습니다</div>';
+        return;
+      }
+      /* 막대는 그 닷새 안에서 가장 큰 값을 기준으로 잡는다 */
+      let max = 1;
+      flow.forEach((f) => ['person', 'foreign', 'inst'].forEach((k) => {
+        max = Math.max(max, Math.abs(f[k] || 0));
+      }));
+      const line = (label, key) => {
+        const v = last[key] || 0;
+        const w = Math.abs(v) / max * 100;
+        return `<div class="kh-flow"><span class="kh-flow-l">${label}</span>
+          <span class="kh-flow-v kh-num ${dirClass(v)}">${shares(v)}</span>
+          <span class="kh-flow-bar"><i class="${v >= 0 ? 'up' : 'dn'}"
+            style="width:${w.toFixed(1)}%"></i></span></div>`;
+      };
+      box.innerHTML = line('개인', 'person') + line('외국인', 'foreign') + line('기관', 'inst')
+        + `<div class="kh-flow-note">${dateText(last.date)} 하루치 ·
+             외국인 보유 ${last.foreignRate != null ? last.foreignRate + '%' : '—'}
+             · 최근 ${flow.length}일 중 가장 큰 값을 100% 로 그립니다</div>`;
+    } catch {
+      if (box) box.innerHTML = '<div class="kh-mut">매매동향을 불러오지 못했습니다</div>';
+    }
+  }
+
+  /* 주 → 만주. 순매수는 자릿수가 커서 그대로 쓰면 칸을 넘는다 */
+  function shares(n) {
+    if (n == null || !Number.isFinite(n)) return '—';
+    const v = n / 10000;
+    return `${v > 0 ? '+' : ''}${v.toFixed(1)}만주`;
+  }
+
+  /* 20260918 → 09.18 */
+  function dateText(d) {
+    const t = String(d || '');
+    return t.length === 8 ? `${t.slice(4, 6)}.${t.slice(6)}` : t;
+  }
+
+  loadTicks();
+  loadFlow();
+  const tickTimer = setInterval(() => { if (!document.hidden && !dead) loadTicks(); }, TICKS_RELOAD_MS);
+  const flowTimer = setInterval(() => { if (!document.hidden && !dead) loadFlow(); }, FLOW_RELOAD_MS);
+
   return {
     /** 새 시세가 왔을 때 */
     paint: paintHead,
@@ -214,6 +329,8 @@ export function mountStockView(root, stock, { onBack } = {}) {
       dead = true;
       if (chart) { chart.destroy(); chart = null; }
       if (reloadTimer) { clearInterval(reloadTimer); reloadTimer = null; }
+      clearInterval(tickTimer);
+      clearInterval(flowTimer);
     },
   };
 }
