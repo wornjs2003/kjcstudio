@@ -2148,7 +2148,25 @@ class Handler(SimpleHTTPRequestHandler):
         if (self.path or "").startswith("/api/news/"):
             self._handle_news()
             return
-        self.send_error(405, "PUT 은 /api/news/alerts 에만 됩니다")
+
+        # **딸려 온 본문을 먼저 비운다.** 안 읽고 응답하면 보내는 쪽이
+        # 아직 쓰고 있는 중에 연결이 닫혀 깨진다.
+        try:
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        except Exception:
+            pass
+
+        # **HTTP 상태 줄에는 한글을 쓸 수 없다.** 그 줄은 latin-1 로 인코딩되므로
+        # `send_error(405, "PUT 은 …")` 처럼 설명을 넘기면 그 자리에서
+        # UnicodeEncodeError 로 죽고 **응답이 통째로 안 나간다**(2026-09-21 실측).
+        #
+        #     send_response_only → (self.protocol_version, code, message).encode('latin-1')
+        #     UnicodeEncodeError: 'latin-1' codec can't encode character '은'
+        #
+        # 겉으로는 405 가 아니라 **빈 응답**으로 보여서 원인을 알 수 없다.
+        # 설명은 본문(JSON)에 담는다 — 다른 응답과 모양도 같아진다.
+        self._send_json({"ok": False,
+                         "error": "PUT 은 /api/news/alerts 에만 됩니다."}, 405)
 
     # ── Debugging(검사) 보드 ──
     # 8093 으로 넘긴다. 꺼져 있으면 무엇을 켜야 하는지 적어 준다.
