@@ -130,7 +130,11 @@ def measure_all():
         sys.exit(2)
 
     proc = subprocess.Popen(
-        [CHROME, "--headless=new", "--disable-gpu", "--hide-scrollbars",
+        # `--hide-scrollbars` 를 주지 않는다. 숨기면 콘텐츠 폭이 실제보다
+        # 넓게 재지고, 「(스크롤바 폭)」 항목이 늘 0 이 되어 뜻을 잃는다.
+        # 두는 편이 재권님 화면과 조건이 가깝고, 덤으로 「스크롤바는 한 벌만
+        # 쓴다」 의 6px 이 깨지는 것도 이 도구가 잡는다 (2026-09-21).
+        [CHROME, "--headless=new", "--disable-gpu",
          "--remote-debugging-port=%d" % PORT,
          "--window-size=%d,%d" % (VIEW_W, VIEW_H), "about:blank"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
