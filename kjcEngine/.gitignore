@@ -18,3 +18,6 @@ kjcEngine-font.txt
 
 # 조절 창에서 담은 값. PC 마다 다르므로 담지 않는다
 kjcEngine-shader.txt
+
+# 잰 값. 볼 때마다 덮어쓴다
+kjcEngine-time.txt

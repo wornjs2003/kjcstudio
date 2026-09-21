@@ -120,15 +120,37 @@ float4 PS_Combine(FullOut i) : SV_TARGET {
 }
 
 // ③ 흐리게. 몇 군데만 찔러 본 값이라 그대로 두면 지글거린다
-float4 PS_Blur(FullOut i) : SV_TARGET {
-    float2 texel = 1.0 / screen.xy;
+// 가림 값을 문지른다. 가로 한 번, 세로 한 번으로 나눈다 —
+// 5x5 를 한 번에 하면 스물다섯 번 읽지만 나누면 열 번이면 같은 결과가 난다.
+// 텍스처 크기는 직접 물어본다. 가림은 화면의 절반 크기라 screen 을 쓰면 어긋난다
+float4 BlurAxis(float2 uv, float2 dir) {
+    float w, h;
+    aoTex.GetDimensions(w, h);
+    float2 step = dir / float2(w, h);
+
     float sum = 0.0;
     [unroll]
-    for (int y = -2; y <= 2; ++y) {
-        [unroll]
-        for (int x = -2; x <= 2; ++x) {
-            sum += aoTex.SampleLevel(pointSmp, i.uv + float2(x, y) * texel, 0).r;
-        }
-    }
-    return sum / 25.0;
+    for (int k = -2; k <= 2; ++k)
+        sum += aoTex.SampleLevel(pointSmp, uv + step * k, 0).r;
+    return sum / 5.0;
+}
+
+float4 PS_BlurH(FullOut i) : SV_TARGET { return BlurAxis(i.uv, float2(1.0, 0.0)); }
+float4 PS_BlurV(FullOut i) : SV_TARGET { return BlurAxis(i.uv, float2(0.0, 1.0)); }
+
+// ─── 오버드로를 색으로 ─────────────────────────────────────────────────
+// 몇 번 그려졌는지를 색으로 읽게 한다. 숫자를 보기 전에 어디가 겹쳤는지
+// 한눈에 들어와야 해서, 적은 쪽은 차갑고 많은 쪽은 뜨겁게 간다
+float4 PS_ShowOver(FullOut i) : SV_Target {
+    float n = overTex.SampleLevel(pointSmp, i.uv, 0).r;
+    if (n < 0.5) return float4(0.02, 0.02, 0.03, 1.0);    // 아무것도 안 그려진 자리
+
+    float3 c;
+    if      (n < 1.5) c = float3(0.10, 0.20, 0.55);   // 1겹 — 낭비 없음
+    else if (n < 2.5) c = float3(0.10, 0.45, 0.75);   // 2
+    else if (n < 3.5) c = float3(0.15, 0.65, 0.45);   // 3
+    else if (n < 5.5) c = float3(0.75, 0.80, 0.20);   // 4~5
+    else if (n < 8.5) c = float3(0.95, 0.55, 0.15);   // 6~8
+    else              c = float3(0.95, 0.15, 0.15);   // 9겹 이상
+    return float4(c, 1.0);
 }

@@ -77,13 +77,16 @@ struct Align {
 //   targetHeight   이 높이가 되도록 크기를 맞춘다. 바닥(y=0)에 세우고
 //                  가로 한가운데를 원점에 둔다
 //   실패하면       false 를 돌리고 err 에 이유를 적는다
+//   radial         ao 자리에 「메시 한가운데에서 얼마나 바깥인가」를 넣는다
+//                  (0 = 한가운데, 1 = 가장 바깥). 헤어에서 안쪽 가닥을
+//                  가려내는 데 쓴다 — 광선을 쏘는 것보다 훨씬 싸다
 //   bakeAO         정점마다 광선을 쏴 가림 정도를 굽는다. 정점이 많으면
 //                  몇 분씩 걸리므로, 털 가닥처럼 얻는 것이 적은 메시는 끈다
 //   align          nullptr 이 아니면 — valid 일 때 그 변환을 쓰고,
 //                  아닐 때는 이번에 정한 값을 채워 돌려준다
 bool LoadFBX(ID3D11Device* dev, const char* path, float targetHeight,
              Model& out, char* err, size_t errSize,
-             bool bakeAO = true, Align* align = nullptr);
+             bool bakeAO = true, Align* align = nullptr, bool radial = false);
 
 // 버텍스 AO 를 다른 범위로 다시 굽고 GPU 버퍼를 갈아끼운다.
 // 정점 수에 비례해 시간이 걸리므로 (이 모델은 몇 초) 값을 바꿀 때마다가 아니라

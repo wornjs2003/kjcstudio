@@ -178,7 +178,7 @@ static void ComputeVertexAO(std::vector<Vertex>& v,
 
 bool LoadFBX(ID3D11Device* dev, const char* path, float targetHeight,
              Model& out, char* err, size_t errSize,
-             bool bakeAO, Align* align) {
+             bool bakeAO, Align* align, bool radial) {
     ufbx_load_opts opts = {};
     // DirectX 는 왼손 좌표계에 Y 가 위다. FBX 는 만든 도구마다 축이 달라서
     // 여기서 한 번에 맞춰 둔다 — 안 맞추면 모델이 눕거나 뒤집혀 들어온다
@@ -386,8 +386,30 @@ bool LoadFBX(ID3D11Device* dev, const char* path, float targetHeight,
     // 여기서 시간이 걸린다. 정점 수와 삼각형 수에 따라 1~3초 정도다
     // 털 가닥처럼 정점이 많고 얻는 것이 적은 메시는 굽지 않는다.
     // 안 구우면 ao 가 1(훤히 열림)로 남아 아무 영향도 주지 않는다
-    if (bakeAO) ComputeVertexAO(flat, indices, targetHeight, out.aoRadius);
-    else for (Vertex& v : flat) v.ao = 1.0f;
+    if (bakeAO) {
+        ComputeVertexAO(flat, indices, targetHeight, out.aoRadius);
+    } else if (radial) {
+        // 한가운데에서 얼마나 바깥인가. 헤어는 안쪽 가닥이 바깥 가닥에
+        // 완전히 덮이는데, 광선을 쏴 가리려면 정점이 팔만이라 몇십 초가 든다.
+        // 머리 모양은 덩어리에 가까워 한가운데에서 잰 거리로도 충분히 갈린다
+        DirectX::XMFLOAT3 c(0.0f, 0.0f, 0.0f);
+        for (const Vertex& v : flat) { c.x += v.pos.x; c.y += v.pos.y; c.z += v.pos.z; }
+        float inv = flat.empty() ? 0.0f : 1.0f / (float)flat.size();
+        c.x *= inv; c.y *= inv; c.z *= inv;
+
+        float maxR = 1e-6f;
+        for (const Vertex& v : flat) {
+            float dx = v.pos.x - c.x, dy = v.pos.y - c.y, dz = v.pos.z - c.z;
+            float d = sqrtf(dx * dx + dy * dy + dz * dz);
+            if (d > maxR) maxR = d;
+        }
+        for (Vertex& v : flat) {
+            float dx = v.pos.x - c.x, dy = v.pos.y - c.y, dz = v.pos.z - c.z;
+            v.ao = sqrtf(dx * dx + dy * dy + dz * dz) / maxR;   // 0 = 한가운데
+        }
+    } else {
+        for (Vertex& v : flat) v.ao = 1.0f;
+    }
 
     // ── GPU 로 올린다 ──
     D3D11_BUFFER_DESC bd = {};

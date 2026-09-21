@@ -191,6 +191,12 @@ static const int HDRI_N = 3;
 // ─── 크기와 속도 ───────────────────────────────────────────────────────
 // 여기서부터 모든 길이는 미터다. 머리가 0.34m 라는 것을 기준으로 잡았다
 static const int   WIN_W = 1920, WIN_H = 1280;
+// 가림(SSAO)은 절반 크기로 푼다. 픽셀이 4분의 1 로 줄고, 어차피 뒤에서
+// 문지르는 값이라 눈에 띄게 나빠지지 않는다
+static const int   AO_W = WIN_W / 2, AO_H = WIN_H / 2;
+// 헤어 깊이를 미리 채울 것인가. 끄면 예전 방식으로 돌아간다 —
+// 값이 정말 줄었는지 견주어 보려고 남겨 둔다
+static const bool  HAIR_PREZ = true;
 static const float PLATE = 2.0f;    // 바닥판 한 변 — 2 m
 static const float SPEED = 0.8f;    // 초당 0.8 m — 걷는 빠르기쯤
 static const float ORBIT = 0.008f;  // 마우스 1픽셀을 끌 때 카메라가 도는 각도(라디안)
@@ -334,7 +340,13 @@ static float g_specOn   = 1.0f;   // 끄면 번들거림이 사라진다
 static float g_expo     = 0.46f;  // 노출 — 화면 전체 밝기
 static float g_sunI     = 0.70f;  // 태양 세기. 환경광과 균형을 잡는다
 static float g_bgPow    = 1.0f;   // 배경 밝기. 1 이면 환경맵 그대로
-static float g_frameMs  = 0.0f;   // 한 프레임에 걸린 시간. 여러 장 평균이다   // Gray Diffuse — 피부색을 걷어내고 형태만 본다
+static float g_frameMs  = 0.0f;   // 한 프레임에 걸린 시간. 여러 장 평균이다
+// 헤어 안쪽 가닥을 어디까지 걷어낼 것인가. 멀어질수록 크게 잡는다 —
+// 가까이서는 틈으로 비치는 것이 보이지만 멀어지면 덩어리로만 보인다
+static float g_hairCutNear = 0.00f;   // 이 거리에서는 다 그린다
+static float g_hairCutFar  = 0.45f;   // 멀리서는 안쪽 45% 를 버린다
+static float g_hairNearM   = 0.45f;   // m
+static float g_hairFarM    = 1.60f;   // m   // Gray Diffuse — 피부색을 걷어내고 형태만 본다
 
 // ─── 깊이 어둡게 (Fog) ─────────────────────────────────────────────────
 // 카메라에서 멀어질수록 어둡게 해서 모델 자체의 앞뒤를 드러낸다.
@@ -378,17 +390,28 @@ static ID3D11RenderTargetView*   g_aoRTV     = nullptr;
 static ID3D11ShaderResourceView* g_aoSRV     = nullptr;
 static ID3D11RenderTargetView*   g_aoBlurRTV = nullptr;
 static ID3D11ShaderResourceView* g_aoBlurSRV = nullptr;
+static ID3D11RenderTargetView*   g_aoTmpRTV  = nullptr;   // 가로만 문지른 것
+static ID3D11ShaderResourceView* g_aoTmpSRV  = nullptr;
 static ID3D11SamplerState*       g_pointSmp  = nullptr;
 
 static ID3D11VertexShader*       g_vsGBuf    = nullptr;
 static ID3D11PixelShader*        g_psGBuf    = nullptr;
 static ID3D11VertexShader*       g_vsFull    = nullptr;
 static ID3D11PixelShader*        g_psSSAO    = nullptr;
-static ID3D11PixelShader*        g_psBlur    = nullptr;
+static ID3D11PixelShader*        g_psClip    = nullptr;   // 깊이만 채우는 것
+static ID3D11PixelShader*        g_psCount   = nullptr;   // 몇 겹인지 세는 것
+static ID3D11PixelShader*        g_psShowOver= nullptr;
+static ID3D11RenderTargetView*   g_overRTV   = nullptr;
+static ID3D11ShaderResourceView* g_overSRV   = nullptr;
+static ID3D11BlendState*         g_bsAdd     = nullptr;   // 1 씩 쌓는다
+static bool                      g_showOver  = false;     // O 키
+static ID3D11PixelShader*        g_psBlurH   = nullptr;
+static ID3D11PixelShader*        g_psBlurV   = nullptr;
 static ID3D11PixelShader*        g_psSky     = nullptr;
 // 배경을 그릴 때는 깊이를 보지도 쓰지도 않는다. 화면을 덮는 삼각형이
 // 깊이를 써 버리면 그 뒤에 그리는 물체가 가려진다
 static ID3D11DepthStencilState*  g_dsNoDepth = nullptr;
+static ID3D11DepthStencilState*  g_dsEqual   = nullptr;   // 미리 채운 깊이와 같을 때만
 
 // 피부 번짐용. 그림을 화면에 바로 그리지 않고 여기 담았다가,
 // 확산만 번지게 한 뒤 합쳐서 내보낸다
@@ -992,13 +1015,37 @@ static void SetCB(XMMATRIX world, XMMATRIX viewProj,
     cb.rimCol      = XMFLOAT4(RIM_RGB[0], RIM_RGB[1], RIM_RGB[2], g_vao);
     cb.fogParam    = XMFLOAT4(g_dist + g_fogNear, g_dist + g_fogFar, g_fogOn, 0.0f);
     cb.fogCol      = XMFLOAT4(FOG_RGB[0], FOG_RGB[1], FOG_RGB[2], 0.0f);
-    cb.sssParam    = XMFLOAT4(0.0f, g_sssOn, 0.0f, 0.0f);   // 폭·방향은 번짐 패스에서
+    // 카메라에서 모델까지의 거리로 헤어 안쪽을 얼마나 걷어낼지 정한다
+    float toModel = sqrtf((g_camPos.x - g_x) * (g_camPos.x - g_x)
+                        + (g_camPos.y - MODEL_LIFT) * (g_camPos.y - MODEL_LIFT)
+                        + (g_camPos.z - g_z) * (g_camPos.z - g_z));
+    float tCut = (toModel - g_hairNearM) / max(g_hairFarM - g_hairNearM, 1e-4f);
+    tCut = tCut < 0.0f ? 0.0f : (tCut > 1.0f ? 1.0f : tCut);
+    float hairCut = g_hairCutNear + (g_hairCutFar - g_hairCutNear) * tCut;
+    cb.sssParam    = XMFLOAT4(0.0f, g_sssOn, hairCut, 0.0f);   // 폭·방향은 번짐 패스에서
     cb.envParam    = XMFLOAT4(g_envPow, (float)g_env.specMips, g_envOn, g_micTile);
     g_ctx->UpdateSubresource(g_cb, 0, nullptr, &cb, 0, 0);
 }
 
 // idxFmt 는 인덱스 한 칸의 크기다. 여기서 만든 작은 도형은 16비트면 넉넉하지만,
 // FBX 모델은 정점이 6만 5천을 넘을 수 있어 32비트를 쓴다
+// 모델이 놓이는 자리. 본 패스와 깊이 프리패스가 **같은 값**을 써야 한다 —
+// 한 치라도 어긋나면 「깊이가 같을 때만」 판정이 통째로 빗나가 헤어가 사라진다
+static XMMATRIX ModelWorld() {
+    float cx = g_x, cy = MODEL_LIFT, cz = g_z;   // 판에서 살짝 띄운다
+    if (g_hop > 0.0f) {
+        float t = g_hop / HOP_TIME;
+        if (t > 1.0f) t = 1.0f;
+        cy += HOP_HEIGHT * 4.0f * t * (1.0f - t);
+        // 주기를 4번과 3번으로 어긋나게 둬서 같은 자리를 되풀이하지 않게 한다
+        cx += HOP_WOBBLE * sinf(t * XM_2PI * 4.0f);
+        cz += HOP_WOBBLE * cosf(t * XM_2PI * 3.0f);
+    }
+    // 정면이 향한 쪽으로 돌려 세운 다음 제자리로 옮긴다. 순서가 반대면
+    // 원점을 중심으로 빙 도는 모양이 된다
+    return XMMatrixRotationY(g_facing) * XMMatrixTranslation(cx, cy, cz);
+}
+
 static void DrawOne(ID3D11Buffer* vb, ID3D11Buffer* ib, UINT count,
                     XMMATRIX world, const float rgba[4], bool depthPass,
                     DXGI_FORMAT idxFmt = DXGI_FORMAT_R16_UINT, float mode = 0.0f) {
@@ -1064,20 +1111,7 @@ static void DrawScene(bool depthPass) {
     // 뛰는 중이면 그만큼 떠오르고 좌우로 떤다.
     // 4t(1-t) 는 t 가 0 과 1 에서 0, 한가운데서 1 이 되는 포물선이라
     // 뛰어올랐다 제자리로 내려오는 모양이 저절로 나온다
-    float cx = g_x, cy = MODEL_LIFT, cz = g_z;   // 판에서 살짝 띄운다
-    if (g_hop > 0.0f) {
-        float t = g_hop / HOP_TIME;
-        if (t > 1.0f) t = 1.0f;
-        cy += HOP_HEIGHT * 4.0f * t * (1.0f - t);
-        // 주기를 4번과 3번으로 어긋나게 둬서 같은 자리를 되풀이하지 않게 한다
-        cx += HOP_WOBBLE * sinf(t * XM_2PI * 4.0f);
-        cz += HOP_WOBBLE * cosf(t * XM_2PI * 3.0f);
-    }
-
-    // 정면이 향한 쪽으로 돌려 세운 다음 제자리로 옮긴다. 순서가 반대면
-    // 원점을 중심으로 빙 도는 모양이 된다
-    XMMATRIX cubeWorld = XMMatrixRotationY(g_facing)
-                       * XMMatrixTranslation(cx, cy, cz);
+    XMMATRIX cubeWorld = ModelWorld();
 
     DrawOne(g_plateVB, nullptr, 6, XMMatrixIdentity(), PLATE_C, depthPass);
     // 모델은 정점이 많아 32비트 인덱스를 쓰고, 색은 텍스처에서 읽는다(모드 2)
@@ -1106,8 +1140,15 @@ static void DrawScene(bool depthPass) {
             mode = 0.0f;               // 텍스처가 없으면 회색으로 그린다
         }
 
+        // 헤어는 깊이를 미리 채워 두었다. 그 자리와 똑같은 픽셀만 그리면
+        // 겹친 가닥 중 맨 앞 하나만 셰이딩한다
+        bool preZ = HAIR_PREZ && (e.mode > 3.5f) && !depthPass;
+        if (preZ) g_ctx->OMSetDepthStencilState(g_dsEqual, 0);
+
         DrawOne(e.model.vb, e.model.ib, e.model.indexCount, cubeWorld,
                 e.color, depthPass, DXGI_FORMAT_R32_UINT, mode);
+
+        if (preZ) g_ctx->OMSetDepthStencilState(nullptr, 0);
 
         if (swap) {                    // 얼굴 것으로 돌려 놓는다
             ID3D11ShaderResourceView* t[2] = { g_albedo.srv, g_normal.srv };
@@ -1175,7 +1216,8 @@ static bool BuildShaders(HWND hwnd) {
 
     ID3DBlob *bVS = nullptr, *bVSD = nullptr, *bPS = nullptr, *bGV = nullptr,
              *bGP = nullptr, *bFV = nullptr, *bAO = nullptr, *bBL = nullptr,
-             *bSK = nullptr, *bSB = nullptr, *bCM = nullptr;
+             *bSK = nullptr, *bSB = nullptr, *bCM = nullptr,
+             *bBV = nullptr, *bCL = nullptr, *bCN = nullptr, *bSO = nullptr;
 
     const Job jobs[] = {
         { SH_SCENE, "VS",         "vs_5_0", &bVS  },
@@ -1183,9 +1225,13 @@ static bool BuildShaders(HWND hwnd) {
         { SH_SCENE, "PS",         "ps_5_0", &bPS  },
         { SH_SCENE, "VS_GBuf",    "vs_5_0", &bGV  },
         { SH_SCENE, "PS_GBuf",    "ps_5_0", &bGP  },
+        { SH_SCENE, "PS_Clip",    "ps_5_0", &bCL  },
+        { SH_SCENE, "PS_Count",   "ps_5_0", &bCN  },
+        { SH_POST,  "PS_ShowOver","ps_5_0", &bSO  },
         { SH_POST,  "VS_Full",    "vs_5_0", &bFV  },
         { SH_POST,  "PS_SSAO",    "ps_5_0", &bAO  },
-        { SH_POST,  "PS_Blur",    "ps_5_0", &bBL  },
+        { SH_POST,  "PS_BlurH",   "ps_5_0", &bBL  },
+        { SH_POST,  "PS_BlurV",   "ps_5_0", &bBV  },
         { SH_POST,  "PS_Sky",     "ps_5_0", &bSK  },
         { SH_POST,  "PS_SSSBlur", "ps_5_0", &bSB  },
         { SH_POST,  "PS_Combine", "ps_5_0", &bCM  },
@@ -1214,7 +1260,8 @@ static bool BuildShaders(HWND hwnd) {
 
     // 여기까지 왔으면 전부 성공이다. 이제 갈아끼운다
     ID3D11DeviceChild* old[] = { g_vs, g_vsDepth, g_ps, g_vsGBuf, g_psGBuf,
-                                 g_vsFull, g_psSSAO, g_psBlur, g_psSky,
+                                 g_vsFull, g_psSSAO, g_psBlurH, g_psBlurV, g_psSky, g_psClip,
+                                g_psCount, g_psShowOver,
                                  g_psSSSBlur, g_psCombine, g_layout };
     for (ID3D11DeviceChild* o : old) if (o) o->Release();
 
@@ -1225,7 +1272,11 @@ static bool BuildShaders(HWND hwnd) {
     g_dev->CreatePixelShader (bGP ->GetBufferPointer(), bGP ->GetBufferSize(), nullptr, &g_psGBuf);
     g_dev->CreateVertexShader(bFV ->GetBufferPointer(), bFV ->GetBufferSize(), nullptr, &g_vsFull);
     g_dev->CreatePixelShader (bAO ->GetBufferPointer(), bAO ->GetBufferSize(), nullptr, &g_psSSAO);
-    g_dev->CreatePixelShader (bBL ->GetBufferPointer(), bBL ->GetBufferSize(), nullptr, &g_psBlur);
+    g_dev->CreatePixelShader (bCL ->GetBufferPointer(), bCL ->GetBufferSize(), nullptr, &g_psClip);
+    g_dev->CreatePixelShader (bCN ->GetBufferPointer(), bCN ->GetBufferSize(), nullptr, &g_psCount);
+    g_dev->CreatePixelShader (bSO ->GetBufferPointer(), bSO ->GetBufferSize(), nullptr, &g_psShowOver);
+    g_dev->CreatePixelShader (bBL ->GetBufferPointer(), bBL ->GetBufferSize(), nullptr, &g_psBlurH);
+    g_dev->CreatePixelShader (bBV ->GetBufferPointer(), bBV ->GetBufferSize(), nullptr, &g_psBlurV);
     g_dev->CreatePixelShader (bSK ->GetBufferPointer(), bSK ->GetBufferSize(), nullptr, &g_psSky);
     g_dev->CreatePixelShader (bSB ->GetBufferPointer(), bSB ->GetBufferSize(), nullptr, &g_psSSSBlur);
     g_dev->CreatePixelShader (bCM ->GetBufferPointer(), bCM ->GetBufferSize(), nullptr, &g_psCombine);
@@ -1532,7 +1583,29 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 SetWindowTextW(g_hwnd, L"kjcEngine   |   셰이더를 다시 읽었습니다");
             }
             break;
-        case 'P':                                  // 지금 화면을 파일로
+        case 'V':                                  // 헤어 안쪽 걷어내기
+            g_hairCutFar = (g_hairCutFar > 0.01f) ? 0.0f : 0.45f;
+            SetWindowTextW(g_hwnd, g_hairCutFar > 0.01f
+                ? L"kjcEngine   |   헤어 안쪽 걷어내기 켬"
+                : L"kjcEngine   |   헤어 안쪽 걷어내기 끔");
+            break;
+        case 'O':                                  // 몇 겹으로 그려지나
+            g_showOver = !g_showOver;
+            SetWindowTextW(g_hwnd, g_showOver
+                ? L"kjcEngine   |   겹침 보기 — 파랑 1겹, 빨강 9겹 이상"
+                : L"kjcEngine   |   겹침 보기 끔");
+            break;
+        case 'P':                                  // 지금 화면과 값을 파일로
+            {   // 재 놓은 값도 함께 적는다. 화면에서 숫자를 눈으로
+                // 옮겨 적는 것보다 이쪽이 틀릴 일이 없다
+                FILE* tf = nullptr;
+                if (fopen_s(&tf, "kjcEngine-time.txt", "w") == 0 && tf) {
+                    fprintf(tf, "total %.3f\n", GpuTimeTotalMs());
+                    for (int i = 0; i < GpuTimeCount(); ++i)
+                        fprintf(tf, "%ls %.3f\n", GpuTimeName(i), GpuTimeMs(i));
+                    fclose(tf);
+                }
+            }
             SaveShot("kjcEngine-shot.bmp");
             SetWindowTextW(g_hwnd, L"kjcEngine   |   화면을 담았습니다");
             break;
@@ -1735,10 +1808,10 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     // 화면과 같은 크기로 두되 다중표본은 쓰지 않는다. 가림을 어림잡는 데는
     // 한 겹이면 넉넉하고, 표본이 여럿이면 셰이더에서 읽기가 번거로워진다
     auto makeRT = [&](DXGI_FORMAT fmt, ID3D11RenderTargetView** rtv,
-                      ID3D11ShaderResourceView** srv) {
+                      ID3D11ShaderResourceView** srv, int w, int h) {
         D3D11_TEXTURE2D_DESC rt = {};
-        rt.Width            = WIN_W;
-        rt.Height           = WIN_H;
+        rt.Width            = w;
+        rt.Height           = h;
         rt.MipLevels        = 1;
         rt.ArraySize        = 1;
         rt.Format           = fmt;
@@ -1752,14 +1825,16 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         t->Release();
     };
     // 자리와 법선은 소수점이 필요하고, 가림 정도는 0~1 한 칸이면 된다
-    makeRT(DXGI_FORMAT_R16G16B16A16_FLOAT, &g_posRTV,    &g_posSRV);
-    makeRT(DXGI_FORMAT_R16G16B16A16_FLOAT, &g_nrmRTV,    &g_nrmSRV);
-    makeRT(DXGI_FORMAT_R8_UNORM,           &g_aoRTV,     &g_aoSRV);
-    makeRT(DXGI_FORMAT_R8_UNORM,           &g_aoBlurRTV, &g_aoBlurSRV);
+    // 넷 다 가림 계산에만 쓰이므로 함께 절반으로 간다
+    makeRT(DXGI_FORMAT_R16G16B16A16_FLOAT, &g_posRTV,    &g_posSRV,    AO_W, AO_H);
+    makeRT(DXGI_FORMAT_R16G16B16A16_FLOAT, &g_nrmRTV,    &g_nrmSRV,    AO_W, AO_H);
+    makeRT(DXGI_FORMAT_R8_UNORM,           &g_aoRTV,     &g_aoSRV,     AO_W, AO_H);
+    makeRT(DXGI_FORMAT_R8_UNORM,           &g_aoTmpRTV,  &g_aoTmpSRV,  AO_W, AO_H);
+    makeRT(DXGI_FORMAT_R8_UNORM,           &g_aoBlurRTV, &g_aoBlurSRV, AO_W, AO_H);
 
     D3D11_TEXTURE2D_DESC gd = {};
-    gd.Width            = WIN_W;
-    gd.Height           = WIN_H;
+    gd.Width            = AO_W;
+    gd.Height           = AO_H;
     gd.MipLevels        = 1;
     gd.ArraySize        = 1;
     gd.Format           = DXGI_FORMAT_D32_FLOAT;
@@ -1816,8 +1891,12 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     makeRes(&g_diffRes,  &g_diffSRV);
 
     // 가로로 한 번, 세로로 한 번 흐릴 자리
-    makeRT(DXGI_FORMAT_R16G16B16A16_FLOAT, &g_blurRTV[0], &g_blurSRV[0]);
-    makeRT(DXGI_FORMAT_R16G16B16A16_FLOAT, &g_blurRTV[1], &g_blurSRV[1]);
+    // 몇 겹으로 그려지는지 쌓을 자리. 소수를 더해 가므로 float 이어야 한다
+    makeRT(DXGI_FORMAT_R32_FLOAT, &g_overRTV, &g_overSRV, WIN_W, WIN_H);
+
+    // 이쪽은 확산을 번지게 하는 것이라 화면 크기 그대로다
+    makeRT(DXGI_FORMAT_R16G16B16A16_FLOAT, &g_blurRTV[0], &g_blurSRV[0], WIN_W, WIN_H);
+    makeRT(DXGI_FORMAT_R16G16B16A16_FLOAT, &g_blurRTV[1], &g_blurSRV[1], WIN_W, WIN_H);
 
     // 그림자를 그릴 때만 깊이를 살짝 밀어낸다. 이게 없으면 평평한 면이
     // 자기 자신을 가려서 줄무늬(섀도 애크니)가 생긴다
@@ -1839,6 +1918,25 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     D3D11_DEPTH_STENCIL_DESC nod = {};
     nod.DepthEnable = FALSE;
     g_dev->CreateDepthStencilState(&nod, &g_dsNoDepth);
+
+    // 깊이를 이미 채워 두었으므로 같은 자리만 그리고 다시 쓰지는 않는다
+    D3D11_DEPTH_STENCIL_DESC eq = {};
+    eq.DepthEnable    = TRUE;
+    eq.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+    eq.DepthFunc      = D3D11_COMPARISON_EQUAL;
+    g_dev->CreateDepthStencilState(&eq, &g_dsEqual);
+
+    // 덮어쓰지 않고 더한다. 이것이 있어야 겹친 횟수가 쌓인다
+    D3D11_BLEND_DESC ad = {};
+    ad.RenderTarget[0].BlendEnable    = TRUE;
+    ad.RenderTarget[0].SrcBlend       = D3D11_BLEND_ONE;
+    ad.RenderTarget[0].DestBlend      = D3D11_BLEND_ONE;
+    ad.RenderTarget[0].BlendOp        = D3D11_BLEND_OP_ADD;
+    ad.RenderTarget[0].SrcBlendAlpha  = D3D11_BLEND_ONE;
+    ad.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+    ad.RenderTarget[0].BlendOpAlpha   = D3D11_BLEND_OP_ADD;
+    ad.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    g_dev->CreateBlendState(&ad, &g_bsAdd);
 
     // ── 정점 · 인덱스 · 상수 버퍼 ──
     Vertex plateV[6];
@@ -1886,8 +1984,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     // 가닥 사이가 다 뚫려 있어 구워도 거의 1 로 나온다
     for (Extra& e : g_extra) {
         char why[512] = {};
+        bool radial = (e.mode > 3.5f);     // 헤어만
         if (!LoadFBX(g_dev, meshAt(e.file), MODEL_H, e.model,
-                     why, sizeof(why), false, &align))
+                     why, sizeof(why), false, &align, radial))
             e.model.indexCount = 0;   // 없으면 그냥 안 그린다
     }
     // ── 텍스처 ──
@@ -1974,6 +2073,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     g_proj = XMMatrixPerspectiveFovLH(XM_PIDIV4, (float)WIN_W / WIN_H, 0.1f, 200.0f);
 
     D3D11_VIEWPORT viewMain   = { 0, 0, (float)WIN_W, (float)WIN_H, 0.0f, 1.0f };
+    D3D11_VIEWPORT viewAO     = { 0, 0, (float)AO_W,  (float)AO_H,  0.0f, 1.0f };
     D3D11_VIEWPORT viewShadow = { 0, 0, (float)SHADOW_SIZE, (float)SHADOW_SIZE, 0.0f, 1.0f };
     D3D11_VIEWPORT viewGizmo  = { (float)(WIN_W - GIZMO_PX - GIZMO_PAD), (float)GIZMO_PAD,
                                   (float)GIZMO_PX, (float)GIZMO_PX, 0.0f, 1.0f };
@@ -2111,7 +2211,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
             g_ctx->ClearRenderTargetView(g_posRTV, zero4);
             g_ctx->ClearRenderTargetView(g_nrmRTV, zero4);
             g_ctx->ClearDepthStencilView(g_gbufDSV, D3D11_CLEAR_DEPTH, 1.0f, 0);
-            g_ctx->RSSetViewports(1, &viewMain);
+            g_ctx->RSSetViewports(1, &viewAO);
             g_ctx->RSSetState(g_rsNormal);
             g_ctx->VSSetShader(g_vsGBuf, nullptr, 0);
             g_ctx->PSSetShader(g_psGBuf, nullptr, 0);
@@ -2131,12 +2231,21 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
             g_ctx->PSSetShader(g_psSSAO, nullptr, 0);
             g_ctx->Draw(3, 0);
 
-            // 4패스 — 흐리게. 몇 군데만 찔러 본 값이라 그대로 두면 지글거린다
-            g_ctx->OMSetRenderTargets(1, &g_aoBlurRTV, nullptr);
+            // 4패스 — 흐리게. 몇 군데만 찔러 본 값이라 그대로 두면 지글거린다.
+            // 가로 한 번, 세로 한 번으로 나눈다 — 5x5 를 한 번에 하면 25번
+            // 읽어야 하는데 나누면 5+5 로 열 번이면 끝난다
             g_ctx->PSSetShaderResources(8, 1, &nul);   // 읽던 것을 떼어낸다
             g_ctx->PSSetShaderResources(9, 1, &nul);
+
+            g_ctx->OMSetRenderTargets(1, &g_aoTmpRTV, nullptr);
             g_ctx->PSSetShaderResources(10, 1, &g_aoSRV);
-            g_ctx->PSSetShader(g_psBlur, nullptr, 0);
+            g_ctx->PSSetShader(g_psBlurH, nullptr, 0);
+            g_ctx->Draw(3, 0);
+
+            g_ctx->PSSetShaderResources(10, 1, &nul);
+            g_ctx->OMSetRenderTargets(1, &g_aoBlurRTV, nullptr);
+            g_ctx->PSSetShaderResources(10, 1, &g_aoTmpSRV);
+            g_ctx->PSSetShader(g_psBlurV, nullptr, 0);
             g_ctx->Draw(3, 0);
 
             g_ctx->PSSetShaderResources(10, 1, &nul);
@@ -2158,6 +2267,22 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         g_ctx->ClearRenderTargetView(g_diffRTV, zeroRT);
         g_ctx->ClearDepthStencilView(g_dsv, D3D11_CLEAR_DEPTH, 1.0f, 0);
         g_ctx->RSSetViewports(1, &viewMain);
+
+        // ── 헤어 깊이를 먼저 채운다 ──
+        // clip 이 있는 것은 얼리-Z 가 꺼져서, 겹친 가닥마다 온 셰이더가 다 돈다.
+        // 깊이를 미리 채워 두면 본 패스에서 맨 앞 가닥만 셰이딩하면 된다
+        for (Extra& e : g_extra) {
+            if (!HAIR_PREZ || e.mode < 3.5f || !e.model.indexCount) continue;
+            g_ctx->OMSetRenderTargets(0, nullptr, g_dsv);   // 색은 안 쓴다
+            g_ctx->PSSetShaderResources(1, 1, &g_hairAlbedo.srv);
+            g_ctx->VSSetShader(g_vs, nullptr, 0);
+            g_ctx->PSSetShader(g_psClip, nullptr, 0);
+            g_ctx->RSSetState(g_rsNormal);
+            DrawOne(e.model.vb, e.model.ib, e.model.indexCount, ModelWorld(),
+                    e.color, false, DXGI_FORMAT_R32_UINT, 4.0f);
+            g_ctx->PSSetShaderResources(1, 1, &g_albedo.srv);
+        }
+        g_ctx->OMSetRenderTargets(2, sceneRTs, g_dsv);
 
         if (g_envOn > 0.5f && g_env.skySRV) {
             // 환경을 배경으로 깐다. 화면을 다 덮으므로 색을 따로 지우지 않는다.
@@ -2297,6 +2422,38 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
 
         GpuTimeMark(L"Combine");
 
+        // ── 몇 겹으로 그려지는지 센다 (O 키) ──
+        // 깊이를 안 보고 래스터된 것을 전부 센다 — 가려져 버려질 픽셀까지
+        // 포함한 총 오버드로다. 겹침이 어디에 얼마나 있는지가 이 값이다
+        if (g_showOver) {
+            const float zeroC[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+            const float bf1[4]   = { 0.0f, 0.0f, 0.0f, 0.0f };
+            g_ctx->OMSetRenderTargets(1, &g_overRTV, nullptr);
+            g_ctx->ClearRenderTargetView(g_overRTV, zeroC);
+            g_ctx->RSSetViewports(1, &viewMain);
+            g_ctx->OMSetBlendState(g_bsAdd, bf1, 0xffffffff);
+            g_ctx->OMSetDepthStencilState(g_dsNoDepth, 0);
+            g_ctx->RSSetState(g_rsNormal);
+            g_ctx->IASetInputLayout(g_layout);
+            g_ctx->VSSetShader(g_vs, nullptr, 0);
+            g_ctx->PSSetShader(g_psCount, nullptr, 0);
+            DrawScene(false);
+            g_ctx->OMSetBlendState(nullptr, bf1, 0xffffffff);
+            g_ctx->OMSetDepthStencilState(nullptr, 0);
+
+            // 색으로 칠해 화면에 낸다
+            g_ctx->OMSetRenderTargets(1, &g_rtv, nullptr);
+            g_ctx->PSSetShaderResources(17, 1, &g_overSRV);
+            g_ctx->IASetInputLayout(nullptr);
+            g_ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            g_ctx->VSSetShader(g_vsFull, nullptr, 0);
+            g_ctx->PSSetShader(g_psShowOver, nullptr, 0);
+            g_ctx->Draw(3, 0);
+            ID3D11ShaderResourceView* nulO = nullptr;
+            g_ctx->PSSetShaderResources(17, 1, &nulO);
+            g_ctx->IASetInputLayout(g_layout);
+        }
+
         // ── 12패스 — 화면 맨 위에 글자를 얹는다 ──
         // 톤매핑까지 끝난 뒤라야 글자가 색 보정에 휘둘리지 않는다
         g_ctx->RSSetViewports(1, &viewMain);
@@ -2326,8 +2483,14 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     if (g_sceneRTV)  g_sceneRTV->Release();
     if (g_diffMS)    g_diffMS->Release();
     if (g_sceneMS)   g_sceneMS->Release();
+    if (g_bsAdd)     g_bsAdd->Release();
+    if (g_overSRV)   g_overSRV->Release();
+    if (g_overRTV)   g_overRTV->Release();
+    if (g_dsEqual)   g_dsEqual->Release();
     if (g_dsNoDepth) g_dsNoDepth->Release();
     if (g_pointSmp)  g_pointSmp->Release();
+    if (g_aoTmpSRV)  g_aoTmpSRV->Release();
+    if (g_aoTmpRTV)  g_aoTmpRTV->Release();
     if (g_aoBlurSRV) g_aoBlurSRV->Release();
     if (g_aoBlurRTV) g_aoBlurRTV->Release();
     if (g_aoSRV)     g_aoSRV->Release();
@@ -2364,7 +2527,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     if (g_cb)        g_cb->Release();
     // 셰이더와 입력 레이아웃은 BuildShaders 가 만든 것이라 함께 놓는다
     ID3D11DeviceChild* sh[] = { g_vs, g_vsDepth, g_ps, g_vsGBuf, g_psGBuf,
-                                g_vsFull, g_psSSAO, g_psBlur, g_psSky,
+                                g_vsFull, g_psSSAO, g_psBlurH, g_psBlurV, g_psSky,
                                 g_psSSSBlur, g_psCombine, g_layout };
     for (ID3D11DeviceChild* o : sh) if (o) o->Release();
     if (g_dsv)       g_dsv->Release();

@@ -23,6 +23,7 @@ cbuffer CB : register(b0) {
     float4   fogParam;    // x = 시작 거리, y = 끝 거리, z = 켜짐
     float4   fogCol;      // xyz = 섞을 색
     float4   sssParam;    // x = 번지는 폭, y = 켜짐, zw = 번지는 방향
+                          // (물체를 그릴 때는 z 가 헤어 안쪽을 걷어내는 선)
     float4   envParam;    // x = 환경광 세기, y = 반사 밉 개수, z = 켜짐,
                           // w = 미세 결 타일 수
     float4x4 invVP;       // 화면 픽셀에서 바라보는 방향을 되찾는 데 쓴다
@@ -50,6 +51,7 @@ TextureCube  prefMap  : register(t13);  // 거칠기별로 흐려 놓은 것 (�
 Texture2D    sceneTex : register(t14);  // 색 전부
 Texture2D    diffTex  : register(t15);  // 확산만
 Texture2D    blurTex  : register(t16);  // 번지게 한 확산
+Texture2D    overTex  : register(t17);  // 몇 겹으로 그려졌나
 SamplerState pointSmp : register(s2);   // 뭉개지 않고 그 자리 값을 그대로
 SamplerComparisonState shadowSmp : register(s0);
 SamplerState           texSmp    : register(s1);
