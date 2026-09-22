@@ -1117,11 +1117,10 @@ function openRankModal() {
       name: '실시간 순위',
       sub: 'KOSPI · KOSDAQ',
       caret: true,
-      /* 「전체 화면 ↗」 이 없다. 순위만 갈 화면(rank.html)이 없어서다 —
-         없는 주소를 적어 두면 가운데 단추로 눌렀을 때 빈 곳으로 간다.
-         만들지 말지는 재권님께 여쭙는 중이라 그 자리를 빨간 바탕으로 둔다
-         (CLAUDE.md 「아직 안 정해진 자리는 빨간 바탕」). */
-      actions: [{ label: '전체 화면 없음', todo: true }],
+      /* 「전체 화면 없음」 빨간 칩이 여기 있었다. 「갈 화면이 없다」 를
+         알리려고 둔 것인데, 2026-09-22 에 **모달의 전체 화면 단추를 다
+         빼면서** 그 표시도 뜻이 없어졌다 — 있는 모달에도 없으니
+         「이것만 없다」 가 아니다. */
       big: rankHeadBig(),
       stats: rankHeadStats(),
       /* 850px 에서 세 열이면 눌려 줄바꿈된다 (재서 확인) */
@@ -1572,7 +1571,6 @@ function addModalActions(main, code) {
   const act = document.createElement('div');
   act.className = 'kh-head-act';
   act.innerHTML = `
-    <a class="kh-chip-btn" href="./stock.html?code=${code}">전체 화면 ↗</a>
     <button class="kh-modal-x" title="닫기 (Esc)" aria-label="닫기">✕</button>`;
   act.querySelector('.kh-modal-x').addEventListener('click', closeModal);
   top.appendChild(act);
