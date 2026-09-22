@@ -38,15 +38,33 @@ CAL_PATH = os.path.join(HERE, "..", "data", "market-calendar.json")
 # `NASDAQ` · `USDKRW` 인데 우리가 부르는 이름은 `COMP` · `USD` 다. JS 의
 # `pickIndex` 가 **code 로 못 찾으면 이름을 정규식으로** 찾는데, 옮길 때
 # 그것을 빠뜨려 처음에 「해외」 줄에 S&P 500 하나만 나왔다 (2026-09-22 실측).
+#
+# **열둘을 다 적는다** (2026-09-22 지시 — 「12개 해줘」). 전에는 다섯이라
+# 저장본에는 열둘이 있는데 폰에는 다섯 줄만 갔다.
+#
+# **정규식은 폴백이고 좁게 쓴다.** `code` 가 안 맞을 때만 이름으로 찾는데,
+# `r"나스닥"` 처럼 넓게 쓰면 **「나스닥 종합」 자리에 「나스닥100」 이 잡힌다.**
+# 겹칠 것은 아예 `None` 으로 둔다 — 못 찾는 것이 엉뚱한 것을 집는 것보다 낫다.
+#
+# **이름은 사람이 읽는 말로 쓴다.** `VIX` 는 숫자만 보면 무엇인지 모르므로
+# 뜻을 붙인다 (「숫자에는 뜻을 붙인다」).
 INDEX_ROWS = [
     ("KOSPI", "KOSPI", None),
     ("KOSDAQ", "KOSDAQ", None),
+    ("KOSPI200", "KOSPI200", None),
+    ("KRX100", "KRX100", None),
     ("SPX", "S&P 500", r"S&P"),
-    ("COMP", "나스닥 종합", r"나스닥"),
-    ("USD", "달러 · 원", r"USD|달러"),
+    ("NASDAQ", "나스닥 종합", r"나스닥\s*종합"),
+    ("NDX", "나스닥100", r"나스닥\s*100"),
+    ("SOX", "필라델피아 반도체", r"필라델피아"),
+    ("SX5E", "유로스톡스", r"유로"),
+    ("HSCE", "홍콩H", r"홍콩"),
+    ("VIX", "VIX(공포지수)", None),
+    ("USDKRW", "달러 · 원", r"USD|달러"),
 ]
-HOME_CODES = ["KOSPI", "KOSDAQ"]
-AWAY_CODES = ["SPX", "COMP", "USD"]
+HOME_CODES = ["KOSPI", "KOSDAQ", "KOSPI200", "KRX100"]
+# 환율을 맨 뒤에 둔다 — 지수끼리 묶여 있어야 읽힌다.
+AWAY_CODES = ["SPX", "NASDAQ", "NDX", "SOX", "SX5E", "HSCE", "VIX", "USDKRW"]
 
 # 제목이 이보다 길면 자른다. JS 와 같은 값이어야 한다.
 TITLE_MAX = 34
