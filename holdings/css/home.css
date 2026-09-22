@@ -480,9 +480,14 @@
 /* ── 1·2·3위를 나란히 (2026-09-22 지시) ─────────────────────
    「지금뜨는 산업 하나에 다 들어있어서 잘 보여지지가 않는데」 ·
    「3위까지만 봐도 댐」. 업종 이름 칩 줄은 없앴다. */
-.kh-sc-col { flex: 1; min-width: 0; padding: 0 13px; }
-.kh-sc-col:first-child { padding-left: 4px; }
-.kh-sc-col:last-child { padding-right: 4px; }
+/* **안쪽으로 20px** (2026-09-22 지시 — 「상승과 그위에 상승하락 그래프
+   종목들 가격 등이 너무 바깥쪽에 가까운데 안쪽으로 20픽셀정도 넣어줘
+   세칸 다 적용해줘」).
+
+   전에는 13px 이었고 **첫 칸 왼쪽·마지막 칸 오른쪽만 4px** 이라 카드
+   가장자리에 붙어 있었다. 세 칸을 똑같이 20px 로 둔다 — 예외를 두면
+   가운데 칸만 달라 보인다. */
+.kh-sc-col { flex: 1; min-width: 0; padding: 0 20px; }
 /* **테두리 상자가 아니라 한 줄이다** (시안 — 「줄로 해달라」) */
 .kh-sc-vr { width: 1px; flex: none; background: var(--kh-border); }
 
