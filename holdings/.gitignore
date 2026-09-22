@@ -16,3 +16,8 @@ __pycache__/
 # 로컬 시세 저장소 (D1 과 같은 구조, 로컬 전용)
 market.db
 market.db-journal
+
+# 문서 저장 (2026-09-22) — 「저장은 이 PC 안에만 둔다」.
+# **디렉토리째 무시하지 않는다** — 안쪽을 되살릴 수 없다 (.gitignore:67 과 같은 이유).
+data/docs/*
+!data/docs/README.md

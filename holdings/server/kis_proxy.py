@@ -40,6 +40,8 @@ from datetime import datetime, timedelta, timezone
 
 # 파일을 안전하게 쓴다 — 쓰다 죽어도 옛 내용이 남는다 (2026-09-22)
 from docstore import write_json_atomic
+import docstore
+import re
 import signal_watch
 from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -2292,10 +2294,84 @@ class Handler(SimpleHTTPRequestHandler):
             _mark_ui_call()          # 화면이 보고 있다는 신호는 여기서도 준다
             self._handle_naver()
             return
+        if (self.path or "").startswith("/api/board/"):
+            self._handle_board()
+            return
         if (self.path or "").startswith("/debugging/"):
             self._handle_debugging()
             return
         super().do_GET()
+
+    def _handle_board(self):
+        """문서 저장 — 보드 셋 · AI 분석 · 데일리분석이 함께 쓴다.
+
+        **배포본 워커(`projects/worker/board-api.js`)를 그대로 흉내 낸다.**
+        `CLAUDE.md` 가 그렇게 정해 뒀다 — 맥미니 서버가 나중에 같은 모양으로
+        응답하면 화면은 한 줄도 안 고치고 주소만 바꾸면 된다.
+
+            GET  /api/board/health          살아 있나
+            GET  /api/board/doc/<이름>      읽기
+            PUT  /api/board/doc/<이름>      쓰기  {"data": …}
+
+        **워커와 다른 것 하나** — 그쪽은 Access 로 사람을 가려 `owner` 별로
+        나눠 담는다. 이 서버는 재권님 PC 안에서만 돌아 가릴 사람이 없다.
+        그래서 `owner` 를 안 쓰고 응답에도 안 싣는다.
+        """
+        path = (self.path or "").split("?", 1)[0].rstrip("/")
+
+        if path == "/api/board/health":
+            self._send_json({
+                "ok": True,
+                "root": docstore.DOC_ROOT,
+                "docs": len(docstore.list_docs()),
+            })
+            return
+
+        m = re.match(r"^/api/board/doc/([^/]+)$", path)
+        if not m:
+            self._send_json({"ok": False,
+                             "error": "여기는 문서 저장입니다. /api/board/doc/<이름> 로 부르세요."},
+                            status=404)
+            return
+
+        name = urllib.parse.unquote(m.group(1))
+        try:
+            if self.command == "GET":
+                data = docstore.read_doc(name)
+                self._send_json({"ok": True, "doc": name, "data": data})
+                return
+
+            if self.command == "PUT":
+                raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                try:
+                    body = json.loads(raw.decode("utf-8"))
+                except Exception:
+                    self._send_json({"ok": False, "error": "본문이 JSON 이 아닙니다."},
+                                    status=400)
+                    return
+                if not isinstance(body, dict) or "data" not in body:
+                    self._send_json({"ok": False, "error": "저장할 내용(data)이 없습니다."},
+                                    status=400)
+                    return
+
+                # `history=false` 로 끌 수 있다. 기본은 켠 쪽이다 —
+                # 안전한 쪽이 기본이어야 하고, 끄는 쪽이 밝히는 것이 맞다.
+                keep = body.get("history", True) is not False
+                wrote = docstore.write_doc(name, body["data"], history=keep)
+
+                # **「안 썼다」 를 조용히 넘기지 않는다.** 빈 것을 보냈는데
+                # ok: true 만 오면 저장된 줄 안다.
+                self._send_json({"ok": True, "doc": name, "wrote": wrote,
+                                 "skipped": None if wrote else "빈 내용이라 쓰지 않았습니다"})
+                return
+
+            self._send_json({"ok": False, "error": "GET 또는 PUT 만 됩니다."}, status=405)
+        except docstore.DocNameError as e:
+            self._send_json({"ok": False, "error": str(e)}, status=400)
+        except Exception as e:
+            # 경로에 이름이 섞여 있을 수 있어 종류만 올린다
+            self._send_json({"ok": False, "error": "저장하지 못했습니다 (%s)" % type(e).__name__},
+                            status=500)
 
     def do_PUT(self):
         """쓰기는 한 곳뿐이다 — 「중요」 알림 규칙 (2026-09-21 지시).
@@ -2305,6 +2381,9 @@ class Handler(SimpleHTTPRequestHandler):
         """
         if (self.path or "").startswith("/api/news/"):
             self._handle_news()
+            return
+        if (self.path or "").startswith("/api/board/"):
+            self._handle_board()
             return
 
         # **딸려 온 본문을 먼저 비운다.** 안 읽고 응답하면 보내는 쪽이

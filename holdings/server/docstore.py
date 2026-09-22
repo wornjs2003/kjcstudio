@@ -3,9 +3,32 @@
 
 2026-09-22 지시 — 키 파일을 바로 덮어쓰는 세 곳을 고치라고 하셨다.
 
-지금은 `write_json_atomic` 하나뿐이다. 공용 저장 층(`read_doc`·`write_doc`·
-`list_docs`)은 설계를 올려 두었고 자리가 정해지면 이 파일 위에 얹는다 —
-「가장 낮은 것 하나부터」 라 그 순서로 간다.
+두 켜다.
+
+    write_json_atomic   파일 하나를 안전하게 쓴다. 키 파일·토큰 캐시도 이것을 쓴다
+    read_doc/write_doc  그 위에 얹은 **문서 층**. 이름으로 읽고 쓴다
+
+
+■ 이 층이 아는 것과 모르는 것
+
+    층이 안다        문서 하나를 안전하게 읽고 쓰기 · 이름 규칙 · 경로 · 직전 것 보관
+    쓰는 쪽이 안다    **무엇을 목록으로 둘지 · 커서를 어디 둘지 · 며칠을 남길지**
+
+`index.json` 도 **그냥 문서 하나**다. 부르는 쪽이 `write_doc("ai-analysis-index", …)`
+로 쓰면 되고 이 층은 그것이 목록인지 모른다. 그래야 **안 쓰는 쪽이 안 쓰는 것을
+지고 가지 않는다** — 데일리분석은 열 개뿐이라 목록도 커서도 안 쓴다.
+
+
+■ 왜 다섯이 같은 것을 쓰는가
+
+프로젝트 · AI 작업 · 검수 보드 셋에 AI 분석과 데일리분석이 더해져 **다섯**이다.
+`CLAUDE.md` 「저장은 이 PC 안에만 둔다」 가 **이미 「세 번째라 걸린다」** 고 적어
+두었고, 여기서 각자 만들면 복제가 다섯이 된다.
+
+    한 곳에 모을 것   persistLocal · loadFromServer · syncToServer · serverAlive · 경로
+
+**그중 아래 켜(서버 쪽)가 이 파일이다.** 위 켜(화면의 localStorage 동기화)는
+보드 셋만 쓰므로 그쪽에 둔다 — 화면은 파일을 못 쓰고 서버는 localStorage 가 없다.
 
 
 ■ 왜 필요한가
@@ -126,3 +149,125 @@ def read_json(path, default=None):
             return json.load(f)
     except (OSError, ValueError):
         return default
+
+
+# ── 문서 층 ───────────────────────────────────────────────────
+#
+# 이름 규칙과 응답 모양은 **배포본 워커(`projects/worker/board-api.js`)를
+# 그대로 흉내** 낸다. `CLAUDE.md` 가 그렇게 정해 뒀다 —
+#
+#     맥미니 서버가 나중에 같은 모양으로 응답하면 **화면은 한 줄도 안 고치고**
+#     주소만 바꾸면 된다. 모양이 같아야 아래 공용 모듈에 분기가 안 생긴다.
+#
+# 그래서 새로 설계하지 않는다.
+
+import re
+
+# `board-api.js:264` 의 정규식과 **같은 규칙**이다. 한글은 못 쓴다.
+NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
+
+# 경로는 **여기 한 곳**에서 정한다. 맥미니 서버가 생기면 이 줄만 고친다.
+DOC_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "data", "docs")
+HISTORY_DIRNAME = "history"
+
+
+class DocNameError(ValueError):
+    """이름이 규칙에 안 맞는다. 부르는 쪽이 400 으로 돌려주면 된다."""
+
+
+def _path(name):
+    if not isinstance(name, str) or not NAME_RE.match(name):
+        # **이름을 그대로 싣지 않는다.** `../` 같은 것이 로그에 남으면
+        # 그 자체가 무엇을 시도했는지 알려준다. 길이만 적는다.
+        raise DocNameError("문서 이름이 규칙에 안 맞습니다 (%d자). "
+                           "영문·숫자·밑줄·붙임표 1~40자만 됩니다" % len(str(name)))
+    return os.path.join(DOC_ROOT, name + ".json")
+
+
+def read_doc(name):
+    """문서를 읽는다. 없거나 깨졌으면 None.
+
+    「없다」 와 「빈 것이 들어 있다」 는 다르다 — 빈 문서는 `write_doc` 이
+    애초에 안 쓰므로, None 이면 **정말 없는 것**이다.
+    """
+    return read_json(_path(name), None)
+
+
+def write_doc(name, data, history=True):
+    """문서를 **안전하게** 쓴다.
+
+    하는 일이 넷이고 **순서가 뜻을 가진다.**
+
+        ①  이름을 검사한다
+        ②  **빈 것이면 안 쓴다** — None · {} · [] · ""
+        ③  history=True 면 원본을 history/ 로 **복사**
+        ④  write_json_atomic 으로 제자리에
+
+    **②가 ③보다 앞이다.** 빈 값이 들어오면 직전 것도 안 밀린다. 뒤집으면
+    빈 값이 열 번 들어올 때 history 까지 빈 값으로 채워져 **되살릴 것이
+    없어진다** (2026-09-22 에 `주식페이지_개발2` 와 정리한 자리).
+
+    **history 는 「안전하게 쓴다」 의 일부지 정책이 아니다.** 며칠을 남길지는
+    쓰는 쪽이 정한다 — 이 층은 오래된 것을 지우지 않는다.
+
+    Returns:
+        True  썼다
+        False **비어 있어서 안 썼다** — 원본은 그대로다
+    """
+    path = _path(name)
+
+    # ② 빈 것이면 여기서 멈춘다. write_json_atomic 도 같은 검사를 하지만,
+    #    그쪽까지 가면 ③ 이 이미 돌아 history 가 밀린 뒤다.
+    if data is None or (isinstance(data, (dict, list, str)) and len(data) == 0):
+        return False
+
+    # ③ 원본이 있으면 남긴다. **이동이 아니라 복사**다 —
+    #    옮기면 그 순간 제자리가 비고, 거기서 죽으면 읽는 쪽은 빈 자리를 본다.
+    if history and os.path.exists(path):
+        try:
+            hdir = os.path.join(DOC_ROOT, HISTORY_DIRNAME)
+            os.makedirs(hdir, exist_ok=True)
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            with io.open(path, "r", encoding="utf-8") as src:
+                body = src.read()
+            with io.open(os.path.join(hdir, "%s-%s.json" % (name, stamp)),
+                         "w", encoding="utf-8", newline="\n") as dst:
+                dst.write(body)
+        except OSError:
+            # 직전 것을 못 남겨도 **새 것은 쓴다.** 여기서 멈추면
+            # 백업 실패가 저장 실패가 된다.
+            pass
+
+    return write_json_atomic(path, data)
+
+
+def list_docs(prefix=""):
+    """문서 이름 목록. `history/` 는 안 센다.
+
+    파일이 곧 목록이다 — 따로 목록 파일을 두면 「파일은 있는데 목록에 없는」
+    어긋남이 생긴다. 목록 파일이 필요한 쪽은 그것도 문서로 쓰면 된다.
+    """
+    try:
+        names = os.listdir(DOC_ROOT)
+    except OSError:
+        return []
+    out = []
+    for f in names:
+        if not f.endswith(".json"):
+            continue
+        n = f[:-5]
+        if NAME_RE.match(n) and n.startswith(prefix):
+            out.append(n)
+    return sorted(out)
+
+
+def list_history(name):
+    """그 문서의 직전 것들. 오래된 것부터."""
+    hdir = os.path.join(DOC_ROOT, HISTORY_DIRNAME)
+    try:
+        names = os.listdir(hdir)
+    except OSError:
+        return []
+    head = name + "-"
+    return sorted(f[:-5] for f in names if f.startswith(head) and f.endswith(".json"))
