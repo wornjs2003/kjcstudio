@@ -32,7 +32,8 @@ def main():
             continue
         texts[p] = t
         # 굵게·백틱을 뺀 제목. 「**맨 아래**」 처럼 강조가 섞이면 못 찾는다
-        heads += [re.sub(r"[*`]", "", h) for h in re.findall(r"^#{2,4} (.+)$", t, re.M)]
+        heads += [re.sub(r"\s+", " ", re.sub(r"[*`]", "", h)).strip()
+                  for h in re.findall(r"^#{2,4} (.+)$", t, re.M)]
 
     bad = 0
     for p, t in texts.items():
@@ -40,7 +41,10 @@ def main():
             # **양쪽에서 똑같이 뺀다.** 제목에서만 백틱을 빼고 참조에서 안 빼면
             # 「`0` 이 나오면…」 이 영영 안 맞는다 — 2026-09-22 에 만들자마자 그랬다.
             # 날짜 꼬리(「… (2026-09-18 지시)」)도 떼고 견준다.
-            key = re.sub(r"[*`]", "", r).split(" (")[0]
+            # **줄바꿈을 공백 하나로 편다.** 참조가 두 줄에 걸치는 일이 흔한데
+            # 제목은 한 줄이라 그대로 견주면 영영 안 맞는다 — 2026-09-22 에
+            # 이 도구가 **자기 버그로 세 번째** 걸렸다.
+            key = re.sub(r"\s+", " ", re.sub(r"[*`]", "", r)).strip().split(" (")[0]
             if not any(key in h for h in heads):
                 print("  %s — 「%s」 가 절 제목에 없습니다" % (p, r))
                 bad += 1
