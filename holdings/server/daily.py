@@ -374,13 +374,35 @@ def start_daily(get_indices, get_sectors, get_issues, send=None, keep=KEEP):
             except Exception:
                 pass        # 못 보내도 저장은 남는다
 
+    # **같은 오류는 한 번만 적는다** (2026-09-22 지시).
+    #
+    # 전에는 `except: pass` 였는데, 그것이 **결함을 통째로 삼켰다** —
+    # 튜플을 그대로 넘겨 `once()` 가 매번 죽고 있었는데 로그에는
+    # 「07:30 에 저장」 만 찍혀서 **하루 종일 조용히 실패했다.**
+    #
+    # **동작은 하나도 안 바꾼다.** 저장도 발송도 5분 재시도도 그대로이고,
+    # 콘솔에 남느냐만 다르다. 매번 적으면 **5분마다 하루 이백 줄**이 쌓여
+    # 다른 줄이 묻히므로 같은 것은 한 번만 적는다.
+    #
+    # **오류가 바뀌면 다시 적는다.** 안 그러면 **두 번째 결함이 첫 번째에
+    # 가려진다.** 성공하면 비워서, 다시 실패할 때 또 보이게 한다.
+    last_err = [None]
+
     def loop():
         time.sleep(5)       # 서버가 막 뜬 참이라 잠깐 기다렸다 시작한다
         while True:
             try:
                 once()
-            except Exception:
-                pass        # 한 바퀴 실패해도 다음 바퀴에 다시 본다
+                last_err[0] = None
+            except Exception as e:
+                key = "%s: %s" % (type(e).__name__, e)
+                if key != last_err[0]:
+                    last_err[0] = key
+                    # `pythonw` 로 떠서 콘솔이 없다. `startup.bat` 이
+                    # `logs/<포트>.log` 로 받으므로 **flush 해야 바로 보인다.**
+                    print("데일리분석 저장 실패 — %s" % key, flush=True)
+                    print("  (같은 오류는 다시 안 적습니다. 5분마다 계속 시도합니다)",
+                          flush=True)
             time.sleep(TICK)
 
     threading.Thread(target=loop, daemon=True, name="daily-0730").start()

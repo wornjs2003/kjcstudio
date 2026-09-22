@@ -1121,6 +1121,26 @@ def fetch_indices(cfg, with_chart=True):
     return [r for r in slots if r], errors
 
 
+def fetch_indices_all(cfg, with_chart=True, overseas=True):
+    """국내 지수 **+ 해외·환율**을 합쳐서 준다. 반환은 `(목록, 오류)` 로 같다.
+
+    **화면과 데일리분석이 같은 것을 봐야 한다.** 합치는 방법을 두 곳에 적으면
+    한쪽만 고쳤을 때 조용히 갈린다 — 2026-09-22 에 데일리분석이
+    `fetch_indices` 만 불러 **국내 넷만** 담았다. 화면은 열둘이었다.
+
+    `overseas=False` 는 화면이 `?overseas=0` 으로 부를 때를 위한 것이다.
+    """
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_idx = pool.submit(fetch_indices, cfg, with_chart)
+        f_ovs = pool.submit(fetch_overseas, cfg) if overseas else None
+        data, errors = f_idx.result()
+        if f_ovs is not None:
+            ovs, ovs_err = f_ovs.result()
+            data = data + ovs
+            errors.update(ovs_err)
+    return data, errors
+
+
 def _num(v, cast=float):
     try:
         return cast(str(v).strip())
@@ -2791,15 +2811,10 @@ class Handler(SimpleHTTPRequestHandler):
                 # 국내 · 해외 · 선물을 **함께 진행한다** (2026-09-18).
                 # 하나씩 기다리면 셋의 응답 시간이 그대로 더해졌다.
                 # 해외 지수·환율도 같은 응답에 실어 보낸다 — 화면이 한 번만 부르면 된다.
-                with ThreadPoolExecutor(max_workers=3) as pool:
-                    f_idx = pool.submit(fetch_indices, cfg, with_chart)
-                    f_ovs = pool.submit(fetch_overseas, cfg) if want_ovs else None
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    f_all = pool.submit(fetch_indices_all, cfg, with_chart, want_ovs)
                     f_fut = pool.submit(fetch_futures, cfg)
-                    data, errors = f_idx.result()
-                    if f_ovs is not None:
-                        ovs, ovs_err = f_ovs.result()
-                        data = data + ovs
-                        errors.update(ovs_err)
+                    data, errors = f_all.result()
                     futures = f_fut.result()
                 self._send_json({"ok": bool(data), "data": data,
                                  "futures": futures, "errors": errors or None})
@@ -3133,8 +3148,16 @@ def main():
     # 다투고**, 폴더마다 `secrets.json` 이 따로라 발송도 안 된다.
     if not SLOW:
         daily.start_daily(
-            get_indices=lambda: fetch_indices(load_secrets(), with_chart=False),
-            get_sectors=lambda: fetch_sectors(load_secrets()),
+            # **`[0]` 을 빠뜨리지 않는다.** 이 둘은 `(목록, 오류)` 를 준다.
+            # 안 벗기면 튜플이 그대로 넘어가 `daily` 가 `x.get()` 에서 죽고,
+            # `once()` 의 `except` 가 그것을 삼켜 **아무 일도 안 일어난다** —
+            # 로그에는 「07:30 에 저장」 이 찍히는데 저장본이 안 생긴다.
+            # 2026-09-22 에 그렇게 하루 종일 조용히 실패했다.
+            #
+            # **`fetch_indices_all`** — 화면이 보는 것과 같게 해외·환율까지 담는다.
+            # `fetch_indices` 만 부르면 **국내 넷뿐**이고 해외 줄이 통째로 빈다.
+            get_indices=lambda: fetch_indices_all(load_secrets(), with_chart=False)[0],
+            get_sectors=lambda: fetch_sectors(load_secrets())[0],
             # **`rows` 다.** 화면이 받는 `/api/news/issues` 의 `data` 는 배열인데,
             # 그것을 만드는 `fetch_issues()` 는 `{rows, errors, topics}` 를 준다.
             # 처음에 `issues` 로 적었다가 실제로 불러 보고 잡았다 (2026-09-22).
