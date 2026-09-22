@@ -759,16 +759,26 @@ const SORTS = {
    *
    * 넷째 칸은 시가총액을 적는다. 이 칩은 **제 기준값이 없어서**(거르기라
    * 세우는 값이 없다) 아래에서 세우는 순서인 시가총액을 그대로 쓴다. */
-  fav:  { label: '관심종목', filter: true, head: '시가총액', show: showCap },
+  /* 낱말은 **「관심」** 이다. 「관심종목」 이면 칩 여섯이 352px 칸에
+     한 줄로 안 들어가 **두 줄**이 되고, 그만큼 순위표가 짧아진다 (재서 확인).
 
-  cap:  { label: '시가총액', key: null, head: '시가총액', show: showCap },
-  value:{ label: '거래대금', key: (p) => valueOf(p),
+     **「관심」 은 2026-09-22 에 갈래 띠에서 뺀 낱말이다.** 같은 말이 두
+     곳에서 다른 뜻이 되는 것이라 제가 멈추고 여쭈었고, **재권님이 그
+     겹침을 보시고 이 낱말로 정하셨다.** 「같은 말이 두 곳에 있다」 고
+     읽고 되돌리지 말 것. */
+  fav:  { label: '관심', filter: true, head: '시가총액', show: showCap },
+
+  /* 칩 낱말은 **「총액」·「대금」** 이다 (2026-09-22 지시). 넷째 칸 머리글
+     (`head`)은 「시가총액」·「거래대금」 그대로다 — 거기는 폭이 넉넉하다.
+     칩 여섯이 352px 칸(쓸 수 있는 폭 316px)에 한 줄로 들어가야 해서 줄였다. */
+  cap:  { label: '총액', key: null, head: '시가총액', show: showCap },
+  value:{ label: '대금', key: (p) => valueOf(p),
           head: '거래대금', show: showValue },
   vol:  { label: '거래량',   key: (p) => p.volume,
           head: '거래량',   show: (code, p) => (p ? fmtShareCount(p.volume) : '—') },
-  up:   { label: '급상승',   key: (p) => p.pct,  dir: -1, minValue: true,
+  up:   { label: '상승',   key: (p) => p.pct,  dir: -1, minValue: true,
           head: '거래대금', show: showValue },
-  down: { label: '급하락',   key: (p) => p.pct,  dir: 1,  minValue: true,
+  down: { label: '하락',   key: (p) => p.pct,  dir: 1,  minValue: true,
           head: '거래대금', show: showValue },
 };
 
@@ -852,12 +862,11 @@ function setupSorts() {
    * **같은 목록이 두 곳에 있었다.** 재권님이 "모달에도 있어야 되는 거
    * 알지?" 하신 것이 그 갈림이다. 한 곳에서 만들면 갈릴 수가 없다.
    *
-   * 「N개 담음」 은 지우지 않고 뒤에 다시 붙인다 — 그 칸은 칩이 아니다. */
-  const count = $('kh-fav-count');
+   * 전에는 「♥ N개 담음」 을 뒤에 다시 붙였는데, 그 칸을 2026-09-22 에
+   * 뺐다 (아래 paintFavCount 자리 참고). 이제 칩만 들어간다. */
   host.innerHTML = Object.entries(SORTS).map(([id, x]) =>
     `<button class="kh-chip${id === sortBy ? ' is-active' : ''}" type="button"
       data-sort="${id}">${x.label}</button>`).join('');
-  if (count) host.appendChild(count);
 
   host.addEventListener('click', (e) => {
     const b = e.target.closest('[data-sort]');
@@ -893,7 +902,9 @@ function paintSortNote() {
   /* 마지막으로 값이 들어온 때부터 몇 초 지났나 */
   const sec = lastTickAt ? Math.max(0, Math.round((Date.now() - lastTickAt) / 1000)) : null;
 
-  const bits = [`${s.label} 순`];
+  /* 「관심」 은 **줄 세우는 기준이 아니라 거르는 것**이라 「순」 이 안 붙는다.
+     그대로 두면 「관심 순」 이 되는데, 시가총액 순으로 세운 것을 걸렀을 뿐이다. */
+  const bits = [s.filter ? `${s.label}만 · 시가총액 순` : `${s.label} 순`];
   if (s.minValue) bits.push(`거래대금 ${fmtMoneyKr(MIN_VALUE_WON / 1e8)} 이상만`);
 
   if (total && got < total) {
@@ -941,7 +952,6 @@ function bindHearts(root) {
    종목이 다른 자리에 또 있을 때 어긋난다 */
 onFavChange(() => {
   document.querySelectorAll('.kh-rk[data-fav]').forEach(paintFavCell);
-  paintFavCount();
 
   /* 「관심종목」 으로 보고 있으면 **목록 자체가 바뀐다** — 뺀 종목이 표에
      남아 있으면 안 된다. 다른 기준일 때는 줄 세우는 값이 안 바뀌므로
@@ -950,13 +960,15 @@ onFavChange(() => {
   if (rankModal && rankModalSort === 'fav') paintRankModal();
 });
 
-/* 「N개 담음」 을 순위 단추 줄에 적는다. 담은 것이 어디 갔는지 보여야 한다 */
-function paintFavCount() {
-  const el = $('kh-fav-count');
-  if (!el) return;
-  const n = favList().length;
-  el.textContent = n ? `♥ ${n}개 담음` : '';
-}
+/* 「♥ N개 담음」 은 2026-09-22 에 뺐다 (지시 — "빼줘").
+ *
+ * 2026-09-18 에 그 칸을 둔 이유는 **「하트를 눌렀을 때 어디로 갔는지」**
+ * 를 보여주는 것이었다. 그런데 같은 날 순위표에 **「관심」 칩**이 생겨
+ * **그 칩이 바로 그 일을 한다** — 누르면 담은 것만 남는다.
+ * **같은 것을 두 번 말하는 칸**이 되어 뺐다.
+ *
+ * 폭도 걸렸다. 칩 줄은 쓸 수 있는 폭이 **316px** 인데 이 칸이 59px 를
+ * 차지해 **칩 여섯이 두 줄로 밀렸다** (재서 확인). */
 
 /* 지금 줄 세운 기준의 값 한 칸 */
 function sortCell(code, live) {
@@ -1174,7 +1186,6 @@ function paintRows(priceMap) {
   paintRankModal();     // 열려 있으면 같은 값으로 같이 갱신된다
   paintRowFoot();
   paintSortNote();
-  paintFavCount();
 }
 
 function paintRowFoot() {

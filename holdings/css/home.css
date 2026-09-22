@@ -435,10 +435,8 @@
 /* 줄 세운 기준값 — 오르내림이 아니라 크기라서 등락 색을 입히지 않는다 */
 .kh-metric { color: var(--kh-text-secondary); }
 
-/* 담은 개수 — 순위 단추 오른쪽 끝 */
-.kh-fav-count {
-  margin-left: auto; font-size: 0.76rem; color: var(--kh-fav); font-weight: 500;
-}
+/* 「담은 개수」 칸(.kh-fav-count)은 2026-09-22 에 지웠다 — 「관심」 칩이
+   같은 일을 하게 돼 두 번 말하는 자리가 됐다. */
 .kh-nm { display: flex; align-items: center; gap: 10px; }
 .kh-nm .kh-ic { width: 28px; height: 28px; font-size: 0.6rem; }
 .kh-nm b { font-weight: 500; }
