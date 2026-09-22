@@ -43,6 +43,7 @@ from docstore import write_json_atomic
 import docstore
 import re
 import signal_watch
+import daily
 from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -3107,6 +3108,31 @@ def main():
                  if dart.telegram_config() else "꺼짐 (secrets.json 의 telegram 없음)"))
     else:
         print("  공시 수집 : 꺼짐 (setup-dart.bat 으로 인증키를 넣어주세요)")
+
+    # 데일리분석 — **아침 07:30 에 그날 것을 저장하고 문안을 보낸다**
+    # (2026-09-22 지시 — 「데일리는 아침 7시반에 저장하고 그걸 요약한
+    #  텔레그램용을 나한테 보내줘」 · 「항상 켜놓는 서버가 있을 거야」).
+    #
+    # **판단도 조립도 `daily.py` 에 있다.** 이 파일은 여러 세션이 함께 쓰므로
+    # 부르는 줄만 둔다 — `signal_watch` 와 같은 꼴이다.
+    #
+    # `--slow` 는 안 돈다. 확인용 서버가 저장하면 **메인과 같은 파일을 두고
+    # 다투고**, 폴더마다 `secrets.json` 이 따로라 발송도 안 된다.
+    if not SLOW:
+        daily.start_daily(
+            get_indices=lambda: fetch_indices(load_secrets(), with_chart=False),
+            get_sectors=lambda: fetch_sectors(load_secrets()),
+            # **`rows` 다.** 화면이 받는 `/api/news/issues` 의 `data` 는 배열인데,
+            # 그것을 만드는 `fetch_issues()` 는 `{rows, errors, topics}` 를 준다.
+            # 처음에 `issues` 로 적었다가 실제로 불러 보고 잡았다 (2026-09-22).
+            get_issues=lambda: (news.fetch_issues() or {}).get("rows") or [],
+            # 발송은 공시와 같은 통로를 쓴다. **`NOTIFY_LOCAL` 과 무관하다** —
+            # 그것은 공시만 막는다 (dart.py 주석 참고).
+            send=dart.telegram_send if dart.telegram_config() else None,
+        )
+        print("  데일리분석 : 아침 %02d:%02d 에 저장 · 최근 %d장 (%s)"
+              % (daily.SEND_AT // 60, daily.SEND_AT % 60, daily.KEEP,
+                 "텔레그램 켜짐" if dart.telegram_config() else "저장만 — 열쇠 없음"))
 
     # 볼린저·MACD·RSI 가 동시에 맞는 자리를 본다 (2026-09-22 지시).
     # **KIS 를 새로 안 부른다** — 미리받기가 쌓아 둔 5분봉을 읽기만 한다.
