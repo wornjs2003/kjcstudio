@@ -29,6 +29,7 @@ for _stream in ("stdout", "stderr"):
 # 오류 문구에서 비밀을 지운다. 이 파일은 인증키를 주소에 담아 부르므로,
 # 예외 문구에 주소가 섞이면 키가 화면에 찍힌다.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from docstore import read_json, write_json_atomic
 from secrets_guard import forget, safe_message
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -41,16 +42,21 @@ KEY_LEN = 40
 def load():
     if not os.path.exists(SECRETS):
         return {}
-    try:
-        return json.load(io.open(SECRETS, encoding="utf-8"))
-    except Exception:
-        return {}
+    # 없거나 깨졌으면 {} — 가르는 것은 read_json 한 곳이다
+    return read_json(SECRETS, {}) or {}
 
 
 def save(data):
-    io.open(SECRETS, "w", encoding="utf-8", newline="\n").write(
-        json.dumps(data, ensure_ascii=False, indent=2) + "\n"
-    )
+    """**안전하게** 쓴다 (2026-09-22 지시).
+
+    전에는 `io.open(SECRETS, "w")` 로 바로 덮어썼다. 그 한 줄이 **여는
+    순간 파일을 비우므로**, 거기서 죽으면 KIS·DART 키가 통째로 날아간다.
+    gitignore 라 저장소에도 없어 **되살릴 곳이 없다.**
+
+    `write_json_atomic` 은 임시 파일에 다 쓰고 `os.replace` 로 옮긴다 —
+    쓰다 죽어도 옛 내용이 그대로 남는다 (docstore.py 참고).
+    """
+    write_json_atomic(SECRETS, data)
 
 
 def check(key):
