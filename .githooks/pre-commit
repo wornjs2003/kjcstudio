@@ -24,6 +24,51 @@
 files=$(git diff --cached --name-only)
 [ -z "$files" ] && exit 0
 
+# ── 룰 검사 ────────────────────────────────────────────────────
+#
+# `CLAUDE.md` 의 「아직 검사가 없는 룰」 을 한 번에 센다. 검사 방법은
+# 문서에 적혀 있었는데 **돌리는 사람이 없어서 안 돌았다** — 2026-09-22 에
+# 재권님이 「룰 안지키는거 감시안함?」 하고 물으셔서 여기로 옮겼다.
+#
+# **기억해야 지켜지는 룰은 지켜지지 않는다.** 문서가 스스로 그렇게
+# 적어 놓고 그 상태였다.
+#
+# 2026-09-22 실측 **121ms** 라 커밋을 눈에 띄게 늦추지 않는다.
+#
+# 종료코드는 도구가 셋으로 낸다.
+#     0  걸린 것 없음 — 또는 **「봐야 할 자리」 만 있다** (막지 않는다)
+#     1  위반 — **막는다**
+#     2  못 쟀다 — 알리고 **통과시킨다**
+#
+# **「봐야 할 자리」 로 막지 않는 것이 핵심이다.** 그날 「자세히 ›」 둘이
+# 걸렸는데 **둘 다 이미 모달을 열고 있었다**(JS 가 가로챈다). 막았으면
+# 멀쩡한 커밋이 멈췄을 것이다.
+RULES="$(git rev-parse --show-toplevel 2>/dev/null)/tools/check-rules.py"
+if [ -f "$RULES" ] && command -v python >/dev/null 2>&1; then
+  rules_out=$(python "$RULES" 2>&1)
+  rules_code=$?
+  if [ "$rules_code" = "1" ]; then
+    echo ""
+    echo "  커밋을 멈췄습니다 — 룰 검사에 걸렸습니다."
+    echo ""
+    printf '%s
+' "$rules_out" | sed 's/^/  /'
+    echo ""
+    echo "  고치고 다시 커밋하십시오. 일부러 넘기려면:"
+    echo "      git commit --no-verify"
+    echo ""
+    exit 1
+  fi
+  if [ "$rules_code" = "2" ]; then
+    echo ""
+    echo "  ── 룰 검사가 일부를 못 쟀습니다 (커밋은 계속합니다) ──"
+    printf '%s
+' "$rules_out" | sed 's/^/  /'
+    echo ""
+  fi
+fi
+
+
 # 경로 → 레인. CLAUDE.md 「세션 역할 분담」 표를 따른다.
 # 루트 파일(CLAUDE.md 등)은 어느 레인도 아니므로 세지 않는다.
 lanes=$(printf '%s\n' "$files" | awk -F/ '
