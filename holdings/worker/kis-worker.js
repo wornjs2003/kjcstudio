@@ -252,6 +252,25 @@ function readConfig(env) {
 
 /* ── 접근토큰 (KV 에 24시간 보관) ───────────────────────────── */
 
+/* KIS 가 거부한 토큰을 버린다 (2026-09-22 지시 — 「응 해줘」).
+   server/kis_proxy.py 의 `_drop_token_cache` 와 **같은 판정**이어야 한다.
+
+   **캐시가 「아직 안 만료」 라고 믿는데 KIS 는 거부하는 구간이 있다.**
+   그 상태에서는 `getToken` 이 거부당한 토큰을 계속 돌려주어, 캐시가 스스로
+   만료될 때까지 몇십 분이고 계속 실패한다 (2026-09-22 로컬 실측 —
+   가장 오래된 토큰을 든 폴더 하나만 해외 지수 여덟이 전부 EGW00123 였고,
+   같은 토큰으로 국내는 통했다).
+
+   **지우는 대신 만료로 표시해 덮어쓴다** — 지우면 「없음」 과 「거부됨」 이
+   구분되지 않는다. 로컬은 파일, 여기는 KV 라 저장소만 다르다. */
+async function dropToken(cfg, env) {
+  if (!env.KIS_KV) return;
+  try {
+    await env.KIS_KV.put(`token:${cfg.mode}`,
+      JSON.stringify({ token: "", expiresAt: 0 }));
+  } catch { /* 못 지워도 아래 재시도는 해 본다 */ }
+}
+
 async function getToken(cfg, env) {
   if (!env.KIS_KV) {
     throw new Error("KV 바인딩(KIS_KV)이 없습니다. 토큰을 보관할 수 없습니다.");
@@ -363,7 +382,7 @@ function outRows(data, key) {
   return Array.isArray(v) ? v : [];
 }
 
-async function kisGet(cfg, env, path, params, trId, cacheTtl) {
+async function kisGet(cfg, env, path, params, trId, cacheTtl, _retry = 1) {
   const token = await getToken(cfg, env);
   /* 이 요청 몫의 페이서. 없으면(예전 경로로 불렸으면) 기다리지 않는다 —
      전역으로 물러서면 다시 요청 사이를 넘나들게 된다. */
@@ -385,6 +404,13 @@ async function kisGet(cfg, env, path, params, trId, cacheTtl) {
 
   const text = await res.text();
   if (!res.ok) {
+    /* **거부당한 토큰(EGW00123)은 버리고 한 번만 다시 받는다** (2026-09-22 지시).
+       `_retry > 0` 한 번뿐이라 되풀이되지 않는다 — 다시 받아도 또 거부되면
+       그때는 던진다. `kis_proxy.py` 의 EGW00201 이 도는 그 모양 그대로다. */
+    if (text.includes("EGW00123") && _retry > 0) {
+      await dropToken(cfg, env);
+      return kisGet(cfg, env, path, params, trId, cacheTtl, _retry - 1);
+    }
     // 초당 건수 초과는 호출한 쪽이 알아볼 수 있게 그대로 전달
     throw new Error(`KIS 호출 실패 (HTTP ${res.status}): ${scrub(text, env).slice(0, 200)}`);
   }
@@ -396,6 +422,10 @@ async function kisGet(cfg, env, path, params, trId, cacheTtl) {
     throw new Error("KIS 응답을 해석할 수 없습니다.");
   }
   if (String(data.rt_cd ?? "0") !== "0") {
+    if (data.msg_cd === "EGW00123" && _retry > 0) {
+      await dropToken(cfg, env);
+      return kisGet(cfg, env, path, params, trId, cacheTtl, _retry - 1);
+    }
     throw new Error(`KIS 오류: ${data.msg1 || "알 수 없음"} (${data.msg_cd || ""})`);
   }
   return data;

@@ -330,6 +330,30 @@ def _write_token_cache(mode, token, expires_in):
         pass
 
 
+def _drop_token_cache(mode):
+    """KIS 가 거부한 토큰을 버린다 (2026-09-22 지시 — 「응 해줘」).
+
+    **캐시가 「아직 안 만료」 라고 믿는데 KIS 는 거부하는 구간이 있다.**
+    그 상태에서는 `_read_token_cache` 가 거부당한 토큰을 계속 돌려주어
+    **캐시가 스스로 만료될 때까지 몇십 분이고 계속 실패한다.**
+
+    2026-09-22 실측 — 여섯 폴더의 토큰 발급 시각과 화면을 함께 재니,
+    **가장 오래된 토큰을 든 폴더 하나만** 해외 지수 여덟이 전부
+    `EGW00123` 로 거부됐다. 같은 토큰으로 국내는 통했다.
+
+        KJCStudio  09-22 12:40 발급  12개 정상
+        kjc-stock  09-21 13:12 발급  **4개 · 해외 8건 EGW00123**
+
+    파일을 지우는 대신 **만료로 표시해 덮어쓴다.** 지우면 다른 프로세스가
+    「없음」 과 「거부됨」 을 구분하지 못한다.
+    """
+    try:
+        with open(TOKEN_CACHE_PATH, "w", encoding="utf-8") as f:
+            json.dump({"mode": mode, "access_token": "", "expires_at": 0}, f)
+    except OSError:
+        pass
+
+
 def get_token(cfg):
     """접근토큰을 얻는다. 캐시가 유효하면 재사용한다.
 
@@ -498,6 +522,11 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
         if "EGW00201" in detail and _retry > 0:
             time.sleep(1.0)
             return kis_get(cfg, path, params, tr_id, _retry - 1)
+        # **거부당한 토큰(EGW00123)은 버리고 한 번만 다시 받는다** (2026-09-22 지시).
+        # 이것이 없으면 캐시가 스스로 만료될 때까지 몇십 분이고 계속 실패한다.
+        if "EGW00123" in detail and _retry > 0:
+            _drop_token_cache(cfg["mode"])
+            return kis_get(cfg, path, params, tr_id, _retry - 1)
         raise RuntimeError("KIS 호출 실패 (HTTP %s): %s" % (e.code, detail))
     except urllib.error.URLError as e:
         raise RuntimeError("KIS 호출 실패 (네트워크): %s" % safe_message(e.reason))
@@ -505,6 +534,9 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
     if str(data.get("rt_cd", "0")) != "0":
         if data.get("msg_cd") == "EGW00201" and _retry > 0:
             time.sleep(1.0)
+            return kis_get(cfg, path, params, tr_id, _retry - 1)
+        if data.get("msg_cd") == "EGW00123" and _retry > 0:
+            _drop_token_cache(cfg["mode"])
             return kis_get(cfg, path, params, tr_id, _retry - 1)
         raise RuntimeError("KIS 오류: %s (%s)" % (data.get("msg1", "알 수 없음"), data.get("msg_cd", "")))
     return data
