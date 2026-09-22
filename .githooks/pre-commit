@@ -104,9 +104,18 @@ lanes=$(printf '%s\n' "$files" | awk -F/ '
   $1 == "debugging"                     { print "개념정의";        next }
 
   $1 == ".claude" && $2 == "commands"   { print "홈페이지_정리";   next }
+
+  # 루트 화면은 2026-09-22 에 **개념정의** 로 왔다. 그날 재권님이
+  # `홈페이지_정리` 의 만드는 레인을 비우셨다 — 「니가 작업을 하면 내가
+  # 너한테 업무지시 검수등을 못하잖아」.
   $1 == "assets" || $1 == "category" ||
-  $1 == "data"   || $1 == "partials" ||
-  $1 == "company-setup" || $1 == "api-board" { print "홈페이지_정리"; next }
+  $1 == "data"   || $1 == "partials"    { print "개념정의";        next }
+
+  # company-setup · api-board 는 **아직 주인이 없다** (2026-09-22).
+  # 둘 다 미커밋 0 이고 조용해서 급하지 않다. 정해지면 이 줄을 고친다.
+  # 그때까지는 함께 묶어 **한 레인**으로 센다 — 둘을 같이 고치는 것은
+  # 정상이고, 남의 것과 섞이면 걸린다.
+  $1 == "company-setup" || $1 == "api-board" { print "(미정) 설립·API"; next }
 
   $1 == "tools" || $1 == ".claude" ||
   $1 == ".githooks" || $1 == "docs"     { print "개념정의";        next }
