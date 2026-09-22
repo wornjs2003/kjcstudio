@@ -500,6 +500,12 @@ function paintIndices(indices) {
   paintStrip(indices);
   paintMkt();          // 상승·하락 종목 수가 여기 들어 있다
   paintDailyMini(indices);
+  /* 순위 모달 머리의 수치 격자가 지수로 만들어진다. 열려 있으면 같이 맞춘다 —
+     따로 부르지 않는다 (같은 값을 두 번 부르면 두 자리가 어긋난다). */
+  if (rankModal) {
+    rankModal.head.setBig(rankHeadBig());
+    rankModal.head.setStats(rankHeadStats());
+  }
 }
 
 /* 데일리분석 칸 — 모달 첫 칸(「주요 지수」)을 세 줄로 줄인 것.
@@ -840,24 +846,87 @@ function paintRowHead() {
 /* ── 실시간 순위 모달 ─────────────────────────────────────
  *
  * 재권님 지시 — "이 모달창에는 실시간 순위에 있는 정보들을 보면 되고".
+ * 2026-09-22 에 **공용 뼈대** 위로 올렸다 — "모달창은 이거 참고해서 UI
+ * 구성을 통일해줘야 할거같은데 상단에는 모달창의 이름 및 주요 정보들,
+ * 탭들이 있고 그 하위에 정보들이 표기되는 방향으로".
+ *
+ *     머리 ① 이름 줄 · ② 주요 정보 · ③ 탭 줄   `components/modal-head.js`
+ *     본문                                   여기서 표만 그린다
+ *
+ * 머리를 여기서 만들지 않는다. 뉴스·공시 모달과 데일리분석 모달이 같은
+ * 것을 쓴다 — 셋이 각자 만들면 그 순간 복제가 셋이 된다.
  *
  * 목록은 칸이 368px 로 좁아 **거래대금·시가총액·거래량을 뺐다**(2026-09-17).
  * 모달은 넓으니 그 칸들을 되돌린다. holdings/CLAUDE.md 「모달이 원본이고,
  * 목록·카드는 거기서 덜어낸 일부다」 가 이 모양이다.
  *
- * **따로 부르지 않는다.** 목록이 이미 받아 둔 rowPrices 를 그대로 쓴다 —
- * 모달이 제 것을 따로 받으면 두 자리의 숫자가 어긋나고 KIS 를 겹쳐 부른다.
- * 그래서 열려 있는 동안에는 paintRows 가 이쪽도 같이 다시 그린다
+ * **따로 부르지 않는다.** 목록이 이미 받아 둔 rowPrices·lastIndices 를
+ * 그대로 쓴다 — 모달이 제 것을 따로 받으면 두 자리의 숫자가 어긋나고 KIS 를
+ * 겹쳐 부른다. 그래서 열려 있는 동안에는 paintRows 가 이쪽도 같이 다시 그린다
  * (「최적화는 멈춘다가 아니라 늦춘다다」 와 같은 자리).
  *
  * 산업(섹터)은 넣지 않았다 — universe 가 sector 를 빈 값으로 준다.
  * 「받을 수 없는 것은 자리도 만들지 않는다」 (holdings/CLAUDE.md).
  */
-let rankModalBody = null;
+
+/* 모달 가로. **재서 정했다** — 표 내용이 761px 이라 좌우 여백 72 를 더해
+   833 이고, 긴 ETF 이름에 조금 더 줘서 850 이다. 전에는 1400px 이라
+   639px 가 비어 있었다 (2026-09-22 지시 — "모달 가로는 정보에 맞춰서
+   좀더 좁게"). **고정 px 로 둔다** — max-content 로 두면 탭을 바꿀 때
+   폭이 달라져 「보는 것을 바꿔도 자리는 그대로다」 를 깬다. */
+const RANK_MODAL_WIDTH = 850;
+
+let rankModal = null;           // { body, head } — 닫히면 null
 let rankModalSort = 'cap';      // 모달에서 고른 갈래. 목록과 따로 둔다
 
+/* 머리 ② 왼쪽 대표값 — 코스피. 이미 받아 둔 지수를 쓴다 */
+function rankHeadBig() {
+  const i = (lastIndices || []).find((x) => x.code === 'KOSPI');
+  /* 안 온 것은 「불러오는 중」 으로 둔다. 0 이나 「—」 로 적으면 연결이
+     안 된 건지 값이 그런 건지 구분할 수 없다 (데이터 규칙). */
+  if (!i || i.value == null) return { value: '불러오는 중' };
+  return {
+    value: fmtNum(i.value, 2),
+    change: '어제보다 ' + fmtDelta(i.change, i.changePct, '', 2),
+    changeCls: dirClass(i.changePct),
+    note: '코스피 · ' + marketPhase().label,
+  };
+}
+
+/* 머리 ② 오른쪽 수치 격자.
+   전체 거래대금은 넣지 않았다 — 지수 응답의 amount·volume 이 null 로 온다
+   (재서 확인). 「받을 수 없는 것은 자리도 만들지 않는다」. */
+function rankHeadStats() {
+  const by = Object.fromEntries((lastIndices || []).map((i) => [i.code, i]));
+  const WAIT = { html: '<span class="kh-mut">불러오는 중</span>' };
+
+  const idx = (code) => {
+    const i = by[code];
+    if (!i || i.value == null) return WAIT;
+    return { html: fmtNum(i.value, 2) + ' ' + fmtPct(i.changePct), cls: dirClass(i.changePct) };
+  };
+  /* 상승·보합·하락 종목 수. 지수 조회 응답에 이미 들어 있다 */
+  const counts = (code) => {
+    const i = by[code];
+    if (!i || i.up == null) return WAIT;
+    return { html: '<span class="kh-up">' + fmtNum(i.up) + '</span> · '
+      + '<span class="kh-flat">' + fmtNum(i.flat) + '</span> · '
+      + '<span class="kh-down">' + fmtNum(i.down) + '</span>' };
+  };
+
+  return [
+    { label: '코스닥', ...idx('KOSDAQ') },
+    { label: '코스피 등락', ...counts('KOSPI') },
+    { label: '코스피200', ...idx('KOSPI200') },
+    { label: '코스닥 등락', ...counts('KOSDAQ') },
+    { label: 'KRX100', ...idx('KRX100') },
+    { label: '줄 세운 종목', value: rowList(rankModalSort).length + '개' },
+  ];
+}
+
+/* 본문 — 표만 그린다. 머리는 modal-head.js 가 들고 있다 */
 function paintRankModal() {
-  if (!rankModalBody) return;
+  if (!rankModal) return;
   const list = rowList(rankModalSort);
   const rows = list.map((s) => {
     const p = rowPrices && rowPrices[s.code];
@@ -873,46 +942,63 @@ function paintRankModal() {
     </tr>`;
   }).join('');
 
-  /* 모달 안에서 고른 기준. 첫 화면 순위표와 **따로 둔다** —
-     모달에서 거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면
-     무엇을 눌러 그렇게 됐는지 알 수 없다 (2026-09-22). */
-  const chips = Object.entries(SORTS).map(([id, s]) =>
-    `<button class="kh-chip${id === rankModalSort ? ' is-active' : ''}"
-      data-rkm-sort="${id}" type="button">${s.label}</button>`).join('');
-
-  rankModalBody.innerHTML = `<div class="kh-rkm">
-    <div class="kh-rkm-head">
-      <div class="kh-rkm-t">실시간 순위</div>
-      <div class="kh-rkm-sub">${(SORTS[rankModalSort] || {}).label || ''} 순 ·
-        목록이 좁아 뺐던 거래대금·시가총액·거래량까지 함께 봅니다</div>
-      <div class="kh-rkm-chips">${chips}</div>
-    </div>
+  /* 칸 폭을 못 박는다 (table-layout: fixed).
+     남는 폭을 종목 칸이 먹어서 종목과 현재가 사이가 **559px** 까지 벌어져
+     있었다 (2026-09-22 지시 — "종목과 현재가 사이는 줄여주고").
+     못 박으면 **탭을 바꿔도 칸이 안 움직인다** — 「보는 것을 바꿔도 자리는
+     그대로다」 가 같이 지켜진다. 폭은 css/home.css 의 .kh-rkm col 에 있다. */
+  rankModal.body.innerHTML = `<div class="kh-rkm">
     <table>
+      <colgroup>
+        <col class="c-rk"><col class="c-nm"><col class="c-pr"><col class="c-pc">
+        <col class="c-am"><col class="c-cap"><col class="c-vol">
+      </colgroup>
       <thead><tr>
         <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
         <th>거래대금</th><th>시가총액</th><th>거래량</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <p class="kh-rkm-note">목록은 칸이 좁아 거래대금·시가총액·거래량을 뺐습니다.
-      여기서는 다 보입니다 · ${list.length}종목</p>
   </div>`;
 
-  rankModalBody.querySelectorAll('[data-rkm-sort]').forEach((b) => {
-    b.addEventListener('click', () => {
-      rankModalSort = b.dataset.rkmSort;
-      paintRankModal();
-    });
-  });
+  /* 머리의 수치도 같은 값으로 맞춘다 — 두 자리가 어긋나면 어느 것이
+     맞는지 알 수 없다 */
+  rankModal.head.setBig(rankHeadBig());
+  rankModal.head.setStats(rankHeadStats());
 }
 
 function openRankModal() {
-  const { body } = openModal({
+  const m = openModal({
     label: '실시간 순위',
-    onClose() { rankModalBody = null; },
+    width: RANK_MODAL_WIDTH,
+    head: {
+      icon: '순',
+      name: '실시간 순위',
+      sub: 'KOSPI · KOSDAQ',
+      caret: true,
+      /* 「전체 화면 ↗」 이 없다. 순위만 갈 화면(rank.html)이 없어서다 —
+         없는 주소를 적어 두면 가운데 단추로 눌렀을 때 빈 곳으로 간다.
+         만들지 말지는 재권님께 여쭙는 중이라 그 자리를 빨간 바탕으로 둔다
+         (CLAUDE.md 「아직 안 정해진 자리는 빨간 바탕」). */
+      actions: [{ label: '전체 화면 없음', todo: true }],
+      big: rankHeadBig(),
+      stats: rankHeadStats(),
+      /* 850px 에서 세 열이면 눌려 줄바꿈된다 (재서 확인) */
+      statCols: 2,
+      tabs: Object.entries(SORTS).map(([id, x]) => ({ id, label: x.label })),
+      tab: sortBy,              // 목록에서 보던 기준으로 열린다
+      /* 850px 에서는 이보다 길면 오른쪽이 잘린다 (재서 확인).
+         원래 문장은 「목록이 좁아 뺐던 거래대금 · 시가총액 · 거래량까지 함께 봅니다」 였다 */
+      tabsNote: '거래대금 · 시가총액 · 거래량까지',
+      /* 모달에서 고른 기준은 첫 화면 순위표와 **따로 둔다** — 모달에서
+         거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면 무엇을 눌러
+         그렇게 됐는지 알 수 없다 (2026-09-22). */
+      onTab(id) { rankModalSort = id; paintRankModal(); },
+    },
+    onClose() { rankModal = null; },
   });
-  rankModalBody = body;
-  rankModalSort = sortBy;       // 목록에서 보던 기준으로 열린다
+  rankModal = m;
+  rankModalSort = sortBy;
   paintRankModal();
 }
 

@@ -96,6 +96,116 @@
 /* 스크롤바 모양은 `assets/css/common.css` 한 곳에서 정한다 (2026-09-18 룰).
    여기 10px 를 따로 두었다가 걷어냈다 — 모달만 굵으면 화면 안에서 두 가지가 된다. */
 
+/* ── 모달 뼈대 (2026-09-22 지시) ─────────────────────────────
+ *
+ * 재권님 말씀 — "상단에는 모달창의 이름 및 주요 정보들, 탭들이 있고
+ * 그 하위에 정보들이 표기되는 방향으로". 기준은 아래 `.kh-head`(종목 모달)다.
+ *
+ * **세 모달(실시간 순위 · 뉴스·공시 · 데일리분석)이 이것을 같이 쓴다.**
+ * 각자 만들면 그 순간 복제가 셋이 된다.
+ *
+ * 머리를 **스크롤 칸의 형제**로 두고 모달을 세로 flex 로 만든다. 그러면
+ * 굴러가는 것이 본문뿐이라, 표가 있는 모달에서 `thead th { top: 0 }` 이
+ * 그냥 맞는다. 머리를 스크롤 칸 안에 sticky 로 두면 그 `top` 이 머리
+ * 높이만큼이어야 하는데, 그 높이는 부제·격자 줄 수에 따라 달라진다 —
+ * 어딘가에 숫자를 박게 된다.
+ *
+ * 아래 `.kh-head` 는 종목 모달이 쓰는 **다른 길**이다. `has-head` 가 없으면
+ * 지금까지와 똑같이 돈다.
+ *
+ * **스크롤바를 여기서 건드리지 않는다.** 굵기 6px · 화살표 없음은
+ * `assets/css/common.css` 한 곳이 정하고, 본문이 새 스크롤 칸이 되어도
+ * 그 규칙을 그대로 물려받는다 (2026-09-22 지적). */
+
+.kh-modal.has-head { display: flex; flex-direction: column; }
+
+/* 머리를 주면 스크롤 칸이 남는 높이를 먹는다.
+   min-height: 0 이 없으면 flex 항목이 내용 높이만큼 버텨 모달을 밀어낸다. */
+.kh-modal.has-head .kh-modal-scroll { flex: 1 1 auto; height: auto; min-height: 0; }
+
+.kh-mh {
+  flex: 0 0 auto;
+  background: var(--kh-bg-card);
+  box-shadow: 0 1px 0 var(--kh-border);
+}
+
+/* ① 이름 줄 */
+.kh-mh-top { display: flex; align-items: center; gap: 9px; padding: 15px 26px 0; }
+.kh-mh-ic {
+  width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%;
+  background: var(--kh-accent-dim); color: var(--kh-accent);
+  display: grid; place-items: center; font-size: 0.86rem; font-weight: 700;
+}
+.kh-mh-name { font-size: 1.18rem; font-weight: 700; letter-spacing: -0.03em; }
+.kh-mh-sub { font-size: 0.86rem; color: var(--kh-text-muted); }
+.kh-mh-caret { color: var(--kh-text-dim); }
+.kh-mh-act { margin-left: auto; display: flex; align-items: center; gap: 7px; }
+.kh-mh-btn {
+  font-size: 0.78rem; padding: 6px 12px; border: 0; border-radius: 999px;
+  background: var(--kh-bg-surface); color: var(--kh-text-secondary);
+  cursor: pointer; text-decoration: none; font-family: inherit;
+}
+.kh-mh-btn:hover { background: var(--kh-bg-active); }
+/* 아직 안 정해진 자리는 빨간 바탕 (CLAUDE.md) */
+.kh-mh-btn.is-todo {
+  background: var(--kh-up-dim); color: var(--kh-up);
+  font-weight: 600; cursor: default;
+}
+.kh-mh-btn.is-todo:hover { background: var(--kh-up-dim); }
+.kh-mh-x {
+  border: 0; background: none; font-family: inherit;
+  font-size: 1rem; color: var(--kh-text-muted); padding: 4px 8px; cursor: pointer;
+}
+.kh-mh-x:hover { color: var(--kh-text-primary); }
+
+/* ② 주요 정보 — 왼쪽은 「무엇인가」, 오른쪽은 「얼마인가」.
+   둘 다 없는 모달은 이 줄이 아예 안 그려진다 (modal-head.js 가 뺀다). */
+.kh-mh-main { display: flex; align-items: flex-start; gap: 34px; padding: 12px 26px 15px; }
+.kh-mh-big { font-size: 1.85rem; font-weight: 500; letter-spacing: -0.03em; }
+.kh-mh-big-s { margin-top: 3px; font-size: 0.84rem; font-weight: 600; }
+.kh-mh-big-w { margin-top: 5px; font-size: 0.78rem; color: var(--kh-text-muted); }
+.kh-mh-stats {
+  margin-left: auto;
+  display: grid; grid-template-columns: repeat(3, auto); gap: 4px 26px;
+}
+/* 좁은 모달은 두 열이다 — 850px 에서 세 열이면 눌려 줄바꿈된다 (재서 확인) */
+.kh-mh-stats.is-2 { grid-template-columns: repeat(2, auto); gap: 4px 30px; }
+.kh-mh-stats.is-2 .kh-mh-st > span { min-width: 78px; }
+.kh-mh-st { display: flex; align-items: baseline; gap: 9px; font-size: 0.8rem; }
+.kh-mh-st > span { color: var(--kh-text-muted); min-width: 68px; }
+.kh-mh-st b {
+  margin-left: auto; font-weight: 500; font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ③ 탭 줄 */
+.kh-mh-tabs {
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 26px; border-top: 1px solid var(--kh-border);
+}
+.kh-mh-tab {
+  border: 0; background: none; font-family: inherit;
+  padding: 11px 14px 10px; font-size: 0.88rem; font-weight: 500;
+  color: var(--kh-text-muted); cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.kh-mh-tab:hover { color: var(--kh-text-secondary); }
+.kh-mh-tab.is-on {
+  color: var(--kh-text-primary); font-weight: 700;
+  border-bottom-color: var(--kh-text-primary);
+}
+.kh-mh-tabs-r { margin-left: auto; font-size: 0.78rem; color: var(--kh-text-muted); }
+
+/* ⑤ 아래가 자연스럽게 잘리도록 (2026-09-22 지시 —
+   "모달 하위에 약간 여유를 줘서 자연스럽게 잘리게").
+   본문 아래 여백은 담는 쪽이 준다 — 무엇이 마지막 줄인지 그쪽이 안다.
+   `transparent` 를 쓴다. 색을 적으면 그 한 곳이 또 색을 정하는 자리가 된다. */
+.kh-modal-fade {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 46px;
+  background: linear-gradient(to bottom, transparent, var(--kh-bg));
+  pointer-events: none; z-index: 4;
+}
+
 /* 머리는 스크롤해도 붙어 있는다 — 아래로 내려도 종목명과 현재가가 보여야 한다.
    좌우 여백은 본문이 들고 있으므로, 머리만 음수 여백으로 끝까지 펼친다. */
 .kh-modal .kh-head {

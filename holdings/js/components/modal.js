@@ -14,7 +14,23 @@
  * 줄어들면 서랍을 여는 값이 없다.
  *
  * 펼친 상태는 기억한다. 종목을 바꿀 때마다 다시 펼치게 하지 않는다.
+ *
+ * ── 머리 셋 (2026-09-22 지시) ──
+ *
+ * `head` 를 주면 **이름 줄 · 주요 정보 · 탭 줄**이 본문 위에 붙는다.
+ * 그리는 것은 `modal-head.js` 다 — 이 파일은 여전히 띄우고 닫는 것만 맡는다.
+ *
+ * 머리를 주면 모달이 세로 flex 가 되고 **본문만 굴러간다.** 종목 모달은
+ * `head` 를 안 주므로 지금 모양(`.kh-head` 를 스크롤 칸 안에서 sticky)
+ * 그대로다 — 두 길이 공존한다.
+ *
+ * `width` 를 주면 그 폭이 된다. 모달마다 담는 것이 달라 폭이 다르다 —
+ * 실시간 순위는 표가 761px 이라 850, 뉴스는 980, 데일리는 1100 이다.
+ * **고정 px 로 둔다.** `max-content` 로 두면 탭을 바꿀 때 폭이 달라져
+ * 「보는 것을 바꿔도 자리는 그대로다」 를 깬다.
  */
+
+import { buildHead } from './modal-head.js';
 
 /* 지금 떠 있는 모달. 한 번에 하나만 띄운다 — 모달 위에 모달이 쌓이면
    Esc 를 눌렀을 때 어느 것이 닫히는지 알 수 없다. */
@@ -41,7 +57,8 @@ function remember(key, on) {
  * @param {Function} [opts.onClose]  닫힐 때. 스스로 도는 것을 여기서 멈춘다
  * @returns {{ body: HTMLElement, close: Function }}
  */
-export function openModal({ label = '', drawers = null, onToggle, onClose } = {}) {
+export function openModal({ label = '', drawers = null, head = null, width = null,
+                            fade = true, onToggle, onClose } = {}) {
   if (current) current.close();
 
   /* 손잡이와 모달을 한 판(stage) 에 올린다.
@@ -67,6 +84,26 @@ export function openModal({ label = '', drawers = null, onToggle, onClose } = {}
   const stage = veil.querySelector('.kh-stage');
   const shell = veil.querySelector('.kh-modal');
   const body = veil.querySelector('.kh-modal-scroll');
+
+  /* ── 머리 셋 ──
+     스크롤 칸 **앞**에 형제로 넣는다. 안에 두면 같이 굴러간다.
+     `has-head` 가 모달을 세로 flex 로 만들어 본문만 굴러가게 한다. */
+  let headApi = null;
+  if (head) {
+    shell.classList.add('has-head');
+    headApi = buildHead({ ...head, onClose: () => close() });
+    shell.insertBefore(headApi.el, body);
+    /* 아래가 자연스럽게 잘리도록 흐려지는 띠 (2026-09-22 지시 ⑤).
+       모달 안에 두므로 본문이 굴러가도 제자리에 남는다. */
+    if (fade) {
+      const f = document.createElement('div');
+      f.className = 'kh-modal-fade';
+      shell.appendChild(f);
+    }
+  }
+
+  /* 폭은 부르는 쪽이 정한다. 창보다 크면 창에 맞춘다 */
+  if (width) shell.style.width = `min(${width}px, 100vw - 52px)`;
 
   /* ── 옆 서랍 손잡이 ──
      모달과 형제로 둔다. 모달이 넓어지면 손잡이가 자연스럽게 밀려난다. */
@@ -154,7 +191,7 @@ export function openModal({ label = '', drawers = null, onToggle, onClose } = {}
   requestAnimationFrame(() => stage.classList.add('is-ready'));
 
   current = { close };
-  return { body, close, toggle, isDrawerOpen };
+  return { body, head: headApi, shell, close, toggle, isDrawerOpen };
 }
 
 /** 지금 떠 있는 모달이 있으면 닫는다. 없으면 아무 일도 하지 않는다. */
