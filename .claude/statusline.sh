@@ -17,6 +17,10 @@
 # Windows 에서는 Claude Code 가 Git Bash 로 돌리므로 두 PC 가 같은 파일을 쓴다.
 # 경로는 반드시 슬래시로 적는다 — Git Bash 가 백슬래시를 이스케이프로 먹는다.
 
+# 상태줄 입력을 통째로 받아 둔다. 주간 사용량이 여기 온다 (2026-09-22 지시).
+# **한 번만 읽을 수 있으므로** 변수에 담는다.
+STDIN_JSON=$(cat)
+
 cd "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || exit 0
 
 R='\033[31m'; Y='\033[33m'; G='\033[32m'; D='\033[90m'; B='\033[1m'; X='\033[0m'
@@ -83,8 +87,10 @@ printf '%b\n' "$line1"
 # ── 둘째 줄 — 미커밋 ──────────────────────────────
 # 하나도 없으면 줄을 만들지 않는다. 빈 줄이 남으면 화면만 차지한다.
 dirty=$(git status --porcelain 2>/dev/null | grep -c .)
-[ "$dirty" -eq 0 ] && exit 0
 
+
+# 미커밋이 없으면 둘째 줄은 건너뛴다. **셋째 줄은 그것과 무관하게 늘 나온다.**
+if [ "$dirty" -gt 0 ]; then
 names=$(git status --porcelain 2>/dev/null |
         sed 's/^...//; s/.*\///' |          # 상태 표시와 경로를 떼고 파일명만
         head -3 |
@@ -95,3 +101,47 @@ line2="      ${D}미커밋 ${dirty}  ${names}"
 line2="$line2${X}"
 
 printf '%b\n' "$line2"
+fi
+
+# ── 셋째 줄: 주간 한도 사용률 ────────────────────────────────
+#
+# 재권님 지시 (2026-09-22) — 「주간 사용량을 보고싶은데 **이것만** 추가할수있나?」
+# 위 두 줄은 그대로 두고 아래에 붙인다.
+#
+# **받아 온 맥용 스크립트를 그대로 쓰지 않았다.** 이 PC 에 `jq` 가 없고
+# `stat -f` · `date -j` 도 GNU 에서 안 된다. 그리고 **값의 모양이 달랐다** —
+# 상태줄 입력을 찍어 확인했다.
+#
+#     .rate_limits.seven_day.used_percentage   32        ← 정수다
+#     .rate_limits.seven_day.resets_at         1790528400 ← ISO 가 아니라 유닉스 초다
+#
+# **값이 없어도 줄을 없애지 않는다.** 줄 수가 오락가락하면 화면이 들썩인다.
+week=$(printf '%s' "$STDIN_JSON" | python -c "
+import sys, json, datetime
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+try:
+    d = json.load(sys.stdin)['rate_limits']['seven_day']
+    pct = int(round(float(d['used_percentage'])))
+    at = datetime.datetime.fromtimestamp(float(d['resets_at']))
+    n = max(0, min(10, pct // 10))
+    print('%d|%s|%d/%d %02d:%02d' % (pct, '#' * n + '-' * (10 - n),
+                                     at.month, at.day, at.hour, at.minute))
+except Exception:
+    print('||')
+" 2>/dev/null)
+
+pct=${week%%|*}
+rest=${week#*|}
+bar=${rest%%|*}
+at=${rest#*|}
+
+if [ -n "$pct" ]; then
+  # 색은 맨 위에 모아 둔 것을 쓴다 (「같은 값은 한 곳에만 둔다」).
+  C=$G
+  [ "$pct" -ge 70 ] && C=$Y
+  [ "$pct" -ge 90 ] && C=$R
+  printf '%b\n' "      ${D}주간 한도${X} ${C}${pct}%${X} ${D}[${bar}]  ${at} 초기화${X}"
+else
+  printf '%b\n' "      ${D}주간 한도 --${X}"
+fi
