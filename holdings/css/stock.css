@@ -250,7 +250,26 @@
 .kh-panes { display: flex; flex-direction: column; }
 .kh-pane { position: relative; }
 .kh-pane + .kh-pane { border-top: 1px solid var(--kh-border); }
-.kh-pane-box { width: 100%; position: relative; z-index: 1; }
+/* 차트 canvas 를 **곱하기로 섞는다** (2026-09-22 지시).
+ *
+ * 재권님 — "볼린져 밴드를켜면 매물대위로 볼린져밴드 아래의 흰색부분이
+ * 그려져서 매물대가가려지는데 이거 고쳐줘".
+ *
+ * 볼린저 띠는 「두 선 사이 채우기」 가 라이브러리에 없어서 **위 선을 아래로
+ * 노랗게 채운 뒤 아래 선을 카드 색으로 덮어** 띠만 남긴다 (chart.js 의
+ * drawOverlay). 그 덮는 흰색이 **불투명**이라, canvas 뒤에 깔린 매물대
+ * (.kh-vp)를 가렸다. **매물대가 사라진 것이 아니라 덮인 것이다.**
+ *
+ * 곱하기로 섞으면 흰색(255,255,255)은 뒤를 그대로 통과시킨다 —
+ * 흰색 × 매물대색 = 매물대색. 봉과 축 글자는 어두우니 그대로 남는다.
+ *
+ * 덮는 쪽(chart.js)을 안 고친 이유 — 그 기법 자체는 멀쩡하고, 고치면
+ * 띠 아래가 전부 노래지거나 띠 채우기를 잃는다. 문제는 「불투명하게
+ * 덮는 것」 이지 「덮는 것」 이 아니다. */
+.kh-pane-box {
+  width: 100%; position: relative; z-index: 1;
+  mix-blend-mode: multiply;
+}
 
 /* ── 매물대 (2026-09-18 지시) ─────────────────
    **배경이다.** 가장 아래에 깔리고 봉과 보조지표는 차트 canvas 안이라

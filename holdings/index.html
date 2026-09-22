@@ -235,7 +235,18 @@
                눌러도 아무 일이 없는 장식이었다. 없애도 잃을 것이 없다.
                클래스 이름은 남긴다 — 차트 머리줄의 「자세히 ›」 가 같은 것을
                쓰고 CSS 도 그 이름으로 걸려 있다. -->
-          <button class="kh-fold" id="kh-rank-more" type="button">자세히 ›</button>
+          <!-- 차트 머리줄의 「자세히 ›」 와 **같은 것**이어야 한다
+               (2026-09-22 지시 — "자세히 버튼은 차트에서 모달 띄우는
+               버튼으로 다 통일해줘").
+
+               <button> 이었는데 <a> 로 바꿨다. 버튼은 브라우저 기본이
+               따라붙어 모양이 갈린다 — 재서 **열한 가지가 달랐다**
+               (테두리 2px outset · 폰트 Arial · 배경 #f0f0f0 · 모서리 0 …).
+
+               **href 는 없다.** 차트 쪽은 stock.html 이 있어 가운데 단추로
+               새 탭에 열 수 있지만, 순위는 갈 화면이 없다 — 모달이 그 자리다.
+               없는 주소를 적어 두면 가운데 단추로 눌렀을 때 빈 곳으로 간다. -->
+          <a class="kh-fold" id="kh-rank-more" role="button" tabindex="0">자세히 ›</a>
         </div>
         <div class="kh-chips" id="kh-sorts">
           <button class="kh-chip is-active" data-sort="cap">시가총액</button>
@@ -280,14 +291,26 @@
             <button type="button" class="kh-nwdc-t" data-nwdc="dc">공시</button>
             <button type="button" class="kh-nwdc-t" data-nwdc="sched">주요일정</button>
           </span>
-          <span class="kh-mut" id="kh-nwdc-src">경제지</span>
+          <!-- 「자세히」 는 **탭 옆**에 둔다 (2026-09-21 지시 — 「뉴스 공시 주요일정
+               옆에 자세히 칸 있어야 하고」). 칸 아래에 있던 「더보기」 를 여기로
+               옮기고 이름을 맞췄다 — 같은 일을 하는 단추가 둘이면 어느 것을
+               눌러야 할지 묻게 된다.
+               **클래스를 `kh-fold` 로 합쳤다** (2026-09-22 지시 — 「자세히
+               통일 작업에 함께 정리해」). 전에는 `kh-sec-more` 였는데, 같은
+               글자 「자세히 ›」 가 모양이 둘이었다. 이제 이 저장소에서
+               「자세히」 는 `kh-fold` 하나다.
+               모달은 `data-modal="news"` 로 걸린다 — 클래스가 아니라 그
+               속성을 보므로(news-modal.js) 바꿔도 안 끊긴다. -->
+          <span class="kh-nwdc-side">
+            <span class="kh-mut" id="kh-nwdc-src">경제지</span>
+            <a class="kh-fold" href="./news.html" data-modal="news">자세히 ›</a>
+          </span>
         </div>
         <div class="kh-sched-b">
           <div id="kh-side-news"></div>
           <div class="kh-dc" id="kh-dc-all" hidden></div>
           <div id="kh-side-sched" hidden></div>
         </div>
-        <a class="kh-sec-more" href="./news.html" data-modal="news">더보기</a>
       </div>
 
     </div>
