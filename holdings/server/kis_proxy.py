@@ -1128,7 +1128,11 @@ def fetch_indices_all(cfg, with_chart=True, overseas=True):
     한쪽만 고쳤을 때 조용히 갈린다 — 2026-09-22 에 데일리분석이
     `fetch_indices` 만 불러 **국내 넷만** 담았다. 화면은 열둘이었다.
 
-    `overseas=False` 는 화면이 `?overseas=0` 으로 부를 때를 위한 것이다.
+    `overseas=False` 는 `?overseas=0` 으로 부르면 국내만 주는 길이다.
+    **지금 화면은 그 쿼리를 안 쓴다** (2026-09-22 실측 — `holdings/js` 에 0곳.
+    `home.js:205` 의 `overseas` 는 **응답 필드**이지 쿼리가 아니다).
+    **배포본 워커가 같은 파라미터를 읽으므로**(`worker/kis-worker.js:3230`)
+    짝을 맞춰 남겨 둔다 — 화면이 안 쓴다고 지우면 로컬과 배포본이 갈린다.
     """
     with ThreadPoolExecutor(max_workers=2) as pool:
         f_idx = pool.submit(fetch_indices, cfg, with_chart)
