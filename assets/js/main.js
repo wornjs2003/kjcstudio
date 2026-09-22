@@ -152,6 +152,34 @@
     markActiveNav();
     setupMoreMenu();
     setupMobileMenu();
+    mirrorMenuUnderIntro();
+  }
+
+  /**
+   * 폰에서 인트로 아래에 메뉴 목록을 둔다 (2026-09-22 지시).
+   *
+   * 재권님 말씀 — 「메인은 이화면만 있으면될거같아」 ·
+   * 「kjc스튜디오는 그전에 그린 높이 거기에다가 그대로 두고 그밑으로 글자들 넣어」.
+   *
+   * **목록을 새로 적지 않고 모바일 메뉴에서 복제한다.** 같은 목록이 두 곳에
+   * 있으면 메뉴를 고칠 때 한쪽만 바뀐다 — `partials/nav.html` 한 곳만 고치면
+   * 양쪽이 따라오게 하려는 것이다.
+   *
+   * **보이고 안 보이고는 CSS 가 정한다** (`home.css` 의 768px 블록).
+   * 여기서 창 폭을 재지 않는 이유는, 재서 넣으면 **폰을 돌리거나 창을 줄일 때**
+   * 다시 넣어야 하기 때문이다. 넣어 두고 CSS 가 켜고 끄면 그럴 일이 없다.
+   */
+  function mirrorMenuUnderIntro() {
+    const intro = document.querySelector(".intro");
+    const panel = document.querySelector(".nav-mobile");
+    if (!intro || !panel) return;
+    if (document.querySelector(".intro-links")) return;   /* 두 번 넣지 않는다 */
+
+    const box = document.createElement("nav");
+    box.className = "intro-links";
+    box.setAttribute("aria-label", "바로가기");
+    panel.querySelectorAll("ul").forEach((ul) => box.appendChild(ul.cloneNode(true)));
+    intro.insertAdjacentElement("afterend", box);
   }
 
   if (document.readyState === "loading") {

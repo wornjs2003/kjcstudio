@@ -22,7 +22,7 @@ import { loadStockMain, mountStockView } from './components/stock-view.js';
 import { mountDisclosures } from './components/disclosures.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
 import { mountSchedule } from './components/schedule.js';
-import { bindDailyMenu } from './components/daily-view.js';
+import { bindDailyMenu, loadDailyDoc } from './components/daily-view.js';
 import { fetchIssues, paintIssues } from './components/news-list.js';
 import { bindNewsModal } from './components/news-modal.js';
 import { mountSectors } from './components/sectors.js';
@@ -563,7 +563,8 @@ function paintIndices(indices) {
   lastIndices = indices;
   paintStrip(indices);
   paintMkt();          // 상승·하락 종목 수가 여기 들어 있다
-  paintDailyMini(indices);
+  /* 데일리 칸은 **지수를 안 쓴다** — 07:30 저장본을 읽으므로 여기서 안 부른다
+     (2026-09-22). 제 주기로 따로 돈다. */
   /* 순위 모달 머리의 수치 격자가 지수로 만들어진다. 열려 있으면 같이 맞춘다 —
      따로 부르지 않는다 (같은 값을 두 번 부르면 두 자리가 어긋난다). */
   if (rankModal) {
@@ -572,40 +573,46 @@ function paintIndices(indices) {
   }
 }
 
-/* 데일리분석 칸 — 모달 첫 칸(「주요 지수」)을 세 줄로 줄인 것.
+/* 데일리분석 칸 — **07:30 저장본의 문안**을 보여준다.
  *
- * **새로 부르지 않는다.** 이미 받아 둔 지수를 그대로 쓴다 — 같은 값을
- * 두 번 부르면 두 자리의 숫자가 어긋나고 KIS 를 겹쳐 부른다
- * (holdings/CLAUDE.md 「최적화는 멈춘다가 아니라 늦춘다다」 와 같은 자리).
+ * 2026-09-22 지시 — 「데일리분석 홀딩스 화면일 때 보여지는 건 텔레그램에
+ * 보내는 메세지가 보여지게끔 해줘. **지수가 아니라**」.
+ *
+ * ── 왜 저장본을 읽나 ──
+ *
+ * 문안은 지수 · 업종 · 뉴스 · 일정 넷으로 만드는데 **첫 화면은 지수밖에
+ * 없다.** 여기서 만들려면 셋을 더 불러야 하고, 그러면 「모달이 따로 받으면
+ * 두 자리의 숫자가 어긋나고 KIS 를 겹쳐 부른다」 에 걸린다.
+ *
+ * **저장본을 읽으면 호출이 0 이다.** 그리고 그것이 **그날 폰으로 간 글**이라
+ * 「폰에 이렇게 도착합니다」 와도 맞는다.
+ *
+ * 읽는 것은 `daily-view.js` 의 `loadDailyDoc()` 하나다 — 모달과 같은 것을 쓴다.
  */
-const DAILY_MINI = [
-  { code: 'KOSPI',  name: '코스피' },
-  { code: 'KOSDAQ', name: '코스닥' },
-  { code: 'SPX',    name: 'S&P 500' },
-];
+const DAILY_DOC_MS = 600_000;     // 10분. 저장본은 하루 한 번만 바뀐다
 
-function paintDailyMini(indices) {
+async function paintDailyMini() {
   const host = $('kh-dlm');
   if (!host) return;
-
-  const by = Object.fromEntries((indices || []).map((i) => [i.code, i]));
-  const rows = DAILY_MINI.map((m) => {
-    const i = by[m.code];
-    /* 안 온 것은 「불러오는 중」 으로 둔다. 0 이나 「—」 로 적으면
-       연결이 안 된 건지 값이 그런 건지 구분할 수 없다 (데이터 규칙). */
-    if (!i || i.value == null) {
-      return `<div class="kh-dlm-r"><span class="kh-dlm-n">${m.name}</span>
-        <span class="kh-dlm-v kh-mut" style="font-size:.8rem;font-weight:500"
-          >불러오는 중</span></div>`;
-    }
-    return `<div class="kh-dlm-r"><span class="kh-dlm-n">${m.name}</span>
-      <span class="kh-dlm-v kh-num">${fmtNum(i.value, 2)}</span>
-      <span class="kh-dlm-c ${dirClass(i.changePct)}">${fmtPct(i.changePct)}</span></div>`;
-  }).join('');
-
-  host.innerHTML = rows
-    + '<div class="kh-dlm-note">그날의 일정 · 지수 · 뉴스를 한 장으로 — 자세히 ›</div>';
+  const doc = await loadDailyDoc();
+  if (!doc || !doc.telegram) {
+    /* 07:30 전에는 그날 것이 없다. **어제 것을 보여주지 않는다** —
+       날짜를 착각하게 된다 (모달도 같은 판단이다). */
+    const note = document.createElement('div');
+    note.className = 'kh-dlm-note';
+    note.textContent = '오늘 것은 아침 07:30 에 만들어집니다';
+    host.replaceChildren(note);
+    return;
+  }
+  /* `textContent` 로 넣는다 — 글자만 담으므로 이스케이프가 필요 없다. */
+  const pre = document.createElement('pre');
+  pre.className = 'kh-dlm-tg';
+  pre.textContent = doc.telegram;
+  host.replaceChildren(pre);
 }
+
+paintDailyMini();
+setInterval(() => { if (!document.hidden) paintDailyMini(); }, DAILY_DOC_MS);
 
 /* 52주 최저·최고 — 고른 종목 기준.
  *

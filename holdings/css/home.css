@@ -335,11 +335,33 @@
    옆 칸(지금 뜨는 산업·주요 지수)과 높이가 같아야 줄이 가지런하다.
    그 둘은 237px 이고 여기도 안에서만 굴러 같은 높이를 지킨다 —
    「보는 것을 바꿔도 자리는 그대로다」 와 같은 이유다. */
-.kh-dlm { display: flex; flex-direction: column; gap: 7px; overflow-y: auto; }
+/* 데일리분석 카드 — **안쪽이 굴러가려면 카드가 flex 여야 한다.**
+   `.kh-sc-card`(지금 뜨는 산업, `:526`)가 같은 꼴이다.
+   높이는 위 `.kh-rank > .kh-card` 의 `--kh-row-h` 가 이미 묶는다 —
+   **여기서 다시 박지 않는다.** */
+.kh-dlm-card { display: flex; flex-direction: column; }
+
+/* **`min-height: 0` 이 있어야 굴러간다.** flex 칸은 기본이 auto 라 안쪽이
+   길면 자기 높이가 그만큼 늘고, `overflow-y: auto` 는 **자기 높이가 정해져야**
+   일하므로 막대가 안 생긴다. 그러면 카드의 `overflow: hidden` 이 그대로
+   잘라내 **보이지도 굴리지도 못한다** — 2026-09-22 실측: 문안 26줄을 넣으니
+   `.kh-dlm` 이 1085px 이 되고 카드 255px 밖 830px 이 잘렸다.
+   `.kh-sc-list`(`:569`)가 같은 방법을 쓴다.
+
+   스크롤바 모양은 `assets/css/common.css` 6px 을 그대로 물려받는다 —
+   여기서 정하지 않는다 (2026-09-18 룰). */
+.kh-dlm { display: flex; flex-direction: column; gap: 7px;
+          flex: 1; min-height: 0; overflow-y: auto; }
 .kh-dlm-r {
   display: flex; align-items: baseline; gap: 8px;
   padding: 7px 9px; border-radius: var(--kh-radius-sm, 8px);
   background: var(--kh-bg-surface);
+}
+/* 문안 — 줄바꿈을 그대로 살린다. 폰에 가는 글과 같은 모양이어야 한다. */
+.kh-dlm-tg {
+  margin: 0; font-family: inherit; font-size: 0.74rem; line-height: 1.55;
+  white-space: pre-wrap; word-break: break-word;
+  color: var(--kh-text-secondary);
 }
 .kh-dlm-n { font-size: 0.78rem; color: var(--kh-text-secondary); font-weight: 500; }
 .kh-dlm-v {

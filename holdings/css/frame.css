@@ -773,15 +773,19 @@ a.kh-sc-i:hover { color: var(--kh-accent); }
   --kh-tail-fade: 24px;   /* 흐려지는 띠의 높이 */
 }
 
-/* 굴러가는 칸 — **재서 고른 넷이다** (2026-09-22 실측, 보임/내용)
+/* 굴러가는 칸 — **재서 골랐다** (2026-09-22 실측, 보임/내용)
  *
  *     .kh-p3-b        투자자 정보 · AI 분석    182/309
  *     .kh-sc-list     지금 뜨는 산업           115/345
  *     #kh-rank-scroll 실시간 순위             618/10648
  *     .kh-sched-b     뉴스 · 공시 · 주요일정    150/603
+ *     .kh-dlm         데일리분석               194/532   (2026-09-22 실측)
  */
 .kh-p3-b,
 .kh-sc-list,
+/* `.kh-dlm`(데일리분석)은 `home.css` 가 `padding` 을 안 정해 여기서 이긴다 —
+   바로 아래 `.kh-sched-b` 와 갈리는 자리다. */
+.kh-dlm,
 /* **`.kh-sched-b`(뉴스·공시)는 여기 없다.** `home.css:1020` 의
    `.kh-sec-card > .kh-sched-b` 가 그 칸의 `padding` 을 통째로 정하는데,
    `home.css` 가 **뒤에 실려** 같은 특정도로 적어도 진다 (index.html:21~22).
@@ -793,10 +797,12 @@ a.kh-sc-i:hover { color: var(--kh-accent); }
 /* 띠는 **칸이 아니라 카드**에 붙인다 — 칸 안에 두면 내용과 함께 굴러가
    위로 올라가 버린다. `::after` 라 마크업을 안 건드린다.
    오른쪽 6px 를 비우는 것은 **막대 자리**다 (`common.css` 가 정한 굵기). */
-#kh-panel3, .kh-sc-card, .kh-rank-card, .kh-sec-card { position: relative; }
+#kh-panel3, .kh-sc-card, .kh-rank-card, .kh-sec-card,
+.kh-dlm-card { position: relative; }
 
 #kh-panel3::after, .kh-sc-card::after,
-.kh-rank-card::after, .kh-sec-card::after {
+.kh-rank-card::after, .kh-sec-card::after,
+.kh-dlm-card::after {
   content: "";
   position: absolute; left: 0; right: 6px; bottom: 0;
   height: var(--kh-tail-fade);
