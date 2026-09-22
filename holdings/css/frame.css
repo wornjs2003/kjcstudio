@@ -700,3 +700,28 @@ a.kh-sc-i:hover { color: var(--kh-accent); }
 .kh-iv-bar i { display: block; height: 100%; }
 .kh-iv-bar i.up { background: var(--kh-up); border-radius: 0 3px 3px 0; }
 .kh-iv-bar i.dn { background: var(--kh-down); border-radius: 3px 0 0 3px; }
+
+/* ── 「정식 아님」 띠 (2026-09-22 지시) ──
+   화면이 여섯인데 전부 같게 생겨서 **어느 포트를 보고 있는지 구분이 안 된다.**
+   창 제목에도 포트가 없다. 2026-09-22 에 그것으로 여러 번 엇갈렸다 —
+   작업용 화면을 보고 「안 됐네」 로 읽히는 일이다.
+
+   **8765(메인)에는 안 붙는다.** 거기가 최종 확인하는 자리다.
+   판정은 `js/components/frame.js` 가 `location.port` 로 한다 — 서버는 안 고친다.
+
+   색은 「연한 바탕 + 진한 글씨」 (CLAUDE.md 「색 바탕 위의 글씨」).
+   경고 전용 변수를 쓴다 — 상승색(`--kh-up`)과 값은 같지만 이름이 다르다. */
+.kh-envbar {
+  /* **`.kh-app` 은 3열 grid 다** (`1fr 316px 52px`). 그냥 첫 자식으로 넣으면
+     첫 칸에 들어가 **그 열 높이를 통째로 먹고** 본문·사이드바·아이콘바가
+     한 칸씩 밀린다. 실제로 그렇게 넣어 보니 띠 높이가 2482px 이 되고
+     문서가 1306 에서 2634 로 늘었다 (2026-09-22 실측).
+     한 행을 다 쓰게 못박아야 한다. */
+  grid-column: 1 / -1;
+  background: var(--kh-danger-faint);
+  color: var(--kh-danger);
+  font-size: 0.8rem; font-weight: 700;
+  text-align: center; padding: 6px 12px;
+  border-radius: var(--kh-radius-sm);
+  margin-bottom: 10px;
+}
