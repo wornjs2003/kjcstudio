@@ -27,6 +27,7 @@ CHECKS = [
     ("관심종목 (세 곳)",                  "../holdings/tools/check-watchlist-sync.py"),
     ("설정값 (서버 ↔ 워커)",              "../holdings/tools/check-kis-consts.py"),
     ("뉴스 주제어 (JSON ↔ 워커)",         "../holdings/tools/check-news-topics.py"),
+    ("지표 (chart.js ↔ signal_watch.py)", "../holdings/tools/check-indicators.py"),
 ]
 
 
