@@ -4,7 +4,7 @@
  * 상단에는 모달창의 이름 및 주요 정보들, 탭들이 있고 그 하위에 정보들이
  * 표기되는 방향으로". 기준은 **종목 모달(stock.html 의 `.kh-head`)** 이다.
  *
- *     ① 이름 줄     아이콘 · 이름 · 부제 · 오른쪽 단추(전체 화면 ↗ · ✕)
+ *     ① 이름 줄     아이콘 · 이름 · 부제 · 오른쪽 닫기(✕)
  *     ② 주요 정보    왼쪽은 **대표값 하나**, 오른쪽은 **수치 격자**
  *     ③ 탭 줄       무엇을 볼지 고르는 곳. 오른쪽에 한 줄 설명
  *     ─────────
@@ -51,18 +51,14 @@ const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;');
 
-/* 오른쪽 단추 하나.
-     href 가 있으면 <a> — 가운데 단추로 새 탭에 열 수 있다.
-     todo 면 빨간 바탕 (CLAUDE.md 「아직 안 정해진 자리는 빨간 바탕」). */
-function actionHtml(a) {
-  const cls = 'kh-mh-btn' + (a.todo ? ' is-todo' : '');
-  if (a.href) {
-    return `<a class="${cls}" href="${esc(a.href)}"${a.modal ? ` data-modal="${esc(a.modal)}"` : ''}
-      >${esc(a.label)}</a>`;
-  }
-  return `<button class="${cls}" type="button"
-    ${a.name ? `data-mh-act="${esc(a.name)}"` : ''}>${esc(a.label)}</button>`;
-}
+/* 오른쪽 단추(`actions`)는 2026-09-22 에 뺐다 (지시 — "모달칸에 전체화면
+   이런게 들어가 있는데 이거 다 빼줘").
+
+   여기서 막으면 **네 모달(실시간 순위 · 데일리 · 뉴스·공시 · 지금 뜨는
+   산업)에서 한 번에 사라진다.** 각 모달이 넘기는 `actions:` 는 무시된다 —
+   그 줄은 자기 차례에 각자 지운다.
+
+   **닫기(✕)는 남는다.** 그것까지 없어지면 닫을 길이 줄어든다. */
 
 function statHtml(s) {
   /* 값이 안 온 칸은 「—」 로 두지 않고 부르는 쪽이 정한 글자를 그대로 쓴다.
@@ -88,8 +84,8 @@ function bigHtml(b) {
  *   name      모달 이름. **필수**
  *   sub       이름 옆 작은 글씨 (기준 시각 · 범위 등)
  *   caret     ⌄ 를 붙일지
- *   actions   [{ label, href?, modal?, name?, todo? }] — 오른쪽 단추들
  *   noClose   ✕ 를 빼려면 true (기본은 붙인다)
+ *             ※ `actions` 는 2026-09-22 에 없앴다. 넘겨도 안 그려진다
  *   big       { value|html, change, changeCls, note } — 왼쪽 대표값. 없으면 생략
  *   stats     [{ label, value|html, cls }] — 오른쪽 수치 격자
  *   statCols  격자 열 수 (2 또는 3). 기본 3. **좁은 모달은 2 로 한다** —
@@ -98,7 +94,6 @@ function bigHtml(b) {
  *   tab       처음 고를 탭 id
  *   tabsNote  탭 줄 오른쪽 한 줄 설명
  *   onTab     탭을 눌렀을 때 (id)
- *   onAct     단추를 눌렀을 때 (name)
  *   onClose   ✕ 를 눌렀을 때
  *
  * **② 주요 정보가 없는 모달**은 `big` 과 `stats` 를 둘 다 비워 둔다.
@@ -128,7 +123,6 @@ export function buildHead(spec = {}) {
         <span class="kh-mh-sub kh-num" data-mh-sub>${esc(state.sub)}</span>
         ${spec.caret ? '<span class="kh-mh-caret">⌄</span>' : ''}
         <span class="kh-mh-act">
-          ${(spec.actions || []).map(actionHtml).join('')}
           ${spec.noClose ? '' : '<button class="kh-mh-x" type="button" aria-label="닫기">✕</button>'}
         </span>
       </div>
@@ -155,10 +149,6 @@ export function buildHead(spec = {}) {
           x.classList.toggle('is-on', x.dataset.mhTab === state.tab));
         if (spec.onTab) spec.onTab(state.tab);
       });
-    });
-
-    el.querySelectorAll('[data-mh-act]').forEach((b) => {
-      b.addEventListener('click', () => { if (spec.onAct) spec.onAct(b.dataset.mhAct); });
     });
 
     const x = el.querySelector('.kh-mh-x');

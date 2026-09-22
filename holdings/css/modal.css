@@ -187,18 +187,8 @@
 .kh-mh-sub { font-size: 0.86rem; color: var(--kh-text-muted); }
 .kh-mh-caret { color: var(--kh-text-dim); }
 .kh-mh-act { margin-left: auto; display: flex; align-items: center; gap: 7px; }
-.kh-mh-btn {
-  font-size: 0.78rem; padding: 6px 12px; border: 0; border-radius: 999px;
-  background: var(--kh-bg-surface); color: var(--kh-text-secondary);
-  cursor: pointer; text-decoration: none; font-family: inherit;
-}
-.kh-mh-btn:hover { background: var(--kh-bg-active); }
-/* 아직 안 정해진 자리는 빨간 바탕 (CLAUDE.md) */
-.kh-mh-btn.is-todo {
-  background: var(--kh-up-dim); color: var(--kh-up);
-  font-weight: 600; cursor: default;
-}
-.kh-mh-btn.is-todo:hover { background: var(--kh-up-dim); }
+/* .kh-mh-btn 은 2026-09-22 에 지웠다 — 머리 오른쪽 단추(actions)를
+   없애면서 쓰는 곳이 하나도 안 남았다. 닫기(.kh-mh-x)는 아래에 있다. */
 .kh-mh-x {
   border: 0; background: none; font-family: inherit;
   font-size: 1rem; color: var(--kh-text-muted); padding: 4px 8px; cursor: pointer;
@@ -464,7 +454,7 @@
 .kh-modal [data-p="tick"],
 .kh-modal [data-p="flow"] { min-height: 210px; }
 
-/* 머리 오른쪽 — 닫기와 전체 화면 */
+/* 머리 오른쪽 — 닫기. 「전체 화면 ↗」 은 2026-09-22 에 뺐다 */
 .kh-head-act { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .kh-modal-x {
   border: 0;
@@ -586,9 +576,9 @@
     border-radius: 0;
   }
 
-  /* 닫기가 화면 안에 있어야 한다. 「전체 화면 ↗」 은 폰에서 뜻이 없어 숨긴다 */
+  /* 폰에서 「전체 화면 ↗」 을 숨기던 규칙이 여기 있었다. 2026-09-22 에
+     그 단추를 아예 빼면서 숨길 것이 없어졌다. */
   .kh-head-act { gap: 6px; }
-  .kh-head-act .kh-chip-btn { display: none; }
   .kh-modal-x { width: 34px; height: 34px; }
 
   /* 탭은 한 줄로. 넘치면 가로로 민다 — 접히면 글자가 쪼개진다 */
