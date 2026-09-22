@@ -459,7 +459,9 @@
               max-height: 255px; }
 /* 스크롤바 모양은 적지 않는다 — `assets/css/common.css` 한 곳에서 정한다
    (2026-09-18 지시 · 룰). 여기 5px 를 적어 두었다가 걷어냈다. */
-.kh-sc-body { flex: 1; overflow-y: auto; min-height: 0; display: flex; }
+/* **본문은 안 굴러간다** — 칸이 각자 굴러간다(`.kh-sc-list`).
+   여기에도 `auto` 를 두면 스크롤바가 둘이 된다. */
+.kh-sc-body { flex: 1; overflow: hidden; min-height: 0; display: flex; }
 
 /* 국기 · 갈래 · 기간 (2026-09-22 지시) — 탭 줄에 나란히 */
 .kh-sc-flag { width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; }
@@ -487,7 +489,18 @@
    전에는 13px 이었고 **첫 칸 왼쪽·마지막 칸 오른쪽만 4px** 이라 카드
    가장자리에 붙어 있었다. 세 칸을 똑같이 20px 로 둔다 — 예외를 두면
    가운데 칸만 달라 보인다. */
-.kh-sc-col { flex: 1; min-width: 0; padding: 0 20px; }
+/* **칸마다 따로 굴러간다** (2026-09-22 지시 — 「스크롤창 넣어서 더
+   볼수있또록」). 칸을 세로 flex 로 두고 목록만 남는 자리를 받는다 —
+   머리는 붙어 있고 목록만 움직인다. */
+.kh-sc-col { flex: 1; min-width: 0; padding: 0 20px;
+             display: flex; flex-direction: column; }
+/* **`min-height: 0` 이 있어야 굴러간다.** flex 칸은 기본이 auto 라
+   안쪽이 길면 칸을 밀고 나가고, 그러면 카드가 늘어난다.
+   스크롤바 모양은 `assets/css/common.css` 6px 을 그대로 물려받는다 —
+   여기서 정하지 않는다 (2026-09-18 룰). */
+.kh-sc-list { flex: 1; min-height: 0; overflow-y: auto;
+              /* 스크롤바가 가격을 가리지 않게 자리를 비운다 */
+              margin-right: -6px; padding-right: 6px; }
 /* **테두리 상자가 아니라 한 줄이다** (시안 — 「줄로 해달라」) */
 .kh-sc-vr { width: 1px; flex: none; background: var(--kh-border); }
 
