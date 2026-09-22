@@ -259,6 +259,26 @@ const SIDE_HTML = `
     </div>
 `;
 
+/** 오늘 저장본을 받아 온다. 없으면 `null` (07:30 전이면 그렇다).
+ *
+ * **첫 화면 카드도 이것을 쓴다.** 두 곳에서 같은 주소를 따로 부르면
+ * 하나만 고쳤을 때 갈린다 — 날짜 만드는 법도 여기 한 곳에 있다.
+ *
+ * `sv-SE` 로케일이 `YYYY-MM-DD` 를 준다. `toISOString()` 은 UTC 라
+ * 한국 시간 아침에 **어제 날짜**가 나온다.
+ */
+export async function loadDailyDoc() {
+  const key = 'daily-' + new Date().toLocaleDateString('sv-SE').replace(/-/g, '');
+  try {
+    const r = await apiFetch(`/api/board/doc/${key}`, { cache: 'no-store' });
+    if (!r || !r.ok) return null;          // 404 면 오늘 것이 아직 없다
+    const b = await r.json();
+    return (b && b.ok && b.data) || null;
+  } catch {
+    return null;
+  }
+}
+
 /* ── 붙이기 ─────────────────────────────── */
 
 /**
@@ -684,83 +704,27 @@ export function mountDaily(root, { side = null, past = null,
   /* ── 텔레그램 문안 ──────────────────────── */
   /* 화면과 문안이 갈리지 않도록 같은 데이터에서 한 번에 만든다. */
 
-  function buildTelegram() {
-    const L = [];
-    L.push(`📊 데일리분석 · ${todayLabel()}`);
+  /* ── 문안은 **서버가 만든다** ──
+     2026-09-22 에 `server/daily.py` 로 옮겼다. 07:30 에 저장하고 폰으로
+     보내야 하는데 그 시각에 브라우저가 열려 있다는 보장이 없어서다.
 
-    const today = new Date().toDateString();
-    const todayEvents = schedule.filter(
-      (e) => e.ongoing || (e.when && e.when.toDateString() === today));
-    if (todayEvents.length) {
-      L.push('', '오늘 일정');
-      /* 실적 발표는 하루에 여러 건이 몰린다. 다섯 줄을 그대로 적으면 폰에서
-         문안이 화면 하나를 넘어간다. 시장 전체가 보는 것만 줄로 적고
-         나머지는 개수로 묶는다. */
-      const big = todayEvents.filter((e) => e.kind !== '실적');
-      const ir = todayEvents.filter((e) => e.kind === '실적');
-      for (const e of big) {
-        L.push(`· ${e.title}${e.ongoing ? ' (진행 중)' : ''}`);
-        if (e.note) L.push(`  → ${e.note}`);
-      }
-      if (ir.length) {
-        const names = ir.slice(0, 2).map((e) => e.title.replace(/\s*기업설명회$/, ''));
-        L.push(`· 기업설명회 ${ir.length}건 — ${names.join(' · ')}`
-          + (ir.length > names.length ? ` 외 ${ir.length - names.length}` : ''));
-      }
-    }
+     **여기서 다시 만들지 않는다.** 두 곳에 두면 한쪽만 고쳐도 화면은
+     멀쩡해 보이고 폰으로 가는 글만 갈린다. 문안은 값이 아니라 **문장**이라
+     그것을 잡을 대조 도구도 만들 수 없다.
 
-    const line = (row) => {
-      const x = pickIndex(row);
-      if (!x) return null;
-      const mark = Number(x.change) > 0 ? '▲' : Number(x.change) < 0 ? '▼' : '—';
-      return `${row.label} ${num(x.value)} ${mark}${num(Math.abs(x.changePct), 2)}%`;
-    };
+     **그날 보낸 글을 그대로 보여준다** — 「폰에 이렇게 도착합니다」 라는
+     문구에 맞다. 장중에 값이 바뀌면 오히려 「내가 받은 것과 다르네」 가 된다. */
+  let savedDoc = null;          // 오늘 저장본. 없으면 null
 
-    const home = ['KOSPI', 'KOSDAQ'].map((c) => line(INDEX_ROWS.find((r) => r.code === c)))
-      .filter(Boolean);
-    if (home.length) {
-      L.push('', '국내', ...home);
-      const k = pickIndex(INDEX_ROWS[0]);
-      if (k && (k.up || k.down)) L.push(`상승 ${k.up} · 하락 ${k.down}`);
-    }
-
-    const away = ['SPX', 'COMP', 'USD'].map((c) => line(INDEX_ROWS.find((r) => r.code === c)))
-      .filter(Boolean);
-    if (away.length) L.push('', '해외 (현지 마감)', ...away);
-
-    if (issues.length) {
-      L.push('', '오늘 뉴스');
-      const seen = new Set();
-      let n = 0;
-      for (const it of issues) {
-        const key = it.topic || '';
-        if (key && seen.has(key)) continue;
-        if (key) seen.add(key);
-        const t = it.title.length > 34 ? `${it.title.slice(0, 33)}…` : it.title;
-        L.push(`· ${it.topicLabel ? `${it.topicLabel} — ` : ''}${t}${it.more ? ` (외 ${it.more}건)` : ''}`);
-        if (++n >= 3) break;
-      }
-    }
-
-    if (sectors.length) {
-      const { up, down } = sectorSides();
-      const one = (s) => `${s.name} ${pct(s.pct)}`;
-      L.push('', '주도 섹터 (국내)');
-      if (up.length) L.push(`· 오름 — ${up.slice(0, 3).map(one).join(' · ')}`);
-      if (down.length) L.push(`· 내림 — ${down.slice(0, 3).map(one).join(' · ')}`);
-    }
-
-    /* 화면에는 빨간 자국으로 남아 있는 칸들이다. 문안에서 통째로 빼면 폰에서는
-       무엇이 빠졌는지 알 수 없다. 붙으면 이 줄을 지운다. */
-    L.push('', '연결 예정', '· 미국 업종', '· 야간선물 · 다우존스');
-
-    L.push('', '전문 보기 › thekjcstudio.com/holdings/daily.html');
-    return L.join('\n');
-  }
-
-  function drawTelegram() {
+  async function drawTelegram() {
     const box = $side('kh-dl-tg');
-    if (box) box.textContent = buildTelegram();
+    if (!box) return;
+    savedDoc = await loadDailyDoc();
+    /* 07:30 전에는 그날 것이 없다. **어제 것을 보여주지 않는다** —
+       날짜를 착각하게 된다. */
+    box.textContent = savedDoc
+      ? savedDoc.telegram
+      : '오늘 것은 아침 07:30 에 만들어집니다.';
     /* 폰에서는 이 칸이 화면 제목보다 위에 온다. 어느 날 것인지 여기 적는다. */
     const cap = $side('kh-dl-tg-cap');
     if (cap) cap.textContent = `데일리분석 ${todayLabel()} · 폰에 이렇게 도착합니다`;
