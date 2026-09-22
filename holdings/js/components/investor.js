@@ -17,7 +17,32 @@
      매수·매도 비율  체결이 아니라 **지금 걸려 있는 주문**이다.
                     장이 끝나면 뜻이 옅어진다 — 그래서 화면에 적는다
 
-   순매수 상위 목록(investor-top)만 가집계인데, 그것은 여기서 안 쓴다.
+   ── 장중에는 확정치가 없다 (2026-09-22 지시) ──
+
+   재권님 말씀 — 「응 보고싶어」 · 「**우선되는거 연결해놓고 나중에 퀄업한다.
+   출처만 알수있게 해놔**」.
+
+   `/api/kis/investor` 는 장중에 오늘 줄을 `net: null` 로 준다 (11:03 · 12:00
+   실측). **네이버는 대안이 못 된다** — 경로 셋이 전부 어제까지이고 다른
+   이름 셋은 404 다 (2026-09-22 실측). 표본이 아니라 구조다.
+
+   그래서 **종목별 추정가집계**(`/api/kis/investor-estimate`)로 메운다.
+
+       장중    외국인 · 기관   KIS 추정가집계 (investor-trend-estimate)
+               개인            **없다** — 응답에 그 필드가 아예 없다
+       마감 뒤  셋 다          KIS 확정치 (investor)
+
+   **개인이 모자란 채로 붙인다.** 재권님이 아시고 정하셨다 — 종목별로
+   개인까지 주는 곳을 두 세션이 갈라 찾았는데 못 찾았다(네이버·다음·
+   FnGuide·인베스팅·KRX·공공데이터포털).
+
+   **그래서 출처를 화면에 적는다** (지시 — 「출처만 알수있게 해놔」).
+   같은 칸에 성격이 다른 값이 섞이므로, 무엇이 가집계이고 무엇이 확정치인지
+   보이지 않으면 읽을 수 없다.
+
+   **하루 네 번만 바뀐다는 것도 적는다** — 외국인 09:30·11:20·13:20·14:30,
+   기관 10:00·11:20·13:20·14:30 (±10분). 그 사이에는 값이 안 움직이는데,
+   안 적으면 「멈춘 것 아니냐」 가 된다.
    ========================================================================== */
 
 import { apiFetch } from '../data/api.js';
@@ -28,6 +53,12 @@ const DAYS_SHORT = 5;
 
 /* 다시 받는 주기. 일별 자료라 장중에 한 번 바뀐다 — 서버 캐시도 60초다 */
 const REFRESH_MS = 60 * 1000;
+
+/* ── 장중 가집계는 **종목별로** 받는다 (2026-09-22) ──────────────
+   처음에는 순매수 상위 목록(`investor-top`)으로 메웠는데, 그것은
+   **상위 30줄에 든 종목만** 나온다(서로 다른 종목 47개가 한계 — `limit` 을
+   100·200·500 으로 키워도 KIS 가 30줄까지만 준다). 재권님이 종목별 경로로
+   정하셔서 그쪽으로 옮겼다 — **어느 종목이든 나온다.** */
 
 const SIDES = [
   { key: 'person',  name: '개인' },
@@ -75,6 +106,8 @@ export function mountInvestor({ box, tabs } = {}) {
   let view = 'today';       // today | days
   let timer = null;
   let seq = 0;              // 늦게 온 응답이 새 종목을 덮지 않게
+  let top = null;           // 장중 가집계 — { foreign, inst }
+  let topMiss = false;      // 상위 목록에 이 종목이 없다
 
   /* ── 받아오기 ── */
   async function load() {
@@ -84,6 +117,24 @@ export function mountInvestor({ box, tabs } = {}) {
     if (mine !== seq) return;              // 그새 종목이 바뀌었다
     rows = (iv && iv.ok && Array.isArray(iv.data)) ? iv.data : null;
     paint();
+
+    /* **확정치가 없을 때만 가집계를 부른다.** 마감 뒤에는 부를 이유가 없다.
+       먼저 확정치로 한 번 그리고, 가집계가 오면 다시 그린다 — 기다렸다가
+       한 번에 그리면 장중에 칸이 오래 비어 있다. */
+    if (!todayMissing()) { top = null; topMiss = false; return; }
+    const est = await get(`/api/kis/investor-estimate?code=${code}`);
+    if (mine !== seq) return;
+    const l = est && est.ok && est.data ? est.data.latest : null;
+    top = l && (l.foreign != null || l.inst != null) ? l : null;
+    topMiss = !top;
+    paint();
+  }
+
+  /** 오늘 줄의 확정치가 아직 안 나왔나 (장중) */
+  function todayMissing() {
+    const d = rows && rows[0];
+    if (!d) return false;
+    return SIDES.every((sd) => (d[sd.key] || {}).net == null);
   }
 
   async function get(url) {
@@ -129,7 +180,15 @@ export function mountInvestor({ box, tabs } = {}) {
 
        **raw 와 숫자를 나눈다.** 글자·색은 raw 가 필요하고(`null` 이면 「—」),
        막대 폭은 숫자여야 한다(`null` 이면 `NaN` 이 된다). */
-    const net = (s) => { const v = (d[s.key] || {}).net; return v == null ? null : v; };
+    /* **확정치가 없으면 가집계로 메운다** (2026-09-22 지시).
+       `top` 에는 외국인·기관만 있다 — 개인은 그 목록에 아예 없어 `null`
+       그대로 두고 「—」 가 나간다. */
+    const prov = todayMissing() && !!top;
+    const net = (s) => {
+      const v = (d[s.key] || {}).net;
+      if (v != null) return v;
+      return prov && top[s.key] != null ? top[s.key] : null;
+    };
     const max = Math.max(...SIDES.map((s) => Math.abs(net(s) ?? 0))) || 1;
     const rows2 = SIDES.map((s) => {
       const v = net(s);                      // null 일 수 있다 — 글자·색용
@@ -141,8 +200,30 @@ export function mountInvestor({ box, tabs } = {}) {
         <span class="kh-iv-bar">${bar(n, w)}</span></div>`;
     }).join('');
     return `<div class="kh-iv-rows">${rows2}</div>
-      <div class="kh-iv-note">${dateText(d.date)} 하루치 ·
-        <b class="kh-up">오른쪽이 순매수</b> · <b class="kh-down">왼쪽이 순매도</b></div>`;
+      <div class="kh-iv-note">${todayNote(d)}</div>`;
+  }
+
+  /* **출처를 적는다** (2026-09-22 지시 — 「출처만 알수있게 해놔」).
+     같은 칸에 성격이 다른 값이 섞이므로, 무엇이 가집계인지 보이지 않으면
+     읽을 수 없다. 「값이 없다」 와 「상위 목록에 없다」 도 갈라 적는다. */
+  function todayNote(d) {
+    const dir = '<b class="kh-up">오른쪽 순매수</b> · <b class="kh-down">왼쪽 순매도</b>';
+    if (!todayMissing()) {
+      return `${dateText(d.date)} 확정 · 한국투자증권 · ${dir}`;
+    }
+    if (top) {
+      /* **시각을 적지 않는다.** 응답에 시각이 없다 — `bsop_hour_gb` 는 회차
+         번호일 뿐이고, 회차와 시각의 대응은 아직 못 박지 않았다.
+         대신 「하루 네 번만 바뀐다」 를 적어 **멈춘 것으로 오해하지 않게** 한다. */
+      return `장중 <b>추정가집계</b> · 한국투자증권 ·
+        <span class="kh-mut">하루 네 번 갱신 · 개인은 마감 뒤</span> · ${dir}`;
+    }
+    if (topMiss) {
+      return `장중 가집계를 <b>못 받았습니다</b> ·
+        <span class="kh-mut">마감 뒤 확정치로 채워집니다</span>`;
+    }
+    return `장중 확정치는 <b>마감 뒤</b>에 나옵니다 ·
+      <span class="kh-mut">가집계를 불러오는 중</span>`;
   }
 
   function paintDays(days) {
@@ -170,8 +251,8 @@ export function mountInvestor({ box, tabs } = {}) {
        — "우측에 있는 수치는 5일치를합친건가?"). 막대는 5일이고 숫자는
        오늘이라 갈리므로 그 사실을 적는다. */
     return `<div class="kh-iv-rows">${lines}</div>
-      <div class="kh-iv-note">최근 ${days.length}일을 <b>더한 값</b>입니다
-        (오늘 하루가 아닙니다)</div>`;
+      <div class="kh-iv-note">최근 ${days.length}일을 <b>더한 값</b>입니다 ·
+        한국투자증권 확정치</div>`;
   }
 
   function dateText(d) {
@@ -225,6 +306,7 @@ export function mountInvestor({ box, tabs } = {}) {
     setCode(next) {
       if (!next || next === code) return;
       code = next;
+      top = null; topMiss = false;
       rows = null;
       box.innerHTML = '<span class="kh-mut">불러오는 중</span>';
       load();
