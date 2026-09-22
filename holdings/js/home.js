@@ -226,12 +226,12 @@ function badgeFor(i) {
 
 function paintStrip(indices) {
   const byCode = Object.fromEntries((indices || []).map(i => [i.code, i]));
-  const host = $('kh-strip');
-  if (!host) return;
 
-  /* 자주 보는 넷은 장 상태 줄 위에, 나머지는 「주요 지수」 카드에 (2026-09-17 지시).
-     같은 그림을 두 자리에 나눠 그린다 — 만드는 코드는 하나다. */
+  /* 2026-09-22 까지는 여기서 `kh-strip`(「주요 지수」 카드)을 먼저 찾고
+     없으면 빠져나갔다. 카드를 없애면서 그 줄이 **띠까지 못 그리게**
+     막고 있었다 — 재서 잡았다. 이제 띠 하나만 본다. */
   const top = $('kh-top-ix');
+  if (!top) return;
   const draw = cells => cells.map(cell => {
     const i = cell.code ? byCode[cell.code] : null;
     if (!i) {
@@ -274,16 +274,13 @@ function paintStrip(indices) {
      바꿨는데, 그 자리가 종목 차트가 되어 눌러도 갈 곳이 없어졌다.
      지수 화면을 만들면 그때 다시 붙인다 — 동작하지 않는 단추를 남기지 않는다. */
 
-  /* 위 줄은 자주 보는 넷만, 카드는 전부다 (2026-09-17 지시 — "주요지수에
-     코스닥은 안나오네"). 위에 올린 것을 카드에서 빼면 「주요 지수」인데
-     코스피·코스닥이 없는 목록이 된다. */
-  if (top) top.innerHTML = draw(INDEX_CELLS.filter(c => TOP_CELLS.includes(c.name)));
-  host.innerHTML = draw(INDEX_CELLS);
+  /* **열넷을 다 위 띠에** 넣는다 (2026-09-22 지시).
+     전에는 위에 넷(TOP_CELLS)만 두고 나머지를 「주요 지수」 카드에 뒀는데,
+     카드가 열넷을 다 담고 있어서 **같은 것이 두 자리**에 있었다.
+     카드를 없애고 여기로 합쳤다 — 고를 것은 갈래 띠가 한다. */
+  if (top) top.innerHTML = draw(INDEX_CELLS);
   paintIxFilter();
 }
-
-/* 장 상태 줄 위에 올리는 넷. 이름으로 고른다 — INDEX_CELLS 의 name 과 같다. */
-const TOP_CELLS = ['코스피', '코스닥', '나스닥 종합', 'S&P 500'];
 
 /* 카드 안의 지수를 칩으로 거른다.
 
@@ -294,7 +291,29 @@ const TOP_CELLS = ['코스피', '코스닥', '나스닥 종합', 'S&P 500'];
 
    무리는 칸 앞의 표시로 가른다. 목록을 따로 두면 INDEX_CELLS 와 두 곳이 된다. */
 const IX_GROUP = { kr: 'kr', us: 'us', vix: 'us', eu: 'ov', hk: 'ov', oil: 'etc', au: 'etc' };
-let ixGroup = 'kr';
+
+/* 갈래 띠의 낱말 → 어느 무리를 보여줄지 (2026-09-22 지시).
+ *
+ *     홈      **열넷 전부**
+ *     국내     코스피 · 코스닥 · 코스피200 · KRX100
+ *     미국     S&P500 · 나스닥종합 · 나스닥100 · 필라델피아 반도체 · 미국 USD · VIX
+ *     국외     유로STOXX50 · 홍콩H
+ *     원자재    WTI 원유 · 금
+ *
+ * **낱말로 건다.** 갈래 띠는 `href="#"` 뿐이라 걸 `id` 가 없고, 낱말은
+ * 화면에 보이는 것이라 바뀌면 바로 눈에 띈다.
+ *
+ * **「가상자산」·「시장지표」는 여기 없다** — 그 갈래의 지수를 아직 받아오지
+ * 못한다. `null` 이 아니라 **아예 없는 것**이라 아래에서 갈린다. */
+const CAT_IX = {
+  '홈': null,          // null 은 「거르지 않는다」
+  '국내': ['kr'],
+  '미국': ['us'],
+  '국외': ['ov'],
+  '원자재': ['etc'],
+};
+
+let ixCat = '홈';
 
 function ixGroupOf(cell) {
   if (cell.icon === 'kr' || cell.icon === 'us') return cell.icon;
@@ -302,21 +321,64 @@ function ixGroupOf(cell) {
 }
 
 function paintIxFilter() {
-  const host = $('kh-strip');
+  const host = $('kh-top-ix');
   if (!host) return;
+
+  /* 아직 지수를 못 붙인 갈래. 빈 띠로 두면 「연결이 안 된 건지 값이
+     없는 건지」 구분이 안 된다 — 빨간 바탕으로 그렇게 적는다
+     (CLAUDE.md 「아직 안 정해진 자리는 빨간 바탕」). **띠 높이는 그대로다.** */
+  const todo = $('kh-ix-todo');
+  const known = Object.prototype.hasOwnProperty.call(CAT_IX, ixCat);
+  if (todo) todo.hidden = known;
+  host.hidden = !known;
+  if (!known) return;
+
+  const want = CAT_IX[ixCat];
   [...host.children].forEach((el, i) => {
-    el.hidden = INDEX_CELLS[i] ? ixGroupOf(INDEX_CELLS[i]) !== ixGroup : true;
+    const cell = INDEX_CELLS[i];
+    el.hidden = !cell ? true : (want ? !want.includes(ixGroupOf(cell)) : false);
+  });
+  syncIxNav();
+}
+
+/* 갈래 띠를 누르면 지수가 걸러진다 (2026-09-22 지시).
+   **아직 화면을 바꾸지는 않는다** — 지수 띠만 연결한 것이다. */
+function setupCatFilter() {
+  const links = document.querySelectorAll('nav.kh-cat a');
+  links.forEach((a) => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    links.forEach((x) => x.classList.remove('is-on'));
+    a.classList.add('is-on');
+    ixCat = a.textContent.trim();
+    paintIxFilter();
+  }));
+}
+
+/* 좌우 화살표. 한 줄이라 다 안 들어가면 밀어서 본다.
+   **끝에 닿으면 흐려진다** — 더 밀 곳이 없다는 것이 보여야 한다.
+   자리는 그대로 두고 흐리기만 한다 (없애면 띠 폭이 움직인다). */
+function syncIxNav() {
+  const host = $('kh-top-ix');
+  if (!host) return;
+  const max = host.scrollWidth - host.clientWidth;
+  document.querySelectorAll('[data-ix-nav]').forEach((b) => {
+    const back = Number(b.dataset.ixNav) < 0;
+    b.classList.toggle('is-off', max <= 1
+      || (back ? host.scrollLeft <= 1 : host.scrollLeft >= max - 1));
   });
 }
 
-function setupIxChips() {
-  const chips = document.querySelectorAll('.kh-ix-chips .kh-chip');
-  chips.forEach(b => b.addEventListener('click', () => {
-    chips.forEach(x => x.classList.remove('is-active'));
-    b.classList.add('is-active');
-    ixGroup = b.dataset.g;
-    paintIxFilter();
-  }));
+function setupIxNav() {
+  const host = $('kh-top-ix');
+  if (!host) return;
+  document.querySelectorAll('[data-ix-nav]').forEach((b) => {
+    b.addEventListener('click', () => {
+      host.scrollBy({ left: Number(b.dataset.ixNav) * Math.round(host.clientWidth * 0.8),
+                      behavior: 'smooth' });
+    });
+  });
+  host.addEventListener('scroll', syncIxNav);
+  window.addEventListener('resize', syncIxNav);
 }
 
 /* 좌우로 미는 단추는 2026-09-17 에 없앴다. 지수가 카드 안으로 들어가면서
@@ -1542,7 +1604,8 @@ paintClock();
 setInterval(paintClock, 30000);
 paintMkt();
 setInterval(paintMkt, 30000);
-setupIxChips();
+setupCatFilter();
+setupIxNav();
 setupSorts();
 /* 몇 초 전 값인지는 가만히 있어도 늘어난다. 1초마다 다시 적는다 */
 setInterval(() => { if (!document.hidden) paintSortNote(); }, 1000);
