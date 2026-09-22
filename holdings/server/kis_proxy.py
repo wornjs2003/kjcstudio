@@ -1484,6 +1484,63 @@ def fetch_investor(cfg, code, days=INVESTOR_DAYS):
     return out
 
 
+# ── 종목별 장중 추정가집계 (2026-09-22 지시) ────────────────────
+#
+# 재권님 말씀 — 「응 보고싶어」 · 「우선되는거 연결해놓고 나중에 퀄업한다.
+# **출처만 알수있게 해놔**」.
+#
+# 위 `fetch_investor` 는 장중에 오늘 줄을 `net: null` 로 준다 (11:03 · 12:00
+# 실측). 네이버는 대안이 못 된다 — 경로 셋이 전부 어제까지이고 다른 이름
+# 셋은 404 다 (2026-09-22 실측). **표본이 아니라 구조다.**
+#
+# ⚠️ **가집계다.** KIS 설명 그대로 「증권사 직원이 장중에 집계/입력한 자료를
+# 단순 누계한 수치」이고 **마감 뒤 숫자가 달라진다.** 화면에 그대로 적는다.
+#
+# ⚠️ **개인이 없다.** 응답 필드가 외국인·기관·합계 셋뿐이다. 종목별로 개인까지
+# 주는 곳은 못 찾았다 (네이버·다음·FnGuide·인베스팅·KRX·공공데이터포털).
+# 재권님이 그것을 아시고 이 안을 고르셨다.
+#
+# ── `bsop_hour_gb` 는 회차 번호다 (2026-09-22 11:21 실측) ──
+#
+#     삼성전자   gb=1  외국인 -246,000 · 기관       0    ← 기관 첫 입력 전
+#                gb=2  외국인  +26,000 · 기관 +42,000
+#                gb=3  외국인 -116,000 · 기관 +128,000   ← 최신
+#
+# **큰 것이 최신이다.** 응답에 **시각이 없다** — 몇 시 것인지는 KIS 문서의
+# 입력 시각(외국인 09:30·11:20·13:20·14:30 / 기관 10:00·11:20·13:20·14:30,
+# ±10분)으로 미룰 뿐이다. gb=1 에 기관이 0 인 것이 그 짐작과 맞는다.
+# **회차와 시각의 대응은 아직 못 박지 않았다** — 화면에 시각을 적지 않는다.
+INVESTOR_EST_TTL = 60      # 하루 네 번만 바뀐다. 자주 부를 이유가 없다
+_investor_est_cache = {}
+
+
+def fetch_investor_estimate(cfg, code):
+    """종목별 외국인·기관 추정가집계. 장중에만 뜻이 있다."""
+    cached = _ttl_get(_investor_est_cache, code, INVESTOR_EST_TTL)
+    if cached is not None:
+        return cached
+    _stats["kis_calls"] += 1
+    data = kis_get(
+        cfg,
+        "/uapi/domestic-stock/v1/quotations/investor-trend-estimate",
+        {"MKSC_SHRN_ISCD": code},
+        "HHPTJ04160200",
+    )
+    rows = []
+    for r in out_rows(data, "output2"):
+        rows.append({
+            "seq": _num(r.get("bsop_hour_gb"), int),
+            "foreign": _num(r.get("frgn_fake_ntby_qty"), int),
+            "inst": _num(r.get("orgn_fake_ntby_qty"), int),
+            "sum": _num(r.get("sum_fake_ntby_qty"), int),
+        })
+    # **최신이 앞에 오게 한다.** 화면은 첫 줄만 쓴다
+    rows.sort(key=lambda x: (x["seq"] is None, -(x["seq"] or 0)))
+    out = {"latest": rows[0] if rows else None, "rows": rows}
+    _investor_est_cache[code] = (time.time(), out)
+    return out
+
+
 # 체결은 한 번에 30줄이 온다. 화면이 그보다 많이 보여줄 일이 없다.
 TICKS_TTL = 3              # 장중에는 계속 쌓인다. 화면이 볼 때만 짧게 받아낸다
 _ticks_cache = {}
@@ -2723,6 +2780,28 @@ class Handler(SimpleHTTPRequestHandler):
                 })
                 return
 
+            # 종목별 장중 추정가집계 (2026-09-22 지시)
+            if route == "investor-estimate":
+                code = (qs.get("code") or [""])[0].strip()
+                if not (code.isdigit() and len(code) == 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                data = fetch_investor_estimate(cfg, code)
+                self._send_json({
+                    "ok": bool(data and data.get("latest")), "data": data,
+                    "meta": {
+                        "code": code, "qtyUnit": "주",
+                        # **확정치가 아니다. 화면에 그대로 적어야 한다**
+                        "provisional": True,
+                        "person": False,     # 개인은 이 응답에 없다
+                        "note": "장중 추정가집계 — 증권사 집계치. 마감 뒤 확정치와 다르다. "
+                                "입력 외국인 09:30·11:20·13:20·14:30 / "
+                                "기관 10:00·11:20·13:20·14:30 (±10분)",
+                        "cacheTtl": INVESTOR_EST_TTL,
+                    },
+                })
+                return
+
             # 최근 체결 30줄 (2026-09-21 지시 — A 종목 화면)
             if route == "ticks":
                 code = (qs.get("code") or [""])[0].strip()
@@ -2830,6 +2909,7 @@ def apply_slow():
     global PRICE_CACHE_TTL, INDEX_TTL, INDEX_MINUTE_TTL, OVERSEAS_TTL
     global MULTI_CACHE_TTL, SECTOR_TTL, MOVERS_TTL, FUTURES_TTL
     global INVESTOR_TOP_TTL, INVESTOR_FLOW_TTL, INVESTOR_TTL, ASKING_TTL
+    global INVESTOR_EST_TTL
 
     SLOW = True
     PRICE_CACHE_TTL = SLOW_TTL          # 25 → 300
@@ -2841,6 +2921,7 @@ def apply_slow():
     INVESTOR_TOP_TTL = SLOW_TTL         # 120 → 300
     INVESTOR_FLOW_TTL = max(INVESTOR_FLOW_TTL, SLOW_TTL)   # 이미 600 이라 그대로
     INVESTOR_TTL = SLOW_TTL             # 60 → 300
+    INVESTOR_EST_TTL = SLOW_TTL         # 60 → 300
     ASKING_TTL = SLOW_SHORT_TTL         #  3 → 60. 호가는 원래 아주 짧다
     FUTURES_TTL = SLOW_SHORT_TTL        # 0.7 → 60. 화면이 1초마다 물어보는 자리다
     MULTI_CACHE_TTL = SLOW_SHORT_TTL    #  2 → 60. 순위표가 한 번에 훑는 자리다
