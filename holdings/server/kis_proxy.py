@@ -37,6 +37,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+
+# 파일을 안전하게 쓴다 — 쓰다 죽어도 옛 내용이 남는다 (2026-09-22)
+from docstore import write_json_atomic
 from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -318,15 +321,22 @@ def _read_token_cache(mode):
 
 
 def _write_token_cache(mode, token, expires_in):
-    tmp = {
-        "mode": mode,
-        "access_token": token,
-        "expires_at": time.time() + float(expires_in),
-    }
+    """토큰 캐시를 **안전하게** 쓴다 (2026-09-22).
+
+    전에는 `open(PATH, "w")` 로 바로 덮어썼다. 거기서 죽으면 **깨진
+    캐시가 남는다.** 키 파일만큼 위험하진 않지만(다시 받으면 된다)
+    같은 함수를 쓰면 한 곳만 고치면 된다.
+
+    `tmp` 라는 이름이 붙어 있어 임시 파일을 쓰는 것처럼 보였는데
+    **그냥 dict 이름**이었다 — 이름이 설명 노릇을 하던 자리다.
+    """
     try:
-        with open(TOKEN_CACHE_PATH, "w", encoding="utf-8") as f:
-            json.dump(tmp, f)
-    except OSError:
+        write_json_atomic(TOKEN_CACHE_PATH, {
+            "mode": mode,
+            "access_token": token,
+            "expires_at": time.time() + float(expires_in),
+        }, indent=None)
+    except (OSError, IOError):
         pass
 
 
@@ -348,9 +358,10 @@ def _drop_token_cache(mode):
     「없음」 과 「거부됨」 을 구분하지 못한다.
     """
     try:
-        with open(TOKEN_CACHE_PATH, "w", encoding="utf-8") as f:
-            json.dump({"mode": mode, "access_token": "", "expires_at": 0}, f)
-    except OSError:
+        write_json_atomic(TOKEN_CACHE_PATH,
+                          {"mode": mode, "access_token": "", "expires_at": 0},
+                          indent=None)
+    except (OSError, IOError):
         pass
 
 

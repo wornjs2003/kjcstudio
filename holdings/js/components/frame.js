@@ -28,7 +28,6 @@ import { iconHtml } from './stock-icon.js';
 
    **달러 인덱스만 남는다.** KIS 해외지수 목록에 없다 —
    `docs/data-sources.md` 참고. 받을 수 있게 되면 여기서 지운다. */
-const FOOT_NOT_READY = ['달러 인덱스'];
 
 /* ── 「정식 아님」 띠 ──────────────────────
    화면 여섯이 전부 같게 생겨서 **어느 포트를 보고 있는지 구분이 안 된다.**
@@ -212,29 +211,16 @@ export function mountVBar(el, active) {
   }).join('');
 }
 
-/* ── 하단 시세 띠 ───────────────────────── */
-export function mountFootStrip(el) {
-  if (!el) return { update() {} };
+/* 하단 시세 띠(`mountFootStrip`)는 2026-09-22 에 지웠다 (지시 —
+   "홈페이지 맨 밑에 투자 유의사항이랑 코스피 등등이 있는데 이거 필요없어
+   지워줘"). 네 화면 전부에서 뺐다.
 
-  function render(indices) {
-    const live = (indices || []).map(i => `
-      <span class="kh-fi">
-        <span>${i.name}</span>
-        <b class="kh-num ${dirClass(i.changePct)}">${fmtNum(i.value, 2)}</b>
-        <span class="kh-num ${dirClass(i.changePct)}">${fmtPct(i.changePct)}</span>
-      </span>`).join('');
+   **KIS 호출은 안 줄었다.** 이 띠는 스스로 받아오지 않고 화면이 이미 받아
+   둔 것을 `foot.update(indices)` 로 넘겨받아 그리기만 했다 (미리 재서 확인).
 
-    const soon = FOOT_NOT_READY.map(name => `
-      <span class="kh-fi"><span>${name}</span><b class="kh-mut">연결 예정</b></span>`).join('');
-
-    el.innerHTML = `<span class="kh-foot-warn">투자 유의사항</span>` +
-      (live || `<span class="kh-fi"><span>지수</span><b class="kh-mut">불러오는 중</b></span>`) +
-      soon + `<span class="kh-foot-arrows">⌃ ⌄</span>`;
-  }
-
-  render(null);
-  return { update: render };
-}
+   **종목·데일리·뉴스 화면에는 지수를 볼 자리가 이것뿐이었다.** 지운 뒤로는
+   그 셋에서 지수가 안 보인다 — 재권님이 그 점을 아시고 "네 화면 전부"로
+   정하셨다. */
 
 /* ──────────────────────────────────────────────────────────────────────────
    시세 갱신 — 한 화면에서 한 번만 돌린다.

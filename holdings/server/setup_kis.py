@@ -23,6 +23,7 @@ for _stream in ("stdout", "stderr"):
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import kis_proxy
+from docstore import read_json, write_json_atomic  # noqa: E402
 from secrets_guard import forget, safe_message  # noqa: E402
 
 SECRETS_PATH = kis_proxy.SECRETS_PATH
@@ -88,13 +89,19 @@ def main():
     account = input("  계좌번호 8자리-2자리 (건너뛰려면 엔터): ").strip()
     print()
 
-    data = {"kis": {"mode": mode, "app_key": app_key, "app_secret": app_secret}}
+    # **기존 것을 읽어 `kis` 칸만 갈아끼운다** (2026-09-22).
+    #
+    # 전에는 `data = {"kis": {...}}` 로 **새 dict 를 만들어 통째로 썼다.**
+    # 그래서 이 도구를 한 번 돌리면 `dart.api_key` 와 `telegram.*` 가
+    # **조용히 사라진다** — 화면에는 "저장 완료" 만 나온다.
+    # `setup_dart.py` 는 load() 해서 고치는데 이쪽만 갈려 있었다.
+    data = read_json(SECRETS_PATH, {}) or {}
+    data["kis"] = {"mode": mode, "app_key": app_key, "app_secret": app_secret}
     if account:
         data["kis"]["account"] = account
 
-    with open(SECRETS_PATH, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-        f.write("\n")
+    # 쓰다 죽어도 옛 내용이 남는다 (docstore.py 참고)
+    write_json_atomic(SECRETS_PATH, data)
     print("  저장 완료: secrets.json  (깃에 올라가지 않습니다)")
     print()
 

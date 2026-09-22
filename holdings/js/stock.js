@@ -11,7 +11,7 @@
 
 import { WATCHLIST, MARKET_STOCKS } from './data/market.js';
 import { fetchLivePrices } from './data/live.js';
-import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop } from './components/frame.js';
+import { mountWatchSide, mountVBar, startLiveLoop } from './components/frame.js';
 import { mountStockView } from './components/stock-view.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
 
@@ -28,7 +28,6 @@ document.title = `${stock.name} — KJC Holdings`;
 /* ── 시작 ───────────────────────────────── */
 const side = mountWatchSide($('kh-side'), { activeCode: stock.code });
 mountVBar($('kh-vbar'), 'watch');
-const foot = mountFootStrip($('kh-foot'));
 
 /* onBack 을 넘기지 않는다 — 이 페이지의 「← 목록」 은 첫 화면으로 가는
    링크가 맞다. 모달에서만 닫기로 바뀐다. */
@@ -41,7 +40,7 @@ if (!inWatchlist) {
 }
 
 startLiveLoop({
-  onIndices(indices) { foot.update(indices); },
+
   onPrices(prices) {
     side.update(prices);
     if (prices[stock.code]) view.paint(prices[stock.code]);
