@@ -122,13 +122,30 @@
      2026-09-21 에 뉴스와 주요 일정이 차례로 오른쪽 기둥의 합친 칸으로 갔다
      (재권님 지시 — 「실시간 순위밑으로 합치고」 · 「뉴스 공시에 주요일정도」).
 
-     **칸 수를 줄이지 않는다. 뒤 두 자리는 빈 채로 둔다.**
-     「지금뜨는산업이랑 주요지수는 늘리지 말고 없어진 공간만큼 비워둬」 ·
-     「원래로 되돌리고 비워둔다」 (2026-09-21 지시). 칸을 줄이면 남은 둘이
-     그만큼 넓어진다 — 실제로 한 번 `1fr 1fr 340px` 로 줄였다가
-     **263 이 402 가 되어** 되돌렸다. */
+     **칸 수를 줄이지 않는다.** 칸을 줄이면 남은 것이 그만큼 넓어진다 —
+     실제로 한 번 `1fr 1fr 340px` 로 줄였다가 **263 이 402 가 되어** 되돌렸다.
+
+     ── 2026-09-22 에 자리가 다시 잡혔다 ──
+
+     그 전에는 **뒤 두 자리를 빈 채로** 뒀다 (2026-09-21 지시 —
+     「늘리지 말고 없어진 공간만큼 비워둬」). 재권님이 이번에 **늘리라고**
+     하셔서 그 자리가 채워진다.
+
+         「가로 너비는 2/3이면 될거같아」
+         「**차트 폭이랑 맞춰줘** 그옆에 데일리 분석 들어가면 칸이 딱 맞을거같아」
+
+     **1fr 셋 + 틈 둘 = 817px 이고 위 줄 차트가 818px 이다** (1600 창 실측).
+     남는 칸이 정확히 340px 라 위 줄 오른쪽 패널과도 같다 — **세로선이 이어진다.**
+
+         윗줄    [ 차트           818 ][ 패널   340 ]
+         아랫줄  [ 지금 뜨는 산업  817 ][ 데일리 340 ]
+
+     그래서 「지금 뜨는 산업」 은 `span 3`, 「데일리분석」 은 네 번째 칸이다. */
   grid-template-columns: 1fr 1fr 1fr 340px; gap: 14px;
 }
+
+/* 첫 카드가 앞 세 칸을 쓴다. 나머지 카드는 차례로 네 번째 칸에 간다 */
+.kh-rank > .kh-sc-card { grid-column: span 3; }
 
 /* 격자 칸은 기본이 `min-width: auto` 라 **안의 내용이 넓으면 칸 밖으로 밀고 나간다.**
    미리보기 차트가 그렇게 옆 사이드바를 덮었다 (2026-09-17).
@@ -189,6 +206,62 @@
 /* 종목 칸을 못 박았으니 긴 이름은 「…」 로 줄인다 */
 .kh-rkm .kh-nm { display: flex; align-items: center; gap: 7px; overflow: hidden; }
 .kh-rkm .kh-nm b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ══ 「지금 뜨는 산업」 모달 (2026-09-22 지시) ══════════════════
+   재권님 말씀 — 「지금 뜨는 산업도 모달로 띄울 수 있어야 할 거 같어」.
+
+   머리는 공용 뼈대(`css/modal.css` 의 `.kh-mh*`)를 쓴다. 여기는 **본문만**
+   이다 — 실시간 순위 모달(`.kh-rkm`)과 같은 값을 쓴다.
+
+   **본문 아래 44px · 좌우 26px.** 흐려지는 띠(`.kh-modal-fade`)가 46px 라
+   그보다 좁으면 마지막 줄이 테두리에 붙는다.
+
+   **스크롤바를 여기서 정하지 않는다** — `assets/css/common.css` 6px 을
+   물려받는다 (2026-09-18 룰 「스크롤바는 한 벌만 쓴다」). */
+.kh-scm { padding: 8px 26px 44px; }
+.kh-scm-empty { padding: 28px 0; text-align: center; font-size: 0.86rem; }
+
+/* 묶음 칩 — 카드는 여섯인데 여기는 **받아 온 스물을 다 놓는다**.
+   900px 에서 세 줄쯤 된다. 줄 수가 묶음 이름 길이에 따라 달라지므로
+   아래 표가 밀리는데, **모달 높이는 안 바뀐다**(본문이 굴러간다). */
+.kh-scm-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.kh-scm-chips .kh-chip { display: inline-flex; align-items: baseline; gap: 6px; }
+.kh-scm-chips .kh-chip b { font-size: 0.74rem; font-weight: 700; }
+/* 고른 칩은 바탕이 진하다 — 그 위 글씨는 흰색이어야 읽힌다
+   (CLAUDE.md 「진한 색 바탕에는 흰 글씨」). 등락률 색도 여기서는 묻는다 */
+.kh-scm-chips .kh-chip.is-active b { color: var(--kh-text-on-fill); }
+
+/* 고른 묶음 머리 — 이름 · 등락률 · 오름/내림 띠 */
+.kh-scm-gh {
+  display: flex; align-items: center; gap: 10px;
+  padding-bottom: 10px; margin-bottom: 2px;
+}
+.kh-scm-gn { font-size: 0.95rem; font-weight: 700; }
+.kh-scm-gh .kh-sc-bar { flex: 1; min-width: 0; max-width: 220px; }
+.kh-scm-cnt { font-size: 0.78rem; color: var(--kh-text-secondary); white-space: nowrap; }
+
+/* **`border-collapse: separate` 라야 표머리가 붙어 있는다.**
+   `collapse` 로는 `thead th` 의 sticky 가 안 먹어 표머리가 밀려 올라간다
+   (실시간 순위 모달에서 먼저 겪었다). 줄 사이 선은 `td` 가 그린다. */
+.kh-scm table {
+  width: 100%; table-layout: fixed; font-size: 0.86rem;
+  border-collapse: separate; border-spacing: 0;
+}
+.kh-scm thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--kh-bg); text-align: left;
+  padding: 0 10px 9px; font-size: 0.76rem; font-weight: 600;
+  color: var(--kh-text-muted); white-space: nowrap;
+}
+.kh-scm thead th.r, .kh-scm tbody td.r { text-align: right; }
+.kh-scm tbody td {
+  padding: 9px 10px; white-space: nowrap;
+  border-top: 1px solid var(--kh-border);
+}
+.kh-scm tbody tr:hover td { background: var(--kh-bg-hover); }
+/* 종목 칸이 남는 폭을 다 먹지 않게 못 박는다 — 실시간 순위에서 종목과
+   현재가 사이가 559px 벌어졌던 그 자리다 */
+.kh-scm tbody td:first-child b { overflow: hidden; text-overflow: ellipsis; }
 
 /* ── 데일리분석 칸 (kh-rank 줄) ─────────────────────────────
    옆 칸(지금 뜨는 산업·주요 지수)과 높이가 같아야 줄이 가지런하다.
@@ -372,44 +445,82 @@
    넘치는 것은 본문이 안에서 굴러가며 받는다 — 2026-09-17 지시
    「늘어나는건 없어야해 슬라이드바 넣어서 기존에 높이 유지되도록」.
    237 은 나머지 셋이 만드는 높이다. 그쪽이 바뀌면 이 값도 따라 고친다. */
+/* **237 → 255px** (2026-09-22). 1·2·3위를 나란히 놓으면서 한 칸에
+   「이름 · 띠 · 상승/보합/하락 · 상승률 TOP 셋」 이 들어간다. 237 로는
+   **셋째 종목이 18px 모자라 잘렸다**(본문 176 · 내용 194, 실측).
+
+   옛 237 은 **「나머지 셋이 만드는 높이」** 였는데 그 셋이 2026-09-21~22 에
+   차례로 없어져 지금 옆에 남은 것은 「데일리분석」 하나다. 그 카드도 안에서
+   굴러가므로 같이 커져도 잘리는 것이 없다.
+
+   **안쪽 여백을 깎아 18px 을 내는 길도 있었다.** 안 골랐다 — 여백 넷을
+   1~3px 씩 줄여야 겨우 맞아서, **종목 이름이 한 줄 더 길어지면 또 넘친다.** */
 .kh-sc-card { display: flex; flex-direction: column; overflow: hidden;
-              max-height: 237px; }
-.kh-sc-card .kh-chips { padding-bottom: 7px; }
-/* 이름 단추는 줄바꿈하지 않고 옆으로 민다. 줄이 늘면 카드가 길어진다 */
-.kh-sc-names { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 9px; }
-.kh-sc-names::-webkit-scrollbar { height: 0; }
-.kh-sc-names .kh-chip { white-space: nowrap; }
+              max-height: 255px; }
 /* 스크롤바 모양은 적지 않는다 — `assets/css/common.css` 한 곳에서 정한다
    (2026-09-18 지시 · 룰). 여기 5px 를 적어 두었다가 걷어냈다. */
-.kh-sc-body { flex: 1; overflow-y: auto; min-height: 0; }
+.kh-sc-body { flex: 1; overflow-y: auto; min-height: 0; display: flex; }
 
-.kh-sc-head { display: flex; align-items: center; gap: 7px; padding: 0 18px 7px; }
-.kh-sc-head > b:first-child { font-size: 0.86rem; }
-.kh-sc-head > b { font-size: 0.82rem; }
-.kh-sc-cnt { font-size: 0.72rem; color: var(--kh-text-muted); }
-.kh-sc-cnt b { font-weight: 600; }
-.kh-sc-sub { padding: 0 18px 4px; font-size: 0.72rem; color: var(--kh-text-muted);
-             display: flex; align-items: baseline; }
-/* 어느 쪽 기준인지 적는다 — 업종이 79개인 화면과 41개인 화면이 같은 이름을
-   달고 있으면 보는 쪽은 숫자가 왜 다른지 알 수 없다 (docs/sector-sources.md) */
-.kh-sc-src { margin-left: auto; }
+/* 국기 · 갈래 · 기간 (2026-09-22 지시) — 탭 줄에 나란히 */
+.kh-sc-flag { width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; }
+.kh-sc-mkt .kh-chip { display: inline-flex; align-items: center; }
+/* 갈래와 기간을 가르는 짧은 세로줄 */
+.kh-sc-sep { width: 1px; height: 13px; background: var(--kh-border-strong);
+             margin: 0 5px; flex: none; align-self: center; }
+/* 기간은 오른쪽 끝으로. 그 오른쪽에 「자세히 ›」 가 붙는다 */
+.kh-sc-span { margin-left: auto; }
+/* **아직 받아올 곳이 없는 것** — 미국 · 주간 · 월간.
+   루트 CLAUDE.md 「아직 안 정해진 자리는 빨간 바탕으로 남긴다」.
+   받아올 곳이 정해지면 이 클래스를 뗀다. */
+.kh-todo-chip {
+  background: var(--kh-danger-faint); color: var(--kh-danger);
+  font-weight: 700; cursor: not-allowed;
+}
 
-/* 오른 종목 · 내린 종목 막대 — 네이버에만 있는 값이다 */
-.kh-sc-bar { display: flex; height: 3px; border-radius: 2px; overflow: hidden;
-             width: 42px; flex-shrink: 0; margin-left: auto; }
+/* ── 1·2·3위를 나란히 (2026-09-22 지시) ─────────────────────
+   「지금뜨는 산업 하나에 다 들어있어서 잘 보여지지가 않는데」 ·
+   「3위까지만 봐도 댐」. 업종 이름 칩 줄은 없앴다. */
+.kh-sc-col { flex: 1; min-width: 0; padding: 0 13px; }
+.kh-sc-col:first-child { padding-left: 4px; }
+.kh-sc-col:last-child { padding-right: 4px; }
+/* **테두리 상자가 아니라 한 줄이다** (시안 — 「줄로 해달라」) */
+.kh-sc-vr { width: 1px; flex: none; background: var(--kh-border); }
+
+.kh-sc-ch { display: flex; align-items: baseline; gap: 5px; margin-bottom: 7px; }
+.kh-sc-fire { font-size: 0.78rem; line-height: 1; }
+.kh-sc-rk { font-size: 0.8rem; font-weight: 700; flex: none; }
+/* 묶음 이름이 길면 「…」 로 줄인다 — 테마에 30자짜리가 있다 */
+.kh-sc-nm { font-size: 0.82rem; min-width: 0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kh-sc-pc { font-size: 0.8rem; font-weight: 700; flex: none; margin-left: auto; }
+
+/* 오른 종목 · 내린 종목 막대 — 네이버에만 있는 값이다.
+   **칸 폭을 꽉 채운다** — 전에는 42px 짜리가 머리줄 오른쪽에 붙어 있었다 */
+.kh-sc-bar { display: flex; height: 4px; border-radius: 2px; overflow: hidden;
+             width: 100%; margin-bottom: 5px; }
 .kh-sc-bar i { display: block; height: 100%; }
 .kh-sc-bar .up { background: var(--kh-up); }
 .kh-sc-bar .fl { background: var(--kh-border-strong); }
 .kh-sc-bar .dn { background: var(--kh-down); }
 
-.kh-sc-st { display: flex; align-items: center; gap: 7px;
-            padding: 5px 18px; font-size: 0.78rem; color: inherit; }
+.kh-sc-cnt { display: flex; font-size: 0.7rem; margin-bottom: 9px; }
+.kh-sc-cnt b { font-weight: 600; }
+.kh-sc-cnt > :nth-child(2) { margin-left: auto; margin-right: 9px; }
+.kh-sc-lb { font-size: 0.7rem; font-weight: 700;
+            color: var(--kh-text-secondary); margin-bottom: 3px; }
+
+/* **밑줄을 지운다.** `<a>` 라 브라우저 기본 밑줄이 붙는데, 종목 이름과
+   가격 둘 다에 그어져 표처럼 안 읽혔다 (2026-09-22 실측 — `underline`). */
+.kh-sc-st { display: flex; align-items: center; gap: 8px;
+            padding: 4px 0; font-size: 0.78rem; color: inherit;
+            text-decoration: none; }
 .kh-sc-st:hover { background: var(--kh-bg-hover); }
-.kh-sc-st b { flex: 1; font-weight: 400; min-width: 0;
-              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kh-sc-st .kh-num:first-of-type { color: var(--kh-text-secondary); }
-.kh-sc-st .kh-num:last-child { font-weight: 600; width: 52px; text-align: right; }
-.kh-sc-empty { padding: 10px 18px; font-size: 0.78rem; }
+.kh-sc-stn { flex: 1; min-width: 0;
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kh-sc-stp { text-align: right; flex: none; line-height: 1.3; }
+.kh-sc-stp b { display: block; font-size: 0.78rem; font-weight: 600; }
+.kh-sc-stp i { display: block; font-style: normal; font-size: 0.68rem; }
+.kh-sc-empty { padding: 10px 0; font-size: 0.78rem; }
 
 /* ── 즐겨찾기 = 순위 숫자 (2026-09-18 지시) ───
    칸을 하나 더 만들면 그만큼 종목명이 좁아진다. 그래서 왼쪽 순위 숫자가

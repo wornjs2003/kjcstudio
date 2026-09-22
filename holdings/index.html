@@ -184,16 +184,49 @@
            나온다 (2026-09-18 지시 · 시안 「나안」).
            값은 네이버에서 온다 — KIS 에는 「그 업종에서 몇이 올랐나」와
            「그 업종의 종목 목록」이 없다. js/components/sectors.js 참고. -->
+      <!-- **가로 세 칸을 쓴다** (2026-09-22 지시 — 「가로 너비는 2/3이면
+           될거같아」 · 「차트 폭이랑 맞춰줘 그옆에 데일리 분석 들어가면 칸이
+           딱 맞을거같아」). 1fr 셋 + 틈 둘 = 817px 로 위 줄 차트(818)와 같고,
+           남는 340px 칸이 위 줄 패널과 같다 — 세로선이 이어진다.
+
+           1·2·3위를 나란히 놓는다. **업종 이름 칩 줄은 없앴다**
+           (재권님 지시 — 「3위까지만 봐도 댐」). 4위 아래는 「자세히 ›」
+           모달에 스무 개가 다 있다. -->
       <div class="kh-card kh-sc-card">
-        <!-- 업종·테마 고르개는 「주요 지수」 카드처럼 탭 줄 오른쪽에 둔다.
-             줄을 따로 두면 카드가 그만큼 길어지고, 이 줄의 카드 넷이
-             함께 늘어난다 (2026-09-17 지시 — 높이를 유지한다). -->
+        <!-- 고르개는 탭 줄에 둔다. 줄을 따로 두면 카드가 그만큼 길어진다
+             (2026-09-17 지시 — 높이를 유지한다). -->
         <div class="kh-tabs"><button class="kh-tab is-active">지금 뜨는 산업</button>
+          <!-- 국기는 위쪽 지수 띠와 **같은 SVG** 를 꺼내 쓴다. 색은
+               국기 규정색이라 「색 하드코딩 금지」 의 의도적 예외다. -->
+          <span class="kh-chips kh-sc-mkt" id="kh-sc-mkt">
+            <button class="kh-chip is-active" data-mkt="kr">
+              <svg class="kh-sc-flag" aria-hidden="true"><use href="#kh-flag-kr"></use></svg>국내</button>
+            <!-- 미정: 해외 업종·테마를 받아올 곳을 아직 못 찾았다
+                 (js/components/daily-view.js 의 같은 자리 참조).
+                 정해지면 kh-todo 를 떼고 누를 수 있게 한다. -->
+            <button class="kh-chip kh-todo-chip" data-mkt="us" disabled
+              title="해외 업종·테마는 받아올 곳을 아직 못 찾았습니다">
+              <svg class="kh-sc-flag" aria-hidden="true"><use href="#kh-flag-us"></use></svg>미국</button>
+          </span>
+          <i class="kh-sc-sep" aria-hidden="true"></i>
           <span class="kh-chips kh-ix-chips" id="kh-sc-kind">
             <button class="kh-chip is-active" data-kind="industry">업종</button>
             <button class="kh-chip" data-kind="theme">테마</button>
-          </span></div>
-        <div class="kh-chips kh-sc-names" id="kh-sc-names"></div>
+          </span>
+          <!-- 미정: `/api/naver/groups` 가 기간을 안 받는다. 오는 값은 전부
+               일간이라 주간·월간은 눌러도 같은 값이 나온다. 서버에 기간을
+               붙이면 kh-todo 를 뗀다. -->
+          <span class="kh-chips kh-sc-span" id="kh-sc-span">
+            <button class="kh-chip is-active" data-span="d">일간</button>
+            <button class="kh-chip kh-todo-chip" data-span="w" disabled
+              title="네이버가 기간을 안 줍니다 — 오는 값은 전부 일간입니다">주간</button>
+            <button class="kh-chip kh-todo-chip" data-span="m" disabled
+              title="네이버가 기간을 안 줍니다 — 오는 값은 전부 일간입니다">월간</button>
+          </span>
+          <!-- 차트 머리줄의 「자세히 ›」 와 **같은 것**이어야 한다
+               (2026-09-22 지시 — "자세히 버튼은 차트에서 모달 띄우는
+                버튼으로 다 통일해줘"). href 가 없고 JS 가 모달을 연다. -->
+          <a class="kh-fold" id="kh-sc-more" role="button" tabindex="0">자세히 ›</a></div>
         <div class="kh-sc-body" id="kh-sc-body"></div>
       </div>
 

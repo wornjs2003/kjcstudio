@@ -26,6 +26,7 @@ import { bindDailyMenu } from './components/daily-view.js';
 import { fetchIssues, paintIssues } from './components/news-list.js';
 import { bindNewsModal } from './components/news-modal.js';
 import { mountSectors } from './components/sectors.js';
+import { openSectorModal } from './components/sector-modal.js';
 import { mountStockPanel } from './components/stock-panel.js';
 import { mountStockDetail } from './components/stock-detail.js';
 /* fetchIndexMinutes · fetchIndexCandles 는 여기서 안 쓴다 (2026-09-17).
@@ -1622,7 +1623,21 @@ mountIndicatorMenu(document.querySelector('.kh-ind-menu'));
 
 /* 「지금 뜨는 산업」 — 업종 이름 단추를 누르면 그 종목이 나온다 (2026-09-18 지시).
    값은 네이버에서 오고 첫 화면을 막지 않는다 — 목록 한 번이 0.03초다. */
-mountSectors(document.querySelector('.kh-sc-card'));
+const sectors = mountSectors(document.querySelector('.kh-sc-card'));
+
+/* 「지금 뜨는 산업」 자세히 → 모달 (2026-09-22 지시).
+   **카드가 받아 둔 것을 넘긴다** — 모달이 따로 받으면 두 자리의 숫자가
+   어긋나고 네이버를 겹쳐 부른다. */
+(() => {
+  const more = document.getElementById('kh-sc-more');
+  if (!more || !sectors.snapshot) return;
+  const open = () => openSectorModal(sectors.snapshot());
+  more.addEventListener('click', open);
+  /* 단추가 `<a>` 라 Enter·Space 로도 눌려야 한다 (실시간 순위와 같다) */
+  more.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+  });
+})();
 
 /* 투자자 정보 · 매수매도 비율 — 고른 종목 것이다 (2026-09-18 지시).
    차트 종목이 바뀌면 selectStock 이 setCode 로 알린다. */
