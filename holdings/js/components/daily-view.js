@@ -211,6 +211,21 @@ const BODY_HTML = `
 
     </div>
 
+`;
+
+/* 「지난 분석」 — 2026-09-22 에 `BODY_HTML` 에서 뗐다.
+
+   모달이 탭 셋(오늘 · 보낼 문안 · 지난 분석)이 되면서 이 블록이 **세 번째
+   탭**으로 가야 하는데, 전용 화면에서는 지금처럼 본문 끝에 이어져야 한다.
+   그래서 `side` 와 같은 꼴로 **받는 쪽이 자리를 정한다** —
+   `past` 를 넘기면 거기에, 안 넘기면 본문 끝에 붙는다.
+
+   **이 블록에는 `id` 가 하나도 없다.** `mountDaily` 가 `$(id)` 로 찾는
+   열 개(kh-dl-al-note · kh-dl-alerts · kh-dl-idx · kh-dl-news ·
+   kh-dl-news-src · kh-dl-sch · kh-dl-sec · kh-dl-sub · kh-dl-tg ·
+   kh-dl-tg-cap) 중 여기 있는 것이 없어서, 어디로 옮겨도 조회가 안 끊긴다.
+   양쪽에서 세어 확인했다 (2026-09-22 · 홈페이지_정리 교차). */
+const PAST_HTML = `
     <h2 class="kh-dl-sect">지난 분석</h2>
     <p class="kh-dl-sect-s">30일이 지난 것은 자동으로 지워집니다</p>
     <!-- 미정: 위 「보관」 과 같은 자리다. 저장이 붙으면 여기에 카드가 쌓인다. -->
@@ -250,14 +265,24 @@ const SIDE_HTML = `
  * @param {HTMLElement} root              본문이 들어갈 자리
  * @param {object}      [opts]
  * @param {HTMLElement} [opts.side]       보낼 문안이 들어갈 자리
+ * @param {HTMLElement} [opts.past]       「지난 분석」 이 들어갈 자리.
+ *                                        **안 넘기면 본문 끝에 이어 붙는다** —
+ *                                        전용 화면이 그 길이고, 모달은 탭으로 뺀다
  * @param {Function}    [opts.onIndices]  지수를 받았을 때 (시세 띠 갱신용)
+ * @param {Function}    [opts.onHead]     머리에 얹을 값이 준비됐을 때.
+ *                                        `{ big, stats }` 를 넘긴다 — 모달 머리가 쓴다.
+ *                                        전용 화면은 머리가 없어 안 넘긴다
  * @returns {{ destroy: Function, reload: Function }}
  */
-export function mountDaily(root, { side = null, onIndices = null } = {}) {
+export function mountDaily(root, { side = null, past = null,
+                                   onIndices = null, onHead = null } = {}) {
   if (!root) return { destroy() {}, reload() {} };
 
   root.insertAdjacentHTML('beforeend', BODY_HTML);
   if (side) side.insertAdjacentHTML('beforeend', SIDE_HTML);
+  /* 「지난 분석」 — 자리를 받으면 거기에, 아니면 본문 끝에.
+     `$(id)` 로 찾는 것이 이 블록에 없어 어디로 가든 조회가 안 끊긴다. */
+  (past || root).insertAdjacentHTML('beforeend', PAST_HTML);
 
   /* 찾는 범위를 자기 자리 안으로 좁힌다. 문서 전체에서 찾지 않는 이유는
      파일 맨 위 주석에 있다. */
@@ -771,6 +796,45 @@ export function mountDaily(root, { side = null, onIndices = null } = {}) {
     /* 시세 띠는 붙인 쪽이 갱신한다. 이 컴포넌트는 띠를 모른다 —
        모달에는 띠가 없기 때문이다. */
     if (onIndices) onIndices(indices);
+    /* 모달 머리도 같은 자리에서 넘긴다. 값을 받은 뒤라야 채울 수 있고,
+       전용 화면은 머리가 없어 안 넘긴다. */
+    if (onHead) onHead(headValues());
+  }
+
+  /* ── 모달 머리에 얹을 값 ──
+     시안이 「코스피 마감」 과 「주도 업종」 을 넣기로 했다 (2026-09-22).
+
+     **받은 값이 없으면 `null` 을 돌려준다.** 뼈대가 `big` 과 `stats` 를
+     둘 다 비우면 그 줄을 안 그린다 — 억지로 채우지 않는다. */
+  function headValues() {
+    const ix = (code) => indices.find((x) => x.code === code);
+    const kospi = ix('KOSPI');
+    const kosdaq = ix('KOSDAQ');
+
+    const big = kospi ? {
+      value: `KOSPI ${num(kospi.value, 2)}`,
+      change: `${signed(kospi.change, 2)} ${pct(kospi.changePct)}`,
+      changeCls: `kh-${tone(kospi.changePct)}`,
+      note: todayLabel(),
+    } : null;
+
+    /* 업종은 **`pct` 가 없는 것을 거르고** 센다. 섞여 오는 날이 있다
+       (`:60` 주석). 2026-09-22 실측으로는 41행에 null 이 0개였는데,
+       「그날은 안 걸렸다」 이지 「안 온다」 가 아니라 거르기를 둔다. */
+    const top = sectors.filter((x) => x.pct != null)
+                       .sort((a, b) => b.pct - a.pct)[0];
+
+    const stats = [];
+    if (top) stats.push({ label: '주도 업종', value: `${top.name} ${pct(top.pct)}` });
+    if (kosdaq) {
+      stats.push({ label: 'KOSDAQ',
+                   value: `${num(kosdaq.value, 2)} ${pct(kosdaq.changePct)}` });
+    }
+    if (kospi && kospi.up != null) {
+      stats.push({ label: '오른 종목', value: `${kospi.up} / ${kospi.down}` });
+    }
+
+    return { big, stats: stats.length ? stats : null };
   }
 
   load();
@@ -800,53 +864,72 @@ export function mountDaily(root, { side = null, onIndices = null } = {}) {
 export function openDailyModal() {
   let inst = null;
 
-  const { body } = openModal({
+  /* 탭 셋. 「오늘」 안에서는 **카드를 쪼개지 않는다** — 「그날을 한 장으로」 가
+     목적이라 쪼개면 그 목적이 깨진다 (2026-09-22 시안). */
+  const TABS = [
+    { id: 'today', label: '오늘' },
+    { id: 'msg',   label: '보낼 문안' },
+    { id: 'past',  label: '지난 분석' },
+  ];
+
+  const m = openModal({
     label: '데일리분석',
-    /* 닫으면 멈춘다. 안 멈추면 보이지도 않는 칸 때문에 KIS 를 계속 부른다. */
+    /* 고정 px. `max-content` 면 탭을 바꿀 때 폭이 달라져
+       「보는 것을 바꿔도 자리는 그대로다」 를 깬다. */
+    width: 1100,
+    head: {
+      icon: '데',
+      name: '데일리분석',
+      sub: todayLabel(),
+      caret: true,
+      actions: [{ label: '전체 화면 ↗', href: './daily.html' }],
+      /* 1100px 이면 세 열이 들어간다 (뼈대 기준값) */
+      statCols: 3,
+      tabs: TABS,
+      tab: 'today',
+      /* 머리는 그대로 두고 본문만 갈아끼운다. 세 칸을 다 두고 감추기만
+         하므로 `mountDaily` 의 `$(id)` 조회가 안 끊긴다 — 칸을 지웠다
+         다시 만들면 그 안의 `id` 가 사라져 **조용히 빈다.** */
+      onTab(id) { showPane(id); },
+    },
     onClose() { if (inst) { inst.destroy(); inst = null; } },
   });
 
-  /* 본문과 보낼 문안을 나란히 둔다. 전용 화면에서는 `.kh-app` 이 그 배치를
-     잡아 주는데 모달 안에는 그 틀이 없어, 여기서 한 겹을 두고 `daily.css`
-     의 `.kh-dl-modal` 이 잡는다. */
-  const wrap = document.createElement('div');
-  wrap.className = 'kh-dl-modal';
+  /* 세 칸을 한꺼번에 만든다.
+     **`.kh-side` 도 `.kh-dl-side` 도 안 붙인다.**
+       `.kh-side`    `frame.css` 가 1280px 이하에서 숨긴다. 되살리는 규칙은
+                     `.kh-daily` 조상이 있어야 하는데 모달에는 그것이 없다
+       `.kh-dl-side` `position: sticky` 와 `max-height: 52vh` 가 붙는데,
+                     탭이라 전체가 보이므로 둘 다 뜻이 없다
+     안쪽 모양은 `.kh-side-head` · `.kh-dl-tg-b` 처럼 **최상위 선택자**라
+     감싸는 클래스 없이도 그대로 먹는다 (2026-09-22 확인). */
+  const panes = {};
+  for (const t of TABS) {
+    const el = document.createElement('div');
+    el.className = 'kh-dl-pane';
+    el.dataset.pane = t.id;
+    if (t.id !== 'today') el.hidden = true;
+    m.body.appendChild(el);
+    panes[t.id] = el;
+  }
 
-  const main = document.createElement('div');
-  main.className = 'kh-dl-modal-main';
+  function showPane(id) {
+    for (const t of TABS) panes[t.id].hidden = (t.id !== id);
+  }
 
-  const side = document.createElement('aside');
-  side.className = 'kh-side kh-dl-side';
-  side.setAttribute('aria-label', '보낼 문안');
-
-  wrap.append(main, side);
-  body.appendChild(wrap);
-
-  inst = mountDaily(main, { side });
+  inst = mountDaily(panes.today, {
+    side: panes.msg,
+    past: panes.past,
+    /* 값을 받은 뒤에 머리를 채운다. 받기 전에는 비어 있고, 뼈대가
+       `big` · `stats` 를 둘 다 비우면 그 줄을 안 그린다. */
+    onHead({ big, stats }) {
+      m.head.setBig(big);
+      m.head.setStats(stats);
+    },
+  });
   return inst;
 }
 
-/**
- * 「데일리분석」 으로 가는 메뉴를 눌렀을 때 모달이 열리게 한다.
- *
- * **`href` 를 그대로 둔다.** 바꾸면 네 가지가 한꺼번에 깨진다 —
- *
- *     새 탭 · 가운데 클릭   그대로 daily.html 로 간다
- *     JS 가 안 뜨면         그대로 페이지로 간다
- *     CSS                   `nav.kh-cat a` 규칙이 그대로 먹는다
- *     직접 주소             여전히 열린다
- *
- * **룰도 이 방식으로 정해졌다** — 처음에는 `href` 를 지운 `<button>` 이었는데
- * 위 넷을 잃는다는 것이 드러나 `<a href … data-modal>` 로 바뀌었다
- * (2026-09-21, `holdings/CLAUDE.md`). 재권님 「페이지는 그대로 둔다.
- * 주소로 직접 들어가면 열려야 한다」 와 같은 방향이다.
- *
- * `data-modal` 은 **옮긴 자리라는 표시**다. 찾는 것은 `href` 로 하는데,
- * 아직 안 옮긴 화면(`news.html`)에도 같은 메뉴가 있어 그쪽이 옮길 때
- * 이 함수를 그대로 부르면 되게 두었다.
- *
- * @param {ParentNode} [root]  찾을 범위. 안 주면 문서 전체
- */
 export function bindDailyMenu(root = document) {
   for (const a of root.querySelectorAll('a[href$="daily.html"]')) {
     /* 자기 화면이면 누를 일이 없다. 눌러도 모달을 띄우면 같은 것이 두 겹이 된다 */

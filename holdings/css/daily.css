@@ -398,40 +398,24 @@
 
 /* ── 모달로 열었을 때 ─────────────────────────────────────────────
    「데일리분석」 메뉴를 누르면 모달이 뜬다 (2026-09-21 지시).
-   전용 화면에서는 `.kh-app` 이 본문·문안 배치를 잡아 주는데 모달 안에는
-   그 틀이 없어서, 여기서 한 겹(`.kh-dl-modal`)으로 잡는다.
 
-   **`.kh-daily` 를 안 붙인다.** 이 규칙은 모달에서만 쓰이고, 전용 화면은
-   위쪽 규칙이 그대로 맡는다. 두 자리가 서로를 안 건드린다. */
-.kh-dl-modal {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 316px;
-  gap: 0;
-  align-items: start;
-}
-.kh-dl-modal-main { min-width: 0; padding: 0 18px 18px; }
+   **2026-09-22 에 탭 셋으로 바뀌었다** (오늘 · 보낼 문안 · 지난 분석).
+   전에는 본문과 문안을 2열(`.kh-dl-modal`)로 나란히 뒀는데, 새 뼈대가
+   머리에 탭을 두면서 그 칸이 없어졌다. 2열 규칙은 **쓰는 곳이 사라져
+   지웠다** — 남겨 두면 다음에 보는 쪽이 아직 쓰는 줄로 읽는다.
 
-/* `.kh-side` 기본이 `min-height: 100vh` 라 모달 안에서는 빈 칸이 한 화면
-   더 생긴다. 모달은 제 안에서 구르므로 그 높이가 필요 없다. */
-.kh-dl-modal .kh-side {
-  min-height: 0;
-  position: static;
-  border-left: 1px solid var(--kh-border);
-}
-.kh-dl-modal .kh-dl-tg-b { max-height: none; }
+   ── 탭 칸에 클래스를 안 붙이는 이유 ──
 
-/* 좁을 때는 문안을 본문 아래로 내린다. 전용 화면과 같은 판단이다 —
-   316px 을 옆에 붙여 두면 본문이 너무 좁다.
+   「보낼 문안」 칸에 `.kh-side` 를 붙이면 `frame.css` 가 1280px 이하에서
+   **숨긴다.** 되살리는 규칙(아래 `@media` 의 `.kh-daily .kh-side.kh-dl-side`)은
+   **`.kh-daily` 조상이 있어야** 하는데, 모달은 `index` · `stock` 에서도
+   열리므로 그 조상이 없다. `.kh-dl-side` 도 안 붙인다 — `position: sticky` 와
+   `max-height: 52vh` 가 붙는데 탭이라 전체가 보여 둘 다 뜻이 없다.
 
-   `display: block` 을 다시 주는 이유 — `frame.css` 가 1280px 이하에서
-   `.kh-side` 를 **숨긴다**. 관심종목이라면 맞는 동작이지만 이 칸은
-   「폰에 이렇게 도착합니다」 라, 없어지면 모달의 절반이 사라진다.
-   `frame.css` 는 고치지 않는다. 네 화면이 함께 쓴다. */
-@media (max-width: 1280px) {
-  .kh-dl-modal { grid-template-columns: minmax(0, 1fr); }
-  .kh-dl-modal .kh-side {
-    display: block;
-    border-left: 0;
-    border-top: 1px solid var(--kh-border);
-  }
+   안쪽 모양(`.kh-side-head` · `.kh-dl-tg-b` …)은 **최상위 선택자**라
+   감싸는 클래스 없이도 그대로 먹는다 (2026-09-22 확인). */
+.kh-dl-pane {
+  /* 아래 44px 은 흐려지는 띠(46px)에 글이 묻히지 않게, 좌우 26px 은
+     머리의 안쪽 여백과 줄을 맞춘다 (뼈대 기준값). */
+  padding: 0 26px 44px;
 }
