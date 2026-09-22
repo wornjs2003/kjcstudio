@@ -15,10 +15,15 @@
    어긋나고** 네이버를 겹쳐 부른다. `mountSectors` 가 내주는 `snapshot()`
    을 쓴다.
 
-   **카드보다 많이 보여준다.** 받아 온 것은 같은데 카드가 좁아 잘라 놓았다.
+   **카드와 같은 셋을 나란히 보여준다** (2026-09-22 지시 — 「모달 띄우면
+   업종일때는 업종 3개가 보여져야하고 테마일때는 테마가 3개 보여지도록」).
 
-       카드    묶음 여섯 칩 · 종목 넷 · 이름/가격/등락률
-       모달    **스무 칩 · 종목 열** · 거래대금 · 거래량까지
+       카드    묶음 셋 · 이름/가격/등락률
+       모달    묶음 셋 · **거래대금 · 거래량까지** · 칩으로 4위 아래도 본다
+
+   **칩을 누르면 그 칩부터 셋**이 나온다 — 1위를 누르면 1·2·3위, 4위를
+   누르면 4·5·6위다. 그래서 스무 묶음을 다 볼 수 있으면서 **언제나 셋**이다.
+   (전에는 칩으로 하나를 골라 그 종목만 표로 봤다.)
 
    ── 종류를 바꿔도 카드는 안 바뀐다 ──
 
@@ -28,14 +33,22 @@
    ========================================================================== */
 
 import { openModal } from './modal.js';
-import { fmtWon, fmtPct, fmtMoneyKr, fmtShareCount, dirClass } from '../utils/format.js';
+import { fmtWon, fmtPct, fmtMoneyKr, dirClass } from '../utils/format.js';
 
 /* **고정 px 이다.** `max-content` 면 탭(업종↔테마)을 바꿀 때 묶음 이름 길이에
-   따라 폭이 달라진다. 900 은 칩 스물이 세 줄에 들어가고 표 다섯 열이
-   안 눌리는 값이다 (2026-09-22 실측). */
-const WIDTH = 900;
+   따라 폭이 달라진다.
+
+   **900 → 1100** (2026-09-22). 셋을 나란히 놓으니 한 칸이 228px 로 좁아
+   **종목 이름이 현재가를 덮었다** — 「우성머티리얼즈」 가 「45원」 위로
+   올라탔다. 1100 이면 한 칸이 약 300px 이고 네 열이 안 눌린다.
+   데일리분석 모달이 쓰는 값과 같다. */
+const WIDTH = 1100;
 
 const KIND_LABEL = { industry: '업종', theme: '테마' };
+
+/* **한 번에 보여줄 묶음 수** (2026-09-22 지시 — 「업종 3개 … 테마가 3개」).
+   카드와 같은 셋이다. 칩을 누르면 그 칩부터 셋이 나온다. */
+const SHOW = 3;
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g,
@@ -56,9 +69,13 @@ export function openSectorModal(snap) {
   let kind = snap.kind;
   let groups = snap.groups || [];
   let total = snap.total || groups.length;
-  let pick = snap.pick;
-  let rows = snap.stocks || null;      // 고른 묶음의 종목. null 이면 불러오는 중
+  /* **시작 자리**다. 여기서부터 셋을 보여준다 — 칩을 누르면 이것이 바뀐다 */
+  let from = Math.max(0, groups.findIndex((g) => g.no === snap.pick));
   let seq = 0;
+
+  /* 묶음마다 받아 둔 종목. `snap.pickGroup` 이 받아 오고 여기에 쌓인다 */
+  const rowsBy = {};
+  if (snap.pick != null && snap.stocks) rowsBy[snap.pick] = snap.stocks;
 
   const m = openModal({
     label: '지금 뜨는 산업',
@@ -93,20 +110,25 @@ export function openSectorModal(snap) {
      (모달 510px 에 본문 627px, 2026-09-22 실측).
      앞선 셋(`kh-rkm` · `kh-nwm` · `kh-dlm`)도 전부 **안쪽에 div 를 둔다.** */
   paint();
-  if (!rows) loadStocks();
+  loadShown();
   return m;
 
   /* ── 머리 ── */
 
-  /** 대표값은 **가장 많이 오른 묶음**이다. 이 모달의 주제 그대로다 */
+  /** 대표값은 **지금 보고 있는 첫 칸**이다.
+      1위 고정으로 뒀더니 칩으로 7·8·9위를 볼 때 머리와 본문이 어긋났다
+      (2026-09-22). 머리가 「가장 많이 오른 테마」 라고 적고 있는데
+      아래는 7위부터 나와서, 어느 쪽을 믿을지 알 수 없었다. */
   function headBig() {
-    const top = groups[0];
+    const top = groups[from];
     if (!top) return null;
     return {
       value: top.name,
       change: fmtPct(top.pct),
       changeCls: dirClass(top.pct),
-      note: `가장 많이 오른 ${KIND_LABEL[kind]}`,
+      note: from === 0
+        ? `가장 많이 오른 ${KIND_LABEL[kind]}`
+        : `${from + 1}위 ${KIND_LABEL[kind]} — 아래 셋의 첫째`,
     };
   }
 
@@ -151,7 +173,7 @@ export function openSectorModal(snap) {
     const mine = ++seq;
     kind = id;
     groups = [];
-    rows = null;
+    from = 0;
     m.head.setTab(id);
     paint();                       // 「불러오는 중」 을 먼저 보여준다
 
@@ -163,21 +185,29 @@ export function openSectorModal(snap) {
     }
     groups = got.rows;
     total = got.total;
-    pick = groups.length ? groups[0].no : null;
     refreshHead();
     paint();
-    loadStocks();
+    loadShown();
   }
 
-  /* ── 고른 묶음의 종목 ── */
+  /* ── 보이는 셋의 종목 ── */
 
-  async function loadStocks() {
-    if (pick == null) return;
+  /** 지금 보여줄 묶음 셋 */
+  function shown() {
+    return groups.slice(from, from + SHOW);
+  }
+
+  /** 셋을 **한꺼번에** 받는다. 받아 둔 것은 다시 안 부른다 */
+  async function loadShown() {
     const mine = seq;
-    const got = await snap.pickGroup(kind, pick);
-    if (mine !== seq) return;      // 그새 종류가 바뀌었다
-    rows = got;
-    paint(got ? '' : '불러오지 못했습니다');
+    const want = shown();
+    await Promise.all(want.map(async (g) => {
+      if (rowsBy[g.no]) return;
+      const got = await snap.pickGroup(kind, g.no);
+      if (got) rowsBy[g.no] = got;
+    }));
+    if (mine !== seq) return;      // 그새 갈래가 바뀌었다
+    paint();
   }
 
   /* ── 그리기 ── */
@@ -188,51 +218,63 @@ export function openSectorModal(snap) {
         `<div class="kh-scm"><div class="kh-scm-empty kh-mut">${esc(err || '불러오는 중')}</div></div>`;
       return;
     }
-    const g = groups.find(x => x.no === pick) || groups[0];
+    const want = shown();
 
+    /* **칩을 누르면 그 칩부터 셋**이다. 지금 보고 있는 셋에 불을 켠다 —
+       고른 하나만 켜면 「왜 옆 둘도 보이지」 가 된다. */
     m.body.innerHTML = `<div class="kh-scm">
-      <div class="kh-scm-chips">${groups.map(x => `
-        <button class="kh-chip${x.no === g.no ? ' is-active' : ''}" data-no="${x.no}">
+      <div class="kh-scm-chips">${groups.map((x, i) => `
+        <button class="kh-chip${i >= from && i < from + SHOW ? ' is-active' : ''}"
+          data-i="${i}" title="여기부터 ${SHOW}개를 봅니다">
           ${esc(x.name)}<b class="${dirClass(x.pct)}">${fmtPct(x.pct)}</b>
         </button>`).join('')}</div>
-      ${groupHead(g)}
-      ${stockTable(err)}
+      <div class="kh-scm-cols">${want.map((g, i) => `
+        <div class="kh-scm-col">${groupHead(g, from + i + 1)}${stockTable(g, err)}</div>`)
+        .join('<i class="kh-scm-vr" aria-hidden="true"></i>')}</div>
     </div>`;
 
-    m.body.querySelectorAll('[data-no]').forEach(b => {
+    m.body.querySelectorAll('[data-i]').forEach((b) => {
       b.addEventListener('click', () => {
-        const no = Number(b.dataset.no);
-        if (no === pick) return;
-        pick = no;
-        rows = null;
+        const i = Number(b.dataset.i);
+        /* **끝에서는 뒤로 물린다** — 19번을 누르면 17·18·19 가 나온다.
+           안 물리면 마지막 칩을 눌렀을 때 한 칸만 보인다. */
+        const next = Math.min(i, Math.max(0, groups.length - SHOW));
+        if (next === from) return;
+        from = next;
+        refreshHead();            // 머리의 대표값도 함께 옮긴다
         paint();
-        loadStocks();
+        loadShown();
       });
     });
   }
 
-  function groupHead(g) {
+  function groupHead(g, rank) {
     const sum = (g.rise + g.steady + g.fall) || 1;
     return `
       <div class="kh-scm-gh">
-        <b class="kh-scm-gn">${esc(g.name)}</b>
-        <b class="${dirClass(g.pct)}">${fmtPct(g.pct)}</b>
-        <span class="kh-sc-bar" title="상승 ${g.rise} · 보합 ${g.steady} · 하락 ${g.fall}">
-          <i class="up" style="width:${g.rise / sum * 100}%"></i>
-          <i class="fl" style="width:${g.steady / sum * 100}%"></i>
-          <i class="dn" style="width:${g.fall / sum * 100}%"></i>
-        </span>
-        <span class="kh-scm-cnt">
-          <b class="kh-up">${g.rise}</b> 오름 · <b class="kh-down">${g.fall}</b> 내림
-          <span class="kh-mut">· 종목 ${g.count}개</span>
-        </span>
+        ${rank === 1 ? '<span class="kh-scm-fire" aria-hidden="true">🔥</span>' : ''}
+        <b class="kh-scm-rk">${rank}위</b>
+        <b class="kh-scm-gn" title="${esc(g.name)}">${esc(g.name)}</b>
+        <b class="kh-scm-pc ${dirClass(g.pct)}">${fmtPct(g.pct)}</b>
+      </div>
+      <span class="kh-sc-bar" title="상승 ${g.rise} · 보합 ${g.steady} · 하락 ${g.fall}">
+        <i class="up" style="width:${g.rise / sum * 100}%"></i>
+        <i class="fl" style="width:${g.steady / sum * 100}%"></i>
+        <i class="dn" style="width:${g.fall / sum * 100}%"></i>
+      </span>
+      <div class="kh-scm-cnt">
+        <b class="kh-up">상승 ${g.rise}</b>
+        <span class="kh-mut">보합 ${g.steady}</span>
+        <b class="kh-down">하락 ${g.fall}</b>
+        <span class="kh-mut kh-scm-tot">종목 ${g.count}개</span>
       </div>`;
   }
 
   /* **`border-collapse: separate` 라야 표머리가 붙어 있는다** —
      `collapse` 로는 sticky 가 −892px 로 사라진다 (주식페이지_개발3 실측).
      그 값은 `css/home.css` 의 `.kh-scm table` 에 있다. */
-  function stockTable(err) {
+  function stockTable(g, err) {
+    const rows = rowsBy[g.no];
     if (rows == null) {
       return `<div class="kh-scm-empty kh-mut">${esc(err || '불러오는 중')}</div>`;
     }
@@ -240,19 +282,19 @@ export function openSectorModal(snap) {
       return '<div class="kh-scm-empty kh-mut">종목이 없습니다</div>';
     }
     return `
-      <table>
+      <div class="kh-scm-list"><table>
+        <colgroup><col class="c-nm"><col class="c-pr"><col class="c-pc"><col class="c-am"></colgroup>
         <thead><tr>
           <th>종목</th><th class="r">현재가</th><th class="r">등락률</th>
-          <th class="r">거래대금</th><th class="r">거래량</th>
+          <th class="r">거래대금</th>
         </tr></thead>
-        <tbody>${rows.map(s => `
-          <tr data-code="${esc(s.code)}">
-            <td><b>${esc(s.name)}</b></td>
-            <td class="r kh-num">${fmtWon(s.price)}</td>
-            <td class="r kh-num ${dirClass(s.pct)}">${fmtPct(s.pct)}</td>
-            <td class="r kh-num">${s.value != null ? fmtMoneyKr(s.value / 100) : '—'}</td>
-            <td class="r kh-num">${fmtShareCount(s.volume)}</td>
+        <tbody>${rows.map(st => `
+          <tr data-code="${esc(st.code)}">
+            <td><b title="${esc(st.name)}">${esc(st.name)}</b></td>
+            <td class="r kh-num">${fmtWon(st.price)}</td>
+            <td class="r kh-num ${dirClass(st.pct)}">${fmtPct(st.pct)}</td>
+            <td class="r kh-num">${st.value != null ? fmtMoneyKr(st.value / 100) : '—'}</td>
           </tr>`).join('')}</tbody>
-      </table>`;
+      </table></div>`;
   }
 }
