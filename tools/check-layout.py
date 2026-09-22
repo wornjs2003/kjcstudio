@@ -192,7 +192,7 @@ def _recv(s):
             return json.loads(buf.decode())
 
 
-def measure_all(expect=None):
+def _measure_once(expect=None):
     """모든 화면을 재서 {화면: {칸: [폭, 높이]}} 를 돌려준다.
 
     `expect` 는 기준(이미 잡아 둔 것)이다. 주면 **그 칸이 전부 나타날 때까지**
@@ -297,7 +297,17 @@ def measure_all(expect=None):
                     # 기준이 있으면 **그 칸이 다 나올 때까지** 기다린다.
                     # 덜 그려진 화면을 재서 「칸이 없어졌다」 로 내는 것을 막는다 —
                     # 2026-09-21 에 news.html 의 통계 칸 열셋이 그렇게 빠졌다.
-                    if not (set(want) - set(cells)) and tries >= SETTLE_MIN:
+                    # **다 나올 때까지 기다리지 않는다 (2026-09-21).**
+                    # 기준이 낡아 **진짜 없어진 칸**이 있으면 영영 못 기다린다 —
+                    # 30초를 쓰고 실패한다. 「덜 그려진 것」 과 「없어진 것」 을
+                    # 기다림으로는 가를 수 없다.
+                    #
+                    # **거의 다 나왔으면 그려진 것으로 본다.** 나머지는
+                    # 「이번엔 안 나왔습니다」 알림으로 나가고, 그것이 진짜
+                    # 없어진 것인지는 사람이 본다.
+                    got = len(set(want) & set(cells))
+                    enough = got >= len(want) * 0.9
+                    if enough and tries >= SETTLE_MIN:
                         stable += 1
                         if stable >= SETTLE_SAME:
                             break
@@ -316,9 +326,42 @@ def measure_all(expect=None):
             if stable < SETTLE_SAME:
                 miss = sorted(set((expect or {}).get(page, {})) - set(cells))
                 if miss:
-                    print("  %s — %d초를 기다렸는데 칸 %d개가 끝내 안 나왔습니다: %s"
-                          % (page, SETTLE_TRIES * SETTLE_STEP, len(miss),
-                             " · ".join(miss[:4]) + (" …" if len(miss) > 4 else "")))
+                    # **「없다」 와 「깊이 밖이라 안 봤다」 를 가른다 (2026-09-21).**
+                    # 둘이 같은 출력이라, 쓰는 쪽이 **자기 CSS 가 잘못된 줄 알고**
+                    # HTML·CSS 를 두 번 확인한 일이 있었다. 실제로는 요소가
+                    # 화면에 멀쩡히 있고 **깊이 4로 밀려난 것**이었다.
+                    #
+                    # 「`0` 이 나오면 범위를 먼저 의심한다」 의 **도구 쪽 사례**다 —
+                    # 「도구가 적어둔 범위도 낡는다」 가 여기에 걸린다.
+                    #
+                    # **화면에 있는지 직접 물어본다.** 깊이 제한과 무관하다.
+                    names = [m.split("#")[0] for m in miss]
+                    expr = ("JSON.stringify(%s.map(n => "
+                            "!!document.querySelector('#'+n) || "
+                            "!!document.querySelector('.'+n)))" % json.dumps(names))
+                    try:
+                        r = call("Runtime.evaluate",
+                                 {"expression": expr, "returnByValue": True})
+                        there = json.loads(r["result"]["result"]["value"])
+                    except Exception:
+                        there = [False] * len(miss)
+                    deep = [m for m, t in zip(miss, there) if t]
+                    gone = [m for m, t in zip(miss, there) if not t]
+                    if deep:
+                        print("  %s — **깊이 밖입니다** (화면에는 있습니다): %s"
+                              % (page, " · ".join(deep[:4])
+                                 + (" …" if len(deep) > 4 else "")))
+                        print("     기준을 잡은 뒤 그 칸이 더 깊이 들어갔습니다. "
+                              "`--save` 로 다시 잡으십시오")
+                    if gone:
+                        print("  %s — %d초를 기다렸는데 칸 %d개가 끝내 안 나왔습니다: %s"
+                              % (page, SETTLE_TRIES * SETTLE_STEP, len(gone),
+                                 " · ".join(gone[:4]) + (" …" if len(gone) > 4 else "")))
+                    if deep and not gone:
+                        # **깊이 밖은 실패가 아니다.** 화면에 있고 기준만 낡은
+                        # 것이라, 다시 붙어도 같은 결과다. 값을 그대로 쓴다.
+                        result[page] = cells
+                        continue
                 else:
                     print("  %s — 아직 그려지는 중입니다 (%d초를 기다렸습니다). "
                           "이 값은 기준으로 삼지 마십시오"
@@ -352,6 +395,44 @@ def measure_all(expect=None):
             pass
 
 
+def measure_all(expect=None):
+    """끊기면 다시 붙어 잰다. 그래도 안 되면 **못 쟀다고 낸다.**
+
+    **원인을 못 찾아도 고칠 수 있다 (2026-09-21 · 주식페이지_개발1 제안).**
+    그 세션이 네 가설을 재서 전부 걸러냈다 — 응답 쪼개짐 · 왕복 수 ·
+    서버 오감 · 프로필 공유. 남은 것은 **여럿이 동시에 헤드리스를 띄우는
+    것**인데 다른 세션을 멈출 수가 없어 확정 못 했다.
+
+    **원인이 무엇이든 증상은 「가끔 끊긴다」 다.**
+
+    **「못 쟀다」 를 「달라졌다」 로 내지 않는 것이 더 중요하다.** 전에는
+    끊기거나 덜 잰 것이 **「칸 101개가 끝내 안 나왔습니다」** 로 나와
+    화면이 깨진 것처럼 읽혔다. 실제로 그 값이 헛경보였고, 그것을 보고
+    남의 작업을 되돌려 보낼 뻔했다.
+    """
+    last = None
+    for attempt in range(3):
+        try:
+            got = _measure_once(expect)
+            # **한 화면이라도 못 쟀으면 실패로 본다.** 예외가 안 나도
+            # 그 화면이 `None` 이면 값이 비어 있는 것이다 — 전에는 그것이
+            # 그대로 대조에 들어가 「화면을 못 열었습니다」 로만 나왔다.
+            if got and all(v for v in got.values()) and len(got) == len(PAGES):
+                if attempt:
+                    print("  (%d번째 시도에서 쟀습니다)" % (attempt + 1))
+                return got
+        except Exception as e:
+            last = e
+            print("  연결이 끊겼습니다 — 다시 붙습니다 (%d/3)" % (attempt + 1))
+            time.sleep(2)
+    print()
+    print("세 번 다 못 쟀습니다. **화면이 바뀐 것이 아닙니다.**")
+    if last:
+        print("  마지막 오류: %s" % last)
+    print("  헤드리스 크롬이 쌓여 있으면 정리하고 다시 해 보십시오.")
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--save", action="store_true", help="지금 화면을 기준으로 삼는다")
@@ -378,6 +459,8 @@ def main():
         old = measure_all()
         BASE = BASE_FMT % args.port
         new = measure_all(old)
+        if old is None or new is None:
+            return 2
         moved = []
         for page, cells in (old or {}).items():
             cur = (new or {}).get(page)
@@ -403,6 +486,8 @@ def main():
             base = json.load(f)
 
     now = measure_all(base["pages"] if base else None)
+    if now is None:
+        return 2                       # **2 = 못 쟀다.** 1(달라졌다)과 가른다
 
     if args.save:
         with open(BASELINE, "w", encoding="utf-8", newline="\n") as f:

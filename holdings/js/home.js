@@ -691,7 +691,7 @@ const MIN_VALUE_WON = 1000 * 1e8;
 
 let sortBy = 'cap';
 
-function rowList() {
+function rowList(sortId = sortBy) {
   if (!universe) return WATCHLIST.map((s, i) => ({ ...s, rank: i + 1 }));
 
   const base = universe.map(x => ({
@@ -699,7 +699,7 @@ function rowList() {
     brand: brandColor(x.code, x.name), rank: x.rank,
   }));
 
-  const sort = SORTS[sortBy];
+  const sort = SORTS[sortId];
   if (!sort || !sort.key) return base;      // 시가총액은 목록 순서 그대로
 
   /* 값이 아직 안 온 종목은 뒤로 보낸다. 0 으로 치면 「거래량 0위」 가 된다 */
@@ -854,10 +854,11 @@ function paintRowHead() {
  * 「받을 수 없는 것은 자리도 만들지 않는다」 (holdings/CLAUDE.md).
  */
 let rankModalBody = null;
+let rankModalSort = 'cap';      // 모달에서 고른 갈래. 목록과 따로 둔다
 
 function paintRankModal() {
   if (!rankModalBody) return;
-  const list = rowList();
+  const list = rowList(rankModalSort);
   const rows = list.map((s) => {
     const p = rowPrices && rowPrices[s.code];
     const cap = capOf(s.code);
@@ -872,7 +873,20 @@ function paintRankModal() {
     </tr>`;
   }).join('');
 
+  /* 모달 안에서 고른 기준. 첫 화면 순위표와 **따로 둔다** —
+     모달에서 거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면
+     무엇을 눌러 그렇게 됐는지 알 수 없다 (2026-09-22). */
+  const chips = Object.entries(SORTS).map(([id, s]) =>
+    `<button class="kh-chip${id === rankModalSort ? ' is-active' : ''}"
+      data-rkm-sort="${id}" type="button">${s.label}</button>`).join('');
+
   rankModalBody.innerHTML = `<div class="kh-rkm">
+    <div class="kh-rkm-head">
+      <div class="kh-rkm-t">실시간 순위</div>
+      <div class="kh-rkm-sub">${(SORTS[rankModalSort] || {}).label || ''} 순 ·
+        목록이 좁아 뺐던 거래대금·시가총액·거래량까지 함께 봅니다</div>
+      <div class="kh-rkm-chips">${chips}</div>
+    </div>
     <table>
       <thead><tr>
         <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
@@ -883,6 +897,13 @@ function paintRankModal() {
     <p class="kh-rkm-note">목록은 칸이 좁아 거래대금·시가총액·거래량을 뺐습니다.
       여기서는 다 보입니다 · ${list.length}종목</p>
   </div>`;
+
+  rankModalBody.querySelectorAll('[data-rkm-sort]').forEach((b) => {
+    b.addEventListener('click', () => {
+      rankModalSort = b.dataset.rkmSort;
+      paintRankModal();
+    });
+  });
 }
 
 function openRankModal() {
@@ -891,6 +912,7 @@ function openRankModal() {
     onClose() { rankModalBody = null; },
   });
   rankModalBody = body;
+  rankModalSort = sortBy;       // 목록에서 보던 기준으로 열린다
   paintRankModal();
 }
 
@@ -1270,9 +1292,13 @@ async function openStockModal(code, { push = true } = {}) {
     /* 양옆 서랍. 처음에는 접혀 있고, 한 번 펼치면 기억한다 (2026-09-16 지시).
        key 는 펼친 상태를 적어 두는 이름이라 화면 글자와 따로 둔다 —
        이름을 바꿔도 펼쳐둔 것이 풀리지 않는다. */
+    /* **이름만 바꾼다. `key` 는 그대로 둔다** — 펼쳐둔 것을 적어 두는
+       이름이라, 바꾸면 재권님이 펼쳐 두신 것이 접힌 채로 돌아온다.
+       서랍에 무엇이 드는지는 `css/modal.css` 의 자리 이름이 정한다
+       (2026-09-22 지시로 양쪽 내용이 바뀌었다). */
     drawers: {
-      left:  { key: 'stock-memo', label: '내 메모' },
-      right: { key: 'stock-news', label: '뉴스 · 공시' },
+      left:  { key: 'stock-memo', label: '투자 지표 · 체결' },
+      right: { key: 'stock-news', label: '투자자 정보 · AI 분석 · 종목 뉴스' },
     },
     onToggle() {
       /* 모달 폭이 바뀌었으니 차트도 다시 재야 한다. 캔버스는 CSS 로 늘어나지

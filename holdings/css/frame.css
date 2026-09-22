@@ -399,21 +399,14 @@ a.kh-sc-i:hover { color: var(--kh-accent); }
   overflow: hidden;
 }
 
-/* 더보기 — 이 칸에 다 못 담은 것을 보러 간다.
-   순위표의 국내·해외 칩(.kh-chip)과 같은 모양으로 맞췄다 (2026-09-15 지시).
+/* `.kh-sec-more` 는 2026-09-22 에 지웠다 (지시 — 「자세히 통일 작업에 함께
+   정리해」). 같은 글자 「자세히 ›」 가 `.kh-fold`(알약)와 이것 둘로 갈려
+   있었고, **쓰는 자리가 한 곳뿐이라** 그쪽을 `.kh-fold` 로 옮겼다.
+   모양은 `css/home.css` 의 `.kh-fold` 한 곳에서만 정한다.
 
-   이름이 kh-sec-more 인 이유 — css/home.css 에 순위표용 .kh-more 가 이미
-   있었다. 같은 이름을 쓰면 나중에 읽히는 home.css 가 이것을 덮는다.
-   실제로 그래서 버튼이 폭을 다 채운 채로 나왔다. */
-.kh-sec-more {
-  /* 오른쪽 끝에 붙인다 (2026-09-15 지시). inline-block 이라 왼쪽에 서 있었다.
-     width:fit-content + margin-left:auto 로 제 폭만 쓰면서 오른쪽으로 간다. */
-  display: block; width: fit-content; margin-left: auto; margin-top: 10px;
-  padding: 6px 12px; border-radius: 999px; text-decoration: none;
-  background: var(--kh-bg-surface); color: var(--kh-text-secondary);
-  font-size: 0.78rem;
-}
-.kh-sec-more:hover { color: var(--kh-text-primary); }
+   이름이 `kh-sec-more` 였던 이유도 함께 적어 둔다 — 순위표용 `.kh-more` 와
+   이름이 겹쳐 나중에 읽히는 home.css 가 덮었기 때문이다. 그 `.kh-more` 는
+   `<div id="kh-more">` 로 **버튼이 아니라** 「더 불러오는 자리」다. */
 
 /* 패널 머리에 붙는 더보기 (종목 화면의 뉴스·공시) */
 .kh-w-more {

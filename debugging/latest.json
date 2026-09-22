@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-21T10:02:25+09:00",
+  "at": "2026-09-21T16:49:14+09:00",
   "mode": "manual",
   "counts": {
     "pass": 15,
@@ -21,8 +21,8 @@
       "scope": "CLAUDE.md 안의 `경로` 전부",
       "expected": "문서가 적어둔 경로가 모두 저장소에 있음",
       "status": "pass",
-      "actual": "50개 모두 있음",
-      "detail": "문서가 가리키는 경로 50개 전부 저장소에 있습니다"
+      "actual": "49개 모두 있음",
+      "detail": "문서가 가리키는 경로 49개 전부 저장소에 있습니다"
     },
     {
       "id": "md-no-area-theme",
@@ -101,8 +101,8 @@
       "scope": "kis_proxy.py 의 route == \"…\" ↔ kis-worker.js 의 route === \"…\"",
       "expected": "양쪽 경로 목록이 같음",
       "status": "ignored",
-      "actual": "어긋남 15개",
-      "detail": "오탐 — 검사기가 아직 구역을 못 가림 — kis_proxy.py 에만: alerts, disclosures, discuss, feed, groups, issues, members, moves, news, poll, status, stocks, stored, topics, universe"
+      "actual": "어긋남 16개",
+      "detail": "오탐 — 검사기가 아직 구역을 못 가림 — kis_proxy.py 에만: alerts, disclosures, discuss, feed, groups, integration, issues, members, moves, news, poll, status, stocks, stored, topics, universe"
     },
     {
       "id": "raw-color-projects",
