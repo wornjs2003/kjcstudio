@@ -78,8 +78,20 @@ call :startsession home  8769
 call :startsession dev3  8770
 
 REM --- 2) browser ------------------------------------------------
-echo   [open]  browser
-start "" "http://localhost:8765/"
+REM  Open the browser only when no KJC window is up yet. Running this
+REM  file three times left three Chrome windows behind - it was asked
+REM  about four times before anyone found it, because only the cmd
+REM  windows were being counted.
+REM  findstr /c: keeps "KJC Holdings" as ONE phrase. Without /c: a
+REM  quoted string with a space means "KJC" OR "Holdings", which would
+REM  match unrelated tabs.
+tasklist /fi "imagename eq chrome.exe" /v /fo csv 2>nul | findstr /i /c:"KJC Holdings" > nul
+if %errorlevel%==0 (
+  echo   [skip]  browser already open
+) else (
+  echo   [open]  browser
+  start "" "http://localhost:8765/"
+)
 
 REM --- 3) session windows ----------------------------------------
 echo   [open]  Claude sessions
