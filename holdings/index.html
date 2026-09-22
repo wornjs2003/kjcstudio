@@ -176,7 +176,11 @@
           <span class="kh-chips kh-ix-chips" id="kh-sc-kind">
             <button class="kh-chip is-active" data-kind="industry">업종</button>
             <button class="kh-chip" data-kind="theme">테마</button>
-          </span></div>
+          </span>
+          <!-- 차트 머리줄의 「자세히 ›」 와 **같은 것**이어야 한다
+               (2026-09-22 지시 — "자세히 버튼은 차트에서 모달 띄우는
+                버튼으로 다 통일해줘"). href 가 없고 JS 가 모달을 연다. -->
+          <a class="kh-fold" id="kh-sc-more" role="button" tabindex="0">자세히 ›</a></div>
         <div class="kh-chips kh-sc-names" id="kh-sc-names"></div>
         <div class="kh-sc-body" id="kh-sc-body"></div>
       </div>

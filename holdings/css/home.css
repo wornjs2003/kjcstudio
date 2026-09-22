@@ -190,6 +190,62 @@
 .kh-rkm .kh-nm { display: flex; align-items: center; gap: 7px; overflow: hidden; }
 .kh-rkm .kh-nm b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ══ 「지금 뜨는 산업」 모달 (2026-09-22 지시) ══════════════════
+   재권님 말씀 — 「지금 뜨는 산업도 모달로 띄울 수 있어야 할 거 같어」.
+
+   머리는 공용 뼈대(`css/modal.css` 의 `.kh-mh*`)를 쓴다. 여기는 **본문만**
+   이다 — 실시간 순위 모달(`.kh-rkm`)과 같은 값을 쓴다.
+
+   **본문 아래 44px · 좌우 26px.** 흐려지는 띠(`.kh-modal-fade`)가 46px 라
+   그보다 좁으면 마지막 줄이 테두리에 붙는다.
+
+   **스크롤바를 여기서 정하지 않는다** — `assets/css/common.css` 6px 을
+   물려받는다 (2026-09-18 룰 「스크롤바는 한 벌만 쓴다」). */
+.kh-scm { padding: 8px 26px 44px; }
+.kh-scm-empty { padding: 28px 0; text-align: center; font-size: 0.86rem; }
+
+/* 묶음 칩 — 카드는 여섯인데 여기는 **받아 온 스물을 다 놓는다**.
+   900px 에서 세 줄쯤 된다. 줄 수가 묶음 이름 길이에 따라 달라지므로
+   아래 표가 밀리는데, **모달 높이는 안 바뀐다**(본문이 굴러간다). */
+.kh-scm-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.kh-scm-chips .kh-chip { display: inline-flex; align-items: baseline; gap: 6px; }
+.kh-scm-chips .kh-chip b { font-size: 0.74rem; font-weight: 700; }
+/* 고른 칩은 바탕이 진하다 — 그 위 글씨는 흰색이어야 읽힌다
+   (CLAUDE.md 「진한 색 바탕에는 흰 글씨」). 등락률 색도 여기서는 묻는다 */
+.kh-scm-chips .kh-chip.is-active b { color: var(--kh-text-on-fill); }
+
+/* 고른 묶음 머리 — 이름 · 등락률 · 오름/내림 띠 */
+.kh-scm-gh {
+  display: flex; align-items: center; gap: 10px;
+  padding-bottom: 10px; margin-bottom: 2px;
+}
+.kh-scm-gn { font-size: 0.95rem; font-weight: 700; }
+.kh-scm-gh .kh-sc-bar { flex: 1; min-width: 0; max-width: 220px; }
+.kh-scm-cnt { font-size: 0.78rem; color: var(--kh-text-secondary); white-space: nowrap; }
+
+/* **`border-collapse: separate` 라야 표머리가 붙어 있는다.**
+   `collapse` 로는 `thead th` 의 sticky 가 안 먹어 표머리가 밀려 올라간다
+   (실시간 순위 모달에서 먼저 겪었다). 줄 사이 선은 `td` 가 그린다. */
+.kh-scm table {
+  width: 100%; table-layout: fixed; font-size: 0.86rem;
+  border-collapse: separate; border-spacing: 0;
+}
+.kh-scm thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--kh-bg); text-align: left;
+  padding: 0 10px 9px; font-size: 0.76rem; font-weight: 600;
+  color: var(--kh-text-muted); white-space: nowrap;
+}
+.kh-scm thead th.r, .kh-scm tbody td.r { text-align: right; }
+.kh-scm tbody td {
+  padding: 9px 10px; white-space: nowrap;
+  border-top: 1px solid var(--kh-border);
+}
+.kh-scm tbody tr:hover td { background: var(--kh-bg-hover); }
+/* 종목 칸이 남는 폭을 다 먹지 않게 못 박는다 — 실시간 순위에서 종목과
+   현재가 사이가 559px 벌어졌던 그 자리다 */
+.kh-scm tbody td:first-child b { overflow: hidden; text-overflow: ellipsis; }
+
 /* ── 데일리분석 칸 (kh-rank 줄) ─────────────────────────────
    옆 칸(지금 뜨는 산업·주요 지수)과 높이가 같아야 줄이 가지런하다.
    그 둘은 237px 이고 여기도 안에서만 굴러 같은 높이를 지킨다 —

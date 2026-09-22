@@ -45,6 +45,8 @@ export function mountSectors(root) {
   let kind = 'industry';
   let groups = [];
   let pick = null;
+  let lastTotal = 0;            // 전체 묶음 수 (받은 것은 그중 일부다)
+  let lastAt = null;            // 마지막으로 받은 시각 — 모달이 적는다
   const stockCache = {};        // "industry:294" → 종목 배열
 
   const key = (k, no) => `${k}:${no}`;
@@ -75,7 +77,9 @@ export function mountSectors(root) {
     }
 
     groups = j.data;
+    lastAt = new Date();
     const total = (j.meta && j.meta.total) || groups.length;
+    lastTotal = total;
     setNote(`${kind === 'industry' ? '업종' : '테마'} ${total}개 · 네이버`);
 
     /* 종류를 바꾸면 고른 것도 새로 잡는다 */
@@ -175,5 +179,54 @@ export function mountSectors(root) {
     loadGroups();
   }, REFRESH_MS);
 
-  return { refresh: loadGroups };
+  /* **모달에 넘겨줄 것** (2026-09-22 지시 — 「지금 뜨는 산업도 모달로」).
+
+     모달이 따로 받지 않는다. 같은 화면에서 두 번 받으면 **두 자리의 숫자가
+     어긋나고** 네이버를 겹쳐 부른다 — 종목 모달이 첫 화면 시세 루프에
+     얹혀 있는 것과 같은 생각이다 (holdings/CLAUDE.md 「최적화는 멈춘다가
+     아니라 늦춘다다」).
+
+     카드는 여섯 칩·네 종목만 보여주지만 **받아 온 것은 스무 묶음이고
+     종목도 열**이다. 모달은 그것을 다 쓴다. */
+  function snapshot() {
+    return {
+      kind, groups, pick, total: lastTotal, at: lastAt,
+      stocks: stockCache[key(kind, pick)] || null,
+      /* 모달에서 다른 묶음을 골랐을 때 쓰라고 함께 넘긴다.
+         받아 둔 것이 있으면 그것을, 없으면 이쪽이 받아 캐시에 넣는다. */
+      async pickGroup(k, no) {
+        const c = stockCache[key(k, no)];
+        if (c) return c;
+        try {
+          const r = await apiFetch(`/api/naver/stocks?kind=${k}&no=${no}`, { cache: 'no-store' });
+          if (r && r.ok) {
+            const j = await r.json();
+            if (j && j.ok && Array.isArray(j.data)) {
+              stockCache[key(k, no)] = j.data;
+              return j.data;
+            }
+          }
+        } catch { /* 모달이 「불러오지 못했습니다」 를 적는다 */ }
+        return null;
+      },
+      /* 모달이 종류를 바꿨을 때 목록을 받아 온다. 카드는 안 건드린다 —
+         모달에서 테마를 보다 닫았는데 카드가 테마로 바뀌어 있으면
+         무엇을 눌러 그렇게 됐는지 알 수 없다 (실시간 순위 모달과 같다). */
+      async listGroups(k) {
+        if (k === kind && groups.length) return { rows: groups, total: lastTotal };
+        try {
+          const r = await apiFetch(`/api/naver/groups?kind=${k}`, { cache: 'no-store' });
+          if (r && r.ok) {
+            const j = await r.json();
+            if (j && j.ok && Array.isArray(j.data)) {
+              return { rows: j.data, total: (j.meta && j.meta.total) || j.data.length };
+            }
+          }
+        } catch { /* 아래에서 없다고 적는다 */ }
+        return null;
+      },
+    };
+  }
+
+  return { refresh: loadGroups, snapshot };
 }
