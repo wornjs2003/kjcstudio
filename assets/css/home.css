@@ -388,7 +388,10 @@
     background: rgb(var(--ink-rgb) / 12%);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-    padding: calc(var(--nav-height) + 20px) 14px 40px 0;
+    /* 오른쪽 여백 **24px** — 2026-09-22 지시 「글자랑 버튼 왼쪽으로 10픽셀만
+       이동해서」. 14 → 24 라 오른쪽 끝이 376 → **366** 이 된다.
+       **버튼 안이 아니라 덩어리째** 움직인다 — 글자와 알약이 함께 간다. */
+    padding: calc(var(--nav-height) + 20px) 24px 40px 0;
     gap: 14px;
     align-items: flex-end;
   }
@@ -403,16 +406,21 @@
     width: 100%;
   }
 
-  /* **`li` 에 폭을 준다.** `a` 에만 주면 `li` 가 글자만큼만 넓어져
-     62% 가 제각각이 된다 — 그래서 오른쪽 끝이 313·330·345 로 어긋났다. */
+  /* **폭은 글자를 따라간다** (2026-09-22 지시 —
+     「글자 감싸는 버튼을 글자 크기에 맞게 조절해서」).
+     「3D Modeling」 은 길고 「API」 는 짧으니 버튼도 그만큼이다.
+
+     **오른쪽 끝은 맞는다** — 위 `align-items: flex-end` 가 잡는다.
+     왼쪽 끝만 들쭉날쭉해진다. */
   .nav-mobile .nav-mobile-list li {
-    width: 43.4%;              /* 62 × 0.7 */
+    width: auto;
+    max-width: 100%;           /* 긴 글자가 화면을 넘지 않게 */
   }
 
   /* 알약 버튼. **폭을 맞추고 글자는 오른쪽에 붙인다** — 그림에서
      「API」·「Setup」 처럼 짧은 것이 오른쪽 끝에 맞아 있었다. */
   .nav-mobile .nav-mobile-list a {
-    width: 100%;
+    width: auto;
     white-space: nowrap;
     text-align: right;
     padding: 6.3px 11.2px;     /* 9 16 × 0.7 */
