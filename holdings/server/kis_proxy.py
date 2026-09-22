@@ -40,6 +40,7 @@ from datetime import datetime, timedelta, timezone
 
 # 파일을 안전하게 쓴다 — 쓰다 죽어도 옛 내용이 남는다 (2026-09-22)
 from docstore import write_json_atomic
+import signal_watch
 from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -3027,6 +3028,15 @@ def main():
                  if dart.telegram_config() else "꺼짐 (secrets.json 의 telegram 없음)"))
     else:
         print("  공시 수집 : 꺼짐 (setup-dart.bat 으로 인증키를 넣어주세요)")
+
+    # 볼린저·MACD·RSI 가 동시에 맞는 자리를 본다 (2026-09-22 지시).
+    # **KIS 를 새로 안 부른다** — 미리받기가 쌓아 둔 5분봉을 읽기만 한다.
+    # 확인용 서버(SLOW)는 안 돈다. 같은 알림이 폴더 수만큼 갈 이유가 없다.
+    if not SLOW and signal_watch.start(sys.modules[__name__]):
+        print("  신호 감시 : 사용 (관심종목 %d개 · %d초마다 · 장중만%s)"
+              % (len(signal_watch.WATCH), signal_watch.LOOP_SEC,
+                 "" if signal_watch.SEND else " · **발송 꺼짐**"))
+
     print("  종료      : Ctrl+C")
     print("-" * 52)
     sys.stdout.flush()
