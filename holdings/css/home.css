@@ -544,16 +544,8 @@
 @media (prefers-reduced-motion: reduce) { .kh-pdot::after { animation: none; } }
 
 /* ── 지수 띠 ── */
-/* 감싸개(.kh-strip-wrap)와 좌우 화살표(.kh-strip-btn)는 2026-09-17 에 지웠다.
-   띠가 「주요 지수」 카드 안으로 들어가면서 가로로 밀 일이 없어졌다 —
-   아래 .kh-ix-scroll 이 세로로 굴린다. 붙는 요소가 마크업에 하나도 없었다. */
-.kh-strip {
-  display: flex; gap: 10px; overflow-x: auto;
-  scroll-behavior: smooth; scroll-snap-type: x proximity;
-  padding: 2px 1px;
-  scrollbar-width: none; -ms-overflow-style: none;
-}
-.kh-strip::-webkit-scrollbar { display: none; }
+/* `.kh-strip` 은 2026-09-22 에 지웠다 — 「주요 지수」 카드가 없어지면서
+   쓰는 곳이 하나도 안 남았다. 지수는 위 `.kh-top-ix` 한 자리에만 있다. */
 
 /* 고르지 않은 칸은 한 톤 가라앉힌다 — 고른 것만 흰 카드로 떠 보이게 */
 .kh-ix {
@@ -907,10 +899,69 @@
    우리가 쓴 규칙이 항상 더 세다. 그래서 여기서 다시 적는다 (2026-09-17 실측). */
 .kh-ix[hidden] { display: none; }
 
-/* 장 상태 줄 위 — 넷이 가로 한 줄 */
+/* ── 지수 띠 (2026-09-22 지시) ──────────────────────────────
+   "이걸 한줄로 만들고 좌우로 넘기는 화살표" · "갈래 띠를 누르면 걸러진다".
+
+   전에는 자주 보는 넷만 여기 있고 나머지 열은 아래 「주요 지수」 카드에
+   있었다. 카드가 열넷을 다 담고 있어서 **같은 것이 두 자리**에 있었다.
+   카드를 없애고 열넷을 여기로 합쳤다.
+
+   **칸 모양(.kh-ix)은 안 건드렸다** — 위 886줄 그대로다 (지시).
+
+   **한 줄로 못 박는다**(nowrap). 전에는 wrap 이라 창이 좁아지면 두 줄이
+   되면서 아래가 통째로 밀렸다. 이제 넘치는 만큼 옆으로 밀어서 본다 —
+   갈래를 바꿔 개수가 달라져도 **띠 높이가 안 바뀐다.**
+
+   **막대는 감춘다.** 가로로 미는 띠라 `.kh-cat` 과 같은 이유이고,
+   화살표가 「더 있다」 를 대신 알려준다. 「감추는 것은 예외」 에 든다. */
+.kh-ixbar {
+  display: flex; align-items: center; gap: 4px;
+  margin-bottom: 9px;
+
+  /* **띠 높이를 못 박는다.** 지수 칸 하나가 33px 인데(재서 나온 값),
+     미정 갈래에서 뜨는 빨간 칸이 31px 이라 **띠가 2px 줄었다** — 재서
+     잡았다. 갈래를 바꿔도 아래가 움직이면 안 된다
+     (「보는 것을 바꿔도 자리는 그대로다」). */
+  min-height: 33px;
+}
 .kh-top-ix {
-  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
-  margin-bottom: 9px; padding-left: 4px;
+  display: flex; align-items: center; gap: 20px;
+  flex-wrap: nowrap; overflow-x: auto;
+  flex: 1; min-width: 0;
+  padding-left: 4px;
+  scroll-behavior: smooth;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.kh-top-ix::-webkit-scrollbar { display: none; }
+
+/* 위 `.kh-ix[hidden]` 과 **같은 함정**이다 (2026-09-17 실측 주석 참고).
+   `[hidden] { display: none }` 은 브라우저 기본이라 우리가 쓴 `display: flex`
+   에 진다. 미정 갈래에서 띠를 숨겨도 **안 숨고 미정 칸과 둘 다 보였다** —
+   재서 잡았다. 같은 파일에 답이 적혀 있었는데 그 자리를 또 밟았다. */
+.kh-top-ix[hidden] { display: none; }
+
+/* 좌우 화살표. **끝에 닿아도 없애지 않고 흐리게만 한다** —
+   없애면 그만큼 띠 폭이 넓어져 칸이 움직인다. */
+.kh-ixbar-btn {
+  flex: 0 0 auto;
+  width: 22px; height: 22px; padding: 0;
+  border: 0; border-radius: 50%;
+  background: var(--kh-bg-surface); color: var(--kh-text-secondary);
+  font-family: inherit; font-size: 0.95rem; line-height: 1;
+  cursor: pointer;
+}
+.kh-ixbar-btn:hover { background: var(--kh-bg-active); }
+.kh-ixbar-btn.is-off { opacity: 0.3; cursor: default; }
+.kh-ixbar-btn.is-off:hover { background: var(--kh-bg-surface); }
+
+/* 아직 지수를 못 붙인 갈래 — 빨간 바탕 (CLAUDE.md).
+   높이를 칸과 같게 둔다. 갈래를 바꿔도 띠가 안 움직여야 한다. */
+.kh-ix-todo {
+  flex: 1; min-width: 0;
+  padding: 6px 10px;
+  background: var(--kh-up-dim); color: var(--kh-up);
+  border-radius: var(--kh-radius-sm);
+  font-size: 0.82rem; font-weight: 600;
 }
 
 /* 「자세히 ›」 — 눌러야 창이 뜨는 자리라 단추로 보이게 한다 */
@@ -918,22 +969,9 @@
 /* 「주요 지수」 카드 안 — 세로로 한 줄씩 */
 .kh-ix-chips { padding: 0; margin-left: auto; gap: 4px; flex-wrap: nowrap; }
 .kh-ix-chips .kh-chip { padding: 4px 9px; font-size: 0.73rem; }
-/* 지수가 열둘이라 그냥 두면 이 칸 때문에 아래 줄 전체가 길어진다.
-   다른 칸의 목록과 같은 150px 로 묶고 안에서만 굴러가게 한다. */
-.kh-ix-scroll {
-  max-height: 150px; overflow-y: auto;
-  padding: 0 14px 0 18px;          /* 오른쪽은 막대 자리 */
-}
-.kh-ix-scroll .kh-strip {
-  flex-direction: column; gap: 0; padding: 0; overflow: visible;
-}
-.kh-ix-scroll .kh-ix {
-  width: 100%; padding: 7px 0;
-  border-top: 1px solid var(--kh-border);
-}
-.kh-ix-scroll .kh-ix:first-child { border-top: 0; }
-.kh-ix-scroll .kh-ix-h { flex: 1; min-width: 0; }
-.kh-ix-scroll .kh-ix-b { margin-left: auto; }
+/* `.kh-ix-scroll` 도 함께 지웠다 (2026-09-22). 카드 안에서 세로로
+   굴리던 칸인데 카드가 없다. `.kh-ix-chips` 는 남긴다 —
+   「지금 뜨는 산업」 카드가 같은 모양을 쓴다. */
 
 
 /* 순위를 무엇으로 세웠는지 적는 줄 (2026-09-18).
