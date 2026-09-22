@@ -73,6 +73,25 @@ WATCH_CODES = [
 
 # 언제 물어볼 것인가.
 # DART 접수는 평일에만 있다. 07:00 이전과 20:00 이후는 물어봐야 새 것이 없다.
+# ── 이 PC 에서 공시 알림을 보낼 것인가 ──
+#
+# **끈다 (2026-09-22 지시 — 「두 번 오는 거 같은데」).**
+#
+# 배포본 Worker 가 24시간 돌며 같은 공시를 보낸다. **보낸 기록이 워커와
+# 로컬에 따로 있어 서로를 모르므로**, 둘 다 켜져 있으면 재권님 폰에 **두 번**
+# 간다. 인터넷 서버는 PC 가 꺼져 있어도 도니 그쪽을 남기고 이쪽을 끈다.
+#
+# **수집은 계속 돈다.** 화면이 그 공시를 쓴다 — 끄는 것은 **보내는 자리뿐**이다.
+#
+# **데일리 발송은 이것과 무관하다.** 같은 `telegram_send()` 를 쓰지만
+# 여기서 막는 것은 공시(`notify`)뿐이라, 열쇠를 비우는 방식과 다르다.
+# `secrets.json` 을 비우면 데일리까지 죽는다.
+#
+# 워커를 걷어내는 날이 오면 **이 줄만 True 로** 바꾸면 된다. 그때
+# 그동안 쌓인 것이 한꺼번에 나가지는 않는다 — 아래 `mark` 로
+# **보내지 않아도 「알린 것으로」 적어 두기** 때문이다.
+NOTIFY_LOCAL = False
+
 POLL_INTERVAL = 300          # 5분
 POLL_FROM = 7 * 60           # 07:00
 POLL_TO = 20 * 60            # 20:00
@@ -632,8 +651,13 @@ def poll_once(key, quiet_first_run=True):
                 return {"ok": False, "error": msg}
 
     # 처음 켜는 날이면 오늘 치가 한꺼번에 들어온다. 그건 알리지 않는다.
+    #
+    # **`NOTIFY_LOCAL` 이 꺼져 있을 때도 같은 길로 간다.** 보내지 않되
+    # `notified = 1` 로 적어 둔다 — 안 적으면 나중에 다시 켤 때 그동안
+    # 쌓인 것이 **한꺼번에 쏟아진다.** 「이미 알린 것으로 친다」 는 이 방식이
+    # 처음 켜는 날을 위해 이미 있던 것이라 그대로 쓴다 (`save_disclosures` 참고).
     first_run = _meta_get("dart_last_poll") is None
-    mark = 1 if (first_run and quiet_first_run) else 0
+    mark = 1 if ((first_run and quiet_first_run) or not NOTIFY_LOCAL) else 0
 
     # 종목코드가 있는 것은 전부 담는다 (2026-09-15 지시).
     # 텔레그램은 그대로 관심종목만 간다 — notify() 가 WATCH_CODES 로 거른다.

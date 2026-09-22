@@ -541,7 +541,16 @@ a.kh-sc-i:hover { color: var(--kh-accent); }
 }
 .kh-side-wrap > .kh-card { display: flex; flex-direction: column; min-height: 0; }
 .kh-side-wrap > .kh-rank-card { flex: 1; padding: 0; }
-.kh-side-wrap > .kh-dc-card { flex: 0 0 auto; }
+/* 아래 칸은 **왼쪽 기둥의 아래 줄(.kh-rank)과 같은 높이**다 (2026-09-22
+   지시 — "실시간 순위 칸 세로로 늘어났는데 차트 랑 라인맞춰줘").
+
+   두 기둥의 아래끝은 이미 맞아 있다. 어긋나던 것은 **아래 칸 높이가 달라서**
+   였다 — 왼쪽 255 · 오른쪽 213 이라 그 위 칸(차트 / 실시간 순위)의 아래끝이
+   **42px** 벌어졌다.
+
+   값은 `home.css` 의 `--kh-row-h` 한 곳에 있다. 여기서 숫자를 쓰면 같은 값이
+   두 곳이 되고, 한쪽만 고쳐 다시 어긋난다. */
+.kh-side-wrap > .kh-dc-card { flex: 0 0 var(--kh-row-h); }
 
 /* 순위표가 620px 에 묶여 있으면 카드가 늘어나도 목록이 안 늘어난다 */
 .kh-side-wrap .kh-rank-scroll {
