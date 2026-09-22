@@ -676,12 +676,30 @@ const showValue = (code, p) => {
   return won == null ? '—' : fmtMoneyKr(Math.round(won / 1e8));
 };
 
+/* 시가총액 한 칸. 「시가총액」 칩과 「관심종목」 칩이 같이 쓴다 —
+   두 곳에 적으면 한쪽만 고쳐질 자리다. */
+const showCap = (code) => {
+  const c = capOf(code);
+  return c == null ? '—' : fmtMoneyKr(c);
+};
+
 const SORTS = {
-  cap:  { label: '시가총액', key: null,
-          head: '시가총액', show: (code) => {
-            const c = capOf(code);
-            return c == null ? '—' : fmtMoneyKr(c);
-          } },
+  /* 관심종목 — **다른 다섯과 성격이 다르다.**
+   *
+   * 2026-09-22 지시 — "홈 옆에 관심을 관심종목으로 바꾸고 이걸 실시간순위
+   * 안에 시가총액 앞에 넣어줘. 모달에도 있어야 되는 거 알지?"
+   *
+   *     다른 다섯   **줄 세우는 기준** — 200개를 다시 세운다
+   *     이것       **거르는 것** — 200개에서 담은 것만 골라낸다
+   *
+   * 그래서 `key` 가 아니라 `filter` 다. 줄이 여덟쯤으로 **줄어드는 것이
+   * 맞다** — 「거르기에 높이를 잡으면 더 나빠진다」.
+   *
+   * 넷째 칸은 시가총액을 적는다. 이 칩은 **제 기준값이 없어서**(거르기라
+   * 세우는 값이 없다) 아래에서 세우는 순서인 시가총액을 그대로 쓴다. */
+  fav:  { label: '관심종목', filter: true, head: '시가총액', show: showCap },
+
+  cap:  { label: '시가총액', key: null, head: '시가총액', show: showCap },
   value:{ label: '거래대금', key: (p) => valueOf(p),
           head: '거래대금', show: showValue },
   vol:  { label: '거래량',   key: (p) => p.volume,
@@ -706,6 +724,34 @@ function rowList(sortId = sortBy) {
   }));
 
   const sort = SORTS[sortId];
+
+  /* ── 거르기 ──
+   * 줄을 다시 세우지 않고 **골라낸다.** `base` 가 이미 시가총액 순이라
+   * 거르기만 하면 그 순서가 그대로 남는다 — 「시가총액」 칩과 같은 순서다.
+   *
+   * 담긴 것은 `store/favorites.js` 한 곳에서 본다. **`WATCHLIST` 를 쓰지
+   * 않는다** — 그것은 `data/market.js` 에 박힌 고정값이라 하트를 눌러도
+   * 안 바뀐다. 처음 켰을 때의 기본값일 뿐이다 (favorites.js:43).
+   * 그것을 쓰면 담고 빼도 이 칩이 그대로여서 「한 곳에만 둔다」 가 깨진다. */
+  if (sort && sort.filter) {
+    const fav = favList();
+    const want = new Set(fav.map((f) => f.code));
+    const inside = base.filter((s) => want.has(s.code));
+
+    /* 순위 200 밖에서 담은 종목은 뒤에 붙인다. 빼면 **담았는데 안 보인다**
+       가 된다. 이름은 담을 때 함께 저장돼 있다 (favorites.js 주석).
+       시세가 없으면 표는 「···」 로 그린다 — 0 으로 적지 않는다. */
+    const have = new Set(inside.map((s) => s.code));
+    const outside = fav
+      .filter((f) => !have.has(f.code))
+      .map((f) => ({
+        code: f.code, name: f.name, sector: '',
+        brand: brandColor(f.code, f.name), rank: 0,
+      }));
+
+    return [...inside, ...outside].map((s, i) => ({ ...s, rank: i + 1 }));
+  }
+
   if (!sort || !sort.key) return base;      // 시가총액은 목록 순서 그대로
 
   /* 값이 아직 안 온 종목은 뒤로 보낸다. 0 으로 치면 「거래량 0위」 가 된다 */
@@ -737,6 +783,20 @@ function rowList(sortId = sortBy) {
 function setupSorts() {
   const host = $('kh-sorts');
   if (!host) return;
+
+  /* 칩을 **`SORTS` 에서 만든다** (2026-09-22).
+   *
+   * 전에는 `index.html` 에 다섯을 적어 두고 모달은 `SORTS` 로 만들었다 —
+   * **같은 목록이 두 곳에 있었다.** 재권님이 "모달에도 있어야 되는 거
+   * 알지?" 하신 것이 그 갈림이다. 한 곳에서 만들면 갈릴 수가 없다.
+   *
+   * 「N개 담음」 은 지우지 않고 뒤에 다시 붙인다 — 그 칸은 칩이 아니다. */
+  const count = $('kh-fav-count');
+  host.innerHTML = Object.entries(SORTS).map(([id, x]) =>
+    `<button class="kh-chip${id === sortBy ? ' is-active' : ''}" type="button"
+      data-sort="${id}">${x.label}</button>`).join('');
+  if (count) host.appendChild(count);
+
   host.addEventListener('click', (e) => {
     const b = e.target.closest('[data-sort]');
     if (!b || b.dataset.sort === sortBy) return;
@@ -820,6 +880,12 @@ function bindHearts(root) {
 onFavChange(() => {
   document.querySelectorAll('.kh-rk[data-fav]').forEach(paintFavCell);
   paintFavCount();
+
+  /* 「관심종목」 으로 보고 있으면 **목록 자체가 바뀐다** — 뺀 종목이 표에
+     남아 있으면 안 된다. 다른 기준일 때는 줄 세우는 값이 안 바뀌므로
+     숫자 색만 고치면 된다 (위 두 줄). 모달도 같은 기준이면 함께 그린다. */
+  if (sortBy === 'fav') paintRows(rowPrices);
+  if (rankModal && rankModalSort === 'fav') paintRankModal();
 });
 
 /* 「N개 담음」 을 순위 단추 줄에 적는다. 담은 것이 어디 갔는지 보여야 한다 */

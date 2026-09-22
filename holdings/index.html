@@ -78,7 +78,9 @@
     <!-- 카테고리 탭 — 아직 어디로도 가지 않는다 (연결 예정) -->
     <nav class="kh-cat" aria-label="카테고리">
       <a class="is-on" href="#">홈</a>
-      <a href="#">관심</a>
+      <!-- 「관심」 은 2026-09-22 에 뺐다 (지시 — "홈 옆에 관심을 관심종목으로
+           바꾸고 이걸 실시간순위 안에 시가총액 앞에 넣어줘").
+           순위표 칩으로 갔다 — 목록이 두 곳에 있을 이유가 없다. -->
       <a href="#">국내</a>
       <a href="#">미국</a>
       <a href="#">국외</a>
@@ -246,13 +248,12 @@
                없는 주소를 적어 두면 가운데 단추로 눌렀을 때 빈 곳으로 간다. -->
           <a class="kh-fold" id="kh-rank-more" role="button" tabindex="0">자세히 ›</a>
         </div>
+        <!-- 칩은 **js/home.js 의 SORTS 가 만든다** (2026-09-22).
+             전에는 여기 다섯을 적어 두고 모달은 SORTS 로 만들어서 **같은
+             목록이 두 곳에** 있었다. 한 곳에서 만들면 갈릴 수가 없다. -->
         <div class="kh-chips" id="kh-sorts">
-          <button class="kh-chip is-active" data-sort="cap">시가총액</button>
-          <button class="kh-chip" data-sort="value">거래대금</button>
-          <button class="kh-chip" data-sort="vol">거래량</button>
-          <button class="kh-chip" data-sort="up">급상승</button>
-          <button class="kh-chip" data-sort="down">급하락</button>
-          <!-- 즐겨찾기로 담은 개수. 하트를 눌렀을 때 어디로 갔는지 보인다 -->
+          <!-- 즐겨찾기로 담은 개수. 하트를 눌렀을 때 어디로 갔는지 보인다.
+               칩이 아니라서 setupSorts 가 지우지 않고 뒤에 다시 붙인다 -->
           <span class="kh-fav-count" id="kh-fav-count"></span>
         </div>
         <!-- 지금 어느 기준으로 줄 세웠는지, 값이 몇 분 전 것인지 적는다.

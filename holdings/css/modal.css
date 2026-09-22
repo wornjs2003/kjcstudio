@@ -120,8 +120,18 @@
 .kh-modal.has-head { display: flex; flex-direction: column; }
 
 /* 머리를 주면 스크롤 칸이 남는 높이를 먹는다.
-   min-height: 0 이 없으면 flex 항목이 내용 높이만큼 버텨 모달을 밀어낸다. */
-.kh-modal.has-head .kh-modal-scroll { flex: 1 1 auto; height: auto; min-height: 0; }
+   min-height: 0 이 없으면 flex 항목이 내용 높이만큼 버텨 모달을 밀어낸다.
+
+   **스크롤바 자리를 늘 비워 둔다.** 「관심종목」 처럼 거르는 칩은 줄이
+   200 개에서 여덟쯤으로 줄어 **스크롤이 아예 없어진다.** 그때 막대가
+   사라지면 본문 폭이 6px 넓어져 표 칸이 통째로 움직인다 —
+   「보는 것을 바꿔도 자리는 그대로다」 가 깨진다.
+   `assets/css/common.css` 가 `html` 에 같은 것을 두고 있고 이유도 같다
+   (2026-09-18 — "전체가 왼쪽으로 이동한다"). */
+.kh-modal.has-head .kh-modal-scroll {
+  flex: 1 1 auto; height: auto; min-height: 0;
+  scrollbar-gutter: stable;
+}
 
 .kh-mh {
   flex: 0 0 auto;
