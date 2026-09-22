@@ -357,3 +357,81 @@
     padding-top: 20px;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   폰에서 햄버거를 누르면 — 오른쪽에 알약 버튼 (2026-09-22 지시)
+
+   재권님이 그려 주신 그림 그대로다.
+
+       누르는 것   오른쪽 위 햄버거
+       나오는 곳   화면 **오른쪽**에 세로로
+       모양        **알약** — 「버튼 외각은 내가 대강 해논거니깐 이쁘게 다듬고」
+       뒤 화면     **약간 어두워지고 그대로 비친다** — 「버튼누르면 메인화면이 약간 어두워짐」
+       닫기        **아무것도 안 고르면 메인으로** — 바깥을 누르면 닫힌다
+
+   **패널은 이미 있는 것을 쓴다.** `partials/nav.html` 의 `.nav-mobile` 이고
+   여는 것은 `main.js` 가 한다. 여기서는 **보이는 모양만** 바꾼다 —
+   목록을 새로 적으면 메뉴를 고칠 때 한쪽만 바뀐다.
+
+   **이 블록 안이 전부 768px 이하다.** PC 는 하나도 안 바뀐다.
+   ══════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* 덮지 않는다. 뒤 화면이 비쳐 보여야 한다.
+     `--scrim`(45%) 은 너무 짙어 글자가 안 읽힌다 — 그림은 그보다 훨씬 옅다.
+     색은 `--ink-rgb` 를 쓰고 **투명도만 여기서 정한다**(theme.css 의
+     `--scrim` 이 잡는 방식과 같다). */
+  .nav-mobile {
+    background: rgb(var(--ink-rgb) / 12%);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    padding: calc(var(--nav-height) + 20px) 14px 40px 0;
+    gap: 14px;
+    align-items: flex-end;
+  }
+
+  /* **`.nav-mobile` 안으로 범위를 좁힌다.** `main.js` 의
+     `mirrorMenuUnderIntro()` 가 이 `ul` 을 **클래스째 복제해** 인트로 아래에
+     넣는다 — 좁히지 않으면 그 목록까지 알약이 된다 (2026-09-22 실측:
+     `.nav-mobile-list a` 가 12 가 아니라 **24** 로 잡혔다). */
+  .nav-mobile .nav-mobile-list {
+    gap: 14px;
+    align-items: flex-end;
+    width: 100%;
+  }
+
+  /* **`li` 에 폭을 준다.** `a` 에만 주면 `li` 가 글자만큼만 넓어져
+     62% 가 제각각이 된다 — 그래서 오른쪽 끝이 313·330·345 로 어긋났다. */
+  .nav-mobile .nav-mobile-list li {
+    width: 62%;
+  }
+
+  /* 알약 버튼. **폭을 맞추고 글자는 오른쪽에 붙인다** — 그림에서
+     「API」·「Setup」 처럼 짧은 것이 오른쪽 끝에 맞아 있었다. */
+  .nav-mobile .nav-mobile-list a {
+    width: 100%;
+    white-space: nowrap;
+    text-align: right;
+    padding: 9px 16px;
+    font-size: 21px;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: var(--bg-card);
+    border: 0;
+    border-bottom: 0;          /* 밑줄을 뺀다 — 알약에는 안 맞는다 */
+    border-radius: 999px;
+    box-shadow: 0 1px 4px rgb(var(--ink-rgb) / 8%);
+  }
+
+  /* 아랫단(Web · Interactive 아래)은 한 단 낮춰 읽는다.
+     **그림에는 위 일곱만 있었다.** 감추지 않은 것은 감추면 그 화면에
+     갈 길이 없어지기 때문이다 — 어떻게 할지는 아직 안 정해졌다. */
+  .nav-mobile .nav-mobile-sub a {
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .nav-mobile .nav-mobile-list a.active {
+    color: var(--accent);
+  }
+}
