@@ -110,7 +110,23 @@ export async function fetchIndexMinutes(code) {
      30종목 기준  단건 30번 7.9초  →  멀티 1번 2.1초 (2026-09-14 실측)
 
    주는 항목이 단건보다 적다. 시가총액·PER·PBR·52주 최고저가 없으므로,
-   그런 값이 필요한 종목 화면은 fetchLivePrices 를 그대로 쓴다. */
+   그런 값이 필요한 종목 화면은 fetchLivePrices 를 그대로 쓴다.
+
+   **거래대금(`value`)은 온다.** 그것만은 멀티에도 있다.
+
+   ⚠️ **이 주석을 「낡았다」 고 고치려다 2026-09-22 에 한 번 틀렸다.**
+   서버에서 `fetch_prices(cfg, codes)` 를 직접 불러 보니 시가총액·PER·PBR
+   이 다 와서 「멀티도 다 준다」 로 읽었는데, **그 함수는 화면이 쓰는 길이
+   아니다.**
+
+       화면이 쓰는 길   `/api/kis/quotes`  →  **`fetch_quotes_multi`**
+                       KIS `intstock-multprice` — 종목명은 주고 시가총액은 안 준다
+       직접 불러본 것   `fetch_prices`     →  종목마다 `fetch_price` 를 부른다
+                       그래서 단건과 같은 필드가 나온다
+
+   **함수 이름이 비슷해 갈렸다.** 확인하려면 **서버 함수가 아니라 화면이
+   받는 응답**을 봐야 한다 — 브라우저에서 `/api/kis/quotes` 를 가로채
+   키를 찍으면 바로 나온다. */
 export async function fetchQuotes(codes) {
   if (!codes || !codes.length) return null;
   if (!(await kisReady())) return null;

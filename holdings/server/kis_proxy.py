@@ -602,7 +602,8 @@ def fetch_prices(cfg, codes):
                     "price": price, "prev": prev, "amt": amt, "pct": pct,
                     "per": info.get("per"), "pbr": info.get("pbr"),
                     "high52": info.get("high52"), "low52": info.get("low52"),
-                    "volume": info.get("volume"), "marketCap": info.get("marketCap"),
+                    "volume": info.get("volume"), "value": info.get("value"),
+                    "marketCap": info.get("marketCap"),
                     "open": info.get("open"), "high": info.get("high"),
                     "low": info.get("low"),
                 }
@@ -1153,6 +1154,11 @@ def fetch_price(cfg, code):
         "high": _num(o.get("stck_hgpr"), int),
         "low": _num(o.get("stck_lwpr"), int),
         "volume": _num(o.get("acml_vol"), int),
+        # **거래대금** (2026-09-22). 응답에 있는데 안 내보내고 있었다 —
+        # 그래서 화면이 두 곳에서 `현재가 × 거래량` 으로 어림했고,
+        # **오른 날에는 장중 평균가보다 현재가가 높아 부풀려졌다.**
+        # 단위는 원이다 (`acml_tr_pbmn` = 누적 거래 대금).
+        "value": _num(o.get("acml_tr_pbmn"), int),
         "marketCap": _num(o.get("hts_avls"), int),
         "per": _num(o.get("per")),
         "pbr": _num(o.get("pbr")),
