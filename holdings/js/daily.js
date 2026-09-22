@@ -11,7 +11,7 @@
 
 /* mountWatchSide 는 부르지 않는다. 이 화면의 오른쪽 칸은 관심종목이 아니라
    보낼 문안이다 (2026-09-16 지시). */
-import { mountVBar, mountFootStrip, startLiveLoop }
+import { mountVBar, startLiveLoop }
   from './components/frame.js';
 import { mountDaily } from './components/daily-view.js';
 
@@ -21,7 +21,6 @@ const $ = (id) => document.getElementById(id);
    ITEMS 는 components/frame.js 안에 있고 네 화면이 함께 쓴다.
    추가는 주식페이지_개발 에 넘겼다 (2026-09-16). */
 mountVBar($('kh-vbar'), 'daily');
-const foot = mountFootStrip($('kh-foot'));
 startLiveLoop({ prices: true });
 
 /* `.kh-main` 안 — 카테고리 줄 뒤에 붙는다. 감싸는 요소를 새로 두지 않는 것은
@@ -29,8 +28,4 @@ startLiveLoop({ prices: true });
    한 겹을 더하면 기준에 없는 칸이 생긴다. */
 mountDaily(document.querySelector('.kh-main'), {
   side: $('kh-side'),
-  /* 하단 띠는 mountFootStrip 이 돌려준 손잡이로만 갱신된다. 손잡이를 버리면
-     mount 때 그린 「지수 불러오는 중」 에서 영영 안 바뀐다 — 실제로 그랬다
-     (2026-09-18). home.js·stock.js 는 받아서 쓰고 있었다. */
-  onIndices: (indices) => foot.update(indices),
 });

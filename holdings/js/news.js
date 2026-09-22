@@ -11,7 +11,7 @@
    왜 이렇게 나눴는지는 server/news.py 머리말에 적어 두었다.
    ========================================================================== */
 
-import { mountWatchSide, mountVBar, mountFootStrip, startLiveLoop }
+import { mountWatchSide, mountVBar, startLiveLoop }
   from './components/frame.js';
 import { WATCHLIST } from './data/market.js';
 import { mountSchedule } from './components/schedule.js';
@@ -370,7 +370,6 @@ async function refresh() {
    시세 띠는 「지수 불러오는 중」 에서 영영 안 바뀐다 (2026-09-18). */
 const side = mountWatchSide($('kh-side'), {});
 mountVBar($('kh-vbar'), 'news');
-const foot = mountFootStrip($('kh-foot'));
 
 /* 주요 일정 — 여기는 넓으므로 설명과 필터 칩까지 보여준다 */
 const sched = mountSchedule($('kh-nw-sched'), {
@@ -389,6 +388,6 @@ setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
    느린 갈래가 30초마다 함께 받아 온다. 그 값을 띠에 넘긴다. */
 startLiveLoop({
   prices: true,
-  onIndices(indices) { foot.update(indices); },
+
   onPrices(prices)   { side.update(prices); },
 });

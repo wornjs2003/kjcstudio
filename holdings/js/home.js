@@ -15,7 +15,7 @@ import { favList, isFav, toggleFav, onFavChange } from './store/favorites.js';
 /* mountWatchSide · mountVBar 는 첫 화면에서 안 쓴다 (2026-09-17).
    관심 목록은 순위표의 「관심」 칩으로 들어갔고, 세로 아이콘 바는
    그만큼 오른쪽 칸을 넓히려고 감췄다. 다른 화면은 그대로 쓴다. */
-import { mountFootStrip, startLiveLoop } from './components/frame.js';
+import { startLiveLoop } from './components/frame.js';
 import { iconHtml, paintIcon } from './components/stock-icon.js';
 import { openModal, closeModal } from './components/modal.js';
 import { loadStockMain, mountStockView } from './components/stock-view.js';
@@ -1597,7 +1597,6 @@ function selectStock(code) {
    전에는 mountWatchSide 가 관심 목록을 그리고 그 아래 slot 에
    일정·뉴스·공시를 끼워 넣었는데, 자리가 바뀌면서 필요 없어졌다. */
 
-const foot = mountFootStrip($('kh-foot'));
 
 paintClock();
 setInterval(paintClock, 30000);
@@ -1762,7 +1761,7 @@ startLiveLoop({
      따로 있고, 화면이 워커를 부르는 횟수는 캐시로 줄지 않는다.
      위 ROW_REFRESH_MS 의 계산표 참고 (2026-09-15 지시). */
   indexMs: 2000,
-  onIndices(indices) { paintIndices(indices); foot.update(indices); },
+  onIndices(indices) { paintIndices(indices); },
   onPrices(prices)   {
     lastTickAt = new Date();
     paintClock();                 // 받은 시각을 바로 반영

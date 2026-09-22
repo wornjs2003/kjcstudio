@@ -14,7 +14,6 @@ body {
   color: var(--kh-text-primary);
   font-family: var(--kh-font-sans);
   font-size: 14px;
-  padding-bottom: 46px;          /* 하단 시세 띠 자리 */
   -webkit-font-smoothing: antialiased;
 }
 
@@ -187,23 +186,12 @@ body {
 .kh-vb:hover { color: var(--kh-text-secondary); }
 .kh-vb.is-active { color: var(--kh-text-primary); font-weight: 600; }
 
-/* ── 하단 시세 띠 ───────────────────────── */
-.kh-foot {
-  position: fixed; left: 0; right: 0; bottom: 0; height: 46px; z-index: 50;
-  background: var(--kh-bg-float);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-top: 1px solid var(--kh-border);
-  display: flex; align-items: center; gap: 26px;
-  padding: 0 20px; font-size: 0.79rem; overflow-x: auto;
-  scrollbar-width: none;
-}
-.kh-foot::-webkit-scrollbar { display: none; }
-.kh-foot-warn { color: var(--kh-text-muted); font-size: 0.76rem; flex-shrink: 0; }
-.kh-fi { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
-.kh-fi > span:first-child { color: var(--kh-text-muted); }
-.kh-fi b { font-weight: 600; }
-.kh-foot-arrows { margin-left: auto; color: var(--kh-text-dim); flex-shrink: 0; }
+/* 하단 시세 띠(`.kh-foot`)는 2026-09-22 에 지웠다 (지시).
+   `.kh-foot-warn` · `.kh-fi` · `.kh-foot-arrows` 도 그 띠 안에서만 썼다.
+
+   **`CLAUDE.md` 의 「감추는 것은 덮어쓰기가 아니다」 목록이 낡는다** —
+   거기 적힌 넷 중 `.kh-foot` 이 빠지고, 2026-09-22 에 생긴 `.kh-top-ix` 가
+   더해져야 한다. `개념정의` 에 넘겼다. */
 
 /* ── 좁은 화면 ──────────────────────────── */
 @media (max-width: 1280px) {
@@ -213,13 +201,15 @@ body {
 @media (max-width: 900px) {
   .kh-app { grid-template-columns: 1fr; }
   .kh-vbar {
-    position: fixed; left: 0; right: 0; bottom: 46px; top: auto;
+    /* 시세 띠(46px)가 있던 자리만큼 띄워 뒀다. 그 띠를 지워 0 이 된다 */
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto;
     flex-direction: row; justify-content: space-around;
     gap: 0; padding: 6px 4px;
     border-left: 0; border-top: 1px solid var(--kh-border);
     z-index: 49;
   }
-  body { padding-bottom: 106px; }
+  /* 106 = 시세 띠 46 + 가로 아이콘바 60. 띠를 지워 60 만 남는다 */
+  body { padding-bottom: 60px; }
 }
 
 /* 값이 새로 들어왔다는 표시가 여기 있었다 — 갱신될 때 숫자가 살짝 커졌다
