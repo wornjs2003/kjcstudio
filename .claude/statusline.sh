@@ -86,13 +86,29 @@ printf '%b\n' "$line1"
 
 # ── 둘째 줄 — 미커밋 ──────────────────────────────
 # 하나도 없으면 줄을 만들지 않는다. 빈 줄이 남으면 화면만 차지한다.
-dirty=$(git status --porcelain 2>/dev/null | grep -c .)
+# **자동 생성 파일은 세지 않는다 (2026-09-22 지시).** 이 줄은 「재권님이
+# 하셔야 할 것만 띄운다」 로 만든 것인데, 도구가 만드는 파일은 하실 일이 없다.
+# `check.py` 와 `update-sessions.py` 가 돌 때마다 바뀌어 **늘 떠 있었다.**
+# 재권님이 「푸시 대기하는 거 뭐지?」 하고 물으셨는데 **푸시 대기는 0건**이었고
+# 그 줄이었다.
+#
+# **이름을 박지 않는다.** 자동 생성 파일이 하나 더 생기면 그 순간 낡는다
+# (「검사 도구에 대상 값을 박지 않는다」). 대신 **파일 쪽에 표시를 두고**
+# 그것을 본다 — 만드는 도구가 `generated-by-tool` 을 적는다.
+dirty_names=$(git status --porcelain 2>/dev/null | sed 's/^...//; s/^"//; s/"$//' |
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    head -c 300 "$f" 2>/dev/null | grep -q 'generated-by-tool' || printf '%s
+' "$f"
+  done)
+dirty=$(printf '%s' "$dirty_names" | grep -c . )
 
 
 # 미커밋이 없으면 둘째 줄은 건너뛴다. **셋째 줄은 그것과 무관하게 늘 나온다.**
 if [ "$dirty" -gt 0 ]; then
-names=$(git status --porcelain 2>/dev/null |
-        sed 's/^...//; s/.*\///' |          # 상태 표시와 경로를 떼고 파일명만
+names=$(printf '%s
+' "$dirty_names" |
+        sed 's/.*\///' |                    # 경로를 떼고 파일명만
         head -3 |
         awk '{ printf "%s%s", sep, $0; sep=" · " }')
 

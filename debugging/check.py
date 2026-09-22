@@ -579,6 +579,11 @@ def main():
 
     now = datetime.now(KST)
     report = {
+        # **도구가 만든 파일이라는 표시.** 상태줄이 이것을 보고 「미커밋」
+        # 에서 뺀다 — 이 파일은 검사기가 돌 때마다 바뀌는데 재권님이
+        # 하실 일이 없다 (2026-09-22 지시). **이름을 박지 않으려고**
+        # 파일 쪽에 표시를 둔다.
+        "generated-by-tool": True,
         "at": now.isoformat(timespec="seconds"),
         "mode": mode,
         "counts": count(results),
