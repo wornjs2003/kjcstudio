@@ -84,6 +84,34 @@
     container.appendChild(frag);
   }
 
+  /**
+   * 폰에서 메뉴가 열렸을 때 **바깥을 누르면 닫는다** (2026-09-22 지시).
+   *
+   * 재권님 말씀 — 「아무것도 선택안하면 다시 메인화면이여야 함」.
+   *
+   * **패널을 다시 만들지 않는다.** 여는 것도 닫는 것도 `main.js` 가 하고,
+   * 여기서는 **바깥 클릭 하나만** 더한다. `main.js` 는 네 구역이 함께 쓰는
+   * 파일이라 거기에 넣으면 holdings 에도 실린다 — 이 파일은 `index.html`
+   * 하나만 읽는다.
+   *
+   * **`document` 에 거는 이유** — 메뉴는 `main.js` 가 `fetch` 로 나중에
+   * 넣는다. 그때 `.nav-mobile` 이 생기므로 지금 찾아 걸면 못 찾는다.
+   * 위임으로 걸면 언제 생기든 듣는다.
+   *
+   * 항목(`a`)은 건너뛴다 — 그것은 `main.js` 가 이미 닫고 있고,
+   * 여기서 또 닫으면 두 번 닫힌다.
+   */
+  function closeMenuOnBackdrop() {
+    document.addEventListener("click", (e) => {
+      const panel = e.target.closest(".nav-mobile");
+      if (!panel || e.target.closest("a")) return;
+      const burger = document.querySelector(".nav-burger");
+      if (burger && burger.getAttribute("aria-expanded") === "true") burger.click();
+    });
+  }
+
+  closeMenuOnBackdrop();
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {
