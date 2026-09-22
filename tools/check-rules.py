@@ -35,6 +35,21 @@ SKIP = ("/.git/", "/node_modules/", "/vendor/", "/.claude/worktrees/",
 
 BAD, LOOK = "BAD", "LOOK"
 
+# ── 검사의 **근거**를 함께 낸다 (2026-09-22) ──────────────────
+#
+# `홈페이지_정리` 가 자기 도구에서 찾은 자리다. 그 도구가 「누르는 자리
+# 44px 미만 13개」 를 냈는데, **44px 은 WCAG 2.5.5 의 AAA 기준**이고
+# 표준이 보통 요구하는 **AA 는 24px(2.5.8)** 이었다. AA 로 다시 세니
+# **0개**였다. **「표준을 어겼다」 가 아니라 「최고 등급에 못 미친다」** 였다.
+#
+# **읽는 쪽은 「켜졌다」 를 「어겼다」 로 읽는다.** 그래서 각 검사가
+# **누가 정한 기준인지**를 함께 낸다. 셋은 무게가 다르다.
+#
+#     지시   재권님이 정하셨다        — 어기면 지시를 어긴 것이다
+#     표준   밖에서 정해진 값이다     — **등급까지 적는다**
+#     실측   이 저장소에서 깨져 봤다  — 그때 그 일이 또 난다
+지시, 표준, 실측 = "지시", "표준", "실측"
+
 
 def rd(path):
     try:
@@ -82,7 +97,7 @@ def c_bat_nonascii():
         bad = len([x for x in b if x > 127])
         if bad:
             hits.append("%s — 비ASCII %d자" % (p, bad))
-    return ".bat 안에 한글", n, hits, BAD
+    return ".bat 안에 한글", n, hits, BAD, (실측, "chcp 뒤에 한글이 있으면 cmd 가 줄을 밀어 읽는다 (2026-09-16)")
 
 
 def c_py_encoding():
@@ -96,7 +111,7 @@ def c_py_encoding():
         if "reconfigure" in s or "TextIOWrapper(sys.stdout" in s:
             continue
         hits.append(p)
-    return "한글 출력 도구에 인코딩 두 줄", n, hits, BAD
+    return "한글 출력 도구에 인코딩 두 줄", n, hits, BAD, (실측, "윈도우 콘솔이 cp949 라 `—` 같은 글자에서 죽는다. **독립 실행되는 것만** 본다 — 프로세스의 주인이 켜면 import 된 것도 따라온다")
 
 
 def c_send_error_korean():
@@ -111,7 +126,7 @@ def c_send_error_korean():
         for m in pat.finditer(strip_py_comments(src)):
             if re.search(r"[가-힣]", m.group(1)):
                 hits.append("%s — %s" % (p, m.group(1)[:24]))
-    return "send_error 에 한글 (빈 응답이 나간다)", n, hits, BAD
+    return "send_error 에 한글 (빈 응답이 나간다)", n, hits, BAD, (표준, "HTTP 상태 줄은 latin-1 이다 (RFC 9110). 한글을 넣으면 빈 응답이 나간다")
 
 
 def c_scrollbar():
@@ -132,7 +147,7 @@ def c_scrollbar():
             if sets and not hides:
                 hits.append(p)
                 break
-    return "스크롤바를 common.css 밖에서 덮어씀", n, hits, BAD
+    return "스크롤바를 common.css 밖에서 덮어씀", n, hits, BAD, (지시, "「UI 에 사용되는 스크롤바는 하나로만 적용되도록」 (2026-09-18)")
 
 
 def c_common_css_link():
@@ -148,7 +163,7 @@ def c_common_css_link():
         n += 1
         if "common.css" not in rd(idx):
             hits.append(name + "/index.html")
-    return "구역 첫 화면이 common.css 를 안 실음", n, hits, BAD
+    return "구역 첫 화면이 common.css 를 안 실음", n, hits, BAD, (지시, "스크롤바 한 벌을 그 파일이 들고 있다 (2026-09-18). 안 실으면 브라우저 기본이 나온다")
 
 
 def c_bat_timeout():
@@ -159,7 +174,7 @@ def c_bat_timeout():
         for i, line in enumerate(rd(os.path.join(ROOT, p)).split("\n"), 1):
             if re.search(r"\btimeout\s+/t\b", line, re.I):
                 hits.append("%s:%d" % (p, i))
-    return ".bat 에서 timeout /t 를 씀", n, hits, BAD
+    return ".bat 에서 timeout /t 를 씀", n, hits, BAD, (실측, "입력이 리다이렉트되면 `Input redirection is not supported` 로 즉시 죽는다")
 
 
 def c_modal_links():
@@ -181,7 +196,7 @@ def c_modal_links():
             seg = s[m.start():m.start() + 160]
             if re.search(r"더보기|자세히", seg) and "data-modal" not in m.group(0):
                 hits.append("%s:%d" % (p, s[:m.start()].count("\n") + 1))
-    return "모달로 안 옮긴 「자세히」·「더보기」", n, hits, LOOK
+    return "모달로 안 옮긴 「자세히」·「더보기」", n, hits, LOOK, (지시, "「자세히 버튼은 차트에서 모달 띄우는 버튼으로 다 통일해줘」. **JS 가 가로채는 길을 이 검사가 못 본다**")
 
 
 CHECKS = [c_bat_nonascii, c_py_encoding, c_send_error_korean,
@@ -197,7 +212,7 @@ def main():
 
     for fn in CHECKS:
         try:
-            name, n, hits, kind = fn()
+            name, n, hits, kind, (근거종류, 근거글) = fn()
         except Exception as e:
             print("  ??  %-42s **못 쟀습니다** (%s)" % (fn.__name__, e))
             unmeasured.append(fn.__name__)
@@ -210,12 +225,14 @@ def main():
             continue
 
         if not hits:
-            print("  OK  %-42s 0   (대상 %d)" % (name, n))
+            print("  OK  %-42s 0   (대상 %d)  [%s]" % (name, n, 근거종류))
             continue
 
         mark = "!!" if kind == BAD else "-> "
         tail = "" if kind == BAD else "   <- 위반인지는 봐야 압니다"
-        print("  %s  %-42s %-3d (대상 %d)%s" % (mark, name, len(hits), n, tail))
+        print("  %s  %-42s %-3d (대상 %d)  [%s]%s"
+              % (mark, name, len(hits), n, 근거종류, tail))
+        print("        근거: " + 근거글)
         for h in (hits if verbose else hits[:4]):
             print("        " + h)
         if not verbose and len(hits) > 4:
