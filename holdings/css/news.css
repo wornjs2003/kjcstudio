@@ -100,6 +100,28 @@
   flex: 1; min-height: 0; overflow-y: auto;
   display: flex; flex-direction: column;
 }
+/* **`[hidden]` 을 되살린다.** 브라우저 기본 스타일의 `[hidden] { display: none }`
+   은 **클래스 선택자에 진다** — 바로 위 `display: flex` 가 이겨서 `hidden` 을
+   붙여도 안 숨는다.
+
+   2026-09-22 에 모달 탭이 그래서 셋이 한꺼번에 보였다. `hidden` 속성은
+   제대로 붙는데 화면에서는 안 숨어, **속성만 보고 「갈아끼워진다」 로 읽었다.**
+
+   저장소에 같은 주석이 이미 둘 있다 — `home.css` 의 `.kh-ix[hidden]`,
+   `stock.css` 의 `.kh-ind-list[hidden]` · `.kh-ind-tip[hidden]`.
+   **같은 파일에 적어 두어도 새 선택자에는 안 따라온다.**
+
+   **지금은 이 줄이 없어도 숨는다.** 재서 확인한 것을 그대로 적는다
+   (2026-09-22).
+
+       모달        `modal.css:155` 의 `.kh-modal [hidden]` 이 `!important` 로 막는다
+       news.html   `.kh-nw-list` 셋을 **나란히** 두고 `hidden` 을 **안 쓴다**
+
+   그래도 둔다. 이 줄이 하는 일은 **뼈대에 기대지 않는 것**이다 —
+   `.kh-modal` 밖으로 옮기거나 화면에 탭이 생기면 그 순간 필요해지고,
+   그때는 **또 이 자리를 처음부터 찾게 된다.** 이 계열 사고가
+   저장소에 이미 넷이다(위 목록). */
+.kh-nw-list[hidden] { display: none; }
 /* 주요 일정은 연결 전이라 담을 것이 없다. 자리만 차지하지 않게 짧게. */
 #kh-nw-sched { flex: none; }
 .kh-nw-i {
@@ -190,3 +212,14 @@
   .kh-nw-stats { grid-template-columns: 1fr 1fr; }
   .kh-nw-head { flex-direction: column; gap: 10px; }
 }
+
+/* ── 새 머리를 쓰는 모달 안에서 ───────────────────────────────────
+   머리(이름 줄 · 주요 정보 · 탭 줄)가 붙으면 **본문만 굴러간다.**
+   그 본문의 여백은 **담는 쪽이 준다** (2026-09-22 뼈대 약속).
+
+       좌우      26px — 머리와 같은 값
+       아래      44px — 아래 흐림 띠(46px)에 글자가 묻히지 않게
+
+   `modal.css` 의 `.kh-nwm` 을 이기려고 클래스를 하나 더 얹었다.
+   그 파일은 뼈대(주식페이지_개발3) 것이라 건드리지 않는다. */
+.kh-modal .kh-nwm { padding: 0 26px 44px; }
