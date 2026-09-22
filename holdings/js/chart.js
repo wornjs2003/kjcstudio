@@ -191,7 +191,11 @@ function movingAverage(candles, period, barPeriod) {
    ────────────────────────────────────────────────────────────────────────── */
 
 /* 지수이동평균 — 최근 값에 무게를 더 준다. MACD 가 쓴다. */
-function ema(values, period) {
+/* export 는 `tools/check-indicators.py` 가 node 로 불러 쓰려고 붙였다
+   (2026-09-22). 서버(`server/signal.py`)에 같은 계산이 파이썬으로 한 벌 더
+   있어서, **같은 봉에서 같은 값이 나오는지** 대 본다. 화면과 알림이 갈리면
+   「화면엔 신호가 보이는데 알림은 안 온다」 가 된다. */
+export function ema(values, period) {
   const k = 2 / (period + 1);
   const out = new Array(values.length).fill(null);
   let acc = 0;
@@ -206,7 +210,7 @@ function ema(values, period) {
 /* 볼린저 밴드 — 20일 이동평균에서 표준편차 두 배만큼 떨어진 위아래 선.
    값이 이 띠를 벗어나면 평소 범위 밖이라는 뜻이다.
    **가운데 선은 안 그린다.** 20일 이동평균과 같은 값이라 MA20 이 이미 그리고 있다. */
-function bollinger(candles, barPeriod, period = 20, mult = 2) {
+export function bollinger(candles, barPeriod, period = 20, mult = 2) {
   const up = [], lo = [];
   const vUp = new Array(candles.length).fill(null);
   const vLo = new Array(candles.length).fill(null);
@@ -228,7 +232,7 @@ function bollinger(candles, barPeriod, period = 20, mult = 2) {
 
 /* RSI — 오른 폭과 내린 폭의 비를 0~100 으로 (Wilder 방식).
    70 위면 많이 샀다, 30 아래면 많이 팔았다고 본다. */
-function rsi(candles, barPeriod, period = 14) {
+export function rsi(candles, barPeriod, period = 14) {
   const out = [];
   const vals = new Array(candles.length).fill(null);
   if (candles.length <= period) return { data: out, values: vals, period };
@@ -258,7 +262,7 @@ function rsi(candles, barPeriod, period = 14) {
 
 /* MACD — 12일선과 26일선의 차이(macd), 그것의 9일 지수이동평균(signal),
    그리고 둘의 차이(hist). hist 가 0 을 넘나드는 자리가 추세가 바뀌는 자리다. */
-function macd(candles, barPeriod, fast = 12, slow = 26, sig = 9) {
+export function macd(candles, barPeriod, fast = 12, slow = 26, sig = 9) {
   const close = candles.map((c) => c.close);
   const eF = ema(close, fast);
   const eS = ema(close, slow);
