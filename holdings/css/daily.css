@@ -399,23 +399,48 @@
 /* ── 모달로 열었을 때 ─────────────────────────────────────────────
    「데일리분석」 메뉴를 누르면 모달이 뜬다 (2026-09-21 지시).
 
-   **2026-09-22 에 탭 셋으로 바뀌었다** (오늘 · 보낼 문안 · 지난 분석).
-   전에는 본문과 문안을 2열(`.kh-dl-modal`)로 나란히 뒀는데, 새 뼈대가
-   머리에 탭을 두면서 그 칸이 없어졌다. 2열 규칙은 **쓰는 곳이 사라져
-   지웠다** — 남겨 두면 다음에 보는 쪽이 아직 쓰는 줄로 읽는다.
+   **2026-09-22 에 두 번 바뀌었다.**
+     ① 탭 셋(오늘 · 보낼 문안 · 지난 분석)
+     ② **2열** — 「창 가로로 넓혀서」 「화살표 없이 처음부터 텔레그램보여지게」
 
-   ── 탭 칸에 클래스를 안 붙이는 이유 ──
+   지금은 ②다. 왼쪽이 본문(번호 탭으로 날짜를 고른다), 오른쪽이 「보낼 문안」
+   이고 **늘 보인다.** 접는 기능도 화살표도 없다 — `modal.js` 의 `drawers` 를
+   안 쓴다.
 
-   「보낼 문안」 칸에 `.kh-side` 를 붙이면 `frame.css` 가 1280px 이하에서
-   **숨긴다.** 되살리는 규칙(아래 `@media` 의 `.kh-daily .kh-side.kh-dl-side`)은
-   **`.kh-daily` 조상이 있어야** 하는데, 모달은 `index` · `stock` 에서도
-   열리므로 그 조상이 없다. `.kh-dl-side` 도 안 붙인다 — `position: sticky` 와
-   `max-height: 52vh` 가 붙는데 탭이라 전체가 보여 둘 다 뜻이 없다.
+   ── 폭 ──
 
+   모달 전체 1434 = 본문 1100 + 문안 **320** + 틈 **14**.
+   320·14 는 `modal.css` 의 `--kh-drawer` · `--kh-gap` 과 **같은 값**이다.
+   종목 모달이 오른쪽 칸을 펼칠 때 늘어나는 폭이 그것이라, 같은 값을 쓰면
+   두 모달의 오른쪽 칸이 같은 폭이 된다.
+
+   **문안 칸을 고정으로 둔다.** 좁아지면 본문만 줄고 문안은 안 눌린다 —
+   `modal.js` 가 `min(1434px, 100vw − 52px)` 로 잡으므로 창이 좁으면
+   전체가 줄어드는데, 그때 줄어드는 쪽을 본문으로 정한 것이다.
+
+   ── 「보낼 문안」 칸에 `.kh-side` 를 안 붙인다 ──
+
+   `frame.css` 가 1280px 이하에서 `.kh-side` 를 **숨긴다.** 되살리는 규칙은
+   아래 `@media` 의 `.kh-daily .kh-side.kh-dl-side` 인데 **`.kh-daily` 조상이
+   있어야** 한다. 모달은 `index` · `stock` 에서도 열리므로 그 조상이 없다.
    안쪽 모양(`.kh-side-head` · `.kh-dl-tg-b` …)은 **최상위 선택자**라
    감싸는 클래스 없이도 그대로 먹는다 (2026-09-22 확인). */
-.kh-dl-pane {
+.kh-dl-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 14px;
+  align-items: start;
   /* 아래 44px 은 흐려지는 띠(46px)에 글이 묻히지 않게, 좌우 26px 은
      머리의 안쪽 여백과 줄을 맞춘다 (뼈대 기준값). */
   padding: 0 26px 44px;
+}
+.kh-dl-main { min-width: 0; }
+.kh-dl-msg  { min-width: 0; border-left: 1px solid var(--kh-border); padding-left: 14px; }
+
+/* 좁은 화면에서는 옆에 둘 자리가 없다. 문안을 본문 아래로 내린다.
+   `modal.css` 가 1180px 이하에서 모달을 화면 폭에 맞추므로 그 문턱을 쓴다. */
+@media (max-width: 1180px) {
+  .kh-dl-wrap { grid-template-columns: minmax(0, 1fr); }
+  .kh-dl-msg  { border-left: 0; padding-left: 0;
+                border-top: 1px solid var(--kh-border); padding-top: 14px; }
 }
