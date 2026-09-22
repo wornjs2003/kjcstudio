@@ -265,9 +265,9 @@ const SIDE_HTML = `
  * @param {HTMLElement} root              본문이 들어갈 자리
  * @param {object}      [opts]
  * @param {HTMLElement} [opts.side]       보낼 문안이 들어갈 자리
- * @param {HTMLElement} [opts.past]       「지난 분석」 이 들어갈 자리.
- *                                        **안 넘기면 본문 끝에 이어 붙는다** —
- *                                        전용 화면이 그 길이고, 모달은 탭으로 뺀다
+ * @param {HTMLElement|false} [opts.past]  「지난 분석」 이 들어갈 자리.
+ *                                        **안 넘기면 본문 끝**(전용 화면),
+ *                                        **`false` 면 아예 안 그린다**(모달 — 번호 탭이 대신)
  * @param {Function}    [opts.onIndices]  지수를 받았을 때 (시세 띠 갱신용)
  * @param {Function}    [opts.onHead]     머리에 얹을 값이 준비됐을 때.
  *                                        `{ big, stats }` 를 넘긴다 — 모달 머리가 쓴다.
@@ -280,9 +280,11 @@ export function mountDaily(root, { side = null, past = null,
 
   root.insertAdjacentHTML('beforeend', BODY_HTML);
   if (side) side.insertAdjacentHTML('beforeend', SIDE_HTML);
-  /* 「지난 분석」 — 자리를 받으면 거기에, 아니면 본문 끝에.
+  /* 「지난 분석」 — 자리를 받으면 거기에, 안 받으면 본문 끝에.
+     **`false` 를 주면 아예 안 그린다** — 모달은 번호 탭이 그 자리를
+     대신하므로 그릴 것이 없다 (2026-09-22).
      `$(id)` 로 찾는 것이 이 블록에 없어 어디로 가든 조회가 안 끊긴다. */
-  (past || root).insertAdjacentHTML('beforeend', PAST_HTML);
+  if (past !== false) (past || root).insertAdjacentHTML('beforeend', PAST_HTML);
 
   /* 찾는 범위를 자기 자리 안으로 좁힌다. 문서 전체에서 찾지 않는 이유는
      파일 맨 위 주석에 있다. */
@@ -864,64 +866,80 @@ export function mountDaily(root, { side = null, past = null,
 export function openDailyModal() {
   let inst = null;
 
-  /* 탭 셋. 「오늘」 안에서는 **카드를 쪼개지 않는다** — 「그날을 한 장으로」 가
-     목적이라 쪼개면 그 목적이 깨진다 (2026-09-22 시안). */
-  const TABS = [
-    { id: 'today', label: '오늘' },
-    { id: 'msg',   label: '보낼 문안' },
-    { id: 'past',  label: '지난 분석' },
-  ];
+  /* ── 번호 탭 ──
+     2026-09-22 지시 — 「지난분석은 따로 필요없고 데일리분석에 날별로 쌓여지고
+     가장 최신이 모달 열었을 때 보여지면 될 거 같아. **1.2.3.... 이렇게 해서 보면**
+     될 듯」.
+
+     **지금은 하나뿐이다.** 날짜별 저장이 아직 없어서 오늘 것밖에 없다.
+     저장이 붙으면 최신부터 1 · 2 · 3 … 열까지 늘어난다.
+
+     **그때 `modal-head.js` 에 탭을 다시 그리는 길이 필요하다** — 지금은
+     `setTabsNote` 만 있고 `setTabs` 가 없어, 목록을 받은 뒤에 탭을 못 늘린다.
+     모달을 열기 전에 목록을 받아 두는 방법도 있는데, 그러면 누른 뒤 잠깐
+     아무 일도 안 일어난다. 저장을 붙일 때 정한다. */
+  const TABS = [{ id: 'today', label: '1' }];
 
   const m = openModal({
     label: '데일리분석',
-    /* 고정 px. `max-content` 면 탭을 바꿀 때 폭이 달라져
-       「보는 것을 바꿔도 자리는 그대로다」 를 깬다. */
-    width: 1100,
+    /* 본문 1100 + 보낼 문안 320 + 틈 14.
+       320·14 는 `modal.css` 의 `--kh-drawer` · `--kh-gap` 과 같은 값이다 —
+       종목 모달이 오른쪽 칸을 펼칠 때 늘어나는 폭이 그것이라, 같은 값을 쓰면
+       두 모달의 오른쪽 칸 폭이 같아진다.
+
+       **고정 px 로 둔다.** 탭을 바꿔도 폭이 안 변해야 한다. */
+    width: 1434,
     head: {
       icon: '데',
       name: '데일리분석',
       sub: todayLabel(),
       caret: true,
-      actions: [{ label: '전체 화면 ↗', href: './daily.html' }],
-      /* 1100px 이면 세 열이 들어간다 (뼈대 기준값) */
       statCols: 3,
       tabs: TABS,
       tab: 'today',
-      /* 머리는 그대로 두고 본문만 갈아끼운다. 세 칸을 다 두고 감추기만
-         하므로 `mountDaily` 의 `$(id)` 조회가 안 끊긴다 — 칸을 지웠다
-         다시 만들면 그 안의 `id` 가 사라져 **조용히 빈다.** */
+      /* 아직 하나뿐이라는 것을 화면이 스스로 말한다. 빈 탭을 아홉 개
+         만들어 두는 것보다 낫다 — 눌러도 아무 일이 없으면 고장으로 읽힌다. */
+      tabsNote: '저장이 붙으면 열 장까지 쌓입니다',
       onTab(id) { showPane(id); },
     },
     onClose() { if (inst) { inst.destroy(); inst = null; } },
   });
 
-  /* 세 칸을 한꺼번에 만든다.
-     **`.kh-side` 도 `.kh-dl-side` 도 안 붙인다.**
-       `.kh-side`    `frame.css` 가 1280px 이하에서 숨긴다. 되살리는 규칙은
-                     `.kh-daily` 조상이 있어야 하는데 모달에는 그것이 없다
-       `.kh-dl-side` `position: sticky` 와 `max-height: 52vh` 가 붙는데,
-                     탭이라 전체가 보이므로 둘 다 뜻이 없다
-     안쪽 모양은 `.kh-side-head` · `.kh-dl-tg-b` 처럼 **최상위 선택자**라
-     감싸는 클래스 없이도 그대로 먹는다 (2026-09-22 확인). */
-  const panes = {};
-  for (const t of TABS) {
-    const el = document.createElement('div');
-    el.className = 'kh-dl-pane';
-    el.dataset.pane = t.id;
-    if (t.id !== 'today') el.hidden = true;
-    m.body.appendChild(el);
-    panes[t.id] = el;
-  }
+  /* ── 2열 ──
+     2026-09-22 지시 — 「화살표 없이 처음부터 텔레그램보여지게 **창 가로로 넓혀서**」.
 
+     **`drawers` 를 안 쓴다.** 서랍은 손잡이를 눌러 여닫는 것인데, 여기는
+     접는 기능 없이 늘 보여야 한다. 화살표도 안 만든다.
+
+     **「보낼 문안」 은 탭에서 뺐다.** 서랍과 탭 양쪽에 두면 같은 내용이
+     두 곳이 된다. */
+  const wrap = document.createElement('div');
+  wrap.className = 'kh-dl-wrap';
+
+  const main = document.createElement('div');
+  main.className = 'kh-dl-main';
+
+  /* **`.kh-side` 를 안 붙인다.** `frame.css` 가 1280px 이하에서 그것을 숨기는데,
+     되살리는 규칙(`daily.css` 의 `@media`)은 **`.kh-daily` 조상이 있어야** 한다.
+     모달은 index · stock 에서도 열리므로 그 조상이 없다 (2026-09-22 확인).
+     안쪽 모양(`.kh-side-head` · `.kh-dl-tg-b` …)은 최상위 선택자라 그대로 먹는다. */
+  const msg = document.createElement('aside');
+  msg.className = 'kh-dl-msg';
+  msg.setAttribute('aria-label', '보낼 문안');
+
+  wrap.append(main, msg);
+  m.body.appendChild(wrap);
+
+  /* 번호가 늘면 여기서 갈아끼운다. 지금은 하나라 할 일이 없다. */
+  const panes = { today: main };
   function showPane(id) {
-    for (const t of TABS) panes[t.id].hidden = (t.id !== id);
+    for (const [k, el] of Object.entries(panes)) el.hidden = (k !== id);
   }
 
-  inst = mountDaily(panes.today, {
-    side: panes.msg,
-    past: panes.past,
-    /* 값을 받은 뒤에 머리를 채운다. 받기 전에는 비어 있고, 뼈대가
-       `big` · `stats` 를 둘 다 비우면 그 줄을 안 그린다. */
+  inst = mountDaily(main, {
+    side: msg,
+    /* 「지난 분석」 칸은 없앴다 — 번호 탭이 그 자리다. */
+    past: false,
     onHead({ big, stats }) {
       m.head.setBig(big);
       m.head.setStats(stats);
