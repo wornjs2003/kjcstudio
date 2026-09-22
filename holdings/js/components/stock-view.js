@@ -113,7 +113,22 @@ export function mountStockView(root, stock, { onBack } = {}) {
 
     setHtml('#kh-r1',  rangeBar(live.low, live.high, live.price));
     setHtml('#kh-r52', rangeBar(live.low52, live.high52, live.price));
-    setText('#kh-amt', fmtMoneyKr(Math.round(live.price * live.volume / 1e8)));
+    /* **서버가 준 실제 거래대금을 쓴다** (2026-09-22). 그 전에는 여기도
+       `현재가 × 거래량` 으로 어림했는데 **어림이라고 적혀 있지도 않았다** —
+       차트 머리줄(`components/stock-detail.js`)은 「어림」 을 붙이고 있어서
+       **같은 값이 두 자리에서 다르게 보였다.**
+
+       못 받는 순간에는 여전히 어림하고, 그때만 「어림」 을 붙인다. */
+    const amtExact = live.value != null;
+    const amtRaw = live.value ?? (live.price != null && live.volume != null
+      ? live.price * live.volume : null);
+    setText('#kh-amt', amtRaw != null ? fmtMoneyKr(Math.round(amtRaw / 1e8)) : '—');
+    const amtEl = $('#kh-amt');
+    if (amtEl) {
+      amtEl.title = amtExact ? '서버가 준 실제 거래대금입니다'
+                             : '현재가 × 거래량으로 어림한 값입니다';
+      amtEl.classList.toggle('kh-approx', !amtExact);
+    }
     setText('#kh-vol', fmtShareCount(live.volume));
     setText('#kh-cap', fmtMoneyKr(live.marketCap));
 

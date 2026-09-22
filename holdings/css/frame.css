@@ -621,6 +621,10 @@ a.kh-sc-i:hover { color: var(--kh-accent); }
 .kh-dt-l { color: var(--kh-text-muted); }
 /* 어림값이라는 표시. 숨기지 않고 작게 붙인다 */
 .kh-dt-l i { font-style: normal; font-size: 0.64rem; opacity: .8; margin-left: 3px; }
+/* 종목 화면 「거래대금」 이 어림일 때 (2026-09-22). 차트 머리줄은 「어림」 을
+   글자로 붙이는데 그 칸에는 자리가 없어 **점선 밑줄**로 알린다 —
+   마우스를 올리면 무엇인지 뜬다. 값이 오면 이 클래스가 떨어진다. */
+.kh-approx { text-decoration: underline dotted var(--kh-text-muted); }
 .kh-dt-i b { font-weight: 700; font-size: 0.78rem; }
 .kh-dt-bar { display: flex; width: 58px; height: 6px; border-radius: 3px; overflow: hidden; }
 .kh-dt-bar i { display: block; height: 100%; }
