@@ -43,7 +43,13 @@ import { fmtWon, fmtPct, dirClass } from '../utils/format.js';
    다 들어있어서 잘 보여지지가 않는데」 · 「3위까지만 봐도 댐」).
    업종 이름 칩 줄은 없앴다 — 4위 아래는 「자세히 ›」 모달에 스무 개가 다 있다. */
 const TOP_GROUPS = 3;
-const STOCK_COUNT = 3;          // 한 칸에 보여줄 종목 수
+/* **받아 온 것을 다 그린다** (2026-09-22 지시 — 「뜨는산업들 목록이 3개만
+   보이는데 해당섹터나 업종에 관련된거 더 볼수있어야 할거같아 스크롤창
+   넣어서 더 볼수있또록 해줘」).
+
+   전에는 셋만 잘랐다. 네이버가 묶음마다 **열**을 주므로 그대로 내놓고,
+   **칸 안에서 굴러가게** 한다 — 카드 높이는 안 바뀐다. */
+const STOCK_COUNT = 0;          // 0 이면 자르지 않는다
 
 /* 장중에는 계속 움직인다. 서버도 30초 캐시라 그보다 잦게 불러야 뜻이 없다 */
 const REFRESH_MS = 60 * 1000;
@@ -150,7 +156,9 @@ export function mountSectors(root) {
     if (!rows) return head + '<div class="kh-sc-empty kh-mut">불러오는 중</div>';
     if (!rows.length) return head + '<div class="kh-sc-empty kh-mut">종목이 없습니다</div>';
 
-    return head + rows.slice(0, STOCK_COUNT).map((st) =>
+    /* **목록만 굴러간다.** 머리(이름 · 띠 · 상승/보합/하락 · 「상승률 TOP」)는
+       붙어 있어야 어느 묶음을 보고 있는지 안 사라진다. */
+    const list = (STOCK_COUNT ? rows.slice(0, STOCK_COUNT) : rows).map((st) =>
       `<a class="kh-sc-st" href="./stock.html?code=${st.code}">
          <span class="kh-sc-stn" title="${st.name}">${st.name}</span>
          <span class="kh-sc-stp">
@@ -158,6 +166,7 @@ export function mountSectors(root) {
            <i class="kh-num ${dirClass(st.pct)}">${fmtPct(st.pct)}</i>
          </span>
        </a>`).join('');
+    return head + `<div class="kh-sc-list">${list}</div>`;
   }
 
   function paintBody() {

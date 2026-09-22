@@ -231,14 +231,30 @@
    (CLAUDE.md 「진한 색 바탕에는 흰 글씨」). 등락률 색도 여기서는 묻는다 */
 .kh-scm-chips .kh-chip.is-active b { color: var(--kh-text-on-fill); }
 
-/* 고른 묶음 머리 — 이름 · 등락률 · 오름/내림 띠 */
-.kh-scm-gh {
-  display: flex; align-items: center; gap: 10px;
-  padding-bottom: 10px; margin-bottom: 2px;
-}
-.kh-scm-gn { font-size: 0.95rem; font-weight: 700; }
-.kh-scm-gh .kh-sc-bar { flex: 1; min-width: 0; max-width: 220px; }
-.kh-scm-cnt { font-size: 0.78rem; color: var(--kh-text-secondary); white-space: nowrap; }
+/* ── 셋을 나란히 (2026-09-22 지시) ─────────────────────────
+   「모달 띄우면 업종일때는 업종 3개가 보여져야하고 테마일때는 테마가 3개」.
+   카드와 같은 셋이고, 모달이 넓어 **거래대금까지** 더 보인다. */
+.kh-scm-cols { display: flex; align-items: stretch; }
+/* **여백 12px.** 카드는 20px 인데(재권님 지시) 여기는 표가 네 열이라
+   20px 씩 두면 **등락률과 거래대금이 잘린다** — `+24.86%` 가 56px 에,
+   `2,101억원` 이 63px 에 안 들어갔다 (2026-09-22 실측, 열 열 개가 잘림). */
+.kh-scm-col { flex: 1; min-width: 0; padding: 0 12px;
+              display: flex; flex-direction: column; }
+/* 카드와 같게 **테두리 상자가 아니라 한 줄**이다 */
+.kh-scm-vr { width: 1px; flex: none; background: var(--kh-border); }
+
+.kh-scm-gh { display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px; }
+.kh-scm-fire { font-size: 0.85rem; line-height: 1; }
+.kh-scm-rk { font-size: 0.86rem; font-weight: 700; flex: none; }
+.kh-scm-gn { font-size: 0.9rem; font-weight: 700; min-width: 0;
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kh-scm-pc { font-size: 0.86rem; font-weight: 700; flex: none; margin-left: auto; }
+.kh-scm-col .kh-sc-bar { width: 100%; height: 4px; margin-bottom: 6px; }
+.kh-scm-cnt { display: flex; font-size: 0.74rem; margin-bottom: 10px; }
+.kh-scm-cnt > :nth-child(2) { margin-left: auto; margin-right: 10px; }
+.kh-scm-tot { margin-left: 10px; }
+/* 목록만 굴러간다 — 머리는 붙어 있어야 어느 묶음인지 안 사라진다 */
+.kh-scm-list { flex: 1; min-height: 0; overflow-y: auto; }
 
 /* **`border-collapse: separate` 라야 표머리가 붙어 있는다.**
    `collapse` 로는 `thead th` 의 sticky 가 안 먹어 표머리가 밀려 올라간다
@@ -259,9 +275,17 @@
   border-top: 1px solid var(--kh-border);
 }
 .kh-scm tbody tr:hover td { background: var(--kh-bg-hover); }
-/* 종목 칸이 남는 폭을 다 먹지 않게 못 박는다 — 실시간 순위에서 종목과
-   현재가 사이가 559px 벌어졌던 그 자리다 */
-.kh-scm tbody td:first-child b { overflow: hidden; text-overflow: ellipsis; }
+/* **칸 폭을 못 박는다.** `table-layout: fixed` 만으로는 넷이 똑같이 나뉘어
+   종목 이름 자리가 모자랐고, 긴 이름이 **현재가 위로 올라탔다**
+   (2026-09-22 실측 — 「우성머티리얼즈」 가 「45원」 을 덮었다). */
+.kh-scm col.c-nm { width: 108px; }
+.kh-scm col.c-pr { width:  78px; }
+.kh-scm col.c-pc { width:  64px; }
+.kh-scm col.c-am { width:  73px; }
+/* **`display: block` 이라야 「…」 가 먹는다** — `inline` 인 `<b>` 에는
+   `text-overflow` 가 안 듣는다. 그래서 겹쳐 보였다. */
+.kh-scm tbody td b { display: block; overflow: hidden;
+                     text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── 데일리분석 칸 (kh-rank 줄) ─────────────────────────────
    옆 칸(지금 뜨는 산업·주요 지수)과 높이가 같아야 줄이 가지런하다.
@@ -459,7 +483,9 @@
               max-height: 255px; }
 /* 스크롤바 모양은 적지 않는다 — `assets/css/common.css` 한 곳에서 정한다
    (2026-09-18 지시 · 룰). 여기 5px 를 적어 두었다가 걷어냈다. */
-.kh-sc-body { flex: 1; overflow-y: auto; min-height: 0; display: flex; }
+/* **본문은 안 굴러간다** — 칸이 각자 굴러간다(`.kh-sc-list`).
+   여기에도 `auto` 를 두면 스크롤바가 둘이 된다. */
+.kh-sc-body { flex: 1; overflow: hidden; min-height: 0; display: flex; }
 
 /* 국기 · 갈래 · 기간 (2026-09-22 지시) — 탭 줄에 나란히 */
 .kh-sc-flag { width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; }
@@ -480,9 +506,25 @@
 /* ── 1·2·3위를 나란히 (2026-09-22 지시) ─────────────────────
    「지금뜨는 산업 하나에 다 들어있어서 잘 보여지지가 않는데」 ·
    「3위까지만 봐도 댐」. 업종 이름 칩 줄은 없앴다. */
-.kh-sc-col { flex: 1; min-width: 0; padding: 0 13px; }
-.kh-sc-col:first-child { padding-left: 4px; }
-.kh-sc-col:last-child { padding-right: 4px; }
+/* **안쪽으로 20px** (2026-09-22 지시 — 「상승과 그위에 상승하락 그래프
+   종목들 가격 등이 너무 바깥쪽에 가까운데 안쪽으로 20픽셀정도 넣어줘
+   세칸 다 적용해줘」).
+
+   전에는 13px 이었고 **첫 칸 왼쪽·마지막 칸 오른쪽만 4px** 이라 카드
+   가장자리에 붙어 있었다. 세 칸을 똑같이 20px 로 둔다 — 예외를 두면
+   가운데 칸만 달라 보인다. */
+/* **칸마다 따로 굴러간다** (2026-09-22 지시 — 「스크롤창 넣어서 더
+   볼수있또록」). 칸을 세로 flex 로 두고 목록만 남는 자리를 받는다 —
+   머리는 붙어 있고 목록만 움직인다. */
+.kh-sc-col { flex: 1; min-width: 0; padding: 0 20px;
+             display: flex; flex-direction: column; }
+/* **`min-height: 0` 이 있어야 굴러간다.** flex 칸은 기본이 auto 라
+   안쪽이 길면 칸을 밀고 나가고, 그러면 카드가 늘어난다.
+   스크롤바 모양은 `assets/css/common.css` 6px 을 그대로 물려받는다 —
+   여기서 정하지 않는다 (2026-09-18 룰). */
+.kh-sc-list { flex: 1; min-height: 0; overflow-y: auto;
+              /* 스크롤바가 가격을 가리지 않게 자리를 비운다 */
+              margin-right: -6px; padding-right: 6px; }
 /* **테두리 상자가 아니라 한 줄이다** (시안 — 「줄로 해달라」) */
 .kh-sc-vr { width: 1px; flex: none; background: var(--kh-border); }
 
