@@ -29,6 +29,7 @@ import { mountSectors } from './components/sectors.js';
 import { openSectorModal } from './components/sector-modal.js';
 import { mountStockPanel } from './components/stock-panel.js';
 import { mountStockDetail } from './components/stock-detail.js';
+import { mountMobileFold } from './components/mobile-fold.js';
 /* fetchIndexMinutes · fetchIndexCandles 는 여기서 안 쓴다 (2026-09-17).
    큰 차트가 지수에서 종목으로 바뀌면서 종목 캔들(chart.js 의 fetchCandles)로
    갈아탔다. 두 함수는 지수 화면을 만들 때 쓸 수 있게 live.js 에 남겨 뒀다. */
@@ -1822,3 +1823,8 @@ bindDailyMenu();
 
 /* 실시간 순위 「자세히 ›」 (2026-09-21 지시) */
 $('kh-rank-more')?.addEventListener('click', openRankModal);
+
+/* 모바일 칸 접기 (2026-09-22 지시 — 「칸별로 접기 버튼」).
+   **맨 끝에서 부른다.** 위에서 칸들을 다 그린 뒤라야 단추를 붙일 자리가 있다.
+   나중에 다시 그려지는 칸은 그 모듈이 스스로 다시 붙인다. */
+mountMobileFold();
