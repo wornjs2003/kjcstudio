@@ -28,12 +28,19 @@ echo.
 REM --- 1) local server -------------------------------------------
 REM  kis_proxy.py, NOT holdings-preview.bat. The latter is plain
 REM  http.server: pages load but /api/kis/* all return 404.
+REM  Run servers with pythonw (no console window) and log to a file.
+REM  Five taskbar windows were piling up - see CLAUDE.md. pythonw has no
+REM  stdout, so print() kills it unless output is redirected (2026-09-22).
+set PYW=C:\Users\9800X3D\AppData\Local\Programs\Python\Python313\pythonw.exe
+if not exist "%PYW%" set PYW=pythonw
+if not exist "%~dp0logs" mkdir "%~dp0logs"
+
 netstat -ano | findstr ":8765" | findstr "LISTENING" > nul 2>&1
 if %errorlevel%==0 (
   echo   [skip]  server already listening on 8765
 ) else (
   echo   [start] local server 8765
-  start "KJC local server 8765" /min cmd /c "cd /d "%~dp0holdings" && python server/kis_proxy.py"
+  start "" /b cmd /c "cd /d "%~dp0holdings" && "%PYW%" server/kis_proxy.py > "%~dp0logs\8765.log" 2>&1"
   ping -n 4 127.0.0.1 > nul
 )
 
@@ -55,7 +62,7 @@ if %errorlevel%==0 (
   goto :after8767
 )
 echo   [start] staging server 8767
-start "KJC staging server 8767" /min cmd /c "cd /d C:\work\kjc-staging\holdings && python server/kis_proxy.py --port 8767"
+start "" /b cmd /c "cd /d C:\work\kjc-staging\holdings && "%PYW%" server/kis_proxy.py --port 8767 > "%~dp0logs\8767.log" 2>&1"
 ping -n 3 127.0.0.1 > nul
 :after8767
 
@@ -101,6 +108,6 @@ if %errorlevel%==0 (
   goto :eof
 )
 echo   [start] session server %~2 ^(kjc-%~1, slow^)
-start "KJC session %~1 %~2" /min cmd /c "cd /d C:\work\kjc-%~1\holdings && python server/kis_proxy.py --port %~2 --slow"
+start "" /b cmd /c "cd /d C:\work\kjc-%~1\holdings && "%PYW%" server/kis_proxy.py --port %~2 --slow > "%~dp0logs\%~2.log" 2>&1"
 ping -n 3 127.0.0.1 > nul
 goto :eof
