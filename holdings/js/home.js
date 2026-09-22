@@ -1292,9 +1292,13 @@ async function openStockModal(code, { push = true } = {}) {
     /* 양옆 서랍. 처음에는 접혀 있고, 한 번 펼치면 기억한다 (2026-09-16 지시).
        key 는 펼친 상태를 적어 두는 이름이라 화면 글자와 따로 둔다 —
        이름을 바꿔도 펼쳐둔 것이 풀리지 않는다. */
+    /* **이름만 바꾼다. `key` 는 그대로 둔다** — 펼쳐둔 것을 적어 두는
+       이름이라, 바꾸면 재권님이 펼쳐 두신 것이 접힌 채로 돌아온다.
+       서랍에 무엇이 드는지는 `css/modal.css` 의 자리 이름이 정한다
+       (2026-09-22 지시로 양쪽 내용이 바뀌었다). */
     drawers: {
-      left:  { key: 'stock-memo', label: '내 메모' },
-      right: { key: 'stock-news', label: '뉴스 · 공시' },
+      left:  { key: 'stock-memo', label: '투자 지표 · 체결' },
+      right: { key: 'stock-news', label: '투자자 정보 · AI 분석 · 종목 뉴스' },
     },
     onToggle() {
       /* 모달 폭이 바뀌었으니 차트도 다시 재야 한다. 캔버스는 CSS 로 늘어나지

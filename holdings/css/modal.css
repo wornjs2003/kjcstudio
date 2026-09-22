@@ -124,25 +124,54 @@
    나머지는 양옆 서랍으로 갔다.
 
        가운데   차트
-       왼쪽     투자 지표 · 시세
-       오른쪽   뉴스 · 공시 · 개인/외국인/기관
+       왼쪽     투자 지표 · 체결
+       오른쪽   투자자 정보 · AI 분석 · 종목 뉴스   (2026-09-22 지시)
 
    **호가 · 매매 기록 · 내 메모는 모달에서 뺐다.** stock.html(전체 화면)에는
    그대로 있다 — 마크업은 거기 하나뿐이고 여기서는 안 보이게만 한다.
 
    **접으면 그 서랍 것이 다 숨는다.** 처음 열면 차트만 보인다.
-   재권님이 그대로 가기로 정하셨다 (2026-09-17). */
+   재권님이 그대로 가기로 정하셨다 (2026-09-17).
+
+   ── 몸통은 **늘 두 줄**이다 (2026-09-22 지시) ────────────────
+
+   재권님 말씀 —
+
+       왼쪽 화살표 누르는 곳에 투자지표랑 체결이 있는게 이게 늘어나면서
+       **차트 세로 크기가 변화되는데 이것도 변화되면 안돼**
+
+   **원인은 줄 수가 서랍마다 달랐던 것이다.** 게다가 패널 셋(`panel3`)에
+   자리 이름이 없어 **차트 아래 암묵 줄**에 떨어졌다. 그래서 이랬다.
+
+       둘 다 접힘   차트칸 326px
+       왼쪽 펼침    차트칸 562px
+       둘 다 펼침   차트칸 726px      ← 2026-09-22 실측
+
+   **몸통 줄을 늘 둘로 두고 차트가 둘을 걸치게** 한다. 왼쪽 서랍의 둘
+   (투자 지표 · 체결)이 한 줄씩 가져가고, 오른쪽 패널 셋도 둘을 걸친다.
+   **어느 서랍을 펼쳐도 차트가 차지하는 줄 수가 같아 세로가 안 움직인다.**
+
+   루트 CLAUDE.md 「보는 것을 바꿔도 자리는 그대로다」 의 한 자리다 —
+   서랍은 **열려고 누른 것**이라 가로는 늘어나는 것이 맞고, **세로는
+   아니다.** 어제 첫 화면 패널에 천장을 둔 것과 같은 생각이다. */
 .kh-modal .kh-main {
   max-width: none;
   margin: 0;
   padding: 0 34px 22px;   /* 34 = 손잡이 5 + 22 + 틈 7 */
   display: grid;
   gap: 14px;
-  min-height: 100%;
+  /* **`min-height` 가 아니라 `height` 다** (2026-09-22). `min-height: 100%`
+     면 격자가 내용에 끌려 늘어나고, 그러면 `minmax(0, 1fr)` 줄도 내용 높이를
+     따라간다 — 오른쪽 서랍을 펼치자 차트칸이 646 → **1053px** 이 됐다.
+     `.kh-modal` 이 `height: 77vh` 로 이미 확정 높이라, 여기서 그것을 그대로
+     받으면 줄이 **나눠 갖는 값**이 되어 안쪽이 아무리 길어도 안 밀린다. */
+  height: 100%;
+  min-height: 0;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
     "head"
+    "chart"
     "chart";
 }
 
@@ -152,61 +181,69 @@
 .kh-modal [data-p="ask"]    { grid-area: ask; }
 .kh-modal [data-p="trade"]  { grid-area: trade; }
 .kh-modal [data-p="tick"]   { grid-area: tick; }
-.kh-modal [data-p="flow"]   { grid-area: flow; }
 .kh-modal [data-p="metric"] { grid-area: metric; }
+/* **자리 이름이 없으면 암묵 줄로 떨어진다.** 이것이 없어서 패널 셋이
+   차트 아래에 놓였고, 재권님이 「차트 밑에 보이는 것을 되돌려라」 하셨다 */
+.kh-modal [data-p="panel3"] { grid-area: panel3; }
 
 /* 모달에서 아예 빼는 것. stock.html 에는 그대로 있다 (2026-09-17 지시) */
 .kh-modal [data-p="ask"],
 .kh-modal [data-p="trade"],
 .kh-modal [data-p="memo"] { display: none !important; }
 
-/* 서랍에 든 것. 접혀 있으면 자리를 차지하지 않는다 */
+/* 서랍에 든 것. 접혀 있으면 자리를 차지하지 않는다.
+   **`flow` · `news` 는 2026-09-21 에 stock.html 에서 없어졌다** —
+   그 자리를 패널 셋(`panel3`)이 이어받았다. */
 .kh-modal [data-p="metric"],
 .kh-modal [data-p="tick"],
-.kh-modal [data-p="flow"],
-.kh-modal [data-p="news"] { display: none; }
+.kh-modal [data-p="panel3"] { display: none; }
 
-/* 종목 페이지에서는 두 칸을 차지하라는 인라인 값이 붙어 있다.
-   여기서는 자리 이름으로 잡으므로 그것을 눌러 둔다. */
-.kh-modal [data-p="news"] { grid-area: news; grid-column: news !important; }
+/* **몸통 줄은 늘 둘이다.** 위 `.kh-main` 주석 참조 — 차트가 둘을 걸쳐
+   어느 서랍을 펼쳐도 세로가 안 움직인다. */
 
-/* 왼쪽만 펼침 — 투자 지표 · 시세 */
+/* 왼쪽만 펼침 — 투자 지표 · 체결 */
 .kh-stage.has-left  .kh-modal [data-p="metric"],
 .kh-stage.has-left  .kh-modal [data-p="tick"] { display: flex; }
 .kh-stage.has-left  .kh-modal .kh-main {
   grid-template-columns: var(--kh-drawer) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
     "head   head"
     "metric chart"
     "tick   chart";
 }
 
-/* 오른쪽만 펼침 — 뉴스 · 공시 · 개인/외국인/기관 */
-.kh-stage.has-right .kh-modal [data-p="news"],
-.kh-stage.has-right .kh-modal [data-p="flow"] { display: flex; }
+/* 오른쪽만 펼침 — 투자자 정보 · AI 분석 · 종목 뉴스 (2026-09-22 지시) */
+.kh-stage.has-right .kh-modal [data-p="panel3"] { display: flex; }
 .kh-stage.has-right .kh-modal .kh-main {
   grid-template-columns: minmax(0, 1fr) var(--kh-drawer);
-  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
     "head  head"
-    "chart news"
-    "chart flow";
+    "chart panel3"
+    "chart panel3";
 }
 
 /* 둘 다 펼침 */
 .kh-stage.has-left.has-right .kh-modal [data-p="metric"],
 .kh-stage.has-left.has-right .kh-modal [data-p="tick"],
-.kh-stage.has-left.has-right .kh-modal [data-p="flow"],
-.kh-stage.has-left.has-right .kh-modal [data-p="news"] { display: flex; }
+.kh-stage.has-left.has-right .kh-modal [data-p="panel3"] { display: flex; }
 .kh-stage.has-left.has-right .kh-modal .kh-main {
   grid-template-columns: var(--kh-drawer) minmax(0, 1fr) var(--kh-drawer);
-  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
     "head   head  head"
-    "metric chart news"
-    "tick   chart flow";
+    "metric chart panel3"
+    "tick   chart panel3";
 }
+
+/* **패널 셋은 서랍 높이를 다 쓴다.** 종목 화면(stock.html)에서는 차트 줄에
+   나란히 서느라 `.kh-p3-host` 에 `height: 340px` 이 박혀 있는데, 여기서는
+   차트 높이에 맞춰야 한다 — 재권님 지시대로 **차트 높이의 1/3씩**이 되려면
+   이 칸이 먼저 서랍을 꽉 채워야 한다 (2026-09-22). */
+.kh-modal [data-p="panel3"] { flex-direction: column; min-height: 0; }
+.kh-modal [data-p="panel3"] .kh-w-body { flex: 1; min-height: 0; display: flex; }
+.kh-modal [data-p="panel3"] .kh-p3-host { height: auto; flex: 1; min-height: 0; }
+/* **`min-height: 0` 을 끝까지 이어야 한다.** 한 마디만 빠져도 그 아래 글이
+   칸을 밀고 나간다 — grid·flex 칸의 기본이 `auto` 라서다. */
+.kh-modal [data-p="panel3"] .kh-p3 { min-height: 0; }
 
 /* 지표 여섯이 서랍 폭(320px)에 들어간다. 종목 화면은 3열인데 여기서는 좁아
    글자가 줄바꿈된다. 2열로 놓는다 (2026-09-17). */
