@@ -459,6 +459,10 @@ async function fetchPrice(cfg, env, code) {
     high: num(o.stck_hgpr),
     low: num(o.stck_lwpr),
     volume: num(o.acml_vol),
+    /* **거래대금** (2026-09-22). `server/kis_proxy.py` 의 `fetch_price` 와
+       같은 판정이어야 한다 — 한쪽만 넣으면 로컬과 배포본의 숫자가 갈린다.
+       단위는 원이다 (`acml_tr_pbmn` = 누적 거래 대금). */
+    value: num(o.acml_tr_pbmn),
     marketCap: num(o.hts_avls),
     per: num(o.per),
     pbr: num(o.pbr),

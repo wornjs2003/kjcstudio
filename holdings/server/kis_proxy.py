@@ -444,6 +444,13 @@ def _issue_token(cfg):
 # 8093(Debugging 보드 전용)으로 넘긴다. 8093 은 반대로 /holdings/ 를
 # 8765 로 넘긴다 — 대칭이다.
 DEBUGGING_PORT = 8093
+
+# 재권님이 최종 확인하시는 서버. **텔레그램은 여기서만 보낸다** (2026-09-22).
+#
+# `frame.js` 의 `MAIN_PORT` 와 **같은 값**이다 — 화면은 이 포트가 아니면
+# 「정식 아님」 띠를 붙인다. 언어가 달라 한 곳으로 못 합치므로, **한쪽을
+# 고치면 다른 쪽도 본다.**
+MAIN_PORT = 8765
 DEBUGGING_BASE = "http://localhost:%d" % DEBUGGING_PORT
 
 # 8093 이 살아 있는지. 매 요청마다 확인하면 느리므로 잠깐 기억해 둔다.
@@ -603,7 +610,8 @@ def fetch_prices(cfg, codes):
                     "price": price, "prev": prev, "amt": amt, "pct": pct,
                     "per": info.get("per"), "pbr": info.get("pbr"),
                     "high52": info.get("high52"), "low52": info.get("low52"),
-                    "volume": info.get("volume"), "marketCap": info.get("marketCap"),
+                    "volume": info.get("volume"), "value": info.get("value"),
+                    "marketCap": info.get("marketCap"),
                     "open": info.get("open"), "high": info.get("high"),
                     "low": info.get("low"),
                 }
@@ -1154,6 +1162,11 @@ def fetch_price(cfg, code):
         "high": _num(o.get("stck_hgpr"), int),
         "low": _num(o.get("stck_lwpr"), int),
         "volume": _num(o.get("acml_vol"), int),
+        # **거래대금** (2026-09-22). 응답에 있는데 안 내보내고 있었다 —
+        # 그래서 화면이 두 곳에서 `현재가 × 거래량` 으로 어림했고,
+        # **오른 날에는 장중 평균가보다 현재가가 높아 부풀려졌다.**
+        # 단위는 원이다 (`acml_tr_pbmn` = 누적 거래 대금).
+        "value": _num(o.get("acml_tr_pbmn"), int),
         "marketCap": _num(o.get("hts_avls"), int),
         "per": _num(o.get("per")),
         "pbr": _num(o.get("pbr")),
@@ -3128,11 +3141,31 @@ def main():
             get_issues=lambda: (news.fetch_issues() or {}).get("rows") or [],
             # 발송은 공시와 같은 통로를 쓴다. **`NOTIFY_LOCAL` 과 무관하다** —
             # 그것은 공시만 막는다 (dart.py 주석 참고).
-            send=dart.telegram_send if dart.telegram_config() else None,
+            #
+            # ── **왜 포트로 가르나** ──
+            #
+            # ① `--slow` 로는 못 막는다. 2026-09-22 에 **8770 이 `--slow` 없이**
+            #    떠 있었고, 그런 서버가 둘이면 **07:30 에 각각 보내** 폰에 두 번 간다.
+            #
+            # ② **`docstore` 로도 못 막는다.** `save_today()` 가 「오늘 것이 있으면
+            #    안 쓴다」 로 막고 있는데, `DOC_ROOT` 가 `__file__` 기준이라
+            #    **폴더마다 다른 파일을 본다** (8765 는 `KJCStudio\…`, 8770 은
+            #    `kjc-dev3\…`). 둘 다 「오늘 것이 없다」 로 읽는다.
+            #    **같은 폴더 안 중복만 그것이 막는다.**
+            #
+            # ③ **저장은 모든 폴더에서 한다.** 그 폴더 화면이 읽어야 한다.
+            #    **발송만** 가른다.
+            #
+            # ④ `MAIN_PORT` 는 `frame.js` 의 같은 이름과 **같은 값**이다 (위 주석).
+            send=(dart.telegram_send
+                  if (dart.telegram_config() and args.port == MAIN_PORT)
+                  else None),
         )
+        _tg = ("텔레그램 켜짐" if (dart.telegram_config() and args.port == MAIN_PORT)
+               else ("저장만 — 메인(%d)에서만 보냅니다" % MAIN_PORT
+                     if dart.telegram_config() else "저장만 — 열쇠 없음"))
         print("  데일리분석 : 아침 %02d:%02d 에 저장 · 최근 %d장 (%s)"
-              % (daily.SEND_AT // 60, daily.SEND_AT % 60, daily.KEEP,
-                 "텔레그램 켜짐" if dart.telegram_config() else "저장만 — 열쇠 없음"))
+              % (daily.SEND_AT // 60, daily.SEND_AT % 60, daily.KEEP, _tg))
 
     # 볼린저·MACD·RSI 가 동시에 맞는 자리를 본다 (2026-09-22 지시).
     # **KIS 를 새로 안 부른다** — 미리받기가 쌓아 둔 5분봉을 읽기만 한다.
