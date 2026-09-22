@@ -27,6 +27,19 @@
  * 그래서 머리를 **스크롤 칸 바깥의 형제**로 두고 모달을 세로 flex 로 만든다.
  * 굴러가는 것은 본문뿐이고, `thead th { top: 0 }` 이 그냥 맞는다.
  *
+ * ── 붙이고 나서 이 한 줄을 돌려 본다 ──
+ *
+ *     [...document.querySelectorAll('.kh-modal [hidden]')]
+ *       .filter((e) => getComputedStyle(e).display !== 'none' || e.offsetHeight > 0)
+ *
+ * **비어야 정상이다.** `hidden` 을 붙였는데 `display: flex` 같은 규칙이
+ * 이겨서 **안 숨는 일**이 잦다 — 2026-09-22 에 뉴스·공시 탭 칸이 숨은 채
+ * 8694px 를 차지하고 있었다. `hasAttribute('hidden')` 만 보면 「숨었다」 로
+ * 나오니, **계산된 `display` 와 높이까지** 봐야 갈린다.
+ *
+ * `modal.css` 의 `.kh-modal [hidden] { display: none !important }` 가
+ * 모달 안에서는 막아 주지만, **화면 쪽(모달 아닌 자리)은 각자 봐야 한다.**
+ *
  * ── 스크롤바 ──
  *
  * 굵기·화살표는 `assets/css/common.css` 한 곳이 정한다 (6px · 화살표 없음).
