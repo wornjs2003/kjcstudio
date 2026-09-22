@@ -1080,6 +1080,39 @@ async function fetchInvestor(cfg, env, code, days = INVESTOR_DAYS) {
   });
 }
 
+/* ── 종목별 장중 추정가집계 (2026-09-22 지시) ──────────────────────
+ *
+ * server/kis_proxy.py 의 fetch_investor_estimate() 와 **같은 판정**이어야 한다.
+ * 한쪽만 고치면 로컬과 배포본의 숫자가 갈린다.
+ *
+ * 위 fetchInvestor 는 장중에 오늘 줄을 net: null 로 준다. 네이버는 대안이
+ * 못 된다 — 경로 셋이 전부 어제까지다 (2026-09-22 실측).
+ *
+ * ⚠️ **가집계다.** 마감 뒤 숫자가 달라진다. 화면에 그대로 적는다.
+ * ⚠️ **개인이 없다.** 응답 필드가 외국인·기관·합계 셋뿐이다.
+ *
+ * `bsop_hour_gb` 는 **회차 번호**다 — 큰 것이 최신. 응답에 시각은 없다. */
+const INVESTOR_EST_TTL = 60;    // 하루 네 번만 바뀐다
+
+async function fetchInvestorEstimate(cfg, env, code) {
+  const data = await kisGet(
+    cfg, env,
+    "/uapi/domestic-stock/v1/quotations/investor-trend-estimate",
+    { MKSC_SHRN_ISCD: code },
+    "HHPTJ04160200",
+    INVESTOR_EST_TTL
+  );
+  const rows = outRows(data, "output2").map((r) => ({
+    seq: num(r.bsop_hour_gb),
+    foreign: num(r.frgn_fake_ntby_qty),
+    inst: num(r.orgn_fake_ntby_qty),
+    sum: num(r.sum_fake_ntby_qty),
+  }));
+  /* **최신이 앞에 오게 한다.** 화면은 첫 줄만 쓴다 */
+  rows.sort((a, b) => (b.seq ?? -1) - (a.seq ?? -1));
+  return { latest: rows[0] || null, rows };
+}
+
 /* 최근 체결 30줄. **한 번에 30줄이 오고 그게 전부다** — 더 과거는 안 준다.
    server/kis_proxy.py 의 fetch_ticks() 와 같은 판정이어야 한다. */
 async function fetchTicks(cfg, env, code) {
@@ -2981,6 +3014,26 @@ export default {
             qtyUnit: "주", amtUnit: "백만원",
             /* 종목별은 확정치다. 상위 목록(investor-top)만 가집계다 */
             provisional: false,
+          },
+        });
+      }
+
+      /* 종목별 장중 추정가집계 (2026-09-22 지시) */
+      if (route === "investor-estimate") {
+        const code = (url.searchParams.get("code") || "").trim();
+        if (!/^\d{6}$/.test(code)) return fail("code 는 6자리 숫자여야 합니다.", 400);
+        const data = await fetchInvestorEstimate(cfg, env, code);
+        return json({
+          ok: !!(data && data.latest), data,
+          meta: {
+            code, qtyUnit: "주",
+            /* **확정치가 아니다. 화면에 그대로 적어야 한다** */
+            provisional: true,
+            person: false,      /* 개인은 이 응답에 없다 */
+            note: "장중 추정가집계 — 증권사 집계치. 마감 뒤 확정치와 다르다. "
+                + "입력 외국인 09:30·11:20·13:20·14:30 / "
+                + "기관 10:00·11:20·13:20·14:30 (±10분)",
+            cacheTtl: INVESTOR_EST_TTL,
           },
         });
       }
