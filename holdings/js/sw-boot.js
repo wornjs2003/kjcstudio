@@ -24,22 +24,42 @@
 
 const SCOPE = location.origin + '/holdings/';
 
-/* 손으로 띄워 보는 자리인가. 파일로 직접 열었을 때(file://)는 호스트가
-   비어 있는데, 그때는 워커가 어차피 등록되지 않는다. */
-const isLocal = location.hostname === 'localhost'
-             || location.hostname === '127.0.0.1'
-             || location.hostname === '[::1]';
+/* **배포본에도 켠다** (2026-09-22 지시 — 「켜줘」).
+
+   전에는 `localhost` 일 때만 켜고 배포본에서는 **지웠다.** 그래서 이렇게 갈렸다.
+
+       로컬     워커가 `no-store` 로 다 받아옴   →  **항상 새것**
+       배포본   워커가 아예 없음                →  브라우저가 옛것을 들고 있음
+
+   재권님이 「**지금뜨는산업 완전히 망가져있는데**」 로 보신 화면이 실제로는
+   멀쩡했다. **검수를 통과한 것이 재권님 화면에서만 깨져 보이는 자리**였고,
+   시크릿 창과 캐시 비우기로 둘 다 정상인 것을 재권님이 직접 확인하셨다.
+
+   ── 왜 `?v=` 를 안 쓰나 ──
+
+   HTML 의 `<link>` · `<script>` 에 버전을 붙여도 **절반만 풀린다.**
+   `js/home.js` 가 `import` 로 읽는 모듈이 **스물둘**인데, `import` 경로에는
+   쿼리가 안 물려간다. 오늘 고친 `sectors.js` · `sector-modal.js` ·
+   `chart.js` · `investor.js` 가 전부 거기 들어 있다.
+
+   **워커는 동일 출처 요청을 전부 가로채므로 `import` 까지 한꺼번에 덮는다.**
+
+   ── 대가 ──
+
+   **매번 네트워크를 탄다.** 재권님이 그것을 아시고 정하셨다.
+   얼마나 느려지는지는 `sw.js` 머리글에 실측을 적어 둔다.
+
+   **`isLocal` 판정을 없앴다.** 켜는 곳과 안 켜는 곳을 가르지 않으므로
+   쓸 데가 없어졌다 — 남겨 두면 「어디선가 쓰겠지」 로 읽힌다. */
 
 export function bootServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
 
   navigator.serviceWorker.getRegistrations().then((regs) => {
     for (const r of regs) {
-      /* 이 폴더 밖에 등록된 것은 어느 환경이든 지운다.
-         배포본에서는 안쪽 것까지 지운다. */
-      const outside = r.scope.indexOf(SCOPE) !== 0;
-      if (outside || !isLocal) r.unregister();
+      /* 이 폴더 밖에 등록된 것만 지운다. 안쪽 것은 어느 환경이든 살려 둔다 */
+      if (r.scope.indexOf(SCOPE) !== 0) r.unregister();
     }
-    if (isLocal) return navigator.serviceWorker.register('./sw.js');
+    return navigator.serviceWorker.register('./sw.js');
   }).catch(() => { /* 워커가 없어도 화면은 돈다 */ });
 }
