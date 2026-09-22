@@ -30,6 +30,56 @@ import { iconHtml } from './stock-icon.js';
    `docs/data-sources.md` 참고. 받을 수 있게 되면 여기서 지운다. */
 const FOOT_NOT_READY = ['달러 인덱스'];
 
+/* ── 「정식 아님」 띠 ──────────────────────
+   화면 여섯이 전부 같게 생겨서 **어느 포트를 보고 있는지 구분이 안 된다.**
+   창 제목에도 포트가 없다. 2026-09-22 에 그것으로 여러 번 엇갈렸다 —
+   작업용 화면을 보고 「안 됐네」 로 읽히는 일이 난다.
+
+   ── 왜 여기인가 ──
+
+   이 파일은 **네 엔트리가 모두 `import`** 한다 (home · stock · daily · news).
+   모듈을 읽는 것만으로 붙으므로 부르는 쪽이 아무것도 안 해도 된다.
+   네 파일에 한 줄씩 넣으면 **새 화면이 생길 때 빠뜨린다.**
+
+   ── 왜 브라우저가 판정하나 ──
+
+   `location.port` 면 **서버를 안 고쳐도 된다.** `kis_proxy.py` 는 여러
+   세션이 함께 쓰는 파일이라, 거기에 포트별 분기를 넣으면 부딪힌다.
+
+   ── 세션 이름은 적지 않는다 ──
+
+   「작업용 8769 · 주식페이지_개발2」 처럼 적으면 **포트↔세션 표가 두 곳**이
+   된다. 그 표는 루트 `CLAUDE.md` 「무엇이 어디에 있나」 에 있고,
+   세션이 늘 때마다 양쪽을 고쳐야 한다 — 2026-09-22 하루에 주식 레인이
+   하나에서 넷으로 늘었다. **포트만 보이면 그 표를 찾아갈 수 있다.**
+
+   같은 이유로 「검수용」 · 「작업용」 을 포트로 갈라 적지도 않는다.
+   **8765 가 아니면 최종본이 아니다** — 그 한 줄이면 된다. */
+const MAIN_PORT = '8765';
+
+function mountEnvBar() {
+  /* 포트가 없으면(80 · 443) 배포본이다. 거기는 진짜다. */
+  const port = location.port;
+  if (!port || port === MAIN_PORT) return;
+
+  const host = document.querySelector('.kh-app');
+  if (!host || host.querySelector('.kh-envbar')) return;
+
+  const el = document.createElement('div');
+  el.className = 'kh-envbar';
+  el.setAttribute('role', 'status');
+  el.textContent = `⚠ 작업용 (${port}) — 최종본이 아닙니다`;
+  host.prepend(el);
+}
+
+/* `<script type="module">` 은 defer 와 같아 DOM 이 준비된 뒤 돈다.
+   그래도 확인한다 — 다른 방식으로 불릴 수 있다. */
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', mountEnvBar, { once: true });
+} else {
+  mountEnvBar();
+}
+
 /* ── 관심종목 사이드바 ───────────────────── */
 export function mountWatchSide(el, { activeCode } = {}) {
   if (!el) return { update() {}, slot: null };
