@@ -724,3 +724,61 @@ a.kh-sc-i:hover { color: var(--kh-accent); }
   border-radius: var(--kh-radius-sm);
   margin-bottom: 10px;
 }
+
+/* ── 굴러가는 칸의 아래 (2026-09-22 지시) ────────────────────
+ *
+ * 재권님 말씀 — 「**하위에 잘리는 부분은 칸 끝이 아니고 몇 픽셀 안쪽으로**」,
+ * 이어서 「**이건 모든 칸 통일이야**」.
+ *
+ * 카드 안에서 목록이 굴러갈 때 **마지막 줄이 칸 끝에 딱 붙어** 잘렸다.
+ * 잘린 줄이 테두리에 닿아 있으면 「여기서 끝인가」 와 「더 있나」 가
+ * 구분되지 않는다. 재서 **굴러가는 칸 넷이 전부 아래 여백 0** 이었다.
+ *
+ * **두 가지를 함께 쓴다.**
+ *
+ *     아래 여백      마지막 줄이 끝까지 내려가도 그만큼 뜬다
+ *     흐려지는 띠     잘리는 줄이 서서히 사라진다
+ *
+ * 모달(`css/modal.css` 의 `.kh-modal-fade`)이 이미 같은 방식이다. 거기는
+ * 46px 인데 **카드는 작으므로 절반쯤**으로 둔다 — 카드 하나가 255px 일 때
+ * 46px 은 다섯 줄 중 한 줄을 통째로 먹는다.
+ *
+ * **값은 여기 한 곳에서 정한다.** 카드마다 적으면 그 순간 복제가 넷이 된다
+ * (`--kh-row-h` 와 같은 자리). 새 카드가 생기면 **아래 목록에 한 줄** 더한다.
+ */
+:root {
+  --kh-tail-pad: 22px;    /* 마지막 줄이 칸 끝에서 이만큼 뜬다 */
+  --kh-tail-fade: 24px;   /* 흐려지는 띠의 높이 */
+}
+
+/* 굴러가는 칸 — **재서 고른 넷이다** (2026-09-22 실측, 보임/내용)
+ *
+ *     .kh-p3-b        투자자 정보 · AI 분석    182/309
+ *     .kh-sc-list     지금 뜨는 산업           115/345
+ *     #kh-rank-scroll 실시간 순위             618/10648
+ *     .kh-sched-b     뉴스 · 공시 · 주요일정    150/603
+ */
+.kh-p3-b,
+.kh-sc-list,
+/* **`.kh-sched-b`(뉴스·공시)는 여기 없다.** `home.css:1020` 의
+   `.kh-sec-card > .kh-sched-b` 가 그 칸의 `padding` 을 통째로 정하는데,
+   `home.css` 가 **뒤에 실려** 같은 특정도로 적어도 진다 (index.html:21~22).
+   그래서 그쪽에 적었다 — 값은 여전히 `--kh-tail-pad` 하나를 본다. */
+#kh-rank-scroll {
+  padding-bottom: var(--kh-tail-pad);
+}
+
+/* 띠는 **칸이 아니라 카드**에 붙인다 — 칸 안에 두면 내용과 함께 굴러가
+   위로 올라가 버린다. `::after` 라 마크업을 안 건드린다.
+   오른쪽 6px 를 비우는 것은 **막대 자리**다 (`common.css` 가 정한 굵기). */
+#kh-panel3, .kh-sc-card, .kh-rank-card, .kh-sec-card { position: relative; }
+
+#kh-panel3::after, .kh-sc-card::after,
+.kh-rank-card::after, .kh-sec-card::after {
+  content: "";
+  position: absolute; left: 0; right: 6px; bottom: 0;
+  height: var(--kh-tail-fade);
+  background: linear-gradient(to bottom, transparent, var(--kh-bg-card));
+  pointer-events: none;
+  border-radius: 0 0 var(--kh-radius-lg) var(--kh-radius-lg);
+}

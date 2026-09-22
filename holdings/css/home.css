@@ -1018,7 +1018,12 @@
    높이를 정해 둔다 — 안 정하면 목록만큼 카드가 길어져 밑선이 내려간다.
    이 숫자가 곧 카드 밑선이다. 200px 는 눈대중이니 화면 보고 맞춘다. */
 .kh-sec-card > .kh-sched-b {
-  padding: 0 4px 0 16px; overflow-y: auto; min-height: 0; flex: 1;
+  /* 아래 여백은 **`frame.css` 의 `--kh-tail-pad`** 다 (2026-09-22 지시 —
+     「하위에 잘리는 부분은 칸 끝이 아니고 몇 픽셀 안쪽으로」).
+     그쪽 공용 규칙(`.kh-sched-b`)은 `home.css` 가 뒤에 실려 여기에 지므로,
+     **값만 받아 쓴다.** 숫자를 적으면 같은 값이 두 곳이 된다. */
+  padding: 0 4px var(--kh-tail-pad) 16px;
+  overflow-y: auto; min-height: 0; flex: 1;
   max-height: 150px;
 }
 
