@@ -91,6 +91,16 @@ WATCH_CODES = [
 # 그동안 쌓인 것이 한꺼번에 나가지는 않는다 — 아래 `mark` 로
 # **보내지 않아도 「알린 것으로」 적어 두기** 때문이다.
 NOTIFY_LOCAL = False
+#
+# ⚠️ **다시 켜기 전에 포트를 가리는 형태로 바꾼다** (2026-09-22 · 주식페이지_개발2).
+#
+# 이 스위치는 **통째로 끄고 켠다.** 그대로 켜면 `--slow` 가 아닌 서버가
+# **전부** 보내므로, 지금 띄워 둔 대로면 **세 번** 온다(8765 · 8767 · 8770).
+#
+#     데일리   `MAIN_PORT` 로 **포트를 가린다**  →  8765 하나만 보낸다
+#     공시     **통째로 끈다**                   →  아무도 안 보낸다 · 켜면 전부 보낸다
+#
+# 켜는 날에는 데일리와 같은 꼴(`kis_proxy.py` 의 `MAIN_PORT`)로 맞춘다.
 
 POLL_INTERVAL = 300          # 5분
 POLL_FROM = 7 * 60           # 07:00
@@ -477,6 +487,8 @@ def save_disclosures(items, only_codes=None, notified=0):
             rcept = (it.get("rcept_no") or "").strip()
             if not rcept:
                 continue
+            # **거르기일 뿐 판정이 아니다.** 아래 INSERT 의 결과가 판정한다 —
+            # 여기서 보고 아래에서 쓰는 사이에 남이 끼어들 수 있다.
             if conn.execute("SELECT 1 FROM dart_disclosures WHERE rcept_no = ?",
                             (rcept,)).fetchone():
                 continue
@@ -490,16 +502,32 @@ def save_disclosures(items, only_codes=None, notified=0):
                 "rcept_dt": (it.get("rcept_dt") or "").strip(),
                 "rm": (it.get("rm") or "").strip(),
             }
-            conn.execute(
+            # **새 것인지는 기록이 판정한다** (2026-09-22).
+            #
+            # `worker/kis-worker.js` 에서 **같은 공시가 두 번 나간 일**이 있었다.
+            # 거기는 `SELECT` 로 본 것을 그대로 보내는데, 그것을 **둘이 동시에
+            # 부르면** 둘 다 「없다」 를 보고 각각 보낸다. **기록은 한 벌인데
+            # 보낸 것이 두 번**이었다.
+            #
+            # 여기는 `_db_lock` 이 있어 **한 프로세스 안에서는** 안 나는데,
+            # **같은 `market.db` 를 여러 서버가 쓰면 그때부터 난다.**
+            # 지금은 `NOTIFY_LOCAL = False` 라 보내지 않아 드러나지 않을 뿐이다.
+            #
+            # `ON CONFLICT` 로 두고 `rowcount` 를 보면 **실제로 들어간 것만**
+            # 남는다 — 워커의 `meta.changes` 와 같은 자리다.
+            cur = conn.execute(
                 """INSERT INTO dart_disclosures
                      (rcept_no, corp_code, stock_code, corp_name, report_nm,
                       flr_nm, rcept_dt, rm, received_at, notified)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(rcept_no) DO NOTHING""",
                 (row["rcept_no"], row["corp_code"], row["stock_code"],
                  row["corp_name"], row["report_nm"], row["flr_nm"],
                  row["rcept_dt"], row["rm"],
                  datetime.now(KST).isoformat(timespec="seconds"), notified),
             )
+            if not cur.rowcount:
+                continue
             fresh.append(row)
     return fresh
 

@@ -2478,14 +2478,43 @@ async function saveDisclosures(env, items, onlyCodes = null, notified = 0) {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(rcept_no) DO NOTHING`
   );
+  /* **새 것인지는 기록이 판정한다** (2026-09-22 지시 — 「텔레그램으로 같은
+     메세지 2번 오는데」).
+
+     전에는 위 `SELECT` 로 본 것(`todo`)을 **그대로** `fresh` 에 담았다.
+     `ON CONFLICT DO NOTHING` 이 있어 **기록은 한 벌만 남는데, 보내는 쪽이
+     그 결과를 안 봤다.**
+
+     `dartPollOnce` 를 **둘이 부른다** — `scheduled`(Cron)와 `/api/...`.
+     둘이 겹쳐 돌면 이렇게 된다.
+
+         Cron    SELECT → 「없다」 → todo 에 담음
+         /api    SELECT → 「없다」 → todo 에 담음      ← **아직 INSERT 전**
+         Cron    INSERT 성공
+         /api    INSERT **DO NOTHING**
+         **둘 다 fresh 에 있어 둘 다 보냈다**
+
+     `meta.changes` 를 보면 **실제로 들어간 쪽 하나만** 담긴다. 판정이
+     `SELECT`(보는 시점)에서 `INSERT`(쓰는 시점)로 옮겨가 **틈이 없다.**
+     입구를 막지 않아도 되고, Cron 이 겹쳐 돌아도 안전하다.
+
+     **`known` 으로 미리 거르는 것은 남긴다** — 대부분을 여기서 덜어내
+     batch 가 작아진다. 거르기일 뿐 판정이 아니다.
+
+     `server/dart.py` 의 `save_disclosures` 도 **같은 모양으로 맞췄다.**
+     한쪽만 고치면 로컬을 다시 켜는 날 그쪽에서 같은 일이 난다. */
   const todo = rows.filter((r) => !known.has(r.rcept_no));
   for (let i = 0; i < todo.length; i += CHECK) {
-    await db.batch(todo.slice(i, i + CHECK).map((r) =>
+    const slice = todo.slice(i, i + CHECK);
+    const out = await db.batch(slice.map((r) =>
       stmt.bind(r.rcept_no, r.corp_code, r.stock_code, r.corp_name,
                 r.report_nm, r.flr_nm, r.rcept_dt, r.rm, now, notified)
     ));
+    slice.forEach((r, j) => {
+      const m = out[j] && out[j].meta;
+      if (m && m.changes) fresh.push(r);
+    });
   }
-  fresh.push(...todo);
   return fresh;
 }
 

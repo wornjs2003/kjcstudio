@@ -3135,9 +3135,19 @@ def main():
     elif dart.start_poller():
         print("  공시 수집 : 사용 (코스피 상위 %d종목 · %d분마다)"
               % (dart.UNIVERSE_SIZE, dart.POLL_INTERVAL // 60))
-        print("  알림      : %s"
-              % ("텔레그램 켜짐 (관심종목 %d개)" % len(dart.WATCH_CODES)
-                 if dart.telegram_config() else "꺼짐 (secrets.json 의 telegram 없음)"))
+        # **`NOTIFY_LOCAL` 을 함께 본다** (2026-09-22).
+        #
+        # 전에는 열쇠(`secrets.json`)만 보고 「텔레그램 켜짐」 으로 찍었다.
+        # `NOTIFY_LOCAL = False` 로 **공시 발송을 꺼 둔 날에도 「켜짐」** 이라,
+        # 텔레그램이 두 번 오는 일을 볼 때 **로그가 로컬을 범인으로 가리켰다.**
+        # 오늘 이 줄 때문에 여러 사람이 한 번씩 헛짚었다.
+        if not dart.telegram_config():
+            _al = "꺼짐 (secrets.json 의 telegram 없음)"
+        elif not dart.NOTIFY_LOCAL:
+            _al = "꺼짐 (NOTIFY_LOCAL=False — 공시 알림은 배포본 워커가 보냅니다)"
+        else:
+            _al = "텔레그램 켜짐 (관심종목 %d개)" % len(dart.WATCH_CODES)
+        print("  알림      : %s" % _al)
     else:
         print("  공시 수집 : 꺼짐 (setup-dart.bat 으로 인증키를 넣어주세요)")
 
