@@ -3389,10 +3389,29 @@ def main():
               % PREFILL_TOP)
 
     # 뉴스 쌓기 — **주말·밤에도 돈다.** 공시 폴러와 달리 DART 키가 없어도 돈다
-    if not SLOW and news_store.start_collector():
+    #
+    # ⚠️ **발송은 메인(8765)에서만 한다** (2026-09-23 지시 — 재권님
+    # 「보면 두개씩 온거 있잔아 이거 고쳐줘」).
+    #
+    # **쌓는 것은 모든 폴더에서 한다** — 그 폴더 화면의 뉴스 칸이 읽어야 한다.
+    # **발송만** 가린다. 데일리(아래 `send=`)와 **같은 꼴**이다.
+    #
+    # 그 전에는 `news_store` 가 `dart.telegram_send` 를 직접 불러서
+    # **`--slow` 아닌 서버가 전부 보냈다.** 실측으로 셋이었다 —
+    # 8765 · 8767 · 8770. 같은 기사가 **1분 차이로 따로** 발송됐고,
+    # `market.db` 가 폴더마다 따로라 「보냈다」 표시도 안 나뉘었다.
+    #
+    # **정기 발송(07:30 · 13:30 · 22:00)도 같은 자리다.** 첫 칸이
+    # `daily.py` 의 `SEND_AT` 와 **같은 시각**이라, 안 가리면 그 시각에
+    # **데일리 1 + 뉴스 3 = 4통**이 간다.
+    _news_send = (dart.telegram_send
+                  if (dart.telegram_config() and args.port == MAIN_PORT)
+                  else None)
+    if not SLOW and news_store.start_collector(send=_news_send):
         print("  뉴스 수집 : 사용 (%d분마다 · 주말 포함 · 텔레그램 %s)"
               % (news_store.COLLECT_INTERVAL // 60,
-                 " · ".join("%02d:%02d" % t for t in news_store.DIGEST_SLOTS)))
+                 (" · ".join("%02d:%02d" % t for t in news_store.DIGEST_SLOTS)
+                  if _news_send else "쌓기만 — 메인(%d)에서만 보냅니다" % MAIN_PORT)))
 
     if SLOW:
         pass                 # 확인용 서버는 공시도 안 받는다 (위 주석 참고)
