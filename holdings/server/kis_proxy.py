@@ -43,6 +43,7 @@ from docstore import write_json_atomic
 import docstore
 import re
 import signal_watch
+import heartbeat
 import daily
 from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -3223,6 +3224,20 @@ def main():
         print("  신호 감시 : 사용 (관심종목 %d개 · %d초마다 · 장중만%s)"
               % (len(signal_watch.WATCH), signal_watch.LOOP_SEC,
                  "" if signal_watch.SEND else " · **발송 꺼짐**"))
+
+    # PC 가 꺼진 것을 **밖에서** 알 수 있게, 5분마다 Cloudflare KV 에
+    # 「살아 있다 + 내 상태」 를 쓴다 (2026-09-23 지시 — 「pc는 항상 켜져있는걸
+    # 전제로 해야하고 꺼지거나 이슈가 있으면 알림이 오면 될거같은데」).
+    #
+    # **메인 포트에서만 돈다.** 폴더가 여섯인데 KV 키는 하나라, 여럿이 쓰면
+    # **메인이 꺼져도 세션 서버가 덮어써서 알림이 안 온다.**
+    # `--slow` 로는 안 가른다 — 메인이 `--slow` 로 떠도 살아 있음은 보내야 한다.
+    #
+    # 판단도 조립도 `heartbeat.py` 에 있다. 이 파일은 여러 세션이 함께 쓰므로
+    # 부르는 줄만 둔다 — `signal_watch` · `daily` 와 같은 꼴이다.
+    if heartbeat.start(sys.modules[__name__], args.port):
+        print("  살아있음  : %d분마다 Cloudflare 에 신호 (꺼지면 폰으로 알림)"
+              % (heartbeat.BEAT_SEC // 60))
 
     print("  종료      : Ctrl+C")
     print("-" * 52)

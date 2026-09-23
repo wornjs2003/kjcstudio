@@ -2020,6 +2020,90 @@ function kstStamp(now = new Date()) {
        + `T${p(k.getUTCHours())}:${p(k.getUTCMinutes())}`;
 }
 
+/* ────────────────────────────────────────────────────────────────
+   PC 가 살아 있나 — 5분마다 본다 (2026-09-23 지시)
+
+   재권님 말씀 그대로다 — 「pc는 항상 켜져있는걸 전제로 해야하고
+   꺼지거나 이슈가 있으면 알림이 오면 될거같은데」.
+
+   **꺼진 PC 는 자기가 꺼졌다고 못 알린다.** 그래서 여기서 본다.
+   로컬(`server/heartbeat.py`)이 5분마다 KV 에 「살아 있다 + 상태」 를
+   덮어쓰고, 이 함수가 Cron 때마다 그것을 읽는다.
+
+   **상태가 바뀔 때만 보낸다.** 그래서 「같은 알림은 한 번만」 과
+   「돌아오면 알린다」 가 한 가지 방법으로 풀린다 — 지금 나쁜 항목을
+   한 줄로 만들어 지난번 것과 견주고, 다르면 그때만 보낸다.
+   ──────────────────────────────────────────────────────────────── */
+
+/* server/heartbeat.py 의 ALIVE_KEY 와 **같아야 한다** —
+   tools/check-kis-consts.py 가 본다. */
+const ALIVE_KEY = "alive:main";
+
+/* 신호가 이만큼 안 오면 「꺼졌다」 로 본다. server/heartbeat.py 의
+   ALIVE_STALE_SEC 와 **짝이다** — check-kis-consts.py 가 본다.
+
+   ⚠️ **지금은 시험 1단계 값(24시간)이다.** 값이 KV 에 제대로 쌓이는지만
+   보려는 것이라 **알림이 한 번도 안 간다.** 확인되면 2단계에서
+   **900(15분 · 신호 3회 연속 놓침)** 으로 내린다.
+   재부팅에 걸리는 시간을 못 재서, 그보다 짧게 잡으면 재부팅마다 울린다. */
+const ALIVE_STALE_SEC = 86400;
+
+async function metaGetSafe(env, key) {
+  try { return await metaGet(env, key); } catch { return null; }
+}
+
+/** 지금 나쁜 것들을 줄 목록으로. 비어 있으면 멀쩡한 것이다. */
+function aliveProblems(beat, nowSec) {
+  const out = [];
+  if (!beat || !beat.ts) {
+    out.push("신호가 한 번도 안 왔습니다");
+    return out;
+  }
+  const age = nowSec - beat.ts;
+  if (age > ALIVE_STALE_SEC) {
+    out.push(`PC 가 꺼진 것 같습니다 — 신호가 ${Math.floor(age / 60)}분째 없습니다`);
+    return out;   // 꺼졌으면 나머지 값은 낡은 것이라 안 본다
+  }
+  if (beat.tokenOk === false) out.push("KIS 토큰이 안 됩니다 — 시세가 안 옵니다");
+  if (beat.dartLastError) out.push(`공시 수집 오류 — ${String(beat.dartLastError).slice(0, 80)}`);
+  if (beat.dailyToday === false) out.push("오늘 데일리분석이 저장되지 않았습니다");
+  /* 낡은 코드 — **서버 폴더 안에서만** 센 값이다(heartbeat.py 가 좁혀서 보낸다).
+     푸시 직후에는 늘 뒤처지므로 유예(기본 30분)를 지난 뒤에만 본다. */
+  const grace = Number(beat.staleGraceSec || 1800);
+  if (Number(beat.staleCommits) > 0 && beat.startedAt &&
+      nowSec - beat.startedAt > grace) {
+    out.push(`서버가 낡은 코드로 돌고 있습니다 — 커밋 ${beat.staleCommits}건 뒤처짐`);
+  }
+  return out;
+}
+
+async function checkAlive(env) {
+  if (!env.KIS_KV) return;
+  let raw = null;
+  try { raw = await env.KIS_KV.get(ALIVE_KEY); } catch { return; }
+
+  let beat = null;
+  try { beat = raw ? JSON.parse(raw) : null; } catch { beat = null; }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const problems = aliveProblems(beat, nowSec);
+  const now = problems.join(" | ");
+  const before = (await metaGetSafe(env, "alive_state")) || "";
+
+  if (now === before) return;          // 안 바뀌었으면 아무 말도 안 한다
+
+  let text;
+  if (problems.length) {
+    text = "⚠️ 서버 상태\n\n" + problems.map((p) => "· " + p).join("\n");
+  } else {
+    text = "✅ 서버가 정상으로 돌아왔습니다";
+  }
+  /* **먼저 기록하고 보낸다.** 반대로 하면 보내기가 실패했을 때 다음 Cron 에
+     또 보내려 하는데, 그때는 이미 상태가 같아 보여 영영 안 간다. */
+  try { await metaSet(env, "alive_state", now); } catch {}
+  try { await telegramSend(env, text); } catch {}
+}
+
 async function sendReminders(env) {
   if (!REMINDERS.length) return 0;
   const now = kstStamp();
@@ -2774,6 +2858,10 @@ export default {
     ctx.waitUntil((async () => {
       // 공시와 별개로 먼저 본다. 주말·장 시간과 무관하게 가야 한다.
       try { await sendReminders(env); } catch {}
+
+      // PC 가 꺼졌거나 이상하면 알린다 (2026-09-23).
+      // 공시와 무관하게 **먼저** 본다 — 주말·장 시간과 상관없다.
+      try { await checkAlive(env); } catch {}
 
       /* 5분봉을 몇 종목씩 미리 받아 둔다. 화면이 기다리지 않게 하려는 것이라
          공시보다 먼저 두지 않는다 — 실패해도 공시는 돌아야 한다. */
