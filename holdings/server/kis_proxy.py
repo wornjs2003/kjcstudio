@@ -3466,7 +3466,8 @@ def main():
     # (`kjc-home` 은 비었는데 `kjc-dev3` 은 살아 있다) **키 파일을 만지게 된다.**
     if not SLOW and args.port == MAIN_PORT and signal_watch.start(sys.modules[__name__]):
         print("  신호 감시 : 사용 (관심종목 %d개 · %d초마다 · 장중만%s)"
-              % (len(signal_watch.WATCH), signal_watch.LOOP_SEC,
+              % (len(signal_watch.watch_codes(sys.modules[__name__])),
+                 signal_watch.LOOP_SEC,
                  "" if signal_watch.SEND else " · **발송 꺼짐**"))
 
     # PC 가 꺼진 것을 **밖에서** 알 수 있게, 5분마다 Cloudflare KV 에
