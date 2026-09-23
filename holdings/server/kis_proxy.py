@@ -29,6 +29,7 @@ import argparse
 import json
 import os
 import sqlite3
+import struct
 import sys
 import threading
 import socket
@@ -243,20 +244,173 @@ def _cache_put(code, data):
 #
 # 이 두 값만 바꾸면 호출량 전체가 조절된다.
 KIS_LIMIT_PER_SEC = 10.0
-BUDGET_RATIO = 0.5                                  # 한도의 1/2 만 사용
-KIS_CALLS_PER_SEC = KIS_LIMIT_PER_SEC * BUDGET_RATIO   # = 초당 5건
-KIS_MIN_INTERVAL = 1.0 / KIS_CALLS_PER_SEC             # = 0.2초 간격
+BUDGET_RATIO = 1.0                                  # 기준값을 다 쓴다
+# ⚠️ **이 값은 서버 하나가 아니라 여섯이 합쳐서 쓰는 몫이다** (2026-09-23).
+# 아래 공유 줄이 여섯을 한 줄에 세우므로, 고정으로 나눌 때처럼
+# 「각자 N건 × 여섯」 이 되지 않는다. **합쳐서 10건이다.**
+#
+# 배포본 워커는 이 줄 **밖**이라 따로 초당 5건을 쓴다 —
+# 합하면 **15 / 20** 으로 실제 한도에 **25% 여유**가 남는다.
+KIS_CALLS_PER_SEC = KIS_LIMIT_PER_SEC * BUDGET_RATIO   # = **합쳐서** 초당 10건
+KIS_MIN_INTERVAL = 1.0 / KIS_CALLS_PER_SEC             # = 0.1초 간격
 
 # 동시에 진행할 호출 수. 초당 건수와는 별개다 — 간격은 _rate_limit() 이 지키고,
 # 이 값은 응답을 기다리는 시간을 몇 개까지 겹칠지를 정한다.
 KIS_MAX_PARALLEL = 8
 
 _rate_lock = threading.Lock()
+# **벽시계 기준이다** (2026-09-23). 공유 줄과 같은 눈금을 써야
+# 물러섰다 돌아올 때 이어진다.
 _last_call_at = 0.0
 _call_times = []                 # 최근 호출 시각 (사용량 측정용)
 
+# **실제로 뜬 포트.** `MAIN_PORT`(8765)는 「어느 것이 메인인가」 를 가리는
+# 상수라 다르다. 여섯이 동시에 도므로 **로그 줄마다 이것을 적는다** —
+# 파일이 갈려 있어도 합쳐 볼 때 어느 서버 것인지 알 수 있다.
+RUN_PORT = None
 
-def _rate_limit():
+# ── 여섯 서버가 한 줄에 선다 (2026-09-23 지시) ──────────────────
+#
+# 재권님 말씀 — 「일꾼별로 1씩 주는게 아니고 … 유동적으로 변환이 되야
+# 낭비가 없을거같은데」 · 「응 해줘, 한도를 넘기지 않게 안전장치도 필요해」.
+#
+# **전에는 서버마다 자기 변수만 봤다.** 여섯이 각자 「나는 초당 N건」 을
+# 지켰고 **합치면 넘는데 아무도 몰랐다.** 동시에 **안 쓰는 서버가 제 몫을
+# 잡고 있어** 쓰는 쪽은 모자랐다 (실측 — 8770 은 0건, 8767 은 1,009건).
+#
+# 파일 하나를 함께 보면 **안 쓰는 쪽은 저절로 0 을 쓰고 쓰는 쪽이 다
+# 가져간다.** 몫을 정할 필요가 없다 — **먼저 온 쪽이 먼저 간다.**
+#
+#     혼자 바쁠 때    3.80초 → **0.95초**   **4.0배**
+#     셋이 바쁠 때    3.80초 → 2.95초       1.3배
+#     여섯이 바쁠 때  3.80초 → **5.95초**   **느려진다** — 대신 **안 넘는다**
+#
+# **「빨라진다」 가 아니라 「안전하게 빨라진다」 이다.** 지금 빠른 것은
+# 한도를 넘으면서 빠른 것이다 (위 값은 합계 20 으로 재본 것이다).
+#
+# **왜 벽시계인가** — `time.monotonic()` 은 프로세스마다 기준이 다를 수
+# 있다. **공유 파일에 적어 남이 읽는 값**이므로 벽시계여야 뜻이 통한다.
+# 시계가 뒤로 가도 `max(지금, ...)` 이라 그냥 지금부터 간다.
+#
+# **파일은 저장소 밖에 둔다.** 여섯 폴더가 함께 봐야 하는데 저장소 안에
+# 두면 **폴더마다 따로가 되어 뜻이 없다.**
+#
+# **죽은 서버가 줄을 잡고 안 놓으면?** — 안 그런다. 강제 종료시켜 재보니
+# **0ms 만에 풀렸다** (2026-09-23 실측). OS 가 프로세스를 정리하며 핸들을
+# 닫아 락도 함께 풀린다.
+#
+# **저장소 폴더의 한 칸 위**에 둔다. `holdings/server/kis_proxy.py` 에서
+# 네 번 올라가면 `C:\work` 다 — 여섯 폴더(`KJCStudio` · `kjc-staging` ·
+# `kjc-stock` · `kjc-daily` · `kjc-home` · `kjc-dev3`)의 **공통 부모**다.
+#
+# 세 번만 올라가면 `C:\work\kjc-stock` 이라 **폴더마다 따로가 되어 뜻이
+# 없다** — 처음에 그렇게 짰다가 재보고 고쳤다 (2026-09-23).
+_HERE = os.path.abspath(__file__)
+RATE_FILE = os.environ.get("KJC_RATE_FILE") or os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(_HERE)))),
+    ".kjc-kis-rate")
+
+try:
+    import msvcrt as _msvcrt          # 윈도우
+    _fcntl = None
+except ImportError:                    # 맥 · 리눅스
+    _msvcrt = None
+    import fcntl as _fcntl
+
+_shared_fail = 0
+
+
+def _shared_slot(gap):
+    """공유 줄에서 내 차례를 받는다. 못 받으면 `None`.
+
+    **㉠ 락을 못 잡으면 자기 줄로 물러선다.** 공유 파일이 없거나 잠겨서
+    못 읽으면 **지금까지의 방식(자기 변수)** 으로 돌아간다. 공유가 깨져도
+    **최소한 자기 간격은 지킨다** — 「못 잡으면 그냥 보낸다」 가 가장 나쁘다.
+    """
+    global _shared_fail
+    fh = None
+    try:
+        fh = os.open(RATE_FILE, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0))
+        if _msvcrt:
+            _msvcrt.locking(fh, _msvcrt.LK_LOCK, 8)
+        else:
+            _fcntl.flock(fh, _fcntl.LOCK_EX)
+        raw = os.read(fh, 8)
+        last = struct.unpack("d", raw)[0] if len(raw) == 8 else 0.0
+        now = time.time()
+        start_at = max(now, last + gap)
+        os.lseek(fh, 0, 0)
+        os.write(fh, struct.pack("d", start_at))
+        os.lseek(fh, 0, 0)
+        if _msvcrt:
+            _msvcrt.locking(fh, _msvcrt.LK_UNLCK, 8)
+        else:
+            _fcntl.flock(fh, _fcntl.LOCK_UN)
+        _shared_fail = 0
+        return start_at
+    except Exception as e:
+        # **한 번만 알린다.** 매 호출마다 찍으면 로그가 그것으로 찬다.
+        if not _shared_fail:
+            sys.stderr.write("  [KIS] **공유 줄을 못 썼습니다 — 자기 줄로 갑니다**: %s\n"
+                             % type(e).__name__)
+        _shared_fail += 1
+        return None
+    finally:
+        if fh is not None:
+            try:
+                os.close(fh)
+            except Exception:
+                pass
+
+
+# ── ㉡ 넘는 것을 세어 스스로 늦춘다 ────────────────────────────
+#
+# 지금까지는 `EGW00201` 이 나면 **1초 쉬고 한 번만** 다시 부르고 끝이었다.
+# **몇 번 났는지 아무도 몰랐다** — 「넘고 있다는 것을 아무도 모른다」 가
+# 2026-09-23 조사에서 가장 큰 문제로 나왔다.
+#
+# 최근 60초에 넘은 횟수만큼 **간격을 늘린다.** 한 번에 10%씩, 최대 **세 배**.
+# 잠잠해지면 60초 뒤 저절로 돌아온다. **사람이 손대지 않아도 된다.**
+_over_times = []
+OVER_WINDOW = 60.0
+OVER_STEP = 0.10
+OVER_MAX = 3.0
+
+
+def note_overrun():
+    """`EGW00201` 이 났다고 적는다. `kis_get` 이 부른다."""
+    now = time.time()
+    _over_times.append(now)
+    while _over_times and _over_times[0] < now - OVER_WINDOW:
+        _over_times.pop(0)
+    sys.stderr.write("  [KIS] **한도 초과(EGW00201)** — 최근 %d초에 %d번\n"
+                     % (int(OVER_WINDOW), len(_over_times)))
+
+
+def _gap_now():
+    """지금 쓸 간격. 넘은 적이 잦으면 늘어난다."""
+    now = time.time()
+    while _over_times and _over_times[0] < now - OVER_WINDOW:
+        _over_times.pop(0)
+    return KIS_MIN_INTERVAL * min(OVER_MAX, 1.0 + OVER_STEP * len(_over_times))
+
+
+def _stamp():
+    """`11:23:45.678` — **밀리초까지 찍는다.**
+
+    「같은 순간에 몇 건인가」 를 재려는 것이 목적이라 **초 단위로는 모자란다.**
+    초로만 찍으면 「그 초에 몇 건」 까지만 나오고 **간격이 지켜졌는지**는
+    안 보인다. 밀리초가 있으면 둘 다 나온다.
+
+    날짜는 안 찍는다 — 로그가 서버 시작마다 새로 쓰이므로(`startup.bat` 이
+    `>` 로 연다) **한 파일이 하루를 넘기는 일이 드물고**, 줄마다 열 글자가 는다.
+    """
+    t = time.time()
+    return "%s.%03d" % (time.strftime("%H:%M:%S", time.localtime(t)),
+                        int(t % 1 * 1000))
+
+
+def _rate_limit(path=None):
     """KIS 호출 사이 간격을 지킨다. 기다리는 동안 남을 막지 않는다.
 
     전에는 자물쇠를 쥔 채로 기다렸다. 그래서 아래 ThreadPoolExecutor 로 동시에
@@ -272,12 +426,26 @@ def _rate_limit():
     if threading.current_thread().name == PREFILL_THREAD_NAME:
         time.sleep(PREFILL_BUSY_CALL_GAP if _ui_busy() else PREFILL_IDLE_CALL_GAP)
 
+    # **간격은 넘은 횟수에 따라 늘어난다** (㉡). 잠잠하면 원래 값이다.
+    gap = _gap_now()
+
+    # **먼저 공유 줄에 선다.** 여섯이 한 줄이므로 안 쓰는 서버는 자리를
+    # 차지하지 않고, 쓰는 서버가 남는 몫을 다 가져간다.
+    start_at = _shared_slot(gap)
+
     global _last_call_at
+    if start_at is None:
+        # **㉠ 공유 줄을 못 썼다 — 자기 줄로 물러선다.**
+        # 공유가 깨져도 **최소한 자기 간격은 지킨다.**
+        with _rate_lock:
+            start_at = max(time.time(), _last_call_at + gap)
+            _last_call_at = start_at
+    else:
+        # 공유로 받았어도 자기 기록은 맞춰 둔다 — 물러설 때 이어지게.
+        with _rate_lock:
+            _last_call_at = max(_last_call_at, start_at)
+
     with _rate_lock:
-        now_m = time.monotonic()
-        # 내 차례는 '직전 차례 + 간격' 과 '지금' 중 늦은 쪽
-        start_at = max(now_m, _last_call_at + KIS_MIN_INTERVAL)
-        _last_call_at = start_at
         now = time.time()
         _call_times.append(now)
         # 1시간보다 오래된 기록은 버린다
@@ -285,9 +453,30 @@ def _rate_limit():
         while _call_times and _call_times[0] < cutoff:
             _call_times.pop(0)
 
-    wait = start_at - time.monotonic()
+    # **차례까지 기다린다.** 공유·자기 줄 둘 다 **벽시계** 기준이다 —
+    # 공유 파일에 적어 남이 읽는 값이라 `monotonic` 으로는 뜻이 안 통한다.
+    wait = start_at - time.time()
     if wait > 0:
         time.sleep(wait)
+
+    # **기다린 뒤에 찍는다 — 여기가 실제로 나가는 순간이다**
+    # (2026-09-23 지시 — 「실시간으로 어디서뭐 쓰는지 로그 알수있는게
+    #  있어야 할거같은데」).
+    #
+    # 처음에 자물쇠 안에서 찍었더니 **다섯 건이 같은 밀리초로 찍혔다**
+    # (2026-09-23 실측). 거기는 **차례를 배정받는 자리**이고 실제로
+    # 나가는 것은 `sleep` 뒤다. **「같은 순간에 몇 건인가」 를 재려는
+    # 것이므로 배정 시각으로는 뜻이 없다.**
+    #
+    # ⚠️ **`_call_times` 는 여전히 배정 시각이다.** `usage_stats()` 가
+    # 그것을 쓰므로 **로그와 값이 최대 간격만큼 어긋난다.** 고치면
+    # 자물쇠 밖에서 목록을 건드리게 되어 범위가 커진다 — 로그로 먼저
+    # 보고 정한다.
+    #
+    # 아래 `[API]` 줄은 **화면 → 서버** 요청이라 캐시로 막힌 것까지
+    # 세어진다 — **한도 대상은 이쪽**이다.
+    sys.stderr.write("  [KIS] %s :%s %s\n"
+                     % (_stamp(), RUN_PORT, path or "?"))
 
 
 def usage_stats():
@@ -307,6 +496,11 @@ def usage_stats():
         "perSec60s": round(last_60s / 60.0, 3),
         "budgetUsedPct": round((last_60s / 60.0) / KIS_CALLS_PER_SEC * 100, 1) if KIS_CALLS_PER_SEC else 0,
         "limitUsedPct": round((last_60s / 60.0) / KIS_LIMIT_PER_SEC * 100, 1) if KIS_LIMIT_PER_SEC else 0,
+        # ㉡ **넘은 횟수와 지금 간격** — 화면이 이것을 보면
+        # 「넘고 있다」 를 알 수 있다.
+        "overruns60s": len(_over_times),
+        "gapNowSec": round(_gap_now(), 4),
+        "sharedQueue": _shared_fail == 0,
         "cacheHits": _stats["cache_hits"],
         "totalCalls": _stats["kis_calls"],
         "priceCacheTtl": PRICE_CACHE_TTL,
@@ -436,6 +630,10 @@ def _issue_token(cfg):
         )
     _last_token_attempt = time.time()
 
+    # **㉢ 토큰 발급도 줄에 세운다** (2026-09-23).
+    # 전에는 이 길이 `_rate_limit()` 을 안 탔다 — **줄 밖이었다.**
+    # 빈도가 낮아(캐시가 만료 5분 전까지 산다) 느려지는 것이 없다.
+    _rate_limit("/oauth2/tokenP")
     url = HOSTS[cfg["mode"]] + "/oauth2/tokenP"
     body = json.dumps({
         "grant_type": "client_credentials",
@@ -555,7 +753,7 @@ def out_rows(data, key):
 
 def kis_get(cfg, path, params, tr_id, _retry=1):
     token = get_token(cfg)
-    _rate_limit()
+    _rate_limit(path)
     url = HOSTS[cfg["mode"]] + path + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={
         "authorization": "Bearer " + token,
@@ -572,6 +770,7 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
         detail = scrub(e.read().decode("utf-8", "replace"))[:300]
         # 초당 건수 초과(EGW00201)는 잠깐 쉬었다 한 번만 다시 시도한다.
         if "EGW00201" in detail and _retry > 0:
+            note_overrun()                     # ㉡ 세어 두면 간격이 늘어난다
             time.sleep(1.0)
             return kis_get(cfg, path, params, tr_id, _retry - 1)
         # **거부당한 토큰(EGW00123)은 버리고 한 번만 다시 받는다** (2026-09-22 지시).
@@ -585,6 +784,7 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
 
     if str(data.get("rt_cd", "0")) != "0":
         if data.get("msg_cd") == "EGW00201" and _retry > 0:
+            note_overrun()                     # ㉡
             time.sleep(1.0)
             return kis_get(cfg, path, params, tr_id, _retry - 1)
         if data.get("msg_cd") == "EGW00123" and _retry > 0:
@@ -2326,7 +2526,7 @@ class Handler(SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):
         # 정적 파일 요청 로그는 조용히, API 만 표시
         if "/api/" in (self.path or ""):
-            sys.stderr.write("  [API] %s\n" % (self.path,))
+            sys.stderr.write("  [API] %s %s\n" % (_stamp(), self.path))
 
     def _send_json(self, obj, status=200):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
@@ -3264,6 +3464,9 @@ def main():
     #
     # 판단도 조립도 `heartbeat.py` 에 있다. 이 파일은 여러 세션이 함께 쓰므로
     # 부르는 줄만 둔다 — `signal_watch` · `daily` 와 같은 꼴이다.
+    global RUN_PORT
+    RUN_PORT = args.port
+
     if heartbeat.start(sys.modules[__name__], args.port):
         print("  살아있음  : %d분마다 Cloudflare 에 신호 (꺼지면 폰으로 알림)"
               % (heartbeat.BEAT_SEC // 60))
