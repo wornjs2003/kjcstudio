@@ -929,7 +929,19 @@ def fetch_index_candles(cfg, code, period):
 FUTURES_CODE = "10100000"
 # 화면이 1초마다 물어보므로 그보다 짧게 잡는다. 그래야 자기 탭은 늘 새 값을 받고,
 # 같은 것을 거의 동시에 묻는 다른 탭만 캐시가 받아낸다.
-FUTURES_TTL = 0.7
+# **5초다** (2026-09-23 지시 — 「야간선물 캐시 5초로 하고」).
+#
+# 0.7 초였다. 화면이 **1초마다** 묻는 자리라(`js/home.js` 의 1초 루프)
+# 사실상 요청마다 KIS 로 나갔고, **캐시로 막을 수 있는 초당 건수 2.98 중
+# 1.429 — 절반 가까이를 이 한 줄이 썼다** (2026-09-23 실측).
+#
+# 5초로 두면 초당 0.2 가 되어 **전체가 약 1.75 로 줄어든다.**
+# 대신 화면은 **같은 값을 최대 다섯 번** 보게 된다.
+#
+# ⚠️ `worker/kis-worker.js` 의 `FUTURES_TTL` 과 **짝이다.**
+#    `tools/check-kis-consts.py` 가 `ceil` 로 대조한다 — 한쪽만 고치면
+#    로컬과 배포본이 갈린다.
+FUTURES_TTL = 5
 _fut_cache = {}
 
 
@@ -1051,8 +1063,8 @@ def fetch_overseas(cfg):
 # 5초로 두면 2초 주기의 요청 중 대부분이 캐시로 받아진다. 값이 최대 5초 지난
 # 것이 되지만 지수는 그 사이 눈에 띄게 움직이지 않는다.
 #
-# ⚠️ 선물(FUTURES_TTL)은 그대로 0.7초다. 지시가 「지수 캐시」였다.
-# 그래서 요청마다 선물 한 건은 여전히 나간다.
+# 선물(FUTURES_TTL)도 **2026-09-23 에 5초가 됐다.** 그전에는 0.7초여서
+# 「요청마다 선물 한 건은 여전히 나간다」 고 여기 적혀 있었는데, 이제 아니다.
 INDEX_TTL = 5
 _index_cache = {}
 
@@ -3079,7 +3091,7 @@ def apply_slow():
     INVESTOR_TTL = SLOW_TTL             # 60 → 300
     INVESTOR_EST_TTL = SLOW_TTL         # 60 → 300
     ASKING_TTL = SLOW_SHORT_TTL         #  3 → 60. 호가는 원래 아주 짧다
-    FUTURES_TTL = SLOW_SHORT_TTL        # 0.7 → 60. 화면이 1초마다 물어보는 자리다
+    FUTURES_TTL = SLOW_SHORT_TTL        #   5 → 60. 화면이 1초마다 물어보는 자리다
     MULTI_CACHE_TTL = SLOW_SHORT_TTL    #  2 → 60. 순위표가 한 번에 훑는 자리다
 
 

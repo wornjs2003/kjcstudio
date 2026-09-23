@@ -151,7 +151,10 @@ const SERIES_TTL = 600;
    화면이 2초마다 부르는데 캐시가 그보다 짧으면 한 번도 안 맞는다.
    server/kis_proxy.py 의 INDEX_TTL 과 같아야 한다 — check-kis-consts.py 가 본다. */
 const INDEX_TTL = 5;
-const FUTURES_TTL = 1;
+/* **5초다** (2026-09-23 지시). server/kis_proxy.py 의 FUTURES_TTL 과 짝이고
+   check-kis-consts.py 가 `ceil` 로 대조한다. 1 이었을 때 서버는 0.7 이었다 —
+   ceil(0.7)=1 이라 맞는 값이었다. 지금은 양쪽 다 5 다. */
+const FUTURES_TTL = 5;
 
 /* 캐시 수명. **모든 종목이 같다** (2026-09-18 지시). 위 주석 참고. */
 function quoteCacheTtl() {
