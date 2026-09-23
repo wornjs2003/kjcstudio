@@ -192,9 +192,14 @@ function movingAverage(candles, period, barPeriod) {
 
 /* 지수이동평균 — 최근 값에 무게를 더 준다. MACD 가 쓴다. */
 /* export 는 `tools/check-indicators.py` 가 node 로 불러 쓰려고 붙였다
-   (2026-09-22). 서버(`server/signal.py`)에 같은 계산이 파이썬으로 한 벌 더
-   있어서, **같은 봉에서 같은 값이 나오는지** 대 본다. 화면과 알림이 갈리면
-   「화면엔 신호가 보이는데 알림은 안 온다」 가 된다. */
+   (2026-09-22). 서버(`server/signal_watch.py`)에 같은 계산이 파이썬으로 한 벌
+   더 있어서, **같은 봉에서 같은 값이 나오는지** 대 본다. 화면과 알림이 갈리면
+   「화면엔 신호가 보이는데 알림은 안 온다」 가 된다.
+
+   이름이 `signal_watch` 인 이유 — **`signal` 은 파이썬 기본 모듈 이름**이라
+   `server/signal.py` 로 두면 그 폴더에서 돌리는 것이 죄다 기본 `signal` 대신
+   이 파일을 집는다. 겉으로는 엉뚱한 자리의 `AttributeError` 로만 보여서
+   찾기 어렵다. 짧아 보여도 되돌리면 안 된다. */
 export function ema(values, period) {
   const k = 2 / (period + 1);
   const out = new Array(values.length).fill(null);
