@@ -3448,8 +3448,23 @@ def main():
 
     # 볼린저·MACD·RSI 가 동시에 맞는 자리를 본다 (2026-09-22 지시).
     # **KIS 를 새로 안 부른다** — 미리받기가 쌓아 둔 5분봉을 읽기만 한다.
-    # 확인용 서버(SLOW)는 안 돈다. 같은 알림이 폴더 수만큼 갈 이유가 없다.
-    if not SLOW and signal_watch.start(sys.modules[__name__]):
+    #
+    # **`SLOW` 로는 못 막는다 — 포트로 가른다** (2026-09-23).
+    #
+    # 전에는 `not SLOW` 만 봤다. 「확인용 서버는 안 돈다」 는 뜻이었는데
+    # **`--slow` 없이 뜬 세션 서버가 있으면 그대로 샌다.**
+    #
+    #     `--slow` 아닌 서버      8765 · 8767 · 8770      **셋**
+    #     그중 열쇠가 살아 있는 것  8765 · 8770            **둘**
+    #     → 신호마다 **폰에 두 번** 간다
+    #
+    # **데일리가 이미 이 방식이다**(위 `daily.start_daily` 의 `send=`).
+    # 같은 결함이 옆 파일에 남아 있었다 — 2026-09-22 에 **8770 이 `--slow`
+    # 없이 떠 있어 공시가 두 번 간** 그 자리와 같다.
+    #
+    # **열쇠를 비우는 것으로 막지 않는다.** 폴더마다 갈려 있고
+    # (`kjc-home` 은 비었는데 `kjc-dev3` 은 살아 있다) **키 파일을 만지게 된다.**
+    if not SLOW and args.port == MAIN_PORT and signal_watch.start(sys.modules[__name__]):
         print("  신호 감시 : 사용 (관심종목 %d개 · %d초마다 · 장중만%s)"
               % (len(signal_watch.WATCH), signal_watch.LOOP_SEC,
                  "" if signal_watch.SEND else " · **발송 꺼짐**"))
