@@ -3506,9 +3506,14 @@ def main():
     # **열쇠를 비우는 것으로 막지 않는다.** 폴더마다 갈려 있고
     # (`kjc-home` 은 비었는데 `kjc-dev3` 은 살아 있다) **키 파일을 만지게 된다.**
     if not SLOW and args.port == MAIN_PORT and signal_watch.start(sys.modules[__name__]):
-        print("  신호 감시 : 사용 (관심종목 %d개 · %d초마다 · 장중만%s)"
+        # **시각을 여기 박지 않는다.** `SESSION_FROM`·`SESSION_TO` 에서 만든다 —
+        # 박으면 그쪽을 고쳤을 때 이 줄만 낡는다. 2026-09-23 에 대상을 50 으로
+        # 넓히고 시간을 08~20 으로 바꾸면서 **이 줄이 「관심종목 … 장중만」 인
+        # 채로 남았다.** 「값을 바꾸고 옆 설명을 안 고친」 자리다.
+        print("  신호 감시 : 사용 (감시 대상 %d개 · %d초마다 · %02d~%02d시%s)"
               % (len(signal_watch.watch_codes(sys.modules[__name__])),
                  signal_watch.LOOP_SEC,
+                 signal_watch.SESSION_FROM // 60, signal_watch.SESSION_TO // 60,
                  "" if signal_watch.SEND else " · **발송 꺼짐**"))
 
     # PC 가 꺼진 것을 **밖에서** 알 수 있게, 5분마다 Cloudflare KV 에
