@@ -85,7 +85,7 @@ LOOP_SEC = 60          # 도는 주기. 계산은 새 봉이 생겼을 때만 �
 #
 # 그래서 **기본을 「안 보냄」 으로 둔다.** 만드는 동안 재권님 폰에 시험
 # 알림이 가면 안 된다. 판정은 그대로 하고 로그에만 남긴다.
-SEND = False
+SEND = True
 
 
 # ── 지표 — js/chart.js 를 그대로 옮긴 것 ───────────────────────
@@ -263,6 +263,8 @@ _SCHEMA = """CREATE TABLE IF NOT EXISTS signal_sent (
 def _init(proxy):
     with proxy._db_lock, proxy.db_conn() as conn:
         cols = [r[1] for r in conn.execute("PRAGMA table_info(signal_sent)")]
+        old = conn.execute("SELECT 1 FROM sqlite_master "
+                           "WHERE type='table' AND name='signal_sent_old'").fetchone()
         if cols and "kind" not in cols:
             # **옛 표를 옮긴다.** `CREATE TABLE IF NOT EXISTS` 는 이미 있는 표의
             # 칸을 안 바꾸므로, 여기서 직접 옮기지 않으면 **새 칸이 영영 안 생긴다.**
@@ -274,6 +276,21 @@ def _init(proxy):
             conn.execute("DROP TABLE signal_sent_old")
         else:
             conn.execute(_SCHEMA)
+            if old:
+                # **앞선 옮기기가 중간에 끊겼다.** 이어서 마저 옮긴다.
+                #
+                # `ALTER TABLE` · `CREATE TABLE` 은 **되돌아가지 않는다** —
+                # 파이썬 `sqlite3` 가 그 앞에서 트랜잭션을 안 여는 구간이 있어,
+                # `INSERT` 가 터지면 **두 표가 다 남는다.** 그러면 다음에 돌 때
+                # `kind` 가 보여 위 갈래를 건너뛰고, **옛 데이터가 `_old` 에
+                # 영영 갇힌다.** 그 자리를 여기서 받는다.
+                #
+                # 2026-09-23 에 `홈페이지_정리` 가 임시 DB 로 `INSERT` 를 일부러
+                # 터뜨려 찾았다. **지금은 세 폴더 다 행 0 이라 걸릴 것이 없지만,**
+                # 쌓인 뒤에 칸을 또 늘리는 날이 오면 그때 든다.
+                conn.execute("INSERT OR IGNORE INTO signal_sent "
+                             "SELECT code, ts, 'low', day, sent_at FROM signal_sent_old")
+                conn.execute("DROP TABLE signal_sent_old")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_signal_day ON signal_sent(code, day)")
 
 
