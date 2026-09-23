@@ -344,10 +344,26 @@ DIGEST_MAX = 15
 ALERT_MAX_AGE_H = 3
 
 
-def _telegram(text):
-    """dart.py 의 발송을 빌려 쓴다. 설정이 없으면 (False, 이유) 가 온다."""
-    import dart
-    return dart.telegram_send(text)
+def _telegram(text, send=None):
+    """보낸다. **`send` 가 없으면 보내지 않는다.**
+
+    ⚠️ **여기서 `dart.telegram_send` 를 직접 부르지 않는다** (2026-09-23).
+    이 파일은 **자기가 몇 번 포트인지 모른다.** 직접 부르면 **뜬 서버가
+    전부 보낸다** — 그날 `--slow` 아닌 셋(8765·8767·8770)이 **같은 기사를
+    각각 보내** 재권님 폰에 **두세 번** 갔다.
+
+        15:59  HBM4 날개 단 삼성전자…   8765
+        15:58  **같은 기사**            8770     ← 1분 차이로 따로
+
+    **`market.db` 가 폴더마다 따로**(`HOLDINGS_DIR/market.db`)라
+    「보냈다」 표시가 공유되지 않는다. 각자 「아직 안 보냈다」 로 읽는다.
+
+    **데일리(`kis_proxy.py` 의 `send=`)와 같은 꼴로 바꿨다** — 부르는 쪽이
+    포트를 보고 `send` 를 주거나 `None` 을 준다.
+    """
+    if send is None:
+        return (False, "이 서버에서는 보내지 않습니다 (메인에서만 보냅니다)")
+    return send(text)
 
 
 def _meta(key, value=None):
@@ -362,8 +378,12 @@ def _hhmm(at):
     return (at or "")[11:16]
 
 
-def send_alerts():
-    """「중요」로 걸린 것을 바로 보낸다. 보낸 건수를 돌려준다."""
+def send_alerts(send=None):
+    """「중요」로 걸린 것을 바로 보낸다. 보낸 건수를 돌려준다.
+
+    `send` 가 없으면 **한 건도 안 보내고 표시도 안 한다** — 첫 발송에서
+    `ok` 가 `False` 라 그 자리에서 멈춘다. **안 보냈으니 안 적는 것이 맞다.**
+    """
     rows = unsent_alerts()
     if not rows:
         return 0
@@ -379,7 +399,7 @@ def send_alerts():
     for r in rows:
         text = "[%s] %s\n%s · %s\n%s" % (
             r["alert"], r["title"], r["source"] or "", _hhmm(r["at"]), r["link"])
-        ok, _why = _telegram(text)
+        ok, _why = _telegram(text, send)
         if not ok:
             break            # 설정이 없거나 막혔다. 다음 바퀴에 다시 본다
         sent.append(r["link"])
@@ -400,8 +420,13 @@ def _slot_now(now=None):
     return None
 
 
-def send_digest(force=False):
+def send_digest(force=False, send=None):
     """정기 발송. 같은 시각을 두 번 보내지 않는다.
+
+    ⚠️ **여기도 가려야 한다.** 첫 칸이 **07:30** 이라 `daily.py` 의 `SEND_AT`
+    와 **같은 시각**이다. 안 가리면 그 시각에 **데일리 1 + 뉴스 3 = 4통**이
+    간다. 「같은 시각을 두 번 안 보낸다」 는 `_meta` 로 막는데,
+    **그 `_meta` 도 폴더별 `market.db`** 라 서버마다 따로 센다.
 
     보내는 것은 **지난 발송 뒤에 쌓인 것**이라 하루가 세 토막으로 이어진다.
     """
@@ -427,7 +452,7 @@ def send_digest(force=False):
         lines.append("")
         lines.append("… 외 %d건" % (len(rows) - DIGEST_MAX))
 
-    ok, _why = _telegram("\n".join(lines))
+    ok, _why = _telegram("\n".join(lines), send)
     if not ok:
         return 0
     mark_sent([r["link"] for r in rows], "digest_at")
@@ -437,18 +462,25 @@ def send_digest(force=False):
 
 # ---------------------------------------------------------------- 루프
 
-def collect_once():
-    """한 바퀴 — 받아서 쌓고, 중요한 것은 바로 보내고, 시각이 되면 묶어 보낸다."""
+def collect_once(send=None):
+    """한 바퀴 — 받아서 쌓고, 중요한 것은 바로 보내고, 시각이 되면 묶어 보낸다.
+
+    **받아서 쌓는 것은 어느 폴더에서나 한다** — 그 폴더 화면이 읽어야 한다.
+    **`send` 로 가리는 것은 발송 둘뿐이다.**
+    """
     import news
     got = news.fetch_issues()
     added = store(got.get("rows") or [])
-    alerted = send_alerts()
-    digested = send_digest()
+    alerted = send_alerts(send)
+    digested = send_digest(send=send)
     return {"added": len(added), "alerted": alerted, "digested": digested}
 
 
-def start_collector():
+def start_collector(send=None):
     """서버가 뜰 때 부른다. **주말·밤에도 돈다** — dart 의 공시 폴러와 다른 점이다.
+
+    `send` 는 **부르는 쪽이 포트를 보고** 준다. 안 주면 **쌓기만 하고
+    안 보낸다.** 데일리(`daily.start_daily` 의 `send=`)와 같은 꼴이다.
 
     공시는 평일 07~20 에만 접수되지만 뉴스는 그렇지 않고, 정기 발송이 22시에도
     있어서 그 시간대에 루프가 자고 있으면 안 된다.
@@ -459,7 +491,7 @@ def start_collector():
         time.sleep(8)        # 서버가 막 뜬 참이라 잠깐 기다렸다 시작한다
         while True:
             try:
-                r = collect_once()
+                r = collect_once(send)
                 if r["added"] or r["alerted"] or r["digested"]:
                     print("  [뉴스] 새 %d건 · 즉시알림 %d · 정기 %d"
                           % (r["added"], r["alerted"], r["digested"]))
