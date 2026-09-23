@@ -327,6 +327,24 @@ def watch_codes(proxy):
     return WATCH_FALLBACK
 
 
+def code_names(proxy):
+    """종목 이름 — `dart_universe` 에서 읽는다 (2026-09-23 지시 —
+    「종목이름이 번혼데 내가 인지하도록 해줘야지」).
+
+    **목록을 새로 만들지 않는다.** `watch_codes` 가 읽는 그 표에 이름이
+    같이 있다 (2026-09-23 실측: 상위 50 중 이름이 있는 것 **50 / 50**).
+
+    못 읽으면 빈 dict 를 준다 — 그러면 `format_message` 가 **코드를 그대로**
+    쓴다. **조용히 빈칸이 되지 않는다.**
+    """
+    try:
+        with proxy._db_lock, proxy.db_conn() as conn:
+            return {r[0]: r[1] for r in conn.execute(
+                "SELECT stock_code, name FROM dart_universe") if r[1]}
+    except Exception:
+        return {}
+
+
 def _already(proxy, code, ts, kind):
     with proxy._db_lock, proxy.db_conn() as conn:
         return conn.execute(
@@ -345,6 +363,11 @@ def _mark(proxy, code, ts, kind, day):
 def check_once(proxy, names=None):
     """관심종목을 한 번 훑는다. 보낸(또는 보낼 뻔한) 건수를 돌려준다."""
     _init(proxy)
+    # **부르는 쪽이 안 주면 스스로 읽는다.** `kis_proxy` 가 `names` 없이
+    # 부르고 있어서 **이름 자리에 코드가 그대로 들어갔다** —
+    # 재권님 폰에 「033780 (033780)」 으로 갔다 (2026-09-23).
+    if names is None:
+        names = code_names(proxy)
     day = time.strftime("%Y%m%d")
     hit = 0
 
@@ -378,12 +401,16 @@ def format_message(code, name, sig):
     사고팔라는 말은 안 쓴다. 끝의 「참고용입니다」 도 그래서 둔다."""
     w = sig["why"]
     low = sig["kind"] == "low"
-    return ("%s %s (%s) %s\n"
+    # 이름을 못 찾으면 `name` 이 코드와 같다 — 그때 「033780 (033780)」 이
+    # 되지 않게 코드만 쓴다.
+    who = name if name and name != code else code
+    return ("%s %s%s %s\n"
             "현재가 %s원\n"
             "볼린저 %s %s · %s %s\n"
             "RSI %s · MACD 히스토그램 %s\n"
             "5분봉 기준 · 참고용입니다"
-            % ("📉" if low else "📈", name, code,
+            % ("📉" if low else "📈", who,
+               " (%s)" % code if who != code else "",
                "바닥 신호" if low else "고점 신호",
                format(sig["close"], ","),
                "하단" if low else "상단", format(w["band"], ","),
