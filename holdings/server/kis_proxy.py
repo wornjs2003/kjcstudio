@@ -200,7 +200,7 @@ def _cache_put(code, data):
 # 모의 계좌 한도는 자료마다 달라 확인하지 못했다.
 #
 # 아래 기준값은 실제 한도(20)보다 낮게 잡아 두었다. 여유를 더 두려는 것이고,
-# 지금 쓰는 양은 실제 한도의 5% 수준이다. 자세한 내용은 docs/data-sources.md 참고.
+# 지금 쓰는 양은 실제 한도의 25% 수준이다. 자세한 내용은 docs/data-sources.md 참고.
 #
 #   KIS_LIMIT_PER_SEC : 계정에 허용된다고 보는 한도 (기준값)
 #   BUDGET_RATIO      : 그중 실제로 쓸 비율. 0.5 = 한도의 50%
@@ -214,8 +214,8 @@ def _cache_put(code, data):
 # 이 두 값만 바꾸면 호출량 전체가 조절된다.
 KIS_LIMIT_PER_SEC = 10.0
 BUDGET_RATIO = 0.5                                  # 한도의 1/2 만 사용
-KIS_CALLS_PER_SEC = KIS_LIMIT_PER_SEC * BUDGET_RATIO   # = 초당 1건
-KIS_MIN_INTERVAL = 1.0 / KIS_CALLS_PER_SEC             # = 1.0초 간격
+KIS_CALLS_PER_SEC = KIS_LIMIT_PER_SEC * BUDGET_RATIO   # = 초당 5건
+KIS_MIN_INTERVAL = 1.0 / KIS_CALLS_PER_SEC             # = 0.2초 간격
 
 # 동시에 진행할 호출 수. 초당 건수와는 별개다 — 간격은 _rate_limit() 이 지키고,
 # 이 값은 응답을 기다리는 시간을 몇 개까지 겹칠지를 정한다.
