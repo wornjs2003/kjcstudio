@@ -7,7 +7,8 @@
 
 import { WATCHLIST, brandColor } from './data/market.js';
 import * as lastSeen from './store/last-seen.js';
-import { fetchCandles, createStockChart, maLegend } from './chart.js';
+import { fetchCandles, createStockChart, maLegend,
+  addPrevCloseLine, PREV_CLOSE_NOTE } from './chart.js';
 import { color } from './theme.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount,
   dirClass, marketPhase } from './utils/format.js';
@@ -529,32 +530,19 @@ async function paintBigChart() {
     bigChart = createStockChart(host, candles, { period, showVolume: true });
   }
 
-  /* 5분봉에는 전일 종가선을 그어 둔다. 오늘 올랐는지 내렸는지의 기준이다.
-     어제 마지막 봉의 종가가 그 값이다. */
-  /* addPriceLine 으로 긋는다 — 다음에 봉을 갈아끼울 때 저절로 지워진다.
-     직접 createPriceLine 을 부르면 종목을 옮길 때마다 선이 쌓인다. */
-  if (bigPeriod === '5m' && bigChart) {
-    const today = candles[candles.length - 1].ts.slice(0, 8);
-    const firstToday = candles.findIndex(b => b.ts.slice(0, 8) === today);
-    if (firstToday > 0) {
-      bigChart.addPriceLine({
-        price: candles[firstToday - 1].close,
-        color: color('text-muted'),
-        lineWidth: 1,
-        lineStyle: 2,               // 점선
-        axisLabelVisible: true,
-        title: '전일',
-      });
-    }
-  }
+  /* 5분봉에는 전일 종가선을 그어 둔다. **선 긋는 것은 `chart.js` 한 곳에 있다**
+     (2026-09-23) — 모달·종목 화면도 같은 것을 써야 해서 옮겼다. */
+  const drewPrev = bigPeriod === '5m' && addPrevCloseLine(bigChart, candles);
 
   if (foot) {
     const label = (BIG_PERIODS.find(p => p.id === bigPeriod) || {}).label || '';
     /* 이동평균 범례를 함께 둔다. 어느 선이 그려졌는지, 봉이 모자라 못 그린
        선이 무엇인지 여기서 보인다 (2026-09-16). */
     const ma = bigChart ? maLegend(bigChart.maSeries) : '';
+    /* **그었을 때만 적는다.** 전에는 5분봉이면 무조건 적었는데, 오늘 봉이
+       첫 봉이면 선을 못 그어서 **없는 선을 가리키는 설명**이 남았다. */
     foot.innerHTML = bigPeriod === '5m'
-      ? `<span>${ma} · 점선은 전일 종가</span><span>한국투자증권 실시간</span>`
+      ? `<span>${ma}${drewPrev ? ` · ${PREV_CLOSE_NOTE}` : ''}</span><span>한국투자증권 실시간</span>`
       : `<span>${ma} · ${label}봉 ${candles.length}개</span><span>한국투자증권</span>`;
   }
 }

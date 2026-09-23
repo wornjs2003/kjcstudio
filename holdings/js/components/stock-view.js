@@ -22,7 +22,8 @@
  */
 
 import { CHART_PERIODS } from '../data/market.js';
-import { fetchCandles, createStockChart, maLegend } from '../chart.js';
+import { fetchCandles, createStockChart, maLegend,
+  addPrevCloseLine, PREV_CLOSE_NOTE } from '../chart.js';
 import { getMemo, setMemo } from '../store/memo.js';
 import { fmtNum, fmtWon, fmtMoneyKr, fmtShareCount, fmtDelta, dirClass }
   from '../utils/format.js';
@@ -181,11 +182,25 @@ export function mountStockView(root, stock, { onBack } = {}) {
       if (!candles.length) throw new Error('빈 응답');
       host.innerHTML = '';
       chart = createStockChart(host, candles, { period, showVolume: true });
+
+      /* **전일 종가 점선** — 첫 화면 차트에는 있는데 여기에는 없었다
+         (2026-09-23 모달 검수). 「오늘 올랐는지 내렸는지」 의 기준선이라,
+         모달이 원본인 룰에서 빠져 있으면 안 된다. 선 긋는 것은
+         `chart.js` 한 곳에 있다 — 여기 베끼지 않는다. */
+      const drewPrev = periodId === '5m' && addPrevCloseLine(chart, candles);
+
       if (legend) {
+        /* 출처에 「실시간」 을 붙이는 것은 5분봉일 때만이다 — 첫 화면 발이
+           그렇게 갈라 적는다(`home.js`). 일봉 이상은 지난 값이다. */
         legend.innerHTML = maLegend(chart.maSeries) +
           `<span class="kh-mut" style="margin-left:8px;font-size:.74rem">
-            ${meta.label || ''}봉 · ${meta.source === 'DB' ? '저장됨' : '갱신됨'}</span>`;
+            ${meta.label || ''}봉 · ${meta.source === 'DB' ? '저장됨' : '갱신됨'
+            }${drewPrev ? ` · ${PREV_CLOSE_NOTE}` : ''}</span>`;
       }
+      /* 차트 머리의 출처 뱃지 — `stock.html` 은 「한국투자증권」 만 적어 두는데,
+         5분봉이면 실시간 값이라 첫 화면과 같이 「실시간」 까지 적는다. */
+      const bd = root.querySelector('.kh-w[data-p="chart"] .kh-bd');
+      if (bd) bd.textContent = periodId === '5m' ? '한국투자증권 실시간' : '한국투자증권';
     } catch {
       if (dead || key !== periodId) return;
       host.innerHTML = `<div class="kh-soon">
