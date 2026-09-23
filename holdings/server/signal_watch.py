@@ -404,14 +404,22 @@ def format_message(code, name, sig):
     # 이름을 못 찾으면 `name` 이 코드와 같다 — 그때 「033780 (033780)」 이
     # 되지 않게 코드만 쓴다.
     who = name if name and name != code else code
-    return ("%s %s%s %s\n"
+    # **봉 시각.** `ts` 를 그대로 쓴다 — `chart.js` 의 `toChartTime` 이
+    # 이 값을 **변환 없이** 눈금에 넣으므로 **화면 차트와 같은 자리**가 된다
+    # (2026-09-23 지시 — 「알림에 봉시각도 넣어줘」).
+    #
+    # **알림이 온 시각이 아니다.** 60초마다 도는데 5분봉이라 **최대 5분**
+    # 차이가 난다. 그래서 봉 시각을 적어야 화면에서 그 봉을 찾을 수 있다.
+    t = str(sig.get("ts") or "")
+    when = " · %s:%s" % (t[8:10], t[10:12]) if len(t) >= 12 else ""
+    return ("%s %s%s %s%s\n"
             "현재가 %s원\n"
             "볼린저 %s %s · %s %s\n"
             "RSI %s · MACD 히스토그램 %s\n"
             "5분봉 기준 · 참고용입니다"
             % ("📉" if low else "📈", who,
                " (%s)" % code if who != code else "",
-               "바닥 신호" if low else "고점 신호",
+               "바닥 신호" if low else "고점 신호", when,
                format(sig["close"], ","),
                "하단" if low else "상단", format(w["band"], ","),
                "저가" if low else "고가", format(w["touch"], ","),
