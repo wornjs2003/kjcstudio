@@ -325,6 +325,8 @@ def build_telegram(indices=None, sectors=None, issues=None, schedule=None, now=N
 import threading
 import time
 
+from secrets_guard import safe_message
+
 import docstore
 
 KEEP = 10                    # 몇 장까지 쌓나 (2026-09-22 지시 — 「30개는 많고 10개만」)
@@ -436,7 +438,13 @@ def start_daily(get_indices, get_sectors, get_issues, send=None, keep=KEEP):
                 once()
                 last_err[0] = None
             except Exception as e:
-                key = "%s: %s" % (type(e).__name__, e)
+                # **`safe_message` 로 거른다** — `scrub` 뒤 자르기다.
+                # 오류 문구에 앱키·토큰이 섞여 들어올 수 있고, 이 줄은
+                # `logs/<포트>.log` 에 남는다. **로그는 「안」 인데 세션이
+                # 읽어 세션 간 메시지로 옮긴다** — 2026-09-23 에 실제로
+                # 그 경로를 탔다(`개념정의` 가 이 파일 로그를 읽어 전했다).
+                # **타입 이름은 그대로 둔다** — 「같은 오류인가」 를 그것으로 센다.
+                key = "%s: %s" % (type(e).__name__, safe_message(e))
                 if key != last_err[0]:
                     last_err[0] = key
                     # `pythonw` 로 떠서 콘솔이 없다. `startup.bat` 이
