@@ -31,6 +31,7 @@ import { paintIcon } from './stock-icon.js';
 import { mountDisclosures } from './disclosures.js';
 import { mountStockPanel } from './stock-panel.js';
 import { mountStockDetail } from './stock-detail.js';
+import { mountIndicatorMenu } from './indicator-menu.js';
 import { apiFetch } from '../data/api.js';
 
 /* 서버가 5분마다 공시를 받아 두므로 화면도 그 주기에 맞춘다 */
@@ -234,6 +235,22 @@ export function mountStockView(root, stock, { onBack } = {}) {
   setupMemo();
   setupBack();
 
+  /* **「보조지표」 메뉴** (2026-09-23, 모달 검수 ①).
+   *
+   * `stock.html` 에 틀(`.kh-ind-menu`)은 **처음부터 있었는데** 붙이는 것을
+   * 아무도 안 불렀다. `home.js:1628` 과 `stock.js:50` 이 각각
+   * `document.querySelector('.kh-ind-menu')` 로 **문서의 첫째**를 붙이는데,
+   * 모달 것은 나중에 생기므로 거기에 걸리지 않는다. 그래서 모달 차트에는
+   * 매물대·볼린저·이동평균선·거래량·MACD·RSI 를 켜고 끌 자리가 없었다.
+   *
+   * 켠 목록은 `chart.js` 가 들고 있어 **첫 화면과 같은 상태**를 본다 —
+   * 여기서 켜면 카드 차트도 함께 켜진다 (2026-09-18 지시).
+   *
+   * `root` 안에서 찾는다. 문서 전체에서 찾으면 첫 화면 카드의 것을 다시
+   * 붙이게 된다 — 이 파일 머리의 「id 로 찾지 않고 root 안에서」 와 같은 자리다.
+   */
+  const indMenu = mountIndicatorMenu(root.querySelector('.kh-ind-menu'));
+
   /* 공시 칸은 2026-09-21 에 패널 셋으로 바뀌었다. 첫 화면 오른쪽에는
      그대로 있으므로, 여기서는 **있을 때만** 그린다. */
   const dcHost = $('#kh-dc');
@@ -389,6 +406,9 @@ export function mountStockView(root, stock, { onBack } = {}) {
       clearInterval(flowTimer);
       panel3.destroy();
       detail.destroy();
+      /* **안 떼면 열 때마다 쌓인다** — 지표 메뉴는 `document` 에 손잡이 셋을
+         걸고 `onIndicatorChange` 에 하나를 더 건다 (2026-09-23). */
+      if (indMenu) indMenu.destroy();
     },
   };
 }
