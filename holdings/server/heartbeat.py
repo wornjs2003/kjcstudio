@@ -200,10 +200,24 @@ def collect(proxy):
     except Exception:
         out["tokenOk"] = False
 
+    # **내보낼 때 한 번 더 거른다** (2026-09-23 · 홈페이지_정리 지적).
+    #
+    # `[:120]` 은 **길이만** 자른다. 어제 난 사고가 정확히 그 모양이었다 —
+    # `slice(0,120)` 이 내용을 못 가려 인증키가 응답으로 나갔다.
+    #
+    # 지금은 **넣는 쪽이 이미 가린다** — `dart.py` 의 세 자리가 전부
+    # `safe_message()`(= `scrub()[:N]`) 를 쓴다(직접 따라가 확인했다).
+    # 그래도 거는 것은, **앞으로 `safe_message` 없이 넣는 코드가 하나라도
+    # 생기면 여기가 그대로 KV 로 내보내기 때문이다. KV 는 밖이다.**
+    # `dart.py:576` 도 내보낼 때 `scrub` 을 한 번 더 건다 — 같은 방식이다.
+    try:
+        from secrets_guard import scrub
+    except Exception:
+        scrub = lambda x: x          # 못 불러와도 신호는 가야 한다
     try:
         import dart
         out["dartLastPoll"] = dart._meta_get("dart_last_poll") or None
-        out["dartLastError"] = (dart._meta_get("dart_last_error") or "")[:120] or None
+        out["dartLastError"] = scrub(dart._meta_get("dart_last_error") or "")[:120] or None
     except Exception:
         out["dartLastPoll"] = out["dartLastError"] = None
 

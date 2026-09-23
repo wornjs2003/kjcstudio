@@ -101,6 +101,10 @@ PAIRS = [
     # 살아있음 신호 — server/heartbeat.py ↔ worker/kis-worker.js (2026-09-23)
     ("살아있음 키",          "ALIVE_KEY",           "ALIVE_KEY",            None),
     ("꺼짐 판정 시간",       "ALIVE_STALE_SEC",     "ALIVE_STALE_SEC",      None),
+    # 호출 간격 — 로컬은 **초**, 워커는 **밀리초**라 `ms` 로 환산해 댄다.
+    # 워커 주석(`:347`)이 스스로 「같은 값이어야 한다」 고 적어 두고 있었는데
+    # **여기 없어서 아무도 안 보고 있었다** (2026-09-23).
+    ("호출 간격",            "KIS_MIN_INTERVAL",    "KIS_MIN_INTERVAL_MS",  "ms"),
 ]
 
 # 어긋남을 알릴 때 "올림이라 괜찮은 것" 인지 곁들이려고 미리 모아 둔다
@@ -163,20 +167,42 @@ def read_consts(rel):
             raw = " ".join(buf)
 
         raw = raw.rstrip(";").strip()
-        out[name] = parse_value(raw)
+        out[name] = parse_value(raw, out)
     return out
 
 
-def parse_value(raw):
-    """문자열 리터럴 · 숫자 · 간단한 곱셈만 다룬다. 나머지는 원문 그대로."""
+def parse_value(raw, known=None):
+    """문자열 리터럴 · 숫자 · 간단한 식만 다룬다. 나머지는 원문 그대로.
+
+    **앞서 읽은 상수를 참조하는 식도 푼다** (2026-09-23).
+    `KIS_MIN_INTERVAL = 1.0 / KIS_CALLS_PER_SEC` 가 그런 자리인데, 풀지
+    않으면 **원문 문자열로 남아 그 짝은 대조가 통째로 안 된다.**
+
+    같은 날 「**소스를 읽어 세면 틀린다**」 로 드러난 자리이기도 하다 —
+    그 상수가 소스로는 `1.0` 으로 읽히고 실제로는 `0.2` 였다.
+    **이 도구가 바로 그것을 하고 있었다.**
+    """
     m = re.match(r'^["\'](.*)["\']$', raw)
     if m:
         return m.group(1)
-    if re.match(r"^[\d\s.*+/-]+$", raw):
+    if re.match(r"^[\d\s.*+/()-]+$", raw):
         try:
             return float(eval(raw, {"__builtins__": {}}, {}))    # 숫자만 들어온다
         except Exception:
             pass
+
+    # 이름이 섞인 식 — **앞서 읽은 값으로 바꿔 보고** 숫자만 남으면 계산한다.
+    # 바꿀 수 없는 이름이 하나라도 남으면 계산하지 않고 원문을 돌려준다.
+    if known:
+        def swap(mm):
+            v = known.get(mm.group(0))
+            return repr(v) if isinstance(v, float) else mm.group(0)
+        sub = re.sub(r"[A-Za-z_][A-Za-z0-9_]*", swap, raw)
+        if sub != raw and re.match(r"^[\d\s.*+/()-]+$", sub):
+            try:
+                return float(eval(sub, {"__builtins__": {}}, {}))
+            except Exception:
+                pass
     return raw
 
 
@@ -211,6 +237,12 @@ def same(a, b):
     if isinstance(a, float) and isinstance(b, float):
         return abs(a - b) < 1e-9
     return a == b
+
+
+def brief(v, width=58):
+    """긴 값을 한 줄로 줄여 보여 준다. 줄바꿈·잇단 공백은 하나로."""
+    t = re.sub(r"\s+", " ", show(v)).strip()
+    return t if len(t) <= width else t[:width - 1] + "…"
 
 
 def show(v):
@@ -253,6 +285,10 @@ def main():
             hit = as_dict(a) == as_dict(b) and bool(as_dict(a))
         elif conv == "ceil":
             hit = isinstance(a, float) and isinstance(b, float) and math.ceil(a) == b
+        elif conv == "ms":
+            # 로컬은 초 · 워커는 밀리초. 소수 오차를 피해 반올림해 댄다.
+            hit = (isinstance(a, float) and isinstance(b, float)
+                   and round(a * 1000) == round(b))
         else:
             hit = same(a, b)
         if hit:
@@ -267,6 +303,42 @@ def main():
             print("        (워커는 올림한 값이어야 합니다 — 위 머리말 참조)")
     for what, msg in missing:
         print("없음    %-16s %s" % (what, msg))
+
+    # ── 목록에 없는데 **양쪽에 같은 이름이 있는 것** ──
+    #
+    # `PAIRS` 에 적힌 것만 보면 **빠진 짝은 아무도 모른다.** 실제로
+    # `KIS_MIN_INTERVAL` 이 그렇게 몇 달을 지나갔다 (2026-09-23 에 찾았다).
+    #
+    # **「로컬 전용 목록」 을 적어 두지 않는다.** 적으면 로컬 전용이 늘
+    # 때마다 손이 간다. **워커에 같은 이름이 있나로 스스로 가른다** —
+    # 없으면 로컬 전용이라 볼 것이 없다.
+    #
+    # **위반이 아니라 「봐야 할 자리」 다.** 이름만 같고 뜻이 다를 수 있어
+    # **막지 않는다.** 정말 짝이면 `PAIRS` 에 올리고, 아니면 그냥 둔다.
+    listed = {pname for _, pname, _, _ in PAIRS} | {jname for _, _, jname, _ in PAIRS}
+    also = {}
+    for src in [py] + list(alt.values()):
+        for name, val in src.items():
+            if name in listed or name in also:
+                continue
+            if name in js:
+                also[name] = (val, js[name])
+    if also:
+        print()
+        print("봐야 할 자리 — 목록에 없는데 양쪽에 같은 이름이 있습니다 (%d개)" % len(also))
+        for name in sorted(also):
+            a, b = also[name]
+            # **표기 차이는 같은 것으로 본다.** 파이썬은 튜플·따옴표 키,
+            # 자바스크립트는 배열·맨키를 쓴다. 그것까지 「다름」 으로 내면
+            # **거의 전부가 다름이 되어 아무도 안 본다.**
+            hit = (same(a, b)
+                   or (as_list(a) and as_list(a) == as_list(b))
+                   or (as_dict(a) and as_dict(a) == as_dict(b)))
+            print("        %-22s %s" % (name, "같음" if hit else "**다름**"))
+            if not hit:
+                print("            파이썬 %s" % brief(a))
+                print("            워커   %s" % brief(b))
+        print("        (막지 않습니다. 짝이 맞으면 PAIRS 에 올려 주세요)")
 
     if bad or missing:
         print()
