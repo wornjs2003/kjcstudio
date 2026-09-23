@@ -53,11 +53,18 @@
 
 /* ── 관심종목 ──
    시세는 /api/kis/prices 가 채운다. 메모는 브라우저에 저장된다(store/memo.js). */
+/* **카카오(035720)는 2026-09-23 에 뺐다** (지시 — 「카카오는 관심종목에서 제외」).
+
+   계기는 감시다. 알림이 **시가총액 상위 50** 을 보는데 카카오가 **54위**라
+   신호가 아예 안 났다 (`dart_universe` 실측).
+
+   **공시·뉴스는 그대로 받는다** (지시 — 「공시는 받자」). 그래서 `dart.py` 와
+   `worker/kis-worker.js` 에는 **일부러 남겨 두었다** — 빠뜨린 것이 아니다.
+   `MARKET_STOCKS` 에도 그대로 있다(종목 정보라 빼면 이름·색이 사라진다). */
 export const WATCHLIST = [
   { code: '005930', name: '삼성전자',            sector: '반도체', brand: '#1428a0' },
   { code: '000660', name: 'SK하이닉스',          sector: '반도체', brand: '#e5231b' },
   { code: '035420', name: 'NAVER',               sector: 'IT', brand: '#03c75a' },
-  { code: '035720', name: '카카오',              sector: 'IT', brand: '#f7e600' },
   { code: '005380', name: '현대차',              sector: '자동차', brand: '#002c5f' },
   { code: '373220', name: 'LG에너지솔루션',      sector: '2차전지', brand: '#a50034' },
   { code: '207940', name: '삼성바이오로직스',    sector: '바이오', brand: '#0d4a9a' },
