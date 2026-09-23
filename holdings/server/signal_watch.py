@@ -50,7 +50,22 @@ import dart
 # **관심종목 여덟이면 하루 0.6번** 이 나왔다. 더 자주 받으시려면
 # SAME_BAR 를 False 로 두면 된다 (아래 참고).
 
-WATCH = ["005930", "000660", "035420", "035720",
+# **감시 대상을 코드에 안 적는다** (2026-09-23 지시 — 「50종목은 시가총액 표에서」).
+#
+# `dart_universe` 상위 50 을 그때그때 읽는다. 전에는 여기 여덟을 박아 두었는데,
+# **그것이 네 번째 복제**였다 — `check-watchlist-sync.py` 가 보는 셋
+# (`market.js` · `dart.py` · `kis-worker.js`)에 안 들어 있어 **아무도 안 맞춰
+# 보고 있었다.** 표에서 읽으면 복제가 아예 없어진다.
+#
+# **대상이 하루 한 번 바뀐다.** 그 표를 `dart.py` 가 날짜가 바뀔 때 다시 받는다
+# (2026-09-23 실측: `sync_meta.dart_universe_date` = 20260923 · 07:02:17).
+# 장중에는 안 바뀐다.
+#
+# **KIS 호출은 안 는다.** `read_candles` 가 DB 만 읽는다 (`kis_proxy.py:2465`).
+WATCH_TOP = 50
+
+# 표가 비었을 때만 쓴다. **없으면 감시가 0 이 된다.**
+WATCH_FALLBACK = ["005930", "000660", "035420", "035720",
          "005380", "373220", "207940", "068270"]
 
 PERIOD = "5m"          # 일봉으로는 15개월에 1번이라 안 된다 (실측)
@@ -294,6 +309,24 @@ def _init(proxy):
         conn.execute("CREATE INDEX IF NOT EXISTS ix_signal_day ON signal_sent(code, day)")
 
 
+def watch_codes(proxy):
+    """감시 대상 — `dart_universe` 상위 `WATCH_TOP` (시가총액 순).
+
+    표가 비었거나 못 읽으면 `WATCH_FALLBACK` 으로 물러선다.
+    **감시가 0 이 되는 것보다 여덟이라도 보는 쪽이 낫다.**
+    """
+    try:
+        with proxy._db_lock, proxy.db_conn() as conn:
+            rows = [r[0] for r in conn.execute(
+                "SELECT stock_code FROM dart_universe ORDER BY rank LIMIT ?",
+                (WATCH_TOP,))]
+        if rows:
+            return rows
+    except Exception:
+        pass
+    return WATCH_FALLBACK
+
+
 def _already(proxy, code, ts, kind):
     with proxy._db_lock, proxy.db_conn() as conn:
         return conn.execute(
@@ -315,7 +348,7 @@ def check_once(proxy, names=None):
     day = time.strftime("%Y%m%d")
     hit = 0
 
-    for code in WATCH:
+    for code in watch_codes(proxy):
         try:
             rows = proxy.read_candles(code, PERIOD, NEED_BARS)
             for sig in judge(rows):
@@ -372,7 +405,7 @@ def start(proxy, names=None):
             try:
                 if _in_session():
                     fresh = False
-                    for code in WATCH:
+                    for code in watch_codes(proxy):
                         rows = proxy.read_candles(code, PERIOD, 1)
                         ts = rows[0]["ts"] if rows else None
                         if ts and _last_ts.get(code) != ts:
@@ -392,13 +425,28 @@ def start(proxy, names=None):
     return True
 
 
-def _in_session(now=None):
-    """한국 장중인가 (평일 09:00~15:30).
+SESSION_FROM = 8 * 60         # 08:00
+SESSION_TO = 20 * 60          # 20:00
 
-    `dart.py` 의 `_should_poll` 과 다르다 — 그쪽은 공시라 장 밖에도 본다.
+
+def _in_session(now=None):
+    """볼 시간인가 (평일 **08:00~20:00**).
+
+    2026-09-23 지시 — 「8시부터 저녁 8시까지 다해줘」. 전에는 정규장
+    (09:00~15:30)만 봤다.
+
+    **장 밖에도 봉이 온다** — 어제 실측으로 20:00 까지 다 있었고 16~19시에도
+    종목당 봉이 정규장과 비슷하게 쌓였다. 거래량은 정규장의 수십분의 일이다.
+
+    **빈 봉으로는 신호가 안 난다.** 거래량 0 이면 시가=종가라 「하단 터치 +
+    양봉」 도 「상단 터치 + 음봉」 도 안 맞고, RSI 가 안 움직여 30/70 을
+    못 뚫는다 — 2026-09-23 실측: 우선주·ETF 가 낸 신호 둘이 **모두 정규장**
+    이었고 **거래량 0 봉에서 난 것은 0건**이었다.
+
+    `dart.py` 의 `_should_poll` 과 다르다 — 그쪽은 공시라 주말에도 본다.
     """
     t = now or time.localtime()
     if t.tm_wday >= 5:
         return False
     mins = t.tm_hour * 60 + t.tm_min
-    return 9 * 60 <= mins <= 15 * 60 + 30
+    return SESSION_FROM <= mins <= SESSION_TO
