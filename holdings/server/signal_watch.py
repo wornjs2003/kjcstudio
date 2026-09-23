@@ -58,7 +58,8 @@ NEED_BARS = 120        # 판정에 쓸 봉 수. MACD 가 26+9 를 쓰므로 넉�
 
 BB_PERIOD, BB_MULT = 20, 2      # 볼린저 — chart.js 와 같은 값
 RSI_PERIOD = 14                 # Wilder
-RSI_LINE = 30                   # 이 선을 위로 뚫을 때
+RSI_LOW = 30                    # **바닥** — 이 선을 **위로** 뚫을 때
+RSI_HIGH = 70                   # **고점** — 이 선을 **아래로** 뚫을 때
 MACD_FAST, MACD_SLOW, MACD_SIG = 12, 26, 9
 
 # 셋이 **같은 봉**에서 맞아야 하는가.
@@ -66,7 +67,12 @@ MACD_FAST, MACD_SLOW, MACD_SIG = 12, 26, 9
 SAME_BAR = True
 WINDOW = 5
 
-SEND_MAX_PER_DAY = 3   # 한 종목에 하루 몇 번까지
+# **하루 횟수를 안 막는다** (2026-09-23 지시 — 「횟수는 제한을 두지 않는다」).
+# 전에는 한 종목에 하루 3번까지였다.
+#
+# **같은 봉이 여러 번 가는 것은 따로 막는다** — 그것은 횟수 제한이 아니라
+# 기록(`signal_sent`)이 막는 자리다. 60초마다 도는데 5분봉이라 **같은 봉을
+# 다섯 번 본다.** 기록이 없으면 한 신호가 다섯 번 간다.
 LOOP_SEC = 60          # 도는 주기. 계산은 새 봉이 생겼을 때만 한다
 
 # **보낼지 말지.**
@@ -163,86 +169,125 @@ def macd(closes, fast=MACD_FAST, slow=MACD_SLOW, sig=MACD_SIG):
 def judge(rows):
     """마지막 봉이 신호인가. rows 는 과거→최신 순의 dict 목록.
 
-    Returns: None 또는 {"ts", "close", "why": {...}}
+    Returns: **신호 목록** (0~2개). 각각 {"kind", "ts", "close", "why"}
 
-    ① 볼린저 하단을 **저가가** 건드리고 그 봉이 **양봉**
-       — 종가 기준으로 하면 12일에 6번뿐이라 너무 엄격했다 (조사)
-    ② MACD 히스토그램이 **음수인데 직전보다 큼** (매도세가 약해진다)
-       — 「매수세가 약해진다」 를 글자대로 읽으면 ①③과 방향이 반대이고,
-         실제로 12일 동안 112종목에서 **1번**뿐이었다. 숫자가 답을 냈다
-    ③ RSI 가 직전 < 30, 이번 ≥ 30 (아래에서 위로 뚫는다)
+    **둘은 대칭이다** (2026-09-23 지시 — 「이 두가지 경우에 다 메세지가 와야해」).
+
+        바닥(low)   ① 볼린저 **하단**을 **저가**가 건드리고 그 봉이 **양봉**
+                    ② MACD 히스토그램이 **음수인데 직전보다 큼** (매도세가 약해진다)
+                    ③ RSI 가 직전 < 30, 이번 ≥ 30 (**아래에서 위로** 뚫는다)
+
+        고점(high)  ① 볼린저 **상단**을 **고가**가 건드리고 그 봉이 **음봉**
+                    ② MACD 히스토그램이 **양수인데 작아짐** (매수세가 약해진다)
+                    ③ RSI 가 직전 > 70, 이번 ≤ 70 (**위에서 아래로** 뚫는다)
+
+    **「매수세가 약해지는 신호」 는 고점 쪽 자리였다 — 되돌리지 않는다.**
+    바닥 신호를 먼저 만들 때(2026-09-22) 그 말을 글자대로 읽으면 나머지 둘과
+    방향이 반대라 12일에 1번뿐이어서 **「매도세 약화」 로 바꿨다.** 다음 날
+    재권님이 고점 신호를 말씀하시며 갈렸다 — **처음부터 두 신호를 함께 보고
+    계셨고**, 「매수세 약화」 는 이쪽이었다. 바닥 쪽 판단도 그대로 맞다.
+
+    **셋을 한 함수로 쓰지 않고 `kind` 로 가른다.** 나란히 두면 대칭이 눈에
+    보이고, 한쪽만 고치는 일이 줄어든다.
     """
     if len(rows) < NEED_BARS:
-        return None
+        return []
 
     closes = [r["close"] for r in rows]
-    _, bb_lo = bollinger(closes)
+    bb_up, bb_lo = bollinger(closes)
     rsi_v = rsi(closes)
     _, _, hist = macd(closes)
-
-    def c1(i):
-        r = rows[i]
-        return bb_lo[i] is not None and r["low"] <= bb_lo[i] and r["close"] > r["open"]
-
-    def c2(i):
-        return (i > 0 and hist[i] is not None and hist[i - 1] is not None
-                and hist[i] < 0 and hist[i] > hist[i - 1])
-
-    def c3(i):
-        return (i > 0 and rsi_v[i] is not None and rsi_v[i - 1] is not None
-                and rsi_v[i - 1] < RSI_LINE <= rsi_v[i])
-
     last = len(rows) - 1
-    if not c1(last):
-        return None
 
-    if SAME_BAR:
-        ok2, ok3 = c2(last), c3(last)
-    else:
-        lo_i = max(0, last - WINDOW + 1)
-        ok2 = any(c2(i) for i in range(lo_i, last + 1))
-        ok3 = any(c3(i) for i in range(lo_i, last + 1))
-    if not (ok2 and ok3):
-        return None
+    def band(i, kind):
+        """① 띠를 건드리고 봉 방향이 맞는가."""
+        r = rows[i]
+        if kind == "low":
+            return bb_lo[i] is not None and r["low"] <= bb_lo[i] and r["close"] > r["open"]
+        return bb_up[i] is not None and r["high"] >= bb_up[i] and r["close"] < r["open"]
 
-    return {
-        "ts": rows[last]["ts"],
-        "close": rows[last]["close"],
-        "why": {
-            "하단": round(bb_lo[last], 2),
-            "저가": rows[last]["low"],
-            "rsi": round(rsi_v[last], 1),
-            "hist": round(hist[last], 4),
-        },
-    }
+    def hist_turn(i, kind):
+        """② 히스토그램이 돌아서는가."""
+        if not (i > 0 and hist[i] is not None and hist[i - 1] is not None):
+            return False
+        if kind == "low":
+            return hist[i] < 0 and hist[i] > hist[i - 1]
+        return hist[i] > 0 and hist[i] < hist[i - 1]
+
+    def rsi_cross(i, kind):
+        """③ RSI 가 선을 뚫는가."""
+        if not (i > 0 and rsi_v[i] is not None and rsi_v[i - 1] is not None):
+            return False
+        if kind == "low":
+            return rsi_v[i - 1] < RSI_LOW <= rsi_v[i]
+        return rsi_v[i - 1] > RSI_HIGH >= rsi_v[i]
+
+    out = []
+    for kind in ("low", "high"):
+        if not band(last, kind):
+            continue
+        if SAME_BAR:
+            ok2, ok3 = hist_turn(last, kind), rsi_cross(last, kind)
+        else:
+            lo_i = max(0, last - WINDOW + 1)
+            ok2 = any(hist_turn(i, kind) for i in range(lo_i, last + 1))
+            ok3 = any(rsi_cross(i, kind) for i in range(lo_i, last + 1))
+        if not (ok2 and ok3):
+            continue
+        r = rows[last]
+        out.append({
+            "kind": kind,
+            "ts": r["ts"],
+            "close": r["close"],
+            "why": {
+                # 라벨(「하단/상단」 · 「저가/고가」)은 `format_message` 가 붙인다.
+                "band": round(bb_lo[last] if kind == "low" else bb_up[last], 2),
+                "touch": r["low"] if kind == "low" else r["high"],
+                "rsi": round(rsi_v[last], 1),
+                "hist": round(hist[last], 4),
+            },
+        })
+    return out
 
 
 # ── 보낸 기록 — 서버를 다시 띄워도 남아야 한다 ──────────────────
 
+# **`kind` 가 열쇠에 들어간다.** 없으면 한 봉에 한 신호만 기록되어,
+# 한쪽이 찍힌 봉에서 다른 쪽이 「이미 보냈다」 로 걸린다.
+_SCHEMA = """CREATE TABLE IF NOT EXISTS signal_sent (
+    code TEXT NOT NULL, ts INTEGER NOT NULL, kind TEXT NOT NULL,
+    day TEXT NOT NULL, sent_at REAL NOT NULL,
+    PRIMARY KEY (code, ts, kind))"""
+
+
 def _init(proxy):
     with proxy._db_lock, proxy.db_conn() as conn:
-        conn.execute("""CREATE TABLE IF NOT EXISTS signal_sent (
-            code TEXT NOT NULL, ts INTEGER NOT NULL, day TEXT NOT NULL,
-            sent_at REAL NOT NULL, PRIMARY KEY (code, ts))""")
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(signal_sent)")]
+        if cols and "kind" not in cols:
+            # **옛 표를 옮긴다.** `CREATE TABLE IF NOT EXISTS` 는 이미 있는 표의
+            # 칸을 안 바꾸므로, 여기서 직접 옮기지 않으면 **새 칸이 영영 안 생긴다.**
+            # `kind` 가 생기기 전 것은 전부 바닥 신호였다 (고점은 2026-09-23 에 생겼다).
+            conn.execute("ALTER TABLE signal_sent RENAME TO signal_sent_old")
+            conn.execute(_SCHEMA)
+            conn.execute("INSERT OR IGNORE INTO signal_sent "
+                         "SELECT code, ts, 'low', day, sent_at FROM signal_sent_old")
+            conn.execute("DROP TABLE signal_sent_old")
+        else:
+            conn.execute(_SCHEMA)
         conn.execute("CREATE INDEX IF NOT EXISTS ix_signal_day ON signal_sent(code, day)")
 
 
-def _already(proxy, code, ts):
+def _already(proxy, code, ts, kind):
     with proxy._db_lock, proxy.db_conn() as conn:
         return conn.execute(
-            "SELECT 1 FROM signal_sent WHERE code=? AND ts=?", (code, ts)).fetchone() is not None
+            "SELECT 1 FROM signal_sent WHERE code=? AND ts=? AND kind=?",
+            (code, ts, kind)).fetchone() is not None
 
 
-def _today_count(proxy, code, day):
+def _mark(proxy, code, ts, kind, day):
     with proxy._db_lock, proxy.db_conn() as conn:
-        return conn.execute(
-            "SELECT COUNT(*) FROM signal_sent WHERE code=? AND day=?", (code, day)).fetchone()[0]
-
-
-def _mark(proxy, code, ts, day):
-    with proxy._db_lock, proxy.db_conn() as conn:
-        conn.execute("INSERT OR IGNORE INTO signal_sent VALUES (?,?,?,?)",
-                     (code, ts, day, time.time()))
+        conn.execute("INSERT OR IGNORE INTO signal_sent VALUES (?,?,?,?,?)",
+                     (code, ts, kind, day, time.time()))
 
 
 # ── 한 바퀴 ───────────────────────────────────────────────────
@@ -256,25 +301,22 @@ def check_once(proxy, names=None):
     for code in WATCH:
         try:
             rows = proxy.read_candles(code, PERIOD, NEED_BARS)
-            sig = judge(rows)
-            if not sig:
-                continue
-            if _already(proxy, code, sig["ts"]):
-                continue
-            if _today_count(proxy, code, day) >= SEND_MAX_PER_DAY:
-                continue
+            for sig in judge(rows):
+                # **같은 봉 중복만 막는다.** 하루 횟수는 안 센다 (위 LOOP_SEC 주석).
+                if _already(proxy, code, sig["ts"], sig["kind"]):
+                    continue
 
-            name = (names or {}).get(code, code)
-            text = format_message(code, name, sig)
-            if SEND:
-                ok, err = dart.telegram_send(text)
-                if not ok:
-                    print("  [신호] 보내지 못했습니다: %s" % err)
-            else:
-                # 만드는 동안에는 로그에만 남긴다 (위 SEND 설명 참고)
-                print("  [신호·안보냄] %s" % text.replace("\n", " / "))
-            _mark(proxy, code, sig["ts"], day)
-            hit += 1
+                name = (names or {}).get(code, code)
+                text = format_message(code, name, sig)
+                if SEND:
+                    ok, err = dart.telegram_send(text)
+                    if not ok:
+                        print("  [신호] 보내지 못했습니다: %s" % err)
+                else:
+                    # 만드는 동안에는 로그에만 남긴다 (위 SEND 설명 참고)
+                    print("  [신호·안보냄] %s" % text.replace("\n", " / "))
+                _mark(proxy, code, sig["ts"], sig["kind"], day)
+                hit += 1
         except Exception as e:
             # 한 종목이 실패해도 나머지는 본다 (prefillMinutes 와 같은 자리)
             print("  [신호] %s 판정 실패: %s" % (code, type(e).__name__))
@@ -282,14 +324,20 @@ def check_once(proxy, names=None):
 
 
 def format_message(code, name, sig):
+    """**📉 는 「내려온 자리」 · 📈 는 「올라간 자리」** — 지금 어디 있는지를 가리킨다.
+    사고팔라는 말은 안 쓴다. 끝의 「참고용입니다」 도 그래서 둔다."""
     w = sig["why"]
-    return ("📉 %s (%s) 바닥 신호\n"
+    low = sig["kind"] == "low"
+    return ("%s %s (%s) %s\n"
             "현재가 %s원\n"
-            "볼린저 하단 %s · 저가 %s\n"
+            "볼린저 %s %s · %s %s\n"
             "RSI %s · MACD 히스토그램 %s\n"
             "5분봉 기준 · 참고용입니다"
-            % (name, code, format(sig["close"], ","),
-               format(w["하단"], ","), format(w["저가"], ","),
+            % ("📉" if low else "📈", name, code,
+               "바닥 신호" if low else "고점 신호",
+               format(sig["close"], ","),
+               "하단" if low else "상단", format(w["band"], ","),
+               "저가" if low else "고가", format(w["touch"], ","),
                w["rsi"], w["hist"]))
 
 
