@@ -22,7 +22,15 @@ if [ -z "${CMUX_WORKSPACE_ID:-}${CMUX_SURFACE_ID:-}" ]; then
   exit 2
 fi
 
-running=$(ps -ax -o command= | grep -c "[c]laude --resume")
+# **`claude --resume` 이 붙어 있다고 보면 안 된다** (2026-09-28 실측).
+# cmux 는 그 사이에 `--settings` · `--mcp-config` 를 끼워 넣고, 어떤 세션은
+# `--resume` 이 아니라 **`--session-id`** 로 뜬다. 붙은 꼴로만 세면 **0** 이
+# 나와서 **이 안전장치가 통째로 안 먹는다** — 실제로 그랬다.
+# 세션 번호를 뽑아 `sort -u` 로 센다. 같은 세션이 두 줄로 잡혀도 하나로 본다.
+running=$(ps -ax -o command= \
+  | grep -E "[c]laude .*--(resume|session-id) " \
+  | grep -oE -- "--(resume|session-id) [0-9a-f-]+" \
+  | sort -u | wc -l | tr -d " ")
 if [ "$running" -gt 0 ]; then
   echo ""
   echo "  ⚠️ 이미 돌고 있는 세션이 ${running}개 있습니다."
