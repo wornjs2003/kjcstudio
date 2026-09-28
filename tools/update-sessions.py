@@ -267,7 +267,10 @@ def running_ids():
         out = subprocess.run(
             ["powershell", "-NoProfile", "-Command",
              "Get-CimInstance Win32_Process | "
-             "Where-Object { $_.CommandLine -match 'resume' } | "
+             # claude 본체만 센다. 여는 쪽 `cmd /k "… claude --resume …"` 도
+             # 명령줄에 id 가 있어서, claude 가 못 뜨고 남은 빈 cmd 창까지
+             # 「이미 열려 있음」 으로 셌다 (2026-09-28).
+             "Where-Object { $_.Name -match '^(claude|node)' -and $_.CommandLine -match 'resume' } | "
              "ForEach-Object { $_.CommandLine }"],
             capture_output=True, text=True, timeout=25,
         ).stdout or ""
@@ -307,8 +310,14 @@ def open_windows(rows):
         #
         # CREATE_NEW_CONSOLE 이면 `start` 없이 바로 새 콘솔이 열린다.
         # 제목은 cmd 의 `title` 로 단다.
+        #
+        # 폴더는 `cd /d "…"` 가 아니라 `cwd` 로 넘긴다. 목록으로 넘기면
+        # 파이썬이 따옴표를 `\"` 로 바꾸는데 cmd 는 `\` 를 이스케이프로 안 읽어
+        # 「파일 이름, 디렉터리 이름 또는 볼륨 레이블 구문이 잘못되었습니다」 가
+        # 나고, `&&` 뒤의 `claude` 가 안 돌았다 (2026-09-28).
         subprocess.Popen(
-            ["cmd", "/k", f'title {r["name"]} && cd /d "{REPO}" && claude --resume {r["id"]}'],
+            ["cmd", "/k", f'title {r["name"]} && claude --resume {r["id"]}'],
+            cwd=REPO,
             creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
         print(f"  열기   {r['name']}")
