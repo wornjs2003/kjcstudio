@@ -23,7 +23,40 @@ if hasattr(sys.stdout, "reconfigure"):
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASELINE = os.path.join(ROOT, "tools", "layout-baseline.json")
-CHROME = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+# 크롬 자리. **윈도우와 맥이 다르다** — 맥미니로 옮기면서 갈렸다 (2026-09-28).
+# 경로를 하나 박아 두면 **그 기계에서만 도는 도구**가 된다.
+#
+# `KJC_CHROME` 으로 덮을 수 있다. `kis_proxy.py` 의 `KJC_RATE_FILE` 과 같은
+# 꼴이다 — **띄우는 쪽에서 주면 되니 코드에 기계 이름을 안 박는다.**
+CHROME_CANDIDATES = [
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    os.path.expanduser(
+        "~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+]
+
+
+def find_chrome():
+    """있는 것을 고른다. 없으면 `None`.
+
+    **`KJC_CHROME` 을 줬으면 그것만 본다.** 없는 경로여도 다음 후보로
+    넘어가지 않는다 — 넘어가면 **오타를 낸 사람이 엉뚱한 크롬으로 재면서
+    「됐다」 로 읽는다.** 시킨 것이 안 되면 다른 길로 가지 말고 말한다.
+
+    **못 찾았을 때 「없다」 로만 내지 않는다** — 어디를 봤는지 함께 내야
+    「크롬이 없다」 와 「엉뚱한 데를 봤다」 가 갈린다.
+    """
+    env = os.environ.get("KJC_CHROME")
+    if env:
+        return env if os.path.exists(env) else None
+    for p in CHROME_CANDIDATES:
+        if os.path.exists(p):
+            return p
+    return None
+
+
+CHROME = find_chrome()
 PORT = 9334
 
 # 재는 창 크기. 화면이 반응형이라 폭이 바뀌면 높이도 바뀐다 — 기준과 같은
@@ -205,8 +238,17 @@ def _measure_once(expect=None):
         print("서버가 없습니다 — holdings/preview.bat 로 8765(holdings 미리보기) 를 먼저 띄우십시오")
         sys.exit(2)
 
-    if not os.path.exists(CHROME):
-        print("크롬을 못 찾았습니다: %s" % CHROME)
+    if not CHROME:
+        env = os.environ.get("KJC_CHROME")
+        if env:
+            print("KJC_CHROME 이 가리키는 자리에 크롬이 없습니다 —")
+            print("    %s" % env)
+            print("경로를 고치거나, 이 변수를 지우고 기본 자리를 쓰십시오.")
+        else:
+            print("크롬을 못 찾았습니다. 본 자리는 이것입니다 —")
+            for p in CHROME_CANDIDATES:
+                print("    %s" % p)
+            print("다른 자리에 있으면 `KJC_CHROME` 으로 알려 주십시오.")
         sys.exit(2)
 
     proc = subprocess.Popen(
