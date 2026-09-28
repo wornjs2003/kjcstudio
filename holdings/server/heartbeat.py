@@ -69,6 +69,10 @@ STALE_PATHS = ["holdings/server/"]
 # 그 위에 얹는 유예. 푸시 직후에는 늘 뒤처져 있으므로 바로 울리지 않는다.
 STALE_GRACE_SEC = 1800          # 30분
 
+# 데일리 저장이 끝나기를 기다리는 여유. `daily.SEND_AT` 뒤로 이만큼은
+# 「없어도 정상」 으로 본다 — 실측으로 저장이 2~3분 걸린다.
+DAILY_GRACE_MIN = 15
+
 _state = {"acc": None, "ns": None, "started_at": None, "last_err": None}
 
 
@@ -171,9 +175,33 @@ def _daily_today(now=None):
     못 읽는다. 그래서 **남은 파일**을 본다. 스스로 신고하는 것이 아니라
     결과를 보는 쪽이라, `daily.py` 를 건드리지 않아도 된다.
     """
+    t = now or time.time()
     try:
+        import daily
         import docstore
-        day = time.strftime("%Y%m%d", time.localtime(now or time.time()))
+
+        # **아직 저장할 시각 전이면 「없는 것이 정상」이다** (2026-09-29).
+        #
+        # 2026-09-29 **00:05 에 「오늘 데일리분석이 저장되지 않았습니다」 가
+        # 재권님 폰으로 갔다.** 그 시각에 오늘 것이 없는 것은 당연한데
+        # **파일이 있나만 보고** 있었다.
+        #
+        # **`None` 을 돌려준다.** 워커는 `dailyToday === false` 만 보므로
+        # (`kis-worker.js` 의 `aliveProblems`) `None` 은 그냥 지나간다 —
+        # **워커를 한 줄도 안 고쳐도 되고 배포가 안 붙는다.**
+        #
+        # **시각은 `daily.SEND_AT` 을 그대로 읽는다.** 여기 07:30 을 적으면
+        # 그것이 복제가 되고, 발송 시각을 옮길 때 이 파일도 고쳐야 한다.
+        #
+        # **유예 15분** — 저장이 그 시각 **정각에 끝나지 않는다.**
+        # 실측(2026-09-23~29 이레)으로 **전부 07:32 대**였다(07:32:12~07:32:59).
+        # 넉넉히 두는 것은, 모자라면 **매일 아침 2~3분 동안 헛경보가 나기**
+        # 때문이다. 워커 Cron 이 5분마다라 15분이면 세 바퀴 여유다.
+        lt = time.localtime(t)
+        if lt.tm_hour * 60 + lt.tm_min < daily.SEND_AT + DAILY_GRACE_MIN:
+            return None
+
+        day = time.strftime("%Y%m%d", lt)
         return os.path.exists(os.path.join(docstore.DOC_ROOT, "daily-%s.json" % day))
     except Exception:
         return None
