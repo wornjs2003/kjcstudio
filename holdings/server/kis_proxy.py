@@ -701,6 +701,50 @@ DEBUGGING_PORT = 8093
 # 「정식 아님」 띠를 붙인다. 언어가 달라 한 곳으로 못 합치므로, **한쪽을
 # 고치면 다른 쪽도 본다.**
 MAIN_PORT = 8765
+
+# ── 이 기계가 **내보내는 자리**인가 (2026-09-28 지시) ──────────
+#
+# 재권님 말씀 — 「맥미니로 완전히 이전될때까지는 **같이 쓰고**, 다되면
+# **맥미니가 서버**로 되고 **pc는 작업용**이 될거야」.
+#
+# ⚠️ **포트만으로는 기계를 못 가른다.** `MAIN_PORT` 는 **한 기계 안** 여섯
+# 폴더를 가르는 장치다. 맥미니에서도 8765 로 뜨면 **양쪽 다 「내가 메인」**
+# 이 되어 텔레그램이 두 번 간다.
+#
+#     포트         한 기계 안 여섯 폴더   ← **그대로 둔다**
+#     `KJC_ROLE`   **기계 사이**          ← 이것을 더한다
+#
+# **바꿔 끼우지 않고 AND 로 얹는다.** 역할로만 가르면 **여섯 폴더가 다시
+# 새어**, 2026-09-23 에 고친 뉴스 두 번 건이 그대로 되살아난다.
+#
+# **값이 없으면 `work`(안 보냄)이다.** 맥미니를 처음 띄울 때 **실수로
+# 보내는 것**을 막는다 — 「켜기」 는 명시적으로 켤 때만 일어나야 한다.
+#
+# ⚠️ **그래서 이 PC 도 `KJC_ROLE=server` 를 받아야 계속 보낸다.**
+# 안 주면 재시작하는 순간 **넷이 다 조용해진다** — 그것이 이 설계의 대가다.
+# 띄우는 쪽(`startup.bat` · `preview.bat`)이 준다.
+#
+# `KJC_RATE_FILE` 과 같은 방식이다 — **코드에 기계 이름을 안 박는다.**
+ROLE = (os.environ.get("KJC_ROLE") or "work").strip().lower()
+if ROLE not in ("server", "work"):
+    # **오타를 조용히 넘기지 않는다.** 모르는 값이면 안 보내는 쪽으로 가는데,
+    # 말을 안 하면 「왜 알림이 안 오지」 를 한참 찾게 된다.
+    sys.stderr.write("  [역할] 모르는 KJC_ROLE 입니다 — work(안 보냄)로 봅니다\n")
+    ROLE = "work"
+IS_SERVER = ROLE == "server"
+
+
+def is_sender(port):
+    """텔레그램·KV 를 **실제로 내보내는 자리인가.**
+
+    **두 층을 함께 본다.** 하나라도 빠지면 새거나 막힌다.
+
+        `IS_SERVER`   기계 사이 — 맥미니냐 PC 냐
+        `MAIN_PORT`   한 기계 안 — 여섯 폴더 중 메인이냐
+    """
+    return IS_SERVER and port == MAIN_PORT
+
+
 DEBUGGING_BASE = "http://localhost:%d" % DEBUGGING_PORT
 
 # 8093 이 살아 있는지. 매 요청마다 확인하면 느리므로 잠깐 기억해 둔다.
@@ -3405,7 +3449,7 @@ def main():
     # `daily.py` 의 `SEND_AT` 와 **같은 시각**이라, 안 가리면 그 시각에
     # **데일리 1 + 뉴스 3 = 4통**이 간다.
     _news_send = (dart.telegram_send
-                  if (dart.telegram_config() and args.port == MAIN_PORT)
+                  if (dart.telegram_config() and is_sender(args.port))
                   else None)
     if not SLOW and news_store.start_collector(send=_news_send):
         print("  뉴스 수집 : 사용 (%d분마다 · 주말 포함 · 텔레그램 %s)"
@@ -3478,12 +3522,14 @@ def main():
             #
             # ④ `MAIN_PORT` 는 `frame.js` 의 같은 이름과 **같은 값**이다 (위 주석).
             send=(dart.telegram_send
-                  if (dart.telegram_config() and args.port == MAIN_PORT)
+                  if (dart.telegram_config() and is_sender(args.port))
                   else None),
         )
-        _tg = ("텔레그램 켜짐" if (dart.telegram_config() and args.port == MAIN_PORT)
-               else ("저장만 — 메인(%d)에서만 보냅니다" % MAIN_PORT
-                     if dart.telegram_config() else "저장만 — 열쇠 없음"))
+        _tg = ("텔레그램 켜짐" if (dart.telegram_config() and is_sender(args.port))
+               else ("저장만 — 이 기계는 %s 입니다" % ROLE
+                     if dart.telegram_config() and not IS_SERVER
+                     else ("저장만 — 메인(%d)에서만 보냅니다" % MAIN_PORT
+                           if dart.telegram_config() else "저장만 — 열쇠 없음")))
         print("  데일리분석 : 아침 %02d:%02d 에 저장 · 최근 %d장 (%s)"
               % (daily.SEND_AT // 60, daily.SEND_AT % 60, daily.KEEP, _tg))
 
@@ -3505,7 +3551,7 @@ def main():
     #
     # **열쇠를 비우는 것으로 막지 않는다.** 폴더마다 갈려 있고
     # (`kjc-home` 은 비었는데 `kjc-dev3` 은 살아 있다) **키 파일을 만지게 된다.**
-    if not SLOW and args.port == MAIN_PORT and signal_watch.start(sys.modules[__name__]):
+    if not SLOW and is_sender(args.port) and signal_watch.start(sys.modules[__name__]):
         # **시각을 여기 박지 않는다.** `SESSION_FROM`·`SESSION_TO` 에서 만든다 —
         # 박으면 그쪽을 고쳤을 때 이 줄만 낡는다. 2026-09-23 에 대상을 50 으로
         # 넓히고 시간을 08~20 으로 바꾸면서 **이 줄이 「관심종목 … 장중만」 인

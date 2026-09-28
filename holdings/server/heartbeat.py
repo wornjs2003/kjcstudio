@@ -251,11 +251,25 @@ def beat_once(proxy, cfg):
 def start(proxy, port):
     """서버가 뜰 때 부른다. 돌기 시작하면 True.
 
-    **메인 포트에서만 돈다.** 폴더가 여섯이고 `secrets.json` 도 여섯인데
-    KV 키는 **하나**다. 여럿이 쓰면 **메인이 꺼져도 세션 서버가 덮어써서
+    **내보내는 자리에서만 돈다.** 폴더가 여섯이고 `secrets.json` 도 여섯인데
+    KV 키는 **하나**다. 여럿이 쓰면 **메인이 꺼져도 다른 서버가 덮어써서
     알림이 안 온다** — 막으려던 것의 반대가 된다.
+
+    ⚠️ **기계가 둘이면 포트로는 못 가른다** (2026-09-28). 맥미니에서도
+    8765 로 뜨면 **양쪽이 같은 키를 5분마다 덮어쓴다.** 그러면 **한쪽이
+    꺼져도 다른 쪽이 계속 써서 꺼짐 알림이 영영 안 온다.**
+    `proxy.is_sender()` 가 **포트와 역할을 함께** 본다.
+
+    `ALIVE_KEY` 는 **이번에 안 건드린다** — 바꾸면 `worker/kis-worker.js` 의
+    같은 이름도 함께 고쳐야 하고 **대시보드 배포가 따라온다.** 그 사이
+    워커가 옛 키를 읽으면 **꺼짐 알림이 안 온다.**
     """
-    if port != getattr(proxy, "MAIN_PORT", 8765):
+    sender = getattr(proxy, "is_sender", None)
+    if sender is not None:
+        if not sender(port):
+            return False
+    elif port != getattr(proxy, "MAIN_PORT", 8765):
+        # 옛 `kis_proxy` 와 함께 돌 때를 위해 남겨 둔다
         return False
 
     try:
