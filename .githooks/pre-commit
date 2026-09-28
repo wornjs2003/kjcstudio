@@ -44,8 +44,15 @@ files=$(git diff --cached --name-only)
 # 걸렸는데 **둘 다 이미 모달을 열고 있었다**(JS 가 가로챈다). 막았으면
 # 멀쩡한 커밋이 멈췄을 것이다.
 RULES="$(git rev-parse --show-toplevel 2>/dev/null)/tools/check-rules.py"
-if [ -f "$RULES" ] && command -v python >/dev/null 2>&1; then
-  rules_out=$(python "$RULES" 2>&1)
+# **`python` 이 없는 기계가 있다** — 맥에는 `python3` 뿐이다 (2026-09-28 실측).
+# 앞쪽을 먼저 찾고 없으면 뒤를 쓴다. **둘 다 없으면 조용히 건너뛰지 않고 알린다** —
+# 그 전에는 `command -v python` 이 거짓이라 **검사가 꺼진 줄도 몰랐다.**
+PY=""
+if command -v python3 >/dev/null 2>&1; then PY=python3
+elif command -v python >/dev/null 2>&1; then PY=python
+fi
+if [ -f "$RULES" ] && [ -n "$PY" ]; then
+  rules_out=$("$PY" "$RULES" 2>&1)
   rules_code=$?
   if [ "$rules_code" = "1" ]; then
     echo ""
@@ -66,6 +73,10 @@ if [ -f "$RULES" ] && command -v python >/dev/null 2>&1; then
 ' "$rules_out" | sed 's/^/  /'
     echo ""
   fi
+elif [ -f "$RULES" ]; then
+  echo ""
+  echo "  ⚠️ 파이썬이 없어 룰 검사를 건너뜁니다 (python3 · python 둘 다 없음)"
+  echo ""
 fi
 
 
