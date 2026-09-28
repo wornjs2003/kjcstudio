@@ -35,6 +35,19 @@ set PYW=C:\Users\9800X3D\AppData\Local\Programs\Python\Python313\pythonw.exe
 if not exist "%PYW%" set PYW=pythonw
 if not exist "%~dp0logs" mkdir "%~dp0logs"
 
+REM  Who sends to the outside - news / daily / signal / heartbeat.
+REM  The code defaults to "work" (sends nothing) so a fresh machine
+REM  cannot start pushing to the phone by accident. This PC is still
+REM  the server, so say so here.
+REM
+REM  Two gates, both must pass (see kis_proxy.py is_sender):
+REM    KJC_ROLE  tells machines apart   (this line)
+REM    MAIN_PORT tells the six folders on one machine apart
+REM
+REM  WHEN THE MAC MINI TAKES OVER: set this to work, or delete the line.
+REM  Leaving both machines on server means the phone gets everything twice.
+set KJC_ROLE=server
+
 netstat -ano | findstr ":8765" | findstr "LISTENING" > nul 2>&1
 if %errorlevel%==0 (
   echo   [skip]  server already listening on 8765
