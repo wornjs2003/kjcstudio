@@ -54,6 +54,40 @@ const STOCK_COUNT = 0;          // 0 이면 자르지 않는다
 /* 장중에는 계속 움직인다. 서버도 30초 캐시라 그보다 잦게 불러야 뜻이 없다 */
 const REFRESH_MS = 60 * 1000;
 
+/* ── 기간 칩 (2026-09-23) ──────────────────────────────────────
+ *
+ * 재권님 지시 — 「**가로 해줘 만들거야**」. 카드에만 있던 이 셋을 모달에도
+ * 둔다(모달 검수 ⑥). 룰이 「화면에 있는데 모달에 없으면 위반」 이다
+ * (holdings/CLAUDE.md:332).
+ *
+ * **아직 눌리지 않는다.** `/api/naver/groups` 가 기간을 안 받아서 오는 값이
+ * 전부 일간이다. 그래서 주간·월간은 `disabled` 다.
+ *
+ * ⚠️ **「받을 수 없는 것은 자리도 만들지 않는다」 가 여기 안 걸린다.**
+ * 그 룰은 **어디서도 못 받는 것**을 두고 한 말이고, 이것은 **재권님이
+ * 만드실 예정**인 자리다. 「영영 못 받는다」 로 읽어 지우면 안 된다 —
+ * 2026-09-23 에 세션 둘이 그렇게 읽었다가 갈렸다.
+ *
+ * **여기 한 곳에 둔다.** 전에는 `index.html` 에 단추 셋이 박혀 있었다.
+ * 모달에 같은 것을 또 적으면 복제가 둘이 되고, **서버에 기간이 붙는 날
+ * 한쪽만 살아난다.** 카드도 이 목록으로 그린다.
+ */
+export const SPANS = [
+  { id: 'd', label: '일간', ready: true },
+  { id: 'w', label: '주간', ready: false },
+  { id: 'm', label: '월간', ready: false },
+];
+
+const SPAN_NOT_READY = '네이버가 기간을 안 줍니다 — 오는 값은 전부 일간입니다';
+
+/** 기간 칩 줄의 속을 만든다. 카드와 모달이 같은 것을 쓴다.
+ *  @param {string} cur  지금 고른 기간. 아직 `'d'` 하나뿐이다 */
+export function spanChipsHtml(cur = 'd') {
+  return SPANS.map((s) => `<button class="kh-chip${s.id === cur ? ' is-active' : ''}${
+    s.ready ? '' : ' kh-todo-chip'}" data-span="${s.id}"${
+    s.ready ? '' : ` disabled title="${SPAN_NOT_READY}"`}>${s.label}</button>`).join('');
+}
+
 export function mountSectors(root) {
   if (!root) return { refresh() {} };
 
@@ -61,6 +95,11 @@ export function mountSectors(root) {
   const body = root.querySelector('#kh-sc-body');
   const note = root.querySelector('#kh-sc-note');
   if (!body) return { refresh() {} };
+
+  /* 기간 칩을 `SPANS` 로 그린다 (2026-09-23) — 전에는 `index.html` 에 박혀
+     있었다. 모달도 같은 목록으로 그리므로 둘이 갈리지 않는다. */
+  const spanHost = root.querySelector('#kh-sc-span');
+  if (spanHost) spanHost.innerHTML = spanChipsHtml('d');
 
   let kind = 'industry';
   let groups = [];

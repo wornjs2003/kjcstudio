@@ -1520,6 +1520,41 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
   };
 }
 
+/* ── 전일 종가 점선 (2026-09-23) ──────────────────────────────
+ *
+ * **오늘 올랐는지 내렸는지의 기준선**이다. 어제 마지막 봉의 종가에 점선을
+ * 긋는다. 5분봉에만 뜻이 있다 — 일봉 이상이면 「어제」 가 봉 하나다.
+ *
+ * **여기 한 곳에 둔다.** 전에는 `home.js` 안에만 있어서, 같은 5분봉인데
+ * **첫 화면 차트에는 선이 있고 종목 모달·종목 화면에는 없었다**
+ * (2026-09-23 모달 검수). 룰이 「화면에 있는데 모달에 없으면 위반」 이므로
+ * 모달에도 있어야 하는데, 옮기지 않고 베끼면 그 순간 복제가 둘이 된다.
+ *
+ * `addPriceLine` 으로 긋는다 — 다음에 봉을 갈아끼울 때 저절로 지워진다.
+ * 직접 `createPriceLine` 을 부르면 종목을 옮길 때마다 선이 쌓인다.
+ *
+ * **그었나를 돌려준다.** 부르는 쪽이 아래 줄에 「점선은 전일 종가」 를 적을지
+ * 정하는 데 쓴다 — 오늘 봉이 첫 봉이면 기준이 될 어제 봉이 없어 선을 못 긋는데,
+ * 그때 설명만 남으면 없는 선을 가리킨다.
+ */
+export const PREV_CLOSE_NOTE = '점선은 전일 종가';
+
+export function addPrevCloseLine(chart, candles) {
+  if (!chart || !candles || candles.length < 2) return false;
+  const today = candles[candles.length - 1].ts.slice(0, 8);
+  const firstToday = candles.findIndex((b) => b.ts.slice(0, 8) === today);
+  if (firstToday <= 0) return false;      // 오늘 봉이 없거나 첫 봉이 오늘이다
+  chart.addPriceLine({
+    price: candles[firstToday - 1].close,
+    color: color('text-muted'),
+    lineWidth: 1,
+    lineStyle: 2,               // 점선
+    axisLabelVisible: true,
+    title: '전일',
+  });
+  return true;
+}
+
 /* 차트 칸 밖에 두는 범례 — 패널 머리(stock.html)와 지수 차트 아래 줄에서 쓴다.
    어떤 이동평균이 그려졌는지, 못 그린 것이 있으면 왜인지 적는다.
    값과 켜고 끄기는 차트 안 범례(.kh-lg)가 맡는다. */
