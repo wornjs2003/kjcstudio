@@ -85,6 +85,31 @@ do
   fi
 
   echo "  ──────────────────────────────────────────────────────"
+
+  # `staging` 이 뒤처진 채로 `main` 을 올리나. 그러면 **검수를 안 거친
+  # 커밋이 나간다** — 「세 자리로 나눈다」 의 중간서버가 그 자리다.
+  #
+  # 2026-09-26 과 09-29 에 같은 일이 났다. 둘 다 창구가
+  # `git merge staging --ff-only && git push` 를 이어 썼는데, **머지가
+  # 실패해도 푸시가 그대로 갔다.** 「한 번은 사고, 두 번은 구조다.」
+  #
+  # **룰로는 못 막는다.** 「올리기 직전 `merge main`」 을 지켜도 **그 뒤에
+  # `main` 으로 커밋이 더 들어오면 그만**이고, `main` 에는 입구가 셋이다
+  # (`staging` · 문서 레인 · 엔진). 그래서 **올리는 순간에** 센다.
+  if [ "$local_ref" = "refs/heads/main" ] &&
+     git rev-parse --verify -q staging >/dev/null 2>&1; then
+    behind=$(git rev-list --count staging..main 2>/dev/null || echo 0)
+    if [ "${behind:-0}" -gt 0 ]; then
+      shown=1
+      echo ""
+      echo "  ── staging 이 뒤처져 있습니다 ─────────────────────────"
+      echo "     ${behind}건이 **중간서버 검수를 안 거친 채** 나갑니다."
+      git log --oneline staging..main 2>/dev/null | head -5 | sed 's/^/        /'
+      echo ""
+      echo "     먼저 내리려면:  cd ../kjc-staging && git merge main"
+      echo "  ──────────────────────────────────────────────────────"
+    fi
+  fi
 done
 
 if [ "$shown" = "1" ]; then
