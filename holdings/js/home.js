@@ -8,7 +8,7 @@
 import { WATCHLIST, brandColor } from './data/market.js';
 import * as lastSeen from './store/last-seen.js';
 import { fetchCandles, createStockChart, maLegend,
-  addPrevCloseLine, PREV_CLOSE_NOTE } from './chart.js';
+  addPrevCloseLine, PREV_CLOSE_NOTE, BARS_FOR_MA } from './chart.js';
 import { color } from './theme.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount,
   dirClass, marketPhase } from './utils/format.js';
@@ -426,9 +426,22 @@ function dropBigChart() {
   if (bigChart) { bigChart.destroy(); bigChart = null; }
 }
 
-/* 큰 차트에 얼마나 담을까. 5분봉은 이틀치, 나머지는 넉넉히 받아
-   200일선까지 그려지게 한다 (chart.js 의 MA_LINES 가 200 을 쓴다). */
-const BIG_LIMIT = { '5m': 180, '1d': 400, '1w': 300, '1M': 300, '1y': 40 };
+/* 큰 차트에 얼마나 담을까.
+ *
+ * **전에 이 주석이 「200일선까지 그려지게 한다」 고 적혀 있었는데 틀렸다.**
+ * 5분봉이 180봉이라 200일선은 어느 종목에서도 안 그려지고 있었다
+ * (2026-09-29 실측). 주석이 그렇게 적혀 있어서 의심할 계기가 없었다 —
+ * 「설명이 이미 있으면 의심할 계기조차 없다」 그대로다.
+ *
+ * 개수는 chart.js 의 BARS_FOR_MA 가 정한다. 여기 숫자를 박으면 MA_LINES 가
+ * 바뀔 때 또 어긋난다.
+ *
+ *   일봉 400   BARS_FOR_MA(320) 보다 많아 그대로 둔다. 줄이면 오히려 짧아진다
+ *   년봉  40   320년치를 받을 수도, 받을 뜻도 없다. 그 칸은 범례가
+ *              「MA200 봉 부족」 으로 적는다
+ */
+const BIG_LIMIT = { '5m': BARS_FOR_MA, '1d': 400,
+                    '1w': BARS_FOR_MA, '1M': BARS_FOR_MA, '1y': 40 };
 
 /* 머리줄의 이름·현재가. 차트보다 먼저 바뀌어야 한다 —
    봉을 받는 데 시간이 걸리는데 이름이 옛 종목인 채로 있으면
@@ -498,7 +511,7 @@ async function paintBigChart() {
 
   let candles, period;
   try {
-    ({ candles, period } = await fetchCandles(st.code, bigPeriod, BIG_LIMIT[bigPeriod] || 240));
+    ({ candles, period } = await fetchCandles(st.code, bigPeriod, BIG_LIMIT[bigPeriod] || BARS_FOR_MA));
   } catch {
     if (bigChartKey !== key) return;        // 그 사이 다른 종목을 골랐다
     dropBigChart();
