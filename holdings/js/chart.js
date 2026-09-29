@@ -128,6 +128,31 @@ const PANE_H = 0.18;
  */
 const VISIBLE_BARS = 120;
 
+/* 보이는 구간 **전체**에 가장 긴 이동평균선이 있으려면 이만큼 받아야 한다.
+ *
+ * movingAverage 는 p-1 번째 봉부터 값을 채운다(위 drawOverlay 의 values).
+ * 그래서 보이는 120봉의 왼쪽 끝이 그 지점보다 뒤에 있어야 선이 끊기지 않는다.
+ *
+ *     필요한 봉 = VISIBLE_BARS + 가장 긴 MA = 120 + 200 = 320
+ *
+ * **개수를 박지 않는다.** MA_LINES 에 더 긴 선이 들어오면 저절로 따라온다.
+ * 박아 두면 선을 하나 늘릴 때마다 이 값도 같이 고쳐야 하고, 그 순간 목록이
+ * 둘이 된다.
+ *
+ * 2026-09-29 실측 — 카드가 180봉만 받아서 **200일선이 어느 종목에서도
+ * 안 그려지고 있었다**(candles.length < 200 이면 series: null). 모달은
+ * 300봉이라 그려지긴 했지만 보이는 구간 앞 20봉이 비어 있었다.
+ * 재권님 지시 — 「5분본부터 200일선까지 안그려진 거 다 그려」.
+ *
+ * DB 를 재보니 112종목 중 101종목이 이미 320봉 이상 갖고 있었다. 모자란
+ * 종목은 범례가 「MA200 봉 부족」 으로 적는다 — 그것은 그대로 둔다.
+ *
+ * **KIS 호출은 안 늘어난다.** 서버의 read_candles 가 DB 를 읽을 때만 쓰는
+ * 값이고, 분봉을 KIS 에서 받는 횟수는 limit 과 무관하다(kis_proxy.py 의
+ * get_chart — 하루치 또는 최근 구간, 둘 중 하나다).
+ */
+export const BARS_FOR_MA = VISIBLE_BARS + Math.max(...MA_LINES.map(([p]) => p));
+
 function showLastBars(chart, total) {
   const ts = chart.timeScale();
   try {
@@ -383,7 +408,11 @@ const CANDLE_MAX = 60;              // 이보다 쌓이면 오래된 것부터 �
 const _candleCache = new Map();
 
 /* 서버에서 캔들 가져오기. periodId 는 화면 버튼 값('1d','5m' 등) */
-export async function fetchCandles(code, periodId = '1d', limit = 240) {
+/* limit 을 안 주면 **선이 끊기지 않는 최소**로 받는다.
+   240 이었는데 240-120=120 이라 200일선이 앞 79봉 비었다 (2026-09-29).
+   지금은 부르는 두 곳이 다 값을 주지만, 기본값이 틀린 채로 남아 있으면
+   다음에 안 주고 부르는 곳에서 조용히 다시 빈다. */
+export async function fetchCandles(code, periodId = '1d', limit = BARS_FOR_MA) {
   const period = PERIOD_MAP[periodId] || 'D';
   const key = `${code}:${period}:${limit}`;
 
