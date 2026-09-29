@@ -59,7 +59,10 @@ _recv = _layout._recv
 VIEW_W, VIEW_H = _layout.VIEW_W, _layout.VIEW_H
 
 PORT_DEFAULT = 8767          # **중간서버.** 위 주석 참고
-CDP_PORT = 9223              # check-layout 과 안 겹치게
+# **빈 포트를 찾는다.** 박아 두면 두 세션이 동시에 돌릴 때 부딪히고,
+# 뒤엣쪽이 **남의 크롬에 붙어 엉뚱한 화면을 잰다** — `check-layout.py` 의
+# `free_port` 주석에 그 사고가 적혀 있다. **같은 병이라 같이 고친다.**
+CDP_PORT = _layout.free_port(9223) or 9223
 PAGES = ["index.html", "stock.html", "daily.html", "news.html"]
 
 # 화면에서 **눌리는 것**을 뽑는다. 대상을 박지 않는다 — 뽑는 **방법**을 적는다.
@@ -232,6 +235,18 @@ def main():
                     return m
 
         call("Page.enable")
+
+        # **내가 띄운 크롬에 붙었나.** 위 `free_port` 로 대개 피하지만
+        # 경합은 못 막는다 — 붙고 나서 재는 것이 확실하다.
+        r = call("Runtime.evaluate", {"expression": "innerWidth",
+                                      "returnByValue": True})
+        got = r.get("result", {}).get("result", {}).get("value")
+        if got != VIEW_W:
+            print("**남의 크롬에 붙었습니다** — 창 폭이 %d 가 아니라 %s 입니다."
+                  % (VIEW_W, got))
+            print("  디버깅 포트 %d 를 다른 프로세스가 먼저 잡고 있습니다." % CDP_PORT)
+            print("  **다른 세션이 이 도구를 돌리고 있습니까.**")
+            return 2
 
         found = {}
         for page in PAGES:

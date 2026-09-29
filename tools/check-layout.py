@@ -57,7 +57,36 @@ def find_chrome():
 
 
 CHROME = find_chrome()
-PORT = 9334
+
+
+def free_port(start, tries=40):
+    """**빈 디버깅 포트를 찾는다** (2026-09-29).
+
+    포트를 박아 두면 **두 세션이 같은 도구를 동시에 돌릴 때 부딪힌다.**
+    뒤엣쪽 크롬은 포트를 못 잡는데, 도구는 그 포트에 그냥 붙어서
+    **앞엣쪽 크롬을 잰다.** 그 크롬은 창 크기가 다르므로 **멀쩡한 화면이
+    통째로 어긋남**으로 나온다.
+
+    2026-09-29 에 실제로 났다 — 저장된 값에서 `(문서 전체)` 가
+    **1594 → 750** 이었고, 「메인 폴더에서 모바일 작업 중인 것 같다」 로
+    재권님께 올라갔다. **도구가 남의 크롬을 잰 것**이었다.
+
+    **이것만으로는 경합을 못 막는다** — 빈 포트를 찾은 뒤 크롬이 잡기
+    전에 남이 가져갈 수 있다. 그래서 붙은 뒤 `check_window` 로 한 번 더 본다.
+    """
+    for p in range(start, start + tries):
+        s = socket.socket()
+        try:
+            s.bind(("127.0.0.1", p))
+            return p
+        except OSError:
+            continue
+        finally:
+            s.close()
+    return None
+
+
+PORT = free_port(9334) or 9334
 
 # 재는 창 크기. 화면이 반응형이라 폭이 바뀌면 높이도 바뀐다 — 기준과 같은
 # 폭에서 재야 뜻이 있다. 이 값을 바꾸면 기준을 다시 잡아야 한다.
@@ -290,6 +319,27 @@ def _measure_once(expect=None):
                     return m
 
         call("Page.enable")
+
+        # **내가 띄운 크롬에 붙었나** (2026-09-29).
+        #
+        # 위 `free_port` 로 대개 피하지만 **경합은 못 막는다.** 붙고 나서
+        # 실제로 재는 것이 확실하다 — **창 폭이 내가 준 값이 아니면 남의
+        # 크롬이다.**
+        #
+        # **조용히 멈추지 않는다.** 무엇이 잘못됐는지 내야 다음 사람이
+        # **자기 코드를 의심하지 않는다** — 「대상 0개를 `0` 으로 내지
+        # 않는다」 와 같은 자리다.
+        r = call("Runtime.evaluate", {"expression": "innerWidth",
+                                      "returnByValue": True})
+        got = r.get("result", {}).get("result", {}).get("value")
+        if got != VIEW_W:
+            print("**남의 크롬에 붙었습니다** — 창 폭이 %d 가 아니라 %s 입니다."
+                  % (VIEW_W, got))
+            print("  디버깅 포트 %d 를 다른 프로세스가 먼저 잡고 있습니다." % PORT)
+            print("  **다시 시도합니다** — 세 번 다 이러면 그쪽이 끝난 뒤 돌리십시오.")
+            # `None` 을 주면 위 `measure_all` 의 재시도가 받는다. 새 크롬을
+            # 다시 띄우므로 **대개 두 번째에 제대로 잰다** — 2026-09-29 실측.
+            return None
 
         def measure_once():
             r = call("Runtime.evaluate", {"expression": MEASURE, "returnByValue": True})
