@@ -73,6 +73,53 @@ HOLDINGS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 경로가 같아진다. 키·DB 경로는 그대로 holdings 안을 가리킨다.
 SITE_ROOT = os.path.dirname(HOLDINGS_DIR)
 
+# ── 정적 파일로 내줄 것 · 내주지 않을 것 (2026-09-29 지시) ──────
+#
+# 재권님 말씀 — 「**로컬 서버 저장소 전체를 내주는것 막아**」.
+#
+# **그 전에는 `SITE_ROOT`(저장소 루트) 전체가 열려 있었다.** `/api/*` 와
+# `/debugging/` 만 가로채고 나머지는 `SimpleHTTPRequestHandler` 로 넘겼다.
+# 키 파일 · 토큰 캐시 · `market.db` · 데일리 저장본이 **전부 200** 이었다.
+#
+# **지금은 `127.0.0.1` 에만 떠 있어 밖에서 못 붙는다.** 그래서 「깨진 것」 이
+# 아니었지만, **터널을 열면 그 순간 나간다.** 터널보다 먼저 막는다.
+#
+# ⚠️ **순서가 핵심이다 — 먼저 막고, 그 뒤 낸다.**
+# 키 파일이 `secrets.json`·`.kis-token-cache.json` 으로 **둘 다 `.json`** 이라,
+# 확장자 검사를 먼저 하면 **그것을 통과한다.**
+#
+# **막을 목록은 새로 정하지 않았다 — `.gitignore` 가 근거다.**
+#
+#     secrets.json*              holdings/.gitignore:39
+#     .kis-token-cache.json      :44      ← `.json` 이라 이름으로만 막힌다
+#     market.db · -journal       :51
+#     data/docs/*                :56      ← 데일리 저장본. 텔레그램 문안이 들어 있다
+#     .env · *.key · __pycache__
+#     .claude/*                  루트 .gitignore
+#     **`.git` 자체**             **gitignore 에 없다** — git 이 자기를 안 가린다
+_DENY_DIRS = {".git", "__pycache__", ".claude", "logs", "node_modules",
+              ".pytest_cache", ".venv", "venv"}
+_DENY_NAMES = {".env", ".kis-token-cache.json", ".DS_Store"}
+_DENY_PREFIX = ("secrets.json",)          # secrets.json · secrets.jsonbak · …
+_DENY_SUFFIX = (".key", ".pem", ".db", ".db-journal", ".db-wal", ".db-shm",
+                ".log", ".err", ".pyc", ".pyo", ".bak")
+_DENY_REL = ("holdings/data/docs/",)      # 저장본. README.md 는 .md 라 어차피 안 나간다
+
+# **낼 확장자 — 네 방법으로 세어 정했다** (2026-09-29).
+#
+#     로그(실제 요청)     못 쟀다 — 재시작 뒤 5분치라 표본이 API 폴링뿐
+#     HTML·JS·CSS 링크   .js · .css · .html · .json
+#     실제 파일           같은 넷. **이미지가 0건** — 세 폴더가 비어 있다
+#     **코드의 동적 조립**  **`.png` 이 여기서 나왔다** —
+#                       `stock-icon.js` 가 `/uidata/icons/<종목코드>.png` 를 만든다
+#
+# **앞의 세 방법이 다 `.png` 를 놓쳤다.** 아이콘이 gitignore 라 파일이 아직
+# 없어서 안 보였다. **그대로 넣었으면 내려받는 날 아이콘이 전부 깨졌다.**
+# `.jpg`·`.webp` 는 `CLAUDE.md` 의 권장 포맷이라 작업물이 들어오면 필요하다.
+_ALLOW_EXT = {".html", ".htm", ".css", ".js", ".mjs", ".json", ".map",
+              ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico",
+              ".woff", ".woff2", ".ttf"}
+
 SECRETS_PATH = os.path.join(HOLDINGS_DIR, "secrets.json")
 TOKEN_CACHE_PATH = os.path.join(HOLDINGS_DIR, ".kis-token-cache.json")
 
@@ -2625,6 +2672,61 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
+    def _static_block(self):
+        """정적 파일을 막아야 하나. 막으면 이유(영문), 내줘도 되면 `None`.
+
+        **`self.path` 가 아니라 번역된 실제 경로로 판정한다.** `..` ·
+        `%2e%2e` 같은 우회는 `translate_path` 가 이미 정규화하므로,
+        그 결과를 보면 **우회를 따로 막을 필요가 없다.**
+
+        **상태 줄에 한글을 쓰지 않는다** — latin-1 이라 빈 응답이 나간다
+        (`CLAUDE.md` 의 「HTTP 상태 줄에 한글」).
+        """
+        real = self.translate_path(self.path)
+        try:
+            rel = os.path.relpath(real, SITE_ROOT)
+        except ValueError:
+            return "outside"
+        if rel == os.pardir or rel.startswith(os.pardir + os.sep):
+            return "outside"                      # 저장소 밖
+
+        # ① 먼저 막는다
+        for part in rel.split(os.sep):
+            low = part.lower()
+            if low in _DENY_DIRS:
+                return "blocked dir"
+            if low in _DENY_NAMES:
+                return "blocked name"
+            if low.startswith(_DENY_PREFIX):
+                return "secret"
+            if low.endswith(_DENY_SUFFIX):
+                return "blocked type"
+        if rel.replace(os.sep, "/").startswith(_DENY_REL):
+            return "stored doc"
+
+        # ② 디렉터리는 `index.html` 이 있을 때만 낸다.
+        #    ⚠️ **없으면 파일 목록이 나간다** — `assets` · `data` · `partials` ·
+        #    `uidata` 가 그 꼴이었다 (2026-09-29 실측).
+        if os.path.isdir(real):
+            return None if os.path.isfile(os.path.join(real, "index.html")) \
+                        else "listing"
+
+        # ③ 그 뒤 허용 확장자만
+        if os.path.splitext(rel)[1].lower() in _ALLOW_EXT:
+            return None
+        return "not served"
+
+    def do_HEAD(self):
+        """**GET 만 막으면 샌다.** `do_HEAD` 를 안 덮으면 상속본이 그대로 돌아
+        **파일이 있는지와 크기**가 나간다 (2026-09-29 실측 — 이 메서드가 없었다).
+        """
+        if not (self.path or "").startswith(("/api/", "/debugging/")):
+            why = self._static_block()
+            if why:
+                self.send_error(403, "Forbidden")
+                return
+        super().do_HEAD()
+
     def do_GET(self):
         if (self.path or "").startswith("/api/kis/"):
             _mark_ui_call()          # 미리받기가 양보하도록 알린다
@@ -2645,6 +2747,14 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if (self.path or "").startswith("/debugging/"):
             self._handle_debugging()
+            return
+
+        # ⚠️ 여기부터가 정적 파일이다. **저장소 전체를 내주지 않는다.**
+        why = self._static_block()
+        if why:
+            sys.stderr.write("  [차단] %s %s (%s)\n"
+                             % (_stamp(), self.path, why))
+            self.send_error(403, "Forbidden")
             return
         super().do_GET()
 
