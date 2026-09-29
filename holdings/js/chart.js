@@ -46,6 +46,19 @@ const COLOR = {
    (2026-09-16 지시 — 5 · 20 · 60 · 200) */
 const MA_LINES = [[5, 'ma5'], [20, 'ma20'], [60, 'ma60'], [200, 'ma200']];
 
+/* 지표 기간을 **한 곳에** 모은다 (2026-09-29).
+ *
+ * 전에는 각 함수의 기본 인자에만 있었다. 그러면 「몇 봉을 받아야 하나」 를
+ * 셀 때 그 숫자를 **다시 적게 되고**, 그 순간 목록이 둘이 된다.
+ * 아래 BARS_FOR_IND 가 이것을 보고 센다. */
+export const IND_PERIOD = {
+  bb: 20,                                  // 볼린저 밴드
+  rsi: 14,
+  macdFast: 12, macdSlow: 26, macdSig: 9,
+  vol: 20,                                 // 거래량 이동평균
+  ichA: 9, ichB: 26, ichC: 52,             // 일목균형표
+};
+
 /* 보조지표 (2026-09-17 지시 — "필요한 보조지표들 추가").
  *
  * **기본은 전부 꺼짐이다.** 다섯을 한꺼번에 켜면 선이 열 개를 넘어 봉이 안 보인다.
@@ -128,7 +141,7 @@ const PANE_H = 0.18;
  */
 const VISIBLE_BARS = 120;
 
-/* 보이는 구간 **전체**에 가장 긴 이동평균선이 있으려면 이만큼 받아야 한다.
+/* 보이는 구간 **전체**에 **모든 지표**가 있으려면 이만큼 받아야 한다.
  *
  * movingAverage 는 p-1 번째 봉부터 값을 채운다(위 drawOverlay 의 values).
  * 그래서 보이는 120봉의 왼쪽 끝이 그 지점보다 뒤에 있어야 선이 끊기지 않는다.
@@ -151,7 +164,14 @@ const VISIBLE_BARS = 120;
  * 값이고, 분봉을 KIS 에서 받는 횟수는 limit 과 무관하다(kis_proxy.py 의
  * get_chart — 하루치 또는 최근 구간, 둘 중 하나다).
  */
-export const BARS_FOR_MA = VISIBLE_BARS + Math.max(...MA_LINES.map(([p]) => p));
+const IND_WARMUP = [
+  ...MA_LINES.map(([p]) => p),                            // 이동평균 — 지금은 200 이 가장 길다
+  IND_PERIOD.macdSlow + IND_PERIOD.macdSig - 1,           // MACD 신호선
+  IND_PERIOD.bb, IND_PERIOD.rsi, IND_PERIOD.vol,
+  IND_PERIOD.ichC + IND_PERIOD.ichB,                      // 일목 선행스팬2 (뒤로 b 만큼 민다)
+];
+
+export const BARS_FOR_IND = VISIBLE_BARS + Math.max(...IND_WARMUP);
 
 function showLastBars(chart, total) {
   const ts = chart.timeScale();
@@ -240,7 +260,7 @@ export function ema(values, period) {
 /* 볼린저 밴드 — 20일 이동평균에서 표준편차 두 배만큼 떨어진 위아래 선.
    값이 이 띠를 벗어나면 평소 범위 밖이라는 뜻이다.
    **가운데 선은 안 그린다.** 20일 이동평균과 같은 값이라 MA20 이 이미 그리고 있다. */
-export function bollinger(candles, barPeriod, period = 20, mult = 2) {
+export function bollinger(candles, barPeriod, period = IND_PERIOD.bb, mult = 2) {
   const up = [], lo = [];
   const vUp = new Array(candles.length).fill(null);
   const vLo = new Array(candles.length).fill(null);
@@ -262,7 +282,7 @@ export function bollinger(candles, barPeriod, period = 20, mult = 2) {
 
 /* RSI — 오른 폭과 내린 폭의 비를 0~100 으로 (Wilder 방식).
    70 위면 많이 샀다, 30 아래면 많이 팔았다고 본다. */
-export function rsi(candles, barPeriod, period = 14) {
+export function rsi(candles, barPeriod, period = IND_PERIOD.rsi) {
   const out = [];
   const vals = new Array(candles.length).fill(null);
   if (candles.length <= period) return { data: out, values: vals, period };
@@ -292,7 +312,8 @@ export function rsi(candles, barPeriod, period = 14) {
 
 /* MACD — 12일선과 26일선의 차이(macd), 그것의 9일 지수이동평균(signal),
    그리고 둘의 차이(hist). hist 가 0 을 넘나드는 자리가 추세가 바뀌는 자리다. */
-export function macd(candles, barPeriod, fast = 12, slow = 26, sig = 9) {
+export function macd(candles, barPeriod, fast = IND_PERIOD.macdFast,
+                     slow = IND_PERIOD.macdSlow, sig = IND_PERIOD.macdSig) {
   const close = candles.map((c) => c.close);
   const eF = ema(close, fast);
   const eS = ema(close, slow);
@@ -337,7 +358,8 @@ export function macd(candles, barPeriod, fast = 12, slow = 26, sig = 9) {
  * 선행선은 봉보다 앞을 가리키므로, 라이브러리가 모르는 시각이 되지 않도록
  * **있는 봉 범위 안에서만** 그린다.
  */
-function ichimoku(candles, barPeriod, a = 9, b = 26, c = 52) {
+function ichimoku(candles, barPeriod, a = IND_PERIOD.ichA,
+                  b = IND_PERIOD.ichB, c = IND_PERIOD.ichC) {
   const hl = (from, to) => {
     let hi = -Infinity, lo = Infinity;
     for (let i = from; i <= to; i++) {
@@ -376,7 +398,7 @@ function ichimoku(candles, barPeriod, a = 9, b = 26, c = 52) {
 }
 
 /* 거래량 이동평균 — 오늘 거래가 평소보다 많은지 본다 */
-function volumeMA(candles, barPeriod, period = 20) {
+function volumeMA(candles, barPeriod, period = IND_PERIOD.vol) {
   const out = [];
   const vals = new Array(candles.length).fill(null);
   let sum = 0;
@@ -412,7 +434,7 @@ const _candleCache = new Map();
    240 이었는데 240-120=120 이라 200일선이 앞 79봉 비었다 (2026-09-29).
    지금은 부르는 두 곳이 다 값을 주지만, 기본값이 틀린 채로 남아 있으면
    다음에 안 주고 부르는 곳에서 조용히 다시 빈다. */
-export async function fetchCandles(code, periodId = '1d', limit = BARS_FOR_MA) {
+export async function fetchCandles(code, periodId = '1d', limit = BARS_FOR_IND) {
   const period = PERIOD_MAP[periodId] || 'D';
   const key = `${code}:${period}:${limit}`;
 

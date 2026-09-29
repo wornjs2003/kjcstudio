@@ -2250,6 +2250,60 @@ def fetch_bars_from_kis(cfg, code, period, date_from, date_to):
     return out
 
 
+# 일/주/월/년봉은 한 번에 이만큼만 온다.
+#
+# `fetch_bars_from_kis` 주석에 「한 번에 최대 100개」 라고 적혀 있었는데
+# **적힌 것은 잰 것이 아니라** 재봤다 (2026-09-29). DB 에 일봉이 없던 종목
+# 둘(000150 · 000270)을 부르니 **정확히 100봉**씩 왔다. 삼성전자가 110 으로
+# 나왔던 것은 DB 에 쌓여 있던 것이 더해진 값이었다.
+#
+# 기간을 넓게 줘도 **date_to 기준 최근 100개**를 준다. 그래서 과거를 받으려면
+# date_to 를 거슬러 다시 불러야 한다.
+BARS_PER_CALL = 100
+
+
+def fetch_bars_back(cfg, code, period, want):
+    """일/주/월/년봉을 want 개가 될 때까지 날짜를 거슬러 여러 번 받는다.
+
+    받은 것 중 **가장 오래된 날짜의 하루 전**을 새 date_to 로 삼아 다시 부른다.
+    새 봉이 하나도 안 오면 멈춘다 — 그 종목의 상장 이전이다.
+
+    ⚠️ **분봉은 이 길로 못 온다.** 분봉 API 는 날짜가 아니라 **시각**만 받는다
+    (`fetch_minutes_day` 참조 — `FID_INPUT_HOUR_1` 하나뿐이다). 그래서 지난
+    날짜의 5분봉은 이 방법으로 채울 수 없다. 재권님 지시로 2026-09-29 에
+    일·주·월봉만 이 길을 얻었다.
+
+    **몇 번 부르는지** — want 를 채우는 데 필요한 횟수에 한 번을 더한다.
+    마지막 한 번은 「더 없다」 를 확인하는 몫이다. 무한히 돌지 않게 한다.
+    """
+    import datetime
+    seen = {}
+    date_to = datetime.date.today()
+    span = datetime.timedelta(days=PERIODS[period]["span_days"])
+    done = False
+    for _ in range(max(1, -(-want // BARS_PER_CALL)) + 1):
+        rows = fetch_bars_from_kis(
+            cfg, code, period,
+            (date_to - span).strftime("%Y%m%d"), date_to.strftime("%Y%m%d"))
+        fresh = [r for r in rows if r["ts"] not in seen]
+        for r in rows:
+            seen[r["ts"]] = r
+        if not fresh:
+            done = True               # 더 과거가 없다
+            break
+        if len(seen) >= want:
+            break
+        oldest = min(seen)            # YYYYMMDD 문자열이라 사전순이 곧 날짜순
+        date_to = (datetime.datetime.strptime(oldest, "%Y%m%d").date()
+                   - datetime.timedelta(days=1))
+    if done or len(seen) < want:
+        # 끝까지 훑었다. 다음부터 같은 종목을 또 파고들지 않는다 —
+        # 상장이 짧은 종목은 want 를 영영 못 채워서, 이 표가 없으면
+        # 화면을 열 때마다 KIS 를 몇 번씩 다시 부른다.
+        _meta_set("backfill:%s:%s" % (code, period), "done")
+    return sorted(seen.values(), key=lambda x: x["ts"])
+
+
 def minute_market_div(hour):
     """분봉을 어느 시장에서 받을까. **구간의 시각으로 정한다.**
 
@@ -2620,13 +2674,18 @@ def get_chart(cfg, code, period, limit, gap_check=True):
     last_sync = float(_meta_get(mkey) or 0)
     stale = (time.time() - last_sync) > conf["fresh_sec"]
 
+    # 달라는 만큼 DB 에 없고, 아직 끝까지 훑어보지 않았으면 과거를 더 받는다.
+    #
+    # **「오래됐나」 만 보면 과거가 영영 안 채워진다** (2026-09-29). 한 번에
+    # 100개만 오므로 일봉은 100개에서 멈춰 있었고, 그 뒤로는 `stale` 일 때만
+    # 최근 것을 덮어쓰기만 했다. 그래서 200일선이 일·주·월봉에서 안 그려졌다.
+    want_more = (conf["kis"] and len(rows) < limit
+                 and _meta_get("backfill:%s:%s" % (code, period)) != "done")
+
     fetched = 0
-    if not rows or stale:
+    if not rows or stale or want_more:
         if conf["kis"]:                      # 일/주/월/년
-            today = datetime.date.today()
-            start = today - datetime.timedelta(days=conf["span_days"])
-            bars = fetch_bars_from_kis(cfg, code, period,
-                                       start.strftime("%Y%m%d"), today.strftime("%Y%m%d"))
+            bars = fetch_bars_back(cfg, code, period, limit)
         else:                                # 분봉
             # 많이 비었으면 하루치를 모으고(호출 여러 번), 조금이면 최근 구간만.
             #
