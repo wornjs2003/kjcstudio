@@ -5,10 +5,11 @@
    값은 서버(/api/kis/*)에서 받고, 못 받으면 '—' 또는 '연결 예정' 이 남습니다.
    ========================================================================== */
 
-import { WATCHLIST, brandColor } from './data/market.js';
+import { WATCHLIST, brandColor, CHART_PERIODS, initBarsOf } from './data/market.js';
 import * as lastSeen from './store/last-seen.js';
 import { fetchCandles, createStockChart, maLegend,
-  addPrevCloseLine, PREV_CLOSE_NOTE, BARS_FOR_IND } from './chart.js';
+  addPrevCloseLine, PREV_CLOSE_NOTE, BARS_FOR_IND,
+  savePeriodId, loadPeriodId } from './chart.js';
 import { color } from './theme.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount,
   dirClass, marketPhase } from './utils/format.js';
@@ -396,26 +397,36 @@ function setupIxNav() {
    따로 만든 것이라, 5분봉에서만 쓴다. */
 /* id 는 chart.js 의 PERIOD_MAP 키를 그대로 쓴다. 전에는 지수 전용 코드
    ('D'·'W')여서 따로였는데, 종목 캔들을 그리게 되면서 한 벌로 합쳤다. */
-const BIG_PERIODS = [
-  { id: '5m', label: '5분' },
-  { id: '1d', label: '일'  },
-  { id: '1w', label: '주'  },
-  { id: '1M', label: '월'  },
-  { id: '1y', label: '년'  },
-];
-let bigPeriod = '5m';
+/* 기간 목록은 `data/market.js` 의 `CHART_PERIODS` 한 곳에 있다.
+   여기 같은 목록이 `BIG_PERIODS` 로 복제돼 있었는데 2026-09-29 에 없앴다. */
+
+/* **보던 기간을 이어받는다** (2026-09-29 지시 — 「5분봉을 보다 다른종목으로
+   가면 5분봉」). 종목 화면으로 갈 때 페이지가 새로 뜨므로 변수로는 못 지킨다. */
+let bigPeriod = loadPeriodId('5m');
+
+/* 기간마다 보던 자리. **종목이 바뀌면 버린다** (2026-09-29 지시 —
+   「종목을 바꾸면 각각이 초기화 값으로 돌아가서 보여지고」).
+   그래서 저장하지 않고 화면 안에만 둔다. */
+let bigViews = {};
+let bigViewCode = null;        // 위 자리들이 어느 종목 것인가
 let bigChart = null;          // 그려 둔 차트 (지울 때 필요)
 let bigChartKey = null;
 
 function paintBigPeriods() {
   const host = $('kh-idx-per');
   if (!host) return;
-  host.innerHTML = BIG_PERIODS.map(p =>
+  host.innerHTML = CHART_PERIODS.map(p =>
     `<button data-p="${p.id}" class="${p.id === bigPeriod ? 'is-on' : ''}">${p.label}</button>`
   ).join('');
   host.querySelectorAll('button').forEach(b =>
     b.addEventListener('click', () => {
+      /* 떠나기 전에 지금 기간의 자리를 적어 둔다. 바꾼 **뒤**에는 어느
+         기간에서 온 것인지 알 수 없다 */
+      if (bigChart) {
+        try { bigViews[bigPeriod] = bigChart.getView(); } catch { /* 아직 없다 */ }
+      }
       bigPeriod = b.dataset.p;
+      savePeriodId(bigPeriod);
       paintBigPeriods();
       paintBigChart();
     }));
@@ -506,6 +517,10 @@ async function paintBigChart() {
   const st = findStock(selectedCode);
   if (!st) return;
 
+  /* 종목이 바뀌었으면 기간별로 적어 둔 자리를 전부 버린다.
+     `selectedCode` 가 바뀌는 자리가 둘이라 여기 한 곳에서 가린다 */
+  if (bigViewCode !== st.code) { bigViews = {}; bigViewCode = st.code; }
+
   const key = st.code + ':' + bigPeriod;
   bigChartKey = key;
   paintBigHead(st);
@@ -548,12 +563,18 @@ async function paintBigChart() {
     bigChart = createStockChart(host, candles, { period, showVolume: true });
   }
 
+  /* **이 기간에서 보던 자리로.** 처음이면 최신 쪽 `initBars` 개를 본다.
+     `setData` 는 이전 기간의 구간을 그대로 물려주므로(chart.js 의 `keep`)
+     여기서 반드시 갈아끼운다 — 안 하면 다섯 기간이 자리를 공유한다. */
+  try { bigChart.setView(bigViews[bigPeriod], initBarsOf(bigPeriod)); }
+  catch { /* 칸이 아직 없다 */ }
+
   /* 5분봉에는 전일 종가선을 그어 둔다. **선 긋는 것은 `chart.js` 한 곳에 있다**
      (2026-09-23) — 모달·종목 화면도 같은 것을 써야 해서 옮겼다. */
   const drewPrev = bigPeriod === '5m' && addPrevCloseLine(bigChart, candles);
 
   if (foot) {
-    const label = (BIG_PERIODS.find(p => p.id === bigPeriod) || {}).label || '';
+    const label = (CHART_PERIODS.find(p => p.id === bigPeriod) || {}).label || '';
     /* 이동평균 범례를 함께 둔다. 어느 선이 그려졌는지, 봉이 모자라 못 그린
        선이 무엇인지 여기서 보인다 (2026-09-16). */
     const ma = bigChart ? maLegend(bigChart.maSeries) : '';

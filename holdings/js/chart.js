@@ -138,6 +138,12 @@ const PANE_H = 0.18;
  * 빈 자리는 "아직 덜 쌓였다" 를 보여주는 것이라 숨길 이유가 없다.
  *
  * 5분봉 120개면 10시간, 일봉이면 반년쯤이다.
+ *
+ * ⚠️ **이 값은 「처음에 보이는 봉」 이 아니다 (2026-09-29).** 처음 보이는 것은
+ * 기간마다 다르고(`CHART_PERIODS` 의 `initBars` — 년 5 · 그 밖 30), 이 값은
+ * **지표가 끊기지 않을 것을 보장하는 범위**다. 아래 `BARS_FOR_IND` 가 이것을
+ * 쓴다. 둘을 한 값으로 두면 초기 봉을 30 으로 줄이는 순간 받는 봉이 230 이
+ * 되어 **확대를 풀었을 때 지표가 왼쪽에서 끊긴다.**
  */
 const VISIBLE_BARS = 120;
 
@@ -173,14 +179,45 @@ const IND_WARMUP = [
 
 export const BARS_FOR_IND = VISIBLE_BARS + Math.max(...IND_WARMUP);
 
-function showLastBars(chart, total) {
+function showLastBars(chart, total, bars = VISIBLE_BARS) {
   const ts = chart.timeScale();
   try {
     /* from 이 음수여도 된다. 그만큼 왼쪽이 빈다 */
-    ts.setVisibleLogicalRange({ from: total - VISIBLE_BARS, to: total - 1 });
+    ts.setVisibleLogicalRange({ from: total - bars, to: total - 1 });
   } catch {
     ts.fitContent();          // 라이브러리 판이 다르면 예전대로
   }
+}
+
+
+/* ── 기간 선택을 페이지 너머로 들고 간다 (2026-09-29 지시) ──────────
+ *
+ * 재권님 말씀 — 「종목의 5분봉을 보다 다른종목으로 가면 5분봉 / 일봉을 보다가
+ * 다른종목으로 가면 일봉」.
+ *
+ * **첫 화면에서 종목 화면으로 갈 때 페이지가 새로 뜬다**
+ * (`home.js` 의 `location.href = './stock.html?code=…'`). 그래서 화면 안
+ * 변수로는 못 지킨다.
+ *
+ * **`sessionStorage` 를 고른 이유** — 두 요건을 다 만족하는 것이 이것뿐이다.
+ *
+ *     페이지 이동에 남나    `sessionStorage` **남는다** · `localStorage` 남는다
+ *     탭을 닫으면          `sessionStorage` **사라진다** · `localStorage` 남는다
+ *
+ * 재권님이 「창을 닫았다 열면 안 남아도 된다」 고 하셨다. 둘 다 앞 요건을
+ * 만족하는데 뒤엣것까지 맞는 쪽을 골랐다. **2026-09-29 에 실제로 옮겨 보고
+ * 확인했다** — `location.href` 로 옮긴 뒤에도 값이 그대로 읽혔다.
+ *
+ * **보이는 위치·확대는 여기 저장하지 않는다.** 그것은 종목이 바뀌면 버리는
+ * 값이라, 저장하면 「종목을 바꾸면 초기값」 이 깨진다. */
+const PERIOD_KEY = 'kh-chart-period';
+
+export function savePeriodId(id) {
+  try { sessionStorage.setItem(PERIOD_KEY, id); } catch { /* 사생활 모드 등 */ }
+}
+
+export function loadPeriodId(fallback) {
+  try { return sessionStorage.getItem(PERIOD_KEY) || fallback; } catch { return fallback; }
 }
 
 /* 화면의 기간 버튼 → 서버가 쓰는 기간 코드 */
@@ -1303,9 +1340,56 @@ export function createStockChart(container, candles, opts = {}) {
       build();
     },
 
-    resetView() {
-      panes.forEach((p) => showLastBars(p.chart, candles.length));
+    resetView(bars) {
+      panes.forEach((p) => showLastBars(p.chart, candles.length, bars));
       checkAlign();
+    },
+
+    /* ── 보던 자리를 기간마다 따로 들고 가기 (2026-09-29 지시) ──────
+     *
+     * 재권님 말씀 — 「차트에서 월에가서 이동시키고 년으로 가면 년도 이동되는데
+     * 각각 이동되는정보를 가지고 있어야지」.
+     *
+     * **원인은 `setData` 였다.** 첫 화면 카드는 차트를 다시 만들지 않고 봉만
+     * 갈아끼우는데(`home.js` — 2026-09-17 지시로 그렇게 만들었다), `setData` 가
+     * 부르는 `build()` 안의 `keep` 이 **이전 기간의 보이는 구간을 그대로**
+     * 새 칸에 먹인다. 그래서 다섯 기간이 자리를 공유했다.
+     *
+     * 종목 화면은 `destroy()` 뒤 새로 만들어 `panes` 가 비므로 안 그랬다 —
+     * **같은 증상이 한쪽에만 났던 이유다.**
+     *
+     * **`keep` 자체는 그대로 둔다.** 그것은 지표를 켜고 끌 때 보던 자리를
+     * 지키는 장치다(2026-09-18 지시). 기간이 바뀔 때만 화면 쪽이 아래 둘로
+     * 갈아끼운다. */
+
+    /* 보이는 구간을 **오른쪽 끝 기준**으로 읽는다.
+       `{from, to}` 를 그대로 저장하면 새 봉이 오른쪽에 붙을 때마다 화면이
+       왼쪽으로 밀린다 — 5분봉은 5분에 하나씩 붙는다. */
+    getView() {
+      const ch = panes[0] && panes[0].chart;
+      if (!ch) return null;
+      try {
+        const r = ch.timeScale().getVisibleLogicalRange();
+        if (!r) return null;
+        const last = candles.length - 1;
+        return { fromRight: last - r.to, bars: r.to - r.from };
+      } catch { return null; }
+    },
+
+    /* 기억해 둔 구간으로 되돌린다. `v` 가 없으면 **최신 쪽 `bars` 개**를 본다.
+
+       두 번 먹인다 — 라이브러리가 한 박자 뒤에 제 계산을 밀어넣는다.
+       `redrawOverlay` 가 같은 이유로 `requestAnimationFrame` 을 쓴다. */
+    setView(v, bars) {
+      const last = candles.length - 1;
+      const to = v ? last - v.fromRight : last;
+      const from = v ? to - v.bars : to - (bars || VISIBLE_BARS);
+      const put = () => panes.forEach((p) => {
+        try { p.chart.timeScale().setVisibleLogicalRange({ from, to }); }
+        catch { /* 칸이 아직 없다 */ }
+      });
+      put();
+      requestAnimationFrame(put);
     },
 
     destroy() {

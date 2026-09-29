@@ -21,9 +21,10 @@
  * 문서 전체가 아니라 건네받은 root 안에서만 찾는다.
  */
 
-import { CHART_PERIODS } from '../data/market.js';
+import { CHART_PERIODS, initBarsOf } from '../data/market.js';
 import { fetchCandles, createStockChart, maLegend,
-  addPrevCloseLine, PREV_CLOSE_NOTE, BARS_FOR_IND } from '../chart.js';
+  addPrevCloseLine, PREV_CLOSE_NOTE, BARS_FOR_IND,
+  savePeriodId, loadPeriodId } from '../chart.js';
 import { getMemo, setMemo } from '../store/memo.js';
 import { fmtNum, fmtWon, fmtMoneyKr, fmtShareCount, fmtDelta, dirClass }
   from '../utils/format.js';
@@ -82,7 +83,13 @@ export function mountStockView(root, stock, { onBack } = {}) {
   const $ = sel => root.querySelector(sel);
 
   let chart = null;
-  let periodId = CHART_PERIODS[0] ? CHART_PERIODS[0].id : '1d';
+  /* **보던 기간을 이어받는다** (2026-09-29 지시). 첫 화면에서 이 화면으로
+     올 때 페이지가 새로 뜨므로 `sessionStorage` 를 거친다 */
+  let periodId = loadPeriodId(CHART_PERIODS[0] ? CHART_PERIODS[0].id : '1d');
+
+  /* 기간마다 보던 자리. 이 화면은 한 종목만 보므로 종목이 바뀔 일이 없다 —
+     모달은 닫히면서 통째로 사라진다 */
+  const views = {};
   let disclosures = null;
   let reloadTimer = null;
   let dead = false;
@@ -166,7 +173,14 @@ export function mountStockView(root, stock, { onBack } = {}) {
     `).join('') + `<span class="kh-per-tools">⊞ ／ ⇄ ⤢</span>`;
 
     box.querySelectorAll('button').forEach(b =>
-      b.addEventListener('click', () => { periodId = b.dataset.period; paintPeriods(); drawChart(); }));
+      b.addEventListener('click', () => {
+        /* 떠나기 전에 지금 기간의 자리를 적어 둔다 */
+        if (chart) { try { views[periodId] = chart.getView(); } catch { /* 아직 없다 */ } }
+        periodId = b.dataset.period;
+        savePeriodId(periodId);
+        paintPeriods();
+        drawChart();
+      }));
   }
 
   async function drawChart() {
@@ -183,6 +197,13 @@ export function mountStockView(root, stock, { onBack } = {}) {
       if (!candles.length) throw new Error('빈 응답');
       host.innerHTML = '';
       chart = createStockChart(host, candles, { period, showVolume: true });
+
+      /* **이 기간에서 보던 자리로.** 처음이면 최신 쪽 `initBars` 개를 본다
+         (2026-09-29 지시 — 년봉 5개 · 그 밖 30개).
+         이 화면은 기간을 바꿀 때 차트를 새로 만들어서 이전 구간이
+         물려지지는 않는데, **「기억한다」 는 여기서도 해야 한다.** */
+      try { chart.setView(views[periodId], initBarsOf(periodId)); }
+      catch { /* 칸이 아직 없다 */ }
 
       /* **전일 종가 점선** — 첫 화면 차트에는 있는데 여기에는 없었다
          (2026-09-23 모달 검수). 「오늘 올랐는지 내렸는지」 의 기준선이라,

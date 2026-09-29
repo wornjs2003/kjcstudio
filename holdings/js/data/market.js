@@ -124,13 +124,28 @@ export const MARKET_STOCKS = [
 ];
 
 /* ── 차트 기간 버튼 ── */
+/* 차트 기간 — **한 곳에서만 정한다.**
+ *
+ * `home.js` 에 같은 목록이 `BIG_PERIODS` 로 복제돼 있었는데 2026-09-29 에
+ * 없앴다. 초기 봉 수를 붙이려면 두 곳에 붙여야 했고, 그 순간 목록이 둘이 된다.
+ *
+ * `initBars` 는 **그 기간을 처음 열 때 화면에 보이는 봉 수**다
+ * (2026-09-29 지시 — 「년봉은 캔들이 5개 다른 차트는 캔들이 30개가 보이는게
+ * 기본값」). 봉을 **몇 개 받는가**(`BARS_FOR_IND`)와 다른 값이다 —
+ * 받는 것은 지표가 끊기지 않을 만큼이고, 이것은 처음 보이는 만큼이다. */
 export const CHART_PERIODS = [
-  { id: '5m', label: '5분' },
-  { id: '1d', label: '일'  },
-  { id: '1w', label: '주'  },
-  { id: '1M', label: '월'  },
-  { id: '1y', label: '년'  },
+  { id: '5m', label: '5분', initBars: 30 },
+  { id: '1d', label: '일',  initBars: 30 },
+  { id: '1w', label: '주',  initBars: 30 },
+  { id: '1M', label: '월',  initBars: 30 },
+  { id: '1y', label: '년',  initBars: 5  },
 ];
+
+/* 그 기간의 초기 봉 수. 목록에 없는 기간이 와도 화면이 안 깨지게 한다 */
+export function initBarsOf(id) {
+  const p = CHART_PERIODS.find((x) => x.id === id);
+  return p && p.initBars ? p.initBars : 30;
+}
 
 /* 시가총액(백만원 단위 숫자)을 '498조' 처럼 읽기 쉽게 */
 export function fmtMarketCapNum(num) {
