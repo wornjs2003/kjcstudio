@@ -10,7 +10,7 @@ resume-sessions.bat 은 실행될 때 스스로 이 스크립트를 먼저 부�
 평소에는 따로 돌릴 일이 없다.
 
 세션 기록은 Claude Code 가 아래에 남긴다.
-  %USERPROFILE%\\.claude\\projects\\C--work-KJCStudio\\<세션ID>.jsonl
+  ~/.claude/projects/-Users-kjc-work-KJCStudio/<세션ID>.jsonl
 이름은 `/rename` 을 쓴 기록에서 찾는다. 이름이 없는 세션은 목록에서 뺀다.
 """
 import io
@@ -234,11 +234,11 @@ def write_doc(rows):
     A("  한글 메시지는 `tools/update-sessions.py` 가 출력한다")
     A("- **`timeout` 대신 `ping -n` 으로 기다린다.** `timeout` 은 입력이 리다이렉트된 채")
     A("  실행되면 `Input redirection is not supported` 로 즉시 죽는다")
-    A("- **작업 폴더를 맞춰서 연다.** 네 세션 모두 `C:\\work\\KJCStudio` 에서 돈다.")
+    A("- **작업 폴더를 맞춰서 연다.** 네 세션 모두 `/Users/kjc/work/KJCStudio` 에서 돈다.")
     A("  다른 곳에서 열면 상대 경로가 어긋난다. `resume-sessions.bat` 은 알아서 맞춘다")
     A("- **이름이 없는 세션은 목록에 싣지 않는다.** `/rename` 을 쓴 적이 있어야 잡힌다")
     A("- 그냥 `claude` 만 치면 **새 세션**이 생긴다. 기존 대화와 별개다")
-    A("- 세션 기록은 `%USERPROFILE%\\.claude\\projects\\C--work-KJCStudio\\` 에 쌓인다")
+    A("- 세션 기록은 `~/.claude/projects/-Users-kjc-work-KJCStudio/` 에 쌓인다")
     A("- 네 세션은 같은 작업 트리를 공유한다. 레인은 `CLAUDE.md` 「세션 역할 분담」 표를 따른다")
     A("")
     A("## 목록이 안 맞을 때")
