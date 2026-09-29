@@ -2180,6 +2180,39 @@ def db_conn():
     return conn
 
 
+def _prune_span_dupes():
+    """한 구간에 여러 줄이 쌓인 것을 치운다 — 구간마다 **가장 큰 ts 하나**만 남긴다.
+
+    위 SPAN_CUT 주석의 병으로 이미 쌓인 것들이다. 고쳐도 남은 줄은 안 없어져서
+    화면에 그대로 나온다 — 재권님이 보신 년봉 다섯 줄이 그것이다.
+
+    **가장 큰 ts 가 최신이다.** 진행 중인 구간은 부를수록 ts 가 뒤로 가고,
+    그 줄의 종가가 가장 최근 값이다.
+
+    서버가 뜰 때 한 번 돈다. 치울 것이 없으면 0 을 내고 아무것도 안 한다.
+    """
+    n = 0
+    with _db_lock, db_conn() as conn:
+        for period, cut in SPAN_CUT.items():
+            # **같은 종목 안에서** 자기보다 큰 ts 가 같은 구간에 있으면 지운다.
+            #
+            # 처음에 `ts NOT IN (SELECT MAX(ts) … GROUP BY code, 구간)` 으로
+            # 썼다가 틀렸다 (2026-09-29). **`NOT IN` 이 종목을 안 가른다** —
+            # 다른 종목의 그 구간 최대값이 목록에 있으면 이 종목의 같은
+            # 날짜 줄도 살아남았다. 삼성전자 2026년이 두 줄로 남았다.
+            #
+            # **「9줄 치웠다」 는 숫자만 보면 됐다고 읽힌다.** 남은 줄을
+            # 눈으로 보고서야 갈렸다.
+            cur = conn.execute(
+                "DELETE FROM candles WHERE period = ? AND ts < ("
+                "  SELECT MAX(c2.ts) FROM candles c2"
+                "   WHERE c2.code = candles.code AND c2.period = candles.period"
+                "     AND substr(c2.ts, 1, ?) = substr(candles.ts, 1, ?))",
+                (period, cut, cut))
+            n += cur.rowcount or 0
+    return n
+
+
 def db_init():
     with _db_lock, db_conn() as conn:
         for sql in SCHEMA:
@@ -2641,10 +2674,44 @@ def aggregate_minutes(bars, minutes):
     return [buckets[k] for k in sorted(buckets)]
 
 
+# ── 한 구간에 봉이 여럿 생기던 것 (2026-09-29 · 재권님이 년봉에서 찾으셨다) ──
+#
+# **KIS 는 「진행 중인 구간」 의 봉에 마지막 거래일을 ts 로 준다.**
+#
+#     년봉 2026    20260911 · 20260914 · 20260917 · 20260918 · 20260929
+#                  **시·고·저가 다섯 줄 다 같고 종가만 다르다**
+#     월봉 202609   같은 모양
+#
+# 부를 때마다 그 날짜가 달라져서 PK(code, period, ts)가 **새 줄**이 된다.
+# 그래서 한 해에 봉이 다섯 개씩 생겼다. 재권님 말씀 — 「년봉이 이상한거같은데」.
+#
+# **주봉·일봉은 안전하다.** 주봉은 그 주 **월요일**(구간 시작)을, 일봉은
+# 그날을 준다 — 구간이 정해지면 안 바뀐다. 실측으로 겹침 0 이었다.
+# 그래서 **그 둘은 건드리지 않는다.**
+#
+# **ts 를 구간 끝으로 바꾸지 않는다.** 지난 해 봉은 ts 가 실제 마지막
+# 거래일(20251230)이라, 20251231 로 정규화하면 **기존 줄과 키가 어긋나
+# 오히려 중복이 는다.** 넣기 전에 같은 구간을 지우는 쪽이 안전하다.
+SPAN_CUT = {"Y": 4, "M": 6}       # ts 앞 몇 글자가 한 구간인가
+
+
 def save_candles(code, period, candles):
     if not candles:
         return 0
+    cut = SPAN_CUT.get(period)
     with _db_lock, db_conn() as conn:
+        if cut:
+            # 넣을 봉이 그 구간의 최신이다. 옛 줄을 먼저 치운다.
+            #
+            # ⚠️ **이 저장소에서 캔들을 지우는 유일한 자리다.** 2026-09-29 에
+            # 「지우는 코드가 없다」 를 전수로 확인하고 적어 둔 터라, 여기가
+            # 생겼다는 것을 함께 적는다. 지우는 범위는 **같은 종목 · 같은 주기 ·
+            # 같은 구간**뿐이고, 곧바로 그 구간의 새 줄이 들어간다.
+            for span in {c["ts"][:cut] for c in candles}:
+                conn.execute(
+                    "DELETE FROM candles WHERE code = ? AND period = ? "
+                    "AND substr(ts, 1, ?) = ?",
+                    (code, period, cut, span))
         conn.executemany(
             """INSERT INTO candles (code, period, ts, open, high, low, close, volume)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -3622,6 +3689,15 @@ def main():
     #   미리받기  KIS 를 가장 많이 부른다. 여기서 끄는 것이 --slow 의 핵심이다
     #   공시      OpenDART 하루 한도를 메인 서버와 나눠 쓰게 된다
     #   뉴스 수집  같은 market.db 에 서버 둘이 쓰고, **텔레그램이 두 번 간다**
+    # 한 구간에 여러 줄이 쌓인 것을 치운다 (SPAN_CUT 주석 참조).
+    # 고침이 들어오기 전에 쌓인 것은 저절로 안 없어진다 — 여기서 한 번 치운다.
+    try:
+        _dupes = _prune_span_dupes()
+        if _dupes:
+            print("  겹친 봉 정리: 월·년봉에서 %d줄을 치웠습니다" % _dupes)
+    except Exception as e:
+        print("  겹친 봉 정리: 건너뜁니다 (%s)" % type(e).__name__)
+
     if SLOW:
         print("  느린 모드  : 시세 %d초 · 미리받기/공시/뉴스수집 **끔** (--slow)"
               % SLOW_TTL)
