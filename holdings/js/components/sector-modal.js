@@ -34,6 +34,8 @@
 
 import { openModal } from './modal.js';
 import { fmtWon, fmtPct, fmtMoneyKr, dirClass } from '../utils/format.js';
+/* 기간 칩은 **카드와 같은 목록**으로 그린다 — 새로 적으면 복제가 된다 */
+import { spanChipsHtml } from './sectors.js';
 
 /* **고정 px 이다.** `max-content` 면 탭(업종↔테마)을 바꿀 때 묶음 이름 길이에
    따라 폭이 달라진다.
@@ -222,6 +224,12 @@ export function openSectorModal(snap) {
     /* **칩을 누르면 그 칩부터 셋**이다. 지금 보고 있는 셋에 불을 켠다 —
        고른 하나만 켜면 「왜 옆 둘도 보이지」 가 된다. */
     m.body.innerHTML = `<div class="kh-scm">
+      <!-- 기간 칩 — **카드와 같은 SPANS** 로 그린다 (2026-09-23, 모달 검수 ⑥).
+           재권님 지시 「가로 해줘 만들거야」. 아직 주간·월간은 눌리지 않는다 —
+           네이버가 기간을 안 준다. **만드실 자리이므로 둔다.**
+           (백틱을 쓰지 않는다 — 이 주석은 템플릿 문자열 **안**이라
+            백틱 하나가 문자열을 끊는다. 2026-09-23 에 한 번 끊었다.) -->
+      <div class="kh-chips kh-scm-span">${spanChipsHtml('d')}</div>
       <div class="kh-scm-chips">${groups.map((x, i) => `
         <button class="kh-chip${i >= from && i < from + SHOW ? ' is-active' : ''}"
           data-i="${i}" title="여기부터 ${SHOW}개를 봅니다">

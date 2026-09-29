@@ -22,7 +22,8 @@
  */
 
 import { CHART_PERIODS } from '../data/market.js';
-import { fetchCandles, createStockChart, maLegend } from '../chart.js';
+import { fetchCandles, createStockChart, maLegend,
+  addPrevCloseLine, PREV_CLOSE_NOTE } from '../chart.js';
 import { getMemo, setMemo } from '../store/memo.js';
 import { fmtNum, fmtWon, fmtMoneyKr, fmtShareCount, fmtDelta, dirClass }
   from '../utils/format.js';
@@ -30,6 +31,7 @@ import { paintIcon } from './stock-icon.js';
 import { mountDisclosures } from './disclosures.js';
 import { mountStockPanel } from './stock-panel.js';
 import { mountStockDetail } from './stock-detail.js';
+import { mountIndicatorMenu } from './indicator-menu.js';
 import { apiFetch } from '../data/api.js';
 
 /* 서버가 5분마다 공시를 받아 두므로 화면도 그 주기에 맞춘다 */
@@ -181,11 +183,25 @@ export function mountStockView(root, stock, { onBack } = {}) {
       if (!candles.length) throw new Error('빈 응답');
       host.innerHTML = '';
       chart = createStockChart(host, candles, { period, showVolume: true });
+
+      /* **전일 종가 점선** — 첫 화면 차트에는 있는데 여기에는 없었다
+         (2026-09-23 모달 검수). 「오늘 올랐는지 내렸는지」 의 기준선이라,
+         모달이 원본인 룰에서 빠져 있으면 안 된다. 선 긋는 것은
+         `chart.js` 한 곳에 있다 — 여기 베끼지 않는다. */
+      const drewPrev = periodId === '5m' && addPrevCloseLine(chart, candles);
+
       if (legend) {
+        /* 출처에 「실시간」 을 붙이는 것은 5분봉일 때만이다 — 첫 화면 발이
+           그렇게 갈라 적는다(`home.js`). 일봉 이상은 지난 값이다. */
         legend.innerHTML = maLegend(chart.maSeries) +
           `<span class="kh-mut" style="margin-left:8px;font-size:.74rem">
-            ${meta.label || ''}봉 · ${meta.source === 'DB' ? '저장됨' : '갱신됨'}</span>`;
+            ${meta.label || ''}봉 · ${meta.source === 'DB' ? '저장됨' : '갱신됨'
+            }${drewPrev ? ` · ${PREV_CLOSE_NOTE}` : ''}</span>`;
       }
+      /* 차트 머리의 출처 뱃지 — `stock.html` 은 「한국투자증권」 만 적어 두는데,
+         5분봉이면 실시간 값이라 첫 화면과 같이 「실시간」 까지 적는다. */
+      const bd = root.querySelector('.kh-w[data-p="chart"] .kh-bd');
+      if (bd) bd.textContent = periodId === '5m' ? '한국투자증권 실시간' : '한국투자증권';
     } catch {
       if (dead || key !== periodId) return;
       host.innerHTML = `<div class="kh-soon">
@@ -218,6 +234,22 @@ export function mountStockView(root, stock, { onBack } = {}) {
   drawChart();
   setupMemo();
   setupBack();
+
+  /* **「보조지표」 메뉴** (2026-09-23, 모달 검수 ①).
+   *
+   * `stock.html` 에 틀(`.kh-ind-menu`)은 **처음부터 있었는데** 붙이는 것을
+   * 아무도 안 불렀다. `home.js:1628` 과 `stock.js:50` 이 각각
+   * `document.querySelector('.kh-ind-menu')` 로 **문서의 첫째**를 붙이는데,
+   * 모달 것은 나중에 생기므로 거기에 걸리지 않는다. 그래서 모달 차트에는
+   * 매물대·볼린저·이동평균선·거래량·MACD·RSI 를 켜고 끌 자리가 없었다.
+   *
+   * 켠 목록은 `chart.js` 가 들고 있어 **첫 화면과 같은 상태**를 본다 —
+   * 여기서 켜면 카드 차트도 함께 켜진다 (2026-09-18 지시).
+   *
+   * `root` 안에서 찾는다. 문서 전체에서 찾으면 첫 화면 카드의 것을 다시
+   * 붙이게 된다 — 이 파일 머리의 「id 로 찾지 않고 root 안에서」 와 같은 자리다.
+   */
+  const indMenu = mountIndicatorMenu(root.querySelector('.kh-ind-menu'));
 
   /* 공시 칸은 2026-09-21 에 패널 셋으로 바뀌었다. 첫 화면 오른쪽에는
      그대로 있으므로, 여기서는 **있을 때만** 그린다. */
@@ -374,6 +406,9 @@ export function mountStockView(root, stock, { onBack } = {}) {
       clearInterval(flowTimer);
       panel3.destroy();
       detail.destroy();
+      /* **안 떼면 열 때마다 쌓인다** — 지표 메뉴는 `document` 에 손잡이 셋을
+         걸고 `onIndicatorChange` 에 하나를 더 건다 (2026-09-23). */
+      if (indMenu) indMenu.destroy();
     },
   };
 }

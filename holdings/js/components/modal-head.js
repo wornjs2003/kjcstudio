@@ -171,7 +171,29 @@ export function buildHead(spec = {}) {
       const s = el.querySelector('[data-mh-sub]');
       if (s) s.textContent = state.sub;
     },
-    setTabsNote(note) { state.tabsNote = note || ''; draw(); },
+    /** 탭 줄 오른쪽 한 줄 설명 — **통째로 안 그린다.**
+     *
+     * 2026-09-23 에 여기로 **신선도**(「N초 전 값」 · 「N/M종목 채우는 중」)가
+     * 들어왔다. 그것은 **1초마다 바뀐다.** `draw()` 를 부르면 매초 머리를
+     * 다시 만들면서 탭 손잡이를 다시 붙이고, 마우스를 올린 상태와 포커스가
+     * 매초 끊긴다. 바로 위 `setSub` 가 같은 이유로 이미 이렇게 되어 있다.
+     *
+     * 글자가 없으면 **칸을 지운다** — 빈 칸을 남기면 탭 줄 오른쪽에
+     * 쓰지 않는 자리가 생긴다.
+     */
+    setTabsNote(note) {
+      state.tabsNote = note || '';
+      const row = el.querySelector('.kh-mh-tabs');
+      if (!row) { draw(); return; }          // 탭 줄이 없는 모달이면 어쩔 수 없다
+      let s = row.querySelector('.kh-mh-tabs-r');
+      if (!state.tabsNote) { if (s) s.remove(); return; }
+      if (!s) {
+        s = document.createElement('span');
+        s.className = 'kh-mh-tabs-r';
+        row.appendChild(s);
+      }
+      s.textContent = state.tabsNote;
+    },
     setTab(id) {
       state.tab = id;
       el.querySelectorAll('[data-mh-tab]').forEach((x) =>

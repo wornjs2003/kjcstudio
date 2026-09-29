@@ -7,7 +7,8 @@
 
 import { WATCHLIST, brandColor } from './data/market.js';
 import * as lastSeen from './store/last-seen.js';
-import { fetchCandles, createStockChart, maLegend } from './chart.js';
+import { fetchCandles, createStockChart, maLegend,
+  addPrevCloseLine, PREV_CLOSE_NOTE } from './chart.js';
 import { color } from './theme.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount,
   dirClass, marketPhase } from './utils/format.js';
@@ -529,32 +530,19 @@ async function paintBigChart() {
     bigChart = createStockChart(host, candles, { period, showVolume: true });
   }
 
-  /* 5분봉에는 전일 종가선을 그어 둔다. 오늘 올랐는지 내렸는지의 기준이다.
-     어제 마지막 봉의 종가가 그 값이다. */
-  /* addPriceLine 으로 긋는다 — 다음에 봉을 갈아끼울 때 저절로 지워진다.
-     직접 createPriceLine 을 부르면 종목을 옮길 때마다 선이 쌓인다. */
-  if (bigPeriod === '5m' && bigChart) {
-    const today = candles[candles.length - 1].ts.slice(0, 8);
-    const firstToday = candles.findIndex(b => b.ts.slice(0, 8) === today);
-    if (firstToday > 0) {
-      bigChart.addPriceLine({
-        price: candles[firstToday - 1].close,
-        color: color('text-muted'),
-        lineWidth: 1,
-        lineStyle: 2,               // 점선
-        axisLabelVisible: true,
-        title: '전일',
-      });
-    }
-  }
+  /* 5분봉에는 전일 종가선을 그어 둔다. **선 긋는 것은 `chart.js` 한 곳에 있다**
+     (2026-09-23) — 모달·종목 화면도 같은 것을 써야 해서 옮겼다. */
+  const drewPrev = bigPeriod === '5m' && addPrevCloseLine(bigChart, candles);
 
   if (foot) {
     const label = (BIG_PERIODS.find(p => p.id === bigPeriod) || {}).label || '';
     /* 이동평균 범례를 함께 둔다. 어느 선이 그려졌는지, 봉이 모자라 못 그린
        선이 무엇인지 여기서 보인다 (2026-09-16). */
     const ma = bigChart ? maLegend(bigChart.maSeries) : '';
+    /* **그었을 때만 적는다.** 전에는 5분봉이면 무조건 적었는데, 오늘 봉이
+       첫 봉이면 선을 못 그어서 **없는 선을 가리키는 설명**이 남았다. */
     foot.innerHTML = bigPeriod === '5m'
-      ? `<span>${ma} · 점선은 전일 종가</span><span>한국투자증권 실시간</span>`
+      ? `<span>${ma}${drewPrev ? ` · ${PREV_CLOSE_NOTE}` : ''}</span><span>한국투자증권 실시간</span>`
       : `<span>${ma} · ${label}봉 ${candles.length}개</span><span>한국투자증권</span>`;
   }
 }
@@ -900,28 +888,49 @@ function setupSorts() {
  */
 let noteAt = 0;
 
+/* 신선도 한 줄을 **여기 한 곳에서** 만든다 (2026-09-23).
+ *
+ * 전에는 `paintSortNote()` 안에만 있어서 **카드에만 보였다.** 룰이
+ * 「화면에 있는데 모달에 없으면 위반」 이고(holdings/CLAUDE.md:332),
+ * 신선도처럼 **보는 방식에 딸린 것도 든다.** 모달은 카드보다 오래 열려
+ * 있으니 오히려 더 필요하다.
+ *
+ * `{ text, cls }` 로 돌려준다 — 카드는 색을 입혀 `innerHTML` 로 넣고,
+ * 모달 머리(`setTabsNote`)는 **글자만** 받는다(`esc()` 를 거친다).
+ * 그래서 문구를 양쪽에 따로 적지 않는다. 없으면 `null` 이다.
+ */
+function freshNote() {
+  const total = (universe || []).length;
+  const got = (universe || []).filter(x => rowPrices && rowPrices[x.code]).length;
+
+  /* 아직 다 안 찼으면 그것이 먼저다 — 200개가 차기 전에는 **순서를 믿을 때가
+     아니다.** 「몇 초 전」 보다 이 사실이 크다. */
+  if (total && got < total) {
+    return { text: `${got}/${total}종목 채우는 중`, cls: 'kh-accent' };
+  }
+  /* 마지막으로 값이 들어온 때부터 몇 초 지났나. 2초 안쪽은 적지 않는다 —
+     늘 떠 있으면 읽지 않게 된다. */
+  const sec = lastTickAt ? Math.max(0, Math.round((Date.now() - lastTickAt) / 1000)) : null;
+  if (sec == null || sec < 3) return null;
+  return {
+    text: `${sec >= 60 ? `${Math.floor(sec / 60)}분` : `${sec}초`} 전 값`,
+    cls: sec >= 60 ? 'kh-down' : 'kh-mut',
+  };
+}
+
 function paintSortNote() {
   const el = $('kh-sort-note');
   if (!el) return;
   const s = SORTS[sortBy];
-
-  const total = (universe || []).length;
-  const got = (universe || []).filter(x => rowPrices && rowPrices[x.code]).length;
-
-  /* 마지막으로 값이 들어온 때부터 몇 초 지났나 */
-  const sec = lastTickAt ? Math.max(0, Math.round((Date.now() - lastTickAt) / 1000)) : null;
 
   /* 「관심」 은 **줄 세우는 기준이 아니라 거르는 것**이라 「순」 이 안 붙는다.
      그대로 두면 「관심 순」 이 되는데, 시가총액 순으로 세운 것을 걸렀을 뿐이다. */
   const bits = [s.filter ? `${s.label}만 · 시가총액 순` : `${s.label} 순`];
   if (s.minValue) bits.push(`거래대금 ${fmtMoneyKr(MIN_VALUE_WON / 1e8)} 이상만`);
 
-  if (total && got < total) {
-    bits.push(`<b class="kh-accent">${got}/${total}종목 채우는 중</b>`);
-  } else if (sec != null && sec >= 3) {
-    bits.push(`<b class="${sec >= 60 ? 'kh-down' : 'kh-mut'}">${
-      sec >= 60 ? `${Math.floor(sec / 60)}분` : `${sec}초`} 전 값</b>`);
-  }
+  const fresh = freshNote();
+  if (fresh) bits.push(`<b class="${fresh.cls}">${fresh.text}</b>`);
+
   el.innerHTML = bits.join(' <span class="kh-mut">·</span> ');
   noteAt = Date.now();
 }
@@ -1024,6 +1033,11 @@ function paintRowHead() {
    좀더 좁게"). **고정 px 로 둔다** — max-content 로 두면 탭을 바꿀 때
    폭이 달라져 「보는 것을 바꿔도 자리는 그대로다」 를 깬다. */
 const RANK_MODAL_WIDTH = 850;
+
+/* 순위 모달 탭 줄 오른쪽 설명. **뒤에 신선도가 붙는다**(2026-09-23) —
+   850px 에서 잘리지 않는지는 재서 확인한다. 원래 문장은 「목록이 좁아 뺐던
+   거래대금 · 시가총액 · 거래량까지 함께 봅니다」 였는데 그때 잘려서 줄였다. */
+const RANK_TABS_NOTE = '거래대금 · 시가총액 · 거래량까지';
 
 let rankModal = null;           // { body, head } — 닫히면 null
 let rankModalSort = 'cap';      // 모달에서 고른 갈래. 목록과 따로 둔다
@@ -1135,9 +1149,9 @@ function openRankModal() {
       statCols: 2,
       tabs: Object.entries(SORTS).map(([id, x]) => ({ id, label: x.label })),
       tab: sortBy,              // 목록에서 보던 기준으로 열린다
-      /* 850px 에서는 이보다 길면 오른쪽이 잘린다 (재서 확인).
-         원래 문장은 「목록이 좁아 뺐던 거래대금 · 시가총액 · 거래량까지 함께 봅니다」 였다 */
-      tabsNote: '거래대금 · 시가총액 · 거래량까지',
+      /* 글자는 `RANK_TABS_NOTE` 에 있다 — 여는 자리와 1초마다 다시 적는
+         자리(`paintRankModalNote`) 둘이 같은 것을 써야 한다. */
+      tabsNote: RANK_TABS_NOTE,
       /* 모달에서 고른 기준은 첫 화면 순위표와 **따로 둔다** — 모달에서
          거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면 무엇을 눌러
          그렇게 됐는지 알 수 없다 (2026-09-22). */
@@ -1148,6 +1162,23 @@ function openRankModal() {
   rankModal = m;
   rankModalSort = sortBy;
   paintRankModal();
+  paintRankModalNote();
+}
+
+/* 모달 탭 줄에 신선도를 붙인다 (2026-09-23).
+ *
+ * 카드의 `#kh-sort-note` 와 **같은 `freshNote()`** 를 쓴다. 모달 머리는
+ * 글자만 받으므로(`esc()` 를 거친다) 색은 안 들어간다 — 카드에서는 굵게
+ * 색이 붙고 여기서는 안 붙는다. **정보는 같고 꾸밈만 다르다.**
+ *
+ * 1초마다 불린다. `setTabsNote` 는 그 한 칸만 고치도록 고쳤다 —
+ * 머리를 통째로 다시 그리면 매초 탭 손잡이가 다시 붙는다.
+ */
+function paintRankModalNote() {
+  if (!rankModal) return;
+  const fresh = freshNote();
+  rankModal.head.setTabsNote(
+    fresh ? `${RANK_TABS_NOTE} · ${fresh.text}` : RANK_TABS_NOTE);
 }
 
 function paintRows(priceMap) {
@@ -1300,7 +1331,7 @@ async function fetchVisible() {
         chunk.forEach(c => asked.delete(c));
         break;
       }
-      applyPrices(map);
+      applyFreshPrices(map);
     }
   } finally {
     fetching = false;
@@ -1326,7 +1357,30 @@ function nextCodes() {
     .filter(c => !asked.has(c));
 }
 
-/* 새로 받은 값을 모으고 양쪽 화면에 반영한다. */
+/* 시세가 **정말 새로 들어온** 자리 — `fetchQuotes` 가 값을 돌려준 직후다.
+ *
+ * 2026-09-23 에 찾은 것 — 「N초 전 값」 이 **한 번도 뜨지 않고 있었다.**
+ * `lastTickAt` 을 찍는 자리가 `startLiveLoop({ onPrices })` 안이었는데,
+ * 첫 화면은 **`prices: false`** 로 부른다(순위표가 200종목을 함께 받으므로
+ * 두 번 부르지 않기 위해서다). `frame.js:319` 가 그때 `fetchLivePrices` 를
+ * 건너뛰므로 **`onPrices` 가 불리지 않는다** — 그래서 `lastTickAt` 이 계속
+ * `null` 이고, 신선도 한 줄이 영영 안 나왔다.
+ *
+ * 남겨 둔 값으로 한 번 부르는 길(`frame.js:326`)은 있는데, **그것으로 시각을
+ * 찍으면 안 된다** — 어제 받아 둔 값을 「방금」 이라고 적는 셈이다.
+ *
+ * 그래서 **받은 자리에서 찍는다.** 아래 `applyPrices` 는 남겨 둔 값으로도
+ * 불리므로 거기 두지 않는다.
+ */
+function applyFreshPrices(map) {
+  if (!map) return;
+  lastTickAt = new Date();
+  paintClock();                 // 받은 시각을 바로 반영
+  applyPrices(map);
+}
+
+/* 새로 받은 값을 모으고 양쪽 화면에 반영한다.
+   **여기서는 시각을 찍지 않는다** — 위 `applyFreshPrices` 참고. */
 function applyPrices(map) {
   if (!map) return;
   rowPrices = { ...rowPrices, ...map };
@@ -1430,7 +1484,7 @@ async function rotateTick() {
 
   rotating = true;
   try {
-    applyPrices(await fetchQuotes(chunk));
+    applyFreshPrices(await fetchQuotes(chunk));
   } finally {
     rotating = false;
   }
@@ -1623,8 +1677,14 @@ setInterval(paintMkt, 30000);
 setupCatFilter();
 setupIxNav();
 setupSorts();
-/* 몇 초 전 값인지는 가만히 있어도 늘어난다. 1초마다 다시 적는다 */
-setInterval(() => { if (!document.hidden) paintSortNote(); }, 1000);
+/* 몇 초 전 값인지는 가만히 있어도 늘어난다. 1초마다 다시 적는다.
+   **모달이 열려 있으면 그쪽도 함께** 적는다 (2026-09-23) — 한쪽만 적으면
+   카드는 「12초 전」 인데 모달은 「3초 전」 에 멈춰 있게 된다. */
+setInterval(() => {
+  if (document.hidden) return;
+  paintSortNote();
+  paintRankModalNote();
+}, 1000);
 mountIndicatorMenu(document.querySelector('.kh-ind-menu'));
 
 /* 「지금 뜨는 산업」 — 업종 이름 단추를 누르면 그 종목이 나온다 (2026-09-18 지시).
@@ -1795,8 +1855,10 @@ startLiveLoop({
   indexMs: 2000,
   onIndices(indices) { paintIndices(indices); },
   onPrices(prices)   {
-    lastTickAt = new Date();
-    paintClock();                 // 받은 시각을 바로 반영
+    /* **여기서 `lastTickAt` 을 찍지 않는다** (2026-09-23) — 첫 화면은
+       `prices: false` 라 이 길은 **남겨 둔 값으로 한 번**만 불린다
+       (`frame.js:326`). 그것으로 시각을 찍으면 어제 값을 「방금」 이라고
+       적는다. 받은 시각은 `applyFreshPrices` 가 찍는다. */
     /* 관심 사이드바도 순위표와 같은 값을 써야 한다. 여기서 따로 받은 값을
        바로 넣으면 두 자리의 숫자가 어긋난다. 모으는 곳을 거친다. */
     applyPrices(prices);

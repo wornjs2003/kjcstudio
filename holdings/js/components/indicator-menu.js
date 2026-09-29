@@ -50,6 +50,18 @@ function showTip(key, el) {
 }
 function hideTip() { if (tip) tip.hidden = true; }
 
+/**
+ * 「보조지표」 메뉴를 붙인다.
+ *
+ * **떼는 것을 돌려준다** (2026-09-23). 전에는 화면이 뜰 때 한 번만 붙였는데
+ * (`home.js` · `stock.js` 각 한 번), 종목 **모달**이 열릴 때마다 붙게 되면서
+ * 자리가 생겼다 — 이 함수는 `document` 에 손잡이 **셋**(바깥 누르기 ·
+ * `mouseover` · `mouseout`)을 걸고 `onIndicatorChange` 에 하나를 더 건다.
+ * 모달을 열고 닫기를 되풀이하면 그만큼 쌓이고, 닫힌 모달의 목록(이미
+ * 문서에서 떨어진 것)을 계속 고치게 된다.
+ *
+ * @returns {{destroy: Function}|undefined} 붙일 자리가 없으면 `undefined`
+ */
 export function mountIndicatorMenu(root) {
   if (!root) return;
   const btn = root.querySelector('.kh-ind-open');
@@ -67,16 +79,26 @@ export function mountIndicatorMenu(root) {
     });
   };
   sync();
-  onIndicatorChange(sync);
+  const offSync = onIndicatorChange(sync);
 
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     list.hidden = !list.hidden;
     if (!list.hidden) loadDocs();
   });
-  document.addEventListener('click', (e) => {
+
+  /* `document` 에 거는 것은 **이름을 붙여 둔다** — 떼려면 같은 함수를
+     넘겨야 한다. 익명 함수로 걸면 `removeEventListener` 가 못 뗀다. */
+  const onDocClick = (e) => {
     if (!root.contains(e.target)) { list.hidden = true; hideTip(); }
-  });
+  };
+  const onOver = (e) => {
+    const n = e.target.closest('[data-doc]');
+    if (n) showTip(n.dataset.doc, n);
+  };
+  const onOut = (e) => { if (e.target.closest('[data-doc]')) hideTip(); };
+
+  document.addEventListener('click', onDocClick);
 
   list.addEventListener('change', (e) => {
     const b = e.target.closest('input[data-ind]');
@@ -85,11 +107,17 @@ export function mountIndicatorMenu(root) {
 
   /* 설명 풍선 — 목록에서도, 차트 칸 이름표에서도 뜬다 */
   loadDocs();
-  document.addEventListener('mouseover', (e) => {
-    const n = e.target.closest('[data-doc]');
-    if (n) showTip(n.dataset.doc, n);
-  });
-  document.addEventListener('mouseout', (e) => {
-    if (e.target.closest('[data-doc]')) hideTip();
-  });
+  document.addEventListener('mouseover', onOver);
+  document.addEventListener('mouseout', onOut);
+
+  return {
+    /** 모달처럼 **떴다 사라지는 자리**에서 부른다. 안 부르면 열 때마다 쌓인다 */
+    destroy() {
+      offSync();
+      document.removeEventListener('click', onDocClick);
+      document.removeEventListener('mouseover', onOver);
+      document.removeEventListener('mouseout', onOut);
+      hideTip();
+    },
+  };
 }

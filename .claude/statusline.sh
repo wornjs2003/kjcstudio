@@ -21,6 +21,14 @@
 # **한 번만 읽을 수 있으므로** 변수에 담는다.
 STDIN_JSON=$(cat)
 
+# **`python` 이 없는 기계가 있다** — 맥에는 `python3` 뿐이다 (2026-09-29 실측).
+# 그 탓에 주간 한도 줄이 계속 `--` 로 나왔다. 앞쪽을 먼저 찾고 없으면 뒤를 쓴다.
+# 윈도우에는 `python` 만 있을 수 있어 **둘 다 본다.**
+if command -v python3 >/dev/null 2>&1; then PY_BIN=python3
+elif command -v python >/dev/null 2>&1; then PY_BIN=python
+else PY_BIN=""
+fi
+
 cd "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || exit 0
 
 R='\033[31m'; Y='\033[33m'; G='\033[32m'; D='\033[90m'; B='\033[1m'; X='\033[0m'
@@ -132,7 +140,7 @@ fi
 #     .rate_limits.seven_day.resets_at         1790528400 ← ISO 가 아니라 유닉스 초다
 #
 # **값이 없어도 줄을 없애지 않는다.** 줄 수가 오락가락하면 화면이 들썩인다.
-week=$(printf '%s' "$STDIN_JSON" | python -c "
+week=$(printf '%s' "$STDIN_JSON" | "$PY_BIN" -c "
 import sys, json, datetime
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')

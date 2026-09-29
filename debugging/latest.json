@@ -1,6 +1,6 @@
 {
   "generated-by-tool": true,
-  "at": "2026-09-22T11:29:25+09:00",
+  "at": "2026-09-23T13:47:24+09:00",
   "mode": "manual",
   "counts": {
     "pass": 15,
@@ -22,8 +22,8 @@
       "scope": "CLAUDE.md 안의 `경로` 전부",
       "expected": "문서가 적어둔 경로가 모두 저장소에 있음",
       "status": "pass",
-      "actual": "49개 모두 있음",
-      "detail": "문서가 가리키는 경로 49개 전부 저장소에 있습니다"
+      "actual": "53개 모두 있음",
+      "detail": "문서가 가리키는 경로 53개 전부 저장소에 있습니다"
     },
     {
       "id": "md-no-area-theme",
