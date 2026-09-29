@@ -80,6 +80,7 @@ PICK = r"""
       how, tag: el.tagName.toLowerCase(),
       id: el.id || '', cls: (el.className || '').toString().slice(0, 40),
       text: (el.innerText || el.value || el.title || '').trim().slice(0, 30),
+      data: Object.entries(el.dataset || {}).map(([k, v]) => k + '=' + v).sort().join(','),
       x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2),
       w: Math.round(r.width), h: Math.round(r.height)
     });
@@ -105,13 +106,43 @@ PICK = r"""
   // **대표만 눌렀다는 것은 결과에 적는다** — 「걸렸다」 와 「위반이다」 를
   // 가르는 것과 같은 자리다. 같은 클래스인데 동작이 다른 것이 있으면
   // 이 도구는 못 본다.
-  const rep = new Map();
+  // **`data-*` 가 다르면 하는 일도 다를 수 있다.** 클래스가 같아도 그렇다.
+  // `주식페이지_개발` 이 재서 갈라 주었다 — `closest()` 가 12곳이고 여럿이
+  // `data-*` 값으로 갈래를 나눈다.
+  //
+  //     `data-view`  `days` / `today`   ← **반드시 둘 다** 눌러야 한다.
+  //                  「보는 것을 바꿔도 자리는 그대로다」 가 **세 번 깨진 자리**이고
+  //                  재권님이 직접 찾으셨다. 하나만 누르면 그 버그를 못 본다
+  //     `data-doc`   여는 문서가 다르다 — 하나가 되도 다른 것이 깨질 수 있다
+  //     `data-fav`   종목마다 다르지만 **코드 경로는 같다** — 대표만으로 된다
+  //
+  // **가짓수로 가른다.** 적으면 전부, 많으면 대표만. 그래야 `data-view`(둘)는
+  // 다 누르면서 `data-fav`(수백)로 1147개가 다시 늘지 않는다.
+  const DATA_ALL = 8;
+
+  const groups = new Map();                 // 모양+태그+클래스 → data 별 묶음
   for (const it of out) {
-    const key = it.how + '|' + it.tag + '|' + it.cls;
-    if (!rep.has(key)) { it.같은것 = 1; rep.set(key, it); }
-    else rep.get(key).같은것 += 1;
+    const outer = it.how + '|' + it.tag + '|' + it.cls;
+    if (!groups.has(outer)) groups.set(outer, new Map());
+    const inner = groups.get(outer);
+    const dk = it.data || '';
+    if (!inner.has(dk)) { it.같은것 = 1; inner.set(dk, it); }
+    else inner.get(dk).같은것 += 1;
   }
-  return [...rep.values()];
+
+  const res = [];
+  for (const inner of groups.values()) {
+    const kinds = [...inner.values()];
+    if (kinds.length <= DATA_ALL) {          // 가짓수가 적다 — 전부 누른다
+      for (const k of kinds) { k.전부 = true; res.push(k); }
+    } else {                                 // 많다 — 대표 하나만
+      const head = kinds[0];
+      head.같은것 = kinds.reduce((a, b) => a + b.같은것, 0);
+      head.갈래 = kinds.length;
+      res.push(head);
+    }
+  }
+  return res;
 })()
 """
 
@@ -221,9 +252,15 @@ def main():
         print("")
         raw_total = sum(it.get("같은것", 1) for v in found.values() for it in v)
         print("  화면에서 뽑은 것  %d종류 (실제 %d개)" % (total, raw_total))
-        print("    **같은 모양·태그·클래스는 대표 하나만 셉니다.**")
-        print("    목록은 줄마다 같은 틀이라 하나가 되면 나머지도 됩니다 —")
-        print("    **다만 같은 클래스인데 동작이 다른 것은 이 도구가 못 봅니다.**")
+        folded = [it for v in found.values() for it in v if it.get("갈래")]
+        print("    **`data-*` 갈래가 %d개 이하면 전부, 넘으면 대표만 셉니다.**" % 8)
+        print("    `data-view`(오늘/5일) 같은 것은 **둘 다** 눌러야 합니다 —")
+        print("    「보는 것을 바꿔도 자리는 그대로다」 가 세 번 깨진 자리입니다.")
+        if folded:
+            print("")
+            print("    대표로 접은 것 %d자리 (갈래가 많아서):" % len(folded))
+            for it in folded[:6]:
+                print("      %-10s %-18s 갈래 %d개" % (it["how"], it["cls"][:18], it["갈래"]))
         print("  소스의 만드는 자리 %d   (하한 대조용 — 적으면 놓친 것입니다)" % floor)
 
         if total == 0:
