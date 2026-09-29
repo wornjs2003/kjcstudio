@@ -136,9 +136,13 @@ PICK = r"""
     if (kinds.length <= DATA_ALL) {          // 가짓수가 적다 — 전부 누른다
       for (const k of kinds) { k.전부 = true; res.push(k); }
     } else {                                 // 많다 — 대표 하나만
+      // **무엇을 안 누르는지 함께 낸다.** 접힌 것 중에 「누르면 화면이
+      // 바뀌는」 것이 있으면 놓치는데, 이름이 없으면 **사람이 고를 수도
+      // 없다.** `data-view` 를 살린 판단과 같은 자리다.
       const head = kinds[0];
       head.같은것 = kinds.reduce((a, b) => a + b.같은것, 0);
       head.갈래 = kinds.length;
+      head.접힌것 = kinds.slice(1).map(k => k.data || k.text || '(이름 없음)');
       res.push(head);
     }
   }
@@ -260,7 +264,22 @@ def main():
             print("")
             print("    대표로 접은 것 %d자리 (갈래가 많아서):" % len(folded))
             for it in folded[:6]:
-                print("      %-10s %-18s 갈래 %d개" % (it["how"], it["cls"][:18], it["갈래"]))
+                print("      %s %s — 갈래 %d개 중 **하나만 누릅니다**"
+                      % (it["how"], it["cls"][:20] or "(클래스 없음)", it["갈래"]))
+                names = it.get("접힌것") or []
+                for nm in names[:8]:
+                    print("        안 누름: %s" % str(nm)[:56])
+                if len(names) > 8:
+                    print("        … %d개 더" % (len(names) - 8))
+            print("")
+            print("    **접힌 것 중에 「누르면 화면이 바뀌는」 것이 있으면 놓칩니다.**")
+            print("    사람이 보고 고르십시오.")
+            print("")
+            print("    ⚠️ **`del=` 은 데일리 분석의 「빼기」 버튼입니다**"
+                  " (`daily-view.js:684`).")
+            print("       누르면 항목이 지워지고 **곧바로 `PUT` 으로 저장**되며,")
+            print("       그 저장본이 **텔레그램 문안으로 이어집니다.**")
+            print("       누르기를 붙일 때 **이 갈래는 반드시 막아야 합니다.**")
         print("  소스의 만드는 자리 %d   (하한 대조용 — 적으면 놓친 것입니다)" % floor)
 
         if total == 0:
