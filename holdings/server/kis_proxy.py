@@ -1202,8 +1202,39 @@ INDEX_FRESH = {"D": 60, "W": 300, "M": 600, "Y": 3600}
 INDEX_SPAN = {"D": 400, "W": 1500, "M": 4000, "Y": 12000}
 
 
+def floor_to_span(d, period):
+    """묻는 시작 날짜를 **그 구간의 첫날로 내린다.**
+
+    ⚠️ **구간 중간부터 물으면 KIS 가 「그 날짜부터의 누적」 을 준다**
+    (2026-09-29 실측). 재권님이 코스피 1993년 년봉에서 찾으셨다.
+
+        물은 것                      돌아온 1993년 봉
+        1993-11-xx ~ 오늘   시 757.08  고 880.35  저 **751.21**  종 866.18
+        1990-01-01 ~ 1996   시 685.51  고 880.35  저 **602.30**  종 866.18
+                                                       └ 진짜 1993년 저가
+
+    앞엣것은 **11월부터의 누적**이라 그 해 저가가 빠진다. 그런데 **저장될
+    때는 `ts` 가 같은 `19931228`** 이라 구분이 안 되고, 화면에는 「1993년
+    저가가 751」 로 나온다.
+
+    `INDEX_SPAN["Y"]` 가 12000일(약 33년)이라 `오늘 - 33년` 이 **1993년
+    11월**에 떨어진 것이 그 사달이었다. **기간을 늘리는 것은 답이 아니다** —
+    그 경계가 어느 해 중간으로 옮겨갈 뿐이다.
+
+    **년·월·주봉에만 뜻이 있다.** 일봉과 분봉은 하루가 곧 구간이다.
+    """
+    if period == "Y":
+        return d.replace(month=1, day=1)
+    if period == "M":
+        return d.replace(day=1)
+    if period == "W":
+        return d - timedelta(days=d.weekday())
+    return d
+
+
 def _index_bars_from_kis(cfg, code, period, date_from, date_to):
     """한 구간을 받아 온다. 최대 INDEX_PAGE 개."""
+    date_from = floor_to_span(date_from, period)
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice",
@@ -2324,9 +2355,12 @@ def fetch_bars_back(cfg, code, period, want):
     span = datetime.timedelta(days=PERIODS[period]["span_days"])
     done = False
     for _ in range(max(1, -(-want // BARS_PER_CALL)) + 1):
+        # 구간 중간부터 물으면 **부분 누적**이 온다 — `floor_to_span` 주석 참조.
+        # 지수에서 찾은 병인데 같은 API 계열이라 종목에도 건다.
         rows = fetch_bars_from_kis(
             cfg, code, period,
-            (date_to - span).strftime("%Y%m%d"), date_to.strftime("%Y%m%d"))
+            floor_to_span(date_to - span, period).strftime("%Y%m%d"),
+            date_to.strftime("%Y%m%d"))
         fresh = [r for r in rows if r["ts"] not in seen]
         for r in rows:
             seen[r["ts"]] = r
