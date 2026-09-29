@@ -9,7 +9,8 @@ import { WATCHLIST, brandColor, CHART_PERIODS, initBarsOf } from './data/market.
 import * as lastSeen from './store/last-seen.js';
 import { fetchCandles, createStockChart, maLegend,
   addPrevCloseLine, PREV_CLOSE_NOTE, BARS_FOR_IND,
-  savePeriodId, loadPeriodId } from './chart.js';
+  savePeriodId, loadPeriodId,
+  chartView, setChartView, chartStockChanged } from './chart.js';
 import { color } from './theme.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount,
   dirClass, marketPhase } from './utils/format.js';
@@ -404,11 +405,8 @@ function setupIxNav() {
    가면 5분봉」). 종목 화면으로 갈 때 페이지가 새로 뜨므로 변수로는 못 지킨다. */
 let bigPeriod = loadPeriodId('5m');
 
-/* 기간마다 보던 자리. **종목이 바뀌면 버린다** (2026-09-29 지시 —
-   「종목을 바꾸면 각각이 초기화 값으로 돌아가서 보여지고」).
-   그래서 저장하지 않고 화면 안에만 둔다. */
-let bigViews = {};
-let bigViewCode = null;        // 위 자리들이 어느 종목 것인가
+/* 기간마다 보던 자리는 **`chart.js` 가 들고 있다** (2026-09-29 지시).
+   카드와 모달이 같은 것을 봐야 해서 옮겼다 — 여기 따로 두면 둘이 갈린다. */
 let bigChart = null;          // 그려 둔 차트 (지울 때 필요)
 let bigChartKey = null;
 
@@ -423,7 +421,7 @@ function paintBigPeriods() {
       /* 떠나기 전에 지금 기간의 자리를 적어 둔다. 바꾼 **뒤**에는 어느
          기간에서 온 것인지 알 수 없다 */
       if (bigChart) {
-        try { bigViews[bigPeriod] = bigChart.getView(); } catch { /* 아직 없다 */ }
+        try { setChartView(bigPeriod, bigChart.getView()); } catch { /* 아직 없다 */ }
       }
       bigPeriod = b.dataset.p;
       savePeriodId(bigPeriod);
@@ -519,7 +517,11 @@ async function paintBigChart() {
 
   /* 종목이 바뀌었으면 기간별로 적어 둔 자리를 전부 버린다.
      `selectedCode` 가 바뀌는 자리가 둘이라 여기 한 곳에서 가린다 */
-  if (bigViewCode !== st.code) { bigViews = {}; bigViewCode = st.code; }
+  chartStockChanged(st.code);
+
+  /* **모달이 기간을 바꿨을 수 있다.** 카드와 모달이 같은 것을 보므로
+     그릴 때마다 다시 읽는다 (2026-09-29 지시) */
+  bigPeriod = loadPeriodId(bigPeriod);
 
   const key = st.code + ':' + bigPeriod;
   bigChartKey = key;
@@ -566,7 +568,7 @@ async function paintBigChart() {
   /* **이 기간에서 보던 자리로.** 처음이면 최신 쪽 `initBars` 개를 본다.
      `setData` 는 이전 기간의 구간을 그대로 물려주므로(chart.js 의 `keep`)
      여기서 반드시 갈아끼운다 — 안 하면 다섯 기간이 자리를 공유한다. */
-  try { bigChart.setView(bigViews[bigPeriod], initBarsOf(bigPeriod)); }
+  try { bigChart.setView(chartView(bigPeriod), initBarsOf(bigPeriod)); }
   catch { /* 칸이 아직 없다 */ }
 
   /* 5분봉에는 전일 종가선을 그어 둔다. **선 긋는 것은 `chart.js` 한 곳에 있다**
@@ -1597,6 +1599,12 @@ async function openStockModal(code, { push = true } = {}) {
   const stock = findStock(code);
   if (!stock || (stockModal && stockModal.code === code)) return;
 
+  /* **카드에서 보던 자리를 넘겨준다** (2026-09-29 지시 — 「모달열면 모달에
+     동기화 되야해」). 기간을 바꿀 때만 적으면 **끌어 놓고 바로 연 것**이 빠진다. */
+  if (bigChart) {
+    try { setChartView(bigPeriod, bigChart.getView()); } catch { /* 아직 없다 */ }
+  }
+
   let main;
   try {
     main = await loadStockMain();
@@ -1639,6 +1647,21 @@ async function openStockModal(code, { push = true } = {}) {
 
       /* 갈아타는 중이면 주소는 새 모달이 들고 있다. 여기서 건드리면 안 된다 */
       if (switchingStock) return;
+
+      /* **모달에서 기간이나 자리를 바꿨으면 카드가 따라간다** (2026-09-29 지시 —
+         「캔들갯수등도 조절하면 모델에 그대로 적용되야해」). 값은 `chart.js`
+         한 곳에 있으므로 **다시 그리기만 하면 된다.**
+
+         떠 있는 모달이 새로 열리는 중(`switchingStock`)이면 건너뛴다 —
+         곧 그 모달이 닫히면서 한 번 더 온다.
+
+         ⚠️ **기간을 먼저 읽는다.** `paintBigPeriods()` 가 `bigPeriod` 를 보고
+         단추를 그리는데, `paintBigChart()` 안에서 갱신되므로 순서를 바꾸면
+         **단추만 옛 기간으로 남는다** (2026-09-29 실측 — 모달에서 일봉으로
+         바꾸고 닫았는데 카드 단추가 월봉이었다). */
+      bigPeriod = loadPeriodId(bigPeriod);
+      paintBigPeriods();
+      paintBigChart();
 
       /* 뒤로가기로 닫힌 것이면 히스토리도 주소도 이미 제자리다 */
       if (historyMoved) return;

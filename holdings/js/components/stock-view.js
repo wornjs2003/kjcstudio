@@ -24,7 +24,8 @@
 import { CHART_PERIODS, initBarsOf } from '../data/market.js';
 import { fetchCandles, createStockChart, maLegend,
   addPrevCloseLine, PREV_CLOSE_NOTE, BARS_FOR_IND,
-  savePeriodId, loadPeriodId } from '../chart.js';
+  savePeriodId, loadPeriodId,
+  chartView, setChartView, chartStockChanged } from '../chart.js';
 import { getMemo, setMemo } from '../store/memo.js';
 import { fmtNum, fmtWon, fmtMoneyKr, fmtShareCount, fmtDelta, dirClass }
   from '../utils/format.js';
@@ -87,9 +88,10 @@ export function mountStockView(root, stock, { onBack } = {}) {
      올 때 페이지가 새로 뜨므로 `sessionStorage` 를 거친다 */
   let periodId = loadPeriodId(CHART_PERIODS[0] ? CHART_PERIODS[0].id : '1d');
 
-  /* 기간마다 보던 자리. 이 화면은 한 종목만 보므로 종목이 바뀔 일이 없다 —
-     모달은 닫히면서 통째로 사라진다 */
-  const views = {};
+  /* 기간마다 보던 자리는 **`chart.js` 가 들고 있다** (2026-09-29 지시).
+     카드에서 보던 자리를 그대로 이어받아야 해서다 — 여기 따로 두면 갈린다.
+     종목이 카드와 같으면 그대로 두고, 다르면 버린다. */
+  chartStockChanged(stock.code);
   let disclosures = null;
   let reloadTimer = null;
   let dead = false;
@@ -175,7 +177,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
     box.querySelectorAll('button').forEach(b =>
       b.addEventListener('click', () => {
         /* 떠나기 전에 지금 기간의 자리를 적어 둔다 */
-        if (chart) { try { views[periodId] = chart.getView(); } catch { /* 아직 없다 */ } }
+        if (chart) { try { setChartView(periodId, chart.getView()); } catch { /* 아직 없다 */ } }
         periodId = b.dataset.period;
         savePeriodId(periodId);
         paintPeriods();
@@ -202,7 +204,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
          (2026-09-29 지시 — 년봉 5개 · 그 밖 30개).
          이 화면은 기간을 바꿀 때 차트를 새로 만들어서 이전 구간이
          물려지지는 않는데, **「기억한다」 는 여기서도 해야 한다.** */
-      try { chart.setView(views[periodId], initBarsOf(periodId)); }
+      try { chart.setView(chartView(periodId), initBarsOf(periodId)); }
       catch { /* 칸이 아직 없다 */ }
 
       /* **전일 종가 점선** — 첫 화면 차트에는 있는데 여기에는 없었다
@@ -421,6 +423,9 @@ export function mountStockView(root, stock, { onBack } = {}) {
     /** 모달을 닫을 때 부른다. 안 부르면 안 보이는 차트가 계속 돈다. */
     destroy() {
       dead = true;
+      /* **떠나기 전에 지금 자리를 적어 둔다** (2026-09-29).
+         기간을 바꿀 때만 적으면, **끌어 놓고 바로 닫은 것**이 사라진다. */
+      if (chart) { try { setChartView(periodId, chart.getView()); } catch { /* 아직 없다 */ } }
       if (chart) { chart.destroy(); chart = null; }
       if (reloadTimer) { clearInterval(reloadTimer); reloadTimer = null; }
       clearInterval(tickTimer);

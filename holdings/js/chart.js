@@ -220,6 +220,39 @@ export function loadPeriodId(fallback) {
   try { return sessionStorage.getItem(PERIOD_KEY) || fallback; } catch { return fallback; }
 }
 
+
+/* ── 카드와 모달이 **같은 것을 본다** (2026-09-29 지시) ──────────────
+ *
+ * 재권님 말씀 — 「차트 분봉 일봉 월봉 년봉 적용된게 모달열면 모달에 동기화
+ * 되야해」 · 「캔들갯수등도 조절하면 모델에 그대로 적용되야해」.
+ *
+ * **모달이 값을 따로 들면 두 곳이 되어 갈린다.** 재권님이 「모달에 이값이
+ * 있어야 되나?」 로 물으셨고 **「소유는 한 곳, 읽는 것은 둘」** 로 정해졌다 —
+ * 「같은 값은 한 곳에만 둔다」 그대로다.
+ *
+ * **두 값이 저장되는 자리가 다르다.**
+ *
+ *     기간    페이지를 넘어야 한다      →  `sessionStorage` (위 두 함수)
+ *     자리    같은 페이지 안에서만 쓰고
+ *             종목이 바뀌면 버린다      →  **여기 변수**
+ *
+ * 카드와 모달은 같은 페이지에 있으므로 변수로 닿는다. **저장을 늘리지 않는다.** */
+const _view = { code: null, byPeriod: {} };
+
+/* 그 기간에서 보던 자리. 없으면 `undefined` — 부르는 쪽이 초기값으로 간다 */
+export function chartView(periodId) { return _view.byPeriod[periodId]; }
+
+export function setChartView(periodId, v) { _view.byPeriod[periodId] = v; }
+
+/* 종목이 바뀌면 자리를 전부 버린다 (2026-09-29 지시 — 「종목을 바꾸면 각각이
+   초기화 값으로 돌아가서 보여지고」).
+
+   **기간은 안 버린다** — 「5분봉을 보다 다른종목으로 가면 5분봉」. 그래서
+   자리만 여기서 다루고 기간은 `sessionStorage` 에 그대로 둔다. */
+export function chartStockChanged(code) {
+  if (_view.code !== code) { _view.code = code; _view.byPeriod = {}; }
+}
+
 /* 화면의 기간 버튼 → 서버가 쓰는 기간 코드 */
 export const PERIOD_MAP = {
   '5m': '5m',   // 5분봉
