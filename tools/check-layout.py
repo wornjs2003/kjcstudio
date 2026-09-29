@@ -538,7 +538,12 @@ def main():
 
     if args.save:
         with open(BASELINE, "w", encoding="utf-8", newline="\n") as f:
+            # **잰 조건을 함께 적는다.** 같은 조건끼리만 견줘야 뜻이 있다.
+            # **OS 가 특히 그렇다** — 윈도우는 스크롤바가 자리를 먹고 맥은
+            # 오버레이라, 같은 화면이 **폭에서 22px 갈린다**(2026-09-29 실측).
+            # 그것을 모르고 견주면 **멀쩡한 화면이 42칸 어긋남**으로 나온다.
             json.dump({"view": [VIEW_W, VIEW_H], "headless": True,
+                       "잰곳": sys.platform, "포트": args.port,
                        "잰날": time.strftime("%Y-%m-%d"), "pages": now}, f,
                       ensure_ascii=False, indent=1, sort_keys=True)
         cnt = sum(len(v) for v in now.values())
@@ -548,6 +553,15 @@ def main():
 
     if base is None:
         print("기준이 없습니다. 먼저 --save 로 잡으십시오")
+        return 2
+
+    # **OS 가 다르면 견주지 않는다.** 창 크기만 보면 맥/윈도우가 안 갈린다 —
+    # 값은 나오는데 **전부 어긋남**으로 나와서, 읽는 쪽은 「내가 뭘 깼나」 로 본다.
+    # **없으면 옛 기준이다**(그 필드가 없던 때) — 그때도 다시 잡게 한다.
+    if base.get("잰곳", None) != sys.platform:
+        print("기준을 **다른 OS 에서** 잡았습니다 — %s, 지금은 %s"
+              % (base.get("잰곳") or "(안 적혀 있음)", sys.platform))
+        print("  스크롤바 폭이 달라 값이 통째로 어긋납니다. --save 로 다시 잡으십시오")
         return 2
 
     if base.get("view") != [VIEW_W, VIEW_H]:
