@@ -595,8 +595,27 @@ def main():
     stamp = now.strftime("%Y%m%d-%H%M%S")
     with open(os.path.join(HISTORY_DIR, stamp + ".json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
-    with open(LATEST_PATH, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(report, f, ensure_ascii=False, indent=2)
+    # **결과가 그대로면 `latest.json` 을 다시 쓰지 않는다 (2026-09-29).**
+    #
+    # 바뀌는 것이 `at` 한 줄뿐인데도 파일이 달라져서, **이 파일이 병합을
+    # 세 번 막았다.** 도구가 돌 때마다 미커밋이 하나 생기고, 그것을 담자니
+    # 「시각만 바뀐 커밋」 이 되고 안 담자니 병합이 막혔다.
+    #
+    # **`history/` 는 그대로 쌓는다** — 「언제 돌렸나」 는 거기에 남고,
+    # 그 폴더는 `.gitignore` 라 병합과 무관하다.
+    #
+    # 그래서 `at` 의 뜻이 **「마지막으로 돌린 때」 에서 「이 결과가 나온 때」**
+    # 로 바뀐다. 화면에 09/23 이 떠 있으면 **그때부터 결과가 그대로**라는
+    # 뜻이고, 틀린 말이 아니다.
+    #
+    # **판정은 `counts` 와 `results` 로만 한다.** `diff` 는 직전과의 비교라
+    # 늘 달라질 수 있고, `at` 은 지금 빼려는 그것이다.
+    def _body(d):
+        return None if not d else {k: d.get(k) for k in ("counts", "results")}
+
+    if _body(prev) != _body(report):
+        with open(LATEST_PATH, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
 
     c = report["counts"]
     print("검사 완료 " + now.strftime("%m/%d %H:%M") + " (" + mode + ")")
