@@ -20,6 +20,9 @@
 !.claude/settings.json
 # 상태줄 스크립트도 두 PC 가 같은 것을 쓴다 (Windows 는 Git Bash 로 돈다)
 !.claude/statusline.sh
+# 파이썬을 있는 이름으로 부르는 래퍼. 훅이 이것을 부르므로 함께 담는다 —
+# 없으면 다른 기계에서 훅이 「파일 없음」 으로 조용히 죽는다 (2026-09-29)
+!.claude/run-py.sh
 # 마지막 배포 기록은 PC 마다 다르므로 공유하지 않는다 (.claude/* 규칙에 이미 걸린다)
 
 # API 키 (절대 커밋 금지) — 한국투자증권 앱키, OpenDART 인증키 등

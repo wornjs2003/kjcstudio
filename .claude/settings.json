@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$(git rev-parse --show-toplevel)/tools/hook-edit-churn.py\""
+            "command": "sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-edit-churn.py\""
           }
         ]
       }

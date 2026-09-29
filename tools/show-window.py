@@ -85,7 +85,16 @@ import re
 import subprocess
 import sys
 import time
-from ctypes import wintypes
+
+# **맥과 윈도우 양쪽에서 돈다 (2026-09-29).**
+# 그 전에는 최상위에서 `ctypes.windll` 을 불러 **맥에서는 import 단계에서
+# 죽었다** — `AttributeError: module 'ctypes' has no attribute 'windll'`.
+# 「창을 띄울 때는 이 도구를 쓴다」 가 룰인데 그 도구가 안 돌아서,
+# 맥에서는 **룰을 지키면 아무 화면도 못 띄우는** 상태였다.
+IS_MAC = sys.platform == "darwin"
+
+if not IS_MAC:
+    from ctypes import wintypes
 
 # 윈도우 콘솔은 기본이 cp949 라 '—' 같은 글자에서 죽는다.
 # 출력만 UTF-8 로 바꾼다 (holdings/tools/check-theme-sync.py 와 같은 처리).
@@ -96,17 +105,96 @@ from ctypes import wintypes
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-u32 = ctypes.windll.user32
-k32 = ctypes.windll.kernel32
+u32 = k32 = None
+if not IS_MAC:
+    u32 = ctypes.windll.user32
+    k32 = ctypes.windll.kernel32
 
 SW_RESTORE = 9
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-CHROME = [
+
+# **양쪽 다 실행 파일 경로로 잡는다.** 그래야 아래 여는 코드가 한 벌로 끝난다 —
+# `open -a` 로 열면 이미 떠 있을 때 `--args` 가 버려져 새 창이 안 열린다.
+CHROME = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"] if IS_MAC else [
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
 ]
-# 메모장으로 여는 확장자. 연결 프로그램에 맡기지 않는다 (아래 main 주석 참고).
+# 문자 파일을 여는 프로그램. 연결 프로그램에 맡기지 않는다 (아래 main 주석 참고).
+TEXT_APP = "TextEdit" if IS_MAC else "notepad.exe"
+# 그 프로그램이 창 목록에 나타내는 이름. 창을 그 프로그램 것으로 좁히는 데 쓴다.
+TEXT_PROC = "TextEdit" if IS_MAC else "notepad.exe"
+CHROME_PROC = "Google Chrome" if IS_MAC else "chrome.exe"
 TEXT_EXT = (".md", ".txt", ".log", ".json", ".csv")
+
+
+# --- 맥에서 창을 보는 자리 -------------------------------------------------
+#
+# 맥에는 EnumWindows 가 없다. 접근성(System Events)으로 훑는다 —
+# 이 PC 는 이미 권한이 있다 (2026-09-29 실측).
+#
+# **핸들 자리에 `프로세스명|창제목` 문자열을 넣는다.** already_open 과
+# raise_only 는 핸들을 들고 다니며 넘기기만 하므로, 그 안의
+# 「하지 않는 일」 판단이 **양쪽에서 똑같이 돈다.** 판단을 건드리지
+# 않으려고 이 모양으로 골랐다.
+_MAC_LIST = '''
+tell application "System Events"
+  set out to ""
+  repeat with p in (every process whose background only is false)
+    set pn to name of p
+    try
+      repeat with w in (every window of p)
+        set out to out & pn & "|" & (name of w) & linefeed
+      end repeat
+    end try
+  end repeat
+  return out
+end tell
+'''
+
+
+def _osa(script, timeout=25):
+    try:
+        return subprocess.run(["/usr/bin/osascript", "-e", script],
+                              capture_output=True, text=True, timeout=timeout)
+    except Exception:
+        return None
+
+
+def _mac_windows():
+    r = _osa(_MAC_LIST)
+    if r is None or r.returncode != 0:
+        return []
+    out = []
+    for line in r.stdout.splitlines():
+        if "|" not in line:
+            continue
+        title = line.split("|", 1)[1]
+        if title.strip():
+            out.append((line, title))
+    return out
+
+
+def _front(hwnd):
+    """그 창 **하나만** 앞으로. 내가 연 창에만 쓴다.
+
+    윈도우의 ShowWindow·BringWindowToTop·SetForegroundWindow 세 줄이
+    세 자리에 흩어져 있던 것을 여기로 모았다. 한 곳에서 갈리면
+    **맥 쪽을 빠뜨릴 자리가 없다.**
+    """
+    if IS_MAC:
+        proc, _, title = hwnd.partition("|")
+        q = lambda t: t.replace("\\", "\\\\").replace('"', '\\"')
+        _osa('tell application "System Events"\n'
+             f'  set frontmost of process "{q(proc)}" to true\n'
+             '  try\n'
+             f'    perform action "AXRaise" of (first window of process "{q(proc)}"'
+             f' whose name is "{q(title)}")\n'
+             '  end try\n'
+             'end tell', timeout=15)
+        return
+    u32.ShowWindow(hwnd, SW_RESTORE)   # 내가 연 창에만 쓴다
+    u32.BringWindowToTop(hwnd)
+    u32.SetForegroundWindow(hwnd)
 
 
 def session_name():
@@ -215,7 +303,12 @@ def stamp_title(path, who):
 
 
 def windows():
-    """보이는 최상위 창을 (핸들, 제목) 으로 모은다."""
+    """보이는 최상위 창을 (핸들, 제목) 으로 모은다.
+
+    맥에서는 핸들 자리에 `프로세스명|창제목` 이 들어간다 (위 주석 참고).
+    """
+    if IS_MAC:
+        return _mac_windows()
     found = []
     proto = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
@@ -239,6 +332,8 @@ def proc_name(hwnd):
     `kis-worker.js - KJCStudio - Visual Studio Code` 는 제목에 파일명이 들어
     있지만 우리가 연 창이 아니다.
     """
+    if IS_MAC:
+        return hwnd.split("|", 1)[0]
     pid = wintypes.DWORD()
     u32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     h = k32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
@@ -312,11 +407,17 @@ def raise_only(title_part, before, filename="", exe=""):
         return False
 
     hwnd, title = hits[0]
-    u32.ShowWindow(hwnd, SW_RESTORE)   # 내가 연 창에만 쓴다
-    u32.BringWindowToTop(hwnd)
-    u32.SetForegroundWindow(hwnd)
+    _front(hwnd)
     print(f"  앞으로: {title}")
     return True
+
+
+def _open_default(path):
+    """연결 프로그램에 맡긴다. `os.startfile` 은 윈도우에만 있다."""
+    if IS_MAC:
+        subprocess.Popen(["/usr/bin/open", path])
+    else:
+        os.startfile(path)
 
 
 def main():
@@ -367,9 +468,9 @@ def main():
     # 좁히는 데 쓰고, 열기 전에 already_open 이 같은 기준으로 찾는 데도 쓴다.
     # os.startfile 로 여는 것은 무엇이 뜰지 모르므로 빈 채로 둔다.
     if is_url or path.lower().endswith((".html", ".htm")):
-        opened_with = "chrome.exe" if any(os.path.exists(c) for c in CHROME) else ""
+        opened_with = CHROME_PROC if any(os.path.exists(c) for c in CHROME) else ""
     elif path.lower().endswith(TEXT_EXT):
-        opened_with = "notepad.exe"
+        opened_with = TEXT_PROC
     else:
         opened_with = ""
 
@@ -384,9 +485,7 @@ def main():
     found = (None, None) if is_url else already_open(hint, opened_with)
     if isinstance(found, tuple) and found[0] is not None:
         hwnd, title = found
-        u32.ShowWindow(hwnd, SW_RESTORE)
-        u32.BringWindowToTop(hwnd)
-        u32.SetForegroundWindow(hwnd)
+        _front(hwnd)
         print(f"  이미 떠 있어 앞으로만 꺼냈습니다: {title}")
         print("  **파일이 바뀌었으면 그 창에서 Ctrl+Shift+R 을 눌러 주십시오.**")
         print("  (브라우저를 새로고침시킬 방법이 없습니다. 새 창을 또 열지 않습니다)")
@@ -409,11 +508,13 @@ def main():
 
     if is_url or path.lower().endswith((".html", ".htm")):
         exe = next((c for c in CHROME if os.path.exists(c)), None)
-        url = path if is_url else "file:///" + path.replace("\\", "/")
+        url = path if is_url else (
+            "file://" + path if IS_MAC else "file:///" + path.replace("\\", "/"))
         if exe:
-            subprocess.Popen([exe, "--new-window", url])
+            subprocess.Popen([exe, "--new-window", url],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
-            os.startfile(path)
+            _open_default(path)
             opened_with = ""
     elif path.lower().endswith(TEXT_EXT):
         # 메모장을 직접 부른다. os.startfile 로는 안 열린다 —
@@ -424,9 +525,12 @@ def main():
         #
         # 그동안 문서가 열렸던 것은 부르는 쪽에서 notepad 를 직접 지정했기
         # 때문이고, 이 도구를 거치면 아무 일도 일어나지 않았다.
-        subprocess.Popen(["notepad.exe", path])
+        if IS_MAC:
+            subprocess.Popen(["/usr/bin/open", "-a", TEXT_APP, path])
+        else:
+            subprocess.Popen([TEXT_APP, path])
     else:
-        os.startfile(path)
+        _open_default(path)
 
     time.sleep(2.0)
     raise_only(hint, before, os.path.basename(path), opened_with)
