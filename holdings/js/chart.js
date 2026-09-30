@@ -191,6 +191,33 @@ const IND_WARMUP = [
 
 export const BARS_FOR_IND = VISIBLE_BARS + Math.max(...IND_WARMUP);
 
+/* 기간마다 **받아올** 봉 수. 처음 보이는 개수(`initBars`)와 다른 값이다.
+ *
+ * **한 곳에만 둔다** — 2026-09-30 지시 「모달과 카드는 봉수가 다르면 안돼
+ * 정보는 같아야돼」. 그 전에는 카드(`home.js` 의 `BIG_LIMIT`)와 모달
+ * (`stock-view.js`)이 **각자 값을 들고 있어서 일봉만 400 ↔ 320 으로 갈렸다.**
+ * 같은 종목·같은 기간인데 두 화면이 다른 개수를 받았다.
+ *
+ * 그래서 `fetchCandles` 가 **개수를 인자로 받지 않는다.** 부르는 쪽이 줄 수
+ * 없으면 갈릴 자리가 없다 — 「같은 값은 한 곳에만 둔다」. 400 으로 맞추는
+ * 것만으로는 **예외를 둘 수 있는 자리가 양쪽에 그대로 남는다.**
+ *
+ * 기본은 `BARS_FOR_IND`(선이 끊기지 않는 최소)이고 여기 적은 기간만 예외다.
+ *
+ *   일봉 400   **이 값이 보관량을 정한다.** 서버가 `limit` 까지 과거를 거슬러
+ *              받으므로(`kis_proxy.py` 의 `fetch_bars_back`), 320 으로 내리면
+ *              앞으로 모든 종목이 320 에서 멈춘다. 2026-09-30 실측 —
+ *              삼성전자만 401봉이고 나머지 관심종목은 107~108봉이다
+ *
+ * **년봉은 200일선이 안 그려진다.** 46봉(1985-12~)뿐이라 200봉을 못 채운다 —
+ * 그 칸은 범례가 「MA200 봉 부족」 으로 적는다. **고칠 수 있는 것이 아니다.**
+ */
+const FETCH_BARS = { '1d': 400 };
+
+export function barsToFetch(periodId) {
+  return FETCH_BARS[periodId] || BARS_FOR_IND;
+}
+
 function showLastBars(chart, total, bars = VISIBLE_BARS) {
   const ts = chart.timeScale();
   try {
@@ -511,17 +538,30 @@ const CANDLE_TTL_MS = 60_000;
 const CANDLE_MAX = 60;              // 이보다 쌓이면 오래된 것부터 버린다
 const _candleCache = new Map();
 
-/* 서버에서 캔들 가져오기. periodId 는 화면 버튼 값('1d','5m' 등) */
-/* limit 을 안 주면 **선이 끊기지 않는 최소**로 받는다.
-   240 이었는데 240-120=120 이라 200일선이 앞 79봉 비었다 (2026-09-29).
-   지금은 부르는 두 곳이 다 값을 주지만, 기본값이 틀린 채로 남아 있으면
-   다음에 안 주고 부르는 곳에서 조용히 다시 빈다. */
-export async function fetchCandles(code, periodId = '1d', limit = BARS_FOR_IND) {
+/* 서버에서 캔들 가져오기. periodId 는 화면 버튼 값('1d','5m' 등)
+ *
+ * **몇 개 받을지는 부르는 쪽이 정하지 않는다** — 위 `barsToFetch` 한 곳이
+ * 정한다. 전에는 인자였는데 두 화면이 서로 다른 값을 주어 일봉이 갈렸다.
+ * 240 이었던 기본값도 240-120=120 이라 200일선이 앞 79봉 비어 있었다
+ * (2026-09-29). **줄 수 있게 두면 언젠가 다시 갈린다.** */
+export async function fetchCandles(code, periodId = '1d', opt = {}) {
   const period = PERIOD_MAP[periodId] || 'D';
+  const limit = barsToFetch(periodId);
   const key = `${code}:${period}:${limit}`;
 
-  const hit = _candleCache.get(key);
-  if (hit && Date.now() - hit.at < CANDLE_TTL_MS) return hit.value;
+  /* `fresh` 면 캐시를 건너뛴다 (2026-09-30 지시 — 「5번」).
+   *
+   * **개수 인자를 없앤 것과 다른 이야기다.** 개수는 **양쪽이 같아야 하는 값**
+   * 이라 줄 수 없게 했고(위 `barsToFetch`), 이것은 **부르는 상황**이다 —
+   * 「지금 당장 새로 받아야 하는 자리인가」. 값이 갈릴 여지가 없다.
+   *
+   * 쓰는 곳은 **모달을 닫을 때 하나**다. 모달을 보는 동안 카드 차트는
+   * 안 그려지는데, 닫고 나서 캐시(60초)에 걸리면 **최대 1분 옛 그림**이
+   * 남는다. 닫는 순간에 한 번이라 **총량은 거의 안 는다.** */
+  if (!opt.fresh) {
+    const hit = _candleCache.get(key);
+    if (hit && Date.now() - hit.at < CANDLE_TTL_MS) return hit.value;
+  }
 
   const r = await apiFetch(
     `/api/kis/chart?code=${code}&period=${period}&limit=${limit}`,
@@ -1458,6 +1498,47 @@ export function createStockChart(container, candles, opts = {}) {
     resetView(bars) {
       panes.forEach((p) => showLastBars(p.chart, candles.length, bars));
       checkAlign();
+    },
+
+    /* ── 현재가로 맨 오른쪽 막대만 갱신한다 (2026-09-30 지시) ────────
+     *
+     * 재권님이 고르신 길이다 — 봉을 다시 받지 않고 **이미 오는 현재가**로
+     * 진행 중인 막대의 종가·고가·저가만 고친다. **증권사 호출이 0건 는다.**
+     *
+     * **왜 이것으로 충분한가** — 5분봉은 5분에 한 번만 새 막대가 생긴다.
+     * 그 사이 움직이는 것은 **맨 오른쪽 막대 하나**이고 그 종가는 현재가와
+     * 같다. 봉 400개를 다시 받는 것은 **막대 하나를 위해 전부 다시 받는 것**
+     * 이었다. 일봉 이상도 같다 — 마지막 봉이 「오늘」 이다.
+     *
+     * **`build()` 를 부르지 않는다.** 그것이 이 함수의 값이다 — 지표·매물대·
+     * 범례를 다시 계산하면 막대 하나 고치는 비용이 전체 다시 그리기가 된다.
+     * 그래서 **지표는 다음 `setData` 때 따라온다.**
+     *
+     * **거래량은 건드리지 않는다.** 5분봉의 거래량은 그 5분간의 것이고
+     * `live.volume` 은 **하루 누적**이다. 섞으면 막대 하나가 하루치가 된다.
+     *
+     * `time` 을 기존 마지막 봉과 **같게** 만들어야 갱신이 된다 — 다르면
+     * 라이브러리가 **새 봉을 붙인다.** */
+    updateLast(live) {
+      if (!live || !Number.isFinite(live.price) || live.price <= 0) return;
+      const i = candles.length - 1;
+      const last = candles[i];
+      if (!last) return;
+      const px = live.price;
+      if (last.close === px) return;          // 안 움직였으면 그릴 것이 없다
+      const next = {
+        ...last,
+        close: px,
+        high: Math.max(last.high, px),
+        low: Math.min(last.low, px),
+      };
+      candles[i] = next;
+      try {
+        candleSeries.update({
+          time: toChartTime(next.ts, period),
+          open: next.open, high: next.high, low: next.low, close: next.close,
+        });
+      } catch { /* 칸이 아직 없다 */ }
     },
 
     /* ── 보던 자리를 기간마다 따로 들고 가기 (2026-09-29 지시) ──────

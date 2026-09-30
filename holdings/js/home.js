@@ -8,7 +8,7 @@
 import { WATCHLIST, brandColor, CHART_PERIODS, initBarsOf } from './data/market.js';
 import * as lastSeen from './store/last-seen.js';
 import { fetchCandles, createStockChart, maLegend,
-  addPrevCloseLine, PREV_CLOSE_NOTE, BARS_FOR_IND,
+  addPrevCloseLine, PREV_CLOSE_NOTE,
   savePeriodId, loadPeriodId,
   chartView, setChartView, chartStockChanged } from './chart.js';
 import { color } from './theme.js';
@@ -436,28 +436,6 @@ function dropBigChart() {
   if (bigChart) { bigChart.destroy(); bigChart = null; }
 }
 
-/* 큰 차트에 얼마나 담을까.
- *
- * **전에 이 주석이 「200일선까지 그려지게 한다」 고 적혀 있었는데 틀렸다.**
- * 5분봉이 180봉이라 200일선은 어느 종목에서도 안 그려지고 있었다
- * (2026-09-29 실측). 주석이 그렇게 적혀 있어서 의심할 계기가 없었다 —
- * 「설명이 이미 있으면 의심할 계기조차 없다」 그대로다.
- *
- * 개수는 chart.js 의 BARS_FOR_IND 가 정한다. 여기 숫자를 박으면 MA_LINES 나
- * IND_PERIOD 가 바뀔 때 또 어긋난다.
- *
- * **2026-09-29 에 년봉도 BARS_FOR_IND 로 바꿨다.** 40 으로 묶어 두었는데,
- * 서버가 날짜를 거슬러 받게 되면서 **46봉**(1985-12~)이 오게 됐다.
- * 320 을 달라고 해도 있는 만큼만 오므로 묶어 둘 이유가 없다.
- *
- *   일봉 400   BARS_FOR_IND(320) 보다 많아 그대로 둔다. 줄이면 오히려 짧아진다
- *
- * **년봉은 그래도 200일선이 안 그려진다.** 46봉뿐이라 200봉을 못 채운다 —
- * 그 칸은 범례가 「MA200 봉 부족」 으로 적는다. **고칠 수 있는 것이 아니다.**
- */
-const BIG_LIMIT = { '5m': BARS_FOR_IND, '1d': 400, '1w': BARS_FOR_IND,
-                    '1M': BARS_FOR_IND, '1y': BARS_FOR_IND };
-
 /* 머리줄의 이름·현재가. 차트보다 먼저 바뀌어야 한다 —
    봉을 받는 데 시간이 걸리는데 이름이 옛 종목인 채로 있으면
    다른 종목 차트를 보고 있는 것처럼 보인다. */
@@ -512,7 +490,9 @@ function paintBigPrice() {
  * 무엇을 그리나 — selectedCode 다. 목록에 마우스를 올리면 그것이 바뀌고
  * 여기가 따라온다. 없애 버린 미리보기 카드가 하던 일을, 더 큰 자리에서 한다.
  */
-async function paintBigChart() {
+/* `opt.fresh` 면 캔들 캐시를 건너뛴다 — 모달을 닫을 때 쓴다
+   (2026-09-30 지시 — 「5번」). 자세한 것은 `chart.js` 의 `fetchCandles` 주석. */
+async function paintBigChart(opt = {}) {
   const st = findStock(selectedCode);
   if (!st) return;
 
@@ -534,7 +514,7 @@ async function paintBigChart() {
 
   let candles, period;
   try {
-    ({ candles, period } = await fetchCandles(st.code, bigPeriod, BIG_LIMIT[bigPeriod] || BARS_FOR_IND));
+    ({ candles, period } = await fetchCandles(st.code, bigPeriod, opt));
   } catch {
     if (bigChartKey !== key) return;        // 그 사이 다른 종목을 골랐다
     dropBigChart();
@@ -1437,7 +1417,46 @@ function applyPrices(map) {
   if (typeof detail !== 'undefined' && detail) {
     detail.update(rowPrices && rowPrices[selectedCode]);   // 거래대금 · 시가총액
   }
+  /* 모달이 떠 있으면 같은 값을 넘긴다. 모달이 따로 받으면 두 자리의 숫자가
+     어긋나고 KIS 를 겹쳐 부르게 된다.
+
+     **이 줄이 `startLiveLoop({ onPrices })` 안에 있었는데 거기서는 안 돌았다**
+     (2026-09-30). 첫 화면은 `prices: false` 로 부르므로 `frame.js` 가
+     `fetchLivePrices` 를 건너뛰고, 그 `applyPrices` 는 첫 줄에서 `return` 한다.
+     그래서 `onPrices` 는 **남겨 둔 값으로 페이지 로드 때 한 번**만 불렸고
+     (`frame.js` 의 `kept` 갈래), 그때 `stockModal` 은 아직 `null` 이다.
+     **모달을 연 뒤에는 한 번도 안 불렸다** — 열 때 `view.paint` 로 채운 값에서
+     멈춰 있었다.
+
+     여기가 맞는 자리인 이유는 **두 길이 다 지나가기** 때문이다 —
+     `applyFreshPrices`(순위표 시세가 실제로 들어오는 자리)와
+     `onPrices`(남겨 둔 값) 둘 다 이 함수를 부른다.
+
+     ⚠️ `frame.js` 에도 `applyPrices` 라는 함수가 따로 있다. **다른 함수다** —
+     그쪽이 `onPrices` 를 부르고, 그 `onPrices` 가 이 함수를 부른다. */
+  if (stockModal) {
+    const live = rowPrices[stockModal.code];
+    /* **값이 안 바뀌었으면 건너뛴다.** `updateRowCells` 의 `lastShown` 과 같은
+       방식이다 — 다시 쓰면 그 칸의 `layout` 이 다시 계산된다.
+
+       2026-09-30 실측(8770 · 헤드리스 · 150초) — 안 걸렀을 때 모달 머리줄이
+       **초당 2회** 다시 쓰였고(`rotateTick` 이 1초마다 절반씩 받는 주기),
+       `script` +13ms 에 **`layout` +108ms** 가 붙어 모달 열림 비용이
+       432 → 553ms 로 **28% 늘었다.** 장이 닫힌 시간대여서 **그 전부가 헛일**
+       이었다 — 값이 하나도 안 움직이는데 계속 다시 쓴 것이다. */
+    if (live) {
+      const stamp = `${live.price}|${live.pct}|${live.volume}|${live.value}`;
+      if (stamp !== lastModalStamp) {
+        lastModalStamp = stamp;
+        stockModal.view.paint(live);
+      }
+    }
+  }
 }
+
+/* 모달 머리줄에 마지막으로 그린 값. 종목이 바뀌면 문자열이 달라지므로
+   따로 비우지 않아도 된다. */
+let lastModalStamp = '';
 
 /* 값이 들어온 줄만 고쳐 쓴다. 표를 통째로 다시 그리면 스크롤 위치가 튀고
    지켜보던 줄도 전부 다시 걸어야 한다. */
@@ -1662,7 +1681,11 @@ async function openStockModal(code, { push = true } = {}) {
          바꾸고 닫았는데 카드 단추가 월봉이었다). */
       bigPeriod = loadPeriodId(bigPeriod);
       paintBigPeriods();
-      paintBigChart();
+      /* **캐시를 건너뛰고 즉시 한 번 받는다** (2026-09-30 지시 — 「5번」).
+         모달을 보는 동안 카드 차트는 안 그려지는데, 그냥 부르면 캔들 캐시
+         (60초)에 걸려 **최대 1분 옛 그림**이 남는다. 닫는 순간 한 번이라
+         총량은 거의 안 는다. */
+      paintBigChart({ fresh: true });
 
       /* 뒤로가기로 닫힌 것이면 히스토리도 주소도 이미 제자리다 */
       if (historyMoved) return;
@@ -1930,11 +1953,8 @@ startLiveLoop({
        바로 넣으면 두 자리의 숫자가 어긋난다. 모으는 곳을 거친다. */
     applyPrices(prices);
     paintBigPrice();
-    /* 모달이 떠 있으면 같은 값을 넘긴다. 모달이 따로 받으면 두 자리의
-       숫자가 어긋나고 KIS 를 겹쳐 부르게 된다. */
-    if (stockModal && prices[stockModal.code]) {
-      stockModal.view.paint(prices[stockModal.code]);
-    }
+    /* 모달에 넘기는 줄은 `applyPrices` 안으로 옮겼다 (2026-09-30) —
+       **이 길은 페이지 로드 때 한 번만 돈다.** 위 주석 참고. */
   },
 });
 
