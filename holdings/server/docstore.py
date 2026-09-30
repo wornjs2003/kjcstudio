@@ -66,6 +66,8 @@ import io
 import json
 import os
 import tempfile
+import threading
+from datetime import datetime
 import time
 
 
@@ -185,6 +187,43 @@ def _path(name):
     return os.path.join(DOC_ROOT, name + ".json")
 
 
+class DocConflict(Exception):
+    """내가 읽은 뒤에 남이 썼다.
+
+    `updatedAt` 을 함께 들고 있어 부르는 쪽이 **지금 값**을 돌려줄 수 있다 —
+    「충돌했다」 만 알리면 화면이 다시 읽으러 한 번 더 나가야 한다.
+    """
+
+    def __init__(self, current):
+        super().__init__("그 사이에 남이 썼습니다")
+        self.current = current
+
+
+# ── 견주고 쓰는 것을 한 덩어리로 묶는다 ────────────────────────────
+#
+# 견준 뒤 쓰기 전에 남이 끼어들면 **막으려던 그 일이 그대로 난다.**
+# 이 서버는 **한 프로세스**라 스레드 잠금이면 된다 —
+# 다른 포트는 `DOC_ROOT` 가 `__file__` 기준이라 **애초에 다른 파일**을 본다.
+_write_lock = threading.Lock()
+
+
+def doc_updated_at(name):
+    """이 문서가 마지막으로 바뀐 때. 없으면 `None`.
+
+    **파일 시각(mtime)을 쓴다.** 저장하는 값 안에 넣으면 그 값이 데이터가 되어
+    화면이 그것까지 돌려보내야 하고, 빠뜨리면 조용히 어긋난다.
+
+    ⚠️ **워커는 D1 의 `updated_at` 을 낸다.** 이름과 자리는 같고 **값의 생김새는
+    다르다** — 저장소가 다르기 때문이다. **견주는 것은 같은 서버가 낸 것끼리**라
+    문제가 없지만, **두 쪽 값을 섞어 견주면 안 된다.**
+    """
+    try:
+        return datetime.fromtimestamp(os.path.getmtime(_path(name))).isoformat(
+            timespec="microseconds")
+    except OSError:
+        return None
+
+
 def read_doc(name):
     """문서를 읽는다. 없거나 깨졌으면 None.
 
@@ -194,7 +233,7 @@ def read_doc(name):
     return read_json(_path(name), None)
 
 
-def write_doc(name, data, history=True):
+def write_doc(name, data, history=True, if_updated_at=None):
     """문서를 **안전하게** 쓴다.
 
     하는 일이 넷이고 **순서가 뜻을 가진다.**
@@ -211,9 +250,22 @@ def write_doc(name, data, history=True):
     **history 는 「안전하게 쓴다」 의 일부지 정책이 아니다.** 며칠을 남길지는
     쓰는 쪽이 정한다 — 이 층은 오래된 것을 지우지 않는다.
 
+    **`if_updated_at` 을 주면 견준다.** 내가 읽은 뒤에 남이 썼으면
+    `DocConflict` 를 던지고 **아무것도 안 쓴다.**
+
+        준다       견준다 — 어긋나면 `DocConflict`
+        **안 준다**  **지금처럼 그냥 쓴다** ← 옛 화면이 안 깨진다
+
+    **뒤쪽이 중요하다.** 화면이 아직 안 고쳐진 동안에도 보드는 돌아야 한다.
+    「늘 막는 검사는 검사가 아니다」 와 같은 자리다 — 안 보내는 쪽을 막으면
+    **고치는 동안 보드를 아무도 못 쓴다.**
+
     Returns:
         True  썼다
         False **비어 있어서 안 썼다** — 원본은 그대로다
+
+    Raises:
+        DocConflict  `if_updated_at` 이 지금 값과 다르다
     """
     path = _path(name)
 
@@ -221,6 +273,19 @@ def write_doc(name, data, history=True):
     #    그쪽까지 가면 ③ 이 이미 돌아 history 가 밀린 뒤다.
     if data is None or (isinstance(data, (dict, list, str)) and len(data) == 0):
         return False
+
+    with _write_lock:
+        return _write_locked(name, path, data, history, if_updated_at)
+
+
+def _write_locked(name, path, data, history, if_updated_at):
+    """**견주기와 쓰기를 한 덩어리로.** 잠금 밖에서 나눠 하면
+    견준 뒤 쓰기 전에 남이 끼어들어 **막으려던 그 일이 그대로 난다.**"""
+    # ②' 내가 읽은 뒤에 남이 썼나. **안 보냈으면 안 견준다** (옛 화면 호환)
+    if if_updated_at is not None:
+        now_at = doc_updated_at(name)
+        if now_at != if_updated_at:
+            raise DocConflict(now_at)
 
     # ③ 원본이 있으면 남긴다. **이동이 아니라 복사**다 —
     #    옮기면 그 순간 제자리가 비고, 거기서 죽으면 읽는 쪽은 빈 자리를 본다.
