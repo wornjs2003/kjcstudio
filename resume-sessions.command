@@ -42,13 +42,58 @@ if [ "$running" -gt 0 ]; then
   case "$ans" in y|Y) ;; *) echo "  멈췄습니다."; exit 0;; esac
 fi
 
+# **만들면서 바로 고정한다 (2026-09-30 지시).**
+#
+# 재권님 말씀 — 「왼쪽에 세션 목록들 **핀박고 위치 고정**하는거 안하나?
+# 왜 안되어있지?」
+#
+# 그 전에는 이 스크립트가 `new-workspace` 만 불러서, **재부팅하면 고정이
+# 통째로 풀렸다.** 실제로 그랬다 — 재부팅 전 저장본에 다섯이 고정이었고
+# 다시 뜬 뒤에는 **전부 풀림**이었다.
+#
+# ⚠️ **핀은 「맨 위로」 가 아니라 「고정 묶음의 끝에」 붙는다.**
+# 그래서 **만드는 순서대로 꽂으면 그 순서가 남는다.**
+#
+# 같은 날 이것을 한 개로 재다 틀렸다 — 하나만 꽂으면 **그것이 유일한
+# 고정이라 맨 위로 올라간 것처럼 보인다.** 그 값으로 「아래에서 위로」 로
+# 판단해 여덟을 꽂았더니 **순서가 통째로 뒤집혔다.**
+# **한 개로 잰 것이 여러 개일 때와 다르다.**
+#
+# ⚠️ **순서가 바뀌는 원인이 하나 더 있다.** cmux 기본값
+# `app.reorderOnNotification` 이 **알림이 오면 그 작업공간을 위로 올린다.**
+# `~/.config/cmux/cmux.json` 에서 `false` 로 꺼 두었다 — 고정만으로는
+# 안 막힌다. `qa` 가 찾았다.
+# **`new-workspace` 의 출력을 짐작하지 않는다.** 무엇을 찍는지 `--help` 에
+# 없고, **시험 삼아 만들면 재권님 목록에 찌꺼기가 남는다.** 그래서 만든 뒤에
+# **이름으로 되찾아** 꽂는다 — 그 조회는 지금 있는 것으로 시험할 수 있다.
+pin_by_name() {
+  ref=$(cmux workspace list 2>/dev/null \
+        | sed -e 's/^[* ]*//' \
+        | awk -v n="$1" '{ ws=$1; $1=""; sub(/^ +/,""); sub(/ +\[selected\]$/,"");
+                           if ($0 == n) { print ws; exit } }')
+  if [ -z "$ref" ]; then
+    echo "    (고정 못 함: $1 — 목록에서 못 찾았습니다. 손으로 꽂아 주십시오)"
+    return 1
+  fi
+  cmux workspace-action --action pin --workspace "$ref" >/dev/null 2>&1 || {
+    echo "    (고정 실패: $1)"; return 1; }
+}
+
 open_one() {
   name=$1; sid=$2
   echo "  여는 중 — $name"
-  cmux new-workspace --name "$name" --cwd "$REPO" \
-       --command "claude --resume $sid" --focus false || \
+  if cmux new-workspace --name "$name" --cwd "$REPO" \
+          --command "claude --resume $sid" --focus false >/dev/null 2>&1; then
+    NAMES="$NAMES$name
+"
+    opened=$((opened + 1))
+  else
     echo "    ** 실패: $name **"
+  fi
 }
+
+opened=0
+NAMES=""
 
 open_one "개념정의"          04fa6a4d-eada-4ddc-9cb9-18ae177540e4
 open_one "작업우선순위"      b5e2504d-dc3b-43cb-b44e-ee923448b090
@@ -60,6 +105,21 @@ open_one "주식페이지_개발3"  9bf6d383-13c2-4a27-b4fd-ff388169b1f2
 open_one "엔진_개발"         71470664-9e0d-44f3-9a92-ddd0fe66dd6d
 open_one "qa"               12b7e713-afb0-4450-aabb-18b6544b14b4
 
+# **여는 것이 다 끝난 뒤에 꽂는다 — 만든 순서대로.**
+# 핀이 「고정 묶음의 끝에」 붙으므로 이 순서가 그대로 목록 순서가 된다.
 echo ""
-echo "  여덟을 열었습니다. 왼쪽 목록에서 고르십시오."
+echo "  고정하는 중…"
+pinned=0
+printf '%s' "$NAMES" | while IFS= read -r n; do
+  [ -n "$n" ] && pin_by_name "$n" && pinned=$((pinned + 1))
+done
+
+echo ""
+# **개수를 박지 않는다** — 세션이 늘면 낡는다. 위에서 센 값을 쓴다
+# (「세면 나오는 값은 본문에 적지 않는다」).
+echo "  ${opened}개를 열고 **고정까지** 했습니다. 왼쪽 목록에서 고르십시오."
+echo ""
+echo "  ⚠️ **창을 둘로 나누는 것은 이 스크립트가 하지 않습니다.**"
+echo "     왼쪽(개념정의·작업우선순위·qa)과 오른쪽 나눔은 손으로 하신 배치라"
+echo "     여기서 재현하지 않습니다 — **잘못 짐작하면 배치를 흐트러뜨립니다.**"
 echo ""
