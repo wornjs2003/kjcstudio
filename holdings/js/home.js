@@ -1414,7 +1414,46 @@ function applyPrices(map) {
   if (typeof detail !== 'undefined' && detail) {
     detail.update(rowPrices && rowPrices[selectedCode]);   // 거래대금 · 시가총액
   }
+  /* 모달이 떠 있으면 같은 값을 넘긴다. 모달이 따로 받으면 두 자리의 숫자가
+     어긋나고 KIS 를 겹쳐 부르게 된다.
+
+     **이 줄이 `startLiveLoop({ onPrices })` 안에 있었는데 거기서는 안 돌았다**
+     (2026-09-30). 첫 화면은 `prices: false` 로 부르므로 `frame.js` 가
+     `fetchLivePrices` 를 건너뛰고, 그 `applyPrices` 는 첫 줄에서 `return` 한다.
+     그래서 `onPrices` 는 **남겨 둔 값으로 페이지 로드 때 한 번**만 불렸고
+     (`frame.js` 의 `kept` 갈래), 그때 `stockModal` 은 아직 `null` 이다.
+     **모달을 연 뒤에는 한 번도 안 불렸다** — 열 때 `view.paint` 로 채운 값에서
+     멈춰 있었다.
+
+     여기가 맞는 자리인 이유는 **두 길이 다 지나가기** 때문이다 —
+     `applyFreshPrices`(순위표 시세가 실제로 들어오는 자리)와
+     `onPrices`(남겨 둔 값) 둘 다 이 함수를 부른다.
+
+     ⚠️ `frame.js` 에도 `applyPrices` 라는 함수가 따로 있다. **다른 함수다** —
+     그쪽이 `onPrices` 를 부르고, 그 `onPrices` 가 이 함수를 부른다. */
+  if (stockModal) {
+    const live = rowPrices[stockModal.code];
+    /* **값이 안 바뀌었으면 건너뛴다.** `updateRowCells` 의 `lastShown` 과 같은
+       방식이다 — 다시 쓰면 그 칸의 `layout` 이 다시 계산된다.
+
+       2026-09-30 실측(8770 · 헤드리스 · 150초) — 안 걸렀을 때 모달 머리줄이
+       **초당 2회** 다시 쓰였고(`rotateTick` 이 1초마다 절반씩 받는 주기),
+       `script` +13ms 에 **`layout` +108ms** 가 붙어 모달 열림 비용이
+       432 → 553ms 로 **28% 늘었다.** 장이 닫힌 시간대여서 **그 전부가 헛일**
+       이었다 — 값이 하나도 안 움직이는데 계속 다시 쓴 것이다. */
+    if (live) {
+      const stamp = `${live.price}|${live.pct}|${live.volume}|${live.value}`;
+      if (stamp !== lastModalStamp) {
+        lastModalStamp = stamp;
+        stockModal.view.paint(live);
+      }
+    }
+  }
 }
+
+/* 모달 머리줄에 마지막으로 그린 값. 종목이 바뀌면 문자열이 달라지므로
+   따로 비우지 않아도 된다. */
+let lastModalStamp = '';
 
 /* 값이 들어온 줄만 고쳐 쓴다. 표를 통째로 다시 그리면 스크롤 위치가 튀고
    지켜보던 줄도 전부 다시 걸어야 한다. */
@@ -1903,11 +1942,8 @@ startLiveLoop({
        바로 넣으면 두 자리의 숫자가 어긋난다. 모으는 곳을 거친다. */
     applyPrices(prices);
     paintBigPrice();
-    /* 모달이 떠 있으면 같은 값을 넘긴다. 모달이 따로 받으면 두 자리의
-       숫자가 어긋나고 KIS 를 겹쳐 부르게 된다. */
-    if (stockModal && prices[stockModal.code]) {
-      stockModal.view.paint(prices[stockModal.code]);
-    }
+    /* 모달에 넘기는 줄은 `applyPrices` 안으로 옮겼다 (2026-09-30) —
+       **이 길은 페이지 로드 때 한 번만 돈다.** 위 주석 참고. */
   },
 });
 
