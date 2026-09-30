@@ -200,8 +200,8 @@ export function mountStockView(root, stock, { onBack } = {}) {
       host.innerHTML = '';
       chart = createStockChart(host, candles, { period, showVolume: true });
 
-      /* **이 기간에서 보던 자리로.** 처음이면 최신 쪽 `initBars` 개를 본다
-         (2026-09-29 지시 — 년봉 5개 · 그 밖 30개).
+      /* **이 기간에서 보던 자리로.** 처음이면 최신 쪽 `initBars` 개를 본다.
+         몇 개인지는 `CHART_PERIODS` 가 정한다 — 여기 적으면 낡는다.
          이 화면은 기간을 바꿀 때 차트를 새로 만들어서 이전 구간이
          물려지지는 않는데, **「기억한다」 는 여기서도 해야 한다.** */
       try { chart.setView(chartView(periodId), initBarsOf(periodId)); }
