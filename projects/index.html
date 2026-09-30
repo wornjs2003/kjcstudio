@@ -696,6 +696,36 @@ let syncing = false;
 let pending = false;      /* 저장 중에 또 바뀌었는지 */
 let serverAlive = null;   /* null 아직 모름 · true 서버 저장됨 · false 브라우저만 */
 
+/* ══ 덮어쓰기를 막기 위한 두 값 (2026-09-30) ═══════════════════
+     여럿이 같은 보드를 쓰면 **읽고 쓰는 사이에 남이 쓴 것이 사라집니다.**
+     서버가 `updatedAt` 을 주고, 그것을 실어 보내면 어긋날 때 **409** 로 거절합니다.
+
+     `baseAt`   마지막으로 서버와 맞춘 시각 — PUT 에 실어 보냅니다
+     `baseDoc`  **그때의 내용.** 합칠 때 「무엇을 내가 바꿨나」 를 알려면
+                셋(그때 · 내 것 · 서버 것)이 필요합니다
+
+     **메모리에만 둡니다.** 새로고침하면 `loadFromServer()` 가 다시 채웁니다.
+     `localStorage` 에 두면 **탭이 여럿일 때 서로 덮어씁니다.**
+
+     ⚠️ **`baseDoc` 이 없으면 합칠 수 없으므로 충돌로 봅니다** — 조용히 덮는
+     것보다 낫습니다. */
+let baseAt = null;
+let baseDoc = null;
+
+function snapshot() {
+  return JSON.parse(JSON.stringify({ projects: projects, activeId: activeId }));
+}
+
+/* 키 순서에 안 흔들리게 견줍니다 — 합치는 과정에서 순서가 달라질 수 있습니다. */
+function stable(v) {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map(stable).join(",") + "]";
+  return "{" + Object.keys(v).sort().map(function (k) {
+    return JSON.stringify(k) + ":" + stable(v[k]);
+  }).join(",") + "}";
+}
+function same(a, b) { return stable(a) === stable(b); }
+
 function setStatus(text, cls) {
   savedTag.textContent = text;
   savedTag.className = "saved" + (cls ? " " + cls : "");
@@ -718,6 +748,100 @@ function scheduleSync() {
   if (syncing) { pending = true; return; }
   clearTimeout(syncTimer);
   syncTimer = setTimeout(syncToServer, SYNC_DELAY);
+}
+
+/* ══ 셋을 견주어 합칩니다 (2026-09-30) ═══════════════════════
+     `base`   마지막으로 서버와 맞춘 내용
+     `mine`   지금 내 화면
+     `theirs` 409 뒤 다시 읽은 서버 내용
+
+   **한쪽만 바꿨으면 그쪽을 씁니다.** 둘 다 바꿨으면 **충돌**이고, 그때만
+   사람에게 묻습니다 — 서로 다른 카드를 만진 경우가 대부분이라 조용히 풀립니다.
+
+   ⚠️ **자동으로 풀지 않는 것 하나** — 한쪽이 지웠는데 다른 쪽이 고친 것.
+   어느 쪽으로 풀어도 **지운 것이 되살아나거나 고친 것이 사라집니다.**
+   ══════════════════════════════════════════════════════════ */
+function pick3(b, m, t, conflicts, what) {
+  if (same(m, t)) return { v: m, ok: true };   /* 둘이 같다 */
+  if (same(b, m)) return { v: t, ok: true };   /* 나만 안 바꿨다 → 남의 것 */
+  if (same(b, t)) return { v: m, ok: true };   /* 남만 안 바꿨다 → 내 것 */
+  conflicts.push(what);
+  return { v: m, ok: false };
+}
+
+function byIdMap(list) {
+  const o = {};
+  (list || []).forEach(function (x) { if (x && x.id) o[x.id] = x; });
+  return o;
+}
+
+/* 살아남은 항목의 **순서**도 셋으로 견줍니다. 끌기로 순서를 바꾸므로
+   순서 자체가 데이터입니다. */
+function pickOrder(bIds, mIds, tIds, keep, conflicts, what) {
+  function only(ids) { return ids.filter(function (id) { return keep[id]; }); }
+  const b = only(bIds), m = only(mIds), t = only(tIds);
+  let base;
+  if (same(m, t)) base = m;
+  else if (same(b, m)) base = t;
+  else if (same(b, t)) base = m;
+  else { conflicts.push(what + "의 순서"); base = m; }
+  /* 어느 쪽에도 안 들어간 것(새로 들어온 것)을 뒤에 붙입니다 */
+  const seen = {};
+  base.forEach(function (id) { seen[id] = 1; });
+  Object.keys(keep).forEach(function (id) { if (!seen[id]) base.push(id); });
+  return base;
+}
+
+function mergeList(bList, mList, tList, conflicts, label, mergeOne) {
+  const B = byIdMap(bList), M = byIdMap(mList), T = byIdMap(tList);
+  const keep = {}, out = {};
+  const ids = {};
+  [bList, mList, tList].forEach(function (l) {
+    (l || []).forEach(function (x) { if (x && x.id) ids[x.id] = 1; });
+  });
+
+  Object.keys(ids).forEach(function (id) {
+    const b = B[id], m = M[id], t = T[id];
+    const name = label + " 「" + ((m || t || b || {}).name || (m || t || b || {}).text || id) + "」";
+    /* 둘 다 살아 있으면 안쪽까지 합칩니다 */
+    if (m && t && mergeOne) {
+      const one = mergeOne(b, m, t, conflicts, name);
+      if (one) { keep[id] = 1; out[id] = one; }
+      return;
+    }
+    const r = pick3(b, m, t, conflicts, name);
+    if (r.v) { keep[id] = 1; out[id] = r.v; }
+  });
+
+  const order = pickOrder(
+    (bList || []).map(function (x) { return x.id; }),
+    (mList || []).map(function (x) { return x.id; }),
+    (tList || []).map(function (x) { return x.id; }),
+    keep, conflicts, label);
+  return order.map(function (id) { return out[id]; }).filter(Boolean);
+}
+
+/* 프로젝트 하나 — 카드 목록은 따로 합치고, 나머지 필드는 통째로 견줍니다 */
+function mergeProject(b, m, t, conflicts, name) {
+  const tasks = mergeList(b && b.tasks, m.tasks, t.tasks, conflicts, "작업", null);
+  function noTasks(x) {
+    if (!x) return x;
+    const c = {}; Object.keys(x).forEach(function (k) { if (k !== "tasks") c[k] = x[k]; });
+    return c;
+  }
+  const rest = pick3(noTasks(b), noTasks(m), noTasks(t), conflicts, name);
+  const out = {};
+  Object.keys(rest.v || {}).forEach(function (k) { out[k] = rest.v[k]; });
+  out.tasks = tasks;
+  return out;
+}
+
+function mergeDoc(base, mine, theirs) {
+  const conflicts = [];
+  const projectsOut = mergeList(base.projects, mine.projects, theirs.projects,
+                                conflicts, "프로젝트", mergeProject);
+  const act = pick3(base.activeId, mine.activeId, theirs.activeId, [], "보고 있던 프로젝트");
+  return { doc: { projects: projectsOut, activeId: act.v }, conflicts: conflicts };
 }
 
 function syncToServer() {
@@ -756,25 +880,50 @@ function loadFromServer() {
     })
     .then(function (body) {
       serverAlive = true;
+      /* **읽은 시각과 내용을 들고 있습니다.** 이것이 없으면 나중에 충돌이 났을 때
+         「무엇을 내가 바꿨나」 를 알 수 없습니다. */
+      baseAt = (body && body.updatedAt) || null;
 
       if (body && body.ok && body.data && Array.isArray(body.data.projects)) {
         projects = body.data.projects;
         if (body.data.activeId) activeId = body.data.activeId;
         if (!byId(activeId) && projects.length) activeId = projects[0].id;
+        baseDoc = snapshot();
         persistLocal();
         setStatus("서버에서 불러옴", "ok");
         render();
         return;
       }
 
-      /* 서버에 아직 아무것도 없으면, 이 브라우저에 있던 내용을 올려 둡니다 */
+      /* 서버에 아직 아무것도 없으면, 이 브라우저에 있던 내용을 올려 둡니다.
+         **그때의 base 는 「빈 것」** 입니다 — 올리는 것이 전부 내 변경입니다. */
+      baseDoc = { projects: [], activeId: null };
       setStatus("서버 연결됨", "ok");
       if (projects.length) scheduleSync();
     })
     .catch(function () {
       serverAlive = false;
+      /* **못 읽었으면 base 가 없습니다.** 남겨 두면 낡은 것으로 합치게 됩니다. */
+      baseAt = null;
+      baseDoc = null;
       setStatus("이 브라우저에만 저장됨", "warn");
     });
+}
+
+/* 충돌이 났을 때 — **조용히 덮지 않습니다.**
+   무엇이 사라지는지 양쪽에 적어, 모르고 고르지 않게 합니다. */
+function askConflict(conflicts) {
+  const list = conflicts.slice(0, 4).join(" · ")
+             + (conflicts.length > 4 ? " 외 " + (conflicts.length - 4) + "개" : "");
+  return ask({
+    title: "다른 곳에서 함께 바뀌었습니다",
+    desc: "같은 자리를 양쪽에서 고쳤습니다 — " + list
+        + "\n\n「서버 것으로」 를 고르면 여기서 방금 고친 것이 사라집니다."
+        + "\n「내 것으로」 를 고르면 다른 곳에서 고친 것이 사라집니다.",
+    okText: "서버 것으로",
+    cancelText: "내 것으로",
+    danger: true
+  });
 }
 
 /* ══════════════════════════════════════════
@@ -804,6 +953,9 @@ function ask(opts) {
     dlg.desc.textContent  = opts.desc || "";
     dlg.ask.textContent   = opts.ask || "";
     dlg.ok.textContent    = opts.okText || "확인";
+    /* 취소 쪽도 글자를 바꿀 수 있게 했습니다. 충돌 화면은 **고르는 자리**라
+       「취소」 로는 무엇이 일어나는지 알 수 없습니다. */
+    dlg.cancel.textContent = opts.cancelText || "취소";
     dlg.ok.className      = "btn " + (opts.danger ? "wreck" : "primary");
 
     if (opts.input) {
