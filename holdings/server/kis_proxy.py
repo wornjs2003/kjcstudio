@@ -2244,6 +2244,52 @@ def _prune_span_dupes():
     return n
 
 
+# 구간 중간부터 물어 **부분 누적**이 저장된 것을 한 번 다시 받는다.
+#
+# `floor_to_span` 이 2026-09-29 에 들어와 **앞으로 받을 것**은 온전해졌는데,
+# **이미 저장된 틀린 값은 그대로 남았다.** 재권님이 코스피 1993년 년봉에서
+# 찾으셨다 — 저가가 602.30 이어야 하는데 751.21 로 있었다.
+#
+# ⚠️ **저절로 안 고쳐진다.** 지수 봉을 받는 `fetch_index_candles` 를 **부르는
+# 화면 코드가 저장소에 하나도 없다** (`live.js` 의 `fetchIndexCandles` 를
+# 쓰는 곳 0곳 — 2026-09-17 에 큰 차트가 종목 캔들로 갈아탔다). 그래서
+# 「한 시간 뒤에 덮어써진다」 가 참이 아니었다.
+#
+# **겹침 치우기(`_prune_span_dupes`)와 다른 점** — 겹친 줄은 기계가 가려낼 수
+# 있지만 **값이 틀린 줄은 못 가려낸다.** 다시 받아 덮는 수밖에 없다.
+#
+# **한 번만 돈다.** 표를 남겨 두 번째부터 건너뛴다 — KIS 호출이라 매번 돌면
+# 재시작할 때마다 쌓인다. 값은 판 번호라, 나중에 같은 일이 또 필요하면
+# 올려서 다시 돌린다.
+INDEX_SPAN_FIX = "idxspan-fixed"
+INDEX_SPAN_FIX_VER = "1"
+
+
+def _refresh_index_spans(cfg):
+    """지수 년·월봉을 한 번 다시 받아 덮는다. 받은 봉 수를 낸다.
+
+    주봉·일봉은 하지 않는다 — **문제가 확인된 것만** 한다. 주봉은 그 주
+    월요일을, 일봉은 그날을 받으므로 구간 중간부터 물어도 안 어긋난다
+    (2026-09-29 실측 · 겹침 0).
+    """
+    if not cfg or _meta_get(INDEX_SPAN_FIX) == INDEX_SPAN_FIX_VER:
+        return 0
+    got = 0
+    for code, _name in INDEX_DEFS:
+        for period in SPAN_CUT:                     # Y · M
+            try:
+                now = datetime.now(KST)
+                bars = _index_bars_from_kis(
+                    cfg, code, period, now - timedelta(days=INDEX_SPAN[period]), now)
+                if bars:
+                    save_candles(code, period, bars)
+                    got += len(bars)
+            except Exception:
+                pass                                # 하나 실패해도 나머지는 간다
+    _meta_set(INDEX_SPAN_FIX, INDEX_SPAN_FIX_VER)
+    return got
+
+
 def db_init():
     with _db_lock, db_conn() as conn:
         for sql in SCHEMA:
@@ -3731,6 +3777,15 @@ def main():
             print("  겹친 봉 정리: 월·년봉에서 %d줄을 치웠습니다" % _dupes)
     except Exception as e:
         print("  겹친 봉 정리: 건너뜁니다 (%s)" % type(e).__name__)
+
+    # 부분 누적으로 저장된 지수 년·월봉을 한 번 다시 받는다 (위 주석 참조).
+    # **한 번만 돈다.** 두 번째부터는 표를 보고 건너뛴다.
+    try:
+        _fixed = _refresh_index_spans(cfg)
+        if _fixed:
+            print("  지수 봉 정리: 년·월봉 %d개를 다시 받았습니다" % _fixed)
+    except Exception as e:
+        print("  지수 봉 정리: 건너뜁니다 (%s)" % type(e).__name__)
 
     if SLOW:
         print("  느린 모드  : 시세 %d초 · 미리받기/공시/뉴스수집 **끔** (--slow)"
