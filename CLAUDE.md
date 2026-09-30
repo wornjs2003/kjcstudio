@@ -2824,7 +2824,7 @@ AI 작업 보드도 **화면 쪽은 여전히** 브라우저 하나에만 저장
 
 | 파일 | 올라가는 Worker |
 |---|---|
-| `holdings/worker/kis-worker.js` | `kjc-kis-proxy` |
+| `holdings/worker/kis-worker.js` | **`kjc-kis-kv`** (문서에 `kjc-kis-proxy` 로 적혀 있었으나 실제는 이것 — 2026-09-30 확인) |
 | `projects/worker/board-api.js` | `kjc-board-api` |
 
 붙여넣은 뒤 **맨 아래로 내려 끝이 `};` 인지 본다.** 중간에 잘리면 워커가

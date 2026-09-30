@@ -127,7 +127,52 @@ line2="$line2${X}"
 printf '%b\n' "$line2"
 fi
 
-# ── 셋째 줄: 주간 한도 사용률 ────────────────────────────────
+# ── 셋째 줄: 컨텍스트 게이지 ─────────────────────────────────
+#
+# 재권님 지시 (2026-09-30) — 「컨텍스트 게이지 추가해줘. 주간 한도를 뒤로
+# 밀고 그 앞에 배치해줘」.
+#
+# **값은 이미 계산되어 온다.** 우리가 토큰을 세지 않는다 —
+# `context_window.used_percentage` 를 그대로 쓴다 (공식 문서 확인).
+#
+#     context_window.used_percentage      쓴 비율
+#     context_window.context_window_size  최대치 (모델마다 다르다 — 1M 짜리가 있다)
+#
+# **모양은 주간 한도와 같게 맞춘다.** 퍼센트 + 막대. 한 화면에 둘이 나란히
+# 있는데 모양이 다르면 견주기 어렵다.
+ctx=$(printf '%s' "$STDIN_JSON" | "$PY_BIN" -c "
+import sys, json
+try:
+    d = json.load(sys.stdin).get('context_window') or {}
+    pct = d.get('used_percentage')
+    if pct is None:
+        print('||'); raise SystemExit
+    pct = int(float(pct))
+    size = d.get('context_window_size') or 0
+    # 최대치를 사람이 읽는 단위로. 값을 박지 않고 계산한다
+    cap = ('%dM' % round(size / 1000000)) if size >= 1000000 else \
+          ('%dk' % round(size / 1000)) if size >= 1000 else str(size)
+    filled = pct * 10 // 100
+    print('%d|%s|%s' % (pct, '#' * filled + '-' * (10 - filled), cap))
+except Exception:
+    print('||')
+" 2>/dev/null)
+
+cpct=${ctx%%|*}
+crest=${ctx#*|}
+cbar=${crest%%|*}
+ccap=${crest#*|}
+
+if [ -n "$cpct" ]; then
+  C=$G
+  [ "$cpct" -ge 70 ] && C=$Y
+  [ "$cpct" -ge 90 ] && C=$R
+  printf '%b\n' "      ${D}컨텍스트${X} ${C}${cpct}%${X} ${D}[${cbar}]  ${ccap} 중${X}"
+else
+  printf '%b\n' "      ${D}컨텍스트 --${X}"
+fi
+
+# ── 넷째 줄: 주간 한도 사용률 ────────────────────────────────
 #
 # 재권님 지시 (2026-09-22) — 「주간 사용량을 보고싶은데 **이것만** 추가할수있나?」
 # 위 두 줄은 그대로 두고 아래에 붙인다.

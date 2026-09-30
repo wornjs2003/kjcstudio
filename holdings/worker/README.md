@@ -25,6 +25,17 @@ KIS 접근토큰은 24시간짜리인데 1분에 한 번만 발급할 수 있습
 1. Cloudflare 대시보드 → **Workers & Pages**
 2. **Create application** → **Create Worker**
 3. 이름: `kjc-kis-proxy`
+
+   **⚠️ 실제로 돌고 있는 워커 이름은 `kjc-kis-kv` 다** (2026-09-30 확인).
+   대시보드 주소가 `…/workers/services/view/**kjc-kis-kv**/…` 이고,
+   거기에 `TELEGRAM_BOT_TOKEN`·`TELEGRAM_CHAT_ID` 가 들어 있다.
+
+   **바로 위 절의 KV 네임스페이스와 이름이 같다.** 두 절 모두 「3. 이름:」 으로
+   시작해서, 만들 때 앞 절 이름이 들어간 것으로 보인다 — **왜 그렇게 됐는지는
+   재보지 못했다.**
+
+   **동작에는 지장이 없다.** 다만 **이 문서를 보고 대시보드에서 찾으면 못 찾는다.**
+   찾을 때는 **`kjc-kis-kv`** 를 보면 된다.
 4. **Deploy** (기본 코드 그대로 일단 배포)
 5. 배포 후 **Edit code** 클릭
 6. 편집기 내용을 전부 지우고, `kis-worker.js` 전체를 붙여넣기
