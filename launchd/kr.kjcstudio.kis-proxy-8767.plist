@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kr.kjcstudio.kis-proxy-8767</string>
+
+  <!-- 중간서버(staging). 「세 자리로 나눈다」 의 검수 자리다.
+       맥으로 옮긴 뒤 이것이 안 떠서 **검수 화면이 통째로 막혀 있었다**
+       (2026-09-29 실측 — 8767 이 `000`, 연결 안 됨).
+
+       ⚠️ KJC_ROLE 을 **일부러 안 넣었다.** 8765 와 같다 —
+       넣으면 재부팅마다 텔레그램·KV 가 켜진다. 그것은 「켜기」 다.
+
+       세션 서버 넷(8766·8768·8769·8770)은 **일부러 안 만들었다** —
+       「필요한 서버만 띄우고 다 내려」(2026-09-26 지시) 때문이다.
+       필요해지면 이 파일을 본떠 만든다. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>server/kis_proxy.py</string>
+    <string>--port</string>
+    <string>8767</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/kjc/work/kjc-staging/holdings</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/8767.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/8767.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
+    <key>PYTHONIOENCODING</key>
+    <string>utf-8</string>
+  </dict>
+</dict>
+</plist>

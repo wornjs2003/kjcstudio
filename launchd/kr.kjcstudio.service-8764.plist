@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kr.kjcstudio.service-8764</string>
+
+  <!-- **서비스방** — 폰이 보는 자리 (2026-09-30 지시).
+       재권님 말씀 — 「맥미니 내부에서 작업할곳과 실제 대이터를 나눌 필요는
+       있어뵈는데」 · 「우선 용량이 얼마안되니 전부 두벌로 간다」.
+
+       터널이 여기를 가리킨다. 작업방(`/Users/kjc/work/KJCStudio`)에서
+       아무리 고쳐도 **여기 파일이 안 바뀌면 폰도 안 바뀐다.**
+       옮기는 것은 `service-deploy.command` 가 하고, 재권님 지시로만 돈다.
+
+       ⚠️ **`--slow` 가 아니다.** 재권님이 실제로 보시는 화면이라
+       8765 와 같은 속도로 돈다.
+
+       ⚠️ **`KJC_ROLE` 을 일부러 안 넣었다.** 넣으면 재부팅마다
+       텔레그램·KV 가 켜진다. 그것은 「켜기」 이고 따로 승인받는다.
+       지금 발송은 8765 가 맡고 있다 — **둘 다 켜면 폰에 두 번 간다.** -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>server/kis_proxy.py</string>
+    <string>--port</string>
+    <string>8764</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/kjc/service/holdings</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/8764.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/8764.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
+    <key>PYTHONIOENCODING</key>
+    <string>utf-8</string>
+  </dict>
+</dict>
+</plist>

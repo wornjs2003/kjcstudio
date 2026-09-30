@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kr.kjcstudio.kis-proxy-8768</string>
+
+  <!-- 세션 서버 — 주식페이지_개발1 (`kjc-daily`).
+       2026-09-30 지시(「다 떠야할거같은데」)로 만들었다. 그 전에는
+       `startup.bat` 이 띄웠는데 **윈도우 전용이라 맥에서 통째로 비어
+       있었다** — 8766·8768·8769 셋이 없었고, 그래서 그 세션들이
+       「화면을 띄워서 보여드린다」 를 **지킬 수가 없었다.**
+
+       ⚠️ **`--slow` 다.** 확인용이라 KIS 를 느리게 부른다 —
+       시세 5분 · 미리받기/공시/뉴스수집 끔. 8765·8767 과 다르다.
+
+       ⚠️ **KJC_ROLE 을 일부러 안 넣었다.** 넣으면 재부팅마다
+       텔레그램·KV 가 켜진다. 그것은 「켜기」 이고 따로 승인받는다.
+
+       예산은 재고 넣었다 (2026-09-30 실측) — `_shared_slot` 이
+       **여섯을 한 줄에 세우므로** 서버가 늘어도 초당 건수는 안 늘어난다.
+       쉬는 `--slow` 서버는 1시간에 열 몇 건이다. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>server/kis_proxy.py</string>
+    <string>--port</string>
+    <string>8768</string>
+    <string>--slow</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/kjc/work/kjc-daily/holdings</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/8768.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/8768.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
+    <key>PYTHONIOENCODING</key>
+    <string>utf-8</string>
+  </dict>
+</dict>
+</plist>
