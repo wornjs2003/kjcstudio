@@ -464,15 +464,35 @@ OVER_WINDOW = 60.0
 OVER_STEP = 0.10
 OVER_MAX = 3.0
 
+# ── 누적으로도 센다 (2026-09-30) ────────────────────────────────────
+#
+# 위 `_over_times` 는 **60초 창으로 잘린다.** 그래서 `overruns60s` 는
+# **「최근 60초에 넘었나」 까지만** 답한다 — **「오늘 한 번이라도 넘었나」 를
+# 답할 값이 없었다.**
+#
+# 간격을 늘리는 계산에는 창이 맞다(잠잠해지면 돌아와야 한다). **보는 값으로는
+# 창이 틀렸다** — 넘은 지 61초가 지나면 **없던 일이 된다.**
+#
+# 예산을 계산으로 정하는 구조에서는 **이 값이 계산이 맞았는지 볼 유일한
+# 자리**다. 창 안에서만 보면 「지금 안 넘고 있다」 와 「한 번도 안 넘었다」 가
+# 갈리지 않는다.
+#
+# **재시작하면 0 이다** — `totalCalls` 와 같은 뜻의 누적이다.
+_over_total = 0
+_over_last_at = None
+
 
 def note_overrun():
     """`EGW00201` 이 났다고 적는다. `kis_get` 이 부른다."""
+    global _over_total, _over_last_at
     now = time.time()
     _over_times.append(now)
+    _over_total += 1
+    _over_last_at = now
     while _over_times and _over_times[0] < now - OVER_WINDOW:
         _over_times.pop(0)
-    sys.stderr.write("  [KIS] **한도 초과(EGW00201)** — 최근 %d초에 %d번\n"
-                     % (int(OVER_WINDOW), len(_over_times)))
+    sys.stderr.write("  [KIS] **한도 초과(EGW00201)** — 최근 %d초에 %d번 · 누적 %d번\n"
+                     % (int(OVER_WINDOW), len(_over_times), _over_total))
 
 
 def _gap_now():
@@ -643,6 +663,10 @@ def usage_stats():
         # ㉡ **넘은 횟수와 지금 간격** — 화면이 이것을 보면
         # 「넘고 있다」 를 알 수 있다.
         "overruns60s": len(_over_times),
+        # **누적.** 창 안에서만 보면 「지금 안 넘고 있다」 와 「한 번도 안
+        # 넘었다」 가 안 갈린다. 재시작하면 0 이다
+        "overrunsTotal": _over_total,
+        "overrunLastAt": _over_last_at,
         "gapNowSec": round(_gap_now(), 4),
         "sharedQueue": _shared_fail == 0,
         "cacheHits": _stats["cache_hits"],
