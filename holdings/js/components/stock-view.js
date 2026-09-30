@@ -97,7 +97,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
   let dead = false;
 
   /* ── 헤더 ─────────────────────────────── */
-  function paintHead(live) {
+  function paintHead(liveRaw) {
     paintIcon($('#kh-ic'), stock);
     setText('#kh-name', stock.name);
     setText('#kh-code', stock.code);
@@ -106,12 +106,32 @@ export function mountStockView(root, stock, { onBack } = {}) {
     const sub = $('#kh-price-sub');
     if (!price) return;
 
-    if (!live) {
+    if (!liveRaw) {
       price.className = 'kh-price kh-num kh-mut';
       price.textContent = '불러오는 중';
       if (sub) sub.textContent = '';
       return;
     }
+
+    /* ── 차트 머리줄이 이미 받아 둔 단건 값을 합친다 (2026-09-30 지시) ──
+     *
+     * 재권님 말씀 — 「모달에 있는건 가져와야지 왜 안가져오고있지?」.
+     *
+     * 이 함수가 받는 것은 **카드에서 오는 멀티 조회** 값이라
+     * 시가총액·52주·PER·PBR 이 **아예 없다**(`/api/kis/quotes` 11필드).
+     * 그래서 전부 `—` 로 그려졌고, **바로 아래 차트 머리줄에는 같은 값이
+     * 나오고 있었다** — 거기는 단건(`/api/kis/price`)을 따로 받는다.
+     *
+     * **새로 받지 않는다.** 그 값을 `detail.full()` 로 가져다 쓴다 —
+     * 증권사 호출이 안 는다.
+     *
+     * **단건을 뒤에 놓는 것이 핵심이다.** 앞에 놓으면 멀티가 덮어
+     * 다시 `—` 가 된다 — 2026-09-30 에 카드 시세가 올 때마다 이 함수가
+     * 불리게 고쳤으므로(`852ab34`) **한 번 채우고 마는 방식은 안 듣는다.**
+     * `stock-detail.js` 의 `paint()` 가 쓰는 그 방식 그대로다. */
+    if (typeof detail !== 'undefined' && detail) detail.update(liveRaw);
+    const one = (typeof detail !== 'undefined' && detail && detail.full) ? detail.full() : null;
+    const live = one ? { ...liveRaw, ...one } : liveRaw;
     /* 그 값으로 차트의 맨 오른쪽 막대도 갱신한다 (2026-09-30 지시 — 「4번」).
        봉을 다시 받지 않는다. 자세한 것은 `chart.js` 의 `updateLast` 주석. */
     if (chart) chart.updateLast(live);
@@ -123,8 +143,6 @@ export function mountStockView(root, stock, { onBack } = {}) {
       sub.className = 'kh-price-sub kh-num ' + cls;
       sub.textContent = '어제보다 ' + fmtDelta(live.amt, live.pct);
     }
-
-    if (typeof detail !== 'undefined' && detail) detail.update(live);
 
     setHtml('#kh-r1',  rangeBar(live.low, live.high, live.price));
     setHtml('#kh-r52', rangeBar(live.low52, live.high52, live.price));
