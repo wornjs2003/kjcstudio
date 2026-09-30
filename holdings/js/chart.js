@@ -191,6 +191,33 @@ const IND_WARMUP = [
 
 export const BARS_FOR_IND = VISIBLE_BARS + Math.max(...IND_WARMUP);
 
+/* 기간마다 **받아올** 봉 수. 처음 보이는 개수(`initBars`)와 다른 값이다.
+ *
+ * **한 곳에만 둔다** — 2026-09-30 지시 「모달과 카드는 봉수가 다르면 안돼
+ * 정보는 같아야돼」. 그 전에는 카드(`home.js` 의 `BIG_LIMIT`)와 모달
+ * (`stock-view.js`)이 **각자 값을 들고 있어서 일봉만 400 ↔ 320 으로 갈렸다.**
+ * 같은 종목·같은 기간인데 두 화면이 다른 개수를 받았다.
+ *
+ * 그래서 `fetchCandles` 가 **개수를 인자로 받지 않는다.** 부르는 쪽이 줄 수
+ * 없으면 갈릴 자리가 없다 — 「같은 값은 한 곳에만 둔다」. 400 으로 맞추는
+ * 것만으로는 **예외를 둘 수 있는 자리가 양쪽에 그대로 남는다.**
+ *
+ * 기본은 `BARS_FOR_IND`(선이 끊기지 않는 최소)이고 여기 적은 기간만 예외다.
+ *
+ *   일봉 400   **이 값이 보관량을 정한다.** 서버가 `limit` 까지 과거를 거슬러
+ *              받으므로(`kis_proxy.py` 의 `fetch_bars_back`), 320 으로 내리면
+ *              앞으로 모든 종목이 320 에서 멈춘다. 2026-09-30 실측 —
+ *              삼성전자만 401봉이고 나머지 관심종목은 107~108봉이다
+ *
+ * **년봉은 200일선이 안 그려진다.** 46봉(1985-12~)뿐이라 200봉을 못 채운다 —
+ * 그 칸은 범례가 「MA200 봉 부족」 으로 적는다. **고칠 수 있는 것이 아니다.**
+ */
+const FETCH_BARS = { '1d': 400 };
+
+export function barsToFetch(periodId) {
+  return FETCH_BARS[periodId] || BARS_FOR_IND;
+}
+
 function showLastBars(chart, total, bars = VISIBLE_BARS) {
   const ts = chart.timeScale();
   try {
@@ -511,13 +538,15 @@ const CANDLE_TTL_MS = 60_000;
 const CANDLE_MAX = 60;              // 이보다 쌓이면 오래된 것부터 버린다
 const _candleCache = new Map();
 
-/* 서버에서 캔들 가져오기. periodId 는 화면 버튼 값('1d','5m' 등) */
-/* limit 을 안 주면 **선이 끊기지 않는 최소**로 받는다.
-   240 이었는데 240-120=120 이라 200일선이 앞 79봉 비었다 (2026-09-29).
-   지금은 부르는 두 곳이 다 값을 주지만, 기본값이 틀린 채로 남아 있으면
-   다음에 안 주고 부르는 곳에서 조용히 다시 빈다. */
-export async function fetchCandles(code, periodId = '1d', limit = BARS_FOR_IND) {
+/* 서버에서 캔들 가져오기. periodId 는 화면 버튼 값('1d','5m' 등)
+ *
+ * **몇 개 받을지는 부르는 쪽이 정하지 않는다** — 위 `barsToFetch` 한 곳이
+ * 정한다. 전에는 인자였는데 두 화면이 서로 다른 값을 주어 일봉이 갈렸다.
+ * 240 이었던 기본값도 240-120=120 이라 200일선이 앞 79봉 비어 있었다
+ * (2026-09-29). **줄 수 있게 두면 언젠가 다시 갈린다.** */
+export async function fetchCandles(code, periodId = '1d') {
   const period = PERIOD_MAP[periodId] || 'D';
+  const limit = barsToFetch(periodId);
   const key = `${code}:${period}:${limit}`;
 
   const hit = _candleCache.get(key);

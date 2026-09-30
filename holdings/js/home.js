@@ -8,7 +8,7 @@
 import { WATCHLIST, brandColor, CHART_PERIODS, initBarsOf } from './data/market.js';
 import * as lastSeen from './store/last-seen.js';
 import { fetchCandles, createStockChart, maLegend,
-  addPrevCloseLine, PREV_CLOSE_NOTE, BARS_FOR_IND,
+  addPrevCloseLine, PREV_CLOSE_NOTE,
   savePeriodId, loadPeriodId,
   chartView, setChartView, chartStockChanged } from './chart.js';
 import { color } from './theme.js';
@@ -435,28 +435,6 @@ function dropBigChart() {
   if (bigChart) { bigChart.destroy(); bigChart = null; }
 }
 
-/* 큰 차트에 얼마나 담을까.
- *
- * **전에 이 주석이 「200일선까지 그려지게 한다」 고 적혀 있었는데 틀렸다.**
- * 5분봉이 180봉이라 200일선은 어느 종목에서도 안 그려지고 있었다
- * (2026-09-29 실측). 주석이 그렇게 적혀 있어서 의심할 계기가 없었다 —
- * 「설명이 이미 있으면 의심할 계기조차 없다」 그대로다.
- *
- * 개수는 chart.js 의 BARS_FOR_IND 가 정한다. 여기 숫자를 박으면 MA_LINES 나
- * IND_PERIOD 가 바뀔 때 또 어긋난다.
- *
- * **2026-09-29 에 년봉도 BARS_FOR_IND 로 바꿨다.** 40 으로 묶어 두었는데,
- * 서버가 날짜를 거슬러 받게 되면서 **46봉**(1985-12~)이 오게 됐다.
- * 320 을 달라고 해도 있는 만큼만 오므로 묶어 둘 이유가 없다.
- *
- *   일봉 400   BARS_FOR_IND(320) 보다 많아 그대로 둔다. 줄이면 오히려 짧아진다
- *
- * **년봉은 그래도 200일선이 안 그려진다.** 46봉뿐이라 200봉을 못 채운다 —
- * 그 칸은 범례가 「MA200 봉 부족」 으로 적는다. **고칠 수 있는 것이 아니다.**
- */
-const BIG_LIMIT = { '5m': BARS_FOR_IND, '1d': 400, '1w': BARS_FOR_IND,
-                    '1M': BARS_FOR_IND, '1y': BARS_FOR_IND };
-
 /* 머리줄의 이름·현재가. 차트보다 먼저 바뀌어야 한다 —
    봉을 받는 데 시간이 걸리는데 이름이 옛 종목인 채로 있으면
    다른 종목 차트를 보고 있는 것처럼 보인다. */
@@ -533,7 +511,7 @@ async function paintBigChart() {
 
   let candles, period;
   try {
-    ({ candles, period } = await fetchCandles(st.code, bigPeriod, BIG_LIMIT[bigPeriod] || BARS_FOR_IND));
+    ({ candles, period } = await fetchCandles(st.code, bigPeriod));
   } catch {
     if (bigChartKey !== key) return;        // 그 사이 다른 종목을 골랐다
     dropBigChart();

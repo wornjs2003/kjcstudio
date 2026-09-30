@@ -23,7 +23,7 @@
 
 import { CHART_PERIODS, initBarsOf } from '../data/market.js';
 import { fetchCandles, createStockChart, maLegend,
-  addPrevCloseLine, PREV_CLOSE_NOTE, BARS_FOR_IND,
+  addPrevCloseLine, PREV_CLOSE_NOTE,
   savePeriodId, loadPeriodId,
   chartView, setChartView, chartStockChanged } from '../chart.js';
 import { getMemo, setMemo } from '../store/memo.js';
@@ -193,7 +193,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
     if (chart) { chart.destroy(); chart = null; }
     host.innerHTML = `<div class="kh-soon"><div class="kh-soon-t">차트 불러오는 중…</div></div>`;
     try {
-      const { candles, meta, period } = await fetchCandles(stock.code, periodId, BARS_FOR_IND);
+      const { candles, meta, period } = await fetchCandles(stock.code, periodId);
       /* 그 사이 기간을 바꿨거나 모달을 닫았다 */
       if (dead || key !== periodId) return;
       if (!candles.length) throw new Error('빈 응답');
