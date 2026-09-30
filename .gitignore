@@ -15,6 +15,9 @@
 .claude/*
 # 단, 슬래시 커맨드는 세 세션과 두 PC 가 함께 쓰므로 저장소에 둔다
 !.claude/commands/
+# 스킬도 함께 쓴다. 「모달」 처럼 낱말이 나오면 세션이 스스로 꺼내 읽는 지침서라,
+# 한 PC 에만 있으면 다른 세션·다른 PC 가 그 룰을 아예 못 본다
+!.claude/skills/
 # 금지 명령(deny)도 두 PC 에 함께 적용돼야 하므로 저장소에 둔다.
 # 개인 설정은 settings.local.json 쪽이고 그것은 계속 무시한다
 !.claude/settings.json
