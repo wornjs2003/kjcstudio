@@ -294,6 +294,23 @@
 }
 .kh-vp-t.is-now { color: var(--kh-up); font-weight: 700; }
 
+/* ── 미래 영역 (2026-09-29 지시 — 「미래에 아직 안나온 값은 파란색으로」) ──
+   매물대와 **같은 층 방식**이다. 차트 canvas 뒤에 깔리고 .kh-pane-box 가
+   곱하기로 섞여 비쳐 보인다 (위 그 주석 참고). 위에 얹으면 축 글자가 가려진다.
+
+   **칸마다 하나씩 있다.** 가격 칸만 두면 아래 칸에서 띠가 끊겨 보인다.
+
+   **색은 여기서 정하지 않는다.** chart.js 의 COLOR.noData 가 theme.css 의
+   --kh-nodata-rgb 를 읽어 넣는다 — canvas 쪽과 한 값을 쓰려면 그래야 한다.
+   진하기도 거기(NODATA_ALPHA) 한 곳에 있다. */
+.kh-fut {
+  position: absolute; inset: 0; z-index: 0;
+  pointer-events: none; overflow: hidden;
+}
+/* left · width · bottom · background 는 chart.js 의 drawFuture 가 잰다.
+   봉의 자리에서 나오는 값이라 CSS 로는 알 수 없다 */
+.kh-fut-b { position: absolute; top: 0; }
+
 /* 칸 이름표 — 그림 위에 겹친다. 닫기 · 이름 · 지금 값 */
 .kh-pane-tag {
   position: absolute; left: 11px; top: 7px; z-index: 5;

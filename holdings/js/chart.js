@@ -40,7 +40,16 @@ const COLOR = {
   get rsi()      { return color('rsi'); },
   get rsiSig()   { return color('ma20'); },
   get rsiBand()  { return alpha('rsi-band', 0.10); },   // 30~70 띠 — 옅은 파랑
+
+  /* 값이 없는 구간 — **미래**(아직 안 온 봉). 2026-09-29 지시 —
+     「미래에 아직 안나온 값은 파란색으로」. 진하기는 아래 NODATA_ALPHA 한 곳에서 정한다 */
+  get noData()   { return alpha('nodata', NODATA_ALPHA); },
 };
+
+/* 미래 영역의 진하기. **가장 뒤에 깔리는 배경이라 차트의 파란 것 중 가장 옅다** —
+   하락 봉 1.0 · 매물대 VP_ALPHA · RSI 띠 0.10 · 여기.
+   재권님이 화면을 보시고 조절하실 값이라 **한 곳에만** 둔다. */
+const NODATA_ALPHA = 0.06;
 
 /* 그릴 이동평균선. 늘리려면 여기 한 줄과 theme.css·theme.js 의 색만 더한다.
    (2026-09-16 지시 — 5 · 20 · 60 · 200) */
@@ -809,6 +818,59 @@ export function createStockChart(container, candles, opts = {}) {
     vpLayer.innerHTML = out.join('');
   }
 
+  /* ── 미래 영역 — 아직 안 온 봉 자리를 옅은 파랑으로 깐다 (2026-09-29 지시) ──
+   *
+   * 재권님 말씀 — 「**미래에 아직 안나온 값은 파란색으로**」.
+   *
+   * **오른쪽은 늘 비어 있다.** 위 mkChart 의 `rightOffset: 4` 라 마지막 봉
+   * 오른쪽에 4봉만큼 자리가 남고, 끌거나 줄이면 더 넓어진다. 거기가 「아직
+   * 안 온」 자리다 — 없는 자리를 새로 만드는 것이 아니다.
+   *
+   * **칸마다 깐다.** 가격 칸만 칠하면 아래 거래량·MACD·RSI 에서 띠가 끊겨
+   * 보인다. 그 칸들도 미래에는 값이 없으므로 같이 칠하는 것이 맞다.
+   *
+   * **매물대와 같은 층 방식이다** — 차트 canvas **뒤**에 DOM 을 깔고,
+   * `.kh-pane-box` 가 곱하기로 섞여 비쳐 보인다 (stock.css 의 그 주석 참고).
+   * 위에 얹으면 봉과 축 글자가 가려진다.
+   *
+   * ⚠️ **왼쪽(과거쪽)은 칠하지 않는다.** 거기는 「정말 없는 것」 과 「아직 안
+   * 받은 것」 이 갈리는 자리다. 받아올 수 있는데 칠하면 **「없다」 고 거짓으로
+   * 알린다.** 오른쪽은 받을 방법이 없어 언제나 칠해도 맞는다 —
+   * **색 이름은 하나(`--kh-nodata-rgb`)지만 판정은 둘이다.**
+   */
+  function drawFuture() {
+    const total = candles.length;
+    for (const p of panes) {
+      const band = p.futB;
+      if (!band) continue;
+      const hide = () => { band.style.display = 'none'; };
+      if (total < 2) { hide(); continue; }
+
+      let x0;
+      try {
+        const ts = p.chart.timeScale();
+        const xLast = ts.logicalToCoordinate(total - 1);
+        const xPrev = ts.logicalToCoordinate(total - 2);
+        if (xLast == null || xPrev == null) { hide(); continue; }
+        x0 = xLast + (xLast - xPrev) / 2;          // 마지막 봉의 오른쪽 끝
+      } catch { hide(); continue; }                // 아직 그릴 준비가 안 됐다
+
+      /* 가격축 자리는 비운다 — 매물대와 같은 이유다(좌우 끝이 어긋난다) */
+      const right = Math.max(0, p.fut.clientWidth - AXIS_W);
+      if (!(x0 < right)) { hide(); continue; }     // 미래 자리가 없다
+
+      /* 시간축이 보이는 칸(맨 아래)은 그 띠를 덮지 않는다 — 날짜 뒤가 파래진다 */
+      let axisH = 0;
+      try { axisH = p.chart.timeScale().height() || 0; } catch { /* 없으면 0 */ }
+
+      band.style.display = '';
+      band.style.left = Math.max(0, x0) + 'px';
+      band.style.width = (right - Math.max(0, x0)) + 'px';
+      band.style.bottom = axisH + 'px';
+      band.style.background = COLOR.noData;
+    }
+  }
+
   /* 2초마다 다시 그린다 (지시). 차트를 끌거나 확대하면 그 자리에서 따라
      그린다 — 2초를 기다리면 봉과 어긋나 보인다. */
   function startProfileLoop() {
@@ -816,6 +878,9 @@ export function createStockChart(container, candles, opts = {}) {
     vpTimer = setInterval(() => {
       if (document.hidden) return;           // 안 보이는 탭은 쉰다
       drawProfile();
+      /* 미래 영역도 여기서 다시 잰다. **창 크기가 바뀌는 것을 잡는 자리가
+         이것뿐이다** — 확대·끌기는 위 구독이 잡지만 크기 변경은 구독이 안 온다 */
+      drawFuture();
     }, VP_REFRESH_MS);
   }
 
@@ -987,6 +1052,7 @@ export function createStockChart(container, candles, opts = {}) {
     }
 
     drawProfile();          // 매물대도 새 축에 맞춰 다시 그린다
+    drawFuture();           // 미래 영역도 (봉 자리가 바뀌었다)
     /* 라이브러리가 나중에 제 계산을 밀어넣으므로 한 박자 뒤에 잰다 */
     requestAnimationFrame(() => checkScale(scaleBefore));
 
@@ -1110,6 +1176,15 @@ export function createStockChart(container, candles, opts = {}) {
         vpLayer.className = 'kh-vp';
         el.appendChild(vpLayer);
       }
+      /* 미래 영역도 배경이라 차트보다 먼저 넣는다. **칸마다** 하나씩이다 —
+         가격 칸만 두면 아래 칸에서 띠가 끊겨 보인다 (drawFuture 주석 참고) */
+      const fut = document.createElement('div');
+      fut.className = 'kh-fut';
+      const futB = document.createElement('div');
+      futB.className = 'kh-fut-b';
+      futB.style.display = 'none';        // 자리를 잴 수 있을 때 drawFuture 가 켠다
+      fut.appendChild(futB);
+      el.appendChild(fut);
       el.appendChild(box);
       container.appendChild(el);
 
@@ -1119,7 +1194,7 @@ export function createStockChart(container, candles, opts = {}) {
       box.style.height = h + 'px';
 
       const ch = mkChart(box, h, idx === list.length - 1);
-      const item = { key: p.key, el, box, chart: ch };
+      const item = { key: p.key, el, box, chart: ch, fut, futB };
       panes.push(item);
 
       if (p.key === 'price') { drawCandle(ch); drawOverlay(ch); }
@@ -1161,6 +1236,9 @@ export function createStockChart(container, candles, opts = {}) {
         /* 봉이 움직이면 매물대도 그 자리에서 따라간다. 2초를 기다리면
            띠와 봉이 어긋나 보인다 (2026-09-18). */
         drawProfile();
+        /* 미래 영역은 **봉의 자리로 왼쪽 끝을 잡으므로** 확대·끌기마다
+           다시 잰다. 안 하면 봉만 움직이고 파란 자리가 남는다 */
+        drawFuture();
       });
 
       ch.subscribeCrosshairMove((param) => {
@@ -1183,7 +1261,8 @@ export function createStockChart(container, candles, opts = {}) {
     /* 봉이 자리를 잡은 뒤에 세로 범위를 굳힌다. 그려지기 전에 재면 값이 없다 */
     lockPriceRange();
     drawProfile();
-    requestAnimationFrame(() => { lockPriceRange(); drawProfile(); });
+    drawFuture();
+    requestAnimationFrame(() => { lockPriceRange(); drawProfile(); drawFuture(); });
     startProfileLoop();
     checkAlign();
   }
