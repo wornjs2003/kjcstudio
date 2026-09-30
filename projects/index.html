@@ -647,7 +647,11 @@ if (!byId(activeId) && projects.length) activeId = projects[0].id;
      2. 서버에는 1초 모아서 한 번 보냄 (타이핑마다 부르지 않으려고)
      서버가 없거나 실패해도 화면은 그대로 동작합니다.
    ══════════════════════════════════════════ */
-const API = "/api/board";
+/* 서버가 여는 문은 `/api/board/doc/<이름>` 이다. 전에는 `/api/board` 를 불러
+   **404·405** 가 났고 그래서 브라우저에만 남았다. `ai-work` 이 같은 자리에서
+   `/api/board/doc/ai-work` 를 쓰고 있어 이름만 다르게 맞춘다.
+   배포본 워커는 두 주소를 다 받으므로 이 변경으로 깨지지 않는다. */
+const API = "/api/board/doc/projects";
 const SYNC_DELAY = 1000;
 
 const savedTag = document.getElementById("savedTag");
