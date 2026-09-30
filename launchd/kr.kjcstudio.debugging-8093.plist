@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kr.kjcstudio.debugging-8093</string>
+
+  <!-- Debugging 보드 (8093). **`kis_proxy.py` 가 아니라 `debugging/server.py` 다.**
+       2026-09-30 승인(「되야지」)으로 만들었다.
+
+       8765 가 `/debugging/` 을 여기로 넘기고 이쪽도 반대로 넘긴다(대칭).
+       **이것이 안 뜨면 `/debugging/` 이 `503`** 이 된다 — 맥으로 옮긴 뒤
+       `debugging/debugging.bat` 이 윈도우 전용이라 그 자리가 비어 있었다.
+
+       ⚠️ **`KJC_NO_BROWSER=1` 이 필요하다.** `server.py` 가 뜰 때
+       `webbrowser.open` 을 부르는데, `RunAtLoad` 로 뜨면 **재부팅마다
+       크롬 창이 하나씩 생긴다.** 손으로 띄울 때는 여는 것이 맞아서
+       없애지 않고 환경변수로 갈랐다.
+
+       ⚠️ `.bat` 의 `taskkill` 줄은 **옮기지 않았다.** 그것은 돌고 있는
+       서버를 죽이고 시작하는데, `KeepAlive` 와 함께 두면 **자기가 자기를
+       죽이는 꼴**이 된다. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>server.py</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/kjc/work/KJCStudio/debugging</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/8093.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/8093.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
+    <key>PYTHONIOENCODING</key>
+    <string>utf-8</string>
+    <key>KJC_NO_BROWSER</key>
+    <string>1</string>
+  </dict>
+</dict>
+</plist>
