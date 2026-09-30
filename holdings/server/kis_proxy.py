@@ -3111,8 +3111,12 @@ class Handler(SimpleHTTPRequestHandler):
         name = urllib.parse.unquote(m.group(1))
         try:
             if self.command == "GET":
+                # **`updatedAt` 을 함께 낸다** (2026-09-30). 워커가 이미
+                # 그 모양이고(`board-api.js:270`), 화면은 이것을 들고 있다가
+                # PUT 에 돌려보내 **그 사이 남이 썼는지**를 가린다.
                 data = docstore.read_doc(name)
-                self._send_json({"ok": True, "doc": name, "data": data})
+                self._send_json({"ok": True, "doc": name, "data": data,
+                                 "updatedAt": docstore.doc_updated_at(name)})
                 return
 
             if self.command == "PUT":
@@ -3131,12 +3135,40 @@ class Handler(SimpleHTTPRequestHandler):
                 # `history=false` 로 끌 수 있다. 기본은 켠 쪽이다 —
                 # 안전한 쪽이 기본이어야 하고, 끄는 쪽이 밝히는 것이 맞다.
                 keep = body.get("history", True) is not False
-                wrote = docstore.write_doc(name, body["data"], history=keep)
+
+                # **내가 읽은 뒤에 남이 썼나** (2026-09-30).
+                #
+                # 보드를 여러 세션이 동시에 쓰는데 저장이 **문서를 통째로
+                # 덮는다.** 읽고 쓰는 사이에 남이 쓰면 **그 사람 것이 조용히
+                # 사라진다** — `d0b0b24`(카드 끌기)로 **순서를 바꿀 때마다**
+                # 전체를 PUT 하게 되면서 위험이 커졌다.
+                #
+                # **안 보내면 안 견준다.** 화면이 아직 안 고쳐진 동안에도
+                # 보드는 돌아야 한다 — 「늘 막는 검사는 검사가 아니다」 와
+                # 같은 자리다.
+                try:
+                    wrote = docstore.write_doc(name, body["data"], history=keep,
+                                               if_updated_at=body.get("updatedAt"))
+                except docstore.DocConflict as e:
+                    # **지금 값을 함께 준다.** 「충돌했다」 만 알리면 화면이
+                    # 다시 읽으러 한 번 더 나가야 한다.
+                    #
+                    # ⚠️ **얼마 뒤 다시 하라는 값을 여기 넣지 않는다.**
+                    # 그것을 응답에 박으면 화면이 그 숫자를 따르게 되어
+                    # 「캐시·주기·한도 값을 화면에 박지 않는다」 를 반대쪽에서
+                    # 어긴다. **무엇이 어긋났는지만 알린다.**
+                    self._send_json({"ok": False, "doc": name,
+                                     "error": "그 사이에 남이 썼습니다. 다시 읽고 쓰십시오.",
+                                     "conflict": True,
+                                     "updatedAt": e.current},
+                                    status=409)
+                    return
 
                 # **「안 썼다」 를 조용히 넘기지 않는다.** 빈 것을 보냈는데
                 # ok: true 만 오면 저장된 줄 안다.
                 self._send_json({"ok": True, "doc": name, "wrote": wrote,
-                                 "skipped": None if wrote else "빈 내용이라 쓰지 않았습니다"})
+                                 "skipped": None if wrote else "빈 내용이라 쓰지 않았습니다",
+                                 "updatedAt": docstore.doc_updated_at(name)})
                 return
 
             self._send_json({"ok": False, "error": "GET 또는 PUT 만 됩니다."}, status=405)
