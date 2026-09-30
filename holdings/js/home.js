@@ -38,6 +38,7 @@ import { mountMobileFold } from './components/mobile-fold.js';
    갈아탔다. 두 함수는 지수 화면을 만들 때 쓸 수 있게 live.js 에 남겨 뒀다. */
 import { fetchQuotes } from './data/live.js';
 import { apiFetch } from './data/api.js';
+import { everyServerMs } from './store/timing.js';
 
 /* 지수 띠에 놓을 칸.
  *
@@ -1846,7 +1847,11 @@ setInterval(() => { if (!document.hidden) sched.refresh(); }, 10 * 60 * 1000);
    맛보기로 몇 줄만 보여준다. 전체는 「더보기」 로 모달에서 본다 —
    **모달이 원본이고 이 칸은 거기서 덜어낸 일부다.** */
 const SIDE_NEWS_N = 5;
-const SIDE_NEWS_MS = 180_000;        // 서버 캐시와 같은 주기. 더 자주 물을 이유가 없다
+/* **서버가 정한다** (2026-09-30). `news.py` 의 `NEWS_TTL` 을 따른다 —
+   그 캐시를 고치면 화면이 저절로 따라온다. 아래 값은 **서버가 없을 때의 대체값**
+   이지 「화면이 정한 주기」 가 아니다 (`store/timing.js` 참고) */
+const SIDE_NEWS_KEY = 'news.NEWS_TTL';
+const SIDE_NEWS_FALLBACK_MS = 180_000;
 
 async function drawSideNews() {
   paintIssues($('kh-side-news'), await fetchIssues(),
@@ -1885,7 +1890,7 @@ async function drawSideNews() {
 bindNewsModal(document, { watch: WATCHLIST.map(s => s.code) });
 
 drawSideNews();
-setInterval(() => { if (!document.hidden) drawSideNews(); }, SIDE_NEWS_MS);
+everyServerMs(SIDE_NEWS_KEY, SIDE_NEWS_FALLBACK_MS, drawSideNews);
 /* 종목 뉴스는 이제 패널 셋 중 하나다(stock-panel.js). 여기서는 전체 공시만 본다 */
 setInterval(() => { dcAll.reload(); }, 5 * 60 * 1000);
 

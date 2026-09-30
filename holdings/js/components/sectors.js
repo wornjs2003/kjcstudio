@@ -38,6 +38,7 @@
 
 import { apiFetch } from '../data/api.js';
 import { fmtWon, fmtPct, dirClass } from '../utils/format.js';
+import { everyServerMs } from '../store/timing.js';
 
 /* **1·2·3위를 나란히 놓는다** (2026-09-22 지시 — 「지금뜨는 산업 하나에
    다 들어있어서 잘 보여지지가 않는데」 · 「3위까지만 봐도 댐」).
@@ -51,8 +52,12 @@ const TOP_GROUPS = 3;
    **칸 안에서 굴러가게** 한다 — 카드 높이는 안 바뀐다. */
 const STOCK_COUNT = 0;          // 0 이면 자르지 않는다
 
-/* 장중에는 계속 움직인다. 서버도 30초 캐시라 그보다 잦게 불러야 뜻이 없다 */
-const REFRESH_MS = 60 * 1000;
+/* **서버가 정한다** (2026-09-30). `kis_proxy` 의 `SECTOR_TTL` 을 따른다.
+   ⚠️ 여기 주석이 **「서버도 30초 캐시」 로 낡아 있었다** — 실제 `SECTOR_TTL` 은
+   60 이다. **주석이 값을 들고 있으면 이렇게 갈린다**, 그래서 서버에 묻는다.
+   아래는 서버가 없을 때의 대체값이다 (`store/timing.js` 참고) */
+const REFRESH_KEY = 'kis_proxy.SECTOR_TTL';
+const REFRESH_FALLBACK_MS = 60 * 1000;
 
 /* ── 기간 칩 (2026-09-23) ──────────────────────────────────────
  *
@@ -233,11 +238,11 @@ export function mountSectors(root) {
   }
 
   loadGroups();
-  setInterval(() => {
-    if (document.hidden) return;        // 안 보이는 탭은 쉰다
+  /* `everyServerMs` 가 `document.hidden` 을 함께 본다 */
+  everyServerMs(REFRESH_KEY, REFRESH_FALLBACK_MS, () => {
     for (const k in stockCache) delete stockCache[k];
     loadGroups();
-  }, REFRESH_MS);
+  });
 
   /* **모달에 넘겨줄 것** (2026-09-22 지시 — 「지금 뜨는 산업도 모달로」).
 

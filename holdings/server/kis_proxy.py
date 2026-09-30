@@ -567,6 +567,62 @@ def _rate_limit(path=None):
                      % (_stamp(), RUN_PORT, path or "?"))
 
 
+# ── 주기·캐시 값을 한 곳에서 모아 낸다 (2026-09-23 지시) ────────────────
+#
+# 「캐시·주기·한도 값을 화면에 박지 않는다 — 서버가 내주고 화면이 받는다」.
+# 화면에 박으면 **캐시를 고쳐도 화면이 안 바뀌고**, 고쳤는지 아닌지를
+# 눈으로는 못 찾는다.
+#
+# **목록을 적지 않는다.** 이름 규칙으로 훑으므로 상수가 늘어도 저절로 들어온다.
+# 목록을 적으면 그 목록이 **또 하나의 복제**가 되고 값이 늘 때마다 낡는다.
+#
+# **범위는 서버 폴더 전체다.** `kis_proxy.py` 하나만 보면 `dart.py` ·
+# `news.py` · `news_store.py` 의 값을 놓친다. **모듈 이름을 적는 대신
+# 「파일이 이 폴더 안에 있는 모듈」** 을 훑는다 — 파일이 늘어도 따라온다.
+#
+# **소스를 읽어 세지 않는다. 돌고 있는 값을 낸다** — `globals()` 를 본다.
+# 2026-09-23 에 `KIS_MIN_INTERVAL` 이 **소스로는 `1.0`, 실제로는 `0.2`** 였고
+# 그 줄의 주석까지 낡아 있어 **읽는 쪽이 두 번 속았다.**
+#
+# `_PER_SEC` 는 뺀다 — 그것은 **「초당 몇 건」 이지 「몇 초마다」** 가 아니다.
+# 그 값들은 아래 `usage_stats` 가 `budget…` 항목으로 따로 낸다.
+_TIMING_SUFFIX = ("_TTL", "_INTERVAL", "_SEC")
+
+
+def timing_values():
+    """서버 폴더 안 모듈의 주기·캐시 상수를 **돌고 있는 값**으로 모은다.
+
+    키는 `<모듈>.<이름>`, 값은 **초**다. 모듈 이름을 붙이는 것은
+    `POLL_INTERVAL` 처럼 흔한 이름이 두 파일에 생겨도 **어느 것인지
+    갈리게** 하기 위해서다 — 이름만 쓰면 나중에 조용히 덮인다.
+    """
+    here = os.path.dirname(_HERE)
+    out = {}
+    for name, mod in list(sys.modules.items()):
+        f = getattr(mod, "__file__", None)
+        if not f:
+            continue
+        try:
+            if os.path.dirname(os.path.abspath(f)) != here:
+                continue
+        except (OSError, ValueError):
+            continue
+        for k, v in list(vars(mod).items()):
+            # 밑줄로 시작하는 것은 **그 파일 안에서만 쓰는 값**이라 뺀다.
+            # `k.isupper()` 는 밑줄을 대문자로 치지 않아 `_CACHE_TTL` 이
+            # 통과한다 — 2026-09-30 실측에서 `secrets_guard._CACHE_TTL` 이
+            # 그렇게 섞였다. 화면이 쓸 값이 아니다.
+            if k.startswith("_") or not k.isupper() or k.endswith("_PER_SEC"):
+                continue
+            if not k.endswith(_TIMING_SUFFIX):
+                continue
+            # bool 은 int 라 먼저 거른다 — `SEND = True` 같은 것이 섞인다
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                continue
+            out["%s.%s" % (name, k)] = v
+    return out
+
+
 def usage_stats():
     """실제 호출량을 돌려준다 (재권님이 눈으로 확인하기 위한 용도)."""
     now = time.time()
@@ -593,6 +649,10 @@ def usage_stats():
         "totalCalls": _stats["kis_calls"],
         "priceCacheTtl": PRICE_CACHE_TTL,
 
+        # **주기·캐시 값 전부.** 위 `priceCacheTtl` 은 `status.html` 이
+        # 쓰고 있어 남겨 둔다 — 같은 값이 여기에도 들어오지만 **한 곳에서
+        # 나오므로 갈리지 않는다.** 화면을 옮기면 위 줄을 지운다.
+        "timing": timing_values(),
     }
 
 

@@ -35,6 +35,7 @@ import { mountStockPanel } from './stock-panel.js';
 import { mountStockDetail } from './stock-detail.js';
 import { mountIndicatorMenu } from './indicator-menu.js';
 import { apiFetch } from '../data/api.js';
+import { everyServerMs } from '../store/timing.js';
 
 /* 서버가 5분마다 공시를 받아 두므로 화면도 그 주기에 맞춘다 */
 const DISCLOSURE_RELOAD_MS = 5 * 60 * 1000;
@@ -43,8 +44,10 @@ const DISCLOSURE_RELOAD_MS = 5 * 60 * 1000;
    **확인용 서버(--slow)에서는 5분 캐시**라 값이 그만큼 묵어 보인다 — 정상이다. */
 const TICKS_RELOAD_MS = 5 * 1000;
 
-/* 일별 매매동향은 하루 한 번 바뀐다. 화면을 열어둔 채로도 날짜가 넘어가게 */
-const FLOW_RELOAD_MS = 10 * 60 * 1000;
+/* **서버가 정한다** (2026-09-30). `kis_proxy` 의 `INVESTOR_FLOW_TTL` 을 따른다.
+   아래는 서버가 없을 때의 대체값이다 (`store/timing.js` 참고) */
+const FLOW_RELOAD_KEY = 'kis_proxy.INVESTOR_FLOW_TTL';
+const FLOW_RELOAD_FALLBACK_MS = 10 * 60 * 1000;
 
 /* 체결을 몇 줄까지 보일 것인가. 서버는 30줄을 준다.
    **12줄이면 그 줄이 1행보다 76px 길어진다**(2026-09-21 지적 — "또 세로로
@@ -401,7 +404,8 @@ export function mountStockView(root, stock, { onBack } = {}) {
   loadTicks();
   loadFlow();
   const tickTimer = setInterval(() => { if (!document.hidden && !dead) loadTicks(); }, TICKS_RELOAD_MS);
-  const flowTimer = setInterval(() => { if (!document.hidden && !dead) loadFlow(); }, FLOW_RELOAD_MS);
+  const stopFlow = everyServerMs(FLOW_RELOAD_KEY, FLOW_RELOAD_FALLBACK_MS,
+                                 () => { if (!dead) loadFlow(); });
 
   return {
     /** 새 시세가 왔을 때 */
@@ -429,7 +433,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
       if (chart) { chart.destroy(); chart = null; }
       if (reloadTimer) { clearInterval(reloadTimer); reloadTimer = null; }
       clearInterval(tickTimer);
-      clearInterval(flowTimer);
+      stopFlow();                 // everyServerMs 가 준 멈추는 함수
       panel3.destroy();
       detail.destroy();
       /* **안 떼면 열 때마다 쌓인다** — 지표 메뉴는 `document` 에 손잡이 셋을
