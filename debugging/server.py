@@ -324,7 +324,22 @@ def main():
     print(out.strip())
     print()
 
-    threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+    # **띄워 놓고 도는 서버는 브라우저를 열지 않는다 (2026-09-30).**
+    #
+    # 맥에서 이 서버를 launchd 로 올리면서 생긴 자리다. `RunAtLoad` 로
+    # 뜨는데 여기서 브라우저를 열면 **재부팅마다 창이 하나씩 생긴다.**
+    #
+    # `startup.bat` 이 같은 이유로 고쳐진 적이 있다 — 그때 크롬 창이
+    # 세 개 남아 재권님이 **네 번 넘게** 「안 쓰는 창 닫아」 라고
+    # 말씀하셨다. **재권님 화면에 우리 흔적을 남기지 않는다.**
+    #
+    # 손으로 더블클릭해 띄울 때는 여는 것이 맞다 — 그때는 보려고 띄운
+    # 것이다. **그래서 없애지 않고 환경변수로 가른다.**
+    if os.environ.get("KJC_NO_BROWSER") != "1":
+        threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+    else:
+        print("  (브라우저는 열지 않습니다 — KJC_NO_BROWSER=1)")
+        print()
 
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     try:
