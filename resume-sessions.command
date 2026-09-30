@@ -58,6 +58,7 @@ open_one "주식페이지_개발1"  79392509-8e6d-4d89-83e6-924be9e42ef4
 open_one "주식페이지_개발2"  dbe9b967-1b4e-4624-824f-27c827bbf82c
 open_one "주식페이지_개발3"  9bf6d383-13c2-4a27-b4fd-ff388169b1f2
 open_one "엔진_개발"         71470664-9e0d-44f3-9a92-ddd0fe66dd6d
+open_one "qa"               12b7e713-afb0-4450-aabb-18b6544b14b4
 
 echo ""
 echo "  여덟을 열었습니다. 왼쪽 목록에서 고르십시오."
