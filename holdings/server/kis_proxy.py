@@ -3150,8 +3150,13 @@ class Handler(SimpleHTTPRequestHandler):
                     wrote = docstore.write_doc(name, body["data"], history=keep,
                                                if_updated_at=body.get("updatedAt"))
                 except docstore.DocConflict as e:
-                    # **지금 값을 함께 준다.** 「충돌했다」 만 알리면 화면이
-                    # 다시 읽으러 한 번 더 나가야 한다.
+                    # **`updatedAt` 만 준다. 데이터는 안 싣는다.**
+                    # 화면은 그것으로 **「내가 낡았다」 를 알 뿐**이고
+                    # **합치려면 다시 GET 해야 한다.**
+                    #
+                    # 전체를 실으면 무겁고, **그 순간 값이라 받아서 합치는
+                    # 사이 또 낡는다** — 여러 세션이 초 단위로 쓴다.
+                    # **다시 GET 이 그때의 최신**을 준다.
                     #
                     # ⚠️ **얼마 뒤 다시 하라는 값을 여기 넣지 않는다.**
                     # 그것을 응답에 박으면 화면이 그 숫자를 따르게 되어
