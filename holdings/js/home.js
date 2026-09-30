@@ -489,7 +489,9 @@ function paintBigPrice() {
  * 무엇을 그리나 — selectedCode 다. 목록에 마우스를 올리면 그것이 바뀌고
  * 여기가 따라온다. 없애 버린 미리보기 카드가 하던 일을, 더 큰 자리에서 한다.
  */
-async function paintBigChart() {
+/* `opt.fresh` 면 캔들 캐시를 건너뛴다 — 모달을 닫을 때 쓴다
+   (2026-09-30 지시 — 「5번」). 자세한 것은 `chart.js` 의 `fetchCandles` 주석. */
+async function paintBigChart(opt = {}) {
   const st = findStock(selectedCode);
   if (!st) return;
 
@@ -511,7 +513,7 @@ async function paintBigChart() {
 
   let candles, period;
   try {
-    ({ candles, period } = await fetchCandles(st.code, bigPeriod));
+    ({ candles, period } = await fetchCandles(st.code, bigPeriod, opt));
   } catch {
     if (bigChartKey !== key) return;        // 그 사이 다른 종목을 골랐다
     dropBigChart();
@@ -1678,7 +1680,11 @@ async function openStockModal(code, { push = true } = {}) {
          바꾸고 닫았는데 카드 단추가 월봉이었다). */
       bigPeriod = loadPeriodId(bigPeriod);
       paintBigPeriods();
-      paintBigChart();
+      /* **캐시를 건너뛰고 즉시 한 번 받는다** (2026-09-30 지시 — 「5번」).
+         모달을 보는 동안 카드 차트는 안 그려지는데, 그냥 부르면 캔들 캐시
+         (60초)에 걸려 **최대 1분 옛 그림**이 남는다. 닫는 순간 한 번이라
+         총량은 거의 안 는다. */
+      paintBigChart({ fresh: true });
 
       /* 뒤로가기로 닫힌 것이면 히스토리도 주소도 이미 제자리다 */
       if (historyMoved) return;

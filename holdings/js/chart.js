@@ -544,13 +544,24 @@ const _candleCache = new Map();
  * 정한다. 전에는 인자였는데 두 화면이 서로 다른 값을 주어 일봉이 갈렸다.
  * 240 이었던 기본값도 240-120=120 이라 200일선이 앞 79봉 비어 있었다
  * (2026-09-29). **줄 수 있게 두면 언젠가 다시 갈린다.** */
-export async function fetchCandles(code, periodId = '1d') {
+export async function fetchCandles(code, periodId = '1d', opt = {}) {
   const period = PERIOD_MAP[periodId] || 'D';
   const limit = barsToFetch(periodId);
   const key = `${code}:${period}:${limit}`;
 
-  const hit = _candleCache.get(key);
-  if (hit && Date.now() - hit.at < CANDLE_TTL_MS) return hit.value;
+  /* `fresh` 면 캐시를 건너뛴다 (2026-09-30 지시 — 「5번」).
+   *
+   * **개수 인자를 없앤 것과 다른 이야기다.** 개수는 **양쪽이 같아야 하는 값**
+   * 이라 줄 수 없게 했고(위 `barsToFetch`), 이것은 **부르는 상황**이다 —
+   * 「지금 당장 새로 받아야 하는 자리인가」. 값이 갈릴 여지가 없다.
+   *
+   * 쓰는 곳은 **모달을 닫을 때 하나**다. 모달을 보는 동안 카드 차트는
+   * 안 그려지는데, 닫고 나서 캐시(60초)에 걸리면 **최대 1분 옛 그림**이
+   * 남는다. 닫는 순간에 한 번이라 **총량은 거의 안 는다.** */
+  if (!opt.fresh) {
+    const hit = _candleCache.get(key);
+    if (hit && Date.now() - hit.at < CANDLE_TTL_MS) return hit.value;
+  }
 
   const r = await apiFetch(
     `/api/kis/chart?code=${code}&period=${period}&limit=${limit}`,
@@ -1487,6 +1498,47 @@ export function createStockChart(container, candles, opts = {}) {
     resetView(bars) {
       panes.forEach((p) => showLastBars(p.chart, candles.length, bars));
       checkAlign();
+    },
+
+    /* ── 현재가로 맨 오른쪽 막대만 갱신한다 (2026-09-30 지시) ────────
+     *
+     * 재권님이 고르신 길이다 — 봉을 다시 받지 않고 **이미 오는 현재가**로
+     * 진행 중인 막대의 종가·고가·저가만 고친다. **증권사 호출이 0건 는다.**
+     *
+     * **왜 이것으로 충분한가** — 5분봉은 5분에 한 번만 새 막대가 생긴다.
+     * 그 사이 움직이는 것은 **맨 오른쪽 막대 하나**이고 그 종가는 현재가와
+     * 같다. 봉 400개를 다시 받는 것은 **막대 하나를 위해 전부 다시 받는 것**
+     * 이었다. 일봉 이상도 같다 — 마지막 봉이 「오늘」 이다.
+     *
+     * **`build()` 를 부르지 않는다.** 그것이 이 함수의 값이다 — 지표·매물대·
+     * 범례를 다시 계산하면 막대 하나 고치는 비용이 전체 다시 그리기가 된다.
+     * 그래서 **지표는 다음 `setData` 때 따라온다.**
+     *
+     * **거래량은 건드리지 않는다.** 5분봉의 거래량은 그 5분간의 것이고
+     * `live.volume` 은 **하루 누적**이다. 섞으면 막대 하나가 하루치가 된다.
+     *
+     * `time` 을 기존 마지막 봉과 **같게** 만들어야 갱신이 된다 — 다르면
+     * 라이브러리가 **새 봉을 붙인다.** */
+    updateLast(live) {
+      if (!live || !Number.isFinite(live.price) || live.price <= 0) return;
+      const i = candles.length - 1;
+      const last = candles[i];
+      if (!last) return;
+      const px = live.price;
+      if (last.close === px) return;          // 안 움직였으면 그릴 것이 없다
+      const next = {
+        ...last,
+        close: px,
+        high: Math.max(last.high, px),
+        low: Math.min(last.low, px),
+      };
+      candles[i] = next;
+      try {
+        candleSeries.update({
+          time: toChartTime(next.ts, period),
+          open: next.open, high: next.high, low: next.low, close: next.close,
+        });
+      } catch { /* 칸이 아직 없다 */ }
     },
 
     /* ── 보던 자리를 기간마다 따로 들고 가기 (2026-09-29 지시) ──────

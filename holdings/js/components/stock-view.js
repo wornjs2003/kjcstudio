@@ -112,6 +112,10 @@ export function mountStockView(root, stock, { onBack } = {}) {
       if (sub) sub.textContent = '';
       return;
     }
+    /* 그 값으로 차트의 맨 오른쪽 막대도 갱신한다 (2026-09-30 지시 — 「4번」).
+       봉을 다시 받지 않는다. 자세한 것은 `chart.js` 의 `updateLast` 주석. */
+    if (chart) chart.updateLast(live);
+
     const cls = dirClass(live.pct);
     price.className = 'kh-price kh-num ' + cls;
     price.textContent = fmtWon(live.price);
