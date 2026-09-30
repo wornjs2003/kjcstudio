@@ -166,7 +166,16 @@ h1 {
 .p-fill.full { background: var(--pj-done); }
 
 /* ── 3칸 ─────────────────────────────── */
-.lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+/* 칸 개수를 여기 적지 않습니다 — `config.js` 의 `COLUMNS` 한 곳이 정합니다.
+   `repeat(3, 1fr)` 로 박혀 있어서 칼럼을 넷으로 늘리면 **두 줄로 쌓였습니다**
+   (2026-09-30). `grid-auto-flow: column` 은 **몇 개든 가로로** 놓습니다.
+   `minmax(0, 1fr)` 의 `0` 은 내용이 길어도 칸이 안 늘어나게 합니다. */
+.lanes {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 10px;
+}
 
 .lane {
   background: var(--pj-bg);

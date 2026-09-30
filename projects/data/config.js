@@ -12,10 +12,20 @@
    tone : 제목을 감싸는 배지 색 (neutral 회색 · accent 파랑 · done 초록)
           색 자체는 theme.css 에서 고칩니다 */
 const COLUMNS = [
-  { id: "todo",  label: "할 일",  tone: "neutral" },
-  { id: "doing", label: "진행중", tone: "accent"  },
-  { id: "done",  label: "완료",   tone: "done"    }
+  { id: "todo",   label: "할 일",  tone: "neutral" },
+  { id: "doing",  label: "진행중", tone: "accent"  },
+  { id: "review", label: "검수",   tone: "neutral" },
+  { id: "done",   label: "완료",   tone: "done"    }
 ];
+/* 「검수」 는 2026-09-30 지시로 넣었습니다 — "완료 앞에 검수라고 하나 더".
+   「주식 작업은 두 세션이 검수한다」 가 룰인데 보드에 그 자리가 없었습니다.
+
+   ⚠️ `tone` 이 「할 일」 과 같은 `neutral` 입니다. 배지 색이 셋(neutral·accent·done)
+   뿐이라 새 색을 쓰려면 `theme.css` 를 건드려야 하는데, 거기는 네 구역이 함께
+   쓰는 자리라 따로 여쭐 일입니다.
+
+   ⚠️ 칼럼을 더하면 요약의 「진행중」 에 들어갑니다 — `updateSummary()` 가
+   「가운데 칸들」 을 세기 때문이고, 주석에 그렇게 적혀 있어 의도대로입니다. */
 
 /* 작업 카테고리 — 카드 위쪽 색 띠로 표시됩니다
    색은 theme.css 에 정의된 값을 가져다 씁니다 (색 자체는 theme.css 에서 고치세요) */
