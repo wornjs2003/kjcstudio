@@ -164,14 +164,102 @@ def _mac_windows():
     r = _osa(_MAC_LIST)
     if r is None or r.returncode != 0:
         return []
+    # **핸들이 겹치면 「없던 창」 판정이 무너진다 (2026-09-30).**
+    #
+    # 전에는 핸들이 `프로세스|제목` 이었는데, **제목이 같은 창이 둘 있으면
+    # 두 핸들이 같은 문자열**이 된다. 집합에 넣으면 하나로 합쳐져서
+    # **새로 연 창이 「원래 있던 것」 으로 세어진다.**
+    #
+    # 실측 — 종목 화면을 두 번 열었더니 크롬 창 둘이 제목까지 똑같았고,
+    # 도구가 **「0개 일치」** 를 냈다. 창은 열렸는데 못 찾은 것이다.
+    # 윈도우는 핸들이 숫자라 겹칠 일이 없어 **맥에서만 나는 자리**다.
+    #
+    # 같은 것이 몇 번째인지를 붙여 가른다. `_front` 가 그 꼬리를 뗀다.
     out = []
+    seen = {}
     for line in r.stdout.splitlines():
         if "|" not in line:
             continue
         title = line.split("|", 1)[1]
-        if title.strip():
-            out.append((line, title))
+        if not title.strip():
+            continue
+        n = seen.get(line, 0)
+        seen[line] = n + 1
+        out.append(("%s\x00%d" % (line, n), title))
     return out
+
+
+_MAC_TABS = '''tell application "Google Chrome"
+  set out to ""
+  repeat with w from 1 to (count windows)
+    repeat with t from 1 to (count tabs of window w)
+      set out to out & w & "|" & t & "|" & (URL of tab t of window w) & linefeed
+    end repeat
+  end repeat
+  return out
+end tell'''
+
+
+def mac_find_tab(url):
+    """그 주소를 열어 둔 탭을 찾는다. `(창, 탭)` 또는 `None`.
+
+    **주소로 물으면 포트까지 갈린다.** 제목으로는 못 한다 —
+    「포트는 창 제목에 안 나온다」 가 이 도구의 오래된 구멍이었고,
+    같은 화면이 여섯 포트에 떠 있으면 **남의 포트 창을 앞으로 꺼냈다.**
+    """
+    r = _osa(_MAC_TABS)
+    if r is None or r.returncode != 0:
+        return None
+    for line in r.stdout.splitlines():
+        parts = line.split("|", 2)
+        if len(parts) == 3 and parts[2].rstrip("/") == url.rstrip("/"):
+            return int(parts[0]), int(parts[1])
+    return None
+
+
+def mac_open_url(url):
+    """**새 창으로 띄운다. 기존 탭은 건드리지 않는다.**
+
+    맥에서 크롬을 어떻게 부르든 한 가지씩 어긋났다 (2026-09-30 실측).
+
+        바이너리 + `--new-window`   **창이 안 늘어난다.** 크롬이
+                                   **「기존 브라우저 세션에서 여는 중입니다」**
+                                   를 내고 기존 창에 넘긴다 — 창 1 → 1
+        `/usr/bin/open <url>`      **기존 탭의 주소를 덮어쓴다.** 한 세션이
+                                   그것으로 **재권님이 보고 계시던 탭을
+                                   덮었다**
+
+**앞엣것은 「열렸는지」 가 그때그때 다르고, 뒤엣것은 재권님 화면을 망친다.**
+`make new window` 는 둘 다 아니다 — **반드시 새 창이고 기존 탭을 안 건드린다.**
+    """
+    # ⚠️ **`front window` 를 쓰지 않는다 — 옛 창을 덮는다 (2026-09-30 실측).**
+    #
+    # `make new window` 직후에도 **크롬의 `front window` 가 아직 옛 창**이라,
+    # 거기에 주소를 넣으면 **보고 계시던 탭이 그 주소로 바뀐다.**
+    # 새 창은 `chrome://newtab/` 로 남는다.
+    #
+    #     (넣기 전)  창1 = `8767/holdings/`
+    #     (넣은 뒤)  `daily.html` · `chrome://newtab/`
+    #                 └ **`/holdings/` 가 사라졌다**
+    #
+    # **새 창을 반환값으로 붙잡으면 그 자리가 없다.** 「기존 창을 건드리지
+    # 않는다」 는 이 한 줄에 걸려 있다.
+    r = _osa('tell application "Google Chrome"\n'
+             '  set w to make new window\n'
+             '  set URL of active tab of w to "%s"\n'
+             '  activate\n'
+             'end tell' % url.replace("\\", "\\\\").replace('"', '\\"'))
+    return r is not None and r.returncode == 0
+
+
+def mac_front_tab(win, tab):
+    """그 창의 그 탭만 앞으로. **다른 탭의 주소를 바꾸지 않는다.**"""
+    r = _osa('tell application "Google Chrome"\n'
+             '  set active tab index of window %d to %d\n'
+             '  set index of window %d to 1\n'
+             '  activate\n'
+             'end tell' % (win, tab, win))
+    return r is not None and r.returncode == 0
 
 
 def _front(hwnd):
@@ -182,6 +270,7 @@ def _front(hwnd):
     **맥 쪽을 빠뜨릴 자리가 없다.**
     """
     if IS_MAC:
+        hwnd = hwnd.split("\x00", 1)[0]        # 겹침을 가르려고 붙인 꼬리를 뗀다
         proc, _, title = hwnd.partition("|")
         q = lambda t: t.replace("\\", "\\\\").replace('"', '\\"')
         _osa('tell application "System Events"\n'
@@ -375,8 +464,30 @@ def raise_only(title_part, before, filename="", exe=""):
     **새 창 중에 없으면 아무것도 하지 않는 것이 맞다.**
     """
     old = {h for h, _ in before}
-    hits = [(h, t) for h, t in windows()
-            if title_part in t and h not in old]
+
+    # **주소는 제목으로 찾지 않는다 — 「열기 전에 없던 창」 으로 찾는다.**
+    #
+    # 2026-09-30 에 이 자리에서 막혔다. 화면 주소를 넘겼는데 도구가
+    # **「0개 일치」** 로 냈고, 받은 쪽은 그것을 **「안 띄워진다」** 로 읽었다.
+    # 실제로는 **브라우저가 열린 뒤 앞으로 꺼내기만 실패**한 것이었다.
+    #
+    #     HTTP 로 받은 <title>   「종목 — KJC Holdings」
+    #     실제 창 제목            「**삼성전자** — KJC Holdings」
+    #
+    # **JS 가 뜬 뒤에 제목을 바꾼다.** 힌트는 HTTP 로 받은 것이라
+    # **제목으로는 영영 못 맞춘다.**
+    #
+    # 제목의 뒤쪽(「KJC Holdings」)으로 맞추면 **네 화면·여섯 포트가 다
+    # 걸려** 오히려 남의 창을 집을 수 있다 — 「포트는 창 제목에 안 나온다」.
+    #
+    # **「없던 창」 은 제목이 필요 없고 더 안전하다.** 내가 열기 전에 없던
+    # 창은 내가 연 것이다. 그 2초 사이에 재권님이 창을 여시면 둘이 되어
+    # **아무것도 안 건드린다** — 「엉뚱한 창을 집는 것이 사고다」 가 그대로 산다.
+    if title_part is None:
+        hits = [(h, t) for h, t in windows() if h not in old]
+    else:
+        hits = [(h, t) for h, t in windows()
+                if title_part in t and h not in old]
 
     # 새 창이 안 생겼을 수 있다. 윈도우 11 메모장은 **탭으로 붙어서**,
     # 같은 파일을 세 번 열어도 창은 하나다 (2026-09-16 실측).
@@ -454,12 +565,19 @@ def main():
     if len(sys.argv) > 2:
         hint = sys.argv[2]
     elif is_url:
-        # **주소는 서버에서 `<title>` 을 받아 온다.** 주소의 파일명으로는
-        # 창을 못 찾는다 — 창에 뜨는 것은 `<title>` 이다.
-        hint = url_title(path)[:40]
-        if not hint:
-            print(f"  제목을 못 읽었습니다: {path}")
-            print("  서버가 떠 있는지 보시고, 창제목의 일부를 두 번째 인자로 주십시오")
+        # **주소는 제목으로 찾지 않는다.** `None` 이 「없던 창으로 찾아라」 다 —
+        # 아래 `raise_only` 의 주석에 왜인지 적어 두었다.
+        #
+        # 전에는 서버에서 `<title>` 을 받아 왔는데 **JS 가 뜬 뒤에 그것을
+        # 바꿔서** 영영 안 맞았다 (2026-09-30).
+        #
+        # **서버가 떴는지는 그대로 본다.** 안 떠 있으면 빈 창만 열리고,
+        # 그것을 「띄웠습니다」 로 알리면 재권님이 빈 화면을 보신다.
+        hint = None
+        if not url_title(path):
+            print(f"  서버가 답하지 않습니다: {path}")
+            print("  **띄우지 않았습니다** — 서버가 떠 있는지 보십시오.")
+            print("  (빈 창을 열고 「띄웠습니다」 로 알리지 않습니다)")
             return
     else:
         hint = doc_title(path)[:40] or os.path.splitext(os.path.basename(path))[0]
@@ -502,6 +620,27 @@ def main():
         for _, t in found[:5]:
             print(f"      {t}")
         print("  (하나만 남기고 X 로 닫으신 뒤 다시 불러 주십시오)")
+        return
+
+    # **맥에서 주소는 탭 주소로 찾고 새 창으로 띄운다.**
+    # 제목으로 찾던 것을 여기서 끝낸다 — 포트까지 갈리고, 이미 떠 있으면
+    # 창을 더 쌓지 않는다. 자세한 이유는 `mac_open_url` 주석에 있다.
+    if IS_MAC and is_url:
+        hit = mac_find_tab(path)
+        if hit:
+            if mac_front_tab(*hit):
+                print("  이미 떠 있어 앞으로만 꺼냈습니다: %s" % path)
+                print("  **바뀐 것이 있으면 그 창에서 Cmd+Shift+R 을 눌러 주십시오.**")
+                print("  (주소로 찾았으므로 **포트까지 그 화면이 맞습니다**)")
+            else:
+                print("  그 탭을 앞으로 못 꺼냈습니다 — 창을 더 열지 않습니다.")
+                print("  이미 떠 있습니다: %s" % path)
+            return
+        if mac_open_url(path):
+            print("  **새 창으로 띄웠습니다**: %s" % path)
+            print("  (기존 탭은 건드리지 않았습니다)")
+        else:
+            print("  띄우지 못했습니다 — 크롬이 응답하지 않습니다: %s" % path)
         return
 
     before = windows()
