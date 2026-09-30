@@ -1347,6 +1347,15 @@ function bindSort(el, p, t) {
        그 칸에 속한 자리마다 새 순서를 채우므로 **다른 칸 카드는 안 움직입니다.** */
     function drop() {
       const colId = t.column || COLUMNS[0].id;
+
+      /* ⚠️ `ids` 는 그 칸 카드를 **전부** 담아야 합니다.
+         걸러서 숨기는 기능(필터·검색·접힘·가상스크롤)이 생기면 **짧아지고**,
+         그러면 아래 `byId[ids[k++]]` 가 `undefined` 가 되어 `|| x` 로 원래 것이
+         들어갑니다 — **앞에서 옮겨간 카드가 두 자리에 남습니다.**
+
+         **지금은 안 걸립니다** — 이 화면에 `.task` 를 걸러내는 기능이 없습니다
+         (2026-09-30 검수 · 홈페이지_정리). 그런 기능을 넣는 날 여기를 함께 봅니다.
+         **아직 검사가 없습니다.** */
       const ids = [].slice.call(lane.querySelectorAll(".task")).map(function (x) {
         return x.dataset.id;
       });
