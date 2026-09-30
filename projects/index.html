@@ -211,6 +211,18 @@ h1 {
 }
 .task:hover { box-shadow: 0 0 0 2px var(--pj-accent); transform: translateY(-1px); }
 
+/* 끌어서 순서 바꾸기 (2026-09-30 지시)
+     마우스는 8px 움직이면, 손가락은 300ms 누르고 있으면 끌기가 시작됩니다.
+     손가락에서 바로 시작하면 **페이지 스크롤과 부딪힙니다** — 칸에 자체
+     스크롤이 없어 카드 위에서도 페이지가 스크롤돼야 하기 때문입니다. */
+.task.is-drag {
+  opacity: 0.45;
+  box-shadow: 0 0 0 2px var(--pj-accent);
+  transform: none;
+}
+.task.is-drag:hover { transform: none; }
+.lane.is-sorting .task { transition: none; }   /* 끄는 동안 카드가 출렁이지 않게 */
+
 .task-line { display: flex; align-items: flex-start; gap: 7px; }
 .task-text {
   flex: 1; font-size: 13px; font-weight: 500;
@@ -1256,8 +1268,117 @@ function buildTask(p, t, colIdx) {
 
   if (mini.children.length) el.appendChild(mini);
 
-  el.addEventListener("click", function () { openTask(p, t); });
+  el.dataset.id = t.id;
+  bindSort(el, p, t);
+
+  el.addEventListener("click", function (e) {
+    /* 끌고 난 직후의 click 은 무시합니다 — 안 그러면 놓자마자 상세창이 뜹니다 */
+    if (el.dataset.dragged === "1") { delete el.dataset.dragged; return; }
+    openTask(p, t);
+  });
   return el;
+}
+
+/* ══════════════════════════════════════════
+   카드를 끌어서 위아래 순서 바꾸기 (2026-09-30 지시)
+
+     "아래에 있는게 위로 가거나 위에 있는게 아래로 가도록"
+
+   **같은 칸 안에서만** 움직입니다. 옆 칸으로 옮기는 것은 카드의 ◀ ▶ 단추가
+   하던 일이고 그대로 둡니다.
+
+   **왜 `pointer*` 인가** — `mousedown` 은 손가락에서 안 옵니다. `ai-work` 은
+   HTML5 끌어놓기(`draggable`)를 쓰는데 **그것은 폰에서 동작하지 않습니다.**
+   `pointerdown` 하나로 마우스와 손가락이 함께 됩니다.
+
+   **왜 손가락만 300ms 인가** — 칸에 자체 스크롤이 없어 **카드 위에서도 페이지가
+   스크롤돼야 합니다.** 손가락이 닿자마자 끌기로 잡으면 스크롤을 뺏습니다.
+   그래서 손가락은 「누르고 있으면」, 마우스는 「8px 움직이면」 으로 갈랐습니다.
+   ══════════════════════════════════════════ */
+function bindSort(el, p, t) {
+  el.addEventListener("pointerdown", function (e) {
+    if (e.button) return;                                            /* 왼쪽 단추만 */
+    if (e.target.closest("button, input, textarea, label")) return;  /* 단추 위는 제외 */
+
+    const lane = el.parentNode;
+    const touch = e.pointerType === "touch";
+    const x0 = e.clientX, y0 = e.clientY;
+    let on = false, timer = null;
+
+    function begin() {
+      if (on) return;
+      on = true;
+      clearTimeout(timer);
+      el.classList.add("is-drag");
+      lane.classList.add("is-sorting");
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* 안 되면 그냥 갑니다 */ }
+    }
+
+    /* 포인터가 있는 자리로 카드를 끼워 넣습니다.
+       같은 칸의 다른 카드들과 **중심 높이**를 견줍니다. */
+    function place(y) {
+      const others = [].slice.call(lane.querySelectorAll(".task")).filter(function (x) {
+        return x !== el;
+      });
+      let before = null;
+      for (let i = 0; i < others.length; i++) {
+        const r = others[i].getBoundingClientRect();
+        if (y < r.top + r.height / 2) { before = others[i]; break; }
+      }
+      if (before) { if (el.nextSibling !== before) lane.insertBefore(el, before); }
+      else {
+        const last = others[others.length - 1];
+        if (last && last.nextSibling !== el) lane.insertBefore(el, last.nextSibling);
+      }
+    }
+
+    function move(ev) {
+      if (!on) {
+        const far = Math.abs(ev.clientY - y0) > 8 || Math.abs(ev.clientX - x0) > 8;
+        if (touch) { if (far) stop(); return; }   /* 손가락이 먼저 움직이면 스크롤입니다 */
+        if (!far) return;
+        begin();
+      }
+      ev.preventDefault();
+      place(ev.clientY);
+    }
+
+    /* 놓았을 때 — **화면 순서를 읽어 데이터에 옮겨 적습니다.**
+       그 칸에 속한 자리마다 새 순서를 채우므로 **다른 칸 카드는 안 움직입니다.** */
+    function drop() {
+      const colId = t.column || COLUMNS[0].id;
+      const ids = [].slice.call(lane.querySelectorAll(".task")).map(function (x) {
+        return x.dataset.id;
+      });
+      const byId = {};
+      p.tasks.forEach(function (x) { byId[x.id] = x; });
+      let k = 0;
+      p.tasks = p.tasks.map(function (x) {
+        if ((x.column || COLUMNS[0].id) !== colId) return x;
+        return byId[ids[k++]] || x;
+      });
+      el.dataset.dragged = "1";     /* 곧 올 click 을 막습니다 */
+      save();
+    }
+
+    function stop(ev) {
+      clearTimeout(timer);
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", stop);
+      el.removeEventListener("pointercancel", stop);
+      if (!on) return;
+      on = false;
+      el.classList.remove("is-drag");
+      lane.classList.remove("is-sorting");
+      try { el.releasePointerCapture(e.pointerId); } catch (err) { /* 이미 풀렸으면 넘어갑니다 */ }
+      if (ev && ev.type === "pointerup") drop();
+    }
+
+    if (touch) timer = setTimeout(begin, 300);
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", stop);
+    el.addEventListener("pointercancel", stop);
+  });
 }
 
 /* ══════════════════════════════════════════
