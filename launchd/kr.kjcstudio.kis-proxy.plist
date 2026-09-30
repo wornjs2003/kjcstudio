@@ -18,6 +18,8 @@
 	<key>ProgramArguments</key>
 	<array>
 		<string>/usr/bin/python3</string>
+		<!-- **`-u` 가 없으면 로그가 늦게 쓰인다** — 다른 plist 주석 참고 -->
+		<string>-u</string>
 		<string>server/kis_proxy.py</string>
 	</array>
 	<key>RunAtLoad</key>

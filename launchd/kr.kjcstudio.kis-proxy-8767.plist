@@ -18,6 +18,12 @@
   <key>ProgramArguments</key>
   <array>
     <string>/usr/bin/python3</string>
+    <!-- **`-u` 가 없으면 로그가 늦게 쓰인다.** 파이썬 stdout 이 블록
+         버퍼링이라 한참 뒤에야 파일에 닿는다. 2026-09-30 에 한 세션이
+         그것으로 **「브라우저가 API 를 안 불렀다」 로 읽을 뻔했다** —
+         실제로는 불렀는데 **아직 안 쓰인 것**이었다.
+         **로그를 보고 판단하는 세션이 같은 자리에 걸린다.** -->
+    <string>-u</string>
     <string>server/kis_proxy.py</string>
     <string>--port</string>
     <string>8767</string>
