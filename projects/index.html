@@ -220,6 +220,21 @@ h1 {
 }
 .task:hover { box-shadow: 0 0 0 2px var(--pj-accent); transform: translateY(-1px); }
 
+/* 카드 맨 위 색 막대 · 오른쪽 아래 담당 동그라미 (2026-09-30 지시)
+     "라벨 위에 약간 색이 있어서 잡고 이동가능하는 느낌과
+      거기에 누가하는지 어떤일인지 넣을수 있는거"
+   글자를 넣지 않습니다 — 재권님이 고르신 화면이 **색과 모양으로만** 가릅니다. */
+.task-tags { display: flex; gap: 4px; margin-bottom: 7px; }
+.task-tag  { height: 5px; width: 36px; border-radius: 3px; }
+.task-who {
+  position: absolute; right: 9px; bottom: 8px;
+  width: 22px; height: 22px; border-radius: 50%;
+  color: var(--kh-text-on-fill, #fff);
+  font: 600 11px/22px var(--pj-font-body); text-align: center;
+}
+/* 동그라미가 글을 가리지 않게 오른쪽을 비워 둡니다 */
+.task-line { padding-right: 26px; }
+
 /* 끌어서 순서 바꾸기 (2026-09-30 지시)
      마우스는 8px 움직이면, 손가락은 300ms 누르고 있으면 끌기가 시작됩니다.
      손가락에서 바로 시작하면 **페이지 스크롤과 부딪힙니다** — 칸에 자체
@@ -1155,6 +1170,31 @@ function stampText(t) {
   return "만든 날 " + fmt(t.createdAt) + " · 마지막 수정 " + fmt(t.updatedAt || t.createdAt);
 }
 
+/* 카드 글의 `[업무] [담당]` 을 읽습니다.
+   **데이터는 안 바꿉니다** — 화면에서만 떼어 막대와 동그라미로 옮깁니다.
+   `개념정의` 가 나중에 이것을 필드로 옮기기로 되어 있고, 그때는 아래
+   `tagsOf()` 만 필드를 보게 고치면 됩니다. */
+function tagsOf(t) {
+  const m = (t.text || "").match(/^\s*(?:\[[^\]]*\]\s*){1,2}/);
+  if (!m) return { work: null, who: null, rest: t.text || "" };
+  const tags = (m[0].match(/\[[^\]]*\]/g) || []).map(function (x) { return x.slice(1, -1).trim(); });
+  return { work: tags[0] || null, who: tags[1] || null, rest: (t.text || "").slice(m[0].length) };
+}
+
+/* 이름에서 색을 계산합니다 — 목록을 두지 않으려는 것입니다(`config.js` 주석).
+   같은 이름이면 늘 같은 색입니다. */
+function whoColor(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return WHO_COLORS[h % WHO_COLORS.length];
+}
+
+/* 끝이 숫자면 그 숫자, 아니면 첫 글자 — `개발1` → `1` · `개념정의` → `개` */
+function whoInitial(name) {
+  const m = name.match(/(\d)\s*$/);
+  return m ? m[1] : name.charAt(0);
+}
+
 function buildTask(p, t, colIdx) {
   fillTask(t);
 
@@ -1173,9 +1213,11 @@ function buildTask(p, t, colIdx) {
     line.appendChild(flag);
   }
 
+  const tg = tagsOf(t);
+
   const txt = document.createElement("div");
   txt.className = "task-text" + (t.text ? "" : " task-empty");
-  txt.textContent = t.text || "내용 없음";
+  txt.textContent = (tg.work ? tg.rest : t.text) || "내용 없음";
   line.appendChild(txt);
 
   const btns = document.createElement("div");
@@ -1276,6 +1318,30 @@ function buildTask(p, t, colIdx) {
   }
 
   if (mini.children.length) el.appendChild(mini);
+
+  /* 업무 색 막대 — 카드 맨 위에 넣습니다 (`insertBefore`) */
+  if (tg.work) {
+    const found = WORK_TAGS.filter(function (w) { return w.id === tg.work; })[0];
+    const bar = document.createElement("span");
+    bar.className = "task-tag";
+    /* 표에 없는 분류는 회색으로 둡니다 — 여섯째가 생겼다는 신호입니다 */
+    bar.style.background = found ? found.color : "var(--pj-border-strong)";
+    bar.title = tg.work + (found ? "" : " (색이 아직 없습니다)");
+    const bars = document.createElement("div");
+    bars.className = "task-tags";
+    bars.appendChild(bar);
+    el.insertBefore(bars, el.firstChild);
+  }
+
+  /* 담당 한 글자 동그라미 — 카드 오른쪽 아래 */
+  if (tg.who) {
+    const who = document.createElement("span");
+    who.className = "task-who";
+    who.style.background = whoColor(tg.who);
+    who.textContent = whoInitial(tg.who);
+    who.title = tg.who;
+    el.appendChild(who);
+  }
 
   el.dataset.id = t.id;
   bindSort(el, p, t);
