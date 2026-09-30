@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""관심종목 목록이 세 곳에서 같은지 대조한다.
+"""관심종목 목록이 여러 곳에서 같은지 대조한다.
 
-같은 8종목이 세 파일에 따로 적혀 있다. 언어도 실행 환경도 달라 합칠 수 없다.
+같은 목록이 여러 파일에 따로 적혀 있다. 언어도 실행 환경도 달라 합칠 수 없다.
+
+**개수를 여기 적지 않는다.** 자리가 없어질 수 있다 — 2026-09-30 에
+배포본 워커가 경로에서 빠졌다. 아래 `SOURCES` 가 세는 자리다.
 
     holdings/js/data/market.js    WATCHLIST          브라우저가 화면에 그린다
     holdings/server/dart.py       WATCH_CODES        로컬 서버가 텔레그램을 보낸다
@@ -69,13 +72,40 @@ def read_array(rel, start):
 
 
 def main():
-    lists = []
+    # **「파일이 없다」 와 「파일은 있는데 못 읽었다」 를 가른다 (2026-09-30).**
+    #
+    # 자리가 **없어질 수 있다.** 배포본 워커가 그 자리다 — 2026-09-30 에
+    # 터널로 넘어가면서 **워커가 경로에서 빠졌고**, 곧 지운다.
+    # 그때 이 도구가 **없는 파일을 찾아 영영 실패**하면, 멀쩡한 커밋이
+    # 그것 때문에 막힌다.
+    #
+    #     파일이 **없다**              →  **건너뛴다** (없어진 자리일 수 있다)
+    #     파일은 있는데 **못 읽었다**    →  **실패다** (배열 이름이 바뀌었다)
+    #
+    # ⚠️ **건너뛴 것을 조용히 넘기지 않는다.** 몇 곳을 실제로 댔는지 함께
+    # 낸다 — 「대상 0개를 `0` 으로 내지 않는다」 와 같은 자리다.
+    lists, skipped = [], []
     for name, rel, start in SOURCES:
         codes, err = read_array(rel, start)
         if err:
+            if err.startswith("파일이 없습니다"):
+                skipped.append((name, rel))
+                continue
             print("[읽기 실패] " + err)
             return 1
         lists.append((name, codes))
+
+    if skipped:
+        print("  건너뜁니다 — 파일이 없습니다:")
+        for name, rel in skipped:
+            print("      %-28s %s" % (name, rel))
+        print()
+
+    # **한 곳만 남으면 대조가 아니다.** 「같다」 고 낼 수 없다.
+    if len(lists) < 2:
+        print("  **댈 것이 %d곳뿐입니다 — 대조가 안 됩니다.**" % len(lists))
+        print("  자리가 정말 없어졌으면 이 도구의 `SOURCES` 에서 빼십시오.")
+        return 2
 
     base_name, base = lists[0]
     bad = False
@@ -96,10 +126,12 @@ def main():
                 print("  %s 에만 있음: %s" % (name, ", ".join(only_this)))
 
     print()
+    # **개수를 박지 않는다.** 「세 곳」 이 박혀 있었는데, 자리가 하나 빠지면
+    # 그 문구가 거짓이 된다. **댄 곳을 세어 쓴다.**
     if bad:
-        print("관심종목: 어긋났습니다. 세 곳을 같게 맞춰 주세요.")
+        print("관심종목: 어긋났습니다. %d곳을 같게 맞춰 주세요." % len(lists))
         return 1
-    print("관심종목: %d개, 세 곳 모두 같습니다." % len(base))
+    print("관심종목: %d개, %d곳 모두 같습니다." % (len(base), len(lists)))
     return 0
 
 
