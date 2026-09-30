@@ -52,12 +52,16 @@
 
 import { apiFetch } from '../data/api.js';
 import { dirClass } from '../utils/format.js';
+import { everyServerMs } from '../store/timing.js';
 
 /* 「5일」 에서 보여줄 날 수. 30일치가 오지만 칸이 좁다 */
 const DAYS_SHORT = 5;
 
-/* 다시 받는 주기. 일별 자료라 장중에 한 번 바뀐다 — 서버 캐시도 60초다 */
-const REFRESH_MS = 60 * 1000;
+/* **서버가 정한다** (2026-09-30). `kis_proxy` 의 `INVESTOR_TTL` 을 따른다.
+   아래는 **서버가 없을 때의 대체값**이다 (`store/timing.js` 참고).
+   ⚠️ `--slow` 서버에서는 그 값이 300 이라 **화면도 5분마다** 돈다 — 맞는 동작이다 */
+const REFRESH_KEY = 'kis_proxy.INVESTOR_TTL';
+const REFRESH_FALLBACK_MS = 60 * 1000;
 
 /* ── 장중 가집계는 **종목별로** 받는다 (2026-09-22) ──────────────
    처음에는 순매수 상위 목록(`investor-top`)으로 메웠는데, 그것은
@@ -305,7 +309,7 @@ export function mountInvestor({ box, tabs } = {}) {
     });
   }
 
-  timer = setInterval(() => { if (!document.hidden) load(); }, REFRESH_MS);
+  timer = everyServerMs(REFRESH_KEY, REFRESH_FALLBACK_MS, load);
 
   return {
     setCode(next) {
