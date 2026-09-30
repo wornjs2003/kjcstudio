@@ -3819,6 +3819,23 @@ def main():
                  (" · ".join("%02d:%02d" % t for t in news_store.DIGEST_SLOTS)
                   if _news_send else "쌓기만 — 메인(%d)에서만 보냅니다" % MAIN_PORT)))
 
+    # **공시 발송도 포트로 가린다** (2026-09-30 지시 — 워커를 걷어냈다).
+    #
+    # 그 전에는 `dart.NOTIFY_LOCAL` 을 통째로 끄고 배포본 워커가 보냈다.
+    # 사이트가 맥미니로 넘어오면서 **워커 Route 를 지웠으므로** 이제 여기가 보낸다.
+    #
+    # ⚠️ **`NOTIFY_LOCAL = True` 로 바꾸는 것만으로는 두 번 간다.**
+    # `--slow` 가 아닌 서버가 **둘**이고 둘 다 공시를 수집한다 —
+    # 2026-09-30 15:43 실측에서 **8765 와 8767 의 `lastReceivedAt` 이 2초 차이**였다.
+    # `dart.py:95` 에 「다시 켜기 전에 포트를 가리는 형태로 바꾼다」 가 적혀 있었고,
+    # 그것이 이 줄이다.
+    #
+    # **데일리·뉴스·신호와 같은 방식이다** — 넷 다 `is_sender()` 하나를 본다.
+    # 「룰은 하나다」 의 **같은 기준, 같은 구현**이다.
+    #
+    # **수집은 안 가린다.** 그 폴더 화면이 공시를 읽어야 한다 — 발송만 가른다.
+    dart.NOTIFY_LOCAL = is_sender(args.port)
+
     if SLOW:
         pass                 # 확인용 서버는 공시도 안 받는다 (위 주석 참고)
     elif dart.start_poller():
@@ -3833,7 +3850,7 @@ def main():
         if not dart.telegram_config():
             _al = "꺼짐 (secrets.json 의 telegram 없음)"
         elif not dart.NOTIFY_LOCAL:
-            _al = "꺼짐 (NOTIFY_LOCAL=False — 공시 알림은 배포본 워커가 보냅니다)"
+            _al = "쌓기만 — 메인(%d)에서만 보냅니다" % MAIN_PORT
         else:
             _al = "텔레그램 켜짐 (관심종목 %d개)" % len(dart.WATCH_CODES)
         print("  알림      : %s" % _al)
