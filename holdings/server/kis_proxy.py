@@ -3406,6 +3406,10 @@ class Handler(SimpleHTTPRequestHandler):
                 "ok": True,
                 "root": docstore.DOC_ROOT,
                 "docs": len(docstore.list_docs()),
+                # **돌고 있나를 눈으로 보는 자리** (2026-10-01). 저장본을
+                # git 으로 남기는데, 켜졌는지·쌓이는지를 여기서 본다.
+                # 주소나 문서 이름은 안 낸다 — 켜짐 여부와 개수만이다.
+                "git": docstore.git_status(),
             })
             return
 

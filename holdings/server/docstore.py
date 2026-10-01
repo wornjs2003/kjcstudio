@@ -65,6 +65,7 @@
 import io
 import json
 import os
+import subprocess
 import tempfile
 import threading
 from datetime import datetime
@@ -172,6 +173,124 @@ NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 DOC_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         "data", "docs")
 HISTORY_DIRNAME = "history"
+
+# ── 저장본을 git 으로 남긴다 (2026-10-01 지시) ──────────────────
+#
+# 재권님 지시 — 「동시에 저장할 때 덮어쓰이는 것을 git 으로 막는다」.
+#
+# ⚠️ **git 의 값은 「막는 것」 이 아니라 「되살리는 것」 이다** (2026-10-01 실측).
+# 막는 일은 `if_updated_at`(409)이 이미 한다 — 깨봐서 확인했다(낡은 값으로
+# 쓰면 409 가 나고 **값이 안 바뀐다**). git 으로 **합치는 것**은 재보니 값이
+# 작았다 — `git merge-file` 로 3-way merge 를 재니
+#
+#     메모만 서로 다른 카드에서 고침   →  **자동 병합** (양쪽이 다 산다)
+#     같은 카드를 둘이 고침            →  충돌
+#     **둘이 각각 새 카드를 만듦**      →  **충돌** ← 가장 흔하다
+#
+# 새 카드는 배열 끝에 붙어 **둘이 같은 줄을 고친다.** 그래서 합치기(C)는
+# 미뤘고, 여기서는 **되살리기**만 한다.
+#
+# **원격은 두지 않는다** — 「저장은 이 PC 안에만」. 맥미니에 백업서버가
+# 생기면 그때 정한다.
+#
+# **`history/` 는 담지 않는다.** git 이 그 일을 대신하므로 둘 다 담을 이유가
+# 없고, 2026-10-01 에 **177개 12MB** 라 첫 커밋이 통째로 커진다.
+# **지우는 것은 따로다** — git 이 도는 것을 확인하기 전에 지우면 **둘 다
+# 없는 순간**이 생긴다 (창구 판단 · 재권님께 여쭌 뒤).
+#
+# ⚠️ **`git add -A` 를 쓰지 않는다.** 저장소가 따로라 섞일 것이 없어도
+# **그 형태를 손에 익히지 않는다** — 「절대 쓰지 않는 명령」 그대로다.
+# 담을 파일을 **이름으로** 적는다. 의도도 그쪽이 정확하다.
+#
+# **실패해도 저장을 막지 않는다.** git 은 덤이고, 여기서 멈추면
+# **백업 실패가 저장 실패가 된다** — `history/` 복사가 이미 그 모양이다.
+GIT_ON = (os.environ.get("KJC_DOCS_GIT") or "1").strip().lower() not in (
+    "0", "false", "no", "off")
+GIT_TIMEOUT = 5
+_git_stat = {"commits": 0, "fails": 0, "lastError": None, "ready": None}
+
+
+def _git(args):
+    """`DOC_ROOT` 에서 git 을 부른다. 되면 True — **예외를 밖으로 안 낸다.**"""
+    try:
+        r = subprocess.run(["git"] + args, cwd=DOC_ROOT,
+                           capture_output=True, timeout=GIT_TIMEOUT)
+        return r.returncode == 0
+    except Exception as e:
+        _git_stat["lastError"] = type(e).__name__
+        return False
+
+
+def _git_ready():
+    """저장소가 없으면 만든다. **한 번만 돈다.**"""
+    if not GIT_ON:
+        return False
+    if _git_stat["ready"] is not None:
+        return _git_stat["ready"]
+    ok = False
+    try:
+        os.makedirs(DOC_ROOT, exist_ok=True)
+        if os.path.isdir(os.path.join(DOC_ROOT, ".git")):
+            ok = True
+        elif _git(["init", "-q", "."]):
+            _git(["config", "user.email", "board@kjcstudio.local"])
+            _git(["config", "user.name", "KJC Board"])
+            ign = os.path.join(DOC_ROOT, ".gitignore")
+            if not os.path.exists(ign):
+                io.open(ign, "w", encoding="utf-8", newline="\n").write(
+                    "# git 이 저장본을 남기므로 이 폴더는 담지 않는다 (2026-10-01)\n"
+                    "%s/\n" % HISTORY_DIRNAME)
+            names = [n + ".json" for n in list_docs()]
+            if names:
+                _git(["add", "--"] + names)
+            _git(["add", "--", ".gitignore"])
+            _git(["commit", "-q", "-m", "보드 첫 커밋 — 지금 상태"])
+            ok = True
+    except OSError as e:
+        _git_stat["lastError"] = type(e).__name__
+    _git_stat["ready"] = ok
+    return ok
+
+
+def _git_commit(name):
+    """그 문서만 담아 커밋한다. **`_write_lock` 안에서만 부른다** —
+    동시에 부르면 git 의 `index.lock` 이 부딪힌다.
+
+    **바뀐 것이 없으면 커밋이 실패하는데 그것은 정상이다** — 같은 내용을
+    다시 쓴 경우다. 그래서 `add` 만 보고 센다.
+    """
+    if not _git_ready():
+        return
+    if not _git(["add", "--", name + ".json"]):
+        _git_stat["fails"] += 1
+        return
+    if _git(["commit", "-q", "-m", "보드 저장 — %s" % name]):
+        _git_stat["commits"] += 1
+
+
+def git_status():
+    """`/api/board/health` 가 낸다 — **돌고 있나**를 눈으로 보는 자리다.
+
+    **커밋 수를 git 에게 직접 묻는다.** `_git_stat` 은 재시작하면 0 이 되는데,
+    그것만 내면 **「한 번도 안 돌았다」 와 「방금 떴다」 가 안 갈린다.**
+    """
+    out = {"on": GIT_ON, "ready": bool(_git_stat["ready"]),
+           "commitsThisRun": _git_stat["commits"],
+           "fails": _git_stat["fails"], "lastError": _git_stat["lastError"]}
+    if not GIT_ON:
+        return out
+    try:
+        r = subprocess.run(["git", "rev-list", "--count", "HEAD"],
+                           cwd=DOC_ROOT, capture_output=True,
+                           timeout=GIT_TIMEOUT, text=True)
+        out["commitsTotal"] = int(r.stdout.strip()) if r.returncode == 0 else None
+        r2 = subprocess.run(["git", "log", "-1", "--format=%cI"],
+                            cwd=DOC_ROOT, capture_output=True,
+                            timeout=GIT_TIMEOUT, text=True)
+        out["lastCommitAt"] = r2.stdout.strip() or None if r2.returncode == 0 else None
+    except Exception as e:
+        out["lastError"] = type(e).__name__
+    return out
 
 
 class DocNameError(ValueError):
@@ -332,7 +451,11 @@ def _write_locked(name, path, data, history, if_updated_at):
             # 백업 실패가 저장 실패가 된다.
             pass
 
-    return write_json_atomic(path, data)
+    wrote = write_json_atomic(path, data)
+    if wrote:
+        # **잠금 안이다.** 밖에서 부르면 동시 커밋이 `index.lock` 에서 부딪힌다.
+        _git_commit(name)
+    return wrote
 
 
 def list_docs(prefix=""):
