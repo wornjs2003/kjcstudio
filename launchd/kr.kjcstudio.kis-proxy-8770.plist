@@ -60,6 +60,11 @@
          `tools/check-kis-single.py` 가 대조한다. 값은 스킴 포함 · 끝에 `/` 없음. -->
     <key>KJC_KIS_UPSTREAM</key>
     <string>http://127.0.0.1:8765</string>
+    <!-- **보드도 8765 하나로 (2026-10-01 「보드 스위치 켜」).** /api/board/* 를 8765 로 넘긴다.
+         KIS 와 달리 **폴백이 없다** — 8765 가 안 떠 있으면 503. 두 보드로 갈라지지 않게.
+         받는 쪽(8765)은 보드용 스위치가 따로 없다 — 원래 보드를 받는 서버다. -->
+    <key>KJC_BOARD_UPSTREAM</key>
+    <string>http://127.0.0.1:8765</string>
   </dict>
 </dict>
 </plist>

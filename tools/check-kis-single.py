@@ -131,11 +131,14 @@ def check_plists():
         return None
     names = set()
     missing, differ, notinst, serve_missing, serve_wrong = [], [], [], [], []
+    per_plist = {}                                                  # 보내는 plist 마다 이름 집합
     for f in allk:
         env = plist_env(f)
-        send = [k for k in env if k.endswith("UPSTREAM")]          # 보내는 쪽
+        send = [k for k in env if k.endswith("UPSTREAM")]          # 보내는 쪽 (KIS · 보드 …)
         serve = [k for k in env if k.endswith("UPSTREAM_SERVE")]   # 받는 쪽
         names.update(send + serve)
+        if f not in mains:
+            per_plist[os.path.basename(f)] = frozenset(send)
         base = os.path.basename(f)
         if f in mains:
             if not serve:
@@ -166,9 +169,10 @@ def check_plists():
         unsure.append("b. 설치본이 저장소와 다르다(아직 안 올렸거나 손으로 고쳤다): "
                       + ", ".join(differ + [n + "(미설치)" for n in notinst])
                       + "\n     → 재권님이 launchd/install.command <포트> 로 올리신다")
-    sends = {n for n in names if n.endswith("UPSTREAM")}
-    if len(sends) > 1:
-        bad.append("c. plist 끼리 보내는 변수 이름이 갈린다: " + ", ".join(sorted(sends)))
+    # 보내는 plist 끼리 **집합**이 같아야 한다 — KIS 용·보드용처럼 변수가 여럿일 수 있다
+    if len(set(per_plist.values())) > 1:
+        bad.append("c. 보내는 plist 끼리 변수 집합이 갈린다: "
+                   + " · ".join("%s=%s" % (k, sorted(v)) for k, v in sorted(per_plist.items())))
     return names
 
 
