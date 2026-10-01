@@ -23,7 +23,9 @@
 #     8765  메인서버     /Users/kjc/work/KJCStudio    **알림을 보내는 자리**
 #     8764  서비스방     /Users/kjc/service           **외부접속이 보는 자리**
 #     8767  중간서버     /Users/kjc/work/kjc-staging
-#     8766·8768·8769·8770  세션 폴더들   (`--slow`)
+#     8766·8768·8770  세션 폴더들   (`--slow`)
+#     ~~8769~~  **2026-10-01 에 영구히 뺐다**(지시 「영구히 지워 launchd 에서도 빼」).
+#               plist 를 저장소·설치본 양쪽에서 지웠다. `kjc-home` 폴더 자체는 그대로다.
 #     8093  Debugging   /Users/kjc/work/KJCStudio/debugging
 #
 # 경로가 이 기계와 다르면 **plist 를 먼저 고쳐야 한다.**
@@ -73,7 +75,7 @@ echo ""
 sleep 8
 
 echo "  ── 확인 ──────────────────────────────────────────────"
-for p in 8093 8764 8765 8766 8767 8768 8769 8770; do
+for p in 8093 8764 8765 8766 8767 8768 8770; do
   pid=$(lsof -nP -iTCP:$p -sTCP:LISTEN 2>/dev/null | awk 'NR>1{print $2}' | sort -u | tr '\n' ' ')
   printf '    %s  %s\n' "$p" "${pid:-**안 뜸**}"
 done
