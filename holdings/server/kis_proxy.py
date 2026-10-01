@@ -1660,7 +1660,41 @@ def _num(v, cast=float):
 
 
 def fetch_price(cfg, code):
-    """국내 주식 현재가 조회. 시장 기준은 지금 시각에 따라 정해진다."""
+    """국내 주식 현재가 조회. 시장 기준은 지금 시각에 따라 정해진다.
+
+    **캐시를 탄다 (2026-10-01 지시 — 「캐시 붙이고」).**
+
+    전에는 이 길만 캐시가 없어 **부를 때마다 KIS 로 나갔다.** 2026-10-01
+    장중 실측 — 2초 간격으로 **10번 부르니 10번 다 나갔고 캐시가 0번
+    막았다.** 같은 종목을 복수 경로(`/api/kis/prices`)로 4번 부르면
+    **1번만 나간다.**
+
+    **워커는 이미 캐시를 탄다** — `kis-worker.js` 의 `fetchPrice` 가
+    `quoteCacheTtl(code)` 를 넘긴다. **로컬만 갈려 있었다** —
+    「룰은 하나다 — 로컬만 다르게 정하지 않는다」 의 그 자리다.
+
+    ⚠️ **복수와 저장소를 나눈다.** 같은 `_price_cache` 를 그냥 쓰면 안 된다 —
+    `fetch_prices` 는 이 함수를 부른 뒤 **「프론트가 쓰는 형태」로 바꿔서**
+    담기 때문에 **담긴 모양이 이 함수의 반환 모양과 다르다.**
+
+        이 함수가 주는 것   code · **change · changePct · sign** · eps · bps · source · mode · …
+        복수가 담는 것      price · prev · amt · pct · per · pbr · high52 · … (위 여덟이 **없다**)
+
+    그대로 쓰면 **캐시에 맞았을 때와 안 맞았을 때 응답 모양이 달라진다.**
+    2026-10-01 실측으로 **지금 화면이 쓰는 키는 전부 양쪽에 다 있어** 당장은
+    안 깨지지만, **내일 누가 `changePct` 를 쓰면 캐시에 맞았을 때만
+    `undefined`** 가 된다 — 가장 찾기 어려운 꼴이다.
+
+    **호출이 늘지 않는다.** 지금은 이 길에 캐시가 **아예 없어** 매번 나가므로,
+    저장소를 나눠도 **나빠질 것이 없다.**
+    """
+    # **접두사로 복수 것과 가른다.** `_cache_ttl` 은 모든 종목이 같은 값이라
+    # 접두사가 붙어도 그대로 듣는다.
+    ck = "one:" + code
+    cached = _cache_get(ck)
+    if cached is not None:
+        return cached
+
     div = quote_market_div()
     data = kis_get(
         cfg,
@@ -1670,7 +1704,7 @@ def fetch_price(cfg, code):
     )
     o = data.get("output") or {}
     sign = o.get("prdy_vrss_sign")  # 1상한 2상승 3보합 4하한 5하락
-    return {
+    out = {
         "code": code,
         # **종목명을 넣지 않는다** (2026-09-18).
         #
@@ -1708,6 +1742,8 @@ def fetch_price(cfg, code):
         "source": "KIS",
         "mode": cfg["mode"],
     }
+    _cache_put(ck, out)
+    return out
 
 
 # ── 여러 종목을 한 번에 ────────────────────────────────────────────────
