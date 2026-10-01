@@ -786,6 +786,78 @@ export function createStockChart(container, candles, opts = {}) {
     });
   }
 
+  /* ── 마우스를 따라 **위아래로도** 움직이게 한다 (2026-10-01 지시) ──
+   *
+   * 재권님 — "좌우로 움직이는거 뿐아니라 마우스 따라서 위아래로도 이동되야해".
+   * 가로는 라이브러리 기본(잡아 끄는 방향)이 그대로 맞으니 **안 건드린다.**
+   *
+   * **라이브러리가 이미 할 수 있다.** vendor 의 끌기 핸들러가 세로를
+   * `i.Lo() || t.nu(i, n)` 로 두고 `Lo(){return this.yn.autoScale}` 이라,
+   * **autoScale 이 켜져 있으면 세로를 건너뛴다.** 끄기만 하면 된다 —
+   * 핸들러를 직접 만들지 않는다 (`handleScroll` 도 안 건드린다).
+   *
+   * **늘 꺼 두지 않는다. 누르고 있는 동안만 끈다.**
+   * 자료는 차트를 다시 만들지 않고 들어온다(`updateLast` · `setData`).
+   * 꺼 둔 채로 값이 움직이면 **봉이 화면 밖으로 밀려 안 보인다** —
+   * 「차트가 사라졌다」 로 보이는 자리다. 그래서 가만히 있을 때는 켜 두어
+   * 저절로 맞고, **세로로 끈 뒤에는 끈 채로 둔다**(그 자리가 사용자가
+   * 고른 자리다). 세로로 안 움직이고 뗐으면 **다시 켠다** — 그냥 누른 것과
+   * 가로로만 끈 것까지 꺼 버리면 위 문제가 그대로 돌아온다.
+   *
+   * **가격 칸만이다.** 거래량·MACD·RSI 는 세로로 끌 일이 없고, 끄면 그 칸이
+   * 제 높이에 안 맞는다.
+   *
+   * **되돌아오는 길은 라이브러리가 준다** — 가격축을 두 번 누르면 제자리로
+   * 간다(`handleScale.axisDoubleClickReset.price` 가 기본 true 다).
+   */
+  const VERT_SLOP = 4;        // 이만큼 안 움직였으면 「세로로 끌지 않았다」 로 본다
+
+  function freeVert(ch, box) {
+    let big = null;
+    box.querySelectorAll('canvas').forEach((cv) => {
+      if (!big || cv.width * cv.height > big.width * big.height) big = cv;
+    });
+    const plot = big && big.parentElement;
+    if (!plot) return;          // 그림 영역을 못 찾으면 아무것도 안 건다
+
+    const scale = () => ch.priceScale('right');
+    const set = (on) => {
+      try { scale().applyOptions({ autoScale: on }); } catch { /* 이미 정리됨 */ }
+    };
+
+    let y0 = null;
+    let moved = false;
+    let wasAuto = true;        // 누르기 **전** 상태. 이것이 없으면 아래가 틀린다
+
+    function move(e) {
+      if (y0 === null) return;
+      if (Math.abs(e.clientY - y0) > VERT_SLOP) moved = true;
+    }
+    function up() {
+      if (y0 === null) return;
+      /* **원래 켜져 있었을 때만** 되돌린다. 안 그러면 세로로 끌어 둔 뒤에
+         그냥 한 번 누르는 것만으로 **제자리로 튕긴다** — 값을 읽으려고
+         누르는 일이 흔하므로 그 자리가 바로 걸린다 */
+      if (!moved && wasAuto) set(true);
+      y0 = null;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    }
+
+    plot.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;   // 왼쪽 버튼만
+      y0 = e.clientY;
+      moved = false;
+      try { wasAuto = ch.priceScale('right').options().autoScale !== false; }
+      catch { wasAuto = true; }
+      set(false);               // 누르고 있는 동안만 — 그래야 세로가 먹는다
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
+    });
+  }
+
   const addLine = (ch, o) => ch.addSeries(LC.LineSeries, {
     lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
     crosshairMarkerVisible: false, ...o,
@@ -1240,7 +1312,7 @@ export function createStockChart(container, candles, opts = {}) {
       const item = { key: p.key, el, box, chart: ch, fut, futB };
       panes.push(item);
 
-      if (p.key === 'price') { drawCandle(ch); drawOverlay(ch); }
+      if (p.key === 'price') { drawCandle(ch); drawOverlay(ch); freeVert(ch, box); }
       if (p.key === 'vol')   item.calc = drawVol(ch);
       if (p.key === 'macd')  item.calc = drawMacd(ch);
       if (p.key === 'rsi')   item.calc = drawRsi(ch);
