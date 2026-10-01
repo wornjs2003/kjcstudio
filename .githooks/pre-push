@@ -58,7 +58,7 @@ do
       $1 == "company-setup" || $1 == "api-board" { print "홈페이지_정리"; next }
       $1 == "assets" || $1 == "partials" || $1 == "data" || $1 == "category" \
                                            { print "홈페이지_정리"; next }
-      $1 == "tools" || $1 == ".githooks" || $1 == ".claude" { print "개념정의"; next }
+      $1 == "tools" || $1 == ".githooks" || $1 == ".claude" || $1 == "launchd" { print "개념정의"; next }
     ' | sort -u)
 
   lane_count=$(printf '%s\n' "$lanes" | grep -c '[^[:space:]]')

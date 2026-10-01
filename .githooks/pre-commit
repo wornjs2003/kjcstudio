@@ -129,7 +129,8 @@ lanes=$(printf '%s\n' "$files" | awk -F/ '
   $1 == "company-setup" || $1 == "api-board" { print "(미정) 설립·API"; next }
 
   $1 == "tools" || $1 == ".claude" ||
-  $1 == ".githooks" || $1 == "docs"     { print "개념정의";        next }
+  $1 == ".githooks" || $1 == "docs" ||
+  $1 == "launchd"                       { print "개념정의";        next }   # launchd 는 2026-10-01 에
 
   { print "(미정) " $1 }                            # 그 밖의 최상위 폴더
 ' | sort -u)
