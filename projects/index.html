@@ -844,22 +844,79 @@ function mergeDoc(base, mine, theirs) {
   return { doc: { projects: projectsOut, activeId: act.v }, conflicts: conflicts };
 }
 
+/* 한 번 보내고 **상태와 몸통을 함께** 돌려줍니다.
+   `fetch` 는 409 를 실패로 보지 않으므로(`res.ok` 가 false 일 뿐 예외가 아님)
+   상태를 직접 읽어 가릅니다. */
+function putDoc(doc, at) {
+  const body = at ? { data: doc, updatedAt: at } : { data: doc };
+  return fetch(API, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body)
+  }).then(function (res) {
+    return res.json().catch(function () { return {}; })
+      .then(function (b) { return { status: res.status, body: b }; });
+  });
+}
+
+/* 합친 결과를 화면에 올립니다 */
+function applyDoc(doc) {
+  projects = (doc && doc.projects) || [];
+  if (doc && doc.activeId) activeId = doc.activeId;
+  if (!byId(activeId) && projects.length) activeId = projects[0].id;
+  persistLocal();
+  render();
+}
+
+function markSynced(doc, at) {
+  baseDoc = JSON.parse(JSON.stringify(doc));
+  baseAt = at || null;
+  serverAlive = true;
+  setStatus("서버에 저장됨", "ok");
+}
+
 function syncToServer() {
   syncing = true;
   pending = false;
 
-  fetch(API, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ data: { projects: projects, activeId: activeId } })
-  })
-    .then(function (res) {
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      return res.json();
-    })
-    .then(function () {
-      serverAlive = true;
-      setStatus("서버에 저장됨", "ok");
+  /* **보내는 순간의 내용을 붙들어 둡니다.** 합칠 때 「내 것」 이 무엇이었는지
+     알아야 하는데, 그 사이에 화면이 또 바뀔 수 있습니다. */
+  const mine = snapshot();
+
+  putDoc(mine, baseAt)
+    .then(function (r) {
+      if (r.status !== 409) {
+        if (r.status >= 400) throw new Error("HTTP " + r.status);
+        markSynced(mine, r.body && r.body.updatedAt);
+        return;
+      }
+
+      /* 409 — 그 사이에 남이 썼습니다.
+         **409 는 `updatedAt` 만 주고 내용은 안 줍니다.** 다시 읽어야 합니다. */
+      setStatus("합치는 중…", "busy");
+      return fetch(API, { headers: { accept: "application/json" } })
+        .then(function (res) { return res.json(); })
+        .then(function (body) {
+          const theirs = (body && body.data) || { projects: [], activeId: null };
+          const at = body && body.updatedAt;
+
+          /* **`baseDoc` 이 없으면 합칠 수 없습니다** — 셋 중 하나가 비면
+             「무엇을 내가 바꿨나」 를 알 길이 없습니다. 조용히 덮지 않습니다. */
+          if (!baseDoc) return decide(["이전 상태를 모릅니다"], mine, theirs, at);
+
+          const m = mergeDoc(baseDoc, mine, theirs);
+          if (m.conflicts.length) return decide(m.conflicts, mine, theirs, at);
+
+          /* 자동으로 합쳐졌습니다 — 합친 것을 다시 보냅니다.
+             **여기서 또 409 가 나면 더 시도하지 않습니다**(그 사이 세 번째
+             변경이 들어온 것). 다음 저장 때 다시 합쳐집니다. */
+          applyDoc(m.doc);
+          return putDoc(m.doc, at).then(function (r2) {
+            if (r2.status === 409) { setStatus("다시 저장합니다…", "busy"); pending = true; return; }
+            if (r2.status >= 400) throw new Error("HTTP " + r2.status);
+            markSynced(m.doc, r2.body && r2.body.updatedAt);
+          });
+        });
     })
     .catch(function () {
       serverAlive = false;
@@ -869,6 +926,24 @@ function syncToServer() {
       syncing = false;
       if (pending) scheduleSync();
     });
+}
+
+/* 사람에게 묻고 고른 대로 합니다. **어느 쪽을 골라도 무엇이 사라지는지
+   화면에 적혀 있습니다**(`askConflict`). */
+function decide(conflicts, mine, theirs, at) {
+  return askConflict(conflicts).then(function (ok) {
+    if (ok) {                      /* 서버 것으로 */
+      applyDoc(theirs);
+      markSynced(theirs, at);
+      setStatus("서버에서 불러옴", "ok");
+      return;
+    }
+    /* 내 것으로 — 서버의 지금 `updatedAt` 을 실어 보냅니다 */
+    return putDoc(mine, at).then(function (r) {
+      if (r.status >= 400) { pending = true; setStatus("다시 저장합니다…", "busy"); return; }
+      markSynced(mine, r.body && r.body.updatedAt);
+    });
+  });
 }
 
 /* 서버에서 불러오기 — 실패하면 브라우저에 있던 내용으로 갑니다 */
