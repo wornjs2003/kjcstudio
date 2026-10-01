@@ -24,6 +24,7 @@
 import io
 import os
 import re
+import subprocess
 import sys
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -199,8 +200,34 @@ def c_modal_links():
     return "모달로 안 옮긴 「자세히」·「더보기」", n, hits, LOOK, (지시, "「자세히 버튼은 차트에서 모달 띄우는 버튼으로 다 통일해줘」. **JS 가 가로채는 길을 이 검사가 못 본다**")
 
 
+def c_hook_exec():
+    """훅은 실행 비트가 없으면 git 이 **조용히 건너뛴다** — 오류도 안 낸다.
+
+    2026-10-01 에 새로 만든 `post-merge` 가 100644 로 올라갔다. `core.fileMode=false` 라
+    chmod 가 저장소에 안 실렸고, 창구가 main 에 합쳐도 카드가 안 움직였다. 「실패가 통과로
+    보인다」 꼴 — 저장소에 **기록된** 모드(`git ls-files -s`)를 센다. 작업 트리 비트가 아니다.
+    """
+    hits, n = [], 0
+    try:
+        out = subprocess.run(["git", "ls-files", "-s", ".githooks/"], capture_output=True,
+                             text=True, cwd=ROOT).stdout
+    except Exception:
+        return "훅에 실행 비트가 없다", 0, [], BAD, (실측, "git ls-files 를 못 돌렸다")
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        mode, path = parts[0], parts[3]
+        if os.path.basename(path).startswith(".") or path.endswith((".md", ".txt")):
+            continue
+        n += 1
+        if mode != "100755":
+            hits.append("%s — %s (git update-index --chmod=+x %s)" % (path, mode, path))
+    return "훅에 실행 비트가 없다 (git 이 조용히 건너뛴다)", n, hits, BAD, (실측, "2026-10-01 post-merge 가 100644 로 올라가 main 머지 때 카드가 안 움직였다")
+
+
 CHECKS = [c_bat_nonascii, c_py_encoding, c_send_error_korean,
-          c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links]
+          c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec]
 
 
 def main():

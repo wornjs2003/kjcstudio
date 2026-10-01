@@ -100,6 +100,7 @@ def session_name():
 
 
 FORCED_LABEL = ""   # --label 로 준 것. 환경변수 KJC_BOARD_LABEL 과 같다 — 위가 다 막혔을 때 손으로
+FORCE = False       # --force — 안 끝난 하위 항목이 있어도 열을 옮긴다
 
 
 def label_of(name):
@@ -188,6 +189,13 @@ def cmd_note(key, line, sub, done, column=None):
         if len(hits) != 1:
             sys.exit("카드 %d개 걸림 — 더 좁혀서: %s" % (len(hits), key))
         t = hits[0]
+        if column in ("review", "done") and not FORCE:
+            left = [x for x in (t.get("subs") or []) if not x.get("done")]
+            if left:
+                # 값 없는 --done 은 열 옮기기다 — 하위를 닫으려다 값을 빼먹으면 카드가 통째로 done 이 된다
+                # (주식페이지_개발 지적). 안 끝난 하위가 있으면 되묻는다.
+                sys.exit("하위 항목 %d개가 안 끝났는데 열을 %s 으로? 하위 닫기는 --done \"<하위 일부>\" · 정말 옮기려면 --force"
+                         % (len(left), column))
         if column and t.get("column") != column:
             moved["from"], moved["to"] = t.get("column"), column
             t["column"] = column
@@ -352,7 +360,10 @@ def cmd_merged(dry):
 
 
 def main(argv):
-    global FORCED_LABEL
+    global FORCED_LABEL, FORCE
+    if "--force" in argv:
+        FORCE = True
+        argv = [a for a in argv if a != "--force"]
     if "--label" in argv:
         i = argv.index("--label")
         FORCED_LABEL = argv[i + 1].strip() if i + 1 < len(argv) else ""
