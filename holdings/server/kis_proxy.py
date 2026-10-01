@@ -691,6 +691,14 @@ def usage_stats():
         "totalCalls": _stats["kis_calls"],
         "priceCacheTtl": PRICE_CACHE_TTL,
 
+        # ── 넘기기 (2026-10-01) ── ⚠️ **주소는 내지 않는다.** 이 응답이
+        # 8764(서비스방)를 거쳐 밖으로 나가므로 내부 주소가 보이면 안 된다.
+        "upstream": bool(upstream_base()),
+        "upstreamServe": KIS_UPSTREAM_SERVE,
+        "upstreamCalls": _up_stat["calls"],
+        "upstreamFallbacks": _up_stat["fallbacks"],
+        "upstreamLastError": _up_stat["lastError"],
+
         # **주기·캐시 값 전부.** 위 `priceCacheTtl` 은 `status.html` 이
         # 쓰고 있어 남겨 둔다 — 같은 값이 여기에도 들어오지만 **한 곳에서
         # 나오므로 갈리지 않는다.** 화면을 옮기면 위 줄을 지운다.
@@ -913,6 +921,53 @@ def is_sender(port):
     return IS_SERVER and port == MAIN_PORT
 
 
+# ── KIS 를 부르는 자리를 8765 하나로 모은다 (2026-10-01 지시 · 길 (가) 넘기기) ──
+#
+# 재권님 지시 — 「KIS 를 부르는 자리를 8765 하나로 모은다」. 세션 서버가
+# 저마다 부르면 **예산을 그만큼 나눠 쓰고** 토큰도 폴더마다 따로 발급한다
+# (2026-10-01 실측 — 폴더 일곱 중 **다섯**이 그날 토큰을 받았다).
+#
+#     **보내는 쪽**  `KJC_KIS_UPSTREAM`        값이 있으면 상류로 넘긴다
+#     **받는 쪽**    `KJC_KIS_UPSTREAM_SERVE`  **8765 만 켠다**
+#
+# ⚠️ **스위치를 둘로 가른 이유.** 하나로 두면 **받는 자리가 모든 서버에
+# 생긴다.** 8764(서비스방)는 **외부접속이 닿는 자리**라 거기에 그 자리가
+# 있으면 안 된다. 안 켠 서버는 막힌 것이 아니라 **그 자리가 아예 없다.**
+#
+# ⚠️ **`client_address` 로는 외부접속을 못 걸러낸다 (2026-10-01 실측).**
+# 서버가 **루프백에만** 떠 있고(`127.0.0.1` · `::1`) `cloudflared` 가
+# **같은 기계에서** 돈다. 그래서 **터널을 거쳐 온 요청도 `127.0.0.1` 로
+# 보인다.** 「로컬에서 온 것만 받는다」 는 **외부는 못 막고 `::1` 로 온
+# 정상 호출만 가끔 막는다.** 그래서 그 검사를 **넣지 않았다** — 넣으면
+# 다음 사람이 그것을 방어로 읽는다 (「설명이 이미 있으면 의심할 계기조차
+# 없다」). 막는 것은 위의 **받는 쪽 스위치**와 아래 `/uapi/` 제한이다.
+KIS_UPSTREAM_RAW = (os.environ.get("KJC_KIS_UPSTREAM") or "").strip().rstrip("/")
+KIS_UPSTREAM_SERVE = (os.environ.get("KJC_KIS_UPSTREAM_SERVE") or "").strip().lower() in (
+    "1", "true", "yes", "on")
+RELAY_ROUTE = "relay"
+# 넘긴 횟수 · 폴백한 횟수 · 마지막 오류. `stats` 가 낸다 — **주소는 안 낸다.**
+_up_stat = {"calls": 0, "fallbacks": 0, "lastError": None}
+
+
+def upstream_base():
+    """상류 주소. 없거나 **자기 자신을 가리키면 `None`** 이다.
+
+    자기 포트를 가리키면 **자기를 부르는 고리**가 된다. `RUN_PORT` 는
+    `main()` 이 정하므로 **모듈을 읽을 때가 아니라 부를 때** 본다.
+    """
+    if not KIS_UPSTREAM_RAW:
+        return None
+    try:
+        u = urllib.parse.urlparse(KIS_UPSTREAM_RAW)
+    except ValueError:
+        return None
+    if not u.scheme or not u.hostname:
+        return None
+    if u.port and RUN_PORT and u.port == RUN_PORT:
+        return None
+    return KIS_UPSTREAM_RAW
+
+
 DEBUGGING_BASE = "http://localhost:%d" % DEBUGGING_PORT
 
 # 8093 이 살아 있는지. 매 요청마다 확인하면 느리므로 잠깐 기억해 둔다.
@@ -985,7 +1040,57 @@ def out_rows(data, key):
     return v if isinstance(v, list) else []
 
 
+class _UpstreamDown(Exception):
+    """상류가 안 떠 있거나 터졌다 — **직접 부르는 쪽으로 내려간다.**"""
+
+
+def _kis_via_upstream(base, path, params, tr_id):
+    """KIS 를 상류 서버가 대신 부르게 한다.
+
+    **`get_token` 도 `_rate_limit` 도 타지 않는다.** 둘 다 상류가 한다 —
+    양쪽에서 기다리면 `minIntervalSec`(2026-10-01 실측 **0.1초**)만큼
+    **더 느려진다.** 루프백 왕복은 **중앙 1.6ms** 라 그에 비해 무시할 수 있다.
+    """
+    url = base + "/api/kis/" + RELAY_ROUTE + "?" + urllib.parse.urlencode({
+        "path": path,
+        "tr_id": tr_id,
+        "params": json.dumps(params or {}, ensure_ascii=False),
+    })
+    try:
+        with urllib.request.urlopen(url, timeout=15) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        detail = scrub(e.read().decode("utf-8", "replace"))[:300]
+        # **`404` 는 「상류가 거절한 것」 이 아니라 「받을 자리가 없는 것」 이다.**
+        # 보내는 쪽만 켜지고 받는 쪽(`KJC_KIS_UPSTREAM_SERVE`)이 안 켜진
+        # 상태가 바로 이것이고, 그때 폴백하지 않으면 **그 서버의 KIS 가
+        # 통째로 죽는다.** 설치 순서가 어긋나는 순간이 그 자리다 —
+        # 그래서 `5xx` 와 같이 **직접 부르는 쪽으로 내려간다.**
+        if e.code >= 500 or e.code == 404:
+            raise _UpstreamDown("상류 %s: %s" % (e.code, detail))
+        # **그 밖 4xx 는 폴백하지 않는다.** 상류가 제대로 답한 것이라,
+        # 직접 부르면 **KIS 를 두 번 쓴다.**
+        raise RuntimeError("상류가 거절했습니다 (HTTP %s): %s" % (e.code, detail))
+    except (urllib.error.URLError, OSError) as e:
+        raise _UpstreamDown(safe_message(e))
+    if not isinstance(body, dict) or not body.get("ok"):
+        raise RuntimeError("상류 응답이 이상합니다: %s" % scrub(str(body))[:200])
+    return body.get("data")
+
+
 def kis_get(cfg, path, params, tr_id, _retry=1):
+    # ── 상류가 있으면 넘긴다 (2026-10-01) ──
+    _base = upstream_base()
+    if _base:
+        try:
+            data = _kis_via_upstream(_base, path, params, tr_id)
+            _up_stat["calls"] += 1
+            return data
+        except _UpstreamDown as e:
+            # **폴백** — 상류가 안 떠 있으면 직접 부른다. 화면이 멈추는
+            # 것보다 낫다. 몇 번 떨어졌는지는 `stats` 가 낸다.
+            _up_stat["fallbacks"] += 1
+            _up_stat["lastError"] = safe_message(e)
     token = get_token(cfg)
     _rate_limit(path)
     url = HOSTS[cfg["mode"]] + path + "?" + urllib.parse.urlencode(params)
@@ -3526,11 +3631,18 @@ class Handler(SimpleHTTPRequestHandler):
                     "error": "secrets.json 이 없습니다. holdings/secrets.example.json 을 복사해 키를 넣어주세요.",
                 })
                 return
-            try:
-                get_token(cfg)
+            _base = upstream_base()
+            if _base:
+                # **넘기는 서버는 토큰을 받지 않는다** — 상류가 가진다.
+                # 여기서 발급하면 폴더마다 토큰이 또 생겨 **모으려던 것이
+                # 그 자리에서 어긋난다** (2026-10-01).
                 token_ok, token_err = True, None
-            except RuntimeError as e:
-                token_ok, token_err = False, safe_message(e)
+            else:
+                try:
+                    get_token(cfg)
+                    token_ok, token_err = True, None
+                except RuntimeError as e:
+                    token_ok, token_err = False, safe_message(e)
             self._send_json({
                 "ok": token_ok,
                 "configured": True,
@@ -3538,6 +3650,8 @@ class Handler(SimpleHTTPRequestHandler):
                 "modeLabel": MODE_LABEL[cfg["mode"]],
                 "tokenOk": token_ok,
                 "error": token_err,
+                # **주소는 내지 않는다.** 넘기는 중인지만 알린다
+                "upstream": bool(_base),
             })
             return
 
@@ -3549,6 +3663,40 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         try:
+            # ── 넘겨받는 자리 (2026-10-01) ── **8765 만 켠다.**
+            if route == RELAY_ROUTE:
+                if not KIS_UPSTREAM_SERVE:
+                    # **안 켠 서버에는 이 자리가 없다.** 막는 것이 아니라
+                    # 없는 것이다 — 8764(외부접속)에 있으면 안 된다.
+                    self._send_json({"ok": False, "error": "그런 주소 없음"}, 404)
+                    return
+                kis_path = (qs.get("path") or [""])[0]
+                # **`/uapi/` 로 시작하는 것만.** 아니면 임의의 주소를
+                # 부르게 하는 자리가 된다.
+                if not kis_path.startswith("/uapi/"):
+                    self._send_json(
+                        {"ok": False, "error": "path 는 /uapi/ 로 시작해야 합니다."}, 400)
+                    return
+                tr = (qs.get("tr_id") or [""])[0].strip()
+                if not tr:
+                    self._send_json({"ok": False, "error": "tr_id 가 없습니다."}, 400)
+                    return
+                try:
+                    relay_params = json.loads((qs.get("params") or ["{}"])[0])
+                except ValueError:
+                    self._send_json(
+                        {"ok": False, "error": "params 가 JSON 이 아닙니다."}, 400)
+                    return
+                if not isinstance(relay_params, dict):
+                    self._send_json(
+                        {"ok": False, "error": "params 는 객체여야 합니다."}, 400)
+                    return
+                self._send_json({
+                    "ok": True,
+                    "data": kis_get(cfg, kis_path, relay_params, tr),
+                })
+                return
+
             if route == "price":
                 code = (qs.get("code") or [""])[0].strip()
                 if not code.isdigit() or len(code) != 6:
