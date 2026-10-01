@@ -43,9 +43,11 @@
 .kh-dl-body { display: block; }
 
 /* **회색 바탕 위에 흰 카드로 묶고, 카드 안에는 칸을 다시 두지 않는다** (holdings 「면 구조: 회색 바탕 +
-   흰 카드 · 흰 카드에는 테두리·선을 넣지 않는다」 · 2026-10-01 지시 — 「밝은 부분과 어두운 부분이 다른
-   모달창과 색쓰는게 되집어진 거 같아」 · 「흰색으로 창을 묶어서 거기 안에 정보들을 넣어줘야」).
-   전에는 흰 카드 안에 회색 칸(지수 · 주도 섹터 · 일정 · 문안)이 들어가 「흰 바탕 + 회색 칸」 이었다 */
+   흰 카드 · 흰 카드에는 테두리·선을 넣지 않는다」).
+   2026-10-01 에 두 번 고쳤다 — 처음엔 흰 카드 안에 회색 칸(지수 · 주도 섹터 · 일정 · 문안)이 있어
+   「뒤집힌 것 같다」 하셨고, 카드를 투명하게 하고 안의 칸을 흰색으로 바꿨더니 「흰색으로 창을 묶어서
+   거기 안에 정보들을 넣어줘야 하지 않을까 · 텔레그램은 왜 묶어논 창 밖으로 나가 있지」 하셨다.
+   그래서 **카드가 흰 면 하나**이고, 일정 줄 · 문안 · 영상 줄은 그 안에 바탕 없이 놓인다 */
 .kh-dl-card {
   background: var(--kh-bg-card); border-radius: var(--kh-radius-lg, 16px);
   padding: 20px 22px; margin-bottom: 16px;
@@ -85,39 +87,17 @@
 }
 
 /* ── ② 주요 지수 ────────────────────────── */
-.kh-dl-idx {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: 10px;
-}
-.kh-dl-idx-c {
-  background: var(--kh-bg-surface); border-radius: var(--kh-radius-md);
-  padding: 13px 15px;
-}
-.kh-dl-idx-n {
-  font-size: 12px; color: var(--kh-text-secondary); font-weight: 500; margin-bottom: 5px;
-}
-.kh-dl-idx-v {
-  font-size: 19px; font-weight: 700; letter-spacing: -0.03em;
-  font-variant-numeric: tabular-nums;
-}
-.kh-dl-idx-d {
-  font-size: 12px; font-weight: 600; margin-top: 3px;
-  font-variant-numeric: tabular-nums;
-}
-.kh-dl-idx-sub {
-  font-size: 11px; color: var(--kh-text-muted); margin-top: 7px;
-  overflow-wrap: anywhere;
-  font-variant-numeric: tabular-nums;
-}
+/* 홀딩스 첫 화면 지수 띠(.kh-ixbar · .kh-top-ix · .kh-ix — home.css)를 그대로 쓴다 (2026-10-01 지시 —
+   「홀딩스화면에서 나오는거랑 똑같이」). 여기서는 칸 모양을 정하지 않는다 — 전에 있던 .kh-dl-idx-c 네모는 뺐다 */
+.kh-dl-idx { display: block; }
 /* ── ④ 주도 섹터 ────────────────────────── */
-/* 흰 카드 안에 한 단 들어간 면으로 둔다. 카드가 순백(--kh-bg-card)이라
-   선을 그으면 「흰 카드에는 선을 두지 않는다」 를 어긴다. 지수 칸과 같은 방식이다. */
+/* 회색 바탕 위의 흰 칸으로 둔다 — 지수 칸과 같은 방식이다 (2026-10-01 · 위 .kh-dl-card 주석) */
 .kh-dl-sec {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 10px;
 }
 .kh-dl-sec-col {
-  background: var(--kh-bg-surface); border-radius: var(--kh-radius-md);
+  background: var(--kh-bg-card); border-radius: var(--kh-radius-md);
   padding: 13px 15px;
 }
 .kh-dl-sec-h {
@@ -219,7 +199,7 @@
   .kh-daily .kh-vbar { grid-column: auto; grid-row: auto; }
 }
 
-/* 보낼 문안 — 사이드바가 흰 면이라 문안은 한 단 들어간 회색으로 띄운다 */
+/* 보낼 문안 — 텔레그램 흰 카드 안에 바탕 없이 (2026-10-01 · 위 .kh-dl-card 주석) */
 .kh-dl-tg-b {
   padding: 4px 0 0; font-size: 12.5px; line-height: 1.72;
   white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
@@ -293,12 +273,6 @@
 
   /* 지수 — 168px 칸에 이름·값·등락이 다 들어가 잘렸다.
      폰에서는 두 칸으로 고정하고 여백을 줄인다 */
-  .kh-dl-idx { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .kh-dl-idx-c { padding: 11px 12px; }
-  .kh-dl-idx-n { font-size: 11.5px; }
-  .kh-dl-idx-v { font-size: 17px; }
-  .kh-dl-idx-d { font-size: 11.5px; }
-  .kh-dl-idx-sub { font-size: 10.5px; margin-top: 5px; }
 
   /* 뉴스 — 주제 칩이 66px 을 차지해 제목이 두세 글자씩 끊겼다. 칩을 위로 */
   .kh-dl-news-row { flex-direction: column; gap: 6px; padding: 12px 0; }
@@ -310,7 +284,6 @@
 
 /* 아주 좁은 폰 (360px 이하) — 지수 두 칸도 빠듯해진다 */
 @media (max-width: 380px) {
-  .kh-dl-idx { grid-template-columns: minmax(0, 1fr); }
   .kh-dl-tg-b { font-size: 12px; }
 }
 
@@ -460,3 +433,23 @@
     border-bottom: 1px solid var(--kh-border); padding-bottom: 14px;
   }
 }
+
+
+/* ── 오늘의 뉴스 맨 위 · 영상 분석 (2026-10-01) ── */
+.kh-dl-video { display: flex; flex-direction: column; }
+.kh-dl-video-row {
+  display: flex; align-items: center; gap: 10px; padding: 10px 2px;
+  border-bottom: 1px solid var(--kh-border); text-decoration: none; color: inherit;
+}
+.kh-dl-video-row:hover { background: var(--kh-bg-hover); }
+.kh-dl-video-k {
+  font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: var(--kh-radius-pill, 99px);
+  min-width: 66px; text-align: center; flex-shrink: 0;
+  background: var(--kh-accent-dim); color: var(--kh-accent);
+}
+.kh-dl-video-t { flex: 1; min-width: 0; font-size: 0.88rem; font-weight: 600; color: var(--kh-text-primary); }
+.kh-dl-video-m { font-size: 0.75rem; color: var(--kh-text-muted); flex-shrink: 0; }
+.kh-dl-video-e { font-size: 0.8rem; color: var(--kh-text-muted); padding: 6px 2px; }
+
+/* 창 머리 바로 아래 줄 — 주요 지수 띠 (2026-10-01 · 전 「1」 탭 자리). 머리와 같은 흰 면에 아래 구분선 */
+.kh-dl-ixrow { flex: 0 0 auto; background: var(--kh-bg-card); box-shadow: 0 1px 0 var(--kh-border); padding: 4px 16px; }
