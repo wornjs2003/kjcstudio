@@ -52,6 +52,13 @@
     <string>/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
     <key>PYTHONIOENCODING</key>
     <string>utf-8</string>
+    <!-- **KIS 를 8765 하나로 (2026-10-01 지시 · 길 (가) 넘기기).** 서비스방도 넘긴다 —
+         재권님 「응 그렇게 해」(12:4x · 작업우선순위 경유). 8765 가 안 떠 있으면 폴백으로
+         직접 부른다(`kis_proxy.py` 의 ③) — 그 사이만 토큰 캐시가 둘이 된다.
+         **올리는 순서는 맨 나중** — 앞의 세션 서버들이 돌아가는 것을 보고.
+         이름·값은 `tools/check-kis-single.py` 가 `kis_proxy.py` 와 대조한다. -->
+    <key>KJC_KIS_UPSTREAM</key>
+    <string>http://127.0.0.1:8765</string>
   </dict>
 </dict>
 </plist>

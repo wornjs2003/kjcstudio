@@ -29,6 +29,15 @@
 #     8093  Debugging   /Users/kjc/work/KJCStudio/debugging
 #
 # 경로가 이 기계와 다르면 **plist 를 먼저 고쳐야 한다.**
+#
+# ■ 포트를 주면 그것만 올린다 (2026-10-01)
+#
+#     ./install.command                  전부 (지금까지와 같다)
+#     ./install.command 8766 8767        그 둘만 내렸다 올린다
+#
+# **8765(알림 서버)를 안 끄고 세션 서버만 다시 올리려고** 만들었다 —
+# 「KIS 를 8765 하나로」 를 한 서버씩 켜 보는 자리다. 8765 는 이름에 포트가
+# 없어서(`kis-proxy.plist`) 8765 라고 적으면 그것으로 친다.
 
 set -e
 
@@ -41,10 +50,23 @@ echo ""
 
 mkdir -p "$DEST"
 n=0
+# 인자로 받은 포트 목록. 비어 있으면 전부.
+ONLY="$*"
+port_of() {  # plist 이름 → 포트. 포트가 이름에 없는 것은 8765 다
+  p=$(printf '%s' "$1" | /usr/bin/sed -n 's/.*-\([0-9][0-9]*\)\.plist$/\1/p')
+  printf '%s' "${p:-8765}"
+}
+wanted() {   # $1 포트가 ONLY 에 있나 (ONLY 가 비면 전부)
+  [ -z "$ONLY" ] && return 0
+  for w in $ONLY; do [ "$w" = "$1" ] && return 0; done
+  return 1
+}
+
 for f in "$HERE"/kr.kjcstudio.*.plist; do
   [ -e "$f" ] || continue
   name=$(basename "$f")
   label=${name%.plist}
+  wanted "$(port_of "$name")" || continue
 
   # **경로가 실재하는지 먼저 본다.** 없는 폴더를 가리키면 `KeepAlive` 가
   # 무한히 재시도하며 로그만 쌓인다.
@@ -75,7 +97,7 @@ echo ""
 sleep 8
 
 echo "  ── 확인 ──────────────────────────────────────────────"
-for p in 8093 8764 8765 8766 8767 8768 8770; do
+for p in ${ONLY:-8093 8764 8765 8766 8767 8768 8770}; do
   pid=$(lsof -nP -iTCP:$p -sTCP:LISTEN 2>/dev/null | awk 'NR>1{print $2}' | sort -u | tr '\n' ' ')
   printf '    %s  %s\n' "$p" "${pid:-**안 뜸**}"
 done

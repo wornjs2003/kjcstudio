@@ -10,6 +10,12 @@
 		<string>/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
 		<key>PYTHONIOENCODING</key>
 		<string>utf-8</string>
+		<!-- **KIS 를 8765 하나로 (2026-10-01 · 길 (가)).** 이 서버가 **받는 쪽**이다 —
+		     다른 서버들이 KJC_KIS_UPSTREAM 으로 여기로 넘긴다. 이것을 안 켜면 그 자리가
+		     아예 없어(404) 보내는 쪽이 전부 폴백으로 직접 부른다 — 안 깨지지만 아무것도
+		     안 모인다. 이름은 kis_proxy.py 와 tools/check-kis-single.py 가 대조한다. -->
+		<key>KJC_KIS_UPSTREAM_SERVE</key>
+		<string>1</string>
 	</dict>
 	<key>KeepAlive</key>
 	<true/>
