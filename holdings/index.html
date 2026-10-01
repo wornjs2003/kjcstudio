@@ -29,41 +29,7 @@
 </head>
 <body data-nav="holdings" data-site-root="../">
 
-<!-- 국기·지표 아이콘 — 화면에는 안 보이고, 아래에서 <use> 로 꺼내 쓴다.
-     이모지(🇰🇷)를 쓰면 윈도우에서 "KR" 같은 지역코드 글자로 나온다. 그래서 직접 그렸다.
-     여기 색은 실제 국기 색이라 theme.css 변수를 쓰지 않는다. 테마가 바뀌어도
-     태극기는 태극기여야 한다 (색 하드코딩 금지 규칙의 의도적 예외). -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="kh-flag-kr" viewBox="0 0 24 24">
-    <rect width="24" height="24" fill="#fff"/>
-    <g transform="translate(12,12) rotate(-33)">
-      <circle r="5.4" fill="#cd2e3a"/>
-      <path d="M-5.4,0 A2.7,2.7 0 0 1 0,0 A2.7,2.7 0 0 0 5.4,0 A5.4,5.4 0 0 1 -5.4,0" fill="#0047a0"/>
-    </g>
-    <g fill="#000" transform="translate(12,12)">
-      <g transform="rotate(-56) translate(0,-8.6)"><rect x="-2.4" y="-.45" width="4.8" height=".9"/><rect x="-2.4" y="1" width="4.8" height=".9"/></g>
-      <g transform="rotate(56) translate(0,-8.6)"><rect x="-2.4" y="-.45" width="4.8" height=".9"/><rect x="-2.4" y="1" width="4.8" height=".9"/></g>
-      <g transform="rotate(-124) translate(0,-8.6)"><rect x="-2.4" y="-.45" width="4.8" height=".9"/><rect x="-2.4" y="1" width="4.8" height=".9"/></g>
-      <g transform="rotate(124) translate(0,-8.6)"><rect x="-2.4" y="-.45" width="4.8" height=".9"/><rect x="-2.4" y="1" width="4.8" height=".9"/></g>
-    </g>
-  </symbol>
-  <symbol id="kh-flag-us" viewBox="0 0 24 24">
-    <rect width="24" height="24" fill="#fff"/>
-    <g fill="#b22234">
-      <rect y="0" width="24" height="1.85"/><rect y="3.7" width="24" height="1.85"/>
-      <rect y="7.4" width="24" height="1.85"/><rect y="11.1" width="24" height="1.85"/>
-      <rect y="14.8" width="24" height="1.85"/><rect y="18.5" width="24" height="1.85"/>
-      <rect y="22.2" width="24" height="1.8"/>
-    </g>
-    <rect width="11" height="12.95" fill="#3c3b6e"/>
-    <g fill="#fff">
-      <circle cx="2" cy="2.2" r=".72"/><circle cx="5.5" cy="2.2" r=".72"/><circle cx="9" cy="2.2" r=".72"/>
-      <circle cx="3.75" cy="4.7" r=".72"/><circle cx="7.25" cy="4.7" r=".72"/>
-      <circle cx="2" cy="7.2" r=".72"/><circle cx="5.5" cy="7.2" r=".72"/><circle cx="9" cy="7.2" r=".72"/>
-      <circle cx="3.75" cy="9.7" r=".72"/><circle cx="7.25" cy="9.7" r=".72"/>
-    </g>
-  </symbol>
-</svg>
+<!-- 국기는 img/flags.svg 에 있다 (2026-10-01 옮김) — <use href="./img/flags.svg#kh-flag-kr"> 로 꺼낸다 -->
 
 <div id="site-nav"></div>
 
@@ -200,13 +166,13 @@
                국기 규정색이라 「색 하드코딩 금지」 의 의도적 예외다. -->
           <span class="kh-chips kh-sc-mkt" id="kh-sc-mkt">
             <button class="kh-chip is-active" data-mkt="kr">
-              <svg class="kh-sc-flag" aria-hidden="true"><use href="#kh-flag-kr"></use></svg>국내</button>
+              <svg class="kh-sc-flag" aria-hidden="true"><use href="./img/flags.svg#kh-flag-kr"></use></svg>국내</button>
             <!-- 미정: 해외 업종·테마를 받아올 곳을 아직 못 찾았다
                  (js/components/daily-view.js 의 같은 자리 참조).
                  정해지면 kh-todo 를 떼고 누를 수 있게 한다. -->
             <button class="kh-chip kh-todo-chip" data-mkt="us" disabled
               title="해외 업종·테마는 받아올 곳을 아직 못 찾았습니다">
-              <svg class="kh-sc-flag" aria-hidden="true"><use href="#kh-flag-us"></use></svg>미국</button>
+              <svg class="kh-sc-flag" aria-hidden="true"><use href="./img/flags.svg#kh-flag-us"></use></svg>미국</button>
           </span>
           <i class="kh-sc-sep" aria-hidden="true"></i>
           <span class="kh-chips kh-ix-chips" id="kh-sc-kind">
