@@ -1636,12 +1636,15 @@ function buildTask(p, t, colIdx) {
 
      ⚠️ **접힘은 카드에 저장합니다**(재권님 「저장」). 거르기와 다른 점입니다 —
      거르기는 화면에만 두는데, 접기는 **어느 기기에서 보셔도 같아야** 합니다. */
-  const 접을것 = (t.subs || []).length > 0 || !!(t.memo || "").trim() || !!t.due || t.amount > 0;
   const fold = document.createElement("button");
   fold.className = "tb";
   fold.textContent = t.collapsed ? "\u25b8" : "\u25be";
   fold.title = t.collapsed ? "펼치기" : "접기";
-  fold.disabled = !접을것;
+  /* **비활성 여부는 `buildTask` 끝에서 정합니다 — 세지 않고 결과를 봅니다.**
+     처음에는 「어떤 필드가 있으면 접을 것이 있다」 를 손으로 적었는데, 그것이
+     **그리는 쪽 조건의 복제**라 2026-10-01 검수에서 **셋이 어긋나 있었습니다**
+     (`links` 를 빠뜨림 · 카드에 없는 `t.amount` 를 봄 · 닫힌 칸에서는 안 그려지는
+     `due` 를 켬). **붙은 것을 보면 다시는 안 갈립니다.** */
   fold.addEventListener("click", function (e) {
     e.stopPropagation();                 /* 카드 열기와 겹치지 않게 */
     t.collapsed = !t.collapsed;
@@ -1782,6 +1785,9 @@ function buildTask(p, t, colIdx) {
     });
     el.appendChild(who);
   }
+
+  /* **접을 것이 실제로 붙었나**를 보고 단추를 켭니다 (위 `fold` 주석 참고) */
+  fold.disabled = !el.querySelector(".card-subs, .task-mini");
 
   /* **빼지 않고 숨깁니다** — 위 거르기 절의 `drop()` 전제 때문입니다 */
   if (!passFilter(t)) el.style.display = "none";
