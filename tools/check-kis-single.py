@@ -191,7 +191,7 @@ def check_live():
     ports = sorted({port_of(os.path.basename(f))
                     for f in glob.glob(os.path.join(LAUNCHD, "kr.kjcstudio.*.plist"))
                     if "kis-proxy" in f or "service" in f})
-    seen, using, fallback = 0, [], []
+    seen, using, fallback, nofield, on, serve = 0, [], [], [], [], []
     for p in ports:
         try:
             with urllib.request.urlopen("http://127.0.0.1:%d/api/kis/stats" % p, timeout=2) as r:
@@ -200,14 +200,26 @@ def check_live():
             continue
         seen += 1
         if "upstream" not in data:
+            nofield.append(p)          # 옛 코드가 돌고 있다 — 「안 봤다」 를 조용히 넘기지 않는다
             continue
-        if p != MAIN_PORT and not data.get("upstream"):
+        if p == MAIN_PORT:
+            if data.get("upstreamServe"):
+                serve.append(p)
+        elif data.get("upstream"):
+            on.append(p)
+        else:
             using.append(p)
         if data.get("upstreamFallbacks"):
             fallback.append("%d(%s건)" % (p, data["upstreamFallbacks"]))
-    print("d. 살아 있는 서버 — 응답 %d/%d" % (seen, len(ports)))
+    print("d. 살아 있는 서버 — 응답 %d/%d · 상류로 넘기는 중 %s · 받는 중 %s · 아직 직접 %s · 옛 코드 %s"
+          % (seen, len(ports),
+             ",".join(map(str, on)) or "-", ",".join(map(str, serve)) or "-",
+             ",".join(map(str, using)) or "-", ",".join(map(str, nofield)) or "-"))
     if seen == 0:
         unsure.append("d. 응답하는 서버가 없다")
+    if nofield:
+        unsure.append("d. stats 에 upstream 이 없는 서버(옛 코드가 돌고 있다 — 재시작 전): "
+                      + ", ".join(map(str, nofield)))
     if using:
         bad.append("d. 상류를 안 쓰는 서버: " + ", ".join(str(p) for p in using))
     if fallback:
