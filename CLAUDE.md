@@ -1228,7 +1228,9 @@ canvas 는 CSS 를 상속받지 못한다. 그래서 `holdings/js/theme.js` 가 
 - `data/works.json` : 모든 작업물 데이터 (이곳만 수정하면 갤러리 자동 반영)
 - `partials/nav.html`, `partials/footer.html` : 공통 네비/푸터 (fetch로 동적 주입)
 - `holdings/` : 독립 프로젝트 구역 (주식 분석, 보유 종목 — 별도 관리)
-- `company-setup/` : 회사 설립 체크리스트 (독립 구역, 항목 데이터는 `company-setup/data/checklist.js`)
+- `company-setup/` : **Insight** — 뉴스 · 영상 · 종목 분석 (독립 구역 · `시황분석` 담당 · 전용 CSS 는 `company-setup/css/insight.css`,
+  색은 `--kh-*` 토큰). **2026-10-01 에 회사 설립 체크리스트를 지우고 새로 만들었다** (지시 — 「체크리스트는 다 날리고 새로 만들어」).
+  폴더 이름은 그대로 두었다 — 주소가 바뀌면 메뉴 · 등록 파일 · 문서를 다 고쳐야 해서다
 - `projects/` : 프로젝트 보드 (독립 구역, 칼럼·카테고리 정의는 `projects/data/config.js`, 데이터는 localStorage + JSON 내보내기)
 - `ai-work/` : AI 작업 프로세스를 정하는 판 (독립 구역, 단계·도구 데이터는 `ai-work/data/pipeline.json`)
   - 상단 메뉴의 **AI Work** 는 이곳으로 간다. `category/ai-work.html` 은 그대로 두는데,
@@ -1333,7 +1335,7 @@ holdings 관련 룰은 `holdings/CLAUDE.md` 참조.
     http://localhost:8765/              메인
                         /holdings/      주식
                         /projects/      프로젝트 보드
-                        /company-setup/ 설립 체크리스트
+                        /company-setup/ Insight (뉴스·영상·종목 분석)
                         /api-board/     API 보드
                         /api/kis/*  /api/dart/*  /api/news/*
 
@@ -1436,7 +1438,7 @@ Mac 은 `.command` 더블클릭, Windows 는 같은 이름의 `.bat` 더블클�
 | 용도 | Mac | Windows |
 |---|---|---|
 | 메인만 (8080) | `studio-preview.command` | `studio-preview.bat` |
-| 설립 체크리스트만 (8090) | `company-setup/preview.command` | `company-setup/preview.bat` |
+| Insight 만 (8090) | `company-setup/preview.command` | `company-setup/preview.bat` |
 | 프로젝트 보드만 (8091) | `projects/preview.command` | `projects/preview.bat` |
 | Debugging 보드만 (8093) | — | `debugging/debugging.bat` |
 | ~~홀딩스 정적 서버 (8765, API 없음)~~ | ~~`holdings-preview.command`~~ | ~~`holdings-preview.bat`~~ |
@@ -1739,7 +1741,7 @@ Mac 은 `.command` 더블클릭, Windows 는 같은 이름의 `.bat` 더블클�
 | `CLAUDE.md` | 이 파일 |
 | `holdings/CLAUDE.md` | 주식 구역 룰 |
 | `holdings/worker/README.md` · `projects/worker/README.md` | 워커 배포 절차 |
-| `company-setup/README.md` | 설립 체크리스트 안내 |
+| `company-setup/README.md` | Insight 안내 — **`시황분석` 이 든다** (2026-10-01) |
 
 **`.claude/commands/crosscheck.md` 는 예외로 `홈페이지_정리` 가 든다 (2026-09-16 지시).**
 그 파일은 룰이라기보다 **검증할 때 따라가는 그쪽의 작업 절차서**다. 검증하다 구멍을
