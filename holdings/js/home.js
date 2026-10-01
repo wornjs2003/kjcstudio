@@ -26,7 +26,7 @@ import { mountDisclosures } from './components/disclosures.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
 import { mountSchedule } from './components/schedule.js';
 import { bindDailyMenu, loadDailyDoc } from './components/daily-view.js';
-import { fetchIssues, paintIssues } from './components/news-list.js';
+import { fetchIssues, fetchFeed, paintIssues, paintLoading } from './components/news-list.js';
 import { bindNewsModal } from './components/news-modal.js';
 import { mountSectors } from './components/sectors.js';
 import { openSectorModal } from './components/sector-modal.js';
@@ -1877,8 +1877,28 @@ const SIDE_NEWS_KEY = 'news.NEWS_TTL';
 const SIDE_NEWS_FALLBACK_MS = 180_000;
 
 async function drawSideNews() {
-  paintIssues($('kh-side-news'), await fetchIssues(),
-              { compact: true, limit: SIDE_NEWS_N });
+  const host = $('kh-side-news');
+  /* 처음 켤 때만 적는다. 받아 둔 것이 있으면 갱신마다 깜빡이게 된다 */
+  if (host && !host.children.length) paintLoading(host, { compact: true });
+
+  /* 이 칸은 **시장 이슈만** 쓴다. 가벼운 쪽(`issues`)으로 먼저 그린다 */
+  paintIssues(host, await fetchIssues(), { compact: true, limit: SIDE_NEWS_N });
+
+  /* ── 뉴스 모달이 쓸 「종목 뉴스」 를 여기서 데워 둔다 (2026-10-01 지시) ──
+   *
+   * 재권님 말씀이 계기다 — **「모달이 켜질때 보여지는 정보를 미리 받아노면
+   * 다 되는거 아닌가?」**. 공시·일정은 이 화면이 이미 미리 받아 두어서
+   * 모달이 0.03초에 차는데, **종목 뉴스만 안 받고 있어** 모달을 열 때
+   * 0.2~1초 빈 칸이었다 (2026-10-01 실측).
+   *
+   * **`await` 하지 않는다.** 이 칸은 결과를 안 쓰므로 기다릴 이유가 없다 —
+   * 기다리면 사이드 뉴스가 그 1초만큼 늦게 찬다. 받아 둔 것은
+   * `news-list.js` 가 쥐고 있고 모달이 열릴 때 꺼내 쓴다.
+   *
+   * **KIS 호출이 늘지만 작다.** 2026-10-01 실측으로 증권사 호출 87,906건 중
+   * 종목 뉴스는 76건(0.09%)이었다. 이 주기로 돌려도 전체의 0.35% 다 —
+   * 「아끼려고 안 받는다」 가 주석에 적혀 있었는데 재보니 아낄 것이 없었다. */
+  fetchFeed().catch(() => { /* 못 받으면 모달이 그때 직접 받는다 */ });
 }
 
 /* 탭으로 뉴스 ↔ 공시를 갈아끼운다. **칸 높이가 바뀌면 안 된다**
