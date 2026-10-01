@@ -26,6 +26,7 @@
 """
 
 import argparse
+import collections
 import json
 import os
 import sqlite3
@@ -337,8 +338,10 @@ BUDGET_RATIO = 1.0                                  # 기준값을 다 쓴다
 # 아래 공유 줄이 여섯을 한 줄에 세우므로, 고정으로 나눌 때처럼
 # 「각자 N건 × 여섯」 이 되지 않는다. **합쳐서 10건이다.**
 #
-# 배포본 워커는 이 줄 **밖**이라 따로 초당 5건을 쓴다 —
-# 합하면 **15 / 20** 으로 실제 한도에 **25% 여유**가 남는다.
+# 배포본 워커는 이 줄 **밖**이라 따로 초당 5건을 쓴다 — **다만 2026-09-30 에
+# 경로에서 걷어내 그쪽으로 요청이 가지 않는다.** 그래서 **지금은 10 / 20** 이고,
+# **워커를 되돌리면 15 / 20** 이 된다. 「못 쓴다」 가 아니라 **「지금 안 쓴다」** 다 —
+# 워커·KV·D1 은 되돌릴 자리로 살아 있다.
 KIS_CALLS_PER_SEC = KIS_LIMIT_PER_SEC * BUDGET_RATIO   # = **합쳐서** 초당 10건
 KIS_MIN_INTERVAL = 1.0 / KIS_CALLS_PER_SEC             # = 0.1초 간격
 
@@ -666,7 +669,15 @@ def usage_stats():
     now = time.time()
     last_10s = sum(1 for t in _call_times if t > now - 10)
     last_60s = sum(1 for t in _call_times if t > now - 60)
-    last_1h = len(_call_times)
+    # **길이를 그대로 쓰지 않는다** (2026-10-01). 정리가 `_rate_limit` 안에서만
+    # 돌아 **호출이 멈추면 값이 굳었다** — 「지난 1시간」 이 아니라 「기동 뒤 누적」
+    # 이었다. `calls10s`·`calls60s` 는 처음부터 읽을 때 걸렀고 **이 한 줄만** 틀렸다.
+    #
+    # ⚠️ **여기서 정리(`pop`)하지 않는다.** `usage_stats()` 는 `_rate_lock` 을
+    # 안 잡아 **자물쇠 밖에서 목록을 변경**하게 된다. 정리는 `_rate_limit` 이
+    # 하고, **안 해도 못 커진다** — 초당 한도 × 1시간이 상한이다.
+    last_1h = sum(1 for t in _call_times if t > now - 3600)
+    last_1h_relayed = sum(1 for t in _relay_times if t > now - 3600)
     return {
         "limitPerSec": KIS_LIMIT_PER_SEC,
         "budgetRatio": BUDGET_RATIO,
@@ -675,6 +686,9 @@ def usage_stats():
         "calls10s": last_10s,
         "calls60s": last_60s,
         "calls1h": last_1h,
+        # **그중 넘겨받은 몫.** `calls1h - calls1hRelayed` 가 8765 자기 몫이다 —
+        # 「넘기기가 얼마나 모았나」 를 재는 값이고 전에는 섞여서 못 봤다.
+        "calls1hRelayed": last_1h_relayed,
         "perSec60s": round(last_60s / 60.0, 3),
         "budgetUsedPct": round((last_60s / 60.0) / KIS_CALLS_PER_SEC * 100, 1) if KIS_CALLS_PER_SEC else 0,
         "limitUsedPct": round((last_60s / 60.0) / KIS_LIMIT_PER_SEC * 100, 1) if KIS_LIMIT_PER_SEC else 0,
@@ -1005,6 +1019,15 @@ _board_stat = {"calls": 0, "errors": 0, "lastError": None}
 # 그것을 보고 정한다.
 _relay_cache = {}                  # (path, params, tr_id) -> (저장시각, 데이터)
 _relay_stat = {"hits": 0, "misses": 0}
+
+# **넘겨받아 KIS 로 나간 시각.** `usage_stats()` 가 `calls1hRelayed` 로 낸다 —
+# 8765 의 `calls1h` 에는 **자기 호출과 넘겨받은 것이 섞여** 있어
+# 2026-10-01 에 **200 = 100 + 100** 이 됐고 그것을 가를 값이 없었다.
+#
+# ⚠️ **`deque(maxlen=…)` 다.** `append` 가 원자적이고 **넘치면 저절로 버리므로
+# 자물쇠 없이 안전하다.** `_call_times` 처럼 `pop(0)` 루프를 돌면 읽는 쪽에서
+# 건드릴 때 터질 수 있다. 상한은 **초당 한도 × 1시간** 이라 1시간 창을 못 넘는다.
+_relay_times = collections.deque(maxlen=int(KIS_LIMIT_PER_SEC * 3600) + 1)
 RELAY_CACHE_MAX = 2000             # 키에 `params` 가 들어가 수가 늘 수 있다
 
 
@@ -1178,6 +1201,11 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
             _up_stat["lastError"] = safe_message(e)
     token = get_token(cfg)
     _rate_limit(path)
+    # **실제 KIS 호출을 여기 한 곳에서 센다** (2026-10-01).
+    # 전에는 경로마다 손으로 올려 **13곳**이었고 **일부 경로만** 세었다.
+    # **상류로 넘긴 것은 위에서 `return` 하므로 안 세어진다** — 맞다.
+    # 재시도(`EGW00201`)는 재귀로 다시 와서 **한 번 더 센다** — 실제로 두 번 부른다.
+    _stats["kis_calls"] += 1
     url = HOSTS[cfg["mode"]] + path + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={
         "authorization": "Bearer " + token,
@@ -1244,7 +1272,6 @@ def fetch_prices(cfg, codes):
 
     def one(code):
         try:
-            _stats["kis_calls"] += 1
             return code, fetch_price(cfg, code), None
         except RuntimeError as e:
             return code, None, safe_message(e)
@@ -1636,7 +1663,6 @@ def fetch_futures(cfg):
     if hit and (time.time() - hit[0]) < FUTURES_TTL:
         return hit[1]
     try:
-        _stats["kis_calls"] += 1
         data = kis_get(
             cfg,
             "/uapi/domestic-futureoption/v1/quotations/inquire-price",
@@ -1686,7 +1712,6 @@ def fetch_overseas(cfg):
     def one(item):
         i, (key, div, code, name, unit) = item
         try:
-            _stats["kis_calls"] += 1
             # 기간을 넓게 잡아 현재값과 추이를 한 번에 받는다.
             # output1 에 현재값, output2 에 일봉이 함께 온다 — 두 번 부를 필요가 없다.
             now = datetime.now(KST)
@@ -1742,7 +1767,7 @@ def fetch_overseas(cfg):
 #
 # 0.7초였다. 화면은 **2초마다** 부르므로 캐시가 한 번도 안 맞고 매번 실제로
 # 받았다. 지수 한 번이 여덟 건(국내 3 + 해외 4 + 선물 1)이라, **화면 하나가
-# 초당 3.4건**을 썼다 — 예산 다섯 중 셋이다 (2026-09-18 실측. 호출한 스레드를
+# 초당 3.4건**을 썼다 — **그때 예산 다섯 중 셋이었다** (2026-09-18 실측. 호출한 스레드를
 # 세어 보니 미리받기는 50초에 2~3회뿐이었고 나머지가 전부 이쪽이었다).
 #
 # 5초로 두면 2초 주기의 요청 중 대부분이 캐시로 받아진다. 값이 최대 5초 지난
@@ -1789,12 +1814,10 @@ def fetch_indices(cfg, with_chart=True):
     def one(item):
         i, code, name = item
         try:
-            _stats["kis_calls"] += 1
             info = fetch_index(cfg, code)
             series = []
             if with_chart:
                 try:
-                    _stats["kis_calls"] += 1
                     series = fetch_index_series(cfg, code)
                 except RuntimeError:
                     series = []          # 차트만 실패해도 현재값은 보여준다
@@ -1995,7 +2018,6 @@ def fetch_quotes_multi(cfg, codes):
             params["FID_COND_MRKT_DIV_CODE_%d" % n] = div
             params["FID_INPUT_ISCD_%d" % n] = code
         try:
-            _stats["kis_calls"] += 1
             data = kis_get(
                 cfg,
                 "/uapi/domestic-stock/v1/quotations/intstock-multprice",
@@ -2109,7 +2131,6 @@ def fetch_sectors(cfg, markets=None):
             out.extend(cached)
             continue
         try:
-            _stats["kis_calls"] += 1
             data = kis_get(
                 cfg,
                 "/uapi/domestic-stock/v1/quotations/inquire-index-category-price",
@@ -2153,7 +2174,6 @@ def fetch_movers(cfg, direction="up", market="all", limit=MOVERS_MAX):
     key = "%s:%s" % (sort, iscd)
     rows = _ttl_get(_movers_cache, key, MOVERS_TTL)
     if rows is None:
-        _stats["kis_calls"] += 1
         data = kis_get(
             cfg,
             "/uapi/domestic-stock/v1/ranking/fluctuation",
@@ -2212,7 +2232,6 @@ def fetch_investor_flow(cfg, market="KOSPI", days=INVESTOR_FLOW_DAYS):
     rows = _ttl_get(_inv_flow_cache, key, INVESTOR_FLOW_TTL)
     if rows is None:
         today = _today_kst()
-        _stats["kis_calls"] += 1
         data = kis_get(
             cfg,
             "/uapi/domestic-stock/v1/quotations/inquire-investor-daily-by-market",
@@ -2273,7 +2292,6 @@ def fetch_investor(cfg, code, days=INVESTOR_DAYS):
     cached = _ttl_get(_investor_cache, code, INVESTOR_TTL)
     if cached is not None:
         return cached
-    _stats["kis_calls"] += 1
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-investor",
@@ -2336,7 +2354,6 @@ def fetch_investor_estimate(cfg, code):
     cached = _ttl_get(_investor_est_cache, code, INVESTOR_EST_TTL)
     if cached is not None:
         return cached
-    _stats["kis_calls"] += 1
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/investor-trend-estimate",
@@ -2409,7 +2426,6 @@ def fetch_asking(cfg, code):
     cached = _ttl_get(_asking_cache, code, ASKING_TTL)
     if cached is not None:
         return cached
-    _stats["kis_calls"] += 1
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
@@ -2456,7 +2472,6 @@ def fetch_investor_top(cfg, direction="buy", market="all", by="qty", limit=10):
         rows = _ttl_get(_inv_top_cache, key, INVESTOR_TOP_TTL)
         if rows is None:
             try:
-                _stats["kis_calls"] += 1
                 data = kis_get(
                     cfg,
                     "/uapi/domestic-stock/v1/quotations/foreign-institution-total",
@@ -2989,7 +3004,7 @@ MINUTE_REFILL_GAP = 60
 # 미리 다운받아서 가지고 있다가 마우스 올리면 보여지는거지?").
 # 코스피 시가총액 상위 순으로 간다.
 #
-# ⚠️ **화면이 느려지면 안 된다.** 모든 KIS 호출이 초당 5건 줄에 서므로,
+# ⚠️ **화면이 느려지면 안 된다.** 모든 KIS 호출이 초당 10건 줄에 서므로,
 # 미리 받기가 연달아 부르면 그 뒤에 온 화면 요청이 밀린다. 종목 사이에
 # 쉬어서 그 틈으로 화면 요청이 들어가게 한다.
 PREFILL_TOP = 100          # 코스피 상위 몇 종목까지
@@ -3009,7 +3024,7 @@ PREFILL_ROUND_SEC = 1800   # 한 바퀴 돌고 쉬는 시간. 실제 호출은 d
 #
 # 위 3.5 초는 **화면이 없을 때** 기준이다. 종목 하나가 하루치 5분봉을 받느라
 # KIS 를 스물몇 번 부르므로, 쉬는 시간을 그만큼 잡아도 초당 3회쯤을 계속 쓴다.
-# 예산이 초당 5회라 화면 몫이 2회밖에 안 남는다.
+# **그때 예산이 초당 5회라** 화면 몫이 2회밖에 안 남았다 (지금은 10회다).
 #
 # **실측 (2026-09-18)** — 브라우저를 하나도 안 띄운 상태에서
 #
@@ -3043,7 +3058,7 @@ PREFILL_BUSY_CALL_GAP = 2.0    # 화면이 보고 있을 때 미리받기 호출
 #     화면을 막 열었을 때        4.74 ~ 6.42초   ← 이것이 남아 있었다
 #
 # 그래서 평소에도 호출 사이에 이만큼 둔다. 미리받기가 초당 두 번쯤이 되어
-# 예산 다섯 중 셋이 늘 비어 있고, 화면이 열리는 순간 그 자리로 들어간다.
+# **예산 열 중 여덟이** 늘 비어 있고, 화면이 열리는 순간 그 자리로 들어간다.
 # 한 바퀴가 느려지지만 하루 한 번 도는 일이라 잃는 것이 없다.
 PREFILL_IDLE_CALL_GAP = 0.3    # 화면이 없을 때도 두는 여유
 PREFILL_THREAD_NAME = "prefill-5m"
@@ -4112,6 +4127,7 @@ class Handler(SimpleHTTPRequestHandler):
                     self._send_json({"ok": True, "data": hit[1], "cached": True})
                     return
                 _relay_stat["misses"] += 1
+                _relay_times.append(now)       # `calls1hRelayed` 가 이것을 센다
                 relay_data = kis_get(cfg, kis_path, relay_params, tr)
                 _relay_cache[ckey] = (now, relay_data)
                 if len(_relay_cache) > RELAY_CACHE_MAX:
