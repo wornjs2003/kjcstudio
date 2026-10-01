@@ -1414,6 +1414,17 @@ function applyPrices(map) {
   lastSeen.save('prices', rowPrices);
   updateRowCells(map);
   paintBigPrice();                 // 큰 차트 머리줄의 현재가
+  /* **머리줄 숫자만 고치면 봉이 안 따라온다** (2026-10-01).
+     재권님이 「가격은 변하는데 캔들봉이 안움직이네」 로 찾으셨다.
+
+     2026-09-30 에 `chart.js` 에 `updateLast` 를 넣고 **모달에만** 걸었다
+     (`components/stock-view.js`). 첫 화면 큰 차트는 `bigChart` 를 **그리기
+     길에서만** 만져서, 가격이 들어와도 맨 오른쪽 막대가 그대로였다.
+     **안 듣던 것이 아니라 부르는 자리가 없었다.**
+
+     `updateLast` 가 `!live` 와 `last.close === px` 를 스스로 걸러서
+     여기서 다시 보지 않는다 — 건너뛸 값을 두 곳에서 정하면 갈린다. */
+  if (bigChart) bigChart.updateLast(rowPrices[selectedCode]);
   if (typeof detail !== 'undefined' && detail) {
     detail.update(rowPrices && rowPrices[selectedCode]);   // 거래대금 · 시가총액
   }

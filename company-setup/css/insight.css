@@ -1,0 +1,36 @@
+/* Insight 전용 — 배치·크기는 holdings/css/frame.css · home.css 를 그대로 쓴다.
+   여기에는 홀딩스에 없는 것만 둔다. 색은 루트 theme.css 의 --kh-* 변수만 쓴다 */
+
+/* 홀딩스 지수 띠 자리에 들어가는 한 줄 */
+.in-strip { flex: 1; min-width: 0; padding: 0 12px; font-size: 0.88rem; font-weight: 600;
+            color: var(--kh-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 아래 줄 칸 높이 — 홀딩스는 내용이 채워 255px(--kh-row-h)이 되는데 여기는 비어 있어
+   그 값을 직접 건다. 값은 홀딩스 home.css 의 --kh-row-h 한 곳에서 온다 */
+.kh-rank > .kh-card { height: var(--kh-row-h); }
+
+/* 큰 칸 높이 — 홀딩스는 차트(550) 위 단추 줄과 아래 범례 줄이 더해져 706px 이 된다.
+   여기는 그 줄들이 없어 짧아지므로 실측값을 건다 (tools/layout-baseline.json · index.html kh-card) */
+.kh-idx-main { height: 706px; }
+
+/* ── 뉴스 목록 (네이버 증권 뉴스에서 받은 것) ── */
+.in-asof { margin-left: auto; font-size: 0.75rem; color: var(--kh-text-muted); }
+.in-scroll { overflow-y: auto; min-height: 0; }
+.kh-sc-card, .kh-rank-card { display: flex; flex-direction: column; }
+.kh-sc-card .in-scroll, .kh-rank-card .in-scroll { flex: 1; padding: 0 18px 14px; }
+.in-news { list-style: none; margin: 0; padding: 0; }
+.in-news li { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--kh-border); }
+.in-news li:first-child { border-top: 0; }
+.in-li { min-width: 0; flex: 1; }
+.in-news a, .in-news span { color: var(--kh-text-primary); text-decoration: none; font-size: 0.92rem; font-weight: 500;
+  line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.in-news a:hover { text-decoration: underline; }
+.in-news .in-meta { margin-top: 3px; font-size: 0.75rem; color: var(--kh-text-muted); display: flex; gap: 6px; }
+.in-news .in-meta span { display: inline; font-size: inherit; font-weight: 400; color: inherit; }
+.in-sm a, .in-sm span { font-size: 0.84rem; }
+.in-sm li { padding: 8px 0; }
+.in-no { width: 18px; flex-shrink: 0; font-size: 0.88rem; color: var(--kh-accent); }
+.in-news .in-kind { background: var(--kh-bg-surface); color: var(--kh-text-secondary); border-radius: var(--kh-radius-sm); padding: 0 6px; }
+.in-cols { column-count: 3; column-gap: 24px; }
+.in-cols li { break-inside: avoid; }
+.in-empty { font-size: 0.84rem; color: var(--kh-text-muted); }

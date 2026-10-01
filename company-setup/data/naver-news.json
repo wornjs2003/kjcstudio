@@ -1,0 +1,539 @@
+{
+ "fetchedAt": "2026-10-01 16:39",
+ "from": "https://stock.naver.com/news",
+ "flash": [
+  {
+   "title": "마이크론 호실적, 이젠 삼전닉스 서프라이즈 차례",
+   "source": "동행미디어 시대",
+   "at": "2026-10-01 16:37:48",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/417/2026/10/01/1159851.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/417/0001159851"
+  },
+  {
+   "title": "[인사] 한화자산운용",
+   "source": "한국경제TV",
+   "at": "2026-10-01 16:36:17",
+   "rank": null,
+   "thumb": null,
+   "link": "https://n.news.naver.com/mnews/article/215/0001267900"
+  },
+  {
+   "title": "[인사] 한화자산운용",
+   "source": "헤럴드경제",
+   "at": "2026-10-01 16:36:15",
+   "rank": null,
+   "thumb": null,
+   "link": "https://n.news.naver.com/mnews/article/016/0002704501"
+  },
+  {
+   "title": "코나아이, 휴온스그룹에 식권카드 공급…12월 복지카드로 확대",
+   "source": "이데일리",
+   "at": "2026-10-01 16:36:14",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/018/2026/10/01/6378841.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/018/0006378841"
+  },
+  {
+   "title": "[인사] 한화투자증권",
+   "source": "헤럴드경제",
+   "at": "2026-10-01 16:36:10",
+   "rank": null,
+   "thumb": null,
+   "link": "https://n.news.naver.com/mnews/article/016/0002704500"
+  },
+  {
+   "title": "'재생의료' 기업 엠에스바이오 \"양막 렌즈 시장 선도할 것\"[IPO톡톡]",
+   "source": "한국경제TV",
+   "at": "2026-10-01 16:35:42",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/215/2026/10/01/1267899.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/215/0001267899"
+  },
+  {
+   "title": "\"법 통과됐다, 이제 연결이다\"…토큰증권 시장 '글로벌 확장' 시험대",
+   "source": "이데일리",
+   "at": "2026-10-01 16:35:13",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/018/2026/10/01/6378839.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/018/0006378839"
+  },
+  {
+   "title": "\"내려온다, 수수료 0원\"…NH투자증권, 엔믹스 설윤과 광고 캠페인",
+   "source": "뉴시스",
+   "at": "2026-10-01 16:34:54",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/003/2026/10/01/14228158.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/003/0014228158"
+  },
+  {
+   "title": "삼전닉스 자사주 매입 막바지…반도체 강세가 수급공백 떨칠까",
+   "source": "머니투데이",
+   "at": "2026-10-01 16:33:49",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/008/2026/10/01/5421185.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/008/0005421185"
+  },
+  {
+   "title": "[인사] 한화손해보험",
+   "source": "연합뉴스",
+   "at": "2026-10-01 16:32:27",
+   "rank": null,
+   "thumb": null,
+   "link": "https://n.news.naver.com/mnews/article/001/0016351471"
+  },
+  {
+   "title": "WGBI 자금 유입 공백에…원·달러 환율 상승 마감 [김혜란의 FX]",
+   "source": "서울경제",
+   "at": "2026-10-01 16:32:15",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/011/2026/10/01/4667402.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/011/0004667402"
+  },
+  {
+   "title": "엔씨, ‘아이온2’ 글로벌 흥행 조짐에 9%대 강세 마감",
+   "source": "매일경제",
+   "at": "2026-10-01 16:32:14",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/009/2026/10/01/5742773.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/009/0005742773"
+  },
+  {
+   "title": "금리 급등기 회사채 발행 나선 AA 기업군…전망 한글자에 금리 엇갈려",
+   "source": "머니투데이",
+   "at": "2026-10-01 16:32:09",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/008/2026/10/01/5421183.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/008/0005421183"
+  },
+  {
+   "title": "[인사] 한화생명·한화생명금융서비스",
+   "source": "연합뉴스",
+   "at": "2026-10-01 16:31:24",
+   "rank": null,
+   "thumb": null,
+   "link": "https://n.news.naver.com/mnews/article/001/0016351465"
+  },
+  {
+   "title": "정지성 에스오에스랩 대표, ‘카카오 AI 돛 서밋’서 기술창업 성장 전략 공유",
+   "source": "이데일리",
+   "at": "2026-10-01 16:31:10",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/018/2026/10/01/6378833.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/018/0006378833"
+  }
+ ],
+ "rank": [
+  {
+   "title": "삼전닉스 팔아 치운 개미들, 반도체서 탈출?…알고 보니 '양손투자'",
+   "source": "머니투데이",
+   "at": "2026-10-01 15:09:12",
+   "rank": "1",
+   "thumb": "https://imgnews.pstatic.net/image/origin/008/2026/10/01/5421083.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/008/0005421083"
+  },
+  {
+   "title": "신한은행, '주민번호·연소득' 등 2.5만명 고객정보 유출…\"피해 전액 보상\"",
+   "source": "뉴시스",
+   "at": "2026-10-01 12:10:23",
+   "rank": "2",
+   "thumb": "https://imgnews.pstatic.net/image/origin/003/2026/10/01/14226648.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/003/0014226648"
+  },
+  {
+   "title": "‘10월엔 주식 팔아라’ 겁먹었는데…10년 수익률 뜯어보니 뜻밖의 결과",
+   "source": "매일경제",
+   "at": "2026-10-01 14:48:24",
+   "rank": "3",
+   "thumb": "https://imgnews.pstatic.net/image/origin/009/2026/10/01/5742641.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/009/0005742641"
+  },
+  {
+   "title": "“3000원대 주식을 5만원대로”…14배 폭등시키더니, 그 결말은?",
+   "source": "전자신문",
+   "at": "2026-09-30 21:43:10",
+   "rank": "4",
+   "thumb": "https://imgnews.pstatic.net/image/origin/030/2026/09/30/3471353.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/030/0003471353"
+  },
+  {
+   "title": "\"'폭락 버티기' 안 팔길 잘했네\"…요즘 남몰래 웃는다는 주주들",
+   "source": "한국경제TV",
+   "at": "2026-09-30 14:24:42",
+   "rank": "5",
+   "thumb": "https://imgnews.pstatic.net/image/origin/215/2026/09/30/1267710.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/215/0001267710"
+  },
+  {
+   "title": "신한은행 2만5000여명 개인정보 유출…주민번호·연소득 등",
+   "source": "비즈워치",
+   "at": "2026-10-01 14:16:16",
+   "rank": "6",
+   "thumb": "https://imgnews.pstatic.net/image/origin/648/2026/10/01/51244.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/648/0000051244"
+  },
+  {
+   "title": "“하필 논란의 ‘암살자(들)’”…난처한 미래에셋증권, 단체관람료 지원으로 고발당해",
+   "source": "디지털데일리",
+   "at": "2026-10-01 13:26:06",
+   "rank": "7",
+   "thumb": "https://imgnews.pstatic.net/image/origin/138/2026/10/01/2243338.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/138/0002243338"
+  },
+  {
+   "title": "\"삼성전자, 내년 HBM 판매가 100% 넘게 오를 듯\"-KB",
+   "source": "한국경제",
+   "at": "2026-10-01 07:28:16",
+   "rank": "8",
+   "thumb": "https://imgnews.pstatic.net/image/origin/015/2026/10/01/5337927.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/015/0005337927"
+  },
+  {
+   "title": "신한은행 2만5000명 신용 정보 유출…정상혁 행장 \"진심으로 사과\"",
+   "source": "블로터",
+   "at": "2026-10-01 14:42:11",
+   "rank": "9",
+   "thumb": "https://imgnews.pstatic.net/image/origin/293/2026/10/01/91123.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/293/0000091123"
+  },
+  {
+   "title": "코스피보다 더 아팠다…코인 시장 평균 낙폭 69%",
+   "source": "데일리안",
+   "at": "2026-10-01 12:01:20",
+   "rank": "10",
+   "thumb": "https://imgnews.pstatic.net/image/origin/119/2026/10/01/3138495.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/119/0003138495"
+  },
+  {
+   "title": "KB證 “삼성전자, 차기 3개년 주주환원 600조원 가능”",
+   "source": "조선비즈",
+   "at": "2026-10-01 07:50:15",
+   "rank": "11",
+   "thumb": "https://imgnews.pstatic.net/image/origin/366/2026/10/01/1195456.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/366/0001195456"
+  },
+  {
+   "title": "\"환율 공식 깨졌다\"…美금리 치솟는데 원화가 강해진 이유는",
+   "source": "한국경제",
+   "at": "2026-10-01 15:17:12",
+   "rank": "12",
+   "thumb": "https://imgnews.pstatic.net/image/origin/015/2026/10/01/5338184.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/015/0005338184"
+  },
+  {
+   "title": "SK하닉, 솔리다임 상장 우려에…\"모든 판단 기준은 장기 주주가치\"",
+   "source": "이코노미스트",
+   "at": "2026-10-01 11:29:09",
+   "rank": "13",
+   "thumb": "https://imgnews.pstatic.net/image/origin/243/2026/10/01/103730.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/243/0000103730"
+  },
+  {
+   "title": "물가 지수도 '감동 부족'...슈퍼 코어에 놀란 채권 금리 [딥시그널]",
+   "source": "한국경제TV",
+   "at": "2026-10-01 14:37:40",
+   "rank": "14",
+   "thumb": "https://imgnews.pstatic.net/image/origin/215/2026/10/01/1267866.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/215/0001267866"
+  },
+  {
+   "title": "코스피 불장에 ‘크립토 윈터’ 길어져…버티던 대기자금 35%↓",
+   "source": "한겨레",
+   "at": "2026-10-01 12:02:22",
+   "rank": "15",
+   "thumb": "https://imgnews.pstatic.net/image/origin/028/2026/10/01/2825501.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/028/0002825501"
+  }
+ ],
+ "main": [
+  {
+   "title": "엘앤에프, 예상 3분의 1로 줄인 1천억 CB 발행 승부수",
+   "source": "머니투데이",
+   "at": "2026-10-01 16:26:05",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/008/2026/10/01/5421174.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/008/0005421174"
+  },
+  {
+   "title": "[단독] '서킷브레이커 4번' 폭락장 7월에도…\"팔아라\" 리포트 '0건'",
+   "source": "머니투데이",
+   "at": "2026-10-01 16:20:00",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/008/2026/10/01/5421169.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/008/0005421169"
+  },
+  {
+   "title": "‘찬바람 불면 역시 배당주’ 올해도 통할까…증권가 콕 찍은 종목은",
+   "source": "매일경제",
+   "at": "2026-10-01 16:19:15",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/009/2026/10/01/5742753.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/009/0005742753"
+  },
+  {
+   "title": "마이크론 훈풍이 고금리 이겼다…코스피, 다시 7000선 근접 마감",
+   "source": "뉴시스",
+   "at": "2026-10-01 16:15:42",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/003/2026/10/01/14228067.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/003/0014228067"
+  },
+  {
+   "title": "반토막 난 올해 IPO…4분기 부활 조짐 보이나",
+   "source": "머니투데이",
+   "at": "2026-10-01 16:13:42",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/008/2026/10/01/5421159.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/008/0005421159"
+  },
+  {
+   "title": "'7000피' 다시 눈앞⋯삼성전자·SK하이닉스 끌었다",
+   "source": "아이뉴스24",
+   "at": "2026-10-01 16:13:09",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/031/2026/10/01/1062880.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/031/0001062880"
+  },
+  {
+   "title": "반도체 훈풍 탄 코스피, 7000선 코앞… 마이크론·9월 수출 발표 '호재'",
+   "source": "머니투데이",
+   "at": "2026-10-01 16:11:40",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/008/2026/10/01/5421157.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/008/0005421157"
+  },
+  {
+   "title": "반도체 수출·마이크론 호실적에 코스피 7000선 눈앞…코스닥 4%대 급등 [이런국장 저런주식]",
+   "source": "서울경제",
+   "at": "2026-10-01 16:09:10",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/011/2026/10/01/4667390.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/011/0004667390"
+  },
+  {
+   "title": "마이크론·수출 호조에…삼전닉스 강세·장비주 '불기둥'[핫종목](종합)",
+   "source": "뉴스1",
+   "at": "2026-10-01 16:09:04",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/421/2026/10/01/9204527.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/421/0009204527"
+  },
+  {
+   "title": "마이크론 훈풍보다 셌다… 코스피 6900 이끈 건 ‘삼전닉스 자사주’[마켓뷰]",
+   "source": "조선비즈",
+   "at": "2026-10-01 15:57:12",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/366/2026/10/01/1195667.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/366/0001195667"
+  },
+  {
+   "title": "\"상품권에서 TV까지\"…KB증권, IRP·연금저축 순입금 이벤트",
+   "source": "데일리안",
+   "at": "2026-10-01 15:56:10",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/119/2026/10/01/3138648.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/119/0003138648"
+  },
+  {
+   "title": "메모리 대형주에서 장비주까지…D램 ETF ‘원조’ 한화운용",
+   "source": "매일경제",
+   "at": "2026-10-01 15:55:11",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/009/2026/10/01/5742731.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/009/0005742731"
+  },
+  {
+   "title": "주가 하락 틈타 경쟁사가 2대 주주…미트박스 경영권 흔들리나",
+   "source": "이데일리",
+   "at": "2026-10-01 15:39:13",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/018/2026/10/01/6378762.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/018/0006378762"
+  },
+  {
+   "title": "주식·코인·비상장까지…로빈후드가 판 흔드나[코인 슈퍼위크]",
+   "source": "데일리안",
+   "at": "2026-10-01 15:37:10",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/119/2026/10/01/3138636.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/119/0003138636"
+  },
+  {
+   "title": "[속보]코스피 2% 가까이 올라 6970선 마감…코스닥은 4.5% 상승",
+   "source": "이데일리",
+   "at": "2026-10-01 15:35:13",
+   "rank": null,
+   "thumb": "https://imgnews.pstatic.net/image/origin/018/2026/10/01/6378757.jpg?type=nf206_146",
+   "link": "https://n.news.naver.com/mnews/article/018/0006378757"
+  }
+ ],
+ "world": [
+  {
+   "title": "PMI 지표에 따르면 9월 스페인 제조업이 성장세로 돌아섰다",
+   "source": "로이터",
+   "at": "2026-10-01 16:15"
+  },
+  {
+   "title": "아랍에미리트(UAE) 검찰총장, 경로를 이탈한 플라이두바이 항공편에 대한 수사 지시",
+   "source": "로이터",
+   "at": "2026-10-01 16:15"
+  },
+  {
+   "title": "마이크론의 긍정적인 실적 전망과 매출 예상치 상회 소식에 유럽 반도체주 상승",
+   "source": "로이터",
+   "at": "2026-10-01 16:15"
+  },
+  {
+   "title": "UK의 RentGuarantor, 시장 예상치를 상회하는 연간 이익 및 매출 전망 발표 후 주가 급등",
+   "source": "로이터",
+   "at": "2026-10-01 16:15"
+  },
+  {
+   "title": "바클레이즈, 로이드, 냇웨스트 그룹",
+   "source": "로이터",
+   "at": "2026-10-01 16:15"
+  },
+  {
+   "title": "[속보] 에어텔 모바일 커머스 N.V., IPO 공모가를 주당 1.96파운드로 확정했다고 발표",
+   "source": "로이터",
+   "at": "2026-10-01 16:12"
+  },
+  {
+   "title": "에어텔 머니, IPO 주당 가격을 1.96파운드로 책정",
+   "source": "로이터",
+   "at": "2026-10-01 16:09"
+  },
+  {
+   "title": "마이크론의 실적 전망에 힘입어 반도체주가 상승하면서 닛케이 지수가 6주 만에 최고 종가를 기록했다",
+   "source": "로이터",
+   "at": "2026-10-01 16:09"
+  },
+  {
+   "title": "UK'의 감마 주가, 워터랜드가 인수 제안을 철회한 뒤 하락",
+   "source": "로이터",
+   "at": "2026-10-01 16:07"
+  },
+  {
+   "title": "체코 통계청, “2025년 체코 재정적자 GDP 대비 2.2%” 발표",
+   "source": "로이터",
+   "at": "2026-10-01 16:07"
+  },
+  {
+   "title": "일본 선물, 원자재 가격 강세가 중국 수요 부진을 상쇄하며 상승",
+   "source": "로이터",
+   "at": "2026-10-01 16:07"
+  },
+  {
+   "title": "우크라이나 농림부, 9월 곡물 수출이 전년 동기 대비 36.6% 감소했다고 밝혔다",
+   "source": "로이터",
+   "at": "2026-10-01 16:07"
+  },
+  {
+   "title": "UBS의 본사 이전 전략",
+   "source": "로이터",
+   "at": "2026-10-01 16:07"
+  },
+  {
+   "title": "[속보] BPCL 임원, 다음 주 코치 정유소 내 2개 보조 설비 가동 재개 예정이라고 밝혀",
+   "source": "로이터",
+   "at": "2026-10-01 16:07"
+  },
+  {
+   "title": "9월 스웨덴 내 테슬라 신규 등록 대수가 전년 동기 대비 38.4% 증가했다",
+   "source": "로이터",
+   "at": "2026-10-01 16:04"
+  }
+ ],
+ "notice": [
+  {
+   "title": "울산지피에스 주식회사 사채권자집회소집",
+   "source": "채권수시공시",
+   "kind": "채권익일공시",
+   "at": "2026-10-01 16:38"
+  },
+  {
+   "title": "(주)휴림에이텍 (정정)주주총회소집결의(임시주주총회)",
+   "source": "휴림에이텍",
+   "kind": "주주총회관련",
+   "at": "2026-10-01 16:36"
+  },
+  {
+   "title": "(주)케이에스인더스트리 최대주주변경",
+   "source": "KS인더스트리",
+   "kind": "최대/주요주주/계열회사변경",
+   "at": "2026-10-01 16:36"
+  },
+  {
+   "title": "솔브레인홀딩스(주) 해산사유발생(자회사의 주요경영사항)",
+   "source": "솔브레인홀딩스",
+   "kind": "해산/파산",
+   "at": "2026-10-01 16:35"
+  },
+  {
+   "title": "(주)서부티엔디 신규시설투자등",
+   "source": "서부T&D",
+   "kind": "시설투자/자원개발",
+   "at": "2026-10-01 16:35"
+  },
+  {
+   "title": "(주)케이에스인더스트리 증권 발행결과(자율공시)(제3자배정 유상증자)",
+   "source": "KS인더스트리",
+   "kind": "기타주요경영사항",
+   "at": "2026-10-01 16:33"
+  },
+  {
+   "title": "㈜핑거 타법인 주식 및 출자증권 취득결정(종속회사의 주요경영사항)",
+   "source": "핑거",
+   "kind": "",
+   "at": "2026-10-01 16:33"
+  },
+  {
+   "title": "㈜핑거 유상증자결정(종속회사의 주요경영사항)",
+   "source": "핑거",
+   "kind": "",
+   "at": "2026-10-01 16:32"
+  },
+  {
+   "title": "솔브레인홀딩스(주) 주주명부폐쇄기간 또는 기준일 설정",
+   "source": "솔브레인홀딩스",
+   "kind": "명의개서정지",
+   "at": "2026-10-01 16:30"
+  },
+  {
+   "title": "(주)제주항공 출자법인 부도ㆍ해산사유 등 발생(자율공시)",
+   "source": "제주항공",
+   "kind": "출자/피보증법인",
+   "at": "2026-10-01 16:29"
+  },
+  {
+   "title": "에이치엘비이노베이션(주) 추가상장(유상증자(제3자배정))",
+   "source": "HLB이노베이션",
+   "kind": "신규/추가/변경/재상장",
+   "at": "2026-10-01 16:25"
+  },
+  {
+   "title": "솔브레인홀딩스(주) 회사합병 결정(소규모합병)",
+   "source": "솔브레인홀딩스",
+   "kind": "영업양수도/분할/합병",
+   "at": "2026-10-01 16:23"
+  },
+  {
+   "title": "하나 1Q CD금리액티브증권상장지수투자신탁(채권혼합-파생형)(합성) 합성ETF 거래상대방 순자본비율 공시(국내 금융투자업자)",
+   "source": "1Q CD금리액티브(합성)",
+   "kind": "기타안내공시",
+   "at": "2026-10-01 16:23"
+  },
+  {
+   "title": "주식회사 에스제이그룹 자기주식취득 신탁계약 체결 결정",
+   "source": "에스제이그룹",
+   "kind": "자기주식(신탁포함)",
+   "at": "2026-10-01 16:22"
+  },
+  {
+   "title": "아이쓰리시스템(주) 단일판매ㆍ공급계약체결",
+   "source": "아이쓰리시스템",
+   "kind": "단일판매/공급계약",
+   "at": "2026-10-01 16:22"
+  }
+ ]
+}
