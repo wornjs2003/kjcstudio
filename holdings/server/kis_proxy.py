@@ -2954,13 +2954,137 @@ PREFILL_THREAD_NAME = "prefill-5m"
 # 으로 따로 판단하므로 **보고 있는 종목만 실시간**이 된다 — 지시 그대로다.
 PREFILL_FRESH_SEC = 300
 
+# ── 「갱신될 때만」 을 **봉 구간**으로 가른다 (2026-10-01 지시) ─────
+#
+# **경과 시간으로 가르면 어긋난다.** 위 300초를 「마지막으로 받은 지 이만큼
+# 지났나」 로 썼는데, **한 바퀴가 6~8분 + 쉬는 1800초**라 돌아올 때마다
+# 300초가 지나 있어 **늘 참**이었다 — 2026-09-18 의 고침이 그 자리를 못 넘었다
+# (2026-10-01 실측 — 300초 안쪽인 종목 **0 / 111**).
+#
+# **봉 구간으로 가르면 한 바퀴가 얼마든 안 어긋난다.** 같은 구간을 두 번 받지
+# 않고, **구간이 안 늘어나는 동안(장 마감 뒤 · 주말)은 아예 안 받는다** —
+# 하루의 17.5시간이 거기다. 재권님 말씀 「5분봉 갱신될때만 받기」 그대로다.
+#
+# **300 은 그대로 쓴다 — 이제 「5분봉 한 칸」 이라는 뜻이다.** 워커에도 같은
+# 상수가 있고 `check-kis-consts.py` 가 대조하므로 없애지 않는다
+# (「룰은 하나다 — 로컬만 다르게 정하지 않는다」).
+#
+# ⚠️ **휴장일은 모른다.** 공휴일에는 구간이 늘어나는 것처럼 보여 받으러
+# 가는데, **한 바퀴 주기가 천장이라 지금보다 나빠지지는 않는다.**
+#
+# ⚠️ **워커는 아직 경과 시간으로 가른다** — `kis-worker.js` 의 미리받기가
+# `Date.now() - last < PREFILL_FRESH_SEC * 1000` 그대로다.
+# **기준은 하나고(「새 봉이 생겼을 때만」) 구현이 갈려 있다**
+# (「룰은 하나다 — 로컬만 다르게 정하지 않는다」 의 그 자리).
+# 워커는 2026-09-30 에 **경로에서 걷어냈고**(「외부접속은 맥미니가 받는다」)
+# 지울 날을 기다리는 중이라 이 커밋에서 안 건드렸다. **되살릴 날에는 함께 고친다.**
+MINUTE_SESSION_END = "1530"    # 정규장이 끝난 뒤의 **표식**. 실제 봉 시각이 아니다
+
+
+def prefill_due(code, want=None):
+    """그 종목을 **지금 받아야 하나.** 미리받기 관문이다.
+
+    **함수로 꺼내 둔 이유** — `--slow` 서버는 미리받기를 끄므로 루프를 돌려
+    볼 수가 없다. 관문만 따로 부를 수 있으면 **가짜 시각으로 시험**할 수 있다
+    (2026-10-01).
+    """
+    if want is None:
+        want = _last_closed_5m_slot()
+    return _meta_get("pf5m:%s" % code) != want
+
+
+def _last_closed_5m_slot(now=None):
+    """지금 기준 **이미 완성된** 마지막 정규장 5분봉 구간 (YYYYMMDDHHMM).
+
+    장중이면 직전 경계, 장이 끝난 뒤면 그날 표식, 장 전·주말이면 **직전
+    거래일의 표식**이다. 이 값이 안 바뀌는 동안은 새 봉이 없다는 뜻이라
+    미리받기가 쉰다.
+    """
+    now = now or datetime.now(KST)
+
+    def prev_session(d):
+        d = d - timedelta(days=1)
+        while d.weekday() >= 5:              # 토·일은 거슬러 올라간다
+            d = d - timedelta(days=1)
+        return d.strftime("%Y%m%d") + MINUTE_SESSION_END
+
+    if now.weekday() >= 5:                   # 주말
+        return prev_session(now)
+    open_t = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    close_t = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    if now < open_t:
+        return prev_session(now)
+    if now >= close_t:
+        return now.strftime("%Y%m%d") + MINUTE_SESSION_END
+    # 지금 속한 구간은 **아직 자라는 중**이다. 완성된 것은 그 앞
+    bar_min = PREFILL_FRESH_SEC // 60
+    cur = now.replace(minute=(now.minute // bar_min) * bar_min,
+                      second=0, microsecond=0)
+    done = cur - timedelta(minutes=bar_min)
+    if done < open_t:
+        return prev_session(now)
+    return done.strftime("%Y%m%d%H%M")
+
 _last_ui_at = 0.0              # 화면이 마지막으로 /api/kis/* 를 부른 시각
 
 
-def _mark_ui_call():
-    """화면이 KIS 를 썼다고 적어 둔다. 미리받기가 이것을 보고 양보한다."""
+# ── 화면이 **어느 종목**을 보고 있나 (2026-10-01 지시) ────────────
+#
+# 재권님이 받는 순서를 넷으로 정하셨다.
+#
+#     1 모달이 열린 종목    맨 먼저 · 가장 자주
+#     2 화면에 보이는 종목   그다음 (실시간 갱신은 여기까지)
+#     3 오른쪽 목록 · 정렬에 쓰이는 종목
+#     4 나머지             차차 · 천천히 (미리받기)
+#
+# **아래 `_mark_ui_call` 은 「언제」 만 적어서 1~3 을 가를 수가 없었다.**
+# 그래서 미리받기가 넷을 구분 없이 시가총액 순서로 돌았다 — **1순위가 가장
+# 드물고(모달은 열 때 한 번) 4순위가 가장 자주 도는** 꼴이었다 (2026-10-01 실측).
+#
+# **정보는 이미 매 요청에 들어온다.** 적기만 하면 된다.
+#
+#     모달       `asking?code=` · `ticks?code=`    **5초마다**
+#     보이는 줄   `prices?codes=a,b,c`             **30초마다 목록째**
+#
+# **순위 표를 두지 않는다.** 「어느 종목이 몇 순위」 를 적으면 화면이 바뀔
+# 때마다 낡는다 — **최근에 물어본 순서**가 곧 그 순위다.
+#
+# **모달 룰과 부딪히지 않는다.** 「모달은 목록 폴링에 얹혀 있다」 는 **시세**
+# 이야기이고(`home.js` 의 `applyPrices`), 여기서 적는 것은 **순서**다.
+UI_SEEN_MAX = 400          # 이만큼만 들고 있는다. 넘으면 오래된 것부터 버린다
+_ui_seen = {}              # 종목코드 -> 화면이 마지막으로 물어본 시각(monotonic)
+_ui_seen_lock = threading.Lock()
+
+
+def _mark_ui_call(path=""):
+    """화면이 KIS 를 썼다고 적어 둔다. 미리받기가 이것을 보고 양보한다.
+
+    **종목까지 적는다** (2026-10-01) — 위 주석 참고. `path` 를 안 주면
+    전처럼 시각만 적는다.
+    """
     global _last_ui_at
     _last_ui_at = time.monotonic()
+    if not path:
+        return
+    try:
+        qs = urllib.parse.parse_qs(urllib.parse.urlparse(path).query)
+    except Exception:
+        return                     # 주소가 이상해도 시각은 이미 적었다
+    raw = list(qs.get("code", []))
+    for v in qs.get("codes", []):
+        raw.extend(v.split(","))
+    now = time.monotonic()
+    with _ui_seen_lock:
+        for c in raw:
+            c = c.strip()
+            # **종목코드만 적는다.** `code=KOSPI` 처럼 지수 이름도 오는데
+            # 그것을 넣으면 미리받기가 없는 종목을 받으러 간다
+            if len(c) == 6 and c.isdigit():
+                _ui_seen[c] = now
+        if len(_ui_seen) > UI_SEEN_MAX:
+            old = sorted(_ui_seen.items(), key=lambda kv: kv[1])
+            for c, _ in old[:len(_ui_seen) - UI_SEEN_MAX]:
+                _ui_seen.pop(c, None)
 
 
 def _ui_busy():
@@ -2980,7 +3104,20 @@ def _prefill_codes():
         codes = []
     if not codes:                      # 순위가 아직 없으면 관심종목이라도
         codes = list(dart.WATCH_CODES)
-    return codes
+
+    # **화면이 최근에 본 것부터 간다** (2026-10-01 지시 — 네 단계).
+    # 모달이 열린 종목이 가장 최근이라 맨 앞에 서고, 보이는 줄이 그다음,
+    # 나머지는 시가총액 순서 그대로 뒤에 남는다. **순위 표를 두지 않는다.**
+    #
+    # **목록 밖이어도 화면이 열었으면 받는다** — 모달 룰의 「모달 열린 종목은
+    # 어느 순위에 있든 1순위」 그대로다.
+    with _ui_seen_lock:
+        seen = dict(_ui_seen)
+    if not seen:
+        return codes
+    front = sorted(seen, key=lambda c: -seen[c])
+    rest = [c for c in codes if c not in seen]
+    return front + rest
 
 
 def start_prefill(cfg):
@@ -2992,16 +3129,22 @@ def start_prefill(cfg):
         time.sleep(PREFILL_START_SEC)
         while True:
             try:
+                want = _last_closed_5m_slot()
                 for code in _prefill_codes():
-                    # 새 봉이 생겼을 때만 받는다. 5분봉은 5분에 하나씩 생긴다
-                    last = float(_meta_get("sync:%s:5m" % code) or 0)
-                    if (time.time() - last) < PREFILL_FRESH_SEC:
-                        continue       # 같은 값을 또 받지 않는다
+                    # **새 봉이 생겼을 때만 받는다.** 경과 시간이 아니라
+                    # **봉 구간**으로 가른다 — 위 `_last_closed_5m_slot` 주석.
+                    # 그 구간을 이미 받아 봤으면 건너뛴다. 장이 끝난 뒤와
+                    # 주말에는 구간이 안 늘어나 **한 종목도 안 받는다.**
+                    if not prefill_due(code, want):
+                        continue
                     try:
                         # 하루치는 하루 한 번만. 나머지는 최근 구간만 받는다
                         get_chart(cfg, code, "5m", 1, gap_check=False)
                     except Exception:
                         pass           # 한 종목이 실패해도 나머지는 간다
+                    # **실패해도 적는다.** 안 적으면 그 종목만 바퀴마다 다시
+                    # 부른다 — 다음 봉 구간에 저절로 또 온다
+                    _meta_set("pf5m:%s" % code, want)
                     # 화면이 보고 있으면 길게 쉰다. 지수·시세가 먼저다
                     time.sleep(PREFILL_BUSY_REST_SEC if _ui_busy()
                                else PREFILL_REST_SEC)
@@ -3291,7 +3434,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if (self.path or "").startswith("/api/kis/"):
-            _mark_ui_call()          # 미리받기가 양보하도록 알린다
+            _mark_ui_call(self.path)   # 양보 + **어느 종목인지** 적는다
             self._handle_kis()
             return
         if (self.path or "").startswith("/api/dart/"):
@@ -3301,7 +3444,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._handle_news()
             return
         if (self.path or "").startswith("/api/naver/"):
-            _mark_ui_call()          # 화면이 보고 있다는 신호는 여기서도 준다
+            _mark_ui_call(self.path)   # 화면이 보고 있다는 신호는 여기서도
             self._handle_naver()
             return
         if (self.path or "").startswith("/api/board/"):
