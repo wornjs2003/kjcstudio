@@ -1240,7 +1240,7 @@ canvas 는 CSS 를 상속받지 못한다. 그래서 `holdings/js/theme.js` 가 
   - 받는 방법·옵션은 `uidata/README.md` 에 있다. 여기 다시 적지 않는다
 
 ## 상단 메뉴 구성
-- 메뉴 줄 — 3D Modeling / AI Work / Debugging / API / Holdings / Setup / Projects / ⋯(더보기)
+- 메뉴 줄 — 3D Modeling / AI Work / Debugging / API / Holdings / Insight / Projects / ⋯(더보기)
 - ⋯ 안에 **Web · Interactive** / **Branding** / About / Services / Contact
 - **값은 `partials/nav.html` 이 기준이다.** 여기 적은 것은 그 순간의 모습이므로,
   어긋나면 `nav.html` 을 보고 이쪽을 고친다 (「세면 나오는 값은 본문에 적지 않는다」)
@@ -1257,7 +1257,9 @@ canvas 는 CSS 를 상속받지 못한다. 그래서 `holdings/js/theme.js` 가 
 - **메뉴를 고칠 때는 `partials/nav.html` 의 두 곳을 같이 고친다.**
   데스크톱 목록과 모바일 전체화면 목록이 따로 있다. 한 곳만 고치면 폰과 PC 가 달라진다
 - Holdings는 `holdings/` 로 외부 이동 느낌 (화살표 아이콘)
-- Setup 은 `company-setup/` 으로 외부 이동 느낌 (화살표 아이콘)
+- Insight 는 `company-setup/` 으로 외부 이동 느낌 (화살표 아이콘). **2026-10-01 에 「Setup」 에서 바꿨다** —
+  `시황분석` 세션의 자리가 되면서 재권님이 「너의 공간으로 지정된 곳 이름 바꾸고 알려줘」 하셨다.
+  **주소(`company-setup/`)와 `data-nav` 는 그대로다.** 이름만 바뀌었다
 - Projects 는 `projects/` 로 외부 이동 느낌 (화살표 아이콘)
 
 ## 확장 규칙
@@ -1460,6 +1462,7 @@ Mac 은 `.command` 더블클릭, Windows 는 같은 이름의 `.bat` 더블클�
 | `개념정의` | 개념·용어 정의 · 기술 조사 · PC 환경 설정 · **문서 담당 · 검증 보드 · 루트 화면** | 아래 문서 목록 · `tools/` · `.claude/`(`commands/` 제외) · `.githooks/` · `debugging/` · `launchd/`(2026-10-01) · **루트**(`index.html`·`category/`·`assets/`·`partials/`·`data/`) |
 | `엔진_개발` | **게임 엔진** (파이썬 2D · DirectX 11) · **AI 작업 판** | `kjcEngine/` · `ai-work/` |
 | `작업우선순위` | **현황 담당 · 감사.** 지시를 나르고 진행을 알리며, **중간서버 검수를 같이 본다** | `projects/` **만** |
+| `시황분석` | **뉴스 · 동영상 · 주식 분석** (2026-10-01 · 재권님이 정하심). 상단 메뉴 **Insight** 가 그 자리다 | `company-setup/` |
 | `qa` | **재권님 질문에 답한다 · 검수 도구를 돌리고 보고한다** (2026-09-29) · **룰 · 훅 · 스킬이 새로 들어오거나 바뀌면 임시 저장소에서 「걸려야 할 것 · 안 걸려야 할 것」 을 실제로 돌려 본다** (2026-10-01 지시 — 「룰이나 훅 스킬들 만들면 시뮬레이션 항상 해줘야돼」. `.githooks/post-commit` 이 그런 커밋 뒤에 「qa 에 시뮬레이션을 요청하십시오」 를 띄운다) | **저장소 파일을 고치지 않는다** |
 | 그 밖 | 각자 창에서 하던 일 | — |
 
@@ -1494,8 +1497,8 @@ Mac 은 `.command` 더블클릭, Windows 는 같은 이름의 `.bat` 더블클�
 **「만드는 레인」 과 「일하는 데 필요한 자리」 를 가른다.** 안 가르면 다음에
 또 「이건 만드는 건가」 를 묻게 된다.
 
-**`company-setup/` · `api-board/` 는 아직 주인이 없다 (2026-09-22).**
-둘 다 미커밋 0 이고 9/21 이후 조용해서 **급하지 않다.** 손대기 전에 여쭙는다.
+**`api-board/` 는 아직 주인이 없다 (2026-09-22).** 손대기 전에 여쭙는다.
+**`company-setup/` 은 2026-10-01 에 `시황분석` 의 자리가 됐다** — 그 전까지 둘 다 주인이 없었다.
 
 **레인이 바뀐 것이지 일감이 옮겨간 것이 아니다.** 메인 모바일은
 `주식페이지_개발1` 이 그대로 한다 — 「주업무」 와 「하는 일」 의 구분이다.

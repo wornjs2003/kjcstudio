@@ -141,11 +141,12 @@ lanes=$(printf '%s\n' "$files" | awk -F/ '
   $1 == "assets" || $1 == "category" ||
   $1 == "data"   || $1 == "partials"    { print "개념정의";        next }
 
-  # company-setup · api-board 는 **아직 주인이 없다** (2026-09-22).
+  # company-setup 은 2026-10-01 에 **시황분석** 의 자리가 됐다. api-board 는 **아직 주인이 없다** (2026-09-22).
   # 둘 다 미커밋 0 이고 조용해서 급하지 않다. 정해지면 이 줄을 고친다.
   # 그때까지는 함께 묶어 **한 레인**으로 센다 — 둘을 같이 고치는 것은
   # 정상이고, 남의 것과 섞이면 걸린다.
-  $1 == "company-setup" || $1 == "api-board" { print "(미정) 설립·API"; next }
+  $1 == "company-setup"                 { print "시황분석";        next }
+  $1 == "api-board"                     { print "(미정) API";      next }
 
   $1 == "tools" || $1 == ".claude" ||
   $1 == ".githooks" || $1 == "docs" ||
