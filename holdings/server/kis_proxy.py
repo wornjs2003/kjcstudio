@@ -702,6 +702,13 @@ def usage_stats():
         "boardUpstreamCalls": _board_stat["calls"],
         "boardUpstreamErrors": _board_stat["errors"],
         "boardUpstreamLastError": _board_stat["lastError"],
+        # ── 넘겨받은 요청의 캐시 (2026-10-01) ── **줄어든 비율을 재는 자리다.**
+        # `relayCacheHits` ÷ (`relayCacheHits` + `relayCacheMisses`) 가
+        # **KIS 를 안 부른 비율**이다. 로그에 종목코드를 남기지 않고도
+        # 「얼마나 줄었나」 가 나온다 (창구 판단 2026-10-01).
+        "relayCacheHits": _relay_stat["hits"],
+        "relayCacheMisses": _relay_stat["misses"],
+        "relayCacheSize": len(_relay_cache),
 
         # **주기·캐시 값 전부.** 위 `priceCacheTtl` 은 `status.html` 이
         # 쓰고 있어 남겨 둔다 — 같은 값이 여기에도 들어오지만 **한 곳에서
@@ -966,6 +973,54 @@ _up_stat = {"calls": 0, "fallbacks": 0, "lastError": None}
 # 받는다 — KIS 가 `/api/kis/relay` 를 새로 만들어야 했던 것과 다르다.
 BOARD_UPSTREAM_RAW = (os.environ.get("KJC_BOARD_UPSTREAM") or "").strip().rstrip("/")
 _board_stat = {"calls": 0, "errors": 0, "lastError": None}
+
+# ── 넘겨받은 요청도 캐시를 거친다 (2026-10-01 지시) ──────────────
+#
+# 재권님 지시 — 「둘 다 할 거니 정해서 진행」. **(가) 먼저.**
+#
+# ⚠️ **`relay` 는 `kis_get` 레벨이라 위쪽 캐시 열 곳을 모두 건너뛴다**
+# (`_price_cache` · `_chart_cache` · `_index_cache` · `_multi_cache` ·
+# `_sector_cache` · `_movers_cache` · `_inv_flow_cache` · `_investor_cache` ·
+# `_fut_cache` · `_ovs_cache`). 그 캐시들은 전부 **화면 API 함수 안**에 있고
+# 그 함수가 **그 아래로** `kis_get` 을 부른다.
+#
+# **그래서 넘기기만으로는 KIS 총량이 줄지 않았다** (qa 실측 2026-10-01 —
+# 화면 둘 10분에 `relay` 1031건 ≈ 넘긴 수, 넘긴 건마다 KIS 한 건).
+# **줄어든 것은 토큰 발급과 「레이트리밋이 한 줄에 서는 것」 이었다** —
+# 전에는 서버가 각자 초당 한도를 세어 **합치면 그 배수까지** 나갈 수 있었다.
+#
+# **여기 캐시를 두면 같은 종목을 여러 화면이 봐도 KIS 를 한 번만 부른다.**
+#
+# **키는 KIS 요청 단위**(`path` · `params` · `tr_id`)다. 위쪽 캐시는 키가
+# `code` 라 층이 달라 **키를 맞추는 문제가 아니다.**
+#
+# **TTL 은 `PRICE_CACHE_TTL` 을 그대로 쓴다** — 새 상수를 만들지 않는다
+# (「같은 값은 한 곳에만」). `relay` 를 타는 것이 대부분 시세이고, 차트처럼
+# 위쪽 TTL 이 더 긴 경로는 **세션 서버 캐시가 이미 거르므로** 짧게 잡아도
+# 손해가 없다.
+#
+# **동시 요청 합치기(single-flight)는 일부러 안 넣었다** (창구 판단
+# 2026-10-01). 넣으면 **「락 때문에 느려졌나」 와 「캐시가 듣나」 가 섞여**
+# 둘 다 못 가린다. 아래 `relayCacheHits` 로 **부족한지가 값으로 나오므로**
+# 그것을 보고 정한다.
+_relay_cache = {}                  # (path, params, tr_id) -> (저장시각, 데이터)
+_relay_stat = {"hits": 0, "misses": 0}
+RELAY_CACHE_MAX = 2000             # 키에 `params` 가 들어가 수가 늘 수 있다
+
+
+def _relay_sweep(now):
+    """만료된 것을 치운다. **상한을 넘을 때만** 돈다 — 매번 훑으면 비싸다.
+
+    `ThreadingHTTPServer` 라 동시에 들어온다. **항목을 복사해서** 돌고
+    `pop(k, None)` 으로 지운다 — 도는 중에 남이 지워도 터지지 않는다.
+    """
+    for k, v in list(_relay_cache.items()):
+        if now - v[0] >= PRICE_CACHE_TTL:
+            _relay_cache.pop(k, None)
+    if len(_relay_cache) > RELAY_CACHE_MAX:
+        rows = sorted(list(_relay_cache.items()), key=lambda kv: kv[1][0])
+        for k, _v in rows[:len(rows) - RELAY_CACHE_MAX]:
+            _relay_cache.pop(k, None)
 
 
 def _resolve_upstream(raw):
@@ -3785,10 +3840,23 @@ class Handler(SimpleHTTPRequestHandler):
                     self._send_json(
                         {"ok": False, "error": "params 는 객체여야 합니다."}, 400)
                     return
-                self._send_json({
-                    "ok": True,
-                    "data": kis_get(cfg, kis_path, relay_params, tr),
-                })
+                # **캐시를 먼저 본다.** 오류는 캐시하지 않는다 —
+                # 실패를 TTL 동안 들고 있으면 더 나쁘다.
+                ckey = (kis_path,
+                        json.dumps(relay_params, sort_keys=True, ensure_ascii=False),
+                        tr)
+                now = time.time()
+                hit = _relay_cache.get(ckey)
+                if hit and now - hit[0] < PRICE_CACHE_TTL:
+                    _relay_stat["hits"] += 1
+                    self._send_json({"ok": True, "data": hit[1], "cached": True})
+                    return
+                _relay_stat["misses"] += 1
+                relay_data = kis_get(cfg, kis_path, relay_params, tr)
+                _relay_cache[ckey] = (now, relay_data)
+                if len(_relay_cache) > RELAY_CACHE_MAX:
+                    _relay_sweep(now)
+                self._send_json({"ok": True, "data": relay_data})
                 return
 
             if route == "price":
