@@ -698,6 +698,10 @@ def usage_stats():
         "upstreamCalls": _up_stat["calls"],
         "upstreamFallbacks": _up_stat["fallbacks"],
         "upstreamLastError": _up_stat["lastError"],
+        "boardUpstream": bool(board_upstream_base()),
+        "boardUpstreamCalls": _board_stat["calls"],
+        "boardUpstreamErrors": _board_stat["errors"],
+        "boardUpstreamLastError": _board_stat["lastError"],
 
         # **주기·캐시 값 전부.** 위 `priceCacheTtl` 은 `status.html` 이
         # 쓰고 있어 남겨 둔다 — 같은 값이 여기에도 들어오지만 **한 곳에서
@@ -948,24 +952,50 @@ RELAY_ROUTE = "relay"
 # 넘긴 횟수 · 폴백한 횟수 · 마지막 오류. `stats` 가 낸다 — **주소는 안 낸다.**
 _up_stat = {"calls": 0, "fallbacks": 0, "lastError": None}
 
+# ── 보드도 8765 하나로 (2026-10-01 지시) ──────────────────────
+#
+# 재권님 지시 — 「보드를 서비스서버랑 진짜서버랑 동기화」. 보드가 폴더마다
+# 따로 쌓이면 **외부접속이 보는 것과 메인이 보는 것이 갈린다.**
+#
+# ⚠️ **KIS 와 스위치를 가른다.** 하나로 두면 **폴백 없는 쪽(보드)이
+# 폴백 있는 쪽(KIS)과 한꺼번에 켜진다.** 보드는 상류가 죽으면 `503` 이라
+# **더 위험한데 켜는 순간을 못 고르게 된다** — 「켜기 전에 먼저 잰다」 를
+# 쓸 수 없다.
+#
+# **받는 자리는 새로 만들지 않았다.** 8765 가 이미 `/api/board/*` 를
+# 받는다 — KIS 가 `/api/kis/relay` 를 새로 만들어야 했던 것과 다르다.
+BOARD_UPSTREAM_RAW = (os.environ.get("KJC_BOARD_UPSTREAM") or "").strip().rstrip("/")
+_board_stat = {"calls": 0, "errors": 0, "lastError": None}
 
-def upstream_base():
-    """상류 주소. 없거나 **자기 자신을 가리키면 `None`** 이다.
+
+def _resolve_upstream(raw):
+    """상류 주소를 가린다 — 없거나 **자기 자신을 가리키면 `None`**.
 
     자기 포트를 가리키면 **자기를 부르는 고리**가 된다. `RUN_PORT` 는
     `main()` 이 정하므로 **모듈을 읽을 때가 아니라 부를 때** 본다.
+    **KIS 와 보드가 함께 쓴다** — 같은 판별을 두 곳에 두지 않는다.
     """
-    if not KIS_UPSTREAM_RAW:
+    if not raw:
         return None
     try:
-        u = urllib.parse.urlparse(KIS_UPSTREAM_RAW)
+        u = urllib.parse.urlparse(raw)
     except ValueError:
         return None
     if not u.scheme or not u.hostname:
         return None
     if u.port and RUN_PORT and u.port == RUN_PORT:
         return None
-    return KIS_UPSTREAM_RAW
+    return raw
+
+
+def upstream_base():
+    """KIS 를 넘길 상류."""
+    return _resolve_upstream(KIS_UPSTREAM_RAW)
+
+
+def board_upstream_base():
+    """보드를 넘길 상류."""
+    return _resolve_upstream(BOARD_UPSTREAM_RAW)
 
 
 DEBUGGING_BASE = "http://localhost:%d" % DEBUGGING_PORT
@@ -3235,6 +3265,64 @@ class Handler(SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
+    def _board_via_upstream(self, base):
+        """보드를 상류에 **그대로** 넘긴다 — 경로 · 본문 · 상태코드 그대로.
+
+        ⚠️ **폴백을 두지 않는다. KIS 와 다른 자리다.**
+
+            KIS    상류가 죽으면 **직접 부른다** — 같은 시세를 두 곳에서
+                   받아도 **값이 같다.** 읽기다
+            보드   **쓰는 곳**이다. 상류가 죽었다고 로컬에 쓰면
+                   **보드가 두 곳으로 갈린다** — 한쪽에 적은 카드가
+                   다른 쪽에 없고, 나중에 어느 쪽이 맞는지 못 가린다
+
+        **GET 도 로컬 사본으로 떨어지지 않는다.** 옛 보드를 「지금」 으로
+        보게 되고, **그것을 보고 쓰면 남의 것을 덮는다.**
+
+        **「KIS 에는 폴백이 있는데 왜 여기는 없나」 로 넣지 말 것.**
+        넣는 순간 위의 갈라짐이 돌아온다.
+
+        **상태코드를 그대로 내려보낸다.** `409`(그 사이 남이 썼다)가
+        화면에 닿아야 `if_updated_at` 견주기가 뜻을 갖는다 — 200 으로
+        바꿔 싣거나 500 으로 뭉개면 **덮어쓰기 막기가 그 자리에서 풀린다.**
+        """
+        raw = b""
+        if self.command == "PUT":
+            raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        req = urllib.request.Request(base + (self.path or ""),
+                                     data=raw if self.command == "PUT" else None,
+                                     method=self.command)
+        ct = self.headers.get("Content-Type")
+        if ct:
+            req.add_header("content-type", ct)
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                code, body = resp.getcode(), resp.read()
+                rct = resp.headers.get("Content-Type")
+        except urllib.error.HTTPError as e:
+            # **`409` · `400` 도 응답이다.** 그대로 내려보낸다.
+            code, body, rct = e.code, e.read(), e.headers.get("Content-Type")
+            if code >= 500:
+                _board_stat["errors"] += 1
+                _board_stat["lastError"] = "상류 %s" % code
+        except (urllib.error.URLError, OSError) as e:
+            # **폴백하지 않는다.** 무엇을 켜야 하는지 적어 준다 —
+            # 「로컬 사본을 주느니 안 떠 있다고 말하는 편이 낫다」.
+            _board_stat["errors"] += 1
+            _board_stat["lastError"] = safe_message(e)
+            self._send_json({
+                "ok": False,
+                "error": "보드 상류가 안 떠 있습니다. 8765(holdings 미리보기)를 켜 주십시오.",
+                "upstreamDown": True,
+            }, status=503)
+            return
+        _board_stat["calls"] += 1
+        self.send_response(code)
+        self.send_header("content-type", rct or "application/json; charset=utf-8")
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _handle_board(self):
         """문서 저장 — 보드 셋 · AI 분석 · 데일리분석이 함께 쓴다.
 
@@ -3250,6 +3338,12 @@ class Handler(SimpleHTTPRequestHandler):
         나눠 담는다. 이 서버는 재권님 PC 안에서만 돌아 가릴 사람이 없다.
         그래서 `owner` 를 안 쓰고 응답에도 안 싣는다.
         """
+        # ── 상류가 있으면 보드를 통째로 넘긴다 (2026-10-01) ──
+        _b = board_upstream_base()
+        if _b:
+            self._board_via_upstream(_b)
+            return
+
         path = (self.path or "").split("?", 1)[0].rstrip("/")
 
         if path == "/api/board/health":
