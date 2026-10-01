@@ -2755,10 +2755,18 @@ def fetch_bars_back(cfg, code, period, want):
 
 
 def minute_market_div(hour):
-    """분봉을 어느 시장에서 받을까. **구간의 시각으로 정한다.**
+    """분봉을 **어느 시장부터 물어볼까.** 구간의 시각으로 정한다.
 
         정규장 09:00~15:30   J  (KRX)
         그 밖                UN (통합)
+
+    ⚠️ **이것은 「먼저 물어볼 쪽」 이고 최종 선택이 아니다** (2026-10-01).
+    `fetch_minutes_from_kis` 가 **받아 보고 전부 거래량 0 이면 다른 쪽으로
+    한 번 더** 받는다. 아래 실측이 「시각으로 고를 수 없다」 를 보여 주는데,
+    2026-09-17 에는 **정규장만** 고치고 15:30 뒤를 `UN` 으로 남겨서
+    **우선주의 넥스트레이드 구간이 전일 종가로 평평하게** 그려졌다 —
+    재권님이 2026-10-01 에 「거래가 있는데 맘대로 그리는 거」 로 찾으셨다.
+    자세한 값은 그 함수 주석에 있다. **여기 다시 적지 않는다.**
 
     일봉과 달리 **분봉은 한쪽만으로는 못 채운다** (2026-09-17 실측).
 
@@ -2786,15 +2794,61 @@ def fetch_minutes_from_kis(cfg, code, hour=None):
     hour 를 주지 않으면 '지금까지' 를 기준으로 삼는다. 예전에는 기본값이
     "153000" 이어서, 장중에 최근 구간을 갱신할 때마다 15:00~15:30 자리에
     현재가로 채워진 가짜 봉이 생겼다 (2026-09-14 확인).
+
+    ── **받아 보고 시장을 고른다** (2026-10-01 지시) ──────────────
+
+    재권님이 005935(삼성전자우) 차트를 보시고 **「거래가 있는데 맘대로
+    그리는 거」** 로 찾으셨다. 증권사 화면에는 15:30 뒤에도 201,000 봉과
+    거래량이 있는데, 우리 화면은 **195,200(= 전일 종가)에 평평**했다.
+
+    **원인은 시장 구분이었다.** `minute_market_div` 가 시각으로만 골라
+    15:30 뒤를 `UN`(통합)으로 받는데, **우선주는 `UN` 에서 거래량 0 으로
+    오고 KIS 가 그 칸을 전일 종가로 채운다.**
+
+        2026-10-01 실측 (005935 · 각 30봉)
+        18:30  J  거래량>0 **30개** · 종가 200,500~201,500  ← 증권사 화면과 같다
+        18:30  UN 거래량>0  **0개** · 종가 **195,200** 하나 (= 전일 종가)
+        16:00  J  거래량>0   1개  · 종가 203,500 / 204,500
+        16:00  UN 거래량>0  **0개** · 종가 **195,200**
+
+    **시각으로는 고를 수 없다.** 프리마켓(08:00~09:00)은 `UN` 에만 있고
+    (아래 `minute_market_div` 주석의 실측), 우선주의 넥스트레이드 구간은
+    `J` 에만 있다. **그래서 받아 보고 고른다** — 한쪽이 **전부 거래량 0**
+    이면 다른 쪽으로 한 번 더 받아, 거래가 있는 쪽을 쓴다.
+
+    **비용은 「빈 구간에 한 번 더」** 다. 거래가 있는 구간은 그대로 한 번이다.
+
+    **둘 다 0 이면 먼저 받은 것을 쓴다.** 진짜로 거래가 없는 구간이고,
+    그때라도 **기본 시장 쪽 값이 실제 가격에 가깝다**(위 16:00 의 J 가
+    203,500 인데 UN 은 전일 종가였다). 여기서 봉을 버리면
+    `fetch_minutes_day` 의 「없는 칸만 받기」 가 그 칸을 **바퀴마다 다시
+    받아** 느림이 되돌아온다 — 그래서 버리지 않는다.
     """
     if hour is None:
         m = minute_scan_start()
         hour = "%02d%02d00" % (m // 60, m % 60)
+    first = minute_market_div(hour)
+    out = _minutes_one_market(cfg, code, hour, first)
+    # **빈 응답도 「없다」 로 본다.** `out and ...` 로 두면 첫 시장이 봉을
+    # 0개 줄 때 다른 쪽을 안 보고 끝난다 — 지금은 `UN` 이 거래량 0 봉 30개를
+    # 주는 모양이라 걸리지 않지만, 어느 날 빈 응답으로 바뀌면 **조용히**
+    # 되돌아간다. 비용은 같은 「빈 구간에 한 번 더」 다
+    # (2026-10-01 · 홈페이지_정리 지적).
+    if not out or all((b["volume"] or 0) == 0 for b in out):
+        other = "UN" if first == "J" else "J"
+        alt = _minutes_one_market(cfg, code, hour, other)
+        if any((b["volume"] or 0) > 0 for b in alt):
+            return alt
+    return out
+
+
+def _minutes_one_market(cfg, code, hour, div):
+    """한 시장(`J` KRX · `UN` 통합)에서 분봉 30개를 받는다."""
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
         {
-            "FID_ETC_CLS_CODE": "", "FID_COND_MRKT_DIV_CODE": minute_market_div(hour),
+            "FID_ETC_CLS_CODE": "", "FID_COND_MRKT_DIV_CODE": div,
             "FID_INPUT_ISCD": code, "FID_INPUT_HOUR_1": hour,
             "FID_PW_DATA_INCU_YN": "Y",
         },
@@ -2850,7 +2904,39 @@ def fetch_minutes_day(cfg, code):
     """
     bars = {}
     t = minute_scan_start()
+    start = t                          # 지금 속한 칸 — **자라는 중**이다
+    have = _minutes_have_today(code)
     while t >= MINUTE_DAY_START:
+        # ── **이미 있는 칸은 건너뛴다** (2026-10-01 지시) ──────────
+        #
+        # 재권님이 「실시간 순위 목록을 클릭할때 차트 로딩되는 속도 체크해봐
+        # 뭔가 넘 느린데」 로 찾으셨다.
+        #
+        # `_minutes_need_day` 의 **2번(마지막 봉이 `MINUTE_REFILL_GAP` 넘게
+        # 오래됐나)이 장 밖에서는 거의 늘 참**이다 — 거래가 뜸한 종목은
+        # 넥스트레이드 시간대에 봉이 안 생기기 때문이다. 그래서 **누를 때마다
+        # 08:00 부터 전부 다시 받았다.**
+        #
+        #     호출 횟수   **18~25번** (시각에 따라 — 16:50 에 18 · 20:00 뒤 25)
+        #     실측        005385 를 눌러 **차트가 그려지기까지 4035ms**
+        #                 (종목 이름은 36ms 에 바뀐다 — 이름만 먼저 바뀐다)
+        #
+        # **2번이 메우려는 것은 「마지막 봉 이후」 뿐이고, 앞쪽 구멍은
+        # 1번(`dayfill`)이 이미 본다** (위 `_minutes_need_day` 주석의
+        # 삼성전자우 09:00~10:15 건). 그래서 **없는 칸만** 받는다.
+        #
+        # **기대 봉 수를 박지 않는다.** 「그 칸에 봉이 하나라도 있나」 만
+        # 본다 — 거래가 없어 1개뿐인 칸도 KIS 가 그만큼만 주므로 맞다
+        # (「검사 도구에 대상 값을 박지 않는다」 와 같은 자리다).
+        #
+        # ⚠️ **자라는 중인 칸은 늘 받는다.** 거기는 봉이 있어도 아직 는다.
+        # ⚠️ **`t` 는 30의 배수가 아니다** — `minute_scan_start()` 가 지금 시각
+        # 그대로여서 18:29 면 1109 로 시작한다. 칸을 30의 배수로 만들어
+        # 맞춰 보면 **영영 안 맞는다**(2026-10-01 에 그렇게 썼다가 「건너뛴
+        # 칸 0」 으로 드러났다). 그 시각부터 **과거 30분**이 한 칸이다.
+        if t != start and have and not have.isdisjoint(range(t - 29, t + 1)):
+            t -= 30
+            continue
         hour = "%02d%02d00" % (t // 60, t % 60)
         try:
             for b in fetch_minutes_from_kis(cfg, code, hour):
@@ -2859,6 +2945,33 @@ def fetch_minutes_day(cfg, code):
             pass          # 해당 구간에 데이터가 없을 수 있다. 계속 진행.
         t -= 30
     return sorted(bars.values(), key=lambda x: x["ts"])
+
+
+def _minutes_have_today(code):
+    """오늘 DB 에 있는 분봉의 **분 단위 시각** 집합.
+
+    `1m` 과 `5m` 을 함께 본다 — 어느 쪽으로 저장돼 있어도 「그 칸은 받아
+    두었다」 는 뜻이기 때문이다. 읽지 못하면 **빈 집합**을 돌려 전부 받는
+    쪽으로 간다(덜 받아 구멍이 남는 것보다 낫다).
+    """
+    try:
+        with _db_lock, db_conn() as conn:
+            rows = conn.execute(
+                "SELECT ts FROM candles WHERE code = ? AND period IN ('1m', '5m')"
+                " AND ts LIKE ?",
+                (code, _today_kst() + "%"),
+            ).fetchall()
+    except Exception:
+        return set()
+    out = set()
+    for r in rows:
+        ts = r["ts"]
+        if len(ts) >= 12:
+            try:
+                out.add(int(ts[8:10]) * 60 + int(ts[10:12]))
+            except ValueError:
+                pass
+    return out
 
 
 # 마지막 봉이 이보다 오래됐으면 최근 구간만 받지 않고 하루치를 다시 모은다.
