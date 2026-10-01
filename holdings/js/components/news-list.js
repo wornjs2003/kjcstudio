@@ -109,15 +109,58 @@ export async function fetchIssues() {
   return null;
 }
 
+/* 마지막으로 받아 둔 feed. **모달이 열릴 때 즉시 꺼내 쓴다.**
+ *
+ * 왜 들고 있나 — `moves`(종목 뉴스)는 서버가 KIS 를 두 시장에 나눠 물어야
+ * 해서 캐시가 식으면 0.2~1초가 걸린다 (2026-10-01 실측). 모달이 그때 열리면
+ * **그 시간 내내 빈 칸**이다. 사이드 칸이 이미 주기마다 받고 있으므로
+ * 그것을 쥐고 있으면 **KIS 를 한 번도 더 부르지 않고** 즉시 그릴 수 있다.
+ *
+ * 묵은 값을 보여주고 끝내지 않는다 — 모달은 이것으로 먼저 그린 **뒤**
+ * 새로 받아 다시 그린다. 그래서 「미리 받아 둔다」 와 「최신을 본다」 가
+ * 둘 다 된다.
+ *
+ * ⚠️ **이것은 캐시가 아니라 손에 든 것이다.** 유효기간을 두지 않는다 —
+ * 두면 그 숫자가 화면에 박힌 주기가 되고, 서버가 정하는 것과 갈린다
+ * (CLAUDE.md 「캐시·주기·한도 값을 화면에 박지 않는다」). 묵었는지는
+ * 받은 시각으로 부르는 쪽이 본다. */
+let _lastFeed = null;
+let _lastFeedAt = 0;
+
+/** 받아 둔 feed. 한 번도 못 받았으면 `null`.
+ *  @returns {{data: object, at: number}|null} `at` 은 받은 시각(ms) */
+export function lastFeed() {
+  return _lastFeed ? { data: _lastFeed, at: _lastFeedAt } : null;
+}
+
 /** 이슈 + 종목 움직임. 모달이 쓴다. 못 받으면 null. */
 export async function fetchFeed() {
   try {
     const r = await apiFetch('/api/news/feed', { cache: 'no-store' });
     if (!r) return null;
     const j = await r.json();
-    if (j && j.ok && j.data) return j.data;
+    if (j && j.ok && j.data) {
+      /* 받은 것은 쥐고 있는다. **실패했을 때 덮지 않는다** — 옛것이라도
+         손에 있는 편이 빈 칸보다 낫다 */
+      _lastFeed = j.data;
+      _lastFeedAt = Date.now();
+      return j.data;
+    }
   } catch { /* 위와 같다 */ }
   return null;
+}
+
+/** 기다리는 중이라고 적는다.
+ *
+ * 공시 칸은 `mountDisclosures` 가 이것을 하는데 뉴스 칸에는 없어서
+ * **0.2~1초 동안 아무 말 없이 비어 있었다** (2026-10-01 실측). 같은 1초라도
+ * 적혀 있으면 멈춘 것으로 안 보인다.
+ *
+ * 받아 둔 것이 있을 때는 부르지 않는다 — 갱신마다 깜빡이게 된다. */
+export function paintLoading(host, { compact = false } = {}) {
+  if (!host) return;
+  if (compact) { host.innerHTML = `<div class="kh-sched-i kh-mut">불러오는 중</div>`; return; }
+  host.innerHTML = `<div class="kh-soon"><div class="kh-soon-t">불러오는 중</div></div>`;
 }
 
 /**
