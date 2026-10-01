@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>영상 분석 · Insight</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css" />
+<link rel="stylesheet" href="../assets/css/common.css" />
+<link rel="stylesheet" href="../assets/css/nav.css" />
+<!-- 첫 화면(index.html)과 같이 홀딩스 CSS 를 같이 쓴다 — 「거는 쪽이 둘 이상인 파일」 -->
+<link rel="stylesheet" href="../holdings/css/frame.css" />
+<link rel="stylesheet" href="../holdings/css/home.css" />
+<link rel="stylesheet" href="css/insight.css" />
+</head>
+<body data-nav="company-setup" data-site-root="../">
+<div id="site-nav"></div>
+
+<!-- 영상 분석 보고서 한 편 — ?id=<문서 이름> 을 로컬 문서 저장소(/api/board/doc/<id>)에서 읽는다 -->
+<div class="kh-app kh-app-wide">
+  <main class="kh-main">
+    <nav class="kh-cat" aria-label="갈래">
+      <a href="./">홈</a>
+      <a class="is-on" href="#">영상 분석</a>
+      <span class="kh-cat-my">증권사 리포트</span>
+    </nav>
+    <article class="kh-card in-report" id="in-report"><p class="in-empty">불러오는 중</p></article>
+  </main>
+  <aside class="kh-side" aria-label="영상 분석 목록">
+    <div class="kh-side-wrap">
+      <div class="kh-card kh-rank-card">
+        <div class="kh-tabs"><button class="kh-tab is-active">영상 분석 목록</button></div>
+        <ul class="in-news in-scroll" data-videos></ul>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script src="../assets/js/main.js"></script>
+<script src="js/insight.js"></script>
+<script src="js/report.js"></script>
+</body>
+</html>

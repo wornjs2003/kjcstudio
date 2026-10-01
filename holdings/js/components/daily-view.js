@@ -31,22 +31,11 @@
 
 import { collectSchedule } from './schedule.js';
 import { openModal } from './modal.js';
+import { stripHtml } from './index-strip.js';
 import { apiFetch } from '../data/api.js';
 
 /* 화면을 열어둔 채로도 새 것이 들어오도록. 서버가 5분마다 받으므로 그보다 짧게. */
 const REFRESH_MS = 60_000;
-
-/* 화면에 올릴 지수와 부르는 이름.
-   서버가 주는 name 이 'KOSPI' 처럼 영문이거나 '미국 USD' 처럼 길어서 여기서 고친다. */
-const INDEX_ROWS = [
-  { code: 'KOSPI',    label: 'KOSPI' },
-  { code: 'KOSDAQ',   label: 'KOSDAQ' },
-  { code: 'KOSPI200', label: '코스피200' },
-  { code: 'SPX',      label: 'S&P 500',   match: /S&P/i },
-  { code: 'COMP',     label: '나스닥 종합', match: /나스닥/ },
-  { code: 'USD',      label: '달러 · 원',  match: /USD|달러/ },
-  { code: 'VIX',      label: 'VIX',       match: /VIX/i },
-];
 
 /* 몇 시간치를 보여줄 것인가. 하루를 넘겨서 봐야 「어제 이슈」가 남는다
    (2026-09-21 지시 — "그전날 이슈를 놓치지 않게"). */
@@ -119,7 +108,10 @@ function todayLabel() {
 const BODY_HTML = `
     <header class="kh-dl-head">
       <div>
-        <h1 class="kh-dl-title">데일리분석</h1>
+        <!-- 제목은 「오늘의 뉴스」 다 (2026-10-01 지시 — 「데일리 분석 글자는 한번만」 ·
+             「아래 데일리 분석에 오늘의 뉴스 로 이름 바꿔주고 거기에 12시 영상 분석」).
+             「데일리분석」 은 모달 머리 이름 하나로 남는다 -->
+        <h1 class="kh-dl-title">오늘의 뉴스</h1>
         <p class="kh-dl-sub" id="kh-dl-sub">불러오는 중</p>
       </div>
       <!-- 07:30 저장·발송은 2026-09-22 에 붙었다 (server/daily.py).
@@ -137,34 +129,25 @@ const BODY_HTML = `
       <span class="kh-dl-chip" id="kh-dl-send">07:30 발송</span>
     </header>
 
+    <!-- 「오늘의 뉴스」 제목 아래 — 시황분석 세션이 정리한 영상 분석 (2026-10-01).
+         흰 카드로 묶는다 — 회색 바탕에 줄만 놓지 않는다 -->
+    <section class="kh-dl-card kh-dl-video-card">
+      <div class="kh-dl-ch"><b>영상 분석</b><span class="kh-dl-src">시황분석</span></div>
+      <div class="kh-dl-video" data-dl-video></div>
+    </section>
+
     <div class="kh-dl-body">
 
-        <!-- ① 주요 지수 -->
-        <section class="kh-dl-card">
+        <!-- 「주요 지수」 는 창에서는 머리 아래 줄(전 「1」 탭 자리)로, daily.html 에서는 이 자리에 그린다.
+             「주도 섹터」 칸은 뺐다 (2026-10-01 지시 — 「주요지수가 1번 옆으로 가고 1은 없어져도 됨 ·
+             주요섹터는 없어져도 됌」). 창 머리의 「주도 업종」 수치는 그대로다 -->
+        <section class="kh-dl-card kh-dl-idx-card">
           <div class="kh-dl-ch">
             <b>주요 지수</b>
             <span class="kh-dl-why">국내는 오늘 마감 · 해외는 현지 마감</span>
             <span class="kh-dl-src">KIS</span>
           </div>
           <div class="kh-dl-idx" id="kh-dl-idx"></div>
-        </section>
-
-        <!-- ② 주도 섹터 -->
-        <section class="kh-dl-card">
-          <div class="kh-dl-ch">
-            <b>주도 섹터</b>
-            <span class="kh-dl-why">업종 지수 등락</span>
-            <span class="kh-dl-src">KIS 업종별 시세</span>
-          </div>
-          <div class="kh-dl-sec" id="kh-dl-sec"></div>
-
-          <!-- 미정: 미국 업종은 아직 못 붙였다. industry-theme (HHDFS76370000) 이
-               후보인데 실측이 남았다. 국내만 붙은 상태라는 것이 화면에 보여야 한다. -->
-          <div class="kh-dl-todo kh-dl-sec-todo">
-            <b>미국 업종은 아직입니다</b>
-            <span>국내(코스피·코스닥)만 붙었습니다. 미국 업종은 받아올 곳을
-                  확정하는 중입니다.</span>
-          </div>
         </section>
 
         <!-- 왼쪽 — 오늘 일정 · 중요 알림 / 오른쪽 — 오늘 뉴스
@@ -247,6 +230,9 @@ const PAST_HTML = `
 /* 오른쪽 칸 — 이 화면에서는 관심종목 대신 보낼 문안을 둔다.
    본문과 같은 데이터로 만들기 때문에 나란히 놓고 보면 어긋난 곳이 바로 보인다. */
 const SIDE_HTML = `
+    <!-- 텔레그램 — 제목·설명·문안을 흰 카드 하나로 묶는다 (2026-10-01 지시 — 「텔레그램은 왜 묶어논 창
+         밖으로 나가 있지」) -->
+    <section class="kh-dl-card kh-dl-tgcard">
     <div class="kh-side-head">
       <b>텔레그램</b>
       <span class="kh-side-toggle" id="kh-dl-tg-w">아직 보내지 않았습니다</span>
@@ -255,7 +241,9 @@ const SIDE_HTML = `
          무슨 화면의 무슨 날짜인지 여기서 읽히게 적는다. -->
     <p class="kh-side-sub" id="kh-dl-tg-cap">폰에 이렇게 도착합니다</p>
     <div class="kh-dl-tg-b" id="kh-dl-tg">문안을 만드는 중…</div>
+    </section>
 
+    <section class="kh-dl-card kh-dl-keepcard">
     <div class="kh-side-sec">
       <div class="kh-sched-h"><span>보관</span><span>30일</span></div>
       <!-- 미정: 날짜별로 쌓아 두는 자리가 아직 없다. 워커 D1 에 표를 하나
@@ -266,7 +254,34 @@ const SIDE_HTML = `
               지금은 오늘 것만 그때그때 만들어 보여 줍니다.</span>
       </div>
     </div>
+    </section>
 `;
+
+/* ── 영상 분석 목록 ──
+   시황분석 세션이 영상을 분석해 로컬 문서 저장소에 쓴다(insight-video-index · insight-video-<id>).
+   데일리분석(모달 · daily.html)의 「오늘의 뉴스」 제목 아래에 그린다.
+   보고서 본문은 Insight 의 report.html 이 그린다. */
+async function loadVideoIndex() {
+  try {
+    const r = await fetch('/api/board/doc/insight-video-index', { cache: 'no-store' });
+    const d = (await r.json()).data;
+    return (d && d.items) || [];
+  } catch (e) {
+    return null;          // 못 받음 — 빈 목록([])과 가른다
+  }
+}
+
+/** 영상 분석 목록을 그린다. 못 받으면 「불러오지 못함」, 없으면 「—」 */
+function videoListHtml(items, n = 99) {
+  if (items === null) return '<div class="kh-dl-video-e">영상 분석 · 불러오지 못함</div>';
+  if (!items.length) return '<div class="kh-dl-video-e">영상 분석 · —</div>';
+  return items.slice(0, n).map((x) => `
+    <a class="kh-dl-video-row" href="../company-setup/report.html?id=${encodeURIComponent(x.id)}">
+      <span class="kh-dl-video-k">영상</span>
+      <span class="kh-dl-video-t">${esc(x.headline)}</span>
+      <span class="kh-dl-video-m">${esc(x.show || '')} · ${esc(x.date || '')}</span>
+    </a>`).join('');
+}
 
 /** 오늘 저장본을 받아 온다. 없으면 `null` (07:30 전이면 그렇다).
  *
@@ -303,7 +318,7 @@ export async function loadDailyDoc() {
  *                                        전용 화면은 머리가 없어 안 넘긴다
  * @returns {{ destroy: Function, reload: Function }}
  */
-export function mountDaily(root, { side = null, past = null,
+export function mountDaily(root, { side = null, past = null, indexHost = null,
                                    onIndices = null, onHead = null } = {}) {
   if (!root) return { destroy() {}, reload() {} };
 
@@ -314,6 +329,12 @@ export function mountDaily(root, { side = null, past = null,
      대신하므로 그릴 것이 없다 (2026-09-22).
      `$(id)` 로 찾는 것이 이 블록에 없어 어디로 가든 조회가 안 끊긴다. */
   if (past !== false) (past || root).insertAdjacentHTML('beforeend', PAST_HTML);
+  /* 지수를 다른 자리(창 머리 아래 줄)에 그리면 본문의 「주요 지수」 칸은 뺀다 — 두 곳에 두지 않는다 */
+  if (indexHost) root.querySelector('.kh-dl-idx-card')?.remove();
+
+  /* 「오늘의 뉴스」 제목 아래 — 영상 분석 목록 (2026-10-01) */
+  const videoBox = root.querySelector('[data-dl-video]');
+  if (videoBox) loadVideoIndex().then((items) => { videoBox.innerHTML = videoListHtml(items); });
 
   /* 찾는 범위를 자기 자리 안으로 좁힌다. 문서 전체에서 찾지 않는 이유는
      파일 맨 위 주석에 있다. */
@@ -479,13 +500,15 @@ export function mountDaily(root, { side = null, past = null,
 
   /* ── ② 주요 지수 ────────────────────────── */
 
-  function pickIndex(row) {
-    return indices.find((x) => x.code === row.code)
-        || (row.match ? indices.find((x) => row.match.test(x.name || '')) : null);
-  }
-
+  /* **홀딩스 첫 화면 지수 띠와 똑같이 그린다** (2026-10-01 지시 — 「주요지수는 … 밑에 네모도 없어도 되고
+     홀딩스화면에서 나오는거랑 똑같이 보여달라」). 칸 목록 · 표시 · 그리기는 index-strip.js 한 곳에 있다 —
+     전에는 여기 INDEX_ROWS 가 따로 있어 첫 화면과 지수 목록이 두 벌이었다.
+     「야간선물 · 다우존스 연결 예정」 칸도 뺐다 — 첫 화면 띠에 없다(다우존스는 받을 곳이 없어 뺐고,
+     그 경위는 index-strip.js 의 INDEX_CELLS 주석에 있다).
+     좌우 화살표는 첫 화면과 같은 모양인데 **id 를 쓰지 않는다** — 모달은 첫 화면 위에 뜨므로
+     #kh-top-ix 를 쓰면 두 개가 된다. */
   function drawIndices() {
-    const box = $('kh-dl-idx');
+    const box = indexHost || $('kh-dl-idx');
     if (!box) return;
 
     if (!indices.length) {
@@ -494,34 +517,27 @@ export function mountDaily(root, { side = null, past = null,
       return;
     }
 
-    const cells = INDEX_ROWS.map((row) => {
-      const x = pickIndex(row);
-      if (!x) return '';
-      const t = tone(x.change);
-      /* 상승·하락 종목 수는 지수에만 있다. 환율·VIX 에는 없다. */
-      const breadth = (x.up || x.down)
-        ? `상승 ${x.up} · 하락 ${x.down}`
-        : (x.unit && x.unit !== 'pt' ? x.unit : '');
-      return `<div class="kh-dl-idx-c">
-        <div class="kh-dl-idx-n">${esc(row.label)}</div>
-        <div class="kh-dl-idx-v">${num(x.value)}</div>
-        <div class="kh-dl-idx-d kh-dl-${t}">${signed(x.change)} (${pct(x.changePct)})</div>
-        ${breadth ? `<div class="kh-dl-idx-sub">${esc(breadth)}</div>` : ''}
-      </div>`;
-    }).filter(Boolean).join('');
-
-    /* 미정: 야간선물과 다우존스는 아직 못 붙였다.
-       야간선물 — 전용 시세 API 가 없어 일반 선물(FHMIF10000000)에 야간 종목코드를
-       넣어 실측해야 한다.
-       다우존스 — DJI · .DJI · DJIA 를 네 가지 시장구분으로 다 불러봤지만 전부 0 이었다
-       (DOW 는 다우社 주식이라 28원이 나온다). js/home.js 의 INDEX_CELLS 주석 참조. */
-    box.innerHTML = cells + `
-      <div class="kh-dl-idx-c" style="background:var(--kh-up-dim)">
-        <div class="kh-dl-idx-n" style="color:var(--kh-up)">야간선물 · 다우존스</div>
-        <div class="kh-dl-idx-d kh-dl-up" style="margin-top:6px">연결 예정</div>
-        <div class="kh-dl-idx-sub" style="color:var(--kh-up)">받아올 곳을 찾는 중입니다</div>
-      </div>`;
+    box.innerHTML = `<div class="kh-ixbar">
+      <button class="kh-ixbar-btn" type="button" data-dl-ix="-1" aria-label="왼쪽으로">‹</button>
+      <div class="kh-top-ix">${stripHtml(indices)}</div>
+      <button class="kh-ixbar-btn" type="button" data-dl-ix="1" aria-label="오른쪽으로">›</button>
+    </div>`;
+    const strip = box.querySelector('.kh-top-ix');
+    const sync = () => {
+      const max = strip.scrollWidth - strip.clientWidth;
+      box.querySelectorAll('[data-dl-ix]').forEach((btn) => {
+        const back = Number(btn.dataset.dlIx) < 0;
+        btn.classList.toggle('is-off', max <= 1
+          || (back ? strip.scrollLeft <= 1 : strip.scrollLeft >= max - 1));
+      });
+    };
+    box.querySelectorAll('[data-dl-ix]').forEach((btn) => btn.addEventListener('click', () => {
+      strip.scrollBy({ left: Number(btn.dataset.dlIx) * Math.round(strip.clientWidth * 0.8), behavior: 'smooth' });
+    }));
+    strip.addEventListener('scroll', sync);
+    requestAnimationFrame(sync);
   }
+
 
   /* ── ④ 주도 섹터 ────────────────────────── */
 
@@ -839,19 +855,10 @@ export function mountDaily(root, { side = null, past = null,
 export function openDailyModal() {
   let inst = null;
 
-  /* ── 번호 탭 ──
-     2026-09-22 지시 — 「지난분석은 따로 필요없고 데일리분석에 날별로 쌓여지고
-     가장 최신이 모달 열었을 때 보여지면 될 거 같아. **1.2.3.... 이렇게 해서 보면**
-     될 듯」.
-
-     **지금은 하나뿐이다.** 날짜별 저장이 아직 없어서 오늘 것밖에 없다.
-     저장이 붙으면 최신부터 1 · 2 · 3 … 열까지 늘어난다.
-
-     **그때 `modal-head.js` 에 탭을 다시 그리는 길이 필요하다** — 지금은
-     `setTabsNote` 만 있고 `setTabs` 가 없어, 목록을 받은 뒤에 탭을 못 늘린다.
-     모달을 열기 전에 목록을 받아 두는 방법도 있는데, 그러면 누른 뒤 잠깐
-     아무 일도 안 일어난다. 저장을 붙일 때 정한다. */
-  const TABS = [{ id: 'today', label: '1' }];
+  /* ── 번호 탭은 뺐다 (2026-10-01 지시 — 「주요지수가 1번 옆으로 가고 1은 없어져도 됨」) ──
+     2026-09-22 에 「1 · 2 · 3 … 날별로」 를 보려고 둔 탭인데 저장이 하나뿐이라 「1」 만 떠 있었다.
+     그 자리(머리 바로 아래 줄)에 주요 지수 띠를 둔다. 날짜별 저장이 붙어 번호가 다시 필요해지면
+     그때 이 줄 오른쪽에 붙인다. */
 
   const m = openModal({
     label: '데일리분석',
@@ -868,12 +875,6 @@ export function openDailyModal() {
       sub: todayLabel(),
       caret: true,
       statCols: 3,
-      tabs: TABS,
-      tab: 'today',
-      /* 아직 하나뿐이라는 것을 화면이 스스로 말한다. 빈 탭을 아홉 개
-         만들어 두는 것보다 낫다 — 눌러도 아무 일이 없으면 고장으로 읽힌다. */
-      tabsNote: '저장이 붙으면 열 장까지 쌓입니다',
-      onTab(id) { showPane(id); },
     },
     onClose() { if (inst) { inst.destroy(); inst = null; } },
   });
@@ -903,18 +904,20 @@ export function openDailyModal() {
   wrap.append(main, msg);
   m.body.appendChild(wrap);
 
-  /* 번호가 늘면 여기서 갈아끼운다. 지금은 하나라 할 일이 없다. */
-  const panes = { today: main };
-  function showPane(id) {
-    for (const [k, el] of Object.entries(panes)) el.hidden = (k !== id);
-  }
+  /* 머리 바로 아래 줄 — 주요 지수 띠. 머리(modal-head.js)는 값이 바뀔 때 통째로 다시 그리므로
+     그 안에 넣지 않고 머리와 본문 사이에 끼운다 — 공용 파일은 안 고쳤다 */
+  const ixRow = document.createElement('div');
+  ixRow.className = 'kh-dl-ixrow';
+  m.shell.insertBefore(ixRow, m.body);
 
   inst = mountDaily(main, {
     side: msg,
     /* 「지난 분석」 칸은 없앴다 — 번호 탭이 그 자리다. */
     past: false,
-    onHead({ big, stats }) {
-      m.head.setBig(big);
+    indexHost: ixRow,
+    /* 머리의 큰 대표값(KOSPI)은 넘기지 않는다 (2026-10-01 지시 — 「맨위에 코스피 크게 써져있는건
+       필요없을거 같아」). modal-head.js 는 big 이 없으면 그 칸을 안 그린다 — 공용 파일은 안 고쳤다. */
+    onHead({ stats }) {
       m.head.setStats(stats);
     },
   });
