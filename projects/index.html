@@ -242,6 +242,17 @@ h1 {
 /* 동그라미가 글을 가리지 않게 오른쪽을 비워 둡니다 */
 .task-line { padding-right: 26px; }
 
+/* 카드 접기 (2026-10-01 지시) — "보드의 제목 옆에 접기 버튼 만들어줘
+     카드가 많아지면 보기 힘들어지니"
+
+   접으면 **체크리스트와 칩 줄**이 숨고 **제목 · 색 막대 · 담당**은 남습니다.
+   2026-10-01 실측 — 카드 36장을 전부 접으니 문서가 **6,108 → 2,020px(67%)** 였습니다.
+
+   단추는 `‹ ›` 와 **같은 자리·같은 모양**(`.tb`)을 씁니다 — 새 모양을 만들면
+   그 칸만 달라 보입니다. */
+.task.is-fold .card-subs,
+.task.is-fold .task-mini { display: none; }
+
 /* 라벨을 눌러 거르기 (2026-10-01 지시) — 막대와 동그라미가 **단추**가 됩니다.
      "라벨을 버튼처럼 — 누르면 그 라벨만 거른다"
 
@@ -858,9 +869,46 @@ function mergeList(bList, mList, tList, conflicts, label, mergeOne) {
   return order.map(function (id) { return out[id]; }).filter(Boolean);
 }
 
+/* 카드 하나 — **접힘은 빼고 견줍니다** (2026-10-01).
+
+   접힘(`collapsed`)은 **보는 상태**인데 카드에 저장됩니다(재권님 「저장」 —
+   어느 기기에서 보셔도 같아야 하므로). 그래서 **그냥 견주면 접기만 해도
+   「같은 자리를 양쪽에서 고쳤다」 가 되어 충돌 화면이 뜹니다.**
+
+   **빼고 견주고, 접힘은 내 것을 씁니다.** 그러면
+       접기만 다르다        → 조용히 합쳐진다
+       다른 필드가 갈렸다    → 그때만 묻는다
+   **공유는 안 깨집니다** — 내가 접은 것은 서버에 저장되고, 다른 기기가
+   **새로 열면** `loadFromServer()` 가 그 값을 받습니다. */
+function mergeTask(b, m, t, conflicts, name) {
+  function noView(x) {
+    if (!x) return x;
+    const c = {};
+    Object.keys(x).forEach(function (k) { if (k !== "collapsed") c[k] = x[k]; });
+    return c;
+  }
+  const r = pick3(noView(b), noView(m), noView(t), conflicts, name);
+  if (!r.v) return null;
+  const out = {};
+  Object.keys(r.v).forEach(function (k) { out[k] = r.v[k]; });
+
+  /* 접힘은 **내 것이 먼저, 없으면 남의 것**입니다.
+
+     ⚠️ **그냥 「내 것」 만 쓰면 남이 접은 것이 조용히 사라집니다** —
+     2026-10-01 에 그 자리를 찾았습니다. 한쪽이 접고 다른 쪽이 칸을 옮기면,
+     옮긴 쪽에는 `collapsed` 가 아예 없어서 **접힘이 지워진 채 저장됩니다.**
+     재권님이 고르신 것은 「어느 기기에서 보셔도 같은 쪽」 이라 **지워지면 안 됩니다.**
+
+     편 것은 `collapsed = false` 로 남으므로 **「폈다」 도 내 뜻으로 전해집니다.** */
+  const 접힘 = (m && m.collapsed !== undefined) ? m.collapsed
+             : (t && t.collapsed !== undefined) ? t.collapsed : undefined;
+  if (접힘 !== undefined) out.collapsed = 접힘;
+  return out;
+}
+
 /* 프로젝트 하나 — 카드 목록은 따로 합치고, 나머지 필드는 통째로 견줍니다 */
 function mergeProject(b, m, t, conflicts, name) {
-  const tasks = mergeList(b && b.tasks, m.tasks, t.tasks, conflicts, "작업", null);
+  const tasks = mergeList(b && b.tasks, m.tasks, t.tasks, conflicts, "작업", mergeTask);
   function noTasks(x) {
     if (!x) return x;
     const c = {}; Object.keys(x).forEach(function (k) { if (k !== "tasks") c[k] = x[k]; });
@@ -1226,7 +1274,12 @@ function updateFloor() {
      그렸다 지우므로, 카드를 하나 누를 때마다 도는 것을 막는다.
      **거르기도 열쇠에 넣는다** — 안 넣으면 걸러도 옛 바닥이 남는다. */
   const stamp = projects.map(function (p) {
-    return p.id + ":" + ((p.tasks || []).length);
+    const ts = p.tasks || [];
+    /* **접힌 카드의 id 까지 넣는다** — 개수만 넣으면 「셋 접음」 이 같아도
+       어느 카드를 접었느냐에 따라 높이가 다르다. */
+    return p.id + ":" + ts.length + ":"
+         + ts.filter(function (t) { return t.collapsed; })
+             .map(function (t) { return t.id; }).join(".");
   }).join(",") + "|" + filterWork + "|" + filterWho;
   if (stamp === floorStamp) return;
   floorStamp = stamp;
@@ -1553,7 +1606,8 @@ function buildTask(p, t, colIdx) {
   fillTask(t);
 
   const el = document.createElement("div");
-  el.className = "task" + (t.column === lastColId() ? " is-done" : "");
+  el.className = "task" + (t.column === lastColId() ? " is-done" : "")
+               + (t.collapsed ? " is-fold" : "");
   el.title = "눌러서 자세히 보기";
 
   /* 윗줄 — 우선순위 점 + 내용 + 이동 버튼 */
@@ -1576,6 +1630,28 @@ function buildTask(p, t, colIdx) {
 
   const btns = document.createElement("div");
   btns.className = "task-btns";
+
+  /* 접기 — **제목 옆**(2026-10-01 지시). 접을 것이 없으면 비활성입니다
+     (`‹ ›` 가 양끝 칸에서 쓰는 방식 그대로).
+
+     ⚠️ **접힘은 카드에 저장합니다**(재권님 「저장」). 거르기와 다른 점입니다 —
+     거르기는 화면에만 두는데, 접기는 **어느 기기에서 보셔도 같아야** 합니다. */
+  const 접을것 = (t.subs || []).length > 0 || !!(t.memo || "").trim() || !!t.due || t.amount > 0;
+  const fold = document.createElement("button");
+  fold.className = "tb";
+  fold.textContent = t.collapsed ? "\u25b8" : "\u25be";
+  fold.title = t.collapsed ? "펼치기" : "접기";
+  fold.disabled = !접을것;
+  fold.addEventListener("click", function (e) {
+    e.stopPropagation();                 /* 카드 열기와 겹치지 않게 */
+    t.collapsed = !t.collapsed;
+    /* ⚠️ **`touch()` 를 부르지 않습니다.** 접기는 **보는 것**이지 일한 것이
+       아닙니다 — `updatedAt` 을 건드리면 카드의 「마지막 수정」 이 바뀌고,
+       **세션 현황판이 「가장 최근 카드」 를 그것으로 고릅니다.** 접기만 해도
+       그 카드가 맨 위로 올라갑니다. */
+    save(); render();
+  });
+  btns.appendChild(fold);
 
   const left = document.createElement("button");
   left.className = "tb";
