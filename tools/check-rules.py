@@ -226,8 +226,67 @@ def c_hook_exec():
     return "훅에 실행 비트가 없다 (git 이 조용히 건너뛴다)", n, hits, BAD, (실측, "2026-10-01 post-merge 가 100644 로 올라가 main 머지 때 카드가 안 움직였다")
 
 
+def c_nav_gutter():
+    """메뉴 줄의 기준선은 하나다 — 홀딩스 격자 (2026-10-01 지시 「홀딩스가 기준이야」).
+
+    둘을 본다. ① `nav.css` 에서 `data-nav=` 선택자가 `.site-nav` 의 padding 을 바꾸는 곳 — 0 이어야
+    한다(주석은 뺀다). ② 바탕값 둘(`theme.css` 의 `--grid-max` · `--grid-inset`)이 `frame.css` 의 `.kh-app`
+    max-width · `.kh-main` 좌우 padding 과 같은가. frame.css 가 그 변수를 쓰면 복제가 없는 것이라 통과다 —
+    「합칠 수 있으면 대조 도구보다 먼저 합친다」. 값을 박지 않고 서로를 읽는다.
+    """
+    nav = rd(os.path.join(ROOT, "assets/css/nav.css"))
+    theme = rd(os.path.join(ROOT, "assets/css/theme.css"))
+    frame = rd(os.path.join(ROOT, "holdings/css/frame.css"))
+    if not nav or not frame or not theme:
+        return "메뉴 기준선이 구역별로 갈림", 0, [], BAD, (지시, "nav.css · theme.css · frame.css 를 못 읽었다")
+    strip = lambda x: re.sub(r"/\*.*?\*/", "", x, flags=re.S)
+    nav_code, theme_code, frame_code = strip(nav), strip(theme), strip(frame)
+    hits, n = [], 2
+    for m in re.finditer(r"([^{}]*data-nav=[^{}]*\.site-nav[^{}]*)\{([^}]*)\}", nav_code):
+        if re.search(r"\bpadding(-left|-right)?\s*:", m.group(2)):
+            hits.append("nav.css — 구역별 예외: " + " ".join(m.group(1).split()))
+    if not re.search(r"--nav-gutter\s*:\s*max\(\s*var\(--grid-inset\)", nav_code):
+        hits.append("nav.css 의 --nav-gutter 가 theme.css 의 --grid-inset · --grid-max 로 계산되지 않는다")
+    gmax = re.search(r"--grid-max\s*:\s*(\d+)px", theme_code)
+    gins = re.search(r"--grid-inset\s*:\s*(\d+)px", theme_code)
+    app = re.search(r"\.kh-app\s*\{[^}]*max-width\s*:\s*([^;]+);", frame_code)
+    main = re.search(r"\.kh-main\s*\{[^}]*padding\s*:\s*\S+\s+([^;\s]+)", frame_code)
+    if not gmax or not gins:
+        hits.append("theme.css 에 --grid-max · --grid-inset 이 없다")
+    elif not app or not main:
+        hits.append("frame.css 에서 .kh-app max-width · .kh-main 좌우 padding 을 못 찾았다")
+    else:
+        a, m_ = app.group(1).strip(), main.group(1).strip()
+        if a != "var(--grid-max)" and a != gmax.group(1) + "px":
+            hits.append("격자 폭이 갈렸다 — theme.css --grid-max %spx ↔ frame.css .kh-app %s" % (gmax.group(1), a))
+        if m_ != "var(--grid-inset)" and m_ != gins.group(1) + "px":
+            hits.append("안쪽 여백이 갈렸다 — theme.css --grid-inset %spx ↔ frame.css .kh-main %s" % (gins.group(1), m_))
+    return "메뉴 기준선이 구역별로 갈림 · 홀딩스 격자와 어긋남", n, hits, BAD, (지시, "「홀딩스가 기준이야」 (2026-10-01) — 구역을 오갈 때 메뉴가 44px 움직였다")
+
+def c_shared_css():
+    """구역 밖에서 거는 파일은 「거는 쪽이 둘 이상인 파일」 이다 (2026-10-01 지시 「같이쓴다」).
+
+    다른 구역 화면이 `../<구역>/css/…` 로 거는 파일을 **「봐야 할 자리」** 로 낸다 — 거는 것 자체는
+    위반이 아니고, 그 파일을 고치는 쪽이 거는 화면 전부를 보고 다른 쪽에 먼저 알려야 한다는 표시다.
+    파일 이름도 구역 이름도 박지 않는다. `assets/css/` 는 룰이 정한 공용 자리라 뺀다.
+    """
+    link = re.compile(r'href="\.\./([a-z][a-z-]*/css/[^"]+)"')
+    by, n = {}, 0
+    for p in walk(".html"):
+        if p.startswith("temp/"):
+            continue
+        n += 1
+        for m in link.finditer(rd(os.path.join(ROOT, p))):
+            target = m.group(1)
+            if target.startswith("assets/css/"):
+                continue
+            by.setdefault(target, []).append(p)
+    hits = ["%s  ← %s" % (t, ", ".join(sorted(set(v)))) for t, v in sorted(by.items())]
+    return "거는 쪽이 둘 이상인 구역 CSS", n, hits, LOOK, (지시, "「같이쓴다」 (2026-10-01) — 고치면 거는 화면 전부를 보고 다른 쪽 세션에 먼저 알린다")
+
+
 CHECKS = [c_bat_nonascii, c_py_encoding, c_send_error_korean,
-          c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec]
+          c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec, c_nav_gutter, c_shared_css]
 
 
 def main():

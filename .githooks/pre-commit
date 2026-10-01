@@ -99,9 +99,40 @@ elif [ -f "$RULES" ]; then
 fi
 
 
+# ── 거는 쪽이 둘 이상인 파일 (2026-10-01 지시 「같이쓴다」) ──────────────
+#
+# 다른 구역 화면이 `../<구역>/css/…` 로 거는 파일은 그 구역 전용이 아니다. 그런 파일이 이 커밋에
+# 담겼으면 **거는 화면 목록을 띄우고 「다른 쪽 세션에 알리셨습니까」 를 묻는다.** 막지 않는다 —
+# 알렸는지는 기계가 못 본다. post-commit 은 늦어서(이미 커밋) 여기 둔다.
+# **파일 이름도 구역 이름도 박지 않는다** — 그 자리에서 센다. `assets/css/` 는 룰이 정한 공용 자리라 뺀다.
+# 그리고 그 파일은 **레인을 정하지 않는다** — theme.css 와 같은 길로, 함께 담긴 파일이 정한다.
+TOP="$(git rev-parse --show-toplevel 2>/dev/null)"
+shared=$(cd "$TOP" && grep -rhoE 'href="\.\./[a-z][a-z-]*/css/[^"]+"' --include="*.html" . 2>/dev/null |
+         grep -v '/assets/css/' | sed 's/^href="\.\.\///; s/"$//' | sort -u)
+if [ -n "$shared" ]; then
+  touched=$(printf '%s\n' "$files" | grep -xF -e "$(printf '%s\n' "$shared" | head -1)" $(printf '%s\n' "$shared" | tail -n +2 | sed 's/^/-e /'))
+  if [ -n "$touched" ]; then
+    echo ""
+    echo "  ── 거는 쪽이 둘 이상인 파일을 고칩니다 ─────────────────"
+    printf '%s\n' "$touched" | while IFS= read -r f; do
+      [ -z "$f" ] && continue
+      echo "    $f  ← 거는 화면:"
+      (cd "$TOP" && grep -rlE "href=\"\.\./$f\"" --include="*.html" . 2>/dev/null | grep -v /temp/ | sed 's|^\./||; s/^/        /')
+    done
+    echo ""
+    echo "  고친 뒤 **거는 화면 전부**를 띄워 보고, 다른 쪽 세션에 **먼저 알리셨습니까** (CLAUDE.md"
+    echo "  「구역 밖에서 거는 파일은 「거는 쪽이 둘 이상인 파일」 이다」). 막지는 않습니다."
+    echo "  ──────────────────────────────────────────────────────"
+  fi
+  # 레인 셈에서는 뺀다 — 함께 담긴 파일이 정한다
+  lane_files=$(printf '%s\n' "$files" | grep -vxF -e "$(printf '%s\n' "$shared" | head -1)" $(printf '%s\n' "$shared" | tail -n +2 | sed 's/^/-e /'))
+else
+  lane_files="$files"
+fi
+
 # 경로 → 레인. CLAUDE.md 「세션 역할 분담」 표를 따른다.
 # 루트 파일(CLAUDE.md 등)은 어느 레인도 아니므로 세지 않는다.
-lanes=$(printf '%s\n' "$files" | awk -F/ '
+lanes=$(printf '%s\n' "$lane_files" | awk -F/ '
   NF < 2 { next }                                   # 루트 파일은 건너뛴다
 
   # 룰 문서는 어느 폴더에 있든 개념정의다 (2026-09-17 담당 변경).
