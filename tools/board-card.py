@@ -13,6 +13,7 @@
 **열은 검수 흐름을 따른다(2026-10-01).** 커밋 뒤 훅은 **하위 항목이 없거나 전부 끝난 카드만** review 로
 옮긴다(가지가 main 이면 done). 남은 항목이 있으면 doing 에 두고 「커밋 … · 남은 항목 N」 만 적는다.
 main 에 합쳐지면 post-merge 훅이 해시로 카드를 찾아 done — 못 찾으면 review 에 둔다. 돌려보내는 --doing 은 손.
+**(추정) 으로 고른 카드는 메모만 적고 열을 안 옮긴다** — 낱말은 부분 문자열로 센다(조사 때문).
 
 **쓰는 곳은 하나다** — `KJC_BOARD_URL`(기본 8765). 세션 폴더 서버에 쓰면 넘기기가 안 켜진
 서버는 자기 폴더로 가므로 기본값을 그대로 둔다.
@@ -279,7 +280,10 @@ def cmd_commit(dry):
         best, score = None, 0
         for t in cards:
             body = LABELS.sub("", t["text"])
-            n = len(words(body) & sw)
+            # **부분 문자열로 센다 — 조사 때문에 「카드」↔「카드를」·「훅」↔「훅이」 가 다른 낱말로
+            # 세어져 거의 늘 (추정) 이 됐다** (2026-10-01 · 주식페이지_개발1 이 찾음. 자동 기록 다섯 중
+            # 셋이 추정, 둘은 엉뚱한 카드). 카드 낱말이 제목 안에, 제목 낱말이 카드 안에 들어 있으면 겹친 것.
+            n = len({w for w in words(body) if w in subject} | {w for w in sw if w in body})
             if n > score:
                 best, score = t, n
         guess = ""
@@ -290,8 +294,9 @@ def cmd_commit(dry):
         picked["guess"] = guess
         subs = best.get("subs") or []
         left = [x for x in subs if not x.get("done")]
-        # 열 — 확신이 있을 때만 옮긴다(낱말이 겹쳤거나 그 세션 카드가 하나뿐). 추정으로 옮기면 엉뚱한 카드가 간다
-        sure = (score >= 2) or (len(cards) == 1)
+        # 열 — **낱말이 겹쳤을 때만** 옮긴다. (추정) 이면 메모만 적고 열은 안 옮긴다 (2026-10-01 15:2x 지시).
+        # 전에는 「그 세션 카드가 하나뿐」 도 확신으로 쳤는데, 그 하나가 다른 일의 카드일 수 있다.
+        sure = not guess
         tail = ""
         if left:
             tail = " · 남은 항목 %d" % len(left)
