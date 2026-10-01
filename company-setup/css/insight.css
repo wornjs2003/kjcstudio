@@ -16,8 +16,8 @@
 /* ── 뉴스 목록 (네이버 증권 뉴스에서 받은 것) ── */
 .in-asof { margin-left: auto; font-size: 0.75rem; color: var(--kh-text-muted); }
 .in-scroll { overflow-y: auto; min-height: 0; }
-.kh-sc-card, .kh-rank-card { display: flex; flex-direction: column; }
-.kh-sc-card .in-scroll, .kh-rank-card .in-scroll { flex: 1; padding: 0 18px 14px; }
+.kh-sc-card, .kh-rank-card, .kh-dlm-card { display: flex; flex-direction: column; }
+.kh-sc-card .in-scroll, .kh-rank-card .in-scroll, .kh-dlm-card .in-scroll { flex: 1; padding: 0 18px 14px; }
 .in-news { list-style: none; margin: 0; padding: 0; }
 .in-news li { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--kh-border); }
 .in-news li:first-child { border-top: 0; }
@@ -34,3 +34,18 @@
 .in-cols { column-count: 3; column-gap: 24px; }
 .in-cols li { break-inside: avoid; }
 .in-empty { font-size: 0.84rem; color: var(--kh-text-muted); }
+
+/* ── 영상 분석 보고서 (report.html) ── */
+.in-report { padding: 22px 26px; overflow-y: auto; }
+.in-rp-head { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start;
+              padding-bottom: 20px; border-bottom: 1px solid var(--kh-border); }
+.in-rp-head img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--kh-radius-md); }
+.in-rp-meta { font-size: 0.78rem; color: var(--kh-text-muted); }
+.in-rp-head h1 { font-size: 1.4rem; line-height: 1.4; margin: 8px 0 10px; }
+.in-rp-head p { font-size: 0.92rem; line-height: 1.7; color: var(--kh-text-secondary); margin: 0 0 12px; }
+.in-rp-sec { padding: 18px 0; border-bottom: 1px solid var(--kh-border); }
+.in-rp-sec h2 { font-size: 1rem; margin: 0 0 8px; }
+.in-rp-sec ul { margin: 0; padding-left: 18px; }
+.in-rp-sec li { font-size: 0.88rem; line-height: 1.75; color: var(--kh-text-secondary); }
+.in-rp-note { font-size: 0.75rem; color: var(--kh-text-muted); margin: 14px 0 0; }
+@media (max-width: 900px) { .in-rp-head { grid-template-columns: minmax(0, 1fr); } }
