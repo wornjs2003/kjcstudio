@@ -39,6 +39,23 @@
 # 「KIS 를 8765 하나로」 를 한 서버씩 켜 보는 자리다. 8765 는 이름에 포트가
 # 없어서(`kis-proxy.plist`) 8765 라고 적으면 그것으로 친다.
 
+#
+# ■ 올리기 전에 둘을 본다 — 재시작은 커밋 안 된 코드도 로드한다 (2026-10-01)
+#
+#     그 포트 폴더의 holdings/server/ 에 미커밋이 있나   → 있으면 **멈춘다** (누구 것인지 보여 준다)
+#     kis_proxy.py 가 문법에 맞나 (py_compile)        → 깨졌으면 올리지 않는다
+#
+# 2026-10-01 14:02 에 8765 를 재시작했는데 메인 폴더의 미커밋 보드 코드가 함께 로드돼
+# 검수 전 코드가 알림 서버에서 13분 돌았다. 무해했던 것은 운이 아니라 한 번에 write 한
+# 덕이었다. 편집 중간에 재시작하면 8765 가 안 떠서 신호·공시가 멈춘다.
+#
+#     ./install.command --force 8766      미커밋이 있어도 올린다 — **알림이 멈춰 급히 올려야 할 때**만
+#     ./install.command --check 8766      검사만 하고 올리지 않는다
+#     ./install.command --wait 20 …       올린 뒤 health 를 20초까지 기다린다 (기본 10)
+#
+# 올린 뒤에는 /api/kis/health 가 N초 안에 200 인지 본다 — py_compile 은 문법만 보고
+# import 때 터지는 것(이름 오류 · 없는 모듈)은 못 잡는다.
+
 set -e
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -50,8 +67,43 @@ echo ""
 
 mkdir -p "$DEST"
 n=0
-# 인자로 받은 포트 목록. 비어 있으면 전부.
-ONLY="$*"
+# 인자 — 포트 목록(비어 있으면 전부) · --force · --check · --wait N
+ONLY=""; FORCE=0; CHECK=0; WAIT=10
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --force) FORCE=1 ;;
+    --check) CHECK=1 ;;
+    --wait)  shift; WAIT="${1:-10}" ;;
+    *) ONLY="$ONLY $1" ;;
+  esac
+  shift
+done
+ONLY=$(printf '%s' "$ONLY" | /usr/bin/sed 's/^ *//')
+PY_RUN="$HERE/../.claude/run-py.sh"
+
+# 그 포트의 폴더에서 미커밋·문법을 본다. 0 이면 올려도 된다.
+precheck() {  # $1 = holdings 폴더
+  root=$(dirname "$1")
+  [ -d "$root/.git" ] || [ -f "$root/.git" ] || return 0        # 저장소가 아니면(debugging 폴더 등) 안 본다
+  dirty=$(git -C "$root" status --porcelain -- holdings/server/ 2>/dev/null)
+  if [ -n "$dirty" ]; then
+    echo "  ⚠️ 미커밋이 있습니다 — $root/holdings/server/"
+    printf '%s\n' "$dirty" | /usr/bin/sed 's/^/        /'
+    if [ "$FORCE" = "1" ]; then
+      echo "        --force 라 그대로 올립니다 (검수 전 코드가 돌게 됩니다)"
+    else
+      echo "        커밋하거나 그 세션에 「재시작 미뤄 달라」 — 급하면 --force"
+      return 1
+    fi
+  fi
+  if [ -f "$root/holdings/server/kis_proxy.py" ]; then
+    if ! sh "$PY_RUN" -m py_compile "$root/holdings/server/kis_proxy.py" 2>/dev/null; then
+      echo "  ✗ 문법이 깨져 있습니다 — $root/holdings/server/kis_proxy.py  (올리면 안 뜹니다)"
+      return 1
+    fi
+  fi
+  return 0
+}
 port_of() {  # plist 이름 → 포트. 포트가 이름에 없는 것은 8765 다
   p=$(printf '%s' "$1" | /usr/bin/sed -n 's/.*-\([0-9][0-9]*\)\.plist$/\1/p')
   printf '%s' "${p:-8765}"
@@ -78,6 +130,15 @@ for f in "$HERE"/kr.kjcstudio.*.plist; do
     continue
   fi
 
+  if ! precheck "$wd"; then
+    echo "  건너뜀: $name"
+    continue
+  fi
+  if [ "$CHECK" = "1" ]; then
+    echo "  검사 통과 (올리지 않음): $name"
+    continue
+  fi
+
   cp "$f" "$DEST/$name"
 
   # 이미 올라가 있으면 내렸다 다시 올린다. 안 그러면 옛 설정으로 계속 돈다.
@@ -90,16 +151,32 @@ for f in "$HERE"/kr.kjcstudio.*.plist; do
   fi
 done
 
+[ "$CHECK" = "1" ] && { echo ""; echo "  --check 라 올리지 않았습니다."; echo ""; exit 0; }
+
 echo ""
 echo "  $n개 올렸습니다. 뜨는 데 몇 초 걸립니다."
 echo ""
 
-sleep 8
+sleep 3
 
-echo "  ── 확인 ──────────────────────────────────────────────"
+echo "  ── 확인 (health 를 ${WAIT}초까지 기다립니다) ───────────────"
 for p in ${ONLY:-8093 8764 8765 8766 8767 8768 8770}; do
   pid=$(lsof -nP -iTCP:$p -sTCP:LISTEN 2>/dev/null | awk 'NR>1{print $2}' | sort -u | tr '\n' ' ')
-  printf '    %s  %s\n' "$p" "${pid:-**안 뜸**}"
+  if [ "$p" = "8093" ]; then
+    printf '    %s  %s\n' "$p" "${pid:-**안 뜸**}"
+    continue
+  fi
+  ok=""; i=0
+  while [ "$i" -lt "$WAIT" ]; do
+    code=$(curl -s -o /dev/null -m 2 -w '%{http_code}' "http://127.0.0.1:$p/api/kis/health" 2>/dev/null)
+    [ "$code" = "200" ] && { ok=1; break; }
+    i=$((i + 1)); sleep 1
+  done
+  if [ -n "$ok" ]; then
+    printf '    %s  %s  health 200 (%s초)\n' "$p" "$pid" "$i"
+  else
+    printf '    %s  %s  ⚠️ **health 가 %s초 안에 200 이 아닙니다** — 로그를 보십시오: logs/%s.log\n' "$p" "${pid:-안 뜸}" "$WAIT" "$p"
+  fi
 done
 echo ""
 echo '  ⚠️ cloudflared(터널)는 여기 없습니다 — Cloudflare 가 만든 것이고'
