@@ -672,7 +672,14 @@ def main():
         _open_default(path)
 
     time.sleep(2.0)
-    raise_only(hint, before, os.path.basename(path), opened_with)
+    # **열린 것과 앞으로 꺼낸 것은 다른 일이다 (2026-10-01 · 주식페이지_개발1 이 찾음).**
+    # 앞으로 꺼내기만 실패했는데 그 말만 찍으니 받는 쪽이 「안 열렸다」 로 읽었다 —
+    # 실제로는 미리보기가 쥐고 있었다. 성공을 안 적으면 실패로 읽힌다 (「빈 값은 0 보다
+    # 조용하다」 와 같은 자리). 맥에서는 크롬에 Apple 이벤트 권한이 없으면(-1743) 브라우저
+    # 대상은 늘 0개 일치가 되므로 이 줄이 없으면 매번 실패로 보인다.
+    if not raise_only(hint, before, os.path.basename(path), opened_with):
+        print("  열었습니다: %s" % path)
+        print("  (창을 앞으로 꺼내지는 못했습니다 — 다른 창 뒤에 있을 수 있습니다)")
 
 
 if __name__ == "__main__":

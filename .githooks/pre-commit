@@ -22,6 +22,25 @@
 # 다만 우회하려면 한 번 더 생각하게 된다.
 
 files=$(git diff --cached --name-only)
+
+# ── 일은 보드에서 시작한다 (2026-10-01 지시) — ③ 이 세션의 doing 카드가 없으면 막는다 ──
+#
+# ①(편집 전 훅)은 auto 모드에서 거의 안 뜬다(Bash 로 고치는 일이 많다). 그래서 이것이 주다.
+# 보드를 못 봤으면(연결 거부 · 타임아웃 · 503 · 5xx) 막지 않는다 — 보드가 단일 장애점이다.
+# 머지 커밋은 명시적 예외다 — 남의 작업을 옮기는 것이지 내가 만든 것이 아니다. 지금은
+# 머지의 파일 목록이 비어 저절로 통과하지만 그것에 기대지 않는다(구현이 바뀌면 그날 전부 막힌다).
+# 세션 밖(사람이 터미널에서) 커밋은 세션 이름이 없어 「못 봤다」 로 지나간다.
+if ! git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+  TOP="$(git rev-parse --show-toplevel 2>/dev/null)"
+  if [ -f "$TOP/tools/board-card.py" ]; then
+    if ! sh "$TOP/.claude/run-py.sh" "$TOP/tools/board-card.py" --gate commit; then
+      echo ""
+      echo "  커밋을 멈췄습니다 — 「일은 보드에서 시작한다」 (CLAUDE.md). 카드를 만들고 다시 커밋하십시오."
+      echo ""
+      exit 1
+    fi
+  fi
+fi
 [ -z "$files" ] && exit 0
 
 # ── 룰 검사 ────────────────────────────────────────────────────
