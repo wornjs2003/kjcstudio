@@ -104,9 +104,12 @@ precheck() {  # $1 = holdings 폴더
   fi
   return 0
 }
-port_of() {  # plist 이름 → 포트. 포트가 이름에 없는 것은 8765 다
-  p=$(printf '%s' "$1" | /usr/bin/sed -n 's/.*-\([0-9][0-9]*\)\.plist$/\1/p')
-  printf '%s' "${p:-8765}"
+port_of() {  # plist 이름 → 포트. 포트가 이름에 없는 것은 kis-proxy.plist(8765) 하나뿐이다
+  # **서버 등록 파일만 올린다.** 포트도 없고 kis-proxy 도 아닌 것(check-chart · herdr)은
+  # 빈 값을 내고 아래 루프가 건너뛴다 — 2026-10-02 08:31 에 `install.command 8765` 가
+  # check-chart.plist(30분 주기)까지 같이 올려 지시 없는 켜기가 났다. 그런 것은 손으로 켠다.
+  case "$1" in kr.kjcstudio.kis-proxy.plist) printf '8765'; return ;; esac
+  printf '%s' "$1" | /usr/bin/sed -n 's/.*-\([0-9][0-9]*\)\.plist$/\1/p'
 }
 wanted() {   # $1 포트가 ONLY 에 있나 (ONLY 가 비면 전부)
   [ -z "$ONLY" ] && return 0
@@ -118,7 +121,12 @@ for f in "$HERE"/kr.kjcstudio.*.plist; do
   [ -e "$f" ] || continue
   name=$(basename "$f")
   label=${name%.plist}
-  wanted "$(port_of "$name")" || continue
+  port=$(port_of "$name")
+  if [ -z "$port" ]; then
+    echo "  건너뜀 — 서버 등록 파일이 아닙니다(손으로 켠다): $name"
+    continue
+  fi
+  wanted "$port" || continue
 
   # **경로가 실재하는지 먼저 본다.** 없는 폴더를 가리키면 `KeepAlive` 가
   # 무한히 재시도하며 로그만 쌓인다.

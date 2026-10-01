@@ -6,7 +6,7 @@
   <string>kr.kjcstudio.check-chart</string>
   <!-- 차트 연기 검사를 주기로 돌린다 (2026-10-01 지시 — 「차트쪽 작업된것들 중간에
        고장나는지 안나는지 확인을 항상 할수있는 장치」).
-       30분마다 8765 의 첫 화면·종목 화면을 헤드리스 크롬으로 열어 기간을 바꾸고 지표를
+       하루 세 번(9 · 12 · 14시) 8765 의 첫 화면·종목 화면을 헤드리스 크롬으로 열어 기간을 바꾸고 지표를
        켜 본다 (`tools/check-chart.py`). 결과는 `logs/check-chart.log` 와
        `logs/check-chart.json` 에 남는다. **알림은 안 보낸다** — 「켜기」 는 따로 승인받는다.
        ⚠️ 설치는 `launchd/install.command` 가 아니라 손으로 한다 — 그 스크립트는 서버
@@ -25,8 +25,15 @@
   </array>
   <key>WorkingDirectory</key>
   <string>/Users/kjc/work/KJCStudio</string>
-  <key>StartInterval</key>
-  <integer>1800</integer>
+  <!-- 하루 세 번 — 9시 · 12시 · 14시 (2026-10-02 지시 — 「하루에 3번만 — 9시 · 12시 · 2시」).
+       처음(2026-10-01)에는 StartInterval 1800(30분)이었다. 그 판이 2026-10-02 08:31 에
+       install.command 8765 에 딸려 올라갔다가 지시 없는 켜기라 바로 내려졌고, 그 자리에서 이렇게 정해졌다. -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>12</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>14</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
   <key>RunAtLoad</key>
   <false/>
   <key>StandardOutPath</key>
