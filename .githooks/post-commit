@@ -48,6 +48,25 @@ if [ -n "$layout" ]; then
   echo ""
 fi
 
+# ── 차트 파일을 고쳤으면 연기 검사를 돌려 보라고 알린다 (2026-10-01 지시) ──
+#
+# 「차트쪽 작업된것들 중간에 고장나는지 안나는지 확인을 항상 할수있는 장치」. 파일 이름을
+# 박지 않는다 — `chart.js` 자신과 **그것을 import 하는 파일**을 그 자리에서 센다.
+# 여기서 돌리지는 않는다 — 크롬을 띄워 두 화면을 재는 데 1분 남짓이다.
+TOP0="$(git rev-parse --show-toplevel 2>/dev/null)"
+chartfiles=$( (cd "$TOP0" && { echo holdings/js/chart.js; grep -rl "chart\.js'" holdings/js --include='*.js' 2>/dev/null; } | sort -u) )
+touched_chart=$(printf '%s\n' "$files" | grep -xF -e "$(printf '%s\n' "$chartfiles" | head -1)" $(printf '%s\n' "$chartfiles" | tail -n +2 | sed 's/^/-e /'))
+if [ -n "$touched_chart" ]; then
+  echo ""
+  echo "  ── 차트 파일을 고쳤습니다 ─────────────────────────────"
+  printf '%s\n' "$touched_chart" | head -5 | sed 's/^/      /'
+  echo ""
+  echo "  차트가 아직 그려지는지 연기 검사를 돌려 보십시오 (1분 남짓)."
+  echo ""
+  echo "      python3 tools/check-chart.py --port <내 포트>"
+  echo "  ──────────────────────────────────────────────────────"
+fi
+
 branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 if [ "$branch" = "main" ]; then
   # **알리지 말고 그 자리에서 내린다 (2026-09-21).** 전에는 「알리십시오」

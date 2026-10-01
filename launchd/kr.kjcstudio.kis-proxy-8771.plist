@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kr.kjcstudio.kis-proxy-8771</string>
+
+  <!-- 세션 서버 — 시황분석 (`kjc-home` · 2026-10-01 재권님이 자리를 주심 · 8769 는 영구히 뺀 자리라 8771).
+       2026-09-30 지시(「다 떠야할거같은데」)로 만들었다. 그 전에는
+       `startup.bat` 이 띄웠는데 **윈도우 전용이라 맥에서 통째로 비어
+       있었다** — 8766·8768·8769 셋이 없었고, 그래서 그 세션들이
+       「화면을 띄워서 보여드린다」 를 **지킬 수가 없었다.**
+
+       ⚠️ **`--slow` 다.** 확인용이라 KIS 를 느리게 부른다 —
+       시세 5분 · 미리받기/공시/뉴스수집 끔. 8765·8767 과 다르다.
+
+       ⚠️ **KJC_ROLE 을 일부러 안 넣었다.** 넣으면 재부팅마다
+       텔레그램·KV 가 켜진다. 그것은 「켜기」 이고 따로 승인받는다.
+
+       예산은 재고 넣었다 (2026-09-30 실측) — `_shared_slot` 이
+       **여섯을 한 줄에 세우므로** 서버가 늘어도 초당 건수는 안 늘어난다.
+       쉬는 `--slow` 서버는 1시간에 열 몇 건이다. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <!-- **`-u` 가 없으면 로그가 늦게 쓰인다.** 파이썬 stdout 이 블록
+         버퍼링이라 한참 뒤에야 파일에 닿는다. 2026-09-30 에 한 세션이
+         그것으로 **「브라우저가 API 를 안 불렀다」 로 읽을 뻔했다** —
+         실제로는 불렀는데 **아직 안 쓰인 것**이었다.
+         **로그를 보고 판단하는 세션이 같은 자리에 걸린다.** -->
+    <string>-u</string>
+    <string>server/kis_proxy.py</string>
+    <string>--port</string>
+    <string>8771</string>
+    <string>--slow</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/kjc/work/kjc-home/holdings</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/8771.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/8771.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
+    <key>PYTHONIOENCODING</key>
+    <string>utf-8</string>
+    <!-- **KIS 를 8765 하나로 (2026-10-01 지시 · 길 (가) 넘기기).** 이 서버는 KIS 를
+         직접 안 부르고 8765 로 넘긴다. 8765 가 안 떠 있으면 폴백으로 직접 부른다
+         (`kis_proxy.py` 의 ③). **이름·값은 `kis_proxy.py` 가 읽는 것과 같아야 한다** —
+         `tools/check-kis-single.py` 가 대조한다. 값은 스킴 포함 · 끝에 `/` 없음. -->
+    <key>KJC_KIS_UPSTREAM</key>
+    <string>http://127.0.0.1:8765</string>
+    <!-- **보드도 8765 하나로 (2026-10-01 「보드 스위치 켜」).** /api/board/* 를 8765 로 넘긴다.
+         KIS 와 달리 **폴백이 없다** — 8765 가 안 떠 있으면 503. 두 보드로 갈라지지 않게.
+         받는 쪽(8765)은 보드용 스위치가 따로 없다 — 원래 보드를 받는 서버다. -->
+    <key>KJC_BOARD_UPSTREAM</key>
+    <string>http://127.0.0.1:8765</string>
+  </dict>
+</dict>
+</plist>
