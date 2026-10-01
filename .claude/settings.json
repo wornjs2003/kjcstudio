@@ -17,11 +17,6 @@
       "Bash(git commit --all*)"
     ]
   },
-  "statusLine": {
-    "type": "command",
-    "command": "sh \"$(git rev-parse --show-toplevel)/.claude/statusline.sh\"",
-    "padding": 1
-  },
   "hooks": {
     "PreToolUse": [
       {
