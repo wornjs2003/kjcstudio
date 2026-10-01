@@ -1,0 +1,16 @@
+#!/bin/sh
+# main 에 합쳐진 커밋들의 카드를 done 으로 옮긴다 — 「열은 검수 흐름을 따른다」(2026-10-01).
+#
+# 손으로 --done 을 치면 빠뜨린다 — 오늘 main 머지 여섯 중 하나에 커밋 다섯이 담겨 있었고,
+# 빠뜨려도 아무도 모른다(창구 실측). fast-forward 는 머지 커밋이 없어 ^2 가 없으므로
+# ORIG_HEAD..HEAD 로 센다. 해시가 안 적힌 카드(해시 자동 이전 것)는 못 찾으면 review 에 둔다 —
+# 틀리게 done 으로 옮기는 것보다 낫다. main 이 아닌 가지(staging · w-*)의 머지는 안 건드린다.
+TOP="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" = "main" ] || exit 0
+if [ -f "$TOP/tools/board-card.py" ]; then
+  echo ""
+  echo "  ── 보드 (main 에 합쳐짐) ────────────────────────────"
+  sh "$TOP/.claude/run-py.sh" "$TOP/tools/board-card.py" --merged
+  echo "  ──────────────────────────────────────────────────────"
+fi
+exit 0

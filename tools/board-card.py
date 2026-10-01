@@ -6,7 +6,13 @@
     python3 tools/board-card.py --mine                                     내 doing 카드 (0 있음 · 1 없음 · 2 못 봄)
     python3 tools/board-card.py --gate edit|commit                         훅용 — 없으면 1, 못 봤으면 0
     python3 tools/board-card.py --commit [--dry]                           post-commit 용 — HEAD 를 카드에 적는다
+    python3 tools/board-card.py "<카드 제목 일부>" [--doing|--review|--done]   열 옮기기 (메모 줄과 함께 써도 된다)
+    python3 tools/board-card.py --merged [--dry]                            post-merge 용 — ORIG_HEAD..HEAD 의 해시가 적힌 review 카드를 done 으로
     어느 명령이든 --label <담당>                                            세션 이름을 못 얻을 때 손으로 (= KJC_BOARD_LABEL)
+
+**열은 검수 흐름을 따른다(2026-10-01).** 커밋 뒤 훅은 **하위 항목이 없거나 전부 끝난 카드만** review 로
+옮긴다(가지가 main 이면 done). 남은 항목이 있으면 doing 에 두고 「커밋 … · 남은 항목 N」 만 적는다.
+main 에 합쳐지면 post-merge 훅이 해시로 카드를 찾아 done — 못 찾으면 review 에 둔다. 돌려보내는 --doing 은 손.
 
 **쓰는 곳은 하나다** — `KJC_BOARD_URL`(기본 8765). 세션 폴더 서버에 쓰면 넘기기가 안 켜진
 서버는 자기 폴더로 가므로 기본값을 그대로 둔다.
@@ -171,12 +177,21 @@ def now():
 
 
 # ── 명령들 ───────────────────────────────────────────────────
-def cmd_note(key, line, sub, done):
+COLUMNS = ("todo", "doing", "review", "done")
+
+
+def cmd_note(key, line, sub, done, column=None):
+    moved = {}
+
     def change(doc):
         hits = [t for t in tasks(doc) if key in t.get("text", "")]
         if len(hits) != 1:
             sys.exit("카드 %d개 걸림 — 더 좁혀서: %s" % (len(hits), key))
         t = hits[0]
+        if column and t.get("column") != column:
+            moved["from"], moved["to"] = t.get("column"), column
+            t["column"] = column
+            t["memo"] = (t.get("memo") or "").rstrip() + "\n  %s 열 %s → %s" % (now(), moved["from"], column)
         if line:
             t["memo"] = (t.get("memo") or "").rstrip() + "\n  %s %s" % (now(), line)
         if sub:
@@ -188,7 +203,7 @@ def cmd_note(key, line, sub, done):
                     if not s["text"].startswith("[됨]"):
                         s["text"] = "[됨] " + s["text"]
     apply(change)
-    print("보드 저장됨", now())
+    print("보드 저장됨", now(), ("· 열 %s → %s" % (moved["from"], moved["to"])) if moved else "")
 
 
 def cmd_new(text, line, todo):
@@ -265,21 +280,74 @@ def cmd_commit(dry):
             guess = "(추정) "
         picked["text"] = best["text"]
         picked["guess"] = guess
-        best["memo"] = (best.get("memo") or "").rstrip() + "\n  %s %s커밋 %s %s · %s" % (now(), guess, h, subject, branch)
+        subs = best.get("subs") or []
+        left = [x for x in subs if not x.get("done")]
+        # 열 — 확신이 있을 때만 옮긴다(낱말이 겹쳤거나 그 세션 카드가 하나뿐). 추정으로 옮기면 엉뚱한 카드가 간다
+        sure = (score >= 2) or (len(cards) == 1)
+        tail = ""
+        if left:
+            tail = " · 남은 항목 %d" % len(left)
+        elif sure and best.get("column") == "doing":
+            to = "done" if branch == "main" else "review"
+            best["column"] = to
+            tail = " · 열 doing → %s" % to
+            picked["moved"] = to
+        best["memo"] = (best.get("memo") or "").rstrip() + "\n  %s %s커밋 %s %s · %s%s" % (now(), guess, h, subject, branch, tail)
 
     if dry:
         try:
             doc, _ = read()
             change(doc)
-            print("  (시험) 적을 카드:", picked["guess"] + picked["text"])
+            print("  (시험) 적을 카드:", picked["guess"] + picked["text"], ("→ " + picked["moved"]) if picked.get("moved") else "")
         except Unseen as e:
             print("  (시험) 보드에 못 적는다:", e)
         return 0
     try:
         apply(change)
-        print("  보드: %s%s ← %s" % (picked["guess"], picked["text"], h))
+        print("  보드: %s%s ← %s%s" % (picked["guess"], picked["text"], h, (" · 열 → " + picked["moved"]) if picked.get("moved") else ""))
     except Unseen as e:
         print("  보드에 못 적었다(%s) — 돌아오면 손으로: python3 tools/board-card.py \"<카드>\" \"커밋 %s %s · %s\"" % (e, h, subject, branch))
+    return 0
+
+
+def cmd_merged(dry):
+    """main 에 합쳐진 커밋들의 해시가 적힌 review 카드를 done 으로. fast-forward 도 ORIG_HEAD..HEAD 로 잡힌다."""
+    g = lambda *a: subprocess.run(["git"] + list(a), capture_output=True, text=True).stdout.strip()
+    if g("rev-parse", "--abbrev-ref", "HEAD") != "main":
+        return 0
+    hashes = [x for x in g("log", "--format=%h", "ORIG_HEAD..HEAD").split() if x]
+    if not hashes:
+        print("  보드: 합쳐진 커밋이 없다(ORIG_HEAD..HEAD 비어 있음)")
+        return 0
+    moved, seen = [], set()
+
+    def change(doc):
+        moved.clear(); seen.clear()
+        for t in tasks(doc):
+            memo = t.get("memo") or ""
+            hit = [h for h in hashes if h in memo]
+            if not hit:
+                continue
+            seen.update(hit)
+            if t.get("column") == "review":
+                t["column"] = "done"
+                t["memo"] = memo.rstrip() + "\n  %s main 에 합쳐짐(%s) · 열 review → done" % (now(), ",".join(hit))
+                moved.append(t["text"])
+    try:
+        if dry:
+            doc, _ = read()
+            change(doc)
+        else:
+            apply(change)
+        tag = "(시험) " if dry else ""
+        print("  보드: %s합쳐진 커밋 %d · 카드에 적힌 것 %d · review → done %d" % (tag, len(hashes), len(seen), len(moved)))
+        for m in moved:
+            print("     ·", m)
+        miss = [h for h in hashes if h not in seen]
+        if miss:
+            print("     해시가 어느 카드에도 없는 커밋 %d (해시 자동 이전 것이거나 머지 커밋): %s" % (len(miss), " ".join(miss[:6])))
+    except Unseen as e:
+        print("  보드에 못 적었다(%s) — 돌아오면: python3 tools/board-card.py --merged" % e)
     return 0
 
 
@@ -298,20 +366,26 @@ def main(argv):
         return cmd_mine(gate=argv[1] if len(argv) > 1 else "edit")
     if argv[0] == "--commit":
         return cmd_commit("--dry" in argv)
+    if argv[0] == "--merged":
+        return cmd_merged("--dry" in argv)
     if argv[0] == "--new":
         text = argv[1] if len(argv) > 1 else ""
         rest = [a for a in argv[2:] if not a.startswith("--")]
         return cmd_new(text, rest[0] if rest else "", "--todo" in argv) or 0
     key = argv[0]
     line = argv[1] if len(argv) > 1 and not argv[1].startswith("--") else ""
-    sub = done = None
+    sub = done = column = None
     for i, x in enumerate(argv):
         if x == "--sub":
             sub = argv[i + 1]
-        if x == "--done":
-            done = argv[i + 1]
+        if x == "--done" and i + 1 < len(argv) and not argv[i + 1].startswith("--"):
+            done = argv[i + 1]          # --done "<하위>" 는 하위 항목 닫기
+        elif x == "--done":
+            column = "done"             # 값 없는 --done 은 열 옮기기
+        if x in ("--doing", "--review"):
+            column = x[2:]
     try:
-        cmd_note(key, line, sub, done)
+        cmd_note(key, line, sub, done, column)
     except Unseen as e:
         sys.exit("보드를 못 봤다: %s" % e)
     return 0
