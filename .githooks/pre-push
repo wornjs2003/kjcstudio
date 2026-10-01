@@ -31,7 +31,11 @@ do
   [ "$local_sha" = "$ZERO" ] && continue        # 브랜치를 지우는 것
 
   if [ "$remote_sha" = "$ZERO" ]; then
-    range="$local_sha"                          # 원격에 없던 브랜치
+    # 원격에 없던 브랜치 — **origin/main 과의 갈림점부터** 센다 (2026-10-01).
+    # 전체 이력을 세면 「608건 · 레인 다섯 · 워커 담김」 이 떠서 진짜 경보를 묻는다
+    # (세션 가지를 백업으로 처음 올릴 때 dry-run 실측). origin/main 이 없으면 전부.
+    base=$(git merge-base origin/main "$local_sha" 2>/dev/null)
+    if [ -n "$base" ]; then range="$base..$local_sha"; else range="$local_sha"; fi
   else
     range="$remote_sha..$local_sha"
   fi
@@ -118,7 +122,8 @@ done
 
 if [ "$shown" = "1" ]; then
   echo ""
-  echo "     푸시 지시를 받으셨습니까. 받은 답은 \`작업우선순위\` 에도 알립니다."
+  echo "     커밋 지시에 푸시가 들어 있습니다 (2026-10-01). 남의 레인 커밋이 함께 갔으면"
+  echo "     그 세션에 알립니다 — \`작업우선순위\` 에도."
   echo ""
 fi
 
