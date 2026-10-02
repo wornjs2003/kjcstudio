@@ -864,6 +864,7 @@ def usage_stats():
         "prioLowYields": _prio_stat["lowYields"],
         # ⓓ 롱폴링 — 꺼져 있으면 `longpoll: false` 이고 셈은 0 이다(그 자리가 없으므로)
         "longpoll": LONGPOLL_ON,
+        "longpollPrefixes": list(LONGPOLL_PREFIXES),
         "longpollActive": _lp_stat["active"],
         "longpollTotal": _lp_stat["total"],
         "longpollChanged": _lp_stat["changed"],
@@ -1397,8 +1398,89 @@ def _lp_inner(u):
         return e.code, e.read()
 
 
-def longpoll(u, h, hold):
-    """값이 바뀔 때까지(또는 `hold` 초) 기다린다. 결과는 JSON 으로 낼 dict."""
+LONGPOLL_MAX_URLS = 12     # 한 연결이 묶어 볼 수 있는 주소 수
+
+# **지켜볼 수 있는 주소의 접두** (2026-10-02 · 재권님 「화면은 서버가 알려준다」 —
+# 보드 저장본 · 정적 JSON · 뉴스도 화면이 주기로 다시 묻지 않게). 화면은 이 목록을
+# `stats.longpollPrefixes` 로 받아, 서버가 안 받는 주소 하나 때문에 묶음 전체가
+# 폴백으로 떨어지지 않게 가른다(개발과 계약).
+#
+# **KIS 밖 넷(공시 · 뉴스 · 보드 · 정적)은 예산 계산에 안 넣는다** — 안쪽 호출이 그 라우트의
+# 캐시를 그대로 타므로(뉴스 `NEWS_TTL` · `MOVES_TTL`) 롱폴이 바깥 호출을 늘리지 않는다.
+LONGPOLL_PREFIXES = ("/api/kis/", "/api/dart/", "/api/news/", "/api/board/doc/", "/holdings/data/")
+
+
+def _lp_url_ok(u):
+    """롱폴로 지켜봐도 되는 주소인가. 아니면 그 이유(한국어), 되면 `None`."""
+    path = urllib.parse.urlparse(u).path
+    if ".." in u or not any(path.startswith(p) for p in LONGPOLL_PREFIXES):
+        return "u 는 %s 중 하나로 시작해야 합니다." % " · ".join(LONGPOLL_PREFIXES)
+    if path.startswith("/api/kis/"):
+        inner = path[len("/api/kis/"):].strip("/")
+        # 자기 자신(poll)은 고리가 되고 넘겨받는 자리(relay)는 넘기기 전용이다
+        if not inner or inner in ("poll", RELAY_ROUTE):
+            return "poll · relay 는 지켜볼 수 없습니다."
+    # **`/api/dart/poll` 은 안 된다** — 부를 때마다 OpenDART 에 바로 간다(캐시 없음 · 하루 한도).
+    # 롱폴이 1초마다 부르면 그날 한도(020)를 금방 쓴다.
+    if path.rstrip("/") == "/api/dart/poll":
+        return "/api/dart/poll 은 지켜볼 수 없습니다(OpenDART 를 바로 부릅니다)."
+    if path.startswith("/holdings/data/"):
+        # **`.json` 만 · 저장본 폴더(docs/)는 안 된다** — 정적 막기(`_DENY_REL`)와 같은 자리
+        if not path.endswith(".json") or path.startswith("/" + _DENY_REL[0]):
+            return "/holdings/data/ 는 .json 만 · docs/ 는 안 됩니다."
+    return None
+
+
+def _lp_hash(body):
+    """**`meta` 를 뺀 본문**으로 해시를 만든다 — 값이 안 바뀌었는데 「바뀜」 이 안 나게.
+
+    `/chart` 의 `meta` 는 새로 받은 직후 `{fetched: N, source: 'KIS'}`, 다음부터
+    `{fetched: 0, source: 'DB'}` 라 봉이 같아도 해시가 두 번 바뀌었다(2026-10-02 · 개발 실측).
+    `meta` 는 「언제 · 어디서 받았나」 를 싣는 자리라 값이 아니다. JSON 이 아니면 그대로 해시한다.
+    """
+    try:
+        obj = json.loads(body.decode("utf-8"))
+    except ValueError:
+        return hashlib.sha1(body).hexdigest()[:16], None
+    key = obj
+    if isinstance(obj, dict) and "meta" in obj:
+        key = {k: v for k, v in obj.items() if k != "meta"}
+    raw = json.dumps(key, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    return hashlib.sha1(raw).hexdigest()[:16], obj
+
+
+def _lp_step(u):
+    """그 주소를 다시 볼 간격. **봉은 그 기간의 `fresh_sec`** — 그 전에는 서버가 새로 안 받으므로
+    더 자주 봐도 같은 값을 읽을 뿐이다(KIS 수는 `fresh_sec` 이 정한다 · 이것은 안쪽 부하만 줄인다).
+    나머지는 `LONGPOLL_STEP_SEC`."""
+    pr = urllib.parse.urlparse(u)
+    if pr.path.rstrip("/") == "/api/kis/chart":
+        per = (urllib.parse.parse_qs(pr.query).get("period") or ["D"])[0]
+        f = (PERIODS.get(per) or {}).get("fresh_sec")
+        if isinstance(f, (int, float)):
+            return max(LONGPOLL_STEP_SEC, float(f))
+    return LONGPOLL_STEP_SEC
+
+
+def _lp_item(u, code, body, h):
+    hh, obj = _lp_hash(body)
+    it = {"u": u, "hash": hh, "changed": hh != h, "status": code}
+    if hh != h or code != 200:
+        it["body"] = obj
+    return it
+
+
+def longpoll(us, hs, hold):
+    """주소 여럿(`us`) 중 **하나라도** 바뀔 때까지(또는 `hold` 초) 기다린다.
+
+    **한 화면 = 롱폴 하나**로 묶는다 — 브라우저가 HTTP/1.1 에서 한 주소당 동시 연결을
+    6개까지만 열어, 화면이 주소마다 롱폴을 쥐면 나머지 요청이 막힌다(2026-10-02 · 개발과 계약).
+    응답 `items` 에는 **전부** 담기고, 안 바뀐 것은 `body` 없이 `changed:false` 다.
+    주소가 하나면 최상위에도 그 칸의 값을 그대로 둔다(첫 모양과 맞춘다).
+    """
+    if isinstance(us, str):
+        us, hs = [us], [hs]
+    hs = list(hs) + [""] * (len(us) - len(hs))          # 모자란 해시는 「처음 받기」
     with _lp_lock:
         _lp_stat["total"] += 1
         busy = _lp_stat["active"] >= LONGPOLL_MAX_ACTIVE
@@ -1407,29 +1489,33 @@ def longpoll(u, h, hold):
         else:
             _lp_stat["active"] += 1
     try:
-        deadline = time.monotonic() + (0.0 if busy else hold)
+        now = time.monotonic()
+        deadline = now + (0.0 if busy else hold)
+        items = [None] * len(us)
+        due = [now] * len(us)               # 주소마다 다음에 볼 시각 — 처음엔 다 본다
         while True:
-            code, body = _lp_inner(u)
-            hh = hashlib.sha1(body).hexdigest()[:16]
-            if code != 200 or hh != h or time.monotonic() >= deadline:
+            now = time.monotonic()
+            for i, (u, h) in enumerate(zip(us, hs)):
+                if due[i] <= now:
+                    items[i] = _lp_item(u, *_lp_inner(u), h)
+                    due[i] = now + _lp_step(u)
+            hit = any(it["changed"] or it["status"] != 200 for it in items)
+            if hit or time.monotonic() >= deadline:
                 break
-            time.sleep(min(LONGPOLL_STEP_SEC, max(0.0, deadline - time.monotonic())))
-        changed = hh != h
+            wake = min(min(due), deadline)
+            time.sleep(max(0.0, wake - time.monotonic()))
+        changed = any(it["changed"] for it in items)
         if changed:
             _lp_stat["changed"] += 1
-        out = {"ok": code == 200, "changed": changed, "hash": hh, "status": code,
-               "busy": busy}
-        if changed or code != 200:
-            try:
-                out["body"] = json.loads(body.decode("utf-8"))
-            except ValueError:
-                out["body"] = None
+        out = {"ok": all(it["status"] == 200 for it in items), "changed": changed,
+               "busy": busy, "items": items}
+        if len(items) == 1:
+            out.update({k: v for k, v in items[0].items() if k != "u"})
         return out
     finally:
         if not busy:
             with _lp_lock:
                 _lp_stat["active"] -= 1
-
 
 RELAY_CACHE_MAX = 2000             # 키에 `params` 가 들어가 수가 늘 수 있다
 
@@ -5062,20 +5148,27 @@ class Handler(SimpleHTTPRequestHandler):
             if not LONGPOLL_ON:
                 self._send_json({"ok": False, "error": "그런 주소 없음"}, 404)
                 return
-            u = (qs.get("u") or [""])[0]
-            # **`/api/kis/` 안쪽만 · 자기 자신(poll)과 넘겨받는 자리(relay)는 안 된다** —
-            # 앞은 고리가 되고 뒤는 넘기기 전용 자리다.
-            inner = urllib.parse.urlparse(u).path[len("/api/kis/"):].strip("/") \
-                if u.startswith("/api/kis/") else ""
-            if not inner or inner in ("poll", RELAY_ROUTE) or ".." in u:
-                self._send_json({"ok": False, "error": "u 는 /api/kis/ 안의 주소여야 합니다."}, 400)
+            # **빈 값을 살려 다시 읽는다** — 위 `qs` 는 `h=` 처럼 빈 값을 버려서 묶음일 때
+            # u·h 자리가 밀린다. 다른 라우트는 빈 값을 「없음」 으로 읽으므로 여기서만 바꾼다.
+            _qb = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query,
+                                        keep_blank_values=True)
+            us = [x for x in (_qb.get("u") or []) if x]
+            if not us or len(us) > LONGPOLL_MAX_URLS:
+                self._send_json({"ok": False, "error": "u 는 1~%d 개여야 합니다." % LONGPOLL_MAX_URLS}, 400)
                 return
+            # **허용 접두 안쪽만**(`_lp_url_ok`). 묶음이면 **하나라도** 어기면 400 —
+            # 화면은 `stats.longpollPrefixes` 로 미리 가른다.
+            for u in us:
+                why = _lp_url_ok(u)
+                if why:
+                    self._send_json({"ok": False, "error": why, "u": u}, 400)
+                    return
             try:
                 hold = float((qs.get("hold") or ["10"])[0])
             except ValueError:
                 hold = 10.0
             hold = max(0.0, min(hold, LONGPOLL_MAX_HOLD))
-            self._send_json(longpoll(u, (qs.get("h") or [""])[0], hold))
+            self._send_json(longpoll(us, _qb.get("h") or [], hold))
             return
 
         if route == "policy":
