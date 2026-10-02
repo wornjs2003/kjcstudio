@@ -33,9 +33,13 @@ import { collectSchedule } from './schedule.js';
 import { openModal } from './modal.js';
 import { stripHtml } from './index-strip.js';
 import { apiFetch } from '../data/api.js';
+import { watch } from '../store/longpoll.js';
+import { everyServerMs } from '../store/timing.js';
 
 /* 화면을 열어둔 채로도 새 것이 들어오도록. 서버가 5분마다 받으므로 그보다 짧게. */
-const REFRESH_MS = 60_000;
+/* 다시 받는 주기는 화면이 정하지 않는다 — 서버 값(`/api/kis/stats` 의 timing)을 따른다.
+   이것은 **그 값마저 못 받았을 때**의 대체값이다 (「화면은 서버에 주기로 묻지 않는다」) */
+const FALLBACK_MS = 60_000;
 
 /* 몇 시간치를 보여줄 것인가. 하루를 넘겨서 봐야 「어제 이슈」가 남는다
    (2026-09-21 지시 — "그전날 이슈를 놓치지 않게"). */
@@ -291,10 +295,14 @@ function videoListHtml(items, n = 99) {
  * `sv-SE` 로케일이 `YYYY-MM-DD` 를 준다. `toISOString()` 은 UTC 라
  * 한국 시간 아침에 **어제 날짜**가 나온다.
  */
+/** 오늘 저장본의 주소 — 첫 화면(home.js)이 롱폴로 지켜볼 때도 이것을 쓴다. 날짜 만드는 법은 여기 한 곳이다 */
+export function dailyDocUrl() {
+  return `/api/board/doc/daily-${new Date().toLocaleDateString('sv-SE').replace(/-/g, '')}`;
+}
+
 export async function loadDailyDoc() {
-  const key = 'daily-' + new Date().toLocaleDateString('sv-SE').replace(/-/g, '');
   try {
-    const r = await apiFetch(`/api/board/doc/${key}`, { cache: 'no-store' });
+    const r = await apiFetch(dailyDocUrl(), { cache: 'no-store' });
     if (!r || !r.ok) return null;          // 404 면 오늘 것이 아직 없다
     const b = await r.json();
     return (b && b.ok && b.data) || null;
@@ -353,8 +361,8 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
   let stored = true;
 
   /* 멈출 수 있게 손잡이를 쥐고 있는다. 모달을 닫고도 계속 돌면 보이지도
-     않는 칸 때문에 KIS 를 계속 부른다. */
-  let timer = null;
+     않는 칸 때문에 서버 연결을 쥐고 있게 된다. */
+  const stops = [];
   let dead = false;
 
   /* ── 받아오기 ───────────────────────────── */
@@ -844,15 +852,34 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
   }
 
   load();
-  timer = setInterval(load, REFRESH_MS);
+
+  /* **주기를 갖지 않는다 — 서버가 알려준다** (2026-10-02 재권님 「데일리 화면 코드는 화면이 물으면 안될거같은데」).
+     전에는 1분마다 다섯을 전부 다시 물었다(`setInterval(load, 60_000)`).
+       지수 · 업종   `/api/kis/poll` 로 바뀔 때만 다시 받는다(`store/longpoll.js` · 한 탭 한 연결 · 꺼진 서버는 서버 값 주기)
+       뉴스 저장본   poll 범위 밖이라 **서버가 모으는 주기**(`news_store.COLLECT_INTERVAL`)로 — 그보다 자주 물어도 같은 값이다
+       일정 · 알림 설정 · 데일리 저장본   한 번만 — 그 사이 바뀔 것이 없다(저장본은 07:30 에 한 번 만들어진다)
+     바뀐 것을 받으면 그 칸만 다시 그리고, 모달 머리도 그때 넘긴다. */
+  const redraw = (name, draw) => {
+    if (dead) return;
+    safe(name, draw);
+    if (onHead) safe('머리', () => onHead(headValues()));
+  };
+  stops.push(
+    watch({ url: () => '/api/kis/indices', key: 'kis_proxy.INDEX_TTL', fallbackMs: FALLBACK_MS,
+            onChange: () => loadIndices().then(() => { redraw('지수', drawIndices); if (!dead && onIndices) onIndices(indices); }) }).stop,
+    watch({ url: () => '/api/kis/sectors', key: 'kis_proxy.SECTOR_TTL', fallbackMs: FALLBACK_MS,
+            onChange: () => loadSectors().then(() => redraw('섹터', drawSectors)) }).stop,
+    everyServerMs('news_store.COLLECT_INTERVAL', FALLBACK_MS,
+                  () => loadNews().then(() => { if (!dead) safe('뉴스', drawNews); })),
+  );
 
   return {
-    /* 모달이 닫힐 때 부른다. 안 멈추면 보이지도 않는 칸 때문에 KIS 를
-       계속 부른다 — 「최적화는 멈춘다가 아니라 늦춘다」 는 목록 폴링
-       이야기이고, 이쪽은 칸 자체가 사라지므로 멈추는 것이 맞다. */
+    /* 모달이 닫힐 때 부른다. 안 멈추면 보이지도 않는 칸이 서버 연결을 쥐고
+       있다 — 「최적화는 멈춘다가 아니라 늦춘다」 는 목록 폴링 이야기이고,
+       이쪽은 칸 자체가 사라지므로 멈추는 것이 맞다. */
     destroy() {
       dead = true;
-      if (timer) { clearInterval(timer); timer = null; }
+      stops.splice(0).forEach((stop) => { try { stop(); } catch (e) { console.error(e); } });
     },
     reload: load,
   };
