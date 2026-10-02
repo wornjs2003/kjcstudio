@@ -14,7 +14,25 @@
       "Bash(git clean -d*)",
       "Bash(git clean --force*)",
       "Bash(git commit -a*)",
-      "Bash(git commit --all*)"
+      "Bash(git commit --all*)",
+      "Bash(./install.command 8765*)",
+      "Bash(launchd/install.command 8765*)",
+      "Bash(./install.command)",
+      "Bash(launchd/install.command)",
+      "Bash(rm /Users/kjc/work/KJCStudio/holdings/market.db*)",
+      "Bash(rm -f /Users/kjc/work/KJCStudio/holdings/market.db*)",
+      "Bash(rm -rf /Users/kjc/work/KJCStudio/holdings/data*)",
+      "Bash(launchctl kickstart -k gui/501/kr.kjcstudio.kis-proxy)",
+      "Bash(launchctl bootout gui/501/kr.kjcstudio.kis-proxy)",
+      "Bash(launchctl unload ~/Library/LaunchAgents/kr.kjcstudio.kis-proxy.plist)",
+      "Bash(launchctl bootout gui/501 ~/Library/LaunchAgents/kr.kjcstudio.kis-proxy.plist)",
+      "Bash(./install.command 8764*)",
+      "Bash(launchd/install.command 8764*)",
+      "Bash(launchctl kickstart -k gui/501/kr.kjcstudio.service-8764)",
+      "Bash(launchctl bootout gui/501/kr.kjcstudio.service-8764)",
+      "Bash(rm /Users/kjc/service/holdings/market.db*)",
+      "Bash(rm -f /Users/kjc/service/holdings/market.db*)",
+      "Bash(rm -rf /Users/kjc/service/holdings/data*)"
     ]
   },
   "hooks": {
@@ -34,6 +52,16 @@
           {
             "type": "command",
             "command": "sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-board-card.py\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-main-guard.py\"",
             "timeout": 5
           }
         ]

@@ -22,6 +22,7 @@
 종료코드   0 걸린 것 없음 · 1 위반 있음 · 2 **못 쟀다**
 """
 import io
+import json
 import os
 import re
 import subprocess
@@ -284,9 +285,40 @@ def c_shared_css():
     hits = ["%s  ← %s" % (t, ", ".join(sorted(set(v)))) for t, v in sorted(by.items())]
     return "거는 쪽이 둘 이상인 구역 CSS", n, hits, LOOK, (지시, "「같이쓴다」 (2026-10-01) — 고치면 거는 화면 전부를 보고 다른 쪽 세션에 먼저 알린다")
 
+def c_main_guard():
+    """메인 자리는 재권님 허락 없이 건드리지 않는다 (2026-10-01 지시) — 장치가 조용히 꺼지는 것을 잡는다.
+
+    훅 등록(settings.json) · 훅 파일 · 스킬 · deny 셋이 **다 있어야** 한다. 하나라도 빠지면 위반.
+    2026-10-01 17:4x 에 한 세션이 메인 8765 의 market.db 를 쓰기 모드로 열어 journal_mode 가 바뀌었다.
+    """
+    hits, n = [], 4
+    try:
+        st = json.loads(rd(os.path.join(ROOT, ".claude/settings.json")) or "{}")
+    except Exception:
+        st = {}
+    hooks = st.get("hooks", {}).get("PreToolUse", [])
+    if not any("hook-main-guard" in h.get("command", "") for g in hooks for h in g.get("hooks", [])):
+        hits.append(".claude/settings.json 에 hook-main-guard 훅 등록이 없다")
+    if not os.path.exists(os.path.join(ROOT, "tools/hook-main-guard.py")):
+        hits.append("tools/hook-main-guard.py 가 없다")
+    if not os.path.exists(os.path.join(ROOT, ".claude/skills/main-guard/SKILL.md")):
+        hits.append(".claude/skills/main-guard/SKILL.md 가 없다")
+    deny = st.get("permissions", {}).get("deny", [])
+    if not any("install.command 8765" in x for x in deny) or not any(x.endswith("kr.kjcstudio.kis-proxy)") for x in deny):
+        hits.append(".claude/settings.json deny 에 메인 자리 항목(install.command 8765 · launchctl 메인)이 없다")
+    return "메인 자리 안전장치가 빠짐", n, hits, BAD, (지시, "「메인쪽은 내 허락없이 절대 건들면 안되는곳이야 안정장치를 여러개 만들어줘」 (2026-10-01)")
+
+def c_main_ok_log():
+    """KJC_MAIN_OK=1 을 쓴 기록 — 허락은 기계가 못 보니 **몇 번 썼는지**를 「봐야 할 자리」 로 낸다 (작업우선순위 · 홈페이지_정리 검토)."""
+    p = os.path.join(ROOT, "logs", "main-ok.log")
+    if not os.path.exists(p):
+        return "KJC_MAIN_OK=1 사용 기록", 1, [], LOOK, (지시, "아직 한 번도 안 썼다")
+    lines = [l for l in rd(p).splitlines() if l.strip()]
+    return "KJC_MAIN_OK=1 사용 기록 (허락받고 쓴 것인지 재권님이 보신다)", 1, [l[:150] for l in lines[-10:]], LOOK, (지시, "「메인쪽은 내 허락없이 절대 건들면 안되는곳」 — 쓴 자국을 남긴다")
+
 
 CHECKS = [c_bat_nonascii, c_py_encoding, c_send_error_korean,
-          c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec, c_nav_gutter, c_shared_css]
+          c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec, c_nav_gutter, c_shared_css, c_main_guard, c_main_ok_log]
 
 
 def main():
