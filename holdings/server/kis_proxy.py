@@ -2600,6 +2600,14 @@ def _unlock_bars_backfill():
     **한 번만 돈다.** 매번 지우면 모든 종목이 열릴 때마다 과거를 다시 훑어
     KIS 호출이 계속 늘어난다.
     """
+    # **읽기 전용 서버는 손대지 않는다** (2026-10-02 · `marketdb` 가 들어온 뒤).
+    # 안 보면 `DELETE` 가 터지고, 호출 쪽 `try` 가 받아 「건너뜁니다」 를 찍는다 —
+    # 터지지는 않지만 **재시작마다 같은 로그가 뜬다.** `_meta_set` 도 가드가 있어
+    # 「했다」 표를 못 찍으므로 다음에도 또 시도하기 때문이다.
+    #
+    # 푸는 것은 **쓰는 서버 하나**가 하면 된다. 읽기 전용 서버는 그 결과를 읽는다.
+    if not marketdb.writable():
+        return 0
     if _meta_get(BARS_MKT_FIX) == BARS_MKT_FIX_VER:
         return 0
     with _db_lock, db_conn() as conn:
@@ -2622,6 +2630,15 @@ def _prune_span_dupes():
 
     서버가 뜰 때 한 번 돈다. 치울 것이 없으면 0 을 내고 아무것도 안 한다.
     """
+    # **읽기 전용 서버는 손대지 않는다** (2026-10-02).
+    # 2026-10-02 09:22 에 8768 을 메인 DB 읽기 전용으로 켜니 여기서
+    # `OperationalError` 가 나고 「겹친 봉 정리: 건너뜁니다」 가 떴다.
+    # 치우는 것은 **쓰는 서버 하나**가 하면 되고, 읽기 전용 서버는 그 결과를 읽는다.
+    #
+    # `_meta_set_write` · `_save_candles_write` 는 **부르는 쪽**이 가드를 보므로
+    # 그 짝은 안전하다 — 여기와 `_unlock_bars_backfill` 만 자기가 봐야 했다.
+    if not marketdb.writable():
+        return 0
     n = 0
     with _db_lock, db_conn() as conn:
         for period, cut in SPAN_CUT.items():
