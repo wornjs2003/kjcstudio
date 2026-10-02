@@ -106,17 +106,22 @@ async function loadEarnings() {
    남긴다 (2026-09-15 지시). 관심종목은 지수에 없어도 남긴다. */
 let membersCache = null;
 
+/* **제대로 받았을 때만 기억한다 (2026-10-02 지시).** 전에는 첫 요청이 실패하면
+   빈 목록(`{}`)을 새로고침 전까지 들고 있어서, 서버가 살아난 뒤에도 일정이
+   지수 구성종목으로 안 걸러졌다. 실패면 빈 목록을 돌려주되 기억하지 않는다 —
+   다음 `refresh` 가 다시 받는다. */
 async function loadMembers() {
   if (membersCache) return membersCache;
   try {
     const r = await apiFetch('/api/dart/members', { cache: 'no-store' });
     if (!r) return null;   // 로그인이 풀렸다
     const j = await r.json();
-    membersCache = (j && j.ok && j.data) ? j.data : {};
-  } catch {
-    membersCache = {};
-  }
-  return membersCache;
+    if (j && j.ok && j.data) {
+      membersCache = j.data;
+      return membersCache;
+    }
+  } catch { /* 아래에서 빈 목록 */ }
+  return {};
 }
 
 /**

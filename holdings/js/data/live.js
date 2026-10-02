@@ -14,21 +14,40 @@ import { apiFetch } from './api.js';
 export const LIVE_CODES = WATCHLIST.map(s => s.code);
 
 let _ready = null;
+let _saidMissing = false;      // 「서버 없음」 을 콘솔에 한 번만 적는다
 
-/* 중계 서버가 살아 있고 키가 설정되어 있는지 (한 번만 확인) */
-async function kisReady() {
-  if (_ready !== null) return _ready;
+/* 같은 바퀴에서 여러 칸이 한꺼번에 부르면 **한 번만** 묻는다. 서버가 꺼진 동안
+   칸마다 따로 물으면 10초에 45번이 나갔다(2026-10-02 실측 · 8770). */
+let _asking = null;
+
+/* 중계 서버가 살아 있고 키가 설정되어 있는지.
+ *
+ * **됐을 때만 기억한다 (2026-10-02 지시 — 「응 그렇게 해」).** 전에는 실패도
+ * 기억해서, 화면을 열 때 서버가 재시작 중이면 새로고침 전까지 「서버 없음」
+ * 으로 남았다. 이제 실패면 비워 두고 **지금 도는 바퀴가 다음에 부를 때** 다시
+ * 본다 — 새 주기를 만들지 않는다. 서버가 꺼진 동안은 바퀴마다 로컬 health 를
+ * 한 번 더 부른다(KIS 는 아니다). */
+function kisReady() {
+  if (_ready) return Promise.resolve(true);
+  if (!_asking) _asking = ask().finally(() => { _asking = null; });
+  return _asking;
+}
+
+async function ask() {
+  let ok = false;
   try {
     const r = await apiFetch('/api/kis/health', { cache: 'no-store' });
     if (!r) return null;   // 로그인이 풀렸다
     const j = await r.json();
-    _ready = !!(j && j.ok && j.configured);
-    if (_ready) console.info('[KJC] 한국투자증권 API 연결됨 (' + (j.modeLabel || '') + ')');
-  } catch {
-    _ready = false;
+    ok = !!(j && j.ok && j.configured);
+    if (ok) console.info('[KJC] 한국투자증권 API 연결됨 (' + (j.modeLabel || '') + ')');
+  } catch { /* 아래에서 비워 둔다 */ }
+  if (ok) { _ready = true; _saidMissing = false; return true; }
+  if (!_saidMissing) {
+    console.info('[KJC] 중계 서버 없음 — 시세 칸은 비워 둡니다 (살아나면 다음 바퀴에 받습니다)');
+    _saidMissing = true;
   }
-  if (!_ready) console.info('[KJC] 중계 서버 없음 — 시세 칸은 비워 둡니다');
-  return _ready;
+  return false;
 }
 
 /* 주요 지수 (KOSPI / KOSDAQ / KOSPI200). 실패 시 null */
