@@ -12,6 +12,13 @@
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text-primary); font-family: 'Noto Sans KR', sans-serif; }
   .wrap { padding: 22px 20px 28px; display: grid; grid-template-columns: 1fr 240px; gap: 20px; min-width: 1180px; }
+  /* .view 위아래에 쌓이는 것의 높이 — 위 padding + h1 + .sub + .views + .bar + 아래 padding (2026-10-02 헤드리스 실측 214).
+     모달(iframe) 안에서는 모달 머리가 제목을 들고 있어 h1 · .sub 을 숨긴다 — 그만큼 줄어든다. 바뀌면 재서 고친다.
+     --eco-min 은 흐름도의 자연 높이 — 그보다 작아지면 흐름도가 잘리므로 JS 가 재서 넣는다 */
+  :root { --eco-top: 214px; --eco-min: 420px; }
+  .in-frame { --eco-top: 122px; }   /* 2026-10-02 헤드리스 실측 — 위 108 + 아래 14 */
+  .in-frame h1, .in-frame .sub { display: none; }
+  .in-frame .wrap { padding: 12px 20px 14px; }   /* 모달 안은 머리가 따로 있어 위아래를 좁힌다 — 77vh 안에 흐름도가 통째로 들어가게 */
   h1 { font-size: 19px; margin: 0 0 4px; }
   .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 18px; }
 
@@ -85,16 +92,22 @@
   .views button { font: inherit; font-size: 13px; border: 0; background: none; padding: 6px 16px; border-radius: 8px;
                   cursor: pointer; color: var(--text-secondary); }
   .views button.is-on { background: var(--bg-card); color: var(--text-primary); font-weight: 700; }
-  /* 두 화면이 같은 높이를 쓴다 — 바꿔 봐도 모달 안 자리가 안 움직인다 (「보는 것을 바꿔도 자리는 그대로다」) */
-  .view { height: 660px; }
+  /* 두 화면이 같은 높이를 쓴다 — 바꿔 봐도 모달 안 자리가 안 움직인다 (「보는 것을 바꿔도 자리는 그대로다」).
+     높이는 창(모달 안에서는 iframe)에서 제목 · 단추 줄을 뺀 만큼이다 — 620px 로 박았을 때 77vh 모달에서 지도 아래가 잘렸다
+     (2026-10-02). 주소로 직접 열면 창이 커서 min 이 아니라 calc 가 든다 */
+  .view { height: max(var(--eco-min), calc(100vh - var(--eco-top))); }
   .view[hidden] { display: none; }
-  #geo { height: 620px; border-radius: 14px; overflow: hidden; }
+  #geo { height: calc(100% - 26px); border-radius: 14px; overflow: hidden; }
+  /* 병목만 보기 — 흐름도의 .focus/.lit 과 같은 뜻을 점에 적용한다 */
+  #geo.choke-only .pin:not(.choke) { opacity: .25; }
   .pin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--bg-card); cursor: pointer; }
   .pin.demand { background: rgb(var(--kh-ok-rgb)); } .pin.chip { background: rgb(var(--accent-rgb)); } .pin.power { background: rgb(var(--kh-warn-rgb)); }
   .pin.choke::after { inset: -6px; border-radius: 50%; }
-  .pin .lb { position: absolute; left: 16px; top: -4px; white-space: nowrap; font-size: 11px; font-weight: 700;
+  .pin .lb { position: absolute; left: 16px; top: -4px; max-width: 160px; width: max-content; line-height: 1.35; font-size: 11px; font-weight: 700;
              background: var(--bg-card); color: var(--text-primary); padding: 1px 6px; border-radius: 6px; pointer-events: none; }
-  #geo.far .pin .lb { display: none; }
+  .pin .lb.left { left: auto; right: 16px; text-align: right; }   /* 오른쪽 가장자리 가까운 점은 이름표를 왼쪽에 단다 — 밖으로 안 나가게 */
+  /* 멀리서 볼 때는 가까운 점들의 종목 이름을 한 이름표에 모아 단다(JS labelPins) — 겹치는 이름표는 숨긴다 */
+  .pin .lb[hidden] { display: none; }
   .geo-note { color: var(--text-muted); font-size: 11.5px; margin-top: 6px; }
 </style>
 </head>
@@ -107,7 +120,7 @@
 
     <div class="views" id="views"><button data-v="flow" class="is-on">흐름도</button><button data-v="geo">세계 지도</button></div>
 
-    <div class="view" id="v-flow">
+    <!-- 흐름 · 갈래 · 병목 단추는 두 화면이 같이 쓴다 — 지도 위 선도 같은 룰로 켜지고 흐려진다 (2026-10-02 「가」) -->
     <div class="bar" id="bar">
       <button data-act="flow" class="is-on">▶ 흐름</button>
       <span class="sep"></span>
@@ -118,6 +131,7 @@
       <button data-act="choke"><span class="ring"></span>병목만 보기</button>
     </div>
 
+    <div class="view" id="v-flow">
     <div class="map flow" id="map">
       <svg class="links" id="links"></svg>
 
@@ -155,13 +169,13 @@
         <div class="cell" data-id="power"><span class="k">전력기기</span><span class="t">HD현대일렉트릭 · LS일렉트릭 · 효성중공업</span></div>
         <div class="cell" data-id="cable"><span class="k">전선</span><span class="t">LS · 대한전선</span></div>
         <div class="cell" data-id="nuke"><span class="k">발전</span><span class="t">두산에너빌리티</span></div>
-        <div class="cell" data-id="cool"><span class="k">냉각</span><span class="t">(조사 전)</span></div>
+        <div class="cell" data-id="cool"><span class="k">냉각</span><span class="t">(국내 조사 전) · Vertiv</span></div>
       </div>
     </div>
     </div>
     <div class="view" id="v-geo" hidden>
       <div id="geo"></div>
-      <div class="geo-note">점은 본사 · 주요 공장이 있는 도시에 박았다(도시 수준). 번지까지의 주소 확인은 다음 일이다 · 지도 © OpenStreetMap · Protomaps</div>
+      <div class="geo-note">점은 본사 · 주요 공장이 있는 도시에 박았다(도시 수준) · 선은 흐름도의 연결을 칸의 대표 자리끼리 그은 것 · 번지까지의 주소 확인은 다음 일이다 · 지도 © OpenStreetMap · Protomaps</div>
     </div>
   </div>
 
@@ -172,6 +186,8 @@
 // 연결 — [왼쪽, 오른쪽]. 선은 칸의 실제 위치를 재서 그리므로 칸을 옮기거나 더해도 따라간다.
 // EXTRA 는 칸을 눌렀을 때만 켜지는 곁가지 — 늘 켜 두면 선이 칸 뒤로 얽힌다
 // 셋째 칸은 선 종류 — demand(수요·데이터) · chip(반도체) · power(전력)
+// 모달(iframe) 안이면 제목 줄을 숨긴다 — 모달 머리가 같은 제목을 들고 있다
+if (window !== window.top) document.documentElement.classList.add('in-frame');
 const LINKS = [
   ['svc','model','demand'], ['svc','krsw','demand'], ['model','cloud','demand'],
   ['cloud','chip','chip'], ['cloud','mem','chip'], ['cloud','fab','chip'], ['cloud','pwr','power'],
@@ -196,7 +212,7 @@ const INFO = {
   power: { what: '데이터센터에 전기를 넣는 변압기 · 배전 설비.', watch: '수주 잔고' },
   cable: { what: '송전 · 데이터센터 전력선.', watch: '북미 송전망 투자' },
   nuke:  { what: '전기를 만드는 쪽.', watch: '빅테크 전력 계약' },
-  cool:  { what: '서버 발열을 식히는 설비. 국내 종목은 아직 조사하지 않았다.', watch: '—' },
+  cool:  { what: '서버 발열을 식히는 설비. 해외는 Vertiv 가 큰 자리이고, 국내 종목은 아직 조사하지 않았다.', watch: '—' },
 };
 
 const map = document.getElementById('map'), svg = document.getElementById('links'), panel = document.getElementById('panel');
@@ -221,27 +237,14 @@ function draw() {
   svg.innerHTML =
     LINKS.map(l => `<path class="${l[2]} ${touch(l) ? 'on' : ''}" d="${path(l[0], l[1], false)}"/>`).join('') +
     EXTRA.filter(touch).map(l => `<path class="${l[2]} on" d="${path(l[0], l[1], true)}"/>`).join('');
+  drawGeo();
 }
 
 function pick(id) {
   sel = sel === id ? null : id;
   map.classList.toggle('focus', !!sel);
   map.querySelectorAll('[data-id]').forEach(n => n.classList.remove('lit', 'sel'));
-  if (!sel) { panel.innerHTML = EMPTY;
-document.getElementById('bar').addEventListener('click', e => {
-  const b = e.target.closest('button'); if (!b) return;
-  if (b.dataset.act === 'flow') { b.classList.toggle('is-on'); map.classList.toggle('flow'); return; }
-  if (b.dataset.act === 'choke') {                    // 병목 칸만 남기고 흐리게
-    const on = b.classList.toggle('is-on');
-    map.classList.toggle('focus', on); map.querySelectorAll('[data-id]').forEach(n => n.classList.toggle('lit', on && n.classList.contains('choke')));
-    if (on) { sel = null; panel.innerHTML = EMPTY; draw(); }
-    return;
-  }
-  const k = b.dataset.only, was = b.classList.contains('is-on');   // 같은 단추를 다시 누르면 전부 보기
-  document.querySelectorAll('#bar [data-only]').forEach(x => x.classList.remove('is-on'));
-  map.classList.remove('only-demand', 'only-chip', 'only-power');
-  if (!was) { b.classList.add('is-on'); map.classList.add('only-' + k); }
-}); draw(); return; }
+  if (!sel) { panel.innerHTML = EMPTY; draw(); return; }
   const near = new Set([sel]);
   [...LINKS, ...EXTRA].forEach(([a, b]) => { if (a === sel) near.add(b); if (b === sel) near.add(a); });
   near.forEach(i => el(i).classList.add('lit'));
@@ -261,13 +264,43 @@ document.getElementById('bar').addEventListener('click', e => {
 
 panel.innerHTML = EMPTY;
 map.addEventListener('click', e => { const n = e.target.closest('[data-id]'); if (n) pick(n.dataset.id); });
-addEventListener('resize', draw);
-document.fonts.ready.then(draw);
+// 단추 줄 — 전에는 이 등록이 pick() 안에 들어가 있어 칸을 한 번 골랐다 풀기 전까지 단추가 안 먹었다 (2026-10-02 헤드리스 실측으로 찾음)
+document.getElementById('bar').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.act === 'flow') { b.classList.toggle('is-on'); map.classList.toggle('flow'); geoFlow(); return; }
+  if (b.dataset.act === 'choke') {                    // 병목 칸만 남기고 흐리게
+    const on = b.classList.toggle('is-on');
+    map.classList.toggle('focus', on); map.querySelectorAll('[data-id]').forEach(n => n.classList.toggle('lit', on && n.classList.contains('choke')));
+    if (on) { sel = null; panel.innerHTML = EMPTY; }
+    draw();
+    return;
+  }
+  const k = b.dataset.only, was = b.classList.contains('is-on');   // 같은 단추를 다시 누르면 전부 보기
+  document.querySelectorAll('#bar [data-only]').forEach(x => x.classList.remove('is-on'));
+  map.classList.remove('only-demand', 'only-chip', 'only-power');
+  if (!was) { b.classList.add('is-on'); map.classList.add('only-' + k); }
+  draw();
+});
+// 흐름도의 자연 높이를 재어 두 화면의 바닥으로 삼는다 — 창이 그보다 작으면 스크롤이 생기는 것이 맞다(잘리는 것보다)
+function fitViews() {
+  const h = map.getBoundingClientRect().height;
+  if (h > 0) document.documentElement.style.setProperty('--eco-min', Math.ceil(h) + 'px');
+}
+addEventListener('resize', () => { fitViews(); draw(); });
+document.fonts.ready.then(() => { fitViews(); draw(); });
 
 // ── 세계 지도 ──
 // 점 하나 = 회사의 자리 하나. node 는 흐름도 칸 id — 점을 누르면 그 칸을 고른 것과 같다.
+// also 는 그 자리가 함께 맡는 칸 — 구글 본사는 모델이면서 클라우드이고 서비스다 (점 하나에 칸 여럿).
 // 좌표는 도시 수준이다(본사 · 주요 공장 도시). 번지 수준 확인은 아직 안 했다
 const SITES = [
+  { name: 'OpenAI 본사',          node: 'model', also: ['svc'],          at: [-122.39, 37.76] },  // 미국 샌프란시스코
+  { name: 'Anthropic 본사',       node: 'model',                         at: [-122.40, 37.79] },  // 미국 샌프란시스코
+  { name: '구글 본사',            node: 'model', also: ['cloud', 'svc'], at: [-122.08, 37.42] },  // 미국 마운틴뷰
+  { name: '메타 본사',            node: 'model',                         at: [-122.15, 37.48] },  // 미국 멘로파크
+  { name: '마이크로소프트 본사',  node: 'cloud', also: ['svc'],          at: [-122.13, 47.64] },  // 미국 레드먼드
+  { name: '아마존 AWS 본사',      node: 'cloud',                         at: [-122.34, 47.62] },  // 미국 시애틀
+  { name: '오라클 본사',          node: 'cloud',                         at: [-97.74, 30.27] },   // 미국 오스틴
   { name: '엔비디아 본사',        node: 'chip',  at: [-121.96, 37.37] },  // 미국 산타클라라
   { name: 'AMD 본사',             node: 'chip',  at: [-121.94, 37.35] },  // 미국 산타클라라
   { name: '브로드컴 본사',        node: 'chip',  at: [-122.14, 37.44] },  // 미국 팰로앨토
@@ -287,10 +320,63 @@ const SITES = [
   { name: '두산에너빌리티 창원',  node: 'nuke',  at: [128.62, 35.20] },
   { name: '대한전선 당진',        node: 'cable', at: [126.65, 36.89] },
   { name: '네이버 성남',          node: 'krsw',  at: [127.10, 37.36] },
+  { name: 'Vertiv 본사',          node: 'cool',  at: [-82.93, 40.13] },   // 미국 웨스터빌(오하이오)
 ];
+// 선을 그을 때 그 칸을 대표하는 자리. 안 적은 칸은 그 칸의 첫 자리다.
+// 서비스 · 모델 · 클라우드가 같은 회사(구글 · OpenAI · MS)라 대표를 갈라 두어야 선이 점 위에서 사라지지 않는다
+const REP = { svc: '마이크로소프트 본사', model: 'OpenAI 본사', cloud: '아마존 AWS 본사' };
+const nodesOf = s => [s.node, ...(s.also || [])];
+const repOf = id => SITES.find(s => REP[id] ? s.name === REP[id] : nodesOf(s).includes(id));
+// 지도에 그을 연결 — 흐름도의 LINKS · EXTRA 그대로. 자리가 없는 칸(전력 인프라 묶음)은 건너뛰고 그 아래 칸으로 바로 잇는다
+function geoLinks() {
+  const all = [...LINKS, ...EXTRA], out = [];
+  const push = (a, b, t, src) => { if (repOf(a) && repOf(b)) out.push({ a, b, t, src }); };
+  all.forEach(l => {
+    const [a, b, t] = l;
+    if (!repOf(b)) all.filter(m => m[0] === b).forEach(([, c, t2]) => push(a, c, t2, l));   // 전력 → 그 아래 넷
+    else if (repOf(a)) push(a, b, t, l);
+  });
+  return out;
+}
 // 점 색 = 그 칸으로 들어오는 선의 종류
 const TYPE_OF = id => (LINKS.find(l => l[1] === id) || [0, 0, 'demand'])[2];
-let geo = null;
+// 선 색은 theme.css 토큰이다 — 지도(canvas)는 CSS 를 못 읽어 값을 꺼내 넘긴다 (「차트 색은 복제를 피할 수 없다」 와 같은 길)
+const rootCss = getComputedStyle(document.documentElement);
+const rgbOf = v => 'rgb(' + rootCss.getPropertyValue(v).trim().split(/\s+/).join(',') + ')';
+const LINE_COLOR = { demand: rgbOf('--kh-ok-rgb'), chip: rgbOf('--accent-rgb'), power: rgbOf('--kh-warn-rgb') };
+let geo = null, geoReady = false, flowTimer = null;
+// 태평양을 건넌다 — 경도 차가 180 을 넘으면 서쪽 것을 한 바퀴(+360) 돌려 가까운 쪽으로 긋는다. 안 그러면 대서양 쪽으로 돌아간다
+const across = (A, B) => Math.abs(A[0] - B[0]) > 180 ? (A[0] < B[0] ? [[A[0] + 360, A[1]], B] : [A, [B[0] + 360, B[1]]]) : [A, B];
+function geoData() {
+  const touch = l => sel && (l.src[0] === sel || l.src[1] === sel || l.a === sel || l.b === sel);
+  return { type: 'FeatureCollection', features: geoLinks().map(l => {
+    const [A, B] = across(repOf(l.a).at, repOf(l.b).at);
+    return { type: 'Feature', properties: { t: l.t, on: touch(l) ? 1 : 0 }, geometry: { type: 'LineString', coordinates: [A, B] } };
+  }) };
+}
+// 흐름도의 .focus / .only-* / .choke 와 같은 룰을 지도 선에 건다 — 두 화면이 한 단추 줄을 쓴다
+function drawGeo() {
+  if (!geoReady) return;
+  geo.getSource('flow').setData(geoData());
+  const focus = map.classList.contains('focus');
+  const only = ['demand', 'chip', 'power'].find(k => map.classList.contains('only-' + k));
+  const choke = document.querySelector('#bar [data-act="choke"]').classList.contains('is-on');
+  document.getElementById('geo').classList.toggle('choke-only', choke);
+  geo.setPaintProperty('flow', 'line-opacity', choke ? .12 : focus
+    ? ['case', ['==', ['get', 'on'], 1], 1, .12]
+    : only ? ['case', ['==', ['get', 't'], only], .55, .06] : .55);
+  geo.setPaintProperty('flow', 'line-width', focus ? ['case', ['==', ['get', 'on'], 1], 3, 1.8] : 1.8);
+}
+// 흐름 — 점선이 돈이 가는 쪽으로 흘러간다. SVG 는 CSS 애니메이션이지만 지도 선은 dash 를 돌려 가며 다시 칠한다
+const DASH = [[0, 3, 3, 0], [1, 3, 2, 0], [2, 3, 1, 0], [3, 3, 0, 0], [0, 1, 3, 2], [0, 2, 3, 1]];
+function geoFlow() {
+  if (!geoReady) return;
+  const on = map.classList.contains('flow') && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  clearInterval(flowTimer); flowTimer = null;
+  if (!on) { geo.setPaintProperty('flow', 'line-dasharray', [3, 3]); return; }
+  let i = 0;
+  flowTimer = setInterval(() => { i = (i + 1) % DASH.length; geo.setPaintProperty('flow', 'line-dasharray', DASH[i]); }, 120);
+}
 function buildGeo() {
   maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile);
   // 세계(z8) 위에 깊은 지역(z15) 넷을 겹친다 — 지역 안에서 크게 키우면 건물까지 나온다
@@ -303,22 +389,59 @@ function buildGeo() {
       .filter(l => i === 0 || l.type !== 'background')
       .forEach(l => layers.push({ ...l, id: `${f}-${l.id}` }));
   });
+  sources.flow = { type: 'geojson', data: { type: 'FeatureCollection', features: [] } };
+  layers.push({ id: 'flow', type: 'line', source: 'flow', layout: { 'line-cap': 'round' },
+                paint: { 'line-color': ['match', ['get', 't'], 'demand', LINE_COLOR.demand, 'chip', LINE_COLOR.chip, LINE_COLOR.power],
+                         'line-width': 1.8, 'line-opacity': .55, 'line-dasharray': [3, 3] } });
   geo = new maplibregl.Map({
-    container: 'geo', center: [127, 32], zoom: 1.6,
+    container: 'geo', center: [160, 32], zoom: 1.6,
     style: { version: 8, glyphs: 'https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf',
              sprite: 'https://protomaps.github.io/basemaps-assets/sprites/v4/light', sources, layers },
   });
   geo.addControl(new maplibregl.NavigationControl({ showCompass: false }));
-  // 멀리서 보면 이름표가 서로 겹친다 — 나라 하나가 화면에 찰 만큼 키웠을 때만 이름을 단다
-  const lbl = () => document.getElementById('geo').classList.toggle('far', geo.getZoom() < 5);
-  geo.on('zoom', lbl); lbl();
-  SITES.forEach(s => {
+  const pins = SITES.map(s => {
     const d = document.createElement('div');
     d.className = `pin ${TYPE_OF(s.node)}${el(s.node).classList.contains('choke') ? ' choke' : ''}`;
     d.innerHTML = `<span class="lb">${s.name}</span>`;
     d.addEventListener('click', ev => { ev.stopPropagation(); if (sel !== s.node) pick(s.node); });
     new maplibregl.Marker({ element: d }).setLngLat(s.at).addTo(geo);
+    return { s, lb: d.querySelector('.lb') };
   });
+  // 세계를 한 번만 보인다 — 아프리카에서 미국까지 (2026-10-02 지시 「아프리카에서 미국쪽으로 하나만」).
+  // 창이 넓으면 같은 줌에서 세계가 되풀이돼 미국이 둘 보였다. 세계 한 바퀴(512·2^z px)가 지도 폭과 같아지는 줌을 바닥으로 잡는다
+  const fitWorld = (jump) => {
+    const z = Math.log2(geo.getContainer().clientWidth / 512);
+    geo.setMinZoom(z);
+    if (jump || geo.getZoom() < z) geo.jumpTo({ center: [140, 22], zoom: z });   // 140 = 아프리카 서쪽(-20)과 미국 동쪽(300) 의 가운데
+  };
+  // 종목 이름 — 멀리서는 점이 겹쳐 이름표도 겹친다. 화면에서 가까운 점끼리 묶어 한 이름표에 종목 이름을 모아 단다(「엔비디아 · AMD · 브로드컴」)
+  const shortName = s => s.name.split(' ')[0];
+  function labelPins() {
+    // project 는 적힌 경도 그대로 재는데 점은 화면 가운데에 가까운 세계 복사본에 찍힌다 — 그 복사본의 경도로 잰다
+    const c = geo.getCenter().lng;
+    const near = ([lng, lat]) => [lng + Math.round((c - lng) / 360) * 360, lat];
+    const far = geo.getZoom() < 5, pts = pins.map(p => ({ p, xy: geo.project(near(p.s.at)) }));
+    const done = new Set();
+    pts.forEach(a => {
+      if (done.has(a.p)) return;
+      const grp = far ? pts.filter(b => !done.has(b.p) && Math.hypot(a.xy.x - b.xy.x, a.xy.y - b.xy.y) < 36) : [a];
+      grp.forEach(b => done.add(b.p));
+      const names = [...new Set(grp.map(b => far ? shortName(b.p.s) : b.p.s.name))];
+      a.p.lb.textContent = names.join(' · ');
+      a.p.lb.hidden = false;
+      a.p.lb.classList.toggle('left', a.xy.x > geo.getContainer().clientWidth * 0.62);
+      grp.slice(1).forEach(b => { b.p.lb.hidden = true; });
+    });
+    // 이름표끼리 겹치면 뒤의 것을 반대쪽에 단다 — 한 번만 돌린다(그래도 겹치면 그대로 둔다)
+    const shown = pins.filter(p => !p.lb.hidden), hit = (a, b) => !(a.right < b.left || b.right < a.left || a.bottom < b.top || b.bottom < a.top);
+    shown.forEach((p, i) => {
+      const r = p.lb.getBoundingClientRect();
+      if (shown.slice(0, i).some(q => hit(r, q.lb.getBoundingClientRect()))) p.lb.classList.toggle('left');
+    });
+  }
+  geo.on('resize', () => fitWorld(false));
+  geo.on('moveend', labelPins);
+  geo.on('load', () => { geoReady = true; fitWorld(true); labelPins(); drawGeo(); geoFlow(); });
 }
 document.getElementById('views').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
