@@ -264,26 +264,49 @@ def c_nav_gutter():
             hits.append("안쪽 여백이 갈렸다 — theme.css --grid-inset %spx ↔ frame.css .kh-main %s" % (gins.group(1), m_))
     return "메뉴 기준선이 구역별로 갈림 · 홀딩스 격자와 어긋남", n, hits, BAD, (지시, "「홀딩스가 기준이야」 (2026-10-01) — 구역을 오갈 때 메뉴가 44px 움직였다")
 
-def c_shared_css():
-    """구역 밖에서 거는 파일은 「거는 쪽이 둘 이상인 파일」 이다 (2026-10-01 지시 「같이쓴다」).
+# 다른 구역 파일을 거는 세 모양 — CSS 링크 · script src · JS import.
+# 처음에는 CSS 링크만 셌다가 Insight 가 `../../holdings/js/components/modal.js` 를 import 하는 것을
+# 놓쳤다 (2026-10-02 · 창구 카드). **상대 경로를 거는 파일 자리에서 풀어 구역을 견준다** — 깊이를 박지 않는다.
+_SHARED_REF = [
+    ((".html",), re.compile(r'<link[^>]*\bhref="(\.\.?/[^"]+\.css)"')),
+    ((".html",), re.compile(r'<script[^>]*\bsrc="(\.\.?/[^"]+\.m?js)"')),
+    ((".html", ".js"), re.compile(r"""(?:\bfrom\s*|\bimport\s*\(?\s*)['"](\.\.?/[^'"]+\.m?js)['"]""")),
+]
+_PUBLIC = ("assets/",)   # 룰이 정한 공용 자리 (「공통 자원은 루트에 하나만 둔다」)
 
-    다른 구역 화면이 `../<구역>/css/…` 로 거는 파일을 **「봐야 할 자리」** 로 낸다 — 거는 것 자체는
-    위반이 아니고, 그 파일을 고치는 쪽이 거는 화면 전부를 보고 다른 쪽에 먼저 알려야 한다는 표시다.
-    파일 이름도 구역 이름도 박지 않는다. `assets/css/` 는 룰이 정한 공용 자리라 뺀다.
-    """
-    link = re.compile(r'href="\.\./([a-z][a-z-]*/css/[^"]+)"')
+
+def shared_files():
+    """({거는 대상: [거는 파일들]}, 훑은 파일 수) — 거는 파일과 **다른 구역**에 있는 대상만."""
     by, n = {}, 0
-    for p in walk(".html"):
+    for p in walk(".html", ".js"):
         if p.startswith("temp/"):
             continue
         n += 1
-        for m in link.finditer(rd(os.path.join(ROOT, p))):
-            target = m.group(1)
-            if target.startswith("assets/css/"):
+        src_zone = p.split("/", 1)[0] if "/" in p else ""
+        text = rd(os.path.join(ROOT, p))
+        for exts, rx in _SHARED_REF:
+            if not p.endswith(exts):
                 continue
-            by.setdefault(target, []).append(p)
-    hits = ["%s  ← %s" % (t, ", ".join(sorted(set(v)))) for t, v in sorted(by.items())]
-    return "거는 쪽이 둘 이상인 구역 CSS", n, hits, LOOK, (지시, "「같이쓴다」 (2026-10-01) — 고치면 거는 화면 전부를 보고 다른 쪽 세션에 먼저 알린다")
+            for m in rx.finditer(text):
+                t = os.path.normpath(os.path.join(os.path.dirname(p), m.group(1))).replace("\\", "/")
+                if t.startswith("..") or "/" not in t or t.startswith(_PUBLIC):
+                    continue
+                if t.split("/", 1)[0] == src_zone:
+                    continue
+                by.setdefault(t, set()).add(p)
+    return {t: sorted(v) for t, v in by.items()}, n
+
+
+def c_shared_css():
+    """구역 밖에서 거는 파일은 「거는 쪽이 둘 이상인 파일」 이다 (2026-10-01 지시 「같이쓴다」).
+
+    다른 구역 화면이 거는 파일(CSS 링크 · script src · JS import)을 **「봐야 할 자리」** 로 낸다 — 거는 것
+    자체는 위반이 아니고, 그 파일을 고치는 쪽이 거는 화면 전부를 보고 다른 쪽에 먼저 알려야 한다는 표시다.
+    파일 이름도 구역 이름도 박지 않는다. `assets/` 는 룰이 정한 공용 자리라 뺀다.
+    """
+    by, n = shared_files()
+    hits = ["%s  ← %s" % (t, ", ".join(v)) for t, v in sorted(by.items())]
+    return "거는 쪽이 둘 이상인 구역 파일 (CSS·JS)", n, hits, LOOK, (지시, "「같이쓴다」 (2026-10-01) — 고치면 거는 화면 전부를 보고 다른 쪽 세션에 먼저 알린다")
 
 def c_main_guard():
     """메인 자리는 재권님 허락 없이 건드리지 않는다 (2026-10-01 지시) — 장치가 조용히 꺼지는 것을 잡는다.
@@ -322,6 +345,13 @@ CHECKS = [c_bat_nonascii, c_py_encoding, c_send_error_korean,
 
 
 def main():
+    if "--shared" in sys.argv:
+        # 훅용 — 「대상<TAB>거는 파일」 한 줄씩. pre-commit 이 같은 셈을 쓰게 한다 (셈은 한 곳에).
+        by, _ = shared_files()
+        for t, v in sorted(by.items()):
+            for f in v:
+                print("%s\t%s" % (t, f))
+        return 0
     verbose = "--verbose" in sys.argv or "-v" in sys.argv
     print("룰 검사 — CLAUDE.md 「아직 검사가 없는 룰」 을 한 번에 센다")
     print("=" * 66)

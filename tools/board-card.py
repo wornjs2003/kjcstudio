@@ -6,7 +6,9 @@
     python3 tools/board-card.py --mine                                     내 doing 카드 (0 있음 · 1 없음 · 2 못 봄)
     python3 tools/board-card.py --gate edit|commit                         훅용 — 없으면 1, 못 봤으면 0
     python3 tools/board-card.py --commit [--dry]                           post-commit 용 — HEAD 를 카드에 적는다
-    python3 tools/board-card.py "<카드 제목 일부>" [--doing|--review|--done]   열 옮기기 (메모 줄과 함께 써도 된다)
+    python3 tools/board-card.py "<카드 제목 일부>" [--todo|--doing|--review|--done]   열 옮기기 (메모 줄과 함께 써도 된다)
+    python3 tools/board-card.py "<카드 제목 일부>" --assign [<담당>]              제목의 담당 라벨을 바꾼다 — [미배분] 을 받을 때.
+                                                                           값을 비우면 내 세션. 메모에 「담당 … → …」 한 줄
     python3 tools/board-card.py --merged [--dry]                            post-merge 용 — ORIG_HEAD..HEAD 의 해시가 적힌 review 카드를 done 으로
     어느 명령이든 --label <담당>                                            세션 이름을 못 얻을 때 손으로 (= KJC_BOARD_LABEL)
 
@@ -61,6 +63,19 @@ def session_name():
         # **세션 UUID 로 먼저 맞춘다.** `HERDR_PANE_ID` 는 세션이 시작될 때 박힌 값이라
         # 창·탭을 재배치하면 낡는다 — 2026-10-01 에 주식페이지_개발3 이 `w5:p1` 을 들고 있었는데
         # 목록에는 `w2:p5` 였다. `agent_session.value` 는 `CLAUDE_CODE_SESSION_ID` 와 1:1 이라 안 낡는다.
+        # **창 이름(label)이 먼저다 — 터미널 제목이 아니다 (2026-10-02).** 재시작 뒤 `agent list` 에는
+        # label 이 없고 제목은 Claude 가 대화 주제로 바꿔 쓴다(「Claude Code」 · 남의 이름이 섞인 「재념정의 시작」).
+        # 그날 아침 모든 세션의 카드 게이트가 이름을 못 찾았다. `pane list` 의 label 은 재권님이 붙인 이름이다.
+        try:
+            out = subprocess.run(["herdr", "pane", "list"], capture_output=True,
+                                 text=True, timeout=TIMEOUT).stdout
+            for a in json.loads(out)["result"]["panes"]:
+                hit = (sid and (a.get("agent_session") or {}).get("value") == sid) or \
+                      (not sid and pane and a.get("pane_id") == pane)
+                if hit and (a.get("label") or "").strip():
+                    return a["label"].strip()
+        except Exception:
+            pass
         try:
             out = subprocess.run(["herdr", "agent", "list"], capture_output=True,
                                  text=True, timeout=TIMEOUT).stdout
@@ -185,7 +200,10 @@ def now():
 COLUMNS = ("todo", "doing", "review", "done")
 
 
-def cmd_note(key, line, sub, done, column=None):
+def cmd_note(key, line, sub, done, column=None, assign=None):
+    """assign — 제목의 [담당] 을 바꾼다 (2026-10-02 · 개발2 가 가름). 전에는 [미배분] 카드를 받아 일해도 제목 라벨을 바꿀 길이
+    없어 메모에만 담당을 적었고, 그래서 ① post-commit 이 해시를 엉뚱한 카드에 (추정)으로 적고 ② 그 세션에 다른 doing 카드가
+    없으면 배정받고도 커밋 게이트에 막혔다. mine() 은 제목만 본다 — 메모의 담당 줄까지 보면 「누구 것인가」 가 두 곳이 된다."""
     moved = {}
 
     def change(doc):
@@ -200,6 +218,22 @@ def cmd_note(key, line, sub, done, column=None):
                 # (주식페이지_개발 지적). 안 끝난 하위가 있으면 되묻는다.
                 sys.exit("하위 항목 %d개가 안 끝났는데 열을 %s 으로? 하위 닫기는 --done \"<하위 일부>\" · 정말 옮기려면 --force"
                          % (len(left), column))
+        if assign is not None:
+            new_label = assign.strip() or label_of(session_name())
+            if not new_label:
+                sys.exit("담당을 못 정한다 — `--assign <담당>` 으로 주십시오")
+            m = LABELS.match(t.get("text", ""))
+            if not m:
+                sys.exit("제목이 「[갈래] [담당] 무엇」 모양이 아니라 담당 라벨을 못 바꾼다: %s" % t.get("text", "")[:60])
+            old_label = m.group(2).strip()
+            if old_label != new_label:
+                t["text"] = "[%s] [%s] %s" % (m.group(1), new_label, t["text"][m.end():].strip())
+                t["memo"] = (t.get("memo") or "").rstrip() + "\n  %s 담당 [%s] → [%s]" % (now(), old_label, new_label)
+                moved["assign"] = (old_label, new_label)
+                if t.get("column") == "todo" and not column:
+                    moved["hint"] = "열은 todo 그대로 — 지금 시작하면 `--doing` 을 함께(게이트는 doing 만 본다)"
+            elif not (line or sub or done or column):
+                sys.exit("담당이 이미 [%s] 라 바꿀 것이 없다 — 보드에 쓰지 않는다" % new_label)
         if column and t.get("column") != column:
             moved["from"], moved["to"] = t.get("column"), column
             t["column"] = column
@@ -215,7 +249,10 @@ def cmd_note(key, line, sub, done, column=None):
                     if not s["text"].startswith("[됨]"):
                         s["text"] = "[됨] " + s["text"]
     apply(change)
-    print("보드 저장됨", now(), ("· 열 %s → %s" % (moved["from"], moved["to"])) if moved else "")
+    print("보드 저장됨", now(), ("· 열 %s → %s" % (moved["from"], moved["to"])) if "from" in moved else "",
+          ("· 담당 [%s] → [%s]" % moved["assign"]) if "assign" in moved else "")
+    if "hint" in moved:
+        print("  " + moved["hint"])
 
 
 def cmd_new(text, line, todo):
@@ -393,18 +430,25 @@ def main(argv):
         return cmd_new(text, rest[0] if rest else "", "--todo" in argv) or 0
     key = argv[0]
     line = argv[1] if len(argv) > 1 and not argv[1].startswith("--") else ""
-    sub = done = column = None
+    sub = done = column = assign = None
     for i, x in enumerate(argv):
         if x == "--sub":
             sub = argv[i + 1]
+        if x == "--assign":
+            assign = argv[i + 1] if i + 1 < len(argv) and not argv[i + 1].startswith("--") else ""
+        if x == "--todo":
+            column = "todo"             # 받기만 하고 착수 전으로 내린다
         if x == "--done" and i + 1 < len(argv) and not argv[i + 1].startswith("--"):
             done = argv[i + 1]          # --done "<하위>" 는 하위 항목 닫기
         elif x == "--done":
             column = "done"             # 값 없는 --done 은 열 옮기기
         if x in ("--doing", "--review"):
             column = x[2:]
+    # `--assign <담당>` 의 값이 메모 줄로 읽히지 않게
+    if assign and line == assign:
+        line = ""
     try:
-        cmd_note(key, line, sub, done, column)
+        cmd_note(key, line, sub, done, column, assign)
     except Unseen as e:
         sys.exit("보드를 못 봤다: %s" % e)
     return 0
