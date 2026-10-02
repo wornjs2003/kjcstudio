@@ -269,7 +269,7 @@ _token_lock = threading.Lock()
 #
 # 그래서 `FAST_CODES` 와 `PRICE_CACHE_TTL_FAST` 를 없앴다. 복제가 세 곳
 # (여기 · kis-worker.js · frame.js 의 PRIORITY_CODES)이었는데 한꺼번에 사라졌다.
-PRICE_CACHE_TTL = 25                # 모든 종목 · 지수 (화면 갱신 30초)
+PRICE_CACHE_TTL = 25                # 모든 종목 · 지수. **화면이 이 값을 받아 그 주기로 돈다** (2026-10-02 · 재권님 「나」 — 서버 값이 기준이고 화면이 따라간다)
 
 # ── 확인용 서버는 느리게 돈다 — `--slow` (2026-09-21 지시) ────────────
 #
@@ -2699,7 +2699,7 @@ def fetch_investor_flow(cfg, market="KOSPI", days=INVESTOR_FLOW_DAYS):
 INVESTOR_DAYS = 30          # 한 번에 오는 일수. 늘릴 수 없다
 ASKING_LEVELS = 10          # 호가 단계
 INVESTOR_TTL = 60           # 일별 자료라 장중에 한 번 바뀐다
-ASKING_TTL = 3              # 호가는 계속 움직인다. 화면이 훑을 때만 짧게 받아낸다
+ASKING_TTL = 3              # 호가는 계속 움직인다. **화면이 이 값을 받아 그 주기로 돈다** (2026-10-02 · 재권님 「나」)
 
 _investor_cache = {}
 _asking_cache = {}
@@ -2797,7 +2797,7 @@ def fetch_investor_estimate(cfg, code):
 
 
 # 체결은 한 번에 30줄이 온다. 화면이 그보다 많이 보여줄 일이 없다.
-TICKS_TTL = 3              # 장중에는 계속 쌓인다. 화면이 볼 때만 짧게 받아낸다
+TICKS_TTL = 3              # 장중에는 계속 쌓인다. **화면이 이 값을 받아 그 주기로 돈다** (2026-10-02 · 재권님 「나」)
 _ticks_cache = {}
 
 
