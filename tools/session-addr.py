@@ -55,17 +55,38 @@ def labels():
     return out
 
 
-def sid_of(pid):
-    """(세션 기록 id, 어디서 얻었나) — `--resume <id>` 가 먼저, 없으면 열어 둔 기록 **파일 이름**의 id.
+def sid_of(pid, known=()):
+    """(세션 기록 id, 어디서 얻었나) — 후보는 `--resume <id>` 와 그 프로세스가 연 기록 **파일 이름**의 id 들.
 
-    경로의 첫 id 를 집으면 안 된다 — 헤드리스 시험 세션은 기록 폴더 이름에 **부모 세션 id** 가 들어 있어
-    부모로 읽혔고, 그 동안 같은 이름이 둘이 되어 훅이 손을 뗐다(2026-10-02 qa 실측 · 「한 번 빗나감」 의 원인)."""
+    - 경로의 첫 id 를 집으면 안 된다 — 헤드리스 시험 세션은 기록 폴더 이름에 **부모 세션 id** 가 들어 있다(qa 실측).
+    - **`--resume` 은 `/clear` 뒤 낡는다** — 프로세스 인자는 처음 그대로인데 세션은 새 기록으로 넘어간다.
+      그날 개발1 이 /clear 한 뒤 옛 id 로 읽혀 「개발1」 이 0개가 됐다(2026-10-02 13:0x). 그래서 **herdr 창이 지금 아는 id**
+      (known)가 후보에 있으면 그것을 쓴다. 없으면 --resume, 그것도 없으면 연 파일 중 가장 최근 것."""
+    cands = []
     m = re.search(r"--resume\s+(" + UUID.pattern + ")", run(["ps", "-o", "args=", "-p", pid]))
-    if m:
-        return m.group(1), "resume"
-    m = re.search(r"(" + UUID.pattern + r")\.jsonl", " ".join(
-        l for l in run(["lsof", "-p", pid]).splitlines() if ".jsonl" in l))
-    return (m.group(1), "lsof") if m else ("", "")
+    resume = m.group(1) if m else ""
+    files = re.findall(r"(\S*?(" + UUID.pattern + r")\.jsonl)", run(["lsof", "-p", pid]))
+    for full, sid in files:
+        cands.append(sid)
+    if resume:
+        cands.append(resume)
+    for sid in cands:
+        if sid in known:
+            return sid, ("resume" if sid == resume else "lsof")
+    if resume:
+        return resume, "resume"
+    if files:
+        newest = max(files, key=lambda f: os.path.getmtime(f[0]) if os.path.exists(f[0]) else 0)
+        return newest[1], "lsof"
+    return "", ""
+
+
+def cwd_of(pid):
+    out = run(["lsof", "-a", "-d", "cwd", "-Fn", "-p", pid])
+    for l in out.splitlines():
+        if l.startswith("n"):
+            return os.path.basename(l[1:])
+    return ""
 
 
 def table():
@@ -74,18 +95,30 @@ def table():
     if lb is None or not socks:
         return None
     best = {}                                 # 세션 기록 id → (얻은 길, 줄) — 같은 id 가 둘이면 --resume 쪽
-    rest = []
+    loose = []                                # 창이 아는 id 로 못 맞춘 프로세스 (/clear 뒤 --resume 이 낡은 것)
     for s in socks:
         pid = os.path.basename(s)[:-5]
         if not run(["ps", "-o", "pid=", "-p", pid]).strip():
             continue                          # 죽은 프로세스가 남긴 소켓
-        sid, via = sid_of(pid)
-        name, cwd = lb.get(sid, ("?(창 이름 없음)", "?"))
-        row = (name, "uds:" + s, cwd, sid[:8])
-        if not sid:
-            rest.append(row)
-        elif sid not in best or (via == "resume" and best[sid][0] != "resume"):
-            best[sid] = (via, row)
+        sid, via = sid_of(pid, lb)
+        if sid in lb:
+            row = (lb[sid][0], "uds:" + s, lb[sid][1], sid[:8])
+            if sid not in best or (via == "resume" and best[sid][0] != "resume"):
+                best[sid] = (via, row)
+        else:
+            loose.append((pid, s, sid))
+    # 못 맞춘 프로세스는 **같은 폴더에서 짝 없는 창이 하나뿐일 때만** 그 창으로 맞춘다 — 둘 이상이면 모른다고 둔다
+    # (메인 폴더처럼 창이 여럿인 곳은 짐작하지 않는다). 2026-10-02 개발1 /clear 뒤 이 길로 갈렸다
+    taken = set(best)
+    rest = []
+    for pid, s, sid in loose:
+        cwd = cwd_of(pid)
+        free = [k for k, v in lb.items() if k not in taken and v[1] == cwd and not v[0].startswith("?")]
+        if cwd and len(free) == 1:
+            taken.add(free[0])
+            rest.append((lb[free[0]][0], "uds:" + s, cwd, free[0][:8]))
+        else:
+            rest.append(("?(창 이름 없음)", "uds:" + s, cwd or "?", sid[:8]))
     return sorted([r for _, r in best.values()] + rest)
 
 
