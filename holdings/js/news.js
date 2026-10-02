@@ -389,8 +389,8 @@ everyServerMs(REFRESH_KEY, REFRESH_FALLBACK_MS, refresh);
 
 /* 관심 사이드바와 시세 띠는 다른 화면과 같은 것을 쓴다.
 
-   indexMs 를 안 주는 것은 「지수를 더 자주 받지 않겠다」 는 뜻이고,
-   느린 갈래가 30초마다 함께 받아 온다. 그 값을 띠에 넘긴다. */
+   지수 · 시세 주기는 **서버가 정한다** (2026-10-02 · `frame.js` 의 `startLiveLoop`
+   — `INDEX_TTL` · `PRICE_CACHE_TTL`). `indexMs` 는 서버가 없을 때의 대체값일 뿐이다. */
 startLiveLoop({
   prices: true,
 

@@ -9,6 +9,7 @@ import { WATCHLIST, brandColor } from '../data/market.js';
 import { favList, toggleFav, onFavChange } from '../store/favorites.js';
 import * as lastSeen from '../store/last-seen.js';
 import { fetchLivePrices, fetchLiveIndices, applyLiveToStock } from '../data/live.js';
+import { watch } from '../store/longpoll.js';
 import { fmtWon, fmtPct, fmtNum, dirClass, fmtDeltaAmount } from '../utils/format.js';
 import { iconHtml } from './stock-icon.js';
 
@@ -239,8 +240,15 @@ export function mountVBar(el, active) {
 
    **호출은 오히려 줄었다** — 전에는 분당 2×12 + 6×2 = 36건이었고
    지금은 8×2 = 16건이다.
+
+   **주기를 갖지 않는다 — 바뀌면 서버가 알려 준다** (2026-10-02 · 재권님 「주는
+   대로 받아야」 · `store/longpoll.js`). 서버가 롱폴을 모르면 시세는
+   `PRICE_CACHE_TTL`, 지수는 `INDEX_TTL` 주기로 묻는다. 아래 숫자는 **그마저
+   없을 때의 대체값**이다.
    ────────────────────────────────────────────────────────────────────────── */
-const REFRESH_MS = 30000;
+const PRICE_KEY = 'kis_proxy.PRICE_CACHE_TTL';
+const INDEX_KEY = 'kis_proxy.INDEX_TTL';
+const REFRESH_FALLBACK_MS = 30000;
 
 /* 시세 갱신 루프.
 
@@ -312,33 +320,32 @@ export function startLiveLoop({ onPrices, onIndices, prices = true, indexMs } = 
     if (onPrices) onPrices(latest);
   }
 
-  async function tick() {
+  /* **시세와 지수를 따로 돈다** — 서버 값이 다르다(시세 25초 · 지수 5초).
+     예전처럼 한 바퀴에 묶으면 둘 중 하나는 서버 값과 어긋난다. */
+  async function priceTick() {
     if (document.hidden) return;          // 다른 탭을 보고 있으면 쉬어간다
-    const [indices, quotes] = await Promise.all([
-      fetchLiveIndices(),
-      prices && codes.length ? fetchLivePrices(codes) : Promise.resolve(null),
-    ]);
+    if (!(prices && codes.length)) return;
+    applyPrices(await fetchLivePrices(codes));
+  }
+  async function indexTick() {
+    if (document.hidden) return;
+    const indices = await fetchLiveIndices();
     if (indices) { lastSeen.save('indices', indices); clearStale(); }
     if (indices && onIndices) onIndices(indices);
-    applyPrices(quotes);
   }
 
   if (kept && onPrices) onPrices(latest);   // 남은 값으로 먼저 한 번
 
-  tick();
-  setInterval(tick, REFRESH_MS);
-  /* 지수만 따로 더 자주 받고 싶을 때 (첫 화면). 값을 주지 않으면 위 느린
-     갈래가 30초마다 함께 받는 그대로다. */
-  if (indexMs) {
-    setInterval(async () => {
-      if (document.hidden) return;
-      const indices = await fetchLiveIndices();
-      if (indices) { lastSeen.save('indices', indices); clearStale(); }
-      if (indices && onIndices) onIndices(indices);
-    }, indexMs);
-  }
+  priceTick();
+  indexTick();
+  watch({ url: () => (prices && codes.length ? '/api/kis/prices?codes=' + codes.join(',') : null),
+          onChange: priceTick, key: PRICE_KEY, fallbackMs: REFRESH_FALLBACK_MS });
+  /* `indexMs` 는 이제 **그마저 없을 때의 대체값**일 뿐이다 (첫 화면이 2초를 준다) */
+  watch({ url: () => '/api/kis/indices?chart=0',
+          onChange: indexTick, key: INDEX_KEY, fallbackMs: indexMs || REFRESH_FALLBACK_MS });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
-    tick();
+    priceTick();
+    indexTick();
   });
 }

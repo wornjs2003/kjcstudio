@@ -96,6 +96,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "KJC_KOREAN_HOOK=block sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-korean.py\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

@@ -22,6 +22,8 @@
 
 /** 받아 둔 값. 아직 안 왔으면 `null` */
 let _timing = null;
+/** 같은 응답의 나머지(켜진 기능 등). 롱폴링이 켜져 있는지를 여기서 본다 */
+let _data = {};
 /** 받는 중인 약속. 여러 곳에서 불러도 한 번만 나간다 */
 let _pending = null;
 
@@ -32,7 +34,8 @@ export function loadTiming() {
   _pending = fetch('/api/kis/stats', { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : null))
     .then((j) => {
-      _timing = (j && j.data && j.data.timing) || {};
+      _data = (j && j.data) || {};
+      _timing = _data.timing || {};
       return _timing;
     })
     .catch(() => {
@@ -42,6 +45,11 @@ export function loadTiming() {
       return _timing;
     });
   return _pending;
+}
+
+/** 서버가 켜 둔 기능인가 — 예: `longpoll`. **받기 전이거나 모르는 서버면 `false`** */
+export function serverFlag(name) {
+  return _data[name] === true;
 }
 
 /** 서버가 정한 **초**. 아직 안 왔거나 그 이름이 없으면 `null` */
@@ -71,6 +79,12 @@ export function serverMs(key, fallbackMs) {
  * 빠뜨리기 쉬웠다 — 안 보는 탭에서 도는 것은 **KIS 예산을 그냥 쓰는 것**이다.
  * 2026-09-30 실측: 홈 화면을 안 보면 60초에 0건, 띄운 직후 24건.
  *
+ * **다음 바퀴는 `fn` 이 끝난 뒤부터 센다** (2026-10-02). 서버는 받아 온 **그
+ * 순간**부터 TTL 을 세는데, 화면이 요청을 보낸 순간부터 같은 TTL 을 세면 다음
+ * 요청이 **만료 직전에 도착해 묵은 값을 받는다** — 한 바퀴 건너 한 번만 새 값이
+ * 된다. 응답이 온 뒤부터 세면 서버 쪽 저장 시각보다 늦게 출발하므로 늘 만료 뒤다.
+ * 여유값을 박지 않아도 된다. `fn` 이 터져도 다음 바퀴는 돈다.
+ *
  * @returns {Function} 멈추는 함수
  */
 export function everyServerMs(key, fallbackMs, fn) {
@@ -78,8 +92,10 @@ export function everyServerMs(key, fallbackMs, fn) {
   let dead = false;
   const tick = () => {
     if (dead) return;
-    timer = setTimeout(() => {
-      if (!dead && !document.hidden) fn();
+    timer = setTimeout(async () => {
+      if (!dead && !document.hidden) {
+        try { await fn(); } catch (e) { console.error(e); }
+      }
       tick();
     }, serverMs(key, fallbackMs));
   };

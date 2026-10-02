@@ -40,6 +40,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import http.client
+import hashlib
 from datetime import datetime, timedelta, timezone
 
 # 파일을 안전하게 쓴다 — 쓰다 죽어도 옛 내용이 남는다 (2026-09-22)
@@ -268,7 +269,7 @@ _token_lock = threading.Lock()
 #
 # 그래서 `FAST_CODES` 와 `PRICE_CACHE_TTL_FAST` 를 없앴다. 복제가 세 곳
 # (여기 · kis-worker.js · frame.js 의 PRIORITY_CODES)이었는데 한꺼번에 사라졌다.
-PRICE_CACHE_TTL = 25                # 모든 종목 · 지수 (화면 갱신 30초)
+PRICE_CACHE_TTL = 25                # 모든 종목 · 지수. **화면이 이 값을 받아 그 주기로 돈다** (2026-10-02 · 재권님 「나」 — 서버 값이 기준이고 화면이 따라간다)
 
 # ── 확인용 서버는 느리게 돈다 — `--slow` (2026-09-21 지시) ────────────
 #
@@ -587,6 +588,32 @@ def _stamp():
                         int(t % 1 * 1000))
 
 
+# ── 외부접속 우선 (2026-10-02 · 서버리소스 2단계 ⓒ) ─────────────────
+#
+# 8765 는 넘겨받은 요청을 **한 줄**에 세운다. 확인용 서버(`--slow`)가 넘긴 것과
+# 외부접속(8764)이 넘긴 것이 같은 줄이라, 예산이 모자라면 외부접속 화면이 확인용
+# 뒤에서 기다렸다. **확인용이 넘긴 것은 「낮음」 으로 표시하고**, 최근에 높은 쪽
+# (외부접속 · 8765 화면)이 불렀으면 줄에 서기 전에 잠깐 비켜선다 — 미리받기가
+# 화면에 비켜서는 것(`_ui_busy`)과 같은 모양이다.
+#
+# **표시는 보내는 쪽이 붙인다** — 헤더 `X-KJC-Prio: low`. 자기가 `--slow` 인지는
+# 보내는 쪽만 안다. 헤더라서 넘기기 캐시 키(`path`·`params`·`tr_id`)가 안 바뀐다.
+#
+# ⚠️ **표시는 그 요청의 스레드에만 붙는다**(`threading.local`). 처리 중에
+# `ThreadPoolExecutor` 로 넘어간 호출은 표시를 잃고 **높음으로 친다** — 모르면
+# 높은 쪽으로 두는 편이 외부접속을 안 막는다.
+PRIO_HEADER = "X-KJC-Prio"
+LOW_PRIO_BUSY_WINDOW = 15.0    # 이 시간 안에 높은 쪽이 불렀으면 '붐빈다'
+LOW_PRIO_YIELD_SEC = 0.5       # 낮음이 줄에 서기 전에 비켜서는 시간
+_prio = threading.local()
+_last_high_at = 0.0            # 높은 쪽이 마지막으로 /api/kis/* 를 부른 시각(monotonic)
+_prio_stat = {"lowCalls": 0, "lowYields": 0}
+
+
+def _prio_low():
+    return getattr(_prio, "low", False)
+
+
 def _rate_limit(path=None):
     """KIS 호출 사이 간격을 지킨다. 기다리는 동안 남을 막지 않는다.
 
@@ -602,6 +629,13 @@ def _rate_limit(path=None):
     # 없고, 화면은 기다리면 재권님이 보신다 (2026-09-18).
     if threading.current_thread().name == PREFILL_THREAD_NAME:
         time.sleep(PREFILL_BUSY_CALL_GAP if _ui_busy() else PREFILL_IDLE_CALL_GAP)
+
+    # **확인용 서버가 넘긴 것은 외부접속에 비켜선다** (ⓒ · 위 주석).
+    if _prio_low():
+        _prio_stat["lowCalls"] += 1
+        if (time.monotonic() - _last_high_at) < LOW_PRIO_BUSY_WINDOW:
+            _prio_stat["lowYields"] += 1
+            time.sleep(LOW_PRIO_YIELD_SEC)
 
     # **간격은 넘은 횟수에 따라 늘어난다** (㉡). 잠잠하면 원래 값이다.
     gap = _gap_now()
@@ -722,6 +756,40 @@ def timing_values():
     return out
 
 
+# ── 스레드 감시 (2026-10-02 · 서버리소스 2단계 ⓔ) ──────────────────
+#
+# 연결 하나가 스레드 하나를 쥐는 틀이라, 롱폴링(ⓓ)을 켜거나 응답이 막히면 스레드가
+# 쌓인다. **막지 않고 「봐야 할 자리」 로만 낸다** — 원인이 여럿이라 서버가 판단할 수 없다.
+#
+# **기준값을 박지 않는다.** 바탕(`base`)은 `stats` 를 읽을 때마다 본 **가장 작은 수**
+# — 한가할 때의 스레드다. 경고선은 바탕 + 롱폴링이 쥘 수 있는 최대(`LONGPOLL_MAX_ACTIVE`)
+# + 여유(`THREAD_SLACK`)다. 롱폴링 상한을 바꾸면 경고선도 따라간다.
+#
+# **넘은 순간에 로그 한 줄만** 남긴다 — 매번 찍으면 로그가 그 줄로 덮인다.
+THREAD_SLACK = 16
+_thr = {"base": None, "peak": 0, "over": False, "overCount": 0, "overLastAt": None}
+_thr_lock = threading.Lock()
+
+
+def thread_watch():
+    now_n = threading.active_count()
+    with _thr_lock:
+        if _thr["base"] is None or now_n < _thr["base"]:
+            _thr["base"] = now_n
+        _thr["peak"] = max(_thr["peak"], now_n)
+        line = _thr["base"] + LONGPOLL_MAX_ACTIVE + THREAD_SLACK
+        over = now_n > line
+        if over and not _thr["over"]:
+            _thr["overCount"] += 1
+            _thr["overLastAt"] = time.time()
+            sys.stderr.write("  [스레드] **봐야 할 자리** — %d개 (바탕 %d · 경고선 %d)\n"
+                             % (now_n, _thr["base"], line))
+        _thr["over"] = over
+        return {"now": now_n, "base": _thr["base"], "peak": _thr["peak"],
+                "warnAt": line, "over": over, "overCount": _thr["overCount"],
+                "overLastAt": _thr["overLastAt"]}
+
+
 def usage_stats():
     """실제 호출량을 돌려준다 (재권님이 눈으로 확인하기 위한 용도)."""
     now = time.time()
@@ -751,6 +819,8 @@ def usage_stats():
         # 쥐는 틀(`ThreadingHTTPServer`)이라, 롱폴링을 켜면 이 값이 창 수만큼
         # 늘어난다. **지금은 요청이 끝나면 돌아온다** — 켜기 전후를 견주려고 둔다.
         "threads": threading.active_count(),
+        # ⓔ 바탕 · 최대 · 경고선 · 넘은 횟수 — 막지 않는다
+        "threadWatch": thread_watch(),
         # **응답 시간** — 하한 계산에 쓴다. 못 쟀으면 `None` 이다.
         "respMs": resp_stats(),
         "perSec60s": round(last_60s / 60.0, 3),
@@ -789,6 +859,15 @@ def usage_stats():
         "relayCacheSize": len(_relay_cache),
         # 경로별 넘기기 캐시 수명(2026-10-02). `None` 이면 상수 이름이 틀렸다.
         "relayTtl": relay_ttl_table(),
+        # ⓒ 낮음(확인용 서버가 넘긴 것)이 줄에 선 횟수 · 그중 비켜선 횟수
+        "prioLowCalls": _prio_stat["lowCalls"],
+        "prioLowYields": _prio_stat["lowYields"],
+        # ⓓ 롱폴링 — 꺼져 있으면 `longpoll: false` 이고 셈은 0 이다(그 자리가 없으므로)
+        "longpoll": LONGPOLL_ON,
+        "longpollActive": _lp_stat["active"],
+        "longpollTotal": _lp_stat["total"],
+        "longpollChanged": _lp_stat["changed"],
+        "longpollBusy": _lp_stat["busy"],
         # 화면 API 를 통째로 넘긴 횟수 · 폴백 (차트 셋 — `HIGH_RELAY_ROUTES`)
         "upstreamRouteCalls": _up_stat["routeCalls"],
         "upstreamRouteFallbacks": _up_stat["routeFallbacks"],
@@ -1283,6 +1362,75 @@ def policy_values(draw_ms=None):
             "routes": routes}
 
 
+# ── 롱폴링 입구 (2026-10-02 · 서버리소스 2단계 ⓓ) ── **기본 꺼짐**
+#
+# 화면이 같은 값을 몇 초마다 다시 묻는 대신, **값이 바뀔 때까지 서버가 쥐고 있다가**
+# 바뀌면 바로 돌려준다.
+#
+#     GET /api/kis/poll?u=<안쪽 /api/kis/… 주소>&h=<지난 응답의 해시>&hold=<초>
+#
+# 서버는 안쪽 주소를 **자기 포트로 다시 부르고**(그래서 캐시·예산을 그대로 탄다 —
+# KIS 를 더 부르지 않는다) 응답 해시가 `h` 와 다르면 바로 내고, 같으면 `LONGPOLL_STEP_SEC`
+# 마다 다시 보다가 `hold` 가 지나면 `changed:false` 로 낸다.
+#
+# **켜는 스위치는 `KJC_LONGPOLL=1`** — 안 켠 서버에는 이 자리가 없다(404). 켜기는
+# 따로 지시를 받는다(「켜기」). **연결 하나가 스레드 하나를 쥔다**(2026-10-02 실측 —
+# 연결당 RSS 74KB). 그래서 `LONGPOLL_MAX_ACTIVE` 를 넘으면 쥐지 않고 바로 낸다.
+#
+# **쥐는 상한은 넘기기 timeout(15초)보다 짧다** — 8764 가 넘겨받아 쥐면 16초에서
+# 넘기기가 먼저 끊겼다(2026-10-02 실측 · 14.5초까지 ok).
+LONGPOLL_ON = (os.environ.get("KJC_LONGPOLL") or "").strip().lower() in ("1", "true", "yes", "on")
+LONGPOLL_MAX_HOLD = 12.0
+LONGPOLL_STEP_SEC = 1.0
+LONGPOLL_MAX_ACTIVE = 32
+_lp_lock = threading.Lock()
+_lp_stat = {"active": 0, "total": 0, "changed": 0, "busy": 0}
+
+
+def _lp_inner(u):
+    """안쪽 주소를 자기 포트로 부른다 → (상태코드, 본문 bytes)."""
+    url = "http://127.0.0.1:%d%s" % (RUN_PORT, u)
+    try:
+        with urllib.request.urlopen(url, timeout=15) as resp:
+            return resp.getcode(), resp.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+
+
+def longpoll(u, h, hold):
+    """값이 바뀔 때까지(또는 `hold` 초) 기다린다. 결과는 JSON 으로 낼 dict."""
+    with _lp_lock:
+        _lp_stat["total"] += 1
+        busy = _lp_stat["active"] >= LONGPOLL_MAX_ACTIVE
+        if busy:
+            _lp_stat["busy"] += 1
+        else:
+            _lp_stat["active"] += 1
+    try:
+        deadline = time.monotonic() + (0.0 if busy else hold)
+        while True:
+            code, body = _lp_inner(u)
+            hh = hashlib.sha1(body).hexdigest()[:16]
+            if code != 200 or hh != h or time.monotonic() >= deadline:
+                break
+            time.sleep(min(LONGPOLL_STEP_SEC, max(0.0, deadline - time.monotonic())))
+        changed = hh != h
+        if changed:
+            _lp_stat["changed"] += 1
+        out = {"ok": code == 200, "changed": changed, "hash": hh, "status": code,
+               "busy": busy}
+        if changed or code != 200:
+            try:
+                out["body"] = json.loads(body.decode("utf-8"))
+            except ValueError:
+                out["body"] = None
+        return out
+    finally:
+        if not busy:
+            with _lp_lock:
+                _lp_stat["active"] -= 1
+
+
 RELAY_CACHE_MAX = 2000             # 키에 `params` 가 들어가 수가 늘 수 있다
 
 
@@ -1435,7 +1583,10 @@ def _kis_via_upstream(base, path, params, tr_id):
         "params": json.dumps(params or {}, ensure_ascii=False),
     })
     try:
-        with urllib.request.urlopen(url, timeout=15) as resp:
+        req = urllib.request.Request(url)
+        if SLOW:
+            req.add_header(PRIO_HEADER, "low")      # ⓒ 외부접속에 비켜선다
+        with urllib.request.urlopen(req, timeout=15) as resp:
             body = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         detail = scrub(e.read().decode("utf-8", "replace"))[:300]
@@ -2554,7 +2705,7 @@ def fetch_investor_flow(cfg, market="KOSPI", days=INVESTOR_FLOW_DAYS):
 INVESTOR_DAYS = 30          # 한 번에 오는 일수. 늘릴 수 없다
 ASKING_LEVELS = 10          # 호가 단계
 INVESTOR_TTL = 60           # 일별 자료라 장중에 한 번 바뀐다
-ASKING_TTL = 3              # 호가는 계속 움직인다. 화면이 훑을 때만 짧게 받아낸다
+ASKING_TTL = 3              # 호가는 계속 움직인다. **화면이 이 값을 받아 그 주기로 돈다** (2026-10-02 · 재권님 「나」)
 
 _investor_cache = {}
 _asking_cache = {}
@@ -2781,7 +2932,7 @@ def fetch_investor_estimate(cfg, code):
 
 
 # 체결은 한 번에 30줄이 온다. 화면이 그보다 많이 보여줄 일이 없다.
-TICKS_TTL = 3              # 장중에는 계속 쌓인다. 화면이 볼 때만 짧게 받아낸다
+TICKS_TTL = 3              # 장중에는 계속 쌓인다. **화면이 이 값을 받아 그 주기로 돈다** (2026-10-02 · 재권님 「나」)
 _ticks_cache = {}
 
 
@@ -4336,6 +4487,11 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if (self.path or "").startswith("/api/kis/"):
             _mark_ui_call(self.path)   # 양보 + **어느 종목인지** 적는다
+            # ⓒ 스레드는 요청마다 새로 서지만 표시는 매번 덮어써 둔다
+            _prio.low = (self.headers.get(PRIO_HEADER) or "").strip().lower() == "low"
+            if not _prio.low:
+                global _last_high_at
+                _last_high_at = time.monotonic()
             self._handle_kis()
             return
         if (self.path or "").startswith("/api/dart/"):
@@ -4385,7 +4541,10 @@ class Handler(SimpleHTTPRequestHandler):
         **직접 부르는 쪽으로 내려간다** — `_kis_via_upstream` 과 같은 선이다.
         """
         try:
-            with urllib.request.urlopen(base + (self.path or ""), timeout=15) as resp:
+            _req = urllib.request.Request(base + (self.path or ""))
+            if SLOW:
+                _req.add_header(PRIO_HEADER, "low")     # ⓒ 외부접속에 비켜선다
+            with urllib.request.urlopen(_req, timeout=15) as resp:
                 code, body = resp.getcode(), resp.read()
                 rct = resp.headers.get("Content-Type")
         except urllib.error.HTTPError as e:
@@ -4898,6 +5057,27 @@ class Handler(SimpleHTTPRequestHandler):
 
         # ── 주기 정책 (2026-10-02) ── KIS 키와 무관한 값이라 secrets 검사 앞에 둔다
         # (키 없는 서버도 503 이 아니라 값을 낸다 · 창구 검수).
+        # ── 롱폴링 입구 (2026-10-02 · ⓓ) ── 안 켠 서버에는 이 자리가 없다.
+        if route == "poll":
+            if not LONGPOLL_ON:
+                self._send_json({"ok": False, "error": "그런 주소 없음"}, 404)
+                return
+            u = (qs.get("u") or [""])[0]
+            # **`/api/kis/` 안쪽만 · 자기 자신(poll)과 넘겨받는 자리(relay)는 안 된다** —
+            # 앞은 고리가 되고 뒤는 넘기기 전용 자리다.
+            inner = urllib.parse.urlparse(u).path[len("/api/kis/"):].strip("/") \
+                if u.startswith("/api/kis/") else ""
+            if not inner or inner in ("poll", RELAY_ROUTE) or ".." in u:
+                self._send_json({"ok": False, "error": "u 는 /api/kis/ 안의 주소여야 합니다."}, 400)
+                return
+            try:
+                hold = float((qs.get("hold") or ["10"])[0])
+            except ValueError:
+                hold = 10.0
+            hold = max(0.0, min(hold, LONGPOLL_MAX_HOLD))
+            self._send_json(longpoll(u, (qs.get("h") or [""])[0], hold))
+            return
+
         if route == "policy":
             # `drawMs` 는 화면이 잰 그리는 시간. 없거나 이상하면 `None` — 하한에서 뺀다.
             try:

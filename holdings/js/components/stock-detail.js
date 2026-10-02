@@ -28,9 +28,14 @@
 
 import { apiFetch } from '../data/api.js';
 import { fmtMoneyKr } from '../utils/format.js';
+import { watch } from '../store/longpoll.js';
 
-/* 호가는 계속 움직인다. 서버 캐시가 3초라 그보다 자주 부를 이유가 없다 */
-const ASK_RELOAD_MS = 5000;
+/* **주기를 갖지 않는다 — 바뀌면 서버가 알려 준다** (2026-10-02 · 재권님 「주는 대로
+   받아야」). `store/longpoll.js` 가 한 연결로 묻는다. 서버가 롱폴을 모르면 호가는
+   `ASKING_TTL`, 시세는 `PRICE_CACHE_TTL` 주기로 묻는다 — 아래 숫자는 **그 값마저
+   못 받았을 때의 대체값**이다 */
+const ASK_RELOAD_KEY = 'kis_proxy.ASKING_TTL';
+const ASK_RELOAD_FALLBACK_MS = 5000;
 
 /* **시가총액은 고른 종목만 따로 받는다.**
 
@@ -38,8 +43,9 @@ const ASK_RELOAD_MS = 5000;
    **시가총액·PER·PBR·52주를 안 준다**(live.js 주석). 그래서 이 칸이 「—」로
    나왔다. 단건(`/api/kis/price`)에는 있으므로 고른 하나만 받는다.
 
-   서버 캐시가 25초라 그보다 자주 부를 이유가 없다. */
-const LIVE_RELOAD_MS = 30_000;
+   주기는 서버의 `PRICE_CACHE_TTL` 이다(위). */
+const LIVE_RELOAD_KEY = 'kis_proxy.PRICE_CACHE_TTL';
+const LIVE_RELOAD_FALLBACK_MS = 30_000;
 
 export function mountStockDetail(host) {
   if (!host) return { setCode() {}, update() {}, destroy() {} };
@@ -109,8 +115,11 @@ export function mountStockDetail(host) {
       ${bs}`;
   }
 
-  timer = setInterval(() => { if (!document.hidden) loadAsking(); }, ASK_RELOAD_MS);
-  liveTimer = setInterval(() => { if (!document.hidden) loadLive(); }, LIVE_RELOAD_MS);
+  /* 주소는 고른 종목을 따라간다 — `setCode` 가 `refresh()` 로 알린다 */
+  timer = watch({ url: () => (code ? `/api/kis/asking?code=${code}` : null),
+                  onChange: () => loadAsking(), key: ASK_RELOAD_KEY, fallbackMs: ASK_RELOAD_FALLBACK_MS });
+  liveTimer = watch({ url: () => (code ? `/api/kis/price?code=${code}` : null),
+                      onChange: () => loadLive(), key: LIVE_RELOAD_KEY, fallbackMs: LIVE_RELOAD_FALLBACK_MS });
   paint();
 
   return {
@@ -122,6 +131,7 @@ export function mountStockDetail(host) {
       paint();
       loadAsking();
       loadLive();
+      timer.refresh();          // 쥔 연결이 옛 종목을 보고 있다
     },
     /** **받아 둔 단건 응답을 그대로 내준다** (2026-09-30 지시 —
      *  「모달에 있는건 가져와야지 왜 안가져오고있지?」).
@@ -148,8 +158,8 @@ export function mountStockDetail(host) {
       paint();
     },
     destroy() {
-      if (timer) clearInterval(timer);
-      if (liveTimer) clearInterval(liveTimer);
+      if (timer) timer.stop();
+      if (liveTimer) liveTimer.stop();
     },
   };
 }

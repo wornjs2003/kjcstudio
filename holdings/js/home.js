@@ -7,7 +7,7 @@
 
 import { WATCHLIST, brandColor, CHART_PERIODS, initBarsOf } from './data/market.js';
 import * as lastSeen from './store/last-seen.js';
-import { fetchCandles, createStockChart, maLegend,
+import { fetchCandles, candleUrl, createStockChart, maLegend,
   addPrevCloseLine, PREV_CLOSE_NOTE,
   savePeriodId, loadPeriodId,
   chartView, setChartView, chartStockChanged } from './chart.js';
@@ -42,6 +42,7 @@ import { apiFetch } from './data/api.js';
    데일리분석 모달의 「주요 지수」 가 같은 띠를 쓴다 */
 import { INDEX_CELLS, stripHtml } from './components/index-strip.js';
 import { everyServerMs } from './store/timing.js';
+import { watch } from './store/longpoll.js';
 
 
 
@@ -402,6 +403,7 @@ async function paintBigChart(opt = {}) {
   bigPeriod = loadPeriodId(bigPeriod);
 
   const key = st.code + ':' + bigPeriod;
+  if (bigWatch && key !== bigChartKey) bigWatch.refresh();   // 쥔 연결이 옛 차트를 보고 있다
   bigChartKey = key;
   paintBigHead(st);
 
@@ -1187,8 +1189,13 @@ const LOOK_AHEAD = 400;      // 화면 밖 이만큼까지 미리 받아 둔다
 
    **주기를 바꿀 때는 이 표를 다시 계산해서 커밋 메시지에 적을 것.**
    0.2초로 두었던 것도 계산을 안 해서 생긴 일이다. */
-const ROW_REFRESH_MS = 1000;
-const INDEX_CHART_MS = 60000;   // 큰 차트. 분봉이 5분 간격이라 1분이면 넉넉하다
+/* **위 표는 그날(2026-09-15)의 계산이다.** 2026-10-02 부터 순위표 · 큰 차트는
+   **주기를 갖지 않는다 — 바뀌면 서버가 알려 준다** (재권님 「주는 대로 받아야」 ·
+   `store/longpoll.js`). 아래 둘은 서버가 롱폴을 모르고 서버 값마저 못 받았을 때의
+   대체값이다. 순위표는 그때 `MULTI_CACHE_TTL` 을 따른다. 큰 차트의 서버 값(기간별
+   `fresh_sec`)은 아직 `timing` 에 안 나와 대체값으로 돈다. */
+const ROW_FALLBACK_MS = 2000;
+const BIG_CHART_FALLBACK_MS = 60000;
 
 function visibleCodeList() {
   const box = $('kh-rank-scroll');
@@ -1445,29 +1452,27 @@ function paintOneRow(code, live) {
 /* 묶음을 5 → 2 로 줄였다. 간격이 0.2초에서 1초가 되었으니, 묶음까지 그대로면
    전체 한 바퀴가 5초가 된다. 2 로 하면 2초에 한 바퀴다.
    한 묶음이 커져도 워커가 30종목씩 묶어 부르므로 KIS 호출은 거의 안 는다. */
-const ROTATE_GROUPS = 2;
-let rotateAt = 0;
-let rotating = false;
+/* 보고 있는 줄 + 관심종목. **한 주소로 묻는다** — 서버 `/api/kis/quotes` 가
+   한 번에 120종목까지 받는다(멀티 4묶음). 전에는 둘로 나눠 1초마다 번갈아 물었다 */
+function quoteCodes() {
+  return [...new Set([...WATCHLIST.map(x => x.code), ...visibleCodeList()])].slice(0, 120);
+}
 
-async function rotateTick() {
-  if (document.hidden || rotating) return;
-  const watch = WATCHLIST.map(x => x.code);
-  const codes = [...new Set([...watch, ...visibleCodeList()])];
+let quoting = false;
+async function quoteTick() {
+  if (document.hidden || quoting) return;
+  const codes = quoteCodes();
   if (!codes.length) return;
-
-  const size = Math.ceil(codes.length / ROTATE_GROUPS);
-  const start = (rotateAt % ROTATE_GROUPS) * size;
-  rotateAt++;
-  const chunk = codes.slice(start, start + size);
-  if (!chunk.length) return;
-
-  rotating = true;
+  quoting = true;
   try {
-    applyFreshPrices(await fetchQuotes(chunk));
+    applyFreshPrices(await fetchQuotes(codes));
   } finally {
-    rotating = false;
+    quoting = false;
   }
 }
+
+/* 큰 차트의 지켜보기. 종목·기간이 바뀌면 `paintBigChart` 가 알린다 */
+let bigWatch = null;
 
 /* 다른 탭에 갔다 돌아오면 곧바로 한 번 받는다.
    다음 차례까지 기다리면 멈춘 값을 한동안 보게 된다. */
@@ -1753,15 +1758,17 @@ loadUniverse().then(() => {
   panel3.setCode(selectedCode);
   detail.setCode(selectedCode);
   detail.update(rowPrices && rowPrices[selectedCode]);
-  /* 보고 있는 것만 주기적으로 다시 받는다. 시세 띠·관심 사이드바와 별개다. */
-  /* 0.2초마다 다섯 묶음 중 하나씩. 전체는 1초에 한 바퀴 돈다. */
-  setInterval(rotateTick, ROW_REFRESH_MS);
+  /* 보고 있는 줄은 **값이 바뀌면 서버가 알려 준다.** 시세 띠·관심 사이드바와 별개다.
+     스크롤해 보이는 줄이 바뀌면 주소가 바뀌고, 그 순간 새로 받는다 */
+  watch({ url: () => { const c = quoteCodes(); return c.length ? '/api/kis/quotes?codes=' + c.join(',') : null; },
+          onChange: quoteTick, key: 'kis_proxy.MULTI_CACHE_TTL', fallbackMs: ROW_FALLBACK_MS });
 
   /* 큰 차트도 계속 다시 받는다. 한 번 그린 뒤 장이 진행돼도 선이 멈춰
-     있으면 안 된다 (2026-09-15 지적).
-     5분봉이라 그보다 자주 부를 이유가 없다. 받아 둔 봉은 chart.js 가
-     60초 쥐고 있으므로, 같은 종목을 계속 보고 있으면 KIS 로 가지도 않는다. */
-  setInterval(() => { if (!document.hidden) paintBigChart(); }, INDEX_CHART_MS);
+     있으면 안 된다 (2026-09-15 지적). 바뀌었다는 알림이 오면 **화면 캐시를
+     건너뛰고**(`fresh`) 받는다 — 안 그러면 알림을 받고도 옛 봉을 그린다 */
+  bigWatch = watch({ url: () => (findStock(selectedCode) ? candleUrl(selectedCode, bigPeriod) : null),
+                     onChange: () => paintBigChart({ fresh: true }),
+                     key: null, fallbackMs: BIG_CHART_FALLBACK_MS });
 });
 
 
@@ -1879,7 +1886,7 @@ startLiveLoop({
 
      그래도 2초로 둔다. KIS 는 감당해도 Cloudflare 무료 한도(하루 10만 요청)가
      따로 있고, 화면이 워커를 부르는 횟수는 캐시로 줄지 않는다.
-     위 ROW_REFRESH_MS 의 계산표 참고 (2026-09-15 지시). */
+     위 「갱신 주기는 Cloudflare 무료 한도가 정한다」 계산표 참고 (2026-09-15 지시) — 지금은 대체값이다. */
   indexMs: 2000,
   onIndices(indices) { paintIndices(indices); },
   onPrices(prices)   {
