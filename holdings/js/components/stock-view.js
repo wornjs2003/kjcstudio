@@ -128,13 +128,28 @@ export function mountStockView(root, stock, { onBack } = {}) {
      * **새로 받지 않는다.** 그 값을 `detail.full()` 로 가져다 쓴다 —
      * 증권사 호출이 안 는다.
      *
-     * **단건을 뒤에 놓는 것이 핵심이다.** 앞에 놓으면 멀티가 덮어
-     * 다시 `—` 가 된다 — 2026-09-30 에 카드 시세가 올 때마다 이 함수가
-     * 불리게 고쳤으므로(`852ab34`) **한 번 채우고 마는 방식은 안 듣는다.**
-     * `stock-detail.js` 의 `paint()` 가 쓰는 그 방식 그대로다. */
+     * ⚠️ **단건을 뒤에 놓았더니 가격까지 덮었다** (2026-10-01).
+     * 재권님이 「모달은 둘다 안되는거같은데」 로 찾으셨다.
+     *
+     *     멀티(`quotes`)   **2초**마다 온다 — `ROW_REFRESH_MS` × `ROTATE_GROUPS`
+     *     단건(`price`)    **30초**마다 — `stock-detail.js` 의 `LIVE_RELOAD_MS`
+     *
+     * 단건이 통째로 덮으니 **가격·캔들이 30초에 묶였다.** 8765 실측 —
+     * 100초에 멀티가 **10단계** 바뀌는데 모달 머리줄은 **4단계**였다
+     * (100 ÷ 30 과 맞는다).
+     *
+     * **순서를 뒤집어도 시가총액은 안 사라진다.** `quotes` 응답은 11필드
+     * (`amt high low name open pct prev price source value volume`)이고
+     * `marketCap`·`per`·`pbr`·`high52`·`low52`·`eps`·`bps` 는 **키 자체가
+     * 없다**(2026-10-01 실측). 없는 키는 덮지 못하므로 단건 값이 그대로 남고,
+     * **양쪽에 다 있는 가격·고저는 더 신선한 멀티가 이긴다.**
+     *
+     * 그래서 2026-09-30 의 「단건을 뒤에」 는 **「단건도 합친다」 가 핵심**이고
+     * 순서가 핵심이 아니었다. `stock-detail.js` 의 `paint()` 는 단건만 쓰므로
+     * 이 자리와 다르다. */
     if (typeof detail !== 'undefined' && detail) detail.update(liveRaw);
     const one = (typeof detail !== 'undefined' && detail && detail.full) ? detail.full() : null;
-    const live = one ? { ...liveRaw, ...one } : liveRaw;
+    const live = one ? { ...one, ...liveRaw } : liveRaw;
     /* 그 값으로 차트의 맨 오른쪽 막대도 갱신한다 (2026-09-30 지시 — 「4번」).
        봉을 다시 받지 않는다. 자세한 것은 `chart.js` 의 `updateLast` 주석. */
     if (chart) chart.updateLast(live);

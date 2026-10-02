@@ -46,6 +46,11 @@ JS = "holdings/worker/kis-worker.js"
 #            (2026-09-15 확인). 그래서 0.7 ↔ 1 은 어긋난 것이 아니다.
 PAIRS = [
     ("차트 시장구분",        "MARKET_DIV_CHART",    "MARKET_DIV_CHART",     None),
+    # 통합(UN)이 과거를 잘라 줄 때 되묻는 쪽과, 한 번에 오는 봉 수.
+    # 둘 다 「잘려 왔나」 판정에 쓰이므로 **양쪽이 갈리면 로컬과 배포본의
+    # 봉 개수가 조용히 달라진다** (2026-10-02).
+    ("차트 되묻기 시장",     "MARKET_DIV_CHART_ALT", "MARKET_DIV_CHART_ALT", None),
+    ("한 번에 오는 봉 수",   "BARS_PER_CALL",       "BARS_PER_CALL",        None),
     ("분봉 시작 시각",       "MINUTE_DAY_START",    "MINUTE_DAY_START",     None),
     ("분봉 끝 시각",         "MINUTE_DAY_END",      "MINUTE_DAY_END",       None),
     # 「빠른 갈래」 는 2026-09-18 에 없앴다 — 모든 종목이 같은 수명을 쓴다

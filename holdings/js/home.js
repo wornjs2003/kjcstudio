@@ -26,7 +26,7 @@ import { mountDisclosures } from './components/disclosures.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
 import { mountSchedule } from './components/schedule.js';
 import { bindDailyMenu, loadDailyDoc } from './components/daily-view.js';
-import { fetchIssues, paintIssues } from './components/news-list.js';
+import { fetchIssues, fetchFeed, paintIssues, paintLoading } from './components/news-list.js';
 import { bindNewsModal } from './components/news-modal.js';
 import { mountSectors } from './components/sectors.js';
 import { openSectorModal } from './components/sector-modal.js';
@@ -38,52 +38,12 @@ import { mountMobileFold } from './components/mobile-fold.js';
    갈아탔다. 두 함수는 지수 화면을 만들 때 쓸 수 있게 live.js 에 남겨 뒀다. */
 import { fetchQuotes } from './data/live.js';
 import { apiFetch } from './data/api.js';
+/* 지수 띠 — 칸 목록 · 표시 · 그리기는 components/index-strip.js 한 곳에 있다 (2026-10-01 home.js 에서 빼냄).
+   데일리분석 모달의 「주요 지수」 가 같은 띠를 쓴다 */
+import { INDEX_CELLS, stripHtml } from './components/index-strip.js';
 import { everyServerMs } from './store/timing.js';
 
-/* 지수 띠에 놓을 칸.
- *
- * **다우존스는 뺐다** (2026-09-17 지시 — "받을 수 없는 지수는 메인 UI 상에서도
- * 없애고 만들지 않는다"). 증권사 두 곳 어디에도 없어서 자리만 차지하고
- * 있었다. 「아직 안 붙인 것」이 아니라 「받을 수 없는 것」이다.
- *
- *     KIS    DJI · .DJI · DJIA · INDU · DJX · US30 · DJ30 · DWJ · DIA
- *            13개 후보를 네 시장구분으로 훑었는데 전부 0
- *            (DOW 는 다우社 주식이라 30달러가 나온다)
- *     토스증권 Open API   개별 주식만 준다. 지수가 없다
- *
- * **WTI·금은 남긴다.** 받을 곳은 찾았고 거래소 신청만 하면 된다 —
- * 못 찾은 것이 아니라 아직 안 붙인 것이다. wait 에 무엇을 하면 채워지는지
- * 적어 둔다 (holdings/CLAUDE.md 데이터 규칙).
- */
-const INDEX_CELLS = [
-  { code: 'KOSPI',    name: '코스피',     icon: 'kr' },
-  { code: 'KOSDAQ',   name: '코스닥',     icon: 'kr' },
-  { code: 'KOSPI200', name: '코스피200',  icon: 'kr' },
-  { code: 'KRX100',   name: 'KRX100',   icon: 'kr' },
-  { code: 'USDKRW', name: '미국 USD',  icon: 'us' },
-  { code: 'SPX',    name: 'S&P 500',  icon: 'us' },
-  { code: 'NASDAQ', name: '나스닥 종합', icon: 'us' },
-  { code: 'NDX',    name: '나스닥100',  icon: 'us' },
-  { code: 'SOX',    name: '필라델피아 반도체', icon: 'us' },
-  { code: 'SX5E',   name: '유로STOXX50', icon: 'eu' },
-  { code: 'HSCE',   name: '홍콩H',      icon: 'hk' },
-  { code: 'VIX',    name: 'VIX',      icon: 'vix' },
-  /* NYMEX · COMEX 거래소를 신청하면 채워진다 (EGW00551, 2026-09-17 실측) */
-  { name: 'WTI 원유',  wait: '거래소 신청 필요', icon: 'oil' },
-  { name: '금',       wait: '거래소 신청 필요', icon: 'au' },
-];
 
-/* 칸 앞에 붙는 표시.
-   국기는 <use> 로 꺼내 쓰고(index.html 맨 위에 정의), 나머지는 글자 배지로 만든다.
-   이모지를 쓰면 윈도우에서 "KR" 같은 지역코드 글자로 나와서 직접 그렸다. */
-function cellIcon(kind) {
-  if (kind === 'kr' || kind === 'us') {
-    return `<svg class="kh-ix-flag" viewBox="0 0 24 24" aria-hidden="true"
-      ><use href="#kh-flag-${kind}"/></svg>`;
-  }
-  const badge = { vix: 'V', oil: '油', au: 'Au', eu: 'EU', hk: 'HK' }[kind];
-  return badge ? `<span class="kh-ix-badge ${kind}" aria-hidden="true">${badge}</span>` : '';
-}
 
 const $ = id => document.getElementById(id);
 
@@ -204,76 +164,13 @@ function paintMkt() {
     ${counts}${futures}`;
 }
 
-/* 카드에 붙일 표시. 무엇을 보고 있는지가 한눈에 들어와야 한다. */
-function badgeFor(i) {
-  if (i.market === 'overseas') {
-    const d = i.asOf || '';
-    /* 20260914 → "09.14 종가" */
-    const label = d.length === 8 ? `${d.slice(4, 6)}.${d.slice(6, 8)} 종가` : '해외장';
-    return { live: false, text: label };
-  }
-  /* 국내는 셋으로만 나눈다 (2026-09-15 지시).
-
-       실시간   09:00~15:30  KRX 정규장. 값이 계속 움직인다
-       넥장     08:00~08:50 · 15:30~20:00  넥스트레이드에서만 거래된다
-       장마감   그 밖. 값이 멈춰 있다
-
-     08:50~09:00 은 프리마켓이 끝나고 정규장 전이라 거래가 없다. 장마감으로 묶는다.
-     이 구분은 시세를 어느 시장 기준으로 받는지와 짝이 맞는다
-     (정규장은 KRX, 그 밖은 통합 — CLAUDE.md 의 시세 표기 규칙). */
-  const phase = marketPhase();
-  /* 단일가(15:20~15:30)도 KRX 가 도는 시간이라 값이 움직인다.
-     애프터 준비(15:30~15:40)는 주문만 받고 체결이 없어 값이 멈춰 있다. */
-  if (phase.id === 'regular' || phase.id === 'single') return { live: true, text: '실시간' };
-  if (phase.id === 'pre' || phase.id === 'after') return { live: false, text: '넥장' };
-  return { live: false, text: '장마감' };
-}
 
 function paintStrip(indices) {
-  const byCode = Object.fromEntries((indices || []).map(i => [i.code, i]));
-
   /* 2026-09-22 까지는 여기서 `kh-strip`(「주요 지수」 카드)을 먼저 찾고
      없으면 빠져나갔다. 카드를 없애면서 그 줄이 **띠까지 못 그리게**
      막고 있었다 — 재서 잡았다. 이제 띠 하나만 본다. */
   const top = $('kh-top-ix');
   if (!top) return;
-  const draw = cells => cells.map(cell => {
-    const i = cell.code ? byCode[cell.code] : null;
-    if (!i) {
-      /* 둘을 구분해 적는다.
-         받아올 곳이 아직 없는 칸  → "연결 예정" · 값은 "—"
-         연결은 됐는데 안 온 칸    → "불러오는 중"
-         섞어 쓰면 연결이 안 된 건지 아직 안 온 건지 알 수 없다. */
-      const soon = !cell.code;
-      return `<div class="kh-ix">
-        <div class="kh-ix-h">${cellIcon(cell.icon)}<span class="kh-ix-n">${cell.name}</span>
-          ${soon ? '<span class="kh-bd kh-bd-soon">연결 예정</span>' : ''}</div>
-        <div class="kh-ix-v kh-num kh-mut"
-          style="${soon ? '' : 'font-size:.9rem;font-weight:500'}"
-          >${soon ? '—' : '불러오는 중'}</div>
-        <div class="kh-ix-c kh-mut">${cell.wait || ''}</div>
-      </div>`;
-    }
-    const cls = dirClass(i.changePct);
-    /* 언제 기준 값인지 적는다.
-       국내는 지금 장이 열려 있으면 실시간, 아니면 장 상태 그대로.
-       해외는 국내 낮 시간에 닫혀 있으므로 받은 값의 날짜를 적는다.
-       전에는 값만 있으면 무조건 "실시간" 이라 어제 종가도 실시간으로 보였다
-       (2026-09-15 지적). */
-    const badge = badgeFor(i);
-    return `<div class="kh-ix">
-      <div class="kh-ix-h">${cellIcon(cell.icon)}<span class="kh-ix-n">${cell.name}</span>
-        <span class="kh-bd ${badge.live ? 'kh-bd-on' : (badge.text === '넥장' ? 'kh-bd-nx' : '')}"
-          >${badge.text}</span></div>
-      <div class="kh-ix-b">
-        <div>
-          <div class="kh-ix-v kh-num ${cls}"
-            >${fmtNum(i.value, 2)}</div>
-          <div class="kh-ix-c kh-num ${cls}">${fmtDelta(i.change, i.changePct, '', 2)}</div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
 
   /* 누르는 동작은 뺐다 (2026-09-17). 전에는 눌러서 아래 큰 차트를 그 지수로
      바꿨는데, 그 자리가 종목 차트가 되어 눌러도 갈 곳이 없어졌다.
@@ -283,7 +180,7 @@ function paintStrip(indices) {
      전에는 위에 넷(TOP_CELLS)만 두고 나머지를 「주요 지수」 카드에 뒀는데,
      카드가 열넷을 다 담고 있어서 **같은 것이 두 자리**에 있었다.
      카드를 없애고 여기로 합쳤다 — 고를 것은 갈래 띠가 한다. */
-  if (top) top.innerHTML = draw(INDEX_CELLS);
+  if (top) top.innerHTML = stripHtml(indices);
   paintIxFilter();
 }
 
@@ -1414,6 +1311,17 @@ function applyPrices(map) {
   lastSeen.save('prices', rowPrices);
   updateRowCells(map);
   paintBigPrice();                 // 큰 차트 머리줄의 현재가
+  /* **머리줄 숫자만 고치면 봉이 안 따라온다** (2026-10-01).
+     재권님이 「가격은 변하는데 캔들봉이 안움직이네」 로 찾으셨다.
+
+     2026-09-30 에 `chart.js` 에 `updateLast` 를 넣고 **모달에만** 걸었다
+     (`components/stock-view.js`). 첫 화면 큰 차트는 `bigChart` 를 **그리기
+     길에서만** 만져서, 가격이 들어와도 맨 오른쪽 막대가 그대로였다.
+     **안 듣던 것이 아니라 부르는 자리가 없었다.**
+
+     `updateLast` 가 `!live` 와 `last.close === px` 를 스스로 걸러서
+     여기서 다시 보지 않는다 — 건너뛸 값을 두 곳에서 정하면 갈린다. */
+  if (bigChart) bigChart.updateLast(rowPrices[selectedCode]);
   if (typeof detail !== 'undefined' && detail) {
     detail.update(rowPrices && rowPrices[selectedCode]);   // 거래대금 · 시가총액
   }
@@ -1877,8 +1785,28 @@ const SIDE_NEWS_KEY = 'news.NEWS_TTL';
 const SIDE_NEWS_FALLBACK_MS = 180_000;
 
 async function drawSideNews() {
-  paintIssues($('kh-side-news'), await fetchIssues(),
-              { compact: true, limit: SIDE_NEWS_N });
+  const host = $('kh-side-news');
+  /* 처음 켤 때만 적는다. 받아 둔 것이 있으면 갱신마다 깜빡이게 된다 */
+  if (host && !host.children.length) paintLoading(host, { compact: true });
+
+  /* 이 칸은 **시장 이슈만** 쓴다. 가벼운 쪽(`issues`)으로 먼저 그린다 */
+  paintIssues(host, await fetchIssues(), { compact: true, limit: SIDE_NEWS_N });
+
+  /* ── 뉴스 모달이 쓸 「종목 뉴스」 를 여기서 데워 둔다 (2026-10-01 지시) ──
+   *
+   * 재권님 말씀이 계기다 — **「모달이 켜질때 보여지는 정보를 미리 받아노면
+   * 다 되는거 아닌가?」**. 공시·일정은 이 화면이 이미 미리 받아 두어서
+   * 모달이 0.03초에 차는데, **종목 뉴스만 안 받고 있어** 모달을 열 때
+   * 0.2~1초 빈 칸이었다 (2026-10-01 실측).
+   *
+   * **`await` 하지 않는다.** 이 칸은 결과를 안 쓰므로 기다릴 이유가 없다 —
+   * 기다리면 사이드 뉴스가 그 1초만큼 늦게 찬다. 받아 둔 것은
+   * `news-list.js` 가 쥐고 있고 모달이 열릴 때 꺼내 쓴다.
+   *
+   * **KIS 호출이 늘지만 작다.** 2026-10-01 실측으로 증권사 호출 87,906건 중
+   * 종목 뉴스는 76건(0.09%)이었다. 이 주기로 돌려도 전체의 0.35% 다 —
+   * 「아끼려고 안 받는다」 가 주석에 적혀 있었는데 재보니 아낄 것이 없었다. */
+  fetchFeed().catch(() => { /* 못 받으면 모달이 그때 직접 받는다 */ });
 }
 
 /* 탭으로 뉴스 ↔ 공시를 갈아끼운다. **칸 높이가 바뀌면 안 된다**

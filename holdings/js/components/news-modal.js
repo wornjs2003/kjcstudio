@@ -27,7 +27,7 @@
    ========================================================================== */
 
 import { openModal } from './modal.js';
-import { fetchFeed, paintIssues, moveRowHtml } from './news-list.js';
+import { fetchFeed, lastFeed, paintIssues, paintLoading, moveRowHtml } from './news-list.js';
 import { mountDisclosures } from './disclosures.js';
 import { mountSchedule, collectSchedule, AHEAD_DAYS } from './schedule.js';
 import { apiFetch } from '../data/api.js';
@@ -134,8 +134,11 @@ export function openNewsModal({ tab = 'news', watch = null } = {}) {
 
   const watchSet = watch ? new Set(watch) : null;
 
-  async function drawNews() {
-    const feed = await fetchFeed();
+  /* **그리기와 받기를 가른다.** 받아 둔 것으로 즉시 그릴 때와 새로 받아
+     다시 그릴 때가 같은 함수를 써야 둘이 안 갈린다 (2026-10-01).
+     머리에 쓸 것이 있으면 feed 를 그대로 돌려준다 — 못 받았거나 한 건도
+     없으면 아무것도 돌려주지 않아 머리를 비워 둔다 (데이터 규칙). */
+  function paintNews(feed) {
     if (feed === null) { paintIssues(panes.news, null); return; }
     const issues = feed.issues || [];
     const moves  = feed.moves  || [];
@@ -153,12 +156,40 @@ export function openNewsModal({ tab = 'news', watch = null } = {}) {
     return feed;
   }
 
+  async function drawNews() {
+    return paintNews(await fetchFeed());
+  }
+
   /* ── 머리 채우기 ─────────────────────────────
      **셋을 따로 받는다.** 한 곳이 터져도 나머지 칸은 채워진다.
      받기 전에는 그 칸을 만들지 않는다 — 0 이나 「—」 를 먼저 박으면
      「연결이 안 된 것」 과 구분이 안 된다 (데이터 규칙). */
 
-  async function paintHead(feed) {
+  /* 공시 마지막 수집 시각. **머리 두 곳이 함께 쓴다** — 격자 아래 「… 기준」
+     과 큰 숫자의 안내줄. 가르면서 한 곳에 뒀다 (CLAUDE.md 「같은 값은 한
+     곳에만 둔다」). */
+  let polledAt = '';
+  /* 큰 숫자에 마지막으로 쓴 feed. 공시 시각이 뒤늦게 오면 다시 맞춘다. */
+  let bigFeed = null;
+
+  /* 큰 숫자 — **뉴스가 와야 그릴 수 있다.** 그래서 격자와 갈라 두었다. */
+  function paintBig(feed) {
+    if (!feed) return;
+    bigFeed = feed;
+    const issues = (feed.issues || []).length;
+    const moves  = (feed.moves  || []).length;
+    head.setBig({
+      value: String(issues + moves),
+      change: `시장 이슈 ${issues} · 종목 뉴스 ${moves}`,
+      changeCls: 'kh-mut',
+      note: polledAt ? `경제지 RSS · OpenDART ${stamp(polledAt)} 받음` : '경제지 RSS · OpenDART',
+    });
+  }
+
+  /* 격자 · 탭 줄 — **뉴스와 상관없다.** 전에는 `paintHead(feed)` 하나라
+     뉴스를 기다렸는데, 공시·일정은 0.03초에 오는데도 **뉴스 때문에 1초를
+     기다렸다** (2026-10-01 실측). 가르면 각자 오는 대로 찬다. */
+  async function paintStats() {
     const stats = [];
 
     /* 공시 — mountDisclosures 는 개수를 안 돌려준다. 공용 파일이라
@@ -184,20 +215,14 @@ export function openNewsModal({ tab = 'news', watch = null } = {}) {
       stats.push({ label: '주요 일정', value: `${(g.rows || []).length}건` });
     } catch { /* 〃 */ }
 
-    if (feed) {
-      const issues = (feed.issues || []).length;
-      const moves  = (feed.moves  || []).length;
-      head.setBig({
-        value: String(issues + moves),
-        change: `시장 이슈 ${issues} · 종목 뉴스 ${moves}`,
-        changeCls: 'kh-mut',
-        note: polled ? `경제지 RSS · OpenDART ${stamp(polled)} 받음` : '경제지 RSS · OpenDART',
-      });
-    }
+    polledAt = polled;
     if (stats.length) head.setStats(stats);
     head.setSub(polled ? `${stamp(polled)} 기준` : '');
     /* 공시가 꽉 찼는지는 여기서 정해진다. 탭 줄 설명을 다시 맞춘다. */
     head.setTabsNote(tabNote(head.tab(), dcCapped));
+    /* 큰 숫자의 안내줄이 방금 받은 공시 시각을 쓴다. 뉴스가 먼저 와서
+       이미 그려 둔 것이 있으면 그 줄만 맞춘다. */
+    if (bigFeed) paintBig(bigFeed);
   }
 
   function show(k) {
@@ -205,8 +230,26 @@ export function openNewsModal({ tab = 'news', watch = null } = {}) {
   }
 
   show(first);
-  drawNews().then(paintHead);
-  timer = setInterval(() => { if (!document.hidden) drawNews().then(paintHead); }, REFRESH_MS);
+
+  /* ── 받아 둔 것으로 먼저 그린다 (2026-10-01 지시) ──
+   *
+   * 재권님 말씀 — **「모달이 켜질때 보여지는 정보를 미리 받아노면 다 되는거
+   * 아닌가?」**. 첫 화면이 주기마다 받아 둔 것을 `news-list.js` 가 쥐고 있다.
+   * 꺼내 쓰면 **증권사를 한 번도 더 부르지 않고** 뉴스 칸이 즉시 찬다.
+   *
+   * 묵은 값을 보여주고 끝내지 않는다 — 바로 아래에서 새로 받아 다시 그린다. */
+  const held = lastFeed();
+  if (held) { paintNews(held.data); paintBig(held.data); }
+  else paintLoading(panes.news);
+
+  /* 격자는 뉴스를 기다리지 않는다. 공시·일정이 오는 대로 찬다 */
+  paintStats();
+  drawNews().then(paintBig);
+  timer = setInterval(() => {
+    if (document.hidden) return;
+    drawNews().then(paintBig);
+    paintStats();
+  }, REFRESH_MS);
 
   return { close: m.close };
 }

@@ -26,6 +26,7 @@
 """
 
 import argparse
+import collections
 import json
 import os
 import sqlite3
@@ -155,8 +156,28 @@ MODE_LABEL = {"vts": "모의투자", "prod": "실전투자"}
 #   UN = 통합 — 정규장 + 넥스트레이드. 08:00~20:00 내내 값이 움직인다.
 # 통합을 쓰면 거래량도 양쪽이 합산된다.
 #
-# 차트는 통합으로 고정한다. 과거 봉이라 "지금 몇 시인가"를 따질 일이 없다.
+# 차트는 통합으로 **먼저** 묻는다. 과거 봉이라 "지금 몇 시인가"를 따질 일이 없다.
+#
+# ⚠️ **통합이 과거를 더 준다는 뜻이 아니다** (2026-10-02 실측으로 뒤집혔다).
+# 넥스트레이드에 늦게 편입된 종목은 **통합으로 물으면 편입 뒤만 온다.**
+#
+#     005935 삼성전자우   주 UN=3   J=100  ·  월 UN=2  J=100  ·  년 UN=1  J=23
+#     069500 KODEX 200   주 UN=3   J=100                        (ETF 도 같다)
+#     005930 삼성전자     주 UN=100 J=100                        (편입이 오래돼 같다)
+#
+# 수정주가(`FID_ORG_ADJ_PRC`)는 무관했고, 잘리는 경계는 20260914 였다
+# (**편입 시점으로 보이지만 그것까지는 안 쟀다 — 추정이다**).
+#
+# 전에 이 자리 주석이 「통합으로 고정한다」 였는데, 그 근거가 「시각을 따질
+# 일이 없다」 였다. **시각 문제가 아니라 통합이 과거를 덜 주는 문제였다.**
+# 그래서 고정하지 않고 **적게 오면 KRX 로 한 번 더 받는다**
+# (`fetch_bars_from_kis`). 분봉이 이미 같은 모양을 쓴다 — 「전부 0」 이던
+# 폴백을 「1개 이하」 로 고친 자리(2026-10-01)와 한 계열이다.
 MARKET_DIV_CHART = "UN"
+
+# 통합이 과거를 잘라 줄 때 되묻는 쪽. **`worker/kis-worker.js` 와 같아야 한다**
+# (`holdings/tools/check-kis-consts.py` 가 대조한다).
+MARKET_DIV_CHART_ALT = "J"
 
 # 정규장 시간대 (KRX)
 KRX_OPEN  = (9, 0)
@@ -338,8 +359,10 @@ BUDGET_RATIO = 1.0                                  # 기준값을 다 쓴다
 # 아래 공유 줄이 여섯을 한 줄에 세우므로, 고정으로 나눌 때처럼
 # 「각자 N건 × 여섯」 이 되지 않는다. **합쳐서 10건이다.**
 #
-# 배포본 워커는 이 줄 **밖**이라 따로 초당 5건을 쓴다 —
-# 합하면 **15 / 20** 으로 실제 한도에 **25% 여유**가 남는다.
+# 배포본 워커는 이 줄 **밖**이라 따로 초당 5건을 쓴다 — **다만 2026-09-30 에
+# 경로에서 걷어내 그쪽으로 요청이 가지 않는다.** 그래서 **지금은 10 / 20** 이고,
+# **워커를 되돌리면 15 / 20** 이 된다. 「못 쓴다」 가 아니라 **「지금 안 쓴다」** 다 —
+# 워커·KV·D1 은 되돌릴 자리로 살아 있다.
 KIS_CALLS_PER_SEC = KIS_LIMIT_PER_SEC * BUDGET_RATIO   # = **합쳐서** 초당 10건
 KIS_MIN_INTERVAL = 1.0 / KIS_CALLS_PER_SEC             # = 0.1초 간격
 
@@ -667,7 +690,15 @@ def usage_stats():
     now = time.time()
     last_10s = sum(1 for t in _call_times if t > now - 10)
     last_60s = sum(1 for t in _call_times if t > now - 60)
-    last_1h = len(_call_times)
+    # **길이를 그대로 쓰지 않는다** (2026-10-01). 정리가 `_rate_limit` 안에서만
+    # 돌아 **호출이 멈추면 값이 굳었다** — 「지난 1시간」 이 아니라 「기동 뒤 누적」
+    # 이었다. `calls10s`·`calls60s` 는 처음부터 읽을 때 걸렀고 **이 한 줄만** 틀렸다.
+    #
+    # ⚠️ **여기서 정리(`pop`)하지 않는다.** `usage_stats()` 는 `_rate_lock` 을
+    # 안 잡아 **자물쇠 밖에서 목록을 변경**하게 된다. 정리는 `_rate_limit` 이
+    # 하고, **안 해도 못 커진다** — 초당 한도 × 1시간이 상한이다.
+    last_1h = sum(1 for t in _call_times if t > now - 3600)
+    last_1h_relayed = sum(1 for t in _relay_times if t > now - 3600)
     return {
         "limitPerSec": KIS_LIMIT_PER_SEC,
         "budgetRatio": BUDGET_RATIO,
@@ -676,6 +707,9 @@ def usage_stats():
         "calls10s": last_10s,
         "calls60s": last_60s,
         "calls1h": last_1h,
+        # **그중 넘겨받은 몫.** `calls1h - calls1hRelayed` 가 8765 자기 몫이다 —
+        # 「넘기기가 얼마나 모았나」 를 재는 값이고 전에는 섞여서 못 봤다.
+        "calls1hRelayed": last_1h_relayed,
         "perSec60s": round(last_60s / 60.0, 3),
         "budgetUsedPct": round((last_60s / 60.0) / KIS_CALLS_PER_SEC * 100, 1) if KIS_CALLS_PER_SEC else 0,
         "limitUsedPct": round((last_60s / 60.0) / KIS_LIMIT_PER_SEC * 100, 1) if KIS_LIMIT_PER_SEC else 0,
@@ -1006,6 +1040,15 @@ _board_stat = {"calls": 0, "errors": 0, "lastError": None}
 # 그것을 보고 정한다.
 _relay_cache = {}                  # (path, params, tr_id) -> (저장시각, 데이터)
 _relay_stat = {"hits": 0, "misses": 0}
+
+# **넘겨받아 KIS 로 나간 시각.** `usage_stats()` 가 `calls1hRelayed` 로 낸다 —
+# 8765 의 `calls1h` 에는 **자기 호출과 넘겨받은 것이 섞여** 있어
+# 2026-10-01 에 **200 = 100 + 100** 이 됐고 그것을 가를 값이 없었다.
+#
+# ⚠️ **`deque(maxlen=…)` 다.** `append` 가 원자적이고 **넘치면 저절로 버리므로
+# 자물쇠 없이 안전하다.** `_call_times` 처럼 `pop(0)` 루프를 돌면 읽는 쪽에서
+# 건드릴 때 터질 수 있다. 상한은 **초당 한도 × 1시간** 이라 1시간 창을 못 넘는다.
+_relay_times = collections.deque(maxlen=int(KIS_LIMIT_PER_SEC * 3600) + 1)
 RELAY_CACHE_MAX = 2000             # 키에 `params` 가 들어가 수가 늘 수 있다
 
 
@@ -1179,6 +1222,11 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
             _up_stat["lastError"] = safe_message(e)
     token = get_token(cfg)
     _rate_limit(path)
+    # **실제 KIS 호출을 여기 한 곳에서 센다** (2026-10-01).
+    # 전에는 경로마다 손으로 올려 **13곳**이었고 **일부 경로만** 세었다.
+    # **상류로 넘긴 것은 위에서 `return` 하므로 안 세어진다** — 맞다.
+    # 재시도(`EGW00201`)는 재귀로 다시 와서 **한 번 더 센다** — 실제로 두 번 부른다.
+    _stats["kis_calls"] += 1
     url = HOSTS[cfg["mode"]] + path + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={
         "authorization": "Bearer " + token,
@@ -1245,7 +1293,6 @@ def fetch_prices(cfg, codes):
 
     def one(code):
         try:
-            _stats["kis_calls"] += 1
             return code, fetch_price(cfg, code), None
         except RuntimeError as e:
             return code, None, safe_message(e)
@@ -1637,7 +1684,6 @@ def fetch_futures(cfg):
     if hit and (time.time() - hit[0]) < FUTURES_TTL:
         return hit[1]
     try:
-        _stats["kis_calls"] += 1
         data = kis_get(
             cfg,
             "/uapi/domestic-futureoption/v1/quotations/inquire-price",
@@ -1687,7 +1733,6 @@ def fetch_overseas(cfg):
     def one(item):
         i, (key, div, code, name, unit) = item
         try:
-            _stats["kis_calls"] += 1
             # 기간을 넓게 잡아 현재값과 추이를 한 번에 받는다.
             # output1 에 현재값, output2 에 일봉이 함께 온다 — 두 번 부를 필요가 없다.
             now = datetime.now(KST)
@@ -1743,7 +1788,7 @@ def fetch_overseas(cfg):
 #
 # 0.7초였다. 화면은 **2초마다** 부르므로 캐시가 한 번도 안 맞고 매번 실제로
 # 받았다. 지수 한 번이 여덟 건(국내 3 + 해외 4 + 선물 1)이라, **화면 하나가
-# 초당 3.4건**을 썼다 — 예산 다섯 중 셋이다 (2026-09-18 실측. 호출한 스레드를
+# 초당 3.4건**을 썼다 — **그때 예산 다섯 중 셋이었다** (2026-09-18 실측. 호출한 스레드를
 # 세어 보니 미리받기는 50초에 2~3회뿐이었고 나머지가 전부 이쪽이었다).
 #
 # 5초로 두면 2초 주기의 요청 중 대부분이 캐시로 받아진다. 값이 최대 5초 지난
@@ -1790,12 +1835,10 @@ def fetch_indices(cfg, with_chart=True):
     def one(item):
         i, code, name = item
         try:
-            _stats["kis_calls"] += 1
             info = fetch_index(cfg, code)
             series = []
             if with_chart:
                 try:
-                    _stats["kis_calls"] += 1
                     series = fetch_index_series(cfg, code)
                 except RuntimeError:
                     series = []          # 차트만 실패해도 현재값은 보여준다
@@ -1996,7 +2039,6 @@ def fetch_quotes_multi(cfg, codes):
             params["FID_COND_MRKT_DIV_CODE_%d" % n] = div
             params["FID_INPUT_ISCD_%d" % n] = code
         try:
-            _stats["kis_calls"] += 1
             data = kis_get(
                 cfg,
                 "/uapi/domestic-stock/v1/quotations/intstock-multprice",
@@ -2110,7 +2152,6 @@ def fetch_sectors(cfg, markets=None):
             out.extend(cached)
             continue
         try:
-            _stats["kis_calls"] += 1
             data = kis_get(
                 cfg,
                 "/uapi/domestic-stock/v1/quotations/inquire-index-category-price",
@@ -2154,7 +2195,6 @@ def fetch_movers(cfg, direction="up", market="all", limit=MOVERS_MAX):
     key = "%s:%s" % (sort, iscd)
     rows = _ttl_get(_movers_cache, key, MOVERS_TTL)
     if rows is None:
-        _stats["kis_calls"] += 1
         data = kis_get(
             cfg,
             "/uapi/domestic-stock/v1/ranking/fluctuation",
@@ -2213,7 +2253,6 @@ def fetch_investor_flow(cfg, market="KOSPI", days=INVESTOR_FLOW_DAYS):
     rows = _ttl_get(_inv_flow_cache, key, INVESTOR_FLOW_TTL)
     if rows is None:
         today = _today_kst()
-        _stats["kis_calls"] += 1
         data = kis_get(
             cfg,
             "/uapi/domestic-stock/v1/quotations/inquire-investor-daily-by-market",
@@ -2274,7 +2313,6 @@ def fetch_investor(cfg, code, days=INVESTOR_DAYS):
     cached = _ttl_get(_investor_cache, code, INVESTOR_TTL)
     if cached is not None:
         return cached
-    _stats["kis_calls"] += 1
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-investor",
@@ -2337,7 +2375,6 @@ def fetch_investor_estimate(cfg, code):
     cached = _ttl_get(_investor_est_cache, code, INVESTOR_EST_TTL)
     if cached is not None:
         return cached
-    _stats["kis_calls"] += 1
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/investor-trend-estimate",
@@ -2410,7 +2447,6 @@ def fetch_asking(cfg, code):
     cached = _ttl_get(_asking_cache, code, ASKING_TTL)
     if cached is not None:
         return cached
-    _stats["kis_calls"] += 1
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
@@ -2457,7 +2493,6 @@ def fetch_investor_top(cfg, direction="buy", market="all", by="qty", limit=10):
         rows = _ttl_get(_inv_top_cache, key, INVESTOR_TOP_TTL)
         if rows is None:
             try:
-                _stats["kis_calls"] += 1
                 data = kis_get(
                     cfg,
                     "/uapi/domestic-stock/v1/quotations/foreign-institution-total",
@@ -2539,6 +2574,41 @@ MINUTE_DAY_END = 20 * 60
 def db_conn():
     """읽기 전용 서버면 `mode=ro` 로 열린다 — `marketdb` 가 정한다."""
     return marketdb.connect(timeout=10)
+
+
+# 통합(UN)이 과거를 잘라 줘서 잠긴 `backfill … done` 을 한 번 푸는 표.
+# 값을 바꾸면 그 판으로 다시 한 번 돈다 — 지수의 `INDEX_SPAN_FIX` 와 같은 꼴이다.
+BARS_MKT_FIX = "barsfix:market"
+BARS_MKT_FIX_VER = "2026-10-02-un-alt"
+
+
+def _unlock_bars_backfill():
+    """`backfill … done` 중 주·월·년봉 것을 **한 번** 지운다.
+
+    **이것이 없으면 고쳐도 화면이 안 바뀐다.** `fetch_bars_back` 은 끝까지
+    훑고도 못 채우면 `done` 을 찍는데, 2026-10-02 까지 그 「못 채움」 의 원인이
+    **통합(UN)이 과거를 덜 주는 것**이었다. 원인을 고쳐도 그 표가 남아 있으면
+    `get_chart` 의 `want_more` 가 거짓이라 **다시 받지 않는다.**
+
+    지우면 다음 조회에서 과거를 한 번 더 훑고, 그때 KRX 되묻기가 걸린다.
+
+    **일봉은 안 지운다.** 2026-10-02 실측에서 일봉은 통합으로도 100봉이 왔다
+    (`005935` · `069500` 둘 다). 통합으로 일봉까지 0 이던 `091990` 은
+    **2023년 합병으로 상장폐지된 종목**이라 KRX 로 받아도 쓸 데가 없다 —
+    그 종목을 관심목록에서 빼는 것은 따로 올려 두었다.
+
+    **한 번만 돈다.** 매번 지우면 모든 종목이 열릴 때마다 과거를 다시 훑어
+    KIS 호출이 계속 늘어난다.
+    """
+    if _meta_get(BARS_MKT_FIX) == BARS_MKT_FIX_VER:
+        return 0
+    with _db_lock, db_conn() as conn:
+        cur = conn.execute(
+            "DELETE FROM sync_meta WHERE key LIKE 'backfill:%' "
+            "AND (key LIKE '%:W' OR key LIKE '%:M' OR key LIKE '%:Y')")
+        n = cur.rowcount or 0
+    _meta_set(BARS_MKT_FIX, BARS_MKT_FIX_VER)
+    return n
 
 
 def _prune_span_dupes():
@@ -2673,13 +2743,55 @@ def _meta_set_write(key, value, datetime):
         )
 
 
-def fetch_bars_from_kis(cfg, code, period, date_from, date_to):
-    """일/주/월/년봉. 같은 API 에서 기간 구분 코드만 바뀐다 (한 번에 최대 100개)."""
+def _ymd_gap(a, b):
+    """YYYYMMDD 두 개 사이의 날수. 못 읽으면 0."""
+    import datetime
+    try:
+        d1 = datetime.datetime.strptime(str(a), "%Y%m%d").date()
+        d2 = datetime.datetime.strptime(str(b), "%Y%m%d").date()
+    except (ValueError, TypeError):
+        return 0
+    return abs((d2 - d1).days)
+
+
+def _looks_truncated(rows, date_from):
+    """통합(UN)이 과거를 잘라 준 모양인가.
+
+    **값을 박지 않고 스스로 비교한다.** 「몇 봉 미만이면」 같은 수를 적으면
+    주기마다 다르고 종목마다 달라 그날 낡는다. 대신 **안 온 앞 구간**과
+    **받은 구간**의 길이를 견준다.
+
+        안 온 앞 구간 > 받은 구간   →  그 앞이 통째로 빠졌다고 본다
+
+    왜 이 셈이 드는가 —
+
+        005935 주봉   물은 범위 20210405~  ·  받은 것 20260914~20260928
+                      안 온 앞 5년 ≫ 받은 14일        →  **잘렸다**
+        끝까지 받은 종목   물은 범위 20150101~  ·  받은 것 20150105~20190xxx
+                      안 온 앞 4일 ≪ 받은 수년        →  정상 (상장 이전이다)
+
+    꽉 찬 응답은 보지 않는다 — 더 과거는 `fetch_bars_back` 의 다음 호출이
+    가져가고, 그때 다시 이 판정을 거친다.
+
+    **한 줄도 없으면 무조건 의심한다.** 2026-10-02 에 `091990` 이 통합으로
+    일봉까지 0 이었다(그 종목은 상장폐지라 KRX 로도 결과가 같지만, 0 을
+    「없다」 로 단정하지 않는 쪽이 맞다).
+    """
+    if len(rows) >= BARS_PER_CALL:
+        return False
+    if not rows:
+        return True
+    ts = [r["ts"] for r in rows]
+    return _ymd_gap(date_from, min(ts)) > _ymd_gap(min(ts), max(ts))
+
+
+def _bars_once(cfg, code, period, date_from, date_to, market):
+    """한 시장에 한 번 묻는다. 돌려주는 것은 봉 목록."""
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
         {
-            "FID_COND_MRKT_DIV_CODE": MARKET_DIV_CHART, "FID_INPUT_ISCD": code,
+            "FID_COND_MRKT_DIV_CODE": market, "FID_INPUT_ISCD": code,
             "FID_INPUT_DATE_1": date_from, "FID_INPUT_DATE_2": date_to,
             "FID_PERIOD_DIV_CODE": PERIODS[period]["kis"], "FID_ORG_ADJ_PRC": "0",
         },
@@ -2700,6 +2812,28 @@ def fetch_bars_from_kis(cfg, code, period, date_from, date_to):
             "volume": _num(r.get("acml_vol"), int),
         })
     return out
+
+
+def fetch_bars_from_kis(cfg, code, period, date_from, date_to):
+    """일/주/월/년봉. 같은 API 에서 기간 구분 코드만 바뀐다 (한 번에 최대 100개).
+
+    **통합(UN)으로 먼저 묻고, 과거가 잘려 온 모양이면 KRX(J)로 한 번 더 묻는다**
+    (2026-10-02 지시). 어느 쪽을 쓸지는 **더 많이 온 쪽**으로 정한다 —
+    「통합이 늘 많다」 도 「KRX 가 늘 많다」 도 참이 아니라서다. 분봉이 이미
+    같은 모양이다(`MARKET_DIV_CHART` 주석).
+
+    **되묻는 비용은 잘린 종목에만 든다.** 꽉 찬 응답은 판정에서 빠지므로
+    (`_looks_truncated`) 보통 종목은 호출이 늘지 않는다.
+    """
+    rows = _bars_once(cfg, code, period, date_from, date_to, MARKET_DIV_CHART)
+    if MARKET_DIV_CHART_ALT != MARKET_DIV_CHART and _looks_truncated(rows, date_from):
+        try:
+            alt = _bars_once(cfg, code, period, date_from, date_to, MARKET_DIV_CHART_ALT)
+        except Exception:
+            return rows              # 되묻다 실패하면 처음 받은 것을 쓴다
+        if len(alt) > len(rows):
+            return alt
+    return rows
 
 
 # 일/주/월/년봉은 한 번에 이만큼만 온다.
@@ -2741,7 +2875,30 @@ def fetch_bars_back(cfg, code, period, want):
     seen = {}
     date_to = datetime.date.today()
     span = datetime.timedelta(days=PERIODS[period]["span_days"])
+    cut = SPAN_CUT.get(period)
     done = False
+
+    # 년·월봉은 **구간으로 모은다** (2026-10-02). `ts` 로 모으면 같은 해가
+    # 두 줄 남는다 — `floor_to_span` 이 `date_from` 만 구간 첫날로 내리고
+    # **`date_to` 는 그대로 쓰기 때문이다.**
+    #
+    #     1회차  ~ 20261001 을 물었다   →  2026년 봉의 ts = 20261001
+    #     2회차  ~ 20260930 을 물었다   →  **같은 2026년인데 ts = 20260930**
+    #
+    # 뒤엣것은 「1월~9월 30일 누적」 이라 그 해 고가·저가가 빠져 있는데,
+    # `ts` 가 달라 서로 다른 봉으로 저장된다. `save_candles` 의 `SPAN_CUT`
+    # 지우기는 **넣기 전에 한 번** 도므로 같은 호출 안의 둘을 못 막는다.
+    # 2026-10-01 에 삼성전자우 년봉이 그렇게 두 줄이었다.
+    #
+    # **먼저 받은 것을 남긴다.** 1회차가 범위가 가장 넓고 `ts` 도 가장 크다 —
+    # `_prune_span_dupes` 의 「가장 큰 ts 가 최신」 과 같은 판정이다.
+    #
+    # ⚠️ **주봉·일봉은 이 길로 안 온다.** `SPAN_CUT` 에 없고, 그쪽은 `ts` 가
+    # 구간 첫날(주봉은 월요일)로 고정되어 구간 중간부터 물어도 안 어긋난다
+    # (2026-09-29 실측 · 겹침 0).
+    def span_key(r):
+        return r["ts"][:cut] if cut else r["ts"]
+
     for _ in range(max(1, -(-want // BARS_PER_CALL)) + 1):
         # 구간 중간부터 물으면 **부분 누적**이 온다 — `floor_to_span` 주석 참조.
         # 지수에서 찾은 병인데 같은 API 계열이라 종목에도 건다.
@@ -2749,15 +2906,19 @@ def fetch_bars_back(cfg, code, period, want):
             cfg, code, period,
             floor_to_span(date_to - span, period).strftime("%Y%m%d"),
             date_to.strftime("%Y%m%d"))
-        fresh = [r for r in rows if r["ts"] not in seen]
+        fresh = [r for r in rows if span_key(r) not in seen]
         for r in rows:
-            seen[r["ts"]] = r
+            k = span_key(r)
+            if k not in seen:         # 먼저 받은 것(더 넓은 범위)을 남긴다
+                seen[k] = r
         if not fresh:
             done = True               # 더 과거가 없다
             break
         if len(seen) >= want:
             break
-        oldest = min(seen)            # YYYYMMDD 문자열이라 사전순이 곧 날짜순
+        # **구간 키가 아니라 `ts` 에서 구한다.** 년봉은 키가 `2026`(4자리)이라
+        # 키로 날짜를 만들면 깨진다.
+        oldest = min(r["ts"] for r in seen.values())
         date_to = (datetime.datetime.strptime(oldest, "%Y%m%d").date()
                    - datetime.timedelta(days=1))
     if done or len(seen) < want:
@@ -2769,22 +2930,47 @@ def fetch_bars_back(cfg, code, period, want):
 
 
 def minute_market_div(hour):
-    """분봉을 어느 시장에서 받을까. **구간의 시각으로 정한다.**
+    """분봉을 **어느 시장부터 물어볼까.** 구간의 시각으로 정한다.
 
         정규장 09:00~15:30   J  (KRX)
         그 밖                UN (통합)
 
-    일봉과 달리 **분봉은 한쪽만으로는 못 채운다** (2026-09-17 실측).
+    ⚠️ **이것은 「먼저 물어볼 쪽」 이고 최종 선택이 아니다.**
+    `fetch_minutes_from_kis` 가 받아 보고 모자라면 **다른 쪽으로 한 번 더** 받는다.
 
-        08:30 프리마켓   J  0개      UN 30개   ← 넥스트레이드는 통합에만 있다
+    **일봉과 달리 분봉은 한쪽만으로는 못 채운다** (2026-09-17 실측).
+
+        08:30 프리마켓   J  0개      UN 30개
         10:30 장중       J 30개      UN 30개
         우선주 장중      J 30개      UN  0개   ← 통합은 값이 비어 온다
 
     삼성전자우 5분봉이 하루 종일 194,600원에 거래량 0 이었던 것이 이 때문이다.
-    통합으로 받아 놓고 "거래가 없는 종목" 으로 보고 있었는데, KRX 로 부르면
-    193,200원에 거래량이 정상으로 온다.
 
-    시세 표기 규칙(CLAUDE.md)이 현재가를 가르는 방식과 같다.
+    ── **「늘 `J`」 로 바꾸려다 시뮬레이션에서 뒤집혔다** (2026-10-01) ──
+
+    우선주가 `UN` 에서 전일 종가로 오는 것을 보고 「`J` 를 기본으로」 를
+    제안했는데, **33종목 × 4칸 × 양쪽(132칸) 실측에서 그 반대가 나왔다.**
+
+        **`J` 가 `UN` 보다 나쁜 칸   94개**
+        **`UN` 이 `J` 보다 나쁜 칸  25개**
+
+    `UN` 은 **통합(거래소+넥스트레이드)** 이라 보통주에서는 거래량이 더 많다.
+    `J` 로 통일하면 **보통주 94칸에서 거래가 깎인다.**
+
+    **`UN` 이 못 주는 것은 종류가 정해져 있다 — 우선주와 ETF 다.**
+
+        우선주  005935 · 005387 · 005385
+        ETF     069500 · 278530 · 102110 · 229200 · 233740 · 385540
+        모양    거래량>0 이 **0~1개** · 종가가 **1~2종**(전일 종가로 채움)
+                **37칸 / 132칸**이 그 모양이었다. 정상 칸은 종가가 여러 종이다
+
+    ⚠️ **위 2026-09-17 표의 「08:30 J 0개」 는 그때 값이고 지금은 아니다** —
+    `J` 가 프리마켓에도 온다(005930 29/30 · 035720 27/30). 그 줄을 믿고
+    「`J` 로 통일하면 프리마켓이 빈다」 고 적었다가 재서 뒤집었다.
+    **두 표 다 낡는다 — 고칠 때 다시 잰다.**
+
+    **그래서 시각 분기는 그대로 두고 폴백을 민감하게 한다** — 변경이 작고,
+    정규장에 `J` 를 먼저 묻는 2026-09-17 고침도 살아 있다.
     """
     try:
         m = int(hour[:2]) * 60 + int(hour[2:4])
@@ -2800,15 +2986,88 @@ def fetch_minutes_from_kis(cfg, code, hour=None):
     hour 를 주지 않으면 '지금까지' 를 기준으로 삼는다. 예전에는 기본값이
     "153000" 이어서, 장중에 최근 구간을 갱신할 때마다 15:00~15:30 자리에
     현재가로 채워진 가짜 봉이 생겼다 (2026-09-14 확인).
+
+    ── **받아 보고 시장을 고른다** (2026-10-01 지시) ──────────────
+
+    재권님이 005935(삼성전자우) 차트를 보시고 **「거래가 있는데 맘대로
+    그리는 거」** 로 찾으셨다. 증권사 화면에는 15:30 뒤에도 201,000 봉과
+    거래량이 있는데, 우리 화면은 **195,200(= 전일 종가)에 평평**했다.
+
+    **원인은 시장 구분이었다.** `minute_market_div` 가 시각으로만 골라
+    15:30 뒤를 `UN`(통합)으로 받는데, **우선주는 `UN` 에서 거래량 0 으로
+    오고 KIS 가 그 칸을 전일 종가로 채운다.**
+
+        2026-10-01 실측 (005935 · 각 30봉)
+        18:30  J  거래량>0 **30개** · 종가 200,500~201,500  ← 증권사 화면과 같다
+        18:30  UN 거래량>0  **0개** · 종가 **195,200** 하나 (= 전일 종가)
+        16:00  J  거래량>0   1개  · 종가 203,500 / 204,500
+        16:00  UN 거래량>0  **0개** · 종가 **195,200**
+
+    **시각으로는 고를 수 없다.** 그래서 **받아 보고 고른다** — 거래량 있는 봉이
+    **1개 이하**면 다른 쪽으로 한 번 더 받아 **더 많은 쪽**을 쓴다. 어느 쪽을
+    먼저 물을지는 `minute_market_div` 가 정한다 — **132칸 실측표가 거기 있다**
+    (`J` 가 나쁜 칸 94 · `UN` 이 나쁜 칸 25 · `UN` 이 못 주는 것은 **우선주와 ETF**).
+
+    ⚠️ **「전부 0 이면」 만으로는 샌다.** `UN` 이 **거래량 있는 봉 하나 + 나머지
+    전부 전일 종가**로 주는 모양이 있어서, 그 하나 때문에 폴백이 안 걸렸다.
+
+        2026-10-01 20:00 칸 (005935)
+        UN  봉 30 · 거래량>0 **1개**(20:00 봉 202,000) · 나머지 29개 **195,200**
+        J   봉 30 · 거래량>0 **30개** · 201,000~203,000
+
+    그래서 **19:30~19:55 가 전일 종가로 남았다.** `J` 를 먼저 물으면 그 모양이
+    안 나온다 — 위 실측에서 `J` 는 늘 27~30/30 이었다. **비율로 가르지 않는
+    이유**는 그 값을 박게 되기 때문이고, **먼저 물어보는 쪽을 바꾸는 것으로
+    푼다.**
+
+    **거래량 0 봉이 전부 거짓은 아니다.** 같은 날 15:35~15:55 의 204,500 ·
+    거래량 0 은 **정상**이다 — 15:30 마감 동시호가가 `V106213` 이고
+    넥스트레이드는 16:00 에 열려 **그 사이 거래가 없고 값은 마지막 체결가**다.
+    **거짓인 것은 「전일 종가가 들어온 칸」 이다.**
+
+    **비용은 「빈 구간에 한 번 더」** 다. 거래가 있는 구간은 그대로 한 번이다.
+
+    **둘 다 0 이면 먼저 받은 것을 쓴다.** 진짜로 거래가 없는 구간이고,
+    그때라도 **기본 시장 쪽 값이 실제 가격에 가깝다**(위 16:00 의 J 가
+    203,500 인데 UN 은 전일 종가였다). 여기서 봉을 버리면
+    `fetch_minutes_day` 의 「없는 칸만 받기」 가 그 칸을 **바퀴마다 다시
+    받아** 느림이 되돌아온다 — 그래서 버리지 않는다.
     """
     if hour is None:
         m = minute_scan_start()
         hour = "%02d%02d00" % (m // 60, m % 60)
+    first = minute_market_div(hour)
+    out = _minutes_one_market(cfg, code, hour, first)
+    nz = sum(1 for b in out if (b["volume"] or 0) > 0)
+    # ⚠️ **「전부 0 이면」 으로는 샌다 — 「1개 이하」 로 본다** (2026-10-01).
+    #
+    # `UN` 이 **거래량 있는 봉 하나 + 나머지 전부 전일 종가**로 주는 모양이
+    # 있다. 그 하나 때문에 폴백이 안 걸려 **나머지 29개가 전일 종가로
+    # 남았다** — 재권님이 19:30~19:55 에서 보신 자리다.
+    #
+    #     2026-10-01 20:00 칸 (005935)
+    #     UN  봉 30 · 거래량>0 **1개**(20:00 봉 202,000) · 나머지 **195,200**
+    #     J   봉 30 · 거래량>0 **30개** · 201,000~203,000
+    #
+    # 37칸 / 132칸이 그 모양이었고 그중 **9칸이 정확히 1개**였다.
+    # `not out`(빈 응답)도 `nz == 0` 으로 함께 걸린다.
+    if nz <= 1:
+        other = "UN" if first == "J" else "J"
+        alt = _minutes_one_market(cfg, code, hour, other)
+        # **더 나은 쪽만 쓴다.** 둘 다 1개 이하인 칸(거래가 드문 종목)에서
+        # 엉뚱한 쪽으로 바꾸지 않는다
+        if sum(1 for b in alt if (b["volume"] or 0) > 0) > nz:
+            return alt
+    return out
+
+
+def _minutes_one_market(cfg, code, hour, div):
+    """한 시장(`J` KRX · `UN` 통합)에서 분봉 30개를 받는다."""
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
         {
-            "FID_ETC_CLS_CODE": "", "FID_COND_MRKT_DIV_CODE": minute_market_div(hour),
+            "FID_ETC_CLS_CODE": "", "FID_COND_MRKT_DIV_CODE": div,
             "FID_INPUT_ISCD": code, "FID_INPUT_HOUR_1": hour,
             "FID_PW_DATA_INCU_YN": "Y",
         },
@@ -2864,7 +3123,39 @@ def fetch_minutes_day(cfg, code):
     """
     bars = {}
     t = minute_scan_start()
+    start = t                          # 지금 속한 칸 — **자라는 중**이다
+    have = _minutes_have_today(code)
     while t >= MINUTE_DAY_START:
+        # ── **이미 있는 칸은 건너뛴다** (2026-10-01 지시) ──────────
+        #
+        # 재권님이 「실시간 순위 목록을 클릭할때 차트 로딩되는 속도 체크해봐
+        # 뭔가 넘 느린데」 로 찾으셨다.
+        #
+        # `_minutes_need_day` 의 **2번(마지막 봉이 `MINUTE_REFILL_GAP` 넘게
+        # 오래됐나)이 장 밖에서는 거의 늘 참**이다 — 거래가 뜸한 종목은
+        # 넥스트레이드 시간대에 봉이 안 생기기 때문이다. 그래서 **누를 때마다
+        # 08:00 부터 전부 다시 받았다.**
+        #
+        #     호출 횟수   **18~25번** (시각에 따라 — 16:50 에 18 · 20:00 뒤 25)
+        #     실측        005385 를 눌러 **차트가 그려지기까지 4035ms**
+        #                 (종목 이름은 36ms 에 바뀐다 — 이름만 먼저 바뀐다)
+        #
+        # **2번이 메우려는 것은 「마지막 봉 이후」 뿐이고, 앞쪽 구멍은
+        # 1번(`dayfill`)이 이미 본다** (위 `_minutes_need_day` 주석의
+        # 삼성전자우 09:00~10:15 건). 그래서 **없는 칸만** 받는다.
+        #
+        # **기대 봉 수를 박지 않는다.** 「그 칸에 봉이 하나라도 있나」 만
+        # 본다 — 거래가 없어 1개뿐인 칸도 KIS 가 그만큼만 주므로 맞다
+        # (「검사 도구에 대상 값을 박지 않는다」 와 같은 자리다).
+        #
+        # ⚠️ **자라는 중인 칸은 늘 받는다.** 거기는 봉이 있어도 아직 는다.
+        # ⚠️ **`t` 는 30의 배수가 아니다** — `minute_scan_start()` 가 지금 시각
+        # 그대로여서 18:29 면 1109 로 시작한다. 칸을 30의 배수로 만들어
+        # 맞춰 보면 **영영 안 맞는다**(2026-10-01 에 그렇게 썼다가 「건너뛴
+        # 칸 0」 으로 드러났다). 그 시각부터 **과거 30분**이 한 칸이다.
+        if t != start and have and not have.isdisjoint(range(t - 29, t + 1)):
+            t -= 30
+            continue
         hour = "%02d%02d00" % (t // 60, t % 60)
         try:
             for b in fetch_minutes_from_kis(cfg, code, hour):
@@ -2873,6 +3164,33 @@ def fetch_minutes_day(cfg, code):
             pass          # 해당 구간에 데이터가 없을 수 있다. 계속 진행.
         t -= 30
     return sorted(bars.values(), key=lambda x: x["ts"])
+
+
+def _minutes_have_today(code):
+    """오늘 DB 에 있는 분봉의 **분 단위 시각** 집합.
+
+    `1m` 과 `5m` 을 함께 본다 — 어느 쪽으로 저장돼 있어도 「그 칸은 받아
+    두었다」 는 뜻이기 때문이다. 읽지 못하면 **빈 집합**을 돌려 전부 받는
+    쪽으로 간다(덜 받아 구멍이 남는 것보다 낫다).
+    """
+    try:
+        with _db_lock, db_conn() as conn:
+            rows = conn.execute(
+                "SELECT ts FROM candles WHERE code = ? AND period IN ('1m', '5m')"
+                " AND ts LIKE ?",
+                (code, _today_kst() + "%"),
+            ).fetchall()
+    except Exception:
+        return set()
+    out = set()
+    for r in rows:
+        ts = r["ts"]
+        if len(ts) >= 12:
+            try:
+                out.add(int(ts[8:10]) * 60 + int(ts[10:12]))
+            except ValueError:
+                pass
+    return out
 
 
 # 마지막 봉이 이보다 오래됐으면 최근 구간만 받지 않고 하루치를 다시 모은다.
@@ -2890,7 +3208,7 @@ MINUTE_REFILL_GAP = 60
 # 미리 다운받아서 가지고 있다가 마우스 올리면 보여지는거지?").
 # 코스피 시가총액 상위 순으로 간다.
 #
-# ⚠️ **화면이 느려지면 안 된다.** 모든 KIS 호출이 초당 5건 줄에 서므로,
+# ⚠️ **화면이 느려지면 안 된다.** 모든 KIS 호출이 초당 10건 줄에 서므로,
 # 미리 받기가 연달아 부르면 그 뒤에 온 화면 요청이 밀린다. 종목 사이에
 # 쉬어서 그 틈으로 화면 요청이 들어가게 한다.
 PREFILL_TOP = 100          # 코스피 상위 몇 종목까지
@@ -2910,7 +3228,7 @@ PREFILL_ROUND_SEC = 1800   # 한 바퀴 돌고 쉬는 시간. 실제 호출은 d
 #
 # 위 3.5 초는 **화면이 없을 때** 기준이다. 종목 하나가 하루치 5분봉을 받느라
 # KIS 를 스물몇 번 부르므로, 쉬는 시간을 그만큼 잡아도 초당 3회쯤을 계속 쓴다.
-# 예산이 초당 5회라 화면 몫이 2회밖에 안 남는다.
+# **그때 예산이 초당 5회라** 화면 몫이 2회밖에 안 남았다 (지금은 10회다).
 #
 # **실측 (2026-09-18)** — 브라우저를 하나도 안 띄운 상태에서
 #
@@ -2944,7 +3262,7 @@ PREFILL_BUSY_CALL_GAP = 2.0    # 화면이 보고 있을 때 미리받기 호출
 #     화면을 막 열었을 때        4.74 ~ 6.42초   ← 이것이 남아 있었다
 #
 # 그래서 평소에도 호출 사이에 이만큼 둔다. 미리받기가 초당 두 번쯤이 되어
-# 예산 다섯 중 셋이 늘 비어 있고, 화면이 열리는 순간 그 자리로 들어간다.
+# **예산 열 중 여덟이** 늘 비어 있고, 화면이 열리는 순간 그 자리로 들어간다.
 # 한 바퀴가 느려지지만 하루 한 번 도는 일이라 잃는 것이 없다.
 PREFILL_IDLE_CALL_GAP = 0.3    # 화면이 없을 때도 두는 여유
 PREFILL_THREAD_NAME = "prefill-5m"
@@ -4046,6 +4364,7 @@ class Handler(SimpleHTTPRequestHandler):
                     self._send_json({"ok": True, "data": hit[1], "cached": True})
                     return
                 _relay_stat["misses"] += 1
+                _relay_times.append(now)       # `calls1hRelayed` 가 이것을 센다
                 relay_data = kis_get(cfg, kis_path, relay_params, tr)
                 _relay_cache[ckey] = (now, relay_data)
                 if len(_relay_cache) > RELAY_CACHE_MAX:
@@ -4448,6 +4767,16 @@ def main():
     #   미리받기  KIS 를 가장 많이 부른다. 여기서 끄는 것이 --slow 의 핵심이다
     #   공시      OpenDART 하루 한도를 메인 서버와 나눠 쓰게 된다
     #   뉴스 수집  같은 market.db 에 서버 둘이 쓰고, **텔레그램이 두 번 간다**
+    # 통합(UN)이 과거를 잘라 줘서 잠긴 backfill 표를 한 번 푼다 (위 주석 참조).
+    # **겹친 봉 정리보다 먼저 둔다** — 푼 뒤에 다시 받아야 겹침이 생기는데,
+    # 받는 것은 조회 때이고 정리는 지금이라 순서가 섞이지 않는다.
+    try:
+        _unlocked = _unlock_bars_backfill()
+        if _unlocked:
+            print("  주·월·년봉 다시 받기: 잠겨 있던 %d개를 풀었습니다" % _unlocked)
+    except Exception as e:
+        print("  주·월·년봉 다시 받기: 건너뜁니다 (%s)" % type(e).__name__)
+
     # 한 구간에 여러 줄이 쌓인 것을 치운다 (SPAN_CUT 주석 참조).
     # 고침이 들어오기 전에 쌓인 것은 저절로 안 없어진다 — 여기서 한 번 치운다.
     try:
