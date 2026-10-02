@@ -12,47 +12,31 @@
    탭을 닫으면 지워진다. 시세는 하루만 지나도 쓸모가 없는데 localStorage 에
    두면 내일 아침에 어제 값이 먼저 뜬다. 탭 안에서 오가는 동안만 살면 된다.
 
-   ── 적어둔 값을 믿지 않는다 ──
-   값마다 시각을 함께 넣고, 너무 묵으면 없는 셈 친다. 그리고 화면에는
-   "묵은 값" 이라는 표시가 서야 한다 — 그건 부르는 쪽 몫이다.
+   ── 버리지 않고, 몇 분 전 값인지 적는다 (2026-10-02 지시) ──
+   값마다 시각을 함께 넣는다. **얼마나 묵었든 버리지 않는다** — 재권님 말씀
+   「직전에 받은값 이여 할거같은데」. 화면에는 "○분 전 값" 이라는 표시가
+   서야 한다 — 그건 부르는 쪽 몫이다(`frame.js` 의 `markStale`).
    묵은 숫자를 실시간인 양 보여주면 데이터 규칙에 어긋난다.
    ========================================================================== */
 
-import { marketPhase } from '../utils/format.js';
-
 const PREFIX = 'kh:last:';
 
-/* 얼마나 지나면 버릴 것인가 — **장이 도는지에 따라 다르다** (2026-09-18 지시).
+/* **묵었다고 버리지 않는다** (2026-10-02 지시 — 「직전에 받은값 이여 할거같은데」).
  *
- *   장중 · 단일가   5분.  값이 계속 바뀌므로 오래된 것은 쓸모가 없다
- *   그 밖           12시간. 값이 멈춰 있어 어제 것이 오늘 아침까지 맞다
+ * 전에는 장중 5분 · 장 밖 12시간 · 목록 6시간이 지나면 버렸다(2026-09-18 지시).
+ * 그래서 새로고침하면 **맞을 수도 있는 값을 버리고 빈 칸**부터 보였다. 버려도
+ * 서버를 더 묻지 않으므로 룰 위반은 아니었고, **보여 주는 방식**을 정한 것이다.
  *
- * 전에는 언제나 1분이었다. 그래서 장 마감 뒤에 화면을 열면 **맞는 값을
- * 버리고 빈 칸**을 보여줬다. 반대로 장중에 1분은 짧아, 잠깐 다른 탭에
- * 다녀오면 순위가 통째로 빈 칸이 됐다.
+ * 대신 **몇 분 전 값인지 화면에 적는다** — `load` 가 `ageMs` 를 함께 돌려주는
+ * 것이 그 때문이다. 서버 값이 오면 덮고 표시도 사라진다.
  *
- * **묵은 값을 쓸 때는 화면에 그렇다고 적어야 한다.** load 가 ageMs 를 함께
- * 돌려주는 것이 그 때문이다 (아래 주석 참고). 급상승·급하락은 몇 분 만에도
- * 뒤집히므로, 부르는 쪽이 그 나이를 보고 더 눈에 띄게 적는다.
+ * **며칠 뒤 지우는 장치를 두지 않는다.** `sessionStorage` 라 탭을 닫으면
+ * 사라진다. 탭을 밤새 열어 두었다 새로고침하면 어제 값이 뜨는데, 그때도
+ * 「○시간 전 값」 이 함께 서므로 실시간인 양 보이지 않는다.
+ *
+ * `slow` 는 그대로 받아 적어 둔다. 지금은 버리는 기준에 안 쓰지만, 부르는
+ * 쪽(`home.js` 의 목록)이 넘기고 있어 뜻을 남긴다 — 「하루에 한 번 바뀌는 값」.
  */
-const MAX_AGE_LIVE_MS = 5 * 60_000;
-const MAX_AGE_CLOSED_MS = 12 * 60 * 60 * 1000;
-
-/* 값이 움직이는 시간인가. KRX 가 도는 동안만 참이다 */
-function marketLive() {
-  try {
-    const id = marketPhase().id;
-    return id === 'regular' || id === 'single';
-  } catch { return true; }        // 못 읽으면 짧은 쪽으로 (안전한 쪽)
-}
-
-function maxAge(slow) {
-  if (slow) return MAX_AGE_SLOW_MS;
-  return marketLive() ? MAX_AGE_LIVE_MS : MAX_AGE_CLOSED_MS;
-}
-
-/* 목록은 하루에 한 번 바뀐다. 시세보다 훨씬 오래 들고 있어도 된다. */
-const MAX_AGE_SLOW_MS = 6 * 60 * 60 * 1000;
 
 /* 한 항목이 너무 크면 sessionStorage 가 통째로 막힌다 (보통 5MB).
    200종목 시세가 대략 40KB 라 넉넉하지만, 위쪽은 막아 둔다. */
@@ -71,7 +55,7 @@ export function save(key, value, { slow = false } = {}) {
   }
 }
 
-/* 저장해 둔 것을 돌려준다. 없거나 너무 묵었으면 null.
+/* 저장해 둔 것을 돌려준다. 없으면 null — **묵었다고 null 이 되지 않는다.**
 
    { value, ageMs } 로 돌려주는 이유 — 부르는 쪽이 "몇 초 전 값" 인지
    화면에 적을 수 있어야 한다. */
@@ -81,12 +65,7 @@ export function load(key) {
     if (!raw) return null;
     const box = JSON.parse(raw);
     if (!box || typeof box.at !== 'number') return null;
-    const ageMs = Date.now() - box.at;
-    if (ageMs > maxAge(box.slow)) {
-      sessionStorage.removeItem(PREFIX + key);
-      return null;
-    }
-    return { value: box.v, ageMs };
+    return { value: box.v, ageMs: Math.max(0, Date.now() - box.at) };
   } catch {
     return null;
   }
