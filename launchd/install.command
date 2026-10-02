@@ -151,11 +151,20 @@ for f in "$HERE"/kr.kjcstudio.*.plist; do
 
   # 이미 올라가 있으면 내렸다 다시 올린다. 안 그러면 옛 설정으로 계속 돈다.
   launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
-  if launchctl bootstrap "gui/$(id -u)" "$DEST/$name" 2>/dev/null; then
-    echo "  올렸습니다: $name"
+  # bootout 은 내리기를 **시작**만 하고 돌아온다. 곧바로 bootstrap 하면 아직 내려가는 중이라
+  # `Bootstrap failed: 5: Input/output error` 로 한 번 실패한다 (2026-10-01 · 8768 포함 세 번).
+  # 2초씩 쉬며 세 번까지 해 보고, 끝내 안 되면 launchctl 의 말을 그대로 보여 준다(삼키지 않는다).
+  ok=0; err=""
+  for try in 1 2 3; do
+    if err=$(launchctl bootstrap "gui/$(id -u)" "$DEST/$name" 2>&1); then ok=1; break; fi
+    sleep 2
+  done
+  if [ "$ok" = "1" ]; then
+    [ "$try" = "1" ] && echo "  올렸습니다: $name" || echo "  올렸습니다: $name  (${try}번째에 — 앞은 내려가는 중이었다)"
     n=$((n + 1))
   else
-    echo "  ⚠️ 못 올렸습니다: $name  (포트를 다른 것이 잡고 있을 수 있습니다)"
+    echo "  ⚠️ 못 올렸습니다: $name  — $err"
+    echo "     (세 번 다 실패. 포트를 다른 것이 잡고 있을 수 있습니다)"
   fi
 done
 

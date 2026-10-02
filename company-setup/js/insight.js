@@ -45,3 +45,22 @@
     ul.innerHTML = '<li class="in-empty">불러오지 못함</li>';
   }
 })();
+
+// 종목 분석 — data/stock-analysis.json 의 items 를 날짜 최신순으로 그린다 (2026-10-02 지시).
+// 항목 모양: { "date": "2026-10-02", "code": "005930", "name": "삼성전자", "title": "…", "summary": "…", "page": "(있으면) 모달로 열 페이지" }
+(async () => {
+  const ul = document.querySelector('[data-analysis]');
+  if (!ul) return;
+  const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  try {
+    const r = await fetch('data/stock-analysis.json', { cache: 'no-store' });
+    const items = ((await r.json()).items || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    // page 가 있으면 그 페이지를 모달로 연다 — href 는 남겨 새 탭 · 직접 주소가 그대로 된다 (모달 룰)
+    const head = x => x.page ? `<a href="${esc(x.page)}" data-modal="page">${esc(x.title)}</a>` : `<span>${esc(x.title)}</span>`;
+    ul.innerHTML = items.length ? items.map(x => `<li><div class="in-li">${head(x)}
+      <div class="in-meta">${x.name ? `<span class="in-kind">${esc(x.name)}</span>` : ''}${esc(x.summary)} · ${esc(x.date)}</div></div></li>`).join('')
+      : '<li class="in-empty">아직 분석이 없습니다</li>';
+  } catch (e) {
+    ul.innerHTML = '<li class="in-empty">불러오지 못함</li>';
+  }
+})();

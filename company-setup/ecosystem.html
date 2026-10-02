@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI 생태계 · Insight</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css" />
+<!-- AI 생태계 지도 (2026-10-02 지시 — 「왼쪽에서 오른쪽으로」 · 종목 분석 칸에서 모달로 연다).
+     Insight 첫 화면 모달이 이 페이지를 그대로 띄운다 — 주소로 직접 들어와도 같은 것이 열린다 -->
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text-primary); font-family: 'Noto Sans KR', sans-serif; }
+  .wrap { padding: 22px 20px 28px; display: grid; grid-template-columns: 1fr 240px; gap: 20px; min-width: 1180px; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 18px; }
+
+  .map { position: relative; display: grid; grid-template-columns: repeat(5, 1fr); column-gap: 46px; align-items: center; }
+  svg.links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  /* 선 색은 종류를 뜻한다 — 글씨가 아닌 표시라 색을 그대로 쓴다 (루트 CLAUDE.md 「색 바탕 위의 글씨」) */
+  .map { --c-demand: rgb(var(--kh-ok-rgb)); --c-chip: rgb(var(--accent-rgb)); --c-power: rgb(var(--kh-warn-rgb)); }
+  svg.links path { fill: none; stroke-width: 1.8; stroke-dasharray: 6 6; opacity: .55; transition: opacity .15s, stroke-width .15s; }
+  svg.links path.demand { stroke: var(--c-demand); }
+  svg.links path.chip   { stroke: var(--c-chip); }
+  svg.links path.power  { stroke: var(--c-power); }
+  /* 흐름 — 점선이 왼쪽에서 오른쪽으로 흘러간다 (돈이 가는 방향) */
+  .map.flow svg.links path { animation: eco-flow 1.2s linear infinite; }
+  @keyframes eco-flow { to { stroke-dashoffset: -12; } }
+  .map.focus svg.links path { opacity: .12; }
+  .map.focus svg.links path.on { opacity: 1; stroke-width: 3; }
+  .map.only-demand svg.links path:not(.demand), .map.only-chip svg.links path:not(.chip),
+  .map.only-power svg.links path:not(.power) { opacity: .06; }
+  @media (prefers-reduced-motion: reduce) { .map.flow svg.links path { animation: none; } }
+
+  /* 병목 — 한 회사 · 한 지역이 공급을 쥔 자리. 빨간 고리가 맥박친다 */
+  .choke::after { content: ''; position: absolute; inset: -5px; border-radius: 18px; pointer-events: none;
+                  box-shadow: 0 0 0 2px var(--kh-danger); animation: eco-pulse 1.8s ease-out infinite; }
+  @keyframes eco-pulse { 0% { opacity: .9; } 70% { opacity: 0; transform: scale(1.06); } 100% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .choke::after { animation: none; } }
+
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 18px; font-size: 12px; }
+  .bar button { font: inherit; border: 0; border-radius: 99px; padding: 5px 12px; cursor: pointer;
+                background: var(--bg-card); color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; }
+  .bar button.is-on { background: var(--accent-faint); color: var(--accent); font-weight: 700; }
+  .bar .sw { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+  .bar .ring { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 2px var(--kh-danger); display: inline-block; }
+  .bar .sep { width: 1px; height: 16px; background: var(--border-strong); margin: 0 4px; }
+  .panel .choke-note { background: var(--kh-danger-faint); color: var(--kh-danger); border-radius: 8px; padding: 6px 9px; margin-top: 10px; font-size: 12px; line-height: 1.5; }
+
+  .col { display: flex; flex-direction: column; gap: 14px; }
+  .col .gap { height: 22px; }
+  .col-h { color: var(--text-muted); font-size: 11px; font-weight: 700; margin-bottom: -4px; }
+  .node { background: var(--bg-card); border-radius: 14px; padding: 11px 12px 13px; text-align: center;
+          cursor: pointer; position: relative; z-index: 1; transition: box-shadow .15s, opacity .15s; }
+  .node:hover, .cell:hover { box-shadow: var(--shadow-md); }
+  .node .k { display: inline-block; background: var(--accent-faint); color: var(--accent); font-size: 11px; font-weight: 700;
+             padding: 2px 9px; border-radius: 99px; margin-bottom: 7px; }
+  .node .t { font-weight: 700; font-size: 14px; }
+  .node .d { color: var(--text-secondary); font-size: 11.5px; margin-top: 4px; line-height: 1.5; }
+  .cell { background: var(--bg-card); border-radius: 10px; padding: 8px 12px; cursor: pointer; position: relative; z-index: 1;
+          transition: box-shadow .15s, opacity .15s; }
+  .cell .k { color: var(--accent); font-weight: 700; font-size: 12px; display: block; }
+  .cell .t { font-weight: 500; font-size: 12.5px; }
+
+  .map.focus .node, .map.focus .cell { opacity: .35; }
+  .map.focus .lit { opacity: 1; }
+  .map.focus .sel { box-shadow: 0 0 0 2px var(--accent); }
+
+  .panel { background: var(--bg-card); border-radius: 14px; padding: 16px; align-self: start; }
+  .panel h2 { font-size: 15px; margin: 0 0 10px; }
+  .panel .empty { color: var(--text-muted); font-size: 13px; line-height: 1.6; }
+  .panel dl { margin: 0; font-size: 13px; }
+  .panel dt { color: var(--text-muted); font-size: 12px; margin-top: 10px; }
+  .panel dd { margin: 2px 0 0; line-height: 1.55; }
+  .panel .muted { color: var(--text-muted); }
+</style>
+<!-- 세계 지도 (2026-10-02 지시 — 「지도랑 위치랑 박아놓는거」). 지도 그림은 맥미니 /Users/kjc/data/maps 의
+     PMTiles 다섯 조각을 서버가 /maps/ 로 낸다(부분 받기 · kis_proxy MAPS_DIR). 라이브러리는 아직 CDN 이다. maplibre 는 5.x — 6 은 ESM 만 있어 script 로 못 싣는다 -->
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/pmtiles@4.5.0/dist/pmtiles.js"></script>
+<script src="https://unpkg.com/@protomaps/basemaps@5.7.2/dist/basemaps.js"></script>
+<style>
+  .views { display: inline-flex; background: var(--bg-elevated); border-radius: 10px; padding: 3px; margin: 0 0 14px; }
+  .views button { font: inherit; font-size: 13px; border: 0; background: none; padding: 6px 16px; border-radius: 8px;
+                  cursor: pointer; color: var(--text-secondary); }
+  .views button.is-on { background: var(--bg-card); color: var(--text-primary); font-weight: 700; }
+  /* 두 화면이 같은 높이를 쓴다 — 바꿔 봐도 모달 안 자리가 안 움직인다 (「보는 것을 바꿔도 자리는 그대로다」) */
+  .view { height: 660px; }
+  .view[hidden] { display: none; }
+  #geo { height: 620px; border-radius: 14px; overflow: hidden; }
+  .pin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--bg-card); cursor: pointer; }
+  .pin.demand { background: rgb(var(--kh-ok-rgb)); } .pin.chip { background: rgb(var(--accent-rgb)); } .pin.power { background: rgb(var(--kh-warn-rgb)); }
+  .pin.choke::after { inset: -6px; border-radius: 50%; }
+  .pin .lb { position: absolute; left: 16px; top: -4px; white-space: nowrap; font-size: 11px; font-weight: 700;
+             background: var(--bg-card); color: var(--text-primary); padding: 1px 6px; border-radius: 6px; pointer-events: none; }
+  #geo.far .pin .lb { display: none; }
+  .geo-note { color: var(--text-muted); font-size: 11.5px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>AI 생태계 — 돈이 흐르는 길</h1>
+    <p class="sub">왼쪽에서 오른쪽으로 — 서비스가 돈을 벌면 모델 · 데이터센터를 거쳐 칩과 전력으로 흘러간다. 칸을 누르면 이어진 길이 켜진다 · 빨간 고리는 병목</p>
+    <!-- 참고: Globaia AI 공급망 지도 — 흐름 움직임 · 선 종류 색 · 병목 고리 (2026-10-02 재권님이 고르심) -->
+
+    <div class="views" id="views"><button data-v="flow" class="is-on">흐름도</button><button data-v="geo">세계 지도</button></div>
+
+    <div class="view" id="v-flow">
+    <div class="bar" id="bar">
+      <button data-act="flow" class="is-on">▶ 흐름</button>
+      <span class="sep"></span>
+      <button data-only="demand"><span class="sw" style="background:rgb(var(--kh-ok-rgb))"></span>수요 · 데이터</button>
+      <button data-only="chip"><span class="sw" style="background:rgb(var(--accent-rgb))"></span>반도체</button>
+      <button data-only="power"><span class="sw" style="background:rgb(var(--kh-warn-rgb))"></span>전력</button>
+      <span class="sep"></span>
+      <button data-act="choke"><span class="ring"></span>병목만 보기</button>
+    </div>
+
+    <div class="map flow" id="map">
+      <svg class="links" id="links"></svg>
+
+      <div class="col">
+        <div class="col-h">수요</div>
+        <div class="node" data-id="svc"><span class="k">수요</span><div class="t">AI 서비스</div><div class="d">챗봇 · 에이전트 · 검색 · 코딩 도구</div></div>
+        <div class="cell" data-id="krsw"><span class="k">국내 AI 서비스</span><span class="t">네이버 · 카카오</span></div>
+      </div>
+
+      <div class="col">
+        <div class="col-h">모델</div>
+        <div class="node" data-id="model"><span class="k">모델</span><div class="t">파운데이션 모델</div><div class="d">OpenAI · Anthropic · Google · Meta</div></div>
+      </div>
+
+      <div class="col">
+        <div class="col-h">인프라</div>
+        <div class="node" data-id="cloud"><span class="k">인프라</span><div class="t">클라우드 · 데이터센터</div><div class="d">MS Azure · AWS · Google Cloud · Oracle</div></div>
+      </div>
+
+      <div class="col">
+        <div class="col-h">반도체 · 전력</div>
+        <div class="node choke" data-id="chip"><span class="k">칩 설계</span><div class="t">AI 가속기</div><div class="d">엔비디아 · AMD · 브로드컴</div></div>
+        <div class="node choke" data-id="mem"><span class="k">메모리</span><div class="t">HBM</div><div class="d">SK하이닉스 · 삼성전자 · 마이크론</div></div>
+        <div class="node choke" data-id="fab"><span class="k">제조</span><div class="t">파운드리 · 패키징</div><div class="d">TSMC · 삼성전자</div></div>
+        <div class="gap"></div>
+        <div class="node" data-id="pwr"><span class="k">전력</span><div class="t">전력 인프라</div><div class="d">만들고 · 보내고 · 식힌다</div></div>
+      </div>
+
+      <div class="col">
+        <div class="col-h">국내 종목</div>
+        <div class="cell" data-id="pcb"><span class="k">기판</span><span class="t">이수페타시스</span></div>
+        <div class="cell" data-id="test"><span class="k">테스트 소켓</span><span class="t">ISC · 리노공업</span></div>
+        <div class="cell" data-id="hbmeq"><span class="k">HBM 장비</span><span class="t">한미반도체</span></div>
+        <div class="gap"></div>
+        <div class="cell" data-id="power"><span class="k">전력기기</span><span class="t">HD현대일렉트릭 · LS일렉트릭 · 효성중공업</span></div>
+        <div class="cell" data-id="cable"><span class="k">전선</span><span class="t">LS · 대한전선</span></div>
+        <div class="cell" data-id="nuke"><span class="k">발전</span><span class="t">두산에너빌리티</span></div>
+        <div class="cell" data-id="cool"><span class="k">냉각</span><span class="t">(조사 전)</span></div>
+      </div>
+    </div>
+    </div>
+    <div class="view" id="v-geo" hidden>
+      <div id="geo"></div>
+      <div class="geo-note">점은 본사 · 주요 공장이 있는 도시에 박았다(도시 수준). 번지까지의 주소 확인은 다음 일이다 · 지도 © OpenStreetMap · Protomaps</div>
+    </div>
+  </div>
+
+  <aside class="panel" id="panel"></aside>
+</div>
+
+<script>
+// 연결 — [왼쪽, 오른쪽]. 선은 칸의 실제 위치를 재서 그리므로 칸을 옮기거나 더해도 따라간다.
+// EXTRA 는 칸을 눌렀을 때만 켜지는 곁가지 — 늘 켜 두면 선이 칸 뒤로 얽힌다
+// 셋째 칸은 선 종류 — demand(수요·데이터) · chip(반도체) · power(전력)
+const LINKS = [
+  ['svc','model','demand'], ['svc','krsw','demand'], ['model','cloud','demand'],
+  ['cloud','chip','chip'], ['cloud','mem','chip'], ['cloud','fab','chip'], ['cloud','pwr','power'],
+  ['chip','pcb','chip'], ['chip','test','chip'], ['mem','hbmeq','chip'],
+  ['pwr','power','power'], ['pwr','cable','power'], ['pwr','nuke','power'], ['pwr','cool','power'],
+];
+const EXTRA = [ ['mem','test','chip'], ['mem','fab','chip'], ['chip','fab','chip'] ];
+
+// 칸마다 넣을 정보 — 나중에는 분석 글(data/stock-analysis.json)과 이어 붙인다
+const INFO = {
+  svc:   { what: '사람과 기업이 돈을 내는 자리. 여기 매출이 늘어야 오른쪽 투자가 이어진다.', watch: '유료 이용자 수 · 기업 도입' },
+  krsw:  { what: '국내에서 AI 서비스를 내는 회사.', watch: '자체 모델 · 수익화' },
+  model: { what: '거대 모델을 학습시키는 회사들. 학습·추론에 쓰는 연산이 곧 칩 수요다.', watch: '새 모델 발표 · 학습 투자 규모' },
+  cloud: { what: '빅테크의 설비 투자(capex)가 칩·전력으로 흘러가는 길목.', watch: '분기 capex 발표' },
+  chip:  { what: 'GPU · 맞춤형 칩(ASIC)을 설계한다.', watch: '데이터센터 매출 · 신제품 일정', choke: '한 회사 쏠림 — AI 가속기가 엔비디아에 몰려 있다' },
+  mem:   { what: 'AI 가속기 옆에 붙는 고대역폭 메모리. 국내 비중이 큰 자리.', watch: 'HBM 공급 계약 · 세대 전환', choke: '소수 공급 — HBM 을 만드는 회사가 셋뿐이다' },
+  fab:   { what: '칩을 실제로 만들고 메모리와 한 덩어리로 묶는다(첨단 패키징).', watch: '첨단 패키징 증설', choke: '지역 쏠림 — 첨단 공정 · 패키징이 TSMC(대만)에 몰려 있다' },
+  pwr:   { what: '데이터센터가 먹는 전기를 만들고 보내고, 서버 열을 식히는 쪽.', watch: '빅테크 전력 계약 · 송전망 투자' },
+  pcb:   { what: 'AI 서버·네트워크 장비에 들어가는 고다층 기판.', watch: '빅테크 서버 증설' },
+  test:  { what: '칩·메모리를 검사할 때 쓰는 소모품.', watch: '신규 칩 출시 수' },
+  hbmeq: { what: 'HBM 을 쌓아 붙이는 장비.', watch: '메모리 3사 수주' },
+  power: { what: '데이터센터에 전기를 넣는 변압기 · 배전 설비.', watch: '수주 잔고' },
+  cable: { what: '송전 · 데이터센터 전력선.', watch: '북미 송전망 투자' },
+  nuke:  { what: '전기를 만드는 쪽.', watch: '빅테크 전력 계약' },
+  cool:  { what: '서버 발열을 식히는 설비. 국내 종목은 아직 조사하지 않았다.', watch: '—' },
+};
+
+const map = document.getElementById('map'), svg = document.getElementById('links'), panel = document.getElementById('panel');
+const el = id => map.querySelector(`[data-id="${id}"]`);
+const EMPTY = '<h2>칸을 눌러 보세요</h2><div class="empty">그 칸의 설명 · 종목 · 볼 것 · 이어진 칸이 여기 뜹니다.</div>';
+let sel = null;
+
+function path(a, b, extra) {
+  const m = map.getBoundingClientRect(), A = el(a).getBoundingClientRect(), B = el(b).getBoundingClientRect();
+  if (Math.abs(A.left - B.left) < 4) {                      // 같은 열 — 오른쪽으로 둥글게 돌아 잇는다
+    const x = A.right - m.left, y1 = A.top + A.height / 2 - m.top, y2 = B.top + B.height / 2 - m.top;
+    if (!extra) return `M${A.left + A.width / 2 - m.left},${A.bottom - m.top} L${B.left + B.width / 2 - m.left},${B.top - m.top}`;
+    return `M${x},${y1} C${x + 30},${y1} ${x + 30},${y2} ${x},${y2}`;
+  }
+  const x1 = A.right - m.left, y1 = A.top + A.height / 2 - m.top, x2 = B.left - m.left, y2 = B.top + B.height / 2 - m.top;
+  const mx = (x1 + x2) / 2;
+  return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+}
+
+function draw() {
+  const touch = ([a, b]) => sel && (a === sel || b === sel);
+  svg.innerHTML =
+    LINKS.map(l => `<path class="${l[2]} ${touch(l) ? 'on' : ''}" d="${path(l[0], l[1], false)}"/>`).join('') +
+    EXTRA.filter(touch).map(l => `<path class="${l[2]} on" d="${path(l[0], l[1], true)}"/>`).join('');
+}
+
+function pick(id) {
+  sel = sel === id ? null : id;
+  map.classList.toggle('focus', !!sel);
+  map.querySelectorAll('[data-id]').forEach(n => n.classList.remove('lit', 'sel'));
+  if (!sel) { panel.innerHTML = EMPTY;
+document.getElementById('bar').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.act === 'flow') { b.classList.toggle('is-on'); map.classList.toggle('flow'); return; }
+  if (b.dataset.act === 'choke') {                    // 병목 칸만 남기고 흐리게
+    const on = b.classList.toggle('is-on');
+    map.classList.toggle('focus', on); map.querySelectorAll('[data-id]').forEach(n => n.classList.toggle('lit', on && n.classList.contains('choke')));
+    if (on) { sel = null; panel.innerHTML = EMPTY; draw(); }
+    return;
+  }
+  const k = b.dataset.only, was = b.classList.contains('is-on');   // 같은 단추를 다시 누르면 전부 보기
+  document.querySelectorAll('#bar [data-only]').forEach(x => x.classList.remove('is-on'));
+  map.classList.remove('only-demand', 'only-chip', 'only-power');
+  if (!was) { b.classList.add('is-on'); map.classList.add('only-' + k); }
+}); draw(); return; }
+  const near = new Set([sel]);
+  [...LINKS, ...EXTRA].forEach(([a, b]) => { if (a === sel) near.add(b); if (b === sel) near.add(a); });
+  near.forEach(i => el(i).classList.add('lit'));
+  const n = el(sel), info = INFO[sel] || {};
+  n.classList.add('sel');
+  const names = [...near].filter(i => i !== sel).map(i => el(i).querySelector('.t').textContent).join(' · ');
+  panel.innerHTML = `<h2>${n.querySelector('.k').textContent} — ${n.querySelector('.t').textContent}</h2>
+    <dl><dt>무엇인가</dt><dd>${info.what || '—'}</dd>
+    <dt>종목</dt><dd>${(n.querySelector('.d') || n.querySelector('.t')).textContent}</dd>
+    <dt>볼 것</dt><dd>${info.watch || '—'}</dd>
+    <dt>이어진 칸</dt><dd>${names}</dd>
+    ${info.choke ? `<div class="choke-note">병목 · ${info.choke}</div>` : ''}
+    <dt>최근 분석</dt><dd class="muted">아직 없음 — 종목 분석 글과 이어 붙일 자리</dd>
+    <dt>확인</dt><dd class="muted">예시 배치 — 아직 출처로 확인하지 않았다</dd></dl>`;
+  draw();
+}
+
+panel.innerHTML = EMPTY;
+map.addEventListener('click', e => { const n = e.target.closest('[data-id]'); if (n) pick(n.dataset.id); });
+addEventListener('resize', draw);
+document.fonts.ready.then(draw);
+
+// ── 세계 지도 ──
+// 점 하나 = 회사의 자리 하나. node 는 흐름도 칸 id — 점을 누르면 그 칸을 고른 것과 같다.
+// 좌표는 도시 수준이다(본사 · 주요 공장 도시). 번지 수준 확인은 아직 안 했다
+const SITES = [
+  { name: '엔비디아 본사',        node: 'chip',  at: [-121.96, 37.37] },  // 미국 산타클라라
+  { name: 'AMD 본사',             node: 'chip',  at: [-121.94, 37.35] },  // 미국 산타클라라
+  { name: '브로드컴 본사',        node: 'chip',  at: [-122.14, 37.44] },  // 미국 팰로앨토
+  { name: 'TSMC 본사 · 신주',     node: 'fab',   at: [120.99, 24.78] },   // 대만 신주
+  { name: 'TSMC 타이난',          node: 'fab',   at: [120.27, 23.11] },   // 대만 타이난
+  { name: 'TSMC 애리조나',        node: 'fab',   at: [-112.14, 33.75] },  // 미국 피닉스 북쪽
+  { name: 'SK하이닉스 이천',      node: 'mem',   at: [127.44, 37.25] },
+  { name: 'SK하이닉스 청주',      node: 'mem',   at: [127.42, 36.63] },
+  { name: '삼성전자 평택',        node: 'mem',   at: [127.05, 37.02] },
+  { name: '삼성전자 기흥 · 화성', node: 'fab',   at: [127.07, 37.21] },
+  { name: '마이크론 본사',        node: 'mem',   at: [-116.20, 43.53] },  // 미국 보이시
+  { name: '한미반도체 인천',      node: 'hbmeq', at: [126.66, 37.50] },
+  { name: '리노공업 부산',        node: 'test',  at: [129.03, 35.15] },
+  { name: '이수페타시스 대구',    node: 'pcb',   at: [128.60, 35.87] },
+  { name: 'HD현대일렉트릭 울산',  node: 'power', at: [129.31, 35.54] },
+  { name: '효성중공업 창원',      node: 'power', at: [128.68, 35.23] },
+  { name: '두산에너빌리티 창원',  node: 'nuke',  at: [128.62, 35.20] },
+  { name: '대한전선 당진',        node: 'cable', at: [126.65, 36.89] },
+  { name: '네이버 성남',          node: 'krsw',  at: [127.10, 37.36] },
+];
+// 점 색 = 그 칸으로 들어오는 선의 종류
+const TYPE_OF = id => (LINKS.find(l => l[1] === id) || [0, 0, 'demand'])[2];
+let geo = null;
+function buildGeo() {
+  maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile);
+  // 세계(z8) 위에 깊은 지역(z15) 넷을 겹친다 — 지역 안에서 크게 키우면 건물까지 나온다
+  const files = ['world-z8', 'korea-z15', 'taiwan-z15', 'siliconvalley-z15', 'phoenix-z15'];
+  const sources = {}, layers = [];
+  files.forEach((f, i) => {
+    sources[f] = { type: 'vector', url: `pmtiles://${location.origin}/maps/${f}.pmtiles`,
+                   attribution: i ? '' : '<a href="https://protomaps.com">Protomaps</a> © <a href="https://openstreetmap.org">OpenStreetMap</a>' };
+    basemaps.layers(f, basemaps.namedFlavor('light'), { lang: 'ko' })
+      .filter(l => i === 0 || l.type !== 'background')
+      .forEach(l => layers.push({ ...l, id: `${f}-${l.id}` }));
+  });
+  geo = new maplibregl.Map({
+    container: 'geo', center: [127, 32], zoom: 1.6,
+    style: { version: 8, glyphs: 'https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf',
+             sprite: 'https://protomaps.github.io/basemaps-assets/sprites/v4/light', sources, layers },
+  });
+  geo.addControl(new maplibregl.NavigationControl({ showCompass: false }));
+  // 멀리서 보면 이름표가 서로 겹친다 — 나라 하나가 화면에 찰 만큼 키웠을 때만 이름을 단다
+  const lbl = () => document.getElementById('geo').classList.toggle('far', geo.getZoom() < 5);
+  geo.on('zoom', lbl); lbl();
+  SITES.forEach(s => {
+    const d = document.createElement('div');
+    d.className = `pin ${TYPE_OF(s.node)}${el(s.node).classList.contains('choke') ? ' choke' : ''}`;
+    d.innerHTML = `<span class="lb">${s.name}</span>`;
+    d.addEventListener('click', ev => { ev.stopPropagation(); if (sel !== s.node) pick(s.node); });
+    new maplibregl.Marker({ element: d }).setLngLat(s.at).addTo(geo);
+  });
+}
+document.getElementById('views').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#views button').forEach(x => x.classList.toggle('is-on', x === b));
+  document.getElementById('v-flow').hidden = b.dataset.v !== 'flow';
+  document.getElementById('v-geo').hidden = b.dataset.v !== 'geo';
+  if (b.dataset.v === 'geo') { if (!geo) buildGeo(); else geo.resize(); } else draw();
+});
+draw();
+</script>
+</body>
+</html>
