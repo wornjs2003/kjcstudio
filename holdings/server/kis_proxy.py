@@ -29,6 +29,7 @@ import argparse
 import collections
 import json
 import os
+import shutil
 import sqlite3
 import struct
 import sys
@@ -142,6 +143,31 @@ _ALLOW_EXT = {".html", ".css", ".js", ".json",
               ".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico", ".woff2"}
 
 SECRETS_PATH = os.path.join(HOLDINGS_DIR, "secrets.json")
+
+# `/maps/` 로 내주는 **저장소 밖** 자리 (2026-10-02 지시).
+#
+# Insight 의 「AI 생태계 지도」 가 Protomaps PMTiles 를 쓰는데 다섯 조각 1.5GB 라
+# 저장소에 담을 수 없다. 브라우저는 그 파일을 **Range 로 조각만** 읽으므로
+# 정적 파일 내주기가 206 을 돌려줘야 한다(`_send_file_ranged`).
+#
+# ⚠️ **절대 경로다.** 8764(서비스방)는 자기 폴더(`/Users/kjc/service`)를 내주지만
+# 지도는 그 폴더가 아니라 **이 한 곳**을 가리킨다 — 외부접속에서도 같은 파일을
+# 봐야 하고, 1.5GB 를 폴더마다 복제할 수 없다.
+#
+# 경로를 박지 않는다 — `KJC_MAPS_DIR` 로 덮을 수 있다 (`marketdb` 의
+# `KJC_DB_PATH` 와 같은 모양). 기본값은 지금 파일이 있는 자리다.
+MAPS_URL = "/maps/"
+MAPS_DIR = (os.environ.get("KJC_MAPS_DIR") or "").strip() \
+    or "/Users/kjc/data/maps"
+
+# **그 폴더의 모든 것을 내주지 않는다** (2026-10-02 · 홈페이지_정리 지적).
+# 같은 자리에 변환 로그(`log-*.txt`)와 **`pmtiles` 실행 파일**이 함께 있는데,
+# 확장자를 안 가리면 그것까지 나간다 — 고치기 전 실측으로 둘 다 206 이었다.
+#
+# **「무엇이 아닌지」 가 아니라 「무엇인지」 로 적는다.** 막을 것을 세면 파일이
+# 하나 늘 때마다 「이건 예외인가」 를 따지게 되고, 안 따지면 저절로 나간다.
+# 지도 조각이 늘어도 확장자는 그대로이므로 이 목록은 안 낡는다.
+MAPS_EXTS = (".pmtiles",)
 TOKEN_CACHE_PATH = os.path.join(HOLDINGS_DIR, ".kis-token-cache.json")
 
 HOSTS = {
@@ -3855,7 +3881,139 @@ class Handler(SimpleHTTPRequestHandler):
         """
         if not (self.path or "").startswith("/api/"):
             self.send_header("Cache-Control", "no-cache")
+            # **Range 없는 응답에도 붙인다.** 브라우저는 이 헤더를 보고서야
+            # Range 를 쓴다 — 206 을 낼 수 있어도 알리지 않으면 통째로 받아간다.
+            # 한 곳에서 붙여야 `_send_file_ranged` 와 상속본 양쪽에 빠짐이 없다.
+            self.send_header("Accept-Ranges", "bytes")
         super().end_headers()
+
+    # ── 부분 받기(Range) ───────────────────────────────────────
+    #
+    # 상속본(`SimpleHTTPRequestHandler`)은 Range 를 **모른다** — 2026-10-02 실측으로
+    # `Range: bytes=0-9` 에 200 + 전체 길이를 돌려줬다. 1.5GB 지도 파일에서는
+    # 브라우저가 조각만 읽어야 하므로 206 이 필요하다.
+    #
+    # **단일 범위만 받는다.** 여러 범위(`bytes=0-9,20-29`)는 `multipart/byteranges`
+    # 를 만들어야 하는데 PMTiles 는 쓰지 않는다 — 안 쓰는 길을 만들면 그 길만
+    # 조용히 썩는다. 여러 범위가 오면 **Range 를 무시하고 통째로** 준다(규격이
+    # 허용하는 폴백이다).
+
+    def _parse_range(self, size):
+        """`Range` 헤더를 (시작, 끝) 으로. 없으면 `None`, 범위 밖이면 `False`.
+
+        **셋을 가른다** — 없는 것 · 못 읽는 것 · 범위 밖. 하나로 묶으면
+        416 을 내야 할 자리에 200 이 나간다.
+        """
+        raw = (self.headers.get("Range") or "").strip()
+        if not raw:
+            return None
+        if not raw.lower().startswith("bytes=") or "," in raw:
+            return None                      # 모르는 형태 · 여러 범위 → 통째로
+        spec = raw[6:].strip()
+        try:
+            if spec.startswith("-"):         # 뒤에서 N 바이트
+                n = int(spec[1:])
+                if n <= 0:
+                    return False
+                start, end = max(0, size - n), size - 1
+            else:
+                a, _, b = spec.partition("-")
+                start = int(a)
+                end = int(b) if b else size - 1
+        except ValueError:
+            return None                      # 숫자가 아니다 → 통째로
+        if start >= size or start > end:
+            return False                     # 416
+        return start, min(end, size - 1)
+
+    def _send_file_ranged(self, real, head_only=False):
+        """파일 하나를 내준다. `Range` 가 오면 206, 범위 밖이면 416.
+
+        `Accept-Ranges: bytes` 는 `end_headers` 가 붙인다 — 한 곳에서 붙여야
+        Range 없는 응답에도 빠지지 않는다(브라우저는 그 헤더를 보고 Range 를 쓴다).
+        """
+        try:
+            size = os.path.getsize(real)
+        except OSError:
+            self.send_error(404, "Not Found")
+            return
+
+        ctype = self.guess_type(real)
+        # `.pmtiles` 는 `mimetypes` 가 모른다. 내려받기용 덩어리로 둔다.
+        if real.endswith(".pmtiles"):
+            ctype = "application/octet-stream"
+
+        rng = self._parse_range(size)
+        if rng is False:
+            # **범위 밖**이라고 알려 준다. `Content-Range: bytes */크기` 가 규격이다.
+            self.send_response(416, "Requested Range Not Satisfiable")
+            self.send_header("Content-Range", "bytes */%d" % size)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
+        try:
+            f = open(real, "rb")
+        except OSError:
+            self.send_error(404, "Not Found")
+            return
+        with f:
+            if rng is None:
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(size))
+                self.end_headers()
+                if not head_only:
+                    shutil.copyfileobj(f, self.wfile)
+                return
+
+            start, end = rng
+            length = end - start + 1
+            self.send_response(206, "Partial Content")
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Range", "bytes %d-%d/%d" % (start, end, size))
+            self.send_header("Content-Length", str(length))
+            self.end_headers()
+            if head_only:
+                return
+            f.seek(start)
+            # 한꺼번에 읽지 않는다 — 1.5GB 파일에서 큰 범위가 오면 메모리로 다 올라온다.
+            left = length
+            while left > 0:
+                chunk = f.read(min(64 * 1024, left))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                left -= len(chunk)
+
+    def _serve_maps(self, head_only=False):
+        """`/maps/…` 를 `MAPS_DIR` 에서 내준다. **저장소 밖이므로 직접 막는다.**
+
+        `_static_block` 은 「저장소 밖이면 거부」 라서 이 길에는 쓸 수 없다.
+        대신 같은 방식으로 판정한다 — **합친 뒤 실제 경로로 본다.**
+        `..` · `%2e%2e` 같은 우회는 `realpath` 가 정규화하므로 그 결과를 보면
+        우회를 따로 막을 필요가 없다.
+
+        디렉터리 목록은 내주지 않는다 — 파일만이다.
+        """
+        path = (self.path or "")[len(MAPS_URL):]
+        path = path.split("?", 1)[0].split("#", 1)[0]
+        rel = urllib.parse.unquote(path)
+        base = os.path.realpath(MAPS_DIR)
+        real = os.path.realpath(os.path.join(base, rel))
+        if real != base and not real.startswith(base + os.sep):
+            sys.stderr.write("  [차단] %s %s (maps 밖)\n" % (_stamp(), self.path))
+            self.send_error(403, "Forbidden")
+            return
+        # **확장자가 아니면 「없다」 로 답한다.** 403 으로 가르면 「있지만 못 준다」
+        # 가 되어 그 자리에 무엇이 있는지 알려 주는 셈이다.
+        if not real.lower().endswith(MAPS_EXTS):
+            self.send_error(404, "Not Found")
+            return
+        if not os.path.isfile(real):
+            self.send_error(404, "Not Found")
+            return
+        self._send_file_ranged(real, head_only=head_only)
 
     def _static_block(self):
         """정적 파일을 막아야 하나. 막으면 이유(영문), 내줘도 되면 `None`.
@@ -3905,6 +4063,9 @@ class Handler(SimpleHTTPRequestHandler):
         """**GET 만 막으면 샌다.** `do_HEAD` 를 안 덮으면 상속본이 그대로 돌아
         **파일이 있는지와 크기**가 나간다 (2026-09-29 실측 — 이 메서드가 없었다).
         """
+        if (self.path or "").startswith(MAPS_URL):
+            self._serve_maps(head_only=True)
+            return
         if not (self.path or "").startswith(("/api/", "/debugging/")):
             why = self._static_block()
             if why:
@@ -3934,6 +4095,11 @@ class Handler(SimpleHTTPRequestHandler):
             self._handle_debugging()
             return
 
+        # 지도는 **저장소 밖**이라 `_static_block` 앞에서 가른다 (2026-10-02).
+        if (self.path or "").startswith(MAPS_URL):
+            self._serve_maps()
+            return
+
         # ⚠️ 여기부터가 정적 파일이다. **저장소 전체를 내주지 않는다.**
         why = self._static_block()
         if why:
@@ -3941,6 +4107,15 @@ class Handler(SimpleHTTPRequestHandler):
                              % (_stamp(), self.path, why))
             self.send_error(403, "Forbidden")
             return
+
+        # `Range` 가 오면 가로챈다. **없으면 상속본에 맡긴다** — 디렉터리 목록 ·
+        # `index.html` 찾기 · 304 를 다시 쓰지 않는다. 가로채는 길이 좁을수록
+        # 멀쩡히 돌던 것이 안 깨진다.
+        if self.headers.get("Range"):
+            real = self.translate_path(self.path)
+            if os.path.isfile(real):
+                self._send_file_ranged(real)
+                return
         super().do_GET()
 
     def _board_via_upstream(self, base):
