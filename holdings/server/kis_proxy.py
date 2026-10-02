@@ -29,6 +29,7 @@ import argparse
 import collections
 import json
 import os
+import shutil
 import sqlite3
 import struct
 import sys
@@ -38,6 +39,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import http.client
 from datetime import datetime, timedelta, timezone
 
 # 파일을 안전하게 쓴다 — 쓰다 죽어도 옛 내용이 남는다 (2026-09-22)
@@ -142,6 +144,31 @@ _ALLOW_EXT = {".html", ".css", ".js", ".json",
               ".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico", ".woff2"}
 
 SECRETS_PATH = os.path.join(HOLDINGS_DIR, "secrets.json")
+
+# `/maps/` 로 내주는 **저장소 밖** 자리 (2026-10-02 지시).
+#
+# Insight 의 「AI 생태계 지도」 가 Protomaps PMTiles 를 쓰는데 다섯 조각 1.5GB 라
+# 저장소에 담을 수 없다. 브라우저는 그 파일을 **Range 로 조각만** 읽으므로
+# 정적 파일 내주기가 206 을 돌려줘야 한다(`_send_file_ranged`).
+#
+# ⚠️ **절대 경로다.** 8764(서비스방)는 자기 폴더(`/Users/kjc/service`)를 내주지만
+# 지도는 그 폴더가 아니라 **이 한 곳**을 가리킨다 — 외부접속에서도 같은 파일을
+# 봐야 하고, 1.5GB 를 폴더마다 복제할 수 없다.
+#
+# 경로를 박지 않는다 — `KJC_MAPS_DIR` 로 덮을 수 있다 (`marketdb` 의
+# `KJC_DB_PATH` 와 같은 모양). 기본값은 지금 파일이 있는 자리다.
+MAPS_URL = "/maps/"
+MAPS_DIR = (os.environ.get("KJC_MAPS_DIR") or "").strip() \
+    or "/Users/kjc/data/maps"
+
+# **그 폴더의 모든 것을 내주지 않는다** (2026-10-02 · 홈페이지_정리 지적).
+# 같은 자리에 변환 로그(`log-*.txt`)와 **`pmtiles` 실행 파일**이 함께 있는데,
+# 확장자를 안 가리면 그것까지 나간다 — 고치기 전 실측으로 둘 다 206 이었다.
+#
+# **「무엇이 아닌지」 가 아니라 「무엇인지」 로 적는다.** 막을 것을 세면 파일이
+# 하나 늘 때마다 「이건 예외인가」 를 따지게 되고, 안 따지면 저절로 나간다.
+# 지도 조각이 늘어도 확장자는 그대로이므로 이 목록은 안 낡는다.
+MAPS_EXTS = (".pmtiles",)
 TOKEN_CACHE_PATH = os.path.join(HOLDINGS_DIR, ".kis-token-cache.json")
 
 HOSTS = {
@@ -720,6 +747,12 @@ def usage_stats():
         # **그중 넘겨받은 몫.** `calls1h - calls1hRelayed` 가 8765 자기 몫이다 —
         # 「넘기기가 얼마나 모았나」 를 재는 값이고 전에는 섞여서 못 봤다.
         "calls1hRelayed": last_1h_relayed,
+        # **밀어주기 비용의 분모** (2026-10-02). 연결 하나가 스레드 하나를
+        # 쥐는 틀(`ThreadingHTTPServer`)이라, 롱폴링을 켜면 이 값이 창 수만큼
+        # 늘어난다. **지금은 요청이 끝나면 돌아온다** — 켜기 전후를 견주려고 둔다.
+        "threads": threading.active_count(),
+        # **응답 시간** — 하한 계산에 쓴다. 못 쟀으면 `None` 이다.
+        "respMs": resp_stats(),
         "perSec60s": round(last_60s / 60.0, 3),
         "budgetUsedPct": round((last_60s / 60.0) / KIS_CALLS_PER_SEC * 100, 1) if KIS_CALLS_PER_SEC else 0,
         "limitUsedPct": round((last_60s / 60.0) / KIS_LIMIT_PER_SEC * 100, 1) if KIS_LIMIT_PER_SEC else 0,
@@ -754,6 +787,11 @@ def usage_stats():
         "relayCacheHits": _relay_stat["hits"],
         "relayCacheMisses": _relay_stat["misses"],
         "relayCacheSize": len(_relay_cache),
+        # 경로별 넘기기 캐시 수명(2026-10-02). `None` 이면 상수 이름이 틀렸다.
+        "relayTtl": relay_ttl_table(),
+        # 화면 API 를 통째로 넘긴 횟수 · 폴백 (차트 셋 — `HIGH_RELAY_ROUTES`)
+        "upstreamRouteCalls": _up_stat["routeCalls"],
+        "upstreamRouteFallbacks": _up_stat["routeFallbacks"],
 
         # **주기·캐시 값 전부.** 위 `priceCacheTtl` 은 `status.html` 이
         # 쓰고 있어 남겨 둔다 — 같은 값이 여기에도 들어오지만 **한 곳에서
@@ -1002,7 +1040,8 @@ KIS_UPSTREAM_SERVE = (os.environ.get("KJC_KIS_UPSTREAM_SERVE") or "").strip().lo
     "1", "true", "yes", "on")
 RELAY_ROUTE = "relay"
 # 넘긴 횟수 · 폴백한 횟수 · 마지막 오류. `stats` 가 낸다 — **주소는 안 낸다.**
-_up_stat = {"calls": 0, "fallbacks": 0, "lastError": None}
+_up_stat = {"calls": 0, "fallbacks": 0, "lastError": None,
+            "routeCalls": 0, "routeFallbacks": 0}
 
 # ── 보드도 8765 하나로 (2026-10-01 지시) ──────────────────────
 #
@@ -1039,10 +1078,12 @@ _board_stat = {"calls": 0, "errors": 0, "lastError": None}
 # **키는 KIS 요청 단위**(`path` · `params` · `tr_id`)다. 위쪽 캐시는 키가
 # `code` 라 층이 달라 **키를 맞추는 문제가 아니다.**
 #
-# **TTL 은 `PRICE_CACHE_TTL` 을 그대로 쓴다** — 새 상수를 만들지 않는다
-# (「같은 값은 한 곳에만」). `relay` 를 타는 것이 대부분 시세이고, 차트처럼
-# 위쪽 TTL 이 더 긴 경로는 **세션 서버 캐시가 이미 거르므로** 짧게 잡아도
-# 손해가 없다.
+# **TTL 은 경로마다 그 경로의 화면 API 가 쓰는 상수를 그대로 쓴다**
+# (2026-10-02 · 서버리소스 2단계 ⓑ). 아래 `RELAY_TTL_NAMES` 가 경로 →
+# **상수 이름**(값이 아니다)을 들고 있어 새 값이 생기지 않는다.
+# 전에는 전부 `PRICE_CACHE_TTL`(25초) 하나라, 지수(5초)·선물(5초)·호가(3초)를
+# 넘겨받으면 **25초 묵은 값**이 나갔다 — 외부접속 지수가 26.5초 늦던 원인이다
+# (내부 4.1초 · 8764→8765 루프백은 1.1ms 라 거리가 아니었다).
 #
 # **동시 요청 합치기(single-flight)는 일부러 안 넣었다** (창구 판단
 # 2026-10-01). 넣으면 **「락 때문에 느려졌나」 와 「캐시가 듣나」 가 섞여**
@@ -1059,6 +1100,183 @@ _relay_stat = {"hits": 0, "misses": 0}
 # 자물쇠 없이 안전하다.** `_call_times` 처럼 `pop(0)` 루프를 돌면 읽는 쪽에서
 # 건드릴 때 터질 수 있다. 상한은 **초당 한도 × 1시간** 이라 1시간 창을 못 넘는다.
 _relay_times = collections.deque(maxlen=int(KIS_LIMIT_PER_SEC * 3600) + 1)
+
+# **KIS 응답 시간 표본** (2026-10-02 · 서버리소스 1단계).
+# 하한 계산(`하한 = max(그리는 시간 × 2, 응답 시간)`)에 쓸 값이 `stats` 에
+# **하나도 없었다.** 없으면 그 식이 전부 추측이 된다.
+#
+# **두 가지를 가른다** — 섞으면 하한이 부풀려진다.
+#     `respMs`   순수 왕복 (KIS 가 답하는 데 걸린 시간)      ← 하한에 쓰는 값
+#     `waitMs`   줄 세우기에서 기다린 시간 (`_rate_limit`)   ← 예산이 모자란 정도
+#
+# ⚠️ **표본 상한을 손으로 박지 않는다.** 초당 한도에서 나오므로(1분치)
+# 한도를 올리면 표본도 함께 늘어난다 — 주기·TTL 값이 아니라 **재는 창**이다.
+# 경로마다 따로 담는다. 경로는 코드가 가진 닫힌 집합이라 늘어나지 않는다.
+RESP_SAMPLES = int(KIS_LIMIT_PER_SEC * 60) + 1
+_resp_times = {}                   # 경로 끝 조각 -> deque[(시각, 왕복ms, 대기ms)]
+_resp_lock = threading.Lock()      # dict 에 **키를 만들 때만** 잡는다
+
+
+def _resp_key(path):
+    """경로를 「구역/마지막」 으로 줄인다 — **마지막 조각만으로는 겹친다.**
+
+    `/uapi/domestic-stock/.../inquire-price`(주식)와
+    `/uapi/domestic-futureoption/.../inquire-price`(선물)가 **같은 칸에 섞였다**
+    (2026-10-02 실측 — 경로 17개 중 마지막 조각이 겹치는 것 **하나**. 구역을
+    붙이면 **17개가 다 갈린다**). 섞이면 **하한이 두 API 의 평균**이 된다.
+
+    ⚠️ `CLAUDE.md` 의 예산 몫 세는 명령(`awk -F/ '{print $NF}'`)도 같은 자리에서
+    둘을 합친다 — 그쪽은 문서 레인이 본다.
+    """
+    seg = [x for x in (path or "").split("/") if x]
+    if len(seg) >= 3:
+        return seg[1] + "/" + seg[-1]
+    # 조각이 둘뿐이면 구역과 마지막이 같은 것을 가리켜 `over/over` 가 된다.
+    return seg[-1] if seg else "?"
+
+
+def _resp_note(path, resp_ms, wait_ms):
+    """성공한 왕복 하나를 적는다. 실패는 안 적는다 — 하한은 성공 응답으로 잰다."""
+    seg = _resp_key(path)
+    dq = _resp_times.get(seg)
+    if dq is None:
+        with _resp_lock:
+            dq = _resp_times.get(seg)
+            if dq is None:
+                dq = _resp_times[seg] = collections.deque(maxlen=RESP_SAMPLES)
+    # `deque(maxlen=…)` 의 `append` 는 원자적이라 여기서는 자물쇠가 필요 없다.
+    dq.append((time.time(), resp_ms, wait_ms))
+
+
+def _pct(vals, p):
+    """백분위. **표본이 없으면 `0` 이 아니라 `None` 을 낸다** —
+    「없음」 을 `0` 으로 내면 「빠르다」 로 읽힌다 (CLAUDE.md).
+
+    ⚠️ **`round()` 로 자리를 고르지 않는다.** 파이썬의 `round` 는 .5 를
+    짝수로 보내서(`round(49.5) == 50`) **표본 수가 짝수냐 홀수냐에 따라 답이
+    달라진다** — 1~100 의 p50 이 51 로 나왔다 (2026-10-02 시험에서 걸렸다).
+    위로 올리는 nearest-rank 하나로 고정한다.
+    """
+    if not vals:
+        return None
+    v = sorted(vals)
+    idx = -(-int(round(p * len(v) * 1000)) // 1000) - 1      # ceil(p*n) - 1
+    return round(v[min(max(idx, 0), len(v) - 1)], 1)
+
+
+def resp_stats():
+    """경로별 응답 시간. **못 쟀으면 `None`** 이고 `n` 만 0 이다."""
+    out = {}
+    now = time.time()
+    for seg, dq in list(_resp_times.items()):
+        rows = list(dq)                      # 복사해서 센다 — 도는 중에 늘어난다
+        if not rows:
+            continue
+        resp = [r[1] for r in rows]
+        wait = [r[2] for r in rows]
+        out[seg] = {
+            "n": len(rows),
+            "p50": _pct(resp, 0.50),
+            "p95": _pct(resp, 0.95),
+            "max": round(max(resp), 1),
+            "waitP50": _pct(wait, 0.50),
+            "waitP95": _pct(wait, 0.95),
+            # **표본이 얼마나 오래된 것인지 함께 낸다.** 창을 숫자로 박지 않으므로
+            # 읽는 쪽이 이것으로 「무엇을 본 값인지」 를 안다.
+            "spanSec": round(now - rows[0][0], 1),
+        }
+    return out
+# 넘겨받은 KIS 경로(`_resp_key` 모양) → 그 경로를 부르는 화면 API 의 **TTL 상수 이름.**
+# **값을 적지 않는다** — 부를 때 `globals()` 로 읽으므로 `--slow` 가 바꾼 값도
+# 그대로 따라온다. 표에 없는 경로(종목 차트 둘 등)는 `PRICE_CACHE_TTL` 이다.
+# 이름이 틀리면 조용히 기본값으로 떨어지지 않게 `stats` 의 `relayTtl` 에
+# **`None`** 으로 드러난다.
+RELAY_TTL_NAMES = {
+    "domestic-stock/inquire-price": "PRICE_CACHE_TTL",
+    "domestic-stock/intstock-multprice": "MULTI_CACHE_TTL",
+    "domestic-stock/inquire-index-price": "INDEX_TTL",
+    "domestic-stock/inquire-daily-indexchartprice": "INDEX_CHART_TTL",
+    "domestic-stock/inquire-time-indexchartprice": "INDEX_MINUTE_TTL",
+    "domestic-futureoption/inquire-price": "FUTURES_TTL",
+    "overseas-price/inquire-daily-chartprice": "OVERSEAS_TTL",
+    "domestic-stock/inquire-index-category-price": "SECTOR_TTL",
+    "domestic-stock/fluctuation": "MOVERS_TTL",
+    "domestic-stock/inquire-investor-daily-by-market": "INVESTOR_FLOW_TTL",
+    "domestic-stock/inquire-investor": "INVESTOR_TTL",
+    "domestic-stock/investor-trend-estimate": "INVESTOR_EST_TTL",
+    "domestic-stock/foreign-institution-total": "INVESTOR_TOP_TTL",
+    "domestic-stock/inquire-ccnl": "TICKS_TTL",
+    "domestic-stock/inquire-asking-price-exp-ccn": "ASKING_TTL",
+}
+
+
+def _relay_ttl(path):
+    """넘겨받은 경로의 캐시 수명(초). 표에 없거나 이름이 틀리면 `PRICE_CACHE_TTL`."""
+    v = globals().get(RELAY_TTL_NAMES.get(_resp_key(path), "PRICE_CACHE_TTL"))
+    return v if isinstance(v, (int, float)) else PRICE_CACHE_TTL
+
+
+def relay_ttl_table():
+    """`stats` 용 — 경로별로 지금 도는 값. **이름이 틀린 것은 `None`** 이다."""
+    out = {}
+    for k, name in RELAY_TTL_NAMES.items():
+        v = globals().get(name)
+        out[k] = v if isinstance(v, (int, float)) else None
+    return out
+
+
+# ── 주기 정책 (2026-10-02 · 서버리소스 2단계 ⓐ) ──────────────────
+#
+# **예산 하나에서 경로별 주기를 계산해 낸다** — 화면이 주기를 박지 않고 이것을 받는다
+# (「캐시·주기·한도 값을 화면에 박지 않는다」).
+#
+#     하한     = max(그리는 시간 × 2, 응답 시간) + 잠 깨는 시간
+#     실효주기 = max(TTL, 하한) + 응답 시간            응답 시간은 p95
+#
+# **못 쟀으면 `None`** 이다 — `0` 으로 내면 「빠르다」 로 읽힌다. 그리는 시간(`drawMs`)은
+# 화면 몫이라 서버는 모른다. 화면이 `?drawMs=` 로 실어 보내면 하한에 넣고, 없으면 뺀다.
+#
+# **주소가 `/api/kis/policy` 인 이유** — 처음 안은 `/api/policy` 였는데 이 서버는
+# `/api/kis/` 아래로만 길을 나눈다(창구 판단 2026-10-02).
+_wake_ms = None
+_wake_lock = threading.Lock()      # 첫 요청 둘이 겹쳐도 한 번만 잰다 (창구 검수)
+
+
+def _measure_wake_ms(n=5, ask_ms=10.0):
+    """`time.sleep` 이 요청보다 얼마나 늦게 깨는지(ms 중앙값). 처음 한 번만 잰다 —
+    2026-10-02 실측으로 10ms 를 자면 49ms 에 깼다(이 기계)."""
+    global _wake_ms
+    with _wake_lock:
+        if _wake_ms is not None:
+            return _wake_ms
+        over = []
+        for _ in range(n):
+            t0 = time.perf_counter()
+            time.sleep(ask_ms / 1000.0)
+            over.append((time.perf_counter() - t0) * 1000.0 - ask_ms)
+        over.sort()
+        _wake_ms = round(over[len(over) // 2], 1)
+    return _wake_ms
+
+
+def policy_values(draw_ms=None):
+    """경로별 TTL · 응답 시간 · 하한 · 실효주기. 못 쟀으면 그 칸이 `None`."""
+    wake = _measure_wake_ms()
+    resp = resp_stats()
+    routes = {}
+    for key, ttl in relay_ttl_table().items():
+        r = (resp.get(key) or {}).get("p95")
+        if r is None or ttl is None:
+            routes[key] = {"ttlSec": ttl, "respMs": r, "floorMs": None, "effectiveMs": None}
+            continue
+        base = max(draw_ms * 2.0, r) if draw_ms is not None else r
+        floor = base + wake
+        routes[key] = {"ttlSec": ttl, "respMs": r, "floorMs": round(floor, 1),
+                       "effectiveMs": round(max(ttl * 1000.0, floor) + r, 1)}
+    return {"budgetPerSec": KIS_CALLS_PER_SEC, "wakeMs": wake, "drawMs": draw_ms,
+            "routes": routes}
+
+
 RELAY_CACHE_MAX = 2000             # 키에 `params` 가 들어가 수가 늘 수 있다
 
 
@@ -1069,7 +1287,7 @@ def _relay_sweep(now):
     `pop(k, None)` 으로 지운다 — 도는 중에 남이 지워도 터지지 않는다.
     """
     for k, v in list(_relay_cache.items()):
-        if now - v[0] >= PRICE_CACHE_TTL:
+        if now - v[0] >= _relay_ttl(k[0]):       # k[0] 은 KIS 경로
             _relay_cache.pop(k, None)
     if len(_relay_cache) > RELAY_CACHE_MAX:
         rows = sorted(list(_relay_cache.items()), key=lambda kv: kv[1][0])
@@ -1179,6 +1397,21 @@ def out_rows(data, key):
     return v if isinstance(v, list) else []
 
 
+# ── 차트 셋은 화면 API 째로 넘긴다 (2026-10-02 · 서버리소스 2단계 ⓑ-2) ──
+#
+# 날 `/uapi/` 만 넘기면 **8765 가 KIS 를 대신 부르고 자기 DB 에는 안 쓴다**
+# (`save_candles` 는 부른 쪽 함수 안에 있다). 그래서 읽기 전용 서버가 차트를
+# 열 때마다 같은 봉을 다시 받았다 — 한 번 여는 데 19건(개발3 실증).
+# 화면 API 째로 넘기면 **8765 가 받아 자기 DB 에 쌓고** 다음 사람은 DB 에서 읽는다.
+#
+# 고른 기준은 「`save_candles` 에 닿는 라우트」 다 — 이름을 고른 것이 아니라
+# 그 함수를 부르는 라우트를 셌다(2026-10-02 · 라우트 33개 중 셋).
+#
+# **폴백은 둔다** — 읽기라 어느 쪽이 받아도 값이 같다. 보드(쓰는 곳 · 폴백 없음)와
+# 다른 자리다. `4xx` 는 상류가 제대로 답한 것이라 **그대로 내려보낸다.**
+HIGH_RELAY_ROUTES = ("chart", "index-candles", "index-minutes")
+
+
 class _UpstreamDown(Exception):
     """상류가 안 떠 있거나 터졌다 — **직접 부르는 쪽으로 내려간다.**"""
 
@@ -1231,7 +1464,9 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
             _up_stat["fallbacks"] += 1
             _up_stat["lastError"] = safe_message(e)
     token = get_token(cfg)
+    _t_wait0 = time.time()
     _rate_limit(path)
+    _wait_ms = (time.time() - _t_wait0) * 1000.0
     # **실제 KIS 호출을 여기 한 곳에서 센다** (2026-10-01).
     # 전에는 경로마다 손으로 올려 **13곳**이었고 **일부 경로만** 세었다.
     # **상류로 넘긴 것은 위에서 `return` 하므로 안 세어진다** — 맞다.
@@ -1247,8 +1482,12 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
         "content-type": "application/json; charset=utf-8",
     })
     try:
+        _t_resp0 = time.time()
         with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+            raw = resp.read()
+        # **왕복만 잰다** — JSON 해석은 우리 쪽 일이라 뺀다.
+        _resp_note(path, (time.time() - _t_resp0) * 1000.0, _wait_ms)
+        data = json.loads(raw.decode("utf-8"))
     except urllib.error.HTTPError as e:
         detail = scrub(e.read().decode("utf-8", "replace"))[:300]
         # 초당 건수 초과(EGW00201)는 잠깐 쉬었다 한 번만 다시 시도한다.
@@ -2610,6 +2849,14 @@ def _unlock_bars_backfill():
     **한 번만 돈다.** 매번 지우면 모든 종목이 열릴 때마다 과거를 다시 훑어
     KIS 호출이 계속 늘어난다.
     """
+    # **읽기 전용 서버는 손대지 않는다** (2026-10-02 · `marketdb` 가 들어온 뒤).
+    # 안 보면 `DELETE` 가 터지고, 호출 쪽 `try` 가 받아 「건너뜁니다」 를 찍는다 —
+    # 터지지는 않지만 **재시작마다 같은 로그가 뜬다.** `_meta_set` 도 가드가 있어
+    # 「했다」 표를 못 찍으므로 다음에도 또 시도하기 때문이다.
+    #
+    # 푸는 것은 **쓰는 서버 하나**가 하면 된다. 읽기 전용 서버는 그 결과를 읽는다.
+    if not marketdb.writable():
+        return 0
     if _meta_get(BARS_MKT_FIX) == BARS_MKT_FIX_VER:
         return 0
     with _db_lock, db_conn() as conn:
@@ -2632,6 +2879,15 @@ def _prune_span_dupes():
 
     서버가 뜰 때 한 번 돈다. 치울 것이 없으면 0 을 내고 아무것도 안 한다.
     """
+    # **읽기 전용 서버는 손대지 않는다** (2026-10-02).
+    # 2026-10-02 09:22 에 8768 을 메인 DB 읽기 전용으로 켜니 여기서
+    # `OperationalError` 가 나고 「겹친 봉 정리: 건너뜁니다」 가 떴다.
+    # 치우는 것은 **쓰는 서버 하나**가 하면 되고, 읽기 전용 서버는 그 결과를 읽는다.
+    #
+    # `_meta_set_write` · `_save_candles_write` 는 **부르는 쪽**이 가드를 보므로
+    # 그 짝은 안전하다 — 여기와 `_unlock_bars_backfill` 만 자기가 봐야 했다.
+    if not marketdb.writable():
+        return 0
     n = 0
     with _db_lock, db_conn() as conn:
         for period, cut in SPAN_CUT.items():
@@ -3750,7 +4006,139 @@ class Handler(SimpleHTTPRequestHandler):
         """
         if not (self.path or "").startswith("/api/"):
             self.send_header("Cache-Control", "no-cache")
+            # **Range 없는 응답에도 붙인다.** 브라우저는 이 헤더를 보고서야
+            # Range 를 쓴다 — 206 을 낼 수 있어도 알리지 않으면 통째로 받아간다.
+            # 한 곳에서 붙여야 `_send_file_ranged` 와 상속본 양쪽에 빠짐이 없다.
+            self.send_header("Accept-Ranges", "bytes")
         super().end_headers()
+
+    # ── 부분 받기(Range) ───────────────────────────────────────
+    #
+    # 상속본(`SimpleHTTPRequestHandler`)은 Range 를 **모른다** — 2026-10-02 실측으로
+    # `Range: bytes=0-9` 에 200 + 전체 길이를 돌려줬다. 1.5GB 지도 파일에서는
+    # 브라우저가 조각만 읽어야 하므로 206 이 필요하다.
+    #
+    # **단일 범위만 받는다.** 여러 범위(`bytes=0-9,20-29`)는 `multipart/byteranges`
+    # 를 만들어야 하는데 PMTiles 는 쓰지 않는다 — 안 쓰는 길을 만들면 그 길만
+    # 조용히 썩는다. 여러 범위가 오면 **Range 를 무시하고 통째로** 준다(규격이
+    # 허용하는 폴백이다).
+
+    def _parse_range(self, size):
+        """`Range` 헤더를 (시작, 끝) 으로. 없으면 `None`, 범위 밖이면 `False`.
+
+        **셋을 가른다** — 없는 것 · 못 읽는 것 · 범위 밖. 하나로 묶으면
+        416 을 내야 할 자리에 200 이 나간다.
+        """
+        raw = (self.headers.get("Range") or "").strip()
+        if not raw:
+            return None
+        if not raw.lower().startswith("bytes=") or "," in raw:
+            return None                      # 모르는 형태 · 여러 범위 → 통째로
+        spec = raw[6:].strip()
+        try:
+            if spec.startswith("-"):         # 뒤에서 N 바이트
+                n = int(spec[1:])
+                if n <= 0:
+                    return False
+                start, end = max(0, size - n), size - 1
+            else:
+                a, _, b = spec.partition("-")
+                start = int(a)
+                end = int(b) if b else size - 1
+        except ValueError:
+            return None                      # 숫자가 아니다 → 통째로
+        if start >= size or start > end:
+            return False                     # 416
+        return start, min(end, size - 1)
+
+    def _send_file_ranged(self, real, head_only=False):
+        """파일 하나를 내준다. `Range` 가 오면 206, 범위 밖이면 416.
+
+        `Accept-Ranges: bytes` 는 `end_headers` 가 붙인다 — 한 곳에서 붙여야
+        Range 없는 응답에도 빠지지 않는다(브라우저는 그 헤더를 보고 Range 를 쓴다).
+        """
+        try:
+            size = os.path.getsize(real)
+        except OSError:
+            self.send_error(404, "Not Found")
+            return
+
+        ctype = self.guess_type(real)
+        # `.pmtiles` 는 `mimetypes` 가 모른다. 내려받기용 덩어리로 둔다.
+        if real.endswith(".pmtiles"):
+            ctype = "application/octet-stream"
+
+        rng = self._parse_range(size)
+        if rng is False:
+            # **범위 밖**이라고 알려 준다. `Content-Range: bytes */크기` 가 규격이다.
+            self.send_response(416, "Requested Range Not Satisfiable")
+            self.send_header("Content-Range", "bytes */%d" % size)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
+        try:
+            f = open(real, "rb")
+        except OSError:
+            self.send_error(404, "Not Found")
+            return
+        with f:
+            if rng is None:
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(size))
+                self.end_headers()
+                if not head_only:
+                    shutil.copyfileobj(f, self.wfile)
+                return
+
+            start, end = rng
+            length = end - start + 1
+            self.send_response(206, "Partial Content")
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Range", "bytes %d-%d/%d" % (start, end, size))
+            self.send_header("Content-Length", str(length))
+            self.end_headers()
+            if head_only:
+                return
+            f.seek(start)
+            # 한꺼번에 읽지 않는다 — 1.5GB 파일에서 큰 범위가 오면 메모리로 다 올라온다.
+            left = length
+            while left > 0:
+                chunk = f.read(min(64 * 1024, left))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                left -= len(chunk)
+
+    def _serve_maps(self, head_only=False):
+        """`/maps/…` 를 `MAPS_DIR` 에서 내준다. **저장소 밖이므로 직접 막는다.**
+
+        `_static_block` 은 「저장소 밖이면 거부」 라서 이 길에는 쓸 수 없다.
+        대신 같은 방식으로 판정한다 — **합친 뒤 실제 경로로 본다.**
+        `..` · `%2e%2e` 같은 우회는 `realpath` 가 정규화하므로 그 결과를 보면
+        우회를 따로 막을 필요가 없다.
+
+        디렉터리 목록은 내주지 않는다 — 파일만이다.
+        """
+        path = (self.path or "")[len(MAPS_URL):]
+        path = path.split("?", 1)[0].split("#", 1)[0]
+        rel = urllib.parse.unquote(path)
+        base = os.path.realpath(MAPS_DIR)
+        real = os.path.realpath(os.path.join(base, rel))
+        if real != base and not real.startswith(base + os.sep):
+            sys.stderr.write("  [차단] %s %s (maps 밖)\n" % (_stamp(), self.path))
+            self.send_error(403, "Forbidden")
+            return
+        # **확장자가 아니면 「없다」 로 답한다.** 403 으로 가르면 「있지만 못 준다」
+        # 가 되어 그 자리에 무엇이 있는지 알려 주는 셈이다.
+        if not real.lower().endswith(MAPS_EXTS):
+            self.send_error(404, "Not Found")
+            return
+        if not os.path.isfile(real):
+            self.send_error(404, "Not Found")
+            return
+        self._send_file_ranged(real, head_only=head_only)
 
     def _static_block(self):
         """정적 파일을 막아야 하나. 막으면 이유(영문), 내줘도 되면 `None`.
@@ -3800,6 +4188,9 @@ class Handler(SimpleHTTPRequestHandler):
         """**GET 만 막으면 샌다.** `do_HEAD` 를 안 덮으면 상속본이 그대로 돌아
         **파일이 있는지와 크기**가 나간다 (2026-09-29 실측 — 이 메서드가 없었다).
         """
+        if (self.path or "").startswith(MAPS_URL):
+            self._serve_maps(head_only=True)
+            return
         if not (self.path or "").startswith(("/api/", "/debugging/")):
             why = self._static_block()
             if why:
@@ -3829,6 +4220,11 @@ class Handler(SimpleHTTPRequestHandler):
             self._handle_debugging()
             return
 
+        # 지도는 **저장소 밖**이라 `_static_block` 앞에서 가른다 (2026-10-02).
+        if (self.path or "").startswith(MAPS_URL):
+            self._serve_maps()
+            return
+
         # ⚠️ 여기부터가 정적 파일이다. **저장소 전체를 내주지 않는다.**
         why = self._static_block()
         if why:
@@ -3836,7 +4232,46 @@ class Handler(SimpleHTTPRequestHandler):
                              % (_stamp(), self.path, why))
             self.send_error(403, "Forbidden")
             return
+
+        # `Range` 가 오면 가로챈다. **없으면 상속본에 맡긴다** — 디렉터리 목록 ·
+        # `index.html` 찾기 · 304 를 다시 쓰지 않는다. 가로채는 길이 좁을수록
+        # 멀쩡히 돌던 것이 안 깨진다.
+        if self.headers.get("Range"):
+            real = self.translate_path(self.path)
+            if os.path.isfile(real):
+                self._send_file_ranged(real)
+                return
         super().do_GET()
+
+    def _kis_route_via_upstream(self, base):
+        """화면 API 하나를 상류에 그대로 넘긴다. **보냈으면 `True`, 폴백이면 `False`.**
+
+        상류가 안 떠 있거나 `5xx` · `404`(받을 자리 없음)면 `False` 를 내어
+        **직접 부르는 쪽으로 내려간다** — `_kis_via_upstream` 과 같은 선이다.
+        """
+        try:
+            with urllib.request.urlopen(base + (self.path or ""), timeout=15) as resp:
+                code, body = resp.getcode(), resp.read()
+                rct = resp.headers.get("Content-Type")
+        except urllib.error.HTTPError as e:
+            if e.code >= 500 or e.code == 404:
+                _up_stat["routeFallbacks"] += 1
+                _up_stat["lastError"] = "상류 %s" % e.code
+                return False
+            code, body, rct = e.code, e.read(), e.headers.get("Content-Type")
+        except (urllib.error.URLError, OSError, http.client.HTTPException) as e:
+            # `HTTPException` — 상류가 응답 중간에 끊기면(`IncompleteRead`) 이것이
+            # 난다. `OSError` 가 아니라 안 잡으면 화면에 응답 없이 끊긴다 (창구 검수).
+            _up_stat["routeFallbacks"] += 1
+            _up_stat["lastError"] = safe_message(e)
+            return False
+        _up_stat["routeCalls"] += 1
+        self.send_response(code)
+        self.send_header("content-type", rct or "application/json; charset=utf-8")
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return True
 
     def _board_via_upstream(self, base):
         """보드를 상류에 **그대로** 넘긴다 — 경로 · 본문 · 상태코드 그대로.
@@ -4326,12 +4761,30 @@ class Handler(SimpleHTTPRequestHandler):
             })
             return
 
+        # ── 주기 정책 (2026-10-02) ── KIS 키와 무관한 값이라 secrets 검사 앞에 둔다
+        # (키 없는 서버도 503 이 아니라 값을 낸다 · 창구 검수).
+        if route == "policy":
+            # `drawMs` 는 화면이 잰 그리는 시간. 없거나 이상하면 `None` — 하한에서 뺀다.
+            try:
+                _dm = float((qs.get("drawMs") or [""])[0])
+                _dm = _dm if 0 <= _dm < 60000 else None
+            except ValueError:
+                _dm = None
+            self._send_json({"ok": True, "data": policy_values(_dm)})
+            return
+
         if not cfg:
             self._send_json({
                 "ok": False,
                 "error": "secrets.json 이 없어 KIS 를 쓸 수 없습니다.",
             }, 503)
             return
+
+        # ── 차트 셋은 화면 API 째로 상류에 (2026-10-02) ── 위 `HIGH_RELAY_ROUTES` 주석.
+        if route in HIGH_RELAY_ROUTES:
+            _hb = upstream_base()
+            if _hb and self._kis_route_via_upstream(_hb):
+                return
 
         try:
             # ── 넘겨받는 자리 (2026-10-01) ── **8765 만 켠다.**
@@ -4369,7 +4822,7 @@ class Handler(SimpleHTTPRequestHandler):
                         tr)
                 now = time.time()
                 hit = _relay_cache.get(ckey)
-                if hit and now - hit[0] < PRICE_CACHE_TTL:
+                if hit and now - hit[0] < _relay_ttl(kis_path):
                     _relay_stat["hits"] += 1
                     self._send_json({"ok": True, "data": hit[1], "cached": True})
                     return

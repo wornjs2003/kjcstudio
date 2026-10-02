@@ -59,6 +59,13 @@
          이름·값은 `tools/check-kis-single.py` 가 `kis_proxy.py` 와 대조한다. -->
     <key>KJC_KIS_UPSTREAM</key>
     <string>http://127.0.0.1:8765</string>
+    <!-- **market.db 한 벌 (2026-10-02 지시 · 「응 그래」).** 이 서버는 메인 폴더의 market.db 를 **읽기 전용**으로 본다 —
+         자기 폴더 DB 를 따로 채우지 않는다. 쓰는 쪽은 8765 하나다. KJC_DB_READONLY 를 모르는 옛 코드로 켜면
+         **메인 DB 를 쓰기로 연다** — 켜기 전에 그 폴더 코드에 KJC_DB_READONLY 가 있는지 센다. -->
+    <key>KJC_DB_PATH</key>
+    <string>/Users/kjc/work/KJCStudio/holdings/market.db</string>
+    <key>KJC_DB_READONLY</key>
+    <string>1</string>
     <!-- **보드도 8765 하나로 (2026-10-01 「보드 스위치 켜」).** /api/board/* 를 8765 로 넘긴다.
          KIS 와 달리 **폴백이 없다** — 8765 가 안 떠 있으면 503. 두 보드로 갈라지지 않게.
          받는 쪽(8765)은 보드용 스위치가 따로 없다 — 원래 보드를 받는 서버다. -->

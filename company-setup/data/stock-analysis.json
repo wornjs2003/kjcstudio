@@ -1,0 +1,11 @@
+{
+  "items": [
+    {
+      "date": "2026-10-02",
+      "name": "AI 생태계",
+      "title": "AI 생태계 지도 — 돈이 흐르는 길",
+      "summary": "서비스 → 모델 → 데이터센터 → 칩 · 전력",
+      "page": "ecosystem.html"
+    }
+  ]
+}
