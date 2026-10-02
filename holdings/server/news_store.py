@@ -42,6 +42,8 @@ import os
 import re
 import sqlite3
 import threading
+
+import marketdb
 import time
 from datetime import datetime, timezone, timedelta
 
@@ -49,7 +51,8 @@ KST = timezone(timedelta(hours=9))
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 HOLDINGS_DIR = os.path.dirname(HERE)
-DB_PATH = os.path.join(HOLDINGS_DIR, "market.db")
+# 자리·journal_mode·쓰기 가능 여부는 **`marketdb` 한 곳**이 정한다 (2026-10-01).
+DB_PATH = marketdb.DB_PATH
 ALERTS_PATH = os.path.join(HOLDINGS_DIR, "data", "news-alerts.json")
 
 # 얼마나 자주 받아 쌓나. news.py 의 캐시(180초)보다 길면 캐시가 소용없고,
@@ -89,9 +92,8 @@ _alerts_cache = {"at": 0, "value": None}
 # ---------------------------------------------------------------- 저장소
 
 def _conn():
-    c = sqlite3.connect(DB_PATH, timeout=10)
-    c.row_factory = sqlite3.Row
-    return c
+    """읽기 전용 서버면 `mode=ro` 로 열린다 — `marketdb` 가 정한다."""
+    return marketdb.connect(timeout=10)
 
 
 def init():

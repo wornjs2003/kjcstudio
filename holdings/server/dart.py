@@ -23,6 +23,8 @@ import json
 import os
 import re
 import sqlite3
+
+import marketdb
 import threading
 import time
 import urllib.error
@@ -38,7 +40,8 @@ from secrets_guard import safe_message, scrub
 KST = timezone(timedelta(hours=9))
 
 HOLDINGS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(HOLDINGS_DIR, "market.db")
+# 자리·journal_mode·쓰기 가능 여부는 **`marketdb` 한 곳**이 정한다 (2026-10-01).
+DB_PATH = marketdb.DB_PATH
 
 DART_API = "https://opendart.fss.or.kr/api"
 
@@ -174,9 +177,8 @@ SCHEMA = [
 
 
 def db_conn():
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    conn.row_factory = sqlite3.Row
-    return conn
+    """읽기 전용 서버면 `mode=ro` 로 열린다 — `marketdb` 가 정한다."""
+    return marketdb.connect(timeout=10)
 
 
 def db_init():
@@ -192,6 +194,18 @@ def _meta_get(key):
 
 
 def _meta_set(key, value):
+    # 읽기 전용 서버는 **안 써 본다.** 깃발이 켜져 있어도 디스크 · 권한 ·
+    # 잠금으로 실패할 수 있어 예외도 함께 잡는다 (`marketdb` 의 「깃발과 실패는
+    # 다르다」).
+    if not marketdb.writable():
+        return
+    try:
+        _meta_set_write(key, value)
+    except sqlite3.Error as e:
+        print("[db] sync_meta 쓰기 실패 %s — %s" % (key, safe_message(e, 120)))
+
+
+def _meta_set_write(key, value):
     with _db_lock, db_conn() as conn:
         conn.execute(
             """INSERT INTO sync_meta (key, value, updated_at) VALUES (?, ?, ?)

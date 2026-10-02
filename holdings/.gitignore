@@ -48,7 +48,12 @@ __pycache__/
 *.py[cod]
 
 # 로컬 시세 저장소 (D1 과 같은 구조, 로컬 전용)
+# `market.db` 와 그 곁파일. **`-wal`·`-shm` 까지 적는다** (2026-10-01).
+# `journal_mode` 를 WAL 로 바꾸면 그 둘이 생기는데, 본체만 적어 두면
+# **git 이 그 둘을 본다** — 메인 폴더에도 `??` 로 떴다.
 market.db
+market.db-wal
+market.db-shm
 market.db-journal
 
 # 문서 저장 (2026-09-22) — 「저장은 이 PC 안에만 둔다」.

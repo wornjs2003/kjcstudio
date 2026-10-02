@@ -42,6 +42,7 @@ from datetime import datetime, timedelta, timezone
 # 파일을 안전하게 쓴다 — 쓰다 죽어도 옛 내용이 남는다 (2026-09-22)
 from docstore import write_json_atomic
 import docstore
+import marketdb
 import re
 import signal_watch
 import heartbeat
@@ -2494,7 +2495,9 @@ def fetch_investor_top(cfg, direction="buy", market="all", by="qty", limit=10):
 # 배포본은 Cloudflare D1 을 쓰고, 로컬은 같은 구조를 SQLite 파일로 둔다.
 # 차트는 과거 데이터가 필요한데 볼 때마다 KIS 를 부르면 호출량을 감당할 수 없다.
 
-DB_PATH = os.path.join(HOLDINGS_DIR, "market.db")
+# `market.db` 의 자리·journal_mode·쓰기 가능 여부는 **`marketdb` 한 곳**이 정한다
+# (2026-10-01 지시). 전에는 네 파일이 각자 조립해 **폴더마다 DB 가 따로 쌓였다.**
+DB_PATH = marketdb.DB_PATH
 _db_lock = threading.Lock()
 
 # ts 형식: 일/주/월/년봉은 YYYYMMDD, 분봉은 YYYYMMDDHHMM
@@ -2534,9 +2537,8 @@ MINUTE_DAY_END = 20 * 60
 
 
 def db_conn():
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    conn.row_factory = sqlite3.Row
-    return conn
+    """읽기 전용 서버면 `mode=ro` 로 열린다 — `marketdb` 가 정한다."""
+    return marketdb.connect(timeout=10)
 
 
 def _prune_span_dupes():
@@ -2650,6 +2652,18 @@ def _meta_get(key):
 
 def _meta_set(key, value):
     import datetime
+    # 읽기 전용 서버는 **안 써 본다.** 깃발이 켜져 있어도 디스크 · 권한 ·
+    # 잠금으로 실패할 수 있어 예외도 함께 잡는다 (`marketdb` 의 「깃발과 실패는
+    # 다르다」).
+    if not marketdb.writable():
+        return
+    try:
+        _meta_set_write(key, value, datetime)
+    except sqlite3.Error as e:
+        print("[db] sync_meta 쓰기 실패 %s — %s" % (key, safe_message(e, 120)))
+
+
+def _meta_set_write(key, value, datetime):
     with _db_lock, db_conn() as conn:
         conn.execute(
             """INSERT INTO sync_meta (key, value, updated_at) VALUES (?, ?, ?)
@@ -3247,9 +3261,29 @@ SPAN_CUT = {"Y": 4, "M": 6}       # ts 앞 몇 글자가 한 구간인가
 
 
 def save_candles(code, period, candles):
+    """받은 봉을 DB 에 넣고 **넣으려 한 개수**를 돌려준다. 못 쓰면 `0`.
+
+    ⚠️ **`0` 은 「쓰지 못했다」 또는 「넣을 것이 없었다」 이지 「이미 다 있었다」 가
+    아니다.** `ON CONFLICT … DO UPDATE` 라 들어간 줄 수를 세지 않는다.
+
+    **여기서 막는 이유** — 이 함수를 부르는 네 자리 중 **셋에 `try` 가 없다**
+    (`fetch_index_minutes` · `fetch_index_candles` · `get_chart`). 한 곳에서
+    막으면 넷이 다 안전하다. **깃발(`writable`)과 실패(예외)를 둘 다 본다** —
+    깃발이 켜진 서버에서도 디스크 · 권한 · 잠금으로 실패할 수 있다.
+    """
     if not candles:
         return 0
+    if not marketdb.writable():
+        return 0
     cut = SPAN_CUT.get(period)
+    try:
+        return _save_candles_write(code, period, candles, cut)
+    except sqlite3.Error as e:
+        print("[db] 캔들 저장 실패 %s %s — %s" % (code, period, safe_message(e, 120)))
+        return 0
+
+
+def _save_candles_write(code, period, candles, cut):
     with _db_lock, db_conn() as conn:
         if cut:
             # 넣을 봉이 그 구간의 최신이다. 옛 줄을 먼저 치운다.
@@ -3331,6 +3365,19 @@ def get_chart(cfg, code, period, limit, gap_check=True):
         _meta_set(mkey, time.time())
         if fetched:
             rows = read_candles(code, period, limit)
+        elif not rows and bars and not marketdb.writable():
+            # **읽기 전용 서버인데 그 종목이 DB 에 없다.** 저장은 못 하지만
+            # 방금 받은 것은 보여준다 — 안 그러면 **차트가 빈다** (2026-10-01).
+            #
+            # ⚠️ **`rows` 가 있으면 절대 덮지 않는다.** `bars` 는 방금 받은
+            # 구간뿐이라(일봉은 한 번에 100개) 덮으면 **이력이 통째로 짧아진다** —
+            # 2026-09-29 에 「200일선이 일·주·월봉에서 안 그려졌다」 던 그 사고로
+            # 되돌아간다 (홈페이지_정리 지적).
+            #
+            # **`fetched` 로 가르지 않는 이유** — 거기에 「쓰기 실패」 라는 뜻을
+            # 더 실으면 「넣을 것이 없었다」 와 섞인다. 쓰기 가능 여부는 **따로** 본다.
+            rows = bars[-limit:]
+            return rows, 0, "KIS"
 
     return rows, fetched, ("KIS+DB" if fetched else "DB")
 

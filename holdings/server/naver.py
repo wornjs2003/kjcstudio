@@ -284,12 +284,9 @@ def _cap_rank(code):
     **코스피 상위 200종목뿐이다.** 그 밖이면 None 이고, 화면은 「—」로 적는다.
     받아오는 것은 `server/dart.py` 이고 여기서는 읽기만 한다.
     """
-    import os
-    import sqlite3
-    db = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                      "market.db")
+    import marketdb
     try:
-        with sqlite3.connect(db, timeout=5) as c:
+        with marketdb.connect(timeout=5) as c:
             r = c.execute("SELECT rank FROM dart_universe WHERE stock_code = ?",
                           (code,)).fetchone()
         return r[0] if r else None
