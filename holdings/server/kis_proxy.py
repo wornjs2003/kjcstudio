@@ -1207,6 +1207,12 @@ RELAY_TTL_NAMES = {
     "domestic-stock/foreign-institution-total": "INVESTOR_TOP_TTL",
     "domestic-stock/inquire-ccnl": "TICKS_TTL",
     "domestic-stock/inquire-asking-price-exp-ccn": "ASKING_TTL",
+    # 재무 다섯 (2026-10-02 · 모달 투자 지표 칸 재무 카드) — 분기 자료라 한 수명
+    "domestic-stock/income-statement": "FINANCE_TTL",
+    "domestic-stock/balance-sheet": "FINANCE_TTL",
+    "domestic-stock/financial-ratio": "FINANCE_TTL",
+    "domestic-stock/profit-ratio": "FINANCE_TTL",
+    "domestic-stock/growth-ratio": "FINANCE_TTL",
 }
 
 
@@ -2588,6 +2594,135 @@ def fetch_investor(cfg, code, days=INVESTOR_DAYS):
     _investor_cache[code] = (time.time(), out)
     return out
 
+
+# ── 재무 다섯 — 모달 「투자 지표」 칸 재무 카드 (2026-10-02 지시) ──────────
+#
+# 재권님 — 재무 카드 시안 v3 를 보시고 「방향이 맞아 개발해」.
+#
+#     손익계산서   FHKST66430200   /finance/income-statement
+#     대차대조표   FHKST66430100   /finance/balance-sheet
+#     재무비율     FHKST66430300   /finance/financial-ratio
+#     수익성비율   FHKST66430400   /finance/profit-ratio
+#     성장성비율   FHKST66430800   /finance/growth-ratio
+#
+# **분기로 받는다** — `FID_DIV_CLS_CODE` 0 = 년 · 1 = 분기(한국투자증권 공식 예제 저장소
+# `open-trading-api` 의 `finance_income_statement` 주석). 한 번에 30분기(약 7년)가 온다.
+#
+# **단위는 억원이다.** KIS 문서에서는 못 찾았고 **실측으로 정했다** — 대차대조표 자본금
+# (`cpfn`) 8,975 가 삼성전자 자본금 8,975억 원과 같다 (2026-10-02 12:03). 화면에 「억원」
+# 으로 내보내고, 바뀌면 `meta.unit` 한 곳만 고친다.
+#
+# **손익은 연 누적으로 온다** — 2026.03 매출 1,338,734 → 2026.06 3,053,729.
+# 그래서 분기 값 = 이번 누적 − 같은 해 앞 분기 누적 (1분기는 그대로). 앞 분기가 없으면
+# **`None`** 이다 — 지어서 채우지 않는다. 누적 값도 `…Ytd` 로 함께 낸다.
+# **비율(수익성 · 재무 · 성장성)은 KIS 가 준 그대로다** — 누적 기준으로 보이므로 화면이
+# 「누적」 이라 적는다.
+#
+# **99.99 는 「없음」 이다.** 판관비 · 영업외수익 같은 세부 계정에 **그 글자 그대로** 와서
+# 값이 아니라 표시로 본다(문서에서는 못 찾음). ⚠️ 비율이 정말 99.99 면 함께 지워진다 —
+# 그 위험은 남는다.
+#
+# **수명은 `FINANCE_TTL` 하나다** — 분기 자료라 하루에 몇 번 부를 일이 없다. 화면에
+# 박지 않는다(「캐시·주기·한도 값을 화면에 박지 않는다」). 넘기기 표(`RELAY_TTL_NAMES`)
+# 도 같은 이름을 가리킨다.
+FINANCE_TTL = 6 * 3600
+_finance_cache = {}
+FINANCE_NONE = "99.99"
+
+_FIN_APIS = (
+    ("income", "/uapi/domestic-stock/v1/finance/income-statement", "FHKST66430200"),
+    ("balance", "/uapi/domestic-stock/v1/finance/balance-sheet", "FHKST66430100"),
+    ("ratio", "/uapi/domestic-stock/v1/finance/financial-ratio", "FHKST66430300"),
+    ("profit", "/uapi/domestic-stock/v1/finance/profit-ratio", "FHKST66430400"),
+    ("growth", "/uapi/domestic-stock/v1/finance/growth-ratio", "FHKST66430800"),
+)
+
+
+def _fin_num(v):
+    """KIS 재무 값 하나. **`99.99` 와 빈 값은 `None`** — 「없음」 을 `0` 으로 내지 않는다."""
+    s = str(v if v is not None else "").strip()
+    if not s or s == FINANCE_NONE:
+        return None
+    return _num(s, float)
+
+
+def fetch_finance(cfg, code):
+    """종목 하나의 분기 재무. 다섯 API 를 `stac_yymm`(결산 년월)로 합친다.
+
+    **하나라도 못 받으면 그 칸만 `None`** 이고 나머지는 낸다. 어느 API 가 비었는지는
+    `missing` 에 적는다 — 화면이 「데이터 없음」 을 그 카드에만 쓴다.
+    """
+    cached = _ttl_get(_finance_cache, code, FINANCE_TTL)
+    if cached is not None:
+        return cached
+    rows, missing = {}, []
+    params = {"FID_DIV_CLS_CODE": "1", "FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code}
+    for key, path, tr in _FIN_APIS:
+        try:
+            got = out_rows(kis_get(cfg, path, params, tr), "output")
+        except Exception as e:                       # 하나가 죽어도 나머지는 낸다
+            print(f"[KIS] 재무 {key} 실패: {safe_message(e, 120)}", flush=True)
+            got = []
+        if not got:
+            missing.append(key)
+        for r in got:
+            ym = str(r.get("stac_yymm") or "").strip()
+            if len(ym) == 6 and ym.isdigit():
+                rows.setdefault(ym, {})[key] = r
+
+    def g(ym, key, field):
+        return _fin_num((rows.get(ym, {}).get(key) or {}).get(field))
+
+    def quarter(ym, field):
+        """연 누적 → 분기. 1분기는 그대로, 아니면 같은 해 앞 분기를 뺀다."""
+        cur = g(ym, "income", field)
+        if cur is None:
+            return None
+        prev = {"03": None, "06": "03", "09": "06", "12": "09"}.get(ym[4:])
+        if ym[4:] == "03":
+            return cur
+        if prev is None:
+            return None
+        before = g(ym[:4] + prev, "income", field)
+        return None if before is None else cur - before
+
+    out = []
+    for ym in sorted(rows):
+        sale_ytd, op_ytd = g(ym, "income", "sale_account"), g(ym, "income", "bsop_prti")
+        out.append({
+            "ym": ym,
+            # 손익 — 분기 값 · 누적 값 (억원)
+            "sale": quarter(ym, "sale_account"),
+            "op": quarter(ym, "bsop_prti"),
+            "net": quarter(ym, "thtr_ntin"),
+            "saleYtd": sale_ytd,
+            "opYtd": op_ytd,
+            "netYtd": g(ym, "income", "thtr_ntin"),
+            # 대차 (억원)
+            "assets": g(ym, "balance", "total_aset"),
+            "liab": g(ym, "balance", "total_lblt"),
+            "equity": g(ym, "balance", "total_cptl"),
+            # 재무비율 (% · 원)
+            "debtRatio": g(ym, "ratio", "lblt_rate"),
+            "roe": g(ym, "ratio", "roe_val"),
+            "epsYtd": g(ym, "ratio", "eps"),
+            "bps": g(ym, "ratio", "bps"),
+            # 수익성 (% · 누적) — 영업이익률은 KIS 가 안 주므로 누적끼리 나눈다
+            "grossMargin": g(ym, "profit", "sale_totl_rate"),
+            "netMargin": g(ym, "profit", "sale_ntin_rate"),
+            "opMargin": (round(op_ytd / sale_ytd * 100, 2)
+                         if op_ytd is not None and sale_ytd else None),
+            # 성장성 (% · 전년 같은 때 대비)
+            "growSale": g(ym, "growth", "grs"),
+            "growOp": g(ym, "growth", "bsop_prfi_inrt"),
+            "growEquity": g(ym, "growth", "equt_inrt"),
+            "growAssets": g(ym, "growth", "totl_aset_inrt"),
+        })
+    data = {"rows": out, "missing": missing, "at": int(time.time())}
+    # **다 비었으면 담지 않는다** — 빈 것을 6시간 붙들고 있으면 그동안 못 고친다.
+    if out:
+        _finance_cache[code] = (time.time(), data)
+    return data
 
 # ── 종목별 장중 추정가집계 (2026-09-22 지시) ────────────────────
 #
@@ -5031,6 +5166,24 @@ class Handler(SimpleHTTPRequestHandler):
             # ── 지금 보고 있는 그 종목 (2026-09-18 지시) ──
             # 위 investor-top 과 다르다. 그쪽은 「상위 목록」이고 가집계이며,
             # 이쪽은 「이 종목」이고 확정치다.
+            if route == "finance":
+                code = (qs.get("code") or [""])[0].strip()
+                if not (code.isdigit() and len(code) == 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                fin = fetch_finance(cfg, code)
+                self._send_json({
+                    "ok": bool(fin["rows"]), "data": fin["rows"],
+                    "meta": {
+                        "code": code, "count": len(fin["rows"]), "period": "분기",
+                        "unit": "억원", "missing": fin["missing"], "fetchedAt": fin["at"],
+                        "ttl": FINANCE_TTL,
+                        "source": {k: tr for k, _p, tr in _FIN_APIS},
+                        # 손익 sale/op/net 은 분기 값(누적에서 뺌) · …Ytd 는 연 누적 그대로
+                        # 비율은 KIS 가 준 그대로(누적 기준) · 99.99 는 None
+                    },
+                })
+                return
             if route == "investor":
                 code = (qs.get("code") or [""])[0].strip()
                 if not (code.isdigit() and len(code) == 6):
