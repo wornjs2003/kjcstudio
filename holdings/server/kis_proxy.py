@@ -710,6 +710,12 @@ def usage_stats():
         # **그중 넘겨받은 몫.** `calls1h - calls1hRelayed` 가 8765 자기 몫이다 —
         # 「넘기기가 얼마나 모았나」 를 재는 값이고 전에는 섞여서 못 봤다.
         "calls1hRelayed": last_1h_relayed,
+        # **밀어주기 비용의 분모** (2026-10-02). 연결 하나가 스레드 하나를
+        # 쥐는 틀(`ThreadingHTTPServer`)이라, 롱폴링을 켜면 이 값이 창 수만큼
+        # 늘어난다. **지금은 요청이 끝나면 돌아온다** — 켜기 전후를 견주려고 둔다.
+        "threads": threading.active_count(),
+        # **응답 시간** — 하한 계산에 쓴다. 못 쟀으면 `None` 이다.
+        "respMs": resp_stats(),
         "perSec60s": round(last_60s / 60.0, 3),
         "budgetUsedPct": round((last_60s / 60.0) / KIS_CALLS_PER_SEC * 100, 1) if KIS_CALLS_PER_SEC else 0,
         "limitUsedPct": round((last_60s / 60.0) / KIS_LIMIT_PER_SEC * 100, 1) if KIS_LIMIT_PER_SEC else 0,
@@ -1049,6 +1055,74 @@ _relay_stat = {"hits": 0, "misses": 0}
 # 자물쇠 없이 안전하다.** `_call_times` 처럼 `pop(0)` 루프를 돌면 읽는 쪽에서
 # 건드릴 때 터질 수 있다. 상한은 **초당 한도 × 1시간** 이라 1시간 창을 못 넘는다.
 _relay_times = collections.deque(maxlen=int(KIS_LIMIT_PER_SEC * 3600) + 1)
+
+# **KIS 응답 시간 표본** (2026-10-02 · 서버리소스 1단계).
+# 하한 계산(`하한 = max(그리는 시간 × 2, 응답 시간)`)에 쓸 값이 `stats` 에
+# **하나도 없었다.** 없으면 그 식이 전부 추측이 된다.
+#
+# **두 가지를 가른다** — 섞으면 하한이 부풀려진다.
+#     `respMs`   순수 왕복 (KIS 가 답하는 데 걸린 시간)      ← 하한에 쓰는 값
+#     `waitMs`   줄 세우기에서 기다린 시간 (`_rate_limit`)   ← 예산이 모자란 정도
+#
+# ⚠️ **표본 상한을 손으로 박지 않는다.** 초당 한도에서 나오므로(1분치)
+# 한도를 올리면 표본도 함께 늘어난다 — 주기·TTL 값이 아니라 **재는 창**이다.
+# 경로마다 따로 담는다. 경로는 코드가 가진 닫힌 집합이라 늘어나지 않는다.
+RESP_SAMPLES = int(KIS_LIMIT_PER_SEC * 60) + 1
+_resp_times = {}                   # 경로 끝 조각 -> deque[(시각, 왕복ms, 대기ms)]
+_resp_lock = threading.Lock()      # dict 에 **키를 만들 때만** 잡는다
+
+
+def _resp_note(path, resp_ms, wait_ms):
+    """성공한 왕복 하나를 적는다. 실패는 안 적는다 — 하한은 성공 응답으로 잰다."""
+    seg = (path or "").rstrip("/").rsplit("/", 1)[-1] or "?"
+    dq = _resp_times.get(seg)
+    if dq is None:
+        with _resp_lock:
+            dq = _resp_times.get(seg)
+            if dq is None:
+                dq = _resp_times[seg] = collections.deque(maxlen=RESP_SAMPLES)
+    # `deque(maxlen=…)` 의 `append` 는 원자적이라 여기서는 자물쇠가 필요 없다.
+    dq.append((time.time(), resp_ms, wait_ms))
+
+
+def _pct(vals, p):
+    """백분위. **표본이 없으면 `0` 이 아니라 `None` 을 낸다** —
+    「없음」 을 `0` 으로 내면 「빠르다」 로 읽힌다 (CLAUDE.md).
+
+    ⚠️ **`round()` 로 자리를 고르지 않는다.** 파이썬의 `round` 는 .5 를
+    짝수로 보내서(`round(49.5) == 50`) **표본 수가 짝수냐 홀수냐에 따라 답이
+    달라진다** — 1~100 의 p50 이 51 로 나왔다 (2026-10-02 시험에서 걸렸다).
+    위로 올리는 nearest-rank 하나로 고정한다.
+    """
+    if not vals:
+        return None
+    v = sorted(vals)
+    idx = -(-int(round(p * len(v) * 1000)) // 1000) - 1      # ceil(p*n) - 1
+    return round(v[min(max(idx, 0), len(v) - 1)], 1)
+
+
+def resp_stats():
+    """경로별 응답 시간. **못 쟀으면 `None`** 이고 `n` 만 0 이다."""
+    out = {}
+    now = time.time()
+    for seg, dq in list(_resp_times.items()):
+        rows = list(dq)                      # 복사해서 센다 — 도는 중에 늘어난다
+        if not rows:
+            continue
+        resp = [r[1] for r in rows]
+        wait = [r[2] for r in rows]
+        out[seg] = {
+            "n": len(rows),
+            "p50": _pct(resp, 0.50),
+            "p95": _pct(resp, 0.95),
+            "max": round(max(resp), 1),
+            "waitP50": _pct(wait, 0.50),
+            "waitP95": _pct(wait, 0.95),
+            # **표본이 얼마나 오래된 것인지 함께 낸다.** 창을 숫자로 박지 않으므로
+            # 읽는 쪽이 이것으로 「무엇을 본 값인지」 를 안다.
+            "spanSec": round(now - rows[0][0], 1),
+        }
+    return out
 RELAY_CACHE_MAX = 2000             # 키에 `params` 가 들어가 수가 늘 수 있다
 
 
@@ -1221,7 +1295,9 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
             _up_stat["fallbacks"] += 1
             _up_stat["lastError"] = safe_message(e)
     token = get_token(cfg)
+    _t_wait0 = time.time()
     _rate_limit(path)
+    _wait_ms = (time.time() - _t_wait0) * 1000.0
     # **실제 KIS 호출을 여기 한 곳에서 센다** (2026-10-01).
     # 전에는 경로마다 손으로 올려 **13곳**이었고 **일부 경로만** 세었다.
     # **상류로 넘긴 것은 위에서 `return` 하므로 안 세어진다** — 맞다.
@@ -1237,8 +1313,12 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
         "content-type": "application/json; charset=utf-8",
     })
     try:
+        _t_resp0 = time.time()
         with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+            raw = resp.read()
+        # **왕복만 잰다** — JSON 해석은 우리 쪽 일이라 뺀다.
+        _resp_note(path, (time.time() - _t_resp0) * 1000.0, _wait_ms)
+        data = json.loads(raw.decode("utf-8"))
     except urllib.error.HTTPError as e:
         detail = scrub(e.read().decode("utf-8", "replace"))[:300]
         # 초당 건수 초과(EGW00201)는 잠깐 쉬었다 한 번만 다시 시도한다.
