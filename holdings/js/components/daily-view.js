@@ -757,39 +757,54 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
 
   /* ── 그리기 ─────────────────────────────── */
 
-  function drawAll() {
-    /* 한 칸이 터져도 나머지는 그려지게 따로따로 부른다.
-       전에는 drawTelegram 이 맨 끝이라, 앞에서 무엇이 잘못되면 문안만 조용히
-       비어 있고 다른 칸은 멀쩡해 보였다. 어느 칸이 문제인지 알 수 없다. */
-    for (const [name, fn] of [
-      ['일정', drawSchedule], ['지수', drawIndices],
-      ['섹터', drawSectors], ['뉴스', drawNews], ['문안', drawTelegram],
-    ]) {
-      try { fn(); } catch (e) { console.error(`[데일리분석] ${name} 칸을 그리지 못했습니다`, e); }
-    }
+  /* 한 칸이 터져도 나머지는 그려지게 칸마다 따로 부른다.
+     전에는 drawTelegram 이 맨 끝이라, 앞에서 무엇이 잘못되면 문안만 조용히
+     비어 있고 다른 칸은 멀쩡해 보였다. 어느 칸이 문제인지 알 수 없다. */
+  function safe(name, fn) {
+    try { return fn(); } catch (e) { console.error(`[데일리분석] ${name} 칸을 그리지 못했습니다`, e); }
+  }
+
+  /* ── 시작 ───────────────────────────────── */
+
+  /* **받는 대로 그 칸을 그린다** (2026-10-02 — 외부접속에서 「자세히」 가 느리던 것).
+     전에는 다섯을 Promise.all 로 다 기다린 뒤 한꺼번에 그려서, 하나만 늦어도
+     (2026-10-01 18:33 실측 — /api/news/stored 하나가 2.2초) 모든 칸이 그동안 비어 있었다.
+     칸끼리 서로의 값을 안 읽으므로(일정 · 지수 · 업종 · 뉴스 · 알림 · 문안) 따로 그려도 된다.
+     **모달 머리만** 지수와 업종 둘 다를 쓰므로 모두 끝난 뒤에 넘긴다. */
+  async function load() {
+    /* 받는 사이에 닫혔으면 그린 것이 갈 곳이 없다. 떨어져 나간 요소를
+       건드리게 되고, 그 사이 또 부르는 것도 헛일이다. */
+    const then = (get, name, draw) => get().then(() => { if (!dead) safe(name, draw); });
 
     const sub = $('kh-dl-sub');
     if (sub) {
       sub.textContent = `${todayLabel()} · 그날의 일정 · 지수 · 뉴스를 한 장으로 모읍니다`;
     }
-  }
 
-  /* ── 시작 ───────────────────────────────── */
-
-  async function load() {
-    await Promise.all([loadIndices(), loadNews(), loadSchedule(), loadSectors(),
-                       loadAlerts()]);
-    /* 받는 사이에 닫혔으면 그린 것이 갈 곳이 없다. 떨어져 나간 요소를
-       건드리게 되고, 그 사이 또 부르는 것도 헛일이다. */
-    if (dead) return;
-    drawAll();
-    drawAlerts();
-    /* 시세 띠는 붙인 쪽이 갱신한다. 이 컴포넌트는 띠를 모른다 —
-       모달에는 띠가 없기 때문이다. */
-    if (onIndices) onIndices(indices);
-    /* 모달 머리도 같은 자리에서 넘긴다. 값을 받은 뒤라야 채울 수 있고,
+    const ixDone = loadIndices().then(() => {
+      if (dead) return;
+      safe('지수', drawIndices);
+      /* 시세 띠는 붙인 쪽이 갱신한다. 이 컴포넌트는 띠를 모른다 —
+         모달에는 띠가 없기 때문이다. */
+      if (onIndices) onIndices(indices);
+    });
+    const secDone = then(loadSectors, '섹터', drawSectors);
+    /* 모달 머리는 지수와 업종 둘을 쓰므로 **그 둘만** 기다린다. 전부를 기다리면
+       뉴스 하나가 늦을 때 머리까지 비어 있다 (2026-10-02 실측 — 뉴스 3초 지연에 머리 3.1초).
        전용 화면은 머리가 없어 안 넘긴다. */
-    if (onHead) onHead(headValues());
+    Promise.all([ixDone, secDone]).then(() => {
+      if (!dead && onHead) safe('머리', () => onHead(headValues()));
+    });
+
+    await Promise.all([
+      ixDone, secDone,
+      then(loadNews, '뉴스', drawNews),
+      then(loadSchedule, '일정', drawSchedule),
+      then(loadAlerts, '알림', drawAlerts),
+      Promise.resolve(safe('문안', drawTelegram)).catch((e) => {
+        console.error('[데일리분석] 문안 칸을 그리지 못했습니다', e);
+      }),
+    ]);
   }
 
   /* ── 모달 머리에 얹을 값 ──
