@@ -33,6 +33,7 @@ main 에 합쳐지면 post-merge 훅이 해시로 카드를 찾아 done — 못 
 「못 봤다」(종료 2)이고 훅은 그때 막지 않는다 — 보드가 단일 장애점이 됐기 때문이다.
 """
 import glob
+import importlib.util
 import io
 import json
 import os
@@ -63,17 +64,17 @@ def session_name():
         # **세션 UUID 로 먼저 맞춘다.** `HERDR_PANE_ID` 는 세션이 시작될 때 박힌 값이라
         # 창·탭을 재배치하면 낡는다 — 2026-10-01 에 주식페이지_개발3 이 `w5:p1` 을 들고 있었는데
         # 목록에는 `w2:p5` 였다. `agent_session.value` 는 `CLAUDE_CODE_SESSION_ID` 와 1:1 이라 안 낡는다.
-        # **창 이름(label)이 먼저다 — 터미널 제목이 아니다 (2026-10-02).** 재시작 뒤 `agent list` 에는
-        # label 이 없고 제목은 Claude 가 대화 주제로 바꿔 쓴다(「Claude Code」 · 남의 이름이 섞인 「재념정의 시작」).
-        # 그날 아침 모든 세션의 카드 게이트가 이름을 못 찾았다. `pane list` 의 label 은 재권님이 붙인 이름이다.
+        # **창 이름(label)이 먼저다 — 터미널 제목이 아니다 (2026-10-02).** 재시작 뒤 `agent list` 에는 label 이 없고
+        # 제목은 Claude 가 대화 주제로 바꿔 쓴다. 창 이름을 읽는 길은 `tools/session-addr.py` 의 labels() 한 곳이다 —
+        # 세션 간 주소 도구와 같은 원천을 쓴다(「같은 값은 한 곳에만 둔다」 · 창구 검토).
         try:
-            out = subprocess.run(["herdr", "pane", "list"], capture_output=True,
-                                 text=True, timeout=TIMEOUT).stdout
-            for a in json.loads(out)["result"]["panes"]:
-                hit = (sid and (a.get("agent_session") or {}).get("value") == sid) or \
-                      (not sid and pane and a.get("pane_id") == pane)
-                if hit and (a.get("label") or "").strip():
-                    return a["label"].strip()
+            spec = importlib.util.spec_from_file_location(
+                "session_addr", os.path.join(os.path.dirname(os.path.abspath(__file__)), "session-addr.py"))
+            sa = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(sa)
+            lb = sa.labels() or {}
+            if sid and sid in lb and not lb[sid][0].startswith("?"):
+                return lb[sid][0]
         except Exception:
             pass
         try:

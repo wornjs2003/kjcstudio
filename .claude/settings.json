@@ -65,6 +65,26 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-mockup.py\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-sendmessage-addr.py\"",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "SessionStart": [
