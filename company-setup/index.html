@@ -16,6 +16,8 @@
      ⚠️ 그래서 holdings/css/frame.css · home.css 를 고칠 때 이 화면도 함께 바뀐다 -->
 <link rel="stylesheet" href="../holdings/css/frame.css" />
 <link rel="stylesheet" href="../holdings/css/home.css" />
+<!-- 모달은 홀딩스 것을 그대로 쓴다 — 닫는 길 넷 · 크기가 한 곳에서 정해진다 (2026-10-02) -->
+<link rel="stylesheet" href="../holdings/css/modal.css" />
 <link rel="stylesheet" href="css/insight.css" />
 </head>
 <body data-nav="company-setup" data-site-root="../">
@@ -59,8 +61,10 @@
     <!-- 홀딩스 「지금 뜨는 산업 + 데일리분석」 줄 자리 -->
     <section class="kh-rank" aria-label="분석 갈래">
       <div class="kh-card kh-sc-card">
-        <div class="kh-tabs"><button class="kh-tab is-active">공시</button></div>
-        <ul class="in-news in-sm in-cols in-scroll" data-feed="notice"></ul>
+        <!-- 2026-10-02 지시 — 공시 대신 종목 분석. 글은 data/stock-analysis.json 한 곳에 쌓는다.
+             공시는 fetch-naver-news.py 가 그대로 받는다 — 화면에서만 뺐다 -->
+        <div class="kh-tabs"><button class="kh-tab is-active">종목 분석</button></div>
+        <ul class="in-news in-sm in-scroll" data-analysis></ul>
       </div>
       <div class="kh-card kh-dlm-card">
         <div class="kh-tabs"><button class="kh-tab is-active">영상 분석</button></div>
@@ -82,5 +86,6 @@
 
 <script src="../assets/js/main.js"></script>
 <script src="js/insight.js"></script>
+<script type="module" src="js/insight-modal.js"></script>
 </body>
 </html>
