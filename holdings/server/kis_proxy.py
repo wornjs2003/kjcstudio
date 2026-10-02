@@ -610,6 +610,10 @@ _last_high_at = 0.0            # 높은 쪽이 마지막으로 /api/kis/* 를 �
 _prio_stat = {"lowCalls": 0, "lowYields": 0}
 
 
+# `_rate_limit` 이 그 호출에서 **일부러 잔 시간**(ms). `kis_get` 이 대기에서 뺀다.
+_rl_yield = threading.local()
+
+
 def _prio_low():
     return getattr(_prio, "low", False)
 
@@ -627,15 +631,22 @@ def _rate_limit(path=None):
     """
     # 미리받기는 화면에 자리를 내준다. 급하지 않은 일이라 늦어져도 잃는 것이
     # 없고, 화면은 기다리면 재권님이 보신다 (2026-09-18).
+    _rl_yield.ms = 0.0
     if threading.current_thread().name == PREFILL_THREAD_NAME:
+        _t0 = time.monotonic()
         time.sleep(PREFILL_BUSY_CALL_GAP if _ui_busy() else PREFILL_IDLE_CALL_GAP)
+        # **실제로 잔 시간을 잰다** — 이 기계는 잠에서 늦게 깨서(10ms → 49ms 실측)
+        # 정한 값으로 빼면 그 넘침이 줄 서기로 세어진다
+        _rl_yield.ms += (time.monotonic() - _t0) * 1000.0
 
     # **확인용 서버가 넘긴 것은 외부접속에 비켜선다** (ⓒ · 위 주석).
     if _prio_low():
         _prio_stat["lowCalls"] += 1
         if (time.monotonic() - _last_high_at) < LOW_PRIO_BUSY_WINDOW:
             _prio_stat["lowYields"] += 1
+            _t0 = time.monotonic()
             time.sleep(LOW_PRIO_YIELD_SEC)
+            _rl_yield.ms += (time.monotonic() - _t0) * 1000.0
 
     # **간격은 넘은 횟수에 따라 늘어난다** (㉡). 잠잠하면 원래 값이다.
     gap = _gap_now()
@@ -1215,8 +1226,13 @@ def _resp_key(path):
     return seg[-1] if seg else "?"
 
 
-def _resp_note(path, resp_ms, wait_ms):
-    """성공한 왕복 하나를 적는다. 실패는 안 적는다 — 하한은 성공 응답으로 잰다."""
+def _resp_note(path, resp_ms, wait_ms, yield_ms=0.0):
+    """성공한 왕복 하나를 적는다. 실패는 안 적는다 — 하한은 성공 응답으로 잰다.
+
+    `wait_ms` 는 **줄에 선 시간**, `yield_ms` 는 **일부러 비켜선 시간**(미리받기 ·
+    ⓒ 낮음)이다. 섞이면 5분봉 대기 p95 가 2.15초로 나왔다 — 실제 줄은 0.15초쯤이고
+    2.0초는 미리받기가 화면에 비켜선 것이었다(2026-10-02 qa 실측 · 개발2 코드 확인).
+    """
     seg = _resp_key(path)
     dq = _resp_times.get(seg)
     if dq is None:
@@ -1225,7 +1241,7 @@ def _resp_note(path, resp_ms, wait_ms):
             if dq is None:
                 dq = _resp_times[seg] = collections.deque(maxlen=RESP_SAMPLES)
     # `deque(maxlen=…)` 의 `append` 는 원자적이라 여기서는 자물쇠가 필요 없다.
-    dq.append((time.time(), resp_ms, wait_ms))
+    dq.append((time.time(), resp_ms, wait_ms, yield_ms))
 
 
 def _pct(vals, p):
@@ -1254,6 +1270,7 @@ def resp_stats():
             continue
         resp = [r[1] for r in rows]
         wait = [r[2] for r in rows]
+        yld = [r[3] for r in rows]
         out[seg] = {
             "n": len(rows),
             "p50": _pct(resp, 0.50),
@@ -1261,6 +1278,9 @@ def resp_stats():
             "max": round(max(resp), 1),
             "waitP50": _pct(wait, 0.50),
             "waitP95": _pct(wait, 0.95),
+            # 일부러 비켜선 시간 — 줄(`wait`)과 따로 낸다
+            "yieldP50": _pct(yld, 0.50),
+            "yieldP95": _pct(yld, 0.95),
             # **표본이 얼마나 오래된 것인지 함께 낸다.** 창을 숫자로 박지 않으므로
             # 읽는 쪽이 이것으로 「무엇을 본 값인지」 를 안다.
             "spanSec": round(now - rows[0][0], 1),
@@ -1709,7 +1729,8 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
     token = get_token(cfg)
     _t_wait0 = time.time()
     _rate_limit(path)
-    _wait_ms = (time.time() - _t_wait0) * 1000.0
+    _yield_ms = getattr(_rl_yield, "ms", 0.0)
+    _wait_ms = max(0.0, (time.time() - _t_wait0) * 1000.0 - _yield_ms)
     # **실제 KIS 호출을 여기 한 곳에서 센다** (2026-10-01).
     # 전에는 경로마다 손으로 올려 **13곳**이었고 **일부 경로만** 세었다.
     # **상류로 넘긴 것은 위에서 `return` 하므로 안 세어진다** — 맞다.
@@ -1729,7 +1750,7 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
         with urllib.request.urlopen(req, timeout=15) as resp:
             raw = resp.read()
         # **왕복만 잰다** — JSON 해석은 우리 쪽 일이라 뺀다.
-        _resp_note(path, (time.time() - _t_resp0) * 1000.0, _wait_ms)
+        _resp_note(path, (time.time() - _t_resp0) * 1000.0, _wait_ms, _yield_ms)
         data = json.loads(raw.decode("utf-8"))
     except urllib.error.HTTPError as e:
         detail = scrub(e.read().decode("utf-8", "replace"))[:300]
