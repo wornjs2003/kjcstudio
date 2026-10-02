@@ -25,9 +25,13 @@
    ========================================================================== */
 
 import { apiFetch } from '../data/api.js';
+import { watch } from '../store/longpoll.js';
 
-/* 파일은 세션이 하루 한 번 고친다. 화면이 자주 볼 이유가 없다 */
-const RELOAD_MS = 30 * 60 * 1000;
+/* 파일은 세션이 하루 한 번 고친다. **주기를 갖지 않는다 — 바뀌면 서버가 알려 준다**
+   (2026-10-02 · 재권님 「이거 안대로 수정먼저하고」 · `store/longpoll.js`).
+   서버가 이 주소를 지켜보지 못하면 아래 대체값 주기로 다시 읽는다 */
+const AI_FILE = './data/ai-analysis.json';
+const RELOAD_FALLBACK_MS = 30 * 60 * 1000;
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g,
@@ -64,7 +68,7 @@ export function mountAiAnalysis({ box, when } = {}) {
   async function load() {
     try {
       /* 저장소 파일이라 /api 가 아니다. 서버가 그대로 내보낸다 */
-      const r = await apiFetch('./data/ai-analysis.json', { cache: 'no-store' });
+      const r = await apiFetch(AI_FILE, { cache: 'no-store' });
       if (!r || !r.ok) throw new Error(r && r.status);
       doc = await r.json();
     } catch {
@@ -102,7 +106,9 @@ export function mountAiAnalysis({ box, when } = {}) {
     box.innerHTML = parts + cons;
   }
 
-  timer = setInterval(() => { if (!document.hidden) load(); }, RELOAD_MS);
+  /* 서버는 주소를 **절대 경로**로 받는다 — 이 화면 자리에서 풀어 넘긴다 */
+  timer = watch({ url: () => new URL(AI_FILE, location.href).pathname,
+                  onChange: () => load(), key: null, fallbackMs: RELOAD_FALLBACK_MS });
   load();
 
   return {
@@ -111,6 +117,6 @@ export function mountAiAnalysis({ box, when } = {}) {
       code = next;
       paint();          // 파일은 이미 있다. 다시 받을 이유가 없다
     },
-    destroy() { if (timer) clearInterval(timer); },
+    destroy() { if (timer) timer.stop(); },
   };
 }

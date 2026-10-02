@@ -10,6 +10,7 @@
 
 import { color, alpha } from './theme.js';
 import { apiFetch } from './data/api.js';
+import { watch } from './store/longpoll.js';
 
 /* 차트는 canvas 라 CSS 를 상속받지 못해 색을 문자열로 넘겨야 한다.
    그 값은 theme.js 가 ../assets/css/theme.css 에서 읽어 오므로, 색을 바꿀
@@ -533,10 +534,48 @@ function volumeMA(candles, barPeriod, period = IND_PERIOD.vol) {
  *
  * 서버에도 캐시를 두는 편이 근본이지만 kis_proxy.py 와 kis-worker.js 를
  * 같이 고쳐야 한다. 그것은 따로 잡는다.
+ *
+ * **화면이 유효기간을 정하지 않는다** (2026-10-02 · 「서버가 알려준다」 · 재권님
+ * 「룰 위반부터 잡아봐」). 전에는 60초가 지나면 버리고 다시 받았다 — 언제 새로
+ * 받을지를 화면이 정한 것이다. 이제 **누가 그 주소를 지켜보는 동안만** 쥔 봉을
+ * 믿는다. 바뀌면 서버가 알리고(`watchCandles`) 그때 버린다. 아무도 안 지켜보는
+ * 봉은 다음에 부를 때 새로 받는다 — 언제 바뀌었는지 모르기 때문이다.
  */
-const CANDLE_TTL_MS = 60_000;
 const CANDLE_MAX = 60;              // 이보다 쌓이면 오래된 것부터 버린다
 const _candleCache = new Map();
+const _watched = new Map();         // 지켜보는 주소 → 지켜보는 수
+
+/* 서버가 롱폴을 모를 때 다시 받을 대체값. 봉의 서버 값(기간별 `fresh_sec`)은
+   아직 `timing` 에 안 나온다 — 나오면 그 이름으로 바꾼다 */
+const CANDLE_FALLBACK_MS = 60_000;
+
+/**
+ * 봉을 지켜본다 — 바뀌면 쥔 것을 버리고 `onChange` 를 부른다.
+ * @param {Function} getCode    → 지금 종목
+ * @param {Function} getPeriod  → 지금 기간 단추 값
+ * @param {Function} onChange   새로 받아 그린다 (`fetchCandles` 가 새로 받는다)
+ * @returns {{ stop: Function, refresh: Function }} 종목·기간이 바뀌면 `refresh()`
+ */
+export function watchCandles(getCode, getPeriod, onChange) {
+  let held = null;                  // 지금 지켜보는 주소
+  const hold = (u) => {
+    if (u === held) return;
+    if (held) { const n = (_watched.get(held) || 1) - 1; if (n > 0) _watched.set(held, n); else _watched.delete(held); }
+    held = u;
+    if (u) _watched.set(u, (_watched.get(u) || 0) + 1);
+  };
+  const url = () => { const c = getCode(); const u = c ? candleUrl(c, getPeriod()) : null; hold(u); return u; };
+  const w = watch({
+    url,
+    onChange: () => { if (held) _candleCache.delete(held); return onChange(); },
+    key: null, fallbackMs: CANDLE_FALLBACK_MS,
+  });
+  url();                            // 지켜보기 시작 — 첫 바퀴 전에 받은 봉도 믿는다
+  return {
+    refresh() { url(); w.refresh(); },
+    stop() { hold(null); w.stop(); },
+  };
+}
 
 /* 서버에서 캔들 가져오기. periodId 는 화면 버튼 값('1d','5m' 등)
  *
@@ -553,8 +592,7 @@ export function candleUrl(code, periodId = '1d') {
 
 export async function fetchCandles(code, periodId = '1d', opt = {}) {
   const period = PERIOD_MAP[periodId] || 'D';
-  const limit = barsToFetch(periodId);
-  const key = `${code}:${period}:${limit}`;
+  const key = candleUrl(code, periodId);
 
   /* `fresh` 면 캐시를 건너뛴다 (2026-09-30 지시 — 「5번」).
    *
@@ -565,12 +603,12 @@ export async function fetchCandles(code, periodId = '1d', opt = {}) {
    * 쓰는 곳은 **모달을 닫을 때 하나**다. 모달을 보는 동안 카드 차트는
    * 안 그려지는데, 닫고 나서 캐시(60초)에 걸리면 **최대 1분 옛 그림**이
    * 남는다. 닫는 순간에 한 번이라 **총량은 거의 안 는다.** */
-  if (!opt.fresh) {
+  if (!opt.fresh && _watched.has(key)) {
     const hit = _candleCache.get(key);
-    if (hit && Date.now() - hit.at < CANDLE_TTL_MS) return hit.value;
+    if (hit) return hit.value;
   }
 
-  const r = await apiFetch(candleUrl(code, periodId), { cache: 'no-store' });
+  const r = await apiFetch(key, { cache: 'no-store' });
   if (!r) throw new Error('로그인이 만료되었습니다');
   if (!r.ok) throw new Error(`차트 데이터를 불러오지 못했습니다 (${r.status})`);
   const j = await r.json();

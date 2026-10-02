@@ -26,7 +26,7 @@
    몰라도 된다 — 어느 길이든 `onChange` 가 불린다.
    ========================================================================== */
 
-import { everyServerMs, serverMs, serverFlag, loadTiming } from './timing.js';
+import { everyServerMs, serverMs, serverFlag, serverData, loadTiming } from './timing.js';
 
 const subs = new Set();
 let mode = 'long';          // 'long' | 'fallback'
@@ -78,6 +78,15 @@ function startFallback(s) {
   });
 }
 
+/* **서버가 지켜볼 수 있는 주소인가** (2026-10-02). 서버가 받는 앞머리를 `stats` 의
+   `longpollPrefixes` 로 알려 주면 그것을, 안 알려 주면 처음부터 받던 `/api/kis/` 만 본다.
+   **못 받는 주소 하나 때문에 묶음 전체가 폴백으로 떨어지지 않게** 그 구독만 따로 돈다 */
+function canLong(u) {
+  const list = serverData('longpollPrefixes');
+  const prefixes = Array.isArray(list) && list.length ? list : ['/api/kis/'];
+  return prefixes.some((p) => u.startsWith(p));
+}
+
 function goFallback() {
   mode = 'fallback';
   subs.forEach(startFallback);
@@ -104,6 +113,7 @@ async function loop() {
       subs.forEach((s) => {
         const u = s.url();
         if (!u) return;
+        if (!canLong(u)) { startFallback(s); return; }       // 이 구독만 서버 값 주기로
         if (u !== s.lastUrl) { s.lastUrl = u; s.hash = ''; }   // 주소가 바뀌면 처음부터
         list.push({ s, u });
       });
