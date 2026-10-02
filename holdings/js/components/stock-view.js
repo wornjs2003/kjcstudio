@@ -36,6 +36,7 @@ import { mountStockDetail } from './stock-detail.js';
 import { mountIndicatorMenu } from './indicator-menu.js';
 import { apiFetch } from '../data/api.js';
 import { everyServerMs } from '../store/timing.js';
+import { watch } from '../store/longpoll.js';
 
 /* 서버가 5분마다 공시를 받아 두므로 화면도 그 주기에 맞춘다 */
 /* **서버가 정한다** (2026-10-02 · 서버리소스 화면 묶음 ⑥).
@@ -43,9 +44,11 @@ import { everyServerMs } from '../store/timing.js';
 const DISCLOSURE_RELOAD_KEY = 'dart.POLL_INTERVAL';
 const DISCLOSURE_RELOAD_FALLBACK_MS = 5 * 60 * 1000;
 
-/* 체결은 장중에 계속 쌓인다. 서버 캐시가 3초라 그보다 짧게 부를 이유가 없다.
-   **확인용 서버(--slow)에서는 5분 캐시**라 값이 그만큼 묵어 보인다 — 정상이다. */
-const TICKS_RELOAD_MS = 5 * 1000;
+/* 체결은 장중에 계속 쌓인다. **주기를 갖지 않는다 — 바뀌면 서버가 알려 준다**
+   (2026-10-02 · 재권님 「주는 대로 받아야」 · `store/longpoll.js`). 서버가 롱폴을
+   모르면 `kis_proxy` 의 `TICKS_TTL` 주기로 묻는다. 아래 숫자는 **그마저 없을 때**다. */
+const TICKS_RELOAD_KEY = 'kis_proxy.TICKS_TTL';
+const TICKS_RELOAD_FALLBACK_MS = 5 * 1000;
 
 /* **서버가 정한다** (2026-09-30). `kis_proxy` 의 `INVESTOR_FLOW_TTL` 을 따른다.
    아래는 서버가 없을 때의 대체값이다 (`store/timing.js` 참고) */
@@ -449,7 +452,9 @@ export function mountStockView(root, stock, { onBack } = {}) {
 
   loadTicks();
   loadFlow();
-  const tickTimer = setInterval(() => { if (!document.hidden && !dead) loadTicks(); }, TICKS_RELOAD_MS);
+  const tickWatch = watch({ url: () => (dead ? null : `/api/kis/ticks?code=${stock.code}`),
+                           onChange: () => loadTicks(),
+                           key: TICKS_RELOAD_KEY, fallbackMs: TICKS_RELOAD_FALLBACK_MS });
   const stopFlow = everyServerMs(FLOW_RELOAD_KEY, FLOW_RELOAD_FALLBACK_MS,
                                  () => { if (!dead) loadFlow(); });
 
@@ -478,7 +483,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
       if (chart) { try { setChartView(periodId, chart.getView()); } catch { /* 아직 없다 */ } }
       if (chart) { chart.destroy(); chart = null; }
       if (reloadTimer) { reloadTimer(); reloadTimer = null; }   // everyServerMs 가 준 멈추는 함수
-      clearInterval(tickTimer);
+      tickWatch.stop();
       stopFlow();                 // everyServerMs 가 준 멈추는 함수
       panel3.destroy();
       detail.destroy();

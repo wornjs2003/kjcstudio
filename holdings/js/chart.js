@@ -544,6 +544,13 @@ const _candleCache = new Map();
  * 정한다. 전에는 인자였는데 두 화면이 서로 다른 값을 주어 일봉이 갈렸다.
  * 240 이었던 기본값도 240-120=120 이라 200일선이 앞 79봉 비어 있었다
  * (2026-09-29). **줄 수 있게 두면 언젠가 다시 갈린다.** */
+/** 캔들을 받는 주소. **받는 곳과 바뀜을 지켜보는 곳이 같은 주소를 써야 한다** —
+ *  롱폴링(`store/longpoll.js`)이 이 주소의 응답이 바뀌었는지를 본다 (2026-10-02) */
+export function candleUrl(code, periodId = '1d') {
+  const period = PERIOD_MAP[periodId] || 'D';
+  return `/api/kis/chart?code=${code}&period=${period}&limit=${barsToFetch(periodId)}`;
+}
+
 export async function fetchCandles(code, periodId = '1d', opt = {}) {
   const period = PERIOD_MAP[periodId] || 'D';
   const limit = barsToFetch(periodId);
@@ -563,10 +570,7 @@ export async function fetchCandles(code, periodId = '1d', opt = {}) {
     if (hit && Date.now() - hit.at < CANDLE_TTL_MS) return hit.value;
   }
 
-  const r = await apiFetch(
-    `/api/kis/chart?code=${code}&period=${period}&limit=${limit}`,
-    { cache: 'no-store' }
-  );
+  const r = await apiFetch(candleUrl(code, periodId), { cache: 'no-store' });
   if (!r) throw new Error('로그인이 만료되었습니다');
   if (!r.ok) throw new Error(`차트 데이터를 불러오지 못했습니다 (${r.status})`);
   const j = await r.json();
