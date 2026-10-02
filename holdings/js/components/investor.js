@@ -154,14 +154,26 @@ export function mountInvestor({ box, tabs } = {}) {
     } catch { return null; }
   }
 
-  /* ── 투자자 ── */
+  /* ── 투자자 ──
+   *
+   * **안 바뀌었으면 안 그린다** (2026-10-02). 이 값은 **하루 네 번만** 바뀌는데
+   * (위 머리글) 갱신은 그보다 훨씬 자주 돈다 — 그때마다 `innerHTML` 을 쓰면
+   * 똑같은 글자를 지웠다 다시 쓴다.
+   *
+   * **칸을 하나씩 고치지 않고 글자를 견준다.** 이 칸에는 굴러가는 자리가 없고
+   * 높이는 `css/home.css` 의 `min-height` 가 잡아 두어, 바뀐 때 한 번 다시
+   * 그려도 자리가 움직이지 않는다 — 「지금 뜨는 산업」 과 다른 자리다(그쪽은
+   * `.kh-sc-list` 가 굴러가므로 글자만 고친다). 견주기는 **반쯤 고친 상태가
+   * 없다**는 것도 이점이다. */
+  let lastHtml = '';
+
   function paint() {
-    if (!rows || !rows.length) {
-      box.innerHTML = '<span class="kh-mut">불러오지 못했습니다</span>';
-    } else if (view === 'today') {
-      box.innerHTML = paintToday(rows[0]);
-    } else {
-      box.innerHTML = paintDays(rows.slice(0, DAYS_SHORT));
+    const html = (!rows || !rows.length)
+      ? '<span class="kh-mut">불러오지 못했습니다</span>'
+      : (view === 'today' ? paintToday(rows[0]) : paintDays(rows.slice(0, DAYS_SHORT)));
+    if (html !== lastHtml) {
+      box.innerHTML = html;
+      lastHtml = html;
     }
     if (tabs) {
       tabs.querySelectorAll('[data-view]').forEach((b) =>
@@ -318,6 +330,9 @@ export function mountInvestor({ box, tabs } = {}) {
       top = null; topMiss = false;
       rows = null;
       box.innerHTML = '<span class="kh-mut">불러오는 중</span>';
+      /* **견주는 값을 비운다.** 안 비우면 새 종목의 값이 앞 종목과 같을 때
+         `paint()` 가 「같다」 로 보고 건너뛰어 **「불러오는 중」 이 그대로 남는다** */
+      lastHtml = '';
       load();
     },
     destroy() { if (timer) clearInterval(timer); },

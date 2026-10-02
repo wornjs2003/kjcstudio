@@ -39,6 +39,7 @@
 import { apiFetch } from '../data/api.js';
 import { fmtWon, fmtPct, dirClass } from '../utils/format.js';
 import { everyServerMs } from '../store/timing.js';
+import { patchRows } from '../utils/reconcile.js';
 
 /* **1·2·3위를 나란히 놓는다** (2026-09-22 지시 — 「지금뜨는 산업 하나에
    다 들어있어서 잘 보여지지가 않는데」 · 「3위까지만 봐도 댐」).
@@ -127,7 +128,7 @@ export function mountSectors(root) {
   }
 
   /* ── 업종·테마 목록 ── */
-  async function loadGroups() {
+  async function loadGroups(force = false) {
     setNote('불러오는 중');
     let j = null;
     try {
@@ -150,15 +151,18 @@ export function mountSectors(root) {
 
     pick = groups[0].no;          // 모달이 이것부터 보여준다
     paintBody();
-    loadTop();
+    loadTop(force);
   }
 
-  /** 위 셋의 종목을 **한꺼번에** 받는다. 받아 둔 것은 다시 안 부른다 */
-  async function loadTop() {
+  /** 위 셋의 종목을 **한꺼번에** 받는다. 받아 둔 것은 다시 안 부른다.
+   *  `force` 면 받아 둔 것이 있어도 다시 받는다 — **다만 지우지 않는다.**
+   *  지우면 응답이 오기까지 그 칸이 「불러오는 중」 이 되고, 그 사이 칸이
+   *  새로 만들어져 **굴려 둔 자리가 맨 위로 돌아간다** (2026-10-02). */
+  async function loadTop(force = false) {
     const top = groups.slice(0, TOP_GROUPS);
     const mine = ++seq;
     await Promise.all(top.map(async (g) => {
-      if (stockCache[key(kind, g.no)]) return;
+      if (!force && stockCache[key(kind, g.no)]) return;
       try {
         const r = await apiFetch(`/api/naver/stocks?kind=${kind}&no=${g.no}`, { cache: 'no-store' });
         if (r && r.ok) {
@@ -202,15 +206,124 @@ export function mountSectors(root) {
 
     /* **목록만 굴러간다.** 머리(이름 · 띠 · 상승/보합/하락 · 「상승률 TOP」)는
        붙어 있어야 어느 묶음을 보고 있는지 안 사라진다. */
-    const list = (STOCK_COUNT ? rows.slice(0, STOCK_COUNT) : rows).map((st) =>
-      `<a class="kh-sc-st" href="./stock.html?code=${st.code}">
+    const list = (STOCK_COUNT ? rows.slice(0, STOCK_COUNT) : rows).map(stockRowHtml).join('');
+    return head + `<div class="kh-sc-list">${list}</div>`;
+  }
+
+  /** 종목 한 줄. **처음 그릴 때와 새로 들어온 종목에 같은 것을 쓴다** —
+   *  두 곳에 적으면 한쪽만 고쳐져 줄 모양이 갈린다 */
+  function stockRowHtml(st) {
+    return `<a class="kh-sc-st" data-code="${st.code}" href="./stock.html?code=${st.code}">
          <span class="kh-sc-stn" title="${st.name}">${st.name}</span>
          <span class="kh-sc-stp">
            <b class="kh-num">${fmtWon(st.price)}</b>
            <i class="kh-num ${dirClass(st.pct)}">${fmtPct(st.pct)}</i>
          </span>
-       </a>`).join('');
-    return head + `<div class="kh-sc-list">${list}</div>`;
+       </a>`;
+  }
+
+  /* ── 그려진 것을 고친다 — 다시 만들지 않는다 (2026-10-02) ──
+   *
+   * `body.innerHTML` 로 갈아끼우면 `.kh-sc-list` 가 **새 노드**가 된다.
+   * 그 칸은 `overflow-y: auto` 라(`css/home.css`) **굴려 둔 자리가 맨 위로
+   * 돌아간다** — 갱신마다 그러면 읽던 자리를 빼앗는다. 값만 바뀌는 갱신에서는
+   * 자리를 그대로 두고 **글자·폭만 고친다.**
+   *
+   * **모양이 바뀌는 자리는 고치지 않는다** — 묶음 순서가 바뀌었거나
+   * 「불러오는 중」 ↔ 목록처럼 칸의 짜임이 달라지면 그때만 다시 만든다.
+   * 그것은 값이 아니라 **내용이 바뀐 것**이라 자리가 돌아가도 맞다. */
+
+  /** 고칠 수 있으면 고치고 `true`. 못 고치면 아무것도 안 하고 `false` */
+  function patchBody(top) {
+    const cols = body.querySelectorAll('.kh-sc-col');
+    if (cols.length !== top.length) return false;
+    for (let i = 0; i < top.length; i++) {
+      if (cols[i].dataset.no !== String(top[i].no)) return false;
+      if (!canPatchCol(cols[i], top[i])) return false;
+    }
+    top.forEach((g, i) => patchCol(cols[i], g, i + 1));
+    return true;
+  }
+
+  /** 짜임이 그대로인가 — 고치기 전에 **전부** 본다. 한 칸이라도 아니면
+   *  손대지 않고 다시 만든다 (반쯤 고친 상태를 남기지 않는다).
+   *
+   *  **줄 순서나 종목이 바뀌는 것은 「짜임이 달라진 것」 이 아니다** (2026-10-02).
+   *  이 목록은 **상승률 TOP** 이라 갱신마다 순서가 바뀌고 들락날락한다 —
+   *  2026-10-02 실측에서 **한 바퀴 만에 세 칸 다 바뀌었다.** 그것까지 「못
+   *  고친다」 로 보면 **고치는 길이 사실상 안 쓰인다**(처음 쓴 것이 그 꼴이었다).
+   *  굴러가는 칸(`.kh-sc-list`)만 그대로 두면 자리는 지켜지므로, 줄은
+   *  **코드로 맞춰 옮겨 쓴다.** */
+  function canPatchCol(col, g) {
+    const rows = stockCache[key(kind, g.no)];
+    const list = col.querySelector('.kh-sc-list');
+    if (!rows) return !list;                 // 아직 안 온 칸끼리
+    if (!rows.length) return false;          // 「종목이 없습니다」 는 다시 만든다
+    return !!list;
+  }
+
+  function patchCol(col, g, rank) {
+    const set = (sel, text) => {
+      const el = col.querySelector(sel);
+      if (el && el.textContent !== text) el.textContent = text;
+    };
+    set('.kh-sc-rk', `${rank}위`);
+    const nm = col.querySelector('.kh-sc-nm');
+    if (nm && nm.textContent !== g.name) { nm.textContent = g.name; nm.title = g.name; }
+    const pc = col.querySelector('.kh-sc-pc');
+    if (pc) {
+      const t = fmtPct(g.pct);
+      if (pc.textContent !== t) pc.textContent = t;
+      const cls = `kh-sc-pc ${dirClass(g.pct)}`;
+      if (pc.className !== cls) pc.className = cls;
+    }
+
+    const sum = (g.rise + g.steady + g.fall) || 1;
+    const bar = col.querySelector('.kh-sc-bar');
+    if (bar) {
+      const title = `상승 ${g.rise} · 보합 ${g.steady} · 하락 ${g.fall}`;
+      if (bar.title !== title) bar.title = title;
+      const w = (sel, v) => {
+        const el = bar.querySelector(sel);
+        const t = `${v / sum * 100}%`;
+        if (el && el.style.width !== t) el.style.width = t;
+      };
+      w('i.up', g.rise); w('i.fl', g.steady); w('i.dn', g.fall);
+    }
+    set('.kh-sc-cnt .kh-up', `상승 ${g.rise}`);
+    set('.kh-sc-cnt .kh-mut', `보합 ${g.steady}`);
+    set('.kh-sc-cnt .kh-down', `하락 ${g.fall}`);
+
+    const rows = stockCache[key(kind, g.no)];
+    if (!rows) return;                       // 머리만 고친다
+    patchList(col.querySelector('.kh-sc-list'),
+              STOCK_COUNT ? rows.slice(0, STOCK_COUNT) : rows);
+  }
+
+  /** 종목 줄을 **코드로 맞춰** 고친다. 있던 줄은 옮겨 쓰고, 새로 든 것만
+   *  만들고, 빠진 것만 지운다 — **굴러가는 칸은 그대로 남는다**.
+   *  뉴스·공시와 같은 공용(`utils/reconcile.js`)을 쓴다 — 복제를 두지 않는다 */
+  function patchList(list, want) {
+    patchRows(list, want, {
+      key: (st) => st.code, attr: 'code', html: stockRowHtml, patch: patchRow,
+    });
+  }
+
+  function patchRow(a, st) {
+    const n = a.querySelector('.kh-sc-stn');
+    if (n && n.textContent !== st.name) { n.textContent = st.name; n.title = st.name; }
+    const price = a.querySelector('.kh-sc-stp b');
+    const pt = fmtWon(st.price);
+    if (price && price.textContent !== pt) price.textContent = pt;
+    const ip = a.querySelector('.kh-sc-stp i');
+    if (ip) {
+      const t = fmtPct(st.pct);
+      if (ip.textContent !== t) ip.textContent = t;
+      const cls = `kh-num ${dirClass(st.pct)}`;
+      if (ip.className !== cls) ip.className = cls;
+    }
+    const href = `./stock.html?code=${st.code}`;
+    if (a.getAttribute('href') !== href) a.setAttribute('href', href);
   }
 
   function paintBody() {
@@ -218,11 +331,13 @@ export function mountSectors(root) {
       body.innerHTML = '<div class="kh-sc-empty kh-mut">불러오는 중</div>';
       return;
     }
+    const top = groups.slice(0, TOP_GROUPS);
+    if (patchBody(top)) return;
     /* **세로줄은 칸 사이에만** 넣는다 (2026-09-22 시안 — 「줄로 해달라」).
        테두리 상자가 아니라 한 줄이다. */
-    body.innerHTML = groups.slice(0, TOP_GROUPS).map((g, i) =>
+    body.innerHTML = top.map((g, i) =>
       (i ? '<i class="kh-sc-vr" aria-hidden="true"></i>' : '')
-      + `<div class="kh-sc-col">${column(g, i + 1)}</div>`).join('');
+      + `<div class="kh-sc-col" data-no="${g.no}">${column(g, i + 1)}</div>`).join('');
   }
 
   /* ── 누르기 ── */
@@ -239,10 +354,7 @@ export function mountSectors(root) {
 
   loadGroups();
   /* `everyServerMs` 가 `document.hidden` 을 함께 본다 */
-  everyServerMs(REFRESH_KEY, REFRESH_FALLBACK_MS, () => {
-    for (const k in stockCache) delete stockCache[k];
-    loadGroups();
-  });
+  everyServerMs(REFRESH_KEY, REFRESH_FALLBACK_MS, () => loadGroups(true));
 
   /* **모달에 넘겨줄 것** (2026-09-22 지시 — 「지금 뜨는 산업도 모달로」).
 

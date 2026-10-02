@@ -10,6 +10,7 @@
    ========================================================================== */
 
 import { fetchDisclosures } from '../data/dart.js';
+import { patchRows } from '../utils/reconcile.js';
 
 /* 20260914 → 09.14 */
 function shortDate(s) {
@@ -48,7 +49,9 @@ export function mountDisclosures(host, { code = null, limit = 8, showName = true
   if (!host) return { reload() {} };
 
   async function reload() {
-    host.innerHTML = `<div class="kh-dc-empty">불러오는 중</div>`;
+    /* 「불러오는 중」 은 **그린 것이 없을 때만** 적는다. 갱신마다 덮으면
+       목록이 한순간 지워졌다 다시 나와 깜빡인다 (2026-10-02) */
+    if (!host.querySelector('[data-k]')) host.innerHTML = `<div class="kh-dc-empty">불러오는 중</div>`;
     const rows = await fetchDisclosures(code, limit);
 
     if (rows === null) {
@@ -65,7 +68,8 @@ export function mountDisclosures(host, { code = null, limit = 8, showName = true
       </div>`;
       return;
     }
-    host.innerHTML = rows.map(d => rowHtml(d, showName)).join('');
+    /* **끼워 넣는다** — 새 공시가 한 건 와도 있던 줄은 그대로 둔다 */
+    patchRows(host, rows, { key: (d) => d.url, html: (d) => rowHtml(d, showName) });
   }
 
   reload();

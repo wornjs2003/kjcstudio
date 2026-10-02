@@ -684,6 +684,14 @@ def timing_values():
     키는 `<모듈>.<이름>`, 값은 **초**다. 모듈 이름을 붙이는 것은
     `POLL_INTERVAL` 처럼 흔한 이름이 두 파일에 생겨도 **어느 것인지
     갈리게** 하기 위해서다 — 이름만 쓰면 나중에 조용히 덮인다.
+
+    ⚠️ **모듈 이름은 `sys.modules` 의 키가 아니라 파일 이름으로 쓴다**
+    (2026-10-02). 그 키는 **어떻게 띄웠느냐**에 따라 달라진다 — 이 파일을
+    바로 실행하면 `__main__` 이고 import 되면 `kis_proxy` 다. 그래서
+    화면이 `kis_proxy.SECTOR_TTL` 을 찾는데 서버는 `__main__.SECTOR_TTL`
+    을 내주고 있었다. **찾지 못하면 `serverMs` 가 조용히 대체값으로
+    내려앉아**(`js/store/timing.js`) `--slow` 서버에서도 화면만 자주 돌았다.
+    **「없다」 가 아니라 「그 이름으로는 없다」 였다.**
     """
     here = os.path.dirname(_HERE)
     out = {}
@@ -694,6 +702,8 @@ def timing_values():
         try:
             if os.path.dirname(os.path.abspath(f)) != here:
                 continue
+            # 띄운 방법에 따라 달라지지 않게 **파일 이름**으로 짓는다
+            mod_name = os.path.splitext(os.path.basename(os.path.abspath(f)))[0]
         except (OSError, ValueError):
             continue
         for k, v in list(vars(mod).items()):
@@ -708,7 +718,7 @@ def timing_values():
             # bool 은 int 라 먼저 거른다 — `SEND = True` 같은 것이 섞인다
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 continue
-            out["%s.%s" % (name, k)] = v
+            out["%s.%s" % (mod_name, k)] = v
     return out
 
 
