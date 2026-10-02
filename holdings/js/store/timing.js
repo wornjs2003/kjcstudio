@@ -47,6 +47,11 @@ export function loadTiming() {
   return _pending;
 }
 
+/** 같은 응답의 값 하나를 그대로. 받기 전이거나 없으면 `undefined` */
+export function serverData(name) {
+  return _data[name];
+}
+
 /** 서버가 켜 둔 기능인가 — 예: `longpoll`. **받기 전이거나 모르는 서버면 `false`** */
 export function serverFlag(name) {
   return _data[name] === true;

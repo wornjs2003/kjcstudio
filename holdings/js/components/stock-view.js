@@ -22,7 +22,7 @@
  */
 
 import { CHART_PERIODS, initBarsOf } from '../data/market.js';
-import { fetchCandles, createStockChart, maLegend,
+import { fetchCandles, watchCandles, createStockChart, maLegend,
   addPrevCloseLine, PREV_CLOSE_NOTE,
   savePeriodId, loadPeriodId,
   chartView, setChartView, chartStockChanged } from '../chart.js';
@@ -233,7 +233,21 @@ export function mountStockView(root, stock, { onBack } = {}) {
         savePeriodId(periodId);
         paintPeriods();
         drawChart();
+        chartWatch.refresh();       // 지켜보는 봉 주소가 바뀌었다
       }));
+  }
+
+  /* 봉이 바뀌었다는 알림이 왔다 — **차트를 새로 만들지 않고 값만 갈아 끼운다.**
+     `drawChart` 로 다시 만들면 「불러오는 중」 이 한 번 깜빡이고 보던 자리를 잃는다 */
+  async function refreshChart() {
+    if (!chart) return drawChart();
+    const key = periodId;
+    try {
+      const { candles, period } = await fetchCandles(stock.code, periodId);
+      if (dead || key !== periodId || !chart || !candles.length) return;
+      chart.setData(candles, period);
+      if (periodId === '5m') addPrevCloseLine(chart, candles, lastPrev);   // setData 가 선을 비운다
+    } catch { /* 다음 알림 때 다시 받는다 */ }
   }
 
   async function drawChart() {
@@ -306,6 +320,8 @@ export function mountStockView(root, stock, { onBack } = {}) {
   paintHead(null);
   paintPeriods();
   drawChart();
+  /* **봉은 서버가 바뀌었다고 알릴 때만 다시 받는다** (2026-10-02 · 「서버가 알려준다」) */
+  const chartWatch = watchCandles(() => (dead ? null : stock.code), () => periodId, refreshChart);
   setupMemo();
   setupBack();
 
@@ -484,6 +500,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
       if (chart) { chart.destroy(); chart = null; }
       if (reloadTimer) { reloadTimer(); reloadTimer = null; }   // everyServerMs 가 준 멈추는 함수
       tickWatch.stop();
+      chartWatch.stop();
       stopFlow();                 // everyServerMs 가 준 멈추는 함수
       panel3.destroy();
       detail.destroy();

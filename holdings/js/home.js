@@ -7,7 +7,7 @@
 
 import { WATCHLIST, brandColor, CHART_PERIODS, initBarsOf } from './data/market.js';
 import * as lastSeen from './store/last-seen.js';
-import { fetchCandles, candleUrl, createStockChart, maLegend,
+import { fetchCandles, watchCandles, createStockChart, maLegend,
   addPrevCloseLine, PREV_CLOSE_NOTE,
   savePeriodId, loadPeriodId,
   chartView, setChartView, chartStockChanged } from './chart.js';
@@ -1195,7 +1195,7 @@ const LOOK_AHEAD = 400;      // 화면 밖 이만큼까지 미리 받아 둔다
    대체값이다. 순위표는 그때 `MULTI_CACHE_TTL` 을 따른다. 큰 차트의 서버 값(기간별
    `fresh_sec`)은 아직 `timing` 에 안 나와 대체값으로 돈다. */
 const ROW_FALLBACK_MS = 2000;
-const BIG_CHART_FALLBACK_MS = 60000;
+/* 큰 차트의 대체값은 `chart.js` 의 `watchCandles` 가 들고 있다(봉을 지켜보는 곳이 한 곳이라) */
 
 function visibleCodeList() {
   const box = $('kh-rank-scroll');
@@ -1764,11 +1764,10 @@ loadUniverse().then(() => {
           onChange: quoteTick, key: 'kis_proxy.MULTI_CACHE_TTL', fallbackMs: ROW_FALLBACK_MS });
 
   /* 큰 차트도 계속 다시 받는다. 한 번 그린 뒤 장이 진행돼도 선이 멈춰
-     있으면 안 된다 (2026-09-15 지적). 바뀌었다는 알림이 오면 **화면 캐시를
-     건너뛰고**(`fresh`) 받는다 — 안 그러면 알림을 받고도 옛 봉을 그린다 */
-  bigWatch = watch({ url: () => (findStock(selectedCode) ? candleUrl(selectedCode, bigPeriod) : null),
-                     onChange: () => paintBigChart({ fresh: true }),
-                     key: null, fallbackMs: BIG_CHART_FALLBACK_MS });
+     있으면 안 된다 (2026-09-15 지적). 바뀌었다는 알림이 오면 `chart.js` 가
+     쥔 봉을 버리고 부르므로 새로 받는다 */
+  bigWatch = watchCandles(() => (findStock(selectedCode) ? selectedCode : null), () => bigPeriod,
+                          () => paintBigChart());
 });
 
 
