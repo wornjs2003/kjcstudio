@@ -39,6 +39,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import http.client
 from datetime import datetime, timedelta, timezone
 
 # 파일을 안전하게 쓴다 — 쓰다 죽어도 옛 내용이 남는다 (2026-09-22)
@@ -776,6 +777,11 @@ def usage_stats():
         "relayCacheHits": _relay_stat["hits"],
         "relayCacheMisses": _relay_stat["misses"],
         "relayCacheSize": len(_relay_cache),
+        # 경로별 넘기기 캐시 수명(2026-10-02). `None` 이면 상수 이름이 틀렸다.
+        "relayTtl": relay_ttl_table(),
+        # 화면 API 를 통째로 넘긴 횟수 · 폴백 (차트 셋 — `HIGH_RELAY_ROUTES`)
+        "upstreamRouteCalls": _up_stat["routeCalls"],
+        "upstreamRouteFallbacks": _up_stat["routeFallbacks"],
 
         # **주기·캐시 값 전부.** 위 `priceCacheTtl` 은 `status.html` 이
         # 쓰고 있어 남겨 둔다 — 같은 값이 여기에도 들어오지만 **한 곳에서
@@ -1024,7 +1030,8 @@ KIS_UPSTREAM_SERVE = (os.environ.get("KJC_KIS_UPSTREAM_SERVE") or "").strip().lo
     "1", "true", "yes", "on")
 RELAY_ROUTE = "relay"
 # 넘긴 횟수 · 폴백한 횟수 · 마지막 오류. `stats` 가 낸다 — **주소는 안 낸다.**
-_up_stat = {"calls": 0, "fallbacks": 0, "lastError": None}
+_up_stat = {"calls": 0, "fallbacks": 0, "lastError": None,
+            "routeCalls": 0, "routeFallbacks": 0}
 
 # ── 보드도 8765 하나로 (2026-10-01 지시) ──────────────────────
 #
@@ -1061,10 +1068,12 @@ _board_stat = {"calls": 0, "errors": 0, "lastError": None}
 # **키는 KIS 요청 단위**(`path` · `params` · `tr_id`)다. 위쪽 캐시는 키가
 # `code` 라 층이 달라 **키를 맞추는 문제가 아니다.**
 #
-# **TTL 은 `PRICE_CACHE_TTL` 을 그대로 쓴다** — 새 상수를 만들지 않는다
-# (「같은 값은 한 곳에만」). `relay` 를 타는 것이 대부분 시세이고, 차트처럼
-# 위쪽 TTL 이 더 긴 경로는 **세션 서버 캐시가 이미 거르므로** 짧게 잡아도
-# 손해가 없다.
+# **TTL 은 경로마다 그 경로의 화면 API 가 쓰는 상수를 그대로 쓴다**
+# (2026-10-02 · 서버리소스 2단계 ⓑ). 아래 `RELAY_TTL_NAMES` 가 경로 →
+# **상수 이름**(값이 아니다)을 들고 있어 새 값이 생기지 않는다.
+# 전에는 전부 `PRICE_CACHE_TTL`(25초) 하나라, 지수(5초)·선물(5초)·호가(3초)를
+# 넘겨받으면 **25초 묵은 값**이 나갔다 — 외부접속 지수가 26.5초 늦던 원인이다
+# (내부 4.1초 · 8764→8765 루프백은 1.1ms 라 거리가 아니었다).
 #
 # **동시 요청 합치기(single-flight)는 일부러 안 넣었다** (창구 판단
 # 2026-10-01). 넣으면 **「락 때문에 느려졌나」 와 「캐시가 듣나」 가 섞여**
@@ -1167,6 +1176,97 @@ def resp_stats():
             "spanSec": round(now - rows[0][0], 1),
         }
     return out
+# 넘겨받은 KIS 경로(`_resp_key` 모양) → 그 경로를 부르는 화면 API 의 **TTL 상수 이름.**
+# **값을 적지 않는다** — 부를 때 `globals()` 로 읽으므로 `--slow` 가 바꾼 값도
+# 그대로 따라온다. 표에 없는 경로(종목 차트 둘 등)는 `PRICE_CACHE_TTL` 이다.
+# 이름이 틀리면 조용히 기본값으로 떨어지지 않게 `stats` 의 `relayTtl` 에
+# **`None`** 으로 드러난다.
+RELAY_TTL_NAMES = {
+    "domestic-stock/inquire-price": "PRICE_CACHE_TTL",
+    "domestic-stock/intstock-multprice": "MULTI_CACHE_TTL",
+    "domestic-stock/inquire-index-price": "INDEX_TTL",
+    "domestic-stock/inquire-daily-indexchartprice": "INDEX_CHART_TTL",
+    "domestic-stock/inquire-time-indexchartprice": "INDEX_MINUTE_TTL",
+    "domestic-futureoption/inquire-price": "FUTURES_TTL",
+    "overseas-price/inquire-daily-chartprice": "OVERSEAS_TTL",
+    "domestic-stock/inquire-index-category-price": "SECTOR_TTL",
+    "domestic-stock/fluctuation": "MOVERS_TTL",
+    "domestic-stock/inquire-investor-daily-by-market": "INVESTOR_FLOW_TTL",
+    "domestic-stock/inquire-investor": "INVESTOR_TTL",
+    "domestic-stock/investor-trend-estimate": "INVESTOR_EST_TTL",
+    "domestic-stock/foreign-institution-total": "INVESTOR_TOP_TTL",
+    "domestic-stock/inquire-ccnl": "TICKS_TTL",
+    "domestic-stock/inquire-asking-price-exp-ccn": "ASKING_TTL",
+}
+
+
+def _relay_ttl(path):
+    """넘겨받은 경로의 캐시 수명(초). 표에 없거나 이름이 틀리면 `PRICE_CACHE_TTL`."""
+    v = globals().get(RELAY_TTL_NAMES.get(_resp_key(path), "PRICE_CACHE_TTL"))
+    return v if isinstance(v, (int, float)) else PRICE_CACHE_TTL
+
+
+def relay_ttl_table():
+    """`stats` 용 — 경로별로 지금 도는 값. **이름이 틀린 것은 `None`** 이다."""
+    out = {}
+    for k, name in RELAY_TTL_NAMES.items():
+        v = globals().get(name)
+        out[k] = v if isinstance(v, (int, float)) else None
+    return out
+
+
+# ── 주기 정책 (2026-10-02 · 서버리소스 2단계 ⓐ) ──────────────────
+#
+# **예산 하나에서 경로별 주기를 계산해 낸다** — 화면이 주기를 박지 않고 이것을 받는다
+# (「캐시·주기·한도 값을 화면에 박지 않는다」).
+#
+#     하한     = max(그리는 시간 × 2, 응답 시간) + 잠 깨는 시간
+#     실효주기 = max(TTL, 하한) + 응답 시간            응답 시간은 p95
+#
+# **못 쟀으면 `None`** 이다 — `0` 으로 내면 「빠르다」 로 읽힌다. 그리는 시간(`drawMs`)은
+# 화면 몫이라 서버는 모른다. 화면이 `?drawMs=` 로 실어 보내면 하한에 넣고, 없으면 뺀다.
+#
+# **주소가 `/api/kis/policy` 인 이유** — 처음 안은 `/api/policy` 였는데 이 서버는
+# `/api/kis/` 아래로만 길을 나눈다(창구 판단 2026-10-02).
+_wake_ms = None
+_wake_lock = threading.Lock()      # 첫 요청 둘이 겹쳐도 한 번만 잰다 (창구 검수)
+
+
+def _measure_wake_ms(n=5, ask_ms=10.0):
+    """`time.sleep` 이 요청보다 얼마나 늦게 깨는지(ms 중앙값). 처음 한 번만 잰다 —
+    2026-10-02 실측으로 10ms 를 자면 49ms 에 깼다(이 기계)."""
+    global _wake_ms
+    with _wake_lock:
+        if _wake_ms is not None:
+            return _wake_ms
+        over = []
+        for _ in range(n):
+            t0 = time.perf_counter()
+            time.sleep(ask_ms / 1000.0)
+            over.append((time.perf_counter() - t0) * 1000.0 - ask_ms)
+        over.sort()
+        _wake_ms = round(over[len(over) // 2], 1)
+    return _wake_ms
+
+
+def policy_values(draw_ms=None):
+    """경로별 TTL · 응답 시간 · 하한 · 실효주기. 못 쟀으면 그 칸이 `None`."""
+    wake = _measure_wake_ms()
+    resp = resp_stats()
+    routes = {}
+    for key, ttl in relay_ttl_table().items():
+        r = (resp.get(key) or {}).get("p95")
+        if r is None or ttl is None:
+            routes[key] = {"ttlSec": ttl, "respMs": r, "floorMs": None, "effectiveMs": None}
+            continue
+        base = max(draw_ms * 2.0, r) if draw_ms is not None else r
+        floor = base + wake
+        routes[key] = {"ttlSec": ttl, "respMs": r, "floorMs": round(floor, 1),
+                       "effectiveMs": round(max(ttl * 1000.0, floor) + r, 1)}
+    return {"budgetPerSec": KIS_CALLS_PER_SEC, "wakeMs": wake, "drawMs": draw_ms,
+            "routes": routes}
+
+
 RELAY_CACHE_MAX = 2000             # 키에 `params` 가 들어가 수가 늘 수 있다
 
 
@@ -1177,7 +1277,7 @@ def _relay_sweep(now):
     `pop(k, None)` 으로 지운다 — 도는 중에 남이 지워도 터지지 않는다.
     """
     for k, v in list(_relay_cache.items()):
-        if now - v[0] >= PRICE_CACHE_TTL:
+        if now - v[0] >= _relay_ttl(k[0]):       # k[0] 은 KIS 경로
             _relay_cache.pop(k, None)
     if len(_relay_cache) > RELAY_CACHE_MAX:
         rows = sorted(list(_relay_cache.items()), key=lambda kv: kv[1][0])
@@ -1285,6 +1385,21 @@ def out_rows(data, key):
     """
     v = (data or {}).get(key)
     return v if isinstance(v, list) else []
+
+
+# ── 차트 셋은 화면 API 째로 넘긴다 (2026-10-02 · 서버리소스 2단계 ⓑ-2) ──
+#
+# 날 `/uapi/` 만 넘기면 **8765 가 KIS 를 대신 부르고 자기 DB 에는 안 쓴다**
+# (`save_candles` 는 부른 쪽 함수 안에 있다). 그래서 읽기 전용 서버가 차트를
+# 열 때마다 같은 봉을 다시 받았다 — 한 번 여는 데 19건(개발3 실증).
+# 화면 API 째로 넘기면 **8765 가 받아 자기 DB 에 쌓고** 다음 사람은 DB 에서 읽는다.
+#
+# 고른 기준은 「`save_candles` 에 닿는 라우트」 다 — 이름을 고른 것이 아니라
+# 그 함수를 부르는 라우트를 셌다(2026-10-02 · 라우트 33개 중 셋).
+#
+# **폴백은 둔다** — 읽기라 어느 쪽이 받아도 값이 같다. 보드(쓰는 곳 · 폴백 없음)와
+# 다른 자리다. `4xx` 는 상류가 제대로 답한 것이라 **그대로 내려보낸다.**
+HIGH_RELAY_ROUTES = ("chart", "index-candles", "index-minutes")
 
 
 class _UpstreamDown(Exception):
@@ -4118,6 +4233,36 @@ class Handler(SimpleHTTPRequestHandler):
                 return
         super().do_GET()
 
+    def _kis_route_via_upstream(self, base):
+        """화면 API 하나를 상류에 그대로 넘긴다. **보냈으면 `True`, 폴백이면 `False`.**
+
+        상류가 안 떠 있거나 `5xx` · `404`(받을 자리 없음)면 `False` 를 내어
+        **직접 부르는 쪽으로 내려간다** — `_kis_via_upstream` 과 같은 선이다.
+        """
+        try:
+            with urllib.request.urlopen(base + (self.path or ""), timeout=15) as resp:
+                code, body = resp.getcode(), resp.read()
+                rct = resp.headers.get("Content-Type")
+        except urllib.error.HTTPError as e:
+            if e.code >= 500 or e.code == 404:
+                _up_stat["routeFallbacks"] += 1
+                _up_stat["lastError"] = "상류 %s" % e.code
+                return False
+            code, body, rct = e.code, e.read(), e.headers.get("Content-Type")
+        except (urllib.error.URLError, OSError, http.client.HTTPException) as e:
+            # `HTTPException` — 상류가 응답 중간에 끊기면(`IncompleteRead`) 이것이
+            # 난다. `OSError` 가 아니라 안 잡으면 화면에 응답 없이 끊긴다 (창구 검수).
+            _up_stat["routeFallbacks"] += 1
+            _up_stat["lastError"] = safe_message(e)
+            return False
+        _up_stat["routeCalls"] += 1
+        self.send_response(code)
+        self.send_header("content-type", rct or "application/json; charset=utf-8")
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
     def _board_via_upstream(self, base):
         """보드를 상류에 **그대로** 넘긴다 — 경로 · 본문 · 상태코드 그대로.
 
@@ -4606,12 +4751,30 @@ class Handler(SimpleHTTPRequestHandler):
             })
             return
 
+        # ── 주기 정책 (2026-10-02) ── KIS 키와 무관한 값이라 secrets 검사 앞에 둔다
+        # (키 없는 서버도 503 이 아니라 값을 낸다 · 창구 검수).
+        if route == "policy":
+            # `drawMs` 는 화면이 잰 그리는 시간. 없거나 이상하면 `None` — 하한에서 뺀다.
+            try:
+                _dm = float((qs.get("drawMs") or [""])[0])
+                _dm = _dm if 0 <= _dm < 60000 else None
+            except ValueError:
+                _dm = None
+            self._send_json({"ok": True, "data": policy_values(_dm)})
+            return
+
         if not cfg:
             self._send_json({
                 "ok": False,
                 "error": "secrets.json 이 없어 KIS 를 쓸 수 없습니다.",
             }, 503)
             return
+
+        # ── 차트 셋은 화면 API 째로 상류에 (2026-10-02) ── 위 `HIGH_RELAY_ROUTES` 주석.
+        if route in HIGH_RELAY_ROUTES:
+            _hb = upstream_base()
+            if _hb and self._kis_route_via_upstream(_hb):
+                return
 
         try:
             # ── 넘겨받는 자리 (2026-10-01) ── **8765 만 켠다.**
@@ -4649,7 +4812,7 @@ class Handler(SimpleHTTPRequestHandler):
                         tr)
                 now = time.time()
                 hit = _relay_cache.get(ckey)
-                if hit and now - hit[0] < PRICE_CACHE_TTL:
+                if hit and now - hit[0] < _relay_ttl(kis_path):
                     _relay_stat["hits"] += 1
                     self._send_json({"ok": True, "data": hit[1], "cached": True})
                     return
