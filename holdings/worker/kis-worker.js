@@ -41,8 +41,34 @@ const MODE_LABEL = { prod: "실전투자", vts: "모의투자" };
 //   NX = 넥스트레이드(대체거래소)만
 //   UN = 통합 — 정규장 + 넥스트레이드. 08:00~20:00 내내 값이 움직이고 거래량도 합산된다.
 //
-// 차트는 통합으로 고정한다. 과거 봉이라 "지금 몇 시인가"를 따질 일이 없다.
+// 차트는 통합으로 **먼저** 묻는다. 과거 봉이라 "지금 몇 시인가"를 따질 일이 없다.
+//
+// ⚠️ **통합이 과거를 더 준다는 뜻이 아니다** (2026-10-02 실측으로 뒤집혔다).
+// 넥스트레이드에 늦게 편입된 종목은 **통합으로 물으면 편입 뒤만 온다.**
+//
+//     005935 삼성전자우   주 UN=3   J=100  ·  월 UN=2  J=100  ·  년 UN=1  J=23
+//     069500 KODEX 200   주 UN=3   J=100                        (ETF 도 같다)
+//     005930 삼성전자     주 UN=100 J=100                        (편입이 오래돼 같다)
+//
+// 수정주가(FID_ORG_ADJ_PRC)는 무관했고 잘리는 경계는 20260914 였다
+// (**편입 시점으로 보이지만 그것까지는 안 쟀다 — 추정이다**).
+//
+// 그래서 고정하지 않고 **적게 오면 KRX 로 한 번 더 받는다**(fetchBarsFromKis).
+// **server/kis_proxy.py 와 같은 기준이고 구현만 다르다** (CLAUDE.md
+// 「룰은 하나다 — 로컬만 다르게 정하지 않는다」).
 const MARKET_DIV_CHART = "UN";
+
+// 통합이 과거를 잘라 줄 때 되묻는 쪽. **server/kis_proxy.py 의
+// MARKET_DIV_CHART_ALT 와 같아야 한다** (tools/check-kis-consts.py 가 대조).
+const MARKET_DIV_CHART_ALT = "J";
+
+// 일/주/월/년봉은 한 번에 이만큼만 온다. 기간을 넓게 줘도 **date_to 기준
+// 최근 100개**를 준다. **server/kis_proxy.py 의 BARS_PER_CALL 과 같아야 한다**
+// (tools/check-kis-consts.py 가 대조).
+//
+// 여기서는 「잘려 왔나」 판정(looksTruncated)에만 쓴다 — 워커는 서버와 달리
+// 과거를 거슬러 여러 번 받지 않고 한 번만 받는다.
+const BARS_PER_CALL = 100;
 
 /* 시세를 어느 시장 기준으로 볼지 정한다 (CLAUDE.md 의 시세 표기 규칙).
 
@@ -1601,13 +1627,38 @@ async function metaSet(env, key, value) {
   ).bind(key, String(value), new Date().toISOString()).run();
 }
 
-/* 일/주/월/년봉. 같은 API 에서 기간 구분 코드만 바뀐다 (한 번에 최대 100개) */
-async function fetchBarsFromKis(cfg, env, code, period, from, to) {
+/* YYYYMMDD 두 개 사이의 날수. 못 읽으면 0 */
+function ymdGap(a, b) {
+  const d = (v) => {
+    const t = String(v || "");
+    if (!/^\d{8}$/.test(t)) return null;
+    return new Date(+t.slice(0, 4), +t.slice(4, 6) - 1, +t.slice(6, 8));
+  };
+  const d1 = d(a), d2 = d(b);
+  if (!d1 || !d2) return 0;
+  return Math.abs(Math.round((d2 - d1) / 86400000));
+}
+
+/* 통합(UN)이 과거를 잘라 줬나. **값을 박지 않고 스스로 비교한다** —
+   「안 온 앞 구간」 이 「받은 구간」 보다 길면 그 앞이 통째로 빠진 것으로 본다.
+   판정 근거와 실측은 server/kis_proxy.py 의 `_looks_truncated` 에 적어 두었다.
+   **두 구현이 같은 기준이어야 한다.** */
+function looksTruncated(rows, from) {
+  if (rows.length >= BARS_PER_CALL) return false;
+  if (!rows.length) return true;
+  const ts = rows.map((r) => r.ts);
+  const oldest = ts.reduce((a, b) => (a < b ? a : b));
+  const newest = ts.reduce((a, b) => (a > b ? a : b));
+  return ymdGap(from, oldest) > ymdGap(oldest, newest);
+}
+
+/* 한 시장에 한 번 묻는다 */
+async function barsOnce(cfg, env, code, period, from, to, market) {
   const data = await kisGet(
     cfg, env,
     "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
     {
-      FID_COND_MRKT_DIV_CODE: MARKET_DIV_CHART,
+      FID_COND_MRKT_DIV_CODE: market,
       FID_INPUT_ISCD: code,
       FID_INPUT_DATE_1: from,
       FID_INPUT_DATE_2: to,
@@ -1627,6 +1678,26 @@ async function fetchBarsFromKis(cfg, env, code, period, from, to) {
       close: num(r.stck_clpr),
       volume: num(r.acml_vol),
     }));
+}
+
+/* 일/주/월/년봉. 같은 API 에서 기간 구분 코드만 바뀐다 (한 번에 최대 100개).
+
+   **통합(UN)으로 먼저 묻고, 과거가 잘려 온 모양이면 KRX(J)로 한 번 더 묻는다**
+   (2026-10-02 지시). 어느 쪽을 쓸지는 **더 많이 온 쪽**으로 정한다 —
+   「통합이 늘 많다」 도 「KRX 가 늘 많다」 도 참이 아니라서다.
+
+   **되묻는 비용은 잘린 종목에만 든다.** 꽉 찬 응답은 판정에서 빠진다. */
+async function fetchBarsFromKis(cfg, env, code, period, from, to) {
+  const rows = await barsOnce(cfg, env, code, period, from, to, MARKET_DIV_CHART);
+  if (MARKET_DIV_CHART_ALT !== MARKET_DIV_CHART && looksTruncated(rows, from)) {
+    try {
+      const alt = await barsOnce(cfg, env, code, period, from, to, MARKET_DIV_CHART_ALT);
+      if (alt.length > rows.length) return alt;
+    } catch {
+      return rows;                 // 되묻다 실패하면 처음 받은 것을 쓴다
+    }
+  }
+  return rows;
 }
 
 /* 분봉을 어느 시장에서 받을까. **구간의 시각으로 정한다.**

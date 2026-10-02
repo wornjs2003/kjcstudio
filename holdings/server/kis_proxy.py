@@ -155,8 +155,28 @@ MODE_LABEL = {"vts": "모의투자", "prod": "실전투자"}
 #   UN = 통합 — 정규장 + 넥스트레이드. 08:00~20:00 내내 값이 움직인다.
 # 통합을 쓰면 거래량도 양쪽이 합산된다.
 #
-# 차트는 통합으로 고정한다. 과거 봉이라 "지금 몇 시인가"를 따질 일이 없다.
+# 차트는 통합으로 **먼저** 묻는다. 과거 봉이라 "지금 몇 시인가"를 따질 일이 없다.
+#
+# ⚠️ **통합이 과거를 더 준다는 뜻이 아니다** (2026-10-02 실측으로 뒤집혔다).
+# 넥스트레이드에 늦게 편입된 종목은 **통합으로 물으면 편입 뒤만 온다.**
+#
+#     005935 삼성전자우   주 UN=3   J=100  ·  월 UN=2  J=100  ·  년 UN=1  J=23
+#     069500 KODEX 200   주 UN=3   J=100                        (ETF 도 같다)
+#     005930 삼성전자     주 UN=100 J=100                        (편입이 오래돼 같다)
+#
+# 수정주가(`FID_ORG_ADJ_PRC`)는 무관했고, 잘리는 경계는 20260914 였다
+# (**편입 시점으로 보이지만 그것까지는 안 쟀다 — 추정이다**).
+#
+# 전에 이 자리 주석이 「통합으로 고정한다」 였는데, 그 근거가 「시각을 따질
+# 일이 없다」 였다. **시각 문제가 아니라 통합이 과거를 덜 주는 문제였다.**
+# 그래서 고정하지 않고 **적게 오면 KRX 로 한 번 더 받는다**
+# (`fetch_bars_from_kis`). 분봉이 이미 같은 모양을 쓴다 — 「전부 0」 이던
+# 폴백을 「1개 이하」 로 고친 자리(2026-10-01)와 한 계열이다.
 MARKET_DIV_CHART = "UN"
+
+# 통합이 과거를 잘라 줄 때 되묻는 쪽. **`worker/kis-worker.js` 와 같아야 한다**
+# (`holdings/tools/check-kis-consts.py` 가 대조한다).
+MARKET_DIV_CHART_ALT = "J"
 
 # 정규장 시간대 (KRX)
 KRX_OPEN  = (9, 0)
@@ -2554,6 +2574,41 @@ def db_conn():
     return conn
 
 
+# 통합(UN)이 과거를 잘라 줘서 잠긴 `backfill … done` 을 한 번 푸는 표.
+# 값을 바꾸면 그 판으로 다시 한 번 돈다 — 지수의 `INDEX_SPAN_FIX` 와 같은 꼴이다.
+BARS_MKT_FIX = "barsfix:market"
+BARS_MKT_FIX_VER = "2026-10-02-un-alt"
+
+
+def _unlock_bars_backfill():
+    """`backfill … done` 중 주·월·년봉 것을 **한 번** 지운다.
+
+    **이것이 없으면 고쳐도 화면이 안 바뀐다.** `fetch_bars_back` 은 끝까지
+    훑고도 못 채우면 `done` 을 찍는데, 2026-10-02 까지 그 「못 채움」 의 원인이
+    **통합(UN)이 과거를 덜 주는 것**이었다. 원인을 고쳐도 그 표가 남아 있으면
+    `get_chart` 의 `want_more` 가 거짓이라 **다시 받지 않는다.**
+
+    지우면 다음 조회에서 과거를 한 번 더 훑고, 그때 KRX 되묻기가 걸린다.
+
+    **일봉은 안 지운다.** 2026-10-02 실측에서 일봉은 통합으로도 100봉이 왔다
+    (`005935` · `069500` 둘 다). 통합으로 일봉까지 0 이던 `091990` 은
+    **2023년 합병으로 상장폐지된 종목**이라 KRX 로 받아도 쓸 데가 없다 —
+    그 종목을 관심목록에서 빼는 것은 따로 올려 두었다.
+
+    **한 번만 돈다.** 매번 지우면 모든 종목이 열릴 때마다 과거를 다시 훑어
+    KIS 호출이 계속 늘어난다.
+    """
+    if _meta_get(BARS_MKT_FIX) == BARS_MKT_FIX_VER:
+        return 0
+    with _db_lock, db_conn() as conn:
+        cur = conn.execute(
+            "DELETE FROM sync_meta WHERE key LIKE 'backfill:%' "
+            "AND (key LIKE '%:W' OR key LIKE '%:M' OR key LIKE '%:Y')")
+        n = cur.rowcount or 0
+    _meta_set(BARS_MKT_FIX, BARS_MKT_FIX_VER)
+    return n
+
+
 def _prune_span_dupes():
     """한 구간에 여러 줄이 쌓인 것을 치운다 — 구간마다 **가장 큰 ts 하나**만 남긴다.
 
@@ -2674,13 +2729,55 @@ def _meta_set(key, value):
         )
 
 
-def fetch_bars_from_kis(cfg, code, period, date_from, date_to):
-    """일/주/월/년봉. 같은 API 에서 기간 구분 코드만 바뀐다 (한 번에 최대 100개)."""
+def _ymd_gap(a, b):
+    """YYYYMMDD 두 개 사이의 날수. 못 읽으면 0."""
+    import datetime
+    try:
+        d1 = datetime.datetime.strptime(str(a), "%Y%m%d").date()
+        d2 = datetime.datetime.strptime(str(b), "%Y%m%d").date()
+    except (ValueError, TypeError):
+        return 0
+    return abs((d2 - d1).days)
+
+
+def _looks_truncated(rows, date_from):
+    """통합(UN)이 과거를 잘라 준 모양인가.
+
+    **값을 박지 않고 스스로 비교한다.** 「몇 봉 미만이면」 같은 수를 적으면
+    주기마다 다르고 종목마다 달라 그날 낡는다. 대신 **안 온 앞 구간**과
+    **받은 구간**의 길이를 견준다.
+
+        안 온 앞 구간 > 받은 구간   →  그 앞이 통째로 빠졌다고 본다
+
+    왜 이 셈이 드는가 —
+
+        005935 주봉   물은 범위 20210405~  ·  받은 것 20260914~20260928
+                      안 온 앞 5년 ≫ 받은 14일        →  **잘렸다**
+        끝까지 받은 종목   물은 범위 20150101~  ·  받은 것 20150105~20190xxx
+                      안 온 앞 4일 ≪ 받은 수년        →  정상 (상장 이전이다)
+
+    꽉 찬 응답은 보지 않는다 — 더 과거는 `fetch_bars_back` 의 다음 호출이
+    가져가고, 그때 다시 이 판정을 거친다.
+
+    **한 줄도 없으면 무조건 의심한다.** 2026-10-02 에 `091990` 이 통합으로
+    일봉까지 0 이었다(그 종목은 상장폐지라 KRX 로도 결과가 같지만, 0 을
+    「없다」 로 단정하지 않는 쪽이 맞다).
+    """
+    if len(rows) >= BARS_PER_CALL:
+        return False
+    if not rows:
+        return True
+    ts = [r["ts"] for r in rows]
+    return _ymd_gap(date_from, min(ts)) > _ymd_gap(min(ts), max(ts))
+
+
+def _bars_once(cfg, code, period, date_from, date_to, market):
+    """한 시장에 한 번 묻는다. 돌려주는 것은 봉 목록."""
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
         {
-            "FID_COND_MRKT_DIV_CODE": MARKET_DIV_CHART, "FID_INPUT_ISCD": code,
+            "FID_COND_MRKT_DIV_CODE": market, "FID_INPUT_ISCD": code,
             "FID_INPUT_DATE_1": date_from, "FID_INPUT_DATE_2": date_to,
             "FID_PERIOD_DIV_CODE": PERIODS[period]["kis"], "FID_ORG_ADJ_PRC": "0",
         },
@@ -2701,6 +2798,28 @@ def fetch_bars_from_kis(cfg, code, period, date_from, date_to):
             "volume": _num(r.get("acml_vol"), int),
         })
     return out
+
+
+def fetch_bars_from_kis(cfg, code, period, date_from, date_to):
+    """일/주/월/년봉. 같은 API 에서 기간 구분 코드만 바뀐다 (한 번에 최대 100개).
+
+    **통합(UN)으로 먼저 묻고, 과거가 잘려 온 모양이면 KRX(J)로 한 번 더 묻는다**
+    (2026-10-02 지시). 어느 쪽을 쓸지는 **더 많이 온 쪽**으로 정한다 —
+    「통합이 늘 많다」 도 「KRX 가 늘 많다」 도 참이 아니라서다. 분봉이 이미
+    같은 모양이다(`MARKET_DIV_CHART` 주석).
+
+    **되묻는 비용은 잘린 종목에만 든다.** 꽉 찬 응답은 판정에서 빠지므로
+    (`_looks_truncated`) 보통 종목은 호출이 늘지 않는다.
+    """
+    rows = _bars_once(cfg, code, period, date_from, date_to, MARKET_DIV_CHART)
+    if MARKET_DIV_CHART_ALT != MARKET_DIV_CHART and _looks_truncated(rows, date_from):
+        try:
+            alt = _bars_once(cfg, code, period, date_from, date_to, MARKET_DIV_CHART_ALT)
+        except Exception:
+            return rows              # 되묻다 실패하면 처음 받은 것을 쓴다
+        if len(alt) > len(rows):
+            return alt
+    return rows
 
 
 # 일/주/월/년봉은 한 번에 이만큼만 온다.
@@ -2742,7 +2861,30 @@ def fetch_bars_back(cfg, code, period, want):
     seen = {}
     date_to = datetime.date.today()
     span = datetime.timedelta(days=PERIODS[period]["span_days"])
+    cut = SPAN_CUT.get(period)
     done = False
+
+    # 년·월봉은 **구간으로 모은다** (2026-10-02). `ts` 로 모으면 같은 해가
+    # 두 줄 남는다 — `floor_to_span` 이 `date_from` 만 구간 첫날로 내리고
+    # **`date_to` 는 그대로 쓰기 때문이다.**
+    #
+    #     1회차  ~ 20261001 을 물었다   →  2026년 봉의 ts = 20261001
+    #     2회차  ~ 20260930 을 물었다   →  **같은 2026년인데 ts = 20260930**
+    #
+    # 뒤엣것은 「1월~9월 30일 누적」 이라 그 해 고가·저가가 빠져 있는데,
+    # `ts` 가 달라 서로 다른 봉으로 저장된다. `save_candles` 의 `SPAN_CUT`
+    # 지우기는 **넣기 전에 한 번** 도므로 같은 호출 안의 둘을 못 막는다.
+    # 2026-10-01 에 삼성전자우 년봉이 그렇게 두 줄이었다.
+    #
+    # **먼저 받은 것을 남긴다.** 1회차가 범위가 가장 넓고 `ts` 도 가장 크다 —
+    # `_prune_span_dupes` 의 「가장 큰 ts 가 최신」 과 같은 판정이다.
+    #
+    # ⚠️ **주봉·일봉은 이 길로 안 온다.** `SPAN_CUT` 에 없고, 그쪽은 `ts` 가
+    # 구간 첫날(주봉은 월요일)로 고정되어 구간 중간부터 물어도 안 어긋난다
+    # (2026-09-29 실측 · 겹침 0).
+    def span_key(r):
+        return r["ts"][:cut] if cut else r["ts"]
+
     for _ in range(max(1, -(-want // BARS_PER_CALL)) + 1):
         # 구간 중간부터 물으면 **부분 누적**이 온다 — `floor_to_span` 주석 참조.
         # 지수에서 찾은 병인데 같은 API 계열이라 종목에도 건다.
@@ -2750,15 +2892,19 @@ def fetch_bars_back(cfg, code, period, want):
             cfg, code, period,
             floor_to_span(date_to - span, period).strftime("%Y%m%d"),
             date_to.strftime("%Y%m%d"))
-        fresh = [r for r in rows if r["ts"] not in seen]
+        fresh = [r for r in rows if span_key(r) not in seen]
         for r in rows:
-            seen[r["ts"]] = r
+            k = span_key(r)
+            if k not in seen:         # 먼저 받은 것(더 넓은 범위)을 남긴다
+                seen[k] = r
         if not fresh:
             done = True               # 더 과거가 없다
             break
         if len(seen) >= want:
             break
-        oldest = min(seen)            # YYYYMMDD 문자열이라 사전순이 곧 날짜순
+        # **구간 키가 아니라 `ts` 에서 구한다.** 년봉은 키가 `2026`(4자리)이라
+        # 키로 날짜를 만들면 깨진다.
+        oldest = min(r["ts"] for r in seen.values())
         date_to = (datetime.datetime.strptime(oldest, "%Y%m%d").date()
                    - datetime.timedelta(days=1))
     if done or len(seen) < want:
@@ -4574,6 +4720,16 @@ def main():
     #   미리받기  KIS 를 가장 많이 부른다. 여기서 끄는 것이 --slow 의 핵심이다
     #   공시      OpenDART 하루 한도를 메인 서버와 나눠 쓰게 된다
     #   뉴스 수집  같은 market.db 에 서버 둘이 쓰고, **텔레그램이 두 번 간다**
+    # 통합(UN)이 과거를 잘라 줘서 잠긴 backfill 표를 한 번 푼다 (위 주석 참조).
+    # **겹친 봉 정리보다 먼저 둔다** — 푼 뒤에 다시 받아야 겹침이 생기는데,
+    # 받는 것은 조회 때이고 정리는 지금이라 순서가 섞이지 않는다.
+    try:
+        _unlocked = _unlock_bars_backfill()
+        if _unlocked:
+            print("  주·월·년봉 다시 받기: 잠겨 있던 %d개를 풀었습니다" % _unlocked)
+    except Exception as e:
+        print("  주·월·년봉 다시 받기: 건너뜁니다 (%s)" % type(e).__name__)
+
     # 한 구간에 여러 줄이 쌓인 것을 치운다 (SPAN_CUT 주석 참조).
     # 고침이 들어오기 전에 쌓인 것은 저절로 안 없어진다 — 여기서 한 번 치운다.
     try:
