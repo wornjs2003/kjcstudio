@@ -16,13 +16,18 @@ import { mountWatchSide, mountVBar, startLiveLoop }
 import { WATCHLIST } from './data/market.js';
 import { mountSchedule } from './components/schedule.js';
 import { apiFetch } from './data/api.js';
+import { everyServerMs } from './store/timing.js';
 
 const $ = (id) => document.getElementById(id);
 const WATCH = new Set(WATCHLIST.map((s) => s.code));
 
 /* 화면을 열어둔 채로도 새 것이 들어오도록. 서버가 5분마다 받으므로
    그보다 조금 짧게 둔다. */
-const REFRESH_MS = 60_000;
+/* **서버가 정한다** (2026-10-02 · 서버리소스 화면 묶음 ⑥).
+   「캐시·주기·한도 값을 화면에 박지 않는다」 — `news.py` 의 `MOVES_TTL` 을 따른다.
+   아래는 **서버가 없을 때의 대체값**이지 화면이 정한 주기가 아니다. */
+const REFRESH_KEY = 'news.MOVES_TTL';
+const REFRESH_FALLBACK_MS = 60_000;
 
 let feed = { issues: [], moves: [], topics: [] };
 let disclosures = null;          // null = 못 받음, [] = 받았는데 없음
@@ -380,7 +385,7 @@ setInterval(() => { if (!document.hidden) sched.refresh(); }, 10 * 60 * 1000);
 
 bindSeg();
 refresh();
-setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
+everyServerMs(REFRESH_KEY, REFRESH_FALLBACK_MS, refresh);
 
 /* 관심 사이드바와 시세 띠는 다른 화면과 같은 것을 쓴다.
 

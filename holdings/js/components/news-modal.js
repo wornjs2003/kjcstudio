@@ -27,14 +27,19 @@
    ========================================================================== */
 
 import { openModal } from './modal.js';
-import { fetchFeed, lastFeed, paintIssues, paintLoading, moveRowHtml } from './news-list.js';
+import { fetchFeed, lastFeed, paintIssues, paintLoading, moveRowHtml, rowHtml } from './news-list.js';
+import { patchRows } from '../utils/reconcile.js';
 import { mountDisclosures } from './disclosures.js';
 import { mountSchedule, collectSchedule, AHEAD_DAYS } from './schedule.js';
 import { apiFetch } from '../data/api.js';
+import { everyServerMs } from '../store/timing.js';
 
 /* 모달이 열려 있는 동안만 다시 받는다. 서버 캐시와 같은 주기라
    더 자주 물을 이유가 없다 (server/news.py 의 NEWS_TTL). */
-const REFRESH_MS = 180_000;
+/* **서버가 정한다** (2026-10-02 · 서버리소스 화면 묶음 ⑥).
+   `news.py` 의 `NEWS_TTL` 을 따른다. 아래는 **서버가 없을 때의 대체값**이다. */
+const REFRESH_KEY = 'news.NEWS_TTL';
+const REFRESH_FALLBACK_MS = 180_000;
 
 /* **서버가 200 에서 자른다.** `limit` 을 500 · 1000 으로 올려도 200 만 온다
    (2026-09-22 실측). 그래서 이 값은 「우리가 정한 한도」 가 아니라
@@ -108,7 +113,7 @@ export function openNewsModal({ tab = 'news', watch = null } = {}) {
       tabsNote: tabNote(first, false),
       onTab(id) { show(id); head.setTabsNote(tabNote(id, dcCapped)); },
     },
-    onClose() { if (timer) clearInterval(timer); timer = null; },
+    onClose() { if (timer) timer(); timer = null; },   // everyServerMs 가 준 멈추는 함수
   });
 
   const body = m.body;
@@ -142,17 +147,17 @@ export function openNewsModal({ tab = 'news', watch = null } = {}) {
     if (feed === null) { paintIssues(panes.news, null); return; }
     const issues = feed.issues || [];
     const moves  = feed.moves  || [];
-    /* 종목이 붙은 뉴스를 위에 둔다 — 내 종목이 섞여 있어 먼저 보게 된다. */
-    const sub = moves.length
-      ? `<div class="kh-nw-sub-h">종목 뉴스</div>` +
-        moves.map(x => moveRowHtml(x, watchSet)).join('') +
-        `<div class="kh-nw-sub-h">시장 이슈</div>`
-      : '';
     if (!issues.length && !moves.length) { paintIssues(panes.news, []); return; }
-    panes.news.innerHTML = sub;
-    const box = document.createElement('div');
-    paintIssues(box, issues);
-    panes.news.append(...box.childNodes);
+    /* 종목이 붙은 뉴스를 위에 둔다 — 내 종목이 섞여 있어 먼저 보게 된다.
+       **머리줄도 이름 붙은 항목으로 넘겨** 한 목록으로 끼워 넣는다 (2026-10-02) —
+       통째로 다시 그리면 모달 안에서 굴려 둔 자리가 맨 위로 돌아간다 */
+    const items = moves.length
+      ? [{ k: 'h:moves', h: `<div class="kh-nw-sub-h">종목 뉴스</div>` },
+         ...moves.map(x => ({ k: 'm:' + (x.link || x.title), h: moveRowHtml(x, watchSet) })),
+         { k: 'h:issues', h: `<div class="kh-nw-sub-h">시장 이슈</div>` }]
+      : [];
+    issues.forEach(x => items.push({ k: 'i:' + x.link, h: rowHtml(x) }));
+    patchRows(panes.news, items, { key: (it) => it.k, html: (it) => it.h });
     return feed;
   }
 
@@ -245,11 +250,11 @@ export function openNewsModal({ tab = 'news', watch = null } = {}) {
   /* 격자는 뉴스를 기다리지 않는다. 공시·일정이 오는 대로 찬다 */
   paintStats();
   drawNews().then(paintBig);
-  timer = setInterval(() => {
-    if (document.hidden) return;
+  /* `everyServerMs` 가 `document.hidden` 을 함께 보고, **멈추는 함수**를 돌려준다 */
+  timer = everyServerMs(REFRESH_KEY, REFRESH_FALLBACK_MS, () => {
     drawNews().then(paintBig);
     paintStats();
-  }, REFRESH_MS);
+  });
 
   return { close: m.close };
 }

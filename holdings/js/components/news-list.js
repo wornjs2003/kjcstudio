@@ -27,6 +27,7 @@
    ========================================================================== */
 
 import { apiFetch } from '../data/api.js';
+import { patchRows } from '../utils/reconcile.js';
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g,
@@ -173,5 +174,7 @@ export function paintIssues(host, rows, { compact = false, limit = 0 } = {}) {
   if (rows === null) { host.innerHTML = emptyHtml('fail', compact); return; }
   if (!rows.length)  { host.innerHTML = emptyHtml('none', compact); return; }
   const show = limit > 0 ? rows.slice(0, limit) : rows;
-  host.innerHTML = show.map(x => rowHtml(x, compact)).join('');
+  /* **끼워 넣는다** — 기사 한 건이 들어와도 있던 줄은 그대로 둔다 (2026-10-02).
+     통째로 다시 그리면 굴려 둔 자리가 맨 위로 돌아간다 */
+  patchRows(host, show, { key: (x) => x.link, html: (x) => rowHtml(x, compact) });
 }

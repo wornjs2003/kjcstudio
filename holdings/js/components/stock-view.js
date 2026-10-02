@@ -38,7 +38,10 @@ import { apiFetch } from '../data/api.js';
 import { everyServerMs } from '../store/timing.js';
 
 /* 서버가 5분마다 공시를 받아 두므로 화면도 그 주기에 맞춘다 */
-const DISCLOSURE_RELOAD_MS = 5 * 60 * 1000;
+/* **서버가 정한다** (2026-10-02 · 서버리소스 화면 묶음 ⑥).
+   `dart.py` 의 `POLL_INTERVAL` 을 따른다. 아래는 **서버가 없을 때의 대체값**이다. */
+const DISCLOSURE_RELOAD_KEY = 'dart.POLL_INTERVAL';
+const DISCLOSURE_RELOAD_FALLBACK_MS = 5 * 60 * 1000;
 
 /* 체결은 장중에 계속 쌓인다. 서버 캐시가 3초라 그보다 짧게 부를 이유가 없다.
    **확인용 서버(--slow)에서는 5분 캐시**라 값이 그만큼 묵어 보인다 — 정상이다. */
@@ -319,7 +322,8 @@ export function mountStockView(root, stock, { onBack } = {}) {
   const dcHost = $('#kh-dc');
   if (dcHost) {
     disclosures = mountDisclosures(dcHost, { code: stock.code, limit: 12, showName: false });
-    reloadTimer = setInterval(() => disclosures.reload(), DISCLOSURE_RELOAD_MS);
+    reloadTimer = everyServerMs(DISCLOSURE_RELOAD_KEY, DISCLOSURE_RELOAD_FALLBACK_MS,
+                                () => disclosures.reload());
   }
 
   /* ── 체결 · 일별 매매동향 (2026-09-21 지시 — A 종목 화면) ──
@@ -468,7 +472,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
          기간을 바꿀 때만 적으면, **끌어 놓고 바로 닫은 것**이 사라진다. */
       if (chart) { try { setChartView(periodId, chart.getView()); } catch { /* 아직 없다 */ } }
       if (chart) { chart.destroy(); chart = null; }
-      if (reloadTimer) { clearInterval(reloadTimer); reloadTimer = null; }
+      if (reloadTimer) { reloadTimer(); reloadTimer = null; }   // everyServerMs 가 준 멈추는 함수
       clearInterval(tickTimer);
       stopFlow();                 // everyServerMs 가 준 멈추는 함수
       panel3.destroy();
