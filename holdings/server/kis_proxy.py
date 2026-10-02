@@ -1072,9 +1072,27 @@ _resp_times = {}                   # 경로 끝 조각 -> deque[(시각, 왕복m
 _resp_lock = threading.Lock()      # dict 에 **키를 만들 때만** 잡는다
 
 
+def _resp_key(path):
+    """경로를 「구역/마지막」 으로 줄인다 — **마지막 조각만으로는 겹친다.**
+
+    `/uapi/domestic-stock/.../inquire-price`(주식)와
+    `/uapi/domestic-futureoption/.../inquire-price`(선물)가 **같은 칸에 섞였다**
+    (2026-10-02 실측 — 경로 17개 중 마지막 조각이 겹치는 것 **하나**. 구역을
+    붙이면 **17개가 다 갈린다**). 섞이면 **하한이 두 API 의 평균**이 된다.
+
+    ⚠️ `CLAUDE.md` 의 예산 몫 세는 명령(`awk -F/ '{print $NF}'`)도 같은 자리에서
+    둘을 합친다 — 그쪽은 문서 레인이 본다.
+    """
+    seg = [x for x in (path or "").split("/") if x]
+    if len(seg) >= 3:
+        return seg[1] + "/" + seg[-1]
+    # 조각이 둘뿐이면 구역과 마지막이 같은 것을 가리켜 `over/over` 가 된다.
+    return seg[-1] if seg else "?"
+
+
 def _resp_note(path, resp_ms, wait_ms):
     """성공한 왕복 하나를 적는다. 실패는 안 적는다 — 하한은 성공 응답으로 잰다."""
-    seg = (path or "").rstrip("/").rsplit("/", 1)[-1] or "?"
+    seg = _resp_key(path)
     dq = _resp_times.get(seg)
     if dq is None:
         with _resp_lock:
