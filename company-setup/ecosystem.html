@@ -97,7 +97,14 @@
      (2026-10-02). 주소로 직접 열면 창이 커서 min 이 아니라 calc 가 든다 */
   .view { height: max(var(--eco-min), calc(100vh - var(--eco-top))); }
   .view[hidden] { display: none; }
-  #geo { height: calc(100% - 26px); border-radius: 14px; overflow: hidden; }
+  #geo { height: calc(100% - 26px); border-radius: 14px; overflow: hidden; position: relative; }
+  /* 지구본일 때는 우주처럼 어둡게 — 라이트 테마에서 어둡게 두는 예외 토큰(이미지 확대 배경)을 그대로 쓴다 (2026-10-03 지시) */
+  #geo.globe { background: var(--overlay-bg); }
+  /* 지도 위 단추 — 지구본/평면 · 회전 · 처음으로. 모양은 .bar 단추와 같다 */
+  .geo-ctl { position: absolute; left: 10px; top: 10px; z-index: 2; display: flex; gap: 6px; }
+  .geo-ctl button { font: inherit; font-size: 12px; border: 0; border-radius: 99px; padding: 5px 11px; cursor: pointer;
+                    background: var(--bg-card); color: var(--text-secondary); box-shadow: var(--shadow-md); }
+  .geo-ctl button.is-on { background: var(--accent-faint); color: var(--accent); font-weight: 700; }
   /* 병목만 보기 — 흐름도의 .focus/.lit 과 같은 뜻을 점에 적용한다 */
   #geo.choke-only .pin:not(.choke) { opacity: .25; }
   .pin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--bg-card); cursor: pointer; }
@@ -174,7 +181,13 @@
     </div>
     </div>
     <div class="view" id="v-geo" hidden>
-      <div id="geo"></div>
+      <div id="geo">
+        <div class="geo-ctl" id="geo-ctl">
+          <button data-g="globe" class="is-on">지구본</button>
+          <button data-g="spin" class="is-on">▶ 회전</button>
+          <button data-g="home">처음으로</button>
+        </div>
+      </div>
       <div class="geo-note">점은 본사 · 주요 공장이 있는 도시에 박았다(도시 수준) · 선은 흐름도의 연결을 칸의 대표 자리끼리 그은 것 · 번지까지의 주소 확인은 다음 일이다 · 지도 © OpenStreetMap · Protomaps</div>
     </div>
   </div>
@@ -407,16 +420,64 @@ function buildGeo() {
     new maplibregl.Marker({ element: d }).setLngLat(s.at).addTo(geo);
     return { s, lb: d.querySelector('.lb') };
   });
-  // 세계를 한 번만 보인다 — 아프리카에서 미국까지 (2026-10-02 지시 「아프리카에서 미국쪽으로 하나만」).
+  // ── 지구본 · 회전 (2026-10-03 지시 「지구본 돌리고 크기 키우고 컨트롤할 수 있는 것들도」) ──
+  // 같은 라이브러리의 투영만 바꾼다(MapLibre 5 의 globe). 지도 조각 · 점 · 선은 그대로 지구 위에 올라간다.
+  // 크기는 기존 + − 단추로, 끌어서 돌리는 것은 지도가 원래 하고, 자동 회전은 마우스를 올리거나 끌면 멈춘다
+  let globeOn = true, spinOn = true, hover = false, dragging = false;
+  const box = document.getElementById('geo');
+  // 지구본이 칸에 차는 줌 — 지구 지름이 칸의 짧은 변의 0.9 가 되게. 지름은 줌마다 재서 맞춘다(수식을 박지 않는다)
+  function fitGlobe() {
+    const want = Math.min(box.clientWidth, box.clientHeight) * 0.9;
+    let z = geo.getZoom();
+    for (let i = 0; i < 12; i++) {                       // 지름이 2배/줌 이라 log2 로 한 번에 가고, 두세 번 더 좁힌다
+      const c = geo.getCenter().lng, d = Math.abs(geo.project([c + 90, 0]).x - geo.project([c - 90, 0]).x);
+      if (!d || Math.abs(d - want) < 2) break;
+      z += Math.log2(want / d); geo.jumpTo({ zoom: z });
+    }
+    return z;
+  }
+  // 평면 — 세계를 한 번만 보인다, 아프리카에서 미국까지 (2026-10-02 지시 「아프리카에서 미국쪽으로 하나만」).
   // 창이 넓으면 같은 줌에서 세계가 되풀이돼 미국이 둘 보였다. 세계 한 바퀴(512·2^z px)가 지도 폭과 같아지는 줌을 바닥으로 잡는다
   const fitWorld = (jump) => {
+    if (globeOn) {
+      geo.setMinZoom(0);
+      if (jump) { geo.jumpTo({ center: [150, 20] }); const z = fitGlobe(); geo.setMinZoom(Math.max(0, z - 0.6)); }
+      return;
+    }
     const z = Math.log2(geo.getContainer().clientWidth / 512);
     geo.setMinZoom(z);
     if (jump || geo.getZoom() < z) geo.jumpTo({ center: [140, 22], zoom: z });   // 140 = 아프리카 서쪽(-20)과 미국 동쪽(300) 의 가운데
   };
+  function applyProjection() {
+    geo.setProjection({ type: globeOn ? 'globe' : 'mercator' });
+    box.classList.toggle('globe', globeOn);
+    document.querySelector('#geo-ctl [data-g="globe"]').classList.toggle('is-on', globeOn);
+    fitWorld(true);
+  }
+  // 천천히 돈다 — 보는 사람이 마우스를 올리거나 끌면 멈추고, 떼면 다시 돈다. 숨은 탭에서는 쉰다
+  (function turn() {
+    // 지도 탭이 숨어 있을 때(흐름도 보기)는 돌리지 않는다 — 안 보이는 지구를 돌리는 CPU 다 (창구 검수)
+    if (globeOn && spinOn && !hover && !dragging && !document.hidden && geoReady && !document.getElementById('v-geo').hidden) {
+      const c = geo.getCenter(); geo.setCenter([c.lng - 0.04, c.lat]);
+    }
+    requestAnimationFrame(turn);
+  })();
+  box.addEventListener('mouseenter', () => { hover = true; });
+  box.addEventListener('mouseleave', () => { hover = false; });
+  geo.on('dragstart', () => { dragging = true; }); geo.on('dragend', () => { dragging = false; });
+  document.getElementById('geo-ctl').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.g === 'globe') { globeOn = !globeOn; applyProjection(); }
+    if (b.dataset.g === 'spin') { spinOn = !spinOn; b.classList.toggle('is-on', spinOn); }
+    if (b.dataset.g === 'home') fitWorld(true);
+  });
   // 종목 이름 — 멀리서는 점이 겹쳐 이름표도 겹친다. 화면에서 가까운 점끼리 묶어 한 이름표에 종목 이름을 모아 단다(「엔비디아 · AMD · 브로드컴」)
   const shortName = s => s.name.split(' ')[0];
+  let lastLabel = 0;
   function labelPins() {
+    const now = performance.now();
+    if (now - lastLabel < 150) return;                 // 회전 중에는 매 프레임 moveend 가 온다 — 150ms 에 한 번만
+    lastLabel = now;
     // project 는 적힌 경도 그대로 재는데 점은 화면 가운데에 가까운 세계 복사본에 찍힌다 — 그 복사본의 경도로 잰다
     const c = geo.getCenter().lng;
     const near = ([lng, lat]) => [lng + Math.round((c - lng) / 360) * 360, lat];
@@ -441,7 +502,7 @@ function buildGeo() {
   }
   geo.on('resize', () => fitWorld(false));
   geo.on('moveend', labelPins);
-  geo.on('load', () => { geoReady = true; fitWorld(true); labelPins(); drawGeo(); geoFlow(); });
+  geo.on('load', () => { geoReady = true; applyProjection(); lastLabel = 0; labelPins(); drawGeo(); geoFlow(); });
 }
 document.getElementById('views').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
