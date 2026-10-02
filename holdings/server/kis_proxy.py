@@ -4111,9 +4111,140 @@ def _prefill_codes():
     return front + rest
 
 
+# ── 일·주·월·년봉 한 바퀴 ──────────────────────────────────────
+#
+# **바뀌는 때를 아는 데이터는 그때만 받는다** (2026-10-01 지시 원문의 공통 룰).
+# 재권님 결정(2026-10-02 14:4x) — 「5분봉 · 일봉은 바뀔 때마다 · **주·월·년봉은
+# 마지막 봉을 장 마감 때 한 번**」 · 「일·주·월·년봉은 **쌓아 둔다**」.
+# 그래서 이 바퀴는 **장 마감 뒤 하루 한 번** 네 주기의 마지막 봉을 받는다.
+# 장중의 일봉은 화면이 열 때 받는 길이 따로 있다.
+#
+# **쌓아 둔다** — 캔들은 기간으로 지우지 않는다. 지우는 것은 같은 구간의
+# 옛 줄뿐이다(`_save_candles_write` 주석).
+#
+# **왜 미리 받나** — 2026-10-02 실측으로 DB 에 일봉이 **12종목**뿐이었다
+# (주 6 · 월 8 · 년 8). 종목 차트를 열 때마다 **매번 KIS 왕복**이었다.
+# 한 번 쌓아 두면 **그 뒤로는 하루 한 번 그날 봉만** 받으면 된다.
+#
+# **첫 바퀴만 비싸다** — 2026-10-02 실측으로 종목당 19건 · 348종목 6,612건(48.7분).
+# 그 뒤는 하루 348종목 × 네 주기 = **1,392건** 안팎이다(마지막 봉만 · 아직 안 쟀다).
+#
+# **기존 `prefill-5m` 틀을 그대로 쓴다.** 새로 짜지 않는다 — 종목 순서 · 양보 ·
+# 「받았나」 기록이 이미 거기 있다. 다른 것은 **무엇을 구간으로 보느냐**뿐이다.
+DWMY_THREAD_NAME = "prefill-dwmy"
+DWMY_PERIODS = ("D", "W", "M", "Y")
+
+#: 네 주기 모두 이 개수까지 거슬러 받는다.
+#:
+#: **화면의 일봉이 400 이라 그것에 맞춘다** (`chart.js` 의 `FETCH_BARS`).
+#: 거기 주석대로 **`limit` 이 보관량을 정한다** — 적게 받아 두면 그 양에서
+#: 멈추고, 화면이 더 요구하면 그때 또 받는다. **밤에 받은 값이 헛일이 된다.**
+#:
+#: **주·월·년도 같은 400 으로 둔다 — 화면보다 넉넉히다** (화면은
+#: `BARS_FOR_IND` ≈ 260~320). 주기마다 다른 값을 두면 **그 값이 네 곳**이 되고
+#: 화면의 상수와 갈린다. 넉넉히 받는 비용은 작다 — 네 주기 다 **데이터가
+#: 짧아 일찍 멈춘다**(2026-10-02 실측 — 년봉은 삼성전자도 46봉뿐).
+DWMY_WANT = 400
+
+#: 한 바퀴를 도는 시각(분). **장 마감 뒤라야 그날 일봉과 이번 주·달·해의
+#: 마지막 봉이 확정된다.**
+#: 새벽에 돌면 「어제까지」 만 들어와 다음 날 장중에 그날 봉을 다시 받게 된다.
+DWMY_AT_MIN = 16 * 60          # 16:00
+
+#: 종목 사이 쉬는 시간. **한 번에 몰지 않고 길게 늘인다** (창구 판단).
+#: 348종목 × 5초 = 29분에 걸쳐 돈다. 마감 뒤라 급할 일이 없다.
+DWMY_REST_SEC = 5.0
+DWMY_CHECK_SEC = 60            # 시각을 이만큼마다 본다
+
+#: **기본은 꺼짐이다.** 첫 바퀴가 KIS 를 몇 분간 쓰므로 「켜기」 는 따로
+#: 지시받는다 (「커밋 → 푸시 → 배포 → **켜기**」). 켤 때 `KJC_DWMY=1`.
+#:
+#: **코드가 들어가는 것과 도는 것은 다른 일이다** — 이 줄이 그 둘을 가른다.
+DWMY_ON = (os.environ.get("KJC_DWMY") or "").strip().lower() in (
+    "1", "true", "yes", "on")
+
+
+def _dwmy_codes():
+    """한 바퀴 돌 종목 — 지수 구성종목 전체 (2026-10-02 지시 「348」)."""
+    try:
+        with dart._db_lock, dart.db_conn() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT stock_code FROM index_members "
+                "ORDER BY stock_code").fetchall()
+        return [r["stock_code"] for r in rows]
+    except Exception:
+        return []
+
+
+def _dwmy_slot(period, now):
+    """그 주기를 **언제 다시 받나** — 네 주기 모두 **하루 한 번**(장 마감 뒤)이다.
+
+    재권님 결정(2026-10-02 14:4x) — 「주·월·년봉은 **마지막 봉을 장 마감 때
+    한 번**」. 이번 주·달·해의 봉은 아직 자라는 중이라 날마다 바뀐다. 처음에는
+    주·달·해가 **바뀔 때만** 받게 짰는데, 그러면 이번 주 봉이 월요일 값에서 멈춘다.
+
+    `period` 를 받는 것은 기록 키(`pfW:…`)를 주기마다 따로 두려는 것이다 —
+    한 주기가 실패해도 나머지를 다시 부르지 않는다.
+    """
+    return now.strftime("%Y%m%d")
+
+
+def start_dwmy_prefill(cfg):
+    """일·주·월·년봉을 하루 한 번(16:00) 한 바퀴 받는다.
+
+    **쓰는 서버에서만 돈다.** 읽기 전용 서버가 받아 봐야 저장을 못 한다.
+    """
+    if not cfg:
+        return False
+    if not marketdb.writable():
+        return False
+
+    def loop():
+        time.sleep(PREFILL_START_SEC)
+        while True:
+            try:
+                now = datetime.now(KST)
+                if now.hour * 60 + now.minute >= DWMY_AT_MIN:
+                    for code in _dwmy_codes():
+                        got = False
+                        for period in DWMY_PERIODS:
+                            slot = _dwmy_slot(period, now)
+                            key = "pf%s:%s" % (period, code)
+                            # 그 구간을 이미 받았으면 건너뛴다
+                            if _meta_get(key) == slot:
+                                continue
+                            try:
+                                get_chart(cfg, code, period, DWMY_WANT)
+                            except Exception:
+                                pass   # 한 종목이 실패해도 나머지는 간다
+                            # **실패해도 적는다** — 안 적으면 그 종목만
+                            # 바퀴마다 다시 부른다 (`prefill-5m` 과 같다)
+                            _meta_set(key, slot)
+                            got = True
+                        if got:
+                            # 받은 종목 뒤에만 쉰다. 건너뛴 종목까지 쉬면
+                            # **받을 것이 없는 날에도 29분을 선다.**
+                            time.sleep(PREFILL_BUSY_REST_SEC if _ui_busy()
+                                       else DWMY_REST_SEC)
+            except Exception:
+                pass
+            time.sleep(DWMY_CHECK_SEC)
+
+    threading.Thread(target=loop, daemon=True, name=DWMY_THREAD_NAME).start()
+    return True
+
+
 def start_prefill(cfg):
     """뒤에서 5분봉을 미리 채운다. 키가 없으면 아무것도 하지 않는다."""
     if not cfg:
+        return False
+    # **읽기 전용 서버는 아예 안 받는다** (2026-10-02). 받아도 저장을 못 하니
+    # KIS 만 쓰고 버리는 꼴이다 — 순수 낭비다.
+    #
+    # 세션 서버 다섯은 `--slow` 라 여기까지 오지도 않는다. **걸리는 것은 8764**
+    # 하나인데, 그 하나만으로도 348종목이 헛돈다. 그리고 `--slow` 를 떼는 날
+    # 나머지도 같은 자리에 선다 — **깃발은 플래그와 무관하게 막는다.**
+    if not marketdb.writable():
         return False
 
     def loop():
@@ -5711,6 +5842,12 @@ def main():
     elif start_prefill(cfg):
         print("  5분봉 준비 : 코스피 상위 %d종목을 뒤에서 미리 받습니다"
               % PREFILL_TOP)
+
+    if not DWMY_ON:
+        print("  일주월년   : **꺼져 있습니다** (켜려면 KJC_DWMY=1)")
+    elif start_dwmy_prefill(cfg):
+        print("  일주월년   : %d:%02d 에 %d종목을 한 바퀴 받습니다 (최대 %d봉까지)"
+              % (DWMY_AT_MIN // 60, DWMY_AT_MIN % 60, len(_dwmy_codes()), DWMY_WANT))
 
     # 뉴스 쌓기 — **주말·밤에도 돈다.** 공시 폴러와 달리 DART 키가 없어도 돈다
     #
