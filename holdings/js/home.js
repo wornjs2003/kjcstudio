@@ -55,7 +55,7 @@ const $ = id => document.getElementById(id);
    처음 켜면 비어 있고, 목록이 들어온 뒤 맨 위 종목으로 채운다.
    순위표가 거래대금 순이라 그 시점의 1위가 들어간다.
 
-   last-seen 은 1분이 지나면 스스로 버리므로 여기에는 못 쓴다.
+   last-seen 은 탭을 닫으면 사라지므로(sessionStorage) 여기에는 못 쓴다.
    어제 본 종목도 이어져야 한다. */
 const LAST_KEY = 'kh:lastStock';
 
@@ -1731,9 +1731,9 @@ paintBigPeriods();
    화면을 오갈 때마다 "불러오는 중" 이 몇 초씩 떠 있었다. 서버에서 값이
    오기까지의 그 시간을, 조금 묵었더라도 숫자로 채운다. 곧 새 값이 덮는다.
 
-   남은 것이 없으면(처음 열었거나 1분이 지났으면) 전과 같이 빈 칸이다.
-   묵은 값을 실시간인 양 보여주지 않도록, 1분이 넘으면 last-seen 이
-   스스로 버린다. */
+   남은 것이 없으면(이 탭에서 처음 열었으면) 전과 같이 빈 칸이다.
+   **묵었어도 버리지 않는다**(2026-10-02 지시 — 「직전에 받은값 이여 할거같은데」).
+   실시간인 양 보이지 않도록 `frame.js` 가 「○분 전 값」 을 띄운다. */
 const keptPrices = lastSeen.load('prices');
 if (keptPrices) rowPrices = keptPrices.value;
 

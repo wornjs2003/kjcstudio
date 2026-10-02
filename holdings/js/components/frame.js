@@ -263,12 +263,23 @@ const REFRESH_FALLBACK_MS = 30000;
 
 let staleBar = null;
 
+/* 몇 전 값인지 — 초로만 적으면 묵은 값이 「43200초 전」 이 된다.
+   2026-10-02 에 묵은 값을 버리지 않게 되면서 시간 · 일까지 간다. */
+function agoText(ageMs) {
+  const sec = Math.max(1, Math.round(ageMs / 1000));
+  if (sec < 60) return `${sec}초`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}분`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}시간`;
+  return `${Math.floor(hr / 24)}일`;
+}
+
 function markStale(ageMs) {
   if (staleBar) return;
-  const sec = Math.max(1, Math.round(ageMs / 1000));
   staleBar = document.createElement('div');
   staleBar.className = 'kh-stale';
-  staleBar.innerHTML = `<i></i>${sec}초 전 값입니다 · 새로 받는 중`;
+  staleBar.innerHTML = `<i></i>${agoText(ageMs)} 전 값입니다 · 새로 받는 중`;
   document.body.appendChild(staleBar);
 }
 
@@ -288,7 +299,8 @@ export function startLiveLoop({ onPrices, onIndices, prices = true, indexMs } = 
   /* 지난번에 본 값이 남아 있으면 그것부터 깔고 시작한다 (2026-09-15).
      서버에서 첫 값이 오기까지 사이드바와 시세 띠가 "—" 로 비어 있었다.
      세 화면이 이 함수를 함께 쓰므로 여기 한 번만 두면 모두 해결된다.
-     묵은 값은 last-seen 이 스스로 버리므로 오래된 숫자가 남지 않는다. */
+     **묵었어도 버리지 않는다**(2026-10-02 지시) — 대신 아래 표시가 몇 분 전
+     값인지 적는다. */
   const kept = lastSeen.load('prices');
   if (kept) Object.assign(latest, kept.value);
 
