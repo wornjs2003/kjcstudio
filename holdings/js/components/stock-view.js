@@ -95,6 +95,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
      카드에서 보던 자리를 그대로 이어받아야 해서다 — 여기 따로 두면 갈린다.
      종목이 카드와 같으면 그대로 두고, 다르면 버린다. */
   chartStockChanged(stock.code);
+  let lastPrev = null;          // 시세의 전일 종가 — 「전일」 점선이 쓴다
   let disclosures = null;
   let reloadTimer = null;
   let dead = false;
@@ -153,6 +154,10 @@ export function mountStockView(root, stock, { onBack } = {}) {
     /* 그 값으로 차트의 맨 오른쪽 막대도 갱신한다 (2026-09-30 지시 — 「4번」).
        봉을 다시 받지 않는다. 자세한 것은 `chart.js` 의 `updateLast` 주석. */
     if (chart) chart.updateLast(live);
+    /* 「전일」 점선은 시세의 `prev` 로 긋는다 (2026-10-02). 차트가 먼저
+       그려졌으면 봉에서 뽑은 값이라 여기서 맞춘다 — 같으면 `chart.js` 가 건너뛴다. */
+    if (Number(live.prev) > 0) lastPrev = Number(live.prev);   // null·0 은 안 덮는다
+    if (chart && periodId === '5m') addPrevCloseLine(chart, chart.candles, lastPrev);
 
     const cls = dirClass(live.pct);
     price.className = 'kh-price kh-num ' + cls;
@@ -251,7 +256,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
          (2026-09-23 모달 검수). 「오늘 올랐는지 내렸는지」 의 기준선이라,
          모달이 원본인 룰에서 빠져 있으면 안 된다. 선 긋는 것은
          `chart.js` 한 곳에 있다 — 여기 베끼지 않는다. */
-      const drewPrev = periodId === '5m' && addPrevCloseLine(chart, candles);
+      const drewPrev = periodId === '5m' && addPrevCloseLine(chart, candles, lastPrev);
 
       if (legend) {
         /* 출처에 「실시간」 을 붙이는 것은 5분봉일 때만이다 — 첫 화면 발이

@@ -451,7 +451,8 @@ async function paintBigChart(opt = {}) {
 
   /* 5분봉에는 전일 종가선을 그어 둔다. **선 긋는 것은 `chart.js` 한 곳에 있다**
      (2026-09-23) — 모달·종목 화면도 같은 것을 써야 해서 옮겼다. */
-  const drewPrev = bigPeriod === '5m' && addPrevCloseLine(bigChart, candles);
+  const drewPrev = bigPeriod === '5m' && addPrevCloseLine(bigChart, candles,
+    rowPrices[st.code] && rowPrices[st.code].prev);
 
   if (foot) {
     const label = (CHART_PERIODS.find(p => p.id === bigPeriod) || {}).label || '';
@@ -1322,6 +1323,15 @@ function applyPrices(map) {
      `updateLast` 가 `!live` 와 `last.close === px` 를 스스로 걸러서
      여기서 다시 보지 않는다 — 건너뛸 값을 두 곳에서 정하면 갈린다. */
   if (bigChart) bigChart.updateLast(rowPrices[selectedCode]);
+  /* 「전일」 점선도 시세가 오면 맞춘다 (2026-10-02). 차트가 시세보다 먼저
+     그려졌으면 봉에서 뽑은 값으로 그어져 있다. 값이 같으면 `chart.js` 가
+     건너뛴다 — 여기서 다시 보지 않는다. */
+  /* **양수 `prev` 가 왔을 때만 다시 긋는다.** KIS 가 `prev` 를 안 주는 때가 있어
+     (`null`) 그대로 넘기면 봉 값으로 되돌아가 맞는 선을 지운다 (창구 검수). */
+  const livePrev = rowPrices[selectedCode] && Number(rowPrices[selectedCode].prev);
+  if (bigChart && bigPeriod === '5m' && livePrev > 0) {
+    addPrevCloseLine(bigChart, bigChart.candles, livePrev);
+  }
   if (typeof detail !== 'undefined' && detail) {
     detail.update(rowPrices && rowPrices[selectedCode]);   // 거래대금 · 시가총액
   }

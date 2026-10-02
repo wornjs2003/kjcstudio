@@ -1547,6 +1547,7 @@ export function createStockChart(container, candles, opts = {}) {
     get chart() { return panes[0] && panes[0].chart; },
     get candleSeries() { return candleSeries; },
     get maSeries() { return maSeries; },
+    get candles() { return candles; },
     legend: null,
 
     addPriceLine(o) {
@@ -1555,6 +1556,16 @@ export function createStockChart(container, candles, opts = {}) {
         priceLines.push(l);
         return l;
       } catch { return null; }
+    },
+
+    /* 내가 그은 선 하나만 지운다. 봉을 갈아끼우면(`setData`) 목록이 비므로
+       그 뒤에 부르면 아무 일도 안 한다 — 「있었나」 를 부르는 쪽이 안 봐도 된다. */
+    removePriceLine(l) {
+      const i = priceLines.indexOf(l);
+      if (i < 0) return false;
+      priceLines.splice(i, 1);
+      try { candleSeries.removePriceLine(l); } catch { /* 이미 사라진 시리즈 */ }
+      return true;
     },
 
     setData(next, nextPeriod) {
@@ -1925,8 +1936,9 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
 
 /* ── 전일 종가 점선 (2026-09-23) ──────────────────────────────
  *
- * **오늘 올랐는지 내렸는지의 기준선**이다. 어제 마지막 봉의 종가에 점선을
- * 긋는다. 5분봉에만 뜻이 있다 — 일봉 이상이면 「어제」 가 봉 하나다.
+ * **오늘 올랐는지 내렸는지의 기준선**이다. 시세의 전일 종가(`prev`)에 점선을
+ * 긋고, 그것이 없을 때만 어제 마지막 봉의 종가를 쓴다.
+ * 5분봉에만 뜻이 있다 — 일봉 이상이면 「어제」 가 봉 하나다.
  *
  * **여기 한 곳에 둔다.** 전에는 `home.js` 안에만 있어서, 같은 5분봉인데
  * **첫 화면 차트에는 선이 있고 종목 모달·종목 화면에는 없었다**
@@ -1942,20 +1954,40 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
  */
 export const PREV_CLOSE_NOTE = '점선은 전일 종가';
 
-export function addPrevCloseLine(chart, candles) {
-  if (!chart || !candles || candles.length < 2) return false;
+/* 차트마다 지금 그어 둔 「전일」 선. 시세가 늦게 오면 다시 긋는데,
+   그때 앞 선을 지워야 두 줄이 겹치지 않는다. */
+const _prevLine = new WeakMap();
+
+export function addPrevCloseLine(chart, candles, prev) {
+  if (!chart || !candles || !candles.length) return false;
   const today = candles[candles.length - 1].ts.slice(0, 8);
   const firstToday = candles.findIndex((b) => b.ts.slice(0, 8) === today);
-  if (firstToday <= 0) return false;      // 오늘 봉이 없거나 첫 봉이 오늘이다
-  chart.addPriceLine({
-    price: candles[firstToday - 1].close,
+  if (firstToday < 0) return false;
+  /* **시세의 `prev` 가 먼저다 (2026-10-02 지시).** 어제 마지막 5분봉의 종가는
+     전일 종가가 아니다 — 장 마감 동시호가 체결이 그 봉에 안 들어간다.
+     8770 실측(005935) — 시세 `prev` 204,500 · 봉에서 뽑은 값 202,000.
+     **봉은 폴백으로만 남긴다** — 시세가 아직 안 왔거나 `prev` 가 없는 종목. */
+  const p = Number(prev);
+  const price = p > 0 ? p
+    : (firstToday > 0 ? candles[firstToday - 1].close : null);
+  if (price == null) return false;        // 첫 봉이 오늘이고 시세도 없다
+
+  const was = _prevLine.get(chart);
+  /* **시리즈가 같은지로 「아직 있다」 를 본다.** 지표를 켜고 끄면 `build()` 가
+     차트를 통째로 다시 만들어 선이 사라지는데 목록에는 남는다 — 목록으로
+     보면 「있다」 로 읽혀 다시 안 긋는다. */
+  if (was && was.price === price && was.series === chart.candleSeries) return true;
+  if (was && chart.removePriceLine) chart.removePriceLine(was.line);
+  const line = chart.addPriceLine({
+    price,
     color: color('text-muted'),
     lineWidth: 1,
     lineStyle: 2,               // 점선
     axisLabelVisible: true,
     title: '전일',
   });
-  return true;
+  if (line) _prevLine.set(chart, { line, price, series: chart.candleSeries });
+  return !!line;
 }
 
 /* 차트 칸 밖에 두는 범례 — 패널 머리(stock.html)와 지수 차트 아래 줄에서 쓴다.
