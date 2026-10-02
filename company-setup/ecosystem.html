@@ -74,6 +74,29 @@
   .panel dd { margin: 2px 0 0; line-height: 1.55; }
   .panel .muted { color: var(--text-muted); }
 </style>
+<!-- 세계 지도 (2026-10-02 지시 — 「지도랑 위치랑 박아놓는거」). 지도 그림은 맥미니 /Users/kjc/data/maps 의
+     PMTiles 다섯 조각을 서버가 /maps/ 로 낸다(부분 받기 · kis_proxy MAPS_DIR). 라이브러리는 아직 CDN 이다. maplibre 는 5.x — 6 은 ESM 만 있어 script 로 못 싣는다 -->
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/pmtiles@4.5.0/dist/pmtiles.js"></script>
+<script src="https://unpkg.com/@protomaps/basemaps@5.7.2/dist/basemaps.js"></script>
+<style>
+  .views { display: inline-flex; background: var(--bg-elevated); border-radius: 10px; padding: 3px; margin: 0 0 14px; }
+  .views button { font: inherit; font-size: 13px; border: 0; background: none; padding: 6px 16px; border-radius: 8px;
+                  cursor: pointer; color: var(--text-secondary); }
+  .views button.is-on { background: var(--bg-card); color: var(--text-primary); font-weight: 700; }
+  /* 두 화면이 같은 높이를 쓴다 — 바꿔 봐도 모달 안 자리가 안 움직인다 (「보는 것을 바꿔도 자리는 그대로다」) */
+  .view { height: 660px; }
+  .view[hidden] { display: none; }
+  #geo { height: 620px; border-radius: 14px; overflow: hidden; }
+  .pin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--bg-card); cursor: pointer; }
+  .pin.demand { background: rgb(var(--kh-ok-rgb)); } .pin.chip { background: rgb(var(--accent-rgb)); } .pin.power { background: rgb(var(--kh-warn-rgb)); }
+  .pin.choke::after { inset: -6px; border-radius: 50%; }
+  .pin .lb { position: absolute; left: 16px; top: -4px; white-space: nowrap; font-size: 11px; font-weight: 700;
+             background: var(--bg-card); color: var(--text-primary); padding: 1px 6px; border-radius: 6px; pointer-events: none; }
+  #geo.far .pin .lb { display: none; }
+  .geo-note { color: var(--text-muted); font-size: 11.5px; margin-top: 6px; }
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -82,6 +105,9 @@
     <p class="sub">왼쪽에서 오른쪽으로 — 서비스가 돈을 벌면 모델 · 데이터센터를 거쳐 칩과 전력으로 흘러간다. 칸을 누르면 이어진 길이 켜진다 · 빨간 고리는 병목</p>
     <!-- 참고: Globaia AI 공급망 지도 — 흐름 움직임 · 선 종류 색 · 병목 고리 (2026-10-02 재권님이 고르심) -->
 
+    <div class="views" id="views"><button data-v="flow" class="is-on">흐름도</button><button data-v="geo">세계 지도</button></div>
+
+    <div class="view" id="v-flow">
     <div class="bar" id="bar">
       <button data-act="flow" class="is-on">▶ 흐름</button>
       <span class="sep"></span>
@@ -131,6 +157,11 @@
         <div class="cell" data-id="nuke"><span class="k">발전</span><span class="t">두산에너빌리티</span></div>
         <div class="cell" data-id="cool"><span class="k">냉각</span><span class="t">(조사 전)</span></div>
       </div>
+    </div>
+    </div>
+    <div class="view" id="v-geo" hidden>
+      <div id="geo"></div>
+      <div class="geo-note">점은 본사 · 주요 공장이 있는 도시에 박았다(도시 수준). 번지까지의 주소 확인은 다음 일이다 · 지도 © OpenStreetMap · Protomaps</div>
     </div>
   </div>
 
@@ -232,6 +263,70 @@ panel.innerHTML = EMPTY;
 map.addEventListener('click', e => { const n = e.target.closest('[data-id]'); if (n) pick(n.dataset.id); });
 addEventListener('resize', draw);
 document.fonts.ready.then(draw);
+
+// ── 세계 지도 ──
+// 점 하나 = 회사의 자리 하나. node 는 흐름도 칸 id — 점을 누르면 그 칸을 고른 것과 같다.
+// 좌표는 도시 수준이다(본사 · 주요 공장 도시). 번지 수준 확인은 아직 안 했다
+const SITES = [
+  { name: '엔비디아 본사',        node: 'chip',  at: [-121.96, 37.37] },  // 미국 산타클라라
+  { name: 'AMD 본사',             node: 'chip',  at: [-121.94, 37.35] },  // 미국 산타클라라
+  { name: '브로드컴 본사',        node: 'chip',  at: [-122.14, 37.44] },  // 미국 팰로앨토
+  { name: 'TSMC 본사 · 신주',     node: 'fab',   at: [120.99, 24.78] },   // 대만 신주
+  { name: 'TSMC 타이난',          node: 'fab',   at: [120.27, 23.11] },   // 대만 타이난
+  { name: 'TSMC 애리조나',        node: 'fab',   at: [-112.14, 33.75] },  // 미국 피닉스 북쪽
+  { name: 'SK하이닉스 이천',      node: 'mem',   at: [127.44, 37.25] },
+  { name: 'SK하이닉스 청주',      node: 'mem',   at: [127.42, 36.63] },
+  { name: '삼성전자 평택',        node: 'mem',   at: [127.05, 37.02] },
+  { name: '삼성전자 기흥 · 화성', node: 'fab',   at: [127.07, 37.21] },
+  { name: '마이크론 본사',        node: 'mem',   at: [-116.20, 43.53] },  // 미국 보이시
+  { name: '한미반도체 인천',      node: 'hbmeq', at: [126.66, 37.50] },
+  { name: '리노공업 부산',        node: 'test',  at: [129.03, 35.15] },
+  { name: '이수페타시스 대구',    node: 'pcb',   at: [128.60, 35.87] },
+  { name: 'HD현대일렉트릭 울산',  node: 'power', at: [129.31, 35.54] },
+  { name: '효성중공업 창원',      node: 'power', at: [128.68, 35.23] },
+  { name: '두산에너빌리티 창원',  node: 'nuke',  at: [128.62, 35.20] },
+  { name: '대한전선 당진',        node: 'cable', at: [126.65, 36.89] },
+  { name: '네이버 성남',          node: 'krsw',  at: [127.10, 37.36] },
+];
+// 점 색 = 그 칸으로 들어오는 선의 종류
+const TYPE_OF = id => (LINKS.find(l => l[1] === id) || [0, 0, 'demand'])[2];
+let geo = null;
+function buildGeo() {
+  maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile);
+  // 세계(z8) 위에 깊은 지역(z15) 넷을 겹친다 — 지역 안에서 크게 키우면 건물까지 나온다
+  const files = ['world-z8', 'korea-z15', 'taiwan-z15', 'siliconvalley-z15', 'phoenix-z15'];
+  const sources = {}, layers = [];
+  files.forEach((f, i) => {
+    sources[f] = { type: 'vector', url: `pmtiles://${location.origin}/maps/${f}.pmtiles`,
+                   attribution: i ? '' : '<a href="https://protomaps.com">Protomaps</a> © <a href="https://openstreetmap.org">OpenStreetMap</a>' };
+    basemaps.layers(f, basemaps.namedFlavor('light'), { lang: 'ko' })
+      .filter(l => i === 0 || l.type !== 'background')
+      .forEach(l => layers.push({ ...l, id: `${f}-${l.id}` }));
+  });
+  geo = new maplibregl.Map({
+    container: 'geo', center: [127, 32], zoom: 1.6,
+    style: { version: 8, glyphs: 'https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf',
+             sprite: 'https://protomaps.github.io/basemaps-assets/sprites/v4/light', sources, layers },
+  });
+  geo.addControl(new maplibregl.NavigationControl({ showCompass: false }));
+  // 멀리서 보면 이름표가 서로 겹친다 — 나라 하나가 화면에 찰 만큼 키웠을 때만 이름을 단다
+  const lbl = () => document.getElementById('geo').classList.toggle('far', geo.getZoom() < 5);
+  geo.on('zoom', lbl); lbl();
+  SITES.forEach(s => {
+    const d = document.createElement('div');
+    d.className = `pin ${TYPE_OF(s.node)}${el(s.node).classList.contains('choke') ? ' choke' : ''}`;
+    d.innerHTML = `<span class="lb">${s.name}</span>`;
+    d.addEventListener('click', ev => { ev.stopPropagation(); if (sel !== s.node) pick(s.node); });
+    new maplibregl.Marker({ element: d }).setLngLat(s.at).addTo(geo);
+  });
+}
+document.getElementById('views').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#views button').forEach(x => x.classList.toggle('is-on', x === b));
+  document.getElementById('v-flow').hidden = b.dataset.v !== 'flow';
+  document.getElementById('v-geo').hidden = b.dataset.v !== 'geo';
+  if (b.dataset.v === 'geo') { if (!geo) buildGeo(); else geo.resize(); } else draw();
+});
 draw();
 </script>
 </body>
