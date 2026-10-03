@@ -404,6 +404,25 @@ _rate_lock = threading.Lock()
 _last_call_at = 0.0
 _call_times = []                 # 최근 호출 시각 (사용량 측정용)
 
+# ── 나가는 문 — 「어느 1초든 한도를 안 넘는다」 (2026-10-03 지시) ──────────
+#
+# 재권님 「1초에 10회 한도 걸어놔」. 위 줄은 **간격**(0.1초)을 배정하는데,
+# 배정 뒤 `sleep` 에서 **늦게 깬 차례가 앞 차례에 붙어** 나갔다 — 실제 간격
+# 35~71ms · 로그 1초 창 최대 12건(2026-10-03 가름). 간격을 지켜도 **한 초에
+# 몰리는 것**은 못 막는다.
+#
+# 그래서 **나가기 직전**에 한 번 더 센다 — 「지난 1초 안에 실제로 문을 지난 수」
+# 가 한도면 가장 오래된 것이 1초를 벗어날 때까지 기다린다. **배정 시각이 아니라
+# 지나간 시각**이라 늦게 깬 것도 여기서 걸린다. `monotonic` — 이 셈은 남과
+# 나누지 않는다.
+#
+# ⚠️ **이 프로세스 안만 센다.** KIS 를 부르는 것은 8765 하나다(넘기기). 다른
+# 서버가 상류를 못 써 **폴백으로 직접 부르는 동안**은 그 서버 몫이 따로라 합이
+# 넘을 수 있다 — 공유 줄(`_shared_slot`)이 간격으로만 막는다.
+_send_lock = threading.Lock()
+_send_times = collections.deque()
+_send_stat = {"held": 0, "heldMs": 0.0, "maxIn1s": 0}
+
 # **실제로 뜬 포트.** `MAIN_PORT`(8765)는 「어느 것이 메인인가」 를 가리는
 # 상수라 다르다. 여섯이 동시에 도므로 **로그 줄마다 이것을 적는다** —
 # 파일이 갈려 있어도 합쳐 볼 때 어느 서버 것인지 알 수 있다.
@@ -685,6 +704,9 @@ def _rate_limit(path=None):
     if wait > 0:
         time.sleep(wait)
 
+    # **나가는 문** — 지난 1초 안 실제로 지난 수가 한도면 더 기다린다 (위 주석).
+    _send_gate()
+
     # **기다린 뒤에 찍는다 — 여기가 실제로 나가는 순간이다**
     # (2026-09-23 지시 — 「실시간으로 어디서뭐 쓰는지 로그 알수있는게
     #  있어야 할거같은데」).
@@ -703,6 +725,29 @@ def _rate_limit(path=None):
     # 세어진다 — **한도 대상은 이쪽**이다.
     sys.stderr.write("  [KIS] %s :%s %s\n"
                      % (_stamp(), RUN_PORT, path or "?"))
+
+
+def _send_gate():
+    """지난 1초 안에 이 문을 지난 수가 한도 미만이 될 때까지 기다린다."""
+    limit = max(1, int(KIS_CALLS_PER_SEC))
+    held = 0.0
+    while True:
+        with _send_lock:
+            now = time.monotonic()
+            while _send_times and _send_times[0] <= now - 1.0:
+                _send_times.popleft()
+            if len(_send_times) < limit:
+                _send_times.append(now)
+                if len(_send_times) > _send_stat["maxIn1s"]:
+                    _send_stat["maxIn1s"] = len(_send_times)
+                if held:
+                    _send_stat["held"] += 1
+                    _send_stat["heldMs"] += held * 1000.0
+                return
+            # 가장 오래된 것이 1초를 벗어나는 순간까지 — 2ms 여유
+            pause = _send_times[0] + 1.0 - now + 0.002
+        time.sleep(pause)
+        held += pause
 
 
 # ── 주기·캐시 값을 한 곳에서 모아 낸다 (2026-09-23 지시) ────────────────
@@ -824,6 +869,12 @@ def usage_stats():
         "budgetRatio": BUDGET_RATIO,
         "budgetPerSec": KIS_CALLS_PER_SEC,
         "minIntervalSec": KIS_MIN_INTERVAL,
+        # **나가는 문** (2026-10-03) — 1초 창 최대 · 문에서 더 기다린 횟수와 합(ms).
+        # 재시작 뒤 누적이다. `maxIn1s` 가 `budgetPerSec` 를 넘으면 문이 안 듣는 것이다.
+        "sendGate": {"limitPer1s": max(1, int(KIS_CALLS_PER_SEC)),
+                     "maxIn1s": _send_stat["maxIn1s"],
+                     "held": _send_stat["held"],
+                     "heldMs": round(_send_stat["heldMs"], 1)},
         "calls10s": last_10s,
         "calls60s": last_60s,
         "calls1h": last_1h,
