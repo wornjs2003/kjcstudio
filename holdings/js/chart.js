@@ -9,7 +9,7 @@
    ========================================================================== */
 
 import { color, alpha } from './theme.js';
-import { apiFetch } from './data/api.js';
+import { apiFetch, viewUrl } from './data/api.js';
 import { watch } from './store/longpoll.js';
 
 /* 차트는 canvas 라 CSS 를 상속받지 못해 색을 문자열로 넘겨야 한다.
@@ -554,9 +554,10 @@ const CANDLE_FALLBACK_MS = 60_000;
  * @param {Function} getCode    → 지금 종목
  * @param {Function} getPeriod  → 지금 기간 단추 값
  * @param {Function} onChange   새로 받아 그린다 (`fetchCandles` 가 새로 받는다)
+ * @param {string}   [view]     서버에 「무엇을 보고 있나」 (`api.js` 의 `viewUrl`)
  * @returns {{ stop: Function, refresh: Function }} 종목·기간이 바뀌면 `refresh()`
  */
-export function watchCandles(getCode, getPeriod, onChange) {
+export function watchCandles(getCode, getPeriod, onChange, view) {
   let held = null;                  // 지금 지켜보는 주소
   const hold = (u) => {
     if (u === held) return;
@@ -564,7 +565,8 @@ export function watchCandles(getCode, getPeriod, onChange) {
     held = u;
     if (u) _watched.set(u, (_watched.get(u) || 0) + 1);
   };
-  const url = () => { const c = getCode(); const u = c ? candleUrl(c, getPeriod()) : null; hold(u); return u; };
+  /* 지켜보기 키(`hold`)에는 view 를 안 넣고, 서버로 가는 주소에만 붙인다 */
+  const url = () => { const c = getCode(); const u = c ? candleUrl(c, getPeriod()) : null; hold(u); return u && viewUrl(u, view); };
   const w = watch({
     url,
     onChange: () => { if (held) _candleCache.delete(held); return onChange(); },
@@ -608,7 +610,7 @@ export async function fetchCandles(code, periodId = '1d', opt = {}) {
     if (hit) return hit.value;
   }
 
-  const r = await apiFetch(key, { cache: 'no-store' });
+  const r = await apiFetch(viewUrl(key, opt.view), { cache: 'no-store' });
   if (!r) throw new Error('로그인이 만료되었습니다');
   if (!r.ok) throw new Error(`차트 데이터를 불러오지 못했습니다 (${r.status})`);
   const j = await r.json();

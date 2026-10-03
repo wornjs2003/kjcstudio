@@ -35,7 +35,7 @@ import { mountStockPanel } from './stock-panel.js';
 import { mountStockDetail } from './stock-detail.js';
 import { mountIndicatorMenu } from './indicator-menu.js';
 import { mountFinanceCards } from './finance-cards.js';
-import { apiFetch } from '../data/api.js';
+import { apiFetch, viewUrl } from '../data/api.js';
 import { everyServerMs } from '../store/timing.js';
 import { watch } from '../store/longpoll.js';
 
@@ -90,7 +90,7 @@ export async function loadStockMain(url = './stock.html') {
  * @param {Function} [opts.onBack]  「← 목록」 을 눌렀을 때. 없으면 링크 그대로 둔다
  * @returns {{ paint: Function, destroy: Function }}
  */
-export function mountStockView(root, stock, { onBack } = {}) {
+export function mountStockView(root, stock, { onBack, view } = {}) {
   const $ = sel => root.querySelector(sel);
 
   let chart = null;
@@ -244,7 +244,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
     if (!chart) return drawChart();
     const key = periodId;
     try {
-      const { candles, period } = await fetchCandles(stock.code, periodId);
+      const { candles, period } = await fetchCandles(stock.code, periodId, { view });
       if (dead || key !== periodId || !chart || !candles.length) return;
       chart.setData(candles, period);
       if (periodId === '5m') addPrevCloseLine(chart, candles, lastPrev);   // setData 가 선을 비운다
@@ -259,7 +259,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
     if (chart) { chart.destroy(); chart = null; }
     host.innerHTML = `<div class="kh-soon"><div class="kh-soon-t">차트 불러오는 중…</div></div>`;
     try {
-      const { candles, meta, period } = await fetchCandles(stock.code, periodId);
+      const { candles, meta, period } = await fetchCandles(stock.code, periodId, { view });
       /* 그 사이 기간을 바꿨거나 모달을 닫았다 */
       if (dead || key !== periodId) return;
       if (!candles.length) throw new Error('빈 응답');
@@ -322,7 +322,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
   paintPeriods();
   drawChart();
   /* **봉은 서버가 바뀌었다고 알릴 때만 다시 받는다** (2026-10-02 · 「서버가 알려준다」) */
-  const chartWatch = watchCandles(() => (dead ? null : stock.code), () => periodId, refreshChart);
+  const chartWatch = watchCandles(() => (dead ? null : stock.code), () => periodId, refreshChart, view);
   setupMemo();
   setupBack();
 
@@ -365,7 +365,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
     const box = $('#kh-ticks');
     if (!box) return;
     try {
-      const r = await apiFetch(`/api/kis/ticks?code=${stock.code}`, { cache: 'no-store' });
+      const r = await apiFetch(viewUrl(`/api/kis/ticks?code=${stock.code}`, view), { cache: 'no-store' });
       if (!r || !r.ok) throw new Error(r && r.status);
       const b = await r.json();
       const rows = Array.isArray(b.data) ? b.data : [];
@@ -464,14 +464,14 @@ export function mountStockView(root, stock, { onBack } = {}) {
   /* 오른쪽 패널 셋 — 첫 화면과 같은 컴포넌트다 (2026-09-21 지시).
      모달과 종목 페이지가 각자 제 root 안에서 찾으므로 서로 안 겹친다. */
   const panel3 = mountStockPanel($('#kh-panel3'), { code: stock.code });
-  const detail = mountStockDetail($('#kh-dt'));
+  const detail = mountStockDetail($('#kh-dt'), { view });
   /* 재무 카드 다섯 — 모달 「투자 지표」 칸에만 붙는다 (2026-10-02 지시 · finance-cards.js) */
   const finance = mountFinanceCards(root, stock);
   detail.setCode(stock.code);
 
   loadTicks();
   loadFlow();
-  const tickWatch = watch({ url: () => (dead ? null : `/api/kis/ticks?code=${stock.code}`),
+  const tickWatch = watch({ url: () => (dead ? null : viewUrl(`/api/kis/ticks?code=${stock.code}`, view)),
                            onChange: () => loadTicks(),
                            key: TICKS_RELOAD_KEY, fallbackMs: TICKS_RELOAD_FALLBACK_MS });
   const stopFlow = everyServerMs(FLOW_RELOAD_KEY, FLOW_RELOAD_FALLBACK_MS,

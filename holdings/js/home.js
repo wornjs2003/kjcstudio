@@ -37,7 +37,7 @@ import { mountMobileFold } from './components/mobile-fold.js';
    큰 차트가 지수에서 종목으로 바뀌면서 종목 캔들(chart.js 의 fetchCandles)로
    갈아탔다. 두 함수는 지수 화면을 만들 때 쓸 수 있게 live.js 에 남겨 뒀다. */
 import { fetchQuotes } from './data/live.js';
-import { apiFetch } from './data/api.js';
+import { apiFetch, viewUrl } from './data/api.js';
 /* 지수 띠 — 칸 목록 · 표시 · 그리기는 components/index-strip.js 한 곳에 있다 (2026-10-01 home.js 에서 빼냄).
    데일리분석 모달의 「주요 지수」 가 같은 띠를 쓴다 */
 import { INDEX_CELLS, stripHtml } from './components/index-strip.js';
@@ -413,7 +413,7 @@ async function paintBigChart(opt = {}) {
 
   let candles, period;
   try {
-    ({ candles, period } = await fetchCandles(st.code, bigPeriod, opt));
+    ({ candles, period } = await fetchCandles(st.code, bigPeriod, { ...opt, view: 'direct' }));
   } catch {
     if (bigChartKey !== key) return;        // 그 사이 다른 종목을 골랐다
     dropBigChart();
@@ -548,7 +548,7 @@ async function paintYearRange() {
     /* 52주 값은 하루에 한 번 바뀔까 말까다. 한 번 받으면 쥐고 있는다 —
        마우스로 종목을 훑을 때마다 부르면 요청이 그만큼 늘어난다. */
     try {
-      const res = await apiFetch(`/api/kis/price?code=${code}`, { cache: 'no-store' });
+      const res = await apiFetch(viewUrl(`/api/kis/price?code=${code}`, 'direct'), { cache: 'no-store' });
       if (!res || !res.ok) return;
       const j2 = await res.json();
       if (!j2 || !j2.ok || !j2.data) return;
@@ -1251,7 +1251,7 @@ async function fetchVisible() {
       if (!want.length) break;
       const chunk = want.slice(0, PRICE_CHUNK);
       chunk.forEach(c => asked.add(c));
-      const map = await fetchQuotes(chunk);
+      const map = await fetchQuotes(chunk, { view: 'row' });
       if (!map) {
         /* 실패한 것은 다시 묻게 되돌리고 이번 바퀴는 끝낸다.
            같은 것을 곧바로 또 고르면 무한히 돈다. */
@@ -1465,7 +1465,7 @@ async function quoteTick() {
   if (!codes.length) return;
   quoting = true;
   try {
-    applyFreshPrices(await fetchQuotes(codes));
+    applyFreshPrices(await fetchQuotes(codes, { view: 'row' }));
   } finally {
     quoting = false;
   }
@@ -1629,7 +1629,7 @@ async function openStockModal(code, { push = true } = {}) {
   body.appendChild(main);
   addModalActions(main, code);
 
-  const view = mountStockView(main, stock, { onBack: closeModal });
+  const view = mountStockView(main, stock, { onBack: closeModal, view: 'modal' });
   stockModal = { code, view };
   view.paint(rowPrices[code] || null);
 }
@@ -1721,7 +1721,7 @@ const sectors = mountSectors(document.querySelector('.kh-sc-card'));
 const panel3 = mountStockPanel($('kh-panel3'), { code: selectedCode });
 
 /* 세부사항 — 차트 머리줄의 보조지표 옆 */
-const detail = mountStockDetail($('kh-dt'));
+const detail = mountStockDetail($('kh-dt'), { view: 'direct' });   // 첫 화면에서 크게 보는 종목
 if (selectedCode) detail.setCode(selectedCode);
 
 paintBigPeriods();
@@ -1760,14 +1760,14 @@ loadUniverse().then(() => {
   detail.update(rowPrices && rowPrices[selectedCode]);
   /* 보고 있는 줄은 **값이 바뀌면 서버가 알려 준다.** 시세 띠·관심 사이드바와 별개다.
      스크롤해 보이는 줄이 바뀌면 주소가 바뀌고, 그 순간 새로 받는다 */
-  watch({ url: () => { const c = quoteCodes(); return c.length ? '/api/kis/quotes?codes=' + c.join(',') : null; },
+  watch({ url: () => { const c = quoteCodes(); return c.length ? viewUrl('/api/kis/quotes?codes=' + c.join(','), 'row') : null; },
           onChange: quoteTick, key: 'kis_proxy.MULTI_CACHE_TTL', fallbackMs: ROW_FALLBACK_MS });
 
   /* 큰 차트도 계속 다시 받는다. 한 번 그린 뒤 장이 진행돼도 선이 멈춰
      있으면 안 된다 (2026-09-15 지적). 바뀌었다는 알림이 오면 `chart.js` 가
      쥔 봉을 버리고 부르므로 새로 받는다 */
   bigWatch = watchCandles(() => (findStock(selectedCode) ? selectedCode : null), () => bigPeriod,
-                          () => paintBigChart());
+                          () => paintBigChart(), 'direct');
 });
 
 

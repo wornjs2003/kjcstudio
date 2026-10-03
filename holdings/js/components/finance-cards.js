@@ -234,8 +234,8 @@ export function mountFinanceCards(root, stock) {
   async function load() {
     const [fin, d, m] = await Promise.all([
       fetchFinance(stock.code),
-      fetchCandles(stock.code, '1d').catch(() => null),
-      fetchCandles(stock.code, '1M').catch(() => null),
+      fetchCandles(stock.code, '1d', { view: 'modal' }).catch(() => null),   // 모달에서만 붙는 카드 — 서버에 「모달이 보고 있다」
+      fetchCandles(stock.code, '1M', { view: 'modal' }).catch(() => null),
     ]);
     if (dead) return;
     const rows = fin ? fin.rows : [];

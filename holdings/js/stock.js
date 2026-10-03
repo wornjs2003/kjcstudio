@@ -31,7 +31,7 @@ mountVBar($('kh-vbar'), 'watch');
 
 /* onBack 을 넘기지 않는다 — 이 페이지의 「← 목록」 은 첫 화면으로 가는
    링크가 맞다. 모달에서만 닫기로 바뀐다. */
-const view = mountStockView(document.querySelector('.kh-main'), stock);
+const view = mountStockView(document.querySelector('.kh-main'), stock, { view: 'direct' });   // 검색 · ?code= 로 들어온 종목
 
 /* 관심종목에 없는 종목도 헤더 시세는 받아온다 */
 const inWatchlist = WATCHLIST.some(s => s.code === stock.code);

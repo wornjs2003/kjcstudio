@@ -10,7 +10,7 @@
    목록에 없는 종목(시장 전체 탭 등)은 화면에 '—' 로 남는다.
    종목이 늘면 호출량도 느니, 갱신 주기(main.js)와 함께 보고 정할 것. */
 import { WATCHLIST } from './market.js';
-import { apiFetch } from './api.js';
+import { apiFetch, viewUrl } from './api.js';
 export const LIVE_CODES = WATCHLIST.map(s => s.code);
 
 let _ready = null;
@@ -146,11 +146,11 @@ export async function fetchIndexMinutes(code) {
    **함수 이름이 비슷해 갈렸다.** 확인하려면 **서버 함수가 아니라 화면이
    받는 응답**을 봐야 한다 — 브라우저에서 `/api/kis/quotes` 를 가로채
    키를 찍으면 바로 나온다. */
-export async function fetchQuotes(codes) {
+export async function fetchQuotes(codes, { view } = {}) {
   if (!codes || !codes.length) return null;
   if (!(await kisReady())) return null;
   try {
-    const r = await apiFetch('/api/kis/quotes?codes=' + codes.join(','), { cache: 'no-store' });
+    const r = await apiFetch(viewUrl('/api/kis/quotes?codes=' + codes.join(','), view), { cache: 'no-store' });
     if (!r || !r.ok) return null;
     const j = await r.json();
     if (!j || !j.ok || !j.data) return null;

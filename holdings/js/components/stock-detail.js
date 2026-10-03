@@ -26,7 +26,7 @@
    지시 그대로다. 종목 이름 줄의 「자세히 ›」 하나만 남는다.
    ========================================================================== */
 
-import { apiFetch } from '../data/api.js';
+import { apiFetch, viewUrl } from '../data/api.js';
 import { fmtMoneyKr } from '../utils/format.js';
 import { watch } from '../store/longpoll.js';
 
@@ -47,7 +47,7 @@ const ASK_RELOAD_FALLBACK_MS = 5000;
 const LIVE_RELOAD_KEY = 'kis_proxy.PRICE_CACHE_TTL';
 const LIVE_RELOAD_FALLBACK_MS = 30_000;
 
-export function mountStockDetail(host) {
+export function mountStockDetail(host, { view } = {}) {
   if (!host) return { setCode() {}, update() {}, destroy() {} };
 
   let code = null;
@@ -62,7 +62,7 @@ export function mountStockDetail(host) {
     if (!code) return;
     const mine = ++seq;
     try {
-      const r = await apiFetch(`/api/kis/asking?code=${code}`, { cache: 'no-store' });
+      const r = await apiFetch(viewUrl(`/api/kis/asking?code=${code}`, view), { cache: 'no-store' });
       if (!r || !r.ok) throw new Error(r && r.status);
       const b = await r.json();
       if (mine !== seq) return;          // 그새 종목이 바뀌었다
@@ -77,7 +77,7 @@ export function mountStockDetail(host) {
     if (!code) return;
     const mine = seq;
     try {
-      const r = await apiFetch(`/api/kis/price?code=${code}`, { cache: 'no-store' });
+      const r = await apiFetch(viewUrl(`/api/kis/price?code=${code}`, view), { cache: 'no-store' });
       if (!r || !r.ok) throw new Error(r && r.status);
       const b = await r.json();
       if (mine !== seq) return;          // 그새 종목이 바뀌었다
@@ -116,9 +116,9 @@ export function mountStockDetail(host) {
   }
 
   /* 주소는 고른 종목을 따라간다 — `setCode` 가 `refresh()` 로 알린다 */
-  timer = watch({ url: () => (code ? `/api/kis/asking?code=${code}` : null),
+  timer = watch({ url: () => (code ? viewUrl(`/api/kis/asking?code=${code}`, view) : null),
                   onChange: () => loadAsking(), key: ASK_RELOAD_KEY, fallbackMs: ASK_RELOAD_FALLBACK_MS });
-  liveTimer = watch({ url: () => (code ? `/api/kis/price?code=${code}` : null),
+  liveTimer = watch({ url: () => (code ? viewUrl(`/api/kis/price?code=${code}`, view) : null),
                       onChange: () => loadLive(), key: LIVE_RELOAD_KEY, fallbackMs: LIVE_RELOAD_FALLBACK_MS });
   paint();
 

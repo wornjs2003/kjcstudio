@@ -67,6 +67,24 @@ export async function apiFetch(url, opts = {}) {
   return res;
 }
 
+/**
+ * 요청 주소에 **「무엇을 보고 있나」** 를 싣는다 — `view=modal · direct · row` (2026-10-03).
+ *
+ * 서버 미리받기(서버리소스 (라))가 그 요청의 종목을 그 등급으로 잠깐 기억해, 보이는 것부터
+ * 받는다. 재권님 — 「화면에 보여질 종목들은 미리미리 호출되어 있어야」 · 「특정 종목을
+ * 검색하거나 하면 화면에 보일 종목과는 다른 이벤트이니 고려해 줘」.
+ *
+ *     modal    모달이 연 종목
+ *     direct   검색 · ?code= 로 들어온 종목 화면 · 첫 화면에서 크게 보는 종목
+ *     row      순위표에 보이는 줄(관심종목이 섞여 있다 — 개발2 와 맞춤)
+ *
+ * **헤더가 아니라 쿼리다** — 롱폴(`/api/kis/poll`)이 안쪽에서 주소를 다시 부를 때 헤더는
+ * 안 따라간다. **화면 캐시 · 지켜보기 키에는 넣지 않는다** — 같은 봉을 모달과 큰 차트가 나눠 쓴다.
+ */
+export function viewUrl(url, view) {
+  return view ? url + (url.includes('?') ? '&' : '?') + 'view=' + encodeURIComponent(view) : url;
+}
+
 function markExpired() {
   if (expired) return;
   expired = true;
