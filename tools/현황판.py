@@ -207,12 +207,14 @@ def 보드():
         for t in p.get("tasks") or []:
             s = t.get("text") or ""
             태그 = re.findall(r"\[([^\]]*)\]", s[:40])
-            담당 = 태그[1].strip() if len(태그) > 1 else ""
+            # 담당은 칸(`who`)이 먼저 · 없으면 제목 둘째 대괄호 (2026-10-03 — 라벨을 칸으로 옮기는 중)
+            담당 = (t.get("who") or "").strip() or (태그[1].strip() if len(태그) > 1 else "")
             표.setdefault(담당, []).append({
                 "제목": re.sub(r"^\s*(\[[^\]]*\]\s*){1,2}", "", s).strip(),
                 "열": t.get("column") or "todo",
                 "때": t.get("updatedAt") or t.get("createdAt") or 0,
                 "메모": t.get("memo") or "",
+                "순번": t.get("rank") or 0,
             })
     return 표
 
@@ -394,6 +396,8 @@ def 그리기():
         # ② 그다음 업무 — 그 담당의 todo 카드를 **보드 순서 그대로** (2026-10-02 13:1x 재권님).
         # 하는 일(doing)과 갈리게 「다음 ·」 머리말. 두 줄까지, 넘으면 「외 N개」.
         다음들 = [c for c in 전부 if c["열"] == "todo"]
+        # 재권님이 정한 순번(`rank` · 2026-10-03)이 있으면 그 차례가 먼저 — 없는 것은 보드 순서 그대로 뒤에
+        다음들 = sorted(다음들, key=lambda c: (0, c["순번"]) if c["순번"] else (1, 0))
         for i, c in enumerate(다음들[:2]):
             꼬리 = (" (외 %d개)" % (len(다음들) - 2)) if (i == 1 and len(다음들) > 2) else ""
             머리 = "다음 · " if i == 0 else "       "

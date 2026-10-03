@@ -175,7 +175,10 @@ def apply(change):
     """읽고 → 고치고 → 쓰기. 409 면 한 번 다시 읽어 다시 고친다."""
     for _ in range(2):
         doc, at = read()
+        before = json.dumps(doc, sort_keys=True)
         change(doc)
+        if json.dumps(doc, sort_keys=True) == before:
+            return                              # 바뀐 것이 없으면 안 쓴다 — 409 를 덜 낸다(qa 재검)
         if write(doc, at) != 409:
             return
     raise Unseen("409 두 번 — 남이 계속 쓰고 있다")
@@ -183,14 +186,60 @@ def apply(change):
 
 LABELS = re.compile(r"^\s*\[([^\]]+)\]\s*\[([^\]]+)\]")
 
+# ── 갈래 · 담당 · 순번을 칸(필드)으로 (2026-10-03 지시 — 「둘 다 만들어 줘」) ─────────────
+# 전에는 제목의 대괄호 「[갈래] [담당]」 만 있어서 갈래가 26가지로 흩어졌다(정한 것은 다섯 · 2026-10-03 실측).
+# 이제 카드에 `tag`(갈래) · `who`(담당) · `rank`(재권님이 정한 차례 번호) 칸을 둔다. **옮기는 동안은 제목 대괄호도
+# 함께 적는다** — 화면(개발1)이 칸을 읽게 바뀐 뒤 169장을 한 번에 옮기고 대괄호를 뺀다.
+# 갈래 목록은 화면 설정 `projects/data/config.js` 의 WORK_TAGS 하나다 — 여기 다시 적지 않는다(같은 값은 한 곳에만).
+TAG_MODE = os.environ.get("KJC_BOARD_TAGS", "look")   # block | look — 목록에 「도구」 가 들어오고 옮긴 뒤 block 으로
+
+
+def work_tags():
+    """config.js 의 WORK_TAGS id 들. 못 읽으면 None — 「없다」 가 아니라 「못 쟀다」 다."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "projects", "data", "config.js")
+    try:
+        src = open(path, encoding="utf-8").read()
+    except OSError:
+        return None
+    m = re.search(r"const\s+WORK_TAGS\s*=\s*\[(.*?)\];", src, re.S)
+    if not m:
+        return None
+    return re.findall(r'id\s*:\s*"([^"]+)"', m.group(1)) or None
+
+
+def check_tag(tag):
+    """정한 갈래 밖이면 block 에서 막고 look 에서 알린다. 목록을 못 읽으면 막지 않는다(못 쟀다)."""
+    tags = work_tags()
+    if tags is None:
+        print("  (갈래 목록 projects/data/config.js 의 WORK_TAGS 를 못 읽었다 — 갈래 검사를 건너뛴다)")
+        return
+    if tag in tags:
+        return
+    msg = "갈래 [%s] 는 정한 목록 밖이다 — %s 중에서 고른다 (projects/data/config.js 의 WORK_TAGS)" % (tag, " · ".join(tags))
+    if TAG_MODE == "block":
+        sys.exit("✗ " + msg)
+    print("  ⚠ " + msg)
+
+
+def who_of(t):
+    """카드 담당 — 칸이 먼저, 없으면 제목 대괄호."""
+    w = (t.get("who") or "").strip()
+    m = LABELS.match(t.get("text", ""))
+    if w:
+        if m and m.group(2).strip() != w:
+            # 보드 화면에서 제목을 손으로 고치면 칸이 낡는다 — 옮기는 동안 「담당이 두 곳」 (qa 2026-10-03)
+            print("  ⚠ 담당이 칸 [%s] 과 제목 [%s] 으로 갈렸다 — 칸으로 셉니다. 맞추려면 --assign: %s"
+                  % (w, m.group(2).strip(), t.get("text", "")[:50]), file=sys.stderr)
+        return w
+    return m.group(2).strip() if m else ""
+
 
 def mine(doc, label):
     out = []
     for t in tasks(doc):
         if t.get("column") != "doing":
             continue
-        m = LABELS.match(t.get("text", ""))
-        if m and m.group(2).strip() == label:
+        if who_of(t) == label:
             out.append(t)
     return out
 
@@ -203,7 +252,7 @@ def now():
 COLUMNS = ("todo", "doing", "review", "done")
 
 
-def cmd_note(key, line, sub, done, column=None, assign=None, title=None):
+def cmd_note(key, line, sub, done, column=None, assign=None, title=None, rank=None, tag=None):
     """assign — 제목의 [담당] 을 바꾼다 (2026-10-02 · 개발2 가 가름). 전에는 [미배분] 카드를 받아 일해도 제목 라벨을 바꿀 길이
     없어 메모에만 담당을 적었고, 그래서 ① post-commit 이 해시를 엉뚱한 카드에 (추정)으로 적고 ② 그 세션에 다른 doing 카드가
     없으면 배정받고도 커밋 게이트에 막혔다. mine() 은 제목만 본다 — 메모의 담당 줄까지 보면 「누구 것인가」 가 두 곳이 된다."""
@@ -231,6 +280,8 @@ def cmd_note(key, line, sub, done, column=None, assign=None, title=None):
             old_label = m.group(2).strip()
             if old_label != new_label:
                 t["text"] = "[%s] [%s] %s" % (m.group(1), new_label, t["text"][m.end():].strip())
+                t["who"] = new_label
+                t.setdefault("tag", m.group(1).strip())
                 t["memo"] = (t.get("memo") or "").rstrip() + "\n  %s 담당 [%s] → [%s]" % (now(), old_label, new_label)
                 moved["assign"] = (old_label, new_label)
                 if t.get("column") == "todo" and not column:
@@ -248,6 +299,25 @@ def cmd_note(key, line, sub, done, column=None, assign=None, title=None):
             if t["text"] != old_t:
                 t["memo"] = (t.get("memo") or "").rstrip() + "\n  %s 제목 「%s」 → 「%s」" % (now(), old_t[len(head):][:60], rest[:60])
                 moved["title"] = rest
+        if tag:
+            # 갈래 바꾸기 — 칸과 제목 대괄호를 함께. 26가지를 정한 갈래로 묶을 때 쓴다
+            check_tag(tag)
+            m = LABELS.match(t.get("text", ""))
+            old_tag = t.get("tag") or (m.group(1).strip() if m else "")
+            if m:
+                t["text"] = "[%s] [%s] %s" % (tag, m.group(2).strip(), t["text"][m.end():].strip())
+                t.setdefault("who", m.group(2).strip())
+            t["tag"] = tag
+            if old_tag != tag:
+                t["memo"] = (t.get("memo") or "").rstrip() + "\n  %s 갈래 [%s] → [%s]" % (now(), old_tag, tag)
+                moved["tag"] = (old_tag, tag)
+        if rank is not None:
+            # 재권님이 정한 차례 번호 — 높음·보통·낮음(priority)과 따로 둔다. 「-」 면 지운다
+            old_r = t.get("rank") or None
+            if old_r != (rank or None):
+                t["rank"] = rank or None
+                t["memo"] = (t.get("memo") or "").rstrip() + "\n  %s 순번 %s → %s" % (now(), old_r if old_r else "없음", rank if rank else "없음")
+                moved["rank"] = rank
         if column and t.get("column") != column:
             moved["from"], moved["to"] = t.get("column"), column
             t["column"] = column
@@ -264,7 +334,9 @@ def cmd_note(key, line, sub, done, column=None, assign=None, title=None):
                         s["text"] = "[됨] " + s["text"]
     apply(change)
     print("보드 저장됨", now(), ("· 열 %s → %s" % (moved["from"], moved["to"])) if "from" in moved else "",
-          ("· 담당 [%s] → [%s]" % moved["assign"]) if "assign" in moved else "")
+          ("· 담당 [%s] → [%s]" % moved["assign"]) if "assign" in moved else "",
+          ("· 갈래 [%s] → [%s]" % moved["tag"]) if "tag" in moved else "",
+          ("· 순번 %s" % (moved["rank"] or "지움")) if "rank" in moved else "")
     if "hint" in moved:
         print("  " + moved["hint"])
 
@@ -276,12 +348,21 @@ def cmd_new(text, line, todo):
     m = re.match(r"^\s*(\[[^\]]+\])\s*(.*)$", text)
     if not m:
         sys.exit("카드 제목은 「[갈래] 무엇」 모양이어야 한다")
-    full = "%s [%s] %s" % (m.group(1), label, m.group(2).strip())
+    tag = m.group(1)[1:-1].strip()
+    check_tag(tag)
+    rest = m.group(2).strip()
+    m2 = re.match(r"^\[([^\]]+)\]\s*(.*)$", rest)
+    if m2:                                  # 「[갈래] [담당] 무엇」 으로 줬으면 그 담당을 쓴다 — 담당이 두 번 들어갔다(qa)
+        label, rest = m2.group(1).strip(), m2.group(2).strip()
+    full = "%s [%s] %s" % (m.group(1), label, rest)
+    if label != label_of(session_name()):
+        todo = True                         # 남의 담당 · [미배분] 으로 만든 카드는 todo — doing 이면 그 세션 게이트를 대신 연다(qa)
 
     def change(doc):
         ms = int(time.time() * 1000)
         tasks(doc).append({"id": "t%dr" % ms, "text": full, "column": "todo" if todo else "doing",
                            "subs": [], "links": [], "due": "", "priority": "normal", "createdAt": ms,
+                           "tag": tag, "who": label,
                            "memo": "  %s %s" % (now(), line) if line else ""})
     apply(change)
     print("카드 만듦:", full)
@@ -444,10 +525,22 @@ def main(argv):
         return cmd_new(text, rest[0] if rest else "", "--todo" in argv) or 0
     key = argv[0]
     line = argv[1] if len(argv) > 1 and not argv[1].startswith("--") else ""
-    sub = done = column = assign = title = None
+    sub = done = column = assign = title = rank = tag = None
     for i, x in enumerate(argv):
         if x == "--sub":
             sub = argv[i + 1]
+        if x == "--rank":
+            v = argv[i + 1] if i + 1 < len(argv) else ""
+            if v in ("-", "0", ""):
+                rank = 0
+            elif v.isdigit():
+                rank = int(v)
+            else:
+                sys.exit("--rank 는 숫자(1 이 가장 먼저) · 지우려면 -")
+        if x == "--tag":
+            tag = (argv[i + 1] if i + 1 < len(argv) else "").strip()
+            if not tag:
+                sys.exit("--tag 에 갈래 이름을 주십시오")
         if x == "--title":
             title = argv[i + 1] if i + 1 < len(argv) else ""
         if x == "--assign":
@@ -465,8 +558,10 @@ def main(argv):
         line = ""
     if title and line == title:
         line = ""
+    if (rank is not None and line == argv[argv.index("--rank") + 1]) or (tag and line == tag):
+        line = ""
     try:
-        cmd_note(key, line, sub, done, column, assign, title)
+        cmd_note(key, line, sub, done, column, assign, title, rank, tag)
     except Unseen as e:
         sys.exit("보드를 못 봤다: %s" % e)
     return 0
