@@ -55,7 +55,7 @@ do
       $1 == "debugging"                    { print "개념정의"; next }
       $1 == ".claude" && $2 == "commands"  { print "홈페이지_정리"; next }
       $1 == "company-setup"                { print "시황분석"; next }   # 2026-10-01 에 시황분석 자리 — pre-commit 과 맞춤
-      $1 == "api-board"                    { print "홈페이지_정리"; next }
+      $1 == "api-board"                    { print "주식"; next }   # 2026-10-03 개발3
       $1 == "assets" || $1 == "partials" || $1 == "data" || $1 == "category" \
                                            { print "홈페이지_정리"; next }
       $1 == "tools" || $1 == ".githooks" || $1 == ".claude" || $1 == "launchd" { print "개념정의"; next }
