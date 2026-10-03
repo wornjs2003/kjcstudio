@@ -213,6 +213,14 @@ h1 {
 }
 .lane-add:hover { background: var(--pj-accent-faint); color: var(--pj-accent); }
 
+.lane-old {
+  display: block; width: 100%; margin: 2px 0 6px; padding: 8px 11px;
+  font-family: inherit; font-size: 12px; font-weight: 600; text-align: left;
+  color: var(--pj-text-muted); background: var(--pj-bg-elevated);
+  border: none; border-radius: var(--pj-radius-sm); cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.lane-old:hover { background: var(--pj-bg-active); color: var(--pj-text-primary); }
 .lane-empty { text-align: center; color: var(--pj-text-dim); font-size: 12px; font-weight: 500; padding: 12px 0 14px; }
 
 /* ── 작업 카드 ─────────────────────────────── */
@@ -1307,7 +1315,7 @@ function updateFloor() {
     return p.id + ":" + ts.length + ":"
          + ts.filter(function (t) { return t.collapsed; })
              .map(function (t) { return t.id; }).join(".");
-  }).join(",") + "|" + filterWork + "|" + filterWho + "|" + filterAsk;
+  }).join(",") + "|" + filterWork + "|" + filterWho + "|" + filterAsk + "|" + doneOpen;
   if (stamp === floorStamp) return;
   floorStamp = stamp;
 
@@ -1530,7 +1538,31 @@ function buildLane(p, col, colIdx) {
     lane.appendChild(e);
   }
 
-  rows.forEach(function (t) { lane.appendChild(buildTask(p, t, colIdx)); });
+  rows.forEach(function (t) {
+    const el = buildTask(p, t, colIdx);
+    /* 지난 완료는 **빼지 않고 숨깁니다** — 끌기의 `drop()` 이 칸 카드를 전부 센다는
+       전제 때문입니다(거르기 절과 같은 자리). */
+    if (col.id === lastColId() && isOldDone(t)) {
+      el.classList.add("is-old");
+      if (!doneOpen) el.style.display = "none";
+    }
+    lane.appendChild(el);
+  });
+
+  /* 지난 완료 접기 줄 (2026-10-03 · 보드 5번 · 재권님 「(가) 화면에서만 · 7일」) */
+  if (col.id === lastColId()) {
+    const nOld = rows.filter(isOldDone).length;
+    if (nOld) {
+      const fold = document.createElement("button");
+      fold.className = "lane-old";
+      fold.textContent = doneOpen ? "지난 완료 접기 \u25b4" : "지난 완료 " + nOld + "장 \u25b8";
+      fold.title = doneOpen
+        ? DONE_FOLD_DAYS + "일 넘게 안 고친 완료 카드를 다시 접습니다"
+        : DONE_FOLD_DAYS + "일 넘게 안 고친 완료 카드입니다 — 접힌 동안 이 칸은 끌 수 없습니다";
+      fold.addEventListener("click", function () { doneOpen = !doneOpen; render(); });
+      lane.appendChild(fold);
+    }
+  }
 
   /* 걸러서 이 칸에 보이는 것이 없을 때. 위 `lane-empty`(「비어 있음」)는
      **데이터 기준**이라 카드가 숨어 있을 뿐이면 안 뜹니다 — 기준이 다릅니다. */
@@ -1680,6 +1712,28 @@ function knownWhos() {
 let filterWork = null;
 let filterWho  = null;
 let filterAsk  = false;     /* 「묻는 중」 카드만 (2026-10-03 · 보드 6번) */
+
+/* ══ 지난 완료 접기 (2026-10-03 · 보드 5번) ═══════════════════════
+     재권님 「(가) 화면에서만 접기 · 7일」 — 완료 칸에 **마지막 수정이 7일 안인 것만**
+     보이고 나머지는 「지난 완료 N장 ▸」 한 줄로 접힙니다. **데이터는 그대로**라
+     도구·훅(해시로 카드 찾기)도 그대로 돕니다. 7일은 **화면 보기 값**입니다 —
+     서버를 다시 묻는 주기가 아니라 룰(「화면은 서버에 주기로 묻지 않는다」)과 무관합니다.
+     **저장하지 않습니다** — 거르기처럼 보는 상태라 새로고침하면 다시 접힙니다. */
+const DONE_FOLD_DAYS = 7;
+let doneOpen = false;
+/* 시각은 **숫자(밀리초)도 글자(`2026-09-30T20:05:36`)도** 옵니다 — 화면이 만든 카드는
+   숫자, 손으로 넣은 옛 카드 둘은 글자입니다. 못 읽으면 접지 않습니다(안 보이는 것보다 낫다).
+   ⚠️ 도구(`board-card.py`)는 메모를 적어도 `updatedAt` 을 안 바꿔서, 도구로만 고친 카드는
+   **만든 날**로 셉니다(2026-10-03 실측 — 카드 199장 중 `updatedAt` 이 있는 것은 셋). */
+function stampMs(v) {
+  if (typeof v === "number") return v;
+  const n = Date.parse(v || "");
+  return isNaN(n) ? null : n;
+}
+function isOldDone(t) {
+  const at = stampMs(t.updatedAt) || stampMs(t.createdAt);
+  return at !== null && (Date.now() - at) > DONE_FOLD_DAYS * 86400000;
+}
 
 function filtering() { return !!(filterWork || filterWho || filterAsk); }
 
@@ -1982,6 +2036,9 @@ function bindSort(el, p, t) {
     function begin() {
       if (on) return;
       if (filtering()) return;
+      /* 지난 완료가 접혀 숨은 칸에서는 끌지 않습니다 — `place()` 가 높이 0 인 숨은
+         카드를 세는 것은 거르기 때와 같습니다. 펼치면 끌 수 있습니다. */
+      if (lane.querySelector(".task.is-old") && !doneOpen) return;
       on = true;
       clearTimeout(timer);
       el.classList.add("is-drag");
