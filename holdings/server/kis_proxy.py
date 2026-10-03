@@ -4343,7 +4343,7 @@ def _minutes_need_day(code, period, rows, gap_check=True):
 
 
 def drop_before_first_trade(rows):
-    """분봉에서 **그날 첫 체결 전의 거래량 0 봉**을 뺀다 — 화면에 낼 때만 (2026-10-03 지시).
+    """분봉에서 **그날 첫 체결 전 · 마지막 체결 뒤의 거래량 0 봉**을 뺀다 — 화면에 낼 때만 (2026-10-03 지시).
 
     재권님이 069500(KODEX 200) 아침 08:00~08:55 에 납작봉이 있는 것을 물으셨다.
 
@@ -4355,18 +4355,35 @@ def drop_before_first_trade(rows):
     **저장은 그대로 둔다.** 빼면 `_minutes_have_today` 가 그 칸을 「안 받았다」 로 보고
     **바퀴마다 다시 받는다**(그 함수 주석의 느림이 되돌아온다). 그래서 응답에서만 뺀다.
 
-    **첫 체결 뒤의 거래량 0 봉은 둔다** — 마감 동시호가 뒤 15:35 처럼 거래가 없는 진짜
-    구간이고 값은 마지막 체결가다. 하루 내내 체결이 없으면 그날 봉이 다 빠진다 — 그린 것이 없는 것이 맞다.
+    **마지막 체결 뒤의 거래량 0 봉도 뺀다** (같은 날 · 재권님 「빼」). 069500 은 저녁
+    16:00~19:55 에도 같은 이유로 납작봉 쉰 개 남짓이 남았다 — ETF 는 그 시간 거래가 없다.
+
+    **첫 체결과 마지막 체결 사이의 거래량 0 봉은 둔다** — 마감 동시호가 뒤 15:35 처럼 거래가
+    없는 진짜 구간이고 값은 마지막 체결가다. 하루 내내 체결이 없으면 그날 봉이 다 빠진다 —
+    그린 것이 없는 것이 맞다. 장중에는 체결이 아직 없는 지금 칸이 잠깐 빠졌다가 체결이 오면 생긴다.
     """
-    out, traded = [], set()
-    for r in rows:
-        day = r["ts"][:8]
-        if day not in traded:
-            if not (r.get("volume") or 0):
-                continue
-            traded.add(day)
-        out.append(r)
-    return out
+    # **하루 끝(20:00) 줄은 마감 체결을 다시 붙인 것일 수 있다** (2026-10-03 실측).
+    # 넥스트레이드에 없는 종목은 KIS 가 20:00 줄에 15:30 마감 체결을 **값 · 거래량 그대로**
+    # 다시 준다 — 069500 20:00 = 112,060 · 44,456 = 15:30 · 229200 20:00 = 15,180 · 108,061 = 15:30.
+    # 그 줄 때문에 거래량이 두 번 세어지고 「마지막 체결」 이 20:00 이 되어 저녁 납작봉이 안 빠졌다.
+    # **바로 앞 봉이 거래량 0 인데 끝 줄만 거래량이 있으면** 다시 붙은 것으로 보고 뺀다.
+    # 넥스트레이드에서 저녁까지 거래가 있는 종목은 바로 앞 봉에 거래량이 있어 그대로 둔다.
+    end = "%02d%02d" % (MINUTE_DAY_END // 60, MINUTE_DAY_END % 60)
+    dup = set()
+    for i, r in enumerate(rows):
+        if (r["ts"][8:12] == end and (r.get("volume") or 0) and i > 0
+                and rows[i - 1]["ts"][:8] == r["ts"][:8] and not (rows[i - 1].get("volume") or 0)):
+            dup.add(i)
+    rows = [r for i, r in enumerate(rows) if i not in dup]
+
+    first, last = {}, {}
+    for i, r in enumerate(rows):
+        if r.get("volume") or 0:
+            day = r["ts"][:8]
+            first.setdefault(day, i)
+            last[day] = i
+    return [r for i, r in enumerate(rows)
+            if r["ts"][:8] in first and first[r["ts"][:8]] <= i <= last[r["ts"][:8]]]
 
 
 def aggregate_minutes(bars, minutes):
