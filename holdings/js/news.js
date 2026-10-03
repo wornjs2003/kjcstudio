@@ -17,6 +17,7 @@ import { WATCHLIST } from './data/market.js';
 import { mountSchedule } from './components/schedule.js';
 import { apiFetch } from './data/api.js';
 import { everyServerMs } from './store/timing.js';
+import { watch } from './store/longpoll.js';
 
 const $ = (id) => document.getElementById(id);
 const WATCH = new Set(WATCHLIST.map((s) => s.code));
@@ -381,7 +382,12 @@ const sched = mountSchedule($('kh-nw-sched'), {
   chipHost: $('kh-sched-chips'),
   watch: [...WATCH],
 });
-setInterval(() => { if (!document.hidden) sched.refresh(); }, 10 * 60 * 1000);
+/* 일정 중 바뀌는 것은 실적 발표(공시의 IR)뿐이라 **공시가 바뀌면** 다시 받는다 (2026-10-03 ·
+   「화면에 박힌 주기 지우기」). 주소는 `schedule.js` 의 `loadEarnings()` 가 묻는 것과 같고,
+   대체값은 롱폴이 꺼진 서버에서만 쓴다 — 평소에는 서버의 `dart.POLL_INTERVAL` 을 따른다 */
+const DART_FALLBACK_MS = 5 * 60 * 1000;
+watch({ url: () => '/api/dart/disclosures?limit=200', onChange: () => sched.refresh(),
+        key: 'dart.POLL_INTERVAL', fallbackMs: DART_FALLBACK_MS });
 
 bindSeg();
 refresh();

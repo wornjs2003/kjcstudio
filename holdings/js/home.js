@@ -25,7 +25,7 @@ import { loadStockMain, mountStockView } from './components/stock-view.js';
 import { mountDisclosures } from './components/disclosures.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
 import { mountSchedule } from './components/schedule.js';
-import { bindDailyMenu, loadDailyDoc } from './components/daily-view.js';
+import { bindDailyMenu, loadDailyDoc, dailyDocUrl } from './components/daily-view.js';
 import { fetchIssues, fetchFeed, paintIssues, paintLoading } from './components/news-list.js';
 import { bindNewsModal } from './components/news-modal.js';
 import { mountSectors } from './components/sectors.js';
@@ -499,7 +499,10 @@ function paintIndices(indices) {
  *
  * 읽는 것은 `daily-view.js` 의 `loadDailyDoc()` 하나다 — 모달과 같은 것을 쓴다.
  */
-const DAILY_DOC_MS = 600_000;     // 10분. 저장본은 하루 한 번만 바뀐다
+/* **바뀌면 서버가 알려 준다** (2026-10-03 · 「화면에 박힌 주기 지우기」). 그날 저장본 주소를 롱폴로
+   지켜본다 — 날짜가 바뀌면 `dailyDocUrl()` 이 새 주소를 낸다. 아래 값은 롱폴이 꺼진 서버에서만 쓰는
+   대체값이다 — 저장본에는 서버 쪽 짝 값이 없다(하루 한 번 07:30 에 만들어진다). */
+const DAILY_DOC_FALLBACK_MS = 600_000;
 
 async function paintDailyMini() {
   const host = $('kh-dlm');
@@ -522,7 +525,7 @@ async function paintDailyMini() {
 }
 
 paintDailyMini();
-setInterval(() => { if (!document.hidden) paintDailyMini(); }, DAILY_DOC_MS);
+watch({ url: dailyDocUrl, onChange: paintDailyMini, key: null, fallbackMs: DAILY_DOC_FALLBACK_MS });
 
 /* 52주 최저·최고 — 고른 종목 기준.
  *
@@ -1772,8 +1775,10 @@ loadUniverse().then(() => {
 
 
 /* ── 공시 ──
-   서버(server/dart.py)가 5분마다 받아 두므로 화면도 같은 주기로 다시 읽는다.
+   서버(server/dart.py)가 받아 두고, 바뀌면 롱폴로 알려 준다(아래 `watch`).
    오른쪽은 감시 대상 200종목 전체, 미리보기 안쪽은 지금 고른 종목만. */
+/* 롱폴이 꺼진 서버에서만 쓰는 대체값 — 평소에는 서버의 `dart.POLL_INTERVAL` 을 따른다 */
+const DART_FALLBACK_MS = 5 * 60 * 1000;
 const dcAll = mountDisclosures($('kh-dc-all'), { limit: 10, showName: true });
 
 /* 주요 일정 — 금리·물가·실적 발표 중 앞으로 2주 안의 것.
@@ -1781,7 +1786,10 @@ const dcAll = mountDisclosures($('kh-dc-all'), { limit: 10, showName: true });
 const sched = mountSchedule($('kh-side-sched'), {
   compact: true, limit: 4, watch: WATCHLIST.map(s => s.code),
 });
-setInterval(() => { if (!document.hidden) sched.refresh(); }, 10 * 60 * 1000);
+/* 일정 중 바뀌는 것은 실적 발표(공시의 IR)뿐이라 **공시가 바뀌면** 다시 받는다 (2026-10-03).
+   주소는 `schedule.js` 의 `loadEarnings()` 가 묻는 것과 같다. 폴백은 서버의 공시 주기다 */
+watch({ url: () => '/api/dart/disclosures?limit=200', onChange: () => sched.refresh(),
+        key: 'dart.POLL_INTERVAL', fallbackMs: DART_FALLBACK_MS });
 
 /* ── 뉴스·공시 합친 칸 ──
    재권님 지시로 뉴스와 공시를 한 칸에 넣었다 (2026-09-21 — "홀딩스 화면에
@@ -1859,7 +1867,9 @@ bindNewsModal(document, { watch: WATCHLIST.map(s => s.code) });
 drawSideNews();
 everyServerMs(SIDE_NEWS_KEY, SIDE_NEWS_FALLBACK_MS, drawSideNews);
 /* 종목 뉴스는 이제 패널 셋 중 하나다(stock-panel.js). 여기서는 전체 공시만 본다 */
-setInterval(() => { dcAll.reload(); }, 5 * 60 * 1000);
+/* 공시도 **바뀌면 서버가 알려 준다** (2026-10-03). 주소는 `fetchDisclosures(null, 10)` 이 묻는 것과 같다 */
+watch({ url: () => '/api/dart/disclosures?limit=10', onChange: () => dcAll.reload(),
+        key: 'dart.POLL_INTERVAL', fallbackMs: DART_FALLBACK_MS });
 
 /* 종목 시세는 받지 않는다(prices: false). 순위표가 멀티 조회로
    관심종목까지 함께 받아 한 곳에 모으기 때문이다. 여기서 또 받으면
