@@ -196,6 +196,8 @@ h1 {
 }
 .lane-title.tone-accent { background: var(--pj-accent-faint); color: var(--pj-accent); }
 .lane-title.tone-done   { background: var(--pj-done-faint);   color: var(--pj-done); }
+/* 검수중 — 주황 (2026-10-03 재권님 「응 해줘」 · 개발1 시안). 연한 바탕에 진한 글씨(색 바탕 위의 글씨 룰) */
+.lane-title.tone-warn   { background: var(--pj-warn-faint);   color: var(--pj-warn); }
 .lane-title::before {
   content: ""; width: 6px; height: 6px; border-radius: 50%;
   background: currentColor; flex-shrink: 0;
@@ -413,6 +415,7 @@ h1 {
 }
 .tm-lane.tone-accent { background: var(--pj-accent-faint); color: var(--pj-accent); }
 .tm-lane.tone-done   { background: var(--pj-done-faint);   color: var(--pj-done); }
+.tm-lane.tone-warn   { background: var(--pj-warn-faint);   color: var(--pj-warn); }
 .tm-lane::before {
   content: ""; width: 6px; height: 6px; border-radius: 50%;
   background: currentColor; flex-shrink: 0;
