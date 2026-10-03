@@ -255,6 +255,7 @@ td.owner { background: var(--pj-done-faint); }
 </div>
 
 <script src="data/sources.js"></script>
+<script src="../projects/js/board-store.js"></script>
 <script>
 /* ==========================================================================
    체크 상태 저장
@@ -262,12 +263,9 @@ td.owner { background: var(--pj-done-faint); }
      재권님이 손으로 바꾼 것만 서버에 남겨서 기본값 위에 덮습니다.
      그래서 나중에 기본값이 바뀌어도 손댄 것은 그대로 유지됩니다.
    ========================================================================== */
-const API = "/api/board/doc/api-checks";
 const LOCAL_KEY = "kjc-api-checks-v1";
-const SYNC_DELAY = 800;
 
 let overrides = {};          /* "행|열": true | false */
-let syncTimer = null, syncing = false, pending = false;
 
 try { overrides = JSON.parse(localStorage.getItem(LOCAL_KEY)) || {}; } catch (e) { overrides = {}; }
 
@@ -282,47 +280,52 @@ function persistLocal() {
   try { localStorage.setItem(LOCAL_KEY, JSON.stringify(overrides)); } catch (e) {}
 }
 
-function save() {
-  persistLocal();
-  setStatus("저장 중…", "busy");
-  if (syncing) { pending = true; return; }
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(sync, SYNC_DELAY);
+/* ── 저장은 보드 셋이 함께 쓰는 층으로 (2026-10-03 · 보드 9번 · 재권님 「가」) ──
+   전에는 여기 저장 코드가 따로 있었고 **`updatedAt` 을 안 보내서**, 두 창이 같은
+   체크판을 고치면 늦게 쓴 쪽이 앞의 것을 지웠다. 이제 `projects/js/board-store.js`
+   가 `updatedAt` 을 실어 보내고 409 면 다시 읽어 아래 `mergeChecks` 로 합친다.
+
+   합치기는 **칸(「행|열」) 하나씩** 견준다 — 한쪽만 바꾼 칸은 그쪽 것, 둘 다 같은
+   칸을 다르게 바꿨을 때만 묻는다. */
+function mergeChecks(base, mine, theirs) {
+  const b = (base && base.overrides) || {}, m = mine.overrides || {}, t = theirs.overrides || {};
+  const out = {}, conflicts = [];
+  const keys = {};
+  [b, m, t].forEach(function (x) { Object.keys(x).forEach(function (k) { keys[k] = 1; }); });
+  Object.keys(keys).forEach(function (k) {
+    const bv = b[k], mv = m[k], tv = t[k];
+    let v;
+    if (mv === tv) v = mv;
+    else if (mv === bv) v = tv;          /* 나는 안 바꿨다 → 남의 것 */
+    else if (tv === bv) v = mv;          /* 남이 안 바꿨다 → 내 것 */
+    else { conflicts.push(k); v = mv; }
+    if (v !== undefined) out[k] = v;
+  });
+  return { doc: { overrides: out }, conflicts: conflicts };
 }
 
-function sync() {
-  syncing = true; pending = false;
-  fetch(API, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ data: { overrides: overrides } })
-  })
-    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then(function () { setStatus("서버에 저장됨", "ok"); })
-    .catch(function () { setStatus("이 브라우저에만 저장됨", "warn"); })
-    .then(function () {
-      syncing = false;
-      if (pending) { clearTimeout(syncTimer); syncTimer = setTimeout(sync, SYNC_DELAY); }
-    });
-}
+const store = createBoardStore({
+  name: "api-checks",
+  delay: 800,
+  snapshot: function () { return { overrides: JSON.parse(JSON.stringify(overrides)) }; },
+  apply: function (doc) { overrides = (doc && doc.overrides) || {}; drawGrid(); drawStats(); },
+  hasData: function (d) { return !!d.overrides; },
+  empty: { overrides: {} },
+  hasLocal: function () { return Object.keys(overrides).length > 0; },
+  persistLocal: persistLocal,
+  merge: mergeChecks,
+  /* 같은 칸을 양쪽에서 다르게 바꾼 드문 경우 — 체크판이라 따로 확인창이 없어
+     브라우저 확인창으로 묻는다. 「확인」 이 서버 것, 「취소」 가 내 것이다. */
+  decide: function (c) {
+    return Promise.resolve(window.confirm(
+      "다른 곳에서 같은 칸(" + c.length + "개)을 함께 바꿨습니다.\n\n" +
+      "「확인」 — 서버 것으로(여기서 방금 바꾼 것이 사라집니다)\n" +
+      "「취소」 — 내 것으로(다른 곳에서 바꾼 것이 사라집니다)"));
+  },
+  status: setStatus,
+});
 
-function loadFromServer() {
-  return fetch(API, { headers: { accept: "application/json" } })
-    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then(function (body) {
-      if (body && body.ok && body.data && body.data.overrides) {
-        overrides = body.data.overrides;
-        persistLocal();
-        setStatus("서버에서 불러옴", "ok");
-        drawGrid();
-        drawStats();
-        return;
-      }
-      setStatus("서버 연결됨", "ok");
-      if (Object.keys(overrides).length) save();
-    })
-    .catch(function () { setStatus("이 브라우저에만 저장됨", "warn"); });
-}
+function save() { store.save(); }
 
 /* ── 상태 읽고 쓰기 ─────────────────────────── */
 function keyOf(rowIdx, colId) { return rowIdx + "|" + colId; }
@@ -534,7 +537,7 @@ document.getElementById("stampTag").textContent = UPDATED_AT + " 갱신";
 drawSources();
 drawGrid();
 drawStats();
-loadFromServer();
+store.load();
 </script>
 
 <script src="../assets/js/main.js"></script>
