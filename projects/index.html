@@ -831,18 +831,34 @@ function byIdMap(list) {
 }
 
 /* 살아남은 항목의 **순서**도 셋으로 견줍니다. 끌기로 순서를 바꾸므로
-   순서 자체가 데이터입니다. */
+   순서 자체가 데이터입니다.
+
+   **순서는 셋 다에 있는 항목으로만 견줍니다 (2026-10-03 · 보드 8번 덤).** 전에는 새로
+   들어온 항목까지 넣고 견줘서, 두 창이 **같은 프로젝트에 새 카드를 하나씩** 넣으면
+   그때·내 것·남의 것 순서가 셋 다 달라 「작업의 순서」 충돌 창이 떴습니다(창구 실측 ·
+   두 세션이 같은 보드에 카드를 만드는 일은 흔합니다). 기존 항목의 순서가 정해지면
+   **이긴 쪽의 전체 순서**(그쪽 새 항목의 자리까지)를 쓰고, 다른 쪽의 새 항목은 뒤에
+   그쪽 순서대로 붙입니다. */
 function pickOrder(bIds, mIds, tIds, keep, conflicts, what) {
   function only(ids) { return ids.filter(function (id) { return keep[id]; }); }
   const b = only(bIds), m = only(mIds), t = only(tIds);
-  let base;
-  if (same(m, t)) base = m;
-  else if (same(b, m)) base = t;
-  else if (same(b, t)) base = m;
-  else { conflicts.push(what + "의 순서"); base = m; }
-  /* 어느 쪽에도 안 들어간 것(새로 들어온 것)을 뒤에 붙입니다 */
+  const inB = {}, inM = {}, inT = {};
+  b.forEach(function (id) { inB[id] = 1; });
+  m.forEach(function (id) { inM[id] = 1; });
+  t.forEach(function (id) { inT[id] = 1; });
+  function common(ids) { return ids.filter(function (id) { return inB[id] && inM[id] && inT[id]; }); }
+  const pb = common(b), pm = common(m), pt = common(t);
+  let base, other;
+  if (same(pm, pt))      { base = m; other = t; }
+  else if (same(pb, pm)) { base = t; other = m; }   /* 나는 기존 순서를 안 바꿨다 → 남의 것 */
+  else if (same(pb, pt)) { base = m; other = t; }   /* 남이 안 바꿨다 → 내 것 */
+  else { conflicts.push(what + "의 순서"); base = m; other = t; }
+  base = base.slice();
   const seen = {};
   base.forEach(function (id) { seen[id] = 1; });
+  /* 다른 쪽에만 있는 새 항목 — 그쪽 순서대로 뒤에 */
+  other.forEach(function (id) { if (!seen[id]) { seen[id] = 1; base.push(id); } });
+  /* 어느 쪽 목록에도 안 들어간 것(셋을 합칠 때만 생김)을 끝에 */
   Object.keys(keep).forEach(function (id) { if (!seen[id]) base.push(id); });
   return base;
 }
