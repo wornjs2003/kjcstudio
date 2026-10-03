@@ -340,8 +340,68 @@ def c_main_ok_log():
     return "KJC_MAIN_OK=1 사용 기록 (허락받고 쓴 것인지 재권님이 보신다)", 1, [l[:150] for l in lines[-10:]], LOOK, (지시, "「메인쪽은 내 허락없이 절대 건들면 안되는곳」 — 쓴 자국을 남긴다")
 
 
+def strip_js_comments(src):
+    """JS 의 /* */ 와 // 주석을 뺀다 — 줄 수는 그대로 둔다.
+
+    따옴표를 따라가는 방식은 정규식 리터럴(/'/ 등) 하나에 어긋나 **주석 안의 예시가 코드로 세어졌다**(첫 판 ·
+    daily-view.js 의 「전에는 setInterval(load, 60_000)」). 그래서 단순하게 간다 — 블록 주석은 통째로,
+    // 는 앞 글자가 「:」 가 아닐 때만(「http://」 를 주석으로 읽지 않게)."""
+    src = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n"), src, flags=re.S)
+    return re.sub(r"(^|[^:\\])//[^\n]*", r"\1", src)
+
+
+def _call_args(s, start):
+    """s[start] 가 「(」 일 때 맨 바깥 쉼표로 나눈 인자 목록."""
+    depth, args, cur, i = 0, [], [], start
+    while i < len(s):
+        c = s[i]
+        if c in "([{":
+            depth += 1
+            if depth == 1 and c == "(":
+                i += 1; continue
+        elif c in ")]}":
+            depth -= 1
+            if depth == 0:
+                args.append("".join(cur)); return args
+        elif c == "," and depth == 1:
+            args.append("".join(cur)); cur = []; i += 1; continue
+        cur.append(c); i += 1
+    return args
+
+
+def c_screen_timers():
+    """화면에 박힌 주기 — 숫자로 정한 타이머 (2026-10-03 · 개발1 셈 · 재권님 12:3x 「화면에 박힌 주기 지우기」 의 재발 검사).
+
+    화면은 서버에 주기로 묻지 않는다 — 서버가 알려준다(「캐시·주기·한도 값을 화면에 박지 않는다」). 그런데
+    **숫자 타이머가 서버를 묻는지 그리기인지는 기계가 못 가른다** — 시계 30초 · 「몇 초 전」 1초 · 미룸 180ms 도
+    같은 모양이다. 그래서 **「봐야 할 자리」** 로 낸다. 세는 것:
+      ① setInterval · setTimeout 의 지연 자리가 숫자식(30_000 · 30 * 1000 · 180)
+      ② everyServerMs · serverMs 의 **열쇠 자리**에 숫자 (대체값 자리의 숫자는 허용)
+    허용 — 이름에 FALLBACK 이 든 상수 · 지연이 0 이거나 없는 것. 주석은 빼고 센다. 범위 holdings/js · company-setup.
+    """
+    hits, n = [], 0
+    num = re.compile(r"^[\s0-9_.*+()]+$")
+    call = re.compile(r"\b(setInterval|setTimeout|everyServerMs|serverMs)\s*\(")
+    for p in walk(".js"):
+        if not (p.startswith("holdings/js/") or p.startswith("company-setup/")):
+            continue
+        n += 1
+        s = strip_js_comments(rd(os.path.join(ROOT, p)))
+        for m in call.finditer(s):
+            args = _call_args(s, m.end() - 1)
+            pos = 1 if m.group(1).startswith("set") else 0
+            if len(args) <= pos:
+                continue
+            a = args[pos].strip()
+            if "FALLBACK" in a or not num.match(a) or not re.search(r"[1-9]", a):
+                continue
+            line = s[:m.start()].count("\n") + 1
+            hits.append("%s:%d  %s(… %s)" % (p, line, m.group(1), a))
+    return "화면에 박힌 주기 (숫자 타이머)", n, hits, LOOK, (지시, "「화면은 서버에 주기로 묻지 않는다 — 서버가 알려준다」 (2026-10-02) — **서버를 묻는 것만 위반**, 그리기 주기는 괜찮다")
+
+
 CHECKS = [c_bat_nonascii, c_py_encoding, c_send_error_korean,
-          c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec, c_nav_gutter, c_shared_css, c_main_guard, c_main_ok_log]
+          c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec, c_nav_gutter, c_shared_css, c_main_guard, c_main_ok_log, c_screen_timers]
 
 
 def main():
