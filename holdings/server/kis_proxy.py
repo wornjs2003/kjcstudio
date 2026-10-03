@@ -423,6 +423,19 @@ _send_lock = threading.Lock()
 _send_times = collections.deque()
 _send_stat = {"held": 0, "heldMs": 0.0, "maxIn1s": 0}
 
+# ── 거절됐을 때 앞뒤를 남긴다 (2026-10-03 · 재권님 「가」) ──────────────
+#
+# 밤 바퀴에서 `EGW00201` 이 2번 났는데 **우리 1초 창은 8 · 7** 이었다. 우리가
+# 보낸 시각으로는 한도 안이라, **KIS 가 받은 시각**이 몰렸는지 봐야 한다.
+# 매 호출이 새 연결(`urlopen`)이라 연결 맺는 시간만큼 도착이 밀릴 수 있다.
+#
+# 평소에는 아무것도 안 찍는다 — 최근 호출 몇십 개의 [보낸 시각 · 왕복 ms ·
+# 결과] 를 고리에만 쥐고, **거절이 나면 그 앞 3초를 한꺼번에 찍는다.**
+# 왕복이 긴 것이 거절 직전에 몰려 있으면 도착 몰림이다.
+SEND_RING_MAX = 60
+SEND_RING_DUMP_SEC = 3.0
+_send_ring = collections.deque(maxlen=SEND_RING_MAX)
+
 # **실제로 뜬 포트.** `MAIN_PORT`(8765)는 「어느 것이 메인인가」 를 가리는
 # 상수라 다르다. 여섯이 동시에 도므로 **로그 줄마다 이것을 적는다** —
 # 파일이 갈려 있어도 합쳐 볼 때 어느 서버 것인지 알 수 있다.
@@ -725,6 +738,22 @@ def _rate_limit(path=None):
     # 세어진다 — **한도 대상은 이쪽**이다.
     sys.stderr.write("  [KIS] %s :%s %s\n"
                      % (_stamp(), RUN_PORT, path or "?"))
+
+
+def _ring_dump(me):
+    """거절난 호출(`me`) 앞 `SEND_RING_DUMP_SEC` 초를 한꺼번에 찍는다."""
+    t_me = me[0]
+    rows = [r for r in list(_send_ring) if t_me - SEND_RING_DUMP_SEC <= r[0] <= t_me + 1.0]
+    sys.stderr.write("  [KIS-거절] %s :%s 거절난 것 보냄 %s · 앞 %.0f초 %d건(보낸 시각 · 왕복 ms · 결과)\n"
+                     % (_stamp(), RUN_PORT, _fmt_wall(t_me), SEND_RING_DUMP_SEC, len(rows)))
+    for r in rows:
+        ms = "—" if r[2] is None else "%.0f" % r[2]      # 아직 안 돌아온 것은 「—」
+        sys.stderr.write("    %s %6s %s%s\n" % (_fmt_wall(r[0]), ms, r[3] or "…",
+                                              "  ← 이것" if r is me else ""))
+
+
+def _fmt_wall(t):
+    return "%s.%03d" % (time.strftime("%H:%M:%S", time.localtime(t)), int(t % 1 * 1000))
 
 
 def _send_gate():
@@ -1797,6 +1826,9 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
     # **상류로 넘긴 것은 위에서 `return` 하므로 안 세어진다** — 맞다.
     # 재시도(`EGW00201`)는 재귀로 다시 와서 **한 번 더 센다** — 실제로 두 번 부른다.
     _stats["kis_calls"] += 1
+    # [보낸 시각 · 왕복 ms · 결과] — 거절이 나면 앞뒤를 찍는다 (`_ring_dump`)
+    _me = [time.time(), None, None, None]
+    _send_ring.append(_me)
     url = HOSTS[cfg["mode"]] + path + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={
         "authorization": "Bearer " + token,
@@ -1811,12 +1843,18 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
         with urllib.request.urlopen(req, timeout=15) as resp:
             raw = resp.read()
         # **왕복만 잰다** — JSON 해석은 우리 쪽 일이라 뺀다.
-        _resp_note(path, (time.time() - _t_resp0) * 1000.0, _wait_ms, _yield_ms)
+        _me[2] = (time.time() - _t_resp0) * 1000.0
+        _me[3] = "ok"
+        _resp_note(path, _me[2], _wait_ms, _yield_ms)
         data = json.loads(raw.decode("utf-8"))
     except urllib.error.HTTPError as e:
+        _me[2] = (time.time() - _t_resp0) * 1000.0
+        _me[3] = "HTTP%s" % e.code
         detail = scrub(e.read().decode("utf-8", "replace"))[:300]
         # 초당 건수 초과(EGW00201)는 잠깐 쉬었다 한 번만 다시 시도한다.
         if "EGW00201" in detail and _retry > 0:
+            _me[3] = "EGW00201"
+            _ring_dump(_me)
             note_overrun()                     # ㉡ 세어 두면 간격이 늘어난다
             time.sleep(1.0)
             return kis_get(cfg, path, params, tr_id, _retry - 1)
@@ -1831,6 +1869,8 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
 
     if str(data.get("rt_cd", "0")) != "0":
         if data.get("msg_cd") == "EGW00201" and _retry > 0:
+            _me[3] = "EGW00201"
+            _ring_dump(_me)
             note_overrun()                     # ㉡
             time.sleep(1.0)
             return kis_get(cfg, path, params, tr_id, _retry - 1)
