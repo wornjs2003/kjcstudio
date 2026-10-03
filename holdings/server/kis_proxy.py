@@ -3954,6 +3954,33 @@ def _minutes_need_day(code, period, rows, gap_check=True):
     return gap > MINUTE_REFILL_GAP
 
 
+def drop_before_first_trade(rows):
+    """분봉에서 **그날 첫 체결 전의 거래량 0 봉**을 뺀다 — 화면에 낼 때만 (2026-10-03 지시).
+
+    재권님이 069500(KODEX 200) 아침 08:00~08:55 에 납작봉이 있는 것을 물으셨다.
+
+        ETF 는 넥스트레이드에 없어 **09:00 전 거래가 없다**
+        통합(UN)은 그 빈 분을 **전일 종가로 채워** 30행을 준다 (069500 = 111,520 = 10-01 종가)
+        KRX(J)는 09:00 전이 없어 전날 저녁 행을 준다 — 069500 은 그것도 거래량 0
+        `fetch_minutes_from_kis` 는 **둘 다 0 이면 먼저 받은 것을 쓴다** — 그래서 저장된다
+
+    **저장은 그대로 둔다.** 빼면 `_minutes_have_today` 가 그 칸을 「안 받았다」 로 보고
+    **바퀴마다 다시 받는다**(그 함수 주석의 느림이 되돌아온다). 그래서 응답에서만 뺀다.
+
+    **첫 체결 뒤의 거래량 0 봉은 둔다** — 마감 동시호가 뒤 15:35 처럼 거래가 없는 진짜
+    구간이고 값은 마지막 체결가다. 하루 내내 체결이 없으면 그날 봉이 다 빠진다 — 그린 것이 없는 것이 맞다.
+    """
+    out, traded = [], set()
+    for r in rows:
+        day = r["ts"][:8]
+        if day not in traded:
+            if not (r.get("volume") or 0):
+                continue
+            traded.add(day)
+        out.append(r)
+    return out
+
+
 def aggregate_minutes(bars, minutes):
     """1분봉을 N분봉으로 묶는다 (KIS 는 5분봉을 직접 주지 않는다)."""
     buckets = {}
@@ -5054,6 +5081,8 @@ class Handler(SimpleHTTPRequestHandler):
                     limit = 240
                 limit = max(1, min(limit, 1000))
                 rows, fetched, source = get_chart(cfg, code, period, limit)
+                if PERIODS[period]["kis"] is None:      # 분봉(1m · 5m)만 — 일봉 이상은 받은 그대로
+                    rows = drop_before_first_trade(rows)
                 self._send_json({
                     "ok": True,
                     "data": {"code": code, "period": period, "candles": rows},
