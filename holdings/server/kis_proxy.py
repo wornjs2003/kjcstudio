@@ -813,6 +813,12 @@ def timing_values():
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 continue
             out["%s.%s" % (mod_name, k)] = v
+    # **봉의 기간별 `fresh_sec`** (2026-10-03 재권님 「응 그래」). `PERIODS` 는 dict 라 위 이름 규칙에
+    # 안 걸려 화면이 봉을 다시 물을 서버 값이 없었다(chart.js 가 60초를 박고 있었다).
+    # 이름은 위와 같이 **파일 이름**을 앞에 붙인다 — `<모듈>.PERIODS.<기간>.fresh_sec`.
+    me = os.path.splitext(os.path.basename(os.path.abspath(__file__)))[0]
+    for p, conf in PERIODS.items():
+        out["%s.PERIODS.%s.fresh_sec" % (me, p)] = conf["fresh_sec"]
     return out
 
 

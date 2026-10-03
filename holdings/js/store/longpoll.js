@@ -38,7 +38,8 @@ let running = false;
  * @param {Function} opt.url        → 지금 볼 `/api/kis/…` 주소. 없으면 `null`(쉰다)
  * @param {Function} opt.onChange   값이 바뀌었을 때. **스스로 다시 받아 그린다** —
  *                                   서버 캐시에 걸리므로 KIS 는 안 는다
- * @param {string}   opt.key        폴백 때 따를 서버 값 이름 (예: `kis_proxy.INDEX_TTL`)
+ * @param {string|Function} opt.key 폴백 때 따를 서버 값 이름 (예: `kis_proxy.INDEX_TTL`).
+ *                                   그때그때 바뀌면 이름을 내는 함수 — `timing.js` 의 `serverSec`
  * @param {number}   opt.fallbackMs 그 값마저 못 받았을 때
  * @returns {{ stop: Function, refresh: Function }}
  *          `refresh()` — 주소가 바뀌었다(종목을 골랐다). **쥔 연결은 끊지 않는다** —

@@ -60,6 +60,9 @@ export function serverFlag(name) {
 /** 서버가 정한 **초**. 아직 안 왔거나 그 이름이 없으면 `null` */
 export function serverSec(key) {
   if (!_timing) return null;
+  /* **이름이 그때그때 바뀌는 자리는 함수로 넘긴다** (2026-10-03) — 봉은 기간 단추를 바꾸면
+     따를 값이 달라진다(`chart.js` 의 `watchCandles`). 부를 때마다 이름을 다시 얻는다 */
+  if (typeof key === 'function') key = key();
   const v = _timing[key];
   return typeof v === 'number' ? v : null;
 }
