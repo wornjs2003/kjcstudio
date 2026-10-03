@@ -5,7 +5,21 @@
       "name": "AI 생태계",
       "title": "AI 생태계 지도 — 돈이 흐르는 길",
       "summary": "서비스 → 모델 → 데이터센터 → 칩 · 전력",
-      "page": "ecosystem.html"
+      "page": "flowmap.html?map=ai"
+    },
+    {
+      "date": "2026-10-03",
+      "name": "금리 · 유가",
+      "title": "금리 · 유가 · 주식 — 돈이 흐르는 길",
+      "summary": "기준금리 → 채권금리 · 달러 → 유가 · 물가 → 업종 · 오를 때 / 내릴 때",
+      "page": "flowmap.html?map=rates"
+    },
+    {
+      "date": "2026-10-03",
+      "name": "북극항로",
+      "title": "북극항로 생태계 — 물동량이 흐르는 길",
+      "summary": "아시아–유럽 수요 → 북동항로 · 허가 → 쇄빙 LNG선 → 조선 · 해운 · 에너지",
+      "page": "flowmap.html?map=arctic"
     }
   ]
 }

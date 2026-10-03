@@ -1,0 +1,826 @@
+{
+  "id": "arctic",
+  "title": "북극항로 생태계 — 물동량이 흐르는 길",
+  "sub": "아시아–유럽 수요가 러시아 북동항로를 지나 선박 · 조선 · 운항 · 에너지로 이어진다. 왼쪽에서 오른쪽으로",
+  "asOf": "2026-10-03",
+  "note": "등급 · 연결은 시황분석 판단 — 근거는 「누가 그 자리를 쥐고 있나」(쇄빙선 · 통항 허가 · 보험은 러시아와 소수 보험사가 쥔다). 종목 코드는 holdings/js/data/market.js 에 조선 · 해운 · 가스 종목이 없어 대조하지 못했다 — 적은 코드는 작성자가 확신하는 것만이고 null 은 확인 전. 거리 · 물동량 · 운임 같은 숫자는 적지 않았다(출처 확인 전). 좌표는 도시 · 해협 수준이고 북동항로 선은 베링해협에서 경도 180도를 넘는다 — 그리는 쪽이 날짜변경선 처리를 해야 한다. 북극 LNG 2(기단반도) 좌표는 확신이 없어 뺐다 · 코드는 2026-10-03 에 네이버 업종별 종목 목록과 holdings 관심종목으로 대조된 것만 두었다(시황분석) — 대조 못 해 비운 것: HD현대중공업 · 삼성중공업 · 한화오션 · HD한국조선해양 · HD현대마린엔진 · 한화엔진 · 한국카본 · 동성화인텍 · 성광벤드 · 태광 · CJ대한통운 · 한국가스공사",
+  "columns": [
+    {
+      "head": "수요",
+      "items": [
+        {
+          "id": "demand",
+          "type": "node",
+          "k": "수요",
+          "t": "아시아–유럽 물동량",
+          "d": "컨테이너 · 벌크 · LNG",
+          "choke": false
+        },
+        {
+          "id": "dist",
+          "type": "node",
+          "k": "거리 단축",
+          "t": "수에즈보다 짧은 길",
+          "d": "부산–로테르담 · 운항일 · 연료 절감",
+          "choke": false
+        },
+        {
+          "id": "lngx",
+          "type": "node",
+          "k": "LNG 수출",
+          "t": "러시아 북극 LNG → 아시아",
+          "d": "야말 · 북극 LNG 2",
+          "choke": false
+        }
+      ]
+    },
+    {
+      "head": "항로 · 규제",
+      "items": [
+        {
+          "id": "nsr",
+          "type": "node",
+          "k": "항로",
+          "t": "북동항로(NSR)",
+          "d": "러시아 북쪽 해안 · 여름 통항",
+          "choke": true
+        },
+        {
+          "id": "permit",
+          "type": "node",
+          "k": "허가 · 호위",
+          "t": "러시아 통항 허가",
+          "d": "로사톰(NSR 운영) · 쇄빙 호위 의무",
+          "choke": true
+        },
+        {
+          "id": "insur",
+          "type": "node",
+          "k": "보험",
+          "t": "선체 · P&I 보험",
+          "d": "결빙 위험 할증 · 제재 리스크",
+          "choke": true
+        }
+      ]
+    },
+    {
+      "head": "선박",
+      "items": [
+        {
+          "id": "lngc",
+          "type": "node",
+          "k": "쇄빙 LNG선",
+          "t": "Arc7 쇄빙 LNG 운반선",
+          "d": "야말 LNG 선단 — 옛 대우조선(한화오션) 건조",
+          "choke": false
+        },
+        {
+          "id": "icecont",
+          "type": "node",
+          "k": "내빙 컨테이너선",
+          "t": "내빙 등급 컨테이너선",
+          "d": "아직 소수 · 시험 운항 단계",
+          "choke": false
+        },
+        {
+          "id": "icebreaker",
+          "type": "node",
+          "k": "쇄빙선",
+          "t": "핵추진 쇄빙선",
+          "d": "로사톰플로트 — 러시아만 보유",
+          "choke": true
+        }
+      ]
+    },
+    {
+      "head": "조선 · 기자재",
+      "items": [
+        {
+          "id": "yard",
+          "type": "cell",
+          "k": "조선 3사",
+          "t": "HD현대중공업 · 삼성중공업 · 한화오션"
+        },
+        {
+          "id": "engine",
+          "type": "cell",
+          "k": "선박 엔진",
+          "t": "HD현대마린엔진 · 한화엔진"
+        },
+        {
+          "id": "cryo",
+          "type": "cell",
+          "k": "극저온 기자재",
+          "t": "한국카본 · 동성화인텍 · 성광벤드 · 태광"
+        }
+      ]
+    },
+    {
+      "head": "운항 · 항만 · 에너지",
+      "items": [
+        {
+          "id": "carrier",
+          "type": "cell",
+          "k": "해운사",
+          "t": "HMM · 팬오션 · 대한해운"
+        },
+        {
+          "id": "port",
+          "type": "cell",
+          "k": "부산항 · 거점 항만",
+          "t": "CJ대한통운 · KCTC"
+        },
+        {
+          "gap": true
+        },
+        {
+          "id": "yamal",
+          "type": "node",
+          "k": "에너지",
+          "t": "야말 LNG · 북극 가스",
+          "d": "노바텍 · 사베타항",
+          "choke": false
+        },
+        {
+          "id": "gas",
+          "type": "cell",
+          "k": "국내 LNG 도입",
+          "t": "한국가스공사 · 포스코인터내셔널"
+        }
+      ]
+    }
+  ],
+  "lineTypes": {
+    "cargo": {
+      "label": "물동량 · 수요",
+      "color": "ok"
+    },
+    "ship": {
+      "label": "선박 · 조선",
+      "color": "accent"
+    },
+    "energy": {
+      "label": "에너지 · 규제",
+      "color": "warn"
+    }
+  },
+  "links": [
+    [
+      "demand",
+      "nsr",
+      "cargo"
+    ],
+    [
+      "dist",
+      "nsr",
+      "cargo"
+    ],
+    [
+      "lngx",
+      "permit",
+      "energy"
+    ],
+    [
+      "nsr",
+      "icecont",
+      "ship"
+    ],
+    [
+      "nsr",
+      "lngc",
+      "ship"
+    ],
+    [
+      "nsr",
+      "port",
+      "cargo"
+    ],
+    [
+      "permit",
+      "icebreaker",
+      "energy"
+    ],
+    [
+      "permit",
+      "lngc",
+      "energy"
+    ],
+    [
+      "insur",
+      "icecont",
+      "energy"
+    ],
+    [
+      "lngc",
+      "yard",
+      "ship"
+    ],
+    [
+      "lngc",
+      "cryo",
+      "ship"
+    ],
+    [
+      "icecont",
+      "yard",
+      "ship"
+    ],
+    [
+      "icecont",
+      "engine",
+      "ship"
+    ],
+    [
+      "icebreaker",
+      "carrier",
+      "energy"
+    ],
+    [
+      "yard",
+      "carrier",
+      "cargo"
+    ],
+    [
+      "engine",
+      "carrier",
+      "ship"
+    ],
+    [
+      "yard",
+      "yamal",
+      "energy"
+    ],
+    [
+      "cryo",
+      "gas",
+      "energy"
+    ]
+  ],
+  "extra": [
+    [
+      "demand",
+      "carrier",
+      "cargo"
+    ],
+    [
+      "lngx",
+      "gas",
+      "energy"
+    ],
+    [
+      "nsr",
+      "insur",
+      "energy"
+    ],
+    [
+      "carrier",
+      "port",
+      "cargo"
+    ],
+    [
+      "lngc",
+      "yamal",
+      "energy"
+    ]
+  ],
+  "info": {
+    "demand": {
+      "what": "아시아에서 유럽으로 가는 화물. 이 양이 늘어야 북쪽으로 돌릴 배가 생긴다.",
+      "watch": "아시아–유럽 컨테이너 운임 · 수에즈 통항량"
+    },
+    "dist": {
+      "what": "부산에서 로테르담까지 북쪽으로 가면 수에즈 경유보다 짧다. 운항일과 연료가 줄어 선사가 관심을 갖는 이유다.",
+      "watch": "해빙 면적 · 통항 가능 기간(여름)"
+    },
+    "lngx": {
+      "what": "러시아가 북극 가스를 아시아로 팔려는 수요. 북동항로를 실제로 쓰는 가장 큰 화물이 LNG 다.",
+      "watch": "야말 LNG 출하 · 북극 LNG 2 제재 · 중국 · 인도 도입"
+    },
+    "nsr": {
+      "what": "러시아 북쪽 해안을 따라 베링해협에서 바렌츠해까지 가는 길. 여름에만 열리고 러시아 영해 · 배타적경제수역을 지난다.",
+      "watch": "통항 건수 · 통항 가능 기간 · 결빙 시점",
+      "choke": "한 나라가 쥔다 — 러시아 영해를 지나므로 러시아가 열고 닫는다"
+    },
+    "permit": {
+      "what": "북동항로를 지나려면 러시아 당국(로사톰이 운영)의 허가와 쇄빙선 호위가 필요하다.",
+      "watch": "허가 건수 · 호위 요금 · 제재 범위",
+      "choke": "허가 한 곳 — 러시아가 안 내주면 배가 못 간다"
+    },
+    "insur": {
+      "what": "결빙 해역은 사고 위험이 커서 선체 · P&I 보험료가 비싸고, 제재 대상이면 보험을 안 받아 준다.",
+      "watch": "보험 할증 · 제재 목록 · 사고 건수",
+      "choke": "소수 보험사 — 보험이 안 나오면 배가 못 뜬다"
+    },
+    "lngc": {
+      "what": "얼음을 깨며 LNG 를 싣는 Arc7 등급 운반선. 야말 LNG 선단은 옛 대우조선해양(지금 한화오션)이 지었다.",
+      "watch": "북극 LNG 2 선단 발주 · 제재로 인도 중단된 배"
+    },
+    "icecont": {
+      "what": "얼음 바다를 다닐 수 있게 선체를 보강한 컨테이너선. 아직 수가 적고 정기 노선은 시험 단계다.",
+      "watch": "선사 시험 운항 · 내빙 선박 발주"
+    },
+    "icebreaker": {
+      "what": "핵추진 쇄빙선으로 앞길을 뚫는다. 러시아 로사톰플로트만 갖고 있다.",
+      "watch": "신조 쇄빙선 취항 · 호위 가능 척수",
+      "choke": "한 회사 — 쇄빙선 수가 곧 통항 상한이다"
+    },
+    "yard": {
+      "what": "쇄빙 LNG선 · 내빙선을 지을 수 있는 국내 조선 3사. 극지 선박은 고가라 수주 하나가 크다.",
+      "watch": "극지선 수주 공시 · 러시아 제재로 묶인 계약"
+    },
+    "engine": {
+      "what": "극지 선박용 추진 엔진 · LNG 이중연료 엔진.",
+      "watch": "조선 3사 수주 → 엔진 발주 시차"
+    },
+    "cryo": {
+      "what": "LNG 를 영하 160도 근처로 담는 보냉재(한국카본 · 동성화인텍)와 극저온 피팅(성광벤드 · 태광).",
+      "watch": "LNG선 수주 잔고 · 보냉재 단가"
+    },
+    "carrier": {
+      "what": "항로를 실제로 쓰는 국내 선사. HMM 은 컨테이너, 팬오션 · 대한해운은 벌크 · LNG.",
+      "watch": "북극항로 시험 운항 · 운임 지수"
+    },
+    "port": {
+      "what": "북동항로의 아시아 쪽 출발 · 환적 거점으로 부산항이 거론된다. 항만 하역 · 물류 회사가 그 자리에 있다.",
+      "watch": "부산항 환적 물동량 · 북극항로 거점항 지정"
+    },
+    "yamal": {
+      "what": "노바텍이 운영하는 야말 LNG 와 북극 LNG 2. 사베타항에서 쇄빙 LNG선으로 실어 낸다.",
+      "watch": "출하량 · 제재 · 중국 · 인도 수입"
+    },
+    "gas": {
+      "what": "국내 LNG 도입 창구. 러시아 북극 가스가 아시아로 더 오면 조달선이 넓어진다.",
+      "watch": "장기 계약 · 현물 LNG 가격"
+    }
+  },
+  "scenarios": [
+    {
+      "id": "open",
+      "label": "항로 열릴 때(여름 · 해빙)",
+      "effects": {
+        "demand": "+",
+        "dist": "+",
+        "lngx": "+",
+        "nsr": "+",
+        "permit": "±",
+        "insur": "±",
+        "lngc": "+",
+        "icecont": "+",
+        "icebreaker": "±",
+        "yard": "+",
+        "engine": "+",
+        "cryo": "+",
+        "carrier": "+",
+        "port": "+",
+        "yamal": "+",
+        "gas": "+"
+      }
+    },
+    {
+      "id": "closed",
+      "label": "막힐 때(제재 · 결빙)",
+      "effects": {
+        "demand": "-",
+        "dist": "-",
+        "lngx": "-",
+        "nsr": "-",
+        "permit": "-",
+        "insur": "-",
+        "lngc": "-",
+        "icecont": "-",
+        "icebreaker": "-",
+        "yard": "±",
+        "engine": "±",
+        "cryo": "-",
+        "carrier": "±",
+        "port": "-",
+        "yamal": "-",
+        "gas": "±"
+      }
+    }
+  ],
+  "grades": {
+    "lead": "대장주",
+    "driver": "주도주",
+    "parts": "관련주"
+  },
+  "stocks": [
+    {
+      "name": "HD현대중공업",
+      "code": null,
+      "node": "yard",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "삼성중공업",
+      "code": null,
+      "node": "yard",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "한화오션",
+      "code": null,
+      "node": "yard",
+      "also": [
+        "lngc"
+      ],
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "HD한국조선해양",
+      "code": null,
+      "node": "yard",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "HD현대마린엔진",
+      "code": null,
+      "node": "engine",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "한화엔진",
+      "code": null,
+      "node": "engine",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "한국카본",
+      "code": null,
+      "node": "cryo",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "동성화인텍",
+      "code": null,
+      "node": "cryo",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "성광벤드",
+      "code": null,
+      "node": "cryo",
+      "grade": "parts",
+      "market": "KR"
+    },
+    {
+      "name": "태광",
+      "code": null,
+      "node": "cryo",
+      "grade": "parts",
+      "market": "KR"
+    },
+    {
+      "name": "HMM",
+      "code": "011200",
+      "node": "carrier",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "팬오션",
+      "code": "028670",
+      "node": "carrier",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "대한해운",
+      "code": "005880",
+      "node": "carrier",
+      "grade": "parts",
+      "market": "KR"
+    },
+    {
+      "name": "CJ대한통운",
+      "code": null,
+      "node": "port",
+      "grade": "parts",
+      "market": "KR"
+    },
+    {
+      "name": "KCTC",
+      "code": null,
+      "node": "port",
+      "grade": "parts",
+      "market": "KR"
+    },
+    {
+      "name": "한국가스공사",
+      "code": null,
+      "node": "gas",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "포스코인터내셔널",
+      "code": "047050",
+      "node": "gas",
+      "grade": "parts",
+      "market": "KR"
+    },
+    {
+      "name": "노바텍",
+      "code": null,
+      "node": "yamal",
+      "market": "RU"
+    },
+    {
+      "name": "로사톰",
+      "code": null,
+      "node": "permit",
+      "also": [
+        "icebreaker"
+      ],
+      "market": "RU"
+    }
+  ],
+  "sites": [
+    {
+      "name": "부산항",
+      "company": "부산항",
+      "node": "port",
+      "at": [
+        129.04,
+        35.1
+      ]
+    },
+    {
+      "name": "HD현대중공업 울산",
+      "company": "HD현대중공업",
+      "node": "yard",
+      "at": [
+        129.4,
+        35.5
+      ]
+    },
+    {
+      "name": "삼성중공업 거제",
+      "company": "삼성중공업",
+      "node": "yard",
+      "at": [
+        128.62,
+        34.88
+      ]
+    },
+    {
+      "name": "한화오션 거제",
+      "company": "한화오션",
+      "node": "yard",
+      "also": [
+        "lngc"
+      ],
+      "at": [
+        128.68,
+        34.86
+      ]
+    },
+    {
+      "name": "HD현대마린엔진 창원",
+      "company": "HD현대마린엔진",
+      "node": "engine",
+      "at": [
+        128.68,
+        35.18
+      ]
+    },
+    {
+      "name": "한화엔진 창원",
+      "company": "한화엔진",
+      "node": "engine",
+      "at": [
+        128.65,
+        35.2
+      ]
+    },
+    {
+      "name": "한국카본 밀양",
+      "company": "한국카본",
+      "node": "cryo",
+      "at": [
+        128.75,
+        35.49
+      ]
+    },
+    {
+      "name": "동성화인텍 창원",
+      "company": "동성화인텍",
+      "node": "cryo",
+      "at": [
+        128.57,
+        35.2
+      ]
+    },
+    {
+      "name": "HMM 서울",
+      "company": "HMM",
+      "node": "carrier",
+      "at": [
+        126.98,
+        37.57
+      ]
+    },
+    {
+      "name": "팬오션 서울",
+      "company": "팬오션",
+      "node": "carrier",
+      "at": [
+        126.98,
+        37.56
+      ]
+    },
+    {
+      "name": "한국가스공사 대구",
+      "company": "한국가스공사",
+      "node": "gas",
+      "at": [
+        128.6,
+        35.87
+      ]
+    },
+    {
+      "name": "가스공사 인천 LNG 기지",
+      "company": "한국가스공사",
+      "node": "gas",
+      "at": [
+        126.6,
+        37.37
+      ]
+    },
+    {
+      "name": "상하이항",
+      "company": "상하이항",
+      "node": "demand",
+      "at": [
+        121.47,
+        31.23
+      ]
+    },
+    {
+      "name": "로테르담항",
+      "company": "로테르담항",
+      "node": "demand",
+      "at": [
+        4.48,
+        51.92
+      ]
+    },
+    {
+      "name": "야말 LNG · 사베타항",
+      "company": "노바텍",
+      "node": "yamal",
+      "at": [
+        72.06,
+        71.27
+      ]
+    },
+    {
+      "name": "무르만스크",
+      "company": "로사톰",
+      "node": "icebreaker",
+      "also": [
+        "permit"
+      ],
+      "at": [
+        33.08,
+        68.97
+      ]
+    },
+    {
+      "name": "노바텍 · 로사톰 모스크바",
+      "company": "노바텍",
+      "node": "permit",
+      "also": [
+        "yamal"
+      ],
+      "at": [
+        37.62,
+        55.75
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "name": "북동항로(NSR) — 부산 → 로테르담",
+      "type": "cargo",
+      "coords": [
+        [
+          129.04,
+          35.1
+        ],
+        [
+          129.3,
+          34.5
+        ],
+        [
+          135.0,
+          40.0
+        ],
+        [
+          142.0,
+          45.7
+        ],
+        [
+          165.0,
+          55.0
+        ],
+        [
+          -169.0,
+          65.8
+        ],
+        [
+          -175.0,
+          70.0
+        ],
+        [
+          160.0,
+          72.0
+        ],
+        [
+          104.0,
+          77.5
+        ],
+        [
+          72.06,
+          71.27
+        ],
+        [
+          58.0,
+          70.5
+        ],
+        [
+          40.0,
+          71.0
+        ],
+        [
+          25.8,
+          71.2
+        ],
+        [
+          4.48,
+          51.92
+        ]
+      ],
+      "note": "부산 → 대한해협 → 동해 → 소야해협 → 캄차카 동쪽 → 베링해협 → 축치해 → 동시베리아해 → 빌키츠키 해협 → 사베타(야말) → 카라 해협 → 바렌츠해 → 노르카프 → 로테르담. 베링해협에서 경도 180도를 넘는다"
+    },
+    {
+      "name": "수에즈 항로 — 부산 → 로테르담(비교용)",
+      "type": "ship",
+      "coords": [
+        [
+          129.04,
+          35.1
+        ],
+        [
+          122.0,
+          25.0
+        ],
+        [
+          103.85,
+          1.29
+        ],
+        [
+          75.0,
+          8.0
+        ],
+        [
+          50.0,
+          12.5
+        ],
+        [
+          32.55,
+          29.97
+        ],
+        [
+          18.0,
+          36.0
+        ],
+        [
+          -5.6,
+          36.0
+        ],
+        [
+          -8.0,
+          45.0
+        ],
+        [
+          4.48,
+          51.92
+        ]
+      ],
+      "note": "부산 → 대만해협 → 싱가포르 → 인도양 → 아덴만 → 수에즈 → 지중해 → 지브롤터 → 비스케이만 → 로테르담"
+    }
+  ],
+  "geoCenter": [
+    95,
+    58
+  ]
+}

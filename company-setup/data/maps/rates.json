@@ -1,0 +1,750 @@
+{
+  "id": "rates",
+  "title": "금리 · 유가 · 주식 — 돈이 흐르는 길",
+  "sub": "중앙은행이 금리를 정하면 채권금리 → 달러 · 환율 → 유가 → 물가를 거쳐 업종마다 다르게 닿는다. 왼쪽이 원인, 오른쪽이 받는 쪽",
+  "asOf": "2026-10-03",
+  "note": "연결 · 등급 · 시나리오 배지는 시황분석 판단이다 — 근거는 교과서적 상관(금리가 오르면 은행 예대마진은 넓어지고 성장주 할인율은 커진다 · 유가가 오르면 원가로 쓰는 쪽은 받고 파는 쪽은 받친다)이지 그날의 실제 등락이 아니다. 종목 코드는 holdings/js/data/market.js 와 대조한 것과 지시에 적힌 셋(HD현대중공업 · S-Oil · 대한항공)만 적었고 나머지는 null(확인 전). 좌표는 도시 수준 · 기관 소재지. 물가 → 중앙은행으로 되돌아가는 고리는 오른쪽 → 왼쪽이라 선으로 긋지 않고 설명에만 적었다 · 코드는 2026-10-03 에 네이버 업종별 종목 목록과 holdings 관심종목으로 대조된 것만 두었다(시황분석) — 대조 못 해 비운 것: HD현대중공업 · 대한항공",
+  "columns": [
+    {
+      "head": "통화 정책",
+      "items": [
+        {
+          "id": "fed",
+          "type": "node",
+          "k": "중앙은행",
+          "t": "연준 기준금리",
+          "d": "FOMC · 달러의 값을 정한다",
+          "choke": false
+        },
+        {
+          "id": "bok",
+          "type": "node",
+          "k": "중앙은행",
+          "t": "한국은행 기준금리",
+          "d": "금통위 · 원화의 값을 정한다",
+          "choke": false
+        }
+      ]
+    },
+    {
+      "head": "채권 · 환율",
+      "items": [
+        {
+          "id": "ust",
+          "type": "node",
+          "k": "채권금리",
+          "t": "미 10년물",
+          "d": "세계 자산의 할인율",
+          "choke": false
+        },
+        {
+          "id": "ktb",
+          "type": "node",
+          "k": "채권금리",
+          "t": "국고채 3년 · 10년",
+          "d": "대출 · 예금금리의 바탕",
+          "choke": false
+        },
+        {
+          "id": "usd",
+          "type": "node",
+          "k": "환율",
+          "t": "달러 · 원/달러",
+          "d": "원자재와 수출 대금이 전부 달러로 오간다",
+          "choke": true
+        }
+      ]
+    },
+    {
+      "head": "유가 · 물가",
+      "items": [
+        {
+          "id": "opec",
+          "type": "node",
+          "k": "공급",
+          "t": "OPEC+ 감산 · 증산",
+          "d": "산유국 모임이 공급량을 쥔다",
+          "choke": true
+        },
+        {
+          "id": "wti",
+          "type": "node",
+          "k": "유가",
+          "t": "WTI · 브렌트",
+          "d": "휴스턴 · 북해 기준 가격",
+          "choke": false
+        },
+        {
+          "id": "cpi",
+          "type": "node",
+          "k": "물가",
+          "t": "소비자물가 · 기대 인플레",
+          "d": "유가가 물가로, 물가가 다시 금리로",
+          "choke": false
+        }
+      ]
+    },
+    {
+      "head": "업종 — 금융 · 성장 · 수출",
+      "items": [
+        {
+          "id": "bank",
+          "type": "cell",
+          "k": "은행",
+          "t": "(종목은 stocks 에서 채움)"
+        },
+        {
+          "id": "insur",
+          "type": "cell",
+          "k": "보험",
+          "t": "(종목은 stocks 에서 채움)"
+        },
+        {
+          "gap": true
+        },
+        {
+          "id": "semi",
+          "type": "cell",
+          "k": "성장주 · 반도체",
+          "t": "(종목은 stocks 에서 채움)"
+        },
+        {
+          "id": "bio",
+          "type": "cell",
+          "k": "성장주 · 바이오",
+          "t": "(종목은 stocks 에서 채움)"
+        },
+        {
+          "gap": true
+        },
+        {
+          "id": "auto",
+          "type": "cell",
+          "k": "수출주 · 자동차",
+          "t": "(종목은 stocks 에서 채움)"
+        },
+        {
+          "id": "ship",
+          "type": "cell",
+          "k": "수출주 · 조선",
+          "t": "(종목은 stocks 에서 채움)"
+        }
+      ]
+    },
+    {
+      "head": "업종 — 에너지 · 운송 · 내수",
+      "items": [
+        {
+          "id": "refine",
+          "type": "cell",
+          "k": "정유",
+          "t": "(종목은 stocks 에서 채움)"
+        },
+        {
+          "id": "chem",
+          "type": "cell",
+          "k": "화학",
+          "t": "(종목은 stocks 에서 채움)"
+        },
+        {
+          "gap": true
+        },
+        {
+          "id": "air",
+          "type": "cell",
+          "k": "항공",
+          "t": "(종목은 stocks 에서 채움)"
+        },
+        {
+          "id": "sea",
+          "type": "cell",
+          "k": "해운",
+          "t": "(종목은 stocks 에서 채움)"
+        },
+        {
+          "gap": true
+        },
+        {
+          "id": "constr",
+          "type": "cell",
+          "k": "건설",
+          "t": "(종목은 stocks 에서 채움)"
+        },
+        {
+          "id": "util",
+          "type": "cell",
+          "k": "유틸리티",
+          "t": "(종목은 stocks 에서 채움)"
+        }
+      ]
+    }
+  ],
+  "lineTypes": {
+    "rate": {
+      "label": "금리 · 통화",
+      "color": "accent"
+    },
+    "oil": {
+      "label": "유가 · 원자재",
+      "color": "warn"
+    },
+    "equity": {
+      "label": "주식 · 업종",
+      "color": "ok"
+    }
+  },
+  "links": [
+    [
+      "fed",
+      "ust",
+      "rate"
+    ],
+    [
+      "bok",
+      "ktb",
+      "rate"
+    ],
+    [
+      "fed",
+      "usd",
+      "rate"
+    ],
+    [
+      "ust",
+      "usd",
+      "rate"
+    ],
+    [
+      "usd",
+      "wti",
+      "oil"
+    ],
+    [
+      "opec",
+      "wti",
+      "oil"
+    ],
+    [
+      "wti",
+      "cpi",
+      "oil"
+    ],
+    [
+      "ktb",
+      "bank",
+      "equity"
+    ],
+    [
+      "ktb",
+      "insur",
+      "equity"
+    ],
+    [
+      "ust",
+      "semi",
+      "equity"
+    ],
+    [
+      "ust",
+      "bio",
+      "equity"
+    ],
+    [
+      "usd",
+      "auto",
+      "equity"
+    ],
+    [
+      "usd",
+      "ship",
+      "equity"
+    ],
+    [
+      "wti",
+      "refine",
+      "oil"
+    ],
+    [
+      "wti",
+      "chem",
+      "oil"
+    ],
+    [
+      "wti",
+      "air",
+      "oil"
+    ],
+    [
+      "wti",
+      "sea",
+      "oil"
+    ],
+    [
+      "ktb",
+      "constr",
+      "equity"
+    ],
+    [
+      "cpi",
+      "util",
+      "equity"
+    ],
+    [
+      "wti",
+      "util",
+      "oil"
+    ]
+  ],
+  "extra": [
+    [
+      "usd",
+      "semi",
+      "equity"
+    ],
+    [
+      "usd",
+      "refine",
+      "oil"
+    ],
+    [
+      "ust",
+      "constr",
+      "equity"
+    ],
+    [
+      "wti",
+      "auto",
+      "oil"
+    ],
+    [
+      "ktb",
+      "util",
+      "equity"
+    ],
+    [
+      "cpi",
+      "bank",
+      "equity"
+    ]
+  ],
+  "info": {
+    "fed": {
+      "what": "미국 중앙은행이 정하는 하루짜리 금리. 세계 돈값의 출발점이라 미 채권금리와 달러가 여기서 움직인다.",
+      "watch": "FOMC 일정(연 8회) · 점도표 · 의장 발언 · 미 고용 · 물가 지표"
+    },
+    "bok": {
+      "what": "한국은행 금통위가 정하는 기준금리. 국고채 · 대출금리 · 원화 값의 바탕이고, 연준과 벌어지면 환율이 흔들린다.",
+      "watch": "금통위 일정(연 8회) · 한미 금리차 · 가계부채 · 국내 물가"
+    },
+    "ust": {
+      "what": "미 국채 10년물 금리. 세계 주식 · 부동산의 할인율이라 이것이 오르면 먼 미래 이익이 큰 성장주가 먼저 받는다.",
+      "watch": "10년물 · 2년물 · 장단기 금리차 · 미 재정적자 · 국채 입찰"
+    },
+    "ktb": {
+      "what": "국고채 3년 · 10년 금리. 은행 예대마진 · 보험 운용수익 · 주택담보대출 금리가 여기서 나온다.",
+      "watch": "국고채 3년 · 10년 · 한미 금리차 · 외국인 채권 자금"
+    },
+    "usd": {
+      "what": "달러의 값. 원자재(유가)는 달러로 사고, 수출 대금도 달러로 받는다. 달러가 세면 유가는 눌리고 원화 수출주는 환차익을 본다.",
+      "watch": "달러인덱스 · 원/달러 · 외국인 순매수 · 한미 금리차",
+      "choke": "한 통화 쏠림 — 원자재 · 무역 결제가 달러 하나로 몰려 있어 달러가 움직이면 유가와 수출주가 한꺼번에 받는다"
+    },
+    "opec": {
+      "what": "산유국 모임(OPEC+)이 감산 · 증산으로 공급량을 정한다. 수요가 그대로여도 여기서 유가가 뒤집힌다.",
+      "watch": "OPEC+ 회의 · 감산 이행률 · 미 셰일 생산량 · 중동 정세",
+      "choke": "소수 공급 — 세계 원유 공급의 큰 몫을 몇 나라가 쥐고 있어 회의 한 번에 유가 방향이 바뀐다"
+    },
+    "wti": {
+      "what": "미국(WTI) · 북해(브렌트) 기준 유가. 정유 · 화학의 원가이자 항공 · 해운의 연료비이고, 물가로 번져 금리까지 되돌아간다.",
+      "watch": "WTI · 브렌트 · 미 원유 재고(EIA) · 정제마진 · 달러인덱스"
+    },
+    "cpi": {
+      "what": "소비자물가와 기대 인플레. 유가가 올라 물가가 오르면 중앙은행이 금리를 올리게 된다 — 이 지도의 오른쪽에서 왼쪽으로 되돌아가는 고리.",
+      "watch": "미 CPI · PCE · 국내 CPI · 기대 인플레 · 유가"
+    },
+    "bank": {
+      "what": "금리가 오르면 예대마진(대출금리 − 예금금리)이 넓어져 이익이 는다. 너무 오르면 연체가 늘어 되돌아온다.",
+      "watch": "순이자마진(NIM) · 대출 성장률 · 연체율 · 주주환원"
+    },
+    "insur": {
+      "what": "보험료를 받아 채권으로 굴린다. 금리가 오르면 운용수익과 자본비율(K-ICS)이 좋아진다.",
+      "watch": "국고채 10년 · K-ICS 비율 · 보험계약마진(CSM)"
+    },
+    "semi": {
+      "what": "이익이 먼 미래에 크게 잡히는 성장주. 미 10년물이 오르면 할인율이 커져 눌리고, 내리면 가장 먼저 뛴다. 수출주이기도 해서 달러 강세는 ± 로 갈린다.",
+      "watch": "미 10년물 · 메모리 가격 · 원/달러 · 외국인 순매수"
+    },
+    "bio": {
+      "what": "이익이 아직 없거나 먼 회사가 많아 금리에 가장 민감한 성장주. 금리가 내리면 자금 조달이 쉬워진다.",
+      "watch": "미 10년물 · 임상 일정 · 바이오 자금 조달"
+    },
+    "auto": {
+      "what": "달러로 파는 수출주. 원화가 약해지면 환차익 · 가격 경쟁력이 생기고, 금리가 오르면 할부 수요가 눌린다.",
+      "watch": "원/달러 · 미국 판매 · 관세 · 할부금리"
+    },
+    "ship": {
+      "what": "달러로 수주하는 수출주. 환율 수혜에 더해 유가가 오르면 해양플랜트 · LNG선 발주가 는다.",
+      "watch": "원/달러 · 신조선가 · 수주 잔고 · 유가"
+    },
+    "refine": {
+      "what": "원유를 사서 석유제품을 판다. 유가가 오르면 재고 평가이익 · 정제마진이 늘고, 급하게 내리면 거꾸로 받는다.",
+      "watch": "정제마진 · 유가 · 재고 평가손익 · 원/달러"
+    },
+    "chem": {
+      "what": "나프타(원유 부산물)가 원가라 유가가 오르면 원가가 오르고, 제품 가격이 못 따라가면 마진이 눌린다.",
+      "watch": "나프타 가격 · 에틸렌 스프레드 · 중국 수요"
+    },
+    "air": {
+      "what": "연료비가 가장 큰 비용이고 항공기 리스 · 부채가 달러다. 유가와 달러가 같이 오르면 둘 다 받는다.",
+      "watch": "항공유 · 원/달러 · 여객 수요 · 환헤지 비율"
+    },
+    "sea": {
+      "what": "연료비는 유가로 받지만 운임은 달러로 받는다. 탱커는 유가 · 지정학에 따라 운임이 뛰어 ± 로 갈린다.",
+      "watch": "운임지수(SCFI · BDI) · 벙커유 · 원/달러"
+    },
+    "constr": {
+      "what": "금리가 오르면 주택 수요 · PF 조달이 눌리고, 유가가 오르면 자재비가 는다. 금리가 내릴 때 먼저 받는 내수주.",
+      "watch": "국고채 · 주택담보대출 금리 · 분양 · PF 연체"
+    },
+    "util": {
+      "what": "연료(유가 · 가스)를 사서 전기 · 가스를 판다. 요금은 정부가 정해 원가를 바로 못 넘기고, 부채가 커서 금리에도 받는다.",
+      "watch": "유가 · LNG 가격 · 전기 · 가스 요금 조정 · 국고채"
+    }
+  },
+  "scenarios": [
+    {
+      "id": "up",
+      "label": "금리 오를 때",
+      "effects": {
+        "ust": "+",
+        "ktb": "+",
+        "usd": "+",
+        "wti": "-",
+        "cpi": "-",
+        "bank": "+",
+        "insur": "+",
+        "semi": "-",
+        "bio": "-",
+        "auto": "±",
+        "ship": "±",
+        "refine": "±",
+        "chem": "-",
+        "air": "-",
+        "sea": "±",
+        "constr": "-",
+        "util": "-"
+      }
+    },
+    {
+      "id": "down",
+      "label": "금리 내릴 때",
+      "effects": {
+        "ust": "-",
+        "ktb": "-",
+        "usd": "-",
+        "wti": "+",
+        "cpi": "+",
+        "bank": "-",
+        "insur": "-",
+        "semi": "+",
+        "bio": "+",
+        "auto": "±",
+        "ship": "±",
+        "refine": "±",
+        "chem": "+",
+        "air": "+",
+        "sea": "±",
+        "constr": "+",
+        "util": "+"
+      }
+    },
+    {
+      "id": "oilup",
+      "label": "유가 오를 때",
+      "effects": {
+        "cpi": "+",
+        "ust": "+",
+        "usd": "±",
+        "bank": "±",
+        "semi": "±",
+        "auto": "-",
+        "ship": "+",
+        "refine": "+",
+        "chem": "-",
+        "air": "-",
+        "sea": "±",
+        "constr": "-",
+        "util": "-"
+      }
+    }
+  ],
+  "grades": {
+    "lead": "대장주",
+    "driver": "주도주",
+    "parts": "관련주"
+  },
+  "stocks": [
+    {
+      "name": "KB금융",
+      "code": "105560",
+      "node": "bank",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "신한지주",
+      "code": "055550",
+      "node": "bank",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "하나금융지주",
+      "code": "086790",
+      "node": "bank",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "삼성생명",
+      "code": "032830",
+      "node": "insur",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "삼성화재",
+      "code": null,
+      "node": "insur",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "DB손해보험",
+      "code": null,
+      "node": "insur",
+      "grade": "parts",
+      "market": "KR"
+    },
+    {
+      "name": "삼성전자",
+      "code": "005930",
+      "node": "semi",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "SK하이닉스",
+      "code": "000660",
+      "node": "semi",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "삼성바이오로직스",
+      "code": "207940",
+      "node": "bio",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "셀트리온",
+      "code": "068270",
+      "node": "bio",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "현대차",
+      "code": "005380",
+      "node": "auto",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "기아",
+      "code": null,
+      "node": "auto",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "현대모비스",
+      "code": "012330",
+      "node": "auto",
+      "grade": "parts",
+      "market": "KR"
+    },
+    {
+      "name": "HD현대중공업",
+      "code": null,
+      "node": "ship",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "삼성중공업",
+      "code": null,
+      "node": "ship",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "한화오션",
+      "code": null,
+      "node": "ship",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "S-Oil",
+      "code": "010950",
+      "node": "refine",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "SK이노베이션",
+      "code": "096770",
+      "node": "refine",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "LG화학",
+      "code": "051910",
+      "node": "chem",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "롯데케미칼",
+      "code": null,
+      "node": "chem",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "대한항공",
+      "code": null,
+      "node": "air",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "제주항공",
+      "code": null,
+      "node": "air",
+      "grade": "parts",
+      "market": "KR"
+    },
+    {
+      "name": "HMM",
+      "code": "011200",
+      "node": "sea",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "팬오션",
+      "code": "028670",
+      "node": "sea",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "현대건설",
+      "code": null,
+      "node": "constr",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "삼성물산",
+      "code": "028260",
+      "node": "constr",
+      "grade": "driver",
+      "market": "KR"
+    },
+    {
+      "name": "한국전력",
+      "code": "015760",
+      "node": "util",
+      "grade": "lead",
+      "market": "KR"
+    },
+    {
+      "name": "한국가스공사",
+      "code": null,
+      "node": "util",
+      "grade": "driver",
+      "market": "KR"
+    }
+  ],
+  "sites": [
+    {
+      "name": "연준 · 워싱턴",
+      "company": "연준",
+      "node": "fed",
+      "at": [
+        -77.04,
+        38.89
+      ]
+    },
+    {
+      "name": "한국은행 · 서울",
+      "company": "한국은행",
+      "node": "bok",
+      "at": [
+        126.98,
+        37.56
+      ]
+    },
+    {
+      "name": "뉴욕 월가 · 미 국채시장",
+      "company": "월가",
+      "node": "ust",
+      "at": [
+        -74.01,
+        40.71
+      ]
+    },
+    {
+      "name": "OPEC 본부 · 빈",
+      "company": "OPEC+",
+      "node": "opec",
+      "at": [
+        16.37,
+        48.21
+      ]
+    },
+    {
+      "name": "휴스턴 · WTI",
+      "company": "WTI",
+      "node": "wti",
+      "at": [
+        -95.37,
+        29.76
+      ]
+    },
+    {
+      "name": "애버딘 · 북해 브렌트",
+      "company": "브렌트",
+      "node": "wti",
+      "at": [
+        -2.1,
+        57.15
+      ]
+    },
+    {
+      "name": "울산 · 정유 단지",
+      "company": "S-Oil",
+      "node": "refine",
+      "at": [
+        129.31,
+        35.54
+      ]
+    }
+  ],
+  "routes": []
+}

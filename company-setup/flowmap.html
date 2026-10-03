@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>돈의 흐름 지도 · Insight</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css" />
+<!-- 지도 엔진 (2026-10-03 지시 — 「금리와 주식시장의 상관관계를 AI 생태계 지도처럼 · 유가도 · 북극항로 생태계 지도도」).
+     지도가 셋이 되어 AI 생태계 화면(ecosystem.html)을 복사하지 않고 **자료 파일 하나가 한 지도**가 되게 했다 —
+     flowmap.html?map=<이름> 이 data/maps/<이름>.json 을 읽어 세계 지도(지구본)와 흐름도를 그린다.
+     자료 파일 모양은 data/maps/README.md. AI 생태계는 data/maps/ai.json 으로 옮겼고 ecosystem.html 은 여기로 넘긴다.
+     Insight 첫 화면 모달이 이 페이지를 그대로 띄운다 — 주소로 직접 들어와도 같은 것이 열린다 -->
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text-primary); font-family: 'Noto Sans KR', sans-serif; }
+  .wrap { padding: 22px 20px 28px; display: grid; grid-template-columns: 1fr 240px; gap: 20px; min-width: 1180px; }
+  /* .view 위아래에 쌓이는 것의 높이 — 위 padding + h1 + .sub + .views + .bar + 아래 padding (2026-10-02 헤드리스 실측 214).
+     모달(iframe) 안에서는 모달 머리가 제목을 들고 있어 h1 · .sub 을 숨긴다 — 그만큼 줄어든다. 바뀌면 재서 고친다 */
+  :root { --eco-top: 214px; }
+  .in-frame { --eco-top: 122px; }   /* 2026-10-02 헤드리스 실측 — 위 108 + 아래 14 */
+  .in-frame h1, .in-frame .sub { display: none; }
+  .in-frame .wrap { padding: 12px 20px 14px; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 18px; }
+
+  .map { position: relative; display: grid; column-gap: 46px; align-items: center; }
+  svg.links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  /* 선 색은 종류를 뜻한다 — 글씨가 아닌 표시라 색을 그대로 쓴다. 종류별 색은 자료 파일의 lineTypes.color(토큰 이름)로 JS 가 만든다 */
+  svg.links path { fill: none; stroke-width: 1.8; stroke-dasharray: 6 6; opacity: .55; transition: opacity .15s, stroke-width .15s; }
+  .map.flow svg.links path { animation: eco-flow 1.2s linear infinite; }
+  @keyframes eco-flow { to { stroke-dashoffset: -12; } }
+  .map.focus svg.links path { opacity: .12; }
+  .map.focus svg.links path.on { opacity: 1; stroke-width: 3; }
+  @media (prefers-reduced-motion: reduce) { .map.flow svg.links path { animation: none; } }
+
+  .choke::after { content: ''; position: absolute; inset: -5px; border-radius: 18px; pointer-events: none;
+                  box-shadow: 0 0 0 2px var(--kh-danger); animation: eco-pulse 1.8s ease-out infinite; }
+  @keyframes eco-pulse { 0% { opacity: .9; } 70% { opacity: 0; transform: scale(1.06); } 100% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .choke::after { animation: none; } }
+
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 18px; font-size: 12px; }
+  .bar button { font: inherit; border: 0; border-radius: 99px; padding: 5px 12px; cursor: pointer;
+                background: var(--bg-card); color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; }
+  .bar button.is-on { background: var(--accent-faint); color: var(--accent); font-weight: 700; }
+  .bar .sw { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+  .bar .ring { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 2px var(--kh-danger); display: inline-block; }
+  .bar .sep { width: 1px; height: 16px; background: var(--border-strong); margin: 0 4px; }
+  .stk { display: inline-flex; align-items: center; gap: 3px; margin: 1px 4px 1px 0; white-space: nowrap; }
+  .stk i { font-style: normal; font-size: 9.5px; font-weight: 700; padding: 0 5px; border-radius: 99px; line-height: 15px; }
+  /* 등급 배지 — 첫째 accent · 둘째 ok · 셋째 warn (자료의 grades 순서) · 연한 바탕에 같은 색의 진한 글씨 */
+  .g-1 i { background: var(--accent-faint); color: var(--accent); }
+  .g-2 i { background: rgb(var(--kh-ok-rgb) / 10%); color: rgb(var(--kh-ok-rgb)); }
+  .g-3 i { background: rgb(var(--kh-warn-rgb) / 10%); color: rgb(var(--kh-warn-rgb)); }
+  .g-4 i { background: var(--kh-danger-faint); color: var(--kh-danger); }
+  .bar .lg { display: inline-flex; gap: 8px; align-items: center; color: var(--text-muted); }
+  .bar .lg .stk { margin: 0; }
+  .node .d .stk, .cell .t .stk { font-weight: 500; }
+  /* 시나리오 배지 — 「오를 때」 를 켜면 칸 모서리에 + − ± 가 뜬다 */
+  .eff { display: none; position: absolute; right: -6px; top: -8px; min-width: 20px; height: 20px; border-radius: 99px; font-size: 12px; font-weight: 700;
+         line-height: 20px; text-align: center; padding: 0 5px; }
+  .map.sc .eff:not(:empty) { display: block; }
+  .eff.up { background: rgb(var(--kh-ok-rgb) / 12%); color: rgb(var(--kh-ok-rgb)); }
+  .eff.down { background: var(--kh-danger-faint); color: var(--kh-danger); }
+  .eff.mixed { background: var(--bg-elevated); color: var(--text-muted); }
+  .panel .choke-note { background: var(--kh-danger-faint); color: var(--kh-danger); border-radius: 8px; padding: 6px 9px; margin-top: 10px; font-size: 12px; line-height: 1.5; }
+
+  .col { display: flex; flex-direction: column; gap: 14px; }
+  .col .gap { height: 22px; }
+  .col-h { color: var(--text-muted); font-size: 11px; font-weight: 700; margin-bottom: -4px; }
+  .node { background: var(--bg-card); border-radius: 14px; padding: 11px 12px 13px; text-align: center;
+          cursor: pointer; position: relative; z-index: 1; transition: box-shadow .15s, opacity .15s; }
+  .node:hover, .cell:hover { box-shadow: var(--shadow-md); }
+  .node .k { display: inline-block; background: var(--accent-faint); color: var(--accent); font-size: 11px; font-weight: 700;
+             padding: 2px 9px; border-radius: 99px; margin-bottom: 7px; }
+  .node .t { font-weight: 700; font-size: 14px; }
+  .node .d { color: var(--text-secondary); font-size: 11.5px; margin-top: 4px; line-height: 1.5; }
+  .cell { background: var(--bg-card); border-radius: 10px; padding: 8px 12px; cursor: pointer; position: relative; z-index: 1;
+          transition: box-shadow .15s, opacity .15s; }
+  .cell .k { color: var(--accent); font-weight: 700; font-size: 12px; display: block; }
+  .cell .t { font-weight: 500; font-size: 12.5px; }
+  .map.focus .node, .map.focus .cell { opacity: .35; }
+  .map.focus .lit { opacity: 1; }
+  .map.focus .sel { box-shadow: 0 0 0 2px var(--accent); }
+
+  .panel { background: var(--bg-card); border-radius: 14px; padding: 16px; align-self: start; }
+  .panel h2 { font-size: 15px; margin: 0 0 10px; }
+  .panel .empty { color: var(--text-muted); font-size: 13px; line-height: 1.6; }
+  .panel dl { margin: 0; font-size: 13px; }
+  .panel dt { color: var(--text-muted); font-size: 12px; margin-top: 10px; }
+  .panel dd { margin: 2px 0 0; line-height: 1.55; }
+  .panel .muted { color: var(--text-muted); }
+  .err { background: var(--kh-danger-faint); color: var(--kh-danger); border-radius: 10px; padding: 12px 14px; font-size: 13px; }
+</style>
+<!-- 세계 지도 — 지도 그림은 맥미니 /Users/kjc/data/maps 의 PMTiles 를 서버가 /maps/ 로 낸다. 라이브러리는 아직 CDN. maplibre 5.x(6 은 ESM 만) -->
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/pmtiles@4.5.0/dist/pmtiles.js"></script>
+<script src="https://unpkg.com/@protomaps/basemaps@5.7.2/dist/basemaps.js"></script>
+<style>
+  .views { display: inline-flex; background: var(--bg-elevated); border-radius: 10px; padding: 3px; margin: 0 0 14px; }
+  .views button { font: inherit; font-size: 13px; border: 0; background: none; padding: 6px 16px; border-radius: 8px;
+                  cursor: pointer; color: var(--text-secondary); }
+  .views button.is-on { background: var(--bg-card); color: var(--text-primary); font-weight: 700; }
+  /* 두 화면이 같은 높이 — 창에서 위아래를 뺀 만큼. 흐름도가 길면 안에서 스크롤한다 — 탭을 바꿔도 자리가 안 움직인다 */
+  .view { height: max(420px, calc(100vh - var(--eco-top))); overflow: auto; }
+  .view[hidden] { display: none; }
+  #geo { height: calc(100% - 26px); border-radius: 14px; overflow: hidden; position: relative; }
+  #geo.globe { background: var(--overlay-bg); }   /* 지구본일 때는 우주처럼 어둡게 — 어둡게 두는 예외 토큰(이미지 확대 배경) */
+  .geo-ctl { position: absolute; left: 10px; top: 10px; z-index: 2; display: flex; gap: 6px; }
+  .geo-ctl button { font: inherit; font-size: 12px; border: 0; border-radius: 99px; padding: 5px 11px; cursor: pointer;
+                    background: var(--bg-card); color: var(--text-secondary); box-shadow: var(--shadow-md); }
+  .geo-ctl button.is-on { background: var(--accent-faint); color: var(--accent); font-weight: 700; }
+  #geo.choke-only .pin:not(.choke) { opacity: .25; }
+  .pin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--bg-card); cursor: pointer; }
+  .pin.choke::after { inset: -6px; border-radius: 50%; }
+  .pin .lb { position: absolute; left: 16px; top: -4px; max-width: 160px; width: max-content; line-height: 1.35; font-size: 11px; font-weight: 700;
+             background: var(--bg-card); color: var(--text-primary); padding: 1px 6px; border-radius: 6px; pointer-events: none; }
+  .pin .lb.left { left: auto; right: 16px; text-align: right; }
+  .pin .lb[hidden] { display: none; }
+  .geo-note { color: var(--text-muted); font-size: 11.5px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1 id="h1"></h1>
+    <p class="sub" id="sub"></p>
+    <div class="views" id="views"><button data-v="geo" class="is-on">세계 지도</button><button data-v="flow" id="flow-tab">흐름도</button></div>
+    <!-- 흐름 · 갈래 · 병목 · 시나리오 · 등급 범례 — 두 화면이 같이 쓴다. 갈래 · 시나리오 · 범례 단추는 자료에서 만든다 -->
+    <div class="bar" id="bar">
+      <button data-act="flow" class="is-on">▶ 흐름</button>
+      <span class="sep"></span>
+      <span id="types"></span>
+      <span class="sep"></span>
+      <button data-act="choke"><span class="ring"></span>병목만 보기</button>
+      <span id="scen"></span>
+      <span class="sep"></span>
+      <span class="lg" id="lg"></span>
+    </div>
+    <div class="view" id="v-flow" hidden>
+      <div class="map flow" id="map"><svg class="links" id="links"></svg></div>
+    </div>
+    <div class="view" id="v-geo">
+      <div id="geo">
+        <div class="geo-ctl" id="geo-ctl">
+          <button data-g="globe" class="is-on">지구본</button>
+          <button data-g="spin" class="is-on">▶ 회전</button>
+          <button data-g="home">처음으로</button>
+        </div>
+      </div>
+      <div class="geo-note" id="geo-note"></div>
+    </div>
+  </div>
+  <aside class="panel" id="panel"></aside>
+</div>
+<style id="dyn"></style>
+
+<script>
+if (window !== window.top) document.documentElement.classList.add('in-frame');   // 모달 안이면 제목 줄을 숨긴다 — 모달 머리가 제목을 들고 있다
+
+const $ = id => document.getElementById(id);
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const map = $('map'), svg = $('links'), panel = $('panel');
+// 색 토큰 이름 → theme.css 변수. 자료 파일은 이 이름만 쓴다(#색 금지)
+const TOKEN = { ok: '--kh-ok-rgb', accent: '--accent-rgb', warn: '--kh-warn-rgb', danger: '--kh-danger-rgb' };
+const rootCss = getComputedStyle(document.documentElement);
+const rgbOf = v => 'rgb(' + rootCss.getPropertyValue(v).trim().split(/\s+/).join(',') + ')';
+
+let D = null;                    // 지도 자료
+let LINKS = [], EXTRA = [], INFO = {}, STOCKS = [], GRADES = {}, GRADE_NO = {}, SITES = [], TYPES = {}, LINE_COLOR = {};
+let sel = null, scenario = null;
+const EMPTY = '<h2>칸을 눌러 보세요</h2><div class="empty">그 칸의 설명 · 종목 · 볼 것 · 이어진 칸이 여기 뜹니다.</div>';
+const el = id => map.querySelector(`[data-id="${id}"]`);
+const chip = st => `<span class="stk${st.grade ? ' g-' + (GRADE_NO[st.grade] || 4) : ''}">${esc(st.name)}${st.grade ? `<i>${esc(GRADES[st.grade] || st.grade)}</i>` : ''}</span>`;
+const stocksOf = id => STOCKS.filter(st => st.node === id || (st.also || []).includes(id));
+
+// ── 자료로 화면을 짓는다 ──
+function build(d) {
+  D = d;
+  document.title = `${d.title} · Insight`;
+  $('h1').textContent = d.title; $('sub').textContent = d.sub || '';
+  $('flow-tab').textContent = d.flowLabel || '흐름도';
+  $('geo-note').textContent = d.geoNote || '점은 본사 · 주요 거점이 있는 도시에 박았다(도시 수준) · 선은 흐름도의 연결을 칸의 대표 자리끼리 그은 것 · 지도 © OpenStreetMap · Protomaps';
+  LINKS = d.links || []; EXTRA = d.extra || []; INFO = d.info || {};
+  STOCKS = d.stocks || []; GRADES = d.grades || {}; SITES = d.sites || []; TYPES = d.lineTypes || {};
+  Object.keys(GRADES).forEach((k, i) => { GRADE_NO[k] = i + 1; });
+  // 선 종류별 CSS — 색은 토큰으로
+  const css = [];
+  Object.entries(TYPES).forEach(([t, v]) => {
+    const tok = TOKEN[v.color] || TOKEN.accent;
+    LINE_COLOR[t] = rgbOf(tok);
+    css.push(`svg.links path.${t} { stroke: rgb(var(${tok})); }`,
+             `.map.only-${t} svg.links path:not(.${t}) { opacity: .06; }`,
+             `.pin.${t} { background: rgb(var(${tok})); }`);
+  });
+  $('dyn').textContent = css.join('\n');
+  $('types').innerHTML = Object.entries(TYPES).map(([t, v]) =>
+    `<button data-only="${t}"><span class="sw" style="background:rgb(var(${TOKEN[v.color] || TOKEN.accent}))"></span>${esc(v.label)}</button>`).join('');
+  $('scen').innerHTML = (d.scenarios || []).length ? '<span class="sep"></span>' + d.scenarios.map(s => `<button data-sc="${esc(s.id)}">${esc(s.label)}</button>`).join('') : '';
+  $('lg').innerHTML = Object.entries(GRADES).map(([k, v]) => `<span class="stk g-${GRADE_NO[k]}"><i>${esc(v)}</i></span>`).join('');
+  // 열과 칸
+  map.style.gridTemplateColumns = `repeat(${d.columns.length}, 1fr)`;
+  map.innerHTML = '<svg class="links" id="links"></svg>' + d.columns.map(col => `<div class="col"><div class="col-h">${esc(col.head)}</div>` +
+    col.items.map(it => it.gap ? '<div class="gap"></div>'
+      : it.type === 'cell' ? `<div class="cell" data-id="${esc(it.id)}"><span class="k">${esc(it.k)}</span><span class="t">${esc(it.t || '')}</span><b class="eff"></b></div>`
+      : `<div class="node${it.choke ? ' choke' : ''}" data-id="${esc(it.id)}"><span class="k">${esc(it.k)}</span><div class="t">${esc(it.t || '')}</div><div class="d">${esc(it.d || '')}</div><b class="eff"></b></div>`
+    ).join('') + '</div>').join('');
+  // 종목 칩 — 회사 이름 자리(.node .d · .cell .t)를 칩으로. 종목이 없는 칸은 글 그대로
+  map.querySelectorAll('[data-id]').forEach(n => {
+    const list = stocksOf(n.dataset.id); if (!list.length) return;
+    const slot = n.classList.contains('node') ? n.querySelector('.d') : n.querySelector('.t');
+    if (slot) slot.innerHTML = list.map(chip).join('');
+  });
+  panel.innerHTML = EMPTY;
+}
+const svgEl = () => map.querySelector('svg.links');
+
+function path(a, b, extra) {
+  const m = map.getBoundingClientRect(), A = el(a).getBoundingClientRect(), B = el(b).getBoundingClientRect();
+  if (Math.abs(A.left - B.left) < 4) {                      // 같은 열 — 오른쪽으로 둥글게 돌아 잇는다
+    const x = A.right - m.left, y1 = A.top + A.height / 2 - m.top, y2 = B.top + B.height / 2 - m.top;
+    if (!extra) return `M${A.left + A.width / 2 - m.left},${A.bottom - m.top} L${B.left + B.width / 2 - m.left},${B.top - m.top}`;
+    return `M${x},${y1} C${x + 30},${y1} ${x + 30},${y2} ${x},${y2}`;
+  }
+  const x1 = A.right - m.left, y1 = A.top + A.height / 2 - m.top, x2 = B.left - m.left, y2 = B.top + B.height / 2 - m.top;
+  const mx = (x1 + x2) / 2;
+  return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+}
+function draw() {
+  if (!D) return;
+  const touch = ([a, b]) => sel && (a === sel || b === sel);
+  const ok = ([a, b]) => el(a) && el(b);
+  svgEl().innerHTML =
+    LINKS.filter(ok).map(l => `<path class="${esc(l[2])} ${touch(l) ? 'on' : ''}" d="${path(l[0], l[1], false)}"/>`).join('') +
+    EXTRA.filter(ok).filter(touch).map(l => `<path class="${esc(l[2])} on" d="${path(l[0], l[1], true)}"/>`).join('');
+  drawGeo();
+}
+function pick(id) {
+  sel = sel === id ? null : id;
+  map.classList.toggle('focus', !!sel);
+  map.querySelectorAll('[data-id]').forEach(n => n.classList.remove('lit', 'sel'));
+  if (!sel) { panel.innerHTML = EMPTY; draw(); return; }
+  const near = new Set([sel]);
+  [...LINKS, ...EXTRA].forEach(([a, b]) => { if (a === sel) near.add(b); if (b === sel) near.add(a); });
+  near.forEach(i => el(i) && el(i).classList.add('lit'));
+  const n = el(sel), info = INFO[sel] || {};
+  n.classList.add('sel');
+  const title = x => x.classList.contains('cell') ? x.querySelector('.k').textContent : `${x.querySelector('.k').textContent} — ${x.querySelector('.t').textContent}`;
+  const names = [...near].filter(i => i !== sel && el(i)).map(i => el(i).classList.contains('cell') ? el(i).querySelector('.k').textContent : el(i).querySelector('.t').textContent).join(' · ');
+  const sc = (D.scenarios || []).filter(s => s.effects && s.effects[sel]).map(s => `${esc(s.label)} <b>${esc(s.effects[sel])}</b>`).join(' · ');
+  panel.innerHTML = `<h2>${esc(title(n))}</h2>
+    <dl><dt>무엇인가</dt><dd>${esc(info.what || '—')}</dd>
+    <dt>종목</dt><dd>${stocksOf(sel).length ? stocksOf(sel).map(chip).join('') : esc((n.querySelector('.d') || n.querySelector('.t')).textContent)}</dd>
+    <dt>볼 것</dt><dd>${esc(info.watch || '—')}</dd>
+    ${sc ? `<dt>시나리오</dt><dd>${sc}</dd>` : ''}
+    <dt>이어진 칸</dt><dd>${esc(names)}</dd>
+    ${info.choke ? `<div class="choke-note">병목 · ${esc(info.choke)}</div>` : ''}
+    <dt>최근 분석</dt><dd class="muted">아직 없음 — 종목 분석 글과 이어 붙일 자리</dd>
+    <dt>확인</dt><dd class="muted">${esc(D.asOf || '')} 시점 판단 — 아직 출처로 확인하지 않았다</dd></dl>`;
+  draw();
+}
+// 시나리오 — 켜면 칸 모서리에 + − ± 배지
+function applyScenario() {
+  const s = (D.scenarios || []).find(x => x.id === scenario);
+  map.classList.toggle('sc', !!s);
+  map.querySelectorAll('[data-id]').forEach(n => {
+    const b = n.querySelector('.eff'), v = s && s.effects ? s.effects[n.dataset.id] : null;
+    b.textContent = v || ''; b.className = 'eff ' + (v === '+' ? 'up' : v === '-' || v === '−' ? 'down' : v ? 'mixed' : '');
+  });
+  document.querySelectorAll('#scen [data-sc]').forEach(x => x.classList.toggle('is-on', x.dataset.sc === scenario));
+}
+map.addEventListener('click', e => { const n = e.target.closest('[data-id]'); if (n) pick(n.dataset.id); });
+$('bar').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.act === 'flow') { b.classList.toggle('is-on'); map.classList.toggle('flow'); geoFlow(); return; }
+  if (b.dataset.act === 'choke') {
+    const on = b.classList.toggle('is-on');
+    map.classList.toggle('focus', on); map.querySelectorAll('[data-id]').forEach(n => n.classList.toggle('lit', on && n.classList.contains('choke')));
+    if (on) { sel = null; panel.innerHTML = EMPTY; }
+    draw(); return;
+  }
+  if (b.dataset.sc) { scenario = scenario === b.dataset.sc ? null : b.dataset.sc; applyScenario(); return; }
+  const k = b.dataset.only, was = b.classList.contains('is-on');   // 같은 단추를 다시 누르면 전부 보기
+  document.querySelectorAll('#bar [data-only]').forEach(x => x.classList.remove('is-on'));
+  Object.keys(TYPES).forEach(t => map.classList.remove('only-' + t));
+  if (!was) { b.classList.add('is-on'); map.classList.add('only-' + k); }
+  draw();
+});
+addEventListener('resize', draw);
+$('v-flow').addEventListener('scroll', draw, { passive: true });
+document.fonts.ready.then(draw);
+
+// ── 세계 지도 ──
+const nodesOf = s => [s.node, ...(s.also || [])];
+const repOf = id => SITES.find(s => (D.rep || {})[id] ? s.name === D.rep[id] : nodesOf(s).includes(id));
+// 지도에 그을 연결 — 흐름도 그대로. 자리가 없는 칸은 건너뛰고 그 아래 칸으로 바로 잇는다
+function geoLinks() {
+  const all = [...LINKS, ...EXTRA], out = [];
+  const push = (a, b, t, src) => { if (repOf(a) && repOf(b)) out.push({ a, b, t, src }); };
+  all.forEach(l => {
+    const [a, b, t] = l;
+    if (!repOf(b)) all.filter(m => m[0] === b).forEach(([, c, t2]) => push(a, c, t2, l));
+    else if (repOf(a)) push(a, b, t, l);
+  });
+  return out;
+}
+const TYPE_OF = id => (LINKS.find(l => l[1] === id) || [0, 0, Object.keys(TYPES)[0]])[2];
+let geo = null, geoReady = false, flowTimer = null;
+// 경도 차가 180 을 넘으면 서쪽 것을 한 바퀴(+360) 돌려 가까운 쪽으로 긋는다
+const across = (A, B) => Math.abs(A[0] - B[0]) > 180 ? (A[0] < B[0] ? [[A[0] + 360, A[1]], B] : [A, [B[0] + 360, B[1]]]) : [A, B];
+// 길(항로 · 송유관) — 점이 여럿이라 앞 점에 이어 붙이며 180 을 넘지 않게 푼다
+const unwrap = coords => coords.reduce((o, c) => { if (!o.length) return [c]; const p = o[o.length - 1]; let lng = c[0];
+  while (lng - p[0] > 180) lng -= 360; while (p[0] - lng > 180) lng += 360; o.push([lng, c[1]]); return o; }, []);
+function geoData() {
+  const touch = l => sel && (l.src[0] === sel || l.src[1] === sel || l.a === sel || l.b === sel);
+  return { type: 'FeatureCollection', features: geoLinks().map(l => {
+    const [A, B] = across(repOf(l.a).at, repOf(l.b).at);
+    return { type: 'Feature', properties: { t: l.t, on: touch(l) ? 1 : 0 }, geometry: { type: 'LineString', coordinates: [A, B] } };
+  }) };
+}
+function routeData() {
+  return { type: 'FeatureCollection', features: (D.routes || []).map(r => ({ type: 'Feature', properties: { t: r.type, name: r.name },
+    geometry: { type: 'LineString', coordinates: unwrap(r.coords || []) } })) };
+}
+function drawGeo() {
+  if (!geoReady) return;
+  geo.getSource('flow').setData(geoData());
+  const focus = map.classList.contains('focus');
+  const only = Object.keys(TYPES).find(k => map.classList.contains('only-' + k));
+  const choke = document.querySelector('#bar [data-act="choke"]').classList.contains('is-on');
+  $('geo').classList.toggle('choke-only', choke);
+  geo.setPaintProperty('flow', 'line-opacity', choke ? .12 : focus ? ['case', ['==', ['get', 'on'], 1], 1, .12] : only ? ['case', ['==', ['get', 't'], only], .55, .06] : .55);
+  geo.setPaintProperty('flow', 'line-width', focus ? ['case', ['==', ['get', 'on'], 1], 3, 1.8] : 1.8);
+  geo.setPaintProperty('route', 'line-opacity', only ? ['case', ['==', ['get', 't'], only], .9, .1] : .9);
+}
+const DASH = [[0, 3, 3, 0], [1, 3, 2, 0], [2, 3, 1, 0], [3, 3, 0, 0], [0, 1, 3, 2], [0, 2, 3, 1]];
+function geoFlow() {
+  if (!geoReady) return;
+  const on = map.classList.contains('flow') && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  clearInterval(flowTimer); flowTimer = null;
+  if (!on) { geo.setPaintProperty('flow', 'line-dasharray', [3, 3]); return; }
+  let i = 0;
+  flowTimer = setInterval(() => { i = (i + 1) % DASH.length; geo.setPaintProperty('flow', 'line-dasharray', DASH[i]); }, 120);
+}
+function lineColorExpr() {
+  const m = ['match', ['get', 't']];
+  Object.keys(LINE_COLOR).forEach(t => m.push(t, LINE_COLOR[t]));
+  m.push(Object.values(LINE_COLOR)[0] || rgbOf(TOKEN.accent));
+  return m;
+}
+function buildGeo() {
+  const box = $('geo');
+  try {
+    maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile);
+    const files = ['world-z8', 'korea-z15', 'taiwan-z15', 'siliconvalley-z15', 'phoenix-z15'];
+    const sources = {}, layers = [];
+    files.forEach((f, i) => {
+      sources[f] = { type: 'vector', url: `pmtiles://${location.origin}/maps/${f}.pmtiles`,
+                     attribution: i ? '' : '<a href="https://protomaps.com">Protomaps</a> © <a href="https://openstreetmap.org">OpenStreetMap</a>' };
+      basemaps.layers(f, basemaps.namedFlavor('light'), { lang: 'ko' }).filter(l => i === 0 || l.type !== 'background')
+        .forEach(l => layers.push({ ...l, id: `${f}-${l.id}` }));
+    });
+    sources.route = { type: 'geojson', data: routeData() };
+    layers.push({ id: 'route', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' },
+                  paint: { 'line-color': lineColorExpr(), 'line-width': 2.6, 'line-opacity': .9 } });
+    sources.flow = { type: 'geojson', data: { type: 'FeatureCollection', features: [] } };
+    layers.push({ id: 'flow', type: 'line', source: 'flow', layout: { 'line-cap': 'round' },
+                  paint: { 'line-color': lineColorExpr(), 'line-width': 1.8, 'line-opacity': .55, 'line-dasharray': [3, 3] } });
+    geo = new maplibregl.Map({
+      container: 'geo', center: D.geoCenter || [160, 32], zoom: 1.6,
+      style: { version: 8, glyphs: 'https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf',
+               sprite: 'https://protomaps.github.io/basemaps-assets/sprites/v4/light', sources, layers },
+    });
+  } catch (e) {
+    // GPU 가 없는 기기 — 지구본을 못 그린다. 빈 칸 대신 알리고 흐름도로 간다 (창구 검수 「봐야 할 자리」)
+    console.error('[지도] 못 그렸습니다', e);
+    box.innerHTML = '<div class="err">이 기기에서는 세계 지도를 그릴 수 없습니다(그래픽 기능 없음). 흐름도로 보여 드립니다.</div>';
+    $('flow-tab').click();
+    return;
+  }
+  geo.addControl(new maplibregl.NavigationControl({ showCompass: false }));
+  const pins = SITES.map(s => {
+    const d = document.createElement('div');
+    const n = el(s.node);
+    d.className = `pin ${esc(TYPE_OF(s.node))}${n && n.classList.contains('choke') ? ' choke' : ''}`;
+    d.innerHTML = `<span class="lb">${esc(s.name)}</span>`;
+    d.addEventListener('click', ev => { ev.stopPropagation(); if (sel !== s.node && n) pick(s.node); });
+    new maplibregl.Marker({ element: d }).setLngLat(s.at).addTo(geo);
+    return { s, lb: d.querySelector('.lb') };
+  });
+  let globeOn = true, spinOn = true, hover = false, dragging = false;
+  function fitGlobe() {
+    const want = Math.min(box.clientWidth, box.clientHeight) * 0.9;
+    let z = geo.getZoom();
+    for (let i = 0; i < 12; i++) {
+      const c = geo.getCenter().lng, d = Math.abs(geo.project([c + 90, 0]).x - geo.project([c - 90, 0]).x);
+      if (!d || Math.abs(d - want) < 2) break;
+      z += Math.log2(want / d); geo.jumpTo({ zoom: z });
+    }
+    return z;
+  }
+  const HOME = D.geoCenter || [150, 20];
+  const fitWorld = (jump) => {
+    if (globeOn) {
+      geo.setMinZoom(0);
+      if (jump) { geo.jumpTo({ center: HOME }); const z = fitGlobe(); geo.setMinZoom(Math.max(0, z - 0.6)); }
+      return;
+    }
+    const z = Math.log2(geo.getContainer().clientWidth / 512);
+    geo.setMinZoom(z);
+    if (jump || geo.getZoom() < z) geo.jumpTo({ center: [140, 22], zoom: z });
+  };
+  function applyProjection() {
+    geo.setProjection({ type: globeOn ? 'globe' : 'mercator' });
+    box.classList.toggle('globe', globeOn);
+    document.querySelector('#geo-ctl [data-g="globe"]').classList.toggle('is-on', globeOn);
+    fitWorld(true);
+  }
+  (function turn() {
+    if (globeOn && spinOn && !hover && !dragging && !document.hidden && geoReady && !$('v-geo').hidden) {
+      const c = geo.getCenter(); geo.setCenter([c.lng - 0.04, c.lat]);
+    }
+    requestAnimationFrame(turn);
+  })();
+  box.addEventListener('mouseenter', () => { hover = true; });
+  box.addEventListener('mouseleave', () => { hover = false; });
+  geo.on('dragstart', () => { dragging = true; }); geo.on('dragend', () => { dragging = false; });
+  $('geo-ctl').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.g === 'globe') { globeOn = !globeOn; applyProjection(); }
+    if (b.dataset.g === 'spin') { spinOn = !spinOn; b.classList.toggle('is-on', spinOn); }
+    if (b.dataset.g === 'home') fitWorld(true);
+  });
+  const shortName = s => s.name.split(' ')[0];
+  let lastLabel = 0;
+  function labelPins() {
+    const now = performance.now();
+    if (now - lastLabel < 150) return;
+    lastLabel = now;
+    const c = geo.getCenter().lng;
+    const near = ([lng, lat]) => [lng + Math.round((c - lng) / 360) * 360, lat];
+    const far = geo.getZoom() < 5, pts = pins.map(p => ({ p, xy: geo.project(near(p.s.at)) }));
+    const done = new Set();
+    pts.forEach(a => {
+      if (done.has(a.p)) return;
+      const grp = far ? pts.filter(b => !done.has(b.p) && Math.hypot(a.xy.x - b.xy.x, a.xy.y - b.xy.y) < 36) : [a];
+      grp.forEach(b => done.add(b.p));
+      const gradeOf = st => { const x = STOCKS.find(y => y.name === st.company); return x && x.grade ? ' · ' + (GRADES[x.grade] || x.grade) : ''; };
+      const names = [...new Set(grp.map(b => far ? shortName(b.p.s) : b.p.s.name + gradeOf(b.p.s)))];
+      a.p.lb.textContent = names.join(' · ');
+      a.p.lb.hidden = false;
+      a.p.lb.classList.toggle('left', a.xy.x > geo.getContainer().clientWidth * 0.62);
+      grp.slice(1).forEach(b => { b.p.lb.hidden = true; });
+    });
+    const shown = pins.filter(p => !p.lb.hidden), hit = (a, b) => !(a.right < b.left || b.right < a.left || a.bottom < b.top || b.bottom < a.top);
+    shown.forEach((p, i) => {
+      const r = p.lb.getBoundingClientRect();
+      if (shown.slice(0, i).some(q => hit(r, q.lb.getBoundingClientRect()))) p.lb.classList.toggle('left');
+    });
+  }
+  geo.on('resize', () => fitWorld(false));
+  geo.on('moveend', labelPins);
+  geo.on('load', () => { geoReady = true; applyProjection(); lastLabel = 0; labelPins(); drawGeo(); geoFlow(); });
+}
+function showView(v) {
+  document.querySelectorAll('#views button').forEach(x => x.classList.toggle('is-on', x.dataset.v === v));
+  $('v-flow').hidden = v !== 'flow';
+  $('v-geo').hidden = v !== 'geo';
+  if (v === 'geo') { if (!geo) buildGeo(); else geo.resize(); } else draw();
+}
+$('views').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showView(b.dataset.v); });
+
+// ── 시작: ?map=<이름> 의 자료를 읽는다 (기본 ai) · ?view=flow 면 흐름도부터 ──
+(async () => {
+  const q = new URLSearchParams(location.search), id = (q.get('map') || 'ai').replace(/[^a-z0-9_-]/gi, '');
+  try {
+    const r = await fetch(`data/maps/${id}.json`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    build(await r.json());
+  } catch (e) {
+    console.error('[지도] 자료를 못 읽었습니다', id, e);
+    panel.innerHTML = `<div class="err">지도 자료(data/maps/${esc(id)}.json)를 못 읽었습니다.</div>`;
+    return;
+  }
+  showView(q.get('view') === 'flow' ? 'flow' : 'geo');
+})();
+</script>
+</body>
+</html>
