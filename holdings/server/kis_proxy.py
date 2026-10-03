@@ -3837,7 +3837,7 @@ def _minutes_have_today(code):
             rows = conn.execute(
                 "SELECT ts FROM candles WHERE code = ? AND period IN ('1m', '5m')"
                 " AND ts LIKE ?",
-                (code, _today_kst() + "%"),
+                (code, _minutes_trade_day() + "%"),     # ④ 주말엔 금요일 칸
             ).fetchall()
     except Exception:
         return set()
@@ -4303,6 +4303,41 @@ def _today_kst():
     return datetime.now(KST).strftime("%Y%m%d")
 
 
+# ── 분봉은 「오늘」 이 아니라 「마지막 거래일」 로 센다 (2026-10-03 지시 ④) ──
+#
+# 주말에 5분봉을 열 때마다 하루치를 통째로 다시 받아 **15~31초**가 걸렸다(개발 실측 ·
+# qa 4초 · KIS 25~37건). 원인은 셋이 같은 뿌리다 — **「오늘 날짜 · 벽시계」 로 셌다.**
+#   ㉠ dayfill 키가 토요일 날짜라 「오늘치 안 받음」 → 하루치 다시
+#   ㉡ `_minutes_have_today` 가 토요일 칸을 찾아 빈 집합 → 금요일 칸을 전부 다시
+#   ㉢ 2번(마지막 봉이 1시간 넘게 오래됨)이 주말 · 장 뒤엔 늘 참
+# 그리고 받아도 새 봉이 없다 — KIS 는 그날(거래일) 분봉만 준다.
+#
+# **휴일은 못 가린다** — 달력이 없다(`_last_closed_5m_slot` 도 같다). 휴일엔 그날
+# 하루치를 한 번 헛받는다 — 전과 같은 한계다.
+def _minutes_trade_day(now=None):
+    """분봉이 속한 거래일 YYYYMMDD — 주말은 금요일, 평일 08:00 전은 앞 평일."""
+    now = now or datetime.now(KST)
+    d = now
+    if d.weekday() < 5 and d.hour * 60 + d.minute < MINUTE_DAY_START:
+        d = d - timedelta(days=1)
+    while d.weekday() >= 5:
+        d = d - timedelta(days=1)
+    return d.strftime("%Y%m%d")
+
+
+def _minutes_live(now=None):
+    """지금 새 분봉이 생길 수 있나 — 평일 08:00 부터 통합 거래가 끝난 뒤 10분(`DWMY_AT_MIN`)까지.
+
+    끝을 20:00 이 아니라 20:10 으로 두는 것은 마지막 봉이 KIS 에 들어가는 여유다
+    (`DWMY_AT_MIN` 주석 — 아직 못 쟀다). 같은 값을 또 적지 않고 그것을 쓴다.
+    """
+    now = now or datetime.now(KST)
+    if now.weekday() >= 5:
+        return False
+    cur = now.hour * 60 + now.minute
+    return MINUTE_DAY_START <= cur < DWMY_AT_MIN
+
+
 def _minutes_need_day(code, period, rows, gap_check=True):
     """하루치를 통째로 받아야 하나.
 
@@ -4317,7 +4352,7 @@ def _minutes_need_day(code, period, rows, gap_check=True):
 
     1번은 하루 한 번만 걸린다. 날짜를 값에 넣어 키가 늘어나지 않게 한다.
     """
-    if _meta_get("dayfill:%s:%s" % (code, period)) != _today_kst():
+    if _meta_get("dayfill:%s:%s" % (code, period)) != _minutes_trade_day():
         return True
     if not rows:
         return True
@@ -4331,6 +4366,10 @@ def _minutes_need_day(code, period, rows, gap_check=True):
     # 화면이 여는 종목은 그대로 2번을 본다. 앞쪽 구멍을 메워야 하고,
     # 한 종목이라 부담도 작다.
     if not gap_check:
+        return False
+    # **새 봉이 생길 수 없는 때(주말 · 장 앞뒤)는 2번을 안 본다** (④ · 위 주석 ㉢).
+    # 그때 「마지막 봉이 오래됨」 은 늘 참인데 받아도 새 봉이 없다.
+    if not _minutes_live():
         return False
     try:
         ts = rows[-1]["ts"]                      # YYYYMMDDHHMM
@@ -4507,7 +4546,11 @@ def get_chart(cfg, code, period, limit, gap_check=True):
             # 있었던 것이라, 종목마다 봉 개수가 크게 갈렸다.
             if _minutes_need_day(code, period, rows, gap_check):
                 raw = fetch_minutes_day(cfg, code)
-                _meta_set("dayfill:%s:%s" % (code, period), _today_kst())
+                _meta_set("dayfill:%s:%s" % (code, period), _minutes_trade_day())
+            elif rows and not _minutes_live():
+                # ④ 그 거래일 하루치를 이미 받았고 지금은 새 봉이 안 생긴다 —
+                # KIS 를 부르지 않는다(주말에 화면이 열려 있으면 30초마다 한 건씩 나갔다).
+                raw = []
             else:
                 raw = fetch_minutes_from_kis(cfg, code)
             bars = aggregate_minutes(raw, 5) if period == "5m" else raw
