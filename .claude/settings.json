@@ -85,6 +85,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-subagent-ask.py\"",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "SessionStart": [

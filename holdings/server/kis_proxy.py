@@ -3205,8 +3205,12 @@ PERIODS = {
     "M":  {"kis": "M", "label": "월",  "fresh_sec": 600, "span_days": 4000},
     "Y":  {"kis": "Y", "label": "년",  "fresh_sec": 3600, "span_days": 8000},
     "1m": {"kis": None, "label": "1분", "fresh_sec": 30, "span_days": 1},
-    "5m": {"kis": None, "label": "5분", "fresh_sec": 30, "span_days": 1},
+    "5m": {"kis": None, "label": "5분", "fresh_sec": 30, "span_days": 1, "view_days": 10},
 }
+# `view_days` — **보여 주는 거래일 수** (2026-10-03 재권님 「보이는 것만」 · 5분봉 10일).
+# 쌓는 양이 아니다 — 옛 봉을 지우지 않는다. KIS 는 분봉을 오늘치만 주므로 지난 날짜는
+# DB 에 쌓인 것만 나온다. 화면(chart.js)은 limit 를 그대로 묻고 서버가 넓힌다 —
+# 날마다 봉 수가 달라(실측 6~145) 개수로는 박을 수 없어서다. 아래 `_view_limit`.
 
 # 분봉 수집 범위 (분 단위). 통합 시장 기준 08:00~20:00
 MINUTE_DAY_START = 8 * 60
@@ -3837,7 +3841,7 @@ def _minutes_have_today(code):
             rows = conn.execute(
                 "SELECT ts FROM candles WHERE code = ? AND period IN ('1m', '5m')"
                 " AND ts LIKE ?",
-                (code, _today_kst() + "%"),
+                (code, _minutes_trade_day() + "%"),     # ④ 주말엔 금요일 칸
             ).fetchall()
     except Exception:
         return set()
@@ -4303,6 +4307,41 @@ def _today_kst():
     return datetime.now(KST).strftime("%Y%m%d")
 
 
+# ── 분봉은 「오늘」 이 아니라 「마지막 거래일」 로 센다 (2026-10-03 지시 ④) ──
+#
+# 주말에 5분봉을 열 때마다 하루치를 통째로 다시 받아 **15~31초**가 걸렸다(개발 실측 ·
+# qa 4초 · KIS 25~37건). 원인은 셋이 같은 뿌리다 — **「오늘 날짜 · 벽시계」 로 셌다.**
+#   ㉠ dayfill 키가 토요일 날짜라 「오늘치 안 받음」 → 하루치 다시
+#   ㉡ `_minutes_have_today` 가 토요일 칸을 찾아 빈 집합 → 금요일 칸을 전부 다시
+#   ㉢ 2번(마지막 봉이 1시간 넘게 오래됨)이 주말 · 장 뒤엔 늘 참
+# 그리고 받아도 새 봉이 없다 — KIS 는 그날(거래일) 분봉만 준다.
+#
+# **휴일은 못 가린다** — 달력이 없다(`_last_closed_5m_slot` 도 같다). 휴일엔 그날
+# 하루치를 한 번 헛받는다 — 전과 같은 한계다.
+def _minutes_trade_day(now=None):
+    """분봉이 속한 거래일 YYYYMMDD — 주말은 금요일, 평일 08:00 전은 앞 평일."""
+    now = now or datetime.now(KST)
+    d = now
+    if d.weekday() < 5 and d.hour * 60 + d.minute < MINUTE_DAY_START:
+        d = d - timedelta(days=1)
+    while d.weekday() >= 5:
+        d = d - timedelta(days=1)
+    return d.strftime("%Y%m%d")
+
+
+def _minutes_live(now=None):
+    """지금 새 분봉이 생길 수 있나 — 평일 08:00 부터 통합 거래가 끝난 뒤 10분(`DWMY_AT_MIN`)까지.
+
+    끝을 20:00 이 아니라 20:10 으로 두는 것은 마지막 봉이 KIS 에 들어가는 여유다
+    (`DWMY_AT_MIN` 주석 — 아직 못 쟀다). 같은 값을 또 적지 않고 그것을 쓴다.
+    """
+    now = now or datetime.now(KST)
+    if now.weekday() >= 5:
+        return False
+    cur = now.hour * 60 + now.minute
+    return MINUTE_DAY_START <= cur < DWMY_AT_MIN
+
+
 def _minutes_need_day(code, period, rows, gap_check=True):
     """하루치를 통째로 받아야 하나.
 
@@ -4317,7 +4356,7 @@ def _minutes_need_day(code, period, rows, gap_check=True):
 
     1번은 하루 한 번만 걸린다. 날짜를 값에 넣어 키가 늘어나지 않게 한다.
     """
-    if _meta_get("dayfill:%s:%s" % (code, period)) != _today_kst():
+    if _meta_get("dayfill:%s:%s" % (code, period)) != _minutes_trade_day():
         return True
     if not rows:
         return True
@@ -4331,6 +4370,10 @@ def _minutes_need_day(code, period, rows, gap_check=True):
     # 화면이 여는 종목은 그대로 2번을 본다. 앞쪽 구멍을 메워야 하고,
     # 한 종목이라 부담도 작다.
     if not gap_check:
+        return False
+    # **새 봉이 생길 수 없는 때(주말 · 장 앞뒤)는 2번을 안 본다** (④ · 위 주석 ㉢).
+    # 그때 「마지막 봉이 오래됨」 은 늘 참인데 받아도 새 봉이 없다.
+    if not _minutes_live():
         return False
     try:
         ts = rows[-1]["ts"]                      # YYYYMMDDHHMM
@@ -4487,6 +4530,24 @@ def read_candles(code, period, limit):
     return [dict(r) for r in reversed(rows)]   # 차트는 과거 -> 최신 순
 
 
+def _view_limit(code, period, limit):
+    """`view_days` 가 있는 기간이면 최근 그 날짜 수만큼의 봉 수로 limit 를 넓힌다. 줄이지는 않는다.
+
+    **5분봉에만 탄다** — 일·주·월·년봉은 밤 한 바퀴가 limit 400 으로 부르고 그 limit 이
+    과거를 거슬러 받는 양을 정하므로(`fetch_bars_back`) 건드리면 안 된다 (개발3 · 2026-10-02)."""
+    days = PERIODS[period].get("view_days")
+    if not days:
+        return limit
+    with _db_lock, db_conn() as conn:
+        n = conn.execute(
+            """SELECT COUNT(*) FROM candles WHERE code = ? AND period = ? AND substr(ts, 1, 8) >=
+                 (SELECT MIN(d) FROM (SELECT DISTINCT substr(ts, 1, 8) AS d FROM candles
+                                       WHERE code = ? AND period = ? ORDER BY d DESC LIMIT ?))""",
+            (code, period, code, period, days),
+        ).fetchone()[0]
+    return max(limit, n or 0)
+
+
 def get_chart(cfg, code, period, limit, gap_check=True):
     """DB 를 먼저 보고, 최근 구간이 오래됐으면 KIS 에서 받아 덮어쓴다.
 
@@ -4496,7 +4557,7 @@ def get_chart(cfg, code, period, limit, gap_check=True):
     import datetime
     db_init()
     conf = PERIODS[period]
-    rows = read_candles(code, period, limit)
+    rows = read_candles(code, period, _view_limit(code, period, limit))
 
     mkey = "sync:%s:%s" % (code, period)
     last_sync = float(_meta_get(mkey) or 0)
@@ -4524,14 +4585,18 @@ def get_chart(cfg, code, period, limit, gap_check=True):
             # 있었던 것이라, 종목마다 봉 개수가 크게 갈렸다.
             if _minutes_need_day(code, period, rows, gap_check):
                 raw = fetch_minutes_day(cfg, code)
-                _meta_set("dayfill:%s:%s" % (code, period), _today_kst())
+                _meta_set("dayfill:%s:%s" % (code, period), _minutes_trade_day())
+            elif rows and not _minutes_live():
+                # ④ 그 거래일 하루치를 이미 받았고 지금은 새 봉이 안 생긴다 —
+                # KIS 를 부르지 않는다(주말에 화면이 열려 있으면 30초마다 한 건씩 나갔다).
+                raw = []
             else:
                 raw = fetch_minutes_from_kis(cfg, code)
             bars = aggregate_minutes(raw, 5) if period == "5m" else raw
         fetched = save_candles(code, period, bars)
         _meta_set(mkey, time.time())
         if fetched:
-            rows = read_candles(code, period, limit)
+            rows = read_candles(code, period, _view_limit(code, period, limit))
         elif not rows and bars and not marketdb.writable():
             # **읽기 전용 서버인데 그 종목이 DB 에 없다.** 저장은 못 하지만
             # 방금 받은 것은 보여준다 — 안 그러면 **차트가 빈다** (2026-10-01).

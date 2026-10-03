@@ -13,9 +13,8 @@
   body { margin: 0; background: var(--bg); color: var(--text-primary); font-family: 'Noto Sans KR', sans-serif; }
   .wrap { padding: 22px 20px 28px; display: grid; grid-template-columns: 1fr 240px; gap: 20px; min-width: 1180px; }
   /* .view 위아래에 쌓이는 것의 높이 — 위 padding + h1 + .sub + .views + .bar + 아래 padding (2026-10-02 헤드리스 실측 214).
-     모달(iframe) 안에서는 모달 머리가 제목을 들고 있어 h1 · .sub 을 숨긴다 — 그만큼 줄어든다. 바뀌면 재서 고친다.
-     --eco-min 은 흐름도의 자연 높이 — 그보다 작아지면 흐름도가 잘리므로 JS 가 재서 넣는다 */
-  :root { --eco-top: 214px; --eco-min: 420px; }
+     모달(iframe) 안에서는 모달 머리가 제목을 들고 있어 h1 · .sub 을 숨긴다 — 그만큼 줄어든다. 바뀌면 재서 고친다 */
+  :root { --eco-top: 214px; }
   .in-frame { --eco-top: 122px; }   /* 2026-10-02 헤드리스 실측 — 위 108 + 아래 14 */
   .in-frame h1, .in-frame .sub { display: none; }
   .in-frame .wrap { padding: 12px 20px 14px; }   /* 모달 안은 머리가 따로 있어 위아래를 좁힌다 — 77vh 안에 흐름도가 통째로 들어가게 */
@@ -52,6 +51,15 @@
   .bar .sw { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
   .bar .ring { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 2px var(--kh-danger); display: inline-block; }
   .bar .sep { width: 1px; height: 16px; background: var(--border-strong); margin: 0 4px; }
+  /* 종목 칩 — 이름 옆에 등급 배지(대장 · 주도 · 소부장). 연한 바탕에 같은 색의 진한 글씨(「색 바탕 위의 글씨」) */
+  .stk { display: inline-flex; align-items: center; gap: 3px; margin: 1px 4px 1px 0; white-space: nowrap; }
+  .stk i { font-style: normal; font-size: 9.5px; font-weight: 700; padding: 0 5px; border-radius: 99px; line-height: 15px; }
+  .g-lead i   { background: var(--accent-faint); color: var(--accent); }
+  .g-driver i { background: rgb(var(--kh-ok-rgb) / 10%); color: rgb(var(--kh-ok-rgb)); }
+  .g-parts i  { background: rgb(var(--kh-warn-rgb) / 10%); color: rgb(var(--kh-warn-rgb)); }
+  .bar .lg { display: inline-flex; gap: 8px; align-items: center; color: var(--text-muted); }
+  .bar .lg .stk { margin: 0; }
+  .node .d .stk, .cell .t .stk { font-weight: 500; }
   .panel .choke-note { background: var(--kh-danger-faint); color: var(--kh-danger); border-radius: 8px; padding: 6px 9px; margin-top: 10px; font-size: 12px; line-height: 1.5; }
 
   .col { display: flex; flex-direction: column; gap: 14px; }
@@ -95,7 +103,8 @@
   /* 두 화면이 같은 높이를 쓴다 — 바꿔 봐도 모달 안 자리가 안 움직인다 (「보는 것을 바꿔도 자리는 그대로다」).
      높이는 창(모달 안에서는 iframe)에서 제목 · 단추 줄을 뺀 만큼이다 — 620px 로 박았을 때 77vh 모달에서 지도 아래가 잘렸다
      (2026-10-02). 주소로 직접 열면 창이 커서 min 이 아니라 calc 가 든다 */
-  .view { height: max(var(--eco-min), calc(100vh - var(--eco-top))); }
+  /* 두 화면이 같은 높이 — 창에서 위아래를 뺀 만큼. 흐름도가 그보다 길면(종목 칩이 늘어서) 안에서 스크롤한다 — 자리는 안 움직인다 */
+  .view { height: max(420px, calc(100vh - var(--eco-top))); overflow: auto; }
   .view[hidden] { display: none; }
   #geo { height: calc(100% - 26px); border-radius: 14px; overflow: hidden; position: relative; }
   /* 지구본일 때는 우주처럼 어둡게 — 라이트 테마에서 어둡게 두는 예외 토큰(이미지 확대 배경)을 그대로 쓴다 (2026-10-03 지시) */
@@ -125,7 +134,8 @@
     <p class="sub">왼쪽에서 오른쪽으로 — 서비스가 돈을 벌면 모델 · 데이터센터를 거쳐 칩과 전력으로 흘러간다. 칸을 누르면 이어진 길이 켜진다 · 빨간 고리는 병목</p>
     <!-- 참고: Globaia AI 공급망 지도 — 흐름 움직임 · 선 종류 색 · 병목 고리 (2026-10-02 재권님이 고르심) -->
 
-    <div class="views" id="views"><button data-v="flow" class="is-on">흐름도</button><button data-v="geo">세계 지도</button></div>
+    <!-- 2026-10-03 지시 — 세계 지도가 위, AI 흐름도가 그 아래. ?view=flow 로 열면 흐름도부터 -->
+    <div class="views" id="views"><button data-v="geo" class="is-on">세계 지도</button><button data-v="flow">AI 흐름도</button></div>
 
     <!-- 흐름 · 갈래 · 병목 단추는 두 화면이 같이 쓴다 — 지도 위 선도 같은 룰로 켜지고 흐려진다 (2026-10-02 「가」) -->
     <div class="bar" id="bar">
@@ -136,9 +146,12 @@
       <button data-only="power"><span class="sw" style="background:rgb(var(--kh-warn-rgb))"></span>전력</button>
       <span class="sep"></span>
       <button data-act="choke"><span class="ring"></span>병목만 보기</button>
+      <span class="sep"></span>
+      <!-- 등급 범례 — 종목 자료(data/ai-stocks.json)의 grades 로 그린다 -->
+      <span class="lg" id="lg"></span>
     </div>
 
-    <div class="view" id="v-flow">
+    <div class="view" id="v-flow" hidden>
     <div class="map flow" id="map">
       <svg class="links" id="links"></svg>
 
@@ -172,6 +185,7 @@
         <div class="cell" data-id="pcb"><span class="k">기판</span><span class="t">이수페타시스</span></div>
         <div class="cell" data-id="test"><span class="k">테스트 소켓</span><span class="t">ISC · 리노공업</span></div>
         <div class="cell" data-id="hbmeq"><span class="k">HBM 장비</span><span class="t">한미반도체</span></div>
+        <div class="cell" data-id="equip"><span class="k">장비 · 소재</span><span class="t">(종목 자료에서 채운다)</span></div>
         <div class="gap"></div>
         <div class="cell" data-id="power"><span class="k">전력기기</span><span class="t">HD현대일렉트릭 · LS일렉트릭 · 효성중공업</span></div>
         <div class="cell" data-id="cable"><span class="k">전선</span><span class="t">LS · 대한전선</span></div>
@@ -180,7 +194,7 @@
       </div>
     </div>
     </div>
-    <div class="view" id="v-geo" hidden>
+    <div class="view" id="v-geo">
       <div id="geo">
         <div class="geo-ctl" id="geo-ctl">
           <button data-g="globe" class="is-on">지구본</button>
@@ -204,10 +218,10 @@ if (window !== window.top) document.documentElement.classList.add('in-frame');
 const LINKS = [
   ['svc','model','demand'], ['svc','krsw','demand'], ['model','cloud','demand'],
   ['cloud','chip','chip'], ['cloud','mem','chip'], ['cloud','fab','chip'], ['cloud','pwr','power'],
-  ['chip','pcb','chip'], ['chip','test','chip'], ['mem','hbmeq','chip'],
+  ['chip','pcb','chip'], ['chip','test','chip'], ['mem','hbmeq','chip'], ['mem','equip','chip'],
   ['pwr','power','power'], ['pwr','cable','power'], ['pwr','nuke','power'], ['pwr','cool','power'],
 ];
-const EXTRA = [ ['mem','test','chip'], ['mem','fab','chip'], ['chip','fab','chip'] ];
+const EXTRA = [ ['mem','test','chip'], ['mem','fab','chip'], ['chip','fab','chip'], ['chip','equip','chip'] ];
 
 // 칸마다 넣을 정보 — 나중에는 분석 글(data/stock-analysis.json)과 이어 붙인다
 const INFO = {
@@ -222,6 +236,7 @@ const INFO = {
   pcb:   { what: 'AI 서버·네트워크 장비에 들어가는 고다층 기판.', watch: '빅테크 서버 증설' },
   test:  { what: '칩·메모리를 검사할 때 쓰는 소모품.', watch: '신규 칩 출시 수' },
   hbmeq: { what: 'HBM 을 쌓아 붙이는 장비.', watch: '메모리 3사 수주' },
+  equip: { what: '반도체 공정 장비와 소재(소부장). 메모리 · 파운드리 증설이 곧 수주다.', watch: '메모리 3사 · TSMC 투자 발표 · 수주 공시' },
   power: { what: '데이터센터에 전기를 넣는 변압기 · 배전 설비.', watch: '수주 잔고' },
   cable: { what: '송전 · 데이터센터 전력선.', watch: '북미 송전망 투자' },
   nuke:  { what: '전기를 만드는 쪽.', watch: '빅테크 전력 계약' },
@@ -229,6 +244,29 @@ const INFO = {
 };
 
 const map = document.getElementById('map'), svg = document.getElementById('links'), panel = document.getElementById('panel');
+
+// ── 종목 — data/ai-stocks.json 한 곳 (2026-10-03 지시 「소부장주 · 주도주 · 대장주도 같이」) ──
+// 흐름도 칸의 회사 이름 · 오른쪽 설명의 「종목」 · 세계 지도의 점이 전부 이것을 읽는다. 등급은 그 파일의 asOf 시점 판단이다
+let STOCKS = [], GRADES = {}, SITES = [];
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const chip = st => `<span class="stk${st.grade ? ' g-' + st.grade : ''}">${esc(st.name)}${st.grade ? `<i>${esc(GRADES[st.grade] || st.grade)}</i>` : ''}</span>`;
+const stocksOf = id => STOCKS.filter(st => st.node === id || (st.also || []).includes(id));
+function fillStocks() {
+  // 칸 — 회사 이름이 적힌 자리(.node 의 .d · .cell 의 .t)를 칩으로 바꾼다. 종목이 없는 칸(서비스 · 전력 묶음)은 글을 그대로 둔다
+  map.querySelectorAll('[data-id]').forEach(n => {
+    const list = stocksOf(n.dataset.id); if (!list.length) return;
+    const slot = n.classList.contains('node') ? n.querySelector('.d') : n.querySelector('.t');
+    if (slot) slot.innerHTML = list.map(chip).join('');
+  });
+  document.getElementById('lg').innerHTML = Object.entries(GRADES).map(([k, v]) => `<span class="stk g-${k}"><i>${esc(v)}</i></span>`).join('');
+}
+async function loadStocks() {
+  try {
+    const d = await (await fetch('data/ai-stocks.json', { cache: 'no-store' })).json();
+    STOCKS = d.stocks || []; GRADES = d.grades || {}; SITES = d.sites || [];
+  } catch (e) { console.error('[생태계] 종목 자료를 못 읽었습니다', e); }
+  fillStocks();
+}
 const el = id => map.querySelector(`[data-id="${id}"]`);
 const EMPTY = '<h2>칸을 눌러 보세요</h2><div class="empty">그 칸의 설명 · 종목 · 볼 것 · 이어진 칸이 여기 뜹니다.</div>';
 let sel = null;
@@ -263,10 +301,13 @@ function pick(id) {
   near.forEach(i => el(i).classList.add('lit'));
   const n = el(sel), info = INFO[sel] || {};
   n.classList.add('sel');
-  const names = [...near].filter(i => i !== sel).map(i => el(i).querySelector('.t').textContent).join(' · ');
-  panel.innerHTML = `<h2>${n.querySelector('.k').textContent} — ${n.querySelector('.t').textContent}</h2>
+  // 칸 이름 — .cell 은 .t 에 종목 칩이 들어 있어 .k 만 쓴다. .node 는 .t 가 제목이다
+  const title = x => x.classList.contains('cell') ? x.querySelector('.k').textContent
+                                                   : `${x.querySelector('.k').textContent} — ${x.querySelector('.t').textContent}`;
+  const names = [...near].filter(i => i !== sel).map(i => el(i).classList.contains('cell') ? el(i).querySelector('.k').textContent : el(i).querySelector('.t').textContent).join(' · ');
+  panel.innerHTML = `<h2>${title(n)}</h2>
     <dl><dt>무엇인가</dt><dd>${info.what || '—'}</dd>
-    <dt>종목</dt><dd>${(n.querySelector('.d') || n.querySelector('.t')).textContent}</dd>
+    <dt>종목</dt><dd>${stocksOf(sel).length ? stocksOf(sel).map(chip).join('') : esc((n.querySelector('.d') || n.querySelector('.t')).textContent)}</dd>
     <dt>볼 것</dt><dd>${info.watch || '—'}</dd>
     <dt>이어진 칸</dt><dd>${names}</dd>
     ${info.choke ? `<div class="choke-note">병목 · ${info.choke}</div>` : ''}
@@ -295,46 +336,13 @@ document.getElementById('bar').addEventListener('click', e => {
   draw();
 });
 // 흐름도의 자연 높이를 재어 두 화면의 바닥으로 삼는다 — 창이 그보다 작으면 스크롤이 생기는 것이 맞다(잘리는 것보다)
-function fitViews() {
-  const h = map.getBoundingClientRect().height;
-  if (h > 0) document.documentElement.style.setProperty('--eco-min', Math.ceil(h) + 'px');
-}
-addEventListener('resize', () => { fitViews(); draw(); });
-document.fonts.ready.then(() => { fitViews(); draw(); });
+addEventListener('resize', draw);
+document.getElementById('v-flow').addEventListener('scroll', draw, { passive: true });
+document.fonts.ready.then(draw);
 
 // ── 세계 지도 ──
-// 점 하나 = 회사의 자리 하나. node 는 흐름도 칸 id — 점을 누르면 그 칸을 고른 것과 같다.
-// also 는 그 자리가 함께 맡는 칸 — 구글 본사는 모델이면서 클라우드이고 서비스다 (점 하나에 칸 여럿).
-// 좌표는 도시 수준이다(본사 · 주요 공장 도시). 번지 수준 확인은 아직 안 했다
-const SITES = [
-  { name: 'OpenAI 본사',          node: 'model', also: ['svc'],          at: [-122.39, 37.76] },  // 미국 샌프란시스코
-  { name: 'Anthropic 본사',       node: 'model',                         at: [-122.40, 37.79] },  // 미국 샌프란시스코
-  { name: '구글 본사',            node: 'model', also: ['cloud', 'svc'], at: [-122.08, 37.42] },  // 미국 마운틴뷰
-  { name: '메타 본사',            node: 'model',                         at: [-122.15, 37.48] },  // 미국 멘로파크
-  { name: '마이크로소프트 본사',  node: 'cloud', also: ['svc'],          at: [-122.13, 47.64] },  // 미국 레드먼드
-  { name: '아마존 AWS 본사',      node: 'cloud',                         at: [-122.34, 47.62] },  // 미국 시애틀
-  { name: '오라클 본사',          node: 'cloud',                         at: [-97.74, 30.27] },   // 미국 오스틴
-  { name: '엔비디아 본사',        node: 'chip',  at: [-121.96, 37.37] },  // 미국 산타클라라
-  { name: 'AMD 본사',             node: 'chip',  at: [-121.94, 37.35] },  // 미국 산타클라라
-  { name: '브로드컴 본사',        node: 'chip',  at: [-122.14, 37.44] },  // 미국 팰로앨토
-  { name: 'TSMC 본사 · 신주',     node: 'fab',   at: [120.99, 24.78] },   // 대만 신주
-  { name: 'TSMC 타이난',          node: 'fab',   at: [120.27, 23.11] },   // 대만 타이난
-  { name: 'TSMC 애리조나',        node: 'fab',   at: [-112.14, 33.75] },  // 미국 피닉스 북쪽
-  { name: 'SK하이닉스 이천',      node: 'mem',   at: [127.44, 37.25] },
-  { name: 'SK하이닉스 청주',      node: 'mem',   at: [127.42, 36.63] },
-  { name: '삼성전자 평택',        node: 'mem',   at: [127.05, 37.02] },
-  { name: '삼성전자 기흥 · 화성', node: 'fab',   at: [127.07, 37.21] },
-  { name: '마이크론 본사',        node: 'mem',   at: [-116.20, 43.53] },  // 미국 보이시
-  { name: '한미반도체 인천',      node: 'hbmeq', at: [126.66, 37.50] },
-  { name: '리노공업 부산',        node: 'test',  at: [129.03, 35.15] },
-  { name: '이수페타시스 대구',    node: 'pcb',   at: [128.60, 35.87] },
-  { name: 'HD현대일렉트릭 울산',  node: 'power', at: [129.31, 35.54] },
-  { name: '효성중공업 창원',      node: 'power', at: [128.68, 35.23] },
-  { name: '두산에너빌리티 창원',  node: 'nuke',  at: [128.62, 35.20] },
-  { name: '대한전선 당진',        node: 'cable', at: [126.65, 36.89] },
-  { name: '네이버 성남',          node: 'krsw',  at: [127.10, 37.36] },
-  { name: 'Vertiv 본사',          node: 'cool',  at: [-82.93, 40.13] },   // 미국 웨스터빌(오하이오)
-];
+// 점 하나 = 회사의 자리 하나(data/ai-stocks.json 의 sites). node 는 흐름도 칸 id — 점을 누르면 그 칸을 고른 것과 같다.
+// also 는 그 자리가 함께 맡는 칸. 좌표는 도시 수준이다(본사 · 주요 공장 도시). 번지 수준 확인은 아직 안 했다
 // 선을 그을 때 그 칸을 대표하는 자리. 안 적은 칸은 그 칸의 첫 자리다.
 // 서비스 · 모델 · 클라우드가 같은 회사(구글 · OpenAI · MS)라 대표를 갈라 두어야 선이 점 위에서 사라지지 않는다
 const REP = { svc: '마이크로소프트 본사', model: 'OpenAI 본사', cloud: '아마존 AWS 본사' };
@@ -487,7 +495,8 @@ function buildGeo() {
       if (done.has(a.p)) return;
       const grp = far ? pts.filter(b => !done.has(b.p) && Math.hypot(a.xy.x - b.xy.x, a.xy.y - b.xy.y) < 36) : [a];
       grp.forEach(b => done.add(b.p));
-      const names = [...new Set(grp.map(b => far ? shortName(b.p.s) : b.p.s.name))];
+      const gradeOf = st => { const x = STOCKS.find(y => y.name === st.company); return x && x.grade ? ' · ' + (GRADES[x.grade] || x.grade) : ''; };
+      const names = [...new Set(grp.map(b => far ? shortName(b.p.s) : b.p.s.name + gradeOf(b.p.s)))];
       a.p.lb.textContent = names.join(' · ');
       a.p.lb.hidden = false;
       a.p.lb.classList.toggle('left', a.xy.x > geo.getContainer().clientWidth * 0.62);
@@ -504,14 +513,19 @@ function buildGeo() {
   geo.on('moveend', labelPins);
   geo.on('load', () => { geoReady = true; applyProjection(); lastLabel = 0; labelPins(); drawGeo(); geoFlow(); });
 }
+function showView(v) {
+  document.querySelectorAll('#views button').forEach(x => x.classList.toggle('is-on', x.dataset.v === v));
+  document.getElementById('v-flow').hidden = v !== 'flow';
+  document.getElementById('v-geo').hidden = v !== 'geo';
+  if (v === 'geo') { if (!geo) buildGeo(); else geo.resize(); } else draw();
+}
 document.getElementById('views').addEventListener('click', e => {
-  const b = e.target.closest('button'); if (!b) return;
-  document.querySelectorAll('#views button').forEach(x => x.classList.toggle('is-on', x === b));
-  document.getElementById('v-flow').hidden = b.dataset.v !== 'flow';
-  document.getElementById('v-geo').hidden = b.dataset.v !== 'geo';
-  if (b.dataset.v === 'geo') { if (!geo) buildGeo(); else geo.resize(); } else draw();
+  const b = e.target.closest('button'); if (b) showView(b.dataset.v);
 });
-draw();
+// 세계 지도가 기본(2026-10-03 지시). 첫 화면의 「돈의 흐름」 이 ?view=geo 로 연다 · ?view=flow 면 흐름도부터
+loadStocks().then(() => {
+  showView(new URLSearchParams(location.search).get('view') === 'flow' ? 'flow' : 'geo');
+});
 </script>
 </body>
 </html>

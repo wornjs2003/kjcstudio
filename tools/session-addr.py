@@ -63,6 +63,16 @@ def sid_of(pid, known=()):
       그날 개발1 이 /clear 한 뒤 옛 id 로 읽혀 「개발1」 이 0개가 됐다(2026-10-02 13:0x). 그래서 **herdr 창이 지금 아는 id**
       (known)가 후보에 있으면 그것을 쓴다. 없으면 --resume, 그것도 없으면 연 파일 중 가장 최근 것."""
     cands = []
+    # **1순위 — Claude Code 가 프로세스마다 적는 ~/.claude/sessions/<pid>.json 의 sessionId** (2026-10-03).
+    # /clear 하면 여기가 새 id 로 바뀐다. --resume 은 처음 그대로라, 메인 폴더처럼 창이 여럿인 곳에서
+    # /clear 한 창(개념정의 · 작업우선순위)이 「?(창 이름 없음)」 이 됐다(작업우선순위 09:0x 지적).
+    try:
+        with open(os.path.expanduser("~/.claude/sessions/%s.json" % pid), encoding="utf-8") as f:
+            live = (json.load(f).get("sessionId") or "").strip()
+        if live in known:
+            return live, "sessions"
+    except Exception:
+        pass
     m = re.search(r"--resume\s+(" + UUID.pattern + ")", run(["ps", "-o", "args=", "-p", pid]))
     resume = m.group(1) if m else ""
     files = re.findall(r"(\S*?(" + UUID.pattern + r")\.jsonl)", run(["lsof", "-p", pid]))
