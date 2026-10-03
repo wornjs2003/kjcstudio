@@ -3256,12 +3256,16 @@ SCHEMA = [
 #   fresh_sec : 이 시간이 지나면 최근 구간을 다시 받는다 (장중 당일 캔들 갱신용)
 PERIODS = {
     "D":  {"kis": "D", "label": "일",  "fresh_sec": 60,  "span_days": 400},
-    "W":  {"kis": "W", "label": "주",  "fresh_sec": 300, "span_days": 2000},
-    "M":  {"kis": "M", "label": "월",  "fresh_sec": 600, "span_days": 4000},
-    "Y":  {"kis": "Y", "label": "년",  "fresh_sec": 3600, "span_days": 8000},
+    "W":  {"kis": "W", "label": "주",  "fresh_sec": 300, "span_days": 2000, "close_once": True},
+    "M":  {"kis": "M", "label": "월",  "fresh_sec": 600, "span_days": 4000, "close_once": True},
+    "Y":  {"kis": "Y", "label": "년",  "fresh_sec": 3600, "span_days": 8000, "close_once": True},
     "1m": {"kis": None, "label": "1분", "fresh_sec": 30, "span_days": 1},
     "5m": {"kis": None, "label": "5분", "fresh_sec": 30, "span_days": 1, "view_days": 10},
 }
+# `close_once` — **마감 뒤 한 번만 다시 받는다** (2026-10-03 재권님 「응 해줘」 · 봉 결정 「주·월·년은 마지막
+# 봉을 장 마감 때 한 번」). 이 기간은 `fresh_sec` 이 지나도 장중에는 KIS 를 다시 부르지 않는다 — 아래
+# `_last_close_ts`. 롱폴이 이 주소를 안쪽으로 다시 부르므로, 안 그러면 화면이 주봉을 열어 둔 동안
+# 5분마다 KIS 를 부르고 「바뀜」 을 알렸다. `fresh_sec` 은 롱폴이 DB 를 다시 보는 간격으로만 남는다.
 # `view_days` — **보여 주는 거래일 수** (2026-10-03 재권님 「보이는 것만」 · 5분봉 10일).
 # 쌓는 양이 아니다 — 옛 봉을 지우지 않는다. KIS 는 분봉을 오늘치만 주므로 지난 날짜는
 # DB 에 쌓인 것만 나온다. 화면(chart.js)은 limit 를 그대로 묻고 서버가 넓힌다 —
@@ -4662,6 +4666,22 @@ def _view_limit(code, period, limit):
     return max(limit, n or 0)
 
 
+def _last_close_ts(now=None):
+    """가장 최근 마감 시각(초) — 거래일의 `DWMY_AT_MIN`(통합 거래가 끝난 뒤 10분).
+
+    밤 한 바퀴(`start_dwmy_prefill`)와 **같은 시각**을 쓴다 — 값은 `DWMY_AT_MIN` 한 곳이다.
+    오늘이 거래일이고 그 시각이 지났으면 오늘, 아니면 앞 거래일. 토·일은 건너뛴다.
+    **휴일은 못 가른다** — 달력이 없다(`_dwmy_slot` 과 같다). 휴일에는 한 번 더 받을 뿐이다."""
+    now = now or datetime.now(KST)
+    d = now
+    if not (d.weekday() < 5 and d.hour * 60 + d.minute >= DWMY_AT_MIN):
+        d = d - timedelta(days=1)
+        while d.weekday() >= 5:
+            d = d - timedelta(days=1)
+    mark = d.replace(hour=DWMY_AT_MIN // 60, minute=DWMY_AT_MIN % 60, second=0, microsecond=0)
+    return mark.timestamp()
+
+
 def get_chart(cfg, code, period, limit, gap_check=True):
     """DB 를 먼저 보고, 최근 구간이 오래됐으면 KIS 에서 받아 덮어쓴다.
 
@@ -4675,7 +4695,10 @@ def get_chart(cfg, code, period, limit, gap_check=True):
 
     mkey = "sync:%s:%s" % (code, period)
     last_sync = float(_meta_get(mkey) or 0)
-    stale = (time.time() - last_sync) > conf["fresh_sec"]
+    if conf.get("close_once"):
+        stale = last_sync < _last_close_ts()        # 마감 뒤 한 번 — 위 PERIODS 의 `close_once`
+    else:
+        stale = (time.time() - last_sync) > conf["fresh_sec"]
 
     # 달라는 만큼 DB 에 없고, 아직 끝까지 훑어보지 않았으면 과거를 더 받는다.
     #
