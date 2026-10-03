@@ -3205,8 +3205,12 @@ PERIODS = {
     "M":  {"kis": "M", "label": "월",  "fresh_sec": 600, "span_days": 4000},
     "Y":  {"kis": "Y", "label": "년",  "fresh_sec": 3600, "span_days": 8000},
     "1m": {"kis": None, "label": "1분", "fresh_sec": 30, "span_days": 1},
-    "5m": {"kis": None, "label": "5분", "fresh_sec": 30, "span_days": 1},
+    "5m": {"kis": None, "label": "5분", "fresh_sec": 30, "span_days": 1, "view_days": 10},
 }
+# `view_days` — **보여 주는 거래일 수** (2026-10-03 재권님 「보이는 것만」 · 5분봉 10일).
+# 쌓는 양이 아니다 — 옛 봉을 지우지 않는다. KIS 는 분봉을 오늘치만 주므로 지난 날짜는
+# DB 에 쌓인 것만 나온다. 화면(chart.js)은 limit 를 그대로 묻고 서버가 넓힌다 —
+# 날마다 봉 수가 달라(실측 6~145) 개수로는 박을 수 없어서다. 아래 `_view_limit`.
 
 # 분봉 수집 범위 (분 단위). 통합 시장 기준 08:00~20:00
 MINUTE_DAY_START = 8 * 60
@@ -4509,6 +4513,24 @@ def read_candles(code, period, limit):
     return [dict(r) for r in reversed(rows)]   # 차트는 과거 -> 최신 순
 
 
+def _view_limit(code, period, limit):
+    """`view_days` 가 있는 기간이면 최근 그 날짜 수만큼의 봉 수로 limit 를 넓힌다. 줄이지는 않는다.
+
+    **5분봉에만 탄다** — 일·주·월·년봉은 밤 한 바퀴가 limit 400 으로 부르고 그 limit 이
+    과거를 거슬러 받는 양을 정하므로(`fetch_bars_back`) 건드리면 안 된다 (개발3 · 2026-10-02)."""
+    days = PERIODS[period].get("view_days")
+    if not days:
+        return limit
+    with _db_lock, db_conn() as conn:
+        n = conn.execute(
+            """SELECT COUNT(*) FROM candles WHERE code = ? AND period = ? AND substr(ts, 1, 8) >=
+                 (SELECT MIN(d) FROM (SELECT DISTINCT substr(ts, 1, 8) AS d FROM candles
+                                       WHERE code = ? AND period = ? ORDER BY d DESC LIMIT ?))""",
+            (code, period, code, period, days),
+        ).fetchone()[0]
+    return max(limit, n or 0)
+
+
 def get_chart(cfg, code, period, limit, gap_check=True):
     """DB 를 먼저 보고, 최근 구간이 오래됐으면 KIS 에서 받아 덮어쓴다.
 
@@ -4518,7 +4540,7 @@ def get_chart(cfg, code, period, limit, gap_check=True):
     import datetime
     db_init()
     conf = PERIODS[period]
-    rows = read_candles(code, period, limit)
+    rows = read_candles(code, period, _view_limit(code, period, limit))
 
     mkey = "sync:%s:%s" % (code, period)
     last_sync = float(_meta_get(mkey) or 0)
@@ -4557,7 +4579,7 @@ def get_chart(cfg, code, period, limit, gap_check=True):
         fetched = save_candles(code, period, bars)
         _meta_set(mkey, time.time())
         if fetched:
-            rows = read_candles(code, period, limit)
+            rows = read_candles(code, period, _view_limit(code, period, limit))
         elif not rows and bars and not marketdb.writable():
             # **읽기 전용 서버인데 그 종목이 DB 에 없다.** 저장은 못 하지만
             # 방금 받은 것은 보여준다 — 안 그러면 **차트가 빈다** (2026-10-01).
