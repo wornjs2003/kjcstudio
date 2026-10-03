@@ -252,6 +252,16 @@ def _git_ready():
     return ok
 
 
+def _git_covers():
+    """git 이 저장본을 대신 남겨 주고 있나 — `history/` 복사를 건너뛸지 가른다.
+
+    켜져 있고 · 저장소가 준비됐고 · **이번 실행에서 실패가 0** 일 때만 참이다.
+    실패를 한 번이라도 봤으면 재시작 전까지 복사로 돌아간다 — 실패가 이어지는지
+    한 번뿐인지 가를 값을 박지 않으려고 보수적으로 간다.
+    """
+    return _git_ready() and _git_stat["fails"] == 0
+
+
 def _git_commit(name):
     """그 문서만 담아 커밋한다. **`_write_lock` 안에서만 부른다** —
     동시에 부르면 git 의 `index.lock` 이 부딪힌다.
@@ -436,7 +446,14 @@ def _write_locked(name, path, data, history, if_updated_at):
 
     # ③ 원본이 있으면 남긴다. **이동이 아니라 복사**다 —
     #    옮기면 그 순간 제자리가 비고, 거기서 죽으면 읽는 쪽은 빈 자리를 본다.
-    if history and os.path.exists(path):
+    #
+    #    **git 이 돌고 있으면 건너뛴다 (2026-10-03 재권님 「(가)」).** 아래
+    #    `_git_commit` 이 같은 일을 대신하는데 복사까지 하면 history/ 가 끝없이
+    #    쌓인다(그날 1,000개 넘게 · 250MB 안팎). **있는 것은 지우지 않는다** —
+    #    지우는 것은 따로 여쭌다. git 이 꺼졌거나(`KJC_DOCS_GIT=0`) 이번 실행에서
+    #    **한 번이라도 실패했으면** 예전처럼 복사한다 — 백업이 둘 다 없는 순간을
+    #    만들지 않는다.
+    if history and os.path.exists(path) and not _git_covers():
         try:
             hdir = os.path.join(DOC_ROOT, HISTORY_DIRNAME)
             os.makedirs(hdir, exist_ok=True)
