@@ -36,6 +36,15 @@
   --kh-drawer: 320px;
   --kh-gap: 14px;
 
+  /* 왼쪽 서랍의 「체결」 줄 높이 (2026-10-02 지시 — 「체결창을 좀더 밑으로 내리고」).
+     그 전에는 「투자 지표」 와 반씩 나눠 가졌다. 체결 칸은 머리줄 · 체결강도 · 네 줄이
+     보이는 높이만 남기고, 남은 높이를 「투자 지표」(재무 카드 다섯)가 갖는다.
+     차트는 두 줄에 걸쳐 있어 이 값으로 크기가 안 바뀐다.
+     시안은 재권님 11:52 스크린샷에서 체결 칸 256px 였다. 그 화면 배율은 1.25 다(서랍 320 이
+     400px 로 찍혔다) — 256 ÷ 1.25 = 205. 이 칸에는 원래 「값이 붙기 전에 납작해지지 않게」 바닥
+     210 이 있어(아래 `min-height`) 그 값에 맞췄다. 바닥도 이 변수를 쓴다 — 두 곳에 안 둔다 */
+  --kh-tick-h: 210px;
+
   /* 서랍 하나가 늘리는 폭 = 칸 폭 + 그 칸과 본문 사이 틈.
      틈을 빼먹으면 본문이 그만큼 좁아진다 — 차트가 14px 줄었다 늘었다 한다. */
   --kh-add: calc(var(--kh-drawer) + var(--kh-gap));
@@ -353,6 +362,7 @@
 .kh-stage.has-left  .kh-modal [data-p="tick"] { display: flex; }
 .kh-stage.has-left  .kh-modal .kh-main {
   grid-template-columns: var(--kh-drawer) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) var(--kh-tick-h);
   grid-template-areas:
     "head   head"
     "metric chart"
@@ -375,6 +385,7 @@
 .kh-stage.has-left.has-right .kh-modal [data-p="panel3"] { display: flex; }
 .kh-stage.has-left.has-right .kh-modal .kh-main {
   grid-template-columns: var(--kh-drawer) minmax(0, 1fr) var(--kh-drawer);
+  grid-template-rows: auto minmax(0, 1fr) var(--kh-tick-h);
   grid-template-areas:
     "head   head  head"
     "metric chart panel3"
@@ -451,7 +462,7 @@
 .kh-modal [data-p="chart"] .kh-chart-box { min-height: 0; }
 
 /* 아직 값이 안 붙은 패널이 납작해지지 않게 */
-.kh-modal [data-p="tick"],
+.kh-modal [data-p="tick"] { min-height: var(--kh-tick-h); }
 .kh-modal [data-p="flow"] { min-height: 210px; }
 
 /* 머리 오른쪽 — 닫기. 「전체 화면 ↗」 은 2026-09-22 에 뺐다 */
@@ -639,3 +650,35 @@
   margin: 14px 2px 6px;
 }
 .kh-nw-sub-h:first-child { margin-top: 2px; }
+
+/* ── 재무 카드 다섯 — 모달 「투자 지표」 칸 (2026-10-02 지시 · components/finance-cards.js) ──
+   카드는 칸 높이를 다섯으로 나눠 갖는다 — 값이 바뀌어도 자리가 안 움직인다.
+   **숫자 여섯 칸은 카드 위에 가로 한 줄로 작게 남긴다** — 재권님 답 「가로」(2026-10-02 12:3x).
+   시안 v3 는 숨겼는데, 그러면 PER · PBR 이 모달에서 사라져 「화면에 있는데 모달에 없으면 위반」 이
+   된다. 종목 화면(stock.html)은 카드가 안 붙어 3열 여섯 칸 그대로다.
+   칸 하나가 45px 남짓이라 글자를 줄이고 줄바꿈을 막는다 — 넘치는지는 화면에서 잰다. */
+.kh-modal [data-p="metric"].has-fin .kh-mgrid {
+  /* 똑같이 나누면 「1,612.1조원」 이 46px 칸을 넘쳤다(2026-10-02 실측) — **값 길이대로** 나눈다.
+     종목마다 값 길이가 달라 비율을 박지 않는다. 남는 폭은 칸마다 고르게 붙는다 */
+  grid-template-columns: repeat(6, auto); gap: 3px; margin-bottom: 6px; flex: none;
+}
+.kh-modal [data-p="metric"].has-fin .kh-m { padding: 4px 2px; text-align: center; min-width: 0; }
+.kh-modal [data-p="metric"].has-fin .kh-m-l { font-size: 8px; margin-bottom: 1px; white-space: nowrap; }
+.kh-modal [data-p="metric"].has-fin .kh-m-v { font-size: 9px; white-space: nowrap; letter-spacing: -0.03em; }
+.kh-modal [data-p="metric"] .kh-fin {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-rows: repeat(5, minmax(0, 1fr)); gap: 6px;
+}
+.kh-fin-c { display: block; width: 100%; height: 100%; min-height: 0;
+  background: var(--kh-bg-surface); border-radius: var(--kh-radius-md); }
+.kh-fin-c .fc-t  { font-size: 11px; font-weight: 700; fill: var(--kh-text-primary); }
+.kh-fin-c .fc-ax { font-size: 8px; fill: var(--kh-text-muted); }
+.kh-fin-c .fc-lg { font-size: 8.5px; fill: var(--kh-text-secondary); }
+.kh-fin-c .fc-nd { font-size: 11px; font-weight: 700; fill: var(--kh-text-secondary); }
+.kh-fin-c .fc-grid { stroke: var(--kh-border); stroke-width: 1; }
+.kh-fin-c .fc-l { fill: none; stroke-width: 1.6; }
+.kh-fin-c .fc-dash { stroke-dasharray: 3 2; }
+.kh-fin-c .fc-c-dim { fill: var(--kh-text-dim); }   .kh-fin-c .fc-s-dim { stroke: var(--kh-text-dim); }
+.kh-fin-c .fc-c-acc { fill: var(--kh-accent); }     .kh-fin-c .fc-s-acc { stroke: var(--kh-accent); }
+.kh-fin-c .fc-c-grn { fill: var(--kh-tag-news); }   .kh-fin-c .fc-s-grn { stroke: var(--kh-tag-news); }
+.kh-fin-c .fc-c-pri { fill: var(--kh-text-primary); } .kh-fin-c .fc-s-pri { stroke: var(--kh-text-primary); }

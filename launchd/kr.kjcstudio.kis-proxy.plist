@@ -16,6 +16,13 @@
 		     안 모인다. 이름은 kis_proxy.py 와 tools/check-kis-single.py 가 대조한다. -->
 		<key>KJC_KIS_UPSTREAM_SERVE</key>
 		<string>1</string>
+		<!-- **밤 한 바퀴(일·주·월·년봉 쌓기) · 롱폴링 켜기 (2026-10-03 지시 — 「(가)」).** 메인서버만 켠다 —
+		     서비스방(8764)은 스위치를 따로 둔다. 이름은 kis_proxy.py 의 DWMY_ON · LONGPOLL_ON 이 읽는다.
+		     이 파일을 고쳐도 **설치본에 넣고 재시작해야** 켜진다(「켜기」 는 따로 지시). -->
+		<key>KJC_DWMY</key>
+		<string>1</string>
+		<key>KJC_LONGPOLL</key>
+		<string>1</string>
 	</dict>
 	<key>KeepAlive</key>
 	<true/>

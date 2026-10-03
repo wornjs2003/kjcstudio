@@ -10,6 +10,8 @@
     python3 tools/board-card.py "<카드 제목 일부>" --assign [<담당>]              제목의 담당 라벨을 바꾼다 — [미배분] 을 받을 때.
                                                                            값을 비우면 내 세션. 메모에 「담당 … → …」 한 줄
     python3 tools/board-card.py --merged [--dry]                            post-merge 용 — ORIG_HEAD..HEAD 의 해시가 적힌 review 카드를 done 으로
+    python3 tools/board-card.py "<카드 제목 일부>" --title "<새 제목>"                 제목 뒤쪽(무엇)만 바꾼다 — [갈래] [담당] 은 그대로.
+                                                                           메모에 「제목 … → …」 한 줄
     어느 명령이든 --label <담당>                                            세션 이름을 못 얻을 때 손으로 (= KJC_BOARD_LABEL)
 
 **메모 줄은 홑따옴표로 넘긴다.** 큰따옴표 안의 백틱(`…`)은 셸이 명령으로 실행해 **그 부분이 조용히 사라진다**
@@ -201,7 +203,7 @@ def now():
 COLUMNS = ("todo", "doing", "review", "done")
 
 
-def cmd_note(key, line, sub, done, column=None, assign=None):
+def cmd_note(key, line, sub, done, column=None, assign=None, title=None):
     """assign — 제목의 [담당] 을 바꾼다 (2026-10-02 · 개발2 가 가름). 전에는 [미배분] 카드를 받아 일해도 제목 라벨을 바꿀 길이
     없어 메모에만 담당을 적었고, 그래서 ① post-commit 이 해시를 엉뚱한 카드에 (추정)으로 적고 ② 그 세션에 다른 doing 카드가
     없으면 배정받고도 커밋 게이트에 막혔다. mine() 은 제목만 본다 — 메모의 담당 줄까지 보면 「누구 것인가」 가 두 곳이 된다."""
@@ -235,6 +237,17 @@ def cmd_note(key, line, sub, done, column=None, assign=None):
                     moved["hint"] = "열은 todo 그대로 — 지금 시작하면 `--doing` 을 함께(게이트는 doing 만 본다)"
             elif not (line or sub or done or column):
                 sys.exit("담당이 이미 [%s] 라 바꿀 것이 없다 — 보드에 쓰지 않는다" % new_label)
+        if title:
+            # 제목 바꾸기 — 「[갈래] [담당]」 은 그대로 두고 뒤쪽 「무엇」 만 바꾼다. 제목은 게이트·현황판이 담당을 읽는 자리라
+            # 라벨까지 손으로 바꾸게 두지 않는다(라벨은 --assign). 2026-10-02 개발1 「5분봉 5일치 → 10일」 에서 길이 없었다
+            m = LABELS.match(t.get("text", ""))
+            head = "[%s] [%s] " % (m.group(1), m.group(2).strip()) if m else ""
+            rest = LABELS.sub("", title.strip()) if LABELS.match(title.strip()) else title.strip()
+            old_t = t.get("text", "")
+            t["text"] = head + rest
+            if t["text"] != old_t:
+                t["memo"] = (t.get("memo") or "").rstrip() + "\n  %s 제목 「%s」 → 「%s」" % (now(), old_t[len(head):][:60], rest[:60])
+                moved["title"] = rest
         if column and t.get("column") != column:
             moved["from"], moved["to"] = t.get("column"), column
             t["column"] = column
@@ -431,10 +444,12 @@ def main(argv):
         return cmd_new(text, rest[0] if rest else "", "--todo" in argv) or 0
     key = argv[0]
     line = argv[1] if len(argv) > 1 and not argv[1].startswith("--") else ""
-    sub = done = column = assign = None
+    sub = done = column = assign = title = None
     for i, x in enumerate(argv):
         if x == "--sub":
             sub = argv[i + 1]
+        if x == "--title":
+            title = argv[i + 1] if i + 1 < len(argv) else ""
         if x == "--assign":
             assign = argv[i + 1] if i + 1 < len(argv) and not argv[i + 1].startswith("--") else ""
         if x == "--todo":
@@ -448,8 +463,10 @@ def main(argv):
     # `--assign <담당>` 의 값이 메모 줄로 읽히지 않게
     if assign and line == assign:
         line = ""
+    if title and line == title:
+        line = ""
     try:
-        cmd_note(key, line, sub, done, column, assign)
+        cmd_note(key, line, sub, done, column, assign, title)
     except Unseen as e:
         sys.exit("보드를 못 봤다: %s" % e)
     return 0

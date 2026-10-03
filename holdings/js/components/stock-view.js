@@ -34,6 +34,7 @@ import { mountDisclosures } from './disclosures.js';
 import { mountStockPanel } from './stock-panel.js';
 import { mountStockDetail } from './stock-detail.js';
 import { mountIndicatorMenu } from './indicator-menu.js';
+import { mountFinanceCards } from './finance-cards.js';
 import { apiFetch } from '../data/api.js';
 import { everyServerMs } from '../store/timing.js';
 import { watch } from '../store/longpoll.js';
@@ -464,6 +465,8 @@ export function mountStockView(root, stock, { onBack } = {}) {
      모달과 종목 페이지가 각자 제 root 안에서 찾으므로 서로 안 겹친다. */
   const panel3 = mountStockPanel($('#kh-panel3'), { code: stock.code });
   const detail = mountStockDetail($('#kh-dt'));
+  /* 재무 카드 다섯 — 모달 「투자 지표」 칸에만 붙는다 (2026-10-02 지시 · finance-cards.js) */
+  const finance = mountFinanceCards(root, stock);
   detail.setCode(stock.code);
 
   loadTicks();
@@ -504,6 +507,7 @@ export function mountStockView(root, stock, { onBack } = {}) {
       stopFlow();                 // everyServerMs 가 준 멈추는 함수
       panel3.destroy();
       detail.destroy();
+      finance.destroy();
       /* **안 떼면 열 때마다 쌓인다** — 지표 메뉴는 `document` 에 손잡이 셋을
          걸고 `onIndicatorChange` 에 하나를 더 건다 (2026-09-23). */
       if (indMenu) indMenu.destroy();

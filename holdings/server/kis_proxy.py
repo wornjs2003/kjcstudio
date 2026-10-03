@@ -610,6 +610,10 @@ _last_high_at = 0.0            # 높은 쪽이 마지막으로 /api/kis/* 를 �
 _prio_stat = {"lowCalls": 0, "lowYields": 0}
 
 
+# `_rate_limit` 이 그 호출에서 **일부러 잔 시간**(ms). `kis_get` 이 대기에서 뺀다.
+_rl_yield = threading.local()
+
+
 def _prio_low():
     return getattr(_prio, "low", False)
 
@@ -627,15 +631,22 @@ def _rate_limit(path=None):
     """
     # 미리받기는 화면에 자리를 내준다. 급하지 않은 일이라 늦어져도 잃는 것이
     # 없고, 화면은 기다리면 재권님이 보신다 (2026-09-18).
+    _rl_yield.ms = 0.0
     if threading.current_thread().name == PREFILL_THREAD_NAME:
+        _t0 = time.monotonic()
         time.sleep(PREFILL_BUSY_CALL_GAP if _ui_busy() else PREFILL_IDLE_CALL_GAP)
+        # **실제로 잔 시간을 잰다** — 이 기계는 잠에서 늦게 깨서(10ms → 49ms 실측)
+        # 정한 값으로 빼면 그 넘침이 줄 서기로 세어진다
+        _rl_yield.ms += (time.monotonic() - _t0) * 1000.0
 
     # **확인용 서버가 넘긴 것은 외부접속에 비켜선다** (ⓒ · 위 주석).
     if _prio_low():
         _prio_stat["lowCalls"] += 1
         if (time.monotonic() - _last_high_at) < LOW_PRIO_BUSY_WINDOW:
             _prio_stat["lowYields"] += 1
+            _t0 = time.monotonic()
             time.sleep(LOW_PRIO_YIELD_SEC)
+            _rl_yield.ms += (time.monotonic() - _t0) * 1000.0
 
     # **간격은 넘은 횟수에 따라 늘어난다** (㉡). 잠잠하면 원래 값이다.
     gap = _gap_now()
@@ -864,6 +875,7 @@ def usage_stats():
         "prioLowYields": _prio_stat["lowYields"],
         # ⓓ 롱폴링 — 꺼져 있으면 `longpoll: false` 이고 셈은 0 이다(그 자리가 없으므로)
         "longpoll": LONGPOLL_ON,
+        "longpollPrefixes": list(LONGPOLL_PREFIXES),
         "longpollActive": _lp_stat["active"],
         "longpollTotal": _lp_stat["total"],
         "longpollChanged": _lp_stat["changed"],
@@ -1214,8 +1226,13 @@ def _resp_key(path):
     return seg[-1] if seg else "?"
 
 
-def _resp_note(path, resp_ms, wait_ms):
-    """성공한 왕복 하나를 적는다. 실패는 안 적는다 — 하한은 성공 응답으로 잰다."""
+def _resp_note(path, resp_ms, wait_ms, yield_ms=0.0):
+    """성공한 왕복 하나를 적는다. 실패는 안 적는다 — 하한은 성공 응답으로 잰다.
+
+    `wait_ms` 는 **줄에 선 시간**, `yield_ms` 는 **일부러 비켜선 시간**(미리받기 ·
+    ⓒ 낮음)이다. 섞이면 5분봉 대기 p95 가 2.15초로 나왔다 — 실제 줄은 0.15초쯤이고
+    2.0초는 미리받기가 화면에 비켜선 것이었다(2026-10-02 qa 실측 · 개발2 코드 확인).
+    """
     seg = _resp_key(path)
     dq = _resp_times.get(seg)
     if dq is None:
@@ -1224,7 +1241,7 @@ def _resp_note(path, resp_ms, wait_ms):
             if dq is None:
                 dq = _resp_times[seg] = collections.deque(maxlen=RESP_SAMPLES)
     # `deque(maxlen=…)` 의 `append` 는 원자적이라 여기서는 자물쇠가 필요 없다.
-    dq.append((time.time(), resp_ms, wait_ms))
+    dq.append((time.time(), resp_ms, wait_ms, yield_ms))
 
 
 def _pct(vals, p):
@@ -1253,6 +1270,7 @@ def resp_stats():
             continue
         resp = [r[1] for r in rows]
         wait = [r[2] for r in rows]
+        yld = [r[3] for r in rows]
         out[seg] = {
             "n": len(rows),
             "p50": _pct(resp, 0.50),
@@ -1260,6 +1278,9 @@ def resp_stats():
             "max": round(max(resp), 1),
             "waitP50": _pct(wait, 0.50),
             "waitP95": _pct(wait, 0.95),
+            # 일부러 비켜선 시간 — 줄(`wait`)과 따로 낸다
+            "yieldP50": _pct(yld, 0.50),
+            "yieldP95": _pct(yld, 0.95),
             # **표본이 얼마나 오래된 것인지 함께 낸다.** 창을 숫자로 박지 않으므로
             # 읽는 쪽이 이것으로 「무엇을 본 값인지」 를 안다.
             "spanSec": round(now - rows[0][0], 1),
@@ -1286,6 +1307,12 @@ RELAY_TTL_NAMES = {
     "domestic-stock/foreign-institution-total": "INVESTOR_TOP_TTL",
     "domestic-stock/inquire-ccnl": "TICKS_TTL",
     "domestic-stock/inquire-asking-price-exp-ccn": "ASKING_TTL",
+    # 재무 다섯 (2026-10-02 · 모달 투자 지표 칸 재무 카드) — 분기 자료라 한 수명
+    "domestic-stock/income-statement": "FINANCE_TTL",
+    "domestic-stock/balance-sheet": "FINANCE_TTL",
+    "domestic-stock/financial-ratio": "FINANCE_TTL",
+    "domestic-stock/profit-ratio": "FINANCE_TTL",
+    "domestic-stock/growth-ratio": "FINANCE_TTL",
 }
 
 
@@ -1391,8 +1418,89 @@ def _lp_inner(u):
         return e.code, e.read()
 
 
-def longpoll(u, h, hold):
-    """값이 바뀔 때까지(또는 `hold` 초) 기다린다. 결과는 JSON 으로 낼 dict."""
+LONGPOLL_MAX_URLS = 12     # 한 연결이 묶어 볼 수 있는 주소 수
+
+# **지켜볼 수 있는 주소의 접두** (2026-10-02 · 재권님 「화면은 서버가 알려준다」 —
+# 보드 저장본 · 정적 JSON · 뉴스도 화면이 주기로 다시 묻지 않게). 화면은 이 목록을
+# `stats.longpollPrefixes` 로 받아, 서버가 안 받는 주소 하나 때문에 묶음 전체가
+# 폴백으로 떨어지지 않게 가른다(개발과 계약).
+#
+# **KIS 밖 넷(공시 · 뉴스 · 보드 · 정적)은 예산 계산에 안 넣는다** — 안쪽 호출이 그 라우트의
+# 캐시를 그대로 타므로(뉴스 `NEWS_TTL` · `MOVES_TTL`) 롱폴이 바깥 호출을 늘리지 않는다.
+LONGPOLL_PREFIXES = ("/api/kis/", "/api/dart/", "/api/news/", "/api/board/doc/", "/holdings/data/")
+
+
+def _lp_url_ok(u):
+    """롱폴로 지켜봐도 되는 주소인가. 아니면 그 이유(한국어), 되면 `None`."""
+    path = urllib.parse.urlparse(u).path
+    if ".." in u or not any(path.startswith(p) for p in LONGPOLL_PREFIXES):
+        return "u 는 %s 중 하나로 시작해야 합니다." % " · ".join(LONGPOLL_PREFIXES)
+    if path.startswith("/api/kis/"):
+        inner = path[len("/api/kis/"):].strip("/")
+        # 자기 자신(poll)은 고리가 되고 넘겨받는 자리(relay)는 넘기기 전용이다
+        if not inner or inner in ("poll", RELAY_ROUTE):
+            return "poll · relay 는 지켜볼 수 없습니다."
+    # **`/api/dart/poll` 은 안 된다** — 부를 때마다 OpenDART 에 바로 간다(캐시 없음 · 하루 한도).
+    # 롱폴이 1초마다 부르면 그날 한도(020)를 금방 쓴다.
+    if path.rstrip("/") == "/api/dart/poll":
+        return "/api/dart/poll 은 지켜볼 수 없습니다(OpenDART 를 바로 부릅니다)."
+    if path.startswith("/holdings/data/"):
+        # **`.json` 만 · 저장본 폴더(docs/)는 안 된다** — 정적 막기(`_DENY_REL`)와 같은 자리
+        if not path.endswith(".json") or path.startswith("/" + _DENY_REL[0]):
+            return "/holdings/data/ 는 .json 만 · docs/ 는 안 됩니다."
+    return None
+
+
+def _lp_hash(body):
+    """**`meta` 를 뺀 본문**으로 해시를 만든다 — 값이 안 바뀌었는데 「바뀜」 이 안 나게.
+
+    `/chart` 의 `meta` 는 새로 받은 직후 `{fetched: N, source: 'KIS'}`, 다음부터
+    `{fetched: 0, source: 'DB'}` 라 봉이 같아도 해시가 두 번 바뀌었다(2026-10-02 · 개발 실측).
+    `meta` 는 「언제 · 어디서 받았나」 를 싣는 자리라 값이 아니다. JSON 이 아니면 그대로 해시한다.
+    """
+    try:
+        obj = json.loads(body.decode("utf-8"))
+    except ValueError:
+        return hashlib.sha1(body).hexdigest()[:16], None
+    key = obj
+    if isinstance(obj, dict) and "meta" in obj:
+        key = {k: v for k, v in obj.items() if k != "meta"}
+    raw = json.dumps(key, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    return hashlib.sha1(raw).hexdigest()[:16], obj
+
+
+def _lp_step(u):
+    """그 주소를 다시 볼 간격. **봉은 그 기간의 `fresh_sec`** — 그 전에는 서버가 새로 안 받으므로
+    더 자주 봐도 같은 값을 읽을 뿐이다(KIS 수는 `fresh_sec` 이 정한다 · 이것은 안쪽 부하만 줄인다).
+    나머지는 `LONGPOLL_STEP_SEC`."""
+    pr = urllib.parse.urlparse(u)
+    if pr.path.rstrip("/") == "/api/kis/chart":
+        per = (urllib.parse.parse_qs(pr.query).get("period") or ["D"])[0]
+        f = (PERIODS.get(per) or {}).get("fresh_sec")
+        if isinstance(f, (int, float)):
+            return max(LONGPOLL_STEP_SEC, float(f))
+    return LONGPOLL_STEP_SEC
+
+
+def _lp_item(u, code, body, h):
+    hh, obj = _lp_hash(body)
+    it = {"u": u, "hash": hh, "changed": hh != h, "status": code}
+    if hh != h or code != 200:
+        it["body"] = obj
+    return it
+
+
+def longpoll(us, hs, hold):
+    """주소 여럿(`us`) 중 **하나라도** 바뀔 때까지(또는 `hold` 초) 기다린다.
+
+    **한 화면 = 롱폴 하나**로 묶는다 — 브라우저가 HTTP/1.1 에서 한 주소당 동시 연결을
+    6개까지만 열어, 화면이 주소마다 롱폴을 쥐면 나머지 요청이 막힌다(2026-10-02 · 개발과 계약).
+    응답 `items` 에는 **전부** 담기고, 안 바뀐 것은 `body` 없이 `changed:false` 다.
+    주소가 하나면 최상위에도 그 칸의 값을 그대로 둔다(첫 모양과 맞춘다).
+    """
+    if isinstance(us, str):
+        us, hs = [us], [hs]
+    hs = list(hs) + [""] * (len(us) - len(hs))          # 모자란 해시는 「처음 받기」
     with _lp_lock:
         _lp_stat["total"] += 1
         busy = _lp_stat["active"] >= LONGPOLL_MAX_ACTIVE
@@ -1401,29 +1509,33 @@ def longpoll(u, h, hold):
         else:
             _lp_stat["active"] += 1
     try:
-        deadline = time.monotonic() + (0.0 if busy else hold)
+        now = time.monotonic()
+        deadline = now + (0.0 if busy else hold)
+        items = [None] * len(us)
+        due = [now] * len(us)               # 주소마다 다음에 볼 시각 — 처음엔 다 본다
         while True:
-            code, body = _lp_inner(u)
-            hh = hashlib.sha1(body).hexdigest()[:16]
-            if code != 200 or hh != h or time.monotonic() >= deadline:
+            now = time.monotonic()
+            for i, (u, h) in enumerate(zip(us, hs)):
+                if due[i] <= now:
+                    items[i] = _lp_item(u, *_lp_inner(u), h)
+                    due[i] = now + _lp_step(u)
+            hit = any(it["changed"] or it["status"] != 200 for it in items)
+            if hit or time.monotonic() >= deadline:
                 break
-            time.sleep(min(LONGPOLL_STEP_SEC, max(0.0, deadline - time.monotonic())))
-        changed = hh != h
+            wake = min(min(due), deadline)
+            time.sleep(max(0.0, wake - time.monotonic()))
+        changed = any(it["changed"] for it in items)
         if changed:
             _lp_stat["changed"] += 1
-        out = {"ok": code == 200, "changed": changed, "hash": hh, "status": code,
-               "busy": busy}
-        if changed or code != 200:
-            try:
-                out["body"] = json.loads(body.decode("utf-8"))
-            except ValueError:
-                out["body"] = None
+        out = {"ok": all(it["status"] == 200 for it in items), "changed": changed,
+               "busy": busy, "items": items}
+        if len(items) == 1:
+            out.update({k: v for k, v in items[0].items() if k != "u"})
         return out
     finally:
         if not busy:
             with _lp_lock:
                 _lp_stat["active"] -= 1
-
 
 RELAY_CACHE_MAX = 2000             # 키에 `params` 가 들어가 수가 늘 수 있다
 
@@ -1617,7 +1729,8 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
     token = get_token(cfg)
     _t_wait0 = time.time()
     _rate_limit(path)
-    _wait_ms = (time.time() - _t_wait0) * 1000.0
+    _yield_ms = getattr(_rl_yield, "ms", 0.0)
+    _wait_ms = max(0.0, (time.time() - _t_wait0) * 1000.0 - _yield_ms)
     # **실제 KIS 호출을 여기 한 곳에서 센다** (2026-10-01).
     # 전에는 경로마다 손으로 올려 **13곳**이었고 **일부 경로만** 세었다.
     # **상류로 넘긴 것은 위에서 `return` 하므로 안 세어진다** — 맞다.
@@ -1637,7 +1750,7 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
         with urllib.request.urlopen(req, timeout=15) as resp:
             raw = resp.read()
         # **왕복만 잰다** — JSON 해석은 우리 쪽 일이라 뺀다.
-        _resp_note(path, (time.time() - _t_resp0) * 1000.0, _wait_ms)
+        _resp_note(path, (time.time() - _t_resp0) * 1000.0, _wait_ms, _yield_ms)
         data = json.loads(raw.decode("utf-8"))
     except urllib.error.HTTPError as e:
         detail = scrub(e.read().decode("utf-8", "replace"))[:300]
@@ -2739,6 +2852,135 @@ def fetch_investor(cfg, code, days=INVESTOR_DAYS):
     _investor_cache[code] = (time.time(), out)
     return out
 
+
+# ── 재무 다섯 — 모달 「투자 지표」 칸 재무 카드 (2026-10-02 지시) ──────────
+#
+# 재권님 — 재무 카드 시안 v3 를 보시고 「방향이 맞아 개발해」.
+#
+#     손익계산서   FHKST66430200   /finance/income-statement
+#     대차대조표   FHKST66430100   /finance/balance-sheet
+#     재무비율     FHKST66430300   /finance/financial-ratio
+#     수익성비율   FHKST66430400   /finance/profit-ratio
+#     성장성비율   FHKST66430800   /finance/growth-ratio
+#
+# **분기로 받는다** — `FID_DIV_CLS_CODE` 0 = 년 · 1 = 분기(한국투자증권 공식 예제 저장소
+# `open-trading-api` 의 `finance_income_statement` 주석). 한 번에 30분기(약 7년)가 온다.
+#
+# **단위는 억원이다.** KIS 문서에서는 못 찾았고 **실측으로 정했다** — 대차대조표 자본금
+# (`cpfn`) 8,975 가 삼성전자 자본금 8,975억 원과 같다 (2026-10-02 12:03). 화면에 「억원」
+# 으로 내보내고, 바뀌면 `meta.unit` 한 곳만 고친다.
+#
+# **손익은 연 누적으로 온다** — 2026.03 매출 1,338,734 → 2026.06 3,053,729.
+# 그래서 분기 값 = 이번 누적 − 같은 해 앞 분기 누적 (1분기는 그대로). 앞 분기가 없으면
+# **`None`** 이다 — 지어서 채우지 않는다. 누적 값도 `…Ytd` 로 함께 낸다.
+# **비율(수익성 · 재무 · 성장성)은 KIS 가 준 그대로다** — 누적 기준으로 보이므로 화면이
+# 「누적」 이라 적는다.
+#
+# **99.99 는 「없음」 이다.** 판관비 · 영업외수익 같은 세부 계정에 **그 글자 그대로** 와서
+# 값이 아니라 표시로 본다(문서에서는 못 찾음). ⚠️ 비율이 정말 99.99 면 함께 지워진다 —
+# 그 위험은 남는다.
+#
+# **수명은 `FINANCE_TTL` 하나다** — 분기 자료라 하루에 몇 번 부를 일이 없다. 화면에
+# 박지 않는다(「캐시·주기·한도 값을 화면에 박지 않는다」). 넘기기 표(`RELAY_TTL_NAMES`)
+# 도 같은 이름을 가리킨다.
+FINANCE_TTL = 6 * 3600
+_finance_cache = {}
+FINANCE_NONE = "99.99"
+
+_FIN_APIS = (
+    ("income", "/uapi/domestic-stock/v1/finance/income-statement", "FHKST66430200"),
+    ("balance", "/uapi/domestic-stock/v1/finance/balance-sheet", "FHKST66430100"),
+    ("ratio", "/uapi/domestic-stock/v1/finance/financial-ratio", "FHKST66430300"),
+    ("profit", "/uapi/domestic-stock/v1/finance/profit-ratio", "FHKST66430400"),
+    ("growth", "/uapi/domestic-stock/v1/finance/growth-ratio", "FHKST66430800"),
+)
+
+
+def _fin_num(v):
+    """KIS 재무 값 하나. **`99.99` 와 빈 값은 `None`** — 「없음」 을 `0` 으로 내지 않는다."""
+    s = str(v if v is not None else "").strip()
+    if not s or s == FINANCE_NONE:
+        return None
+    return _num(s, float)
+
+
+def fetch_finance(cfg, code):
+    """종목 하나의 분기 재무. 다섯 API 를 `stac_yymm`(결산 년월)로 합친다.
+
+    **하나라도 못 받으면 그 칸만 `None`** 이고 나머지는 낸다. 어느 API 가 비었는지는
+    `missing` 에 적는다 — 화면이 「데이터 없음」 을 그 카드에만 쓴다.
+    """
+    cached = _ttl_get(_finance_cache, code, FINANCE_TTL)
+    if cached is not None:
+        return cached
+    rows, missing = {}, []
+    params = {"FID_DIV_CLS_CODE": "1", "FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code}
+    for key, path, tr in _FIN_APIS:
+        try:
+            got = out_rows(kis_get(cfg, path, params, tr), "output")
+        except Exception as e:                       # 하나가 죽어도 나머지는 낸다
+            print(f"[KIS] 재무 {key} 실패: {safe_message(e, 120)}", flush=True)
+            got = []
+        if not got:
+            missing.append(key)
+        for r in got:
+            ym = str(r.get("stac_yymm") or "").strip()
+            if len(ym) == 6 and ym.isdigit():
+                rows.setdefault(ym, {})[key] = r
+
+    def g(ym, key, field):
+        return _fin_num((rows.get(ym, {}).get(key) or {}).get(field))
+
+    def quarter(ym, field):
+        """연 누적 → 분기. 1분기는 그대로, 아니면 같은 해 앞 분기를 뺀다."""
+        cur = g(ym, "income", field)
+        if cur is None:
+            return None
+        prev = {"03": None, "06": "03", "09": "06", "12": "09"}.get(ym[4:])
+        if ym[4:] == "03":
+            return cur
+        if prev is None:
+            return None
+        before = g(ym[:4] + prev, "income", field)
+        return None if before is None else cur - before
+
+    out = []
+    for ym in sorted(rows):
+        sale_ytd, op_ytd = g(ym, "income", "sale_account"), g(ym, "income", "bsop_prti")
+        out.append({
+            "ym": ym,
+            # 손익 — 분기 값 · 누적 값 (억원)
+            "sale": quarter(ym, "sale_account"),
+            "op": quarter(ym, "bsop_prti"),
+            "net": quarter(ym, "thtr_ntin"),
+            "saleYtd": sale_ytd,
+            "opYtd": op_ytd,
+            "netYtd": g(ym, "income", "thtr_ntin"),
+            # 대차 (억원)
+            "assets": g(ym, "balance", "total_aset"),
+            "liab": g(ym, "balance", "total_lblt"),
+            "equity": g(ym, "balance", "total_cptl"),
+            # 재무비율 (% · 원)
+            "debtRatio": g(ym, "ratio", "lblt_rate"),
+            "roe": g(ym, "ratio", "roe_val"),
+            "epsYtd": g(ym, "ratio", "eps"),
+            "bps": g(ym, "ratio", "bps"),
+            # 수익성 (% · 누적) — 영업이익률은 KIS 가 안 주므로 누적끼리 나눈다
+            "grossMargin": g(ym, "profit", "sale_totl_rate"),
+            "netMargin": g(ym, "profit", "sale_ntin_rate"),
+            "opMargin": (round(op_ytd / sale_ytd * 100, 2)
+                         if op_ytd is not None and sale_ytd else None),
+            # 성장성 (% · 전년 같은 때 대비)
+            "growSale": g(ym, "growth", "grs"),
+            "growOp": g(ym, "growth", "bsop_prfi_inrt"),
+            "growEquity": g(ym, "growth", "equt_inrt"),
+            "growAssets": g(ym, "growth", "totl_aset_inrt"),
+        })
+    data = {"rows": out, "missing": missing, "at": int(time.time())}
+    # **다 비었으면 담지 않는다** — 빈 것을 6시간 붙들고 있으면 그동안 못 고친다.
+    if out:
+        _finance_cache[code] = (time.time(), data)
+    return data
 
 # ── 종목별 장중 추정가집계 (2026-09-22 지시) ────────────────────
 #
@@ -3869,9 +4111,155 @@ def _prefill_codes():
     return front + rest
 
 
+# ── 일·주·월·년봉 한 바퀴 ──────────────────────────────────────
+#
+# **바뀌는 때를 아는 데이터는 그때만 받는다** (2026-10-01 지시 원문의 공통 룰).
+# 재권님 결정(2026-10-02 14:4x) — 「5분봉 · 일봉은 바뀔 때마다 · **주·월·년봉은
+# 마지막 봉을 장 마감 때 한 번**」 · 「일·주·월·년봉은 **쌓아 둔다**」.
+# 그래서 이 바퀴는 **통합 거래가 끝난 뒤(20:10) 거래일마다 한 번** 네 주기의 마지막 봉을 받는다.
+# 장중의 일봉은 화면이 열 때 받는 길이 따로 있다.
+#
+# **쌓아 둔다** — 캔들은 기간으로 지우지 않는다. 지우는 것은 같은 구간의
+# 옛 줄뿐이다(`_save_candles_write` 주석).
+#
+# **왜 미리 받나** — 2026-10-02 실측으로 DB 에 일봉이 **12종목**뿐이었다
+# (주 6 · 월 8 · 년 8). 종목 차트를 열 때마다 **매번 KIS 왕복**이었다.
+# 한 번 쌓아 두면 **그 뒤로는 하루 한 번 그날 봉만** 받으면 된다.
+#
+# **첫 바퀴만 비싸다** — 2026-10-02 실측으로 종목당 19건 · 348종목 6,612건(48.7분).
+# 그 뒤는 하루 348종목 × 네 주기 = **1,392건** 안팎이다(마지막 봉만 · 아직 안 쟀다).
+#
+# **기존 `prefill-5m` 틀을 그대로 쓴다.** 새로 짜지 않는다 — 종목 순서 · 양보 ·
+# 「받았나」 기록이 이미 거기 있다. 다른 것은 **무엇을 구간으로 보느냐**뿐이다.
+DWMY_THREAD_NAME = "prefill-dwmy"
+DWMY_PERIODS = ("D", "W", "M", "Y")
+
+#: 네 주기 모두 이 개수까지 거슬러 받는다.
+#:
+#: **화면의 일봉이 400 이라 그것에 맞춘다** (`chart.js` 의 `FETCH_BARS`).
+#: 거기 주석대로 **`limit` 이 보관량을 정한다** — 적게 받아 두면 그 양에서
+#: 멈추고, 화면이 더 요구하면 그때 또 받는다. **밤에 받은 값이 헛일이 된다.**
+#:
+#: **주·월·년도 같은 400 으로 둔다 — 화면보다 넉넉히다** (화면은
+#: `BARS_FOR_IND` ≈ 260~320). 주기마다 다른 값을 두면 **그 값이 네 곳**이 되고
+#: 화면의 상수와 갈린다. 넉넉히 받는 비용은 작다 — 네 주기 다 **데이터가
+#: 짧아 일찍 멈춘다**(2026-10-02 실측 — 년봉은 삼성전자도 46봉뿐).
+DWMY_WANT = 400
+
+#: 한 바퀴를 도는 시각(분) — **통합(UN) 거래가 끝난 뒤 10분**이다(2026-10-03 지시).
+#:
+#: 재권님 말씀 — 「종가는 3시반이긴 하지만 **거래는 8시까지**」. 일봉을 통합으로
+#: 받으므로(넥스트레이드 애프터마켓 포함) 16:00 에 받으면 **덜 된 봉**일 수 있다.
+#: 거래가 끝나는 시각은 위 `MINUTE_DAY_END`(20:00)가 이미 들고 있어 그것에서 센다 —
+#: 20:00 을 여기 또 적으면 두 곳이 된다.
+#:
+#: **10분은 여유다 — 근거를 아직 못 쟀다.** 20:00 체결이 KIS 일봉에 언제 들어가는지
+#: 모른다. 2026-10-06(월) 16:05 · 20:05 에 같은 종목의 UN · J 일봉 · 주봉 마지막 봉을
+#: 견주어 닫는다. 새벽에 돌면 「어제까지」 만 들어와 다음 날 그날 봉을 다시 받게 된다.
+DWMY_AT_MIN = MINUTE_DAY_END + 10          # 20:10
+
+#: 종목 사이 쉬는 시간. **한 번에 몰지 않고 길게 늘인다** (창구 판단).
+#: 348종목 × 5초 = 29분에 걸쳐 돈다. 마감 뒤라 급할 일이 없다.
+DWMY_REST_SEC = 5.0
+DWMY_CHECK_SEC = 60            # 시각을 이만큼마다 본다
+
+#: **기본은 꺼짐이다.** 첫 바퀴가 KIS 를 몇 분간 쓰므로 「켜기」 는 따로
+#: 지시받는다 (「커밋 → 푸시 → 배포 → **켜기**」). 켤 때 `KJC_DWMY=1`.
+#:
+#: **코드가 들어가는 것과 도는 것은 다른 일이다** — 이 줄이 그 둘을 가른다.
+DWMY_ON = (os.environ.get("KJC_DWMY") or "").strip().lower() in (
+    "1", "true", "yes", "on")
+
+
+def _dwmy_codes():
+    """한 바퀴 돌 종목 — 지수 구성종목 전체 (2026-10-02 지시 「348」)."""
+    try:
+        with dart._db_lock, dart.db_conn() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT stock_code FROM index_members "
+                "ORDER BY stock_code").fetchall()
+        return [r["stock_code"] for r in rows]
+    except Exception:
+        return []
+
+
+def _dwmy_slot(period, now):
+    """그 주기를 **언제 다시 받나** — **마지막 거래일**에 한 번이다.
+
+    재권님 결정(2026-10-02 14:4x) — 「주·월·년봉은 **마지막 봉을 장 마감 때
+    한 번**」. 이번 주·달·해의 봉은 아직 자라는 중이라 거래일마다 바뀐다. 처음에는
+    주·달·해가 **바뀔 때만** 받게 짰는데, 그러면 이번 주 봉이 월요일 값에서 멈춘다.
+
+    **그날 날짜가 아니라 마지막 거래일이다 (2026-10-03 지시).** 날짜로 두면
+    **토·일에도** 새 키가 생겨 한 바퀴(하루 약 1,392건)를 헛돈다 — 새 봉이 없다.
+    토·일은 금요일 키가 되어 금요일에 받았으면 건너뛴다. **휴일은 못 가른다** —
+    달력이 없다(`_last_closed_5m_slot` 도 같다). 휴일에는 한 바퀴를 더 돈다.
+
+    `period` 를 받는 것은 기록 키(`pfW:…`)를 주기마다 따로 두려는 것이다 —
+    한 주기가 실패해도 나머지를 다시 부르지 않는다.
+    """
+    d = now
+    while d.weekday() >= 5:                  # 토·일은 금요일로 거슬러 간다
+        d = d - timedelta(days=1)
+    return d.strftime("%Y%m%d")
+
+
+def start_dwmy_prefill(cfg):
+    """일·주·월·년봉을 거래일마다 한 번(`DWMY_AT_MIN`) 한 바퀴 받는다.
+
+    **쓰는 서버에서만 돈다.** 읽기 전용 서버가 받아 봐야 저장을 못 한다.
+    """
+    if not cfg:
+        return False
+    if not marketdb.writable():
+        return False
+
+    def loop():
+        time.sleep(PREFILL_START_SEC)
+        while True:
+            try:
+                now = datetime.now(KST)
+                if now.hour * 60 + now.minute >= DWMY_AT_MIN:
+                    for code in _dwmy_codes():
+                        got = False
+                        for period in DWMY_PERIODS:
+                            slot = _dwmy_slot(period, now)
+                            key = "pf%s:%s" % (period, code)
+                            # 그 구간을 이미 받았으면 건너뛴다
+                            if _meta_get(key) == slot:
+                                continue
+                            try:
+                                get_chart(cfg, code, period, DWMY_WANT)
+                            except Exception:
+                                pass   # 한 종목이 실패해도 나머지는 간다
+                            # **실패해도 적는다** — 안 적으면 그 종목만
+                            # 바퀴마다 다시 부른다 (`prefill-5m` 과 같다)
+                            _meta_set(key, slot)
+                            got = True
+                        if got:
+                            # 받은 종목 뒤에만 쉰다. 건너뛴 종목까지 쉬면
+                            # **받을 것이 없는 날에도 29분을 선다.**
+                            time.sleep(PREFILL_BUSY_REST_SEC if _ui_busy()
+                                       else DWMY_REST_SEC)
+            except Exception:
+                pass
+            time.sleep(DWMY_CHECK_SEC)
+
+    threading.Thread(target=loop, daemon=True, name=DWMY_THREAD_NAME).start()
+    return True
+
+
 def start_prefill(cfg):
     """뒤에서 5분봉을 미리 채운다. 키가 없으면 아무것도 하지 않는다."""
     if not cfg:
+        return False
+    # **읽기 전용 서버는 아예 안 받는다** (2026-10-02). 받아도 저장을 못 하니
+    # KIS 만 쓰고 버리는 꼴이다 — 순수 낭비다.
+    #
+    # 세션 서버 다섯은 `--slow` 라 여기까지 오지도 않는다. **걸리는 것은 8764**
+    # 하나인데, 그 하나만으로도 348종목이 헛돈다. 그리고 `--slow` 를 떼는 날
+    # 나머지도 같은 자리에 선다 — **깃발은 플래그와 무관하게 막는다.**
+    if not marketdb.writable():
         return False
 
     def loop():
@@ -4954,20 +5342,27 @@ class Handler(SimpleHTTPRequestHandler):
             if not LONGPOLL_ON:
                 self._send_json({"ok": False, "error": "그런 주소 없음"}, 404)
                 return
-            u = (qs.get("u") or [""])[0]
-            # **`/api/kis/` 안쪽만 · 자기 자신(poll)과 넘겨받는 자리(relay)는 안 된다** —
-            # 앞은 고리가 되고 뒤는 넘기기 전용 자리다.
-            inner = urllib.parse.urlparse(u).path[len("/api/kis/"):].strip("/") \
-                if u.startswith("/api/kis/") else ""
-            if not inner or inner in ("poll", RELAY_ROUTE) or ".." in u:
-                self._send_json({"ok": False, "error": "u 는 /api/kis/ 안의 주소여야 합니다."}, 400)
+            # **빈 값을 살려 다시 읽는다** — 위 `qs` 는 `h=` 처럼 빈 값을 버려서 묶음일 때
+            # u·h 자리가 밀린다. 다른 라우트는 빈 값을 「없음」 으로 읽으므로 여기서만 바꾼다.
+            _qb = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query,
+                                        keep_blank_values=True)
+            us = [x for x in (_qb.get("u") or []) if x]
+            if not us or len(us) > LONGPOLL_MAX_URLS:
+                self._send_json({"ok": False, "error": "u 는 1~%d 개여야 합니다." % LONGPOLL_MAX_URLS}, 400)
                 return
+            # **허용 접두 안쪽만**(`_lp_url_ok`). 묶음이면 **하나라도** 어기면 400 —
+            # 화면은 `stats.longpollPrefixes` 로 미리 가른다.
+            for u in us:
+                why = _lp_url_ok(u)
+                if why:
+                    self._send_json({"ok": False, "error": why, "u": u}, 400)
+                    return
             try:
                 hold = float((qs.get("hold") or ["10"])[0])
             except ValueError:
                 hold = 10.0
             hold = max(0.0, min(hold, LONGPOLL_MAX_HOLD))
-            self._send_json(longpoll(u, (qs.get("h") or [""])[0], hold))
+            self._send_json(longpoll(us, _qb.get("h") or [], hold))
             return
 
         if route == "policy":
@@ -5240,6 +5635,24 @@ class Handler(SimpleHTTPRequestHandler):
             # ── 지금 보고 있는 그 종목 (2026-09-18 지시) ──
             # 위 investor-top 과 다르다. 그쪽은 「상위 목록」이고 가집계이며,
             # 이쪽은 「이 종목」이고 확정치다.
+            if route == "finance":
+                code = (qs.get("code") or [""])[0].strip()
+                if not (code.isdigit() and len(code) == 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                fin = fetch_finance(cfg, code)
+                self._send_json({
+                    "ok": bool(fin["rows"]), "data": fin["rows"],
+                    "meta": {
+                        "code": code, "count": len(fin["rows"]), "period": "분기",
+                        "unit": "억원", "missing": fin["missing"], "fetchedAt": fin["at"],
+                        "ttl": FINANCE_TTL,
+                        "source": {k: tr for k, _p, tr in _FIN_APIS},
+                        # 손익 sale/op/net 은 분기 값(누적에서 뺌) · …Ytd 는 연 누적 그대로
+                        # 비율은 KIS 가 준 그대로(누적 기준) · 99.99 는 None
+                    },
+                })
+                return
             if route == "investor":
                 code = (qs.get("code") or [""])[0].strip()
                 if not (code.isdigit() and len(code) == 6):
@@ -5473,6 +5886,12 @@ def main():
     elif start_prefill(cfg):
         print("  5분봉 준비 : 코스피 상위 %d종목을 뒤에서 미리 받습니다"
               % PREFILL_TOP)
+
+    if not DWMY_ON:
+        print("  일주월년   : **꺼져 있습니다** (켜려면 KJC_DWMY=1)")
+    elif start_dwmy_prefill(cfg):
+        print("  일주월년   : %d:%02d 에 %d종목을 한 바퀴 받습니다 (최대 %d봉까지)"
+              % (DWMY_AT_MIN // 60, DWMY_AT_MIN % 60, len(_dwmy_codes()), DWMY_WANT))
 
     # 뉴스 쌓기 — **주말·밤에도 돈다.** 공시 폴러와 달리 DART 키가 없어도 돈다
     #
