@@ -545,9 +545,12 @@ const CANDLE_MAX = 60;              // 이보다 쌓이면 오래된 것부터 �
 const _candleCache = new Map();
 const _watched = new Map();         // 지켜보는 주소 → 지켜보는 수
 
-/* 서버가 롱폴을 모를 때 다시 받을 대체값. 봉의 서버 값(기간별 `fresh_sec`)은
-   아직 `timing` 에 안 나온다 — 나오면 그 이름으로 바꾼다 */
+/* 서버가 롱폴을 모를 때는 **서버의 기간별 `fresh_sec`** 마다 다시 받는다 (2026-10-03 재권님
+   「응 그래」 — 5분봉 30 · 일 60 · 주 300 · 월 600 · 년 3600초. 그보다 자주 물어도 서버가 새로
+   안 받는다). 이름은 서버 `timing_values()` 가 짓는 `kis_proxy.PERIODS.<기간>.fresh_sec`.
+   아래 값은 그것마저 못 받았을 때의 대체값이다 */
 const CANDLE_FALLBACK_MS = 60_000;
+const candleKey = (periodId) => `kis_proxy.PERIODS.${PERIOD_MAP[periodId] || periodId}.fresh_sec`;
 
 /**
  * 봉을 지켜본다 — 바뀌면 쥔 것을 버리고 `onChange` 를 부른다.
@@ -570,7 +573,7 @@ export function watchCandles(getCode, getPeriod, onChange, view) {
   const w = watch({
     url,
     onChange: () => { if (held) _candleCache.delete(held); return onChange(); },
-    key: null, fallbackMs: CANDLE_FALLBACK_MS,
+    key: () => candleKey(getPeriod()), fallbackMs: CANDLE_FALLBACK_MS,
   });
   url();                            // 지켜보기 시작 — 첫 바퀴 전에 받은 봉도 믿는다
   return {
