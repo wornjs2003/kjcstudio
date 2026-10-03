@@ -1000,7 +1000,7 @@ canvas 는 CSS 를 상속받지 못한다. 그래서 `holdings/js/theme.js` 가 
     로컬   `secrets_guard.py` 의 `scrub` · `safe_message`
     워커   `kis-worker.js` 의 `scrub` · `safeErr`
 
-    기준   KIS 를 초당 다섯 건까지 부른다
+    기준   KIS 를 초당 몇 건까지 부르나 — 값은 `kis_proxy.py` 의 `KIS_CALLS_PER_SEC` · 돌고 있는 값은 `/api/kis/stats` 의 `budgetPerSec`
     로컬   스레드 락 + 마지막 호출 시각
     워커   전역 변수 + 대기
     **둘 다 「자기 안에서만」 센다** — 프로세스가 여럿이면 그만큼 는다
