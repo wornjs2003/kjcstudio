@@ -63,7 +63,9 @@
       <div class="kh-card kh-sc-card">
         <!-- 2026-10-02 지시 — 공시 대신 종목 분석. 글은 data/stock-analysis.json 한 곳에 쌓는다.
              공시는 fetch-naver-news.py 가 그대로 받는다 — 화면에서만 뺐다 -->
-        <div class="kh-tabs"><button class="kh-tab is-active">종목 분석</button></div>
+        <!-- 2026-10-03 지시 — 칸 이름 「돈의 흐름」. 머리를 누르면 AI 생태계의 세계 지도(지구본)가 모달로 뜬다.
+             href 는 그대로 두어 새 탭 · 직접 주소도 된다(모달 룰) -->
+        <div class="kh-tabs"><a class="kh-tab is-active" href="ecosystem.html?view=geo" data-modal="page">돈의 흐름</a></div>
         <ul class="in-news in-sm in-scroll" data-analysis></ul>
       </div>
       <div class="kh-card kh-dlm-card">
