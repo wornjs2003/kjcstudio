@@ -4064,6 +4064,17 @@ _last_ui_at = 0.0              # 화면이 마지막으로 /api/kis/* 를 부른
 # 이야기이고(`home.js` 의 `applyPrices`), 여기서 적는 것은 **순서**다.
 UI_SEEN_MAX = 400          # 이만큼만 들고 있는다. 넘으면 오래된 것부터 버린다
 _ui_seen = {}              # 종목코드 -> 화면이 마지막으로 물어본 시각(monotonic)
+
+# ── 화면이 「어느 자리에서」 봤나 (2026-10-03 · 설계서 (라)) ──────────
+#
+# `_ui_seen` 은 「최근에 물었다」 만 안다. 화면이 요청에 `view=` 를 붙이면 자리를 안다.
+#     modal   모달이 연 종목            ┐ 1순위 — 모달 룰 「어느 순위에 있든 1순위」
+#     direct  검색 · ?code= 로 들어온 종목 ┘ (재권님 「화면에 보일 종목과는 다른 이벤트」)
+#     row     보이는 줄(순위표 시세 묶음)    2순위
+# **쿼리다 — 헤더가 아니다.** 롱폴의 안쪽 호출이 u 주소를 그대로 다시 부르는데 헤더는 안
+# 따라간다. 표시가 없으면 지금처럼 「최근에 물었다」 로만 센다(뒤로 맞음).
+UI_VIEW_RANK = {"modal": 0, "direct": 0, "row": 1}
+_ui_view = {}              # 종목코드 -> (등급, 시각 monotonic)
 _ui_seen_lock = threading.Lock()
 
 
@@ -4085,6 +4096,7 @@ def _mark_ui_call(path=""):
     for v in qs.get("codes", []):
         raw.extend(v.split(","))
     now = time.monotonic()
+    rank = UI_VIEW_RANK.get((qs.get("view") or [""])[0].strip().lower())
     with _ui_seen_lock:
         for c in raw:
             c = c.strip()
@@ -4092,10 +4104,13 @@ def _mark_ui_call(path=""):
             # 그것을 넣으면 미리받기가 없는 종목을 받으러 간다
             if len(c) == 6 and c.isdigit():
                 _ui_seen[c] = now
+                if rank is not None:
+                    _ui_view[c] = (rank, now)
         if len(_ui_seen) > UI_SEEN_MAX:
             old = sorted(_ui_seen.items(), key=lambda kv: kv[1])
             for c, _ in old[:len(_ui_seen) - UI_SEEN_MAX]:
                 _ui_seen.pop(c, None)
+                _ui_view.pop(c, None)
 
 
 def _ui_busy():
@@ -4124,9 +4139,16 @@ def _prefill_codes():
     # 어느 순위에 있든 1순위」 그대로다.
     with _ui_seen_lock:
         seen = dict(_ui_seen)
+        view = dict(_ui_view)
     if not seen:
         return codes
-    front = sorted(seen, key=lambda c: -seen[c])
+    # (라) 화면이 자리를 알렸으면 그 등급이 먼저 — modal · direct > row > 그 밖 최근 본 것.
+    # 등급은 `PREFILL_HOT_SEC` 동안만 듣는다(그 뒤엔 「최근 본 것」 으로 내려간다).
+    now = time.monotonic()
+    def _rank(c):
+        r = view.get(c)
+        return r[0] if r and now - r[1] < PREFILL_HOT_SEC else len(UI_VIEW_RANK)
+    front = sorted(seen, key=lambda c: (_rank(c), -seen[c]))
     rest = [c for c in codes if c not in seen]
     return front + rest
 
