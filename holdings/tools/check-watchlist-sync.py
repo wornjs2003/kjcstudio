@@ -16,7 +16,21 @@
     python tools/check-watchlist-sync.py     맞으면 0, 어긋나면 1
 
 CLAUDE.md 「같은 값은 한 곳에만 둔다」 참조.
+
+**`--listed [--port N]` — 목록이 실제 상장 종목인지 본다** (2026-10-03 재권님 「응 해」).
+셀트리온헬스케어(091990)가 2023년 상장폐지인데 시장 전체 목록에 남아 있었다 — 목업에서
+옮겨 오며 대조를 안 했다. `market.js` 의 WATCHLIST · MARKET_STOCKS 코드를 서버
+`/api/kis/quotes`(기본 8765 · 서버 캐시 · 30종목에 KIS 1건)로 한 번 묻는다.
+
+    응답에 없는 코드    「상장 목록에 없음」 — 걸림(1)
+    이름이 다른 코드    「봐야 할 자리」 — 이름을 바꿨을 수 있다. 막지 않는다
+    서버 · KIS 를 못 봄  「못 쟀다」(2) — **`0` 으로 내지 않는다**
+
+**기본 실행은 네트워크를 안 쓴다** — `tools/check-all.py` 가 부르는 것은 그대로다.
+언제 돌릴지는 정하지 않았다 — 손으로 돌린다.
 """
+import json
+import urllib.request
 import io
 import os
 import re
@@ -71,7 +85,93 @@ def read_array(rel, start):
     return CODE.findall(s[i:end]), None
 
 
+ITEM = re.compile(r"""code:\s*["'](\d{6})["']\s*,\s*name:\s*["']([^"']+)["']""")
+LISTED_SOURCES = [
+    ("WATCHLIST",     "export const WATCHLIST = ["),
+    ("MARKET_STOCKS", "export const MARKET_STOCKS = ["),
+]
+
+
+def read_items(rel, start):
+    """배열 하나에서 (코드, 이름) 을 뽑는다. 자르는 법은 `read_array` 와 같다."""
+    codes, err = read_array(rel, start)
+    if err:
+        return None, err
+    s = io.open(os.path.join(ROOT, rel), encoding="utf-8").read()
+    at = s.find(start)
+    body = s[at:]
+    items = []
+    for c, n in ITEM.findall(body):
+        if c in codes and c not in [x[0] for x in items]:
+            items.append((c, n))
+    return items, None
+
+
+def listed(port):
+    """market.js 의 종목이 지금 시세가 오는 종목인지 — 0 통과 · 1 걸림 · 2 못 쟀다."""
+    rel = "holdings/js/data/market.js"
+    want = []          # (목록 이름, 코드, 이름)
+    for lname, start in LISTED_SOURCES:
+        items, err = read_items(rel, start)
+        if err:
+            print("[읽기 실패] " + err)
+            return 2
+        want += [(lname, c, n) for c, n in items]
+    codes = list(dict.fromkeys(c for _, c, _ in want))
+    if not codes:
+        print("  **물을 종목이 0개입니다 — 「없다」 가 아니라 「못 읽었다」 입니다.**")
+        return 2
+
+    got, unmeasured = {}, []
+    step = 120                       # 서버 `quotes` 가 한 번에 받는 상한(kis_proxy.py 의 [:120])
+    for i in range(0, len(codes), step):
+        chunk = codes[i:i + step]
+        url = "http://127.0.0.1:%d/api/kis/quotes?codes=%s" % (port, ",".join(chunk))
+        try:
+            with urllib.request.urlopen(url, timeout=30) as r:
+                j = json.load(r)
+        except Exception as e:
+            print("  못 쟀다 — 서버(%d)를 못 불렀다: %s" % (port, type(e).__name__))
+            return 2
+        if not j.get("ok"):
+            print("  못 쟀다 — 서버가 실패를 돌려줬다: %s" % (j.get("error") or "")[:80])
+            return 2
+        # **KIS 오류로 빠진 것은 「상장 목록에 없음」 이 아니다** — 그 묶음은 못 쟀다로 둔다
+        if j.get("errors"):
+            unmeasured += chunk
+            continue
+        got.update(j.get("data") or {})
+
+    missing = [(l, c, n) for l, c, n in want if c not in got and c not in unmeasured]
+    renamed = [(l, c, n, (got[c] or {}).get("name")) for l, c, n in want
+               if c in got and (got[c] or {}).get("name") and (got[c] or {}).get("name") != n]
+
+    print("  market.js  WATCHLIST + MARKET_STOCKS   %d종목 (서버 %d · 응답 %d)" % (len(codes), port, len(got)))
+    if renamed:
+        print()
+        print("  봐야 할 자리 — 이름이 다릅니다 (막지 않습니다)")
+        for l, c, n, real in renamed:
+            print("      %-14s %s  market.js 「%s」 ↔ 시세 「%s」" % (l, c, n, real))
+    if unmeasured:
+        print()
+        print("  못 쟀다 — KIS 오류로 %d종목을 못 봤습니다: %s" % (len(unmeasured), ", ".join(unmeasured)))
+    if missing:
+        print()
+        print("상장 목록에 없음 — 시세가 안 옵니다 (상장폐지 · 합병 · 코드 틀림)")
+        for l, c, n in missing:
+            print("      %-14s %s  %s" % (l, c, n))
+        return 1
+    if unmeasured:
+        return 2
+    print()
+    print("상장: %d종목 모두 시세가 옵니다." % len(codes))
+    return 0
+
+
 def main():
+    if "--listed" in sys.argv:
+        port = int(sys.argv[sys.argv.index("--port") + 1]) if "--port" in sys.argv else 8765
+        return listed(port)
     # **「파일이 없다」 와 「파일은 있는데 못 읽었다」 를 가른다 (2026-09-30).**
     #
     # 자리가 **없어질 수 있다.** 배포본 워커가 그 자리다 — 2026-09-30 에
