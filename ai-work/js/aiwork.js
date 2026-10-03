@@ -21,9 +21,7 @@
 
 const $ = (id) => document.getElementById(id);
 
-const API = "/api/board/doc/ai-work";
 const LOCAL_KEY = "kjc-ai-work-v3";
-const SYNC_DELAY = 800;
 
 /* 칸은 pipeline.json 이 정한다. 프로젝트 보드의 COLUMNS 자리다 —
    거기서는 할 일·진행중·완료였고 여기서는 컨셉·모델링·… 이다. */
@@ -40,7 +38,6 @@ const TOOL_STATUS = {
 let frame = null;      /* pipeline.json */
 let tasks = [];        /* [ {id, text, column, subs[], tools[], memo, …} ] */
 let openTask = null;   /* 상세창에 띄운 작업 */
-let syncTimer = null, syncing = false, pending = false;
 
 try { tasks = JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; } catch (e) { tasks = []; }
 if (!Array.isArray(tasks)) tasks = [];
@@ -140,45 +137,67 @@ function persistLocal() {
   } catch (e) {}
 }
 
-function save() {
-  persistLocal();
-  setSaved("저장 중…", "is-busy");
-  if (syncing) { pending = true; return; }
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(sync, SYNC_DELAY);
+/* ── 저장은 보드 셋이 함께 쓰는 층으로 (2026-10-03 · 보드 9번 · 재권님 「가」) ──
+   전에는 여기 저장 코드가 따로 있었고 **`updatedAt` 을 안 보내서**, 두 창이 같은
+   판을 고치면 늦게 쓴 쪽이 앞의 것을 지웠다. 이제 `projects/js/board-store.js`
+   (보드 레인 · `index.html` 이 이 모듈보다 먼저 싣는다)가 `updatedAt` 을 실어 보내고
+   409 면 다시 읽어 아래 `mergeTasks` 로 합친다. 주소는 그대로 `/api/board/doc/ai-work`.
+
+   합치기는 **작업 하나씩**(id) 견준다 — 한쪽만 바꾼 작업은 그쪽 것, 둘 다 같은 작업을
+   다르게 고쳤을 때만 묻는다. 순서는 셋 다에 있는 작업으로만 견주고 새 작업은 뒤에 붙인다
+   (프로젝트 보드의 `pickOrder` 와 같은 생각). */
+function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+function mergeTasks(base, mine, theirs) {
+  const conflicts = [];
+  const idx = (l) => { const o = {}; (l || []).forEach((x) => { if (x && x.id) o[x.id] = x; }); return o; };
+  const bl = (base && base.tasks) || [], ml = mine.tasks || [], tl = theirs.tasks || [];
+  const B = idx(bl), M = idx(ml), T = idx(tl), out = {};
+  const ids = {};
+  [bl, ml, tl].forEach((l) => l.forEach((x) => { if (x && x.id) ids[x.id] = 1; }));
+  Object.keys(ids).forEach((id) => {
+    const b = B[id], m = M[id], t = T[id];
+    let v;
+    if (same(m, t)) v = m;
+    else if (same(b, m)) v = t;          /* 나는 안 바꿨다 → 남의 것 */
+    else if (same(b, t)) v = m;          /* 남이 안 바꿨다 → 내 것 */
+    else { conflicts.push("작업 「" + ((m || t || b).text || id) + "」"); v = m; }
+    if (v) out[id] = v;
+  });
+  const keep = (l) => l.map((x) => x.id).filter((id) => out[id]);
+  const b = keep(bl), m = keep(ml), t = keep(tl);
+  const all3 = (l) => l.filter((id) => B[id] && M[id] && T[id]);
+  let order, other;
+  if (same(all3(m), all3(t)) || same(all3(b), all3(t))) { order = m; other = t; }
+  else if (same(all3(b), all3(m))) { order = t; other = m; }
+  else { conflicts.push("작업의 순서"); order = m; other = t; }
+  order = order.slice();
+  const seen = {}; order.forEach((id) => { seen[id] = 1; });
+  other.forEach((id) => { if (!seen[id]) { seen[id] = 1; order.push(id); } });
+  Object.keys(out).forEach((id) => { if (!seen[id]) order.push(id); });
+  return { doc: { tasks: order.map((id) => out[id]) }, conflicts };
 }
 
-function sync() {
-  syncing = true; pending = false;
-  fetch(API, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ data: { tasks: tasks } }),
-  })
-    .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then(() => setSaved("서버에 저장됨", "is-ok"))
-    .catch(() => setSaved("이 브라우저에만 저장됨", "is-warn"))
-    .then(() => {
-      syncing = false;
-      if (pending) { clearTimeout(syncTimer); syncTimer = setTimeout(sync, SYNC_DELAY); }
-    });
-}
+/* global createBoardStore — projects/js/board-store.js (일반 스크립트) */
+const store = createBoardStore({
+  name: "ai-work",
+  delay: 800,
+  snapshot: () => ({ tasks: JSON.parse(JSON.stringify(tasks)) }),
+  apply: (doc) => { tasks = (doc && Array.isArray(doc.tasks)) ? doc.tasks : []; if (frame) render(); },
+  hasData: (d) => Array.isArray(d.tasks),
+  empty: { tasks: [] },
+  hasLocal: () => tasks.length > 0,
+  persistLocal,
+  merge: mergeTasks,
+  /* 같은 작업을 양쪽에서 다르게 고친 드문 경우 — 따로 확인창이 없어 브라우저 확인창으로
+     묻는다. 「확인」 이 서버 것, 「취소」 가 내 것이다. */
+  decide: (c) => Promise.resolve(window.confirm(
+    "다른 곳에서 함께 바뀌었습니다 — " + c.slice(0, 3).join(" · ") + (c.length > 3 ? " 외" : "") + "\n\n" +
+    "「확인」 — 서버 것으로(여기서 방금 고친 것이 사라집니다)\n" +
+    "「취소」 — 내 것으로(다른 곳에서 고친 것이 사라집니다)")),
+  status: (text, cls) => setSaved(text, cls ? "is-" + cls : ""),
+});
 
-function loadFromServer() {
-  return fetch(API, { headers: { accept: "application/json" } })
-    .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then((body) => {
-      if (body && body.ok && body.data && body.data.tasks) {
-        tasks = body.data.tasks;
-        persistLocal();
-        setSaved("서버에서 불러옴", "is-ok");
-        return;
-      }
-      setSaved("서버 연결됨", "is-ok");
-      if (tasks.length) save();
-    })
-    .catch(() => setSaved("이 브라우저에만 저장됨", "is-warn"));
-}
+function save() { store.save(); }
 
 /* ── 작업 카드 ──────────────────────────── */
 
@@ -508,7 +527,7 @@ async function init() {
   }
 
   render();               /* 브라우저에 있던 것으로 먼저 */
-  await loadFromServer();
+  await store.load();
   render();               /* 서버 것으로 다시 */
 }
 
