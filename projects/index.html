@@ -1538,6 +1538,37 @@ function subStat(t) {
 
 function touch(t) { t.updatedAt = Date.now(); }
 
+/* 카드의 열을 옮깁니다 — **검수중·완료로 갈 때 안 끝난 하위가 있으면 되묻습니다**
+   (2026-10-03 · 보드 2번). 도구(`tools/board-card.py` 의 `--done`)는 이미 되묻는데
+   화면의 › 단추와 카드 창 「상태」 단추는 열만 바꿔서, 하위가 남은 카드가 조용히
+   완료로 갔습니다. **두 자리가 이 함수 하나를 씁니다** — 따로 검사하면 갈립니다.
+
+   열 이름은 도구와 같은 둘(`review` · `done`)입니다. **앞으로 갈 때만** 묻습니다 —
+   완료에서 검수중으로 되돌리는 것은 「아직 덜 됐다」 는 뜻이라 물을 것이 없습니다.
+   (끌어서 놓는 `drop()` 은 같은 칸 안의 순서만 바꾸므로 여기 해당이 없습니다.)
+
+   옮겼으면 true, 취소했거나 같은 칸이면 false 를 돌려줍니다. */
+const ASK_BEFORE = ["review", "done"];
+async function moveColumn(t, to) {
+  const from = t.column || COLUMNS[0].id;
+  if (to === from) return false;
+  const idx = function (id) { return COLUMNS.findIndex(function (c) { return c.id === id; }); };
+  const left = (t.subs || []).filter(function (s) { return !s.done; }).length;
+  if (left && ASK_BEFORE.indexOf(to) >= 0 && idx(to) > idx(from)) {
+    const label = (COLUMNS[idx(to)] || {}).label || to;
+    const yes = await ask({
+      title: "하위 " + left + "개가 안 끝났습니다",
+      desc: "이 카드에 체크하지 않은 세부 항목이 남아 있습니다.",
+      ask: "그래도 「" + label + "」 으로 옮길까요?",
+      okText: "옮기기",
+    });
+    if (!yes) return false;
+  }
+  t.column = to;
+  touch(t); save();
+  return true;
+}
+
 function stampText(t) {
   function fmt(ms) {
     if (!ms) return "—";
@@ -1663,8 +1694,7 @@ function buildTask(p, t, colIdx) {
   left.disabled = colIdx === 0;
   left.addEventListener("click", function (e) {
     e.stopPropagation();                 /* 카드 열기와 겹치지 않게 */
-    t.column = COLUMNS[colIdx - 1].id;
-    touch(t); save(); render();
+    moveColumn(t, COLUMNS[colIdx - 1].id).then(function (ok) { if (ok) render(); });
   });
   btns.appendChild(left);
 
@@ -1675,8 +1705,7 @@ function buildTask(p, t, colIdx) {
   right.disabled = colIdx === COLUMNS.length - 1;
   right.addEventListener("click", function (e) {
     e.stopPropagation();
-    t.column = COLUMNS[colIdx + 1].id;
-    touch(t); save(); render();
+    moveColumn(t, COLUMNS[colIdx + 1].id).then(function (ok) { if (ok) render(); });
   });
   btns.appendChild(right);
 
@@ -2020,9 +2049,7 @@ function drawTask() {
     b.className = t.column === c.id ? "on" : "";
     b.textContent = c.label;
     b.addEventListener("click", function () {
-      t.column = c.id;
-      touch(t); save();
-      drawTask();
+      moveColumn(t, c.id).then(function (ok) { if (ok) drawTask(); });
     });
     segState.appendChild(b);
   });
