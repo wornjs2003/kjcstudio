@@ -296,6 +296,12 @@ h1 {
 .lane.is-sorting .task { transition: none; }   /* 끄는 동안 카드가 출렁이지 않게 */
 
 .task-line { display: flex; align-items: flex-start; gap: 7px; }
+/* 순번 — 글 앞의 작은 숫자. 줄을 새로 만들지 않아 카드 높이가 그대로입니다 */
+.task-rank {
+  display: inline-block; min-width: 16px; margin-right: 5px;
+  font-size: 11px; font-weight: 700; color: var(--pj-text-muted);
+}
+.tm-pick { width: 180px; }
 .task-text {
   flex: 1; font-size: 13px; font-weight: 500;
   line-height: 1.5; color: var(--pj-text-primary); word-break: break-word;
@@ -1578,15 +1584,48 @@ function stampText(t) {
   return "만든 날 " + fmt(t.createdAt) + " · 마지막 수정 " + fmt(t.updatedAt || t.createdAt);
 }
 
-/* 카드 글의 `[업무] [담당]` 을 읽습니다.
-   **데이터는 안 바꿉니다** — 화면에서만 떼어 막대와 동그라미로 옮깁니다.
-   `개념정의` 가 나중에 이것을 필드로 옮기기로 되어 있고, 그때는 아래
-   `tagsOf()` 만 필드를 보게 고치면 됩니다. */
+/* 카드의 업무 · 담당을 읽습니다 — **칸(`t.tag` · `t.who`)이 먼저, 없으면 글의
+   `[업무] [담당]`** (2026-10-03 · 보드 4번 ㄴ). 도구(`tools/board-card.py`)가
+   2026-10-03 부터 칸을 함께 적으므로(`9db0046`) 화면도 그것을 먼저 봅니다.
+   옛 카드는 칸이 없어 글의 대괄호로 물러섭니다 — 개념정의가 옛 카드를 옮기면
+   (ㄷ) 그 갈래가 저절로 안 쓰이게 됩니다.
+
+   `rest` 는 **늘 앞의 대괄호를 뗀 글**입니다. 칸이 있어도 글에 대괄호가 함께
+   적혀 있어서(도구가 둘 다 적는다), 떼지 않으면 막대와 글자로 두 번 보입니다. */
 function tagsOf(t) {
-  const m = (t.text || "").match(/^\s*(?:\[[^\]]*\]\s*){1,2}/);
-  if (!m) return { work: null, who: null, rest: t.text || "" };
-  const tags = (m[0].match(/\[[^\]]*\]/g) || []).map(function (x) { return x.slice(1, -1).trim(); });
-  return { work: tags[0] || null, who: tags[1] || null, rest: (t.text || "").slice(m[0].length) };
+  const text = t.text || "";
+  const m = text.match(/^\s*(?:\[[^\]]*\]\s*){1,2}/);
+  const tags = m ? (m[0].match(/\[[^\]]*\]/g) || []).map(function (x) { return x.slice(1, -1).trim(); }) : [];
+  return {
+    work: String(t.tag || "").trim() || tags[0] || null,
+    who:  String(t.who || "").trim() || tags[1] || null,
+    rest: m ? text.slice(m[0].length) : text,
+  };
+}
+
+/* 업무 · 담당을 고릅니다 — **칸과 글의 대괄호를 함께** 고칩니다. 둘이 갈리면
+   도구와 화면이 서로 다른 것을 봅니다(도구는 칸을, 옛 판 화면은 글을 읽는다). */
+function setLabels(t, work, who) {
+  const tg = tagsOf(t);
+  work = work || null; who = who || null;
+  if (work) t.tag = work; else delete t.tag;
+  if (who) t.who = who; else delete t.who;
+  /* 업무 없이 담당만 있으면 **글에 대괄호를 안 씁니다** — `[개발3] …` 으로 쓰면
+     대괄호를 읽는 쪽(옛 판 화면 · 도구의 물러서기)이 그것을 업무로 읽습니다.
+     그때는 칸(`t.who`)만 들고 있습니다. */
+  const head = work ? "[" + work + "] " + (who ? "[" + who + "] " : "") : "";
+  t.text = head + tg.rest.replace(/^\s+/, "");
+  touch(t); save();
+}
+
+/* 고를 수 있는 담당 — **보드에 이미 있는 이름을 셉니다.** 세션 목록을 여기 두면
+   「세션 역할 분담」 표와 복제가 됩니다(`config.js` 의 담당 주석과 같은 이유). */
+function knownWhos() {
+  const set = {};
+  projects.forEach(function (p) {
+    (p.tasks || []).forEach(function (x) { const w = tagsOf(x).who; if (w) set[w] = 1; });
+  });
+  return Object.keys(set).sort();
 }
 
 /* ══ 라벨을 눌러 거르기 (2026-10-01 지시) ═══════════════════════
@@ -1656,7 +1695,16 @@ function buildTask(p, t, colIdx) {
 
   const txt = document.createElement("div");
   txt.className = "task-text" + (t.text ? "" : " task-empty");
-  txt.textContent = (tg.work ? tg.rest : t.text) || "내용 없음";
+  txt.textContent = tg.rest || "내용 없음";
+  /* 순번 — 담당이 무엇부터 할지 정해 둔 것(`t.rank` · 1 이 먼저).
+     **글 앞의 작은 숫자로만** 둡니다 — 줄을 새로 만들면 카드 높이가 바뀝니다. */
+  if (t.rank) {
+    const rk = document.createElement("span");
+    rk.className = "task-rank";
+    rk.textContent = t.rank;
+    rk.title = "순번 " + t.rank + " — 담당이 이 차례로 합니다";
+    txt.insertBefore(rk, txt.firstChild);
+  }
   line.appendChild(txt);
 
   const btns = document.createElement("div");
@@ -2055,6 +2103,36 @@ function drawTask() {
   });
   rState.appendChild(segState);
   tmBox.appendChild(rState);
+
+  /* ── 업무 · 담당 — 고르는 목록 (2026-10-03 · 보드 4번 ㄴ) ──
+     업무는 `WORK_TAGS` 에서, 담당은 보드에 있는 이름에서 고릅니다. 목록 밖의 값이
+     이미 붙어 있으면 그것도 보여 줍니다 — 안 그러면 열기만 해도 값이 바뀐 것처럼
+     보입니다. 고르면 칸과 글의 대괄호를 함께 고칩니다(`setLabels`). */
+  const tgNow = tagsOf(t);
+  function pickRow(label, opts, cur, onPick) {
+    const row = document.createElement("div");
+    row.className = "tm-row";
+    row.innerHTML = '<span class="tm-lbl"></span>';
+    row.firstChild.textContent = label;
+    const sel = document.createElement("select");
+    sel.className = "tm-in tm-pick";
+    const list = [""].concat(opts);
+    if (cur && list.indexOf(cur) < 0) list.push(cur);
+    list.forEach(function (v) {
+      const o = document.createElement("option");
+      o.value = v;
+      o.textContent = v || "— 없음 —";
+      if (v === (cur || "")) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener("change", function () { onPick(sel.value); drawTask(); render(); });
+    row.appendChild(sel);
+    tmBox.appendChild(row);
+  }
+  pickRow("업무", WORK_TAGS.map(function (w) { return w.id; }), tgNow.work,
+    function (v) { setLabels(t, v, tagsOf(t).who); });
+  pickRow("담당", knownWhos(), tgNow.who,
+    function (v) { setLabels(t, tagsOf(t).work, v); });
 
   /* ── 마감일 ── */
   const rDue = document.createElement("div");
