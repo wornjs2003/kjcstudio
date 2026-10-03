@@ -93,6 +93,18 @@ function goFallback() {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* **실패 · 붐빔 뒤 얼마나 쉬나 — 묶음 안 서버 값 중 가장 짧은 것** (2026-10-03).
+   전에는 묶음의 **첫 구독** 주기를 썼는데, 첫 화면에서는 그것이 AI 분석 파일(대체값
+   30분)일 수 있어 poll 이 한 번 끊기면 **30분을 잤다** — qa 실측 「474초까지 다시 안
+   묻는다」(서버 재시작 · 터널 끊김에서 실제로 난다). 그동안 시세 · 지수 · 차트가 멈췄다.
+   가장 자주 받아야 하는 값에 맞춰 다시 묻는다 — 새 숫자는 없다(서버 값 그대로) */
+const restMs = (list) => {
+  /* 대체값 없이 구독한 자리가 있으면 `NaN` 이 섞여 **쉼이 0** 이 된다(창구 검수) — 숫자만 본다.
+     하나도 없으면 서버가 다시 보는 간격(`LONGPOLL_STEP_SEC`)만큼은 쉰다 */
+  const ms = list.map(({ s }) => serverMs(s.key, s.fallbackMs)).filter((v) => Number.isFinite(v) && v > 0);
+  return ms.length ? Math.min(...ms) : serverMs('kis_proxy.LONGPOLL_STEP_SEC', 1000);
+};
 const visible = () => new Promise((r) => {
   const on = () => { if (!document.hidden) { document.removeEventListener('visibilitychange', on); r(); } };
   document.addEventListener('visibilitychange', on);
@@ -128,7 +140,7 @@ async function loop() {
         j = await r.json();
       } catch (e) {
         /* 서버가 잠깐 없다 — 서버 값 주기만큼 쉬고 다시 묻는다 */
-        await sleep(serverMs(list[0].s.key, list[0].s.fallbackMs));
+        await sleep(restMs(list));
         continue;
       }
 
@@ -146,7 +158,7 @@ async function loop() {
         }
       });
       /* 서버가 붐벼(`busy`) 쥐지 못하고 바로 냈다 — 그대로 다시 물으면 맴돈다 */
-      if (j.busy) { await sleep(serverMs(list[0].s.key, list[0].s.fallbackMs)); continue; }
+      if (j.busy) { await sleep(restMs(list)); continue; }
       /* **바닥 쉼** (2026-10-02 · 창구 검수). 서버는 첫 비교를 곧바로 하므로, 응답에
          받은 시각처럼 매번 달라지는 값이 섞인 주소를 구독하면 쉼 없이 되돌아온다.
          서버가 다시 보는 간격(`LONGPOLL_STEP_SEC`)보다 자주 묻지 않는다 — 그 값도
