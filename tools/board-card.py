@@ -248,6 +248,12 @@ def now():
     return time.strftime("%H:%M")
 
 
+def touch(t):
+    """카드를 고쳤다는 시각 — 화면의 「지난 완료 접기」 가 이것으로 센다. 도구가 안 찍으면 만든 날로 세어져
+    8일 전에 만든 카드가 오늘 끝나자마자 접혔다(개발3 2026-10-03 · 카드 199장 중 셋만 있었다)."""
+    t["updatedAt"] = int(time.time() * 1000)
+
+
 # ── 명령들 ───────────────────────────────────────────────────
 COLUMNS = ("todo", "doing", "review", "done")
 
@@ -263,6 +269,7 @@ def cmd_note(key, line, sub, done, column=None, assign=None, title=None, rank=No
         if len(hits) != 1:
             sys.exit("카드 %d개 걸림 — 더 좁혀서: %s" % (len(hits), key))
         t = hits[0]
+        before_t = json.dumps(t, sort_keys=True)
         if column in ("review", "done") and not FORCE:
             left = [x for x in (t.get("subs") or []) if not x.get("done")]
             if left:
@@ -332,6 +339,8 @@ def cmd_note(key, line, sub, done, column=None, assign=None, title=None, rank=No
                     s["done"] = True
                     if not s["text"].startswith("[됨]"):
                         s["text"] = "[됨] " + s["text"]
+        if json.dumps(t, sort_keys=True) != before_t:
+            touch(t)
     apply(change)
     print("보드 저장됨", now(), ("· 열 %s → %s" % (moved["from"], moved["to"])) if "from" in moved else "",
           ("· 담당 [%s] → [%s]" % moved["assign"]) if "assign" in moved else "",
@@ -362,7 +371,7 @@ def cmd_new(text, line, todo):
         ms = int(time.time() * 1000)
         tasks(doc).append({"id": "t%dr" % ms, "text": full, "column": "todo" if todo else "doing",
                            "subs": [], "links": [], "due": "", "priority": "normal", "createdAt": ms,
-                           "tag": tag, "who": label,
+                           "tag": tag, "who": label, "updatedAt": ms,
                            "memo": "  %s %s" % (now(), line) if line else ""})
     apply(change)
     print("카드 만듦:", full)
@@ -405,14 +414,32 @@ def cmd_commit(dry):
         return 0
     words = lambda s: {w for w in re.split(r"[\s·—\-:,.()「」『』\[\]/]+", s) if len(w) >= 2}
     sw = words(subject)
+    # **커밋 메시지에 「카드: <제목 일부>」 줄이 있으면 그 카드다** (2026-10-03) — 낱말 겹침은 짐작이라
+    # 가운뎃점 제목(「주·월·년봉」 → 한 글자가 빠져 「년봉」 하나만 남는다)에서 엉뚱한 카드를 골랐다.
+    body = g("log", "-1", "--format=%B")
+    named = ""
+    for ln in body.splitlines():
+        mm = re.match(r"^\s*카드\s*[:：]\s*(\S.*)$", ln)
+        if mm:
+            named = mm.group(1).strip()
 
     picked = {}
 
     def change(doc):
         cards = mine(doc, label)
+        if named:
+            hit = [t for t in tasks(doc) if named in t.get("text", "") and t.get("column") != "done"]
+            if len(hit) == 1:
+                cards, forced = hit, True
+            else:
+                picked["skip"] = (("「카드: %s」 에 열린 카드가 %d개 걸렸다 — 더 좁혀 적거나 손으로 적으십시오" % (named, len(hit))) if hit
+                                  else ("「카드: %s」 에 열린 카드가 없다(완료 카드에만 걸리거나 제목이 다르다) — 손으로 적으십시오" % named))
+                return
+        else:
+            forced = False
         if not cards:
             raise Unseen("[%s] 의 doing 카드가 없다" % label)
-        best, score = None, 0
+        best, score, tie = None, 0, False
         for t in cards:
             body = LABELS.sub("", t["text"])
             # **부분 문자열로 센다 — 조사 때문에 「카드」↔「카드를」·「훅」↔「훅이」 가 다른 낱말로
@@ -420,10 +447,21 @@ def cmd_commit(dry):
             # 셋이 추정, 둘은 엉뚱한 카드). 카드 낱말이 제목 안에, 제목 낱말이 카드 안에 들어 있으면 겹친 것.
             n = len({w for w in words(body) if w in subject} | {w for w in sw if w in body})
             if n > score:
-                best, score = t, n
+                best, score, tie = t, n, False
+            elif n == score and n:
+                tie = True
         guess = ""
-        if score < 2:
-            best = max(cards, key=lambda t: t.get("createdAt", 0))
+        if forced:
+            best = cards[0]
+        elif score < 2 or tie:
+            # **카드가 여럿이면 짐작하지 않는다** (2026-10-03) — 「가장 최근 카드」 로 짐작해 하루 네 번 엉뚱한 카드에
+            # 적었다(개발3). 엉뚱한 카드에 해시가 남으면 post-merge 가 그 카드를 done 으로 옮길 수 있다.
+            # 하나뿐일 때만 (추정) 으로 적는다 — 열은 안 옮긴다.
+            if len(cards) > 1:
+                picked["skip"] = ("진행중 카드가 %d장이라 어느 카드인지 못 골랐다 — 커밋 메시지에 「카드: <제목 일부>」 줄을 넣거나 손으로:\n"
+                                  "        python3 tools/board-card.py \"<카드 제목 일부>\" \"커밋 %s %s\"" % (len(cards), h, subject[:40]))
+                return
+            best = cards[0]
             guess = "(추정) "
         picked["text"] = best["text"]
         picked["guess"] = guess
@@ -432,6 +470,10 @@ def cmd_commit(dry):
         # 열 — **낱말이 겹쳤을 때만** 옮긴다. (추정) 이면 메모만 적고 열은 안 옮긴다 (2026-10-01 15:2x 지시).
         # 전에는 「그 세션 카드가 하나뿐」 도 확신으로 쳤는데, 그 하나가 다른 일의 카드일 수 있다.
         sure = not guess
+        if forced and who_of(best) != label:
+            sure = False                        # 「카드:」 로 남의 카드를 가리켰으면 메모만 — 남의 열은 안 옮긴다(qa)
+            guess = "(%s 의 커밋) " % label
+            picked["guess"] = guess
         tail = ""
         if left:
             tail = " · 남은 항목 %d" % len(left)
@@ -441,18 +483,25 @@ def cmd_commit(dry):
             tail = " · 열 doing → %s" % to
             picked["moved"] = to
         best["memo"] = (best.get("memo") or "").rstrip() + "\n  %s %s커밋 %s %s · %s%s" % (now(), guess, h, subject, branch, tail)
+        touch(best)
 
     if dry:
         try:
             doc, _ = read()
             change(doc)
-            print("  (시험) 적을 카드:", picked["guess"] + picked["text"], ("→ " + picked["moved"]) if picked.get("moved") else "")
+            if "skip" in picked:
+                print("  (시험) 카드에 안 적는다 — " + picked["skip"])
+            else:
+                print("  (시험) 적을 카드:", picked["guess"] + picked["text"], ("→ " + picked["moved"]) if picked.get("moved") else "")
         except Unseen as e:
             print("  (시험) 보드에 못 적는다:", e)
         return 0
     try:
         apply(change)
-        print("  보드: %s%s ← %s%s" % (picked["guess"], picked["text"], h, (" · 열 → " + picked["moved"]) if picked.get("moved") else ""))
+        if "skip" in picked:
+            print("  보드: 카드에 안 적었다 — " + picked["skip"])
+        else:
+            print("  보드: %s%s ← %s%s" % (picked["guess"], picked["text"], h, (" · 열 → " + picked["moved"]) if picked.get("moved") else ""))
     except Unseen as e:
         print("  보드에 못 적었다(%s) — 돌아오면 손으로: python3 tools/board-card.py \"<카드>\" \"커밋 %s %s · %s\"" % (e, h, subject, branch))
     return 0
@@ -480,6 +529,7 @@ def cmd_merged(dry):
             if t.get("column") == "review":
                 t["column"] = "done"
                 t["memo"] = memo.rstrip() + "\n  %s main 에 합쳐짐(%s) · 열 review → done" % (now(), ",".join(hit))
+                touch(t)                        # 머지로 done 이 될 때도 — 안 찍으면 오래된 카드가 바로 접힌다(qa)
                 moved.append(t["text"])
     try:
         if dry:
