@@ -56,7 +56,7 @@ body {
 .kh-app {
   display: grid;
   grid-template-columns: 1fr 316px 52px;
-  max-width: 1800px;
+  max-width: var(--grid-max);      /* theme.css 한 곳 — 메뉴 기준선(nav.css --nav-gutter)과 같은 값 */
   margin: 0 auto;
 }
 
@@ -76,7 +76,7 @@ body {
    「가로로 넘친다」 로 보이지만 원인은 **어디서부터 좁아지나** 쪽이다 —
    넘치는 칸 131개는 전부 결과였다. */
 .kh-app-wide { grid-template-columns: 1fr 368px; }
-.kh-main { padding: 14px 16px; min-width: 0; }
+.kh-main { padding: 14px var(--grid-inset); min-width: 0; }   /* 좌우는 theme.css --grid-inset */
 
 /* ── 탭 (홈·종목 공용) ─────────────────────── */
 .kh-tabs { display: flex; align-items: center; gap: 2px; }
