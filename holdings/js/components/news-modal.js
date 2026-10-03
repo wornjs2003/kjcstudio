@@ -31,7 +31,7 @@ import { fetchFeed, lastFeed, paintIssues, paintLoading, moveRowHtml, rowHtml } 
 import { patchRows } from '../utils/reconcile.js';
 import { mountDisclosures } from './disclosures.js';
 import { mountSchedule, collectSchedule, AHEAD_DAYS } from './schedule.js';
-import { apiFetch } from '../data/api.js';
+import { getDisclosuresBody } from '../data/dart.js';
 import { everyServerMs } from '../store/timing.js';
 
 /* 모달이 열려 있는 동안만 다시 받는다. 서버 캐시와 같은 주기라
@@ -196,14 +196,17 @@ export function openNewsModal({ tab = 'news', watch = null } = {}) {
      기다렸다** (2026-10-01 실측). 가르면 각자 오는 대로 찬다. */
   async function paintStats() {
     const stats = [];
+    /* **일정도 지금 같이 시작한다** (2026-10-03). 공시를 다 받은 뒤 일정을 부르면 그때는 공시
+       목록 · 일정 칸의 받기가 이미 끝나 있어 **같이 쓸 것이 없다** — 실측으로 공시 · 일정 파일이
+       28ms 뒤에 한 번씩 더 나갔다. 함께 시작하면 `getDisclosuresBody` · `loadCalendar` 가 하나로 묶는다 */
+    const schedP = collectSchedule({ watch });
 
-    /* 공시 — mountDisclosures 는 개수를 안 돌려준다. 공용 파일이라
-       고치지 않고 한 번 더 부른다. 서버 캐시가 있어 부담은 작다. */
+    /* 공시 — mountDisclosures 는 개수를 안 돌려준다. **같은 받기를 같이 쓴다**
+       (`data/dart.js` 의 `getDisclosuresBody` · 2026-10-03) — 전에는 한 번 더 불렀다. */
     let polled = '';
     try {
-      const r = await apiFetch(`/api/dart/disclosures?limit=${DC_LIMIT}`, { cache: 'no-store' });
-      if (r && r.ok) {
-        const b = await r.json();
+      const b = await getDisclosuresBody(DC_LIMIT);
+      if (b) {
         const n = (b.data || []).length;
         polled = ((b.meta || {}).lastPollAt) || '';
         /* 꽉 찼으면 **더 있다는 것**이 보여야 한다. 서버가 자른 값이다. */
@@ -216,7 +219,7 @@ export function openNewsModal({ tab = 'news', watch = null } = {}) {
        2026-09-22 실측: 달력에 오늘 이후 15건인데 14일 안은 0건이었다.
        기간은 라벨에 넣지 않고 **탭 줄 설명**이 맡는다 — 격자 칸이 좁다. */
     try {
-      const g = await collectSchedule({ watch });
+      const g = await schedP;
       stats.push({ label: '주요 일정', value: `${(g.rows || []).length}건` });
     } catch { /* 〃 */ }
 

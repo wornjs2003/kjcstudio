@@ -17,6 +17,7 @@
    ========================================================================== */
 
 import { apiFetch } from '../data/api.js';
+import { getDisclosuresBody } from '../data/dart.js';
 
 /* 앞으로 며칠 치를 보여줄 것인가. 지난 것은 보여주지 않는다 —
    일정 칸은 "앞으로 뭐가 있나" 를 보는 자리다 (2026-09-15 지시). */
@@ -76,7 +77,15 @@ function dayLabel(d) {
 
 /* ── 모으기 ─────────────────────────────────────────────── */
 
-async function loadCalendar() {
+/* 일정 파일도 **받는 중이면 같이 쓴다** (2026-10-03) — 뉴스 모달 하나에 두 번 나갔다.
+   위 `getDisclosuresBody` 와 같은 방식이라 시간으로 묵히지 않는다 */
+let _calInflight = null;
+function loadCalendar() {
+  if (!_calInflight) _calInflight = loadCalendarOnce().finally(() => { _calInflight = null; });
+  return _calInflight;
+}
+
+async function loadCalendarOnce() {
   try {
     const r = await fetch(CAL_PATH, { cache: 'no-store' });
     if (!r) return null;   // 로그인이 풀렸다
@@ -88,15 +97,10 @@ async function loadCalendar() {
 }
 
 async function loadEarnings() {
-  try {
-    const r = await apiFetch('/api/dart/disclosures?limit=200', { cache: 'no-store' });
-    if (!r) return null;   // 로그인이 풀렸다
-    const j = await r.json();
-    if (!j || !j.ok || !Array.isArray(j.data)) return null;
-    return j.data.filter((d) => IR_WORDS.some((w) => (d.title || '').includes(w)));
-  } catch {
-    return null;
-  }
+  /* 공시 목록 · 모달 머리 숫자와 **같은 받기를 같이 쓴다** (`data/dart.js` 의 `getDisclosuresBody`) */
+  const j = await getDisclosuresBody(200);
+  if (!j || !j.ok || !Array.isArray(j.data)) return null;
+  return j.data.filter((d) => IR_WORDS.some((w) => (d.title || '').includes(w)));
 }
 
 /* 지수 구성종목 — { 종목코드: ['KPI200', ...] }
