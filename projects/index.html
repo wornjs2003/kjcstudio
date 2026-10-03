@@ -159,6 +159,10 @@ h1 {
 }
 .icon-btn:hover { background: var(--pj-bg-active); color: var(--pj-text-primary); }
 .icon-btn.del:hover { background: var(--pj-danger-faint); color: var(--pj-danger); }
+/* 켜진 거르기 단추(「묻는 중」) — 연한 파랑 바탕에 진한 파랑 글씨(색 바탕 위의 글씨 룰) */
+.icon-btn.on { background: var(--pj-accent-faint); color: var(--pj-accent); }
+.icon-btn:disabled { opacity: .5; cursor: default; }
+.icon-btn:disabled:hover { background: var(--pj-bg-elevated); color: var(--pj-text-muted); }
 
 /* 진행률 막대 */
 .p-bar { height: 6px; background: var(--pj-bg-elevated); border-radius: 99px; overflow: hidden; margin-bottom: 16px; }
@@ -1286,7 +1290,7 @@ function updateFloor() {
     return p.id + ":" + ts.length + ":"
          + ts.filter(function (t) { return t.collapsed; })
              .map(function (t) { return t.id; }).join(".");
-  }).join(",") + "|" + filterWork + "|" + filterWho;
+  }).join(",") + "|" + filterWork + "|" + filterWho + "|" + filterAsk;
   if (stamp === floorStamp) return;
   floorStamp = stamp;
 
@@ -1391,6 +1395,20 @@ function drawPanel() {
   prog.textContent = st.total ? st.done + "/" + st.total + " · " + st.pct + "%" : "작업 없음";
   head.appendChild(prog);
 
+  /* 「묻는 중」 카드만 보기 (2026-10-03 · 보드 6번) — 폰에서 답할 것을 찾는 자리.
+     현황판은 터미널이라 폰에서 안 보입니다. **0 이어도 단추를 둡니다** — 생겼다
+     없어졌다 하면 옆 단추가 움직입니다(「보는 것을 바꿔도 자리는 그대로다」). */
+  const nAsk = (p.tasks || []).filter(function (x) {
+    return x.column !== lastColId() && askingOf(x) !== null;
+  }).length;
+  const askBtn = document.createElement("button");
+  askBtn.className = "icon-btn" + (filterAsk ? " on" : "");
+  askBtn.textContent = "묻는 중 " + nAsk;
+  askBtn.title = nAsk ? "답이 안 온 물음이 있는 카드만 봅니다" : "답을 기다리는 카드가 없습니다";
+  askBtn.disabled = !nAsk && !filterAsk;
+  askBtn.addEventListener("click", toggleAsk);
+  head.appendChild(askBtn);
+
   const del = document.createElement("button");
   del.className = "icon-btn del";
   del.textContent = "프로젝트 삭제";
@@ -1443,6 +1461,7 @@ function drawPanel() {
     }
     if (filterWork) pill(filterWork, function () { toggleWork(filterWork); });
     if (filterWho)  pill(filterWho,  function () { toggleWho(filterWho); });
+    if (filterAsk)  pill("묻는 중", toggleAsk);
 
     /* **왜 끌기가 안 되는지 여기서 알립니다** — 안 적으면 「고장났나」 가 됩니다.
        칸 이동은 거르는 중에도 `‹ ›` 로 그대로 됩니다. */
@@ -1643,20 +1662,42 @@ function knownWhos() {
    두 자리에 남습니다.** 숨기면 수가 그대로라 그 자리가 안 깨집니다. */
 let filterWork = null;
 let filterWho  = null;
+let filterAsk  = false;     /* 「묻는 중」 카드만 (2026-10-03 · 보드 6번) */
 
-function filtering() { return !!(filterWork || filterWho); }
+function filtering() { return !!(filterWork || filterWho || filterAsk); }
+
+/* 카드에 **답이 안 온 물음**이 있나 — 메모의 `묻는 중:` 줄 중 마지막 뒤에 `답:` 이
+   없으면 그 물음을 돌려줍니다. **줄 맨 앞**(시각 `HH:MM` 은 건너뜀)일 때만 셉니다 —
+   줄 가운데서 세면 그 표기를 설명한 줄까지 물음이 됩니다.
+   ⚠️ **같은 규칙이 `tools/현황판.py` 의 `묻는중()` 에 있습니다** — 언어가 달라
+   합칠 수 없는 복제입니다. 표기는 「일은 보드에서 시작한다」 가 정한 것이고,
+   한쪽을 고치면 다른 쪽도 고칩니다. */
+const ASK_LINE = /^\s*(?:\d{1,2}:\d{2}\s+)?(묻는 중|답):\s*(.*)$/;
+function askingOf(t) {
+  let left = null;
+  String(t.memo || "").split("\n").forEach(function (line) {
+    const m = line.match(ASK_LINE);
+    if (!m) return;
+    if (m[1] === "묻는 중") left = m[2].trim();
+    else if (left !== null) left = null;
+  });
+  return left;
+}
 
 function passFilter(t) {
   if (!filtering()) return true;
   const tg = tagsOf(t);
   if (filterWork && tg.work !== filterWork) return false;
   if (filterWho  && tg.who  !== filterWho)  return false;
+  /* 완료 칸은 뺍니다 — 단추의 숫자와 같은 잣대(끝난 카드에 남은 물음은 답할 것이 아닙니다) */
+  if (filterAsk  && (t.column === lastColId() || askingOf(t) === null)) return false;
   return true;
 }
 
 /* 같은 것을 다시 누르면 풀립니다 */
 function toggleWork(v) { filterWork = (filterWork === v ? null : v); render(); }
 function toggleWho(v)  { filterWho  = (filterWho  === v ? null : v); render(); }
+function toggleAsk()   { filterAsk  = !filterAsk; render(); }
 
 /* 이름에서 색을 계산합니다 — 목록을 두지 않으려는 것입니다(`config.js` 주석).
    같은 이름이면 늘 같은 색입니다. */
