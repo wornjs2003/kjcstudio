@@ -161,8 +161,9 @@ lanes=$(printf '%s\n' "$lane_files" | awk -F/ '
   # 세면 같은 레인이 넷으로 갈린다.
   $1 == "kjcEngine" || $1 == "ai-work"  { print "엔진_개발";      next }
 
-  $1 == "holdings"                      { print "주식";           next }
-  $1 == "projects"                      { print "작업우선순위";   next }
+  # projects/ 는 2026-10-03 에 주식 레인으로 왔다 — 보드 화면이 개발3 전담이 됐다(재권님 「옮기고 고쳐」).
+  # 작업우선순위는 이제 저장소 파일을 안 고친다.
+  $1 == "holdings" || $1 == "projects"  { print "주식";           next }
   $1 == "debugging"                     { print "개념정의";        next }
 
   $1 == ".claude" && $2 == "commands"   { print "홈페이지_정리";   next }
@@ -207,13 +208,12 @@ printf '%s\n' "$lanes" | while IFS= read -r lane; do
   echo "    [$lane]"
   case "$lane" in
     "(미정) "*) dir=${lane#"(미정) "} ;;
-    "주식")           dir="holdings" ;;
-    "작업우선순위")   dir="projects" ;;
+    "주식")           dir="holdings|projects" ;;
     "시황분석")       dir="company-setup" ;;   # 없으면 아래 *) 가 모든 파일을 이 레인 아래 찍는다 (qa 가 찾음)
     *) dir="" ;;
   esac
   if [ -n "$dir" ]; then
-    printf '%s\n' "$files" | grep "^$dir/" | sed 's/^/        /'
+    printf '%s\n' "$files" | grep -E "^($dir)/" | sed 's/^/        /'
   else
     printf '%s\n' "$files" | grep "/" | sed 's/^/        /'
   fi

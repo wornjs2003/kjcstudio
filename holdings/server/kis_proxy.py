@@ -612,6 +612,8 @@ _prio_stat = {"lowCalls": 0, "lowYields": 0}
 
 # `_rate_limit` 이 그 호출에서 **일부러 잔 시간**(ms). `kis_get` 이 대기에서 뺀다.
 _rl_yield = threading.local()
+# 미리받기가 지금 「보이는 종목」 을 받는 중인가 — 그때는 비켜서지 않는다 ((다))
+_prefill_hot = threading.local()
 
 
 def _prio_low():
@@ -632,7 +634,9 @@ def _rate_limit(path=None):
     # 미리받기는 화면에 자리를 내준다. 급하지 않은 일이라 늦어져도 잃는 것이
     # 없고, 화면은 기다리면 재권님이 보신다 (2026-09-18).
     _rl_yield.ms = 0.0
-    if threading.current_thread().name == PREFILL_THREAD_NAME:
+    # (다) 보이는 종목을 받는 중이면 비켜서지 않는다 — `_prefill_one` 이 켠다
+    if (threading.current_thread().name == PREFILL_THREAD_NAME
+            and not getattr(_prefill_hot, "on", False)):
         _t0 = time.monotonic()
         time.sleep(PREFILL_BUSY_CALL_GAP if _ui_busy() else PREFILL_IDLE_CALL_GAP)
         # **실제로 잔 시간을 잰다** — 이 기계는 잠에서 늦게 깨서(10ms → 49ms 실측)
@@ -3885,7 +3889,19 @@ PREFILL_TOP = 100          # 코스피 상위 몇 종목까지
 # 늘어날 뿐인데, **하루 한 번 도는 것이라 그 차이는 아무 뜻이 없다.**
 PREFILL_REST_SEC = 3.5
 PREFILL_START_SEC = 20     # 서버가 뜨고 이만큼 뒤에 시작 (첫 화면에 양보)
-PREFILL_ROUND_SEC = 1800   # 한 바퀴 돌고 쉬는 시간. 실제 호출은 dayfill 이 막는다
+# ── 보이는 종목을 먼저 · 구간마다 · 양보 가르기 (2026-10-03 지시 (가)~(다)) ──
+#
+# 재권님 — 「화면에 보여질 종목들은 미리미리 호출되어 있어야」 · 「보이지 않는 종목들은
+# 후차로 차근차근 받아서 저장」. 전에는 셋이 막았다.
+#   ㉠ 한 바퀴를 돌고 **30분** 쉬었다 — 5분봉은 5분마다 생긴다
+#   ㉡ 순서를 **바퀴 시작에 한 번만** 뽑았다 — 도중에 새로 보인 종목은 다음 바퀴
+#   ㉢ 화면이 보고 있으면 **보이는 종목까지** 비켜섰다 — 화면을 위한 일인데
+# 그래서 (가) 종목을 **하나 받을 때마다** 순서를 다시 뽑고(`_prefill_one`),
+# (나) 다 돌면 30분이 아니라 **새 5분 구간이 닫혔나**만 짧게 보며(KIS 안 부름) 기다리고,
+# (다) 화면이 최근 물은 종목(`PREFILL_HOT_SEC` 안)은 **비켜서지 않는다.** 나머지(3순위 —
+# 최근 본 것 · 시총 상위)는 전처럼 비켜서며 뒤에서 받아 저장한다.
+PREFILL_SLOT_POLL_SEC = 20   # 다 돈 뒤 새 구간이 닫혔나 보는 간격 — KIS 를 안 부른다
+PREFILL_HOT_SEC = 60         # 이 안에 화면이 물은 종목 = 지금 보이는 것(1·2순위)
 
 # ── 화면이 보고 있으면 더 쉰다 (2026-09-18) ────────────────────────
 #
@@ -4048,6 +4064,17 @@ _last_ui_at = 0.0              # 화면이 마지막으로 /api/kis/* 를 부른
 # 이야기이고(`home.js` 의 `applyPrices`), 여기서 적는 것은 **순서**다.
 UI_SEEN_MAX = 400          # 이만큼만 들고 있는다. 넘으면 오래된 것부터 버린다
 _ui_seen = {}              # 종목코드 -> 화면이 마지막으로 물어본 시각(monotonic)
+
+# ── 화면이 「어느 자리에서」 봤나 (2026-10-03 · 설계서 (라)) ──────────
+#
+# `_ui_seen` 은 「최근에 물었다」 만 안다. 화면이 요청에 `view=` 를 붙이면 자리를 안다.
+#     modal   모달이 연 종목            ┐ 1순위 — 모달 룰 「어느 순위에 있든 1순위」
+#     direct  검색 · ?code= 로 들어온 종목 ┘ (재권님 「화면에 보일 종목과는 다른 이벤트」)
+#     row     보이는 줄(순위표 시세 묶음)    2순위
+# **쿼리다 — 헤더가 아니다.** 롱폴의 안쪽 호출이 u 주소를 그대로 다시 부르는데 헤더는 안
+# 따라간다. 표시가 없으면 지금처럼 「최근에 물었다」 로만 센다(뒤로 맞음).
+UI_VIEW_RANK = {"modal": 0, "direct": 0, "row": 1}
+_ui_view = {}              # 종목코드 -> (등급, 시각 monotonic)
 _ui_seen_lock = threading.Lock()
 
 
@@ -4069,6 +4096,7 @@ def _mark_ui_call(path=""):
     for v in qs.get("codes", []):
         raw.extend(v.split(","))
     now = time.monotonic()
+    rank = UI_VIEW_RANK.get((qs.get("view") or [""])[0].strip().lower())
     with _ui_seen_lock:
         for c in raw:
             c = c.strip()
@@ -4076,10 +4104,13 @@ def _mark_ui_call(path=""):
             # 그것을 넣으면 미리받기가 없는 종목을 받으러 간다
             if len(c) == 6 and c.isdigit():
                 _ui_seen[c] = now
+                if rank is not None:
+                    _ui_view[c] = (rank, now)
         if len(_ui_seen) > UI_SEEN_MAX:
             old = sorted(_ui_seen.items(), key=lambda kv: kv[1])
             for c, _ in old[:len(_ui_seen) - UI_SEEN_MAX]:
                 _ui_seen.pop(c, None)
+                _ui_view.pop(c, None)
 
 
 def _ui_busy():
@@ -4108,11 +4139,56 @@ def _prefill_codes():
     # 어느 순위에 있든 1순위」 그대로다.
     with _ui_seen_lock:
         seen = dict(_ui_seen)
+        view = dict(_ui_view)
     if not seen:
         return codes
-    front = sorted(seen, key=lambda c: -seen[c])
+    # (라) 화면이 자리를 알렸으면 그 등급이 먼저 — modal · direct > row > 그 밖 최근 본 것.
+    # 등급은 `PREFILL_HOT_SEC` 동안만 듣는다(그 뒤엔 「최근 본 것」 으로 내려간다).
+    now = time.monotonic()
+    def _rank(c):
+        r = view.get(c)
+        return r[0] if r and now - r[1] < PREFILL_HOT_SEC else len(UI_VIEW_RANK)
+    front = sorted(seen, key=lambda c: (_rank(c), -seen[c]))
     rest = [c for c in codes if c not in seen]
     return front + rest
+
+
+def _prefill_hot_codes(now=None):
+    """화면이 `PREFILL_HOT_SEC` 안에 물은 종목 — 지금 보이는 것(1·2순위).
+
+    순위표 시세 묶음(`codes=`)이 보이는 줄을 몇 초마다 묻고, 모달 · 검색으로 연 종목은
+    차트 · 가격(`code=`)이 묻는다. 그래서 「최근에 물었다」 가 「지금 보인다」 와 거의 같다.
+    모달 · 직접 진입을 화면이 분명히 알리는 것은 (라)다.
+    """
+    now = now if now is not None else time.monotonic()
+    with _ui_seen_lock:
+        return {c for c, t in _ui_seen.items() if now - t < PREFILL_HOT_SEC}
+
+
+def _prefill_one(cfg, want):
+    """(가) 다음 받을 종목 **하나**를 그 자리에서 뽑아 받는다. 받았으면 그 코드, 없으면 `None`.
+
+    순서를 매번 다시 뽑으므로 방금 보인 종목이 바로 앞에 선다. 그 구간을 이미 받아
+    봤으면 건너뛴다(`prefill_due`) — 장이 끝난 뒤와 주말에는 구간이 안 늘어 한 종목도 안 받는다.
+    """
+    code = next((c for c in _prefill_codes() if prefill_due(c, want)), None)
+    if code is None:
+        return None
+    hot = code in _prefill_hot_codes()
+    _prefill_hot.on = hot
+    try:
+        # 하루치는 하루 한 번만. 나머지는 최근 구간만 받는다
+        get_chart(cfg, code, "5m", 1, gap_check=False)
+    except Exception:
+        pass                       # 한 종목이 실패해도 나머지는 간다
+    finally:
+        _prefill_hot.on = False
+    # **실패해도 적는다.** 안 적으면 그 종목만 계속 다시 부른다 — 다음 구간에 저절로 또 온다
+    _meta_set("pf5m:%s" % code, want)
+    if not hot:
+        # 3순위는 화면이 보고 있으면 길게 쉰다. 지수·시세가 먼저다
+        time.sleep(PREFILL_BUSY_REST_SEC if _ui_busy() else PREFILL_REST_SEC)
+    return code
 
 
 # ── 일·주·월·년봉 한 바퀴 ──────────────────────────────────────
@@ -4271,27 +4347,14 @@ def start_prefill(cfg):
         while True:
             try:
                 want = _last_closed_5m_slot()
-                for code in _prefill_codes():
-                    # **새 봉이 생겼을 때만 받는다.** 경과 시간이 아니라
-                    # **봉 구간**으로 가른다 — 위 `_last_closed_5m_slot` 주석.
-                    # 그 구간을 이미 받아 봤으면 건너뛴다. 장이 끝난 뒤와
-                    # 주말에는 구간이 안 늘어나 **한 종목도 안 받는다.**
-                    if not prefill_due(code, want):
-                        continue
-                    try:
-                        # 하루치는 하루 한 번만. 나머지는 최근 구간만 받는다
-                        get_chart(cfg, code, "5m", 1, gap_check=False)
-                    except Exception:
-                        pass           # 한 종목이 실패해도 나머지는 간다
-                    # **실패해도 적는다.** 안 적으면 그 종목만 바퀴마다 다시
-                    # 부른다 — 다음 봉 구간에 저절로 또 온다
-                    _meta_set("pf5m:%s" % code, want)
-                    # 화면이 보고 있으면 길게 쉰다. 지수·시세가 먼저다
-                    time.sleep(PREFILL_BUSY_REST_SEC if _ui_busy()
-                               else PREFILL_REST_SEC)
+                # (가) 하나씩 뽑아 받는다. **구간이 바뀌면 그 자리에서 새 구간으로** —
+                # 남은 3순위는 새 구간의 순서 뒤에 다시 선다
+                while _last_closed_5m_slot() == want and _prefill_one(cfg, want):
+                    pass
             except Exception:
                 pass
-            time.sleep(PREFILL_ROUND_SEC)
+            # (나) 30분이 아니라 새 구간이 닫혔나만 본다 — KIS 는 안 부른다
+            time.sleep(PREFILL_SLOT_POLL_SEC)
 
     threading.Thread(target=loop, daemon=True, name="prefill-5m").start()
     return True
@@ -4589,7 +4652,21 @@ def get_chart(cfg, code, period, limit, gap_check=True):
             elif rows and not _minutes_live():
                 # ④ 그 거래일 하루치를 이미 받았고 지금은 새 봉이 안 생긴다 —
                 # KIS 를 부르지 않는다(주말에 화면이 열려 있으면 30초마다 한 건씩 나갔다).
-                raw = []
+                #
+                # **단 거래일마다 한 번은 마지막 30분(19:30~20:00)을 받는다** — 20:05~20:10
+                # 사이에 아무도 안 열었으면 그날 꼬리가 영영 빈다(전에는 저녁·주말 2번이
+                # 하루치를 다시 받아 채웠다 · 창구 검수 지적). 주말 첫 열기 때 한 건 · 그 뒤 0건.
+                _day = _minutes_trade_day()
+                _ck = "dayclose:%s:%s" % (code, period)
+                if _meta_get(_ck) != _day:
+                    try:
+                        raw = fetch_minutes_from_kis(
+                            cfg, code, "%02d%02d00" % (MINUTE_DAY_END // 60, MINUTE_DAY_END % 60))
+                    except RuntimeError:
+                        raw = []
+                    _meta_set(_ck, _day)
+                else:
+                    raw = []
             else:
                 raw = fetch_minutes_from_kis(cfg, code)
             bars = aggregate_minutes(raw, 5) if period == "5m" else raw
