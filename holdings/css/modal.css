@@ -51,10 +51,21 @@
 
   --kh-w-left: 0px;
   --kh-w-right: 0px;
+
+  /* 모달 폭 — 서랍만큼 늘되 창에서 양옆 26px 는 남긴다. 아래 `.kh-modal` 과 미는 양이 같은 값을 쓴다 */
+  --kh-mw: min(calc(1400px + var(--kh-w-left) + var(--kh-w-right)), calc(100vw - 52px));
   display: flex;
   align-items: center;
   max-width: 100%;
-  transform: translateX(calc((var(--kh-w-right) - var(--kh-w-left)) / 2));
+
+  /* **미는 양은 창 안에 남는 여백까지만** (2026-10-06 재권님 「고쳐」 · 「응 모달은 이대로 해줘」).
+     차트를 제자리에 두려고 서랍 폭의 절반((오른쪽 − 왼쪽) / 2)만큼 미는데, 모달 폭이 창에 막혀
+     덜 늘었을 때도 그대로 밀어 **모달 끝이 화면 밖으로 나갔다** — 1440 창 왼쪽 서랍 −141px ·
+     1920 창 −74px(실측). 남는 여백((창 − 모달) / 2 − 26px)을 넘지 않게 묶는다. 여유가 있으면 지금처럼
+     차트가 제자리, 모자라면 모자란 만큼 차트가 옆으로 간다(크기는 그대로) */
+  transform: translateX(clamp(calc((var(--kh-mw) - 100vw) / 2 + 26px),
+                              calc((var(--kh-w-right) - var(--kh-w-left)) / 2),
+                              calc((100vw - var(--kh-mw)) / 2 - 26px)));
 }
 
 .kh-stage.has-left  { --kh-w-left:  var(--kh-add); }
@@ -70,7 +81,7 @@
 
 .kh-modal {
   position: relative;             /* 손잡이를 이 안 가장자리에 붙인다 */
-  width: min(calc(1400px + var(--kh-w-left) + var(--kh-w-right)), 100vw - 52px);
+  width: var(--kh-mw);              /* 위 .kh-stage 한 곳 */
 
   /* **높이를 고정한다.** 안의 격자가 이 높이를 나눠 가지므로 차트가 창 밖으로
      나가지 않는다 (2026-09-17 지시 — "모달 창 밖으로 이미지가 나가면 안될거같은데").
