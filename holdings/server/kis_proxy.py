@@ -6317,7 +6317,15 @@ def main():
     #
     # `--slow` 는 안 돈다. 확인용 서버가 저장하면 **메인과 같은 파일을 두고
     # 다투고**, 폴더마다 `secrets.json` 이 따로라 발송도 안 된다.
-    if not SLOW:
+    #
+    # **보드를 넘기는 서버도 안 돈다** (2026-10-06 재권님 「응 해줘」). 데일리 화면은
+    # `/api/board/doc/daily-*` 로 읽어 그 서버에서는 상류(8765) 것을 본다 — 자기 폴더에
+    # 저장해도 **아무도 안 읽는 사본**이었다(서비스방 8764 가 매일 07:3x 에 썼다).
+    # **포트를 먼저 정한다** — `board_upstream_base()` 가 「자기 자신을 가리키는가」 를
+    # `RUN_PORT` 로 가린다. 전에는 이 아래(하트비트 앞)에서 정했다.
+    global RUN_PORT
+    RUN_PORT = args.port
+    if not SLOW and not board_upstream_base():
         daily.start_daily(
             # **`[0]` 을 빠뜨리지 않는다.** 이 둘은 `(목록, 오류)` 를 준다.
             # 안 벗기면 튜플이 그대로 넘어가 `daily` 가 `x.get()` 에서 죽고,
@@ -6402,8 +6410,7 @@ def main():
     #
     # 판단도 조립도 `heartbeat.py` 에 있다. 이 파일은 여러 세션이 함께 쓰므로
     # 부르는 줄만 둔다 — `signal_watch` · `daily` 와 같은 꼴이다.
-    global RUN_PORT
-    RUN_PORT = args.port
+    # (`RUN_PORT` 는 데일리 시작 앞에서 정한다 — 아래가 아니라 위에 있다.)
 
     if heartbeat.start(sys.modules[__name__], args.port):
         print("  살아있음  : %d분마다 Cloudflare 에 신호 (꺼지면 폰으로 알림)"
