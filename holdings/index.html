@@ -241,6 +241,9 @@
       <div class="kh-card kh-rank-card">
         <div class="kh-tabs">
           <button class="kh-tab is-active">실시간 순위</button>
+          <!-- 시장 칩(코스피 · 코스닥)은 js/home.js 의 MARKETS 가 만든다. 제목과 **같은 줄**에 둔다 —
+               위로 올리면 제목보다 높아 보이고, 줄을 따로 두면 표가 짧아진다 (2026-10-06 재권님 「동일선상으로」) -->
+          <span class="kh-chips kh-rank-mkt" id="kh-rank-mkt"></span>
           <!-- 「▤ 요약 접기」 였다 (2026-09-21 지시로 바꿈).
                **아무것도 안 접고 있었다** — kh-fold 가 JS 어디에서도 안 쓰여
                눌러도 아무 일이 없는 장식이었다. 없애도 잃을 것이 없다.

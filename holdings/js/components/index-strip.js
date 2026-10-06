@@ -30,6 +30,8 @@ export const INDEX_CELLS = [
   { code: 'KOSDAQ',   name: '코스닥',     icon: 'kr' },
   { code: 'KOSPI200', name: '코스피200',  icon: 'kr' },
   { code: 'KRX100',   name: 'KRX100',   icon: 'kr' },
+  /* 코스닥150 — KIS 지수 코드 3003(KSQ150). 서버 INDEX_DEFS 가 같은 키로 준다 (2026-10-06 재권님 「가」 · 서버는 개발3) */
+  { code: 'KOSDAQ150', name: '코스닥150', icon: 'kr' },
   { code: 'USDKRW', name: '미국 USD',  icon: 'us' },
   { code: 'SPX',    name: 'S&P 500',  icon: 'us' },
   { code: 'NASDAQ', name: '나스닥 종합', icon: 'us' },

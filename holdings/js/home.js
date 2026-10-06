@@ -594,7 +594,27 @@ async function paintYearRange() {
    200종목 시세를 한꺼번에 받으면 한국투자증권을 200번 불러야 한다. 보이는 것은
    열 몇 개뿐이라 그 몫만 받는다. */
 
-let universe = null;        // [{code, name, rank, cap}]
+let universe = null;        // [{code, name, rank, cap, market}]
+
+/* ── 시장 칩 — 코스피 · 코스닥 (2026-10-06 재권님 「가」 · 「동일선상으로」) ──
+ *
+ * 순위표 목록(dart_universe)에 코스닥 시총 상위 150 이 함께 온다(서버는 개발3).
+ * 줄마다 `market` 이 붙고 rank 는 시장마다 1부터다. **market 이 없는 줄은 코스피로 본다** —
+ * 서버가 아직 안 바뀌었으면 지금처럼 코스피 200 만 보인다.
+ *
+ * 정렬 칩(관심 · 총액 · 대금 …)과 **따로 둔다** — 「무엇으로 세우나」 와 「어느 시장인가」 는 다른 물음이다.
+ * 「관심」 은 시장을 안 가린다 — 담은 것이 시장을 따라 사라지면 「담았는데 안 보인다」 가 된다. */
+const MARKETS = [
+  { id: 'KOSPI', label: '코스피' },
+  { id: 'KOSDAQ', label: '코스닥' },
+];
+let market = 'KOSPI';
+const marketOf = (x) => x.market || 'KOSPI';
+
+function marketChipsHtml(cur) {
+  return MARKETS.map((m) => `<button class="kh-chip${m.id === cur ? ' is-active' : ''}" type="button"
+    data-mkt="${m.id}">${m.label}</button>`).join('');
+}
 
 /* 화면이 함께 보는 시세 한 곳.
 
@@ -711,13 +731,14 @@ const MIN_VALUE_WON = 1000 * 1e8;
 
 let sortBy = 'cap';
 
-function rowList(sortId = sortBy) {
+function rowList(sortId = sortBy, mkt = market) {
   if (!universe) return WATCHLIST.map((s, i) => ({ ...s, rank: i + 1 }));
 
-  const base = universe.map(x => ({
+  const all = universe.map(x => ({
     code: x.code, name: x.name, sector: '',
     brand: brandColor(x.code, x.name), rank: x.rank,
   }));
+  const base = all.filter((s, i) => marketOf(universe[i]) === mkt);
 
   const sort = SORTS[sortId];
 
@@ -732,7 +753,7 @@ function rowList(sortId = sortBy) {
   if (sort && sort.filter) {
     const fav = favList();
     const want = new Set(fav.map((f) => f.code));
-    const inside = base.filter((s) => want.has(s.code));
+    const inside = all.filter((s) => want.has(s.code));   // 시장을 안 가린다 — 위 MARKETS 주석
 
     /* 순위 200 밖에서 담은 종목은 뒤에 붙인다. 빼면 **담았는데 안 보인다**
        가 된다. 이름은 담을 때 함께 저장돼 있다 (favorites.js 주석).
@@ -802,6 +823,26 @@ function setupSorts() {
   });
 }
 
+/* 시장 칩 — 누르면 그 시장 줄로 갈아 끼운다. 서버는 안 부른다(목록은 이미 있다).
+   새로 보이는 줄의 시세는 scheduleFetch 가 받는다. */
+function setupMarkets() {
+  const host = $('kh-rank-mkt');
+  if (!host) return;
+  host.innerHTML = marketChipsHtml(market);
+  host.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-mkt]');
+    if (!b || b.dataset.mkt === market) return;
+    market = b.dataset.mkt;
+    host.querySelectorAll('[data-mkt]').forEach(x =>
+      x.classList.toggle('is-active', x === b));
+    const box = $('kh-rank-scroll');
+    if (box) box.scrollTop = 0;          // 다른 시장의 1위부터 본다
+    paintRows(rowPrices);
+    paintSortNote();
+    scheduleFetch();
+  });
+}
+
 /* 지금 무엇을 보고 있는지 한 줄로 적는다 (2026-09-18 지시).
  *
  * **단추를 눌러도 서버를 안 부르므로 기다릴 일이 없다.** 대신 두 가지가
@@ -827,8 +868,9 @@ let noteAt = 0;
  * 그래서 문구를 양쪽에 따로 적지 않는다. 없으면 `null` 이다.
  */
 function freshNote() {
-  const total = (universe || []).length;
-  const got = (universe || []).filter(x => rowPrices && rowPrices[x.code]).length;
+  const mine = (universe || []).filter(x => marketOf(x) === market);   // 보고 있는 시장만 센다
+  const total = mine.length;
+  const got = mine.filter(x => rowPrices && rowPrices[x.code]).length;
 
   /* 아직 다 안 찼으면 그것이 먼저다 — 200개가 차기 전에는 **순서를 믿을 때가
      아니다.** 「몇 초 전」 보다 이 사실이 크다. */
@@ -968,10 +1010,12 @@ const RANK_TABS_NOTE = '거래대금 · 시가총액 · 거래량까지';
 
 let rankModal = null;           // { body, head } — 닫히면 null
 let rankModalSort = 'cap';      // 모달에서 고른 갈래. 목록과 따로 둔다
+let rankModalMarket = 'KOSPI';  // 모달에서 고른 시장. 갈래와 같은 까닭으로 목록과 따로 둔다
 
 /* 머리 ② 왼쪽 대표값 — 코스피. 이미 받아 둔 지수를 쓴다 */
 function rankHeadBig() {
-  const i = (lastIndices || []).find((x) => x.code === 'KOSPI');
+  const mk = rankModalMarket === 'KOSDAQ' ? { code: 'KOSDAQ', label: '코스닥' } : { code: 'KOSPI', label: '코스피' };
+  const i = (lastIndices || []).find((x) => x.code === mk.code);
   /* 안 온 것은 「불러오는 중」 으로 둔다. 0 이나 「—」 로 적으면 연결이
      안 된 건지 값이 그런 건지 구분할 수 없다 (데이터 규칙). */
   if (!i || i.value == null) return { value: '불러오는 중' };
@@ -979,7 +1023,7 @@ function rankHeadBig() {
     value: fmtNum(i.value, 2),
     change: '어제보다 ' + fmtDelta(i.change, i.changePct, '', 2),
     changeCls: dirClass(i.changePct),
-    note: '코스피 · ' + marketPhase().label,
+    note: mk.label + ' · ' + marketPhase().label,
   };
 }
 
@@ -1010,14 +1054,14 @@ function rankHeadStats() {
     { label: '코스피200', ...idx('KOSPI200') },
     { label: '코스닥 등락', ...counts('KOSDAQ') },
     { label: 'KRX100', ...idx('KRX100') },
-    { label: '줄 세운 종목', value: rowList(rankModalSort).length + '개' },
+    { label: '줄 세운 종목', value: rowList(rankModalSort, rankModalMarket).length + '개' },
   ];
 }
 
 /* 본문 — 표만 그린다. 머리는 modal-head.js 가 들고 있다 */
 function paintRankModal() {
   if (!rankModal) return;
-  const list = rowList(rankModalSort);
+  const list = rowList(rankModalSort, rankModalMarket);
   const rows = list.map((s) => {
     const p = rowPrices && rowPrices[s.code];
     const cap = capOf(s.code);
@@ -1031,13 +1075,19 @@ function paintRankModal() {
       <td class="kh-num">${p ? fmtShareCount(p.volume) : '···'}</td>
     </tr>`;
   }).join('');
+  /* 카드와 같다 — 고른 시장 목록이 아직 안 왔으면 빈 표 대신 그렇다고 적는다 */
+  const empty = !list.length && universe
+    ? `<tr><td colspan="7" class="kh-mut">${MARKETS.find(m => m.id === rankModalMarket)?.label || rankModalMarket} 목록을 아직 받지 못했습니다</td></tr>` : '';
 
   /* 칸 폭을 못 박는다 (table-layout: fixed).
      남는 폭을 종목 칸이 먹어서 종목과 현재가 사이가 **559px** 까지 벌어져
      있었다 (2026-09-22 지시 — "종목과 현재가 사이는 줄여주고").
      못 박으면 **탭을 바꿔도 칸이 안 움직인다** — 「보는 것을 바꿔도 자리는
      그대로다」 가 같이 지켜진다. 폭은 css/home.css 의 .kh-rkm col 에 있다. */
+  /* 시장 칩은 본문 맨 위에 둔다 — 카드에 있으니 모달에도 있어야 한다(모달이 원본).
+     머리(modal-head.js)는 다른 구역도 거는 공용이라 손대지 않는다. */
   rankModal.body.innerHTML = `<div class="kh-rkm">
+    <div class="kh-chips kh-rkm-mkt" data-rkm-mkt>${marketChipsHtml(rankModalMarket)}</div>
     <table>
       <colgroup>
         <col class="c-rk"><col class="c-nm"><col class="c-pr"><col class="c-pc">
@@ -1047,12 +1097,20 @@ function paintRankModal() {
         <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
         <th>거래대금</th><th>시가총액</th><th>거래량</th>
       </tr></thead>
-      <tbody>${rows}</tbody>
+      <tbody>${rows || empty}</tbody>
     </table>
   </div>`;
 
   /* 머리의 수치도 같은 값으로 맞춘다 — 두 자리가 어긋나면 어느 것이
      맞는지 알 수 없다 */
+  rankModal.body.querySelector('[data-rkm-mkt]').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-mkt]');
+    if (!b || b.dataset.mkt === rankModalMarket) return;
+    rankModalMarket = b.dataset.mkt;
+    paintRankModal();
+    scheduleFetch();
+  });
+
   rankModal.head.setBig(rankHeadBig());
   rankModal.head.setStats(rankHeadStats());
 }
@@ -1088,6 +1146,7 @@ function openRankModal() {
   });
   rankModal = m;
   rankModalSort = sortBy;
+  rankModalMarket = market;     // 목록에서 보던 시장으로 열린다
   paintRankModal();
   paintRankModalNote();
 }
@@ -1110,6 +1169,12 @@ function paintRankModalNote() {
 
 function paintRows(priceMap) {
   const list = rowList();
+  /* 고른 시장의 목록이 비었다 — 서버가 아직 그 시장을 안 준다. 빈 표로 두면 고장처럼 보인다 */
+  if (!list.length && universe) {
+    $('kh-rows').innerHTML = `<tr><td colspan="5" class="kh-mut">${
+      MARKETS.find(m => m.id === market)?.label || market} 목록을 아직 받지 못했습니다</td></tr>`;
+    return;
+  }
   $('kh-rows').innerHTML = list.map(s => {
     const live = priceMap && priceMap[s.code];
     const cls = live ? dirClass(live.pct) : 'kh-mut';
@@ -1284,7 +1349,10 @@ async function fetchVisible() {
    종목 안에서만 줄이 섰다 (2026-09-18 실측 — 36초가 지나도 23/200). */
 function nextCodes() {
   const watch = WATCHLIST.map(s => s.code);
-  const rest = (universe || []).map(x => x.code);
+  /* 나머지는 **보고 있는 시장 것만** 이어 받는다 — 코스닥을 안 보면 그 150 을 안 부른다.
+     모달이 다른 시장을 보고 있으면 그것도 받는다. */
+  const want = new Set([market, rankModal ? rankModalMarket : market]);
+  const rest = (universe || []).filter(x => want.has(marketOf(x))).map(x => x.code);
   return [...new Set([...watch, ...visibleCodeList(), ...rest])]
     .filter(c => !asked.has(c));
 }
@@ -1691,6 +1759,7 @@ setInterval(paintMkt, 30000);
 setupCatFilter();
 setupIxNav();
 setupSorts();
+setupMarkets();
 /* 몇 초 전 값인지는 가만히 있어도 늘어난다. 1초마다 다시 적는다.
    **모달이 열려 있으면 그쪽도 함께** 적는다 (2026-09-23) — 한쪽만 적으면
    카드는 「12초 전」 인데 모달은 「3초 전」 에 멈춰 있게 된다. */
