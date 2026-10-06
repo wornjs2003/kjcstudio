@@ -1,0 +1,7 @@
+{
+  "width": 2560,
+  "height": 1359,
+  "dpr": 1.5,
+  "_왜": "재권님이 평소 홀딩스를 보시는 크롬 창에서 잰 값(2026-10-06 15:06 · tools/view-size.html). 세션이 화면을 찍을 때는 이 크기로만 찍는다 — tools/shot.py · 훅 tools/hook-view-size.py. 창을 바꾸시면 다시 잰다.",
+  "_잰값": "innerWidth 2560 · innerHeight 1359 · outer 3840×2038 · screen 3840×2160 · devicePixelRatio 1.5"
+}

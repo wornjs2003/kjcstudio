@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>개념정의 · 창 크기 재기</title>
+<style>
+  :root { --bg: #f6f7f9; --card: #ffffff; --text: #101013; --sub: #4e5968; --accent: #3182f6; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: "Noto Sans KR", sans-serif; }
+  main { max-width: 560px; margin: 48px auto; padding: 0 16px; }
+  .card { background: var(--card); border-radius: 16px; padding: 28px; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  p { color: var(--sub); line-height: 1.6; margin: 0 0 16px; }
+  .big { font-size: 40px; font-weight: 700; margin: 8px 0; }
+  .row { color: var(--sub); font-size: 14px; margin: 4px 0; }
+  .ok { color: var(--accent); font-weight: 700; }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1>재권님 창 크기 재기</h1>
+    <p>평소 홀딩스를 보시는 크롬 창 그대로 이 페이지를 여시면 됩니다. 창 크기를 바꾸지 말아 주십시오.</p>
+    <div class="big" id="inner">—</div>
+    <div class="row" id="outer"></div>
+    <div class="row" id="dpr"></div>
+    <div class="row" id="saved">저장 중…</div>
+  </div>
+</main>
+<script>
+  // 화면이 실제로 쓰는 폭·높이(innerWidth/innerHeight)가 세션이 찍을 때 맞출 값이다.
+  // 8765 보드 저장소의 view-size 문서에 남겨 개념정의가 읽는다.
+  const v = {
+    innerWidth: innerWidth, innerHeight: innerHeight,
+    outerWidth: outerWidth, outerHeight: outerHeight,
+    devicePixelRatio: devicePixelRatio,
+    screenWidth: screen.width, screenHeight: screen.height,
+    at: new Date().toISOString(), ua: navigator.userAgent
+  };
+  document.getElementById('inner').textContent = v.innerWidth + ' × ' + v.innerHeight;
+  document.getElementById('outer').textContent = '창 바깥 ' + v.outerWidth + ' × ' + v.outerHeight + ' · 화면 ' + v.screenWidth + ' × ' + v.screenHeight;
+  document.getElementById('dpr').textContent = '배율 ' + v.devicePixelRatio;
+  fetch('/api/board/doc/view-size', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: v }) })
+    .then(r => { document.getElementById('saved').innerHTML = r.ok ? '<span class="ok">저장했습니다. 이 창은 닫으셔도 됩니다.</span>' : '저장 못 함 (' + r.status + ') — 위 숫자를 알려 주십시오'; })
+    .catch(() => { document.getElementById('saved').textContent = '저장 못 함 — 위 숫자를 알려 주십시오'; });
+</script>
+</body>
+</html>

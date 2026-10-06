@@ -122,6 +122,11 @@ SAVE_MIN     = 30     # 기준을 잡을 때는 이만큼 (0.5 x 30 = 15초)
 
 MEASURE = r"""
 (() => {
+  // 「⚠ 작업용」 띠(8765 가 아닌 포트에만 붙는다 · frame.js)는 재기 전에 뺀다 — 화면 흐름에 끼어 있으면
+  // 세션 포트를 8765 와 견줄 때 화면 전부가 그 높이만큼 어긋나 진짜 차이를 덮는다(2026-10-06 · 8770 이 +41).
+  // 띠가 흐름 밖으로 바뀐 뒤에는 빼도 아무것도 안 바뀐다 — 그래서 문서에 예외를 적지 않아도 된다.
+  const envbar = document.querySelector('.kh-envbar');
+  if (envbar) { window.__khEnvbarH = envbar.getBoundingClientRect().height; envbar.remove(); }
   const root = document.querySelector('.kh-app') || document.body;
   const out = {};
   const seen = {};

@@ -95,6 +95,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-view-size.py\"",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "SessionStart": [

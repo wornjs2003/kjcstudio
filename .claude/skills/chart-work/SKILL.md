@@ -37,6 +37,7 @@ when_to_use: 차트 · chart.js · 지표 · 이동평균 · 볼린저 · RSI ·
 - 사용법은 `--help` 로 본다 — 인자 없이 부르면 검사를 한 번 돌리고 `logs/check-chart.json` 을 덮는다
 - 세션 폴더에는 `uidata/icons` 가 없어(gitignore) 아이콘이 404 다 — 도구가 걸린 것에서 빼고 「세지 않음: /uidata/ 404 N건」 으로 따로 적는다. **8765 에서 나면 진짜다**
 - 단계마다 경고 띠(`scaleWarn` · `alignWarn`) · 그려진 칸 수(`canvases` · `panes`) · 콘솔 오류를 전후로 나란히 놓는다
+- **재권님께 링크를 드리기 전에** `python3 tools/check-layout.py --port <내 포트> --against 8765` — 고친 칸 말고 달라진 칸이 없는지 사람이 가른다(CLAUDE.md 「고친 그 화면을 띄운다」 · 2026-10-06 「창이 왜 또 바뀌게」)
 
 ## 3. 달라진 것이 있으면 셋을 묻는다
 
