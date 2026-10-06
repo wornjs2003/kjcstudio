@@ -1,98 +1,17 @@
 {
   "id": "ai",
   "title": "AI 생태계 — 돈이 흐르는 길",
-  "sub": "왼쪽에서 오른쪽으로 — 서비스가 돈을 벌면 모델 · 데이터센터를 거쳐 칩과 전력으로 흘러간다. 칸을 누르면 이어진 길이 켜진다 · 빨간 고리는 병목",
+  "sub": "왼쪽에서 오른쪽으로 — 소부장 · 반도체 · AI 칩 · 인프라 · 모델을 거쳐 AI 서비스로 부품과 연산이 흘러간다(돈은 반대로 돌아온다). 칸을 누르면 이어진 길이 켜진다 · 빨간 고리는 병목",
   "flowLabel": "AI 흐름도",
-  "asOf": "2026-10-03",
-  "note": "2026-10-02 지시로 만든 AI 생태계 지도(ecosystem.html)를 2026-10-03 에 자료 파일로 옮겼다. 참고: Globaia AI 공급망 지도 — 흐름 움직임 · 선 종류 색 · 병목 고리(재권님이 고르심). 등급은 시황분석 판단. 코드는 market.js 와 대조된 것만, 나머지 null",
+  "asOf": "2026-10-06",
+  "note": "2026-10-02 지시로 만든 AI 생태계 지도(ecosystem.html)를 2026-10-03 에 자료 파일로 옮겼다. 참고: Globaia AI 공급망 지도 — 흐름 움직임 · 선 종류 색 · 병목 고리(재권님이 고르심). 등급은 시황분석 판단. 코드는 market.js 와 대조된 것만, 나머지 null · 코드는 금감원 DART 상장사 표(dart_corps)로 확인(2026-10-06) · 해외 티커는 SEC company_tickers 표 — OpenAI · Anthropic 은 비상장이라 없음 · 2026-10-06 재권님 지시로 방향을 뒤집음(왼쪽 소부장 → 오른쪽 AI 서비스) · AI 칩을 반도체와 인프라 사이 열로 · 전력 인프라는 인프라 열로",
   "geoCenter": [
     150,
     20
   ],
   "columns": [
     {
-      "head": "수요",
-      "items": [
-        {
-          "id": "svc",
-          "type": "node",
-          "k": "수요",
-          "t": "AI 서비스",
-          "d": "챗봇 · 에이전트 · 검색 · 코딩 도구"
-        },
-        {
-          "id": "krsw",
-          "type": "cell",
-          "k": "국내 AI 서비스",
-          "t": "네이버 · 카카오"
-        }
-      ]
-    },
-    {
-      "head": "모델",
-      "items": [
-        {
-          "id": "model",
-          "type": "node",
-          "k": "모델",
-          "t": "파운데이션 모델",
-          "d": "OpenAI · Anthropic · Google · Meta"
-        }
-      ]
-    },
-    {
-      "head": "인프라",
-      "items": [
-        {
-          "id": "cloud",
-          "type": "node",
-          "k": "인프라",
-          "t": "클라우드 · 데이터센터",
-          "d": "MS Azure · AWS · Google Cloud · Oracle"
-        }
-      ]
-    },
-    {
-      "head": "반도체 · 전력",
-      "items": [
-        {
-          "id": "chip",
-          "type": "node",
-          "k": "칩 설계",
-          "t": "AI 가속기",
-          "d": "엔비디아 · AMD · 브로드컴",
-          "choke": true
-        },
-        {
-          "id": "mem",
-          "type": "node",
-          "k": "메모리",
-          "t": "HBM",
-          "d": "SK하이닉스 · 삼성전자 · 마이크론",
-          "choke": true
-        },
-        {
-          "id": "fab",
-          "type": "node",
-          "k": "제조",
-          "t": "파운드리 · 패키징",
-          "d": "TSMC · 삼성전자",
-          "choke": true
-        },
-        {
-          "gap": true
-        },
-        {
-          "id": "pwr",
-          "type": "node",
-          "k": "전력",
-          "t": "전력 인프라",
-          "d": "만들고 · 보내고 · 식힌다"
-        }
-      ]
-    },
-    {
-      "head": "국내 종목",
+      "head": "소부장 · 국내 종목",
       "items": [
         {
           "id": "pcb",
@@ -146,6 +65,92 @@
           "t": "(국내 조사 전) · Vertiv"
         }
       ]
+    },
+    {
+      "head": "반도체",
+      "items": [
+        {
+          "id": "mem",
+          "type": "node",
+          "k": "메모리",
+          "t": "HBM",
+          "d": "SK하이닉스 · 삼성전자 · 마이크론",
+          "choke": true
+        },
+        {
+          "id": "fab",
+          "type": "node",
+          "k": "제조",
+          "t": "파운드리 · 패키징",
+          "d": "TSMC · 삼성전자",
+          "choke": true
+        }
+      ]
+    },
+    {
+      "head": "AI 칩",
+      "items": [
+        {
+          "id": "chip",
+          "type": "node",
+          "k": "AI 칩",
+          "t": "AI 가속기 — 설계",
+          "d": "엔비디아 · AMD · 브로드컴",
+          "choke": true
+        }
+      ]
+    },
+    {
+      "head": "인프라",
+      "items": [
+        {
+          "id": "cloud",
+          "type": "node",
+          "k": "인프라",
+          "t": "클라우드 · 데이터센터",
+          "d": "MS Azure · AWS · Google Cloud · Oracle"
+        },
+        {
+          "gap": true
+        },
+        {
+          "id": "pwr",
+          "type": "node",
+          "k": "전력",
+          "t": "전력 인프라",
+          "d": "만들고 · 보내고 · 식힌다"
+        }
+      ]
+    },
+    {
+      "head": "모델",
+      "items": [
+        {
+          "id": "model",
+          "type": "node",
+          "k": "모델",
+          "t": "파운데이션 모델",
+          "d": "OpenAI · Anthropic · Google · Meta"
+        }
+      ]
+    },
+    {
+      "head": "AI 서비스",
+      "items": [
+        {
+          "id": "svc",
+          "type": "node",
+          "k": "수요",
+          "t": "AI 서비스",
+          "d": "챗봇 · 에이전트 · 검색 · 코딩 도구"
+        },
+        {
+          "id": "krsw",
+          "type": "cell",
+          "k": "국내 AI 서비스",
+          "t": "네이버 · 카카오"
+        }
+      ]
     }
   ],
   "lineTypes": {
@@ -164,100 +169,95 @@
   },
   "links": [
     [
-      "svc",
+      "pcb",
+      "chip",
+      "chip"
+    ],
+    [
+      "test",
+      "chip",
+      "chip"
+    ],
+    [
+      "hbmeq",
+      "mem",
+      "chip"
+    ],
+    [
+      "equip",
+      "mem",
+      "chip"
+    ],
+    [
+      "power",
+      "pwr",
+      "power"
+    ],
+    [
+      "cable",
+      "pwr",
+      "power"
+    ],
+    [
+      "nuke",
+      "pwr",
+      "power"
+    ],
+    [
+      "cool",
+      "pwr",
+      "power"
+    ],
+    [
+      "mem",
+      "chip",
+      "chip"
+    ],
+    [
+      "fab",
+      "chip",
+      "chip"
+    ],
+    [
+      "chip",
+      "cloud",
+      "chip"
+    ],
+    [
+      "pwr",
+      "cloud",
+      "power"
+    ],
+    [
+      "cloud",
       "model",
       "demand"
     ],
     [
+      "model",
       "svc",
+      "demand"
+    ],
+    [
+      "model",
       "krsw",
       "demand"
-    ],
-    [
-      "model",
-      "cloud",
-      "demand"
-    ],
-    [
-      "cloud",
-      "chip",
-      "chip"
-    ],
-    [
-      "cloud",
-      "mem",
-      "chip"
-    ],
-    [
-      "cloud",
-      "fab",
-      "chip"
-    ],
-    [
-      "cloud",
-      "pwr",
-      "power"
-    ],
-    [
-      "chip",
-      "pcb",
-      "chip"
-    ],
-    [
-      "chip",
-      "test",
-      "chip"
-    ],
-    [
-      "mem",
-      "hbmeq",
-      "chip"
-    ],
-    [
-      "mem",
-      "equip",
-      "chip"
-    ],
-    [
-      "pwr",
-      "power",
-      "power"
-    ],
-    [
-      "pwr",
-      "cable",
-      "power"
-    ],
-    [
-      "pwr",
-      "nuke",
-      "power"
-    ],
-    [
-      "pwr",
-      "cool",
-      "power"
     ]
   ],
   "extra": [
     [
-      "mem",
       "test",
-      "chip"
-    ],
-    [
       "mem",
-      "fab",
       "chip"
     ],
     [
-      "chip",
       "fab",
+      "mem",
       "chip"
     ],
     [
-      "chip",
       "equip",
+      "chip",
       "chip"
     ]
   ],
@@ -286,7 +286,11 @@
     "mem": {
       "what": "AI 가속기 옆에 붙는 고대역폭 메모리. 국내 비중이 큰 자리.",
       "watch": "HBM 공급 계약 · 세대 전환",
-      "choke": "소수 공급 — HBM 을 만드는 회사가 셋뿐이다"
+      "choke": "소수 공급 — HBM 을 만드는 회사가 셋뿐이다",
+      "parts": {
+        "label": "HBM 패키지 분해도(3D) ›",
+        "page": "hbm3d.html"
+      }
     },
     "fab": {
       "what": "칩을 실제로 만들고 메모리와 한 덩어리로 묶는다(첨단 패키징).",
@@ -360,33 +364,38 @@
       "name": "마이크론",
       "code": null,
       "node": "mem",
-      "market": "US"
+      "market": "US",
+      "ticker": "MU"
     },
     {
       "name": "엔비디아",
       "code": null,
       "node": "chip",
       "market": "US",
-      "grade": "lead"
+      "grade": "lead",
+      "ticker": "NVDA"
     },
     {
       "name": "AMD",
       "code": null,
       "node": "chip",
-      "market": "US"
+      "market": "US",
+      "ticker": "AMD"
     },
     {
       "name": "브로드컴",
       "code": null,
       "node": "chip",
-      "market": "US"
+      "market": "US",
+      "ticker": "AVGO"
     },
     {
       "name": "TSMC",
       "code": null,
       "node": "fab",
       "market": "TW",
-      "grade": "lead"
+      "grade": "lead",
+      "ticker": "TSM"
     },
     {
       "name": "한미반도체",
@@ -396,19 +405,19 @@
     },
     {
       "name": "이수페타시스",
-      "code": null,
+      "code": "007660",
       "node": "pcb",
       "grade": "driver"
     },
     {
       "name": "리노공업",
-      "code": null,
+      "code": "058470",
       "node": "test",
       "grade": "driver"
     },
     {
       "name": "ISC",
-      "code": null,
+      "code": "095340",
       "node": "test",
       "grade": "parts"
     },
@@ -420,78 +429,78 @@
     },
     {
       "name": "효성중공업",
-      "code": null,
+      "code": "298040",
       "node": "power",
       "grade": "driver"
     },
     {
       "name": "LS일렉트릭",
-      "code": null,
+      "code": "010120",
       "node": "power",
       "grade": "driver"
     },
     {
       "name": "두산에너빌리티",
-      "code": null,
+      "code": "034020",
       "node": "nuke",
       "grade": "driver"
     },
     {
       "name": "대한전선",
-      "code": null,
+      "code": "001440",
       "node": "cable",
       "grade": "parts"
     },
     {
       "name": "LS",
-      "code": null,
+      "code": "006260",
       "node": "cable",
       "grade": "parts"
     },
     {
       "name": "테크윙",
-      "code": null,
+      "code": "089030",
       "node": "equip",
       "grade": "parts"
     },
     {
       "name": "피에스케이",
-      "code": null,
+      "code": "319660",
       "node": "equip",
       "grade": "parts"
     },
     {
       "name": "원익IPS",
-      "code": null,
+      "code": "240810",
       "node": "equip",
       "grade": "parts"
     },
     {
       "name": "주성엔지니어링",
-      "code": null,
+      "code": "036930",
       "node": "equip",
       "grade": "parts"
     },
     {
       "name": "솔브레인",
-      "code": null,
+      "code": "357780",
       "node": "equip",
       "grade": "parts"
     },
     {
       "name": "동진쎄미켐",
-      "code": null,
+      "code": "005290",
       "node": "equip",
       "grade": "parts"
     },
     {
       "name": "네이버",
-      "code": null,
+      "code": "035420",
       "node": "krsw"
     },
     {
       "name": "카카오",
-      "code": null,
+      "code": "035720",
       "node": "krsw"
     },
     {
@@ -517,13 +526,15 @@
         "cloud",
         "svc"
       ],
-      "market": "US"
+      "market": "US",
+      "ticker": "GOOGL"
     },
     {
       "name": "메타",
       "code": null,
       "node": "model",
-      "market": "US"
+      "market": "US",
+      "ticker": "META"
     },
     {
       "name": "마이크로소프트",
@@ -532,25 +543,29 @@
       "also": [
         "svc"
       ],
-      "market": "US"
+      "market": "US",
+      "ticker": "MSFT"
     },
     {
       "name": "아마존",
       "code": null,
       "node": "cloud",
-      "market": "US"
+      "market": "US",
+      "ticker": "AMZN"
     },
     {
       "name": "오라클",
       "code": null,
       "node": "cloud",
-      "market": "US"
+      "market": "US",
+      "ticker": "ORCL"
     },
     {
       "name": "Vertiv",
       "code": null,
       "node": "cool",
-      "market": "US"
+      "market": "US",
+      "ticker": "VRT"
     }
   ],
   "sites": [

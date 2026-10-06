@@ -21,6 +21,13 @@
   .in-frame { --eco-top: 122px; }   /* 2026-10-02 헤드리스 실측 — 위 108 + 아래 14 */
   .in-frame h1, .in-frame .sub { display: none; }
   .in-frame .wrap { padding: 12px 20px 14px; }
+  /* 칸 안 모드(?embed=1) — Insight 첫 화면의 돈의 흐름 칸이 이 화면을 틀로 띄운다 (2026-10-06 지시 · 「나」).
+     지도만 보이게 제목 · 보기 단추 · 아래 단추 줄 · 오른쪽 패널 · 지구본 단추를 감추고, 지구본은 손대기 전까지 멈춘다(spinOn).
+     흐름 · 병목 · 시나리오 · 회사 카드는 모달(큰 화면)에서 본다 */
+  .embed .wrap { grid-template-columns: 1fr; min-width: 0; padding: 0; }
+  .embed h1, .embed .sub, .embed .views, .embed #bar, .embed .panel, .embed .geo-ctl, .embed .geo-note { display: none; }
+  .embed .view { height: 100vh; }
+  .embed #geo { height: 100%; border-radius: 0; }
   h1 { font-size: 19px; margin: 0 0 4px; }
   .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 18px; }
 
@@ -119,6 +126,46 @@
   .pin .lb.left { left: auto; right: 16px; text-align: right; }
   .pin .lb[hidden] { display: none; }
   .geo-note { color: var(--text-muted); font-size: 11.5px; margin-top: 6px; }
+
+  /* ── 회사 카드 — 종목 칩을 누르면 오른쪽에서 덮는 창 (2026-10-06 지시 — 사업 · 영업이익 · 현재가치 · 미래가치 · 출처 셋) ── */
+  .stk[data-co] { cursor: pointer; }
+  .stk[data-co]:hover { text-decoration: underline; text-decoration-color: var(--accent); }
+  .co-wrap { position: fixed; inset: 0; z-index: 50; display: none; }
+  .co-wrap.is-on { display: block; }
+  .co-dim { position: absolute; inset: 0; background: var(--overlay-bg); }
+  .co { position: absolute; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); background: var(--bg-card); box-shadow: var(--shadow-md);
+        overflow-y: auto; padding: 18px 22px 28px; box-sizing: border-box; font-size: 13px; line-height: 1.55; }
+  .co h2 { font-size: 18px; margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .co h2 small { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+  .co .x { position: absolute; top: 12px; right: 14px; border: 0; background: var(--accent-faint); color: var(--accent); border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
+  .co .meta { color: var(--text-muted); font-size: 12px; margin: 4px 0 12px; }
+  .co h3 { font-size: 13px; margin: 18px 0 6px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+  .co h3 .src { font-weight: 400; font-size: 11.5px; color: var(--text-muted); margin-left: auto; }
+  .co h3 .src a, .co .meta a, .co .rep a { color: var(--accent); text-decoration: none; }
+  .co p { margin: 0; }
+  .co table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .co th, .co td { padding: 5px 4px; border-bottom: 1px solid var(--bg-elevated); text-align: right; white-space: nowrap; }
+  .co th { color: var(--text-muted); font-weight: 500; }
+  .co th:first-child, .co td:first-child { text-align: left; }
+  .co th.est { color: var(--accent); }
+  .co td.neg { color: var(--kh-danger); }
+  .co .kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .co .kv div { background: var(--bg-elevated); border-radius: 10px; padding: 8px 10px; }
+  .co .kv b { display: block; font-size: 15px; }
+  .co .kv span { font-size: 11.5px; color: var(--text-muted); }
+  .co .rep { list-style: none; padding: 0; margin: 0; }
+  .co .rep li { padding: 4px 0; border-bottom: 1px solid var(--bg-elevated); display: flex; gap: 8px; }
+  .co .rep li .b { color: var(--text-muted); flex: 0 0 76px; }
+  .co .rep li .d { color: var(--text-muted); margin-left: auto; flex: 0 0 auto; }
+  .co .none { color: var(--text-muted); }
+  .co .foot { margin-top: 18px; font-size: 11.5px; color: var(--text-muted); border-top: 1px solid var(--bg-elevated); padding-top: 8px; }
+  .co .foot a { color: var(--accent); text-decoration: none; }
+
+  /* 부품 분해도(3D) 덮는 창 — 자료 파일 info.<칸>.parts 가 있는 칸만 (2026-10-06 지시 · HBM 칸) */
+  .parts-btn { border: 0; background: var(--accent-faint); color: var(--accent); border-radius: 8px; padding: 5px 10px; cursor: pointer; font: inherit; font-size: 12.5px; }
+  .parts { position: absolute; inset: 24px; background: var(--bg-card); border-radius: 14px; box-shadow: var(--shadow-md); overflow: hidden; }
+  .parts iframe { width: 100%; height: 100%; border: 0; display: block; }
+  .parts .x { position: absolute; top: 10px; right: 12px; z-index: 2; border: 0; background: var(--accent-faint); color: var(--accent); border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -154,10 +201,14 @@
   </div>
   <aside class="panel" id="panel"></aside>
 </div>
+<div class="co-wrap parts-wrap" id="parts-wrap" aria-hidden="true"><div class="co-dim" data-parts-close></div><div class="parts" id="parts"><button class="x" data-parts-close>닫기 ✕</button><iframe id="parts-frame" title="부품 분해도"></iframe></div></div>
+<div class="co-wrap" id="co-wrap" aria-hidden="true"><div class="co-dim" data-co-close></div><aside class="co" id="co" role="dialog" aria-label="회사 카드"></aside></div>
 <style id="dyn"></style>
 
 <script>
 if (window !== window.top) document.documentElement.classList.add('in-frame');   // 모달 안이면 제목 줄을 숨긴다 — 모달 머리가 제목을 들고 있다
+const EMBED = !!new URLSearchParams(location.search).get('embed');   // 칸 안 모드 — 지도만 · 지구본 멈춤 (2026-10-06)
+if (EMBED) document.documentElement.classList.add('embed');
 
 const $ = id => document.getElementById(id);
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -172,7 +223,7 @@ let LINKS = [], EXTRA = [], INFO = {}, STOCKS = [], GRADES = {}, GRADE_NO = {}, 
 let sel = null, scenario = null;
 const EMPTY = '<h2>칸을 눌러 보세요</h2><div class="empty">그 칸의 설명 · 종목 · 볼 것 · 이어진 칸이 여기 뜹니다.</div>';
 const el = id => map.querySelector(`[data-id="${id}"]`);
-const chip = st => `<span class="stk${st.grade ? ' g-' + (GRADE_NO[st.grade] || 4) : ''}">${esc(st.name)}${st.grade ? `<i>${esc(GRADES[st.grade] || st.grade)}</i>` : ''}</span>`;
+const chip = st => `<span class="stk${st.grade ? ' g-' + (GRADE_NO[st.grade] || 4) : ''}"${(st.code || st.ticker) ? ` data-co="${esc(st.code || st.ticker)}" title="회사 카드 열기"` : ''}>${esc(st.name)}${st.grade ? `<i>${esc(GRADES[st.grade] || st.grade)}</i>` : ''}</span>`;
 const stocksOf = id => STOCKS.filter(st => st.node === id || (st.also || []).includes(id));
 
 // ── 자료로 화면을 짓는다 ──
@@ -252,6 +303,7 @@ function pick(id) {
   panel.innerHTML = `<h2>${esc(title(n))}</h2>
     <dl><dt>무엇인가</dt><dd>${esc(info.what || '—')}</dd>
     <dt>종목</dt><dd>${stocksOf(sel).length ? stocksOf(sel).map(chip).join('') : esc((n.querySelector('.d') || n.querySelector('.t')).textContent)}</dd>
+    ${info.parts ? `<dt>부품</dt><dd><button class="parts-btn" data-parts="${esc(info.parts.page)}">${esc(info.parts.label)}</button></dd>` : ''}
     <dt>볼 것</dt><dd>${esc(info.watch || '—')}</dd>
     ${sc ? `<dt>시나리오</dt><dd>${sc}</dd>` : ''}
     <dt>이어진 칸</dt><dd>${esc(names)}</dd>
@@ -389,7 +441,7 @@ function buildGeo() {
     new maplibregl.Marker({ element: d }).setLngLat(s.at).addTo(geo);
     return { s, lb: d.querySelector('.lb') };
   });
-  let globeOn = true, spinOn = true, hover = false, dragging = false;
+  let globeOn = true, spinOn = !EMBED, hover = false, dragging = false;   // 칸 안에서는 손대기 전까지 멈춘다(재권님 「나」)
   function fitGlobe() {
     const want = Math.min(box.clientWidth, box.clientHeight) * 0.9;
     let z = geo.getZoom();
@@ -471,6 +523,111 @@ function showView(v) {
 }
 $('views').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showView(b.dataset.v); });
 
+
+// ── 회사 카드 — data/company-cards.json(tools/fetch-company-cards.py 가 DART · 네이버 증권 · EDGAR 에서 받아 둔 것) ──
+let CARDS = null, CARDS_AT = '';
+async function loadCards() {
+  try {
+    const r = await fetch('data/company-cards.json', { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json(); CARDS = j.cards || {}; CARDS_AT = j.fetchedAt || '';
+  } catch (e) { console.warn('[회사 카드] 자료를 못 읽었습니다', e); CARDS = {}; }
+}
+const keyOf = st => st.code || st.ticker || '';
+const won = v => v == null ? '—' : (Math.abs(v) >= 10000 ? (v / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 1 }) + '조' : v.toLocaleString('ko-KR')) ;
+const n0 = v => v == null ? '—' : Number(v).toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+const ymd = s => s && s.length === 8 ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6)}` : (s || '');
+const neg = v => (v != null && v < 0) ? ' class="neg"' : '';
+function finRow(label, row, cols, fmt = won) {
+  if (!row) return '';
+  return `<tr><td>${esc(label)}</td>${cols.map(c => `<td${neg(row[c.key])}>${fmt(row[c.key])}</td>`).join('')}</tr>`;
+}
+function renderCard(st, c) {
+  const title = `<h2>${esc(st.name)} <small>${esc(keyOf(st))}${st.grade ? ' · ' + esc(GRADES[st.grade] || st.grade) : ''}</small></h2>`;
+  if (!c) {
+    return title + `<p class="meta">${st.code || st.ticker ? '카드 자료가 아직 없습니다 — tools/fetch-company-cards.py 를 돌리면 생깁니다' : '비상장 — 공시 · 증권사 자료가 없습니다'}</p>`;
+  }
+  let h = title;
+  const d = c.dart, n = c.naver, e = c.edgar, err = c.errors || {};
+  h += `<p class="meta">${d && d.corpName ? esc(d.corpName) + ' · ' : ''}${d && d.homepage ? `<a href="https://${esc(d.homepage.replace(/^https?:\/\//, ''))}" target="_blank" rel="noopener">${esc(d.homepage)}</a> · ` : ''}${e && e.sic ? esc(e.sic) + ' · ' : ''}지도 칸: ${esc((c.maps || []).map(m => m.node).join(' · '))}</p>`;
+  // 사업 — 회사가 직접 쓴 글
+  if (d) {
+    const b = d.business;
+    h += `<h3>사업 <span class="src">출처 금감원 DART${b ? ` · ${esc(b.report)} · <a href="${esc(b.from)}" target="_blank" rel="noopener">원문 ›</a>` : ''}</span></h3>`;
+    h += b ? `<p>${esc(b.text)}</p>` : `<p class="none">「사업의 개요」 를 못 받았습니다${err.dart ? ' — ' + esc(err.dart) : ''}</p>`;
+  } else if (e) {
+    h += `<h3>사업 <span class="src">출처 미국 증권위 EDGAR${e.report ? ` · ${esc(e.report.form)} ${esc(e.report.date)} · <a href="${esc(e.report.from)}" target="_blank" rel="noopener">원문(영어) ›</a>` : ''}</span></h3>`;
+    h += `<p>${esc(e.entityName || '')}${e.sic ? ' — ' + esc(e.sic) : ''}. 사업 설명 본문은 연차보고서(10-K · 20-F)에 영어로 있습니다 — 위 원문 링크.</p>`;
+  } else {
+    h += `<h3>사업</h3><p class="none">출처에서 못 받았습니다${err.dart ? ' — ' + esc(err.dart) : ''}</p>`;
+  }
+  // 실적 · 추정 (국내 — 네이버/FnGuide)
+  if (n && n.columns && n.columns.length) {
+    const cols = n.columns;
+    h += `<h3>실적 · 증권사 추정 <span class="src">출처 네이버 증권(FnGuide) · 단위 억원</span></h3>`;
+    h += `<table><tr><th></th>${cols.map(c => `<th${c.estimate ? ' class="est"' : ''}>${esc(c.label)}${c.estimate ? '(E)' : ''}</th>`).join('')}</tr>`;
+    h += finRow('매출액', n.rows['매출액'], cols) + finRow('영업이익', n.rows['영업이익'], cols) + finRow('당기순이익', n.rows['당기순이익'], cols);
+    h += finRow('영업이익률 %', n.rows['영업이익률'], cols, n0) + finRow('ROE %', n.rows['ROE'], cols, n0);
+    h += finRow('EPS 원', n.rows['EPS'], cols, n0) + finRow('PER 배', n.rows['PER'], cols, n0) + finRow('PBR 배', n.rows['PBR'], cols, n0);
+    h += `</table><p class="meta">(E) 열은 증권사 추정 평균 — 아직 안 난 실적입니다. 억원 · 1조 이상은 조로 적음</p>`;
+  } else if (e && e.financials) {
+    const f = e.financials, rev = f.revenue, op = f.operatingIncome, ni = f.netIncome;
+    const years = rev ? Object.keys(rev.values) : (op ? Object.keys(op.values) : []);
+    const unit = (rev || op || ni || {}).unit || 'USD';
+    const big = v => v == null ? '—' : (v / 1e8).toLocaleString('ko-KR', { maximumFractionDigits: 1 });
+    h += `<h3>실적 <span class="src">출처 미국 증권위 EDGAR · 회계연도(끝나는 달) · 단위 억 ${esc(unit)}</span></h3>`;
+    h += `<table><tr><th></th>${years.map(y => `<th>~${esc(y.slice(0, 7))}</th>`).join('')}</tr>`;
+    [['매출', rev], ['영업이익', op], ['순이익', ni]].forEach(([lb, row]) => {
+      if (row) h += `<tr><td>${lb}</td>${years.map(y => `<td${neg(row.values[y])}>${big(row.values[y])}</td>`).join('')}</tr>`;
+    });
+    h += `</table>`;
+  }
+  // 현재가치 · 미래가치
+  if (n) {
+    const t = n.totals || {}, cs = n.consensus || {};
+    h += `<h3>현재가치 <span class="src">출처 네이버 증권</span></h3><div class="kv">`;
+    [['PER', t['PER']], ['PBR', t['PBR']], ['배당수익률', t['배당수익률']]].forEach(([k, v]) => { h += `<div><b>${esc(v || '—')}</b><span>${k}</span></div>`; });
+    h += `</div>`;
+    h += `<h3>미래가치 — 증권사 컨센서스 <span class="src">출처 네이버 증권(FnGuide) · ${esc(cs.asOf || '')} 집계</span></h3><div class="kv">`;
+    h += `<div><b>${cs.targetPriceMean != null ? n0(cs.targetPriceMean) + '원' : '—'}</b><span>목표주가 평균</span></div>`;
+    h += `<div><b>${cs.recommMean != null ? n0(cs.recommMean) + ' / 5' : '—'}</b><span>투자의견 평균(5 매수)</span></div>`;
+    const est = n.columns.find(c => c.estimate), opE = est && n.rows['영업이익'] ? n.rows['영업이익'][est.key] : null;
+    h += `<div><b>${won(opE)}</b><span>${est ? esc(est.label) + ' 영업이익 추정(억원)' : '추정 없음'}</span></div></div>`;
+    h += `<h3>증권사 리포트 <span class="src">출처 네이버 증권 · 최근 ${(n.reports || []).length}건</span></h3>`;
+    h += (n.reports || []).length ? `<ul class="rep">${n.reports.map(r => `<li><span class="b">${esc(r.broker)}</span><a href="${esc(r.from)}" target="_blank" rel="noopener">${esc(r.title)}</a><span class="d">${esc(ymd(r.date))}</span></li>`).join('')}</ul>` : `<p class="none">최근 리포트 없음</p>`;
+  } else if (e) {
+    h += `<h3>미래가치 — 증권사 컨센서스</h3><p class="none">EDGAR(공시)에는 증권사 전망이 없습니다 — 해외 컨센서스 출처는 아직 안 정했습니다</p>`;
+  } else if (err.naver) {
+    h += `<h3>실적 · 컨센서스</h3><p class="none">네이버 증권에서 못 받았습니다 — ${esc(err.naver)}</p>`;
+  }
+  h += `<div class="foot">받은 시각 ${esc(c.fetchedAt || CARDS_AT)} · 값은 출처 그대로이고 시황분석이 고치지 않았습니다 · 등급(대장 · 주도 · 소부장)만 시황분석 판단`;
+  if (st.code) h += ` · <a href="../holdings/stock.html?code=${esc(st.code)}" target="_blank" rel="noopener">홀딩스 종목 창(차트 · 재무 카드) ›</a>`;
+  h += `</div>`;
+  return h;
+}
+function openCard(key) {
+  const st = STOCKS.find(s => keyOf(s) === key); if (!st) return;
+  $('co').innerHTML = `<button class="x" data-co-close>닫기 ✕</button>` + renderCard(st, CARDS ? CARDS[key] : null);
+  $('co-wrap').classList.add('is-on'); $('co-wrap').setAttribute('aria-hidden', 'false'); $('co').scrollTop = 0;
+}
+function closeCard() { $('co-wrap').classList.remove('is-on'); $('co-wrap').setAttribute('aria-hidden', 'true'); }
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-co-close]')) { closeCard(); return; }
+  const s = e.target.closest('.stk[data-co]'); if (!s) return;
+  e.stopPropagation(); e.preventDefault(); openCard(s.dataset.co);
+}, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCard(); });
+
+
+// ── 부품 분해도(3D) — 칸 패널의 단추 → 덮는 창 안 iframe ──
+function openParts(page) { const f = $('parts-frame'); if (f.getAttribute('src') !== page) f.setAttribute('src', page); $('parts-wrap').classList.add('is-on'); $('parts-wrap').setAttribute('aria-hidden', 'false'); }
+function closeParts() { $('parts-wrap').classList.remove('is-on'); $('parts-wrap').setAttribute('aria-hidden', 'true'); }
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-parts-close]')) { closeParts(); return; }
+  const b = e.target.closest('.parts-btn[data-parts]'); if (b) { e.stopPropagation(); openParts(b.dataset.parts.replace(/[^A-Za-z0-9._-]/g, '')); }
+}, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeParts(); });
+
 // ── 시작: ?map=<이름> 의 자료를 읽는다 (기본 ai) · ?view=flow 면 흐름도부터 ──
 (async () => {
   const q = new URLSearchParams(location.search), id = (q.get('map') || 'ai').replace(/[^a-z0-9_-]/gi, '');
@@ -478,6 +635,9 @@ $('views').addEventListener('click', e => { const b = e.target.closest('button')
     const r = await fetch(`data/maps/${id}.json`, { cache: 'no-store' });
     if (!r.ok) throw new Error(r.status);
     build(await r.json());
+    await loadCards();
+    if (q.get('parts')) openParts(q.get('parts').replace(/[^A-Za-z0-9._-]/g, ''));   // ?parts=hbm3d.html — 검수용
+    if (q.get('co')) openCard(q.get('co').replace(/[^A-Za-z0-9]/g, ''));   // ?co=000660 — 카드를 바로 연다(링크 · 검수용)
   } catch (e) {
     console.error('[지도] 자료를 못 읽었습니다', id, e);
     panel.innerHTML = `<div class="err">지도 자료(data/maps/${esc(id)}.json)를 못 읽었습니다.</div>`;
