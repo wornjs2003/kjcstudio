@@ -18,11 +18,17 @@
 
       지금 무엇을 부르는지는 이렇게 셉니다.
 
-          grep -rhoE "/api/[a-z-]+/[a-z-]+" holdings/js/ holdings/*.html | sort -u
+          grep -rhoE "/api/[a-z-]+/[a-z-]+" holdings/js/ holdings/*.html company-setup/ --include='*.js' --include='*.html' | sort -u
 
       **html 을 빼면 하나가 덜 나옵니다.** 화면이 부르는 곳이 js 에만
       있지 않습니다 — 적어둔 명령과 적어둔 숫자가 어긋나면 다음 사람이
       「숫자가 틀렸다」 로 읽습니다 (2026-09-21 에 실제로 그랬습니다).
+
+      **각 줄의 `api` 가 그 주소들입니다 (2026-10-06).** 위 명령의 결과에서 `api` 들과
+      `NOT_DATA_API` 를 빼면 아무것도 남지 않아야 합니다 — 남으면 표에 없는 주소, 거꾸로
+      `api` 에만 있으면 화면이 안 부르는데 표가 「쓰는 중」 이라 적은 것입니다.
+      API 는 지금 다듬어 가는 중이라 자주 어긋납니다 (재권님 2026-10-06 — 「앞으로 자주
+      정리되어야 함」). 맞춰 보는 검사는 아직 손으로 합니다.
 
       **부르는 것과 되는 것은 다릅니다.** 화면이 부르는데 서버에 경로가
       없을 수 있으니, 센 다음 하나씩 눌러 봐야 on 인지 알 수 있습니다.
@@ -117,7 +123,7 @@ const FIELDS = [
     }
   },
   {
-    label: "현재가 한 번에", owner: "kis",
+    label: "현재가 한 번에", owner: "kis", api: ["/api/kis/price", "/api/kis/prices", "/api/kis/quotes"],
     cells: {
       toss:  { s: "todo", t: "가격만" },
       kis:   { s: "on",   t: "등락률·시총·PER·52주" },
@@ -128,12 +134,12 @@ const FIELDS = [
   {
     /* owner 를 toss 에서 kis 로 옮겼다 — 토스를 기다릴 것 없이 KIS 가
        주고 있고 이미 쓰는 중이다 (2026-09-21 실측). */
-    label: "투자자 수급", owner: "kis",
+    label: "투자자 수급", owner: "kis", api: ["/api/kis/investor", "/api/kis/investor-estimate", "/api/naver/integration"],
     cells: {
       toss:  { s: "todo", t: "당일 · 공식" },
       kis:   { s: "on",   t: "종목별 30일", n: "확정치" },
       dart:  { s: "none" },
-      naver: { s: "todo", t: "전일까지" }
+      naver: { s: "on",   t: "5일 · 외국인 보유율", n: "종목 모달 머리 통계" }
     }
   },
   {
@@ -165,7 +171,7 @@ const FIELDS = [
   },
   {
     /* 아래 넷은 2026-09-14 뒤에 붙었다. 그때 표에 없던 것들이다. */
-    label: "호가 · 매수/매도 비율", owner: "kis",
+    label: "호가 · 매수/매도 비율", owner: "kis", api: ["/api/kis/asking"],
     cells: {
       toss:  { s: "todo", t: "있음" },
       kis:   { s: "on",   t: "10단계 · buyPct" },
@@ -174,12 +180,12 @@ const FIELDS = [
     }
   },
   {
-    label: "업종 등락률", owner: "kis",
+    label: "업종 등락률", owner: "kis", api: ["/api/kis/sectors", "/api/naver/groups", "/api/naver/stocks"],
     cells: {
       toss:  { s: "none" },
       kis:   { s: "on",   t: "코스피·코스닥 전 업종" },
       dart:  { s: "none" },
-      naver: { s: "todo", t: "테마", n: "KIS 에 테마는 없음" }
+      naver: { s: "on",   t: "업종 · 테마 묶음", n: "홈 업종 카드 · KIS 에 테마는 없음" }
     }
   },
   {
@@ -195,7 +201,7 @@ const FIELDS = [
     }
   },
   {
-    label: "뉴스", owner: "naver",
+    label: "뉴스", owner: "naver", api: ["/api/naver/news", "/api/news/feed", "/api/news/issues", "/api/news/alerts", "/api/news/stored"],
     cells: {
       toss:  { s: "none" },
       kis:   { s: "none" },
@@ -204,7 +210,7 @@ const FIELDS = [
     }
   },
   {
-    label: "PER · PBR", owner: "kis",
+    label: "PER · PBR", owner: "kis", api: ["/api/kis/price"],
     cells: {
       toss:  { s: "none", t: "없음" },
       kis:   { s: "on",   t: "있음" },
@@ -213,12 +219,12 @@ const FIELDS = [
     }
   },
   {
-    label: "EPS · BPS", owner: "dart",
+    /* owner 를 dart 에서 kis 로 옮겼다 — 종목 모달 재무 카드가 KIS 값을 쓴다 (2026-10-06 실측).
+       전에는 「받는 중 · 화면이 안 씀」 이라 todo 였다 (2026-09-21). */
+    label: "EPS · BPS", owner: "kis", api: ["/api/kis/price", "/api/kis/finance"],
     cells: {
       toss:  { s: "none", t: "없음" },
-      /* 받고는 있다 — /api/kis/price 가 eps·bps 를 함께 준다.
-         화면이 아직 안 쓴다. 그래서 none 이 아니라 todo 다 (2026-09-21). */
-      kis:   { s: "todo", t: "있음", n: "받는 중 · 화면이 안 씀" },
+      kis:   { s: "on",   t: "있음", n: "재무 카드가 씀" },
       dart:  { s: "todo", t: "원천 있음" },
       naver: { s: "todo", t: "있음" }
     }
@@ -233,7 +239,7 @@ const FIELDS = [
     }
   },
   {
-    label: "공시", owner: "dart",
+    label: "공시", owner: "dart", api: ["/api/dart/disclosures"],
     cells: {
       toss:  { s: "none", t: "없음" },
       kis:   { s: "none", t: "없음" },
@@ -242,10 +248,12 @@ const FIELDS = [
     }
   },
   {
-    label: "재무제표", owner: "dart",
+    /* KIS 칸이 「없음」 이었다 — KIS 재무 다섯(대차 · 손익 · 비율 · 수익성 · 성장성)을 분기 30개로 받아
+       종목 모달 재무 카드가 쓴다 (2026-10-06 실측). 현금흐름표 · EBITDA 는 KIS 에 없어 DART 몫으로 남는다. */
+    label: "재무제표", owner: "kis", api: ["/api/kis/finance"],
     cells: {
       toss:  { s: "none", t: "없음" },
-      kis:   { s: "none", t: "없음" },
+      kis:   { s: "on",   t: "분기 30개", n: "현금흐름표 없음" },
       dart:  { s: "todo", t: "유일" },
       naver: { s: "todo", t: "요약만" }
     }
@@ -257,6 +265,43 @@ const FIELDS = [
       kis:   { s: "none", t: "없음" },
       dart:  { s: "todo", t: "유일" },
       naver: { s: "none", t: "없음" }
+    }
+  },
+  {
+    /* 아래 넷은 2026-10-06 첫 정리에서 붙였다 — 화면이 부르는데 표에 줄이 없던 것 */
+    label: "차트 봉 (분 · 일 · 주 · 월)", owner: "kis", api: ["/api/kis/chart"],
+    cells: {
+      toss:  { s: "todo", t: "차트 20/초" },
+      kis:   { s: "on",   t: "분봉 · 일봉 · 주봉 · 월봉" },
+      dart:  { s: "none" },
+      naver: { s: "todo", t: "일봉", n: "비공식" }
+    }
+  },
+  {
+    label: "지수 (코스피 · 코스닥 · 해외)", owner: "kis", api: ["/api/kis/indices", "/api/kis/index-candles", "/api/kis/index-minutes"],
+    cells: {
+      toss:  { s: "none" },
+      kis:   { s: "on",   t: "시세 · 일봉 · 분봉", n: "해외지수 · 환율도" },
+      dart:  { s: "none" },
+      naver: { s: "none" }
+    }
+  },
+  {
+    label: "체결 (틱)", owner: "kis", api: ["/api/kis/ticks"],
+    cells: {
+      toss:  { s: "todo", t: "있음" },
+      kis:   { s: "on",   t: "종목 모달 체결" },
+      dart:  { s: "none" },
+      naver: { s: "none" }
+    }
+  },
+  {
+    label: "종목 목록 · 지수 구성종목", owner: "dart", api: ["/api/dart/universe", "/api/dart/members"],
+    cells: {
+      toss:  { s: "todo", t: "종목명" },
+      kis:   { s: "none" },
+      dart:  { s: "on",   t: "시장 전체 목록 · 구성종목", n: "순위표 · 일정이 씀" },
+      naver: { s: "none" }
     }
   },
   {
@@ -272,9 +317,12 @@ const FIELDS = [
 ];
 
 /* 맨 위 통계 — 표에서 셀 수 없는 것만 여기 적습니다 */
-const REVIEWING = 5;            /* 검토 중인 곳 (아직 카드로 만들지 않은 후보)
-                                   ⚠️ 손으로 세어 박은 값이다. **무엇을 셌는지가
-                                   어디에도 없어 맞는지 확인할 수 없다.** 후보를
-                                   목록으로 적고 그 길이를 쓰는 편이 낫다
-                                   (2026-09-21). */
-const UPDATED_AT = "2026. 09. 21.";
+/* 검토 중인 곳 — 조사 기록(holdings/docs/sources.json)에 있는데 아직 위 출처 카드로 만들지 않은 것.
+   전에는 「5」 를 손으로 박아 무엇을 셌는지가 없었다 (2026-09-21). 2026-10-06 에 세어 보니 이 다섯이었다. */
+const REVIEW_LIST = ["야후 파이낸스", "KRX Open API", "한국은행 ECOS", "CNN 공포탐욕지수", "업비트"];
+const REVIEWING = REVIEW_LIST.length;
+const UPDATED_AT = "2026. 10. 06.";
+
+/* 데이터가 아닌 주소 — 화면이 부르지만 표의 줄이 될 것이 아니다(살아 있나 · 보드 저장 · 롱폴 · 서버 통계).
+   각 줄의 `api` 와 이 목록을 합치면 화면이 부르는 /api/* 주소가 빠짐없이 들어 있어야 한다 — 대조는 맨 위 주석 */
+const NOT_DATA_API = ["/api/board/doc", "/api/kis/health", "/api/kis/stats", "/api/kis/poll", "/api/dart/status"];
