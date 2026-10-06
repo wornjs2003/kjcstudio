@@ -42,6 +42,7 @@ secrets.json*
 
 # 토큰 캐시 (KIS 접근토큰 24시간 캐싱)
 .kis-token-cache.json
+.kis-token-cache-2.json
 
 # 파이썬 캐시
 __pycache__/
