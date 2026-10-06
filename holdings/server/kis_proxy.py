@@ -104,7 +104,7 @@ SITE_ROOT = os.path.dirname(HOLDINGS_DIR)
 #     **`.git` 자체**             **gitignore 에 없다** — git 이 자기를 안 가린다
 _DENY_DIRS = {".git", "__pycache__", ".claude", "logs", "node_modules",
               ".pytest_cache", ".venv", "venv"}
-_DENY_NAMES = {".env", ".kis-token-cache.json", ".DS_Store"}
+_DENY_NAMES = {".env", ".kis-token-cache.json", ".kis-token-cache-2.json", ".DS_Store"}
 _DENY_PREFIX = ("secrets.json",)          # secrets.json · secrets.jsonbak · …
 _DENY_SUFFIX = (".key", ".pem", ".db", ".db-journal", ".db-wal", ".db-shm",
                 ".log", ".err", ".pyc", ".pyo", ".bak")
@@ -171,6 +171,8 @@ MAPS_DIR = (os.environ.get("KJC_MAPS_DIR") or "").strip() \
 # 지도 조각이 늘어도 확장자는 그대로이므로 이 목록은 안 낡는다.
 MAPS_EXTS = (".pmtiles",)
 TOKEN_CACHE_PATH = os.path.join(HOLDINGS_DIR, ".kis-token-cache.json")
+# **둘째 앱키의 토큰** (2026-10-06 · 아래 「앱키 둘」). 키마다 토큰이 따로다.
+TOKEN_CACHE_PATH2 = os.path.join(HOLDINGS_DIR, ".kis-token-cache-2.json")
 
 HOSTS = {
     "vts": "https://openapivts.koreainvestment.com:29443",   # 모의투자
@@ -244,6 +246,9 @@ _last_token_attempt = 0.0
 # indices·index-minutes 가 한꺼번에 발급을 시도한다. 자물쇠가 없으면
 # 하나만 성공하고 나머지는 위 간격에 걸려 500(서버가 터짐)이 된다.
 _token_lock = threading.Lock()
+# 둘째 키 몫 — 발급 간격(1분 1회)도 자물쇠도 **키마다 따로**다 (2026-10-06).
+_token_lock2 = threading.Lock()
+_last_token_attempt2 = 0.0
 
 # 시세 캐시: KIS 호출량을 줄이는 핵심 장치.
 # 같은 종목을 이 시간 안에 다시 요청하면 KIS 를 부르지 않고 캐시로 답한다.
@@ -420,8 +425,37 @@ _call_times = []                 # 최근 호출 시각 (사용량 측정용)
 # 서버가 상류를 못 써 **폴백으로 직접 부르는 동안**은 그 서버 몫이 따로라 합이
 # 넘을 수 있다 — 공유 줄(`_shared_slot`)이 간격으로만 막는다.
 _send_lock = threading.Lock()
-_send_times = collections.deque()
-_send_stat = {"held": 0, "heldMs": 0.0, "maxIn1s": 0}
+_send_times = [collections.deque(), collections.deque()]     # 키마다 하나
+_send_stat = {"held": 0, "heldMs": 0.0, "maxIn1s": 0,
+              "perKey": [{"maxIn1s": 0, "sent": 0}, {"maxIn1s": 0, "sent": 0}]}
+
+# ── 앱키 둘 — 한 줄에 서서 덜 쓴 키로 나간다 (2026-10-06 지시) ──────────────
+#
+# 재권님 「합쳐서 20이고 이거를 잘 분배해서 쓰는 방향으로 해줘」 → 「응 그게
+# 좋을거같아」. `secrets.json` 에 `kis2` 칸이 있으면 **8765 가 두 키를 함께 쓴다.**
+#
+# **일마다 키를 정하지 않는다.** 줄은 하나이고, 나갈 차례가 오면 **지난 1초에
+# 덜 쓴 키**로 나간다. 키마다 「어느 1초든 `KIS_CALLS_PER_SEC` 건」 을 넘지
+# 않으므로 **합은 키 수 × 그 값**이다. 낮에 미리받기가 쉬면 화면이 다 쓰고,
+# 밤에는 밤 바퀴가 다 쓴다 — 노는 몫이 없다. 화면이 먼저인 것은 미리받기가
+# 비켜서는 기존 장치(`_ui_busy`)가 그대로 맡는다.
+#
+# 실측(2026-10-06 11:41~11:47 · 임시 도구 264건) — 둘째 혼자 12 · 9+9 · 10+10 ·
+# 13+13 전부 거절 0. 계정 합쳐 20 이 아니다(앱키별이거나 계정 한도가 26 넘음).
+#
+# **둘째 키가 없거나 토큰을 못 받으면 첫째 하나로 돈다** — 지금과 같다.
+# 못 받으면 `KEY2_DOWN_SEC` 동안 쉬었다 다시 본다.
+#
+# ⚠️ **8765 만 해당이다.** 다른 서버는 KIS 를 8765 로 넘긴다(`KJC_KIS_UPSTREAM`).
+# 폴백으로 직접 부를 때도 자기 `secrets.json` 을 읽으므로, 그 폴더에 `kis2` 가
+# 없으면 첫째 하나다.
+KEY2_DOWN_SEC = 600
+# 문을 지난 시각과 실제로 보내는 시각 사이가 몇 ms 벌어진다(토큰 · 요청 만들기 ·
+# 스레드 깨기). 문에서만 세면 받는 쪽에서는 1초에 한 건 더 들어올 수 있어
+# (가짜 시험 10 → 11) 1초 창을 이만큼 넉넉히 비운다 (2026-10-06).
+SEND_GATE_PAD = 0.06
+_key2_down_until = 0.0
+_keys_active = 1           # 마지막으로 줄에 선 키 수 — `stats` 가 낸다
 
 # ── 거절됐을 때 앞뒤를 남긴다 (2026-10-03 · 재권님 「가」) ──────────────
 #
@@ -597,12 +631,13 @@ def note_overrun():
                      % (int(OVER_WINDOW), len(_over_times), _over_total))
 
 
-def _gap_now():
-    """지금 쓸 간격. 넘은 적이 잦으면 늘어난다."""
+def _gap_now(n_keys=1):
+    """지금 쓸 간격. 넘은 적이 잦으면 늘어난다. 키가 둘이면 반이다."""
     now = time.time()
     while _over_times and _over_times[0] < now - OVER_WINDOW:
         _over_times.pop(0)
-    return KIS_MIN_INTERVAL * min(OVER_MAX, 1.0 + OVER_STEP * len(_over_times))
+    return (KIS_MIN_INTERVAL * min(OVER_MAX, 1.0 + OVER_STEP * len(_over_times))
+            / max(1, n_keys))
 
 
 def _stamp():
@@ -652,7 +687,7 @@ def _prio_low():
     return getattr(_prio, "low", False)
 
 
-def _rate_limit(path=None):
+def _rate_limit(path=None, n_keys=1):
     """KIS 호출 사이 간격을 지킨다. 기다리는 동안 남을 막지 않는다.
 
     전에는 자물쇠를 쥔 채로 기다렸다. 그래서 아래 ThreadPoolExecutor 로 동시에
@@ -685,7 +720,7 @@ def _rate_limit(path=None):
             _rl_yield.ms += (time.monotonic() - _t0) * 1000.0
 
     # **간격은 넘은 횟수에 따라 늘어난다** (㉡). 잠잠하면 원래 값이다.
-    gap = _gap_now()
+    gap = _gap_now(n_keys)
 
     # **먼저 공유 줄에 선다.** 여섯이 한 줄이므로 안 쓰는 서버는 자리를
     # 차지하지 않고, 쓰는 서버가 남는 몫을 다 가져간다.
@@ -718,7 +753,8 @@ def _rate_limit(path=None):
         time.sleep(wait)
 
     # **나가는 문** — 지난 1초 안 실제로 지난 수가 한도면 더 기다린다 (위 주석).
-    _send_gate()
+    # 키가 둘이면 **덜 쓴 키**를 고른다 — 고른 키 번호(0 · 1)를 돌려준다.
+    slot = _send_gate(n_keys)
 
     # **기다린 뒤에 찍는다 — 여기가 실제로 나가는 순간이다**
     # (2026-09-23 지시 — 「실시간으로 어디서뭐 쓰는지 로그 알수있는게
@@ -736,8 +772,9 @@ def _rate_limit(path=None):
     #
     # 아래 `[API]` 줄은 **화면 → 서버** 요청이라 캐시로 막힌 것까지
     # 세어진다 — **한도 대상은 이쪽**이다.
-    sys.stderr.write("  [KIS] %s :%s %s\n"
-                     % (_stamp(), RUN_PORT, path or "?"))
+    sys.stderr.write("  [KIS] %s :%s %s%s\n"
+                     % (_stamp(), RUN_PORT, path or "?", " ·키2" if slot else ""))
+    return slot
 
 
 def _ring_dump(me):
@@ -748,33 +785,47 @@ def _ring_dump(me):
                      % (_stamp(), RUN_PORT, _fmt_wall(t_me), SEND_RING_DUMP_SEC, len(rows)))
     for r in rows:
         ms = "—" if r[2] is None else "%.0f" % r[2]      # 아직 안 돌아온 것은 「—」
-        sys.stderr.write("    %s %6s %s%s\n" % (_fmt_wall(r[0]), ms, r[3] or "…",
-                                              "  ← 이것" if r is me else ""))
+        sys.stderr.write("    %s %6s %s%s%s\n" % (_fmt_wall(r[0]), ms, r[3] or "…",
+                                                " ·키2" if r[4] else "",
+                                                "  ← 이것" if r is me else ""))
 
 
 def _fmt_wall(t):
     return "%s.%03d" % (time.strftime("%H:%M:%S", time.localtime(t)), int(t % 1 * 1000))
 
 
-def _send_gate():
-    """지난 1초 안에 이 문을 지난 수가 한도 미만이 될 때까지 기다린다."""
+def _send_gate(n_keys=1):
+    """키마다 「지난 1초 안에 이 문을 지난 수 < 한도」 인 키가 생길 때까지 기다린다.
+
+    여럿이 비면 **덜 쓴 키**를 고른다. 고른 키 번호(0 · 1)를 돌려준다.
+    """
     limit = max(1, int(KIS_CALLS_PER_SEC))
+    n = max(1, min(n_keys, len(_send_times)))
     held = 0.0
     while True:
         with _send_lock:
             now = time.monotonic()
-            while _send_times and _send_times[0] <= now - 1.0:
-                _send_times.popleft()
-            if len(_send_times) < limit:
-                _send_times.append(now)
-                if len(_send_times) > _send_stat["maxIn1s"]:
-                    _send_stat["maxIn1s"] = len(_send_times)
+            for k in range(n):
+                dq = _send_times[k]
+                while dq and dq[0] <= now - 1.0:
+                    dq.popleft()
+            k = min(range(n), key=lambda i: len(_send_times[i]))
+            dq = _send_times[k]
+            if len(dq) < limit:
+                dq.append(now)
+                pk = _send_stat["perKey"][k]
+                pk["sent"] += 1
+                if len(dq) > pk["maxIn1s"]:
+                    pk["maxIn1s"] = len(dq)
+                total = sum(len(_send_times[i]) for i in range(n))
+                if total > _send_stat["maxIn1s"]:
+                    _send_stat["maxIn1s"] = total
                 if held:
                     _send_stat["held"] += 1
                     _send_stat["heldMs"] += held * 1000.0
-                return
-            # 가장 오래된 것이 1초를 벗어나는 순간까지 — 2ms 여유
-            pause = _send_times[0] + 1.0 - now + 0.002
+                return k
+            # 가장 먼저 1초를 벗어나는 순간까지 — **`SEND_GATE_PAD` 여유**
+            pause = min(_send_times[i][0] for i in range(n)) + 1.0 - now + SEND_GATE_PAD
         time.sleep(pause)
         held += pause
 
@@ -902,12 +953,17 @@ def usage_stats():
     return {
         "limitPerSec": KIS_LIMIT_PER_SEC,
         "budgetRatio": BUDGET_RATIO,
-        "budgetPerSec": KIS_CALLS_PER_SEC,
+        # **키 수만큼 곱한 합**이다 (2026-10-06 · 앱키 둘). 키 하나면 그대로다.
+        "budgetPerSec": KIS_CALLS_PER_SEC * _keys_active,
         "minIntervalSec": KIS_MIN_INTERVAL,
         # **나가는 문** (2026-10-03) — 1초 창 최대 · 문에서 더 기다린 횟수와 합(ms).
-        # 재시작 뒤 누적이다. `maxIn1s` 가 `budgetPerSec` 를 넘으면 문이 안 듣는 것이다.
+        # 재시작 뒤 누적이다. `maxIn1s` 는 키를 합친 값 · `perKey` 는 키마다다.
+        # 키마다 `maxIn1s` 가 `limitPer1s` 를 넘으면 문이 안 듣는 것이다.
         "sendGate": {"limitPer1s": max(1, int(KIS_CALLS_PER_SEC)),
+                     "keys": _keys_active,
                      "maxIn1s": _send_stat["maxIn1s"],
+                     "perKey": [dict(p) for p in _send_stat["perKey"][:max(1, _keys_active)]],
+                     "key2DownSec": max(0, int(_key2_down_until - time.time())),
                      "held": _send_stat["held"],
                      "heldMs": round(_send_stat["heldMs"], 1)},
         "calls10s": last_10s,
@@ -1002,14 +1058,26 @@ def load_secrets():
     if mode not in HOSTS:
         raise RuntimeError('mode 는 "vts"(모의) 또는 "prod"(실전) 여야 합니다.')
     kis["mode"] = mode
+    # **둘째 앱키** (2026-10-06) — 있으면 붙여 둔다. 모의/실전은 첫째를 따른다.
+    # 값은 어디에도 찍지 않는다. 없거나 비었으면 첫째 하나로 돈다.
+    k2 = data.get("kis2") or {}
+    if k2.get("app_key") and k2.get("app_secret"):
+        kis["_key2"] = {"app_key": k2["app_key"], "app_secret": k2["app_secret"],
+                        "mode": mode, "_slot": 1}
     return kis
 
 
 # ---------------------------------------------------------------- 토큰 관리
 
-def _read_token_cache(mode):
+def _token_path(cfg_or_slot):
+    """키의 토큰 캐시 경로. 둘째 키(`_slot` 1)만 따로다."""
+    slot = cfg_or_slot if isinstance(cfg_or_slot, int) else (cfg_or_slot or {}).get("_slot", 0)
+    return TOKEN_CACHE_PATH2 if slot else TOKEN_CACHE_PATH
+
+
+def _read_token_cache(mode, path=TOKEN_CACHE_PATH):
     try:
-        with open(TOKEN_CACHE_PATH, encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             cache = json.load(f)
     except (OSError, ValueError):
         return None
@@ -1021,7 +1089,7 @@ def _read_token_cache(mode):
     return cache.get("access_token")
 
 
-def _write_token_cache(mode, token, expires_in):
+def _write_token_cache(mode, token, expires_in, path=TOKEN_CACHE_PATH):
     """토큰 캐시를 **안전하게** 쓴다 (2026-09-22).
 
     전에는 `open(PATH, "w")` 로 바로 덮어썼다. 거기서 죽으면 **깨진
@@ -1032,7 +1100,7 @@ def _write_token_cache(mode, token, expires_in):
     **그냥 dict 이름**이었다 — 이름이 설명 노릇을 하던 자리다.
     """
     try:
-        write_json_atomic(TOKEN_CACHE_PATH, {
+        write_json_atomic(path, {
             "mode": mode,
             "access_token": token,
             "expires_at": time.time() + float(expires_in),
@@ -1041,7 +1109,7 @@ def _write_token_cache(mode, token, expires_in):
         pass
 
 
-def _drop_token_cache(mode):
+def _drop_token_cache(mode, path=TOKEN_CACHE_PATH):
     """KIS 가 거부한 토큰을 버린다 (2026-09-22 지시 — 「응 해줘」).
 
     **캐시가 「아직 안 만료」 라고 믿는데 KIS 는 거부하는 구간이 있다.**
@@ -1059,7 +1127,7 @@ def _drop_token_cache(mode):
     「없음」 과 「거부됨」 을 구분하지 못한다.
     """
     try:
-        write_json_atomic(TOKEN_CACHE_PATH,
+        write_json_atomic(path,
                           {"mode": mode, "access_token": "", "expires_at": 0},
                           indent=None)
     except (OSError, IOError):
@@ -1079,29 +1147,35 @@ def get_token(cfg):
     """
     global _last_token_attempt
 
-    cached = _read_token_cache(cfg["mode"])
+    path = _token_path(cfg)
+    cached = _read_token_cache(cfg["mode"], path)
     if cached:
         return cached
 
-    with _token_lock:
+    with (_token_lock2 if cfg.get("_slot") else _token_lock):
         return _issue_token(cfg)
 
 
 def _issue_token(cfg):
     """실제 발급. _token_lock 을 쥔 상태에서만 부른다."""
-    global _last_token_attempt
+    global _last_token_attempt, _last_token_attempt2
 
-    cached = _read_token_cache(cfg["mode"])
+    slot = cfg.get("_slot", 0)
+    path = _token_path(slot)
+    cached = _read_token_cache(cfg["mode"], path)
     if cached:
         return cached
 
-    elapsed = time.time() - _last_token_attempt
+    elapsed = time.time() - (_last_token_attempt2 if slot else _last_token_attempt)
     if elapsed < TOKEN_MIN_INTERVAL:
         raise RuntimeError(
             "토큰 재발급 대기 중입니다. %d초 후 다시 시도해 주세요. "
             "(KIS 는 1분에 1회만 발급을 허용합니다)" % int(TOKEN_MIN_INTERVAL - elapsed)
         )
-    _last_token_attempt = time.time()
+    if slot:
+        _last_token_attempt2 = time.time()
+    else:
+        _last_token_attempt = time.time()
 
     # **㉢ 토큰 발급도 줄에 세운다** (2026-09-23).
     # 전에는 이 길이 `_rate_limit()` 을 안 탔다 — **줄 밖이었다.**
@@ -1129,7 +1203,7 @@ def _issue_token(cfg):
     if not token:
         raise RuntimeError("토큰 발급 응답에 access_token 이 없습니다: %s" % str(data)[:200])
 
-    _write_token_cache(cfg["mode"], token, data.get("expires_in", 86400))
+    _write_token_cache(cfg["mode"], token, data.get("expires_in", 86400), path)
     return token
 
 
@@ -1816,24 +1890,46 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
             # 것보다 낫다. 몇 번 떨어졌는지는 `stats` 가 낸다.
             _up_stat["fallbacks"] += 1
             _up_stat["lastError"] = safe_message(e)
-    token = get_token(cfg)
+    global _keys_active, _key2_down_until
+    # **앱키 둘** (2026-10-06 · 위 주석) — 둘째가 있고 쉬는 중이 아니면 줄에 둘이 선다.
+    _k2 = cfg.get("_key2")
+    _keys = [cfg] + ([_k2] if _k2 and time.time() >= _key2_down_until else [])
+    _keys_active = len(_keys)
+    if len(_keys) == 1:
+        get_token(cfg)               # 하나일 때는 지금처럼 줄 서기 전에 받아 둔다
     _t_wait0 = time.time()
-    _rate_limit(path)
+    _slot = _rate_limit(path, len(_keys))
+    # **`get_token` 보다 먼저 읽는다** — 발급하면 그 안의 `_rate_limit` 이 값을 지운다
     _yield_ms = getattr(_rl_yield, "ms", 0.0)
     _wait_ms = max(0.0, (time.time() - _t_wait0) * 1000.0 - _yield_ms)
+    _kc = _keys[_slot] if _slot < len(_keys) else cfg
+    try:
+        token = get_token(_kc)
+    except RuntimeError:
+        if _kc is cfg:
+            raise
+        # 둘째 키 토큰을 못 받았다 — 쉬게 하고 이번 것은 첫째로 보낸다
+        _key2_down_until = time.time() + KEY2_DOWN_SEC
+        sys.stderr.write("  [KIS] %s 둘째 키 토큰 못 받음 — %d초 첫째 하나로\n"
+                         % (_stamp(), KEY2_DOWN_SEC))
+        _kc = cfg
+        # **첫째 키 문을 다시 지난다** — 둘째 자리로 받은 것을 그대로 첫째로 보내면
+        # 그 순간 첫째가 1초 한도를 넘는다(가짜 시험에서 1초 20건이 됐다).
+        _send_gate(1)
+        token = get_token(cfg)
     # **실제 KIS 호출을 여기 한 곳에서 센다** (2026-10-01).
     # 전에는 경로마다 손으로 올려 **13곳**이었고 **일부 경로만** 세었다.
     # **상류로 넘긴 것은 위에서 `return` 하므로 안 세어진다** — 맞다.
     # 재시도(`EGW00201`)는 재귀로 다시 와서 **한 번 더 센다** — 실제로 두 번 부른다.
     _stats["kis_calls"] += 1
     # [보낸 시각 · 왕복 ms · 결과] — 거절이 나면 앞뒤를 찍는다 (`_ring_dump`)
-    _me = [time.time(), None, None, None]
+    _me = [time.time(), None, None, None, _kc.get("_slot", 0)]
     _send_ring.append(_me)
     url = HOSTS[cfg["mode"]] + path + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={
         "authorization": "Bearer " + token,
-        "appkey": cfg["app_key"],
-        "appsecret": cfg["app_secret"],
+        "appkey": _kc["app_key"],
+        "appsecret": _kc["app_secret"],
         "tr_id": tr_id,
         "custtype": "P",
         "content-type": "application/json; charset=utf-8",
@@ -1861,7 +1957,7 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
         # **거부당한 토큰(EGW00123)은 버리고 한 번만 다시 받는다** (2026-09-22 지시).
         # 이것이 없으면 캐시가 스스로 만료될 때까지 몇십 분이고 계속 실패한다.
         if "EGW00123" in detail and _retry > 0:
-            _drop_token_cache(cfg["mode"])
+            _drop_token_cache(cfg["mode"], _token_path(_kc))
             return kis_get(cfg, path, params, tr_id, _retry - 1)
         raise RuntimeError("KIS 호출 실패 (HTTP %s): %s" % (e.code, detail))
     except urllib.error.URLError as e:
@@ -1875,7 +1971,7 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
             time.sleep(1.0)
             return kis_get(cfg, path, params, tr_id, _retry - 1)
         if data.get("msg_cd") == "EGW00123" and _retry > 0:
-            _drop_token_cache(cfg["mode"])
+            _drop_token_cache(cfg["mode"], _token_path(_kc))
             return kis_get(cfg, path, params, tr_id, _retry - 1)
         raise RuntimeError("KIS 오류: %s (%s)" % (data.get("msg1", "알 수 없음"), data.get("msg_cd", "")))
     return data
