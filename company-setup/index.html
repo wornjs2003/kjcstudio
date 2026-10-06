@@ -53,7 +53,12 @@
              href 는 그대로 두어 새 탭 · 직접 주소도 된다(모달 룰). 글은 data/stock-analysis.json 한 곳에 쌓는다 -->
         <div class="kh-idx-head"><b class="kh-idx-name"><a href="flowmap.html?map=ai&view=geo" data-modal="page">돈의 흐름</a></b><span class="in-asof" data-asof-map></span></div>
         <!-- 홀딩스 차트 자리 — 높이(550px)를 홀딩스 home.css 의 .kh-idx-chart 가 정한다 -->
-        <div class="kh-idx-chart in-scroll"><ul class="in-news in-sm" data-analysis></ul></div>
+        <!-- 2026-10-06 지시 — 지도를 칸에 바로(AI 생태계 지구본 · 손대기 전까지 멈춤). 칩으로 지도를 바꾸고 제목을 누르면 모달로 크게.
+             칩은 insight.js 가 data/stock-analysis.json 의 지도 글에서 만든다 — 목록을 여기 또 적지 않는다 -->
+        <div class="kh-idx-chart in-map">
+          <div class="kh-chips in-map-chips" data-map-chips></div>
+          <iframe class="in-map-frame" data-map-frame src="flowmap.html?map=ai&view=geo&embed=1" title="돈의 흐름 지도"></iframe>
+        </div>
       </div>
       <aside class="kh-card kh-idxp" aria-label="영상 분석">
         <div class="kh-idxp-s"><div class="kh-idxp-h">영상 분석<span class="in-asof">유튜브 · 시황분석 고름</span></div><ul class="in-news in-sm" data-videos></ul></div>
