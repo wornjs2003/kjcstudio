@@ -191,7 +191,7 @@ LABELS = re.compile(r"^\s*\[([^\]]+)\]\s*\[([^\]]+)\]")
 # 이제 카드에 `tag`(갈래) · `who`(담당) · `rank`(재권님이 정한 차례 번호) 칸을 둔다. **옮기는 동안은 제목 대괄호도
 # 함께 적는다** — 화면(개발1)이 칸을 읽게 바뀐 뒤 169장을 한 번에 옮기고 대괄호를 뺀다.
 # 갈래 목록은 화면 설정 `projects/data/config.js` 의 WORK_TAGS 하나다 — 여기 다시 적지 않는다(같은 값은 한 곳에만).
-TAG_MODE = os.environ.get("KJC_BOARD_TAGS", "look")   # block | look — 목록에 「도구」 가 들어오고 옮긴 뒤 block 으로
+TAG_MODE = os.environ.get("KJC_BOARD_TAGS", "block")  # block | look — 2026-10-03 옛 카드를 여섯 갈래로 옮긴 뒤 block (재권님 「응 그렇게 해줘」)
 
 
 def work_tags():
@@ -207,18 +207,31 @@ def work_tags():
     return re.findall(r'id\s*:\s*"([^"]+)"', m.group(1)) or None
 
 
+# 옛 갈래 이름 → 정한 갈래 — 2026-10-03 옛 카드 211장을 옮길 때 재권님이 승인하신 묶음표(「응 그렇게 해줘」) 그대로.
+# 옛 이름으로 만들면 막지 않고 바꿔 넣는다 — qa 재생에서 막힐 42건 중 21건이 이 이름들이었다.
+ALIAS = {"측정": "도구", "훅": "도구", "환경": "도구", "launchd": "도구", "룰·도구": "도구", "스킬": "도구",
+         "검수": "도구", "조사": "도구", "Insight": "화면", "루트 화면": "화면", "연구": "화면",
+         "서버": "백엔드", "문서": "룰·문서", "룰": "룰·문서", "문서·검사": "룰·문서", "계획": "룰·문서",
+         "차트": "차트·모달", "개발": "차트·모달"}
+
+
 def check_tag(tag):
-    """정한 갈래 밖이면 block 에서 막고 look 에서 알린다. 목록을 못 읽으면 막지 않는다(못 쟀다)."""
+    """정한 갈래면 그대로 · 옛 이름이면 바꿔 넣고 알림 · 그 밖은 block 에서 막고 look 에서 알린다.
+    목록을 못 읽으면 막지 않는다(못 쟀다). 돌려주는 값이 넣을 갈래다."""
     tags = work_tags()
     if tags is None:
         print("  (갈래 목록 projects/data/config.js 의 WORK_TAGS 를 못 읽었다 — 갈래 검사를 건너뛴다)")
-        return
+        return tag
     if tag in tags:
-        return
+        return tag
+    if ALIAS.get(tag) in tags:
+        print("  갈래 [%s] 는 [%s] 로 넣었다 (옛 이름 · 2026-10-03 묶음표)" % (tag, ALIAS[tag]))
+        return ALIAS[tag]
     msg = "갈래 [%s] 는 정한 목록 밖이다 — %s 중에서 고른다 (projects/data/config.js 의 WORK_TAGS)" % (tag, " · ".join(tags))
     if TAG_MODE == "block":
         sys.exit("✗ " + msg)
     print("  ⚠ " + msg)
+    return tag
 
 
 def who_of(t):
@@ -281,14 +294,14 @@ def cmd_note(key, line, sub, done, column=None, assign=None, title=None, rank=No
             new_label = assign.strip() or label_of(session_name())
             if not new_label:
                 sys.exit("담당을 못 정한다 — `--assign <담당>` 으로 주십시오")
+            # 담당은 칸(who)이다 — 2026-10-03 에 옛 카드 제목의 대괄호를 뺐다. 대괄호가 남은 카드는 그것도 함께 고친다
             m = LABELS.match(t.get("text", ""))
-            if not m:
-                sys.exit("제목이 「[갈래] [담당] 무엇」 모양이 아니라 담당 라벨을 못 바꾼다: %s" % t.get("text", "")[:60])
-            old_label = m.group(2).strip()
+            old_label = who_of(t)
             if old_label != new_label:
-                t["text"] = "[%s] [%s] %s" % (m.group(1), new_label, t["text"][m.end():].strip())
+                if m:
+                    t["text"] = "[%s] [%s] %s" % (m.group(1), new_label, t["text"][m.end():].strip())
+                    t.setdefault("tag", m.group(1).strip())
                 t["who"] = new_label
-                t.setdefault("tag", m.group(1).strip())
                 t["memo"] = (t.get("memo") or "").rstrip() + "\n  %s 담당 [%s] → [%s]" % (now(), old_label, new_label)
                 moved["assign"] = (old_label, new_label)
                 if t.get("column") == "todo" and not column:
@@ -299,7 +312,10 @@ def cmd_note(key, line, sub, done, column=None, assign=None, title=None, rank=No
             # 제목 바꾸기 — 「[갈래] [담당]」 은 그대로 두고 뒤쪽 「무엇」 만 바꾼다. 제목은 게이트·현황판이 담당을 읽는 자리라
             # 라벨까지 손으로 바꾸게 두지 않는다(라벨은 --assign). 2026-10-02 개발1 「5분봉 5일치 → 10일」 에서 길이 없었다
             m = LABELS.match(t.get("text", ""))
-            head = "[%s] [%s] " % (m.group(1), m.group(2).strip()) if m else ""
+            head = "[%s] [%s] " % (m.group(1), m.group(2).strip()) if m else ""   # 대괄호가 남은 옛 카드만
+            if m:                               # 옛모양 카드면 칸도 채운다(qa)
+                t.setdefault("tag", m.group(1).strip())
+                t.setdefault("who", m.group(2).strip())
             rest = LABELS.sub("", title.strip()) if LABELS.match(title.strip()) else title.strip()
             old_t = t.get("text", "")
             t["text"] = head + rest
@@ -308,16 +324,16 @@ def cmd_note(key, line, sub, done, column=None, assign=None, title=None, rank=No
                 moved["title"] = rest
         if tag:
             # 갈래 바꾸기 — 칸과 제목 대괄호를 함께. 26가지를 정한 갈래로 묶을 때 쓴다
-            check_tag(tag)
+            nt = check_tag(tag)
             m = LABELS.match(t.get("text", ""))
             old_tag = t.get("tag") or (m.group(1).strip() if m else "")
             if m:
-                t["text"] = "[%s] [%s] %s" % (tag, m.group(2).strip(), t["text"][m.end():].strip())
+                t["text"] = "[%s] [%s] %s" % (nt, m.group(2).strip(), t["text"][m.end():].strip())
                 t.setdefault("who", m.group(2).strip())
-            t["tag"] = tag
-            if old_tag != tag:
-                t["memo"] = (t.get("memo") or "").rstrip() + "\n  %s 갈래 [%s] → [%s]" % (now(), old_tag, tag)
-                moved["tag"] = (old_tag, tag)
+            t["tag"] = nt
+            if old_tag != nt:
+                t["memo"] = (t.get("memo") or "").rstrip() + "\n  %s 갈래 [%s] → [%s]" % (now(), old_tag, nt)
+                moved["tag"] = (old_tag, nt)
         if rank is not None:
             # 재권님이 정한 차례 번호 — 높음·보통·낮음(priority)과 따로 둔다. 「-」 면 지운다
             old_r = t.get("rank") or None
@@ -357,19 +373,18 @@ def cmd_new(text, line, todo):
     m = re.match(r"^\s*(\[[^\]]+\])\s*(.*)$", text)
     if not m:
         sys.exit("카드 제목은 「[갈래] 무엇」 모양이어야 한다")
-    tag = m.group(1)[1:-1].strip()
-    check_tag(tag)
+    tag = check_tag(m.group(1)[1:-1].strip())
     rest = m.group(2).strip()
     m2 = re.match(r"^\[([^\]]+)\]\s*(.*)$", rest)
     if m2:                                  # 「[갈래] [담당] 무엇」 으로 줬으면 그 담당을 쓴다 — 담당이 두 번 들어갔다(qa)
         label, rest = m2.group(1).strip(), m2.group(2).strip()
-    full = "%s [%s] %s" % (m.group(1), label, rest)
+    full = "[%s] [%s] %s" % (tag, label, rest)   # 알리는 글에만 — 카드 제목에는 대괄호를 안 넣는다(2026-10-03)
     if label != label_of(session_name()):
         todo = True                         # 남의 담당 · [미배분] 으로 만든 카드는 todo — doing 이면 그 세션 게이트를 대신 연다(qa)
 
     def change(doc):
         ms = int(time.time() * 1000)
-        tasks(doc).append({"id": "t%dr" % ms, "text": full, "column": "todo" if todo else "doing",
+        tasks(doc).append({"id": "t%dr" % ms, "text": rest, "column": "todo" if todo else "doing",
                            "subs": [], "links": [], "due": "", "priority": "normal", "createdAt": ms,
                            "tag": tag, "who": label, "updatedAt": ms,
                            "memo": "  %s %s" % (now(), line) if line else ""})
