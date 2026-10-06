@@ -38,7 +38,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 API = "https://api.cloudflare.com/client/v4"
 
-# 신호를 쓰는 주기. 워커 Cron 이 5분마다 도니 그것과 맞춘다.
+# 신호를 쓰는 주기. 워커(`holdings/worker/heartbeat-watch.js`) Cron 이 5분마다 도니 그것과 맞춘다.
 BEAT_SEC = 300
 
 # KV 키 하나에 **덮어쓴다.** 쌓지 않는다 — 마지막 것만 있으면 된다.
@@ -47,14 +47,13 @@ ALIVE_KEY = "alive:main"
 
 # 신호가 이만큼 안 오면 워커가 「꺼졌다」 로 본다.
 #
-# **판정은 워커가 한다.** 여기 두는 것은 `worker/kis-worker.js` 의 같은 이름과
-# **짝을 맞추기 위해서다** — `tools/check-kis-consts.py` 가 본다. 한쪽만 고치면
-# 로컬 화면과 실제 알림이 갈리는데, 그때는 **알림이 안 오는 쪽으로** 갈려서
-# 가장 조용하다.
+# **판정은 워커가 하고, 값은 여기 한 곳이다** — 신호에 `aliveStaleSec` 으로 실어
+# 보내고 워커가 그것을 읽는다(없으면 워커가 900 을 쓴다). 두 곳에 두면 갈리는데,
+# 그때는 **알림이 안 오는 쪽으로** 갈려서 가장 조용하다 — 그래서 한 곳에 모았다.
 #
-# ⚠️ **지금은 시험 1단계 값(24시간)이다.** 값이 KV 에 제대로 쌓이는지만 보려는
-# 것이라 **알림이 한 번도 안 간다.** 확인되면 2단계에서 **900(15분)** 으로 내린다.
-ALIVE_STALE_SEC = 86400
+# 2026-10-06 재권님 「응 해줘」 — 시험 1단계 값 24시간에서 **15분**(신호 세 번 놓침)
+# 으로 내렸다. 재부팅이 15분 넘게 걸리면 재부팅마다 한 번 울린다.
+ALIVE_STALE_SEC = 900
 
 # ── 「낡은 코드」 판정 범위 ──
 #
@@ -138,12 +137,14 @@ def _resolve(cfg):
     if code != 200 or not rows:
         return None, "저장 공간 목록을 못 받았습니다 (HTTP %s)" % code
     if len(rows) > 1:
-        # 워커가 쓰는 것을 고른다 — `token:` 키가 들어 있는 쪽이다.
+        # 워커가 쓰는 것을 고른다 — `token:` 키(옛 전체 워커가 쓰던 것)나
+        # 이 파일이 쓰는 `alive:main` 이 들어 있는 쪽이다. 2026-10-06 에 워커가
+        # 꺼짐 감시만 하게 되어 `token:` 은 더 안 쓰인다 — 만료되면 사라진다.
         for r in rows:
             c, b = _api(cfg, "/accounts/%s/storage/kv/namespaces/%s/keys?limit=100"
                         % (acc, r["id"]))
             names = [k.get("name", "") for k in ((b or {}).get("result") or [])]
-            if any(n.startswith("token:") for n in names):
+            if any(n.startswith("token:") or n == ALIVE_KEY for n in names):
                 return {"acc": acc, "ns": r["id"]}, None
         return None, "저장 공간이 %d개인데 어느 것인지 못 갈랐습니다" % len(rows)
     return {"acc": acc, "ns": rows[0]["id"]}, None
@@ -187,7 +188,7 @@ def _daily_today(now=None):
         # **파일이 있나만 보고** 있었다.
         #
         # **`None` 을 돌려준다.** 워커는 `dailyToday === false` 만 보므로
-        # (`kis-worker.js` 의 `aliveProblems`) `None` 은 그냥 지나간다 —
+        # (`heartbeat-watch.js` 의 `aliveProblems`) `None` 은 그냥 지나간다 —
         # **워커를 한 줄도 안 고쳐도 되고 배포가 안 붙는다.**
         #
         # **시각은 `daily.SEND_AT` 을 그대로 읽는다.** 여기 07:30 을 적으면
@@ -261,6 +262,9 @@ def collect(proxy):
         out["newsLastAt"] = out["newsCount"] = None
 
     out["dailyToday"] = _daily_today(now)
+    out["aliveStaleSec"] = ALIVE_STALE_SEC     # 워커가 이 값으로 「꺼졌다」 를 가른다
+    # 「낡은 코드」 는 더 알리지 않는다(2026-10-06 재권님 — 주석 커밋에도 울려서).
+    # 값은 상태를 볼 때 쓰도록 그대로 싣는다.
     out["staleCommits"] = _stale_commits(_state["started_at"])
     out["staleGraceSec"] = STALE_GRACE_SEC
     return out
@@ -288,7 +292,7 @@ def start(proxy, port):
     꺼져도 다른 쪽이 계속 써서 꺼짐 알림이 영영 안 온다.**
     `proxy.is_sender()` 가 **포트와 역할을 함께** 본다.
 
-    `ALIVE_KEY` 는 **이번에 안 건드린다** — 바꾸면 `worker/kis-worker.js` 의
+    `ALIVE_KEY` 는 **이번에 안 건드린다** — 바꾸면 `worker/heartbeat-watch.js` 의
     같은 이름도 함께 고쳐야 하고 **대시보드 배포가 따라온다.** 그 사이
     워커가 옛 키를 읽으면 **꺼짐 알림이 안 온다.**
     """
