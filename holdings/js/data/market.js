@@ -115,12 +115,12 @@ export const MARKET_STOCKS = [
   { code: '064350', name: '현대로템',            market: 'KOSPI', sector: '기계', brand: '#002c5f' },
   { code: '377300', name: '카카오페이',          market: 'KOSPI', sector: '금융', brand: '#f7e600' },
   { code: '024110', name: '기업은행',            market: 'KOSPI', sector: '금융', brand: '#015198' },
-  { code: '251270', name: '넷마블',              market: 'KOSDAQ', sector: '게임', brand: '#8b95a1' },
-  { code: '036570', name: 'NC',                  market: 'KOSDAQ', sector: '게임', brand: '#004385' },   // 시세 이름 「NC」 (2026-10-03 · check-watchlist-sync --listed)
+  { code: '251270', name: '넷마블',              market: 'KOSPI', sector: '게임', brand: '#8b95a1' },
+  { code: '036570', name: 'NC',                  market: 'KOSPI', sector: '게임', brand: '#004385' },   // 시세 이름 「NC」 (2026-10-03 · check-watchlist-sync --listed)
   { code: '196170', name: '알테오젠',            market: 'KOSDAQ', sector: '바이오', brand: '#009ade' },
   { code: '247540', name: '에코프로비엠',        market: 'KOSDAQ', sector: '2차전지', brand: '#004097' },
   { code: '086520', name: '에코프로',            market: 'KOSDAQ', sector: '2차전지', brand: '#004097' },
-  { code: '042700', name: '한미반도체',          market: 'KOSDAQ', sector: '반도체', brand: '#14429d' },
+  { code: '042700', name: '한미반도체',          market: 'KOSPI', sector: '반도체', brand: '#14429d' },
 ];
 
 /* ── 차트 기간 버튼 ── */
