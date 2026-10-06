@@ -1462,3 +1462,38 @@
   /* 칸마다 굴리면 스크롤이 겹친다. 바깥 하나로 모은다 */
   .kh-sc-list { overflow: visible; flex: none; }
 }
+
+/* ── 폰 칸 순서 — 모바일 퍼스트 (2026-10-06 재권님 「응 해놔」 · 시안 주식페이지_개발1-모바일퍼스트-묶음) ──
+
+       지수 띠 → 장 상태 → 큰 차트 → 실시간 순위 → 지금 뜨는 산업 → 투자자 정보·AI → 뉴스·공시 → 데일리
+
+   위 700px 블록은 틀 셋(.kh-idx · .kh-side · .kh-rank)을 통째로 줄 세운다 — 그래서 큰 차트 바로 아래에
+   투자자 정보·AI 가 붙고 산업이 맨 아래로 갔다. 틀 안의 카드끼리 섞으려면 **틀을 풀어야** 한다 —
+   .kh-main 과 같은 방식(display: contents)으로 넷을 더 풀고 카드마다 order 를 준다. 마크업은 안 건드린다.
+
+   **홀딩스 첫 화면에만 건다.** Insight(company-setup)도 이 파일과 같은 틀 이름(kh-app-wide · kh-idx · kh-rank ·
+   kh-side)을 쓴다 — body 의 data-nav 로 가른다. **데스크톱은 안 바뀐다** — 700px 이하 안이다.
+
+   틀의 간격(14px)이 풀리면서 사라지므로 카드 위 여백으로 같은 값을 준다. */
+@media (max-width: 700px) {
+  body[data-nav="holdings"] .kh-app-wide .kh-idx,
+  body[data-nav="holdings"] .kh-app-wide .kh-rank,
+  body[data-nav="holdings"] .kh-app-wide .kh-side,
+  body[data-nav="holdings"] .kh-app-wide .kh-side-wrap { display: contents; }
+
+  body[data-nav="holdings"] .kh-app-wide .kh-cat        { order: 1; }
+  body[data-nav="holdings"] .kh-app-wide .kh-ixbar      { order: 2; }
+  body[data-nav="holdings"] .kh-app-wide .kh-mkt        { order: 3; }
+  body[data-nav="holdings"] .kh-app-wide .kh-idx-main   { order: 4; }
+  body[data-nav="holdings"] .kh-app-wide .kh-rank-card  { order: 5; }
+  body[data-nav="holdings"] .kh-app-wide .kh-sc-card    { order: 6; }
+  body[data-nav="holdings"] .kh-app-wide #kh-panel3     { order: 7; }
+  body[data-nav="holdings"] .kh-app-wide .kh-nwdc-card  { order: 8; }
+  body[data-nav="holdings"] .kh-app-wide .kh-dlm-card   { order: 9; }
+
+  body[data-nav="holdings"] .kh-app-wide .kh-rank-card,
+  body[data-nav="holdings"] .kh-app-wide .kh-sc-card,
+  body[data-nav="holdings"] .kh-app-wide #kh-panel3,
+  body[data-nav="holdings"] .kh-app-wide .kh-nwdc-card,
+  body[data-nav="holdings"] .kh-app-wide .kh-dlm-card { margin-top: 14px; }
+}
