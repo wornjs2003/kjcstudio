@@ -1079,13 +1079,16 @@ export function createStockChart(container, candles, opts = {}) {
   function lockPriceRange() {
     if (!indOn().has('vp')) return;            // 끌 때는 건드리지 않는다
     if (vpRange) return;                       // 이미 굳혀 두었다
-    const box = panes[0] && panes[0].box;
-    if (!candleSeries || !box) return;
+    const edge = readScale();
+    if (!edge) return;                         // 아직 그릴 준비가 안 됐다
+    /* **잰 값은 칸 위아래 끝이고, 그 안에는 여백(scaleMargins)이 이미 들어 있다.**
+       그대로 넘기면 라이브러리가 여백을 한 번 더 얹어 범위가 넓어진다 —
+       2026-10-03 연기 검사의 「세로가 움직임 49.1%」 가 이것과 아래 칸 높이였다.
+       여백을 빼고 넘겨야 켜기 전과 같은 자리에 그려진다. */
     try {
-      const top = candleSeries.coordinateToPrice(0);
-      const bot = candleSeries.coordinateToPrice(box.clientHeight);
-      if (top == null || bot == null || !(top > bot)) return;
-      vpRange = { min: bot, max: top };
+      const m = candleSeries.priceScale().options().scaleMargins || { top: 0, bottom: 0 };
+      const span = edge.top - edge.bot;
+      vpRange = { min: edge.bot + m.bottom * span, max: edge.top - m.top * span };
       candleSeries.applyOptions(priceFix());
     } catch { /* 아직 그릴 준비가 안 됐다 */ }
   }
@@ -1465,11 +1468,16 @@ export function createStockChart(container, candles, opts = {}) {
    * 좌우 끝(checkAlign)과 짝이다. 그것은 가로, 이것은 세로다.
    */
   function readScale() {
-    const box = panes[0] && panes[0].box;
-    if (!candleSeries || !box || !box.clientHeight) return null;
+    const ch = panes[0] && panes[0].chart;
+    if (!candleSeries || !ch) return null;
     try {
+      /* **칸 높이는 차트에게 묻는다 — 감싼 상자(box)의 높이가 아니다.**
+         상자가 140px 인데 그려진 가격 칸은 222px 인 일이 있었다 (2026-10-03
+         헤드리스 실측) — 그러면 위쪽 63% 만 재고 그 범위로 굳혀 버린다. */
+      const h = ch.paneSize(0).height;
+      if (!h) return null;
       const top = candleSeries.coordinateToPrice(0);
-      const bot = candleSeries.coordinateToPrice(box.clientHeight);
+      const bot = candleSeries.coordinateToPrice(h);
       if (top == null || bot == null || !(top > bot)) return null;
       return { top, bot };
     } catch { return null; }
