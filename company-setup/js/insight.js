@@ -66,13 +66,19 @@
     try { const asOf = (await (await fetch(`data/maps/${id}.json`, { cache: 'no-store' })).json()).asOf; asofEl.textContent = asOf ? `시황분석 자료 · ${asOf}` : '시황분석 자료 · —'; }
     catch (e) { asofEl.textContent = '시황분석 자료 · —'; }
   };
-  const setMap = id => {
-    frame.src = `flowmap.html?map=${encodeURIComponent(id)}&view=geo&embed=1`;
-    if (titleLink) titleLink.href = `flowmap.html?map=${encodeURIComponent(id)}&view=geo`;
+  // 제목 옆 토글(지구본 | 흐름도)이 틀 안 보기를 바꾼다 — 지도(칩)와 보기(토글)를 따로 들고 같은 주소로 합친다
+  const views = document.querySelector('[data-map-views]');
+  const param = k => new URLSearchParams(frame.getAttribute('src').split('?')[1] || '').get(k);
+  const current = () => param('map') || 'ai';
+  const curView = () => param('view') === 'flow' ? 'flow' : 'geo';
+  const setMap = (id, view = curView()) => {
+    frame.src = `flowmap.html?map=${encodeURIComponent(id)}&view=${view}&embed=1`;
+    if (titleLink) titleLink.href = `flowmap.html?map=${encodeURIComponent(id)}&view=${view}`;
     chips.querySelectorAll('.kh-chip').forEach(b => b.classList.toggle('is-active', b.dataset.map === id));
+    if (views) views.querySelectorAll('.kh-chip').forEach(b => b.classList.toggle('is-active', b.dataset.view === view));
     setAsof(id);
   };
-  const current = () => new URLSearchParams(frame.getAttribute('src').split('?')[1] || '').get('map') || 'ai';
+  if (views) views.addEventListener('click', e => { const b = e.target.closest('.kh-chip'); if (b) setMap(current(), b.dataset.view); });
   try {
     const r = await fetch('data/stock-analysis.json', { cache: 'no-store' });
     const maps = ((await r.json()).items || []).map(x => ({ x, id: (String(x.page || '').match(/flowmap\.html\?map=([a-z0-9_-]+)/i) || [])[1] })).filter(m => m.id);

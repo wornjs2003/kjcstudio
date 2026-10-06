@@ -24,10 +24,13 @@
   /* 칸 안 모드(?embed=1) — Insight 첫 화면의 돈의 흐름 칸이 이 화면을 틀로 띄운다 (2026-10-06 지시 · 「나」).
      지도만 보이게 제목 · 보기 단추 · 아래 단추 줄 · 오른쪽 패널 · 지구본 단추를 감추고, 지구본은 손대기 전까지 멈춘다(spinOn).
      흐름 · 병목 · 시나리오 · 회사 카드는 모달(큰 화면)에서 본다 */
-  .embed .wrap { grid-template-columns: 1fr; min-width: 0; padding: 0; }
+  .embed .wrap { grid-template-columns: minmax(0, 1fr); min-width: 0; padding: 0; }   /* minmax(0,…) — 폭을 재는 동안 칸이 내용을 따라 안 늘어나게 */
   .embed h1, .embed .sub, .embed .views, .embed #bar, .embed .panel, .embed .geo-ctl, .embed .geo-note { display: none; }
   .embed .view { height: 100vh; }
   .embed #geo { height: 100%; border-radius: 0; }
+  /* 칸 안 흐름도 — 종목이 다 보이게(2026-10-06 재권님). 제 폭(1100)으로 그린 뒤 fitFlow() 가 틀 크기에 맞춰 통째로 줄인다. 안에서 스크롤하지 않는다 */
+  .embed #v-flow { overflow: hidden; }
+  .embed #v-flow .map { width: 1100px; transform-origin: 0 0; }
   h1 { font-size: 19px; margin: 0 0 4px; }
   .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 18px; }
 
@@ -278,15 +281,36 @@ function path(a, b, extra) {
   const mx = (x1 + x2) / 2;
   return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
 }
-function draw() {
-  if (!D) return;
+function drawLines() {   // 선만 — map 이 줄여진(transform) 상태에서 부르면 좌표가 어긋난다
   const touch = ([a, b]) => sel && (a === sel || b === sel);
   const ok = ([a, b]) => el(a) && el(b);
   svgEl().innerHTML =
     LINKS.filter(ok).map(l => `<path class="${esc(l[2])} ${touch(l) ? 'on' : ''}" d="${path(l[0], l[1], false)}"/>`).join('') +
     EXTRA.filter(ok).filter(touch).map(l => `<path class="${esc(l[2])} on" d="${path(l[0], l[1], true)}"/>`).join('');
+}
+function draw() {
+  if (!D) return;
+  if (EMBED) fitFlow(); else drawLines();
   drawGeo();
 }
+// 칸 안 모드 — 흐름도가 종목까지 다 보이게 틀에 맞춰 통째로 줄인다 (2026-10-06 재권님). 폭을 여러 개 재서 가장 크게 보이는
+// 폭을 고른다(좁으면 세로로 길어져 많이 줄고, 넓으면 가로가 넘친다). 1 보다 키우지는 않는다
+function fitFlow() {
+  if (!EMBED) return;
+  const v = $('v-flow'); if (v.hidden) return;
+  map.style.transform = '';
+  const W = window.innerWidth, H = window.innerHeight;   // 틀(iframe) 자체의 크기 — 칸을 재면 내용을 따라 늘어난 값이 나온다(2026-10-06 실측)
+  let best = { s: 0, w: 1100 };
+  for (let w = 1000; w <= 2800; w += 200) {
+    map.style.width = w + 'px';
+    const s = Math.min(W / map.scrollWidth, H / map.scrollHeight, 1);
+    if (s > best.s + 0.005) best = { s, w };
+  }
+  map.style.width = best.w + 'px';
+  drawLines();
+  map.style.transform = `scale(${best.s})`;
+}
+if (EMBED) window.addEventListener('resize', fitFlow);
 function pick(id) {
   sel = sel === id ? null : id;
   map.classList.toggle('focus', !!sel);
@@ -322,7 +346,13 @@ function applyScenario() {
   });
   document.querySelectorAll('#scen [data-sc]').forEach(x => x.classList.toggle('is-on', x.dataset.sc === scenario));
 }
-map.addEventListener('click', e => { const n = e.target.closest('[data-id]'); if (n) pick(n.dataset.id); });
+map.addEventListener('click', e => {
+  const n = e.target.closest('[data-id]'); if (!n) return;
+  pick(n.dataset.id);
+  // 칸 안 모드 — 부품 분해도(info.<칸>.parts)가 있는 칸(HBM)은 부모(Insight)에 알려 모달로 띄운다 (2026-10-06 재권님 「hbm 누르면 3d 가 모달로」)
+  const info = INFO[n.dataset.id];
+  if (EMBED && info && info.parts && window.parent !== window) window.parent.postMessage({ type: 'kjc-parts', page: info.parts.page, label: info.parts.label }, location.origin);
+});
 $('bar').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.act === 'flow') { b.classList.toggle('is-on'); map.classList.toggle('flow'); geoFlow(); return; }

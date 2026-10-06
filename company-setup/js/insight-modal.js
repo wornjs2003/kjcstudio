@@ -12,3 +12,15 @@ document.addEventListener('click', e => {
   body.innerHTML = `<iframe src="${a.getAttribute('href')}" title="${a.textContent}"
     style="width:100%;height:100%;border:0;display:block"></iframe>`;
 });
+
+// 칸 안 흐름도(iframe · flowmap.html?embed=1)에서 HBM 같은 칸을 누르면 그쪽이 postMessage 로 알린다 → 부품 분해도(hbm3d.html)를 모달로 (2026-10-06 지시).
+// 같은 출처만 받고, 페이지 이름은 글자 · 점 · 밑줄만 허용한다
+window.addEventListener('message', e => {
+  if (e.origin !== location.origin || !e.data || e.data.type !== 'kjc-parts') return;
+  const page = String(e.data.page || '').replace(/[^A-Za-z0-9._-]/g, '');
+  if (!page) return;
+  const label = String(e.data.label || page).replace(/\s*›\s*$/, '');
+  const { body } = openModal({ label, width: 1320 });
+  body.style.overflow = 'hidden';
+  body.innerHTML = `<iframe src="${page}" title="${label}" style="width:100%;height:100%;border:0;display:block"></iframe>`;
+});

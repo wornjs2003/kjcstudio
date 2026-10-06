@@ -25,13 +25,19 @@
   .g3{background:var(--kh-bg-sub);color:var(--text-sub)}
   .list{font-size:12px;color:var(--text-sub);margin-top:14px}
   .list b{color:var(--text)}
-  .list div{padding:4px 0;cursor:pointer}
-  .list div:hover,.list div.on{color:var(--kh-accent)}
+  .list div{padding:8px 0;cursor:pointer;border-top:1px solid var(--kh-border)}
+  .list div b{display:block;font-size:13px}
+  .list div p{margin:3px 0 0;line-height:1.5;color:var(--text-sub)}
+  .list div:hover b,.list div.on b{color:var(--kh-accent)}
   #bar{position:absolute;left:0;right:360px;bottom:0;background:var(--bg-card);padding:12px 20px;display:flex;gap:18px;align-items:center;font-size:13px;box-shadow:0 -1px 0 var(--border)}
   #bar label{display:flex;align-items:center;gap:8px;white-space:nowrap}
   input[type=range]{width:260px}
-  .lbl{background:var(--bg-card);color:var(--text);font-size:11px;padding:2px 8px;border-radius:6px;box-shadow:var(--shadow-sm);white-space:nowrap;pointer-events:none}
-  .lbl.pin{font-weight:700;color:var(--kh-accent)}
+  /* 이름표 — 바깥 칸은 지시선 끝점에 가운데 맞춰지고(CSS2DRenderer), 안쪽 글 상자를 반 칸 밀어 상자의 가장자리가 끝점에 오게 한다 */
+  .lbl{white-space:nowrap;pointer-events:none;font-size:11px}
+  .lbl span{display:inline-block;background:var(--bg-card);color:var(--text);padding:2px 8px;border-radius:6px;box-shadow:var(--shadow-sm)}
+  .lbl.r span{transform:translateX(50%)}
+  .lbl.l span{transform:translateX(-50%)}
+  .lbl.pin span{font-weight:700;color:var(--kh-accent)}
   #hint{position:absolute;left:20px;top:16px;font-size:12px;color:var(--text-sub);background:var(--bg-card);padding:6px 10px;border-radius:8px}
 </style></head><body>
 <div id="stage"><div id="hint">끌어서 돌리기 · 휠로 확대 · 부품 위에 올리면 이름 · 누르면 오른쪽에 종목</div></div>

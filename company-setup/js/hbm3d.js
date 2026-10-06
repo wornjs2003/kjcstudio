@@ -72,7 +72,7 @@ const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(
 const lr=new CSS2DRenderer();lr.domElement.style.position='absolute';lr.domElement.style.top='0';lr.domElement.style.pointerEvents='none';stage.appendChild(lr.domElement);
 const scene=new THREE.Scene();scene.background=new THREE.Color(getComputedStyle(document.body).getPropertyValue('--bg').trim()||'#f6f7f9');
 const pm=new THREE.PMREMGenerator(renderer);scene.environment=pm.fromScene(new RoomEnvironment(),.04).texture;
-const camera=new THREE.PerspectiveCamera(33,1,.1,500);camera.position.set(64,74,82);
+const camera=new THREE.PerspectiveCamera(33,1,.1,500);camera.position.set(128,148,164);   // 2026-10-06 재권님 「지금보다 1/2 정도로」 — 전에는 (64,74,82). 거리를 두 배로
 const ctl=new OrbitControls(camera,renderer.domElement);ctl.enableDamping=true;ctl.target.set(0,9,0);ctl.maxPolarAngle=Math.PI*.49;
 const sun=new THREE.DirectionalLight('#fff',2.2);sun.position.set(30,60,25);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-60,right:60,top:60,bottom:-60,near:1,far:200});sun.shadow.bias=-.0005;scene.add(sun);
 scene.add(new THREE.HemisphereLight("#ffffff","#b9c0cc",.9));const fill=new THREE.DirectionalLight("#fff",.8);fill.position.set(-40,30,-30);scene.add(fill);
@@ -82,22 +82,33 @@ const floor=new THREE.Mesh(new THREE.PlaneGeometry(400,400),new THREE.ShadowMate
 const movers=[]; // {obj, baseY, tier, side:[x,z] , layer}
 const labels=[];
 function box(w,h,d,mat,r=.15){const m=new THREE.Mesh(new RoundedBoxGeometry(w,h,d,3,r),mat);m.castShadow=m.receiveShadow=true;return m;}
-function tag(obj,key,text,y){const el=document.createElement('div');el.className='lbl';el.textContent=text;const o=new CSS2DObject(el);o.position.set(0,y,0);obj.add(o);labels.push({el,key});return o;}
+// 이름표 — 부품의 가장자리(anchor)에서 꼬리표 자리(tip)까지 선으로 잇는다 (2026-10-06 재권님 「부품이랑 이름이랑 줄로 연결」).
+// 좌표는 그 부품(obj) 기준이라 분해 슬라이더로 부품이 움직여도 선이 따라간다. 꼬리표는 점의 바깥쪽(왼쪽 · 오른쪽)에 붙는다
+const leadColor=getComputedStyle(document.body).getPropertyValue('--text-sub').trim()||'#4e5968';
+M.lead=new THREE.LineBasicMaterial({color:leadColor,transparent:true,opacity:.9,depthTest:false});   // 부품 뒤에 가려지지 않게 늘 위에
+M.leadDot=new THREE.MeshBasicMaterial({color:leadColor,depthTest:false});
+function tag(obj,key,text,anchor,tip){
+  const el=document.createElement('div');el.className='lbl '+(tip[0]<anchor[0]?'l':'r');
+  const sp=document.createElement('span');sp.textContent=text;el.appendChild(sp);
+  const o=new CSS2DObject(el);o.position.set(...tip);obj.add(o);
+  const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...anchor),new THREE.Vector3(...tip)]),M.lead);line.renderOrder=999;obj.add(line);
+  const dot=new THREE.Mesh(new THREE.SphereGeometry(.4,8,6),M.leadDot);dot.position.set(...anchor);dot.renderOrder=999;obj.add(dot);
+  labels.push({el,key,line,dot});return o;}
 function part(key,obj,tier,side=[0,0],layer=0){obj.userData.key=key;obj.traverse(c=>c.userData.key=key);movers.push({obj,baseY:obj.position.y,tier,side,layer});scene.add(obj);return obj;}
 
 // 기판
-const sub=box(56,1.8,56,M.pcb,.3);sub.position.y=0;part('sub',sub,0);tag(sub,'sub','패키지 기판',-1.6);
+const sub=box(56,1.8,56,M.pcb,.3);sub.position.y=0;part('sub',sub,0);tag(sub,'sub','패키지 기판',[28,0,14],[44,-10,16]);
 // 솔더볼
-{const g=new THREE.SphereGeometry(.42,14,10);const n=22;const im=new THREE.InstancedMesh(g,M.ball,n*n);const d=new THREE.Object3D();let k=0;for(let i=0;i<n;i++)for(let j=0;j<n;j++){d.position.set(-25.2+i*2.4,-1.3,-25.2+j*2.4);d.updateMatrix();im.setMatrixAt(k++,d.matrix);}im.castShadow=true;const grp=new THREE.Group();grp.add(im);grp.position.y=0;part('ball',grp,-0.55);tag(grp,'ball','솔더볼',-2.4);}
+{const g=new THREE.SphereGeometry(.42,14,10);const n=22;const im=new THREE.InstancedMesh(g,M.ball,n*n);const d=new THREE.Object3D();let k=0;for(let i=0;i<n;i++)for(let j=0;j<n;j++){d.position.set(-25.2+i*2.4,-1.3,-25.2+j*2.4);d.updateMatrix();im.setMatrixAt(k++,d.matrix);}im.castShadow=true;const grp=new THREE.Group();grp.add(im);grp.position.y=0;part('ball',grp,-0.55);tag(grp,'ball','솔더볼',[-26,-1.3,12],[-40,-14,14]);}
 // 인터포저
-const inter=box(46,.6,34,M.inter,.08);inter.position.y=1.2;part('inter',inter,1);tag(inter,'inter','실리콘 인터포저',-.6);
+const inter=box(46,.6,34,M.inter,.08);inter.position.y=1.2;part('inter',inter,1);tag(inter,'inter','실리콘 인터포저',[-23,0,4],[-42,-3,6]);
 // GPU 다이
-const gpu=box(21,1.1,17,M.die,.1);gpu.position.y=2.05;part('gpu',gpu,2);tag(gpu,'gpu','GPU 다이',1.2);
+const gpu=box(21,1.1,17,M.die,.1);gpu.position.y=2.05;part('gpu',gpu,2);tag(gpu,'gpu','GPU 다이',[0,.6,8.5],[-6,-5,30]);
 // HBM 스택 6
 const LAY=8, LT=.34, LG=.1;
 [[-17.5,-11],[-17.5,0],[-17.5,11],[17.5,-11],[17.5,0],[17.5,11]].forEach(([x,z],si)=>{
   const sideV=[Math.sign(x),0];
-  const base=box(9.5,.7,10.5,M.base,.08);base.position.set(x,1.85,z);part('base',base,2,sideV);if(si===0)tag(base,'base','베이스 다이',-.9);
+  const base=box(9.5,.7,10.5,M.base,.08);base.position.set(x,1.85,z);part('base',base,2,sideV);if(si===0)tag(base,'base','베이스 다이',[-4.75,0,-3],[-24,9,-10]);
   for(let l=0;l<LAY;l++){
     const y=2.2+.35+l*(LT+LG);
     const g=new THREE.Group();g.position.set(x,y,z);
@@ -105,15 +116,15 @@ const LAY=8, LT=.34, LG=.1;
     // 층 사이 마이크로 범프
     const bg=new THREE.SphereGeometry(.07,6,5);const bn=10,bm=11;const im=new THREE.InstancedMesh(bg,M.bump,bn*bm);const d=new THREE.Object3D();let k=0;for(let i=0;i<bn;i++)for(let j=0;j<bm;j++){d.position.set(-3.6+i*.8,-LT/2-LG/2,-4+j*.8);d.updateMatrix();im.setMatrixAt(k++,d.matrix);}g.add(im);
     part(l<LAY-1?'tsv':'hbm',g,2,sideV,l+1);
-    if(si===3&&l===LAY-1)tag(g,'hbm','HBM D램 스택',1);
-    if(si===3&&l===3)tag(g,'tsv','TSV · 범프',0);
+    if(si===3&&l===LAY-1)tag(g,'hbm','HBM D램 스택',[4.75,0,0],[19,6,0]);
+    if(si===3&&l===3)tag(g,'tsv','TSV · 범프',[4.75,-.2,0],[19,-3,0]);
   }
 });
 // 리드
 {const grp=new THREE.Group();const top=box(54,1.4,54,M.lid,.4);top.position.y=7.6;grp.add(top);
   const wallM=new THREE.MeshStandardMaterial({color:"#c9ced6",roughness:.5,metalness:.75});[[0,-26.3],[0,26.3]].forEach(([x,z])=>{const w=new THREE.Mesh(new THREE.BoxGeometry(54,6,1.4),wallM);w.position.set(x,4,z);w.castShadow=true;grp.add(w);});
   [[-26.3,0],[26.3,0]].forEach(([x,z])=>{const w=new THREE.Mesh(new THREE.BoxGeometry(1.4,6,54),wallM);w.position.set(x,4,z);w.castShadow=true;grp.add(w);});
-  grp.position.y=0;part("lid",grp,5.5);tag(grp,'lid','히트스프레더',9.2);}
+  grp.position.y=0;part("lid",grp,5.5);tag(grp,'lid','히트스프레더',[27,7.6,-12],[41,15,-12]);}
 
 // ── 분해 ────────────────────────────────────────────────────────────────
 const ex=document.getElementById('ex'),ly=document.getElementById('ly');
@@ -133,8 +144,11 @@ renderer.domElement.addEventListener('click',()=>{if(hover){if(pinned&&pinned!==
 function show(k){const p=PARTS[k];document.getElementById('pname').textContent=p.name;document.getElementById('pdesc').textContent=p.desc;
   document.getElementById('ptab').innerHTML='<tr><th>등급</th><th>종목</th><th>왜</th></tr>'+p.stocks.map(([g,s,w])=>`<tr><td><span class="pill g${g}">${G[g]}</span></td><td>${s}</td><td>${w||''}</td></tr>`).join('');
   document.querySelectorAll('#plist div').forEach(d=>d.classList.toggle('on',d.dataset.k===k));}
-const pl=document.getElementById('plist');for(const k of Object.keys(PARTS)){const d=document.createElement('div');d.dataset.k=k;d.textContent='· '+PARTS[k].name;d.onclick=()=>{if(pinned)setHi(pinned,false);pinned=k;setHi(k,true);show(k);};pl.appendChild(d);}
-document.getElementById('lab').onchange=e=>{lr.domElement.style.display=e.target.checked?'':'none';};
+// 부품 목록 — 이름 아래 설명을 바로 보인다 (2026-10-06 재권님 「각 부품별로 설명이 있어야」). 누르면 그 부품을 비추고 위에 종목 표
+const pl=document.getElementById('plist');for(const k of Object.keys(PARTS)){const d=document.createElement('div');d.dataset.k=k;
+  const nm=document.createElement('b');nm.textContent=PARTS[k].name;const ds=document.createElement('p');ds.textContent=PARTS[k].desc;d.append(nm,ds);
+  d.onclick=()=>{if(pinned)setHi(pinned,false);pinned=k;setHi(k,true);show(k);};pl.appendChild(d);}
+document.getElementById('lab').onchange=e=>{lr.domElement.style.display=e.target.checked?'':'none';for(const L of labels){L.line.visible=L.dot.visible=e.target.checked;}};
 
 // ── 그리기 ──────────────────────────────────────────────────────────────
 function resize(){const w=stage.clientWidth,h=stage.clientHeight;renderer.setSize(w,h);lr.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();}
