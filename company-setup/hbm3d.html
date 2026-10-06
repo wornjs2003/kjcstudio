@@ -1,0 +1,54 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HBM 패키지 분해도 · Insight</title>
+<!-- HBM 패키지 분해도(3D) — AI 흐름도의 메모리(HBM) 칸에서 연다 (2026-10-06 재권님 「HBM4 면 메모리 쪽으로」).
+     구조는 재권님이 주신 HBM4 그림(D램 스택 · TSV · 베이스 다이 · GPU · 인터포저 · 기판) · 부품 치수는 실물 비율이 아닌 개념도.
+     부품 재질 색(금 · 실리콘 · 니켈 · 기판 초록)은 실물 색이라 테마 변수가 아닌 데이터로 둔다(「데이터로서의 색」).
+     종목 · 등급은 시황분석 판단(2026-10-06 · 미확정 — 화면에 빨간 표시) · 시세 없음. Three.js 는 CDN(jsdelivr) -->
+<link rel="stylesheet" href="../assets/css/theme.css">
+<style>
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:"Noto Sans KR",Roboto,sans-serif;overflow:hidden}
+  #stage{position:absolute;inset:0;right:360px}
+  canvas{display:block}
+  #side{position:absolute;top:0;right:0;bottom:0;width:360px;background:var(--bg-card);padding:18px 20px;box-sizing:border-box;overflow:auto;box-shadow:-1px 0 0 var(--border)}
+  h1{font-size:16px;margin:0 0 4px}
+  .sub{font-size:12px;color:var(--text-sub);margin:0 0 14px}
+  .warn{background:var(--kh-danger-faint);color:var(--kh-danger);font-size:12px;padding:8px 10px;border-radius:8px;margin:0 0 14px;line-height:1.5}
+  .part{font-size:18px;font-weight:700;margin:6px 0 2px}
+  .desc{font-size:13px;color:var(--text-sub);line-height:1.55;margin:0 0 12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  td,th{padding:6px 4px;border-bottom:1px solid var(--border);text-align:left}
+  th{font-weight:500;color:var(--text-sub);font-size:12px}
+  .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700}
+  .g1{background:var(--kh-up-faint);color:var(--kh-up)}
+  .g2{background:var(--kh-accent-faint);color:var(--kh-accent)}
+  .g3{background:var(--kh-bg-sub);color:var(--text-sub)}
+  .list{font-size:12px;color:var(--text-sub);margin-top:14px}
+  .list b{color:var(--text)}
+  .list div{padding:4px 0;cursor:pointer}
+  .list div:hover,.list div.on{color:var(--kh-accent)}
+  #bar{position:absolute;left:0;right:360px;bottom:0;background:var(--bg-card);padding:12px 20px;display:flex;gap:18px;align-items:center;font-size:13px;box-shadow:0 -1px 0 var(--border)}
+  #bar label{display:flex;align-items:center;gap:8px;white-space:nowrap}
+  input[type=range]{width:260px}
+  .lbl{background:var(--bg-card);color:var(--text);font-size:11px;padding:2px 8px;border-radius:6px;box-shadow:var(--shadow-sm);white-space:nowrap;pointer-events:none}
+  .lbl.pin{font-weight:700;color:var(--kh-accent)}
+  #hint{position:absolute;left:20px;top:16px;font-size:12px;color:var(--text-sub);background:var(--bg-card);padding:6px 10px;border-radius:8px}
+</style></head><body>
+<div id="stage"><div id="hint">끌어서 돌리기 · 휠로 확대 · 부품 위에 올리면 이름 · 누르면 오른쪽에 종목</div></div>
+<div id="bar">
+  <label>분해 <input id="ex" type="range" min="0" max="100" value="60"> <span id="exv">45%</span></label>
+  <label>HBM 층 벌림 <input id="ly" type="range" min="0" max="100" value="0"> <span id="lyv">0%</span></label>
+  <label><input id="rot" type="checkbox" checked> 천천히 돌기</label>
+  <label><input id="lab" type="checkbox" checked> 이름표</label>
+</div>
+<div id="side">
+  <h1>HBM 패키지(AI 가속기) — 부품별 주도주</h1>
+  <p class="sub">GPU + HBM 수직 적층(HBM4 식) · 2.5D 인터포저 · 2026-10-06</p>
+  <div class="warn">미정 — 종목 · 등급은 시황분석 판단(2026-10-06)이고 아직 확인받지 않았습니다. 시세 · 비율은 안 붙였습니다.</div>
+  <div id="pname" class="part">부품을 누르십시오</div>
+  <div id="pdesc" class="desc">조립 상태에서 「분해」 를 올리면 층이 벌어집니다. 「HBM 층 벌림」 은 D램 8단 사이를 띄웁니다.</div>
+  <table id="ptab"></table>
+  <div class="list" id="plist"><b>부품 목록</b></div>
+</div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="module" src="js/hbm3d.js"></script></body></html>
