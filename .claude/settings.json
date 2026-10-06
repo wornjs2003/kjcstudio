@@ -124,6 +124,11 @@
             "type": "command",
             "command": "KJC_KOREAN_HOOK=block sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-korean.py\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "KJC_LINK_HOOK=block sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-link-path.py\"",
+            "timeout": 10
           }
         ]
       }
