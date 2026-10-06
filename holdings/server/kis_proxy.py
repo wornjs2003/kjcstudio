@@ -4028,12 +4028,17 @@ def fetch_minutes_day(cfg, code, max_past=None):
     if start < MINUTE_DAY_START:
         return [], []
     now_m = _minutes_now_min()
-    got_min = _minutes_done_cover(_minutes_done(code))
-    ends = _minute_chunk_ends(start)
+    done = _minutes_done(code)
+    first_full = -(-(start - 29) // 5) * 5          # 첫 칸 안에서 처음으로 온전한 5분 칸
+    ends = [start]
+    e = first_full - 1
+    while e >= MINUTE_DAY_START:
+        ends.append(e)
+        e -= 30
     past = 0
     for t in ends:
         over = t < now_m                             # 그 칸이 이미 끝났나
-        if over and all(m in got_min for m in range(max(t - 29, MINUTE_DAY_START), t + 1)):
+        if over and t in done:
             continue
         if over and t != start:
             if max_past is not None and past >= max_past:
@@ -4073,54 +4078,6 @@ def _minutes_done(code):
     if day != _minutes_trade_day():
         return set()
     return {int(x) for x in rest.split(",") if x.strip().isdigit()}
-
-
-def _minute_chunk_ends(start):
-    """`fetch_minutes_day` 가 받는 30분 칸들의 끝 분 — 첫 칸은 `start`, 그 뒤는 5분 칸에 맞춘 …4/…9."""
-    first_full = -(-(start - 29) // 5) * 5          # 첫 칸 안에서 처음으로 온전한 5분 칸
-    ends = [start]
-    e = first_full - 1
-    while e >= MINUTE_DAY_START:
-        ends.append(e)
-        e -= 30
-    return ends
-
-
-def _minutes_done_cover(done):
-    """끝난 뒤 받은 칸들이 덮은 **분** 집합.
-
-    칸 끝은 지금 시각에 따라 30분 안에서 5분씩 밀린다(첫 칸이 지금에서 끝나므로) — 끝 분이
-    같은지로 보면 앞서 받은 칸이 거의 안 맞아 **받은 칸을 또 받는다.** 분으로 덮였는지 본다.
-    """
-    return {m for d in done for m in range(d - 29, d + 1)}
-
-
-def _minutes_holes(code):
-    """그 종목에 **이미 끝났는데 아직 끝난 뒤에 못 받은** 30분 칸이 몇 개인가 (2026-10-06).
-
-    미리받기 관문(`prefill_due` · `_prefill_one`)이 5분 구간 표식(`pf5m`)만 보면, 마감 뒤에는
-    표식이 1530 에 멈춰 종목당 한 번(지난 칸 6개)만 받고 끝난다 — 남은 구멍이 다음 날까지 갔다
-    (10-06 15:4x 빈 종목 193→192 · 4분). 이것으로 「구멍이 남은 종목」 도 다시 차례에 든다.
-    `fetch_minutes_day` 와 같은 칸 목록 · 같은 `m5done` 을 보므로 받은 칸은 다시 안 센다.
-    """
-    start = minute_scan_start()
-    if start < MINUTE_DAY_START:
-        return 0
-    now_m = _minutes_now_min()
-    got_min = _minutes_done_cover(_minutes_done(code))
-    return sum(1 for t in _minute_chunk_ends(start)
-               if t < now_m and not all(m in got_min for m in range(max(t - 29, MINUTE_DAY_START), t + 1)))
-
-
-def _minutes_hole_due(code, want):
-    """구멍 메우기로 그 종목을 받을 차례인가 — 새 봉이 생길 수 있는 동안 · 구멍이 남았고 ·
-    **이 구간에 받아 봤는데 구멍이 안 줄어 그만둔 종목이 아니다**(`pf5mh`).
-
-    KIS 가 늘 실패하는 칸이 있으면 그 칸은 영영 「끝난 뒤 받음」 이 안 적힌다 — 막지 않으면
-    그 종목만 쉬는 틈마다 다시 부른다. 그만둔 표식은 구간(`want`)이 바뀌면 풀린다.
-    """
-    return (_minutes_live() and _meta_get("pf5mh:%s" % code) != want
-            and _minutes_holes(code) > 0)
 
 
 def _minutes_mark_done(code, ends):
@@ -4275,11 +4232,7 @@ def prefill_due(code, want=None):
     """
     if want is None:
         want = _last_closed_5m_slot()
-    if _meta_get("pf5m:%s" % code) != want:
-        return True
-    # 새 봉이 생길 수 있는 동안은 **구멍이 남은 종목도** 받는다 — 그 밖(20:10 뒤 · 주말)은
-    # get_chart 가 하루치를 다시 안 받으므로 불러도 메워지지 않는다
-    return _minutes_hole_due(code, want)
+    return _meta_get("pf5m:%s" % code) != want
 
 
 def _last_closed_5m_slot(now=None):
@@ -4450,30 +4403,14 @@ def _prefill_one(cfg, want):
     # 뒤쪽은 굶었다 — 10-06 에 203종목 중 193종목이 같은 시간대에 비었다(10-03 45e5892).
     # 화면에 보이는 종목(1·2순위)은 그대로 맨 앞이다.
     hot_set = _prefill_hot_codes()
-    live = _minutes_live()
-    due = []
-    for c in _prefill_codes():
-        last = _meta_get("pf5m:%s" % c) or ""
-        if last != want:
-            due.append((c, (0, last)))
-        elif (live and _minutes_hole_due(c, want)
-              and time.time() - float(_meta_get("sync:%s:5m" % c) or 0) > PERIODS["5m"]["fresh_sec"]):
-            # 방금 받은 종목(`fresh_sec` 안)은 get_chart 가 안 받으므로 지금 뽑으면 헛걸음이고,
-            # 구멍이 안 줄었다고 그만둔 표식까지 찍힌다 — 그 틈이 지나면 다시 든다
-            # **구멍이 남은 종목은 새 구간 종목 다음** (2026-10-06 재권님 「응 해줘」) — 그중에서도
-            # 가장 오래 안 받은 순. 방금 받은 종목은 `fresh_sec`(30초) 안이면 get_chart 가 안 받으므로
-            # 같은 종목을 연달아 뽑지 않게 마지막 받은 시각으로 줄 세운다
-            due.append((c, (1, "%020.3f" % float(_meta_get("sync:%s:5m" % c) or 0))))
-    # 보이는 종목의 **구멍 메우기는 앞에 세우지 않는다** — 보이는 종목은 쉬지 않고 받으므로
-    # 30초 안에 다시 뽑히면 get_chart 가 안 받은 채 같은 종목을 계속 돈다
-    hot_due = [c for c, k in due if c in hot_set and k[0] == 0]
-    rest = sorted((x for x in due if x[0] not in hot_due), key=lambda x: x[1])   # 안정 정렬 — 같으면 원래 순서
+    due = [(c, _meta_get("pf5m:%s" % c) or "") for c in _prefill_codes()]
+    due = [(c, last) for c, last in due if last != want]
+    hot_due = [c for c, _ in due if c in hot_set]
+    rest = sorted((x for x in due if x[0] not in hot_set), key=lambda x: x[1])   # 안정 정렬 — 같으면 원래 순서
     code = hot_due[0] if hot_due else (rest[0][0] if rest else None)
     if code is None:
         return None
-    hot = code in hot_due
-    filling = _meta_get("pf5m:%s" % code) == want         # 새 구간이 아니라 구멍 메우기로 뽑혔다
-    holes0 = _minutes_holes(code) if filling else 0
+    hot = code in hot_set
     _prefill_hot.on = hot
     try:
         # 하루치는 하루 한 번만. 나머지는 최근 구간만 받는다
@@ -4484,8 +4421,6 @@ def _prefill_one(cfg, want):
         _prefill_hot.on = False
     # **실패해도 적는다.** 안 적으면 그 종목만 계속 다시 부른다 — 다음 구간에 저절로 또 온다
     _meta_set("pf5m:%s" % code, want)
-    if filling and _minutes_holes(code) >= holes0:
-        _meta_set("pf5mh:%s" % code, want)               # 받아도 안 줄었다 — 이 구간은 그만
     if not hot:
         # 3순위는 화면이 보고 있으면 길게 쉰다. 지수·시세가 먼저다
         time.sleep(PREFILL_BUSY_REST_SEC if _ui_busy() else PREFILL_REST_SEC)
