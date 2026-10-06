@@ -64,7 +64,17 @@ class Unmeasured(Exception):
     pass
 
 
+# 세지 않되 **센 수는 낸다** — 세션 폴더에는 uidata/icons 가 없어서(gitignore) 종목 아이콘이 늘 404 다.
+# 「고친 뒤」 를 세션 포트로 재면 그것이 「새로 생긴 오류」 로 나와 전후 비교를 흐렸다(qa 2026-10-03 · 8767).
+# 조용히 빼면 8765 에서 아이콘이 진짜 깨져도 안 보이므로, 걸린 것에서만 빼고 수는 따로 적는다.
+IGNORED = []
+
+
 def main(argv):
+    if "--help" in argv or "-h" in argv:
+        # --help 가 없어서 그대로 검사를 돌리고 30분 주기 결과 파일(logs/check-chart.json)을 덮었다(qa 2026-10-03)
+        print(__doc__)
+        return 0
     port = int(argv[argv.index("--port") + 1]) if "--port" in argv else 8765
     code = argv[argv.index("--code") + 1] if "--code" in argv else "005930"
     out_json = argv[argv.index("--json") + 1] if "--json" in argv else os.path.join(ROOT, "logs", "check-chart.json")
@@ -156,7 +166,9 @@ def main(argv):
                     errs.append("console.error: " + txt[:160])
                 elif meth == "Log.entryAdded":
                     e = p.get("entry", {})
-                    if e.get("level") == "error" and "favicon" not in (e.get("url") or ""):
+                    if e.get("level") == "error" and "/uidata/" in (e.get("url") or ""):
+                        IGNORED.append(e.get("url"))
+                    elif e.get("level") == "error" and "favicon" not in (e.get("url") or ""):
                         errs.append("오류: " + (e.get("text") or "")[:160])
                 elif meth == "Network.responseReceived":
                     res = p.get("response", {})
@@ -311,6 +323,7 @@ def main(argv):
     try:
         os.makedirs(os.path.dirname(out_json), exist_ok=True)
         with open(out_json, "w", encoding="utf-8") as fp:
+            report["ignoredUidata404"] = len(IGNORED)
             json.dump(report, fp, ensure_ascii=False, indent=1)
     except Exception:
         pass
@@ -323,6 +336,8 @@ def main(argv):
         print("  %-6s 열기: canvas %s · 라이브러리 %s · 차트 API %s · 단계 %d"
               % (sc["name"], opened and opened["canvases"], opened and ("있음" if opened["lc"] else "**없음**"),
                  ",".join("%s/봉%s" % (c["status"], c["candles"]) for c in api) or "-", n_steps))
+    if IGNORED:
+        print("  -- 세지 않음: /uidata/ 404 %d건 (세션 폴더에는 uidata/icons 가 없다 · 8765 에서 나면 진짜다)" % len(IGNORED))
     if report["problems"]:
         print("  !! 걸린 것 %d" % len(report["problems"]))
         for p in report["problems"]:
