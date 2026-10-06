@@ -1,0 +1,92 @@
+/* 종목 리포트(stock-report.html) 전용 — 틀은 insight.css(.in-report · .in-rp-sec · .in-tbl · .in-pill · .in-src)를 그대로 쓰고
+   여기에는 이 화면에만 있는 것만 둔다. 색은 루트 theme.css 의 --kh-* 변수만 (2026-10-06 · 시황분석1).
+
+   **모바일 퍼스트** (2026-10-06 재권님 「요거는 모바일 퍼스트로 해야해」) — 기본 규칙이 폰(한 열 · 값 칸 둘씩 · 표는 가로로 민다)이고,
+   넓은 화면(900px 이상)에서만 열을 늘린다. 참고 화면(ILOULI 보드)도 폰에서 한 열로 읽히는 틀이다 */
+
+/* ── 기본 = 폰 ── */
+.rp.in-report { padding: 16px 14px; overflow-x: hidden; }
+.rp-head { padding: 0 0 12px; border-bottom: 1px solid var(--kh-border); }
+.rp-head h1 { font-size: 1.25rem; margin: 4px 0 6px; display: flex; align-items: baseline; gap: 8px 12px; flex-wrap: wrap; }
+.rp-head h1 .rp-px { font-size: 1.1rem; font-weight: 600; }
+.rp-head h1 .rp-chg { font-size: 0.95rem; font-weight: 600; }
+.rp-up { color: var(--kh-up); }
+.rp-down { color: var(--kh-down); }
+.rp-verdict { font-size: 0.95rem; font-weight: 700; color: var(--kh-text-primary); margin: 2px 0; line-height: 1.5; }
+.rp-verdict small { display: block; font-weight: 500; color: var(--kh-text-secondary); }
+.rp-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.rp .in-rp-meta { line-height: 1.5; }
+
+/* 값 칸 — 폰은 둘씩 */
+.rp-kv { display: grid; gap: 8px; margin: 8px 0 4px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rp-kv div { background: var(--kh-bg-surface); border-radius: var(--kh-radius-md); padding: 8px 10px; min-width: 0; }
+.rp-kv b { display: block; font-size: 1rem; color: var(--kh-text-primary); overflow-wrap: anywhere; }
+.rp-kv b small { font-size: 0.78rem; }
+.rp-kv span { font-size: 0.7rem; color: var(--kh-text-muted); line-height: 1.5; }
+
+/* 가격표 — 규칙 미정이라 빨간 바탕 (「아직 안 정해진 자리는 빨간 바탕으로 남긴다」). 정해지면 이 블록을 지운다 */
+.rp-price { background: var(--kh-danger-faint); border-radius: var(--kh-radius-md); padding: 12px; }
+.rp-price .rp-kv div { background: var(--kh-bg-card); }
+.rp-undecided-note { font-size: 0.78rem; color: var(--kh-danger); margin-bottom: 4px; line-height: 1.5; }
+
+.rp h2 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 1rem; }
+.rp h2 .in-src { margin-left: 0; }
+.rp h3 { font-size: 0.88rem; margin: 14px 0 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rp h3 small { font-weight: 400; font-size: 0.72rem; color: var(--kh-text-muted); }
+
+/* 표 — 폰에서는 가로로 민다(줄이 안 겹친다). 막대는 common.css 한 벌 그대로 */
+.rp-tw { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -14px; padding: 0 14px; }
+.rp .in-tbl { min-width: 100%; font-size: 0.8rem; }
+.rp .in-tbl th, .rp .in-tbl td { padding: 6px 6px; white-space: nowrap; }
+.rp .in-tbl td:first-child { white-space: normal; min-width: 7em; }
+.rp .in-tbl td.num, .rp .in-tbl th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.rp .in-tbl td.wrap { white-space: normal; min-width: 12em; }
+
+.rp-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.rp-list { margin: 0; padding-left: 18px; }
+.rp-list li { font-size: 0.86rem; line-height: 1.7; color: var(--kh-text-secondary); }
+.rp-list li b { color: var(--kh-text-primary); }
+.rp-text { font-size: 0.88rem; line-height: 1.7; color: var(--kh-text-secondary); margin: 0 0 8px; overflow-wrap: anywhere; }
+.rp-text b { color: var(--kh-text-primary); }
+canvas#rp-canvas { width: 100%; height: 220px; display: block; background: var(--kh-bg-card); }
+.rp-flowline { margin: 10px 0 0; line-height: 1.6; }
+.rp .in-rp-note { line-height: 1.5; overflow-wrap: anywhere; }
+
+/* 카드 목록 — 시나리오 · 전략 · 모니터링 · 10줄. 폰 한 열 */
+.rp-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 6px 0; }
+.rp-item { background: var(--kh-bg-surface); border-radius: var(--kh-radius-md); padding: 10px 12px; font-size: 0.86rem; line-height: 1.6; color: var(--kh-text-secondary); min-width: 0; overflow-wrap: anywhere; }
+.rp-item > b { display: block; color: var(--kh-text-primary); margin-bottom: 2px; }
+.rp-item div b { color: var(--kh-text-primary); margin-right: 4px; }
+.rp .in-tbl td small { font-size: 0.72rem; color: var(--kh-text-muted); }
+
+/* 펼치기 · 접기 — 절마다 한 줄 요약(summary)을 두고 누르면 펼친다 (2026-10-06 재권님 「펼치기 접기도 있어야」) */
+.rp-fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; padding-right: 22px; position: relative; }
+.rp-fold > summary::-webkit-details-marker { display: none; }
+.rp-fold > summary::after { content: ''; position: absolute; right: 4px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--kh-text-muted); border-bottom: 2px solid var(--kh-text-muted); transform: translateY(-70%) rotate(45deg); transition: transform .15s; }
+.rp-fold[open] > summary::after { transform: translateY(-30%) rotate(-135deg); }
+.rp-fold > summary h2 { margin: 0; }
+.rp-sum { font-size: 0.82rem; color: var(--kh-text-secondary); line-height: 1.5; flex-basis: 100%; }
+.rp-fold[open] > summary .rp-sum { color: var(--kh-text-muted); }
+.rp-fold-body { padding-top: 8px; }
+.rp-foldall { display: flex; gap: 6px; margin-top: 8px; }
+.rp-foldall .kh-chip { font-size: 0.74rem; padding: 3px 10px; cursor: pointer; }
+
+/* ── 넓은 화면 ── */
+@media (min-width: 900px) {
+  .rp.in-report { padding: 22px 26px; }
+  .rp-head h1 { font-size: 1.5rem; }
+  .rp-head h1 .rp-px { font-size: 1.25rem; }
+  .rp-head h1 .rp-chg { font-size: 1rem; }
+  .rp-verdict { font-size: 1rem; }
+  .rp-verdict small { display: inline; margin-left: 8px; }
+  .rp-kv-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .rp-kv b { font-size: 1.05rem; }
+  .rp-price { padding: 14px 16px; }
+  .rp-tw { margin: 0; padding: 0; }
+  .rp .in-tbl { font-size: 0.84rem; }
+  .rp .in-tbl th, .rp .in-tbl td { padding: 7px 8px; }
+  .rp-cols { grid-template-columns: 1fr 1fr; gap: 24px; }
+  canvas#rp-canvas { height: 320px; }
+  .rp-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .rp-sum { flex-basis: auto; margin-left: 4px; }
+}

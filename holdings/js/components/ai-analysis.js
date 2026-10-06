@@ -78,13 +78,15 @@ export function mountAiAnalysis({ box, when } = {}) {
   }
 
   function paint() {
-    if (when) when.textContent = doc && doc.at ? whenText(doc.at) : '—';
 
     if (!doc || !doc.codes) {
+      if (when) when.textContent = '—';
       box.innerHTML = '<span class="kh-mut">분석 파일을 불러오지 못했습니다</span>';
       return;
     }
     const d = code ? doc.codes[code] : null;
+    /* 배지 — 종목 글에 at(쓴 시각) · writer(쓴 세션)가 있으면 그것을, 없으면 파일의 at (2026-10-06 · 종목별로 따로 쓰기 시작) */
+    if (when) when.textContent = d && d.at ? `${d.writer ? d.writer + ' · ' : ''}${whenText(d.at)}` : doc.at ? whenText(doc.at) : '—';
     if (!d) {
       box.innerHTML = '<span class="kh-mut">이 종목은 아직 없습니다 —'
         + ' 관심종목부터 쓰고 있습니다</span>';

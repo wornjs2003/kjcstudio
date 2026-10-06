@@ -35,6 +35,7 @@
       <a href="#">경제 지표</a>
       <span class="kh-cat-my">증권사 리포트</span>
     </nav>
+    <nav class="in-stocks-row" aria-label="종목(좁은 화면)"><b>종목</b><span data-stocks-row></span></nav>
     <article class="kh-card in-report in-doc" id="in-doc">
       <div class="in-rp-head in-doc-head">
         <div>
@@ -143,24 +144,19 @@
       </section>
     </article>
   </main>
-  <aside class="kh-side" aria-label="차례">
+  <!-- 오른쪽 「종목」 목록 — 차례 대신 (2026-10-06 재권님 지시). 목록은 data/stock-report/index.json 한 곳 · 누르면 그 종목 리포트(stock-report.html?code=) -->
+  <aside class="kh-side" aria-label="종목">
     <div class="kh-side-wrap">
       <div class="kh-card kh-rank-card">
-        <div class="kh-tabs"><button class="kh-tab is-active">차례</button></div>
-        <ul class="in-news in-sm in-scroll in-toc">
-          <li><a href="#s1">① 리포트의 공통 틀</a></li>
-          <li><a href="#s2">② 방법 · 지표</a></li>
-          <li><a href="#s3">③ 공식 · 공개 자료</a></li>
-          <li><a href="#s4">④ 홀딩스와 짝 — 받을 수 있나</a></li>
-          <li><a href="#s5">⑤ 종목분석 칸 후보(가이드 여덟)</a></li>
-          <li><a href="#s6">확인한 것 · 못 본 것</a></li>
-        </ul>
+        <div class="kh-tabs"><button class="kh-tab is-active">종목</button><span class="in-asof">시황분석 리포트</span></div>
+        <ul class="in-news in-sm in-scroll in-stocks" data-stocks></ul>
       </div>
     </div>
   </aside>
 </div>
 
 <script src="../assets/js/main.js"></script>
+<script src="js/stock-list.js"></script>
 <script type="module" src="js/analysis.js"></script>
 </body>
 </html>

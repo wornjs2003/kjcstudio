@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>종목 리포트 · Insight</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css" />
+<link rel="stylesheet" href="../assets/css/common.css" />
+<link rel="stylesheet" href="../assets/css/nav.css" />
+<!-- 첫 화면(index.html) · analysis.html 과 같이 홀딩스 CSS 를 같이 쓴다 — 「거는 쪽이 둘 이상인 파일」 -->
+<link rel="stylesheet" href="../holdings/css/frame.css" />
+<link rel="stylesheet" href="../holdings/css/home.css" />
+<link rel="stylesheet" href="css/insight.css" />
+<link rel="stylesheet" href="css/stock-report.css" />
+</head>
+<body data-nav="company-setup" data-site-root="../">
+<div id="site-nav"></div>
+
+<!-- 종목 리포트 — 재권님이 주신 참고 화면(ILOULI 보드 · 2026-10-06)의 틀을 우리 자료로 채운다 (2026-10-06 지시 —
+     「내가 준 링크대로 만들 폼부터 만들어서 채워넣어줘 html 로 만들어서 띄워볼래」 · 「종목 분석이 정확해 질때까지는 우선
+     세션이 손으로 만든다 · 삼성전자 종목을 잘 다듬어서 룰화 시켜서 전파」).
+     숫자는 전부 우리 서버(KIS · 네이버 · DART)에서 js/stock-report.js 가 받아 세고, 글(판정 · 요약 · 시나리오 · 전략 ·
+     촉매 해석 · 한계)은 세션이 data/stock-report/<코드>.json 에 손으로 쓴다 — 값을 지어내지 않는다.
+     절마다 한 줄 요약을 두고 눌러서 펼친다(2026-10-06 재권님 「펼치기 접기도 있어야」) — 참고 화면과 같은 모양 · 폰에서는 접힌 채로 시작하고 핵심 요약만 펼쳐 둔다.
+     가격표 규칙(매수 · 손절 · 목표)은 아직 재권님이 정하지 않아 참고 화면 방식으로 임시 계산하고 빨간 바탕으로 둔다
+     (「아직 안 정해진 자리는 빨간 바탕으로 남긴다」) -->
+<div class="kh-app kh-app-wide">
+  <main class="kh-main">
+    <nav class="kh-cat" aria-label="갈래">
+      <a href="./">홈</a>
+      <a class="is-on" href="analysis.html">종목 분석</a>
+      <a href="#">시황 · 전망</a>
+      <a href="#">영상 분석</a>
+      <a href="#">뉴스 분석</a>
+      <a href="#">산업 분석</a>
+      <a href="#">투자 전략</a>
+      <a href="#">경제 지표</a>
+      <span class="kh-cat-my">증권사 리포트</span>
+    </nav>
+    <nav class="in-stocks-row" aria-label="종목(좁은 화면)"><b>종목</b><span data-stocks-row></span></nav>
+
+    <article class="kh-card in-report in-doc rp" id="rp">
+      <!-- 머리 — 종목 · 현재가 · 판정 -->
+      <header class="rp-head" id="rp-head">
+        <div class="in-rp-meta" id="rp-meta">받는 중…</div>
+        <h1 id="rp-title">—</h1>
+        <div class="rp-verdict" id="rp-verdict"></div>
+        <div class="rp-tags" id="rp-tags"></div>
+        <div class="rp-foldall"><button type="button" class="kh-chip" id="rp-open-all">전부 펼치기</button><button type="button" class="kh-chip" id="rp-close-all">전부 접기</button></div>
+      </header>
+
+      <!-- 가격표 — 매수 · 손절 · 목표 · 손익비 (규칙 미정 · 빨간 바탕) -->
+      <section class="in-rp-sec rp-price" id="rp-pricebox" aria-label="가격표">
+        <!-- 미정: 매수가 · 손절가 · 목표가를 어떤 규칙으로 정할지 재권님이 아직 안 정하셨다. 지금은 참고 화면의 방식
+             (1차 지지 − ATR×0.5 · 1차 저항)으로 임시 계산한다. 정해지면 .rp-undecided 를 떼고 JS 의 priceRule 을 바꾼다 -->
+        <div class="rp-undecided-note"><span class="in-pill no">미정</span> 가격표 규칙은 재권님 결정 전 — 참고 화면 방식(1차 지지 − ATR×0.5 · 1차 저항)으로 임시 계산</div>
+        <div class="rp-kv rp-kv-5" id="rp-pricekv"></div>
+        <p class="in-rp-note" id="rp-pricenote"></p>
+      </section>
+
+      <!-- 핵심 지표 한 줄 -->
+      <section class="in-rp-sec" aria-label="핵심 지표">
+        <div class="rp-kv rp-kv-5" id="rp-keykv"></div>
+        <p class="in-doc-p rp-flowline" id="rp-flowline"></p>
+      </section>
+
+      <!-- 핵심 요약 · 종합 판정 (세션 글) -->
+      <details class="in-rp-sec rp-fold" id="rp-summary" open>
+        <summary><h2>핵심 요약 <span class="in-src">세션 글</span></h2><span class="rp-sum" id="rp-summary-sum"></span></summary>
+        <div class="rp-fold-body">
+        <div id="rp-summary-body"></div>
+        </div>
+      </details>
+
+      <!-- 기본 지표 -->
+      <details class="in-rp-sec rp-fold" id="rp-fund">
+        <summary><h2>기본 지표 <span class="in-src">네이버</span><span class="in-src">KIS</span></h2><span class="rp-sum" id="rp-fund-sum"></span></summary>
+        <div class="rp-fold-body">
+        <div id="rp-fund-body"></div>
+        </div>
+      </details>
+
+      <!-- 가격·추세 차트 -->
+      <details class="in-rp-sec rp-fold" id="rp-chart">
+        <summary><h2>가격 · 추세 차트 <span class="in-src">KIS</span><span class="in-src">계산</span></h2><span class="rp-sum" id="rp-chart-sum"></span></summary>
+        <div class="rp-fold-body">
+        <canvas id="rp-canvas" width="1200" height="320"></canvas>
+        <p class="in-rp-note" id="rp-chart-note"></p>
+        </div>
+      </details>
+
+      <!-- 기술적 지표 -->
+      <details class="in-rp-sec rp-fold" id="rp-tech">
+        <summary><h2>기술적 지표 <span class="in-src">계산</span></h2><span class="rp-sum" id="rp-tech-sum"></span></summary>
+        <div class="rp-fold-body">
+        <div id="rp-tech-body"></div>
+        </div>
+      </details>
+
+      <!-- 수급 -->
+      <details class="in-rp-sec rp-fold" id="rp-flow">
+        <summary><h2>수급 · 투자자 동향 <span class="in-src">KIS</span><span class="in-src">네이버</span></h2><span class="rp-sum" id="rp-flow-sum"></span></summary>
+        <div class="rp-fold-body">
+        <div id="rp-flow-body"></div>
+        </div>
+      </details>
+
+      <!-- 촉매 -->
+      <details class="in-rp-sec rp-fold" id="rp-cat">
+        <summary><h2>촉매 — 공시 · 뉴스 <span class="in-src">DART</span><span class="in-src">네이버</span><span class="in-src">세션 글</span></h2><span class="rp-sum" id="rp-cat-sum"></span></summary>
+        <div class="rp-fold-body">
+        <div id="rp-cat-body"></div>
+        </div>
+      </details>
+
+      <!-- 지지 · 저항 -->
+      <details class="in-rp-sec rp-fold" id="rp-sr">
+        <summary><h2>지지 · 저항 영역 <span class="in-src">계산</span></h2><span class="rp-sum" id="rp-sr-sum"></span></summary>
+        <div class="rp-fold-body">
+        <div id="rp-sr-body"></div>
+        </div>
+      </details>
+
+      <!-- 시나리오 · 전략 (세션 글) -->
+      <details class="in-rp-sec rp-fold" id="rp-scn">
+        <summary><h2>시나리오 <span class="in-src">세션 글</span></h2><span class="rp-sum" id="rp-scn-sum"></span></summary>
+        <div class="rp-fold-body">
+        <div id="rp-scn-body"></div>
+        </div>
+      </details>
+      <details class="in-rp-sec rp-fold" id="rp-plan">
+        <summary><h2>전략 · 대응 <span class="in-src">세션 글</span><span class="in-src">계산</span></h2><span class="rp-sum" id="rp-plan-sum"></span></summary>
+        <div class="rp-fold-body">
+        <div id="rp-plan-body"></div>
+        </div>
+      </details>
+
+      <!-- SUMMARY 10줄 -->
+      <details class="in-rp-sec rp-fold" id="rp-ten">
+        <summary><h2>SUMMARY 10줄 요약 <span class="in-src">세션 글</span></h2><span class="rp-sum" id="rp-ten-sum"></span></summary>
+        <div class="rp-fold-body">
+        <div id="rp-ten-body"></div>
+        </div>
+      </details>
+
+      <!-- 한계 -->
+      <details class="in-rp-sec rp-fold" id="rp-limit">
+        <summary><h2>이 분석의 한계 <span class="in-src">세션 글</span><span class="in-src">계산</span></h2><span class="rp-sum" id="rp-limit-sum"></span></summary>
+        <div class="rp-fold-body">
+        <div id="rp-limit-body"></div>
+        </div>
+      </details>
+
+      <p class="in-rp-note" id="rp-foot"></p>
+    </article>
+  </main>
+  <!-- 오른쪽 「종목」 목록 — 차례 대신 (2026-10-06 재권님 지시). 목록은 data/stock-report/index.json 한 곳 · 누르면 그 종목 리포트(stock-report.html?code=) -->
+  <aside class="kh-side" aria-label="종목">
+    <div class="kh-side-wrap">
+      <div class="kh-card kh-rank-card">
+        <div class="kh-tabs"><button class="kh-tab is-active">종목</button><span class="in-asof">시황분석 리포트</span></div>
+        <ul class="in-news in-sm in-scroll in-stocks" data-stocks></ul>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script src="../assets/js/main.js"></script>
+<script src="js/stock-list.js"></script>
+<script type="module" src="js/stock-report.js"></script>
+</body>
+</html>
