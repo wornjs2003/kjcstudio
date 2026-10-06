@@ -29,10 +29,10 @@
     <!-- 갈래 탭 — 홀딩스 「홈 · 국내 · 미국 …」 자리. 아직 어디로도 가지 않는다 -->
     <nav class="kh-cat" aria-label="갈래">
       <a class="is-on" href="#">홈</a>
+      <a href="analysis.html">종목 분석</a>
       <a href="#">시황 · 전망</a>
       <a href="#">영상 분석</a>
       <a href="#">뉴스 분석</a>
-      <a href="analysis.html">종목 분석</a>
       <a href="#">산업 분석</a>
       <a href="#">투자 전략</a>
       <a href="#">경제 지표</a>
@@ -52,7 +52,7 @@
         <div class="kh-idx-chart in-scroll"><ul class="in-news" data-feed="flash"></ul></div>
       </div>
       <aside class="kh-card kh-idxp" aria-label="분석 요약">
-        <div class="kh-idxp-s"><div class="kh-idxp-h">해외 뉴스</div><ul class="in-news in-sm" data-feed="world" data-n="5"></ul></div>
+        <div class="kh-idxp-s"><div class="kh-idxp-h">해외 뉴스<span class="in-asof" data-asof="네이버 뉴스"></span></div><ul class="in-news in-sm" data-feed="world" data-n="5"></ul></div>
         <div class="kh-idxp-s"><div class="kh-idxp-h">핵심 숫자</div></div>
         <div class="kh-idxp-s kh-idxp-dc"><div class="kh-idxp-h">관련 뉴스</div></div>
       </aside>
@@ -65,11 +65,11 @@
              공시는 fetch-naver-news.py 가 그대로 받는다 — 화면에서만 뺐다 -->
         <!-- 2026-10-03 지시 — 칸 이름 「돈의 흐름」. 머리를 누르면 AI 생태계의 세계 지도(지구본)가 모달로 뜬다.
              href 는 그대로 두어 새 탭 · 직접 주소도 된다(모달 룰) -->
-        <div class="kh-tabs"><a class="kh-tab is-active" href="flowmap.html?map=ai&view=geo" data-modal="page">돈의 흐름</a></div>
+        <div class="kh-tabs"><a class="kh-tab is-active" href="flowmap.html?map=ai&view=geo" data-modal="page">돈의 흐름</a><span class="in-asof" data-asof-map></span></div>
         <ul class="in-news in-sm in-scroll" data-analysis></ul>
       </div>
       <div class="kh-card kh-dlm-card">
-        <div class="kh-tabs"><button class="kh-tab is-active">영상 분석</button></div>
+        <div class="kh-tabs"><button class="kh-tab is-active">영상 분석</button><span class="in-asof">유튜브 · 시황분석 고름</span></div>
         <ul class="in-news in-scroll" data-videos></ul>
       </div>
     </section>
@@ -79,7 +79,7 @@
   <aside class="kh-side" aria-label="많이 본 뉴스">
     <div class="kh-side-wrap">
       <div class="kh-card kh-rank-card">
-        <div class="kh-tabs"><button class="kh-tab is-active">많이 본 뉴스</button></div>
+        <div class="kh-tabs"><button class="kh-tab is-active">많이 본 뉴스</button><span class="in-asof" data-asof="네이버 뉴스"></span></div>
         <ul class="in-news in-rank in-scroll" data-feed="rank"></ul>
       </div>
     </div>

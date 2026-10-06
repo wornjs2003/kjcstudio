@@ -13,8 +13,9 @@
     lists.forEach(ul => { ul.innerHTML = '<li class="in-empty">불러오지 못함</li>'; });
     return;
   }
+  // 출처 표시 (2026-10-06 지시) — 머리줄마다 「<출처> · <받은 시각> 받음」. 출처 이름은 data-asof 값, 비면 「네이버 증권」
   document.querySelectorAll('[data-asof]').forEach(el => {
-    el.textContent = `네이버 증권 · ${d.fetchedAt} 받음`;
+    el.textContent = `${el.dataset.asof || '네이버 증권'} · ${d.fetchedAt} 받음`;
   });
   lists.forEach(ul => {
     const items = (d[ul.dataset.feed] || []).slice(0, Number(ul.dataset.n) || 99);
@@ -43,6 +44,20 @@
       : '<li class="in-empty">—</li>';
   } catch (e) {
     ul.innerHTML = '<li class="in-empty">불러오지 못함</li>';
+  }
+})();
+
+// 돈의 흐름 출처 — 지도 자료(data/maps/ai.json)의 asOf 를 머리줄에 「시황분석 자료 · <날짜>」 로 (2026-10-06 지시).
+// 못 읽으면 「—」 — 0 이나 빈칸으로 두지 않는다
+(async () => {
+  const el = document.querySelector('[data-asof-map]');
+  if (!el) return;
+  try {
+    const r = await fetch('data/maps/ai.json', { cache: 'no-store' });
+    const asOf = (await r.json()).asOf;
+    el.textContent = asOf ? `시황분석 자료 · ${asOf}` : '시황분석 자료 · —';
+  } catch (e) {
+    el.textContent = '시황분석 자료 · —';
   }
 })();
 
