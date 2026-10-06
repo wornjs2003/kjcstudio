@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>종목 분석 · Insight</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css" />
+<link rel="stylesheet" href="../assets/css/common.css" />
+<link rel="stylesheet" href="../assets/css/nav.css" />
+<!-- 첫 화면(index.html) · report.html 과 같이 홀딩스 CSS 를 같이 쓴다 — 「거는 쪽이 둘 이상인 파일」 -->
+<link rel="stylesheet" href="../holdings/css/frame.css" />
+<link rel="stylesheet" href="../holdings/css/home.css" />
+<link rel="stylesheet" href="css/insight.css" />
+</head>
+<body data-nav="company-setup" data-site-root="../">
+<div id="site-nav"></div>
+
+<!-- 종목 분석 — 애널리스트가 종목을 분석할 때 쓰는 방법 · 문서와 홀딩스 종목분석의 기준 (2026-10-06 재권님 지시 —
+     「시장지표 옆에 종목분석이라고 만들어서 거기에 UI 룰에 맞게 넣어봐줘」). 본문은 시황분석 조사(2026-10-06 15:4x)이고
+     값(있음 · 아직 · 없음)은 그날 실측이다 — 출처는 각 절 끝 · 확인한 것과 못 본 것은 맨 아래 -->
+<div class="kh-app kh-app-wide">
+  <main class="kh-main">
+    <nav class="kh-cat" aria-label="갈래">
+      <a href="./">홈</a>
+      <a class="is-on" href="#">종목 분석</a>
+      <span class="kh-cat-my">증권사 리포트</span>
+    </nav>
+    <article class="kh-card in-report in-doc" id="in-doc">
+      <div class="in-rp-head in-doc-head">
+        <div>
+          <div class="in-rp-meta">시황분석 조사 · 2026-10-06 · 만든 것 없음 · 「확인한 것」 은 원문을 직접 연 것</div>
+          <h1>애널리스트가 종목을 분석할 때 쓰는 방법 · 문서</h1>
+          <p>홀딩스 종목분석 칸의 기준을 잡기 위해 실물 리포트 · 교재 · 거래소 지표 · 공시 서식을 읽고, 홀딩스에 지금 있는 자료와 짝 지었다. 결론은 아래 ⑤ — 창구 가이드 여덟은 실물 리포트의 틀과 거의 1:1 이고 바꾸자는 것은 셋이다.</p>
+        </div>
+      </div>
+
+      <section class="in-rp-sec in-calc" id="calc">
+        <h2>받을 수 있는 값 — 지금 계산 <label class="in-calc-pick">종목 <select id="calc-code"></select></label></h2>
+        <p class="in-doc-p">아래 ①~⑤가 적은 값 중 우리 서버(한국투자증권) · 회사 카드(네이버 증권 · DART)로 지금 받을 수 있는 것만 계산한다. 못 받는 것은 「아직」 으로 둔다 · 값을 지어내지 않는다.</p>
+        <div id="calc-body"></div>
+      </section>
+
+      <section class="in-rp-sec" id="s1">
+        <h2>① 증권사 리포트의 공통 틀 — 실물 한 장으로 확인</h2>
+        <p class="in-doc-p">실제 리포트(이베스트투자증권 Mid-Small cap · 2023-04-25 · 노바텍 기업분석 쪽 · 공개 PDF)를 열어 본 구성이다. 대형사 리포트도 같은 뼈대이고 첫 장에 전부 압축된다. 뒷장은 근거 표다.</p>
+        <table class="in-tbl">
+          <tr><th>자리</th><th>무엇이 있나 (실물 그대로)</th></tr>
+          <tr><td>머리</td><td>종목명(코드) · 한 줄 제목 · 날짜 · 애널리스트 이름</td></tr>
+          <tr><td><b>의견 상자</b></td><td><b>투자의견</b>(매수 · 보유 · 매도 · Not Rated) · <b>목표주가</b> · 현재주가 · <b>상승여력</b> · <b>컨센서스 대비</b>(상회 · 부합 · 하회)</td></tr>
+          <tr><td>기업개요</td><td>무슨 사업 · 매출 비중 · 국내 동종기업 셋(이름 · 매출 · 영업이익)</td></tr>
+          <tr><td>체크포인트</td><td>첫째 · 둘째 · 셋째 · 넷째 — 앞으로 실적을 움직일 요인</td></tr>
+          <tr><td><b>Stock Data</b></td><td>시가총액 · 발행주식수 · 52주 최고/최저 · 90일 평균거래대금 · 외국인 지분율 · 배당수익률 · BPS · 지수 대비 상대수익률(1 · 6 · 12개월) · 주주구성</td></tr>
+          <tr><td><b>Financial Data 5년</b></td><td>매출액 · 영업이익 · 세전이익 · 순이익 · EPS · EPS 증감률 · EBITDA · PER · EV/EBITDA · PBR · ROE</td></tr>
+          <tr><td>주가 차트</td><td>2년 주가 + 지수 상대 선 한 장</td></tr>
+          <tr><td>뒷장 표</td><td>연간 실적 추이(제품별 매출 · 비중 · 영업이익률) · 분기 실적 8개 · 밸류에이션 산정표(목표주가 = 추정 EPS × 목표 PER) · 리스크</td></tr>
+        </table>
+        <p class="in-rp-note">출처 — 이베스트 공개 PDF(file.alphasquare.co.kr · 확인함 · 54쪽 중 40~42쪽) · 토스피드 「증권사 리포트 읽는 법」(확인함) · 금융투자교육원 안내(요약만) · 네이버 리서치의 최근 SK하이닉스 리포트 5건(제목만 · 본문 못 염)</p>
+      </section>
+
+      <section class="in-rp-sec" id="s2">
+        <h2>② 흔히 쓰는 방법 · 지표 — 교재와 규정이 정한 것</h2>
+        <table class="in-tbl">
+          <tr><th>갈래</th><th>방법 · 지표</th><th>어디가 정했나</th></tr>
+          <tr><td>절대가치</td><td>배당할인(DDM) · 잉여현금흐름(FCFF · FCFE) · 잔여이익(RI) — 할인율(COE · WACC) · 영구성장률이 입력</td><td>CFA Level II 주식가치평가 모듈 23 · 24 · 26</td></tr>
+          <tr><td><b>상대가치</b></td><td><b>PER · PBR · PSR · EV/EBITDA</b> · 동종 비교 · 과거 밴드 · 국내 기본형 「목표주가 = 추정 EPS × 목표 PER」</td><td>CFA 모듈 25 · 국내 리포트 관행</td></tr>
+          <tr><td>산업 · 경쟁</td><td>산업 구조 · 경쟁 위치 · 가치사슬(「돈의 흐름」 지도가 이 자리)</td><td>CFA 모듈 22</td></tr>
+          <tr><td>재무 3표</td><td>손익 · 재무상태 · 현금흐름 → 영업이익률 · 순이익률 · ROE · ROIC · 부채비율 · FCF</td><td>DART 사업보고서 III. 재무 · KIS 재무 5종</td></tr>
+          <tr><td><b>밸류업 공식 지표</b></td><td>시장평가 PBR · PER / 자본효율성 ROE · ROIC · 자본비용 COE · WACC / 주주환원 배당성향 · 배당수익률 · 자사주 · TSR / 성장성 매출 · 영업이익 · 자산 증가율 / FCF · 부채비율</td><td>KRX 「기업가치 제고 계획 가이드라인 해설서」 2-1(확인함)</td></tr>
+          <tr><td>수급</td><td>외국인 · 기관 · 개인 순매수(일 · 5일 · 20일) · 외국인 지분율 · 공매도 잔고 · 대차</td><td>리포트 Stock Data · 네이버 종목 페이지 관행</td></tr>
+          <tr><td>기술적</td><td>이동평균 · 거래량 — 리서치 보고서에는 차트 한 장뿐</td><td>실물 리포트</td></tr>
+        </table>
+        <p class="in-rp-note">출처 — AnalystPrep CFA L2 Equity 모듈 목록(확인함 · CFA 원문 목차는 못 봄) · KRX 해설서 PDF(kind.krx.co.kr · 확인함 · 37쪽)</p>
+      </section>
+
+      <section class="in-rp-sec" id="s3">
+        <h2>③ 공식 · 공개 자료 — 무엇을 믿고 쓸 수 있나</h2>
+        <table class="in-tbl">
+          <tr><th>자료</th><th>무엇을 주나</th><th>확인</th></tr>
+          <tr><td><b>금감원 DART 정기보고서</b></td><td>표준 목차 — I. 회사의 개요 / <b>II. 사업의 내용</b>(사업의 개요 · 주요 제품 · 원재료 · 매출 및 수주 · 위험관리 · 연구개발) / III. 재무 / IV. 경영진단 / V. 감사의견 — 회사가 직접 쓴 사업 설명과 매출 비중</td><td><span class="in-pill ok">확인함</span> 사업보고서 원문 목차 · Insight 회사 카드가 이미 씀</td></tr>
+          <tr><td><b>금융투자협회 영업 · 업무 규정</b> 2-25~2-31조</td><td>조사분석자료의 정의 · 공표 기준 — 투자의견 · 목표가격과 산정 근거 · 유효기간 · 의견 분류 비율 · 이해관계 고지</td><td><span class="in-pill half">요약만</span> 규정 이름 · 조문 계열은 협회 법규시스템에서 확인 · 세부 문구는 원문 대조 못 함</td></tr>
+          <tr><td><b>증권사 리포트 · 컨센서스</b></td><td>투자의견 · 목표주가 · 추정 실적 · 밸류에이션 · 리스크 — 2차 자료. 네이버가 FnGuide 집계로 목표가 평균 · 투자의견 평균 · 추정 EPS/영업이익을 냄</td><td><span class="in-pill ok">받아짐</span> 네이버 API(Insight 회사 카드) · 이용 조건은 못 봄</td></tr>
+          <tr><td>한국IR협의회 기업 · 기술분석보고서</td><td>코스닥 중소형주 무료 보고서 — 기업개요 · 기술 · 시장 · R&D · 핵심포인트 · 밸류에이션</td><td><span class="in-pill half">요약만</span> 원문 못 염</td></tr>
+          <tr><td>KRX 밸류업 해설서</td><td>거래소가 정한 기업가치 지표 묶음(②)</td><td><span class="in-pill ok">확인함</span></td></tr>
+          <tr><td>CFA 교재</td><td>가치평가 방법의 교과서</td><td><span class="in-pill half">요약 노트</span> 원문은 유료</td></tr>
+          <tr><td><b>자본시장연구원 2026 「애널리스트 투자의견과 목표주가의 투자가치」</b></td><td>2013년 이후 매수 의견 비중 38% → 69% · 목표주가 · 투자의견의 초과수익 신호 소멸 — 컨센서스는 「정답」 이 아니라 「시장의 눈」 으로만 쓰라는 근거</td><td><span class="in-pill ok">확인함</span> 요약 페이지</td></tr>
+          <tr><td>회사 홈페이지 IR</td><td>IR 자료 · 실적 발표</td><td><span class="in-pill no">못 받음</span> 회사마다 모양이 달라 자동으로 못 받음 — 사업보고서가 그 표준</td></tr>
+        </table>
+      </section>
+
+      <section class="in-rp-sec" id="s4">
+        <h2>④ 홀딩스에 이미 있는 것과 짝 — 지금 받을 수 있나</h2>
+        <table class="in-tbl">
+          <tr><th>리포트 항목</th><th>지금 홀딩스에서</th><th>있나</th><th>없으면 — 영영인가 아직인가</th></tr>
+          <tr><td>현재가 · 시총 · PER · PBR · 52주 · EPS · BPS</td><td>KIS 시세 · 네이버 통합(지표 18개)</td><td><span class="in-pill ok">있음</span></td><td></td></tr>
+          <tr><td>외국인 지분율 · 투자자별 순매수</td><td>KIS 투자자 · 네이버 통합의 일별 흐름</td><td><span class="in-pill ok">있음</span></td><td></td></tr>
+          <tr><td>매출 · 영업이익 · 순이익 분기 · 영업이익률 · 부채비율 · ROE · 성장률</td><td>KIS 재무 5종(재무 카드)</td><td><span class="in-pill ok">있음</span></td><td></td></tr>
+          <tr><td>EBITDA · EV/EBITDA · FCF · ROIC</td><td>없음 — KIS 재무 API 에 현금흐름표가 없다</td><td><span class="in-pill no">없음</span></td><td><span class="in-pill soon">아직</span> DART 재무제표 API(현금흐름 · 감가상각)로 계산하면 된다</td></tr>
+          <tr><td>사업 개요 · 제품별 매출 비중 · 동종기업</td><td>DART 「사업의 개요」(회사 카드) · 네이버 동종 비교</td><td><span class="in-pill half">절반</span></td><td><span class="in-pill soon">아직</span> 매출 비중 표 파싱 · 동종 비교 칸</td></tr>
+          <tr><td>투자의견 · 목표주가 · 상승여력 · 추정 실적(E)</td><td>네이버 컨센서스 — Insight 회사 카드에만</td><td><span class="in-pill half">Insight 만</span></td><td><span class="in-pill soon">아직</span> 같은 자료를 홀딩스 모달에 걸면 된다 · 공식 길로 KIS 종목투자의견 API 도 있음(안 불러 봄)</td></tr>
+          <tr><td>리포트 본문 · 밸류에이션 산정표</td><td>제목 · 증권사 · 날짜 · 링크까지</td><td><span class="in-pill half">목록만</span></td><td><span class="in-pill soon">아직</span> PDF 첫 장 요약은 가능하나 이용 조건 확인 필요</td></tr>
+          <tr><td>공매도 잔고 · 대차</td><td>없음</td><td><span class="in-pill no">없음</span></td><td><span class="in-pill soon">아직</span> KIS 공매도 API 유무를 못 봄</td></tr>
+          <tr><td>최근 공시 · 뉴스 · 일정</td><td>DART · 네이버 종목 뉴스 · 일정 파일</td><td><span class="in-pill ok">있음</span></td><td></td></tr>
+          <tr><td>주가 차트 · 지수 대비 상대수익률</td><td>KIS 일봉 · 5분봉 · 지수</td><td><span class="in-pill half">차트 있음</span></td><td><span class="in-pill soon">아직</span> 상대수익률(1 · 6 · 12개월)은 계산만 하면 된다</td></tr>
+          <tr><td>DCF · 적정가 범위</td><td>없음</td><td><span class="in-pill no">없음</span></td><td><span class="in-pill soon">아직</span> 입력(COE · 성장률)을 누가 정하나가 먼저</td></tr>
+          <tr><td>해외 종목 컨센서스</td><td>EDGAR 에는 없음</td><td><span class="in-pill no">없음</span></td><td>미정 — 출처를 못 정함</td></tr>
+        </table>
+      </section>
+
+      <section class="in-rp-sec" id="s5">
+        <h2>⑤ 홀딩스 「종목분석 모달」 칸 후보 — 창구 가이드 여덟에 맞춰</h2>
+        <p class="in-doc-p">창구 가이드 여덟(한눈에 · 실적 · 재무 건강 · 수급 · 시장의 눈 · 사업 · 흐름 · 우리 판단)은 실물 리포트의 틀과 거의 1:1 이다. 리포트와 대보아 바꿀 것은 셋이다.</p>
+        <table class="in-tbl">
+          <tr><th>가이드</th><th>리포트의 이 자리</th><th>후보 칸(값 · 출처)</th><th>지금</th><th>제안</th></tr>
+          <tr><td>① 한눈에</td><td>Stock Data</td><td>현재가 · 등락 · 시총 · PER · PBR · 배당수익률 · 52주 위치 · 외국인 지분율 · <b>+ 지수 대비 상대수익률 1 · 6 · 12개월</b></td><td><span class="in-pill ok">있음</span></td><td>상대수익률 한 줄 추가 — 계산만 하면 됨</td></tr>
+          <tr><td>② 실적</td><td>Financial Data · 분기 추이</td><td>5분기 매출 · 영업이익 · 순이익 + YoY · 연간 3~5년 · <b>+ (E) 열 = 증권사 추정</b></td><td><span class="in-pill ok">5분기 있음</span></td><td>리포트는 「과거 5년 + 추정 2년」 을 한 표에 — (E) 열이 핵심</td></tr>
+          <tr><td>③ 재무 건강</td><td>비율 열</td><td>부채비율 · 유보율 · ROE · 영업이익률 · + ROIC · FCF(아직) · 업종 평균</td><td><span class="in-pill ok">받으면 됨</span></td><td>밸류업 기준이 ROE · ROIC · COE 라 ROIC 자리는 비워 두고 나중에</td></tr>
+          <tr><td>④ 수급</td><td>Stock Data(외국인 지분율)</td><td>외 · 기 · 개 5일 · 20일 · 외국인 보유율 추이 · 공매도(미확인)</td><td><span class="in-pill half">절반</span></td><td>리포트는 수급을 작게 다룬다 — 1단계는 5일로 충분</td></tr>
+          <tr><td>⑤ 시장의 눈</td><td><b>의견 상자</b></td><td>목표가 평균 · 상승여력 · 투자의견 평균(1~5) · 추정 영업이익 · 리포트 제목 5건 · 집계일</td><td><span class="in-pill half">Insight 만</span></td><td>「정답」 이 아니라 「시장의 눈」 — 이름 그대로 두고 집계일을 붙인다</td></tr>
+          <tr><td>⑥ 사업</td><td>기업개요 · 체크포인트</td><td>「사업의 개요」 발췌 · 제품별 매출 비중(아직) · 동종기업 셋</td><td><span class="in-pill half">발췌만</span></td><td>체크포인트(투자포인트)는 사람 글 자리</td></tr>
+          <tr><td>⑦ 흐름</td><td>본문 끝 · 공시</td><td>최근 공시 5 · 뉴스 5 · 다음 일정</td><td><span class="in-pill ok">있음</span></td><td></td></tr>
+          <tr><td>⑧ 우리 판단</td><td>밸류에이션 산정표</td><td><b>적정가 범위 = 추정 EPS(E) × 과거 5년 PER 밴드</b> · 컨센서스 대비 위치 · 「싸다 / 적정 / 비싸다」</td><td><span class="in-pill no">기준 미정</span></td><td>리포트 기본형을 그대로 쓰면 입력이 전부 받을 수 있는 값 — 밴드의 어디(중간 등)를 쓸지만 정하면 1단계에 들어간다</td></tr>
+        </table>
+        <p class="in-doc-p"><b>바꾸자는 것 셋</b> — ① 한눈에에 상대수익률 · ② 실적에 추정(E) 열 · ⑧ 우리 판단을 「추정 EPS × 과거 PER 밴드」 규칙으로 1단계에. 여덟 묶음 자체는 그대로.</p>
+      </section>
+
+      <section class="in-rp-sec" id="s6">
+        <h2>확인한 것 · 못 본 것</h2>
+        <ul>
+          <li><b>확인함</b> — 실물 리포트 PDF 한 건(이베스트 2023) · KRX 해설서 PDF · DART 사업보고서 원문 목차 · 네이버 컨센서스 · KIS 재무 API 응답 · 자본시장연구원 요약 · 토스피드 글 · CFA 모듈 목록(요약 노트)</li>
+          <li><b>못 봄</b> — 협회 규정 조문 원문 · 대형 증권사 최신 리포트 PDF 본문 · 한국IR협의회 보고서 원문 · CFA 공식 목차 · KIS 공매도 · 종목투자의견 API 실응답 · 네이버 자료 이용 조건</li>
+        </ul>
+        <p class="in-rp-note">출처 주소 — 이베스트 PDF file.alphasquare.co.kr/media/pdfs/company-report/ · 토스피드 toss.im/tossfeed/article/desperate-shareholders-07 · 금융투자교육원 kcie.or.kr · AnalystPrep analystprep.com/study-notes/cfa-level-2/ · KRX 해설서 kind.krx.co.kr/external/dst/valueupNotice/11058/ · 협회 법규시스템 law.kofia.or.kr · 자본시장연구원 kcmi.re.kr/publications/ · 한국IR협의회 보도 dailian.co.kr</p>
+      </section>
+    </article>
+  </main>
+  <aside class="kh-side" aria-label="차례">
+    <div class="kh-side-wrap">
+      <div class="kh-card kh-rank-card">
+        <div class="kh-tabs"><button class="kh-tab is-active">차례</button></div>
+        <ul class="in-news in-sm in-scroll in-toc">
+          <li><a href="#s1">① 리포트의 공통 틀</a></li>
+          <li><a href="#s2">② 방법 · 지표</a></li>
+          <li><a href="#s3">③ 공식 · 공개 자료</a></li>
+          <li><a href="#s4">④ 홀딩스와 짝 — 받을 수 있나</a></li>
+          <li><a href="#s5">⑤ 종목분석 칸 후보(가이드 여덟)</a></li>
+          <li><a href="#s6">확인한 것 · 못 본 것</a></li>
+        </ul>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script src="../assets/js/main.js"></script>
+<script type="module" src="js/analysis.js"></script>
+</body>
+</html>

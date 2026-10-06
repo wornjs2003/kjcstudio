@@ -49,3 +49,34 @@
 .in-rp-sec li { font-size: 0.88rem; line-height: 1.75; color: var(--kh-text-secondary); }
 .in-rp-note { font-size: 0.75rem; color: var(--kh-text-muted); margin: 14px 0 0; }
 @media (max-width: 900px) { .in-rp-head { grid-template-columns: minmax(0, 1fr); } }
+
+/* 종목 분석 문서(analysis.html) — 표와 상태 알약. 색은 변수 · 흰 카드에 선 없음(표 구분선만 --kh-border)
+   (2026-10-06 지시 — 「시장지표 옆에 종목분석 · UI 룰에 맞게」) */
+.in-doc .in-doc-head { grid-template-columns: minmax(0, 1fr); }
+.in-doc-p { font-size: 0.9rem; line-height: 1.7; color: var(--kh-text-secondary); margin: 0 0 10px; }
+.in-tbl { width: 100%; border-collapse: collapse; font-size: 0.84rem; line-height: 1.55; }
+.in-tbl th, .in-tbl td { padding: 7px 8px; border-bottom: 1px solid var(--kh-border); text-align: left; vertical-align: top; }
+.in-tbl th { font-weight: 500; font-size: 0.76rem; color: var(--kh-text-muted); white-space: nowrap; }
+.in-tbl td:first-child { white-space: nowrap; color: var(--kh-text-primary); }
+/* 상태 알약 — 「색 바탕 위의 글씨」 룰: 연한 바탕(12%)에 같은 색의 진한 글씨 */
+.in-pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 0.72rem; font-weight: 700; white-space: nowrap; margin-right: 4px; }
+.in-pill.ok   { background: rgb(var(--kh-ok-rgb) / .12);   color: rgb(var(--kh-ok-rgb)); }
+.in-pill.half { background: rgb(var(--kh-warn-rgb) / .12); color: rgb(var(--kh-warn-rgb)); }
+.in-pill.no   { background: var(--kh-danger-faint);         color: var(--kh-danger); }
+.in-pill.soon { background: var(--kh-accent-dim);           color: var(--kh-accent); }
+.in-toc li { padding: 8px 0; }
+.in-toc a { color: var(--kh-text-secondary); text-decoration: none; font-size: 0.88rem; }
+.in-toc a:hover { color: var(--kh-text-primary); }
+/* 「받을 수 있는 값 — 지금 계산」 카드(analysis.js) */
+.in-calc h2 { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.in-calc-pick { font-size: 0.82rem; font-weight: 500; color: var(--kh-text-secondary); margin-left: auto; }
+.in-calc-pick select { font: inherit; padding: 3px 8px; border: 1px solid var(--kh-border); border-radius: var(--kh-radius-sm); background: var(--kh-bg-card); color: var(--kh-text-primary); }
+.in-calc h3 { font-size: 0.9rem; margin: 16px 0 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.in-calc h3 .src { font-weight: 400; font-size: 0.72rem; color: var(--kh-text-muted); margin-left: auto; }
+.in-kv { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0 4px; }
+.in-kv div { background: var(--kh-bg-surface); border-radius: var(--kh-radius-md); padding: 8px 10px; }
+.in-kv b { display: block; font-size: 1.05rem; color: var(--kh-text-primary); }
+.in-kv span { font-size: 0.72rem; color: var(--kh-text-muted); }
+.in-tbl th.est { color: var(--kh-accent); }
+.in-tbl td.neg { color: var(--kh-danger); }
+@media (max-width: 900px) { .in-kv { grid-template-columns: repeat(2, 1fr); } }
