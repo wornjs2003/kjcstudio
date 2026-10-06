@@ -5283,7 +5283,7 @@ class Handler(SimpleHTTPRequestHandler):
     def _handle_board(self):
         """문서 저장 — 보드 셋 · AI 분석 · 데일리분석이 함께 쓴다.
 
-        **배포본 워커(`projects/worker/board-api.js`)를 그대로 흉내 낸다.**
+        **옛 배포본 워커(`board-api.js` · 2026-10-06 에 지움 — `git log -- projects/worker`)를 그대로 흉내 낸다.**
         `CLAUDE.md` 가 그렇게 정해 뒀다 — 맥미니 서버가 나중에 같은 모양으로
         응답하면 화면은 한 줄도 안 고치고 주소만 바꾸면 된다.
 
@@ -5326,7 +5326,7 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             if self.command == "GET":
                 # **`updatedAt` 을 함께 낸다** (2026-09-30). 워커가 이미
-                # 그 모양이고(`board-api.js:270`), 화면은 이것을 들고 있다가
+                # 그 모양이고(옛 워커 `board-api.js`), 화면은 이것을 들고 있다가
                 # PUT 에 돌려보내 **그 사이 남이 썼는지**를 가린다.
                 data = docstore.read_doc(name)
                 self._send_json({"ok": True, "doc": name, "data": data,
