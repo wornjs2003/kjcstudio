@@ -11,6 +11,7 @@
 
 import { WATCHLIST, MARKET_STOCKS } from './data/market.js';
 import { fetchLivePrices } from './data/live.js';
+import { apiFetch } from './data/api.js';
 import { mountWatchSide, mountVBar, startLiveLoop } from './components/frame.js';
 import { mountStockView } from './components/stock-view.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
@@ -18,10 +19,27 @@ import { mountIndicatorMenu } from './components/indicator-menu.js';
 const $ = id => document.getElementById(id);
 
 /* ── 어느 종목인가 ─────────────────────────
-   목록에 없는 코드가 들어오면 첫 관심종목으로 돌아간다. */
+   주소의 코드를 그대로 쓴다. 이름은 우리 목록 → 순위표(/api/dart/universe ·
+   네이버 시총 순위 저장본 · 첫 화면이 쓰는 그것) → 코드 순으로 찾는다.
+   전에는 우리 목록(market.js)에 없으면 첫 관심종목으로 돌아가, 순위표 200 중
+   대부분이 삼성전자로 떴다 (2026-10-06 · qa). 코드가 없거나 6자리가 아닐 때만
+   첫 관심종목이다. */
 const params = new URLSearchParams(location.search);
 const ALL = [...WATCHLIST, ...MARKET_STOCKS];
-const stock = ALL.find(s => s.code === params.get('code')) || WATCHLIST[0];
+const stock = await resolveStock(params.get('code'));
+
+async function resolveStock(code) {
+  if (!/^\d{6}$/.test(code || '')) return WATCHLIST[0];
+  const known = ALL.find(s => s.code === code);
+  if (known) return known;
+  try {
+    const r = await apiFetch('/api/dart/universe', { cache: 'no-store' });
+    const j = r && await r.json();
+    const hit = j && j.ok && Array.isArray(j.data) && j.data.find(x => x.code === code);
+    if (hit) return { code, name: hit.name };
+  } catch { /* 이름을 못 찾아도 그 종목으로 연다 */ }
+  return { code, name: code };
+}
 
 document.title = `${stock.name} — KJC Holdings`;
 
