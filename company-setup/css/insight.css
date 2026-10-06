@@ -44,6 +44,12 @@
 .kh-idx-name a { color: inherit; text-decoration: none; }
 .kh-idx-name a:hover { text-decoration: underline; }
 
+/* 돈의 흐름 칸 — 지도를 바로 (2026-10-06). 칸 높이(550)는 home.css .kh-idx-chart 그대로, 칩 줄 아래를 틀이 채운다.
+   틀 바탕은 지구본의 어두운 바탕과 같은 예외 토큰(지도가 뜨기 전 흰 번쩍임을 막는다) */
+.in-map { display: flex; flex-direction: column; }
+.in-map-chips { padding: 0 0 10px; }
+.in-map-frame { flex: 1; min-height: 0; width: 100%; border: 0; border-radius: var(--kh-radius-md); background: var(--overlay-bg); }
+
 /* ── 영상 분석 보고서 (report.html) ── */
 .in-report { padding: 22px 26px; overflow-y: auto; }
 .in-rp-head { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start;
