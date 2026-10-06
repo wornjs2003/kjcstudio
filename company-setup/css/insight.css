@@ -86,6 +86,12 @@
    못 받는 값은 그 줄의 「아직」 알약이 빨강(.in-pill.no) */
 .in-src { display: inline; padding: 0 6px; border-radius: var(--kh-radius-sm); font-size: 0.68rem; font-weight: 600;
           color: var(--kh-accent); background: var(--kh-accent-dim); white-space: nowrap; }   /* inline — 글줄 높이에 안 얹힌다 */
+/* 오른쪽 「종목」 목록 · 좁은 화면(오른쪽 칸이 숨는 1280px 이하)의 종목 줄 (2026-10-06 재권님 「차례 대신에 종목」) */
+.in-stocks a.is-on { color: var(--kh-text-primary); font-weight: 700; }
+.in-stocks-row { display: none; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 0 2px; font-size: 0.82rem; color: var(--kh-text-secondary); }
+.in-stocks-row b { color: var(--kh-text-primary); }
+.in-stocks-row .kh-chip { text-decoration: none; }
+@media (max-width: 1280px) { .in-stocks-row { display: flex; } }
 .in-toc li { padding: 8px 0; }
 .in-toc a { color: var(--kh-text-secondary); text-decoration: none; font-size: 0.88rem; }
 .in-toc a:hover { color: var(--kh-text-primary); }
