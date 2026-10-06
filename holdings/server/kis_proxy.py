@@ -142,7 +142,8 @@ _DENY_REL = ("holdings/data/docs/",)      # 저장본. README.md 는 .md 라 어
 #
 # **늘릴 일이 생기면 그때 승인을 받는다.**
 _ALLOW_EXT = {".html", ".css", ".js", ".json",
-              ".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico", ".woff2"}
+              ".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico", ".woff2",
+              ".pbf"}   # 2026-10-06 — 지구본 글꼴(company-setup/vendor/basemaps-assets/fonts). 바깥 CDN 대신 우리 서버가 낸다(로딩 개선)
 
 SECRETS_PATH = os.path.join(HOLDINGS_DIR, "secrets.json")
 

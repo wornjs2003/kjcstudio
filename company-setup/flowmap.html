@@ -102,11 +102,11 @@
   .panel .muted { color: var(--text-muted); }
   .err { background: var(--kh-danger-faint); color: var(--kh-danger); border-radius: 10px; padding: 12px 14px; font-size: 13px; }
 </style>
-<!-- 세계 지도 — 지도 그림은 맥미니 /Users/kjc/data/maps 의 PMTiles 를 서버가 /maps/ 로 낸다. 라이브러리는 아직 CDN. maplibre 5.x(6 은 ESM 만) -->
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
-<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
-<script src="https://unpkg.com/pmtiles@4.5.0/dist/pmtiles.js"></script>
-<script src="https://unpkg.com/@protomaps/basemaps@5.7.2/dist/basemaps.js"></script>
+<!-- 세계 지도 — 지도 그림은 맥미니 /Users/kjc/data/maps 의 PMTiles 를 서버가 /maps/ 로 낸다. 라이브러리 · 글꼴 · 스프라이트는 vendor/ (2026-10-06 로딩 개선 · 전에는 unpkg · protomaps CDN). maplibre 5.x(6 은 ESM 만) -->
+<link rel="stylesheet" href="vendor/maplibre-gl.css" />
+<script src="vendor/maplibre-gl.js"></script>
+<script src="vendor/pmtiles.js"></script>
+<script src="vendor/basemaps.js"></script>
 <style>
   .views { display: inline-flex; background: var(--bg-elevated); border-radius: 10px; padding: 3px; margin: 0 0 14px; }
   .views button { font: inherit; font-size: 13px; border: 0; background: none; padding: 6px 16px; border-radius: 8px;
@@ -213,6 +213,7 @@ if (window !== window.top) document.documentElement.classList.add('in-frame');  
 const EMBED = !!new URLSearchParams(location.search).get('embed');   // 칸 안 모드 — 지도만 · 지구본 멈춤 (2026-10-06)
 if (EMBED) document.documentElement.classList.add('embed');
 
+const ASSETS = location.origin + location.pathname.replace(/[^/]*$/, '') + 'vendor/basemaps-assets/';
 const $ = id => document.getElementById(id);
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const map = $('map'), svg = $('links'), panel = $('panel');
@@ -451,8 +452,8 @@ function buildGeo() {
                   paint: { 'line-color': lineColorExpr(), 'line-width': 1.8, 'line-opacity': .55, 'line-dasharray': [3, 3] } });
     geo = new maplibregl.Map({
       container: 'geo', center: D.geoCenter || [160, 32], zoom: 1.6,
-      style: { version: 8, glyphs: 'https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf',
-               sprite: 'https://protomaps.github.io/basemaps-assets/sprites/v4/light', sources, layers },
+      // 글꼴 · 스프라이트는 vendor/ 에서 — maplibre 는 절대 주소를 요구해 이 문서 자리에서 만든다 (2026-10-06 로딩 개선)
+      style: { version: 8, glyphs: ASSETS + 'fonts/{fontstack}/{range}.pbf', sprite: ASSETS + 'sprites/v4/light', sources, layers },
     });
   } catch (e) {
     // GPU 가 없는 기기 — 지구본을 못 그린다. 빈 칸 대신 알리고 흐름도로 간다 (창구 검수 「봐야 할 자리」)
