@@ -90,3 +90,15 @@
     setAsof(current());
   }
 })();
+
+// 뉴스 칸 탭 — 많이 본 뉴스 | 최신 뉴스 | 해외 뉴스 (2026-10-06 지시). 목록만 바뀌고 칸 크기는 그대로(「보는 것을 바꿔도 자리는 그대로다」)
+(() => {
+  const tabs = document.querySelector('[data-news-tabs]');
+  if (!tabs) return;
+  tabs.addEventListener('click', e => {
+    const b = e.target.closest('.kh-tab[data-tab]'); if (!b) return;
+    tabs.querySelectorAll('.kh-tab').forEach(x => x.classList.toggle('is-active', x === b));
+    document.querySelectorAll('[data-pane]').forEach(ul => { ul.hidden = ul.dataset.pane !== b.dataset.tab; });
+    const sc = tabs.parentElement.querySelector('.in-scroll'); if (sc) sc.scrollTop = 0;
+  });
+})();
