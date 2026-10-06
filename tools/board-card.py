@@ -148,13 +148,23 @@ def read():
     return body["data"], body.get("updatedAt")
 
 
+WORK_PROJECT = os.environ.get("KJC_BOARD_PROJECT", "KJC 작업")
+
+
 def tasks(doc):
+    """세션 카드가 사는 프로젝트의 카드 목록.
+
+    **`activeId` 를 보지 않는다** (2026-10-06) — 그것은 화면에서 지금 **보고 있는** 프로젝트이지 세션이 **쓰는** 곳이
+    아니다. 재권님이 「종목분석」 프로젝트를 만들어 화면이 그쪽으로 가자, 도구가 카드 226장을 못 찾아 모든 세션의
+    게이트 · 메모 · 해시 적기가 「0개 걸림」 이 됐다(개발3 이 찾음). 이름(`KJC_BOARD_PROJECT` · 기본 「KJC 작업」)으로
+    고르고, 그 이름이 없으면 카드가 가장 많은 프로젝트로 간다."""
     pj = doc.get("projects") or []
-    active = doc.get("activeId")
     for p in pj:
-        if p.get("id") == active:
+        if (p.get("name") or "").strip() == WORK_PROJECT:
             return p.setdefault("tasks", [])
-    return pj[0].setdefault("tasks", []) if pj else []
+    if not pj:
+        return []
+    return max(pj, key=lambda p: len(p.get("tasks") or [])).setdefault("tasks", [])
 
 
 def write(doc, at):
