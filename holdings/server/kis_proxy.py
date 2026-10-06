@@ -3962,84 +3962,103 @@ def minute_scan_start(now=None):
     return cur                                # 그 밖에는 지금 시각까지만
 
 
-def fetch_minutes_day(cfg, code):
-    """하루치 1분봉을 모은다.
+def fetch_minutes_day(cfg, code, max_past=None):
+    """그날 1분봉을 모은다 → (봉 목록, 받은 범위 목록 [(시작 분, 끝 분)]).
 
     KIS 분봉 API 는 기준 시각부터 과거 30개만 돌려주므로, 시각을 30분씩
     거슬러 내려가며 여러 번 부른다. 통합 시장이라 넥스트레이드 시간대
-    (~20:00)까지 포함한다. 한 번 받아 저장하면 이후에는 최근 구간만 갱신한다.
+    (~20:00)까지 포함한다. 시작 시각은 minute_scan_start() 가 정한다 — 미래를 묻지 않는다.
 
-    시작 시각은 minute_scan_start() 가 정한다. 미래를 묻지 않기 위해서다.
+    ── **「끝난 뒤에 받은 칸」 만 건너뛴다** (2026-10-06 재권님 「응 이거 맞아 해줘」) ──
+
+    재권님이 LG화학 5분봉이 10시 자리에서 **갭 상승처럼** 뚝 올라간 것을 보셨다. 10:05~10:55
+    열한 봉이 저장되지 않아 10:00 봉 다음에 11:00 봉이 붙어 있었다(그날 203종목 중 193종목이
+    같은 시간대에 비었다). 전에는 **「30분 칸에 봉이 하나라도 있으면 다 받은 것」** 으로 보고
+    건너뛰어 반쯤 빈 칸을 영영 못 메웠고, 받던 순간 자라던 봉(덜 찬 봉)도 다시 안 받았다.
+
+    이제는 **그 칸이 끝난 뒤에 받았는지**를 적어 두고(`_minutes_done`) 그것만 건너뛴다.
+    봉 개수를 세지 않으므로 거래가 드문 칸도 한 번 받으면 끝이다(전의 느림이 안 돌아온다).
+
+    **칸 경계를 5분 칸에 맞춘다.** 첫 칸(지금까지 30분)만 지금 시각에서 끝나고, 그 뒤는
+    끝 분이 5로 나눠 4가 남는 자리(…:59 · …:04)다 — 한 5분 칸이 두 묶음에 갈려 한쪽만 받으면
+    덜 찬 봉이 된다(LG화학 11:00 봉 거래량 2,136 · 다시 묶으면 3,701).
+
+    `max_past` — 이미 지난 칸을 이번에 몇 개까지 받나. 미리받기와 화면 열기가 한 번에
+    오래 걸리지 않게 나눠 메운다(최근 칸부터). `None` 이면 다 받는다.
     """
-    bars = {}
-    t = minute_scan_start()
-    start = t                          # 지금 속한 칸 — **자라는 중**이다
-    have = _minutes_have_today(code)
-    while t >= MINUTE_DAY_START:
-        # ── **이미 있는 칸은 건너뛴다** (2026-10-01 지시) ──────────
-        #
-        # 재권님이 「실시간 순위 목록을 클릭할때 차트 로딩되는 속도 체크해봐
-        # 뭔가 넘 느린데」 로 찾으셨다.
-        #
-        # `_minutes_need_day` 의 **2번(마지막 봉이 `MINUTE_REFILL_GAP` 넘게
-        # 오래됐나)이 장 밖에서는 거의 늘 참**이다 — 거래가 뜸한 종목은
-        # 넥스트레이드 시간대에 봉이 안 생기기 때문이다. 그래서 **누를 때마다
-        # 08:00 부터 전부 다시 받았다.**
-        #
-        #     호출 횟수   **18~25번** (시각에 따라 — 16:50 에 18 · 20:00 뒤 25)
-        #     실측        005385 를 눌러 **차트가 그려지기까지 4035ms**
-        #                 (종목 이름은 36ms 에 바뀐다 — 이름만 먼저 바뀐다)
-        #
-        # **2번이 메우려는 것은 「마지막 봉 이후」 뿐이고, 앞쪽 구멍은
-        # 1번(`dayfill`)이 이미 본다** (위 `_minutes_need_day` 주석의
-        # 삼성전자우 09:00~10:15 건). 그래서 **없는 칸만** 받는다.
-        #
-        # **기대 봉 수를 박지 않는다.** 「그 칸에 봉이 하나라도 있나」 만
-        # 본다 — 거래가 없어 1개뿐인 칸도 KIS 가 그만큼만 주므로 맞다
-        # (「검사 도구에 대상 값을 박지 않는다」 와 같은 자리다).
-        #
-        # ⚠️ **자라는 중인 칸은 늘 받는다.** 거기는 봉이 있어도 아직 는다.
-        # ⚠️ **`t` 는 30의 배수가 아니다** — `minute_scan_start()` 가 지금 시각
-        # 그대로여서 18:29 면 1109 로 시작한다. 칸을 30의 배수로 만들어
-        # 맞춰 보면 **영영 안 맞는다**(2026-10-01 에 그렇게 썼다가 「건너뛴
-        # 칸 0」 으로 드러났다). 그 시각부터 **과거 30분**이 한 칸이다.
-        if t != start and have and not have.isdisjoint(range(t - 29, t + 1)):
-            t -= 30
+    bars, cover, newly = {}, [], []
+    start = minute_scan_start()
+    if start < MINUTE_DAY_START:
+        return [], []
+    now_m = _minutes_now_min()
+    done = _minutes_done(code)
+    first_full = -(-(start - 29) // 5) * 5          # 첫 칸 안에서 처음으로 온전한 5분 칸
+    ends = [start]
+    e = first_full - 1
+    while e >= MINUTE_DAY_START:
+        ends.append(e)
+        e -= 30
+    past = 0
+    for t in ends:
+        over = t < now_m                             # 그 칸이 이미 끝났나
+        if over and t in done:
             continue
+        if over and t != start:
+            if max_past is not None and past >= max_past:
+                break
+            past += 1
         hour = "%02d%02d00" % (t // 60, t % 60)
         try:
-            for b in fetch_minutes_from_kis(cfg, code, hour):
-                bars[b["ts"]] = b
+            got = fetch_minutes_from_kis(cfg, code, hour)
         except RuntimeError:
-            pass          # 해당 구간에 데이터가 없을 수 있다. 계속 진행.
-        t -= 30
-    return sorted(bars.values(), key=lambda x: x["ts"])
+            continue          # 해당 구간에 데이터가 없을 수 있다. 계속 진행.
+        for b in got:
+            bars[b["ts"]] = b
+        cover.append((t - 29, t))
+        if over:
+            newly.append(t)
+    if newly:
+        _minutes_mark_done(code, newly)
+    return sorted(bars.values(), key=lambda x: x["ts"]), cover
 
 
-def _minutes_have_today(code):
-    """오늘 DB 에 있는 분봉의 **분 단위 시각** 집합.
+#: 미리받기 · 화면 열기가 한 번에 받을 「이미 지난 칸」 수 — 나머지는 다음에 (최근 칸부터)
+MINUTE_PAST_PER_CALL = 6
 
-    `1m` 과 `5m` 을 함께 본다 — 어느 쪽으로 저장돼 있어도 「그 칸은 받아
-    두었다」 는 뜻이기 때문이다. 읽지 못하면 **빈 집합**을 돌려 전부 받는
-    쪽으로 간다(덜 받아 구멍이 남는 것보다 낫다).
-    """
-    try:
-        with _db_lock, db_conn() as conn:
-            rows = conn.execute(
-                "SELECT ts FROM candles WHERE code = ? AND period IN ('1m', '5m')"
-                " AND ts LIKE ?",
-                (code, _minutes_trade_day() + "%"),     # ④ 주말엔 금요일 칸
-            ).fetchall()
-    except Exception:
+
+def _minutes_now_min():
+    """지금이 그 거래일의 몇 분째인가. 거래일이 지났으면(주말 · 다음 날 새벽) 하루 끝 뒤로 친다."""
+    now = datetime.now(KST)
+    if now.strftime("%Y%m%d") != _minutes_trade_day():
+        return 24 * 60
+    return now.hour * 60 + now.minute
+
+
+def _minutes_done(code):
+    """그 거래일에 **끝난 뒤에 받은** 30분 칸의 끝 분 집합 (`sync_meta` 의 `m5done:<코드>`)."""
+    v = _meta_get("m5done:%s" % code) or ""
+    day, _, rest = v.partition("|")
+    if day != _minutes_trade_day():
         return set()
-    out = set()
-    for r in rows:
-        ts = r["ts"]
-        if len(ts) >= 12:
-            try:
-                out.add(int(ts[8:10]) * 60 + int(ts[10:12]))
-            except ValueError:
-                pass
+    return {int(x) for x in rest.split(",") if x.strip().isdigit()}
+
+
+def _minutes_mark_done(code, ends):
+    done = _minutes_done(code) | set(ends)
+    _meta_set("m5done:%s" % code,
+              _minutes_trade_day() + "|" + ",".join(str(x) for x in sorted(done)))
+
+
+def _keep_covered_slots(bars5, cover, now_m):
+    """받은 범위에 다섯 분이 다 든 5분봉만 남긴다 — 지금 자라는 칸은 둔다.
+
+    한쪽만 받은 5분 칸을 저장하면 **멀쩡하던 봉을 덜 찬 봉으로 덮어쓴다**(`ON CONFLICT … UPDATE`).
+    """
+    out = []
+    for b in bars5:
+        s = int(b["ts"][8:10]) * 60 + int(b["ts"][10:12])
+        if s + 4 >= now_m or all(any(lo <= m <= hi for lo, hi in cover) for m in range(s, s + 5)):
+            out.append(b)
     return out
 
 
@@ -4346,10 +4365,19 @@ def _prefill_one(cfg, want):
     순서를 매번 다시 뽑으므로 방금 보인 종목이 바로 앞에 선다. 그 구간을 이미 받아
     봤으면 건너뛴다(`prefill_due`) — 장이 끝난 뒤와 주말에는 구간이 안 늘어 한 종목도 안 받는다.
     """
-    code = next((c for c in _prefill_codes() if prefill_due(c, want)), None)
+    # **뒤쪽은 가장 오래 안 받은 종목부터** (2026-10-06). 전에는 5분 구간이 바뀔 때마다
+    # 줄을 처음부터 세워, 화면이 열려 있는 동안(종목 사이 20초) 앞쪽 열댓 종목만 받고
+    # 뒤쪽은 굶었다 — 10-06 에 203종목 중 193종목이 같은 시간대에 비었다(10-03 45e5892).
+    # 화면에 보이는 종목(1·2순위)은 그대로 맨 앞이다.
+    hot_set = _prefill_hot_codes()
+    due = [(c, _meta_get("pf5m:%s" % c) or "") for c in _prefill_codes()]
+    due = [(c, last) for c, last in due if last != want]
+    hot_due = [c for c, _ in due if c in hot_set]
+    rest = sorted((x for x in due if x[0] not in hot_set), key=lambda x: x[1])   # 안정 정렬 — 같으면 원래 순서
+    code = hot_due[0] if hot_due else (rest[0][0] if rest else None)
     if code is None:
         return None
-    hot = code in _prefill_hot_codes()
+    hot = code in hot_set
     _prefill_hot.on = hot
     try:
         # 하루치는 하루 한 번만. 나머지는 최근 구간만 받는다
@@ -4550,7 +4578,7 @@ def _today_kst():
 # 주말에 5분봉을 열 때마다 하루치를 통째로 다시 받아 **15~31초**가 걸렸다(개발 실측 ·
 # qa 4초 · KIS 25~37건). 원인은 셋이 같은 뿌리다 — **「오늘 날짜 · 벽시계」 로 셌다.**
 #   ㉠ dayfill 키가 토요일 날짜라 「오늘치 안 받음」 → 하루치 다시
-#   ㉡ `_minutes_have_today` 가 토요일 칸을 찾아 빈 집합 → 금요일 칸을 전부 다시
+#   ㉡ 그때의 `_minutes_have_today`(2026-10-06 에 `_minutes_done` 으로 바뀜)가 토요일 칸을 찾아 빈 집합 → 금요일 칸을 전부 다시
 #   ㉢ 2번(마지막 봉이 1시간 넘게 오래됨)이 주말 · 장 뒤엔 늘 참
 # 그리고 받아도 새 봉이 없다 — KIS 는 그날(거래일) 분봉만 준다.
 #
@@ -4633,8 +4661,8 @@ def drop_before_first_trade(rows):
         KRX(J)는 09:00 전이 없어 전날 저녁 행을 준다 — 069500 은 그것도 거래량 0
         `fetch_minutes_from_kis` 는 **둘 다 0 이면 먼저 받은 것을 쓴다** — 그래서 저장된다
 
-    **저장은 그대로 둔다.** 빼면 `_minutes_have_today` 가 그 칸을 「안 받았다」 로 보고
-    **바퀴마다 다시 받는다**(그 함수 주석의 느림이 되돌아온다). 그래서 응답에서만 뺀다.
+    **저장은 그대로 둔다.** 그때는 빼면 「봉이 있나」 로 받았나를 가려 그 칸을 바퀴마다 다시 받았다
+    (2026-10-06 부터는 `_minutes_done` 이 「끝난 뒤에 받았나」 로 가린다). 그래서 응답에서만 뺀다.
 
     **마지막 체결 뒤의 거래량 0 봉도 뺀다** (같은 날 · 재권님 「빼」). 069500 은 저녁
     16:00~19:55 에도 같은 이유로 납작봉 쉰 개 남짓이 남았다 — ETF 는 그 시간 거래가 없다.
@@ -4840,8 +4868,9 @@ def get_chart(cfg, code, period, limit, gap_check=True):
             # 통째로 비었다 — 삼성전자우가 09:00~10:15 가 없이 7개뿐이었다
             # (2026-09-17). 거래가 잦은 종목만 자주 열려 저절로 채워지고
             # 있었던 것이라, 종목마다 봉 개수가 크게 갈렸다.
+            cover = None
             if _minutes_need_day(code, period, rows, gap_check):
-                raw = fetch_minutes_day(cfg, code)
+                raw, cover = fetch_minutes_day(cfg, code)
                 _meta_set("dayfill:%s:%s" % (code, period), _minutes_trade_day())
             elif rows and not _minutes_live():
                 # ④ 그 거래일 하루치를 이미 받았고 지금은 새 봉이 안 생긴다 —
@@ -4862,8 +4891,12 @@ def get_chart(cfg, code, period, limit, gap_check=True):
                 else:
                     raw = []
             else:
-                raw = fetch_minutes_from_kis(cfg, code)
+                # **지금 칸 + 아직 안 끝난 지난 칸 몇 개** (2026-10-06). 전에는 지금까지 30분만
+                # 받아, 한 종목을 다시 찾는 데 30분이 넘으면 그 사이가 영영 비었다.
+                raw, cover = fetch_minutes_day(cfg, code, MINUTE_PAST_PER_CALL)
             bars = aggregate_minutes(raw, 5) if period == "5m" else raw
+            if period == "5m" and cover is not None:
+                bars = _keep_covered_slots(bars, cover, _minutes_now_min())
         fetched = save_candles(code, period, bars)
         _meta_set(mkey, time.time())
         if fetched:
