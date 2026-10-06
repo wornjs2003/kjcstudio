@@ -156,7 +156,11 @@ def _index_line(code, label, pat, indices):
     except (TypeError, ValueError):
         c = 0.0
     mark = "▲" if c > 0 else ("▼" if c < 0 else "—")
-    return f"{label} {num(x.get('value'))} {mark}{num(abs(float(x.get('changePct') or 0)), 2)}%"
+    # **「(전일)」 은 장 전에 만든 줄이라는 표시다** (2026-10-06 재권님 「응 해줘」). 07:30 에는 장이 안 열려
+    # KIS 지수 시세가 등락 0 을 준다 — 그때는 `kis_proxy` 가 지수 일봉 마지막 두 종가로 채우고
+    # `basis` 를 붙인다. 붙이지 않으면 「오늘 등락」 으로 읽힌다
+    tag = "(전일) " if x.get("basis") == "전일" else ""
+    return f"{label} {num(x.get('value'))} {tag}{mark}{num(abs(float(x.get('changePct') or 0)), 2)}%"
 
 
 def _today_events(schedule, now=None):
@@ -412,10 +416,20 @@ def start_daily(get_indices, get_sectors, get_issues, send=None, keep=KEEP):
             return
         purge_old(keep)
         if send:
+            # **보냈는지 남긴다** (2026-10-06 재권님 「응 해줘」). 전에는 실패를 `pass` 로 삼키고
+            # 성공도 안 적어 「갔나」 를 아무도 못 셌다. 못 보내도 저장은 남는다(그대로).
+            # 오류 문구는 `safe_message` 로 가린다 — 로그와 저장본(API 로 나간다) 둘 다 「밖」 이다
+            sent, err = False, None
             try:
                 send(data["telegram"])
-            except Exception:
-                pass        # 못 보내도 저장은 남는다
+                sent = True
+                print("데일리분석 발송함 — %s" % now.strftime("%H:%M"), flush=True)
+            except Exception as e:
+                err = "%s: %s" % (type(e).__name__, safe_message(e))
+                print("데일리분석 발송 실패 — %s" % err, flush=True)
+            data["sent"] = sent
+            data["sendError"] = err
+            docstore.write_doc(doc_name(now), data, history=False)
 
     # **같은 오류는 한 번만 적는다** (2026-09-22 지시).
     #

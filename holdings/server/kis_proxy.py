@@ -2321,6 +2321,36 @@ def _index_backfill(cfg, code, period, want):
     return sorted(got.values(), key=lambda b: b["ts"])
 
 
+def _daily_indices(cfg):
+    """데일리(07:30)가 담을 지수 — 화면과 같은 `fetch_indices_all` 에 **전일 등락**을 채운다.
+
+    **07:30 은 장 전이라** KIS 지수 시세가 「전일 종가 · 등락 0」 을 준다 — 저장본 실측 10-01 · 10-02 ·
+    10-06 국내 넷 모두 change 0 · changePct 0 이었다(2026-10-06 재권님 「응 해줘」). 그래서 국내 넷
+    (`INDEX_DEFS`)만, 등락이 0 이고 **값이 지수 일봉의 마지막 마감 종가와 같을 때** 그 앞 종가로 등락을
+    채우고 `basis = "전일"` 을 붙인다(`daily.py` 가 그 줄에 「(전일)」). 값이 안 맞으면 손대지 않는다 —
+    다른 날 종가끼리 견주게 된다. 일봉은 DB 를 먼저 보고 낡았으면 KIS 몇 건(`fetch_index_candles`)."""
+    rows = fetch_indices_all(cfg, with_chart=False)[0]
+    by_name = {n: c for c, n in INDEX_DEFS}
+    today = datetime.now(KST).strftime("%Y%m%d")
+    for x in rows or []:
+        num = by_name.get(x.get("code"))
+        if not num or x.get("change") not in (0, 0.0) or x.get("value") is None:
+            continue
+        try:
+            bars = [b for b in fetch_index_candles(cfg, num, "D") if str(b["ts"])[:8] < today]
+        except Exception:
+            continue
+        if len(bars) < 2 or not bars[-2]["close"]:
+            continue
+        last, prev = float(bars[-1]["close"]), float(bars[-2]["close"])
+        if abs(last - float(x["value"])) > 0.01:
+            continue
+        x["change"] = round(last - prev, 2)
+        x["changePct"] = round((last - prev) / prev * 100, 2)
+        x["basis"] = "전일"
+    return rows
+
+
 def fetch_index_candles(cfg, code, period):
     """지수 봉. **받아둔 것을 DB 에서 읽고, 모자라거나 묵었을 때만 부른다.**
 
@@ -6335,7 +6365,7 @@ def main():
             #
             # **`fetch_indices_all`** — 화면이 보는 것과 같게 해외·환율까지 담는다.
             # `fetch_indices` 만 부르면 **국내 넷뿐**이고 해외 줄이 통째로 빈다.
-            get_indices=lambda: fetch_indices_all(load_secrets(), with_chart=False)[0],
+            get_indices=lambda: _daily_indices(load_secrets()),
             get_sectors=lambda: fetch_sectors(load_secrets())[0],
             # **`rows` 다.** 화면이 받는 `/api/news/issues` 의 `data` 는 배열인데,
             # 그것을 만드는 `fetch_issues()` 는 `{rows, errors, topics}` 를 준다.
