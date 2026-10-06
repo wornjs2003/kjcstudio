@@ -38,6 +38,12 @@
 .in-cols li { break-inside: avoid; }
 .in-empty { font-size: 0.84rem; color: var(--kh-text-muted); }
 
+/* 2026-10-06 재배치 — 오른쪽 「뉴스」 칸에 목록 셋을 위아래로(많이 본 → 속보 → 해외). 머리줄은 홀딩스 .kh-idxp-h 그대로 */
+.in-stack { display: flex; flex-direction: column; gap: 14px; }
+/* 큰 칸 머리 「돈의 흐름」 이 링크(지도 모달)라 글자색 · 밑줄을 제목처럼 */
+.kh-idx-name a { color: inherit; text-decoration: none; }
+.kh-idx-name a:hover { text-decoration: underline; }
+
 /* ── 영상 분석 보고서 (report.html) ── */
 .in-report { padding: 22px 26px; overflow-y: auto; }
 .in-rp-head { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start;

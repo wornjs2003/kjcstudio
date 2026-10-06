@@ -45,42 +45,42 @@
     <div class="kh-mkt">오늘의 핵심</div>
 
     <!-- 홀딩스 「고른 종목 차트 + 오른쪽 패널」 자리 -->
-    <section class="kh-idx" aria-label="실시간 속보">
+    <!-- 2026-10-06 지시 — 칸 재배치. 큰 칸은 돈의 흐름(전에는 실시간 속보), 옆 칸 첫 절은 영상 분석(전에는 해외 뉴스).
+         속보 · 해외 뉴스 · 많이 본 뉴스는 오른쪽 「뉴스」 칸으로. 칸의 자리 · 크기는 그대로(시안 실측 다섯 칸 전후 같음) -->
+    <section class="kh-idx" aria-label="돈의 흐름">
       <div class="kh-card kh-idx-main">
-        <div class="kh-idx-head"><b class="kh-idx-name">실시간 속보</b><span class="in-asof" data-asof></span></div>
+        <!-- 2026-10-03 지시 — 칸 이름 「돈의 흐름」. 머리를 누르면 AI 생태계의 세계 지도(지구본)가 모달로 뜬다.
+             href 는 그대로 두어 새 탭 · 직접 주소도 된다(모달 룰). 글은 data/stock-analysis.json 한 곳에 쌓는다 -->
+        <div class="kh-idx-head"><b class="kh-idx-name"><a href="flowmap.html?map=ai&view=geo" data-modal="page">돈의 흐름</a></b><span class="in-asof" data-asof-map></span></div>
         <!-- 홀딩스 차트 자리 — 높이(550px)를 홀딩스 home.css 의 .kh-idx-chart 가 정한다 -->
-        <div class="kh-idx-chart in-scroll"><ul class="in-news" data-feed="flash"></ul></div>
+        <div class="kh-idx-chart in-scroll"><ul class="in-news in-sm" data-analysis></ul></div>
       </div>
-      <aside class="kh-card kh-idxp" aria-label="분석 요약">
-        <div class="kh-idxp-s"><div class="kh-idxp-h">해외 뉴스<span class="in-asof" data-asof="네이버 뉴스"></span></div><ul class="in-news in-sm" data-feed="world" data-n="5"></ul></div>
+      <aside class="kh-card kh-idxp" aria-label="영상 분석">
+        <div class="kh-idxp-s"><div class="kh-idxp-h">영상 분석<span class="in-asof">유튜브 · 시황분석 고름</span></div><ul class="in-news in-sm" data-videos></ul></div>
         <div class="kh-idxp-s"><div class="kh-idxp-h">핵심 숫자</div></div>
         <div class="kh-idxp-s kh-idxp-dc"><div class="kh-idxp-h">관련 뉴스</div></div>
       </aside>
     </section>
 
     <!-- 홀딩스 「지금 뜨는 산업 + 데일리분석」 줄 자리 -->
-    <section class="kh-rank" aria-label="분석 갈래">
-      <div class="kh-card kh-sc-card">
-        <!-- 2026-10-02 지시 — 공시 대신 종목 분석. 글은 data/stock-analysis.json 한 곳에 쌓는다.
-             공시는 fetch-naver-news.py 가 그대로 받는다 — 화면에서만 뺐다 -->
-        <!-- 2026-10-03 지시 — 칸 이름 「돈의 흐름」. 머리를 누르면 AI 생태계의 세계 지도(지구본)가 모달로 뜬다.
-             href 는 그대로 두어 새 탭 · 직접 주소도 된다(모달 룰) -->
-        <div class="kh-tabs"><a class="kh-tab is-active" href="flowmap.html?map=ai&view=geo" data-modal="page">돈의 흐름</a><span class="in-asof" data-asof-map></span></div>
-        <ul class="in-news in-sm in-scroll" data-analysis></ul>
-      </div>
-      <div class="kh-card kh-dlm-card">
-        <div class="kh-tabs"><button class="kh-tab is-active">영상 분석</button><span class="in-asof">유튜브 · 시황분석 고름</span></div>
-        <ul class="in-news in-scroll" data-videos></ul>
-      </div>
+    <!-- 미정: 2026-10-06 재권님 「빈곳은 칸만 놔두고 우선 비워놔」 — 돈의 흐름 · 영상 분석이 위로 올라가 비었다.
+         무엇을 넣을지는 재권님이 정하신다. 높이는 insight.css 의 .kh-rank > .kh-card(--kh-row-h)가 그대로 잡는다 -->
+    <section class="kh-rank" aria-label="비워 둔 칸">
+      <div class="kh-card kh-sc-card"></div>
+      <div class="kh-card kh-dlm-card"></div>
     </section>
   </main>
 
-  <!-- 홀딩스 오른쪽 칸 자리 — 실시간 순위 칸 하나만 둔다 (2026-10-01 아래 칸 지움) -->
-  <aside class="kh-side" aria-label="많이 본 뉴스">
+  <!-- 홀딩스 오른쪽 칸 자리 — 「뉴스」 하나. 2026-10-06 지시 — 많이 본 뉴스 → 실시간 속보 → 해외 뉴스 순서(16:1x) -->
+  <aside class="kh-side" aria-label="뉴스">
     <div class="kh-side-wrap">
       <div class="kh-card kh-rank-card">
-        <div class="kh-tabs"><button class="kh-tab is-active">많이 본 뉴스</button><span class="in-asof" data-asof="네이버 뉴스"></span></div>
-        <ul class="in-news in-rank in-scroll" data-feed="rank"></ul>
+        <div class="kh-tabs"><button class="kh-tab is-active">뉴스</button><span class="in-asof" data-asof="네이버 뉴스"></span></div>
+        <div class="in-scroll in-stack">
+          <div class="kh-idxp-s"><div class="kh-idxp-h">많이 본 뉴스</div><ul class="in-news in-rank" data-feed="rank"></ul></div>
+          <div class="kh-idxp-s"><div class="kh-idxp-h">실시간 속보</div><ul class="in-news in-sm" data-feed="flash"></ul></div>
+          <div class="kh-idxp-s"><div class="kh-idxp-h">해외 뉴스</div><ul class="in-news in-sm" data-feed="world" data-n="5"></ul></div>
+        </div>
       </div>
     </div>
   </aside>
