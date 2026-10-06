@@ -1,6 +1,6 @@
 {
   "설명": "뉴스 화면이 쓰는 주제어 목록. 여기만 고치면 수집과 화면 칩이 함께 바뀐다.",
-  "쓰는곳": "server/news.py · worker/kis-worker.js · js/news.js 의 필터 칩",
+  "쓰는곳": "server/news.py · js/news.js 의 필터 칩",
   "늘리는법": "topics 에 묶음을 하나 더 적는다. 코드는 건드리지 않는다.",
   "색": "color 는 assets/css/theme.css 의 --kh-cat-<이름> 을 가리킨다. 안 적으면 id 로 자동 배정한다.",
   "끄는법": "지우지 말고 on 을 false 로 둔다. 되살리기 쉽다.",
