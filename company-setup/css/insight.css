@@ -48,6 +48,8 @@
    틀 바탕은 지구본의 어두운 바탕과 같은 예외 토큰(지도가 뜨기 전 흰 번쩍임을 막는다) */
 .in-map { display: flex; flex-direction: column; }
 .in-map-chips { padding: 0 0 10px; }
+.in-map-views { display: inline-flex; gap: 4px; margin-left: 12px; }   /* 제목 옆 지구본 | 흐름도 토글 */
+.in-map-views .kh-chip { padding: 4px 10px; }
 .in-map-frame { flex: 1; min-height: 0; width: 100%; border: 0; border-radius: var(--kh-radius-md); background: var(--overlay-bg); }
 
 /* ── 영상 분석 보고서 (report.html) ── */
@@ -79,6 +81,11 @@
 .in-pill.half { background: rgb(var(--kh-warn-rgb) / .12); color: rgb(var(--kh-warn-rgb)); }
 .in-pill.no   { background: var(--kh-danger-faint);         color: var(--kh-danger); }
 .in-pill.soon { background: var(--kh-accent-dim);           color: var(--kh-accent); }
+/* 출처 배지 — 값 옆에 「KIS · 네이버 · DART · 계산」 (2026-10-06 재권님 「어디서 가져올수 있는지 표기」). 글줄 안에 들어가 칸 높이를 안 바꾼다.
+   색 — 재권님 「가져올수 있는값은 파랑색 못가져오는 색은 빨간색」: 받을 수 있는 출처는 파랑(연한 바탕 + 진한 글씨 · 「색 바탕 위의 글씨」),
+   못 받는 값은 그 줄의 「아직」 알약이 빨강(.in-pill.no) */
+.in-src { display: inline; padding: 0 6px; border-radius: var(--kh-radius-sm); font-size: 0.68rem; font-weight: 600;
+          color: var(--kh-accent); background: var(--kh-accent-dim); white-space: nowrap; }   /* inline — 글줄 높이에 안 얹힌다 */
 .in-toc li { padding: 8px 0; }
 .in-toc a { color: var(--kh-text-secondary); text-decoration: none; font-size: 0.88rem; }
 .in-toc a:hover { color: var(--kh-text-primary); }
