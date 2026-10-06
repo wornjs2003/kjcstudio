@@ -14,7 +14,10 @@
 .kh-idx-main { height: 706px; }
 
 /* ── 뉴스 목록 (네이버 증권 뉴스에서 받은 것) ── */
-.in-asof { margin-left: auto; font-size: 0.75rem; color: var(--kh-text-muted); }
+.in-asof { margin-left: auto; font-size: 0.75rem; color: var(--kh-text-muted); white-space: nowrap; }
+/* 출처 표시가 탭 줄에도 든다 (2026-10-06). 폰(home.css 700px 이하)에서 .kh-sc-card 탭 줄이 ::after 로 줄을 가르는데
+   자식 기본 order 가 4 라 아랫줄로 내려가 칸이 커진다 — 제목(order 1)과 같은 줄에 둔다 */
+.kh-sc-card > .kh-tabs > .in-asof { order: 1; }
 .in-scroll { overflow-y: auto; min-height: 0; }
 .kh-sc-card, .kh-rank-card, .kh-dlm-card { display: flex; flex-direction: column; }
 .kh-sc-card .in-scroll, .kh-rank-card .in-scroll, .kh-dlm-card .in-scroll { flex: 1; padding: 0 18px 14px; }
