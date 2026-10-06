@@ -385,7 +385,9 @@ let bigShown = null;
 function paintBigPrice() {
   const el = $('kh-big-v');
   if (!el) return;
-  const live = rowPrices && rowPrices[selectedCode];
+  /* 묶음 시세가 아직 안 왔으면 세부사항 칸이 받은 단건으로 먼저 칠한다 — 묶음이 오면 그것이 덮는다
+     (2026-10-06 실측: 단건은 0.2초에 와 있는데 묶음을 기다려 1.7초에 칠해졌다) */
+  const live = (rowPrices && rowPrices[selectedCode]) || _oneSeed.get(selectedCode);
   if (!live) {
     el.className = 'kh-idx-v kh-num kh-mut';
     el.textContent = '불러오는 중';
@@ -559,6 +561,15 @@ watch({ url: dailyDocUrl, onChange: paintDailyMini, key: null, fallbackMs: DAILY
  */
 const _range = new Map();          // 종목코드 → { lo, hi }
 let rangeKey = null;
+const _oneSeed = new Map();        // 종목코드 → { price, pct } — 세부사항 칸 단건에서(묶음 오기 전 머리 현재가)
+
+/* 세부사항 칸(stock-detail.js)이 단건을 받으면 불린다 — 52주 칸과 머리 현재가가 그것을 같이 쓴다.
+   전에는 52주 칸이 **같은 주소를 따로 한 번 더** 불렀다(2026-10-06 실측 · 종목을 고를 때마다 두 번). */
+function takeOne(code, one) {
+  _range.set(code, { lo: one.low52, hi: one.high52, price: one.price });
+  if (one.price != null) _oneSeed.set(code, { price: one.price, pct: one.changePct });
+  if (code === selectedCode) { paintYearRange(); paintBigPrice(); }
+}
 
 async function paintYearRange() {
   const el = $('kh-year-range');
@@ -569,6 +580,8 @@ async function paintYearRange() {
   let r = _range.get(code);
   if (!r) {
     el.textContent = '불러오는 중';
+    /* 세부사항 칸이 있으면 그 단건이 오면서 takeOne 이 채운다 — 여기서 또 부르지 않는다 */
+    if ($('kh-dt')) return;
     /* 52주 값은 하루에 한 번 바뀔까 말까다. 한 번 받으면 쥐고 있는다 —
        마우스로 종목을 훑을 때마다 부르면 요청이 그만큼 늘어난다. */
     try {
@@ -1835,7 +1848,7 @@ document.querySelector('.kh-sc-card')?.addEventListener('click', (e) => {
 const panel3 = mountStockPanel($('kh-panel3'), { code: selectedCode });
 
 /* 세부사항 — 차트 머리줄의 보조지표 옆 */
-const detail = mountStockDetail($('kh-dt'), { view: 'direct' });   // 첫 화면에서 크게 보는 종목
+const detail = mountStockDetail($('kh-dt'), { view: 'direct', onOne: takeOne });   // 첫 화면에서 크게 보는 종목
 if (selectedCode) detail.setCode(selectedCode);
 
 paintBigPeriods();
