@@ -1,5 +1,8 @@
-// Insight — 네이버 증권 뉴스에서 받아 둔 파일(data/naver-news.json)을 칸에 채운다.
+// Insight — 네이버 증권 뉴스에서 받아 둔 것을 칸에 채운다.
 // 받는 것은 tools/fetch-naver-news.py 가 한다. 네이버가 다른 사이트의 직접 호출을 막아서다.
+// 2026-10-06 — 10분 주기로 받는 쪽은 8765 문서 저장소(naver-news)에 둔다(--to-board). 그 문서를 먼저 읽고,
+// 없거나(아직 안 켜짐 → data: null) 못 읽으면 손으로 받아 둔 파일(data/naver-news.json)로 돌아간다.
+// 주기 값은 화면에 없다 — 문서의 fetchedAt 이 곧 받은 시각이다(「캐시·주기·한도 값을 화면에 박지 않는다」)
 // 파일이 없거나 비면 「불러오지 못함」 · 「—」 를 적는다 — 예시 데이터를 두지 않는다
 (async () => {
   const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -7,8 +10,11 @@
   const lists = document.querySelectorAll('[data-feed]');
   let d;
   try {
-    const r = await fetch('data/naver-news.json', { cache: 'no-store' });
-    d = await r.json();
+    try {
+      const b = await (await fetch('/api/board/doc/naver-news', { cache: 'no-store' })).json();
+      if (b && b.ok && b.data && b.data.fetchedAt) d = b.data;
+    } catch (e) { /* 문서 저장소를 못 읽으면 파일로 */ }
+    if (!d) d = await (await fetch('data/naver-news.json', { cache: 'no-store' })).json();
   } catch (e) {
     lists.forEach(ul => { ul.innerHTML = '<li class="in-empty">불러오지 못함</li>'; });
     return;
