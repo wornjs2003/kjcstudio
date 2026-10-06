@@ -284,12 +284,10 @@ def _cap_rank(code):
     **코스피 상위 200종목뿐이다.** 그 밖이면 None 이고, 화면은 「—」로 적는다.
     받아오는 것은 `server/dart.py` 이고 여기서는 읽기만 한다.
     """
-    import marketdb
+    import dart
     try:
-        with marketdb.connect(timeout=5) as c:
-            r = c.execute("SELECT rank FROM dart_universe WHERE stock_code = ?",
-                          (code,)).fetchone()
-        return r[0] if r else None
+        # 코스피 안의 순위만 — 코스닥 150 이 같은 표에 들어왔다 (2026-10-06). 화면 문구가 「코스피 시가총액 순위」 다
+        return dart.cap_rank(code, "KOSPI")
     except Exception:
         return None          # 표가 아직 없을 수 있다. 순위만 빠진다
 
