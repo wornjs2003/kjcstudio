@@ -147,7 +147,7 @@ export function mountSectors(root) {
     lastAt = new Date();
     const total = (j.meta && j.meta.total) || groups.length;
     lastTotal = total;
-    setNote(`${kind === 'industry' ? '업종' : '테마'} ${total}개 · 네이버`);
+    setNote('네이버');   // 출처만 — 개수는 모달이 적는다 (2026-10-06 재권님 「가로 해」)
 
     pick = groups[0].no;          // 모달이 이것부터 보여준다
     paintBody();
