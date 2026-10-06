@@ -249,6 +249,8 @@ function paintIxFilter() {
 function setupCatFilter() {
   const links = document.querySelectorAll('nav.kh-cat a');
   links.forEach((a) => a.addEventListener('click', (e) => {
+    /* href 가 있는 탭(「종목분석」 → Insight 페이지)은 그대로 간다 — 거르기가 아니다 (2026-10-06 지시) */
+    if ((a.getAttribute('href') || '#') !== '#') return;
     e.preventDefault();
     links.forEach((x) => x.classList.remove('is-on'));
     a.classList.add('is-on');
