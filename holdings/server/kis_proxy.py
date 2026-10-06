@@ -3936,7 +3936,13 @@ def fetch_minutes_from_kis(cfg, code, hour=None):
         alt = _minutes_one_market(cfg, code, hour, other)
         # **더 나은 쪽만 쓴다.** 둘 다 1개 이하인 칸(거래가 드문 종목)에서
         # 엉뚱한 쪽으로 바꾸지 않는다
-        if sum(1 for b in alt if (b["volume"] or 0) > 0) > nz:
+        #
+        # **같으면 `J` 를 쓴다** (2026-10-06 · 개발2 분석 · 창구). 넥스트레이드 없는 종목(ETF · 우선주)은
+        # 15:30 뒤 칸에서 `UN` 0~1개 · `J` 도 동시호가 한 줄(1개)이라 비기는데, 그때 `UN` 이 남으면
+        # **빈 줄 종가가 전일 종가**로 깔린다(005935 15:30~15:50 = 201,000 · 069500 = 112,060).
+        # `J` 의 빈 줄은 마지막 체결가다.
+        alt_nz = sum(1 for b in alt if (b["volume"] or 0) > 0)
+        if alt_nz > nz or (alt_nz == nz and other == "J" and alt):
             return alt
     return out
 
@@ -4810,6 +4816,98 @@ def aggregate_minutes(bars, minutes):
     return [buckets[k] for k in sorted(buckets)]
 
 
+def pin_carried_trade(raw, bars, stored, minutes):
+    """「지금 줄」 로 옮겨 실린 마지막 체결을 **원래 칸에 되돌린다** (2026-10-06 지시 — 「응 고쳐줘」).
+
+    **KIS 1분봉은 새 체결이 없는 동안 마지막 체결을 「지금 분」 줄로 옮겨 싣고, 원래 줄은 0 으로 준다.**
+    2026-10-06 마감봉 관찰(005930 · 069500 · 1분마다 원본 J · UN):
+
+        15:31 에 물으면   1530 줄 0 · 1531 줄 1,427,002   (마감 체결)
+        15:36 에 물으면   1530~1535 줄 0 · 1536 줄 1,427,002
+        15:40 부터        UN 은 넥스트레이드 체결이 오자 1530 줄로 되돌림 · J 와 ETF(넥스트레이드 없음)는 계속 따라감
+        15:29 에 물으면   1529 줄 173,403 — 마감 동시호가 전 마지막 체결이 같은 꼴로 따라옴
+
+    그대로 저장하면 5분봉 막대가 15:30 → 15:35 → 15:40 칸으로 옮겨 다니고 원래 칸은 납작해진다
+    (10-02 「15:35 봉에 있다가 15:30 봉으로」 · ETF 마감 직전 납작봉이 이 모양).
+
+    **판정 둘.**
+      ① **이미 지난 칸의 거래량은 줄지 않는다.** 저장된 것보다 작게 오면 저장된 칸을 그대로 둔다.
+         단 **그만큼이 다른 지난 칸에 늘었으면** KIS 가 제자리로 옮긴 것이라 KIS 를 따른다(두 번 세지 않게).
+         옮겨 실린 체결이 다음 체결(마감 체결 등)에 밀려 「지금 줄」 에서도 사라지면, 원래 칸만 줄고
+         어디에도 안 남는다 — 15:29 의 173,403 이 15:30 에 그렇게 사라졌다. ①이 그것을 막는다.
+      ② **「지금 줄」 거래량이 ①에서 막은 양과 꼭 같으면** 옮겨 실린 것이다 — 지금 칸에서 뺀다.
+         「지금 줄」 = 받은 1분봉의 마지막 줄 · 거래량 있음 · 시가=고가=저가=종가(한 체결).
+         원래 칸이 이번 구간(30분) **밖**이면 그 칸은 안 덮였으므로, 구간 안 앞 칸이 전부 0 이고
+         구간 앞 마지막 저장 칸이 **그 거래량 · 종가 그대로**일 때 뺀다(저녁에 ETF 가 15:30 체결을 끌고 다님).
+    진짜 새 체결이면 앞 칸이 줄지 않아 ②에 안 걸린다. 같은 칸 안에서 옮긴 것은 합이 같아 손댈 것이 없다.
+
+    **한계** — 원래 분에 한 번도 안 받았으면(그 시각에 아무도 안 열었다) 저장된 칸이 없어 못 되돌린다.
+    그때는 처음 받은 칸에 머문다. 하루치를 다시 받으면 KIS 가 지난 시각은 제자리로 주므로 바로잡힌다.
+    ①은 KIS 가 지난 칸 거래량을 **정말로 낮춰 고친** 경우에도 옛 값을 지킨다 — 관찰에서 그런 일은 없었다.
+
+    raw     이번에 받은 1분봉(시각순)
+    bars    raw 를 `minutes` 분으로 묶은 것 — 저장할 것
+    stored  {ts: 저장된 봉} — 같은 날 같은 주기
+    """
+    if not raw or not bars or not stored:
+        return bars
+    last = max(raw, key=lambda b: b["ts"])
+    hhmm = last["ts"][8:12]
+    slot = (int(hhmm[:2]) * 60 + int(hhmm[2:])) // minutes * minutes
+    cur = last["ts"][:8] + "%02d%02d" % (slot // 60, slot % 60)
+    by_ts = {b["ts"]: b for b in bars}
+    keys = ("ts", "open", "high", "low", "close", "volume")
+
+    # ① 지난 칸이 준 양. **다른 지난 칸에 그만큼 늘었으면 KIS 가 제자리로 옮긴 것이다** — 그때는 KIS 를 믿는다.
+    #    `UN` 은 넥스트레이드 체결이 오면 마감 체결을 1530 으로 되돌리고, 20:00 뒤 하루치는 지난 시각을
+    #    제자리로 준다. 그때도 옛 칸을 지키면 두 번 세어진다.
+    past = [t for t in by_ts if t < cur and t[:8] == cur[:8]]
+    gained = [(by_ts[t].get("volume") or 0) - ((stored.get(t) or {}).get("volume") or 0) for t in past]
+    held = set()
+    for ts in past:
+        old = stored.get(ts)
+        if not old:
+            continue
+        lost = (old.get("volume") or 0) - (by_ts[ts].get("volume") or 0)
+        if lost > 0 and lost not in gained:
+            by_ts[ts] = {k: old[k] for k in keys}
+            held.add(lost)
+
+    v = last.get("volume") or 0                    # ② 지금 줄이 옮겨 실린 것인가
+    one = last["open"] == last["high"] == last["low"] == last["close"]
+    carried = False
+    if v and one and cur in by_ts:
+        if v in held:
+            carried = True
+        elif all(not (by_ts[t].get("volume") or 0) for t in by_ts if t < cur):
+            first = min(by_ts)
+            before = [t for t in stored
+                      if t[:8] == cur[:8] and t < first and (stored[t].get("volume") or 0)]
+            if before:
+                o = stored[max(before)]
+                carried = (o.get("volume") or 0) == v and o["close"] == last["close"]
+    if carried:
+        c = dict(by_ts[cur])
+        c["volume"] = max(0, (c.get("volume") or 0) - v)
+        if not c["volume"]:
+            c["open"] = c["high"] = c["low"] = c["close"]
+        by_ts[cur] = c
+    return [by_ts[k] for k in sorted(by_ts)]
+
+
+def _stored_day(code, period, day):
+    """그날 저장된 봉 {ts: 봉}. 못 읽으면 빈 것 — 그때는 되돌리지 않는다."""
+    try:
+        with _db_lock, db_conn() as conn:
+            rows = conn.execute(
+                "SELECT ts, open, high, low, close, volume FROM candles"
+                " WHERE code = ? AND period = ? AND ts LIKE ?",
+                (code, period, day + "%")).fetchall()
+    except Exception:
+        return {}
+    return {r["ts"]: dict(r) for r in rows}
+
+
 # ── 한 구간에 봉이 여럿 생기던 것 (2026-09-29 · 재권님이 년봉에서 찾으셨다) ──
 #
 # **KIS 는 「진행 중인 구간」 의 봉에 마지막 거래일을 ts 로 준다.**
@@ -4990,6 +5088,10 @@ def get_chart(cfg, code, period, limit, gap_check=True):
                 # 받아, 한 종목을 다시 찾는 데 30분이 넘으면 그 사이가 영영 비었다.
                 raw, cover = fetch_minutes_day(cfg, code, MINUTE_PAST_PER_CALL)
             bars = aggregate_minutes(raw, 5) if period == "5m" else raw
+            if raw:   # 「지금 줄」 로 옮겨 실린 마지막 체결을 제자리로 (pin_carried_trade 주석)
+                last_day = max(b["ts"] for b in raw)[:8]
+                bars = pin_carried_trade(raw, bars, _stored_day(code, period, last_day),
+                                         5 if period == "5m" else 1)
             if period == "5m" and cover is not None:
                 bars = _keep_covered_slots(bars, cover, _minutes_now_min())
         fetched = save_candles(code, period, bars)
