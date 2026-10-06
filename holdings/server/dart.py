@@ -48,8 +48,11 @@ DART_API = "https://opendart.fss.or.kr/api"
 # 공시 원문 보기 주소. rcept_no 하나만 있으면 열린다.
 VIEWER = "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=%s"
 
-# 감시 대상 — 코스피 시가총액 상위 몇 종목까지 볼 것인가
-UNIVERSE_SIZE = 200
+# 감시 대상 — 시장마다 시가총액 상위 몇 종목까지 볼 것인가.
+# 코스닥 150 은 2026-10-06 에 더했다 (재권님 「코스피 200 종목 불러오는데 코스닥 150 도」 · 「가」 =
+# 지수 구성종목이 아니라 코스피 쪽과 같은 **시가총액 상위**). 순위는 시장마다 1부터 센다.
+UNIVERSE_SIZES = (("KOSPI", 200), ("KOSDAQ", 150))
+UNIVERSE_SIZE = 200          # 코스피 쪽 — 옛 이름이라 남긴다
 
 # 어느 시장의 공시를 받을 것인가 (2026-09-15 지시로 넓혔다).
 #   Y 유가증권(코스피) · K 코스닥 · N 코넥스 · E 기타
@@ -149,9 +152,10 @@ SCHEMA = [
     """CREATE TABLE IF NOT EXISTS dart_universe (
          stock_code  TEXT PRIMARY KEY,
          name        TEXT,
-         rank        INTEGER,
+         rank        INTEGER,               -- 시장 안의 순위 (1부터)
          market_cap  INTEGER,
-         updated_at  TEXT
+         updated_at  TEXT,
+         market      TEXT DEFAULT 'KOSPI'   -- KOSPI | KOSDAQ (2026-10-06)
        )""",
 
     # 받아온 공시. rcept_no 가 접수번호이자 원문 주소의 열쇠다.
@@ -185,6 +189,17 @@ def db_init():
     with _db_lock, db_conn() as conn:
         for sql in SCHEMA:
             conn.execute(sql)
+        # 옛 표에는 market 칸이 없다 — 쓸 수 있는 서버만 붙인다 (2026-10-06).
+        # 읽기 전용 서버는 못 붙이므로 아래 읽기 함수가 칸이 없으면 전부 코스피로 읽는다.
+        if marketdb.writable() and not _universe_has_market(conn):
+            try:
+                conn.execute("ALTER TABLE dart_universe ADD COLUMN market TEXT DEFAULT 'KOSPI'")
+            except sqlite3.Error as e:
+                print("[db] dart_universe market 칸 붙이기 실패 — %s" % safe_message(e, 120))
+
+
+def _universe_has_market(conn):
+    return any(r[1] == "market" for r in conn.execute("PRAGMA table_info(dart_universe)"))
 
 
 def _meta_get(key):
@@ -376,7 +391,11 @@ def index_members_count():
 
 
 def fetch_kospi_top(size=UNIVERSE_SIZE):
-    """코스피 시가총액 순위를 네이버에서 받는다 (100건씩).
+    return fetch_market_top("KOSPI", size)
+
+
+def fetch_market_top(market, size):
+    """시장(KOSPI · KOSDAQ)의 시가총액 순위를 네이버에서 받는다 (100건씩).
 
     공식 API 가 아니다. 한국투자증권 순위 API 는 30건까지만 주기 때문에
     200종목을 만들 수 없어서 이쪽을 쓴다. 막히면 예외가 나고, 그때는
@@ -388,8 +407,8 @@ def fetch_kospi_top(size=UNIVERSE_SIZE):
     out = []
     page = 1
     while len(out) < size and page <= 10:
-        url = ("https://m.stock.naver.com/api/stocks/marketValue/KOSPI"
-               "?page=%d&pageSize=100" % page)
+        url = ("https://m.stock.naver.com/api/stocks/marketValue/%s"
+               "?page=%d&pageSize=100" % (market, page))
         req = urllib.request.Request(url, headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
             "Referer": "https://m.stock.naver.com/",
@@ -412,36 +431,81 @@ def fetch_kospi_top(size=UNIVERSE_SIZE):
     return out[:size]
 
 
-def refresh_universe(size=UNIVERSE_SIZE):
-    """감시 대상을 새로 정한다. 못 받으면 기존 목록을 건드리지 않는다."""
+def refresh_universe():
+    """감시 대상을 새로 정한다 — 시장마다 따로. 못 받은 시장은 기존 목록을 건드리지 않는다."""
     db_init()
-    try:
-        items = fetch_kospi_top(size)
-    except Exception as e:
-        return {"ok": False, "count": universe_size(),
-                "error": "시가총액 순위를 받지 못했습니다: %s" % safe_message(e, 80)}
-    if len(items) < 50:
-        return {"ok": False, "count": universe_size(),
-                "error": "받은 종목이 %d개뿐이라 반영하지 않았습니다." % len(items)}
+    got, errs = {}, []
+    for market, size in UNIVERSE_SIZES:
+        try:
+            items = fetch_market_top(market, size)
+        except Exception as e:
+            errs.append("%s 시가총액 순위를 받지 못했습니다: %s" % (market, safe_message(e, 80)))
+            continue
+        if len(items) < 50:
+            errs.append("%s 받은 종목이 %d개뿐이라 반영하지 않았습니다." % (market, len(items)))
+            continue
+        got[market] = items
+    if not got:
+        return {"ok": False, "count": universe_size(), "error": " · ".join(errs)}
 
     now = datetime.now(KST).isoformat(timespec="seconds")
     with _db_lock, db_conn() as conn:
-        conn.execute("DELETE FROM dart_universe")
-        conn.executemany(
-            """INSERT INTO dart_universe (stock_code, name, rank, market_cap, updated_at)
-               VALUES (?, ?, ?, ?, ?)""",
-            [(it["code"], it["name"], i + 1, it["cap"], now)
-             for i, it in enumerate(items)],
-        )
-    _meta_set("dart_universe_date", _today())
-    return {"ok": True, "count": len(items)}
+        has = _universe_has_market(conn)
+        for market, items in got.items():
+            if not has and market != "KOSPI":
+                continue                       # 칸이 없는 옛 표에는 코스피만 담는다
+            if has:
+                conn.execute("DELETE FROM dart_universe WHERE COALESCE(market, 'KOSPI') = ?", (market,))
+            else:
+                conn.execute("DELETE FROM dart_universe")
+            conn.executemany(
+                """INSERT OR REPLACE INTO dart_universe
+                     (stock_code, name, rank, market_cap, updated_at%s)
+                   VALUES (?, ?, ?, ?, ?%s)""" % ((", market", ", ?") if has else ("", "")),
+                [(it["code"], it["name"], i + 1, it["cap"], now) + ((market,) if has else ())
+                 for i, it in enumerate(items)],
+            )
+    if "KOSPI" in got:
+        _meta_set("dart_universe_date", _today())
+    out = {"ok": not errs, "count": universe_size()}
+    if errs:
+        out["error"] = " · ".join(errs)
+    return out
 
 
-def universe_codes():
+def universe_rows(market="KOSPI", limit=None):
+    """감시 대상 목록 — 시가총액 순. 열: stock_code · name · rank · market_cap · market.
+
+    **목록을 읽는 자리는 이것 하나다** (2026-10-06). 코스닥이 같은 표에 들어오면서 `ORDER BY rank` 만으로는
+    코스피 1위와 코스닥 1위가 섞인다. 미리 받기 · 신호 감시 · 모달 순위는 `market="KOSPI"` 그대로 읽는다.
+    `market=None` 이면 전부 — 코스피가 먼저다.
+    """
     db_init()
     with _db_lock, db_conn() as conn:
-        rows = conn.execute("SELECT stock_code FROM dart_universe").fetchall()
-    return {r["stock_code"] for r in rows}
+        has = _universe_has_market(conn)
+        if not has and market not in (None, "KOSPI"):
+            return []
+        col = "COALESCE(market, 'KOSPI')" if has else "'KOSPI'"
+        sql = "SELECT stock_code, name, rank, market_cap, %s AS market FROM dart_universe" % col
+        args = []
+        if market and has:
+            sql += " WHERE %s = ?" % col
+            args.append(market)
+        # 코스피가 먼저 — 글자 순(KOSPI > KOSDAQ)에 기대지 않고 뜻으로 적는다 (창구 검수)
+        sql += " ORDER BY %s rank" % (
+            "CASE %s WHEN 'KOSPI' THEN 0 ELSE 1 END, %s," % (col, col) if market is None and has else "")
+        if limit:
+            sql += " LIMIT ?"
+            args.append(limit)
+        return conn.execute(sql, args).fetchall()
+
+
+def cap_rank(code, market="KOSPI"):
+    """시가총액 순위 — 그 시장 안의 순위. 목록 밖이면 None."""
+    for r in universe_rows(market):
+        if r["stock_code"] == code:
+            return r["rank"]
+    return None
 
 
 def universe_size():
@@ -692,7 +756,10 @@ def poll_once(key, quiet_first_run=True):
             refresh_corps(key)
         except Exception as e:
             _meta_set("dart_last_error", "대응표: %s" % safe_message(e, 120))
-    if _meta_get("dart_universe_date") != today or universe_size() == 0:
+    # 코스닥이 아직 없으면(market 칸을 막 붙였을 때) 그날 한 번 더 받는다 — 쓸 수 있는 서버만.
+    # 읽기 전용 서버는 칸을 못 붙여 코스닥이 늘 0 이라, 안 가르면 돌 때마다 쓰기를 시도한다
+    if (_meta_get("dart_universe_date") != today or universe_size() == 0
+            or (marketdb.writable() and not universe_rows("KOSDAQ", 1))):
         refresh_universe()
     if _meta_get("dart_members_date") != today or not index_members_count():
         refresh_index_members()

@@ -319,10 +319,8 @@ def watch_codes(proxy):
     **감시가 0 이 되는 것보다 여덟이라도 보는 쪽이 낫다.**
     """
     try:
-        with proxy._db_lock, proxy.db_conn() as conn:
-            rows = [r[0] for r in conn.execute(
-                "SELECT stock_code FROM dart_universe ORDER BY rank LIMIT ?",
-                (WATCH_TOP,))]
+        # 코스피만 — 코스닥이 같은 표에 들어와도 감시는 넓히지 않는다 (2026-10-06)
+        rows = [r["stock_code"] for r in dart.universe_rows("KOSPI", WATCH_TOP)]
         if rows:
             return rows
     except Exception:

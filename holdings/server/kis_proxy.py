@@ -2034,6 +2034,7 @@ INDEX_DEFS = [
     ("1001", "KOSDAQ"),
     ("2001", "KOSPI200"),
     ("4001", "KRX100"),      # 2026-09-17 에 코드를 찾았다. 01xx 대역이 아니라 4xxx 다
+    ("3003", "KOSDAQ150"),   # 2026-10-06 — KIS 지수 마스터 idxcode.mst 의 KSQ150 (개발1 실측). 맨 끝에 둔다 — 화면이 순서로 읽는 자리가 있다
 ]
 INDEX_CHART_TTL = 600      # 일봉은 자주 바뀌지 않으므로 길게 캐시한다
 _chart_cache = {}          # code -> (저장시각, series)
@@ -4397,12 +4398,8 @@ def _ui_busy():
 def _prefill_codes():
     """미리 받을 종목. 코스피 시가총액 상위 순서."""
     try:
-        with dart._db_lock, dart.db_conn() as conn:
-            rows = conn.execute(
-                "SELECT stock_code FROM dart_universe ORDER BY rank LIMIT ?",
-                (PREFILL_TOP,),
-            ).fetchall()
-        codes = [r["stock_code"] for r in rows]
+        # 코스피만 — 코스닥 150 이 같은 표에 들어와도 미리 받기는 넓히지 않는다 (2026-10-06 · KIS 호출이 는다)
+        codes = [r["stock_code"] for r in dart.universe_rows("KOSPI", PREFILL_TOP)]
     except Exception:
         codes = []
     if not codes:                      # 순위가 아직 없으면 관심종목이라도
@@ -5859,14 +5856,11 @@ class Handler(SimpleHTTPRequestHandler):
                 return
 
             if route == "universe":
-                with dart._db_lock, dart.db_conn() as conn:
-                    rows = conn.execute(
-                        """SELECT rank, stock_code, name, market_cap
-                             FROM dart_universe ORDER BY rank"""
-                    ).fetchall()
+                # 코스피 200 다음 코스닥 150 (2026-10-06). rank 는 시장 안의 순위 — 화면은 market 으로 가른다
+                rows = dart.universe_rows(None)
                 self._send_json({"ok": True, "data": [
-                    {"rank": r["rank"], "code": r["stock_code"],
-                     "name": r["name"], "cap": r["market_cap"]} for r in rows
+                    {"rank": r["rank"], "code": r["stock_code"], "name": r["name"],
+                     "cap": r["market_cap"], "market": r["market"]} for r in rows
                 ]})
                 return
 
