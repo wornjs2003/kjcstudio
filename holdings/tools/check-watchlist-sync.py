@@ -3,15 +3,13 @@
 
 같은 목록이 여러 파일에 따로 적혀 있다. 언어도 실행 환경도 달라 합칠 수 없다.
 
-**개수를 여기 적지 않는다.** 자리가 없어질 수 있다 — 2026-09-30 에
-배포본 워커가 경로에서 빠졌다. 아래 `SOURCES` 가 세는 자리다.
+**개수를 여기 적지 않는다.** 자리가 없어질 수 있다 — 2026-10-06 에
+배포본 워커(`holdings/worker/`)를 지웠다. 아래 `SOURCES` 가 세는 자리다.
 
     holdings/js/data/market.js    WATCHLIST          브라우저가 화면에 그린다
     holdings/server/dart.py       WATCH_CODES        로컬 서버가 텔레그램을 보낸다
-    holdings/worker/kis-worker.js DART_WATCH_CODES   배포본이 텔레그램을 보낸다
 
-한쪽만 고치면 화면에는 있는데 알림이 안 오거나, 로컬과 배포본이 다른 종목을
-감시한다. 어느 쪽도 오류를 내지 않아 눈으로는 못 찾는다.
+한쪽만 고치면 화면에는 있는데 알림이 안 온다. 어느 쪽도 오류를 내지 않아 눈으로는 못 찾는다.
 
     python tools/check-watchlist-sync.py     맞으면 0, 어긋나면 1
 
@@ -50,7 +48,6 @@ ROOT = os.path.dirname(os.path.dirname(HERE))            # 저장소 루트
 SOURCES = [
     ("market.js  WATCHLIST",         "holdings/js/data/market.js",    "export const WATCHLIST = ["),
     ("dart.py    WATCH_CODES",       "holdings/server/dart.py",       "WATCH_CODES = ["),
-    ("worker.js  DART_WATCH_CODES",  "holdings/worker/kis-worker.js", "const DART_WATCH_CODES = ["),
 ]
 
 CODE = re.compile(r"""["'](\d{6})["']""")
@@ -174,8 +171,8 @@ def main():
         return listed(port)
     # **「파일이 없다」 와 「파일은 있는데 못 읽었다」 를 가른다 (2026-09-30).**
     #
-    # 자리가 **없어질 수 있다.** 배포본 워커가 그 자리다 — 2026-09-30 에
-    # 터널로 넘어가면서 **워커가 경로에서 빠졌고**, 곧 지운다.
+    # 자리가 **없어질 수 있다.** 배포본 워커가 그 자리였다 — 2026-09-30 에
+    # 경로에서 빠졌고 2026-10-06 에 지웠다(`SOURCES` 에서도 뺐다).
     # 그때 이 도구가 **없는 파일을 찾아 영영 실패**하면, 멀쩡한 커밋이
     # 그것 때문에 막힌다.
     #

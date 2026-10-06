@@ -165,11 +165,11 @@ export function fmtDeltaAmount(amount, unit = '원', digits = 0) {
 
 export function marketPhase(now = new Date()) {
   /* 한국 시각으로 고정한다. 보는 사람의 PC 시계가 무엇이든 같은 답이 나와야 한다.
-     서버(kis_proxy.py)와 배포용 워커(kis-worker.js)도 KST 로 판단하므로,
+     서버(kis_proxy.py)도 KST 로 판단하므로,
      여기만 브라우저 로컬 시각을 쓰면 화면 문구와 실제 시세 기준이 어긋난다.
      실제로 PC 를 UTC 로 두고 돌려보면 한국 09:00~15:00 내내
      화면은 "장 마감", 서버는 정규장(J)으로 조회한다.
-     보정 방식은 kis-worker.js 의 quoteMarketDiv 와 같게 맞췄다. */
+     보정 방식은 그때의 워커(2026-10-06 지움)의 quoteMarketDiv 와 같게 맞췄다. */
   const kst = new Date(now.getTime() + 9 * 3600 * 1000);
   const day = kst.getUTCDay();                 // 0 일요일 · 6 토요일
   if (day === 0 || day === 6) {
