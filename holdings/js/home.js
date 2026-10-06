@@ -58,9 +58,27 @@ const $ = id => document.getElementById(id);
    last-seen 은 탭을 닫으면 사라지므로(sessionStorage) 여기에는 못 쓴다.
    어제 본 종목도 이어져야 한다. */
 const LAST_KEY = 'kh:lastStock';
+const LAST_NAME_KEY = 'kh:lastStockName';
+
+/* 순위표 · 관심종목 **밖**에서 고른 종목 (2026-10-06 지시 — 「지금 뜨는 산업」 종목을 누르면
+   순위표 줄처럼 큰 차트가 그 종목으로). 산업 칸에는 순위 목록(코스피 200 · 코스닥 150) 밖의
+   소형주가 많고, 지금 안 보는 시장 탭의 종목도 있다. findStock 이 못 찾으면 큰 차트만 옛 종목에
+   남고 옆 패널은 새 종목으로 바뀌어 화면이 엇갈렸다. 이름은 누른 링크에서 받는다. */
+const EXTRA_STOCKS = new Map();
+
+function addExtraStock(code, name) {
+  if (!code || !name) return;
+  EXTRA_STOCKS.set(code, { code, name, sector: '', brand: brandColor(code, name) });
+}
 
 function rememberStock(code) {
-  try { localStorage.setItem(LAST_KEY, code); } catch { /* 사생활 보호 창 */ }
+  try {
+    localStorage.setItem(LAST_KEY, code);
+    /* 밖에서 고른 종목은 이름도 남긴다 — 다시 켰을 때 큰 차트가 비지 않게 */
+    const extra = EXTRA_STOCKS.get(code);
+    if (extra) localStorage.setItem(LAST_NAME_KEY, extra.name);
+    else localStorage.removeItem(LAST_NAME_KEY);
+  } catch { /* 사생활 보호 창 */ }
 }
 
 function keptStock() {
@@ -68,6 +86,7 @@ function keptStock() {
 }
 
 let selectedCode = keptStock() || WATCHLIST[0].code;
+try { addExtraStock(selectedCode, localStorage.getItem(LAST_NAME_KEY)); } catch { /* 사생활 보호 창 */ }
 
 /* 마지막으로 시세를 받은 시각.
    가격이 한동안 그대로일 때가 있어서(체결이 같은 값에 머무는 구간),
@@ -1528,7 +1547,8 @@ function paintOneRow(code, live) {
 /* 보고 있는 줄 + 관심종목. **한 주소로 묻는다** — 서버 `/api/kis/quotes` 가
    한 번에 120종목까지 받는다(멀티 4묶음). 전에는 둘로 나눠 1초마다 번갈아 물었다 */
 function quoteCodes() {
-  return [...new Set([...WATCHLIST.map(x => x.code), ...visibleCodeList()])].slice(0, 120);
+  /* 고른 종목도 넣는다 — 순위표 밖에서 골랐으면 보이는 줄에 없어 큰 차트 머리의 현재가가 안 들어온다 */
+  return [...new Set([selectedCode, ...WATCHLIST.map(x => x.code), ...visibleCodeList()])].slice(0, 120);
 }
 
 let quoting = false;
@@ -1572,6 +1592,7 @@ document.addEventListener('visibilitychange', () => {
 function findStock(code) {
   return rowList().find(s => s.code === code)
       || WATCHLIST.find(s => s.code === code)
+      || EXTRA_STOCKS.get(code)
       || null;
 }
 
@@ -1773,6 +1794,25 @@ mountIndicatorMenu(document.querySelector('.kh-ind-menu'));
 /* 「지금 뜨는 산업」 — 업종 이름 단추를 누르면 그 종목이 나온다 (2026-09-18 지시).
    값은 네이버에서 오고 첫 화면을 막지 않는다 — 목록 한 번이 0.03초다. */
 const sectors = mountSectors(document.querySelector('.kh-sc-card'));
+
+/* 산업 칸 종목을 누르면 **순위표 줄과 같은 길** — 큰 차트 · 옆 패널 · 현재가가 그 종목으로
+   (2026-10-06 지시 — 「실시간 순위에서 선택하면 차트 나오는 것처럼 … 그래야 룰이 하나일 거 같어」).
+   전에는 가로채는 것이 없어 stock.html 로 페이지가 넘어갔고, 그 화면은 차트 칸이 작아
+   「차트 크기가 바뀐다」 로 보였다. 모달은 그 뒤 「자세히 ›」 로 연다.
+   href 는 남긴다 — 새 탭 · 가운데 클릭은 그대로 그 화면으로 간다(모달 스킬과 같은 이유). */
+document.querySelector('.kh-sc-card')?.addEventListener('click', (e) => {
+  const a = e.target.closest('a.kh-sc-st[data-code]');
+  if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+  e.preventDefault();
+  const code = a.dataset.code;
+  if (!findStock(code)) {
+    const name = (a.querySelector('.kh-sc-stn')?.textContent || '').trim();
+    addExtraStock(code, name || code);
+  }
+  selectStock(code);
+  /* 순위표 밖 종목은 받아 둔 시세가 없다 — 서버 알림(롱폴)을 기다리면 그동안 「불러오는 중」 이라 곧바로 한 번 받는다 */
+  if (!(rowPrices && rowPrices[code])) quoteTick();
+});
 
 /* 「지금 뜨는 산업」 자세히 → 모달 (2026-09-22 지시).
    **카드가 받아 둔 것을 넘긴다** — 모달이 따로 받으면 두 자리의 숫자가
