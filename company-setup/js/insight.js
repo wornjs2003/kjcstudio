@@ -53,35 +53,34 @@
   }
 })();
 
-// 돈의 흐름 출처 — 지도 자료(data/maps/ai.json)의 asOf 를 머리줄에 「시황분석 자료 · <날짜>」 로 (2026-10-06 지시).
-// 못 읽으면 「—」 — 0 이나 빈칸으로 두지 않는다
+// 돈의 흐름 — 칸에 지도를 바로 (2026-10-06 지시 · 「나」 — 칸 안 지구본은 손대기 전까지 멈춤).
+// data/stock-analysis.json 의 지도 글(page 가 flowmap.html?map=…)을 칩으로 만들고, 칩을 누르면 틀(iframe)의 지도를 바꾼다.
+// 제목 링크(모달)도 같은 지도로 맞춘다. 머리줄 출처는 그 지도 자료(data/maps/<id>.json)의 asOf — 못 읽으면 「—」
 (async () => {
-  const el = document.querySelector('[data-asof-map]');
-  if (!el) return;
-  try {
-    const r = await fetch('data/maps/ai.json', { cache: 'no-store' });
-    const asOf = (await r.json()).asOf;
-    el.textContent = asOf ? `시황분석 자료 · ${asOf}` : '시황분석 자료 · —';
-  } catch (e) {
-    el.textContent = '시황분석 자료 · —';
-  }
-})();
-
-// 종목 분석 — data/stock-analysis.json 의 items 를 날짜 최신순으로 그린다 (2026-10-02 지시).
-// 항목 모양: { "date": "2026-10-02", "code": "005930", "name": "삼성전자", "title": "…", "summary": "…", "page": "(있으면) 모달로 열 페이지" }
-(async () => {
-  const ul = document.querySelector('[data-analysis]');
-  if (!ul) return;
+  const chips = document.querySelector('[data-map-chips]'), frame = document.querySelector('[data-map-frame]');
+  if (!chips || !frame) return;
   const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const asofEl = document.querySelector('[data-asof-map]'), titleLink = document.querySelector('.kh-idx-name a[data-modal]');
+  const setAsof = async id => {
+    if (!asofEl) return;
+    try { const asOf = (await (await fetch(`data/maps/${id}.json`, { cache: 'no-store' })).json()).asOf; asofEl.textContent = asOf ? `시황분석 자료 · ${asOf}` : '시황분석 자료 · —'; }
+    catch (e) { asofEl.textContent = '시황분석 자료 · —'; }
+  };
+  const setMap = id => {
+    frame.src = `flowmap.html?map=${encodeURIComponent(id)}&view=geo&embed=1`;
+    if (titleLink) titleLink.href = `flowmap.html?map=${encodeURIComponent(id)}&view=geo`;
+    chips.querySelectorAll('.kh-chip').forEach(b => b.classList.toggle('is-active', b.dataset.map === id));
+    setAsof(id);
+  };
+  const current = () => new URLSearchParams(frame.getAttribute('src').split('?')[1] || '').get('map') || 'ai';
   try {
     const r = await fetch('data/stock-analysis.json', { cache: 'no-store' });
-    const items = ((await r.json()).items || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
-    // page 가 있으면 그 페이지를 모달로 연다 — href 는 남겨 새 탭 · 직접 주소가 그대로 된다 (모달 룰)
-    const head = x => x.page ? `<a href="${esc(x.page)}" data-modal="page">${esc(x.title)}</a>` : `<span>${esc(x.title)}</span>`;
-    ul.innerHTML = items.length ? items.map(x => `<li><div class="in-li">${head(x)}
-      <div class="in-meta">${x.name ? `<span class="in-kind">${esc(x.name)}</span>` : ''}${esc(x.summary)} · ${esc(x.date)}</div></div></li>`).join('')
-      : '<li class="in-empty">아직 분석이 없습니다</li>';
+    const maps = ((await r.json()).items || []).map(x => ({ x, id: (String(x.page || '').match(/flowmap\.html\?map=([a-z0-9_-]+)/i) || [])[1] })).filter(m => m.id);
+    chips.innerHTML = maps.map(m => `<button class="kh-chip${m.id === current() ? ' is-active' : ''}" data-map="${esc(m.id)}" title="${esc(m.x.title)}">${esc(m.x.name || m.id)}</button>`).join('');
+    chips.addEventListener('click', e => { const b = e.target.closest('.kh-chip'); if (b) setMap(b.dataset.map); });
+    setAsof(current());
   } catch (e) {
-    ul.innerHTML = '<li class="in-empty">불러오지 못함</li>';
+    chips.innerHTML = '<span class="in-empty">불러오지 못함</span>';
+    setAsof(current());
   }
 })();

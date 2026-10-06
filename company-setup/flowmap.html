@@ -21,6 +21,13 @@
   .in-frame { --eco-top: 122px; }   /* 2026-10-02 헤드리스 실측 — 위 108 + 아래 14 */
   .in-frame h1, .in-frame .sub { display: none; }
   .in-frame .wrap { padding: 12px 20px 14px; }
+  /* 칸 안 모드(?embed=1) — Insight 첫 화면의 돈의 흐름 칸이 이 화면을 틀로 띄운다 (2026-10-06 지시 · 「나」).
+     지도만 보이게 제목 · 보기 단추 · 아래 단추 줄 · 오른쪽 패널 · 지구본 단추를 감추고, 지구본은 손대기 전까지 멈춘다(spinOn).
+     흐름 · 병목 · 시나리오 · 회사 카드는 모달(큰 화면)에서 본다 */
+  .embed .wrap { grid-template-columns: 1fr; min-width: 0; padding: 0; }
+  .embed h1, .embed .sub, .embed .views, .embed #bar, .embed .panel, .embed .geo-ctl, .embed .geo-note { display: none; }
+  .embed .view { height: 100vh; }
+  .embed #geo { height: 100%; border-radius: 0; }
   h1 { font-size: 19px; margin: 0 0 4px; }
   .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 18px; }
 
@@ -200,6 +207,8 @@
 
 <script>
 if (window !== window.top) document.documentElement.classList.add('in-frame');   // 모달 안이면 제목 줄을 숨긴다 — 모달 머리가 제목을 들고 있다
+const EMBED = !!new URLSearchParams(location.search).get('embed');   // 칸 안 모드 — 지도만 · 지구본 멈춤 (2026-10-06)
+if (EMBED) document.documentElement.classList.add('embed');
 
 const $ = id => document.getElementById(id);
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -432,7 +441,7 @@ function buildGeo() {
     new maplibregl.Marker({ element: d }).setLngLat(s.at).addTo(geo);
     return { s, lb: d.querySelector('.lb') };
   });
-  let globeOn = true, spinOn = true, hover = false, dragging = false;
+  let globeOn = true, spinOn = !EMBED, hover = false, dragging = false;   // 칸 안에서는 손대기 전까지 멈춘다(재권님 「나」)
   function fitGlobe() {
     const want = Math.min(box.clientWidth, box.clientHeight) * 0.9;
     let z = geo.getZoom();
