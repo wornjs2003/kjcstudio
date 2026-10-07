@@ -1,0 +1,118 @@
+/* ==========================================================================
+   주식 회고 (review.html) — 구글 캘린더 모양 · 월 · 주 · 일 (2026-10-07 재권님 「응 이대로 해줘」)
+
+   **모바일 퍼스트다.** 아래 기본값이 폰(390 · 한 열)이고, 넓은 화면은 맨 아래 `min-width: 701px` 에서
+   달력 오른쪽에 그날 칸을 둔다. 홀딩스 다른 화면의 CSS 는 안 건드린다 — 이 파일은 이 화면만 건다.
+
+   색은 theme.css 의 --kh-* 만 쓴다. 매수 = 오름 색(빨강) · 매도 = 내림 색(파랑) — 한국식.
+   연한 바탕(--kh-up-dim)에는 같은 색 진한 글씨(--kh-up) — 「색 바탕 위의 글씨」.
+   ========================================================================== */
+
+.rv-app { padding: calc(var(--nav-height) + 12px) 12px 40px; max-width: var(--grid-max); margin: 0 auto; box-sizing: border-box; }
+.rv { background: var(--kh-bg-card); border-radius: 16px; padding: 14px 12px; }
+
+/* ── 머리줄 ── */
+.rv-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.rv-top h1 { font-size: 1.15rem; margin: 0 6px 0 0; color: var(--kh-text-primary); }
+.rv-nav { background: none; border: 0; font: inherit; font-size: 1.2rem; color: var(--kh-text-muted); padding: 2px 6px; cursor: pointer; }
+.rv-title { font-size: 0.95rem; color: var(--kh-text-primary); }
+.rv-today { background: none; border: 1px solid var(--kh-border-strong); border-radius: 8px; padding: 3px 10px; font: inherit; font-size: 0.8rem; color: var(--kh-text-secondary); cursor: pointer; }
+.rv-status { font-size: 0.7rem; color: var(--kh-text-muted); }
+.rv-status.warn { color: var(--kh-danger); }
+.rv-seg { margin-left: auto; display: flex; background: var(--kh-bg-surface); border-radius: 8px; padding: 2px; }
+.rv-seg button { background: none; border: 0; font: inherit; font-size: 0.78rem; padding: 4px 11px; border-radius: 6px; color: var(--kh-text-muted); cursor: pointer; }
+.rv-seg button.is-on { background: var(--kh-bg-card); color: var(--kh-text-primary); font-weight: 700; }
+
+/* ── 월 보기 ── */
+.rv-dow, .rv-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.rv-dow div { font-size: 0.72rem; color: var(--kh-text-muted); text-align: center; padding-bottom: 4px; }
+.rv-dow .sun, .rv-wd-h .sun { color: var(--kh-up); }
+.rv-dow .sat, .rv-wd-h .sat { color: var(--kh-down); }
+.rv-cell { min-height: 84px; border-top: 1px solid var(--kh-border); padding: 3px 2px; overflow: hidden; text-align: center; cursor: pointer; }
+.rv-cell.is-out { cursor: default; }
+.rv-cell.is-pick { background: var(--kh-bg-active); border-radius: 6px; }
+.rv-d { display: inline-block; font-size: 0.74rem; color: var(--kh-text-secondary); width: 22px; height: 22px; line-height: 22px; margin-bottom: 3px; }
+.rv-d.is-today { background: var(--kh-accent); color: var(--kh-text-on-fill); border-radius: 50%; font-weight: 700; }
+
+/* 띠 — 폰은 칸이 좁아(약 48px) 이름 대신 종목 아이콘에 매수/매도 색 테두리 */
+.rv-chip { display: inline-flex; align-items: center; gap: 4px; border-radius: 50%; margin: 0 2px 3px 0; white-space: nowrap; overflow: hidden; }
+.rv-chip > span:not(.kh-ic) { display: none; }
+.rv-chip .kh-ic { width: 18px; height: 18px; min-width: 18px; font-size: 6px; border-radius: 50%; }
+.rv-chip.buy { box-shadow: 0 0 0 2px var(--kh-up); }
+.rv-chip.sell { box-shadow: 0 0 0 2px var(--kh-down); }
+.rv-more { display: block; font-size: 0.66rem; color: var(--kh-text-muted); }
+
+/* ── 주 보기 — 폰은 세로 7줄 ── */
+.rv-week { display: flex; flex-direction: column; }
+.rv-wd { display: flex; gap: 10px; border-top: 1px solid var(--kh-border); padding: 8px 4px; min-height: 52px; cursor: pointer; }
+.rv-wd.is-pick { background: var(--kh-bg-active); border-radius: 6px; }
+.rv-wd-h { width: 34px; text-align: center; font-size: 0.72rem; color: var(--kh-text-muted); flex: none; }
+.rv-wd-h .rv-d { display: block; margin: 2px auto 0; font-size: 0.9rem; }
+.rv-wd-b { flex: 1; display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; min-width: 0; }
+.rv-wd-b .rv-chip, .rv-band .rv-chip { border-radius: 5px; padding: 3px 7px; margin: 0; box-shadow: none; font-size: 0.78rem; }
+.rv-wd-b .rv-chip > span, .rv-band .rv-chip > span { display: inline; overflow: hidden; text-overflow: ellipsis; }
+.rv-wd-b .rv-chip .kh-ic, .rv-band .rv-chip .kh-ic { width: 16px; height: 16px; min-width: 16px; }
+.rv-wd-b .rv-chip.buy, .rv-band .rv-chip.buy { background: var(--kh-up-dim); color: var(--kh-up); }
+.rv-wd-b .rv-chip.sell, .rv-band .rv-chip.sell { background: var(--kh-down-dim); color: var(--kh-down); }
+.rv-none { font-size: 0.72rem; color: var(--kh-text-dim); }
+
+/* ── 그날 칸 ── */
+.rv-day { margin-top: 14px; border-top: 1px solid var(--kh-border); padding-top: 12px; }
+.rv-cal:empty + .rv-side-col .rv-day { margin-top: 0; border-top: 0; padding-top: 0; }
+.rv-day-h { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.rv-day-h b { font-size: 0.98rem; color: var(--kh-text-primary); }
+.rv-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--kh-border); font-size: 0.86rem; }
+.rv-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--kh-text-primary); font-weight: 700; text-decoration: none; }
+.rv-side { font-size: 0.72rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; flex: none; }
+.rv-side.buy { background: var(--kh-up-dim); color: var(--kh-up); }
+.rv-side.sell { background: var(--kh-down-dim); color: var(--kh-down); }
+.rv-q { font-size: 0.78rem; color: var(--kh-text-secondary); flex: none; }
+.rv-p { text-align: right; font-variant-numeric: tabular-nums; flex: none; }
+.rv-why { flex-basis: 100%; font-size: 0.76rem; color: var(--kh-text-muted); margin: -4px 0 0 32px; }
+.rv-del { background: none; border: 0; color: var(--kh-text-dim); cursor: pointer; font-size: 0.8rem; padding: 2px 4px; }
+.rv-del:hover { color: var(--kh-text-primary); }
+.rv-rowwrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-bottom: 1px solid var(--kh-border); padding: 6px 0; }
+.rv-rowwrap .rv-row { border: 0; padding: 2px 0; flex: 1 1 100%; }
+.rv-empty { font-size: 0.8rem; color: var(--kh-text-muted); padding: 8px 0; }
+
+/* 기록 더하기 */
+.rv-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; background: var(--kh-bg-surface); border-radius: 10px; padding: 10px; }
+.rv-form input, .rv-form textarea { font: inherit; font-size: 0.85rem; border: 1px solid var(--kh-border-strong); border-radius: 6px; padding: 7px 8px; background: var(--kh-bg-card); color: var(--kh-text-primary); min-width: 0; box-sizing: border-box; }
+.rv-form .full { grid-column: 1 / -1; }
+.rv-form .rv-sidebtn { display: flex; gap: 4px; }
+.rv-form .rv-sidebtn button { flex: 1; font: inherit; font-size: 0.82rem; border: 1px solid var(--kh-border-strong); background: var(--kh-bg-card); color: var(--kh-text-secondary); border-radius: 6px; padding: 6px 0; cursor: pointer; }
+.rv-form .rv-sidebtn button.buy.is-on { background: var(--kh-up-dim); color: var(--kh-up); border-color: var(--kh-up); font-weight: 700; }
+.rv-form .rv-sidebtn button.sell.is-on { background: var(--kh-down-dim); color: var(--kh-down); border-color: var(--kh-down); font-weight: 700; }
+.rv-form .rv-hint { grid-column: 1 / -1; font-size: 0.7rem; color: var(--kh-text-muted); }
+.rv-form .rv-go { grid-column: 1 / -1; font: inherit; font-size: 0.85rem; font-weight: 700; border: 0; border-radius: 8px; padding: 9px 0; background: var(--kh-accent); color: var(--kh-text-on-fill); cursor: pointer; }
+
+/* 그날 회고 */
+.rv-memo-h { margin-top: 14px; font-size: 0.82rem; font-weight: 700; color: var(--kh-text-primary); }
+.rv-memo { margin-top: 6px; width: 100%; min-height: 80px; box-sizing: border-box; font: inherit; font-size: 0.85rem; border: 1px solid var(--kh-border-strong); border-radius: 8px; padding: 10px; background: var(--kh-bg-surface); color: var(--kh-text-primary); resize: vertical; }
+
+/* 미정 — 재권님이 정하실 자리(빨간 바탕). 정해지면 지운다 */
+.rv-red { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; background: var(--kh-danger-faint); color: var(--kh-danger); font-size: 0.74rem; line-height: 1.5; border-radius: 8px; padding: 8px 10px; }
+
+/* ── 넓은 화면 — 달력 왼쪽 · 그날 칸 오른쪽 ── */
+@media (min-width: 701px) {
+  .rv-app { padding: calc(var(--nav-height) + 16px) var(--nav-gutter) 60px; max-width: none; }
+  .rv { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 0 24px; padding: 20px 24px; align-items: start; }
+  .rv-top { grid-column: 1 / -1; }
+  .rv-cal { grid-column: 1; }
+  .rv-side-col { grid-column: 2; }
+  .rv-cal:empty { display: none; }
+  .rv-cal:empty + .rv-side-col { grid-column: 1 / -1; max-width: 760px; }
+  .rv-day { margin-top: 0; border-top: 0; padding-top: 0; }
+  .rv-cell { min-height: 112px; padding: 4px; text-align: left; }
+  .rv-cell .rv-d { display: block; margin: 0 auto 3px; text-align: center; }
+  .rv-cell .rv-chip { display: flex; border-radius: 4px; padding: 2px 5px; margin: 0 0 2px; box-shadow: none; font-size: 0.74rem; }
+  .rv-cell .rv-chip > span { display: inline; overflow: hidden; text-overflow: ellipsis; }
+  .rv-cell .rv-chip .kh-ic { width: 14px; height: 14px; min-width: 14px; font-size: 5px; }
+  .rv-cell .rv-chip.buy { background: var(--kh-up-dim); color: var(--kh-up); }
+  .rv-cell .rv-chip.sell { background: var(--kh-down-dim); color: var(--kh-down); }
+  .rv-more { text-align: left; padding-left: 4px; }
+  .rv-week { flex-direction: row; }
+  .rv-wd { flex-direction: column; flex: 1; min-width: 0; min-height: 420px; border-top: 0; border-left: 1px solid var(--kh-border); }
+  .rv-wd-h { width: auto; }
+  .rv-wd-b { flex-direction: column; flex-wrap: nowrap; }
+}

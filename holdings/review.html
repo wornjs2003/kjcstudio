@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+  <title>주식 회고 — KJC Holdings</title>
+  <meta name="description" content="종목을 사고판 날을 달력에서 되돌아보는 매매 기록 · 회고" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- 색·모서리는 theme.css 한 곳에서 정한다 -->
+  <link rel="stylesheet" href="../assets/css/theme.css" />
+  <link rel="stylesheet" href="../assets/css/common.css" />
+  <link rel="stylesheet" href="../assets/css/nav.css" />
+  <link rel="stylesheet" href="./css/frame.css" />
+  <link rel="stylesheet" href="./css/review.css" />
+</head>
+<!-- 주식 회고 (2026-10-07 재권님 「project 옆에 캘린더 칸」 · 「종목 사고팔 때 리뷰하는 페이지 — 주식회고」 ·
+     「구글 캘린더처럼?」 · 「월/주/일 보기 전환까지」 · 「응 이대로 해줘」).
+     **새 화면이라 모바일 퍼스트다** — 기본 CSS 가 폰(한 열)이고 넓은 화면은 css/review.css 의 min-width 에서 두 열이 된다.
+     저장은 보드와 같은 길 — /api/board/doc/stock-review (docstore · 저장마다 직전 것을 남긴다) · 화면 쪽은
+     projects/js/board-store.js(409 합치기 · 「이 브라우저에만」). -->
+<body data-nav="review" data-site-root="../">
+
+<div id="site-nav"></div>
+
+<main class="rv-app">
+  <section class="rv" aria-label="주식 회고">
+    <header class="rv-top">
+      <h1>주식 회고</h1>
+      <button class="rv-nav" type="button" data-move="-1" aria-label="이전">‹</button>
+      <b class="rv-title" id="rv-title"></b>
+      <button class="rv-nav" type="button" data-move="1" aria-label="다음">›</button>
+      <button class="rv-today" type="button" id="rv-today">오늘</button>
+      <span class="rv-status" id="rv-status"></span>
+      <div class="rv-seg" id="rv-seg" role="tablist">
+        <button type="button" data-view="month">월</button>
+        <button type="button" data-view="week">주</button>
+        <button type="button" data-view="day">일</button>
+      </div>
+    </header>
+
+    <div class="rv-cal" id="rv-cal"></div>
+
+    <div class="rv-side-col">
+      <div class="rv-day" id="rv-day"></div>
+
+      <!-- 미정: 재권님이 정하실 자리 셋 (2026-10-07 시안 · 「응 이대로 해줘」 때 남긴 것). 정해지면 이 칸을 지운다 -->
+      <div class="rv-red">
+        <b>재권님이 정하실 자리</b>
+        <span>· 칸의 띠 — 지금 「아이콘 + 이름 · 매수 빨강 / 매도 파랑」. 손익 금액을 띠에 넣을지</span>
+        <span>· 칸이 넘칠 때 몇 줄까지(폰 2 · 넓은 화면 3 → 「+N」)</span>
+        <span>· 회고를 그날 하나로 둘지, 매매마다 둘지(지금은 둘 다 — 그날 회고 칸 + 매매마다 이유 한 줄)</span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<datalist id="rv-stocks"></datalist>
+
+<!-- 보드 저장 층 — 보드 레인(projects/) 파일을 그대로 건다. 고치지 않는다 -->
+<script src="../projects/js/board-store.js"></script>
+<script type="module" src="./js/review.js"></script>
+<script src="../assets/js/main.js"></script>
+</body>
+</html>
