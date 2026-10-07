@@ -1,7 +1,7 @@
 {
- "fetchedAt": "2026-10-07 18:08",
+ "fetchedAt": "2026-10-07 18:25",
  "sources": {
-  "dart": "금감원 DART 전자공시 — 기업개황 · 정기보고서 「사업의 개요」 · 사업보고서 재무제표(재무 건전성) · 감사의견(회계 신뢰도)",
+  "dart": "금감원 DART 전자공시 — 기업개황 · 정기보고서 「사업의 개요」 · 사업보고서 재무제표(재무 건전성) · 감사의견(회계 신뢰도) · 최대주주 · 임원 · 보수 · 자기주식 · 배당(경영진 · 지배구조 · 주주환원)",
   "naver": "네이버 증권(FnGuide 집계) — 연간 실적 · 증권사 추정(E) · 목표주가 · 투자의견 · 리포트",
   "edgar": "미국 증권위 EDGAR — companyfacts 재무 · 10-K/20-F"
  },
@@ -121,6 +121,97 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260317000635",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 20.07,
+      "top": [
+       {
+        "name": "SK스퀘어(주)",
+        "relate": "최대주주",
+        "pct": 20.07
+       },
+       {
+        "name": "곽노정",
+        "relate": "특수관계인",
+        "pct": 0.0
+       },
+       {
+        "name": "안현",
+        "relate": "특수관계인",
+        "pct": 0.0
+       }
+      ],
+      "count": 9
+     },
+     "board": {
+      "registered": 9,
+      "inside": 2,
+      "outside": 5,
+      "ceo": [
+       "곽노정"
+      ],
+      "executives": 9
+     },
+     "pay": {
+      "people": 9.0,
+      "total": 7104000000.0,
+      "avg": 1015000000.0,
+      "top": [
+       {
+        "name": "박정호",
+        "title": "경영자문위원",
+        "pay": 9610000000.0
+       },
+       {
+        "name": "최태원",
+        "title": "회장",
+        "pay": 4750000000.0
+       },
+       {
+        "name": "곽노정",
+        "title": "사장/ 대표이사",
+        "pay": 4239000000.0
+       },
+       {
+        "name": "김주선",
+        "title": "사장",
+        "pay": 2830000000.0
+       },
+       {
+        "name": "김동섭",
+        "title": "경영자문위원",
+        "pay": 2730000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 19048003.0,
+      "acquired": null,
+      "disposed": 1669705.0,
+      "retired": null,
+      "end": 17378298.0
+     },
+     "dividend": {
+      "payout": [
+       4.9,
+       7.7
+      ],
+      "dps": [
+       3000.0,
+       2204.0
+      ],
+      "yield": [
+       0.4,
+       1.0
+      ]
+     },
+     "minority": {
+      "pct": 63.34,
+      "holders": 1186328.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "에스케이하이닉스(주)",
     "ceo": "곽노정",
@@ -277,7 +368,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:04"
+   "fetchedAt": "2026-10-07 18:19"
   },
   "005930": {
    "name": "삼성전자",
@@ -367,6 +458,98 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260310002820",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 19.84,
+      "top": [
+       {
+        "name": "삼성생명보험㈜",
+        "relate": "최대주주 본인",
+        "pct": 8.51
+       },
+       {
+        "name": "삼성물산㈜",
+        "relate": "계열회사",
+        "pct": 5.05
+       },
+       {
+        "name": "이재용",
+        "relate": "최대주주의 특수관계인",
+        "pct": 1.65
+       }
+      ],
+      "count": 19
+     },
+     "board": {
+      "registered": 9,
+      "inside": 3,
+      "outside": 6,
+      "ceo": [
+       "전영현",
+       "노태문"
+      ],
+      "executives": 9
+     },
+     "pay": {
+      "people": 9.0,
+      "total": 28052000000.0,
+      "avg": 3006000000.0,
+      "top": [
+       {
+        "name": "한종희",
+        "title": "부회장 (前대표이사)",
+        "pay": 13407000000.0
+       },
+       {
+        "name": "이원진",
+        "title": "사장",
+        "pay": 7305000000.0
+       },
+       {
+        "name": "전경훈",
+        "title": "고문",
+        "pay": 6417000000.0
+       },
+       {
+        "name": "신명훈",
+        "title": "고문",
+        "pay": 6331000000.0
+       },
+       {
+        "name": "노태문",
+        "title": "대표이사",
+        "pay": 6125000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 29700000.0,
+      "acquired": 118314495.0,
+      "disposed": 6040880.0,
+      "retired": 50144628.0,
+      "end": 91828987.0
+     },
+     "dividend": {
+      "payout": [
+       25.1,
+       29.2
+      ],
+      "dps": [
+       1668.0,
+       1446.0
+      ],
+      "yield": [
+       1.5,
+       2.7
+      ]
+     },
+     "minority": {
+      "pct": 66.04,
+      "holders": 4195927.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "삼성전자(주)",
     "ceo": "전영현, 노태문",
@@ -523,7 +706,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:20"
   },
   "MU": {
    "name": "마이크론",
@@ -582,7 +765,7 @@
     "source": "미국 증권위 EDGAR"
    },
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:20"
   },
   "NVDA": {
    "name": "엔비디아",
@@ -641,7 +824,7 @@
     "source": "미국 증권위 EDGAR"
    },
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:20"
   },
   "AMD": {
    "name": "AMD",
@@ -700,7 +883,7 @@
     "source": "미국 증권위 EDGAR"
    },
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:20"
   },
   "AVGO": {
    "name": "브로드컴",
@@ -759,7 +942,7 @@
     "source": "미국 증권위 EDGAR"
    },
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:20"
   },
   "TSM": {
    "name": "TSMC",
@@ -818,7 +1001,7 @@
     "source": "미국 증권위 EDGAR"
    },
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:20"
   },
   "042700": {
    "name": "한미반도체",
@@ -903,6 +1086,82 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260312001230",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 55.7,
+      "top": [
+       {
+        "name": "곽동신",
+        "relate": "本人",
+        "pct": 33.51
+       },
+       {
+        "name": "곽영미",
+        "relate": "姉",
+        "pct": 4.42
+       },
+       {
+        "name": "곽영아",
+        "relate": "姉",
+        "pct": 4.17
+       }
+      ],
+      "count": 8
+     },
+     "board": {
+      "registered": 4,
+      "inside": 2,
+      "outside": 1,
+      "ceo": [
+       "곽동신"
+      ],
+      "executives": 4
+     },
+     "pay": {
+      "people": 4.0,
+      "total": 4678000000.0,
+      "avg": 1170000000.0,
+      "top": [
+       {
+        "name": "곽동신",
+        "title": "대표이사 회장",
+        "pay": 4217000000.0
+       },
+       {
+        "name": "-",
+        "title": "-",
+        "pay": null
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 1691157.0,
+      "acquired": 1363000.0,
+      "disposed": 1292900.0,
+      "retired": 1302059.0,
+      "end": 459198.0
+     },
+     "dividend": {
+      "payout": [
+       35.5,
+       44.8
+      ],
+      "dps": [
+       800.0,
+       720.0
+      ],
+      "yield": [
+       0.4,
+       0.7
+      ]
+     },
+     "minority": {
+      "pct": 40.42,
+      "holders": 280731.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "한미반도체(주)",
     "ceo": "곽동신",
@@ -1012,8 +1271,8 @@
      }
     },
     "totals": {
-     "PER": "113.95배",
-     "PBR": "33.72배",
+     "PER": "113.30배",
+     "PBR": "33.53배",
      "배당수익률": "0.30%"
     },
     "consensus": {
@@ -1028,7 +1287,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:20"
   },
   "007660": {
    "name": "이수페타시스",
@@ -1113,6 +1372,76 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260323000847",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 26.13,
+      "top": [
+       {
+        "name": "(주)이수",
+        "relate": "본인",
+        "pct": 21.47
+       },
+       {
+        "name": "김선정",
+        "relate": "특수관계인",
+        "pct": 3.68
+       },
+       {
+        "name": "김상범",
+        "relate": "특수관계인",
+        "pct": 0.9
+       }
+      ],
+      "count": 6
+     },
+     "board": {
+      "registered": 5,
+      "inside": 3,
+      "outside": 1,
+      "ceo": [
+       "최창복"
+      ],
+      "executives": 5
+     },
+     "pay": {
+      "people": 5.0,
+      "total": 1605898000.0,
+      "avg": 321180000.0,
+      "top": [
+       {
+        "name": "김상범",
+        "title": "회장",
+        "pay": 2688000000.0
+       },
+       {
+        "name": "최창복",
+        "title": "사장",
+        "pay": 747958000.0
+       }
+      ]
+     },
+     "treasury": null,
+     "dividend": {
+      "payout": [
+       11.0,
+       13.0
+      ],
+      "dps": [
+       null,
+       null
+      ],
+      "yield": [
+       null,
+       null
+      ]
+     },
+     "minority": {
+      "pct": null,
+      "holders": null
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "(주)이수페타시스",
     "ceo": "최창복",
@@ -1222,8 +1551,8 @@
      }
     },
     "totals": {
-     "PER": "44.63배",
-     "PBR": "10.44배",
+     "PER": "44.67배",
+     "PBR": "10.45배",
      "배당수익률": "0.19%"
     },
     "consensus": {
@@ -1269,7 +1598,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:20"
   },
   "058470": {
    "name": "리노공업",
@@ -1354,6 +1683,87 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260318000182",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 34.66,
+      "top": [
+       {
+        "name": "이채윤",
+        "relate": "최대주주 본인",
+        "pct": 34.66
+       },
+       {
+        "name": "김형계",
+        "relate": "발행회사 임원",
+        "pct": 0.0
+       }
+      ],
+      "count": 2
+     },
+     "board": {
+      "registered": 7,
+      "inside": 4,
+      "outside": 2,
+      "ceo": [
+       "이채윤"
+      ],
+      "executives": 11
+     },
+     "pay": {
+      "people": 7.0,
+      "total": 5092814836.0,
+      "avg": 727544977.0,
+      "top": [
+       {
+        "name": "이채윤",
+        "title": "대표이사",
+        "pay": 3101952701.0
+       },
+       {
+        "name": "최용기",
+        "title": "상무",
+        "pay": 808270104.0
+       },
+       {
+        "name": "정병준",
+        "title": "상무",
+        "pay": 716195871.0
+       },
+       {
+        "name": "김병기",
+        "title": "상무",
+        "pay": 617208207.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 316250.0,
+      "acquired": null,
+      "disposed": null,
+      "retired": null,
+      "end": 316250.0
+     },
+     "dividend": {
+      "payout": [
+       39.96,
+       40.2
+      ],
+      "dps": [
+       800.0,
+       3000.0
+      ],
+      "yield": [
+       1.31,
+       1.54
+      ]
+     },
+     "minority": {
+      "pct": 58.49,
+      "holders": 62851.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "리노공업(주)",
     "ceo": "이채윤",
@@ -1463,8 +1873,8 @@
      }
     },
     "totals": {
-     "PER": "34.89배",
-     "PBR": "8.40배",
+     "PER": "34.77배",
+     "PBR": "8.37배",
      "배당수익률": "0.93%"
     },
     "consensus": {
@@ -1504,7 +1914,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:08"
+   "fetchedAt": "2026-10-07 18:20"
   },
   "095340": {
    "name": "ISC",
@@ -1617,6 +2027,78 @@
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260318000018",
      "source": "금감원 DART 사업보고서 감사의견"
     },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 48.9,
+      "top": [
+       {
+        "name": "에스케이씨(주)",
+        "relate": "본인",
+        "pct": 45.03
+       },
+       {
+        "name": "헬리오스제8호\n사모투자 합자회사",
+        "relate": "-",
+        "pct": 3.73
+       },
+       {
+        "name": "김정렬",
+        "relate": "특수관계인",
+        "pct": 0.13
+       }
+      ],
+      "count": 5
+     },
+     "board": {
+      "registered": 8,
+      "inside": 4,
+      "outside": 2,
+      "ceo": [
+       "유지한",
+       "김정렬"
+      ],
+      "executives": 8
+     },
+     "pay": {
+      "people": 8.0,
+      "total": 745000000.0,
+      "avg": 93000000.0,
+      "top": [
+       {
+        "name": "-",
+        "title": "-",
+        "pay": null
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 54607.0,
+      "acquired": null,
+      "disposed": null,
+      "retired": null,
+      "end": 54607.0
+     },
+     "dividend": {
+      "payout": [
+       31.0,
+       30.3
+      ],
+      "dps": [
+       850.0,
+       810.0
+      ],
+      "yield": [
+       0.8,
+       1.2
+      ]
+     },
+     "minority": {
+      "pct": 26.5,
+      "holders": 25939.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
+    },
     "corpName": "(주)아이에스시",
     "ceo": "김정렬 (단독 대표이사)",
     "homepage": "isc21.kr",
@@ -1725,8 +2207,8 @@
      }
     },
     "totals": {
-     "PER": "55.34배",
-     "PBR": "7.35배",
+     "PER": "55.21배",
+     "PBR": "7.34배",
      "배당수익률": "0.42%"
     },
     "consensus": {
@@ -1772,7 +2254,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:20"
   },
   "267260": {
    "name": "HD현대일렉트릭",
@@ -1857,6 +2339,97 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260316000940",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 37.4,
+      "top": [
+       {
+        "name": "HD현대㈜",
+        "relate": "최대주주",
+        "pct": 35.74
+       },
+       {
+        "name": "아산사회복지재단",
+        "relate": "특수관계인",
+        "pct": 1.1
+       },
+       {
+        "name": "아산나눔재단",
+        "relate": "특수관계인",
+        "pct": 0.57
+       }
+      ],
+      "count": 5
+     },
+     "board": {
+      "registered": 5,
+      "inside": 2,
+      "outside": 3,
+      "ceo": [
+       "김영기"
+      ],
+      "executives": 33
+     },
+     "pay": {
+      "people": 5.0,
+      "total": 1512000000.0,
+      "avg": 378000000.0,
+      "top": [
+       {
+        "name": "김영기",
+        "title": "대표이사",
+        "pay": 1232000000.0
+       },
+       {
+        "name": "조석",
+        "title": "부회장",
+        "pay": 664000000.0
+       },
+       {
+        "name": "이창호",
+        "title": "부사장",
+        "pay": 686000000.0
+       },
+       {
+        "name": "양재철",
+        "title": "전무",
+        "pay": 585000000.0
+       },
+       {
+        "name": "김관중",
+        "title": "전무",
+        "pay": 552000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 54431.0,
+      "acquired": null,
+      "disposed": null,
+      "retired": null,
+      "end": 54431.0
+     },
+     "dividend": {
+      "payout": [
+       34.88,
+       38.39
+      ],
+      "dps": [
+       null,
+       null
+      ],
+      "yield": [
+       null,
+       null
+      ]
+     },
+     "minority": {
+      "pct": 56.48,
+      "holders": 104487.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "에이치디현대일렉트릭(주)",
     "ceo": "김영기",
@@ -2013,7 +2586,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:20"
   },
   "298040": {
    "name": "효성중공업",
@@ -2126,6 +2699,84 @@
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260323001004",
      "source": "금감원 DART 사업보고서 감사의견"
     },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 43.96,
+      "top": [
+       {
+        "name": "(주)효성",
+        "relate": "최대주주 본인",
+        "pct": 32.47
+       },
+       {
+        "name": "조현준",
+        "relate": "임원",
+        "pct": 9.99
+       },
+       {
+        "name": "송광자",
+        "relate": "기타",
+        "pct": 0.73
+       }
+      ],
+      "count": 13
+     },
+     "board": {
+      "registered": 9,
+      "inside": 4,
+      "outside": 5,
+      "ceo": [
+       "조현준",
+       "우태희",
+       "이성근"
+      ],
+      "executives": 57
+     },
+     "pay": {
+      "people": 9.0,
+      "total": 4002000000.0,
+      "avg": 445000000.0,
+      "top": [
+       {
+        "name": "우태희",
+        "title": "대표이사(사장)",
+        "pay": 601000000.0
+       },
+       {
+        "name": "조현준",
+        "title": "사내이사(회장)",
+        "pay": 2500000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 12807.0,
+      "acquired": null,
+      "disposed": null,
+      "retired": null,
+      "end": 12807.0
+     },
+     "dividend": {
+      "payout": [
+       13.4,
+       20.9
+      ],
+      "dps": [
+       7500.0,
+       5000.0
+      ],
+      "yield": [
+       0.4,
+       1.2
+      ]
+     },
+     "minority": {
+      "pct": 40.16,
+      "holders": 64022.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
+    },
     "corpName": "효성중공업(주)",
     "ceo": "우태희",
     "homepage": "www.hyosungheavyindustries.com",
@@ -2234,8 +2885,8 @@
      }
     },
     "totals": {
-     "PER": "41.92배",
-     "PBR": "9.47배",
+     "PER": "41.82배",
+     "PBR": "9.44배",
      "배당수익률": "0.29%"
     },
     "consensus": {
@@ -2281,7 +2932,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:21"
   },
   "010120": {
    "name": "LS일렉트릭",
@@ -2375,6 +3026,97 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260318001243",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 49.33,
+      "top": [
+       {
+        "name": "(주)LS",
+        "relate": "최대주주",
+        "pct": 48.46
+       },
+       {
+        "name": "LS ELECTRIC(주)",
+        "relate": "특수관계인",
+        "pct": 0.87
+       },
+       {
+        "name": "채대석",
+        "relate": "등기임원",
+        "pct": 0.0
+       }
+      ],
+      "count": 5
+     },
+     "board": {
+      "registered": 9,
+      "inside": 4,
+      "outside": 5,
+      "ceo": [
+       "구자균"
+      ],
+      "executives": 39
+     },
+     "pay": {
+      "people": 9.0,
+      "total": 10717000000.0,
+      "avg": 1191000000.0,
+      "top": [
+       {
+        "name": "구자균",
+        "title": "회장",
+        "pay": 7151000000.0
+       },
+       {
+        "name": "김종우",
+        "title": "사장",
+        "pay": 1231000000.0
+       },
+       {
+        "name": "오재석",
+        "title": "사장",
+        "pay": 1189000000.0
+       },
+       {
+        "name": "안길영",
+        "title": "전무",
+        "pay": 836000000.0
+       },
+       {
+        "name": "김동현",
+        "title": "고문",
+        "pay": 1431000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 298739.0,
+      "acquired": null,
+      "disposed": 37230.0,
+      "retired": null,
+      "end": 261509.0
+     },
+     "dividend": {
+      "payout": [
+       31.1,
+       36.1
+      ],
+      "dps": [
+       null,
+       null
+      ],
+      "yield": [
+       null,
+       null
+      ]
+     },
+     "minority": {
+      "pct": 40.1,
+      "holders": 108607.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "엘에스일렉트릭 주식회사",
     "ceo": "구자균, 채대석",
@@ -2484,8 +3226,8 @@
      }
     },
     "totals": {
-     "PER": "79.48배",
-     "PBR": "14.39배",
+     "PER": "79.28배",
+     "PBR": "14.35배",
      "배당수익률": "0.06%"
     },
     "consensus": {
@@ -2531,7 +3273,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:21"
   },
   "034020": {
    "name": "두산에너빌리티",
@@ -2643,6 +3385,99 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260320001246",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 30.68,
+      "top": [
+       {
+        "name": "㈜두산",
+        "relate": "본인",
+        "pct": 30.39
+       },
+       {
+        "name": "박정원",
+        "relate": "특수관계인",
+        "pct": 0.07
+       },
+       {
+        "name": "박지원",
+        "relate": "특수관계인",
+        "pct": 0.05
+       }
+      ],
+      "count": 29
+     },
+     "board": {
+      "registered": 7,
+      "inside": 3,
+      "outside": 4,
+      "ceo": [
+       "박지원",
+       "정연인",
+       "박상현"
+      ],
+      "executives": 7
+     },
+     "pay": {
+      "people": 8.0,
+      "total": 10765000000.0,
+      "avg": 1346000000.0,
+      "top": [
+       {
+        "name": "박지원",
+        "title": "회장",
+        "pay": 6047000000.0
+       },
+       {
+        "name": "김정관",
+        "title": "사장",
+        "pay": 2654000000.0
+       },
+       {
+        "name": "정연인",
+        "title": "부회장",
+        "pay": 2455000000.0
+       },
+       {
+        "name": "박상현",
+        "title": "사장",
+        "pay": 1966000000.0
+       },
+       {
+        "name": "김종두",
+        "title": "사장",
+        "pay": 1451000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 95978.0,
+      "acquired": null,
+      "disposed": null,
+      "retired": null,
+      "end": 95978.0
+     },
+     "dividend": {
+      "payout": [
+       null,
+       null
+      ],
+      "dps": [
+       null,
+       null
+      ],
+      "yield": [
+       null,
+       null
+      ]
+     },
+     "minority": {
+      "pct": 63.32,
+      "holders": 1117843.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "두산에너빌리티(주)",
     "ceo": "박지원, 정연인, 박상현",
@@ -2799,7 +3634,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:21"
   },
   "001440": {
    "name": "대한전선",
@@ -2893,6 +3728,71 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260318001418",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 41.97,
+      "top": [
+       {
+        "name": "주식회사 호반산업",
+        "relate": "최대주주",
+        "pct": 41.95
+       },
+       {
+        "name": "송종민",
+        "relate": "특수관계인",
+        "pct": 0.01
+       },
+       {
+        "name": "김선규",
+        "relate": "계열회사 임원",
+        "pct": 0.01
+       }
+      ],
+      "count": 3
+     },
+     "board": {
+      "registered": 7,
+      "inside": 2,
+      "outside": 4,
+      "ceo": [
+       "송종민"
+      ],
+      "executives": 54
+     },
+     "pay": {
+      "people": 7.0,
+      "total": 956000000.0,
+      "avg": 137000000.0,
+      "top": [
+       {
+        "name": "송종민",
+        "title": "부회장",
+        "pay": 602000000.0
+       }
+      ]
+     },
+     "treasury": null,
+     "dividend": {
+      "payout": [
+       null,
+       null
+      ],
+      "dps": [
+       null,
+       null
+      ],
+      "yield": [
+       null,
+       null
+      ]
+     },
+     "minority": {
+      "pct": 51.67,
+      "holders": 294536.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "대한전선(주)",
     "ceo": "송종민",
@@ -3003,7 +3903,7 @@
     },
     "totals": {
      "PER": "N/A",
-     "PBR": "3.10배",
+     "PBR": "3.11배",
      "배당수익률": "N/A"
     },
     "consensus": {
@@ -3049,7 +3949,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:21"
   },
   "006260": {
    "name": "LS",
@@ -3162,6 +4062,92 @@
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260318001427",
      "source": "금감원 DART 사업보고서 감사의견"
     },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 32.6,
+      "top": [
+       {
+        "name": "구자은",
+        "relate": "최대주주의  친인척",
+        "pct": 3.69
+       },
+       {
+        "name": "구동휘",
+        "relate": "최대주주의  친인척",
+        "pct": 3.04
+       },
+       {
+        "name": "구자용",
+        "relate": "최대주주의  친인척",
+        "pct": 2.43
+       }
+      ],
+      "count": 46
+     },
+     "board": {
+      "registered": 7,
+      "inside": 3,
+      "outside": 4,
+      "ceo": [
+       "명노현"
+      ],
+      "executives": 17
+     },
+     "pay": {
+      "people": 7.0,
+      "total": 15531000000.0,
+      "avg": 2219000000.0,
+      "top": [
+       {
+        "name": "구자열",
+        "title": "이사회 의장",
+        "pay": 5577000000.0
+       },
+       {
+        "name": "구자은",
+        "title": "회장",
+        "pay": 6761000000.0
+       },
+       {
+        "name": "명노현",
+        "title": "부회장",
+        "pay": 2906000000.0
+       },
+       {
+        "name": "안원형",
+        "title": "사장",
+        "pay": 1263000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 4852462.0,
+      "acquired": null,
+      "disposed": 387365.0,
+      "retired": 500000.0,
+      "end": 3965097.0
+     },
+     "dividend": {
+      "payout": [
+       25.25,
+       19.01
+      ],
+      "dps": [
+       null,
+       null
+      ],
+      "yield": [
+       null,
+       null
+      ]
+     },
+     "minority": {
+      "pct": 43.76,
+      "holders": 57868.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
+    },
     "corpName": "(주)LS",
     "ceo": "명노현",
     "homepage": "www.lsholdings.co.kr",
@@ -3270,9 +4256,9 @@
      }
     },
     "totals": {
-     "PER": "20.64배",
-     "PBR": "1.45배",
-     "배당수익률": "0.89%"
+     "PER": "20.60배",
+     "PBR": "1.44배",
+     "배당수익률": "0.90%"
     },
     "consensus": {
      "targetPriceMean": 556000,
@@ -3317,7 +4303,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:21"
   },
   "089030": {
    "name": "테크윙",
@@ -3402,6 +4388,78 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260623000173",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 24.13,
+      "top": [
+       {
+        "name": "나윤성",
+        "relate": "최대주주",
+        "pct": 13.5
+       },
+       {
+        "name": "(주)다솜테크",
+        "relate": "기타",
+        "pct": 4.99
+       },
+       {
+        "name": "(주)트루텍",
+        "relate": "기타",
+        "pct": 4.75
+       }
+      ],
+      "count": 7
+     },
+     "board": {
+      "registered": 4,
+      "inside": 2,
+      "outside": 1,
+      "ceo": [
+       "나윤성",
+       "장남"
+      ],
+      "executives": 4
+     },
+     "pay": {
+      "people": 4.0,
+      "total": 1758000000.0,
+      "avg": 440000000.0,
+      "top": [
+       {
+        "name": "나윤성",
+        "title": "대표이사",
+        "pay": 1291000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 1613171.0,
+      "acquired": null,
+      "disposed": null,
+      "retired": -300000.0,
+      "end": 1313171.0
+     },
+     "dividend": {
+      "payout": [
+       49.4,
+       -22.3
+      ],
+      "dps": [
+       130.0,
+       130.0
+      ],
+      "yield": [
+       0.3,
+       0.4
+      ]
+     },
+     "minority": {
+      "pct": 65.08,
+      "holders": 73553.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "(주)테크윙",
     "ceo": "나윤성, 장 남 각자대표",
@@ -3512,7 +4570,7 @@
     },
     "totals": {
      "PER": "N/A",
-     "PBR": "9.17배",
+     "PBR": "9.13배",
      "배당수익률": "0.24%"
     },
     "consensus": {
@@ -3534,7 +4592,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:05"
+   "fetchedAt": "2026-10-07 18:21"
   },
   "319660": {
    "name": "피에스케이",
@@ -3619,6 +4677,71 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260323000017",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 32.86,
+      "top": [
+       {
+        "name": "피에스케이홀딩스",
+        "relate": "최대주주",
+        "pct": 32.76
+       },
+       {
+        "name": "이경일",
+        "relate": "특수관계인",
+        "pct": 0.05
+       },
+       {
+        "name": "강호길",
+        "relate": "특수관계인",
+        "pct": 0.02
+       }
+      ],
+      "count": 13
+     },
+     "board": {
+      "registered": 6,
+      "inside": 3,
+      "outside": 2,
+      "ceo": [
+       "이경일"
+      ],
+      "executives": 22
+     },
+     "pay": {
+      "people": 6.0,
+      "total": 1319000000.0,
+      "avg": 219000000.0,
+      "top": [
+       {
+        "name": "-",
+        "title": "-",
+        "pay": null
+       }
+      ]
+     },
+     "treasury": null,
+     "dividend": {
+      "payout": [
+       25.1,
+       14.6
+      ],
+      "dps": [
+       680.0,
+       400.0
+      ],
+      "yield": [
+       1.8,
+       2.4
+      ]
+     },
+     "minority": {
+      "pct": 61.07,
+      "holders": 28439.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "피에스케이 주식회사",
     "ceo": "이경일, 하형찬 각자대표",
@@ -3769,7 +4892,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:21"
   },
   "240810": {
    "name": "원익IPS",
@@ -3854,6 +4977,97 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260316001453",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 32.98,
+      "top": [
+       {
+        "name": "(주)원익홀딩스",
+        "relate": "최대주주",
+        "pct": 32.9
+       },
+       {
+        "name": "이현덕",
+        "relate": "발행회사 임원",
+        "pct": 0.03
+       },
+       {
+        "name": "임창빈",
+        "relate": "계열회사 임원",
+        "pct": 0.03
+       }
+      ],
+      "count": 8
+     },
+     "board": {
+      "registered": 6,
+      "inside": 3,
+      "outside": 3,
+      "ceo": [
+       "안태혁"
+      ],
+      "executives": 6
+     },
+     "pay": {
+      "people": 6.0,
+      "total": 2791000000.0,
+      "avg": 465000000.0,
+      "top": [
+       {
+        "name": "이용한",
+        "title": "회장",
+        "pay": 1039000000.0
+       },
+       {
+        "name": "이현덕",
+        "title": "부회장",
+        "pay": 996000000.0
+       },
+       {
+        "name": "안태혁",
+        "title": "이사",
+        "pay": 553000000.0
+       },
+       {
+        "name": "조태승",
+        "title": "센터장",
+        "pay": 935000000.0
+       },
+       {
+        "name": "양장규",
+        "title": "고문",
+        "pay": 556000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 19375.0,
+      "acquired": null,
+      "disposed": null,
+      "retired": null,
+      "end": 19375.0
+     },
+     "dividend": {
+      "payout": [
+       11.6,
+       11.7
+      ],
+      "dps": [
+       200.0,
+       50.0
+      ],
+      "yield": [
+       0.3,
+       0.2
+      ]
+     },
+     "minority": {
+      "pct": 52.91,
+      "holders": 70783.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "(주)원익아이피에스",
     "ceo": "Tae Hyuk Ahn",
@@ -3963,8 +5177,8 @@
      }
     },
     "totals": {
-     "PER": "37.63배",
-     "PBR": "6.01배",
+     "PER": "37.52배",
+     "PBR": "6.00배",
      "배당수익률": "0.15%"
     },
     "consensus": {
@@ -3998,7 +5212,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:22"
   },
   "036930": {
    "name": "주성엔지니어링",
@@ -4083,6 +5297,78 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260318000323",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 30.08,
+      "top": [
+       {
+        "name": "황철주",
+        "relate": "최대주주 본인",
+        "pct": 25.5
+       },
+       {
+        "name": "황은석",
+        "relate": "최대주주의 자",
+        "pct": 2.23
+       },
+       {
+        "name": "김재란",
+        "relate": "최대주주 배우자",
+        "pct": 1.88
+       }
+      ],
+      "count": 11
+     },
+     "board": {
+      "registered": 7,
+      "inside": 2,
+      "outside": 4,
+      "ceo": [
+       "황철주",
+       "황은석"
+      ],
+      "executives": 19
+     },
+     "pay": {
+      "people": 9.0,
+      "total": 5256000000.0,
+      "avg": 584000000.0,
+      "top": [
+       {
+        "name": "황철주",
+        "title": "대표이사/회장",
+        "pay": 4200000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 1574399.0,
+      "acquired": null,
+      "disposed": null,
+      "retired": null,
+      "end": 1574399.0
+     },
+     "dividend": {
+      "payout": [
+       6.79,
+       12.28
+      ],
+      "dps": [
+       53.0,
+       287.0
+      ],
+      "yield": [
+       0.19,
+       0.97
+      ]
+     },
+     "minority": {
+      "pct": 54.25,
+      "holders": 66117.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "주성엔지니어링(주)",
     "ceo": "황철주, 황은석(각자대표이사)",
@@ -4192,8 +5478,8 @@
      }
     },
     "totals": {
-     "PER": "1,646.10배",
-     "PBR": "19.57배",
+     "PER": "1,633.12배",
+     "PBR": "19.41배",
      "배당수익률": "0.02%"
     },
     "consensus": {
@@ -4208,7 +5494,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:22"
   },
   "357780": {
    "name": "솔브레인",
@@ -4293,6 +5579,82 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260316001567",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 44.93,
+      "top": [
+       {
+        "name": "솔브레인홀딩스㈜",
+        "relate": "본인",
+        "pct": 31.0
+       },
+       {
+        "name": "정지완",
+        "relate": " 특수관계인",
+        "pct": 7.77
+       },
+       {
+        "name": "정문주",
+        "relate": "특수관계인",
+        "pct": 2.38
+       }
+      ],
+      "count": 10
+     },
+     "board": {
+      "registered": 4,
+      "inside": 2,
+      "outside": 1,
+      "ceo": [
+       "박영수"
+      ],
+      "executives": 20
+     },
+     "pay": {
+      "people": 4.0,
+      "total": 876000000.0,
+      "avg": 219000000.0,
+      "top": [
+       {
+        "name": "임정훈",
+        "title": "전무이사",
+        "pay": 868000000.0
+       },
+       {
+        "name": "박영수",
+        "title": "대표이사",
+        "pay": 563000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 35424.0,
+      "acquired": 84486.0,
+      "disposed": null,
+      "retired": null,
+      "end": 119910.0
+     },
+     "dividend": {
+      "payout": [
+       22.77,
+       15.04
+      ],
+      "dps": [
+       2350.0,
+       2300.0
+      ],
+      "yield": [
+       0.53,
+       1.38
+      ]
+     },
+     "minority": {
+      "pct": 37.9,
+      "holders": 23904.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "솔브레인 주식회사",
     "ceo": "박영수",
@@ -4402,8 +5764,8 @@
      }
     },
     "totals": {
-     "PER": "24.98배",
-     "PBR": "2.73배",
+     "PER": "25.05배",
+     "PBR": "2.74배",
      "배당수익률": "0.57%"
     },
     "consensus": {
@@ -4449,7 +5811,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:22"
   },
   "005290": {
    "name": "동진쎄미켐",
@@ -4534,6 +5896,87 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260319000264",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 38.62,
+      "top": [
+       {
+        "name": "동진홀딩스주식회사",
+        "relate": "최대주주",
+        "pct": 32.49
+       },
+       {
+        "name": "재단법인\n동진장학연구재단",
+        "relate": "기타",
+        "pct": 3.66
+       },
+       {
+        "name": "명부산업(주)",
+        "relate": "기타",
+        "pct": 1.23
+       }
+      ],
+      "count": 6
+     },
+     "board": {
+      "registered": 5,
+      "inside": 3,
+      "outside": 1,
+      "ceo": [
+       "이준혁"
+      ],
+      "executives": 49
+     },
+     "pay": {
+      "people": 5.0,
+      "total": 4956814000.0,
+      "avg": 991363000.0,
+      "top": [
+       {
+        "name": "이부섭",
+        "title": "(전)대표이사 회장",
+        "pay": 710042000.0
+       },
+       {
+        "name": "이준혁",
+        "title": "대표이사 회장",
+        "pay": 2981035000.0
+       },
+       {
+        "name": "이준규",
+        "title": "부회장",
+        "pay": 1362086000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": null,
+      "acquired": 26498.0,
+      "disposed": null,
+      "retired": null,
+      "end": 26498.0
+     },
+     "dividend": {
+      "payout": [
+       33.71,
+       6.64
+      ],
+      "dps": [
+       650.0,
+       200.0
+      ],
+      "yield": [
+       1.72,
+       0.94
+      ]
+     },
+     "minority": {
+      "pct": 50.89,
+      "holders": 74720.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "(주)동진쎄미켐",
     "ceo": "이준혁",
@@ -4643,9 +6086,9 @@
      }
     },
     "totals": {
-     "PER": "12.47배",
-     "PBR": "2.11배",
-     "배당수익률": "1.28%"
+     "PER": "12.42배",
+     "PBR": "2.10배",
+     "배당수익률": "1.29%"
     },
     "consensus": {
      "targetPriceMean": null,
@@ -4659,7 +6102,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:22"
   },
   "035420": {
    "name": "네이버",
@@ -4772,6 +6215,92 @@
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260313001021",
      "source": "금감원 DART 사업보고서 감사의견"
     },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 9.25,
+      "top": [
+       {
+        "name": "국민연금기금",
+        "relate": "특수관계인",
+        "pct": 9.25
+       },
+       {
+        "name": "국민연금공단",
+        "relate": "본인",
+        "pct": 0.0
+       }
+      ],
+      "count": 2
+     },
+     "board": {
+      "registered": 7,
+      "inside": 2,
+      "outside": 4,
+      "ceo": [
+       "최수연"
+      ],
+      "executives": 7
+     },
+     "pay": {
+      "people": 7.0,
+      "total": 5957000000.0,
+      "avg": 851000000.0,
+      "top": [
+       {
+        "name": "한성숙",
+        "title": "(前) 리더/Global Advisor",
+        "pay": 10343000000.0
+       },
+       {
+        "name": "최수연",
+        "title": "대표이사",
+        "pay": 3029000000.0
+       },
+       {
+        "name": "이해진",
+        "title": "이사회 의장",
+        "pay": 2437000000.0
+       },
+       {
+        "name": "채선주",
+        "title": "전략사업대표",
+        "pay": 2011000000.0
+       },
+       {
+        "name": "김범준",
+        "title": "COO",
+        "pay": 1857000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 9507713.0,
+      "acquired": null,
+      "disposed": null,
+      "retired": null,
+      "end": 7272861.0
+     },
+     "dividend": {
+      "payout": [
+       20.2,
+       8.8
+      ],
+      "dps": [
+       2630.0,
+       1130.0
+      ],
+      "yield": [
+       1.0,
+       0.5
+      ]
+     },
+     "minority": {
+      "pct": 74.98,
+      "holders": 1159318.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
+    },
     "corpName": "네이버(주)",
     "ceo": "최수연",
     "homepage": "www.navercorp.com",
@@ -4880,7 +6409,7 @@
      }
     },
     "totals": {
-     "PER": "14.66배",
+     "PER": "14.64배",
      "PBR": "0.96배",
      "배당수익률": "1.39%"
     },
@@ -4927,7 +6456,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:22"
   },
   "035720": {
    "name": "카카오",
@@ -5040,6 +6569,97 @@
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260318001423",
      "source": "금감원 DART 사업보고서 감사의견"
     },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 24.1,
+      "top": [
+       {
+        "name": "김범수",
+        "relate": "본인",
+        "pct": 13.28
+       },
+       {
+        "name": "㈜케이큐브홀딩스",
+        "relate": "특수관계인",
+        "pct": 10.45
+       },
+       {
+        "name": "형미선",
+        "relate": "특수관계인",
+        "pct": 0.06
+       }
+      ],
+      "count": 90
+     },
+     "board": {
+      "registered": 8,
+      "inside": 3,
+      "outside": 5,
+      "ceo": [
+       "정신아"
+      ],
+      "executives": 8
+     },
+     "pay": {
+      "people": 8.0,
+      "total": 3861000000.0,
+      "avg": 483000000.0,
+      "top": [
+       {
+        "name": "홍은택",
+        "title": "(前)대표이사",
+        "pay": 2332000000.0
+       },
+       {
+        "name": "정신아",
+        "title": "대표이사",
+        "pay": 1361000000.0
+       },
+       {
+        "name": "권대열",
+        "title": "CA협의체 그룹ESG담당",
+        "pay": 807000000.0
+       },
+       {
+        "name": "정규돈",
+        "title": "CTO",
+        "pay": 787000000.0
+       },
+       {
+        "name": "이성호",
+        "title": "그룹재무전략실 소속 리더",
+        "pay": 785000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 4653062.0,
+      "acquired": null,
+      "disposed": 9695.0,
+      "retired": 2202644.0,
+      "end": 2440723.0
+     },
+     "dividend": {
+      "payout": [
+       6.7,
+       54.0
+      ],
+      "dps": [
+       75.0,
+       68.0
+      ],
+      "yield": [
+       0.1,
+       0.2
+      ]
+     },
+     "minority": {
+      "pct": 64.96,
+      "holders": 1600467.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
+    },
     "corpName": "(주)카카오",
     "ceo": "정신아",
     "homepage": "www.kakaocorp.com",
@@ -5148,8 +6768,8 @@
      }
     },
     "totals": {
-     "PER": "42.02배",
-     "PBR": "1.23배",
+     "PER": "42.15배",
+     "PBR": "1.24배",
      "배당수익률": "0.23%"
     },
     "consensus": {
@@ -5195,7 +6815,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:22"
   },
   "GOOGL": {
    "name": "구글",
@@ -5254,7 +6874,7 @@
     "source": "미국 증권위 EDGAR"
    },
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:22"
   },
   "META": {
    "name": "메타",
@@ -5313,7 +6933,7 @@
     "source": "미국 증권위 EDGAR"
    },
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:22"
   },
   "MSFT": {
    "name": "마이크로소프트",
@@ -5372,7 +6992,7 @@
     "source": "미국 증권위 EDGAR"
    },
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:22"
   },
   "AMZN": {
    "name": "아마존",
@@ -5431,7 +7051,7 @@
     "source": "미국 증권위 EDGAR"
    },
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:22"
   },
   "ORCL": {
    "name": "오라클",
@@ -5490,7 +7110,7 @@
     "source": "미국 증권위 EDGAR"
    },
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:22"
   },
   "VRT": {
    "name": "Vertiv",
@@ -5549,7 +7169,7 @@
     "source": "미국 증권위 EDGAR"
    },
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:22"
   },
   "011200": {
    "name": "HMM",
@@ -5639,6 +7259,72 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260318001444",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 35.42,
+      "top": [
+       {
+        "name": "한국산업은행",
+        "relate": "최대주주\n본인",
+        "pct": 35.42
+       }
+      ],
+      "count": 1
+     },
+     "board": {
+      "registered": 6,
+      "inside": 2,
+      "outside": 4,
+      "ceo": [
+       "최원혁"
+      ],
+      "executives": 41
+     },
+     "pay": {
+      "people": 6.0,
+      "total": 2552578000.0,
+      "avg": 425430000.0,
+      "top": [
+       {
+        "name": "김경배",
+        "title": "前 대표이사",
+        "pay": 718767000.0
+       },
+       {
+        "name": "박진기",
+        "title": "前 부사장",
+        "pay": 814530000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 0.0,
+      "acquired": 81801526.0,
+      "disposed": null,
+      "retired": 81801526.0,
+      "end": 0.0
+     },
+     "dividend": {
+      "payout": [
+       35.15,
+       13.98
+      ],
+      "dps": [
+       700.0,
+       600.0
+      ],
+      "yield": [
+       3.4,
+       3.2
+      ]
+     },
+     "minority": {
+      "pct": 23.05,
+      "holders": 410469.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "에이치엠엠(주) ",
     "ceo": "최원혁",
@@ -5795,7 +7481,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:22"
   },
   "028670": {
    "name": "팬오션",
@@ -5885,6 +7571,77 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260319001097",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 54.92,
+      "top": [
+       {
+        "name": "(주)하림지주",
+        "relate": "최대주주",
+        "pct": 54.72
+       },
+       {
+        "name": "(주)에코캐피탈",
+        "relate": "계열사",
+        "pct": 0.16
+       },
+       {
+        "name": "김기만",
+        "relate": "친인척",
+        "pct": 0.01
+       }
+      ],
+      "count": 14
+     },
+     "board": {
+      "registered": 7,
+      "inside": 3,
+      "outside": 4,
+      "ceo": [
+       "김홍국",
+       "안중호"
+      ],
+      "executives": 23
+     },
+     "pay": {
+      "people": 7.0,
+      "total": 3161000000.0,
+      "avg": 452000000.0,
+      "top": [
+       {
+        "name": "김홍국",
+        "title": "회장/대표이사",
+        "pay": 1850000000.0
+       },
+       {
+        "name": "안중호",
+        "title": "사장/대표이사",
+        "pay": 895000000.0
+       }
+      ]
+     },
+     "treasury": null,
+     "dividend": {
+      "payout": [
+       26.6,
+       23.9
+      ],
+      "dps": [
+       150.0,
+       120.0
+      ],
+      "yield": [
+       3.8,
+       3.6
+      ]
+     },
+     "minority": {
+      "pct": 40.14,
+      "holders": 215873.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "팬오션(주)",
     "ceo": "김홍국, 안중호(각자 대표이사)",
@@ -5994,8 +7751,8 @@
      }
     },
     "totals": {
-     "PER": "9.79배",
-     "PBR": "0.52배",
+     "PER": "9.81배",
+     "PBR": "0.53배",
      "배당수익률": "2.42%"
     },
     "consensus": {
@@ -6041,7 +7798,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:23"
   },
   "005880": {
    "name": "대한해운",
@@ -6126,6 +7883,72 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260320001138",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 48.81,
+      "top": [
+       {
+        "name": "에스엠상선㈜",
+        "relate": "최대주주\n본인",
+        "pct": 23.58
+       },
+       {
+        "name": "㈜우방",
+        "relate": "계열회사",
+        "pct": 21.38
+       },
+       {
+        "name": "에스엠\n하이플러스㈜",
+        "relate": "계열회사",
+        "pct": 3.85
+       }
+      ],
+      "count": 3
+     },
+     "board": {
+      "registered": 7,
+      "inside": 3,
+      "outside": 4,
+      "ceo": [
+       "이동수",
+       "한수한"
+      ],
+      "executives": 12
+     },
+     "pay": {
+      "people": 5.0,
+      "total": 966000000.0,
+      "avg": 208000000.0,
+      "top": [
+       {
+        "name": "-",
+        "title": "-",
+        "pay": null
+       }
+      ]
+     },
+     "treasury": null,
+     "dividend": {
+      "payout": [
+       null,
+       null
+      ],
+      "dps": [
+       null,
+       null
+      ],
+      "yield": [
+       null,
+       null
+      ]
+     },
+     "minority": {
+      "pct": 46.55,
+      "holders": 233550.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "대한해운(주)",
     "ceo": "민상기",
@@ -6235,8 +8058,8 @@
      }
     },
     "totals": {
-     "PER": "3.77배",
-     "PBR": "0.28배",
+     "PER": "3.76배",
+     "PBR": "0.27배",
      "배당수익률": "N/A"
     },
     "consensus": {
@@ -6270,7 +8093,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:23"
   },
   "047050": {
    "name": "포스코인터내셔널",
@@ -6355,6 +8178,97 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260318001494",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 70.72,
+      "top": [
+       {
+        "name": "포스코홀딩스(주)",
+        "relate": "최대주주",
+        "pct": 70.71
+       },
+       {
+        "name": "이계인",
+        "relate": "등기임원",
+        "pct": 0.01
+       },
+       {
+        "name": "학교법인 포항공과대학교",
+        "relate": "기타",
+        "pct": 0.0
+       }
+      ],
+      "count": 4
+     },
+     "board": {
+      "registered": 8,
+      "inside": 2,
+      "outside": 5,
+      "ceo": [
+       "이계인"
+      ],
+      "executives": 8
+     },
+     "pay": {
+      "people": 7.0,
+      "total": 2177000000.0,
+      "avg": 311000000.0,
+      "top": [
+       {
+        "name": "이계인",
+        "title": "대표이사 사장 (재임)",
+        "pay": 959000000.0
+       },
+       {
+        "name": "정경진",
+        "title": "부사장 (재임)",
+        "pay": 777000000.0
+       },
+       {
+        "name": "조준수",
+        "title": "부사장 (재임)",
+        "pay": 591000000.0
+       },
+       {
+        "name": "민창기",
+        "title": "고문 (퇴임)",
+        "pay": 553000000.0
+       },
+       {
+        "name": "김동일",
+        "title": "상무 (재임)",
+        "pay": 501000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 5478301.0,
+      "acquired": null,
+      "disposed": null,
+      "retired": null,
+      "end": 5478301.0
+     },
+     "dividend": {
+      "payout": [
+       51.3,
+       51.3
+      ],
+      "dps": [
+       1850.0,
+       1550.0
+      ],
+      "yield": [
+       3.2,
+       3.7
+      ]
+     },
+     "minority": {
+      "pct": 19.45,
+      "holders": 146393.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "(주)포스코인터내셔널",
     "ceo": "대표이사 사장 이계인",
@@ -6464,9 +8378,9 @@
      }
     },
     "totals": {
-     "PER": "12.13배",
+     "PER": "12.10배",
      "PBR": "1.39배",
-     "배당수익률": "3.24%"
+     "배당수익률": "3.25%"
     },
     "consensus": {
      "targetPriceMean": 90467,
@@ -6511,7 +8425,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:06"
+   "fetchedAt": "2026-10-07 18:23"
   },
   "105560": {
    "name": "KB금융",
@@ -6624,6 +8538,84 @@
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260619000667",
      "source": "금감원 DART 사업보고서 감사의견"
     },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 8.68,
+      "top": [
+       {
+        "name": "국민연금공단",
+        "relate": "본인 및 특별관계자",
+        "pct": 8.68
+       }
+      ],
+      "count": 1
+     },
+     "board": {
+      "registered": 9,
+      "inside": 1,
+      "outside": 7,
+      "ceo": [
+       "양종희",
+       "최재홍",
+       "이명활"
+      ],
+      "executives": 32
+     },
+     "pay": {
+      "people": 9.0,
+      "total": 1965000000.0,
+      "avg": 224000000.0,
+      "top": [
+       {
+        "name": "양종희",
+        "title": "회장",
+        "pay": 1890000000.0
+       },
+       {
+        "name": "권봉중",
+        "title": "전무",
+        "pay": 1390000000.0
+       },
+       {
+        "name": "강승호",
+        "title": "실장",
+        "pay": 536000000.0
+       },
+       {
+        "name": "임대환",
+        "title": "부사장",
+        "pay": 524000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 19927704.0,
+      "acquired": 15012997.0,
+      "disposed": null,
+      "retired": 12066320.0,
+      "end": 22874381.0
+     },
+     "dividend": {
+      "payout": [
+       27.0,
+       23.6
+      ],
+      "dps": [
+       4367.0,
+       3174.0
+      ],
+      "yield": [
+       3.2,
+       3.5
+      ]
+     },
+     "minority": {
+      "pct": 70.44,
+      "holders": 167441.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
+    },
     "corpName": "(주)KB금융지주",
     "ceo": "양종희",
     "homepage": "www.kbfg.com",
@@ -6732,9 +8724,9 @@
      }
     },
     "totals": {
-     "PER": "10.06배",
+     "PER": "10.05배",
      "PBR": "0.98배",
-     "배당수익률": "2.59%"
+     "배당수익률": "2.60%"
     },
     "consensus": {
      "targetPriceMean": 221889,
@@ -6779,7 +8771,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:07"
+   "fetchedAt": "2026-10-07 18:23"
   },
   "055550": {
    "name": "신한지주",
@@ -6892,6 +8884,87 @@
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20261007000218",
      "source": "금감원 DART 사업보고서 감사의견"
     },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 9.03,
+      "top": [
+       {
+        "name": "국민연금공단",
+        "relate": "본인및특별관계자",
+        "pct": 9.03
+       }
+      ],
+      "count": 1
+     },
+     "board": {
+      "registered": 11,
+      "inside": 1,
+      "outside": 9,
+      "ceo": [
+       "진옥동"
+      ],
+      "executives": 20
+     },
+     "pay": {
+      "people": 11.0,
+      "total": 2165000000.0,
+      "avg": 197000000.0,
+      "top": [
+       {
+        "name": "진옥동",
+        "title": "대표이사",
+        "pay": 1297000000.0
+       },
+       {
+        "name": "이인균",
+        "title": "부문장 (부사장)",
+        "pay": 847000000.0
+       },
+       {
+        "name": "방동권",
+        "title": "파트장 (부사장)",
+        "pay": 802000000.0
+       },
+       {
+        "name": "고석헌",
+        "title": "부문장 (부사장)",
+        "pay": 722000000.0
+       },
+       {
+        "name": "천상영",
+        "title": "부문장 (부사장)",
+        "pay": 555000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 4585561.0,
+      "acquired": 21702365.0,
+      "disposed": null,
+      "retired": 17950391.0,
+      "end": 8337535.0
+     },
+     "dividend": {
+      "payout": [
+       25.06,
+       24.45
+      ],
+      "dps": [
+       2590.0,
+       2160.0
+      ],
+      "yield": [
+       3.01,
+       4.26
+      ]
+     },
+     "minority": {
+      "pct": 65.89,
+      "holders": 137469.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
+    },
     "corpName": "(주)신한금융지주회사",
     "ceo": "진옥동",
     "homepage": "www.shinhangroup.com",
@@ -7000,7 +9073,7 @@
      }
     },
     "totals": {
-     "PER": "9.21배",
+     "PER": "9.20배",
      "PBR": "0.80배",
      "배당수익률": "2.52%"
     },
@@ -7047,7 +9120,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:07"
+   "fetchedAt": "2026-10-07 18:23"
   },
   "086790": {
    "name": "하나금융지주",
@@ -7159,6 +9232,87 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260814004019",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 8.66,
+      "top": [
+       {
+        "name": "국민연금공단",
+        "relate": "본인 및 특수관계인",
+        "pct": 8.66
+       }
+      ],
+      "count": 1
+     },
+     "board": {
+      "registered": 12,
+      "inside": 3,
+      "outside": 9,
+      "ceo": [
+       "함영주"
+      ],
+      "executives": 33
+     },
+     "pay": {
+      "people": 12.0,
+      "total": 3723000000.0,
+      "avg": 310000000.0,
+      "top": [
+       {
+        "name": "함영주",
+        "title": "대표이사 회장",
+        "pay": 2202000000.0
+       },
+       {
+        "name": "이은형",
+        "title": "부회장",
+        "pay": 1129000000.0
+       },
+       {
+        "name": "윤운성",
+        "title": "팀장",
+        "pay": 847000000.0
+       },
+       {
+        "name": "박성환",
+        "title": "팀장",
+        "pay": 701000000.0
+       },
+       {
+        "name": "이준혁",
+        "title": "부사장",
+        "pay": 683000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 5940000.0,
+      "acquired": 10751463.0,
+      "disposed": null,
+      "retired": 8915066.0,
+      "end": 7776397.0
+     },
+     "dividend": {
+      "payout": [
+       28.0,
+       27.0
+      ],
+      "dps": [
+       4105.0,
+       3600.0
+      ],
+      "yield": [
+       4.0,
+       6.0
+      ]
+     },
+     "minority": {
+      "pct": 76.69,
+      "holders": 158499.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "(주)하나금융지주",
     "ceo": "함영주",
@@ -7315,7 +9469,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:07"
+   "fetchedAt": "2026-10-07 18:23"
   },
   "032830": {
    "name": "삼성생명",
@@ -7400,6 +9554,97 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260331004244",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 43.56,
+      "top": [
+       {
+        "name": "삼성물산(주)",
+        "relate": "최대주주 본인",
+        "pct": 19.34
+       },
+       {
+        "name": "이재용",
+        "relate": "최대주주의 특수관계인",
+        "pct": 10.44
+       },
+       {
+        "name": "이부진",
+        "relate": "계열회사 등기임원",
+        "pct": 5.76
+       }
+      ],
+      "count": 10
+     },
+     "board": {
+      "registered": 6,
+      "inside": 2,
+      "outside": 4,
+      "ceo": [
+       "홍원학"
+      ],
+      "executives": 63
+     },
+     "pay": {
+      "people": 7.0,
+      "total": 4114000000.0,
+      "avg": 588000000.0,
+      "top": [
+       {
+        "name": "이길호",
+        "title": "前 부사장",
+        "pay": 2492000000.0
+       },
+       {
+        "name": "홍원학",
+        "title": "대표이사",
+        "pay": 2161000000.0
+       },
+       {
+        "name": "이승호",
+        "title": "사장",
+        "pay": 1681000000.0
+       },
+       {
+        "name": "전영묵",
+        "title": "前 대표이사",
+        "pay": 1609000000.0
+       },
+       {
+        "name": "안덕호",
+        "title": "부사장",
+        "pay": 1274000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 20425221.0,
+      "acquired": null,
+      "disposed": null,
+      "retired": null,
+      "end": 20425221.0
+     },
+     "dividend": {
+      "payout": [
+       41.3,
+       38.4
+      ],
+      "dps": [
+       null,
+       null
+      ],
+      "yield": [
+       null,
+       null
+      ]
+     },
+     "minority": {
+      "pct": 30.69,
+      "holders": 75290.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "삼성생명보험(주)",
     "ceo": "홍원학",
@@ -7556,7 +9801,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:07"
+   "fetchedAt": "2026-10-07 18:23"
   },
   "207940": {
    "name": "삼성바이오로직스",
@@ -7659,6 +9904,97 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260515001658",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 74.32,
+      "top": [
+       {
+        "name": "삼성물산",
+        "relate": "최대주주",
+        "pct": 43.06
+       },
+       {
+        "name": "삼성전자",
+        "relate": "특수관계인",
+        "pct": 31.22
+       },
+       {
+        "name": "삼성생명보험(특별계정)",
+        "relate": "특수관계인",
+        "pct": 0.04
+       }
+      ],
+      "count": 6
+     },
+     "board": {
+      "registered": 7,
+      "inside": 3,
+      "outside": 4,
+      "ceo": [
+       "존림\n(Rim John Chongbo)"
+      ],
+      "executives": 7
+     },
+     "pay": {
+      "people": 7.0,
+      "total": 8912000000.0,
+      "avg": 1273000000.0,
+      "top": [
+       {
+        "name": "존림\n (Rim John Chongbo)",
+        "title": "대표이사",
+        "pay": 6689000000.0
+       },
+       {
+        "name": "김태한",
+        "title": "고문",
+        "pay": 3953000000.0
+       },
+       {
+        "name": "민호성",
+        "title": "부사장",
+        "pay": 2214000000.0
+       },
+       {
+        "name": "다이앤블랙",
+        "title": "부사장",
+        "pay": 1374000000.0
+       },
+       {
+        "name": "피에캐티뇰",
+        "title": "부사장",
+        "pay": 1341000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 51433.0,
+      "acquired": null,
+      "disposed": null,
+      "retired": null,
+      "end": 51433.0
+     },
+     "dividend": {
+      "payout": [
+       null,
+       null
+      ],
+      "dps": [
+       null,
+       null
+      ],
+      "yield": [
+       null,
+       null
+      ]
+     },
+     "minority": {
+      "pct": 21.72,
+      "holders": 85805.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "삼성바이오로직스(주)",
     "ceo": "임존종보 (Rim John Chongbo)",
@@ -7768,8 +10104,8 @@
      }
     },
     "totals": {
-     "PER": "35.54배",
-     "PBR": "7.12배",
+     "PER": "35.52배",
+     "PBR": "7.11배",
      "배당수익률": "N/A"
     },
     "consensus": {
@@ -7815,7 +10151,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:07"
+   "fetchedAt": "2026-10-07 18:24"
   },
   "068270": {
    "name": "셀트리온",
@@ -7900,6 +10236,99 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260316001415",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 31.15,
+      "top": [
+       {
+        "name": "(주)셀트리온홀딩스",
+        "relate": "본인",
+        "pct": 24.44
+       },
+       {
+        "name": "서정진",
+        "relate": "최대주주",
+        "pct": 4.03
+       },
+       {
+        "name": "(주)셀트리온스킨큐어",
+        "relate": "계열회사",
+        "pct": 2.08
+       }
+      ],
+      "count": 97
+     },
+     "board": {
+      "registered": 12,
+      "inside": 4,
+      "outside": 8,
+      "ceo": [
+       "서진석",
+       "기우성",
+       "김형기"
+      ],
+      "executives": 89
+     },
+     "pay": {
+      "people": 12.0,
+      "total": 6537000000.0,
+      "avg": 545000000.0,
+      "top": [
+       {
+        "name": "서정진",
+        "title": "회장",
+        "pay": 2491000000.0
+       },
+       {
+        "name": "윤사룡",
+        "title": "이사",
+        "pay": 2274000000.0
+       },
+       {
+        "name": "서정수",
+        "title": "부회장",
+        "pay": 1231000000.0
+       },
+       {
+        "name": "서준석",
+        "title": "수석부회장",
+        "pay": 1229000000.0
+       },
+       {
+        "name": "서진석",
+        "title": "대표이사",
+        "pay": 1126000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 12047681.0,
+      "acquired": 5284826.0,
+      "disposed": 13712.0,
+      "retired": 4970950.0,
+      "end": 12347845.0
+     },
+     "dividend": {
+      "payout": [
+       15.92,
+       36.38
+      ],
+      "dps": [
+       null,
+       null
+      ],
+      "yield": [
+       null,
+       null
+      ]
+     },
+     "minority": {
+      "pct": 57.26,
+      "holders": 504214.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "(주)셀트리온",
     "ceo": "기우성, 서진석",
@@ -8056,7 +10485,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:07"
+   "fetchedAt": "2026-10-07 18:24"
   },
   "005380": {
    "name": "현대차",
@@ -8109,6 +10538,99 @@
      "source": "금감원 DART 사업보고서 재무제표"
     },
     "audit": null,
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 30.67,
+      "top": [
+       {
+        "name": "현대모비스",
+        "relate": "본인",
+        "pct": 22.36
+       },
+       {
+        "name": "정몽구",
+        "relate": "기타",
+        "pct": 5.57
+       },
+       {
+        "name": "정의선",
+        "relate": "대표이사",
+        "pct": 2.73
+       }
+      ],
+      "count": 14
+     },
+     "board": {
+      "registered": 12,
+      "inside": 5,
+      "outside": 7,
+      "ceo": [
+       "정의선",
+       "무뇨스\n바르셀로\n호세 안토니오",
+       "이동석"
+      ],
+      "executives": 12
+     },
+     "pay": {
+      "people": 12.0,
+      "total": 23692000000.0,
+      "avg": 1974000000.0,
+      "top": [
+       {
+        "name": "무뇨스 바르셀로\n호세 안토니오",
+        "title": "사장",
+        "pay": 9729000000.0
+       },
+       {
+        "name": "정의선",
+        "title": "회장",
+        "pay": 9001000000.0
+       },
+       {
+        "name": "이동석",
+        "title": "전)사장",
+        "pay": 5537000000.0
+       },
+       {
+        "name": "장재훈",
+        "title": "부회장",
+        "pay": 5416000000.0
+       },
+       {
+        "name": "양희원",
+        "title": "전)사장",
+        "pay": 4954000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 4468561.0,
+      "acquired": 2944049.0,
+      "disposed": 1105627.0,
+      "retired": 4658425.0,
+      "end": 1648558.0
+     },
+     "dividend": {
+      "payout": [
+       27.7,
+       25.1
+      ],
+      "dps": [
+       10000.0,
+       12000.0
+      ],
+      "yield": [
+       1.9,
+       5.9
+      ]
+     },
+     "minority": {
+      "pct": 65.95,
+      "holders": 965758.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
+    },
     "corpName": "현대자동차(주)",
     "ceo": "정의선, 무뇨스 바르셀로 호세 안토니오, 최영일(각자 대표이사)",
     "homepage": "www.hyundai.com",
@@ -8217,7 +10739,7 @@
      }
     },
     "totals": {
-     "PER": "10.98배",
+     "PER": "10.96배",
      "PBR": "0.72배",
      "배당수익률": "2.97%"
     },
@@ -8266,7 +10788,7 @@
    "errors": {
     "dart": "사업보고서 감사의견 없음(2025 · 2024)"
    },
-   "fetchedAt": "2026-10-07 18:08"
+   "fetchedAt": "2026-10-07 18:24"
   },
   "012330": {
    "name": "현대모비스",
@@ -8360,6 +10882,98 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260309001878",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 32.7,
+      "top": [
+       {
+        "name": "기아(주)",
+        "relate": "최대주주",
+        "pct": 18.1
+       },
+       {
+        "name": "정몽구",
+        "relate": "기타",
+        "pct": 7.47
+       },
+       {
+        "name": "현대제철(주)",
+        "relate": "계열회사",
+        "pct": 6.07
+       }
+      ],
+      "count": 10
+     },
+     "board": {
+      "registered": 9,
+      "inside": 4,
+      "outside": 5,
+      "ceo": [
+       "정의선",
+       "이규석"
+      ],
+      "executives": 96
+     },
+     "pay": {
+      "people": 9.0,
+      "total": 6545000000.0,
+      "avg": 727000000.0,
+      "top": [
+       {
+        "name": "정의선",
+        "title": "대표이사",
+        "pay": 3060000000.0
+       },
+       {
+        "name": "이규석",
+        "title": "대표이사",
+        "pay": 1722000000.0
+       },
+       {
+        "name": "정창재",
+        "title": "상무",
+        "pay": 1446000000.0
+       },
+       {
+        "name": "이현우",
+        "title": "전무",
+        "pay": 1396000000.0
+       },
+       {
+        "name": "천재승",
+        "title": "상무",
+        "pay": 1157000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 2504454.0,
+      "acquired": 1562511.0,
+      "disposed": 248654.0,
+      "retired": 2262511.0,
+      "end": 1555800.0
+     },
+     "dividend": {
+      "payout": [
+       15.9,
+       13.3
+      ],
+      "dps": [
+       6500.0,
+       6000.0
+      ],
+      "yield": [
+       1.6,
+       2.3
+      ]
+     },
+     "minority": {
+      "pct": 55.17,
+      "holders": 154333.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "현대모비스(주)",
     "ceo": "정의선, 이규석",
@@ -8469,9 +11083,9 @@
      }
     },
     "totals": {
-     "PER": "9.35배",
+     "PER": "9.34배",
      "PBR": "0.64배",
-     "배당수익률": "1.74%"
+     "배당수익률": "1.75%"
     },
     "consensus": {
      "targetPriceMean": 715833,
@@ -8516,7 +11130,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:07"
+   "fetchedAt": "2026-10-07 18:24"
   },
   "010950": {
    "name": "S-Oil",
@@ -8601,6 +11215,97 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260320000559",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 63.43,
+      "top": [
+       {
+        "name": "Aramco Overseas Company B.V.",
+        "relate": "최대주주 본인",
+        "pct": 63.41
+       },
+       {
+        "name": "안종범",
+        "relate": "계열회사 등기임원",
+        "pct": 0.01
+       },
+       {
+        "name": "방주완",
+        "relate": "계열회사 등기임원",
+        "pct": 0.01
+       }
+      ],
+      "count": 7
+     },
+     "board": {
+      "registered": 11,
+      "inside": 1,
+      "outside": 6,
+      "ceo": [
+       "Anwar A.\nAl-Hejazi"
+      ],
+      "executives": 65
+     },
+     "pay": {
+      "people": 11.0,
+      "total": 2001626000.0,
+      "avg": 181966000.0,
+      "top": [
+       {
+        "name": "서정규",
+        "title": "Special Assignee (현) SVP (전)",
+        "pay": 2263225000.0
+       },
+       {
+        "name": "배중호",
+        "title": "Special Assignee (현) SVP (전)",
+        "pay": 2206464000.0
+       },
+       {
+        "name": "김형배",
+        "title": "Special Assignee (현) SVP (전)",
+        "pay": 2099810000.0
+       },
+       {
+        "name": "강기태",
+        "title": "VP (전)",
+        "pay": 1484051000.0
+       },
+       {
+        "name": "조용국",
+        "title": "VP (전)",
+        "pay": 1466189000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": null,
+      "acquired": null,
+      "disposed": null,
+      "retired": null,
+      "end": null
+     },
+     "dividend": {
+      "payout": [
+       21.8,
+       null
+      ],
+      "dps": [
+       330.0,
+       125.0
+      ],
+      "yield": [
+       0.3,
+       0.2
+      ]
+     },
+     "minority": {
+      "pct": 28.09,
+      "holders": 76462.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "S-Oil(주)",
     "ceo": "Anwar A. Al-Hejazi (안와르 에이 알-히즈아지)",
@@ -8712,7 +11417,7 @@
     "totals": {
      "PER": "12.98배",
      "PBR": "1.96배",
-     "배당수익률": "0.20%"
+     "배당수익률": "0.19%"
     },
     "consensus": {
      "targetPriceMean": 186308,
@@ -8757,7 +11462,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:07"
+   "fetchedAt": "2026-10-07 18:24"
   },
   "096770": {
    "name": "SK이노베이션",
@@ -8869,6 +11574,97 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260316000827",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 52.09,
+      "top": [
+       {
+        "name": "SK㈜",
+        "relate": "본인",
+        "pct": 52.09
+       },
+       {
+        "name": "박상규",
+        "relate": "발행회사 임원",
+        "pct": 0.0
+       },
+       {
+        "name": "박진회",
+        "relate": "발행회사 임원",
+        "pct": 0.0
+       }
+      ],
+      "count": 8
+     },
+     "board": {
+      "registered": 8,
+      "inside": 1,
+      "outside": 6,
+      "ceo": [
+       "추형욱"
+      ],
+      "executives": 80
+     },
+     "pay": {
+      "people": 8.0,
+      "total": 7557000000.0,
+      "avg": 1079000000.0,
+      "top": [
+       {
+        "name": "최재원",
+        "title": "수석부회장",
+        "pay": 20589000000.0
+       },
+       {
+        "name": "차태병",
+        "title": "PassKey, Inc. Biz. Development Unit장",
+        "pay": 2607000000.0
+       },
+       {
+        "name": "안정환",
+        "title": "기업문화본부장",
+        "pay": 1991000000.0
+       },
+       {
+        "name": "추형욱",
+        "title": "대표이사",
+        "pay": 1911000000.0
+       },
+       {
+        "name": "최환준",
+        "title": "SoC최적화Group리더",
+        "pay": 1643000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 3403156.0,
+      "acquired": 2175.0,
+      "disposed": 3404104.0,
+      "retired": null,
+      "end": 1227.0
+     },
+     "dividend": {
+      "payout": [
+       null,
+       null
+      ],
+      "dps": [
+       null,
+       2000.0
+      ],
+      "yield": [
+       null,
+       1.6
+      ]
+     },
+     "minority": {
+      "pct": null,
+      "holders": null
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "SK이노베이션(주)",
     "ceo": "추형욱, 장용호",
@@ -9025,7 +11821,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:07"
+   "fetchedAt": "2026-10-07 18:24"
   },
   "051910": {
    "name": "LG화학",
@@ -9137,6 +11933,92 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260313001195",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 31.54,
+      "top": [
+       {
+        "name": "(주)LG",
+        "relate": "최대주주 본인",
+        "pct": 31.52
+       },
+       {
+        "name": "LG연암문화재단",
+        "relate": "(주)LG의 최대주주의 특수관계법인",
+        "pct": 0.03
+       }
+      ],
+      "count": 2
+     },
+     "board": {
+      "registered": 7,
+      "inside": 2,
+      "outside": 4,
+      "ceo": [
+       "신학철"
+      ],
+      "executives": 115
+     },
+     "pay": {
+      "people": 7.0,
+      "total": 3211000000.0,
+      "avg": 459000000.0,
+      "top": [
+       {
+        "name": "신학철",
+        "title": "부회장",
+        "pay": 1887000000.0
+       },
+       {
+        "name": "남철",
+        "title": "자문",
+        "pay": 2029000000.0
+       },
+       {
+        "name": "노국래",
+        "title": "자문",
+        "pay": 1878000000.0
+       },
+       {
+        "name": "김정대",
+        "title": "자문",
+        "pay": 2256000000.0
+       },
+       {
+        "name": "김성현",
+        "title": "자문",
+        "pay": 1255000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 1.0,
+      "acquired": 1.0,
+      "disposed": null,
+      "retired": null,
+      "end": 2.0
+     },
+     "dividend": {
+      "payout": [
+       null,
+       null
+      ],
+      "dps": [
+       2000.0,
+       1000.0
+      ],
+      "yield": [
+       0.6,
+       0.4
+      ]
+     },
+     "minority": {
+      "pct": 59.26,
+      "holders": 322694.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "(주)LG화학",
     "ceo": "김동춘",
@@ -9293,7 +12175,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:07"
+   "fetchedAt": "2026-10-07 18:24"
   },
   "028260": {
    "name": "삼성물산",
@@ -9378,6 +12260,99 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260312000856",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 36.02,
+      "top": [
+       {
+        "name": "이 재 용",
+        "relate": "최대주주 본인",
+        "pct": 19.76
+       },
+       {
+        "name": "이 서 현",
+        "relate": "친인척",
+        "pct": 6.8
+       },
+       {
+        "name": "이 부 진",
+        "relate": "친인척",
+        "pct": 6.1
+       }
+      ],
+      "count": 14
+     },
+     "board": {
+      "registered": 9,
+      "inside": 4,
+      "outside": 5,
+      "ceo": [
+       "오세철",
+       "정해린",
+       "이재언"
+      ],
+      "executives": 9
+     },
+     "pay": {
+      "people": 9.0,
+      "total": 7929000000.0,
+      "avg": 881000000.0,
+      "top": [
+       {
+        "name": "강선명",
+        "title": "자문역",
+        "pay": 4541000000.0
+       },
+       {
+        "name": "이현동",
+        "title": "자문역",
+        "pay": 2746000000.0
+       },
+       {
+        "name": "이준서",
+        "title": "부사장",
+        "pay": 2564000000.0
+       },
+       {
+        "name": "강병일",
+        "title": "사장",
+        "pay": 2492000000.0
+       },
+       {
+        "name": "황춘길",
+        "title": "자문역",
+        "pay": 2323000000.0
+       }
+      ]
+     },
+     "treasury": {
+      "begin": 15615126.0,
+      "acquired": null,
+      "disposed": null,
+      "retired": 7807563.0,
+      "end": 7808963.0
+     },
+     "dividend": {
+      "payout": [
+       18.8,
+       19.1
+      ],
+      "dps": [
+       2800.0,
+       2600.0
+      ],
+      "yield": [
+       1.2,
+       2.2
+      ]
+     },
+     "minority": {
+      "pct": 42.46,
+      "holders": 107908.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "삼성물산(주)",
     "ceo": "오세철, 이재언, 송규종",
@@ -9534,7 +12509,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:07"
+   "fetchedAt": "2026-10-07 18:24"
   },
   "015760": {
    "name": "한국전력",
@@ -9619,6 +12594,69 @@
      ],
      "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260317000686",
      "source": "금감원 DART 사업보고서 감사의견"
+    },
+    "gov": {
+     "year": 2025,
+     "major": {
+      "totalPct": 51.1,
+      "top": [
+       {
+        "name": "한국산업은행",
+        "relate": "최대주주",
+        "pct": 32.9
+       },
+       {
+        "name": "대한민국정부",
+        "relate": "특수관계인",
+        "pct": 18.2
+       }
+      ],
+      "count": 2
+     },
+     "board": {
+      "registered": 14,
+      "inside": 6,
+      "outside": 8,
+      "ceo": [],
+      "executives": 17
+     },
+     "pay": {
+      "people": 15.0,
+      "total": 1888517000.0,
+      "avg": 125901000.0,
+      "top": [
+       {
+        "name": "-",
+        "title": "-",
+        "pay": null
+       },
+       {
+        "name": "-",
+        "title": "-",
+        "pay": null
+       }
+      ]
+     },
+     "treasury": null,
+     "dividend": {
+      "payout": [
+       11.6,
+       3.9
+      ],
+      "dps": [
+       1542.0,
+       213.0
+      ],
+      "yield": [
+       3.2,
+       1.0
+      ]
+     },
+     "minority": {
+      "pct": 36.07,
+      "holders": 640757.0
+     },
+     "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"
     },
     "corpName": "한국전력공사(주)",
     "ceo": "김동철",
@@ -9775,7 +12813,7 @@
    },
    "edgar": null,
    "errors": {},
-   "fetchedAt": "2026-10-07 18:07"
+   "fetchedAt": "2026-10-07 18:25"
   }
  }
 }

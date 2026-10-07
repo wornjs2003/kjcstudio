@@ -235,3 +235,5 @@
 .in-term-none { margin: 6px 0; padding: 5px 10px; background: var(--kh-danger-faint); color: var(--kh-danger); border-radius: var(--kh-radius-sm); font-size: 0.76rem; }
 .in-term-note { margin: 6px 0 0; font-size: 0.76rem; }
 td .in-term-tip, .in-vt-stat .in-term-tip { font-weight: 400; }
+/* 지금 계산 ④ · ⑤ · ⑥ 바로 가기 — 위 메뉴 줄 밑에 제목이 가리지 않게 (2026-10-07 재권님 「칸만 있고 밑에 클릭하면 경영진 같은 게 안 나오는데」) */
+#calc-body h3[id] { scroll-margin-top: 96px; }

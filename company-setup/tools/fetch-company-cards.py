@@ -216,6 +216,59 @@ def dart_audit(key, cc):
     return None, "사업보고서 감사의견 없음(%d · %d)" % (year - 1, year - 2)
 
 
+# 경영진 · 지배구조 · 주주환원 — DART 사업보고서 주요사항(최대주주 · 임원 · 이사 보수 · 5억 이상 개인 보수 · 자기주식 · 배당 · 소액주주)
+# (2026-10-07 재권님 「이것도 dart 에서 받을 수 있지 않나? 가능하면 이것도 표기해줘」). 못 받은 칸은 null
+def _n(v):
+    try:
+        return float(str(v).replace(",", "").replace("%", "").strip())
+    except Exception:
+        return None
+
+
+def _dart_list(key, cc, api, y):
+    q = urllib.parse.urlencode({"crtfc_key": key, "corp_code": cc, "bsns_year": str(y), "reprt_code": "11011"})
+    j = get_json(DART + "/%s.json?" % api + q)
+    time.sleep(PAUSE)
+    return j.get("list") or [] if j.get("status") == "000" else []
+
+
+def dart_gov(key, cc):
+    year = datetime.now().year
+    for y in (year - 1, year - 2):
+        hs = _dart_list(key, cc, "hyslrSttus", y)
+        if not hs:
+            continue
+        common = [r for r in hs if any(t in (r.get("stock_knd") or "") for t in ("보통", "의결권 있는"))] or hs   # 회사마다 「보통주」 · 「의결권 있는 주식」 으로 갈린다(하이닉스 실측)
+        tot = next((r for r in common if (r.get("nm") or "").strip() in ("계", "합계")), None)
+        holders = [{"name": r.get("nm"), "relate": r.get("relate"), "pct": _n(r.get("trmend_posesn_stock_qota_rt"))}
+                   for r in common if (r.get("nm") or "").strip() not in ("계", "합계")]
+        holders.sort(key=lambda x: -(x["pct"] or 0))
+        ex = _dart_list(key, cc, "exctvSttus", y)
+        reg = [r for r in ex if "이사" in (r.get("rgist_exctv_at") or "") or "감사" in (r.get("rgist_exctv_at") or "")]
+        ceo = [r.get("nm") for r in ex if "대표" in (r.get("chrg_job") or "") + (r.get("ofcps") or "")]
+        pay = (_dart_list(key, cc, "hmvAuditAllSttus", y) or [{}])[0]
+        top = [{"name": r.get("nm"), "title": re.sub(r"\s+", " ", r.get("ofcps") or ""), "pay": _n(r.get("mendng_totamt"))} for r in _dart_list(key, cc, "indvdlByPay", y)]
+        ts = [r for r in _dart_list(key, cc, "tesstkAcqsDspsSttus", y) if any(t in (r.get("stock_knd") or "") for t in ("보통", "의결권 있는"))]
+        tsum = next((r for r in ts if "계" in (r.get("acqs_mth1") or "") and "소계" not in (r.get("acqs_mth1") or "")), None) or (ts[-1] if ts else None)
+        al = _dart_list(key, cc, "alotMatter", y)
+        def alv(name, knd=None):
+            r = next((r for r in al if name in (r.get("se") or "") and (knd is None or knd in (r.get("stock_knd") or ""))), None)
+            return (_n(r.get("thstrm")), _n(r.get("frmtrm"))) if r else (None, None)
+        mh = (_dart_list(key, cc, "mrhlSttus", y) or [{}])[0]
+        return {"year": y,
+                "major": {"totalPct": _n(tot.get("trmend_posesn_stock_qota_rt")) if tot else (round(sum(h["pct"] or 0 for h in holders), 2) if holders else None),
+                          "top": holders[:3], "count": len(holders)},
+                "board": {"registered": len(reg), "inside": sum(1 for r in reg if "사내" in (r.get("rgist_exctv_at") or "")),
+                          "outside": sum(1 for r in reg if "사외" in (r.get("rgist_exctv_at") or "")), "ceo": ceo[:3], "executives": len(ex)},
+                "pay": {"people": _n(pay.get("nmpr")), "total": _n(pay.get("mendng_totamt")), "avg": _n(pay.get("jan_avrg_mendng_am")), "top": top[:5]},
+                "treasury": {"begin": _n(tsum.get("bsis_qy")), "acquired": _n(tsum.get("change_qy_acqs")), "disposed": _n(tsum.get("change_qy_dsps")),
+                             "retired": _n(tsum.get("change_qy_incnr")), "end": _n(tsum.get("trmend_qy"))} if tsum else None,
+                "dividend": {"payout": alv("현금배당성향"), "dps": alv("주당 현금배당금", "보통"), "yield": alv("현금배당수익률", "보통")},
+                "minority": {"pct": _n(mh.get("hold_stock_rate")), "holders": _n(mh.get("shrholdr_co"))},
+                "source": "금감원 DART 사업보고서 — 최대주주 · 임원 · 이사 보수 · 개인별 보수(5억 이상) · 자기주식 · 배당 · 소액주주"}, None
+    return None, "사업보고서 최대주주 현황 없음(%d · %d)" % (year - 1, year - 2)
+
+
 def fetch_dart(card, key):
     cc = corp_code(card["code"])
     if not key:
@@ -232,8 +285,10 @@ def fetch_dart(card, key):
     fs, err2 = dart_fs(key, cc)
     time.sleep(PAUSE)
     audit, err3 = dart_audit(key, cc)
-    err = "; ".join(e for e in (err, err2, err3) if e) or None
-    return {"fs": fs, "audit": audit, "corpName": j.get("corp_name"), "ceo": j.get("ceo_nm"), "homepage": j.get("hm_url"),
+    time.sleep(PAUSE)
+    gov, err4 = dart_gov(key, cc)
+    err = "; ".join(e for e in (err, err2, err3, err4) if e) or None
+    return {"fs": fs, "audit": audit, "gov": gov, "corpName": j.get("corp_name"), "ceo": j.get("ceo_nm"), "homepage": j.get("hm_url"),
             "industryCode": j.get("induty_code"), "established": j.get("est_dt"), "address": j.get("adres"),
             "business": biz, "from": "https://dart.fss.or.kr/dsae001/main.do?corpCode=" + cc,
             "source": "금감원 DART"}, err
@@ -390,7 +445,7 @@ def main():
             n_ok += 1
         log("%-8s %-12s %s" % (k, c["name"], ("· ".join("%s=%s" % kv for kv in card["errors"].items()) or "받음")))
     out = {"fetchedAt": datetime.now().strftime("%Y-%m-%d %H:%M"),
-           "sources": {"dart": "금감원 DART 전자공시 — 기업개황 · 정기보고서 「사업의 개요」 · 사업보고서 재무제표(재무 건전성) · 감사의견(회계 신뢰도)",
+           "sources": {"dart": "금감원 DART 전자공시 — 기업개황 · 정기보고서 「사업의 개요」 · 사업보고서 재무제표(재무 건전성) · 감사의견(회계 신뢰도) · 최대주주 · 임원 · 보수 · 자기주식 · 배당(경영진 · 지배구조 · 주주환원)",
                        "naver": "네이버 증권(FnGuide 집계) — 연간 실적 · 증권사 추정(E) · 목표주가 · 투자의견 · 리포트",
                        "edgar": "미국 증권위 EDGAR — companyfacts 재무 · 10-K/20-F"},
            "cards": cards}

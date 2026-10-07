@@ -153,7 +153,7 @@ async function paint(code) {
       ['이익의 질', N.netIncome ? `${n0(r(N.opCF, N.netIncome, 1), 2)}배` : '—', P.netIncome ? `${n0(r(P.opCF, P.netIncome, 1), 2)}배` : '—', '영업현금흐름 ÷ 순이익 — 1배 넘으면 이익이 현금으로 들어온다'],
       ['배당 지급 · 자사주 취득', `${jo(N.dividendPaid)} · ${jo(N.buyback)}`, `${jo(P.dividendPaid)} · ${jo(P.buyback)}`, '현금흐름표 — 주주환원'],
     ];
-    h += `<h3>④ 재무 건전성 ${S_DART} <span class="src">금감원 DART · ${esc(fs.year)}년 사업보고서 · ${esc(fs.fsDiv)} · 회사 카드 ${esc(card.fetchedAt || CARDS_AT)} 받음 · <a href="${esc(fs.from)}" target="_blank" rel="noopener">원문 ›</a></span></h3>
+    h += `<h3 id="calc-fs">④ 재무 건전성 ${S_DART} <span class="src">금감원 DART · ${esc(fs.year)}년 사업보고서 · ${esc(fs.fsDiv)} · 회사 카드 ${esc(card.fetchedAt || CARDS_AT)} 받음 · <a href="${esc(fs.from)}" target="_blank" rel="noopener">원문 ›</a></span></h3>
       <div class="in-tblx"><table class="in-tbl"><tr><th></th><th>${esc(fs.year)} ${S_DART}</th><th>${esc(fs.year - 1)} ${S_DART}</th><th>셈 · 뜻</th></tr>
       ${rowsF.map(([a, b, c, d]) => `<tr><td>${a}</td><td>${b}</td><td>${c}</td><td>${d}</td></tr>`).join('')}</table></div>`;
   } else {
@@ -163,7 +163,7 @@ async function paint(code) {
   const au = dart && dart.audit;
   if (au && au.rows && au.rows.length) {
     const gc = au.rows.some((x) => x.goingConcern);
-    h += `<h3>⑤ 회계 신뢰도 ${S_DART} <span class="src">금감원 DART · ${esc(au.year)}년 사업보고서 감사의견 · <a href="${esc(au.from)}" target="_blank" rel="noopener">원문 ›</a></span></h3>
+    h += `<h3 id="calc-audit">⑤ 회계 신뢰도 ${S_DART} <span class="src">금감원 DART · ${esc(au.year)}년 사업보고서 감사의견 · <a href="${esc(au.from)}" target="_blank" rel="noopener">원문 ›</a></span></h3>
       <p class="in-doc-p">${gc ? '<span class="in-pill no">계속기업 불확실성 기재</span> 강조사항 · 특기사항에 「계속기업」 이 있다 — 금감원 자료로 2024년 이 기재 84곳 중 27곳이 다음 해 상장폐지 · 비적정' : '<span class="in-pill ok">계속기업 기재 없음</span>'}</p>
       <div class="in-tblx"><table class="in-tbl"><tr><th>기</th><th>감사인</th><th>감사의견</th><th>강조사항</th><th>핵심감사사항</th></tr>
       ${au.rows.map((x) => `<tr><td>${esc(x.term)}</td><td>${esc(x.auditor)}</td><td>${/적정/.test(x.opinion || '') && !/(한정|부적정|거절)/.test(x.opinion || '') ? '<span class="in-pill ok">' + esc(x.opinion) + '</span>' : '<span class="in-pill no">' + esc(x.opinion || '—') + '</span>'}</td><td>${esc(x.emphasis || '—')}</td><td>${esc(x.keyMatters || '—').replace(/\n/g, '<br>')}</td></tr>`).join('')}</table></div>
@@ -171,11 +171,37 @@ async function paint(code) {
   } else {
     h += `<h3>⑤ 회계 신뢰도</h3><p class="in-doc-p">${SOON} 이 종목의 DART 감사의견이 회사 카드에 없습니다</p>`;
   }
+  // ⑥ 경영진 · 지배구조 · 주주환원 — DART 사업보고서(회사 카드 dart.gov) · 2026-10-07 재권님 「이것도 dart 에서 받을 수 있지 않나? 가능하면 이것도 표기해줘」
+  const gv = dart && dart.gov;
+  if (gv) {
+    const eokw = (v) => v == null ? '—' : (v >= 1e12 ? `${(v / 1e12).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}조원` : `${(v / 1e8).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}억원`);
+    const ju = (v) => v == null ? '—' : `${n0(v)}주`;
+    const pp = (a) => a && a[0] != null ? `${n0(a[0], 1)}%${a[1] != null ? ` (전년 ${n0(a[1], 1)}%)` : ''}` : '—';
+    const m = gv.major || {}, b = gv.board || {}, py = gv.pay || {}, t = gv.treasury, dv = gv.dividend || {}, mn = gv.minority || {};
+    const gRows = [
+      ['최대주주 + 특수관계인', m.totalPct != null ? `${n0(m.totalPct, 2)}%` : '—', (m.top || []).filter((x) => x.pct).map((x) => `${esc(x.name)} ${n0(x.pct, 2)}%(${esc(x.relate || '')})`).join(' · ') || '—'],
+      ['소액주주 지분', mn.pct != null ? `${n0(mn.pct, 2)}%` : '—', mn.holders != null ? `소액주주 ${n0(mn.holders)}명` : ''],
+      ['등기임원(이사회)', b.registered != null ? `${b.registered}명` : '—', `사내 ${b.inside ?? '—'} · 사외 ${b.outside ?? '—'}${b.registered ? ` · 사외이사 비율 ${n0((b.outside || 0) / b.registered * 100, 0)}%` : ''}${(b.ceo || []).length ? ` · 대표 ${b.ceo.map(esc).join(' · ')}` : ''}`],
+      ['이사 · 감사 보수', eokw(py.total), `${py.people != null ? n0(py.people) + '명' : ''}${py.avg != null ? ` · 1인 평균 ${eokw(py.avg)}` : ''}`],
+      ['보수 5억 이상 개인', (py.top || []).length ? `${py.top.length}명` : '—', (py.top || []).map((x) => `${esc(x.name)}(${esc(x.title)}) ${eokw(x.pay)}`).join(' · ')],
+      ['자기주식(보통주)', t ? ju(t.end) : '—', t ? `기초 ${ju(t.begin)} · 취득 ${ju(t.acquired)} · 처분 ${ju(t.disposed)} · <b>소각 ${ju(t.retired)}</b>` : ''],
+      ['현금배당성향', pp(dv.payout), '번 돈 중 배당으로 준 비율(연결)'],
+      ['주당 현금배당금 · 배당수익률', dv.dps && dv.dps[0] != null ? `${n0(dv.dps[0])}원` : '—', `${dv.dps && dv.dps[1] != null ? `전년 ${n0(dv.dps[1])}원 · ` : ''}수익률 ${pp(dv.yield)}`],
+    ];
+    h += `<h3 id="calc-gov">⑥ 경영진 · 지배구조 · 주주환원 ${S_DART} <span class="src">금감원 DART · ${esc(gv.year)}년 사업보고서 · 회사 카드 ${esc(card.fetchedAt || CARDS_AT)} 받음</span></h3>
+      <div class="in-tblx"><table class="in-tbl"><tr><th></th><th>${esc(gv.year)} ${S_DART}</th><th>자세히</th></tr>
+      ${gRows.map(([a, b2, c]) => `<tr><td>${a}</td><td>${b2}</td><td>${c}</td></tr>`).join('')}</table></div>
+      <p class="in-rp-note">자사주는 사들이기만 하면 주식 수가 안 줄어 주주가치가 안 늘고, <b>소각</b>해야 준다(한국거래소 밸류업). 사외이사 비율이 높을수록 이사회가 경영진을 견제한다</p>`;
+  } else {
+    h += `<h3>⑥ 경영진 · 지배구조 · 주주환원</h3><p class="in-doc-p">${SOON} 이 종목의 DART 지배구조 자료가 회사 카드에 없습니다</p>`;
+  }
   // 못 받는 것
   // 못 받는 값의 줄 — 출처 배지(파랑)를 안 붙인다. 파랑은 「받을 수 있다」 는 뜻이라서다. 어디서 받을 예정인지는 글로만
   h += `<p class="in-doc-p">${SOON} EBITDA · EV/EBITDA · ROIC(DART 재무제표로 계산 예정) · 공매도 잔고(KIS API 유무 미확인) · 해외 종목 컨센서스(출처 미정)</p>`;
   if (Object.keys(errs).length) h += `<p class="in-rp-note">못 받은 것 — ${esc(Object.entries(errs).map(([k, v]) => `${k}: ${v}`).join(' · '))}</p>`;
   box.innerHTML = h;
+  // 주소가 지금 계산 안의 칸(#calc-fs · #calc-audit · #calc-gov)을 가리키면 그려진 뒤 그리로 간다 — 표의 「지금 계산 ④ · ⑤ · ⑥」 링크용
+  if (/^#calc-/.test(location.hash)) { const t = document.querySelector(location.hash); if (t) t.scrollIntoView({ block: 'start' }); }
 }
 
 (async () => {
