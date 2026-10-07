@@ -5127,8 +5127,9 @@ US_QUOTES_MAX = 20
 
 # ── 미국 장중 미리받기 (묶음 3 · 2026-10-07 재권님 「응 해줘」) ────────────────────────
 #
-# 나스닥100 의 5분봉을 미국 장중(동부 09:30~16:05 · 서머타임은 zoneinfo 가 따라간다)에 5분 칸이 닫힐 때마다
-# 한 바퀴 받는다. 국내 미리받기와 줄을 따로 쓴다 — 국내 장(한국 08:00~20:10)과 시간이 안 겹친다.
+# 미국 묶음 전부(나스닥100 ∪ S&P500 · 2026-10-07 실측 519종목)의 5분봉을 미국 장중(동부 09:30~16:05 · 서머타임은
+# zoneinfo 가 따라간다)에 5분 칸이 닫힐 때마다 한 바퀴 받는다. 일·주·월·년봉 · 시총 · 지난 세션 5분봉은 **장 전 창**
+# (동부 07:15~09:15 · 지금 한국 20:15~22:15)에 나눠 받는다 — 재권님 「장전에 미리 받을 수 있는 거 먼저 · 분산으로」. 국내 미리받기와 줄을 따로 쓴다 — 국내 장(한국 08:00~20:10)과 시간이 안 겹친다.
 # 받는 길은 겉 함수 get_chart 그대로라 자물쇠 · 저장 · `sync` 가 화면과 같다.
 #
 # **8765 만 돈다**(창구 검수 — 8764 는 차트 주소째 8765 로 넘기므로 8765 가 쌓은 것을 본다. 둘 다 돌면
@@ -5189,14 +5190,43 @@ def start_us_prefill(cfg, port):
         _us_log("%s 한 바퀴 %d종목 · KIS %d건 · %.0f초 · 초당 %.2f건"
                 % (period, len(codes), n, time.time() - t0, n / max(1.0, time.time() - t0)))
 
+    def pre_round(codes, et_date):
+        """장 전 창 — 종목마다 일·주·월·년봉 마지막 봉 · 시총 · (처음이면) 지난 세션 5분봉을 받는다.
+        남은 창 시간에 고르게 나눈다. 창이 끝나면 멈추고 나머지는 다음 날 창으로 — 장중을 무겁게 하지 않는다."""
+        c0, t0, done = _up_stat["calls"] + _stats["kis_calls"], time.time(), 0
+        for i, code in enumerate(codes):
+            ok, _, left = us_universe.in_premarket()
+            if not ok:
+                _us_log("장 전 창이 끝나 %d/%d종목에서 멈춤 — 나머지는 다음 날 장 전에" % (i, len(codes)))
+                break
+            gap = max(0.2, left / max(1, len(codes) - i))   # 남은 시간을 남은 종목에 고르게
+            t1 = time.time()
+            try:
+                for per, lim in (("D", 240), ("W", 100), ("M", 100), ("Y", 20)):
+                    get_chart(cfg, code, per, lim)
+                if not read_candles(code, "5m", 1):
+                    get_chart(cfg, code, "5m", 1)            # 처음이면 지난 세션 5분봉(두 쪽)
+                us_universe.save_caps(kis_get, cfg, [code])
+                done += 1
+            except Exception as e:
+                _us_log("%s 장 전 받기 실패 (%s)" % (code, safe_message(e, 80)))
+            time.sleep(max(0.0, gap - (time.time() - t1)))
+        n = _up_stat["calls"] + _stats["kis_calls"] - c0
+        _us_log("장 전(%s) %d/%d종목 · KIS %d건 · %.0f초 · 초당 %.2f건"
+                % (et_date, done, len(codes), n, time.time() - t0, n / max(1.0, time.time() - t0)))
+
     def loop():
         time.sleep(PREFILL_START_SEC)
-        state = {"holiday": None, "seen": None, "after": None, "slot": None, "probe": None}
+        state = {"holiday": None, "seen": None, "pre": None, "slot": None, "probe": None}
         while True:
             try:
                 st, d, m = us_universe.session_state()
-                codes = us_universe.members()
-                if st == "open" and codes and state["holiday"] != d:
+                codes = us_universe.all_members()
+                pre, pd, _left = us_universe.in_premarket()
+                if pre and codes and state["pre"] != pd:
+                    state["pre"] = pd                     # 하루 한 번 — 다 못 받아도 그날은 다시 안 돈다
+                    pre_round(codes, pd)
+                elif st == "open" and codes and state["holiday"] != d:
                     slot = (d, (m - us_universe.SESSION_OPEN_MIN) // 5)
                     if slot != state["slot"]:
                         if state["seen"] != d and state["probe"] != slot:   # 오늘 봉이 아직 — 칸마다 한 번만 한 종목으로 본다
@@ -5211,11 +5241,6 @@ def start_us_prefill(cfg, port):
                         if state["seen"] == d:
                             state["slot"] = slot
                             one_round(codes, "5m", 1)
-                elif st == "after" and codes and state["after"] != d and state["seen"] == d \
-                        and m >= us_universe.AFTER_CLOSE_MIN:
-                    state["after"] = d
-                    for per, lim in (("D", 240), ("W", 100), ("M", 100), ("Y", 20)):
-                        one_round(codes, per, lim)
             except Exception as e:
                 _us_log("뒤 작업 오류 (%s)" % type(e).__name__)
             time.sleep(PREFILL_SLOT_POLL_SEC)
@@ -6535,6 +6560,21 @@ class Handler(SimpleHTTPRequestHandler):
                 })
                 return
 
+            if route == "us-board":
+                # 나스닥100 순위 표 — DB 만 읽는다(KIS 0건). 미리받기가 쌓은 5분봉 · 일봉 (2026-10-07)
+                idx = (qs.get("index") or [us_universe.NDX100])[0].strip().upper()
+                if idx not in us_universe.US_INDEXES:
+                    self._send_json({"ok": False, "error": "index 는 %s 중 하나여야 합니다."
+                                     % ", ".join(us_universe.US_INDEXES)}, 400)
+                    return
+                rows = us_universe.us_board(idx)
+                self._send_json({"ok": True, "data": rows, "meta": {"index": idx,
+                    "count": len(rows), "priced": sum(1 for r in rows if r["price"] is not None),
+                    "asof": max((r["asof"] for r in rows if r["asof"]), default=None),
+                    "session": us_universe.session_state()[0], "kisCalls": 0,
+                    "valueIsEstimate": True}})
+                return
+
             if route == "quotes":
                 raw = (qs.get("codes") or [""])[0]
                 codes = [c.strip() for c in raw.split(",") if c.strip()]
@@ -6712,7 +6752,7 @@ def main():
     if not SLOW and us_universe.start():
         print("  미국 목록  : 나스닥100 과 거래소 코드를 하루 한 번 받습니다")
     if not SLOW and start_us_prefill(cfg, args.port):
-        print("  미국 5분봉 : 미국 장중(동부 09:30~16:05)에 나스닥100 을 5분마다 받습니다")
+        print("  미국 받기  : 장 전(동부 07:15~09:15) 일·주·월·년봉·시총을 나눠 받고, 장중(09:30~16:05)에는 5분봉만 5분마다")
 
     if not DWMY_ON:
         print("  일주월년   : **꺼져 있습니다** (켜려면 KJC_DWMY=1)")
