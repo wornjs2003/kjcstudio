@@ -181,13 +181,16 @@ def main(argv):
             """차트 응답 본문을 읽어 ok · 봉 수를 센다."""
             out = []
             for c in charts:
-                item = {"status": c["status"], "ok": None, "candles": None, "period": None}
+                # since= 는 「안 받은 봉만」 받는 이어 받기라 봉 1~2 가 정상이다 — 봉 수를 안 센다(2026-10-07 · 개발 실측 헛경보)
+                item = {"status": c["status"], "ok": None, "candles": None, "period": None,
+                        "since": "since=" in (c.get("url") or "")}
                 try:
                     r = call("Network.getResponseBody", {"requestId": c["rid"]})
                     body = json.loads(r["result"]["body"])
                     item["ok"] = bool(body.get("ok"))
                     d = body.get("data") or {}
-                    item["candles"] = len(d.get("candles") or [])
+                    if not item["since"]:
+                        item["candles"] = len(d.get("candles") or [])
                     item["period"] = d.get("period")
                 except Exception:
                     pass
