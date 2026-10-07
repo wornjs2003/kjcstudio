@@ -58,6 +58,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import dart
 import us_universe
 import naver
+import toss
 import news
 import news_store
 # 오류 문구에서 비밀을 지운다. 외부 호출 오류를 사람에게 보여줄 때는
@@ -5600,6 +5601,9 @@ class Handler(SimpleHTTPRequestHandler):
         if (self.path or "").startswith("/api/board/"):
             self._handle_board()
             return
+        if (self.path or "").startswith("/api/toss/"):
+            self._handle_toss()
+            return
         if (self.path or "").startswith("/debugging/"):
             self._handle_debugging()
             return
@@ -5895,6 +5899,15 @@ class Handler(SimpleHTTPRequestHandler):
     # 「지금 뜨는 산업」 이 쓴다. KIS 에 없는 둘 때문에 여기서 받는다 —
     # 업종 안에서 몇이 오르내렸는지, 그리고 그 업종의 종목 목록이다.
     # 자세한 것은 server/naver.py 머리글과 docs/sector-sources.md 에 있다.
+    def _handle_toss(self):
+        """토스증권 — 지금은 연결 확인 하나 (2026-10-07). 토큰은 보내는 서버(8765)만 받는다 — toss.py 머리 주석."""
+        route = urllib.parse.urlparse(self.path).path[len("/api/toss/"):].strip("/")
+        if route != "health":
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/toss/health 하나뿐입니다."}, 404)
+            return
+        r = toss.health(is_sender(self.server.server_address[1]))
+        self._send_json(r, 200 if r.get("ok") or r.get("connected") is None else 502)
+
     def _handle_naver(self):
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/naver/"):].strip("/")
