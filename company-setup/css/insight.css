@@ -78,6 +78,9 @@
 .in-tbl th { font-weight: 500; font-size: 0.76rem; color: var(--kh-text-muted); white-space: nowrap; }
 .in-tbl td:first-child { white-space: nowrap; color: var(--kh-text-primary); }
 .in-tbl.in-wrap td:first-child { white-space: normal; }   /* 첫 열이 긴 표(⑥) — 안 바꾸면 표가 카드보다 넓어져 끝 열이 잘린다(2026-10-07 실측) */
+@media (max-width: 639px) {   /* 계산 표(.in-tblx) 첫 칸 — 좁은 폭에서 항목명이 폭을 다 먹어 셋째 칸이 몇 글자 폭에 갇혔다(2026-10-08 재권님 「가」) · 줄바꿈 허용 + 폭 상한 · 낱말은 안 끊는다 */
+  .in-tblx .in-tbl td:first-child { white-space: normal; width: 6.5em; min-width: 5em; word-break: keep-all; }
+}
 /* 상태 알약 — 「색 바탕 위의 글씨」 룰: 연한 바탕(12%)에 같은 색의 진한 글씨 */
 .in-pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 0.72rem; font-weight: 700; white-space: nowrap; margin-right: 4px; }
 .in-pill.ok   { background: rgb(var(--kh-ok-rgb) / .12);   color: rgb(var(--kh-ok-rgb)); }
