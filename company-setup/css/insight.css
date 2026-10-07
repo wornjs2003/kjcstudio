@@ -77,6 +77,7 @@
 .in-tbl th, .in-tbl td { padding: 7px 8px; border-bottom: 1px solid var(--kh-border); text-align: left; vertical-align: top; }
 .in-tbl th { font-weight: 500; font-size: 0.76rem; color: var(--kh-text-muted); white-space: nowrap; }
 .in-tbl td:first-child { white-space: nowrap; color: var(--kh-text-primary); }
+.in-tbl.in-wrap td:first-child { white-space: normal; }   /* 첫 열이 긴 표(⑥) — 안 바꾸면 표가 카드보다 넓어져 끝 열이 잘린다(2026-10-07 실측) */
 /* 상태 알약 — 「색 바탕 위의 글씨」 룰: 연한 바탕(12%)에 같은 색의 진한 글씨 */
 .in-pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 0.72rem; font-weight: 700; white-space: nowrap; margin-right: 4px; }
 .in-pill.ok   { background: rgb(var(--kh-ok-rgb) / .12);   color: rgb(var(--kh-ok-rgb)); }
@@ -127,3 +128,20 @@
   body[data-nav="company-setup"] .kh-cat::-webkit-scrollbar { display: none; }
   body[data-nav="company-setup"] .kh-cat-my { margin-left: 0; flex: none; }
 }
+
+/* ── 펼치기 · 접기 — 종목 리포트(stock-report.html)와 종목 분석 문서(analysis.html)가 같이 쓴다(2026-10-07 옮김 · 전에는 stock-report.css) ── */
+.rp-fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; padding-right: 22px; position: relative; }
+.rp-fold > summary::-webkit-details-marker { display: none; }
+.rp-fold > summary::after { content: ''; position: absolute; right: 4px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--kh-text-muted); border-bottom: 2px solid var(--kh-text-muted); transform: translateY(-70%) rotate(45deg); transition: transform .15s; }
+.rp-fold[open] > summary::after { transform: translateY(-30%) rotate(-135deg); }
+.rp-fold > summary h2 { margin: 0; }
+.rp-sum { font-size: 0.82rem; color: var(--kh-text-secondary); line-height: 1.5; flex-basis: 100%; }
+.rp-fold[open] > summary .rp-sum { color: var(--kh-text-muted); }
+.rp-fold-body { padding-top: 8px; }
+/* 종목 분석 문서의 갈래(.in-grp) — 갈래 제목은 크게 · 안의 ①~⑤ 절 제목은 작게 · 안쪽 마지막 절은 밑줄 없이 (2026-10-07 재권님 「카테고리별로 묶어서 접고 펼칠 수 있게」) */
+.in-grp > summary h2 { font-size: 1.05rem; }
+.in-grp .rp-fold-body .in-rp-sec h2 { font-size: 0.95rem; }
+.in-grp .rp-fold-body > .in-rp-sec:last-child { border-bottom: 0; padding-bottom: 0; }
+.in-doc-foldall { display: flex; gap: 6px; margin-top: 4px; }
+.in-calc-pick-row { display: flex; justify-content: flex-end; margin: 0 0 6px; }
+.in-calc-pick-row .in-calc-pick { margin-left: 0; }

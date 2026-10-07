@@ -197,7 +197,7 @@ async function main() {
 
   // ── 머리 ──
   const chg = fin(price.changePct) ? price.changePct : (b.length > 1 ? (b[L].c / b[L - 1].c - 1) * 100 : null);
-  $('rp-meta').textContent = `시황분석1 손글 · 기준 ${at} · 숫자는 KIS · 네이버 · DART 에서 받음 · 글은 ${T.asOf ? T.asOf + ' 에 씀' : '아직'}`;
+  $('rp-meta').textContent = `${T.author || '시황분석1'} 손글 · 기준 ${at} · 숫자는 KIS · 네이버 · DART 에서 받음 · 글은 ${T.asOf ? T.asOf + ' 에 씀' : '아직'}`;
   $('rp-title').innerHTML = `${esc(name)} <span class="rp-px">${won(px)}</span> <span class="rp-chg ${signCls(chg)}">${pct(chg, 2)}</span>`;
   const V = T.verdict || {};
   $('rp-verdict').innerHTML = V.label ? `${esc(V.label)}<small>${esc(V.direction || '')}</small>` : `${SOON} 판정은 세션이 숫자를 본 뒤 씁니다`;

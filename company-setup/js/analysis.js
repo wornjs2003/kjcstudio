@@ -157,3 +157,19 @@ async function paint(code) {
   sel.addEventListener('change', () => paint(sel.value));
   paint(sel.value);
 })();
+
+// ── 갈래 접기 · 펼치기(2026-10-07) — 「전부 펼치기 · 접기」 단추, 주소(#s6r · #r5 …)가 가리키는 절이 접힌 갈래 안이면 그 갈래를 열고 거기로 간다
+(() => {
+  const folds = document.querySelectorAll('details.rp-fold');
+  const oa = $('doc-open-all'), ca = $('doc-close-all');
+  if (oa) oa.addEventListener('click', () => folds.forEach((d) => { d.open = true; }));
+  if (ca) ca.addEventListener('click', () => folds.forEach((d) => { d.open = false; }));
+  const go = () => {
+    if (!location.hash) return;
+    const t = document.querySelector(location.hash); if (!t) return;
+    let p = t.closest('details'); while (p) { p.open = true; p = p.parentElement && p.parentElement.closest('details'); }
+    t.scrollIntoView({ block: 'start' });
+  };
+  go(); window.addEventListener('hashchange', go);
+})();
+
