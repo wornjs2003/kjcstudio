@@ -136,6 +136,86 @@ def dart_business(key, cc):
             "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=" + rep["rcept_no"]}, None
 
 
+# 재무 건전성 — DART 단일회사 전체 재무제표(fnlttSinglAcntAll) · 가장 최근 사업보고서 · 연결(없으면 별도)
+# (2026-10-07 재권님 「재무건전성은 dart 에서 재무재표를 받아 볼 수 있지 않나」 → 「있음으로 표기되야 하고 채워 넣어줘」)
+# 계정은 account_id(IFRS 표준 이름)로 먼저 찾고, 없으면 account_nm(한글)으로 — 회사마다 이름이 조금씩 달라서다. 못 찾은 칸은 null(지어내지 않는다)
+FS_WANT = {
+    "assets":      (["ifrs-full_Assets"], ["자산총계"]),
+    "liab":        (["ifrs-full_Liabilities"], ["부채총계"]),
+    "equity":      (["ifrs-full_Equity"], ["자본총계"]),
+    "curAssets":   (["ifrs-full_CurrentAssets"], ["유동자산"]),
+    "curLiab":     (["ifrs-full_CurrentLiabilities"], ["유동부채"]),
+    "cash":        (["ifrs-full_CashAndCashEquivalents"], ["현금및현금성자산"]),
+    "revenue":     (["ifrs-full_Revenue"], ["매출액", "수익(매출액)", "영업수익"]),
+    "opIncome":    (["dart_OperatingIncomeLoss"], ["영업이익", "영업이익(손실)"]),
+    "netIncome":   (["ifrs-full_ProfitLoss"], ["당기순이익", "당기순이익(손실)", "연결당기순이익"]),
+    "opCF":        (["ifrs-full_CashFlowsFromUsedInOperatingActivities"], ["영업활동현금흐름", "영업활동으로 인한 현금흐름"]),
+    "capex":       (["ifrs-full_PurchaseOfPropertyPlantAndEquipment"], ["유형자산의 취득"]),
+    "dividendPaid":(["ifrs-full_DividendsPaidClassifiedAsFinancingActivities"], ["배당금의 지급", "배당금지급"]),
+    "buyback":     (["ifrs-full_PaymentsToAcquireOrRedeemEntitysShares"], ["자기주식의 취득", "자기주식의취득"]),
+}
+FS_SJ = {"assets": "BS", "liab": "BS", "equity": "BS", "curAssets": "BS", "curLiab": "BS", "cash": "BS",
+         "revenue": "IS", "opIncome": "IS", "netIncome": "IS", "opCF": "CF", "capex": "CF", "dividendPaid": "CF", "buyback": "CF"}
+
+
+def _amt(v):
+    try:
+        return int(str(v).replace(",", "").strip())
+    except Exception:
+        return None
+
+
+def dart_fs(key, cc):
+    year = datetime.now().year
+    for y in (year - 1, year - 2):
+        for div in ("CFS", "OFS"):
+            q = urllib.parse.urlencode({"crtfc_key": key, "corp_code": cc, "bsns_year": str(y), "reprt_code": "11011", "fs_div": div})
+            j = get_json(DART + "/fnlttSinglAcntAll.json?" + q)
+            time.sleep(PAUSE)
+            rows = j.get("list") or []
+            if j.get("status") != "000" or not rows:
+                continue
+            out = {"year": y, "fsDiv": "연결" if div == "CFS" else "별도", "unit": "원", "now": {}, "prev": {},
+                   "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=" + rows[0].get("rcept_no", ""), "source": "금감원 DART 사업보고서 재무제표"}
+            for k, (ids, names) in FS_WANT.items():
+                sj = FS_SJ[k]
+                cand = [r for r in rows if (r.get("sj_div") == sj or (sj == "IS" and r.get("sj_div") == "CIS"))]
+                hit = next((r for r in cand if r.get("account_id") in ids), None) or \
+                      next((r for r in cand if r.get("account_nm", "").replace(" ", "") in [n.replace(" ", "") for n in names]), None)
+                out["now"][k] = _amt(hit.get("thstrm_amount")) if hit else None
+                out["prev"][k] = _amt(hit.get("frmtrm_amount")) if hit else None
+            return out, None
+    return None, "사업보고서 재무제표 없음(%d · %d)" % (year - 1, year - 2)
+
+
+# 회계 신뢰도 — DART 회계감사인의 명칭 및 감사의견(accnutAdtorNmNdAdtOpinion) · 가장 최근 사업보고서 · 당기 · 전기
+# (2026-10-07 재권님 「회계신뢰도 dart 에서 볼 수 있는 거 같은데 이것도 확인해줘」). 「계속기업」 글자가 강조사항 · 특기사항에 있으면 goingConcern=True
+def dart_audit(key, cc):
+    year = datetime.now().year
+    for y in (year - 1, year - 2):
+        q = urllib.parse.urlencode({"crtfc_key": key, "corp_code": cc, "bsns_year": str(y), "reprt_code": "11011"})
+        j = get_json(DART + "/accnutAdtorNmNdAdtOpinion.json?" + q)
+        time.sleep(PAUSE)
+        rows = j.get("list") or []
+        if j.get("status") != "000" or not rows:
+            continue
+        out = []
+        for r in rows:
+            term = re.sub(r"\s+", "", r.get("bsns_year", ""))
+            item = {"term": term, "auditor": r.get("adtor"), "opinion": r.get("adt_opinion"),
+                    "emphasis": r.get("emphs_matter"), "special": r.get("adt_reprt_spcmnt_matter"), "keyMatters": r.get("core_adt_matter")}
+            item["goingConcern"] = "계속기업" in "%s %s" % (item["emphasis"] or "", item["special"] or "")
+            if not (item["opinion"] or "").strip("- "):          # DART 가 빈 줄(의견 없음)을 섞어 보낸다 — 리노공업 · 현대차 실측
+                continue
+            if not any(x["term"] == item["term"] and x["opinion"] == item["opinion"] and x["keyMatters"] == item["keyMatters"] for x in out):
+                out.append(item)
+        if not out:
+            continue
+        return {"year": y, "rows": out, "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=" + rows[0].get("rcept_no", ""),
+                "source": "금감원 DART 사업보고서 감사의견"}, None
+    return None, "사업보고서 감사의견 없음(%d · %d)" % (year - 1, year - 2)
+
+
 def fetch_dart(card, key):
     cc = corp_code(card["code"])
     if not key:
@@ -148,7 +228,12 @@ def fetch_dart(card, key):
         return None, "기업개황 %s %s" % (j.get("status"), j.get("message"))
     time.sleep(PAUSE)
     biz, err = dart_business(key, cc)
-    return {"corpName": j.get("corp_name"), "ceo": j.get("ceo_nm"), "homepage": j.get("hm_url"),
+    time.sleep(PAUSE)
+    fs, err2 = dart_fs(key, cc)
+    time.sleep(PAUSE)
+    audit, err3 = dart_audit(key, cc)
+    err = "; ".join(e for e in (err, err2, err3) if e) or None
+    return {"fs": fs, "audit": audit, "corpName": j.get("corp_name"), "ceo": j.get("ceo_nm"), "homepage": j.get("hm_url"),
             "industryCode": j.get("induty_code"), "established": j.get("est_dt"), "address": j.get("adres"),
             "business": biz, "from": "https://dart.fss.or.kr/dsae001/main.do?corpCode=" + cc,
             "source": "금감원 DART"}, err
@@ -305,7 +390,7 @@ def main():
             n_ok += 1
         log("%-8s %-12s %s" % (k, c["name"], ("· ".join("%s=%s" % kv for kv in card["errors"].items()) or "받음")))
     out = {"fetchedAt": datetime.now().strftime("%Y-%m-%d %H:%M"),
-           "sources": {"dart": "금감원 DART 전자공시 — 기업개황 · 정기보고서 「사업의 개요」",
+           "sources": {"dart": "금감원 DART 전자공시 — 기업개황 · 정기보고서 「사업의 개요」 · 사업보고서 재무제표(재무 건전성) · 감사의견(회계 신뢰도)",
                        "naver": "네이버 증권(FnGuide 집계) — 연간 실적 · 증권사 추정(E) · 목표주가 · 투자의견 · 리포트",
                        "edgar": "미국 증권위 EDGAR — companyfacts 재무 · 10-K/20-F"},
            "cards": cards}
