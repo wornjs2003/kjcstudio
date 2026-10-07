@@ -174,3 +174,45 @@
   border-radius: var(--kh-radius-md) var(--kh-radius-md) 0 0; box-shadow: var(--kh-shadow-lg); padding-bottom: env(safe-area-inset-bottom); }
 .rp-toc-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px 4px; font-size: 0.95rem; }
 @media (max-width: 1280px) { .rp-toc-fab { display: inline-flex; } }
+
+/* ── 종목 분석 ⓪ 「리포트 머리 틀」 보기(정지 그림 · analysis.html #g-top) — 리포트 화면이 같은 틀을 쓰게 되면 이 클래스를 그대로 쓴다 (2026-10-07 재권님 사진 틀)
+   상태는 연한 바탕 + 진한 글씨로 알린다 · 흰 칸에는 테두리 색을 안 쓴다(「선 — 흰 카드에는 넣지 않는다」) · 좁은 폭부터 */
+.in-vt-ex { margin: 6px 0 10px; }
+.in-vt-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.in-vt-title { font-size: 1.25rem; font-weight: 800; line-height: 1.3; }
+.in-vt-price { font-weight: 700; }
+.in-vt-price.up { color: var(--kh-up); } .in-vt-price.down { color: var(--kh-down); }
+.in-vt-verdict { margin-top: 8px; font-size: 0.92rem; color: var(--kh-text-secondary); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.in-vt-label { font-size: 0.82rem; padding: 3px 10px; }
+.in-vt-tags { margin-top: 6px; font-size: 0.8rem; color: var(--kh-accent); font-family: ui-monospace, Menlo, monospace; }
+.in-vt-meta { margin-top: 4px; font-size: 0.76rem; color: var(--kh-text-muted); display: flex; gap: 10px; flex-wrap: wrap; }
+.in-vt-by { font-weight: 600; color: var(--kh-text-secondary); }
+.in-vt-card { margin-top: 12px; background: var(--kh-bg); border-radius: var(--kh-radius-md); padding: 12px; display: grid; gap: 10px; }
+.in-vt-row2 { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.in-vt-box { background: var(--kh-bg-card); border-radius: var(--kh-radius-md); padding: 10px 12px; }
+.in-vt-box-l { font-size: 0.74rem; color: var(--kh-text-muted); margin-bottom: 6px; }
+.in-vt-box-v { font-size: 0.95rem; font-weight: 600; color: var(--kh-text-primary); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.in-vt-box-s { font-size: 0.76rem; color: var(--kh-text-secondary); margin-top: 6px; }
+.in-vt-tabs { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--kh-bg-card); border-radius: var(--kh-radius-md); overflow: hidden; }
+.in-vt-tab { display: block; text-align: center; font: inherit; font-size: 0.86rem; padding: 10px 6px; border: 0; background: transparent; color: var(--kh-text-secondary); }
+.in-vt-tab.on { background: var(--kh-accent-dim); color: var(--kh-accent); font-weight: 700; }
+.in-vt-note { font-size: 0.74rem; color: var(--kh-text-muted); margin: 8px 2px 0; line-height: 1.6; }
+.in-vt-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px; }
+.in-vt-stat { background: var(--kh-bg-card); border-radius: var(--kh-radius-md); padding: 10px 12px; min-height: 76px; }
+.in-vt-stat-l { font-size: 0.74rem; color: var(--kh-text-muted); }
+.in-vt-stat-v { font-size: 1.05rem; font-weight: 800; margin-top: 4px; color: var(--kh-text-primary); word-break: keep-all; }
+.in-vt-stat-s { font-size: 0.74rem; color: var(--kh-text-secondary); margin-top: 2px; }
+.in-vt-stat.buy  { background: rgb(var(--kh-ok-rgb) / .10); }  .in-vt-stat.buy  .in-vt-stat-v { color: rgb(var(--kh-ok-rgb)); }
+.in-vt-stat.stop { background: var(--kh-down-dim); }            .in-vt-stat.stop .in-vt-stat-v, .in-vt-stat.stop .in-vt-stat-s { color: var(--kh-down); }
+.in-vt-stat.tgt  { background: var(--kh-up-dim); }              .in-vt-stat.tgt  .in-vt-stat-v, .in-vt-stat.tgt  .in-vt-stat-s { color: var(--kh-up); }
+.in-vt-call { margin-top: 8px; }
+.in-vt-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.in-vt-chips .kh-chip b { margin-left: 4px; }
+.in-vt-chips-s { font-size: 0.72rem; color: var(--kh-text-muted); }
+.in-vt-flow { font-size: 0.86rem; color: var(--kh-text-secondary); }
+.in-vt-flow .up { color: var(--kh-up); } .in-vt-flow .down { color: var(--kh-down); }
+@media (min-width: 640px) {
+  .in-vt-row2 { grid-template-columns: 1fr 1fr; }
+  .in-vt-stats { grid-template-columns: repeat(4, 1fr); }
+  .in-vt-title { font-size: 1.45rem; }
+}
