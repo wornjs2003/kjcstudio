@@ -216,3 +216,22 @@
   .in-vt-stats { grid-template-columns: repeat(4, 1fr); }
   .in-vt-title { font-size: 1.45rem; }
 }
+/* ⑥-4 규칙 다섯 줄(번호 목록) — 2026-10-07 */
+.in-doc-ol { margin: 6px 0 10px; padding-left: 1.4em; font-size: 0.9rem; line-height: 1.7; color: var(--kh-text-secondary); }
+.in-doc-ol li { margin: 4px 0; }
+.in-doc-ol li b { color: var(--kh-text-primary); }
+
+/* ── 용어 풍선 (js/glossary.js · data/glossary.json) — 2026-10-07 재권님 「마우스 올리면 설명으로 뜨도록」. 좁은 폭부터 */
+.in-term { position: relative; text-decoration: underline dotted; text-underline-offset: 3px; text-decoration-color: var(--kh-text-muted); cursor: help; outline: none; }
+.in-term:focus-visible { text-decoration-style: solid; }
+.in-term-tip { position: absolute; left: 0; top: calc(100% + 6px); z-index: 40; width: min(420px, 88vw); background: var(--kh-bg-card); border-radius: var(--kh-radius-md); box-shadow: var(--kh-shadow-lg, var(--shadow-lg)); padding: 10px 12px; text-align: left; font-weight: 400; font-style: normal; font-size: 0.8rem; line-height: 1.6; color: var(--kh-text-secondary); white-space: normal; text-decoration: none; cursor: auto; }
+.in-term-tip.up { top: auto; bottom: calc(100% + 6px); }
+.in-term-h { display: block; color: var(--kh-text-primary); font-size: 0.88rem; margin-bottom: 4px; }
+.in-term-kv { display: grid; grid-template-columns: 4.6em minmax(0, 1fr); gap: 6px; margin: 3px 0; }
+.in-term-kv span { color: var(--kh-text-muted); }
+.in-term-tip blockquote { margin: 6px 0 2px; padding: 6px 10px; background: var(--kh-bg); border-radius: var(--kh-radius-sm); font-size: 0.78rem; }
+.in-term-src { font-size: 0.72rem; margin-bottom: 4px; }
+.in-term-src a { color: var(--kh-accent); text-decoration: none; }
+.in-term-none { margin: 6px 0; padding: 5px 10px; background: var(--kh-danger-faint); color: var(--kh-danger); border-radius: var(--kh-radius-sm); font-size: 0.76rem; }
+.in-term-note { margin: 6px 0 0; font-size: 0.76rem; }
+td .in-term-tip, .in-vt-stat .in-term-tip { font-weight: 400; }

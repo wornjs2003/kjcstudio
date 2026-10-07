@@ -1,0 +1,598 @@
+{
+ "_읽는법": "종목 분석 문서의 용어 풍선 재료 — js/glossary.js 가 읽는다. 원천은 시황분석1 조사(temp/시황분석1-glossary.html · 2026-10-07)이고 이 파일로 옮긴 것이 저장소의 한 곳이다. quotes = 출처 문장 그대로(번역 안 함) · missing = 권위 출처 못 찾음(우리 정의) · weak = 원문을 직접 못 열어 본 것 · match = 문서에서 찾을 글자(긴 것부터). 값을 고치려면 이 파일만.",
+ "from": "temp/시황분석1-glossary.html",
+ "madeAt": "2026-10-07 17:4x",
+ "items": [
+  {
+   "id": "매물대",
+   "term": "매물대",
+   "aliases": "매물대 차트 · 누적 거래량 차트(한국투자 · 다올) · Volume Profile · Volume by Price(영문)",
+   "group": "가격표 · 지지 저항",
+   "quotes": [
+    {
+     "text": "대기매물 가격대별 거래량의 비율을 가격대에 바형식으로 구현한 차트로 매물대 분석시에 사용됩니다. … 누적 거래량 차트라고 말하기도 합니다.",
+     "source": "한국투자증권 HTS 도움말 [0301] 주식 종합차트",
+     "url": "http://truefriend.com/pro_help/0301.html"
+    },
+    {
+     "text": "누적 거래량이 많은 가격대가 매물대라고 볼 수 있습니다. 주가가 매물대 위에 있으면, 매물대는 지지구간의 역할을 하고, 매물대 밑에 있으면 매물대는 저항구간의 역할을 하게 됩니다. 누적 거래량이 적은 구간에서는 주가가 빠른 속도로 움직이는 것이 일반적인 현상입니다.",
+     "source": "다올투자증권(옛 KTB) HTS 도움말 [5501] 주식종합차트",
+     "url": "https://www.ktb.co.kr/html/hts_help/5501.html"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "홀딩스 차트 「매물대(vp)」 지표 · 종목 리포트에는 아직 없음(문서 0회)",
+   "note": [
+    "리포트 가격표에 쓰는 길(권함 · 정하는 것은 재권님) — 다올 정의 그대로 「지지 · 저항의 재료」 다. 지금 1차 지지 · 저항은 ZigZag 꺾임점이라, 그 가격이 두꺼운 매물대와 겹치면 「강한 자리」, 매물이 얇은 구간이면 「빨리 지나가는 자리」 로 한 칸 덧붙이면 된다."
+   ],
+   "match": [
+    "매물대"
+   ]
+  },
+  {
+   "id": "지지선 · 저항선",
+   "term": "지지 · 저항(1차 지지 · 1차 저항)",
+   "aliases": "지지구간 · 저항구간(다올) · Support · Resistance",
+   "group": "가격표 · 지지 저항",
+   "quotes": [
+    {
+     "text": "지지선과 저항선은 가격이 더이상 한 방향으로 움직이는 것을 멈추거나 방향을 바꿀 가능성이 있는 가격 수준을 지칭할 때 트레이더들이 사용하는 일반적 용어입니다.",
+     "source": "CME Group 교육(한국어) — 지지선과 저항선",
+     "url": "https://www.cmegroup.com/ko/education/courses/technical-analysis/support-and-resistance.html"
+    }
+   ],
+   "missing": null,
+   "weak": true,
+   "cell": "종목 리포트 가격표(손절가 = 1차 지지 − ATR×0.5 · 목표가 = 1차 저항) · 「지지 · 저항 영역」 절",
+   "note": [
+    "⚠ CME 문장은 검색 결과 요약에서 옮겼다 — 원문 페이지를 직접 열지 못했다(바깥에서 403 · 시간 초과). 재권님 화면에서 열어 맞는지 보셔야 한다."
+   ],
+   "match": [
+    "1차 지지",
+    "2차 지지",
+    "1차 저항",
+    "2차 저항",
+    "지지선",
+    "저항선",
+    "지지구간",
+    "저항구간",
+    "지지",
+    "저항"
+   ]
+  },
+  {
+   "id": "ZigZag(꺾임점 · 스윙 고점/저점)",
+   "term": "ZigZag 꺾임점",
+   "aliases": "ZigZag차트(키움 차트 유형) · 스윙",
+   "group": "가격표 · 지지 저항",
+   "quotes": [],
+   "missing": "출처 못 찾음 — 키움 HTS 도움말에 「ZigZag차트」 가 차트 유형 이름으로만 있고 뜻 설명은 없다(https://download.kiwoom.com/hero4_help_new/0600.htm)",
+   "weak": false,
+   "cell": "가격표의 1차 지지 · 저항을 뽑는 방법(최근 260봉 · 꺾임 8.8% = ATR×2)",
+   "note": [],
+   "match": [
+    "ZigZag",
+    "꺾임점",
+    "꺾임"
+   ]
+  },
+  {
+   "id": "손절가 · 목표가 · 매수가 · 손익비",
+   "term": "손절가 · 목표가 · 매수가 · 손익비",
+   "aliases": "손절(매) · 목표주가(증권사 목표가와 다른 것)",
+   "group": "가격표 · 지지 저항",
+   "quotes": [],
+   "missing": "출처 못 찾음 — 권위 출처의 정의를 못 찾았다 — 우리 가격표 규칙의 낱말이다(규칙 자체가 「미정 · 빨간 바탕」)",
+   "weak": false,
+   "cell": "종목 리포트 가격표 다섯 칸",
+   "note": [
+    "「목표가」 가 두 뜻으로 쓰인다 — 가격표의 목표가(1차 저항)와 증권사 목표주가(기본 지표 · 세 칸). 낱말을 갈라 쓰기를 권함: 가격표는 「목표가」, 증권사 것은 「증권사 목표주가」"
+   ],
+   "match": [
+    "손절가",
+    "목표가",
+    "매수가",
+    "손익비",
+    "손절"
+   ]
+  },
+  {
+   "id": "눌림(눌림목) · 분할 매수 · 관망 · 보류 · 비중 축소 · 버퍼",
+   "term": "(그대로)",
+   "aliases": "—",
+   "group": "가격표 · 지지 저항",
+   "quotes": [],
+   "missing": "출처 못 찾음 — 권위 출처의 정의를 못 찾았다 — 국내 매매 관용어 · 우리 판정 낱말",
+   "weak": false,
+   "cell": "종목 리포트 머리 판정 · 전략 · 대응",
+   "note": [],
+   "match": [
+    "눌림목",
+    "눌림",
+    "분할 매수",
+    "관망",
+    "보류",
+    "비중 축소",
+    "버퍼"
+   ]
+  },
+  {
+   "id": "이동평균(선)",
+   "term": "이동평균선(이평선) · MA5 · MA20 · MA60 · MA224",
+   "aliases": "SMA(단순) · EMA(지수)",
+   "group": "지표",
+   "quotes": [
+    {
+     "text": "Moving averages are one of the core indicators in technical analysis, and there are a variety of different versions. SMA is the easiest moving average to construct.",
+     "source": "Fidelity Learning Center — Technical Indicator Guide · Simple Moving Average",
+     "url": "https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/sma"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "차트 · 기술적 지표 절 · 224선 체류율",
+   "note": [],
+   "match": [
+    "이동평균선",
+    "이동평균",
+    "이평선",
+    "MA5",
+    "MA20",
+    "MA60",
+    "MA112",
+    "MA224",
+    "MA448",
+    "224일선",
+    "224선"
+   ]
+  },
+  {
+   "id": "골든크로스 · 데드크로스",
+   "term": "골든크로스 · 데드크로스",
+   "aliases": "이평 교차 · crossover",
+   "group": "지표",
+   "quotes": [
+    {
+     "text": "When a short period SMA crosses above a long period SMA, you may want to go long. You may want to go short when the short-term SMA crosses back below the long-term SMA.",
+     "source": "Fidelity Learning Center — Technical Indicator Guide · Simple Moving Average",
+     "url": "https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/sma"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "기술적 지표 · 「이평 교차 뒤 5 · 20봉 수익률」",
+   "note": [
+    "Fidelity 는 교차를 설명하지만 「골든 · 데드」 라는 이름은 안 쓴다. 이름 자체의 권위 출처는 못 찾았다"
+   ],
+   "match": [
+    "골든크로스",
+    "데드크로스",
+    "골든",
+    "데드"
+   ]
+  },
+  {
+   "id": "정배열 · 역배열",
+   "term": "정배열 · 역배열",
+   "aliases": "—",
+   "group": "지표",
+   "quotes": [],
+   "missing": "출처 못 찾음 — 권위 출처의 정의를 못 찾았다 — 국내 관용어(짧은 이평이 긴 이평 위에 차례로 놓이면 정배열)",
+   "weak": false,
+   "cell": "머리 판정 · 차트 절 요약(「단기 정배열 · 장기 정배열」)",
+   "note": [],
+   "match": [
+    "정배열",
+    "역배열"
+   ]
+  },
+  {
+   "id": "RSI",
+   "term": "RSI(14)",
+   "aliases": "상대강도지수 · Relative Strength Index",
+   "group": "지표",
+   "quotes": [
+    {
+     "text": "The Relative Strength Index (RSI), developed by J. Welles Wilder, is a momentum oscillator that measures the speed and change of price movements.",
+     "source": "Fidelity Learning Center — Technical Indicator Guide · RSI",
+     "url": "https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/RSI"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "기술적 지표",
+   "note": [],
+   "match": [
+    "RSI"
+   ]
+  },
+  {
+   "id": "MACD",
+   "term": "MACD",
+   "aliases": "Moving Average Convergence/Divergence",
+   "group": "지표",
+   "quotes": [
+    {
+     "text": "The Moving Average Convergence/Divergence indicator is a momentum oscillator primarily used to trade trends.",
+     "source": "Fidelity Learning Center — Technical Indicator Guide · MACD",
+     "url": "https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/macd"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "기술적 지표",
+   "note": [],
+   "match": [
+    "MACD"
+   ]
+  },
+  {
+   "id": "볼린저 밴드(%B)",
+   "term": "볼린저 밴드 · %B",
+   "aliases": "Bollinger Bands",
+   "group": "지표",
+   "quotes": [
+    {
+     "text": "Bollinger Bands are a type of price envelope developed by John Bollinger. (Price envelopes define upper and lower price range levels.) Bollinger Bands are envelopes plotted at a standard deviation level above and below a simple moving average of the price.",
+     "source": "Fidelity Learning Center — Technical Indicator Guide · Bollinger Bands",
+     "url": "https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/bollinger-bands"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "기술적 지표(%B)",
+   "note": [],
+   "match": [
+    "볼린저",
+    "%B"
+   ]
+  },
+  {
+   "id": "스토캐스틱",
+   "term": "스토캐스틱(슬로)",
+   "aliases": "Slow Stochastic Oscillator",
+   "group": "지표",
+   "quotes": [
+    {
+     "text": "The Slow Stochastic Oscillator is a momentum indicator that shows the location of the close relative to the high-low range over a set number of periods.",
+     "source": "Fidelity Learning Center — Technical Indicator Guide · Slow Stochastic",
+     "url": "https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/slow-stochastic"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "기술적 지표",
+   "note": [],
+   "match": [
+    "스토캐스틱"
+   ]
+  },
+  {
+   "id": "ADX(+DI · −DI)",
+   "term": "ADX · +DI · −DI",
+   "aliases": "DMI(Directional Movement Index)",
+   "group": "지표",
+   "quotes": [
+    {
+     "text": "The Directional Movement Index (DMI) assists in determining if a security is trending and attempts to measure the strength of the trend.",
+     "source": "Fidelity Learning Center — Technical Indicator Guide · DMI",
+     "url": "https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/dmi"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "기술적 지표 · 머리 판정(「ADX 8 — 추세 약함」)",
+   "note": [
+    "ADX 는 추세의 「세기」 만 보고 방향은 안 본다(같은 쪽 설명)"
+   ],
+   "match": [
+    "ADX",
+    "+DI",
+    "−DI",
+    "DMI"
+   ]
+  },
+  {
+   "id": "ATR",
+   "term": "ATR(14)",
+   "aliases": "Average True Range",
+   "group": "지표",
+   "quotes": [
+    {
+     "text": "Average True Range (ATR) is the average of true ranges over the specified period. ATR measures volatility, taking into account any gaps in the price movement.",
+     "source": "Fidelity Learning Center — Technical Indicator Guide · ATR",
+     "url": "https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/atr"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "가격표 손절가(ATR×0.5) · ZigZag 꺾임 기준(ATR×2)",
+   "note": [],
+   "match": [
+    "ATR"
+   ]
+  },
+  {
+   "id": "OBV",
+   "term": "OBV",
+   "aliases": "On Balance Volume",
+   "group": "지표",
+   "quotes": [
+    {
+     "text": "On Balance Volume (OBV) measures buying and selling pressure as a cumulative indicator that adds volume on up days and subtracts volume on down days.",
+     "source": "Fidelity Learning Center — Technical Indicator Guide · OBV",
+     "url": "https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/obv"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "기술적 지표 · SUMMARY 10줄",
+   "note": [],
+   "match": [
+    "OBV"
+   ]
+  },
+  {
+   "id": "일목균형표(전환 · 기준 · 선행 · 구름)",
+   "term": "일목균형표 · 구름",
+   "aliases": "Ichimoku Cloud",
+   "group": "지표",
+   "quotes": [
+    {
+     "text": "The Ichimoku Cloud is a type of chart used in technical analysis to display support and resistance, momentum, and trend in one view.",
+     "source": "Fidelity Learning Center — Technical Indicator Guide · Ichimoku Cloud",
+     "url": "https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/Ichimoku-Cloud"
+    },
+    {
+     "text": "일본의 동경신문사에 처음으로 발표된 지표로서 기간계산 보다는 매매에 활용하기 위한 지표로 개발되었으며 엘리어트 파동 이론과 상당히 유사점을 가지고 있다.",
+     "source": "다올투자증권(옛 KTB) HTS 도움말 [5501] 주식종합차트",
+     "url": "https://www.ktb.co.kr/html/hts_help/5501.html"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "기술적 지표(「일목 구름 안」)",
+   "note": [],
+   "match": [
+    "일목균형표",
+    "일목",
+    "구름"
+   ]
+  },
+  {
+   "id": "VWAP",
+   "term": "250일 VWAP",
+   "aliases": "거래량가중평균가격 · Volume Weighted Average Price",
+   "group": "지표",
+   "quotes": [],
+   "missing": "출처 못 찾음 — Fidelity 차트 교육에 VWAP 가 나오지만 정의 문장을 직접 받지 못했다",
+   "weak": false,
+   "cell": "머리 판정 · 차트 절(「250일 VWAP 보다 29% 위」)",
+   "note": [],
+   "match": [
+    "VWAP"
+   ]
+  },
+  {
+   "id": "상대수익률(지수 대비)",
+   "term": "코스피 대비 상대수익률",
+   "aliases": "—",
+   "group": "지표",
+   "quotes": [],
+   "missing": "출처 못 찾음 — 권위 출처의 정의를 못 찾았다 — 우리 계산(종목 수익률 − 코스피 수익률)",
+   "weak": false,
+   "cell": "한눈에 · 기본 지표",
+   "note": [],
+   "match": [
+    "상대수익률"
+   ]
+  },
+  {
+   "id": "PER",
+   "term": "PER — 확정 · 최근 4분기 · 추정 셋을 갈라 적는다",
+   "aliases": "주가수익비율 · P/E",
+   "group": "판정 · 가치",
+   "quotes": [
+    {
+     "text": "주가가 실제 기업의 가치에 비해 고평가되어 있는지, 아니면 저평가되어 있는지 여부를 판단할 때 활용하는 대표적인 지표로 주가수익비율(PER; Price Earning Ratio)이 있다. PER는 기업의 주가를 주당순이익(EPS; Earning Per Share)으로 나눈 값으로 …",
+     "source": "한국은행 경제용어사전",
+     "url": "https://www.bok.or.kr/portal/ecEdu/ecWordDicary/search.do?menuNo=200688"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "기본 지표 · 판정 점수표(추정 PER · PER 밴드)",
+   "note": [
+    "어느 EPS 로 나누느냐에 따라 같은 날 41.5배 · 12.2배 · 5.8배로 갈린다(삼성전자 10-06) — 이름에 기준을 붙여 쓴다"
+   ],
+   "match": [
+    "추정 PER",
+    "PER 밴드",
+    "PER"
+   ]
+  },
+  {
+   "id": "PBR · BPS",
+   "term": "PBR · BPS",
+   "aliases": "주가순자산비율 · 주가장부가치비율(기재부) · P/B",
+   "group": "판정 · 가치",
+   "quotes": [
+    {
+     "text": "PBR 혹은 P/B라고도 쓰며 Price-To-Book Ratio의 약자이다. 우리말로는 주가장부가치비율이라고 부르며 주가와 장부가치를 비교하기 위해 사용하는 비율이다. PBR은 주당 시장가격을 주당 장부가치로 나눈 것이다.",
+     "source": "기획재정부 시사경제용어사전",
+     "url": "https://www.mofe.go.kr/sisa/dictionary/detail?idx=191"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "기본 지표 · 지표 칸",
+   "note": [
+    "우리말 이름이 갈린다 — 기재부 「주가장부가치비율」 · 흔히 「주가순자산비율」. 권함: 그냥 「PBR」"
+   ],
+   "match": [
+    "PBR",
+    "BPS"
+   ]
+  },
+  {
+   "id": "EPS",
+   "term": "EPS(확정 · 추정)",
+   "aliases": "주당순이익",
+   "group": "판정 · 가치",
+   "quotes": [
+    {
+     "text": "주당순이익(EPS; Earning Per Share)은 기업이 벌어들인 당기순이익을 동 기업이 발행한 총 주식수로 나눈 값을 말한다.",
+     "source": "한국은행 경제용어사전",
+     "url": "https://www.bok.or.kr/portal/ecEdu/ecWordDicary/search.do?menuNo=200688"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "기본 지표 · 판정(추정 EPS × PER 밴드)",
+   "note": [],
+   "match": [
+    "추정 EPS",
+    "EPS"
+   ]
+  },
+  {
+   "id": "ROE",
+   "term": "ROE",
+   "aliases": "자기자본이익률",
+   "group": "판정 · 가치",
+   "quotes": [
+    {
+     "text": "자기자본이익률(Return on equity: ROE)은 경영자가 주주의 자본을 활용하여 얼마만큼의 이익을 올리고 있는가를 나타내는 지표로, 기업의 손익계산서상의 순이익을 자기자본으로 나눈 비율을 뜻한다.",
+     "source": "기획재정부 시사경제용어사전",
+     "url": "https://www.mofe.go.kr/sisa/dictionary/detail?idx=210"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "핵심 지표 한 줄 · 수익성",
+   "note": [],
+   "match": [
+    "ROE"
+   ]
+  },
+  {
+   "id": "영업이익률 · 순이익률",
+   "term": "영업이익률 · 순이익률",
+   "aliases": "매출액영업이익률(한국은행)",
+   "group": "판정 · 가치",
+   "quotes": [
+    {
+     "text": "기업의 주된 영업활동의 효율성을 측정하는 지표로 제조 및 판매활동에 의해 창출된 영업손익을 매출액으로 나누어 산출한다.",
+     "source": "한국은행 경제용어사전",
+     "url": "https://www.bok.or.kr/portal/ecEdu/ecWordDicary/search.do?menuNo=200688"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "핵심 지표 한 줄 · 연간 실적 표",
+   "note": [
+    "순이익률의 권위 정의는 따로 못 찾았다(같은 꼴 — 순이익 ÷ 매출액)"
+   ],
+   "match": [
+    "영업이익률",
+    "순이익률"
+   ]
+  },
+  {
+   "id": "부채비율",
+   "term": "부채비율",
+   "aliases": "—",
+   "group": "판정 · 가치",
+   "quotes": [
+    {
+     "text": "부채를 자기자본으로 나눈 비율로 타인자본(부채)과 자기자본간의 관계를 나타내는 대표적인 안전성 지표이다. 이 비율이 낮을수록 재무구조가 건전하다고 판단할 수 있다.",
+     "source": "한국은행 경제용어사전",
+     "url": "https://www.bok.or.kr/portal/ecEdu/ecWordDicary/search.do?menuNo=200688"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "기본 지표",
+   "note": [],
+   "match": [
+    "부채비율"
+   ]
+  },
+  {
+   "id": "시가총액",
+   "term": "시가총액",
+   "aliases": "—",
+   "group": "판정 · 가치",
+   "quotes": [
+    {
+     "text": "상장회사 수 및 시가총액은 주식시장의 규모를 나타내는 지표로서, 주식시장의 국제비교에 유용함",
+     "source": "e-나라지표(통계청) — 상장회사 수 및 시가총액",
+     "url": "https://www.index.go.kr/unify/idx-info.do?idxCd=1079"
+    }
+   ],
+   "missing": null,
+   "weak": true,
+   "cell": "기본 지표",
+   "note": [
+    "이 출처는 「쓰임」 만 적고 계산식은 안 적는다. 계산식(주가 × 상장주식수)의 권위 문장은 못 찾았다"
+   ],
+   "match": [
+    "시가총액"
+   ]
+  },
+  {
+   "id": "공매도",
+   "term": "공매도",
+   "aliases": "short selling",
+   "group": "판정 · 가치",
+   "quotes": [
+    {
+     "text": "공매도(short selling)란 없는 것을 판다는 의미로 쓰이는데 주식시장에서 공매도란 투자자가 주식을 보유하지 않은 상태에서 주가 하락을 예상하고 금융기관으로부터 주식을 빌려 먼저 매도한 후, 주가가 하락하면 시장에서 주식을 매입하여 되갚은 후 차익을 얻는 투자를 말한다.",
+     "source": "한국은행 경제용어사전",
+     "url": "https://www.bok.or.kr/portal/ecEdu/ecWordDicary/search.do?menuNo=200688"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "cell": "SUMMARY 10줄 · 「못 받는 것」(공매도 자료 아직)",
+   "note": [],
+   "match": [
+    "공매도"
+   ]
+  },
+  {
+   "id": "컨센서스 · 증권사 목표주가 · 투자의견",
+   "term": "컨센서스(네이버 · FnGuide 평균) · 증권사 목표주가(KIS)",
+   "aliases": "—",
+   "group": "판정 · 가치",
+   "quotes": [],
+   "missing": "출처 못 찾음 — 용어의 권위 정의는 못 찾았다. 값의 출처는 정해져 있다 — 컨센서스 = 네이버 증권(FnGuide 집계) · 증권사별 목표주가 = KIS 종목투자의견",
+   "weak": false,
+   "cell": "기본 지표(연간 (E) 열 · 증권사별 목표가 세 칸)",
+   "note": [],
+   "match": [
+    "컨센서스",
+    "증권사 목표주가",
+    "목표주가",
+    "투자의견"
+   ]
+  },
+  {
+   "id": "수급(외국인 · 기관 순매수) · 영업이익 YoY · PER 밴드",
+   "term": "(그대로)",
+   "aliases": "—",
+   "group": "판정 · 가치",
+   "quotes": [],
+   "missing": "출처 못 찾음 — 권위 출처의 정의를 못 찾았다",
+   "weak": false,
+   "cell": "수급 절 · 판정 점수표",
+   "note": [],
+   "match": [
+    "영업이익 YoY",
+    "순매수",
+    "수급"
+   ]
+  }
+ ]
+}
