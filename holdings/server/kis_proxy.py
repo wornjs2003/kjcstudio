@@ -58,6 +58,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import dart
 import us_universe
 import naver
+import toss
 import news
 import news_store
 # 오류 문구에서 비밀을 지운다. 외부 호출 오류를 사람에게 보여줄 때는
@@ -5600,6 +5601,9 @@ class Handler(SimpleHTTPRequestHandler):
         if (self.path or "").startswith("/api/board/"):
             self._handle_board()
             return
+        if (self.path or "").startswith("/api/toss/"):
+            self._handle_toss()
+            return
         if (self.path or "").startswith("/debugging/"):
             self._handle_debugging()
             return
@@ -5895,6 +5899,15 @@ class Handler(SimpleHTTPRequestHandler):
     # 「지금 뜨는 산업」 이 쓴다. KIS 에 없는 둘 때문에 여기서 받는다 —
     # 업종 안에서 몇이 오르내렸는지, 그리고 그 업종의 종목 목록이다.
     # 자세한 것은 server/naver.py 머리글과 docs/sector-sources.md 에 있다.
+    def _handle_toss(self):
+        """토스증권 — 지금은 연결 확인 하나 (2026-10-07). 토큰은 보내는 서버(8765)만 받는다 — toss.py 머리 주석."""
+        route = urllib.parse.urlparse(self.path).path[len("/api/toss/"):].strip("/")
+        if route != "health":
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/toss/health 하나뿐입니다."}, 404)
+            return
+        r = toss.health(is_sender(self.server.server_address[1]))
+        self._send_json(r, 200 if r.get("ok") or r.get("connected") is None else 502)
+
     def _handle_naver(self):
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/naver/"):].strip("/")
@@ -6201,7 +6214,9 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         # ── 차트 셋은 화면 API 째로 상류에 (2026-10-02) ── 위 `HIGH_RELAY_ROUTES` 주석.
-        if route in HIGH_RELAY_ROUTES:
+        # 받아 둔 봉만(`chart?stored=1` · 아래 chart 자리)은 KIS 를 안 부르므로 넘기지 않고 자기 DB 로 답한다 —
+        # 넘기는 서버는 메인 DB 를 읽기 전용으로 열어 같은 값이다 (2026-10-07)
+        if route in HIGH_RELAY_ROUTES and not (route == "chart" and (qs.get("stored") or [""])[0] == "1"):
             _hb = upstream_base()
             if _hb and self._kis_route_via_upstream(_hb):
                 return
@@ -6300,7 +6315,15 @@ class Handler(SimpleHTTPRequestHandler):
                 except ValueError:
                     limit = 240
                 limit = max(1, min(limit, 1000))
-                rows, fetched, source = get_chart(cfg, code, period, limit)
+                # ── 받아 둔 것만 (2026-10-07 재권님 「1 해줘」 — 「다른 종목을 열 때 미리 받아 놓은 5분봉을 불러오고
+                # 불러오지 못한 것만 그린다」) ── `stored=1` 이면 KIS 를 안 부르고 DB 에 있는 봉만 바로 준다. 전에는 DB 에
+                # 봉이 있어도 「오래됨」 이면 빈 30분 칸을 KIS 로 다 채운 **뒤에** 답해, 종목을 바꿀 때마다 차트 칸이
+                # 0.9~2.9초 「불러오는 중」 으로 덮였다(10-07 17:05 실측). 화면은 이것으로 먼저 그리고 since 로 빈 칸만 받는다.
+                # 없으면 빈 목록 — 화면이 그때만 「불러오는 중」 을 띄우고 통째로 받는다.
+                if (qs.get("stored") or [""])[0] == "1":
+                    rows, fetched, source = read_candles(code, period, _view_limit(code, period, limit)), 0, "DB"
+                else:
+                    rows, fetched, source = get_chart(cfg, code, period, limit)
                 if PERIODS[period]["kis"] is None:      # 분봉(1m · 5m)만 — 일봉 이상은 받은 그대로
                     rows = drop_before_first_trade(rows)
                 # ── 안 받은 봉만 (2026-10-07 지시 — 「아직 안 받은 봉만 받아 덧붙이고, 받아 둔 봉은 다시 받지 않는다」) ──
