@@ -56,6 +56,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 같은 폴더(server/)의 모듈들. 스크립트로 실행하므로 바로 잡힌다.
 import dart
+import us_universe
 import naver
 import news
 import news_store
@@ -4559,12 +4560,17 @@ DWMY_ON = (os.environ.get("KJC_DWMY") or "").strip().lower() in (
 
 
 def _dwmy_codes():
-    """한 바퀴 돌 종목 — 지수 구성종목 전체 (2026-10-02 지시 「348」)."""
+    """한 바퀴 돌 종목 — **국내** 지수 구성종목 전체 (2026-10-02 지시 「348」).
+
+    ⚠️ **국내 묶음만 읽는다** (2026-10-07). 같은 표에 나스닥100(`us_universe.NDX100`)이 들어오면서,
+    전체를 읽으면 미국 티커 101개가 국내 API 로 밤마다 불려 헛걸음이 된다.
+    """
+    codes = [c for c, _ in dart.INDEX_LISTS]
     try:
         with dart._db_lock, dart.db_conn() as conn:
             rows = conn.execute(
-                "SELECT DISTINCT stock_code FROM index_members "
-                "ORDER BY stock_code").fetchall()
+                "SELECT DISTINCT stock_code FROM index_members WHERE index_code IN (%s) "
+                "ORDER BY stock_code" % ",".join("?" * len(codes)), codes).fetchall()
         return [r["stock_code"] for r in rows]
     except Exception:
         return []
@@ -6500,6 +6506,10 @@ def main():
     elif start_prefill(cfg):
         print("  5분봉 준비 : 코스피 상위 %d종목을 뒤에서 미리 받습니다"
               % PREFILL_TOP)
+
+    # 미국 종목 목록(나스닥100 · 거래소 코드) — 하루 한 번 · KIS 호출 없음 (2026-10-07)
+    if not SLOW and us_universe.start():
+        print("  미국 목록  : 나스닥100 과 거래소 코드를 하루 한 번 받습니다")
 
     if not DWMY_ON:
         print("  일주월년   : **꺼져 있습니다** (켜려면 KJC_DWMY=1)")
