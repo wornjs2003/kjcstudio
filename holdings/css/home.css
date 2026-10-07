@@ -1497,3 +1497,20 @@
   body[data-nav="holdings"] .kh-app-wide .kh-nwdc-card,
   body[data-nav="holdings"] .kh-app-wide .kh-dlm-card { margin-top: 14px; }
 }
+
+/* ── 폰 갈래 줄(홈 · 국내 · 국외 …) — 메뉴 밑에 깔리지 않고, 내리면 따라온다 (2026-10-06 재권님 「내리면 거기 내려와서 클릭되도록해줘」 · 「응」) ──
+
+   위 폰 블록(2026-09-22)의 `.kh-app { padding: 14px 16px }` 가 frame.css 의 위 여백(var(--nav-height) — 고정 메뉴 높이)을
+   덮어써, 갈래 줄이 메뉴(KJC · ☰ · position: fixed) **밑에 깔려** 있었다(폰 390 실측 — .kh-cat y12 · 메뉴 h72).
+   그 줄은 Insight 도 걸어 건드리지 않고 홀딩스 첫 화면에서만 위 여백을 되살린다.
+
+   줄은 sticky 로 메뉴 바로 밑에 붙는다. 양옆 바탕은 .kh-app 의 좌우 여백(16px)만큼 늘려, 밑으로 지나가는 카드가
+   비치지 않게 한다. z 는 메뉴(80)보다 아래. 데스크톱(701px 이상)은 안 바뀐다. */
+@media (max-width: 700px) {
+  body[data-nav="holdings"] .kh-app-wide { padding-top: calc(var(--nav-height) + 14px); }
+  body[data-nav="holdings"] .kh-app-wide .kh-cat {
+    position: sticky; top: var(--nav-height); z-index: 40;
+    background: var(--kh-bg);
+    margin: -14px -16px 0; padding: 12px 20px 0;
+  }
+}
