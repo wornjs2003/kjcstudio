@@ -5026,7 +5026,37 @@ def _last_close_ts(now=None):
     return mark.timestamp()
 
 
+#: 같은 (종목, 주기) 요청이 겹칠 때 앞 요청을 기다리는 최대 초 — 넘으면 기다리지 않고 지금처럼 받는다
+CHART_WAIT_SEC = 10
+_chart_locks = {}          # (종목, 주기) → 자물쇠. 지우지 않는다 — 많아야 종목 수 × 주기 수다
+_chart_locks_guard = threading.Lock()
+
+
 def get_chart(cfg, code, period, limit, gap_check=True):
+    """`_get_chart_one` 을 **같은 (종목, 주기)마다 한 번에 하나씩** 부른다 (2026-10-06 재권님 「풀리면 해줘」).
+
+    앞 요청이 KIS 에서 하루치(30분 칸 여러 번)를 받는 2~3초 사이에 같은 요청이 또 오면, 아직 `sync`
+    시각이 안 적혀 있어 모두 「오래됨」 으로 보고 **각자 하루치를 받았다.** 17:48 에 화면이 086520
+    5분봉을 15초에 13번 불러 그 한 분에 분봉 호출이 499건, 예산이 112% 로 튀었다(넘침 0).
+    뒤 요청은 앞 것이 끝나길 기다렸다가 들어가므로 `sync` 가 새것이라 KIS 를 안 부르고 DB 를 읽는다.
+
+    **기다림에 상한이 있다**(`CHART_WAIT_SEC` · 창구 검수) — 앞 요청이 KIS 에서 멈추면 뒤가 전부
+    매달리므로, 넘으면 기다리지 않고 지금처럼 받는다. 다른 종목 · 다른 주기는 서로 안 기다린다.
+    """
+    key = (code, period)
+    with _chart_locks_guard:
+        lk = _chart_locks.get(key)
+        if lk is None:
+            lk = _chart_locks[key] = threading.Lock()
+    got = lk.acquire(timeout=CHART_WAIT_SEC)
+    try:
+        return _get_chart_one(cfg, code, period, limit, gap_check)
+    finally:
+        if got:
+            lk.release()
+
+
+def _get_chart_one(cfg, code, period, limit, gap_check=True):
     """DB 를 먼저 보고, 최근 구간이 오래됐으면 KIS 에서 받아 덮어쓴다.
 
     당일(또는 최근) 캔들은 장중에 계속 바뀌므로, 마지막 갱신으로부터
