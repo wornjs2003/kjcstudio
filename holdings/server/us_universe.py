@@ -31,6 +31,14 @@ from secrets_guard import safe_message
 #: 지수 구성 표에 쓰는 묶음 이름 — 국내 `KPI200` · `KQI150` 과 같은 자리
 NDX100 = "NDX100"
 
+#: S&P500 — 2026-10-07 재권님 「S&P 500 도 있어야 할 것 같은데」. 목록은 SPY(S&P500 ETF) 운용사
+#: State Street 가 매일 올리는 보유종목 파일에서 받는다(2026-10-07 실측 503종목 · 마스터에 없는 티커 0)
+SPX500 = "SPX500"
+SPX500_URL = ("https://www.ssga.com/us/en/intermediary/library-content/products/fund-data/etfs/us/"
+              "holdings-daily-us-en-spy.xlsx")
+#: 미국 묶음 — 이름과 받는 함수. 국내 `dart.INDEX_LISTS` 와 같은 자리
+US_INDEXES = (NDX100, SPX500)
+
 #: 나스닥100 구성종목 목록 (nasdaq.com 공개 API — 브라우저 이름표가 없으면 응답이 안 온다)
 NDX100_URL = "https://api.nasdaq.com/api/quote/list-type/nasdaq100"
 
@@ -92,6 +100,28 @@ def fetch_ndx100():
     return out
 
 
+def fetch_spx500():
+    """S&P500 구성종목 → [(티커, 영문 이름)]. SPY 보유종목 엑셀을 표 꼴로 읽는다(라이브러리 없이 zip · xml).
+
+    티커의 점(BRK.B)은 KIS 마스터 꼴(BRK/B)로 바꾼다. 현금 · 선물 줄은 티커 꼴이 아니라 저절로 빠진다.
+    """
+    import re as _re
+    raw = _get(SPX500_URL, timeout=60)
+    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+        ss = [_re.sub("<[^>]+>", "", x) for x in
+              _re.findall(r"<si>.*?</si>", z.read("xl/sharedStrings.xml").decode("utf-8"), _re.S)]
+        sheet = z.read("xl/worksheets/sheet1.xml").decode("utf-8")
+    out = []
+    for r in _re.findall(r"<row [^>]*>(.*?)</row>", sheet, _re.S):
+        v = []
+        for c in _re.findall(r"<c [^>]*>.*?</c>|<c [^>]*/>", r, _re.S):
+            m = _re.search(r"<v>(.*?)</v>", c)
+            v.append(ss[int(m.group(1))] if (m and 't="s"' in c) else (m.group(1) if m else ""))
+        if len(v) > 2 and _re.fullmatch(r"[A-Z]{1,5}(\.[A-Z])?", v[1] or ""):
+            out.append((v[1].replace(".", "/"), (v[0] or "").strip()))
+    return out
+
+
 def fetch_master(excd):
     """KIS 마스터 한 거래소 → [(티커, 거래소, 한글, 영문, 종류)]. 탭으로 나뉜 cp949 글이다.
 
@@ -136,23 +166,26 @@ def refresh():
                 "INSERT OR REPLACE INTO us_symbols (symbol, excd, name_ko, name_en, kind, updated_at)"
                 " VALUES (?, ?, ?, ?, ?, ?)", [s + (now,) for s in syms])
         out["symbols"] = len(syms)
-    try:
-        members = fetch_ndx100()
-    except Exception as e:
-        dart._meta_set("us_last_error", "나스닥100: %s" % safe_message(e, 90))
-        members = []
-    if members:
-        known = symbol_map()
+    known = symbol_map()
+    out["missing"] = []
+    for index_code, fetch, label in ((NDX100, fetch_ndx100, "나스닥100"), (SPX500, fetch_spx500, "S&P500")):
+        try:
+            members = fetch()
+        except Exception as e:
+            dart._meta_set("us_last_error", "%s: %s" % (label, safe_message(e, 90)))
+            members = []
+        if not members:
+            continue
         # 한글 이름이 있으면 그것을 쓴다 — 국내 구성종목도 한글 이름으로 들어 있다
-        rows = [(s, NDX100, (known.get(s) or {}).get("name_ko") or n, now) for s, n in members]
+        rows = [(s, index_code, (known.get(s) or {}).get("name_ko") or n, now) for s, n in members]
         with dart._db_lock, dart.db_conn() as conn:
-            conn.execute("DELETE FROM index_members WHERE index_code = ?", (NDX100,))
+            conn.execute("DELETE FROM index_members WHERE index_code = ?", (index_code,))
             conn.executemany(
                 "INSERT INTO index_members (stock_code, index_code, name, updated_at) VALUES (?, ?, ?, ?)",
                 rows)
-        out[NDX100] = len(members)
-        out["missing"] = [s for s, _ in members if s not in known]
-    if out.get("symbols") and out.get(NDX100):
+        out[index_code] = len(members)
+        out["missing"] += [s for s, _ in members if s not in known]
+    if out.get("symbols") and out.get(NDX100) and out.get(SPX500):
         dart._meta_set("us_members_date", datetime.now(KST).strftime("%Y%m%d"))
     return out
 
@@ -166,6 +199,26 @@ def symbol_map():
             return {}                    # 아직 표가 없다(읽기 전용 서버가 먼저 떴을 때)
     return {r["symbol"]: {"excd": r["excd"], "name_ko": r["name_ko"],
                           "name_en": r["name_en"], "kind": r["kind"]} for r in rows}
+
+
+def all_members():
+    """미리받기 대상 — 미국 묶음 전부의 합(나스닥100 먼저 · 겹치는 것은 한 번). 2026-10-07 실측 519종목."""
+    seen, out = set(), []
+    for ix in US_INDEXES:
+        for c in members(ix):
+            if c not in seen:
+                seen.add(c)
+                out.append(c)
+    return out
+
+
+def in_premarket(now=None):
+    """지금 장 전 창(동부 07:15~09:15 · 평일)인가 → (그런가, 동부 날짜, 창이 끝날 때까지 남은 초)."""
+    now = now or et_now()
+    m = now.hour * 60 + now.minute
+    if now.weekday() >= 5 or not (PRE_FROM_MIN <= m < PRE_TO_MIN):
+        return False, now.strftime("%Y%m%d"), 0
+    return True, now.strftime("%Y%m%d"), (PRE_TO_MIN - m) * 60 - now.second
 
 
 def members(index_code=NDX100):
@@ -362,8 +415,11 @@ from zoneinfo import ZoneInfo
 ET = ZoneInfo("America/New_York")
 #: 정규장 — 동부 시각 분(09:30 · 16:00). 미리받기는 마감 봉(16:00)이 닫히는 16:05 까지 돈다
 SESSION_OPEN_MIN, SESSION_CLOSE_MIN = 9 * 60 + 30, 16 * 60
-#: 장 마감 뒤 일·주·월·년봉 마지막 봉을 받는 시각 — 동부 16:10
-AFTER_CLOSE_MIN = 16 * 60 + 10
+#: 장 전 창 — 동부 07:15~09:15(지금 한국 20:15~22:15 · 서머타임이 끝나면 21:15~23:15). 국내가 넥스트레이드까지
+#: 끝난(한국 20:10) 뒤 · 미국 개장 전. 이 사이에 목록 · 시총 · 일·주·월·년봉 · 지난 세션 5분봉을 나눠 받는다
+#: (2026-10-07 재권님 「나스닥은 장전에 미리 받을 수 있는 거 먼저 받아놔 한번에 받으면 부담스러우니」 · 「분산으로」).
+#: 장 마감 뒤 바퀴는 두지 않는다 — 그 일을 다음 날 이 창이 한다
+PRE_FROM_MIN, PRE_TO_MIN = 7 * 60 + 15, 9 * 60 + 15
 #: 휴장으로 판정하는 시각 — 동부 10:00. 이때까지 오늘 봉이 하나도 없으면 휴장으로 본다
 #: (시세가 지연이어도 30분이면 첫 봉이 든다 — 개장 직후에 판정하면 지연 탓에 장날을 휴장으로 읽는다)
 HOLIDAY_JUDGE_MIN = 10 * 60
@@ -400,3 +456,94 @@ def session_open_kst(et_date):
     if US_SHOW_KST:
         t = t.astimezone(KST)
     return t.strftime("%Y%m%d%H%M")
+
+
+# ── 미국 순위 표 (묶음 4 앞 조각 · 2026-10-07 재권님 「ㄱ 으로 해줘」) ────────────────────
+#
+# 첫 화면 「실시간 순위」 의 「나스닥100」 칩이 읽는다. **DB 만 읽는다 — KIS 를 안 부른다.** 미리받기(묶음 3)가
+# 장중 5분마다 쌓는 5분봉의 마지막 종가가 현재가, 일봉에서 그 세션 앞날 종가가 전일 종가다. 화면이 종목마다
+# 시세를 물으면 「미국」 을 보는 동안 25초마다 약 20건이 나가므로 이 길로 둔다.
+#
+# 시가총액은 봉에 없어 **현재가 상세에서 하루 한 번** 받아 둔 값(`uscap:<티커>`)을 쓴다 — 없으면 None(화면은 —).
+# 거래대금(`value`)은 5분봉의 종가×거래량 합이라 **어림값**이다(응답 meta 의 `valueIsEstimate`).
+
+
+def _et_date_of_kst(ts12):
+    """한국 시각 YYYYMMDDHHMM → 그 봉의 동부 날짜 YYYYMMDD."""
+    t = datetime.strptime(ts12, "%Y%m%d%H%M").replace(tzinfo=KST)
+    return t.astimezone(ET).strftime("%Y%m%d")
+
+
+def us_board(index_code=NDX100):
+    """나스닥100 순위 표 → [{code, name, price, prev, amt, pct, volume, value, marketCap, asof}] (DB 만).
+
+    칸 이름은 국내 `/api/kis/quotes` 와 같게 둔다 — 순위 표 코드(home.js)가 한 길로 두 표를 그린다.
+    `value`(거래대금)는 5분봉 종가×거래량 합이라 어림값이다 — 응답 meta 의 `valueIsEstimate` 가 알린다."""
+    codes = members(index_code)
+    info = _symbols()
+    out = []
+    with dart._db_lock, dart.db_conn() as conn:
+        for code in codes:
+            last = conn.execute(
+                "SELECT ts, close FROM candles WHERE code=? AND period='5m' ORDER BY ts DESC LIMIT 1",
+                (code,)).fetchone()
+            row = {"code": code, "name": (info.get(code) or {}).get("name_ko") or code,
+                   "price": None, "prev": None, "amt": None, "pct": None, "volume": None,
+                   "value": None, "marketCap": None, "asof": None, "currency": "USD"}
+            cap = conn.execute("SELECT value FROM sync_meta WHERE key=?", ("uscap:" + code,)).fetchone()
+            if cap:
+                try:
+                    row["marketCap"] = float(cap["value"])
+                except (TypeError, ValueError):
+                    pass
+            if not last:
+                # 5분봉이 없는 종목(S&P500 만 든 종목 등) — 마지막 일봉 둘로 값을 낸다
+                d2 = conn.execute(
+                    "SELECT ts, close, volume FROM candles WHERE code=? AND period='D' ORDER BY ts DESC LIMIT 2",
+                    (code,)).fetchall()
+                if d2:
+                    row["price"], row["volume"], row["asof"] = d2[0]["close"], d2[0]["volume"], d2[0]["ts"]
+                    if len(d2) > 1 and d2[1]["close"]:
+                        row["prev"] = d2[1]["close"]
+                        row["amt"] = round(d2[0]["close"] - d2[1]["close"], 4)
+                        row["pct"] = round(row["amt"] / d2[1]["close"] * 100, 2)
+            if last:
+                day = _et_date_of_kst(last["ts"])
+                start = session_open_kst(day)
+                bars = conn.execute(
+                    "SELECT close, volume FROM candles WHERE code=? AND period='5m' AND ts >= ? AND ts <= ?",
+                    (code, start, last["ts"])).fetchall()
+                prev = conn.execute(
+                    "SELECT close FROM candles WHERE code=? AND period='D' AND ts < ? ORDER BY ts DESC LIMIT 1",
+                    (code, day)).fetchone()
+                # 그날 일봉이 있으면(장 마감 뒤) 그 종가 · 거래량이 공식 값이다 — 5분봉 마지막 종가는 마감 동시호가
+                # 뒤 체결이 섞여 조금 다르다(2026-10-07 NVDA 5분 239.29 · 일봉 239.24)
+                dbar = conn.execute(
+                    "SELECT close, volume FROM candles WHERE code=? AND period='D' AND ts=?",
+                    (code, day)).fetchone()
+                price = dbar["close"] if dbar else last["close"]
+                row["price"], row["asof"] = price, last["ts"]
+                row["volume"] = (dbar["volume"] if dbar and dbar["volume"] else
+                                 sum(b["volume"] or 0 for b in bars))
+                row["value"] = round(sum((b["close"] or 0) * (b["volume"] or 0) for b in bars))
+                if prev and prev["close"]:
+                    row["prev"] = prev["close"]
+                    row["amt"] = round(price - prev["close"], 4)
+                    row["pct"] = round(row["amt"] / prev["close"] * 100, 2)
+            out.append(row)
+    return out
+
+
+def save_caps(kis_get, cfg, codes):
+    """시가총액을 하루 한 번 받아 둔다(현재가 상세 · 종목마다 1건). 장 마감 뒤 바퀴가 부른다."""
+    n = 0
+    for code in codes:
+        try:
+            p = us_price(kis_get, cfg, code)
+        except Exception:
+            continue
+        if p.get("marketCap"):
+            dart._meta_set("uscap:" + code, str(p["marketCap"]))
+            n += 1
+        time.sleep(0.3)
+    return n
