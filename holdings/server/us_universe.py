@@ -196,3 +196,156 @@ def start():
 
     threading.Thread(target=loop, daemon=True, name="us-universe").start()
     return True
+
+
+# ── 시세 · 봉 받기 (묶음 2 · 2026-10-07) ──────────────────────────────────────────
+#
+# **KIS 를 부르는 함수(`kis_get`)는 인자로 받는다** — kis_proxy 가 이 파일을 import 하므로 거꾸로 부르면
+# 서로 물린다. 돌려주는 모양은 국내와 같게 맞춘다(봉은 ts · open · high · low · close · volume).
+# 국내와 다른 점: 가격이 **달러 소수**다 — 봉 표 칸이 INTEGER 여도 SQLite 는 소수를 REAL 로 그대로 둔다
+# (2026-10-07 사본 실측 331.28 → real).
+
+import re
+from datetime import timedelta
+
+#: 미국 티커 모양 — 대문자로 시작 · 대문자 · 숫자 · 점 · 슬래시 · 하이픈(BRK/B). 6자리 숫자인 국내 코드와 안 겹친다
+TICKER_RE = re.compile(r"^[A-Z][A-Z0-9./-]{0,9}$")
+
+PRICE_PATH = "/uapi/overseas-price/v1/quotations/price-detail"
+PRICE_TR = "HHDFS76200200"
+DAILY_PATH = "/uapi/overseas-price/v1/quotations/dailyprice"
+DAILY_TR = "HHDFS76240000"
+MIN_PATH = "/uapi/overseas-price/v1/quotations/inquire-time-itemchartprice"
+MIN_TR = "HHDFS76950200"
+
+#: 일·주·월봉의 GUBN — 년봉은 KIS 에 없어 월봉을 묶어 만든다
+DAILY_GUBN = {"D": "0", "W": "1", "M": "2"}
+#: 한 번에 오는 봉 수(일·주·월 100 · 5분 120) — 이어 받기 상한을 정할 때 쓴다
+DAILY_PER_CALL = 100
+MIN_PER_CALL = 120
+#: 5분봉을 한 번에 몇 쪽까지 이어 받나. 하루(04:00~20:00)가 192봉이라 두 쪽이 하루치다
+US_5M_PAGES = 2
+#: 정규장 — 미국 현지 시각(HHMMSS). 16:00 봉에 종가 동시호가가 든다(2026-10-07 AAPL 실측 거래량 943만) — 국내 15:30 봉과 같은 자리라 넣는다
+REGULAR_FROM, REGULAR_TO = "093000", "160000"
+
+_sym_cache = {"at": 0.0, "map": {}}
+
+
+def _symbols():
+    """`symbol_map()` 을 1분 들고 있는다 — 시세를 부를 때마다 표 전체를 읽지 않게."""
+    if time.time() - _sym_cache["at"] > 60:
+        _sym_cache["map"] = symbol_map()
+        _sym_cache["at"] = time.time()
+    return _sym_cache["map"]
+
+
+def is_us(code):
+    """미국 티커인가 — 모양이 맞고 **us_symbols 에 있어야** 한다(거래소 코드를 알아야 부를 수 있다)."""
+    return bool(code) and bool(TICKER_RE.match(code)) and code in _symbols()
+
+
+def excd_of(code):
+    return (_symbols().get(code) or {}).get("excd")
+
+
+def _f(v):
+    try:
+        return float(str(v).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _i(v):
+    x = _f(v)
+    return int(x) if x is not None else None
+
+
+def us_price(kis_get, cfg, code):
+    """미국 현재가 — 상세 API 한 번으로 국내 세 모양(price · prices · quotes)이 쓰는 칸을 다 채운다."""
+    data = kis_get(cfg, PRICE_PATH, {"AUTH": "", "EXCD": excd_of(code), "SYMB": code}, PRICE_TR)
+    o = (data or {}).get("output") or {}
+    last, base = _f(o.get("last")), _f(o.get("base"))
+    chg = round(last - base, 4) if last is not None and base is not None else None
+    pct = round(chg / base * 100, 2) if chg is not None and base else None
+    info = _symbols().get(code) or {}
+    return {
+        "code": code, "name": info.get("name_ko") or info.get("name_en"), "currency": "USD",
+        "price": last, "prev": base, "change": chg, "amt": chg, "changePct": pct, "pct": pct,
+        "sign": "2" if (chg or 0) > 0 else ("5" if (chg or 0) < 0 else "3"),
+        "open": _f(o.get("open")), "high": _f(o.get("high")), "low": _f(o.get("low")),
+        "volume": _i(o.get("tvol")), "value": _f(o.get("tamt")),
+        "marketCap": _f(o.get("tomv")), "per": _f(o.get("perx")), "pbr": _f(o.get("pbrx")),
+        "eps": _f(o.get("epsx")), "bps": _f(o.get("bpsx")),
+        "high52": _f(o.get("h52p")), "low52": _f(o.get("l52p")), "source": "KIS",
+    }
+
+
+def us_bars(kis_get, cfg, code, period, limit):
+    """일·주·월·년봉 → 봉 목록(과거 → 최신). 년봉은 월봉을 해마다 묶는다(ts = 그해 마지막 봉 날짜 · 국내와 같은 모양)."""
+    gubn = DAILY_GUBN.get("M" if period == "Y" else period)
+    want = limit * 12 if period == "Y" else limit
+    pages = max(1, min(10, -(-want // DAILY_PER_CALL)))
+    out, bymd = {}, ""
+    for _ in range(pages):
+        data = kis_get(cfg, DAILY_PATH, {"AUTH": "", "EXCD": excd_of(code), "SYMB": code,
+                                         "GUBN": gubn, "BYMD": bymd, "MODP": "1"}, DAILY_TR)
+        rows = (data or {}).get("output2") or []
+        if not isinstance(rows, list) or not rows:
+            break
+        for r in rows:
+            d = (r.get("xymd") or "").strip()
+            c = _f(r.get("clos"))
+            if len(d) == 8 and c is not None:
+                out[d] = {"ts": d, "open": _f(r.get("open")), "high": _f(r.get("high")),
+                          "low": _f(r.get("low")), "close": c, "volume": _i(r.get("tvol"))}
+        oldest = min(out)
+        if len(rows) < DAILY_PER_CALL or len(out) >= want:
+            break
+        bymd = (datetime.strptime(oldest, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
+    bars = [out[k] for k in sorted(out)]
+    if period != "Y":
+        return bars
+    years = {}
+    for b in bars:                                   # 과거 → 최신 순이라 첫 봉이 시가 · 마지막이 종가
+        y = years.get(b["ts"][:4])
+        if y is None:
+            years[b["ts"][:4]] = dict(b)
+        else:
+            y.update(ts=b["ts"], close=b["close"], high=max(y["high"], b["high"]),
+                     low=min(y["low"], b["low"]), volume=(y["volume"] or 0) + (b["volume"] or 0))
+    return [years[k] for k in sorted(years)]
+
+
+def us_5m(kis_get, cfg, code):
+    """5분봉 → 봉 목록(과거 → 최신). ts 는 `US_SHOW_KST` 면 한국 시각(kymd+khms), 아니면 현지(xymd+xhms).
+
+    `US_REGULAR_ONLY` 면 현지 09:30~16:00 봉만 둔다. 한 쪽 120봉 · `US_5M_PAGES` 쪽까지 이어 받는다.
+    """
+    out, keyb, nxt = {}, "", ""
+    for _ in range(US_5M_PAGES):
+        data = kis_get(cfg, MIN_PATH, {"AUTH": "", "EXCD": excd_of(code), "SYMB": code, "NMIN": "5",
+                                       "PINC": "1", "NEXT": nxt, "NREC": str(MIN_PER_CALL),
+                                       "FILL": "", "KEYB": keyb}, MIN_TR)
+        rows = (data or {}).get("output2") or []
+        if not isinstance(rows, list) or not rows:
+            break
+        last_local = None
+        for r in rows:
+            xd, xt = (r.get("xymd") or "").strip(), (r.get("xhms") or "").strip()
+            kd, kt = (r.get("kymd") or "").strip(), (r.get("khms") or "").strip()
+            c = _f(r.get("last"))
+            if len(xd) != 8 or len(xt) != 6 or c is None:
+                continue
+            last_local = xd + xt
+            if US_REGULAR_ONLY and not (REGULAR_FROM <= xt <= REGULAR_TO):
+                continue
+            ts = (kd + kt[:4]) if US_SHOW_KST else (xd + xt[:4])
+            out[ts] = {"ts": ts, "open": _f(r.get("open")), "high": _f(r.get("high")),
+                       "low": _f(r.get("low")), "close": c, "volume": _i(r.get("evol"))}
+        if len(rows) < MIN_PER_CALL or not last_local:
+            break
+        # 다음 쪽 — 이번 쪽 가장 이른 봉의 한 칸 앞 (open-trading-api 예제의 KEYB 모양)
+        prev = datetime.strptime(min(r["xymd"] + r["xhms"] for r in rows if r.get("xymd") and r.get("xhms")),
+                                 "%Y%m%d%H%M%S") - timedelta(minutes=5)
+        keyb, nxt = prev.strftime("%Y%m%d%H%M%S"), "1"
+    return [out[k] for k in sorted(out)]
