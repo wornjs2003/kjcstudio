@@ -16,6 +16,8 @@
 외부접속일 때는 `localhost` 주소가 안 열려 파일을 보낸다(SendUserFile). 그때 「보냈습니다: <경로>」
 를 확인란에 넣으면 걸린다 — 그 줄은 본문에 둔다.
 
+둘째 — 확인란 줄의 `holdings/stock.html` 은 알리기만 한다(2026-10-07 · 「홀딩스 작업은 홈 첫 화면으로 보여 드린다」).
+
 걸리면 턴을 끝내지 않고(decision: block) 「http 주소로 다시」 를 돌려준다. 같은 턴에 두 번 막지 않는다
 (`stop_hook_active`). `KJC_LINK_HOOK=block|look|off` — 기본은 알리기만.
 """
@@ -74,6 +76,13 @@ def main():
     text = data.get("last_assistant_message") or last_text(data.get("transcript_path") or "")
     hits = find(text)
     if not hits:
+        # 홀딩스 종목 화면 링크 — 알리기만 (2026-10-07 지시 · CLAUDE.md 「홀딩스 작업은 홈 첫 화면으로 보여 드린다」).
+        # 종목 화면 자체를 고친 때는 맞는 링크라 막지 않는다
+        if any(CONFIRM.match(l) and "holdings/stock.html" in l for l in (text or "").splitlines()):
+            print(json.dumps({"systemMessage":
+                "확인란에 종목 화면(holdings/stock.html) 링크가 있습니다 — 홀딩스 일은 홈 첫 화면(/holdings/)으로 보여 드립니다. "
+                "모달이면 /holdings/?code=<종목>. 종목 화면 자체를 고쳤으면 지나가도 됩니다 "
+                "(CLAUDE.md 「홀딩스 작업은 홈 첫 화면으로 보여 드린다」)."}, ensure_ascii=False))
         return 0
     reason = ("확인란에 파일 경로가 있습니다 — Herdr 는 파일 경로를 자기 뷰어로 열고 크롬으로 안 넘깁니다. "
               "CLAUDE.md 「그림 · 화면은 http 주소로 드린다」. 파일을 저장소 temp/ 에 두고 "
