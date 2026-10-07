@@ -435,8 +435,15 @@
 }
 
 
-/* ── 오늘의 뉴스 맨 위 · 영상 분석 (2026-10-01) ── */
+/* ── 오늘의 뉴스 맨 위 · 미국장 분석 + 영상 분석 한 목록 (2026-10-01 영상 · 2026-10-07 장분석) ── */
 .kh-dl-video { display: flex; flex-direction: column; }
+/* 장분석 줄 — 누르면 그 자리에서 펼쳐진다(details). 줄 모양은 영상 줄과 같고 본문은 보낸 글 그대로(줄 바꿈 유지) */
+.kh-dl-video-row.kh-dl-us { display: block; padding: 0; }   /* 아래 .kh-dl-video-row 의 padding 10px 을 이긴다 — 안 그러면 줄이 20px 더 커진다(2026-10-07 check-layout 실측 43 → 63) */
+.kh-dl-us > summary { display: flex; align-items: center; gap: 10px; padding: 10px 2px; cursor: pointer; list-style: none; }
+.kh-dl-us > summary::-webkit-details-marker { display: none; }
+.kh-dl-us-body { padding: 0 2px 12px; }
+.kh-dl-us-text { margin: 0; white-space: pre-wrap; word-break: break-word; font: inherit; font-size: 0.84rem; line-height: 1.65; color: var(--kh-text-secondary); }
+.kh-dl-us-text a { color: var(--kh-accent); }
 .kh-dl-video-row {
   display: flex; align-items: center; gap: 10px; padding: 10px 2px;
   border-bottom: 1px solid var(--kh-border); text-decoration: none; color: inherit;

@@ -133,10 +133,11 @@ const BODY_HTML = `
       <span class="kh-dl-chip" id="kh-dl-send">07:30 발송</span>
     </header>
 
-    <!-- 「오늘의 뉴스」 제목 아래 — 시황분석 세션이 정리한 영상 분석 (2026-10-01).
-         흰 카드로 묶는다 — 회색 바탕에 줄만 놓지 않는다 -->
+    <!-- 「오늘의 뉴스」 제목 아래 — 시황분석 세션이 쓴 미국장 분석 + 영상 분석을 한 목록으로 (2026-10-01 영상 · 2026-10-07 재권님
+         「영상분석을 미국장분석으로 이름 바꾸고 오늘 새벽 5시에 분석해서 보낸 걸 넣어줘 · 제목에 년월일 + 데일리장분석 · 클릭하면 내용」).
+         장분석 줄은 누르면 그 자리에서 펼쳐진다(details) · 영상 줄은 전처럼 Insight report.html 로. 흰 카드로 묶는다 -->
     <section class="kh-dl-card kh-dl-video-card">
-      <div class="kh-dl-ch"><b>영상 분석</b><span class="kh-dl-src">시황분석</span></div>
+      <div class="kh-dl-ch"><b>미국장 분석</b><span class="kh-dl-src">시황분석</span></div>
       <div class="kh-dl-video" data-dl-video></div>
     </section>
 
@@ -261,32 +262,37 @@ const SIDE_HTML = `
     </section>
 `;
 
-/* ── 영상 분석 목록 ──
-   시황분석 세션이 영상을 분석해 로컬 문서 저장소에 쓴다(insight-video-index · insight-video-<id>).
-   데일리분석(모달 · daily.html)의 「오늘의 뉴스」 제목 아래에 그린다.
-   보고서 본문은 Insight 의 report.html 이 그린다. */
-async function loadVideoIndex() {
-  try {
-    const r = await fetch('/api/board/doc/insight-video-index', { cache: 'no-store' });
-    const d = (await r.json()).data;
-    return (d && d.items) || [];
-  } catch (e) {
-    return null;          // 못 받음 — 빈 목록([])과 가른다
-  }
+/* ── 미국장 분석 · 영상 분석 목록 ──
+   시황분석 세션이 로컬 문서 저장소에 쓴다 — 장분석: us-market-index(제목 · 보낸 시각 · 본문 text 까지 한 문서 — 줄을 펼칠 때 따로 묻지 않는다. 이 화면은 긴 연결을 여럿 쥐고 있어 추가 요청이 밀린다 · 2026-10-07 실측 40초 넘게 안 옴) / 영상: insight-video-index · insight-video-<id>.
+   데일리분석(모달 · daily.html)의 「오늘의 뉴스」 제목 아래 「미국장 분석」 카드에 한 목록으로 그린다(새것 위 · 같은 날이면 장분석 먼저).
+   영상 보고서 본문은 Insight 의 report.html 이 그리고, 장분석 본문은 줄을 누르면 그 자리에서 펼쳐진다(이미 받아 둔 글). */
+async function loadDoc(name) {
+  const r = await fetch(`/api/board/doc/${name}`, { cache: 'no-store' });
+  return (await r.json()).data;
+}
+async function loadAnalysisList() {
+  const [us, vid] = await Promise.allSettled([loadDoc('us-market-index'), loadDoc('insight-video-index')]);
+  if (us.status === 'rejected' && vid.status === 'rejected') return null;   // 둘 다 못 받음 — 빈 목록([])과 가른다
+  const a = us.status === 'fulfilled' && us.value && us.value.items ? us.value.items.map((x) => ({ kind: 'us', ...x })) : [];
+  const b = vid.status === 'fulfilled' && vid.value && vid.value.items ? vid.value.items.map((x) => ({ kind: 'video', ...x })) : [];
+  return [...a, ...b].sort((x, y) => (y.date || '').localeCompare(x.date || '') || (x.kind === 'us' ? -1 : 1));
 }
 
-/** 영상 분석 목록을 그린다. 못 받으면 「불러오지 못함」, 없으면 「—」 */
-function videoListHtml(items, n = 99) {
-  if (items === null) return '<div class="kh-dl-video-e">영상 분석 · 불러오지 못함</div>';
-  if (!items.length) return '<div class="kh-dl-video-e">영상 분석 · —</div>';
-  return items.slice(0, n).map((x) => `
+/** 목록을 그린다. 못 받으면 「불러오지 못함」, 없으면 「—」 */
+function analysisListHtml(items, n = 99) {
+  if (items === null) return '<div class="kh-dl-video-e">미국장 분석 · 불러오지 못함</div>';
+  if (!items.length) return '<div class="kh-dl-video-e">미국장 분석 · —</div>';
+  return items.slice(0, n).map((x) => x.kind === 'us' ? `
+    <details class="kh-dl-video-row kh-dl-us" data-us-id="${esc(x.id)}">
+      <summary><span class="kh-dl-video-k">장분석</span><span class="kh-dl-video-t">${esc(x.title)}</span><span class="kh-dl-video-m">${esc(x.sentAt || '')} 발송</span></summary>
+      <div class="kh-dl-us-body">${x.text ? `<pre class="kh-dl-us-text">${esc(x.text)}</pre>` : '<div class="kh-dl-video-e">본문 없음</div>'}</div>
+    </details>` : `
     <a class="kh-dl-video-row" href="../company-setup/report.html?id=${encodeURIComponent(x.id)}">
       <span class="kh-dl-video-k">영상</span>
       <span class="kh-dl-video-t">${esc(x.headline)}</span>
       <span class="kh-dl-video-m">${esc(x.show || '')} · ${esc(x.date || '')}</span>
     </a>`).join('');
 }
-
 /** 오늘 저장본을 받아 온다. 없으면 `null` (07:30 전이면 그렇다).
  *
  * **첫 화면 카드도 이것을 쓴다.** 두 곳에서 같은 주소를 따로 부르면
@@ -342,7 +348,7 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
 
   /* 「오늘의 뉴스」 제목 아래 — 영상 분석 목록 (2026-10-01) */
   const videoBox = root.querySelector('[data-dl-video]');
-  if (videoBox) loadVideoIndex().then((items) => { videoBox.innerHTML = videoListHtml(items); });
+  if (videoBox) loadAnalysisList().then((items) => { videoBox.innerHTML = analysisListHtml(items); });
 
   /* 찾는 범위를 자기 자리 안으로 좁힌다. 문서 전체에서 찾지 않는 이유는
      파일 맨 위 주석에 있다. */
