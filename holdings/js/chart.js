@@ -634,13 +634,18 @@ export async function fetchCandles(code, periodId = '1d', opt = {}) {
     if (hit) return hit.value;
   }
 
-  const r = await apiFetch(viewUrl(key, opt.view), { cache: 'no-store' });
+  /* `stored` — 서버가 **받아 둔 봉만** KIS 없이 바로 준다 (2026-10-07 재권님 「1 해줘」 — 「다른 종목을 열 때 미리 받아
+     놓은 5분봉을 불러오고 불러오지 못한 것만 그린다」). 부르는 쪽은 이것으로 먼저 그리고 `fetchCandlesSince` 로 빈 칸만
+     받아 `appendBars` 한다. 빈 목록이면 캐시에 안 넣는다 — 부르는 쪽이 통째로 받는다. 캐시 열쇠는 같은 주소다
+     (지켜보기 · `peekCandles` 가 같은 배열을 본다) */
+  const r = await apiFetch(viewUrl(opt.stored ? key + '&stored=1' : key, opt.view), { cache: 'no-store' });
   if (!r) throw new Error('로그인이 만료되었습니다');
   if (!r.ok) throw new Error(`차트 데이터를 불러오지 못했습니다 (${r.status})`);
   const j = await r.json();
   if (!j || !j.ok) throw new Error(j?.error || '차트 데이터를 불러오지 못했습니다');
 
   const value = { candles: j.data.candles || [], meta: j.meta || {}, period };
+  if (opt.stored && !value.candles.length) return value;
   _candleCache.set(key, { at: Date.now(), value });
   if (_candleCache.size > CANDLE_MAX) {
     _candleCache.delete(_candleCache.keys().next().value);

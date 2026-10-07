@@ -480,11 +480,24 @@ async function paintBigChart(opt = {}) {
     return;
   }
   let candles, period;
+  let fromStore = false;                    // 서버가 받아 둔 봉으로 먼저 그렸다 — 그린 뒤 빈 칸만 받는다
   if (cached && cached.candles && cached.candles.length) {
     ({ candles, period } = cached);
   } else try {
-    if (bigDrawnKey !== key) showBigLoading(host);
-    ({ candles, period } = await fetchCandles(st.code, bigPeriod, { ...opt, view: 'direct' }));
+    /* **서버가 받아 둔 봉을 먼저 그린다** (2026-10-07 재권님 「1 해줘」). 전에는 서버가 빈 30분 칸을 KIS 로 다
+       채운 뒤에 답해 종목을 바꿀 때마다 0.9~2.9초 「불러오는 중」 으로 덮였다. 받아 둔 것이 없을 때만 덮고 통째로 */
+    let got = null;
+    if (!opt.fresh) {
+      try { got = await fetchCandles(st.code, bigPeriod, { view: 'direct', stored: true }); } catch { /* 통째로 간다 */ }
+      if (bigChartKey !== key) return;      // 그 사이 다른 종목을 골랐다
+    }
+    if (got && got.candles && got.candles.length) {
+      ({ candles, period } = got);
+      fromStore = true;
+    } else {
+      if (bigDrawnKey !== key) showBigLoading(host);
+      ({ candles, period } = await fetchCandles(st.code, bigPeriod, { ...opt, view: 'direct' }));
+    }
   } catch {
     if (bigChartKey !== key) return;        // 그 사이 다른 종목을 골랐다
     hideBigLoading(host);
@@ -546,6 +559,7 @@ async function paintBigChart(opt = {}) {
       ? `<span>${ma}${drewPrev ? ` · ${PREV_CLOSE_NOTE}` : ''}</span><span>한국투자증권 실시간</span>`
       : `<span>${ma} · ${label}봉 ${candles.length}개</span><span>한국투자증권</span>`;
   }
+  if (fromStore) catchUpBigChart(key);      // 받아 둔 뒤에 생긴 봉 · 빈 칸만 받아 붙인다
 }
 
 function paintIndices(indices) {
