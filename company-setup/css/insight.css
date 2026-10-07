@@ -110,3 +110,20 @@
 .in-tbl th.est { color: var(--kh-accent); }
 .in-tbl td.neg { color: var(--kh-danger); }
 @media (max-width: 900px) { .in-kv { grid-template-columns: repeat(2, 1fr); } }
+
+/* ── 폰(640px 이하) — 종목 분석 문서 (2026-10-07 재권님 「응」 · 창구 경유 · 데스크톱은 그대로) ──
+   갈래 탭 줄: 홀딩스 home.css 700px 규칙이 이미 옆으로 밀리게 하는데 이 화면은 줄이 잘려 보였다 — 밀리는 줄에는
+   「증권사 리포트」 의 자리 벌림(margin-left:auto)이 뜻이 없어 끈다. 막대는 감춘다(가로로 미는 띠 · 「스크롤바는 한 벌만」 의 예외).
+   계산 카드 표(analysis.js 가 .in-tblx 로 감싼다): 열이 여섯 넘는 숫자 표라 줄을 못 바꾼다 → 표만 옆으로 민다. 넓은 화면에서는 안 넘쳐 아무 일 없다 */
+.in-tblx { overflow-x: auto; }
+/* 고정 메뉴(--nav-height · nav.css) 아래로 본문을 민다 — frame.css 가 .kh-app 에 padding-top 으로 밀어 두었는데 home.css 700px 규칙의
+   `.kh-app { padding: 14px 16px }` 이 그것을 덮어 폰에서 갈래 줄이 메뉴 밑에 통째로 숨었다(2026-10-07 실측 · 메뉴 72px · 줄 위 12px).
+   Insight 화면에만 건다 — 홀딩스 쪽 같은 자리는 주식페이지_개발1 몫이라 알리기만 했다 */
+@media (max-width: 700px) {
+  body[data-nav="company-setup"] .kh-app { padding-top: calc(var(--nav-height) + 14px); }
+}
+@media (max-width: 700px) {   /* home.css 가 .kh-cat 을 옆으로 밀게 하는 폭과 같게 — 미는 순간 자리 벌림도 같이 끈다 */
+  body[data-nav="company-setup"] .kh-cat { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  body[data-nav="company-setup"] .kh-cat::-webkit-scrollbar { display: none; }
+  body[data-nav="company-setup"] .kh-cat-my { margin-left: 0; flex: none; }
+}

@@ -43,6 +43,23 @@ const PARTS = {
           stocks:[[1,'덕산하이메탈 077360','솔더볼'],[2,'MK전자 033160','본딩 와이어·솔더'],[3,'—','']]},
 };
 
+// ── 설명 칸 — 3D 가 없어도 돈다 (2026-10-07 재권님 「응」 · 창구 경유 · WebGL 실패 안내) ──
+let onPick=null;   // 3D 가 떠 있으면 init3D 가 비추기(setHi)를 건다
+function show(k){const p=PARTS[k];document.getElementById('pname').textContent=p.name;document.getElementById('pdesc').textContent=p.desc;
+  document.getElementById('ptab').innerHTML='<tr><th>등급</th><th>종목</th><th>왜</th></tr>'+p.stocks.map(([g,s,w])=>`<tr><td><span class="pill g${g}">${G[g]}</span></td><td>${s}</td><td>${w||''}</td></tr>`).join('');
+  document.querySelectorAll('#plist div').forEach(d=>d.classList.toggle('on',d.dataset.k===k));}
+// 부품 목록 — 이름 아래 설명을 바로 보인다 (2026-10-06 재권님 「각 부품별로 설명이 있어야」). 누르면 그 부품을 비추고 위에 종목 표
+{const pl=document.getElementById('plist');for(const k of Object.keys(PARTS)){const d=document.createElement('div');d.dataset.k=k;
+  const nm=document.createElement('b');nm.textContent=PARTS[k].name;const ds=document.createElement('p');ds.textContent=PARTS[k].desc;d.append(nm,ds);
+  d.onclick=()=>{if(onPick)onPick(k);show(k);};pl.appendChild(d);}}   // 모델을 누른 것과 같은 길 — 늘 선택(접기 없음 · 2026-10-06 재권님)
+// WebGL 을 못 만들면(옛 기기 · 외부접속 브라우저 설정) 3D 자리에 안내만 두고 목록 · 종목 표는 그대로 쓴다 — 「못 한다」 를 빈 화면으로 두지 않는다
+function noGL(why){const s=document.getElementById('stage');s.innerHTML='';const d=document.createElement('div');d.className='nogl';
+  d.textContent='이 기기(브라우저)에서는 3D(WebGL)를 그릴 수 없습니다'+(why?' — '+why:'')+'. 부품 목록과 종목은 설명 칸에서 그대로 보실 수 있습니다.';s.appendChild(d);
+  document.getElementById('bar').style.display='none';console.warn('[hbm3d] WebGL 없음',why||'');}
+const glOK=(()=>{try{const c=document.createElement('canvas');return !!(c.getContext('webgl2')||c.getContext('webgl'));}catch(e){return false;}})();
+if(glOK)init3D();else noGL('WebGL 컨텍스트 없음');
+
+function init3D(){
 // ── 질감 — 캔버스로 그린다(이미지 파일 없음) ─────────────────────────────
 const T0=performance.now(),TM={};const mark=k=>{TM[k]=Math.round(performance.now()-T0);};   // 시작 단계 시간(?stats=1 에 찍는다)
 function cv(w,h,f){const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');f(x,w,h);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;return t;}
@@ -91,7 +108,7 @@ mark('텍스처');const M={
 
 // ── 장면 ────────────────────────────────────────────────────────────────
 const stage=document.getElementById('stage');
-const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.25));/* 2026-10-06 최적화 — 2 → 1.25. 재권님 창(2560 · 배율 1.5)에서 캔버스가 3300×1908 이었다 */renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;stage.appendChild(renderer.domElement);
+let renderer;try{renderer=new THREE.WebGLRenderer({antialias:true});}catch(e){noGL(e&&e.message?e.message.slice(0,60):'');return;}renderer.setPixelRatio(Math.min(devicePixelRatio,1.25));/* 2026-10-06 최적화 — 2 → 1.25. 재권님 창(2560 · 배율 1.5)에서 캔버스가 3300×1908 이었다 */renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;stage.appendChild(renderer.domElement);
 const lr=new CSS2DRenderer();lr.domElement.style.position='absolute';lr.domElement.style.top='0';lr.domElement.style.pointerEvents='none';stage.appendChild(lr.domElement);
 const scene=new THREE.Scene();scene.background=new THREE.Color(getComputedStyle(document.body).getPropertyValue('--bg').trim()||'#f6f7f9');
 mark('렌더러');const pm=new THREE.PMREMGenerator(renderer);scene.environment=pm.fromScene(new RoomEnvironment(),.04).texture;mark('환경맵');
@@ -194,17 +211,13 @@ const pickables=[];scene.traverse(o=>{if(o.isMesh&&o.userData.key&&!o.isInstance
 let orbiting=false;ctl.addEventListener('start',()=>{orbiting=true;});ctl.addEventListener('end',()=>{orbiting=false;});
 renderer.domElement.addEventListener('pointermove',e=>{if(orbiting)return;const r=renderer.domElement.getBoundingClientRect();mouse.set((e.clientX-r.left)/r.width*2-1,-((e.clientY-r.top)/r.height)*2+1);ray.setFromCamera(mouse,camera);const h=ray.intersectObjects(pickables,false).find(i=>i.object.userData.key);const k=h?h.object.userData.key:null;if(k!==hover){if(hover&&hover!==pinned)setHi(hover,false);hover=k;if(hover)setHi(hover,true);}renderer.domElement.style.cursor=k?'pointer':'grab';});
 renderer.domElement.addEventListener('click',()=>{if(hover){if(pinned&&pinned!==hover)setHi(pinned,false);pinned=hover;setHi(pinned,true);show(pinned);}});
-function show(k){const p=PARTS[k];document.getElementById('pname').textContent=p.name;document.getElementById('pdesc').textContent=p.desc;
-  document.getElementById('ptab').innerHTML='<tr><th>등급</th><th>종목</th><th>왜</th></tr>'+p.stocks.map(([g,s,w])=>`<tr><td><span class="pill g${g}">${G[g]}</span></td><td>${s}</td><td>${w||''}</td></tr>`).join('');
-  document.querySelectorAll('#plist div').forEach(d=>d.classList.toggle('on',d.dataset.k===k));}
-// 부품 목록 — 이름 아래 설명을 바로 보인다 (2026-10-06 재권님 「각 부품별로 설명이 있어야」). 누르면 그 부품을 비추고 위에 종목 표
-const pl=document.getElementById('plist');for(const k of Object.keys(PARTS)){const d=document.createElement('div');d.dataset.k=k;
-  const nm=document.createElement('b');nm.textContent=PARTS[k].name;const ds=document.createElement('p');ds.textContent=PARTS[k].desc;d.append(nm,ds);
-  d.onclick=()=>{if(pinned&&pinned!==k)setHi(pinned,false);pinned=k;setHi(k,true);show(k);};pl.appendChild(d);}   // 모델을 누른 것과 같은 길 — 늘 선택(접기 없음 · 2026-10-06 재권님)
+onPick=k=>{if(pinned&&pinned!==k)setHi(pinned,false);pinned=k;setHi(k,true);};   // 목록 누르기 → 비추기(목록 자체는 위 공용 자리에서 만든다)
 document.getElementById('lab').onchange=e=>{lr.domElement.style.display=e.target.checked?'':'none';for(const L of labels){L.line.visible=L.dot.visible=e.target.checked;}redraw();};
 
 // ── 그리기 ──────────────────────────────────────────────────────────────
-function resize(){const w=stage.clientWidth,h=stage.clientHeight;renderer.setSize(w,h);lr.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();}
+function resize(){const w=stage.clientWidth,h=stage.clientHeight;renderer.setSize(w,h);lr.setSize(w,h);camera.aspect=w/h;
+  // 세로가 더 긴 틀(폰 · 55vh 칸)에서는 세로 시야각을 넓혀 가로 폭이 데스크톱의 세로 폭만큼 들어오게 한다 — 안 그러면 모델이 좌우로 잘린다(2026-10-07 폰 대응). 가로가 더 길면(데스크톱) 33 그대로
+  camera.fov=camera.aspect>=1?33:Math.atan(Math.tan(33*Math.PI/360)/camera.aspect)*360/Math.PI;camera.updateProjectionMatrix();}
 addEventListener('resize',()=>{resize();redraw();});resize();
 const rot=document.getElementById('rot');ctl.autoRotate=true;ctl.autoRotateSpeed=.6;rot.onchange=()=>ctl.autoRotate=rot.checked;
 let loopErr=0,firstFrame=false;
@@ -220,3 +233,4 @@ if(q.get('diag')){const C={down:0,move:0,up:0,start:0,change:0,end:0,click:0,err
   window.addEventListener('error',e=>{C.err='오류: '+e.message+' @ '+String(e.error&&e.error.stack||'').split('\n').slice(1,4).map(x=>x.trim().replace(/^at /,'').replace(/https?:\/\/[^ )]*\//g,'')).join(' ← ');paint();});paint();}
 if(q.get('stats')){window.__dbg={camera,ctl,renderer,get pinned(){return pinned;},get hover(){return hover;}};const t0=performance.now();let n=0;const tick=()=>{n++;if(performance.now()-t0<3000){requestAnimationFrame(tick);return;}
   const i=renderer.info;document.getElementById('hint').textContent=`단계(ms) ${JSON.stringify(TM)} · 모듈시작 ${Math.round(T0)} | stats calls=${i.render.calls} tris=${i.render.triangles} geom=${i.memory.geometries} tex=${i.memory.textures} ms/frame=${((performance.now()-t0)/n).toFixed(1)} dpr=${renderer.getPixelRatio()} size=${renderer.domElement.width}x${renderer.domElement.height}`;};requestAnimationFrame(tick);}
+}   // init3D 끝

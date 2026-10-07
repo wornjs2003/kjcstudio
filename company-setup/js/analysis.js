@@ -109,18 +109,18 @@ async function paint(code) {
   // ① 상대수익률
   const r1 = got.d && got.kd ? relReturn(got.d, got.kd, 1) : null, r6 = got.d && got.kd ? relReturn(got.d, got.kd, 6) : null, r12 = got.w && got.kw ? relReturn(got.w, got.kw, 12) : null;
   h += `<h3>① 지수(코스피) 대비 상대수익률 ${S.calc} <span class="src">KIS 일봉 · 주봉 · 코스피 일봉 · 주봉 · ${at} 받음</span></h3>
-    <table class="in-tbl"><tr><th></th><th>종목 ${S.kis}</th><th>코스피 ${S.kis}</th><th>상대(%p) ${S.calc}</th><th>기준일</th></tr>
+    <div class="in-tblx"><table class="in-tbl"><tr><th></th><th>종목 ${S.kis}</th><th>코스피 ${S.kis}</th><th>상대(%p) ${S.calc}</th><th>기준일</th></tr>
     ${[['1개월', r1], ['6개월', r6], ['12개월(주봉)', r12]].map(([lb, r]) => r ? row(lb, [pct(r.rs), pct(r.ri), pct(r.rel), ymd(r.from)]) : row(lb, [SOON + ' 자료 부족', '', '', ''])).join('')}
-    </table>`;
+    </table></div>`;
   // ② 실적 + (E)
   if (nv && nv.columns && nv.columns.length) {
     const cols = nv.columns, R = nv.rows || {};
     const cell = (k, r, f = won) => R[r] ? f(R[r][k]) : '—';
     h += `<h3>② 실적 · 증권사 추정(E) ${S.naver} <span class="src">네이버 증권(FnGuide 집계) · 억원 · 회사 카드 ${esc(card.fetchedAt || CARDS_AT)} 받음</span></h3>
-      <table class="in-tbl"><tr><th></th>${cols.map((c) => `<th${c.estimate ? ' class="est"' : ''}>${esc(c.label)}${c.estimate ? '(E)' : ''} ${S.naver}</th>`).join('')}</tr>
+      <div class="in-tblx"><table class="in-tbl"><tr><th></th>${cols.map((c) => `<th${c.estimate ? ' class="est"' : ''}>${esc(c.label)}${c.estimate ? '(E)' : ''} ${S.naver}</th>`).join('')}</tr>
       ${row('매출액', cols.map((c) => cell(c.key, '매출액')))}${row('영업이익', cols.map((c) => cell(c.key, '영업이익')))}${row('당기순이익', cols.map((c) => cell(c.key, '당기순이익')))}
       ${row('EPS 원', cols.map((c) => cell(c.key, 'EPS', (v) => n0(v))))}${row('PER 배', cols.map((c) => cell(c.key, 'PER', (v) => n0(v, 2))))}
-      </table><p class="in-rp-note">(E) 열은 증권사 추정 평균 — 아직 안 난 실적. 1조 이상은 조로 적음</p>`;
+      </table></div><p class="in-rp-note">(E) 열은 증권사 추정 평균 — 아직 안 난 실적. 1조 이상은 조로 적음</p>`;
   } else {
     h += `<h3>② 실적 · 증권사 추정(E)</h3><p class="in-doc-p">${SOON} 이 종목의 회사 카드가 없습니다 — tools/fetch-company-cards.py 가 받은 종목만 됩니다</p>`;
   }
@@ -132,10 +132,10 @@ async function paint(code) {
   const band5 = got.m && got.fin ? perBand5y(got.m, got.fin) : { ok: false, n: 0 };
   const fair = (b) => b ? [b.lo, b.mid, b.hi].map((p) => epsE != null ? n0(Math.round(epsE * p)) + '원' : '—') : ['—', '—', '—'];
   h += `<h3>③ 적정가 밴드 = 추정 EPS(E) × 과거 PER ${S.calc} <span class="src">EPS(E) ${epsE != null ? n0(epsE) + '원 · ' + esc(est.label) : '—'} · 네이버 / PER 밴드 KIS · 네이버 · ${at}</span></h3>
-    <table class="in-tbl"><tr><th>밴드</th><th>PER 하단</th><th>중간</th><th>상단</th><th>적정가 하단 ${S.calc}</th><th>중간</th><th>상단</th></tr>
+    <div class="in-tblx"><table class="in-tbl"><tr><th>밴드</th><th>PER 하단</th><th>중간</th><th>상단</th><th>적정가 하단 ${S.calc}</th><th>중간</th><th>상단</th></tr>
     ${bandA ? row(`(가) 연간 PER ${bandA.n}년(양수만) ${S.naver}`, [n0(bandA.lo, 2), n0(bandA.mid, 2), n0(bandA.hi, 2), ...fair(bandA)]) : row(`(가) 연간 PER ${S.naver}`, [SOON + ' 회사 카드 없음', '', '', '', '', ''])}
     ${band5.ok ? row(`(나) 5년 PER — 월봉 ${band5.months}개 ÷ 분기 EPS 4분기 합(${band5.n}개월 셈) ${S.kis}`, [n0(band5.lo, 2), n0(band5.mid, 2), n0(band5.hi, 2), ...fair(band5)]) : row(`(나) 5년 PER ${S.kis}`, [SOON + ` 셀 수 있는 달 ${band5.n}개뿐${errs.fin ? ' · 재무 못 받음' : ''}`, '', '', '', '', ''])}
-    </table>
+    </table></div>
     <p class="in-rp-note">현재가 ${price ? n0(price.close) + '원' : '—'} · 목표가 평균 ${cs.targetPriceMean != null ? n0(cs.targetPriceMean) + '원' : '—'} 과 견준다 — 밴드의 어디(하단 · 중간 · 상단)를 기준으로 삼을지는 아직 안 정했다(재권님 결정). 분기 EPS 는 KIS 손익계산서 누적 EPS 의 차로 셈 · 적자 분기가 끼면 그 달은 셈에서 뺀다</p>`;
   // 못 받는 것
   // 못 받는 값의 줄 — 출처 배지(파랑)를 안 붙인다. 파랑은 「받을 수 있다」 는 뜻이라서다. 어디서 받을 예정인지는 글로만
