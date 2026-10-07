@@ -1363,8 +1363,11 @@ canvas 는 CSS 를 상속받지 못한다. 그래서 `holdings/js/theme.js` 가 
   - 받는 방법·옵션은 `uidata/README.md` 에 있다. 여기 다시 적지 않는다
 
 ## 상단 메뉴 구성
-- 메뉴 줄 — 3D Modeling / AI Work / Debugging / API / Holdings / Insight / Projects / ⋯(더보기)
+- 메뉴 줄 — 3D Modeling / AI Work / Debugging / API / Holdings / Insight / Projects / 주식 회고 / ⋯(더보기)
 - ⋯ 안에 **Web · Interactive** / **Branding** / About / Services / Contact
+- **외부접속에서는 Debugging 이 안 보인다 (2026-10-07 지시 — 「다 로해줘」).** 서비스방의 `/debugging/` 이 `localhost:8093` 으로
+  넘겨 외부 기기에서 안 닿는다. 넘기는 쪽은 두고 메뉴만 가린다 — `partials/nav.html` 의 `data-local-only` 항목을
+  `assets/js/main.js` 의 `hideLocalOnly` 가 주소가 localhost · 127.0.0.1 이 아니면 뺀다(맥에서 8764 를 열면 보인다)
 - **값은 `partials/nav.html` 이 기준이다.** 여기 적은 것은 그 순간의 모습이므로,
   어긋나면 `nav.html` 을 보고 이쪽을 고친다 (「세면 나오는 값은 본문에 적지 않는다」)
 - Branding 은 2026-09-14 에 메뉴 줄에서 ⋯ 안으로 옮겼고, **그 자리에 API 가 들어왔다**
@@ -1384,6 +1387,8 @@ canvas 는 CSS 를 상속받지 못한다. 그래서 `holdings/js/theme.js` 가 
   `시황분석` 세션의 자리가 되면서 재권님이 「너의 공간으로 지정된 곳 이름 바꾸고 알려줘」 하셨다.
   **주소(`company-setup/`)와 `data-nav` 는 그대로다.** 이름만 바뀌었다
 - Projects 는 `projects/` 로 외부 이동 느낌 (화살표 아이콘)
+- **주식 회고**는 `holdings/review.html` 로 외부 이동 느낌 (화살표 아이콘 · 2026-10-07 지시 — 「project 옆에 캘린더 칸」).
+  화면은 주식 레인이고 메뉴 불은 그 화면의 `data-nav="review"` 로 켜진다 — Holdings 와 따로
 
 ## 확장 규칙
 - 작업물 추가(권장): 이미지를 `assets/images/works/<카테고리>/` 에 드롭 → 루트 `refresh-works.command` 더블클릭 → `data/works.json` 자동 갱신
@@ -1493,7 +1498,7 @@ Insight 가 `holdings/js/components/modal.js` 를 **JS `import` 로** 걸고 있
 
 ### 상단 메뉴는 네 구역이 같다
 
-- 어느 구역에 들어가도 메뉴 7개 + `⋯` 가 보인다. 눌러서 서로 오갈 수 있다
+- 어느 구역에 들어가도 같은 메뉴 줄과 `⋯` 가 보인다. 눌러서 서로 오갈 수 있다 (몇 개인지는 `partials/nav.html` 을 센다)
 - 메뉴를 고칠 때는 `partials/nav.html` **한 곳만** 고친다
 - 구역별 자체 nav 는 두지 않는다
 

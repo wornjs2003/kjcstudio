@@ -149,10 +149,27 @@
       injectPartial("site-footer", partialsBase + "footer.html", base),
     ]);
 
+    hideLocalOnly();
     markActiveNav();
     setupMoreMenu();
     setupMobileMenu();
     mirrorMenuUnderIntro();
+  }
+
+  /**
+   * 외부접속에서는 내부 전용 메뉴를 뺀다 (2026-10-07 지시 — 「다 로해줘」).
+   *
+   * Debugging 보드는 8093 전용 서버라 서비스방의 `/debugging/` 이 `localhost:8093` 으로
+   * 넘기는데(`kis_proxy.py`), 외부 기기에서는 그 주소가 안 닿는다. 넘기는 쪽은 그대로 두고
+   * 메뉴만 가린다. **주소가 localhost · 127.0.0.1 이면 내부**다 — 맥에서 8764 를 열어도 보인다
+   * (거기서는 8093 이 닿는다). 항목은 `partials/nav.html` 의 `data-local-only` 로 고른다.
+   *
+   * 인트로 아래 복제(`mirrorMenuUnderIntro`)보다 먼저 돌아야 복제본에도 안 남는다.
+   */
+  function hideLocalOnly() {
+    const h = location.hostname;
+    if (h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "") return;
+    document.querySelectorAll("[data-local-only]").forEach((el) => el.remove());
   }
 
   /**
