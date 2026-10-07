@@ -27,8 +27,8 @@ import { fetchCandles, watchCandles, createStockChart, maLegend,
   savePeriodId, loadPeriodId,
   chartView, setChartView, chartStockChanged } from '../chart.js';
 import { getMemo, setMemo } from '../store/memo.js';
-import { fmtNum, fmtWon, fmtMoneyKr, fmtShareCount, fmtDelta, dirClass }
-  from '../utils/format.js';
+import { fmtNum, fmtWon, fmtMoneyKr, fmtShareCount, fmtDelta, dirClass,
+  isUsCode, fmtPriceOf, fmtUsdBig, priceDigitsOf } from '../utils/format.js';
 import { paintIcon } from './stock-icon.js';
 import { mountDisclosures } from './disclosures.js';
 import { mountStockPanel } from './stock-panel.js';
@@ -167,11 +167,14 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
     if (chart && periodId === '5m') addPrevCloseLine(chart, chart.candles, lastPrev);
 
     const cls = dirClass(live.pct);
+    /* 미국 종목(2026-10-07 나스닥100 · S&P500)은 달러 — 가격 소수 둘째 자리 · 큰 금액 「조 · 억 달러」 */
+    const us = isUsCode(stock.code);
+    const big = (v) => (v == null ? '—' : (us ? fmtUsdBig(v) : fmtMoneyKr(v)));
     price.className = 'kh-price kh-num ' + cls;
-    price.textContent = fmtWon(live.price);
+    price.textContent = fmtPriceOf(stock.code, live.price);
     if (sub) {
       sub.className = 'kh-price-sub kh-num ' + cls;
-      sub.textContent = '어제보다 ' + fmtDelta(live.amt, live.pct);
+      sub.textContent = '어제보다 ' + (us ? fmtDelta(live.amt, live.pct, '달러', 2) : fmtDelta(live.amt, live.pct));
     }
 
     setHtml('#kh-r1',  rangeBar(live.low, live.high, live.price));
@@ -185,7 +188,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
     const amtExact = live.value != null;
     const amtRaw = live.value ?? (live.price != null && live.volume != null
       ? live.price * live.volume : null);
-    setText('#kh-amt', amtRaw != null ? fmtMoneyKr(Math.round(amtRaw / 1e8)) : '—');
+    setText('#kh-amt', amtRaw == null ? '—' : (us ? fmtUsdBig(amtRaw) : fmtMoneyKr(Math.round(amtRaw / 1e8))));
     const amtEl = $('#kh-amt');
     if (amtEl) {
       amtEl.title = amtExact ? '서버가 준 실제 거래대금입니다'
@@ -193,17 +196,17 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
       amtEl.classList.toggle('kh-approx', !amtExact);
     }
     setText('#kh-vol', fmtShareCount(live.volume));
-    setText('#kh-cap', fmtMoneyKr(live.marketCap));
+    setText('#kh-cap', big(live.marketCap));
 
     setText('#kh-m-per', live.per != null ? live.per + '배' : '—');
     setText('#kh-m-pbr', live.pbr != null ? live.pbr + '배' : '—');
-    setText('#kh-m-cap', fmtMoneyKr(live.marketCap));
+    setText('#kh-m-cap', big(live.marketCap));
     setText('#kh-m-vol', fmtShareCount(live.volume));
-    setText('#kh-m-hi',  fmtWon(live.high52));
-    setText('#kh-m-lo',  fmtWon(live.low52));
+    setText('#kh-m-hi',  fmtPriceOf(stock.code, live.high52));
+    setText('#kh-m-lo',  fmtPriceOf(stock.code, live.low52));
 
     const ord = $('#kh-ord-price');
-    if (ord) ord.value = fmtNum(live.price);
+    if (ord) ord.value = fmtNum(live.price, priceDigitsOf(stock.code));
   }
 
   function setText(sel, v) { const el = $(sel); if (el) el.textContent = v; }
@@ -212,10 +215,12 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
   /* 현재가가 범위 어디쯤인지 점으로 */
   function rangeBar(lo, hi, cur) {
     if (lo == null || hi == null || cur == null) return '<b class="kh-mut">—</b>';
-    const p = Math.max(0, Math.min(1, (cur - lo) / Math.max(1, hi - lo)));
-    return `<b class="kh-num">${fmtNum(lo)}</b>
+    /* 미국은 범위가 1달러 안쪽일 수 있다 — 나눗수를 1 로 묶으면 막대가 한쪽에 붙는다 */
+    const d = priceDigitsOf(stock.code);
+    const p = Math.max(0, Math.min(1, (cur - lo) / Math.max(d ? 1e-9 : 1, hi - lo)));
+    return `<b class="kh-num">${fmtNum(lo, d)}</b>
       <span class="kh-rng-bar"><i style="left:calc(${(p * 100).toFixed(1)}% - 4px)"></i></span>
-      <b class="kh-num">${fmtNum(hi)}</b>`;
+      <b class="kh-num">${fmtNum(hi, d)}</b>`;
   }
 
   /* ── 차트 ─────────────────────────────── */
@@ -264,7 +269,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
       if (dead || key !== periodId) return;
       if (!candles.length) throw new Error('빈 응답');
       host.innerHTML = '';
-      chart = createStockChart(host, candles, { period, showVolume: true });
+      chart = createStockChart(host, candles, { period, showVolume: true, priceDigits: priceDigitsOf(stock.code) });
 
       /* **이 기간에서 보던 자리로.** 처음이면 최신 쪽 `initBars` 개를 본다.
          몇 개인지는 `CHART_PERIODS` 가 정한다 — 여기 적으면 낡는다.

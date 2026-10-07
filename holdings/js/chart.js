@@ -807,6 +807,8 @@ export function createStockChart(container, candles, opts = {}) {
   const showMA = opts.showMA !== false;
   const showLegend = opts.showLegend !== false;
   let period = opts.period || 'D';
+  /* 가격 눈금 소수 자리 — 국내 0 · 미국 2(달러 · 2026-10-07 나스닥100). 정수로 두면 미국 종목 눈금이 「244 · 244 · 243」 처럼 겹쳤다 */
+  const priceDigits = opts.priceDigits || 0;
 
   container.classList.add('kh-panes');
 
@@ -819,7 +821,7 @@ export function createStockChart(container, candles, opts = {}) {
   const priceLines = [];
   let syncing = false;
 
-  function mkChart(box, h, axis) {
+  function mkChart(box, h, axis, digits = 0) {   // digits — 가격 칸만 미국 2 · 거래량 · MACD · RSI 칸은 0(소수가 붙으면 「16,953,846.00」)
     return LC.createChart(box, {
       width: box.clientWidth || container.clientWidth, height: h,
       layout: {
@@ -849,7 +851,9 @@ export function createStockChart(container, candles, opts = {}) {
       },
       localization: {
         locale: 'ko-KR',
-        priceFormatter: (v) => Math.round(v).toLocaleString('ko-KR'),
+        priceFormatter: (v) => (digits
+          ? v.toLocaleString('ko-KR', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+          : Math.round(v).toLocaleString('ko-KR')),
       },
     });
   }
@@ -1388,7 +1392,7 @@ export function createStockChart(container, candles, opts = {}) {
         : paneH()[p.key];
       box.style.height = h + 'px';
 
-      const ch = track(mkChart(box, h, idx === list.length - 1));
+      const ch = track(mkChart(box, h, idx === list.length - 1, p.key === 'price' ? priceDigits : 0));
       const item = { key: p.key, el, box, chart: ch, fut, futB };
       panes.push(item);
 

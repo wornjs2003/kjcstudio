@@ -325,12 +325,17 @@ def us_price(kis_get, cfg, code):
     chg = round(last - base, 4) if last is not None and base is not None else None
     pct = round(chg / base * 100, 2) if chg is not None and base else None
     info = _symbols().get(code) or {}
+    # 미국 날짜가 바뀐 뒤(동부 자정) 장 전까지는 그날 거래량 · 거래대금이 0 으로 온다 — 그때는 지난 세션 값(pvol · pamt)을
+    # 쓴다. 안 그러면 한국 오후에 「거래대금 0억 달러」 로 보였다(2026-10-07 16:08 NVDA tvol 0 · pvol 1억)
+    vol, amt = _i(o.get("tvol")), _f(o.get("tamt"))
+    if not vol:
+        vol, amt = _i(o.get("pvol")), _f(o.get("pamt"))
     return {
         "code": code, "name": info.get("name_ko") or info.get("name_en"), "currency": "USD",
         "price": last, "prev": base, "change": chg, "amt": chg, "changePct": pct, "pct": pct,
         "sign": "2" if (chg or 0) > 0 else ("5" if (chg or 0) < 0 else "3"),
         "open": _f(o.get("open")), "high": _f(o.get("high")), "low": _f(o.get("low")),
-        "volume": _i(o.get("tvol")), "value": _f(o.get("tamt")),
+        "volume": vol, "value": amt,
         "marketCap": _f(o.get("tomv")), "per": _f(o.get("perx")), "pbr": _f(o.get("pbrx")),
         "eps": _f(o.get("epsx")), "bps": _f(o.get("bpsx")),
         "high52": _f(o.get("h52p")), "low52": _f(o.get("l52p")), "source": "KIS",

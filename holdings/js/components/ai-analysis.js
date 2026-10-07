@@ -26,6 +26,7 @@
 
 import { apiFetch } from '../data/api.js';
 import { watch } from '../store/longpoll.js';
+import { isUsCode } from '../utils/format.js';
 
 /* 파일은 세션이 하루 한 번 고친다. **주기를 갖지 않는다 — 바뀌면 서버가 알려 준다**
    (2026-10-02 · 재권님 「이거 안대로 수정먼저하고」 · `store/longpoll.js`).
@@ -78,6 +79,12 @@ export function mountAiAnalysis({ box, when } = {}) {
   }
 
   function paint() {
+    /* 미국 종목(2026-10-07) — 분석 파일은 국내 종목만 담는다 */
+    if (isUsCode(code)) {
+      if (when) when.textContent = '—';
+      box.innerHTML = '<span class="kh-mut">미국 종목은 아직 없습니다 — 국내 종목만 받는 칸입니다</span>';
+      return;
+    }
 
     if (!doc || !doc.codes) {
       if (when) when.textContent = '—';

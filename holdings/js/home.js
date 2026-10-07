@@ -13,7 +13,7 @@ import { fetchCandles, fetchCandlesSince, peekCandles, watchCandles, createStock
   chartView, setChartView, chartStockChanged } from './chart.js';
 import { color } from './theme.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount,
-  dirClass, marketPhase } from './utils/format.js';
+  dirClass, marketPhase, isUsCode, fmtPriceOf, fmtUsdBig, priceDigitsOf } from './utils/format.js';
 import { favList, isFav, toggleFav, onFavChange } from './store/favorites.js';
 /* mountWatchSide · mountVBar 는 첫 화면에서 안 쓴다 (2026-09-17).
    관심 목록은 순위표의 「관심」 칩으로 들어갔고, 세로 아이콘 바는
@@ -276,6 +276,7 @@ function setupCatFilter() {
     a.classList.add('is-on');
     ixCat = a.textContent.trim();
     paintIxFilter();
+    syncMarketGroup();
   }));
 }
 
@@ -436,7 +437,7 @@ function paintBigPrice() {
   if (bigShown === stamp) return;
   bigShown = stamp;
   el.className = 'kh-idx-v kh-num ' + dirClass(live.pct);
-  el.textContent = `${fmtWon(live.price)}  ${fmtPct(live.pct)}`;
+  el.textContent = `${fmtPriceOf(selectedCode, live.price)}  ${fmtPct(live.pct)}`;
 }
 
 /* 큰 차트 — 고른 종목을 그린다.
@@ -449,6 +450,7 @@ function paintBigPrice() {
  */
 /* `opt.fresh` 면 캔들 캐시를 건너뛴다 — 모달을 닫을 때 쓴다
    (2026-09-30 지시 — 「5번」). 자세한 것은 `chart.js` 의 `fetchCandles` 주석. */
+let bigDigits = 0;          // 지금 큰 차트의 가격 눈금 소수 자리
 async function paintBigChart(opt = {}) {
   const st = findStock(selectedCode);
   if (!st) return;
@@ -510,12 +512,15 @@ async function paintBigChart(opt = {}) {
      (2026-09-17 아침 — "위로 올려서 삼성전자 볼려고 하니까 안나온다").
 
      칸이 비어 있으면(오류 문구를 띄웠던 자리) 새로 만든다. */
-  if (bigChart && host.querySelector('canvas')) {
+  /* 국내 ↔ 미국이 바뀌면 가격 눈금 소수 자리(0 · 2)가 달라 새로 만든다 — 같은 쪽끼리는 그대로 봉만 갈아끼운다 */
+  const digits = priceDigitsOf(st.code);
+  if (bigChart && host.querySelector('canvas') && bigDigits === digits) {
     bigChart.setData(candles, period);
   } else {
     dropBigChart();
     host.innerHTML = '';
-    bigChart = createStockChart(host, candles, { period, showVolume: true });
+    bigChart = createStockChart(host, candles, { period, showVolume: true, priceDigits: digits });
+    bigDigits = digits;
   }
   bigDrawnKey = key;
 
@@ -653,12 +658,12 @@ async function paintYearRange() {
   const at = Math.max(0, Math.min(1, (cur - r.lo) / Math.max(1e-9, r.hi - r.lo)));
   el.innerHTML = `
     <div class="kh-yr">
-      <span class="kh-num kh-down">${fmtWon(r.lo)}</span>
+      <span class="kh-num kh-down">${fmtPriceOf(code, r.lo)}</span>
       <span class="kh-yr-bar"><i style="left:calc(${(at * 100).toFixed(1)}% - 5px)"></i></span>
-      <span class="kh-num kh-up">${fmtWon(r.hi)}</span>
+      <span class="kh-num kh-up">${fmtPriceOf(code, r.hi)}</span>
     </div>
     <div class="kh-head-yr-note kh-mut">
-      지금 <b>${fmtWon(cur)}</b> · 최저에서 <b>${(at * 100).toFixed(0)}%</b> 자리</div>`;
+      지금 <b>${fmtPriceOf(code, cur)}</b> · 최저에서 <b>${(at * 100).toFixed(0)}%</b> 자리</div>`;
 }
 
 /* 세부사항(거래대금 · 시가총액 · 매수매도)은 차트 머리줄로 갔다 (2026-09-21 지시).
@@ -688,15 +693,55 @@ let universe = null;        // [{code, name, rank, cap, market}]
  * 정렬 칩(관심 · 총액 · 대금 …)과 **따로 둔다** — 「무엇으로 세우나」 와 「어느 시장인가」 는 다른 물음이다.
  * 「관심」 은 시장을 안 가린다 — 담은 것이 시장을 따라 사라지면 「담았는데 안 보인다」 가 된다. */
 const MARKETS = [
-  { id: 'KOSPI', label: '코스피' },
-  { id: 'KOSDAQ', label: '코스닥' },
+  { id: 'KOSPI', label: '코스피', ix: 'KOSPI' },
+  { id: 'KOSDAQ', label: '코스닥', ix: 'KOSDAQ' },
 ];
 let market = 'KOSPI';
 const marketOf = (x) => x.market || 'KOSPI';
 
+/* ── 미국 시장 칩 — 나스닥100 · S&P500 (2026-10-07 재권님 「미국을 누르면 실시간 순위 옆에 코스피 코스닥처럼」 ·
+ * 「S&P 500 도 있어야」 · 「미국을 누르면 미국시장의 실시간순위란의 맨위에 있는 종목이 나와야」 · 시안 「응 이모양으로 해줘」) ──
+ *
+ * 갈래 띠가 「미국」 이면 칩이 이 둘로 바뀐다. 「홈」 · 「국내」 는 위 둘 그대로다(재권님 「홈은 그대로 둘」).
+ * 목록 · 시세는 서버 `/api/kis/us-board?index=` 한 주소가 준다 — 미리받기가 쌓은 5분봉 · 일봉으로 만들어
+ * **화면 때문에 나가는 KIS 호출이 0** 이다. 종목마다 시세를 물으면(/api/kis/quotes) 미국은 한 종목에 1건이라
+ * 보는 동안 25초마다 스무 건이 나간다 — 그래서 미국 줄은 그 길을 안 탄다(quoteCodes · nextCodes 에서 뺀다).
+ * 시가총액 · 가격은 달러다 — 표기는 format.js 의 fmtPriceOf · fmtUsdBig 한 곳. */
+const US_MARKETS = [
+  { id: 'NDX100', label: '나스닥100', ix: 'NDX' },
+  { id: 'SPX500', label: 'S&P500', ix: 'SPX' },
+];
+const isUsMarket = (m) => US_MARKETS.some((x) => x.id === m);
+const marketsOf = (m) => (isUsMarket(m) ? US_MARKETS : MARKETS);
+const marketDef = (m) => marketsOf(m).find((x) => x.id === m) || MARKETS[0];
+const usRows = {};          // { NDX100: [{code, name, rank, cap, market}], SPX500: [...] } — 시총 순 · cap 은 달러
+
 function marketChipsHtml(cur) {
-  return MARKETS.map((m) => `<button class="kh-chip${m.id === cur ? ' is-active' : ''}" type="button"
+  return marketsOf(cur).map((m) => `<button class="kh-chip${m.id === cur ? ' is-active' : ''}" type="button"
     data-mkt="${m.id}">${m.label}</button>`).join('');
+}
+
+/* 미국 묶음 하나를 받아 목록 · 시세를 채운다. 시세는 rowPrices 에 국내와 같은 칸 이름으로 들어간다
+   (서버가 국내 /api/kis/quotes 와 같은 이름 · price · prev · amt · pct · volume · value) */
+async function loadUsBoard(id) {
+  try {
+    const r = await apiFetch(viewUrl('/api/kis/us-board?index=' + id, 'row'), { cache: 'no-store' });
+    if (!r) return false;
+    const j = await r.json();
+    if (!j || !j.ok || !Array.isArray(j.data)) return false;
+    applyUsBoard(id, j.data);
+    return true;
+  } catch { return false; }
+}
+
+function applyUsBoard(id, data) {
+  const rows = data.slice().sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
+  usRows[id] = rows.map((x, i) => ({ code: x.code, name: x.name, rank: i + 1, cap: x.marketCap, market: id }));
+  rows.forEach((x) => {
+    if (x.price == null) return;
+    rowPrices[x.code] = { price: x.price, prev: x.prev, amt: x.amt, pct: x.pct,
+                          volume: x.volume, value: x.value, name: x.name, currency: 'USD' };
+  });
 }
 
 /* 화면이 함께 보는 시세 한 곳.
@@ -733,6 +778,13 @@ async function loadUniverse() {
 /* 시가총액은 목록(dart_universe)이 갖고 있다. 네이버 시총 순위에서 온 값이고
    단위는 억원이라 fmtMoneyKr 이 그대로 받는다. */
 function capOf(code) {
+  if (isUsCode(code)) {
+    for (const id of Object.keys(usRows)) {
+      const hit = usRows[id].find((x) => x.code === code);
+      if (hit) return hit.cap;
+    }
+    return null;
+  }
   if (!universe) return null;
   const hit = universe.find(x => x.code === code);
   return hit ? hit.cap : null;
@@ -762,14 +814,16 @@ const valueOf = (p) => (p ? (p.value ?? (p.price != null && p.volume != null
    **걸러내는 기준인 거래대금**을 보여준다 — 왜 이 종목이 올라왔는지가 보인다. */
 const showValue = (code, p) => {
   const won = valueOf(p);
-  return won == null ? '—' : fmtMoneyKr(Math.round(won / 1e8));
+  if (won == null) return '—';
+  return isUsCode(code) ? fmtUsdBig(won) : fmtMoneyKr(Math.round(won / 1e8));
 };
 
 /* 시가총액 한 칸. 「시가총액」 칩과 「관심종목」 칩이 같이 쓴다 —
    두 곳에 적으면 한쪽만 고쳐질 자리다. */
 const showCap = (code) => {
   const c = capOf(code);
-  return c == null ? '—' : fmtMoneyKr(c);
+  if (c == null) return '—';
+  return isUsCode(code) ? fmtUsdBig(c) : fmtMoneyKr(c);
 };
 
 const SORTS = {
@@ -815,13 +869,15 @@ const MIN_VALUE_WON = 1000 * 1e8;
 let sortBy = 'cap';
 
 function rowList(sortId = sortBy, mkt = market) {
-  if (!universe) return WATCHLIST.map((s, i) => ({ ...s, rank: i + 1 }));
+  const us = isUsMarket(mkt);
+  if (!universe && !us) return WATCHLIST.map((s, i) => ({ ...s, rank: i + 1 }));
 
-  const all = universe.map(x => ({
+  const src = us ? (usRows[mkt] || []) : universe;
+  const all = src.map(x => ({
     code: x.code, name: x.name, sector: '',
     brand: brandColor(x.code, x.name), rank: x.rank,
   }));
-  const base = all.filter((s, i) => marketOf(universe[i]) === mkt);
+  const base = us ? all : all.filter((s, i) => marketOf(universe[i]) === mkt);
 
   const sort = SORTS[sortId];
 
@@ -912,7 +968,7 @@ function setupMarkets() {
   const host = $('kh-rank-mkt');
   if (!host) return;
   host.innerHTML = marketChipsHtml(market);
-  host.addEventListener('click', (e) => {
+  host.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-mkt]');
     if (!b || b.dataset.mkt === market) return;
     market = b.dataset.mkt;
@@ -920,10 +976,41 @@ function setupMarkets() {
       x.classList.toggle('is-active', x === b));
     const box = $('kh-rank-scroll');
     if (box) box.scrollTop = 0;          // 다른 시장의 1위부터 본다
+    if (isUsMarket(market)) {
+      if (!usRows[market]) await loadUsBoard(market);
+      paintRows(rowPrices);
+      paintSortNote();
+      pickTopRow();                      // 미국 칩은 그 표 1위로 — 시안 그대로(재권님 「응 이모양으로 해줘」)
+      return;
+    }
     paintRows(rowPrices);
     paintSortNote();
     scheduleFetch();
   });
+}
+
+/* 순위 표 1위 종목을 고른다 — 순위 줄을 누른 것과 같은 길(selectStock) */
+function pickTopRow() {
+  const top = rowList()[0];
+  if (top) selectStock(top.code);
+}
+
+/* 갈래 띠가 「미국」 ↔ 그 밖으로 바뀌면 시장 칩 묶음을 갈아 끼우고 그 표 1위를 고른다
+   (2026-10-07 재권님 「미국을 누르면 미국시장의 실시간순위란의 맨위에 있는 종목이 나와야」 —
+   국내로 돌아오면 코스피 1위). 같은 묶음 안에서 갈래만 바뀌면(홈 ↔ 국내) 아무것도 안 한다 */
+async function syncMarketGroup() {
+  const wantUs = ixCat === '미국';
+  if (wantUs === isUsMarket(market)) return;
+  market = wantUs ? US_MARKETS[0].id : MARKETS[0].id;
+  if (wantUs) await Promise.all(US_MARKETS.map((m) => (usRows[m.id] ? true : loadUsBoard(m.id))));
+  const host = $('kh-rank-mkt');
+  if (host) host.innerHTML = marketChipsHtml(market);
+  const box = $('kh-rank-scroll');
+  if (box) box.scrollTop = 0;
+  paintRows(rowPrices);
+  paintSortNote();
+  if (!wantUs) scheduleFetch();
+  pickTopRow();
 }
 
 /* 지금 무엇을 보고 있는지 한 줄로 적는다 (2026-09-18 지시).
@@ -951,7 +1038,8 @@ let noteAt = 0;
  * 그래서 문구를 양쪽에 따로 적지 않는다. 없으면 `null` 이다.
  */
 function freshNote() {
-  const mine = (universe || []).filter(x => marketOf(x) === market);   // 보고 있는 시장만 센다
+  const mine = isUsMarket(market) ? (usRows[market] || [])
+    : (universe || []).filter(x => marketOf(x) === market);   // 보고 있는 시장만 센다
   const total = mine.length;
   const got = mine.filter(x => rowPrices && rowPrices[x.code]).length;
 
@@ -1097,7 +1185,8 @@ let rankModalMarket = 'KOSPI';  // 모달에서 고른 시장. 갈래와 같은 
 
 /* 머리 ② 왼쪽 대표값 — 코스피. 이미 받아 둔 지수를 쓴다 */
 function rankHeadBig() {
-  const mk = rankModalMarket === 'KOSDAQ' ? { code: 'KOSDAQ', label: '코스닥' } : { code: 'KOSPI', label: '코스피' };
+  const d = marketDef(rankModalMarket);
+  const mk = { code: d.ix, label: d.label };
   const i = (lastIndices || []).find((x) => x.code === mk.code);
   /* 안 온 것은 「불러오는 중」 으로 둔다. 0 이나 「—」 로 적으면 연결이
      안 된 건지 값이 그런 건지 구분할 수 없다 (데이터 규칙). */
@@ -1151,16 +1240,16 @@ function paintRankModal() {
     return `<tr>
       <td class="kh-rkm-rk">${s.rank}</td>
       <td class="l"><span class="kh-nm">${iconHtml(s)}<b>${s.name}</b></span></td>
-      <td class="kh-num">${p ? fmtWon(p.price) : '···'}</td>
+      <td class="kh-num">${p ? fmtPriceOf(s.code, p.price) : '···'}</td>
       <td class="kh-num ${p ? dirClass(p.pct) : 'kh-mut'}">${p ? fmtPct(p.pct) : '—'}</td>
       <td class="kh-num">${p ? showValue(s.code, p) : '···'}</td>
-      <td class="kh-num">${cap == null ? '—' : fmtMoneyKr(cap)}</td>
+      <td class="kh-num">${showCap(s.code)}</td>
       <td class="kh-num">${p ? fmtShareCount(p.volume) : '···'}</td>
     </tr>`;
   }).join('');
   /* 카드와 같다 — 고른 시장 목록이 아직 안 왔으면 빈 표 대신 그렇다고 적는다 */
   const empty = !list.length && universe
-    ? `<tr><td colspan="7" class="kh-mut">${MARKETS.find(m => m.id === rankModalMarket)?.label || rankModalMarket} 목록을 아직 받지 못했습니다</td></tr>` : '';
+    ? `<tr><td colspan="7" class="kh-mut">${marketDef(rankModalMarket).label} 목록을 아직 받지 못했습니다</td></tr>` : '';
 
   /* 칸 폭을 못 박는다 (table-layout: fixed).
      남는 폭을 종목 칸이 먹어서 종목과 현재가 사이가 **559px** 까지 벌어져
@@ -1190,6 +1279,9 @@ function paintRankModal() {
     const b = e.target.closest('[data-mkt]');
     if (!b || b.dataset.mkt === rankModalMarket) return;
     rankModalMarket = b.dataset.mkt;
+    if (isUsMarket(rankModalMarket) && !usRows[rankModalMarket]) {
+      loadUsBoard(rankModalMarket).then(() => paintRankModal());
+    }
     paintRankModal();
     scheduleFetch();
   });
@@ -1205,7 +1297,7 @@ function openRankModal() {
     head: {
       icon: '순',
       name: '실시간 순위',
-      sub: 'KOSPI · KOSDAQ',
+      sub: isUsMarket(market) ? '나스닥100 · S&P500' : 'KOSPI · KOSDAQ',
       caret: true,
       /* 「전체 화면 없음」 빨간 칩이 여기 있었다. 「갈 화면이 없다」 를
          알리려고 둔 것인데, 2026-09-22 에 **모달의 전체 화면 단추를 다
@@ -1272,7 +1364,7 @@ function paintRows(priceMap) {
         ${iconHtml(s)}
         <b>${s.name}</b></span></td>
       <td class="kh-num"><span
-        >${live ? fmtWon(live.price) : '···'}</span></td>
+        >${live ? fmtPriceOf(s.code, live.price) : '···'}</span></td>
       <td class="kh-num kh-metric">${sortCell(s.code, live)}</td>
       <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(live.pct) : '—'}</td>
     </tr>`;
@@ -1437,7 +1529,7 @@ function nextCodes() {
   const want = new Set([market, rankModal ? rankModalMarket : market]);
   const rest = (universe || []).filter(x => want.has(marketOf(x))).map(x => x.code);
   return [...new Set([...watch, ...visibleCodeList(), ...rest])]
-    .filter(c => !asked.has(c));
+    .filter(c => !asked.has(c) && !isUsCode(c));
 }
 
 /* 시세가 **정말 새로 들어온** 자리 — `fetchQuotes` 가 값을 돌려준 직후다.
@@ -1587,7 +1679,7 @@ function paintOneRow(code, live) {
     if (!tr || !live) return;
     const cls = dirClass(live.pct);
     tr.children[2].innerHTML =
-      `<span>${fmtWon(live.price)}</span>`;
+      `<span>${fmtPriceOf(code, live.price)}</span>`;
     /* 「전일대비」 자리에는 지금 줄 세운 기준값이 온다. 오르내림이 아니라
        크기라서 등락 색을 입히지 않는다. */
     tr.children[3].className = 'kh-num kh-metric';
@@ -1614,7 +1706,8 @@ function paintOneRow(code, live) {
    한 번에 120종목까지 받는다(멀티 4묶음). 전에는 둘로 나눠 1초마다 번갈아 물었다 */
 function quoteCodes() {
   /* 고른 종목도 넣는다 — 순위표 밖에서 골랐으면 보이는 줄에 없어 큰 차트 머리의 현재가가 안 들어온다 */
-  return [...new Set([selectedCode, ...WATCHLIST.map(x => x.code), ...visibleCodeList()])].slice(0, 120);
+  return [...new Set([selectedCode, ...WATCHLIST.map(x => x.code), ...visibleCodeList()])]
+    .filter((c) => !isUsCode(c)).slice(0, 120);   // 미국 줄은 /api/kis/us-board 가 준다 — 종목마다 KIS 1건이라 이 길을 안 탄다
 }
 
 let quoting = false;
@@ -1952,6 +2045,17 @@ loadUniverse().then(() => {
      스크롤해 보이는 줄이 바뀌면 주소가 바뀌고, 그 순간 새로 받는다 */
   watch({ url: () => { const c = quoteCodes(); return c.length ? viewUrl('/api/kis/quotes?codes=' + c.join(','), 'row') : null; },
           onChange: quoteTick, key: 'kis_proxy.MULTI_CACHE_TTL', fallbackMs: ROW_FALLBACK_MS });
+  /* 미국 표 — 그 묶음 주소 하나를 지켜본다(서버 DB · KIS 0). 미리받기가 5분마다 봉을 쌓으면 값이 바뀌어 알림이 온다.
+     미국을 안 보면 주소가 null 이라 쉰다 */
+  watch({ url: () => (isUsMarket(market) ? viewUrl('/api/kis/us-board?index=' + market, 'row') : null),
+          onChange: async () => {
+            if (!isUsMarket(market)) return;
+            await loadUsBoard(market);
+            paintRows(rowPrices);
+            paintBigPrice();
+            paintSortNote();
+          },
+          key: 'kis_proxy.MULTI_CACHE_TTL', fallbackMs: ROW_FALLBACK_MS });
 
   /* 큰 차트도 계속 다시 받는다. 한 번 그린 뒤 장이 진행돼도 선이 멈춰
      있으면 안 된다 (2026-09-15 지적). 바뀌었다는 알림이 오면 `chart.js` 가

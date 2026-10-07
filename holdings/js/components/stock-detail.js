@@ -27,7 +27,7 @@
    ========================================================================== */
 
 import { apiFetch, viewUrl } from '../data/api.js';
-import { fmtMoneyKr } from '../utils/format.js';
+import { fmtMoneyKr, fmtUsdBig, isUsCode } from '../utils/format.js';
 import { watch } from '../store/longpoll.js';
 
 /* **주기를 갖지 않는다 — 바뀌면 서버가 알려 준다** (2026-10-02 · 재권님 「주는 대로
@@ -99,8 +99,10 @@ export function mountStockDetail(host, { view, onOne } = {}) {
     const exact = src.value != null;
     const raw = src.value ?? (src.price != null && src.volume != null
       ? src.price * src.volume : null);
-    const amt = raw != null ? fmtMoneyKr(Math.round(raw / 1e8)) : '—';
-    const cap = src.marketCap != null ? fmtMoneyKr(src.marketCap) : '—';
+    /* 미국 종목(2026-10-07)은 거래대금 · 시가총액이 달러 그대로 온다 — 원 · 억원으로 읽으면 「576,568,400조원」 이 됐다 */
+    const us = isUsCode(code);
+    const amt = raw == null ? '—' : (us ? fmtUsdBig(raw) : fmtMoneyKr(Math.round(raw / 1e8)));
+    const cap = src.marketCap == null ? '—' : (us ? fmtUsdBig(src.marketCap) : fmtMoneyKr(src.marketCap));
 
     const bs = buyPct == null ? '' : `
       <span class="kh-dt-i">

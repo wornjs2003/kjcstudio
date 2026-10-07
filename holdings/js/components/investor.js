@@ -51,7 +51,7 @@
    ========================================================================== */
 
 import { apiFetch } from '../data/api.js';
-import { dirClass } from '../utils/format.js';
+import { dirClass, isUsCode } from '../utils/format.js';
 import { everyServerMs } from '../store/timing.js';
 
 /* 「5일」 에서 보여줄 날 수. 30일치가 오지만 칸이 좁다 */
@@ -121,6 +121,8 @@ export function mountInvestor({ box, tabs } = {}) {
   /* ── 받아오기 ── */
   async function load() {
     if (!code) return;
+    /* 미국 종목(2026-10-07 나스닥100 · S&P500) — 투자자 매매는 국내 API 라 받을 곳이 없다. 주기로 다시 와도 여기서 멈춘다 */
+    if (isUsCode(code)) { box.innerHTML = '<span class="kh-mut">미국 종목은 아직 없습니다 — 국내 종목만 받는 칸입니다</span>'; lastHtml = ''; return; }
     const mine = ++seq;
     const iv = await get(`/api/kis/investor?code=${code}`);
     if (mine !== seq) return;              // 그새 종목이 바뀌었다

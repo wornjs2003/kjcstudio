@@ -17,6 +17,7 @@
    ========================================================================== */
 
 import { apiFetch } from '../data/api.js';
+import { isUsCode } from '../utils/format.js';
 
 /* 202609181902 (YYYYMMDDHHMM) → 오늘 것이면 19:02, 아니면 09.18.
    칸 너비가 같도록 둘 다 다섯 글자다. */
@@ -60,6 +61,8 @@ export function mountStockNews(host, { limit = 6 } = {}) {
 
   async function reload() {
     if (!code) return;
+    /* 미국 종목(2026-10-07) — 종목 뉴스는 네이버 국내 종목만 받는다 */
+    if (isUsCode(code)) { ++seq; host.innerHTML = '<div class="kh-dc-empty">미국 종목은 아직 없습니다 — 국내 종목만 받는 칸입니다</div>'; return; }
     const mine = ++seq;
     host.innerHTML = `<div class="kh-dc-empty">불러오는 중</div>`;
     let rows = null;

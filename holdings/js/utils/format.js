@@ -211,3 +211,27 @@ export function marketPhase(now = new Date()) {
   return { id: 'closed', label: '장 마감', note: '다음 개장 09:00' };
 }
 
+
+/* ── 미국 종목 (2026-10-07 재권님 「응 이모양으로 해줘」 · 나스닥100 · S&P500) ──────────
+   국내 종목코드는 6자리 숫자, 미국은 대문자로 시작하는 티커(AAPL · BRK/B)다 — 서버 `us_universe.TICKER_RE` 와 같은 모양.
+   가격은 달러 소수 둘째 자리, 큰 금액(시가총액 · 거래대금)은 「조 · 억 달러」 로 한국어 단위를 쓴다. */
+export const isUsCode = (code) => /^[A-Z][A-Z0-9./-]{0,9}$/.test(code || '');
+
+export function fmtUsd(v) {
+  return v == null || Number.isNaN(v) ? '—' : '$' + fmtNum(v, 2);
+}
+
+/* 종목에 맞는 가격 표기 — 국내 「270,500원」 · 미국 「$239.24」 */
+export function fmtPriceOf(code, v) {
+  return isUsCode(code) ? fmtUsd(v) : fmtWon(v);
+}
+
+/* 달러 큰 금액 — 「5.77조 달러」 · 「1,234억 달러」. 입력은 달러 그대로 */
+export function fmtUsdBig(v) {
+  if (v == null || Number.isNaN(v)) return '—';
+  if (v >= 1e12) return fmtNum(v / 1e12, 2) + '조 달러';
+  return fmtNum(Math.round(v / 1e8)) + '억 달러';
+}
+
+/* 차트 눈금 소수 자리 — 국내 0 · 미국 2 */
+export const priceDigitsOf = (code) => (isUsCode(code) ? 2 : 0);
