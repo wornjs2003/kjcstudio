@@ -29,6 +29,7 @@ KIS 로는 업종 등락률까지만 됩니다. 화면이 보여주려는 것 �
 
 import html
 import json
+import os
 import re
 import sys
 import threading
@@ -70,8 +71,16 @@ STOCK_SIZE = 10
 # 테마에는 이런 칸이 없습니다. 가장 큰 것이 시스템반도체 58종목입니다.
 MAX_GROUP_COUNT = 1000
 
-# 종목별 뉴스에서 받아 둘 묶음 수. 화면은 위에서 몇 개만 쓴다
-NEWS_SIZE = 12
+# 종목별 뉴스에서 받아 둘 묶음 수. 화면은 위에서 몇 개만 쓴다.
+# 12 → 30 (2026-10-06 · 재권님 「응」) — 그 종목 이름이 든 것만 남기면 열두 묶음에서 0~4 건이라 칸이 빈다.
+# 네이버 호출은 그대로 한 번이고 크기만 커진다.
+NEWS_SIZE = 30
+
+# 종목을 가리키는 말 — 이름은 종목 목록 표(dart_universe), 별칭은 market.js 한 줄에만 둔다
+# (holdings/CLAUDE.md 「종목 뉴스는 고른 종목과 관련된 것만 낸다」 · 「같은 값은 한 곳에만 둔다」).
+MARKET_JS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         "js", "data", "market.js")
+TERMS_TTL = 600
 
 # 종목토론에서 받아 둘 글 수
 DISCUSS_SIZE = 12
@@ -183,6 +192,71 @@ def news(code, size=NEWS_SIZE):
         return rows
 
     return _cached("n:" + code, make)
+
+
+_terms = {"at": 0, "mtime": None, "map": {}}
+
+
+def _norm(s):
+    """띄어쓰기를 빼고 영문을 대문자로 — 「SK 하이닉스」 · 「Naver」 도 같은 말로 본다."""
+    return re.sub(r"\s+", "", s or "").upper()
+
+
+def _load_terms():
+    """{종목코드: [이름 · 별칭 …]} — 종목 목록 표 350 의 이름 + market.js 의 이름 · 별칭."""
+    out = {}
+    try:
+        import dart
+        for r in dart.universe_rows(None):
+            if r["name"]:
+                out.setdefault(r["stock_code"], []).append(r["name"])
+    except Exception:
+        pass                       # 표를 못 읽어도 market.js 만으로 간다
+    try:
+        with open(MARKET_JS, encoding="utf-8") as f:
+            for line in f:
+                m = re.search(r"code:\s*'(\d{6})'.*?name:\s*'([^']*)'", line)
+                if not m:
+                    continue
+                words = out.setdefault(m.group(1), [])
+                words.append(m.group(2))
+                a = re.search(r"alias:\s*\[([^\]]*)\]", line)
+                if a:
+                    words.extend(re.findall(r"'([^']+)'", a.group(1)))
+    except OSError:
+        pass
+    return {c: sorted({_norm(w) for w in ws if w.strip()}) for c, ws in out.items()}
+
+
+def stock_terms(code):
+    """그 종목을 가리키는 말(띄어쓰기 뺀 대문자). 모르면 빈 목록 — 그때는 거르지 않는다."""
+    now = time.time()
+    try:
+        mt = os.path.getmtime(MARKET_JS)
+    except OSError:
+        mt = None
+    with _lock:
+        fresh = (now - _terms["at"]) < TERMS_TTL and _terms["mtime"] == mt
+    if not fresh:
+        m = _load_terms()
+        with _lock:
+            _terms.update(at=now, mtime=mt, map=m)
+    return _terms["map"].get(code, [])
+
+
+def news_related(code):
+    """종목 뉴스 중 **제목에 그 종목 이름이나 별칭이 든 것만** (2026-10-06 지시).
+
+    돌려주는 것: (남은 묶음, {"candidates": 받은 묶음 수, "kept": 남은 수, "filtered": 걸렀나})
+    이름을 모르는 종목은 거르지 않고 `filtered=False` 로 낸다 — 다 빼서 0 이 되면 「관련 없음」 과
+    「못 거름」 이 갈리지 않는다. 묶음 안 다른 기사까지 보는 것은 두지 않는다(룰 절 · 더 남는 것 0).
+    """
+    rows = news(code)
+    terms = stock_terms(code)
+    if not terms:
+        return rows, {"candidates": len(rows), "kept": len(rows), "filtered": False}
+    kept = [r for r in rows if any(t in _norm(r.get("title")) for t in terms)]
+    return kept, {"candidates": len(rows), "kept": len(kept), "filtered": True}
 
 
 def discuss(code, size=DISCUSS_SIZE):
