@@ -22,7 +22,7 @@
  */
 
 import { CHART_PERIODS, initBarsOf } from '../data/market.js';
-import { fetchCandles, watchCandles, createStockChart, maLegend,
+import { fetchCandles, fetchCandlesSince, watchCandles, createStockChart, maLegend,
   addPrevCloseLine, PREV_CLOSE_NOTE,
   savePeriodId, loadPeriodId,
   chartView, setChartView, chartStockChanged } from '../chart.js';
@@ -243,17 +243,25 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
       }));
   }
 
-  /* 봉이 바뀌었다는 알림이 왔다 — **차트를 새로 만들지 않고 값만 갈아 끼운다.**
+  /* 봉이 바뀌었다는 알림이 왔다 — **차트를 새로 만들지 않고 안 받은 봉만 받아 붙인다** (2026-10-07 재권님 「가로」 —
+     첫 화면과 같은 길). 전에는 알림마다 봉 전부(5분봉 137KB)를 다시 받아 `setData` 로 갈아 끼웠다.
      `drawChart` 로 다시 만들면 「불러오는 중」 이 한 번 깜빡이고 보던 자리를 잃는다 */
+  let catching = false;
   async function refreshChart() {
     if (!chart) return drawChart();
+    if (catching) return;
+    catching = true;
     const key = periodId;
     try {
-      const { candles, period } = await fetchCandles(stock.code, periodId, { view });
-      if (dead || key !== periodId || !chart || !candles.length) return;
-      chart.setData(candles, period);
-      if (periodId === '5m') addPrevCloseLine(chart, candles, lastPrev);   // setData 가 선을 비운다
+      const cs = chart.candles;
+      const since = cs.length ? cs[cs.length - 1].ts : null;
+      const add = await fetchCandlesSince(stock.code, periodId, since, { view });
+      if (dead || key !== periodId || !chart) return;
+      chart.appendBars(add);
+      /* 받아 둔 봉 사이가 고쳐지면 appendBars 가 칸을 새로 만들어 선이 사라진다 — 같은 선이면 다시 안 긋는다 */
+      if (periodId === '5m') addPrevCloseLine(chart, chart.candles, lastPrev);
     } catch { /* 다음 알림 때 다시 받는다 */ }
+    finally { catching = false; }
   }
 
   async function drawChart() {
@@ -262,9 +270,18 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
     if (!host) return;
     const key = periodId;
     if (chart) { chart.destroy(); chart = null; }
-    host.innerHTML = `<div class="kh-soon"><div class="kh-soon-t">차트 불러오는 중…</div></div>`;
     try {
-      const { candles, meta, period } = await fetchCandles(stock.code, periodId, { view });
+      /* **서버가 받아 둔 봉을 먼저 그린다** (2026-10-07 재권님 「1 해줘」 — 첫 화면 큰 차트와 같은 길). 받아 둔 것이
+         없을 때만 「불러오는 중」 을 띄우고 통째로 받는다. 받아 둔 것으로 그렸으면 아래 끝에서 빈 칸만 받아 붙인다 */
+      let got = null;
+      try { got = await fetchCandles(stock.code, periodId, { view, stored: true }); } catch { /* 통째로 간다 */ }
+      if (dead || key !== periodId) return;
+      const fromStore = !!(got && got.candles && got.candles.length);
+      if (!fromStore) {
+        host.innerHTML = `<div class="kh-soon"><div class="kh-soon-t">차트 불러오는 중…</div></div>`;
+        got = await fetchCandles(stock.code, periodId, { view });
+      }
+      const { candles, meta, period } = got;
       /* 그 사이 기간을 바꿨거나 모달을 닫았다 */
       if (dead || key !== periodId) return;
       if (!candles.length) throw new Error('빈 응답');
@@ -296,6 +313,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
          5분봉이면 실시간 값이라 첫 화면과 같이 「실시간」 까지 적는다. */
       const bd = root.querySelector('.kh-w[data-p="chart"] .kh-bd');
       if (bd) bd.textContent = periodId === '5m' ? '한국투자증권 실시간' : '한국투자증권';
+      if (fromStore) refreshChart();          // 받아 둔 뒤에 생긴 봉 · 빈 칸만 받아 붙인다
     } catch {
       if (dead || key !== periodId) return;
       host.innerHTML = `<div class="kh-soon">
@@ -327,7 +345,8 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
   paintPeriods();
   drawChart();
   /* **봉은 서버가 바뀌었다고 알릴 때만 다시 받는다** (2026-10-02 · 「서버가 알려준다」) */
-  const chartWatch = watchCandles(() => (dead ? null : stock.code), () => periodId, refreshChart, view);
+  const chartWatch = watchCandles(() => (dead ? null : stock.code), () => periodId, refreshChart, view,
+                                  { keep: true });   // 안 받은 봉만 (2026-10-07)
   setupMemo();
   setupBack();
 
