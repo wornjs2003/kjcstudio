@@ -82,6 +82,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -124,7 +125,7 @@ TEXT_APP = "TextEdit" if IS_MAC else "notepad.exe"
 # 그 프로그램이 창 목록에 나타내는 이름. 창을 그 프로그램 것으로 좁히는 데 쓴다.
 TEXT_PROC = "TextEdit" if IS_MAC else "notepad.exe"
 CHROME_PROC = "Google Chrome" if IS_MAC else "chrome.exe"
-TEXT_EXT = (".md", ".txt", ".log", ".json", ".csv")
+TEXT_EXT = (".md", ".txt", ".log", ".json", ".csv", ".plist", ".yml", ".yaml", ".toml", ".env")
 
 
 # --- 맥에서 창을 보는 자리 -------------------------------------------------
@@ -600,6 +601,19 @@ def main():
     #
     # 「찾지 못하는 것은 괜찮고 **엉뚱한 창을 집는 것이 사고다**」 를 따른다.
     # 창이 쌓이는 것은 X 를 눌러 닫으면 되고, 잘못 본 화면은 되돌릴 수 없다.
+    # **맥에서 글 파일은 VS Code 로 연다 (2026-10-07 지시 — 「코드에서 열리게 해줘」).**
+    # TextEdit 로 열면 창 목록으로 찾아 꺼내야 하는데 맥에서 자주 못 꺼냈다(「앞으로 꺼내지는 못했습니다」).
+    # `code -r` 는 같은 파일이면 그 탭으로 가고 VS Code 를 스스로 앞으로 꺼낸다 — 창도 탭도 안 쌓인다.
+    # 룰은 CLAUDE.md 「손으로 고치실 글 파일은 VS Code 로 열어 드린다」. VS Code 가 없으면 아래 옛 길로 간다.
+    code = shutil.which("code") or next((c for c in ("/opt/homebrew/bin/code", "/usr/local/bin/code") if os.path.exists(c)), None)
+    if IS_MAC and not is_url and path.lower().endswith(TEXT_EXT) and code:
+        r = subprocess.run([code, "-r", path], capture_output=True, text=True)
+        if r.returncode == 0:
+            print("  VS Code 로 열었습니다: %s" % path)
+        else:
+            print("  VS Code 로 못 열었습니다(종료 %d): %s" % (r.returncode, (r.stderr or "").strip()[:200]))
+        return
+
     found = (None, None) if is_url else already_open(hint, opened_with)
     if isinstance(found, tuple) and found[0] is not None:
         hwnd, title = found

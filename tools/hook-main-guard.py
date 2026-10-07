@@ -252,6 +252,12 @@ def check_segment(seg, cwd, prev_seg, prev_hit):
                 or ("=" in a and is_main_path(a.split("=", 1)[1], cwd))]
     if arg_hits:
         ours = head in ("python3", "python") and args and re.match(OUR_TOOLS, args[0].lstrip("./"))
+        # `code -r <경로>` 는 세션이 쓰는 것이 아니라 재권님 VS Code 에 열어 손에 넘기는 것 — 열기만이라 통과 (2026-10-07 지시
+        # 「코드에서 열리게 해줘」 · 작업우선순위 검토: 안 열어 주면 KJC_MAIN_OK=1 을 습관처럼 붙여 그 표시가 빈다)
+        # 좁힌 것 둘(qa 손 시험) — sudo 로 열면 저장할 때 주인이 root 로 바뀔 수 있다 · DB 같은 이진 파일은 「글 파일」 이 아니다
+        ours = ours or (head == "code" and ("-r" in args or "--reuse-window" in args)
+                        and not re.match(r"\s*(sudo|doas)\b", seg)
+                        and not any(re.search(r"\.(db|sqlite3?)(-wal|-shm|-journal)?$", a) for a in arg_hits))
         if head not in READ_HEADS and not ours:
             return ("%s 가 메인 데이터(%s)를 인자로 받습니다 — 읽기 명령(cat · ls · grep · git · sqlite3 -readonly …)이 아니면 막습니다."
                     % (head or "(이 명령)", hit)) + HOWTO
