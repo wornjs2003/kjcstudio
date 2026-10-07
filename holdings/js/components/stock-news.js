@@ -63,11 +63,12 @@ export function mountStockNews(host, { limit = 6 } = {}) {
     const mine = ++seq;
     host.innerHTML = `<div class="kh-dc-empty">불러오는 중</div>`;
     let rows = null;
+    let meta = {};
     try {
       const r = await apiFetch(`/api/naver/news?code=${code}`, { cache: 'no-store' });
       if (r && r.ok) {
         const j = await r.json();
-        if (j && j.ok && Array.isArray(j.data)) rows = j.data;
+        if (j && j.ok && Array.isArray(j.data)) { rows = j.data; meta = j.meta || {}; }
       }
     } catch { /* 아래에서 못 받았다고 적는다 */ }
     if (mine !== seq) return;              // 그새 종목이 바뀌었다
@@ -79,14 +80,25 @@ export function mountStockNews(host, { limit = 6 } = {}) {
       </div>`;
       return;
     }
+    /* 서버가 제목에 그 종목 이름 · 별칭이 든 것만 남긴다 (2026-10-06 지시).
+       셋을 가른다 — 네이버가 안 줬다(후보 0) · 다 걸러졌다(후보 N) · 이름을 몰라 못 걸렀다(filtered=false) */
     if (!rows.length) {
-      host.innerHTML = `<div class="kh-dc-empty">
-        이 종목의 뉴스가 아직 없습니다
-        <span class="kh-dc-empty-s">올라오는 대로 채워집니다</span>
-      </div>`;
+      const n = Number(meta.candidates) || 0;
+      host.innerHTML = meta.filtered && n > 0
+        ? `<div class="kh-dc-empty">
+            관련 뉴스 없음 · 후보 ${n}건
+            <span class="kh-dc-empty-s">제목에 이 종목 이름이 든 기사만 냅니다</span>
+          </div>`
+        : `<div class="kh-dc-empty">
+            이 종목의 뉴스가 아직 없습니다
+            <span class="kh-dc-empty-s">올라오는 대로 채워집니다</span>
+          </div>`;
       return;
     }
-    host.innerHTML = rows.slice(0, limit).map(rowHtml).join('');
+    host.innerHTML = rows.slice(0, limit).map(rowHtml).join('') +
+      (meta.filtered === false
+        ? '<div class="kh-dc-empty-s">이 종목은 이름을 몰라 거르지 않았습니다</div>'
+        : '');
   }
 
   return {

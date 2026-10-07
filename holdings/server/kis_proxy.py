@@ -5720,10 +5720,12 @@ class Handler(SimpleHTTPRequestHandler):
                 if not (code.isdigit() and len(code) == 6):
                     self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
                     return
-                rows = naver.news(code)
+                # 제목에 그 종목 이름 · 별칭이 든 것만 (2026-10-06 지시). candidates 는 네이버가 준 묶음 수,
+                # kept 는 남은 수, filtered=False 는 이름을 몰라 거르지 않았다는 뜻 — 화면이 셋을 가른다
+                rows, info = naver.news_related(code)
                 self._send_json({
                     "ok": True, "data": rows,
-                    "meta": {"code": code, "count": len(rows), "source": "네이버"},
+                    "meta": {"code": code, "count": len(rows), "source": "네이버", **info},
                 })
                 return
 

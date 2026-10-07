@@ -81,21 +81,24 @@ export const WATCHLIST = [
    순위 탭(거래상위·상승률 등)이 쓰는 목록. 정렬 기준이 되는 값(거래량·시총·
    공매도 비율)은 아직 받아올 곳이 없어서, 해당 탭은 비어 있다고 표시한다.
    ─ 할 일: 거래량·시가총액·공매도 잔고비율 받아오기 (KIS 순위분석 또는 KRX) */
+/* alias — 그 종목**만** 가리키는 말 (2026-10-06 · 종목 뉴스 거르기). 서버(naver.py)가 이 줄을 읽어
+   제목에 이름이나 별칭이 든 뉴스만 낸다. **그룹 · 계열사 이름(삼성 · LG · SK)은 넣지 않는다** — 넣으면 남의 기사가 붙는다.
+   첫 묶음 여덟은 실측에서 이름만으로 못 잡던 것이다 (holdings/CLAUDE.md 「종목 뉴스는 고른 종목과 관련된 것만 낸다」). */
 export const MARKET_STOCKS = [
-  { code: '005930', name: '삼성전자',            market: 'KOSPI', sector: '반도체', brand: '#1428a0' },
-  { code: '000660', name: 'SK하이닉스',          market: 'KOSPI', sector: '반도체', brand: '#e5231b' },
-  { code: '373220', name: 'LG에너지솔루션',      market: 'KOSPI', sector: '2차전지', brand: '#a50034' },
+  { code: '005930', name: '삼성전자',            market: 'KOSPI', sector: '반도체', brand: '#1428a0', alias: ['삼전'] },
+  { code: '000660', name: 'SK하이닉스',          market: 'KOSPI', sector: '반도체', brand: '#e5231b', alias: ['하이닉스'] },
+  { code: '373220', name: 'LG에너지솔루션',      market: 'KOSPI', sector: '2차전지', brand: '#a50034', alias: ['LG엔솔', '엔솔'] },
   { code: '207940', name: '삼성바이오로직스',    market: 'KOSPI', sector: '바이오', brand: '#0d4a9a' },
-  { code: '005380', name: '현대차',              market: 'KOSPI', sector: '자동차', brand: '#002c5f' },
-  { code: '005490', name: 'POSCO홀딩스',         market: 'KOSPI', sector: '철강', brand: '#00a5e5' },
+  { code: '005380', name: '현대차',              market: 'KOSPI', sector: '자동차', brand: '#002c5f', alias: ['현대자동차'] },
+  { code: '005490', name: 'POSCO홀딩스',         market: 'KOSPI', sector: '철강', brand: '#00a5e5', alias: ['포스코홀딩스'] },
   { code: '068270', name: '셀트리온',            market: 'KOSPI', sector: '바이오', brand: '#00a0e9' },
-  { code: '035420', name: 'NAVER',               market: 'KOSPI', sector: 'IT', brand: '#03c75a' },
+  { code: '035420', name: 'NAVER',               market: 'KOSPI', sector: 'IT', brand: '#03c75a', alias: ['네이버'] },
   { code: '035720', name: '카카오',              market: 'KOSPI', sector: 'IT', brand: '#f7e600' },
   { code: '051910', name: 'LG화학',              market: 'KOSPI', sector: '화학', brand: '#a50034' },
   { code: '006400', name: '삼성SDI',             market: 'KOSPI', sector: '2차전지', brand: '#1428a0' },
-  { code: '055550', name: '신한지주',            market: 'KOSPI', sector: '금융', brand: '#0046ff' },
+  { code: '055550', name: '신한지주',            market: 'KOSPI', sector: '금융', brand: '#0046ff', alias: ['신한금융'] },
   { code: '105560', name: 'KB금융',              market: 'KOSPI', sector: '금융', brand: '#544f4b' },
-  { code: '017670', name: 'SK텔레콤',            market: 'KOSPI', sector: '통신', brand: '#ea1917' },
+  { code: '017670', name: 'SK텔레콤',            market: 'KOSPI', sector: '통신', brand: '#ea1917', alias: ['SKT'] },
   { code: '012330', name: '현대모비스',          market: 'KOSPI', sector: '자동차', brand: '#002c5f' },
   { code: '028260', name: '삼성물산',            market: 'KOSPI', sector: '건설', brand: '#1428a0' },
   { code: '066570', name: 'LG전자',              market: 'KOSPI', sector: '전기전자', brand: '#a50034' },
