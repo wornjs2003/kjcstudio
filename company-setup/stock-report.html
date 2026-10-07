@@ -160,6 +160,12 @@
   <!-- 오른쪽 「종목」 목록 — 차례 대신 (2026-10-06 재권님 지시). 목록은 data/stock-report/index.json 한 곳 · 누르면 그 종목 리포트(stock-report.html?code=) -->
   <aside class="kh-side" aria-label="종목">
     <div class="kh-side-wrap">
+      <!-- 목차 — 오른쪽 기둥에 붙어 스크롤을 따라다닌다 · 누르면 그 칸이 펼쳐지며 거기로 · 지금 보는 칸은 굵게 (2026-10-07 재권님 「목차가 옆에 떠 있고 누르면 해당 칸으로」).
+           항목은 JS 가 절(details)에서 만든다 — 두 곳에 안 둔다. 폰(오른쪽 기둥이 숨는 폭)은 아래 떠 있는 「목차」 단추가 같은 목록을 작은 창으로 띄운다 -->
+      <div class="kh-card rp-toc-card">
+        <div class="kh-tabs"><button class="kh-tab is-active" type="button">목차</button></div>
+        <ol class="rp-toc" data-toc-list></ol>
+      </div>
       <div class="kh-card kh-rank-card">
         <div class="kh-tabs"><button class="kh-tab is-active">종목</button><span class="in-asof">시황분석 리포트</span></div>
         <ul class="in-news in-sm in-scroll in-stocks" data-stocks></ul>
@@ -168,6 +174,12 @@
   </aside>
 </div>
 
+<!-- 폰 — 떠 있는 「목차」 단추와 작은 창(오른쪽 기둥이 숨는 1280px 이하에서만 보인다) -->
+<button type="button" class="rp-toc-fab" data-toc-open aria-label="목차 열기">목차</button>
+<div class="rp-toc-sheet" data-toc-sheet hidden>
+  <div class="rp-toc-dim" data-toc-close></div>
+  <div class="rp-toc-panel"><div class="rp-toc-panel-head"><b>목차</b><button type="button" class="kh-chip" data-toc-close>닫기 ✕</button></div><ol class="rp-toc" data-toc-list></ol></div>
+</div>
 <script src="../assets/js/main.js"></script>
 <script src="js/stock-list.js"></script>
 <script type="module" src="js/stock-report.js"></script>

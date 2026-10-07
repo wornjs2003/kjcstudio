@@ -10,6 +10,7 @@
 // 가격표(매수 · 손절 · 목표)는 재권님 결정 전 — 참고 화면 방식으로 임시 계산(priceRule). 주기 숫자 없음 — 열 때 한 번 받는다.
 // 캔버스 색은 holdings/js/theme.js 의 color() 로 — theme.css 를 읽고 폴백은 그 파일 한 곳(check-theme-sync 가 대조). 여기에 hex 를 두지 않는다 (창구 검수 2026-10-06)
 import { color } from '../../holdings/js/theme.js';
+import { mountToc } from './toc.js';
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fin = (v) => v != null && Number.isFinite(v);
@@ -145,6 +146,11 @@ function drawChart(b, levels) {
   levels.forEach((l) => { ctx.strokeStyle = l.kind === 'resist' ? up : dn; ctx.beginPath(); ctx.moveTo(padL, y(l.p)); ctx.lineTo(W - padR, y(l.p)); ctx.stroke(); ctx.fillStyle = ctx.strokeStyle; ctx.textAlign = 'left'; ctx.fillText(`${l.kind === 'resist' ? '저항' : '지지'} ${n0(l.p)}`, padL + 4, y(l.p) - 8); });
   ctx.setLineDash([]); ctx.fillStyle = color('text-muted'); ctx.textAlign = 'center';
   [0, Math.floor(n / 2), n - 1].forEach((i) => ctx.fillText(ymd(w[i].ts), x(i), H - padB / 2));
+}
+
+// ── 목차(js/toc.js) — 절(details.rp-fold)의 이름(배지 뺀 글)으로 항목을 만든다. 요약은 접힌 줄(.rp-sum)에만 둔다
+function tocItems(folds) {
+  return [...folds].map((d) => { const h = d.querySelector('summary h2'); if (!h || !d.id) return null; const c = h.cloneNode(true); c.querySelectorAll('.in-src').forEach((x) => x.remove()); return { id: d.id, title: c.textContent.trim() }; }).filter(Boolean);
 }
 
 async function main() {
@@ -311,6 +317,7 @@ async function main() {
   sum('rp-ten', T.summary10 && T.summary10.length ? T.summary10.map((x) => x.item).join(' · ') : '세션 글 아직');
   sum('rp-limit', `데이터 공백 ${gaps.length} · 신뢰도 ${T.confidence ? T.confidence.split(' ')[0] : '—'}`);
   const folds = document.querySelectorAll('details.rp-fold');
+  mountToc(tocItems(folds));   // 목차(오른쪽 기둥 · 폰 단추)
   $('rp-open-all').addEventListener('click', () => folds.forEach((d) => { d.open = true; }));
   $('rp-close-all').addEventListener('click', () => folds.forEach((d) => { d.open = false; }));
   // 주소로 절을 가리키면 그 절을 펼치고 거기로 간다 — ?open=all 은 전부 펼침, #rp-tech 는 그 절만 (링크로 자리를 넘길 때 · 폰 그림 찍을 때)

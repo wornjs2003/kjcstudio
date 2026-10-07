@@ -1,3 +1,4 @@
+import { mountToc } from './toc.js';
 // 종목 분석 페이지 — 「받을 수 있는 값 — 지금 계산」 카드 (2026-10-06 재권님 「해줘봐」 · 창구 경유)
 //
 // 조사 문서(①~⑤)가 「이런 값을 쓴다」 고 적은 것을 **우리 서버 · 회사 카드 자료만으로** 지금 계산해 보여 준다.
@@ -161,6 +162,10 @@ async function paint(code) {
 // ── 갈래 접기 · 펼치기(2026-10-07) — 「전부 펼치기 · 접기」 단추, 주소(#s6r · #r5 …)가 가리키는 절이 접힌 갈래 안이면 그 갈래를 열고 거기로 간다
 (() => {
   const folds = document.querySelectorAll('details.rp-fold');
+  // 목차(js/toc.js) — 갈래 넷 · 갈래 안 절(①~⑤ · ⑥-1~⑥-8)은 둘째 줄
+  const txt = (h) => { const c = h.cloneNode(true); c.querySelectorAll('.in-src, .in-pill, label').forEach((x) => x.remove()); return c.textContent.replace(/\s+/g, ' ').trim(); };
+  mountToc([...folds].map((d) => { const h = d.querySelector('summary h2'); if (!h || !d.id) return null;
+    return { id: d.id, title: txt(h), subs: [...d.querySelectorAll('.rp-fold-body > section[id] > h2')].map((sh) => ({ id: sh.parentElement.id, title: txt(sh) })) }; }).filter(Boolean));
   const oa = $('doc-open-all'), ca = $('doc-close-all');
   if (oa) oa.addEventListener('click', () => folds.forEach((d) => { d.open = true; }));
   if (ca) ca.addEventListener('click', () => folds.forEach((d) => { d.open = false; }));

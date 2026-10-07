@@ -145,3 +145,32 @@
 .in-doc-foldall { display: flex; gap: 6px; margin-top: 4px; }
 .in-calc-pick-row { display: flex; justify-content: flex-end; margin: 0 0 6px; }
 .in-calc-pick-row .in-calc-pick { margin-left: 0; }
+
+
+
+/* ── 목차 — 오른쪽 기둥 카드(.rp-toc-card) + 폰 떠 있는 단추(.rp-toc-fab) · 종목 리포트 · 종목 분석 문서 공용
+   (2026-10-07 재권님 「목차가 옆에 떠 있고 누르면 해당 칸으로」). 항목 글은 절 이름 그대로 · 지금 보는 칸 굵게(.is-now · js/toc.js) */
+.rp-toc { list-style: none; margin: 0; padding: 0 18px 12px; }
+.rp-toc li { padding: 0; }
+.rp-toc a { display: block; padding: 6px 0; font-size: 0.86rem; color: var(--kh-text-secondary); text-decoration: none; line-height: 1.4; }
+.rp-toc a:hover, .rp-toc a.is-now { color: var(--kh-text-primary); }
+.rp-toc a.is-now { font-weight: 700; }
+.rp-toc ol { list-style: none; margin: 0 0 4px 12px; padding: 0; }
+.rp-toc ol a { padding: 3px 0; font-size: 0.8rem; }
+.rp-toc-card { flex: none; }
+.rp-toc-card > .kh-tabs { padding: 15px 18px 10px; }   /* 종목 카드(.kh-rank-card .kh-tabs)와 같은 머리 여백 — 실측 15/18/10 · 없으면 「목차」 글자가 카드 윗선에 붙는다(창구 검수) */
+/* 기둥이 스크롤을 따라다닌다 — frame.css 는 .kh-side-wrap 을 기둥 맨 위에 절대 배치하는데(홀딩스 첫 화면 · 한 화면 높이), 문서처럼 긴 화면에서는
+   목차가 위로 사라진다. 목차 카드가 있는 기둥만 sticky 로 — 다른 화면은 그대로 */
+.kh-side-wrap:has(.rp-toc-card) { position: sticky; top: calc(var(--nav-height) + 14px); bottom: auto; left: auto; right: auto;
+  margin: 14px 14px 14px 2px; max-height: calc(100vh - var(--nav-height) - 28px); overflow: auto; align-self: start; }
+.kh-side:has(.rp-toc-card) { align-self: stretch; overflow: visible; }   /* 기둥의 overflow:hidden 이 sticky 를 기둥 안에 가둬 안 따라왔다(2026-10-07 실측 · 1600 틀에서 스크롤 2500 → 카드 top −2294) */
+/* 폰 — 떠 있는 단추(1280px 이하 · frame.css 가 .kh-side 를 숨기는 폭과 같다)와 아래에서 올라오는 작은 창 */
+.rp-toc-fab { display: none; position: fixed; right: 16px; bottom: 20px; z-index: 60; border: 0; border-radius: 999px; padding: 10px 16px;
+  font: inherit; font-size: 0.86rem; font-weight: 700; background: var(--kh-accent); color: var(--kh-text-on-fill); box-shadow: var(--kh-shadow-lg); cursor: pointer; }
+.rp-toc-sheet { position: fixed; inset: 0; z-index: 70; }
+.rp-toc-sheet[hidden] { display: none; }
+.rp-toc-dim { position: absolute; inset: 0; background: var(--overlay-bg); opacity: .35; }
+.rp-toc-panel { position: absolute; left: 0; right: 0; bottom: 0; max-height: 70vh; overflow: auto; background: var(--kh-bg-card);
+  border-radius: var(--kh-radius-md) var(--kh-radius-md) 0 0; box-shadow: var(--kh-shadow-lg); padding-bottom: env(safe-area-inset-bottom); }
+.rp-toc-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px 4px; font-size: 0.95rem; }
+@media (max-width: 1280px) { .rp-toc-fab { display: inline-flex; } }
