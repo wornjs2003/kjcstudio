@@ -47,7 +47,10 @@ const ASK_RELOAD_FALLBACK_MS = 5000;
 const LIVE_RELOAD_KEY = 'kis_proxy.PRICE_CACHE_TTL';
 const LIVE_RELOAD_FALLBACK_MS = 30_000;
 
-export function mountStockDetail(host, { view } = {}) {
+/* `onOne(code, 단건)` — 단건을 받을 때마다 알린다 (2026-10-06 지시 — 「로딩 순서 체크해 봐」 → 「응」).
+   첫 화면의 52주 칸과 큰 차트 머리 현재가가 **같은 단건을 따로 또 부르거나**(같은 주소 두 번)
+   **1초 넘는 묶음 시세를 기다리던** 것을 이 응답 하나로 칠한다. 증권사 호출이 한 건 준다. */
+export function mountStockDetail(host, { view, onOne } = {}) {
   if (!host) return { setCode() {}, update() {}, destroy() {} };
 
   let code = null;
@@ -86,6 +89,7 @@ export function mountStockDetail(host, { view } = {}) {
       one = null;
     }
     paint();
+    if (one && onOne) onOne(code, one);
   }
 
   function paint() {

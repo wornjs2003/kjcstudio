@@ -39,18 +39,26 @@
     <article class="kh-card in-report in-doc" id="in-doc">
       <div class="in-rp-head in-doc-head">
         <div>
-          <div class="in-rp-meta">시황분석 조사 · 2026-10-06 · 만든 것 없음 · 「확인한 것」 은 원문을 직접 연 것</div>
-          <h1>애널리스트가 종목을 분석할 때 쓰는 방법 · 문서</h1>
-          <p>홀딩스 종목분석 칸의 기준을 잡기 위해 실물 리포트 · 교재 · 거래소 지표 · 공시 서식을 읽고, 홀딩스에 지금 있는 자료와 짝 지었다. 결론은 아래 ⑤ — 창구 가이드 여덟은 실물 리포트의 틀과 거의 1:1 이고 바꾸자는 것은 셋이다.</p>
+          <div class="in-rp-meta">시황분석 조사 · 2026-10-06 · 규칙 갈래 2026-10-07 · 「확인한 것」 은 원문을 직접 연 것</div>
+          <h1>종목 분석 — 방법 · 자료 · 리포트 규칙</h1>
+          <p>세 갈래다 — <b>받을 수 있는 값</b>(지금 계산) · <b>분석 방법 · 자료</b>(실물 리포트 · 교재 · 거래소 지표 · 공시 서식을 읽고 홀딩스 자료와 짝 지은 조사) · <b>종목 리포트 규칙</b>(리포트를 쓸 때 따르는 규칙 — 2026-10-07 재권님 「룰을 더 세분화해서 … 분석할 때 해당 페이지를 바탕으로」). 갈래마다 누르면 펼쳐진다.</p>
+          <div class="in-doc-foldall"><button type="button" class="kh-chip" id="doc-open-all">전부 펼치기</button><button type="button" class="kh-chip" id="doc-close-all">전부 접기</button></div>
         </div>
       </div>
 
-      <section class="in-rp-sec in-calc" id="calc">
-        <h2>받을 수 있는 값 — 지금 계산 <label class="in-calc-pick">종목 <select id="calc-code"></select></label></h2>
+      <details class="in-rp-sec rp-fold in-grp in-calc" id="g-calc" open>
+        <summary><h2>받을 수 있는 값 — 지금 계산</h2><span class="rp-sum">우리 서버 · 회사 카드로 지금 받을 수 있는 것만 · 종목을 고른다</span></summary>
+        <div class="rp-fold-body">
+        <p class="in-calc-pick-row"><label class="in-calc-pick">종목 <select id="calc-code"></select></label></p>
         <p class="in-doc-p">아래 ①~⑤가 적은 값 중 우리 서버(한국투자증권) · 회사 카드(네이버 증권 · DART)로 지금 받을 수 있는 것만 계산한다. 못 받는 것은 「아직」 으로 둔다 · 값을 지어내지 않는다.</p>
         <div id="calc-body"></div>
-      </section>
+        </div>
+      </details>
 
+      <details class="in-rp-sec rp-fold in-grp" id="g-method">
+        <summary><h2>분석 방법 · 자료 — 2026-10-06 조사</h2><span class="rp-sum">① 리포트 공통 틀 · ② 방법 · 지표 · ③ 공식 자료 · ④ 홀딩스 짝 · ⑤ 모달 칸 후보</span></summary>
+        <div class="rp-fold-body">
+        <p class="in-doc-p">홀딩스 종목분석 칸의 기준을 잡기 위해 실물 리포트 · 교재 · 거래소 지표 · 공시 서식을 읽고 홀딩스에 지금 있는 자료와 짝 지었다. 결론은 ⑤ — 창구 가이드 여덟은 실물 리포트의 틀과 거의 1:1 이고 바꾸자는 것은 셋이다.</p>
       <section class="in-rp-sec" id="s1">
         <h2>① 증권사 리포트의 공통 틀 — 실물 한 장으로 확인</h2>
         <p class="in-doc-p">실제 리포트(이베스트투자증권 Mid-Small cap · 2023-04-25 · 노바텍 기업분석 쪽 · 공개 PDF)를 열어 본 구성이다. 대형사 리포트도 같은 뼈대이고 첫 장에 전부 압축된다. 뒷장은 근거 표다.</p>
@@ -133,15 +141,173 @@
         </table>
         <p class="in-doc-p"><b>바꾸자는 것 셋</b> — ① 한눈에에 상대수익률 · ② 실적에 추정(E) 열 · ⑧ 우리 판단을 「추정 EPS × 과거 PER 밴드」 규칙으로 1단계에. 여덟 묶음 자체는 그대로.</p>
       </section>
+        </div>
+      </details>
 
-      <section class="in-rp-sec" id="s6">
-        <h2>확인한 것 · 못 본 것</h2>
+      <details class="in-rp-sec rp-fold in-grp" id="g-rules" open>
+        <summary><h2>종목 리포트 규칙 — 리포트를 쓸 때 이 갈래를 따른다</h2><span class="rp-sum">⑥-1 참고 화면 · ⑥-2 숫자 · ⑥-3 지표 · ⑥-4 가격표 · ⑥-5 판정 · ⑥-6 글 틀 · ⑥-7 절차 · ⑥-8 바뀐 날</span></summary>
+        <div class="rp-fold-body">
+        <!-- 2026-10-07 재권님 「룰을 더 세분화해서 룰을 다듬어서 분석할 때 해당 페이지를 바탕으로 분석하도록 · 해당 룰 넣어주고」.
+             초안을 개념정의 · 작업우선순위가 보았다(의견 · 정하는 것은 재권님). 임계값 · 배수 · 공식처럼 재권님 결정 전인 값은 빨간 「미정 · 임시」 —
+             「아직 안 정해진 자리는 빨간 바탕으로 남긴다」. 정해지면 표시를 떼고 값은 서버 한 곳으로 옮긴다(「같은 값은 한 곳에만」) -->
+        <p class="in-doc-p"><b>원칙 셋</b> — ㉠ <b>판정은 서버가 하나로 낸다</b>(홀딩스 룰 「계산은 판정과 그리기로 가른다」 · 지금은 세션이 이 규칙대로 손으로 세고, 서버가 내주게 되면 화면은 받은 대로 보여 준다 — <span class="in-pill no">아직</span>) ㉡ <b>글 안 숫자는 서버 값을 시각 · 출처와 함께 인용</b>한다. 손으로 친 숫자는 다음 날 낡는다 ㉢ <b>사람 판단은 「판단」 표시 한 줄</b>로만 — 나머지는 규칙이 쓴다. 빨간 <span class="in-pill no">미정 · 임시</span> 는 재권님 결정 전이다.</p>
+
+        <section class="in-rp-sec" id="s6r">
+          <h2>⑥-1 참고 화면(ILOULI 보드)에서 가져온 것 · 안 가져온 것</h2>
+<p class="in-doc-p">참고 화면은 <b>삼성전기 AI 리포트(ILOULI 보드 · stock-bot · 2026-10-06)</b> 다. 거기서 가져온 것은 <b>칸의 틀과 가격표 규칙</b>이고 숫자는 하나도 안 가져왔다 — 그쪽 숫자가 어디서 왔는지는 화면에 표기가 없어 모른다. 우리 숫자는 전부 우리 서버(한국투자증권 · 네이버 증권 · 금감원 DART)에서 받아 브라우저가 센다. 글(판정 · 시나리오 · 전략 · 10줄 · 한계)은 세션이 손으로 쓴다.</p>
+
+        <table class="in-tbl in-wrap">
+          <tr><th>우리 칸</th><th>참고 화면에서</th><th>그대로인가</th></tr>
+          <tr><td>머리(종목 · 현재가 · 판정 · 방향 · #stockreport #코드)</td><td>같은 배치</td><td><span class="in-pill ok">그대로</span></td></tr>
+          <tr><td><b>가격표</b> 매수 · 손익비 · 손절 · 목표 · 판단</td><td>매수가 = 현재가 · 손절가 = 1차 지지 − ATR×0.5 · 목표가 = 1차 저항 · 손익비 1.5 미만이면 보류 · 「지금 사면 / 눌림에 사면 / 보유 중」 셋</td><td><span class="in-pill no">미정</span> 규칙까지 그대로라 빨간 바탕 — 재권님이 규칙을 정하시면 바꾼다</td></tr>
+          <tr><td>핵심 지표 한 줄(ROE · 영업이익률 · 순이익률) · 수급 5일 한 줄</td><td>같은 칸</td><td><span class="in-pill half">더함</span> PER · PBR 두 칸</td></tr>
+          <tr><td>절 순서 — 핵심 요약 → 기본 지표 → 차트 → 기술적 지표 → 수급 → 시나리오 → 전략</td><td>같은 순서 · 같은 이름</td><td><span class="in-pill ok">그대로</span></td></tr>
+          <tr><td>절마다 한 줄 요약</td><td>절 제목 옆 소제목 한 줄</td><td><span class="in-pill half">바꿈</span> 접힌 채로 읽히는 요약으로(재권님 「펼치기 접기도」)</td></tr>
+          <tr><td>시나리오 낙관 · 기본 · 비관 + 확률</td><td>같은 셋</td><td><span class="in-pill ok">그대로</span> 확률은 세션이 적는다</td></tr>
+          <tr><td>촉매(호재 · 위험 · 이벤트) · 지지 · 저항 · SUMMARY 10줄 · 한계 · 신뢰도</td><td>「분석 본문」 01~07 절을 풀어 옮김 · 10줄 항목(실적 · 평가 · 이평선 · 추세 · OBV · 일목 · 수급 · 공매도 · 거래량 · 시나리오)도 같은 묶음</td><td><span class="in-pill ok">그대로</span></td></tr>
+          <tr><td>면책 문구</td><td>「투자 판단의 참고 자료이며 투자 책임은 본인에게 있습니다」</td><td><span class="in-pill ok">그대로</span></td></tr>
+          <tr><td><b>안 가져온 것</b></td><td colspan="2">SWOT(06 종합 전략) · 긴 분석 본문 · 「색 · 굵기 읽는 법」 · 마크다운/HTML/덱 내려받기 · 「진입 시점 · 손익 구조」 배지 · 공매도 현황(자료가 없어 「아직」)</td></tr>
+          <tr><td><b>우리가 더 넣은 것</b></td><td colspan="2">값마다 출처 배지(KIS · 네이버 · DART · 계산 · 세션 글) · 못 받는 값은 「아직」 · 코스피 대비 상대수익률 · 224선 체류율 · 250일 VWAP · 이평 교차 뒤 5 · 20봉 수익률 · DART 공시 · 펼치기/접기 · 오른쪽 종목 목록</td></tr>
+        </table>
+        </section>
+
+        <section class="in-rp-sec" id="r2">
+          <h2>⑥-2 숫자 규칙 — 어디서 받고 어떻게 적나</h2>
+          <ul>
+            <li><b>값은 우리 서버(한국투자증권 · 네이버 증권 · 금감원 DART)와 회사 카드 파일에서만</b> 받는다. 다른 데서 본 숫자는 리포트에 안 넣는다 — 출처가 화면에 배지로 안 붙기 때문이다.</li>
+            <li><b>못 받는 값은 지어내지 않고 <span class="in-pill no">아직</span></b> 으로 둔다. 「없다」 와 「아직 안 받는다」 를 가른다 — 공매도는 「아직」(KIS API 를 안 불러 봄), 증권사별 목표가는 「없다」(네이버가 평균만 줌).</li>
+            <li><b>글(json)에 적는 숫자는 화면이 서버에서 받은 값을 그대로 옮기고 시각(asOf)을 함께</b> 적는다. 글의 숫자는 그 시각 값이라 화면과 다를 수 있다 — 그 사실을 리포트 머리에 적는다.</li>
+            <li><b>단위</b> — 억원 · 1조 이상은 조 · 주가는 원 · 비율은 소수 둘째 자리 · 수량은 만주. 화면 표기와 같게.</li>
+          </ul>
+          <h3>화면의 값 → 우리 서버 → 바깥</h3>
+
+        <p class="in-doc-p">화면을 열 때 <code>js/stock-report.js</code> 가 우리 서버에 한 번 묻고(주기 타이머 없음) 서버가 바깥을 부른다. 지표는 전부 브라우저에서 센다 — Wilder 식 · 홀딩스 차트(chart.js) · 신호(signal_watch.py)와 같은 식.</p>
+        <table class="in-tbl in-wrap">
+          <tr><th>화면의 값</th><th>우리 서버 경로</th><th>서버가 부르는 바깥 자리</th></tr>
+          <tr><td>현재가 · 등락률 · 확정 PER · PBR · EPS</td><td><code>/api/kis/price</code></td><td>한국투자증권 현재가 <span class="in-src">KIS</span> inquire-price · FHKST01010100</td></tr>
+          <tr><td>일봉 520 · 주봉 · 월봉 → 차트 · 이동평균 6종 · RSI · MACD · 볼린저 · 스토캐스틱 · ATR · ADX · OBV · 일목 · ZigZag · 지지 · 저항 · 가격표 · 224 체류율 · 250일 VWAP · 교차 이력</td><td><code>/api/kis/chart</code></td><td>한국투자증권 일자별 차트 <span class="in-src">KIS</span> inquire-daily-itemchartprice · FHKST03010100 → <span class="in-src">계산</span></td></tr>
+          <tr><td>코스피 대비 상대수익률 1 · 6 · 12개월</td><td><code>/api/kis/index-candles</code></td><td>한국투자증권 지수 일자별 <span class="in-src">KIS</span> inquire-daily-indexchartprice · FHKUP03500100</td></tr>
+          <tr><td>ROE · 영업이익률 · 순이익률 · 부채비율 · 최근 5분기 실적</td><td><code>/api/kis/finance</code></td><td>한국투자증권 재무 셋 <span class="in-src">KIS</span> 손익계산서 FHKST66430200 · 대차대조표 FHKST66430100 · 재무비율 FHKST66430300 (분기 30개)</td></tr>
+          <tr><td>수급 3 · 5 · 10 · 20일(금액 · 수량) · 연속 순매수</td><td><code>/api/kis/investor</code></td><td>한국투자증권 투자자별 매매 <span class="in-src">KIS</span> inquire-investor · FHKST01010900 — <b>30일치뿐</b></td></tr>
+          <tr><td>장중 추정(외국인 · 기관)</td><td><code>/api/kis/investor-estimate</code></td><td>한국투자증권 투자자 추정 <span class="in-src">KIS</span> investor-trend-estimate · 가집계</td></tr>
+          <tr><td>최근 4분기 PER · 추정 PER · 추정 EPS · BPS · 52주 · 배당 · 시가총액 · 외국인 지분율과 보유율 흐름</td><td><code>/api/naver/integration</code></td><td>네이버 증권 모바일 통합 API <span class="in-src">네이버</span> m.stock.naver.com/api/stock/&lt;코드&gt;/integration (지표 18)</td></tr>
+          <tr><td>관련 뉴스 5건</td><td><code>/api/naver/news</code></td><td>네이버 증권 종목 뉴스 <span class="in-src">네이버</span> m.stock.naver.com/api/news/stock/&lt;코드&gt;</td></tr>
+          <tr><td>최근 공시 5건</td><td><code>/api/dart/disclosures</code></td><td>금감원 OpenDART 공시 목록 <span class="in-src">DART</span> opendart.fss.or.kr/api/list.json</td></tr>
+          <tr><td>연간 실적 표 · 추정(E) 열 · 목표가 평균 · 투자의견 평균 · 증권사 리포트 제목</td><td>파일 <code>data/company-cards.json</code></td><td>서버를 안 부른다 — <code>tools/fetch-company-cards.py</code> 가 네이버 증권 API(FnGuide 집계) <span class="in-src">네이버</span> 에서 미리 받아 둔 것. 파일의 받은 시각이 기준</td></tr>
+          <tr><td>판정 · 방향 · 강점 · 리스크 · 종합 판정 · 호재 · 위험 · 이벤트 · 시나리오 · 전략 · 모니터링 · 10줄 · 한계 · 신뢰도</td><td>파일 <code>data/stock-report/&lt;코드&gt;.json</code></td><td><span class="in-src">세션 글</span> 세션이 화면 숫자를 보고 손으로 쓴다(삼성전자는 시황분석1 · 2026-10-06 17:00). 글 안의 숫자는 그 시각 값이라 화면과 다를 수 있다</td></tr>
+          <tr><td>오른쪽 종목 목록</td><td>파일 <code>data/stock-report/index.json</code></td><td>리포트를 쓴 종목만</td></tr>
+        </table>
+        <p class="in-rp-note"><b>못 받는 것</b>(화면에 「아직」) — 공매도 비율 · 잔고(KIS 공매도 API 를 아직 안 불러 봄) · 3 · 6개월 수급(30일 넘는 자료 없음) · 증권사별 목표가(네이버가 평균만 준다) · 업종 밸류에이션. 경로 · TR 은 holdings/server 의 kis_proxy.py · naver.py · dart.py 에 적힌 그대로(2026-10-07 확인).</p>
+        </section>
+
+        <section class="in-rp-sec" id="r3">
+          <h2>⑥-3 지표 계산 규칙 — 기간 · 식은 홀딩스 차트와 같다</h2>
+          <p class="in-doc-p">식은 교과서(Wilder) 그대로이고 홀딩스 차트(chart.js) · 서버 신호(signal_watch.py)와 같은 식이다. <b>식을 바꾸면 그 둘도 함께 바꾸고 check-indicators 로 대조한다.</b> 지금은 브라우저(stock-report.js)가 세고, 판정에 쓰는 지표는 앞으로 서버가 판정과 함께 내준다(<span class="in-pill no">아직</span>).</p>
+          <table class="in-tbl in-wrap">
+            <tr><th>지표</th><th>기간 · 식</th><th>리포트에서 읽는 법</th></tr>
+            <tr><td>이동평균 MA5 · 20 · 60 · 112 · 224 · 448</td><td>일봉 종가 단순평균 · 1주 · 1개월 · 3개월 · 6개월 · 1년 · 2년</td><td>단기 배열 = MA5 &gt; MA20 &gt; MA60 (정배열) / 반대(역배열) / 그 밖(혼조) · 장기 배열 = MA112 · 224 · 448 같은 식</td></tr>
+            <tr><td>RSI</td><td>14 · Wilder 평활</td><td>70 이상 과매수 · 30 이하 과매도 · 사이 중립</td></tr>
+            <tr><td>MACD</td><td>EMA 12 · 26 · 신호선 9</td><td>히스토그램 &gt; 0 강세 · &lt; 0 약세</td></tr>
+            <tr><td>볼린저</td><td>20 · 2σ · %B = (종가 − 하단) ÷ (상단 − 하단)</td><td>%B 100 넘음 상단 밖 · 80 넘음 상단 · 20 미만 하단 · 0 미만 하단 밖</td></tr>
+            <tr><td>스토캐스틱</td><td>%K 14 · %D 3</td><td>%K 80 이상 과매수 · 20 이하 과매도</td></tr>
+            <tr><td>ATR · ADX · +DI · −DI</td><td>14 · Wilder</td><td>ADX 20 미만 추세 약함 · 40 초과 추세 강함 · 사이 추세 있음. ATR 은 가격표의 버퍼(⑥-4)</td></tr>
+            <tr><td>OBV</td><td>종가가 오르면 거래량을 더하고 내리면 뺀 누적</td><td>20봉 전보다 위면 「상승」</td></tr>
+            <tr><td>일목균형표</td><td>전환 9 · 기준 26 · 선행 52 · 구름은 26봉 전 값을 지금 자리에</td><td>현재가가 구름 위 · 안 · 아래 / 전환선 vs 기준선 / 후행스팬 vs 26일 전 종가</td></tr>
+            <tr><td>ZigZag</td><td>꺾임 = max(3%, ATR ÷ 현재가 × 2) · 최근 260봉</td><td>저점 · 고점 셋씩. 지지 · 저항의 재료(⑥-4)</td></tr>
+            <tr><td>이평 교차 이력</td><td>MA5×20 · MA20×60 · MA60×112 · 520봉 안 · 뒤 5 · 20봉 수익률</td><td>최근 셋 — 교차가 뒤에 어떻게 됐나</td></tr>
+            <tr><td>224선 체류율</td><td>최근 120봉 중 종가가 MA224 위였던 비율</td><td>100% 면 1년 내내 1년선 위</td></tr>
+            <tr><td>250일 VWAP</td><td>Σ(종가 × 거래량) ÷ Σ거래량 · 250봉</td><td>현재가와의 거리 — 1년 평균 매입가 대비</td></tr>
+            <tr><td>코스피 대비 상대수익률</td><td>1 · 6개월 일봉 · 12개월 주봉 · (종목 수익률 − 지수 수익률) %p</td><td>지수보다 더 올랐나</td></tr>
+          </table>
+        </section>
+
+        <section class="in-rp-sec" id="r4">
+          <h2>⑥-4 지지 · 저항 · 가격표 규칙 <span class="in-pill no">미정 · 임시</span></h2>
+          <!-- 미정: 매수가 · 손절가 · 목표가를 어떤 규칙으로 정할지 재권님이 아직 안 정하셨다(창구가 여쭙는 중). 지금은 참고 화면 방식을 차용한 임시 규칙 -->
+          <p class="in-doc-p">지금 규칙은 <b>참고 화면(ILOULI 「가격표 기준과 산정 근거」 · 2026-10-06 읽음)의 방식을 차용</b>한 임시 규칙이다. 복제가 아니라 규칙 차용이고 출처를 여기 적어 둔다. 재권님이 정하시면 표시를 떼고 값은 서버로 옮긴다. 후보 — (가) 이 방식 그대로 (나) 「추정 EPS × 과거 PER 밴드」 적정가(⑤ · 계산 카드 ③)를 목표로 (다) 둘 병기(단기 = 가 · 중기 = 나).</p>
+          <table class="in-tbl in-wrap">
+            <tr><th>값</th><th>임시 규칙</th><th>비고</th></tr>
+            <tr><td>1차 · 2차 지지</td><td>ZigZag 저점 중 현재가에서 ATR×0.5 넘게 <b>아래</b>인 것 · 가까운 순 둘</td><td>일목 구름 하단을 함께 적는다</td></tr>
+            <tr><td>1차 · 2차 저항</td><td>ZigZag 고점 중 현재가에서 ATR×0.5 넘게 <b>위</b>인 것 · 가까운 순 둘</td><td>구름 상단 함께</td></tr>
+            <tr><td>매수가</td><td>「지금 사면」 = 현재가 · 「눌림에 사면」 = 1차 지지대</td><td>「보유 중」 은 매수가 없음</td></tr>
+            <tr><td>손절가</td><td>1차 지지 − ATR×0.5</td><td>버퍼 배수 0.5 가 미정 값</td></tr>
+            <tr><td>목표가</td><td>1차 저항 · 돌파하면 2차 저항</td><td></td></tr>
+            <tr><td>손익비</td><td>(목표 − 매수) ÷ (매수 − 손절) · <b>1.5 미만이면 「진입 보류」</b></td><td>1.5 가 미정 값</td></tr>
+          </table>
+        </section>
+
+        <section class="in-rp-sec" id="r5">
+          <h2>⑥-5 판정 점수표 — 네 묶음으로 「분할 매수 · 관망 · 비중 축소」 <span class="in-pill no">미정 · 임시</span></h2>
+          <!-- 미정: 묶음별 기준과 임계값은 임시다. 삼성전자 + 세 종목을 과거 봉으로 되돌려 본 표를 만든 뒤 재권님께 「이 표대로 할까요」 로 여쭙는다(작업우선순위 · 개념정의 의견) -->
+          <p class="in-doc-p">묶음마다 +1 · 0 · −1 을 주고 합으로 판정한다. <b>못 잰 묶음은 0점이 아니라 「없음」</b> 으로 두고, 판정 옆에 <b>몇 묶음으로 냈는지</b>를 적는다(예 「관망 · 4묶음 중 3」). 「없음」 이 둘 이상이면 판정하지 않고 <b>「보류」</b> 다 — 「못 쟀으면 0 이 아니라 못 쟀다고 낸다」. 기준값은 임시이고 되돌려 본 뒤 재권님께 올린다.</p>
+          <table class="in-tbl in-wrap">
+            <tr><th>묶음</th><th>+1</th><th>0</th><th>−1</th><th>「없음」 일 때</th></tr>
+            <tr><td><b>실적</b></td><td>최근 분기 영업이익 YoY &gt; 0 <b>이고</b> 영업이익률이 전 분기 이상</td><td>그 밖</td><td>영업이익 YoY &lt; 0 또는 적자</td><td>KIS 재무를 못 받음 · 분기 5개 미만</td></tr>
+            <tr><td><b>평가</b></td><td>추정 PER 이 5년 PER 밴드(계산 카드 (나)) <b>중간 이하</b></td><td>중간 ~ 상단</td><td>상단 초과</td><td>추정 EPS 없음(적자 · 컨센서스 없음) 또는 밴드 못 셈</td></tr>
+            <tr><td><b>추세</b></td><td>단기 정배열 <b>이고</b> 현재가 &gt; MA224</td><td>그 밖 · <b>ADX 20 미만이면 늘 0</b>(추세 없음)</td><td>단기 역배열 또는 현재가 &lt; MA224</td><td>봉이 224개 미만</td></tr>
+            <tr><td><b>수급</b></td><td>20일 외국인 + 기관 순매수 금액 합 &gt; 0</td><td>0 근처(±현재가 × 거래량 20일 평균의 1% 안)</td><td>합 &lt; 0</td><td>투자자 자료 못 받음</td></tr>
+          </table>
+          <table class="in-tbl in-wrap">
+            <tr><th>합</th><th>판정</th><th>시나리오 확률(낙관 · 기본 · 비관)</th></tr>
+            <tr><td>+3 ~ +4</td><td>분할 매수</td><td>50 · 35 · 15</td></tr>
+            <tr><td>+1 ~ +2</td><td>분할 매수 — 지지 확인 뒤</td><td>45 · 35 · 20</td></tr>
+            <tr><td>0</td><td>관망</td><td>35 · 45 · 20</td></tr>
+            <tr><td>−1 ~ −2</td><td>관망 — 비중 늘리지 않음</td><td>25 · 40 · 35</td></tr>
+            <tr><td>−3 ~ −4</td><td>비중 축소</td><td>15 · 35 · 50</td></tr>
+            <tr><td>「없음」 2 이상</td><td><b>보류</b></td><td>안 적는다</td></tr>
+          </table>
+          <p class="in-rp-note">시나리오 확률은 세션 판단이 아니라 이 표에서 나온다(개념정의 · 작업우선순위 의견 — 「판단이 들어가면 매번 같은 품질이 안 된다」). 표의 숫자는 전부 <span class="in-pill no">미정 · 임시</span> 다.</p>
+        </section>
+
+        <section class="in-rp-sec" id="r6">
+          <h2>⑥-6 글 틀 — 칸마다 무엇을 쓰나 (data/stock-report/&lt;코드&gt;.json)</h2>
+          <table class="in-tbl in-wrap">
+            <tr><th>칸</th><th>무엇을 쓰나</th><th>숫자</th><th>판단이 드나</th></tr>
+            <tr><td>verdict — label · direction</td><td>label = ⑥-5 판정 그대로 + 「몇 묶음 중 몇」 · direction = 추세 묶음과 다음 이벤트 한 줄</td><td>없음</td><td>direction 뒤 「<b>판단:</b> …」 한 줄만 — 리포트에서 사람 판단은 이 줄 하나다</td></tr>
+            <tr><td>verdict — strength · risk</td><td>+1 묶음의 근거 / −1 묶음의 근거를 숫자 인용으로</td><td>서버 값 + 시각</td><td>안 든다</td></tr>
+            <tr><td>overall (종합 판정 4줄)</td><td>실적 · 수급 · 기술적 · 가격 부담 — 앞 셋은 점수표 묶음과 1:1, 가격 부담 = 1년 전 대비 · 224선 체류율 · VWAP 거리 · 고점 대비</td><td>서버 값 + 시각</td><td>안 든다</td></tr>
+            <tr><td>catalysts — positive · negative · events</td><td>뉴스 API 제목 · 공시 제목 · 일정에서만 고른다 · 날짜가 확실치 않으면 「확인 필요」 표시</td><td>뉴스 · 공시 그대로</td><td>고르는 것이 판단이라 출처(매체 · 날짜)를 반드시 적는다</td></tr>
+            <tr><td>scenarios (낙관 · 기본 · 비관)</td><td>확률 = ⑥-5 표 · 목표 = 1차 · 2차 저항(낙관) / 박스(기본) / 1차 지지 · 구름 하단(비관) · 조건 = 다음 이벤트 + 거래량 조건</td><td>⑥-4 값</td><td>안 든다</td></tr>
+            <tr><td>strategy — positions 셋</td><td>「지금 사면 · 눌림에 사면 · 보유 중」 — 매수 · 손절 · 목표 · 손익비는 ⑥-4 값 그대로 · 판단 칸은 손익비 1.5 기준 문장</td><td>⑥-4 값</td><td>안 든다</td></tr>
+            <tr><td>strategy — monitor</td><td>다음 실적 · 수급 전환 · 1차 저항 · 1차 지지 · 이벤트 — 강세 / 약세 조건을 숫자로</td><td>⑥-4 값 · 일정</td><td>안 든다</td></tr>
+            <tr><td>summary10 (10줄)</td><td>항목 순서 고정 — 실적 · 평가 · 이평선 · 추세 강도 · OBV · 일목균형표 · 수급 · 공매도 · 거래량 · 시나리오. now = 값 · mean = 읽는 법 한 문장</td><td>서버 값</td><td>안 든다 — 「읽는 법」 은 ⑥-3 표의 문장</td></tr>
+            <tr><td>limits</td><td>데이터 공백(화면이 센다) + 세션이 적는 한계(임시 규칙 · 안 본 것 · 기준 시각)</td><td>—</td><td>안 든다</td></tr>
+            <tr><td>confidence</td><td><b>규칙</b> — 「없음」 0 이고 가격표 규칙 확정이면 높음 · 「없음」 1 또는 규칙이 임시면 중간 · 「없음」 2 이상이면 낮음(보류)</td><td>—</td><td>안 든다</td></tr>
+            <tr><td>score · history</td><td>점수표 결과(묶음별 점수 · 합 · 쓴 묶음 수)와 판정이 바뀐 날(⑥-8)</td><td>—</td><td><span class="in-pill no">아직</span> 화면이 아직 안 그린다 — 자료로 먼저 쌓는다</td></tr>
+          </table>
+        </section>
+
+        <section class="in-rp-sec" id="r7">
+          <h2>⑥-7 리포트를 쓰는 절차 — 순서대로</h2>
+          <ol>
+            <li><b>종목을 연다</b> — stock-report.html?code=&lt;코드&gt; 를 8771(자기 서버)에서 열어 숫자가 다 받아지는지 본다. 「아직」 이 몇 개인지 센다.</li>
+            <li><b>지표를 읽는다</b> — ⑥-3 표의 읽는 법으로. 값은 화면(window.__rp)에서 그대로 옮기고 시각을 적는다.</li>
+            <li><b>점수표를 센다</b> — ⑥-5. 묶음마다 +1 · 0 · −1 · 없음 → 합 → 판정 · 몇 묶음. 「없음」 2 이상이면 보류로 끝낸다.</li>
+            <li><b>가격표를 옮긴다</b> — ⑥-4 값(화면 가격표 그대로). 규칙이 미정이면 글에도 「임시」 라고 적는다.</li>
+            <li><b>글을 쓴다</b> — ⑥-6 칸 순서대로. 판단은 「판단:」 한 줄만.</li>
+            <li><b>검사한다</b> — 필수 칸이 다 있나 · asOf 가 있나 · 글의 숫자가 화면 값과 맞나. 검사 도구는 <span class="in-pill no">아직</span>(company-setup/tools 에 둔다 · 「봐야 할 자리」 로 내고 커밋은 안 막는다).</li>
+            <li><b>목록에 등록한다</b> — data/stock-report/index.json 에 한 줄. 리포트 글 파일이 있어야 등록한다.</li>
+            <li><b>화면을 찍고 검수를 요청한다</b> — 데스크톱 · 폰 · 창구(홈페이지_정리). 커밋은 지시 뒤.</li>
+          </ol>
+        </section>
+
+        <section class="in-rp-sec" id="r8">
+          <h2>⑥-8 판정이 바뀐 날을 남긴다</h2>
+          <p class="in-doc-p"><b>같은 입력이면 같은 판정이어야 한다.</b> 리포트를 다시 쓸 때 판정 · 점수 · 가격표가 바뀌면 글 파일의 <code>history</code> 에 한 줄 — 날짜 · 전 판정 → 새 판정 · 무엇이 바뀌어서(어느 묶음 · 어느 값). 재권님의 「주식 회고」(사고판 날에 그때 판정이 무엇이었나)가 바로 이 줄을 읽는다. 화면에 그리는 것은 <span class="in-pill no">아직</span>.</p>
+        </section>
+        </div>
+      </details>
+
+      <details class="in-rp-sec rp-fold in-grp" id="g-seen">
+        <summary><h2>확인한 것 · 못 본 것</h2><span class="rp-sum">원문을 직접 연 것과 못 연 것 · 출처 주소</span></summary>
+        <div class="rp-fold-body" id="s6">
         <ul>
           <li><b>확인함</b> — 실물 리포트 PDF 한 건(이베스트 2023) · KRX 해설서 PDF · DART 사업보고서 원문 목차 · 네이버 컨센서스 · KIS 재무 API 응답 · 자본시장연구원 요약 · 토스피드 글 · CFA 모듈 목록(요약 노트)</li>
           <li><b>못 봄</b> — 협회 규정 조문 원문 · 대형 증권사 최신 리포트 PDF 본문 · 한국IR협의회 보고서 원문 · CFA 공식 목차 · KIS 공매도 · 종목투자의견 API 실응답 · 네이버 자료 이용 조건</li>
         </ul>
         <p class="in-rp-note">출처 주소 — 이베스트 PDF file.alphasquare.co.kr/media/pdfs/company-report/ · 토스피드 toss.im/tossfeed/article/desperate-shareholders-07 · 금융투자교육원 kcie.or.kr · AnalystPrep analystprep.com/study-notes/cfa-level-2/ · KRX 해설서 kind.krx.co.kr/external/dst/valueupNotice/11058/ · 협회 법규시스템 law.kofia.or.kr · 자본시장연구원 kcmi.re.kr/publications/ · 한국IR협의회 보도 dailian.co.kr</p>
-      </section>
+        </div>
+      </details>
     </article>
   </main>
   <!-- 오른쪽 「종목」 목록 — 차례 대신 (2026-10-06 재권님 지시). 목록은 data/stock-report/index.json 한 곳 · 누르면 그 종목 리포트(stock-report.html?code=) -->

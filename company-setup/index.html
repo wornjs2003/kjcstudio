@@ -83,11 +83,12 @@
   <aside class="kh-side" aria-label="뉴스">
     <div class="kh-side-wrap">
       <div class="kh-card kh-rank-card">
-        <div class="kh-tabs"><button class="kh-tab is-active">뉴스</button><span class="in-asof" data-asof="네이버 뉴스"></span></div>
-        <div class="in-scroll in-stack">
-          <div class="kh-idxp-s"><div class="kh-idxp-h">많이 본 뉴스</div><ul class="in-news in-rank" data-feed="rank"></ul></div>
-          <div class="kh-idxp-s"><div class="kh-idxp-h">실시간 속보</div><ul class="in-news in-sm" data-feed="flash"></ul></div>
-          <div class="kh-idxp-s"><div class="kh-idxp-h">해외 뉴스</div><ul class="in-news in-sm" data-feed="world" data-n="5"></ul></div>
+        <!-- 2026-10-06 17:5x 지시 — 세로로 쌓으니 아래 둘이 안 보여 탭 셋으로(홀딩스 순위 칸의 코스피|코스닥 탭과 같은 모양). 누르면 목록만 바뀌고 칸은 그대로 -->
+        <div class="kh-tabs" data-news-tabs><button class="kh-tab is-active" data-tab="rank">많이 본</button><button class="kh-tab" data-tab="flash">최신</button><button class="kh-tab" data-tab="world">해외</button><span class="in-asof" data-asof="네이버 뉴스"></span></div>
+        <div class="in-scroll">
+          <ul class="in-news in-rank" data-feed="rank" data-pane="rank"></ul>
+          <ul class="in-news in-sm" data-feed="flash" data-pane="flash" hidden></ul>
+          <ul class="in-news in-sm" data-feed="world" data-pane="world" hidden></ul>
         </div>
       </div>
     </div>

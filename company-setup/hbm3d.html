@@ -42,6 +42,18 @@
   .lbl.l span{transform:translateX(-50%)}
   .lbl.pin span{font-weight:700;color:var(--kh-accent)}
   #hint{position:absolute;left:20px;top:16px;font-size:12px;color:var(--text-sub);background:var(--bg-card);padding:6px 10px;border-radius:8px}
+  .nogl{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;font-size:13px;line-height:1.7;color:var(--text-sub)}   /* WebGL 이 없을 때 3D 자리에 */
+  /* 폰(640px 이하 · 모달 iframe 안에서는 틀 폭으로 센다) — 위 3D 55vh · 아래 설명 칸 가로 전체 · 조작 줄은 3D 밑 · 안내문 숨김 · 이름표 작게
+     (2026-10-07 재권님 「응」 · 창구 경유). 641px 이상은 위 규칙 그대로 — 데스크톱은 안 바뀐다 */
+  @media (max-width:640px){
+    html,body{height:auto;min-height:100%;overflow:auto}
+    #stage{position:relative;inset:auto;height:55vh;min-height:260px}
+    #bar{position:relative;left:auto;right:auto;bottom:auto;flex-wrap:wrap;gap:8px 16px;padding:10px 14px}
+    input[type=range]{width:140px}
+    #side{position:relative;inset:auto;width:auto;padding:14px 16px;overflow:visible;box-shadow:none}
+    #hint{display:none}
+    .lbl{font-size:9px}
+  }
 </style></head><body>
 <div id="stage"><div id="hint">끌어서 돌리기 · 휠로 확대 · 부품 위에 올리면 이름 · 누르면 오른쪽에 종목</div></div>
 <div id="bar">

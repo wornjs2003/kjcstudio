@@ -1541,40 +1541,48 @@ export function createStockChart(container, candles, opts = {}) {
   }
   _indSync.add(syncInd);
 
-  /* ── 칸 높이 끌기 — 그 경계의 위아래 둘만 바뀐다 ── */
+  /* ── 칸 높이 끌기 — 그 경계의 위아래 둘만 바뀐다 ──
+     **pointer 이벤트로 듣는다** (2026-10-06 재권님 — 「모바일에서 보조지표 구분선을 끌어도 안 움직임」 · 「응 해줘」).
+     mouse 만 들어서 손가락 끌기가 안 왔다(qa 실측 — 64px 끌면 칸은 그대로 · 화면이 49px 굴러감). 마우스도
+     pointer 로 오므로 데스크톱 동작은 같다. 손가락이 손잡이 밖으로 나가도 놓치지 않게 setPointerCapture 로 잡는다.
+     손가락 끌기를 스크롤이 가져가지 않게 하는 것은 css/stock.css 의 .kh-grip touch-action: none 이다. */
   let drag = null;
-  container.addEventListener('mousedown', (e) => {
+  container.addEventListener('pointerdown', (e) => {
     const g = e.target.closest('.kh-grip');
     if (!g) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
     const at = panes.findIndex((p) => p.key === g.dataset.pane);
     if (at <= 0) return;
     g.classList.add('is-drag');
+    try { g.setPointerCapture(e.pointerId); } catch { /* 이미 놓았다 */ }
     drag = {
-      g, y: e.clientY, above: panes[at - 1], below: panes[at],
+      g, id: e.pointerId, y: e.clientY, above: panes[at - 1], below: panes[at],
       aH: panes[at - 1].box.clientHeight, bH: panes[at].box.clientHeight,
     };
     document.body.style.userSelect = 'none';
   });
 
   function onMove(e) {
-    if (!drag) return;
+    if (!drag || e.pointerId !== drag.id) return;
     const d = e.clientY - drag.y;
     const minA = drag.above.key === 'price' ? PRICE_MIN : PANE_MIN;
     const a = Math.max(minA, Math.min(drag.aH + drag.bH - PANE_MIN, drag.aH + d));
     setPaneH(drag.above, a);
     setPaneH(drag.below, drag.aH + drag.bH - a);
   }
-  function onUp() {
-    if (!drag) return;
+  function onUp(e) {
+    if (!drag || (e && e.pointerId !== drag.id)) return;
+    try { drag.g.releasePointerCapture(drag.id); } catch { /* 이미 놓였다 */ }
     drag.g.classList.remove('is-drag');
     drag = null;
     document.body.style.userSelect = '';
     savePaneH();
     checkAlign();
   }
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', onUp);
 
   function setPaneH(p, h) {
     p.box.style.height = h + 'px';

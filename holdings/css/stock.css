@@ -341,6 +341,14 @@
 .kh-grip:hover::before, .kh-grip.is-drag::before {
   background: var(--kh-text-primary); height: 2px;
 }
+/* 손가락 끌기 (2026-10-06 재권님 「모바일에서 보조지표 구분선을 끌어도 안 움직임」 · 「응 해줘」).
+   touch-action: none — 끌기를 브라우저 스크롤이 가져가지 않게(손잡이 위에서만). 손가락 화면(pointer: coarse)에서만
+   잡는 자리를 8px → 24px 로 넓힌다 — 보이는 선(1px)은 가운데 그대로. 마우스 화면은 그대로다. */
+.kh-grip { touch-action: none; }
+@media (pointer: coarse) {
+  .kh-grip { top: -12px; height: 24px; }
+  .kh-grip::before { top: 11px; }
+}
 
 /* 좌우 끝이 어긋나면 여기에 뜬다. 뜨면 고쳐야 한다 — 주석은 안 지켜진다 */
 /* 좌우 끝이 어긋났을 때 · 세로가 움직였을 때 뜨는 표시.
