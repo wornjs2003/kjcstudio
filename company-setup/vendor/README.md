@@ -8,6 +8,7 @@
 | pmtiles.js | unpkg.com/pmtiles | 4.5.0 |
 | basemaps.js | unpkg.com/@protomaps/basemaps | 5.7.2 |
 | three/three.module.min.js · addons 넷 | cdn.jsdelivr.net/npm/three | 0.160.0 |
+| 3d-force-graph.min.js(three 를 안에 품음) | cdn.jsdelivr.net/npm/3d-force-graph | 1.80.1 — 흐름도 3D(js/flow3d.js) · 2026-10-07 |
 | basemaps-assets/fonts · sprites | protomaps.github.io/basemaps-assets | 지구본이 실제로 요청한 글꼴 넷 · 스프라이트 둘만 |
 
 왜 — 지구본이 unpkg · protomaps 를 매번 거쳐 글꼴 하나에 2.6~4.7초(헤드리스 실측)였고, 3D 는 jsdelivr 에서 three.js 를 받았다.

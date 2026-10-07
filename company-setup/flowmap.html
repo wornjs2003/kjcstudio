@@ -73,6 +73,17 @@
   .eff.up { background: rgb(var(--kh-ok-rgb) / 12%); color: rgb(var(--kh-ok-rgb)); }
   .eff.down { background: var(--kh-danger-faint); color: var(--kh-danger); }
   .eff.mixed { background: var(--bg-elevated); color: var(--text-muted); }
+  /* 흐름도 3D(자료의 flow3d · js/flow3d.js) — 2D 칸은 지어 두고 감춘다. 3D 상자가 흐름도 칸 자리를 그대로 채운다 (2026-10-07) */
+  .map.is-3d { display: none; }
+  .wrap > div:first-child { min-width: 0; }   /* 3D 그림판이 칸 폭을 밀어 오른쪽 패널을 밀어내지 않게 */
+  #v-flow:has(.map.is-3d) { overflow: hidden; }
+  .f3d { position: relative; width: 100%; height: 100%; border-radius: 14px; overflow: hidden; background: var(--bg-card); }
+  .f3d-tags { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+  .f3d-tags span { position: absolute; left: 0; top: 0; white-space: nowrap; font-size: 10px; color: var(--text-secondary); transition: opacity .15s; pointer-events: auto; cursor: pointer; }   /* 이름표도 누른다 — 점만으로는 작아서 못 맞춘다 */
+  .f3d-tags span.st { font-size: 12px; font-weight: 700; color: var(--text-primary); background: var(--bg-card); padding: 0 4px; border-radius: 4px; }
+  .f3d-tags span.sel { box-shadow: 0 0 0 2px var(--accent); }
+  .f3d-tags span.dim { opacity: .2; }
+  .f3d-tags span[hidden] { display: none; }
   .panel .choke-note { background: var(--kh-danger-faint); color: var(--kh-danger); border-radius: 8px; padding: 6px 9px; margin-top: 10px; font-size: 12px; line-height: 1.5; }
 
   .col { display: flex; flex-direction: column; gap: 14px; }
@@ -166,7 +177,10 @@
 
   /* 부품 분해도(3D) 덮는 창 — 자료 파일 info.<칸>.parts 가 있는 칸만 (2026-10-06 지시 · HBM 칸) */
   .parts-btn { border: 0; background: var(--accent-faint); color: var(--accent); border-radius: 8px; padding: 5px 10px; cursor: pointer; font: inherit; font-size: 12.5px; }
-  .parts { position: absolute; inset: 24px; background: var(--bg-card); border-radius: 14px; box-shadow: var(--shadow-md); overflow: hidden; }
+  /* 2026-10-07 재권님 「hbm 누르면 3d 화면 … 작게 열리면 좋을거 같은데 · 지금은 너무 커서」 → 오른쪽 아래 작은 창 · 뒤를 덮지 않는다(흐름도를 보며 돌린다) */
+  .parts-wrap { inset: auto; right: 20px; bottom: 20px; width: min(520px, calc(100vw - 40px)); height: min(420px, calc(100vh - 40px)); }
+  .parts-wrap .co-dim { display: none; }
+  .parts { position: absolute; inset: 0; background: var(--bg-card); border-radius: 14px; box-shadow: var(--shadow-lg); overflow: hidden; }
   .parts iframe { width: 100%; height: 100%; border: 0; display: block; }
   .parts .x { position: absolute; top: 10px; right: 12px; z-index: 2; border: 0; background: var(--accent-faint); color: var(--accent); border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
 </style>
@@ -227,6 +241,7 @@ let LINKS = [], EXTRA = [], INFO = {}, STOCKS = [], GRADES = {}, GRADE_NO = {}, 
 let sel = null, scenario = null;
 const EMPTY = '<h2>칸을 눌러 보세요</h2><div class="empty">그 칸의 설명 · 종목 · 볼 것 · 이어진 칸이 여기 뜹니다.</div>';
 const el = id => map.querySelector(`[data-id="${id}"]`);
+const f3d = () => typeof Flow3D !== 'undefined' && Flow3D.on();   // 흐름도 3D(js/flow3d.js) — 그 파일이 못 떠도 2D 흐름도는 돈다
 const chip = st => `<span class="stk${st.grade ? ' g-' + (GRADE_NO[st.grade] || 4) : ''}"${(st.code || st.ticker) ? ` data-co="${esc(st.code || st.ticker)}" title="회사 카드 열기"` : ''}>${esc(st.name)}${st.grade ? `<i>${esc(GRADES[st.grade] || st.grade)}</i>` : ''}</span>`;
 const stocksOf = id => STOCKS.filter(st => st.node === id || (st.also || []).includes(id));
 
@@ -291,13 +306,13 @@ function drawLines() {   // 선만 — map 이 줄여진(transform) 상태에서
 }
 function draw() {
   if (!D) return;
-  if (EMBED) fitFlow(); else drawLines();
+  if (f3d()) Flow3D.sync(); else if (EMBED) fitFlow(); else drawLines();
   drawGeo();
 }
 // 칸 안 모드 — 흐름도가 종목까지 다 보이게 틀에 맞춰 통째로 줄인다 (2026-10-06 재권님). 폭을 여러 개 재서 가장 크게 보이는
 // 폭을 고른다(좁으면 세로로 길어져 많이 줄고, 넓으면 가로가 넘친다). 1 보다 키우지는 않는다
 function fitFlow() {
-  if (!EMBED) return;
+  if (!EMBED || f3d()) return;
   const v = $('v-flow'); if (v.hidden) return;
   map.style.transform = '';
   const W = window.innerWidth, H = window.innerHeight;   // 틀(iframe) 자체의 크기 — 칸을 재면 내용을 따라 늘어난 값이 나온다(2026-10-06 실측)
@@ -346,6 +361,7 @@ function applyScenario() {
     b.textContent = v || ''; b.className = 'eff ' + (v === '+' ? 'up' : v === '-' || v === '−' ? 'down' : v ? 'mixed' : '');
   });
   document.querySelectorAll('#scen [data-sc]').forEach(x => x.classList.toggle('is-on', x.dataset.sc === scenario));
+  if (f3d()) Flow3D.sync();
 }
 map.addEventListener('click', e => {
   const n = e.target.closest('[data-id]'); if (!n) return;
@@ -550,7 +566,7 @@ function showView(v) {
   document.querySelectorAll('#views button').forEach(x => x.classList.toggle('is-on', x.dataset.v === v));
   $('v-flow').hidden = v !== 'flow';
   $('v-geo').hidden = v !== 'geo';
-  if (v === 'geo') { if (!geo) buildGeo(); else geo.resize(); } else draw();
+  if (v === 'geo') { if (!geo) buildGeo(); else geo.resize(); } else { if (f3d()) Flow3D.mount(); draw(); }
 }
 $('views').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showView(b.dataset.v); });
 
@@ -677,5 +693,6 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeParts()
   showView(q.get('view') === 'flow' ? 'flow' : 'geo');
 })();
 </script>
+<script src="js/flow3d.js"></script>
 </body>
 </html>
