@@ -580,6 +580,10 @@
   .kh-stage.has-left.has-right .kh-modal .kh-main {
     padding: 0 14px 16px;
     min-height: 0;
+    /* **넓은 화면의 `height: 100%` 를 푼다** (2026-10-08). 여기는 위아래로 쌓으니 각자 제 높이를 쓰고
+       넘치면 스크롤한다(1180 블록 주석의 뜻). 100% 가 남아 있으면 행이 창 높이를 나눠 가져 차트 칸이
+       135px 로 눌려 보조지표가 잘렸고, 투자 지표 칸은 3px 로 접혀 안 보였다(폰 390 · 005930 실측) */
+    height: auto;
     gap: 12px;
     grid-template-rows: none;
     grid-template-columns: minmax(0, 1fr);
@@ -635,8 +639,10 @@
   .kh-modal .kh-per button { flex: 1; min-width: 0; }
   .kh-modal .kh-per-tools { display: none; }
 
-  /* 차트는 화면 절반쯤. 아래 패널도 스크롤로 닿아야 한다 */
-  .kh-modal [data-p="chart"] { min-height: 320px; }
+  /* 차트 칸은 홈 큰 차트와 같은 303px (2026-10-08 재권님 — 「응 303으로해」 · home.css 좁은 폭 `.kh-idx-chart`).
+     가격 120 + 보조 60 × 3 + 경계선 3 — 지표 셋을 켜도 안 넘친다. 패널은 칸에 맞춰 줄어든다 */
+  .kh-modal [data-p="chart"] { min-height: 0; }
+  .kh-modal [data-p="chart"] .kh-chart-box { flex: none; height: 303px; }
   .kh-modal [data-p="tick"],
   .kh-modal [data-p="flow"] { min-height: 150px; }
 
