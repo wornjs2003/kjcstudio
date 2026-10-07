@@ -237,11 +237,15 @@ def start():
     def loop():
         while True:
             try:
-                if dart._meta_get("us_members_date") != datetime.now(KST).strftime("%Y%m%d"):
+                # 날짜만 보면 묶음이 새로 늘어난 날(2026-10-07 S&P500)에 「오늘 끝」 으로 건너뛴다 — 묶음 중 하나라도
+                # 비어 있으면 그날도 다시 받는다(그날 15:09 에 나스닥100 만 받고 찍힌 날짜 때문에 S&P500 이 0행이었다)
+                counts = dart.index_members_count()
+                if (dart._meta_get("us_members_date") != datetime.now(KST).strftime("%Y%m%d")
+                        or any(not counts.get(ix) for ix in US_INDEXES)):
                     with _lock:
                         got = refresh()
-                    print("  미국 목록  : 종목 %s · 나스닥100 %s · 마스터에 없는 티커 %s"
-                          % (got.get("symbols", "—"), got.get(NDX100, "—"),
+                    print("  미국 목록  : 종목 %s · 나스닥100 %s · S&P500 %s · 마스터에 없는 티커 %s"
+                          % (got.get("symbols", "—"), got.get(NDX100, "—"), got.get(SPX500, "—"),
                              ", ".join(got.get("missing") or []) or "없음"))
             except Exception as e:
                 print("  미국 목록  : 못 받았습니다 (%s)" % type(e).__name__)
