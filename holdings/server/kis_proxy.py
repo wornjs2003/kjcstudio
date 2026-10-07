@@ -5056,10 +5056,76 @@ def get_chart(cfg, code, period, limit, gap_check=True):
             lk = _chart_locks[key] = threading.Lock()
     got = lk.acquire(timeout=CHART_WAIT_SEC)
     try:
+        if us_universe.is_us(code):                 # 미국 티커 — 국내 몸통을 안 탄다 (2026-10-07 나스닥100)
+            return _get_chart_us(cfg, code, period, limit)
         return _get_chart_one(cfg, code, period, limit, gap_check)
     finally:
         if got:
             lk.release()
+
+
+def _get_chart_us(cfg, code, period, limit):
+    """미국 티커의 봉 — 국내 `_get_chart_one` 과 같은 표(candles) · 같은 `sync` 시각 · 같은 `fresh_sec` 을 쓴다.
+
+    그래서 겉 함수의 자물쇠(겹친 요청은 한 번만)가 그대로 듣는다. 받는 것은 `us_universe` 가 한다(묶음 2 ·
+    2026-10-07 재권님 「응 해줘」). 1분봉은 받지 않는다. 년봉은 KIS 에 없어 월봉을 해마다 묶는다.
+    처음(또는 덜 찼을 때)은 달라는 만큼 거슬러 받고, 그 뒤 「오래됨」 일 때는 최근 한 쪽만 받는다.
+    """
+    db_init()
+    if period not in ("D", "W", "M", "Y", "5m"):
+        return [], 0, "US"
+    view = _view_limit(code, period, limit)
+    rows = read_candles(code, period, view)
+    mkey = "sync:%s:%s" % (code, period)
+    bkey = "backfill:%s:%s" % (code, period)
+    stale = (time.time() - float(_meta_get(mkey) or 0)) > PERIODS[period]["fresh_sec"]
+    deep = period != "5m" and (not rows or (len(rows) < limit and _meta_get(bkey) != "done"))
+    fetched = 0
+    if deep or stale or not rows:
+        try:
+            if period == "5m":
+                bars = us_universe.us_5m(kis_get, cfg, code)
+            else:
+                n = limit if deep else (2 if period == "Y" else us_universe.DAILY_PER_CALL)
+                bars = us_universe.us_bars(kis_get, cfg, code, period, n)
+                if deep:
+                    _meta_set(bkey, "done")     # 한 번 끝까지 거슬러 받았다 — 덜 와도 KIS 가 더 안 준다
+        except RuntimeError:
+            bars = []
+        fetched = save_candles(code, period, bars)
+        _meta_set(mkey, time.time())
+        if fetched:
+            rows = read_candles(code, period, _view_limit(code, period, limit))
+        elif not rows and bars and not marketdb.writable():
+            rows = bars[-view:]                 # 읽기 전용 서버 — 저장은 못 해도 받은 것을 보여 준다
+    return rows, fetched, "KIS" if fetched else "DB"
+
+
+def _us_quotes(cfg, codes):
+    """미국 티커 여럿의 시세 → (data, errors). KIS 해외에 여러 종목 한 번에 받는 시세가 없어 종목마다 1건이고,
+    국내와 같은 시세 캐시(`PRICE_CACHE_TTL`)를 탄다. 한 요청에 `US_QUOTES_MAX` 개까지만 받는다."""
+    data, errors = {}, {}
+    for code in codes[:US_QUOTES_MAX]:
+        ck = "us:" + code
+        hit = _cache_get(ck)
+        if hit is None:
+            try:
+                hit = us_universe.us_price(kis_get, cfg, code)
+                _cache_put(ck, hit)
+            except Exception as e:
+                errors[code] = safe_message(e, 120)
+                continue
+        data[code] = hit
+    return data, errors
+
+
+#: 미국 시세를 한 요청에 몇 종목까지 받나 — 종목마다 KIS 1건이라 국내 멀티(30종목에 1건)보다 비싸다
+US_QUOTES_MAX = 20
+
+
+def _code_ok(code):
+    """국내 6자리 종목코드이거나, us_symbols 에 있는 미국 티커인가."""
+    return (code.isdigit() and len(code) == 6) or us_universe.is_us(code)
 
 
 def _get_chart_one(cfg, code, period, limit, gap_check=True):
@@ -6065,8 +6131,15 @@ class Handler(SimpleHTTPRequestHandler):
 
             if route == "price":
                 code = (qs.get("code") or [""])[0].strip()
-                if not code.isdigit() or len(code) != 6:
-                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                if not _code_ok(code):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자이거나 미국 티커여야 합니다."}, 400)
+                    return
+                if us_universe.is_us(code):
+                    data, errors = _us_quotes(cfg, [code])
+                    if code not in data:
+                        self._send_json({"ok": False, "error": errors.get(code) or "받지 못했습니다."}, 502)
+                        return
+                    self._send_json({"ok": True, "data": data[code]})
                     return
                 self._send_json({"ok": True, "data": fetch_price(cfg, code)})
                 return
@@ -6086,8 +6159,8 @@ class Handler(SimpleHTTPRequestHandler):
 
             if route == "chart":
                 code = (qs.get("code") or [""])[0].strip()
-                if not code.isdigit() or len(code) != 6:
-                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                if not _code_ok(code):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자이거나 미국 티커여야 합니다."}, 400)
                     return
                 period = (qs.get("period") or ["D"])[0].strip()
                 if period not in PERIODS:
@@ -6355,7 +6428,13 @@ class Handler(SimpleHTTPRequestHandler):
             if route == "quotes":
                 raw = (qs.get("codes") or [""])[0]
                 codes = [c.strip() for c in raw.split(",") if c.strip()]
+                us_codes = list(dict.fromkeys(c for c in codes if us_universe.is_us(c)))
                 codes = [c for c in codes if c.isdigit() and len(c) == 6]
+                if us_codes and not codes:          # 미국만 — 국내 길을 안 탄다 (2026-10-07)
+                    data, errors = _us_quotes(cfg, us_codes)
+                    self._send_json({"ok": True, "data": data, "errors": errors or None,
+                                     "meta": {"requested": len(us_codes), "us": len(data)}})
+                    return
                 codes = list(dict.fromkeys(codes))[:120]   # 멀티 4묶음까지
                 if not codes:
                     self._send_json({"ok": False, "error": "codes 에 6자리 종목코드가 없습니다."}, 400)
@@ -6377,7 +6456,13 @@ class Handler(SimpleHTTPRequestHandler):
             if route == "prices":
                 raw = (qs.get("codes") or [""])[0]
                 codes = [c.strip() for c in raw.split(",") if c.strip()]
+                us_codes = list(dict.fromkeys(c for c in codes if us_universe.is_us(c)))
                 codes = [c for c in codes if c.isdigit() and len(c) == 6]
+                if us_codes and not codes:          # 미국만 — 국내 길을 안 탄다 (2026-10-07)
+                    data, errors = _us_quotes(cfg, us_codes)
+                    self._send_json({"ok": True, "data": data, "errors": errors or None,
+                                     "meta": {"requested": len(us_codes), "us": len(data)}})
+                    return
                 codes = list(dict.fromkeys(codes))[:40]  # 중복 제거, 과다 요청 방지
                 if not codes:
                     self._send_json({"ok": False, "error": "codes 에 6자리 종목코드가 없습니다."}, 400)
