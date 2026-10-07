@@ -559,7 +559,10 @@ const candleKey = (periodId) => `kis_proxy.PERIODS.${PERIOD_MAP[periodId] || per
  * @param {string}   [view]     서버에 「무엇을 보고 있나」 (`api.js` 의 `viewUrl`)
  * @returns {{ stop: Function, refresh: Function }} 종목·기간이 바뀌면 `refresh()`
  */
-export function watchCandles(getCode, getPeriod, onChange, view) {
+/* `opt.keep` — 바뀌었다는 알림이 와도 **받아 둔 봉을 버리지 않는다** (2026-10-07 지시 — 「아직 안 받은 봉만
+   받아 덧붙이고, 받아 둔 봉은 다시 받지 않는다」). 그때 부르는 쪽은 `fetchCandlesSince` 로 안 받은 봉만 받아
+   `appendBars` 로 붙인다. 안 넘기면 전처럼 버리고 통째로 다시 받는다(모달 · 종목 화면). */
+export function watchCandles(getCode, getPeriod, onChange, view, opt = {}) {
   let held = null;                  // 지금 지켜보는 주소
   const hold = (u) => {
     if (u === held) return;
@@ -571,7 +574,7 @@ export function watchCandles(getCode, getPeriod, onChange, view) {
   const url = () => { const c = getCode(); const u = c ? candleUrl(c, getPeriod()) : null; hold(u); return u && viewUrl(u, view); };
   const w = watch({
     url,
-    onChange: () => { if (held) _candleCache.delete(held); return onChange(); },
+    onChange: () => { if (held && !opt.keep) _candleCache.delete(held); return onChange(); },
     key: () => candleKey(getPeriod()), fallbackMs: CANDLE_FALLBACK_MS,
   });
   url();                            // 지켜보기 시작 — 첫 바퀴 전에 받은 봉도 믿는다
@@ -592,6 +595,25 @@ export function watchCandles(getCode, getPeriod, onChange, view) {
 export function candleUrl(code, periodId = '1d') {
   const period = PERIOD_MAP[periodId] || 'D';
   return `/api/kis/chart?code=${code}&period=${period}&limit=${barsToFetch(periodId)}`;
+}
+
+/** 이 화면이 이미 받아 둔 봉 — 없으면 null. **지켜보기와 무관하게** 본다(종목을 다시 고를 때 바로 그리려고) */
+export function peekCandles(code, periodId = '1d') {
+  const hit = _candleCache.get(candleUrl(code, periodId));
+  return hit ? hit.value : null;
+}
+
+/** **안 받은 봉만** — `sinceTs`(마지막으로 받은 봉 시각) 이후의 봉 전부를 받는다. 그 봉도 함께 온다(진행 중이라
+ *  값이 바뀌었을 수 있다). 서버가 since 를 모르면(옛 서버) 봉 전부가 오는데, 받는 쪽 `appendBars` 가 겹치는 것은
+ *  고치고 새것만 붙이므로 결과는 같다 — 보내는 양만 다르다. */
+export async function fetchCandlesSince(code, periodId, sinceTs, opt = {}) {
+  const url = candleUrl(code, periodId) + (sinceTs ? `&since=${sinceTs}` : '');
+  const r = await apiFetch(viewUrl(url, opt.view), { cache: 'no-store' });
+  if (!r) throw new Error('로그인이 만료되었습니다');
+  if (!r.ok) throw new Error(`차트 데이터를 불러오지 못했습니다 (${r.status})`);
+  const j = await r.json();
+  if (!j || !j.ok) throw new Error(j?.error || '차트 데이터를 불러오지 못했습니다');
+  return j.data.candles || [];
 }
 
 export async function fetchCandles(code, periodId = '1d', opt = {}) {
@@ -902,6 +924,15 @@ export function createStockChart(container, candles, opts = {}) {
       window.addEventListener('pointerup', up);
       window.addEventListener('pointercancel', up);
     });
+  }
+
+  /* 칸(차트)마다 그은 시리즈를 적어 둔다 — `appendBars` 가 아래 칸의 선만 지우고 다시 긋는다.
+     칸을 지우고 새로 만들면(build) 화면이 통째로 다시 그려진다 (2026-10-07 지시). */
+  function track(ch) {
+    const add = ch.addSeries.bind(ch);
+    ch.__khSeries = [];
+    ch.addSeries = (...a) => { const sr = add(...a); ch.__khSeries.push(sr); return sr; };
+    return ch;
   }
 
   const addLine = (ch, o) => ch.addSeries(LC.LineSeries, {
@@ -1357,7 +1388,7 @@ export function createStockChart(container, candles, opts = {}) {
         : paneH()[p.key];
       box.style.height = h + 'px';
 
-      const ch = mkChart(box, h, idx === list.length - 1);
+      const ch = track(mkChart(box, h, idx === list.length - 1));
       const item = { key: p.key, el, box, chart: ch, fut, futB };
       panes.push(item);
 
@@ -1638,6 +1669,81 @@ export function createStockChart(container, candles, opts = {}) {
       priceLines.length = 0;
       remap();
       build();
+    },
+
+    /* ── 안 받은 봉 N개를 붙이고, 겹치는 봉은 고친다 (2026-10-07 지시) ─────────
+     *
+     * 재권님 — 「이미 로딩이 다 되어 있고 마지막 봉들만 로딩하는 건데 전체가 이상하게 로딩되는 건 뭔가 방법이
+     * 잘못된 것 같은데」 · 「로딩이 안 된 봉만 갱신 아닌가?」 → 「응 그렇게 해줘」.
+     *
+     * 전에는 서버가 「바뀌었다」 고 알릴 때마다(장중 약 30초) 봉 1,266개를 통째로 다시 받아 `setData` → `build()` 가
+     * **칸을 전부 지우고 새로 만들었다**(10-07 실측 · 2분 반에 6번). 여기는 칸을 그대로 두고
+     *   봉            새 시각이면 하나 붙이고, 같은 시각이면 그 봉을 고친다 — `candleSeries.update`
+     *   겹침(MA · BB …) `redrawOverlay` — 같은 차트 위에서 선만 다시 긋는다(보던 자리 · 세로 범위 그대로)
+     *   아래 칸        그 칸의 선만 지우고 다시 긋는다 — 칸(차트)은 그대로
+     * 1개든 20개든 같은 길이다(탭을 비웠다 돌아와 여러 개 쌓인 경우).
+     *
+     * **끝이 아닌 자리가 바뀌었으면**(받아 둔 봉 사이가 고쳐짐 · 날이 바뀌어 앞이 잘림 등) 끝만 고칠 수 없으므로
+     * 전처럼 통째로 갈아끼운다 — 드물다. 그때도 같은 배열을 고쳐 쓴다(화면 캐시가 같은 배열을 들고 있다).
+     * 돌려주는 값: 고친 봉 수(0 이면 그릴 것이 없었다) · 통째였으면 -1. */
+    appendBars(bars) {
+      if (!bars || !bars.length || !candles.length) return 0;
+      const same = (a, b) => a.open === b.open && a.high === b.high && a.low === b.low
+        && a.close === b.close && a.volume === b.volume;
+      const at = new Map(candles.map((c, i) => [c.ts, i]));
+      const lastTs = candles[candles.length - 1].ts;
+      const tail = [];                       // 끝(마지막 봉)이거나 그 뒤
+      let middle = false;                    // 끝이 아닌 받아 둔 봉이 달라졌다
+      for (const b of [...bars].sort((x, y) => (x.ts < y.ts ? -1 : x.ts > y.ts ? 1 : 0))) {
+        if (!b || !b.ts) continue;
+        const i = at.get(b.ts);
+        if (i == null) {
+          if (b.ts > lastTs) tail.push(b); else middle = true;
+        } else if (!same(candles[i], b)) {
+          if (i === candles.length - 1) tail.push(b); else middle = true;
+        }
+      }
+      if (middle) {
+        const map = new Map(candles.map((c) => [c.ts, c]));
+        bars.forEach((b) => b && b.ts && map.set(b.ts, b));
+        const merged = [...map.values()].sort((x, y) => (x.ts < y.ts ? -1 : x.ts > y.ts ? 1 : 0));
+        candles.splice(0, candles.length, ...merged);
+        remap();
+        build();
+        return -1;
+      }
+      if (!tail.length) return 0;
+      for (const b of tail) {
+        if (b.ts === candles[candles.length - 1].ts) candles[candles.length - 1] = b;
+        else candles.push(b);
+        try {
+          candleSeries.update({ time: toChartTime(b.ts, period), open: b.open, high: b.high, low: b.low, close: b.close });
+        } catch { /* 칸이 아직 없다 */ }
+      }
+      /* 매물대를 켜 세로 범위를 굳혀 두었으면(lockPriceRange) 새 봉이 그 밖으로 나갈 수 있다 — 그만큼만 넓힌다.
+         통째로 다시 재면 켤 때 굳힌 뜻(안 움직임)이 깨진다 */
+      if (vpRange) {
+        const hi = Math.max(...tail.map((b) => b.high)), lo = Math.min(...tail.map((b) => b.low));
+        if (hi > vpRange.max || lo < vpRange.min) {
+          vpRange = { min: Math.min(vpRange.min, lo), max: Math.max(vpRange.max, hi) };
+          try { candleSeries.applyOptions(priceFix()); } catch { /* 칸이 아직 없다 */ }
+        }
+      }
+      remap();
+      redrawOverlay();
+      const main = panes[0] && panes[0].chart;
+      let range = null;
+      try { range = main && main.timeScale().getVisibleLogicalRange(); } catch { /* 없으면 그대로 */ }
+      panes.slice(1).forEach((p) => {
+        const draw = p.key === 'vol' ? drawVol : p.key === 'macd' ? drawMacd : p.key === 'rsi' ? drawRsi : null;
+        if (!draw) return;
+        (p.chart.__khSeries || []).forEach((sr) => { try { p.chart.removeSeries(sr); } catch { /* 이미 없다 */ } });
+        p.chart.__khSeries = [];
+        p.calc = draw(p.chart);
+        if (range) { try { p.chart.timeScale().setVisibleLogicalRange(range); } catch { /* 아직 없음 */ } }
+      });
+      paintPaneTags(candles.length - 1);
+      return tail.length;
     },
 
     resetView(bars) {

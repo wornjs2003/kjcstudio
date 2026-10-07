@@ -7,7 +7,7 @@
 
 import { WATCHLIST, brandColor, CHART_PERIODS, initBarsOf } from './data/market.js';
 import * as lastSeen from './store/last-seen.js';
-import { fetchCandles, watchCandles, createStockChart, maLegend,
+import { fetchCandles, fetchCandlesSince, peekCandles, watchCandles, createStockChart, maLegend,
   addPrevCloseLine, PREV_CLOSE_NOTE,
   savePeriodId, loadPeriodId,
   chartView, setChartView, chartStockChanged } from './chart.js';
@@ -330,6 +330,41 @@ let bigPeriod = loadPeriodId('5m');
    카드와 모달이 같은 것을 봐야 해서 옮겼다 — 여기 따로 두면 둘이 갈린다. */
 let bigChart = null;          // 그려 둔 차트 (지울 때 필요)
 let bigChartKey = null;
+/* **지금 그려져 있는** 종목·기간. bigChartKey 는 「그리려는 것」 이라 새 봉을 받는 동안 둘이 다르다.
+   그 사이에 시세를 옛 차트 끝 봉에 붙이면 옛 종목 차트 끝에 새 종목 가격까지 긴 막대가 생겼다(2026-10-07 실측) */
+let bigDrawnKey = null;
+
+/* 처음 보는 종목 · 기간만 — 받는 동안 옛 차트를 가리고 「불러오는 중」. 칸 크기는 그대로(덮기만 한다) */
+function showBigLoading(host) {
+  if (!host || host.querySelector('.kh-big-loading')) return;
+  if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+  host.insertAdjacentHTML('beforeend', `<div class="kh-soon kh-big-loading"
+    style="position:absolute;inset:0;z-index:5;background:var(--kh-bg-card);display:flex;align-items:center;justify-content:center">
+    <div class="kh-soon-t">차트 불러오는 중</div></div>`);
+}
+function hideBigLoading(host) {
+  const el = host && host.querySelector('.kh-big-loading');
+  if (el) el.remove();
+}
+
+/* **안 받은 봉만** 받아 붙인다 (2026-10-07 지시 — 「아직 안 받은 봉만 받아 덧붙이고, 받아 둔 봉은 다시 받지 않는다」).
+   서버가 「바뀌었다」 고 알릴 때 · 받아 둔 봉으로 먼저 그린 뒤에 부른다. 전에는 30초마다 1,266개를 통째로 받아
+   차트 칸을 전부 다시 만들었다. */
+let catching = false;
+async function catchUpBigChart(key = bigChartKey) {
+  if (!bigChart || bigDrawnKey !== key) return paintBigChart();
+  if (catching) return;
+  catching = true;
+  try {
+    const cs = bigChart.candles;
+    const since = cs.length ? cs[cs.length - 1].ts : null;
+    const [code, per] = key.split(':');
+    const add = await fetchCandlesSince(code, per, since, { view: 'direct' });
+    if (!bigChart || bigDrawnKey !== key) return;
+    bigChart.appendBars(add);
+  } catch { /* 이번 바퀴는 건너뛴다 — 다음 알림 때 다시 */ }
+  finally { catching = false; }
+}
 
 function paintBigPeriods() {
   const host = $('kh-idx-per');
@@ -435,21 +470,35 @@ async function paintBigChart(opt = {}) {
   const foot = $('kh-big-foot');
   if (!host) return;
 
+  /* **받아 둔 봉이 있으면 바로 그리고, 안 받은 봉만 받아 붙인다** (2026-10-07 지시). 처음 보는 종목 · 기간만
+     통째로 받고 그동안 「불러오는 중」. `opt.fresh`(모달을 닫을 때)는 전처럼 통째로 */
+  const cached = opt.fresh ? null : peekCandles(st.code, bigPeriod);
+  if (cached && cached.candles && cached.candles.length && bigChart && bigDrawnKey === key) {
+    catchUpBigChart(key);                   // 이미 그려져 있다 — 다시 그리지 않는다
+    return;
+  }
   let candles, period;
-  try {
+  if (cached && cached.candles && cached.candles.length) {
+    ({ candles, period } = cached);
+  } else try {
+    if (bigDrawnKey !== key) showBigLoading(host);
     ({ candles, period } = await fetchCandles(st.code, bigPeriod, { ...opt, view: 'direct' }));
   } catch {
     if (bigChartKey !== key) return;        // 그 사이 다른 종목을 골랐다
+    hideBigLoading(host);
     dropBigChart();
+    bigDrawnKey = null;
     host.innerHTML = `<div class="kh-soon">
       <div class="kh-soon-t">차트를 불러오지 못했습니다</div></div>`;
     if (foot) foot.innerHTML = '<span></span><span>한국투자증권</span>';
     return;
   }
   if (bigChartKey !== key) return;
+  hideBigLoading(host);
 
   if (!candles || !candles.length) {
     dropBigChart();
+    bigDrawnKey = null;
     host.innerHTML = `<div class="kh-soon">
       <div class="kh-soon-t">봉이 없습니다</div></div>`;
     return;
@@ -468,6 +517,7 @@ async function paintBigChart(opt = {}) {
     host.innerHTML = '';
     bigChart = createStockChart(host, candles, { period, showVolume: true });
   }
+  bigDrawnKey = key;
 
   /* **이 기간에서 보던 자리로.** 처음이면 최신 쪽 `initBars` 개를 본다.
      `setData` 는 이전 기간의 구간을 그대로 물려주므로(chart.js 의 `keep`)
@@ -1435,14 +1485,16 @@ function applyPrices(map) {
 
      `updateLast` 가 `!live` 와 `last.close === px` 를 스스로 걸러서
      여기서 다시 보지 않는다 — 건너뛸 값을 두 곳에서 정하면 갈린다. */
-  if (bigChart) bigChart.updateLast(rowPrices[selectedCode]);
+  /* **그려져 있는 것이 고른 종목일 때만** — 새 봉을 받는 동안 옛 차트에 새 종목 가격을 붙이지 않는다(2026-10-07) */
+  const drawnIsSelected = bigChart && bigDrawnKey === bigChartKey;
+  if (drawnIsSelected) bigChart.updateLast(rowPrices[selectedCode]);
   /* 「전일」 점선도 시세가 오면 맞춘다 (2026-10-02). 차트가 시세보다 먼저
      그려졌으면 봉에서 뽑은 값으로 그어져 있다. 값이 같으면 `chart.js` 가
      건너뛴다 — 여기서 다시 보지 않는다. */
   /* **양수 `prev` 가 왔을 때만 다시 긋는다.** KIS 가 `prev` 를 안 주는 때가 있어
      (`null`) 그대로 넘기면 봉 값으로 되돌아가 맞는 선을 지운다 (창구 검수). */
   const livePrev = rowPrices[selectedCode] && Number(rowPrices[selectedCode].prev);
-  if (bigChart && bigPeriod === '5m' && livePrev > 0) {
+  if (drawnIsSelected && bigPeriod === '5m' && livePrev > 0) {
     addPrevCloseLine(bigChart, bigChart.candles, livePrev);
   }
   if (typeof detail !== 'undefined' && detail) {
@@ -1905,7 +1957,7 @@ loadUniverse().then(() => {
      있으면 안 된다 (2026-09-15 지적). 바뀌었다는 알림이 오면 `chart.js` 가
      쥔 봉을 버리고 부르므로 새로 받는다 */
   bigWatch = watchCandles(() => (findStock(selectedCode) ? selectedCode : null), () => bigPeriod,
-                          () => paintBigChart(), 'direct');
+                          () => catchUpBigChart(), 'direct', { keep: true });   // 안 받은 봉만 (2026-10-07)
 });
 
 

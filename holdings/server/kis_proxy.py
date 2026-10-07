@@ -6104,12 +6104,21 @@ class Handler(SimpleHTTPRequestHandler):
                 rows, fetched, source = get_chart(cfg, code, period, limit)
                 if PERIODS[period]["kis"] is None:      # 분봉(1m · 5m)만 — 일봉 이상은 받은 그대로
                     rows = drop_before_first_trade(rows)
+                # ── 안 받은 봉만 (2026-10-07 지시 — 「아직 안 받은 봉만 받아 덧붙이고, 받아 둔 봉은 다시 받지 않는다」) ──
+                # 화면이 마지막으로 받은 봉 시각을 since 로 보내면 **그 시각 이후의 봉 전부**(그 봉 포함 — 진행 중이라
+                # 값이 바뀌었을 수 있다)를 준다. 1개든 20개든. 전에는 30초마다 1,266개를 통째로 보냈다(10-07 실측).
+                # 위 계산(get_chart · drop_before_first_trade)은 그대로 다 하고 **보내기만** 줄인다 — KIS 호출은 그대로다.
+                since = (qs.get("since") or [""])[0].strip()
+                total = len(rows)
+                if since.isdigit():
+                    rows = [r for r in rows if str(r.get("ts", "")) >= since]
                 self._send_json({
                     "ok": True,
                     "data": {"code": code, "period": period, "candles": rows},
                     "meta": {
                         "count": len(rows), "fetched": fetched, "source": source,
                         "label": PERIODS[period]["label"],
+                        "since": since or None, "total": total,
                     },
                 })
                 return
