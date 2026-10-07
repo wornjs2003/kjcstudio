@@ -316,13 +316,14 @@ def us_bars(kis_get, cfg, code, period, limit):
     return [years[k] for k in sorted(years)]
 
 
-def us_5m(kis_get, cfg, code):
+def us_5m(kis_get, cfg, code, pages=US_5M_PAGES):
     """5분봉 → 봉 목록(과거 → 최신). ts 는 `US_SHOW_KST` 면 한국 시각(kymd+khms), 아니면 현지(xymd+xhms).
 
-    `US_REGULAR_ONLY` 면 현지 09:30~16:00 봉만 둔다. 한 쪽 120봉 · `US_5M_PAGES` 쪽까지 이어 받는다.
+    `US_REGULAR_ONLY` 면 현지 09:30~16:00 봉만 둔다. 한 쪽 120봉 · `pages` 쪽까지 이어 받는다
+    (처음 채울 때 `US_5M_PAGES` · 그 뒤 갱신은 한 쪽 — 120봉이 10시간이라 장중 갱신에는 한 쪽이면 된다).
     """
     out, keyb, nxt = {}, "", ""
-    for _ in range(US_5M_PAGES):
+    for _ in range(max(1, pages)):
         data = kis_get(cfg, MIN_PATH, {"AUTH": "", "EXCD": excd_of(code), "SYMB": code, "NMIN": "5",
                                        "PINC": "1", "NEXT": nxt, "NREC": str(MIN_PER_CALL),
                                        "FILL": "", "KEYB": keyb}, MIN_TR)
@@ -349,3 +350,53 @@ def us_5m(kis_get, cfg, code):
                                  "%Y%m%d%H%M%S") - timedelta(minutes=5)
         keyb, nxt = prev.strftime("%Y%m%d%H%M%S"), "1"
     return [out[k] for k in sorted(out)]
+
+
+# ── 미국 장 시간 (묶음 3 · 2026-10-07) ─────────────────────────────────────────────
+#
+# **미국 동부 시각으로 센다** — 서머타임을 zoneinfo 가 따라간다(2026-10-07 지금 서머타임 · 11월 1일에 끝남).
+# 한국 시각으로 박으면 서머타임이 바뀌는 날 한 시간이 어긋난다.
+
+from zoneinfo import ZoneInfo
+
+ET = ZoneInfo("America/New_York")
+#: 정규장 — 동부 시각 분(09:30 · 16:00). 미리받기는 마감 봉(16:00)이 닫히는 16:05 까지 돈다
+SESSION_OPEN_MIN, SESSION_CLOSE_MIN = 9 * 60 + 30, 16 * 60
+#: 장 마감 뒤 일·주·월·년봉 마지막 봉을 받는 시각 — 동부 16:10
+AFTER_CLOSE_MIN = 16 * 60 + 10
+#: 휴장으로 판정하는 시각 — 동부 10:00. 이때까지 오늘 봉이 하나도 없으면 휴장으로 본다
+#: (시세가 지연이어도 30분이면 첫 봉이 든다 — 개장 직후에 판정하면 지연 탓에 장날을 휴장으로 읽는다)
+HOLIDAY_JUDGE_MIN = 10 * 60
+
+
+def et_now():
+    return datetime.now(ET)
+
+
+def session_state(now=None):
+    """지금 미국 장이 어디쯤인가 → ("pre" | "open" | "after" | "closed", 동부 날짜 YYYYMMDD, 지금 분).
+
+    open 은 09:30~16:05(마감 봉이 닫힐 때까지), after 는 16:05 뒤 그날, 주말은 closed.
+    휴장일은 여기서 모른다 — 미리받기가 그날 첫 봉으로 판정한다.
+    """
+    now = now or et_now()
+    d, m = now.strftime("%Y%m%d"), now.hour * 60 + now.minute
+    if now.weekday() >= 5:
+        return "closed", d, m
+    if m < SESSION_OPEN_MIN:
+        return "pre", d, m
+    if m <= SESSION_CLOSE_MIN + 5:
+        return "open", d, m
+    return "after", d, m
+
+
+def session_open_kst(et_date):
+    """그날 동부 09:30 이 한국 시각으로 몇 시인가 → 봉 ts 와 견줄 YYYYMMDDHHMM.
+
+    `US_SHOW_KST` 가 꺼져 있으면 봉 ts 가 현지 시각이므로 현지 그대로 돌려준다.
+    """
+    t = datetime.strptime(et_date, "%Y%m%d").replace(
+        hour=SESSION_OPEN_MIN // 60, minute=SESSION_OPEN_MIN % 60, tzinfo=ET)
+    if US_SHOW_KST:
+        t = t.astimezone(KST)
+    return t.strftime("%Y%m%d%H%M")
