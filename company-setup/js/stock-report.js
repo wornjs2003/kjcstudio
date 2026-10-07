@@ -164,6 +164,7 @@ async function main() {
     nv: api(`/api/naver/integration?code=${code}`).then((j) => j.data), news: api(`/api/naver/news?code=${code}`).then((j) => j.data || []),
     dart: api(`/api/dart/disclosures?code=${code}`).then((j) => j.data || []),
     cards: fetch('data/company-cards.json', { cache: 'no-store' }).then((r) => r.json()), text: fetch(`data/stock-report/${code}.json`, { cache: 'no-store' }).then((r) => r.ok ? r.json() : null),
+    brokers: fetch('data/stock-report/brokers.json', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null),   // 증권사별 목표가 — tools/fetch-broker-targets.py(KIS 종목투자의견)
   };
   await Promise.all(Object.entries(tasks).map(([k, p]) => p.then((v) => { got[k] = v; }, (e) => { errs[k] = String(e.message || e); })));
   const now = new Date(), at = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -240,7 +241,23 @@ async function main() {
     row(['배당수익률 · 주당배당금', `${info.dividendYieldRatio ? esc(info.dividendYieldRatio.value) : '—'} · ${won(iv('dividend'))}`, '네이버']),
     row(['목표가 평균 · 투자의견 평균', `${won(cs.targetPriceMean)} (${fin(px) && cs.targetPriceMean ? pct((cs.targetPriceMean / px - 1) * 100) : '—'}) · ${cs.recommMean != null ? n0(cs.recommMean, 2) + ' / 5' : '—'}`, `네이버(FnGuide) ${esc(cs.asOf || '')}`]),
   ]);
-  $('rp-fund-body').innerHTML = `<h3>연간 실적 · 증권사 추정(E) ${S.naver} <small>억원 · 회사 카드 ${esc(card && card.fetchedAt || got.cards && got.cards.fetchedAt || '')}</small></h3>${annual}<h3>최근 5분기 ${S.kis} <small>억원</small></h3>${quarters}<h3>핵심 지표</h3>${key2}<h3>최근 리포트 ${S.naver}</h3>${nvc.reports && nvc.reports.length ? tbl([row(['날짜', '증권사', '제목'], true), ...nvc.reports.slice(0, 5).map((r) => trow([ymd(r.date), esc(r.broker), `<a href="${esc(r.from)}" target="_blank" rel="noopener">${esc(r.title)}</a>`]))]) : `<p class="rp-text">${SOON}</p>`}<p class="in-rp-note">증권사별 목표가 숫자는 네이버가 안 준다 — 평균만 있다(2026-10-06 실측)</p>`;
+  // 증권사별 목표가 — 최고 · 평균 · 최저 세 칸 (2026-10-07 재권님 「증권사별로 책정된 값을 넣어주면 좋을거같은데」 → 「너무 많은데 최고와 최저 평균으로」).
+  // 네이버는 평균만 준다 — KIS 종목투자의견을 tools/fetch-broker-targets.py 가 받아 둔 파일(증권사마다 가장 최근 값)에서 센다
+  const BK = got.brokers && got.brokers.items ? got.brokers.items[code] : null, bl = BK ? BK.brokers || [] : [];
+  const vsPx = (v) => fin(px) ? ` <small class="rp-up">${pct((v / px - 1) * 100)}</small>` : '';
+  let brokerBox = `<h3>증권사별 목표가 ${S.kis}</h3><p class="rp-text">${SOON} 받아 둔 값이 없습니다 — tools/fetch-broker-targets.py</p>`;
+  if (bl.length) {
+    const hi = bl.reduce((a, b) => b.target > a.target ? b : a), lo = bl.reduce((a, b) => b.target < a.target ? b : a);
+    const avg = bl.reduce((s, b) => s + b.target, 0) / bl.length, md = (s) => `${s.slice(4, 6)}-${s.slice(6, 8)}`;
+    brokerBox = `<h3>증권사별 목표가 ${S.kis} <small>${bl.length}곳 · 증권사마다 가장 최근 값 · ${ymd(BK.from)} 이후 · 받은 시각 ${esc(BK.fetchedAt)}</small></h3>
+      <div class="rp-kv rp-kv3">
+        <div><b>${won(hi.target)}${vsPx(hi.target)}</b><span>최고 · ${esc(hi.broker)} ${md(hi.date)}</span></div>
+        <div><b>${won(avg)}${vsPx(avg)}</b><span>평균 · ${bl.length}곳 · 네이버 평균 ${won(cs.targetPriceMean)}</span></div>
+        <div><b>${won(lo.target)}${vsPx(lo.target)}</b><span>최저 · ${esc(lo.broker)} ${md(lo.date)}</span></div>
+      </div>
+      <p class="in-rp-note">% 는 현재가 ${won(px)} 대비 · 네이버 평균과 다른 까닭 — 평균에 넣는 기간이 다르다 · 실적 추정은 증권사별로 못 받는다(위 (E)는 네이버 평균)</p>`;
+  }
+  $('rp-fund-body').innerHTML = `<h3>연간 실적 · 증권사 추정(E) ${S.naver} <small>억원 · 회사 카드 ${esc(card && card.fetchedAt || got.cards && got.cards.fetchedAt || '')}</small></h3>${annual}<h3>최근 5분기 ${S.kis} <small>억원</small></h3>${quarters}<h3>핵심 지표</h3>${key2}<h3>최근 리포트 ${S.naver}</h3>${nvc.reports && nvc.reports.length ? tbl([row(['날짜', '증권사', '제목'], true), ...nvc.reports.slice(0, 5).map((r) => trow([ymd(r.date), esc(r.broker), `<a href="${esc(r.from)}" target="_blank" rel="noopener">${esc(r.title)}</a>`]))]) : `<p class="rp-text">${SOON}</p>`}${brokerBox}`;
 
   // ── 차트 ──
   const levels = [...resist.map((p) => ({ kind: 'resist', p: p.p })), ...support.map((p) => ({ kind: 'support', p: p.p }))];
@@ -299,7 +316,7 @@ async function main() {
   // ── 10줄 · 한계 ──
   $('rp-ten-body').innerHTML = T.summary10 && T.summary10.length ? cards(T.summary10.map((s, i) => ({ head: `${i + 1}. ${esc(s.item)} — ${esc(s.now)}`, lines: [esc(s.mean)] }))) : `<p class="rp-text">${SOON} 세션 글</p>`;
   const gaps = [];
-  if (errs.inv) gaps.push('투자자 자료 못 받음'); gaps.push('공매도 — KIS 공매도 API 실호출 전'); gaps.push('증권사별 목표가 — 네이버가 평균만 준다'); gaps.push('3개월 · 6개월 수급 — 30일 넘는 자료 없음'); gaps.push('업종 밸류에이션 — 자료 없음'); gaps.push('가격표 · 지지저항 규칙 — 임시(참고 화면 방식)');
+  if (errs.inv) gaps.push('투자자 자료 못 받음'); gaps.push('공매도 — KIS 공매도 API 실호출 전'); if (!bl.length) gaps.push('증권사별 목표가 — 받아 둔 값 없음(tools/fetch-broker-targets.py)'); gaps.push('3개월 · 6개월 수급 — 30일 넘는 자료 없음'); gaps.push('업종 밸류에이션 — 자료 없음'); gaps.push('가격표 · 지지저항 규칙 — 임시(참고 화면 방식)');
   Object.entries(errs).forEach(([k, v]) => gaps.push(`${k} 못 받음 — ${esc(v)}`));
   $('rp-limit-body').innerHTML = `<h3>데이터 공백 ${S.calc}</h3>${list(gaps)}<h3>세션이 적은 한계 ${S.me}</h3>${list((T.limits || []).map(esc))}<p class="rp-text"><b>신뢰도</b> ${T.confidence ? esc(T.confidence) : SOON}</p>`;
   $('rp-foot').textContent = `기준 ${at} · 투자 판단의 참고 자료이며 투자 책임은 본인에게 있습니다 · 이 리포트는 세션이 손으로 쓴 것이고 규칙은 삼성전자로 다듬어 정한 뒤 다른 종목으로 넓힌다 (2026-10-06 재권님 지시)`;

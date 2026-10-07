@@ -23,6 +23,7 @@
 .rp-kv b { display: block; font-size: 1rem; color: var(--kh-text-primary); overflow-wrap: anywhere; }
 .rp-kv b small { font-size: 0.78rem; }
 .rp-kv span { font-size: 0.7rem; color: var(--kh-text-muted); line-height: 1.5; }
+.rp-kv.rp-kv3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }   /* 증권사별 목표가 — 최고 · 평균 · 최저 (폰에서도 한 줄) */
 
 /* 가격표 — 규칙 미정이라 빨간 바탕 (「아직 안 정해진 자리는 빨간 바탕으로 남긴다」). 정해지면 이 블록을 지운다 */
 .rp-price { background: var(--kh-danger-faint); border-radius: var(--kh-radius-md); padding: 12px; }

@@ -1,0 +1,284 @@
+{
+ "note": "증권사별 목표가 — KIS 종목투자의견(invest-opinion · FHKST663300C0) · 증권사마다 가장 최근 값 하나 · tools/fetch-broker-targets.py 가 만든다(손으로 고치지 않는다) · 화면은 js/stock-report.js 「기본 지표」",
+ "items": {
+  "005930": {
+   "fetchedAt": "2026-10-07 16:05",
+   "from": "20260407",
+   "to": "20261007",
+   "brokers": [
+    {
+     "broker": "유안타",
+     "date": "20260923",
+     "opinion": "BUY",
+     "target": 630000
+    },
+    {
+     "broker": "미래에셋",
+     "date": "20260907",
+     "opinion": "매수",
+     "target": 400000
+    },
+    {
+     "broker": "LS증권",
+     "date": "20260831",
+     "opinion": "Buy",
+     "target": 450000
+    },
+    {
+     "broker": "키움",
+     "date": "20260810",
+     "opinion": "BUY",
+     "target": 350000
+    },
+    {
+     "broker": "삼성",
+     "date": "20260731",
+     "opinion": "BUY",
+     "target": 400000
+    },
+    {
+     "broker": "한국투자",
+     "date": "20260731",
+     "opinion": "매수",
+     "target": 650000
+    },
+    {
+     "broker": "신한투자증권",
+     "date": "20260731",
+     "opinion": "매수",
+     "target": 450000
+    },
+    {
+     "broker": "IBK투자",
+     "date": "20260708",
+     "opinion": "매수",
+     "target": 460000
+    },
+    {
+     "broker": "KB",
+     "date": "20260708",
+     "opinion": "BUY",
+     "target": 600000
+    },
+    {
+     "broker": "메리츠",
+     "date": "20260706",
+     "opinion": "BUY",
+     "target": 500000
+    },
+    {
+     "broker": "DB증권",
+     "date": "20260703",
+     "opinion": "BUY",
+     "target": 360000
+    },
+    {
+     "broker": "교보",
+     "date": "20260701",
+     "opinion": "BUY",
+     "target": 500000
+    },
+    {
+     "broker": "상상인",
+     "date": "20260630",
+     "opinion": "BUY",
+     "target": 580000
+    },
+    {
+     "broker": "한화투자",
+     "date": "20260630",
+     "opinion": "BUY",
+     "target": 580000
+    },
+    {
+     "broker": "다올투자",
+     "date": "20260623",
+     "opinion": "BUY",
+     "target": 585000
+    },
+    {
+     "broker": "IM증권",
+     "date": "20260622",
+     "opinion": "BUY",
+     "target": 480000
+    },
+    {
+     "broker": "하나증권",
+     "date": "20260618",
+     "opinion": "BUY",
+     "target": 480000
+    },
+    {
+     "broker": "유진투자",
+     "date": "20260617",
+     "opinion": "Strong BUY",
+     "target": 560000
+    },
+    {
+     "broker": "현대차",
+     "date": "20260610",
+     "opinion": "BUY",
+     "target": 440000
+    },
+    {
+     "broker": "NH투자",
+     "date": "20260608",
+     "opinion": "BUY",
+     "target": 530000
+    },
+    {
+     "broker": "대신",
+     "date": "20260602",
+     "opinion": "BUY",
+     "target": 560000
+    },
+    {
+     "broker": "SK",
+     "date": "20260601",
+     "opinion": "매수",
+     "target": 610000
+    }
+   ]
+  },
+  "000660": {
+   "fetchedAt": "2026-10-07 16:05",
+   "from": "20260407",
+   "to": "20261007",
+   "brokers": [
+    {
+     "broker": "DB증권",
+     "date": "20260907",
+     "opinion": "BUY",
+     "target": 2300000
+    },
+    {
+     "broker": "미래에셋",
+     "date": "20260907",
+     "opinion": "매수",
+     "target": 3100000
+    },
+    {
+     "broker": "LS증권",
+     "date": "20260831",
+     "opinion": "Buy",
+     "target": 2400000
+    },
+    {
+     "broker": "키움",
+     "date": "20260810",
+     "opinion": "BUY",
+     "target": 2100000
+    },
+    {
+     "broker": "삼성",
+     "date": "20260730",
+     "opinion": "BUY",
+     "target": 3000000
+    },
+    {
+     "broker": "한화투자",
+     "date": "20260730",
+     "opinion": "BUY",
+     "target": 3150000
+    },
+    {
+     "broker": "NH투자",
+     "date": "20260730",
+     "opinion": "BUY",
+     "target": 3400000
+    },
+    {
+     "broker": "대신",
+     "date": "20260730",
+     "opinion": "BUY",
+     "target": 3200000
+    },
+    {
+     "broker": "한국투자",
+     "date": "20260730",
+     "opinion": "매수",
+     "target": 4700000
+    },
+    {
+     "broker": "신한투자증권",
+     "date": "20260730",
+     "opinion": "매수",
+     "target": 2700000
+    },
+    {
+     "broker": "메리츠",
+     "date": "20260727",
+     "opinion": "BUY",
+     "target": 3100000
+    },
+    {
+     "broker": "상상인",
+     "date": "20260703",
+     "opinion": "BUY",
+     "target": 3800000
+    },
+    {
+     "broker": "KB",
+     "date": "20260703",
+     "opinion": "BUY",
+     "target": 4200000
+    },
+    {
+     "broker": "IBK투자",
+     "date": "20260702",
+     "opinion": "매수",
+     "target": 4000000
+    },
+    {
+     "broker": "교보",
+     "date": "20260701",
+     "opinion": "BUY",
+     "target": 4000000
+    },
+    {
+     "broker": "하나증권",
+     "date": "20260626",
+     "opinion": "BUY",
+     "target": 3600000
+    },
+    {
+     "broker": "현대차",
+     "date": "20260624",
+     "opinion": "BUY",
+     "target": 3300000
+    },
+    {
+     "broker": "다올투자",
+     "date": "20260623",
+     "opinion": "BUY",
+     "target": 4200000
+    },
+    {
+     "broker": "IM증권",
+     "date": "20260622",
+     "opinion": "BUY",
+     "target": 3500000
+    },
+    {
+     "broker": "유진투자",
+     "date": "20260617",
+     "opinion": "Strong BUY",
+     "target": 3700000
+    },
+    {
+     "broker": "SK",
+     "date": "20260601",
+     "opinion": "매수",
+     "target": 4000000
+    },
+    {
+     "broker": "유안타",
+     "date": "20260423",
+     "opinion": "BUY",
+     "target": 1900000
+    }
+   ]
+  }
+ },
+ "errors": {}
+}
