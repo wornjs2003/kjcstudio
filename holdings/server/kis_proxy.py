@@ -1830,6 +1830,15 @@ def out_rows(data, key):
 HIGH_RELAY_ROUTES = ("chart", "index-candles", "index-minutes")
 
 
+def _valid_ymd(ymd):
+    """8자리여도 없는 날짜(20261399)는 거른다 — 400 으로 내려고."""
+    try:
+        datetime.strptime(ymd, "%Y%m%d")
+        return True
+    except ValueError:
+        return False
+
+
 class _UpstreamDown(Exception):
     """상류가 안 떠 있거나 터졌다 — **직접 부르는 쪽으로 내려간다.**"""
 
@@ -5900,13 +5909,79 @@ class Handler(SimpleHTTPRequestHandler):
     # 업종 안에서 몇이 오르내렸는지, 그리고 그 업종의 종목 목록이다.
     # 자세한 것은 server/naver.py 머리글과 docs/sector-sources.md 에 있다.
     def _handle_toss(self):
-        """토스증권 — 지금은 연결 확인 하나 (2026-10-07). 토큰은 보내는 서버(8765)만 받는다 — toss.py 머리 주석."""
-        route = urllib.parse.urlparse(self.path).path[len("/api/toss/"):].strip("/")
-        if route != "health":
-            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/toss/health 하나뿐입니다."}, 404)
+        """토스증권 — 연결 확인 · 1분봉 (2026-10-07 · 10-08). 토큰은 보내는 서버(8765)만 받는다 — toss.py 머리 주석.
+
+        8765 가 아닌 서버는 1분봉을 KIS 와 같은 상류(`KJC_KIS_UPSTREAM`)로 넘긴다 — 토스를 직접 부르지 않는다.
+        """
+        parsed = urllib.parse.urlparse(self.path)
+        route = parsed.path[len("/api/toss/"):].strip("/")
+        main_ok = is_sender(self.server.server_address[1])
+        if route == "health":
+            r = toss.health(main_ok)
+            self._send_json(r, 200 if r.get("ok") or r.get("connected") is None else 502)
             return
-        r = toss.health(is_sender(self.server.server_address[1]))
-        self._send_json(r, 200 if r.get("ok") or r.get("connected") is None else 502)
+        if route != "candles":
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/toss/health · /api/toss/candles 둘입니다."}, 404)
+            return
+        if not toss.can_call(main_ok):
+            self._toss_forward()
+            return
+        qs = urllib.parse.parse_qs(parsed.query)
+        q = lambda k: (qs.get(k) or [""])[0].strip()
+        symbol = toss.check_symbol(q("symbol"))
+        interval = q("interval") or "1m"
+        date = q("date")
+        if not symbol:
+            self._send_json({"ok": False, "error": "symbol 이 없거나 모양이 다릅니다 — 국내 005930 · 미국 AAPL · BRK.B"}, 400)
+            return
+        if interval != "1m":
+            self._send_json({"ok": False, "error": "interval 은 1m 하나만 받습니다"}, 400)
+            return
+        if date and not (re.fullmatch(r"\d{8}", date) and _valid_ymd(date)):
+            self._send_json({"ok": False, "error": "date 는 YYYYMMDD(한국시각 날짜)입니다"}, 400)
+            return
+        t0 = time.time()
+        try:
+            if date:
+                bars, calls = toss.candles_day(symbol, date)
+                nb = None
+            else:
+                try:
+                    count = int(q("count") or 200)
+                except ValueError:
+                    count = 200
+                bars, nb, calls = toss.minutes(symbol, q("before") or None, count)
+        except Exception as e:
+            self._send_json({"ok": False, "symbol": symbol, "interval": interval,
+                             "error": toss._hide(e), "source": "toss"}, 502)
+            return
+        self._send_json({"ok": True, "symbol": symbol, "interval": interval, "date": date or None,
+                         "candles": bars, "nextBefore": nb, "calls": calls,
+                         "ms": int((time.time() - t0) * 1000), "source": "toss"})
+
+    def _toss_forward(self):
+        """토스 1분봉을 상류(8765)에 넘긴다. 상류가 없으면 「여기서는 안 부른다」 를 낸다 — 폴백하지 않는다
+        (직접 부르면 토큰을 새로 받아 8765 토큰이 끊긴다)."""
+        base = upstream_base()
+        if not base:
+            self._send_json({"ok": False, "error": "토스는 8765 에서만 부릅니다 — 이 서버에는 넘길 상류(KJC_KIS_UPSTREAM)가 없습니다",
+                             "source": "toss"}, 503)
+            return
+        try:
+            with urllib.request.urlopen(base + self.path, timeout=60) as resp:
+                status, body = resp.status, resp.read()
+        except urllib.error.HTTPError as e:
+            status, body = e.code, e.read()
+        except (urllib.error.URLError, OSError) as e:
+            self._send_json({"ok": False, "error": "상류(8765)에 못 닿았습니다 — %s" % safe_message(e),
+                             "source": "toss"}, 502)
+            return
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
 
     def _handle_naver(self):
         parsed = urllib.parse.urlparse(self.path)
