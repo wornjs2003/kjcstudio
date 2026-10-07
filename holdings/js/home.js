@@ -29,6 +29,7 @@ import { bindDailyMenu, loadDailyDoc, dailyDocUrl } from './components/daily-vie
 import { fetchIssues, fetchFeed, paintIssues, paintLoading } from './components/news-list.js';
 import { bindNewsModal } from './components/news-modal.js';
 import { mountSectors } from './components/sectors.js';
+import { mountStockSearch } from './components/stock-search.js';
 import { openSectorModal } from './components/sector-modal.js';
 import { mountStockPanel } from './components/stock-panel.js';
 import { mountStockDetail } from './components/stock-detail.js';
@@ -1807,6 +1808,16 @@ mountIndicatorMenu(document.querySelector('.kh-ind-menu'));
 /* 「지금 뜨는 산업」 — 업종 이름 단추를 누르면 그 종목이 나온다 (2026-09-18 지시).
    값은 네이버에서 오고 첫 화면을 막지 않는다 — 목록 한 번이 0.03초다. */
 const sectors = mountSectors(document.querySelector('.kh-sc-card'));
+
+/* 갈래 줄 검색칸 — 고르면 **순위표 줄 · 산업 칸과 같은 길**(큰 차트 · 패널 · 현재가가 그 종목)
+   (2026-10-06 지시 · 재권님 (가)). 모달은 그 뒤 「자세히 ›」. */
+mountStockSearch(document.querySelector('[data-stock-search]'), {
+  onPick(code, name) {
+    if (!findStock(code)) addExtraStock(code, name || code);
+    selectStock(code);
+    if (!(rowPrices && rowPrices[code])) quoteTick();
+  },
+});
 
 /* 산업 칸 종목을 누르면 **순위표 줄과 같은 길** — 큰 차트 · 옆 패널 · 현재가가 그 종목으로
    (2026-10-06 지시 — 「실시간 순위에서 선택하면 차트 나오는 것처럼 … 그래야 룰이 하나일 거 같어」).

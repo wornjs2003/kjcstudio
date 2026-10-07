@@ -18,6 +18,7 @@ import { mountSchedule } from './components/schedule.js';
 import { apiFetch } from './data/api.js';
 import { everyServerMs } from './store/timing.js';
 import { watch } from './store/longpoll.js';
+import { mountStockSearch } from './components/stock-search.js';
 
 const $ = (id) => document.getElementById(id);
 const WATCH = new Set(WATCHLIST.map((s) => s.code));
@@ -402,3 +403,6 @@ startLiveLoop({
 
   onPrices(prices)   { side.update(prices); },
 });
+
+/* 갈래 줄 검색칸 — 이 화면에서는 고르면 종목 화면으로 간다 (2026-10-06 지시 · 재권님 (가)) */
+mountStockSearch(document.querySelector('[data-stock-search]'));

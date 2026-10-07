@@ -5893,6 +5893,12 @@ class Handler(SimpleHTTPRequestHandler):
                 })
                 return
 
+            if route == "search":
+                # 종목 찾기 — 갈래 줄 검색칸 (2026-10-06 지시). 이미 있는 표 둘만 읽는다 — dart.search 주석
+                q = (qs.get("q") or [""])[0]
+                self._send_json({"ok": True, "data": dart.search(q, (qs.get("limit") or ["10"])[0])})
+                return
+
             if route == "universe":
                 # 코스피 200 다음 코스닥 150 (2026-10-06). rank 는 시장 안의 순위 — 화면은 market 으로 가른다
                 rows = dart.universe_rows(None)

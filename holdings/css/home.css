@@ -744,6 +744,45 @@
   font-weight: 700; font-size: 0.92rem; padding-bottom: 12px;
 }
 
+/* ── 종목 검색칸 — 갈래 줄 오른쪽 끝 (2026-10-06 지시 · 「내 기록」 자리) ──
+   그리는 것은 js/components/stock-search.js. **줄 높이를 늘리지 않는다** — 칸 높이 + 아래 여백이
+   옆 링크(글자 + 12px)와 같은 높이 안에 든다(check-layout 으로 전후 같음을 본다).
+   **Insight 화면도 이 파일을 건다** — 이 클래스들만 더했고 .kh-cat · .kh-cat-my 는 안 고쳤다. */
+.kh-cat-search { margin-left: auto; padding-bottom: 6px; display: flex; align-items: center; }
+.kh-cs-btn { display: none; }
+.kh-cs-in {
+  width: 200px; height: 28px; box-sizing: border-box; padding: 0 10px;
+  border: 1px solid var(--kh-border-strong); border-radius: var(--kh-radius-sm);
+  background: var(--kh-bg-card); color: var(--kh-text-primary); font: inherit; font-size: 0.86rem;
+}
+.kh-cs-in::placeholder { color: var(--kh-text-muted); }
+.kh-cs-in:focus { outline: none; border-color: var(--kh-accent); }
+.kh-cs-list {
+  position: fixed; z-index: 1000; margin: 0; padding: 4px 0; list-style: none;
+  background: var(--kh-bg-float); border-radius: var(--kh-radius-md); box-shadow: var(--kh-shadow-lg);
+  max-height: 360px; overflow-y: auto;
+}
+.kh-cs-row { display: flex; align-items: baseline; gap: 8px; padding: 7px 12px; cursor: pointer; font-size: 0.88rem; }
+.kh-cs-row.is-on, .kh-cs-row:hover { background: var(--kh-bg-hover); }
+.kh-cs-name { font-weight: 500; color: var(--kh-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kh-cs-code { color: var(--kh-text-secondary); font-size: 0.8rem; }
+.kh-cs-mkt { margin-left: auto; font-size: 0.76rem; }
+.kh-cs-none { padding: 9px 12px; font-size: 0.84rem; }
+@media (max-width: 700px) {
+  /* 좁은 화면 — 돋보기만 두고, 누르면 칸이 화면 위쪽에 가로로 펼쳐진다 */
+  .kh-cs-btn {
+    display: block; border: 0; background: none; padding: 0 4px; cursor: pointer;
+    font-size: 1.15rem; line-height: 1; color: var(--kh-text-secondary);
+  }
+  .kh-cs-in { display: none; }
+  /* 갈래 줄이 옆으로 밀리는 띠라 맨 끝 자리는 화면 밖으로 나간다 — 돋보기를 오른쪽 끝에 붙여 둔다 */
+  .kh-cat-search { position: sticky; right: 0; background: var(--kh-bg); padding-left: 8px; }
+  .kh-cat-search.is-open .kh-cs-in {
+    display: block; position: fixed; z-index: 1000; left: 12px; right: 12px; top: 12px; width: auto; height: 36px;
+    box-shadow: var(--kh-shadow-md);
+  }
+}
+
 /* ── 장 상태 줄 ── */
 .kh-mkt {
   display: flex; align-items: center; gap: 20px; flex-wrap: wrap;

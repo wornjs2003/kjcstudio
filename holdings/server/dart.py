@@ -508,6 +508,70 @@ def cap_rank(code, market="KOSPI"):
     return None
 
 
+def search(q, limit=10):
+    """종목 찾기 — 이름 일부나 코드로 (2026-10-06 지시 — 「내기록 이걸 검색창으로 해주고 종목 검색 가능하도록」).
+
+    **새로 받는 것이 없다.** 이미 있는 표 둘을 읽는다.
+        순위 목록(dart_universe)   코스피 200 · 코스닥 150 — ETF 도 든다 · 시장이 있다
+        기업 대응표(dart_corps)    OpenDART 상장사 전체 — ETF 는 없다 · 시장이 없다
+    그래서 ETF 는 순위 안의 것만 찾는다. 대응표에는 **상장폐지된 회사도 종목코드를 단 채 남아 있을 수 있다** —
+    지금은 가려낼 값이 표에 없다(받는 쪽 xml 에 상장 여부가 없다). 순위 목록에 든 것을 먼저 낸다.
+
+    순서 — 순위 목록 → 이름이 같음 → 이름이 그것으로 시작 → 이름에 들어 있음. 코드는 앞부분이 같으면.
+    """
+    q = (q or "").strip()
+    if not q:
+        return []
+    limit = max(1, min(int(limit or 10), 20))
+    db_init()
+    low = q.lower()
+    digits = q.isdigit()
+    with _db_lock, db_conn() as conn:
+        has = _universe_has_market(conn)
+        col = "COALESCE(market, 'KOSPI')" if has else "'KOSPI'"
+        uni = conn.execute("SELECT stock_code, name, rank, %s AS market FROM dart_universe" % col).fetchall()
+        if digits:
+            corps = conn.execute(
+                "SELECT stock_code, corp_name FROM dart_corps WHERE stock_code LIKE ? LIMIT 200",
+                (q + "%",)).fetchall()
+        else:
+            corps = conn.execute(
+                "SELECT stock_code, corp_name FROM dart_corps WHERE stock_code <> '' AND corp_name LIKE ? LIMIT 400",
+                ("%" + q + "%",)).fetchall()
+
+    def score(name, code):
+        n = (name or "").lower()
+        if digits:
+            return 0 if code == q else (1 if code.startswith(q) else None)
+        if n == low:
+            return 0
+        if n.startswith(low):
+            return 1
+        if low in n:
+            return 2
+        return None
+
+    out, seen = [], set()
+    rows = []
+    for r in uni:
+        sc = score(r["name"], r["stock_code"])
+        if sc is not None:
+            rows.append((0, sc, 0 if r["market"] == "KOSPI" else 1, r["rank"] or 999, r["stock_code"], r["name"], r["market"]))
+    for r in corps:
+        code = (r["stock_code"] or "").strip()
+        sc = score(r["corp_name"], code)
+        if sc is not None and len(code) == 6:
+            rows.append((1, sc, 2, 999, code, r["corp_name"], None))
+    for row in sorted(rows, key=lambda x: (x[1], x[0], x[2], x[3], len(x[5] or ""))):
+        if row[4] in seen:
+            continue
+        seen.add(row[4])
+        out.append({"code": row[4], "name": row[5], "market": row[6]})
+        if len(out) >= limit:
+            break
+    return out
+
+
 def universe_size():
     db_init()
     with _db_lock, db_conn() as conn:

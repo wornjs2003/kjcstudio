@@ -14,6 +14,7 @@
 import { mountVBar, startLiveLoop }
   from './components/frame.js';
 import { mountDaily } from './components/daily-view.js';
+import { mountStockSearch } from './components/stock-search.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -29,3 +30,6 @@ startLiveLoop({ prices: true });
 mountDaily(document.querySelector('.kh-main'), {
   side: $('kh-side'),
 });
+
+/* 갈래 줄 검색칸 — 이 화면에서는 고르면 종목 화면으로 간다 (2026-10-06 지시 · 재권님 (가)) */
+mountStockSearch(document.querySelector('[data-stock-search]'));
