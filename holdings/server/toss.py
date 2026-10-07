@@ -1,8 +1,19 @@
 # -*- coding: utf-8 -*-
 """토스증권 Open API 연결 (2026-10-07 재권님 지시 — 「토큰 받아 놨으니 연결할 수 있게」).
 
-**지금은 연결 확인 하나뿐이다.** 화면에는 아직 아무것도 안 올린다 — `/api/toss/health` 가
-현재가를 한 번 불러 「연결됨」 만 낸다. 무엇을 토스에서 받을지는 그 다음에 정한다.
+**연결 확인과 1분봉 둘이다.** `/api/toss/health` 가 현재가를 한 번 불러 「연결됨」 을 내고,
+`/api/toss/candles` 가 1분봉을 낸다(2026-10-08 · 5분봉 계획 (나) — 재권님 「응 해」).
+화면은 아직 안 쓴다.
+
+── 1분봉 (2026-10-07 실측 · 주식페이지_개발3) ──
+
+    GET /api/v1/candles?symbol=&interval=1m&count=200[&before=ISO]
+    → result.candles[{timestamp, openPrice, highPrice, lowPrice, closePrice, volume, currency}] (전부 글자) · nextBefore
+    최신이 먼저 온다 · timestamp 는 국내 · 미국 모두 한국시각(+09:00)
+    국내는 KRX+NXT 합친 값이라 08:00~20:00 하루 720봉 → 네 번 부른다 · 2024-10-01 까지 거슬러 간다
+
+**하루치(`candles_day`)의 「하루」 는 한국시각 날짜다.** 미국 종목은 한국 자정을 넘는 장이 둘로 갈린다.
+한 쪽이라도 실패하면 하루 전체를 실패로 낸다 — 반쯤 받은 날을 「그날 전부」 로 읽지 않게.
 
 ── 공식 명세 (openapi.tossinvest.com/openapi-docs/latest/openapi.json · v1.2.19 · 2026-10-07 직접 읽음) ──
 
@@ -26,11 +37,13 @@ access_token 이 차 있으면 그것을 먼저 쓰고, 401 이면 client_id · 
 """
 import json
 import os
+import re
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 from secrets_guard import safe_message
 
@@ -38,10 +51,32 @@ BASE = "https://openapi.tossinvest.com"
 SECRETS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "secrets.json")
 RENEW_BEFORE = 600            # 만료 10분 전에 다시 받는다
 TIMEOUT = 10
+PER_SEC = 15                  # 시세 한도(15/초 · sources.json) 안에서 간격을 둔다 — 이 프로세스 안에서만 센다
+DAY_PAGES_MAX = 10            # 하루치 쪽 상한 — 미국 24시간이어도 1440봉 = 8쪽
+KST = timezone(timedelta(hours=9))
+# 8765 가 아닌 서버가 토스를 직접 불러도 되나 — 시험용. 켜면 그 서버가 토큰을 받아 8765 토큰이 끊긴다
+TOSS_HERE = (os.environ.get("KJC_TOSS_HERE") or "").strip().lower() in ("1", "true", "yes", "on")
 
 _lock = threading.Lock()
 _last_code = [None]          # 바로 앞 시도의 상태 코드 — 401 일 때만 토큰을 새로 받는다
 _tok = {"value": None, "until": 0.0, "from": None}     # from: 「붙여넣은 것」 · 「서버가 받은 것」
+_pace_lock = threading.Lock()
+_pace_next = [0.0]
+
+
+def can_call(main_ok):
+    """이 서버가 토스를 직접 불러도 되나 — 8765(main_ok) 이거나 시험 스위치(`KJC_TOSS_HERE`)."""
+    return bool(main_ok or TOSS_HERE)
+
+
+def _pace():
+    """부르기 전에 간격을 맞춘다 — 차례를 잡고 그 시각까지 잔다."""
+    with _pace_lock:
+        now = time.monotonic()
+        at = max(now, _pace_next[0])
+        _pace_next[0] = at + 1.0 / PER_SEC
+    if at > now:
+        time.sleep(at - now)
 
 
 def _conf():
@@ -57,10 +92,10 @@ def _conf():
 
 def _hide(text):
     """오류 문구에서 키 · 토큰을 지운다. 서버가 받은 토큰은 secrets.json 에 없어 따로 지운다."""
-    s = safe_message(text, 200)
+    s = str(text)
     if _tok["value"]:
-        s = s.replace(_tok["value"], "<가림>")
-    return s
+        s = s.replace(_tok["value"], "<가림>")      # 자르기 전에 바꾼다 — 200자 경계에 걸린 토큰 앞조각이 안 남게
+    return safe_message(s, 200)
 
 
 def _issue(conf):
@@ -112,6 +147,7 @@ def get(path, params=None):
     for attempt in (0, 1):
         tok = _token(conf, renew=attempt == 1 and _last_code[0] == 401)
         req = urllib.request.Request(url, headers={"Authorization": "Bearer " + tok})
+        _pace()
         try:
             with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
                 return json.loads(r.read().decode("utf-8"))
@@ -136,7 +172,7 @@ def health(main_only_ok):
 
     main_only_ok: 이 서버가 토큰을 받아도 되는 자리인가(8765). 아니면 부르지 않는다.
     """
-    if not main_only_ok:
+    if not can_call(main_only_ok):
         return {"ok": False, "connected": None,
                 "error": "토스는 8765 에서만 부릅니다 — 키 하나에 토큰이 하나라 서버마다 받으면 서로 끊습니다"}
     if not _conf():
@@ -156,3 +192,64 @@ def _first(j):
     if isinstance(d, list):
         d = d[0] if d else None
     return d
+
+
+# ── 1분봉 ──
+
+SYMBOL_RE = re.compile(r"^[A-Z0-9][A-Z0-9.]{0,11}$")
+
+
+def check_symbol(symbol):
+    """국내 6자리 · 미국 티커(점 포함 — BRK.B). 아니면 None."""
+    s = (symbol or "").strip().upper()
+    return s if SYMBOL_RE.match(s) else None
+
+
+def _num(v):
+    f = float(v)
+    return int(f) if f.is_integer() else f
+
+
+def _bar(c):
+    return {"t": c["timestamp"], "o": _num(c["openPrice"]), "h": _num(c["highPrice"]),
+            "l": _num(c["lowPrice"]), "c": _num(c["closePrice"]), "v": _num(c["volume"])}
+
+
+def _page(symbol, before=None, count=200):
+    p = {"symbol": symbol, "interval": "1m", "count": count}
+    if before:
+        p["before"] = before
+    j = get("/api/v1/candles", p)
+    b = j.get("result") if isinstance(j, dict) else None
+    if not isinstance(b, dict) or not isinstance(b.get("candles"), list):
+        raise RuntimeError("토스 봉 응답 모양이 다릅니다 — %s" % _hide(str(j)[:120]))
+    return b["candles"], b.get("nextBefore")
+
+
+def minutes(symbol, before=None, count=200):
+    """한 쪽 — 옛것부터 오름차순. 돌려주는 것: (봉, nextBefore, 부른 수)."""
+    rows, nb = _page(symbol, before, max(1, min(int(count), 200)))
+    return [_bar(c) for c in reversed(rows)], nb, 1
+
+
+def candles_day(symbol, ymd):
+    """그날(한국시각) 1분봉 전부 — 옛것부터. 돌려주는 것: (봉, 부른 수). 한 쪽이라도 실패하면 예외."""
+    start = datetime.strptime(ymd, "%Y%m%d").replace(tzinfo=KST)
+    end = start + timedelta(days=1)
+    before = end.isoformat(timespec="milliseconds")
+    got, calls = {}, 0
+    for _ in range(DAY_PAGES_MAX):
+        rows, nb = _page(symbol, before)
+        calls += 1
+        oldest = None
+        for c in rows:
+            ts = datetime.fromisoformat(c["timestamp"])
+            oldest = ts if oldest is None or ts < oldest else oldest
+            if start <= ts < end:
+                got[c["timestamp"]] = _bar(c)
+        if not rows or not nb or nb == before or (oldest is not None and oldest < start):
+            break
+        before = nb
+    else:
+        raise RuntimeError("하루치가 %d쪽을 넘었습니다 — 끝까지 못 받았습니다" % DAY_PAGES_MAX)
+    return [got[k] for k in sorted(got, key=datetime.fromisoformat)], calls
