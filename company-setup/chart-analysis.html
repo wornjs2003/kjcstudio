@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>차트분석 · Insight</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css" />
+<link rel="stylesheet" href="../assets/css/common.css" />
+<link rel="stylesheet" href="../assets/css/nav.css" />
+<!-- 종목 분석(analysis.html)과 같은 틀 — 홀딩스 CSS 를 같이 쓴다(「거는 쪽이 둘 이상인 파일」) · 이 화면 전용 CSS 는 아직 없다(있는 칸만 씀) -->
+<link rel="stylesheet" href="../holdings/css/frame.css" />
+<link rel="stylesheet" href="../holdings/css/home.css" />
+<link rel="stylesheet" href="css/insight.css" />
+</head>
+<body data-nav="company-setup" data-site-root="../">
+<div id="site-nav"></div>
+
+<!-- 차트분석 — 차트 보는 방법을 논문으로 가른다 (2026-10-08 재권님 「차트보는방법 논문들좀 뒤져볼래?」 → 「시황 · 전망 여기를 차트분석으로 바꾸고
+     여기에 정리를 해놔야 할거같은데」 → 「틀만 먼저 만들어서 보여줘」). 틀 확인 뒤 본문을 채웠다(「응 이렇게 해줘」) -->
+<div class="kh-app kh-app-wide">
+  <main class="kh-main">
+    <!-- 갈래 탭은 첫 화면(index.html)과 같은 줄 · 같은 순서 -->
+    <nav class="kh-cat" aria-label="갈래">
+      <a href="./">홈</a>
+      <a href="analysis.html">종목 분석</a>
+      <a class="is-on" href="chart-analysis.html">차트분석</a>
+      <a href="#">영상 분석</a>
+      <a href="#">뉴스 분석</a>
+      <a href="#">산업 분석</a>
+      <a href="#">투자 전략</a>
+      <a href="#">경제 지표</a>
+      <span class="kh-cat-my">증권사 리포트</span>
+    </nav>
+    <div data-page-find></div>
+    <article class="kh-card in-report in-doc" id="in-doc">
+      <div class="in-rp-head in-doc-head">
+        <div>
+          <div class="in-rp-meta">시황분석 조사 · 2026-10-08 · 학술지에 실린 논문 · 원문 링크는 맨 아래 「출처」</div>
+          <h1>차트분석 — 무엇이 근거가 있고 무엇이 약한가</h1>
+          <p>차트를 볼 때 쓰는 방법을 논문 결과로 가르고(①~③), 고른 종목 차트에 대입해 본다(⓪). 갈래마다 누르면 펼쳐진다.</p>
+          <div class="in-doc-foldall"><button type="button" class="kh-chip" id="doc-open-all">전부 펼치기</button><button type="button" class="kh-chip" id="doc-close-all">전부 접기</button></div>
+        </div>
+      </div>
+
+      <!-- ⓪ 차트에 대입해 보기 (2026-10-08 재권님 「차트 이미지를 보면서 대입해서 분석되면 좋을거같은데」 → (나) 종목을 골라 대입 · 「응 해줘」).
+           종목을 고르면 그 종목 일봉(KIS · 통합 시장)을 받아 그리고, ① 의 네 근거를 대입해 판정한다. 판정 기준은 논문이 쓴 규칙만 — 논문에 절대 기준이 없는 둘(52주 고점 · 거래량)은 값만 내고 「미정」 -->
+      <details class="in-rp-sec rp-fold in-grp" id="c-apply" open>
+        <summary><h2>⓪ 차트에 대입해 보기</h2><span class="rp-sum">종목을 고르면 그 차트에 ① 의 네 근거를 대입한다</span></summary>
+        <div class="rp-fold-body">
+          <div class="in-doc-foldall" data-apply-stocks></div>
+          <canvas id="ca-canvas" width="1200" height="380" style="width: 100%; height: 380px; display: block;" aria-label="일봉 1년 · 이동평균 · 52주 고점 · 거래량"></canvas>
+          <p class="in-rp-note" data-apply-legend></p>
+          <table class="in-tbl in-wrap" data-apply-table></table>
+          <p class="in-rp-note">일봉은 KIS 통합 시장(KRX + 넥스트레이드) 종가라 네이버 종가와 조금 다를 수 있다 · 견주는 판정이지 매수 · 매도 신호가 아니다(<a href="#c-rule">③</a>)</p>
+        </div>
+      </details>
+
+      <details class="in-rp-sec rp-fold in-grp" id="c-yes">
+        <summary><h2>① 근거가 있는 것</h2><span class="rp-sum">추세 · 이동평균 · 52주 고점 거리 · 거래량</span></summary>
+        <div class="rp-fold-body">
+          <section class="in-rp-sec" id="c-yes-trend"><h2>추세 · 모멘텀</h2><p class="in-doc-p"><b>무엇</b> 최근 1~12개월 오른 것이 더 가고, 내린 것이 더 내린다.</p>
+<p class="in-doc-p"><b>결과</b> 주가지수 · 통화 · 원자재 · 채권 선물 58개에서 1~12개월 추세가 이어졌다. 그보다 길게 보면 일부 되돌아간다 — 처음엔 덜 반응하고 나중엔 지나치게 반응한다는 설명과 맞는다(Moskowitz · Ooi · Pedersen 2012). 종목을 지난 수익률로 줄 세우면 위쪽(오른 종목)이 중기적으로 아래쪽보다 계속 낫다(Jegadeesh · Titman 1993).</p>
+<p class="in-doc-p"><b>읽는 법</b> 1년 안쪽 추세는 따라가는 쪽에 근거가 있다. 몇 년 넘게 오른 것은 되돌림 쪽으로 기운다.</p><span class="in-look-src">출처 Moskowitz · Ooi · Pedersen(2012) · Jegadeesh · Titman(1993)</span>
+<details class="rp-fold ca-orig" id="o1"><summary><h3>원문 해석 — Moskowitz · Ooi · Pedersen (2012) 「시계열 모멘텀」</h3><span class="rp-sum">Journal of Financial Economics · 2012년 5월호 · 유동성 큰 선물 58종</span></summary><div class="rp-fold-body">
+<p class="in-doc-p"><b>초록 해석</b></p><div class="in-quote">주가지수 · 통화 · 원자재 · 채권 선물을 대상으로, 살펴본 유동성 큰 상품 58개 <b>하나하나에서</b> 뚜렷한 「시계열 모멘텀」 을 확인했다. 1~12개월 수익률은 이어지는 경향이 있고, 그보다 긴 기간에는 일부 되돌아간다. 이는 투자자가 처음엔 덜 반응했다가 나중에 지나치게 반응한다는 심리 이론과 맞는다.</div>
+<p class="in-doc-p"><b>차트 볼 때 뜻</b> 「다른 종목보다 더 올랐나」 가 아니라 <b>그 종목 자신의 지난 1년이 플러스인가</b> 를 본다 — ⓪ 의 추세 판정이 이 규칙이다. 다만 대상이 개별 주식이 아니라 선물이다.</p>
+<p class="in-rp-note">확인 범위 — 초록(SSRN 은 열리지 않아 검색 결과의 초록 요약)만 · 본문 표는 못 봄</p></div></details>
+<details class="rp-fold ca-orig" id="o2"><summary><h3>원문 해석 — Jegadeesh · Titman (1993) 「승자를 사고 패자를 팔 때의 수익」</h3><span class="rp-sum">Journal of Finance · 1993 · 미국 주식</span></summary><div class="rp-fold-body">
+<p class="in-doc-p"><b>초록 해석</b></p><div class="in-quote">과거에 잘 오른 주식을 사고 못 오른 주식을 파는 전략이 <b>3~12개월 보유</b>에서 뚜렷한 플러스 수익을 냈다. 이 수익은 시장 위험이나 공통 요인에 대한 늦은 반응으로 설명되지 않는다. 다만 첫해의 초과 수익은 <b>그 뒤 2년 동안 일부 되돌아갔다</b>. 실적 발표 전후에도 비슷한 모양이 보였다.</div>
+<p class="in-doc-p"><b>차트 볼 때 뜻</b> 종목끼리 줄을 세우는 모멘텀이다. 1년 안쪽은 따라가고, 그 뒤는 되돌림을 염두에 둔다.</p>
+<p class="in-rp-note">확인 범위 — 초록(IDEAS)만</p></div></details>
+</section>
+          <section class="in-rp-sec" id="c-yes-ma"><h2>이동평균</h2><p class="in-doc-p"><b>무엇</b> 가격이 이동평균선 위로 올라서면 사고, 아래로 내려가면 판다 · 박스 상단 돌파 · 하단 이탈.</p>
+<p class="in-doc-p"><b>결과</b> 다우지수 1897~1986년에서 매수 신호 뒤 수익이 매도 신호 뒤보다 높고 덜 흔들렸다. 매도 신호 뒤 수익은 마이너스였다(Brock · Lakonishok · LeBaron 1992). 변동성이 큰 종목 묶음에 이동평균을 쓰면 그냥 들고 있는 것보다 크게 나았다(Han · Yang · Zhou 2013). 이동평균 같은 기술 지표는 시장 전체 수익을 금리 · 물가 같은 거시 변수만큼 예측했고, 둘을 함께 쓰면 더 나았다(Neely 외 2014).</p>
+<p class="in-doc-p"><b>단</b> 같은 다우지수를 규칙 수천 개로 넓혀 착시를 걷어내면 의미 있게 이기는 규칙이 없었다 — <a href="#c-rule-snoop">③</a> 참고.</p><span class="in-look-src">출처 Brock · Lakonishok · LeBaron(1992) · Han · Yang · Zhou(2013) · Neely · Rapach · Tu · Zhou(2014)</span>
+<details class="rp-fold ca-orig" id="o3"><summary><h3>원문 해석 — Brock · Lakonishok · LeBaron (1992) 「단순한 기술적 매매 규칙과 주가의 확률적 성질」</h3><span class="rp-sum">Journal of Finance 47권 5호 · 다우지수 1897~1986</span></summary><div class="rp-fold-body">
+<p class="in-doc-p"><b>초록 해석</b></p><div class="in-quote">가장 단순하고 널리 쓰이는 두 규칙 — <b>이동평균</b>과 <b>박스(거래 범위) 돌파</b> — 를 다우지수 1897~1986년으로 시험했다. 부트스트랩으로 통계 검정을 넓혔다. 결과는 기술적 전략을 강하게 지지한다. 이 전략의 수익은 랜덤워크 · AR(1) · GARCH-M · EGARCH 네 모형으로 설명되지 않는다. 매수 신호 뒤 수익은 매도 신호 뒤보다 늘 높고 덜 흔들렸으며, 매도 신호 뒤 수익은 마이너스였다 — 지금의 균형 모형으로 쉽게 설명되지 않는다.</div>
+<p class="in-doc-p"><b>차트 볼 때 뜻</b> 200일선 위 · 아래로 가르는 ⓪ 의 이동평균 판정이 여기서 왔다. 단 같은 자료를 착시 보정한 뒤속 연구(③)에서는 힘을 잃었다.</p>
+<p class="in-rp-note">확인 범위 — 초록(IDEAS)만 · 시험한 이동평균 기간은 초록에 없어 못 봄</p></div></details>
+<details class="rp-fold ca-orig" id="o4"><summary><h3>원문 해석 — Han · Yang · Zhou (2013) 「새 이상현상 — 기술적 분석의 횡단면 수익성」</h3><span class="rp-sum">JFQA · 2013 · 변동성으로 나눈 미국 주식 묶음</span></summary><div class="rp-fold-body">
+<p class="in-doc-p"><b>초록 해석</b></p><div class="in-quote">변동성으로 나눈 포트폴리오에 <b>이동평균 타이밍 전략</b>을 적용하면 그냥 들고 있는 것보다 크게 나았다. 변동성이 큰 묶음에서는 CAPM · 파마-프렌치 3요인 대비 초과 수익이 경제적으로 매우 크고, 잘 알려진 모멘텀 전략보다도 컸다. 시장 타이밍 능력 · 투자 심리 · 부도 · 유동성 위험으로 설명되지 않았다. 「정보가 불확실한 정도」 를 다른 잣대로 나눠도 결과가 비슷했다.</div>
+<p class="in-doc-p"><b>차트 볼 때 뜻</b> 이동평균은 <b>흔들림이 큰 종목</b>에서 더 쓸모가 있었다 — 같은 신호라도 종목 성격에 따라 무게가 다르다.</p>
+<p class="in-rp-note">확인 범위 — 초록(케임브리지 대학 출판부)만</p></div></details>
+<details class="rp-fold ca-orig" id="o5"><summary><h3>원문 해석 — Neely · Rapach · Tu · Zhou (2014) 「주식 위험 프리미엄 예측 — 기술 지표의 역할」</h3><span class="rp-sum">Management Science · 2014 · 미국 1950.12~2011.12 · 거시 변수 14 · 기술 지표 14</span></summary><div class="rp-fold-body">
+<p class="in-doc-p"><b>초록 해석</b></p><div class="in-quote">학계는 주로 거시 변수로 미국 주식의 초과 수익을 예측해 왔고 실무자가 쓰는 기술 지표는 덜 봤다. 이 논문은 둘을 견줬다. 기술 지표(이동평균 · 모멘텀 · 거래량 기반)는 표본 안팎 모두에서 통계적 · 경제적으로 뚜렷한 예측력을 보였고, 거시 변수와 같거나 더 나았다. 둘은 경기 순환에서 서로 다른 정보를 준다 — 기술 지표는 <b>경기 고점 근처의 하락</b>을, 거시 변수는 <b>경기 바닥 근처의 반등</b>을 더 잘 잡는다. 둘을 합치면 어느 한쪽만 쓸 때보다 예측이 뚜렷이 좋아졌다.</div>
+<p class="in-doc-p"><b>차트 볼 때 뜻</b> 차트는 꼭지에서 꺾이는 것을 먼저 알려 주고, 바닥은 거시 지표가 먼저 알려 준다 — 둘을 같이 놓는 이유다(③).</p>
+<p class="in-rp-note">확인 범위 — 세인트루이스 연준 워킹페이퍼(2010-008) 초록과 머리말 일부를 직접 열어 봄 · 지표별 기간 표는 못 봄</p></div></details>
+<details class="rp-fold ca-orig" id="o6"><summary><h3>원문 해석 — 옥기율 · 이민규 (2018) 「시장이상현상과 기술적 분석을 이용한 거래전략 실증연구」</h3><span class="rp-sum">경영과 정보연구 37권 1호 · 한국 주식시장</span></summary><div class="rp-fold-body">
+<p class="in-doc-p"><b>초록 해석</b></p><div class="in-quote">한국 주식시장에서 규모 · 장부가 대 시가 비율 · 발생액으로 10분위 포트폴리오를 만들고, 이동평균 거래전략을 샤프 · 소르티노 비율로 평가했다. 작은 회사 · 장부가 비율이 높은 회사 · 발생액이 낮은 회사의 평균 수익이 높았다. 이동평균 전략은 위험 조정 뒤에도 플러스였고, 무비용 포트폴리오 수익이 모두 플러스 · 성공률은 68.8% 를 넘었다.</div>
+<p class="in-doc-p"><b>차트 볼 때 뜻</b> 국내에서도 이동평균 전략이 통했다는 결과다. 다만 거래비용과 착시 보정을 했는지는 초록에 없다.</p>
+<p class="in-rp-note">확인 범위 — 초록(KoreaScience)만 · 표본 기간 · 이동평균 기간 · 거래비용은 못 봄</p></div></details>
+</section>
+          <section class="in-rp-sec" id="c-yes-high"><h2>52주 고점에서의 거리</h2><p class="in-doc-p"><b>무엇</b> 현재가 ÷ 52주 고점 — 고점에 얼마나 가까운가.</p>
+<p class="in-doc-p"><b>결과</b> 고점에 가까운 종목을 사고 먼 종목을 파는 전략이, 견준 모멘텀 전략 가운데 성과가 가장 좋았다(George · Hwang 2004).</p>
+<p class="in-doc-p"><b>읽는 법</b> 「고점에서 많이 빠졌으니 싸다」 는 차트만으로는 근거가 없다. 오히려 고점 가까이 버티는 쪽이 더 갔다.</p><span class="in-look-src">출처 George · Hwang(2004)</span>
+<details class="rp-fold ca-orig" id="o7"><summary><h3>원문 해석 — George · Hwang (2004) 「52주 고점과 모멘텀 투자」</h3><span class="rp-sum">Journal of Finance · 2004년 10월호 · 미국 주식</span></summary><div class="rp-fold-body">
+<p class="in-doc-p"><b>초록 해석</b></p><div class="in-quote">현재가와 함께 보면, 누구나 쉽게 얻는 정보인 <b>52주 고점</b>이 모멘텀 투자 수익의 큰 부분을 설명한다. 52주 고점에 가까운 정도가 지난 수익률(종목 · 업종 모두)의 예측력을 <b>앞서고 더 낫게</b> 한다. 52주 고점으로 예측한 수익은 길게 봐도 <b>되돌아가지 않았다</b> — 짧은 모멘텀과 긴 되돌림은 서로 다른 현상이라는 뜻이다.</div>
+<p class="in-doc-p"><b>차트 볼 때 뜻</b> 「고점에서 많이 빠져 싸다」 보다 「고점 가까이 버틴다」 쪽이 더 갔다. 단 종목끼리 견준 순위라, ⓪ 에서는 몇 % 를 「가깝다」 로 볼지 정하지 못해 「미정」 이다.</p>
+<p class="in-rp-note">확인 범위 — 초록(검색 결과의 초록)만</p></div></details>
+</section>
+          <section class="in-rp-sec" id="c-yes-vol"><h2>거래량</h2><p class="in-doc-p"><b>무엇</b> 거래량 · 회전율.</p>
+<p class="in-doc-p"><b>결과</b> 거래량은 가격만으로는 알 수 없는 「정보가 얼마나 확실한가」 를 담고, 가격과 거래량을 함께 본 쪽이 더 잘했다(Blume · Easley · O'Hara 1994). 지난 거래량이 모멘텀의 크기와 지속을 예측했다 — 거래량이 많은 상승 종목은 더 빨리 되돌아갔다(Lee · Swaminathan 2000).</p>
+<p class="in-doc-p"><b>읽는 법</b> 돌파는 거래량이 붙었는지 함께 본다. 거래량이 지나치게 몰린 상승은 되돌림을 경계한다.</p><span class="in-look-src">출처 Blume · Easley · O'Hara(1994) · Lee · Swaminathan(2000)</span>
+<details class="rp-fold ca-orig" id="o8"><summary><h3>원문 해석 — Blume · Easley · O'Hara (1994) 「시장 통계와 기술적 분석 — 거래량의 역할」</h3><span class="rp-sum">Journal of Finance 49권 1호 · 이론 모형</span></summary><div class="rp-fold-body">
+<p class="in-doc-p"><b>초록 해석</b></p><div class="in-quote">거래량이 주는 정보와 기술적 분석에서의 쓰임을 살폈다. 공급이 정해져 있고 사람마다 다른 질의 정보를 받는 균형 모형을 세웠다. 거래량은 <b>가격으로는 알 수 없는 「정보의 질」</b>을 알려 준다. 거래량 · 정보의 정밀도 · 가격 움직임이 어떻게 이어지는지, 거래량과 가격의 흐름이 어떻게 정보가 되는지 보였다. 시장 통계를 쓰는 사람이 안 쓰는 사람보다 더 잘했다 — 기술적 분석은 배우는 과정의 자연스러운 한 부분이 된다.</div>
+<p class="in-doc-p"><b>차트 볼 때 뜻</b> 같은 상승이라도 거래량이 붙었나를 따로 본다. 이론 논문이라 「몇 배」 같은 기준은 주지 않는다.</p>
+<p class="in-rp-note">확인 범위 — 초록(IDEAS)만</p></div></details>
+<details class="rp-fold ca-orig" id="o9"><summary><h3>원문 해석 — Lee · Swaminathan (2000) 「가격 모멘텀과 거래량」</h3><span class="rp-sum">Journal of Finance 55권 5호 · 미국 주식</span></summary><div class="rp-fold-body">
+<p class="in-doc-p"><b>초록 해석</b></p><div class="in-quote">지난 거래량은 모멘텀 전략과 가치 전략을 잇는 고리다. 지난 회전율이 높은(낮은) 회사는 인기주(가치주) 성격을 띠고, 앞으로 수익이 낮고(높고), 이후 8분기 동안 실적 놀람이 꾸준히 나쁜(좋은) 쪽이었다. 지난 거래량은 모멘텀의 크기와 지속을 예측했고, 모멘텀은 5년에 걸쳐 되돌아갔다. 거래량 많은 승자(적은 패자)는 <b>더 빨리 되돌아갔다</b>. 중기의 「덜 반응」 과 장기의 「지나친 반응」 을 거래량이 이어 준다.</div>
+<p class="in-doc-p"><b>차트 볼 때 뜻</b> 거래량이 지나치게 몰린 상승 종목은 되돌림을 경계한다 — 「거래량이 붙으면 좋다」 만으로 읽지 않는다.</p>
+<p class="in-rp-note">확인 범위 — 초록(IDEAS)만</p></div></details>
+</section>
+        </div>
+      </details>
+
+      <details class="in-rp-sec rp-fold in-grp" id="c-weak">
+        <summary><h2>② 근거가 약한 것</h2><span class="rp-sum">캔들 신호 · 차트 모양 · 거래비용에 사라지는 규칙</span></summary>
+        <div class="rp-fold-body">
+          <section class="in-rp-sec" id="c-weak-candle"><h2>캔들 신호</h2><p class="in-doc-p"><b>결과</b> 다우 종목(1992~2002)에 캔들 신호 28종을 열흘 보유로 시험하니, 강세 신호 뒤에 오른 경우가 절반이 안 됐고 믿을 만하게 오르는 신호는 없었다. 강세 신호 하나는 오히려 내림을 예측했고, 부트스트랩 검정에서는 어떤 캔들 신호도 예측력이 없었다(Marshall · Young · Rose 2006).</p>
+<p class="in-doc-p"><b>읽는 법</b> 캔들 모양 하나로 사고팔지 않는다.</p><span class="in-look-src">출처 Marshall · Young · Rose(2006) — 미국 대형주 기준</span>
+<details class="rp-fold ca-orig" id="o10"><summary><h3>원문 해석 — Marshall · Young · Rose (2006) 「캔들 기술적 매매 전략 — 효과가 있나」</h3><span class="rp-sum">다우 종목 1992.1~2002.12 · 신호 28종 · 열흘 보유 · 부트스트랩</span></summary><div class="rp-fold-body">
+<p class="in-doc-p"><b>초록 해석</b></p><div class="in-quote">다우 구성 종목에 캔들 신호 28가지를 신호 다음 날 종가에 사서 열흘 보유하는 것으로 시험했다. 강세 하루짜리 신호 뒤 수익이 플러스인 경우는 절반이 안 됐고, 그중 하나는 오히려 믿을 만하게 마이너스를 예측했다. 약세 하루짜리 신호는 절반 넘게 마이너스였지만 여러 날짜리 약세 모양 일부는 평균이 플러스였다. 정규분포를 가정하지 않는 부트스트랩 검정에서는 <b>어떤 캔들 신호도 주가 움직임을 예측한다는 증거가 없었다</b>.</div>
+<p class="in-doc-p"><b>차트 볼 때 뜻</b> 캔들 모양은 매매 근거로 쓰지 않는다 — 우리 리포트에도 넣지 않았다.</p>
+<p class="in-rp-note">확인 범위 — 원문 초록은 못 열고 정리글(CXO Advisory)만</p></div></details>
+</section>
+          <section class="in-rp-sec" id="c-weak-shape"><h2>차트 모양(머리어깨 · 쌍바닥)</h2><p class="in-doc-p"><b>결과</b> 머리어깨 · 쌍바닥 같은 모양을 기계로 판별해 미국 주식 1962~1996년에 대 보니, 몇몇 모양은 그 뒤 수익의 분포를 바꿨다 — 「참고 정보는 된다」 수준이다. 사람이 눈으로 고르면 모양이 보는 사람마다 다르다는 것이 출발점이었다(Lo · Mamaysky · Wang 2000).</p>
+<p class="in-doc-p"><b>읽는 법</b> 모양은 정의가 흐려 사람마다 다르게 본다. 쓰려면 규칙으로 정해 기계가 같은 답을 내게 한다.</p><span class="in-look-src">출처 Lo · Mamaysky · Wang(2000)</span>
+<details class="rp-fold ca-orig" id="o11"><summary><h3>원문 해석 — Lo · Mamaysky · Wang (2000) 「기술적 분석의 기초」</h3><span class="rp-sum">Journal of Finance 55권 · 미국 주식 1962~1996(31년)</span></summary><div class="rp-fold-body">
+<p class="in-doc-p"><b>초록 해석</b></p><div class="in-quote">차트 분석은 오래 쓰였지만 학계의 검증은 덜 받았다. 가장 큰 걸림돌은 주관성이다 — 차트의 모양은 <b>보는 사람 눈에 따라</b> 있다. 이 논문은 비모수 커널 회귀로 모양을 자동으로 찾는 방법을 내고, 미국 주식 1962~1996년에 적용했다. 머리어깨 · 쌍바닥 같은 신호가 나온 뒤의 수익 분포를 그냥 수익 분포와 견주니, 31년 동안 몇몇 기술 지표는 <b>더해 주는 정보가 있고 실제로 쓸모가 있을 수도</b> 있었다.</div>
+<p class="in-doc-p"><b>차트 볼 때 뜻</b> 모양이 「수익을 낸다」 가 아니라 「분포를 조금 바꾼다」 수준이다. 쓰려면 규칙으로 정의해 누구나 같은 답을 얻게 한다.</p>
+<p class="in-rp-note">확인 범위 — NBER 초록만</p></div></details>
+</section>
+          <section class="in-rp-sec" id="c-weak-cost"><h2>거래비용 · 1990년대 이후</h2><p class="in-doc-p"><b>결과</b> 다우 1897~2011년에서 낮은 거래비용만 넣어도 기술 매매 이익이 사라졌고, 앞으로 잘 맞을 규칙을 미리 고를 수도 없었다(Bajgrowicz · Scaillet 2012). 현대 연구 95편 중 56편이 효과 있음 · 20편이 없음 · 19편이 엇갈렸지만 이익은 1990년대 초까지였고, 시험 방법(착시 · 사후 선택 · 위험과 비용 추정)에 문제가 있는 연구가 많았다(Park · Irwin 2007).</p><span class="in-look-src">출처 Bajgrowicz · Scaillet(2012) · Park · Irwin(2007)</span>
+<details class="rp-fold ca-orig" id="o12"><summary><h3>원문 해석 — Bajgrowicz · Scaillet (2012) 「기술적 매매 다시 보기 — 거짓 발견 · 지속성 · 거래비용」</h3><span class="rp-sum">Journal of Financial Economics 106권 3호 · 다우 1897~2011</span></summary><div class="rp-fold-body">
+<p class="in-doc-p"><b>초록 해석</b></p><div class="in-quote">다우지수 일봉 1897~2011년에서 기술 매매 규칙의 「역사적 성공」 을 다시 봤다. 착시를 걸러내는 새 방법(거짓 발견 비율)을 썼는데, 이 방법은 이기는 규칙을 더 많이 골라 여러 규칙에 나눠 걸 수 있게 해 준다. 그래도 지속성 검정에서 투자자는 <b>앞으로 가장 잘할 규칙을 미리 고를 수 없었다</b>. 게다가 표본 안에서조차 <b>낮은 거래비용을 넣으면 성과가 완전히 사라졌다</b>. 이른 시기에 보고된 기술 매매의 경제적 가치는 크게 의심스럽다.</div>
+<p class="in-doc-p"><b>차트 볼 때 뜻</b> 지나간 차트에서 잘 맞은 규칙이 다음에도 맞는다는 보장이 없다. 사고팔 때 드는 비용을 늘 같이 센다.</p>
+<p class="in-rp-note">확인 범위 — 초록(IDEAS)만</p></div></details>
+<details class="rp-fold ca-orig" id="o13"><summary><h3>원문 해석 — Park · Irwin (2007) 「기술적 분석의 수익성 — 우리가 아는 것」</h3><span class="rp-sum">Journal of Economic Surveys 21권 4호 · 연구 정리</span></summary><div class="rp-fold-body">
+<p class="in-doc-p"><b>초록 해석</b></p><div class="in-quote">기술적 분석의 수익성 연구를 「초기」 와 「현대」 로 나눠 정리했다. 초기 연구는 외환 · 선물에서는 수익이 났고 주식에서는 아니었다. 현대 연구는 기술 전략이 <b>적어도 1990년대 초까지</b> 여러 투기 시장에서 꾸준히 경제적 이익을 냈다고 본다. 현대 연구 95편 중 56편은 긍정, 20편은 부정, 19편은 엇갈렸다. 다만 대부분이 착시(데이터 스누핑) · 규칙의 사후 선택 · 위험과 거래비용 추정의 어려움 같은 시험 방법의 문제를 안고 있다.</div>
+<p class="in-doc-p"><b>차트 볼 때 뜻</b> 「효과가 있다는 논문이 더 많다」 는 그대로 믿을 수 없다 — 시험 방법을 같이 본다.</p>
+<p class="in-rp-note">확인 범위 — 초록(IDEAS)만 · 학술지판 숫자(95편)로 적었다 — 2004년 보고서판은 92편</p></div></details>
+</section>
+        </div>
+      </details>
+
+      <details class="in-rp-sec rp-fold in-grp" id="c-rule">
+        <summary><h2>③ 차트를 볼 때 지킬 것</h2><span class="rp-sum">맞은 규칙만 고르는 착시 · 거래비용 · 한 지표로 단정하지 않기</span></summary>
+        <div class="rp-fold-body">
+          <section class="in-rp-sec" id="c-rule-snoop"><h2>맞은 규칙만 고르는 착시</h2><p class="in-doc-p"><b>무엇</b> 규칙을 많이 시험해 놓고 맞은 것만 고르면, 운으로 맞은 것도 실력처럼 보인다.</p>
+<p class="in-doc-p"><b>결과</b> Brock 외(1992)의 규칙 26개를 수천 개로 넓혀 이 착시를 통계로 걷어내자 다우 · S&amp;P 500 에서 의미 있게 이기는 규칙이 없었다(Sullivan · Timmermann · White 1999).</p>
+<p class="in-doc-p"><b>지킬 것</b> 규칙은 먼저 정하고 나중에 대 본다 · 맞을 때까지 지표 기간을 바꾸지 않는다 · 거래비용을 넣고 본다.</p><span class="in-look-src">출처 Sullivan · Timmermann · White(1999)</span>
+<details class="rp-fold ca-orig" id="o14"><summary><h3>원문 해석 — Sullivan · Timmermann · White (1999) 「데이터 스누핑 · 기술 규칙의 성과 · 부트스트랩」</h3><span class="rp-sum">Journal of Finance · 다우 100년 일봉</span></summary><div class="rp-fold-body">
+<p class="in-doc-p"><b>초록 해석</b></p><div class="in-quote">White 의 「리얼리티 체크」 부트스트랩으로 단순한 기술 매매 규칙을 평가하면서, 규칙을 뽑아 온 <b>전체 규칙 집합</b>을 기준으로 착시(데이터 스누핑)의 크기를 재고 그만큼 보정했다. Brock 외(1992)의 규칙 26개를 넓혀 다우지수 100년 일봉에 적용했다.</div>
+<p class="in-doc-p"><b>차트 볼 때 뜻</b> 규칙을 많이 시험할수록 운으로 맞는 것이 생긴다. 지표 기간을 맞을 때까지 바꾸지 않는다.</p>
+<p class="in-rp-note">확인 범위 — 연구소 소개 쪽의 초록 일부만 · 「이기는 규칙이 없었다」 는 뒤 연구가 인용한 결과(검색 결과)로 확인 · 원문 PDF 는 못 봄</p></div></details>
+</section>
+          <section class="in-rp-sec" id="c-rule-mix"><h2>여러 근거를 함께 보기</h2><p class="in-doc-p"><b>무엇</b> 차트 지표 하나로 단정하지 않는다.</p>
+<p class="in-doc-p"><b>근거</b> 기술 지표와 거시 변수는 경기 국면마다 서로 다른 정보를 주고, 함께 쓸 때 예측이 나아졌다(Neely 외 2014). 1년 안쪽 추세에는 근거가 있지만 더 길면 되돌림이 섞인다(<a href="#c-yes-trend">①</a>).</p>
+<p class="in-doc-p"><b>지킬 것</b> 차트(추세 · 거래량)는 실적 · 평가와 같이 놓고 판정한다 — 종목 분석의 판정 점수표(<a href="analysis.html#r5">⑥-5</a>)가 그 자리다.</p><span class="in-look-src">출처 Neely 외(2014)</span></section>
+        </div>
+      </details>
+
+      <details class="in-rp-sec rp-fold in-grp" id="c-link">
+        <summary><h2>④ 우리 리포트와 잇기</h2><span class="rp-sum">종목 리포트의 어느 칸이 어느 근거인가</span></summary>
+        <div class="rp-fold-body">
+          <section class="in-rp-sec" id="c-link-map"><h2>칸 · 근거 대응표</h2><table class="in-tbl in-wrap">
+<tr><th>리포트 칸</th><th>근거</th><th>근거 세기</th></tr>
+<tr><td>이동평균 배열 · 224일선 위/아래</td><td><a href="#c-yes-ma">① 이동평균</a></td><td><span class="in-pill ok">있음</span> 착시 · 비용을 걷어내면 약해짐</td></tr>
+<tr><td>1년 상대 수익률 · 6 · 12개월 수익률</td><td><a href="#c-yes-trend">① 추세</a></td><td><span class="in-pill ok">있음</span></td></tr>
+<tr><td>52주 고점 대비 거리</td><td><a href="#c-yes-high">① 52주 고점</a></td><td><span class="in-pill ok">있음</span></td></tr>
+<tr><td>거래량 배율 · OBV</td><td><a href="#c-yes-vol">① 거래량</a></td><td><span class="in-pill ok">있음</span></td></tr>
+<tr><td>RSI · MACD · 볼린저 · 스토캐스틱 · ADX · 일목</td><td>이 조사에서 지표별 논문을 따로 보지 않음</td><td><span class="in-pill half">못 봄</span></td></tr>
+<tr><td>지지 · 저항(ZigZag 꺾임점)</td><td><a href="#c-weak-shape">② 차트 모양</a>과 같은 자리 — 규칙으로 정해 둔 것</td><td><span class="in-pill half">약함</span></td></tr>
+<tr><td>캔들 모양</td><td><a href="#c-weak-candle">② 캔들</a> — 리포트에는 없음</td><td><span class="in-pill half">약함</span></td></tr>
+</table>
+<p class="in-doc-p">리포트의 지표 규칙은 종목 분석 <a href="analysis.html#r3">⑥-3</a> · 판정은 <a href="analysis.html#r5">⑥-5</a>.</p></section>
+        </div>
+      </details>
+
+      <details class="in-rp-sec rp-fold in-grp" id="c-src">
+        <summary><h2>⑤ 출처</h2><span class="rp-sum">논문 원문 링크 · 국내 연구</span></summary>
+        <div class="rp-fold-body">
+          <section class="in-rp-sec" id="c-src-list"><h2>논문 목록</h2><ol class="in-doc-p">
+<li>Brock · Lakonishok · LeBaron(1992) Journal of Finance — <a href="https://ideas.repec.org/a/bla/jfinan/v47y1992i5p1731-64.html" target="_blank" rel="noopener">원문 정보</a></li>
+<li>Jegadeesh · Titman(1993) · George · Hwang(2004) 52주 고점 — <a href="https://alphaarchitect.com/the-secret-to-momentum-is-the-52-week-high/" target="_blank" rel="noopener">정리글</a></li>
+<li>Blume · Easley · O'Hara(1994) Journal of Finance — <a href="https://ideas.repec.org/r/bla/jfinan/v49y1994i1p153-81.html" target="_blank" rel="noopener">원문 정보</a></li>
+<li>Sullivan · Timmermann · White(1999) Journal of Finance — <a href="https://www.fmg.ac.uk/publications/discussion-papers/data-snooping-technical-trading-rule-performance-and-bootstrap" target="_blank" rel="noopener">원문 정보</a></li>
+<li>Lo · Mamaysky · Wang(2000) Journal of Finance — <a href="https://www.nber.org/papers/w7613" target="_blank" rel="noopener">NBER</a></li>
+<li>Lee · Swaminathan(2000) Journal of Finance — <a href="https://ideas.repec.org/a/bla/jfinan/v55y2000i5p2017-2069.html" target="_blank" rel="noopener">원문 정보</a></li>
+<li>Marshall · Young · Rose(2006) — <a href="https://www.cxoadvisory.com/technical-trading/candlesticks-fiddlesticks/" target="_blank" rel="noopener">정리글</a></li>
+<li>Park · Irwin(2007) Journal of Economic Surveys — <a href="https://ideas.repec.org/a/bla/jecsur/v21y2007i4p786-826.html" target="_blank" rel="noopener">원문 정보</a></li>
+<li>Moskowitz · Ooi · Pedersen(2012) Journal of Financial Economics — <a href="https://papers.ssrn.com/abstract=2089463" target="_blank" rel="noopener">SSRN</a></li>
+<li>Bajgrowicz · Scaillet(2012) Journal of Financial Economics — <a href="https://ideas.repec.org/a/eee/jfinec/v106y2012i3p473-491.html" target="_blank" rel="noopener">원문 정보</a></li>
+<li>Han · Yang · Zhou(2013) JFQA — <a href="https://core-cms.cambridgecore.org/core/journals/journal-of-financial-and-quantitative-analysis/article/new-anomaly-the-crosssectional-profitability-of-technical-analysis/B9E41049F2E55B4F274D46E72ECA8E29" target="_blank" rel="noopener">원문 정보</a></li>
+<li>Neely · Rapach · Tu · Zhou(2014) Management Science — <a href="https://files.stlouisfed.org/files/htdocs/wp/2010/2010-008.pdf" target="_blank" rel="noopener">연준 워킹페이퍼</a></li>
+<li>국내 — 시장이상현상과 기술적 분석 거래전략(KOSPI 이동평균 전략 성공률 68.8% 넘음 · 거래비용 · 착시 처리는 확인 못 함) — <a href="https://www.koreascience.or.kr/article/JAKO201825758342883.page?lang=ko" target="_blank" rel="noopener">KoreaScience</a></li>
+</ol>
+<p class="in-doc-p">「원문 정보」 는 초록 · 서지 쪽이다. 결과 문장은 초록과 정리글에서 확인한 것만 적었다 — 본문 표 · 기간별 수치는 직접 열어 보지 않았다.</p></section>
+        </div>
+      </details>
+    </article>
+  </main>
+  <aside class="kh-side" aria-label="목차">
+    <div class="kh-side-wrap">
+      <div class="kh-card rp-toc-card">
+        <div class="kh-tabs"><button class="kh-tab is-active" type="button">목차</button></div>
+        <ol class="rp-toc" data-toc-list></ol>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- 폰 — 떠 있는 「목차」 단추와 작은 창(종목 분석과 같은 것) -->
+<button type="button" class="rp-toc-fab" data-toc-open aria-label="목차 열기">목차</button>
+<div class="rp-toc-sheet" data-toc-sheet hidden>
+  <div class="rp-toc-dim" data-toc-close></div>
+  <div class="rp-toc-panel"><div class="rp-toc-panel-head"><b>목차</b><button type="button" class="kh-chip" data-toc-close>닫기 ✕</button></div><ol class="rp-toc" data-toc-list></ol></div>
+</div>
+<script src="../assets/js/main.js"></script>
+<script type="module" src="js/page-find.js"></script>
+<script type="module" src="js/chart-analysis.js"></script>
+</body>
+</html>
