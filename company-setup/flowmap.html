@@ -488,7 +488,8 @@ function buildGeo() {
     new maplibregl.Marker({ element: d }).setLngLat(s.at).addTo(geo);
     return { s, lb: d.querySelector('.lb') };
   });
-  let globeOn = true, spinOn = !EMBED, hover = false, dragging = false;   // 칸 안에서는 손대기 전까지 멈춘다(재권님 「나」)
+  // view=flat — 지구본을 펼친 평면 세계지도로 연다 (2026-10-08 재권님 「지구본 펼치면 세계지도도 보여지면 · 이름은 잘 정해줘」 → 「세계지도」)
+  let globeOn = new URLSearchParams(location.search).get('view') !== 'flat', spinOn = !EMBED, hover = false, dragging = false;   // 칸 안에서는 손대기 전까지 멈춘다(재권님 「나」)
   function fitGlobe() {
     const want = Math.min(box.clientWidth, box.clientHeight) * 0.9;
     let z = geo.getZoom();
