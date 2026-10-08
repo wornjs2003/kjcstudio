@@ -255,3 +255,17 @@
 td .in-term-tip, .in-vt-stat .in-term-tip { font-weight: 400; }
 /* 지금 계산 ④ · ⑤ · ⑥ 바로 가기 — 위 메뉴 줄 밑에 제목이 가리지 않게 (2026-10-07 재권님 「칸만 있고 밑에 클릭하면 경영진 같은 게 안 나오는데」) */
 #calc-body h3[id] { scroll-margin-top: 96px; }
+
+/* 찾기 칸 — js/page-find.js (2026-10-08 재권님 「종목분석 위에 단어 검색하는거 만들어줘」 · 「찾기 버튼누르면 거기로 이동하게」).
+   기존 화면에 더한 칸이라 이 파일 방식(넓은 폭 기본 + max-width)을 따른다(「모바일 퍼스트」 룰 1) — 넓으면 입력칸 360px, 좁으면 줄을 꽉 채운다 */
+.in-find { display: flex; align-items: center; gap: 6px; padding: 10px 0 4px; }
+.in-find-q { flex: 0 1 360px; min-width: 0; height: 34px; padding: 0 12px; border: 1px solid var(--kh-border); border-radius: var(--kh-radius-sm);
+             background: var(--kh-bg-card); color: var(--kh-text-primary); font: inherit; font-size: 0.85rem; }
+.in-find-q:focus { outline: 2px solid var(--kh-accent); outline-offset: -1px; }
+.in-find-go { flex: none; height: 34px; padding: 0 16px; border: 0; border-radius: var(--kh-radius-sm); background: var(--kh-accent); color: var(--kh-text-on-fill);
+              font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+.in-find-nav { flex: none; width: 30px; height: 34px; border: 0; border-radius: var(--kh-radius-sm); background: var(--kh-bg-card); color: var(--kh-text-secondary); cursor: pointer; }
+.in-find-n { flex: none; min-width: 3.5em; font-size: 0.78rem; color: var(--kh-text-muted); }
+mark.in-find-hit { background: var(--kh-cat-amber-dim); color: inherit; border-radius: 2px; }
+mark.in-find-hit.is-cur { background: var(--kh-cat-amber); color: var(--kh-text-on-fill); }
+@media (max-width: 899px) { .in-find-q { flex: 1 1 auto; } }

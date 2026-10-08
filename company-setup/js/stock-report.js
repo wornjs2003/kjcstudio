@@ -147,7 +147,31 @@ function bizHtml(card) {
   if (!tb) return h + `<p class="rp-text">${SOON} 정기보고서 원문이 회사 카드에 없습니다</p>`;
   h += `<p class="rp-text"><b>제품별</b> — 「주요 제품 및 서비스」</p>` + (tb.product ? rawTable(tb.product) : `<p class="rp-text">${pill('no', '못 뽑음')} 그 절에 매출 · 비율 표가 없거나 글로만 적혀 있습니다</p>`);
   h += `<p class="rp-text"><b>지역별</b> — 「매출 및 수주상황」</p>` + (tb.region ? rawTable(tb.region) : `<p class="rp-text">${pill('no', '못 뽑음')} 그 절에 지역 · 내수/수출 표가 없습니다 — 회사에 따라 재무제표 주석(부문 정보)에만 있다</p>`);
+  // 점유율 · 매출처 · 원재료 (2026-10-08 재권님 「응 해줘」) — 회사가 사업보고서에 적은 것 그대로. 점유율은 회사가 인용한 조사기관(IDC · Omdia 등) 값이다
+  const sh = tb.share;
+  h += `<p class="rp-text"><b>시장점유율</b> — 「사업의 내용」 · 회사가 인용한 조사기관 값</p>` + (sh ? (sh.table ? rawTable(sh.table) : '') + (sh.text && !sh.table ? `<p class="rp-text">${esc(sh.text)}</p>` : '') : `<p class="rp-text">${pill('no', '못 뽑음')} 사업보고서에 점유율을 안 적었습니다</p>`);
+  h += `<p class="rp-text"><b>주요 매출처</b> — 고객이 몰렸나</p>` + (tb.customers ? `<p class="rp-text">${esc(tb.customers)}</p>` : `<p class="rp-text">${pill('no', '못 뽑음')} 「주요 매출처」 글이 없습니다</p>`);
+  h += `<p class="rp-text"><b>원재료 매입</b> — 무엇을 누구에게서 사나</p>` + (tb.materials ? rawTable(tb.materials) : `<p class="rp-text">${pill('no', '못 뽑음')} 「원재료」 절에 매입 표가 없습니다</p>`)
+    + (tb.materialPrice ? `<p class="rp-text"><b>원재료 가격 추이</b></p>` + rawTable(tb.materialPrice) : '');
   return h;
+}
+// 산업 성장성 — 한국은행 ECOS 업종 지표 셋(data/industry.json · tools/fetch-industry.py). 종목 → 업종은 DART 업종코드 앞 두 자리
+function industryHtml(card, ind) {
+  const k = card && card.dart && card.dart.industryCode ? String(+String(card.dart.industryCode).slice(0, 2)) : null;
+  const r = ind && ind.byKsic2 && k ? ind.byKsic2[k] : null;
+  let h = `<h3>산업 성장성 — 업종이 크고 있나 ${src('ECOS')} <small>한국은행 · 업종(표준산업분류) ${esc(k || '—')} · ${esc(ind ? ind.fetchedAt : '')} 받음</small></h3>`;
+  if (!r) return h + `<p class="rp-text">${SOON} 업종 지표를 못 받았습니다</p>`;
+  const rows = [row(['지표', '최근', '이전', '읽는 법'], true)];
+  const ss = r.sales && r.sales.series || [];
+  rows.push(ss.length ? row([`매출액 증가율(${esc(r.sales.name)} · 기업경영분석)`, `${esc(ss[ss.length - 1][0])} ${pct(ss[ss.length - 1][1])}`, ss.length > 1 ? `${esc(ss[ss.length - 2][0])} ${pct(ss[ss.length - 2][1])}` : '—', '1년 전 같은 분기보다 업종 매출이 얼마나 늘었나'])
+    : row(['매출액 증가율', '—', '—', esc(r.errors.sales || '못 받음')]));
+  const pr = r.prod;
+  rows.push(pr ? row(['생산지수(광업제조업동향)', `${esc(pr.at)} ${n0(pr.value, 1)}`, pr.yearAgo != null ? `1년 전 ${n0(pr.yearAgo, 1)}` : '—', `1년 전보다 ${pct(pr.yoy)} — 업종이 실제로 더 만들고 있나`])
+    : row(['생산지수', '—', '—', esc(r.errors.prod || '못 받음')]));
+  const bs = r.bsi && r.bsi.series || [];
+  rows.push(bs.length ? row(['업황 전망 BSI(기업경기조사)', `${esc(bs[bs.length - 1][0])} ${n0(bs[bs.length - 1][1])}`, bs.length > 1 ? `${esc(bs[bs.length - 2][0])} ${n0(bs[bs.length - 2][1])}` : '—', '100 위면 좋아질 거라는 회사가 더 많다'])
+    : row(['업황 전망 BSI', '—', '—', esc(r.errors.bsi || '못 받음')]));
+  return h + tbl(rows) + `<p class="in-rp-note">업종 전체 값이라 이 회사 몫이 아니다 — 회사 매출 증가율(실적 표)과 견줘 「산업 덕인지 점유율 덕인지」 를 본다(⑥-11). 업종 묶음이 넓다(예: 반도체는 「전자영상통신장비」 안)</p>`;
 }
 function peerHtml(code, card, all) {
   const me = card || {}; const keys = new Set((me.maps || []).map((m) => m.map + '/' + m.node));
@@ -207,6 +231,7 @@ async function main() {
     nv: api(`/api/naver/integration?code=${code}`).then((j) => j.data), news: api(`/api/naver/news?code=${code}`).then((j) => j.data || []),
     dart: api(`/api/dart/disclosures?code=${code}`).then((j) => j.data || []),
     cards: fetch('data/company-cards.json', { cache: 'no-store' }).then((r) => r.json()), text: fetch(`data/stock-report/${code}.json`, { cache: 'no-store' }).then((r) => r.ok ? r.json() : null),
+    industry: fetch('data/industry.json', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null),
     brokers: fetch('data/stock-report/brokers.json', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null),   // 증권사별 목표가 — tools/fetch-broker-targets.py(KIS 종목투자의견)
   };
   await Promise.all(Object.entries(tasks).map(([k, p]) => p.then((v) => { got[k] = v; }, (e) => { errs[k] = String(e.message || e); })));
@@ -300,7 +325,7 @@ async function main() {
       </div>
       <p class="in-rp-note">% 는 현재가 ${won(px)} 대비 · 네이버 평균과 다른 까닭 — 평균에 넣는 기간이 다르다 · 실적 추정은 증권사별로 못 받는다(위 (E)는 네이버 평균)</p>`;
   }
-  $('rp-fund-body').innerHTML = `<h3>연간 실적 · 증권사 추정(E) ${S.naver} <small>억원 · 회사 카드 ${esc(card && card.fetchedAt || got.cards && got.cards.fetchedAt || '')}</small></h3>${annual}<h3>최근 5분기 ${S.kis} <small>억원</small></h3>${quarters}<h3>핵심 지표</h3>${key2}<h3>최근 리포트 ${S.naver}</h3>${nvc.reports && nvc.reports.length ? tbl([row(['날짜', '증권사', '제목'], true), ...nvc.reports.slice(0, 5).map((r) => trow([ymd(r.date), esc(r.broker), `<a href="${esc(r.from)}" target="_blank" rel="noopener">${esc(r.title)}</a>`]))]) : `<p class="rp-text">${SOON}</p>`}${brokerBox}${bizHtml(card)}${peerHtml(code, card, got.cards && got.cards.cards)}`;
+  $('rp-fund-body').innerHTML = `<h3>연간 실적 · 증권사 추정(E) ${S.naver} <small>억원 · 회사 카드 ${esc(card && card.fetchedAt || got.cards && got.cards.fetchedAt || '')}</small></h3>${annual}<h3>최근 5분기 ${S.kis} <small>억원</small></h3>${quarters}<h3>핵심 지표</h3>${key2}<h3>최근 리포트 ${S.naver}</h3>${nvc.reports && nvc.reports.length ? tbl([row(['날짜', '증권사', '제목'], true), ...nvc.reports.slice(0, 5).map((r) => trow([ymd(r.date), esc(r.broker), `<a href="${esc(r.from)}" target="_blank" rel="noopener">${esc(r.title)}</a>`]))]) : `<p class="rp-text">${SOON}</p>`}${brokerBox}${industryHtml(card, got.industry)}${bizHtml(card)}${peerHtml(code, card, got.cards && got.cards.cards)}`;
 
   // ── 차트 ──
   const levels = [...resist.map((p) => ({ kind: 'resist', p: p.p })), ...support.map((p) => ({ kind: 'support', p: p.p }))];

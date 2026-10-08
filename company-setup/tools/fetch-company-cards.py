@@ -141,7 +141,7 @@ def dart_business(key, cc):
 # 제품별 · 지역별 매출 — 같은 정기보고서 원문의 「2. 주요 제품 및 서비스」 · 「4. 매출 및 수주상황」 표를 그대로 옮긴다
 # (2026-10-08 재권님 「일부 항목들 할수있는것들은 채워줘」). 표 모양이 회사마다 달라 **해석하지 않고 줄 · 칸 그대로** 둔다 —
 # 화면이 「사업보고서 표 그대로」 로 보여 준다. 못 찾으면 null + 이유(지어내지 않는다)
-TBL_ROWS, TBL_CELL = 14, 60
+TBL_ROWS, TBL_CELL, SNIP = 14, 60, 420
 REGION = re.compile(r"^(국\s*내|내\s*수|수\s*출|해\s*외|미\s*주|미국|북미|중국|아시아|유럽|일본|대만|한국)")
 
 
@@ -176,7 +176,7 @@ def _unit_before(ts, i):
 
 
 def biz_tables(x):
-    out, err = {"product": None, "region": None}, []
+    out, err = {"product": None, "region": None, "share": None, "customers": None, "materials": None, "materialPrice": None}, []
     ts = _tables(_section(x, r"주요\s*제품"))
     for i, t in enumerate(ts):
         if len(t) >= 2 and re.search(r"매출|비율|비중", " ".join(t[0])):
@@ -192,6 +192,49 @@ def biz_tables(x):
             break
     if not out["region"]:
         err.append("「매출 및 수주상황」 절에 지역 · 내수/수출 표 없음")
+    # 성장성 재료(2026-10-08 재권님 「응 해줘」) — 시장점유율 · 주요 매출처 · 원재료. 회사가 적은 글 · 표를 그대로 옮긴다
+    ts_all = [(m.start(), _clean(m.group(1))) for m in re.finditer(r"<TITLE[^>]*>(.*?)</TITLE>", x, re.S)]
+    a = [p for p, t in ts_all if re.match(r"II\.\s*사업의\s*내용", t)]
+    seg = ""
+    if a:
+        b = [p for p, t in ts_all if re.match(r"III\.", t) and p > a[-1]]
+        seg = x[a[-1]: b[0] if b else len(x)]
+    tseg = _tables(seg)
+    shares = [t for t in tseg if len(t) >= 2 and any("점유율" in c for r in t[:2] for c in r)]
+    if not shares:      # 표 바로 아래 「※ 시장점유율은 …」 한 줄짜리 주석만 점유율을 말하는 회사(삼성전자 실측) — 그 앞 표가 점유율 표다
+        for i, t in enumerate(tseg):
+            if len(t) == 1 and "점유율" in " ".join(t[0]) and i and len(tseg[i - 1]) >= 2:
+                shares = [tseg[i - 1]]; break
+    txt = _clean(seg)
+    m = re.search(r"시장\s*점유율\s*(\(|은|현황)", txt) or re.search(r"시장\s*점유율", txt)
+    out["share"] = {"table": {"rows": shares[0][:TBL_ROWS], "unit": None, "cut": len(shares[0]) > TBL_ROWS} if shares else None,
+                    "text": txt[m.start(): m.start() + SNIP].rsplit(" ", 1)[0] + "…" if m else None} if (shares or m) else None
+    if not out["share"]:
+        err.append("「사업의 내용」 에 시장점유율 없음")
+    m = re.search(r"주요\s*매출처", txt)
+    if m:
+        t = txt[m.start(): m.start() + SNIP]
+        e = re.search(r"\s[2-9]\.\s|\s[나-하]\.\s", t[10:])
+        out["customers"] = (t[: e.start() + 10] if e else t.rsplit(" ", 1)[0] + "…").strip()
+    else:
+        err.append("「주요 매출처」 글 없음")
+    sec = _section(x, r"원재료") or ""
+    ts = _tables(sec)
+    for i, t in enumerate(ts):
+        if len(t) >= 2 and re.search(r"매입|투입", " ".join(t[0])):
+            out["materials"] = {"rows": t[:TBL_ROWS], "unit": _unit_before(ts, i), "cut": len(t) > TBL_ROWS}
+            break
+    # 원재료 가격 — 「가격 변동」 · 「가격변동추이」 글 바로 뒤의 첫 표만(생산능력 · 생산실적 표를 집지 않게 · 2026-10-08 실측)
+    pm = re.search(r"가격\s*변동", re.sub(r"<TABLE.*?</TABLE>", "", sec, flags=re.S))
+    if pm:
+        k = re.search(r"가격\s*변동", sec).start()
+        e = re.search(r"생산\s*능력|생산\s*실적|가동률|생산설비", sec[k:])     # 가격 글 뒤 생산 쪽 소절이 오면 거기서 끊는다 — 그 표는 가격이 아니다
+        after = _tables(sec[k: k + e.start()] if e else sec[k:])
+        pt = next((t for t in after if len(t) >= 2), None)
+        if pt:
+            out["materialPrice"] = {"rows": pt[:TBL_ROWS], "unit": next((" ".join(t[0]) for t in after[:2] if len(t) == 1 and "단위" in " ".join(t[0])), None), "cut": len(pt) > TBL_ROWS}
+    if not out.get("materials"):
+        err.append("「원재료」 절에 매입 표 없음")
     return out, "; ".join(err) or None
 
 
