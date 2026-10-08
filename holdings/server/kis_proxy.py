@@ -59,6 +59,7 @@ import dart
 import us_universe
 import naver
 import toss
+import macro
 import news
 import news_store
 # 오류 문구에서 비밀을 지운다. 외부 호출 오류를 사람에게 보여줄 때는
@@ -5613,6 +5614,9 @@ class Handler(SimpleHTTPRequestHandler):
         if (self.path or "").startswith("/api/toss/"):
             self._handle_toss()
             return
+        if (self.path or "").startswith("/api/macro/"):
+            self._handle_macro()
+            return
         if (self.path or "").startswith("/debugging/"):
             self._handle_debugging()
             return
@@ -5962,10 +5966,36 @@ class Handler(SimpleHTTPRequestHandler):
     def _toss_forward(self):
         """토스 1분봉을 상류(8765)에 넘긴다. 상류가 없으면 「여기서는 안 부른다」 를 낸다 — 폴백하지 않는다
         (직접 부르면 토큰을 새로 받아 8765 토큰이 끊긴다)."""
+        self._relay_upstream("토스는 8765 에서만 부릅니다", "toss")
+
+    def _handle_macro(self):
+        """경제 지표(ECOS · FRED) — server/macro.py 머리 주석. `ecos` 키가 없는 서버는 상류로 넘긴다."""
+        parsed = urllib.parse.urlparse(self.path)
+        route = parsed.path[len("/api/macro/"):].strip("/")
+        if route not in ("regime", "series"):
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/macro/regime · /api/macro/series?ids= 둘입니다."}, 404)
+            return
+        if not macro.ecos_key() and upstream_base():
+            self._relay_upstream("경제 지표 키(ecos)가 이 서버에 없습니다", "macro")
+            return
+        if route == "regime":
+            r = macro.regime()
+        else:
+            ids = (urllib.parse.parse_qs(parsed.query).get("ids") or [""])[0]
+            want = [i.strip() for i in ids.split(",") if i.strip()]
+            if not want:
+                self._send_json({"ok": False, "error": "ids 가 비었습니다 — 예: ?ids=kr_cpi,us_unrate",
+                                 "known": macro.ALL_IDS}, 400)
+                return
+            r = macro.pick(want)
+        self._send_json(r, 200 if r.get("ok") else 502)
+
+    def _relay_upstream(self, why, source):
+        """이 요청을 그대로 상류(`KJC_KIS_UPSTREAM`)에 넘기고 받은 것을 내려보낸다. 상류가 없으면 503."""
         base = upstream_base()
         if not base:
-            self._send_json({"ok": False, "error": "토스는 8765 에서만 부릅니다 — 이 서버에는 넘길 상류(KJC_KIS_UPSTREAM)가 없습니다",
-                             "source": "toss"}, 503)
+            self._send_json({"ok": False, "error": why + " — 이 서버에는 넘길 상류(KJC_KIS_UPSTREAM)가 없습니다",
+                             "source": source}, 503)
             return
         try:
             with urllib.request.urlopen(base + self.path, timeout=60) as resp:
@@ -5974,7 +6004,7 @@ class Handler(SimpleHTTPRequestHandler):
             status, body = e.code, e.read()
         except (urllib.error.URLError, OSError) as e:
             self._send_json({"ok": False, "error": "상류(8765)에 못 닿았습니다 — %s" % safe_message(e),
-                             "source": "toss"}, 502)
+                             "source": source}, 502)
             return
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
