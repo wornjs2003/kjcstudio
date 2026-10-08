@@ -276,3 +276,11 @@ mark.in-find-hit.is-cur { background: var(--kh-cat-amber); color: var(--kh-text-
 @media (max-width: 899px) { .in-find-q { flex: 1 1 auto; } }
 /* 「보는 것」 표 세부사항 칸 끝의 출처 한 줄 (2026-10-08 재권님 「제목 정의 분석 현황 세부사항(출처)」) */
 .in-look-src { display: block; margin-top: 4px; font-size: 0.74rem; color: var(--kh-text-muted); }
+
+/* ── 차트분석(chart-analysis.html) 「원문 해석」 접기 — 칸 밑에 논문마다 하나 (2026-10-08 재권님 「원본들 해석해서 접어서 밑으로 각각 넣어주는것도」).
+   새 화면이라 좁은 폭이 기본 · 이 클래스는 그 화면에만 있다 */
+.ca-orig { margin-top: 8px; padding: 8px 12px; background: var(--kh-bg); border-radius: var(--kh-radius-md); }
+.ca-orig > summary h3 { margin: 0; font-size: 0.88rem; font-weight: 600; line-height: 1.5; }
+.ca-orig > summary .rp-sum { font-size: 0.78rem; }
+.ca-orig .in-quote { background: var(--kh-bg-card); }
+.ca-orig .in-rp-note { margin-bottom: 0; }
