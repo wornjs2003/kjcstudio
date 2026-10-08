@@ -351,11 +351,14 @@ function hideBigLoading(host) {
 /* **안 받은 봉만** 받아 붙인다 (2026-10-07 지시 — 「아직 안 받은 봉만 받아 덧붙이고, 받아 둔 봉은 다시 받지 않는다」).
    서버가 「바뀌었다」 고 알릴 때 · 받아 둔 봉으로 먼저 그린 뒤에 부른다. 전에는 30초마다 1,266개를 통째로 받아
    차트 칸을 전부 다시 만들었다. */
-let catching = false;
+/* **종목마다 하나씩** 막는다 (2026-10-08 · 「종목 이동하면 5분봉 로딩이 겁나게 느린데」). 전에는 하나뿐인 깃발이라 앞 종목의
+   빈 칸 받기(서버가 하루치를 KIS 로 채우면 2~3초)가 도는 사이 종목을 옮기면 새 종목 것을 **건너뛰었다** — 받아 둔 옛 봉만 그려진 채
+   다음 알림까지 멈춰 있었다(8765 실측 · 0.4초 간격으로 열 종목 중 둘) */
+let catchingKey = null;
 async function catchUpBigChart(key = bigChartKey) {
   if (!bigChart || bigDrawnKey !== key) return paintBigChart();
-  if (catching) return;
-  catching = true;
+  if (catchingKey === key) return;
+  catchingKey = key;
   try {
     const cs = bigChart.candles;
     const since = cs.length ? cs[cs.length - 1].ts : null;
@@ -364,7 +367,7 @@ async function catchUpBigChart(key = bigChartKey) {
     if (!bigChart || bigDrawnKey !== key) return;
     bigChart.appendBars(add);
   } catch { /* 이번 바퀴는 건너뛴다 — 다음 알림 때 다시 */ }
-  finally { catching = false; }
+  finally { if (catchingKey === key) catchingKey = null; }
 }
 
 function paintBigPeriods() {
@@ -480,9 +483,10 @@ async function paintBigChart(opt = {}) {
     return;
   }
   let candles, period;
-  let fromStore = false;                    // 서버가 받아 둔 봉으로 먼저 그렸다 — 그린 뒤 빈 칸만 받는다
+  let fromStore = false;                    // 서버가 받아 둔 봉 · 이 화면이 받아 둔 봉으로 먼저 그렸다 — 그린 뒤 빈 칸만 받는다
   if (cached && cached.candles && cached.candles.length) {
     ({ candles, period } = cached);
+    fromStore = true;                       // 다시 돌아온 종목 — 떠난 사이 생긴 봉을 받는다(전에는 다음 알림까지 옛 봉 그대로)
   } else try {
     /* **서버가 받아 둔 봉을 먼저 그린다** (2026-10-07 재권님 「1 해줘」). 전에는 서버가 빈 30분 칸을 KIS 로 다
        채운 뒤에 답해 종목을 바꿀 때마다 0.9~2.9초 「불러오는 중」 으로 덮였다. 받아 둔 것이 없을 때만 덮고 통째로 */
