@@ -121,7 +121,9 @@ def dart_business(key, cc):
     time.sleep(PAUSE)
     z = zipfile.ZipFile(io.BytesIO(get(DART + "/document.xml?" + urllib.parse.urlencode({"crtfc_key": key, "rcept_no": rep["rcept_no"]}))))
     main = [n for n in z.namelist() if re.fullmatch(r"\d+\.xml", n)] or z.namelist()
-    txt = strip_tags(z.read(main[0]).decode("utf-8", "replace"))
+    raw = z.read(main[0]).decode("utf-8", "replace")
+    tables, terr = biz_tables(raw)
+    txt = strip_tags(raw)
     hits = [m.start() for m in re.finditer("사업의 개요", txt)]
     if not hits:
         return None, "「사업의 개요」 못 찾음"
@@ -132,8 +134,109 @@ def dart_business(key, cc):
     body = body.strip()
     if len(body) > BIZ_MAX:
         body = body[:BIZ_MAX].rsplit(" ", 1)[0] + "…"
-    return {"text": body, "report": rep["report_nm"], "reportDate": rep["rcept_dt"],
+    return {"text": body, "report": rep["report_nm"], "reportDate": rep["rcept_dt"], "tables": tables, "tablesError": terr,
             "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=" + rep["rcept_no"]}, None
+
+
+# 제품별 · 지역별 매출 — 같은 정기보고서 원문의 「2. 주요 제품 및 서비스」 · 「4. 매출 및 수주상황」 표를 그대로 옮긴다
+# (2026-10-08 재권님 「일부 항목들 할수있는것들은 채워줘」). 표 모양이 회사마다 달라 **해석하지 않고 줄 · 칸 그대로** 둔다 —
+# 화면이 「사업보고서 표 그대로」 로 보여 준다. 못 찾으면 null + 이유(지어내지 않는다)
+TBL_ROWS, TBL_CELL = 14, 60
+REGION = re.compile(r"^(국\s*내|내\s*수|수\s*출|해\s*외|미\s*주|미국|북미|중국|아시아|유럽|일본|대만|한국)")
+
+
+def _clean(s):
+    return re.sub(r"\s+", " ", strip_tags(s)).strip()
+
+
+def _section(x, pat):
+    ts = [(m.start(), _clean(m.group(1))) for m in re.finditer(r"<TITLE[^>]*>(.*?)</TITLE>", x, re.S)]
+    for i, (p, t) in enumerate(ts):
+        if i and re.search(pat, t) and not t.startswith("목"):
+            return x[p: ts[i + 1][0] if i + 1 < len(ts) else len(x)]
+    return None
+
+
+def _tables(sec):
+    out = []
+    for m in re.finditer(r"<TABLE(.*?)</TABLE>", sec or "", re.S):
+        rows = [[_clean(c)[:TBL_CELL] for c in re.findall(r"<T[DHEU][^>]*>(.*?)</T[DHEU]>", tr, re.S)]
+                for tr in re.findall(r"<TR[^>]*>(.*?)</TR>", m.group(1), re.S)]
+        out.append([r for r in rows if any(r)])
+    return out
+
+
+def _unit_before(ts, i):
+    """표 바로 앞의 한 줄짜리 표가 「(단위 : …)」 이면 그 글"""
+    if i and len(ts[i - 1]) == 1:
+        u = " ".join(ts[i - 1][0])
+        if "단위" in u:
+            return u
+    return None
+
+
+def biz_tables(x):
+    out, err = {"product": None, "region": None}, []
+    ts = _tables(_section(x, r"주요\s*제품"))
+    for i, t in enumerate(ts):
+        if len(t) >= 2 and re.search(r"매출|비율|비중", " ".join(t[0])):
+            out["product"] = {"rows": t[:TBL_ROWS], "unit": _unit_before(ts, i), "cut": len(t) > TBL_ROWS}
+            break
+    if not out["product"]:
+        err.append("「주요 제품」 절에 매출 표 없음")
+    ts = _tables(_section(x, r"매출\s*및\s*수주"))
+    for i, t in enumerate(ts):
+        hit = sum(1 for r in t for c in r[:2] if REGION.match(c))
+        if hit >= 2 and not any("⇒" in " ".join(r) for r in t) and any(re.search(r"\d{2,}", c) for r in t for c in r):
+            out["region"] = {"rows": t[:TBL_ROWS], "unit": _unit_before(ts, i), "cut": len(t) > TBL_ROWS}
+            break
+    if not out["region"]:
+        err.append("「매출 및 수주상황」 절에 지역 · 내수/수출 표 없음")
+    return out, "; ".join(err) or None
+
+
+# 다가오는 일정 — DART 거래소 공시에서 기업설명회(실적 발표) · 배당 기준일 · 주주총회 날짜를 본문에서 읽는다
+# (2026-10-08 같은 지시). 제목만으로는 날짜가 안 나와 공시 본문을 연다. 최근 400일 안에서 종류마다 가장 최근 것 하나
+EVENT_KINDS = [
+    ("ir", r"기업설명회", [(r"일시\s*(\d{4}-\d{2}-\d{2}(?:\s*\d{1,2}:\d{2})?)", "date"), (r"개최목적\s*(.{2,40}?)\s*\d\.", "what")]),
+    ("dividend", r"현금ㆍ현물배당결정|현금ㆍ현물배당을위한주주명부폐쇄", [(r"(?:배당기준일|기준일)\s*(\d{4}-\d{2}-\d{2})", "date"),
+                                                              (r"배당금지급\s*예정일자\s*(\d{4}-\d{2}-\d{2})", "pay"), (r"1주당 배당금\(원\)\s*보통주식\s*([\d,]+)", "dps")]),
+    ("agm", r"주주총회소집결의", [(r"일\s*시\s*(\d{4}-\d{2}-\d{2}(?:\s*\d{1,2}:\d{2})?)", "date")]),
+]
+
+
+def dart_events(key, cc):
+    from datetime import timedelta
+    bgn = (datetime.now() - timedelta(days=400)).strftime("%Y%m%d")
+    lst = []
+    for page in (1, 2, 3):
+        q = urllib.parse.urlencode({"crtfc_key": key, "corp_code": cc, "bgn_de": bgn, "pblntf_ty": "I", "page_no": page, "page_count": 100})
+        j = get_json(DART + "/list.json?" + q)
+        time.sleep(PAUSE)
+        lst += j.get("list") or []
+        if page >= int(j.get("total_page") or 1):
+            break
+    out, today = [], datetime.now().strftime("%Y-%m-%d")
+    for kind, pat, fields in EVENT_KINDS:
+        hit = next((x for x in lst if re.search(pat, re.sub(r"\s+", "", x.get("report_nm", ""))) and "정정" not in x.get("report_nm", "")), None) \
+              or next((x for x in lst if re.search(pat, re.sub(r"\s+", "", x.get("report_nm", "")))), None)
+        if not hit:
+            continue
+        ev = {"kind": kind, "title": re.sub(r"\s+", " ", hit["report_nm"]).strip(), "filed": hit["rcept_dt"],
+              "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=" + hit["rcept_no"]}
+        try:
+            z = zipfile.ZipFile(io.BytesIO(get(DART + "/document.xml?" + urllib.parse.urlencode({"crtfc_key": key, "rcept_no": hit["rcept_no"]}))))
+            raw = re.sub(r"<style.*?</style>", "", z.read(z.namelist()[0]).decode("utf-8", "replace"), flags=re.S | re.I)
+            txt = strip_tags(raw)
+            for rx, k in fields:
+                m = re.search(rx, txt)
+                ev[k] = m.group(1).strip() if m else None
+        except Exception as ex:
+            ev["error"] = type(ex).__name__
+        time.sleep(PAUSE)
+        ev["upcoming"] = bool(ev.get("date") and ev["date"][:10] >= today)
+        out.append(ev)
+    return {"events": out, "source": "금감원 DART 거래소 공시 본문"}, (None if out else "최근 400일 안 일정 공시 없음")
 
 
 # 재무 건전성 — DART 단일회사 전체 재무제표(fnlttSinglAcntAll) · 가장 최근 사업보고서 · 연결(없으면 별도)
@@ -145,17 +248,25 @@ FS_WANT = {
     "equity":      (["ifrs-full_Equity"], ["자본총계"]),
     "curAssets":   (["ifrs-full_CurrentAssets"], ["유동자산"]),
     "curLiab":     (["ifrs-full_CurrentLiabilities"], ["유동부채"]),
-    "cash":        (["ifrs-full_CashAndCashEquivalents"], ["현금및현금성자산"]),
+    "cash":        (["ifrs-full_CashAndCashEquivalents"], ["현금및현금성자산", "현금및예치금"]),   # 「현금및예치금」 은 금융지주 · 은행 표기(2026-10-08 KB · 신한 · 하나 실측)
     "revenue":     (["ifrs-full_Revenue"], ["매출액", "수익(매출액)", "영업수익"]),
     "opIncome":    (["dart_OperatingIncomeLoss"], ["영업이익", "영업이익(손실)"]),
     "netIncome":   (["ifrs-full_ProfitLoss"], ["당기순이익", "당기순이익(손실)", "연결당기순이익"]),
     "opCF":        (["ifrs-full_CashFlowsFromUsedInOperatingActivities"], ["영업활동현금흐름", "영업활동으로 인한 현금흐름"]),
-    "capex":       (["ifrs-full_PurchaseOfPropertyPlantAndEquipment"], ["유형자산의 취득"]),
+    "capex":       (["ifrs-full_PurchaseOfPropertyPlantAndEquipment"], ["유형자산의 취득", "유형자산의취득", "유형자산 취득", "유형자산의 증가"]),
     "dividendPaid":(["ifrs-full_DividendsPaidClassifiedAsFinancingActivities"], ["배당금의 지급", "배당금지급"]),
-    "buyback":     (["ifrs-full_PaymentsToAcquireOrRedeemEntitysShares"], ["자기주식의 취득", "자기주식의취득"]),
+    "buyback":     (["ifrs-full_PaymentsToAcquireOrRedeemEntitysShares"], ["자기주식의 취득", "자기주식의취득", "자기주식 취득"]),
+    # ROIC(투하자본이익률)용 — 2026-10-08 재권님 「일부 항목들 할수있는것들은 채워줘」. 세율 = 법인세비용 ÷ 법인세차감전이익, 투하자본 = 자본 + 차입금 − 현금
+    "preTax":      (["ifrs-full_ProfitLossBeforeTax"], ["법인세비용차감전순이익", "법인세비용차감전순이익(손실)", "법인세차감전순이익"]),
+    "tax":         (["ifrs-full_IncomeTaxExpenseContinuingOperations"], ["법인세비용", "법인세비용(수익)"]),
+    "stBorrow":    (["ifrs-full_ShorttermBorrowings"], ["단기차입금"]),
+    "curLTD":      (["ifrs-full_CurrentPortionOfLongtermBorrowings"], ["유동성장기부채", "유동성장기차입금"]),
+    "ltBorrow":    (["ifrs-full_LongtermBorrowings"], ["장기차입금"]),
+    "bonds":       (["dart_BondsIssued", "ifrs-full_NoncurrentPortionOfNoncurrentBondsIssued"], ["사채"]),
 }
 FS_SJ = {"assets": "BS", "liab": "BS", "equity": "BS", "curAssets": "BS", "curLiab": "BS", "cash": "BS",
-         "revenue": "IS", "opIncome": "IS", "netIncome": "IS", "opCF": "CF", "capex": "CF", "dividendPaid": "CF", "buyback": "CF"}
+         "revenue": "IS", "opIncome": "IS", "netIncome": "IS", "opCF": "CF", "capex": "CF", "dividendPaid": "CF", "buyback": "CF",
+         "preTax": "IS", "tax": "IS", "stBorrow": "BS", "curLTD": "BS", "ltBorrow": "BS", "bonds": "BS"}
 
 
 def _amt(v):
@@ -287,8 +398,10 @@ def fetch_dart(card, key):
     audit, err3 = dart_audit(key, cc)
     time.sleep(PAUSE)
     gov, err4 = dart_gov(key, cc)
-    err = "; ".join(e for e in (err, err2, err3, err4) if e) or None
-    return {"fs": fs, "audit": audit, "gov": gov, "corpName": j.get("corp_name"), "ceo": j.get("ceo_nm"), "homepage": j.get("hm_url"),
+    time.sleep(PAUSE)
+    events, err5 = dart_events(key, cc)
+    err = "; ".join(e for e in (err, err2, err3, err4, err5) if e) or None
+    return {"fs": fs, "audit": audit, "gov": gov, "events": events, "corpName": j.get("corp_name"), "ceo": j.get("ceo_nm"), "homepage": j.get("hm_url"),
             "industryCode": j.get("induty_code"), "established": j.get("est_dt"), "address": j.get("adres"),
             "business": biz, "from": "https://dart.fss.or.kr/dsae001/main.do?corpCode=" + cc,
             "source": "금감원 DART"}, err
