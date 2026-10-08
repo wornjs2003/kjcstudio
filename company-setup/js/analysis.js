@@ -20,7 +20,7 @@ const SOON = pill('no', '아직');   // 못 받는 값은 빨강 (2026-10-06 재
 // 출처 배지 (2026-10-06 재권님 「종목 분석에 있는 정보들 어디서 가져올수 있는지 표기해서 보여줘」 → 「응 해줘」).
 // 값마다 어디서 온 것인지를 값 옆에 적는다 — KIS(한국투자증권 · 우리 서버) · 네이버(증권 · FnGuide 집계 · 회사 카드) ·
 // DART(금감원 · 회사 카드) · 계산(위 값으로 셈). 글자 배지라 칸 높이를 안 바꾼다(insight.css .in-src)
-const src = (t) => `<span class="in-src">${esc(t)}</span>`;
+const src = (t) => `<span class="in-src" data-src="${esc(String(t).split(/[\s·(]/)[0])}">${esc(t)}</span>`;   // data-src = 받는 곳(첫 낱말) — 점 색은 insight.css
 const S = { kis: src('KIS'), naver: src('네이버'), dart: src('DART'), calc: src('계산') };
 
 async function api(u) {
