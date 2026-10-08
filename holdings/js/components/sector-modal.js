@@ -64,7 +64,9 @@ function atText(at) {
   return `${p(at.getHours())}:${p(at.getMinutes())} 기준`;
 }
 
-export function openSectorModal(snap) {
+/* `opt.onPick(code, name)` — 표 줄을 누르면 모달을 닫고 부른다. 홈이 카드 종목을 누를 때와 같은 길을 넘긴다
+   (2026-10-08 재권님 「같은 룰이니 그렇게 하면 될거같은데」 — 전에는 줄이 눌리는 것처럼 보이는데 아무 일이 없었다) */
+export function openSectorModal(snap, opt = {}) {
   if (!snap) return null;
 
   /* 모달이 들고 있는 것. 카드와 **따로** 움직인다 */
@@ -270,6 +272,15 @@ export function openSectorModal(snap) {
     /* 기간 칩 — 눌리지 않는 칩은 disabled 라 클릭이 안 온다 (2026-10-08) */
     m.body.querySelectorAll('.kh-scm-span [data-span]').forEach((b) => {
       b.addEventListener('click', () => switchSpan(b.dataset.span));
+    });
+
+    if (opt.onPick) m.body.querySelectorAll('tr[data-code]').forEach((tr) => {
+      tr.style.cursor = 'pointer';
+      tr.addEventListener('click', () => {
+        const name = (tr.querySelector('b')?.textContent || '').trim();
+        m.close();
+        opt.onPick(tr.dataset.code, name);
+      });
     });
 
     m.body.querySelectorAll('[data-i]').forEach((b) => {

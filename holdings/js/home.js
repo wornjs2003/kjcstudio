@@ -1986,19 +1986,19 @@ mountStockSearch(document.querySelector('[data-stock-search]'), {
    (2026-10-06 지시 — 「실시간 순위에서 선택하면 차트 나오는 것처럼 … 그래야 룰이 하나일 거 같어」).
    전에는 가로채는 것이 없어 stock.html 로 페이지가 넘어갔고, 그 화면은 차트 칸이 작아
    「차트 크기가 바뀐다」 로 보였다. 모달은 그 뒤 「자세히 ›」 로 연다.
-   href 는 남긴다 — 새 탭 · 가운데 클릭은 그대로 그 화면으로 간다(모달 스킬과 같은 이유). */
+   href 는 남긴다 — 새 탭 · 가운데 클릭은 그대로 그 화면으로 간다(모달 스킬과 같은 이유).
+   「자세히 ›」 모달의 표 줄도 이 함수 하나를 쓴다 (2026-10-08 — 「같은 룰이니」) */
+function pickSectorStock(code, name) {
+  if (!findStock(code)) addExtraStock(code, name || code);
+  selectStock(code);
+  /* 순위표 밖 종목은 받아 둔 시세가 없다 — 서버 알림(롱폴)을 기다리면 그동안 「불러오는 중」 이라 곧바로 한 번 받는다 */
+  if (!(rowPrices && rowPrices[code])) quoteTick();
+}
 document.querySelector('.kh-sc-card')?.addEventListener('click', (e) => {
   const a = e.target.closest('a.kh-sc-st[data-code]');
   if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
   e.preventDefault();
-  const code = a.dataset.code;
-  if (!findStock(code)) {
-    const name = (a.querySelector('.kh-sc-stn')?.textContent || '').trim();
-    addExtraStock(code, name || code);
-  }
-  selectStock(code);
-  /* 순위표 밖 종목은 받아 둔 시세가 없다 — 서버 알림(롱폴)을 기다리면 그동안 「불러오는 중」 이라 곧바로 한 번 받는다 */
-  if (!(rowPrices && rowPrices[code])) quoteTick();
+  pickSectorStock(a.dataset.code, (a.querySelector('.kh-sc-stn')?.textContent || '').trim());
 });
 
 /* 「지금 뜨는 산업」 자세히 → 모달 (2026-09-22 지시).
@@ -2007,7 +2007,7 @@ document.querySelector('.kh-sc-card')?.addEventListener('click', (e) => {
 (() => {
   const more = document.getElementById('kh-sc-more');
   if (!more || !sectors.snapshot) return;
-  const open = () => openSectorModal(sectors.snapshot());
+  const open = () => openSectorModal(sectors.snapshot(), { onPick: pickSectorStock });
   more.addEventListener('click', open);
   /* 단추가 `<a>` 라 Enter·Space 로도 눌려야 한다 (실시간 순위와 같다) */
   more.addEventListener('keydown', (e) => {
