@@ -237,7 +237,39 @@ function tocItems(folds) {
   return [...folds].map((d) => { const h = d.querySelector('summary h2'); if (!h || !d.id) return null; const c = h.cloneNode(true); c.querySelectorAll('.in-src').forEach((x) => x.remove()); return { id: d.id, title: c.textContent.trim() }; }).filter(Boolean);
 }
 
+// ── 저장본 — 리포트는 쓴 때의 값으로 문서로 저장하고, 열 때는 그 문서를 연다 (2026-10-08 재권님 「값을 불러오는게 아니고 문서로 작성되서
+// 저장되도록 · 접기는 살려주고」). 저장은 tools/save-stock-report.py 가 이 화면을 ?live=1 로 그린 뒤 본문(#rp)을 data/stock-report/docs/<코드>.json
+// 에 담는다(차트 그림은 이미지로 굳힌다). 저장본이 없으면 지금처럼 서버에서 받아 그린다 · ?live=1 이면 저장본을 건너뛴다(새로 저장할 때)
+function wireFolds() {
+  const folds = document.querySelectorAll('details.rp-fold:not([hidden])');   // 숨은 절(글이 없는 갈래별 분석)은 목차에서 뺀다
+  mountToc(tocItems(folds));   // 목차(오른쪽 기둥 · 폰 단추)
+  $('rp-open-all').addEventListener('click', () => folds.forEach((d) => { d.open = true; }));
+  $('rp-close-all').addEventListener('click', () => folds.forEach((d) => { d.open = false; }));
+  // 주소로 절을 가리키면 그 절을 펼치고 거기로 간다 — ?open=all 은 전부 펼침, #rp-tech 는 그 절만 (링크로 자리를 넘길 때 · 폰 그림 찍을 때)
+  const q = new URLSearchParams(location.search);
+  if (q.get('open') === 'all') folds.forEach((d) => { d.open = true; });
+  if (location.hash) { const t = document.querySelector(location.hash); if (t) { if (t.tagName === 'DETAILS' && q.get('open') !== 'none') t.open = true; t.scrollIntoView({ block: 'start' }); } }   // open=none 이면 접힌 채 그 자리로만
+}
 async function main() {
+  const q0 = new URLSearchParams(location.search), code0 = q0.get('code') || '005930';
+  if (q0.get('live') !== '1') {
+    try {
+      const r = await fetch(`data/stock-report/docs/${code0}.json`, { cache: 'no-store' });
+      if (r.ok) {
+        const doc = await r.json();
+        $('rp').innerHTML = doc.html;
+        $('rp').querySelectorAll('details.rp-fold').forEach((d) => { d.open = false; });   // 저장할 때 펼쳐 둔 것과 무관하게 접어서 연다
+        const meta = $('rp-meta');
+        if (meta) meta.insertAdjacentHTML('afterbegin', `<span class="in-pill half">저장본</span> ${esc(doc.savedAt)} 에 쓴 문서 · 숫자는 그때 값 · `);
+        document.title = `${doc.name || code0} 리포트 — Insight`;
+        wireFolds();
+        return;
+      }
+    } catch (e) { /* 저장본이 없거나 못 읽으면 아래에서 지금 값으로 그린다 */ }
+  }
+  return renderLive();
+}
+async function renderLive() {
   const code = new URLSearchParams(location.search).get('code') || '005930';
   const got = {}, errs = {};
   const tasks = {
@@ -435,14 +467,8 @@ async function main() {
   sum('rp-plan', ST2.positions && ST2.positions.length ? ST2.positions.map((x) => x.name).join(' · ') + ` · 모니터링 ${(ST2.monitor || []).length}` : '세션 글 아직');
   sum('rp-ten', T.summary10 && T.summary10.length ? T.summary10.map((x) => x.item).join(' · ') : '세션 글 아직');
   sum('rp-limit', `데이터 공백 ${gaps.length} · 신뢰도 ${T.confidence ? T.confidence.split(' ')[0] : '—'}`);
-  const folds = document.querySelectorAll('details.rp-fold:not([hidden])');   // 숨은 절(글이 없는 갈래별 분석)은 목차에서 뺀다
-  mountToc(tocItems(folds));   // 목차(오른쪽 기둥 · 폰 단추)
-  $('rp-open-all').addEventListener('click', () => folds.forEach((d) => { d.open = true; }));
-  $('rp-close-all').addEventListener('click', () => folds.forEach((d) => { d.open = false; }));
-  // 주소로 절을 가리키면 그 절을 펼치고 거기로 간다 — ?open=all 은 전부 펼침, #rp-tech 는 그 절만 (링크로 자리를 넘길 때 · 폰 그림 찍을 때)
-  const q = new URLSearchParams(location.search);
-  if (q.get('open') === 'all') folds.forEach((d) => { d.open = true; });
-  if (location.hash) { const t = document.querySelector(location.hash); if (t) { if (t.tagName === 'DETAILS' && q.get('open') !== 'none') t.open = true; t.scrollIntoView({ block: 'start' }); } }   // open=none 이면 접힌 채 그 자리로만
+  wireFolds();
+  $('rp-meta').insertAdjacentHTML('afterbegin', `<span class="rp-live-note"><span class="in-pill no">저장본 없음</span> 지금 값으로 그림 · </span>`);   // 저장 도구가 이 묶음째 뺀다
   window.__rp = { px, hi250, lo250, zzThr, MA, R, M, BB, ST, atr, adx, pdi, mdi, ich, piv, resist, support, pr, stay, vwap, volRatio, obvUp, r1, r6, r12, invSum: { 3: invSum(3), 5: invSum(5), 10: invSum(10), 20: invSum(20) }, fl, frNow, frAgo, errs };
 }
 main();
