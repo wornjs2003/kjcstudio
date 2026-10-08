@@ -92,6 +92,21 @@
    못 받는 값은 그 줄의 「아직」 알약이 빨강(.in-pill.no) */
 .in-src { display: inline; padding: 0 6px; border-radius: var(--kh-radius-sm); font-size: 0.68rem; font-weight: 600;
           color: var(--kh-accent); background: var(--kh-accent-dim); white-space: nowrap; }   /* inline — 글줄 높이에 안 얹힌다 */
+/* 받는 곳 색 (2026-10-08 재권님 「받는곳도 색이 필요해」 → 「출처 글자색도 각각 달라야 할거같은데 kis 랑 네이버랑 같아」 → 「응 그래」) —
+   배지가 받는 곳 색으로 통째로 바뀐다(연한 바탕 + 같은 색 진한 글씨). 「파랑 = 받을 수 있음」 은 「배지가 있으면 받을 수 있음 · 빨간 알약(.in-pill.no)이면 못 받음」 으로 바뀌었다.
+   빨강 계열은 「없음」 과 헷갈려 안 쓴다 · data-src 는 배지 글의 첫 낱말(analysis.js · stock-report.js) · 목록에 없는 받는 곳은 위 파랑 그대로 */
+.in-src[data-src="네이버"] { color: var(--kh-cat-teal);   background: var(--kh-cat-teal-dim); }
+.in-src[data-src="토스"]   { color: var(--kh-cat-slate);  background: var(--kh-cat-slate-dim); }
+.in-src[data-src="ECOS"]  { color: var(--kh-cat-amber);  background: var(--kh-cat-amber-dim); }
+.in-src[data-src="DART"]  { color: var(--kh-cat-violet); background: var(--kh-cat-violet-dim); }
+.in-src[data-src="계산"], .in-src[data-src="세션"] { color: var(--kh-text-muted); background: var(--kh-overlay-faint); }   /* 받아 온 값이 아니다 */
+/* 받는 법 풍선 (2026-10-08 재권님 「각 값들을 어떻게 가져오는지 알수있게」) — 배지에 마우스를 올리면(폰은 눌러 초점) 풍선. 모양은 용어 풍선(.in-term-tip) 그대로 · CSS 만 */
+.in-how { position: relative; cursor: help; outline: none; }
+.in-how > .in-term-tip { display: none; }
+.in-how:hover > .in-term-tip, .in-how:focus > .in-term-tip { display: block; }
+.in-how.r > .in-term-tip { left: auto; right: 0; }
+.in-how .in-term-tip code { font-size: 0.74rem; }
+.in-vt-sample { margin: 0 0 10px; font-size: 0.8rem; color: var(--kh-text-secondary); }
 /* 오른쪽 「종목」 목록 · 좁은 화면(오른쪽 칸이 숨는 1280px 이하)의 종목 줄 (2026-10-06 재권님 「차례 대신에 종목」) */
 .in-stocks a.is-on { color: var(--kh-text-primary); font-weight: 700; }
 .in-stocks-row { display: none; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 0 2px; font-size: 0.82rem; color: var(--kh-text-secondary); }

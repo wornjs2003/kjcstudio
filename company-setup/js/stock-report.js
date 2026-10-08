@@ -24,7 +24,7 @@ const ymd = (s) => s ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : ''
 const md = (s) => s ? `${+s.slice(4, 6)}월 ${+s.slice(6, 8)}일` : '';
 const pill = (k, t) => `<span class="in-pill ${k}">${esc(t)}</span>`;
 const SOON = pill('no', '아직');
-const src = (t) => `<span class="in-src">${esc(t)}</span>`;
+const src = (t) => `<span class="in-src" data-src="${esc(String(t).split(/[\s·(]/)[0])}">${esc(t)}</span>`;   // data-src = 받는 곳(첫 낱말) — 점 색은 insight.css
 const S = { kis: src('KIS'), naver: src('네이버'), dart: src('DART'), calc: src('계산'), me: src('세션 글') };
 const signCls = (v) => v > 0 ? 'rp-up' : v < 0 ? 'rp-down' : '';
 const sgn = (v, f) => `<span class="${signCls(v)}">${f(v)}</span>`;
