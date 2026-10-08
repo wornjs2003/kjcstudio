@@ -5103,8 +5103,10 @@ def _get_chart_us(cfg, code, period, limit):
             else:
                 n = limit if deep else (2 if period == "Y" else us_universe.DAILY_PER_CALL)
                 bars = us_universe.us_bars(kis_get, cfg, code, period, n)
-                if deep:
-                    _meta_set(bkey, "done")     # 한 번 끝까지 거슬러 받았다 — 덜 와도 KIS 가 더 안 준다
+                # 「다 받음」 은 **KIS 가 달라는 것보다 덜 줬을 때만** 적는다 (2026-10-08). 전에는 받기만 하면 적어서,
+                # 장 전 창이 적게(100) 달라고 한 뒤로는 화면이 400 을 달라고 해도 더 거슬러 받지 않았다
+                if deep and len(bars) < n:
+                    _meta_set(bkey, "done")     # 끝까지 거슬러 받았다 — 덜 와도 KIS 가 더 안 준다
         except RuntimeError:
             bars = []
         fetched = save_candles(code, period, bars)
@@ -5215,7 +5217,7 @@ def start_us_prefill(cfg, port):
             gap = max(0.2, left / max(1, len(codes) - i))   # 남은 시간을 남은 종목에 고르게
             t1 = time.time()
             try:
-                for per, lim in (("D", 240), ("W", 100), ("M", 100), ("Y", 20)):
+                for per, lim in (("D", DWMY_WANT), ("W", DWMY_WANT), ("M", DWMY_WANT), ("Y", 20)):   # 국내와 같은 400 (2026-10-08 · 전에 240·100·100)
                     get_chart(cfg, code, per, lim)
                 if not read_candles(code, "5m", 1):
                     get_chart(cfg, code, "5m", 1)            # 처음이면 지난 세션 5분봉(두 쪽)
@@ -5259,6 +5261,332 @@ def start_us_prefill(cfg, port):
             time.sleep(PREFILL_SLOT_POLL_SEC)
 
     threading.Thread(target=loop, daemon=True, name="prefill-us").start()
+    return True
+
+
+# ── 봉 채우기 — 비어 있는 지난 5분봉 · 미국 일·주·월봉을 한가할 때 메운다 (2026-10-08) ─────────────────
+#
+# 재권님 말씀(10-08) — 「코스닥 미국주식등등 5분봉이 과거꺼 안받아진것들 있는데 이거 순차로 좀 받아놔 10일 받기로
+# 한거 아니였나?」 · 「일봉 주봉 월봉까지 다 확인해 이번에 추가된 종목들 전부야」. 그날 8765 DB 실측(읽기 전용):
+#
+#     국내 5분봉    지난 날짜를 받는 길이 없어 그날치만 쌓였다 — 미리받기는 코스피 상위 100 + 화면이 연 종목뿐이라
+#                  코스닥150 · 코스피200 나머지는 날마다 빈다(빈 「종목×날」 약 2,000)
+#    미국 5분봉    10-02 부터만 있다(받기 시작한 날)
+#    미국 일·주·월  일 240~300 · 주·월 100 에서 멈췄다 — 장 전 창이 적게 받고 바로 「다 받음」 을 적었다
+#
+# **기본은 꺼짐이다 — `KJC_BAR_FILL=1` 일 때만 돈다** (창구 · 「켜기 전에 먼저 잰다」). 처음 한 바퀴가 KIS 약
+# 22,000건(실측 기반 셈)이라, 재시작만 허락받아도 저절로 돌면 안 된다. 쓰는 서버(8765)에서만 돈다.
+#
+# **쉬는 때** — 국내 장중(그날 봉이 들어오는 동안) · 미국 장 전 창 · 미국 장중 · 화면을 보는 동안. 휴장일은 달력이
+# 없어 「08:30 이 지났는데 그날 국내 5분봉이 하나도 없다」 로 가른다(10-09 한글날 낮을 쓰려고).
+# **순서** — 미국 5분봉(KIS 가 약 한 달 전까지만 준다 — 미루면 앞날부터 영영 못 받는다) → 미국 일·주·월 → 국내 5분봉.
+# **날짜** — 그 종목 일봉의 최근 `view_days`(10) 거래일. 휴장 · 거래정지 날이 저절로 빠진다.
+
+BAR_FILL_ON = (os.environ.get("KJC_BAR_FILL") or "").strip().lower() in ("1", "true", "yes", "on")
+BAR_FILL_THREAD_NAME = "bar-fill"
+#: KIS 한 건 뒤 쉬는 시간 — 초당 약 1.5건. 미리받기 · 장 전 창이 쓰던 빠르기와 같은 자리다(10-07 장 전 창 실측 초당 1.49)
+BAR_FILL_CALL_GAP = 0.67
+#: 받을 것이 없거나 다 돈 뒤 다시 보는 간격. 다시 볼 때는 DB 만 읽는다 — KIS 를 안 부른다
+BAR_FILL_REST_SEC = 1800
+#: 지난 날짜 분봉(`FHKST03010230`)이 한 번에 주는 1분봉 수(2026-10-08 실측 120)
+KR_PAST_PER_CALL = 120
+#: 하루(08:00~20:00 = 720분)를 덮는 데 드는 건수에 한 번 여유 — 무한히 돌지 않게
+KR_PAST_MAX_CALLS = (MINUTE_DAY_END - MINUTE_DAY_START) // KR_PAST_PER_CALL + 1
+#: 「그날이 다 찼나」 를 볼 때 봉 사이가 이보다 벌어지면 덜 찬 것 — 미리받기가 30분 칸으로 받으므로 한 칸이 빠지면 35분이 벌어진다
+BAR_FILL_MAX_GAP_MIN = 30
+
+_bar_fill = {"state": "꺼짐", "calls": 0, "items": 0, "left": None, "at": None}
+
+
+def _bar_fill_log(msg):
+    print("  [채우기] %s %s" % (datetime.now(KST).strftime("%H:%M:%S"), msg))
+
+
+def _kis_calls_now():
+    return _up_stat["calls"] + _stats["kis_calls"]
+
+
+def _day_complete(minutes, first, last):
+    """그날 봉의 분(그날 몇 분째) 목록이 정규장 `first`~`last` 를 다 덮나 — 첫 봉 · 끝 봉 · 사이 벌어짐을 본다.
+
+    봉 개수로 가르지 않는다 — 그러면 종목 · 시장마다 맞는 개수를 박아야 한다."""
+    ms = sorted(m for m in minutes if first <= m <= last)
+    if not ms or ms[0] > first + 5 or ms[-1] < last - 5:
+        return False
+    return all(b - a <= BAR_FILL_MAX_GAP_MIN for a, b in zip(ms, ms[1:]))
+
+
+def _fill_marks(code):
+    v = _meta_get("m5fill:%s" % code) or ""
+    return {d for d in v.split(",") if d}
+
+
+def _fill_mark(code, day):
+    """지난 날짜로 한 번 받은 날을 적는다 — 거래가 드물어 다 안 차도 다시 안 받는다. 최근 것만 둔다."""
+    days = sorted(_fill_marks(code) | {day})[-(PERIODS["5m"]["view_days"] * 2):]
+    _meta_set("m5fill:%s" % code, ",".join(days))
+
+
+def _recent_days(code, n, before=None):
+    """그 종목 일봉의 최근 n 거래일(YYYYMMDD · 오래된 것 먼저). `before` 를 주면 그 날짜 앞만."""
+    with _db_lock, db_conn() as conn:
+        rows = conn.execute(
+            "SELECT ts FROM candles WHERE code = ? AND period = 'D' AND (? IS NULL OR ts < ?) "
+            "ORDER BY ts DESC LIMIT ?", (code, before, before, n)).fetchall()
+    return sorted(r["ts"][:8] for r in rows)
+
+
+def _5m_ts_since(code, since):
+    with _db_lock, db_conn() as conn:
+        rows = conn.execute(
+            "SELECT ts FROM candles WHERE code = ? AND period = '5m' AND ts >= ?",
+            (code, since)).fetchall()
+    return [r["ts"] for r in rows]
+
+
+def _kr_today_seen(today):
+    """오늘 국내 5분봉이 하나라도 들었나 — 휴장일을 가르는 데 쓴다(달력이 없다)."""
+    with _db_lock, db_conn() as conn:
+        r = conn.execute(
+            "SELECT 1 FROM candles WHERE period = '5m' AND ts >= ? AND ts < ? "
+            "AND code GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]' LIMIT 1",
+            (today + "0000", today + "9999")).fetchone()
+    return r is not None
+
+
+def _kr_busy(now=None):
+    """국내 5분봉이 지금 들어오는 중인가. 평일 08:00~20:10 이 그 자리인데, 08:30 이 지나도 그날 봉이 하나도
+    없으면 휴장일로 본다."""
+    now = now or datetime.now(KST)
+    if not _minutes_live(now):
+        return False
+    if now.hour * 60 + now.minute < MINUTE_DAY_START + 30:
+        return True
+    return _kr_today_seen(now.strftime("%Y%m%d"))
+
+
+def _bar_fill_wait_reason():
+    """지금 쉬어야 하면 그 까닭(글), 아니면 None."""
+    if _ui_busy():
+        return "화면을 보는 중"
+    if us_universe.in_premarket()[0]:
+        return "미국 장 전 창"
+    if us_universe.session_state()[0] == "open":
+        return "미국 장중"
+    if _kr_busy():
+        return "국내 장중"
+    return None
+
+
+def _bar_fill_gate():
+    """쉬어야 하는 동안 기다린다. 까닭이 바뀔 때만 한 줄 남긴다."""
+    said = None
+    while True:
+        why = _bar_fill_wait_reason()
+        if not why:
+            if said:
+                _bar_fill_log("다시 받습니다")
+            _bar_fill["state"] = "받는 중"
+            return
+        if why != said:
+            _bar_fill_log("쉼 — %s" % why)
+            said = why
+        _bar_fill["state"] = "쉼(%s)" % why
+        time.sleep(PREFILL_SLOT_POLL_SEC)
+
+
+def _kr_past_one_market(cfg, code, day, hour, div):
+    """지난 날짜 1분봉 한 쪽(120개) — 주식일별분봉조회(`FHKST03010230`). 모양은 `_minutes_one_market` 과 같다."""
+    data = kis_get(
+        cfg,
+        "/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice",
+        {
+            "FID_COND_MRKT_DIV_CODE": div, "FID_INPUT_ISCD": code,
+            "FID_INPUT_HOUR_1": hour, "FID_INPUT_DATE_1": day,
+            "FID_PW_DATA_INCU_YN": "Y", "FID_FAKE_TICK_INCU_YN": "",
+        },
+        "FHKST03010230",
+    )
+    out = []
+    for r in out_rows(data, "output2"):
+        d, t = r.get("stck_bsop_date"), r.get("stck_cntg_hour")
+        close = _num(r.get("stck_prpr"), int)
+        if not d or not t or close is None:
+            continue
+        out.append({
+            "ts": "%s%s" % (d, str(t)[:4]),
+            "open": _num(r.get("stck_oprc"), int),
+            "high": _num(r.get("stck_hgpr"), int),
+            "low": _num(r.get("stck_lwpr"), int),
+            "close": close,
+            "volume": _num(r.get("cntg_vol"), int),
+        })
+    return out
+
+
+def _kr_past_chunk(cfg, code, day, hour):
+    """한 쪽을 받되 시장은 `fetch_minutes_from_kis` 와 같이 고른다 — 먼저 물을 쪽은 `minute_market_div`,
+    거래 있는 봉이 1개 이하면 다른 쪽으로 한 번 더 받아 더 많은 쪽(같으면 `J`). 까닭은 그 함수 주석에 있다."""
+    first = minute_market_div(hour)
+    out = _kr_past_one_market(cfg, code, day, hour, first)
+    nz = sum(1 for b in out if (b["volume"] or 0) > 0)
+    if nz <= 1:
+        other = "UN" if first == "J" else "J"
+        time.sleep(BAR_FILL_CALL_GAP)
+        alt = _kr_past_one_market(cfg, code, day, hour, other)
+        alt_nz = sum(1 for b in alt if (b["volume"] or 0) > 0)
+        if alt_nz > nz or (alt_nz == nz and other == "J" and alt):
+            return alt
+    return out
+
+
+def _kr_past_day(cfg, code, day):
+    """지난 하루(08:00~20:00) 1분봉을 모아 5분봉으로 → 저장한 봉 수. 20:00 에서 120분씩 거슬러 내려간다.
+
+    거래가 드물어 120개가 그보다 앞까지 닿으면 그 앞부터 다시 묻는다 — 같은 분을 두 번 받지 않는다."""
+    raw, t = {}, MINUTE_DAY_END
+    for _ in range(KR_PAST_MAX_CALLS):
+        if t < MINUTE_DAY_START:
+            break
+        rows = _kr_past_chunk(cfg, code, day, "%02d%02d00" % (t // 60, t % 60))
+        time.sleep(BAR_FILL_CALL_GAP)
+        mine = [b for b in rows if b["ts"][:8] == day]
+        for b in mine:
+            m = int(b["ts"][8:10]) * 60 + int(b["ts"][10:12])
+            if MINUTE_DAY_START <= m <= MINUTE_DAY_END:
+                raw[b["ts"]] = b
+        if not mine or len(mine) < len(rows):
+            break                                   # 빈 날(휴장 · 정지)이거나 그날 앞까지 닿았다
+        t = min(int(b["ts"][8:10]) * 60 + int(b["ts"][10:12]) for b in mine) - 1
+    bars = aggregate_minutes(list(raw.values()), 5)
+    return save_candles(code, "5m", bars)
+
+
+def _kr_fill_work():
+    """국내 — 지수 구성 종목마다 최근 거래일 중 5분봉이 덜 찬 날 → [(코드, 날짜)]."""
+    n = PERIODS["5m"]["view_days"]
+    first = KRX_OPEN[0] * 60 + KRX_OPEN[1]
+    last = KRX_CLOSE[0] * 60 + KRX_CLOSE[1]
+    today = datetime.now(KST).strftime("%Y%m%d")
+    work = []
+    for code in _dwmy_codes():
+        days = [d for d in _recent_days(code, n) if not (d == today and _kr_busy())]
+        if not days:
+            continue
+        marks = _fill_marks(code)
+        have = {}
+        for ts in _5m_ts_since(code, days[0]):
+            have.setdefault(ts[:8], []).append(int(ts[8:10]) * 60 + int(ts[10:12]))
+        for d in reversed(days):                     # 최근 날부터
+            if d not in marks and not _day_complete(have.get(d, []), first, last):
+                work.append((code, d))
+    return work
+
+
+def _us_fill_work():
+    """미국 — 묶음 종목마다 최근 세션(동부 날짜) 중 5분봉이 덜 찬 날 → [(코드, 동부 날짜)].
+    봉 ts 가 한국 시각이면(`US_SHOW_KST`) 동부로 바꿔 센다. 오늘 세션은 끝난 뒤(16:05)부터 든다."""
+    n = PERIODS["5m"]["view_days"]
+    first = us_universe.SESSION_OPEN_MIN
+    last = us_universe.SESSION_CLOSE_MIN
+    st, et_today, _m = us_universe.session_state()
+    before = None if st in ("after", "closed") else et_today
+    since_kst = (datetime.now(KST) - timedelta(days=n * 2 + 7)).strftime("%Y%m%d0000")
+    work = []
+    for code in us_universe.all_members():
+        days = _recent_days(code, n, before)
+        if not days:
+            continue
+        marks = _fill_marks(code)
+        have = {}
+        for ts in _5m_ts_since(code, since_kst):
+            t = datetime.strptime(ts, "%Y%m%d%H%M")
+            t = t.replace(tzinfo=KST).astimezone(us_universe.ET) if us_universe.US_SHOW_KST else t
+            have.setdefault(t.strftime("%Y%m%d"), []).append(t.hour * 60 + t.minute)
+        for d in reversed(days):
+            if d not in marks and not _day_complete(have.get(d, []), first, last):
+                work.append((code, d))
+    return work
+
+
+def _us_deep_work():
+    """미국 일·주·월봉이 `DWMY_WANT` 에 못 미치고 아직 끝까지 거슬러 받아 보지 않은 것 → [(코드, 주기)].
+    옛 「다 받음」(`backfill:`) 표시는 장 전 창이 적게 받고 적은 것이라 보지 않는다 — 이 일은 자기 표시(`usdeep:`)를 쓴다."""
+    work = []
+    for code in us_universe.all_members():
+        for period in ("D", "W", "M"):
+            if _meta_get("usdeep:%s:%s" % (code, period)) == "done":
+                continue
+            if len(read_candles(code, period, DWMY_WANT)) < DWMY_WANT:
+                work.append((code, period))
+    return work
+
+
+def _bar_fill_run(label, work, do_one):
+    """일감 목록을 하나씩 — 하나 앞마다 쉬어야 하는지 본다. 백 개마다 · 끝에 한 줄."""
+    if not work:
+        return 0
+    c0, t0 = _kis_calls_now(), time.time()
+    _bar_fill_log("%s %d건 시작" % (label, len(work)))
+    for i, item in enumerate(work):
+        _bar_fill_gate()
+        _bar_fill["left"] = "%s %d/%d" % (label, i, len(work))
+        try:
+            do_one(*item)
+        except Exception as e:
+            _bar_fill_log("%s %s 실패 (%s)" % (label, " ".join(item), safe_message(e, 80)))
+        _bar_fill["items"] += 1
+        if (i + 1) % 100 == 0:
+            n = _kis_calls_now() - c0
+            _bar_fill_log("%s %d/%d · KIS %d건 · %.0f초" % (label, i + 1, len(work), n, time.time() - t0))
+    n = _kis_calls_now() - c0
+    _bar_fill["calls"] += n
+    _bar_fill_log("%s 끝 %d건 · KIS %d건 · %.0f초 · 초당 %.2f건"
+                  % (label, len(work), n, time.time() - t0, n / max(1.0, time.time() - t0)))
+    return len(work)
+
+
+def start_bar_fill(cfg, port):
+    """봉 채우기를 켠다 — `KJC_BAR_FILL=1` · 쓰는 서버 · 8765 일 때만."""
+    if not BAR_FILL_ON or not cfg or port != MAIN_PORT or not marketdb.writable():
+        return False
+
+    def us_5m_one(code, et_date):
+        bars = us_universe.us_5m_session(kis_get, cfg, code, et_date)
+        time.sleep(BAR_FILL_CALL_GAP * 2)
+        save_candles(code, "5m", bars)
+        _fill_mark(code, et_date)
+
+    def us_deep_one(code, period):
+        bars = us_universe.us_bars(kis_get, cfg, code, period, DWMY_WANT)
+        time.sleep(BAR_FILL_CALL_GAP * max(1, -(-DWMY_WANT // us_universe.DAILY_PER_CALL)))
+        save_candles(code, period, bars)
+        _meta_set("usdeep:%s:%s" % (code, period), "done")
+
+    def kr_one(code, day):
+        _kr_past_day(cfg, code, day)
+        _fill_mark(code, day)
+
+    def loop():
+        time.sleep(PREFILL_START_SEC)
+        while True:
+            try:
+                _bar_fill_gate()
+                done = 0
+                done += _bar_fill_run("미국 5분봉", _us_fill_work(), us_5m_one)
+                done += _bar_fill_run("미국 일주월", _us_deep_work(), us_deep_one)
+                done += _bar_fill_run("국내 5분봉", _kr_fill_work(), kr_one)
+                _bar_fill["at"] = datetime.now(KST).strftime("%m-%d %H:%M")
+                _bar_fill["left"] = None
+                _bar_fill["state"] = "다 돎 · 다음 확인 대기"
+                if done:
+                    _bar_fill_log("한 바퀴 끝 — 일감 %d건" % done)
+            except Exception as e:
+                _bar_fill_log("뒤 작업 오류 (%s)" % type(e).__name__)
+            time.sleep(BAR_FILL_REST_SEC)
+
+    _bar_fill["state"] = "켜짐"
+    threading.Thread(target=loop, daemon=True, name=BAR_FILL_THREAD_NAME).start()
     return True
 
 
@@ -6917,6 +7245,12 @@ def main():
         print("  미국 목록  : 나스닥100 과 거래소 코드를 하루 한 번 받습니다")
     if not SLOW and start_us_prefill(cfg, args.port):
         print("  미국 받기  : 장 전(동부 07:15~09:15) 일·주·월·년봉·시총을 나눠 받고, 장중(09:30~16:05)에는 5분봉만 5분마다")
+
+    if start_bar_fill(cfg, args.port):
+        print("  봉 채우기  : 켜짐 — 한가할 때 지난 5분봉(최근 %d거래일) · 미국 일·주·월(%d봉)을 메웁니다"
+              % (PERIODS["5m"]["view_days"], DWMY_WANT))
+    else:
+        print("  봉 채우기  : 꺼져 있습니다 (켜려면 KJC_BAR_FILL=1 · 8765 만)")
 
     if not DWMY_ON:
         print("  일주월년   : **꺼져 있습니다** (켜려면 KJC_DWMY=1)")

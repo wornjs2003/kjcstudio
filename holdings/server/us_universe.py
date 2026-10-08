@@ -384,7 +384,23 @@ def us_5m(kis_get, cfg, code, pages=US_5M_PAGES):
     `US_REGULAR_ONLY` 면 현지 09:30~16:00 봉만 둔다. 한 쪽 120봉 · `pages` 쪽까지 이어 받는다
     (처음 채울 때 `US_5M_PAGES` · 그 뒤 갱신은 한 쪽 — 120봉이 10시간이라 장중 갱신에는 한 쪽이면 된다).
     """
-    out, keyb, nxt = {}, "", ""
+    return _us_5m_pages(kis_get, cfg, code, "", "", pages)
+
+
+def us_5m_session(kis_get, cfg, code, et_date, pages=US_5M_PAGES + 1):
+    """**지난 세션 하루치** 5분봉 → 봉 목록(과거 → 최신) — 그날(동부 날짜) 봉만 (2026-10-08 봉 채우기).
+
+    KEYB 를 그날 동부 20:00 으로 두고 거슬러 받는다 — 맨 앞 쪽부터 따라 내려가지 않고 그날로 바로 뛴다
+    (2026-10-08 AAPL 실측 — KEYB 20260915160000 이 06:05~16:00 120봉을 줬다). **KIS 는 약 한 달 전까지만
+    준다**(같은 날 09-15 옴 · 09-01 0건) — 그보다 앞 세션은 빈 목록이 온다. 하루(04:00~20:00)가 192봉이라
+    두 쪽이면 닿고, 한 쪽 여유를 둔다. 그날보다 앞 날짜 봉이 나오면 멈춘다.
+    """
+    return _us_5m_pages(kis_get, cfg, code, et_date + "200000", "1", pages, only_date=et_date)
+
+
+def _us_5m_pages(kis_get, cfg, code, keyb, nxt, pages, only_date=None):
+    """5분봉 쪽을 `pages` 쪽까지 이어 받는다. `only_date`(동부 날짜)를 주면 그날 봉만 두고, 그보다 앞 날짜가 나오면 멈춘다."""
+    out = {}
     for _ in range(max(1, pages)):
         data = kis_get(cfg, MIN_PATH, {"AUTH": "", "EXCD": excd_of(code), "SYMB": code, "NMIN": "5",
                                        "PINC": "1", "NEXT": nxt, "NREC": str(MIN_PER_CALL),
@@ -400,6 +416,8 @@ def us_5m(kis_get, cfg, code, pages=US_5M_PAGES):
             if len(xd) != 8 or len(xt) != 6 or c is None:
                 continue
             last_local = xd + xt
+            if only_date and xd != only_date:
+                continue
             if US_REGULAR_ONLY and not (REGULAR_FROM <= xt <= REGULAR_TO):
                 continue
             ts = (kd + kt[:4]) if US_SHOW_KST else (xd + xt[:4])
@@ -407,6 +425,8 @@ def us_5m(kis_get, cfg, code, pages=US_5M_PAGES):
                        "low": _f(r.get("low")), "close": c, "volume": _i(r.get("evol"))}
         if len(rows) < MIN_PER_CALL or not last_local:
             break
+        if only_date and min((r.get("xymd") or "").strip() for r in rows) < only_date:
+            break                                   # 그날 앞까지 닿았다
         # 다음 쪽 — 이번 쪽 가장 이른 봉의 한 칸 앞 (open-trading-api 예제의 KEYB 모양)
         prev = datetime.strptime(min(r["xymd"] + r["xhms"] for r in rows if r.get("xymd") and r.get("xhms")),
                                  "%Y%m%d%H%M%S") - timedelta(minutes=5)
