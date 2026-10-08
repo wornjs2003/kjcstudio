@@ -269,3 +269,5 @@ td .in-term-tip, .in-vt-stat .in-term-tip { font-weight: 400; }
 mark.in-find-hit { background: var(--kh-cat-amber-dim); color: inherit; border-radius: 2px; }
 mark.in-find-hit.is-cur { background: var(--kh-cat-amber); color: var(--kh-text-on-fill); }
 @media (max-width: 899px) { .in-find-q { flex: 1 1 auto; } }
+/* 「보는 것」 표 세부사항 칸 끝의 출처 한 줄 (2026-10-08 재권님 「제목 정의 분석 현황 세부사항(출처)」) */
+.in-look-src { display: block; margin-top: 4px; font-size: 0.74rem; color: var(--kh-text-muted); }

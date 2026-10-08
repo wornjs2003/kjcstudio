@@ -173,15 +173,32 @@ function industryHtml(card, ind) {
     : row(['업황 전망 BSI', '—', '—', esc(r.errors.bsi || '못 받음')]));
   return h + tbl(rows) + `<p class="in-rp-note">업종 전체 값이라 이 회사 몫이 아니다 — 회사 매출 증가율(실적 표)과 견줘 「산업 덕인지 점유율 덕인지」 를 본다(⑥-11). 업종 묶음이 넓다(예: 반도체는 「전자영상통신장비」 안)</p>`;
 }
-function peerHtml(code, card, all) {
-  const me = card || {}; const keys = new Set((me.maps || []).map((m) => m.map + '/' + m.node));
+// 경쟁 비교 — 동종기업은 종목 분석 ⑥-12 「경쟁력 재는 순서」 대로 고른 점유율 상위 경쟁사(리포트 글의 competitors · 세션이 출처와 함께 적는다).
+// 그 글이 없으면 같은 지도 칸 종목으로 대신하고 「점유율 순위로 고른 것이 아님」 을 적는다 (2026-10-08 재권님 「응 그렇게 해줘」)
+function peerHtml(code, card, all, comp) {
+  const me = card || {};
+  const fsRow = (c, label, share) => {
+    const n = (c && c.dart && c.dart.fs && c.dart.fs.now) || {};
+    if (c && c.edgar && c.edgar.financials) {                 // 해외 경쟁사 — 미국 증권위 EDGAR 회계연도 값(회사 전체 · 통화 그대로)
+      const f = c.edgar.financials, lastOf = (x) => x && x.values ? Object.entries(x.values).sort().pop() : null;
+      const rv = lastOf(f.revenue), op = lastOf(f.operatingIncome), cur = f.revenue && f.revenue.unit;
+      return row([label, esc(share || '—'), rv ? `${n0(rv[1] / 1e9, 1)}십억 ${esc(cur)}` : '—', pct(rv && op ? op[1] / rv[1] * 100 : null), '—', '—', rv ? `${esc(rv[0].slice(0, 7))} 회계연도 · EDGAR` : '—']);
+    }
+    return row([label, esc(share || '—'), n.revenue != null ? eok(n.revenue / 1e8) : '—', pct(n.revenue ? n.opIncome / n.revenue * 100 : null),
+      pct(n.equity ? n.netIncome / n.equity * 100 : null), c && FIN_RE.test(c.name) ? '금융업 안 씀' : pct(roicOf(c)), esc(c && c.dart && c.dart.fs ? c.dart.fs.year + ' ' + c.dart.fs.fsDiv + ' · DART' : '—')]);
+  };
+  const head = row(['', '점유율', '매출', '영업이익률', 'ROE', 'ROIC(약식)', '기준'], true);
+  const note = `<p class="in-rp-note">매출 · 이익률은 회사 전체 값(부문 값 아님) · ROIC = 영업이익 × (1 − 세율) ÷ (자본 + 차입금 − 현금) · 국내 억원(1조 이상 조) · 해외는 그 회사 통화 · 규칙은 종목 분석 ⑥-11 · ⑥-12</p>`;
+  if (comp && comp.list && comp.list.length) {
+    const rows = [fsRow(me, `${esc(me.name || code)} <b>(이 종목)</b>`, comp.self && comp.self.share ? `${comp.self.share}${comp.self.rank ? ` · ${comp.self.rank}위` : ''}` : '')];
+    for (const x of comp.list) rows.push(fsRow((all || {})[x.key], esc(x.name), `${x.share || '—'}${x.rank ? ` · ${x.rank}위` : ''}`));
+    return `<h3>경쟁 비교 — ${esc(comp.product || '')} 점유율 상위 경쟁사 ${S.dart} ${src('EDGAR')} ${S.me} <small>⑥-12 순서로 고름 · 점유율 출처 ${esc(comp.source || '—')}</small></h3>${tbl([head, ...rows])}${comp.note ? `<p class="in-rp-note">${esc(comp.note)}</p>` : ''}${note}`;
+  }
+  const keys = new Set((me.maps || []).map((m) => m.map + '/' + m.node));
   const peers = Object.values(all || {}).filter((c) => c.code && c.code !== code && (c.maps || []).some((m) => keys.has(m.map + '/' + m.node)));
-  const rowOf = (c) => { const n = (c.dart && c.dart.fs && c.dart.fs.now) || {};
-    return row([`${esc(c.name)}${c.code === code ? ' <b>(이 종목)</b>' : ''}`, n.revenue != null ? eok(n.revenue / 1e8) : '—', pct(n.revenue ? n.opIncome / n.revenue * 100 : null),
-      pct(n.equity ? n.netIncome / n.equity * 100 : null), FIN_RE.test(c.name) ? '금융업 안 씀' : pct(roicOf(c)), esc(c.dart && c.dart.fs ? c.dart.fs.year + ' ' + c.dart.fs.fsDiv : '—')]); };
-  return `<h3>경쟁 비교 — ROIC · 동종기업 ${S.dart} ${S.calc} <small>동종기업 = 같은 지도 칸(${esc((me.maps || []).map((m) => m.node).filter(Boolean).join(' · ') || '없음')})</small></h3>`
-    + (me.code ? tbl([row(['', '매출', '영업이익률', 'ROE', 'ROIC(약식)', '기준'], true), ...[me, ...peers.slice(0, 6)].map(rowOf)]) : `<p class="rp-text">${SOON} 회사 카드 없음</p>`)
-    + `<p class="in-rp-note">ROIC = 영업이익 × (1 − 세율) ÷ (자본 + 차입금 − 현금) · 규칙은 종목 분석 ⑥-11. ${FIN_RE.test(me.name || '') ? '금융업은 차입이 곧 영업이라 ROIC 를 쓰지 않고 ROE 로 본다. ' : ''}${peers.length ? '' : '같은 지도 칸에 다른 국내 종목이 없어 비교할 회사가 없다'}</p>`;
+  return `<h3>경쟁 비교 — 동종기업(임시) ${S.dart} ${S.calc} <small>${pill('no', '점유율 순위로 고른 것이 아님')} 리포트 글에 ⑥-12 경쟁사가 아직 없어 같은 지도 칸(${esc((me.maps || []).map((m) => m.node).filter(Boolean).join(' · ') || '없음')}) 국내 종목으로 대신</small></h3>`
+    + (me.code ? tbl([head, fsRow(me, `${esc(me.name)} <b>(이 종목)</b>`, ''), ...peers.slice(0, 6).map((c) => fsRow(c, esc(c.name), ''))]) : `<p class="rp-text">${SOON} 회사 카드 없음</p>`)
+    + note + (peers.length ? '' : `<p class="in-rp-note">같은 지도 칸에 다른 국내 종목도 없어 비교할 회사가 없다</p>`);
 }
 function eventHtml(card) {
   const ev = (card && card.dart && card.dart.events && card.dart.events.events) || [];
@@ -325,7 +342,7 @@ async function main() {
       </div>
       <p class="in-rp-note">% 는 현재가 ${won(px)} 대비 · 네이버 평균과 다른 까닭 — 평균에 넣는 기간이 다르다 · 실적 추정은 증권사별로 못 받는다(위 (E)는 네이버 평균)</p>`;
   }
-  $('rp-fund-body').innerHTML = `<h3>연간 실적 · 증권사 추정(E) ${S.naver} <small>억원 · 회사 카드 ${esc(card && card.fetchedAt || got.cards && got.cards.fetchedAt || '')}</small></h3>${annual}<h3>최근 5분기 ${S.kis} <small>억원</small></h3>${quarters}<h3>핵심 지표</h3>${key2}<h3>최근 리포트 ${S.naver}</h3>${nvc.reports && nvc.reports.length ? tbl([row(['날짜', '증권사', '제목'], true), ...nvc.reports.slice(0, 5).map((r) => trow([ymd(r.date), esc(r.broker), `<a href="${esc(r.from)}" target="_blank" rel="noopener">${esc(r.title)}</a>`]))]) : `<p class="rp-text">${SOON}</p>`}${brokerBox}${industryHtml(card, got.industry)}${bizHtml(card)}${peerHtml(code, card, got.cards && got.cards.cards)}`;
+  $('rp-fund-body').innerHTML = `<h3>연간 실적 · 증권사 추정(E) ${S.naver} <small>억원 · 회사 카드 ${esc(card && card.fetchedAt || got.cards && got.cards.fetchedAt || '')}</small></h3>${annual}<h3>최근 5분기 ${S.kis} <small>억원</small></h3>${quarters}<h3>핵심 지표</h3>${key2}<h3>최근 리포트 ${S.naver}</h3>${nvc.reports && nvc.reports.length ? tbl([row(['날짜', '증권사', '제목'], true), ...nvc.reports.slice(0, 5).map((r) => trow([ymd(r.date), esc(r.broker), `<a href="${esc(r.from)}" target="_blank" rel="noopener">${esc(r.title)}</a>`]))]) : `<p class="rp-text">${SOON}</p>`}${brokerBox}${industryHtml(card, got.industry)}${bizHtml(card)}${peerHtml(code, card, got.cards && got.cards.cards, T.competitors)}`;
 
   // ── 차트 ──
   const levels = [...resist.map((p) => ({ kind: 'resist', p: p.p })), ...support.map((p) => ({ kind: 'support', p: p.p }))];
