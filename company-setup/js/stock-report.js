@@ -126,6 +126,49 @@ const tbl = (rows) => `<div class="rp-tw"><table class="in-tbl">${rows.join('')}
 const cards = (items) => `<div class="rp-cards">${items.map((it) => `<div class="rp-item"><b>${it.head}</b>${it.lines.map((l) => `<div>${l}</div>`).join('')}</div>`).join('')}</div>`;
 const list = (items) => items && items.length ? `<ul class="rp-list">${items.map((x) => `<li>${x}</li>`).join('')}</ul>` : `<p class="rp-text">${SOON} 세션이 아직 안 썼습니다</p>`;
 
+// 회사 재료 — 사업 구성(제품 · 지역 매출) · 경쟁 비교(ROIC) · 일정 (2026-10-08 재권님 「일부 항목들 할수있는것들은 채워줘」 →
+// 「분석 화면에는 판단 근거 재료만 · 그 룰 안에서 움직여」 → 「응 그렇게 해」). 규칙은 종목 분석 문서 ⑥-11 에 있고 여기는 그 규칙대로 값을 그린다.
+// 표는 회사 카드(tools/fetch-company-cards.py)가 DART 정기보고서 원문에서 줄 · 칸 그대로 옮긴 것 — 해석하지 않는다
+const FIN_RE = /금융|지주|생명|화재|증권|은행|보험/;
+function roicOf(c) {                                  // 약식 — 영업이익 × (1 − 세율) ÷ (자본 + 차입금 − 현금) · 세율이 0~60% 밖이면 24.2%(법정 최고)
+  const n = c && c.dart && c.dart.fs && c.dart.fs.now; if (!n || n.opIncome == null || n.equity == null) return null;
+  let t = (n.tax != null && n.preTax) ? n.tax / n.preTax : null; if (t == null || t < 0 || t > 0.6) t = 0.242;
+  const ic = n.equity + ['stBorrow', 'curLTD', 'ltBorrow', 'bonds'].reduce((a, k) => a + (n[k] || 0), 0) - (n.cash || 0);
+  return ic > 0 ? n.opIncome * (1 - t) / ic * 100 : null;
+}
+function rawTable(t) {                                // 칸이 합쳐진 표는 줄마다 칸 수가 달라 모자란 칸을 첫 칸 뒤에 채운다
+  const w = Math.max(...t.rows.map((r) => r.length));
+  const fill = (r) => r.length < w ? [r[0], ...Array(w - r.length).fill(''), ...r.slice(1)] : r;
+  return tbl(t.rows.map((r, i) => trow(fill(r).map(esc), !i))) + `<p class="in-rp-note">${esc(t.unit || '')}${t.cut ? ' · 앞 14줄만' : ''} · 사업보고서 표를 줄 · 칸 그대로 옮김 — 합쳐진 칸은 비워 둠</p>`;
+}
+function bizHtml(card) {
+  const b = card && card.dart && card.dart.business; const tb = b && b.tables;
+  let h = `<h3>사업 구성 — 제품별 · 지역별 매출 ${S.dart} <small>${esc(b ? b.report : '')}${b ? ` · <a href="${esc(b.from)}" target="_blank" rel="noopener">원문 ›</a>` : ''}</small></h3>`;
+  if (!tb) return h + `<p class="rp-text">${SOON} 정기보고서 원문이 회사 카드에 없습니다</p>`;
+  h += `<p class="rp-text"><b>제품별</b> — 「주요 제품 및 서비스」</p>` + (tb.product ? rawTable(tb.product) : `<p class="rp-text">${pill('no', '못 뽑음')} 그 절에 매출 · 비율 표가 없거나 글로만 적혀 있습니다</p>`);
+  h += `<p class="rp-text"><b>지역별</b> — 「매출 및 수주상황」</p>` + (tb.region ? rawTable(tb.region) : `<p class="rp-text">${pill('no', '못 뽑음')} 그 절에 지역 · 내수/수출 표가 없습니다 — 회사에 따라 재무제표 주석(부문 정보)에만 있다</p>`);
+  return h;
+}
+function peerHtml(code, card, all) {
+  const me = card || {}; const keys = new Set((me.maps || []).map((m) => m.map + '/' + m.node));
+  const peers = Object.values(all || {}).filter((c) => c.code && c.code !== code && (c.maps || []).some((m) => keys.has(m.map + '/' + m.node)));
+  const rowOf = (c) => { const n = (c.dart && c.dart.fs && c.dart.fs.now) || {};
+    return row([`${esc(c.name)}${c.code === code ? ' <b>(이 종목)</b>' : ''}`, n.revenue != null ? eok(n.revenue / 1e8) : '—', pct(n.revenue ? n.opIncome / n.revenue * 100 : null),
+      pct(n.equity ? n.netIncome / n.equity * 100 : null), FIN_RE.test(c.name) ? '금융업 안 씀' : pct(roicOf(c)), esc(c.dart && c.dart.fs ? c.dart.fs.year + ' ' + c.dart.fs.fsDiv : '—')]); };
+  return `<h3>경쟁 비교 — ROIC · 동종기업 ${S.dart} ${S.calc} <small>동종기업 = 같은 지도 칸(${esc((me.maps || []).map((m) => m.node).filter(Boolean).join(' · ') || '없음')})</small></h3>`
+    + (me.code ? tbl([row(['', '매출', '영업이익률', 'ROE', 'ROIC(약식)', '기준'], true), ...[me, ...peers.slice(0, 6)].map(rowOf)]) : `<p class="rp-text">${SOON} 회사 카드 없음</p>`)
+    + `<p class="in-rp-note">ROIC = 영업이익 × (1 − 세율) ÷ (자본 + 차입금 − 현금) · 규칙은 종목 분석 ⑥-11. ${FIN_RE.test(me.name || '') ? '금융업은 차입이 곧 영업이라 ROIC 를 쓰지 않고 ROE 로 본다. ' : ''}${peers.length ? '' : '같은 지도 칸에 다른 국내 종목이 없어 비교할 회사가 없다'}</p>`;
+}
+function eventHtml(card) {
+  const ev = (card && card.dart && card.dart.events && card.dart.events.events) || [];
+  const KIND = { ir: '기업설명회(실적 발표)', dividend: '배당 기준일', agm: '주주총회' };
+  return `<h3>일정 — 실적 발표 · 배당 기준일 · 주주총회 ${S.dart} <small>공시 본문 · 종류마다 최근 공시 하나</small></h3>`
+    + (ev.length ? tbl([row(['', '날짜', '자세히', '공시'], true), ...ev.map((e) => trow([esc(KIND[e.kind] || e.kind), e.date ? esc(e.date) + (e.upcoming ? ' ' + pill('ok', '다가옴') : '') : pill('no', '못 읽음'),
+      esc([e.what, e.pay ? '지급 ' + e.pay : '', e.dps ? '주당 ' + e.dps + '원' : ''].filter(Boolean).join(' · ') || '—'), `<a href="${esc(e.from)}" target="_blank" rel="noopener">${esc(e.filed)} ›</a>`]))])
+      + `<p class="in-rp-note">「다가옴」 이 없는 줄은 지난 일정 — 다음 공시가 나오면 바뀐다 · 신제품 · 규제 날짜는 받을 길이 없다</p>`
+      : `<p class="rp-text">${SOON} 최근 400일 안에 일정 공시가 없습니다</p>`);
+}
+
 function drawChart(b, levels) {
   const cv = $('rp-canvas'); if (!cv) return; const ctx = cv.getContext('2d');
   const W = cv.width, H = cv.height, padL = 70, padR = 16, padT = 12, padB = 24;
@@ -257,7 +300,7 @@ async function main() {
       </div>
       <p class="in-rp-note">% 는 현재가 ${won(px)} 대비 · 네이버 평균과 다른 까닭 — 평균에 넣는 기간이 다르다 · 실적 추정은 증권사별로 못 받는다(위 (E)는 네이버 평균)</p>`;
   }
-  $('rp-fund-body').innerHTML = `<h3>연간 실적 · 증권사 추정(E) ${S.naver} <small>억원 · 회사 카드 ${esc(card && card.fetchedAt || got.cards && got.cards.fetchedAt || '')}</small></h3>${annual}<h3>최근 5분기 ${S.kis} <small>억원</small></h3>${quarters}<h3>핵심 지표</h3>${key2}<h3>최근 리포트 ${S.naver}</h3>${nvc.reports && nvc.reports.length ? tbl([row(['날짜', '증권사', '제목'], true), ...nvc.reports.slice(0, 5).map((r) => trow([ymd(r.date), esc(r.broker), `<a href="${esc(r.from)}" target="_blank" rel="noopener">${esc(r.title)}</a>`]))]) : `<p class="rp-text">${SOON}</p>`}${brokerBox}`;
+  $('rp-fund-body').innerHTML = `<h3>연간 실적 · 증권사 추정(E) ${S.naver} <small>억원 · 회사 카드 ${esc(card && card.fetchedAt || got.cards && got.cards.fetchedAt || '')}</small></h3>${annual}<h3>최근 5분기 ${S.kis} <small>억원</small></h3>${quarters}<h3>핵심 지표</h3>${key2}<h3>최근 리포트 ${S.naver}</h3>${nvc.reports && nvc.reports.length ? tbl([row(['날짜', '증권사', '제목'], true), ...nvc.reports.slice(0, 5).map((r) => trow([ymd(r.date), esc(r.broker), `<a href="${esc(r.from)}" target="_blank" rel="noopener">${esc(r.title)}</a>`]))]) : `<p class="rp-text">${SOON}</p>`}${brokerBox}${bizHtml(card)}${peerHtml(code, card, got.cards && got.cards.cards)}`;
 
   // ── 차트 ──
   const levels = [...resist.map((p) => ({ kind: 'resist', p: p.p })), ...support.map((p) => ({ kind: 'support', p: p.p }))];
@@ -300,7 +343,7 @@ async function main() {
   const C = T.catalysts || {};
   const dT = got.dart && got.dart.length ? tbl([row(['접수일', '공시', '제출인'], true), ...got.dart.slice(0, 5).map((d) => trow([ymd(d.date), `<a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.title)}</a>`, esc(d.filer)]))]) : `<p class="rp-text">${SOON} 공시 못 받음</p>`;
   const nT = got.news && got.news.length ? tbl([row(['시각', '매체', '제목'], true), ...got.news.slice(0, 5).map((x) => trow([`${x.at.slice(4, 6)}/${x.at.slice(6, 8)} ${x.at.slice(8, 10)}:${x.at.slice(10, 12)}`, esc(x.office), `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>`]))]) : `<p class="rp-text">${SOON} 뉴스 못 받음</p>`;
-  $('rp-cat-body').innerHTML = `<div class="rp-cols"><div><h3>주요 호재 ${S.me}</h3>${list((C.positive || []).map(esc))}</div><div><h3>주요 위험 ${S.me}</h3>${list((C.negative || []).map(esc))}</div></div><h3>예정 · 진행 이벤트 ${S.me}</h3>${list((C.events || []).map(esc))}<h3>최근 공시 ${S.dart}</h3>${dT}<h3>관련 뉴스 ${S.naver}</h3>${nT}`;
+  $('rp-cat-body').innerHTML = `<div class="rp-cols"><div><h3>주요 호재 ${S.me}</h3>${list((C.positive || []).map(esc))}</div><div><h3>주요 위험 ${S.me}</h3>${list((C.negative || []).map(esc))}</div></div><h3>예정 · 진행 이벤트 ${S.me}</h3>${list((C.events || []).map(esc))}${eventHtml(card)}<h3>최근 공시 ${S.dart}</h3>${dT}<h3>관련 뉴스 ${S.naver}</h3>${nT}`;
 
   // ── 지지 · 저항 ──
   $('rp-sr-body').innerHTML = tbl([row(['구분', '가격', '현재가에서', '근거'], true), ...resist.slice().reverse().map((p) => row(['저항', won(p.p), pct((p.p / px - 1) * 100), `${md(p.ts)} 고점(ZigZag)`])), ...support.map((p) => row(['지지', won(p.p), pct((p.p / px - 1) * 100), `${md(p.ts)} 저점(ZigZag)`]))].concat(ich && ich.spanA != null ? [row(['구름 상단 · 하단', `${won(Math.max(ich.spanA, ich.spanB))} · ${won(Math.min(ich.spanA, ich.spanB))}`, '', '일목'])] : [])) + `<p class="in-rp-note">임시 규칙 — 최근 260봉 ZigZag(3%) 꺾임점. 규칙은 재권님 결정 뒤 바꾼다</p>`;

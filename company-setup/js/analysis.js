@@ -197,7 +197,7 @@ async function paint(code) {
   }
   // 못 받는 것
   // 못 받는 값의 줄 — 출처 배지(파랑)를 안 붙인다. 파랑은 「받을 수 있다」 는 뜻이라서다. 어디서 받을 예정인지는 글로만
-  h += `<p class="in-doc-p">${SOON} EBITDA · EV/EBITDA · ROIC(DART 재무제표로 계산 예정) · 공매도 잔고(KIS API 유무 미확인) · 해외 종목 컨센서스(출처 미정)</p>`;
+  h += `<p class="in-doc-p">${SOON} EBITDA · EV/EBITDA(DART 재무제표로 계산 예정 · 감가상각을 아직 안 받음) · 공매도 잔고(KIS API 유무 미확인) · 해외 종목 컨센서스(출처 미정)</p>`;
   if (Object.keys(errs).length) h += `<p class="in-rp-note">못 받은 것 — ${esc(Object.entries(errs).map(([k, v]) => `${k}: ${v}`).join(' · '))}</p>`;
   box.innerHTML = h;
   // 주소가 지금 계산 안의 칸(#calc-fs · #calc-audit · #calc-gov)을 가리키면 그려진 뒤 그리로 간다 — 표의 「지금 계산 ④ · ⑤ · ⑥」 링크용
