@@ -84,6 +84,13 @@ def load_stocks():
             c = out.setdefault(key, {"name": s["name"], "code": s.get("code"), "ticker": s.get("ticker"),
                                      "market": s.get("market") or ("KR" if s.get("code") else ""), "maps": []})
             c["maps"].append({"map": d.get("id") or fn[:-5], "node": s.get("node"), "grade": s.get("grade")})
+    # 리포트를 쓴 종목도 카드를 갖는다(2026-10-08 · 종목 분석 ⑥-11 「연결할 것」 — 카드가 없으면 리포트 13칸의 DART 칸이 빈다)
+    try:
+        for s in json.load(open(os.path.join(HERE, "..", "data", "stock-report", "index.json"), encoding="utf-8")).get("items") or []:
+            if s.get("code") and s["code"] not in out:
+                out[s["code"]] = {"name": s["name"], "code": s["code"], "ticker": None, "market": "KR", "maps": []}
+    except Exception:
+        pass
     return out
 
 
@@ -235,6 +242,48 @@ def biz_tables(x):
             out["materialPrice"] = {"rows": pt[:TBL_ROWS], "unit": next((" ".join(t[0]) for t in after[:2] if len(t) == 1 and "단위" in " ".join(t[0])), None), "cut": len(pt) > TBL_ROWS}
     if not out.get("materials"):
         err.append("「원재료」 절에 매입 표 없음")
+    # 주요 제품 가격 변동(2026-10-08 · ⑥-11 「가격 · 물량으로도 나눈다」) — 「주요 제품 등의 가격 변동」 글 · 표. 글은 「X 평균 판매가격은 … 약 N% 상승」 꼴을 읽는다.
+    # 기준(전년 동기 · 전년 연간 평균 등)을 함께 둔다 — 매출 증가율과 기간이 같아야 가를 수 있다
+    psec = _section(x, r"주요\s*제품") or ""
+    k = re.search(r"가격\s*변동", re.sub(r"<TABLE.*?</TABLE>", "", psec, flags=re.S))
+    if k:
+        raw = psec[re.search(r"가격\s*변동", psec).start():]
+        e = re.search(r"원재료|생산\s*능력", raw[10:])
+        raw = raw[: e.start() + 10] if e else raw
+        txt2 = _clean(raw)[:SNIP * 2]
+        items = []
+        for m2 in re.finditer(r"([가-힣A-Za-z0-9ㆍ·()/\- ]{2,24}?)(?:의\s*)?(?:평균\s*)?(?:판매\s*)?(?:가격|단가)?(?:은|는|이|도)\s*((?:전년|전기|직전)[^,.]{0,20}?대비)?\s*약?\s*([\d.]+)\s*%\s*(상승|하락|증가|감소)", txt2):
+            name = re.sub(r"^(그리고|또한|한편|이며|하였으며|하였고|,)\s*", "", m2.group(1).strip())
+            name = re.sub(r"^.*(?:하였으며|하였고|했으며|이며)\s*", "", name).strip()
+            name = re.sub(r"^.*(?:가격\s*변동(?:\s*현황|\s*추이)?|가격변동추이|20\d\d년(?:\s*반기|\s*\d분기)?)\s*", "", name).strip()
+            name = re.sub(r"(?:의)?\s*(?:평균\s*)?(?:판매\s*)?(?:가격|단가)?$", "", name).strip()
+            if not name or any(i["item"] == name for i in items):
+                continue
+            items.append({"item": name, "pct": float(m2.group(3)) * (1 if m2.group(4) in ("상승", "증가") else -1), "basis": (m2.group(2) or "").strip()})
+        ptab = next((t for t in _tables(raw) if len(t) >= 2), None)
+        out["productPrice"] = {"text": txt2, "items": items, "table": {"rows": ptab[:TBL_ROWS]} if ptab else None}
+    # 점유율 몇 해치 — 「사업의 내용」 글 전체에서 「해 머리(2026년 반기 2025년 …) + 제품 이름 + 백분율 둘 이상」 을 모두 찾는다(2026-10-08 · ⑥-11 「점유율 글 · 표를 절 안에서 전부」 ·
+    # ⑥-12 「해가 둘 이상이면 늘었나 줄었나」). 바로 뒤 「※ …」 주석에서 기준을 읽는다 — 금액 · 수량 · 회사 추정 · 조사기관(⑥-11 — 수량 기준은 참고만)
+    series = []
+    YR = r"20\d\d년(?:\s*\d\s*분기|\s*반기|\s*상반기)?"
+    for m3 in re.finditer(r"((?:%s\s*){2,})" % YR, txt):
+        cols = [re.sub(r"\s+", "", c) for c in re.findall(YR, m3.group(1))]
+        pos = m3.end()
+        while True:
+            r3 = re.match(r"\s*([A-Za-z가-힣][A-Za-z가-힣0-9 ·/()&-]{0,24}?)\s+((?:\d{1,3}(?:\.\d+)?\s*%\s*){2,})", txt[pos:])
+            if not r3:
+                break
+            vals = [float(v) for v in re.findall(r"(\d{1,3}(?:\.\d+)?)\s*%", r3.group(2))]
+            note = txt[pos + r3.end(): pos + r3.end() + 260]
+            near = txt[max(0, m3.start() - 200): pos + r3.end() + 260]
+            if "점유율" in near and len(vals) <= len(cols):
+                org = re.search(r"(Prismark|IDC|Omdia|TrendForce|Gartner|Counterpoint|TechInsights|Yole|DSCC|Strategy Analytics)", note)
+                series.append({"product": r3.group(1).strip(), "cols": cols[:len(vals)], "vals": vals,
+                               "basis": "금액" if re.search(r"금액|매출액", note) else ("수량" if re.search(r"수량|출하량|대수|판매량", note) else ""),
+                               "estimate": "추정" in note[:120], "org": org.group(1) if org else None})
+            pos += r3.end()
+    if series:
+        out["shareSeries"] = series
     return out, "; ".join(err) or None
 
 

@@ -352,7 +352,7 @@ async function renderLive() {
   // 13칸 자동 표 — 「보는 것」 표의 규칙을 이 종목 값에 대입(2026-10-08 재권님 「제목 칸들이 다 그렇게 대입되도록」 · 「갈래별 분석은 하위 13개를 바탕으로 분석해야 하는 정보」).
   // 판정 넷: 좋다 · 보통 · 나쁘다 · 못 가름(재료가 모자라거나 기준 미정 — 빨강). 세션 손글(T.lenses)은 이 표를 바탕으로 쓰고 아래에 그대로 둔다
   const L13 = lens13({ code, px, fq, card, monthly: (got.m || []).map((k) => ({ ts: k.ts, close: k.c })), daily: b, cnsPer: iv('cnsPer'), per: price.per,
-    inv, MA, adx, industry: got.industry, competitors: T.competitors, world: worldView(got.world) });
+    inv, MA, adx, industry: got.industry, competitors: T.competitors, world: worldView(got.world), cards: got.cards && got.cards.cards });
   const VCLS = { '좋다': 'ok', '보통': 'mid', '나쁘다': 'half', '못 가름': 'no' };
   const cnt = (k) => L13.filter((r) => r.verdict === k).length;
   $('rp-lens').hidden = false;
@@ -374,7 +374,7 @@ async function renderLive() {
   $('rp-lens-auto').innerHTML = worldHtml + `<h3>13칸 대입 ${S.calc} <small>규칙은 종목 분석 「보는 것」 표 · 좋다 ${cnt('좋다')} · 보통 ${cnt('보통')} · 나쁘다 ${cnt('나쁘다')} · 못 가름 ${cnt('못 가름')}</small></h3>`
     + tbl([trow(['갈래', '이 종목 값', '판정', '왜 · 비는 이유', '출처'], true), ...L13.map((r) => trow([`<a href="${esc(r.rule)}">${esc(r.name)}</a>`, esc(r.value),
       `<span class="in-pill ${VCLS[r.verdict]}">${esc(r.verdict)}</span>`, esc([r.why, r.gap].filter(Boolean).join(' · ') || '—'), esc(r.src || '—')]))])
-    + `<p class="in-rp-note">「못 가름」 은 재료가 모자라거나 판정 기준이 아직 정해지지 않은 칸이다 — 지어내지 않는다. 성장성 · 경쟁력의 회사 쪽 재료(부문 3년 · 가격 · 물량 · 점유율 추이)는 다음 단계</p>`;
+    + `<p class="in-rp-note">「못 가름」 은 재료가 모자라거나 판정 기준이 아직 정해지지 않은 칸이다 — 지어내지 않는다. 성장성은 ⑥-11 가르는 순서 · 경쟁력은 ⑥-12 다섯 걸음 그대로 — 부문 매출 3년 추이는 아직</p>`;
   if (LN.length) {
     // 모양(2026-10-08 재권님 「인지가 더 잘되도록 정리」 → 「응 이게 더 좋네」) — 판단 먼저 · 숫자는 표(blocks) · 출처(from)와 못 본 것(gaps)은 아래 한 줄.
     // 글 안 **굵게** 만 받는다. 옛 모양(points)도 그대로 그린다
