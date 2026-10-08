@@ -5274,15 +5274,16 @@ def start_us_prefill(cfg, port):
 #    미국 5분봉    10-02 부터만 있다(받기 시작한 날)
 #    미국 일·주·월  일 240~300 · 주·월 100 에서 멈췄다 — 장 전 창이 적게 받고 바로 「다 받음」 을 적었다
 #
-# **기본은 꺼짐이다 — `KJC_BAR_FILL=1` 일 때만 돈다** (창구 · 「켜기 전에 먼저 잰다」). 처음 한 바퀴가 KIS 약
-# 22,000건(실측 기반 셈)이라, 재시작만 허락받아도 저절로 돌면 안 된다. 쓰는 서버(8765)에서만 돈다.
+# **기본은 켜짐이다 — 끄려면 `KJC_BAR_FILL=0`** (2026-10-08 재권님 「응 그렇게 해」). 처음에는 꺼짐으로 넣었다
+# (처음 한 바퀴가 KIS 약 28,600건이라 재시작만으로 돌면 안 된다 · 「켜기 전에 먼저 잰다」) — 건수를 재서 올리고 켜기를
+# 허락받아 기본을 바꿨다. 쓰는 서버(8765)에서만 돈다.
 #
 # **쉬는 때** — 국내 장중(그날 봉이 들어오는 동안) · 미국 장 전 창 · 미국 장중 · 화면을 보는 동안. 휴장일은 달력이
 # 없어 「08:30 이 지났는데 그날 국내 5분봉이 하나도 없다」 로 가른다(10-09 한글날 낮을 쓰려고).
 # **순서** — 미국 5분봉(KIS 가 약 한 달 전까지만 준다 — 미루면 앞날부터 영영 못 받는다) → 미국 일·주·월 → 국내 5분봉.
 # **날짜** — 그 종목 일봉의 최근 `view_days`(10) 거래일. 휴장 · 거래정지 날이 저절로 빠진다.
 
-BAR_FILL_ON = (os.environ.get("KJC_BAR_FILL") or "").strip().lower() in ("1", "true", "yes", "on")
+BAR_FILL_ON = (os.environ.get("KJC_BAR_FILL") or "").strip().lower() not in ("0", "false", "no", "off")
 BAR_FILL_THREAD_NAME = "bar-fill"
 #: KIS 한 건 뒤 쉬는 시간 — 초당 약 1.5건. 미리받기 · 장 전 창이 쓰던 빠르기와 같은 자리다(10-07 장 전 창 실측 초당 1.49)
 BAR_FILL_CALL_GAP = 0.67
@@ -5547,7 +5548,7 @@ def _bar_fill_run(label, work, do_one):
 
 
 def start_bar_fill(cfg, port):
-    """봉 채우기를 켠다 — `KJC_BAR_FILL=1` · 쓰는 서버 · 8765 일 때만."""
+    """봉 채우기를 켠다 — 쓰는 서버 · 8765 일 때만(`KJC_BAR_FILL=0` 이면 끔)."""
     if not BAR_FILL_ON or not cfg or port != MAIN_PORT or not marketdb.writable():
         return False
 
@@ -7250,7 +7251,7 @@ def main():
         print("  봉 채우기  : 켜짐 — 한가할 때 지난 5분봉(최근 %d거래일) · 미국 일·주·월(%d봉)을 메웁니다"
               % (PERIODS["5m"]["view_days"], DWMY_WANT))
     else:
-        print("  봉 채우기  : 꺼져 있습니다 (켜려면 KJC_BAR_FILL=1 · 8765 만)")
+        print("  봉 채우기  : 꺼져 있습니다 (KJC_BAR_FILL=0 이거나 8765 가 아님)")
 
     if not DWMY_ON:
         print("  일주월년   : **꺼져 있습니다** (켜려면 KJC_DWMY=1)")
