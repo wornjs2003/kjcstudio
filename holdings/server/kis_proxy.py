@@ -59,6 +59,7 @@ import dart
 import us_universe
 import us_sectors
 import naver
+import naver_period
 import toss
 import macro
 import news
@@ -6350,7 +6351,35 @@ class Handler(SimpleHTTPRequestHandler):
         qs = urllib.parse.parse_qs(parsed.query)
         kind = (qs.get("kind") or ["industry"])[0].strip()
 
+        span = (qs.get("span") or ["d"])[0].strip()
+
         try:
+            # 주간 · 월간 (2026-10-08 재권님 「네이버로」) — 묶음 안 종목 기간 등락률 평균 · `naver_period.py`
+            if route in ("groups", "stocks") and span in naver_period.SPAN_BACK:
+                if route == "groups":
+                    g = naver_period.groups(kind, span)
+                    rows = g and g["rows"]
+                    meta = {"kind": kind, "span": span, "total": g and g["total"],
+                            "asof": g and g["asof"], "source": "네이버"}
+                else:
+                    no = (qs.get("no") or [""])[0].strip()
+                    if not no.isdigit():
+                        self._send_json({"ok": False, "error": "no 는 숫자여야 합니다."}, 400)
+                        return
+                    rows = naver_period.stocks(kind, no, span)
+                    meta = {"kind": kind, "no": int(no), "span": span, "source": "네이버"}
+                if not rows:
+                    # 못 쟀다 — 빈 목록을 「없다」 로 내지 않는다
+                    self._send_json({"ok": False, "error": "기간 값을 아직 못 받았습니다(장 마감 뒤 하루 한 번 받습니다).",
+                                     "meta": meta}, 503)
+                    return
+                meta["count"] = len(rows)
+                self._send_json({"ok": True, "data": rows, "meta": meta})
+                return
+            if span != "d" and route in ("groups", "stocks"):
+                self._send_json({"ok": False, "error": "span 은 d · w · m 중 하나여야 합니다."}, 400)
+                return
+
             if route == "groups":
                 g = naver.groups(kind)
                 self._send_json({
@@ -7242,6 +7271,9 @@ def main():
               % PREFILL_TOP)
 
     # 미국 종목 목록(나스닥100 · 거래소 코드) — 하루 한 번 · KIS 호출 없음 (2026-10-07)
+    # 「지금 뜨는 산업」 국내 주간 · 월간 — 장 마감 뒤 하루 한 번 · 네이버만 (2026-10-08)
+    if not SLOW and naver_period.start(args.port, MAIN_PORT):
+        print("  업종 기간  : 국내 업종 · 테마 주간 · 월간을 장 마감 뒤 하루 한 번 받습니다(네이버)")
     if not SLOW and us_universe.start():
         print("  미국 목록  : 나스닥100 과 거래소 코드를 하루 한 번 받습니다")
     if not SLOW and start_us_prefill(cfg, args.port):

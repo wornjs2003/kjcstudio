@@ -66,8 +66,8 @@ const REFRESH_FALLBACK_MS = 60 * 1000;
  * 둔다(모달 검수 ⑥). 룰이 「화면에 있는데 모달에 없으면 위반」 이다
  * (holdings/CLAUDE.md:332).
  *
- * **미국은 셋 다 눌린다 · 국내는 일간만** (2026-10-08). `/api/naver/groups` 가 기간을
- * 안 받아 국내 주간·월간은 아직 `disabled` 다 — 아래 `SPAN_READY`.
+ * **두 시장 다 셋이 눌린다** (2026-10-08) — 아래 `SPAN_READY`. 국내 주간·월간은 네이버가
+ * 기간을 안 줘서 서버가 묶음 안 종목들의 기간 등락률을 평균해 낸다(`naver_period.py`).
  *
  * ⚠️ **「받을 수 없는 것은 자리도 만들지 않는다」 가 여기 안 걸린다.**
  * 그 룰은 **어디서도 못 받는 것**을 두고 한 말이고, 이것은 **재권님이
@@ -84,12 +84,13 @@ export const SPANS = [
   { id: 'm', label: '월간' },
 ];
 
-/* **시장마다 받을 수 있는 기간이 다르다** (2026-10-08 지시 — 「미국클릭이 안되고 주간 월간도 안되는데」).
- * 미국은 섹터 ETF 일봉으로 셋 다 낸다(서버 `us_sectors.py`). 국내 주간·월간은 받는 방법을 고르는 중이라
- * 아직 빨간 칩이다 — 정해지면 여기 `kr` 에 더한다. */
-const SPAN_READY = { kr: ['d'], us: ['d', 'w', 'm'] };
+/* **두 시장 다 셋이 눌린다** (2026-10-08 지시 — 「미국클릭이 안되고 주간 월간도 안되는데」).
+ * 미국은 섹터 ETF 일봉(서버 `us_sectors.py`), 국내 주간·월간은 네이버 묶음 안 종목들의 기간 등락률
+ * 평균이다(서버 `naver_period.py` · 재권님 「네이버로」 · 장 마감 뒤 하루 한 번 받아 그날 종가 기준).
+ * 시장이 늘면 그 시장 줄을 더한다 — 없는 기간은 빨간 칩으로 남는다. */
+const SPAN_READY = { kr: ['d', 'w', 'm'], us: ['d', 'w', 'm'] };
 
-const SPAN_NOT_READY = '네이버가 기간을 안 줍니다 — 국내 주간·월간은 받는 방법을 정하는 중입니다';
+const SPAN_NOT_READY = '이 시장은 아직 이 기간을 받지 못합니다';
 
 /** 기간 칩 줄의 속을 만든다. 카드와 모달이 같은 것을 쓴다.
  *  @param {string} cur  지금 고른 기간
@@ -106,11 +107,12 @@ export function spanChipsHtml(cur = 'd', mkt = 'kr') {
 
 /** 시장 · 기간에 맞는 주소 — 카드와 모달(스냅숏)이 같은 것을 쓴다 */
 export function groupsUrl(mkt, kind, span) {
-  return mkt === 'us' ? `/api/kis/us-sectors?span=${span}` : `/api/naver/groups?kind=${kind}`;
+  return mkt === 'us' ? `/api/kis/us-sectors?span=${span}`
+    : `/api/naver/groups?kind=${kind}${span === 'd' ? '' : `&span=${span}`}`;
 }
 export function stocksUrl(mkt, kind, no, span) {
   return mkt === 'us' ? `/api/kis/us-sector-stocks?no=${no}&span=${span}`
-    : `/api/naver/stocks?kind=${kind}&no=${no}`;
+    : `/api/naver/stocks?kind=${kind}&no=${no}${span === 'd' ? '' : `&span=${span}`}`;
 }
 /** 출처 한 낱말 (2026-10-06 재권님 「가로 해」 — 개수는 모달에) */
 export const sourceOf = (mkt) => (mkt === 'us' ? 'State Street · KIS' : '네이버');
