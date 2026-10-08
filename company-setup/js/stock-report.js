@@ -313,6 +313,23 @@ async function main() {
   $('rp-flowline').innerHTML = inv.length ? `수급 5일 외국인 ${sgn(f5.fa, (v) => eok(v))} · 기관 ${sgn(f5.ia, (v) => eok(v))} · 개인 ${sgn(f5.pa, (v) => eok(v))} ${S.kis} (금액 · 확정치)` : `${SOON} 투자자 자료 못 받음`;
 
   // ── 핵심 요약 · 종합 판정 ──
+  // ── 갈래별 분석 (세션 글 · T.lenses) — 분석 문서 「보는 것」 표의 갈래 중 골라 쓴 것만. 없으면 절이 숨는다 (2026-10-08) ──
+  const LN = Array.isArray(T.lenses) ? T.lenses : [];
+  $('rp-lens').hidden = !LN.length;
+  if (LN.length) {
+    // 모양(2026-10-08 재권님 「인지가 더 잘되도록 정리」 → 「응 이게 더 좋네」) — 판단 먼저 · 숫자는 표(blocks) · 출처(from)와 못 본 것(gaps)은 아래 한 줄.
+    // 글 안 **굵게** 만 받는다. 옛 모양(points)도 그대로 그린다
+    const em = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    const block = (k) => (k.title ? `<p class="rp-text"><b>${em(k.title)}</b></p>` : '')
+      + (k.table ? tbl([trow(k.table.head.map(em), true), ...k.table.rows.map((r) => trow(r.map(em)))]) : '')
+      + (k.list ? list(k.list.map(em)) : '');
+    $('rp-lens-body').innerHTML = LN.map((x) => `<h3>${esc(x.name)} ${(x.sources || []).map(src).join(' ')}</h3>`
+      + (x.call ? `<p class="rp-text"><b>판단</b> ${em(x.call)}</p>` : '')
+      + (x.blocks || []).map(block).join('') + (x.points ? list(x.points.map(em)) : '')
+      + (x.from ? `<p class="in-rp-note">출처 · 시각 — ${em(x.from)}</p>` : '')
+      + (x.gaps ? `<p class="in-rp-note">못 본 것 — ${em(x.gaps)}</p>` : '')).join('');
+    $('rp-lens-sum').textContent = LN.map((x) => x.name).join(' · ');
+  }
   $('rp-summary-body').innerHTML = (V.label ? `<p class="rp-text"><b>판정</b> ${esc(V.label)}<br><b>방향</b> ${esc(V.direction)}<br><b>강점</b> ${esc(V.strength)}<br><b>리스크</b> ${esc(V.risk)}</p>` : `<p class="rp-text">${SOON} 판정 · 방향 · 강점 · 리스크 — 세션 글</p>`) + `<h3>종합 판정</h3>` + list((T.overall || []).map(esc));
 
   // ── 기본 지표 ──
@@ -418,7 +435,7 @@ async function main() {
   sum('rp-plan', ST2.positions && ST2.positions.length ? ST2.positions.map((x) => x.name).join(' · ') + ` · 모니터링 ${(ST2.monitor || []).length}` : '세션 글 아직');
   sum('rp-ten', T.summary10 && T.summary10.length ? T.summary10.map((x) => x.item).join(' · ') : '세션 글 아직');
   sum('rp-limit', `데이터 공백 ${gaps.length} · 신뢰도 ${T.confidence ? T.confidence.split(' ')[0] : '—'}`);
-  const folds = document.querySelectorAll('details.rp-fold');
+  const folds = document.querySelectorAll('details.rp-fold:not([hidden])');   // 숨은 절(글이 없는 갈래별 분석)은 목차에서 뺀다
   mountToc(tocItems(folds));   // 목차(오른쪽 기둥 · 폰 단추)
   $('rp-open-all').addEventListener('click', () => folds.forEach((d) => { d.open = true; }));
   $('rp-close-all').addEventListener('click', () => folds.forEach((d) => { d.open = false; }));
