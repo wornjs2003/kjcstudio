@@ -255,6 +255,11 @@
 td .in-term-tip, .in-vt-stat .in-term-tip { font-weight: 400; }
 /* 지금 계산 ④ · ⑤ · ⑥ 바로 가기 — 위 메뉴 줄 밑에 제목이 가리지 않게 (2026-10-07 재권님 「칸만 있고 밑에 클릭하면 경영진 같은 게 안 나오는데」) */
 #calc-body h3[id] { scroll-margin-top: 96px; }
+/* 인용 — 한국어 본문 · 원문(영어)은 접어 둔다 (2026-10-07 · 개념정의가 룰로 올리는 모양) */
+.in-quote { margin: 8px 0 4px; padding: 8px 12px; background: var(--kh-bg); border-radius: var(--kh-radius-md); font-size: 0.86rem; line-height: 1.7; color: var(--kh-text-secondary); }
+.in-orig { margin-top: 6px; font-size: 0.78rem; }
+.in-orig summary { cursor: pointer; color: var(--kh-text-muted); }
+.in-orig p { margin: 4px 0 0; color: var(--kh-text-muted); }
 
 /* 찾기 칸 — js/page-find.js (2026-10-08 재권님 「종목분석 위에 단어 검색하는거 만들어줘」 · 「찾기 버튼누르면 거기로 이동하게」).
    기존 화면에 더한 칸이라 이 파일 방식(넓은 폭 기본 + max-width)을 따른다(「모바일 퍼스트」 룰 1) — 넓으면 입력칸 360px, 좁으면 줄을 꽉 채운다 */
