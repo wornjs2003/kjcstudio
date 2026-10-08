@@ -284,3 +284,4 @@ mark.in-find-hit.is-cur { background: var(--kh-cat-amber); color: var(--kh-text-
 .ca-orig > summary .rp-sum { font-size: 0.78rem; }
 .ca-orig .in-quote { background: var(--kh-bg-card); }
 .ca-orig .in-rp-note { margin-bottom: 0; }
+.in-pill.mid  { background: var(--kh-bg); color: var(--kh-text-secondary); }   /* 「보통」 — 13칸 판정(js/lens13.js · 2026-10-08) */

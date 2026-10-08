@@ -1,4 +1,5 @@
 import { mountToc } from './toc.js';
+import { perBand5y } from './lens13.js';
 // 종목 분석 페이지 — 「받을 수 있는 값 — 지금 계산」 카드 (2026-10-06 재권님 「해줘봐」 · 창구 경유)
 //
 // 조사 문서(①~⑤)가 「이런 값을 쓴다」 고 적은 것을 **우리 서버 · 회사 카드 자료만으로** 지금 계산해 보여 준다.
@@ -47,38 +48,7 @@ function relReturn(stock, index, months) {
   return { rs: rs * 100, ri: ri * 100, rel: (rs - ri) * 100, from: s0.ts };
 }
 
-// ── ③(나) 5년 PER 밴드 — 월봉 종가 ÷ 그 시점 4분기 합 EPS ──
-function quarterEps(fin) {
-  // epsYtd 는 연 누적 — 분기 값 = 이번 누적 − 같은 해 앞 분기 누적 (1분기는 그대로). 앞 분기가 없으면 null (지어내지 않는다)
-  const out = [];
-  for (let i = 0; i < fin.length; i++) {
-    const r = fin[i], ym = String(r.ym), q = +ym.slice(4, 6);
-    let eps = null;
-    if (r.epsYtd != null) {
-      if (q === 3) eps = r.epsYtd;
-      else { const p = fin[i - 1]; if (p && String(p.ym).slice(0, 4) === ym.slice(0, 4) && p.epsYtd != null) eps = r.epsYtd - p.epsYtd; }
-    }
-    out.push({ ym, eps });
-  }
-  return out;
-}
-function perBand5y(monthly, fin) {
-  const qs = quarterEps(fin);
-  const ttm = [];                                                  // 분기 끝마다 4분기 합
-  for (let i = 3; i < qs.length; i++) {
-    const w = qs.slice(i - 3, i + 1);
-    if (w.every((x) => x.eps != null)) ttm.push({ ym: qs[i].ym, eps: w.reduce((a, x) => a + x.eps, 0) });
-  }
-  const last60 = monthly.slice(-60);
-  const pers = [];
-  for (const m of last60) {
-    const ym = m.ts.slice(0, 6);
-    let hit = null; for (const t of ttm) { if (t.ym <= ym) hit = t; else break; }
-    if (hit && hit.eps > 0) pers.push(m.close / hit.eps);
-  }
-  if (pers.length < 12) return { ok: false, n: pers.length, months: last60.length };
-  return { ok: true, n: pers.length, months: last60.length, lo: Math.min(...pers), mid: median(pers), hi: Math.max(...pers), from: last60[0].ts, to: last60[last60.length - 1].ts };
-}
+// ── ③(나) 5년 PER 밴드 — 셈은 js/lens13.js 한 곳(종목 리포트 13칸 판정과 같이 쓴다 · 2026-10-08) ──
 
 // ── 그리기 ──
 let CARDS = null, CARDS_AT = '';

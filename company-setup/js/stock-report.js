@@ -10,6 +10,7 @@
 // 가격표(매수 · 손절 · 목표)는 재권님 결정 전 — 참고 화면 방식으로 임시 계산(priceRule). 주기 숫자 없음 — 열 때 한 번 받는다.
 // 캔버스 색은 holdings/js/theme.js 의 color() 로 — theme.css 를 읽고 폴백은 그 파일 한 곳(check-theme-sync 가 대조). 여기에 hex 를 두지 않는다 (창구 검수 2026-10-06)
 import { color } from '../../holdings/js/theme.js';
+import { lens13, worldView } from './lens13.js';   // 「보는 것」 13칸 판정 — 규칙은 한 곳(2026-10-08)
 import { mountToc } from './toc.js';
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -281,6 +282,7 @@ async function renderLive() {
     dart: api(`/api/dart/disclosures?code=${code}`).then((j) => j.data || []),
     cards: fetch('data/company-cards.json', { cache: 'no-store' }).then((r) => r.json()), text: fetch(`data/stock-report/${code}.json`, { cache: 'no-store' }).then((r) => r.ok ? r.json() : null),
     industry: fetch('data/industry.json', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null),
+    world: fetch('data/world-flow.json', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null),   // 세계 돈의 흐름 — 종목분석의 위 층(tools/fetch-world-flow.py)
     brokers: fetch('data/stock-report/brokers.json', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null),   // 증권사별 목표가 — tools/fetch-broker-targets.py(KIS 종목투자의견)
   };
   await Promise.all(Object.entries(tasks).map(([k, p]) => p.then((v) => { got[k] = v; }, (e) => { errs[k] = String(e.message || e); })));
@@ -347,7 +349,32 @@ async function renderLive() {
   // ── 핵심 요약 · 종합 판정 ──
   // ── 갈래별 분석 (세션 글 · T.lenses) — 분석 문서 「보는 것」 표의 갈래 중 골라 쓴 것만. 없으면 절이 숨는다 (2026-10-08) ──
   const LN = Array.isArray(T.lenses) ? T.lenses : [];
-  $('rp-lens').hidden = !LN.length;
+  // 13칸 자동 표 — 「보는 것」 표의 규칙을 이 종목 값에 대입(2026-10-08 재권님 「제목 칸들이 다 그렇게 대입되도록」 · 「갈래별 분석은 하위 13개를 바탕으로 분석해야 하는 정보」).
+  // 판정 넷: 좋다 · 보통 · 나쁘다 · 못 가름(재료가 모자라거나 기준 미정 — 빨강). 세션 손글(T.lenses)은 이 표를 바탕으로 쓰고 아래에 그대로 둔다
+  const L13 = lens13({ code, px, fq, card, monthly: (got.m || []).map((k) => ({ ts: k.ts, close: k.c })), daily: b, cnsPer: iv('cnsPer'), per: price.per,
+    inv, MA, adx, industry: got.industry, competitors: T.competitors, world: worldView(got.world) });
+  const VCLS = { '좋다': 'ok', '보통': 'mid', '나쁘다': 'half', '못 가름': 'no' };
+  const cnt = (k) => L13.filter((r) => r.verdict === k).length;
+  $('rp-lens').hidden = false;
+  // 세계 돈의 흐름 — 13칸 위에 둔다. 종목과 상관없이 같은 값이고, 13칸 첫 줄 「흐름 속 이 종목」 이 이것을 바탕으로 판정한다(2026-10-08 재권님 「종목분석의 상위 개념」)
+  const W = worldView(got.world);
+  const bp = (v) => fin(v) ? `${v > 0 ? '+' : ''}${v}bp` : '—';
+  const chips = (arr) => arr.map((c) => `${esc(c.name)} <b class="${signCls(c.m1)}">${pct(c.m1)}</b>`).join(' · ');
+  const worldHtml = W ? `<h3>세계 돈의 흐름 — 종목분석의 위 층 <small>어느 종목이나 같은 값 · 1개월 등락(달러 ETF) · ${esc(W.at)} 받음</small></h3>`
+    + tbl([trow(['', '1개월 — 많이 오른 순', '읽기'], true),
+      trow(['나라', chips(W.ctry), W.kr ? `한국 ${W.krRank}위 / ${W.ctry.length} · 세계(ACWI) ${pct(W.acwi.m1)} — 한국이 세계보다 ${W.kr.m1 > W.acwi.m1 ? '강하다' : '약하다'}` : '—']),
+      trow(['업종(미국 섹터)', chips(W.sect.slice(0, 4)) + ' … ' + chips(W.sect.slice(-3)), `돈이 몰린 업종 ${esc(W.sect[0] ? W.sect[0].name : '—')} · 빠진 업종 ${esc(W.sect[W.sect.length - 1] ? W.sect[W.sect.length - 1].name : '—')}`]),
+      trow(['채권 값(ETF)', ['SHY', 'IEF', 'TLT', 'BNDX', 'EMB', 'LQD', 'HYG'].map((c) => W.be(c)).filter(Boolean).map((c) => `${esc(c.name)} <b class="${signCls(c.m1)}">${pct(c.m1)}</b>`).join(' · '),
+        W.riskOn == null ? '—' : W.riskOn ? '하이일드가 국채보다 덜 빠짐 — 위험을 사는 쪽' : '국채가 하이일드보다 강함 — 안전자산 쪽']),
+      trow(['돈 — 코스피 외국인', W.kf ? `5일 ${sgn(W.kf.d5, (v) => eok(v))} · 20일 ${sgn(W.kf.d20, (v) => eok(v))}` : '—', W.kf && fin(W.kf.d20) ? (W.kf.d20 > 0 ? '한국 시장으로 들어온다' : '한국 시장에서 빠진다') : '—'])])
+    + tbl([trow(['금리', '최근', '1주', '1개월', '3개월', '받는 곳'], true), ...['미국 국채 2년', '미국 국채 10년', '한국 국고채 3년', '한국 국고채 10년', '독일 국채 10년', '일본 국채 10년'].map((n) => W.y(n)).filter(Boolean)
+      .map((y) => trow([esc(y.name), fin(y.value) ? `${y.value.toFixed(2)}% <small>${esc(y.date ? y.date.slice(4, 6) + '-' + y.date.slice(6, 8) : '')}</small>` : '—', y.daily ? bp(y.w1) : '—', bp(y.m1), bp(y.m3), esc(y.src)]))])
+    + `<p class="in-rp-note">금리가 오르면 채권 값이 내린다 — 채권에서 돈이 빠지는 쪽. 독일 · 일본은 달마다 값(OECD)이라 한두 달 늦다 · 「1개월」 은 21거래일(금리 달마다 값은 한 달)</p>`
+    : `<h3>세계 돈의 흐름</h3><p class="rp-text">${SOON} 세계 흐름 자료가 없습니다 — tools/fetch-world-flow.py</p>`;
+  $('rp-lens-auto').innerHTML = worldHtml + `<h3>13칸 대입 ${S.calc} <small>규칙은 종목 분석 「보는 것」 표 · 좋다 ${cnt('좋다')} · 보통 ${cnt('보통')} · 나쁘다 ${cnt('나쁘다')} · 못 가름 ${cnt('못 가름')}</small></h3>`
+    + tbl([trow(['갈래', '이 종목 값', '판정', '왜 · 비는 이유', '출처'], true), ...L13.map((r) => trow([`<a href="${esc(r.rule)}">${esc(r.name)}</a>`, esc(r.value),
+      `<span class="in-pill ${VCLS[r.verdict]}">${esc(r.verdict)}</span>`, esc([r.why, r.gap].filter(Boolean).join(' · ') || '—'), esc(r.src || '—')]))])
+    + `<p class="in-rp-note">「못 가름」 은 재료가 모자라거나 판정 기준이 아직 정해지지 않은 칸이다 — 지어내지 않는다. 성장성 · 경쟁력의 회사 쪽 재료(부문 3년 · 가격 · 물량 · 점유율 추이)는 다음 단계</p>`;
   if (LN.length) {
     // 모양(2026-10-08 재권님 「인지가 더 잘되도록 정리」 → 「응 이게 더 좋네」) — 판단 먼저 · 숫자는 표(blocks) · 출처(from)와 못 본 것(gaps)은 아래 한 줄.
     // 글 안 **굵게** 만 받는다. 옛 모양(points)도 그대로 그린다
@@ -360,8 +387,9 @@ async function renderLive() {
       + (x.blocks || []).map(block).join('') + (x.points ? list(x.points.map(em)) : '')
       + (x.from ? `<p class="in-rp-note">출처 · 시각 — ${em(x.from)}</p>` : '')
       + (x.gaps ? `<p class="in-rp-note">못 본 것 — ${em(x.gaps)}</p>` : '')).join('');
-    $('rp-lens-sum').textContent = LN.map((x) => x.name).join(' · ');
+    $('rp-lens-body').insertAdjacentHTML('afterbegin', '<h3>세션 분석 <small>위 13칸을 바탕으로 쓴 글</small></h3>');
   }
+  $('rp-lens-sum').textContent = `13칸 — 좋다 ${cnt('좋다')} · 보통 ${cnt('보통')} · 나쁘다 ${cnt('나쁘다')} · 못 가름 ${cnt('못 가름')}` + (LN.length ? ` · 세션 글 ${LN.map((x) => x.name).join(' · ')}` : '');
   $('rp-summary-body').innerHTML = (V.label ? `<p class="rp-text"><b>판정</b> ${esc(V.label)}<br><b>방향</b> ${esc(V.direction)}<br><b>강점</b> ${esc(V.strength)}<br><b>리스크</b> ${esc(V.risk)}</p>` : `<p class="rp-text">${SOON} 판정 · 방향 · 강점 · 리스크 — 세션 글</p>`) + `<h3>종합 판정</h3>` + list((T.overall || []).map(esc));
 
   // ── 기본 지표 ──
