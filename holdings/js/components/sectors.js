@@ -37,7 +37,7 @@
    ========================================================================== */
 
 import { apiFetch } from '../data/api.js';
-import { fmtWon, fmtPct, dirClass } from '../utils/format.js';
+import { fmtPriceOf, fmtPct, dirClass } from '../utils/format.js';
 import { everyServerMs } from '../store/timing.js';
 import { patchRows } from '../utils/reconcile.js';
 
@@ -66,8 +66,8 @@ const REFRESH_FALLBACK_MS = 60 * 1000;
  * 둔다(모달 검수 ⑥). 룰이 「화면에 있는데 모달에 없으면 위반」 이다
  * (holdings/CLAUDE.md:332).
  *
- * **아직 눌리지 않는다.** `/api/naver/groups` 가 기간을 안 받아서 오는 값이
- * 전부 일간이다. 그래서 주간·월간은 `disabled` 다.
+ * **미국은 셋 다 눌린다 · 국내는 일간만** (2026-10-08). `/api/naver/groups` 가 기간을
+ * 안 받아 국내 주간·월간은 아직 `disabled` 다 — 아래 `SPAN_READY`.
  *
  * ⚠️ **「받을 수 없는 것은 자리도 만들지 않는다」 가 여기 안 걸린다.**
  * 그 룰은 **어디서도 못 받는 것**을 두고 한 말이고, 이것은 **재권님이
@@ -79,20 +79,41 @@ const REFRESH_FALLBACK_MS = 60 * 1000;
  * 한쪽만 살아난다.** 카드도 이 목록으로 그린다.
  */
 export const SPANS = [
-  { id: 'd', label: '일간', ready: true },
-  { id: 'w', label: '주간', ready: false },
-  { id: 'm', label: '월간', ready: false },
+  { id: 'd', label: '일간' },
+  { id: 'w', label: '주간' },
+  { id: 'm', label: '월간' },
 ];
 
-const SPAN_NOT_READY = '네이버가 기간을 안 줍니다 — 오는 값은 전부 일간입니다';
+/* **시장마다 받을 수 있는 기간이 다르다** (2026-10-08 지시 — 「미국클릭이 안되고 주간 월간도 안되는데」).
+ * 미국은 섹터 ETF 일봉으로 셋 다 낸다(서버 `us_sectors.py`). 국내 주간·월간은 받는 방법을 고르는 중이라
+ * 아직 빨간 칩이다 — 정해지면 여기 `kr` 에 더한다. */
+const SPAN_READY = { kr: ['d'], us: ['d', 'w', 'm'] };
+
+const SPAN_NOT_READY = '네이버가 기간을 안 줍니다 — 국내 주간·월간은 받는 방법을 정하는 중입니다';
 
 /** 기간 칩 줄의 속을 만든다. 카드와 모달이 같은 것을 쓴다.
- *  @param {string} cur  지금 고른 기간. 아직 `'d'` 하나뿐이다 */
-export function spanChipsHtml(cur = 'd') {
-  return SPANS.map((s) => `<button class="kh-chip${s.id === cur ? ' is-active' : ''}${
-    s.ready ? '' : ' kh-todo-chip'}" data-span="${s.id}"${
-    s.ready ? '' : ` disabled title="${SPAN_NOT_READY}"`}>${s.label}</button>`).join('');
+ *  @param {string} cur  지금 고른 기간
+ *  @param {string} mkt  'kr' · 'us' — 시장마다 눌리는 기간이 다르다 */
+export function spanChipsHtml(cur = 'd', mkt = 'kr') {
+  const ready = SPAN_READY[mkt] || ['d'];
+  return SPANS.map((s) => {
+    const ok = ready.includes(s.id);
+    return `<button class="kh-chip${s.id === cur ? ' is-active' : ''}${
+      ok ? '' : ' kh-todo-chip'}" data-span="${s.id}"${
+      ok ? '' : ` disabled title="${SPAN_NOT_READY}"`}>${s.label}</button>`;
+  }).join('');
 }
+
+/** 시장 · 기간에 맞는 주소 — 카드와 모달(스냅숏)이 같은 것을 쓴다 */
+export function groupsUrl(mkt, kind, span) {
+  return mkt === 'us' ? `/api/kis/us-sectors?span=${span}` : `/api/naver/groups?kind=${kind}`;
+}
+export function stocksUrl(mkt, kind, no, span) {
+  return mkt === 'us' ? `/api/kis/us-sector-stocks?no=${no}&span=${span}`
+    : `/api/naver/stocks?kind=${kind}&no=${no}`;
+}
+/** 출처 한 낱말 (2026-10-06 재권님 「가로 해」 — 개수는 모달에) */
+export const sourceOf = (mkt) => (mkt === 'us' ? 'State Street · KIS' : '네이버');
 
 export function mountSectors(root) {
   if (!root) return { refresh() {} };
@@ -105,9 +126,12 @@ export function mountSectors(root) {
   /* 기간 칩을 `SPANS` 로 그린다 (2026-09-23) — 전에는 `index.html` 에 박혀
      있었다. 모달도 같은 목록으로 그리므로 둘이 갈리지 않는다. */
   const spanHost = root.querySelector('#kh-sc-span');
-  if (spanHost) spanHost.innerHTML = spanChipsHtml('d');
+  const mktHost = root.querySelector('#kh-sc-mkt');
 
+  let mkt = 'kr';               // 'kr' · 'us' (2026-10-08)
+  let span = 'd';
   let kind = 'industry';
+  if (spanHost) spanHost.innerHTML = spanChipsHtml(span, mkt);
   let groups = [];
   /* **고른 하나가 아니라 위 셋을 다 그린다** (2026-09-22). `pick` 은
      모달이 「어느 것부터 보여줄지」 에 쓰므로 1위로 둔다. */
@@ -117,7 +141,8 @@ export function mountSectors(root) {
   let lastAt = null;            // 마지막으로 받은 시각 — 모달이 적는다
   const stockCache = {};        // "industry:294" → 종목 배열
 
-  const key = (k, no) => `${k}:${no}`;
+  /* 시장 · 기간이 갈리면 같은 묶음 번호라도 다른 값이다 */
+  const key = (k, no, m = mkt, sp = span) => `${m}:${sp}:${k}:${no}`;
 
   /* 안내는 본문 머리 오른쪽에 작게 붙는다. 줄을 따로 두면 카드가 길어지고
      같은 줄의 카드 넷이 함께 늘어난다. */
@@ -128,18 +153,21 @@ export function mountSectors(root) {
   }
 
   /* ── 업종·테마 목록 ── */
+  let gseq = 0;                 // 시장 · 기간 · 종류를 빨리 바꾸면 늦게 온 목록이 새것을 덮는다
   async function loadGroups(force = false) {
+    const mine = ++gseq;
     setNote('불러오는 중');
     let j = null;
     try {
-      const r = await apiFetch(`/api/naver/groups?kind=${kind}`, { cache: 'no-store' });
+      const r = await apiFetch(groupsUrl(mkt, kind, span), { cache: 'no-store' });
       if (r && r.ok) j = await r.json();
     } catch { /* 아래에서 없다고 적는다 */ }
+    if (mine !== gseq) return;
 
     if (!j || !j.ok || !Array.isArray(j.data) || !j.data.length) {
       groups = [];
       body.innerHTML = '<div class="kh-sc-empty kh-mut">불러오지 못했습니다</div>';
-      setNote('네이버에서 받지 못했습니다', 'kh-down');
+      setNote(`${sourceOf(mkt)}에서 받지 못했습니다`, 'kh-down');
       return;
     }
 
@@ -147,7 +175,7 @@ export function mountSectors(root) {
     lastAt = new Date();
     const total = (j.meta && j.meta.total) || groups.length;
     lastTotal = total;
-    setNote('네이버');   // 출처만 — 개수는 모달이 적는다 (2026-10-06 재권님 「가로 해」)
+    setNote(sourceOf(mkt));   // 출처만 — 개수는 모달이 적는다 (2026-10-06 재권님 「가로 해」)
 
     pick = groups[0].no;          // 모달이 이것부터 보여준다
     paintBody();
@@ -164,7 +192,7 @@ export function mountSectors(root) {
     await Promise.all(top.map(async (g) => {
       if (!force && stockCache[key(kind, g.no)]) return;
       try {
-        const r = await apiFetch(`/api/naver/stocks?kind=${kind}&no=${g.no}`, { cache: 'no-store' });
+        const r = await apiFetch(stocksUrl(mkt, kind, g.no, span), { cache: 'no-store' });
         if (r && r.ok) {
           const j = await r.json();
           if (j && j.ok && Array.isArray(j.data)) stockCache[key(kind, g.no)] = j.data;
@@ -216,7 +244,7 @@ export function mountSectors(root) {
     return `<a class="kh-sc-st" data-code="${st.code}" href="./stock.html?code=${st.code}">
          <span class="kh-sc-stn" title="${st.name}">${st.name}</span>
          <span class="kh-sc-stp">
-           <b class="kh-num">${fmtWon(st.price)}</b>
+           <b class="kh-num">${fmtPriceOf(st.code, st.price)}</b>
            <i class="kh-num ${dirClass(st.pct)}">${fmtPct(st.pct)}</i>
          </span>
        </a>`;
@@ -313,7 +341,7 @@ export function mountSectors(root) {
     const n = a.querySelector('.kh-sc-stn');
     if (n && n.textContent !== st.name) { n.textContent = st.name; n.title = st.name; }
     const price = a.querySelector('.kh-sc-stp b');
-    const pt = fmtWon(st.price);
+    const pt = fmtPriceOf(st.code, st.price);
     if (price && price.textContent !== pt) price.textContent = pt;
     const ip = a.querySelector('.kh-sc-stp i');
     if (ip) {
@@ -341,10 +369,52 @@ export function mountSectors(root) {
   }
 
   /* ── 누르기 ── */
+
+  /** 미국은 업종(섹터)만 있다 — 테마 칩을 끈다 */
+  function syncKindChips() {
+    if (!kindHost) return;
+    kindHost.querySelectorAll('[data-kind]').forEach((x) => {
+      const off = mkt === 'us' && x.dataset.kind !== 'industry';
+      x.disabled = off;
+      x.title = off ? '미국은 업종(섹터 ETF)만 있습니다' : '';
+      x.classList.toggle('is-active', x.dataset.kind === kind);
+    });
+  }
+
+  /* 시장 칩 (2026-10-08) — 국내 ↔ 미국. 기간이 그 시장에 없으면 일간으로 돌린다 */
+  if (mktHost) {
+    mktHost.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-mkt]');
+      if (!b || b.disabled || b.dataset.mkt === mkt) return;
+      mkt = b.dataset.mkt;
+      mktHost.querySelectorAll('[data-mkt]').forEach(x =>
+        x.classList.toggle('is-active', x === b));
+      if (mkt === 'us') kind = 'industry';
+      if (!(SPAN_READY[mkt] || []).includes(span)) span = 'd';
+      if (spanHost) spanHost.innerHTML = spanChipsHtml(span, mkt);
+      syncKindChips();
+      groups = [];
+      paintBody();
+      loadGroups();
+    });
+  }
+
+  /* 기간 칩 (2026-10-08) — 눌리지 않는 칩은 `disabled` 라 클릭이 안 온다 */
+  if (spanHost) {
+    spanHost.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-span]');
+      if (!b || b.disabled || b.dataset.span === span) return;
+      span = b.dataset.span;
+      spanHost.querySelectorAll('[data-span]').forEach(x =>
+        x.classList.toggle('is-active', x === b));
+      loadGroups();
+    });
+  }
+
   if (kindHost) {
     kindHost.addEventListener('click', (e) => {
       const b = e.target.closest('[data-kind]');
-      if (!b || b.dataset.kind === kind) return;
+      if (!b || b.disabled || b.dataset.kind === kind) return;
       kind = b.dataset.kind;
       kindHost.querySelectorAll('[data-kind]').forEach(x =>
         x.classList.toggle('is-active', x === b));
@@ -367,19 +437,21 @@ export function mountSectors(root) {
      종목도 열**이다. 모달은 그것을 다 쓴다. */
   function snapshot() {
     return {
-      kind, groups, pick, total: lastTotal, at: lastAt,
+      kind, mkt, span, groups, pick, total: lastTotal, at: lastAt,
       stocks: stockCache[key(kind, pick)] || null,
       /* 모달에서 다른 묶음을 골랐을 때 쓰라고 함께 넘긴다.
          받아 둔 것이 있으면 그것을, 없으면 이쪽이 받아 캐시에 넣는다. */
-      async pickGroup(k, no) {
-        const c = stockCache[key(k, no)];
+      /* 시장은 스냅숏을 뜬 때의 것이다 — 모달은 시장을 안 바꾼다. 기간은 모달이 바꿀 수 있다 */
+      async pickGroup(k, no, sp = span) {
+        const m = mkt;
+        const c = stockCache[key(k, no, m, sp)];
         if (c) return c;
         try {
-          const r = await apiFetch(`/api/naver/stocks?kind=${k}&no=${no}`, { cache: 'no-store' });
+          const r = await apiFetch(stocksUrl(m, k, no, sp), { cache: 'no-store' });
           if (r && r.ok) {
             const j = await r.json();
             if (j && j.ok && Array.isArray(j.data)) {
-              stockCache[key(k, no)] = j.data;
+              stockCache[key(k, no, m, sp)] = j.data;
               return j.data;
             }
           }
@@ -389,10 +461,10 @@ export function mountSectors(root) {
       /* 모달이 종류를 바꿨을 때 목록을 받아 온다. 카드는 안 건드린다 —
          모달에서 테마를 보다 닫았는데 카드가 테마로 바뀌어 있으면
          무엇을 눌러 그렇게 됐는지 알 수 없다 (실시간 순위 모달과 같다). */
-      async listGroups(k) {
-        if (k === kind && groups.length) return { rows: groups, total: lastTotal };
+      async listGroups(k, sp = span) {
+        if (k === kind && sp === span && groups.length) return { rows: groups, total: lastTotal };
         try {
-          const r = await apiFetch(`/api/naver/groups?kind=${k}`, { cache: 'no-store' });
+          const r = await apiFetch(groupsUrl(mkt, k, sp), { cache: 'no-store' });
           if (r && r.ok) {
             const j = await r.json();
             if (j && j.ok && Array.isArray(j.data)) {

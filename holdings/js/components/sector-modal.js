@@ -33,9 +33,9 @@
    ========================================================================== */
 
 import { openModal } from './modal.js';
-import { fmtWon, fmtPct, fmtMoneyKr, dirClass } from '../utils/format.js';
+import { fmtPriceOf, fmtPct, fmtMoneyKr, dirClass } from '../utils/format.js';
 /* 기간 칩은 **카드와 같은 목록**으로 그린다 — 새로 적으면 복제가 된다 */
-import { spanChipsHtml } from './sectors.js';
+import { spanChipsHtml, sourceOf } from './sectors.js';
 
 /* **고정 px 이다.** `max-content` 면 탭(업종↔테마)을 바꿀 때 묶음 이름 길이에
    따라 폭이 달라진다.
@@ -69,6 +69,9 @@ export function openSectorModal(snap) {
 
   /* 모달이 들고 있는 것. 카드와 **따로** 움직인다 */
   let kind = snap.kind;
+  /* 시장은 카드에서 고른 그대로 · 기간은 모달 칩으로 바꿀 수 있다 (2026-10-08) */
+  const mkt = snap.mkt || 'kr';
+  let span = snap.span || 'd';
   let groups = snap.groups || [];
   let total = snap.total || groups.length;
   /* **시작 자리**다. 여기서부터 셋을 보여준다 — 칩을 누르면 이것이 바뀐다 */
@@ -76,7 +79,7 @@ export function openSectorModal(snap) {
   let seq = 0;
 
   /* 묶음마다 받아 둔 종목. `snap.pickGroup` 이 받아 오고 여기에 쌓인다 */
-  const rowsBy = {};
+  let rowsBy = {};
   if (snap.pick != null && snap.stocks) rowsBy[snap.pick] = snap.stocks;
 
   const m = openModal({
@@ -85,7 +88,7 @@ export function openSectorModal(snap) {
     head: {
       icon: '산',
       name: '지금 뜨는 산업',
-      sub: '네이버',
+      sub: sourceOf(mkt),
       caret: true,
       /* **단추를 두지 않는다** (2026-09-22 지시 — 「전체 화면 없음 이거
          없애줘」). 전에는 「산업만 볼 화면이 없다」 를 빨간 칩으로 적어
@@ -95,7 +98,8 @@ export function openSectorModal(snap) {
       stats: headStats(),
       /* 900px 에서 세 열이면 눌려 줄바꿈된다 (2026-09-22 실측) */
       statCols: 2,
-      tabs: [
+      /* 미국은 업종(섹터 ETF)만 있다 */
+      tabs: mkt === 'us' ? [{ id: 'industry', label: '업종' }] : [
         { id: 'industry', label: '업종' },
         { id: 'theme', label: '테마' },
       ],
@@ -178,8 +182,31 @@ export function openSectorModal(snap) {
     m.head.setTab(id);
     paint();                       // 「불러오는 중」 을 먼저 보여준다
 
-    const got = await snap.listGroups(id);
+    const got = await snap.listGroups(id, span);
     if (mine !== seq) return;      // 그새 다시 눌렀다
+    if (!got) {
+      paint('불러오지 못했습니다');
+      return;
+    }
+    groups = got.rows;
+    total = got.total;
+    refreshHead();
+    paint();
+    loadShown();
+  }
+
+  /* ── 기간 바꾸기 (2026-10-08) — 목록 · 종목을 그 기간으로 다시 받는다 ── */
+
+  async function switchSpan(id) {
+    if (id === span) return;
+    const mine = ++seq;
+    span = id;
+    groups = [];
+    rowsBy = {};
+    from = 0;
+    paint();
+    const got = await snap.listGroups(kind, span);
+    if (mine !== seq) return;
     if (!got) {
       paint('불러오지 못했습니다');
       return;
@@ -204,7 +231,7 @@ export function openSectorModal(snap) {
     const want = shown();
     await Promise.all(want.map(async (g) => {
       if (rowsBy[g.no]) return;
-      const got = await snap.pickGroup(kind, g.no);
+      const got = await snap.pickGroup(kind, g.no, span);
       if (got) rowsBy[g.no] = got;
     }));
     if (mine !== seq) return;      // 그새 갈래가 바뀌었다
@@ -229,7 +256,7 @@ export function openSectorModal(snap) {
            네이버가 기간을 안 준다. **만드실 자리이므로 둔다.**
            (백틱을 쓰지 않는다 — 이 주석은 템플릿 문자열 **안**이라
             백틱 하나가 문자열을 끊는다. 2026-09-23 에 한 번 끊었다.) -->
-      <div class="kh-chips kh-scm-span">${spanChipsHtml('d')}</div>
+      <div class="kh-chips kh-scm-span">${spanChipsHtml(span, mkt)}</div>
       <div class="kh-scm-chips">${groups.map((x, i) => `
         <button class="kh-chip${i >= from && i < from + SHOW ? ' is-active' : ''}"
           data-i="${i}" title="여기부터 ${SHOW}개를 봅니다">
@@ -239,6 +266,11 @@ export function openSectorModal(snap) {
         <div class="kh-scm-col">${groupHead(g, from + i + 1)}${stockTable(g, err)}</div>`)
         .join('<i class="kh-scm-vr" aria-hidden="true"></i>')}</div>
     </div>`;
+
+    /* 기간 칩 — 눌리지 않는 칩은 disabled 라 클릭이 안 온다 (2026-10-08) */
+    m.body.querySelectorAll('.kh-scm-span [data-span]').forEach((b) => {
+      b.addEventListener('click', () => switchSpan(b.dataset.span));
+    });
 
     m.body.querySelectorAll('[data-i]').forEach((b) => {
       b.addEventListener('click', () => {
@@ -298,7 +330,7 @@ export function openSectorModal(snap) {
         <tbody>${rows.map(st => `
           <tr data-code="${esc(st.code)}">
             <td><b title="${esc(st.name)}">${esc(st.name)}</b></td>
-            <td class="r kh-num">${fmtWon(st.price)}</td>
+            <td class="r kh-num">${fmtPriceOf(st.code, st.price)}</td>
             <td class="r kh-num ${dirClass(st.pct)}">${fmtPct(st.pct)}</td>
             <td class="r kh-num">${st.value != null ? fmtMoneyKr(st.value / 100) : '—'}</td>
           </tr>`).join('')}</tbody>

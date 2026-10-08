@@ -57,6 +57,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 # 같은 폴더(server/)의 모듈들. 스크립트로 실행하므로 바로 잡힌다.
 import dart
 import us_universe
+import us_sectors
 import naver
 import toss
 import macro
@@ -2855,6 +2856,7 @@ INVESTOR_FLOW_TTL = 600    # 일별 자료라 장중에 한 번 바뀐다
 INVESTOR_FLOW_DAYS = 30    # 화면이 보여주는 기간
 
 _sector_cache = {}
+_us_sector_cache = {}          # 「지금 뜨는 산업」 미국 칸 — 기간 · 섹터:기간 → (시각, 값)
 _movers_cache = {}
 _inv_top_cache = {}
 _inv_flow_cache = {}
@@ -6686,6 +6688,40 @@ class Handler(SimpleHTTPRequestHandler):
                         "resting": True,
                     },
                 })
+                return
+
+            if route in ("us-sectors", "us-sector-stocks"):
+                # 「지금 뜨는 산업」 미국 칸 — 섹터 ETF 열하나 (2026-10-08 지시 · `us_sectors.py` 머리글).
+                # 구성 종목 등락률은 봉 표만 읽는다. ETF 열하나의 일봉만 KIS 를 탄다(봉 캐시가 수를 정한다)
+                span = (qs.get("span") or ["d"])[0].strip()
+                if span not in us_sectors.SPAN_BACK:
+                    self._send_json({"ok": False, "error": "span 은 d · w · m 중 하나여야 합니다."}, 400)
+                    return
+                known = us_universe.symbol_map()
+                if route == "us-sectors":
+                    rows = _ttl_get(_us_sector_cache, span, SECTOR_TTL)
+                    if rows is None:
+                        rows = us_sectors.groups(
+                            span, lambda c, p, n: get_chart(cfg, c, p, n), read_candles, known)
+                        _us_sector_cache[span] = (time.time(), rows)
+                    self._send_json({"ok": True, "data": rows, "meta": {
+                        "market": "us", "span": span, "total": len(rows), "count": len(rows),
+                        "source": "State Street · KIS", "cacheTtl": SECTOR_TTL}})
+                    return
+                no = (qs.get("no") or [""])[0].strip().upper()
+                if no not in us_sectors.SECTOR_NAME:
+                    self._send_json({"ok": False, "error": "no 는 섹터 ETF 티커여야 합니다."}, 400)
+                    return
+                key = "%s:%s" % (no, span)
+                got = _ttl_get(_us_sector_cache, key, SECTOR_TTL)
+                if got is None:
+                    got = us_sectors.stocks(no, span, read_candles, known)
+                    _us_sector_cache[key] = (time.time(), got)
+                self._send_json({"ok": True, "data": got["rows"], "meta": {
+                    "no": no, "name": got["name"], "span": span, "asof": got["asof"],
+                    "count": len(got["rows"]),
+                    "priced": sum(1 for r in got["rows"] if r["pct"] is not None),
+                    "source": "State Street · KIS"}})
                 return
 
             if route == "us-board":
