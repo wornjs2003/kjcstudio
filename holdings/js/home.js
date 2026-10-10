@@ -1275,8 +1275,9 @@ function paintRankModal() {
      못 박으면 **탭을 바꿔도 칸이 안 움직인다** — 「보는 것을 바꿔도 자리는
      그대로다」 가 같이 지켜진다. 폭은 css/home.css 의 .kh-rkm col 에 있다. */
   /* 시장 칩은 본문 맨 위에 둔다 — 카드에 있으니 모달에도 있어야 한다(모달이 원본).
-     머리(modal-head.js)는 다른 구역도 거는 공용이라 손대지 않는다. */
-  rankModal.body.innerHTML = `<div class="kh-rkm">
+     머리(modal-head.js)는 다른 구역도 거는 공용이라 손대지 않는다.
+     `data-sort` 는 좁은 폭에서 기준 칸 하나만 남기려고 단다(css/home.css · 2026-10-08) */
+  rankModal.body.innerHTML = `<div class="kh-rkm" data-sort="${rankModalSort}">
     <div class="kh-chips kh-rkm-mkt" data-rkm-mkt>${marketChipsHtml(rankModalMarket)}</div>
     <table>
       <colgroup>

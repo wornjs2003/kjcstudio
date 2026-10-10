@@ -102,8 +102,11 @@ export function openModal({ label = '', drawers = null, head = null, width = nul
     }
   }
 
-  /* 폭은 부르는 쪽이 정한다. 창보다 크면 창에 맞춘다 */
-  if (width) shell.style.width = `min(${width}px, 100vw - 52px)`;
+  /* 폭은 부르는 쪽이 정한다. 창보다 크면 창에 맞춘다.
+     **인라인 width 가 아니라 변수로 준다** (2026-10-08 · 모바일 모달) — 인라인은 modal.css 의
+     좁은 폭 `width: 100%` 를 이겨 폰에서 모달이 338px 로 남고 오른쪽 52px 에 뒤 화면이 비쳤다(qa 실측).
+     `.kh-modal { width: var(--kh-mw) }` 가 이 값을 받으니 넓은 화면은 그대로다 */
+  if (width) shell.style.setProperty('--kh-mw', `min(${width}px, 100vw - 52px)`);
 
   /* ── 옆 서랍 손잡이 ──
      모달과 형제로 둔다. 모달이 넓어지면 손잡이가 자연스럽게 밀려난다. */

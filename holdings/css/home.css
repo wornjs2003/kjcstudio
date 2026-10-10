@@ -233,6 +233,28 @@
 .kh-rkm .kh-nm { display: flex; align-items: center; gap: 7px; overflow: hidden; }
 .kh-rkm .kh-nm b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* 좁은 폭 — 일곱 칸(762px)이 폰에 안 들어가 모달 본문이 옆으로 밀렸다(332 → 804 · 2026-10-08 qa 실측).
+   **고른 기준 칸 하나만 남긴다** — 대금 · 상승 · 하락은 거래대금, 관심 · 총액은 시가총액, 거래량은 거래량.
+   기준은 `.kh-rkm` 의 data-sort(home.js 의 paintRankModal). 탭을 바꾸면 그 한 칸만 갈아 끼워진다 */
+@media (max-width: 700px) {
+  .kh-rkm { padding: 6px 14px 44px; }
+  .kh-rkm table { font-size: 0.8rem; }
+  .kh-rkm col.c-rk { width: 24px; }
+  .kh-rkm col.c-nm { width: auto; }
+  .kh-rkm col.c-pr { width: 80px; }
+  .kh-rkm col.c-pc { width: 58px; }
+  .kh-rkm col.c-am, .kh-rkm col.c-cap, .kh-rkm col.c-vol { width: 78px; }
+  .kh-rkm thead th, .kh-rkm tbody td { padding-left: 3px; padding-right: 3px; }
+  .kh-rkm .kh-nm { gap: 5px; }
+  .kh-rkm col:nth-child(n+5),
+  .kh-rkm tr > :nth-child(n+5) { display: none; }
+  .kh-rkm:is([data-sort="value"], [data-sort="up"], [data-sort="down"]) :is(col, tr > *):nth-child(5),
+  .kh-rkm:is([data-sort="fav"], [data-sort="cap"]) :is(col, tr > *):nth-child(6),
+  .kh-rkm[data-sort="vol"] :is(col, tr > *):nth-child(7) { display: revert; }
+  /* 시장 칩은 누르는 자리 28px 이상 */
+  .kh-rkm-mkt .kh-chip { min-height: 30px; }
+}
+
 /* ══ 「지금 뜨는 산업」 모달 (2026-09-22 지시) ══════════════════
    재권님 말씀 — 「지금 뜨는 산업도 모달로 띄울 수 있어야 할 거 같어」.
 
@@ -334,6 +356,20 @@
    `text-overflow` 가 안 듣는다. 그래서 겹쳐 보였다. */
 .kh-scm tbody td b { display: block; overflow: hidden;
                      text-overflow: ellipsis; white-space: nowrap; }
+
+/* 좁은 폭 — 셋을 나란히 두면 한 칸이 100px 남짓이라 「1위 +5.03% 2위」 가 겹치고 상승 · 보합 · 하락이 두 줄로
+   쪼개졌다(2026-10-08 qa 실측). **셋을 위아래로 쌓고**, 칸 안 목록 스크롤을 풀어 모달 본문 하나로 굴린다.
+   칩은 누르는 자리 28px 이상 */
+@media (max-width: 700px) {
+  .kh-scm { padding: 6px 14px 44px; height: auto; }
+  .kh-scm-cols { flex-direction: column; gap: 18px; }
+  .kh-scm-col { padding: 0; }
+  .kh-scm-vr { display: none; }
+  .kh-scm-list { flex: none; overflow: visible; margin-right: 0; padding-right: 0; }
+  .kh-scm-cnt { white-space: nowrap; }
+  .kh-scm-chips .kh-chip,
+  .kh-scm-span .kh-chip { min-height: 30px; align-items: center; }
+}
 
 /* ── 데일리분석 칸 (kh-rank 줄) ─────────────────────────────
    옆 칸(지금 뜨는 산업·주요 지수)과 높이가 같아야 줄이 가지런하다.
