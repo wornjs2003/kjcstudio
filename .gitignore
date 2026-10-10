@@ -99,3 +99,9 @@ tools/layout-baseline-[0-9]*.json
 # 폴더째 무시한다 — 홈페이지_정리가 「다음 `git add` 에 딸려 들어갈 수 있다」 고
 # 짚어 줬다.
 logs/
+
+# ETF 어림 데이터 — launchd 가 평일 16:00 마다 쌓는다 (2026-10-08 지시 — 「응 해」).
+# 메인 폴더를 여럿이 쓰므로 담으면 매일 남의 git status 에 미커밋이 생긴다.
+# ⚠️ 지난 값은 다시 받을 곳이 없다 — 저장소 백업이 안 되니 지우지 않는다.
+company-setup/data/etf-nav.json
+company-setup/data/etf-flow.json

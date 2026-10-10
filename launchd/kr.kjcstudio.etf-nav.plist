@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kr.kjcstudio.etf-nav</string>
+  <!-- 국내 ETF 시가총액을 평일 장 마감 뒤 하루 한 번 쌓는다 (2026-10-08 지시 — 「응 해」).
+       `company-setup/tools/fetch-etf-nav.py` 가 네이버 ETF 목록을 받아
+       `company-setup/data/etf-nav.json` 에 쌓고 `etf-flow.json` 에 설정 · 환매 어림을 낸다.
+       **하루 한 번인 이유** — 장중에는 가격만 움직이고 좌수(나와 있는 개수)는 그대로다
+       (2026-10-08 11:52 → 12:02 실측 · 시총 5천억+ 167개 중 가격 바뀜 132 · 좌수 바뀜 0).
+       어림은 좌수가 늘고 준 몫이라 장중에 여러 번 돌려도 값이 같다.
+       두 데이터 파일은 `.gitignore` 에 있다 — 메인 폴더를 여럿이 쓰므로 매일 미커밋이 생기지 않게.
+       **지난 값은 다시 받을 곳이 없다** — 저장소 백업이 없으니 파일을 지우지 않는다.
+       공휴일에는 도구가 그날 값을 그대로 쌓는다(앞날과 같아 어림 0 근처) — 도구 레인(시황분석)이 볼 자리.
+       설치는 손으로 한다(「켜기」 · 재권님 지시).
+           cp launchd/kr.kjcstudio.etf-nav.plist ~/Library/LaunchAgents/
+           launchctl load ~/Library/LaunchAgents/kr.kjcstudio.etf-nav.plist -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>-u</string>
+    <string>company-setup/tools/fetch-etf-nav.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/kjc/work/KJCStudio</string>
+  <!-- 평일(월 1 ~ 금 5) 16:00 — 도구는 15:40 전 · 주말이면 스스로 멈춘다 -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/etf-nav.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/etf-nav.log</string>
+</dict>
+</plist>

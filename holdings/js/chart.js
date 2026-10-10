@@ -778,6 +778,8 @@ function volumeProfile(candles, bins = VP_BINS) {
   };
 }
 const PANE_MIN = 60, PRICE_MIN = 120;
+/* 칸이 모자라 줄일 때만 쓰는 둘(build 의 fitH) — 시간축 높이는 폰 390 · 005930 5분봉 모달에서 잰 값(2026-10-08 · 약 28px) */
+const TIME_AXIS_H = 28, FIT_MIN = 40;
 
 let _paneH = null;
 function paneH() {
@@ -1331,7 +1333,11 @@ export function createStockChart(container, candles, opts = {}) {
     });
     under.setData(put(r.values.map((v) => v == null ? null : Math.min(v, 30))));
 
-    const ln = addLine(ch, { color: COLOR.rsi, lineWidth: 2, lastValueVisible: true });
+    /* **세로 범위는 늘 0~100** (2026-10-08 재권님 — 「RSI 값이 밑이 잘리는데 0~100 이 다 보여야 하는데」).
+       전에는 값이 지나간 범위에 맞춰 늘고 줄어, 좁은 칸에서 30 띠 아래가 잘리고 값 배지가 칸 밑으로 밀렸다.
+       칸의 다른 선(띠 · 70/30 채움 · 평균선)은 다 0~100 안이라 이 선 하나만 정해 주면 된다. */
+    const ln = addLine(ch, { color: COLOR.rsi, lineWidth: 2, lastValueVisible: true,
+      autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }) });
     ln.setData(put(r.values));
 
     /* 두 번째 선 — RSI 의 14봉 평균 */
@@ -1365,7 +1371,26 @@ export function createStockChart(container, candles, opts = {}) {
     const own = OWN_PANES.filter((x) =>
       indOn().has(x.key) && (x.key !== 'vol' || showVolume));
     const list = [{ key: 'price' }, ...own];
-    const below = own.reduce((a, x) => a + paneH()[x.key], 0);
+    /* **칸 높이에 다 안 들어가면 보조 칸을 비율대로 줄인다**(최소 PANE_MIN · 2026-10-08 재권님 — 「칸을 줄여」).
+       좁은 폭 홈 큰 차트는 367px(home.css 2/3 지시)인데 가격 120 + 보조 110×3 = 453 이라 86px 이 칸 밖으로
+       넘쳐 RSI 가 잘렸다. 줄인 값은 저장하지 않는다 — 넓은 화면(들어가는 곳)은 지금 높이 그대로다. */
+    const want = own.reduce((a, x) => a + paneH()[x.key], 0);
+    const room = container.clientHeight - PRICE_MIN - own.length;   // 칸 사이 경계선 1px 씩(stock.css .kh-pane + .kh-pane)
+    const shrink = want > room && room > 0;
+    /* **줄일 때는 시간축 자리를 먼저 떼어 맨 아래 칸에 얹는다** (2026-10-08 재권님 — 「RSI 값이 밑이 잘리는데 … 칸 조절좀 해봐」).
+       시간축은 맨 아래 칸 안에 그려져 약 TIME_AXIS_H 를 먹는다 — 칸을 똑같이 60 씩 주면 맨 아래 칸(대개 RSI)만
+       그림 자리가 32px 남짓이라 값 배지가 칸 밑으로 밀려 잘렸다. 그래서 보조 칸 **그림 자리**를 같게 나누고,
+       바닥은 FIT_MIN 이다(끌개의 PANE_MIN 60 보다 낮다 — 좁은 폭 303px 에 지표 셋이 들어가야 해서) */
+    const lastKey = own.length ? own[own.length - 1].key : null;
+    const share = shrink ? room - TIME_AXIS_H : 0;
+    const fitH = {};
+    own.forEach((x) => {
+      fitH[x.key] = shrink
+        ? Math.max(FIT_MIN, Math.floor(paneH()[x.key] * share / want)) + (x.key === lastKey ? TIME_AXIS_H : 0)
+        : paneH()[x.key];
+    });
+    /* 경계선은 줄일 때만 센다 — 들어가는 화면은 전과 같은 높이로 둔다 */
+    const below = own.reduce((a, x) => a + fitH[x.key], 0) + (shrink ? own.length : 0);
 
     list.forEach((p, idx) => {
       const el = document.createElement('div');
@@ -1394,7 +1419,7 @@ export function createStockChart(container, candles, opts = {}) {
 
       const h = p.key === 'price'
         ? Math.max(PRICE_MIN, container.clientHeight - below)
-        : paneH()[p.key];
+        : fitH[p.key];
       box.style.height = h + 'px';
 
       const ch = track(mkChart(box, h, idx === list.length - 1, p.key === 'price' ? priceDigits : 0));

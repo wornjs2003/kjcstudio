@@ -580,6 +580,10 @@
   .kh-stage.has-left.has-right .kh-modal .kh-main {
     padding: 0 14px 16px;
     min-height: 0;
+    /* **넓은 화면의 `height: 100%` 를 푼다** (2026-10-08). 여기는 위아래로 쌓으니 각자 제 높이를 쓰고
+       넘치면 스크롤한다(1180 블록 주석의 뜻). 100% 가 남아 있으면 행이 창 높이를 나눠 가져 차트 칸이
+       135px 로 눌려 보조지표가 잘렸고, 투자 지표 칸은 3px 로 접혀 안 보였다(폰 390 · 005930 실측) */
+    height: auto;
     gap: 12px;
     grid-template-rows: none;
     grid-template-columns: minmax(0, 1fr);
@@ -596,12 +600,46 @@
     margin: 0 -14px;
     padding: 12px 14px;
     border-radius: 0;
+    /* 붙은 머리가 차트 칸 이름표(.kh-pane-tag · 5) · 경계 손잡이(6) · 경고 띠(20)보다 위 — 같은 5 라 뒤에 오는
+       「✕ 거래량 (20)」 이 내려 볼 때 머리 위로 올라와 「기관 순매수」 를 덮었다(2026-10-08 qa).
+       보조지표 메뉴(30)는 누를 때만 뜨니 머리보다 위에 둔다 */
+    z-index: 25;
   }
 
   /* 폰에서 「전체 화면 ↗」 을 숨기던 규칙이 여기 있었다. 2026-09-22 에
      그 단추를 아예 빼면서 숨길 것이 없어졌다. */
   .kh-head-act { gap: 6px; }
   .kh-modal-x { width: 34px; height: 34px; }
+
+  /* ── 공용 머리(modal-head.js · .kh-mh-*) — 위아래로 쌓는다 (2026-10-08 · 모바일 모달) ──
+     넓은 화면은 「큰 숫자 | 통계」 옆으로 두는데, 폰에서 그대로면 통계가 모달 밖(오른끝 475)으로 나가고
+     탭 글자가 한 자씩 세로로 접혀 머리만 520px 를 먹었다 — 순위 목록이 167px 만 남았다(qa 실측).
+     순위 · 산업 · 뉴스 · 데일리 · Insight 가 이 머리를 함께 쓰므로 여기 한 곳에서 푼다 */
+  .kh-mh-top { padding: 12px 10px 0 14px; }
+  .kh-mh-name { white-space: nowrap; }
+  .kh-mh-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kh-mh-x { min-width: 34px; min-height: 34px; }
+  .kh-mh-main { flex-direction: column; gap: 10px; padding: 10px 14px 12px; }
+  .kh-mh-big { font-size: 1.5rem; }
+  .kh-mh-stats,
+  .kh-mh-stats.is-2 {
+    margin-left: 0; width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 14px;
+  }
+  .kh-mh-st { min-width: 0; gap: 6px; }
+  .kh-mh-st > span,
+  .kh-mh-stats.is-2 .kh-mh-st > span { min-width: 0; flex: none; white-space: nowrap; }
+  /* 값이 길면(데일리 「주도 업종」 의 업종 이름) 이름표를 덮지 않고 값 쪽이 줄을 바꾼다 */
+  .kh-mh-st b { min-width: 0; text-align: right; }
+  /* 탭은 글자가 안 접히게 — 탭 하나는 한 줄, 다 못 들어가면 다음 줄로. 오른쪽 설명은 늘 아래 줄로 */
+  .kh-mh-tabs { flex-wrap: wrap; padding: 0 6px; gap: 0; }
+  .kh-mh-tab { white-space: nowrap; flex: 0 0 auto; padding: 11px 10px 10px; }
+  .kh-mh-tabs-r { flex: 1 0 100%; margin-left: 0; padding: 0 8px 8px; }
+
+  /* 모달 안 누르는 자리는 28px 이상 (2026-10-08 qa — 데일리 ‹ › 22×22 · 낱말 빼기 × 14×14).
+     넓은 화면 · 홈 지수 띠는 그대로 — 모달 안에서만 키운다 */
+  .kh-modal .kh-ixbar-btn { width: 30px; height: 30px; }
+  .kh-modal .kh-dl-al-w button { min-width: 28px; min-height: 28px; }
 
   /* 탭은 한 줄로. 넘치면 가로로 민다 — 접히면 글자가 쪼개진다 */
   .kh-modal .kh-tabs {
@@ -623,6 +661,12 @@
     gap: 6px 14px;
   }
   .kh-modal .kh-price { font-size: 1.5rem; }
+  /* 범위 칸(값 · 막대 · 값)은 반 칸(181px)에 안 들어가 옆 칸 「거래대금」 · 「거래량」 과 겹쳤다 — 한 줄을 다 쓴다.
+     dense 로 빈 반 칸은 다음 칸이 메운다 */
+  .kh-modal .kh-head-stats { grid-auto-flow: row dense; }
+  .kh-modal .kh-st { min-width: 0; }
+  .kh-modal .kh-st:has(.kh-rng) { grid-column: 1 / -1; }
+  .kh-modal .kh-st .kh-rng { margin-left: auto; }
 
   /* 패널 제목이 쪼개지지 않게 */
   .kh-modal .kh-w-title,
@@ -635,8 +679,10 @@
   .kh-modal .kh-per button { flex: 1; min-width: 0; }
   .kh-modal .kh-per-tools { display: none; }
 
-  /* 차트는 화면 절반쯤. 아래 패널도 스크롤로 닿아야 한다 */
-  .kh-modal [data-p="chart"] { min-height: 320px; }
+  /* 차트 칸은 홈 큰 차트와 같은 303px (2026-10-08 재권님 — 「응 303으로해」 · home.css 좁은 폭 `.kh-idx-chart`).
+     가격 120 + 보조 60 × 3 + 경계선 3 — 지표 셋을 켜도 안 넘친다. 패널은 칸에 맞춰 줄어든다 */
+  .kh-modal [data-p="chart"] { min-height: 0; }
+  .kh-modal [data-p="chart"] .kh-chart-box { flex: none; height: 303px; }
   .kh-modal [data-p="tick"],
   .kh-modal [data-p="flow"] { min-height: 150px; }
 

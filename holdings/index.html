@@ -171,11 +171,9 @@
           <span class="kh-chips kh-sc-mkt" id="kh-sc-mkt">
             <button class="kh-chip is-active" data-mkt="kr">
               <svg class="kh-sc-flag" aria-hidden="true"><use href="./img/flags.svg#kh-flag-kr"></use></svg>국내</button>
-            <!-- 미정: 해외 업종·테마를 받아올 곳을 아직 못 찾았다
-                 (js/components/daily-view.js 의 같은 자리 참조).
-                 정해지면 kh-todo 를 떼고 누를 수 있게 한다. -->
-            <button class="kh-chip kh-todo-chip" data-mkt="us" disabled
-              title="해외 업종·테마는 받아올 곳을 아직 못 찾았습니다">
+            <!-- 미국은 SPDR 섹터 ETF 열하나를 업종으로 쓴다 (2026-10-08 지시 —
+                 「미국클릭이 안되고」). 서버 server/us_sectors.py · 테마는 없다 -->
+            <button class="kh-chip" data-mkt="us" title="미국 — S&amp;P500 섹터 ETF 열하나">
               <svg class="kh-sc-flag" aria-hidden="true"><use href="./img/flags.svg#kh-flag-us"></use></svg>미국</button>
           </span>
           <i class="kh-sc-sep" aria-hidden="true"></i>
@@ -188,10 +186,8 @@
                모달에도 같은 셋이 필요해져(모달 검수 ⑥) **한 곳으로 옮겼다** —
                여기에 또 적으면 서버에 기간이 붙는 날 한쪽만 살아난다.
 
-               미정: `/api/naver/groups` 가 기간을 안 받아 오는 값이 전부
-               일간이다. 주간·월간은 아직 `disabled` 다. **재권님이 만드실
-               예정인 자리이므로 지우지 않는다** — 「받을 수 없는 것은 자리도
-               만들지 않는다」 는 어디서도 못 받는 것을 두고 한 말이다. -->
+               국내 · 미국 다 셋이 눌린다(2026-10-08). 국내 주간·월간은 네이버가 기간을
+               안 줘서 서버가 묶음 안 종목 평균으로 낸다(server/naver_period.py). -->
           <span class="kh-chips kh-sc-span" id="kh-sc-span"></span>
           <!-- 차트 머리줄의 「자세히 ›」 와 **같은 것**이어야 한다
                (2026-09-22 지시 — "자세히 버튼은 차트에서 모달 띄우는

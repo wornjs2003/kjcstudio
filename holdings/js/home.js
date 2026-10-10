@@ -351,11 +351,14 @@ function hideBigLoading(host) {
 /* **안 받은 봉만** 받아 붙인다 (2026-10-07 지시 — 「아직 안 받은 봉만 받아 덧붙이고, 받아 둔 봉은 다시 받지 않는다」).
    서버가 「바뀌었다」 고 알릴 때 · 받아 둔 봉으로 먼저 그린 뒤에 부른다. 전에는 30초마다 1,266개를 통째로 받아
    차트 칸을 전부 다시 만들었다. */
-let catching = false;
+/* **종목마다 하나씩** 막는다 (2026-10-08 · 「종목 이동하면 5분봉 로딩이 겁나게 느린데」). 전에는 하나뿐인 깃발이라 앞 종목의
+   빈 칸 받기(서버가 하루치를 KIS 로 채우면 2~3초)가 도는 사이 종목을 옮기면 새 종목 것을 **건너뛰었다** — 받아 둔 옛 봉만 그려진 채
+   다음 알림까지 멈춰 있었다(8765 실측 · 0.4초 간격으로 열 종목 중 둘) */
+let catchingKey = null;
 async function catchUpBigChart(key = bigChartKey) {
   if (!bigChart || bigDrawnKey !== key) return paintBigChart();
-  if (catching) return;
-  catching = true;
+  if (catchingKey === key) return;
+  catchingKey = key;
   try {
     const cs = bigChart.candles;
     const since = cs.length ? cs[cs.length - 1].ts : null;
@@ -364,7 +367,7 @@ async function catchUpBigChart(key = bigChartKey) {
     if (!bigChart || bigDrawnKey !== key) return;
     bigChart.appendBars(add);
   } catch { /* 이번 바퀴는 건너뛴다 — 다음 알림 때 다시 */ }
-  finally { catching = false; }
+  finally { if (catchingKey === key) catchingKey = null; }
 }
 
 function paintBigPeriods() {
@@ -480,9 +483,10 @@ async function paintBigChart(opt = {}) {
     return;
   }
   let candles, period;
-  let fromStore = false;                    // 서버가 받아 둔 봉으로 먼저 그렸다 — 그린 뒤 빈 칸만 받는다
+  let fromStore = false;                    // 서버가 받아 둔 봉 · 이 화면이 받아 둔 봉으로 먼저 그렸다 — 그린 뒤 빈 칸만 받는다
   if (cached && cached.candles && cached.candles.length) {
     ({ candles, period } = cached);
+    fromStore = true;                       // 다시 돌아온 종목 — 떠난 사이 생긴 봉을 받는다(전에는 다음 알림까지 옛 봉 그대로)
   } else try {
     /* **서버가 받아 둔 봉을 먼저 그린다** (2026-10-07 재권님 「1 해줘」). 전에는 서버가 빈 30분 칸을 KIS 로 다
        채운 뒤에 답해 종목을 바꿀 때마다 0.9~2.9초 「불러오는 중」 으로 덮였다. 받아 둔 것이 없을 때만 덮고 통째로 */
@@ -1271,8 +1275,9 @@ function paintRankModal() {
      못 박으면 **탭을 바꿔도 칸이 안 움직인다** — 「보는 것을 바꿔도 자리는
      그대로다」 가 같이 지켜진다. 폭은 css/home.css 의 .kh-rkm col 에 있다. */
   /* 시장 칩은 본문 맨 위에 둔다 — 카드에 있으니 모달에도 있어야 한다(모달이 원본).
-     머리(modal-head.js)는 다른 구역도 거는 공용이라 손대지 않는다. */
-  rankModal.body.innerHTML = `<div class="kh-rkm">
+     머리(modal-head.js)는 다른 구역도 거는 공용이라 손대지 않는다.
+     `data-sort` 는 좁은 폭에서 기준 칸 하나만 남기려고 단다(css/home.css · 2026-10-08) */
+  rankModal.body.innerHTML = `<div class="kh-rkm" data-sort="${rankModalSort}">
     <div class="kh-chips kh-rkm-mkt" data-rkm-mkt>${marketChipsHtml(rankModalMarket)}</div>
     <table>
       <colgroup>
@@ -1982,19 +1987,19 @@ mountStockSearch(document.querySelector('[data-stock-search]'), {
    (2026-10-06 지시 — 「실시간 순위에서 선택하면 차트 나오는 것처럼 … 그래야 룰이 하나일 거 같어」).
    전에는 가로채는 것이 없어 stock.html 로 페이지가 넘어갔고, 그 화면은 차트 칸이 작아
    「차트 크기가 바뀐다」 로 보였다. 모달은 그 뒤 「자세히 ›」 로 연다.
-   href 는 남긴다 — 새 탭 · 가운데 클릭은 그대로 그 화면으로 간다(모달 스킬과 같은 이유). */
+   href 는 남긴다 — 새 탭 · 가운데 클릭은 그대로 그 화면으로 간다(모달 스킬과 같은 이유).
+   「자세히 ›」 모달의 표 줄도 이 함수 하나를 쓴다 (2026-10-08 — 「같은 룰이니」) */
+function pickSectorStock(code, name) {
+  if (!findStock(code)) addExtraStock(code, name || code);
+  selectStock(code);
+  /* 순위표 밖 종목은 받아 둔 시세가 없다 — 서버 알림(롱폴)을 기다리면 그동안 「불러오는 중」 이라 곧바로 한 번 받는다 */
+  if (!(rowPrices && rowPrices[code])) quoteTick();
+}
 document.querySelector('.kh-sc-card')?.addEventListener('click', (e) => {
   const a = e.target.closest('a.kh-sc-st[data-code]');
   if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
   e.preventDefault();
-  const code = a.dataset.code;
-  if (!findStock(code)) {
-    const name = (a.querySelector('.kh-sc-stn')?.textContent || '').trim();
-    addExtraStock(code, name || code);
-  }
-  selectStock(code);
-  /* 순위표 밖 종목은 받아 둔 시세가 없다 — 서버 알림(롱폴)을 기다리면 그동안 「불러오는 중」 이라 곧바로 한 번 받는다 */
-  if (!(rowPrices && rowPrices[code])) quoteTick();
+  pickSectorStock(a.dataset.code, (a.querySelector('.kh-sc-stn')?.textContent || '').trim());
 });
 
 /* 「지금 뜨는 산업」 자세히 → 모달 (2026-09-22 지시).
@@ -2003,7 +2008,7 @@ document.querySelector('.kh-sc-card')?.addEventListener('click', (e) => {
 (() => {
   const more = document.getElementById('kh-sc-more');
   if (!more || !sectors.snapshot) return;
-  const open = () => openSectorModal(sectors.snapshot());
+  const open = () => openSectorModal(sectors.snapshot(), { onPick: pickSectorStock });
   more.addEventListener('click', open);
   /* 단추가 `<a>` 라 Enter·Space 로도 눌려야 한다 (실시간 순위와 같다) */
   more.addEventListener('keydown', (e) => {
