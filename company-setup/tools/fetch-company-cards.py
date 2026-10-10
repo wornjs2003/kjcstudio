@@ -278,12 +278,81 @@ def biz_tables(x):
             near = txt[max(0, m3.start() - 200): pos + r3.end() + 260]
             if "점유율" in near and len(vals) <= len(cols):
                 org = re.search(r"(Prismark|IDC|Omdia|TrendForce|Gartner|Counterpoint|TechInsights|Yole|DSCC|Strategy Analytics)", note)
+                hd = re.findall(r"\[([^\[\]]{2,24})\]", txt[max(0, m3.start() - 4000): m3.start()])
                 series.append({"product": r3.group(1).strip(), "cols": cols[:len(vals)], "vals": vals,
+                               "section": re.sub(r"\s*(사업)?부문$", "", hd[-1]).strip() if hd else None,
                                "basis": "금액" if re.search(r"금액|매출액", note) else ("수량" if re.search(r"수량|출하량|대수|판매량", note) else ""),
                                "estimate": "추정" in note[:120], "org": org.group(1) if org else None})
             pos += r3.end()
     if series:
         out["shareSeries"] = series
+    # 부문 · 제품 매출 몇 해치(2026-10-08 · ⑥-11 ① 「그 제품의 매출과 점유율이 2년 이상」) — 「매출 및 수주상황」 의 표 중 머리에 기간(제NN기)이 둘 이상인 것.
+    # 줄 이름이 수출 · 내수 · 합계로 나뉜 회사(삼성전기)는 「합계」 줄을 그 부문 값으로 쓴다. 값은 표 그대로(단위는 unit)
+    def num(c):
+        c = str(c).replace(",", "").replace(" ", "")
+        neg = c.startswith("△") or c.startswith("-") or (c.startswith("(") and c.endswith(")"))
+        c = c.strip("△-()")
+        try:
+            return -float(c) if neg else float(c)
+        except ValueError:
+            return None
+    sts = _tables(_section(x, r"매출\s*및\s*수주") or "")
+    sales = []
+    for i, t in enumerate(sts):
+        if not t:
+            continue
+        cols = [c for c in t[0] if re.search(r"제\s*\d+\s*기", c)]
+        if len(cols) < 2 or any(re.match(r"(미주|유럽|중국|아시아|미국|일본|기타\s*지역)", c) for r in t for c in r[:2]):   # 지역 표는 뺀다(「내수」 는 부문 표에도 있어 기준에서 뺌)
+            continue
+        rows, cur, split = [], None, False
+        for r in t[1:]:
+            vals = [num(c) for c in r if num(c) is not None and not str(c).strip().endswith("%")]
+            if len(vals) < len(cols):
+                continue
+            vals = vals[-len(cols):]
+            lab = next((c for c in r if c and num(c) is None), "")
+            if lab in ("수출", "내수"):
+                split = True; continue
+            if lab in ("합계", "계", "소계") and cur and split:      # 수출 · 내수로 나뉜 부문의 합계 줄 — 그 부문 값으로
+                rows[-1]["vals"] = vals; split = False; continue
+            if "수출" in r and lab != "수출":                         # 부문 이름 줄이 수출 값을 함께 달고 온다(삼성전기) — 뒤 합계 줄을 기다린다
+                split = True
+            cur = lab; rows.append({"name": lab, "vals": vals})
+        if rows:
+            sales.append({"cols": [re.sub(r"\(.*?\)", "", c).strip() for c in cols], "annual": [not re.search(r"반기|분기", c) for c in cols], "rows": rows, "unit": _unit_before(sts, i)})
+    if sales:
+        out["salesSeries"] = sales
+    # 부문 영업이익(2026-10-08 · ⑥-12 4 「부문 값이 있으면 부문」) — 두 꼴: (가) 「부문 · 매출액 · 영업이익」 이 줄로 내려가는 표(삼성전자 사업의 내용)
+    # (나) 머리에 부문 이름이 가로로 늘어서고 「영업이익」 줄이 있는 표(재무제표 주석 · 삼성전기). 맨 앞 기간(이번 보고서)만
+    segnames = [r["name"] for t in sales for r in t["rows"]]
+    prof = None
+    for t in _tables(x):
+        for k, r in enumerate(t):
+            if len(r) > 2 and r[0] in segnames and r[1].replace(" ", "") == "매출액" and k + 1 < len(t) and re.match(r"영업(이익|손익)", t[k + 1][0]):
+                sv = [num(c) for c in r[2:] if num(c) is not None and not c.endswith("%")]
+                ov = [num(c) for c in t[k + 1][1:] if num(c) is not None and not c.endswith("%")]
+                if sv and ov:
+                    pc_ = [re.sub(r"\(.*?\)", "", c).strip() for c in t[0] if re.search(r"제\s*\d+\s*기", c)]
+                    prof = prof or {"rows": [], "from": "사업의 내용 부문 표", "cols": pc_, "annual": [not re.search(r"반기|분기", c) for c in pc_]}
+                    prof["rows"].append({"seg": r[0], "sales": sv, "op": ov})
+        if prof:
+            break
+    if not prof and segnames:
+        for t in _tables(x):
+            head = next((r for r in t[:4] if sum(1 for c in r if c in segnames) >= 2), None)
+            orow = next((r for r in t if r and re.match(r"(부문)?영업(이익|손익)", r[0].replace(" ", ""))), None)
+            srow = next((r for r in t if r and re.match(r"(매출액|수익|외부고객)", r[0].replace(" ", ""))), None)
+            if head and orow:
+                names = [c for c in head if c in segnames and not re.match(r"^(합\s*계|계|소계)$", c)]
+                ov = [num(c) for c in orow[1:] if num(c) is not None]
+                sv = [num(c) for c in (srow or [])[1:] if num(c) is not None]
+                if len(ov) >= len(names):
+                    pc_ = (sales[0]["cols"][:1] if sales else ["이번 보고서 기간"])
+                    prof = {"rows": [{"seg": nm, "sales": [sv[j]] if j < len(sv) else [next((r2["vals"][0] for t2 in sales for r2 in t2["rows"] if r2["name"] == nm), None)], "op": [ov[j]]} for j, nm in enumerate(names)],
+                            "from": "재무제표 주석 부문 정보", "cols": pc_, "annual": [not re.search(r"반기|분기", c) for c in pc_]}
+                    break
+    if prof:
+        out["segProfit"] = prof
     return out, "; ".join(err) or None
 
 

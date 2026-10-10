@@ -190,6 +190,9 @@ function peerHtml(code, card, all, comp) {
   };
   const head = row(['', '점유율', '매출', '영업이익률', 'ROE', 'ROIC(약식)', '기준'], true);
   const note = `<p class="in-rp-note">매출 · 이익률은 회사 전체 값(부문 값 아님) · ROIC = 영업이익 × (1 − 세율) ÷ (자본 + 차입금 − 현금) · 국내 억원(1조 이상 조) · 해외는 그 회사 통화 · 규칙은 종목 분석 ⑥-11 · ⑥-12</p>`;
+  const comps = (Array.isArray(comp) ? comp : comp ? [comp] : []).filter((c) => c && c.list && c.list.length);   // 제품마다 하나(2026-10-08 경쟁사 칸 통일)
+  if (comps.length > 1) return comps.map((c) => peerHtml(code, card, all, c)).join('');
+  comp = comps[0];
   if (comp && comp.list && comp.list.length) {
     const rows = [fsRow(me, `${esc(me.name || code)} <b>(이 종목)</b>`, comp.self && comp.self.share ? `${comp.self.share}${comp.self.rank ? ` · ${comp.self.rank}위` : ''}` : '')];
     for (const x of comp.list) rows.push(fsRow((all || {})[x.key], esc(x.name), `${x.share || '—'}${x.rank ? ` · ${x.rank}위` : ''}`));
@@ -375,20 +378,26 @@ async function renderLive() {
     + tbl([trow(['갈래', '이 종목 값', '판정', '왜 · 비는 이유', '출처'], true), ...L13.map((r) => trow([`<a href="${esc(r.rule)}">${esc(r.name)}</a>`, esc(r.value),
       `<span class="in-pill ${VCLS[r.verdict]}">${esc(r.verdict)}</span>`, esc([r.why, r.gap].filter(Boolean).join(' · ') || '—'), esc(r.src || '—')]))])
     + `<p class="in-rp-note">「못 가름」 은 재료가 모자라거나 판정 기준이 아직 정해지지 않은 칸이다 — 지어내지 않는다. 성장성은 ⑥-11 가르는 순서 · 경쟁력은 ⑥-12 다섯 걸음 그대로 — 부문 매출 3년 추이는 아직</p>`;
-  if (LN.length) {
-    // 모양(2026-10-08 재권님 「인지가 더 잘되도록 정리」 → 「응 이게 더 좋네」) — 판단 먼저 · 숫자는 표(blocks) · 출처(from)와 못 본 것(gaps)은 아래 한 줄.
-    // 글 안 **굵게** 만 받는다. 옛 모양(points)도 그대로 그린다
-    const em = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
-    const block = (k) => (k.title ? `<p class="rp-text"><b>${em(k.title)}</b></p>` : '')
-      + (k.table ? tbl([trow(k.table.head.map(em), true), ...k.table.rows.map((r) => trow(r.map(em)))]) : '')
-      + (k.list ? list(k.list.map(em)) : '');
-    $('rp-lens-body').innerHTML = LN.map((x) => `<h3>${esc(x.name)} ${(x.sources || []).map(src).join(' ')}</h3>`
-      + (x.call ? `<p class="rp-text"><b>판단</b> ${em(x.call)}</p>` : '')
-      + (x.blocks || []).map(block).join('') + (x.points ? list(x.points.map(em)) : '')
-      + (x.from ? `<p class="in-rp-note">출처 · 시각 — ${em(x.from)}</p>` : '')
-      + (x.gaps ? `<p class="in-rp-note">못 본 것 — ${em(x.gaps)}</p>` : '')).join('');
-    $('rp-lens-body').insertAdjacentHTML('afterbegin', '<h3>세션 분석 <small>위 13칸을 바탕으로 쓴 글</small></h3>');
-  }
+  // 갈래 자세히 — 흐름 · 성장성 · 경쟁력은 표를 계산(lens13 blocks)이 채우고, 세션 글은 그 위의 「판단」 한 줄과 접힌 「세션이 더한 표」 로만 붙는다
+  // (2026-10-08 재권님 「같은 룰로」 — 세션이 글을 썼는지와 상관없이 어느 종목이든 같은 표가 나오게). 그 밖 갈래의 세션 글은 전처럼 그린다
+  const em = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  const block = (k) => (k.title ? `<p class="rp-text"><b>${em(k.title)}</b></p>` : '')
+    + (k.table ? tbl([trow(k.table.head.map(em), true), ...k.table.rows.map((r) => trow(r.map((c) => em(String(c)))))]) : '')
+    + (k.list ? list(k.list.map(em)) : '') + (k.note ? `<p class="in-rp-note">${esc(k.note)}</p>` : '');
+  const ALIAS = { flow: ['세계 돈의 흐름', '흐름 속 이 종목'], growth: ['시황 · 사업 성장성'], moat: ['경쟁력(해자)'] };
+  const used = new Set();
+  const auto = L13.filter((r) => r.blocks && r.blocks.length).map((r) => {
+    const sl = LN.find((x) => (ALIAS[r.id] || []).includes(x.name)); if (sl) used.add(sl);
+    return `<h3>${esc(r.name)} <span class="in-pill ${VCLS[r.verdict]}">${esc(r.verdict)}</span> ${src('계산')}${sl ? ' ' + (sl.sources || []).map(src).join(' ') : ''}</h3>`
+      + (sl && sl.call ? `<p class="rp-text"><b>판단(세션)</b> ${em(sl.call)}</p>` : '')
+      + `<p class="rp-text"><b>판단(계산)</b> ${esc(r.verdict)}${r.why ? ' — ' + esc(r.why) : ''}${r.gap ? `<br><small>${esc(r.gap)}</small>` : ''}</p>`
+      + r.blocks.map(block).join('')
+      + (sl && (sl.blocks || sl.points) ? `<details class="rp-fold ca-orig"><summary><h3>세션이 손으로 더한 표</h3><span class="rp-sum">${esc(sl.from || '')}</span></summary><div class="rp-fold-body">${(sl.blocks || []).map(block).join('')}${sl.points ? list(sl.points.map(em)) : ''}${sl.gaps ? `<p class="in-rp-note">못 본 것 — ${em(sl.gaps)}</p>` : ''}</div></details>` : '');
+  }).join('');
+  const rest = LN.filter((x) => !used.has(x)).map((x) => `<h3>${esc(x.name)} ${(x.sources || []).map(src).join(' ')}</h3>`
+    + (x.call ? `<p class="rp-text"><b>판단</b> ${em(x.call)}</p>` : '') + (x.blocks || []).map(block).join('') + (x.points ? list(x.points.map(em)) : '')
+    + (x.from ? `<p class="in-rp-note">출처 · 시각 — ${em(x.from)}</p>` : '') + (x.gaps ? `<p class="in-rp-note">못 본 것 — ${em(x.gaps)}</p>` : '')).join('');
+  $('rp-lens-body').innerHTML = `<h3>갈래 자세히 <small>표는 계산이 어느 종목이든 같은 모양으로 채운다 · 세션 글은 「판단(세션)」 한 줄과 접힌 표로 붙는다</small></h3>` + auto + rest;
   $('rp-lens-sum').textContent = `13칸 — 좋다 ${cnt('좋다')} · 보통 ${cnt('보통')} · 나쁘다 ${cnt('나쁘다')} · 못 가름 ${cnt('못 가름')}` + (LN.length ? ` · 세션 글 ${LN.map((x) => x.name).join(' · ')}` : '');
   $('rp-summary-body').innerHTML = (V.label ? `<p class="rp-text"><b>판정</b> ${esc(V.label)}<br><b>방향</b> ${esc(V.direction)}<br><b>강점</b> ${esc(V.strength)}<br><b>리스크</b> ${esc(V.risk)}</p>` : `<p class="rp-text">${SOON} 판정 · 방향 · 강점 · 리스크 — 세션 글</p>`) + `<h3>종합 판정</h3>` + list((T.overall || []).map(esc));
 

@@ -62,7 +62,7 @@ const pc = (v, d = 1) => fin(v) ? `${v > 0 ? '+' : ''}${v.toFixed(d)}%` : '—';
 const p0 = (v, d = 1) => fin(v) ? `${v.toFixed(d)}%` : '—';
 const jo = (v) => fin(v) ? (Math.abs(v) >= 1e12 ? `${(v / 1e12).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}조` : `${Math.round(v / 1e8).toLocaleString('ko-KR')}억`) : '—';
 const eok = (v) => fin(v) ? (Math.abs(v) >= 10000 ? `${(v / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}조` : `${Math.round(v).toLocaleString('ko-KR')}억`) : '—';
-const R = (id, name, rule, o) => ({ id, name, rule, value: o.value || '—', verdict: o.verdict || '못 가름', why: o.why || '', gap: o.gap || '', src: o.src || '' });
+const R = (id, name, rule, o) => ({ id, name, rule, value: o.value || '—', verdict: o.verdict || '못 가름', why: o.why || '', gap: o.gap || '', src: o.src || '', blocks: o.blocks || null });   // blocks — 자세히 표(어느 종목이든 같은 머리)
 
 /**
  * x — 종목 리포트가 이미 받은 것: { code, px, fq(KIS 분기 재무), card(회사 카드), monthly([{ts,close}]), daily([{c,h,l}]), cnsPer, per,
@@ -88,6 +88,12 @@ export function lens13(x) {
       value: `한국 ${pc(W.kr.m1)} vs 세계 ${pc(W.acwi.m1)}(1개월) · 업종 짝 ${ps ? `${ps.name}(${ps.code}) ${pc(ps.m1)}` : '없음'} · 이 종목 외국인 20일 ${fin(f20) ? (f20 > 0 ? '+' : '') + eok(f20) : '—'}`,
       verdict: v, why: v === '못 가름' ? '' : `나라 ${sKr ? '강함' : '약함'} · 업종 ${sSec ? '강함' : '약함'} · 돈 ${sMoney ? '들어옴' : '빠짐'}`,
       gap: v === '못 가름' ? (ps ? '이 종목 외국인 자료가 없다' : '이 업종의 미국 섹터 짝이 대응표에 없다') : '', src: `세계 흐름 ${W.at} · KIS`,
+      blocks: [{ title: '나라 · 업종 · 돈 (1개월 · 20일)', table: { head: ['', '값', '세계(ACWI) 대비'], rows: [
+        ['한국(EWY)', pc(W.kr.m1), W.kr.m1 > W.acwi.m1 ? '강함' : '약함'],
+        [`업종 짝 ${ps ? ps.name + '(' + ps.code + ')' : '없음'}`, ps ? pc(ps.m1) : '—', ps ? (ps.m1 > W.acwi.m1 ? '강함' : '약함') : '—'],
+        ['코스피 외국인 20일', W.kf && fin(W.kf.d20) ? (W.kf.d20 > 0 ? '+' : '') + eok(W.kf.d20) : '—', '시장 전체'],
+        ['이 종목 외국인 20일', fin(f20) ? (f20 > 0 ? '+' : '') + eok(f20) : '—', '이 종목'],
+        ['이 종목 기관 20일', inv.length ? (invSum(20, 'inst') > 0 ? '+' : '') + eok(invSum(20, 'inst')) : '—', '이 종목']] } }],
     }));
   } else out.push(R('flow', '흐름 속 이 종목', 'analysis.html#s0w', { gap: '세계 흐름 자료(data/world-flow.json)가 없다 — tools/fetch-world-flow.py', src: '' }));
 
@@ -103,7 +109,8 @@ export function lens13(x) {
   // 점유율 제품 → 부문 짝: 제품 이름의 낱말이 가장 많이 들어 있는 부문 하나에 붙인다(같으면 매출이 큰 부문) — 이름이 달라 못 붙인 것은 「짝 못 지음」 으로 따로 낸다
   const toks = (t) => t.toLowerCase().split(/[\s·/()]+/).filter(Boolean);
   const hit = (sg, r) => { const hay = (sg.items + ' ' + sg.name).toLowerCase().replace(/\s+/g, ''); return toks(r.product).filter((w) => hay.includes(w)).length; };
-  const home = new Map(SS.map((r) => { let best = null, bn = 0; segs.forEach((sg) => { const n2 = hit(sg, r); if (n2 > bn) { bn = n2; best = sg.name; } }); return [r, best]; }));
+  const bySec = (r) => r.section ? segs.find((sg) => sg.name.replace(/\s/g, '').includes(r.section.replace(/\s/g, '')) || r.section.replace(/\s/g, '').includes(sg.name.replace(/\s*부문$/, '').replace(/\s/g, ''))) : null;   // 점유율 표가 놓인 [사업부문] 머리(카드 도구 section)
+  const home = new Map(SS.map((r) => { const sec = bySec(r); if (sec) return [r, sec.name]; let best = null, bn = 0; segs.forEach((sg) => { const n2 = hit(sg, r); if (n2 > bn) { bn = n2; best = sg.name; } }); return [r, best]; }));
   const segShare = (sg) => SS.filter((r) => home.get(r) === sg.name);
   const unmatched = SS.filter((r) => !home.get(r));
   const shareAmt = SS.filter((r) => r.basis === '금액' && r.vals.length >= 2 && home.get(r));
@@ -120,40 +127,85 @@ export function lens13(x) {
   if (ref.length) steps.push(`참고만(수량 · 기준 안 적힘 · 주요 매출원과 짝 못 지음) ${ref.map((r) => `${r.product} ${r.vals[1]}→${r.vals[0]}%`).join(' · ')}`);
   if (PP.length) steps.push(`가격 ${PP.map((i) => `${i.item} ${i.pct > 0 ? '+' : ''}${i.pct}%`).join(' · ')}(${PP[0].basis || '기준 안 적힘'} — 매출 증가율과 기간이 같지 않아 참고만)`);
   if (fin(coG)) steps.push(`② 회사 매출 ${qLabel} ${pc(coG)} · 업종 ${fin(indG) ? pc(indG) : '—'}${fin(coG) && fin(indG) ? ` → 경쟁 몫 ${pc(coG - indG)}(넓은 업종과 견줌)` : ''}`);
-  // ⑥-11 ① 은 「그 제품의 매출과 점유율이 2년 이상 있을 때」 만 — 회사 카드의 제품 매출은 이번 보고서 한 기간뿐이라 ① 은 못 한다(점유율만으로 가르지 않는다).
-  //   그래서 ② 업종 견줌으로 가르고, 주요 매출원 점유율(금액 기준)은 「나쁘다 — 점유율이 내려간다」 를 확인하는 데만 쓴다(보는 것 표의 나쁘다 줄)
-  steps.unshift('① 못 함 — 제품 매출이 한 기간뿐(⑥-11 「그 제품의 매출과 점유율이 2년 이상 있을 때」)');
+  // ⑥-11 ① — 「그 제품의 매출과 점유율이 2년 이상 있을 때」: 점유율(금액 기준 · 주요 매출원) 해마다 값과 매출 몇 해치(카드 salesSeries)를 같은 해로 맞춰
+  //   (1 + 회사 증가율) = (1 + 시장 증가율) × (1 + 점유율 변화율). 매출은 제품 표에서 이름이 맞는 줄, 없으면 그 부문 줄(「부문 매출로 어림」). 최근 두 사업연도만
+  const rptY = +(String((dart.business && dart.business.report) || '').match(/\((\d{4})\./) || [])[1] || null;
+  const SL = Array.isArray(tb.salesSeries) ? tb.salesSeries : [];
+  const yearCol = (t, y) => t.cols.findIndex((c, k) => t.annual[k] && rptY && rptY - k === y);
+  const prodRow = (r) => { const tk = toks(r.product).filter((w) => w.length > 1); for (const t of SL) for (const row of t.rows) { const nm = row.name.toLowerCase().replace(/\s/g, ''); if (tk.length && tk.every((w) => nm.includes(w))) return { t, row, approx: false }; } return null; };   // 낱말이 다 들어 있는 제품 줄만 — 아니면 부문 줄
+  const segRow = (r) => { const sg = home.get(r); if (!sg) return null; for (const t of SL) for (const row of t.rows) if (row.name.replace(/\s/g, '') === sg.replace(/\s/g, '')) return { t, row, approx: true }; return null; };
+  const shareY = (r, y) => { const k = r.cols.findIndex((c) => c === `${y}년`); return k >= 0 ? r.vals[k] : null; };
+  const one = shareAmt.map((r) => {
+    const src = prodRow(r) || segRow(r); if (!src || !rptY) return { r, ok: false };
+    const ys = [rptY - 1, rptY - 2].filter((y) => yearCol(src.t, y) >= 0 && fin(shareY(r, y)));
+    if (ys.length < 2) return { r, ok: false };
+    const [y1, y0] = ys; const s1 = src.row.vals[yearCol(src.t, y1)], s0 = src.row.vals[yearCol(src.t, y0)];
+    const g = s1 / s0 - 1, sc = shareY(r, y1) / shareY(r, y0) - 1, mk = (1 + g) / (1 + sc) - 1;
+    const same = shareAmt.filter((q) => home.get(q) === home.get(r)).length || 1;   // 한 부문에 점유율 표가 여럿이면 그 부문 비중을 나눠 단다
+    return { r, ok: true, y0, y1, g: g * 100, sc, mk: mk * 100, sh0: shareY(r, y0), sh1: shareY(r, y1), name: src.row.name, approx: src.approx, w: ((segs.find((sg) => sg.name === home.get(r)) || {}).p || 0) / same };
+  });
+  const okOne = one.filter((o) => o.ok);
+  if (okOne.length) steps.unshift(`① ${okOne[0].y0} → ${okOne[0].y1} ${okOne.map((o) => `${o.r.product}(${o.name}${o.approx ? ' · 부문 매출로 어림' : ''}) 매출 ${pc(o.g)} · 점유율 ${o.sh0}→${o.sh1}% → 시장 ${pc(o.mk)} · ${o.sc > 0 ? '점유율 덕' : o.sc < 0 ? '산업 덕 — 점유율 잃음' : '산업 덕'}`).join(' / ')}`);
+  else steps.unshift('① 못 함 — 같은 해의 제품 매출 · 금액 기준 점유율이 두 해치 없다');
   let gv2 = '못 가름', gw = '', gg = '';
-  const t3 = shareAmt.map(trend), dnN = t3.filter((v) => v < 0).length, upN = t3.filter((v) => v > 0).length;
-  if (fin(indG) && indG < 0) { gv2 = '나쁘다'; gw = '업종이 줄고 있다'; }
-  else if (shareAmt.length && dnN > upN) { gv2 = '나쁘다'; gw = `주요 매출원 점유율이 내려간 제품이 더 많다(${dnN}/${t3.length})`; }
+  if (okOne.length) {
+    // 주요 매출원 매출 비중으로 무게를 단다 — 점유율이 오른 쪽과 내린 쪽 중 무거운 쪽
+    const wUp = okOne.filter((o) => o.sc > 0).reduce((a2, o) => a2 + o.w, 0), wDn = okOne.filter((o) => o.sc < 0).reduce((a2, o) => a2 + o.w, 0);
+    const mkUp = okOne.some((o) => o.mk > 0);
+    gv2 = wDn > wUp ? '나쁘다' : wUp > wDn && mkUp ? '좋다' : '보통';
+    gw = `① ${okOne[0].y1}년 — 점유율 오른 쪽 매출 비중 ${wUp.toFixed(0)}% · 내린 쪽 ${wDn.toFixed(0)}% → ${gv2 === '좋다' ? '점유율 덕' : gv2 === '나쁘다' ? '점유율이 내려갔다' : '산업 덕'}`;
+    const latest = shareAmt.filter((r) => r.cols[0] && !/^\d{4}년$/.test(r.cols[0]));
+    if (latest.length) gw += ` · 그 뒤 ${latest[0].cols[0]} 점유율 ${latest.map((r) => `${r.product} ${r.vals[1]}→${r.vals[0]}%`).join(' · ')}`;
+  } else if (fin(indG) && indG < 0) { gv2 = '나쁘다'; gw = '업종이 줄고 있다'; }
   else if (fin(coG) && fin(indG)) {
     gv2 = coG - indG > 0 ? '좋다' : '보통'; gw = coG - indG > 0 ? `② 회사가 업종보다 빨리 컸다(경쟁 몫 ${pc(coG - indG)})` : `② 업종만큼 또는 업종보다 덜 컸다(경쟁 몫 ${pc(coG - indG)}) — 산업 덕`;
-    if (shareAmt.length) gw += ` · 주요 매출원 점유율 ${upN > dnN ? '오름' : '그대로'}(${upN}/${t3.length})`;
   } else gg = !ind ? '업종 지표가 없다(금융 · 보험은 세 통계가 없음)' : '같은 분기의 회사 · 업종 증가율이 없다';
   out.push(R('growth', '시황 · 사업 성장성', 'analysis.html#r11', {
     value: (ind ? `업종(${ind.sales ? ind.sales.name : k2}) 매출 ${ss.length ? ss[ss.length - 1][0] + ' ' + pc(ss[ss.length - 1][1]) : '—'} · 생산 ${ind.prod ? pc(ind.prod.yoy) : '—'} · 업황 전망 ${(ind.bsi && ind.bsi.series || []).slice(-1).map((v) => v[1])[0] ?? '—'}` : '업종 지표 없음') + (steps.length ? ' — ' + steps.join(' / ') : ''),
-    verdict: gv2, why: gw, gap: [gg, '업종 묶음이 넓다(⑥-11 「넓은 업종과 견줌」)'].filter(Boolean).join(' · '), src: 'ECOS · DART · KIS',
+    blocks: [
+      ...(okOne.length ? [{ title: `① 점유율로 가르기 (⑥-11 ① · ${okOne[0].y0} → ${okOne[0].y1})`, table: { head: ['제품', `매출 ${okOne[0].y0} → ${okOne[0].y1}`, '점유율', '시장 셈', '가름'],
+        rows: okOne.map((o) => [`${o.r.product}${o.approx ? '(' + o.name.replace(/\s*부문$/, '') + ' 부문 매출로 어림)' : ''}`, pc(o.g), `${o.sh0}% → ${o.sh1}%(${o.r.org || (o.r.estimate ? '회사 추정' : '출처 안 적힘')})`, pc(o.mk), o.sc > 0 ? '점유율 덕' : o.sc < 0 ? '산업 덕 — 점유율 잃음' : '산업 덕']) } }] : []),
+      // 매출 유형(제품 · 용역) 표는 뺀다
+      ...SL.filter((t) => t.rows.length > 1 && !t.rows.some((r) => /제품\/상품|제ㆍ상품|용역/.test(r.name))).slice(0, 2).map((t) => ({ title: '매출 몇 해치 (DART 「매출 및 수주상황」)', table: { head: ['', ...t.cols], rows: t.rows.map((r) => [r.name, ...r.vals.map((v) => fin(v) ? Math.round(v).toLocaleString('ko-KR') : '—')]) }, note: t.unit || '' })),
+      ...(PP.length ? [{ title: '판매가격 (DART 「주요 제품 가격 변동」)', table: { head: ['제품', '변동', '기준'], rows: PP.map((i) => [i.item, `${i.pct > 0 ? '+' : ''}${i.pct}%`, i.basis || '안 적힘']) } }] : []),
+      { title: '업종 (한국은행 ECOS) · 회사', table: { head: ['', '값'], rows: [['업종 매출 증가율', ss.length ? `${ss[ss.length - 1][0]} ${pc(ss[ss.length - 1][1])}` : '—'], ['회사 매출 증가율(같은 분기)', fin(coG) ? `${qLabel} ${pc(coG)}` : '—'], ['경쟁 몫(회사 − 업종)', fin(coG) && fin(indG) ? pc(coG - indG) : '—']] } }],
+    verdict: gv2, why: gw, gap: [gg, okOne.length ? '' : '업종 묶음이 넓다(⑥-11 「넓은 업종과 견줌」)', okOne.some((o) => o.approx) ? '부문에 다른 제품이 섞여 「부문 매출로 어림」' : ''].filter(Boolean).join(' · '), src: 'ECOS · DART · KIS',
   }));
 
   // ③ 경쟁력 — 종목 분석 ⑥-12 다섯 걸음 그대로: 1 주요 매출원 셋 → 2 그 제품 점유율(추세) → 3 경쟁사 둘 → 4 이익률 한 표 → 5 판단
-  const cpx = x.competitors; const cards = x.cards || {};
-  const margin = (key) => { const c = cards[key]; if (!c) return null;
+  // 경쟁사 칸(리포트 글 competitors)은 제품마다 하나 — 배열이 맞는 꼴이고, 옛 글의 한 덩어리도 받는다(2026-10-08 「경쟁사 칸 통일」)
+  const CPS = Array.isArray(x.competitors) ? x.competitors : x.competitors ? [x.competitors] : []; const cpx = CPS[0] || null; const cards = x.cards || {};
+  const margin = (key, product, y) => { const c = cards[key]; if (!c) return null;
+    const pt2 = c.dart && c.dart.business && c.dart.business.tables; const sp2 = pt2 && pt2.segProfit; const ss2 = (pt2 && pt2.shareSeries) || [];
+    const ry2 = +(String(((c.dart || {}).business || {}).report || '').match(/\((\d{4})\./) || [])[1] || null;
+    const sec2 = (ss2.find((r) => String(r.product).toLowerCase() === String(product || '').toLowerCase()) || {}).section;
+    const row2 = sp2 && sec2 ? sp2.rows.find((r) => r.seg.replace(/\s/g, '').includes(sec2.replace(/\s/g, ''))) : null;
+    if (row2) { let k = y && ry2 ? sp2.cols.findIndex((cc, j) => sp2.annual[j] && ry2 - j === y) : -1; if (k < 0) k = 0;
+      if (fin(row2.sales[k]) && fin(row2.op[k]) && row2.sales[k]) return { v: row2.op[k] / row2.sales[k] * 100, at: `${row2.seg} 부문 · ${sp2.cols[k]}` }; }
     if (c.dart && c.dart.fs && c.dart.fs.now && c.dart.fs.now.revenue) return { v: c.dart.fs.now.opIncome / c.dart.fs.now.revenue * 100, at: `${c.dart.fs.year} 회사 전체` };
     const f = c.edgar && c.edgar.financials; if (f && f.revenue && f.operatingIncome) { const ks = Object.keys(f.revenue.values).sort(); const k = ks[ks.length - 1]; if (f.operatingIncome.values[k] != null) return { v: f.operatingIncome.values[k] / f.revenue.values[k] * 100, at: `${k.slice(0, 4)} 회사 전체(EDGAR)` }; }
     return null; };
   const me = dart.fs && dart.fs.now && dart.fs.now.revenue ? dart.fs.now.opIncome / dart.fs.now.revenue * 100 : null;
+  // 부문 영업이익률(⑥-12 4 「부문 값이 있으면 부문」) — 카드 segProfit. 경쟁사 값(사업보고서 연간)과 같은 해가 있으면 그 해, 없으면 이번 보고서 기간
+  const SP = tb.segProfit;
+  const segMargin = (sg, y) => { if (!SP) return null; const row = SP.rows.find((r) => r.seg.replace(/\s/g, '') === sg.replace(/\s/g, '')); if (!row) return null;
+    let k = y && rptY ? SP.cols.findIndex((c, j) => SP.annual[j] && rptY - j === y) : -1; if (k < 0) k = 0;
+    const sv = row.sales[k], ov = row.op[k]; return fin(sv) && fin(ov) && sv ? { v: ov / sv * 100, at: SP.cols[k] + (k > 0 || SP.annual[k] ? '' : ' 누적') } : null; };
+  const fsYear = dart.fs && dart.fs.year;
   // 제품(부문)마다 ⑥-12 2~5 — 경쟁사는 리포트 글(competitors)의 제품이 이 부문 점유율 제품과 같을 때만 붙인다
   const perSeg = segs.map((sg) => {
     const sh = segShare(sg).filter((r) => r.basis === '금액');
-    const cp = cpx && cpx.list && sh.some((r) => r.product.toLowerCase() === String(cpx.product).toLowerCase()) ? cpx : null;
-    const peers = cp ? cp.list.slice(0, 2).map((c) => ({ name: c.name, share: c.share, m: margin(c.key) })) : [];
-    const cells = { share: sh.length ? sh.map((r) => `${r.product} ${r.vals[1]}→${r.vals[0]}%(${r.org || (r.estimate ? '회사 추정' : '출처 안 적힘')})`).join(' · ') : '아직',
-      sales: `${sg.p}%(부문 비중)`, margin: fin(me) ? `${me.toFixed(1)}%(회사 전체)` : '아직', price: '아직' };
+    const prods = segShare(sg).map((r) => r.product.toLowerCase());
+    const cp = CPS.find((c) => c && c.list && (prods.includes(String(c.product).toLowerCase()) || (sg.items + ' ' + sg.name).toLowerCase().includes(String(c.product).toLowerCase()))) || null;
+    const peers = cp ? cp.list.slice(0, 2).map((c) => ({ name: c.name, share: c.share, m: c.key ? margin(c.key, cp.product, fsYear) : null })) : [];
+    const cells = { share: segShare(sg).length ? segShare(sg).map((r) => `${r.product} ${r.vals[1]}→${r.vals[0]}%(${r.org || (r.estimate ? '회사 추정' : '출처 안 적힘')}${r.basis === '금액' ? '' : ' · 참고'})`).join(' · ') : '아직',
+      sales: `${sg.p}%(부문 비중)`, price: '아직' };
+    const sm = segMargin(sg.name, peers.length ? fsYear : null);
+    const myM = sm ? sm.v : me; cells.margin = sm ? `${sm.v.toFixed(1)}%(부문 · ${sm.at})` : fin(me) ? `${me.toFixed(1)}%(회사 전체 · ${fsYear})` : '아직';
     let v = '판단 못 함', w = '';
-    if (sh.length && peers.length && fin(me) && peers.every((p2) => p2.m)) {
+    if (sh.length && peers.length && fin(myM) && peers.every((p2) => p2.m)) {
       const up = sh.filter((r) => trend(r) > 0).length > sh.filter((r) => trend(r) < 0).length, dn = sh.filter((r) => trend(r) < 0).length > sh.filter((r) => trend(r) > 0).length;
-      const better = peers.every((p2) => me > p2.m.v), worse = peers.every((p2) => me < p2.m.v);
+      const better = peers.every((p2) => myM > p2.m.v), worse = peers.every((p2) => myM < p2.m.v);
       v = up && better ? '좋다' : dn && worse ? '나쁘다' : '보통';
       w = `점유율 ${up ? '오름' : dn ? '내림' : '그대로'} · 이익률 ${better ? '경쟁사보다 높다' : worse ? '경쟁사보다 낮다' : '엇갈림'}`;
     }
@@ -168,7 +220,11 @@ export function lens13(x) {
   const segTxt = perSeg.map((p2) => `${p2.sg.name}[점유율 ${p2.cells.share} · 매출 ${p2.cells.sales} · 경쟁사 ${p2.peers.length ? p2.peers.map((q) => `${q.name} ${q.share}${q.m ? ' 이익률 ' + q.m.v.toFixed(1) + '%' : ''}`).join(' · ') : '아직'} · 이익률 ${p2.cells.margin} · 1년 주가 ${p2.cells.price} → ${p2.v}${p2.w ? '(' + p2.w + ')' : ''}]`);
   out.push(R('moat', '경쟁력(해자)', 'analysis.html#r12', {
     value: `${segTxt.length ? segTxt.join(' / ') : '주요 매출원 못 뽑음'}${unmatched.length ? ` · 짝 못 지은 점유율 ${unmatched.map((r) => `${r.product} ${r.vals[1]}→${r.vals[0]}%`).join(' · ')}` : ''}`,
-    verdict: mv, why: mw, gap: [mg, '1년 주가 · 부문 이익률은 아직 · 해자 원천 · ROIC 10년은 한 해치뿐이라 「오래 가나」 는 못 본다'].filter(Boolean).join(' · '), src: 'DART · 리포트 글 · EDGAR',
+    blocks: [{ title: '주요 매출원 · 점유율 · 경쟁사 (⑥-12 1 · 2 · 3)', table: { head: ['제품(매출 비중)', '점유율', '경쟁사 1', '경쟁사 2', '판단'],
+        rows: perSeg.map((p2) => [`${p2.sg.name} (${p2.sg.p}%)`, segShare(p2.sg).length ? segShare(p2.sg).map((r) => `${r.product} ${r.vals.slice().reverse().join(' → ')}%(${r.org || (r.estimate ? '회사 추정' : '출처 안 적힘')}${r.basis === '금액' ? '' : ' · 참고'})`).join(' · ') : '아직',
+          p2.peers[0] ? `${p2.peers[0].name} ${p2.peers[0].share}` : '아직', p2.peers[1] ? `${p2.peers[1].name} ${p2.peers[1].share}` : '아직', p2.v + (p2.w ? ' — ' + p2.w : '')]) } },
+      { title: '이익률 한 표 (⑥-12 4)', table: { head: ['회사 · 제품', '영업이익률', '기준'], rows: perSeg.flatMap((p2) => [[`이 종목 · ${p2.sg.name}`, p2.cells.margin, ''], ...p2.peers.map((q) => [`${q.name}`, q.m ? q.m.v.toFixed(1) + '%' : '아직', q.m ? q.m.at : ''])]) } }],
+    verdict: mv, why: mw, gap: [mg, '1년 주가는 아직 · 해자 원천 · ROIC 10년은 한 해치뿐이라 「오래 가나」 는 못 본다'].filter(Boolean).join(' · '), src: 'DART · 리포트 글 · EDGAR',
   }));
 
   // ④ 실적 — 최근 분기 영업이익이 1년 전보다 크고 영업이익률이 전 분기 이상이면 좋다 · 줄거나 적자면 나쁘다
