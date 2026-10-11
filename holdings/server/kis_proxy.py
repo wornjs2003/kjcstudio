@@ -5104,9 +5104,19 @@ def _get_chart_us(cfg, code, period, limit):
             else:
                 n = limit if deep else (2 if period == "Y" else us_universe.DAILY_PER_CALL)
                 bars = us_universe.us_bars(kis_get, cfg, code, period, n)
+                got = len(bars)                 # 「다 받음」 은 거르기 전 개수로 가른다 — 거른 한 줄로 done 이 되지 않게
+                # **장이 열리기 전에는 오늘 줄을 버린다** (2026-10-12 재권님 「가로」). 장 전 창(동부 07:15~)에
+                # 받으면 KIS 가 아직 안 열린 오늘을 장 전 시세 한 줄로 주는데, 그것이 그날 일봉으로 굳어
+                # 순위 표가 마감 종가 대신 그 값을 냈다(10-09 S&P500 503 중 502). 오늘 일봉은 장 마감 뒤
+                # 바퀴(`post_round`)가 받는다. 월·년봉은 ts 가 그 봉의 마지막 날(=오늘)이라 함께 빠지고 앞서 저장한
+                # 그 달 줄이 남는다. **주봉은 ts 가 그 주 시작일**이라 월요일 장 전에만 빠진다 — 화~금에는 이번 주 봉의
+                # 종가가 장 전 값으로 남는다(다음 장 전 창까지). 순위 표는 일봉 · 5분봉만 읽어 주봉은 안 닿는다
+                st_now, d_now, _m = us_universe.session_state()
+                if st_now == "pre":
+                    bars = [b for b in bars if b["ts"] < d_now]
                 # 「다 받음」 은 **KIS 가 달라는 것보다 덜 줬을 때만** 적는다 (2026-10-08). 전에는 받기만 하면 적어서,
                 # 장 전 창이 적게(100) 달라고 한 뒤로는 화면이 400 을 달라고 해도 더 거슬러 받지 않았다
-                if deep and len(bars) < n:
+                if deep and got < n:
                     _meta_set(bkey, "done")     # 끝까지 거슬러 받았다 — 덜 와도 KIS 가 더 안 준다
         except RuntimeError:
             bars = []
@@ -5156,6 +5166,9 @@ US_QUOTES_MAX = 20
 # 가른다** — 오류면 「KIS 오류」 로 적고 다음 칸에 다시 본다(휴장으로 굳히지 않는다).
 
 US_PREFILL_ENV = (os.environ.get("KJC_US_PREFILL") or "").strip().lower()
+#: 장 마감 뒤 일봉 바퀴 — 마감(동부 16:00) 몇 분 뒤에 도나 · 종목 사이 몇 초 쉬나(518종목 ≈ 7분 · 초당 1.3 안팎)
+US_POST_AFTER_MIN = 20
+US_POST_GAP_SEC = 0.5
 #: 한 바퀴를 몇 초 안에 고르게 나눠 받나 — 5분 칸 안에 끝나게
 US_PREFILL_SPREAD_SEC = 270
 
@@ -5231,9 +5244,25 @@ def start_us_prefill(cfg, port):
         _us_log("장 전(%s) %d/%d종목 · KIS %d건 · %.0f초 · 초당 %.2f건"
                 % (et_date, done, len(codes), n, time.time() - t0, n / max(1.0, time.time() - t0)))
 
+    def post_round(codes, et_date):
+        """장 마감 뒤 바퀴 — 종목마다 일봉을 한 번 받아 그날 마감 종가를 넣는다 (2026-10-12 재권님 「가로」).
+        전에는 그날 일봉을 다음 날 장 전 창에서야 받아, 그 사이 순위 표 · 차트가 장 전 값을 냈다.
+        일봉 신선 기준(60초)이 장 전 창보다 짧아 `get_chart` 가 그대로 KIS 를 부른다 — 한 종목 1건."""
+        c0, t0, done = _up_stat["calls"] + _stats["kis_calls"], time.time(), 0
+        for code in codes:
+            try:
+                get_chart(cfg, code, "D", DWMY_WANT)
+                done += 1
+            except Exception as e:
+                _us_log("%s 마감 뒤 일봉 실패 (%s)" % (code, safe_message(e, 80)))
+            time.sleep(US_POST_GAP_SEC)
+        n = _up_stat["calls"] + _stats["kis_calls"] - c0
+        _us_log("마감 뒤(%s) 일봉 %d/%d종목 · KIS %d건 · %.0f초 · 초당 %.2f건"
+                % (et_date, done, len(codes), n, time.time() - t0, n / max(1.0, time.time() - t0)))
+
     def loop():
         time.sleep(PREFILL_START_SEC)
-        state = {"holiday": None, "seen": None, "pre": None, "slot": None, "probe": None}
+        state = {"holiday": None, "seen": None, "pre": None, "slot": None, "probe": None, "post": None}
         while True:
             try:
                 st, d, m = us_universe.session_state()
@@ -5242,6 +5271,11 @@ def start_us_prefill(cfg, port):
                 if pre and codes and state["pre"] != pd:
                     state["pre"] = pd                     # 하루 한 번 — 다 못 받아도 그날은 다시 안 돈다
                     pre_round(codes, pd)
+                elif (st == "after" and codes and state["post"] != d
+                      and m >= us_universe.SESSION_CLOSE_MIN + US_POST_AFTER_MIN):
+                    # 하루 한 번 — 휴장일이면 받은 마지막 봉이 앞 거래일이라 그대로 맞다. 재시작 뒤에도 그날 한 번 돈다
+                    state["post"] = d
+                    post_round(codes, d)
                 elif st == "open" and codes and state["holiday"] != d:
                     slot = (d, (m - us_universe.SESSION_OPEN_MIN) // 5)
                     if slot != state["slot"]:
