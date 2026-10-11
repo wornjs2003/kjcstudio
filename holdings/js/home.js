@@ -1838,6 +1838,7 @@ async function openStockModal(code, { push = true } = {}) {
   switchingStock = true;
   const { body } = openModal({
     label: `${stock.name} 종목 정보`,
+    closeButton: false,   // 닫기는 머리(.kh-head)에 제 것이 있다
     /* 양옆 서랍. 처음에는 접혀 있고, 한 번 펼치면 기억한다 (2026-09-16 지시).
        key 는 펼친 상태를 적어 두는 이름이라 화면 글자와 따로 둔다 —
        이름을 바꿔도 펼쳐둔 것이 풀리지 않는다. */

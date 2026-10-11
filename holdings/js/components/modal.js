@@ -55,10 +55,12 @@ function remember(key, on) {
  * @param {object}   [opts.drawers] { left: {key, label}, right: {key, label} }
  * @param {Function} [opts.onToggle] 서랍을 여닫을 때. 차트 크기를 다시 잡는 자리
  * @param {Function} [opts.onClose]  닫힐 때. 스스로 도는 것을 여기서 멈춘다
+ * @param {boolean}  [opts.closeButton] 머리 없는 모달의 떠 있는 닫기(✕). 기본은 머리가 없을 때 켠다.
+ *                   본문에 제 닫기를 그리는 쪽(종목 모달)은 false 로 끈다
  * @returns {{ body: HTMLElement, close: Function }}
  */
 export function openModal({ label = '', drawers = null, head = null, width = null,
-                            fade = true, onToggle, onClose } = {}) {
+                            fade = true, closeButton = !head, onToggle, onClose } = {}) {
   if (current) current.close();
 
   /* 손잡이와 모달을 한 판(stage) 에 올린다.
@@ -100,6 +102,20 @@ export function openModal({ label = '', drawers = null, head = null, width = nul
       f.className = 'kh-modal-fade';
       shell.appendChild(f);
     }
+  }
+
+  /* 머리 없는 모달의 닫기 (2026-10-10 · 모바일 모달 2차). Insight 모달(흐름도 · 지도 · 3D)은 머리 없이 열려
+     ✕ 가 없었고, 폰에서 모달이 폭을 다 채운 뒤로는 닫을 길이 없었다(qa 390 실측). 보이는 것은 좁은 폭에서만이다
+     — modal.css `.kh-modal-xf` · 넓은 화면은 바깥 누르기 · Esc 그대로라 모습이 안 바뀐다 */
+  if (closeButton) {
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'kh-modal-x kh-modal-xf';
+    x.title = '닫기 (Esc)';
+    x.setAttribute('aria-label', '닫기');
+    x.textContent = '✕';
+    x.addEventListener('click', () => close());
+    shell.appendChild(x);
   }
 
   /* 폭은 부르는 쪽이 정한다. 창보다 크면 창에 맞춘다.

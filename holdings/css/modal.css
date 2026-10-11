@@ -489,6 +489,8 @@
   font-family: inherit;
 }
 .kh-modal-x:hover { background: var(--kh-border-strong); }
+/* 머리 없는 모달의 떠 있는 닫기 — 좁은 폭에서만 보인다(아래 640 블록 · modal.js 주석) */
+.kh-modal-xf { display: none; }
 
 /* 좁은 화면 — 두 칸으로 접는다 */
 @media (max-width: 1180px) {
@@ -557,13 +559,22 @@
   .kh-modal {
     width: 100%;
     height: 100vh;
-    height: calc(100dvh - 46px);   /* dvh 를 모르는 브라우저는 위 100vh 로 */
+    height: 100dvh;                /* dvh 를 모르는 브라우저는 위 100vh 로 */
     max-height: none;
-    margin-bottom: 46px;           /* 시세 띠 자리 */
+    /* 아래 46px 은 시세 띠 자리였다. 그 띠가 지워져(frame.css 900 블록 주석) 빈 띠로 뒤 화면이 비쳤다
+       (2026-10-10 · 모바일 모달 2차 · qa 390). 꽉 채운다 */
     border-radius: 0;
   }
 
   .kh-modal-scroll { height: 100%; }
+
+  .kh-modal-xf {
+    display: block;
+    position: absolute; top: 8px; right: 8px; z-index: 30;
+    min-width: 34px; min-height: 34px;
+    background: var(--kh-bg); box-shadow: var(--kh-shadow-lg);
+    border-radius: 50%;
+  }
 
   /* 손잡이는 없앤다. 폰에서는 옆으로 펼칠 자리가 없다 */
   .kh-drawer-tab { display: none; }
@@ -676,7 +687,8 @@
 
   /* 기간 단추를 한 줄에 고르게 */
   .kh-modal .kh-per { display: flex; gap: 4px; }
-  .kh-modal .kh-per button { flex: 1; min-width: 0; }
+  /* 「5분」 이 「5 / 분」 두 줄로 접혔다(2026-10-10 · qa 390). 글자 폭 밑으로는 안 줄인다 */
+  .kh-modal .kh-per button { flex: 1 0 auto; padding: 6px 8px; white-space: nowrap; }
   .kh-modal .kh-per-tools { display: none; }
 
   /* 차트 칸은 홈 큰 차트와 같은 303px (2026-10-08 재권님 — 「응 303으로해」 · home.css 좁은 폭 `.kh-idx-chart`).
