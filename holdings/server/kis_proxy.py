@@ -4400,8 +4400,10 @@ def _mark_ui_call(path=""):
         for c in raw:
             c = c.strip()
             # **종목코드만 적는다.** `code=KOSPI` 처럼 지수 이름도 오는데
-            # 그것을 넣으면 미리받기가 없는 종목을 받으러 간다
-            if len(c) == 6 and c.isdigit():
+            # 그것을 넣으면 미리받기가 없는 종목을 받으러 간다.
+            # **미국 티커도 적는다** (2026-10-12 재권님 「응 해줘」) — 미국 미리받기 · 봉 채우기가 순서에 쓴다.
+            # 국내 5분봉 미리받기는 `_prefill_codes` 가 6자리만 골라 안 섞인다
+            if _is_kr_code(c) or us_universe.is_us(c):
                 _ui_seen[c] = now
                 if rank is not None:
                     _ui_view[c] = (rank, now)
@@ -4414,6 +4416,43 @@ def _mark_ui_call(path=""):
 
 def _ui_busy():
     return (time.monotonic() - _last_ui_at) < PREFILL_BUSY_WINDOW
+
+
+def _is_kr_code(c):
+    return len(c) == 6 and c.isdigit()
+
+
+def _ui_key():
+    """종목 → 줄 세우기 열쇠(작을수록 앞). 모달·직접 > 보이는 줄(`PREFILL_HOT_SEC` 안) > 그 밖 최근 본 것 > 안 본 것.
+    안 본 종목은 모두 같은 열쇠라 **안정 정렬이면 원래 순서가 그대로 남는다** — 화면이 없는 시각(밤)에는 지금과 같다.
+    네 곳(국내 5분봉 · 미국 미리받기 · 밤 받기 · 봉 채우기)이 이 하나를 쓴다 (2026-10-12 · 설계서 3번)."""
+    with _ui_seen_lock:
+        seen = dict(_ui_seen)
+        view = dict(_ui_view)
+    now = time.monotonic()
+    unseen = (len(UI_VIEW_RANK) + 1, 0.0)
+
+    def key(c):
+        t = seen.get(c)
+        if t is None:
+            return unseen
+        r = view.get(c)
+        rank = r[0] if r and now - r[1] < PREFILL_HOT_SEC else len(UI_VIEW_RANK)
+        return (rank, -t)
+    return key, seen
+
+
+def _ui_order(codes, keep=None, keep_sec=None):
+    """`codes` 를 화면 순서로 다시 세운다. `keep(c)` 가 참인 종목은 **목록 밖이어도 앞에 넣는다**
+    (모달 룰 「모달 열린 종목은 어느 순위에 있든 1순위」). `keep_sec` 이 있으면 목록 밖 종목은 그 초 안에 본 것만 넣는다."""
+    key, seen = _ui_key()
+    if not seen:
+        return list(codes)
+    inlist = set(codes)
+    now = time.monotonic()
+    extra = [c for c in seen if c not in inlist and keep and keep(c)
+             and (keep_sec is None or now - seen[c] < keep_sec)]
+    return sorted(list(codes) + extra, key=key)
 
 
 def _prefill_codes():
@@ -4432,20 +4471,9 @@ def _prefill_codes():
     #
     # **목록 밖이어도 화면이 열었으면 받는다** — 모달 룰의 「모달 열린 종목은
     # 어느 순위에 있든 1순위」 그대로다.
-    with _ui_seen_lock:
-        seen = dict(_ui_seen)
-        view = dict(_ui_view)
-    if not seen:
-        return codes
     # (라) 화면이 자리를 알렸으면 그 등급이 먼저 — modal · direct > row > 그 밖 최근 본 것.
-    # 등급은 `PREFILL_HOT_SEC` 동안만 듣는다(그 뒤엔 「최근 본 것」 으로 내려간다).
-    now = time.monotonic()
-    def _rank(c):
-        r = view.get(c)
-        return r[0] if r and now - r[1] < PREFILL_HOT_SEC else len(UI_VIEW_RANK)
-    front = sorted(seen, key=lambda c: (_rank(c), -seen[c]))
-    rest = [c for c in codes if c not in seen]
-    return front + rest
+    # 등급은 `PREFILL_HOT_SEC` 동안만 듣는다(그 뒤엔 「최근 본 것」 으로 내려간다). 국내 6자리만 — 미국 티커는 미국 줄이 받는다
+    return _ui_order(codes, keep=_is_kr_code)
 
 
 def _prefill_hot_codes(now=None):
@@ -4627,7 +4655,8 @@ def start_dwmy_prefill(cfg):
             try:
                 now = datetime.now(KST)
                 if now.hour * 60 + now.minute >= DWMY_AT_MIN:
-                    for code in _dwmy_codes():
+                    # 화면이 본 종목부터 (2026-10-12 · 설계서 3번) — 화면이 없으면 지금처럼 종목코드 순
+                    for code in _ui_order(_dwmy_codes()):
                         got = False
                         for period in DWMY_PERIODS:
                             slot = _dwmy_slot(period, now)
@@ -5290,7 +5319,9 @@ def start_us_prefill(cfg, port):
                                 _us_log("오늘(%s) 동부 10:00 까지 봉이 없다 — 휴장으로 보고 멈춤" % d)
                         if state["seen"] == d:
                             state["slot"] = slot
-                            one_round(codes, "5m", 1)
+                            # 화면이 본 종목부터 · 모달로 연 묶음 밖 미국 종목도 그 바퀴에 (2026-10-12 · 설계서 3번).
+                            # 목록 밖은 `PREFILL_HOT_SEC` 안에 본 것만 — 한 번 본 종목이 바퀴마다 계속 붙지 않게
+                            one_round(_ui_order(codes, keep=us_universe.is_us, keep_sec=PREFILL_HOT_SEC), "5m", 1)
             except Exception as e:
                 _us_log("뒤 작업 오류 (%s)" % type(e).__name__)
             time.sleep(PREFILL_SLOT_POLL_SEC)
@@ -5564,9 +5595,15 @@ def _bar_fill_run(label, work, do_one):
         return 0
     c0, t0 = _kis_calls_now(), time.time()
     _bar_fill_log("%s %d건 시작" % (label, len(work)))
-    for i, item in enumerate(work):
+    left, total = list(work), len(work)
+    for i in range(total):
         _bar_fill_gate()
-        _bar_fill["left"] = "%s %d/%d" % (label, i, len(work))
+        # **쉬었다 다시 받을 때 방금 화면이 본 종목의 일감부터** (2026-10-12 · 설계서 3번). 본 종목이 없으면
+        # 맨 앞 그대로 — `min` 은 같은 열쇠면 앞의 것을 고른다
+        key, seen = _ui_key()
+        item = min(left, key=lambda it: key(it[0])) if seen else left[0]
+        left.remove(item)
+        _bar_fill["left"] = "%s %d/%d" % (label, i, total)
         try:
             do_one(*item)
         except Exception as e:
@@ -5574,7 +5611,7 @@ def _bar_fill_run(label, work, do_one):
         _bar_fill["items"] += 1
         if (i + 1) % 100 == 0:
             n = _kis_calls_now() - c0
-            _bar_fill_log("%s %d/%d · KIS %d건 · %.0f초" % (label, i + 1, len(work), n, time.time() - t0))
+            _bar_fill_log("%s %d/%d · KIS %d건 · %.0f초" % (label, i + 1, total, n, time.time() - t0))
     n = _kis_calls_now() - c0
     _bar_fill["calls"] += n
     _bar_fill_log("%s 끝 %d건 · KIS %d건 · %.0f초 · 초당 %.2f건"
