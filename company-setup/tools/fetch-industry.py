@@ -12,7 +12,7 @@
     업황 전망 BSI   한국은행 기업경기조사              512Y008 · 업황전망BSI · 업종 — 100 위면 좋아질 거라는 회사가 더 많다
 
 종목 → 업종은 회사 카드(data/company-cards.json)의 DART 업종코드(한국표준산업분류) 앞 두 자리로 잇는다.
-업종 코드 대응은 ECOS StatisticItemList 로 2026-10-08 확인한 것이다. ECOS 키는 holdings/secrets.json 의 ecos.api_key.
+업종 코드 대응은 ECOS StatisticItemList 로 2026-10-08 확인한 것이다. ECOS 키는 열쇠 파일(tools/_secrets.py 순서)의 ecos.api_key.
 값을 지어내지 않는다 — 없는 업종(금융 등)은 그 칸이 null 이고 이유가 남는다.
 """
 import json, os, sys, urllib.request
@@ -25,7 +25,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 CARDS = os.path.join(HERE, "..", "data", "company-cards.json")
 OUT = os.path.join(HERE, "..", "data", "industry.json")
-SECRETS = os.path.join(ROOT, "holdings", "secrets.json")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _secrets import secrets_path
+SECRETS = secrets_path()   # KJC_SECRETS → ~/.kjc/secrets.json → holdings/secrets.json (tools/_secrets.py 한 곳)
 ECOS = "https://ecos.bok.or.kr/api"
 QUIET = "--quiet" in sys.argv
 
@@ -75,7 +77,7 @@ def main():
     try:
         key = json.load(open(SECRETS, encoding="utf-8"))["ecos"]["api_key"]
     except Exception:
-        print("ECOS 키 없음(holdings/secrets.json 의 ecos.api_key)"); sys.exit(2)
+        print("ECOS 키 없음(%s 의 ecos.api_key)" % SECRETS); sys.exit(2)
     cards = json.load(open(CARDS, encoding="utf-8"))["cards"]
     ks = sorted({int(str(c["dart"]["industryCode"])[:2]) for c in cards.values() if c.get("code") and c.get("dart") and c["dart"].get("industryCode")})
     out = {}

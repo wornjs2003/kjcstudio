@@ -2,7 +2,7 @@
 """미국 지표 발표 날 다음 날 코스피가 오른 확률 — 경기 국면으로 갈라 센다 (2026-10-12 재권님 「확률로 알고싶은데」 →
 시황분석1 조사 → 「응」 · FRED 열쇠 등록). data/release-odds.json 에 두고 시황분석 탭(market.html)이 읽는다. 손으로 돌린다.
 
-  발표 날   FRED API release/dates — 물가(CPI) · 고용 · 생산자물가(PPI) · 소매판매 · GDP · 개인소득·소비(PCE). 열쇠 holdings/secrets.json fred
+  발표 날   FRED API release/dates — 물가(CPI) · 고용 · 생산자물가(PPI) · 소매판매 · GDP · 개인소득·소비(PCE). 열쇠는 열쇠 파일(tools/_secrets.py 순서)의 fred
             FOMC(연준 회의)는 FRED 의 그 갈래가 회의 날만이 아니라 날마다 찍혀 있어 뺐다(2026-10-12 실측 3,809날)
   코스피    한국은행 ECOS 802Y001(코스피 일별 · 1995~) — 미국 발표는 한국 밤이라 **그 날짜 다음 한국 거래일** 이 반응하는 날
   국면      OECD 경기선행지수 미국(FRED USALOLITOAASTSAM · 달마다). 발표 달의 **두 달 전** 값이 그 전달보다 높으면 「오르는 중」 —
@@ -21,7 +21,8 @@ if hasattr(sys.stdout, "reconfigure"):
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 OUT = os.path.join(HERE, "..", "data", "release-odds.json")
-SECRETS = os.path.join(ROOT, "holdings", "secrets.json")
+from _secrets import secrets_path
+SECRETS = secrets_path()   # KJC_SECRETS → ~/.kjc/secrets.json → holdings/secrets.json (tools/_secrets.py 한 곳)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _save import save   # --out · --also · 실패하면 옛 파일 그대로 — 넷이 함께 씀
 SINCE = "1995-01-01"

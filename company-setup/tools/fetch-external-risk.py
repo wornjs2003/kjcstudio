@@ -8,7 +8,7 @@
   정책 불확실성(EPU)  Baker · Bloom · Davis — 미국 신문 매일. policyuncertainty.com All_Daily_Policy_Data.csv · 100 = 1985~2009 평균
                       한국 판은 2021-01 에서 멈춰 있어 안 쓴다(2026-10-12 실측)
   무역정책 불확실성    Caldara 외 — 매일. matteoiacoviello.com/tpu_files/tpu_web_latest.xlsx 의 TPU_DAILY
-  공포 지수           VIX(미국 주가 옵션 · FRED VIXCLS) · OVX(원유 옵션 · FRED OVXCLS) — FRED 열쇠 holdings/secrets.json fred
+  공포 지수           VIX(미국 주가 옵션 · FRED VIXCLS) · OVX(원유 옵션 · FRED OVXCLS) — FRED 열쇠는 열쇠 파일(tools/_secrets.py 순서)의 fred
 
 받지 못한 것은 빈 값으로 두고 errors 에 이름만 적는다(주소에 열쇠가 있는 것도 있어 문구를 안 남긴다).
 """
@@ -21,7 +21,8 @@ if hasattr(sys.stdout, "reconfigure"):
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 OUT = os.path.join(HERE, "..", "data", "external-risk.json")
-SECRETS = os.path.join(ROOT, "holdings", "secrets.json")
+from _secrets import secrets_path
+SECRETS = secrets_path()   # KJC_SECRETS → ~/.kjc/secrets.json → holdings/secrets.json (tools/_secrets.py 한 곳)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _save import save   # --out · --also · 실패하면 옛 파일 그대로 — 넷이 함께 씀
 GPR = "https://www.matteoiacoviello.com/gpr_files/"
