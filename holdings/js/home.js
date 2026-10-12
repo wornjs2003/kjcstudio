@@ -39,6 +39,7 @@ import { mountMobileFold } from './components/mobile-fold.js';
    갈아탔다. 두 함수는 지수 화면을 만들 때 쓸 수 있게 live.js 에 남겨 뒀다. */
 import { fetchQuotes } from './data/live.js';
 import { apiFetch, viewUrl } from './data/api.js';
+import { lookupStock } from './data/lookup-stock.js';
 /* 지수 띠 — 칸 목록 · 표시 · 그리기는 components/index-strip.js 한 곳에 있다 (2026-10-01 home.js 에서 빼냄).
    데일리분석 모달의 「주요 지수」 가 같은 띠를 쓴다 */
 import { INDEX_CELLS, stripHtml } from './components/index-strip.js';
@@ -2232,7 +2233,16 @@ startLiveLoop({
   const code = new URLSearchParams(location.search).get('code');
   if (code) {
     history.replaceState({ stock: code }, '', location.href);
-    openStockModal(code, { push: false });
+    /* 관심종목 밖이면 이름부터 찾는다 (2026-10-12 · 재권님 「응 가로 해줘」). 여기는 첫 로드 맨 끝이라
+       순위 목록이 아직 없어 findStock 이 관심종목만 알고, 모달이 아예 안 열렸다(8765 실측 — 000100 · 035720).
+       찾은 이름은 산업 칸 소형주처럼 EXTRA_STOCKS 에 넣는다. 못 찾아도 코드 이름으로 연다 — 종목 화면과 같다 */
+    (async () => {
+      if (!findStock(code) && /^\d{6}$/.test(code)) {
+        const hit = await lookupStock(code);
+        addExtraStock(code, hit ? hit.name : code);
+      }
+      openStockModal(code, { push: false });
+    })();
   }
 }
 

@@ -11,7 +11,7 @@
 
 import { WATCHLIST, MARKET_STOCKS } from './data/market.js';
 import { fetchLivePrices } from './data/live.js';
-import { apiFetch } from './data/api.js';
+import { lookupStock } from './data/lookup-stock.js';
 import { mountWatchSide, mountVBar, startLiveLoop } from './components/frame.js';
 import { mountStockView } from './components/stock-view.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
@@ -32,18 +32,8 @@ async function resolveStock(code) {
   if (!/^\d{6}$/.test(code || '')) return WATCHLIST[0];
   const known = ALL.find(s => s.code === code);
   if (known) return known;
-  try {
-    const r = await apiFetch('/api/dart/universe', { cache: 'no-store' });
-    const j = r && await r.json();
-    const hit = j && j.ok && Array.isArray(j.data) && j.data.find(x => x.code === code);
-    if (hit) return { code, name: hit.name };
-    /* 순위 목록 밖이면 상장사 대응표에서 이름을 찾는다(갈래 줄 검색칸과 같은 /api/dart/search · 2026-10-06) */
-    const r2 = await apiFetch(`/api/dart/search?q=${code}&limit=1`, { cache: 'no-store' });
-    const j2 = r2 && await r2.json();
-    const hit2 = j2 && j2.ok && Array.isArray(j2.data) && j2.data.find(x => x.code === code);
-    if (hit2) return { code, name: hit2.name };
-  } catch { /* 이름을 못 찾아도 그 종목으로 연다 */ }
-  return { code, name: code };
+  /* 이름 찾기는 첫 화면 주소 진입과 함께 쓴다 — data/lookup-stock.js (2026-10-12) */
+  return (await lookupStock(code)) || { code, name: code };   // 이름을 못 찾아도 그 종목으로 연다
 }
 
 document.title = `${stock.name} — KJC Holdings`;

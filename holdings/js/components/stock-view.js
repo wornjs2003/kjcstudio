@@ -108,6 +108,11 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
   let dead = false;
 
   /* ── 헤더 ─────────────────────────────── */
+  /* 묶음 시세의 마지막 값 · 아래 차트 머리줄(mountStockDetail). 머리는 그보다 **먼저** 그려지므로 변수로 둔다 —
+     `const detail` 을 일찍 읽으면 선언 전이라 터진다 */
+  let lastLiveRaw = null;
+  let detailApi = null;
+
   function paintHead(liveRaw) {
     paintIcon($('#kh-ic'), stock);
     setText('#kh-name', stock.name);
@@ -117,7 +122,11 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
     const sub = $('#kh-price-sub');
     if (!price) return;
 
-    if (!liveRaw) {
+    if (liveRaw) lastLiveRaw = liveRaw;
+    /* **단건만 와도 그린다** (2026-10-12 · 재권님 「응 가로 해줘」). 묶음 시세(카드 · 보이는 줄)는
+       고른 종목 · 관심 · 보이는 줄만 받아, 그 밖 종목을 주소로 연 모달은 머리가 「불러오는 중」 에 남았다 */
+    const oneNow = detailApi && detailApi.full ? detailApi.full() : null;
+    if (!liveRaw && !oneNow) {
       price.className = 'kh-price kh-num kh-mut';
       price.textContent = '불러오는 중';
       if (sub) sub.textContent = '';
@@ -155,9 +164,9 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
      * 그래서 2026-09-30 의 「단건을 뒤에」 는 **「단건도 합친다」 가 핵심**이고
      * 순서가 핵심이 아니었다. `stock-detail.js` 의 `paint()` 는 단건만 쓰므로
      * 이 자리와 다르다. */
-    if (typeof detail !== 'undefined' && detail) detail.update(liveRaw);
-    const one = (typeof detail !== 'undefined' && detail && detail.full) ? detail.full() : null;
-    const live = one ? { ...one, ...liveRaw } : liveRaw;
+    if (liveRaw && detailApi) detailApi.update(liveRaw);
+    const one = oneNow;
+    const live = one ? { ...one, ...(liveRaw || {}) } : liveRaw;
     /* 그 값으로 차트의 맨 오른쪽 막대도 갱신한다 (2026-09-30 지시 — 「4번」).
        봉을 다시 받지 않는다. 자세한 것은 `chart.js` 의 `updateLast` 주석. */
     if (chart) chart.updateLast(live);
@@ -488,7 +497,10 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
   /* 오른쪽 패널 셋 — 첫 화면과 같은 컴포넌트다 (2026-09-21 지시).
      모달과 종목 페이지가 각자 제 root 안에서 찾으므로 서로 안 겹친다. */
   const panel3 = mountStockPanel($('#kh-panel3'), { code: stock.code });
-  const detail = mountStockDetail($('#kh-dt'), { view });
+  /* 단건이 오면 머리도 다시 그린다 (2026-10-12). 전에는 머리가 다음 묶음 시세를 기다려 시가총액이
+     0.5~2.7초 「—」 였다 — 아래 머리줄은 0.07~0.39초에 이미 같은 값을 들고 있었다(8765 실측) */
+  const detail = mountStockDetail($('#kh-dt'), { view, onOne: () => { if (!dead) paintHead(lastLiveRaw); } });
+  detailApi = detail;
   /* 재무 카드 다섯 — 모달 「투자 지표」 칸에만 붙는다 (2026-10-02 지시 · finance-cards.js) */
   const finance = mountFinanceCards(root, stock);
   detail.setCode(stock.code);
