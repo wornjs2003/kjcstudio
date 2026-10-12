@@ -50,7 +50,7 @@
         <div class="mk-card"><h2>투자 시계 — 지금 국면(어림)</h2><div class="cap">메릴린치 투자 시계(2004) · 성장 = OECD 경기선행지수 석 달 방향 · 물가 = 월 물가 석 달 방향 · 칸 이름 옆은 그 국면에 과거 강했던 자산</div><div class="ck" id="clock"></div></div>
         <div class="mk-card"><h2>침체 확률 — 미국 10년 − 3개월 금리차</h2><div class="cap">뉴욕 연준(에스트레야 · 미시킨 1996) 표로 읽은 4분기 뒤 침체 확률 · 금리차는 석 달 평균 · FRED DGS10 · DGS3MO</div><div class="chart"><canvas id="c-rec"></canvas></div></div>
       </div>
-      <!-- 아래 두 층은 접고 펼친다 · 「그 밖의 지표」 는 매크로 · 시장 반응으로 나눠 옮겼다(재권님 「분류가 좀 잘못된거 같은데」 → 「응 해줘」) · 층 제목 아래 요약은 그래프 값으로 화면이 쓴다 — 처음엔 접힌 채, 펼친 상태는 이 브라우저에 기억(2026-10-12 재권님 「접혔다 펼쳤다」 → 「접힌채로」) · 분석은 늘 펼침 -->
+      <!-- 아래 세 층(매크로 지표 · 시장 반응 · 대외변수)은 접고 펼친다 · 「그 밖의 지표」 는 매크로 · 시장 반응으로 나눠 옮겼다(재권님 「분류가 좀 잘못된거 같은데」 → 「응 해줘」) · 층 제목 아래 요약은 그래프 값으로 화면이 쓴다 — 처음엔 접힌 채, 펼친 상태는 이 브라우저에 기억(2026-10-12 재권님 「접혔다 펼쳤다」 → 「접힌채로」) · 분석은 늘 펼침 -->
       <details class="mk-fold" data-fold="macro"><summary class="mk-sec">매크로 지표<span class="mk-sec-s">정책금리 · 물가 · 경기선행 · 실질 금리 · 국채 금리 · 국내 금리 · 국채 곡선 · 원자재와 운임</span><span class="mk-sum" id="sum-macro">—</span></summary>
       <div class="mk-grid">
         <div class="mk-card"><h2>정책금리 — 2024년부터</h2><div class="cap">BIS 정책금리(그달 마지막 값) · 한국은 한국은행 ECOS · 브라질은 오른쪽 눈금</div><div class="chart"><canvas id="c-rate"></canvas></div></div>
@@ -78,6 +78,16 @@
         <div class="mk-card mk-wide"><h2>미국 지표 발표 다음 날 — 코스피가 오른 확률<span class="tag">계산</span></h2><div class="cap" id="cap-odds"><b>오늘 값의 예측이 아니라 1995년부터 과거에 그랬던 비율이다</b> · 미국 발표는 한국 밤이라 그다음 한국 거래일을 센다 · 국면 = 미국 경기선행지수가 오르는 중(선행 ↑) · 내리는 중(선행 ↓) — 발표 두 달 전 값 · 굵은 글씨 = 같은 국면의 모든 날보다 우연으로 보기 어려울 만큼 다름(표준오차 두 배 밖) · 발표값이 예상과 얼마나 달랐는지는 과거 예상치를 받을 곳이 없어 안 본다(Andersen 외 2007 은 그 몫에 반응한다고 했다) · FRED · 한국은행 ECOS · OECD</div><div class="odds" id="odds"></div></div>
       </div>
       </details>
+      <details class="mk-fold" data-fold="ext"><summary class="mk-sec">대외변수<span class="mk-sec-s">지정학 위험(세계 · 한국) · 정책과 무역 불확실성 · 공포 지수 · 급한 대외 사건</span><span class="mk-sum" id="sum-ext">—</span></summary>   <!-- 2026-10-12 재권님 「대외변수에 들어갈만한것들 찾아보라」 → 「응 해줘」 · js/market-ext.js -->
+      <div class="mk-grid">
+        <div class="mk-card"><h2>지정학 위험 — 세계 · 1년</h2><div class="cap">전쟁 · 테러 · 군사 긴장을 다룬 기사 비율로 센 지수(Caldara · Iacoviello 2022) · 매일 · 100 = 1985~2019 평균</div><div class="chart"><canvas id="c-gpr"></canvas></div></div>
+        <div class="mk-card"><h2>지정학 위험 — 한국 · 2020년부터</h2><div class="cap">한국 관련 지정학 위험을 다룬 기사가 전체 기사 중 몇 %인지 · 달마다 · 같은 지수의 나라별 판</div><div class="chart"><canvas id="c-gpr-kr"></canvas></div></div>
+        <div class="mk-card"><h2>정책 · 무역 불확실성 — 1년</h2><div class="cap">경제 정책(미국 신문 · Baker · Bloom · Davis)과 무역정책(Caldara 외) 불확실성 기사로 센 지수 · 30일 평균 · 100 = 평소</div><div class="chart"><canvas id="c-unc"></canvas></div></div>
+        <div class="mk-card"><h2>공포 지수 — 1년</h2><div class="cap">VIX = 미국 주가 옵션으로 본 앞으로 30일 흔들림 · OVX = 원유 옵션 · 대외 사건이 터지면 먼저 뛴다 · FRED</div><div class="chart"><canvas id="c-fear"></canvas></div></div>
+        <div class="mk-card mk-wide"><h2>급한 대외 사건</h2><div class="cap">지수가 튄 날에 세션이 기사를 읽고 적는다 · 갈래(전쟁 · 안보 / 정치 · 선거 / 무역정책 …)와 기사 주소</div><div class="mv" id="ext-events"></div></div>
+      </div>
+      <div class="mk-meta" id="meta-ext"></div>
+      </details>
       </div>
     </section>
   </main>
@@ -86,5 +96,6 @@
 <script src="vendor/chart.umd.min.js"></script>   <!-- 그래프 — Chart.js 4.4.1 (vendor/README.md) -->
 <script type="module" src="js/market.js"></script>   <!-- 모듈 — 이름이 main.js 와 안 섞이게 -->
 <script type="module" src="js/market-note.js"></script>   <!-- 세션이 쓴 시황 — market.js 와 따로 -->
+<script type="module" src="js/market-ext.js"></script>   <!-- 대외변수 층 — market.js 와 따로 -->
 </body>
 </html>
