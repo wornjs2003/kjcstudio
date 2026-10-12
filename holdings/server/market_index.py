@@ -6,11 +6,17 @@
 
     GET /api/market/indicators          칩 열하나 — 마지막 값 · 앞 값 · 날짜 · 봉인가 선인가
     GET /api/market/indicator?key=us10  그 지표 1년 일별 — 봉이면 시가·고가·저가·종가, 선이면 종가
+    GET /api/market/materials           오른쪽 칸 「시장지표 재료」 — 환율 · 금리 · 에너지 · 금속 · 농산 · 운임의 지금 값
+                                        (2026-10-12 · 재권님 「응 그래」 · 시안 3)
 
 ── 어디서 받나 (2026-10-12 실측 · 주식페이지_개발) ──
 
     https://stock.naver.com/api/securityService/marketindex/<갈래>/<코드>/prices?page=N&pageSize=60
     한 쪽에 60일 · 다섯 쪽이면 1년 · 코드의 `=` 는 `%3D` 로
+
+재료(지금 값)는 갈래 목록 한 번에 받는다 — `…/marketindex/<갈래>` · 환율은 `…/marketindex/exchange/majors`.
+시황분석 도구(company-setup/tools/fetch-naver-macro.py)가 같은 주소를 손으로 받아 파일로 두던 것을 여기로 옮겼다 —
+그 도구는 「홀딩스에 들어오면 없앤다」 고 적혀 있다(없애는 것은 시황분석 레인).
 
 ── 봉인가 선인가 (재권님 「캔들이 없으면 그래프로만 그려도 돼」) ──
 
@@ -68,6 +74,17 @@ ITEMS = [
     {"key": "scfi", "name": "상하이 컨테이너", "group": "운임", "cat": "transport", "code": ".SCFIDXSSE", "unit": "", "digits": 2, "kind": "line", "freq": "주간"},
 ]
 BY_KEY = {i["key"]: i for i in ITEMS}
+
+# 오른쪽 칸 칩 순서 그대로. parts = (네이버 갈래 경로, 묶음 머리 · 없으면 칩 이름)
+MATERIALS = [
+    {"id": "환율", "parts": [("exchange/majors", None)]},
+    {"id": "금리", "parts": [("standardInterest", "나라별 기준금리"), ("domesticInterest", "국내 금리")]},
+    {"id": "에너지", "parts": [("energy", None)]},
+    {"id": "금속", "parts": [("metals", None)]},
+    {"id": "농산", "parts": [("agricultural", None)]},
+    {"id": "운임", "parts": [("transport", None)]},
+]
+_mat = {"at": 0.0, "groups": None, "fetchedAt": None, "err": {}}
 META_KEYS = ("key", "name", "group", "unit", "digits", "kind", "freq")
 
 _lock = threading.Lock()
@@ -214,3 +231,39 @@ def indicator(key):
         return {"ok": bool(bars), "source": "네이버 증권 시장지표", "fetchedAt": _fetched["at"],
                 "cacheTtlSec": _left(), "item": {k: it.get(k) for k in META_KEYS},
                 "bars": bars, "fixed": fixed, "error": None if bars else (err or "받은 값이 없습니다")}
+
+
+def _mat_row(x):
+    return {"name": x.get("name"), "code": x.get("reutersCode"), "v": _num(x.get("closePrice")),
+            "pct": _num(x.get("fluctuationsRatio")), "at": str(x.get("localTradedAt") or "")[:10] or None,
+            "unit": x.get("unit") or None}
+
+
+def materials():
+    """오른쪽 칸 재료 — 갈래마다 한 번 · `RECENT_TTL` 마다. 못 받은 갈래는 빈 목록 · `errors` 에 그 이름."""
+    with _lock:
+        now = time.time()
+        if _mat["groups"] is None or now - _mat["at"] >= RECENT_TTL:
+            groups, err = [], {}
+            for g in MATERIALS:
+                parts = []
+                for path, label in g["parts"]:
+                    try:
+                        req = urllib.request.Request(
+                            "https://stock.naver.com/api/securityService/marketindex/" + path,
+                            headers={"User-Agent": UA})
+                        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                            j = json.loads(r.read().decode("utf-8", "replace"))
+                        rows = [_mat_row(x) for x in (j if isinstance(j, list) else [])]
+                    except Exception as e:
+                        err[path] = safe_message(e, 120)
+                        old = next((p for og in (_mat["groups"] or []) for p in og["parts"] if p["path"] == path), None)
+                        rows = old["rows"] if old else []          # 못 받으면 앞에 받은 것을 그대로 둔다
+                    parts.append({"path": path, "label": label or g["id"], "rows": rows})
+                groups.append({"id": g["id"], "parts": parts})
+            _mat.update(at=now, groups=groups, err=err,
+                        fetchedAt=datetime.now(KST).isoformat(timespec="seconds"))
+        left = max(0, int(RECENT_TTL - (now - _mat["at"])))
+        n = sum(len(p["rows"]) for g in _mat["groups"] for p in g["parts"])
+        return {"ok": n > 0, "source": "네이버 증권 시장지표", "fetchedAt": _mat["fetchedAt"],
+                "cacheTtlSec": left, "groups": _mat["groups"], "count": n, "errors": _mat["err"]}

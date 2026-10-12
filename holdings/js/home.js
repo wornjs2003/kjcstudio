@@ -44,7 +44,8 @@ import { lookupStock } from './data/lookup-stock.js';
    데일리분석 모달의 「주요 지수」 가 같은 띠를 쓴다 */
 import { INDEX_CELLS, stripHtml } from './components/index-strip.js';
 import { loadIndicators, peekIndicators, loadIndicator, peekIndicator, chipsHtml, headOf,
-         drawIndicator, MK_TERM } from './components/market-index.js';
+         drawIndicator, MK_TERM, loadMaterials, peekMaterials, materialsShell,
+         paintMaterials } from './components/market-index.js';
 import { everyServerMs } from './store/timing.js';
 import { watch } from './store/longpoll.js';
 
@@ -283,7 +284,9 @@ function setupCatFilter() {
     a.classList.add('is-on');
     const was = ixCat;
     ixCat = a.textContent.trim();
+    if (ixCat === MK_CAT) enterMkSide();                  // 오른쪽 순위 카드 → 시장지표 재료
     if (was === MK_CAT && ixCat !== MK_CAT) {
+      leaveMkSide();
       leaveMarket();                                        // 다른 갈래로 — 큰 차트는 종목으로 돌아간다
       const top = $('kh-top-ix');
       if (top && lastIndices) top.innerHTML = stripHtml(lastIndices);
@@ -399,6 +402,57 @@ function leaveMarket() {
   if (st) paintBigHead(st);
   paintYearRange();
   paintBigChart();                       // 그려 둔 종목 차트면 다시 안 만들고 빈 봉만 받는다
+}
+
+/* 오른쪽 칸 — 순위 카드 위에 같은 클래스로 만든 판을 얹는다(components/market-index.js 「오른쪽 칸」 주석) */
+let mkSide = null;
+let mkGrp = '전체';
+async function enterMkSide() {
+  const card = document.querySelector('.kh-rank-card');
+  if (!card) return;
+  if (!mkSide) {
+    if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
+    mkSide = document.createElement('div');
+    mkSide.className = 'kh-card kh-rank-card kh-mk-side';
+    mkSide.style.cssText = 'position:absolute;inset:0;margin:0;z-index:6;overflow:hidden';
+    /* 칸 사이 틈 · 배치는 카드가 받은 것을 그대로 — 판은 카드 안이라 같은 클래스여도 카드 바깥 규칙(order 등)과 갈린다 */
+    const cs = getComputedStyle(card);
+    mkSide.dataset.display = cs.display;
+    mkSide.style.flexDirection = cs.flexDirection;
+    mkSide.style.gap = cs.gap;
+    mkSide.setAttribute('aria-label', '시장지표 재료');
+    mkSide.innerHTML = materialsShell();
+    mkSide.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-mat]');
+      if (!b) return;
+      mkGrp = b.dataset.mat;
+      paintMaterials(mkSide, peekMaterials(), mkGrp);
+      const sc = mkSide.querySelector('[data-mat-scroll]');
+      if (sc) sc.scrollTop = 0;
+    });
+    card.appendChild(mkSide);
+    /* 표 칸 높이는 밑의 순위표 칸을 그대로 따른다 — 넓은 화면은 그 칸이 카드 남은 높이로 정해져서(max-height 가 아니라)
+       판 안의 같은 클래스 칸은 늘어나 버린다(2026-10-12 실측 602 → 4574) */
+    const orig = $('kh-rank-scroll');
+    const sc = mkSide.querySelector('[data-mat-scroll]');
+    if (orig && sc && window.ResizeObserver) {
+      const fit = () => { sc.style.maxHeight = 'none'; sc.style.height = orig.getBoundingClientRect().height + 'px'; };
+      new ResizeObserver(fit).observe(orig);
+      fit();
+    }
+  }
+  mkSide.style.display = mkSide.dataset.display;
+  paintMaterials(mkSide, peekMaterials(), mkGrp);
+  try {
+    const j = await loadMaterials();
+    if (ixCat === MK_CAT && mkSide) paintMaterials(mkSide, j, mkGrp);
+  } catch {
+    const a = mkSide && mkSide.querySelector('[data-mat-asof]');
+    if (a && !peekMaterials()) a.textContent = '· 불러오지 못함';
+  }
+}
+function leaveMkSide() {
+  if (mkSide) mkSide.style.display = 'none';           // hidden 속성은 카드 클래스의 display 에 진다
 }
 
 function setupMarketChips() {
