@@ -199,6 +199,9 @@ def find_main_in(seg, cwd):
     return "", None
 
 
+WRAP = r"(?:(?:os\.path\.)?expanduser\s*\(\s*|(?:pathlib\.)?Path\s*\(\s*)?"     # 경로를 한 번 감싸는 것
+
+
 DBPATH_TEXT = r"(?m)^\s*(?:os\.environ\[\s*[\"']KJC_DB_PATH[\"']\s*\]|KJC_DB_PATH|export\s+KJC_DB_PATH)\s*[=:]\s*\\?[\"']?([^\s\"'\\,)]+)"
 
 
@@ -225,11 +228,12 @@ def check_text(text, cwd, argv_hit=""):
         ls = before.rfind("\n") + 1
         le = text.find("\n", m.end())
         line = text[ls:] if le < 0 else text[ls:le]
-        if re.search(r"\bopen\s*\(\s*[rb]?\\?[\"']?$", before) and re.match(r"[\"']?\\?[\"']?\s*,\s*\\?[\"']?[rwax+b]*[wax+]", after):
+        # 경로를 expanduser( · Path( 로 한 번 감싼 꼴도 같은 동사다 — 「open(os.path.expanduser('~/.kjc/…'),'w')」 가 빠졌다 (qa 2026-10-12)
+        if re.search(r"\bopen\s*\(\s*" + WRAP + r"[rb]?\\?[\"']?$", before) and re.match(r"[\"']?\\?[\"']?\s*\)?\s*,\s*\\?[\"']?[rwax+b]*[wax+]", after):
             return "파이썬 open() 으로 메인 데이터(%s)를 쓰기 모드로 엽니다." % hit
-        if re.search(r"\bconnect\s*\(\s*[\"']?(file:)?\\?[\"']?$", before) and "mode=ro" not in line:
+        if re.search(r"\bconnect\s*\(\s*" + WRAP + r"[\"']?(file:)?\\?[\"']?$", before) and "mode=ro" not in line:
             return "파이썬 connect() 로 메인 DB(%s)를 쓰기 가능하게 엽니다." % hit + HOWTO
-        if re.search(r"\b(remove|unlink|rename|replace|rmtree|write_text|write_bytes|copyfile|copy2?|move)\s*\(\s*[rb]?\\?[\"']?$", before):
+        if re.search(r"\b(remove|unlink|rename|replace|rmtree|write_text|write_bytes|copyfile|copy2?|move)\s*\(\s*" + WRAP + r"[rb]?\\?[\"']?$", before):
             return "파이썬 호출로 메인 데이터(%s)를 바꾸는 명령입니다." % hit
     return ""
 
@@ -286,11 +290,11 @@ def check_segment(seg, cwd, prev_seg, prev_hit):
             if any(not re.match(READ_SQL, x) or re.search(WRITE_SQL, x) for x in stmts):
                 return "sqlite3 로 메인 DB(%s)에 읽기가 아닌 질의를 보냅니다." % hit + HOWTO
 
-    # 리다이렉트는 머리와 무관하다
-    if hit:
-        for r in re.finditer(r"(?<![<\w])>{1,2}\s*[\"']?([^\s\"'|;&]+)", seg):
-            if is_main_path(r.group(1), cwd):
-                return "메인 데이터(%s)에 리다이렉트로 쓰는 명령입니다." % hit
+    # 리다이렉트는 머리와 무관하다 — 대상이 상대 경로여도 cwd 로 풀어 본다(「cd ~/.kjc; echo x > a.json」 이 빠졌다 · qa 2026-10-12)
+    for r in re.finditer(r"(?<![<\w])>{1,2}\s*[\"']?([^\s\"'|;&]+)", seg):
+        rhit = is_main_path(r.group(1), cwd)
+        if rhit:
+            return "메인 데이터(%s)에 리다이렉트로 쓰는 명령입니다." % rhit
 
     # ── ② 글 안에 든 경로 → 닿는 동사가 붙은 것만 ──
     if hit and not arg_hits:
