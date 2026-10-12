@@ -4,7 +4,7 @@
 <dict>
   <key>Label</key>
   <string>kr.kjcstudio.naver-news</string>
-  <!-- Insight 네이버 증권 뉴스를 10분마다 받는다 (2026-10-06 지시 「응 해봐」 · 등록 파일은 2026-10-12 재권님 「응 만들어」).
+  <!-- Insight 네이버 증권 뉴스를 장중 10분 · 그 밖 30분마다 받는다 (2026-10-06 지시 「응 해봐」 · 등록 파일은 2026-10-12 재권님 「응 만들어」).
        `company-setup/tools/fetch-naver-news.py --to-board` 가 받아 **8765 의 문서 저장소 naver-news** 에 둔다 — 저장소 파일은 안 쓴다.
        주소는 도구의 `KJC_BOARD_URL`(기본 8765) 하나다. 8764(서비스방)는 /api/board 를 8765 로 넘기므로 따로 쓰지 않는다.
        **2026-10-12 까지 이 등록 파일이 없어 10-01 뒤로 뉴스가 멈춰 있었다** (qa 가 찾음) — 도구만 있고 돌리는 쪽이 없었다.
@@ -14,14 +14,16 @@
            launchctl load ~/Library/LaunchAgents/kr.kjcstudio.naver-news.plist -->
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/python3</string>
-    <string>-u</string>
-    <string>company-setup/tools/fetch-naver-news.py</string>
-    <string>--to-board</string>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>S=logs/naver-news.last; now=$(date +%s); last=$(stat -f %m "$S" 2&gt;/dev/null || echo 0); hm=$(date +%H%M); if [ "$(date +%u)" -le 5 ] &amp;&amp; [ "$hm" -ge 0900 ] &amp;&amp; [ "$hm" -le 1530 ]; then gap=0; else gap=1740; fi; if [ $((now - last)) -ge $gap ]; then touch "$S"; /usr/bin/python3 -u company-setup/tools/fetch-naver-news.py --to-board; fi</string>
   </array>
   <key>WorkingDirectory</key>
   <string>/Users/kjc/work/KJCStudio</string>
-  <!-- 10분(600초)마다 -->
+  <!-- 10분(600초)마다 깨어나 시각을 본다 (2026-10-12 재권님 「장중에는 10분 그밖은 30분」).
+       장중(평일 09:00~15:30)이면 늘 받고, 그 밖(저녁 · 밤 · 주말)이면 마지막으로 받은 지 29분 넘었을 때만 받는다 — 곧 30분마다.
+       마지막 시각은 logs/naver-news.last(파일 시각)로 센다. 처음 올릴 때는 그 파일이 없어 시각과 무관하게 한 번 받는다(RunAtLoad).
+       공휴일은 평일로 보고 10분마다 받는다 — 장 쉬는 날을 따로 세지 않는다. -->
   <key>StartInterval</key>
   <integer>600</integer>
   <key>RunAtLoad</key>
