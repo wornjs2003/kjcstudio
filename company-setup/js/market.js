@@ -58,14 +58,15 @@ async function chart(code) {
   return j.data.candles.filter(c => c.close).map(c => [day(c.ts), c.close]);
 }
 async function load() {
-  const [M, N, MV, ...px] = await Promise.all([
+  const [M, N, MV, O, ...px] = await Promise.all([
     fetch('data/world-macro.json', { cache: 'no-store' }).then(r => r.json()),
     fetch('data/naver-macro.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),   // 그 밖의 지표 — 못 받아도 위 셋은 그린다
     fetch('data/market-moves.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),   // 크게 움직인 날의 원인 — 세션이 손으로 적는다
+    fetch('data/release-odds.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),   // 발표 다음 날 확률 — tools/fetch-release-odds.py
     ...[...K, 'GOLD'].map(k => chart(ETF[k]).catch(() => null)),
     ...Object.keys(BOND).map(b => chart(b).catch(() => null))]);
   const P = {}; [...K, 'GOLD', ...Object.keys(BOND)].forEach((k, i) => { P[k] = px[i] ? px[i].slice(-252) : null; });
-  return { M, N, MV, S: M.series, P };
+  return { M, N, MV, O, S: M.series, P };
 }
 
 // ── 규칙으로 쓰는 문단 R1~R6 — 각 문단은 { 글, 근거[], 읽는 법 }
@@ -269,7 +270,7 @@ function others(N) {
   const pick = (cat, n) => (N[cat] || []).slice(0, n);
   const rate = xs => xs.map(x => ({ ...x, name: x.name, v: x.v, unit: '%' }));
   box.innerHTML = [['에너지', pick('energy', 6)], ['금속', pick('metals', 6)], ['운임', pick('transport', 6)], ['농산물', pick('agricultural', 6)],
-    ['국내 금리', rate(pick('domesticInterest', 8))], ['기준금리', rate(pick('standardInterest', 8))]]
+    ['국내 금리', rate(pick('domesticInterest', 8))]]   // 기준금리는 정책금리 그래프와 겹쳐 뺐다(2026-10-12 재권님 「응 해줘」)
     .map(([g, xs]) => `<div><div class="g">${g}</div>${xs.map(row).join('')}</div>`).join('');
 }
 // ── 국내 시장 — 오늘 · 업종 · 크게 움직인 날 (2026-10-12 재권님 「응 해봐」 — 「그 밖의 재료」 룰 · 시황분석1 안)
@@ -299,6 +300,79 @@ function krDay(N, MV) {
   mv.innerHTML = rows.length ? rows.map(r => { const x = C[`${r.d}|${r.k}`];
     return `<div class="r"><span>${r.d}</span><span>${r.name}</span><span class="${r.c > 0 ? 'num-up' : 'num-dn'}">${pct(r.c, 2)}</span><span class="why">${x ? `<b>${x.cause}</b> — ${x.note || ''}${x.src ? ` <a href="${x.src}" target="_blank" rel="noopener">기사</a>` : ''}` : '—'}</span></div>`; }).join('')
     : '<span class="cap">석 달 안에 문턱을 넘은 날이 없다</span>';
+}
+// ── 미국 지표 발표 다음 날 코스피가 오른 확률 (2026-10-12 재권님 「확률로 알고싶은데」 → 「응」) — data/release-odds.json
+//    굵게 = 같은 국면 모든 날의 확률에서 표준오차 두 배 밖(대략 95%) — 안쪽은 우연일 수 있어 그냥 둔다
+function odds(O) {
+  const box = document.getElementById('odds');
+  if (!O) { box.innerHTML = '<span class="err">값이 없습니다 — company-setup/tools/fetch-release-odds.py 를 돌리면 생긴다</span>'; return; }
+  const B = O.base, now = O.phaseNow;
+  const cell = (x, b, col) => { if (!x) return `<td class="${col === now ? 'now' : ''}">—</td>`;
+    const se = Math.sqrt(b.up / 100 * (1 - b.up / 100) / x.n) * 100, sure = Math.abs(x.up - b.up) > 2 * se;
+    return `<td class="${col === now ? 'now' : ''}">${sure ? `<b>${x.up.toFixed(1)}%</b>` : `${x.up.toFixed(1)}%`}<small>${x.n}번</small></td>`; };
+  const ph = { up: '선행 ↑', down: '선행 ↓' };   // 경기선행지수가 오르는 중 · 내리는 중 — 좁은 폭에 들어가게 짧게(뜻은 칸 설명에)
+  box.innerHTML = `<table><thead><tr><th>발표</th><th>전체</th><th class="${now === 'up' ? 'now' : ''}">${ph.up}${now === 'up' ? ' (지금)' : ''}</th><th class="${now === 'down' ? 'now' : ''}">${ph.down}${now === 'down' ? ' (지금)' : ''}</th><th>다음 발표</th></tr></thead><tbody>`
+    + `<tr class="base"><td>모든 날(견줄 값)</td><td>${B.all.up.toFixed(1)}%</td><td class="${now === 'up' ? 'now' : ''}">${B.up.up.toFixed(1)}%</td><td class="${now === 'down' ? 'now' : ''}">${B.down.up.toFixed(1)}%</td><td></td></tr>`
+    + O.releases.map(r => `<tr><td>${r.name}</td>${cell(r.all, B.all, '')}${cell(r.up, B.up, 'up')}${cell(r.down, B.down, 'down')}<td>${r.next ? r.next.slice(5) : '—'}</td></tr>`).join('')
+    + `</tbody></table>`;
+  document.getElementById('cap-odds').insertAdjacentHTML('beforeend', ` · 코스피 ${O.kospiFrom}~${O.kospiTo} · 경기선행 ${O.cliLast} 까지 · ${O.fetchedAt} 셈`);
+}
+// ── 접는 층 — 처음엔 접힌 채 · 펼친 것은 이 브라우저에 기억한다(보는 사람 편의 · 없어도 접힌 채로 뜬다). 접힌 동안 그래프 폭이 0 이라 펼칠 때 다시 잰다
+const FOLD_KEY = 'kjc.market.open';
+function folds() {
+  let open = [];
+  try { open = JSON.parse(localStorage.getItem(FOLD_KEY) || '[]'); } catch (e) { open = []; }
+  document.querySelectorAll('details.mk-fold').forEach(d => {
+    d.open = open.includes(d.dataset.fold);
+    d.addEventListener('toggle', () => {
+      if (d.open) charts.forEach(ch => { if (d.contains(ch.canvas)) ch.resize(); });
+      const now = [...document.querySelectorAll('details.mk-fold[open]')].map(x => x.dataset.fold);
+      try { localStorage.setItem(FOLD_KEY, JSON.stringify(now)); } catch (e) { /* 저장이 막힌 창 — 접힌 채로 뜨면 된다 */ }
+    });
+  });
+}
+// ── 층 제목 아래 추세 요약 — 접혀 있어도 보인다. 그래프에 쓴 값으로 화면이 쓴다(2026-10-12 재권님 「그래프를 바탕으로 간략하게 인지되게」 → 「응 해줘」)
+//    한 달 = 21 거래일 · 석 달 = 달 값 셋 전과 견줌 · 못 받은 값은 그 줄을 빼지 않고 「—」
+function sums({ M, N, S, P }) {
+  const C = M.countries, H = (N && N.hist) || {};
+  const m1 = ser => ser && ser.length > 21 ? (ser[ser.length - 1][1] / ser[ser.length - 22][1] - 1) * 100 : null;          // 한 달 %
+  const bp = ser => ser && ser.length > 21 ? Math.round((ser[ser.length - 1][1] - ser[ser.length - 22][1]) * 100) : null;    // 한 달 bp
+  const hs = n => H[n] && H[n].s;
+  const sgn = v => v == null ? '—' : `${v > 0 ? '+' : ''}${v}`;
+  const ar = v => v == null ? '' : v > 0 ? '↑' : v < 0 ? '↓' : '→';
+  const line = (h, t) => `<span class="sl"><b>${h}</b> ${t}</span>`;
+  // 매크로
+  const up = K.filter(k => C[k].rate && C[k].rate.dir === 'up'), dn = K.filter(k => C[k].rate && C[k].rate.dir === 'down');
+  const hot = K.filter(k => C[k].cpi && !C[k].cpi.annual && C[k].cpi.v > 2);
+  const cpi3 = K.filter(k => S.cpi[k] && S.cpi[k].length > 3).map(k => { const s = S.cpi[k]; return [k, s[s.length - 1][1] - s[s.length - 4][1]]; });
+  const cli3 = K.filter(k => S.cli[k] && S.cli[k].length > 3).map(k => { const s = S.cli[k]; return [k, s[s.length - 1][1] - s[s.length - 4][1]]; });
+  const Y = S.yld || {}, us10 = Y.US10, us3m = Y.US3M;
+  const term = us10 && us3m ? (us10[us10.length - 1][1] - us3m[us3m.length - 1][1]) : null;
+  const aa = hs('회사채 (3년, AA-)'), k3 = hs('한국 국채 3년');
+  const spread = (a, b) => a && b ? +(a[a.length - 1][1] - b[b.length - 1][1]).toFixed(2) : null;
+  const spr = spread(aa, k3), spr1 = aa && k3 && aa.length > 21 && k3.length > 21 ? Math.round(((aa[aa.length - 1][1] - k3[k3.length - 1][1]) - (aa[aa.length - 22][1] - k3[k3.length - 22][1])) * 100) : null;
+  const pc = n => { const v = m1(hs(n)); return v == null ? '—' : pct(v); };
+  document.getElementById('sum-macro').innerHTML = [
+    line('정책금리', `직전 결정 인상 ${up.length}곳 · 인하 ${dn.length}곳${up.length ? ` (인상 ${up.map(k => NAME[k]).join(' · ')})` : ''}`),
+    line('물가', `목표 2% 위 ${hot.length}곳 · 석 달 오름 ${cpi3.filter(x => x[1] > 0.05).map(x => NAME[x[0]]).join(' · ') || '없음'} · 내림 ${cpi3.filter(x => x[1] < -0.05).map(x => NAME[x[0]]).join(' · ') || '없음'}`),
+    line('경기선행', `석 달 오름 ${cli3.filter(x => x[1] > 0.05).map(x => NAME[x[0]]).join(' · ') || '없음'} · 내림 ${cli3.filter(x => x[1] < -0.05).map(x => NAME[x[0]]).join(' · ') || '없음'}`),
+    line('금리', `미국 10년 ${us10 ? us10[us10.length - 1][1].toFixed(2) + '%' : '—'} 한 달 ${sgn(bp(us10))}bp · 10년 − 3개월 ${term == null ? '—' : term.toFixed(2) + '%p' + (term < 0 ? '(뒤집힘)' : '')} · 한국 3년 한 달 ${sgn(bp(k3))}bp · 회사채 가산금리 ${spr == null ? '—' : spr + '%p'} 한 달 ${sgn(spr1)}bp`),
+    line('원자재', `한 달 WTI ${pc('WTI')} · 구리 ${pc('구리(선물)')} · 건화물 운임(BDI) ${pc('BDI 건화물선지수')}`),
+  ].join('');
+  // 시장 반응
+  const eq = K.filter(k => C[k].eq).map(k => [k, C[k].eq.m1]).sort((a, b) => b[1] - a[1]);
+  const y1 = K.filter(k => P[k]).map(k => [k, (P[k][P[k].length - 1][1] / P[k][0][1] - 1) * 100]).sort((a, b) => b[1] - a[1]);
+  const g = m1(P.GOLD), dx = C.US.dxy ? C.US.dxy.m1 : null, tlt = m1(P.TLT), hyg = m1(P.HYG);
+  const ks = N && N.kr && N.kr.KOSPI, kl = N && N.idx && N.idx.KOSPI && N.idx.KOSPI.s.slice(-1)[0];
+  const since = new Date(Date.now() - 92 * 864e5).toISOString().slice(0, 10);
+  const big = N && N.idx ? Object.entries(N.idx).reduce((a, [k, v]) => a + v.s.filter(p => p[0] >= since && p[2] != null && Math.abs(p[2]) >= MOVE_BAR[k]).length, 0) : null;
+  document.getElementById('sum-market').innerHTML = [
+    line('주가 한 달', `강한 곳 ${eq.slice(0, 2).map(([k, v]) => `${NAME[k]} ${pct(v)}`).join(' · ')} · 약한 곳 ${eq.slice(-2).reverse().map(([k, v]) => `${NAME[k]} ${pct(v)}`).join(' · ')}`),
+    line('주가 1년', `${y1.length ? `${NAME[y1[0][0]]} ${pct(y1[0][1], 0)} 가장 높음 · ${NAME[y1[y1.length - 1][0]]} ${pct(y1[y1.length - 1][1], 0)} 가장 낮음` : '—'}`),
+    line('금 · 달러 한 달', `금 ${g == null ? '—' : pct(g)} ${ar(g)} · 달러지수 ${dx == null ? '—' : pct(dx)} ${ar(dx)}${g != null && dx != null && g * dx > 0 ? ' — 같은 쪽으로 움직임(보통은 반대)' : ''}`),
+    line('채권 값 한 달', `미국 장기채(TLT) ${tlt == null ? '—' : pct(tlt)} · 하이일드(HYG) ${hyg == null ? '—' : pct(hyg)}`),
+    line('코스피 오늘', ks && kl ? `${pct(kl[2], 2)} · 외국인 ${ks.investor.외국인 == null ? '—' : (ks.investor.외국인 > 0 ? '+' : '') + ks.investor.외국인.toLocaleString('ko-KR')}억원 · 오른 종목 ${ks.updown.오름 ?? '—'} · 내린 종목 ${ks.updown.내림 ?? '—'} · 석 달 크게 움직인 날 ${big ?? '—'}번` : '—'),
+  ].join('');
 }
 function apply() {
   charts.forEach(ch => {
@@ -333,5 +407,5 @@ function controls() {
   w.paras.forEach((p, i) => {
     box.insertAdjacentHTML('beforeend', `<p class="para">${p.t}</p><details class="ev"><summary>근거 ${i + 1}</summary><ul>${p.ev.map(x => `<li>${x}</li>`).join('')}</ul><div class="why">읽는 법 — ${p.why}</div></details>`);
   });
-  controls(); draw(D); others(D.N); krDay(D.N, D.MV);
+  folds(); controls(); draw(D); others(D.N); krDay(D.N, D.MV); odds(D.O); sums(D);
 })();
