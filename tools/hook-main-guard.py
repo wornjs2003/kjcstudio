@@ -11,6 +11,7 @@ journal_mode 가 WAL 로 바뀌었다(-wal · -shm 생김). 그 세션은 메인
 재권님 「범위에 넣어줘」)의 **데이터와 돌고 있는 것**이다. 소스 코드가 아니다(그것은 레인 룰이 본다).
 
     데이터        두 폴더의 holdings/market.db(+ -wal · -shm) · holdings/data/ · holdings/secrets.json · holdings/.kis-token-cache.json
+                  + 열쇠 파일 한 벌의 자리 ~/.kjc/ (폴더째 · 2026-10-12)
     돌고 있는 것   8765 · 8764 프로세스 — 재시작 · 죽이기 · install.command · launchd 등록(kr.kjcstudio.kis-proxy · service-8764)
     서비스방 트리   git merge · checkout · reset · pull 로 그 폴더를 바꾸는 것 — 옮기기는 service-deploy.command 로만
 
@@ -59,6 +60,8 @@ ROOTS = (MAIN, SERVICE)
 MAIN_DATA = ("holdings/market.db", "holdings/data/", "holdings/secrets.json", "holdings/.kis-token-cache.json")
 OK_LOG = os.path.join(MAIN, "logs", "main-ok.log")
 HOME = os.path.expanduser("~")
+# 열쇠 파일 한 벌의 자리 (2026-10-12 재권님 「응 열쇠파일은 한자리로 모아」 · 「응 해줘」) — 폴더째 메인 데이터로 본다
+KEYS_DIR = os.path.join(HOME, ".kjc")
 GUARD_PORTS = ("8765", "8764")
 GUARD_LABELS = r"kr\.kjcstudio\.(kis-proxy|service-8764)(\.plist)?(?![\w-])"
 
@@ -166,6 +169,8 @@ def is_main_path(tok, cwd):
     if not t or "$" in t:
         return ""
     t = os.path.normpath(t if t.startswith("/") else os.path.join(cwd or "/", t))
+    if t == KEYS_DIR or t.startswith(KEYS_DIR + "/"):
+        return "~/.kjc/" + t[len(KEYS_DIR) + 1:]
     for root in ROOTS:
         for p in MAIN_DATA:
             full = os.path.normpath(os.path.join(root, p))
@@ -368,6 +373,8 @@ def check_bash(cmd, cwd):
                 return "KJC_DB_PATH 가 메인 8765 의 market.db 를 가리킵니다 — 2026-10-01 에 이것으로 journal_mode 가 바뀌었습니다."
         if head == "cd":
             tgt = norm(args[0]).strip("'\"") if args else HOME
+            if tgt in ("~", "$HOME", "${HOME}"):          # 맨 「~」 — norm 은 「~/」 만 바꾼다 (qa 2026-10-12)
+                tgt = HOME
             cur = os.path.normpath(tgt if tgt.startswith("/") else os.path.join(cur, tgt))
             continue
         r = check_segment(seg, cur, prev_seg, prev_hit)
