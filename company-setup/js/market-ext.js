@@ -1,3 +1,4 @@
+import { live } from './live.js';   // 새 값(-live) 먼저 · 없으면 씨앗
 // 시황분석 탭 「대외변수」 층 — 전쟁 · 정치 · 무역 같은 외부 요인을 숫자로 센 지수(2026-10-12 재권님 「대외변수에 들어갈만한것들 찾아보라」 → 「응 해줘」).
 // 값 data/external-risk.json(tools/fetch-external-risk.py · 손으로 돌림) · 사건 data/external-events.json(세션이 손으로 적음).
 // market.js 와 따로 둔 까닭 — 같은 화면을 다른 세션이 고치는 일이 잦아 섞이지 않게. 층 접기는 market.js 의 folds() 가 맡고, 펼칠 때 여기 그래프만 다시 잰다
@@ -17,7 +18,7 @@ const monthAgo = s => { if (!s || !s.length) return null; const t = new Date(new
 (async () => {
   const sum = document.getElementById('sum-ext');
   let R, E;
-  try { [R, E] = await Promise.all([fetch('data/external-risk.json', { cache: 'no-store' }).then(r => r.json()), fetch('data/external-events.json', { cache: 'no-store' }).then(r => r.json()).catch(() => ({ events: [] }))]); }
+  try { [R, E] = await Promise.all([live('external-risk'), fetch('data/external-events.json', { cache: 'no-store' }).then(r => r.json()).catch(() => ({ events: [] }))]); }
   catch (e) { if (sum) sum.innerHTML = '<span class="err">대외변수 값을 받지 못했습니다 — company-setup/tools/fetch-external-risk.py 를 돌리면 생긴다</span>'; return; }
   document.getElementById('meta-ext').textContent = `${R.fetchedAt} 받음 · ${R.src}` + (Object.keys(R.errors || {}).length ? ` · 못 받은 것 ${Object.keys(R.errors).join(', ')}` : '');
   const blue = css('--accent'), red = css('--kh-up'), amber = css('--kh-cat-amber'), slate = css('--kh-cat-slate'), violet = css('--kh-cat-violet');

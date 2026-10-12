@@ -26,6 +26,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 OUT = os.path.join(HERE, "..", "data", "world-macro.json")
 SECRETS = os.path.join(ROOT, "holdings", "secrets.json")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _save import save   # --out · --also · 실패하면 옛 파일 그대로 — 넷이 함께 씀
 PORT = sys.argv[sys.argv.index("--port") + 1] if "--port" in sys.argv else "8771"
 API = "http://localhost:%s/api" % PORT
 
@@ -250,15 +252,12 @@ def main():
     except Exception as ex:
         err["fomc"] = type(ex).__name__
 
-    tmp = OUT + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(out, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, OUT)
+    _, bad = save(out, OUT, list(err), indent=1)
     filled = sum(1 for c in X.values() for f in ("eq", "rate", "cpi", "y10", "cli", "gdp") if c[f])
     print("✓ 받음 — 나라 %d · 채운 칸 %d / %d · 못 받음 %d" % (len(X), filled, len(X) * 6, len(err)))
     for k, v in err.items():
         print("  ✗", k, v)
-    return 0
+    return bad
 
 
 if __name__ == "__main__":

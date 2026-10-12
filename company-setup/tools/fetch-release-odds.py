@@ -22,6 +22,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 OUT = os.path.join(HERE, "..", "data", "release-odds.json")
 SECRETS = os.path.join(ROOT, "holdings", "secrets.json")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _save import save   # --out · --also · 실패하면 옛 파일 그대로 — 넷이 함께 씀
 SINCE = "1995-01-01"
 RELEASES = [(10, "CPI", "소비자물가(CPI)"), (50, "JOBS", "고용"), (46, "PPI", "생산자물가(PPI)"),
             (9, "RETAIL", "소매판매"), (53, "GDP", "GDP"), (54, "PCE", "개인소득 · 소비(PCE)")]
@@ -86,15 +88,14 @@ def main():
          "cliLast": cli[-1][0], "phaseNow": phase(date.today().isoformat()),
          "base": base, "releases": out,
          "src": "발표 날 FRED release/dates · 코스피 한국은행 ECOS 802Y001 · 국면 OECD 경기선행지수 미국(FRED USALOLITOAASTSAM · 두 달 전 값의 방향)"}
-    with open(OUT, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(X, f, ensure_ascii=False, indent=1)
+    paths, bad = save(X, OUT, [], indent=1)   # 못 받으면 위에서 이미 종료 1 로 나갔다
     print("코스피 %s~%s %d날 · 모든 날 오른 확률 %.1f%%" % (kd[0], last, len(kd), base["all"]["up"]))
     for r in out:
         a, u, d = r["all"], r["up"], r["down"]
         print("  %-14s %4d번 오름 %5.1f%% · 경기선행↑ %s · ↓ %s · 다음 %s" % (r["name"], a["n"], a["up"],
               "%.1f%%(%d)" % (u["up"], u["n"]) if u else "—", "%.1f%%(%d)" % (d["up"], d["n"]) if d else "—", r["next"]))
-    print("  지금 국면", X["phaseNow"], "→", os.path.normpath(OUT))
-    return 0
+    print("  지금 국면", X["phaseNow"], "→", " · ".join(map(os.path.normpath, paths)))
+    return bad
 
 
 if __name__ == "__main__":
