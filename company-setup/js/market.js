@@ -1,6 +1,6 @@
 // 시황분석 탭 — 세계지도 말풍선 값으로 그날 시황을 화면이 쓰고, 지표 흐름을 그래프로 보인다 (2026-10-12 재권님 「시황분석을 클릭하면 지금 분석해놓은게 나오면 ·
 // 실시간 분석을 여기에 연결 · 나라별로 껐다 켰다 · 금값그래프도」 → temp 시안 → 「응 좋아 붙여줘」).
-//   · 글은 세션이 손으로 쓰지 않는다 — 아래 write() 의 규칙 여섯(금리 방향 · 물가와 다음 회의 · 한 달 돈 간 곳 · 1년 흐름과 고점 · 경기선행 방향 · 금과 달러)이
+//   · 글은 세션이 손으로 쓰지 않는다 — 아래 write() 의 규칙(금리 방향 · 물가와 다음 회의 · 한 달 돈 간 곳 · 1년 흐름과 고점 · 경기선행 방향 · 금과 달러 · 무역 발표)이
 //     값을 보고 정해진 문장을 고른다. 문단마다 근거(값 · 시각 · 출처)와 읽는 법을 접어 둔다
 //   · 값 — 주가 · 금은 열 때마다 이 서버 /api/kis/chart(KIS 해외 일봉). 금리 · 물가 · 환율 · 기간 흐름은 data/world-macro.json(tools/fetch-world-macro.py · 지도 말풍선과 같은 파일)
 //   · 나라 칩을 끄면 모든 그래프에서 그 나라가 빠진다. 글은 아홉 곳 전부로 쓴다
@@ -58,22 +58,23 @@ async function chart(code) {
   return j.data.candles.filter(c => c.close).map(c => [day(c.ts), c.close]);
 }
 async function load() {
-  const [M, N, MV, O, ...px] = await Promise.all([
+  const [M, N, MV, O, T, ...px] = await Promise.all([
     fetch('data/world-macro.json', { cache: 'no-store' }).then(r => r.json()),
     fetch('data/naver-macro.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),   // 그 밖의 지표 — 못 받아도 위 셋은 그린다
     fetch('data/market-moves.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),   // 크게 움직인 날의 원인 — 세션이 손으로 적는다
     fetch('data/release-odds.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),   // 발표 다음 날 확률 — tools/fetch-release-odds.py
+    fetch('data/trade-flash.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),   // 무역 발표 — tools/fetch-trade.py(관세청 잠정치 · 발표 날 09:00~)
     ...[...K, 'GOLD'].map(k => chart(ETF[k]).catch(() => null)),
     ...Object.keys(BOND).map(b => chart(b).catch(() => null))]);
   const P = {}; [...K, 'GOLD', ...Object.keys(BOND)].forEach((k, i) => { P[k] = px[i] ? px[i].slice(-252) : null; });
-  return { M, N, MV, O, S: M.series, P };
+  return { M, N, MV, O, T, S: M.series, P };
 }
 
 // ── 규칙으로 쓰는 문단 R1~R6 — 각 문단은 { 글, 근거[], 읽는 법 }
 function rateTurns(ser) {   // 기간 값에서 바뀐 때 [(월, 앞, 뒤)]
   const out = []; for (let i = 1; i < ser.length; i++) if (ser[i][1] !== ser[i - 1][1]) out.push([ser[i][0], ser[i - 1][1], ser[i][1]]); return out;
 }
-function write({ M, S, P }) {
+function write({ M, S, P, T }) {
   const C = M.countries, paras = [];
   const yr = String(new Date().getFullYear());
   // R1 금리 방향
@@ -164,6 +165,26 @@ function write({ M, S, P }) {
         : gm > 0 ? '달러가 약해지며 금이 올랐다 — 보통의 짝이다.' : dy > 0 ? '달러가 강해지며 금이 내렸다 — 보통의 짝이다.' : '달러와 금이 함께 내렸다.'),
       ev: [`금 GLD ${g[g.length - 1][1]} 달러 (${g[g.length - 1][0]} · KIS 해외 일봉) · 1년 ${pct(gy)} · 1개월 ${pct(gm)}`, dy != null ? `달러지수 1개월 ${pct(dy)} (FRED · ${S.dxy[S.dxy.length - 1][0]})` : '달러지수 —'],
       why: '금은 달러로 값을 매겨 보통 달러와 반대로 간다. 둘이 함께 오르면 금리 · 환율 밖의 이유(불안 · 중앙은행 매입)가 있다고 읽는다. 무엇이 이유인지는 이 값들로는 모른다.' });
+  }
+  // R7 무역 발표 — 관세청 수출입 잠정치(1~10일 · 1~20일 · 한 달). 2026-10-12 재권님 「발표되면 그시간에 맞춰서 읽고 정리」 · 「니가 다 해」
+  const tx = T && T.items ? T.items.find(x => ['1-10', '1-20', 'month'].includes(x.kind) && x.export) : null;
+  if (tx) {
+    const tag = s => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+    const top = (rows, n) => (rows || []).slice(0, n).map(r => `${tag(r.name)} ${pct(r.yoy)}`).join(' · ');
+    const chip = tx.items && tx.items.export.find(r => r.name === '반도체');
+    const d = tx.dailyExport;
+    const next = { '1-10': '21일(1~20일)', '1-20': '다음 달 1일(한 달)', month: '11일(1~10일)' }[tx.kind];
+    paras.push({ t: `관세청 ${tag(tx.period || tx.title)} 수출은 ${tx.export.amt.toLocaleString()}억 달러로 1년 전보다 ${pct(tx.export.yoy)}`
+        + (d ? `, 조업일수를 맞춘 하루 평균으로는 ${pct(d.yoy)}다. ` : '다. ')
+        + (tx.chipShare != null ? `반도체가 수출의 ${tx.chipShare}%` + (chip ? `(${pct(chip.yoy)})` : '') + '를 차지하고, ' : '')
+        + (tx.countries ? `나라로는 ${top(tx.countries.export, 3)}이다. ` : '')
+        + (tx.balance != null ? `무역수지는 ${Math.abs(tx.balance).toLocaleString()}억 달러 ${tx.balance >= 0 ? '흑자' : '적자'}.` : ''),
+      ev: [`${tag(tx.title)} · 보도 ${tx.releasedAt || tx.date} · 관세청 원문 PDF(<a href="${tx.url}" target="_blank" rel="noopener">KDI 경제정책자료</a>)`,
+           `수출 ${tx.export.amt}억 달러(${pct(tx.export.yoy)}) · 수입 ${tx.import ? tx.import.amt + '억 달러(' + pct(tx.import.yoy) + ')' : '—'} · 무역수지 ${tx.balance ?? '—'}억 달러`,
+           d && tx.workdays ? `조업일수 ${tx.workdays.prev} → ${tx.workdays.now}일 · 하루 평균 수출 ${d.prev} → ${d.now}억 달러(${pct(d.yoy)})` : '조업일수 · 하루 평균 — 이 발표에는 없음',
+           tx.items ? `품목 수출 ${top(tx.items.export, 4)}` : '품목 표 — 한 달 잠정치에는 없음(1~10일 · 1~20일에만)',
+           `다음 발표 ${next} 09:00 — 주말 · 공휴일이면 다음 평일`],
+      why: '1~10일 · 1~20일 값은 그 사이 일한 날 수(조업일수)에 크게 흔들려 1년 전과 그대로 견주면 착시가 난다 — 하루 평균 증감을 먼저 본다. 잠정치라 확정(이듬해 2월)까지 바뀐다. 품목 · 나라 표는 1~10일 · 1~20일 발표에만 있다.' });
   }
   // 한 줄 — 위 규칙의 앞머리를 잇는다
   const one = `금리를 올리는 곳 ${up.length} · 내리는 곳 ${dn.length} — 한 달 사이 돈은 ${m1.slice(0, 2).map(([k]) => NAME[k]).join(' · ')}로, 1년으로는 ${josa(NAME[best.k], "이", "가")} 가장 많이 올랐다`
