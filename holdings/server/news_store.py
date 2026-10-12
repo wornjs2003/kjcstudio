@@ -177,9 +177,12 @@ def save_alerts(value):
     return True
 
 
-def match_alert(title):
-    """제목이 어떤 「중요」 규칙에 걸리나. 안 걸리면 None."""
-    for rule in (load_alerts().get("즉시알림") or []):
+def match_alert(title, key="즉시알림"):
+    """제목이 어떤 규칙에 걸리나. 안 걸리면 None.
+
+    `key` — 「즉시알림」(바로 보낸다) · 「모아서」(정기 묶음 맨 위 칸 · 2026-10-12).
+    """
+    for rule in (load_alerts().get(key) or []):
         if not rule.get("켬", True):
             continue
         for pat in (rule.get("제목에") or []):
@@ -337,6 +340,13 @@ SLOT_GRACE_MIN = 90
 # 한 메시지가 길면 잘린다.
 DIGEST_MAX = 15
 
+# 정기 묶음에서 주제 하나에 싣는 묶음 수 (2026-10-12). 넘는 것은 「외 N묶음」.
+DIGEST_PER_TOPIC = 3
+
+# 즉시 알림 하루 상한 (2026-10-12). **`None` 이면 상한 없음** — 재권님이 아직 안 정하셨다.
+# 숫자를 넣으면 그날 그만큼 보낸 뒤로는 바로 안 보내고 정기 묶음으로 넘긴다.
+ALERT_DAILY_MAX = None
+
 # 즉시 알림은 **이보다 오래된 기사에는 보내지 않는다.**
 #
 # 텔레그램이 꺼져 있는 동안에도 쌓이기 때문에, 나중에 설정을 켜는 순간
@@ -392,23 +402,60 @@ def send_alerts(send=None):
 
     # 오래된 것은 조용히 넘긴다 (위 ALERT_MAX_AGE_H 참고)
     cutoff = int(time.time()) - ALERT_MAX_AGE_H * 3600
+    # 안 보낸 것이라 `alert` 도 지운다 — 남기면 「그 묶음은 이미 갔다」 로 읽혀 새 기사를 막는다
     stale = [r["link"] for r in rows if (r["at_ts"] or 0) < cutoff]
-    if stale:
-        mark_sent(stale, "alerted_at")
     rows = [r for r in rows if (r["at_ts"] or 0) >= cutoff]
 
-    sent = []
-    for r in rows:
+    # **보낼 때 지금 규칙으로 다시 본다** (2026-10-12). 쌓을 때 적어 둔 `alert` 는 그때 규칙이라,
+    # 규칙을 고쳐도 이미 쌓인 것은 옛 규칙으로 나갔다. 안 걸리면 보내지 않고 표시만 한다 —
+    # 정기 묶음에는 그대로 실린다(`digest_at` 은 안 건드린다).
+    #
+    # **같은 사건은 한 번만 간다** (2026-10-12 — 「1~10일 수출 역대 최대」 한 건이 한 시간에 5통 갔다).
+    # 묶음(`group_id`)에서 이미 하나가 바로 갔으면 나머지는 건너뛴다.
+    day = datetime.now(KST).strftime("%Y%m%d")
+    count_key = "news_alert_count_" + day
+    done_today = int(_meta(count_key) or 0)
+
+    sent, skip, seen = [], list(stale), set()
+    for r in sorted(rows, key=lambda x: x["at_ts"] or 0):       # 이른 기사가 그 묶음 대표로 간다
+        name = match_alert(r["title"])
+        if not name or r["group_id"] in seen or _group_alerted(r["group_id"], r["link"]):
+            skip.append(r["link"])
+            continue
+        if ALERT_DAILY_MAX is not None and done_today + len(sent) >= ALERT_DAILY_MAX:
+            skip.append(r["link"])               # 상한을 넘었다 — 정기 묶음으로 간다
+            continue
         text = "[%s] %s\n%s · %s\n%s" % (
-            r["alert"], r["title"], r["source"] or "", _hhmm(r["at"]), r["link"])
+            name, r["title"], r["source"] or "", _hhmm(r["at"]), r["link"])
         ok, _why = _telegram(text, send)
         if not ok:
-            break            # 설정이 없거나 막혔다. 다음 바퀴에 다시 본다
+            # 설정이 없거나 막혔다. 다음 바퀴에 다시 본다 — 오래된 것만 적는다
+            return _finish_alerts(sent, stale, count_key, done_today)
         sent.append(r["link"])
+        seen.add(r["group_id"])
         time.sleep(0.4)      # 텔레그램 초당 제한
+    return _finish_alerts(sent, skip, count_key, done_today)
+
+
+def _finish_alerts(sent, skip, count_key, done_today):
+    """보낸 것과 건너뛴 것을 표시한다. 보낸 것만 `alert` 를 남긴다 — 「이 묶음은 이미 갔다」 의 근거다."""
     if sent:
         mark_sent(sent, "alerted_at")
+        _meta(count_key, str(done_today + len(sent)))
+    if skip:
+        with _lock, _conn() as c:
+            c.executemany("UPDATE news_items SET alerted_at = ?, alert = NULL WHERE link = ?",
+                          [(int(time.time()), l) for l in skip])
     return len(sent)
+
+
+def _group_alerted(gid, link):
+    """그 묶음에서 다른 기사가 이미 바로 갔나."""
+    with _conn() as c:
+        return c.execute(
+            """SELECT 1 FROM news_items WHERE group_id = ? AND link != ?
+               AND alert IS NOT NULL AND alerted_at IS NOT NULL LIMIT 1""",
+            (gid, link)).fetchone() is not None
 
 
 def _slot_now(now=None):
@@ -443,23 +490,67 @@ def send_digest(force=False, send=None):
         _meta("news_digest_slot", slot)
         return 0
 
-    head = "📰 쌓인 뉴스 %d건 (%s 기준)" % (len(rows), datetime.now(KST).strftime("%m/%d %H:%M"))
-    lines = [head, ""]
-    for r in rows[:DIGEST_MAX]:
-        mark = "❗ " if r["alert"] else ""
-        lines.append("%s[%s] %s\n   %s · %s" % (
-            mark, r["topic_label"] or "기타", r["title"],
-            r["source"] or "", _hhmm(r["at"])))
-    if len(rows) > DIGEST_MAX:
-        lines.append("")
-        lines.append("… 외 %d건" % (len(rows) - DIGEST_MAX))
-
-    ok, _why = _telegram("\n".join(lines), send)
+    ok, _why = _telegram(digest_text(rows), send)
     if not ok:
         return 0
     mark_sent([r["link"] for r in rows], "digest_at")
     _meta("news_digest_slot", slot)
     return len(rows)
+
+
+def digest_text(rows, now=None):
+    """정기 묶음 글 (2026-10-12 — 「뉴스들을 정리해서 보내주면 더 좋을 것 같아」).
+
+    **관심종목**(규칙 「모아서」)이 맨 위, 그 밑은 **주제별**로 묶음마다 대표 한 줄 + 「외 N건」.
+    주제마다 `DIGEST_PER_TOPIC` 묶음, 전체 `DIGEST_MAX` 줄까지 — 넘는 것은 「외 N묶음」.
+    바로 간 것(`alert` 가 남은 것)은 ❗ 를 붙인다.
+    """
+    now = now or datetime.now(KST)
+    sizes = _group_sizes([r["group_id"] for r in rows])
+    total = sum(sizes.get(r["group_id"], 1) for r in rows)
+
+    watch, by_topic = [], {}
+    for r in sorted(rows, key=lambda x: -(sizes.get(x["group_id"], 1))):   # 기사가 많은 사건 먼저
+        if match_alert(r["title"], "모아서"):
+            watch.append(r)
+        else:
+            by_topic.setdefault(r["topic_label"] or "기타", []).append(r)
+
+    def line(r):
+        more = sizes.get(r["group_id"], 1) - 1
+        return "%s• %s%s\n   %s · %s" % (
+            "❗ " if r["alert"] else "", r["title"], " (외 %d건)" % more if more else "",
+            r["source"] or "", _hhmm(r["at"]))
+
+    lines = ["📰 뉴스 정리 — %d묶음 · 기사 %d건 (%s 기준)" % (len(rows), total, now.strftime("%m/%d %H:%M"))]
+    used, left = 0, 0
+    sections = [("⭐ 관심종목", watch)] + sorted(
+        (("[%s]" % k, v) for k, v in by_topic.items()), key=lambda kv: -len(kv[1]))
+    for title, items in sections:
+        if not items:
+            continue
+        room = min(len(items), DIGEST_PER_TOPIC, DIGEST_MAX - used)
+        if room <= 0:
+            left += len(items)
+            continue
+        lines += ["", title] + [line(r) for r in items[:room]]
+        used += room
+        if len(items) > room:
+            lines.append("   … 외 %d묶음" % (len(items) - room))
+    if left:
+        lines += ["", "… 그 밖 %d묶음" % left]
+    return "\n".join(lines)
+
+
+def _group_sizes(gids):
+    """묶음마다 기사 수."""
+    if not gids:
+        return {}
+    with _conn() as c:
+        q = ",".join("?" * len(gids))
+        return {r["group_id"]: r["n"] for r in c.execute(
+            "SELECT group_id, COUNT(*) n FROM news_items WHERE group_id IN (%s) GROUP BY group_id" % q,
+            list(gids))}
 
 
 # ---------------------------------------------------------------- 루프
