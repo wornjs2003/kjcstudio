@@ -18,6 +18,10 @@
     <string>/usr/bin/python3</string>
     <string>-u</string>
     <string>company-setup/tools/fetch-trade.py</string>
+    <!-- 서비스방(외부접속 · 8764)에도 한 벌 — 데이터 파일이 .gitignore 라 옮기기로는 안 간다
+         (2026-10-12 재권님 「서비스방에도 무역지수 올려줘」 · 서비스방 데이터라 메인 가드 자리 — 그 말씀이 허락) -->
+    <string>--also</string>
+    <string>/Users/kjc/service/company-setup/data/trade-flash.json</string>
   </array>
   <key>WorkingDirectory</key>
   <string>/Users/kjc/work/KJCStudio</string>
