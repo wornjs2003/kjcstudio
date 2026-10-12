@@ -419,13 +419,21 @@ def start_daily(get_indices, get_sectors, get_issues, send=None, keep=KEEP):
             # **보냈는지 남긴다** (2026-10-06 재권님 「응 해줘」). 전에는 실패를 `pass` 로 삼키고
             # 성공도 안 적어 「갔나」 를 아무도 못 셌다. 못 보내도 저장은 남는다(그대로).
             # 오류 문구는 `safe_message` 로 가린다 — 로그와 저장본(API 로 나간다) 둘 다 「밖」 이다
+            #
+            # **`send` 는 실패해도 예외를 안 낸다** — `dart.telegram_send` 는 `(ok, 까닭)` 을 돌려준다.
+            # 전에는 그 값을 안 봐서 실패도 `sent = True` 로 적혔다 (2026-10-12). 예외는 그대로 잡는다.
             sent, err = False, None
             try:
-                send(data["telegram"])
-                sent = True
-                print("데일리분석 발송함 — %s" % now.strftime("%H:%M"), flush=True)
+                r = send(data["telegram"])
+                if isinstance(r, tuple) and r and not r[0]:
+                    err = safe_message(Exception(r[1] if len(r) > 1 else "보내지 못함"))
+                else:
+                    sent = True
             except Exception as e:
                 err = "%s: %s" % (type(e).__name__, safe_message(e))
+            if sent:
+                print("데일리분석 발송함 — %s" % now.strftime("%H:%M"), flush=True)
+            else:
                 print("데일리분석 발송 실패 — %s" % err, flush=True)
             data["sent"] = sent
             data["sendError"] = err

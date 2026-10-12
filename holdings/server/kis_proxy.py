@@ -6308,7 +6308,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     # ── 뉴스 ──
     # 두 갈래를 따로 받는다. 자세한 이유는 server/news.py 머리말에 있다.
-    #   issues  구글 뉴스 RSS · 주제어별 · 원문 링크 있음
+    #   issues  경제지 RSS · 주제어별 · 원문 링크 있음 (구글 뉴스는 막혀 2026-09-15 에 바꿨다)
     #   moves   KIS news-title · 종목코드 붙음 · 링크 없음
     # ── 네이버 업종 · 테마 (2026-09-18) ──
     #
