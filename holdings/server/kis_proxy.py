@@ -7429,6 +7429,10 @@ def main():
     # **정기 발송(07:30 · 13:30 · 22:00)도 같은 자리다.** 첫 칸이
     # `daily.py` 의 `SEND_AT` 와 **같은 시각**이라, 안 가리면 그 시각에
     # **데일리 1 + 뉴스 3 = 4통**이 간다.
+    #
+    # **보내는 자리 깃발을 여기서 먼저 넣는다** (2026-10-12) — `dart.telegram_config()` 가 이 값을 보고
+    # 보내는 서버가 아니면 텔레그램 칸을 아예 안 읽는다(「한곳에서만 알림을 보낸다」). 아래 공시 쪽 긴 주석의 그 값이다.
+    dart.NOTIFY_LOCAL = is_sender(args.port)
     _news_send = (dart.telegram_send
                   if (dart.telegram_config() and is_sender(args.port))
                   else None)
@@ -7456,7 +7460,7 @@ def main():
     #
     # **수집은 포트로 안 가린다** — 다만 읽기 전용 DB 서버는 수집하지 않는다(아래 · 2026-10-12).
     # 그 서버 화면은 8765 가 쌓는 같은 DB 를 읽는다. 발송은 포트로 가른다.
-    dart.NOTIFY_LOCAL = is_sender(args.port)
+    # `dart.NOTIFY_LOCAL = is_sender(args.port)` 는 위 뉴스 쌓기 앞으로 옮겼다(2026-10-12) — 텔레그램 칸 읽기가 그 값을 본다.
 
     if SLOW:
         pass                 # 확인용 서버는 공시도 안 받는다 (위 주석 참고)
@@ -7472,10 +7476,10 @@ def main():
         # `NOTIFY_LOCAL = False` 로 **공시 발송을 꺼 둔 날에도 「켜짐」** 이라,
         # 텔레그램이 두 번 오는 일을 볼 때 **로그가 로컬을 범인으로 가리켰다.**
         # 오늘 이 줄 때문에 여러 사람이 한 번씩 헛짚었다.
-        if not dart.telegram_config():
-            _al = "꺼짐 (secrets.json 의 telegram 없음)"
-        elif not dart.NOTIFY_LOCAL:
+        if not dart.NOTIFY_LOCAL:
             _al = "쌓기만 — 메인(%d)에서만 보냅니다" % MAIN_PORT
+        elif not dart.telegram_config():
+            _al = "꺼짐 (secrets.json 의 telegram 없음)"
         else:
             _al = "텔레그램 켜짐 (관심종목 %d개)" % len(dart.WATCH_CODES)
         print("  알림      : %s" % _al)
@@ -7537,11 +7541,12 @@ def main():
                   if (dart.telegram_config() and is_sender(args.port))
                   else None),
         )
+        # 보내는 서버가 아니면 텔레그램 칸을 안 읽으므로(dart.telegram_config) 까닭을 먼저 가른다
         _tg = ("텔레그램 켜짐" if (dart.telegram_config() and is_sender(args.port))
                else ("저장만 — 이 기계는 %s 입니다" % ROLE
-                     if dart.telegram_config() and not IS_SERVER
+                     if not IS_SERVER
                      else ("저장만 — 메인(%d)에서만 보냅니다" % MAIN_PORT
-                           if dart.telegram_config() else "저장만 — 열쇠 없음")))
+                           if not is_sender(args.port) else "저장만 — 열쇠 없음")))
         print("  데일리분석 : 아침 %02d:%02d 에 저장 · 최근 %d장 (%s)"
               % (daily.SEND_AT // 60, daily.SEND_AT % 60, daily.KEEP, _tg))
 

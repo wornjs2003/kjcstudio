@@ -740,7 +740,15 @@ def status():
 # ---------------------------------------------------------------- 텔레그램
 
 def telegram_config():
-    """봇 토큰과 받을 사람. secrets.json 에 없으면 보내지 않는다."""
+    """봇 토큰과 받을 사람. secrets.json 에 없으면 보내지 않는다.
+
+    **보내는 서버(`NOTIFY_LOCAL` = `is_sender`)가 아니면 텔레그램 칸을 아예 안 읽는다** (2026-10-12 지시 —
+    「한곳에서만 알림을 보낸다」). 열쇠 파일을 한 벌(`~/.kjc`)로 합치면 세션 서버 · 서비스방도 메인의 봇 값을
+    갖게 되는데, 그때도 발송 판정(`is_sender`)에 더해 이 한 겹이 남는다. 공시 · 뉴스 · 데일리 · 신호 · 예약
+    알림이 전부 `telegram_send` → 이 함수를 지나므로 자리는 여기 하나다.
+    """
+    if not NOTIFY_LOCAL:
+        return None
     path = secrets_path()
     if not os.path.exists(path):
         return None
