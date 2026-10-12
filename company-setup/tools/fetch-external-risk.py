@@ -22,6 +22,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 OUT = os.path.join(HERE, "..", "data", "external-risk.json")
 SECRETS = os.path.join(ROOT, "holdings", "secrets.json")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _save import save   # --out · --also · 실패하면 옛 파일 그대로 — 넷이 함께 씀
 GPR = "https://www.matteoiacoviello.com/gpr_files/"
 SINCE = (date.today() - timedelta(days=372)).isoformat()
 
@@ -114,8 +116,7 @@ def main():
         err["fred"] = type(ex).__name__
     X["errors"] = err
     X["src"] = "지정학 위험 Caldara · Iacoviello(matteoiacoviello.com · 100 = 1985~2019 평균) · 정책 불확실성 Baker · Bloom · Davis(policyuncertainty.com · 100 = 1985~2009 평균) · 무역정책 불확실성 Caldara 외 · VIX · OVX FRED"
-    with open(OUT, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(X, f, ensure_ascii=False, separators=(",", ":"))
+    save(X, OUT, list(err), separators=(",", ":"))
     last = lambda s: s[-1] if s else "—"
     print("지정학 %s · 한국 달 %s · 정책 %s · 무역 %s · VIX %s · OVX %s · 큰 사건 %d · 못 받은 것 %s" % (
         last(X["gpr"]), last(X["gprMonthly"]), last(X["epu"]), last(X["tpu"]), last(X["vix"]), last(X["ovx"]), len(X["gprEvents"]), ", ".join(err) or "없음"))

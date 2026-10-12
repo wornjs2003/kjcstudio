@@ -1,7 +1,7 @@
 """네이버 증권 뉴스(stock.naver.com/news)에 있는 것을 받아 Insight 화면용 파일로 둔다.
 
     python3 company-setup/tools/fetch-naver-news.py              → data/naver-news.json (손으로 한 번)
-    python3 company-setup/tools/fetch-naver-news.py --to-board   → 8765 문서 저장소 naver-news (10분 주기 · launchd)
+    python3 company-setup/tools/fetch-naver-news.py --to-board   → 8765 문서 저장소 naver-news (10분 주기 · launchd/kr.kjcstudio.naver-news.plist — 2026-10-12 까지 등록 파일이 없어 10-01 뒤로 멈춰 있었다 · qa 가 찾음 · 설치는 「켜기」)
 
 2026-10-01 지시 — 「네이버에 있는거 가져와서 그냥 채워만 놓으면 됨」.
 네이버 API 는 다른 사이트에서의 직접 호출을 막는다(Access-Control-Allow-Origin 없음).

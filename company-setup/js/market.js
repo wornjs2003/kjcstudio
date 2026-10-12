@@ -1,3 +1,4 @@
+import { live } from './live.js';   // 새 값(-live) 먼저 · 없으면 씨앗
 // 시황분석 탭 — 세계지도 말풍선 값으로 그날 시황을 화면이 쓰고, 지표 흐름을 그래프로 보인다 (2026-10-12 재권님 「시황분석을 클릭하면 지금 분석해놓은게 나오면 ·
 // 실시간 분석을 여기에 연결 · 나라별로 껐다 켰다 · 금값그래프도」 → temp 시안 → 「응 좋아 붙여줘」).
 //   · 글은 세션이 손으로 쓰지 않는다 — 아래 write() 의 규칙(금리 방향 · 물가와 다음 회의 · 한 달 돈 간 곳 · 1년 흐름과 고점 · 경기선행 방향 · 금과 달러 · 무역 발표)이
@@ -59,10 +60,10 @@ async function chart(code) {
 }
 async function load() {
   const [M, N, MV, O, T, ...px] = await Promise.all([
-    fetch('data/world-macro.json', { cache: 'no-store' }).then(r => r.json()),
-    fetch('data/naver-macro.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),   // 그 밖의 지표 — 못 받아도 위 셋은 그린다
+    live('world-macro'),
+    live('naver-macro').catch(() => null),   // 그 밖의 지표 — 못 받아도 위 셋은 그린다
     fetch('data/market-moves.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),   // 크게 움직인 날의 원인 — 세션이 손으로 적는다
-    fetch('data/release-odds.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),   // 발표 다음 날 확률 — tools/fetch-release-odds.py
+    live('release-odds').catch(() => null),   // 발표 다음 날 확률 — tools/fetch-release-odds.py
     fetch('data/trade-flash.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),   // 무역 발표 — tools/fetch-trade.py(관세청 잠정치 · 발표 날 09:00~)
     ...[...K, 'GOLD'].map(k => chart(ETF[k]).catch(() => null)),
     ...Object.keys(BOND).map(b => chart(b).catch(() => null))]);

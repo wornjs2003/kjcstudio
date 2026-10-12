@@ -72,7 +72,9 @@ def main():
             if "기사" in t and "http" not in t:
                 bad.append("기사를 말한 줄에 출처 주소가 없다: " + t[:40])
         r = str(s.get("read") or "").strip()
-        if r and not re.search(r"(읽힌|읽힙|읽히|읽을 수 있|일 수 있|보인|보입|볼 수 있|가능성|듯)", r):
+        # 「읽기」 의 마지막 문장만 어간으로 본다(qa 재시뮬레이션 · 앞에 해석 낱말이 있어도 끝이 단정이면 건다)
+        lastsent = [x for x in re.split(r"(?<=[.!?。])\s+", r) if x.strip()][-1:] or [""]
+        if r and not re.search(r"(읽히|읽힌|읽힙|보이|보인|보입|수 있|수도 있|가능성|듯|추정|판단)", lastsent[0]):
             bad.append("「%s」 의 「읽기」 가 단정으로 끝난다 — 「~로 읽힌다 · ~일 수 있다」" % s.get("h"))
     if "오늘" in str(N.get("one", "")):
         bad.append("한 줄 요지에 「오늘」 — 날짜로 쓴다")

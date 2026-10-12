@@ -80,6 +80,8 @@ def history(cat, code, since):
     return sorted(set(map(tuple, out)))
 
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _save import save   # --out · --also · 실패하면 옛 파일 그대로 — 넷이 함께 씀
 M_API = "https://m.stock.naver.com/api/"
 IDX = [("KOSPI", "코스피", M_API + "index/KOSPI/price"), ("KOSDAQ", "코스닥", M_API + "index/KOSDAQ/price"),
        ("SPX", "S&P 500", "https://api.stock.naver.com/index/.INX/price"), ("IXIC", "나스닥", "https://api.stock.naver.com/index/.IXIC/price")]
@@ -158,11 +160,10 @@ def main():
             err["idx/" + key] = type(ex).__name__
     X["histSrc"] = "네이버 증권 시장지표 과거 값(…/marketindex/<갈래>/<코드>/prices) · %s 부터" % since
     X["errors"] = err
-    with open(OUT, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(X, f, ensure_ascii=False, separators=(",", ":"))
+    paths, _ = save(X, OUT, list(err), separators=(",", ":"))
     n_now = sum(len(X[c]) for c in CATS) + sum(len(v) for v in X["bond"].values()) + len(X["majors"])
     print("지금 값 %d개 · 1년 흐름 %d/%d개 · 국내 시장 %d · 업종 %d · 지수 1년 %d/%d · 못 받은 것 %s → %s" % (
-        n_now, len(X["hist"]), len(HIST), len(X["kr"]), len(X["industry"]), len(X["idx"]), len(IDX), ", ".join(err) or "없음", os.path.normpath(OUT)))
+        n_now, len(X["hist"]), len(HIST), len(X["kr"]), len(X["industry"]), len(X["idx"]), len(IDX), ", ".join(err) or "없음", " · ".join(map(os.path.normpath, paths)) or "안 씀"))
     return 1 if err else 0
 
 
