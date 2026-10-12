@@ -45,10 +45,10 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-from secrets_guard import safe_message
+from secrets_guard import safe_message, secrets_path
 
 BASE = "https://openapi.tossinvest.com"
-SECRETS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "secrets.json")
+SECRETS_PATH = secrets_path()        # 자리 셈은 secrets_guard 하나
 RENEW_BEFORE = 600            # 만료 10분 전에 다시 받는다
 TIMEOUT = 10
 PER_SEC = 15                  # 시세 한도(15/초 · sources.json) 안에서 간격을 둔다 — 이 프로세스 안에서만 센다

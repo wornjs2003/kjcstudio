@@ -33,7 +33,26 @@ import re
 import time
 
 HOLDINGS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SECRETS_PATH = os.path.join(HOLDINGS_DIR, "secrets.json")
+
+# 열쇠 파일은 맥미니에 한 벌 (2026-10-12 지시 — 「응 열쇠파일은 한자리로 모아」 · 「한벌로 하고」).
+# 자리를 정하는 셈은 여기 하나다 — 서버 파일들이 각자 경로를 만들지 않고 이것을 부른다.
+#     KJC_SECRETS 가 있으면  그 자리(있든 없든 — 준 쪽 뜻대로)
+#     없으면                ~/.kjc/secrets.json 이 있으면 그것
+#     그것도 없으면          옛 자리(이 폴더의 holdings/secrets.json)
+# 옛 자리 폴백이 있어 한 벌 파일을 만들기 전까지는 전과 똑같이 돈다. 자리는 서버가 뜰 때 정해진다(바꾸면 재시작).
+SHARED_SECRETS = os.path.join(os.path.expanduser("~"), ".kjc", "secrets.json")
+
+
+def secrets_path():
+    env = (os.environ.get("KJC_SECRETS") or "").strip()
+    if env:
+        return os.path.expanduser(env)
+    if os.path.exists(SHARED_SECRETS):
+        return SHARED_SECRETS
+    return os.path.join(HOLDINGS_DIR, "secrets.json")
+
+
+SECRETS_PATH = secrets_path()
 
 # 값을 지울 최소 길이. 너무 짧은 값까지 지우면 (예: mode "vts")
 # 멀쩡한 문구가 알아볼 수 없게 된다.

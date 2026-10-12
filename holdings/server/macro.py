@@ -40,9 +40,9 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-from secrets_guard import safe_message
+from secrets_guard import safe_message, secrets_path
 
-SECRETS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "secrets.json")
+SECRETS_PATH = secrets_path()        # 자리 셈은 secrets_guard 하나
 MACRO_TTL = 24 * 3600
 MACRO_RETRY_TTL = 30 * 60
 POINTS = 36                  # 계열마다 내는 달 수 — 옛것부터

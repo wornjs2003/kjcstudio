@@ -35,7 +35,7 @@ import zipfile
 from datetime import datetime, timedelta, timezone
 
 # 오류 문구에서 비밀을 지운다. 왜 필요한지는 그 파일 머리말에 적혀 있다.
-from secrets_guard import safe_message, scrub
+from secrets_guard import safe_message, scrub, secrets_path
 
 KST = timezone(timedelta(hours=9))
 
@@ -236,7 +236,7 @@ def _today():
 
 def get_key():
     """secrets.json 의 dart.api_key. 없으면 None — 공시 기능만 조용히 꺼진다."""
-    path = os.path.join(HOLDINGS_DIR, "secrets.json")
+    path = secrets_path()
     if not os.path.exists(path):
         return None
     try:
@@ -741,7 +741,7 @@ def status():
 
 def telegram_config():
     """봇 토큰과 받을 사람. secrets.json 에 없으면 보내지 않는다."""
-    path = os.path.join(HOLDINGS_DIR, "secrets.json")
+    path = secrets_path()
     if not os.path.exists(path):
         return None
     try:

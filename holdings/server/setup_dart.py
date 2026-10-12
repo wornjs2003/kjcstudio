@@ -30,11 +30,11 @@ for _stream in ("stdout", "stderr"):
 # 예외 문구에 주소가 섞이면 키가 화면에 찍힌다.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from docstore import read_json, write_json_atomic
-from secrets_guard import forget, safe_message
+from secrets_guard import forget, safe_message, secrets_path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 HOLDINGS_DIR = os.path.dirname(HERE)
-SECRETS = os.path.join(HOLDINGS_DIR, "secrets.json")
+SECRETS = secrets_path()             # 자리 셈은 secrets_guard 하나 — 고른 그 자리에 쓴다
 
 KEY_LEN = 40
 

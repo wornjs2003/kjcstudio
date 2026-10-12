@@ -67,7 +67,7 @@ import news
 import news_store
 # 오류 문구에서 비밀을 지운다. 외부 호출 오류를 사람에게 보여줄 때는
 # 반드시 이것을 거친다 (2026-09-14 에 인증키가 실제로 샜다).
-from secrets_guard import safe_message, scrub
+from secrets_guard import safe_message, scrub, secrets_path
 
 # Windows 기본 콘솔(cp949)에서 한글·기호 출력에 실패해 서버가 죽지 않도록 고정한다.
 for _stream in ("stdout", "stderr"):
@@ -151,7 +151,7 @@ _ALLOW_EXT = {".html", ".css", ".js", ".json",
               ".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico", ".woff2",
               ".pbf"}   # 2026-10-06 — 지구본 글꼴(company-setup/vendor/basemaps-assets/fonts). 바깥 CDN 대신 우리 서버가 낸다(로딩 개선)
 
-SECRETS_PATH = os.path.join(HOLDINGS_DIR, "secrets.json")
+SECRETS_PATH = secrets_path()        # 자리 셈은 secrets_guard 하나 — 한 벌(~/.kjc) · 옛 자리 폴백
 
 # `/maps/` 로 내주는 **저장소 밖** 자리 (2026-10-02 지시).
 #
