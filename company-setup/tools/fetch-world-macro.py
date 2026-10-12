@@ -6,10 +6,12 @@ data/world-macro.json 에 둔다 (2026-10-12 · 재권님 시안 승인 「응 �
   정책금리   BIS WS_CBPOL(매일) · 한국은 한국은행 ECOS 722Y001 기준금리. 직전 결정 = 올해 마지막으로 바뀐 방향(안 바뀌었으면 동결)
   물가       OECD 소비자물가 전년비(월). 월 값이 없는 나라는 IMF 세계경제전망 지난해 연간 값 — 화면이 「연간」 을 붙인다
   환율       ECB 기준환율(유로 기준을 달러 기준으로 환산) · 1개월 변화. 미국은 FRED 달러지수
-  10년 금리  FRED 의 OECD 장기금리(달마다 · 늦게 나온다)
+  10년 금리  미국 · 한국은 매일 값(FRED DGS10 · ECOS 국고채 10년), 나머지는 FRED 의 OECD 장기금리(달마다 · 늦게 나온다)
   경기선행   OECD 경기선행지수(100 = 장기 평균) · 전달 값과 함께
   성장률     IMF 세계경제전망 올해 실질성장률 전망
   다음 회의  미국만 — 연준 FOMC 일정 쪽에서 오늘 이후 첫 회의. 다른 나라는 아직 받는 곳이 없다(None → 화면 「—」)
+  기간 흐름  series — 정책금리 · 물가 · 경기선행(2024-01 부터 달마다) · 달러지수 · 국채 금리(미국 2 · 10년 FRED · 한국 3 · 10년 ECOS 817Y002 · 1년 매일). 시황분석 탭(market.html) 그래프가 읽는다(2026-10-12 「응 좋아 붙여줘」).
+             주가 · 금은 여기 두지 않는다 — 그 화면이 열 때 서버 /api/kis/chart 에서 받는다
 
 받지 못한 것은 None 으로 두고 errors 에 이름만 적는다(주소에 키가 있어 문구를 안 남긴다). 키 없이 받는 곳이고 한국 금리만 ECOS 키를 쓴다.
 IMF 는 파이썬 기본 요청을 403 으로 막아 curl 로 부른다(2026-10-12 실측).
@@ -71,9 +73,21 @@ def rate_of(ser, src):
             "since": since, "prev": prev and prev[1], "src": src}
 
 
+SINCE = "2024-01-01"   # 기간 흐름의 처음 — 2024~2025 인하에서 2026 인상으로 돌아선 것이 보이는 자리
+
+
+def monthly(ser):
+    """(날짜, 값) 매일 → (YYYY-MM, 그달 마지막 값)."""
+    m = {}
+    for d, v in ser:
+        m[d[:7]] = v
+    return sorted(m.items())
+
+
 def main():
     today = date.today()
-    out = {"fetchedAt": datetime.now().strftime("%Y-%m-%d %H:%M"), "countries": {}, "errors": {}}
+    out = {"fetchedAt": datetime.now().strftime("%Y-%m-%d %H:%M"), "countries": {}, "series": {"rate": {}, "cpi": {}, "cli": {}, "dxy": [], "yld": {}}, "errors": {}}
+    SER = out["series"]
     X = out["countries"]
     err = out["errors"]
     for k, v in C.items():
@@ -90,32 +104,39 @@ def main():
     try:                                                      # 정책금리 — BIS
         areas = "+".join(v[2] for v in C.values() if v[2])
         s = {}
-        for x in rows("https://stats.bis.org/api/v2/data/dataflow/BIS/WS_CBPOL/1.0/D.%s?startPeriod=%d-01-01&format=csv" % (areas, today.year)):
+        for x in rows("https://stats.bis.org/api/v2/data/dataflow/BIS/WS_CBPOL/1.0/D.%s?startPeriod=%s&format=csv" % (areas, SINCE)):
             if x["OBS_VALUE"] and x["OBS_VALUE"].lower() != "nan":
                 s.setdefault(x["REF_AREA"], []).append((x["TIME_PERIOD"], float(x["OBS_VALUE"])))
         for k, v in C.items():
             if v[2] in s:
-                X[k]["rate"] = rate_of(sorted(s[v[2]]), "BIS 중앙은행 정책금리")
+                ser = sorted(s[v[2]])
+                X[k]["rate"] = rate_of([p for p in ser if p[0] >= "%d-01-01" % today.year] or ser[-1:], "BIS 중앙은행 정책금리")
+                SER["rate"][k] = monthly(ser)
     except Exception as ex:
         err["bis"] = type(ex).__name__
     try:                                                      # 한국 기준금리 — ECOS
         key = json.load(open(SECRETS, encoding="utf-8"))["ecos"]["api_key"]
-        b = today - timedelta(days=400)
-        rr = json.loads(get("https://ecos.bok.or.kr/api/StatisticSearch/%s/json/kr/1/500/722Y001/D/%s/%s/0101000"
-                            % (key, b.strftime("%Y%m%d"), today.strftime("%Y%m%d"))))["StatisticSearch"]["row"]
+        rr = json.loads(get("https://ecos.bok.or.kr/api/StatisticSearch/%s/json/kr/1/2000/722Y001/D/%s/%s/0101000"
+                            % (key, SINCE.replace("-", ""), today.strftime("%Y%m%d"))))["StatisticSearch"]["row"]
         ser = [("%s-%s-%s" % (x["TIME"][:4], x["TIME"][4:6], x["TIME"][6:]), float(x["DATA_VALUE"])) for x in rr]
         X["KR"]["rate"] = rate_of([p for p in ser if p[0] >= "%d-01-01" % today.year] or ser[-1:], "한국은행 ECOS 기준금리")
+        SER["rate"]["KR"] = monthly(ser)
     except Exception as ex:
         err["ecos"] = type(ex).__name__
 
     try:                                                      # 물가 — OECD 월
-        start = (today.replace(day=1) - timedelta(days=200)).strftime("%Y-%m")
-        o = {}
+        start = SINCE[:7]
+        recent = (today.replace(day=1) - timedelta(days=200)).strftime("%Y-%m")
+        o, hist = {}, {}
         for x in rows("https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_PRICES@DF_PRICES_ALL,1.0/.M.N.CPI.PA._T.N.GY?startPeriod=%s"
                       "&dimensionAtObservation=AllDimensions&format=csvfilewithlabels" % start):
             if x["OBS_VALUE"]:
-                o[x["REF_AREA"]] = max(o.get(x["REF_AREA"], ("", "")), (x["TIME_PERIOD"], x["OBS_VALUE"]))
+                if x["TIME_PERIOD"] >= recent:   # 말풍선 값은 반년 안 것만 — 더 낡으면 IMF 지난해 연간 값으로(유로존은 2025-12 에서 멈춰 있다)
+                    o[x["REF_AREA"]] = max(o.get(x["REF_AREA"], ("", "")), (x["TIME_PERIOD"], x["OBS_VALUE"]))
+                hist.setdefault(x["REF_AREA"], []).append((x["TIME_PERIOD"], round(float(x["OBS_VALUE"]), 2)))
         for k, v in C.items():
+            if v[3] in hist:
+                SER["cpi"][k] = sorted(hist[v[3]])
             if v[3] in o:
                 X[k]["cpi"] = {"v": round(float(o[v[3]][1]), 1), "date": o[v[3]][0], "annual": False, "src": "OECD 소비자물가 전년비(월)"}
     except Exception as ex:
@@ -152,8 +173,24 @@ def main():
     try:                                                      # 미국 — 달러지수
         l = fred("DTWEXBGS")
         X["US"]["dxy"] = {"v": round(l[-1][1], 1), "m1": round((l[-1][1] / l[-22][1] - 1) * 100, 1), "date": l[-1][0], "src": "FRED 달러지수(교역가중)"}
+        SER["dxy"] = [(d, v) for d, v in l if d >= (today - timedelta(days=380)).isoformat()]
     except Exception as ex:
         err["dxy"] = type(ex).__name__
+
+    y1 = (today - timedelta(days=380)).isoformat()             # 국채 금리 1년 매일 — 시황분석 탭 채권 그래프 (2026-10-12 재권님 「시황에 채권도」)
+    for name, sid in (("US2", "DGS2"), ("US10", "DGS10")):
+        try:
+            SER["yld"][name] = [(d, v) for d, v in fred(sid) if d >= y1]
+        except Exception as ex:
+            err["yld-" + name] = type(ex).__name__
+    try:
+        key = json.load(open(SECRETS, encoding="utf-8"))["ecos"]["api_key"]
+        for name, item in (("KR3", "010200000"), ("KR10", "010210000")):
+            rr = json.loads(get("https://ecos.bok.or.kr/api/StatisticSearch/%s/json/kr/1/400/817Y002/D/%s/%s/%s"
+                                % (key, y1.replace("-", ""), today.strftime("%Y%m%d"), item)))["StatisticSearch"]["row"]
+            SER["yld"][name] = [("%s-%s-%s" % (x["TIME"][:4], x["TIME"][4:6], x["TIME"][6:]), float(x["DATA_VALUE"])) for x in rr]
+    except Exception as ex:
+        err["yld-KR"] = type(ex).__name__
 
     for k, v in C.items():                                   # 10년 금리 — FRED 월
         if v[5]:
@@ -163,15 +200,21 @@ def main():
             except Exception as ex:
                 err["y10-" + k] = type(ex).__name__
 
+    for k, n, src in (("US", "US10", "FRED DGS10 · 미국 국채 10년(매일)"), ("KR", "KR10", "한국은행 ECOS 817Y002 · 국고채 10년(매일)")):
+        ser = SER["yld"].get(n)                               # 매일 값이 있는 나라는 말풍선도 매일 값 (2026-10-12 재권님 「매일값이 있어야」) — 달마다 값은 넉 달 늦었다
+        if ser:
+            X[k]["y10"] = {"v": round(ser[-1][1], 2), "date": ser[-1][0], "daily": True, "src": src}
+
     try:                                                      # 경기선행 — OECD
         cl = {}
         for x in rows("https://sdmx.oecd.org/public/rest/data/OECD.SDD.STES,DSD_STES@DF_CLI,4.1/.M.LI...AA...H?startPeriod=%s"
-                      "&dimensionAtObservation=AllDimensions&format=csvfilewithlabels" % (today - timedelta(days=200)).strftime("%Y-%m")):
+                      "&dimensionAtObservation=AllDimensions&format=csvfilewithlabels" % SINCE[:7]):
             if x["OBS_VALUE"]:
                 cl.setdefault(x["REF_AREA"], []).append((x["TIME_PERIOD"], float(x["OBS_VALUE"])))
         for k, v in C.items():
             if v[3] in cl and len(cl[v[3]]) >= 2:
                 ser = sorted(cl[v[3]])
+                SER["cli"][k] = [(d, round(x, 2)) for d, x in ser]
                 X[k]["cli"] = {"v": round(ser[-1][1], 1), "prev": round(ser[-2][1], 1), "date": ser[-1][0], "src": "OECD 경기선행지수(100 = 장기 평균)"}
     except Exception as ex:
         err["oecd-cli"] = type(ex).__name__

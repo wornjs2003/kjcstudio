@@ -1,0 +1,35 @@
+/* 시황분석 탭(market.html · js/market.js) — 2026-10-12 재권님 「응 좋아 붙여줘」. 새 화면이라 좁은 폭부터 짜고 넓은 폭(900px~)을 덧붙인다(「모바일 퍼스트」 룰 1).
+   다른 Insight 화면과 안 섞이게 .mk 안에서만 건다. 색은 --kh-* 토큰 · 상태 색은 연한 바탕에 같은 색 진한 글씨 */
+.mk { font-size: 14px; line-height: 1.7; }
+.mk .mk-meta { color: var(--kh-text-muted); font-size: 12px; margin: 0 0 4px; }
+.mk .mk-card { background: var(--kh-bg-card); border-radius: var(--kh-radius-lg); padding: 14px; margin: 0 0 12px; }
+.mk .mk-card h2 { font-size: 15px; margin: 0 0 6px; }
+.mk .cap { font-size: 11.5px; color: var(--kh-text-muted); margin: 0 0 6px; }
+/* 나라 켜고 끄기 — 스크롤해도 따라다닌다. 좁은 폭은 오른쪽 위에 떠 있고, 넓은 폭(900px~)은 오른쪽 세로 줄(2026-10-12 재권님 「오른쪽으로 세로로 · 따라다니게 · 폰도 옆으로 · 오른쪽 위에 떠있으면」). 끈 나라는 모든 그래프에서 빠진다 */
+.mk .ctl { position: fixed; right: 6px; top: calc(var(--nav-height) + 8px); z-index: 20; display: flex; flex-direction: column; gap: 3px; padding: 6px;
+           background: var(--kh-bg-card); border-radius: var(--kh-radius-lg); box-shadow: var(--kh-shadow-md, var(--shadow-md)); }   /* 좁은 폭 — 오른쪽 위에 떠 있다. 위에 고정된 메뉴 줄(--nav-height) 아래 — 그 높이를 안 빼면 스크롤할 때 메뉴 줄이 위 버튼을 덮는다(2026-10-12 재권님 「미국이랑 몇몇 나라들이 잘려서」) */
+.mk .ctl button { font: inherit; font-size: 11px; line-height: 18px; border: 0; border-radius: 99px; padding: 2px 8px; cursor: pointer; background: none; color: var(--kh-text-muted);
+                  display: inline-flex; align-items: center; gap: 5px; }
+.mk .ctl button i { width: 8px; height: 8px; border-radius: 50%; opacity: .35; }
+.mk .ctl button.on { color: var(--kh-text-primary); font-weight: 700; }
+.mk .ctl button.on i { opacity: 1; }
+.mk .ctl .all { background: var(--kh-accent-dim); color: var(--kh-accent); justify-content: center; }
+.mk .ctl .all:first-of-type { margin-top: 4px; }
+.mk .one { font-size: 15px; font-weight: 700; line-height: 1.6; margin: 0; }
+.mk .para { margin: 0 0 4px; }
+.mk details.ev { margin: 0 0 12px; font-size: 12.5px; color: var(--kh-text-secondary); }
+.mk details.ev summary { cursor: pointer; color: var(--kh-accent); font-size: 12px; }
+.mk details.ev ul { margin: 4px 0 0; padding-left: 18px; }
+.mk details.ev .why { background: var(--kh-bg); border-radius: var(--kh-radius-md); padding: 5px 9px; margin-top: 4px; }
+.mk .tag { font-size: 10.5px; font-weight: 500; padding: 0 6px; border-radius: 99px; background: var(--kh-accent-dim); color: var(--kh-accent); margin-left: 4px; }
+.mk .chart { position: relative; height: 260px; }   /* 그래프 칸 높이를 잡아 둔다 — 나라를 껐다 켜도 칸이 안 움직인다 */
+.mk .mk-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 12px; }
+.mk .err { background: var(--kh-danger-faint); color: var(--kh-danger); border-radius: var(--kh-radius-md); padding: 6px 10px; font-size: 12px; }
+@media (min-width: 900px) {
+  .mk { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 0 12px; align-items: start; }
+  .mk .mk-body { grid-column: 1; grid-row: 1; min-width: 0; }
+  .mk .ctl { position: sticky; grid-column: 2; grid-row: 1; top: calc(var(--nav-height) + 12px); right: auto; gap: 4px; padding: 10px 8px; box-shadow: none; }   /* 넓은 폭 — 오른쪽 세로 줄로 따라다닌다 · 메뉴 줄 아래에서 멈춘다 */
+  .mk .ctl button { font-size: 12px; padding: 5px 10px; }
+  .mk .mk-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .mk .chart { height: 300px; }
+}
