@@ -63,6 +63,12 @@ COLLECT_INTERVAL = 300
 # 며칠 지나 같은 낱말이 나오는 것은 대개 다른 사건이다.
 GROUP_WINDOW_H = 24
 
+# 쌓아 두는 기간 (2026-10-12 재권님 「뉴스보관은 1주일이면 될거같아」). 그 전에는 지우는 코드가 없어
+# 무기한 쌓였다(9-21 부터 3주 2,119건). 쌓는 바퀴(`collect_once`)에서 이보다 오래된 기사를 지운다.
+# 읽는 쪽은 모두 이 안에 든다 — 데일리 화면 36시간(`daily-view.js` 의 NEWS_HOURS) · 같은 사건 묶기 창
+# `GROUP_WINDOW_H`(24시간) · 즉시 알림 `ALERT_MAX_AGE_H`(3시간) · 정기 묶음은 지난 발송 뒤 것만.
+NEWS_KEEP_DAYS = 7
+
 # 제목 낱말이 이만큼 겹치면 같은 사건으로 본다.
 #
 # **2026-09-21 에 80건으로 기준을 바꿔가며 재고 골랐다.**
@@ -111,7 +117,7 @@ def init():
           group_id    TEXT,               -- 같은 사건 묶음
           is_lead     INTEGER DEFAULT 0,  -- 그 묶음의 대표(가장 이른 기사)
           alert       TEXT,               -- 걸린 「중요」 규칙 이름
-          alerted_at  INTEGER,            -- 즉시 알림을 보낸 시각
+          alerted_at  INTEGER,            -- 즉시 알림을 보낸 시각 · -1 은 안 보내고 정기 묶음으로 넘김
           digest_at   INTEGER,            -- 정기 묶음에 실어 보낸 시각
           seen_at     INTEGER             -- 우리가 처음 받은 시각
         );
@@ -247,6 +253,13 @@ def store(rows):
     return added
 
 
+def purge_old(days=None):
+    """`NEWS_KEEP_DAYS` 지난 기사를 지운다. 지운 건수를 돌려준다. 기사 시각(`at_ts`)으로 자른다."""
+    cut = int(time.time()) - (days or NEWS_KEEP_DAYS) * 86400
+    with _lock, _conn() as c:
+        return c.execute("DELETE FROM news_items WHERE at_ts < ?", (cut,)).rowcount or 0
+
+
 # ---------------------------------------------------------------- 읽기
 
 def groups(hours=24, limit=80):
@@ -330,7 +343,9 @@ def mark_sent(links, field):
 
 # 정기 발송 시각 (2026-09-21 지시 — "아침7시반 오후1시반 저역 10시").
 # **주말에도 보낸다** — "주말에도 이슈는 계속있으니 매일 받으면 좋을거같아".
-DIGEST_SLOTS = [(7, 30), (13, 30), (22, 0)]
+# 22:00 → 21:50 (2026-10-12 · 재권님 「가」) — 22:00 부터 조용한 시간(`dart.QUIET_FROM`)이라 그 앞으로 당겼다.
+# 밤(21:50 뒤) 기사는 다음 날 07:30 묶음에 실린다.
+DIGEST_SLOTS = [(7, 30), (13, 30), (21, 50)]
 
 # 그 시각을 놓쳤을 때 몇 분까지 따라잡아 보낼 것인가. 서버가 잠깐 꺼져 있었다고
 # 하루치를 통째로 건너뛰면 안 된다.
@@ -402,9 +417,16 @@ def send_alerts(send=None):
 
     # 오래된 것은 조용히 넘긴다 (위 ALERT_MAX_AGE_H 참고)
     cutoff = int(time.time()) - ALERT_MAX_AGE_H * 3600
-    # 안 보낸 것이라 `alert` 도 지운다 — 남기면 「그 묶음은 이미 갔다」 로 읽혀 새 기사를 막는다
-    stale = [r["link"] for r in rows if (r["at_ts"] or 0) < cutoff]
-    rows = [r for r in rows if (r["at_ts"] or 0) >= cutoff]
+    # 안 보낸 것은 `alerted_at = -1`(「안 보냄」)로 적는다 — 「이미 갔다」(양수)와 갈린다.
+    # **조용한 시간에 나온 기사도 같은 길이다** (2026-10-12 재권님 「밤 10시~아침 7시까지는 알림을 주지 않는다」).
+    # 07:00 에 몰아 보내지 않고 07:30 정기 묶음에 ❗ 로 실린다 — `alert` 를 지금 규칙으로 남겨 두는 까닭이다.
+    import dart
+    late = [r for r in rows if (r["at_ts"] or 0) < cutoff or dart.in_quiet(r["at_ts"])]
+    rows = [r for r in rows if r not in late]
+    if dart.in_quiet():
+        _hold_for_digest(late)
+        return 0                # 지금이 조용한 시간 — 남은 것은 다음 바퀴(07:00 뒤)에
+    _hold_for_digest(late)
 
     # **보낼 때 지금 규칙으로 다시 본다** (2026-10-12). 쌓을 때 적어 둔 `alert` 는 그때 규칙이라,
     # 규칙을 고쳐도 이미 쌓인 것은 옛 규칙으로 나갔다. 안 걸리면 보내지 않고 표시만 한다 —
@@ -416,7 +438,7 @@ def send_alerts(send=None):
     count_key = "news_alert_count_" + day
     done_today = int(_meta(count_key) or 0)
 
-    sent, skip, seen = [], list(stale), set()
+    sent, skip, seen = [], [], set()
     for r in sorted(rows, key=lambda x: x["at_ts"] or 0):       # 이른 기사가 그 묶음 대표로 간다
         name = match_alert(r["title"])
         if not name or r["group_id"] in seen or _group_alerted(r["group_id"], r["link"]):
@@ -430,7 +452,7 @@ def send_alerts(send=None):
         ok, _why = _telegram(text, send)
         if not ok:
             # 설정이 없거나 막혔다. 다음 바퀴에 다시 본다 — 오래된 것만 적는다
-            return _finish_alerts(sent, stale, count_key, done_today)
+            return _finish_alerts(sent, [], count_key, done_today)
         sent.append(r["link"])
         seen.add(r["group_id"])
         time.sleep(0.4)      # 텔레그램 초당 제한
@@ -449,12 +471,21 @@ def _finish_alerts(sent, skip, count_key, done_today):
     return len(sent)
 
 
+def _hold_for_digest(rows):
+    """바로 안 보내고 정기 묶음으로 넘긴다 — `alerted_at = -1` · `alert` 는 지금 규칙으로(묶음의 ❗)."""
+    if not rows:
+        return
+    with _lock, _conn() as c:
+        c.executemany("UPDATE news_items SET alerted_at = -1, alert = ? WHERE link = ?",
+                      [(match_alert(r["title"]), r["link"]) for r in rows])
+
+
 def _group_alerted(gid, link):
     """그 묶음에서 다른 기사가 이미 바로 갔나."""
     with _conn() as c:
         return c.execute(
             """SELECT 1 FROM news_items WHERE group_id = ? AND link != ?
-               AND alert IS NOT NULL AND alerted_at IS NOT NULL LIMIT 1""",
+               AND alert IS NOT NULL AND alerted_at > 0 LIMIT 1""",
             (gid, link)).fetchone() is not None
 
 
@@ -564,6 +595,7 @@ def collect_once(send=None):
     import news
     got = news.fetch_issues()
     added = store(got.get("rows") or [])
+    purge_old()
     alerted = send_alerts(send)
     digested = send_digest(send=send)
     return {"added": len(added), "alerted": alerted, "digested": digested}
