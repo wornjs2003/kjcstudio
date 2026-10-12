@@ -22,6 +22,11 @@
 
     python3 company-setup/tools/fetch-trade.py          새 발표가 있으면 받아 쌓는다
     python3 company-setup/tools/fetch-trade.py --all    목록에 보이는 것을 전부 다시 읽는다(처음 채울 때)
+    … --also <경로>                                      받은 파일을 그 경로에도 한 벌 쓴다(여러 번 줄 수 있다)
+
+**서비스방에도 쓴다 (2026-10-12 재권님 「서비스방에도 무역지수 올려줘」)** — 데이터 파일이 .gitignore 라 옮기기(service-deploy)로는
+안 간다. launchd 등록 파일이 --also 로 서비스방 경로를 준다 — **경로는 도구에 박지 않고 등록 파일 한 곳에만 둔다.**
+그 폴더가 없으면 건너뛰고 알린다(만들지 않는다).
 
 종료 — 0 새 발표를 받음 · 3 새 것 없음 · 2 못 받음(목록 · PDF · 읽기). 발표 날 09:00 부터 0 이 나올 때까지 돌린다.
 저장 — company-setup/data/trade-flash.json  {"fetchedAt", "source", "items": [최신순]}
@@ -158,6 +163,7 @@ def parse(text):
 
 def main():
     redo = "--all" in sys.argv
+    also = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == "--also"]
     now = datetime.now(KST)
     try:
         rows = listing()
@@ -194,6 +200,14 @@ def main():
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         json.dump(store, f, ensure_ascii=False, indent=1)
     os.replace(tmp, OUT)
+    for dst in also:                        # 서비스방 등 — 같은 내용을 한 벌 더(쓰는 중에 읽혀도 깨지지 않게 임시 파일 → 바꿔 끼우기)
+        if not os.path.isdir(os.path.dirname(dst)):
+            print("한 벌 더 쓸 폴더가 없어 건너뜀: %s" % os.path.dirname(dst))
+            continue
+        with open(dst + ".tmp", "w", encoding="utf-8", newline="\n") as f:
+            json.dump(store, f, ensure_ascii=False, indent=1)
+        os.replace(dst + ".tmp", dst)
+        print("한 벌 더 씀: %s" % dst)
     top = store["items"][0]
     print("최신 %s · %s · 수출 %s" % (top["date"], top["title"], (top.get("export") or {}).get("amt", "—")))
     if failed:
