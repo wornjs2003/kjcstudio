@@ -63,6 +63,12 @@ COLLECT_INTERVAL = 300
 # 며칠 지나 같은 낱말이 나오는 것은 대개 다른 사건이다.
 GROUP_WINDOW_H = 24
 
+# 쌓아 두는 기간 (2026-10-12 재권님 「뉴스보관은 1주일이면 될거같아」). 그 전에는 지우는 코드가 없어
+# 무기한 쌓였다(9-21 부터 3주 2,119건). 쌓는 바퀴(`collect_once`)에서 이보다 오래된 기사를 지운다.
+# 읽는 쪽은 모두 이 안에 든다 — 데일리 화면 36시간(`daily-view.js` 의 NEWS_HOURS) · 같은 사건 묶기 창
+# `GROUP_WINDOW_H`(24시간) · 즉시 알림 `ALERT_MAX_AGE_H`(3시간) · 정기 묶음은 지난 발송 뒤 것만.
+NEWS_KEEP_DAYS = 7
+
 # 제목 낱말이 이만큼 겹치면 같은 사건으로 본다.
 #
 # **2026-09-21 에 80건으로 기준을 바꿔가며 재고 골랐다.**
@@ -245,6 +251,13 @@ def store(rows):
                           "topicLabel": row.get("topicLabel"),
                           "group": gid, "alert": alert})
     return added
+
+
+def purge_old(days=None):
+    """`NEWS_KEEP_DAYS` 지난 기사를 지운다. 지운 건수를 돌려준다. 기사 시각(`at_ts`)으로 자른다."""
+    cut = int(time.time()) - (days or NEWS_KEEP_DAYS) * 86400
+    with _lock, _conn() as c:
+        return c.execute("DELETE FROM news_items WHERE at_ts < ?", (cut,)).rowcount or 0
 
 
 # ---------------------------------------------------------------- 읽기
@@ -564,6 +577,7 @@ def collect_once(send=None):
     import news
     got = news.fetch_issues()
     added = store(got.get("rows") or [])
+    purge_old()
     alerted = send_alerts(send)
     digested = send_digest(send=send)
     return {"added": len(added), "alerted": alerted, "digested": digested}
