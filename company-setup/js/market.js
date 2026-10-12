@@ -58,13 +58,14 @@ async function chart(code) {
   return j.data.candles.filter(c => c.close).map(c => [day(c.ts), c.close]);
 }
 async function load() {
-  const [M, N, ...px] = await Promise.all([
+  const [M, N, MV, ...px] = await Promise.all([
     fetch('data/world-macro.json', { cache: 'no-store' }).then(r => r.json()),
     fetch('data/naver-macro.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),   // 그 밖의 지표 — 못 받아도 위 셋은 그린다
+    fetch('data/market-moves.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),   // 크게 움직인 날의 원인 — 세션이 손으로 적는다
     ...[...K, 'GOLD'].map(k => chart(ETF[k]).catch(() => null)),
     ...Object.keys(BOND).map(b => chart(b).catch(() => null))]);
   const P = {}; [...K, 'GOLD', ...Object.keys(BOND)].forEach((k, i) => { P[k] = px[i] ? px[i].slice(-252) : null; });
-  return { M, N, S: M.series, P };
+  return { M, N, MV, S: M.series, P };
 }
 
 // ── 규칙으로 쓰는 문단 R1~R6 — 각 문단은 { 글, 근거[], 읽는 법 }
@@ -271,6 +272,34 @@ function others(N) {
     ['국내 금리', rate(pick('domesticInterest', 8))], ['기준금리', rate(pick('standardInterest', 8))]]
     .map(([g, xs]) => `<div><div class="g">${g}</div>${xs.map(row).join('')}</div>`).join('');
 }
+// ── 국내 시장 — 오늘 · 업종 · 크게 움직인 날 (2026-10-12 재권님 「응 해봐」 — 「그 밖의 재료」 룰 · 시황분석1 안)
+//    날마다 칸 = 한국거래소 마감 시황의 공통 칸 · 원인 칸 = 크게 움직인 날만(Baker · Bloom · Davis · Sammon NBER w28687)
+const MOVE_BAR = { SPX: 2.5, IXIC: 2.5, KOSPI: 4, KOSDAQ: 4 };   // 한국 4% — 지난 1년 2.5% 면 코스피 87날이라 시황분석1 안 「나라별 2~4%」 의 위 끝(2026-10-12 재권님 「응 해줘」)
+const won = v => v == null ? '—' : `<b class="${v > 0 ? 'num-up' : v < 0 ? 'num-dn' : ''}">${v > 0 ? '+' : ''}${v.toLocaleString('ko-KR')}</b>`;
+function krDay(N, MV) {
+  const day = document.getElementById('kr-day'), ind = document.getElementById('kr-ind'), mv = document.getElementById('kr-moves');
+  if (!N || !N.kr) { day.innerHTML = '<span class="err">국내 시장 값을 받지 못했습니다</span>'; return; }
+  const last = k => { const s = (N.idx && N.idx[k] && N.idx[k].s) || []; return s[s.length - 1]; };
+  const block = (k, name) => { const m = N.kr[k]; if (!m) return `<div><h3>${name}</h3>—</div>`; const l = last(k), u = m.updown, tot = (u.오름 || 0) + (u.보합 || 0) + (u.내림 || 0) || 1;
+    return `<div><h3>${name} ${l ? `${l[1].toLocaleString('ko-KR')} <span class="${l[2] > 0 ? 'num-up' : 'num-dn'}">${pct(l[2], 2)}</span>` : ''}</h3>
+      <div class="nv-tb one-col"><div class="g">투자자별 순매수(억원)</div>${Object.entries(m.investor).map(([n, v]) => `<div class="r"><span>${n}</span>${won(v)}</div>`).join('')}
+      <div class="g">프로그램 매매(억원)</div>${Object.entries(m.program).map(([n, v]) => `<div class="r"><span>${n}</span>${won(v)}</div>`).join('')}
+      <div class="g">오른 종목 ${u.오름 ?? '—'}(상한 ${u.상한 ?? '—'}) · 보합 ${u.보합 ?? '—'} · 내린 종목 ${u.내림 ?? '—'}(하한 ${u.하한 ?? '—'})</div>
+      <div class="ud"><i class="u" style="width:${(u.오름 || 0) / tot * 100}%"></i><i class="s" style="width:${(u.보합 || 0) / tot * 100}%"></i><i class="d" style="width:${(u.내림 || 0) / tot * 100}%"></i></div></div></div>`; };
+  const us = ['SPX', 'IXIC'].map(k => last(k) ? `<div class="r"><span>${N.idx[k].name} <span class="cap">${last(k)[0]}</span></span><span>${last(k)[1].toLocaleString('ko-KR')} <span class="${last(k)[2] > 0 ? 'num-up' : 'num-dn'}">${pct(last(k)[2], 2)}</span></span></div>` : '').join('');
+  const top = (N.kr.KOSPI && N.kr.KOSPI.top) || [];
+  day.innerHTML = block('KOSPI', '코스피') + block('KOSDAQ', '코스닥')
+    + `<div><h3>전날 미국 증시</h3><div class="nv-tb one-col">${us || '—'}<div class="g">코스피 시가총액 상위</div>${top.map(x => `<div class="r"><span>${x.name}</span><span>${x.v == null ? '—' : x.v.toLocaleString('ko-KR')} <span class="${x.pct > 0 ? 'num-up' : 'num-dn'}">${pct(x.pct, 2)}</span></span></div>`).join('')}</div></div>`;
+  const g = [...(N.industry || [])].filter(x => x.pct != null).sort((a, b) => b.pct - a.pct);
+  const irow = x => `<div class="r"><span>${x.name} <span class="cap">${x.up}↑ ${x.down}↓</span></span><span class="${x.pct > 0 ? 'num-up' : 'num-dn'}">${pct(x.pct, 2)}</span></div>`;
+  ind.innerHTML = g.length ? `<div class="g">많이 오른 업종</div>${g.slice(0, 5).map(irow).join('')}<div class="g">많이 내린 업종</div>${g.slice(-5).reverse().map(irow).join('')}` : '—';
+  const since = new Date(Date.now() - 92 * 864e5).toISOString().slice(0, 10), C = (MV && MV.moves) || {};
+  const rows = Object.entries(N.idx || {}).flatMap(([k, v]) => v.s.filter(p => p[0] >= since && p[2] != null && Math.abs(p[2]) >= MOVE_BAR[k]).map(p => ({ k, name: v.name, d: p[0], c: p[2] })))
+    .sort((a, b) => b.d.localeCompare(a.d) || Math.abs(b.c) - Math.abs(a.c));
+  mv.innerHTML = rows.length ? rows.map(r => { const x = C[`${r.d}|${r.k}`];
+    return `<div class="r"><span>${r.d}</span><span>${r.name}</span><span class="${r.c > 0 ? 'num-up' : 'num-dn'}">${pct(r.c, 2)}</span><span class="why">${x ? `<b>${x.cause}</b> — ${x.note || ''}${x.src ? ` <a href="${x.src}" target="_blank" rel="noopener">기사</a>` : ''}` : '—'}</span></div>`; }).join('')
+    : '<span class="cap">석 달 안에 문턱을 넘은 날이 없다</span>';
+}
 function apply() {
   charts.forEach(ch => {
     if (ch._rebuild) return ch._rebuild();
@@ -304,5 +333,5 @@ function controls() {
   w.paras.forEach((p, i) => {
     box.insertAdjacentHTML('beforeend', `<p class="para">${p.t}</p><details class="ev"><summary>근거 ${i + 1}</summary><ul>${p.ev.map(x => `<li>${x}</li>`).join('')}</ul><div class="why">읽는 법 — ${p.why}</div></details>`);
   });
-  controls(); draw(D); others(D.N);
+  controls(); draw(D); others(D.N); krDay(D.N, D.MV);
 })();

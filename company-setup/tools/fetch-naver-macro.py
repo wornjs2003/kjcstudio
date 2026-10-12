@@ -11,6 +11,11 @@
 **나중에 바뀔 자리** — 홀딩스에 시장지표 차트가 들어와 서버가 이 값을 내주게 되면 시황분석 탭은 거기서 받는다
 (재권님 10-12 「홀딩스에 차트 넣으면 거기서 값을 가져오는 방향」). 그때 이 도구와 이 파일은 없앤다 — 둘을 함께 두지 않는다.
 
+  국내 시장(2026-10-12 재권님 「응 해봐」 — 「그 밖의 재료」 룰 · 시황분석1 안 · 한국거래소 마감 시황의 공통 칸)
+            m.stock.naver.com/api/index/<KOSPI|KOSDAQ>/integration   투자자별 순매수(억원) · 프로그램(억원) · 오른/내린 종목 수 · 시가총액 상위
+            m.stock.naver.com/api/stocks/industry                     업종 등락(네이버 업종 분류)
+  지수 1년  m.stock.naver.com/api/index/<KOSPI|KOSDAQ>/price · api.stock.naver.com/index/<.INX|.IXIC>/price — 크게 움직인 날을 화면이 고른다
+
 받지 못한 갈래는 빈 목록으로 두고 errors 에 이름만 적는다. 키가 없는 곳이다.
 """
 import json, os, subprocess, sys
@@ -38,7 +43,8 @@ HIST = [
 
 
 def get(path, timeout=20):
-    r = subprocess.run(["curl", "-sfL", "-m", str(timeout), "-A", "Mozilla/5.0", BASE + path], capture_output=True)
+    url = path if path.startswith("http") else BASE + path
+    r = subprocess.run(["curl", "-sfL", "-m", str(timeout), "-A", "Mozilla/5.0", url], capture_output=True)
     if r.returncode:
         raise RuntimeError("curl %d" % r.returncode)
     return json.loads(r.stdout.decode("utf-8", "replace"))
@@ -74,6 +80,39 @@ def history(cat, code, since):
     return sorted(set(map(tuple, out)))
 
 
+M_API = "https://m.stock.naver.com/api/"
+IDX = [("KOSPI", "코스피", M_API + "index/KOSPI/price"), ("KOSDAQ", "코스닥", M_API + "index/KOSDAQ/price"),
+       ("SPX", "S&P 500", "https://api.stock.naver.com/index/.INX/price"), ("IXIC", "나스닥", "https://api.stock.naver.com/index/.IXIC/price")]
+
+
+def kr_market(code):
+    d = get(M_API + "index/%s/integration" % code)
+    t, p, u = d.get("dealTrendInfo") or {}, d.get("programTrendInfo") or {}, d.get("upDownStockInfo") or {}
+    return {"date": t.get("bizdate"),
+            "investor": {"개인": num(t.get("personalValue")), "외국인": num(t.get("foreignValue")), "기관": num(t.get("institutionalValue"))},
+            "program": {"차익": num(p.get("indexDifferenceReal")), "비차익": num(p.get("indexBiDifferenceReal")), "합계": num(p.get("indexTotalReal"))},
+            "updown": {"상한": num(u.get("upperCount")), "오름": num(u.get("riseCount")), "보합": num(u.get("steadyCount")),
+                       "내림": num(u.get("fallCount")), "하한": num(u.get("lowerCount"))},
+            "top": [{"name": x.get("stockName"), "code": x.get("itemCode"), "v": num(x.get("closePrice")), "pct": num(x.get("fluctuationsRatio"))}
+                    for x in (d.get("enrollStocks") or [])[:10]]}
+
+
+def index_year(url, since):
+    out = []
+    for page in range(1, 10):
+        rows = get("%s?page=%d&pageSize=60" % (url, page))
+        if not rows:
+            break
+        for r in rows:
+            d = (r.get("localTradedAt") or "")[:10]
+            v, c = num(r.get("closePrice")), num(r.get("fluctuationsRatio"))
+            if d >= since and v is not None:
+                out.append([d, v, c])
+        if (rows[-1].get("localTradedAt") or "")[:10] < since:
+            break
+    return sorted({p[0]: p for p in out}.values())
+
+
 def main():
     err = {}
     X = {"fetchedAt": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -100,13 +139,30 @@ def main():
             X["hist"][name] = {"cat": cat, "code": code, "s": [list(p) for p in history(cat, code, since)]}
         except Exception as ex:
             err["hist/" + name] = type(ex).__name__
+    X["kr"] = {}
+    for code in ("KOSPI", "KOSDAQ"):
+        try:
+            X["kr"][code] = kr_market(code)
+        except Exception as ex:
+            err["kr/" + code] = type(ex).__name__
+    try:
+        X["industry"] = [{"name": g.get("name"), "pct": num(g.get("changeRate")), "n": g.get("totalCount"),
+                          "up": g.get("riseCount"), "down": g.get("fallCount")} for g in get(M_API + "stocks/industry?page=1&pageSize=100").get("groups", [])]
+    except Exception as ex:
+        X["industry"], err["industry"] = [], type(ex).__name__
+    X["idx"] = {}
+    for key, name, url in IDX:
+        try:
+            X["idx"][key] = {"name": name, "s": index_year(url, since)}   # [날짜, 종가, 전날 대비 %]
+        except Exception as ex:
+            err["idx/" + key] = type(ex).__name__
     X["histSrc"] = "네이버 증권 시장지표 과거 값(…/marketindex/<갈래>/<코드>/prices) · %s 부터" % since
     X["errors"] = err
     with open(OUT, "w", encoding="utf-8", newline="\n") as f:
         json.dump(X, f, ensure_ascii=False, separators=(",", ":"))
     n_now = sum(len(X[c]) for c in CATS) + sum(len(v) for v in X["bond"].values()) + len(X["majors"])
-    print("지금 값 %d개 · 1년 흐름 %d/%d개 · 못 받은 것 %s → %s" % (
-        n_now, len(X["hist"]), len(HIST), ", ".join(err) or "없음", os.path.normpath(OUT)))
+    print("지금 값 %d개 · 1년 흐름 %d/%d개 · 국내 시장 %d · 업종 %d · 지수 1년 %d/%d · 못 받은 것 %s → %s" % (
+        n_now, len(X["hist"]), len(HIST), len(X["kr"]), len(X["industry"]), len(X["idx"]), len(IDX), ", ".join(err) or "없음", os.path.normpath(OUT)))
     return 1 if err else 0
 
 

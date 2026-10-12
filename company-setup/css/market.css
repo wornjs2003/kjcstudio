@@ -46,6 +46,17 @@
 .mk .nv-tb .p { font-size: 11px; padding: 0 6px; border-radius: 99px; margin-left: 6px; font-variant-numeric: tabular-nums; }
 .mk .nv-tb .p.up { background: var(--kh-up-dim); color: var(--kh-up); }
 .mk .nv-tb .p.dn { background: var(--kh-down-dim); color: var(--kh-down); }
+/* 국내 시장 — 오늘 · 크게 움직인 날 (2026-10-12 재권님 「응 해봐」 — 「그 밖의 재료」 룰) */
+.mk .kr-day { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px 16px; font-size: 12.5px; }
+.mk .kr-day h3 { font-size: 13px; margin: 0 0 4px; }
+.mk .kr-day .ud { display: flex; height: 8px; border-radius: 99px; overflow: hidden; margin: 4px 0 2px; background: var(--kh-bg); }
+.mk .kr-day .ud i { display: block; }
+.mk .kr-day .ud .u { background: var(--kh-up); } .mk .kr-day .ud .d { background: var(--kh-down); } .mk .kr-day .ud .s { background: var(--kh-cat-slate-dim); }
+.mk .num-up { color: var(--kh-up); } .mk .num-dn { color: var(--kh-down); }
+.mk .mv { font-size: 12.5px; max-height: 420px; overflow-y: auto; }
+.mk .mv .r { display: grid; grid-template-columns: 78px 52px 58px minmax(0, 1fr); gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--kh-border); align-items: baseline; }
+.mk .mv .why { color: var(--kh-text-secondary); font-size: 12px; }
+.mk .mv .why a { color: var(--kh-accent); }
 @media (min-width: 900px) {
   .mk { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 0 12px; align-items: start; }
   .mk .mk-body { grid-column: 1; grid-row: 1; min-width: 0; }
@@ -55,4 +66,6 @@
   .mk .chart { height: 300px; }
   .mk .mk-wide { grid-column: 1 / -1; }
   .mk .nv-tb { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mk .nv-tb.one-col { grid-template-columns: minmax(0, 1fr); }
+  .mk .kr-day { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
