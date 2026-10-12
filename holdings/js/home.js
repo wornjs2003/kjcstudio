@@ -43,6 +43,8 @@ import { lookupStock } from './data/lookup-stock.js';
 /* 지수 띠 — 칸 목록 · 표시 · 그리기는 components/index-strip.js 한 곳에 있다 (2026-10-01 home.js 에서 빼냄).
    데일리분석 모달의 「주요 지수」 가 같은 띠를 쓴다 */
 import { INDEX_CELLS, stripHtml } from './components/index-strip.js';
+import { loadIndicators, peekIndicators, loadIndicator, peekIndicator, chipsHtml, headOf,
+         drawIndicator } from './components/market-index.js';
 import { everyServerMs } from './store/timing.js';
 import { watch } from './store/longpoll.js';
 
@@ -202,6 +204,7 @@ function paintStrip(indices) {
      전에는 위에 넷(TOP_CELLS)만 두고 나머지를 「주요 지수」 카드에 뒀는데,
      카드가 열넷을 다 담고 있어서 **같은 것이 두 자리**에 있었다.
      카드를 없애고 여기로 합쳤다 — 고를 것은 갈래 띠가 한다. */
+  if (ixCat === MK_CAT) return;          // 시장지표 칩이 떠 있다 — 지수는 lastIndices 에 들고 있다가 갈래를 떠날 때 그린다
   if (top) top.innerHTML = stripHtml(indices);
   paintIxFilter();
 }
@@ -227,8 +230,9 @@ const IX_GROUP = { kr: 'kr', us: 'us', vix: 'us', eu: 'ov', hk: 'ov', oil: 'etc'
  * **낱말로 건다.** 갈래 띠는 `href="#"` 뿐이라 걸 `id` 가 없고, 낱말은
  * 화면에 보이는 것이라 바뀌면 바로 눈에 띈다.
  *
- * **「가상자산」·「시장지표」는 여기 없다** — 그 갈래의 지수를 아직 받아오지
- * 못한다. `null` 이 아니라 **아예 없는 것**이라 아래에서 갈린다. */
+ * **「가상자산」은 여기 없다** — 그 갈래의 지수를 아직 받아오지
+ * 못한다. `null` 이 아니라 **아예 없는 것**이라 아래에서 갈린다.
+ * **「시장지표」는 지수가 아니라 따로 칩을 그린다** (2026-10-12 · `MK_CAT` · components/market-index.js). */
 const CAT_IX = {
   '홈': null,          // null 은 「거르지 않는다」
   '국내': ['kr'],
@@ -238,6 +242,7 @@ const CAT_IX = {
 };
 
 let ixCat = '홈';
+const MK_CAT = '시장지표';
 
 function ixGroupOf(cell) {
   if (cell.icon === 'kr' || cell.icon === 'us') return cell.icon;
@@ -252,6 +257,7 @@ function paintIxFilter() {
      없는 건지」 구분이 안 된다 — 빨간 바탕으로 그렇게 적는다
      (CLAUDE.md 「아직 안 정해진 자리는 빨간 바탕」). **띠 높이는 그대로다.** */
   const todo = $('kh-ix-todo');
+  if (ixCat === MK_CAT) { if (todo) todo.hidden = true; host.hidden = false; paintMkChips(); return; }
   const known = Object.prototype.hasOwnProperty.call(CAT_IX, ixCat);
   if (todo) todo.hidden = known;
   host.hidden = !known;
@@ -275,10 +281,125 @@ function setupCatFilter() {
     e.preventDefault();
     links.forEach((x) => x.classList.remove('is-on'));
     a.classList.add('is-on');
+    const was = ixCat;
     ixCat = a.textContent.trim();
+    if (was === MK_CAT && ixCat !== MK_CAT) {
+      leaveMarket();                                        // 다른 갈래로 — 큰 차트는 종목으로 돌아간다
+      const top = $('kh-top-ix');
+      if (top && lastIndices) top.innerHTML = stripHtml(lastIndices);
+    }
     paintIxFilter();
     syncMarketGroup();
   }));
+}
+
+/* ── 시장지표 갈래 (2026-10-12 · 재권님 「응 해줘」 · 시안 2판) ─────────────
+ *
+ * 「시장지표」 를 누르면 지수 띠 자리에 칩 열하나가 뜬다(값은 네이버 · 서버가 받는다).
+ * 칩을 누르면 **큰 차트 칸이 그 지표의 1년** — 봉이 오는 지표는 일봉, 종가만 오는 지표는 선.
+ * 다른 갈래나 종목을 누르면 종목 차트로 돌아간다. 종목 차트는 지우지 않고 가려 둔다(돌아갈 때 다시 안 만든다).
+ *
+ * **칸 크기는 그대로다** (「보는 것을 바꿔도 자리는 그대로다」). 머리줄 · 아래 줄은 글 길이가 달라 폰에서 줄 수가
+ * 바뀌므로 들어갈 때의 높이를 잡아 두었다가 나올 때 푼다(`MK_LOCK`). 오른쪽 칸(투자자 정보 · 종목분석 · 종목 뉴스)은 그 종목 그대로다
+ * — 어떻게 둘지 아직 안 정했다(창구 · 2026-10-12).
+ */
+let mkKey = null;                       // 큰 차트에 띄운 지표 — null 이면 종목 차트
+let mkWant = null;                      // 마지막으로 누른 지표(받는 사이 다른 것을 누르면 옛 응답을 버린다)
+let mkDrop = null;                      // 지표 차트 지우기
+const MK_HIDE = ['kh-big-ic', 'kh-big-link', 'kh-dt'];          // 지표에는 없는 칸 — 자리는 두고 가린다
+const MK_HIDE_SEL = ['.kh-idx-ai', '.kh-ind-menu'];
+const MK_LOCK = ['.kh-idx-head', '#kh-big-foot'];
+
+async function paintMkChips() {
+  const host = $('kh-top-ix');
+  if (!host) return;
+  const had = peekIndicators();
+  if (had) host.innerHTML = chipsHtml(had, mkKey);
+  else host.innerHTML = '<div class="kh-ix"><div class="kh-ix-h"><span class="kh-ix-n">시장지표</span></div>'
+    + '<div class="kh-ix-b"><div><div class="kh-ix-v kh-num kh-mut">불러오는 중</div><div class="kh-ix-c"></div></div></div></div>';
+  syncIxNav();
+  try {
+    const j = await loadIndicators();
+    if (ixCat !== MK_CAT) return;
+    host.innerHTML = chipsHtml(j, mkKey);
+  } catch {
+    if (ixCat !== MK_CAT || had) return;
+    host.innerHTML = '<div class="kh-ix"><div class="kh-ix-h"><span class="kh-ix-n">시장지표</span></div>'
+      + '<div class="kh-ix-b"><div><div class="kh-ix-v kh-num kh-mut">불러오지 못함</div><div class="kh-ix-c"></div></div></div></div>';
+  }
+  syncIxNav();
+}
+
+function setMkHidden(on) {
+  const v = on ? 'hidden' : '';
+  MK_HIDE.forEach((id) => { const e = $(id); if (e) e.style.visibility = v; });
+  MK_HIDE_SEL.forEach((q) => { const e = document.querySelector(q); if (e) e.style.visibility = v; });
+  const host = $('kh-big-chart');
+  if (host) [...host.children].forEach((c) => { if (!c.classList.contains('kh-mk-c')) c.style.visibility = v; });
+}
+
+async function showMarket(key) {
+  mkWant = key;
+  /* 머리줄 · 아래 줄 높이를 잡아 둔다 — 글 길이가 달라 폰에서 줄 수가 바뀐다(2026-10-12 실측 머리 21px · 아래 17px) */
+  if (!mkKey) MK_LOCK.forEach((q) => { const e = document.querySelector(q);
+    if (e) e.style.minHeight = e.getBoundingClientRect().height + 'px'; });
+  mkKey = key;
+  document.querySelectorAll('#kh-top-ix .kh-ix[data-mk]').forEach((el) =>
+    el.classList.toggle('is-on', el.dataset.mk === key));
+  setMkHidden(true);
+  let j = peekIndicator(key);
+  if (!j) {
+    const name = $('kh-idx-name'), v = $('kh-big-v');
+    const it = (peekIndicators() || { items: [] }).items.find((x) => x.key === key);
+    if (name && it) name.textContent = it.name;
+    if (v) { v.className = 'kh-idx-v kh-num kh-mut'; v.textContent = '불러오는 중'; }
+    try { j = await loadIndicator(key); }
+    catch {
+      if (mkWant !== key || mkKey !== key) return;
+      if (v) v.textContent = '불러오지 못함';
+      return;
+    }
+    if (mkWant !== key || mkKey !== key) return;
+  }
+  const h = headOf(j);
+  const name = $('kh-idx-name'), v = $('kh-big-v'), yr = $('kh-year-range');
+  const per = $('kh-idx-per'), foot = $('kh-big-foot'), host = $('kh-big-chart');
+  if (name) name.textContent = h.name;
+  if (v) { v.className = 'kh-idx-v kh-num ' + h.dirClass; v.textContent = h.value; }
+  if (yr) yr.textContent = h.range;
+  if (per) per.innerHTML = `<span class="kh-chip live" style="cursor:default">${h.per}</span>`;
+  if (foot) foot.innerHTML = `<span title="${h.footTitle}">${h.foot[0]}</span><span title="네이버 증권 시장지표">${h.foot[1]}</span>`;
+  if (host) {
+    if (mkDrop) mkDrop();
+    try { mkDrop = drawIndicator(host, j); }
+    catch { mkDrop = null; }
+  }
+}
+
+function leaveMarket() {
+  if (!mkKey) return;
+  mkKey = null;
+  mkWant = null;
+  if (mkDrop) { mkDrop(); mkDrop = null; }
+  setMkHidden(false);
+  MK_LOCK.forEach((q) => { const e = document.querySelector(q); if (e) e.style.minHeight = ''; });
+  document.querySelectorAll('#kh-top-ix .kh-ix.is-on').forEach((el) => el.classList.remove('is-on'));
+  bigShown = null;
+  paintBigPeriods();
+  const st = findStock(selectedCode);
+  if (st) paintBigHead(st);
+  paintYearRange();
+  paintBigChart();                       // 그려 둔 종목 차트면 다시 안 만들고 빈 봉만 받는다
+}
+
+function setupMarketChips() {
+  const host = $('kh-top-ix');
+  if (!host) return;
+  host.addEventListener('click', (e) => {
+    if (ixCat !== MK_CAT) return;
+    const chip = e.target.closest('.kh-ix[data-mk]');
+    if (chip) showMarket(chip.dataset.mk);
+  });
 }
 
 /* 좌우 화살표. 한 줄이라 다 안 들어가면 밀어서 본다.
@@ -357,6 +478,7 @@ function hideBigLoading(host) {
    다음 알림까지 멈춰 있었다(8765 실측 · 0.4초 간격으로 열 종목 중 둘) */
 let catchingKey = null;
 async function catchUpBigChart(key = bigChartKey) {
+  if (mkKey) return;
   if (!bigChart || bigDrawnKey !== key) return paintBigChart();
   if (catchingKey === key) return;
   catchingKey = key;
@@ -400,6 +522,7 @@ function dropBigChart() {
    봉을 받는 데 시간이 걸리는데 이름이 옛 종목인 채로 있으면
    다른 종목 차트를 보고 있는 것처럼 보인다. */
 function paintBigHead(s2) {
+  if (mkKey) return;                    // 시장지표를 보고 있다 — 돌아갈 때 leaveMarket 이 다시 그린다
   paintIcon($('kh-big-ic'), s2);
   /* 옆 패널 「세부사항」 제목에도 같은 아이콘을 둔다 (2026-09-18 지시).
      패널 넷이 다 이 종목 이야기인데 어느 종목인지는 여기 머리줄에만 있었다. */
@@ -425,7 +548,7 @@ function paintBigHead(s2) {
 let bigShown = null;
 function paintBigPrice() {
   const el = $('kh-big-v');
-  if (!el) return;
+  if (!el || mkKey) return;
   /* 묶음 시세가 아직 안 왔으면 세부사항 칸이 받은 단건으로 먼저 칠한다 — 묶음이 오면 그것이 덮는다
      (2026-10-06 실측: 단건은 0.2초에 와 있는데 묶음을 기다려 1.7초에 칠해졌다) */
   const live = (rowPrices && rowPrices[selectedCode]) || _oneSeed.get(selectedCode);
@@ -456,6 +579,7 @@ function paintBigPrice() {
    (2026-09-30 지시 — 「5번」). 자세한 것은 `chart.js` 의 `fetchCandles` 주석. */
 let bigDigits = 0;          // 지금 큰 차트의 가격 눈금 소수 자리
 async function paintBigChart(opt = {}) {
+  if (mkKey) return;                    // 시장지표가 큰 차트 칸을 쓰고 있다
   const st = findStock(selectedCode);
   if (!st) return;
 
@@ -648,7 +772,7 @@ function takeOne(code, one) {
 
 async function paintYearRange() {
   const el = $('kh-year-range');
-  if (!el) return;
+  if (!el || mkKey) return;
   const code = selectedCode;
   rangeKey = code;
 
@@ -1933,6 +2057,7 @@ window.addEventListener('popstate', () => {
 });
 
 function selectStock(code) {
+  leaveMarket();                        // 종목을 고르면 큰 차트는 그 종목으로 돌아간다
   selectedCode = code;
   document.querySelectorAll('#kh-rows tr').forEach(tr =>
     tr.classList.toggle('is-active', tr.dataset.code === code));
@@ -1958,6 +2083,7 @@ setInterval(paintClock, 30000);
 paintMkt();
 setInterval(paintMkt, 30000);
 setupCatFilter();
+setupMarketChips();
 setupIxNav();
 setupSorts();
 setupMarkets();

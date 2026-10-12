@@ -62,6 +62,7 @@ import naver
 import naver_period
 import toss
 import macro
+import market_index
 import news
 import news_store
 # 오류 문구에서 비밀을 지운다. 외부 호출 오류를 사람에게 보여줄 때는
@@ -6020,6 +6021,9 @@ class Handler(SimpleHTTPRequestHandler):
         if (self.path or "").startswith("/api/macro/"):
             self._handle_macro()
             return
+        if (self.path or "").startswith("/api/market/"):
+            self._handle_market()
+            return
         if (self.path or "").startswith("/debugging/"):
             self._handle_debugging()
             return
@@ -6391,6 +6395,47 @@ class Handler(SimpleHTTPRequestHandler):
                                  "known": macro.ALL_IDS}, 400)
                 return
             r = macro.pick(want)
+        self._send_json(r, 200 if r.get("ok") else 502)
+
+    def _handle_market(self):
+        """시장지표(네이버) — server/market_index.py 머리 주석. 상류가 있는 서버는 넘긴다(받는 것은 8765 한 곳).
+
+        상류가 이 주소를 아직 모르면(새 코드로 재시작 전 — 옛 8765 는 JSON 이 아닌 403 을 낸다 · 2026-10-12 실측) 그때만 여기서 받는다 — 확인용 서버가 새 코드를
+        재시작 전에 볼 수 있게. 토스처럼 토큰을 끊는 일이 없어 이 폴백은 해가 없다. 응답 `servedBy` 가 어디서 받았나다."""
+        parsed = urllib.parse.urlparse(self.path)
+        route = parsed.path[len("/api/market/"):].strip("/")
+        if route not in ("indicators", "indicator"):
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= 둘입니다."}, 404)
+            return
+        base = upstream_base()
+        if base:
+            try:
+                with urllib.request.urlopen(base + self.path, timeout=60) as resp:
+                    status, body = resp.status, resp.read()
+            except urllib.error.HTTPError as e:
+                status, body = e.code, e.read()
+            except (urllib.error.URLError, OSError) as e:
+                self._send_json({"ok": False, "error": "상류(8765)에 못 닿았습니다 — %s" % safe_message(e),
+                                 "source": "market"}, 502)
+                return
+            if not (status in (403, 404) and not body.lstrip().startswith(b"{")):
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+        if route == "indicators":
+            r = market_index.indicators()
+        else:
+            key = (urllib.parse.parse_qs(parsed.query).get("key") or [""])[0].strip()
+            r = market_index.indicator(key)
+            if r is None:
+                self._send_json({"ok": False, "error": "모르는 지표입니다 — key 는 %s 중 하나입니다."
+                                 % " · ".join(i["key"] for i in market_index.ITEMS)}, 400)
+                return
+        r["servedBy"] = "상류에 아직 없어 여기서" if base else "여기서"
         self._send_json(r, 200 if r.get("ok") else 502)
 
     def _relay_upstream(self, why, source):
