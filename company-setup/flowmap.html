@@ -183,6 +183,50 @@
   .parts { position: absolute; inset: 0; background: var(--bg-card); border-radius: 14px; box-shadow: var(--shadow-lg); overflow: hidden; }
   .parts iframe { width: 100%; height: 100%; border: 0; display: block; }
   .parts .x { position: absolute; top: 10px; right: 12px; z-index: 2; border: 0; background: var(--accent-faint); color: var(--accent); border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
+
+  /* ── 나라별 시황 말풍선 — 세계지도(평면)에서만 · data/world-macro.json(tools/fetch-world-macro.py) (2026-10-12 재권님 시안 승인 「응 좋은거같아 해줘」) ──
+     좁은 폭이 기본: 지도엔 나라 이름 + 금리 칩만, 누르면 지도 아래 판(.wm-sheet). 넓은 폭(561px~)은 주가 · 물가 · 환율 · 10년 금리까지 띄우고 누르면 그 자리에서 펼친다.
+     정책금리 칩 색 = 직전 결정 — 인상 상승색 · 동결 ok · 인하 하락색(연한 바탕에 같은 색 진한 글씨). 말풍선이 켜지면 AI 생태계 핀은 흐리게 */
+  #geo.wm-on .maplibregl-marker:not(.wm) { opacity: .12 !important; pointer-events: none; }   /* !important — maplibre 가 마커에 opacity 를 인라인으로 박는다 */
+  .wm { font-family: 'Noto Sans KR', sans-serif; background: var(--bg-card); border-radius: 8px; box-shadow: var(--shadow-md); padding: 3px 6px;
+        color: var(--text-primary); cursor: pointer; }
+  .wm h4 { margin: 0; font-size: 11.5px; font-weight: 700; display: flex; gap: 5px; align-items: center; justify-content: space-between; white-space: nowrap; }
+  .wm .rt, .wm-leg .rt { font-size: 10px; font-weight: 700; padding: 0 6px; border-radius: 99px; line-height: 16px; }
+  .rt.up { background: rgb(var(--kh-up-rgb) / 12%); color: var(--kh-up); }
+  .rt.hold { background: rgb(var(--kh-ok-rgb) / 14%); color: rgb(var(--kh-ok-rgb)); }
+  .rt.down { background: rgb(var(--kh-down-rgb) / 12%); color: var(--kh-down); }
+  .rt.none { background: var(--bg-elevated); color: var(--text-muted); }
+  .wm table { border-collapse: collapse; font-size: 10.5px; line-height: 15px; display: none; }
+  .wm td { padding: 0; }
+  .wm td:first-child { color: var(--text-muted); padding-right: 8px; white-space: nowrap; }
+  .wm td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .wm .p { color: var(--kh-up); }
+  .wm .m { color: var(--kh-down); }
+  .wm .y { color: var(--text-muted); font-size: 9px; }
+  .wm .src { display: none; font-size: 9px; color: var(--text-muted); margin-top: 3px; line-height: 12px; }
+  .wm.pick { box-shadow: 0 0 0 2px var(--accent); }
+  .wm-sheet { position: absolute; left: 6px; right: 6px; bottom: 6px; z-index: 6; cursor: pointer; padding: 5px 7px 6px;
+              display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 10px; }
+  .wm-sheet[hidden] { display: none; }
+  .wm-sheet h4, .wm-sheet .src { grid-column: 1 / -1; margin-bottom: 3px; }
+  .wm-sheet table { display: table; width: 100%; font-size: 10px; }
+  .wm-sheet td:last-child .y { display: none; }
+  .wm-sheet .src { display: block; }
+  .wm-leg { display: none; position: absolute; left: 10px; bottom: 10px; z-index: 3; background: var(--bg-card); border-radius: 8px; box-shadow: var(--shadow-md);
+            padding: 5px 8px; font: 10.5px/16px 'Noto Sans KR', sans-serif; color: var(--text-secondary); }
+  .wm-leg b { font-weight: 700; color: var(--text-primary); margin-right: 6px; }
+  .wm-leg .rt { margin-right: 4px; }
+  @media (min-width: 561px) {
+    .wm { min-width: 96px; padding: 5px 7px 6px; }
+    .wm h4 { margin: 0 0 3px; }
+    .wm table { display: table; }
+    .wm.open { min-width: 190px; z-index: 5; }
+    .wm .more { display: none; border-top: 1px solid var(--border); margin-top: 4px; padding-top: 3px; }
+    .wm.open .more { display: table; }
+    .wm.open .src { display: block; max-width: 190px; }
+    .wm-sheet { display: none !important; }
+    #geo.wm-on .wm-leg { display: block; }
+  }
 </style>
 </head>
 <body>
@@ -448,6 +492,68 @@ function lineColorExpr() {
   m.push(Object.values(LINE_COLOR)[0] || rgbOf(TOKEN.accent));
   return m;
 }
+// ── 나라별 시황 말풍선 — 세계지도(평면)일 때만 켠다 (2026-10-12 · 위 CSS 주석) ──
+const WM_WIDE = window.matchMedia('(min-width: 561px)');   // CSS 의 @media 폭과 같은 값 — 말풍선 자리(offset)가 폭에 따라 달라 JS 도 안다
+const WM_OFF = { wide: { US: [-20, -60], EZ: [0, -40], JP: [70, 10], BR: [40, 10], CL: [-40, 30], VN: [-10, 70], AU: [0, 20], KR: [20, -95], CN: [-90, -10] },
+                 narrow: { CN: [-45, 5], KR: [5, -22], JP: [40, 22], VN: [-10, 10] } };   // 이웃 나라 말풍선이 안 겹치게 — 시안에서 잰 자리
+const WM_DIR = { up: '인상', hold: '동결', down: '인하' };
+let wmData = null, wmMarks = [], wmSheet = null, wmLeg = null;
+function wmCenter() { return WM_WIDE.matches ? { center: [35, 12], extra: 0 } : { center: [128, 22], extra: 0.9 }; }   // 아홉 곳이 다 들어오는 자리 · 좁은 폭은 한국 둘레
+const wmPct = (v, d = 1) => v == null ? '—' : `<span class="${v > 0 ? 'p' : v < 0 ? 'm' : ''}">${v > 0 ? '+' : ''}${v.toFixed(d)}%</span>`;
+const wmDay = s => s ? String(s).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3').slice(0, 10) : '';
+function wmHtml(c) {
+  const r = c.rate;
+  const rt = r ? `<span class="rt ${esc(r.dir)}">${r.v}% ${WM_DIR[r.dir] || ''}</span>` : '<span class="rt none">금리 —</span>';
+  const fxRow = c.fx ? [esc(c.fx.pair), `${c.fx.v.toLocaleString()} ${wmPct(c.fx.m1)}`] : c.dxy ? ['달러', `달러지수 ${c.dxy.v.toFixed(1)} ${wmPct(c.dxy.m1)}`] : ['환율', '—'];
+  const tr = (a, b) => `<tr><td>${a}</td><td>${b}</td></tr>`;
+  const src = [c.eq && `주가 ${esc(c.eq.etf)} ${wmDay(c.eq.date)}`, r && `금리 ${esc(r.src.split(' ')[0])} ${esc(r.date)}`,
+               c.cpi && `물가 ${esc(c.cpi.src.split(' ')[0])} ${esc(c.cpi.date)}`, c.dxy ? `달러지수 FRED ${esc(c.dxy.date)}` : c.fx && `환율 ECB ${esc(c.fx.date)}`,
+               c.y10 && `10년 ${esc(c.y10.date)}`].filter(Boolean).join(' · ');
+  return `<h4>${esc(c.name)}${rt}</h4><table>`
+    + tr('주가 1개월', c.eq ? wmPct(c.eq.m1) : '—')
+    + tr('물가', c.cpi ? `${c.cpi.v.toFixed(1)}%${c.cpi.annual ? ' <span class="y">연간</span>' : ''}` : '—')
+    + tr(fxRow[0], fxRow[1])
+    + tr('10년 금리', c.y10 ? c.y10.v.toFixed(2) + '%' : '—')
+    + '</table><table class="more">'
+    + tr('금리 직전 변경', r && r.prev != null ? `${r.prev} → ${r.v}% <span class="y">${esc(String(r.since).slice(5))}</span>` : '—')
+    + tr('경기선행지수', c.cli ? `${c.cli.v} <span class="y">(전달 ${c.cli.prev} · ${esc(c.cli.date)})</span>` : '—')
+    + tr('성장률 전망', c.gdp ? `${c.gdp.v}% <span class="y">${esc(c.gdp.date)} · IMF</span>` : '—')
+    + tr('다음 금리 회의', c.meet ? `${esc(c.meet.v)} <span class="y">${esc(c.meet.name)}</span>` : '—')
+    + `</table><div class="src">${src}</div>`;
+}
+function wmClear() { wmMarks.forEach(m => m.remove()); wmMarks = []; if (wmSheet) wmSheet.hidden = true; }
+function wmDraw() {
+  wmClear();
+  const wide = WM_WIDE.matches, off = wide ? WM_OFF.wide : WM_OFF.narrow, box = $('geo');
+  if (!wmSheet) {
+    wmSheet = document.createElement('div'); wmSheet.className = 'wm wm-sheet'; wmSheet.hidden = true;
+    wmSheet.addEventListener('click', () => { wmSheet.hidden = true; box.querySelectorAll('.wm.pick').forEach(x => x.classList.remove('pick')); });
+    wmLeg = document.createElement('div'); wmLeg.className = 'wm-leg';
+    box.append(wmSheet, wmLeg);
+  }
+  wmLeg.innerHTML = `<b>정책금리 직전 결정</b><span class="rt up">인상</span><span class="rt hold">동결</span><span class="rt down">인하</span> · 주가는 나라 ETF 1개월 · 받은 시각 ${esc(wmData.fetchedAt)}`;
+  Object.entries(wmData.countries).forEach(([k, c]) => {
+    const d = document.createElement('div'); d.className = 'wm'; d.innerHTML = wmHtml(c);
+    d.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (WM_WIDE.matches) { const on = !d.classList.contains('open'); box.querySelectorAll('.wm.open').forEach(x => x.classList.remove('open')); d.classList.toggle('open', on); return; }
+      const on = !d.classList.contains('pick');
+      box.querySelectorAll('.wm.pick').forEach(x => x.classList.remove('pick'));
+      d.classList.toggle('pick', on); wmSheet.innerHTML = wmHtml(c); wmSheet.hidden = !on;
+    });
+    wmMarks.push(new maplibregl.Marker({ element: d, offset: off[k] || [0, 0] }).setLngLat(c.at).addTo(geo));
+  });
+}
+async function wmShow(on) {
+  $('geo').classList.toggle('wm-on', on);
+  if (!on) { wmClear(); return; }
+  if (!wmData) {
+    try { wmData = await (await fetch('data/world-macro.json', { cache: 'no-store' })).json(); }
+    catch (e) { console.error('[세계지도 시황] 못 읽었습니다', e); $('geo').classList.remove('wm-on'); return; }
+  }
+  wmDraw();
+}
+WM_WIDE.addEventListener('change', () => { if (wmMarks.length) wmDraw(); });
 function buildGeo() {
   const box = $('geo');
   try {
@@ -507,15 +613,16 @@ function buildGeo() {
       if (jump) { geo.jumpTo({ center: HOME }); const z = fitGlobe(); geo.setMinZoom(Math.max(0, z - 0.6)); }
       return;
     }
-    const z = Math.log2(geo.getContainer().clientWidth / 512);
+    const z = Math.log2(geo.getContainer().clientWidth / 512), wc = wmCenter();   // 세계지도는 나라 말풍선이 다 들어오는 자리로 (2026-10-12 · 전에는 [140, 22])
     geo.setMinZoom(z);
-    if (jump || geo.getZoom() < z) geo.jumpTo({ center: [140, 22], zoom: z });
+    if (jump || geo.getZoom() < z) geo.jumpTo({ center: wc.center, zoom: z + (jump ? wc.extra : 0) });
   };
   function applyProjection() {
     geo.setProjection({ type: globeOn ? 'globe' : 'mercator' });
     box.classList.toggle('globe', globeOn);
     document.querySelector('#geo-ctl [data-g="globe"]').classList.toggle('is-on', globeOn);
     fitWorld(true);
+    wmShow(!globeOn);
   }
   (function turn() {
     if (globeOn && spinOn && !hover && !dragging && !document.hidden && geoReady && !$('v-geo').hidden) {
