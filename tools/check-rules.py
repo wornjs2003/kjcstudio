@@ -420,14 +420,45 @@ def strip_html_comments(src):
 TERM_REFS = [
     re.compile(r"""data-term=(\\?)(["'])(.*?)\1\2"""),
     re.compile(r"""\.dataset\.term\s*=\s*()(["'`])(.*?)\2"""),
+    re.compile(r"""\.dataset\[\s*["']term["']\s*\]\s*=\s*()(["'`])(.*?)\2"""),
     re.compile(r"""setAttribute\(\s*["']data-term["']\s*,\s*()(["'`])(.*?)\2\s*\)"""),
 ]
 DYNAMIC = re.compile(r"""[$+{}'"`\\]""")      # 값을 이어 붙이거나 변수로 채우는 것 — 실행해 봐야 안다
 
 
+def strip_comments_quoted(src):
+    """// · /* */ 를 빼되 따옴표 안은 건너뛴다 — 줄 수는 그대로 둔다. 용어 표시를 셀 때만 쓴다.
+
+    strip_js_comments 는 따옴표를 안 봐서 「href="//cdn…"」 · 「'holdings/*.js'」 뒤의 표시까지 지웠다(qa 2026-10-12 재시험).
+    ' 와 " 는 줄 끝에서 닫는다 — 정규식 리터럴(/'/)이나 글 속 「don't」 가 따옴표를 열어도 그 줄에서 끝난다.
+    틀려도 주석을 덜 지우는 쪽이라 「놓침」 이 아니라 「더 셈」 으로 난다."""
+    out, i, n, q = [], 0, len(src), None
+    while i < n:
+        c = src[i]
+        if q:
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(src[i + 1]); i += 2; continue
+            if c == q or (c == "\n" and q != "`"):
+                q = None
+            i += 1
+        elif c in "'\"`":
+            q = c; out.append(c); i += 1
+        elif src.startswith("//", i) and (i == 0 or src[i - 1] not in ":\\"):
+            j = src.find("\n", i)
+            i = n if j < 0 else j
+        elif src.startswith("/*", i):
+            j = src.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out.append("\n" * src.count("\n", i, j)); i = j
+        else:
+            out.append(c); i += 1
+    return "".join(out)
+
+
 def term_refs(src):
-    """(줄, 값) — 주석은 빼고 센다. 값을 이어 붙인 것(변수 · ${})은 뺀다. 빈 값은 '' 로 낸다."""
-    src = strip_js_comments(strip_html_comments(src))
+    """(줄, 값) — 주석은 빼고 센다. 값을 이어 붙인 것(변수 · ${})은 뺀다. 빈 값은 '' 로 낸다. 줄 번호순."""
+    src = strip_comments_quoted(strip_html_comments(src))
     out = []
     for pat in TERM_REFS:
         for m in pat.finditer(src):
@@ -435,7 +466,7 @@ def term_refs(src):
             if DYNAMIC.search(v):
                 continue
             out.append((src[:m.start()].count("\n") + 1, v))
-    return out
+    return sorted(out)
 
 
 def c_glossary():
@@ -478,8 +509,17 @@ def c_glossary():
     return "용어집이 어긋남 · 없는 용어를 가리킴", n, hits, BAD, (지시, "「하나 써놓으면 전체 페이지에 다 들어가도록」 (2026-10-12)")
 
 
+def _is_def(v):
+    """한 줄 뜻으로 읽히는 글자인가 — 종목 줄임 이름(「삼성」) · false 같은 값은 뜻이 아니다(qa 2026-10-12 재시험)."""
+    return isinstance(v, str) and len(v.strip()) >= 12
+
+
 def _entry(x):
-    return isinstance(x, dict) and ("short" in x and ("term" in x or "match" in x) or "term" in x and "match" in x)
+    if not isinstance(x, dict):
+        return False
+    term = isinstance(x.get("term"), str) and bool(x["term"].strip())
+    match = isinstance(x.get("match"), (list, str)) and bool(x.get("match"))
+    return _is_def(x.get("short")) and (term or match) or term and match
 
 
 def glossary_shapes(d, path="$"):
@@ -491,14 +531,45 @@ def glossary_shapes(d, path="$"):
             yield from glossary_shapes(x, "%s[%d]" % (path, i))
     elif isinstance(d, dict):
         vals = list(d.values())
-        if sum(map(_entry, vals)) >= 2 or sum(isinstance(v, dict) and "short" in v for v in vals) >= 2:
+        if sum(map(_entry, vals)) >= 2 or sum(isinstance(v, dict) and _is_def(v.get("short")) for v in vals) >= 2:
             yield path
             return
         for k, v in d.items():
             yield from glossary_shapes(v, "%s.%s" % (path, k))
 
 
-JS_ENTRY = re.compile(r"""\{[^{}]*?\bterm\s*:\s*["'`][^{}]*?\b(short|match)\s*:[^{}]*?\}""", re.S)
+# 열쇠는 따옴표가 있어도 없어도 된다(「term:」 · 「"term":」). short 는 글자 · match 는 글자나 목록일 때만.
+JS_TERM = re.compile(r"""(?<![\w$])["']?term["']?\s*:\s*["'`]""")
+JS_DEF = re.compile(r"""(?<![\w$])["']?(?:short["']?\s*:\s*["'`]|match["']?\s*:\s*[\["'`])""")
+
+
+def js_entries(src):
+    """term 열쇠를 품은 객체 글자 중 short · match 도 가진 것의 개수 — 안에 다른 객체가 들어 있어도 센다."""
+    n, seen = 0, set()
+    for m in JS_TERM.finditer(src):
+        d, a = 0, m.start()
+        while a > 0:                      # 감싸는 「{」 를 거꾸로 찾는다
+            a -= 1
+            if src[a] == "}":
+                d += 1
+            elif src[a] == "{":
+                if d == 0:
+                    break
+                d -= 1
+        else:
+            continue
+        d, b = 0, a
+        while b < len(src):               # 짝 「}」
+            if src[b] == "{":
+                d += 1
+            elif src[b] == "}":
+                d -= 1
+                if d == 0:
+                    break
+            b += 1
+        if a not in seen and JS_DEF.search(src, a, b):
+            seen.add(a); n += 1
+    return n
 
 
 def c_glossary_copy():
@@ -523,7 +594,7 @@ def c_glossary_copy():
                     hits.append("%s %s — 용어집 모양이 %s 밖에 있다" % (f, where, GLOSSARY))
             except Exception:
                 pass
-        elif f.endswith(".js") and len(JS_ENTRY.findall(strip_js_comments(src))) >= 2:
+        elif f.endswith(".js") and js_entries(strip_comments_quoted(src)) >= 2:
             hits.append("%s — 용어집 모양의 객체(term 과 short · match)가 %s 밖에 있다" % (f, GLOSSARY))
         for sh in shorts:
             if sh in src:
