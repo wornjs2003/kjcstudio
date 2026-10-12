@@ -22,7 +22,9 @@ if hasattr(sys.stdout, "reconfigure"):
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 OUT = os.path.join(HERE, "..", "data", "world-flow.json")
-SECRETS = os.path.join(ROOT, "holdings", "secrets.json")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _secrets import secrets_path
+SECRETS = secrets_path()   # KJC_SECRETS → ~/.kjc/secrets.json → holdings/secrets.json (tools/_secrets.py 한 곳)
 PORT = sys.argv[sys.argv.index("--port") + 1] if "--port" in sys.argv else "8771"
 API = "http://localhost:%s/api" % PORT
 

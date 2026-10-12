@@ -25,7 +25,8 @@ if hasattr(sys.stdout, "reconfigure"):
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 OUT = os.path.join(HERE, "..", "data", "world-macro.json")
-SECRETS = os.path.join(ROOT, "holdings", "secrets.json")
+from _secrets import secrets_path
+SECRETS = secrets_path()   # KJC_SECRETS → ~/.kjc/secrets.json → holdings/secrets.json (tools/_secrets.py 한 곳)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _save import save   # --out · --also · 실패하면 옛 파일 그대로 — 넷이 함께 씀
 PORT = sys.argv[sys.argv.index("--port") + 1] if "--port" in sys.argv else "8771"

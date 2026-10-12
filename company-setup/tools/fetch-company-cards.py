@@ -17,7 +17,7 @@
 값을 지어내지 않는다. 못 받은 칸은 `null` 이고 `errors` 에 이유가 남는다. 받은 시각(`fetchedAt`)과 출처 주소(`from`)를
 카드마다 적어 화면이 그대로 보여 준다(「숫자에는 뜻을 붙인다」 · 「됨 대신 넣은 값」).
 
-DART 키는 holdings/secrets.json 의 dart.api_key, 회사 고유번호는 holdings/market.db 의 dart_corps(금감원 표 · 읽기만)에서 찾는다.
+DART 키는 열쇠 파일(tools/_secrets.py 순서)의 dart.api_key, 회사 고유번호는 holdings/market.db 의 dart_corps(금감원 표 · 읽기만)에서 찾는다.
 네이버 길은 공개 문서가 없는 내부 API 라 바뀔 수 있다 — 바뀌면 그 칸만 `null` 이 되고 나머지는 산다.
 """
 import io, json, os, re, sqlite3, sys, time, zipfile, urllib.request, urllib.parse
@@ -30,7 +30,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 MAPS = os.path.join(HERE, "..", "data", "maps")
 OUT = os.path.join(HERE, "..", "data", "company-cards.json")
-SECRETS = os.path.join(ROOT, "holdings", "secrets.json")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _secrets import secrets_path
+SECRETS = secrets_path()   # KJC_SECRETS → ~/.kjc/secrets.json → holdings/secrets.json (tools/_secrets.py 한 곳)
 MARKET_DB = os.path.join(ROOT, "holdings", "market.db")
 
 UA_WEB = "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/120 Safari/537.36 KJC-Insight/1.0"
@@ -544,7 +546,7 @@ def dart_gov(key, cc):
 def fetch_dart(card, key):
     cc = corp_code(card["code"])
     if not key:
-        return None, "DART 키 없음(holdings/secrets.json)"
+        return None, "DART 키 없음(%s)" % SECRETS
     if not cc:
         return None, "금감원 표(dart_corps)에 코드 없음"
     q = urllib.parse.urlencode({"crtfc_key": key, "corp_code": cc})
