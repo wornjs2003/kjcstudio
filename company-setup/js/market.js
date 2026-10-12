@@ -12,6 +12,34 @@ const COL = { US: css('--accent'), EZ: css('--kh-cat-indigo'), JP: css('--kh-cat
               AU: css('--kh-ma5'), KR: css('--kh-up'), CN: css('--kh-cat-slate'), GOLD: css('--kh-cat-amber'), DXY: css('--kh-cat-slate') };
 const ETF = { US: 'SPY', EZ: 'EZU', JP: 'EWJ', BR: 'EWZ', CL: 'ECH', VN: 'VNM', AU: 'EWA', KR: 'EWY', CN: 'MCHI', GOLD: 'GLD' };
 // 채권 — 국채 금리는 world-macro.json series.yld(미국 2 · 10년 FRED · 한국 3 · 10년 ECOS), 채권 ETF 는 열 때 서버에서 (2026-10-12 재권님 「시황에 채권도 있어야」)
+// ── 해석 틀 둘 (2026-10-12 재권님 「응 넣어줘」 · 근거는 아래 각 주석의 원문)
+// ① 침체 확률 — 뉴욕 연준 에스트레야 · 미시킨(1996) 「The Yield Curve as a Predictor of U.S. Recessions」 표: 10년 − 3개월 금리차(분기 평균)
+//    → 4분기 뒤 침체 확률. 표 사이는 직선으로 잇는다 · 1.21%p 넘으면 「5% 미만」. newyorkfed.org/research/current_issues/ci2-7.pdf
+const RECESSION = [[1.21, 5], [0.76, 10], [0.46, 15], [0.22, 20], [0.02, 25], [-0.17, 30], [-0.50, 40], [-0.82, 50], [-1.13, 60], [-1.46, 70], [-1.85, 80], [-2.40, 90]];
+function recessionProb(sp) {
+  if (sp >= RECESSION[0][0]) return null;                    // 5% 미만
+  if (sp <= RECESSION[RECESSION.length - 1][0]) return 90;
+  for (let i = 1; i < RECESSION.length; i++) {
+    const [s0, p0] = RECESSION[i - 1], [s1, p1] = RECESSION[i];
+    if (sp >= s1) return p0 + (s0 - sp) / (s0 - s1) * (p1 - p0);
+  }
+}
+function termSpread(Y) {                                       // [(날짜, 10년 − 3개월)] 매일
+  if (!Y || !Y.US10 || !Y.US3M) return [];
+  const m = new Map(Y.US3M); return Y.US10.filter(([d]) => m.has(d)).map(([d, v]) => [d, +(v - m.get(d)).toFixed(3)]);
+}
+const qAvg = (ser, i) => { const w = ser.slice(Math.max(0, i - 62), i + 1); return w.reduce((a, b) => a + b[1], 0) / w.length; };   // 분기 ≈ 63 거래일
+// ② 투자 시계 — 메릴린치(2004) 「The Investment Clock」: 성장(평소보다 빨라지나) × 물가(오르나) 네 국면과 그때 강했던 자산.
+//    원래는 산출 갭 · 물가 추세로 정하는데, 여기서는 OECD 경기선행지수와 월 물가의 석 달 방향으로 어림한다(「어림」 이라 적는다)
+const CLOCK = { '1,0': ['회복', '주식'], '1,1': ['과열', '원자재'], '0,1': ['스태그플레이션', '현금'], '0,0': ['리플레이션', '채권'] };
+function clockOf(S, k) {
+  const c = S.cli[k], p = S.cpi[k];
+  if (!c || !p || c.length < 4 || p.length < 4) return null;
+  const old = new Date(); old.setMonth(old.getMonth() - 6);
+  if (p[p.length - 1][0] < old.toISOString().slice(0, 7)) return null;   // 물가가 반년 넘게 멈춘 나라(유로존 2025-12)는 국면을 안 매긴다
+  const g = c[c.length - 1][1] - c[c.length - 4][1], f = p[p.length - 1][1] - p[p.length - 4][1];
+  return { g, f, gAt: c[c.length - 1][0], fAt: p[p.length - 1][0], ph: CLOCK[`${g > 0 ? 1 : 0},${f > 0 ? 1 : 0}`] };
+}
 const YLD = { US2: ['US', '미국 2년'], US10: ['US', '미국 10년'], KR3: ['KR', '한국 3년'], KR10: ['KR', '한국 10년'] };   // 나라 칩으로 함께 켜고 끈다
 const BOND = { SHY: '미국 국채 단기(1~3년)', IEF: '미국 국채 중기(7~10년)', TLT: '미국 국채 장기(20년+)', LQD: '미국 우량 회사채', HYG: '미국 하이일드 회사채', EMB: '신흥국 달러 채권', BNDX: '미국 밖 선진국 채권' };
 const MON = ym => `${+ym.slice(5, 7)}월`;
@@ -30,12 +58,13 @@ async function chart(code) {
   return j.data.candles.filter(c => c.close).map(c => [day(c.ts), c.close]);
 }
 async function load() {
-  const [M, ...px] = await Promise.all([
+  const [M, N, ...px] = await Promise.all([
     fetch('data/world-macro.json', { cache: 'no-store' }).then(r => r.json()),
+    fetch('data/naver-macro.json', { cache: 'no-store' }).then(r => r.json()).catch(() => null),   // 그 밖의 지표 — 못 받아도 위 셋은 그린다
     ...[...K, 'GOLD'].map(k => chart(ETF[k]).catch(() => null)),
     ...Object.keys(BOND).map(b => chart(b).catch(() => null))]);
   const P = {}; [...K, 'GOLD', ...Object.keys(BOND)].forEach((k, i) => { P[k] = px[i] ? px[i].slice(-252) : null; });
-  return { M, S: M.series, P };
+  return { M, N, S: M.series, P };
 }
 
 // ── 규칙으로 쓰는 문단 R1~R6 — 각 문단은 { 글, 근거[], 읽는 법 }
@@ -103,6 +132,26 @@ function write({ M, S, P }) {
            ...Object.keys(BOND).filter(b => P[b]).map(b => `${BOND[b]} ${b} 한 달 ${pct(m1of(b))} (KIS 해외 일봉 · ${P[b][P[b].length - 1][0]})`)],
       why: '채권 값과 금리는 거꾸로 간다. 10년 − 2년 차이가 0 아래면 앞날 경기를 나쁘게 본다는 뜻으로 읽는다. 하이일드(부실 위험이 큰 회사채)가 국채보다 강하면 위험을 사는 돈, 약하면 피하는 돈으로 읽는다(차이 ±0.5%p 안은 비슷함). 지도 말풍선의 10년 금리도 미국 · 한국은 같은 매일 값이고, 다른 나라는 달마다 값이라 늦다.' });
   }
+  // R8 침체 확률 — 뉴욕 연준 표
+  const ts = termSpread(Y);
+  if (ts.length > 63) {
+    const q = qAvg(ts, ts.length - 1), qPrev = qAvg(ts, ts.length - 64), pr = recessionProb(q), prP = recessionProb(qPrev);
+    const say = v => v == null ? '5% 미만' : `약 ${Math.round(v)}%`;
+    paras.push({ t: `미국 10년 − 3개월 국채 금리차는 최근 석 달 평균 ${q.toFixed(2)}%p다. 뉴욕 연준 표로 읽으면 1년 뒤 경기 침체 확률은 ${say(pr)}(석 달 전 ${say(prP)})로, `
+        + (pr == null || pr < 15 ? '아직 낮은 편이다.' : pr < 40 ? '눈여겨볼 만큼 올라왔다.' : '높다 — 금리차가 거꾸로 서 있다.'),
+      ev: [`미국 10년 ${lastY('US10')[1].toFixed(2)}% · 3개월 ${lastY('US3M') ? lastY('US3M')[1].toFixed(2) : '—'}% (${ts[ts.length - 1][0]} · FRED DGS10 · DGS3MO)`,
+           `금리차 석 달 평균 ${q.toFixed(2)}%p → ${say(pr)} · 석 달 전 평균 ${qPrev.toFixed(2)}%p → ${say(prP)}`,
+           '뉴욕 연준 표(금리차 → 4분기 뒤 침체 확률): 1.21 → 5% · 0.76 → 10% · 0.46 → 15% · 0.22 → 20% · 0.02 → 25% · −0.17 → 30% · −0.50 → 40% · −0.82 → 50% · −1.13 → 60% · −1.46 → 70% · −1.85 → 80% · −2.40 → 90% (에스트레야 · 미시킨 1996 · 1960~1995 자료)'],
+      why: '긴 금리가 짧은 금리보다 낮아지면(금리차가 0 아래) 시장이 앞날 경기를 나쁘게 본다는 뜻이다. 표는 1960~1995 년 자료로 만든 것이라 지금 경제에 그대로 맞는다는 보장은 없다 — 확률은 「얼마나 경계할지」 의 눈금으로 쓴다. 표 사이 값은 직선으로 이어 어림했다.' });
+  }
+  // R9 투자 시계 국면 — 메릴린치
+  const ck = K.map(k => [k, clockOf(S, k)]).filter(([, v]) => v);
+  if (ck.length) {
+    const by = {}; ck.forEach(([k, v]) => { (by[v.ph[0]] = by[v.ph[0]] || []).push(k); });
+    paras.push({ t: '투자 시계로 어림한 국면은 ' + Object.entries(by).map(([ph, ks]) => `${ks.map(k => NAME[k]).join(' · ')} — ${ph}(${Object.values(CLOCK).find(x => x[0] === ph)[1]} 강세 국면)`).join(', ') + '이다.',
+      ev: ck.map(([k, v]) => `${NAME[k]} 경기선행 석 달 ${v.g > 0 ? '+' : ''}${v.g.toFixed(2)}(${v.gAt}) · 물가 석 달 ${v.f > 0 ? '+' : ''}${v.f.toFixed(2)}%p(${v.fAt}) → ${v.ph[0]}`),
+      why: '메릴린치 투자 시계(2004)는 성장이 평소보다 빨라지는지와 물가가 오르는지로 네 국면을 나눈다 — 회복(성장↑ · 물가↓ · 주식), 과열(성장↑ · 물가↑ · 원자재), 스태그플레이션(성장↓ · 물가↑ · 현금), 리플레이션(성장↓ · 물가↓ · 채권). 원래 틀은 산출 갭과 물가 추세를 쓰는데 여기서는 경기선행지수와 물가의 석 달 방향으로 어림했다. 국면별 강한 자산은 과거 평균이지 이번에도 그렇다는 약속이 아니다 — 학계 시험에서 이런 지표로 시장 시점을 맞히기는 어려웠다(웰치 · 고얄 2008).' });
+  }
   // R6 금 · 달러
   const g = P.GOLD;
   if (g) {
@@ -117,6 +166,7 @@ function write({ M, S, P }) {
   // 한 줄 — 위 규칙의 앞머리를 잇는다
   const one = `금리를 올리는 곳 ${up.length} · 내리는 곳 ${dn.length} — 한 달 사이 돈은 ${m1.slice(0, 2).map(([k]) => NAME[k]).join(' · ')}로, 1년으로는 ${josa(NAME[best.k], "이", "가")} 가장 많이 올랐다`
     + (kr && kr.dd < -10 ? ` · 한국은 고점에서 ${pct(kr.dd, 0)} 쉬어 가는 중` : '')
+    + (ts.length > 63 ? ` · 미국 1년 뒤 침체 확률 ${recessionProb(qAvg(ts, ts.length - 1)) == null ? '5% 미만' : '약 ' + Math.round(recessionProb(qAvg(ts, ts.length - 1))) + '%'}(뉴욕 연준 표)` : '')
     + (lastY('US10') && bp(Y.US10) != null ? ` · 미국 10년 금리 ${lastY('US10')[1].toFixed(2)}%(한 달 ${bp(Y.US10) > 0 ? '+' : ''}${bp(Y.US10)}bp)` : '') + (C.US.meet ? ` · 다음 볼 것 미국 연준 ${C.US.meet.v}` : '') + '.';
   return { one, paras };
 }
@@ -136,6 +186,21 @@ function draw({ M, S, P }) {
     options: { ...opt('금 GLD 달러', { y2: { position: 'right', grid: { display: false }, title: { display: true, text: '달러지수' } } }),
       plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, boxHeight: 2 } } } } });
   else document.getElementById('cap-gold').innerHTML = '<span class="err">금값을 받지 못했습니다</span>';
+  const tsr = termSpread(S.yld);
+  if (tsr.length > 63) {
+    const pts = tsr.map((p, i) => i < 62 ? null : [p[0], qAvg(tsr, i)]).filter(Boolean);
+    add('c-rec', { type: 'line', data: { labels: pts.map(p => p[0]), datasets: [
+        { key: 'US', label: '금리차 석 달 평균(%p · 왼쪽)', data: pts.map(([x, v]) => ({ x, y: +v.toFixed(3) })), borderColor: COL.US, backgroundColor: COL.US, borderWidth: 1.6, pointRadius: 0, yAxisID: 'y' },
+        { key: 'US', label: '침체 확률(% · 오른쪽 · 5% 미만은 5)', data: pts.map(([x, v]) => ({ x, y: +(recessionProb(v) ?? 5).toFixed(1) })), borderColor: css('--kh-up'), backgroundColor: css('--kh-up'), borderWidth: 2, pointRadius: 0, yAxisID: 'y2' }] },
+      options: { ...opt('금리차 %p', { y2: { position: 'right', min: 0, grid: { display: false }, title: { display: true, text: '침체 확률 %' } } }), plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, boxHeight: 2 } } } } });
+  }
+  const clk = document.getElementById('clock');
+  if (clk) {
+    const cells = { '회복': [], '과열': [], '스태그플레이션': [], '리플레이션': [] };
+    K.forEach(k => { const v = clockOf(S, k); if (v) cells[v.ph[0]].push(`<span class="ck-c" style="--c:${COL[k]}">${NAME[k]}</span>`); });
+    const cell = (ph, side) => `<div class="ck-q"><b>${ph}</b><span class="ck-s">${side}</span><div>${cells[ph].join('') || '<span class="ck-none">—</span>'}</div></div>`;
+    clk.innerHTML = cell('과열', '성장↑ 물가↑ · 원자재') + cell('회복', '성장↑ 물가↓ · 주식') + cell('스태그플레이션', '성장↓ 물가↑ · 현금') + cell('리플레이션', '성장↓ 물가↓ · 채권');
+  }
   if (S.yld && S.yld.US10) {
     const yd = [...new Set(Object.values(S.yld).flat().map(p => p[0]))].sort();
     const at = ser => { const m = new Map(ser); let last = null; return yd.map(d => [d, m.has(d) ? (last = m.get(d)) : last]); };
@@ -168,6 +233,43 @@ function draw({ M, S, P }) {
   bars('c-real', ks => { const rk = ks.filter(k => C[k].rate && C[k].cpi); return { type: 'bar', data: { labels: rk.map(k => NAME[k]), datasets: [
     { label: '정책금리 − 물가', data: rk.map(k => +(C[k].rate.v - C[k].cpi.v).toFixed(2)), backgroundColor: rk.map(k => C[k].cpi.annual ? css('--kh-cat-slate-dim') : COL[k]) }] },
     options: { ...opt('%p'), scales: { x: { grid }, y: { grid, min: -2.5, max: 3, title: { display: true, text: '%p' } } } } }; });
+}
+// ── 그 밖의 지표 — data/naver-macro.json(tools/fetch-naver-macro.py · 손으로 돌림 · 2026-10-12 재권님 「응 붙여줘」 · 받는 방식 (가)).
+//    홀딩스에 시장지표 차트가 들어와 서버가 이 값을 내주면 거기서 받는다(재권님 10-12) — 그때 이 파일 받기를 그쪽 주소로 바꾼다
+const CURVE = { USA: 'US', KOR: 'KR', JPN: 'JP', DEU: 'EZ', CHN: 'CN', BRA: 'BR', AUS: 'AU', GBR: 'GB' };   // 독일 = 유로존 칩으로 켜고 끈다 · 영국은 칩이 없어 늘 보인다
+function others(N) {
+  const nv = document.getElementById('meta-nv');
+  if (!N) { nv.innerHTML = '<span class="err">그 밖의 지표 값을 받지 못했습니다 — company-setup/tools/fetch-naver-macro.py 를 돌리면 생긴다</span>'; return; }
+  nv.textContent = `${N.fetchedAt} 받음 · ${N.src}` + (Object.keys(N.errors || {}).length ? ` · 못 받은 것 ${Object.keys(N.errors).join(', ')}` : '');
+  const add = (id, cfg) => charts.push(new Chart(document.getElementById(id), cfg));
+  const H = N.hist || {}, pal = [css('--accent'), css('--kh-cat-amber'), css('--kh-cat-slate'), css('--kh-cat-teal'), css('--kh-cat-violet'), css('--kh-cat-rose')];
+  const legend = { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, boxHeight: 2, font: { size: 10 } } } };
+  const days = names => [...new Set(names.filter(n => H[n]).flatMap(n => H[n].s.map(p => p[0])))].sort();
+  const at = (ser, ds) => { const m = new Map(ser); let last = null; return ds.map(d => (m.has(d) ? (last = m.get(d)) : last)); };
+  const set = (n, i, ds, f = v => v, more = {}) => ({ key: '_nv', label: n, data: at(H[n].s, ds).map(f), borderColor: pal[i], backgroundColor: pal[i], borderWidth: 1.6, pointRadius: 0, spanGaps: true, ...more });
+  const oil = ['WTI', '브렌트유', '두바이유'].filter(n => H[n]), od = days(oil);
+  if (oil.length) add('c-oil', { type: 'line', data: { labels: od, datasets: oil.map((n, i) => set(n, i, od)) }, options: { ...opt('달러/배럴'), plugins: legend } });
+  const cmd = ['은', '구리(선물)', 'BDI 건화물선지수', '상하이컨테이너 운임지수', '중국컨테이너 운임지수'].filter(n => H[n]), cd = days(cmd);
+  if (cmd.length) add('c-cmd', { type: 'line', data: { labels: cd, datasets: cmd.map((n, i) => { const b = H[n].s[0][1]; return set(n, i, cd, v => v == null ? null : +(v / b * 100).toFixed(2), { borderDash: i > 1 ? [4, 3] : [] }); }) },
+    options: { ...opt('처음 = 100'), plugins: legend } });
+  const kr = ['콜금리 (1일)', 'CD금리 (91일)', '한국 국채 3년', '회사채 (3년, AA-)', '회사채 (3년, BBB-)'].filter(n => H[n]), kd = days(kr);
+  if (kr.length) add('c-krr', { type: 'line', data: { labels: kd, datasets: kr.map((n, i) => set(n, i, kd, v => v, n.includes('BBB') ? { yAxisID: 'y2', borderDash: [4, 3] } : {})) },
+    options: { ...opt('금리 %', { y2: { position: 'right', grid: { display: false }, title: { display: true, text: 'BBB- %' } } }), plugins: legend } });
+  const yrs = name => { const m = name.match(/(\d+)(년|개월)/); return m ? (m[2] === '년' ? +m[1] : +m[1] / 12) : null; };
+  const cv = Object.keys(N.bond || {}).filter(n => n !== 'BRA' && (N.bond[n] || []).length);   // 브라질은 12%대라 한 눈금에 넣으면 나머지가 납작해져 뺀다
+  if (cv.length) add('c-curve', { type: 'line', data: { datasets: cv.map(n => { const k = CURVE[n], c = COL[k] || css('--kh-cat-slate');
+      const pts = N.bond[n].map(x => ({ x: yrs(x.name), y: x.v })).filter(p => p.x != null && p.y != null).sort((a, b) => a.x - b.x);
+      return { key: k, label: N.bond[n][0].name.replace(/\s*국채.*$/, ''), data: pts, borderColor: c, backgroundColor: c, borderWidth: k === 'KR' ? 2.4 : 1.5, pointRadius: 2, borderDash: k === 'GB' ? [4, 3] : [] }; }) },
+    options: { maintainAspectRatio: false, animation: false, interaction: { mode: 'nearest', intersect: false },
+      plugins: legend, scales: { x: { type: 'logarithmic', grid, title: { display: true, text: '만기(년 · 로그 눈금)' }, ticks: { callback: v => [0.25, 1, 2, 5, 10, 30].includes(+v) ? (v < 1 ? '3개월' : v + '년') : '' } },
+        y: { grid, title: { display: true, text: '금리 %' } } } } });
+  const box = document.getElementById('nv-now'), row = x => x.v == null ? '' :
+    `<div class="r"><span>${x.name}</span><span><b>${x.v.toLocaleString('ko-KR', { maximumFractionDigits: 3 })}${x.unit || ''}</b>${x.pct == null ? '' : `<span class="p ${x.pct > 0 ? 'up' : x.pct < 0 ? 'dn' : ''}">${pct(x.pct, 2)}</span>`}</span></div>`;
+  const pick = (cat, n) => (N[cat] || []).slice(0, n);
+  const rate = xs => xs.map(x => ({ ...x, name: x.name, v: x.v, unit: '%' }));
+  box.innerHTML = [['에너지', pick('energy', 6)], ['금속', pick('metals', 6)], ['운임', pick('transport', 6)], ['농산물', pick('agricultural', 6)],
+    ['국내 금리', rate(pick('domesticInterest', 8))], ['기준금리', rate(pick('standardInterest', 8))]]
+    .map(([g, xs]) => `<div><div class="g">${g}</div>${xs.map(row).join('')}</div>`).join('');
 }
 function apply() {
   charts.forEach(ch => {
@@ -202,5 +304,5 @@ function controls() {
   w.paras.forEach((p, i) => {
     box.insertAdjacentHTML('beforeend', `<p class="para">${p.t}</p><details class="ev"><summary>근거 ${i + 1}</summary><ul>${p.ev.map(x => `<li>${x}</li>`).join('')}</ul><div class="why">읽는 법 — ${p.why}</div></details>`);
   });
-  controls(); draw(D);
+  controls(); draw(D); others(D.N);
 })();

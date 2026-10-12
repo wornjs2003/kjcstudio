@@ -24,7 +24,28 @@
 .mk .tag { font-size: 10.5px; font-weight: 500; padding: 0 6px; border-radius: 99px; background: var(--kh-accent-dim); color: var(--kh-accent); margin-left: 4px; }
 .mk .chart { position: relative; height: 260px; }   /* 그래프 칸 높이를 잡아 둔다 — 나라를 껐다 켜도 칸이 안 움직인다 */
 .mk .mk-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 12px; }
+/* 투자 시계 2 × 2 — 위가 성장↑ · 왼쪽이 물가↑ (시계 모양을 칸 넷으로). 칸 높이를 잡아 나라를 껐다 켜도 안 움직인다 */
+.mk .ck { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.mk .ck-q { background: var(--kh-bg); border-radius: var(--kh-radius-md); padding: 8px 10px; min-height: 96px; }
+.mk .ck-q b { font-size: 13px; margin-right: 6px; }
+.mk .ck-s { font-size: 11px; color: var(--kh-text-muted); }
+.mk .ck-q > div { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+.mk .ck-c { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 99px; background: var(--kh-bg-card); color: var(--kh-text-primary); }
+.mk .ck-c::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--c); margin-right: 4px; vertical-align: 1px; }
+.mk .ck-none { color: var(--kh-text-muted); font-size: 12px; }
 .mk .err { background: var(--kh-danger-faint); color: var(--kh-danger); border-radius: var(--kh-radius-md); padding: 6px 10px; font-size: 12px; }
+/* 네 층 머리 — 분석 · 매크로 지표 · 시장 반응 · 그 밖의 지표 (2026-10-12 재권님 「셋을 나눠서 놓고 맨위에 분석」) */
+.mk .mk-sec { font-size: 17px; font-weight: 700; margin: 22px 0 8px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.mk .mk-sec:first-of-type { margin-top: 4px; }
+.mk .mk-sec-s { font-size: 12px; font-weight: 400; color: var(--kh-text-muted); }
+/* 지금 값 — 이름 · 값 · 전날 대비. 오른 것은 연한 빨강 바탕에 진한 빨강(한국식) */
+.mk .nv-tb { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px 16px; font-size: 12.5px; }
+.mk .nv-tb .g { font-size: 11.5px; color: var(--kh-text-muted); margin: 6px 0 0; }
+.mk .nv-tb .r { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.mk .nv-tb .r b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.mk .nv-tb .p { font-size: 11px; padding: 0 6px; border-radius: 99px; margin-left: 6px; font-variant-numeric: tabular-nums; }
+.mk .nv-tb .p.up { background: var(--kh-up-dim); color: var(--kh-up); }
+.mk .nv-tb .p.dn { background: var(--kh-down-dim); color: var(--kh-down); }
 @media (min-width: 900px) {
   .mk { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 0 12px; align-items: start; }
   .mk .mk-body { grid-column: 1; grid-row: 1; min-width: 0; }
@@ -32,4 +53,6 @@
   .mk .ctl button { font-size: 12px; padding: 5px 10px; }
   .mk .mk-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .mk .chart { height: 300px; }
+  .mk .mk-wide { grid-column: 1 / -1; }
+  .mk .nv-tb { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

@@ -41,18 +41,37 @@
       <aside class="ctl" id="ctl" aria-label="나라 켜고 끄기"></aside>
       <div class="mk-body">
       <div class="mk-meta" id="meta">값을 받는 중…</div>
+      <!-- 네 층 — 맨 위 분석, 그 아래 매크로 지표 · 시장 반응 · 그 밖의 지표 (2026-10-12 재권님 「셋을 나눠서 놓고 맨위에 분석」 → 묶음 안 「응 해줘」) -->
+      <h2 class="mk-sec">분석</h2>
       <div class="mk-card"><h2>오늘의 시황</h2><p class="one" id="one">—</p></div>
       <div class="mk-card" id="text"><h2>왜 그렇게 보나</h2><div class="cap">문단은 이 화면이 값으로 만든다 · 「근거」 를 누르면 쓴 값 · 시각 · 출처와 읽는 법이 나온다</div></div>
       <div class="mk-grid">
-        <div class="mk-card"><h2>주가 1년 — 처음 = 100</h2><div class="cap">나라 ETF(달러) · KIS 해외 일봉 · 열 때 받음</div><div class="chart"><canvas id="c-eq"></canvas></div></div>
-        <div class="mk-card"><h2>금값 · 달러지수 — 1년</h2><div class="cap" id="cap-gold">금 = GLD(금 ETF · 달러 · KIS) · 달러지수 = FRED 교역가중</div><div class="chart"><canvas id="c-gold"></canvas></div></div>
-        <div class="mk-card"><h2>국채 금리 — 1년</h2><div class="cap">미국 2 · 10년 FRED · 한국 3 · 10년 한국은행 ECOS · 매일 · 점선이 짧은 만기</div><div class="chart"><canvas id="c-yld"></canvas></div></div>
-        <div class="mk-card"><h2>채권 값 — 1년 · 처음 = 100</h2><div class="cap">채권 ETF(달러) · KIS 해외 일봉 · 열 때 받음 · 금리가 오르면 내린다 · 범례를 누르면 그 줄을 켜고 끈다</div><div class="chart"><canvas id="c-bond"></canvas></div></div>
+        <div class="mk-card"><h2>투자 시계 — 지금 국면(어림)</h2><div class="cap">메릴린치 투자 시계(2004) · 성장 = OECD 경기선행지수 석 달 방향 · 물가 = 월 물가 석 달 방향 · 칸 이름 옆은 그 국면에 과거 강했던 자산</div><div class="ck" id="clock"></div></div>
+        <div class="mk-card"><h2>침체 확률 — 미국 10년 − 3개월 금리차</h2><div class="cap">뉴욕 연준(에스트레야 · 미시킨 1996) 표로 읽은 4분기 뒤 침체 확률 · 금리차는 석 달 평균 · FRED DGS10 · DGS3MO</div><div class="chart"><canvas id="c-rec"></canvas></div></div>
+      </div>
+      <h2 class="mk-sec">매크로 지표<span class="mk-sec-s">정책 · 물가 · 경기 · 금리</span></h2>
+      <div class="mk-grid">
         <div class="mk-card"><h2>정책금리 — 2024년부터</h2><div class="cap">BIS 정책금리(그달 마지막 값) · 한국은 한국은행 ECOS · 브라질은 오른쪽 눈금</div><div class="chart"><canvas id="c-rate"></canvas></div></div>
         <div class="mk-card"><h2>물가(전년비) — 목표 2%</h2><div class="cap">OECD 소비자물가(월) · 유로존은 2025-12 에서 멈춤 · 일본 · 칠레 · 베트남 월 값 없음</div><div class="chart"><canvas id="c-cpi"></canvas></div></div>
         <div class="mk-card"><h2>경기선행지수 — 100 = 장기 평균</h2><div class="cap">OECD · 유로존 · 칠레 · 베트남 없음</div><div class="chart"><canvas id="c-cli"></canvas></div></div>
-        <div class="mk-card"><h2>한 달 주가 — 달러 vs 그 나라 돈<span class="tag">계산</span></h2><div class="cap">ETF 1개월 × 통화 1개월(ECB)로 어림 · 칠레 · 베트남은 환율 없음</div><div class="chart"><canvas id="c-m1"></canvas></div></div>
         <div class="mk-card"><h2>실질 금리 — 정책금리 − 물가<span class="tag">계산</span></h2><div class="cap">흐린 막대 = 물가가 지난해 연간 값(IMF) · 브라질은 잘림</div><div class="chart"><canvas id="c-real"></canvas></div></div>
+        <div class="mk-card"><h2>국채 금리 — 1년</h2><div class="cap">미국 2 · 10년 FRED · 한국 3 · 10년 한국은행 ECOS · 매일 · 점선이 짧은 만기</div><div class="chart"><canvas id="c-yld"></canvas></div></div>
+      </div>
+      <h2 class="mk-sec">시장 반응<span class="mk-sec-s">주가 · 돈 · 금 · 채권 값</span></h2>
+      <div class="mk-grid">
+        <div class="mk-card"><h2>주가 1년 — 처음 = 100</h2><div class="cap">나라 ETF(달러) · KIS 해외 일봉 · 열 때 받음</div><div class="chart"><canvas id="c-eq"></canvas></div></div>
+        <div class="mk-card"><h2>한 달 주가 — 달러 vs 그 나라 돈<span class="tag">계산</span></h2><div class="cap">ETF 1개월 × 통화 1개월(ECB)로 어림 · 칠레 · 베트남은 환율 없음</div><div class="chart"><canvas id="c-m1"></canvas></div></div>
+        <div class="mk-card"><h2>금값 · 달러지수 — 1년</h2><div class="cap" id="cap-gold">금 = GLD(금 ETF · 달러 · KIS) · 달러지수 = FRED 교역가중</div><div class="chart"><canvas id="c-gold"></canvas></div></div>
+        <div class="mk-card"><h2>채권 값 — 1년 · 처음 = 100</h2><div class="cap">채권 ETF(달러) · KIS 해외 일봉 · 열 때 받음 · 금리가 오르면 내린다 · 범례를 누르면 그 줄을 켜고 끈다</div><div class="chart"><canvas id="c-bond"></canvas></div></div>
+      </div>
+      <h2 class="mk-sec">그 밖의 지표<span class="mk-sec-s">원자재 · 운임 · 국내 금리 · 국채 곡선 — 네이버 증권 시장지표</span></h2>
+      <div class="mk-meta" id="meta-nv"></div>
+      <div class="mk-grid">
+        <div class="mk-card"><h2>유가 — 1년</h2><div class="cap">WTI · 브렌트유 · 두바이유 · 달러/배럴 · 네이버 증권</div><div class="chart"><canvas id="c-oil"></canvas></div></div>
+        <div class="mk-card"><h2>금속 · 운임 — 1년 · 처음 = 100</h2><div class="cap">은 · 구리(선물) · BDI 건화물선지수 · 상하이 · 중국 컨테이너 운임지수(주 1회) · 네이버 증권</div><div class="chart"><canvas id="c-cmd"></canvas></div></div>
+        <div class="mk-card"><h2>국내 금리 — 1년</h2><div class="cap">콜 · CD(91일) · 국채 3년 · 회사채 3년(AA- · BBB-) · BBB- 는 오른쪽 눈금 · 회사채와 국채의 차이가 신용 가산금리 · 네이버 증권</div><div class="chart"><canvas id="c-krr"></canvas></div></div>
+        <div class="mk-card"><h2>국채 곡선 — 지금</h2><div class="cap">나라별 만기별 국채 금리 · 짧은 만기가 긴 만기보다 높으면 곡선이 뒤집힌 것 · 브라질(12%대)은 눈금이 달라 뺐다 · 영국은 점선 · 네이버 증권</div><div class="chart"><canvas id="c-curve"></canvas></div></div>
+        <div class="mk-card mk-wide"><h2>지금 값</h2><div class="cap">원자재 · 운임 · 기준금리 — 마지막 값과 전날 대비</div><div class="nv-tb" id="nv-now"></div></div>
       </div>
       </div>
     </section>
