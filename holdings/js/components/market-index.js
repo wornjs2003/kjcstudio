@@ -127,3 +127,64 @@ export function drawIndicator(host, j) {
   ch.timeScale().fitContent();
   return () => { ch.remove(); box.remove(); };
 }
+
+/* ── 오른쪽 칸 「시장지표 재료」 (2026-10-12 · 재권님 「응 그래」 · 시안 3) ──
+ * 「시장지표」 갈래에서 오른쪽 실시간 순위 카드 자리에 환율 · 금리 · 에너지 · 금속 · 농산 · 운임의 지금 값을 둔다.
+ * 순위 카드를 고치지 않고 **같은 클래스로 만든 판을 카드 위에 얹는다** — 카드 크기는 밑의 순위 카드가 정하므로
+ * 안 바뀐다(「보는 것을 바꿔도 자리는 그대로다」). 순위 카드는 가려 둔 채 그대로 돈다. 줄을 눌러 큰 차트로 가는 것은 아직 없다. */
+let matCache = null;
+export async function loadMaterials() {
+  const r = await apiFetch('/api/market/materials', { cache: 'no-store' });
+  const j = r && await r.json();
+  if (!j || !j.ok) throw new Error((j && j.error) || '시장지표 재료를 못 받았습니다');
+  matCache = j;
+  return j;
+}
+export const peekMaterials = () => matCache;
+
+const matFmt = (v) => v == null ? '—'
+  : v.toLocaleString('ko-KR', { maximumFractionDigits: Math.abs(v) >= 1000 ? 0 : Math.abs(v) >= 100 ? 2 : 3 });
+const matPct = (p) => p == null ? '—' : `${p > 0 ? '+' : ''}${p.toFixed(2)}%`;
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+export function materialsShell() {
+  return `<div class="kh-tabs"><button class="kh-tab is-active" type="button">시장지표 재료</button></div>
+    <div class="kh-chips" data-mat-chips></div>
+    <div class="kh-sort-note">값 · 기준일 · 그날 등락률</div>
+    <div class="kh-asof" data-mat-asof>· 불러오는 중</div>
+    <div class="kh-rank-scroll" data-mat-scroll><table><thead><tr>
+      <th></th><th class="l">지표</th><th>값</th><th>기준일</th><th>등락률</th></tr></thead>
+      <tbody data-mat-rows></tbody></table></div>`;
+}
+
+/* 판 안을 채운다 — grp 는 '전체' 또는 칩 이름 */
+export function paintMaterials(root, j, grp) {
+  const ids = ['전체', ...((j && j.groups) || []).map((g) => g.id)];
+  root.querySelector('[data-mat-chips]').innerHTML = ids.map((id) =>
+    `<button class="kh-chip${id === grp ? ' is-active' : ''}" type="button" data-mat="${id}">${id}</button>`).join('');
+  const asof = root.querySelector('[data-mat-asof]');
+  const body = root.querySelector('[data-mat-rows]');
+  if (!j) { asof.textContent = '· 불러오는 중'; body.innerHTML = ''; return; }
+  const t = (j.fetchedAt || '').slice(11, 16);
+  asof.textContent = `· ${t} 받음 · 네이버 증권 시장지표`;
+  const rows = [];
+  for (const g of j.groups) {
+    if (grp !== '전체' && grp !== g.id) continue;
+    for (const p of g.parts) {
+      if (grp === '전체' || g.parts.length > 1) {
+        rows.push(`<tr><td></td><td class="l" colspan="4" style="padding-top:12px"><b class="kh-mut" style="font-size:.76rem">${esc(p.label)}</b></td></tr>`);
+      }
+      if (!p.rows.length) rows.push('<tr><td></td><td class="l kh-mut" colspan="4">불러오지 못함</td></tr>');
+      const pctUnit = p.path.endsWith('Interest');
+      for (const x of p.rows) {
+        const c = x.pct == null ? 'kh-mut' : x.pct > 0 ? 'kh-up' : x.pct < 0 ? 'kh-down' : '';
+        rows.push(`<tr title="${esc(x.unit || '')}">
+          <td class="kh-rk"></td><td class="l"><span class="kh-nm"><b>${esc(x.name)}</b></span></td>
+          <td class="kh-num">${matFmt(x.v)}${pctUnit ? '%' : ''}</td>
+          <td class="kh-num kh-metric kh-mut">${md(x.at)}</td>
+          <td class="kh-num ${c}" style="font-weight:500">${matPct(x.pct)}</td></tr>`);
+      }
+    }
+  }
+  body.innerHTML = rows.join('');
+}

@@ -422,6 +422,11 @@ tr_id `FHPST01740000`)는 **30건까지만** 돌려주고 연속조회용 `ctx_a
 | 건화물 BDI · 상하이 컨테이너(주간) | `.BADI` · `.SCFIDXSSE` | 오지만 네 값이 늘 같다 | 하루(주) 한 번 발표 — 영영 |
 | 신용 가산금리 | AA- − 국고채 3년 | 계산값 | 같은 출처(네이버)끼리 뺀다 — ECOS 국고채(3.983)와 네이버(3.994)가 10-08 에 갈렸다 |
 
+**오른쪽 칸 재료(지금 값)** — 갈래 목록 한 번에 받는다(2026-10-12 · `/api/market/materials` · 5분 캐시).
+`…/marketindex/exchange/majors`(환율 6) · `standardInterest`(나라별 기준금리 17) · `domesticInterest`(국내 금리 8) ·
+`energy`(13) · `metals`(13) · `agricultural`(14) · `transport`(9). 항목마다 `unit`(예 `USD/OZS`)이 온다.
+시황분석 도구 `company-setup/tools/fetch-naver-macro.py` 가 같은 주소를 손으로 받던 것이다.
+
 **봉이 깨진 날이 있다** — 고가·저가가 0 인 날(미국 2년 8일 · 10년 1일), 종가가 고가·저가 밖인 날(달러인덱스 5일 · 미국 2년 1일).
 서버가 메우고 몇 개인지 응답 `fixed` 에 낸다.
 

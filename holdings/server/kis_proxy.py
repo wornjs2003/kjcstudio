@@ -6404,8 +6404,8 @@ class Handler(SimpleHTTPRequestHandler):
         재시작 전에 볼 수 있게. 토스처럼 토큰을 끊는 일이 없어 이 폴백은 해가 없다. 응답 `servedBy` 가 어디서 받았나다."""
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/market/"):].strip("/")
-        if route not in ("indicators", "indicator"):
-            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= 둘입니다."}, 404)
+        if route not in ("indicators", "indicator", "materials"):
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= · /api/market/materials 셋입니다."}, 404)
             return
         base = upstream_base()
         if base:
@@ -6418,7 +6418,8 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": False, "error": "상류(8765)에 못 닿았습니다 — %s" % safe_message(e),
                                  "source": "market"}, 502)
                 return
-            if not (status in (403, 404) and not body.lstrip().startswith(b"{")):
+            # 상류가 이 주소를 모른다 — 옛 코드는 JSON 아닌 403, 주소 일부만 아는 코드는 404(「없는 주소」). 아는 주소는 404 를 안 낸다
+            if not (status == 404 or (status == 403 and not body.lstrip().startswith(b"{"))):
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
@@ -6428,6 +6429,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return
         if route == "indicators":
             r = market_index.indicators()
+        elif route == "materials":
+            r = market_index.materials()
         else:
             key = (urllib.parse.parse_qs(parsed.query).get("key") or [""])[0].strip()
             r = market_index.indicator(key)
