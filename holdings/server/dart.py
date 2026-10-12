@@ -754,7 +754,28 @@ def telegram_config():
     return None
 
 
+# 조용한 시간 — 이 사이에는 텔레그램을 **하나도** 안 보낸다 (2026-10-12 재권님 「밤 10시~아침 7시까지는
+# 알림을 주지 않는다」 · 「가」). 텔레그램은 전부 아래 `telegram_send` 하나로 나가므로(뉴스 즉시 · 정기 묶음 ·
+# 공시 · 신호 · 예약 · 데일리) **여기 한 곳**이 막는다 — 새 발송 길이 생겨도 저절로 걸린다.
+# 밤에 걸린 것은 버리지 않는다: 뉴스는 07:30 정기 묶음에 ❗ 로(`news_store.send_alerts`) · 공시 · 예약은 다음 바퀴.
+# 맥미니 꺼짐 알림은 Cloudflare 워커가 보내 이 함수를 안 거친다 — 그것은 밤에도 간다(재권님 답 · 예외).
+QUIET_FROM = 22 * 60          # 22:00 (분)
+QUIET_TO = 7 * 60             # 07:00 (분) — 이 시각부터 보낸다
+QUIET_REASON = "조용한 시간(22:00~07:00)이라 보내지 않았습니다"
+
+
+def in_quiet(ts=None):
+    """그 시각(초 · 없으면 지금)이 조용한 시간인가. 한국 시각으로 본다."""
+    t = datetime.fromtimestamp(time.time() if ts is None else ts, KST)
+    m = t.hour * 60 + t.minute
+    if QUIET_FROM <= QUIET_TO:
+        return QUIET_FROM <= m < QUIET_TO
+    return m >= QUIET_FROM or m < QUIET_TO       # 자정을 넘는다
+
+
 def telegram_send(text):
+    if in_quiet():
+        return False, QUIET_REASON
     cfg = telegram_config()
     if not cfg:
         return False, "텔레그램 설정이 없습니다 (secrets.json 의 telegram)"
