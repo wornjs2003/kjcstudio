@@ -7367,7 +7367,10 @@ def main():
     # ⚠️ **발송은 메인(8765)에서만 한다** (2026-09-23 지시 — 재권님
     # 「보면 두개씩 온거 있잔아 이거 고쳐줘」).
     #
-    # **쌓는 것은 모든 폴더에서 한다** — 그 폴더 화면의 뉴스 칸이 읽어야 한다.
+    # **쌓는 것은 `--slow` 가 아니고 DB 에 쓸 수 있는 서버만 한다** (2026-10-12).
+    # 읽기 전용 서버(`KJC_DB_READONLY` · 서비스방 8764)는 메인 DB 를 `mode=ro` 로 열어
+    # 쌓으려 할 때마다 `OperationalError`(읽기 전용 DB 에 쓰기)로 죽었다 — 10-10 11:38 부터
+    # 8764 로그에 200번 넘게. 그 서버 화면은 8765 가 쌓은 같은 DB 를 읽으므로 잃는 것이 없다.
     # **발송만** 가린다. 데일리(아래 `send=`)와 **같은 꼴**이다.
     #
     # 그 전에는 `news_store` 가 `dart.telegram_send` 를 직접 불러서
@@ -7381,7 +7384,9 @@ def main():
     _news_send = (dart.telegram_send
                   if (dart.telegram_config() and is_sender(args.port))
                   else None)
-    if not SLOW and news_store.start_collector(send=_news_send):
+    if not SLOW and not marketdb.writable():
+        print("  뉴스 수집 : 꺼짐 (읽기 전용 DB — 쌓는 것은 메인(%d))" % MAIN_PORT)
+    elif not SLOW and news_store.start_collector(send=_news_send):
         print("  뉴스 수집 : 사용 (%d분마다 · 주말 포함 · 텔레그램 %s)"
               % (news_store.COLLECT_INTERVAL // 60,
                  (" · ".join("%02d:%02d" % t for t in news_store.DIGEST_SLOTS)
@@ -7401,11 +7406,15 @@ def main():
     # **데일리·뉴스·신호와 같은 방식이다** — 넷 다 `is_sender()` 하나를 본다.
     # 「룰은 하나다」 의 **같은 기준, 같은 구현**이다.
     #
-    # **수집은 안 가린다.** 그 폴더 화면이 공시를 읽어야 한다 — 발송만 가른다.
+    # **수집은 포트로 안 가린다** — 다만 읽기 전용 DB 서버는 수집하지 않는다(아래 · 2026-10-12).
+    # 그 서버 화면은 8765 가 쌓는 같은 DB 를 읽는다. 발송은 포트로 가른다.
     dart.NOTIFY_LOCAL = is_sender(args.port)
 
     if SLOW:
         pass                 # 확인용 서버는 공시도 안 받는다 (위 주석 참고)
+    elif not marketdb.writable():
+        # 뉴스와 같은 까닭 — 읽기 전용 DB 에 공시를 쌓으려다 매번 죽었다 (2026-10-12)
+        print("  공시 수집 : 꺼짐 (읽기 전용 DB — 쌓는 것은 메인(%d))" % MAIN_PORT)
     elif dart.start_poller():
         print("  공시 수집 : 사용 (코스피 상위 %d종목 · %d분마다)"
               % (dart.UNIVERSE_SIZE, dart.POLL_INTERVAL // 60))
