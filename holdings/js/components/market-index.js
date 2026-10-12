@@ -13,6 +13,10 @@
 import { apiFetch } from '../data/api.js';
 import { color } from '../theme.js';
 
+/* 큰 차트 머리 이름에 다는 용어 풍선 — 지표 key → 용어집(data/glossary.json) id. 칩에는 안 단다:
+   지수 띠가 옆으로 미는 칸이라 풍선이 그 안에 갇혀 잘린다(2026-10-12 실측 · 재권님 「가로 해줘」) */
+export const MK_TERM = { dxy: '달러인덱스' };
+
 let listCache = null;              // 마지막 칩 목록 — 다시 열 때 먼저 보여 준다
 const barsCache = new Map();       // key → 응답
 

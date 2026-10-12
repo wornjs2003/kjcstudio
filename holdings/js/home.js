@@ -44,7 +44,7 @@ import { lookupStock } from './data/lookup-stock.js';
    데일리분석 모달의 「주요 지수」 가 같은 띠를 쓴다 */
 import { INDEX_CELLS, stripHtml } from './components/index-strip.js';
 import { loadIndicators, peekIndicators, loadIndicator, peekIndicator, chipsHtml, headOf,
-         drawIndicator } from './components/market-index.js';
+         drawIndicator, MK_TERM } from './components/market-index.js';
 import { everyServerMs } from './store/timing.js';
 import { watch } from './store/longpoll.js';
 
@@ -338,6 +338,14 @@ function setMkHidden(on) {
   if (host) [...host.children].forEach((c) => { if (!c.classList.contains('kh-mk-c')) c.style.visibility = v; });
 }
 
+/* 머리 이름에 용어 풍선 표시를 붙이고 뗀다 — 모양 · 풍선은 공용 assets/js/glossary.js 가 맡는다 */
+function setMkTerm(term) {
+  const el = $('kh-idx-name');
+  if (!el) return;
+  if (term) { el.dataset.term = term; el.classList.add('gl-term'); el.tabIndex = 0; }
+  else { delete el.dataset.term; el.classList.remove('gl-term'); el.removeAttribute('tabindex'); }
+}
+
 async function showMarket(key) {
   mkWant = key;
   /* 머리줄 · 아래 줄 높이를 잡아 둔다 — 글 길이가 달라 폰에서 줄 수가 바뀐다(2026-10-12 실측 머리 21px · 아래 17px) */
@@ -364,7 +372,7 @@ async function showMarket(key) {
   const h = headOf(j);
   const name = $('kh-idx-name'), v = $('kh-big-v'), yr = $('kh-year-range');
   const per = $('kh-idx-per'), foot = $('kh-big-foot'), host = $('kh-big-chart');
-  if (name) name.textContent = h.name;
+  if (name) { name.textContent = h.name; setMkTerm(MK_TERM[key]); }
   if (v) { v.className = 'kh-idx-v kh-num ' + h.dirClass; v.textContent = h.value; }
   if (yr) yr.textContent = h.range;
   if (per) per.innerHTML = `<span class="kh-chip live" style="cursor:default">${h.per}</span>`;
@@ -382,6 +390,7 @@ function leaveMarket() {
   mkWant = null;
   if (mkDrop) { mkDrop(); mkDrop = null; }
   setMkHidden(false);
+  setMkTerm(null);
   MK_LOCK.forEach((q) => { const e = document.querySelector(q); if (e) e.style.minHeight = ''; });
   document.querySelectorAll('#kh-top-ix .kh-ix.is-on').forEach((el) => el.classList.remove('is-on'));
   bigShown = null;
