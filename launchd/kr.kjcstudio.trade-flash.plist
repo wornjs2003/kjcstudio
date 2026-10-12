@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kr.kjcstudio.trade-flash</string>
+  <!-- 관세청 수출입 현황 잠정치를 발표 날 받는다 (2026-10-12 재권님 「발표되면 그시간에 맞춰서 읽고 정리」 · 「니가 다 해」).
+       `company-setup/tools/fetch-trade.py` 가 KDI 경제정책자료 목록에서 새 글을 찾아 원문 PDF 를 읽고
+       `company-setup/data/trade-flash.json` 에 쌓는다. 시황분석 탭 「무역 발표」 문단이 그 파일을 읽는다.
+       **발표는 1 · 11 · 21일(주말 · 공휴일이면 다음 평일) 09:00** — 날짜가 밀리므로 날을 박지 않고
+       **날마다 09:00 ~ 11:50 에 10분마다** 목록 한 장만 본다. 새 글이 없으면 도구가 종료 3 으로 바로 끝난다.
+       데이터 파일은 `.gitignore` 에 있다 — 메인 폴더를 여럿이 쓰므로 미커밋이 생기지 않게(etf-nav 와 같다).
+       설치는 손으로 한다(「켜기」).
+           cp launchd/kr.kjcstudio.trade-flash.plist ~/Library/LaunchAgents/
+           launchctl load ~/Library/LaunchAgents/kr.kjcstudio.trade-flash.plist -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>-u</string>
+    <string>company-setup/tools/fetch-trade.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/kjc/work/KJCStudio</string>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>10</integer></dict>
+    <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>20</integer></dict>
+    <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>40</integer></dict>
+    <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>50</integer></dict>
+    <dict><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>10</integer><key>Minute</key><integer>10</integer></dict>
+    <dict><key>Hour</key><integer>10</integer><key>Minute</key><integer>20</integer></dict>
+    <dict><key>Hour</key><integer>10</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Hour</key><integer>10</integer><key>Minute</key><integer>40</integer></dict>
+    <dict><key>Hour</key><integer>10</integer><key>Minute</key><integer>50</integer></dict>
+    <dict><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>11</integer><key>Minute</key><integer>10</integer></dict>
+    <dict><key>Hour</key><integer>11</integer><key>Minute</key><integer>20</integer></dict>
+    <dict><key>Hour</key><integer>11</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Hour</key><integer>11</integer><key>Minute</key><integer>40</integer></dict>
+    <dict><key>Hour</key><integer>11</integer><key>Minute</key><integer>50</integer></dict>
+  </array>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/trade-flash.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/trade-flash.log</string>
+</dict>
+</plist>
