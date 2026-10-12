@@ -1,0 +1,22 @@
+/* 용어 풍선 — assets/js/glossary.js 가 스스로 건다(화면은 이 파일을 링크하지 않는다). 2026-10-12 재권님 「하나 써놓으면 전체 페이지에 다 들어가도록」.
+   옛 자리 company-setup/css/insight.css 「용어 풍선」 절(2026-10-07)에서 옮겼다. 좁은 폭부터 쓴다.
+   색은 접두사 없는 토큰. 빨간 줄(미정)과 모서리는 접두사 없는 토큰이 아직 없어 --kh- 를 쓴다 — 생기면 바꾼다 */
+.gl-term { position: relative; text-decoration: underline dotted; text-underline-offset: 3px; text-decoration-color: var(--text-muted); cursor: help; outline: none; }
+.gl-term:focus-visible { text-decoration-style: solid; }
+.gl-tip { position: absolute; left: 0; top: calc(100% + 6px); z-index: 40; width: min(420px, 88vw); background: var(--bg-card); border-radius: var(--kh-radius-md);
+          box-shadow: var(--shadow-lg); padding: 10px 12px; text-align: left; font-weight: 400; font-style: normal; font-size: 0.8rem; line-height: 1.6;
+          color: var(--text-secondary); white-space: normal; text-decoration: none; cursor: auto; }
+.gl-tip.up { top: auto; bottom: calc(100% + 6px); }
+.gl-h { display: block; color: var(--text-primary); font-size: 0.88rem; }
+.gl-short { margin: 2px 0 6px; color: var(--text-primary); }
+.gl-kv { display: grid; grid-template-columns: 4.6em minmax(0, 1fr); gap: 6px; margin: 3px 0; }
+.gl-kv span { color: var(--text-muted); }
+.gl-tip blockquote { margin: 6px 0 2px; padding: 6px 10px; background: var(--bg); border-radius: var(--kh-radius-sm); font-size: 0.78rem; }
+.gl-tr { display: block; margin-top: 2px; font-size: 0.7rem; color: var(--text-muted); }
+.gl-orig { font-size: 0.72rem; margin: 2px 0; }
+.gl-orig summary { cursor: pointer; color: var(--text-muted); }
+.gl-orig p { margin: 4px 0 0; color: var(--text-muted); }
+.gl-src { font-size: 0.72rem; margin-bottom: 4px; }
+.gl-src a { color: var(--accent); text-decoration: none; }
+.gl-none { margin: 6px 0; padding: 5px 10px; background: var(--kh-danger-faint); color: var(--kh-danger); border-radius: var(--kh-radius-sm); font-size: 0.76rem; }
+.gl-note { margin: 6px 0 0; font-size: 0.76rem; }

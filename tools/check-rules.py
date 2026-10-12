@@ -400,8 +400,84 @@ def c_screen_timers():
     return "화면에 박힌 주기 (숫자 타이머)", n, hits, LOOK, (지시, "「화면은 서버에 주기로 묻지 않는다 — 서버가 알려준다」 (2026-10-02) — **서버를 묻는 것만 위반**, 그리기 주기는 괜찮다")
 
 
+GLOSSARY = "data/glossary.json"
+
+
+def glossary_items():
+    try:
+        return json.loads(rd(os.path.join(ROOT, GLOSSARY)) or "{}").get("items") or []
+    except Exception:
+        return []
+
+
+def c_glossary():
+    """용어 설명은 한 곳에만 쓴다 (2026-10-12 지시) — 용어집 안이 어긋나거나 화면이 없는 용어를 가리키면 위반.
+
+    용어집 안 — id · term 이 겹친다 · 같은 「찾을 글자」(match) 가 두 항목에 있다 · 한 줄 뜻(short)이 비었다.
+    화면 — `data-term="X"` 인데 용어집에 X 가 없다(id · term · match 어느 것과도 안 맞음). 순서가 「용어집 먼저 → 화면」 이라 막는다.
+    """
+    items = glossary_items()
+    hits, seen, ms = [], {}, {}
+    keys = set()
+    for it in items:
+        for k in ("id", "term"):
+            v = it.get(k)
+            if v in seen.get(k, set()):
+                hits.append("%s 안 %s 겹침: %s" % (GLOSSARY, k, v))
+            seen.setdefault(k, set()).add(v)
+        if not (it.get("short") or "").strip():
+            hits.append("%s 안 한 줄 뜻(short) 없음: %s" % (GLOSSARY, it.get("id")))
+        for m in it.get("match") or []:
+            if m in ms and ms[m] != it.get("id"):
+                hits.append("%s 안 찾을 글자 「%s」 가 두 항목에: %s · %s" % (GLOSSARY, m, ms[m], it.get("id")))
+            ms[m] = it.get("id")
+        keys |= {it.get("id"), it.get("term")} | set(it.get("match") or [])
+    n = len(items)
+    pat = re.compile(r'data-term="([^"$]+)"')
+    for f in walk(".html", ".js"):
+        if f.startswith(("temp/", "assets/js/glossary.js")):
+            continue
+        src = rd(os.path.join(ROOT, f))
+        for i, line in enumerate(src.splitlines(), 1):
+            for t in pat.findall(line):
+                n += 1
+                if t not in keys:
+                    hits.append("%s:%d  data-term=\"%s\" — 용어집에 없다(용어집에 먼저 넣는다)" % (f, i, t))
+    return "용어집이 어긋남 · 없는 용어를 가리킴", n, hits, BAD, (지시, "「하나 써놓으면 전체 페이지에 다 들어가도록」 (2026-10-12)")
+
+
+def c_glossary_copy():
+    """용어집 밖에 용어 설명이 또 생겼나 — 「봐야 할 자리」 (2026-10-12).
+
+    이름을 박지 않고 모양으로 센다(창구 검토) — 루트 용어집 밖의 json 에 「term 과 match」(또는 term 과 short)를 가진 항목이
+    있으면 또 하나의 용어집이다. 그리고 화면 코드 · 데이터에 용어집의 한 줄 뜻(short)이 그대로 들어 있으면 설명을 베낀 것이다.
+    위반으로 내지 않는다 — 옮기는 동안 옛 자리가 잠깐 남고, 같은 문장이 우연히 맞을 수 있다.
+    """
+    items = glossary_items()
+    shorts = [x["short"] for x in items if len(x.get("short") or "") >= 12]
+    hits, n = [], 0
+    for f in walk(".json", ".js", ".html"):
+        if f in (GLOSSARY, "assets/js/glossary.js") or f.startswith(("temp/", "debugging/history/", "logs/")):
+            continue
+        src = rd(os.path.join(ROOT, f))
+        n += 1
+        if f.endswith(".json") and '"term"' in src and ('"match"' in src or '"short"' in src):
+            try:
+                d = json.loads(src)
+                arr = d.get("items") if isinstance(d, dict) else d
+                if isinstance(arr, list) and any(isinstance(x, dict) and "term" in x and ("match" in x or "short" in x) for x in arr):
+                    hits.append("%s — 용어집 모양의 파일이 %s 밖에 있다" % (f, GLOSSARY))
+            except Exception:
+                pass
+        for sh in shorts:
+            if sh in src:
+                hits.append("%s — 용어집 한 줄 뜻이 그대로 있다: %s" % (f, sh[:30]))
+    return "용어집 밖의 용어 설명", n, hits, LOOK, (지시, "「같은 단어가 여기저기에서 설명이 들어가는 게 아니고」 (2026-10-12)")
+
+
 CHECKS = [c_bat_nonascii, c_py_encoding, c_send_error_korean,
-          c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec, c_nav_gutter, c_shared_css, c_main_guard, c_main_ok_log, c_screen_timers]
+          c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec, c_nav_gutter, c_shared_css, c_main_guard, c_main_ok_log, c_screen_timers,
+          c_glossary, c_glossary_copy]
 
 
 def main():
