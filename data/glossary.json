@@ -640,6 +640,37 @@
     "순매수",
     "수급"
    ]
+  },
+  {
+   "id": "달러인덱스",
+   "term": "달러인덱스",
+   "short": "미국 달러가 주요 6개 통화에 견주어 얼마나 강한지를 나타낸 지수 — 오르면 달러가 강해진 것이다",
+   "aliases": "달러지수 · DXY · USDX(영문)",
+   "group": "시장 지표",
+   "quotes": [
+    {
+     "text": "미국 달러 지수는 미국 달러에 견준 여섯 통화를 가중해 기하평균으로 계산한다. 1973년 미국 연준이 처음 만들었고, 1985년 선물 거래가 시작된 뒤로 ICE Futures U.S. 가 구성 통화와 비중을 정하고 계산·배포한다. … 값은 주요 교역국 통화가 서로 자유롭게 변하기 시작한 1973년 3월에 견준다.",
+     "source": "ICE 「U.S. Dollar Index Contracts FAQ」(2015-06)",
+     "url": "https://www.ice.com/publicdocs/futures_us/ICE_Dollar_Index_FAQ.pdf",
+     "translated": true
+    },
+    {
+     "text": "비중 — 유로 57.6% · 일본 엔 13.6% · 영국 파운드 11.9% · 캐나다 달러 9.1% · 스웨덴 크로나 4.2% · 스위스 프랑 3.6%. 1973년 도입 뒤 한 번 바뀌었다(1999년 유로 출범 · 유럽 통화 몫은 57.6% 그대로).",
+     "source": "ICE 「U.S. Dollar Index」 안내서",
+     "url": "https://www.ice.com/publicdocs/ICE_USDX_Brochure.pdf",
+     "translated": true
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "note": [
+    "여섯 통화에 원화는 없다 — 원/달러 환율과 같이 움직이지 않을 때가 있다(위 비중 목록에서 나오는 사실)."
+   ],
+   "used": "홀딩스 시장지표 칩 「달러인덱스」 · Insight 시황분석 탭 「금과 달러지수」",
+   "match": [
+    "달러인덱스",
+    "달러지수"
+   ]
   }
  ]
 }
