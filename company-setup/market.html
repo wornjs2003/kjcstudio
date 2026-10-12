@@ -43,6 +43,7 @@
       <div class="mk-meta" id="meta">값을 받는 중…</div>
       <!-- 네 층 — 맨 위 분석, 그 아래 매크로 지표 · 시장 반응 · 그 밖의 지표 (2026-10-12 재권님 「셋을 나눠서 놓고 맨위에 분석」 → 묶음 안 「응 해줘」) -->
       <h2 class="mk-sec">분석</h2>
+      <div class="mk-card mk-note"><h2>세션이 쓴 시황</h2><div id="note">—</div></div>   <!-- 2026-10-12 재권님 「이 분석 시황분석의 맨위에 넣어줘」 · data/market-note.json · js/market-note.js -->
       <div class="mk-card"><h2>오늘의 시황</h2><p class="one" id="one">—</p></div>
       <div class="mk-card" id="text"><h2>왜 그렇게 보나</h2><div class="cap">문단은 이 화면이 값으로 만든다 · 「근거」 를 누르면 쓴 값 · 시각 · 출처와 읽는 법이 나온다</div></div>
       <div class="mk-grid">
@@ -84,5 +85,6 @@
 <script src="../assets/js/main.js"></script>
 <script src="vendor/chart.umd.min.js"></script>   <!-- 그래프 — Chart.js 4.4.1 (vendor/README.md) -->
 <script type="module" src="js/market.js"></script>   <!-- 모듈 — 이름이 main.js 와 안 섞이게 -->
+<script type="module" src="js/market-note.js"></script>   <!-- 세션이 쓴 시황 — market.js 와 따로 -->
 </body>
 </html>
