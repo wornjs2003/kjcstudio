@@ -1,16 +1,16 @@
 """네이버 증권 뉴스(stock.naver.com/news)에 있는 것을 받아 Insight 화면용 파일로 둔다.
 
     python3 company-setup/tools/fetch-naver-news.py              → data/naver-news.json (손으로 한 번)
-    python3 company-setup/tools/fetch-naver-news.py --to-board   → 8765 문서 저장소 naver-news (10분 주기 · launchd/kr.kjcstudio.naver-news.plist — 2026-10-12 까지 등록 파일이 없어 10-01 뒤로 멈춰 있었다 · qa 가 찾음 · 설치는 「켜기」)
+    python3 company-setup/tools/fetch-naver-news.py --to-board   → 8765 문서 저장소 naver-news (평일 09:00~15:30 은 10분 · 그 밖은 30분 · launchd/kr.kjcstudio.naver-news.plist — 2026-10-12 까지 등록 파일이 없어 10-01 뒤로 멈춰 있었다 · qa 가 찾음 · 설치는 「켜기」)
 
 2026-10-01 지시 — 「네이버에 있는거 가져와서 그냥 채워만 놓으면 됨」.
 네이버 API 는 다른 사이트에서의 직접 호출을 막는다(Access-Control-Allow-Origin 없음).
 그래서 화면이 바로 못 부르고, 이 도구가 받아 data/naver-news.json 에 둔다.
 **돌린 그 시각의 값이다** — 화면에 받은 시각을 함께 적는다.
 
-2026-10-06 지시(「응 해봐」) — 10분마다 받는다. 주기로 도는 쪽은 저장소 파일 대신 **8765 의 문서 저장소**
+2026-10-06 지시(「응 해봐」) — 10분마다 받는다. 2026-10-12 재권님 「장중에는 10분 그밖은 30분」 — 주기는 등록 파일 한 곳이 정한다. 주기로 도는 쪽은 저장소 파일 대신 **8765 의 문서 저장소**
 (`PUT /api/board/doc/naver-news` · 본문 `{"data": …}` · `holdings/server/docstore.py`)에 둔다 — 파일에 쓰면
-10분마다 메인 폴더가 미커밋으로 더러워진다. 화면(js/insight.js)은 그 문서를 먼저 읽고 없으면 파일로 돌아간다.
+주기마다 메인 폴더가 미커밋으로 더러워진다. 화면(js/insight.js)은 그 문서를 먼저 읽고 없으면 파일로 돌아간다.
 주소는 `KJC_BOARD_URL`(기본 8765) 하나 — `tools/board-card.py` 와 같은 변수다. **세션 폴더 서버(8766~8771)에
 쓰지 않는다** — 보드 넘기기가 켜진 서버는 그대로 8765 로 넘긴다(메인 데이터 · 「메인 자리는 허락 없이 건드리지 않는다」).
 """
@@ -26,7 +26,7 @@ N = 15
 BOARD_URL = (os.environ.get("KJC_BOARD_URL") or "http://localhost:8765").rstrip("/")
 DOC = "naver-news"
 # 요청 사이 쉼 — 재권님 「서버에 무리가지 않도록 순차로 받도록 하면 될 거 같아」(2026-10-06 16:1x · 창구 경유).
-# 다섯 주소를 한 번에 하나씩(순차) 받고, 그 사이에 이만큼 쉰다. 10분 주기라 한 바퀴가 몇 초 늘어도 지장 없다
+# 다섯 주소를 한 번에 하나씩(순차) 받고, 그 사이에 이만큼 쉰다. 주기가 10분 이상이라 한 바퀴가 몇 초 늘어도 지장 없다
 GAP_SEC = 1.0
 
 # 네이버 화면의 칸 → 그 칸이 부르는 주소 (2026-10-01 stock.naver.com/news 스크립트에서 찾음)
@@ -85,7 +85,7 @@ def put_board(out):
 def main():
     ap = argparse.ArgumentParser(description="네이버 증권 뉴스를 받아 파일 또는 8765 문서 저장소에 둔다")
     ap.add_argument("--to-board", action="store_true",
-                    help="data/naver-news.json 대신 %s/api/board/doc/%s 에 PUT (10분 주기용)" % (BOARD_URL, DOC))
+                    help="data/naver-news.json 대신 %s/api/board/doc/%s 에 PUT (주기로 돌 때 · launchd)" % (BOARD_URL, DOC))
     args = ap.parse_args()
 
     out = {"fetchedAt": datetime.now().strftime("%Y-%m-%d %H:%M"), "from": BASE + "/news"}
