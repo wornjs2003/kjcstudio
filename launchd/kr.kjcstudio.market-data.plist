@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kr.kjcstudio.market-data</string>
+  <!-- 시황분석 탭(company-setup/market.html) 값을 평일 아침에 저절로 받는다 (2026-10-12 재권님 「응 해줘」 · 시황분석 자동 받기 안 (가)).
+       평일 06:30 — 세계 거시(정책금리 · 물가 · 경기선행 · 국채 금리 · 나라 ETF) · 네이버 시장지표 · 대외변수(지정학 위험 · 불확실성 · VIX · OVX).
+                    월요일만 미국 지표 발표 다음 날 확률(release-odds)도.
+       평일 16:10 — 네이버 시장지표만 한 번 더(한국 장 마감 15:30 뒤 값 · 국내 시장 · 업종 등락).
+       한 프로그램이 시각을 보고 고른다 — 12시 전이면 아침 몫, 뒤면 오후 몫.
+       **하나가 실패해도 다음 것은 돈다** (`;` 로 잇는다 · `&amp;&amp;` 가 아니다). 실패한 도구는 옛 파일을 그대로 둔다.
+       받는 파일은 `*-live.json` 이고 `.gitignore` 에 있다 — 메인 폴더를 여럿이 쓰므로 매일 미커밋이 생기지 않게(커밋된 `*.json` 은 덮지 않는다).
+       `--also` 로 서비스방(/Users/kjc/service · 8764 · 외부접속이 보는 자리)에도 같은 파일을 쓴다 — 그 경로는 이 등록 파일에만 둔다.
+       세계 거시는 8765 의 /api/kis/chart 를 부른다(KIS 예산 안 · 하루 한 번).
+       FRED 열쇠가 secrets.json 에 없으면 VIX · OVX · release-odds 는 실패한다(2026-10-12 메인 · 서비스방 모두 아직 없음).
+       설치는 손으로 한다(「켜기」 · 재권님 지시).
+           cp launchd/kr.kjcstudio.market-data.plist ~/Library/LaunchAgents/
+           launchctl load ~/Library/LaunchAgents/kr.kjcstudio.market-data.plist -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>echo "== $(date '+%F %T')"; if [ "$(date +%H)" -lt 12 ]; then /usr/bin/python3 -u company-setup/tools/fetch-world-macro.py --port 8765 --out company-setup/data/world-macro-live.json --also /Users/kjc/service/company-setup/data/world-macro-live.json; /usr/bin/python3 -u company-setup/tools/fetch-naver-macro.py --out company-setup/data/naver-macro-live.json --also /Users/kjc/service/company-setup/data/naver-macro-live.json; /usr/bin/python3 -u company-setup/tools/fetch-external-risk.py --out company-setup/data/external-risk-live.json --also /Users/kjc/service/company-setup/data/external-risk-live.json; if [ "$(date +%u)" = 1 ]; then /usr/bin/python3 -u company-setup/tools/fetch-release-odds.py --out company-setup/data/release-odds-live.json --also /Users/kjc/service/company-setup/data/release-odds-live.json; fi; else /usr/bin/python3 -u company-setup/tools/fetch-naver-macro.py --out company-setup/data/naver-macro-live.json --also /Users/kjc/service/company-setup/data/naver-macro-live.json; fi</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/kjc/work/KJCStudio</string>
+  <!-- 평일(월 1 ~ 금 5) 06:30 · 16:10 -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>10</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>10</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>10</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>10</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>10</integer></dict>
+  </array>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/market-data.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/market-data.log</string>
+</dict>
+</plist>

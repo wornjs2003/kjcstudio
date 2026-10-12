@@ -109,3 +109,9 @@ company-setup/data/etf-flow.json
 # 무역 발표(관세청 수출입 잠정치) — launchd 가 날마다 09:00~11:50 에 새 발표를 찾아 쌓는다 (2026-10-12 지시 — 「니가 다 해」).
 # 메인 폴더를 여럿이 쓰므로 담으면 발표 날마다 미커밋이 생긴다. 지난 것은 KDI 목록에서 --all 로 다시 받을 수 있다.
 company-setup/data/trade-flash.json
+
+# 시황분석 탭 값 — launchd(kr.kjcstudio.market-data)가 평일 06:30 · 16:10 에 받는다 (2026-10-12 재권님 「응 해줘」).
+# 커밋된 *.json 은 덮지 않고 *-live.json 에 쓴다 — 메인 폴더를 여럿이 쓰므로 담으면 매일 미커밋이 생긴다.
+# .tmp 는 바꿔 끼우는 중간 파일이다.
+company-setup/data/*-live.json
+company-setup/data/*-live.json.tmp
