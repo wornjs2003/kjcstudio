@@ -886,8 +886,13 @@ def _kst_stamp(now=None):
 
 
 def send_reminders():
-    """때가 된 알림을 보낸다. 보낸 건수를 돌려준다."""
-    if not REMINDERS:
+    """때가 된 알림을 보낸다. 보낸 건수를 돌려준다.
+
+    **메인서버만 보낸다** — 공시 발송과 같은 `NOTIFY_LOCAL`(= `is_sender`)을 본다 (2026-10-12).
+    그 전에는 이 깃발을 안 봐서 공시 폴러가 도는 서버마다 따로 보낼 수 있었다.
+    보내지 않은 서버는 「보냈다」 표시도 안 남긴다 — 메인이 그대로 보낸다.
+    """
+    if not REMINDERS or not NOTIFY_LOCAL:
         return 0
     db_init()
     now = _kst_stamp()
