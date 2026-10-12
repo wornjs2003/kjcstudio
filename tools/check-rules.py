@@ -410,18 +410,50 @@ def glossary_items():
         return []
 
 
+def strip_html_comments(src):
+    """html 의 <!-- --> 를 뺀다 — 줄 수는 그대로 둔다."""
+    return re.sub(r"<!--.*?-->", lambda m: "\n" * m.group(0).count("\n"), src, flags=re.S)
+
+
+# 화면이 용어를 가리키는 표기 — 한 표기만 세면 「그 표기로는 없다」 가 된다(qa 2026-10-12).
+# 속성(큰 · 작은따옴표 · JS 문자열 안의 \") · dataset.term = … · setAttribute('data-term', …)
+TERM_REFS = [
+    re.compile(r"""data-term=(\\?)(["'])(.*?)\1\2"""),
+    re.compile(r"""\.dataset\.term\s*=\s*()(["'`])(.*?)\2"""),
+    re.compile(r"""setAttribute\(\s*["']data-term["']\s*,\s*()(["'`])(.*?)\2\s*\)"""),
+]
+DYNAMIC = re.compile(r"""[$+{}'"`\\]""")      # 값을 이어 붙이거나 변수로 채우는 것 — 실행해 봐야 안다
+
+
+def term_refs(src):
+    """(줄, 값) — 주석은 빼고 센다. 값을 이어 붙인 것(변수 · ${})은 뺀다. 빈 값은 '' 로 낸다."""
+    src = strip_js_comments(strip_html_comments(src))
+    out = []
+    for pat in TERM_REFS:
+        for m in pat.finditer(src):
+            v = m.group(3)
+            if DYNAMIC.search(v):
+                continue
+            out.append((src[:m.start()].count("\n") + 1, v))
+    return out
+
+
 def c_glossary():
     """용어 설명은 한 곳에만 쓴다 (2026-10-12 지시) — 용어집 안이 어긋나거나 화면이 없는 용어를 가리키면 위반.
 
-    용어집 안 — id · term 이 겹친다 · 같은 「찾을 글자」(match) 가 두 항목에 있다 · 한 줄 뜻(short)이 비었다.
-    화면 — `data-term="X"` 인데 용어집에 X 가 없다(id · term · match 어느 것과도 안 맞음). 순서가 「용어집 먼저 → 화면」 이라 막는다.
+    용어집 안 — id · term 이 없다 · 겹친다 · 같은 「찾을 글자」(match) 가 두 항목에 있다 · 한 줄 뜻(short)이 비었다.
+    화면 — 용어를 가리키는 표기(term_refs)의 값이 용어집에 없거나 비었다. 주석 안은 안 센다.
+    순서가 「용어집 먼저 → 화면」 이라 막는다.
     """
     items = glossary_items()
     hits, seen, ms = [], {}, {}
     keys = set()
-    for it in items:
+    for i, it in enumerate(items):
         for k in ("id", "term"):
             v = it.get(k)
+            if not v:
+                hits.append("%s 안 %d번째 항목에 %s 칸이 없다" % (GLOSSARY, i + 1, k))
+                continue
             if v in seen.get(k, set()):
                 hits.append("%s 안 %s 겹침: %s" % (GLOSSARY, k, v))
             seen.setdefault(k, set()).add(v)
@@ -432,26 +464,50 @@ def c_glossary():
                 hits.append("%s 안 찾을 글자 「%s」 가 두 항목에: %s · %s" % (GLOSSARY, m, ms[m], it.get("id")))
             ms[m] = it.get("id")
         keys |= {it.get("id"), it.get("term")} | set(it.get("match") or [])
+    keys.discard(None)
     n = len(items)
-    pat = re.compile(r'data-term="([^"$]+)"')
     for f in walk(".html", ".js"):
         if f.startswith(("temp/", "assets/js/glossary.js")):
             continue
-        src = rd(os.path.join(ROOT, f))
-        for i, line in enumerate(src.splitlines(), 1):
-            for t in pat.findall(line):
-                n += 1
-                if t not in keys:
-                    hits.append("%s:%d  data-term=\"%s\" — 용어집에 없다(용어집에 먼저 넣는다)" % (f, i, t))
+        for line, t in term_refs(rd(os.path.join(ROOT, f))):
+            n += 1
+            if not t.strip():
+                hits.append("%s:%d  용어 표시의 값이 비었다" % (f, line))
+            elif t not in keys:
+                hits.append("%s:%d  data-term \"%s\" — 용어집에 없다(용어집에 먼저 넣는다)" % (f, line, t))
     return "용어집이 어긋남 · 없는 용어를 가리킴", n, hits, BAD, (지시, "「하나 써놓으면 전체 페이지에 다 들어가도록」 (2026-10-12)")
+
+
+def _entry(x):
+    return isinstance(x, dict) and ("short" in x and ("term" in x or "match" in x) or "term" in x and "match" in x)
+
+
+def glossary_shapes(d, path="$"):
+    """json 안에서 용어집 모양을 찾는다 — 어느 열쇠 아래든 · 목록이든 사전(이름 → 항목)이든."""
+    if isinstance(d, list):
+        if sum(map(_entry, d)) >= 2:
+            yield path
+        for i, x in enumerate(d):
+            yield from glossary_shapes(x, "%s[%d]" % (path, i))
+    elif isinstance(d, dict):
+        vals = list(d.values())
+        if sum(map(_entry, vals)) >= 2 or sum(isinstance(v, dict) and "short" in v for v in vals) >= 2:
+            yield path
+            return
+        for k, v in d.items():
+            yield from glossary_shapes(v, "%s.%s" % (path, k))
+
+
+JS_ENTRY = re.compile(r"""\{[^{}]*?\bterm\s*:\s*["'`][^{}]*?\b(short|match)\s*:[^{}]*?\}""", re.S)
 
 
 def c_glossary_copy():
     """용어집 밖에 용어 설명이 또 생겼나 — 「봐야 할 자리」 (2026-10-12).
 
-    이름을 박지 않고 모양으로 센다(창구 검토) — 루트 용어집 밖의 json 에 「term 과 match」(또는 term 과 short)를 가진 항목이
-    있으면 또 하나의 용어집이다. 그리고 화면 코드 · 데이터에 용어집의 한 줄 뜻(short)이 그대로 들어 있으면 설명을 베낀 것이다.
-    위반으로 내지 않는다 — 옮기는 동안 옛 자리가 잠깐 남고, 같은 문장이 우연히 맞을 수 있다.
+    이름을 박지 않고 모양으로 센다(창구 검토) — 루트 용어집 밖에 「term 과 match」(또는 short 와 term · match)를 가진 항목이
+    둘 이상 모여 있으면 또 하나의 용어집이다. json 은 어느 열쇠 아래든 · 사전 꼴(이름 → 항목)이든 보고, js 는 그런 객체 글자가
+    둘 이상인 파일을 낸다(qa 2026-10-12). 그리고 화면 코드 · 데이터에 용어집의 한 줄 뜻(short)이 그대로 들어 있으면 설명을 베낀 것이다.
+    위반으로 내지 않는다 — 같은 문장이 우연히 맞을 수 있다.
     """
     items = glossary_items()
     shorts = [x["short"] for x in items if len(x.get("short") or "") >= 12]
@@ -461,14 +517,14 @@ def c_glossary_copy():
             continue
         src = rd(os.path.join(ROOT, f))
         n += 1
-        if f.endswith(".json") and '"term"' in src and ('"match"' in src or '"short"' in src):
+        if f.endswith(".json") and "short" in src or f.endswith(".json") and "term" in src:
             try:
-                d = json.loads(src)
-                arr = d.get("items") if isinstance(d, dict) else d
-                if isinstance(arr, list) and any(isinstance(x, dict) and "term" in x and ("match" in x or "short" in x) for x in arr):
-                    hits.append("%s — 용어집 모양의 파일이 %s 밖에 있다" % (f, GLOSSARY))
+                for where in list(glossary_shapes(json.loads(src)))[:1]:
+                    hits.append("%s %s — 용어집 모양이 %s 밖에 있다" % (f, where, GLOSSARY))
             except Exception:
                 pass
+        elif f.endswith(".js") and len(JS_ENTRY.findall(strip_js_comments(src))) >= 2:
+            hits.append("%s — 용어집 모양의 객체(term 과 short · match)가 %s 밖에 있다" % (f, GLOSSARY))
         for sh in shorts:
             if sh in src:
                 hits.append("%s — 용어집 한 줄 뜻이 그대로 있다: %s" % (f, sh[:30]))

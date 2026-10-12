@@ -5,7 +5,8 @@
 //   · (나) 자동 — 글 덩어리에 data-glossary 를 달면 그 안의 낱말을 찾아 감싼다(문서 · 리포트). 건너뛸 칸은 data-no-glossary,
 //     또는 그 덩어리에 data-glossary-skip=".클래스,…" — 클래스 이름은 화면이 들고 이 파일에 박지 않는다
 //   · 나중에 그린 칸은 import { wrap } 해서 wrap(칸) 을 부르거나, data-term 으로 달면 된다 — 풍선은 document 에 한 번만 건다
-//   · 낱말 경계로만 찾는다 — 영문 약어(MA · PER)는 앞뒤가 영문 · 숫자면 안 걸리고, 한글은 조사가 붙은 것까지만 같은 낱말이다
+//   · 낱말 경계로만 찾는다 — 영문 약어(MA · PER)는 앞뒤가 영문 · 숫자면 안 걸리고, 한글은 앞이 한글 · 영문 · 숫자면 안 걸리며
+//     조사가 붙은 것까지만 같은 낱말이다(「11차 지지」 의 「1차 지지」 · 「1224선」 의 「224선」 은 안 걸린다)
 //   · 옛 자리(company-setup/js/glossary.js · 2026-10-07)에서 옮겼다
 const DATA = new URL('../../data/glossary.json', import.meta.url);
 const CSS = new URL('../css/glossary.css', import.meta.url);
@@ -29,7 +30,7 @@ async function load() {
 
 function pattern(m) {
   const e = m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  if (/[가-힣]/.test(m)) return `(?<![가-힣A-Za-z])${e}(?=$|[^가-힣]|[${JOSA}](?![가-힣]))`;
+  if (/[가-힣]/.test(m)) return `(?<![가-힣A-Za-z0-9])${e}(?=$|[^가-힣]|[${JOSA}](?![가-힣]))`;
   return `(?<![A-Za-z0-9%+−])${e}(?![A-Za-z0-9])`;
 }
 
