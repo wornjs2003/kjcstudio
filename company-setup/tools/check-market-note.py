@@ -18,6 +18,7 @@ if hasattr(sys.stdout, "reconfigure"):
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 ORDER = ["금리", "경기", "시장 반응", "한국", "원자재"]   # 갈래 제목의 머리 낱말 — 「1. 금리 · 물가 — …」 처럼 번호 뒤에 온다
+OPTIONAL = ["대외변수"]   # 뒤에 붙을 수 있는 갈래 — 화면에 대외변수 칸이 있으면 쓰고 없으면 안 쓴다(재권님 10-12 · 10-13 「응 넣어줘」 로 여섯째 갈래 판을 넣음)
 
 
 def korean_judge():
@@ -52,9 +53,9 @@ def main():
             bad.append("%s 이 비었다" % k)
     S = N.get("sections") or []
     heads = [re.sub(r"^\s*\d+\.\s*", "", s.get("h", "")) for s in S]
-    if len(S) != len(ORDER):
-        bad.append("갈래가 %d개 — %d개여야 한다(%s)" % (len(S), len(ORDER), " · ".join(ORDER)))
-    for i, want in enumerate(ORDER):
+    if not len(ORDER) <= len(S) <= len(ORDER) + len(OPTIONAL):
+        bad.append("갈래가 %d개 — %d개(+ 뒤에 %s)여야 한다(%s)" % (len(S), len(ORDER), " · ".join(OPTIONAL), " · ".join(ORDER)))
+    for i, want in enumerate(ORDER + OPTIONAL):
         if i < len(heads) and not heads[i].startswith(want):
             bad.append("%d번째 갈래가 「%s」 — 「%s」 로 시작해야 한다" % (i + 1, heads[i], want))
     for s in S:
