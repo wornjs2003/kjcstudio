@@ -81,10 +81,8 @@ h1 { font-size: clamp(24px, 3.5vw, 30px); font-weight: 700; letter-spacing: -0.0
   background: var(--pj-bg-card); border-radius: var(--pj-radius-lg);
   overflow: hidden; display: flex; flex-direction: column;
 }
-.src-stripe { height: 3px; width: 100%; }
-.src-stripe.live       { background: var(--pj-done); }
-.src-stripe.key        { background: var(--pj-accent); }
-.src-stripe.unofficial { background: var(--pj-warn); }
+/* 카드 윗줄 색 띠(받는 중 = 초록 · 키 받음 = 파랑 · 비공식 = 주황)는 2026-10-13 에 뺐습니다 —
+   「선 — 흰 카드에는 넣지 않는다」 · 「선에 상태 색을 쓰지 않는다」. 상태는 오른쪽 배지 글자가 이미 알립니다. */
 
 .src-body { padding: 16px 18px 14px; flex: 1; display: flex; flex-direction: column; }
 .src-top { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
@@ -405,10 +403,6 @@ function drawSources() {
     const el = document.createElement("div");
     el.className = "src";
 
-    const stripe = document.createElement("div");
-    stripe.className = "src-stripe " + s.state;
-    el.appendChild(stripe);
-
     const body = document.createElement("div");
     body.className = "src-body";
 
@@ -533,7 +527,21 @@ function drawGrid() {
 }
 
 /* ── 시작 ─────────────────────────────── */
-document.getElementById("stampTag").textContent = UPDATED_AT + " 갱신";
+/* 「갱신」 날짜는 손으로 적지 않습니다 (2026-10-13 전수 검수) — 손으로 적은 「2026. 10. 06.」 이
+   그 뒤 바뀐 것을 못 따라가 낡았습니다. 항목 정의 파일을 **마지막으로 고친 날**을 서버가 주는
+   `Last-Modified` 에서 읽습니다. 못 받으면 날짜 대신 「—」 를 냅니다(「못 쟀으면 0 이 아니라 못 쟀다고 낸다」). */
+(function stamp() {
+  const tag = document.getElementById("stampTag");
+  tag.textContent = "— 갱신";
+  fetch("data/sources.js", { method: "HEAD", cache: "no-store" }).then(function (r) {
+    const lm = r.ok && r.headers.get("Last-Modified");
+    const d = lm ? new Date(lm) : null;
+    if (!d || isNaN(d)) return;
+    tag.textContent = d.getFullYear() + ". " + String(d.getMonth() + 1).padStart(2, "0") + ". "
+      + String(d.getDate()).padStart(2, "0") + ". 갱신";
+    tag.title = "항목 정의 파일(data/sources.js)을 마지막으로 고친 날";
+  }).catch(function () {});
+})();
 drawSources();
 drawGrid();
 drawStats();
