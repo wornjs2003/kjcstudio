@@ -106,11 +106,35 @@ def table():
         return None
     best = {}                                 # 세션 기록 id → (얻은 길, 줄) — 같은 id 가 둘이면 --resume 쪽
     loose = []                                # 창이 아는 id 로 못 맞춘 프로세스 (/clear 뒤 --resume 이 낡은 것)
+    # **뒤로 옮긴 세션(parked)** (2026-10-13) — 창의 세션을 백그라운드로 옮기면 옛 프로세스가 parkedJobId 를 들고 남고
+    # 일은 jobId 가 같은 kind bg 프로세스가 이어 한다. 창(herdr)은 옛 기록 id 를 그대로 알아, 이름이 옛 프로세스로
+    # 풀려 메시지가 아무도 안 읽는 큐에 쌓였다(시황분석1 · 70028 → 44276 · 작업우선순위 실측).
+    # 그래서 parked 프로세스는 주소로 내지 않고, 그 창 id 를 이어 받은 bg 프로세스에 넘긴다.
+    meta = {}
+    for s in socks:
+        pid = os.path.basename(s)[:-5]
+        try:
+            with open(os.path.expanduser("~/.claude/sessions/%s.json" % pid), encoding="utf-8") as f:
+                meta[pid] = json.load(f)
+        except Exception:
+            meta[pid] = {}
+    heir = {}                                 # bg 프로세스 pid → 옛 창이 아는 기록 id
+    for pid, m in meta.items():
+        job = m.get("parkedJobId")
+        if job:
+            for p2, m2 in meta.items():
+                if m2.get("kind") == "bg" and m2.get("jobId") == job and m.get("sessionId") in lb:
+                    heir[p2] = m["sessionId"]
     for s in socks:
         pid = os.path.basename(s)[:-5]
         if not run(["ps", "-o", "pid=", "-p", pid]).strip():
             continue                          # 죽은 프로세스가 남긴 소켓
-        sid, via = sid_of(pid, lb)
+        if meta[pid].get("parkedJobId"):
+            continue                          # 세워 둔 옛 프로세스 — 메시지를 안 읽는다
+        if pid in heir:
+            sid, via = heir[pid], "parked"
+        else:
+            sid, via = sid_of(pid, lb)
         if sid in lb:
             row = (lb[sid][0], "uds:" + s, lb[sid][1], sid[:8])
             if sid not in best or (via == "resume" and best[sid][0] != "resume"):
