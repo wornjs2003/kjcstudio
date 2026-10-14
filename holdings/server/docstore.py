@@ -276,6 +276,33 @@ def _git_commit(name):
         return
     if _git(["commit", "-q", "-m", "보드 저장 — %s" % name]):
         _git_stat["commits"] += 1
+        _git_gc_daily()
+
+
+# ── 하루 한 번 묶는다 (2026-10-14 재권님 「가」) ─────────────────
+#
+# 저장마다 커밋이 낱개 파일로 쌓여 2026-10-14 에 `.git` 이 856MB(낱개 10,319개 ·
+# 한 번도 안 묶임)였다. 손으로 한 번 묶으니 8MB · 커밋 3,437 그대로 · fsck 0.
+# git 이 스스로 묶는 자동 정리(`gc --auto`)가 왜 안 돌았는지는 못 갈랐다 —
+# 그래서 기대지 않고 여기서 부른다.
+#
+# **지우는 것이 아니라 묶는 것이다** — 커밋 · 저장본은 하나도 안 빠진다.
+# **기다리지 않는다** — 따로 띄워 저장을 안 막는다. git 이 자기 잠금으로
+# 커밋과 부딪히지 않게 한다. 실패해도 다음 날 다시 돈다.
+GC_EVERY_SEC = 24 * 3600
+
+
+def _git_gc_daily():
+    now = time.time()
+    if now - _git_stat.get("gcAt", 0) < GC_EVERY_SEC:
+        return
+    _git_stat["gcAt"] = now
+    try:
+        subprocess.Popen(["git", "gc", "-q"], cwd=DOC_ROOT,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+    except Exception as e:
+        _git_stat["lastError"] = type(e).__name__
 
 
 def git_status():
