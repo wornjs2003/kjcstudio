@@ -424,7 +424,8 @@ def 그리기():
     물음 = []
     if 표 is not None:
         for s in 세션:
-            카드 = [c for c in 표.get(라벨(s["이름"]), []) if c["열"] in 도는열]
+            # 물음은 todo 카드에서도 센다 — 착수 승인을 묻는 카드는 룰상 todo 다(2026-10-14 작업우선순위 실측 · 「업무 흐름」)
+            카드 = [c for c in 표.get(라벨(s["이름"]), []) if c["열"] in 도는열 + ("todo",)]
             qs = 물음들(카드)
             if qs:
                 물음.append((s["이름"], qs))
@@ -467,7 +468,7 @@ def 그리기():
                       key=lambda c: str(c["때"]), reverse=True)
         검수 = [c for c in 목록 if c["열"] == "review"]
         카드 = 돌고 + 검수
-        qs = 물음들(카드)
+        qs = 물음들(카드 + [c for c in 전부 if c["열"] == "todo"])   # todo 의 착수 물음도(위와 같은 까닭)
         q = qs[0] if qs else None
 
         # 상태 다섯 — CLAUDE.md 「현황 보고는 표로만 한다」 의 상태에 맞춘다 (2026-10-02 13:1x 재권님

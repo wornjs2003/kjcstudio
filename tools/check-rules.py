@@ -602,9 +602,49 @@ def c_glossary_copy():
     return "용어집 밖의 용어 설명", n, hits, LOOK, (지시, "「같은 단어가 여기저기에서 설명이 들어가는 게 아니고」 (2026-10-12)")
 
 
+_HOST = re.compile(r"https?://([A-Za-z0-9.-]+\.[A-Za-z]{2,})")
+_LOCAL = ("localhost", "127.0.0.1", "thekjcstudio.com")
+
+
+def _domain(h):
+    """호스트의 도메인 끝 — 보통 끝 둘, 나라 도메인 아래 한 칸(co.kr · or.kr · go.kr 꼴)이면 끝 셋."""
+    p = h.lower().split(".")
+    if len(p) >= 3 and len(p[-1]) == 2 and len(p[-2]) <= 3:
+        return ".".join(p[-3:])
+    return ".".join(p[-2:])
+
+
+def c_same_source():
+    """두 구역이 같은 값을 쓰면 받는 곳은 서버 하나 (2026-10-14 재권님 「응 해줘」 · 「두 구역이 같은 값을 쓰면」).
+
+    서버(`holdings/server/`)가 부르는 바깥 주소의 호스트를 **서버 코드에서 뽑아**(목록을 박지 않는다), **서버 밖 전부**
+    (폴더 이름을 박지 않는다 · 2026-10-14 qa — 범위를 박았더니 tools/ · holdings/worker/ 를 놓쳤다)에서 같은 도메인을
+    부르는 파일을 「봐야 할 자리」 로 낸다. **호스트가 아니라 도메인 끝으로 견준다** — api.stlouisfed.org 와
+    fred.stlouisfed.org 처럼 표기만 다른 같은 출처를 놓치지 않으려고(qa). 같은 바깥 값을 도구가 따로 받는 자리다 —
+    위반은 아니다. 서버 쪽에 보기 링크 · Referer 주소가 섞여 「같은 값」 이 아닌 짝도 나온다 — 그래서 봐야 할 자리다.
+    주석은 빼고 센다.
+    """
+    srv = set()
+    for f in walk(".py"):
+        if f.startswith("holdings/server/"):
+            srv |= set(_HOST.findall(strip_py_comments(rd(os.path.join(ROOT, f)))))
+    srv = {_domain(h) for h in srv if h not in _LOCAL}
+    hits, n = [], 0
+    for f in walk(".py", ".js", ".html", ".sh"):
+        if f.startswith("holdings/server/") or f == "tools/check-rules.py":
+            continue
+        n += 1
+        src = rd(os.path.join(ROOT, f))
+        src = strip_py_comments(src) if f.endswith(".py") else strip_js_comments(src)
+        got = sorted({_domain(h) for h in _HOST.findall(src)} & srv)
+        if got:
+            hits.append("%s — 서버도 받는 곳: %s" % (f, " · ".join(got)))
+    return "서버와 같은 바깥 출처를 따로 받는 곳", n, hits, LOOK, (지시, "「홀딩스와 인사이트에 중복된 값들 … 룰 잡아봐」 (2026-10-14) — 받는 곳은 서버 하나")
+
+
 CHECKS = [c_bat_nonascii, c_py_encoding, c_send_error_korean,
           c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec, c_nav_gutter, c_shared_css, c_main_guard, c_main_ok_log, c_screen_timers,
-          c_glossary, c_glossary_copy]
+          c_glossary, c_glossary_copy, c_same_source]
 
 
 def main():
