@@ -197,8 +197,6 @@ export function mountVBar(el, active) {
   const ITEMS = [
     { id: 'watch',    icon: '♥', label: '관심',   href: './index.html' },
     { id: 'news',     icon: '◰', label: '뉴스',   href: './news.html' },
-    { id: 'analysis', icon: '▤', label: '분석',   href: './analysis/' },
-    { id: 'roadmap',  icon: '◫', label: '로드맵', href: './roadmap.html' },
     { id: 'record',   icon: '▥', label: '내 기록' },
     { id: 'recent',   icon: '◷', label: '최근 본' },
     { id: 'studio',   icon: '↗', label: 'Studio', href: '../index.html' },

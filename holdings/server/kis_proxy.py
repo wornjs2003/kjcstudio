@@ -7341,7 +7341,6 @@ def main():
     print("  KJC Holdings - 로컬 서버")
     print("-" * 52)
     print("  대시보드  : http://localhost:%d/holdings/" % args.port)
-    print("  주식 분석 : http://localhost:%d/holdings/analysis/" % args.port)
     print("  메인 사이트: http://localhost:%d/" % args.port)
     if cfg:
         print("  KIS 연동  : 사용 (%s)" % MODE_LABEL[cfg["mode"]])

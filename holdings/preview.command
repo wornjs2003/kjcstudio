@@ -29,8 +29,6 @@ echo "────────────────────────�
 echo ""
 echo "  포트      : ${PORT}"
 echo "  대시보드  : ${URL}"
-echo "  주식 분석 : ${URL}analysis/"
-echo "  로드맵    : ${URL}roadmap.html"
 echo ""
 echo "  종료: Control+C 또는 이 창 닫기"
 echo "────────────────────────────────────────────"
