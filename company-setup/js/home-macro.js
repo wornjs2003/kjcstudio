@@ -1,7 +1,10 @@
 // Insight 홈 — 「오늘의 시황 한 줄」 자리에 세션이 쓴 시황 한 줄, 「오늘의 핵심」 줄에 매크로 지표 칩 (2026-10-14 재권님
 // 「매크로 지표를 Insight 홈에 하나로 모아서」 → 시안 → 「홈의 오늘의 핵심 옆에다가 / 그리고 홈에 오늘의 시황한줄 옆에 시황분석한게 있어야」 →
 // 「옆으로 밀기로 해줘」). 칩이 넘치면 가로로 민다 — 줄 높이는 그대로(insight.css .in-mac). 종목 리포트에는 안 더한다(창구 (나)).
-//   · 값은 시황분석 탭과 같은 파일 · 주소에서 — data/world-macro · naver-macro · external-risk(live.js · 새 값 먼저 · 없으면 씨앗) · js/dxy.js(ICE 달러인덱스)
+//   · 값은 시황분석 탭과 같은 파일 · 주소에서 — data/world-macro · external-risk(live.js · 새 값 먼저 · 없으면 씨앗) · js/dxy.js(ICE 달러인덱스)
+//   · **홀딩스 서버에 있는 값은 서버에서 받는다**(2026-10-14 재권님 「홀딩스가 기준」 · 「응 옮겨」 — 「두 구역이 같은 값을 쓰면」) —
+//     정책금리(/api/market/materials 나라별 기준금리) · 국채 10년 · 원/달러 · WTI(/api/market/indicators) · VIX(/api/kis/indices · 홀딩스 지수 띠와 같은 값).
+//     물가 · 경기선행은 서버에 없어 world-macro 그대로 · 서버를 못 받으면 그 칩만 「—」(파일 값으로 대신하지 않는다 — 기준이 둘이 된다)
 //   · 시황 글은 data/market-note.json 한 곳(시황분석 탭 맨 위 「세션이 쓴 시황」 과 같은 파일) — 쓴 시각을 함께 보인다
 //   · 색 — 달러인덱스 칩 바탕은 tone.js(100 위 빨강 · 아래 파랑 · 멀수록 짙게) · 오르내림 숫자는 글씨만 빨강 · 파랑(num-up · num-dn)
 //   · 칩을 누르면 시황분석 탭의 그 그래프로 — 그 칸이 접혀 있으면 열어 둔다(시황분석 탭이 기억하는 열린 칸 목록에 더한다)
@@ -33,15 +36,21 @@ async function note() {
 async function macro() {
   const row = document.querySelector('[data-home-macro]');
   if (!row) return;
-  const [W, N, E, X] = await Promise.all([live('world-macro').catch(() => null), live('naver-macro').catch(() => null),
-    live('external-risk').catch(() => null), dxyIce().catch(() => null), toneReady]);
+  const js = u => fetch(u, { cache: 'no-store' }).then(r => r.json()).then(j => (j && j.ok !== false ? j : null)).catch(() => null);
+  const [W, E, X, MI, MM, KI] = await Promise.all([live('world-macro').catch(() => null), live('external-risk').catch(() => null),
+    dxyIce().catch(() => null), js('/api/market/indicators'), js('/api/market/materials'), js('/api/kis/indices'), toneReady]);
   const C = (W && W.countries) || {}, us = C.US || {}, kr = C.KR || {}, v = o => o && o.v;
-  const krw = N && N.majors && N.majors.find(m => m.code === 'FX_USDKRW'), wti = N && N.energy && N.energy.find(m => m.name === 'WTI');
-  const g = E && last(E.gpr), ep = E && last(E.epu), vx = E && last(E.vix);
+  // 서버 값 — 지표는 열쇠로 · 기준금리는 네이버 코드로 · VIX 는 KIS 지수 코드로
+  const ind = k => { const i = MI && MI.items && MI.items.find(x => x.key === k); return i && i.last ? { v: i.last.c, pct: i.prev && i.prev.c ? (i.last.c / i.prev.c - 1) * 100 : null } : null; };
+  const pol = c => { for (const g of (MM && MM.groups) || []) for (const p of g.parts || []) if (p.path === 'standardInterest') { const r = p.rows.find(x => x.code === c); if (r) return r.v; } return null; };
+  const kis = c => { const d = KI && KI.data; const a = Array.isArray(d) ? d : (d && d.items) || []; return a.find(x => x.code === c) || null; };
+  const r2 = x => (x == null ? null : Math.round(x * 100) / 100);   // 칩은 소수 둘째 자리 — 서버는 셋째까지 준다
+  const krw = ind('usdkrw'), wti = ind('wti'), vix = kis('VIX');
+  const g = E && last(E.gpr), ep = E && last(E.epu);
   // [이름, 값 글, 시황분석 탭의 접는 칸, 그 그래프, 바탕]
   const CH = [
-    ['정책금리', pair(v(us.rate), v(kr.rate), 2, '%'), 'macro', 'c-rate'],
-    ['국채 10년', pair(v(us.y10), v(kr.y10), 2, '%'), 'macro', 'c-yld'],
+    ['정책금리', MM ? pair(pol('USFOMC=ECIX'), pol('KROCRT=ECIX'), 2, '%') : '—', 'macro', 'c-rate'],
+    ['국채 10년', MI ? pair(r2((ind('us10') || {}).v), r2((ind('kr10') || {}).v), 2, '%') : '—', 'macro', 'c-yld'],
     ['물가', pair(v(us.cpi), v(kr.cpi), 1, '%'), 'macro', 'c-cpi'],
     ['경기선행', pair(v(us.cli), v(kr.cli), 1), 'macro', 'c-cli'],
     ['달러인덱스', X ? `${num(X.v, 2)}${X.m1 == null ? '' : ' · 한 달' + pc(X.m1)}` : '—', 'market', 'c-gold', X ? paint('dxy', X.v, 'bg') : ''],
@@ -49,7 +58,7 @@ async function macro() {
     ['WTI', wti ? num(wti.v, 2) + pc(wti.pct) : '—', 'macro', 'c-oil'],
     ['지정학 위험', g && g[2] != null ? `30일 평균 ${num(g[2], 1)}` : '—', 'ext', 'c-gpr'],
     ['정책 불확실성', ep && ep[2] != null ? `30일 평균 ${num(ep[2], 1)}` : '—', 'ext', 'c-unc'],
-    ['VIX', vx ? num(vx[1], 2) : '—', 'ext', 'c-fear'],
+    ['VIX', vix && vix.value != null ? num(vix.value, 2) + pc(vix.changePct) : '—', 'ext', 'c-fear'],
   ];
   row.classList.add('in-mac');
   row.innerHTML = '<span class="in-mac-h">오늘의 핵심</span>'
