@@ -66,11 +66,11 @@
       </div>
       <div class="mk-meta" id="meta-nv"></div>
       </details>
-      <details class="mk-fold" data-fold="market"><summary class="mk-sec">시장 반응<span class="mk-sec-s">주가 · 한 달 주가 · 금과 달러지수 · 채권 값 · 국내 시장 · 업종 · 크게 움직인 날 · 발표 다음 날 확률</span><span class="mk-sum" id="sum-market">—</span></summary>
+      <details class="mk-fold" data-fold="market"><summary class="mk-sec">시장 반응<span class="mk-sec-s">주가 · 한 달 주가 · 금과 달러인덱스 · 채권 값 · 국내 시장 · 업종 · 크게 움직인 날 · 발표 다음 날 확률</span><span class="mk-sum" id="sum-market">—</span></summary>
       <div class="mk-grid">
         <div class="mk-card"><h2>주가 1년 — 처음 = 100</h2><div class="cap">나라 ETF(달러) · KIS 해외 일봉 · 열 때 받음</div><div class="chart"><canvas id="c-eq"></canvas></div></div>
         <div class="mk-card"><h2>한 달 주가 — 달러 vs 그 나라 돈<span class="tag">계산</span></h2><div class="cap">ETF 1개월 × 통화 1개월(ECB)로 어림 · 칠레 · 베트남은 환율 없음</div><div class="chart"><canvas id="c-m1"></canvas></div></div>
-        <div class="mk-card"><h2>금값 · 달러지수 — 1년</h2><div class="cap" id="cap-gold">금 = GLD(금 ETF · 달러 · KIS) · 달러지수 = FRED 교역가중</div><div class="chart"><canvas id="c-gold"></canvas></div></div>
+        <div class="mk-card"><h2>금값 · 달러인덱스 — 1년</h2><div class="cap" id="cap-gold">금 = GLD(금 ETF · 달러 · KIS) · 달러인덱스 = ICE(1973년 3월 = 100 · 네이버) — 점선이 100 위면 빨강 · 아래면 파랑, 멀수록 짙게</div><div class="chart"><canvas id="c-gold"></canvas></div></div>
         <div class="mk-card"><h2>채권 값 — 1년 · 처음 = 100</h2><div class="cap">채권 ETF(달러) · KIS 해외 일봉 · 열 때 받음 · 금리가 오르면 내린다 · 범례를 누르면 그 줄을 켜고 끈다</div><div class="chart"><canvas id="c-bond"></canvas></div></div>
         <div class="mk-card mk-wide"><h2>국내 시장 — 오늘</h2><div class="cap">투자자별 순매수 · 프로그램 매매(억원) · 오른/내린 종목 수 · 시가총액 상위 · 전날 미국 증시 — 네이버 증권 · 한국거래소 마감 시황의 공통 칸</div><div class="kr-day" id="kr-day"></div></div>
         <div class="mk-card"><h2>업종 등락 — 오늘</h2><div class="cap">네이버 업종 분류 · 많이 오른 다섯과 많이 내린 다섯</div><div class="nv-tb one-col" id="kr-ind"></div></div>
