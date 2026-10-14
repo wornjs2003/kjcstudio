@@ -109,7 +109,7 @@ function relReturn(stock, index, months) {
   const rs = (l.c / s0.c - 1) * 100, ri = (il.c / i0.c - 1) * 100; return { rs, ri, rel: rs - ri, from: s0.ts };
 }
 const numStr = (s) => { const m = String(s ?? '').replace(/,/g, '').match(/-?\d+(\.\d+)?/); return m ? +m[0] : null; };
-const sumBy = (rows, f) => rows.reduce((s, r) => s + (f(r) || 0), 0);
+const sumBy = (rows, f) => rows.every((r) => fin(f(r))) ? rows.reduce((s, r) => s + f(r), 0) : null;   // 한 칸이라도 비면 「—」 — 빈 날을 0 으로 더하지 않는다(2026-10-13 전수 검수)
 
 // ── 가격표 규칙 (임시 · 참고 화면 방식 · 재권님 결정 전) ──
 function priceRule({ price, atr, support, resist }) {
@@ -316,7 +316,7 @@ async function renderLive() {
   const r1 = relReturn(b, got.kd || [], 1), r6 = relReturn(b, got.kd || [], 6), r12 = relReturn(got.w || [], got.kw || [], 12);
   const pr = priceRule({ price: px, atr, support, resist });
   // 수급
-  const inv = (got.inv && got.inv.rows) || []; const invSum = (n) => { const w = inv.slice(0, n); return { f: sumBy(w, (r) => r.foreign.net), i: sumBy(w, (r) => r.inst.net), p: sumBy(w, (r) => r.person.net), fa: sumBy(w, (r) => r.foreign.netAmt) / 100, ia: sumBy(w, (r) => r.inst.netAmt) / 100, pa: sumBy(w, (r) => r.person.netAmt) / 100 }; };
+  const inv = (got.inv && got.inv.rows) || []; const invSum = (n) => { const w = inv.length >= n ? inv.slice(0, n) : null; const s = (f) => w ? sumBy(w, (r) => f(r) ?? null) : null; const e = (v) => fin(v) ? v / 100 : null; return { f: s((r) => r.foreign && r.foreign.net), i: s((r) => r.inst && r.inst.net), p: s((r) => r.person && r.person.net), fa: e(s((r) => r.foreign && r.foreign.netAmt)), ia: e(s((r) => r.inst && r.inst.netAmt)), pa: e(s((r) => r.person && r.person.netAmt)) }; };   // 날이 n 보다 모자라면 「—」
   const streak = (side) => { let k = 0; for (const r of inv) { if (r[side].net > 0) k++; else break; } return k; };
   const flowN = (got.nv && got.nv.flow) || []; const frNow = flowN[0] ? flowN[0].foreignRate : iv('foreignRate'), frAgo = flowN[flowN.length - 1] ? flowN[flowN.length - 1].foreignRate : null;
   // 실적
@@ -474,7 +474,7 @@ async function renderLive() {
   $('rp-cat-body').innerHTML = `<div class="rp-cols"><div><h3>주요 호재 ${S.me}</h3>${list((C.positive || []).map(esc))}</div><div><h3>주요 위험 ${S.me}</h3>${list((C.negative || []).map(esc))}</div></div><h3>예정 · 진행 이벤트 ${S.me}</h3>${list((C.events || []).map(esc))}${eventHtml(card)}<h3>최근 공시 ${S.dart}</h3>${dT}<h3>관련 뉴스 ${S.naver}</h3>${nT}`;
 
   // ── 지지 · 저항 ──
-  $('rp-sr-body').innerHTML = tbl([row(['구분', '가격', '현재가에서', '근거'], true), ...resist.slice().reverse().map((p) => row(['저항', won(p.p), pct((p.p / px - 1) * 100), `${md(p.ts)} 고점(ZigZag)`])), ...support.map((p) => row(['지지', won(p.p), pct((p.p / px - 1) * 100), `${md(p.ts)} 저점(ZigZag)`]))].concat(ich && ich.spanA != null ? [row(['구름 상단 · 하단', `${won(Math.max(ich.spanA, ich.spanB))} · ${won(Math.min(ich.spanA, ich.spanB))}`, '', '일목'])] : [])) + `<p class="in-rp-note">임시 규칙 — 최근 260봉 ZigZag(3%) 꺾임점. 규칙은 재권님 결정 뒤 바꾼다</p>`;
+  $('rp-sr-body').innerHTML = tbl([row(['구분', '가격', '현재가에서', '근거'], true), ...resist.slice().reverse().map((p) => row(['저항', won(p.p), pct((p.p / px - 1) * 100), `${md(p.ts)} 고점(ZigZag)`])), ...support.map((p) => row(['지지', won(p.p), pct((p.p / px - 1) * 100), `${md(p.ts)} 저점(ZigZag)`]))].concat(ich && ich.spanA != null ? [row(['구름 상단 · 하단', `${won(Math.max(ich.spanA, ich.spanB))} · ${won(Math.min(ich.spanA, ich.spanB))}`, '—', '일목'])] : [])) + `<p class="in-rp-note">임시 규칙 — 최근 260봉 ZigZag(3%) 꺾임점. 규칙은 재권님 결정 뒤 바꾼다</p>`;
 
   // ── 시나리오 · 전략 ──
   const SC = T.scenarios || [];

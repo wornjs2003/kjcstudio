@@ -14,9 +14,10 @@
   "원자재",
   "테러",
   "해외 증시",
+  "산업 · 경쟁",
   "원인 모름"
  ],
- "_갈래출처": "Baker · Bloom · Davis · Sammon 「What Triggers Stock Market Jumps?」 NBER w28687 — 원문은 17갈래, 여기 적은 것은 시황분석1 이 넘긴 이름이다(17갈래 전부는 확인 전)",
+ "_갈래출처": "Baker · Bloom · Davis · Sammon 「What Triggers Stock Market Jumps?」 NBER w28687 — 원문은 17갈래, 여기 적은 것은 시황분석1 이 넘긴 이름이다(17갈래 전부는 확인 전) · 「산업 · 경쟁」 은 논문 밖에서 우리가 더했다(2026-10-14 — 남의 회사 경영자 발언 · 경쟁사 기술 진전처럼 한 업종을 흔든 소식. 10-13 브로드컴 CEO 발언 · CXMT 가 어디에도 안 맞았다)",
  "moves": {
   "2026-10-12|KOSDAQ": {
    "cause": "기업 실적 · 전망",

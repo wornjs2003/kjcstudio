@@ -25,6 +25,9 @@ KIS · 토스 · 네이버 어디에도 ETF 설정 · 환매 항목이 없다(20
 
 저장 — company-setup/data/etf-nav.json   {"names": {코드: 이름}, "days": {YYYYMMDD: {코드: [시가총액, 가격]}}}
        company-setup/data/etf-flow.json  마지막 두 거래일로 어림한 유입 · 유출 (화면이 읽는 쪽)
+
+    … --also <경로>   어림(etf-flow)을 그 경로에도 한 벌 쓴다(여러 번 줄 수 있다 · 서비스방). 경로는 등록 파일
+                      launchd/kr.kjcstudio.etf-nav.plist 한 곳에만 둔다 — 무역 발표 도구와 같은 길. 쌓는 파일(etf-nav)은 메인 한 곳이다
 """
 import json
 import os
@@ -125,6 +128,9 @@ def main():
     est["fetchedAt"] = now.isoformat(timespec="seconds")
     est["source"] = "네이버 ETF 목록(비공식) · finance.naver.com/api/sise/etfItemList.nhn"
     save(FLOW_PATH, est)
+    for p in [a for i, x in enumerate(sys.argv[:-1]) if x == "--also" for a in [sys.argv[i + 1]]]:
+        os.makedirs(os.path.dirname(os.path.abspath(p)), exist_ok=True)
+        save(p, est)
     print("%s ETF %d개 쌓음 · 쌓인 날 %d일" % (ymd, len(today), len(store["days"])))
     if est["ok"]:
         print("어림 %s → %s · 유입 %+d억 · 유출 %+d억" % (est["from"], est["to"], est["inflowTotal"], est["outflowTotal"]))

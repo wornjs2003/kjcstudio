@@ -14,7 +14,10 @@
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text-primary); font-family: 'Noto Sans KR', sans-serif; }
-  .wrap { padding: 22px 20px 28px; display: grid; grid-template-columns: 1fr 240px; gap: 20px; min-width: 1180px; }
+  /* 좁은 폭이 기본 — 한 줄로 쌓는다. 넓은 폭(1180px~)은 전처럼 지도 + 오른쪽 패널 240px (2026-10-13 전수 검수 · 그 전에는 늘 1180px 을 잡아
+     좁은 폭에서 설명 글 · 칩 줄 · 지구본 오른쪽이 잘렸다) */
+  .wrap { padding: 22px 20px 28px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  @media (min-width: 1180px) { .wrap { grid-template-columns: 1fr 240px; min-width: 1180px; } }
   /* .view 위아래에 쌓이는 것의 높이 — 위 padding + h1 + .sub + .views + .bar + 아래 padding (2026-10-02 헤드리스 실측 214).
      모달(iframe) 안에서는 모달 머리가 제목을 들고 있어 h1 · .sub 을 숨긴다 — 그만큼 줄어든다. 바뀌면 재서 고친다 */
   :root { --eco-top: 214px; }
@@ -216,7 +219,7 @@
             padding: 5px 8px; font: 10.5px/16px 'Noto Sans KR', sans-serif; color: var(--text-secondary); }
   .wm-leg b { font-weight: 700; color: var(--text-primary); margin-right: 6px; }
   .wm-leg .rt { margin-right: 4px; }
-  @media (min-width: 561px) {
+  @media (min-width: 561px) {   /* 말풍선 넓은 폭 — 이 폭은 여기 한 곳이다. JS(WM_WIDE)는 이 규칙을 읽어 쓴다 */
     .wm { min-width: 96px; padding: 5px 7px 6px; }
     .wm h4 { margin: 0 0 3px; }
     .wm table { display: table; }
@@ -493,7 +496,14 @@ function lineColorExpr() {
   return m;
 }
 // ── 나라별 시황 말풍선 — 세계지도(평면)일 때만 켠다 (2026-10-12 · 위 CSS 주석) ──
-const WM_WIDE = window.matchMedia('(min-width: 561px)');   // CSS 의 @media 폭과 같은 값 — 말풍선 자리(offset)가 폭에 따라 달라 JS 도 안다
+// 말풍선 넓은 폭 — 값은 위 <style> 의 .wm 을 담은 @media 한 곳이다. JS 는 그 규칙의 조건을 읽어 쓴다(2026-10-13 · 두 곳에 숫자를 두지 않는다).
+// 못 찾으면 좁은 폭으로 그리고 콘솔에 알린다 — 숫자를 여기 다시 적으면 그것이 복제가 된다
+const WM_WIDE = (() => {
+  const rules = [...document.styleSheets].flatMap((sh) => { try { return [...sh.cssRules]; } catch (e) { return []; } });
+  const m = rules.find((r) => r.media && r.cssRules && [...r.cssRules].some((x) => x.selectorText === '.wm'));
+  if (!m) console.warn('흐름도: .wm 넓은 폭 @media 를 못 찾아 좁은 폭으로 그립니다');
+  return window.matchMedia(m ? m.conditionText || m.media.mediaText : 'not all');
+})();
 const WM_OFF = { wide: { US: [-20, -60], EZ: [0, -40], JP: [70, 10], BR: [40, 10], CL: [-40, 30], VN: [-10, 70], AU: [0, 20], KR: [20, -95], CN: [-90, -10] },
                  narrow: { CN: [-45, 5], KR: [5, -22], JP: [40, 22], VN: [-10, 10] } };   // 이웃 나라 말풍선이 안 겹치게 — 시안에서 잰 자리
 const WM_DIR = { up: '인상', hold: '동결', down: '인하' };

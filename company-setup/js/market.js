@@ -303,12 +303,12 @@ function krDay(N, MV) {
   const day = document.getElementById('kr-day'), ind = document.getElementById('kr-ind'), mv = document.getElementById('kr-moves');
   if (!N || !N.kr) { day.innerHTML = '<span class="err">국내 시장 값을 받지 못했습니다</span>'; return; }
   const last = k => { const s = (N.idx && N.idx[k] && N.idx[k].s) || []; return s[s.length - 1]; };
-  const block = (k, name) => { const m = N.kr[k]; if (!m) return `<div><h3>${name}</h3>—</div>`; const l = last(k), u = m.updown, tot = (u.오름 || 0) + (u.보합 || 0) + (u.내림 || 0) || 1;
+  const block = (k, name) => { const m = N.kr[k]; if (!m) return `<div><h3>${name}</h3>—</div>`; const l = last(k), u = m.updown, ok3 = [u.오름, u.보합, u.내림].every(v => Number.isFinite(v)), tot = ok3 ? (u.오름 + u.보합 + u.내림 || 1) : 1;
     return `<div><h3>${name} ${l ? `${l[1].toLocaleString('ko-KR')} <span class="${l[2] > 0 ? 'num-up' : 'num-dn'}">${pct(l[2], 2)}</span>` : ''}</h3>
       <div class="nv-tb one-col"><div class="g">투자자별 순매수(억원)</div>${Object.entries(m.investor).map(([n, v]) => `<div class="r"><span>${n}</span>${won(v)}</div>`).join('')}
       <div class="g">프로그램 매매(억원)</div>${Object.entries(m.program).map(([n, v]) => `<div class="r"><span>${n}</span>${won(v)}</div>`).join('')}
       <div class="g">오른 종목 ${u.오름 ?? '—'}(상한 ${u.상한 ?? '—'}) · 보합 ${u.보합 ?? '—'} · 내린 종목 ${u.내림 ?? '—'}(하한 ${u.하한 ?? '—'})</div>
-      <div class="ud"><i class="u" style="width:${(u.오름 || 0) / tot * 100}%"></i><i class="s" style="width:${(u.보합 || 0) / tot * 100}%"></i><i class="d" style="width:${(u.내림 || 0) / tot * 100}%"></i></div></div></div>`; };
+      ${ok3 ? `<div class="ud"><i class="u" style="width:${u.오름 / tot * 100}%"></i><i class="s" style="width:${u.보합 / tot * 100}%"></i><i class="d" style="width:${u.내림 / tot * 100}%"></i></div>` : ''}</div></div>`; };   // 한 칸이라도 비면 막대를 안 그린다 — 빈 칸을 0 으로 그리지 않는다
   const us = ['SPX', 'IXIC'].map(k => last(k) ? `<div class="r"><span>${N.idx[k].name} <span class="cap">${last(k)[0]}</span></span><span>${last(k)[1].toLocaleString('ko-KR')} <span class="${last(k)[2] > 0 ? 'num-up' : 'num-dn'}">${pct(last(k)[2], 2)}</span></span></div>` : '').join('');
   const top = (N.kr.KOSPI && N.kr.KOSPI.top) || [];
   day.innerHTML = block('KOSPI', '코스피') + block('KOSDAQ', '코스닥')
