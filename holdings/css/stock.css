@@ -161,6 +161,26 @@
   .kh-head-main { flex-direction: column; align-items: flex-start; gap: 14px; }
   .kh-head-stats { margin-left: 0; width: 100%; }
   .kh-mgrid { grid-template-columns: repeat(2, 1fr); }
+
+  /* 머리 통계 — 390 폭에서 오른쪽 칸(거래대금 · 시총 순위 · 거래량 · 시가총액)이 11px 넘쳐 잘렸다
+     (2026-10-13 전수 검수). 모달(modal.css 「머리 통계는 두 칸씩」)과 같은 짜임 — 반 칸씩 고르게 나누고
+     범위 칸(값 · 막대 · 값)은 한 줄을 다 쓴다. 빈 반 칸은 dense 로 다음 칸이 메운다.
+     홈 모달도 stock.html 의 .kh-head 를 불러와 쓰므로 이 규칙이 모달에도 닿는다 — modal.css 의 그 규칙과 같은 짜임이라
+     겹쳐도 모양이 같다(2026-10-13 창구가 8766 · 8765 모달을 폰 폭으로 찍어 봄). 둘 중 하나를 고치면 다른 쪽도 본다 */
+  .kh-head .kh-head-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: row dense;
+    gap: 6px 14px;
+  }
+  .kh-head .kh-st { min-width: 0; }
+  .kh-head .kh-st:has(.kh-rng) { grid-column: 1 / -1; }
+  .kh-head .kh-st .kh-rng { margin-left: auto; }
+
+  /* 탭 — 글자가 한 자씩 세로로 꺾였다. 한 줄로 두고 넘치면 가로로 민다(모달 탭과 같다) */
+  .kh-head .kh-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .kh-head .kh-tabs::-webkit-scrollbar { display: none; }
+  .kh-head .kh-tab,
+  .kh-head .kh-edit { white-space: nowrap; flex: 0 0 auto; }
 }
 
 /* ==========================================================================

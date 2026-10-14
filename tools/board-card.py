@@ -10,6 +10,7 @@
     python3 tools/board-card.py "<카드 제목 일부>" --assign [<담당>]              제목의 담당 라벨을 바꾼다 — [미배분] 을 받을 때.
                                                                            값을 비우면 내 세션. 메모에 「담당 … → …」 한 줄
     python3 tools/board-card.py --merged [--dry]                            post-merge 용 — ORIG_HEAD..HEAD 의 해시가 적힌 review 카드를 done 으로
+                                                                           + 쓸기: 적힌 커밋이 다 main 에 든 review 카드도 done 으로
     python3 tools/board-card.py "<카드 제목 일부>" --title "<새 제목>"                 제목 뒤쪽(무엇)만 바꾼다 — [갈래] [담당] 은 그대로.
                                                                            메모에 「제목 … → …」 한 줄
     어느 명령이든 --label <담당>                                            세션 이름을 못 얻을 때 손으로 (= KJC_BOARD_LABEL)
@@ -538,24 +539,42 @@ def cmd_merged(dry):
     if g("rev-parse", "--abbrev-ref", "HEAD") != "main":
         return 0
     hashes = [x for x in g("log", "--format=%h", "ORIG_HEAD..HEAD").split() if x]
-    if not hashes:
-        print("  보드: 합쳐진 커밋이 없다(ORIG_HEAD..HEAD 비어 있음)")
-        return 0
-    moved, seen = [], set()
+    moved, seen, swept = [], set(), []
+    inmain = {}
+
+    def in_main(h):
+        # **쓸기(2026-10-13 · 전수 검수 안 1)** — 이번 머지 범위 밖이어도, review 카드에 적힌 커밋이 **전부** main 에
+        # 들어 있으면 그 카드는 옮기는 것을 잊은 것이다(「해시 자동」 이전 · 다른 폴더에서 합침 · 머지 때 보드가 죽어 있음).
+        # 모르는 해시(지운 가지 · 오타)는 「안 들었다」 로 센다 — 틀리게 done 으로 옮기는 것보다 review 에 두는 게 낫다.
+        if h not in inmain:
+            inmain[h] = subprocess.run(["git", "merge-base", "--is-ancestor", h, "main"],
+                                       capture_output=True).returncode == 0
+        return inmain[h]
 
     def change(doc):
-        moved.clear(); seen.clear()
+        moved.clear(); seen.clear(); swept.clear()
         for t in tasks(doc):
             memo = t.get("memo") or ""
             hit = [h for h in hashes if h in memo]
-            if not hit:
+            if hit:
+                seen.update(hit)
+                if t.get("column") == "review":
+                    t["column"] = "done"
+                    t["memo"] = memo.rstrip() + "\n  %s main 에 합쳐짐(%s) · 열 review → done" % (now(), ",".join(hit))
+                    touch(t)                    # 머지로 done 이 될 때도 — 안 찍으면 오래된 카드가 바로 접힌다(qa)
+                    moved.append(t["text"])
                 continue
-            seen.update(hit)
-            if t.get("column") == "review":
+            if t.get("column") != "review":
+                continue
+            # 「(추정) 커밋 X」 · 「(누구 의 커밋) 커밋 X」 줄은 빼고 센다 — 엉뚱한 카드에 적힌 남의 커밋일 수 있어,
+            # 그것이 main 에 들면 이 카드가 done 이 된다(qa 시뮬 · 10-03 개발3 넷)
+            own = sorted({h for ln in memo.splitlines() if "(추정)" not in ln and "의 커밋)" not in ln
+                          for h in re.findall(r"커밋 ([0-9a-f]{7,40})\b", ln)})
+            if own and all(in_main(h) for h in own):
                 t["column"] = "done"
-                t["memo"] = memo.rstrip() + "\n  %s main 에 합쳐짐(%s) · 열 review → done" % (now(), ",".join(hit))
-                touch(t)                        # 머지로 done 이 될 때도 — 안 찍으면 오래된 카드가 바로 접힌다(qa)
-                moved.append(t["text"])
+                t["memo"] = memo.rstrip() + "\n  %s 적힌 커밋이 다 main 에 있음(%s) · 쓸기 · 열 review → done" % (now(), ",".join(own))
+                touch(t)
+                swept.append(t["text"])
     try:
         if dry:
             doc, _ = read()
@@ -563,8 +582,8 @@ def cmd_merged(dry):
         else:
             apply(change)
         tag = "(시험) " if dry else ""
-        print("  보드: %s합쳐진 커밋 %d · 카드에 적힌 것 %d · review → done %d" % (tag, len(hashes), len(seen), len(moved)))
-        for m in moved:
+        print("  보드: %s합쳐진 커밋 %d · 카드에 적힌 것 %d · review → done %d · 쓸기 %d" % (tag, len(hashes), len(seen), len(moved), len(swept)))
+        for m in moved + swept:
             print("     ·", m)
         miss = [h for h in hashes if h not in seen]
         if miss:

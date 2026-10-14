@@ -160,7 +160,7 @@ function paintDay() {
         ${iconHtml(stockOf(t))}
         <a class="rv-nm" href="./stock.html?code=${esc(t.code)}">${esc(t.name)}</a>
         <span class="rv-side ${t.side === 'sell' ? 'sell' : 'buy'}">${t.side === 'sell' ? '매도' : '매수'}</span>
-        <span class="rv-q">${Number(t.qty || 0).toLocaleString('ko-KR')}주</span>
+        <span class="rv-q">${t.qty == null || t.qty === '' ? '—' : Number(t.qty).toLocaleString('ko-KR') + '주'}</span>
         <span class="rv-p">${t.price == null || t.price === '' ? '—' : won(Number(t.price))}</span>
         <button class="rv-del" type="button" data-del="${esc(t.id)}" title="지우기" aria-label="지우기">✕</button>
       </div>

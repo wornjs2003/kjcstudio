@@ -812,7 +812,9 @@
   }
   .kh-cs-in { display: none; }
   /* 갈래 줄이 옆으로 밀리는 띠라 맨 끝 자리는 화면 밖으로 나간다 — 돋보기를 오른쪽 끝에 붙여 둔다 */
-  .kh-cat-search { position: sticky; right: 0; background: var(--kh-bg); padding-left: 8px; }
+  /* 붙은 자리가 띠 오른쪽 끝보다 20px 안쪽이라(폰 390 실측 · 돋보기 끝 364 · 띠 끝 384) 그 틈으로 뒤 글자가 비쳤다
+     (「시 ⌕|표」 · 2026-10-13 전수 검수). 바탕색 그림자로 오른쪽 틈을 덮는다 — 칸 크기 · 자리는 그대로다 */
+  .kh-cat-search { position: sticky; right: 0; background: var(--kh-bg); padding-left: 8px; box-shadow: 24px 0 0 var(--kh-bg); }
   .kh-cat-search.is-open .kh-cs-in {
     display: block; position: fixed; z-index: 1000; left: 12px; right: 12px; top: 12px; width: auto; height: 36px;
     box-shadow: var(--kh-shadow-md);
@@ -1591,4 +1593,27 @@
     background: var(--kh-bg);
     margin: -14px -16px 0; padding: 12px 20px 0;
   }
+}
+
+/* ── 좁은 폭 — 글자 바닥 11px (2026-10-13 전수 검수 · 재권님 「응 해줘」) ──
+   홈 좁은 폭(폰 390)에서 11px 아래로 읽히던 글자를 칸 이름으로 올린다. 넓은 폭은 안 건드린다.
+   **종목 아이콘 머리글자(.kh-ic)는 뺐다** — 로고 대신 그린 그림이라 키우면 아이콘이 커진다. 8765 에는 로고가 다 있어 해당 없음(그 글자는 로고 폴더가 없는 자리에서만 나온다). */
+@media (max-width: 700px) {
+  body[data-nav="holdings"] .kh-sc-stp i,
+  body[data-nav="holdings"] .kh-vp-t,
+  body[data-nav="holdings"] .kh-ix-h .kh-bd,
+  body[data-nav="holdings"] .kh-p3-h .kh-bd,
+  body[data-nav="holdings"] .kh-ix-badge,
+  body[data-nav="holdings"] .kh-lg-ohlc span,
+  body[data-nav="holdings"] #kh-sc-note { font-size: 11px; }
+}
+
+/* ── 좁은 폭 — 누를 자리 바닥 24px (2026-10-13 전수 검수) ──
+   손가락으로 누르는 칩 · 단추 · 탭이 24px 아래였다. 글자 크기는 그대로 두고 칸만 키운다. */
+@media (max-width: 700px) {
+  body[data-nav="holdings"] .kh-chip,
+  body[data-nav="holdings"] .kh-nwdc-t { min-height: 24px; }
+  body[data-nav="holdings"] .kh-ixbar-btn { width: 24px; height: 24px; }
+  body[data-nav="holdings"] .kh-cs-btn { min-width: 24px; min-height: 24px; }
+  body[data-nav="holdings"] .kh-cat a { min-width: 24px; flex-shrink: 0; text-align: center; }
 }

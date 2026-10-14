@@ -292,9 +292,10 @@ def main(argv):
                 on = ev("(function(){const b=document.querySelector(%s); if(!b) return 'none'; if(b.checked) return 'already'; b.click(); return 'on';})()" % json.dumps(sel))
                 st3 = wait_drawn(host, AFTER_CLICK)
                 errs, charts = drain()
-                ev("(function(){const b=document.querySelector(%s); if(b && b.checked) b.click();})()" % json.dumps(sel))
-                pump(1.0)
-                drain()
+                if on == "on":                  # 처음부터 켜져 있던 지표(거래량 등)는 끄지 않는다 — 끄면 칸이 줄어 뒤 지표가 「줄었다」 로 잡혔다(2026-10-13 개발3)
+                    ev("(function(){const b=document.querySelector(%s); if(b && b.checked) b.click();})()" % json.dumps(sel))
+                    pump(1.0)
+                    drain()
                 step = {"step": "지표 " + key, "toggle": on, "state": st3, "errors": errs}
                 rec["steps"].append(step)
                 if on == "none":

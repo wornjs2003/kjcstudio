@@ -643,6 +643,11 @@ h1 {
   .tb { position: relative; }
   .tb::after { content: ""; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
   .task-who::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; }
+  /* 라벨 막대는 위 기본 규칙으로 누르는 자리가 17px(5 + 6 + 6)이라 손가락 기준 24px
+     에 모자랐습니다(2026-10-13 전수 검수). 손가락 화면에서만 위아래로 더 넓혀 24px.
+     아래로 넓힌 9px 은 막대 아래 여백 7px 을 넘어 제목 줄 윗부분 2px 에 닿습니다 —
+     거기는 글자 위 빈 줄간격이라 제목을 누르려던 손이 걸릴 일은 드뭅니다. */
+  .task-tag::after { top: -10px; bottom: -9px; }
 }
 </style>
 </head>
