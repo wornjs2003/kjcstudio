@@ -5,6 +5,7 @@
 //   await ready;
 //   tone('dxy', 102.18)          → { side: 'up', k: 0.58 }      쪽 · 짙기(0~1). 이름이 없거나 값이 없으면 { side: null, k: 0 }
 //   paint('dxy', 102.18, 'bg')   → 'rgb(240 68 82 / 20%)'         바탕 · 'line' 은 선 · 점. 색을 안 칠할 자리는 ''
+//   has('dxy')                   → true                           표에 있나(경고 없음) — 여러 지표를 돌며 칠할 때 먼저 묻는다
 // · 색 값은 들고 있지 않는다 — 부를 때마다 theme.css 의 --kh-up-rgb · --kh-down-rgb · --kh-text-secondary 를 읽는다
 // · 짙기를 불투명도로 옮기는 범위만 여기 한 곳에 둔다(바탕은 옅게 · 선은 진하게)
 // · 글씨에는 쓰지 않는다 — 옅은 글씨는 안 읽힌다(「색 바탕 위의 글씨」)
@@ -21,6 +22,9 @@ export const ready = (async () => {
 })();
 
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+/** 그 이름이 tone.json 에 있나 — 경고 없이 묻는다. 지표 목록을 화면에 박지 않고 표에 있는 것만 칠할 때(주식페이지_개발 · 2026-10-14) */
+export const has = (id) => { const it = byId.get(id); return !!(it && it.full > 0); };
 
 export function tone(id, v) {
   const it = byId.get(id);
