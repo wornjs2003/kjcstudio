@@ -225,7 +225,79 @@ def indicators():
                 "fetchedAt": _fetched["at"], "cacheTtlSec": _left(), "items": out}
 
 
+# ── 재료 칸 줄 하나의 1년치 (2026-10-14 재권님 「시장지표에 옮겨진 환율등등 목록을 누르면 차트에 캔들이든 선차트든 나와야」 ·
+# 「응 커밋하고 그다음 차트해줘」) ──
+# 열쇠는 `n:<갈래>:<코드>` — 재료 응답의 path 앞 조각과 reutersCode 다. **그때 재료 목록에 있는 코드만** 받는다(아무 코드나 넘기는 길이
+# 되지 않게). 누를 때만 받는다 — 처음 누른 줄은 1년치(다섯 쪽)를 받아 하루 들고, 그 줄은 최근 10건을 `RECENT_TTL` 마다 덧받는다.
+# 봉인가 선인가는 받은 값이 정한다 — 고가 · 저가가 온 날이 대부분이면 봉, 아니면 종가 선(위 「봉인가 선인가」 와 같은 뜻).
+# 2026-10-14 실측(재료 80줄) — 봉 46 · 종가만 16 · **날짜별 값이 안 오는 줄 18**(나라별 기준금리 17 은 이 길이 404 · 유로/달러는 빈 목록)
+_mser = {}
+_mlock = threading.Lock()
+MAT_PREFIX = "n:"
+
+
+def _mat_find(key):
+    """`n:<갈래>:<코드>` → (그 줄, 갈래) · 재료 목록에 없으면 None."""
+    try:
+        _, cat, code = key.split(":", 2)
+    except ValueError:
+        return None
+    if _mat["groups"] is None:
+        materials()
+    for g in (_mat["groups"] or []):
+        for p in g["parts"]:
+            if p["path"].split("/")[0] != cat:
+                continue
+            for r in p["rows"]:
+                if r.get("code") == code:
+                    return r, cat, g["id"], p["path"].endswith("Interest")
+    return None
+
+
+def _mat_digits(v):
+    v = abs(v or 0)
+    return 2 if v >= 100 else 3
+
+
+def mat_indicator(key):
+    """재료 줄 하나 — indicator() 와 같은 모양. 목록에 없는 열쇠면 None."""
+    found = _mat_find(key)
+    if not found:
+        return None
+    row, cat, gid, rate = found
+    it = {"cat": cat, "code": row["code"]}
+    with _mlock:
+        now = time.time()
+        got = _mser.get(key) or {"hat": 0.0, "hist": [], "rat": 0.0, "recent": [], "err": None}
+        try:
+            if now - got["hat"] >= HIST_TTL:
+                got.update(hist=_fetch(it, PAGES, PAGE_SIZE), hat=now, rat=now, err=None)
+            elif now - got["rat"] >= RECENT_TTL:
+                got.update(recent=_fetch(it, 1, RECENT_SIZE), rat=now, err=None)
+        except Exception as e:
+            got.update(hat=got["hat"] or now - HIST_TTL + RETRY_TTL, rat=now, err=safe_message(e, 160))
+        _mser[key] = got
+        rows = _merge(got["hist"], got["recent"])
+    if rows:
+        start = (date.fromisoformat(rows[-1][0]) - timedelta(days=365)).isoformat()
+        rows = [r for r in rows if r[0] > start]
+    ohlc = sum(1 for r in rows if r[2] and r[3] and r[2] > 0 and r[3] > 0 and r[2] != r[3])
+    kind = "candle" if rows and ohlc >= len(rows) * 0.8 else "line"
+    fixed = 0
+    if kind == "candle":
+        rows, fixed = _fix(rows)
+    bars = [{"d": r[0], "o": r[1], "h": r[2], "l": r[3], "c": r[4]} if kind == "candle" else {"d": r[0], "c": r[4]}
+            for r in rows]
+    meta = {"key": key, "name": row["name"], "group": gid, "unit": "%" if rate else "",
+            "digits": _mat_digits(bars[-1]["c"] if bars else row.get("v")), "kind": kind, "freq": None}
+    return {"ok": bool(bars), "source": "네이버 증권 시장지표", "fetchedAt": datetime.now(KST).isoformat(timespec="seconds"),
+            "cacheTtlSec": RECENT_TTL, "item": meta, "bars": bars, "fixed": fixed,
+            "error": None if bars else "이 지표는 날짜별 값을 받는 곳이 아직 없습니다"}
+
+
 def indicator(key):
+    if key.startswith(MAT_PREFIX):
+        return mat_indicator(key)
     if key not in BY_KEY:
         return None
     with _lock:

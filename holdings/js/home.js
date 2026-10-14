@@ -357,6 +357,8 @@ async function showMarket(key) {
   mkKey = key;
   document.querySelectorAll('#kh-top-ix .kh-ix[data-mk]').forEach((el) =>
     el.classList.toggle('is-on', el.dataset.mk === key));
+  if (mkSide) mkSide.querySelectorAll('tr[data-mat-key]').forEach((tr) =>      // 재료 칸 줄도 같은 표시(칩을 눌러도 줄 표시가 남지 않게)
+    tr.classList.toggle('is-active', tr.dataset.matKey === key));
   setMkHidden(true);
   let j = peekIndicator(key);
   if (!j) {
@@ -423,10 +425,12 @@ async function enterMkSide() {
     mkSide.setAttribute('aria-label', '시장지표 재료');
     mkSide.innerHTML = materialsShell();
     mkSide.addEventListener('click', (e) => {
+      const tr = e.target.closest('tr[data-mat-key]');
+      if (tr) { showMaterial(tr.dataset.matKey, tr.dataset.matName); return; }
       const b = e.target.closest('[data-mat]');
       if (!b) return;
       mkGrp = b.dataset.mat;
-      paintMaterials(mkSide, peekMaterials(), mkGrp);
+      paintMaterials(mkSide, peekMaterials(), mkGrp, mkKey);
       const sc = mkSide.querySelector('[data-mat-scroll]');
       if (sc) sc.scrollTop = 0;
     });
@@ -442,15 +446,45 @@ async function enterMkSide() {
     }
   }
   mkSide.style.display = mkSide.dataset.display;
-  paintMaterials(mkSide, peekMaterials(), mkGrp);
+  paintMaterials(mkSide, peekMaterials(), mkGrp, mkKey);
   try {
     const j = await loadMaterials();
-    if (ixCat === MK_CAT && mkSide) paintMaterials(mkSide, j, mkGrp);
+    if (ixCat === MK_CAT && mkSide) paintMaterials(mkSide, j, mkGrp, mkKey);
   } catch {
     const a = mkSide && mkSide.querySelector('[data-mat-asof]');
     if (a && !peekMaterials()) a.textContent = '· 불러오지 못함';
   }
 }
+/* 재료 칸 줄 하나를 큰 차트로 (2026-10-14 재권님 「시장지표에 옮겨진 환율등등 목록을 누르면 차트에 캔들이든 선차트든 나와야」 ·
+   「응 커밋하고 그다음 차트해줘」). **먼저 받아 보고** 날짜별 값이 있을 때만 위 칩과 같은 showMarket 으로 간다 —
+   없는 줄(나라별 기준금리 등 · 서버 mat_indicator 주석)은 큰 차트를 안 바꾸고 그 칸 받은 시각 줄에 그렇다고 적는다(0 · 가짜 선 안 그림) */
+async function showMaterial(key, name) {
+  if (!mkSide || !key) return;
+  const asof = mkSide.querySelector('[data-mat-asof]');
+  const mark = (k) => mkSide.querySelectorAll('tr[data-mat-key]').forEach((tr) =>
+    tr.classList.toggle('is-active', tr.dataset.matKey === k));
+  mark(key);
+  let j = peekIndicator(key);
+  if (!j) {
+    if (asof) asof.textContent = `· ${name} 불러오는 중`;
+    try { j = await loadIndicator(key); }
+    catch (e) {
+      if (ixCat !== MK_CAT) return;
+      mark(mkKey);
+      /* 한 줄로 — 글이 길어 두 줄이 되면 아래 표 칸이 그만큼 줄었다(2026-10-14 실측 602 → 585). 다 못 보이면 마우스를 올려 본다 */
+      if (asof) {
+        Object.assign(asof.style, { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' });
+        asof.title = `${name} — ${(e && e.message) || '날짜별 값을 받지 못했습니다'}`;
+        asof.textContent = `· ${asof.title}`;
+      }
+      return;
+    }
+  }
+  if (ixCat !== MK_CAT) return;
+  paintMaterials(mkSide, peekMaterials(), mkGrp, key);
+  showMarket(key);
+}
+
 function leaveMkSide() {
   if (mkSide) mkSide.style.display = 'none';           // hidden 속성은 카드 클래스의 display 에 진다
 }
