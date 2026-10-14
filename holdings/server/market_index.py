@@ -278,6 +278,9 @@ def mat_indicator(key):
             got.update(hat=got["hat"] or now - HIST_TTL + RETRY_TTL, rat=now, err=safe_message(e, 160))
         _mser[key] = got
         rows = _merge(got["hist"], got["recent"])
+        # 「이 길로는 날짜별 값이 없다」(네이버가 404 · 빈 목록)와 「받다가 실패했다」 를 가른다 — 앞은 고장이 아니라 200 으로 낸다(kis_proxy)
+        absent = not rows and (not got["err"] or "404" in got["err"])
+        err = got["err"]
     if rows:
         start = (date.fromisoformat(rows[-1][0]) - timedelta(days=365)).isoformat()
         rows = [r for r in rows if r[0] > start]
@@ -292,7 +295,8 @@ def mat_indicator(key):
             "digits": _mat_digits(bars[-1]["c"] if bars else row.get("v")), "kind": kind, "freq": None}
     return {"ok": bool(bars), "source": "네이버 증권 시장지표", "fetchedAt": datetime.now(KST).isoformat(timespec="seconds"),
             "cacheTtlSec": RECENT_TTL, "item": meta, "bars": bars, "fixed": fixed,
-            "error": None if bars else "이 지표는 날짜별 값을 받는 곳이 아직 없습니다"}
+            "absent": bool(absent and not bars),
+            "error": None if bars else ("이 지표는 날짜별 값을 받는 곳이 아직 없습니다" if absent else (err or "받은 값이 없습니다"))}
 
 
 def indicator(key):

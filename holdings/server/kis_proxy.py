@@ -6445,7 +6445,8 @@ class Handler(SimpleHTTPRequestHandler):
                                  % " · ".join([i["key"] for i in market_index.ITEMS] + [i["key"] for i in crypto.ITEMS])}, 400)
                 return
         r["servedBy"] = "상류에 아직 없어 여기서" if base else "여기서"
-        self._send_json(r, 200 if r.get("ok") else 502)
+        # 날짜별 값이 원래 없는 지표(`absent` · 나라별 기준금리 등)는 고장이 아니다 — 502 로 내면 F12 에 서버가 터진 것처럼 보였다(qa 10-14)
+        self._send_json(r, 200 if (r.get("ok") or r.get("absent")) else 502)
 
     def _relay_upstream(self, why, source):
         """이 요청을 그대로 상류(`KJC_KIS_UPSTREAM`)에 넘기고 받은 것을 내려보낸다. 상류가 없으면 503."""
