@@ -21,6 +21,9 @@
     <string>/usr/bin/python3</string>
     <string>-u</string>
     <string>company-setup/tools/fetch-etf-nav.py</string>
+    <!-- 어림(etf-flow)을 서비스방(8764 · 외부접속)에도 한 벌 — 저장소에 안 담기는 파일이라 옮기기로는 안 간다(2026-10-13 전수 검수) -->
+    <string>--also</string>
+    <string>/Users/kjc/service/company-setup/data/etf-flow.json</string>
   </array>
   <key>WorkingDirectory</key>
   <string>/Users/kjc/work/KJCStudio</string>
