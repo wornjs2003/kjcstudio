@@ -29,7 +29,9 @@ kill · pkill · killall · xargs kill · launchctl · install.command · servic
 (`pkill -f kis_proxy` · `killall python3` · `holdings/server`)은 포트가 없어도 막는다 — 여섯 서버가 함께 죽는다.
 
 **허락을 받았으면 그 명령 앞에 `KJC_MAIN_OK=1` 을 붙인다.** 훅은 지나가게 두면서 **`logs/main-ok.log` 에 한 줄 남긴다**
-(시각 · cwd · 세션 · 명령 앞 120자). 허락을 받았는지는 기계가 못 보지만 **몇 번 썼는지는 센다** — `check-rules.py` 가
+(시각 · cwd · 세션 · 명령 앞 120자 · 막혔을 까닭). **셸 자리(명령 앞 · export)에 붙인 표시이거나 표시를 뺀 명령이 막혔을 때만 적는다**
+(2026-10-14) — 글 안의 그 글자(grep 패턴 · printf 메모)는 안 적고, 입력의 session_id 가 훅을 돌리는 세션과 다르면(qa 재생) 판정만 하고 안 적는다. **재생은 OK_LOG 를 scratchpad 파일로 바꿔 끼우고 돌린다** — check_bash 를
+바로 부르면 재생 가르기를 안 거친다. 허락을 받았는지는 기계가 못 보지만 **몇 번 썼는지는 센다** — `check-rules.py` 가
 그 줄 수를 「봐야 할 자리」 로 낸다. **막는 메시지가 읽는 길을 알려 준다** — 그래야 표시로 도망가지 않는다.
 
 **다섯째 판 (2026-10-02 · 재권님 「내가 말해주면 니거 만들어」) — 글과 명령을 먼저 가른다.** 넷째 판을 qa 가 재생하니 막힘 35 → 51 로
@@ -39,9 +41,9 @@ kill · pkill · killall · xargs kill · launchctl · install.command · servic
 ①은 셸 조각에만. 그리고 `install.command $p` 처럼 **포트가 변수**면 「포트 없음(=전부)」 로 읽혀 막혔다 — 변수가 있으면 판정을 못 하는
 것이지 전부가 아니므로 지나간다(실제 전부는 인자가 비어 있다).
 
-**못 막는 것** — 변수에 담은 경로(`p=…; rm $p`) · API 로 쓰기(curl PUT 8765) · 세션 밖 사람 · 8765 자신 ·
+**못 막는 것** — 변수에 담은 경로(`p=…; rm $p` · 파이썬에서 `connect(p)` · `open(tmp,"w")` 뒤 `os.replace` — qa 가 기록에서 찾은 진짜 쓰기 둘) · API 로 쓰기(curl PUT 8765) · 세션 밖 사람 · 8765 자신 ·
 **heredoc 으로 스크립트 파일에 적어 두고 그 파일을 돌리는 것**(몸통은 글이라 kill · launchctl 을 안 센다 — 돌리는 명령 쪽에서 잡힌다) ·
-`install.command $p`(변수 포트).
+`install.command $p`(변수 포트) · `bash < 스크립트`(표준 입력으로 먹인 것).
 막히면 종료 0 에 `permissionDecision: deny` 를 낸다 — 세션이 그 이유를 보고 재권님께 여쭙는다.
 """
 import json
@@ -148,6 +150,19 @@ def words(seg):
         return seg.split()
 
 
+SHELLS = ("bash", "sh", "zsh", "dash", "ksh")
+
+
+def shell_c(opts):
+    """셸 옵션 중 -c 묶음 뒤의 프로그램 글 — 없으면 None."""
+    for k, w in enumerate(opts):
+        if not w.startswith("-") or w.startswith("--"):
+            return None
+        if "c" in w[1:]:
+            return opts[k + 1] if k + 1 < len(opts) else None
+    return None
+
+
 def head_of(ws):
     """환경변수 접두 · sudo · 경로 접두를 뗀 첫 낱말과 나머지."""
     i = 0
@@ -155,6 +170,24 @@ def head_of(ws):
         i += 1
     while i < len(ws) and ws[i] in ("sudo", "nohup", "time", "env", "exec", "command"):
         i += 1
+    # `bash ./launchd/install.command 8765` · `sh service-deploy.command` — 셸로 부른 스크립트는 그 스크립트를 머리로 본다
+    # (2026-10-14 · qa 시뮬이 찾음 · 재권님 「응 해줘」 — 전에는 머리가 「bash」 라 메인서버 올리기가 그냥 지나갔다).
+    # 옵션(-x · -e · -l …)은 넘기되 `-c` 는 그대로 둔다 — 그 뒤는 스크립트 파일이 아니라 프로그램 글이다
+    # `-n` 이 든 묶음은 문법 검사라 실행하지 않는다 — 셸을 머리로 둔다(qa 재생 오탐 7 · `sh -n launchd/install.command`).
+    # `-o` · `-O` 는 값을 하나 받는다. `-c` 묶음(-c · -lc …)의 글은 check_bash 가 셸 조각으로 다시 판정한다(shell_c).
+    # `source` · `.` 도 그 스크립트를 이 셸에서 돌린다 — 다음 낱말을 머리로 본다
+    if i < len(ws) and ws[i] in ("source", ".") and i + 1 < len(ws):
+        i += 1
+    elif i < len(ws) and os.path.basename(ws[i]) in SHELLS and not shell_c(ws[i + 1:]):
+        j, dry = i + 1, False
+        while j < len(ws) and ws[j].startswith("-") and ws[j] != "--":
+            if not ws[j].startswith("--") and "n" in ws[j][1:]:
+                dry = True
+            j += 2 if ws[j] in ("-o", "-O", "+o", "+O") else 1
+        if j < len(ws) and ws[j] == "--":
+            j += 1
+        if not dry and j < len(ws):
+            i = j
     return (os.path.basename(ws[i]) if i < len(ws) else ""), (ws[i + 1:] if i < len(ws) else [])
 
 
@@ -341,16 +374,42 @@ def check_segment(seg, cwd, prev_seg, prev_hit):
     return ""
 
 
-def check_bash(cmd, cwd):
-    if "KJC_MAIN_OK=1" in cmd:
-        try:
-            os.makedirs(os.path.dirname(OK_LOG), exist_ok=True)
-            with open(OK_LOG, "a", encoding="utf-8") as fp:
-                fp.write("%s\t%s\t%s\t%s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), cwd or "",
+def log_ok(cmd, cwd, reason):
+    try:
+        os.makedirs(os.path.dirname(OK_LOG), exist_ok=True)
+        with open(OK_LOG, "a", encoding="utf-8") as fp:
+            fp.write("%s\t%s\t%s\t%s\t%s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), cwd or "",
                                                os.environ.get("CLAUDE_CODE_SESSION_ID", "")[:8],
-                                               " ".join(cmd.split())[:120]))
-        except Exception:
-            pass
+                                               " ".join(cmd.split())[:120], " ".join(reason.split())[:60]))
+    except Exception:
+        pass
+
+
+def ok_prefixed(cmd):
+    """표시가 셸 조각의 환경변수 접두(머리 앞)나 export 인자로 왔나 — 따옴표 · heredoc 안의 글자는 아니다."""
+    for kind, seg in segments(norm(cmd)):
+        if kind != "sh":
+            continue
+        ws = words(seg)
+        head, args = head_of(ws)
+        if "KJC_MAIN_OK=1" in ws[:len(ws) - len(args)] + (args if head == "export" else []):
+            return True
+    return False
+
+
+def check_bash(cmd, cwd, replay=False):
+    # 허락 표시가 있으면 — 표시를 뺀 명령을 그대로 판정해 **막혔을 것만** 기록한다 (2026-10-14 · 전수 검수 안 2 · 재권님 「응 해줘」).
+    # 전에는 글자가 들어 있기만 하면 적어서, 그 글자를 찾는 grep · 메모에 적는 printf · qa 재생이 기록을 덮었다
+    # (10-12 17:53:22 한 초에 92줄). 재생(replay)은 판정만 하고 안 적는다 — 옛 세션의 허락을 지금 세션 이름으로 적게 된다.
+    # 셸 자리에 붙인 표시(`KJC_MAIN_OK=1 명령` · `export KJC_MAIN_OK=1`)는 막혔을지와 상관없이 적는다 — 막는 쪽이 못 보는 꼴
+    # (bash ./service-deploy.command · 변수 경로로 연 DB)도 허락을 받아 붙인 것이면 기록에 남아야 한다(qa 시뮬 10-14).
+    # 글 안의 표시(grep 패턴 · printf 메모)는 막혔을 때만.
+    if "KJC_MAIN_OK=1" in cmd:
+        reason = check_bash(re.sub(r"(?:export\s+)?KJC_MAIN_OK=1\s*;?", " ", cmd), cwd)
+        if not reason and ok_prefixed(cmd):
+            reason = "셸 자리 표시"
+        if reason and not replay:
+            log_ok(cmd, cwd, reason)
         return ""
     text = norm(cmd)
     cur = cwd or os.getcwd()
@@ -381,6 +440,12 @@ def check_bash(cmd, cwd):
                 tgt = HOME
             cur = os.path.normpath(tgt if tgt.startswith("/") else os.path.join(cur, tgt))
             continue
+        if os.path.basename(head) in SHELLS:                    # bash -c '…' · bash -lc '…' — 그 글을 셸로 다시 본다
+            inner = shell_c(args)
+            if inner:
+                r = check_bash(inner, cur, True)
+                if r:
+                    return r
         r = check_segment(seg, cur, prev_seg, prev_hit)
         if isinstance(r, tuple):            # `python3 - <경로> <<'PY'` — 몸통에서 본다
             argv_hit = r[1]
@@ -407,8 +472,12 @@ def main():
     tool = data.get("tool_name")
     inp = data.get("tool_input") or {}
     cwd = data.get("cwd") or os.getcwd()
+    # 재생 가르기 — 진짜 호출은 입력의 session_id 가 훅을 돌리는 세션과 같다. qa 가 옛 기록을 먹이면 둘이 갈린다
+    # (둘 중 하나라도 없으면 진짜로 본다 — 기록이 빠지는 쪽보다 남는 쪽이 낫다)
+    me, sid = os.environ.get("CLAUDE_CODE_SESSION_ID", ""), data.get("session_id") or ""
+    replay = bool(me and sid and me != sid)
     if tool == "Bash":
-        reason = check_bash(inp.get("command") or "", cwd)
+        reason = check_bash(inp.get("command") or "", cwd, replay)
     elif tool in ("Edit", "Write"):
         reason = check_edit(inp.get("file_path") or "")
     else:
