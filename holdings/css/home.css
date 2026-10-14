@@ -804,6 +804,9 @@
 .kh-cs-code { color: var(--kh-text-secondary); font-size: 0.8rem; }
 .kh-cs-mkt { margin-left: auto; font-size: 0.76rem; }
 .kh-cs-none { padding: 9px 12px; font-size: 0.84rem; }
+/* 최근 고른 종목의 시장 묶음 이름 (2026-10-14 · stock-search.js 의 「최근 고른 종목」) */
+.kh-cs-grp { padding: 8px 12px 3px; font-size: 0.74rem; font-weight: 500; }
+.kh-cs-grp ~ .kh-cs-grp { margin-top: 4px; border-top: 1px solid var(--kh-border); padding-top: 9px; }
 @media (max-width: 700px) {
   /* 좁은 화면 — 돋보기만 두고, 누르면 칸이 화면 위쪽에 가로로 펼쳐진다 */
   .kh-cs-btn {
