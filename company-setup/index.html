@@ -41,9 +41,9 @@
     </nav>
 
     <!-- 홀딩스 지수 띠 자리 -->
-    <div class="kh-ixbar"><div class="in-strip">오늘의 시황 한 줄</div></div>
+    <div class="kh-ixbar"><div class="in-strip" data-home-note>오늘의 시황 한 줄</div></div>   <!-- 2026-10-14 지시 — 세션이 쓴 시황 한 줄(js/home-macro.js) -->
     <!-- 홀딩스 장 상태 줄 자리 -->
-    <div class="kh-mkt">오늘의 핵심</div>
+    <div class="kh-mkt" data-home-macro>오늘의 핵심</div>   <!-- 2026-10-14 지시 — 매크로 지표 칩 · 넘치면 옆으로 밀기(js/home-macro.js) -->
 
     <!-- 홀딩스 「고른 종목 차트 + 오른쪽 패널」 자리 -->
     <!-- 2026-10-06 지시 — 칸 재배치. 큰 칸은 돈의 흐름(전에는 실시간 속보), 옆 칸 첫 절은 영상 분석(전에는 해외 뉴스).
@@ -105,5 +105,6 @@
 <script src="../assets/js/main.js"></script>
 <script src="js/insight.js"></script>
 <script type="module" src="js/insight-modal.js"></script>
+<script type="module" src="js/home-macro.js"></script>
 </body>
 </html>

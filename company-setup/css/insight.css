@@ -283,3 +283,22 @@ mark.in-find-hit.is-cur { background: var(--kh-cat-amber); color: var(--kh-text-
 .ca-orig .in-quote { background: var(--kh-bg-card); }
 .ca-orig .in-rp-note { margin-bottom: 0; }
 .in-pill.mid  { background: var(--kh-bg); color: var(--kh-text-secondary); }   /* 「보통」 — 13칸 판정(js/lens13.js · 2026-10-08) */
+
+/* 홈 「오늘의 시황 한 줄」 · 「오늘의 핵심」 줄 — js/home-macro.js (2026-10-14 재권님 「옆으로 밀기로 해줘」).
+   두 줄 다 높이는 그대로 — 글은 한 줄로 자르고(…) · 칩은 넘치면 가로로 민다. 막대는 감춘다(「스크롤바는 한 벌만 쓴다」 의 가로로 미는 띠 · 글자가 잘려 보이면 더 있다는 것을 안다) */
+.in-strip.in-note { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.in-note-h { flex: none; }
+.in-note-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 400; color: var(--kh-text-primary); }
+.in-note-at { flex: none; font-weight: 400; font-size: 0.76rem; color: var(--kh-text-muted); }
+.in-note-more { flex: none; font-size: 0.8rem; color: var(--kh-text-secondary); text-decoration: none; }
+.kh-mkt.in-mac { flex-wrap: nowrap; gap: 6px; overflow-x: auto; scrollbar-width: none; position: relative; }
+.kh-mkt.in-mac::-webkit-scrollbar { display: none; }
+.kh-mkt.in-mac > .in-mac-h { flex: none; margin-right: 6px; }
+.in-mac-c { flex: none; display: inline-flex; align-items: baseline; gap: 6px; padding: 0 8px; border-radius: var(--kh-radius-md);
+  background: var(--kh-bg-surface); white-space: nowrap; color: inherit; text-decoration: none; }
+.in-mac-c:hover { background: var(--kh-bg-hover); }
+.kh-mkt .in-mac-c b { font-weight: 600; color: var(--kh-text-secondary); }
+.in-mac-c > span { font-weight: 600; color: var(--kh-text-primary); }
+.in-mac-c .num-up { color: var(--kh-up); } .in-mac-c .num-dn { color: var(--kh-down); }
+.kh-mkt.in-mac > .in-mac-more { position: sticky; right: 0; flex: none; margin-left: auto; padding: 0 6px; background: var(--kh-bg); color: var(--kh-text-muted); font-weight: 700; }
+.kh-mkt.in-mac > .in-mac-more[hidden] { display: none; }
