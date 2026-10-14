@@ -17,6 +17,9 @@
     python3 tools/shot.py <주소> <저장할 png> --wait 8              다 그려지기를 더 기다린다(초 · 기본 3)
     python3 tools/shot.py --size                                    지금 기준 크기만 보기
 
+**찍으면 그림 옆에 `<이름>-보기.html` 을 함께 만든다** — 재권님께는 그 주소를 드린다(그림 그대로는 배율만큼 크게 보인다 ·
+「찍은 그림은 창에 맞춰 한눈에 보이게 드린다」 · 2026-10-14).
+
 **크롬을 디버깅 포트로 직접 조종한다** (`tools/check-layout.py` 와 같은 길). 첫 판은 `--screenshot` 한 줄로 찍었는데,
 홀딩스가 롱폴링으로 서버 연결을 계속 열어 두어 **찍은 뒤에도 크롬이 안 끝나 30~90초씩 걸리고 가끔 실패했다**
 (2026-10-06 실측). 지금은 열고 → 다 그려질 때까지(그림 칸 수 · 문서 높이가 1초 동안 그대로) 기다리고 → 찍고 → 닫는다.
@@ -70,6 +73,29 @@ def view_dpr():
         return float(d.get("dpr") or 1)
     except Exception:
         return 1.0
+
+
+def viewer(out, tall):
+    """찍은 그림 옆에 「창에 맞춰 보기」 페이지를 만든다 (2026-10-14 재권님 「화면보다 크게 해서 보여주는 이유가 뭐야?」 ·
+    「한눈에 안들어오잖아」 → 룰 「찍은 그림은 창에 맞춰 한눈에 보이게 드린다」).
+
+    그림은 배율만큼 픽셀이 많아(재권님 창 1.5) 그대로 열면 화면보다 크게 보인다. 보기 페이지는 **줄이기만 하고 키우지 않는다**
+    (폰 그림을 넓은 창에서 키우면 또 「크다」). 창 크기 그림은 가로 · 세로 다 들어오게, `--tall` 은 가로만 맞추고 세로 스크롤.
+    그림은 `?t=<찍은 시각>` 으로 불러 같은 이름으로 다시 찍어도 옛 그림이 안 보인다. 이름은 그림 이름 뒤에 `-보기` 만 붙인다."""
+    base, name = os.path.dirname(out), os.path.basename(out)
+    stem = os.path.splitext(name)[0]
+    page = os.path.join(base, stem + "-보기.html")
+    fit = "max-width:100%;height:auto" if tall else "max-width:100vw;max-height:100vh;width:auto;height:auto"
+    html = ("<!doctype html><meta charset=\"utf-8\"><title>%s</title>"
+            "<style>html,body{margin:0}body{display:flex;justify-content:center}img{display:block;%s}</style>"
+            "<img src=\"%s?t=%d\" alt=\"%s\">\n") % (stem, fit, name, int(time.time()), stem)
+    open(page, "w", encoding="utf-8").write(html)
+    parts = page.replace("\\", "/").split("/")
+    rel = "/".join(parts[parts.index("temp"):]) if "temp" in parts else None
+    if rel:
+        print("보기: http://localhost:<내 서버 포트>/%s   ← 확인란에는 이 주소(창에 맞춰 한눈에)" % rel)
+    else:
+        print("보기: %s   ← temp/ 밖이라 http 주소가 없다 — 재권님께 드릴 그림은 temp/ 에 찍는다" % page)
 
 
 def arg(argv, name, default=None):
@@ -161,6 +187,7 @@ def main(argv):
             return 2
         open(out, "wb").write(base64.b64decode(data))
         print("찍음: %s · %d × %d · 배율 %s%s" % (out, size[0], size[1], dpr, " (폰)" if phone else " (재권님 창)"))
+        viewer(out, "--tall" in argv)
         return 0
     except urllib.error.URLError:
         print("✗ 못 찍음 — 서버가 없다")

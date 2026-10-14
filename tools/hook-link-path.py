@@ -66,6 +66,26 @@ def last_text(path):
     return ""
 
 
+# 찍은 그림 원본 — 확인란 ▶ 줄에 temp/….png 주소가 있고, 그 그림 옆에 같은 이름의 -보기.html 이 디스크에 있으면 알린다
+# (2026-10-14 「찍은 그림은 창에 맞춰 한눈에 보이게 드린다」). 보기 페이지가 없는 그림(shot 밖)은 안 센다. 「확대해서」 줄은 안 센다
+TEMP_PNG = re.compile(r"/temp/([^\s`'\"()<>?#]+?\.png)", re.I)
+TEMP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "temp")
+
+
+def raw_pngs(text):
+    from urllib.parse import unquote
+    out = []
+    for l in (text or "").splitlines():
+        if not CONFIRM.match(l) or "확대해서" in l:
+            continue
+        for m in TEMP_PNG.findall(l):
+            name = unquote(m)
+            stem = os.path.splitext(os.path.basename(name))[0]
+            if os.path.exists(os.path.join(TEMP_DIR, os.path.dirname(name), stem + "-보기.html")):
+                out.append(name)
+    return out
+
+
 def main():
     try:
         data = json.load(sys.stdin)
@@ -76,13 +96,20 @@ def main():
     text = data.get("last_assistant_message") or last_text(data.get("transcript_path") or "")
     hits = find(text)
     if not hits:
+        notes = []
         # 홀딩스 종목 화면 링크 — 알리기만 (2026-10-07 지시 · CLAUDE.md 「홀딩스 작업은 홈 첫 화면으로 보여 드린다」).
         # 종목 화면 자체를 고친 때는 맞는 링크라 막지 않는다
         if any(CONFIRM.match(l) and "holdings/stock.html" in l for l in (text or "").splitlines()):
-            print(json.dumps({"systemMessage":
-                "확인란에 종목 화면(holdings/stock.html) 링크가 있습니다 — 홀딩스 일은 홈 첫 화면(/holdings/)으로 보여 드립니다. "
-                "모달이면 /holdings/?code=<종목>. 종목 화면 자체를 고쳤으면 지나가도 됩니다 "
-                "(CLAUDE.md 「홀딩스 작업은 홈 첫 화면으로 보여 드린다」)."}, ensure_ascii=False))
+            notes.append("확인란에 종목 화면(holdings/stock.html) 링크가 있습니다 — 홀딩스 일은 홈 첫 화면(/holdings/)으로 보여 드립니다. "
+                         "모달이면 /holdings/?code=<종목>. 종목 화면 자체를 고쳤으면 지나가도 됩니다 "
+                         "(CLAUDE.md 「홀딩스 작업은 홈 첫 화면으로 보여 드린다」).")
+        raw = raw_pngs(text)
+        if raw:
+            notes.append("확인란에 찍은 그림 원본 주소가 있습니다 — 그대로 열면 배율만큼 화면보다 크게 보입니다. 옆에 있는 보기 페이지 주소로 "
+                         "드려 주십시오: " + " · ".join(raw[:3]) + " (CLAUDE.md 「찍은 그림은 창에 맞춰 한눈에 보이게 드린다」 · "
+                         "크게 보셔야 하는 그림이면 「확대해서 보시려면」 줄로 덧붙인 것은 안 셉니다).")
+        if notes:
+            print(json.dumps({"systemMessage": "\n".join(notes)}, ensure_ascii=False))
         return 0
     reason = ("확인란에 파일 경로가 있습니다 — Herdr 는 파일 경로를 자기 뷰어로 열고 크롬으로 안 넘깁니다. "
               "CLAUDE.md 「그림 · 화면은 http 주소로 드린다」. 파일을 저장소 temp/ 에 두고 "

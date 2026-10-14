@@ -636,6 +636,7 @@ def c_same_source():
         n += 1
         src = rd(os.path.join(ROOT, f))
         src = strip_py_comments(src) if f.endswith(".py") else strip_js_comments(src)
+        src = re.sub(r'href\s*=\s*["\'][^"\']*["\']', "", src)   # 누르는 링크는 받는 곳이 아니다(qa · 논문 링크 오탐)
         got = sorted({_domain(h) for h in _HOST.findall(src)} & srv)
         if got:
             hits.append("%s — 서버도 받는 곳: %s" % (f, " · ".join(got)))

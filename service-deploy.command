@@ -74,8 +74,8 @@ echo ""
 
 # 서버를 다시 읽게 한다. 파이썬은 파일을 매번 읽지 않으므로 재시작이 필요하다.
 # **화면 파일(HTML·CSS·JS)은 재시작 없이도 바뀐다** — 서버가 그때그때 읽는다.
-# 서버 코드(`.py`)가 바뀐 경우에만 재시작한다.
-if git -C "$SERVICE" diff --name-only "$before" "$after" | grep -q '\.py$'; then
+# 서버 코드(`holdings/server/` 의 `.py`)가 바뀐 경우에만 재시작한다 — 도구(`tools/` 등)의 `.py` 로는 안 한다 (2026-10-14 창구 · 안 해도 될 재시작).
+if git -C "$SERVICE" diff --name-only "$before" "$after" | grep -q '^holdings/server/.*\.py$'; then
   echo "  서버 코드가 바뀌었습니다 — 재시작합니다"
   launchctl kickstart -k "gui/$(id -u)/kr.kjcstudio.service-$PORT" 2>/dev/null \
     && echo "  재시작했습니다" \
