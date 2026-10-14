@@ -45,7 +45,7 @@ import { lookupStock } from './data/lookup-stock.js';
 import { INDEX_CELLS, stripHtml } from './components/index-strip.js';
 import { loadIndicators, peekIndicators, loadIndicator, peekIndicator, chipsHtml, headOf,
          drawIndicator, MK_TERM, loadMaterials, peekMaterials, materialsShell,
-         paintMaterials, fmtIx, loadCrypto, peekCrypto } from './components/market-index.js';
+         paintMaterials, loadCrypto, CRYPTO_CHIP } from './components/market-index.js';
 import { everyServerMs } from './store/timing.js';
 import { watch } from './store/longpoll.js';
 
@@ -231,19 +231,17 @@ const IX_GROUP = { kr: 'kr', us: 'us', vix: 'us', eu: 'ov', hk: 'ov', oil: 'etc'
  * **낱말로 건다.** 갈래 띠는 `href="#"` 뿐이라 걸 `id` 가 없고, 낱말은
  * 화면에 보이는 것이라 바뀌면 바로 눈에 띈다.
  *
- * **「가상자산」은 여기 없다** — 그 갈래의 지수를 아직 받아오지
- * 못한다. `null` 이 아니라 **아예 없는 것**이라 아래에서 갈린다.
- * **「시장지표」는 지수가 아니라 따로 칩을 그린다** (2026-10-12 · `MK_CAT` · components/market-index.js). */
+ * **「시장 흐름」(옛 「시장지표」)은 지수가 아니라 따로 칩을 그린다** (2026-10-12 · `MK_CAT` · components/market-index.js).
+ * 「원자재」 · 「가상자산」 갈래는 2026-10-14 에 이 갈래로 합쳐 뺐다(index.html 갈래 줄 주석). */
 const CAT_IX = {
   '홈': null,          // null 은 「거르지 않는다」
   '국내': ['kr'],
   '미국': ['us'],
   '국외': ['ov'],
-  '원자재': ['etc'],
 };
 
 let ixCat = '홈';
-const MK_CAT = '시장지표';
+const MK_CAT = '시장 흐름';                 // 갈래 줄 낱말 — index.html 의 그 링크 글자와 같아야 한다(낱말로 건다)
 
 function ixGroupOf(cell) {
   if (cell.icon === 'kr' || cell.icon === 'us') return cell.icon;
@@ -318,7 +316,7 @@ async function paintMkChips() {
   if (!host) return;
   const had = peekIndicators();
   if (had) host.innerHTML = chipsHtml(had, mkKey);
-  else host.innerHTML = '<div class="kh-ix"><div class="kh-ix-h"><span class="kh-ix-n">시장지표</span></div>'
+  else host.innerHTML = `<div class="kh-ix"><div class="kh-ix-h"><span class="kh-ix-n">${MK_CAT}</span></div>`
     + '<div class="kh-ix-b"><div><div class="kh-ix-v kh-num kh-mut">불러오는 중</div><div class="kh-ix-c"></div></div></div></div>';
   syncIxNav();
   try {
@@ -327,7 +325,7 @@ async function paintMkChips() {
     host.innerHTML = chipsHtml(j, mkKey);
   } catch {
     if (ixCat !== MK_CAT || had) return;
-    host.innerHTML = '<div class="kh-ix"><div class="kh-ix-h"><span class="kh-ix-n">시장지표</span></div>'
+    host.innerHTML = `<div class="kh-ix"><div class="kh-ix-h"><span class="kh-ix-n">${MK_CAT}</span></div>`
       + '<div class="kh-ix-b"><div><div class="kh-ix-v kh-num kh-mut">불러오지 못함</div><div class="kh-ix-c"></div></div></div></div>';
   }
   syncIxNav();
@@ -381,7 +379,7 @@ async function showMarket(key) {
   if (v) { v.className = 'kh-idx-v kh-num ' + h.dirClass; v.textContent = h.value; }
   if (yr) yr.textContent = h.range;
   if (per) per.innerHTML = `<span class="kh-chip live" style="cursor:default">${h.per}</span>`;
-  if (foot) foot.innerHTML = `<span title="${h.footTitle}">${h.foot[0]}</span><span title="네이버 증권 시장지표">${h.foot[1]}</span>`;
+  if (foot) foot.innerHTML = `<span title="${h.footTitle}">${h.foot[0]}</span><span title="${j.source || ''}">${h.foot[1]}</span>`;
   if (host) {
     if (mkDrop) mkDrop();
     try { mkDrop = drawIndicator(host, j); }
@@ -422,8 +420,8 @@ async function enterMkSide() {
     mkSide.dataset.display = cs.display;
     mkSide.style.flexDirection = cs.flexDirection;
     mkSide.style.gap = cs.gap;
-    mkSide.setAttribute('aria-label', '시장지표 재료');
-    mkSide.innerHTML = materialsShell();
+    mkSide.setAttribute('aria-label', `${MK_CAT} 재료`);
+    mkSide.innerHTML = materialsShell(`${MK_CAT} 재료`);
     mkSide.addEventListener('click', (e) => {
       const tr = e.target.closest('tr[data-mat-key]');
       if (tr) { showMaterial(tr.dataset.matKey, tr.dataset.matName); return; }
@@ -431,6 +429,7 @@ async function enterMkSide() {
       if (!b) return;
       mkGrp = b.dataset.mat;
       paintMaterials(mkSide, peekMaterials(), mkGrp, mkKey);
+      if (mkGrp === CRYPTO_CHIP || mkGrp === '전체') paintMkCrypto();   // 가상자산은 누를 때 지금 값을 받는다(서버가 10초 든다)
       const sc = mkSide.querySelector('[data-mat-scroll]');
       if (sc) sc.scrollTop = 0;
     });
@@ -450,6 +449,7 @@ async function enterMkSide() {
   try {
     const j = await loadMaterials();
     if (ixCat === MK_CAT && mkSide) paintMaterials(mkSide, j, mkGrp, mkKey);
+    paintMkCrypto();
   } catch {
     const a = mkSide && mkSide.querySelector('[data-mat-asof]');
     if (a && !peekMaterials()) a.textContent = '· 불러오지 못함';
@@ -483,6 +483,12 @@ async function showMaterial(key, name) {
   if (ixCat !== MK_CAT) return;
   paintMaterials(mkSide, peekMaterials(), mkGrp, key);
   showMarket(key);
+}
+
+/* 오른쪽 칸 「가상자산」 — 받고 나서 그 칩(또는 전체)을 보고 있으면 다시 그린다. 못 받으면 칸이 「불러오지 못함」 을 적는다 */
+function paintMkCrypto() {
+  const redraw = () => { if (ixCat === MK_CAT && mkSide && (mkGrp === CRYPTO_CHIP || mkGrp === '전체')) paintMaterials(mkSide, peekMaterials(), mkGrp, mkKey); };
+  loadCrypto().then(redraw, redraw);
 }
 
 function leaveMkSide() {
@@ -956,109 +962,8 @@ const marketsOf = (m) => (isUsMarket(m) ? US_MARKETS : MARKETS);
 const marketDef = (m) => marketsOf(m).find((x) => x.id === m) || MARKETS[0];
 const usRows = {};          // { NDX100: [{code, name, rank, cap, market}], SPX500: [...] } — 시총 순 · cap 은 달러
 
-/* ── 실시간 순위의 「원자재」 칩 (2026-10-14 재권님 「(실시간 순위에) 더하는 쪽으로」 · 시안 (B) · 「응」) ──
- *
- * 코스피 · 코스닥 줄에 섞지 않고 칩을 하나 더 둔다 — 값의 기준 시각이 달라서다(원자재는 그 거래소의 전일 정산가).
- * 목록 · 값은 시장지표 칩과 같은 `/api/market/indicators` 의 「원자재」 묶음이다(server/market_index.py 의 ITEMS) —
- * 종목 시세 길(quoteTick)을 안 탄다. 표는 순위표 칸을 고치지 않고 **같은 클래스로 만든 판을 표 자리 위에 얹는다**
- * (시장지표 갈래의 오른쪽 판과 같은 수) — 순위표는 밑에서 그대로 돈다. 줄을 누르면 큰 차트가 그 지표 일봉으로 간다
- * (시장지표 칩과 같은 showMarket). 모달(「자세히 ›」)에도 같은 칩 · 표가 있다 — 화면에 있으면 모달에도 있어야 한다 */
-const EXTRA_MARKETS = [
-  { id: 'COMMOD', label: '원자재', group: '원자재', note: '네이버 증권 시장지표 · 그 거래소의 전일 정산가', metric: '기준일' },
-  /* 가상자산 — 업비트 대표 열(server/crypto.py 의 ITEMS · 세계 시가총액 순 · 고른 기준은 그 파일 머리). 24시간 도는 시장이라
-     등락률은 업비트 기준(한국 09:00)이고 「기준일」 대신 24시간 거래대금을 둔다 (2026-10-14 재권님 「대표되는 거 10개만」) */
-  { id: 'CRYPTO', label: '가상자산', crypto: true, note: '업비트 원화 시장 · 등락률은 한국 09:00 기준', metric: '24시간 거래대금' },
-];
-const isExtra = (m) => EXTRA_MARKETS.some((x) => x.id === m);
-const extraDef = (m) => EXTRA_MARKETS.find((x) => x.id === m);
-let rankExtra = null;                 // 카드에서 고른 덧칩(없으면 코스피 · 코스닥 표)
-let rankExtraEl = null;               // 표 자리 위에 얹은 판
-
-function extraItems(def) {
-  if (def.crypto) return (peekCrypto() || { items: [] }).items || [];
-  return ((peekIndicators() || { items: [] }).items || []).filter((it) => it.group === def.group);
-}
-const extraSrc = (def) => (def.crypto ? peekCrypto() : peekIndicators()) || {};
-const extraLoad = (def) => (def.crypto ? loadCrypto() : loadIndicators());
-const extraPct = (it) => it.pct != null ? it.pct
-  : (it.last && it.prev && it.prev.c) ? (it.last.c - it.prev.c) / it.prev.c * 100 : null;
-/* 넷째 칸 — 원자재는 그 값의 날짜, 가상자산은 24시간 거래대금(억 · 조) */
-const extraMetric = (def, it) => def.crypto
-  ? (it.value24 == null ? '—' : fmtMoneyKr(it.value24 / 1e8))
-  : mdOf(it.last && it.last.d);
-const mdOf = (d) => d ? d.slice(5).replace('-', '.') : '—';
-
-/* 카드 표 줄 — 순위표와 같은 다섯 칸(빈 순위 · 이름 · 값 · 기준일 · 등락률) */
-function extraRowsHtml(def) {
-  const list = extraItems(def);
-  if (!list.length) return `<tr><td colspan="5" class="kh-mut">${def.label} 값을 아직 받지 못했습니다</td></tr>`;
-  return list.map((it) => {
-    const p = extraPct(it);
-    return `<tr data-mk="${it.key}" class="${it.key === mkKey ? 'is-active' : ''}">
-      <td class="kh-rk"></td>
-      <td class="l"><span class="kh-nm"><b>${it.name}</b>${it.sym ? ` <span class="kh-mut" style="font-size:.74rem">${it.sym}</span>` : ''}</span></td>
-      <td class="kh-num">${it.last ? fmtIx(it.last.c, it.digits) : '—'}</td>
-      <td class="kh-num kh-metric kh-mut">${extraMetric(def, it)}</td>
-      <td class="kh-num ${p == null ? 'kh-mut' : dirClass(p)}" style="font-weight:500">${p == null ? '—' : fmtPct(p)}</td>
-    </tr>`;
-  }).join('');
-}
-
-function paintRankExtra() {
-  if (!rankExtraEl || !rankExtra) return;
-  const def = extraDef(rankExtra);
-  const at = extraSrc(def).fetchedAt;
-  rankExtraEl.querySelector('[data-rx-metric]').textContent = def.metric;
-  rankExtraEl.querySelector('[data-rx-note]').textContent =
-    `${def.note}${at ? ` · ${at.slice(11, 16)} 받음` : ''}`;
-  rankExtraEl.querySelector('tbody').innerHTML = extraRowsHtml(def);
-}
-
-/* 판은 머리줄(.kh-tabs) 바로 아래부터 카드 끝까지 덮는다 — 카드 크기는 밑의 순위표가 정하므로 안 바뀐다 */
-function showRankExtra(id) {
-  const card = document.querySelector('.kh-rank-card');
-  const tabs = card && card.querySelector(':scope > .kh-tabs');
-  if (!card || !tabs) return;
-  rankExtra = id;
-  if (!rankExtraEl) {
-    if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
-    rankExtraEl = document.createElement('div');
-    rankExtraEl.className = 'kh-rank-extra';
-    rankExtraEl.style.cssText = 'position:absolute;left:0;right:0;bottom:0;z-index:5;display:flex;flex-direction:column;'
-      + 'background:var(--kh-bg-card);border-radius:0 0 var(--kh-radius-lg) var(--kh-radius-lg);overflow:hidden';
-    rankExtraEl.innerHTML = `<div class="kh-sort-note" data-rx-note style="padding-top:0"></div>
-      <div class="kh-rank-scroll" style="flex:1 1 auto;max-height:none"><table>
-        <thead><tr><th></th><th class="l" data-rx-name>원자재</th><th>값</th><th data-rx-metric>기준일</th><th>등락률</th></tr></thead>
-        <tbody></tbody></table></div>`;
-    rankExtraEl.addEventListener('click', (e) => {
-      const tr = e.target.closest('tr[data-mk]');
-      if (!tr) return;
-      rankExtraEl.querySelectorAll('tr.is-active').forEach((x) => x.classList.remove('is-active'));
-      tr.classList.add('is-active');
-      showMarket(tr.dataset.mk);
-    });
-    card.appendChild(rankExtraEl);
-    const fit = () => { rankExtraEl.style.top = (tabs.offsetTop + tabs.offsetHeight) + 'px'; };
-    if (window.ResizeObserver) new ResizeObserver(fit).observe(tabs);
-    fit();
-  }
-  rankExtraEl.querySelector('[data-rx-name]').textContent = extraDef(id).label;
-  rankExtraEl.hidden = false;
-  rankExtraEl.style.display = 'flex';
-  paintRankExtra();
-  const sc = rankExtraEl.querySelector('.kh-rank-scroll'); if (sc) sc.scrollTop = 0;
-  /* 가상자산은 누를 때마다 지금 값을 받는다(서버가 10초 든다 · 화면은 주기로 안 묻는다). 원자재는 받아 둔 것이 없을 때만 */
-  const def = extraDef(id);
-  if (def.crypto || !extraSrc(def).items) extraLoad(def).then(() => { if (rankExtra === id) paintRankExtra(); }).catch(() => {});
-}
-function hideRankExtra() {
-  rankExtra = null;
-  if (rankExtraEl) rankExtraEl.style.display = 'none';
-}
-
 function marketChipsHtml(cur) {
-  const list = isUsMarket(cur) ? US_MARKETS : [...MARKETS, ...EXTRA_MARKETS];
-  return list.map((m) => `<button class="kh-chip${m.id === cur ? ' is-active' : ''}" type="button"
+  return marketsOf(cur).map((m) => `<button class="kh-chip${m.id === cur ? ' is-active' : ''}" type="button"
     data-mkt="${m.id}">${m.label}</button>`).join('');
 }
 
@@ -1309,14 +1214,10 @@ function setupMarkets() {
   host.innerHTML = marketChipsHtml(market);
   host.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-mkt]');
-    if (!b || b.dataset.mkt === (rankExtra || market)) return;
+    if (!b || b.dataset.mkt === market) return;
+    market = b.dataset.mkt;
     host.querySelectorAll('[data-mkt]').forEach(x =>
       x.classList.toggle('is-active', x === b));
-    if (isExtra(b.dataset.mkt)) { showRankExtra(b.dataset.mkt); return; }
-    const wasExtra = rankExtra;
-    hideRankExtra();
-    if (wasExtra && b.dataset.mkt === market) return;    // 덧칩에서 보던 시장으로 돌아왔다 — 표는 그대로 돌고 있었다
-    market = b.dataset.mkt;
     const box = $('kh-rank-scroll');
     if (box) box.scrollTop = 0;          // 다른 시장의 1위부터 본다
     if (isUsMarket(market)) {
@@ -1345,7 +1246,6 @@ async function syncMarketGroup() {
   const wantUs = ixCat === '미국';
   if (wantUs === isUsMarket(market)) return;
   market = wantUs ? US_MARKETS[0].id : MARKETS[0].id;
-  hideRankExtra();
   if (wantUs) await Promise.all(US_MARKETS.map((m) => (usRows[m.id] ? true : loadUsBoard(m.id))));
   const host = $('kh-rank-mkt');
   if (host) host.innerHTML = marketChipsHtml(market);
@@ -1528,10 +1428,6 @@ let rankModalMarket = 'KOSPI';  // 모달에서 고른 시장. 갈래와 같은 
 
 /* 머리 ② 왼쪽 대표값 — 코스피. 이미 받아 둔 지수를 쓴다 */
 function rankHeadBig() {
-  if (isExtra(rankModalMarket)) {
-    const def = extraDef(rankModalMarket);
-    return { value: def.label, note: `${extraItems(def).length}개 · ${def.note}` };
-  }
   const d = marketDef(rankModalMarket);
   const mk = { code: d.ix, label: d.label };
   const i = (lastIndices || []).find((x) => x.code === mk.code);
@@ -1580,7 +1476,6 @@ function rankHeadStats() {
 /* 본문 — 표만 그린다. 머리는 modal-head.js 가 들고 있다 */
 function paintRankModal() {
   if (!rankModal) return;
-  if (isExtra(rankModalMarket)) { paintRankModalExtra(); return; }
   const list = rowList(rankModalSort, rankModalMarket);
   const rows = list.map((s) => {
     const p = rowPrices && rowPrices[s.code];
@@ -1624,50 +1519,6 @@ function paintRankModal() {
 
   /* 머리의 수치도 같은 값으로 맞춘다 — 두 자리가 어긋나면 어느 것이
      맞는지 알 수 없다 */
-  bindRankModalMkt();
-  rankModal.head.setBig(rankHeadBig());
-  rankModal.head.setStats(rankHeadStats());
-}
-
-/* 모달의 덧칩 표 — 카드 판과 같은 목록에 칸을 더 둔다(전일 값 · 전일 날짜). 칸 폭은 순위 표의 col 을 그대로 쓴다 */
-function paintRankModalExtra() {
-  const def = extraDef(rankModalMarket);
-  const list = extraItems(def);
-  const at = extraSrc(def).fetchedAt;
-  const rows = list.map((it) => {
-    const p = extraPct(it);
-    return `<tr>
-      <td class="kh-rkm-rk"></td>
-      <td class="l"><span class="kh-nm"><b>${it.name}</b></span></td>
-      <td class="kh-num">${it.last ? fmtIx(it.last.c, it.digits) : '—'}</td>
-      <td class="kh-num ${p == null ? 'kh-mut' : dirClass(p)}">${p == null ? '—' : fmtPct(p)}</td>
-      <td class="kh-num">${extraMetric(def, it)}</td>
-      <td class="kh-num">${it.prev ? fmtIx(it.prev.c, it.digits) : '—'}</td>
-      <td class="kh-num">${def.crypto ? (it.sym || '') : mdOf(it.prev && it.prev.d)}</td>
-    </tr>`;
-  }).join('') || `<tr><td colspan="7" class="kh-mut">${def.label} 값을 아직 받지 못했습니다</td></tr>`;
-  rankModal.body.innerHTML = `<div class="kh-rkm" data-sort="${rankModalSort}">
-    <div class="kh-chips kh-rkm-mkt" data-rkm-mkt>${marketChipsHtml(rankModalMarket)}</div>
-    <div class="kh-sort-note">${def.note}${at ? ` · ${at.slice(11, 16)} 받음` : ''} · 정렬 탭은 이 목록에 안 맞아 고정 순서</div>
-    <table>
-      <colgroup>
-        <col class="c-rk"><col class="c-nm"><col class="c-pr"><col class="c-pc">
-        <col class="c-am"><col class="c-cap"><col class="c-vol">
-      </colgroup>
-      <thead><tr>
-        <th></th><th class="l">${def.label}</th><th>값</th><th>등락률</th>
-        <th>${def.metric}</th><th>${def.crypto ? '전일 종가' : '전일 값'}</th><th>${def.crypto ? '기호' : '전일'}</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  </div>`;
-  bindRankModalMkt();
-  rankModal.head.setBig(rankHeadBig());
-  rankModal.head.setStats(rankHeadStats());
-  if (!extraSrc(def).items) extraLoad(def).then(() => { if (rankModal && isExtra(rankModalMarket)) paintRankModalExtra(); }).catch(() => {});
-}
-
-function bindRankModalMkt() {
   rankModal.body.querySelector('[data-rkm-mkt]').addEventListener('click', (e) => {
     const b = e.target.closest('[data-mkt]');
     if (!b || b.dataset.mkt === rankModalMarket) return;
@@ -1676,8 +1527,11 @@ function bindRankModalMkt() {
       loadUsBoard(rankModalMarket).then(() => paintRankModal());
     }
     paintRankModal();
-    if (!isExtra(rankModalMarket)) scheduleFetch();
+    scheduleFetch();
   });
+
+  rankModal.head.setBig(rankHeadBig());
+  rankModal.head.setStats(rankHeadStats());
 }
 
 function openRankModal() {
@@ -1711,7 +1565,7 @@ function openRankModal() {
   });
   rankModal = m;
   rankModalSort = sortBy;
-  rankModalMarket = rankExtra || market;     // 목록에서 보던 시장으로 열린다(덧칩 포함)
+  rankModalMarket = market;     // 목록에서 보던 시장으로 열린다
   paintRankModal();
   paintRankModalNote();
 }
