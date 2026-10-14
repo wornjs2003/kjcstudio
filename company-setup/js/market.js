@@ -1,5 +1,6 @@
 import { live } from './live.js';   // 새 값(-live) 먼저 · 없으면 씨앗
-import { dxyIce } from './dxy.js';   // 달러인덱스 — ICE(1973년 3월 = 100) · 홈 · 흐름도와 같은 셈
+import { dxyIce } from './dxy.js';
+import { indicatorSeries } from './indicator.js';   // 서버 시장지표 한 계열 — 아래 SERVER 표   // 달러인덱스 — ICE(1973년 3월 = 100) · 홈 · 흐름도와 같은 셈
 import { ready as toneReady, paint } from '/assets/js/tone.js';   // 기준이 있는 수치의 색 — 달러인덱스 100 위 빨강 · 아래 파랑(CLAUDE.md 「기준이 있는 수치는 위 빨강 · 아래 파랑, 멀수록 짙게」)
 // 시황분석 탭 — 세계지도 말풍선 값으로 그날 시황을 화면이 쓰고, 지표 흐름을 그래프로 보인다 (2026-10-12 재권님 「시황분석을 클릭하면 지금 분석해놓은게 나오면 ·
 // 실시간 분석을 여기에 연결 · 나라별로 껐다 켰다 · 금값그래프도」 → temp 시안 → 「응 좋아 붙여줘」).
@@ -60,6 +61,29 @@ async function chart(code) {
   const j = await (await fetch(`/api/kis/chart?code=${code}&period=D`)).json();
   return j.data.candles.filter(c => c.close).map(c => [day(c.ts), c.close]);
 }
+// 서버에서 읽는 계열 — 시황분석 탭 그래프는 그대로 두고 값만 서버 시장지표(열 때 받음)에서 (2026-10-14 재권님 「이건 그대로 두고 이값을 가져와서
+// 읽도록 구조를 짜는게 어때?」 → 「응 해」). 아직 서버에 없는 미국 3개월(침체 확률)은 world-macro 의 FRED 그대로 — 서버에 더해지면 이 표로 옮긴다.
+// 못 받은 계열은 06:30 파일 값으로 남고 그 칸 설명에 「06:30 파일로 대신」 을 붙인다
+const SERVER = {
+  hist: { 'WTI': 'wti', '브렌트유': 'brent', '은': 'silver', '구리(선물)': 'copper', 'BDI 건화물선지수': 'bdi', '상하이컨테이너 운임지수': 'scfi',
+          '한국 국채 3년': 'kr3', '회사채 (3년, AA-)': 'aa',
+          // 서버 시장지표 칩에는 없고 재료 목록에만 있는 줄 — 서버가 「n:<갈래>:<코드>」 로 1년치를 받는다(market_index.py 의 mat_indicator · 2026-10-14 실측 다섯 다 10-13 까지)
+          '두바이유': 'n:energy:DCBc1', '중국컨테이너 운임지수': 'n:transport:.CCFIDXSSE',
+          '콜금리 (1일)': 'n:domesticInterest:KRCALLBOKK', 'CD금리 (91일)': 'n:domesticInterest:KFIA114000', '회사채 (3년, BBB-)': 'n:domesticInterest:KFIA103010' },   // naver-macro.json hist 이름 → 서버 지표
+  yld: { US2: 'us2', US10: 'us10', KR3: 'kr3', KR10: 'kr10' },                  // world-macro.json series.yld → 서버 지표
+};
+async function fromServer(M, N) {
+  const keys = [...new Set([...Object.values(SERVER.hist), ...Object.values(SERVER.yld)])];
+  const got = Object.fromEntries(await Promise.all(keys.map(k => indicatorSeries(k).then(r => [k, r]).catch(() => [k, null]))));
+  const used = { hist: [], yld: [] };
+  if (N && N.hist) Object.entries(SERVER.hist).forEach(([n, k]) => { if (got[k]) { N.hist[n] = { ...(N.hist[n] || {}), s: got[k].s }; used.hist.push(n); } });
+  const S = M.series;
+  S.yldFile = { ...(S.yld || {}) };   // 침체 확률은 미국 10년 · 3개월을 같은 출처(FRED)로 견준다 — 3개월이 서버에 없어서
+  S.yldSrc = {};
+  Object.entries(SERVER.yld).forEach(([n, k]) => { if (got[k]) { S.yld = { ...(S.yld || {}), [n]: got[k].s }; S.yldSrc[n] = '네이버 시장지표(서버 · 열 때 받음)'; used.yld.push(n); } });
+  const at = Object.values(got).map(r => r && r.fetchedAt).filter(Boolean).sort().pop() || null;
+  return { used, at };
+}
 async function load() {
   const [M, N, MV, O, T, X, ...px] = await Promise.all([
     live('world-macro'),
@@ -71,7 +95,8 @@ async function load() {
     ...[...K, 'GOLD'].map(k => chart(ETF[k]).catch(() => null)),
     ...Object.keys(BOND).map(b => chart(b).catch(() => null))]);
   const P = {}; [...K, 'GOLD', ...Object.keys(BOND)].forEach((k, i) => { P[k] = px[i] ? px[i].slice(-252) : null; });
-  return { M, N, MV, O, T, X, S: M.series, P };
+  const SV = await fromServer(M, N);
+  return { M, N, MV, O, T, X, SV, S: M.series, P };
 }
 
 // ── 규칙으로 쓰는 문단 R1~R6 — 각 문단은 { 글, 근거[], 읽는 법 }
@@ -135,12 +160,12 @@ function write({ M, S, P, T, X }) {
         + (bp(Y.US10) > 0 ? '금리가 오르면 이미 있는 채권 값은 내린다' : '금리가 내리면 이미 있는 채권 값은 오른다') + (tlt != null ? ` — 미국 장기채(TLT)가 한 달 ${pct(tlt)}다. ` : '. ')
         + (sp != null ? `미국 10년 − 2년 차이는 ${sp.toFixed(2)}%p${spPrev != null ? `(한 달 전 ${spPrev.toFixed(2)})` : ''}로 ${sp > 0 ? '바로 서 있다' : '거꾸로 서 있다(경기 침체 신호로 읽힌다)'}. ` : '')
         + (hyg != null && ief != null ? (hyg - ief > 0.5 ? `하이일드 회사채(${pct(hyg)})가 국채(${pct(ief)})보다 강해 위험을 사는 돈이 아직 많다.` : hyg - ief < -0.5 ? `하이일드 회사채(${pct(hyg)})가 국채(${pct(ief)})보다 약해 위험을 피하는 쪽으로 돈이 움직인다.` : `하이일드 회사채와 국채가 비슷하게(${pct(hyg)} · ${pct(ief)}) 움직였다.`) : ''),
-      ev: [...['US2', 'US10', 'KR3', 'KR10'].filter(n => lastY(n)).map(n => `${YLD[n][1]} ${lastY(n)[1].toFixed(2)}% (${lastY(n)[0]}) · 한 달 ${bps(bp(Y[n]))} · ${n.startsWith('US') ? 'FRED ' + (n === 'US2' ? 'DGS2' : 'DGS10') : '한국은행 ECOS 817Y002'}`),
+      ev: [...['US2', 'US10', 'KR3', 'KR10'].filter(n => lastY(n)).map(n => `${YLD[n][1]} ${lastY(n)[1].toFixed(2)}% (${lastY(n)[0]}) · 한 달 ${bps(bp(Y[n]))} · ${(S.yldSrc && S.yldSrc[n]) || (n.startsWith('US') ? 'FRED ' + (n === 'US2' ? 'DGS2' : 'DGS10') : '한국은행 ECOS 817Y002')}`),
            ...Object.keys(BOND).filter(b => P[b]).map(b => `${BOND[b]} ${b} 한 달 ${pct(m1of(b))} (KIS 해외 일봉 · ${P[b][P[b].length - 1][0]})`)],
       why: '채권 값과 금리는 거꾸로 간다. 10년 − 2년 차이가 0 아래면 앞날 경기를 나쁘게 본다는 뜻으로 읽는다. 하이일드(부실 위험이 큰 회사채)가 국채보다 강하면 위험을 사는 돈, 약하면 피하는 돈으로 읽는다(차이 ±0.5%p 안은 비슷함). 지도 말풍선의 10년 금리도 미국 · 한국은 같은 매일 값이고, 다른 나라는 달마다 값이라 늦다.' });
   }
   // R8 침체 확률 — 뉴욕 연준 표
-  const ts = termSpread(Y);
+  const ts = termSpread(S.yldFile || Y);   // 같은 출처(FRED) 10년 · 3개월
   if (ts.length > 63) {
     const q = qAvg(ts, ts.length - 1), qPrev = qAvg(ts, ts.length - 64), pr = recessionProb(q), prP = recessionProb(qPrev);
     const say = v => v == null ? '5% 미만' : `약 ${Math.round(v)}%`;
@@ -216,7 +241,7 @@ function draw({ M, S, P, X }) {
       plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, boxHeight: 2 } } } } });
   else document.getElementById('cap-gold').innerHTML = '<span class="err">금값을 받지 못했습니다</span>';
   if (!X) document.getElementById('cap-gold').insertAdjacentHTML('beforeend', ' · <span class="err">달러인덱스 —(받지 못함)</span>');
-  const tsr = termSpread(S.yld);
+  const tsr = termSpread(S.yldFile || S.yld);
   if (tsr.length > 63) {
     const pts = tsr.map((p, i) => i < 62 ? null : [p[0], qAvg(tsr, i)]).filter(Boolean);
     add('c-rec', { type: 'line', data: { labels: pts.map(p => p[0]), datasets: [
@@ -267,6 +292,20 @@ function draw({ M, S, P, X }) {
 // ── 그 밖의 지표 — data/naver-macro.json(tools/fetch-naver-macro.py · 손으로 돌림 · 2026-10-12 재권님 「응 붙여줘」 · 받는 방식 (가)).
 //    홀딩스에 시장지표 차트가 들어와 서버가 이 값을 내주면 거기서 받는다(재권님 10-12) — 그때 이 파일 받기를 그쪽 주소로 바꾼다
 const CURVE = { USA: 'US', KOR: 'KR', JPN: 'JP', DEU: 'EZ', CHN: 'CN', BRA: 'BR', AUS: 'AU', GBR: 'GB' };   // 독일 = 유로존 칩으로 켜고 끈다 · 영국은 칩이 없어 늘 보인다
+// 서버에서 못 받아 06:30 파일 값으로 그린 선이 있으면 그 칸 설명 끝에 한 줄로 적는다 — 칸 크기가 안 바뀌게 줄을 바꾸지 않는다
+const CAP_SRC = { 'c-yld': ['미국 2년', '미국 10년', '한국 3년', '한국 10년'], 'c-krr': ['콜금리 (1일)', 'CD금리 (91일)', '한국 국채 3년', '회사채 (3년, AA-)', '회사채 (3년, BBB-)'],
+  'c-oil': ['WTI', '브렌트유', '두바이유'], 'c-cmd': ['은', '구리(선물)', 'BDI 건화물선지수', '상하이컨테이너 운임지수', '중국컨테이너 운임지수'] };
+function capSrc(SV, N, S) {
+  if (!SV) return;
+  const yName = Object.fromEntries(Object.entries(YLD).map(([k, v]) => [v[1], k]));
+  Object.entries(CAP_SRC).forEach(([id, names]) => {
+    const cap = document.getElementById(id) && document.getElementById(id).closest('.mk-card').querySelector('.cap');
+    if (!cap) return;
+    const has = n => id === 'c-yld' ? !!(S.yld && S.yld[yName[n]]) : !!(N && N.hist && N.hist[n]);
+    const file = names.filter(n => has(n) && !(id === 'c-yld' ? SV.used.yld.includes(yName[n]) : SV.used.hist.includes(n)));
+    if (file.length) cap.insertAdjacentHTML('beforeend', ` · <span class="err">06:30 파일로 대신: ${file.join(' · ')}</span>`);
+  });
+}
 function others(N) {
   const nv = document.getElementById('meta-nv');
   if (!N) { nv.innerHTML = '<span class="err">그 밖의 지표 값을 받지 못했습니다 — company-setup/tools/fetch-naver-macro.py 를 돌리면 생긴다</span>'; return; }
@@ -305,9 +344,12 @@ function others(N) {
 //    날마다 칸 = 한국거래소 마감 시황의 공통 칸 · 원인 칸 = 크게 움직인 날만(Baker · Bloom · Davis · Sammon NBER w28687)
 const MOVE_BAR = { SPX: 2.5, IXIC: 2.5, KOSPI: 4, KOSDAQ: 4 };   // 한국 4% — 지난 1년 2.5% 면 코스피 87날이라 시황분석1 안 「나라별 2~4%」 의 위 끝(2026-10-12 재권님 「응 해줘」)
 const won = v => v == null ? '—' : `<b class="${v > 0 ? 'num-up' : v < 0 ? 'num-dn' : ''}">${v > 0 ? '+' : ''}${v.toLocaleString('ko-KR')}</b>`;
+const krDate = N => { const d = N && N.kr && N.kr.KOSPI && N.kr.KOSPI.date; return d ? `${String(d).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3')} 마감` : '날짜 모름'; };   // 파일의 kr.KOSPI.date(20261013) → 2026-10-13 마감
 function krDay(N, MV) {
   const day = document.getElementById('kr-day'), ind = document.getElementById('kr-ind'), mv = document.getElementById('kr-moves');
   if (!N || !N.kr) { day.innerHTML = '<span class="err">국내 시장 값을 받지 못했습니다</span>'; return; }
+  // 칸 이름에 「오늘」 대신 그 값의 날 — 장중에는 전날 마감을 보이므로(받기는 평일 06:30 · 16:10) (2026-10-14 재권님 「갱신값을 오늘이라고 하지말고 년 월 일을 써줘」)
+  document.querySelectorAll('[data-kr-date]').forEach(e => { e.textContent = krDate(N); });
   const last = k => { const s = (N.idx && N.idx[k] && N.idx[k].s) || []; return s[s.length - 1]; };
   const block = (k, name) => { const m = N.kr[k]; if (!m) return `<div><h3>${name}</h3>—</div>`; const l = last(k), u = m.updown, ok3 = [u.오름, u.보합, u.내림].every(v => Number.isFinite(v)), tot = ok3 ? (u.오름 + u.보합 + u.내림 || 1) : 1;
     return `<div><h3>${name} ${l ? `${l[1].toLocaleString('ko-KR')} <span class="${l[2] > 0 ? 'num-up' : 'num-dn'}">${pct(l[2], 2)}</span>` : ''}</h3>
@@ -368,6 +410,7 @@ function sums({ M, N, S, P, X }) {
   const hs = n => H[n] && H[n].s;
   const sgn = v => v == null ? '—' : `${v > 0 ? '+' : ''}${v}`;
   const ar = v => v == null ? '' : v > 0 ? '↑' : v < 0 ? '↓' : '→';
+  const bpp = v => v == null ? '—' : `${sgn(v)}bp(${v > 0 ? '+' : ''}${(v / 100).toFixed(2)}%p)`;   // bp 옆에 %p — 100bp = 1%p(2026-10-14 재권님 「29bp 올랐다 인데 그옆에 퍼센트도」)
   const line = (h, t) => `<span class="sl"><b>${h}</b> ${t}</span>`;
   // 오르내림 숫자는 글씨 색만 — 오름 빨강 · 내림 파랑 · 짙기 없음(2026-10-14 재권님 「그럼 상승 하락만 빨갈 파랑으로 하자」 · 「나」). 국내 시장 칸과 같은 num-up · num-dn
   const ud = (v, t) => v == null || !v ? t : `<span class="${v > 0 ? 'num-up' : 'num-dn'}">${t}</span>`;
@@ -383,10 +426,10 @@ function sums({ M, N, S, P, X }) {
   const spr = spread(aa, k3), spr1 = aa && k3 && aa.length > 21 && k3.length > 21 ? Math.round(((aa[aa.length - 1][1] - k3[k3.length - 1][1]) - (aa[aa.length - 22][1] - k3[k3.length - 22][1])) * 100) : null;
   const pc = n => { const v = m1(hs(n)); return v == null ? '—' : ud(v, pct(v)); };
   document.getElementById('sum-macro').innerHTML = [
-    line('정책금리', `직전 결정 인상 ${up.length}곳 · 인하 ${dn.length}곳${up.length ? ` (인상 ${up.map(k => NAME[k]).join(' · ')})` : ''}`),
+    line('정책금리', `직전 결정 ${ud(up.length, `인상 ${up.length}곳`)} · ${ud(-dn.length, `인하 ${dn.length}곳`)}${up.length ? ` (${ud(1, `인상 ${up.map(k => NAME[k]).join(' · ')}`)})` : ''}`),   // 인상 빨강 · 인하 파랑(2026-10-14 재권님 「인상된건 빨간색 인하된건 파란색」)
     line('물가', `목표 2% 위 ${hot.length}곳 · 석 달 오름 ${cpi3.filter(x => x[1] > 0.05).map(x => NAME[x[0]]).join(' · ') || '없음'} · 내림 ${cpi3.filter(x => x[1] < -0.05).map(x => NAME[x[0]]).join(' · ') || '없음'}`),
     line('경기선행', `석 달 오름 ${cli3.filter(x => x[1] > 0.05).map(x => NAME[x[0]]).join(' · ') || '없음'} · 내림 ${cli3.filter(x => x[1] < -0.05).map(x => NAME[x[0]]).join(' · ') || '없음'}`),
-    line('금리', `미국 10년 ${us10 ? us10[us10.length - 1][1].toFixed(2) + '%' : '—'} 한 달 ${ud(bp(us10), sgn(bp(us10)) + 'bp')} · 10년 − 3개월 ${term == null ? '—' : term.toFixed(2) + '%p' + (term < 0 ? '(뒤집힘)' : '')} · 한국 3년 한 달 ${ud(bp(k3), sgn(bp(k3)) + 'bp')} · 회사채 가산금리 ${spr == null ? '—' : spr + '%p'} 한 달 ${ud(spr1, sgn(spr1) + 'bp')}`),
+    line('금리', `미국 10년 ${us10 ? us10[us10.length - 1][1].toFixed(2) + '%' : '—'} 한 달 ${ud(bp(us10), bpp(bp(us10)))} · 10년 − 3개월 ${term == null ? '—' : term.toFixed(2) + '%p' + (term < 0 ? '(뒤집힘)' : '')} · 한국 3년 한 달 ${ud(bp(k3), bpp(bp(k3)))} · 회사채 가산금리 ${spr == null ? '—' : spr + '%p'} 한 달 ${ud(spr1, bpp(spr1))}`),
     line('원자재', `한 달 WTI ${pc('WTI')} · 구리 ${pc('구리(선물)')} · 건화물 운임(BDI) ${pc('BDI 건화물선지수')}`),
   ].join('');
   // 시장 반응
@@ -401,7 +444,7 @@ function sums({ M, N, S, P, X }) {
     line('주가 1년', `${y1.length ? `${NAME[y1[0][0]]} ${ud(y1[0][1], pct(y1[0][1], 0))} 가장 높음 · ${NAME[y1[y1.length - 1][0]]} ${ud(y1[y1.length - 1][1], pct(y1[y1.length - 1][1], 0))} 가장 낮음` : '—'}`),
     line('금 · 달러 한 달', `금 ${g == null ? '—' : ud(g, pct(g))} ${ar(g)} · 달러인덱스 ${dx == null ? '—' : ud(dx, pct(dx))} ${ar(dx)}${g != null && dx != null && g * dx > 0 ? ' — 같은 쪽으로 움직임(보통은 반대)' : ''}`),
     line('채권 값 한 달', `미국 장기채(TLT) ${tlt == null ? '—' : ud(tlt, pct(tlt))} · 하이일드(HYG) ${hyg == null ? '—' : ud(hyg, pct(hyg))}`),
-    line('코스피 오늘', ks && kl ? `${ud(kl[2], pct(kl[2], 2))} · 외국인 ${ks.investor.외국인 == null ? '—' : ud(ks.investor.외국인, (ks.investor.외국인 > 0 ? '+' : '') + ks.investor.외국인.toLocaleString('ko-KR') + '억원')} · 오른 종목 ${ks.updown.오름 ?? '—'} · 내린 종목 ${ks.updown.내림 ?? '—'} · 석 달 크게 움직인 날 ${big ?? '—'}번` : '—'),
+    line(N && N.kr ? `코스피 ${krDate(N)}` : '코스피', ks && kl ? `${ud(kl[2], pct(kl[2], 2))} · 외국인 ${ks.investor.외국인 == null ? '—' : ud(ks.investor.외국인, (ks.investor.외국인 > 0 ? '+' : '') + ks.investor.외국인.toLocaleString('ko-KR') + '억원')} · 오른 종목 ${ks.updown.오름 ?? '—'} · 내린 종목 ${ks.updown.내림 ?? '—'} · 석 달 크게 움직인 날 ${big ?? '—'}번` : '—'),
   ].join('');
 }
 function apply() {
@@ -437,5 +480,5 @@ function controls() {
   w.paras.forEach((p, i) => {
     box.insertAdjacentHTML('beforeend', `<p class="para">${p.t}</p><details class="ev"><summary>근거 ${i + 1}</summary><ul>${p.ev.map(x => `<li>${x}</li>`).join('')}</ul><div class="why">읽는 법 — ${p.why}</div></details>`);
   });
-  folds(); controls(); draw(D); others(D.N); krDay(D.N, D.MV); odds(D.O); sums(D);
+  folds(); controls(); draw(D); others(D.N); capSrc(D.SV, D.N, D.S); krDay(D.N, D.MV); odds(D.O); sums(D);
 })();

@@ -57,11 +57,11 @@
         <div class="mk-card"><h2>물가(전년비) — 목표 2%</h2><div class="cap">OECD 소비자물가(월) · 유로존은 2025-12 에서 멈춤 · 일본 · 칠레 · 베트남 월 값 없음</div><div class="chart"><canvas id="c-cpi"></canvas></div></div>
         <div class="mk-card"><h2>경기선행지수 — 100 = 장기 평균</h2><div class="cap">OECD · 유로존 · 칠레 · 베트남 없음</div><div class="chart"><canvas id="c-cli"></canvas></div></div>
         <div class="mk-card"><h2>실질 금리 — 정책금리 − 물가<span class="tag">계산</span></h2><div class="cap">흐린 막대 = 물가가 지난해 연간 값(IMF) · 브라질은 잘림</div><div class="chart"><canvas id="c-real"></canvas></div></div>
-        <div class="mk-card"><h2>국채 금리 — 1년</h2><div class="cap">미국 2 · 10년 FRED · 한국 3 · 10년 한국은행 ECOS · 매일 · 점선이 짧은 만기</div><div class="chart"><canvas id="c-yld"></canvas></div></div>
-        <div class="mk-card"><h2>국내 금리 — 1년</h2><div class="cap">콜 · CD(91일) · 국채 3년 · 회사채 3년(AA- · BBB-) · BBB- 는 오른쪽 눈금 · 회사채와 국채의 차이가 신용 가산금리 · 네이버 증권</div><div class="chart"><canvas id="c-krr"></canvas></div></div>
+        <div class="mk-card"><h2>국채 금리 — 1년</h2><div class="cap">미국 2 · 10년 · 한국 3 · 10년 · 네이버 · 열 때 받음 · 점선이 짧은 만기</div><div class="chart"><canvas id="c-yld"></canvas></div></div>
+        <div class="mk-card"><h2>국내 금리 — 1년</h2><div class="cap">콜 · CD(91일) · 국채 3년 · 회사채 3년(AA- · BBB-) · BBB- 는 오른쪽 눈금 · 회사채와 국채의 차이가 신용 가산금리 · 네이버 · 열 때 받음</div><div class="chart"><canvas id="c-krr"></canvas></div></div>
         <div class="mk-card"><h2>국채 곡선 — 지금</h2><div class="cap">나라별 만기별 국채 금리 · 짧은 만기가 긴 만기보다 높으면 곡선이 뒤집힌 것 · 브라질(12%대)은 눈금이 달라 뺐다 · 영국은 점선 · 네이버 증권</div><div class="chart"><canvas id="c-curve"></canvas></div></div>
-        <div class="mk-card"><h2>유가 — 1년</h2><div class="cap">WTI · 브렌트유 · 두바이유 · 달러/배럴 · 네이버 증권</div><div class="chart"><canvas id="c-oil"></canvas></div></div>
-        <div class="mk-card"><h2>금속 · 운임 — 1년 · 처음 = 100</h2><div class="cap">은 · 구리(선물) · BDI 건화물선지수 · 상하이 · 중국 컨테이너 운임지수(주 1회) · 네이버 증권</div><div class="chart"><canvas id="c-cmd"></canvas></div></div>
+        <div class="mk-card"><h2>유가 — 1년</h2><div class="cap">WTI · 브렌트유 · 두바이유 · 달러/배럴 · 네이버 · 열 때 받음</div><div class="chart"><canvas id="c-oil"></canvas></div></div>
+        <div class="mk-card"><h2>금속 · 운임 — 1년 · 처음 = 100</h2><div class="cap">은 · 구리(선물) · BDI 건화물선지수 · 상하이 · 중국 컨테이너 운임지수(주 1회) · 네이버 · 열 때 받음</div><div class="chart"><canvas id="c-cmd"></canvas></div></div>
         <div class="mk-card mk-wide"><h2>지금 값</h2><div class="cap">원자재 · 운임 · 국내 금리 — 마지막 값과 전날 대비 · 네이버 증권</div><div class="nv-tb" id="nv-now"></div></div>
       </div>
       <div class="mk-meta" id="meta-nv"></div>
@@ -72,8 +72,8 @@
         <div class="mk-card"><h2>한 달 주가 — 달러 vs 그 나라 돈<span class="tag">계산</span></h2><div class="cap">ETF 1개월 × 통화 1개월(ECB)로 어림 · 칠레 · 베트남은 환율 없음</div><div class="chart"><canvas id="c-m1"></canvas></div></div>
         <div class="mk-card"><h2>금값 · 달러인덱스 — 1년</h2><div class="cap" id="cap-gold">금 = GLD(금 ETF · 달러 · KIS) · 달러인덱스 = ICE(1973년 3월 = 100 · 네이버) — 점선이 100 위면 빨강 · 아래면 파랑, 멀수록 짙게</div><div class="chart"><canvas id="c-gold"></canvas></div></div>
         <div class="mk-card"><h2>채권 값 — 1년 · 처음 = 100</h2><div class="cap">채권 ETF(달러) · KIS 해외 일봉 · 열 때 받음 · 금리가 오르면 내린다 · 범례를 누르면 그 줄을 켜고 끈다</div><div class="chart"><canvas id="c-bond"></canvas></div></div>
-        <div class="mk-card mk-wide"><h2>국내 시장 — 오늘</h2><div class="cap">투자자별 순매수 · 프로그램 매매(억원) · 오른/내린 종목 수 · 시가총액 상위 · 전날 미국 증시 — 네이버 증권 · 한국거래소 마감 시황의 공통 칸</div><div class="kr-day" id="kr-day"></div></div>
-        <div class="mk-card"><h2>업종 등락 — 오늘</h2><div class="cap">네이버 업종 분류 · 많이 오른 다섯과 많이 내린 다섯</div><div class="nv-tb one-col" id="kr-ind"></div></div>
+        <div class="mk-card mk-wide"><h2>국내 시장 — <span data-kr-date>—</span></h2><div class="cap">투자자별 순매수 · 프로그램 매매(억원) · 오른/내린 종목 수 · 시가총액 상위 · 전날 미국 증시 — 네이버 증권 · 한국거래소 마감 시황의 공통 칸</div><div class="kr-day" id="kr-day"></div></div>
+        <div class="mk-card"><h2>업종 등락 — <span data-kr-date>—</span></h2><div class="cap">네이버 업종 분류 · 많이 오른 다섯과 많이 내린 다섯</div><div class="nv-tb one-col" id="kr-ind"></div></div>
         <div class="mk-card"><h2>크게 움직인 날 — 원인</h2><div class="cap">석 달 안 · 미국 ±2.5% · 한국 ±4% · 원인은 기사를 읽고 갈래 하나(Baker 외 NBER w28687) · 못 찾으면 「원인 모름」 · 「—」 은 아직 안 적음</div><div class="mv" id="kr-moves"></div></div>
         <div class="mk-card mk-wide"><h2>미국 지표 발표 다음 날 — 코스피가 오른 확률<span class="tag">계산</span></h2><div class="cap" id="cap-odds"><b>오늘 값의 예측이 아니라 1995년부터 과거에 그랬던 비율이다</b> · 미국 발표는 한국 밤이라 그다음 한국 거래일을 센다 · 국면 = 미국 경기선행지수가 오르는 중(선행 ↑) · 내리는 중(선행 ↓) — 발표 두 달 전 값 · 굵은 글씨 = 같은 국면의 모든 날보다 우연으로 보기 어려울 만큼 다름(표준오차 두 배 밖) · 발표값이 예상과 얼마나 달랐는지는 과거 예상치를 받을 곳이 없어 안 본다(Andersen 외 2007 은 그 몫에 반응한다고 했다) · FRED · 한국은행 ECOS · OECD</div><div class="odds" id="odds"></div></div>
       </div>
