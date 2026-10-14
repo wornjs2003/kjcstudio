@@ -12,6 +12,7 @@
 
 import { apiFetch } from '../data/api.js';
 import { color } from '../theme.js';
+import { ready as toneReady, has as toneHas, paint as tonePaint } from '/assets/js/tone.js';
 
 /* 큰 차트 머리 이름에 다는 용어 풍선 — 지표 key → 용어집(data/glossary.json) id. 칩에는 안 단다:
    지수 띠가 옆으로 미는 칸이라 풍선이 그 안에 갇혀 잘린다(2026-10-12 실측 · 재권님 「가로 해줘」) */
@@ -24,6 +25,7 @@ export async function loadIndicators() {
   const r = await apiFetch('/api/market/indicators', { cache: 'no-store' });
   const j = r && await r.json();
   if (!j || !j.ok) throw new Error((j && j.error) || '시장지표를 못 받았습니다');
+  await toneReady;                 // 칩 바탕 색의 기준표(data/tone.json)를 먼저 — 받자마자 그리는 칩에 색이 빠지지 않게
   listCache = j;
   return j;
 }
@@ -47,14 +49,19 @@ const tail = (it) => (it.unit === '%' || it.unit === '%p') ? it.unit : '';
 const md = (d) => d ? d.slice(5).replace('-', '.') : '';
 const dir = (c) => c == null ? 'kh-mut' : c > 0 ? 'kh-up' : c < 0 ? 'kh-down' : '';
 
-/* 지수 띠의 칩 — 국내·미국 지수 칩(index-strip.js)과 같은 모양 · 날짜 옆에 「봉」 · 「선」 */
+/* 지수 띠의 칩 — 국내·미국 지수 칩(index-strip.js)과 같은 모양 · 날짜 옆에 「봉」 · 「선」
+   기준이 있는 지표는 칩 **바탕에 한 겹** 덧칠한다 — 기준 위 빨강 · 아래 파랑 · 멀수록 짙게 (2026-10-14 재권님 「달러인덱스를
+   100을 기준으로 …」 · 「홀딩스 시장지표도 같아야 하고」 · 「그렇게 해」). 셈 · 기준 · 폭은 assets/js/tone.js · data/tone.json 한 곳이고
+   여기는 지표 key 를 넘기기만 한다 — 그 표에 없는 지표는 칠하지 않는다. 글씨 색(그날 등락)과 칩 크기는 그대로다.
+   덧칠(background-image)이라 고른 칩 · 마우스 올림의 바탕 규칙(home.css)은 그 밑에서 그대로 돈다 */
 export function chipsHtml(list, sel) {
   return list.items.map((it) => {
     const v = it.last ? it.last.c : null;
+    const tint = toneHas(it.key) ? tonePaint(it.key, v, 'bg') : '';   // 표에 없는 지표는 묻지 않는다 — 경고 없이 넘긴다
     const c = (it.last && it.prev) ? it.last.c - it.prev.c : null;
     const unitC = it.unit === '%' ? '%p' : tail(it);
     const ch = c == null ? (it.error ? '못 받음' : '') : `${c > 0 ? '+' : ''}${fmtIx(c, it.digits)}${unitC}`;
-    return `<div class="kh-ix${it.key === sel ? ' is-on' : ''}" data-mk="${it.key}">
+    return `<div class="kh-ix${it.key === sel ? ' is-on' : ''}" data-mk="${it.key}"${tint ? ` style="background-image:linear-gradient(${tint},${tint})"` : ''}>
       <div class="kh-ix-h"><span class="kh-ix-n">${it.name}</span>
         <span class="kh-bd">${md(it.last && it.last.d)}${it.freq ? ' ' + it.freq : ''} · ${it.kind === 'candle' ? '봉' : '선'}</span></div>
       <div class="kh-ix-b"><div>
