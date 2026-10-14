@@ -54,8 +54,10 @@ import { apiFetch } from '../data/api.js';
 import { dirClass, isUsCode } from '../utils/format.js';
 import { everyServerMs } from '../store/timing.js';
 
-/* 「5일」 에서 보여줄 날 수. 30일치가 오지만 칸이 좁다 */
-const DAYS_SHORT = 5;
+/* 단추마다 더할 거래일 수. 서버가 30일치를 주므로 한달(20)까지는 화면만으로 된다
+   (2026-10-14 지시 — 「응 그렇게 해」 · 한달 · 3달). 3달(60)은 서버가 마감 뒤 받아
+   쌓은 뒤에 더한다 — 지금 응답으로는 모자란다 */
+const VIEW_DAYS = { days: 5, month: 20 };
 
 /* **서버가 정한다** (2026-09-30). `kis_proxy` 의 `INVESTOR_TTL` 을 따른다.
    아래는 **서버가 없을 때의 대체값**이다 (`store/timing.js` 참고).
@@ -172,7 +174,7 @@ export function mountInvestor({ box, tabs } = {}) {
   function paint() {
     const html = (!rows || !rows.length)
       ? '<span class="kh-mut">불러오지 못했습니다</span>'
-      : (view === 'today' ? paintToday(rows[0]) : paintDays(rows.slice(0, DAYS_SHORT)));
+      : (view === 'today' ? paintToday(rows[0]) : paintDays(daysRows(VIEW_DAYS[view]), todayMissing()));
     if (html !== lastHtml) {
       box.innerHTML = html;
       lastHtml = html;
@@ -249,12 +251,23 @@ export function mountInvestor({ box, tabs } = {}) {
       <span class="kh-mut">가집계를 불러오는 중</span>`;
   }
 
-  function paintDays(days) {
-    let max = 1;
-    days.forEach((d) => SIDES.forEach((s) => {
-      max = Math.max(max, Math.abs((d[s.key] || {}).net || 0));
-    }));
-    /* 5일도 가로 막대다. **합계가 아니라 닷새를 더한 값**을 보여준다 —
+  /* **장중에는 오늘을 건너뛴다** (2026-10-14 지시 — 「응 고치게해」 · (가)).
+     장중에는 오늘 줄의 확정치가 비어(`net: null`) 있어, 그 줄째 다섯 줄을
+     더하면 **어제까지 나흘 합**이 「5일」 로 나갔다. 가집계로 메우지 않는다 —
+     개인은 가집계가 없어 개인 줄만 나흘이 되고, 확정치와 가집계가 한 합에 섞인다.
+     그래서 장중에는 **어제까지 닷새 확정치**, 마감 뒤에는 오늘을 넣은 닷새다. */
+  function daysRows(n) {
+    const from = todayMissing() ? 1 : 0;
+    return rows.slice(from, from + n);
+  }
+
+  function paintDays(days, skippedToday) {
+    /* **막대는 세 줄 합 가운데 가장 큰 것에 견준다** (2026-10-14 지시 — 「빨간색 파란색은
+       그날의 최고값대비로」 · (ㄱ)). 전에는 「하루 최댓값 × 날 수」 에 견줘 날이 많을수록
+       막대가 짧아졌다(한달 외국인 -3377만주가 반쪽의 17%). 「오늘」 칸과 같은 방식이다 */
+    const sums = SIDES.map((s) => days.reduce((a2, d) => a2 + ((d[s.key] || {}).net || 0), 0));
+    const max = Math.max(...sums.map(Math.abs)) || 1;
+    /* 5일 · 한달도 가로 막대다. **합계가 아니라 그 날들을 더한 값**을 보여준다 —
        오늘 것만 보면 하루 흐름이고, 닷새를 더하면 추세가 읽힌다. */
     const lines = SIDES.map((s) => {
       /* **여기서는 `|| 0` 이 맞다** — 더하는 자리라 `null` 을 그냥 두면
@@ -264,17 +277,19 @@ export function mountInvestor({ box, tabs } = {}) {
       const any = vals.some((v) => v != null);
       const sum = vals.reduce((a2, v) => a2 + (v || 0), 0);
       const shown = any ? sum : null;        // 글자·색용
-      const w = Math.min(50, Math.abs(sum) / (max * days.length) * 50);
+      const w = Math.abs(sum) / max * 50;
       return `<div class="kh-iv-r2">
         <span class="kh-iv-n2">${s.name}</span>
         <span class="kh-iv-v2 ${dirClass(shown)}">${man(shown)}</span>
         <span class="kh-iv-bar">${bar(sum, w)}</span></div>`;
     }).join('');
-    /* **오른쪽 숫자는 오늘 값이다** — 5일 합계가 아니다 (2026-09-18 지적
-       — "우측에 있는 수치는 5일치를합친건가?"). 막대는 5일이고 숫자는
-       오늘이라 갈리므로 그 사실을 적는다. */
+    /* **오른쪽 숫자도 막대와 같은 닷새 합이다** (2026-09-18 지적 — "우측에
+       있는 수치는 5일치를합친건가?" 뒤로 숫자도 합으로 맞췄다). 그 사실을
+       아래 글에 적는다 — 이 주석은 2026-10-14 까지 「오늘 값이다」 로 낡아 있었다. */
+    /* 「거래일」 로 적는다 — 한달이 달력 30일이 아니라 장이 선 20일이라서다 */
+    const span = skippedToday ? `어제까지 ${days.length}거래일` : `최근 ${days.length}거래일`;
     return `<div class="kh-iv-rows">${lines}</div>
-      <div class="kh-iv-note">최근 ${days.length}일을 <b>더한 값</b>입니다 ·
+      <div class="kh-iv-note">${span}을 <b>더한 값</b>입니다 ·
         한국투자증권 확정치</div>`;
   }
 
