@@ -40,6 +40,18 @@ export async function loadIndicator(key) {
 }
 export const peekIndicator = (key) => barsCache.get(key) || null;
 
+/* 가상자산 대표 열 — 서버 `/api/market/crypto`(server/crypto.py · 업비트 공개 시세). 실시간 순위 「가상자산」 칩이 쓴다.
+   일봉은 시장지표와 같은 `/api/market/indicator?key=btc` 라 큰 차트가 같은 길로 그린다 */
+let cryptoCache = null;
+export async function loadCrypto() {
+  const r = await apiFetch('/api/market/crypto', { cache: 'no-store' });
+  const j = r && await r.json();
+  if (!j || !j.ok) throw new Error((j && j.error) || '가상자산 값을 못 받았습니다');
+  cryptoCache = j;
+  return j;
+}
+export const peekCrypto = () => cryptoCache;
+
 export function fmtIx(v, digits) {
   return v == null ? '—'
     : Number(v).toLocaleString('ko-KR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -88,7 +100,7 @@ export function headOf(j) {
        자세한 말은 마우스를 올리면 뜬다 */
     foot: [`1년 ${it.kind === 'candle' ? '일봉' : '종가'} ${b.length}개 · ${md(last.d)}까지`
              + (it.kind === 'candle' && j.fixed ? ` · 메운 날 ${j.fixed}` : ''),
-           `네이버 · ${md((j.fetchedAt || '').slice(0, 10))} ${(j.fetchedAt || '').slice(11, 16)} 받음`],
+           `${(j.source || '네이버').replace('네이버 증권 시장지표', '네이버')} · ${md((j.fetchedAt || '').slice(0, 10))} ${(j.fetchedAt || '').slice(11, 16)} 받음`],
     footTitle: it.kind === 'candle'
       ? (j.fixed ? `고가·저가가 비었거나 종가가 고가·저가 밖인 날 ${j.fixed}개는 시가·종가로 메웠습니다` : '')
       : '네이버가 시가·고가·저가를 주지 않아 종가 선으로 그립니다',
@@ -165,7 +177,9 @@ export function materialsShell() {
 }
 
 /* 판 안을 채운다 — grp 는 '전체' 또는 칩 이름 */
-export function paintMaterials(root, j, grp) {
+/* sel — 큰 차트에 띄운 줄의 열쇠(`n:<갈래>:<코드>` · server/market_index.py 의 mat_indicator). 줄을 누르면 home.js 가
+   큰 차트를 그 줄로 바꾼다(2026-10-14 재권님 「목록을 누르면 차트에 캔들이든 선차트든 나와야」) */
+export function paintMaterials(root, j, grp, sel) {
   const ids = ['전체', ...((j && j.groups) || []).map((g) => g.id)];
   root.querySelector('[data-mat-chips]').innerHTML = ids.map((id) =>
     `<button class="kh-chip${id === grp ? ' is-active' : ''}" type="button" data-mat="${id}">${id}</button>`).join('');
@@ -183,9 +197,11 @@ export function paintMaterials(root, j, grp) {
       }
       if (!p.rows.length) rows.push('<tr><td></td><td class="l kh-mut" colspan="4">불러오지 못함</td></tr>');
       const pctUnit = p.path.endsWith('Interest');
+      const cat = p.path.split('/')[0];
       for (const x of p.rows) {
         const c = x.pct == null ? 'kh-mut' : x.pct > 0 ? 'kh-up' : x.pct < 0 ? 'kh-down' : '';
-        rows.push(`<tr title="${esc(x.unit || '')}">
+        const key = x.code ? `n:${cat}:${x.code}` : '';
+        rows.push(`<tr title="${esc(x.unit || '')}"${key ? ` data-mat-key="${esc(key)}" data-mat-name="${esc(x.name)}"` : ''}${key && key === sel ? ' class="is-active"' : ''}>
           <td class="kh-rk"></td><td class="l"><span class="kh-nm"><b>${esc(x.name)}</b></span></td>
           <td class="kh-num">${matFmt(x.v)}${pctUnit ? '%' : ''}</td>
           <td class="kh-num kh-metric kh-mut">${md(x.at)}</td>

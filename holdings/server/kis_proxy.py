@@ -63,6 +63,7 @@ import naver_period
 import toss
 import macro
 import market_index
+import crypto            # 가상자산 — 업비트 공개 시세(2026-10-14 · server/crypto.py 머리 주석)
 import news
 import news_store
 # 오류 문구에서 비밀을 지운다. 외부 호출 오류를 사람에게 보여줄 때는
@@ -6404,8 +6405,8 @@ class Handler(SimpleHTTPRequestHandler):
         재시작 전에 볼 수 있게. 토스처럼 토큰을 끊는 일이 없어 이 폴백은 해가 없다. 응답 `servedBy` 가 어디서 받았나다."""
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/market/"):].strip("/")
-        if route not in ("indicators", "indicator", "materials"):
-            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= · /api/market/materials 셋입니다."}, 404)
+        if route not in ("indicators", "indicator", "materials", "crypto"):
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= · /api/market/materials · /api/market/crypto 넷입니다."}, 404)
             return
         base = upstream_base()
         if base:
@@ -6419,7 +6420,9 @@ class Handler(SimpleHTTPRequestHandler):
                                  "source": "market"}, 502)
                 return
             # 상류가 이 주소를 모른다 — 옛 코드는 JSON 아닌 403, 주소 일부만 아는 코드는 404(「없는 주소」). 아는 주소는 404 를 안 낸다
-            if not (status == 404 or (status == 403 and not body.lstrip().startswith(b"{"))):
+            # 지표 key 를 상류가 모르면 400(「모르는 지표」) — 새로 더한 key(가상자산 등)를 상류 재시작 전에 볼 수 있게 그때도 여기서 받는다
+            if not (status == 404 or (status == 403 and not body.lstrip().startswith(b"{"))
+                    or (status == 400 and route == "indicator")):
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
@@ -6431,12 +6434,15 @@ class Handler(SimpleHTTPRequestHandler):
             r = market_index.indicators()
         elif route == "materials":
             r = market_index.materials()
+        elif route == "crypto":
+            r = crypto.items()
         else:
             key = (urllib.parse.parse_qs(parsed.query).get("key") or [""])[0].strip()
-            r = market_index.indicator(key)
+            # 가상자산 종목도 같은 주소로 일봉을 낸다 — 큰 차트가 한 길로 그리게(응답 모양이 같다)
+            r = crypto.indicator(key) if key in crypto.BY_KEY else market_index.indicator(key)
             if r is None:
                 self._send_json({"ok": False, "error": "모르는 지표입니다 — key 는 %s 중 하나입니다."
-                                 % " · ".join(i["key"] for i in market_index.ITEMS)}, 400)
+                                 % " · ".join([i["key"] for i in market_index.ITEMS] + [i["key"] for i in crypto.ITEMS])}, 400)
                 return
         r["servedBy"] = "상류에 아직 없어 여기서" if base else "여기서"
         self._send_json(r, 200 if r.get("ok") else 502)
