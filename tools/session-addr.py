@@ -127,8 +127,12 @@ def table():
                     heir[p2] = m["sessionId"]
     for s in socks:
         pid = os.path.basename(s)[:-5]
-        if not run(["ps", "-o", "pid=", "-p", pid]).strip():
+        st = run(["ps", "-o", "stat=", "-p", pid]).strip()
+        if not st:
             continue                          # 죽은 프로세스가 남긴 소켓
+        if st.startswith("T"):
+            continue                          # 멈춘(T) 옛 프로세스 — 메시지를 못 읽어 보내면 시간 초과다. 창을 다시 띄우면 옛 것이
+                                              # 같은 기록 id 를 들고 남아 표가 그쪽을 냈다(2026-10-14 개발1 · 1013 멈춤 ↔ 13637 새 창)
         if meta[pid].get("parkedJobId"):
             continue                          # 세워 둔 옛 프로세스 — 메시지를 안 읽는다
         if pid in heir:

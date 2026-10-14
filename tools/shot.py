@@ -86,7 +86,7 @@ def viewer(out, tall):
     stem = os.path.splitext(name)[0]
     page = os.path.join(base, stem + "-보기.html")
     fit = "max-width:100%;height:auto" if tall else "max-width:100vw;max-height:100vh;width:auto;height:auto"
-    html = ("<!doctype html><meta charset=\"utf-8\"><title>%s</title>"
+    html = ("<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>%s</title>"
             "<style>html,body{margin:0}body{display:flex;justify-content:center}img{display:block;%s}</style>"
             "<img src=\"%s?t=%d\" alt=\"%s\">\n") % (stem, fit, name, int(time.time()), stem)
     open(page, "w", encoding="utf-8").write(html)
