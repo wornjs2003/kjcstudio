@@ -21,9 +21,9 @@ import { fmtNum, fmtDelta, dirClass, marketPhase } from '../utils/format.js';
  *            (DOW 는 다우社 주식이라 30달러가 나온다)
  *     토스증권 Open API   개별 주식만 준다. 지수가 없다
  *
- * **WTI·금은 남긴다.** 받을 곳은 찾았고 거래소 신청만 하면 된다 —
- * 못 찾은 것이 아니라 아직 안 붙인 것이다. wait 에 무엇을 하면 채워지는지
- * 적어 둔다 (holdings/CLAUDE.md 데이터 규칙).
+ * **WTI·금 빈칸(「거래소 신청 필요」)은 2026-10-14 에 뺐다** — 원자재를 「시장 흐름」 갈래 칩으로 합치면서
+ * 네이버 시장지표 일봉으로 값과 차트가 생겼다(server/market_index.py 의 ITEMS · 재권님 「응 넣어줘」 · 「응」).
+ * KIS 해외선물로 받는 길(거래소 신청)은 그대로 남아 있다 — 받게 되면 여기 되살릴 수 있다.
  */
 export const INDEX_CELLS = [
   { code: 'KOSPI',    name: '코스피',     icon: 'kr' },
@@ -40,9 +40,6 @@ export const INDEX_CELLS = [
   { code: 'SX5E',   name: '유로STOXX50', icon: 'eu' },
   { code: 'HSCE',   name: '홍콩H',      icon: 'hk' },
   { code: 'VIX',    name: 'VIX',      icon: 'vix' },
-  /* NYMEX · COMEX 거래소를 신청하면 채워진다 (EGW00551, 2026-09-17 실측) */
-  { name: 'WTI 원유',  wait: '거래소 신청 필요', icon: 'oil' },
-  { name: '금',       wait: '거래소 신청 필요', icon: 'au' },
 ];
 
 /* 칸 앞에 붙는 표시.

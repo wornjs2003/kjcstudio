@@ -12,6 +12,7 @@
 
 import { apiFetch } from '../data/api.js';
 import { color } from '../theme.js';
+import { fmtMoneyKr } from '../utils/format.js';
 import { ready as toneReady, has as toneHas, paint as tonePaint } from '/assets/js/tone.js';
 
 /* 큰 차트 머리 이름에 다는 용어 풍선 — 지표 key → 용어집(data/glossary.json) id. 칩에는 안 단다:
@@ -25,7 +26,7 @@ export async function loadIndicators() {
   const r = await apiFetch('/api/market/indicators', { cache: 'no-store' });
   const j = r && await r.json();
   if (!j || !j.ok) throw new Error((j && j.error) || '시장지표를 못 받았습니다');
-  await toneReady;                 // 칩 바탕 색의 기준표(data/tone.json)를 먼저 — 받자마자 그리는 칩에 색이 빠지지 않게
+  await toneReady;                 // 칩 바탕 색의 기준표(data/metrics.json)를 먼저 — 받자마자 그리는 칩에 색이 빠지지 않게
   listCache = j;
   return j;
 }
@@ -43,12 +44,16 @@ export const peekIndicator = (key) => barsCache.get(key) || null;
 /* 가상자산 대표 열 — 서버 `/api/market/crypto`(server/crypto.py · 업비트 공개 시세). 실시간 순위 「가상자산」 칩이 쓴다.
    일봉은 시장지표와 같은 `/api/market/indicator?key=btc` 라 큰 차트가 같은 길로 그린다 */
 let cryptoCache = null;
+let cryptoErr = null;               // 마지막으로 받다가 실패했나 — 「불러오는 중」 과 「불러오지 못함」 을 가른다(qa 10-14)
 export async function loadCrypto() {
-  const r = await apiFetch('/api/market/crypto', { cache: 'no-store' });
-  const j = r && await r.json();
-  if (!j || !j.ok) throw new Error((j && j.error) || '가상자산 값을 못 받았습니다');
-  cryptoCache = j;
-  return j;
+  try {
+    const r = await apiFetch('/api/market/crypto', { cache: 'no-store' });
+    const j = r && await r.json();
+    if (!j || !j.ok) throw new Error((j && j.error) || '가상자산 값을 못 받았습니다');
+    cryptoCache = j;
+    cryptoErr = null;
+    return j;
+  } catch (e) { cryptoErr = e; throw e; }
 }
 export const peekCrypto = () => cryptoCache;
 
@@ -63,7 +68,7 @@ const dir = (c) => c == null ? 'kh-mut' : c > 0 ? 'kh-up' : c < 0 ? 'kh-down' : 
 
 /* 지수 띠의 칩 — 국내·미국 지수 칩(index-strip.js)과 같은 모양 · 날짜 옆에 「봉」 · 「선」
    기준이 있는 지표는 칩 **바탕에 한 겹** 덧칠한다 — 기준 위 빨강 · 아래 파랑 · 멀수록 짙게 (2026-10-14 재권님 「달러인덱스를
-   100을 기준으로 …」 · 「홀딩스 시장지표도 같아야 하고」 · 「그렇게 해」). 셈 · 기준 · 폭은 assets/js/tone.js · data/tone.json 한 곳이고
+   100을 기준으로 …」 · 「홀딩스 시장지표도 같아야 하고」 · 「그렇게 해」). 셈 · 기준 · 폭은 assets/js/tone.js · data/metrics.json 한 곳이고
    여기는 지표 key 를 넘기기만 한다 — 그 표에 없는 지표는 칠하지 않는다. 글씨 색(그날 등락)과 칩 크기는 그대로다.
    덧칠(background-image)이라 고른 칩 · 마우스 올림의 바탕 규칙(home.css)은 그 밑에서 그대로 돈다 */
 export function chipsHtml(list, sel) {
@@ -166,8 +171,8 @@ const matFmt = (v) => v == null ? '—'
 const matPct = (p) => p == null ? '—' : `${p > 0 ? '+' : ''}${p.toFixed(2)}%`;
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-export function materialsShell() {
-  return `<div class="kh-tabs"><button class="kh-tab is-active" type="button">시장지표 재료</button></div>
+export function materialsShell(title = '시장 흐름 재료') {     // 제목은 home.js 가 갈래 이름(MK_CAT)으로 넘긴다
+  return `<div class="kh-tabs"><button class="kh-tab is-active" type="button">${title}</button></div>
     <div class="kh-chips" data-mat-chips></div>
     <div class="kh-sort-note">값 · 기준일 · 그날 등락률</div>
     <div class="kh-asof" data-mat-asof>· 불러오는 중</div>
@@ -176,25 +181,58 @@ export function materialsShell() {
       <tbody data-mat-rows></tbody></table></div>`;
 }
 
-/* 판 안을 채운다 — grp 는 '전체' 또는 칩 이름 */
-/* sel — 큰 차트에 띄운 줄의 열쇠(`n:<갈래>:<코드>` · server/market_index.py 의 mat_indicator). 줄을 누르면 home.js 가
-   큰 차트를 그 줄로 바꾼다(2026-10-14 재권님 「목록을 누르면 차트에 캔들이든 선차트든 나와야」) */
+/* 판 안을 채운다 — grp 는 '전체' 또는 칩 이름.
+   칩은 서버 묶음(환율 · 금리 · 에너지 · 금속 · 농산 · 운임)을 그대로 쓰되 **에너지 · 금속 · 농산은 「원자재」 하나로 묶고, 그 뒤에
+   「가상자산」 을 둔다** (2026-10-14 재권님 「원자재 가상자산이 시장지표의 실시간순위 갈래 있어야돼」 · 시안 · 「응 맞아」 — 그 전에는 홈 실시간
+   순위의 코스피 · 코스닥 옆에 있었다). 가상자산은 서버 `/api/market/crypto`(업비트 대표 열)를 home.js 가 받아 둔 것을 그린다.
+   sel — 큰 차트에 띄운 줄의 열쇠(재료 줄 `n:<갈래>:<코드>` · 가상자산 `btc` 등). 줄을 누르면 home.js 가 큰 차트를 그 줄로 바꾼다 */
+const MAT_CHIP = { 에너지: '원자재', 금속: '원자재', 농산: '원자재' };
+export const CRYPTO_CHIP = '가상자산';
+const chipOf = (gid) => MAT_CHIP[gid] || gid;
+const grpHead = (t) => `<tr><td></td><td class="l" colspan="4" style="padding-top:12px"><b class="kh-mut" style="font-size:.76rem">${esc(t)}</b></td></tr>`;
+
+function cryptoRows(sel) {
+  const cj = cryptoCache;
+  if (!cj) return [`<tr><td></td><td class="l kh-mut" colspan="4">${cryptoErr ? '불러오지 못함' : '불러오는 중'}</td></tr>`];
+  return cj.items.map((x, i) => {
+    const c = x.pct == null ? 'kh-mut' : x.pct > 0 ? 'kh-up' : x.pct < 0 ? 'kh-down' : '';
+    return `<tr data-mat-key="${esc(x.key)}" data-mat-name="${esc(x.name)}"${x.key === sel ? ' class="is-active"' : ''}>
+      <td class="kh-rk">${i + 1}</td><td class="l"><span class="kh-nm"><b>${esc(x.name)}</b> <span class="kh-mut" style="font-size:.74rem">${esc(x.sym || '')}</span></span></td>
+      <td class="kh-num">${matFmt(x.last && x.last.c)}</td>
+      <td class="kh-num kh-metric kh-mut">${x.value24 == null ? '—' : fmtMoneyKr(x.value24 / 1e8)}</td>
+      <td class="kh-num ${c}" style="font-weight:500">${matPct(x.pct)}</td></tr>`;
+  });
+}
+
 export function paintMaterials(root, j, grp, sel) {
-  const ids = ['전체', ...((j && j.groups) || []).map((g) => g.id)];
+  const ids = ['전체'];
+  for (const g of (j && j.groups) || []) if (!ids.includes(chipOf(g.id))) ids.push(chipOf(g.id));
+  const at = ids.indexOf('원자재');
+  ids.splice(at >= 0 ? at + 1 : ids.length, 0, CRYPTO_CHIP);
   root.querySelector('[data-mat-chips]').innerHTML = ids.map((id) =>
     `<button class="kh-chip${id === grp ? ' is-active' : ''}" type="button" data-mat="${id}">${id}</button>`).join('');
+  const crypto = grp === CRYPTO_CHIP;
+  /* 칸 이름 · 안내 줄 — 가상자산은 기준일 대신 24시간 거래대금(24시간 도는 시장 · 등락률은 업비트 한국 09:00 기준). 한 줄에 들게 짧게 */
+  const th = root.querySelectorAll('thead th');
+  if (th.length >= 5) { th[1].textContent = crypto ? '가상자산' : '지표'; th[3].textContent = crypto ? '24시간 거래대금' : '기준일'; }
+  const note = root.querySelector('.kh-sort-note');
+  if (note) note.textContent = crypto ? '값 · 24시간 거래대금 · 등락률(09:00 기준)' : '값 · 기준일 · 그날 등락률';
   const asof = root.querySelector('[data-mat-asof]');
   const body = root.querySelector('[data-mat-rows]');
+  if (crypto) {
+    const t = cryptoCache ? (cryptoCache.fetchedAt || '').slice(11, 16) : '';
+    asof.textContent = cryptoCache ? `· ${t} 받음 · 업비트 원화 시장` : `· ${cryptoErr ? '불러오지 못함' : '불러오는 중'}`;
+    body.innerHTML = cryptoRows(sel).join('');
+    return;
+  }
   if (!j) { asof.textContent = '· 불러오는 중'; body.innerHTML = ''; return; }
   const t = (j.fetchedAt || '').slice(11, 16);
   asof.textContent = `· ${t} 받음 · 네이버 증권 시장지표`;
   const rows = [];
   for (const g of j.groups) {
-    if (grp !== '전체' && grp !== g.id) continue;
+    if (grp !== '전체' && grp !== chipOf(g.id)) continue;
     for (const p of g.parts) {
-      if (grp === '전체' || g.parts.length > 1) {
-        rows.push(`<tr><td></td><td class="l" colspan="4" style="padding-top:12px"><b class="kh-mut" style="font-size:.76rem">${esc(p.label)}</b></td></tr>`);
-      }
+      if (grp === '전체' || g.parts.length > 1 || MAT_CHIP[g.id]) rows.push(grpHead(p.label));
       if (!p.rows.length) rows.push('<tr><td></td><td class="l kh-mut" colspan="4">불러오지 못함</td></tr>');
       const pctUnit = p.path.endsWith('Interest');
       const cat = p.path.split('/')[0];
@@ -208,6 +246,8 @@ export function paintMaterials(root, j, grp, sel) {
           <td class="kh-num ${c}" style="font-weight:500">${matPct(x.pct)}</td></tr>`);
       }
     }
+    /* 「전체」 는 원자재 다음에 가상자산을 끼운다 — 칩 순서와 같게 */
+    if (grp === '전체' && g.id === '농산') rows.push(grpHead(CRYPTO_CHIP), ...cryptoRows(sel));
   }
   body.innerHTML = rows.join('');
 }
