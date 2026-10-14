@@ -74,7 +74,7 @@ export function lens13(x) {
   const ksic = dart.industryCode ? String(dart.industryCode) : '';
   const isFin = /^6[456]/.test(ksic);   // 금융 · 보험 — 부채비율 · ROIC 를 안 쓴다(보는 것 표)
   const inv = x.inv || [];
-  const invSum = (n, side) => inv.slice(0, n).reduce((s, r) => s + ((r[side] && r[side].netAmt) || 0), 0) / 100;   // 억원
+  const invSum = (n, side) => { const w = inv.slice(0, n); return w.length >= n && w.every((r) => r[side] && fin(r[side].netAmt)) ? w.reduce((s, r) => s + r[side].netAmt, 0) / 100 : null; };   // 억원 · 날이 모자라거나 한 날이라도 비면 null(「—」) — 0 으로 더하지 않는다
 
   // ① 흐름 속 이 종목 — 위 세계 흐름(worldView)을 바탕으로: 나라(한국이 세계보다 강한가) · 업종(짝 미국 섹터가 세계보다 강한가) · 돈(이 종목 외국인 20일)
   //    셋 다 플러스면 좋다 · 셋 다 마이너스면 나쁘다 · 엇갈리면 보통 — 보는 것 표의 「돈이 몰리는 나라 · 업종 안에 있고 외국인이 사고 있다」 그대로
@@ -93,7 +93,7 @@ export function lens13(x) {
         [`업종 짝 ${ps ? ps.name + '(' + ps.code + ')' : '없음'}`, ps ? pc(ps.m1) : '—', ps ? (ps.m1 > W.acwi.m1 ? '강함' : '약함') : '—'],
         ['코스피 외국인 20일', W.kf && fin(W.kf.d20) ? (W.kf.d20 > 0 ? '+' : '') + eok(W.kf.d20) : '—', '시장 전체'],
         ['이 종목 외국인 20일', fin(f20) ? (f20 > 0 ? '+' : '') + eok(f20) : '—', '이 종목'],
-        ['이 종목 기관 20일', inv.length ? (invSum(20, 'inst') > 0 ? '+' : '') + eok(invSum(20, 'inst')) : '—', '이 종목']] } }],
+        ['이 종목 기관 20일', fin(invSum(20, 'inst')) ? (invSum(20, 'inst') > 0 ? '+' : '') + eok(invSum(20, 'inst')) : '—', '이 종목']] } }],
     }));
   } else out.push(R('flow', '흐름 속 이 종목', 'analysis.html#s0w', { gap: '세계 흐름 자료(data/world-flow.json)가 없다 — tools/fetch-world-flow.py', src: '' }));
 
@@ -223,7 +223,7 @@ export function lens13(x) {
     blocks: [{ title: '주요 매출원 · 점유율 · 경쟁사 (⑥-12 1 · 2 · 3)', table: { head: ['제품(매출 비중)', '점유율', '경쟁사 1', '경쟁사 2', '판단'],
         rows: perSeg.map((p2) => [`${p2.sg.name} (${p2.sg.p}%)`, segShare(p2.sg).length ? segShare(p2.sg).map((r) => `${r.product} ${r.vals.slice().reverse().join(' → ')}%(${r.org || (r.estimate ? '회사 추정' : '출처 안 적힘')}${r.basis === '금액' ? '' : ' · 참고'})`).join(' · ') : '아직',
           p2.peers[0] ? `${p2.peers[0].name} ${p2.peers[0].share}` : '아직', p2.peers[1] ? `${p2.peers[1].name} ${p2.peers[1].share}` : '아직', p2.v + (p2.w ? ' — ' + p2.w : '')]) } },
-      { title: '이익률 한 표 (⑥-12 4)', table: { head: ['회사 · 제품', '영업이익률', '기준'], rows: perSeg.flatMap((p2) => [[`이 종목 · ${p2.sg.name}`, p2.cells.margin, ''], ...p2.peers.map((q) => [`${q.name}`, q.m ? q.m.v.toFixed(1) + '%' : '아직', q.m ? q.m.at : ''])]) } }],
+      { title: '이익률 한 표 (⑥-12 4)', table: { head: ['회사 · 제품', '영업이익률', '기준'], rows: perSeg.flatMap((p2) => [[`이 종목 · ${p2.sg.name}`, p2.cells.margin, '앞 칸 괄호'], ...p2.peers.map((q) => [`${q.name}`, q.m ? q.m.v.toFixed(1) + '%' : '아직', q.m ? q.m.at : '—'])]) } }],
     verdict: mv, why: mw, gap: [mg, '1년 주가는 아직 · 해자 원천 · ROIC 10년은 한 해치뿐이라 「오래 가나」 는 못 본다'].filter(Boolean).join(' · '), src: 'DART · 리포트 글 · EDGAR',
   }));
 
@@ -286,7 +286,7 @@ export function lens13(x) {
   } else out.push(R('ret', '주주환원', 'analysis.html#calc-gov', { gap: '배당 · 자기주식 자료가 없다', src: 'DART' }));
 
   // ⑪ 수급 · 추세 — 20일 외국인 + 기관 순매수 플러스 · 단기 정배열 · 224일선 위면 좋다 · ADX 20 아래면 늘 보통
-  const fi = inv.length ? invSum(20, 'foreign') + invSum(20, 'inst') : null; const M = x.MA || {};
+  const fiF = invSum(20, 'foreign'), fiI = invSum(20, 'inst'), fi = fin(fiF) && fin(fiI) ? fiF + fiI : null; const M = x.MA || {};
   if (fin(fi) && fin(M[5]) && fin(M[20]) && fin(M[60]) && fin(M[224]) && fin(x.px)) {
     const up = M[5] > M[20] && M[20] > M[60], dn = M[5] < M[20] && M[20] < M[60], above = x.px > M[224];
     let v = fi > 0 && up && above ? '좋다' : (fi < 0 && (dn || !above)) ? '나쁘다' : '보통';
