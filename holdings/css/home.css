@@ -422,9 +422,13 @@
 .kh-dlm-note { font-size: 0.72rem; color: var(--kh-text-dim); margin-top: auto; }
 
 .kh-rank .kh-tabs, .kh-rank-card .kh-tabs { padding: 15px 18px 10px; }
-/* 시장 칩 — 탭 줄 안이라 칩 줄의 아래 여백(10px)을 지우고 제목 바로 옆에 붙인다.
-   크기는 산업 카드의 업종 · 테마 칩(.kh-ix-chips)과 같다 (2026-10-06 「동일선상으로」) */
-.kh-rank-card .kh-tabs > .kh-rank-mkt { padding: 0; margin: 0 auto 0 12px; gap: 4px; flex-wrap: nowrap; }
+/* 시장 칩 — 탭 줄 안이라 칩 줄의 아래 여백(10px)을 지운다. 크기는 산업 카드의 업종 · 테마 칩(.kh-ix-chips)과 같다
+   (2026-10-06 「동일선상으로」). **제목 아랫줄에 둔다** (2026-10-14 · 시안 (B) · 재권님 「응」) — 「원자재」 를 더하니
+   제목 옆 폭에 칩이 안 들어가 글자가 한 자씩 세로로 접혔다(시안 실측 · 머리 61 → 84). 아랫줄이면 머리가 그만큼 늘고
+   카드 높이는 그대로라 표 칸이 짧아진다 — 재권님이 그림으로 보고 고르셨다 */
+/* 시장 칩이 든 머리만 접는다 — Insight 뉴스 · 영상 카드도 .kh-rank-card > .kh-tabs 를 쓴다(그쪽은 칩이 없어 안 걸린다) */
+.kh-rank-card > .kh-tabs:has(> .kh-rank-mkt) { flex-wrap: wrap; }
+.kh-rank-card .kh-tabs > .kh-rank-mkt { order: 3; flex: 0 0 100%; padding: 0; margin: 8px 0 0; gap: 4px; flex-wrap: nowrap; }
 .kh-rank-mkt .kh-chip { padding: 4px 9px; font-size: 0.73rem; }
 .kh-rank .kh-tab.is-active,
 .kh-rank-card .kh-tab.is-active { background: none; font-weight: 700; }

@@ -72,6 +72,15 @@ ITEMS = [
     {"key": "spread", "name": "신용 가산금리", "group": "회사채", "from": ("aa", "kr3"), "unit": "%p", "digits": 3, "kind": "line"},
     {"key": "bdi", "name": "건화물 운임 BDI", "group": "운임", "cat": "transport", "code": ".BADI", "unit": "", "digits": 0, "kind": "line"},
     {"key": "scfi", "name": "상하이 컨테이너", "group": "운임", "cat": "transport", "code": ".SCFIDXSSE", "unit": "", "digits": 2, "kind": "line", "freq": "주간"},
+    # 원자재 — 홈 갈래 「원자재」 를 이 갈래로 합쳤다(2026-10-14 재권님 「응 넣어줘」 · 「응」). 같은 네이버 길이 일봉 시가·고가·저가·종가를 준다.
+    # 여섯을 고른 까닭 — 에너지(원유 둘 · 가스) · 귀금속(금 · 은) · 산업 금속(구리)을 한 칩씩은 보이게. 실시간 순위 「원자재」 표도 이 목록을 쓴다.
+    # 날짜는 그 거래소 날짜(미국 시카고 · 뉴욕 장 마감) — 값은 전일 정산가다
+    {"key": "wti", "name": "WTI 원유", "group": "원자재", "cat": "energy", "code": "CLcv1", "unit": "", "digits": 2, "kind": "candle"},
+    {"key": "brent", "name": "브렌트유", "group": "원자재", "cat": "energy", "code": "LCOcv1", "unit": "", "digits": 2, "kind": "candle"},
+    {"key": "natgas", "name": "천연가스", "group": "원자재", "cat": "energy", "code": "NGcv1", "unit": "", "digits": 3, "kind": "candle"},
+    {"key": "gold", "name": "국제 금", "group": "원자재", "cat": "metals", "code": "GCcv1", "unit": "", "digits": 1, "kind": "candle"},
+    {"key": "silver", "name": "은", "group": "원자재", "cat": "metals", "code": "SIcv1", "unit": "", "digits": 2, "kind": "candle"},
+    {"key": "copper", "name": "구리", "group": "원자재", "cat": "metals", "code": "HGcv1", "unit": "", "digits": 3, "kind": "candle"},
 ]
 BY_KEY = {i["key"]: i for i in ITEMS}
 
