@@ -146,11 +146,14 @@ export async function fetchIndexMinutes(code) {
    **함수 이름이 비슷해 갈렸다.** 확인하려면 **서버 함수가 아니라 화면이
    받는 응답**을 봐야 한다 — 브라우저에서 `/api/kis/quotes` 를 가로채
    키를 찍으면 바로 나온다. */
-export async function fetchQuotes(codes, { view } = {}) {
+export async function fetchQuotes(codes, { view, low } = {}) {
   if (!codes || !codes.length) return null;
   if (!(await kisReady())) return null;
+  /* `low` — 서버 줄에서 **뒤로 비켜선다**(서버 `X-KJC-Prio: low` · 확인용 서버가 넘길 때 쓰는 것과 같은 표시).
+     안 보이는 것을 미리 받을 때 쓴다 — 보이는 줄 · 모달이 먼저 쓰고 남은 차례로 간다 (2026-10-14) */
+  const headers = low ? { 'X-KJC-Prio': 'low' } : undefined;
   try {
-    const r = await apiFetch(viewUrl('/api/kis/quotes?codes=' + codes.join(','), view), { cache: 'no-store' });
+    const r = await apiFetch(viewUrl('/api/kis/quotes?codes=' + codes.join(','), view), { cache: 'no-store', headers });
     if (!r || !r.ok) return null;
     const j = await r.json();
     if (!j || !j.ok || !j.data) return null;

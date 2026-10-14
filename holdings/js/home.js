@@ -1063,14 +1063,16 @@ const SORTS = {
           head: '거래대금', show: showValue },
   vol:  { label: '거래량',   key: (p) => p.volume,
           head: '거래량',   show: (code, p) => (p ? fmtShareCount(p.volume) : '—') },
-  up:   { label: '상승',   key: (p) => p.pct,  dir: -1, minValue: true,
+  up:   { label: '상승',   key: (p) => p.pct,  dir: -1,
           head: '거래대금', show: showValue },
-  down: { label: '하락',   key: (p) => p.pct,  dir: 1,  minValue: true,
+  down: { label: '하락',   key: (p) => p.pct,  dir: 1,
           head: '거래대금', show: showValue },
 };
 
-/* 급상승·급하락에서 이보다 적게 거래된 종목은 뺀다 (지시 — 1000억) */
-const MIN_VALUE_WON = 1000 * 1e8;
+/* 상승 · 하락은 **등락률 그대로** 세운다 — 거래대금 문턱을 뺐다 (2026-10-14 · 재권님 「가」).
+   전에는 「거래대금 1,000억 이상만」(지시 — 1000억)이었는데, 10:56 실측으로 코스피 200 중 20개만 넘어
+   더 오른 종목(300~487억)이 빠지고 상승이 대형주 · ETF 목록이 됐다. 순위 목록이 이미 시가총액 상위라
+   아주 작은 종목은 애초에 없다. ETF 도 넣는다(재권님 「etf도 필요해」) */
 
 let sortBy = 'cap';
 
@@ -1120,10 +1122,6 @@ function rowList(sortId = sortBy, mkt = market) {
   const val = (s) => {
     const p = rowPrices && rowPrices[s.code];
     if (!p) return null;
-    if (sort.minValue) {
-      const v = valueOf(p);
-      if (!(v >= MIN_VALUE_WON)) return null;
-    }
     const n = sort.key(p);
     return Number.isFinite(n) ? n : null;
   };
@@ -1272,7 +1270,6 @@ function paintSortNote() {
   /* 「관심」 은 **줄 세우는 기준이 아니라 거르는 것**이라 「순」 이 안 붙는다.
      그대로 두면 「관심 순」 이 되는데, 시가총액 순으로 세운 것을 걸렀을 뿐이다. */
   const bits = [s.filter ? `${s.label}만 · 시가총액 순` : `${s.label} 순`];
-  if (s.minValue) bits.push(`거래대금 ${fmtMoneyKr(MIN_VALUE_WON / 1e8)} 이상만`);
 
   const fresh = freshNote();
   if (fresh) bits.push(`<b class="${fresh.cls}">${fresh.text}</b>`);
@@ -1773,6 +1770,7 @@ function applyPrices(map) {
      어느 쪽이 나중에 쓰든 값이 줄지 않는다. */
   lastSeen.save('prices', rowPrices);
   updateRowCells(map);
+  resortRowsIfMoved();
   paintBigPrice();                 // 큰 차트 머리줄의 현재가
   /* **머리줄 숫자만 고치면 봉이 안 따라온다** (2026-10-01).
      재권님이 「가격은 변하는데 캔들봉이 안움직이네」 로 찾으셨다.
@@ -1925,9 +1923,62 @@ async function quoteTick() {
   quoting = true;
   try {
     applyFreshPrices(await fetchQuotes(codes, { view: 'row' }));
+    /* 값 갈래면 화면 밖 줄도 한 묶음씩 돌려 받는다 — 아래 `restChunk` */
+    const rest = restChunk();
+    if (rest.length) applyFreshPrices(await fetchQuotes(rest, { low: true }));
   } finally {
     quoting = false;
   }
+}
+
+/* ── 값 갈래(상승 · 하락 · 대금 · 거래량)는 시세가 오면 다시 세운다 (2026-10-14) ──
+ *
+ * 재권님 — 「실시간 순위에 상승과 하락 종목들 실시간으로 정렬이 안되는거 같은데」 · 「나를 기준으로 해줘」.
+ * 까닭이 둘이었다.
+ *   ① 줄 세우기(`rowList` → `paintRows`)는 칩 · 시장을 누를 때만 돌았다. 시세가 오면
+ *      `updateRowCells` 가 숫자만 고쳐, 순서는 칩을 누른 순간에 멈춰 있었다
+ *   ② 다시 받는 것은 보이는 줄뿐이라(`quoteCodes`) 화면 밖 종목은 처음 값에 머물렀다 —
+ *      아래에서 갑자기 오른 종목이 위로 못 올라왔다
+ *
+ * ① 표를 다시 그리지 않고 **있는 줄을 새 순서로 옮겨 붙인다.** 스크롤 자리 · 깜빡임이 그대로고
+ *    줄 수가 같아 칸 높이도 안 움직인다(「보는 것을 바꿔도 자리는 그대로다」).
+ * ② 보이는 줄을 받을 때마다 **화면 밖 한 묶음**을 덧붙여 받는다. 새 주기를 두지 않는다 — 보이는 줄이
+ *    서버에서 바뀌었다고 알려 올 때만 돈다(장이 닫혀 안 움직이면 안 부른다). **낮음(`low`)으로 보낸다** —
+ *    서버가 최근에 높은 쪽(보이는 줄 · 모달 · 차트)이 불렀으면 줄에 서기 전에 비켜선다. `view` 도 안 붙여
+ *    미리받기의 「보는 자리」 순위(`UI_VIEW_RANK`)를 얻지 않는다. KIS 는 서버가 정한 초당 예산 안에서 줄을
+ *    서므로 **예산을 넘지 않고, 보이는 것이 먼저 쓴 나머지를 나눠 쓴다**(재권님 「정해진 리소스에서 분배」). */
+let restCursor = 0;
+function restChunk() {
+  if (!SORTS[sortBy]?.key || isUsMarket(market) || !universe) return [];
+  const seen = new Set(quoteCodes());
+  const rest = universe.filter(x => marketOf(x) === market).map(x => x.code).filter(c => !seen.has(c));
+  if (!rest.length) return [];
+  if (restCursor >= rest.length) restCursor = 0;
+  const out = rest.slice(restCursor, restCursor + PRICE_CHUNK);
+  restCursor += PRICE_CHUNK;
+  return out;
+}
+
+function resortRowsIfMoved() {
+  if (!SORTS[sortBy]?.key) return;           // 총액 · 관심은 시세로 순서가 안 바뀐다
+  const body = $('kh-rows');
+  if (!body) return;
+  const list = rowList();
+  const now = [...body.children].map(tr => tr.dataset.code);
+  if (list.length !== now.length || list.every((s, i) => s.code === now[i])) return;
+  const byCode = {};
+  for (const tr of body.children) byCode[tr.dataset.code] = tr;
+  if (list.some(s => !byCode[s.code])) { paintRows(rowPrices); return; }   // 줄 구성이 달라졌으면 통째로
+  const frag = document.createDocumentFragment();
+  for (const s of list) {
+    const tr = byCode[s.code];
+    const rk = tr.querySelector('.kh-rk');
+    if (rk) rk.textContent = s.rank;
+    frag.appendChild(tr);
+  }
+  body.appendChild(frag);
+  scheduleFetch();                           // 보이는 줄이 바뀌었을 수 있다 — 안 받은 것만 받는다
+  if (rankModal && rankModalSort === sortBy && rankModalMarket === market) paintRankModal();
 }
 
 /* 큰 차트의 지켜보기. 종목·기간이 바뀌면 `paintBigChart` 가 알린다 */
