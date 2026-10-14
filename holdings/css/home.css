@@ -1594,3 +1594,16 @@
     margin: -14px -16px 0; padding: 12px 20px 0;
   }
 }
+
+/* ── 좁은 폭 — 글자 바닥 11px (2026-10-13 전수 검수 · 재권님 「응 해줘」) ──
+   홈 좁은 폭(폰 390)에서 11px 아래로 읽히던 글자를 칸 이름으로 올린다. 넓은 폭은 안 건드린다.
+   **종목 아이콘 머리글자(.kh-ic)는 뺐다** — 로고 대신 그린 그림이라 키우면 아이콘이 커진다. 8765 에는 로고가 다 있어 해당 없음(그 글자는 로고 폴더가 없는 자리에서만 나온다). */
+@media (max-width: 700px) {
+  body[data-nav="holdings"] .kh-sc-stp i,
+  body[data-nav="holdings"] .kh-vp-t,
+  body[data-nav="holdings"] .kh-ix-h .kh-bd,
+  body[data-nav="holdings"] .kh-p3-h .kh-bd,
+  body[data-nav="holdings"] .kh-ix-badge,
+  body[data-nav="holdings"] .kh-lg-ohlc span,
+  body[data-nav="holdings"] #kh-sc-note { font-size: 11px; }
+}
