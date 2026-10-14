@@ -34,6 +34,7 @@ const HTML = `
       <span class="kh-chips kh-iv-tabs">
         <button class="kh-chip is-active" data-view="today">오늘</button>
         <button class="kh-chip" data-view="days">5일</button>
+        <button class="kh-chip" data-view="month">한달</button>
       </span>
       <span class="kh-bd kh-bd-on">한국투자증권</span></div>
     <div class="kh-p3-b kh-iv-box">불러오는 중</div>
