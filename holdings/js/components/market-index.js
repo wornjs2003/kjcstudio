@@ -165,7 +165,9 @@ export function materialsShell() {
 }
 
 /* 판 안을 채운다 — grp 는 '전체' 또는 칩 이름 */
-export function paintMaterials(root, j, grp) {
+/* sel — 큰 차트에 띄운 줄의 열쇠(`n:<갈래>:<코드>` · server/market_index.py 의 mat_indicator). 줄을 누르면 home.js 가
+   큰 차트를 그 줄로 바꾼다(2026-10-14 재권님 「목록을 누르면 차트에 캔들이든 선차트든 나와야」) */
+export function paintMaterials(root, j, grp, sel) {
   const ids = ['전체', ...((j && j.groups) || []).map((g) => g.id)];
   root.querySelector('[data-mat-chips]').innerHTML = ids.map((id) =>
     `<button class="kh-chip${id === grp ? ' is-active' : ''}" type="button" data-mat="${id}">${id}</button>`).join('');
@@ -183,9 +185,11 @@ export function paintMaterials(root, j, grp) {
       }
       if (!p.rows.length) rows.push('<tr><td></td><td class="l kh-mut" colspan="4">불러오지 못함</td></tr>');
       const pctUnit = p.path.endsWith('Interest');
+      const cat = p.path.split('/')[0];
       for (const x of p.rows) {
         const c = x.pct == null ? 'kh-mut' : x.pct > 0 ? 'kh-up' : x.pct < 0 ? 'kh-down' : '';
-        rows.push(`<tr title="${esc(x.unit || '')}">
+        const key = x.code ? `n:${cat}:${x.code}` : '';
+        rows.push(`<tr title="${esc(x.unit || '')}"${key ? ` data-mat-key="${esc(key)}" data-mat-name="${esc(x.name)}"` : ''}${key && key === sel ? ' class="is-active"' : ''}>
           <td class="kh-rk"></td><td class="l"><span class="kh-nm"><b>${esc(x.name)}</b></span></td>
           <td class="kh-num">${matFmt(x.v)}${pctUnit ? '%' : ''}</td>
           <td class="kh-num kh-metric kh-mut">${md(x.at)}</td>
