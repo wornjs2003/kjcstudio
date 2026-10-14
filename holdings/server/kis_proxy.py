@@ -7591,7 +7591,7 @@ def main():
     # (`RUN_PORT` 는 데일리 시작 앞에서 정한다 — 아래가 아니라 위에 있다.)
 
     if heartbeat.start(sys.modules[__name__], args.port):
-        print("  살아있음  : %d분마다 Cloudflare 에 신호 (꺼지면 폰으로 알림)"
+        print("  살아있음  : %d분마다 Cloudflare 에 신호 (꺼지면 알림)"
               % (heartbeat.BEAT_SEC // 60))
 
     print("  종료      : Ctrl+C")
