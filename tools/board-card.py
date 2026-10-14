@@ -13,6 +13,11 @@
                                                                            + 쓸기: 적힌 커밋이 다 main 에 든 review 카드도 done 으로
     python3 tools/board-card.py "<카드 제목 일부>" --title "<새 제목>"                 제목 뒤쪽(무엇)만 바꾼다 — [갈래] [담당] 은 그대로.
                                                                            메모에 「제목 … → …」 한 줄
+    python3 tools/board-card.py "<카드 제목 일부>" --ask "<물음>" | --answer "<답>"     재권님께 물은 것 · 받은 답 (2026-10-14)
+                                                                           「HH:MM 묻는 중: …」 · 「HH:MM 답: …」 줄을 만든다 — 현황판은
+                                                                           줄 앞의 그 표기만 센다. 열린 물음이 없으면 --answer 는 막는다
+    python3 tools/board-card.py "<카드 제목 일부>" --after "<무엇>"                 이 할 일이 기다리는 것 — 「HH:MM 뒤에 진행: …」 줄.
+                                                                           현황판이 쉬는 세션을 「진행 예정 — <무엇> 뒤」 로 보인다
     어느 명령이든 --label <담당>                                            세션 이름을 못 얻을 때 손으로 (= KJC_BOARD_LABEL)
 
 **메모 줄은 홑따옴표로 넘긴다.** 큰따옴표 안의 백틱(`…`)은 셸이 명령으로 실행해 **그 부분이 조용히 사라진다**
@@ -282,6 +287,19 @@ def touch(t):
 COLUMNS = ("todo", "doing", "review", "done")
 
 
+ASK_HEAD = re.compile(r"^\s*(?:\d{1,2}:\d{2}\s+)?(묻는 중|답):\s*(.*)$")
+
+
+def open_question(memo):
+    """답이 안 붙은 마지막 「묻는 중:」 — tools/현황판.py 의 묻는중() 과 같은 셈(줄 앞만 · 시각은 건너뜀)."""
+    left = None
+    for ln in memo.split("\n"):
+        m = ASK_HEAD.match(ln)
+        if m:
+            left = m.group(2).strip() if m.group(1) == "묻는 중" else None
+    return left
+
+
 def cmd_note(key, line, sub, done, column=None, assign=None, title=None, rank=None, tag=None):
     """assign — 제목의 [담당] 을 바꾼다 (2026-10-02 · 개발2 가 가름). 전에는 [미배분] 카드를 받아 일해도 제목 라벨을 바꿀 길이
     없어 메모에만 담당을 적었고, 그래서 ① post-commit 이 해시를 엉뚱한 카드에 (추정)으로 적고 ② 그 세션에 다른 doing 카드가
@@ -356,6 +374,17 @@ def cmd_note(key, line, sub, done, column=None, assign=None, title=None, rank=No
             moved["from"], moved["to"] = t.get("column"), column
             t["column"] = column
             t["memo"] = (t.get("memo") or "").rstrip() + "\n  %s 열 %s → %s" % (now(), moved["from"], column)
+        if line and line.startswith(("묻는 중:", "답:", "뒤에 진행:")):
+            # 물음 · 답은 그 카드 담당 세션이 적는다 — 남의 카드에 물음을 걸면 그 세션 줄이 「답 기다림」 이 된다(qa 2026-10-14)
+            mine_label = label_of(session_name())
+            if who_of(t) and mine_label and who_of(t) != mine_label:
+                sys.exit("남의 카드(담당 %s)입니다 — 물음 · 답 · 뒤에 진행은 담당 세션이 적습니다. 그 세션에 알리십시오" % who_of(t))
+            opened = open_question(t.get("memo") or "")
+            if line.startswith("답:") and not opened:
+                sys.exit("열린 「묻는 중:」 줄이 없습니다 — 물은 것이 없는 답은 적지 않습니다(--ask 로 먼저 물음을 적으십시오)")
+            if line.startswith("묻는 중:") and opened:
+                # 판은 마지막 물음 하나만 본다 — 둘째를 걸면 앞 물음이 답 없이 판에서 빠진다(qa 2026-10-14)
+                sys.exit("이 카드에 답 안 받은 물음이 있습니다 — 「%s」. 답을 먼저 --answer 로 적거나, 물음을 하나로 합쳐 주십시오" % opened[:60])
         if line:
             t["memo"] = (t.get("memo") or "").rstrip() + "\n  %s %s" % (now(), line)
         if sub:
@@ -620,6 +649,20 @@ def main(argv):
     key = argv[0]
     line = argv[1] if len(argv) > 1 and not argv[1].startswith("--") else ""
     sub = done = column = assign = title = rank = tag = None
+    for flag, head in (("--ask", "묻는 중: "), ("--answer", "답: "), ("--after", "뒤에 진행: ")):
+        if flag in argv:
+            i = argv.index(flag)
+            v = (argv[i + 1] if i + 1 < len(argv) else "").strip()
+            if not v or v.startswith("--"):
+                sys.exit("%s 에 글을 주십시오" % flag)
+            argv = argv[:i] + argv[i + 2:]
+            if line:
+                sys.exit("--ask · --answer · --after 는 한 번에 하나만, 메모 줄과도 따로 적으십시오")
+            line = head + v
+    if line and re.search(r"(묻는 중|답):", line) and not ASK_HEAD.match(line):
+        # 줄 가운데의 표기는 현황판이 못 본다(2026-10-14 셈: 줄 앞 7 · 가운데 35) — 막지 않고 알린다
+        print("알림: 메모 줄 가운데의 「묻는 중:」 · 「답:」 은 현황판이 못 봅니다 — --ask \"<물음>\" · --answer \"<답>\" 로 따로 적으십시오",
+              file=sys.stderr)
     for i, x in enumerate(argv):
         if x == "--sub":
             sub = argv[i + 1]

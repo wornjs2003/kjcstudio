@@ -141,7 +141,7 @@ def 세션들():
     # **순서를 고정한다** — herdr 순서는 바뀐다. 훑어보는 판이라 같은 세션이 늘 같은 줄에 있어야 한다.
     # 표에 없는 이름은 맨 아래, 그 안에서는 이름순.
     자리 = {n: i for i, n in enumerate(세션순서)}
-    return sorted(({"이름": 이름(a), "상태": a.get("agent_status")} for a in d["result"]["agents"]),
+    return sorted(({"이름": 이름(a), "상태": a.get("agent_status"), "창": a.get("pane_id")} for a in d["result"]["agents"]),
                   key=lambda x: (자리.get(x["이름"], len(세션순서)), x["이름"]))
 
 # 세션 이름 색 — **묶음 넷** (2026-10-02 12:5x 재권님 · 작업우선순위 경유).
@@ -281,6 +281,132 @@ def _깜빡일까(이름, 표시):
     # 갱신(3초)마다 번갈아 — 바뀐 순간부터 센다
     return int((지금 - t) // 3) % 2 == 0
 
+# ── 키로 그 세션 창 가기 (2026-10-14 재권님 「응 해줘」 · 작업우선순위 경유 · 개발1 조사) ──
+# 세션 줄 앞에 키를 붙이고, --watch 중 그 키를 누르면 `herdr agent focus <pane_id>` 로 그 창에 간다.
+# 키는 줄 순서(위 「순서를 고정한다」)를 따른다. --dry 면 옮기지 않고 판 아래에 부를 명령만 적는다.
+키들 = "123456789abcdefghijklmnopqrstuvwxyz"
+_키창 = {}          # 키 → (세션 이름, pane_id) — 그릴 때마다 새로 채운다
+키없음 = {"작업우선순위", "개념정의", "qa"}   # 재권님 「작업우선순위 개념정의 qa 는 번호 없어도 돼」(2026-10-14) — 키는 나머지에 1부터
+_알림 = ""          # 판 맨 아래 한 줄 — 방금 누른 키의 결과
+
+
+def 창가기(키, dry):
+    global _알림
+    if 키 not in _키창:
+        _알림 = ""          # 없는 키 — 앞 키의 알림이 남아 먹은 것처럼 보이지 않게(qa)
+        return
+    이름, 창 = _키창[키]
+    if not 창:
+        _알림 = "%s — 창 번호를 못 얻었습니다" % 이름
+    elif dry:
+        _알림 = "(--dry) → %s 창(%s)" % (이름, 창)          # 좁은 판에서도 이름 · 창 번호가 보이게 짧게
+    else:
+        r = subprocess.run(["herdr", "agent", "focus", 창], capture_output=True, text=True)
+        _알림 = ("%s 창으로 옮김" % 이름) if r.returncode == 0 else ("%s 창으로 못 옮김 — %s" % (이름, (r.stderr or r.stdout).strip()[:60]))
+
+
+# ── 쉬는 세션은 마지막 답 끝으로 가른다 (2026-10-14 재권님 「멈춤과 일없음의 구별을 정확히 해줘」 · 두 세션 검토) ──
+# Stop 훅 tools/hook-confirm-box.py 가 답 끝을 「▶ 확인란」 · 「지금 답하실 것은 없습니다」 둘 중 하나로 강제한다 — 그것이 곧 신호다.
+# 셈(마지막 답 읽기 · 확인란 줄 · 「없습니다」)은 그 훅 것을 가져다 쓴다. 기록 자리는 session-addr 의 이름 → 주소 → 그 프로세스의
+# ~/.claude/sessions/<pid>.json sessionId(뒤로 옮긴 세션도 이어 받은 쪽)로 찾는다. 못 읽으면 None — 카드 셈으로 떨어진다.
+def _모듈(이름, 파일):
+    import importlib.util
+    here = os.path.dirname(os.path.abspath(__file__))
+    try:
+        spec = importlib.util.spec_from_file_location(이름, os.path.join(here, 파일))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        return None
+
+_기록자리 = {"때": 0, "표": {}}
+
+
+def _기록들():
+    """{세션 이름: 기록 파일} — 30초마다 다시 센다(프로세스 셈이 가볍지 않다)."""
+    if time.time() - _기록자리["때"] < 30:
+        return _기록자리["표"]
+    표 = {}
+    sa = _모듈("session_addr", "session-addr.py")
+    rows = (sa.table() if sa else None) or []
+    for name, addr, _cwd, _sid in rows:
+        pid = addr.rsplit("/", 1)[-1].replace(".sock", "")
+        try:
+            with open(os.path.expanduser("~/.claude/sessions/%s.json" % pid), encoding="utf-8") as f:
+                sid = json.load(f).get("sessionId") or ""
+        except Exception:
+            continue
+        import glob
+        got = glob.glob(os.path.expanduser("~/.claude/projects/*/%s.jsonl" % sid)) if sid else []
+        if got:
+            표[name] = got[0]
+    _기록자리.update(때=time.time(), 표=표)
+    return 표
+
+
+def 마지막답(이름):
+    """(갈래, 시각 HH:MM) — 갈래는 box(▶ 확인란) · none(「지금 답하실 것은 없습니다」) · other(둘 다 아님 · 끊김). 못 읽으면 None."""
+    path = _기록들().get(이름)
+    cb = _모듈("hook_confirm_box", "hook-confirm-box.py")
+    if not path or not cb:
+        return None
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2); f.seek(max(0, f.tell() - (1 << 20)))
+            lines = f.read().decode("utf-8", "ignore").splitlines()
+    except OSError:
+        return None
+    for line in reversed(lines):
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if r.get("isSidechain") or r.get("isMeta") or r.get("isCompactSummary"):
+            continue                            # 문맥 압축 요약 · 시스템이 넣은 줄은 「받은 말」 이 아니다
+        m = r.get("message") or {}
+        if r.get("type") == "user":
+            c = m.get("content")
+            글 = c if isinstance(c, str) else " ".join(b.get("text", "") for b in c or [] if isinstance(b, dict) and b.get("type") == "text")
+            앞 = 글.lstrip()
+            # <task-notification> · <local-command…> · <bash-…> · /clear 는 사람 말이 아니다. 붙여넣기 · 사람이 부른 /스킬은 사람 말이다(qa)
+            사람 = bool(앞) and (not 앞.startswith("<") or 앞.startswith("<pasted_content")
+                                or (앞.startswith("<command-name>") and "/clear" not in 앞[:40]))
+            if 사람 and not any(isinstance(b, dict) and b.get("type") == "tool_result" for b in (c if isinstance(c, list) else [])):
+                return ("other", "")            # 마지막 답 뒤에 받은 말이 있는데 답이 없다 — 끊김
+            continue
+        if r.get("type") != "assistant" or r.get("isApiErrorMessage") or m.get("model") == "<synthetic>":
+            continue
+        t = "\n".join(b.get("text", "") for b in m.get("content") or [] if isinstance(b, dict) and b.get("type") == "text")
+        if not t.strip():
+            continue
+        때 = ""
+        try:
+            때 = time.strftime("%H:%M", time.localtime(time.mktime(time.strptime(r["timestamp"][:19], "%Y-%m-%dT%H:%M:%S")) - time.timezone))
+        except Exception:
+            pass
+        끝 = "\n".join(t.strip().splitlines()[-6:])
+        if cb.box_lines(끝):
+            return ("box", 때)
+        if cb.NONE_RE.search(끝):
+            return ("none", 때)
+        return ("other", 때)
+    return ("clear", "")                        # 기록은 읽었는데 답이 없다 — /clear 직후 · 새로 연 세션(멈춤이 아니다 · qa)
+
+
+_뒤에 = re.compile(r"^\s*(?:\d{1,2}:\d{2}\s+)?뒤에 진행:\s*(.+)$")
+
+
+def 뒤에진행(카드):
+    """todo 카드 메모의 마지막 「뒤에 진행:」 — 무엇을 기다리는지. 없으면 빈 글자."""
+    for c in 카드:
+        for 줄 in reversed((c["메모"] or "").split("\n")):
+            m = _뒤에.match(줄)
+            if m:
+                return m.group(1).strip()
+    return ""
+
+
 def 그리기():
     W = 칸폭()
     표 = 보드()
@@ -321,7 +447,13 @@ def 그리기():
     적기(DIM + 줄 + OFF)
 
     # ── 세션마다 세로 블록 ──
+    _키창.clear()
+    번 = 0
     for s in 세션:
+        키 = ""
+        if s["이름"] not in 키없음 and 번 < len(키들):
+            키 = 키들[번]; 번 += 1
+            _키창[키] = (s["이름"], s.get("창"))
         # **`doing` 을 먼저, 그 안에서 최신 먼저.**
         # 파이썬 `sorted` 는 안정 정렬이라 **두 번 나눠 거는 것이 맞다** —
         # 뒤에 건 기준이 1차, 앞서 건 기준이 그 안의 2차로 남는다.
@@ -360,17 +492,29 @@ def 그리기():
             # 13:4x 재권님 「대기는 파란색으로 해주고 깜빡이고 있게」 — 파랑 · 계속 깜빡임(아래 대기깜빡)
             # 13:5x 재권님 — 이름 「세션 기다림」 · 흐린 회색 · 안 깜빡임
             글, 색 = "세션 기다림 · " + _대기사정(돌고), DIM + GRAY
-        elif not 돌고:
-            글, 색 = "일 없음", GRAY            # 멈춤 빨강과 가른다 (13:5x)
         else:
-            글, 색 = "멈춤", 멈춤색
+            # 쉬는 세션 — 마지막 답 끝으로 가른다(2026-10-14). 못 읽으면 None 이라 옛 셈(doing 있으면 멈춤)으로 떨어진다
+            끝 = 마지막답(s["이름"])
+            다음들0 = [c for c in 전부 if c["열"] == "todo"]
+            뒤 = 뒤에진행(다음들0)
+            if 끝 and 끝[0] == "box":
+                글, 색 = "답 기다림" + (" · " + 끝[1] if 끝[1] else ""), 대기색   # 시각 — 다른 창에서 답하신 뒤 낡은 ▶ 가 보이게(창구)
+            elif (끝 and 끝[0] == "other") or (끝 is None and 돌고):
+                글, 색 = "멈춤", 멈춤색
+            elif 뒤:
+                글, 색 = "진행 예정 — " + 뒤 + " 뒤", DIM + GRAY       # 재권님 「어떤 일 후에 진행 예정」 · 세션 기다림과 같은 흐린 회색
+            elif 끝 and 끝[0] == "clear":
+                글, 색 = "일 없음 · 새로 시작", GRAY
+            else:
+                # 「없습니다」 로 끝내고 쉬는데 doing 카드가 남아 있으면 아래 줄의 카드와 어긋나 보인다 — 그 사실을 붙인다(qa)
+                글, 색 = ("일 없음 · 카드 열림" if 돌고 else "일 없음"), GRAY
 
         앞 = 돌고 or 검수
         표시 = (글, 앞[0]["제목"] if (돌고 or 검수) else "", q or "")
         반전 = REV if _깜빡일까(s["이름"], 표시) else ""
         # ① 상태는 이름 옆에 (2026-10-02 13:1x 재권님) — 상태 줄은 따로 안 둔다
         # 깜빡일 때는 이름과 상태 글 둘 다 반전 — 사이에서 색을 끊으므로 반전을 다시 건다
-        적기(BOLD + 반전 + 이름색(s["이름"]) + s["이름"] + OFF + 반전 + "  " + 색 + 글 + OFF)
+        적기((DIM + 키 + " " + OFF if 키 else "  ") + BOLD + 반전 + 이름색(s["이름"]) + s["이름"] + OFF + 반전 + "  " + 색 + 글 + OFF)
         if 앞:
             더 = (" (외 %d개)" % (len(앞) - 1)) if len(앞) > 1 else ""
             조각 = 접기_꼬리(앞[0]["제목"], 더, W - 4)
@@ -401,13 +545,18 @@ def 그리기():
         for i, c in enumerate(다음들[:2]):
             꼬리 = (" (외 %d개)" % (len(다음들) - 2)) if (i == 1 and len(다음들) > 2) else ""
             머리 = "다음 · " if i == 0 else "       "
+            줄들 = [x for x in (c["메모"] or "").split("\n") if x.strip()]
+            if 줄들 and "홀딩" in 줄들[-1]:
+                꼬리 = " (홀딩)" + 꼬리                 # 미뤄 두신 것 — 당장 할 일로 안 읽히게(2026-10-14)
             조각 = 접기_꼬리(c["제목"], 꼬리, W - 4 - w(머리), 최대=1)
             적기("  " + DIM + 머리 + OFF + 조각[0])
         # 세션 사이 가름줄 (2026-10-02 · 재권님 「세션별로 줄도 그어서 인지가 잘 되게」)
         적기(DIM + 줄 + OFF)
 
-    for 조각 in 접기("상태 herdr · 하는 일과 확인대기 8765 보드 카드", W - 2, 최대=3):
+    for 조각 in 접기("상태 herdr · 하는 일과 확인대기 8765 보드 카드 · 이름 앞 키를 누르면 그 세션 창으로", W - 2, 최대=3):
         적기(DIM + " " + 조각 + OFF)
+    if _알림:
+        적기(YEL + " " + _알림 + OFF)
     return "\n".join(자르기(x, W) for x in 쓸)
 
 _ANSI = re.compile(r"\033\[[0-9;?]*[A-Za-z]")
@@ -432,28 +581,47 @@ def main():
     보기 = "--watch" in sys.argv
     if not 보기:
         print(그리기()); return
+    키받기 = False
     try:
         sys.stdout.write("\033[?25l")                 # 커서 감추기
         나 = os.path.abspath(__file__)
         처음 = os.path.getmtime(나)
+        dry = "--dry" in sys.argv
+        키받기 = sys.stdin.isatty()
+        if 키받기:
+            import select, termios, tty
+            옛단말 = termios.tcgetattr(sys.stdin)
+            tty.setcbreak(sys.stdin.fileno())        # 줄 끝을 안 기다리고 한 글자씩 · 끝날 때 되돌린다
         while True:
             # **지우고 그리지 않는다** — 깜빡인다. 홈으로 보내고 덮어쓴 뒤 아래를 지운다.
             # 줄 끝마다 `\033[K` — 앞 갱신이 더 길었으면 그 꼬리가 남아 겹쳐 보인다
             판 = 그리기().replace("\n", "\033[K\n")
             sys.stdout.write("\033[H" + 판 + "\033[K\033[J")
             sys.stdout.flush()
-            time.sleep(3)
+            if 키받기:
+                r, _, _ = select.select([sys.stdin], [], [], 3)
+                if r:
+                    창가기(sys.stdin.read(1).lower(), dry)
+            else:
+                time.sleep(3)
             # **이 파일이 바뀌면 스스로 다시 뜬다** (2026-10-02) — 고칠 때마다 창을 다시 띄우지 않게
             try:
                 if os.path.getmtime(나) != 처음:
                     sys.stdout.write("\033[?25h")
                     sys.stdout.flush()
+                    if 키받기:
+                        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, 옛단말)
                     os.execv(sys.executable, [sys.executable] + sys.argv)
             except OSError:
                 pass
     except KeyboardInterrupt:
         pass
     finally:
+        try:
+            if 키받기:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, 옛단말)
+        except Exception:
+            pass
         sys.stdout.write("\033[?25h\n")               # 커서 되돌리기
 
 main()
