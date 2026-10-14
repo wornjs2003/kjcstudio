@@ -489,6 +489,20 @@
   font-family: inherit;
 }
 .kh-modal-x:hover { background: var(--kh-border-strong); }
+
+/* 머리 왼쪽 종목 이름 옆 — 종목 검색 (2026-10-14 지시 · home.js 의 addModalSearch).
+   부품은 갈래 줄 검색(home.css 의 .kh-cat-search)을 그대로 쓰고, 갈래 줄용 바깥 자리만 모달 안에서 푼다 —
+   오른쪽으로 미는 margin-left:auto · 밑줄 맞춤 아래 6px. 칸 높이 28 은 닫기 30 안에 들어 머리 줄이 안 큰다 */
+.kh-modal .kh-head-top .kh-cat-search { margin-left: 4px; padding-bottom: 0; }
+
+/* 좁은 폭 — 돋보기만 닫기 옆(오른쪽)에 둔다. 누르면 칸이 화면 위쪽에 펼쳐지는 것은 home.css 그대로.
+   폭 700 은 그 돋보기로 바뀌는 home.css 의 폭과 맞춘다. 갈래 띠용 sticky 바탕 · 끝 가림 그림자는 흰 머리 위라 푼다 */
+@media (max-width: 700px) {
+  .kh-modal .kh-head-top .kh-cat-search {
+    margin-left: auto; position: static; background: none; padding-left: 0; box-shadow: none;
+  }
+  .kh-modal .kh-head-top .kh-cat-search + .kh-head-act { margin-left: 0; }
+}
 /* 머리 없는 모달의 떠 있는 닫기 — 좁은 폭에서만 보인다(아래 640 블록 · modal.js 주석) */
 .kh-modal-xf { display: none; }
 

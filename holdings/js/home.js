@@ -1998,7 +1998,7 @@ function dropCodeFromUrl() {
   history.replaceState(null, '', u.pathname + u.search + u.hash);
 }
 
-async function openStockModal(code, { push = true } = {}) {
+async function openStockModal(code, { push = true, pushed } = {}) {
   const stock = findStock(code);
   if (!stock || (stockModal && stockModal.code === code)) return;
 
@@ -2020,7 +2020,9 @@ async function openStockModal(code, { push = true } = {}) {
   /* 이 모달이 히스토리에 항목을 **밀어 넣었나**. 닫을 때 뒤로 갈지,
      주소만 털지를 가른다. history.state 로는 알 수 없다 — 그 값은 지금
      어디인지를 말할 뿐 내가 밀어 넣었는지를 말하지 않는다 (2026-09-16). */
-  const pushedHere = push;
+  /* 모달 검색으로 갈아탈 때는 앞 모달의 것을 이어받는다(`pushed`) — 주소는 갈아 끼웠으므로
+     닫으면 한 번에 홈으로 돌아간다 (2026-10-14 · 모달 종목 검색) */
+  const pushedHere = pushed ?? push;
   if (push) history.pushState({ stock: code }, '', `?code=${code}`);
 
   switchingStock = true;
@@ -2045,6 +2047,7 @@ async function openStockModal(code, { push = true } = {}) {
     },
     onClose() {
       if (stockModal && stockModal.code === code) {
+        if (stockModal.search) stockModal.search.destroy();   // 후보 목록은 body 에 붙어 있다
         stockModal.view.destroy();
         stockModal = null;
       }
@@ -2089,9 +2092,10 @@ async function openStockModal(code, { push = true } = {}) {
 
   body.appendChild(main);
   addModalActions(main, code);
+  const search = addModalSearch(main, code, pushedHere);
 
   const view = mountStockView(main, stock, { onBack: closeModal, view: 'modal' });
-  stockModal = { code, view };
+  stockModal = { code, view, search };
   view.paint(rowPrices[code] || null);
 }
 
@@ -2106,6 +2110,32 @@ function addModalActions(main, code) {
     <button class="kh-modal-x" title="닫기 (Esc)" aria-label="닫기">✕</button>`;
   act.querySelector('.kh-modal-x').addEventListener('click', closeModal);
   top.appendChild(act);
+}
+
+/* 머리 왼쪽 종목 이름 옆에 종목 검색 (2026-10-14 지시 — 「차트 모달창에서 종목검색 넣어주고 검색된 종목 모달로
+   이동되도록 해줘」 · 「넓은폭은 삼성전자 이름 옆으로 가까우면 좋을거 같아 오른쪽보다는 왼쪽으로」).
+   부품 · 목록 · API 는 갈래 줄 검색과 같다. 고르면 **갈래 줄과 같은 길**(큰 차트 · 패널이 그 종목)을 가고
+   모달도 그 종목으로 갈아탄다. 주소는 쌓지 않고 갈아 끼운다 — 쌓으면 닫을 때 popstate 가 앞 종목 모달을
+   다시 연다. 좁은 폭은 돋보기만 ✕ 옆에 둔다(css/modal.css). */
+function addModalSearch(main, code, pushedHere) {
+  const top = main.querySelector('.kh-head-top');
+  const act = top && top.querySelector('.kh-head-act');
+  if (!act) return null;
+  const slot = document.createElement('span');
+  top.insertBefore(slot, act);
+  const search = mountStockSearch(slot, {
+    onPick(next, name) {
+      if (!findStock(next)) addExtraStock(next, name || next);
+      selectStock(next);
+      if (!(rowPrices && rowPrices[next])) quoteTick();
+      if (next === code) return;
+      history.replaceState({ stock: next }, '', `?code=${next}`);
+      openStockModal(next, { push: false, pushed: pushedHere });
+    },
+  });
+  /* 칸 안의 Esc 는 목록만 닫는다 — 문서까지 가면 모달이 통째로 닫힌다(components/modal.js) */
+  if (search) search.input.addEventListener('keydown', (e) => { if (e.key === 'Escape') e.stopPropagation(); });
+  return search;
 }
 
 /* 뒤로가기로도 닫힌다. 주소를 복사해 두면 그 종목이 열린 채로 뜬다. */
