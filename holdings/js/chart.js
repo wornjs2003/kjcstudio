@@ -43,6 +43,15 @@ const COLOR = {
   get rsi()      { return color('rsi'); },
   get rsiSig()   { return color('ma20'); },
   get rsiBand()  { return alpha('rsi-band', 0.10); },   // 30~70 띠 — 옅은 파랑
+  /* 일목균형표 (2026-10-15 재권님 「차트 보조지표에 일목 균형표 만들어줘」) — 선 셋은 theme.css --kh-ich-*,
+     선행스팬 · 구름은 오름 · 내림 색을 옅게(선행1 이 위면 빨강 구름 · 아래면 파랑 구름 — 한국식 오름 · 내림 색과 같은 뜻) */
+  get ichConv()  { return color('ich-conv'); },
+  get ichBase()  { return color('ich-base'); },
+  get ichLag()   { return color('ich-lag'); },
+  get ichSp1()   { return alpha('up', ICH_LINE_ALPHA); },
+  get ichSp2()   { return alpha('down', ICH_LINE_ALPHA); },
+  get ichUp()    { return alpha('up', ICH_CLOUD_ALPHA); },
+  get ichDown()  { return alpha('down', ICH_CLOUD_ALPHA); },
 
   /* 값이 없는 구간 — **미래**(아직 안 온 봉). 2026-09-29 지시 —
      「미래에 아직 안나온 값은 파란색으로」. 진하기는 아래 NODATA_ALPHA 한 곳에서 정한다 */
@@ -53,6 +62,10 @@ const COLOR = {
    하락 봉 1.0 · 매물대 VP_ALPHA · RSI 띠 0.10 · 여기.
    재권님이 화면을 보시고 조절하실 값이라 **한 곳에만** 둔다. */
 const NODATA_ALPHA = 0.06;
+
+/* 일목 구름 · 선행스팬 선의 진하기 — 구름은 배경이라 옅게(매물대 0.16 보다 옅다), 선행 선은 경계만 보이게 */
+const ICH_CLOUD_ALPHA = 0.12;
+const ICH_LINE_ALPHA = 0.55;
 
 /* 그릴 이동평균선. 늘리려면 여기 한 줄과 theme.css·theme.js 의 색만 더한다.
    (2026-09-16 지시 — 5 · 20 · 60 · 200) */
@@ -87,6 +100,8 @@ export const INDICATORS = [
   { key: 'vp',   name: '매물대',      pane: 'price' },
   { key: 'bb',   name: '볼린저 밴드', pane: 'price' },
   { key: 'ma',   name: '이동평균선',  pane: 'price' },
+  /* 일목균형표 (2026-10-15) — 전환 · 기준 · 후행은 차트 선, 선행스팬 둘과 구름은 매물대처럼 봉 뒤 층(drawCloud) */
+  { key: 'ich',  name: '일목균형표',  pane: 'price' },
   { key: 'vol',  name: '거래량',      pane: 'own'   },
   { key: 'macd', name: 'MACD',       pane: 'own'   },
   { key: 'rsi',  name: 'RSI',        pane: 'own'   },
@@ -221,11 +236,19 @@ export function barsToFetch(periodId) {
   return FETCH_BARS[periodId] || BARS_FOR_IND;
 }
 
+/* 일목균형표를 켜면 오른쪽에 선행스팬 26봉 자리를 비운다 (2026-10-15 재권님 「응 넓혀줘」 — 미래 구름이 빈칸 4봉만큼만 보였다).
+   둘을 함께 한다 — 라이브러리의 오른쪽 빈칸(rightOffset)을 그만큼 늘리고, 처음 보이는 구간도 그만큼 오른쪽으로 잡는다.
+   구간만 늘려 잡으면 라이브러리가 빈칸 한도(rightOffset)에 맞춰 봉을 굵게 다시 맞춰 봉 수가 줄었고, 빈칸만 늘리면 구간을
+   직접 잡는 자리(showLastBars · setView)가 그것을 덮어 안 보였다(19:5x 실측 둘). 봉 폭은 그대로다 */
+const RIGHT_PAD = 4;
+const ichPad = () => (indOn().has('ich') ? IND_PERIOD.ichB : 0);
+
 function showLastBars(chart, total, bars = VISIBLE_BARS) {
   const ts = chart.timeScale();
   try {
     /* from 이 음수여도 된다. 그만큼 왼쪽이 빈다 */
-    ts.setVisibleLogicalRange({ from: total - bars, to: total - 1 });
+    const pad = ichPad();
+    ts.setVisibleLogicalRange({ from: total - bars + pad, to: total - 1 + pad });
   } catch {
     ts.fitContent();          // 라이브러리 판이 다르면 예전대로
   }
@@ -478,13 +501,12 @@ export function macd(candles, barPeriod, fast = IND_PERIOD.macdFast,
  *   선행2    최근 52봉의 (최고+최저)/2 를 26봉 앞으로 민 것
  *   후행     종가를 26봉 **뒤로** 민 것
  *
- * **구름(선행1과 선행2 사이 색칠)은 안 그린다.** 두 선 사이를 채우려면
- * 라이브러리에 없는 기능이라 따로 만들어야 한다. 선 둘로 경계만 보여준다.
- * 선행선은 봉보다 앞을 가리키므로, 라이브러리가 모르는 시각이 되지 않도록
- * **있는 봉 범위 안에서만** 그린다.
+ * 값은 **봉 자리(0 … n-1) 배열**로 낸다. 선행 둘은 마지막 봉 뒤 b 칸까지 가므로 길이가 n + b 다 —
+ * 라이브러리는 봉이 없는 시각을 모르니 선행선 · 구름은 차트 선이 아니라 봉 뒤 층에 자리(logical)로 그린다
+ * (createStockChart 의 drawCloud · 2026-10-15 — 전에는 「구름은 안 그린다 · 있는 봉 범위 안에서만」 이었다).
  */
-function ichimoku(candles, barPeriod, a = IND_PERIOD.ichA,
-                  b = IND_PERIOD.ichB, c = IND_PERIOD.ichC) {
+function ichimoku(candles, a = IND_PERIOD.ichA, b = IND_PERIOD.ichB, c = IND_PERIOD.ichC) {
+  const n = candles.length;
   const hl = (from, to) => {
     let hi = -Infinity, lo = Infinity;
     for (let i = from; i <= to; i++) {
@@ -493,33 +515,19 @@ function ichimoku(candles, barPeriod, a = IND_PERIOD.ichA,
     }
     return (hi + lo) / 2;
   };
-
-  const conv = [], base = [], sp1 = [], sp2 = [], lag = [];
-  const vConv = new Array(candles.length).fill(null);
-  const vBase = new Array(candles.length).fill(null);
-
-  for (let i = 0; i < candles.length; i++) {
-    const t = toChartTime(candles[i].ts, barPeriod);
-    if (i >= a - 1) { vConv[i] = hl(i - a + 1, i); conv.push({ time: t, value: vConv[i] }); }
-    if (i >= b - 1) { vBase[i] = hl(i - b + 1, i); base.push({ time: t, value: vBase[i] }); }
-
-    /* 앞으로 민 선 — i 번째 값이 i+b 자리에 놓인다. 봉이 있는 데까지만 */
-    const fwd = i + b;
-    if (fwd < candles.length) {
-      const ft = toChartTime(candles[fwd].ts, barPeriod);
-      if (vConv[i] != null && vBase[i] != null) {
-        sp1.push({ time: ft, value: (vConv[i] + vBase[i]) / 2 });
-      }
-      if (i >= c - 1) sp2.push({ time: ft, value: hl(i - c + 1, i) });
-    }
-
-    /* 뒤로 민 선 — 지금 종가를 26봉 전 자리에 놓는다 */
-    const bwd = i - b;
-    if (bwd >= 0) {
-      lag.push({ time: toChartTime(candles[bwd].ts, barPeriod), value: candles[i].close });
-    }
+  const vConv = new Array(n).fill(null);
+  const vBase = new Array(n).fill(null);
+  const vLag = new Array(n).fill(null);
+  const vSp1 = new Array(n + b).fill(null);
+  const vSp2 = new Array(n + b).fill(null);
+  for (let i = 0; i < n; i++) {
+    if (i >= a - 1) vConv[i] = hl(i - a + 1, i);
+    if (i >= b - 1) vBase[i] = hl(i - b + 1, i);
+    if (vConv[i] != null && vBase[i] != null) vSp1[i + b] = (vConv[i] + vBase[i]) / 2;
+    if (i >= c - 1) vSp2[i + b] = hl(i - c + 1, i);
+    if (i - b >= 0) vLag[i - b] = candles[i].close;
   }
-  return { conv, base, sp1, sp2, lag, vConv, vBase, a, b, c };
+  return { vConv, vBase, vLag, vSp1, vSp2, a, b, c };
 }
 
 /* 거래량 이동평균 — 오늘 거래가 평소보다 많은지 본다 */
@@ -838,6 +846,8 @@ export function createStockChart(container, candles, opts = {}) {
   let maSeries = [];
   let candleSeries = null;
   let vpLayer = null;          // 매물대가 깔리는 층 (가격 칸 뒤)
+  let ichLayer = null;         // 일목 구름 · 선행스팬이 깔리는 층 (매물대와 같은 자리 · drawCloud)
+  let ichCalc = null;          // 켜 있을 때 그 셈 — 구름은 끌기 · 확대마다 다시 그린다
   let vpTimer = null;
   let legend = null;
   let lastLive = null;          // 마지막으로 받은 시세 — 서버 봉을 덧붙여 맨 오른쪽이 서버 값으로 돌아가면 다시 얹는다
@@ -867,7 +877,7 @@ export function createStockChart(container, candles, opts = {}) {
         minimumWidth: AXIS_W,            // 좌우 끝을 맞추는 핵심. 위 주석 참고
       },
       timeScale: {
-        borderColor: COLOR.border, rightOffset: 4, fixLeftEdge: false,
+        borderColor: COLOR.border, rightOffset: RIGHT_PAD + ichPad(), fixLeftEdge: false,
         timeVisible: MINUTE_PERIODS.has(period), secondsVisible: false,
         visible: axis,
       },
@@ -1001,6 +1011,64 @@ export function createStockChart(container, candles, opts = {}) {
    * 반드시 맞는다」 와 부딪히는 자리다. 왼쪽은 그림 영역 안이라 축을
    * 건드리지 않는다.
    */
+  /* ── 일목 구름 · 선행스팬 (2026-10-15) ──
+   * 선행 둘은 마지막 봉 뒤 26봉까지 간다 — 라이브러리 시리즈로는 봉 없는 시각을 못 그어 **매물대처럼 봉 뒤 층**에 그린다.
+   * 가로는 봉 자리(logical) → 좌표, 세로는 가격 → 좌표(봉 계열 눈금). 끌기 · 확대 · 2초 고리마다 drawProfile 과 함께 다시 그린다.
+   * 가격축 자리는 비운다(매물대 · 미래 영역과 같은 까닭 — 좌우 끝). 미래 자리는 차트 오른쪽 빈칸에 보이는 만큼이다 */
+  function drawCloud() {
+    if (!ichLayer) return;
+    const cv = ichLayer;
+    const ctx = cv.getContext('2d');
+    const W = cv.clientWidth, H = cv.clientHeight, dpr = window.devicePixelRatio || 1;
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
+      cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    if (!ichCalc || !candleSeries || !panes[0]) return;
+    const ts = panes[0].chart.timeScale();
+    const right = Math.max(0, W - AXIS_W);
+    const pts = [];                              // { x, y1, y2, up }
+    try {
+      for (let j = 0; j < ichCalc.vSp1.length; j++) {
+        const a = ichCalc.vSp1[j], b = ichCalc.vSp2[j];
+        if (a == null || b == null) continue;
+        const x = ts.logicalToCoordinate(j);
+        const y1 = candleSeries.priceToCoordinate(a), y2 = candleSeries.priceToCoordinate(b);
+        if (x == null || y1 == null || y2 == null) continue;
+        pts.push({ x, y1, y2, up: a >= b });
+      }
+    } catch { return; }                          // 아직 그릴 준비가 안 됐다
+    if (pts.length < 2) return;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, right, H); ctx.clip();
+    /* 구름 — 이웃한 두 점 사이를 사다리꼴로 칠한다. 두 선이 엇갈리는 칸은 엇갈리는 자리에서 둘로 나눈다 */
+    for (let k = 1; k < pts.length; k++) {
+      const p = pts[k - 1], q = pts[k];
+      if (q.x < -20 || p.x > right + 20) continue;
+      const d0 = p.y1 - p.y2, d1 = q.y1 - q.y2;
+      const fill = (x0, a0, b0, x1, a1, b1, up) => {
+        ctx.fillStyle = up ? COLOR.ichUp : COLOR.ichDown;
+        ctx.beginPath(); ctx.moveTo(x0, a0); ctx.lineTo(x1, a1); ctx.lineTo(x1, b1); ctx.lineTo(x0, b0); ctx.closePath(); ctx.fill();
+      };
+      if (d0 * d1 < 0) {
+        const t = d0 / (d0 - d1), xm = p.x + (q.x - p.x) * t, ym = p.y1 + (q.y1 - p.y1) * t;
+        fill(p.x, p.y1, p.y2, xm, ym, ym, p.up);
+        fill(xm, ym, ym, q.x, q.y1, q.y2, q.up);
+      } else {
+        fill(p.x, p.y1, p.y2, q.x, q.y1, q.y2, q.up);
+      }
+    }
+    /* 선행스팬 선 — 선행1 옅은 빨강 · 선행2 옅은 파랑 */
+    [['y1', COLOR.ichSp1], ['y2', COLOR.ichSp2]].forEach(([k, color]) => {
+      ctx.strokeStyle = color; ctx.lineWidth = 1;
+      ctx.beginPath();
+      pts.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt[k]) : ctx.moveTo(pt.x, pt[k])));
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
   function drawProfile() {
     if (!vpLayer) return;
     if (!indOn().has('vp') || !candleSeries) { vpLayer.innerHTML = ''; return; }
@@ -1101,6 +1169,7 @@ export function createStockChart(container, candles, opts = {}) {
     vpTimer = setInterval(() => {
       if (document.hidden) return;           // 안 보이는 탭은 쉰다
       drawProfile();
+      drawCloud();
       /* 미래 영역도 여기서 다시 잰다. **창 크기가 바뀌는 것을 잡는 자리가
          이것뿐이다** — 확대·끌기는 위 구독이 잡지만 크기 변경은 구독이 안 온다 */
       drawFuture();
@@ -1176,6 +1245,16 @@ export function createStockChart(container, candles, opts = {}) {
   function drawOverlay(ch) {
     maSeries = [];
     overlay = [];
+    ichCalc = null;
+    if (indOn().has('ich')) {
+      /* 전환 · 기준 · 후행은 차트 선 — 세로 범위에서 뺀다(NO_SCALE · 「지표를 켜고 꺼도 차트 크기가 바뀌지 않는다」) */
+      ichCalc = ichimoku(candles);
+      [['vConv', COLOR.ichConv], ['vBase', COLOR.ichBase], ['vLag', COLOR.ichLag]].forEach(([k, color]) => {
+        const sr = addLine(ch, { color, ...NO_SCALE });
+        sr.setData(put(ichCalc[k]));
+        overlay.push(sr);
+      });
+    }
     if (indOn().has('bb')) {
       const bb = bollinger(candles, period);
       /* 밴드 안을 옅게 채운다. 라이브러리에 「두 선 사이 채우기」가 없어서,
@@ -1263,8 +1342,17 @@ export function createStockChart(container, candles, opts = {}) {
     let keep = null;
     try { keep = ch.timeScale().getVisibleLogicalRange(); } catch { /* 없으면 그대로 */ }
 
+    const ichWas = !!ichCalc;
     dropOverlay(ch);
     drawOverlay(ch);
+    /* 일목을 켜고 끄면 오른쪽 26봉 자리를 열고 닫는다(ichPad) — 칸마다 같은 값이어야 좌우 끝이 맞는다 */
+    if (ichWas !== !!ichCalc) {
+      panes.forEach((p) => { try { p.chart.timeScale().applyOptions({ rightOffset: RIGHT_PAD + ichPad() }); } catch { /* 칸이 사라졌다 */ } });
+      if (keep && keep.to >= candles.length - 2) {                // 맨 오른쪽을 보던 중이면 봉 폭 그대로 26봉 민다
+        const d = (ichCalc ? 1 : -1) * IND_PERIOD.ichB;
+        keep = { from: keep.from + d, to: keep.to + d };
+      }
+    }
     /* 매물대를 켜고 끄면 세로 축 규칙이 바뀐다. 봉을 새로 만들지 않고
        옵션만 다시 먹인다 — 다시 만들면 축이 두 번 흔들린다. */
     lockPriceRange();
@@ -1278,6 +1366,7 @@ export function createStockChart(container, candles, opts = {}) {
     }
 
     drawProfile();          // 매물대도 새 축에 맞춰 다시 그린다
+    drawCloud();            // 일목 구름도
     drawFuture();           // 미래 영역도 (봉 자리가 바뀌었다)
     /* 라이브러리가 나중에 제 계산을 밀어넣으므로 한 박자 뒤에 잰다 */
     requestAnimationFrame(() => checkScale(scaleBefore));
@@ -1424,6 +1513,11 @@ export function createStockChart(container, candles, opts = {}) {
         vpLayer = document.createElement('div');
         vpLayer.className = 'kh-vp';
         el.appendChild(vpLayer);
+        /* 일목 구름 층 — 매물대와 같은 자리(배경 · 클릭 안 받음). 모양은 .kh-vp 를 그대로 쓰고 canvas 로 그린다 */
+        ichLayer = document.createElement('canvas');
+        ichLayer.className = 'kh-vp';
+        ichLayer.style.width = '100%'; ichLayer.style.height = '100%';
+        el.appendChild(ichLayer);
       }
       /* 미래 영역도 배경이라 차트보다 먼저 넣는다. **칸마다** 하나씩이다 —
          가격 칸만 두면 아래 칸에서 띠가 끊겨 보인다 (drawFuture 주석 참고) */
@@ -1485,6 +1579,7 @@ export function createStockChart(container, candles, opts = {}) {
         /* 봉이 움직이면 매물대도 그 자리에서 따라간다. 2초를 기다리면
            띠와 봉이 어긋나 보인다 (2026-09-18). */
         drawProfile();
+        drawCloud();
         /* 미래 영역은 **봉의 자리로 왼쪽 끝을 잡으므로** 확대·끌기마다
            다시 잰다. 안 하면 봉만 움직이고 파란 자리가 남는다 */
         drawFuture();
@@ -1515,8 +1610,9 @@ export function createStockChart(container, candles, opts = {}) {
     /* 봉이 자리를 잡은 뒤에 세로 범위를 굳힌다. 그려지기 전에 재면 값이 없다 */
     lockPriceRange();
     drawProfile();
+    drawCloud();
     drawFuture();
-    requestAnimationFrame(() => { lockPriceRange(); drawProfile(); drawFuture(); });
+    requestAnimationFrame(() => { lockPriceRange(); drawProfile(); drawCloud(); drawFuture(); });
     startProfileLoop();
     checkAlign();
   }
@@ -1914,7 +2010,7 @@ export function createStockChart(container, candles, opts = {}) {
        `redrawOverlay` 가 같은 이유로 `requestAnimationFrame` 을 쓴다. */
     setView(v, bars) {
       const last = candles.length - 1;
-      const to = v ? last - v.fromRight : last;
+      const to = v ? last - v.fromRight : last + ichPad();      // 처음 보는 기간이면 일목 26봉 자리도(ichPad)
       const from = v ? to - v.bars : to - (bars || VISIBLE_BARS);
       const put = () => panes.forEach((p) => {
         try { p.chart.timeScale().setVisibleLogicalRange({ from, to }); }
