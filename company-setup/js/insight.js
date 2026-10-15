@@ -43,11 +43,31 @@
   const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   try {
     const r = await fetch('/api/board/doc/insight-video-index', { cache: 'no-store' });
-    const items = ((await r.json()).data || {}).items || [];
-    ul.innerHTML = items.length ? items.map(x => `<li><div class="in-li">
-      <a href="report.html?id=${encodeURIComponent(x.id)}">${esc(x.headline)}</a>
-      <div class="in-meta">${esc(x.show)} · ${esc(x.date)} · ${esc(x.duration)}</div></div></li>`).join('')
-      : '<li class="in-empty">—</li>';
+    const doc = (await r.json()).data || {};
+    const items = doc.items || [];
+    const draw = list => {
+      ul.innerHTML = list.length ? list.map(x => `<li><div class="in-li">
+        <a href="report.html?id=${encodeURIComponent(x.id)}">${esc(x.headline)}</a>
+        <div class="in-meta">${esc(x.show)} · ${esc(x.date)} · ${esc(x.duration)}</div></div></li>`).join('')
+        : '<li class="in-empty">—</li>';
+    };
+    // 분류 — 「영상 분석」 탭 밑 칩 줄(data-video-groups · report.html 에만). 이름과 순서는 목록 자료의 group · groups 에서 —
+    // 코드에 두지 않는다 (2026-10-15 재권님 「단테 12시에만나요 ai 요렇게 나눠줘」 · 「영상분석 이름 밑으로 나눠주면」).
+    // 지금 보는 보고서의 분류가 켜지고 오른쪽 목록은 그 분류만 · 칩을 누르면 그 분류의 가장 새 보고서로 간다
+    const tabs = document.querySelector('[data-video-groups]');
+    if (!tabs) { draw(items); return; }
+    const grp = x => x.group || '기타';
+    const groups = [...new Set([...(doc.groups || []), ...items.map(grp)])].filter(n => items.some(x => grp(x) === n));   // 순서는 자료의 groups
+    const curId = new URLSearchParams(location.search).get('id');
+    const cur = items.find(x => x.id === curId) || items[0];
+    const on = cur ? grp(cur) : groups[0];
+    tabs.innerHTML = groups.map(n => {
+      const first = items.find(x => grp(x) === n);
+      return `<a class="kh-chip${n === on ? ' is-active' : ''}" href="report.html?id=${encodeURIComponent(first.id)}">${esc(n)}</a>`;
+    }).join('');
+    const head = document.querySelector('[data-video-group-name]');
+    if (head && on) head.textContent = `${on} 목록`;
+    draw(items.filter(x => grp(x) === on));
   } catch (e) {
     ul.innerHTML = '<li class="in-empty">불러오지 못함</li>';
   }

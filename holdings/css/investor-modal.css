@@ -4,48 +4,81 @@
    `has-right` 를 붙이면 이 칸이 보이고 모달이 서랍만큼 넓어진다(css/modal.css 의 --kh-add).
    ========================================================================== */
 
-/* 서랍 폭은 홈 오른쪽 칸(.kh-app-wide 의 368px)과 같게 — 홈 순위 칸을 그대로 옮겨 오므로.
-   틈은 14 + 손잡이 자리 22 — 손잡이가 순위표 등락률을 가리지 않게 */
-.kh-stage:has(.kh-ivm-rank) { --kh-drawer: 368px; --kh-gap: 36px; }
+/* ── 모바일 퍼스트 (2026-10-15 개념정의 검수 · 재권님 「응 해줘」) ──
+   기본은 좁은 폭(폰) 모양이고, 넓어질 때를 아래 min-width 로 덧붙인다. 경계 둘은 새로 만들지 않고 이미 쓰는 폭을 따른다 —
+       701px   홈 · 공용 모달의 좁은 폭 경계(css/home.css · css/modal.css 의 700)
+       1181px  공용 모달이 서랍을 옆에 펴는 경계(css/modal.css 의 1180 — 그 아래는 옆으로 넓힐 자리가 없다)
+   폰은 공용 모달이 서랍 손잡이를 없앤다(640 아래) — 실시간 순위는 넓은 화면에서만 옆에 붙는다. 폰은 검색 · 그래프 줄로 고른다 */
+
 .kh-stage .kh-ivm-rank { display: none; }
-.kh-stage.has-right .kh-ivm-rank {
-  display: flex; flex-direction: column;
-  flex: 0 0 var(--kh-drawer); width: var(--kh-drawer);
-  margin-left: 14px; padding-right: 22px; box-sizing: content-box;
-}
-.kh-ivm-rank .kh-side { flex: 1; display: flex; flex-direction: column; }
-.kh-ivm-rank .kh-side-wrap { position: relative; inset: auto; flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.kh-ivm-rank .kh-rank-card { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 0; }
-.kh-ivm-rank #kh-rank-more { display: none; }     /* 순위 모달로 가는 길 — 이 모달 안에서는 쓰지 않는다 */
+.kh-stage:has(.kh-ivm) .kh-drawer-tab { display: none; }    /* 서랍 칸이 안 보이는 폭에서 손잡이만 남지 않게 */
+.kh-ivm-main { padding: 8px 12px 16px; }
+.kh-stage:has(.kh-ivm) .kh-mh-sub,
+.kh-stage:has(.kh-ivm) .kh-mh-tabs-r { display: none; }      /* 좁은 폭에서 검색칸과 겹친다 */
 
-.kh-ivm { display: flex; height: min(680px, calc(100vh - 220px)); }
-.kh-ivm-main { flex: 1; min-width: 0; padding: 8px 20px 20px; overflow: auto; }
+.kh-mh-top .kh-cat-search { margin-left: 8px; }
 
-.kh-mh-top .kh-cat-search { margin-left: 12px; }
-
-.kh-ivm-bar-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0 12px; }
+.kh-ivm-bar-row { display: flex; gap: 6px 8px; align-items: center; flex-wrap: wrap; margin: 4px 0 12px; }
 .kh-ivm-cap { display: flex; font-size: 12px; color: var(--kh-text-secondary); margin-bottom: 6px; }
-.kh-ivm-cap > div:first-child { flex: 1; text-align: right; padding-right: 8px; }
-.kh-ivm-cap > div:last-child { flex: 1; padding-left: 8px; }
+.kh-ivm-cap > div:first-child { flex: 1; text-align: left; }
+.kh-ivm-cap > div:last-child { flex: 1; text-align: right; }
+.kh-ivm-cap > .kh-ivm-mid { display: none; }
 
-/* 양쪽 막대 — 왼쪽 매도(파랑) · 가운데 이름 · 오른쪽 매수(빨강) */
-.kh-ivm-row { display: flex; align-items: center; margin: 4px 0; border-radius: 6px; }
+/* 양쪽 막대 — 좁은 폭: 이름 줄이 위 · 그 아래 왼쪽 매도(파랑) | 오른쪽 매수(빨강) */
+.kh-ivm-row { display: flex; flex-wrap: wrap; align-items: center; margin: 6px 0; border-radius: 6px; padding: 2px 0; }
 .kh-ivm-row[data-code] { cursor: pointer; }
 .kh-ivm-row[data-code]:hover { background: var(--kh-bg-surface); }
 .kh-ivm-row.is-on { outline: 2px solid var(--kh-accent); }
-.kh-ivm-side { flex: 1; display: flex; align-items: center; gap: 4px; }
+.kh-ivm-mid { order: -1; flex: 1 0 100%; display: flex; gap: 8px; align-items: baseline; font-size: 13px; line-height: 1.3; margin-bottom: 3px; }
+.kh-ivm-mid br { display: none; }
+.kh-ivm-mid small { font-size: 11px; color: var(--kh-text-secondary); }
+.kh-ivm-side { flex: 1 1 40%; display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }   /* 바탕 40% — 둘이 이름 줄 아래 한 줄로 넘어가고, 막대 폭(%)이 이 칸 폭을 기준으로 잡힌다 */
 .kh-ivm-side.l { justify-content: flex-end; }
-.kh-ivm-fill { height: 20px; }
+.kh-ivm-fill { height: 16px; }
 .kh-ivm-fill.sell { background: var(--kh-down); border-radius: 4px 0 0 4px; }
 .kh-ivm-fill.buy  { background: var(--kh-up);   border-radius: 0 4px 4px 0; }
 .kh-ivm-amt { font-size: 11px; color: var(--kh-text-secondary); white-space: nowrap; }
-.kh-ivm-mid { width: 190px; flex: 0 0 190px; text-align: center; font-size: 13px; line-height: 1.25; }
-.kh-ivm-mid small { font-size: 11px; color: var(--kh-text-secondary); }
-.kh-ivm-big .kh-ivm-fill { height: 30px; }
+.kh-ivm-big .kh-ivm-fill { height: 22px; }
 .kh-ivm-big .kh-ivm-mid { font-size: 14px; }
 
+/* 701px 부터 — 「매도 막대 · 종목 칸 · 매수 막대」 한 줄 */
+@media (min-width: 701px) {
+  .kh-ivm-main { padding: 8px 20px 20px; }
+  .kh-stage:has(.kh-ivm) .kh-mh-sub { display: inline; }
+  .kh-mh-top .kh-cat-search { margin-left: 12px; }
+  .kh-ivm-cap > div:first-child { text-align: right; padding-right: 8px; }
+  .kh-ivm-cap > div:last-child { text-align: left; padding-left: 8px; }
+  .kh-ivm-cap > .kh-ivm-mid { display: block; }
+  .kh-ivm-row { flex-wrap: nowrap; margin: 4px 0; padding: 0; }
+  .kh-ivm-side { flex: 1 1 0; }
+  .kh-ivm-mid { order: 0; flex: 0 0 190px; width: 190px; display: block; text-align: center; margin: 0; }
+  .kh-ivm-mid br { display: inline; }
+  .kh-ivm-fill { height: 20px; }
+  .kh-ivm-big .kh-ivm-fill { height: 30px; }
+}
+
+/* 1181px 부터 — 오른쪽 실시간 순위 서랍. 서랍 폭은 홈 오른쪽 칸(.kh-app-wide 의 368px)과 같게 — 홈 순위 칸을 그대로 옮겨 오므로.
+   틈은 14 + 손잡이 자리 22 — 손잡이가 순위표 등락률을 가리지 않게 */
+@media (min-width: 1181px) {
+  .kh-stage:has(.kh-ivm-rank) { --kh-drawer: 368px; --kh-gap: 36px; }
+  .kh-stage:has(.kh-ivm) .kh-drawer-tab { display: flex; }
+  .kh-stage:has(.kh-ivm) .kh-mh-tabs-r { display: inline; }
+  .kh-ivm { display: flex; height: min(680px, calc(100vh - 220px)); }
+  .kh-ivm-main { flex: 1; min-width: 0; overflow: auto; }
+  .kh-stage.has-right .kh-ivm-rank {
+    display: flex; flex-direction: column;
+    flex: 0 0 var(--kh-drawer); width: var(--kh-drawer);
+    margin-left: 14px; padding-right: 22px; box-sizing: content-box;
+  }
+  .kh-ivm-rank .kh-side { flex: 1; display: flex; flex-direction: column; }
+  .kh-ivm-rank .kh-side-wrap { position: relative; inset: auto; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .kh-ivm-rank .kh-rank-card { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 0; }
+  .kh-ivm-rank #kh-rank-more { display: none; }     /* 순위 모달로 가는 길 — 이 모달 안에서는 쓰지 않는다 */
+}
+
 .kh-ivm-name { font-weight: 700; margin-left: 8px; }
-.kh-ivm-chart { position: relative; height: 320px; }
+.kh-ivm-chart { position: relative; height: 260px; }
+@media (min-width: 701px) { .kh-ivm-chart { height: 320px; } }
 .kh-ivm-pick { position: absolute; inset: 0 0 28px 0; cursor: crosshair; z-index: 3; display: none; }
 .kh-ivm-chart.is-picking .kh-ivm-pick { display: block; }
 .kh-ivm-box {
