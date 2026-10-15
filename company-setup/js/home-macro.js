@@ -13,11 +13,12 @@ import { live } from './live.js';
 import { dxyIce } from './dxy.js';
 import { signColor } from './sign-color.js';
 import { ready as toneReady, paint } from '/assets/js/tone.js';
+import { signClass, NUM } from '/assets/js/sign.js';
 
 const FOLD_KEY = 'kjc.market.open';   // 시황분석 탭 market.js 의 접기 기억과 같은 열쇠
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const num = (x, d) => x == null || !Number.isFinite(+x) ? '—' : (+x).toLocaleString('ko-KR', { minimumFractionDigits: d, maximumFractionDigits: Math.max(d, 3) });
-const ud = (x, t) => x == null || !x ? t : `<span class="${x > 0 ? 'num-up' : 'num-dn'}">${t}</span>`;
+const ud = (x, t) => { const c = signClass(x, NUM); return c ? `<span class="${c}">${t}</span>` : t; };   // 셈은 sign.js
 const pc = x => x == null ? '' : ' ' + ud(x, `${x > 0 ? '+' : ''}${(+x).toFixed(1)}%`);
 const last = a => a && a.length ? a[a.length - 1] : null;
 const pair = (a, b, d, u = '') => `미국 ${num(a, d)}${a == null ? '' : u} · 한국 ${num(b, d)}${b == null ? '' : u}`;
