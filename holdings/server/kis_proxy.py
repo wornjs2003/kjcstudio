@@ -311,8 +311,9 @@ _stats = {"kis_calls": 0, "cache_hits": 0}
 
 
 def _cache_ttl(code):
-    """캐시 수명. **모든 종목이 같다** (2026-09-18 지시). 위 주석 참고."""
-    return PRICE_CACHE_TTL
+    """캐시 수명. **모든 종목이 같다** (2026-09-18 지시). 위 주석 참고.
+    예산이 남으면 서버가 당긴다 — `fill_factor` (2026-10-15)."""
+    return max(PRICE_TTL_FLOOR, round(PRICE_CACHE_TTL * fill_factor(), 1))
 
 
 def _cache_get(code):
@@ -372,6 +373,11 @@ def _cache_put(code, data):
 #
 # 기준값 10 은 그대로다 — **실제 한도(20)의 절반**이라 아직 여유가 있다.
 #
+# **2026-10-15 에 20 으로 올렸다** (재권님 「키 하나당 20건으로 늘려」 · 「kis 만 늘려야해」 ·
+# 안 「응 해줘」). KIS 공식 한도와 같은 값이라 여유가 0 이다 — 넘으면 아래 ㉡ 이 간격을
+# 늘렸다가 60초 뒤 돌아오고, `stats` 의 `overruns60s` · `overrunsTotal` 이 센다. 넘는 일이
+# 잦으면 이 값을 내린다. 그 전 장중 사용은 한도(키당 10)의 10~14% 였다(10-15 작업우선순위 실측).
+#
 # (2026-10-06 에 배포본 워커를 지웠다 — 그 전에는 워커가 따로 초당 5건을
 # 써서 「여기 10 + 워커 5」 였다. 이제 KIS 를 부르는 것은 8765 하나다.)
 #
@@ -395,7 +401,7 @@ def _cache_put(code, data):
 # **제목이 안 말한 것은 아무도 안 본다.**
 #
 # 이 두 값만 바꾸면 호출량 전체가 조절된다.
-KIS_LIMIT_PER_SEC = 10.0
+KIS_LIMIT_PER_SEC = 20.0
 BUDGET_RATIO = 1.0                                  # 기준값을 다 쓴다
 # ⚠️ **이 값은 서버 하나가 아니라 여섯이 합쳐서 쓰는 몫이다** (2026-09-23).
 # 아래 공유 줄이 여섯을 한 줄에 세우므로, 고정으로 나눌 때처럼
@@ -403,8 +409,8 @@ BUDGET_RATIO = 1.0                                  # 기준값을 다 쓴다
 #
 # **앱키 하나당 값이다** (2026-10-06 · 아래 「앱키 둘」). `kis2` 가 있으면
 # 키마다 이만큼이라 **합은 키 수 × 이 값**(둘이면 20)이다.
-KIS_CALLS_PER_SEC = KIS_LIMIT_PER_SEC * BUDGET_RATIO   # = 앱키 하나당 초당 10건
-KIS_MIN_INTERVAL = 1.0 / KIS_CALLS_PER_SEC             # = 0.1초 간격
+KIS_CALLS_PER_SEC = KIS_LIMIT_PER_SEC * BUDGET_RATIO   # = 앱키 하나당 초당 20건
+KIS_MIN_INTERVAL = 1.0 / KIS_CALLS_PER_SEC             # = 0.05초 간격
 
 # 동시에 진행할 호출 수. 초당 건수와는 별개다 — 간격은 _rate_limit() 이 지키고,
 # 이 값은 응답을 기다리는 시간을 몇 개까지 겹칠지를 정한다.
@@ -647,6 +653,71 @@ def _gap_now(n_keys=1):
             / max(1, n_keys))
 
 
+# ── ㉢ 남는 예산을 채운다 — 서버가 스스로 당기고 늦춘다 (2026-10-15 재권님 「응 해줘」) ──
+#
+# 재권님 — 「한도를 정하고 한도안에서 계속 정보 받아와야 하는데 예산이 남는 이유는 뭐지?」.
+# 장중 사용이 예산의 10~14% 였다. 시세 보관(`PRICE_CACHE_TTL`)과 미리 받기의 쉬는 시간이
+# 고정이라 예산이 남아도 그대로 쉬었다.
+#
+# 그래서 **지난 60초 사용률**을 보고 배수(`fill_factor`)를 움직인다 — 목표보다 많이 적으면
+# 조금씩 줄이고(더 자주 받음), 목표를 넘거나 한도 초과(㉡)가 났으면 빨리 늘린다(되돌림).
+# 이 배수를 시세 보관 시간과 미리 받기 쉬는 시간에 곱한다. 화면은 지금처럼 서버가 주는 값을
+# 받는다 — 롱폴이 1초마다 안쪽을 다시 보므로 보관이 짧아지면 새 값이 그만큼 빨리 간다.
+#
+# **8765 처럼 KIS 를 직접 부르는 빠른 서버만** 움직인다. `--slow` 서버 · 상류로 넘기는
+# 서버는 1 그대로다 — 넘기는 서버는 자기 호출이 0 으로 세어져 끝없이 당기게 된다.
+FILL_TARGET = 0.6         # 지난 60초 사용이 예산(키 수 × 키당 한도)의 이만큼을 넘으면 늦춘다
+FILL_FLOOR = 0.25         # 가장 당겨도 원래 값의 이만큼까지 (시세 25초 → 8초 바닥 · 쉬기 20초 → 5초)
+FILL_STEP_DOWN = 0.85     # 한가하면 한 번에 이만큼 곱한다
+FILL_STEP_UP = 1.5        # 차면 한 번에 이만큼 곱한다 — 늦추는 쪽이 빠르다
+FILL_EVERY = 10.0         # 배수를 다시 보는 간격(초)
+PRICE_TTL_FLOOR = 8       # 시세 보관 바닥(초)
+_fill = {"factor": 1.0, "at": 0.0, "usage": None, "changes": 0}
+_fill_lock = threading.Lock()
+# **넘기는 빠른 서버(8764)는 상류(8765)의 배수를 따른다** (2026-10-15 재권님 「응」 — 외부접속도 받아
+# 다시 그리게). 자기 호출은 0 으로 세어지므로 스스로 셈하지 않고, 넘기기 응답에 실려 온 값을 쓴다.
+# 이 시간 안에 받은 값만 믿는다 — 상류가 죽어 폴백하면 1 로 돌아간다
+FILL_REMOTE_MAX_AGE = 120.0
+_fill_remote = {"factor": None, "at": 0.0}
+
+
+def fill_factor():
+    """시세 보관 · 미리 받기 쉬는 시간에 곱할 배수(`FILL_FLOOR` ~ 1)."""
+    if SLOW:
+        return 1.0
+    now = time.time()
+    if KIS_UPSTREAM_RAW:
+        f = _fill_remote["factor"]
+        if f is None or now - _fill_remote["at"] > FILL_REMOTE_MAX_AGE:
+            return 1.0
+        return max(FILL_FLOOR, min(1.0, f))
+    with _fill_lock:
+        if now - _fill["at"] < FILL_EVERY:
+            return _fill["factor"]
+        _fill["at"] = now
+        budget = KIS_CALLS_PER_SEC * max(1, _keys_active) * 60.0
+        used = sum(1 for t in list(_call_times) if t > now - 60)
+        u = used / budget if budget else 1.0
+        over = sum(1 for t in list(_over_times) if t > now - OVER_WINDOW)
+        f = old = _fill["factor"]
+        if over or u > FILL_TARGET:
+            f = min(1.0, f * FILL_STEP_UP)
+        elif u < FILL_TARGET * 0.8:
+            f = max(FILL_FLOOR, f * FILL_STEP_DOWN)
+        _fill["factor"], _fill["usage"] = f, u
+        if round(f, 3) != round(old, 3):
+            _fill["changes"] += 1
+        return f
+
+
+def fill_stats():
+    return {"factor": round(fill_factor(), 3),
+            "usage60s": None if _fill["usage"] is None else round(_fill["usage"], 3),
+            "target": FILL_TARGET, "floor": FILL_FLOOR, "changes": _fill["changes"],
+            "priceTtlNow": _cache_ttl(None),
+            "fromUpstream": bool(KIS_UPSTREAM_RAW) and not SLOW}
+
+
 def _stamp():
     """`11:23:45.678` — **밀리초까지 찍는다.**
 
@@ -712,7 +783,7 @@ def _rate_limit(path=None, n_keys=1):
     if (threading.current_thread().name == PREFILL_THREAD_NAME
             and not getattr(_prefill_hot, "on", False)):
         _t0 = time.monotonic()
-        time.sleep(PREFILL_BUSY_CALL_GAP if _ui_busy() else PREFILL_IDLE_CALL_GAP)
+        time.sleep(PREFILL_BUSY_CALL_GAP * fill_factor() if _ui_busy() else PREFILL_IDLE_CALL_GAP)
         # **실제로 잔 시간을 잰다** — 이 기계는 잠에서 늦게 깨서(10ms → 49ms 실측)
         # 정한 값으로 빼면 그 넘침이 줄 서기로 세어진다
         _rl_yield.ms += (time.monotonic() - _t0) * 1000.0
@@ -1002,6 +1073,8 @@ def usage_stats():
         "cacheHits": _stats["cache_hits"],
         "totalCalls": _stats["kis_calls"],
         "priceCacheTtl": PRICE_CACHE_TTL,
+        # 남는 예산 채우기 (2026-10-15) — 지금 배수 · 지난 60초 사용률 · 지금 시세 보관(초)
+        "fill": fill_stats(),
 
         # ── 넘기기 (2026-10-01) ── ⚠️ **주소는 내지 않는다.** 이 응답이
         # 8764(서비스방)를 거쳐 밖으로 나가므로 내부 주소가 보이면 안 된다.
@@ -1489,8 +1562,11 @@ RELAY_TTL_NAMES = {
 
 def _relay_ttl(path):
     """넘겨받은 경로의 캐시 수명(초). 표에 없거나 이름이 틀리면 `PRICE_CACHE_TTL`."""
-    v = globals().get(RELAY_TTL_NAMES.get(_resp_key(path), "PRICE_CACHE_TTL"))
-    return v if isinstance(v, (int, float)) else PRICE_CACHE_TTL
+    name = RELAY_TTL_NAMES.get(_resp_key(path), "PRICE_CACHE_TTL")
+    if name == "PRICE_CACHE_TTL":
+        return _cache_ttl(None)          # 남는 예산이면 당겨진 값 (2026-10-15 · ㉢)
+    v = globals().get(name)
+    return v if isinstance(v, (int, float)) else _cache_ttl(None)
 
 
 def relay_ttl_table():
@@ -1890,6 +1966,8 @@ def _kis_via_upstream(base, path, params, tr_id):
         raise _UpstreamDown(safe_message(e))
     if not isinstance(body, dict) or not body.get("ok"):
         raise RuntimeError("상류 응답이 이상합니다: %s" % scrub(str(body))[:200])
+    if isinstance(body.get("fill"), (int, float)):      # 상류의 남는 예산 배수 (㉢)
+        _fill_remote["factor"], _fill_remote["at"] = float(body["fill"]), time.time()
     return body.get("data")
 
 
@@ -4704,7 +4782,7 @@ def _prefill_one(cfg, want):
         _meta_set("pf5mh:%s" % code, want)               # 받아도 안 줄었다 — 이 구간은 그만
     if not hot:
         # 3순위는 화면이 보고 있으면 길게 쉰다. 지수·시세가 먼저다
-        time.sleep(PREFILL_BUSY_REST_SEC if _ui_busy() else PREFILL_REST_SEC)
+        time.sleep((PREFILL_BUSY_REST_SEC if _ui_busy() else PREFILL_REST_SEC) * fill_factor())
     return code
 
 
@@ -4842,8 +4920,8 @@ def start_dwmy_prefill(cfg):
                         if got:
                             # 받은 종목 뒤에만 쉰다. 건너뛴 종목까지 쉬면
                             # **받을 것이 없는 날에도 29분을 선다.**
-                            time.sleep(PREFILL_BUSY_REST_SEC if _ui_busy()
-                                       else DWMY_REST_SEC)
+                            time.sleep((PREFILL_BUSY_REST_SEC if _ui_busy()
+                                        else DWMY_REST_SEC) * fill_factor())
             except Exception:
                 pass
             time.sleep(DWMY_CHECK_SEC)
@@ -5410,7 +5488,9 @@ def start_us_prefill(cfg, port):
                 get_chart(cfg, code, period, limit)
             except Exception as e:
                 _us_log("%s %s 실패 (%s)" % (code, period, safe_message(e, 80)))
-            time.sleep(gap)
+            # 예산이 남으면 서버가 당긴다(㉢ · 2026-10-15) — 고정 270초 나눔은 한 종목 호출 시간까지 더해
+            # 한 바퀴가 397초로 5분 칸을 넘었다(10-15 04:45~05:06 로그)
+            time.sleep(gap * fill_factor())
         n = _up_stat["calls"] + _stats["kis_calls"] - c0
         _us_log("%s 한 바퀴 %d종목 · KIS %d건 · %.0f초 · 초당 %.2f건"
                 % (period, len(codes), n, time.time() - t0, n / max(1.0, time.time() - t0)))
@@ -5451,7 +5531,7 @@ def start_us_prefill(cfg, port):
                 done += 1
             except Exception as e:
                 _us_log("%s 마감 뒤 일봉 실패 (%s)" % (code, safe_message(e, 80)))
-            time.sleep(US_POST_GAP_SEC)
+            time.sleep(US_POST_GAP_SEC * fill_factor())
         n = _up_stat["calls"] + _stats["kis_calls"] - c0
         _us_log("마감 뒤(%s) 일봉 %d/%d종목 · KIS %d건 · %.0f초 · 초당 %.2f건"
                 % (et_date, done, len(codes), n, time.time() - t0, n / max(1.0, time.time() - t0)))
@@ -7052,7 +7132,8 @@ class Handler(SimpleHTTPRequestHandler):
                 hit = _relay_cache.get(ckey)
                 if hit and now - hit[0] < _relay_ttl(kis_path):
                     _relay_stat["hits"] += 1
-                    self._send_json({"ok": True, "data": hit[1], "cached": True})
+                    self._send_json({"ok": True, "data": hit[1], "cached": True,
+                                     "fill": round(fill_factor(), 3)})
                     return
                 _relay_stat["misses"] += 1
                 _relay_times.append(now)       # `calls1hRelayed` 가 이것을 센다
@@ -7060,7 +7141,8 @@ class Handler(SimpleHTTPRequestHandler):
                 _relay_cache[ckey] = (now, relay_data)
                 if len(_relay_cache) > RELAY_CACHE_MAX:
                     _relay_sweep(now)
-                self._send_json({"ok": True, "data": relay_data})
+                self._send_json({"ok": True, "data": relay_data,
+                                 "fill": round(fill_factor(), 3)})
                 return
 
             if route == "price":
