@@ -246,10 +246,14 @@ def _today():
 #
 # OpenDART 를 부르는 자리는 전부 `_dart_get` 을 거친다 — 여기서 하루 건수와 020 을 센다.
 # 셈은 sync_meta 의 `dart_usage` 한 줄(JSON)에 두어 서버를 다시 켜도 그날 셈이 이어진다.
-# 쓰기 못 하는 서버(읽기 전용 DB)는 메모리로만 센다 — 그런 서버는 공시를 안 받는다(kis_proxy).
+# **세는 곳은 공시를 받는 서버 하나다**(start_poller 가 `_COUNTING` 을 켠다 · 지금 8765).
+# 공시를 안 받는 서버(8764 · 8767 · 세션)는 셈을 들고 있지 않고, 물을 때마다 sync_meta 를
+# 다시 읽어 낸다 — 오늘 기록이 없으면 calls 는 0 이 아니라 null(못 셌다) 이다
+# (「못 쟀으면 0 이 아니라 「못 쟀다」 고 낸다」 · 2026-10-15 개념정의 검수).
 
 _usage_lock = threading.Lock()
 _usage = None
+_COUNTING = False
 
 
 def _usage_now():
@@ -271,11 +275,29 @@ def _usage_save(u):
 
 
 def dart_usage():
-    """하루 사용량 — /api/dart/status 가 그대로 낸다. 못 센 날(셈이 없는 서버)도 0 이 아니라 그날 셈이다."""
-    with _usage_lock:
-        u = dict(_usage_now())
+    """하루 사용량 — /api/dart/status 가 그대로 낸다.
+
+    counter  "this"   이 서버가 센다(공시를 받는 서버)
+             "record" 세는 서버가 DB 에 남긴 오늘 셈을 읽었다
+             None     오늘 셈이 없다 — calls · left 도 None(0 이 아니다)
+    """
+    if _COUNTING:
+        with _usage_lock:
+            u = dict(_usage_now())
+        u["counter"] = "this"
+    else:
+        try:
+            rec = json.loads(_meta_get("dart_usage") or "null")
+        except (ValueError, sqlite3.Error):
+            rec = None
+        if isinstance(rec, dict) and rec.get("date") == _today():
+            u = dict(rec)
+            u["counter"] = "record"
+        else:
+            u = {"date": _today(), "calls": None, "e020": None, "last020": None,
+                 "blocked": None, "counter": None}
     u.update({"limit": DART_DAILY_LIMIT, "budget": DART_DAILY_BUDGET,
-              "left": max(0, DART_DAILY_BUDGET - u["calls"])})
+              "left": None if u["calls"] is None else max(0, DART_DAILY_BUDGET - u["calls"])})
     return u
 
 
@@ -1022,9 +1044,11 @@ def _should_poll(now=None):
 
 def start_poller():
     """백그라운드로 5분마다 한 바퀴 돈다. 키가 없으면 아무것도 하지 않는다."""
+    global _COUNTING
     key = get_key()
     if not key:
         return False
+    _COUNTING = True             # 하루 셈은 공시를 받는 이 서버가 든다 — dart_usage 참고
 
     def loop():
         time.sleep(5)            # 서버가 막 뜬 참이라 잠깐 기다렸다 시작한다
