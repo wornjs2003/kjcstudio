@@ -29,7 +29,6 @@ const FALLBACK = {
   'band': '#f5a623', 'rsi': '#9b51e0',
   'ind-1': '#3182f6', 'ind-2': '#f29300', 'ind-3': '#8b5cf6',
   'ind-4': '#f04452', 'ind-5': '#8b95a1',
-  'draw-1': '#101013', 'draw-2': '#3182f6', 'draw-3': '#f29300', 'draw-4': '#8b5cf6', 'draw-5': '#02a262',
   'topic-war': '#f04452', 'topic-ai': '#3182f6', 'topic-defense': '#f29300',
   'topic-arctic': '#02a262', 'topic-ship': '#8b5cf6',
 };
