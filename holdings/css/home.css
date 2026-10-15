@@ -501,7 +501,8 @@
    (지시 — "매도는 아래방향으로 나오게 해줘").
    가로 막대로는 그 방향을 말할 수 없어 세로로 세웠다. */
 .kh-iv-tabs { padding: 0; margin-left: auto; gap: 4px; flex-wrap: nowrap; }
-.kh-iv-tabs .kh-chip { padding: 3px 8px; font-size: 0.7rem; }
+/* 여백 6px — 「3달」 단추가 늘어 머리 줄(304px)에 넷이 한 줄로 들게 (2026-10-15 재권님 「응 해줘」) */
+.kh-iv-tabs .kh-chip { padding: 3px 6px; font-size: 0.7rem; }
 
 /* **옛 세로막대 규칙을 걷어냈다** (2026-09-21).
 
