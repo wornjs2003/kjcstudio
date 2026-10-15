@@ -825,6 +825,8 @@ export function createStockChart(container, candles, opts = {}) {
   let vpLayer = null;          // 매물대가 깔리는 층 (가격 칸 뒤)
   let vpTimer = null;
   let legend = null;
+  let livePrev = null;          // 시세가 준 전일 종가(updateLast) — 마우스 표 「전일」 의 첫 기준 · 종목이 바뀌면 지운다
+  let drawnCode = opts.code || null;   // 지금 그린 종목 — setData 가 다른 종목을 받을 때만 위 값을 지운다
   const priceLines = [];
   let syncing = false;
 
@@ -1265,7 +1267,7 @@ export function createStockChart(container, candles, opts = {}) {
     if (showLegend && legend) {
       legend.destroy();
       legend = mountLegend(panes[0].box, ch,
-        { candles, period, maSeries, showVolume: false, ind: {}, series: candleSeries, getPrev: () => api.prevClose });
+        { candles, period, maSeries, showVolume: false, ind: {}, series: candleSeries, getPrev: () => livePrev || api.prevClose });
       api.legend = legend;
     }
   }
@@ -1480,7 +1482,7 @@ export function createStockChart(container, candles, opts = {}) {
     if (showLegend) {
       if (legend) legend.destroy();
       legend = mountLegend(panes[0].box, panes[0].chart,
-        { candles, period, maSeries, showVolume: false, ind: {}, series: candleSeries, getPrev: () => api.prevClose });
+        { candles, period, maSeries, showVolume: false, ind: {}, series: candleSeries, getPrev: () => livePrev || api.prevClose });
       api.legend = legend;
     }
     curOwn = ownKeys();
@@ -1695,11 +1697,16 @@ export function createStockChart(container, candles, opts = {}) {
       return true;
     },
 
-    setData(next, nextPeriod) {
+    setData(next, nextPeriod, code) {
       if (!next || !next.length) return;
       candles = next;
       if (nextPeriod) period = nextPeriod;
       vpRange = null;          // 종목·기간이 바뀌면 세로 범위를 다시 잡는다
+      /* 전일 종가는 앞 종목 것이 남으면 안 된다 — 홈 큰 차트는 같은 차트에 다른 종목을 setData 로 다시 쓴다
+         (qa 검수 2026-10-15 · 삼성 5분 → 하닉 일봉에서 「전일 +829.78%」). 같은 종목을 다시 그릴 때(기간 바꿈 · 다시 받기)는 그대로 둔다 —
+         그때 지우면 다음 시세가 올 때까지 봉으로 짐작한 값이 쓰인다. 종목을 모르면(code 없이 부름) 지운다 */
+      if (!code || code !== drawnCode) { livePrev = null; api.prevClose = null; }
+      drawnCode = code || null;
       priceLines.length = 0;
       remap();
       build();
@@ -1807,6 +1814,11 @@ export function createStockChart(container, candles, opts = {}) {
      * 라이브러리가 **새 봉을 붙인다.** */
     updateLast(live) {
       if (!live || !Number.isFinite(live.price) || live.price <= 0) return;
+      /* 마우스 표 「전일」 — 값이 안 바뀌어도 받아 둔다. 묶음 시세는 prev 를 주고, 모달의 단건 시세(/api/kis/price)는
+         prev 없이 change(전일 대비)만 줘서 거꾸로 센다 */
+      const chg = Number.isFinite(live.change) ? live.change : Number.isFinite(live.amt) ? live.amt : null;
+      const pv = Number(live.prev) > 0 ? Number(live.prev) : chg != null ? live.price - chg : null;
+      if (pv > 0) livePrev = pv;
       const i = candles.length - 1;
       const last = candles[i];
       if (!last) return;
@@ -2056,13 +2068,14 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
   function prevClose() {
     const p = getPrev ? Number(getPrev()) : 0;
     if (p > 0) return p;
+    /* 시세 · 점선 값이 없을 때만 봉에서 — 분봉은 어제 마지막 봉, 일봉은 앞 봉. 주 · 월 · 년봉의 앞 봉은 전일이 아니라 「—」 */
     const last = candles.length - 1;
     if (MINUTE_PERIODS.has(period)) {
       const today = String(candles[last].ts).slice(0, 8);
       for (let k = last; k >= 0; k--) if (String(candles[k].ts).slice(0, 8) !== today) return candles[k].close;
       return null;
     }
-    return last > 0 ? candles[last - 1].close : null;
+    return period === 'D' && last > 0 ? candles[last - 1].close : null;
   }
 
   function placeTag() {

@@ -776,11 +776,11 @@ async function paintBigChart(opt = {}) {
   /* 국내 ↔ 미국이 바뀌면 가격 눈금 소수 자리(0 · 2)가 달라 새로 만든다 — 같은 쪽끼리는 그대로 봉만 갈아끼운다 */
   const digits = priceDigitsOf(st.code);
   if (bigChart && host.querySelector('canvas') && bigDigits === digits) {
-    bigChart.setData(candles, period);
+    bigChart.setData(candles, period, st.code);     // 종목을 알려 줘야 다른 종목일 때만 전일 종가를 지운다
   } else {
     dropBigChart();
     host.innerHTML = '';
-    bigChart = createStockChart(host, candles, { period, showVolume: true, priceDigits: digits });
+    bigChart = createStockChart(host, candles, { period, showVolume: true, priceDigits: digits, code: st.code });
     bigDigits = digits;
   }
   bigDrawnKey = key;
