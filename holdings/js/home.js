@@ -210,6 +210,11 @@ function paintStrip(indices) {
     const el = top.querySelector('[data-mk="usdkrw"]');
     const it = el && ((peekIndicators() || { items: [] }).items || []).find((x) => x.key === 'usdkrw');
     if (it) el.outerHTML = chipsHtml({ items: [it] }, mkKey, mkLive());
+    const j = mkKey === 'usdkrw' && peekIndicator('usdkrw'), v = $('kh-big-v');   // 그 칩을 보고 있으면 큰 차트 머리도 같은 값으로(qa 10-15)
+    if (j && v && mkLive().usdkrw) {
+      const h = headOf(j, mkLive().usdkrw);
+      v.className = 'kh-idx-v kh-num ' + h.dirClass; v.textContent = h.value;
+    }
     return;
   }
   if (top) top.innerHTML = stripHtml(indices);
