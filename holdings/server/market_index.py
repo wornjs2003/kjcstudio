@@ -351,6 +351,27 @@ def indicator(key):
                 "bars": bars, "fixed": fixed, "error": None if bars else (err or "받은 값이 없습니다")}
 
 
+# 네이버 재료 줄이 늦는 것은 야후 파이낸스 지금 값으로 덮는다 (2026-10-15 재권님 「천연가스는 다른곳에서 값 가져와」 · 「응 해줘」).
+# 그날 11:51 실측 — 네이버 천연가스 줄 3.2(10-14 종가 3.198) · 야후 NG=F 3.259. KIS 해외 선물은 거래소 신청이 따로 있어 못 쓴다.
+# 야후는 공식으로 열어 둔 창구가 아니다 — 못 받으면 네이버 줄을 그대로 두고 errors 에 남긴다(0 · 빈칸으로 덮지 않는다).
+# 1년 일봉은 네이버 그대로다. 한 번에 한 종목 · 재료와 같은 `RECENT_TTL` 마다
+YAHOO = {"NGcv1": "NG=F", "QGcv1": "QG=F"}          # 재료 줄 코드(reutersCode) → 야후 기호
+YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/%s?range=1d&interval=1m"
+YAHOO_SRC = "야후 파이낸스"
+YAHOO_UA = "Mozilla/5.0"     # 크롬 전체 이름(UA)으로 부르면 쿠키 없이는 429(너무 많은 요청)로 막는다 — 짧은 이름은 200(10-15 12:1x 실측)
+
+
+def _yahoo(sym):
+    req = urllib.request.Request(YAHOO_URL % urllib.parse.quote(sym), headers={"User-Agent": YAHOO_UA})
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        meta = json.loads(r.read().decode("utf-8", "replace"))["chart"]["result"][0]["meta"]
+    v, prev, t = _num(meta.get("regularMarketPrice")), _num(meta.get("chartPreviousClose")), meta.get("regularMarketTime")
+    if v is None or not prev or not t:
+        raise ValueError("야후가 값을 주지 않았습니다")
+    day = datetime.fromtimestamp(t, timezone(timedelta(seconds=meta.get("gmtoffset") or 0))).date().isoformat()
+    return {"v": v, "pct": round((v / prev - 1) * 100, 2), "at": day, "src": YAHOO_SRC}
+
+
 def _mat_row(x):
     return {"name": x.get("name"), "code": x.get("reutersCode"), "v": _num(x.get("closePrice")),
             "pct": _num(x.get("fluctuationsRatio")), "at": str(x.get("localTradedAt") or "")[:10] or None,
@@ -377,6 +398,13 @@ def materials():
                         err[path] = safe_message(e, 120)
                         old = next((p for og in (_mat["groups"] or []) for p in og["parts"] if p["path"] == path), None)
                         rows = old["rows"] if old else []          # 못 받으면 앞에 받은 것을 그대로 둔다
+                    for row in rows:
+                        sym = YAHOO.get(row.get("code"))
+                        if sym:
+                            try:
+                                row.update(_yahoo(sym))
+                            except Exception as e:
+                                err["yahoo:" + sym] = safe_message(e, 120)   # 네이버 줄 그대로
                     parts.append({"path": path, "label": label or g["id"], "rows": rows})
                 groups.append({"id": g["id"], "parts": parts})
             _mat.update(at=now, groups=groups, err=err,

@@ -210,6 +210,11 @@ function paintStrip(indices) {
     const el = top.querySelector('[data-mk="usdkrw"]');
     const it = el && ((peekIndicators() || { items: [] }).items || []).find((x) => x.key === 'usdkrw');
     if (it) el.outerHTML = chipsHtml({ items: [it] }, mkKey, mkLive());
+    const j = mkKey === 'usdkrw' && peekIndicator('usdkrw'), v = $('kh-big-v');   // 그 칩을 보고 있으면 큰 차트 머리도 같은 값으로(qa 10-15)
+    if (j && v && mkLive().usdkrw) {
+      const h = headOf(j, mkLive().usdkrw);
+      v.className = 'kh-idx-v kh-num ' + h.dirClass; v.textContent = h.value;
+    }
     return;
   }
   if (top) top.innerHTML = stripHtml(indices);
@@ -326,6 +331,19 @@ function mkLive() {
   return { usdkrw: { last: { d, c: fx.value }, prev: fx.change == null ? null : { d: null, c: fx.value - fx.change } } };
 }
 
+/* 재료 줄(`n:<갈래>:<코드>`)을 눌러 연 큰 차트 머리도 그 줄의 값 · 등락으로 — 칩과 같은 자리(일봉 끝은 어제 종가일 수 있다 ·
+   천연가스는 줄이 야후 값 · 2026-10-15) */
+function matNow(key) {
+  const [, cat, code] = String(key).split(':');
+  if (!code) return null;
+  for (const g of ((peekMaterials() || {}).groups || [])) for (const p of g.parts) {
+    if (p.path.split('/')[0] !== cat) continue;
+    const x = p.rows.find((r) => r.code === code);
+    if (x && x.v != null) return { last: { d: x.at, c: x.v }, prev: x.pct == null ? null : { d: null, c: x.v / (1 + x.pct / 100) } };
+  }
+  return null;
+}
+
 async function paintMkChips() {
   const host = $('kh-top-ix');
   if (!host) return;
@@ -387,7 +405,7 @@ async function showMarket(key) {
     }
     if (mkWant !== key || mkKey !== key) return;
   }
-  const chip = ((peekIndicators() || { items: [] }).items || []).find((x) => x.key === key);
+  const chip = ((peekIndicators() || { items: [] }).items || []).find((x) => x.key === key) || matNow(key);
   const h = headOf(j, mkLive()[key] || chip || null);      // 머리 값은 칩과 같게
   const name = $('kh-idx-name'), v = $('kh-big-v'), yr = $('kh-year-range');
   const per = $('kh-idx-per'), foot = $('kh-big-foot'), host = $('kh-big-chart');

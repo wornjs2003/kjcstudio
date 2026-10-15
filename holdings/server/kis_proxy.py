@@ -3093,6 +3093,143 @@ def fetch_investor(cfg, code, days=INVESTOR_DAYS):
     return out
 
 
+# ── 투자자 3달 — 마감 뒤 두 번 받아 쌓는다 (2026-10-15 재권님 「응」) ──────────
+#
+# 위 `fetch_investor`(FHKST01010900)는 30거래일까지만 준다. 「3달」(60거래일)은
+# **종목별 투자자매매동향(일별)** FHPTJ04160001 로 받는다 — 한 번에 30거래일이
+# 오고 `FID_INPUT_DATE_1` 을 앞으로 옮기면 그 날부터 거슬러 준다(2026-10-14 15:4x 실측).
+#
+# **00:00 ~ 15:40 에는 거절된다** — 응답 `TIME LIMIT 00:00 ~ 15:40`(2026-10-15 10:36 실측).
+# 그래서 15:40 뒤 그 종목을 처음 열 때 두 번 불러 `investor_daily` 에 쌓고, 그 날은 다시
+# 부르지 않는다. 그 밖 시각에는 쌓인 것만 읽는다 — 장중에 「3달」 을 눌러도 KIS 를 안 부른다.
+# 모든 종목을 미리 받지 않는다 — 열어 본 종목만 하루 두 번이다.
+INVESTOR_LONG_DAYS = 60          # 「3달」 이 더하는 거래일 수
+INVESTOR_LONG_OPEN = (15, 40)    # 이 시각부터 받을 수 있다 (위 실측)
+INVESTOR_LONG_RETRY = 600        # 못 받았으면 이만큼 쉬었다 다시 (초)
+_inv_long_fail = {}              # code -> 못 받은 시각
+# 아래 `SCHEMA` 에도 들지만 `db_init` 이 서버가 뜰 때 늘 도는 것은 아니라 쌓을 때 한 번 더 부른다
+INVESTOR_DAILY_SQL = """CREATE TABLE IF NOT EXISTS investor_daily (
+         code TEXT NOT NULL,
+         date TEXT NOT NULL,
+         row  TEXT NOT NULL,
+         PRIMARY KEY (code, date)
+       )"""
+_inv_long_lock = threading.Lock()
+
+
+def _inv_long_row(r):
+    def side(prefix):
+        return {
+            "net": _num(r.get(prefix + "_ntby_qty"), int),
+            "netAmt": _num(r.get(prefix + "_ntby_tr_pbmn"), int),
+            "buy": _num(r.get(prefix + "_shnu_vol"), int),
+            "sell": _num(r.get(prefix + "_seln_vol"), int),
+        }
+    return {
+        "date": r.get("stck_bsop_date"),
+        "close": _num(r.get("stck_clpr"), int),
+        "amt": _num(r.get("prdy_vrss"), int),
+        "person": side("prsn"),
+        "foreign": side("frgn"),
+        "inst": side("orgn"),
+    }
+
+
+def _inv_long_page(cfg, code, ymd):
+    data = kis_get(
+        cfg,
+        "/uapi/domestic-stock/v1/quotations/investor-trade-by-stock-daily",
+        {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code,
+         "FID_INPUT_DATE_1": ymd, "FID_ORG_ADJ_PRC": "", "FID_ETC_CLS_CODE": ""},
+        "FHPTJ04160001",
+    )
+    if not isinstance(data, dict) or str(data.get("rt_cd")) != "0":
+        return None
+    rows = [_inv_long_row(r) for r in out_rows(data, "output2")]
+    return [r for r in rows if r["date"]]
+
+
+def _inv_long_fetch(cfg, code):
+    """15:40 뒤 하루 한 번 두 쪽(60거래일)을 받아 쌓는다. 쌓았으면 True."""
+    import datetime
+    now = datetime.datetime.now(KST)
+    today = now.strftime("%Y%m%d")
+    key = "inv60:" + code
+    if (now.hour, now.minute) < INVESTOR_LONG_OPEN or not marketdb.writable():
+        return False
+    if _meta_get(key) == today:
+        return False
+    if time.time() - _inv_long_fail.get(code, 0) < INVESTOR_LONG_RETRY:
+        return False
+    with _inv_long_lock:
+        if _meta_get(key) == today:
+            return False
+        got = []
+        ymd = today
+        for _ in range(2):
+            page = _inv_long_page(cfg, code, ymd)
+            if not page:
+                break
+            got.extend(page)
+            oldest = min(r["date"] for r in page)
+            ymd = (datetime.datetime.strptime(oldest, "%Y%m%d")
+                   - datetime.timedelta(days=1)).strftime("%Y%m%d")
+        # 확정치가 빈 줄(net 이 셋 다 None)은 안 쌓는다 — 다음 날 다시 받는다
+        keep = [r for r in got
+                if any(r[s]["net"] is not None for s in ("person", "foreign", "inst"))]
+        if len(keep) < INVESTOR_DAYS:
+            _inv_long_fail[code] = time.time()
+            print("[투자자 3달] %s 못 받음(%d줄) — %d초 뒤 다시"
+                  % (code, len(keep), INVESTOR_LONG_RETRY))
+            return False
+        try:
+            with _db_lock, db_conn() as conn:
+                conn.execute(INVESTOR_DAILY_SQL)
+                conn.executemany(
+                    "INSERT OR REPLACE INTO investor_daily (code, date, row) VALUES (?, ?, ?)",
+                    [(code, r["date"], json.dumps(r, ensure_ascii=False)) for r in keep])
+        except sqlite3.Error as e:
+            _inv_long_fail[code] = time.time()
+            print("[투자자 3달] %s 쓰기 실패 — %s" % (code, safe_message(e, 120)))
+            return False
+        _meta_set(key, today)
+        _inv_long_fail.pop(code, None)
+        return True
+
+
+def _inv_long_read(code, before, limit):
+    """`before` 보다 앞 날짜의 쌓인 줄을 새것부터 `limit` 개. 표가 없으면 빈 목록."""
+    try:
+        with _db_lock, db_conn() as conn:
+            rs = conn.execute(
+                "SELECT row FROM investor_daily WHERE code = ? AND date < ? "
+                "ORDER BY date DESC LIMIT ?", (code, before, limit)).fetchall()
+    except sqlite3.Error:
+        return []
+    return [json.loads(r["row"]) for r in rs]
+
+
+def fetch_investor_long(cfg, code, days=INVESTOR_LONG_DAYS):
+    """30거래일(`fetch_investor`) 뒤에 쌓인 옛 줄을 이어 `days` 거래일 + 오늘 줄까지.
+
+    맨 앞은 그대로 `fetch_investor` 다 — 장중 오늘 줄(`net: null`)도 그대로 온다.
+    화면이 오늘을 건너뛸 수 있게 한 줄 더 붙인다. 쌓인 것이 없으면 30거래일만 간다.
+    """
+    base = fetch_investor(cfg, code)
+    try:
+        _inv_long_fetch(cfg, code)
+    except Exception as e:                       # 받기가 터져도 30거래일은 낸다
+        _inv_long_fail[code] = time.time()
+        print("[투자자 3달] %s 받다 멈춤 — %s" % (code, safe_message(e, 120)))
+    want = days + 1
+    if not base:
+        return _inv_long_read(code, "99999999", want)
+    oldest = min(r["date"] for r in base if r.get("date")) if any(
+        r.get("date") for r in base) else "99999999"
+    more = _inv_long_read(code, oldest, max(0, want - len(base)))
+    return base + more
+
+
 # ── 재무 다섯 — 모달 「투자 지표」 칸 재무 카드 (2026-10-02 지시) ──────────
 #
 # 재권님 — 재무 카드 시안 v3 를 보시고 「방향이 맞아 개발해」.
@@ -3435,6 +3572,7 @@ SCHEMA = [
     """CREATE TABLE IF NOT EXISTS sync_meta (
          key TEXT PRIMARY KEY, value TEXT, updated_at TEXT
        )""",
+    INVESTOR_DAILY_SQL,      # 「3달」 — 위 `fetch_investor_long`
 ]
 
 # 기간별 설정
@@ -7123,7 +7261,15 @@ class Handler(SimpleHTTPRequestHandler):
                 if not (code.isdigit() and len(code) == 6):
                     self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
                     return
-                data = fetch_investor(cfg, code)
+                # `span=60` 이면 쌓인 옛 줄을 이어 3달까지 (2026-10-15 · `fetch_investor_long`)
+                try:
+                    span = int((qs.get("span") or ["0"])[0])
+                except ValueError:
+                    span = 0
+                if span > INVESTOR_DAYS:
+                    data = fetch_investor_long(cfg, code, min(span, INVESTOR_LONG_DAYS))
+                else:
+                    data = fetch_investor(cfg, code)
                 self._send_json({
                     "ok": bool(data), "data": data,
                     "meta": {
