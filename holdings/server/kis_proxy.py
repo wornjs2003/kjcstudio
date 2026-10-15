@@ -216,6 +216,14 @@ MARKET_DIV_CHART = "UN"
 # 통합이 과거를 잘라 줄 때 되묻는 쪽.
 MARKET_DIV_CHART_ALT = "J"
 
+# **일 · 주 · 월 · 년봉은 정규장(KRX · J)으로 받는다** (2026-10-15 재권님 「오늘 시가에 맞춰야지」 · 「응 해줘」).
+# 통합(UN)으로 받으면 넥스트레이드 장 전(08:00~) · 장 뒤 거래가 봉에 들어가, 화면 위쪽 시세(정규장)와 갈렸다 —
+# 삼성 10-15 일봉 시가 225,000(장 전 첫 체결) ↔ 시세 시가 216,500 · 어제 일봉 종가 234,500 ↔ 시세 전일 232,000
+# (개념정의 · qa 실측). **5분봉은 그대로 통합이다** — 장 전 · 장 뒤 움직임을 시간대별로 보는 차트라서다.
+# 과거가 잘려 오면(넥스트레이드 늦게 편입된 종목) 아래 ALT 로 한 번 더 묻는 모양은 그대로 — 기준만 뒤집었다.
+MARKET_DIV_BARS = "J"
+MARKET_DIV_BARS_ALT = "UN"
+
 # 정규장 시간대 (KRX)
 KRX_OPEN  = (9, 0)
 KRX_CLOSE = (15, 30)
@@ -3862,10 +3870,10 @@ def fetch_bars_from_kis(cfg, code, period, date_from, date_to):
     **되묻는 비용은 잘린 종목에만 든다.** 꽉 찬 응답은 판정에서 빠지므로
     (`_looks_truncated`) 보통 종목은 호출이 늘지 않는다.
     """
-    rows = _bars_once(cfg, code, period, date_from, date_to, MARKET_DIV_CHART)
-    if MARKET_DIV_CHART_ALT != MARKET_DIV_CHART and _looks_truncated(rows, date_from):
+    rows = _bars_once(cfg, code, period, date_from, date_to, MARKET_DIV_BARS)
+    if MARKET_DIV_BARS_ALT != MARKET_DIV_BARS and _looks_truncated(rows, date_from):
         try:
-            alt = _bars_once(cfg, code, period, date_from, date_to, MARKET_DIV_CHART_ALT)
+            alt = _bars_once(cfg, code, period, date_from, date_to, MARKET_DIV_BARS_ALT)
         except Exception:
             return rows              # 되묻다 실패하면 처음 받은 것을 쓴다
         if len(alt) > len(rows):
@@ -5729,6 +5737,25 @@ def _us_deep_work():
     return work
 
 
+def _kr_div_work():
+    """국내 일 · 주 · 월 · 년봉 중 아직 정규장(`MARKET_DIV_BARS`)으로 다시 안 받은 것 → [(코드, 주기)] (2026-10-15).
+
+    화면이 연 (종목, 주기)는 `_get_chart_one` 이 그 자리에서 다시 받지만, **읽기 전용 서버(8764 · 8767 · 세션)는
+    저장 · 표시를 못 해** 8765 가 그 종목을 열기 전까지 통합 봉을 그대로 냈다(개념정의 검수 · 8767 삼성 일봉 시가 225,000).
+    그래서 8765 의 봉 채우기가 DB 에 있는 것 전부를 한 번씩 다시 받는다. 감시 대상(시가총액 순)을 앞에 둔다."""
+    try:
+        with _db_lock, db_conn() as conn:
+            have = conn.execute(
+                "SELECT DISTINCT code, period FROM candles WHERE period IN ('D','W','M','Y') AND length(code)=6").fetchall()
+            rank = {r[0]: r[1] for r in conn.execute("SELECT stock_code, rank FROM dart_universe")}
+    except Exception:
+        return []
+    work = [(c, p) for c, p in have
+            if not us_universe.is_us(c) and _meta_get("div:%s:%s" % (c, p)) != MARKET_DIV_BARS]
+    work.sort(key=lambda cp: (rank.get(cp[0], 10 ** 6), cp[0], "DWMY".index(cp[1])))
+    return work
+
+
 def _bar_fill_run(label, work, do_one):
     """일감 목록을 하나씩 — 하나 앞마다 쉬어야 하는지 본다. 백 개마다 · 끝에 한 줄."""
     if not work:
@@ -5780,6 +5807,14 @@ def start_bar_fill(cfg, port):
         _kr_past_day(cfg, code, day)
         _fill_mark(code, day)
 
+    def kr_div_one(code, period):
+        # 화면이 여는 길과 같은 양(DWMY_WANT)을 정규장으로 거슬러 받아 덮는다 · 받은 만큼 쉰다
+        bars = fetch_bars_back(cfg, code, period, DWMY_WANT)
+        time.sleep(BAR_FILL_CALL_GAP * max(1, -(-DWMY_WANT // BARS_PER_CALL)))
+        if bars:
+            save_candles(code, period, bars)
+            _meta_set("div:%s:%s" % (code, period), MARKET_DIV_BARS)
+
     def loop():
         time.sleep(PREFILL_START_SEC)
         while True:
@@ -5789,6 +5824,7 @@ def start_bar_fill(cfg, port):
                 done += _bar_fill_run("미국 5분봉", _us_fill_work(), us_5m_one)
                 done += _bar_fill_run("미국 일주월", _us_deep_work(), us_deep_one)
                 done += _bar_fill_run("국내 5분봉", _kr_fill_work(), kr_one)
+                done += _bar_fill_run("국내 일주월년 정규장", _kr_div_work(), kr_div_one)
                 _bar_fill["at"] = datetime.now(KST).strftime("%m-%d %H:%M")
                 _bar_fill["left"] = None
                 _bar_fill["state"] = "다 돎 · 다음 확인 대기"
@@ -5826,6 +5862,13 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
     else:
         stale = (time.time() - last_sync) > conf["fresh_sec"]
 
+    # **통합(UN)으로 쌓인 일 · 주 · 월 · 년봉은 한 번 정규장(J)으로 다시 받는다** (2026-10-15 · `MARKET_DIV_BARS`).
+    # 그 (종목, 주기)를 처음 볼 때 「오래됨」 으로 보고 달라는 만큼 거슬러 받아 덮어쓴다 — 받은 뒤 표시를 적어 다시 안 받는다.
+    # 달라는 것보다 오래된 봉은 통합 그대로 남는다(화면에 안 닿는 자리).
+    dkey = "div:%s:%s" % (code, period)
+    if conf["kis"] and _meta_get(dkey) != MARKET_DIV_BARS:
+        stale = True
+
     # 달라는 만큼 DB 에 없고, 아직 끝까지 훑어보지 않았으면 과거를 더 받는다.
     #
     # **「오래됐나」 만 보면 과거가 영영 안 채워진다** (2026-09-29). 한 번에
@@ -5838,6 +5881,8 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
     if not rows or stale or want_more:
         if conf["kis"]:                      # 일/주/월/년
             bars = fetch_bars_back(cfg, code, period, limit)
+            if bars:
+                _meta_set(dkey, MARKET_DIV_BARS)
         else:                                # 분봉
             # 많이 비었으면 하루치를 모으고(호출 여러 번), 조금이면 최근 구간만.
             #
