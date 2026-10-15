@@ -21,6 +21,7 @@
 
 import { apiFetch } from '../data/api.js';
 import { getDisclosuresBody } from '../data/dart.js';
+import { signClass } from '../../../assets/js/sign.js';
 
 /* 앞으로 며칠 치를 보여줄 것인가. 지난 것은 보여주지 않는다 —
    일정 칸은 "앞으로 뭐가 있나" 를 보는 자리다 (2026-09-15 지시). */
@@ -135,7 +136,8 @@ function releaseValue(x) {
   else if (x.unit === '천건') { a = `${(v / 10).toLocaleString('ko-KR', { maximumFractionDigits: 0 })}만 건`; b = c == null ? '' : `${sign(c)}${num(c / 10)}만 건`; }
   else if (x.unit === '건') { a = `${(v / 1e4).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}만 건`; b = c == null ? '' : `${sign(c)}${num(c / 1e4, 1)}만 건`; }
   else { a = v.toLocaleString('ko-KR', { maximumFractionDigits: 1 }); b = c == null ? '' : `${sign(c)}${num(c)}`; }
-  return { text: b ? `${a} ${b}` : a, cls: c > 0 ? 'kh-up' : c < 0 ? 'kh-down' : '' };
+  /* 등락 색은 공용 셈(sign.js) — 등락이 없으면(c 없음) 머리 숫자를 흐리게 하지 않고 색 없음 */
+  return { text: b ? `${a} ${b}` : a, cls: c == null ? '' : signClass(c) };
 }
 
 /* 몇 월분 — 계열 마지막 점의 기간 */
