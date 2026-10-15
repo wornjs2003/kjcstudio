@@ -45,6 +45,14 @@ DB_PATH = marketdb.DB_PATH
 
 DART_API = "https://opendart.fss.or.kr/api"
 
+# 하루 한도 — 공식은 「일반적으로 20,000건 이상이면 020 · 요청 제한이 다르게 설정된 경우는 그에 준한다」
+# (OpenDART 개발 가이드 · 메시지 설명 · 2026-10-15 확인). 키마다 다를 수 있다 — 우리 키의 값은 OpenDART
+# 「오픈API 이용현황」 에서만 보인다. 1분 제한(100건 등)은 남의 글에만 있고 공식 문서에서는 못 찾았다.
+DART_DAILY_LIMIT = 20000
+# 하루 이만큼까지만 쓴다 — 넘으면 그날은 받기를 멈추고 자정(KST)에 다시 센다.
+# 재권님 2026-10-15 「절반만 안으로 만들어놔」. 무엇을 더 받을지는 나중에 정하신다.
+DART_DAILY_BUDGET = DART_DAILY_LIMIT // 2
+
 # 공시 원문 보기 주소. rcept_no 하나만 있으면 열린다.
 VIEWER = "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=%s"
 
@@ -234,6 +242,70 @@ def _today():
     return datetime.now(KST).strftime("%Y%m%d")
 
 
+# ---------------------------------------------------------------- 하루 사용량
+#
+# OpenDART 를 부르는 자리는 전부 `_dart_get` 을 거친다 — 여기서 하루 건수와 020 을 센다.
+# 셈은 sync_meta 의 `dart_usage` 한 줄(JSON)에 두어 서버를 다시 켜도 그날 셈이 이어진다.
+# 쓰기 못 하는 서버(읽기 전용 DB)는 메모리로만 센다 — 그런 서버는 공시를 안 받는다(kis_proxy).
+
+_usage_lock = threading.Lock()
+_usage = None
+
+
+def _usage_now():
+    """오늘 셈. 날짜가 바뀌었으면 0 부터. 부르는 쪽이 _usage_lock 을 쥔다."""
+    global _usage
+    today = _today()
+    if _usage is None:
+        try:
+            _usage = json.loads(_meta_get("dart_usage") or "null")
+        except (ValueError, sqlite3.Error):
+            _usage = None
+    if not isinstance(_usage, dict) or _usage.get("date") != today:
+        _usage = {"date": today, "calls": 0, "e020": 0, "last020": None, "blocked": 0}
+    return _usage
+
+
+def _usage_save(u):
+    _meta_set("dart_usage", json.dumps(u, ensure_ascii=False))
+
+
+def dart_usage():
+    """하루 사용량 — /api/dart/status 가 그대로 낸다. 못 센 날(셈이 없는 서버)도 0 이 아니라 그날 셈이다."""
+    with _usage_lock:
+        u = dict(_usage_now())
+    u.update({"limit": DART_DAILY_LIMIT, "budget": DART_DAILY_BUDGET,
+              "left": max(0, DART_DAILY_BUDGET - u["calls"])})
+    return u
+
+
+class DartBudgetExceeded(RuntimeError):
+    pass
+
+
+def _dart_get(url, timeout):
+    """OpenDART 한 번 부르기 — 하루 쓸 값을 넘으면 부르지 않고 DartBudgetExceeded."""
+    with _usage_lock:
+        u = _usage_now()
+        if u["calls"] >= DART_DAILY_BUDGET:
+            u["blocked"] = u.get("blocked", 0) + 1
+            _usage_save(u)
+            raise DartBudgetExceeded("하루 쓸 값 %d건에 닿아 오늘은 받지 않습니다" % DART_DAILY_BUDGET)
+        u["calls"] += 1
+        _usage_save(u)
+    req = urllib.request.Request(url, headers={"User-Agent": "KJC-Holdings/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+def _note_020():
+    with _usage_lock:
+        u = _usage_now()
+        u["e020"] += 1
+        u["last020"] = datetime.now(KST).isoformat(timespec="seconds")
+        _usage_save(u)
+
+
 def get_key():
     """secrets.json 의 dart.api_key. 없으면 None — 공시 기능만 조용히 꺼진다."""
     path = secrets_path()
@@ -256,12 +328,12 @@ def refresh_corps(key):
     십만 개가 넘는다. 그중 stock_code 가 채워진 것이 상장사다.
     """
     url = DART_API + "/corpCode.xml?" + urllib.parse.urlencode({"crtfc_key": key})
-    req = urllib.request.Request(url, headers={"User-Agent": "KJC-Holdings/1.0"})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        raw = r.read()
+    raw = _dart_get(url, 60)
 
     # 키가 틀리면 ZIP 이 아니라 XML 로 오류가 온다
     if not raw.startswith(b"PK"):
+        if b"<status>020</status>" in raw:
+            _note_020()
         msg = scrub(raw.decode("utf-8", "replace"))[:200]
         raise RuntimeError("기업 대응표를 받지 못했습니다: %s" % msg)
 
@@ -593,11 +665,11 @@ def fetch_list(key, bgn, end, corp_cls="Y", max_pages=12):
             "crtfc_key": key, "bgn_de": bgn, "end_de": end,
             "corp_cls": corp_cls, "page_no": page, "page_count": 100,
         })
-        req = urllib.request.Request(url, headers={"User-Agent": "KJC-Holdings/1.0"})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            body = json.loads(r.read().decode("utf-8"))
+        body = json.loads(_dart_get(url, 30).decode("utf-8"))
 
         status_code = body.get("status")
+        if status_code == "020":
+            _note_020()
         if status_code == "013":            # 아직 공시가 없다
             break
         if status_code != "000":
@@ -734,6 +806,7 @@ def status():
         # 고치기 전에 저장된 값이 남아 있을 수 있어 돌려줄 때 한 번 더 거른다
         "lastPollError": scrub(_meta_get("dart_last_error")) or None,
         "watchCodes": WATCH_CODES,
+        "usage": dart_usage(),
     }
 
 
