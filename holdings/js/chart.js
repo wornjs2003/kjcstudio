@@ -1940,8 +1940,9 @@ export function createStockChart(container, candles, opts = {}) {
       const last = candles[i];
       if (!last) return;
       /* **일 · 주 · 월 · 년봉은 아침 7시~장 시작(9시)과 주말에는 시세를 안 얹는다** (2026-10-15 재권님 「다음날 아침7시에
-         정규장 종가로 변경해줘」). 장이 끝난 저녁에는 시세(넥스트레이드 · 통합)를 따라가다가, 다음 날 7시가 되면 서버가 준
-         정규장 종가 봉으로 돌아간다. 저녁부터 창이 켜져 있었으면 얹기 전 서버 봉으로 되돌린다 */
+         정규장 종가로 변경해줘」 → 같은 날 20:1x 「응 통합으로 해줘」 — 봉이 통합(MARKET_DIV_BARS)이 되어 7시 뒤는 **통합 종가**).
+         장이 끝난 저녁에는 시세(넥스트레이드 · 통합)를 따라가다가, 다음 날 7시가 되면 서버가 준 봉(통합 종가)으로 돌아간다.
+         저녁부터 창이 켜져 있었으면 얹기 전 서버 봉으로 되돌린다 */
       if (!MINUTE_PERIODS.has(period) && !liveOverlayHours()) {
         if (overlaid && last === overlaid && serverLast && serverLast.ts === last.ts) {   // 내가 얹은 봉일 때만 — 서버가 새로 준 봉은 그대로
           candles[i] = serverLast;
@@ -2294,8 +2295,10 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     if (!c) return;
     const last = candles.length - 1;
     nodes.when.textContent = fmtWhen(c.ts);
-    const prevC = i > 0 ? candles[i - 1].close : null;
-    const chg = prevC ? (c.close - prevC) / prevC * 100 : null;
+    /* 「등락」 은 그 봉의 시가 대비 — (종가 − 시가) ÷ 시가 (2026-10-15 20:1x 재권님 「등락률을 표기할때 시가를 기준으로 한다 로 해줘」 ·
+       「응」 — 차트 마우스 표 · 범례만. 위쪽 시세 · 순위의 전일 대비 등락률은 그대로). 전에는 앞 봉 종가 대비였는데 일 이상 봉이
+       통합이 되면서 앞 봉 종가(통합)가 정규장 전일 종가와 갈려 위쪽 시세 등락률과 다른 값이 나왔다 */
+    const chg = c.open ? (c.close - c.open) / c.open * 100 : null;
     nodes.chg.textContent = chg == null ? '—' : `${sign(chg)}${chg.toFixed(2)}%`;
     nodes.chg.className = chg == null ? '' : updn(chg);
     const cur = candles[last].close;
