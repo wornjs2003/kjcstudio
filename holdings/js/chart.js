@@ -825,7 +825,8 @@ export function createStockChart(container, candles, opts = {}) {
   let vpLayer = null;          // 매물대가 깔리는 층 (가격 칸 뒤)
   let vpTimer = null;
   let legend = null;
-  let livePrev = null;          // 시세가 준 전일 종가(updateLast) — 마우스 표 「전일」 의 첫 기준 · 종목이 바뀌면 지운다
+  let livePrev = null;
+  let lastLive = null;          // 마지막으로 받은 시세 — 서버 봉을 덧붙여 맨 오른쪽이 서버 값으로 돌아가면 다시 얹는다          // 시세가 준 전일 종가(updateLast) — 마우스 표 「전일」 의 첫 기준 · 종목이 바뀌면 지운다
   let drawnCode = opts.code || null;   // 지금 그린 종목 — setData 가 다른 종목을 받을 때만 위 값을 지운다
   const priceLines = [];
   let syncing = false;
@@ -1705,7 +1706,7 @@ export function createStockChart(container, candles, opts = {}) {
       /* 전일 종가는 앞 종목 것이 남으면 안 된다 — 홈 큰 차트는 같은 차트에 다른 종목을 setData 로 다시 쓴다
          (qa 검수 2026-10-15 · 삼성 5분 → 하닉 일봉에서 「전일 +829.78%」). 같은 종목을 다시 그릴 때(기간 바꿈 · 다시 받기)는 그대로 둔다 —
          그때 지우면 다음 시세가 올 때까지 봉으로 짐작한 값이 쓰인다. 종목을 모르면(code 없이 부름) 지운다 */
-      if (!code || code !== drawnCode) { livePrev = null; api.prevClose = null; }
+      if (!code || code !== drawnCode) { livePrev = null; lastLive = null; api.prevClose = null; }
       drawnCode = code || null;
       priceLines.length = 0;
       remap();
@@ -1751,6 +1752,7 @@ export function createStockChart(container, candles, opts = {}) {
         candles.splice(0, candles.length, ...merged);
         remap();
         build();
+        if (lastLive) api.updateLast(lastLive);   // 맨 오른쪽을 지금 시세로 (qa 검수 · 주봉 「현재」 가 서버 봉 값)
         return -1;
       }
       if (!tail.length) return 0;
@@ -1785,6 +1787,7 @@ export function createStockChart(container, candles, opts = {}) {
         if (range) { try { p.chart.timeScale().setVisibleLogicalRange(range); } catch { /* 아직 없음 */ } }
       });
       paintPaneTags(candles.length - 1);
+      if (lastLive) api.updateLast(lastLive);     // 덧붙인 서버 봉이 맨 오른쪽을 서버 값으로 돌려놓았다 — 지금 시세로
       return tail.length;
     },
 
@@ -1819,6 +1822,7 @@ export function createStockChart(container, candles, opts = {}) {
       const chg = Number.isFinite(live.change) ? live.change : Number.isFinite(live.amt) ? live.amt : null;
       const pv = Number(live.prev) > 0 ? Number(live.prev) : chg != null ? live.price - chg : null;
       if (pv > 0) livePrev = pv;
+      lastLive = live;
       const i = candles.length - 1;
       const last = candles[i];
       if (!last) return;
@@ -2098,6 +2102,9 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
       + `<br><i>현재</i> <b class="${pct == null ? '' : updn(pct)}">${fmtPct(pct)}</b>`;
     tag.style.left = `${ox + point.x}px`;
     tag.hidden = false;
+    /* 칸 오른끝에서 넘치면 마우스 왼쪽에 둔다 (qa 검수 · 좁은 폭 오른끝 5~8px 넘침) */
+    const right = ox + point.x + 10 + tag.offsetWidth > container.clientWidth;
+    tag.style.transform = right ? 'translate(calc(-100% - 10px), -50%)' : '';
     /* 칸 위끝 · 아래끝에서 칸 밖으로 넘치지 않게 표 높이 절반만큼 안으로 당긴다 (qa 검수 · 넓은 폭 위로 10px 넘침) */
     const half = tag.offsetHeight / 2;
     tag.style.top = `${Math.min(Math.max(oy + point.y, half), container.clientHeight - half)}px`;
