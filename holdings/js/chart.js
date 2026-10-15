@@ -2106,7 +2106,7 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
   /* ── 보이는 화면 안 최고가 · 최저가 (2026-10-15 재권님 「차트에 가장 하한가와 가장 상한가도 표기해주고 그것과 현재 내가 마우스
      올린곳과의 등락률도 알려줘 · 차트에 표기해달라는건 현재 차트에 보여지는 화면안에서의 값이야」 → 시안 「응 맞아 이대로해」).
      지금 화면에 보이는 봉들의 고가 중 가장 높은 것 · 저가 중 가장 낮은 것 — 끌거나 줄여 보이는 봉이 바뀌면 따라 바뀐다.
-     그 캔들 꼬리 끝에 이름표를 얹기만 한다(칸 크기 · 봉 높이 안 바뀜). 좁은 미리보기 차트(is-compact)에서는 감춘다 */
+     그 캔들 꼬리 끝에 이름표를 얹기만 한다(칸 크기 · 봉 높이 안 바뀜) */
   const pinHi = document.createElement('div');
   pinHi.className = 'kh-lg-pin is-hi kh-num';
   const pinLo = document.createElement('div');
@@ -2134,7 +2134,9 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
       x = chart.timeScale().logicalToCoordinate(i);
       y = series ? series.priceToCoordinate(price) : null;
     } catch { /* 칸이 아직 없다 */ }
-    if (x == null || y == null || el.classList.contains('is-compact')) { pin.hidden = true; return; }
+    /* 칸 크기로 감추지 않는다 — 좁은 폭(폰) 큰 차트에서도 보인다 (2026-10-15 qa 물음 · 재권님 「당연한 말을」).
+       이 차트를 만드는 곳은 홈 큰 차트와 종목 모달 둘뿐이라 감출 미리보기 차트가 없다(grep createStockChart · 같은 날) */
+    if (x == null || y == null) { pin.hidden = true; return; }
     const cv = container.querySelector('canvas');
     const ox = cv ? cv.getBoundingClientRect().left - container.getBoundingClientRect().left : 0;
     const oy = cv ? cv.getBoundingClientRect().top - container.getBoundingClientRect().top : 0;
@@ -2143,7 +2145,14 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     /* 칸 왼끝 · 오른끝에서 칸 밖으로 넘치지 않게 안으로 당긴다 */
     const half = pin.offsetWidth / 2;
     pin.style.left = `${Math.min(Math.max(ox + x, half), container.clientWidth - half)}px`;
-    pin.style.top = `${oy + y}px`;
+    /* 세로 범위가 그 값보다 좁으면(좁은 폭 · 세로 범위 고정) 그림판 밖으로 나간다 — 그림판 위끝 · 아래끝 안으로 당긴다 */
+    const ch = cv ? cv.getBoundingClientRect().height : container.clientHeight;
+    const h = pin.offsetHeight + 4;
+    /* 위쪽은 값 줄(시 · 고 · 저 · 종) 아래까지만 — 이름표가 값 줄을 가리지 않게 */
+    const lgBottom = cv ? el.getBoundingClientRect().bottom - cv.getBoundingClientRect().top : 0;
+    const top = Math.max(h, lgBottom + h);
+    const yy = pin.classList.contains('is-hi') ? Math.min(Math.max(y, top), ch) : Math.max(Math.min(y, ch - h), 0);
+    pin.style.top = `${oy + yy}px`;
   }
 
   function placePins() {
