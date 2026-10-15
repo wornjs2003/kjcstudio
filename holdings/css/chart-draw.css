@@ -1,0 +1,17 @@
+/* 차트 그리기 도구 — holdings/js/chart-draw.js 가 스스로 건다(홈 · 종목 모달 · 종목 화면 어디서 차트를 열든)
+   가격 칸 안 오른쪽 위에 겹쳐 얹는다 — 칸 크기 · 배치는 그대로 (재권님 2026-10-15 「오른쪽 위에가 더 좋겠는데, 칸은 좀더 작게」)
+   오른쪽 자리(가격축 폭)는 JS 가 넣는다 — chart.js 의 AXIS_W 한 곳 */
+.kh-draw {
+  position: absolute; top: 6px; z-index: 6;
+  display: flex; flex-direction: column; gap: 1px; padding: 2px;
+  background: var(--kh-bg-card); border-radius: 8px;
+  box-shadow: 0 1px 4px rgb(var(--kh-ink-rgb) / 12%);
+}
+.kh-draw-b {
+  width: 22px; height: 22px; display: grid; place-items: center;
+  border: 0; border-radius: 6px; padding: 0; cursor: pointer;
+  background: transparent; color: var(--kh-text-secondary);
+}
+.kh-draw-b:hover { background: var(--kh-accent-dim); }
+.kh-draw-b.is-on { background: var(--kh-accent-dim); color: var(--kh-accent); }
+.kh-drawing .kh-pane-box { cursor: crosshair; }
