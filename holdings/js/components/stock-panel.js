@@ -27,6 +27,7 @@
 import { mountInvestor } from './investor.js';
 import { mountAiAnalysis } from './ai-analysis.js';
 import { mountStockNews } from './stock-news.js';
+import { openInvestorModal } from './investor-modal.js';
 
 const HTML = `
   <div class="kh-p3-s kh-iv-s">
@@ -37,7 +38,10 @@ const HTML = `
         <button class="kh-chip" data-view="month">한달</button>
         <button class="kh-chip" data-view="q3">3달</button>
       </span>
-      <span class="kh-bd kh-bd-on">한국투자증권</span></div>
+      <!-- 출처 배지 자리에 「자세히 ›」 — 투자자 지표 모달 (2026-10-15 재권님 · 시안 「자세히는 배지 자리」).
+           줄 끝에 따로 붙이면 머리 줄이 꺾였다(22 → 40px 실측). 출처(한국투자증권)는 아래 설명 줄에 이미 있다.
+           클래스는 「자세히 ›」 하나(kh-fold · 스킬 modal) · 여백만 줄여 머리 줄 높이를 지킨다(css/home.css) -->
+      <a class="kh-fold kh-iv-more" role="button" tabindex="0">자세히 ›</a></div>
     <div class="kh-p3-b kh-iv-box">불러오는 중</div>
   </div>
 
@@ -275,9 +279,19 @@ export function mountStockPanel(root, { code = null } = {}) {
 
   if (code) { investor.setCode(code); ai.setCode(code); news.setCode(code); }
 
+  /* 「자세히 ›」 — 지금 이 칸이 보는 종목으로 투자자 지표 모달을 연다 */
+  let cur = code;
+  const more = q('.kh-iv-more');
+  const openMore = () => openInvestorModal({ code: cur });
+  if (more) {
+    more.addEventListener('click', openMore);
+    more.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMore(); } });
+  }
+
   return {
     setCode(next) {
       if (!next) return;
+      cur = next;
       investor.setCode(next);
       ai.setCode(next);
       news.setCode(next);

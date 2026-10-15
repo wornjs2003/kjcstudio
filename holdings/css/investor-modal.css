@@ -1,0 +1,57 @@
+/* ==========================================================================
+   투자자 지표 모달 — js/components/investor-modal.js 가 스스로 건다 (2026-10-15 재권님 「한번 올려줘」)
+   색은 theme.css 변수만. 서랍(실시간 순위)은 공용 모달의 오른쪽 서랍 손잡이를 쓴다 — 판이
+   `has-right` 를 붙이면 이 칸이 보이고 모달이 서랍만큼 넓어진다(css/modal.css 의 --kh-add).
+   ========================================================================== */
+
+/* 서랍 폭은 홈 오른쪽 칸(.kh-app-wide 의 368px)과 같게 — 홈 순위 칸을 그대로 옮겨 오므로.
+   틈은 14 + 손잡이 자리 22 — 손잡이가 순위표 등락률을 가리지 않게 */
+.kh-stage:has(.kh-ivm-rank) { --kh-drawer: 368px; --kh-gap: 36px; }
+.kh-stage .kh-ivm-rank { display: none; }
+.kh-stage.has-right .kh-ivm-rank {
+  display: flex; flex-direction: column;
+  flex: 0 0 var(--kh-drawer); width: var(--kh-drawer);
+  margin-left: 14px; padding-right: 22px; box-sizing: content-box;
+}
+.kh-ivm-rank .kh-side { flex: 1; display: flex; flex-direction: column; }
+.kh-ivm-rank .kh-side-wrap { position: relative; inset: auto; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.kh-ivm-rank .kh-rank-card { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 0; }
+.kh-ivm-rank #kh-rank-more { display: none; }     /* 순위 모달로 가는 길 — 이 모달 안에서는 쓰지 않는다 */
+
+.kh-ivm { display: flex; height: min(680px, calc(100vh - 220px)); }
+.kh-ivm-main { flex: 1; min-width: 0; padding: 8px 20px 20px; overflow: auto; }
+
+.kh-mh-top .kh-cat-search { margin-left: 12px; }
+
+.kh-ivm-bar-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0 12px; }
+.kh-ivm-cap { display: flex; font-size: 12px; color: var(--kh-text-secondary); margin-bottom: 6px; }
+.kh-ivm-cap > div:first-child { flex: 1; text-align: right; padding-right: 8px; }
+.kh-ivm-cap > div:last-child { flex: 1; padding-left: 8px; }
+
+/* 양쪽 막대 — 왼쪽 매도(파랑) · 가운데 이름 · 오른쪽 매수(빨강) */
+.kh-ivm-row { display: flex; align-items: center; margin: 4px 0; border-radius: 6px; }
+.kh-ivm-row[data-code] { cursor: pointer; }
+.kh-ivm-row[data-code]:hover { background: var(--kh-bg-surface); }
+.kh-ivm-row.is-on { outline: 2px solid var(--kh-accent); }
+.kh-ivm-side { flex: 1; display: flex; align-items: center; gap: 4px; }
+.kh-ivm-side.l { justify-content: flex-end; }
+.kh-ivm-fill { height: 20px; }
+.kh-ivm-fill.sell { background: var(--kh-down); border-radius: 4px 0 0 4px; }
+.kh-ivm-fill.buy  { background: var(--kh-up);   border-radius: 0 4px 4px 0; }
+.kh-ivm-amt { font-size: 11px; color: var(--kh-text-secondary); white-space: nowrap; }
+.kh-ivm-mid { width: 190px; flex: 0 0 190px; text-align: center; font-size: 13px; line-height: 1.25; }
+.kh-ivm-mid small { font-size: 11px; color: var(--kh-text-secondary); }
+.kh-ivm-big .kh-ivm-fill { height: 30px; }
+.kh-ivm-big .kh-ivm-mid { font-size: 14px; }
+
+.kh-ivm-name { font-weight: 700; margin-left: 8px; }
+.kh-ivm-chart { position: relative; height: 320px; }
+.kh-ivm-pick { position: absolute; inset: 0 0 28px 0; cursor: crosshair; z-index: 3; display: none; }
+.kh-ivm-chart.is-picking .kh-ivm-pick { display: block; }
+.kh-ivm-box {
+  position: absolute; top: 0; bottom: 28px; z-index: 2; pointer-events: none;
+  border: 1.5px dashed var(--kh-accent); background: var(--kh-accent-dim);
+}
+.kh-ivm-period { margin: 10px 0 6px; font-size: 13px; }
+.kh-ivm-note { margin-top: 10px; font-size: 12px; color: var(--kh-text-secondary); }
+.kh-ivm-mut { font-size: 13px; color: var(--kh-text-secondary); }
