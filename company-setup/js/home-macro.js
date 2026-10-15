@@ -51,7 +51,7 @@ async function macro() {
   const krw = ind('usdkrw'), wti = ind('wti'), vix = kis('VIX');
   const g = E && last(E.gpr), ep = E && last(E.epu);
   // 물가 — 미국은 서버 발표 지표(/api/macro/releases 의 cpi) · 한국은 서버 ECOS 값(kr_cpi_yoy). 못 받으면 「—」 (2026-10-15 재권님 「응」)
-  // 날짜는 미국 날짜 · 발표는 한국 21:30 · fresh 가 false 면 새 발표를 아직 못 받아 last 가 그 전 값이다(개발3)
+  // 날짜는 미국 날짜 · 다음 발표의 한국 시각은 서버 nextReleaseKst(서머타임을 서버가 셈 · 없으면 날짜만) · fresh 가 false 면 새 발표를 아직 못 받아 last 가 그 전 값이다(개발3)
   const r1 = x => (x == null ? null : Math.round(x * 10) / 10);
   const cu = REL && (REL.releases || []).find(x => x.key === 'cpi'), cl = cu && cu.last;
   const kc = KS && KS.series && KS.series.kr_cpi_yoy && last(KS.series.kr_cpi_yoy.points);
@@ -59,7 +59,7 @@ async function macro() {
   const cpiT = (cl ? `미국 ${num(r1(cl.v), 1)}%${cu.chg == null ? '' : ` <span class="${signClass(cu.chg, NUM)}">${cu.chg > 0 ? '+' : ''}${(+cu.chg).toFixed(1)}%p</span>`}`
       + ` · ${cu.fresh === false ? '직전 발표 값' : `${(cu.lastRelease || '').slice(5)} 발표`}` : '미국 —')
     + (kc ? ` · 한국 ${num(r1(kc.v), 1)}% · ${mon(kc.d)}` : ' · 한국 —');
-  const cpiTip = [cl ? `미국 소비자물가 전년비 ${cl.d} 분 ${cl.v}%${cu.prev ? ` (직전 ${cu.prev.d} 분 ${cu.prev.v}%)` : ''} · ${cu.lastRelease} 발표 · 다음 발표 ${cu.nextRelease || '—'} (미국 날짜 · 한국 시각 21:30)` : '',
+  const cpiTip = [cl ? `미국 소비자물가 전년비 ${cl.d} 분 ${cl.v}%${cu.prev ? ` (직전 ${cu.prev.d} 분 ${cu.prev.v}%)` : ''} · ${cu.lastRelease} 발표 · 다음 발표 ${cu.nextReleaseKst ? `${cu.nextReleaseKst} (한국 시각)` : (cu.nextRelease || '—')}` : '',
     kc ? `한국 소비자물가 전년비 ${kc.d} 분 ${kc.v}% (한국은행)` : '', '홀딩스 서버 값'].filter(Boolean).join('\n');
   // [이름, 값 글, 시황분석 탭의 접는 칸, 그 그래프, 바탕, 마우스 올리면 뜨는 글]
   const CH = [
