@@ -10,6 +10,7 @@
 // · 짙기를 불투명도로 옮기는 범위만 여기 한 곳에 둔다(바탕은 옅게 · 선은 진하게)
 // · 글씨에는 쓰지 않는다 — 옅은 글씨는 안 읽힌다(「색 바탕 위의 글씨」)
 // · 지표 표에 없거나 기준 · 폭이 빈 이름은 색을 안 칠하고 콘솔에 한 번 알린다 — 짐작한 색을 내지 않는다
+import { side } from './sign.js';
 const DATA = new URL('../../data/metrics.json', import.meta.url);
 const RANGE = { bg: [0.06, 0.30], line: [0.35, 1] };   // 선 · 점은 35% 부터 — 그보다 옅으면 가는 선이 안 보인다
 
@@ -34,7 +35,7 @@ export function tone(id, v) {
   }
   if (v == null || !Number.isFinite(+v)) return { side: null, k: 0 };
   const d = +v - it.base;
-  return { side: d > 0 ? 'up' : d < 0 ? 'down' : 'flat', k: Math.min(Math.abs(d) / it.full, 1) };
+  return { side: side(d), k: Math.min(Math.abs(d) / it.full, 1) };   // 방향은 sign.js 한 곳(2026-10-15)
 }
 
 export function paint(id, v, where = 'bg') {
