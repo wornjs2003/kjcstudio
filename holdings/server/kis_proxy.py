@@ -3158,6 +3158,9 @@ def fetch_investor(cfg, code, days=INVESTOR_DAYS):
                 "netAmt": _num(r.get(prefix + "_ntby_tr_pbmn"), int),
                 "buy": _num(r.get(prefix + "_shnu_vol"), int),
                 "sell": _num(r.get(prefix + "_seln_vol"), int),
+                # 매수 · 매도 **금액**(백만원) — 투자자 지표 모달의 양쪽 막대 (2026-10-15 · KIS 가 이미 주던 칸)
+                "buyAmt": _num(r.get(prefix + "_shnu_tr_pbmn"), int),
+                "sellAmt": _num(r.get(prefix + "_seln_tr_pbmn"), int),
             }
         out.append({
             "date": r.get("stck_bsop_date"),
@@ -3202,6 +3205,8 @@ def _inv_long_row(r):
             "netAmt": _num(r.get(prefix + "_ntby_tr_pbmn"), int),
             "buy": _num(r.get(prefix + "_shnu_vol"), int),
             "sell": _num(r.get(prefix + "_seln_vol"), int),
+            "buyAmt": _num(r.get(prefix + "_shnu_tr_pbmn"), int),     # 백만원 — 위 fetch_investor 와 같은 칸
+            "sellAmt": _num(r.get(prefix + "_seln_tr_pbmn"), int),
         }
     return {
         "date": r.get("stck_bsop_date"),
