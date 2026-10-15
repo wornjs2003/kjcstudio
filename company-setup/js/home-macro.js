@@ -6,11 +6,12 @@
 //     정책금리(/api/market/materials 나라별 기준금리) · 국채 10년 · 원/달러 · WTI(/api/market/indicators) · VIX(/api/kis/indices · 홀딩스 지수 띠와 같은 값).
 //     물가 · 경기선행은 서버에 없어 world-macro 그대로 · 서버를 못 받으면 그 칩만 「—」(파일 값으로 대신하지 않는다 — 기준이 둘이 된다)
 //   · 시황 글은 data/market-note.json 한 곳(시황분석 탭 맨 위 「세션이 쓴 시황」 과 같은 파일) — 쓴 시각을 함께 보인다
-//   · 색 — 달러인덱스 칩 바탕은 tone.js(100 위 빨강 · 아래 파랑 · 멀수록 짙게) · 오르내림 숫자는 글씨만 빨강 · 파랑(num-up · num-dn)
+//   · 색 — 달러인덱스 칩 바탕은 tone.js(100 위 빨강 · 아래 파랑 · 멀수록 짙게) · 오르내림 숫자는 글씨만 빨강 · 파랑(num-up · num-dn) · 시황 한 줄 속 +/− 숫자도 sign-color.js 로(2026-10-15 「전부 같은 룰이야」)
 //   · 칩을 누르면 시황분석 탭의 그 그래프로 — 그 칸이 접혀 있으면 열어 둔다(시황분석 탭이 기억하는 열린 칸 목록에 더한다)
 //   · 못 받은 값은 「—」
 import { live } from './live.js';
 import { dxyIce } from './dxy.js';
+import { signColor } from './sign-color.js';
 import { ready as toneReady, paint } from '/assets/js/tone.js';
 
 const FOLD_KEY = 'kjc.market.open';   // 시황분석 탭 market.js 의 접기 기억과 같은 열쇠
@@ -28,7 +29,7 @@ async function note() {
   try { N = await (await fetch('data/market-note.json', { cache: 'no-store' })).json(); } catch (e) { /* 아래에서 「—」 */ }
   box.classList.add('in-note');
   box.innerHTML = '<b class="in-note-h">오늘의 시황 한 줄</b>'
-    + `<span class="in-note-t" title="${esc(N && N.one)}">${N ? esc(N.one) : '—'}</span>`
+    + `<span class="in-note-t" title="${esc(N && N.one)}">${N ? signColor(esc(N.one)) : '—'}</span>`
     + (N ? `<span class="in-note-at">${esc(N.writtenAt)} 씀</span>` : '')
     + '<a class="in-note-more" href="market.html">자세히 ›</a>';
 }

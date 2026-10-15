@@ -299,6 +299,6 @@ mark.in-find-hit.is-cur { background: var(--kh-cat-amber); color: var(--kh-text-
 .in-mac-c:hover { background: var(--kh-bg-hover); }
 .kh-mkt .in-mac-c b { font-weight: 600; color: var(--kh-text-secondary); }
 .in-mac-c > span { font-weight: 600; color: var(--kh-text-primary); }
-.in-mac-c .num-up { color: var(--kh-up); } .in-mac-c .num-dn { color: var(--kh-down); }
+.in-mac-c .num-up, .in-note-t .num-up { color: var(--kh-up); } .in-mac-c .num-dn, .in-note-t .num-dn { color: var(--kh-down); }
 .kh-mkt.in-mac > .in-mac-more { position: sticky; right: 0; flex: none; margin-left: auto; padding: 0 6px; background: var(--kh-bg); color: var(--kh-text-muted); font-weight: 700; }
 .kh-mkt.in-mac > .in-mac-more[hidden] { display: none; }
