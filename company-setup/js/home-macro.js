@@ -13,11 +13,12 @@ import { live } from './live.js';
 import { dxyIce } from './dxy.js';
 import { signColor } from './sign-color.js';
 import { ready as toneReady, paint } from '/assets/js/tone.js';
+import { signClass, NUM } from '/assets/js/sign.js';
 
 const FOLD_KEY = 'kjc.market.open';   // 시황분석 탭 market.js 의 접기 기억과 같은 열쇠
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const num = (x, d) => x == null || !Number.isFinite(+x) ? '—' : (+x).toLocaleString('ko-KR', { minimumFractionDigits: d, maximumFractionDigits: Math.max(d, 3) });
-const ud = (x, t) => x == null || !x ? t : `<span class="${x > 0 ? 'num-up' : 'num-dn'}">${t}</span>`;
+const ud = (x, t) => { const c = signClass(x, NUM); return c ? `<span class="${c}">${t}</span>` : t; };   // 셈은 sign.js
 const pc = x => x == null ? '' : ' ' + ud(x, `${x > 0 ? '+' : ''}${(+x).toFixed(1)}%`);
 const last = a => a && a.length ? a[a.length - 1] : null;
 const pair = (a, b, d, u = '') => `미국 ${num(a, d)}${a == null ? '' : u} · 한국 ${num(b, d)}${b == null ? '' : u}`;
@@ -38,8 +39,9 @@ async function macro() {
   const row = document.querySelector('[data-home-macro]');
   if (!row) return;
   const js = u => fetch(u, { cache: 'no-store' }).then(r => r.json()).then(j => (j && j.ok !== false ? j : null)).catch(() => null);
-  const [W, E, X, MI, MM, KI] = await Promise.all([live('world-macro').catch(() => null), live('external-risk').catch(() => null),
-    dxyIce().catch(() => null), js('/api/market/indicators'), js('/api/market/materials'), js('/api/kis/indices'), toneReady]);
+  const [W, E, X, MI, MM, KI, REL, KS] = await Promise.all([live('world-macro').catch(() => null), live('external-risk').catch(() => null),
+    dxyIce().catch(() => null), js('/api/market/indicators'), js('/api/market/materials'), js('/api/kis/indices'),
+    js('/api/macro/releases'), js('/api/macro/series?ids=kr_cpi_yoy'), toneReady]);
   const C = (W && W.countries) || {}, us = C.US || {}, kr = C.KR || {}, v = o => o && o.v;
   // 서버 값 — 지표는 열쇠로 · 기준금리는 네이버 코드로 · VIX 는 KIS 지수 코드로
   const ind = k => { const i = MI && MI.items && MI.items.find(x => x.key === k); return i && i.last ? { v: i.last.c, pct: i.prev && i.prev.c ? (i.last.c / i.prev.c - 1) * 100 : null } : null; };
@@ -48,11 +50,22 @@ async function macro() {
   const r2 = x => (x == null ? null : Math.round(x * 100) / 100);   // 칩은 소수 둘째 자리 — 서버는 셋째까지 준다
   const krw = ind('usdkrw'), wti = ind('wti'), vix = kis('VIX');
   const g = E && last(E.gpr), ep = E && last(E.epu);
-  // [이름, 값 글, 시황분석 탭의 접는 칸, 그 그래프, 바탕]
+  // 물가 — 미국은 서버 발표 지표(/api/macro/releases 의 cpi) · 한국은 서버 ECOS 값(kr_cpi_yoy). 못 받으면 「—」 (2026-10-15 재권님 「응」)
+  // 날짜는 미국 날짜 · 발표는 한국 21:30 · fresh 가 false 면 새 발표를 아직 못 받아 last 가 그 전 값이다(개발3)
+  const r1 = x => (x == null ? null : Math.round(x * 10) / 10);
+  const cu = REL && (REL.releases || []).find(x => x.key === 'cpi'), cl = cu && cu.last;
+  const kc = KS && KS.series && KS.series.kr_cpi_yoy && last(KS.series.kr_cpi_yoy.points);
+  const mon = d => (d ? `${+d.slice(5, 7)}월` : '');
+  const cpiT = (cl ? `미국 ${num(r1(cl.v), 1)}%${cu.chg == null ? '' : ` <span class="${signClass(cu.chg, NUM)}">${cu.chg > 0 ? '+' : ''}${(+cu.chg).toFixed(1)}%p</span>`}`
+      + ` · ${cu.fresh === false ? '직전 발표 값' : `${(cu.lastRelease || '').slice(5)} 발표`}` : '미국 —')
+    + (kc ? ` · 한국 ${num(r1(kc.v), 1)}% · ${mon(kc.d)}` : ' · 한국 —');
+  const cpiTip = [cl ? `미국 소비자물가 전년비 ${cl.d} 분 ${cl.v}%${cu.prev ? ` (직전 ${cu.prev.d} 분 ${cu.prev.v}%)` : ''} · ${cu.lastRelease} 발표 · 다음 발표 ${cu.nextRelease || '—'} (미국 날짜 · 한국 시각 21:30)` : '',
+    kc ? `한국 소비자물가 전년비 ${kc.d} 분 ${kc.v}% (한국은행)` : '', '홀딩스 서버 값'].filter(Boolean).join('\n');
+  // [이름, 값 글, 시황분석 탭의 접는 칸, 그 그래프, 바탕, 마우스 올리면 뜨는 글]
   const CH = [
     ['정책금리', MM ? pair(pol('USFOMC=ECIX'), pol('KROCRT=ECIX'), 2, '%') : '—', 'macro', 'c-rate'],
     ['국채 10년', MI ? pair(r2((ind('us10') || {}).v), r2((ind('kr10') || {}).v), 2, '%') : '—', 'macro', 'c-yld'],
-    ['물가', pair(v(us.cpi), v(kr.cpi), 1, '%'), 'macro', 'c-cpi'],
+    ['물가', cpiT, 'macro', 'c-cpi', '', cpiTip],
     ['경기선행', pair(v(us.cli), v(kr.cli), 1), 'macro', 'c-cli'],
     ['달러인덱스', X ? `${num(X.v, 2)}${X.m1 == null ? '' : ' · 한 달' + pc(X.m1)}` : '—', 'market', 'c-gold', X ? paint('dxy', X.v, 'bg') : ''],
     ['원/달러', krw ? num(krw.v, 1) + pc(krw.pct) : '—', 'macro', 'nv-now'],
@@ -63,7 +76,7 @@ async function macro() {
   ];
   row.classList.add('in-mac');
   row.innerHTML = '<span class="in-mac-h">오늘의 핵심</span>'
-    + CH.map(([n, t, fold, id, bg]) => `<a class="in-mac-c" href="market.html#${id}" data-fold="${fold}"${bg ? ` style="background:${bg}"` : ''}><b>${n}</b><span>${t}</span></a>`).join('')
+    + CH.map(([n, t, fold, id, bg, tip]) => `<a class="in-mac-c" href="market.html#${id}" data-fold="${fold}"${bg ? ` style="background:${bg}"` : ''}${tip ? ` title="${esc(tip)}"` : ''}><b>${n}</b><span>${t}</span></a>`).join('')
     + '<span class="in-mac-more" aria-hidden="true">›</span>';
   row.addEventListener('click', e => {
     const a = e.target.closest('a.in-mac-c'); if (!a) return;
