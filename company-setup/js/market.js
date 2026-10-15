@@ -1,5 +1,6 @@
 import { live } from './live.js';   // 새 값(-live) 먼저 · 없으면 씨앗
 import { dxyIce } from './dxy.js';
+import { signColor } from './sign-color.js';   // 글 속 +/− 숫자 색 — 한 곳
 import { indicatorSeries } from './indicator.js';   // 서버 시장지표 한 계열 — 아래 SERVER 표   // 달러인덱스 — ICE(1973년 3월 = 100) · 홈 · 흐름도와 같은 셈
 import { ready as toneReady, paint } from '/assets/js/tone.js';   // 기준이 있는 수치의 색 — 달러인덱스 100 위 빨강 · 아래 파랑(CLAUDE.md 「기준이 있는 수치는 위 빨강 · 아래 파랑, 멀수록 짙게」)
 // 시황분석 탭 — 세계지도 말풍선 값으로 그날 시황을 화면이 쓰고, 지표 흐름을 그래프로 보인다 (2026-10-12 재권님 「시황분석을 클릭하면 지금 분석해놓은게 나오면 ·
@@ -233,7 +234,7 @@ function draw({ M, S, P, X }) {
   const C = M.countries, add = (id, cfg) => charts.push(new Chart(document.getElementById(id), cfg));
   const days = (P.US || P.GOLD || [[]]).map(p => p[0]);
   add('c-eq', { type: 'line', data: { labels: days, datasets: K.filter(k => P[k]).map(k => line(k, P[k].map(([d, v]) => [d, +(v / P[k][0][1] * 100).toFixed(2)]))) }, options: opt('처음 = 100') });
-  // 달러인덱스 선은 조각마다 100 에서 떨어진 만큼 색 — 위 빨강 · 아래 파랑 · 멀수록 짙게(셈은 tone.js · 기준 · 폭은 data/tone.json)
+  // 달러인덱스 선은 조각마다 100 에서 떨어진 만큼 색 — 위 빨강 · 아래 파랑 · 멀수록 짙게(셈은 tone.js · 기준 · 폭은 data/metrics.json)
   const dxSeg = { borderColor: c => paint('dxy', c.p1.parsed.y, 'line') || COL.DXY };
   if (P.GOLD) add('c-gold', { type: 'line', data: { labels: P.GOLD.map(p => p[0]), datasets: [line('GOLD', P.GOLD, { yAxisID: 'y' }),
       ...(X ? [line('DXY', (() => { const m = new Map(X.s); let last = null; return P.GOLD.map(([d]) => [d, m.has(d) ? (last = m.get(d)) : last]); })(), { yAxisID: 'y2', borderDash: [3, 3], segment: dxSeg })] : [])] },
@@ -332,13 +333,23 @@ function others(N) {
     options: { maintainAspectRatio: false, animation: false, interaction: { mode: 'nearest', intersect: false },
       plugins: legend, scales: { x: { type: 'logarithmic', grid, title: { display: true, text: '만기(년 · 로그 눈금)' }, ticks: { callback: v => [0.25, 1, 2, 5, 10, 30].includes(+v) ? (v < 1 ? '3개월' : v + '년') : '' } },
         y: { grid, title: { display: true, text: '금리 %' } } } } });
-  const box = document.getElementById('nv-now'), row = x => x.v == null ? '' :
-    `<div class="r"><span>${x.name}</span><span><b>${x.v.toLocaleString('ko-KR', { maximumFractionDigits: 3 })}${x.unit || ''}</b>${x.pct == null ? '' : `<span class="p ${x.pct > 0 ? 'up' : x.pct < 0 ? 'dn' : ''}">${pct(x.pct, 2)}</span>`}</span></div>`;
-  const pick = (cat, n) => (N[cat] || []).slice(0, n);
-  const rate = xs => xs.map(x => ({ ...x, name: x.name, v: x.v, unit: '%' }));
-  box.innerHTML = [['에너지', pick('energy', 6)], ['금속', pick('metals', 6)], ['운임', pick('transport', 6)], ['농산물', pick('agricultural', 6)],
-    ['국내 금리', rate(pick('domesticInterest', 8))]]   // 기준금리는 정책금리 그래프와 겹쳐 뺐다(2026-10-12 재권님 「응 해줘」)
-    .map(([g, xs]) => `<div><div class="g">${g}</div>${xs.map(row).join('')}</div>`).join('');
+}
+// 「지금 값」 표 — 홀딩스 서버 /api/market/materials(홀딩스 「시장지표 재료」 칸과 같은 값) (2026-10-14 재권님 「홀딩스가 기준」 · 「응 옮겨」 · 시황분석1).
+// 전에는 06:30 네이버 파일(naver-macro)을 읽었다 — 같은 네이버 값을 서버와 도구가 두 번 받았다(「두 구역이 같은 값을 쓰면」). 못 받으면 「—」 · 파일로 대신하지 않는다
+async function nvNow() {
+  const box = document.getElementById('nv-now');
+  if (!box) return;
+  let M = null;
+  try { M = await (await fetch('/api/market/materials', { cache: 'no-store' })).json(); } catch (e) { /* 아래에서 알림 */ }
+  if (!M || !M.groups) { box.innerHTML = '<span class="err">지금 값을 받지 못했습니다 — 홀딩스 서버 /api/market/materials</span>'; return; }
+  const part = path => { for (const g of M.groups) for (const p of g.parts || []) if (p.path === path) return p.rows || []; return []; };
+  const row = x => x.v == null ? '' :
+    `<div class="r"><span>${x.name}</span><span><b>${x.v.toLocaleString('ko-KR', { maximumFractionDigits: 3 })}${x.unit === '%' ? '%' : x.unit ? ' <small>' + x.unit + '</small>' : ''}</b>${x.pct == null ? '' : `<span class="p ${x.pct > 0 ? 'up' : x.pct < 0 ? 'dn' : ''}">${pct(x.pct, 2)}</span>`}</span></div>`;
+  const rate = xs => xs.map(x => ({ ...x, unit: '%' }));
+  box.innerHTML = [['에너지', part('energy').slice(0, 6)], ['금속', part('metals').slice(0, 6)], ['운임', part('transport').slice(0, 6)], ['농산물', part('agricultural').slice(0, 6)],
+    ['국내 금리', rate(part('domesticInterest').slice(0, 8))]]   // 기준금리는 정책금리 그래프와 겹쳐 뺐다(2026-10-12 재권님 「응 해줘」)
+    .map(([g, xs]) => `<div><div class="g">${g}</div>${xs.map(row).join('')}</div>`).join('')
+    + `<div class="cap">홀딩스 서버 · ${String(M.fetchedAt || '').replace('T', ' ').slice(0, 16)} 받음</div>`;
 }
 // ── 국내 시장 — 오늘 · 업종 · 크게 움직인 날 (2026-10-12 재권님 「응 해봐」 — 「그 밖의 재료」 룰 · 시황분석1 안)
 //    날마다 칸 = 한국거래소 마감 시황의 공통 칸 · 원인 칸 = 크게 움직인 날만(Baker · Bloom · Davis · Sammon NBER w28687)
@@ -475,10 +486,10 @@ function controls() {
   const lastEq = D.P.US ? D.P.US[D.P.US.length - 1][0] : '—';
   document.getElementById('meta').textContent = `주가 · 금 ${hm} 에 받음(마지막 거래일 ${lastEq}) · 금리 · 물가 · 환율 ${D.M.fetchedAt} 받음 · 글은 이 값들로 화면이 만든다`;
   const w = write(D);
-  document.getElementById('one').textContent = w.one;
+  document.getElementById('one').innerHTML = signColor(String(w.one).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])));   // 글자는 막고 +/− 숫자만 색
   const box = document.getElementById('text');
   w.paras.forEach((p, i) => {
-    box.insertAdjacentHTML('beforeend', `<p class="para">${p.t}</p><details class="ev"><summary>근거 ${i + 1}</summary><ul>${p.ev.map(x => `<li>${x}</li>`).join('')}</ul><div class="why">읽는 법 — ${p.why}</div></details>`);
+    box.insertAdjacentHTML('beforeend', `<p class="para">${signColor(p.t)}</p><details class="ev"><summary>근거 ${i + 1}</summary><ul>${p.ev.map(x => `<li>${signColor(x)}</li>`).join('')}</ul><div class="why">읽는 법 — ${p.why}</div></details>`);
   });
-  folds(); controls(); draw(D); others(D.N); capSrc(D.SV, D.N, D.S); krDay(D.N, D.MV); odds(D.O); sums(D);
+  folds(); controls(); draw(D); others(D.N); nvNow(); capSrc(D.SV, D.N, D.S); krDay(D.N, D.MV); odds(D.O); sums(D);
 })();

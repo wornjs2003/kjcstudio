@@ -54,10 +54,11 @@ import { apiFetch } from '../data/api.js';
 import { dirClass, isUsCode } from '../utils/format.js';
 import { everyServerMs } from '../store/timing.js';
 
-/* 단추마다 더할 거래일 수. 서버가 30일치를 주므로 한달(20)까지는 화면만으로 된다
-   (2026-10-14 지시 — 「응 그렇게 해」 · 한달 · 3달). 3달(60)은 서버가 마감 뒤 받아
-   쌓은 뒤에 더한다 — 지금 응답으로는 모자란다 */
-const VIEW_DAYS = { days: 5, month: 20 };
+/* 단추마다 더할 거래일 수 (2026-10-14 지시 — 「응 그렇게 해」 · 한달 · 3달).
+   3달(60)은 서버가 15:40 뒤 받아 쌓은 옛 줄을 이어 준다(`span=60` · 2026-10-15 「응」).
+   아직 덜 쌓였으면 있는 만큼 더하고 아래 글에 그 거래일 수와 「마감 뒤 채워짐」 을 적는다 */
+const VIEW_DAYS = { days: 5, month: 20, q3: 60 };
+const SPAN = Math.max(...Object.values(VIEW_DAYS));
 
 /* **서버가 정한다** (2026-09-30). `kis_proxy` 의 `INVESTOR_TTL` 을 따른다.
    아래는 **서버가 없을 때의 대체값**이다 (`store/timing.js` 참고).
@@ -119,6 +120,7 @@ export function mountInvestor({ box, tabs } = {}) {
   let seq = 0;              // 늦게 온 응답이 새 종목을 덮지 않게
   let top = null;           // 장중 가집계 — { foreign, inst }
   let topMiss = false;      // 상위 목록에 이 종목이 없다
+  let longFill = true;      // 이 서버가 3달 옛 줄을 스스로 받나(서버 meta) — 읽기만 하는 서버는 false
 
   /* ── 받아오기 ── */
   async function load() {
@@ -126,9 +128,10 @@ export function mountInvestor({ box, tabs } = {}) {
     /* 미국 종목(2026-10-07 나스닥100 · S&P500) — 투자자 매매는 국내 API 라 받을 곳이 없다. 주기로 다시 와도 여기서 멈춘다 */
     if (isUsCode(code)) { box.innerHTML = '<span class="kh-mut">미국 종목은 아직 없습니다 — 국내 종목만 받는 칸입니다</span>'; lastHtml = ''; return; }
     const mine = ++seq;
-    const iv = await get(`/api/kis/investor?code=${code}`);
+    const iv = await get(`/api/kis/investor?code=${code}&span=${SPAN}`);
     if (mine !== seq) return;              // 그새 종목이 바뀌었다
     rows = (iv && iv.ok && Array.isArray(iv.data)) ? iv.data : null;
+    longFill = !(iv && iv.meta && iv.meta.longFill === false);
     paint();
 
     /* **확정치가 없을 때만 가집계를 부른다.** 마감 뒤에는 부를 이유가 없다.
@@ -288,9 +291,13 @@ export function mountInvestor({ box, tabs } = {}) {
        아래 글에 적는다 — 이 주석은 2026-10-14 까지 「오늘 값이다」 로 낡아 있었다. */
     /* 「거래일」 로 적는다 — 한달이 달력 30일이 아니라 장이 선 20일이라서다 */
     const span = skippedToday ? `어제까지 ${days.length}거래일` : `최근 ${days.length}거래일`;
+    /* 3달이 덜 쌓였으면 말한다 — 「3달」 을 눌렀는데 30거래일이 더해진 것을 3달로 읽지 않게 */
+    /* 읽기만 하는 서버(8764 등)는 스스로 안 받는다 — 「15:40 뒤」 를 약속하지 않는다 (2026-10-15 qa) */
+    const short = days.length >= VIEW_DAYS[view] ? ''
+      : (longFill ? ' · 나머지는 장 마감(15:40) 뒤 채워집니다' : ' · 나머지는 메인 서버가 받아 둔 종목만 나옵니다');
     return `<div class="kh-iv-rows">${lines}</div>
       <div class="kh-iv-note">${span}을 <b>더한 값</b>입니다 ·
-        한국투자증권 확정치</div>`;
+        한국투자증권 확정치${short}</div>`;
   }
 
   function dateText(d) {

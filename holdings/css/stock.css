@@ -220,6 +220,24 @@
 .kh-lg-ohlc span { display: inline-flex; align-items: baseline; gap: 3px; }
 .kh-lg-ohlc i { font-style: normal; color: var(--kh-text-muted); }
 .kh-lg-ohlc b { font-weight: 600; }
+/* 마지막 봉을 볼 때는 「현재가 대비」 칸을 감춘다 — 위 span 의 inline-flex 가 hidden 을 이기므로 따로 적는다 */
+.kh-lg-ohlc span[hidden] { display: none; }
+
+/* 마우스 자리 가격 · 그 아래 현재가 대비 % (2026-10-14) — 마우스 끝 오른쪽에 얹기만 한다. 칸 크기를 안 바꾸고 끌기 · 확대를 안 막는다 */
+.kh-lg-tag {
+  position: absolute; z-index: 2;
+  transform: translate(10px, -50%);
+  padding: 2px 6px;
+  font-size: 0.72rem; line-height: 1.35; text-align: right; white-space: nowrap;
+  color: var(--kh-text-primary);
+  background: var(--kh-bg-float);
+  border-radius: var(--kh-radius-sm);
+  box-shadow: 0 0 0 1px var(--kh-border);
+  pointer-events: none;
+}
+.kh-lg-tag b { font-weight: 600; }
+.kh-lg-tag i { font-style: normal; color: var(--kh-text-muted); }
+.kh-lg-tag[hidden] { display: none; }
 
 /* 이동평균 칩 — 눌러서 끄고 켠다. 범례 전체는 pointer-events 를 막아 두었으므로
    여기서만 되살린다 */

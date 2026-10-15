@@ -216,6 +216,14 @@ MARKET_DIV_CHART = "UN"
 # 통합이 과거를 잘라 줄 때 되묻는 쪽.
 MARKET_DIV_CHART_ALT = "J"
 
+# **일 · 주 · 월 · 년봉은 정규장(KRX · J)으로 받는다** (2026-10-15 재권님 「오늘 시가에 맞춰야지」 · 「응 해줘」).
+# 통합(UN)으로 받으면 넥스트레이드 장 전(08:00~) · 장 뒤 거래가 봉에 들어가, 화면 위쪽 시세(정규장)와 갈렸다 —
+# 삼성 10-15 일봉 시가 225,000(장 전 첫 체결) ↔ 시세 시가 216,500 · 어제 일봉 종가 234,500 ↔ 시세 전일 232,000
+# (개념정의 · qa 실측). **5분봉은 그대로 통합이다** — 장 전 · 장 뒤 움직임을 시간대별로 보는 차트라서다.
+# 과거가 잘려 오면(넥스트레이드 늦게 편입된 종목) 아래 ALT 로 한 번 더 묻는 모양은 그대로 — 기준만 뒤집었다.
+MARKET_DIV_BARS = "J"
+MARKET_DIV_BARS_ALT = "UN"
+
 # 정규장 시간대 (KRX)
 KRX_OPEN  = (9, 0)
 KRX_CLOSE = (15, 30)
@@ -3085,6 +3093,162 @@ def fetch_investor(cfg, code, days=INVESTOR_DAYS):
     return out
 
 
+# ── 투자자 3달 — 마감 뒤 두 번 받아 쌓는다 (2026-10-15 재권님 「응」) ──────────
+#
+# 위 `fetch_investor`(FHKST01010900)는 30거래일까지만 준다. 「3달」(60거래일)은
+# **종목별 투자자매매동향(일별)** FHPTJ04160001 로 받는다 — 한 번에 30거래일이
+# 오고 `FID_INPUT_DATE_1` 을 앞으로 옮기면 그 날부터 거슬러 준다(2026-10-14 15:4x 실측).
+#
+# **00:00 ~ 15:40 에는 거절된다** — 응답 `TIME LIMIT 00:00 ~ 15:40`(2026-10-15 10:36 실측).
+# 그래서 15:40 뒤 그 종목을 처음 열 때 두 번 불러 `investor_daily` 에 쌓고, 그 날은 다시
+# 부르지 않는다. 그 밖 시각에는 쌓인 것만 읽는다 — 장중에 「3달」 을 눌러도 KIS 를 안 부른다.
+# 모든 종목을 미리 받지 않는다 — 열어 본 종목만 하루 두 번이다.
+INVESTOR_LONG_DAYS = 60          # 「3달」 이 더하는 거래일 수
+INVESTOR_LONG_OPEN = (15, 40)    # 이 시각부터 받을 수 있다 (위 실측)
+INVESTOR_LONG_RETRY = 600        # 못 받았으면 이만큼 쉬었다 다시 (초)
+_inv_long_fail = {}              # code -> 못 받은 시각
+# 아래 `SCHEMA` 에도 들지만 `db_init` 이 서버가 뜰 때 늘 도는 것은 아니라 쌓을 때 한 번 더 부른다
+INVESTOR_DAILY_SQL = """CREATE TABLE IF NOT EXISTS investor_daily (
+         code TEXT NOT NULL,
+         date TEXT NOT NULL,
+         row  TEXT NOT NULL,
+         PRIMARY KEY (code, date)
+       )"""
+_inv_long_lock = threading.Lock()
+
+
+def _inv_long_row(r):
+    def side(prefix):
+        return {
+            "net": _num(r.get(prefix + "_ntby_qty"), int),
+            "netAmt": _num(r.get(prefix + "_ntby_tr_pbmn"), int),
+            "buy": _num(r.get(prefix + "_shnu_vol"), int),
+            "sell": _num(r.get(prefix + "_seln_vol"), int),
+        }
+    return {
+        "date": r.get("stck_bsop_date"),
+        "close": _num(r.get("stck_clpr"), int),
+        "amt": _num(r.get("prdy_vrss"), int),
+        "person": side("prsn"),
+        "foreign": side("frgn"),
+        "inst": side("orgn"),
+    }
+
+
+def _inv_long_page(cfg, code, ymd):
+    data = kis_get(
+        cfg,
+        "/uapi/domestic-stock/v1/quotations/investor-trade-by-stock-daily",
+        {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code,
+         "FID_INPUT_DATE_1": ymd, "FID_ORG_ADJ_PRC": "", "FID_ETC_CLS_CODE": ""},
+        "FHPTJ04160001",
+    )
+    if not isinstance(data, dict) or str(data.get("rt_cd")) != "0":
+        return None
+    rows = [_inv_long_row(r) for r in out_rows(data, "output2")]
+    return [r for r in rows if r["date"]]
+
+
+def _inv_long_fetch(cfg, code):
+    """15:40 뒤 하루 한 번 두 쪽(60거래일)을 받아 쌓는다. 쌓았으면 True."""
+    import datetime
+    now = datetime.datetime.now(KST)
+    today = now.strftime("%Y%m%d")
+    key = "inv60:" + code
+    if (now.hour, now.minute) < INVESTOR_LONG_OPEN or not marketdb.writable():
+        return False
+    if _meta_get(key) == today:
+        return False
+    if time.time() - _inv_long_fail.get(code, 0) < INVESTOR_LONG_RETRY:
+        return False
+    with _inv_long_lock:
+        if _meta_get(key) == today:
+            return False
+        got = []
+        ymd = today
+        broken = False
+        for _ in range(2):
+            page = _inv_long_page(cfg, code, ymd)
+            # **두 쪽을 다 받았을 때만 쌓는다** (2026-10-15 qa · 재권님 「응 해」) — 둘째 쪽이
+            # 실패한 채 30줄만 쌓이면 아래 「이어지나」 판정이 헛돈다. 빈 쪽(`[]`)은 상장이 짧아
+            # 더 없는 것이라 실패가 아니다
+            if page is None:
+                broken = True
+                break
+            if not page:
+                break
+            got.extend(page)
+            oldest = min(r["date"] for r in page)
+            ymd = (datetime.datetime.strptime(oldest, "%Y%m%d")
+                   - datetime.timedelta(days=1)).strftime("%Y%m%d")
+        # 확정치가 빈 줄(net 이 셋 다 None)은 안 쌓는다 — 다음 날 다시 받는다
+        keep = [r for r in got
+                if any(r[s]["net"] is not None for s in ("person", "foreign", "inst"))]
+        if broken or len(keep) < INVESTOR_DAYS:
+            _inv_long_fail[code] = time.time()
+            print("[투자자 3달] %s 못 받음(%d줄) — %d초 뒤 다시"
+                  % (code, len(keep), INVESTOR_LONG_RETRY))
+            return False
+        try:
+            with _db_lock, db_conn() as conn:
+                conn.execute(INVESTOR_DAILY_SQL)
+                conn.executemany(
+                    "INSERT OR REPLACE INTO investor_daily (code, date, row) VALUES (?, ?, ?)",
+                    [(code, r["date"], json.dumps(r, ensure_ascii=False)) for r in keep])
+        except sqlite3.Error as e:
+            _inv_long_fail[code] = time.time()
+            print("[투자자 3달] %s 쓰기 실패 — %s" % (code, safe_message(e, 120)))
+            return False
+        _meta_set(key, today)
+        _inv_long_fail.pop(code, None)
+        return True
+
+
+def _inv_long_read(code, upto, limit):
+    """`upto` 날짜와 그보다 앞의 쌓인 줄을 새것부터 `limit` 개. 표가 없으면 빈 목록."""
+    try:
+        with _db_lock, db_conn() as conn:
+            rs = conn.execute(
+                "SELECT row FROM investor_daily WHERE code = ? AND date <= ? "
+                "ORDER BY date DESC LIMIT ?", (code, upto, limit)).fetchall()
+    except sqlite3.Error:
+        return []
+    return [json.loads(r["row"]) for r in rs]
+
+
+def fetch_investor_long(cfg, code, days=INVESTOR_LONG_DAYS):
+    """30거래일(`fetch_investor`) 뒤에 쌓인 옛 줄을 이어 확정치 `days` 거래일(+ 장중 오늘 빈 줄)까지.
+
+    맨 앞은 그대로 `fetch_investor` 다 — 장중 오늘 줄(`net: null`)도 그대로 온다.
+    화면이 오늘을 건너뛸 수 있게 한 줄 더 붙인다. 쌓인 것이 없으면 30거래일만 간다.
+    """
+    base = fetch_investor(cfg, code)
+    try:
+        _inv_long_fetch(cfg, code)
+    except Exception as e:                       # 받기가 터져도 30거래일은 낸다
+        _inv_long_fail[code] = time.time()
+        print("[투자자 3달] %s 받다 멈춤 — %s" % (code, safe_message(e, 120)))
+    # 30거래일을 못 받았으면 쌓인 줄만 내지 않는다 — 어디서 끊겼는지 가를 기준이 없다(3달 전과 같다)
+    if not base or not any(r.get("date") for r in base):
+        return base
+    oldest = min(r["date"] for r in base if r.get("date"))
+    # 붙일 줄 수는 **확정치 줄**로 센다 — 장중 오늘 빈 줄은 화면이 건너뛴다. 이렇게 세면 붙이는 줄은
+    # `base` 맨 옛날을 품은 묶음(60줄) 안에서 늘 끝난다 — 묶음 밖 한 줄이 빈틈 너머에서 붙지 않는다
+    confirmed = sum(1 for r in base
+                    if any((r.get(s) or {}).get("net") is not None for s in ("person", "foreign", "inst")))
+    need = max(0, days - confirmed)
+    if not need:
+        return base
+    # **날짜가 이어질 때만 붙인다** (2026-10-15 qa 걸림 · 재권님 「응 해」). 쌓인 줄을 그냥
+    # 붙이면 오래전에 받은 묶음이 석 달을 건너뛰어 붙었다(09-01 · 08-31 → 05-20).
+    # 한 번에 받은 60줄은 이어진 거래일이라, `base` 맨 옛날과 **같은 날**이 쌓여 있으면
+    # 그 묶음이 그 아래 30거래일을 빈틈없이 덮는다 — 달력 표 없이 가른다. 없으면 30거래일만
+    rs = _inv_long_read(code, oldest, need + 1)
+    if not rs or rs[0].get("date") != oldest:
+        return base
+    return base + rs[1:]
+
+
 # ── 재무 다섯 — 모달 「투자 지표」 칸 재무 카드 (2026-10-02 지시) ──────────
 #
 # 재권님 — 재무 카드 시안 v3 를 보시고 「방향이 맞아 개발해」.
@@ -3427,6 +3591,7 @@ SCHEMA = [
     """CREATE TABLE IF NOT EXISTS sync_meta (
          key TEXT PRIMARY KEY, value TEXT, updated_at TEXT
        )""",
+    INVESTOR_DAILY_SQL,      # 「3달」 — 위 `fetch_investor_long`
 ]
 
 # 기간별 설정
@@ -3724,10 +3889,10 @@ def fetch_bars_from_kis(cfg, code, period, date_from, date_to):
     **되묻는 비용은 잘린 종목에만 든다.** 꽉 찬 응답은 판정에서 빠지므로
     (`_looks_truncated`) 보통 종목은 호출이 늘지 않는다.
     """
-    rows = _bars_once(cfg, code, period, date_from, date_to, MARKET_DIV_CHART)
-    if MARKET_DIV_CHART_ALT != MARKET_DIV_CHART and _looks_truncated(rows, date_from):
+    rows = _bars_once(cfg, code, period, date_from, date_to, MARKET_DIV_BARS)
+    if MARKET_DIV_BARS_ALT != MARKET_DIV_BARS and _looks_truncated(rows, date_from):
         try:
-            alt = _bars_once(cfg, code, period, date_from, date_to, MARKET_DIV_CHART_ALT)
+            alt = _bars_once(cfg, code, period, date_from, date_to, MARKET_DIV_BARS_ALT)
         except Exception:
             return rows              # 되묻다 실패하면 처음 받은 것을 쓴다
         if len(alt) > len(rows):
@@ -5591,6 +5756,25 @@ def _us_deep_work():
     return work
 
 
+def _kr_div_work():
+    """국내 일 · 주 · 월 · 년봉 중 아직 정규장(`MARKET_DIV_BARS`)으로 다시 안 받은 것 → [(코드, 주기)] (2026-10-15).
+
+    화면이 연 (종목, 주기)는 `_get_chart_one` 이 그 자리에서 다시 받지만, **읽기 전용 서버(8764 · 8767 · 세션)는
+    저장 · 표시를 못 해** 8765 가 그 종목을 열기 전까지 통합 봉을 그대로 냈다(개념정의 검수 · 8767 삼성 일봉 시가 225,000).
+    그래서 8765 의 봉 채우기가 DB 에 있는 것 전부를 한 번씩 다시 받는다. 감시 대상(시가총액 순)을 앞에 둔다."""
+    try:
+        with _db_lock, db_conn() as conn:
+            have = conn.execute(
+                "SELECT DISTINCT code, period FROM candles WHERE period IN ('D','W','M','Y') AND length(code)=6").fetchall()
+            rank = {r[0]: r[1] for r in conn.execute("SELECT stock_code, rank FROM dart_universe")}
+    except Exception:
+        return []
+    work = [(c, p) for c, p in have
+            if not us_universe.is_us(c) and _meta_get("div:%s:%s" % (c, p)) != MARKET_DIV_BARS]
+    work.sort(key=lambda cp: (rank.get(cp[0], 10 ** 6), cp[0], "DWMY".index(cp[1])))
+    return work
+
+
 def _bar_fill_run(label, work, do_one):
     """일감 목록을 하나씩 — 하나 앞마다 쉬어야 하는지 본다. 백 개마다 · 끝에 한 줄."""
     if not work:
@@ -5642,6 +5826,14 @@ def start_bar_fill(cfg, port):
         _kr_past_day(cfg, code, day)
         _fill_mark(code, day)
 
+    def kr_div_one(code, period):
+        # 화면이 여는 길과 같은 양(DWMY_WANT)을 정규장으로 거슬러 받아 덮는다 · 받은 만큼 쉰다
+        bars = fetch_bars_back(cfg, code, period, DWMY_WANT)
+        time.sleep(BAR_FILL_CALL_GAP * max(1, -(-DWMY_WANT // BARS_PER_CALL)))
+        if bars:
+            save_candles(code, period, bars)
+            _meta_set("div:%s:%s" % (code, period), MARKET_DIV_BARS)
+
     def loop():
         time.sleep(PREFILL_START_SEC)
         while True:
@@ -5651,6 +5843,7 @@ def start_bar_fill(cfg, port):
                 done += _bar_fill_run("미국 5분봉", _us_fill_work(), us_5m_one)
                 done += _bar_fill_run("미국 일주월", _us_deep_work(), us_deep_one)
                 done += _bar_fill_run("국내 5분봉", _kr_fill_work(), kr_one)
+                done += _bar_fill_run("국내 일주월년 정규장", _kr_div_work(), kr_div_one)
                 _bar_fill["at"] = datetime.now(KST).strftime("%m-%d %H:%M")
                 _bar_fill["left"] = None
                 _bar_fill["state"] = "다 돎 · 다음 확인 대기"
@@ -5688,6 +5881,13 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
     else:
         stale = (time.time() - last_sync) > conf["fresh_sec"]
 
+    # **통합(UN)으로 쌓인 일 · 주 · 월 · 년봉은 한 번 정규장(J)으로 다시 받는다** (2026-10-15 · `MARKET_DIV_BARS`).
+    # 그 (종목, 주기)를 처음 볼 때 「오래됨」 으로 보고 달라는 만큼 거슬러 받아 덮어쓴다 — 받은 뒤 표시를 적어 다시 안 받는다.
+    # 달라는 것보다 오래된 봉은 통합 그대로 남는다(화면에 안 닿는 자리).
+    dkey = "div:%s:%s" % (code, period)
+    if conf["kis"] and _meta_get(dkey) != MARKET_DIV_BARS:
+        stale = True
+
     # 달라는 만큼 DB 에 없고, 아직 끝까지 훑어보지 않았으면 과거를 더 받는다.
     #
     # **「오래됐나」 만 보면 과거가 영영 안 채워진다** (2026-09-29). 한 번에
@@ -5700,6 +5900,8 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
     if not rows or stale or want_more:
         if conf["kis"]:                      # 일/주/월/년
             bars = fetch_bars_back(cfg, code, period, limit)
+            if bars:
+                _meta_set(dkey, MARKET_DIV_BARS)
         else:                                # 분봉
             # 많이 비었으면 하루치를 모으고(호출 여러 번), 조금이면 최근 구간만.
             #
@@ -7108,12 +7310,23 @@ class Handler(SimpleHTTPRequestHandler):
                 if not (code.isdigit() and len(code) == 6):
                     self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
                     return
-                data = fetch_investor(cfg, code)
+                # `span=60` 이면 쌓인 옛 줄을 이어 3달까지 (2026-10-15 · `fetch_investor_long`)
+                try:
+                    span = int((qs.get("span") or ["0"])[0])
+                except ValueError:
+                    span = 0
+                if span > INVESTOR_DAYS:
+                    data = fetch_investor_long(cfg, code, min(span, INVESTOR_LONG_DAYS))
+                else:
+                    data = fetch_investor(cfg, code)
                 self._send_json({
                     "ok": bool(data), "data": data,
                     "meta": {
                         "code": code, "count": len(data), "days": INVESTOR_DAYS,
                         "qtyUnit": "주", "amtUnit": "백만원",
+                        # 이 서버가 3달 옛 줄을 스스로 받나 — 읽기만 하는 서버(8764 등)는 8765 가
+                        # 쌓은 것만 읽으므로 「15:40 뒤 채워집니다」 를 약속하지 않는다 (2026-10-15 qa)
+                        "longFill": marketdb.writable(),
                         # 종목별은 확정치다 (docs/kis-sector-investor.md).
                         # 상위 목록(investor-top)만 가집계라 거기만 그렇게 적는다.
                         "provisional": False,

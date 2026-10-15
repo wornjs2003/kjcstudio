@@ -209,7 +209,28 @@ def _left():
     return max(0, int(min(_hist["ttl"] - (now - _hist["at"]), RECENT_TTL - (now - _recent["at"]))))
 
 
+def _mat_now():
+    """재료 줄의 지금 값 — 코드(reutersCode) → (값, 날짜). 원자재 칩이 재료 줄과 같은 값을 내게 한다."""
+    try:
+        materials()
+    except Exception:
+        return {}
+    out = {}
+    for g in (_mat["groups"] or []):
+        for p in g["parts"]:
+            for r in p["rows"]:
+                if r.get("code") and r.get("v") is not None and r.get("at"):
+                    out.setdefault(r["code"], (r["v"], r["at"], r.get("pct")))
+    return out
+
+
 def indicators():
+    # 재료 줄에 같은 코드가 있는 칩(원자재 · 달러인덱스 · 환율)은 일봉 마지막(어제 종가)이 아니라 재료 줄의 지금 값을 쓴다 (2026-10-14 재권님 「홀딩스의 값이 정확한지 확인하고」 →
+    # 값 맞추기 c 「응 해줘」 · WTI 칩 94.14 ↔ 줄 94.77 이던 것). 전일 값은 줄의 등락률이 맞는 쪽을 일봉 끝 둘에서 고른다 —
+    # 재료 줄 날짜는 거래소 날짜라 일봉 마지막과 같은 날로 찍혀도 그 뒤 거래일 값일 수 있다(10-15 실측 WTI 줄 10-14 93.89 −1.26% ·
+    # 일봉 10-14 95.09 → 전일은 95.09)
+    # materials() 가 같은 자물쇠를 잡으므로 자물쇠 밖에서 먼저 읽는다
+    now_v = _mat_now()
     with _lock:
         _refresh()
         out = []
@@ -217,9 +238,21 @@ def indicators():
             rows, err = _series(it["key"])
             last = rows[-1] if rows else None
             prev = rows[-2] if len(rows) > 1 else None
+            last = {"d": last[0], "c": last[4]} if last else None
+            prev = {"d": prev[0], "c": prev[4]} if prev else None
+            m = now_v.get(it.get("code"))         # 재료 줄에 같은 코드가 있는 칩 전부(원자재 · 달러인덱스 · 환율 — 10-15 「응 해줘」)
+            if m and last and m[1] >= last["d"]:
+                v, d, pct = m
+                newer = d > last["d"]
+                if not newer and pct is not None and last["c"]:
+                    gap = lambda c: abs((v / c - 1) * 100 - pct) if c else 1e9
+                    newer = gap(last["c"]) < gap(prev["c"] if prev else None)
+                if newer:
+                    prev = last
+                last = {"d": d, "c": v}
             out.append({**{k: it.get(k) for k in META_KEYS},
-                        "last": {"d": last[0], "c": last[4]} if last else None,
-                        "prev": {"d": prev[0], "c": prev[4]} if prev else None,
+                        "last": last,
+                        "prev": prev,
                         "error": None if last else (err or "받은 값이 없습니다")})
         return {"ok": any(i["last"] for i in out), "source": "네이버 증권 시장지표",
                 "fetchedAt": _fetched["at"], "cacheTtlSec": _left(), "items": out}
@@ -318,6 +351,27 @@ def indicator(key):
                 "bars": bars, "fixed": fixed, "error": None if bars else (err or "받은 값이 없습니다")}
 
 
+# 네이버 재료 줄이 늦는 것은 야후 파이낸스 지금 값으로 덮는다 (2026-10-15 재권님 「천연가스는 다른곳에서 값 가져와」 · 「응 해줘」).
+# 그날 11:51 실측 — 네이버 천연가스 줄 3.2(10-14 종가 3.198) · 야후 NG=F 3.259. KIS 해외 선물은 거래소 신청이 따로 있어 못 쓴다.
+# 야후는 공식으로 열어 둔 창구가 아니다 — 못 받으면 네이버 줄을 그대로 두고 errors 에 남긴다(0 · 빈칸으로 덮지 않는다).
+# 1년 일봉은 네이버 그대로다. 한 번에 한 종목 · 재료와 같은 `RECENT_TTL` 마다
+YAHOO = {"NGcv1": "NG=F", "QGcv1": "QG=F"}          # 재료 줄 코드(reutersCode) → 야후 기호
+YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/%s?range=1d&interval=1m"
+YAHOO_SRC = "야후 파이낸스"
+YAHOO_UA = "Mozilla/5.0"     # 크롬 전체 이름(UA)으로 부르면 쿠키 없이는 429(너무 많은 요청)로 막는다 — 짧은 이름은 200(10-15 12:1x 실측)
+
+
+def _yahoo(sym):
+    req = urllib.request.Request(YAHOO_URL % urllib.parse.quote(sym), headers={"User-Agent": YAHOO_UA})
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        meta = json.loads(r.read().decode("utf-8", "replace"))["chart"]["result"][0]["meta"]
+    v, prev, t = _num(meta.get("regularMarketPrice")), _num(meta.get("chartPreviousClose")), meta.get("regularMarketTime")
+    if v is None or not prev or not t:
+        raise ValueError("야후가 값을 주지 않았습니다")
+    day = datetime.fromtimestamp(t, timezone(timedelta(seconds=meta.get("gmtoffset") or 0))).date().isoformat()
+    return {"v": v, "pct": round((v / prev - 1) * 100, 2), "at": day, "src": YAHOO_SRC}
+
+
 def _mat_row(x):
     return {"name": x.get("name"), "code": x.get("reutersCode"), "v": _num(x.get("closePrice")),
             "pct": _num(x.get("fluctuationsRatio")), "at": str(x.get("localTradedAt") or "")[:10] or None,
@@ -344,6 +398,13 @@ def materials():
                         err[path] = safe_message(e, 120)
                         old = next((p for og in (_mat["groups"] or []) for p in og["parts"] if p["path"] == path), None)
                         rows = old["rows"] if old else []          # 못 받으면 앞에 받은 것을 그대로 둔다
+                    for row in rows:
+                        sym = YAHOO.get(row.get("code"))
+                        if sym:
+                            try:
+                                row.update(_yahoo(sym))
+                            except Exception as e:
+                                err["yahoo:" + sym] = safe_message(e, 120)   # 네이버 줄 그대로
                     parts.append({"path": path, "label": label or g["id"], "rows": rows})
                 groups.append({"id": g["id"], "parts": parts})
             _mat.update(at=now, groups=groups, err=err,
