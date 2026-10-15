@@ -295,7 +295,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
       if (dead || key !== periodId) return;
       if (!candles.length) throw new Error('빈 응답');
       host.innerHTML = '';
-      chart = createStockChart(host, candles, { period, showVolume: true, priceDigits: priceDigitsOf(stock.code) });
+      chart = createStockChart(host, candles, { period, showVolume: true, priceDigits: priceDigitsOf(stock.code), code: stock.code });   // code — 그리기 도구가 종목마다 선을 기억한다
 
       /* **이 기간에서 보던 자리로.** 처음이면 최신 쪽 `initBars` 개를 본다.
          몇 개인지는 `CHART_PERIODS` 가 정한다 — 여기 적으면 낡는다.
