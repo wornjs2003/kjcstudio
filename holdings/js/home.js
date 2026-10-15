@@ -802,6 +802,9 @@ async function paintBigChart(opt = {}) {
     bigDigits = digits;
   }
   bigDrawnKey = key;
+  /* 그린 직후 맨 오른쪽 봉을 지금 시세로 — 다음 시세가 올 때까지 서버 봉 값(주봉은 어제까지)이 「현재가」 로 쓰였다
+     (개념정의 ㉯ · qa 검수 2026-10-15 · 주봉 「현재」 가 234,490 기준). 시세가 아직 없으면 updateLast 가 스스로 건너뛴다 */
+  bigChart.updateLast(rowPrices[st.code]);
 
   /* **이 기간에서 보던 자리로.** 처음이면 최신 쪽 `initBars` 개를 본다.
      `setData` 는 이전 기간의 구간을 그대로 물려주므로(chart.js 의 `keep`)
