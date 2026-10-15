@@ -596,6 +596,9 @@ a.kh-sc-i:hover { color: var(--kh-accent); }
 .kh-side-wrap tbody td {
   padding: 0; border: 0; white-space: nowrap;
 }
+/* 줄 사이 선은 줄(tr) 하나에만 — home.css 의 표 모양 「칸마다 윗선」(.kh-rank-card tbody tr + tr td)이 위 `border: 0` 보다 세서
+   두 줄로 쌓인 칸마다 제 높이에 선이 따로 그어졌다(이름 위 · 값 위 · 번호 칸 — 가는 선이 둘셋). 재권님 「그 줄은 없어야 될 줄이야」 (2026-10-14) */
+.kh-side-wrap .kh-rank-card tbody tr + tr td { border-top: 0; }   /* 클래스 둘 — home.css 가 뒤에 실려 같은 세기면 진다 */
 .kh-side-wrap tbody td:nth-child(1) {
   grid-area: no; text-align: center;
   font-size: 0.72rem; color: var(--kh-text-muted);
