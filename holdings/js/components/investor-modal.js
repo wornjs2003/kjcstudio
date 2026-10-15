@@ -79,16 +79,17 @@ function investorRows(code) {
 
 /** 줄들의 한 투자자 합 — 금액은 백만원. 매수 · 매도 금액이 없는 줄은 수량 × 종가로 어림 */
 function sumSide(rows, side) {
-  let buy = 0, sell = 0, net = 0, guess = false, any = false;
+  let buy = 0, sell = 0, net = 0, guess = false, any = false, netMissing = false;
   for (const r of rows) {
     const s = r[side] || {};
     if (s.net == null) continue;
     any = true;
-    net += s.netAmt || 0;
+    /* 순매수 금액이 빈 날이 끼면 합을 내지 않는다 — 0 으로 더하면 조용히 틀린다(개념정의 검수 · 「못 쟀으면 0 이 아니라」) */
+    if (s.netAmt == null) netMissing = true; else net += s.netAmt;
     if (s.buyAmt != null && s.sellAmt != null) { buy += s.buyAmt; sell += s.sellAmt; }
     else if (r.close) { guess = true; buy += (s.buy || 0) * r.close / 1e6; sell += (s.sell || 0) * r.close / 1e6; }
   }
-  return any ? { buy, sell, net, guess } : null;
+  return any ? { buy, sell, net: netMissing ? null : net, guess } : null;
 }
 
 function sideHtml(v, max, left) {
