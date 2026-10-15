@@ -41,19 +41,24 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 NOT_SERVED_DIRS = ("tools/", ".claude/", ".githooks/", "launchd/", "kjcEngine/", "temp/",
                    "debugging/")   # debugging 은 서비스방에서 8093 으로 넘겨 외부접속에 안 닿는다(「상단 메뉴 구성」)
 QA, DEF = "검수 통과(qa)", "검수 통과(개념정의)"
+# 통과 · 걸림 줄 — **줄 머리**(시각 다음)가 그 글자로 시작할 때만, 그리고 「—」 앞의 해시만 센다. 줄 가운데에 그 글자가 있는
+# 설명문(커밋 기록 · 「…에서 멈춤(없는 줄 검수 통과(개념정의))」 · 본문의 다른 해시)을 통과로 셌다(qa 시뮬 · 2026-10-15)
+VERDICT = re.compile(r"^\s*(?:\d{1,2}:\d{2}\s+)?검수 (통과|걸림)\((qa|개념정의)\)\s*(.*)$")
 HEX = re.compile(r"(?<![0-9A-Za-z])[0-9a-f]{7,40}(?![0-9A-Za-z])")
 
 
 def served(path):
     if path.endswith(".md") or path.startswith(NOT_SERVED_DIRS):
         return False
-    if "/" not in path and path.startswith("."):       # 루트 점 파일(.gitignore · .worktreeinclude …)
-        return False
+    if "/" not in path:            # 루트 — 화면은 html 뿐이다(「업무 흐름」 5번 「루트 html」). 점 파일 · .command · .bat 은 안 닿는다(qa 시뮬)
+        return path.endswith(".html")
     return True
 
 
 def git(*a):
-    return subprocess.run(["git", "-C", ROOT] + list(a), capture_output=True, text=True, check=True).stdout
+    # quotepath=off — 한글 이름 파일(tools/현황판.py)이 「"tools/\\355…"」 로 나와 tools/ 로 안 갈렸다(qa 시뮬 · 2026-10-15)
+    return subprocess.run(["git", "-c", "core.quotepath=off", "-C", ROOT] + list(a),
+                          capture_output=True, text=True, check=True).stdout
 
 
 def full(h):
@@ -130,28 +135,27 @@ def main(argv):
     # 「검수 걸림(누구)」 도 센다 (2026-10-15 창구 짚음) — main 직행은 qa 하나면 되지만, 개념정의가 **걸었으면** 그 검수자의
     # 통과 줄이 다시 오기 전까지 막는다. 329b42a 가 qa 통과 · 개념정의 걸림인 채로 문턱을 지나갔다
     failed = {QA: set(), DEF: set()}
-    FAIL = {QA: "검수 걸림(qa)", DEF: "검수 걸림(개념정의)"}
     for t in cards:
         for ln in (t.get("memo") or "").splitlines():
-            for kind in (QA, DEF):
-                if FAIL[kind] in ln:
-                    for h in HEX.findall(ln):
-                        f = full(h)
-                        if f:
-                            failed[kind].add(f)
-                if kind not in ln:
+            m = VERDICT.match(ln)
+            if not m:
+                continue
+            kind = QA if m.group(2) == "qa" else DEF
+            head = m.group(3).split("—")[0]
+            for h in HEX.findall(head):
+                f = full(h)
+                if not f:
                     continue
-                for h in HEX.findall(ln):
-                    f = full(h)
-                    if not f:
-                        continue
-                    parents = git("rev-list", "--parents", "-n", "1", f).split()[1:]
-                    # 머지 — **창구가 staging 에 합친 머지일 때만** 그 머지로 들어온 묶음 전부. 세션 가지의 「staging 받음」 머지
-                    # (5f3c0b7 처럼)를 펼치면 staging 에 있던 남의 커밋까지 통과로 셌다(329b42a 가 그렇게 지나감 · 2026-10-15 시험)
-                    if len(parents) > 1 and f in staging_fp:
-                        passed[kind].update(git("rev-list", "%s..%s" % (parents[0], f)).split())
-                    else:
-                        passed[kind].add(f)
+                if m.group(1) == "걸림":
+                    failed[kind].add(f)
+                    continue
+                parents = git("rev-list", "--parents", "-n", "1", f).split()[1:]
+                # 머지 — **창구가 staging 에 합친 머지일 때만** 그 머지로 들어온 묶음 전부. 세션 가지의 「staging 받음」 머지
+                # (5f3c0b7 처럼)를 펼치면 staging 에 있던 남의 커밋까지 통과로 셌다(329b42a 가 그렇게 지나감 · 2026-10-15 시험)
+                if len(parents) > 1 and f in staging_fp:
+                    passed[kind].update(git("rev-list", "%s..%s" % (parents[0], f)).split())
+                else:
+                    passed[kind].add(f)
 
     def owner(c):
         """post-commit 이 「커밋 <해시>」 를 적은 카드의 담당 — 없으면 None."""
