@@ -236,7 +236,6 @@
   pointer-events: none;
 }
 .kh-lg-tag b { font-weight: 600; }
-.kh-lg-tag i { font-style: normal; color: var(--kh-text-muted); }
 .kh-lg-tag[hidden] { display: none; }
 
 /* 이동평균 칩 — 눌러서 끄고 켠다. 범례 전체는 pointer-events 를 막아 두었으므로
