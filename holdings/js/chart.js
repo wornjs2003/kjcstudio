@@ -838,7 +838,6 @@ export function createStockChart(container, candles, opts = {}) {
   let vpLayer = null;          // 매물대가 깔리는 층 (가격 칸 뒤)
   let vpTimer = null;
   let legend = null;
-  let livePrev = null;          // 시세가 준 전일 종가(updateLast) — 마우스 표 「전일」 의 첫 기준 · 종목이 바뀌면 지운다
   let lastLive = null;          // 마지막으로 받은 시세 — 서버 봉을 덧붙여 맨 오른쪽이 서버 값으로 돌아가면 다시 얹는다
   let serverLast = null;        // 시세를 얹기 전 서버가 준 맨 오른쪽 봉 — 아침 7시에 정규장 종가로 되돌릴 때 쓴다
   let overlaid = null;          // updateLast 가 얹어 만든 봉 — 이것이 아니면 맨 오른쪽은 서버가 새로 준 봉이다
@@ -1283,7 +1282,7 @@ export function createStockChart(container, candles, opts = {}) {
     if (showLegend && legend) {
       legend.destroy();
       legend = mountLegend(panes[0].box, ch,
-        { candles, period, maSeries, showVolume: false, ind: {}, series: candleSeries, getPrev: () => livePrev || api.prevClose });
+        { candles, period, maSeries, showVolume: false, ind: {}, series: candleSeries });
       api.legend = legend;
     }
   }
@@ -1498,7 +1497,7 @@ export function createStockChart(container, candles, opts = {}) {
     if (showLegend) {
       if (legend) legend.destroy();
       legend = mountLegend(panes[0].box, panes[0].chart,
-        { candles, period, maSeries, showVolume: false, ind: {}, series: candleSeries, getPrev: () => livePrev || api.prevClose });
+        { candles, period, maSeries, showVolume: false, ind: {}, series: candleSeries });
       api.legend = legend;
     }
     curOwn = ownKeys();
@@ -1718,11 +1717,11 @@ export function createStockChart(container, candles, opts = {}) {
       candles = next;
       if (nextPeriod) period = nextPeriod;
       vpRange = null;          // 종목·기간이 바뀌면 세로 범위를 다시 잡는다
-      /* 전일 종가는 앞 종목 것이 남으면 안 된다 — 홈 큰 차트는 같은 차트에 다른 종목을 setData 로 다시 쓴다
-         (qa 검수 2026-10-15 · 삼성 5분 → 하닉 일봉에서 「전일 +829.78%」). 같은 종목을 다시 그릴 때(기간 바꿈 · 다시 받기)는 그대로 둔다 —
-         그때 지우면 다음 시세가 올 때까지 봉으로 짐작한 값이 쓰인다. 종목을 모르면(code 없이 부름) 지운다 */
-      if (!code || code !== drawnCode) { livePrev = null; lastLive = null; api.prevClose = null; }
+      /* 앞 종목의 시세 · 전일 종가가 남으면 안 된다 — 홈 큰 차트는 같은 차트에 다른 종목을 setData 로 다시 쓴다
+         (qa 검수 2026-10-15). 같은 종목을 다시 그릴 때(기간 바꿈 · 다시 받기)는 그대로 둔다. 종목을 모르면(code 없이 부름) 지운다 */
+      if (!code || code !== drawnCode) { lastLive = null; api.prevClose = null; }
       drawnCode = code || null;
+      serverLast = null; overlaid = null;   // 새 서버 봉이 왔다 — 앞 종목 · 앞 판의 되돌릴 봉을 버린다 (qa 2026-10-15 · 7~9시 삼성 → 하닉이 삼성 봉으로 덮임)
       priceLines.length = 0;
       remap();
       build();
@@ -1832,11 +1831,6 @@ export function createStockChart(container, candles, opts = {}) {
      * 라이브러리가 **새 봉을 붙인다.** */
     updateLast(live) {
       if (!live || !Number.isFinite(live.price) || live.price <= 0) return;
-      /* 마우스 표 「전일」 — 값이 안 바뀌어도 받아 둔다. 묶음 시세는 prev 를 주고, 모달의 단건 시세(/api/kis/price)는
-         prev 없이 change(전일 대비)만 줘서 거꾸로 센다 */
-      const chg = Number.isFinite(live.change) ? live.change : Number.isFinite(live.amt) ? live.amt : null;
-      const pv = Number(live.prev) > 0 ? Number(live.prev) : chg != null ? live.price - chg : null;
-      if (pv > 0) livePrev = pv;
       lastLive = live;
       const i = candles.length - 1;
       const last = candles[i];
@@ -1845,7 +1839,7 @@ export function createStockChart(container, candles, opts = {}) {
          정규장 종가로 변경해줘」). 장이 끝난 저녁에는 시세(넥스트레이드 · 통합)를 따라가다가, 다음 날 7시가 되면 서버가 준
          정규장 종가 봉으로 돌아간다. 저녁부터 창이 켜져 있었으면 얹기 전 서버 봉으로 되돌린다 */
       if (!MINUTE_PERIODS.has(period) && !liveOverlayHours()) {
-        if (serverLast && serverLast.ts === last.ts && last !== serverLast) {
+        if (overlaid && last === overlaid && serverLast && serverLast.ts === last.ts) {   // 내가 얹은 봉일 때만 — 서버가 새로 준 봉은 그대로
           candles[i] = serverLast;
           try {
             candleSeries.update({ time: toChartTime(serverLast.ts, period), open: serverLast.open,
@@ -2046,7 +2040,7 @@ function maChip(m) {
    차트 위 글씨가 봉을 가렸다. 켜고 끄는 것은 기간 줄의 「보조지표」 메뉴에서
    한다. 이동평균 값은 바로 위 MA 줄에 그대로 있다. */
 
-function mountLegend(container, chart, { candles, period, maSeries, showVolume, ind, series, getPrev }) {
+function mountLegend(container, chart, { candles, period, maSeries, showVolume, ind, series }) {
   container.classList.add('kh-lg-host');
 
   /* 지수는 소수점이 있고 종목은 정수다. 받은 값을 보고 정한다 */
@@ -2078,10 +2072,11 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
   /* ── 마우스 자리 가격 · 현재가 대비 (2026-10-14 재권님 「차트에 마우스 올리면 올린 캔들 위치의 값이 나오고 … 현재가랑 비교해줘
      가격 등락률 등등 나오게」 → 시안 셋 → 「내가 마우스 올린 바로 그곳에서 가격과 퍼센트만」 · 「한 캔들씩 이동하면 가격과 퍼센트도 변해야돼」).
      현재가 = 지금 그려진 마지막 봉의 종가 — updateLast 가 실시간 값으로 갈아 끼우므로 그것이 곧 현재가다.
-     마우스 표 = 마우스 높이의 가격(coordinateToPrice) · 그 아래 두 줄(2026-10-15 재권님 「가로 해줘」 · 「어제 종가에 비교하는것과
-     현재가에 비교하는거 둘다 필요해」)
-       전일   (가격 − 전일 종가) ÷ 전일 종가 — 그 가격이면 오늘 등락률이 몇 %인가. 전일 종가는 차트의 「전일」 점선과 같은 값
-       현재   (현재가 − 가격) ÷ 가격 — 그 가격에서 지금까지 몇 % 움직였나(어제 종가에 올리면 오늘 등락률) · 값 줄 「현재가 대비」 와 같은 기준
+     마우스 표 = 마우스 높이의 가격(coordinateToPrice) · 그 아래 세 줄(2026-10-15 재권님 「마우스를 올리면 현재가 대비 등락률만 ·
+     … 가장 하한가와 가장 상한가 … 그것과 현재 내가 마우스 올린곳과의 등락률도」 → 「응 맞아 이대로해」. 그 전의 「전일」 줄은 뺐다)
+       현재가 대비   (현재가 − 가격) ÷ 가격 — 그 가격에서 지금까지 몇 % 움직였나 · 값 줄 「현재가 대비」 와 같은 기준
+       최고가까지    (화면 최고가 − 가격) ÷ 가격 — 화면 최고 · 최저는 아래 visibleExtremes(보이는 봉들 안)
+       최저가까지    (화면 최저가 − 가격) ÷ 가격
      값 줄의 「현재가 대비」 = 현재가 − 올린 봉 종가(그 봉 종가 기준 %) · 마지막 봉 자신은 견줄 것이 없어 그 칸을 감춘다.
      표는 차트 위에 얹기만 한다 — 칸 크기 · 봉 높이를 안 바꾸고(「보는 것을 바꿔도 자리는 그대로다」) 끌기 · 확대도 안 막는다 */
   const tag = document.createElement('div');
@@ -2100,17 +2095,54 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     return '—';
   }
 
-  function prevClose() {
-    const p = getPrev ? Number(getPrev()) : 0;
-    if (p > 0) return p;
-    /* 시세 · 점선 값이 없을 때만 봉에서 — 분봉은 어제 마지막 봉, 일봉은 앞 봉. 주 · 월 · 년봉의 앞 봉은 전일이 아니라 「—」 */
-    const last = candles.length - 1;
-    if (MINUTE_PERIODS.has(period)) {
-      const today = String(candles[last].ts).slice(0, 8);
-      for (let k = last; k >= 0; k--) if (String(candles[k].ts).slice(0, 8) !== today) return candles[k].close;
-      return null;
+  /* ── 보이는 화면 안 최고가 · 최저가 (2026-10-15 재권님 「차트에 가장 하한가와 가장 상한가도 표기해주고 그것과 현재 내가 마우스
+     올린곳과의 등락률도 알려줘 · 차트에 표기해달라는건 현재 차트에 보여지는 화면안에서의 값이야」 → 시안 「응 맞아 이대로해」).
+     지금 화면에 보이는 봉들의 고가 중 가장 높은 것 · 저가 중 가장 낮은 것 — 끌거나 줄여 보이는 봉이 바뀌면 따라 바뀐다.
+     그 캔들 꼬리 끝에 이름표를 얹기만 한다(칸 크기 · 봉 높이 안 바뀜). 좁은 미리보기 차트(is-compact)에서는 감춘다 */
+  const pinHi = document.createElement('div');
+  pinHi.className = 'kh-lg-pin is-hi kh-num';
+  const pinLo = document.createElement('div');
+  pinLo.className = 'kh-lg-pin is-lo kh-num';
+  pinHi.hidden = pinLo.hidden = true;
+  container.append(pinHi, pinLo);
+
+  function visibleExtremes() {
+    let r = null;
+    try { r = chart.timeScale().getVisibleLogicalRange(); } catch { /* 칸이 아직 없다 */ }
+    if (!r || !candles.length) return null;
+    const lo = Math.max(0, Math.ceil(r.from)), hi = Math.min(candles.length - 1, Math.floor(r.to));
+    if (hi < lo) return null;
+    let hiI = lo, loI = lo;
+    for (let k = lo + 1; k <= hi; k++) {
+      if (candles[k].high > candles[hiI].high) hiI = k;
+      if (candles[k].low < candles[loI].low) loI = k;
     }
-    return period === 'D' && last > 0 ? candles[last - 1].close : null;
+    return { hiI, hi: candles[hiI].high, loI, lo: candles[loI].low };
+  }
+
+  function placePin(pin, i, price, label) {
+    let x = null, y = null;
+    try {
+      x = chart.timeScale().logicalToCoordinate(i);
+      y = series ? series.priceToCoordinate(price) : null;
+    } catch { /* 칸이 아직 없다 */ }
+    if (x == null || y == null || el.classList.contains('is-compact')) { pin.hidden = true; return; }
+    const cv = container.querySelector('canvas');
+    const ox = cv ? cv.getBoundingClientRect().left - container.getBoundingClientRect().left : 0;
+    const oy = cv ? cv.getBoundingClientRect().top - container.getBoundingClientRect().top : 0;
+    pin.innerHTML = `${label} <b>${fmtPrice(price, dec)}</b>`;
+    pin.hidden = false;
+    /* 칸 왼끝 · 오른끝에서 칸 밖으로 넘치지 않게 안으로 당긴다 */
+    const half = pin.offsetWidth / 2;
+    pin.style.left = `${Math.min(Math.max(ox + x, half), container.clientWidth - half)}px`;
+    pin.style.top = `${oy + y}px`;
+  }
+
+  function placePins() {
+    const e = visibleExtremes();
+    if (!e) { pinHi.hidden = pinLo.hidden = true; return; }
+    placePin(pinHi, e.hiI, e.hi, '화면 최고');
+    placePin(pinLo, e.loI, e.lo, '화면 최저');
   }
 
   function placeTag() {
@@ -2121,16 +2153,18 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     if (price == null || !Number.isFinite(price)) { tag.hidden = true; return; }
     const cur = candles[candles.length - 1].close;
     const pct = price ? (cur - price) / price * 100 : null;
-    const prev = prevClose();
-    const vsPrev = prev ? (price - prev) / prev * 100 : null;
+    const ext = visibleExtremes();
+    const toHi = ext && price ? (ext.hi - price) / price * 100 : null;
+    const toLo = ext && price ? (ext.lo - price) / price * 100 : null;
     const fmtPct = (v) => (v == null ? '—' : `${sign(v)}${v.toFixed(2)}%`);
     /* 좌표는 차트 그림판 기준 — 칸(container) 안에서 그림판 자리를 더한다 */
     const cv = container.querySelector('canvas');
     const ox = cv ? cv.getBoundingClientRect().left - container.getBoundingClientRect().left : 0;
     const oy = cv ? cv.getBoundingClientRect().top - container.getBoundingClientRect().top : 0;
     tag.innerHTML = `<b>${fmtPrice(price, dec)}</b>`
-      + `<br><i>전일</i> <b class="${vsPrev == null ? '' : updn(vsPrev)}">${fmtPct(vsPrev)}</b>`
-      + `<br><i>현재</i> <b class="${pct == null ? '' : updn(pct)}">${fmtPct(pct)}</b>`;
+      + `<br><i>현재가 대비</i> <b class="${pct == null ? '' : updn(pct)}">${fmtPct(pct)}</b>`
+      + `<br><i>최고가까지</i> <b class="${toHi == null ? '' : updn(toHi)}">${fmtPct(toHi)}</b>`
+      + `<br><i>최저가까지</i> <b class="${toLo == null ? '' : updn(toLo)}">${fmtPct(toLo)}</b>`;
     tag.style.left = `${ox + point.x}px`;
     tag.hidden = false;
     /* 칸 오른끝에서 넘치면 마우스 왼쪽에 둔다 (qa 검수 · 좁은 폭 오른끝 5~8px 넘침) */
@@ -2234,6 +2268,7 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
       'is-compact',
       container.clientWidth < LEGEND_COMPACT_W || container.clientHeight < LEGEND_COMPACT_H
     );
+    placePins();
   }
 
   const onMove = (param) => {
@@ -2247,6 +2282,8 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     placeTag();
   };
   chart.subscribeCrosshairMove(onMove);
+  const onRange = () => placePins();
+  chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
 
   syncOff();
   render(candles.length - 1);
@@ -2269,13 +2306,17 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
       const i = shown != null && shown < candles.length ? shown : candles.length - 1;
       render(i);
       placeTag();
+      placePins();
     },
 
     destroy() {
       _legendSync.delete(syncOff);
       if (ro) ro.disconnect();
       try { chart.unsubscribeCrosshairMove(onMove); } catch { /* 이미 정리됨 */ }
+      try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange); } catch { /* 이미 정리됨 */ }
       tag.remove();
+      pinHi.remove();
+      pinLo.remove();
       el.remove();
       container.classList.remove('kh-lg-host');
     },
@@ -2319,7 +2360,7 @@ export function addPrevCloseLine(chart, candles, prev) {
   const price = p > 0 ? p
     : (firstToday > 0 ? candles[firstToday - 1].close : null);
   if (price == null) return false;        // 첫 봉이 오늘이고 시세도 없다
-  chart.prevClose = price;                // 마우스 표의 「전일 대비」 가 이 값을 쓴다(점선과 같은 값)
+  chart.prevClose = price;                // 지금 그은 점선 값 — 종목이 바뀌면 setData 가 지운다
 
   const was = _prevLine.get(chart);
   /* **시리즈가 같은지로 「아직 있다」 를 본다.** 지표를 켜고 끄면 `build()` 가

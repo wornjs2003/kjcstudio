@@ -516,3 +516,18 @@
      길면 칸을 밀고 나간다 — 수급 문장이 오른쪽으로 잘렸다 (2026-09-21 실측) */
   width: 100%; min-width: 0;
 }
+
+/* 보이는 화면 안 최고가 · 최저가 이름표 (2026-10-15 재권님 「차트에 보여지는 화면안에서의 값」) — 그 캔들 꼬리 끝에 얹기만 한다 */
+.kh-lg-pin {
+  position: absolute; z-index: 2;
+  padding: 1px 6px;
+  font-size: 0.72rem; line-height: 1.35; white-space: nowrap;
+  background: var(--kh-bg-float);
+  border-radius: var(--kh-radius-sm);
+  box-shadow: 0 0 0 1px var(--kh-border);
+  pointer-events: none;
+}
+.kh-lg-pin.is-hi { color: var(--kh-up); transform: translate(-50%, calc(-100% - 4px)); }
+.kh-lg-pin.is-lo { color: var(--kh-down); transform: translate(-50%, 4px); }
+.kh-lg-pin b { font-weight: 600; }
+.kh-lg-pin[hidden] { display: none; }
