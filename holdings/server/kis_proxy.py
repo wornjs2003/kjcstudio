@@ -216,13 +216,15 @@ MARKET_DIV_CHART = "UN"
 # 통합이 과거를 잘라 줄 때 되묻는 쪽.
 MARKET_DIV_CHART_ALT = "J"
 
-# **일 · 주 · 월 · 년봉은 정규장(KRX · J)으로 받는다** (2026-10-15 재권님 「오늘 시가에 맞춰야지」 · 「응 해줘」).
-# 통합(UN)으로 받으면 넥스트레이드 장 전(08:00~) · 장 뒤 거래가 봉에 들어가, 화면 위쪽 시세(정규장)와 갈렸다 —
-# 삼성 10-15 일봉 시가 225,000(장 전 첫 체결) ↔ 시세 시가 216,500 · 어제 일봉 종가 234,500 ↔ 시세 전일 232,000
-# (개념정의 · qa 실측). **5분봉은 그대로 통합이다** — 장 전 · 장 뒤 움직임을 시간대별로 보는 차트라서다.
-# 과거가 잘려 오면(넥스트레이드 늦게 편입된 종목) 아래 ALT 로 한 번 더 묻는 모양은 그대로 — 기준만 뒤집었다.
-MARKET_DIV_BARS = "J"
-MARKET_DIV_BARS_ALT = "UN"
+# **일 · 주 · 월 · 년봉은 통합(UN)으로 받는다 — 토스 일봉과 같은 모양** (2026-10-15 20:1x 재권님 「통합으로 해야겠다」 ·
+# 「응 통합으로 해줘」 — 아침 7시 뒤 마지막 봉 종가도 통합 종가).
+# 같은 날 낮에는 정규장(J)으로 바꿨었다(재권님 「오늘 시가에 맞춰야지」 — 일봉 시가 225,000 ↔ 시세 시가 216,500 이 갈림).
+# 저녁에 세 곳을 견주니(삼성 10-08~10-15) 토스 일봉은 시 · 고 · 저 · 종 전부 통합(10-15 시가 225,000 · 10-14 종가 234,500),
+# 네이버는 시가 정규장 · 종가 통합, 우리는 전부 정규장이라 다른 앱과 몸통이 달라 보였다 — 셋 다 등락은 정규장 종가(232,000) 기준.
+# **봉은 통합 · 위쪽 시세 · 등락은 정규장** 이 토스와 같은 모양이다. 5분봉은 처음부터 통합이다.
+# 과거가 잘려 오면(넥스트레이드 늦게 편입된 종목) 아래 ALT(정규장)로 한 번 더 묻는다.
+MARKET_DIV_BARS = "UN"
+MARKET_DIV_BARS_ALT = "J"
 
 # 정규장 시간대 (KRX)
 KRX_OPEN  = (9, 0)
@@ -5842,7 +5844,7 @@ def _us_deep_work():
 
 
 def _kr_div_work():
-    """국내 일 · 주 · 월 · 년봉 중 아직 정규장(`MARKET_DIV_BARS`)으로 다시 안 받은 것 → [(코드, 주기)] (2026-10-15).
+    """국내 일 · 주 · 월 · 년봉 중 아직 `MARKET_DIV_BARS`(지금 통합)로 다시 안 받은 것 → [(코드, 주기)] (2026-10-15 · 기준을 바꾸면 표시가 어긋나 저절로 한 번 더 받는다).
 
     화면이 연 (종목, 주기)는 `_get_chart_one` 이 그 자리에서 다시 받지만, **읽기 전용 서버(8764 · 8767 · 세션)는
     저장 · 표시를 못 해** 8765 가 그 종목을 열기 전까지 통합 봉을 그대로 냈다(개념정의 검수 · 8767 삼성 일봉 시가 225,000).
@@ -5912,7 +5914,7 @@ def start_bar_fill(cfg, port):
         _fill_mark(code, day)
 
     def kr_div_one(code, period):
-        # 화면이 여는 길과 같은 양(DWMY_WANT)을 정규장으로 거슬러 받아 덮는다 · 받은 만큼 쉰다
+        # 화면이 여는 길과 같은 양(DWMY_WANT)을 MARKET_DIV_BARS(지금 통합)로 거슬러 받아 덮는다 · 받은 만큼 쉰다
         bars = fetch_bars_back(cfg, code, period, DWMY_WANT)
         time.sleep(BAR_FILL_CALL_GAP * max(1, -(-DWMY_WANT // BARS_PER_CALL)))
         if bars:
@@ -5928,7 +5930,7 @@ def start_bar_fill(cfg, port):
                 done += _bar_fill_run("미국 5분봉", _us_fill_work(), us_5m_one)
                 done += _bar_fill_run("미국 일주월", _us_deep_work(), us_deep_one)
                 done += _bar_fill_run("국내 5분봉", _kr_fill_work(), kr_one)
-                done += _bar_fill_run("국내 일주월년 정규장", _kr_div_work(), kr_div_one)
+                done += _bar_fill_run("국내 일주월년 시장구분", _kr_div_work(), kr_div_one)
                 _bar_fill["at"] = datetime.now(KST).strftime("%m-%d %H:%M")
                 _bar_fill["left"] = None
                 _bar_fill["state"] = "다 돎 · 다음 확인 대기"
@@ -5966,7 +5968,7 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
     else:
         stale = (time.time() - last_sync) > conf["fresh_sec"]
 
-    # **통합(UN)으로 쌓인 일 · 주 · 월 · 년봉은 한 번 정규장(J)으로 다시 받는다** (2026-10-15 · `MARKET_DIV_BARS`).
+    # **`MARKET_DIV_BARS` 와 다른 기준으로 쌓인 일 · 주 · 월 · 년봉은 한 번 다시 받는다** (2026-10-15 — 낮에 정규장으로 · 저녁에 통합으로 되돌림).
     # 그 (종목, 주기)를 처음 볼 때 「오래됨」 으로 보고 달라는 만큼 거슬러 받아 덮어쓴다 — 받은 뒤 표시를 적어 다시 안 받는다.
     # 달라는 것보다 오래된 봉은 통합 그대로 남는다(화면에 안 닿는 자리).
     dkey = "div:%s:%s" % (code, period)
