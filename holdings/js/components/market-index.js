@@ -247,7 +247,7 @@ export function paintMaterials(root, j, grp, sel) {
         const c = x.pct == null ? 'kh-mut' : x.pct > 0 ? 'kh-up' : x.pct < 0 ? 'kh-down' : '';
         const key = x.code ? `n:${cat}:${x.code}` : '';
         rows.push(`<tr title="${esc(x.unit || '')}"${key ? ` data-mat-key="${esc(key)}" data-mat-name="${esc(x.name)}"` : ''}${key && key === sel ? ' class="is-active"' : ''}>
-          <td class="kh-rk"></td><td class="l"><span class="kh-nm"><b>${esc(x.name)}</b></span></td>
+          <td class="kh-rk"></td><td class="l"><span class="kh-nm"><b>${esc(x.name)}</b>${x.src ? ` <span class="kh-mut" style="font-size:.74rem" title="이 줄 값은 ${esc(x.src)} — 네이버 줄이 늦어서">${esc(x.src.split(' ')[0])}</span>` : ''}</span></td>
           <td class="kh-num">${matFmt(x.v)}${pctUnit ? '%' : ''}</td>
           <td class="kh-num kh-metric kh-mut">${md(x.at)}</td>
           <td class="kh-num ${c}" style="font-weight:500">${matPct(x.pct)}</td></tr>`);
