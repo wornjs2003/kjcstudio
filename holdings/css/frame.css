@@ -243,6 +243,9 @@ body {
   display: flex; flex-direction: column;
   overflow-y: auto; min-height: 0;
 }
+/* 위 display: flex 가 브라우저 기본 [hidden] 을 이긴다 — 홈 「주요 일정」 탭에서도 공시 목록이 남아
+   일정 줄이 그 아래로 밀렸다(2026-10-15 재권님 「응 해줘」). home.css 의 .kh-ix[hidden] 과 같은 함정 */
+.kh-dc[hidden] { display: none; }
 .kh-dc-i {
   display: flex; align-items: baseline; gap: 8px;
   padding: 7px 0; text-decoration: none; color: inherit;
