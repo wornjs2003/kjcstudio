@@ -3166,8 +3166,15 @@ def _inv_long_fetch(cfg, code):
             return False
         got = []
         ymd = today
+        broken = False
         for _ in range(2):
             page = _inv_long_page(cfg, code, ymd)
+            # **두 쪽을 다 받았을 때만 쌓는다** (2026-10-15 qa · 재권님 「응 해」) — 둘째 쪽이
+            # 실패한 채 30줄만 쌓이면 아래 「이어지나」 판정이 헛돈다. 빈 쪽(`[]`)은 상장이 짧아
+            # 더 없는 것이라 실패가 아니다
+            if page is None:
+                broken = True
+                break
             if not page:
                 break
             got.extend(page)
@@ -3177,7 +3184,7 @@ def _inv_long_fetch(cfg, code):
         # 확정치가 빈 줄(net 이 셋 다 None)은 안 쌓는다 — 다음 날 다시 받는다
         keep = [r for r in got
                 if any(r[s]["net"] is not None for s in ("person", "foreign", "inst"))]
-        if len(keep) < INVESTOR_DAYS:
+        if broken or len(keep) < INVESTOR_DAYS:
             _inv_long_fail[code] = time.time()
             print("[투자자 3달] %s 못 받음(%d줄) — %d초 뒤 다시"
                   % (code, len(keep), INVESTOR_LONG_RETRY))
@@ -3197,20 +3204,20 @@ def _inv_long_fetch(cfg, code):
         return True
 
 
-def _inv_long_read(code, before, limit):
-    """`before` 보다 앞 날짜의 쌓인 줄을 새것부터 `limit` 개. 표가 없으면 빈 목록."""
+def _inv_long_read(code, upto, limit):
+    """`upto` 날짜와 그보다 앞의 쌓인 줄을 새것부터 `limit` 개. 표가 없으면 빈 목록."""
     try:
         with _db_lock, db_conn() as conn:
             rs = conn.execute(
-                "SELECT row FROM investor_daily WHERE code = ? AND date < ? "
-                "ORDER BY date DESC LIMIT ?", (code, before, limit)).fetchall()
+                "SELECT row FROM investor_daily WHERE code = ? AND date <= ? "
+                "ORDER BY date DESC LIMIT ?", (code, upto, limit)).fetchall()
     except sqlite3.Error:
         return []
     return [json.loads(r["row"]) for r in rs]
 
 
 def fetch_investor_long(cfg, code, days=INVESTOR_LONG_DAYS):
-    """30거래일(`fetch_investor`) 뒤에 쌓인 옛 줄을 이어 `days` 거래일 + 오늘 줄까지.
+    """30거래일(`fetch_investor`) 뒤에 쌓인 옛 줄을 이어 확정치 `days` 거래일(+ 장중 오늘 빈 줄)까지.
 
     맨 앞은 그대로 `fetch_investor` 다 — 장중 오늘 줄(`net: null`)도 그대로 온다.
     화면이 오늘을 건너뛸 수 있게 한 줄 더 붙인다. 쌓인 것이 없으면 30거래일만 간다.
@@ -3221,13 +3228,25 @@ def fetch_investor_long(cfg, code, days=INVESTOR_LONG_DAYS):
     except Exception as e:                       # 받기가 터져도 30거래일은 낸다
         _inv_long_fail[code] = time.time()
         print("[투자자 3달] %s 받다 멈춤 — %s" % (code, safe_message(e, 120)))
-    want = days + 1
-    if not base:
-        return _inv_long_read(code, "99999999", want)
-    oldest = min(r["date"] for r in base if r.get("date")) if any(
-        r.get("date") for r in base) else "99999999"
-    more = _inv_long_read(code, oldest, max(0, want - len(base)))
-    return base + more
+    # 30거래일을 못 받았으면 쌓인 줄만 내지 않는다 — 어디서 끊겼는지 가를 기준이 없다(3달 전과 같다)
+    if not base or not any(r.get("date") for r in base):
+        return base
+    oldest = min(r["date"] for r in base if r.get("date"))
+    # 붙일 줄 수는 **확정치 줄**로 센다 — 장중 오늘 빈 줄은 화면이 건너뛴다. 이렇게 세면 붙이는 줄은
+    # `base` 맨 옛날을 품은 묶음(60줄) 안에서 늘 끝난다 — 묶음 밖 한 줄이 빈틈 너머에서 붙지 않는다
+    confirmed = sum(1 for r in base
+                    if any((r.get(s) or {}).get("net") is not None for s in ("person", "foreign", "inst")))
+    need = max(0, days - confirmed)
+    if not need:
+        return base
+    # **날짜가 이어질 때만 붙인다** (2026-10-15 qa 걸림 · 재권님 「응 해」). 쌓인 줄을 그냥
+    # 붙이면 오래전에 받은 묶음이 석 달을 건너뛰어 붙었다(09-01 · 08-31 → 05-20).
+    # 한 번에 받은 60줄은 이어진 거래일이라, `base` 맨 옛날과 **같은 날**이 쌓여 있으면
+    # 그 묶음이 그 아래 30거래일을 빈틈없이 덮는다 — 달력 표 없이 가른다. 없으면 30거래일만
+    rs = _inv_long_read(code, oldest, need + 1)
+    if not rs or rs[0].get("date") != oldest:
+        return base
+    return base + rs[1:]
 
 
 # ── 재무 다섯 — 모달 「투자 지표」 칸 재무 카드 (2026-10-02 지시) ──────────
@@ -7303,6 +7322,9 @@ class Handler(SimpleHTTPRequestHandler):
                     "meta": {
                         "code": code, "count": len(data), "days": INVESTOR_DAYS,
                         "qtyUnit": "주", "amtUnit": "백만원",
+                        # 이 서버가 3달 옛 줄을 스스로 받나 — 읽기만 하는 서버(8764 등)는 8765 가
+                        # 쌓은 것만 읽으므로 「15:40 뒤 채워집니다」 를 약속하지 않는다 (2026-10-15 qa)
+                        "longFill": marketdb.writable(),
                         # 종목별은 확정치다 (docs/kis-sector-investor.md).
                         # 상위 목록(investor-top)만 가집계라 거기만 그렇게 적는다.
                         "provisional": False,

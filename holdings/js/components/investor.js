@@ -120,6 +120,7 @@ export function mountInvestor({ box, tabs } = {}) {
   let seq = 0;              // 늦게 온 응답이 새 종목을 덮지 않게
   let top = null;           // 장중 가집계 — { foreign, inst }
   let topMiss = false;      // 상위 목록에 이 종목이 없다
+  let longFill = true;      // 이 서버가 3달 옛 줄을 스스로 받나(서버 meta) — 읽기만 하는 서버는 false
 
   /* ── 받아오기 ── */
   async function load() {
@@ -130,6 +131,7 @@ export function mountInvestor({ box, tabs } = {}) {
     const iv = await get(`/api/kis/investor?code=${code}&span=${SPAN}`);
     if (mine !== seq) return;              // 그새 종목이 바뀌었다
     rows = (iv && iv.ok && Array.isArray(iv.data)) ? iv.data : null;
+    longFill = !(iv && iv.meta && iv.meta.longFill === false);
     paint();
 
     /* **확정치가 없을 때만 가집계를 부른다.** 마감 뒤에는 부를 이유가 없다.
@@ -290,7 +292,9 @@ export function mountInvestor({ box, tabs } = {}) {
     /* 「거래일」 로 적는다 — 한달이 달력 30일이 아니라 장이 선 20일이라서다 */
     const span = skippedToday ? `어제까지 ${days.length}거래일` : `최근 ${days.length}거래일`;
     /* 3달이 덜 쌓였으면 말한다 — 「3달」 을 눌렀는데 30거래일이 더해진 것을 3달로 읽지 않게 */
-    const short = days.length < VIEW_DAYS[view] ? ' · 나머지는 장 마감(15:40) 뒤 채워집니다' : '';
+    /* 읽기만 하는 서버(8764 등)는 스스로 안 받는다 — 「15:40 뒤」 를 약속하지 않는다 (2026-10-15 qa) */
+    const short = days.length >= VIEW_DAYS[view] ? ''
+      : (longFill ? ' · 나머지는 장 마감(15:40) 뒤 채워집니다' : ' · 나머지는 메인 서버가 받아 둔 종목만 나옵니다');
     return `<div class="kh-iv-rows">${lines}</div>
       <div class="kh-iv-note">${span}을 <b>더한 값</b>입니다 ·
         한국투자증권 확정치${short}</div>`;
