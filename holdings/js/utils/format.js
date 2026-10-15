@@ -1,5 +1,7 @@
 /* 숫자·통화·거래량 포맷 */
 
+import { signClass } from '../../../assets/js/sign.js';
+
 export function fmtPrice(n) {
   if (n == null || Number.isNaN(n)) return '—';
   return n.toLocaleString('ko-KR');
@@ -116,11 +118,10 @@ export function fmtShareCount(n) {
   return fmtNum(n) + '주';
 }
 
-/* 오를 때 빨강, 내릴 때 파랑 (한국식) */
+/* 오를 때 빨강, 내릴 때 파랑 (한국식) · 0 은 kh-flat · 값 없음은 kh-mut — 셈은 공용 assets/js/sign.js 한 곳
+   (CLAUDE.md 「오르내림 숫자의 글씨 색은 한 셈이다」 · 2026-10-15). 부르는 곳이 많아 이름은 남겨 둔다 */
 export function dirClass(n) {
-  if (n == null) return 'kh-mut';
-  if (n === 0) return 'kh-flat';   // 보합 — 빨강도 파랑도 아니다
-  return n > 0 ? 'kh-up' : 'kh-down';
+  return signClass(n);
 }
 
 /* 증감 표기 — "▲ 1,200원 (1.59%)" */

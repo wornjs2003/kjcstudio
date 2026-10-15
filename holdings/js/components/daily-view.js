@@ -35,6 +35,7 @@ import { stripHtml } from './index-strip.js';
 import { apiFetch } from '../data/api.js';
 import { watch } from '../store/longpoll.js';
 import { everyServerMs } from '../store/timing.js';
+import { signClass } from '../../../assets/js/sign.js';
 
 /* 화면을 열어둔 채로도 새 것이 들어오도록. 서버가 5분마다 받으므로 그보다 짧게. */
 /* 다시 받는 주기는 화면이 정하지 않는다 — 서버 값(`/api/kis/stats` 의 timing)을 따른다.
@@ -67,11 +68,6 @@ function num(v, digits = 2) {
     { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
-/* 등락을 색 이름으로. 한국식 — 오르면 빨강, 내리면 파랑 */
-function tone(v) {
-  if (v == null || isNaN(v) || Number(v) === 0) return 'flat';
-  return Number(v) > 0 ? 'up' : 'down';
-}
 
 function signed(v, digits = 2) {
   if (v == null || isNaN(v)) return '—';
@@ -588,7 +584,7 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
         ${rows.map((s) => `<div class="kh-dl-sec-row">
           <span class="kh-dl-sec-m">${esc(s.market === 'KOSDAQ' ? '코스닥' : '코스피')}</span>
           <span class="kh-dl-sec-n">${esc(s.name)}</span>
-          <span class="kh-dl-sec-p kh-dl-${tone(s.pct)}">${pct(s.pct)}</span>
+          <span class="kh-dl-sec-p ${signClass(s.pct)}">${pct(s.pct)}</span>
         </div>`).join('')}
       </div>`;
     };
@@ -834,7 +830,7 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
     const big = kospi ? {
       value: `KOSPI ${num(kospi.value, 2)}`,
       change: `${signed(kospi.change, 2)} ${pct(kospi.changePct)}`,
-      changeCls: `kh-${tone(kospi.changePct)}`,
+      changeCls: signClass(kospi.changePct),   // 오르내림 색 — 공용 셈(sign.js)
       note: todayLabel(),
     } : null;
 

@@ -12,6 +12,7 @@ import { color, alpha } from './theme.js';
 import { apiFetch, viewUrl } from './data/api.js';
 import { watch } from './store/longpoll.js';
 import { mountDraw } from './chart-draw.js';
+import { signClass } from '../../assets/js/sign.js';
 
 /* 차트는 canvas 라 CSS 를 상속받지 못해 색을 문자열로 넘겨야 한다.
    그 값은 theme.js 가 ../assets/css/theme.css 에서 읽어 오므로, 색을 바꿀
@@ -2191,7 +2192,7 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
   let shown = null;            // 지금 값 줄이 보여 주는 봉(마우스를 올린 봉 · 없으면 null)
   let point = null;            // 마지막 마우스 자리(그림판 기준) — 현재가가 바뀌면 % 를 다시 센다
 
-  const updn = (v) => (v > 0 ? 'kh-up' : v < 0 ? 'kh-down' : 'kh-flat');
+  const updn = (v) => signClass(v);   // 오르내림 색 — 공용 셈(assets/js/sign.js · 「오르내림 숫자의 글씨 색은 한 셈이다」)
   const sign = (v) => (v > 0 ? '+' : '');
   function fmtWhen(ts) {
     const t = String(ts || '');
