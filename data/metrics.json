@@ -7,8 +7,26 @@
       "unit": "",
       "base": 100,
       "full": 3.78,
-      "src": "ICE 달러인덱스(.DXY · 1973년 3월 = 100) — 8765 /api/market/indicator?key=dxy(네이버 증권 시장지표). FRED 교역가중 달러지수(2006년 1월 = 100)는 기준이 달라 이 항목에 안 맞는다",
+      "src": "ICE 달러인덱스(.DXY · 1973년 3월 = 100). 8765 /api/market/indicators 의 dxy — 지금 값은 재료 줄(/api/market/materials)의 그 코드 값이 있으면 그것으로 덮는다(market_index.py indicators() · 2026-10-15 확인) · 1년 일봉은 /api/market/indicator?key=dxy(네이버 증권 시장지표). FRED 교역가중 달러지수(2006년 1월 = 100)는 기준이 달라 이 항목에 안 맞는다",
       "how": "2026-10-14 · 지난 1년 일봉 종가 259칸(96.22~102.59)에서 100 과 가장 먼 거리"
+    },
+    {
+      "id": "us_cpi_yoy",
+      "name": "미국 소비자물가 전년비",
+      "unit": "%",
+      "base": null,
+      "full": null,
+      "src": "FRED CPIAUCNS(계절조정 안 함)의 전년 같은 달 대비 — 8765 /api/macro/series?ids=us_cpi_yoy · 발표일 · 머리 숫자는 /api/macro/releases 의 cpi(main). 같은 이름의 CPIAUCSL(계절조정)과 값이 다르다(10-15 개발3 · 3.72 ↔ 3.74)",
+      "how": "기준 · 폭은 비움 — 색을 안 칠한다. 물가 목표 2% 를 기준으로 칠할지는 재권님이 정하신다(「기준이 있는 수치」 6번) · 2026-10-15 넣음(홀딩스 주요 일정 · Insight 물가 칩이 함께 씀)"
+    },
+    {
+      "id": "kr_cpi_yoy",
+      "name": "한국 소비자물가 전년비",
+      "unit": "%",
+      "base": null,
+      "full": null,
+      "src": "한국은행 ECOS 901Y009(소비자물가 총지수)의 전년 같은 달 대비 — 8765 /api/macro/series?ids=kr_cpi_yoy",
+      "how": "기준 · 폭은 비움 — 색을 안 칠한다(위와 같다) · 2026-10-15 넣음(Insight 물가 칩)"
     }
   ]
 }
