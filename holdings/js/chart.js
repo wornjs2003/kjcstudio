@@ -2065,8 +2065,10 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     tag.innerHTML = `<b>${fmtPrice(price, dec)}</b><br><b class="${pct == null ? '' : updn(pct)}">${
       pct == null ? '—' : `${sign(pct)}${pct.toFixed(2)}%`}</b>`;
     tag.style.left = `${ox + point.x}px`;
-    tag.style.top = `${oy + point.y}px`;
     tag.hidden = false;
+    /* 칸 위끝 · 아래끝에서 칸 밖으로 넘치지 않게 표 높이 절반만큼 안으로 당긴다 (qa 검수 · 넓은 폭 위로 10px 넘침) */
+    const half = tag.offsetHeight / 2;
+    tag.style.top = `${Math.min(Math.max(oy + point.y, half), container.clientHeight - half)}px`;
   }
 
   function render(i) {
@@ -2080,7 +2082,11 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     nodes.chg.className = chg == null ? '' : updn(chg);
     const cur = candles[last].close;
     const dv = cur - c.close, dp = c.close ? dv / c.close * 100 : null;
-    nodes.vs.parentElement.hidden = i === last;
+    /* 시각 · 등락 · 현재가 대비는 마우스를 올렸을 때만 — 쉴 때 값 줄은 전과 같다(qa 검수 · 좁은 폭에서 쉴 때도 두 줄이 됐다) */
+    const hover = shown != null;
+    nodes.when.parentElement.hidden = !hover;
+    nodes.chg.parentElement.hidden = !hover;
+    nodes.vs.parentElement.hidden = !hover || i === last;
     nodes.vs.textContent = dp == null ? '—' : `${sign(dv)}${fmtPrice(dv, dec)} (${sign(dp)}${dp.toFixed(2)}%)`;
     nodes.vs.className = updn(dv);
     nodes.open.textContent = fmtPrice(c.open, dec);
