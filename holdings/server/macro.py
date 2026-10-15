@@ -21,8 +21,8 @@ Insight 종목분석 ⑥-9 국면 재료 다섯 줄(경기종합지수 · 금리
 
 ── 캐시 ──
 
-월간 자료라 **하루 한 번** 받는다(`MACRO_TTL`). 다만 발표일을 알면 **발표 뒤(`REFRESH_AFTER`)에 다시 받는다** —
-하루를 기다리면 발표 값이 최대 하루 늦는다(2026-10-15). 한 계열이라도 못 받았으면 30분 뒤 다시 받는다(`MACRO_RETRY_TTL`).
+월간 자료라 **하루 한 번** 받는다(`MACRO_TTL`). 다만 발표일을 알면 **발표 뒤에 다시 받는다** —
+하루를 기다리면 발표 값이 최대 하루 늦는다(2026-10-15). 다시 받는 때는 발표 시각 한 시간 뒤와 다음날 07:00 이다. 한 계열이라도 못 받았으면 30분 뒤 다시 받는다(`MACRO_RETRY_TTL`).
 화면은 주기로 묻지 않고 열 때 한 번 받는다. 응답의 `cacheTtlSec` 이 지금 값이다.
 
 ── 어느 서버가 받나 ──
@@ -41,6 +41,7 @@ import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from secrets_guard import safe_message, secrets_path
 
@@ -115,24 +116,27 @@ GROUPS = [
 # main — 그 발표의 머리 숫자 · lag — 발표 달에서 몇 달 전 분이 나오나(그 달이 들어왔으면 「반영됨」). Q 는 분기 · W 는 주간.
 # 미시간대는 그 달 안에 나오지만 FRED 계열은 한 달 늦게 올라온다(2026-10-15 실측 — 09-25 발표 뒤에도 8월이 끝) — 그래서 1
 RELEASES = [
-    {"key": "cpi", "short": "미국 CPI", "name": "미국 소비자물가(CPI)", "kind": "물가", "fred": 10, "main": "us_cpi_yoy", "lag": 1},
-    {"key": "ppi", "short": "미국 PPI", "name": "미국 생산자물가(PPI)", "kind": "물가", "fred": 46, "main": "us_ppi_mom", "lag": 1},
-    {"key": "pce", "short": "미국 PCE 물가", "name": "미국 개인소비지출 물가(PCE)", "kind": "물가", "fred": 54, "main": "us_pce_yoy", "lag": 1},
-    {"key": "jobs", "short": "미국 고용", "name": "미국 고용(비농업 · 실업률)", "kind": "지표", "fred": 50, "main": "us_payems_chg",
+    {"key": "cpi", "short": "미국 CPI", "name": "미국 소비자물가(CPI)", "kind": "물가", "fred": 10, "et": "08:30", "main": "us_cpi_yoy", "lag": 1},
+    {"key": "ppi", "short": "미국 PPI", "name": "미국 생산자물가(PPI)", "kind": "물가", "fred": 46, "et": "08:30", "main": "us_ppi_mom", "lag": 1},
+    {"key": "pce", "short": "미국 PCE 물가", "name": "미국 개인소비지출 물가(PCE)", "kind": "물가", "fred": 54, "et": "08:30", "main": "us_pce_yoy", "lag": 1},
+    {"key": "jobs", "short": "미국 고용", "name": "미국 고용(비농업 · 실업률)", "kind": "지표", "fred": 50, "et": "08:30", "main": "us_payems_chg",
      "also": ["us_unrate"], "lag": 1},
-    {"key": "claims", "short": "미국 실업수당 청구", "name": "미국 신규 실업수당 청구", "kind": "지표", "fred": 180, "main": "us_icsa", "lag": "W"},
-    {"key": "jolts", "short": "미국 JOLTS 구인", "name": "미국 구인·이직(JOLTS)", "kind": "지표", "fred": 192, "main": "us_jolts", "lag": 2},
-    {"key": "retail", "short": "미국 소매판매", "name": "미국 소매판매", "kind": "지표", "fred": 9, "main": "us_retail_mom", "lag": 1},
-    {"key": "indpro", "short": "미국 산업생산", "name": "미국 산업생산", "kind": "지표", "fred": 13, "main": "us_indpro_mom", "lag": 1},
-    {"key": "umich", "short": "미시간대 소비심리", "name": "미시간대 소비심리", "kind": "지표", "fred": 91, "main": "us_umcsent", "lag": 1},
-    {"key": "gdp", "short": "미국 GDP", "name": "미국 국내총생산(GDP)", "kind": "지표", "fred": 53, "main": "us_gdp", "lag": "Q"},
+    {"key": "claims", "short": "미국 실업수당 청구", "name": "미국 신규 실업수당 청구", "kind": "지표", "fred": 180, "et": "08:30", "main": "us_icsa", "lag": "W"},
+    {"key": "jolts", "short": "미국 JOLTS 구인", "name": "미국 구인·이직(JOLTS)", "kind": "지표", "fred": 192, "et": "10:00", "main": "us_jolts", "lag": 2},
+    {"key": "retail", "short": "미국 소매판매", "name": "미국 소매판매", "kind": "지표", "fred": 9, "et": "08:30", "main": "us_retail_mom", "lag": 1},
+    {"key": "indpro", "short": "미국 산업생산", "name": "미국 산업생산", "kind": "지표", "fred": 13, "et": "09:15", "main": "us_indpro_mom", "lag": 1},
+    {"key": "umich", "short": "미시간대 소비심리", "name": "미시간대 소비심리", "kind": "지표", "fred": 91, "et": "10:00", "main": "us_umcsent", "lag": 1},
+    {"key": "gdp", "short": "미국 GDP", "name": "미국 국내총생산(GDP)", "kind": "지표", "fred": 53, "et": "08:30", "main": "us_gdp", "lag": "Q"},
 ]
 FRED_API = "https://api.stlouisfed.org/fred/release/dates"
 RELEASE_TTL = 24 * 3600
-# 발표 뒤 값을 다시 받는 때(한국 시각) — 미국 08:30 발표는 한국 21:30(서머타임) · 22:30, 10:00 발표는 23:00 · 다음날 00:00 이다.
-# FRED 가 계열에 올리는 데 시간이 걸려 발표 날 23:30 과 다음날 07:00 두 번 받는다(시각을 박는 대신 발표일에 붙인다)
-REFRESH_AFTER = [(0, 23, 30), (1, 7, 0)]
-RELEASED_AT = (21, 30)       # 발표일 이 한국 시각부터 「지났다」 로 센다 — 가장 이른 미국 08:30(서머타임)
+# 발표 뒤 값을 다시 받는 때 — FRED 가 계열에 올리는 데 시간이 걸려 발표 시각 한 시간 뒤와 다음날 07:00(한국) 두 번 받는다
+# et — 미국 동부 발표 시각. 서버가 서머타임을 셈해 한국 시각(`nextReleaseKst`)으로 낸다 — 화면에 21:30 · 22:30 을 박지 않는다
+# (2026-10-15 재권님 「응 해줘」 · 시황분석 풍선이 21:30 을 박았다가 11-01 뒤 어긋날 자리). 확인한 곳(2026-10-15):
+# bls.gov/schedule/news_release 의 cpi · ppi · empsit(08:30) · jolts(10:00) · federalreserve.gov G.17(09:15) ·
+# Census 소매 · BEA 소득지출 · GDP · 노동부 실업수당(08:30 — 검색 결과로 확인) · 미시간대(10:00 — 검색 결과로 확인)
+ET = ZoneInfo("America/New_York")
+REFRESH_LAG = timedelta(hours=1)
 
 ALL_IDS = [r["id"] for r in RAW] + [d["id"] for d in DERIVED]
 RAW_BY = {r["id"]: r for r in RAW}
@@ -338,19 +342,26 @@ def _release_dates():
 
 
 def _next_refresh(now):
-    """다음 「발표 뒤 다시 받기」 때(epoch) — 발표일을 못 받았으면 None(하루 한 번 그대로)."""
+    """다음 「발표 뒤 다시 받기」 때(epoch) — 발표 시각 한 시간 뒤와 다음날 07:00(한국). 발표일을 못 받았으면 None(하루 한 번 그대로)."""
     dates = _rel["dates"]            # 잠금 없이 읽는다 — bundle 안에서 부르므로 받기를 새로 시작하지 않는다
     if not dates:
         return None
     best = None
-    for ds in dates.values():
-        for d in ds:
-            y, m, dd = (int(x) for x in d.split("-"))
-            for plus, hh, mm in REFRESH_AFTER:
-                t = (datetime(y, m, dd, hh, mm, tzinfo=KST) + timedelta(days=plus)).timestamp()
-                if t > now and (best is None or t < best):
-                    best = t
+    for r in RELEASES:
+        for d in dates.get(r["key"]) or []:
+            at = _release_at(r, d)
+            for t in (at + REFRESH_LAG, (at + timedelta(days=1)).replace(hour=7, minute=0)):
+                ts = t.timestamp()
+                if ts > now and (best is None or ts < best):
+                    best = ts
     return best
+
+
+def _release_at(rel, day):
+    """그 발표의 시각(한국 시간대 datetime) — 미국 날짜 + 미국 동부 시각."""
+    hh, mm = (int(x) for x in rel["et"].split(":"))
+    y, m, d = (int(x) for x in day.split("-"))
+    return datetime(y, m, d, hh, mm, tzinfo=ET).astimezone(KST)
 
 
 def _expected(rel, day):
@@ -386,13 +397,13 @@ def releases():
     dates, err = _release_dates()
     s, at, left = bundle()
     now = datetime.now(KST)
-    # 오늘 날짜라도 발표 시각 전이면 아직 「다음」 이다
-    today = (now.date() if (now.hour, now.minute) >= RELEASED_AT else now.date() - timedelta(days=1)).isoformat()
     items = []
     for r in RELEASES:
         ds = (dates or {}).get(r["key"]) or []
-        past = [d for d in ds if d <= today]
+        # 오늘 날짜라도 발표 시각 전이면 아직 「다음」 이다 — 그 발표의 미국 동부 시각으로 가른다
+        past = [d for d in ds if _release_at(r, d) <= now]
         last_day = past[-1] if past else None
+        nxt = next((d for d in ds if _release_at(r, d) > now), None)
         main = s.get(r["main"]) or {}
         lp, pp = main.get("last"), main.get("prev")
         chg = round(lp["v"] - pp["v"], 2) if lp and pp else None
@@ -400,7 +411,10 @@ def releases():
             "key": r["key"], "name": r["name"], "short": r["short"], "kind": r["kind"], "country": "US",
             "dates": [d for d in ds if d >= (datetime.now(KST).date() - timedelta(days=7)).isoformat()],
             "lastRelease": last_day,
-            "nextRelease": next((d for d in ds if d > today), None),
+            "nextRelease": nxt,
+            "releaseEt": r["et"],
+            # 다음 발표의 한국 시각 — 'YYYY-MM-DD HH:MM'. 서머타임은 여기서 셈한다
+            "nextReleaseKst": _release_at(r, nxt).astimezone(KST).strftime("%Y-%m-%d %H:%M") if nxt else None,
             "main": r["main"], "label": main.get("label"), "unit": main.get("unit"), "freq": main.get("freq"),
             "last": lp, "prev": pp, "chg": chg,
             # 마지막 발표가 계열에 들어왔나 — 아직이면 last 는 그 전 발표 값이다
