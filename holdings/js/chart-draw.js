@@ -156,10 +156,16 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
      라이브러리 클릭은 누르는 사이 손이 조금만 움직여도 「끌기」 로 읽혀 안 온다 — 그리는 동안은 차트 끌기 · 확대를 멈추고
      눌렀다 뗀 자리를 직접 잰다. 끌어서 긋는 것도 된다(누른 자리 → 뗀 자리) */
   const box = pane.querySelector('.kh-pane-box') || pane;
-  const keepNav = (() => { try { const o = chart.options(); return { handleScroll: o.handleScroll, handleScale: o.handleScale }; } catch { return null; } })();
+  /* 깊은 사본으로 쥔다 — `chart.options()` 가 돌려주는 객체는 라이브러리 안의 것 그대로라, 끌 때 같이 false 로 바뀌어
+     되돌릴 값이 사라졌다(qa 검수 18:5x — 켰다 끄면 큰 차트가 안 끌림 · 18:5x 직접 재서 확인) */
+  const keepNav = (() => { try { const o = chart.options(); return JSON.parse(JSON.stringify({ handleScroll: o.handleScroll, handleScale: o.handleScale })); } catch { return null; } })();
+  /* 끄는 값도 같은 모양의 객체에 false 를 채워 준다 — 켤 때 그 객체를 그대로 돌려 끼운다 */
+  const allOff = (o) => (o && typeof o === 'object'
+    ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, allOff(v)])) : false);
+  const navOff = keepNav ? { handleScroll: allOff(keepNav.handleScroll), handleScale: allOff(keepNav.handleScale) } : null;
   const nav = (on) => {
     if (!keepNav) return;
-    try { chart.applyOptions(on ? keepNav : { handleScroll: false, handleScale: false }); } catch { /* 칸이 사라졌다 */ }
+    try { chart.applyOptions(on ? keepNav : navOff); } catch { /* 칸이 사라졌다 */ }
   };
 
   /* 칸 안 좌표 → { i(봉 자리), time, p(가격) } — 봉이 없는 자리(오른쪽 빈칸)는 i 가 null */
