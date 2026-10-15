@@ -1,5 +1,6 @@
 import { live } from './live.js';   // 새 값(-live) 먼저 · 없으면 씨앗
 import { dxyIce } from './dxy.js';
+import { signColor } from './sign-color.js';   // 글 속 +/− 숫자 색 — 한 곳
 import { indicatorSeries } from './indicator.js';   // 서버 시장지표 한 계열 — 아래 SERVER 표   // 달러인덱스 — ICE(1973년 3월 = 100) · 홈 · 흐름도와 같은 셈
 import { ready as toneReady, paint } from '/assets/js/tone.js';   // 기준이 있는 수치의 색 — 달러인덱스 100 위 빨강 · 아래 파랑(CLAUDE.md 「기준이 있는 수치는 위 빨강 · 아래 파랑, 멀수록 짙게」)
 // 시황분석 탭 — 세계지도 말풍선 값으로 그날 시황을 화면이 쓰고, 지표 흐름을 그래프로 보인다 (2026-10-12 재권님 「시황분석을 클릭하면 지금 분석해놓은게 나오면 ·
@@ -485,10 +486,10 @@ function controls() {
   const lastEq = D.P.US ? D.P.US[D.P.US.length - 1][0] : '—';
   document.getElementById('meta').textContent = `주가 · 금 ${hm} 에 받음(마지막 거래일 ${lastEq}) · 금리 · 물가 · 환율 ${D.M.fetchedAt} 받음 · 글은 이 값들로 화면이 만든다`;
   const w = write(D);
-  document.getElementById('one').textContent = w.one;
+  document.getElementById('one').innerHTML = signColor(String(w.one).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])));   // 글자는 막고 +/− 숫자만 색
   const box = document.getElementById('text');
   w.paras.forEach((p, i) => {
-    box.insertAdjacentHTML('beforeend', `<p class="para">${p.t}</p><details class="ev"><summary>근거 ${i + 1}</summary><ul>${p.ev.map(x => `<li>${x}</li>`).join('')}</ul><div class="why">읽는 법 — ${p.why}</div></details>`);
+    box.insertAdjacentHTML('beforeend', `<p class="para">${signColor(p.t)}</p><details class="ev"><summary>근거 ${i + 1}</summary><ul>${p.ev.map(x => `<li>${signColor(x)}</li>`).join('')}</ul><div class="why">읽는 법 — ${p.why}</div></details>`);
   });
   folds(); controls(); draw(D); others(D.N); nvNow(); capSrc(D.SV, D.N, D.S); krDay(D.N, D.MV); odds(D.O); sums(D);
 })();
