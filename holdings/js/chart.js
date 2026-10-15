@@ -11,6 +11,7 @@
 import { color, alpha } from './theme.js';
 import { apiFetch, viewUrl } from './data/api.js';
 import { watch } from './store/longpoll.js';
+import { mountDraw } from './chart-draw.js';
 
 /* 차트는 canvas 라 CSS 를 상속받지 못해 색을 문자열로 넘겨야 한다.
    그 값은 theme.js 가 ../assets/css/theme.css 에서 읽어 오므로, 색을 바꿀
@@ -844,6 +845,7 @@ export function createStockChart(container, candles, opts = {}) {
   let drawnCode = opts.code || null;   // 지금 그린 종목 — setData 가 다른 종목을 받을 때만 위 값을 지운다
   const priceLines = [];
   let syncing = false;
+  let draw = null;              // 그리기 도구(추세선 · 수평선 · 지우개) — build() 가 칸을 새로 만들 때마다 다시 붙인다 · chart-draw.js
 
   function mkChart(box, h, axis, digits = 0) {   // digits — 가격 칸만 미국 2 · 거래량 · MACD · RSI 칸은 0(소수가 붙으면 「16,953,846.00」)
     return LC.createChart(box, {
@@ -1500,6 +1502,11 @@ export function createStockChart(container, candles, opts = {}) {
         { candles, period, maSeries, showVolume: false, ind: {}, series: candleSeries });
       api.legend = legend;
     }
+    if (draw) draw.destroy();
+    draw = mountDraw({
+      pane: panes[0].el, chart: panes[0].chart, series: candleSeries, code: drawnCode, period, candles, LC,
+      timeOf: (i) => toChartTime(candles[i].ts, period), idxOfTime: (t) => byTime.get(timeKey(t)), axisW: AXIS_W,
+    });
     curOwn = ownKeys();
     paintPaneTags(candles.length - 1);
     /* 매물대는 배경이라 칸이 다 그려진 뒤에 얹는다. 자리를 잡으려면
@@ -1922,6 +1929,7 @@ export function createStockChart(container, candles, opts = {}) {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       if (legend) legend.destroy();
+      if (draw) { draw.destroy(); draw = null; }
       panes.forEach((p) => { try { p.chart.remove(); } catch { /* 이미 정리됨 */ } });
       panes = [];
       container.classList.remove('kh-panes');
