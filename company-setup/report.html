@@ -35,12 +35,15 @@
       <a href="#">투자 전략</a>
       <span class="kh-cat-my">증권사 리포트</span>
     </nav>
+    <!-- 영상 분석 분류 — 「영상 분석」 탭 밑 줄(2026-10-15 재권님 「영상분석 이름 밑으로 나눠주면 좋을거 같은데 · ui구성이나 색은 우리 룰에 맞춰서」).
+         칩 모양은 첫 화면 돈의 흐름 칩과 같은 .kh-chip · 이름과 순서는 목록 자료(insight-video-index 의 group · groups) — js/insight.js 가 그린다 -->
+    <nav class="kh-chips in-subcat" aria-label="영상 분석 분류" data-video-groups></nav>
     <article class="kh-card in-report" id="in-report"><p class="in-empty">불러오는 중</p></article>
   </main>
   <aside class="kh-side" aria-label="영상 분석 목록">
     <div class="kh-side-wrap">
       <div class="kh-card kh-rank-card">
-        <div class="kh-tabs"><button class="kh-tab is-active">영상 분석 목록</button></div>
+        <div class="kh-tabs"><button class="kh-tab is-active" data-video-group-name>영상 분석 목록</button></div>
         <ul class="in-news in-scroll" data-videos></ul>
       </div>
     </div>
