@@ -2294,8 +2294,10 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     if (!c) return;
     const last = candles.length - 1;
     nodes.when.textContent = fmtWhen(c.ts);
-    const prevC = i > 0 ? candles[i - 1].close : null;
-    const chg = prevC ? (c.close - prevC) / prevC * 100 : null;
+    /* 「등락」 은 그 봉의 시가 대비 — (종가 − 시가) ÷ 시가 (2026-10-15 20:1x 재권님 「등락률을 표기할때 시가를 기준으로 한다 로 해줘」 ·
+       「응」 — 차트 마우스 표 · 범례만. 위쪽 시세 · 순위의 전일 대비 등락률은 그대로). 전에는 앞 봉 종가 대비였는데 일 이상 봉이
+       통합이 되면서 앞 봉 종가(통합)가 정규장 전일 종가와 갈려 위쪽 시세 등락률과 다른 값이 나왔다 */
+    const chg = c.open ? (c.close - c.open) / c.open * 100 : null;
     nodes.chg.textContent = chg == null ? '—' : `${sign(chg)}${chg.toFixed(2)}%`;
     nodes.chg.className = chg == null ? '' : updn(chg);
     const cur = candles[last].close;
