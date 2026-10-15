@@ -18,12 +18,21 @@
 <body data-nav="company-setup" data-site-root="../">
 <div id="site-nav"></div>
 
-<!-- 영상 분석 보고서 한 편 — ?id=<문서 이름> 을 로컬 문서 저장소(/api/board/doc/<id>)에서 읽는다 -->
+<!-- 영상 분석 보고서 한 편 — ?id=<문서 이름> 을 로컬 문서 저장소(/api/board/doc/<id>)에서 읽는다.
+     갈래 탭 「영상 분석」 이 이 화면이다 — id 가 없으면 목록(insight-video-index)의 가장 새것을 연다 (2026-10-15 재권님 「영상분석 텝 … 연결되어야해」).
+     탭 줄은 다른 Insight 화면과 같은 줄 · 같은 순서 -->
 <div class="kh-app kh-app-wide">
   <main class="kh-main">
     <nav class="kh-cat" aria-label="갈래">
       <a href="./">홈</a>
-      <a class="is-on" href="#">영상 분석</a>
+      <a href="market.html">시황분석</a>
+      <a href="#">경제 지표</a>
+      <a href="#">산업 분석</a>
+      <a href="#">뉴스 분석</a>
+      <a class="is-on" href="report.html">영상 분석</a>
+      <a href="analysis.html">종목 분석</a>
+      <a href="chart-analysis.html">차트분석</a>
+      <a href="#">투자 전략</a>
       <span class="kh-cat-my">증권사 리포트</span>
     </nav>
     <article class="kh-card in-report" id="in-report"><p class="in-empty">불러오는 중</p></article>
