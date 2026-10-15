@@ -225,7 +225,7 @@ def _mat_now():
 
 
 def indicators():
-    # 원자재 칩은 일봉 마지막(어제 종가)이 아니라 재료 줄의 지금 값을 쓴다 (2026-10-14 재권님 「홀딩스의 값이 정확한지 확인하고」 →
+    # 재료 줄에 같은 코드가 있는 칩(원자재 · 달러인덱스 · 환율)은 일봉 마지막(어제 종가)이 아니라 재료 줄의 지금 값을 쓴다 (2026-10-14 재권님 「홀딩스의 값이 정확한지 확인하고」 →
     # 값 맞추기 c 「응 해줘」 · WTI 칩 94.14 ↔ 줄 94.77 이던 것). 전일 값은 줄의 등락률이 맞는 쪽을 일봉 끝 둘에서 고른다 —
     # 재료 줄 날짜는 거래소 날짜라 일봉 마지막과 같은 날로 찍혀도 그 뒤 거래일 값일 수 있다(10-15 실측 WTI 줄 10-14 93.89 −1.26% ·
     # 일봉 10-14 95.09 → 전일은 95.09)
@@ -240,7 +240,7 @@ def indicators():
             prev = rows[-2] if len(rows) > 1 else None
             last = {"d": last[0], "c": last[4]} if last else None
             prev = {"d": prev[0], "c": prev[4]} if prev else None
-            m = now_v.get(it.get("code")) if it.get("group") == "원자재" else None
+            m = now_v.get(it.get("code"))         # 재료 줄에 같은 코드가 있는 칩 전부(원자재 · 달러인덱스 · 환율 — 10-15 「응 해줘」)
             if m and last and m[1] >= last["d"]:
                 v, d, pct = m
                 newer = d > last["d"]

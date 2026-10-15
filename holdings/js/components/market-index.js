@@ -90,10 +90,14 @@ export function chipsHtml(list, sel, live = {}) {
   }).join('');
 }
 
-/* 큰 차트 머리에 넣을 글 — home.js 가 제 칸에 넣는다 */
-export function headOf(j) {
-  const it = j.item, b = j.bars, last = b[b.length - 1], prev = b[b.length - 2];
-  const c = prev ? last.c - prev.c : null;
+/* 큰 차트 머리에 넣을 글 — home.js 가 제 칸에 넣는다.
+   now = 그 칩의 값 · 전일({ last, prev }) — 머리 값 · 등락은 칩과 같게 한다(원/달러는 KIS · 원자재는 재료 줄 지금 값 ·
+   일봉 마지막은 어제 종가일 수 있다 · 2026-10-15 qa 짚음). 없으면 일봉 끝 둘로 */
+export function headOf(j, now = null) {
+  const it = j.item, b = j.bars;
+  const last = now && now.last && now.last.c != null ? now.last : b[b.length - 1];
+  const prev = now && now.last && now.last.c != null ? now.prev : b[b.length - 2];
+  const c = prev && prev.c != null ? last.c - prev.c : null;
   const lo = Math.min(...b.map(x => it.kind === 'candle' ? x.l : x.c));
   const hi = Math.max(...b.map(x => it.kind === 'candle' ? x.h : x.c));
   const u = it.unit === '원' ? '원' : tail(it);
@@ -105,7 +109,7 @@ export function headOf(j) {
     per: `1년 · ${it.kind === 'candle' ? '일봉' : '종가 선'}`,
     /* 아래 줄은 짧게 — 종목 차트의 줄보다 길면 폰에서 한 줄 더 넘어가 카드가 커진다(2026-10-12 실측 17px).
        자세한 말은 마우스를 올리면 뜬다 */
-    foot: [`1년 ${it.kind === 'candle' ? '일봉' : '종가'} ${b.length}개 · ${md(last.d)}까지`
+    foot: [`1년 ${it.kind === 'candle' ? '일봉' : '종가'} ${b.length}개 · ${md(b[b.length - 1].d)}까지`
              + (it.kind === 'candle' && j.fixed ? ` · 메운 날 ${j.fixed}` : ''),
            `${(j.source || '네이버').replace('네이버 증권 시장지표', '네이버')} · ${md((j.fetchedAt || '').slice(0, 10))} ${(j.fetchedAt || '').slice(11, 16)} 받음`],
     footTitle: it.kind === 'candle'

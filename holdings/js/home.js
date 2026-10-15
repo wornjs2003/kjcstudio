@@ -387,7 +387,8 @@ async function showMarket(key) {
     }
     if (mkWant !== key || mkKey !== key) return;
   }
-  const h = headOf(j);
+  const chip = ((peekIndicators() || { items: [] }).items || []).find((x) => x.key === key);
+  const h = headOf(j, mkLive()[key] || chip || null);      // 머리 값은 칩과 같게
   const name = $('kh-idx-name'), v = $('kh-big-v'), yr = $('kh-year-range');
   const per = $('kh-idx-per'), foot = $('kh-big-foot'), host = $('kh-big-chart');
   if (name) { name.textContent = h.name; setMkTerm(MK_TERM[key]); }
