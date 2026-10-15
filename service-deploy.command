@@ -64,6 +64,16 @@ if [ -n "$(git -C "$WORK" status --porcelain --untracked-files=no)" ]; then
   echo ""
 fi
 
+# **검수 문턱 (2026-10-15 재권님 「응 해줘」)** — 서비스에 닿는 커밋마다 보드에 「검수 통과」 줄이 있어야 옮긴다.
+# 그날 두 번 검수 전 커밋이 main 통째 옮기기에 딸려 갔다. 못 보면(보드 · git) 멈춘다 — 옮기기는 되돌릴 수 없는 쪽이다.
+# 재권님이 그래도 옮기라 하시면 KJC_DEPLOY_FORCE=1 (logs/deploy-force.log 에 남는다). 셈은 tools/deploy-gate.py 머리 주석
+if ! sh "$WORK/.claude/run-py.sh" "$WORK/tools/deploy-gate.py" "$before..main"; then
+  echo ""
+  echo "  옮기지 않았습니다 — 위 커밋의 검수가 끝나면 다시 돌립니다"
+  echo ""
+  exit 1
+fi
+echo ""
 git -C "$SERVICE" merge --ff-only main
 after=$(git -C "$SERVICE" rev-parse --short HEAD)
 
