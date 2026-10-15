@@ -122,10 +122,23 @@ def main(argv):
         return 2
 
     # 통과 줄 → 통과로 칠 커밋 묶음
+    try:
+        staging_fp = set(git("rev-list", "--first-parent", "staging").split())
+    except subprocess.CalledProcessError:
+        staging_fp = set()
     passed = {QA: set(), DEF: set()}
+    # 「검수 걸림(누구)」 도 센다 (2026-10-15 창구 짚음) — main 직행은 qa 하나면 되지만, 개념정의가 **걸었으면** 그 검수자의
+    # 통과 줄이 다시 오기 전까지 막는다. 329b42a 가 qa 통과 · 개념정의 걸림인 채로 문턱을 지나갔다
+    failed = {QA: set(), DEF: set()}
+    FAIL = {QA: "검수 걸림(qa)", DEF: "검수 걸림(개념정의)"}
     for t in cards:
         for ln in (t.get("memo") or "").splitlines():
             for kind in (QA, DEF):
+                if FAIL[kind] in ln:
+                    for h in HEX.findall(ln):
+                        f = full(h)
+                        if f:
+                            failed[kind].add(f)
                 if kind not in ln:
                     continue
                 for h in HEX.findall(ln):
@@ -133,7 +146,9 @@ def main(argv):
                     if not f:
                         continue
                     parents = git("rev-list", "--parents", "-n", "1", f).split()[1:]
-                    if len(parents) > 1:              # 머지 — 그 머지로 들어온 묶음 전부
+                    # 머지 — **창구가 staging 에 합친 머지일 때만** 그 머지로 들어온 묶음 전부. 세션 가지의 「staging 받음」 머지
+                    # (5f3c0b7 처럼)를 펼치면 staging 에 있던 남의 커밋까지 통과로 셌다(329b42a 가 그렇게 지나감 · 2026-10-15 시험)
+                    if len(parents) > 1 and f in staging_fp:
                         passed[kind].update(git("rev-list", "%s..%s" % (parents[0], f)).split())
                     else:
                         passed[kind].add(f)
@@ -151,6 +166,7 @@ def main(argv):
     for c, hit in need:
         who = owner(c)
         want = [QA] if who == "개념정의" else [QA, DEF]
+        want += [k for k in (QA, DEF) if c in failed[k] and k not in want]   # 걸었던 검수자는 통과 줄이 다시 와야 한다
         miss = [k for k in want if c not in passed[k]]
         if miss:
             bad.append((c, hit, who, miss))
