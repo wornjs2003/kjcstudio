@@ -5737,6 +5737,25 @@ def _us_deep_work():
     return work
 
 
+def _kr_div_work():
+    """국내 일 · 주 · 월 · 년봉 중 아직 정규장(`MARKET_DIV_BARS`)으로 다시 안 받은 것 → [(코드, 주기)] (2026-10-15).
+
+    화면이 연 (종목, 주기)는 `_get_chart_one` 이 그 자리에서 다시 받지만, **읽기 전용 서버(8764 · 8767 · 세션)는
+    저장 · 표시를 못 해** 8765 가 그 종목을 열기 전까지 통합 봉을 그대로 냈다(개념정의 검수 · 8767 삼성 일봉 시가 225,000).
+    그래서 8765 의 봉 채우기가 DB 에 있는 것 전부를 한 번씩 다시 받는다. 감시 대상(시가총액 순)을 앞에 둔다."""
+    try:
+        with _db_lock, db_conn() as conn:
+            have = conn.execute(
+                "SELECT DISTINCT code, period FROM candles WHERE period IN ('D','W','M','Y') AND length(code)=6").fetchall()
+            rank = {r[0]: r[1] for r in conn.execute("SELECT stock_code, rank FROM dart_universe")}
+    except Exception:
+        return []
+    work = [(c, p) for c, p in have
+            if not us_universe.is_us(c) and _meta_get("div:%s:%s" % (c, p)) != MARKET_DIV_BARS]
+    work.sort(key=lambda cp: (rank.get(cp[0], 10 ** 6), cp[0], "DWMY".index(cp[1])))
+    return work
+
+
 def _bar_fill_run(label, work, do_one):
     """일감 목록을 하나씩 — 하나 앞마다 쉬어야 하는지 본다. 백 개마다 · 끝에 한 줄."""
     if not work:
@@ -5788,6 +5807,14 @@ def start_bar_fill(cfg, port):
         _kr_past_day(cfg, code, day)
         _fill_mark(code, day)
 
+    def kr_div_one(code, period):
+        # 화면이 여는 길과 같은 양(DWMY_WANT)을 정규장으로 거슬러 받아 덮는다 · 받은 만큼 쉰다
+        bars = fetch_bars_back(cfg, code, period, DWMY_WANT)
+        time.sleep(BAR_FILL_CALL_GAP * max(1, -(-DWMY_WANT // BARS_PER_CALL)))
+        if bars:
+            save_candles(code, period, bars)
+            _meta_set("div:%s:%s" % (code, period), MARKET_DIV_BARS)
+
     def loop():
         time.sleep(PREFILL_START_SEC)
         while True:
@@ -5797,6 +5824,7 @@ def start_bar_fill(cfg, port):
                 done += _bar_fill_run("미국 5분봉", _us_fill_work(), us_5m_one)
                 done += _bar_fill_run("미국 일주월", _us_deep_work(), us_deep_one)
                 done += _bar_fill_run("국내 5분봉", _kr_fill_work(), kr_one)
+                done += _bar_fill_run("국내 일주월년 정규장", _kr_div_work(), kr_div_one)
                 _bar_fill["at"] = datetime.now(KST).strftime("%m-%d %H:%M")
                 _bar_fill["left"] = None
                 _bar_fill["state"] = "다 돎 · 다음 확인 대기"
