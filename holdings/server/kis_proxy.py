@@ -6662,14 +6662,16 @@ class Handler(SimpleHTTPRequestHandler):
         """경제 지표(ECOS · FRED) — server/macro.py 머리 주석. `ecos` 키가 없는 서버는 상류로 넘긴다."""
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/macro/"):].strip("/")
-        if route not in ("regime", "series"):
-            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/macro/regime · /api/macro/series?ids= 둘입니다."}, 404)
+        if route not in ("regime", "series", "releases"):
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/macro/regime · /api/macro/series?ids= · /api/macro/releases 셋입니다."}, 404)
             return
         if not macro.ecos_key() and upstream_base():
             self._relay_upstream("경제 지표 키(ecos)가 이 서버에 없습니다", "macro")
             return
         if route == "regime":
             r = macro.regime()
+        elif route == "releases":
+            r = macro.releases()
         else:
             ids = (urllib.parse.parse_qs(parsed.query).get("ids") or [""])[0]
             want = [i.strip() for i in ids.split(",") if i.strip()]

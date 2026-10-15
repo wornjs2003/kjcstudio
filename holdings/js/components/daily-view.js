@@ -506,7 +506,7 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
       return `<div class="kh-dl-sch-row${isToday ? ' is-now' : ''}">
         <span class="kh-dl-sch-when">${esc(when)}</span>
         <span class="kh-dl-sch-kind">${esc(e.kind)}</span>
-        <span class="kh-dl-sch-t">${esc(e.title)}</span>
+        <span class="kh-dl-sch-t">${esc(e.title)}${e.value ? ` <b class="kh-num ${esc(e.value.cls)}">${esc(e.value.text)}</b>` : ''}</span>
         ${e.note ? `<span class="kh-dl-sch-n">${esc(e.note)}</span>` : ''}
       </div>`;
     }).join('');
