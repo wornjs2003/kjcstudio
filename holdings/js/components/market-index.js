@@ -14,6 +14,8 @@ import { apiFetch } from '../data/api.js';
 import { color } from '../theme.js';
 import { fmtMoneyKr } from '../utils/format.js';
 import { ready as toneReady, has as toneHas, paint as tonePaint } from '/assets/js/tone.js';
+// 오르내림 글씨 색은 공용 셈 한 곳 — 오름 kh-up · 내림 kh-down · 0 kh-flat · 없음 kh-mut (CLAUDE.md 「오르내림 숫자의 글씨 색은 한 셈이다」 · 2026-10-15)
+import { signClass } from '/assets/js/sign.js';
 
 /* 큰 차트 머리 이름에 다는 용어 풍선 — 지표 key → 용어집(data/glossary.json) id. 칩에는 안 단다:
    지수 띠가 옆으로 미는 칸이라 풍선이 그 안에 갇혀 잘린다(2026-10-12 실측 · 재권님 「가로 해줘」) */
@@ -64,7 +66,7 @@ export function fmtIx(v, digits) {
 /* 값 뒤 글자 — % · %p 만 붙인다(원 · 단위 없는 지수는 칩이 좁아 안 붙인다) */
 const tail = (it) => (it.unit === '%' || it.unit === '%p') ? it.unit : '';
 const md = (d) => d ? d.slice(5).replace('-', '.') : '';
-const dir = (c) => c == null ? 'kh-mut' : c > 0 ? 'kh-up' : c < 0 ? 'kh-down' : '';
+const dir = (c) => signClass(c);
 
 /* 지수 띠의 칩 — 국내·미국 지수 칩(index-strip.js)과 같은 모양 · 날짜 옆에 「봉」 · 「선」
    기준이 있는 지표는 칩 **바탕에 한 겹** 덧칠한다 — 기준 위 빨강 · 아래 파랑 · 멀수록 짙게 (2026-10-14 재권님 「달러인덱스를
@@ -202,7 +204,7 @@ function cryptoRows(sel) {
   const cj = cryptoCache;
   if (!cj) return [`<tr><td></td><td class="l kh-mut" colspan="4">${cryptoErr ? '불러오지 못함' : '불러오는 중'}</td></tr>`];
   return cj.items.map((x, i) => {
-    const c = x.pct == null ? 'kh-mut' : x.pct > 0 ? 'kh-up' : x.pct < 0 ? 'kh-down' : '';
+    const c = signClass(x.pct);
     return `<tr data-mat-key="${esc(x.key)}" data-mat-name="${esc(x.name)}"${x.key === sel ? ' class="is-active"' : ''}>
       <td class="kh-rk">${i + 1}</td><td class="l"><span class="kh-nm"><b>${esc(x.name)}</b> <span class="kh-mut" style="font-size:.74rem">${esc(x.sym || '')}</span></span></td>
       <td class="kh-num">${matFmt(x.last && x.last.c)}</td>
@@ -244,7 +246,7 @@ export function paintMaterials(root, j, grp, sel) {
       const pctUnit = p.path.endsWith('Interest');
       const cat = p.path.split('/')[0];
       for (const x of p.rows) {
-        const c = x.pct == null ? 'kh-mut' : x.pct > 0 ? 'kh-up' : x.pct < 0 ? 'kh-down' : '';
+        const c = signClass(x.pct);
         const key = x.code ? `n:${cat}:${x.code}` : '';
         rows.push(`<tr title="${esc(x.unit || '')}"${key ? ` data-mat-key="${esc(key)}" data-mat-name="${esc(x.name)}"` : ''}${key && key === sel ? ' class="is-active"' : ''}>
           <td class="kh-rk"></td><td class="l"><span class="kh-nm"><b>${esc(x.name)}</b>${x.src ? ` <span class="kh-mut" style="font-size:.74rem" title="이 줄 값은 ${esc(x.src)} — 네이버 줄이 늦어서">${esc(x.src.split(' ')[0])}</span>` : ''}</span></td>
