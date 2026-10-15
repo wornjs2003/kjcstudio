@@ -205,7 +205,18 @@ function paintStrip(indices) {
      전에는 위에 넷(TOP_CELLS)만 두고 나머지를 「주요 지수」 카드에 뒀는데,
      카드가 열넷을 다 담고 있어서 **같은 것이 두 자리**에 있었다.
      카드를 없애고 여기로 합쳤다 — 고를 것은 갈래 띠가 한다. */
-  if (ixCat === MK_CAT) return;          // 시장지표 칩이 떠 있다 — 지수는 lastIndices 에 들고 있다가 갈래를 떠날 때 그린다
+  if (ixCat === MK_CAT) {                // 시장지표 칩이 떠 있다 — 지수는 lastIndices 에 들고 있다가 갈래를 떠날 때 그린다
+    /* 원/달러 칩 하나만 새 값으로 바꿔 끼운다 — 띠 전체를 다시 그리면 옆으로 민 자리가 처음으로 돌아간다 */
+    const el = top.querySelector('[data-mk="usdkrw"]');
+    const it = el && ((peekIndicators() || { items: [] }).items || []).find((x) => x.key === 'usdkrw');
+    if (it) el.outerHTML = chipsHtml({ items: [it] }, mkKey, mkLive());
+    const j = mkKey === 'usdkrw' && peekIndicator('usdkrw'), v = $('kh-big-v');   // 그 칩을 보고 있으면 큰 차트 머리도 같은 값으로(qa 10-15)
+    if (j && v && mkLive().usdkrw) {
+      const h = headOf(j, mkLive().usdkrw);
+      v.className = 'kh-idx-v kh-num ' + h.dirClass; v.textContent = h.value;
+    }
+    return;
+  }
   if (top) top.innerHTML = stripHtml(indices);
   paintIxFilter();
 }
@@ -311,18 +322,27 @@ const MK_HIDE = ['kh-big-ic', 'kh-big-link', 'kh-dt'];          // 지표에는 
 const MK_HIDE_SEL = ['.kh-idx-ai', '.kh-ind-menu'];
 const MK_LOCK = ['.kh-idx-head', '#kh-big-foot'];
 
+/* 원/달러 칩은 지수띠(「미국 USD」 · KIS)와 같은 값 · 등락으로 — 홀딩스 안에서 같은 값이 둘로 갈렸다(지수띠 KIS · 칩 네이버 ·
+   2026-10-14 재권님 「응 해줘」). 지수띠 코드 USDKRW ↔ 시장지표 key usdkrw 한 쌍만 잇는다. 큰 차트의 지난 일봉은 그대로 네이버 */
+function mkLive() {
+  const fx = (lastIndices || []).find((x) => x.code === 'USDKRW');
+  if (!fx || fx.value == null) return {};
+  const d = fx.asOf ? `${fx.asOf.slice(0, 4)}-${fx.asOf.slice(4, 6)}-${fx.asOf.slice(6, 8)}` : null;
+  return { usdkrw: { last: { d, c: fx.value }, prev: fx.change == null ? null : { d: null, c: fx.value - fx.change } } };
+}
+
 async function paintMkChips() {
   const host = $('kh-top-ix');
   if (!host) return;
   const had = peekIndicators();
-  if (had) host.innerHTML = chipsHtml(had, mkKey);
+  if (had) host.innerHTML = chipsHtml(had, mkKey, mkLive());
   else host.innerHTML = `<div class="kh-ix"><div class="kh-ix-h"><span class="kh-ix-n">${MK_CAT}</span></div>`
     + '<div class="kh-ix-b"><div><div class="kh-ix-v kh-num kh-mut">불러오는 중</div><div class="kh-ix-c"></div></div></div></div>';
   syncIxNav();
   try {
     const j = await loadIndicators();
     if (ixCat !== MK_CAT) return;
-    host.innerHTML = chipsHtml(j, mkKey);
+    host.innerHTML = chipsHtml(j, mkKey, mkLive());
   } catch {
     if (ixCat !== MK_CAT || had) return;
     host.innerHTML = `<div class="kh-ix"><div class="kh-ix-h"><span class="kh-ix-n">${MK_CAT}</span></div>`
@@ -372,7 +392,8 @@ async function showMarket(key) {
     }
     if (mkWant !== key || mkKey !== key) return;
   }
-  const h = headOf(j);
+  const chip = ((peekIndicators() || { items: [] }).items || []).find((x) => x.key === key);
+  const h = headOf(j, mkLive()[key] || chip || null);      // 머리 값은 칩과 같게
   const name = $('kh-idx-name'), v = $('kh-big-v'), yr = $('kh-year-range');
   const per = $('kh-idx-per'), foot = $('kh-big-foot'), host = $('kh-big-chart');
   if (name) { name.textContent = h.name; setMkTerm(MK_TERM[key]); }

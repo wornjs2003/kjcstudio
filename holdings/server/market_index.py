@@ -209,7 +209,28 @@ def _left():
     return max(0, int(min(_hist["ttl"] - (now - _hist["at"]), RECENT_TTL - (now - _recent["at"]))))
 
 
+def _mat_now():
+    """재료 줄의 지금 값 — 코드(reutersCode) → (값, 날짜). 원자재 칩이 재료 줄과 같은 값을 내게 한다."""
+    try:
+        materials()
+    except Exception:
+        return {}
+    out = {}
+    for g in (_mat["groups"] or []):
+        for p in g["parts"]:
+            for r in p["rows"]:
+                if r.get("code") and r.get("v") is not None and r.get("at"):
+                    out.setdefault(r["code"], (r["v"], r["at"], r.get("pct")))
+    return out
+
+
 def indicators():
+    # 재료 줄에 같은 코드가 있는 칩(원자재 · 달러인덱스 · 환율)은 일봉 마지막(어제 종가)이 아니라 재료 줄의 지금 값을 쓴다 (2026-10-14 재권님 「홀딩스의 값이 정확한지 확인하고」 →
+    # 값 맞추기 c 「응 해줘」 · WTI 칩 94.14 ↔ 줄 94.77 이던 것). 전일 값은 줄의 등락률이 맞는 쪽을 일봉 끝 둘에서 고른다 —
+    # 재료 줄 날짜는 거래소 날짜라 일봉 마지막과 같은 날로 찍혀도 그 뒤 거래일 값일 수 있다(10-15 실측 WTI 줄 10-14 93.89 −1.26% ·
+    # 일봉 10-14 95.09 → 전일은 95.09)
+    # materials() 가 같은 자물쇠를 잡으므로 자물쇠 밖에서 먼저 읽는다
+    now_v = _mat_now()
     with _lock:
         _refresh()
         out = []
@@ -217,9 +238,21 @@ def indicators():
             rows, err = _series(it["key"])
             last = rows[-1] if rows else None
             prev = rows[-2] if len(rows) > 1 else None
+            last = {"d": last[0], "c": last[4]} if last else None
+            prev = {"d": prev[0], "c": prev[4]} if prev else None
+            m = now_v.get(it.get("code"))         # 재료 줄에 같은 코드가 있는 칩 전부(원자재 · 달러인덱스 · 환율 — 10-15 「응 해줘」)
+            if m and last and m[1] >= last["d"]:
+                v, d, pct = m
+                newer = d > last["d"]
+                if not newer and pct is not None and last["c"]:
+                    gap = lambda c: abs((v / c - 1) * 100 - pct) if c else 1e9
+                    newer = gap(last["c"]) < gap(prev["c"] if prev else None)
+                if newer:
+                    prev = last
+                last = {"d": d, "c": v}
             out.append({**{k: it.get(k) for k in META_KEYS},
-                        "last": {"d": last[0], "c": last[4]} if last else None,
-                        "prev": {"d": prev[0], "c": prev[4]} if prev else None,
+                        "last": last,
+                        "prev": prev,
                         "error": None if last else (err or "받은 값이 없습니다")})
         return {"ok": any(i["last"] for i in out), "source": "네이버 증권 시장지표",
                 "fetchedAt": _fetched["at"], "cacheTtlSec": _left(), "items": out}
