@@ -304,6 +304,19 @@ export const PERIOD_MAP = {
 
 const MINUTE_PERIODS = new Set(['1m', '5m']);
 
+/* 일 · 주 · 월 · 년봉 맨 오른쪽에 시세를 얹는 때 — 평일 9시부터 다음 날 7시 전까지(금요일 저녁은 토요일 7시 전까지).
+   그 밖(평일 7~9시 · 주말 낮)은 서버가 준 정규장 봉 그대로다 (2026-10-15 재권님 「다음날 아침7시에 정규장 종가로 변경해줘」).
+   한국 시각으로 센다 — 외부접속 기기의 시계가 다른 나라여도 같다. 공휴일은 가리지 않는다 */
+function liveOverlayHours(now = new Date()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Seoul', weekday: 'short',
+    hour: 'numeric', hourCycle: 'h23' }).formatToParts(now).map((x) => [x.type, x.value]));
+  const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday);
+  const h = Number(p.hour);
+  if (dow >= 1 && dow <= 5 && h >= 9) return true;          // 평일 9시부터 자정까지
+  if (dow >= 2 && dow <= 6 && h < 7) return true;           // 평일 저녁이 이어지는 다음 날 새벽(화~토 7시 전)
+  return false;
+}
+
 /* 서버 ts → 라이브러리 시간 형식
    일/주/월/년봉: 'YYYY-MM-DD'
    분봉: UNIX 초 (같은 날 안에서 시각을 구분해야 하므로) */
@@ -825,8 +838,10 @@ export function createStockChart(container, candles, opts = {}) {
   let vpLayer = null;          // 매물대가 깔리는 층 (가격 칸 뒤)
   let vpTimer = null;
   let legend = null;
-  let livePrev = null;
-  let lastLive = null;          // 마지막으로 받은 시세 — 서버 봉을 덧붙여 맨 오른쪽이 서버 값으로 돌아가면 다시 얹는다          // 시세가 준 전일 종가(updateLast) — 마우스 표 「전일」 의 첫 기준 · 종목이 바뀌면 지운다
+  let livePrev = null;          // 시세가 준 전일 종가(updateLast) — 마우스 표 「전일」 의 첫 기준 · 종목이 바뀌면 지운다
+  let lastLive = null;          // 마지막으로 받은 시세 — 서버 봉을 덧붙여 맨 오른쪽이 서버 값으로 돌아가면 다시 얹는다
+  let serverLast = null;        // 시세를 얹기 전 서버가 준 맨 오른쪽 봉 — 아침 7시에 정규장 종가로 되돌릴 때 쓴다
+  let overlaid = null;          // updateLast 가 얹어 만든 봉 — 이것이 아니면 맨 오른쪽은 서버가 새로 준 봉이다
   let drawnCode = opts.code || null;   // 지금 그린 종목 — setData 가 다른 종목을 받을 때만 위 값을 지운다
   const priceLines = [];
   let syncing = false;
@@ -1826,6 +1841,21 @@ export function createStockChart(container, candles, opts = {}) {
       const i = candles.length - 1;
       const last = candles[i];
       if (!last) return;
+      /* **일 · 주 · 월 · 년봉은 아침 7시~장 시작(9시)과 주말에는 시세를 안 얹는다** (2026-10-15 재권님 「다음날 아침7시에
+         정규장 종가로 변경해줘」). 장이 끝난 저녁에는 시세(넥스트레이드 · 통합)를 따라가다가, 다음 날 7시가 되면 서버가 준
+         정규장 종가 봉으로 돌아간다. 저녁부터 창이 켜져 있었으면 얹기 전 서버 봉으로 되돌린다 */
+      if (!MINUTE_PERIODS.has(period) && !liveOverlayHours()) {
+        if (serverLast && serverLast.ts === last.ts && last !== serverLast) {
+          candles[i] = serverLast;
+          try {
+            candleSeries.update({ time: toChartTime(serverLast.ts, period), open: serverLast.open,
+              high: serverLast.high, low: serverLast.low, close: serverLast.close });
+          } catch { /* 칸이 아직 없다 */ }
+          if (legend) legend.refreshPrice();
+        }
+        return;
+      }
+      if (last !== overlaid) serverLast = last;   // 서버가 준 봉 위에 처음 얹는다 — 그 봉을 남겨 둔다
       const px = live.price;
       if (last.close === px) return;          // 안 움직였으면 그릴 것이 없다
       const next = {
@@ -1835,6 +1865,7 @@ export function createStockChart(container, candles, opts = {}) {
         low: Math.min(last.low, px),
       };
       candles[i] = next;
+      overlaid = next;
       try {
         candleSeries.update({
           time: toChartTime(next.ts, period),
