@@ -65,6 +65,8 @@
 .in-rp-sec { padding: 18px 0; border-bottom: 1px solid var(--kh-border); }
 .in-rp-sec h2 { font-size: 1rem; margin: 0 0 8px; }
 .in-rp-sec ul { margin: 0; padding-left: 18px; }
+.in-subcat { padding: 0 0 12px; }   /* 영상 분석 분류 칩 줄 — 갈래 탭 밑 · 왼쪽을 탭 줄 글자에 맞춘다(.kh-chips 기본 좌우 18px 은 카드 안 기준) */
+.in-subcat .kh-chip { text-decoration: none; }
 .in-rp-sec li { font-size: 0.88rem; line-height: 1.75; color: var(--kh-text-secondary); overflow-wrap: anywhere; }   /* 긴 유튜브 주소가 좁은 폭에서 칸을 넘지 않게 (2026-10-15) */
 .in-rp-note { font-size: 0.75rem; color: var(--kh-text-muted); margin: 14px 0 0; }
 @media (max-width: 900px) { .in-rp-head { grid-template-columns: minmax(0, 1fr); } }
