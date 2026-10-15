@@ -6,6 +6,7 @@ Insight 종목분석 ⑥-9 국면 재료 다섯 줄(경기종합지수 · 금리
 
     GET /api/macro/regime            다섯 줄 묶음 한 번에
     GET /api/macro/series?ids=a,b    낱개
+    GET /api/macro/releases          발표 지표 — 발표일(FRED · 미국 날짜) · 머리 숫자 · 등락 · 마지막 발표가 들어왔나(2026-10-15)
 
 ── 어디서 받나 (2026-10-08 실측 · 주식페이지_개발3) ──
 
@@ -20,7 +21,8 @@ Insight 종목분석 ⑥-9 국면 재료 다섯 줄(경기종합지수 · 금리
 
 ── 캐시 ──
 
-월간 자료라 **하루 한 번** 받는다(`MACRO_TTL`). 한 계열이라도 못 받았으면 30분 뒤 다시 받는다(`MACRO_RETRY_TTL`).
+월간 자료라 **하루 한 번** 받는다(`MACRO_TTL`). 다만 발표일을 알면 **발표 뒤(`REFRESH_AFTER`)에 다시 받는다** —
+하루를 기다리면 발표 값이 최대 하루 늦는다(2026-10-15). 한 계열이라도 못 받았으면 30분 뒤 다시 받는다(`MACRO_RETRY_TTL`).
 화면은 주기로 묻지 않고 열 때 한 번 받는다. 응답의 `cacheTtlSec` 이 지금 값이다.
 
 ── 어느 서버가 받나 ──
@@ -67,6 +69,10 @@ RAW = [
     # 물가
     {"id": "kr_cpi", "label": "소비자물가 총지수", "unit": "2020=100", "ecos": ("901Y009", "0")},
     {"id": "us_cpi", "label": "미국 소비자물가(CPIAUCSL)", "unit": "1982-84=100", "fred": ("CPIAUCSL", False)},
+    # 전년비는 계절조정 안 한 지수로 낸다 — 노동부(BLS) 발표 숫자가 그 기준이다(2026-10-15)
+    {"id": "us_cpi_nsa", "label": "미국 소비자물가(CPIAUCNS · 계절조정 안 함)", "unit": "1982-84=100", "fred": ("CPIAUCNS", False)},
+    {"id": "us_ppi", "label": "미국 생산자물가(최종 수요)", "unit": "2009-11=100", "fred": ("PPIFIS", False)},
+    {"id": "us_pce", "label": "미국 개인소비지출 물가", "unit": "2017=100", "fred": ("PCEPI", False)},
     # 재고
     {"id": "kr_inv_ratio", "label": "제조업 재고율", "unit": "2020=100", "ecos": ("901Y026", "I33A")},
     {"id": "us_isratio", "label": "미국 재고/매출 비율", "unit": "배", "fred": ("ISRATIO", False)},
@@ -75,12 +81,23 @@ RAW = [
     {"id": "kr_unemp", "label": "실업률(계절조정)", "unit": "%", "ecos": ("901Y027", "I61BC", "I28B")},
     {"id": "us_unrate", "label": "미국 실업률", "unit": "%", "fred": ("UNRATE", False)},
     {"id": "us_payems", "label": "미국 비농업 고용", "unit": "천명", "fred": ("PAYEMS", False)},
+    {"id": "us_jolts", "label": "미국 구인 건수(JOLTS)", "unit": "천건", "fred": ("JTSJOL", False)},
+    {"id": "us_icsa", "label": "미국 신규 실업수당 청구(주간)", "unit": "건", "fred": ("ICSA", False, "W")},
+    # 성장 · 소비
+    {"id": "us_retail", "label": "미국 소매판매", "unit": "백만 달러", "fred": ("RSAFS", False)},
+    {"id": "us_indpro", "label": "미국 산업생산", "unit": "2017=100", "fred": ("INDPRO", False)},
+    {"id": "us_umcsent", "label": "미시간대 소비심리", "unit": "1966=100", "fred": ("UMCSENT", False)},
+    {"id": "us_gdp", "label": "미국 실질 GDP 성장률(전기비 연율)", "unit": "%", "fred": ("A191RL1Q225SBEA", False, "Q")},
 ]
 
 # 서버가 계산해 내는 계열 — (원 계열, 방식)
 DERIVED = [
     {"id": "kr_cpi_yoy", "label": "소비자물가 전년비", "unit": "%", "from": "kr_cpi", "how": "yoy"},
-    {"id": "us_cpi_yoy", "label": "미국 소비자물가 전년비", "unit": "%", "from": "us_cpi", "how": "yoy"},
+    {"id": "us_cpi_yoy", "label": "미국 소비자물가 전년비", "unit": "%", "from": "us_cpi_nsa", "how": "yoy"},
+    {"id": "us_ppi_mom", "label": "미국 생산자물가 전월비", "unit": "%", "from": "us_ppi", "how": "mom"},
+    {"id": "us_pce_yoy", "label": "미국 개인소비지출 물가 전년비", "unit": "%", "from": "us_pce", "how": "yoy"},
+    {"id": "us_retail_mom", "label": "미국 소매판매 전월비", "unit": "%", "from": "us_retail", "how": "mom"},
+    {"id": "us_indpro_mom", "label": "미국 산업생산 전월비", "unit": "%", "from": "us_indpro", "how": "mom"},
     {"id": "us_payems_chg", "label": "미국 비농업 고용 전월차", "unit": "천명", "from": "us_payems", "how": "diff"},
 ]
 
@@ -93,16 +110,52 @@ GROUPS = [
     {"key": "employment", "label": "고용", "ids": ["kr_emp", "kr_unemp", "us_unrate", "us_payems", "us_payems_chg"]},
 ]
 
+# ── 발표 지표 (2026-10-15 재권님 「발표날짜랑 등락이 있어야」 · 「값은 Insight 매크로 칸 · 날짜는 홀딩스 주요 일정」 — 「그렇게 해」) ──
+# 발표일은 FRED API 의 release/dates(열쇠 `fred.api_key`)가 미리 낸다 — 2026-10-14 실측 · 날짜는 **미국 날짜**다.
+# main — 그 발표의 머리 숫자 · lag — 발표 달에서 몇 달 전 분이 나오나(그 달이 들어왔으면 「반영됨」). Q 는 분기 · W 는 주간.
+# 미시간대는 그 달 안에 나오지만 FRED 계열은 한 달 늦게 올라온다(2026-10-15 실측 — 09-25 발표 뒤에도 8월이 끝) — 그래서 1
+RELEASES = [
+    {"key": "cpi", "short": "미국 CPI", "name": "미국 소비자물가(CPI)", "kind": "물가", "fred": 10, "main": "us_cpi_yoy", "lag": 1},
+    {"key": "ppi", "short": "미국 PPI", "name": "미국 생산자물가(PPI)", "kind": "물가", "fred": 46, "main": "us_ppi_mom", "lag": 1},
+    {"key": "pce", "short": "미국 PCE 물가", "name": "미국 개인소비지출 물가(PCE)", "kind": "물가", "fred": 54, "main": "us_pce_yoy", "lag": 1},
+    {"key": "jobs", "short": "미국 고용", "name": "미국 고용(비농업 · 실업률)", "kind": "지표", "fred": 50, "main": "us_payems_chg",
+     "also": ["us_unrate"], "lag": 1},
+    {"key": "claims", "short": "미국 실업수당 청구", "name": "미국 신규 실업수당 청구", "kind": "지표", "fred": 180, "main": "us_icsa", "lag": "W"},
+    {"key": "jolts", "short": "미국 JOLTS 구인", "name": "미국 구인·이직(JOLTS)", "kind": "지표", "fred": 192, "main": "us_jolts", "lag": 2},
+    {"key": "retail", "short": "미국 소매판매", "name": "미국 소매판매", "kind": "지표", "fred": 9, "main": "us_retail_mom", "lag": 1},
+    {"key": "indpro", "short": "미국 산업생산", "name": "미국 산업생산", "kind": "지표", "fred": 13, "main": "us_indpro_mom", "lag": 1},
+    {"key": "umich", "short": "미시간대 소비심리", "name": "미시간대 소비심리", "kind": "지표", "fred": 91, "main": "us_umcsent", "lag": 1},
+    {"key": "gdp", "short": "미국 GDP", "name": "미국 국내총생산(GDP)", "kind": "지표", "fred": 53, "main": "us_gdp", "lag": "Q"},
+]
+FRED_API = "https://api.stlouisfed.org/fred/release/dates"
+RELEASE_TTL = 24 * 3600
+# 발표 뒤 값을 다시 받는 때(한국 시각) — 미국 08:30 발표는 한국 21:30(서머타임) · 22:30, 10:00 발표는 23:00 · 다음날 00:00 이다.
+# FRED 가 계열에 올리는 데 시간이 걸려 발표 날 23:30 과 다음날 07:00 두 번 받는다(시각을 박는 대신 발표일에 붙인다)
+REFRESH_AFTER = [(0, 23, 30), (1, 7, 0)]
+RELEASED_AT = (21, 30)       # 발표일 이 한국 시각부터 「지났다」 로 센다 — 가장 이른 미국 08:30(서머타임)
+
 ALL_IDS = [r["id"] for r in RAW] + [d["id"] for d in DERIVED]
+RAW_BY = {r["id"]: r for r in RAW}
 
 _lock = threading.Lock()
 _cache = {"at": 0.0, "ttl": 0, "series": None, "fetchedAt": None}
+_rel_lock = threading.Lock()
+_rel = {"at": 0.0, "ttl": 0, "dates": None, "error": None}
 
 
 def ecos_key():
     try:
         with open(SECRETS_PATH, encoding="utf-8") as f:
             e = (json.load(f) or {}).get("ecos") or {}
+    except (OSError, ValueError):
+        return None
+    return (e.get("api_key") or "").strip() or None
+
+
+def fred_key():
+    try:
+        with open(SECRETS_PATH, encoding="utf-8") as f:
+            e = (json.load(f) or {}).get("fred") or {}
     except (OSError, ValueError):
         return None
     return (e.get("api_key") or "").strip() or None
@@ -142,7 +195,7 @@ def _ecos(key, spec):
     return out
 
 
-def _fred(series_id, monthly_avg):
+def _fred(series_id, monthly_avg, freq="M"):
     y, m = _months_back(POINTS + 14)
     q = {"id": series_id, "cosd": "%04d-%02d-01" % (y, m)}
     if monthly_avg:
@@ -155,7 +208,7 @@ def _fred(series_id, monthly_avg):
     out = []
     for row in rd:
         if len(row) >= 2 and row[1] not in ("", "."):
-            out.append({"d": row[0][:7], "v": float(row[1])})
+            out.append({"d": row[0][:10] if freq == "W" else row[0][:7], "v": float(row[1])})
     return out
 
 
@@ -164,7 +217,12 @@ def _derive(how, pts):
     out = []
     for p in pts:
         y, m = int(p["d"][:4]), int(p["d"][5:7])
-        if how == "yoy":
+        if how == "mom":
+            pm = (y, m - 1) if m > 1 else (y - 1, 12)
+            prev = by.get("%04d-%02d" % pm)
+            if prev:
+                out.append({"d": p["d"], "v": round((p["v"] / prev - 1) * 100, 2)})
+        elif how == "yoy":
             prev = by.get("%04d-%02d" % (y - 1, m))
             if prev:
                 out.append({"d": p["d"], "v": round((p["v"] / prev - 1) * 100, 2)})
@@ -178,7 +236,8 @@ def _derive(how, pts):
 
 def _shape(meta, source, pts, error=None):
     pts = pts[-POINTS:] if pts else []
-    return {"label": meta["label"], "unit": meta["unit"], "freq": "M", "source": source,
+    fred = meta.get("fred") or ()
+    return {"label": meta["label"], "unit": meta["unit"], "freq": fred[2] if len(fred) > 2 else "M", "source": source,
             "points": pts,
             "last": pts[-1] if pts else None,
             "prev": pts[-2] if len(pts) > 1 else None,
@@ -210,7 +269,7 @@ def _fetch_all():
         base = full.get(d["from"])
         src = series[d["from"]]["source"]
         if base:
-            series[d["id"]] = _shape(d, src, _derive(d["how"], base))
+            series[d["id"]] = _shape(dict(d, fred=RAW_BY[d["from"]].get("fred")), src, _derive(d["how"], base))
         else:
             series[d["id"]] = _shape(d, src, None, "원 계열(%s)을 못 받았습니다" % d["from"])
     return series
@@ -218,12 +277,17 @@ def _fetch_all():
 
 def bundle():
     """전 계열 — 캐시가 살아 있으면 그것을. 돌려주는 것: (series, fetchedAt, 남은 캐시 초)."""
+    _release_dates()                 # 발표일을 알아야 「발표 뒤 다시 받기」 때를 잡는다 — 하루 한 번만 실제로 받는다
     with _lock:
         now = time.time()
         if _cache["series"] is None or now - _cache["at"] >= _cache["ttl"]:
             s = _fetch_all()
             bad = any(v["error"] for v in s.values())
-            _cache.update(at=now, ttl=MACRO_RETRY_TTL if bad else MACRO_TTL, series=s,
+            ttl = MACRO_RETRY_TTL if bad else MACRO_TTL
+            nxt = _next_refresh(now)
+            if nxt is not None:
+                ttl = max(60, min(ttl, int(nxt - now)))
+            _cache.update(at=now, ttl=ttl, series=s,
                           fetchedAt=datetime.now(KST).isoformat(timespec="seconds"))
         left = int(_cache["ttl"] - (now - _cache["at"]))
         return _cache["series"], _cache["fetchedAt"], max(left, 0)
@@ -243,3 +307,108 @@ def pick(ids):
     got = {i: s[i] for i in want if i in s}
     return {"ok": bool(got) and any(v["points"] for v in got.values()), "fetchedAt": at,
             "cacheTtlSec": left, "series": got, "unknown": unknown}
+
+
+# ── 발표일 ──
+
+def _release_dates():
+    """{발표 key: ['YYYY-MM-DD', …]} — 앞뒤 넉넉히(지난 40일 · 앞 90일). 하루 한 번 받는다. 못 받으면 (None, 오류)."""
+    with _rel_lock:
+        now = time.time()
+        if _rel["dates"] is not None and now - _rel["at"] < _rel["ttl"]:
+            return _rel["dates"], _rel["error"]
+        key = fred_key()
+        today = datetime.now(KST).date()
+        out, err = {}, None
+        if not key:
+            err = "secrets.json 의 fred.api_key 가 없습니다"
+        else:
+            for r in RELEASES:
+                q = {"release_id": r["fred"], "api_key": key, "file_type": "json", "sort_order": "asc",
+                     "include_release_dates_with_no_data": "true",
+                     "realtime_start": (today - timedelta(days=40)).isoformat(),
+                     "realtime_end": (today + timedelta(days=90)).isoformat()}
+                try:
+                    j = json.loads(_get(FRED_API + "?" + urllib.parse.urlencode(q)))
+                    out[r["key"]] = [d.get("date") for d in j.get("release_dates") or [] if d.get("date")]
+                except Exception as e:
+                    err = safe_message(e, 160).replace(key, "<가림>")
+        _rel.update(at=now, ttl=MACRO_RETRY_TTL if err else RELEASE_TTL, dates=out if out else None, error=err)
+        return _rel["dates"], err
+
+
+def _next_refresh(now):
+    """다음 「발표 뒤 다시 받기」 때(epoch) — 발표일을 못 받았으면 None(하루 한 번 그대로)."""
+    dates = _rel["dates"]            # 잠금 없이 읽는다 — bundle 안에서 부르므로 받기를 새로 시작하지 않는다
+    if not dates:
+        return None
+    best = None
+    for ds in dates.values():
+        for d in ds:
+            y, m, dd = (int(x) for x in d.split("-"))
+            for plus, hh, mm in REFRESH_AFTER:
+                t = (datetime(y, m, dd, hh, mm, tzinfo=KST) + timedelta(days=plus)).timestamp()
+                if t > now and (best is None or t < best):
+                    best = t
+    return best
+
+
+def _expected(rel, day):
+    """그 발표일에 나와야 할 기간 — 그 기간이 계열 마지막 점이면 「반영됨」. 주간은 발표일 앞 2주 안."""
+    y, m = int(day[:4]), int(day[5:7])
+    lag = rel["lag"]
+    if lag == "W":
+        return None
+    if lag == "Q":
+        m -= 3
+        while m <= 0:
+            y, m = y - 1, m + 12
+        return "%04d-%02d" % (y, (m - 1) // 3 * 3 + 1)
+    m -= lag
+    while m <= 0:
+        y, m = y - 1, m + 12
+    return "%04d-%02d" % (y, m)
+
+
+def _fresh(rel, day, last):
+    if not last or not day:
+        return False
+    if rel["lag"] == "W":
+        d0 = datetime.strptime(day, "%Y-%m-%d").date()
+        dl = datetime.strptime(last["d"], "%Y-%m-%d").date()
+        return timedelta(0) <= d0 - dl <= timedelta(days=7)
+    return last["d"] >= _expected(rel, day)
+
+
+def releases():
+    """GET /api/macro/releases — 발표 지표마다 발표일(지난 · 다음)과 머리 숫자 · 등락.
+    머리 숫자는 /api/macro/series 와 같은 값이다(같은 캐시) — 화면이 둘을 따로 받아도 갈리지 않는다."""
+    dates, err = _release_dates()
+    s, at, left = bundle()
+    now = datetime.now(KST)
+    # 오늘 날짜라도 발표 시각 전이면 아직 「다음」 이다
+    today = (now.date() if (now.hour, now.minute) >= RELEASED_AT else now.date() - timedelta(days=1)).isoformat()
+    items = []
+    for r in RELEASES:
+        ds = (dates or {}).get(r["key"]) or []
+        past = [d for d in ds if d <= today]
+        last_day = past[-1] if past else None
+        main = s.get(r["main"]) or {}
+        lp, pp = main.get("last"), main.get("prev")
+        chg = round(lp["v"] - pp["v"], 2) if lp and pp else None
+        items.append({
+            "key": r["key"], "name": r["name"], "short": r["short"], "kind": r["kind"], "country": "US",
+            "dates": [d for d in ds if d >= (datetime.now(KST).date() - timedelta(days=7)).isoformat()],
+            "lastRelease": last_day,
+            "nextRelease": next((d for d in ds if d > today), None),
+            "main": r["main"], "label": main.get("label"), "unit": main.get("unit"), "freq": main.get("freq"),
+            "last": lp, "prev": pp, "chg": chg,
+            # 마지막 발표가 계열에 들어왔나 — 아직이면 last 는 그 전 발표 값이다
+            "fresh": _fresh(r, last_day, lp),
+            "also": {i: {"label": (s.get(i) or {}).get("label"), "unit": (s.get(i) or {}).get("unit"),
+                         "last": (s.get(i) or {}).get("last"), "prev": (s.get(i) or {}).get("prev")}
+                     for i in r.get("also", [])},
+            "error": main.get("error"),
+        })
+    return {"ok": bool(dates), "fetchedAt": at, "cacheTtlSec": left, "datesNote": "미국 날짜(FRED release/dates)",
+            "datesError": err, "releases": items}
