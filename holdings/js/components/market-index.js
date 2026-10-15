@@ -71,8 +71,10 @@ const dir = (c) => c == null ? 'kh-mut' : c > 0 ? 'kh-up' : c < 0 ? 'kh-down' : 
    100을 기준으로 …」 · 「홀딩스 시장지표도 같아야 하고」 · 「그렇게 해」). 셈 · 기준 · 폭은 assets/js/tone.js · data/metrics.json 한 곳이고
    여기는 지표 key 를 넘기기만 한다 — 그 표에 없는 지표는 칠하지 않는다. 글씨 색(그날 등락)과 칩 크기는 그대로다.
    덧칠(background-image)이라 고른 칩 · 마우스 올림의 바탕 규칙(home.css)은 그 밑에서 그대로 돈다 */
-export function chipsHtml(list, sel) {
-  return list.items.map((it) => {
+export function chipsHtml(list, sel, live = {}) {
+  return list.items.map((it0) => {
+    /* live — 칩 값을 지수띠와 같은 값으로 바꿔 끼울 지표(home.js 가 준다 · 원/달러는 KIS). 큰 차트의 지난 일봉은 그대로 네이버 */
+    const it = live[it0.key] ? { ...it0, ...live[it0.key] } : it0;
     const v = it.last ? it.last.c : null;
     const tint = toneHas(it.key) ? tonePaint(it.key, v, 'bg') : '';   // 표에 없는 지표는 묻지 않는다 — 경고 없이 넘긴다
     const c = (it.last && it.prev) ? it.last.c - it.prev.c : null;
@@ -166,8 +168,9 @@ export async function loadMaterials() {
 }
 export const peekMaterials = () => matCache;
 
+/* 10 아래는 소수 넷째 자리까지 — 유로/달러 1.1199 가 1.12 로 보였다(2026-10-14 재권님 「응 해줘」) */
 const matFmt = (v) => v == null ? '—'
-  : v.toLocaleString('ko-KR', { maximumFractionDigits: Math.abs(v) >= 1000 ? 0 : Math.abs(v) >= 100 ? 2 : 3 });
+  : v.toLocaleString('ko-KR', { maximumFractionDigits: Math.abs(v) >= 1000 ? 0 : Math.abs(v) >= 100 ? 2 : Math.abs(v) >= 10 ? 3 : 4 });
 const matPct = (p) => p == null ? '—' : `${p > 0 ? '+' : ''}${p.toFixed(2)}%`;
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
