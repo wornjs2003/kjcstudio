@@ -529,7 +529,7 @@ _sector_map = {"day": None, "map": {}}
 
 def sector_map(proxy, codes):
     """종목 → KIS 업종 이름(`bstp_kor_isnm`). 하루 한 번 감시 종목만 받는다(KIS 50건 남짓).
-    못 받은 종목은 빼고 센다 — 「업종 없음」 으로 묶지 않는다."""
+    못 받은 종목은 None 으로 두어 그날 다시 안 부르고, 빼고 센다 — 「업종 없음」 으로 묶지 않는다."""
     day = time.strftime("%Y%m%d")
     if _sector_map["day"] == day and all(c in _sector_map["map"] for c in codes):
         return _sector_map["map"]
@@ -542,9 +542,9 @@ def sector_map(proxy, codes):
             data = proxy.kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-price",
                                  {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": c}, "FHKST01010100")
             name = ((data.get("output") or {}).get("bstp_kor_isnm") or "").strip()
-            if name:
-                m[c] = name
+            m[c] = name or None
         except Exception as e:
+            m[c] = None   # 못 받은 종목은 그날 다시 안 부른다(새 봉마다 KIS 를 부르지 않게) · 셈에서는 빠진다
             print("  [신호] %s 업종 못 받음: %s" % (c, type(e).__name__))
     _sector_map.update(day=day, map=m)
     return m
@@ -565,7 +565,7 @@ def format_extra(code, name, sig):
     if sig["kind"] == "amt":
         body = "오늘 거래대금이 전날 같은 시각의 %s배" % w["ratio"]
     elif sig["kind"] == "rebound":
-        body = "그날 고점 %s원에서 %s%% 빠진 뒤 5분봉 양봉 %d개 연속" % (format(w["high"], ","), w["drop"], REBOUND_UPS)
+        body = "그날 고점 %s원에서 %s%% 빠진 뒤 5분봉 양봉 %d개 연속" % (format(w["high"], ","), abs(w["drop"]), REBOUND_UPS)
     elif sig["kind"] == "tail":
         bt = str(w["bottom_ts"])
         body = "%s:%s 봉 저가 %s원이 %d봉 바닥 · 아래꼬리 뒤 종가 %d번 연속 오름" % (
@@ -603,7 +603,7 @@ def check_extra(proxy, names=None, codes=None):
             r = amt_ratio(rows)
             if r is not None:
                 ratios[code] = r
-            last_ts = max(last_ts or 0, rows[-1]["ts"])
+            last_ts = max(str(last_ts or ""), str(rows[-1]["ts"]))   # ts 는 글자('202610161210') — 0 과 견주면 TypeError
             for sig in judge_extra(rows):
                 if _already_day(proxy, code, sig["kind"], day):
                     continue
@@ -616,7 +616,7 @@ def check_extra(proxy, names=None, codes=None):
             smap = sector_map(proxy, list(ratios))
             groups = {}
             for c, r in ratios.items():
-                if c in smap:
+                if smap.get(c):
                     groups.setdefault(smap[c], []).append(c)
             for sec, cs in groups.items():
                 if len(cs) < SECTOR_MIN:
