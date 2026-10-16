@@ -43,15 +43,15 @@ NOT_SERVED_DIRS = ("tools/", ".claude/", ".githooks/", "launchd/", "kjcEngine/",
 QA, DEF = "검수 통과(qa)", "검수 통과(개념정의)"
 # 통과 · 걸림 줄 — **줄 머리**(시각 다음)가 그 글자로 시작할 때만, 그리고 「—」 앞의 해시만 센다. 줄 가운데에 그 글자가 있는
 # 설명문(커밋 기록 · 「…에서 멈춤(없는 줄 검수 통과(개념정의))」 · 본문의 다른 해시)을 통과로 셌다(qa 시뮬 · 2026-10-15)
-VERDICT = re.compile(r"^\s*(?:\d{1,2}:\d{2}\s+)?검수 (통과|걸림)\((qa|개념정의)\)\s*(.*)$")
+VERDICT = re.compile(r"^\s*(?:(\d{1,2}:\d{2})\s+)?검수 (통과|걸림)\((qa|개념정의)\)\s*(.*)$")
 HEX = re.compile(r"(?<![0-9A-Za-z])[0-9a-f]{7,40}(?![0-9A-Za-z])")
 
 
 def served(path):
     if path.endswith(".md") or path.startswith(NOT_SERVED_DIRS):
         return False
-    if "/" not in path:            # 루트 — 화면은 html 뿐이다(「업무 흐름」 5번 「루트 html」). 점 파일 · .command · .bat 은 안 닿는다(qa 시뮬)
-        return path.endswith(".html")
+    if "/" not in path:            # 루트 — 점 파일 · 스크립트(.command · .bat · .sh · .py)는 안 닿는다. favicon · CNAME 같은 것은 닿는다(qa 시뮬)
+        return not (path.startswith(".") or path.endswith((".command", ".bat", ".sh", ".py")))
     return True
 
 
@@ -127,6 +127,11 @@ def main(argv):
         return 2
 
     # 통과 줄 → 통과로 칠 커밋 묶음
+    tip = full(rng.split("..", 1)[1] or "HEAD")
+
+    def is_anc(x, y):
+        return y is not None and subprocess.run(["git", "-C", ROOT, "merge-base", "--is-ancestor", x, y]).returncode == 0
+
     try:
         staging_fp = set(git("rev-list", "--first-parent", "staging").split())
     except subprocess.CalledProcessError:
@@ -135,27 +140,41 @@ def main(argv):
     # 「검수 걸림(누구)」 도 센다 (2026-10-15 창구 짚음) — main 직행은 qa 하나면 되지만, 개념정의가 **걸었으면** 그 검수자의
     # 통과 줄이 다시 오기 전까지 막는다. 329b42a 가 qa 통과 · 개념정의 걸림인 채로 문턱을 지나갔다
     failed = {QA: set(), DEF: set()}
+    # **차례대로 센다**(qa 시뮬 · 2026-10-15) — 같은 커밋에 통과 뒤 걸림이 오면 걸림이 이긴다(통과 뒤 빈자리를 찾아 다시 거는 때).
+    # 차례는 줄 머리 시각(HH:MM) · 같은 분이면 걸림이 뒤. **날을 넘긴 차례는 못 가른다**(시각만 있다) — 23:5x 통과 · 00:0x 걸림이면
+    # 00:0x 가 앞으로 셈되어 통과가 이긴다(지나가는 쪽). 그런 밤에는 손으로 본다
+    events = []
+    seq = 0
     for t in cards:
         for ln in (t.get("memo") or "").splitlines():
             m = VERDICT.match(ln)
             if not m:
                 continue
-            kind = QA if m.group(2) == "qa" else DEF
-            head = m.group(3).split("—")[0]
-            for h in HEX.findall(head):
-                f = full(h)
-                if not f:
-                    continue
-                if m.group(1) == "걸림":
-                    failed[kind].add(f)
-                    continue
+            seq += 1
+            kind = QA if m.group(3) == "qa" else DEF
+            head = m.group(4).split("—")[0]
+            fulls = [x for x in (full(h) for h in HEX.findall(head)) if x]
+            # 한 통과 줄의 해시는 **한 묶음**이다(「329b42a+f7502a6」 — 걸린 것 + 고친 것). 고친 것이 옮길 끝(tip)에 아직 없으면
+            # 걸린 것만 혼자 나간다 — 그 줄은 통과로 안 친다(2026-10-15 · f7502a6 이 staging 에만 있을 때 329b42a 가 지나감)
+            if m.group(2) == "통과" and not all(is_anc(x, tip) for x in fulls):
+                continue
+            got = set()
+            for f in fulls:
                 parents = git("rev-list", "--parents", "-n", "1", f).split()[1:]
                 # 머지 — **창구가 staging 에 합친 머지일 때만** 그 머지로 들어온 묶음 전부. 세션 가지의 「staging 받음」 머지
                 # (5f3c0b7 처럼)를 펼치면 staging 에 있던 남의 커밋까지 통과로 셌다(329b42a 가 그렇게 지나감 · 2026-10-15 시험)
-                if len(parents) > 1 and f in staging_fp:
-                    passed[kind].update(git("rev-list", "%s..%s" % (parents[0], f)).split())
+                if m.group(2) == "통과" and len(parents) > 1 and f in staging_fp:
+                    got.update(git("rev-list", "%s..%s" % (parents[0], f)).split())
                 else:
-                    passed[kind].add(f)
+                    got.add(f)
+            # 같은 분(HH:MM)이면 걸림이 이긴다 — 안전한 쪽(qa 물음 · 그날 같은 분에 걸림 · 정정이 붙은 적이 있다)
+            events.append(((m.group(1) or "").zfill(5), 0 if m.group(2) == "통과" else 1, seq, kind, m.group(2), got))
+    for _, _, _, kind, verdict, got in sorted(events):
+        for f in got:
+            if verdict == "통과":
+                passed[kind].add(f); failed[kind].discard(f)
+            else:
+                failed[kind].add(f); passed[kind].discard(f)
 
     def owner(c):
         """post-commit 이 「커밋 <해시>」 를 적은 카드의 담당 — 없으면 None."""
