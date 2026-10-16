@@ -57,7 +57,9 @@ SCENES = [
      "period_btn": "#kh-per button[data-period=%s]"},
 ]
 PERIODS = ["5m", "1d"]      # 바꿔 볼 기간 — 5분봉에서 200일선이 안 그려진 적이 있다 (dbbb055)
-IND_KEYS = ["ma", "bb", "vol", "macd", "rsi", "vp"]
+# 켜 볼 지표는 **화면에서 읽는다** — 그 화면의 `input[data-ind]` 전부(2026-10-15 · 일목균형표 'ich' 가 더해지며 목록이 낡을 뻔했다 ·
+# 「검사 도구에 대상 값을 박지 않는다」). 하나도 못 찾으면 「없다」 가 아니라 걸림으로 낸다
+IND_SEEN = set()
 
 
 class Unmeasured(Exception):
@@ -287,7 +289,11 @@ def main(argv):
 
             # 지표 켜고 끄기 — 하나씩
             base_canvas = state(host)["canvases"]
-            for key in IND_KEYS:
+            keys = ev("[...document.querySelectorAll('input[data-ind]')].map(b => b.dataset.ind)") or []
+            if not keys:
+                problems.append("%s: 지표 단추(input[data-ind])를 하나도 못 찾았다 — 지표를 못 켜 봤다" % name)
+            IND_SEEN.update(keys)
+            for key in keys:
                 sel = "input[data-ind=%s]" % json.dumps(key)
                 on = ev("(function(){const b=document.querySelector(%s); if(!b) return 'none'; if(b.checked) return 'already'; b.click(); return 'on';})()" % json.dumps(sel))
                 st3 = wait_drawn(host, AFTER_CLICK)
@@ -347,7 +353,7 @@ def main(argv):
         for p in report["problems"]:
             print("     - " + p)
         return 1
-    print("  OK  걸린 것 없음 (화면 2 · 기간 %d · 지표 %d)" % (len(PERIODS), len(IND_KEYS)))
+    print("  OK  걸린 것 없음 (화면 2 · 기간 %d · 지표 %d — %s)" % (len(PERIODS), len(IND_SEEN), " · ".join(sorted(IND_SEEN))))
     return 0
 
 
