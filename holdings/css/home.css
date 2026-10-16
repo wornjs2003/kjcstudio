@@ -1130,10 +1130,12 @@
 /* 높이는 여기서 안 정한다 — 오른쪽 기둥의 나눔은 `frame.css` 의
    `.kh-side-wrap > .kh-dc-card`(0,2,0)가 정하고 그쪽이 더 세다. */
 .kh-sec-card { padding: 15px 0; display: flex; flex-direction: column; }
-.kh-sec-card > .kh-sched-h,
 /* .kh-sec-card > .kh-sec-more 는 2026-09-22 에 지웠다 — 303fe96 이 「자세히」 를
-   머리줄로 옮겨 **칸 아래에 놓이는 자리가 없어졌다.** */
+   머리줄로 옮겨 **칸 아래에 놓이는 자리가 없어졌다.**
+   그때 그 줄이 들고 있던 좌우 여백까지 빠져 머리줄이 카드 끝에 붙었다 — 「자세히 ›」 가
+   오른쪽 끝에 닿아 잘려 보였다(2026-10-16 재권님 「데일리처럼 해줘」). 데일리 칸 머리줄(.kh-tabs)과 같은 18px. */
 .kh-sec-card > .kh-sched-h {
+  padding: 0 18px;
   display: flex; align-items: center; justify-content: space-between;
   font-size: 0.88rem; font-weight: 700; margin-bottom: 9px;
 }

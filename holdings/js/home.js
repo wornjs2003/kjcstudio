@@ -2351,6 +2351,25 @@ document.querySelector('.kh-sc-card')?.addEventListener('click', (e) => {
   pickSectorStock(a.dataset.code, (a.querySelector('.kh-sc-stn')?.textContent || '').trim());
 });
 
+/* 뉴스 칸 · 뉴스 모달의 종목 줄 → 그 자리에서 종목 모달 (2026-10-16 재권님 「그렇게 해」).
+   전에는 stock.html 로 페이지째 넘어가 「이창은 뭐지」 가 됐다. 뉴스 모달은 모달 뼈대가 하나라
+   종목 모달이 열리며 저절로 닫힌다. 관심종목 밖이면 이름을 찾아 넣고 연다 — 첫 로드 `?code=` 길과 같다.
+   href(`./?code=`)는 남긴다 — 새 탭 · 가운데 클릭은 홈 모달 주소로 간다 */
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a.kh-nw-i[data-code]');
+  if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+  const code = a.dataset.code;
+  if (!/^\d{6}$/.test(code)) return;
+  e.preventDefault();
+  (async () => {
+    if (!findStock(code)) {
+      const hit = await lookupStock(code);
+      addExtraStock(code, hit ? hit.name : (a.querySelector('.kh-nw-stock')?.textContent || code).trim());
+    }
+    openStockModal(code);
+  })();
+});
+
 /* 「지금 뜨는 산업」 자세히 → 모달 (2026-09-22 지시).
    **카드가 받아 둔 것을 넘긴다** — 모달이 따로 받으면 두 자리의 숫자가
    어긋나고 네이버를 겹쳐 부른다. */

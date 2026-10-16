@@ -203,13 +203,14 @@ function issueRow(x) {
   </a>`;
 }
 
+/* 종목 줄은 홈 모달 주소(`./?code=`)로 간다 — `components/news-list.js` moveRowHtml 과 같은 까닭(2026-10-16) */
 function moveRow(x) {
   const s = x.stocks || [];
   const first = s[0] || {};
   const more = s.length > 1 ? `<i class="kh-nw-more">외 ${s.length - 1}</i>` : '';
   const mine = s.some((v) => WATCH.has(v.code));
   return `<a class="kh-nw-i ${mine ? 'is-mine' : ''}"
-      href="./stock.html?code=${esc(first.code)}">
+      href="./?code=${esc(first.code)}">
     <span class="kh-nw-i-top">
       <i class="kh-nw-topic">${esc(x.market || '')}</i>
       <i class="kh-nw-stock">${esc(first.name)}</i>${more}

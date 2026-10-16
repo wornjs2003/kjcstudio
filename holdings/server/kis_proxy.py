@@ -5870,17 +5870,72 @@ def _kr_fill_work():
     today = datetime.now(KST).strftime("%Y%m%d")
     work = []
     for code in _dwmy_codes():
-        days = [d for d in _recent_days(code, n) if not (d == today and _kr_busy())]
-        if not days:
-            continue
-        marks = _fill_marks(code)
-        have = {}
-        for ts in _5m_ts_since(code, days[0]):
-            have.setdefault(ts[:8], []).append(int(ts[8:10]) * 60 + int(ts[10:12]))
-        for d in reversed(days):                     # 최근 날부터
-            if d not in marks and not _day_complete(have.get(d, []), first, last):
-                work.append((code, d))
+        work.extend((code, d) for d in _kr_days_to_fill(code, n, first, last, today))
     return work
+
+
+def _kr_days_to_fill(code, n, first, last, today):
+    """한 종목의 최근 n 거래일 중 5분봉이 덜 찬 날(최근 날부터). 오늘은 장중이면 뺀다 — 그날 봉은 화면이 받는다."""
+    days = [d for d in _recent_days(code, n) if not (d == today and _kr_busy())]
+    if not days:
+        return []
+    marks = _fill_marks(code)
+    have = {}
+    for ts in _5m_ts_since(code, days[0]):
+        have.setdefault(ts[:8], []).append(int(ts[8:10]) * 60 + int(ts[10:12]))
+    return [d for d in reversed(days)
+            if d not in marks and not _day_complete(have.get(d, []), first, last)]
+
+
+# ── 지수 밖 종목도 열면 지난 5분봉을 채운다 (2026-10-16 재권님 「응 그래」) ──────────
+#
+# 위 뒤 작업은 지수 구성종목(`_dwmy_codes` · 코스피200 · 코스닥150)의 지난 거래일만 채운다. 그 밖 종목은
+# 화면이 여는 순간 받는 오늘 것뿐이라 5분봉이 하루치만 그려졌다(10-16 12:27 재권님 그림 · SNT다이나믹스 003570 —
+# 8765 의 5분봉 54개가 전부 그날 08:00~12:25 · MA60 · MA200 「봉 부족」).
+# 그래서 지수 밖 종목의 5분봉을 화면이 부르면 **그 종목만 한 번** 지난 거래일(`view_days`)을 뒤에서 채운다.
+# 날마다 하는 일은 뒤 작업과 같다(`_kr_past_day` · `_fill_mark`) — 하루 7번 안팎 · 종목당 1~2분.
+# 하루에 한 종목 한 번만 시작한다 — 화면은 5분봉을 30초마다 다시 부른다. 일봉이 없으면 그 일봉부터 받는다(거래일을 그것으로 센다).
+# 쓰는 서버(8765)에서만 돈다 — 세션 서버 · 서비스방은 DB 를 읽기만 한다(`marketdb.READONLY`).
+_kr_open_fill = {}                    # code -> 시작한 날(YYYYMMDD)
+_kr_open_lock = threading.Lock()
+_dwmy_set_cache = [0.0, frozenset()]  # [잰 시각, 지수 구성종목] — 한 시간 들고 있는다(5분봉 요청마다 DB 를 안 읽게)
+
+
+def _in_dwmy(code):
+    if time.time() - _dwmy_set_cache[0] > 3600:
+        _dwmy_set_cache[1] = frozenset(_dwmy_codes())
+        _dwmy_set_cache[0] = time.time()
+    return code in _dwmy_set_cache[1]
+
+
+def kick_kr_open_fill(cfg, code):
+    """지수 밖 국내 종목의 5분봉을 열었으면 지난 거래일 채우기를 뒤에서 한 번 시작한다."""
+    if not marketdb.writable() or not re.fullmatch(r"\d{6}", code or ""):
+        return
+    today = datetime.now(KST).strftime("%Y%m%d")
+    with _kr_open_lock:
+        if _kr_open_fill.get(code) == today:
+            return
+        _kr_open_fill[code] = today
+    if _in_dwmy(code):
+        return
+
+    def run():
+        try:
+            n = PERIODS["5m"]["view_days"]
+            if not _recent_days(code, n):
+                get_chart(cfg, code, "D", BARS_PER_CALL)     # 거래일을 셀 일봉부터 — 한 쪽
+            days = _kr_days_to_fill(code, n, KRX_OPEN[0] * 60 + KRX_OPEN[1],
+                                    KRX_CLOSE[0] * 60 + KRX_CLOSE[1], today)
+            for d in days:
+                _kr_past_day(cfg, code, d)
+                _fill_mark(code, d)
+            if days:
+                _bar_fill_log("연 종목 %s 지난 5분봉 %d일 채움" % (code, len(days)))
+        except Exception as e:
+            _bar_fill_log("연 종목 %s 지난 5분봉 오류 (%s)" % (code, type(e).__name__))
+
+    threading.Thread(target=run, daemon=True, name="kr-open-fill").start()
 
 
 def _us_fill_work():
@@ -7287,6 +7342,8 @@ class Handler(SimpleHTTPRequestHandler):
                     rows, fetched, source = read_candles(code, period, _view_limit(code, period, limit)), 0, "DB"
                 else:
                     rows, fetched, source = get_chart(cfg, code, period, limit)
+                if period == "5m":
+                    kick_kr_open_fill(cfg, code)        # 지수 밖 종목이면 지난 거래일을 뒤에서 한 번 (2026-10-16)
                 if PERIODS[period]["kis"] is None:      # 분봉(1m · 5m)만 — 일봉 이상은 받은 그대로
                     rows = drop_before_first_trade(rows)
                 # ── 안 받은 봉만 (2026-10-07 지시 — 「아직 안 받은 봉만 받아 덧붙이고, 받아 둔 봉은 다시 받지 않는다」) ──
