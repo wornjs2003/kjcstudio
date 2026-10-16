@@ -24,7 +24,8 @@
    홈이 아닌 화면(순위 칸이 없는 곳)에서는 손잡이를 두지 않는다.
 
    ── 값 ──
-       순위 · 종목 묶음   /api/dart/universe → /api/kis/quotes 의 value(거래대금)
+       그래프 탭         /api/kis/investor-board?mkt=&days= — 서버가 들고 있는 거래대금 순 판 한 번(2026-10-16 ·
+                         전에는 시세 18묶음을 차례로 물어 여는 데 3초가 넘었다). 줄마다 rows 가 아래 투자자 줄과 같은 모양
        투자자            /api/kis/investor?code=&span=60 — net · netAmt(백만원) · buyAmt · sellAmt(백만원)
                          매수 · 매도 금액이 없는 줄(옛 서버)은 수량 × 종가로 어림하고 「어림」 이라 적는다
        차트              /api/kis/chart · /api/kis/index-candles · /api/kis/index-minutes
@@ -41,7 +42,6 @@ const SIDES = [['person', '개인'], ['foreign', '외국인'], ['inst', '기관'
 const SIDE_NAME = Object.fromEntries(SIDES);
 const DAYS = [['today', '오늘', 1], ['d5', '5일', 5], ['m1', '한달', 20], ['q3', '3달', 60]];
 const TOP_N = 15;
-const QUOTE_CHUNK = 20;          // /api/kis/quotes 한 번에 묻는 종목 수 — 서버 멀티 조회 한도(30) 안
 const INDEX = { KOSPI: '코스피', KOSDAQ: '코스닥' };
 const PERIODS = [['5m', '분봉'], ['D', '일봉'], ['M', '월봉']];
 const SHOW_BARS = { '5m': 156, D: 60, M: 24 };   // 처음 보이는 봉 수 — 5분봉 이틀 · 일봉 석 달 · 월봉 2년
@@ -169,22 +169,17 @@ export function openInvestorModal({ code } = {}) {
     paint();
   }
 
-  /* ── 종목 묶음 · 거래대금 ── */
-  let rankP = null;
-  function loadRank() {
-    if (rankP) return rankP;
-    rankP = (async () => {
-      const u = await getJson('/api/dart/universe');
-      const list = (u && Array.isArray(u.data) ? u.data : []).filter((x) => /^\d{6}$/.test(x.code));
-      const q = {};
-      for (let i = 0; i < list.length; i += QUOTE_CHUNK) {
-        const j = await getJson('/api/kis/quotes?codes=' + list.slice(i, i + QUOTE_CHUNK).map((x) => x.code).join(','));
-        Object.assign(q, (j && j.data) || {});
-      }
-      return list.map((x) => ({ ...x, ...(q[x.code] || {}), name: (q[x.code] || {}).name || x.name }))
-        .filter((x) => x.value).sort((a, b) => b.value - a.value);
-    })();
-    return rankP;
+  /* ── 거래대금 순 판 — 서버가 들고 있다 내준다. 모달이 떠 있는 동안 시장 · 기간마다 한 번 ── */
+  const boardP = new Map();
+  function loadBoard(mkt, days) {
+    const k = `${mkt}:${days}`;
+    if (!boardP.has(k)) {
+      boardP.set(k, getJson(`/api/kis/investor-board?mkt=${mkt}&days=${days}`).then((j) => {
+        if (j && j.names) Object.entries(j.names).forEach(([c, n]) => { if (!st.names[c]) st.names[c] = n; });
+        return j && Array.isArray(j.data) ? j.data : [];
+      }));
+    }
+    return boardP.get(k);
   }
   const nameOf = (c) => INDEX[c] || st.names[c] || c;
 
@@ -202,14 +197,11 @@ export function openInvestorModal({ code } = {}) {
         ${chips('mkt', [['ALL', '전체'], ['KOSPI', '코스피'], ['KOSDAQ', '코스닥']], st.mkt)}</div>
       <div class="kh-ivm-g"><span class="kh-ivm-mut">불러오는 중</span></div>`;
     bindChips((g, v) => { st[g] = v; paintGraph(); });
-    const all = await loadRank();
-    all.forEach((x) => { st.names[x.code] = x.name; });
-    const topList = all.filter((x) => st.mkt === 'ALL' || x.market === st.mkt).slice(0, TOP_N);
     const n = (DAYS.find((d) => d[0] === st.days) || [])[2] || 1;
-    const rows = await Promise.all(topList.map(async (x) => {
-      const d = (await investorRows(x.code)).filter(confirmed).slice(0, n);
-      return { ...x, s: sumSide(d, st.side) };
-    }));
+    const rows = (await loadBoard(st.mkt, n)).slice(0, TOP_N).map((x) => {
+      st.names[x.code] = x.name;
+      return { ...x, s: sumSide((x.rows || []).filter(confirmed).slice(0, n), st.side) };
+    });
     if (st.tab !== 'graph' || !main.querySelector('.kh-ivm-g')) return;
     const max = Math.max(...rows.flatMap((r) => (r.s ? [r.s.buy, r.s.sell] : [0]))) || 1;
     const guess = rows.some((r) => r.s && r.s.guess);
@@ -331,7 +323,7 @@ export function openInvestorModal({ code } = {}) {
     main.querySelector('.kh-ivm-clear').addEventListener('click', () => { st.box = null; placeBox(); paintSides(); });
 
     if (!st.names[st.target] && !INDEX[st.target]) {
-      loadRank().then((all) => { const f = all.find((x) => x.code === st.target); if (f) { st.names[st.target] = f.name; const n = main.querySelector('.kh-ivm-name'); if (n) n.textContent = f.name; } });
+      loadBoard('ALL', 1).then(() => { const f = st.names[st.target]; if (f) { const n = main.querySelector('.kh-ivm-name'); if (n) n.textContent = f; } });
     }
     const want = `${st.target}|${st.period}`;
     const got = await candles();
