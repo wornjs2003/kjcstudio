@@ -72,13 +72,15 @@ export function rowHtml(x, compact = false) {
   </a>`;
 }
 
-/* 종목이 붙은 뉴스. 누르면 그 종목으로 간다 — 링크가 없는 자료라 그렇다. */
+/* 종목이 붙은 뉴스. 누르면 그 종목으로 간다 — 링크가 없는 자료라 그렇다.
+   주소는 **홈 모달**(`./?code=`)이다 — 옛 종목 화면(stock.html)으로 페이지째 넘어가 「이창은 뭐지」 가 됐다
+   (2026-10-16 재권님 「그렇게 해」). 홈은 `data-code` 를 가로채 페이지를 안 넘기고 모달을 연다(home.js). */
 export function moveRowHtml(x, watch = null) {
   const s = x.stocks || [];
   const first = s[0] || {};
   const more = s.length > 1 ? `<i class="kh-nw-more">외 ${s.length - 1}</i>` : '';
   const mine = watch && s.some(v => watch.has(v.code));
-  return `<a class="kh-nw-i ${mine ? 'is-mine' : ''}" href="./stock.html?code=${esc(first.code)}">
+  return `<a class="kh-nw-i ${mine ? 'is-mine' : ''}" data-code="${esc(first.code)}" href="./?code=${esc(first.code)}">
     <span class="kh-nw-i-top">
       <i class="kh-nw-topic">${esc(x.market || '')}</i>
       <i class="kh-nw-stock">${esc(first.name)}</i>${more}
