@@ -30,7 +30,7 @@ import { openModal } from './modal.js';
 import { fetchFeed, lastFeed, paintIssues, paintLoading, moveRowHtml, rowHtml } from './news-list.js';
 import { patchRows } from '../utils/reconcile.js';
 import { mountDisclosures } from './disclosures.js';
-import { mountSchedule, collectSchedule, AHEAD_DAYS } from './schedule.js';
+import { mountScheduleCalendar, collectSchedule, AHEAD_DAYS, CAL_MONTHS } from './schedule.js';
 import { getDisclosuresBody } from '../data/dart.js';
 import { everyServerMs } from '../store/timing.js';
 
@@ -72,7 +72,7 @@ function stamp(iso) {
 /* 탭마다 **무엇을 보고 있는지** 한 줄로 적는다. 개수만 보이면 「0건」 이
    고장인지 정말 없는 것인지 갈리지 않는다 — 범위가 함께 보여야 한다. */
 function tabNote(k, capped) {
-  if (k === 'sched') return `앞으로 ${AHEAD_DAYS}일`;
+  if (k === 'sched') return `달력 · 앞뒤 ${CAL_MONTHS}개월`;
   if (k === 'dc')    return capped ? `서버가 ${DC_LIMIT}건까지 줍니다` : '받아 둔 전부';
   return '최근 순서';
 }
@@ -135,7 +135,8 @@ export function openNewsModal({ tab = 'news', watch = null } = {}) {
   /* 공시·일정은 mount 하면 스스로 받아 그린다. limit 을 크게 두어
      **모달이 전부를 갖는다** — 첫 화면 칸이 그중 몇 줄만 쓴다. */
   mountDisclosures(panes.dc, { limit: DC_LIMIT, showName: true });
-  mountSchedule(panes.sched, { compact: false, limit: 0, watch });
+  /* 일정은 달력(한 달 보기 · 앞뒤 8개월) — 2026-10-16 재권님 「구글 캘린더처럼」 */
+  mountScheduleCalendar(panes.sched, { watch });
 
   const watchSet = watch ? new Set(watch) : null;
 
@@ -220,7 +221,7 @@ export function openNewsModal({ tab = 'news', watch = null } = {}) {
        기간은 라벨에 넣지 않고 **탭 줄 설명**이 맡는다 — 격자 칸이 좁다. */
     try {
       const g = await schedP;
-      stats.push({ label: '주요 일정', value: `${(g.rows || []).length}건` });
+      stats.push({ label: `주요 일정(${AHEAD_DAYS}일)`, value: `${(g.rows || []).length}건` });
     } catch { /* 〃 */ }
 
     polledAt = polled;
