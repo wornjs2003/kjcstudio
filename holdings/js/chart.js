@@ -2238,7 +2238,9 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     const cv = container.querySelector('canvas');
     const ox = cv ? cv.getBoundingClientRect().left - container.getBoundingClientRect().left : 0;
     const oy = cv ? cv.getBoundingClientRect().top - container.getBoundingClientRect().top : 0;
-    pin.innerHTML = `${label} <b>${fmtPrice(price, dec)}</b>`;
+    /* 글자는 빼고 숫자만 — 「화면 최고 · 화면 최저」 는 마우스를 올리면 뜨는 풀이로만 남긴다 (2026-10-18 재권님 「그거해」) */
+    pin.innerHTML = `<b>${fmtPrice(price, dec)}</b>`;
+    pin.title = label;
     pin.hidden = false;
     /* 칸 왼끝 · 오른끝에서 칸 밖으로 넘치지 않게 안으로 당긴다 */
     const half = pin.offsetWidth / 2;
