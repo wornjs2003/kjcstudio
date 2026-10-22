@@ -182,23 +182,21 @@ async function loadMembers() {
  *   stale  true 면 일정표에 앞으로 것이 하나도 없다 (갱신할 때가 됐다)
  *   calOk  일정표 파일을 읽었나
  */
-export async function collectSchedule({ days = AHEAD_DAYS, watch = null, range = null } = {}) {
+export async function collectSchedule({ days = AHEAD_DAYS, watch = null } = {}) {
   const [cal, earnings, members, rel] = await Promise.all([
     loadCalendar(), loadEarnings(), loadMembers(), loadReleases(),
   ]);
   const mine = new Set(watch || []);
 
-  /* range 를 주면 그 사이(달력 — 지난 날도 든다), 안 주면 오늘부터 days 일 */
-  const now0 = today0();
-  const from = range ? range.from : now0;
-  const to = range ? range.to : new Date(from.getTime() + days * 86400000);
+  const from = today0();
+  const to = new Date(from.getTime() + days * 86400000);
   const rows = [];
 
   let future = 0;        // 오늘 이후 일정이 일정표에 몇 개 남았나
   for (const e of (cal && cal.events) || []) {
     const d = parseDay(e.date);
     if (!d) continue;
-    if (d >= now0) future++;
+    if (d >= from) future++;
     if (d < from || d > to) continue;
     rows.push({
       when: d,
@@ -213,7 +211,7 @@ export async function collectSchedule({ days = AHEAD_DAYS, watch = null, range =
 
   /* 발표 지표 — 앞으로 것은 날짜만, 끝난 것(마지막 발표 · 계열에 들어온 것)은 값과 등락을 붙인다.
      계열에 아직 안 들어왔으면 값 없이 낸다 — 옛 값을 새 발표처럼 보이지 않게 */
-  const back = range ? from : new Date(from.getTime() - RELEASE_BACK_DAYS * 86400000);
+  const back = new Date(from.getTime() - RELEASE_BACK_DAYS * 86400000);
   for (const x of (rel && rel.releases) || []) {
     for (const ds of x.dates || []) {
       const d = parseDay(ds);
@@ -388,120 +386,6 @@ export function mountSchedule(host, { compact = false, limit = 0, watch = null,
 
     paintChips();
     paintRows();
-  }
-
-  refresh();
-  return { refresh };
-}
-
-/* ── 달력 — 뉴스·공시 모달의 「주요 일정」 탭 (2026-10-16 재권님 「구글 캘린더처럼」 · 「앞뒤로 8개월」) ──
-   한 달 보기 · 오늘 · ‹ › 로 앞뒤 CAL_MONTHS 달까지 넘긴다. 넓은 칸은 날짜 칸 안에 종류 · 제목,
-   좁은 폭은 색 점만 두고 아래 「누른 날의 일정」 이 목록을 대신한다(모바일 퍼스트 — sched-cal.css).
-   값은 collectSchedule 하나 — 범위만 넓혀 부른다. 받아 둔 것이 없는 달은 「없음」 을 적는다 */
-export const CAL_MONTHS = 8;
-const CAL_CHIPS = 3;            // 넓은 칸 하나에 보일 줄 — 넘치면 「+N」
-const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
-
-/* 달력 모양은 이 부품만 쓴다 — 거는 화면마다 링크를 두지 않고 스스로 한 번 건다 */
-function calCss() {
-  if (document.querySelector('link[data-sched-cal]')) return;
-  const l = document.createElement('link');
-  l.rel = 'stylesheet';
-  l.href = new URL('../../css/sched-cal.css', import.meta.url).href;
-  l.dataset.schedCal = '1';
-  document.head.appendChild(l);
-}
-
-const dayKey = (d) => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-const ymText = (d) => `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
-
-function calItem(r) {
-  return `<i class="kh-sc-kind is-${esc(r.color)}">${esc(r.kind)}</i><span class="kh-cal-et">${esc(r.title)}</span>`;
-}
-
-export function mountScheduleCalendar(host, { watch = null } = {}) {
-  if (!host) return { refresh() {} };
-  calCss();
-  const t0 = today0();
-  const lo = new Date(t0.getFullYear(), t0.getMonth() - CAL_MONTHS, 1);
-  const hi = new Date(t0.getFullYear(), t0.getMonth() + CAL_MONTHS, 1);
-  let month = new Date(t0.getFullYear(), t0.getMonth(), 1);
-  let picked = t0;
-  let byDay = null;           // null = 아직 못 받음
-
-  function paint() {
-    if (!byDay) { host.innerHTML = `<div class="kh-soon"><div class="kh-soon-t">불러오는 중</div></div>`; return; }
-    const y = month.getFullYear(), mo = month.getMonth();
-    let inMonth = 0;
-    const cells = [];
-    const lead = new Date(y, mo, 1).getDay();      // 첫 주 일요일까지 앞 달 날로 채운다 · 6주(42칸) 고정 — 달마다 높이가 안 바뀌게
-    for (let i = 0; i < 42; i++) {
-      const d = new Date(y, mo, 1 - lead + i);
-      const list = byDay.get(dayKey(d)) || [];
-      if (d.getMonth() === mo) inMonth += list.length;
-      const cls = ['kh-cal-c', d.getMonth() !== mo ? 'is-out' : '', d < t0 ? 'is-past' : '',
-        +d === +t0 ? 'is-today' : '', +d === +picked ? 'is-sel' : ''].join(' ');
-      cells.push(`<button type="button" class="${cls}" data-d="${dayKey(d)}">
-        <b class="kh-cal-n kh-num">${d.getDate()}</b>
-        <span class="kh-cal-dots">${list.map((r) => `<i class="kh-cal-dot kh-sc-kind is-${esc(r.color)}"></i>`).join('')}</span>
-        <span class="kh-cal-es">${list.slice(0, CAL_CHIPS).map((r) => `<span class="kh-cal-e">${calItem(r)}</span>`).join('')}${
-          list.length > CAL_CHIPS ? `<span class="kh-cal-more kh-mut">+${list.length - CAL_CHIPS}</span>` : ''}</span>
-      </button>`);
-    }
-    const sel = byDay.get(dayKey(picked)) || [];
-    const selHead = `${picked.getMonth() + 1}월 ${picked.getDate()}일${+picked === +t0 ? '(오늘)' : ''}`;
-    host.innerHTML = `<div class="kh-cal">
-      <div class="kh-cal-h">
-        <button type="button" class="kh-cal-today" data-go="0">오늘</button>
-        <button type="button" class="kh-cal-nav" data-go="-1" aria-label="앞 달" ${month <= lo ? 'disabled' : ''}>‹</button>
-        <button type="button" class="kh-cal-nav" data-go="1" aria-label="다음 달" ${month >= hi ? 'disabled' : ''}>›</button>
-        <span class="kh-cal-m">${ymText(month)}</span>
-        <span class="kh-cal-r kh-mut">${ymText(lo)} ~ ${ymText(hi)} · ${inMonth ? `이 달 일정 ${inMonth}건` : '이 달 받아 둔 일정 없음'}</span>
-      </div>
-      <div class="kh-cal-g">${WEEK.map((w) => `<div class="kh-cal-w">${w}</div>`).join('')}${cells.join('')}</div>
-      <div class="kh-cal-day">
-        <div class="kh-cal-dh">${selHead}</div>
-        ${sel.length ? sel.map((r) => rowHtml(r, { compact: false })).join('') : `<div class="kh-cal-none kh-mut">일정 없음</div>`}
-      </div>
-    </div>`;
-  }
-
-  host.addEventListener('click', (e) => {
-    const go = e.target.closest('[data-go]');
-    if (go) {
-      const n = +go.dataset.go;
-      month = n === 0 ? new Date(t0.getFullYear(), t0.getMonth(), 1)
-        : new Date(month.getFullYear(), month.getMonth() + n, 1);
-      if (month < lo) month = lo;
-      if (month > hi) month = hi;
-      if (n === 0) picked = t0;
-      paint();
-      return;
-    }
-    const c = e.target.closest('[data-d]');
-    if (c) {
-      const k = +c.dataset.d;
-      picked = new Date(Math.floor(k / 10000), Math.floor(k / 100) % 100 - 1, k % 100);
-      if (picked.getMonth() !== month.getMonth()) month = new Date(picked.getFullYear(), picked.getMonth(), 1);
-      paint();
-    }
-  });
-
-  async function refresh() {
-    paint();
-    const got = await collectSchedule({ watch, range: { from: lo, to: new Date(hi.getFullYear(), hi.getMonth() + 1, 0) } });
-    if (!got.calOk) {
-      host.innerHTML = `<div class="kh-soon"><div class="kh-soon-t">일정을 불러오지 못했습니다</div>
-        <div class="kh-soon-s">data/market-calendar.json</div></div>`;
-      return;
-    }
-    byDay = new Map();
-    for (const r of got.rows) {
-      const k = dayKey(r.when);
-      if (!byDay.has(k)) byDay.set(k, []);
-      byDay.get(k).push(r);
-    }
-    paint();
   }
 
   refresh();
