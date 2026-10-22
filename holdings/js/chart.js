@@ -2226,7 +2226,7 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     return { hiI, hi: candles[hiI].high, loI, lo: candles[loI].low };
   }
 
-  function placePin(pin, i, price, label) {
+  function placePin(pin, i, price) {
     let x = null, y = null;
     try {
       x = chart.timeScale().logicalToCoordinate(i);
@@ -2238,9 +2238,14 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     const cv = container.querySelector('canvas');
     const ox = cv ? cv.getBoundingClientRect().left - container.getBoundingClientRect().left : 0;
     const oy = cv ? cv.getBoundingClientRect().top - container.getBoundingClientRect().top : 0;
-    /* 글자는 빼고 숫자만 — 「화면 최고 · 화면 최저」 는 마우스를 올리면 뜨는 풀이로만 남긴다 (2026-10-18 재권님 「그거해」) */
-    pin.innerHTML = `<b>${fmtPrice(price, dec)}</b>`;
-    pin.title = label;
+    /* 글자는 빼고 숫자만 (2026-10-18 재권님 「그거해」) — 마우스 올림 풀이(title)도 뺐다: 이름표가 pointer-events none 이라
+       풀이가 뜨지 않았다(2026-10-22 qa 걸림 · 재권님 「응」 — 이름표가 마우스를 받으면 그 자리 끌기 · 십자선이 막힌다) ·
+       숫자 옆에 현재가에서 그 값까지 몇 % 인가 — (그 값 − 현재가) ÷ 현재가 (2026-10-22 재권님 시안 (가)(나) 중 「나 로해줘」).
+       마우스 표의 「현재가 대비」(그 값에서 지금까지)와 셈 방향이 반대다 — 최고는 + · 최저는 − 로 나와 숫자 색과 같은 쪽이 된다 */
+    const cur = candles.length ? candles[candles.length - 1].close : null;
+    const pct = cur ? (price - cur) / cur * 100 : null;
+    pin.innerHTML = `<b>${fmtPrice(price, dec)}</b>`
+      + ` <span class="${pct == null ? '' : updn(pct)}">${pct == null ? '—' : `${sign(pct)}${pct.toFixed(2)}%`}</span>`;
     pin.hidden = false;
     /* 칸 왼끝 · 오른끝에서 칸 밖으로 넘치지 않게 안으로 당긴다 */
     const half = pin.offsetWidth / 2;
@@ -2258,8 +2263,8 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
   function placePins() {
     const e = visibleExtremes();
     if (!e) { pinHi.hidden = pinLo.hidden = true; return; }
-    placePin(pinHi, e.hiI, e.hi, '화면 최고');
-    placePin(pinLo, e.loI, e.lo, '화면 최저');
+    placePin(pinHi, e.hiI, e.hi);   // 화면 최고
+    placePin(pinLo, e.loI, e.lo);   // 화면 최저
   }
 
   function placeTag() {
