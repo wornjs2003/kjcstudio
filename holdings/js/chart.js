@@ -2185,7 +2185,8 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
        셋째 줄  (화면 최저가 − 가격) ÷ 가격
      이름(현재가 대비 · 최고가까지 · 최저가까지)은 빼고 색 · 부호 있는 숫자만 둔다 — 첫 줄도 (그 값 − 현재가) ÷ 현재가 로 뒤집었다
      (2026-10-22 재권님 「이름은 딱히 필요없고 숫자만 필요해 숫자가 오르고 내린지만 잘 인재되면됌」 → 시안 「응」).
-     값 줄의 「현재가 대비」 = 현재가 − 올린 봉 종가(그 봉 종가 기준 %) · 마지막 봉 자신은 견줄 것이 없어 그 칸을 감춘다.
+     값 줄의 「현재가 대비」 = 올린 봉 종가 − 현재가(현재가 기준 %) — 마우스 표 첫 줄과 같은 방향(2026-10-22 재권님 시안 「뒤집어줘」) ·
+     마지막 봉 자신은 견줄 것이 없어 그 칸을 감춘다.
      표는 차트 위에 얹기만 한다 — 칸 크기 · 봉 높이를 안 바꾸고(「보는 것을 바꿔도 자리는 그대로다」) 끌기 · 확대도 안 막는다 */
   const tag = document.createElement('div');
   tag.className = 'kh-lg-tag kh-num';
@@ -2311,7 +2312,7 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     nodes.chg.textContent = chg == null ? '—' : `${sign(chg)}${chg.toFixed(2)}%`;
     nodes.chg.className = chg == null ? '' : updn(chg);
     const cur = candles[last].close;
-    const dv = cur - c.close, dp = c.close ? dv / c.close * 100 : null;
+    const dv = c.close - cur, dp = cur ? dv / cur * 100 : null;
     /* 시각 · 등락 · 현재가 대비는 마우스를 올렸을 때만 — 쉴 때 값 줄은 전과 같다(qa 검수 · 좁은 폭에서 쉴 때도 두 줄이 됐다) */
     const hover = shown != null;
     nodes.when.parentElement.hidden = !hover;
