@@ -2180,9 +2180,11 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
      현재가 = 지금 그려진 마지막 봉의 종가 — updateLast 가 실시간 값으로 갈아 끼우므로 그것이 곧 현재가다.
      마우스 표 = 마우스 높이의 가격(coordinateToPrice) · 그 아래 세 줄(2026-10-15 재권님 「마우스를 올리면 현재가 대비 등락률만 ·
      … 가장 하한가와 가장 상한가 … 그것과 현재 내가 마우스 올린곳과의 등락률도」 → 「응 맞아 이대로해」. 그 전의 「전일」 줄은 뺐다)
-       현재가 대비   (현재가 − 가격) ÷ 가격 — 그 가격에서 지금까지 몇 % 움직였나 · 값 줄 「현재가 대비」 와 같은 기준
-       최고가까지    (화면 최고가 − 가격) ÷ 가격 — 화면 최고 · 최저는 아래 visibleExtremes(보이는 봉들 안)
-       최저가까지    (화면 최저가 − 가격) ÷ 가격
+       첫 줄   (가격 − 현재가) ÷ 현재가 — 지금 값에서 그 가격까지 몇 % 인가 · 최고 · 최저 이름표와 같은 방향
+       둘째 줄  (화면 최고가 − 가격) ÷ 가격 — 화면 최고 · 최저는 아래 visibleExtremes(보이는 봉들 안)
+       셋째 줄  (화면 최저가 − 가격) ÷ 가격
+     이름(현재가 대비 · 최고가까지 · 최저가까지)은 빼고 색 · 부호 있는 숫자만 둔다 — 첫 줄도 (그 값 − 현재가) ÷ 현재가 로 뒤집었다
+     (2026-10-22 재권님 「이름은 딱히 필요없고 숫자만 필요해 숫자가 오르고 내린지만 잘 인재되면됌」 → 시안 「응」).
      값 줄의 「현재가 대비」 = 현재가 − 올린 봉 종가(그 봉 종가 기준 %) · 마지막 봉 자신은 견줄 것이 없어 그 칸을 감춘다.
      표는 차트 위에 얹기만 한다 — 칸 크기 · 봉 높이를 안 바꾸고(「보는 것을 바꿔도 자리는 그대로다」) 끌기 · 확대도 안 막는다 */
   const tag = document.createElement('div');
@@ -2241,7 +2243,7 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     /* 글자는 빼고 숫자만 (2026-10-18 재권님 「그거해」) — 마우스 올림 풀이(title)도 뺐다: 이름표가 pointer-events none 이라
        풀이가 뜨지 않았다(2026-10-22 qa 걸림 · 재권님 「응」 — 이름표가 마우스를 받으면 그 자리 끌기 · 십자선이 막힌다) ·
        숫자 옆에 현재가에서 그 값까지 몇 % 인가 — (그 값 − 현재가) ÷ 현재가 (2026-10-22 재권님 시안 (가)(나) 중 「나 로해줘」).
-       마우스 표의 「현재가 대비」(그 값에서 지금까지)와 셈 방향이 반대다 — 최고는 + · 최저는 − 로 나와 숫자 색과 같은 쪽이 된다 */
+       마우스 표 첫 줄도 같은 방향이다(2026-10-22) — 최고는 + · 최저는 − 로 나와 숫자 색과 같은 쪽이 된다 */
     const cur = candles.length ? candles[candles.length - 1].close : null;
     const pct = cur ? (price - cur) / cur * 100 : null;
     pin.innerHTML = `<b>${fmtPrice(price, dec)}</b>`
@@ -2274,7 +2276,7 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     }
     if (price == null || !Number.isFinite(price)) { tag.hidden = true; return; }
     const cur = candles[candles.length - 1].close;
-    const pct = price ? (cur - price) / price * 100 : null;
+    const pct = cur ? (price - cur) / cur * 100 : null;
     const ext = visibleExtremes();
     const toHi = ext && price ? (ext.hi - price) / price * 100 : null;
     const toLo = ext && price ? (ext.lo - price) / price * 100 : null;
@@ -2284,9 +2286,9 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     const ox = cv ? cv.getBoundingClientRect().left - container.getBoundingClientRect().left : 0;
     const oy = cv ? cv.getBoundingClientRect().top - container.getBoundingClientRect().top : 0;
     tag.innerHTML = `<b>${fmtPrice(price, dec)}</b>`
-      + `<br><i>현재가 대비</i> <b class="${pct == null ? '' : updn(pct)}">${fmtPct(pct)}</b>`
-      + `<br><i>최고가까지</i> <b class="${toHi == null ? '' : updn(toHi)}">${fmtPct(toHi)}</b>`
-      + `<br><i>최저가까지</i> <b class="${toLo == null ? '' : updn(toLo)}">${fmtPct(toLo)}</b>`;
+      + `<br><b class="${pct == null ? '' : updn(pct)}">${fmtPct(pct)}</b>`
+      + `<br><b class="${toHi == null ? '' : updn(toHi)}">${fmtPct(toHi)}</b>`
+      + `<br><b class="${toLo == null ? '' : updn(toLo)}">${fmtPct(toLo)}</b>`;
     tag.style.left = `${ox + point.x}px`;
     tag.hidden = false;
     /* 칸 오른끝에서 넘치면 마우스 왼쪽에 둔다 (qa 검수 · 좁은 폭 오른끝 5~8px 넘침) */
