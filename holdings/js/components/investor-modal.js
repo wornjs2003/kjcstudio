@@ -13,7 +13,9 @@
          차트에서 점선 네모를 칠 수 있게 · 이 안에 있는 기간 동안의 값 · 투자자 지표 옆에 종목 검색」
 
    ── 탭 둘 ──
-       그래프   거래대금 순 종목들 — 왼쪽 매도 · 오른쪽 매수 · 가운데 순매수. 개인 · 외국인 · 기관 · 기간을 고른다
+       그래프   거래대금 순 종목들 — 순매수 막대 하나(순매도는 왼쪽 파랑 · 순매수는 오른쪽 빨강). 개인 · 외국인 · 기관 · 기간을 고른다.
+                아래에 개인 · 외국인 · 기관별 금액 칸 셋(위 종목들 합). 「오늘」 옆에 어느 날 확정치인지 적는다 —
+                장중에는 오늘 줄이 비어 지난 거래일 값이 나온다(2026-10-22 재권님 「응 해줘」 · 시안 다섯 자리)
        차트     고른 종목(또는 코스피 · 코스닥)의 분 · 일 · 월봉 + 아래 그 종목의 개인 · 외국인 · 기관 양쪽 막대.
                 기간은 **점선 네모로 고른 구간**, 안 골랐으면 **차트에 보이는 구간**이다
 
@@ -98,6 +100,28 @@ function sideHtml(v, max, left) {
   return `<div class="kh-ivm-side ${left ? 'l' : 'r'}">${left ? amt : ''}<div class="kh-ivm-fill ${left ? 'sell' : 'buy'}"
     style="width:${w}%"></div>${left ? '' : amt}</div>`;
 }
+
+/** 순매수 막대 하나 — 순매도는 왼쪽(파랑) · 순매수는 오른쪽(빨강). 매수 · 매도를 따로 그리지 않는다 */
+function netSide(v, max, left) {
+  const on = v != null && (left ? v < 0 : v > 0);
+  const amt = on ? `<span class="kh-ivm-amt">${eokS(v)}</span>` : '';
+  const bar = on ? `<div class="kh-ivm-fill ${left ? 'sell' : 'buy'}" style="width:${Math.max(1.5, (Math.abs(v) / max) * 82)}%"></div>` : '';
+  return `<div class="kh-ivm-side ${left ? 'l' : 'r'}">${left ? amt + bar : bar + amt}</div>`;
+}
+
+/** 여러 종목의 한 투자자 합 — 한 종목이라도 순매수 금액이 비면 순매수 합은 「—」 */
+function sumMany(list) {
+  let buy = 0, sell = 0, net = 0, any = false, miss = false, guess = false;
+  for (const s of list) {
+    if (!s) continue;
+    any = true;
+    buy += s.buy; sell += s.sell;
+    if (s.net == null) miss = true; else net += s.net;
+    if (s.guess) guess = true;
+  }
+  return any ? { buy, sell, net: miss ? null : net, guess } : null;
+}
+const mmdd = (d) => (d ? `${d.slice(4, 6)}-${d.slice(6, 8)}` : '');
 
 /** 열 곳: 투자자 정보 칸의 「자세히 ›」 — code 는 그 칸이 보던 종목 */
 export function openInvestorModal({ code } = {}) {
@@ -193,26 +217,38 @@ export function openInvestorModal({ code } = {}) {
   /* ── 그래프 탭 ── */
   async function paintGraph() {
     main.innerHTML = `<div class="kh-ivm-bar-row">${chips('side', SIDES, st.side)}
-        ${chips('days', DAYS.map(([id, l]) => [id, l]), st.days)}
+        ${chips('days', DAYS.map(([id, l]) => [id, l]), st.days)}<span class="kh-ivm-asof"></span>
         ${chips('mkt', [['ALL', '전체'], ['KOSPI', '코스피'], ['KOSDAQ', '코스닥']], st.mkt)}</div>
       <div class="kh-ivm-g"><span class="kh-ivm-mut">불러오는 중</span></div>`;
     bindChips((g, v) => { st[g] = v; paintGraph(); });
     const n = (DAYS.find((d) => d[0] === st.days) || [])[2] || 1;
     const rows = (await loadBoard(st.mkt, n)).slice(0, TOP_N).map((x) => {
       st.names[x.code] = x.name;
-      return { ...x, s: sumSide((x.rows || []).filter(confirmed).slice(0, n), st.side) };
+      const d = (x.rows || []).filter(confirmed).slice(0, n);
+      return { ...x, d, s: sumSide(d, st.side) };
     });
     if (st.tab !== 'graph' || !main.querySelector('.kh-ivm-g')) return;
-    const max = Math.max(...rows.flatMap((r) => (r.s ? [r.s.buy, r.s.sell] : [0]))) || 1;
+    /* 「오늘」 이 어느 날 값인지 — 장중에는 맨 위 줄(오늘)이 비어 지난 거래일 확정치가 나온다 */
+    const asof = main.querySelector('.kh-ivm-asof');
+    const lead = rows.find((r) => r.d.length);
+    if (asof && st.days === 'today' && lead) {
+      asof.textContent = `${lead.rows[0] && !confirmed(lead.rows[0]) ? '장중 · ' : ''}${mmdd(lead.d[0].date)} 확정치`;
+    }
+    const max = Math.max(...rows.map((r) => (r.s && r.s.net != null ? Math.abs(r.s.net) : 0))) || 1;
     const guess = rows.some((r) => r.s && r.s.guess);
     const nm = SIDE_NAME[st.side];
+    const totals = SIDES.map(([k, n2]) => ({ n: n2, t: sumMany(rows.map((r) => sumSide(r.d, k))) }));
     main.querySelector('.kh-ivm-g').innerHTML = `
-      <div class="kh-ivm-cap"><div>← ${nm} 매도</div><div class="kh-ivm-mid">종목 · 거래대금 · 순매수</div><div>${nm} 매수 →</div></div>
+      <div class="kh-ivm-cap"><div>← ${nm} 순매도</div><div class="kh-ivm-mid">종목 · 거래대금 · 순매수</div><div>${nm} 순매수 →</div></div>
       ${rows.map((r, i) => `<div class="kh-ivm-row${r.code === st.target ? ' is-on' : ''}" data-code="${r.code}">
-          ${sideHtml(r.s && r.s.sell, max, true)}
+          ${netSide(r.s ? r.s.net : null, max, true)}
           <div class="kh-ivm-mid"><b>${i + 1}. ${esc(r.name)}</b><br>
             <small>대금 ${wonEok(r.value)} · <span class="${signClass(r.s ? r.s.net : null)}">${eokS(r.s ? r.s.net : null)}</span></small></div>
-          ${sideHtml(r.s && r.s.buy, max, false)}</div>`).join('')}
+          ${netSide(r.s ? r.s.net : null, max, false)}</div>`).join('')}
+      <div class="kh-ivm-tot">${totals.map(({ n: n2, t }) => `<div class="kh-ivm-tot-c">
+          <div class="kh-ivm-tot-h">${n2} · 위 ${rows.length}종목 합</div>
+          <div class="kh-ivm-tot-v ${signClass(t ? t.net : null)}">${eokS(t ? t.net : null)}</div>
+          <div class="kh-ivm-tot-s">매수 ${eok(t ? t.buy : null)} · 매도 ${eok(t ? t.sell : null)}</div></div>`).join('')}</div>
       <div class="kh-ivm-note">${(DAYS.find((d) => d[0] === st.days) || [])[1]} 합 · 금액은 확정치${guess ? ' · 매수 · 매도 금액 일부는 수량 × 종가 어림' : ''} ·
         장중 오늘 줄(확정 전)은 빼고 더함 · 줄을 누르면 차트 탭에서 그 종목</div>`;
     main.querySelectorAll('.kh-ivm-row[data-code]').forEach((el) =>
@@ -334,7 +370,8 @@ export function openInvestorModal({ code } = {}) {
     bars = got;
     chart = LC.createChart(el, {
       width: el.clientWidth, height: el.clientHeight,
-      layout: { background: { color: 'transparent' }, textColor: cssVar('--kh-chart-axis') },
+      /* attributionLogo — 왼쪽 아래 「TV」 글자를 끈다(2026-10-22 재권님 「문자같은거 필요없는데 지워」 · chart.js 와 같은 옵션) */
+      layout: { background: { color: 'transparent' }, textColor: cssVar('--kh-chart-axis'), attributionLogo: false },
       grid: { vertLines: { color: cssVar('--kh-chart-grid') }, horzLines: { color: cssVar('--kh-chart-grid') } },
       timeScale: { timeVisible: st.period === '5m', borderColor: cssVar('--kh-chart-border') },
       rightPriceScale: { borderColor: cssVar('--kh-chart-border') },
