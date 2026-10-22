@@ -39,6 +39,16 @@
 .kh-ivm-fill.buy  { background: var(--kh-up);   border-radius: 0 4px 4px 0; }
 .kh-ivm-amt { font-size: 11px; color: var(--kh-text-secondary); white-space: nowrap; }
 .kh-ivm-big .kh-ivm-fill { height: 22px; }
+.kh-ivm-g .kh-ivm-side { min-height: 16px; }    /* 순매수 막대는 한쪽만 그린다 — 막대가 없는 줄도 같은 높이 */
+
+/* 「오늘」 옆 어느 날 확정치인지 — 다른 기간에서도 자리를 비워 두어 칩 줄이 안 움직인다 */
+.kh-ivm-asof { display: inline-block; min-width: 10em; font-size: 12px; color: var(--kh-text-secondary); }
+
+/* 그래프 아래 개인 · 외국인 · 기관별 금액 칸 — 위 종목들 합. 좁은 폭은 세로로 셋 */
+.kh-ivm-tot { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 16px; }
+.kh-ivm-tot-c { background: var(--kh-bg-surface); border-radius: var(--kh-radius-md); padding: 12px 14px; }
+.kh-ivm-tot-h, .kh-ivm-tot-s { font-size: 12px; color: var(--kh-text-secondary); }
+.kh-ivm-tot-v { font-size: 18px; font-weight: 700; margin: 2px 0; }
 .kh-ivm-big .kh-ivm-mid { font-size: 14px; }
 
 /* 701px 부터 — 「매도 막대 · 종목 칸 · 매수 막대」 한 줄 */
@@ -55,6 +65,9 @@
   .kh-ivm-mid br { display: inline; }
   .kh-ivm-fill { height: 20px; }
   .kh-ivm-big .kh-ivm-fill { height: 30px; }
+  .kh-ivm-g .kh-ivm-side { min-height: 20px; }
+  .kh-ivm-tot { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .kh-ivm-tot-v { font-size: 20px; }
 }
 
 /* 1181px 부터 — 오른쪽 실시간 순위 서랍. 서랍 폭은 홈 오른쪽 칸(.kh-app-wide 의 368px)과 같게 — 홈 순위 칸을 그대로 옮겨 오므로.
@@ -63,7 +76,9 @@
   .kh-stage:has(.kh-ivm-rank) { --kh-drawer: 368px; --kh-gap: 36px; }
   .kh-stage:has(.kh-ivm) .kh-drawer-tab { display: flex; }
   .kh-stage:has(.kh-ivm) .kh-mh-tabs-r { display: inline; }
-  .kh-ivm { display: flex; height: min(680px, calc(100vh - 220px)); }
+  /* 모달 바닥까지 — 바닥 간격은 순위 칸 오른쪽 간격(손잡이 자리 22 + 스크롤바 6)과 같게 (2026-10-22 재권님 「오른쪽 떨어진 거 만큼 세로로 내려줘」).
+     전에는 680px 에서 멈춰 아래가 비었다. 모달 높이(77vh)는 css/modal.css 한 곳이 정한다 */
+  .kh-ivm { display: flex; height: calc(100% - 28px); }
   .kh-ivm-main { flex: 1; min-width: 0; overflow: auto; }
   .kh-stage.has-right .kh-ivm-rank {
     display: flex; flex-direction: column;
