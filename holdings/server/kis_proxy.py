@@ -3334,6 +3334,85 @@ def fetch_investor_long(cfg, code, days=INVESTOR_LONG_DAYS):
     return base + rs[1:]
 
 
+# ── 투자자 지표 모달 「그래프」 판 — 서버가 들고 있다 내준다 (2026-10-16 재권님 「정보 받아서 들고있어야」 · 「응」) ──
+#
+# 전에는 모달이 열릴 때마다 화면이 시세 18묶음을 차례로 묻고 그 뒤 상위 종목의 투자자 줄을 물었다 —
+# 여는 데 3~3.5초, 그중 시세 묶음이 2.3~3.4초였다(10-16 12:05 · 8765 실측). 이제 서버가 거래대금 순
+# 판을 하나 들고 있다가 `/api/kis/investor-board` 한 주소로 내준다.
+#   판이 PRICE_CACHE_TTL 보다 낡았으면  들고 있던 판을 **먼저 내주고** 뒤에서 다시 짓는다
+#   판이 없거나 INVESTOR_BOARD_STALE_TTL 보다 낡았으면  그 자리에서 짓는다(서버가 막 떴을 때 · 오래 쉰 뒤)
+# 시세는 `fetch_quotes_multi` · 투자자 줄은 `fetch_investor_long` 그대로 — 서버 캐시를 함께 쓴다.
+# 서버가 뜰 때 한 번 미리 짓는다(`--slow` 는 안 함). 판을 늘 돌려 짓지는 않는다 — 묻는 사람이 있을 때만 KIS 를 쓴다.
+INVESTOR_BOARD_TOP = 15            # 시장마다 줄 수 (화면 그래프 탭)
+INVESTOR_BOARD_STALE_TTL = 300     # 이보다 낡은 판은 먼저 내주지 않고 다시 지어 낸다 (초)
+INVESTOR_BOARD_MARKETS = ("ALL", "KOSPI", "KOSDAQ")
+INVESTOR_BOARD_WORKERS = 6         # 투자자 줄을 동시에 받는 수 — 호출 간격은 kis_get 이 지킨다
+_inv_board = {"at": 0.0, "data": None}
+_inv_board_lock = threading.Lock()         # 판을 읽고 바꾸는 자리
+_inv_board_build = threading.Lock()        # 짓는 것은 한 번에 하나
+
+
+def _investor_board_make(cfg):
+    """거래대금 순 판을 새로 짓는다. 시장마다 상위 INVESTOR_BOARD_TOP 과 그 종목들의 투자자 줄."""
+    import concurrent.futures
+    uni = [r for r in dart.universe_rows(None)
+           if (r["stock_code"] or "").isdigit() and len(r["stock_code"]) == 6]
+    quotes, errors = fetch_quotes_multi(cfg, [r["stock_code"] for r in uni])
+    items = []
+    for r in uni:
+        q = quotes.get(r["stock_code"]) or {}
+        if not q.get("value"):
+            continue
+        items.append({"code": r["stock_code"], "name": q.get("name") or r["name"], "market": r["market"],
+                      "value": q["value"], "price": q.get("price"), "pct": q.get("pct")})
+    items.sort(key=lambda x: -x["value"])
+    tops = {m: [x for x in items if m == "ALL" or x["market"] == m][:INVESTOR_BOARD_TOP]
+            for m in INVESTOR_BOARD_MARKETS}
+    need = list(dict.fromkeys(x["code"] for m in INVESTOR_BOARD_MARKETS for x in tops[m]))
+    inv = {}
+    with concurrent.futures.ThreadPoolExecutor(INVESTOR_BOARD_WORKERS) as ex:
+        for code, rows in zip(need, ex.map(lambda c: fetch_investor_long(cfg, c, INVESTOR_LONG_DAYS), need)):
+            inv[code] = rows or []
+    return {"tops": tops, "inv": inv,
+            "names": {r["stock_code"]: (quotes.get(r["stock_code"]) or {}).get("name") or r["name"] for r in uni},
+            "universe": len(uni), "quoted": len(quotes), "quoteErrors": len(errors or {})}
+
+
+def _investor_board_rebuild(cfg, wait):
+    """판을 다시 짓는다. wait=False 면 이미 짓는 중일 때 바로 돌아간다."""
+    if not _inv_board_build.acquire(blocking=wait):
+        return
+    try:
+        if wait:                    # 기다리는 사이 다른 쪽이 지었으면 그것을 쓴다
+            with _inv_board_lock:
+                if _inv_board["data"] is not None and time.time() - _inv_board["at"] < PRICE_CACHE_TTL:
+                    return
+        data = _investor_board_make(cfg)
+        if data["quoted"]:          # 시세를 하나도 못 받았으면 들고 있던 판을 덮지 않는다
+            with _inv_board_lock:
+                _inv_board["at"], _inv_board["data"] = time.time(), data
+    except Exception as e:
+        print("[투자자 판] 짓다 멈춤 — %s" % safe_message(e, 120))
+    finally:
+        _inv_board_build.release()
+
+
+def investor_board(cfg):
+    """(판, 지은 시각). 판이 없으면 (None, 0)."""
+    with _inv_board_lock:
+        at, data = _inv_board["at"], _inv_board["data"]
+    age = time.time() - at
+    if data is not None and age < PRICE_CACHE_TTL:
+        return data, at
+    if data is not None and age < max(INVESTOR_BOARD_STALE_TTL, PRICE_CACHE_TTL):
+        threading.Thread(target=_investor_board_rebuild, args=(cfg, False), daemon=True,
+                         name="investor-board").start()
+        return data, at
+    _investor_board_rebuild(cfg, True)
+    with _inv_board_lock:
+        return _inv_board["data"], _inv_board["at"]
+
+
 # ── 재무 다섯 — 모달 「투자 지표」 칸 재무 카드 (2026-10-02 지시) ──────────
 #
 # 재권님 — 재무 카드 시안 v3 를 보시고 「방향이 맞아 개발해」.
@@ -5791,17 +5870,72 @@ def _kr_fill_work():
     today = datetime.now(KST).strftime("%Y%m%d")
     work = []
     for code in _dwmy_codes():
-        days = [d for d in _recent_days(code, n) if not (d == today and _kr_busy())]
-        if not days:
-            continue
-        marks = _fill_marks(code)
-        have = {}
-        for ts in _5m_ts_since(code, days[0]):
-            have.setdefault(ts[:8], []).append(int(ts[8:10]) * 60 + int(ts[10:12]))
-        for d in reversed(days):                     # 최근 날부터
-            if d not in marks and not _day_complete(have.get(d, []), first, last):
-                work.append((code, d))
+        work.extend((code, d) for d in _kr_days_to_fill(code, n, first, last, today))
     return work
+
+
+def _kr_days_to_fill(code, n, first, last, today):
+    """한 종목의 최근 n 거래일 중 5분봉이 덜 찬 날(최근 날부터). 오늘은 장중이면 뺀다 — 그날 봉은 화면이 받는다."""
+    days = [d for d in _recent_days(code, n) if not (d == today and _kr_busy())]
+    if not days:
+        return []
+    marks = _fill_marks(code)
+    have = {}
+    for ts in _5m_ts_since(code, days[0]):
+        have.setdefault(ts[:8], []).append(int(ts[8:10]) * 60 + int(ts[10:12]))
+    return [d for d in reversed(days)
+            if d not in marks and not _day_complete(have.get(d, []), first, last)]
+
+
+# ── 지수 밖 종목도 열면 지난 5분봉을 채운다 (2026-10-16 재권님 「응 그래」) ──────────
+#
+# 위 뒤 작업은 지수 구성종목(`_dwmy_codes` · 코스피200 · 코스닥150)의 지난 거래일만 채운다. 그 밖 종목은
+# 화면이 여는 순간 받는 오늘 것뿐이라 5분봉이 하루치만 그려졌다(10-16 12:27 재권님 그림 · SNT다이나믹스 003570 —
+# 8765 의 5분봉 54개가 전부 그날 08:00~12:25 · MA60 · MA200 「봉 부족」).
+# 그래서 지수 밖 종목의 5분봉을 화면이 부르면 **그 종목만 한 번** 지난 거래일(`view_days`)을 뒤에서 채운다.
+# 날마다 하는 일은 뒤 작업과 같다(`_kr_past_day` · `_fill_mark`) — 하루 7번 안팎 · 종목당 1~2분.
+# 하루에 한 종목 한 번만 시작한다 — 화면은 5분봉을 30초마다 다시 부른다. 일봉이 없으면 그 일봉부터 받는다(거래일을 그것으로 센다).
+# 쓰는 서버(8765)에서만 돈다 — 세션 서버 · 서비스방은 DB 를 읽기만 한다(`marketdb.READONLY`).
+_kr_open_fill = {}                    # code -> 시작한 날(YYYYMMDD)
+_kr_open_lock = threading.Lock()
+_dwmy_set_cache = [0.0, frozenset()]  # [잰 시각, 지수 구성종목] — 한 시간 들고 있는다(5분봉 요청마다 DB 를 안 읽게)
+
+
+def _in_dwmy(code):
+    if time.time() - _dwmy_set_cache[0] > 3600:
+        _dwmy_set_cache[1] = frozenset(_dwmy_codes())
+        _dwmy_set_cache[0] = time.time()
+    return code in _dwmy_set_cache[1]
+
+
+def kick_kr_open_fill(cfg, code):
+    """지수 밖 국내 종목의 5분봉을 열었으면 지난 거래일 채우기를 뒤에서 한 번 시작한다."""
+    if not marketdb.writable() or not re.fullmatch(r"\d{6}", code or ""):
+        return
+    today = datetime.now(KST).strftime("%Y%m%d")
+    with _kr_open_lock:
+        if _kr_open_fill.get(code) == today:
+            return
+        _kr_open_fill[code] = today
+    if _in_dwmy(code):
+        return
+
+    def run():
+        try:
+            n = PERIODS["5m"]["view_days"]
+            if not _recent_days(code, n):
+                get_chart(cfg, code, "D", BARS_PER_CALL)     # 거래일을 셀 일봉부터 — 한 쪽
+            days = _kr_days_to_fill(code, n, KRX_OPEN[0] * 60 + KRX_OPEN[1],
+                                    KRX_CLOSE[0] * 60 + KRX_CLOSE[1], today)
+            for d in days:
+                _kr_past_day(cfg, code, d)
+                _fill_mark(code, d)
+            if days:
+                _bar_fill_log("연 종목 %s 지난 5분봉 %d일 채움" % (code, len(days)))
+        except Exception as e:
+            _bar_fill_log("연 종목 %s 지난 5분봉 오류 (%s)" % (code, type(e).__name__))
+
+    threading.Thread(target=run, daemon=True, name="kr-open-fill").start()
 
 
 def _us_fill_work():
@@ -7208,6 +7342,8 @@ class Handler(SimpleHTTPRequestHandler):
                     rows, fetched, source = read_candles(code, period, _view_limit(code, period, limit)), 0, "DB"
                 else:
                     rows, fetched, source = get_chart(cfg, code, period, limit)
+                if period == "5m":
+                    kick_kr_open_fill(cfg, code)        # 지수 밖 종목이면 지난 거래일을 뒤에서 한 번 (2026-10-16)
                 if PERIODS[period]["kis"] is None:      # 분봉(1m · 5m)만 — 일봉 이상은 받은 그대로
                     rows = drop_before_first_trade(rows)
                 # ── 안 받은 봉만 (2026-10-07 지시 — 「아직 안 받은 봉만 받아 덧붙이고, 받아 둔 봉은 다시 받지 않는다」) ──
@@ -7419,6 +7555,37 @@ class Handler(SimpleHTTPRequestHandler):
                         # 종목별은 확정치다 (docs/kis-sector-investor.md).
                         # 상위 목록(investor-top)만 가집계라 거기만 그렇게 적는다.
                         "provisional": False,
+                    },
+                })
+                return
+
+            # 투자자 지표 모달 「그래프」 판 (2026-10-16 · `investor_board`)
+            if route == "investor-board":
+                mkt = (qs.get("mkt") or ["ALL"])[0].upper()
+                if mkt not in INVESTOR_BOARD_MARKETS:
+                    self._send_json({"ok": False, "error": "mkt 는 %s 중 하나입니다." % " · ".join(INVESTOR_BOARD_MARKETS)}, 400)
+                    return
+                try:
+                    days = int((qs.get("days") or ["1"])[0])
+                except ValueError:
+                    days = 1
+                days = max(1, min(days, INVESTOR_LONG_DAYS))
+                board, at = investor_board(cfg)
+                if not board:
+                    self._send_json({"ok": False, "error": "투자자 판을 아직 못 지었습니다."}, 503)
+                    return
+                # 줄은 확정치 days 줄 + 장중 오늘 빈 줄 하나까지 — 화면이 빈 줄을 건너뛰고 days 줄을 더한다
+                data = [dict(x, rows=board["inv"].get(x["code"], [])[:days + 1]) for x in board["tops"][mkt]]
+                self._send_json({
+                    "ok": True, "data": data, "names": board["names"],
+                    "meta": {
+                        "mkt": mkt, "days": days, "top": INVESTOR_BOARD_TOP,
+                        "asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S"),
+                        "age": round(time.time() - at, 1),
+                        "universe": board["universe"], "quoted": board["quoted"],
+                        "quoteErrors": board["quoteErrors"],
+                        "qtyUnit": "주", "amtUnit": "백만원", "valueUnit": "원",
+                        "cacheTtl": PRICE_CACHE_TTL,
                     },
                 })
                 return
@@ -7698,6 +7865,11 @@ def main():
     elif start_prefill(cfg):
         print("  5분봉 준비 : 코스피 상위 %d종목을 뒤에서 미리 받습니다"
               % PREFILL_TOP)
+
+    # 투자자 지표 모달 판을 한 번 미리 짓는다 — 뜬 직후 첫 열기가 기다리지 않게 (2026-10-16)
+    if cfg and not SLOW:
+        threading.Thread(target=lambda: (time.sleep(20), investor_board(cfg)), daemon=True,
+                         name="investor-board-warm").start()
 
     # 미국 종목 목록(나스닥100 · 거래소 코드) — 하루 한 번 · KIS 호출 없음 (2026-10-07)
     # 「지금 뜨는 산업」 국내 주간 · 월간 — 장 마감 뒤 하루 한 번 · 네이버만 (2026-10-08)

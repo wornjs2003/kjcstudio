@@ -97,6 +97,10 @@ def main(argv):
         m = re.search(r"This reverts commit ([0-9a-f]{7,40})", body)
         if m:
             orig = full(m.group(1))
+            # **되돌림을 되돌린 것은 빼지 않는다** — 무른 것을 되살리는 커밋이라 변경이 그대로 나간다(2026-10-16 qa 시뮬 —
+            # X · Revert X · Revert 「Revert X」 셋이 다 빠져 「닿는 커밋 없음」 으로 지나갔다). 그 커밋이 제 통과 줄을 받는다
+            if orig and re.search(r"This reverts commit [0-9a-f]{7,40}", git("log", "-1", "--format=%B", orig)):
+                continue
             drop.add(c)
             if orig in commits:
                 drop.add(orig)

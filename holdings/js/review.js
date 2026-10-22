@@ -153,12 +153,14 @@ function paintWeek() {
   }).join('')}</div>`;
 }
 
+/* 종목 이름은 홈 모달 주소(`./?code=`)로 간다 — 회고 화면에는 종목 모달이 없어 홈으로 넘어가 그 종목 모달이 열린다
+   (2026-10-16 · `components/news-list.js` moveRowHtml 과 같은 까닭) */
 function paintDay() {
   const list = tradesOn(pick);
   const rows = list.length ? list.map((t) => `<div class="rv-rowwrap">
       <div class="rv-row">
         ${iconHtml(stockOf(t))}
-        <a class="rv-nm" href="./stock.html?code=${esc(t.code)}">${esc(t.name)}</a>
+        <a class="rv-nm" href="./?code=${esc(t.code)}">${esc(t.name)}</a>
         <span class="rv-side ${t.side === 'sell' ? 'sell' : 'buy'}">${t.side === 'sell' ? '매도' : '매수'}</span>
         <span class="rv-q">${t.qty == null || t.qty === '' ? '—' : Number(t.qty).toLocaleString('ko-KR') + '주'}</span>
         <span class="rv-p">${t.price == null || t.price === '' ? '—' : won(Number(t.price))}</span>
