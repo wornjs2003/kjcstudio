@@ -73,17 +73,19 @@
 /* 1181px 부터 — 오른쪽 실시간 순위 서랍. 서랍 폭은 홈 오른쪽 칸(.kh-app-wide 의 368px)과 같게 — 홈 순위 칸을 그대로 옮겨 오므로.
    틈은 14 + 손잡이 자리 22 — 손잡이가 순위표 등락률을 가리지 않게 */
 @media (min-width: 1181px) {
-  .kh-stage:has(.kh-ivm-rank) { --kh-drawer: 368px; --kh-gap: 36px; }
+  /* --kh-ivm-handle — 순위 칸 오른쪽 손잡이 자리. 오른쪽 여백과 바닥 간격이 함께 쓴다 */
+  .kh-stage:has(.kh-ivm-rank) { --kh-drawer: 368px; --kh-gap: 36px; --kh-ivm-handle: 22px; }
   .kh-stage:has(.kh-ivm) .kh-drawer-tab { display: flex; }
   .kh-stage:has(.kh-ivm) .kh-mh-tabs-r { display: inline; }
-  /* 모달 바닥까지 — 바닥 간격은 순위 칸 오른쪽 간격(손잡이 자리 22 + 스크롤바 6)과 같게 (2026-10-22 재권님 「오른쪽 떨어진 거 만큼 세로로 내려줘」).
-     전에는 680px 에서 멈춰 아래가 비었다. 모달 높이(77vh)는 css/modal.css 한 곳이 정한다 */
-  .kh-ivm { display: flex; height: calc(100% - 28px); }
+  /* 모달 바닥까지 — 바닥 간격은 순위 칸 오른쪽 간격(손잡이 자리 + 스크롤바)과 같게 (2026-10-22 재권님 「오른쪽 떨어진 거 만큼 세로로 내려줘」).
+     전에는 680px 에서 멈춰 아래가 비었다. 모달 높이(77vh)는 css/modal.css 한 곳이 정한다.
+     6px 은 assets/css/common.css 의 스크롤바 폭 — 그쪽에 변수가 없어(::-webkit-scrollbar) 여기 적는다. 바뀌면 함께 */
+  .kh-ivm { display: flex; height: calc(100% - var(--kh-ivm-handle) - 6px); }
   .kh-ivm-main { flex: 1; min-width: 0; overflow: auto; }
   .kh-stage.has-right .kh-ivm-rank {
     display: flex; flex-direction: column;
     flex: 0 0 var(--kh-drawer); width: var(--kh-drawer);
-    margin-left: 14px; padding-right: 22px; box-sizing: content-box;
+    margin-left: 14px; padding-right: var(--kh-ivm-handle); box-sizing: content-box;
   }
   .kh-ivm-rank .kh-side { flex: 1; display: flex; flex-direction: column; }
   .kh-ivm-rank .kh-side-wrap { position: relative; inset: auto; flex: 1; display: flex; flex-direction: column; min-height: 0; }

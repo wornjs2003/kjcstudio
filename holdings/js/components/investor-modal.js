@@ -37,7 +37,7 @@
 import { apiFetch } from '../data/api.js';
 import { openModal } from './modal.js';
 import { mountStockSearch } from './stock-search.js';
-import { signClass } from '../../../assets/js/sign.js';
+import { side, signClass } from '../../../assets/js/sign.js';
 
 const CSS_HREF = new URL('../../css/investor-modal.css', import.meta.url).href;
 const SIDES = [['person', '개인'], ['foreign', '외국인'], ['inst', '기관']];
@@ -103,23 +103,23 @@ function sideHtml(v, max, left) {
 
 /** 순매수 막대 하나 — 순매도는 왼쪽(파랑) · 순매수는 오른쪽(빨강). 매수 · 매도를 따로 그리지 않는다 */
 function netSide(v, max, left) {
-  const on = v != null && (left ? v < 0 : v > 0);
+  const on = side(v) === (left ? 'down' : 'up');      // 방향은 sign.js 한 곳(「오르내림 숫자의 글씨 색은 한 셈이다」)
   const amt = on ? `<span class="kh-ivm-amt">${eokS(v)}</span>` : '';
   const bar = on ? `<div class="kh-ivm-fill ${left ? 'sell' : 'buy'}" style="width:${Math.max(1.5, (Math.abs(v) / max) * 82)}%"></div>` : '';
   return `<div class="kh-ivm-side ${left ? 'l' : 'r'}">${left ? amt + bar : bar + amt}</div>`;
 }
 
-/** 여러 종목의 한 투자자 합 — 한 종목이라도 순매수 금액이 비면 순매수 합은 「—」 */
+/** 여러 종목의 한 투자자 합 — 한 종목이라도 순매수 금액이 비면 순매수 합은 「—」 · cnt 는 실제로 더한 종목 수 */
 function sumMany(list) {
-  let buy = 0, sell = 0, net = 0, any = false, miss = false, guess = false;
+  let buy = 0, sell = 0, net = 0, cnt = 0, miss = false, guess = false;
   for (const s of list) {
     if (!s) continue;
-    any = true;
+    cnt += 1;
     buy += s.buy; sell += s.sell;
     if (s.net == null) miss = true; else net += s.net;
     if (s.guess) guess = true;
   }
-  return any ? { buy, sell, net: miss ? null : net, guess } : null;
+  return cnt ? { buy, sell, net: miss ? null : net, guess, cnt } : null;
 }
 const mmdd = (d) => (d ? `${d.slice(4, 6)}-${d.slice(6, 8)}` : '');
 
@@ -246,7 +246,7 @@ export function openInvestorModal({ code } = {}) {
             <small>대금 ${wonEok(r.value)} · <span class="${signClass(r.s ? r.s.net : null)}">${eokS(r.s ? r.s.net : null)}</span></small></div>
           ${netSide(r.s ? r.s.net : null, max, false)}</div>`).join('')}
       <div class="kh-ivm-tot">${totals.map(({ n: n2, t }) => `<div class="kh-ivm-tot-c">
-          <div class="kh-ivm-tot-h">${n2} · 위 ${rows.length}종목 합</div>
+          <div class="kh-ivm-tot-h">${n2} · ${t ? `위 ${t.cnt}종목 합` : '값 없음'}</div>
           <div class="kh-ivm-tot-v ${signClass(t ? t.net : null)}">${eokS(t ? t.net : null)}</div>
           <div class="kh-ivm-tot-s">매수 ${eok(t ? t.buy : null)} · 매도 ${eok(t ? t.sell : null)}</div></div>`).join('')}</div>
       <div class="kh-ivm-note">${(DAYS.find((d) => d[0] === st.days) || [])[1]} 합 · 금액은 확정치${guess ? ' · 매수 · 매도 금액 일부는 수량 × 종가 어림' : ''} ·
