@@ -2427,47 +2427,6 @@ def _index_backfill(cfg, code, period, want):
     return sorted(got.values(), key=lambda b: b["ts"])
 
 
-# 데일리 「지수 대비 강한 종목」 — (지수 구성 코드 · 이름 · 기준 지수) · 2026-10-22 재권님 「응」
-DAILY_STRONG_MARKETS = [("KPI200", "코스피", "0001"), ("KQI150", "코스닥", "1001")]
-DAILY_STRONG_DAYS = 45       # 달력 날 — 한 달(20거래일)을 덮고 휴장을 감안
-
-
-def _daily_strong(cfg):
-    """구성 종목 일봉 · 지수 일봉을 날짜와 함께 모아 `daily.build_strong` 에 넘길 모양으로.
-
-    **종목마다 KIS 한 번**(일봉 한 번에 100개 · 45일이면 한 번에 온다) — 구성 종목 수만큼 부른다.
-    오늘(장 전 07:30) 봉은 뺀다. 구성 목록은 `dart.index_members_map()` 그대로 — 그쪽이 하루 한 번 새로 받는다.
-    """
-    now = datetime.now(KST)
-    today = now.strftime("%Y%m%d")
-    dfrom = (now - timedelta(days=DAILY_STRONG_DAYS)).strftime("%Y%m%d")
-    names = {}
-    try:
-        with dart._db_lock, dart.db_conn() as conn:
-            for r in conn.execute("SELECT stock_code, index_code, name FROM index_members"):
-                names.setdefault(r["index_code"], []).append((r["stock_code"], r["name"]))
-    except Exception:
-        names = {}
-    out = []
-    for icode, label, num in DAILY_STRONG_MARKETS:
-        try:
-            ib = [b for b in fetch_index_candles(cfg, num, "D") if str(b["ts"])[:8] < today]
-        except Exception:
-            ib = []
-        index = [(str(b["ts"])[:8], float(b["close"])) for b in ib if b.get("close")]
-        stocks = []
-        for code, name in names.get(icode, []):
-            try:
-                bars = fetch_bars_from_kis(cfg, code, "D", dfrom, today)
-            except Exception:
-                continue
-            stocks.append({"code": code, "name": name,
-                           "bars": [(str(b["ts"])[:8], float(b["close"])) for b in bars
-                                    if b.get("close") and str(b["ts"])[:8] < today]})
-        out.append({"label": label, "index": index, "stocks": stocks})
-    return out
-
-
 def _daily_indices(cfg):
     """데일리(07:30)가 담을 지수 — 화면과 같은 `fetch_indices_all` 에 **전일 등락**을 채운다.
 
@@ -8042,7 +8001,6 @@ def main():
             # 그것을 만드는 `fetch_issues()` 는 `{rows, errors, topics}` 를 준다.
             # 처음에 `issues` 로 적었다가 실제로 불러 보고 잡았다 (2026-09-22).
             get_issues=lambda: (news.fetch_issues() or {}).get("rows") or [],
-            get_strong=lambda: _daily_strong(load_secrets()),
             # 발송은 공시와 같은 통로를 쓴다. **`NOTIFY_LOCAL` 과 무관하다** —
             # 그것은 공시만 막는다 (dart.py 주석 참고).
             #

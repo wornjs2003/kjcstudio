@@ -93,12 +93,6 @@ AWAY_CODES = ["SPX", "NASDAQ", "NDX", "SOX", "SX5E", "HSCE", "VIX", "USDKRW"]
 TITLE_MAX = 34
 NEWS_MAX = 3            # 주제가 겹치지 않는 것으로 셋까지
 SECTOR_TOP = 3
-# 지수 대비 강한 종목 (2026-10-22 재권님 — 「코스피랑 코스닥 지수 대비 더 강한 종목들 10개 정도씩 … 아침에 텔레그램 올 때
-# 같이」 · 「전일 대비, 일주일 대비, 한 달 대비로 묶어서」 · 안에 「응」). 대상은 지수 구성 종목이라 ETF · 우선주가 저절로 빠진다.
-STRONG_TOP = 10
-STRONG_SPANS = [("전일", 1), ("일주일", 5), ("한 달", 20)]      # (이름, 거래일 수)
-# **발송 문안에는 아직 안 넣는다** — 보내는 글이 바뀌는 「켜기」 라 재권님 승인 뒤 True. 저장본에는 늘 담는다.
-STRONG_SEND = False
 
 
 # ── 숫자 표기 ──
@@ -228,64 +222,6 @@ def calendar_today(now=None):
     return out
 
 
-def strong_rank(index_bars, stocks, n, top=STRONG_TOP):
-    """지수보다 n 거래일 동안 더 오른 폭이 큰 순. `index_bars` · 종목 `bars` 는 [(날짜, 종가), …] 오래된 것부터.
-
-    **날짜로 맞춘다** — 끝 날짜가 지수와 다른 종목(거래 정지 등)이나 기준일 종가가 없는 종목은 뺀다.
-    줄 수로만 견주면 하루 쉰 종목이 다른 날끼리 견주어진다. 지수 봉이 모자라면 빈 목록이다(못 쟀다 · 0 이 아니다).
-    """
-    if not index_bars or len(index_bars) <= n:
-        return []
-    last_d, last_v = index_bars[-1]
-    base_d, base_v = index_bars[-1 - n]
-    if not base_v:
-        return []
-    ir = (last_v / base_v - 1) * 100
-    out = []
-    for st in stocks or []:
-        m = dict(st.get("bars") or [])
-        a, b = m.get(base_d), m.get(last_d)
-        if not a or not b:
-            continue
-        r = (b / a - 1) * 100
-        out.append({"code": st.get("code"), "name": st.get("name") or st.get("code"),
-                    "pct": round(r, 2), "index": round(ir, 2), "gap": round(r - ir, 2)})
-    out.sort(key=lambda x: x["gap"], reverse=True)
-    return out[:top]
-
-
-def build_strong(markets):
-    """[{label, index:[(날짜,종가)], stocks:[…]}] → 저장본에 담을 모양. 시장마다 기간 셋."""
-    res = []
-    for mk in markets or []:
-        idx = mk.get("index") or []
-        res.append({
-            "label": mk.get("label"),
-            "asOf": idx[-1][0] if idx else None,
-            "count": len(mk.get("stocks") or []),
-            "spans": [{"name": nm, "days": n, "rows": strong_rank(idx, mk.get("stocks"), n)}
-                      for nm, n in STRONG_SPANS],
-        })
-    return res
-
-
-def strong_lines(strong):
-    """문안 줄. 기간에 줄이 없으면 「못 셈」 — 0 개로 적지 않는다."""
-    L = []
-    for mk in strong or []:
-        for sp in mk.get("spans") or []:
-            rows = sp.get("rows") or []
-            idx = rows[0]["index"] if rows else None
-            L += ["", f"{mk.get('label')} 지수보다 강한 종목 · {sp.get('name')}"
-                  + (f" (지수 {pct(idx)})" if idx is not None else "")]
-            if not rows:
-                L.append("· 못 셈 (봉을 못 받음)")
-                continue
-            for i, r in enumerate(rows, 1):
-                L.append(f"{i}. {r['name']} {pct(r['pct'])} (지수보다 {'+' if r['gap'] > 0 else ''}{r['gap']:.2f}%p)")
-    return L
-
-
 def sector_sides(sectors):
     """오름·내림으로 가른다. **`pct` 가 없는 것은 뺀다** — 섞여 오는 날이 있다."""
     ok = [s for s in (sectors or []) if s.get("pct") is not None]
@@ -298,7 +234,7 @@ def sector_sides(sectors):
 
 # ── 문안 ──
 
-def build_telegram(indices=None, sectors=None, issues=None, schedule=None, now=None, strong=None):
+def build_telegram(indices=None, sectors=None, issues=None, schedule=None, now=None):
     """폰으로 가는 글을 만든다. `buildTelegram()` 을 그대로 옮긴 것이다."""
     L = [f"📊 데일리분석 · {today_label(now)}"]
 
@@ -362,9 +298,6 @@ def build_telegram(indices=None, sectors=None, issues=None, schedule=None, now=N
             L.append("· 오름 — " + " · ".join(one(s) for s in up[:SECTOR_TOP]))
         if down:
             L.append("· 내림 — " + " · ".join(one(s) for s in down[:SECTOR_TOP]))
-
-    if strong and STRONG_SEND:
-        L += strong_lines(strong)
 
     # 화면에는 빨간 자국으로 남아 있는 칸들이다. 문안에서 통째로 빼면 폰에서는
     # 무엇이 빠졌는지 알 수 없다. 붙으면 이 줄을 지운다.
@@ -433,7 +366,7 @@ def purge_old(keep=KEEP):
     return gone
 
 
-def save_today(indices, sectors, issues, schedule=None, now=None, strong=None):
+def save_today(indices, sectors, issues, schedule=None, now=None):
     """그날 것을 저장한다. 이미 있으면 **안 쓰고** `None` 을 돌려준다.
 
     **원본을 그대로 담는다.** 화면이 그리는 것만 추리면 나중에 다른 것을
@@ -457,8 +390,7 @@ def save_today(indices, sectors, issues, schedule=None, now=None, strong=None):
                      for e in (sch or [])],
         # **그날 실제로 보낸 글**을 남긴다. 다시 만들 수는 있지만, 그때 코드로
         # 만든 것이라 나중에 코드가 바뀌면 달라진다.
-        "strong": strong or [],
-        "telegram": build_telegram(indices, sectors, issues, sch, now, strong),
+        "telegram": build_telegram(indices, sectors, issues, sch, now),
     }
     # `history=False` — 날짜가 키라 같은 이름을 다시 쓰는 일이 같은 날 두 번뿐이고,
     # 그때는 덮는 것이 맞다. 열 장이 이미 이력이다.
@@ -466,7 +398,7 @@ def save_today(indices, sectors, issues, schedule=None, now=None, strong=None):
     return data if ok else None
 
 
-def start_daily(get_indices, get_sectors, get_issues, send=None, keep=KEEP, get_strong=None):
+def start_daily(get_indices, get_sectors, get_issues, send=None, keep=KEEP):
     """07:30 루프를 띄운다. `kis_proxy` 가 한 줄로 부른다.
 
     `send(text)` 를 주면 저장한 뒤 그 글을 보낸다. 안 주면 저장만 한다 —
@@ -479,14 +411,7 @@ def start_daily(get_indices, get_sectors, get_issues, send=None, keep=KEEP, get_
             return                              # 아직 07:30 전
         if docstore.read_doc(doc_name(now)) is not None:
             return                              # 오늘 것이 이미 있다
-        # 강한 종목은 KIS 를 종목마다 한 번(구성 종목 수만큼) 부른다 — 못 받아도 나머지는 저장한다
-        strong = None
-        if get_strong:
-            try:
-                strong = build_strong(get_strong())
-            except Exception as e:
-                print("데일리분석 강한 종목 못 셈 — %s: %s" % (type(e).__name__, safe_message(e)), flush=True)
-        data = save_today(get_indices(), get_sectors(), get_issues(), None, now, strong)
+        data = save_today(get_indices(), get_sectors(), get_issues(), None, now)
         if not data:
             return
         purge_old(keep)
