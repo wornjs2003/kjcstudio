@@ -878,12 +878,42 @@ def in_quiet(ts=None):
     return m >= QUIET_FROM or m < QUIET_TO       # 자정을 넘는다
 
 
-def telegram_send(text):
-    if in_quiet():
-        return False, QUIET_REASON
-    cfg = telegram_config()
-    if not cfg:
-        return False, "텔레그램 설정이 없습니다 (secrets.json 의 telegram)"
+# 텔레그램 한 통의 한도는 4,096자다(UTF-16 단위로 센다 · 이모지는 2). 넘으면 sendMessage 가 통째로 실패한다.
+# 넘는 날만 줄 경계로 나눠 차례로 보낸다 — 「넘는 날만 두 통」 재권님 「가」(2026-10-23). 여유를 두고 4,000 으로 자른다.
+TELEGRAM_MAX = 4000
+
+
+def _tg_len(s):
+    return len(s.encode("utf-16-le")) // 2
+
+
+def telegram_chunks(text, limit=TELEGRAM_MAX):
+    """한도 안이면 [text] 그대로. 넘으면 줄 경계로 나눈다 — 한 줄이 한도보다 길 때만 그 줄을 글자로 자른다."""
+    if _tg_len(text) <= limit:
+        return [text]
+    out, cur = [], ""
+    for line in text.split("\n"):
+        while _tg_len(line) > limit:            # 한 줄이 통째로 넘는 드문 경우
+            if cur:
+                out.append(cur)
+                cur = ""
+            cut = limit
+            while _tg_len(line[:cut]) > limit:
+                cut -= 1
+            out.append(line[:cut])
+            line = line[cut:]
+        cand = line if not cur else cur + "\n" + line
+        if _tg_len(cand) > limit:
+            out.append(cur)
+            cur = line
+        else:
+            cur = cand
+    if cur.strip():
+        out.append(cur)
+    return [c for c in out if c.strip()]
+
+
+def _telegram_post(cfg, text):
     url = "https://api.telegram.org/bot%s/sendMessage" % cfg["token"]
     data = urllib.parse.urlencode({
         "chat_id": cfg["chat"],
@@ -898,6 +928,21 @@ def telegram_send(text):
     except Exception as e:
         # 주소에 봇 토큰이 들어 있다. 예외 문구에 URL 이 섞이면 토큰이 샌다.
         return False, safe_message(e, 100)
+
+
+def telegram_send(text):
+    if in_quiet():
+        return False, QUIET_REASON
+    cfg = telegram_config()
+    if not cfg:
+        return False, "텔레그램 설정이 없습니다 (secrets.json 의 telegram)"
+    parts = telegram_chunks(text)
+    for i, part in enumerate(parts):
+        ok, why = _telegram_post(cfg, part)
+        if not ok:
+            # 몇 번째에서 멈췄는지 함께 낸다 — 앞 통은 이미 갔다(못 지운다)
+            return False, why if len(parts) == 1 else "%d통 중 %d번째 실패: %s" % (len(parts), i + 1, why)
+    return True, "" if len(parts) == 1 else "%d통으로 나눠 보냄" % len(parts)
 
 
 def format_message(row):
