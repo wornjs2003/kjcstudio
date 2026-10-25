@@ -56,7 +56,7 @@ from secrets_guard import safe_message
 KST = timezone(timedelta(hours=9))
 ET = ZoneInfo("America/New_York")
 
-SEND = False                 # 켜기는 따로 지시 — 위 머리 주석
+SEND = True                  # 2026-10-25 재권님 「응 해줘」 로 켬(작업우선순위 경유) — 끄려면 False · 위 머리 주석
 TICK = 300                   # 5분마다 한 바퀴 (공시 바퀴와 같은 간격)
 GIVE_UP_H = 12               # 결과 시각부터 이만큼 지나도 못 받으면 「못 받음」 한 줄
 TIMEOUT = 20
