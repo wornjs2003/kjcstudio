@@ -621,12 +621,18 @@ def check(kday):
         found += 1
         p = parse_fomc(_text(_get(url, SEC_UA)))
         print(format_fomc(p, url) if p else "FOMC 숫자 못 읽음 %s" % url, "\n")
-    for cik, title in [(1652044, "알파벳(구글)"), (50863, "인텔"), (1018724, "아마존"), (2023554, "샌디스크")]:
+    # 회사 목록은 일정 파일의 result.type == "sec" 줄에서 뽑는다 — 여기 따로 적으면 회사가 늘 때 이쪽만 낡는다
+    seen = {}
+    for e in _cal().get("events", []):
+        r = e.get("result") or {}
+        if r.get("type") == "sec" and r.get("cik") not in seen:
+            seen[r["cik"]] = e.get("title", "")
+    for cik, title in seen.items():
         f = sec_earnings_filing(cik, et_day)
         if f:
             found += 1
             url = sec_exhibit(cik, f[0])
-            print(format_earnings_us(title + " 실적", parse_earnings_us(_text(_get(url, SEC_UA))), url), "\n")
+            print(format_earnings_us(title, parse_earnings_us(_text(_get(url, SEC_UA))), url), "\n")
             time.sleep(0.3)
     print("(%s · 찾은 결과 %d건 · 미국 지표는 FRED 발표일 범위가 지난 40일이라 여기서 안 봄)" % (kday, found))
 
