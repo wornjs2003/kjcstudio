@@ -8104,8 +8104,10 @@ def main():
     # 실적 · FOMC · 미국 지표 결과 알림 (2026-10-25 재권님 「가」 · server/events.py) — 신호 감시와 같은 문 하나(보내는 서버만).
     # **`events.SEND = False` 가 기본이다** — 바퀴는 돌되 안 보내고, 보냈을 글을 /api/events/status 에 남긴다. 켜기는 재권님 지시로
     if not SLOW and is_sender(args.port) and events.start():
-        print("  결과 알림 : 사용 (%d초마다 · 밤 22~07시 것은 07:00 한 통%s)"
-              % (events.TICK, "" if events.SEND else " · **발송 꺼짐 — 미리보기만**"))
+        # 조용한 시간은 `dart.QUIET_FROM`·`QUIET_TO` 에서 만든다 — 여기 박으면 그쪽을 고쳤을 때 이 줄만 낡는다
+        print("  결과 알림 : 사용 (%d초마다 · 밤 %02d~%02d시 것은 %02d:00 한 통%s)"
+              % (events.TICK, dart.QUIET_FROM // 60, dart.QUIET_TO // 60, dart.QUIET_TO // 60,
+                 "" if events.SEND else " · **발송 꺼짐 — 미리보기만**"))
 
     if not SLOW and is_sender(args.port) and signal_watch.start(sys.modules[__name__]):
         # **시각을 여기 박지 않는다.** `SESSION_FROM`·`SESSION_TO` 에서 만든다 —
