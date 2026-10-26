@@ -13,10 +13,10 @@
     견줌     오늘 장 전 거래량 ≥ 전날(저장해 둔 앞 거래일) 장 전 거래량 × RATIO · 전날이 MIN_PREV 주 이상인 것만
              (전날 1주 → 오늘 2주 같은 헛배율을 막는다 · 재권님 답에 문턱이 없어 추천값 1만주 — 글 머리에 적는다)
     글       배율 큰 순 · 종목(코드) · 배율 · 오늘 · 전날 · 장외가 · 전날 정규장 종가 대비 % · 길면 dart.telegram_send 가 나눠 보낸다
-    저장     market.db 의 `nxt_pre` (날 · 종목 · 거래량 · 장외가 · 전날 종가) — 다음 날 견줄 재료. **처음 켠 다음 거래일부터 목록이 나온다**
+    저장     market.db 의 `nxt_pre` (날 · 종목 · 거래량 · 장외가 · 전날 종가) — 다음 날 견줄 재료. **처음 켠 다음 거래일부터 목록이 나온다** — 빠진 날은 서버가 뜰 때 1분봉으로 채운다(아래 「빠진 날 채우기」)
     휴장     NX 거래량 합이 0 이면 휴장으로 보고 저장도 발송도 안 한다(공휴일을 따로 가리지 못한다)
 
-**보내기는 따로 켠다** — `SEND`. 꺼져 있으면 저장 · 셈만 하고 로그와 `status()` 에 보낼 글을 남긴다(「켜기 전에 먼저 잰다」).
+**보내기는 따로 켠다** — `SEND`(2026-10-26 켬). 꺼져 있으면 저장 · 셈만 하고 로그와 `status()` 에 보낼 글을 남긴다(「켜기 전에 먼저 잰다」).
 8765 만 돈다(`kis_proxy` 가 `is_sender` 로 부른다). KIS 는 `proxy.kis_get` 으로 — 예산 · 토큰은 그쪽이 든다.
 """
 
@@ -33,7 +33,7 @@ from secrets_guard import safe_message
 
 KST = timezone(timedelta(hours=9))
 
-SEND = False
+SEND = True                     # 2026-10-26 재권님 「응 해줘」 — 다음 날 08:51 부터 한 통(길면 나눠)
 RUN_AT = (8, 51)                # 장 전 시장(08:00~08:50)이 닫힌 뒤
 RUN_UNTIL = (9, 0)              # 이 시각이 지나면 그날은 건너뛴다 — 정규장이 열리면 NX 거래량에 본장이 섞인다
 RATIO = 2.0                     # 「100% 이상 증가」 = 2배 이상
@@ -50,7 +50,7 @@ _SCHEMA = """CREATE TABLE IF NOT EXISTS nxt_pre (
     day TEXT NOT NULL, code TEXT NOT NULL, name TEXT, vol INTEGER, price INTEGER, prev_close INTEGER,
     saved_at TEXT, PRIMARY KEY (day, code))"""
 
-_status = {"lastRunDay": None, "lastRunAt": None, "codes": None, "nonzero": None, "hits": None,
+_status = {"backfill": None, "lastRunDay": None, "lastRunAt": None, "codes": None, "nonzero": None, "hits": None,
            "preview": None, "error": None, "send": SEND}
 
 
@@ -190,6 +190,72 @@ def run_once(proxy, day=None):
     return dict(_status)
 
 
+# ── 빠진 날 채우기 (2026-10-26) ──
+# 재권님 「내일 받을수 있게 해줘」 → 「응 해줘」. 켠 날은 견줄 앞 거래일 장 전 값이 없어 다음 날 목록이 안 나온다(위 「처음 켠 다음 거래일부터」).
+# 그 날 08:00~08:49 의 NX 1분봉(주식일별분봉조회 FHKST03010230 · 시장 NX · 085000 기준 120개) 거래량을 더해 그 날 값으로 채운다.
+#   2026-10-26 실측 — 그날 봉 50개(0800~0849) · 삼성전자 합 1,600,745주 · 주권 2,717 중 그날 NX 거래 603 → 부름 약 700번
+#   언제   서버가 뜬 뒤 한 번 · 장 전 바퀴(08:00~09:00) 밖일 때 · 「마지막 거래일」(평일 09:00 뒤면 오늘 · 아니면 앞 평일)에 저장한 값이 없을 때만
+#   거래 있는 종목만 분봉을 부른다(멀티 시세 NX 누적 거래량 > 0) · 한 종목이 실패하면 그 종목만 빠진다 · 합이 0 이면 휴장으로 보고 안 쓴다
+#   장외가는 0849 봉 종가 · 전날 종가는 멀티 시세의 전일 종가 — 다음 날 견줌에는 거래량만 쓴다
+PRE_FROM, PRE_TO = "0800", "0849"
+
+
+def _last_trading_day(now):
+    d = now
+    if not (d.weekday() < 5 and (d.hour, d.minute) >= RUN_UNTIL):
+        d = d - timedelta(days=1)
+    while d.weekday() >= 5:
+        d = d - timedelta(days=1)
+    return d.strftime("%Y%m%d")
+
+
+def _pre_minutes(proxy, cfg, code, day):
+    data = proxy.kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice",
+                         {"FID_COND_MRKT_DIV_CODE": "NX", "FID_INPUT_ISCD": code, "FID_INPUT_HOUR_1": "085000",
+                          "FID_INPUT_DATE_1": day, "FID_PW_DATA_INCU_YN": "Y", "FID_FAKE_TICK_INCU_YN": ""},
+                         "FHKST03010230")
+    vol, last = 0, None
+    for r in (data or {}).get("output2") or []:
+        t = str(r.get("stck_cntg_hour") or "")[:4]
+        if r.get("stck_bsop_date") != day or not (PRE_FROM <= t <= PRE_TO):
+            continue
+        vol += proxy._num(r.get("cntg_vol"), int) or 0
+        if last is None or t > last[0]:
+            last = (t, proxy._num(r.get("stck_prpr"), int))
+    return vol, (last[1] if last else None)
+
+
+def backfill(proxy, day):
+    """그 날 장 전 값을 분봉으로 채운다 — 저장한 종목 수. 이미 있으면 0."""
+    _init(proxy)
+    if _saved(proxy, day):
+        return 0
+    cfg = proxy.load_secrets()
+    names = master_codes()
+    now_rows = fetch_nx(proxy, cfg, names)                 # 그날 NX 누적 — 거래 있는 종목 가르기 · 전일 종가
+    out, fail = [], 0
+    for code, r in now_rows.items():
+        if not r["vol"]:
+            continue
+        try:
+            vol, price = _pre_minutes(proxy, cfg, code, day)
+        except Exception:
+            fail += 1
+            continue
+        out.append((day, code, r["name"] or names.get(code), vol, price, r["prev_close"]))
+        time.sleep(GAP_SEC)
+    if not sum(x[3] for x in out):
+        _status["backfill"] = {"day": day, "saved": 0, "fail": fail, "note": "장 전 거래량 합이 0 — 휴장으로 보고 안 씀"}
+        return 0
+    stamp = _now().isoformat(timespec="seconds") + " 채움"
+    with proxy._db_lock, proxy.db_conn() as conn:
+        conn.executemany(
+            "INSERT OR IGNORE INTO nxt_pre (day, code, name, vol, price, prev_close, saved_at) VALUES (?,?,?,?,?,?,?)",
+            [x + (stamp,) for x in out])
+    _status["backfill"] = {"day": day, "saved": len(out), "fail": fail, "at": stamp}
+    return len(out)
+
+
 def status():
     return dict(_status, send=SEND)
 
@@ -198,6 +264,16 @@ def start(proxy):
     """서버가 뜰 때 한 번. 평일 08:51~09:00 사이 첫 바퀴에 그날 한 번 돈다."""
     def loop():
         time.sleep(30)
+        try:                                     # 빠진 날 채우기 — 뜬 뒤 한 번(장 전 바퀴 밖일 때만)
+            now = _now()
+            if not ((8, 0) <= (now.hour, now.minute) < RUN_UNTIL):
+                day = _last_trading_day(now)
+                n = backfill(proxy, day)
+                if n:
+                    print("  [장 전 거래량] %s 장 전 값을 1분봉으로 채움 — %d종목(실패 %s)" % (day, n, _status["backfill"].get("fail")))
+        except Exception as e:
+            _status["backfill"] = {"error": safe_message(e, 160)}
+            print("  [장 전 거래량] 채우기 실패: %s" % type(e).__name__)
         while True:
             try:
                 now = _now()
