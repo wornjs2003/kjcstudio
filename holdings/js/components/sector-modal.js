@@ -21,9 +21,8 @@
        카드    묶음 셋 · 이름/가격/등락률
        모달    묶음 셋 · **거래대금 · 거래량까지** · 칩으로 4위 아래도 본다
 
-   **칩을 누르면 그 칩부터 셋**이 나온다 — 1위를 누르면 1·2·3위, 4위를
-   누르면 4·5·6위다. 그래서 스무 묶음을 다 볼 수 있으면서 **언제나 셋**이다.
-   (전에는 칩으로 하나를 골라 그 종목만 표로 봤다.)
+   ~~칩을 누르면 그 칩부터 셋~~ — **2026-10-26 에 바뀌었다**(재권님 「가 · 받아」): 칩을 누르면 **그 칩 줄 바로 아래**에
+   그 묶음 하나의 종목이 펼쳐진다 · 같은 칩 다시 누름 · ✕ 로 접는다. 테마가 257개라 칩 아래 셋 표가 화면 밖이었다.
 
    ── 종류를 바꿔도 카드는 안 바뀐다 ──
 
@@ -48,9 +47,6 @@ const WIDTH = 1100;
 
 const KIND_LABEL = { industry: '업종', theme: '테마' };
 
-/* **한 번에 보여줄 묶음 수** (2026-09-22 지시 — 「업종 3개 … 테마가 3개」).
-   카드와 같은 셋이다. 칩을 누르면 그 칩부터 셋이 나온다. */
-const SHOW = 3;
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g,
@@ -76,8 +72,12 @@ export function openSectorModal(snap, opt = {}) {
   let span = snap.span || 'd';
   let groups = snap.groups || [];
   let total = snap.total || groups.length;
-  /* **시작 자리**다. 여기서부터 셋을 보여준다 — 칩을 누르면 이것이 바뀐다 */
+  /* **펼친 칩**의 자리 (2026-10-26 재권님 「가 · 받아」 — 칩을 누르면 그 칩 줄 바로 아래에 그 묶음 종목이 펼쳐진다).
+     전에는 「그 칩부터 셋」 을 칩 줄 **아래** 표 셋으로 그렸는데, 테마가 257개라 그 표가 칩 밑 화면 밖이어서
+     「눌러도 안 나온다」 로 보였다. 이제 하나만 · 칩 바로 아래. 같은 칩을 다시 누르거나 ✕ 면 접는다(`open = false`).
+     처음 열 때는 카드에서 고른 묶음(보통 1위)을 펼친 채로 연다 — 전에도 그것부터 보였다 */
   let from = Math.max(0, groups.findIndex((g) => g.no === snap.pick));
+  let open = true;
   let seq = 0;
 
   /* 묶음마다 받아 둔 종목. `snap.pickGroup` 이 받아 오고 여기에 쌓인다 */
@@ -135,7 +135,7 @@ export function openSectorModal(snap, opt = {}) {
       changeCls: dirClass(top.pct),
       note: from === 0
         ? `가장 많이 오른 ${KIND_LABEL[kind]}`
-        : `${from + 1}위 ${KIND_LABEL[kind]} — 아래 셋의 첫째`,
+        : `${from + 1}위 ${KIND_LABEL[kind]}`,
     };
   }
 
@@ -181,6 +181,7 @@ export function openSectorModal(snap, opt = {}) {
     kind = id;
     groups = [];
     from = 0;
+    open = true;
     m.head.setTab(id);
     paint();                       // 「불러오는 중」 을 먼저 보여준다
 
@@ -206,6 +207,7 @@ export function openSectorModal(snap, opt = {}) {
     groups = [];
     rowsBy = {};
     from = 0;
+    open = true;
     paint();
     const got = await snap.listGroups(kind, span);
     if (mine !== seq) return;
@@ -222,9 +224,9 @@ export function openSectorModal(snap, opt = {}) {
 
   /* ── 보이는 셋의 종목 ── */
 
-  /** 지금 보여줄 묶음 셋 */
+  /** 지금 펼친 묶음 — 접혀 있으면 없음 */
   function shown() {
-    return groups.slice(from, from + SHOW);
+    return open && groups[from] ? [groups[from]] : [];
   }
 
   /** 셋을 **한꺼번에** 받는다. 받아 둔 것은 다시 안 부른다 */
@@ -260,14 +262,25 @@ export function openSectorModal(snap, opt = {}) {
             백틱 하나가 문자열을 끊는다. 2026-09-23 에 한 번 끊었다.) -->
       <div class="kh-chips kh-scm-span">${spanChipsHtml(span, mkt)}</div>
       <div class="kh-scm-chips">${groups.map((x, i) => `
-        <button class="kh-chip${i >= from && i < from + SHOW ? ' is-active' : ''}"
-          data-i="${i}" title="여기부터 ${SHOW}개를 봅니다">
+        <button class="kh-chip${open && i === from ? ' is-active' : ''}"
+          data-i="${i}" title="${open && i === from ? '다시 누르면 접습니다' : '이 묶음의 종목을 바로 아래에 펼칩니다'}">
           ${esc(x.name)}<b class="${dirClass(x.pct)}">${fmtPct(x.pct)}</b>
         </button>`).join('')}</div>
-      <div class="kh-scm-cols">${want.map((g, i) => `
-        <div class="kh-scm-col">${groupHead(g, from + i + 1)}${stockTable(g, err)}</div>`)
-        .join('<i class="kh-scm-vr" aria-hidden="true"></i>')}</div>
     </div>`;
+
+    /* 펼친 칸은 **그 칩이 있는 줄의 마지막 칩 뒤**에 끼운다 — 줄 전체 폭(flex-basis 100%)이라 그 아래 칩 줄들만 밀린다.
+       어느 칩이 같은 줄인지는 그려 본 뒤 자리(top)로 가른다 — 모달 폭 · 이름 길이에 따라 줄이 바뀌어서다 */
+    const g = want[0];
+    if (g) {
+      const btns = [...m.body.querySelectorAll('.kh-scm-chips [data-i]')];
+      const top = btns[from].getBoundingClientRect().top;
+      let last = btns[from];
+      for (let i = from + 1; i < btns.length && Math.abs(btns[i].getBoundingClientRect().top - top) < 4; i++) last = btns[i];
+      last.insertAdjacentHTML('afterend', `<div class="kh-scm-open">
+        <button type="button" class="kh-scm-x" data-scm-close aria-label="접기">✕</button>
+        ${groupHead(g, from + 1)}${stockTable(g, err)}</div>`);
+      m.body.querySelector('[data-scm-close]').addEventListener('click', () => { open = false; refreshHead(); paint(); });
+    }
 
     /* 기간 칩 — 눌리지 않는 칩은 disabled 라 클릭이 안 온다 (2026-10-08) */
     m.body.querySelectorAll('.kh-scm-span [data-span]').forEach((b) => {
@@ -286,11 +299,10 @@ export function openSectorModal(snap, opt = {}) {
     m.body.querySelectorAll('[data-i]').forEach((b) => {
       b.addEventListener('click', () => {
         const i = Number(b.dataset.i);
-        /* **끝에서는 뒤로 물린다** — 19번을 누르면 17·18·19 가 나온다.
-           안 물리면 마지막 칩을 눌렀을 때 한 칸만 보인다. */
-        const next = Math.min(i, Math.max(0, groups.length - SHOW));
-        if (next === from) return;
-        from = next;
+        /* 같은 칩을 다시 누르면 접는다 · 다른 칩이면 그것을 펼친다(펼친 칸은 하나) */
+        if (open && i === from) { open = false; refreshHead(); paint(); return; }
+        from = i;
+        open = true;
         refreshHead();            // 머리의 대표값도 함께 옮긴다
         paint();
         loadShown();
@@ -331,19 +343,24 @@ export function openSectorModal(snap, opt = {}) {
     if (!rows.length) {
       return '<div class="kh-scm-empty kh-mut">종목이 없습니다</div>';
     }
+    /* 주간 · 월간 거래대금은 서버가 날마다 거래량 × 종가를 더한 **추정**이다(naver_period.py) — 표머리에 적는다.
+       시총은 네이버 칸 그대로(억원) · 일간도 같은 칸을 받는다 (2026-10-26 재권님 「받아」) */
+    const valHead = span === 'd' ? '거래대금' : `거래대금(${span === 'w' ? '주간' : '월간'} · 추정)`;
+    const pcHead = span === 'd' ? '등락률' : (span === 'w' ? '주간 등락률' : '월간 등락률');
     return `
       <div class="kh-scm-list"><table>
-        <colgroup><col class="c-nm"><col class="c-pr"><col class="c-pc"><col class="c-am"></colgroup>
+        <colgroup><col class="c-nm"><col class="c-pr"><col class="c-pc"><col class="c-am"><col class="c-cap"></colgroup>
         <thead><tr>
-          <th>종목</th><th class="r">현재가</th><th class="r">등락률</th>
-          <th class="r">거래대금</th>
+          <th>종목</th><th class="r">${span === 'd' ? '현재가' : '현재가(마지막 종가)'}</th><th class="r">${pcHead}</th>
+          <th class="r">${valHead}</th><th class="r">시총</th>
         </tr></thead>
         <tbody>${rows.map(st => `
           <tr data-code="${esc(st.code)}">
-            <td><b title="${esc(st.name)}">${esc(st.name)}</b></td>
+            <td><b title="${esc(st.name)}">${esc(st.name)}</b><span class="kh-mut kh-scm-cd">${esc(st.code)}</span></td>
             <td class="r kh-num">${fmtPriceOf(st.code, st.price)}</td>
             <td class="r kh-num ${dirClass(st.pct)}">${fmtPct(st.pct)}</td>
             <td class="r kh-num">${st.value != null ? fmtMoneyKr(st.value / 100) : '—'}</td>
+            <td class="r kh-num">${st.cap != null ? fmtMoneyKr(st.cap) : '—'}</td>
           </tr>`).join('')}</tbody>
       </table></div>`;
   }
