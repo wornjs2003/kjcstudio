@@ -7380,6 +7380,18 @@ class Handler(SimpleHTTPRequestHandler):
                 })
                 return
 
+            if route == "ir":
+                # 기업설명회(IR) 일시 — 본문에서 읽은 한국 날짜 · 시각(2026-10-26 · dart.read_ir).
+                # 앞으로 days 일(기본 14 · 최대 90) · past 일 앞까지(기본 0 · 최대 30)
+                def _n(k, d, hi):
+                    try:
+                        return max(0, min(hi, int((qs.get(k) or [str(d)])[0])))
+                    except ValueError:
+                        return d
+                rows, meta = dart.read_ir(_n("days", 14, 90), _n("past", 0, 30))
+                self._send_json({"ok": True, "data": rows, "meta": meta})
+                return
+
             if route == "poll":          # 5분을 기다리지 않고 지금 한 번 받아온다
                 self._send_json({"ok": True, "data": dart.poll_once(key)})
                 return

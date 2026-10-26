@@ -811,6 +811,227 @@ def read_disclosures(code=None, limit=30):
     } for r in rows]
 
 
+
+# ── 기업설명회(IR) 일시 (2026-10-26 재권님 「응 묶어」 · 작업우선순위 경유) ──────────────
+#
+# 「기업설명회(IR)개최」 공시는 **일시가 본문에만 있다** — 목록(OpenDART list)은 제목 · 접수일만 준다.
+# 그래서 한국 실적 발표(SK하이닉스 10-28 09:00 · 삼성 콘콜)가 일정 칸에 안 들어갔다(시황분석이 찾음).
+# 공시 바퀴가 새 IR 공시를 저장한 뒤 **우리 종목(코스피 200 · 코스닥 150 · 관심)** 것만 본문을 한 번 읽어
+# 일시 · 목적 · 방법을 `dart_ir` 에 한 줄로 둔다. 본문은 DART 보기 화면(dart.fss.or.kr)이라 OpenDART 하루 한도를 안 쓴다.
+#
+#   본문 모양(2026-10-14 SK하이닉스 20261014800385 실측) —
+#     「1. 일시 및 장소 일시 2026-10-28 09:00 장소 - … 3. 개최목적 2026년 3분기 경영실적 발표 4. 개최방법 Conference Call …」
+#   앞 「일시 및 장소」 의 「일시」 는 숫자가 안 따라와 건너뛴다. 시각이 「--:--」 이거나 없으면 날만 둔다(지어내지 않는다 —
+#   기아처럼 시각을 「기타」 줄 글로만 적은 것도 있는데 그 글은 안 읽는다).
+#   코스닥 쪽 서식은 다르다(2026-10-16 ISC 실측) — 「1. 일시 행사일 시간(현지시간) 시작일 종료일 시작시간 종료시간
+#   2026-10-29 2026-10-30 09:00 18:00 … 4. 실시목적 … 5. 실시방법 …」. 「IR 자료게재 게재일시」 의 날은 행사일이 아니라 뺀다.
+#
+# 쓰는 곳: GET /api/dart/ir?days=14 — Insight 일정 칸 · 홈 일정 달력 · 결과 알림(events.py)이 같은 값을 읽는다(화면 쪽은 각 레인).
+IR_WORD = "기업설명회"
+IR_PER_PASS = 10                 # 한 바퀴(5분)에 읽는 본문 수(한 건 = 보기 화면 2번) — 처음 켤 때 밀린 것을 몇 바퀴에 나눠 읽는다
+IR_GAP_SEC = 2.0                 # 본문 사이 쉼 — **DART 보기 화면은 몰아 부르면 이 기계를 막는다**(2026-10-26 12:34 시험에서
+                                 # 0.3초 간격 · 1분 반에 이백 번쯤 부르자 연결을 끊기 시작했고 그 뒤로 한동안 안 열렸다).
+                                 # events.py 의 잠정실적 본문도 같은 곳이라 막히면 함께 못 읽는다 — 그래서 넉넉히 쉰다
+IR_TIMEOUT = 15
+IR_KEEP_DAYS = RETENTION_DAYS    # 일시가 이만큼 지난 줄은 지운다(공시 보관과 같은 날수)
+IR_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) KJCStudio"
+
+IR_SCHEMA = [
+    """CREATE TABLE IF NOT EXISTS dart_ir (
+         rcept_no    TEXT PRIMARY KEY,
+         stock_code  TEXT,
+         corp_name   TEXT,
+         report_nm   TEXT,
+         rcept_dt    TEXT,
+         ir_date     TEXT,              -- 'YYYY-MM-DD' (한국 날짜) · 못 읽으면 NULL
+         ir_time     TEXT,              -- 'HH:MM' · 본문에 시각이 없으면 NULL
+         ir_end      TEXT,              -- 끝나는 날(코스닥 서식의 종료일) · 하루짜리는 NULL
+         purpose     TEXT,
+         method      TEXT,
+         error       TEXT,              -- 본문은 받았는데 일시를 못 읽은 까닭 — 다시 읽지 않는다(다음 정정 공시가 새 줄로 온다)
+         parsed_at   TEXT
+       )""",
+    "CREATE INDEX IF NOT EXISTS idx_ir_date ON dart_ir (ir_date)",
+]
+
+
+def viewer_body(rcept_no):
+    """공시 본문 HTML(EUC-KR → 글). 첫 화면에서 문서 번호를 찾아 그 문서를 받는다.
+    events.py 의 잠정실적 읽기도 이것을 쓴다(두 벌로 두지 않는다)."""
+    def get(url):
+        req = urllib.request.Request(url, headers={"User-Agent": IR_UA})
+        with urllib.request.urlopen(req, timeout=IR_TIMEOUT) as r:
+            return r.read()
+    main = get(VIEWER % rcept_no).decode("utf-8", "replace")
+    m = re.search(r'viewDoc\("%s",\s*"(\d+)"' % rcept_no, main)
+    if not m:
+        raise RuntimeError("공시 문서 번호를 못 찾았습니다")
+    raw = get("https://dart.fss.or.kr/report/viewer.do?rcpNo=%s&dcmNo=%s&eleId=0&offset=0&length=0&dtd=HTML"
+              % (rcept_no, m.group(1)))
+    for enc in ("cp949", "utf-8"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", "replace")
+
+
+_IR_RANGE = re.compile(
+    r"시작일\s*종료일\s*시작시간\s*종료시간\s*(20\d{2})-(\d{2})-(\d{2})\s*(?:(20\d{2})-(\d{2})-(\d{2}))?\s*(?:(\d{1,2}):(\d{2}))?")
+_IR_WHEN = re.compile(
+    r"(?<!게재)일\s*시\s*:?\s*(20\d{2})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})\s*일?"
+    r"(?:\s*\(\s*[월화수목금토일]\s*\))?"
+    r"(?:\s*(오전|오후)?\s*(\d{1,2})\s*(?::|시)\s*(\d{2})?)?")
+
+
+def parse_ir(body):
+    """본문 → {date, time, purpose, method}. 일시를 못 읽으면 date 가 None."""
+    t = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", body)
+    t = html.unescape(re.sub(r"<[^>]+>", " ", t)).replace("\xa0", " ")
+    t = re.sub(r"\s+", " ", t)
+    out = {"date": None, "endDate": None, "time": None, "purpose": None, "method": None}
+    r = _IR_RANGE.search(t)
+    if r:
+        g = r.groups()
+        out["date"] = "%s-%s-%s" % g[0:3]
+        if g[3]:
+            out["endDate"] = "%s-%s-%s" % g[3:6]
+        if g[6] is not None:
+            out["time"] = "%02d:%s" % (int(g[6]), g[7])
+    m = None if r else _IR_WHEN.search(t)
+    if m:
+        y, mo, d, ampm, hh, mm = m.groups()
+        try:
+            out["date"] = datetime(int(y), int(mo), int(d)).strftime("%Y-%m-%d")
+        except ValueError:
+            out["date"] = None
+        if out["date"] and hh is not None:
+            h = int(hh)
+            if ampm == "오후" and h < 12:
+                h += 12
+            if 0 <= h <= 23:
+                out["time"] = "%02d:%s" % (h, mm or "00")
+    for key, label in (("purpose", "(?:개최|실시)목적"), ("method", "(?:개최|실시)방법")):
+        m = re.search(label + r"\s*:?\s*(.+?)\s*(?:\d{1,2}\s*\.\s*[가-힣(]|$)", t)
+        if m:
+            out[key] = m.group(1).strip(" -")[:120] or None
+    return out
+
+
+def ir_codes():
+    """본문을 읽을 종목 — 코스피 200 · 코스닥 150(대상 표) · 지수 구성 · 관심. 표를 박지 않고 그날 표에서 센다."""
+    codes = set(WATCH_CODES)
+    try:
+        codes.update(r["stock_code"] for r in universe_rows(None))
+    except Exception:
+        pass
+    try:
+        codes.update(index_members_map().keys())
+    except Exception:
+        pass
+    return codes
+
+
+def ir_init():
+    with _db_lock, db_conn() as conn:
+        for sql in IR_SCHEMA:
+            conn.execute(sql)
+
+
+def fill_ir(limit=IR_PER_PASS):
+    """아직 안 읽은 우리 종목 IR 공시의 본문을 읽어 `dart_ir` 에 둔다. 읽은 수 · 남은 수를 돌려준다.
+    쓰기 서버만 한다 — 읽기 전용 서버(마운트만 한 자리)는 건너뛴다."""
+    if not marketdb.writable():
+        return {"read": 0, "left": None, "skipped": "읽기 전용"}
+    ir_init()
+    codes = ir_codes()
+    with _db_lock, db_conn() as conn:
+        rows = conn.execute(
+            """SELECT d.rcept_no, d.stock_code, d.corp_name, d.report_nm, d.rcept_dt
+                 FROM dart_disclosures d LEFT JOIN dart_ir i ON i.rcept_no = d.rcept_no
+                WHERE d.report_nm LIKE ? AND i.rcept_no IS NULL
+                ORDER BY d.rcept_no DESC""", ("%" + IR_WORD + "%",)).fetchall()
+    todo = [r for r in rows if r["stock_code"] in codes]
+    done = 0
+    for r in todo[:max(0, int(limit))]:
+        # **받기 실패는 적지 않고 그 바퀴를 멈춘다** — 다음 바퀴에 다시 읽는다. DART 보기 화면은 몰아 부르면 연결을 끊는다
+        # (2026-10-26 시험 — 0.3초 간격으로 백 번쯤 부르자 「Remote end closed connection」 이 이어졌다). 적으면 영영 못 읽은 것이 된다
+        try:
+            body = viewer_body(r["rcept_no"])
+        except Exception as e:
+            _meta_set("dart_ir_last_error", "%s: %s" % (r["rcept_no"], safe_message(e, 120)))
+            break
+        p, err = parse_ir(body), None
+        if not p["date"]:
+            err = "일시를 못 읽음"
+        with _db_lock, db_conn() as conn:
+            conn.execute(
+                """INSERT INTO dart_ir (rcept_no, stock_code, corp_name, report_nm, rcept_dt,
+                                        ir_date, ir_time, ir_end, purpose, method, error, parsed_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(rcept_no) DO NOTHING""",
+                (r["rcept_no"], r["stock_code"], r["corp_name"], r["report_nm"], r["rcept_dt"],
+                 p["date"], p["time"], p["endDate"], p["purpose"], p["method"], err,
+                 datetime.now(KST).isoformat(timespec="seconds")))
+        done += 1
+        time.sleep(IR_GAP_SEC)
+    cut = (datetime.now(KST) - timedelta(days=IR_KEEP_DAYS)).strftime("%Y-%m-%d")
+    with _db_lock, db_conn() as conn:
+        conn.execute("DELETE FROM dart_ir WHERE ir_date IS NOT NULL AND ir_date < ?", (cut,))
+    return {"read": done, "left": max(0, len(todo) - done)}
+
+
+def _ir_is_earnings(purpose):
+    p = purpose or ""
+    return "실적" in p or ("분기" in p and any(w in p for w in ("설명", "발표")))
+
+
+def read_ir(days=14, past=0):
+    """앞으로 `days` 일(오늘 포함)의 IR — 한국 시각. `past` 일 앞까지 함께.
+    같은 종목의 **정정 공시**가 뒤에 왔으면 그 종목의 앞 줄(같은 목적)을 뺀다 — 날이 바뀐 정정이 둘로 안 보이게."""
+    # 읽기 전용 서버(8764 · 세션 서버 — 메인 DB 를 mode=ro 로 연다)는 표를 못 만든다. 8765 가 새 코드로 뜨기 전에는 표가 없다
+    # — 그때는 빈 목록에 ready=false 를 낸다(「없다」 가 아니라 「아직 안 읽었다」 · 「못 쟀으면 0 이 아니라 못 쟀다」)
+    if marketdb.writable():
+        ir_init()
+    else:
+        with _db_lock, db_conn() as conn:
+            if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='dart_ir'").fetchone():
+                return [], {"ready": False, "count": 0, "note": "IR 일시 표가 아직 없습니다 — 받는 서버(8765)가 새 코드로 뜨면 생깁니다"}
+    now = datetime.now(KST)
+    a = (now - timedelta(days=max(0, int(past)))).strftime("%Y-%m-%d")
+    b = (now + timedelta(days=max(0, int(days)))).strftime("%Y-%m-%d")
+    with _db_lock, db_conn() as conn:
+        rows = conn.execute(
+            """SELECT * FROM dart_ir WHERE ir_date BETWEEN ? AND ?
+                ORDER BY ir_date, COALESCE(ir_time, '99:99'), rcept_no""", (a, b)).fetchall()
+        n_err = conn.execute("SELECT COUNT(*) n FROM dart_ir WHERE error IS NOT NULL").fetchone()["n"]
+    rows = [dict(r) for r in rows]
+    keep = []
+    for r in rows:
+        later = [x for x in rows if x["stock_code"] == r["stock_code"] and x["rcept_no"] > r["rcept_no"]
+                 and "정정" in (x["report_nm"] or "") and (x["purpose"] or "") == (r["purpose"] or "")]
+        if not later:
+            keep.append(r)
+    data = [{
+        "code": r["stock_code"],
+        "name": r["corp_name"],
+        "date": r["ir_date"],
+        "time": r["ir_time"],
+        "endDate": r["ir_end"],
+        "kst": "%s %s" % (r["ir_date"], r["ir_time"]) if r["ir_time"] else None,
+        "purpose": r["purpose"],
+        "method": r["method"],
+        # 실적 발표로 치는 것 — 목적에 「실적」 이 들거나(「2026년 3분기 경영실적 발표」) 「분기」 와 설명 · 발표가 함께 든 것
+        # (「2026년 3분기 기업설명회」 — 한화 계열 · 포스코 계열이 이렇게 적는다). 「3분기 국내 NDR」 은 안 든다
+        "earnings": _ir_is_earnings(r["purpose"]),
+        "title": r["report_nm"],
+        "rceptNo": r["rcept_no"],
+        "url": VIEWER % r["rcept_no"],
+    } for r in keep]
+    return data, {"ready": True, "from": a, "to": b, "count": len(data), "unreadable": n_err,
+                  "lastFillAt": _meta_get("dart_ir_fill"), "lastFill": _meta_get("dart_ir_fill_result")}
+
+
 def status():
     db_init()
     with _db_lock, db_conn() as conn:
@@ -1026,6 +1247,14 @@ def poll_once(key, quiet_first_run=True):
     sent = 0 if mark else notify(fresh)
 
     purged = purge_old()
+
+    # 우리 종목 IR 공시의 본문 일시 — 한 바퀴에 몇 건씩(fill_ir). 실패해도 공시 바퀴는 멈추지 않는다
+    try:
+        r = fill_ir()
+        _meta_set("dart_ir_fill", datetime.now(KST).isoformat(timespec="seconds"))
+        _meta_set("dart_ir_fill_result", json.dumps(r, ensure_ascii=False))
+    except Exception as e:
+        _meta_set("dart_ir_fill_result", json.dumps({"error": safe_message(e, 120)}, ensure_ascii=False))
 
     _meta_set("dart_last_poll", datetime.now(KST).isoformat(timespec="seconds"))
     _meta_set("dart_last_error", "")
