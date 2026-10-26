@@ -38,10 +38,10 @@
 .kh-ivm-fill.sell { background: var(--kh-down); border-radius: 4px 0 0 4px; }
 .kh-ivm-fill.buy  { background: var(--kh-up);   border-radius: 0 4px 4px 0; }
 .kh-ivm-amt { font-size: 11px; color: var(--kh-text-secondary); white-space: nowrap; }
-/* 그쪽 총액(왼쪽 매도 · 오른쪽 매수) — 칸 바깥 끝에 붙인다. 막대 · 순매수 글은 가운데 쪽 그대로 (2026-10-26) */
-.kh-ivm-gross { font-size: 11px; color: var(--kh-text-secondary); white-space: nowrap; flex: 0 0 auto; }
-.kh-ivm-side.l .kh-ivm-gross { margin-right: auto; }
-.kh-ivm-side.r .kh-ivm-gross { margin-left: auto; }
+/* 그쪽 총액(왼쪽 매도 · 오른쪽 매수) — 막대 · 순매수 글과 한 덩어리로 가운데 쪽에 붙인다 (2026-10-26).
+   처음에는 칸 바깥 끝에 두었는데 순매도 종목의 「매수」 가 오른쪽 끝에 홀로 떨어져 재권님이 「매수가 없는데?」 하셨다 —
+   막대가 없는 쪽은 가운데(종목 칸) 바로 옆에 붙어 보인다. 글자는 본문 색(옅으면 안 읽힘) */
+.kh-ivm-gross { font-size: 11px; color: var(--kh-text-primary); white-space: nowrap; flex: 0 0 auto; }
 .kh-ivm-big .kh-ivm-fill { height: 22px; }
 .kh-ivm-g .kh-ivm-side { min-height: 16px; }    /* 순매수 막대는 한쪽만 그린다 — 막대가 없는 줄도 같은 높이 */
 

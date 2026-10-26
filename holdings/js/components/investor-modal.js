@@ -37,7 +37,7 @@
 import { apiFetch } from '../data/api.js';
 import { openModal } from './modal.js';
 import { mountStockSearch } from './stock-search.js';
-import { side, signClass } from '../../../assets/js/sign.js';
+import { signClass } from '../../../assets/js/sign.js';
 
 const CSS_HREF = new URL('../../css/investor-modal.css', import.meta.url).href;
 const SIDES = [['person', '개인'], ['foreign', '외국인'], ['inst', '기관']];
@@ -102,14 +102,14 @@ function sideHtml(v, max, left) {
 }
 
 /** 순매수 막대 하나 — 순매도는 왼쪽(파랑) · 순매수는 오른쪽(빨강). 매수 · 매도를 따로 그리지 않는다 */
-/* gross — 그쪽 총액(왼쪽 매도 · 오른쪽 매수 · 백만원). 막대는 순매수 하나 그대로 두고, 바깥 끝에 매도 · 매수 금액을 늘 적는다
-   (2026-10-26 재권님 「사는게 더 많으면 사는것만 나오고 … 사고 파는 금액 다 나오도록」 · 작업우선순위 경유). 줄 높이는 그대로 — 같은 줄 안 글 */
-function netSide(v, max, left, gross) {
-  const on = side(v) === (left ? 'down' : 'up');      // 방향은 sign.js 한 곳(「오르내림 숫자의 글씨 색은 한 셈이다」)
-  const amt = on ? `<span class="kh-ivm-amt">${eokS(v)}</span>` : '';
-  const bar = on ? `<div class="kh-ivm-fill ${left ? 'sell' : 'buy'}" style="width:${Math.max(1.5, (Math.abs(v) / max) * 82)}%"></div>` : '';
-  const g = gross === undefined ? '' : `<span class="kh-ivm-gross">${left ? '매도' : '매수'} ${eok(gross)}</span>`;
-  return `<div class="kh-ivm-side ${left ? 'l' : 'r'}">${left ? g + amt + bar : bar + amt + g}</div>`;
+/* 줄마다 매도(왼쪽) · 매수(오른쪽) 막대 둘 + 그 금액 (2026-10-26 재권님 「사고 파는 금액 다 나오도록」 → 「글이 안보이는거 말고
+   그래프도 안보이는데」 · 작업우선순위 경유). 10-16 의 「매도 매수를 다 그리지 말고 둘의 차이만」 을 이 말씀이 바꿨다 —
+   순매수는 가운데 글(대금 · ±순매수)에 남는다. 막대 길이 기준은 화면에 나온 줄들의 매수 · 매도 금액 중 가장 큰 것(max) */
+function grossSide(amt, max, left) {
+  const w = amt == null || !max ? 0 : Math.max(1.5, (amt / max) * 82);
+  const bar = amt == null ? '' : `<div class="kh-ivm-fill ${left ? 'sell' : 'buy'}" style="width:${w}%"></div>`;
+  const g = `<span class="kh-ivm-gross">${left ? '매도' : '매수'} ${eok(amt)}</span>`;
+  return `<div class="kh-ivm-side ${left ? 'l' : 'r'}">${left ? g + bar : bar + g}</div>`;
 }
 
 /** 여러 종목의 한 투자자 합 — 한 종목이라도 순매수 금액이 비면 순매수 합은 「—」 · cnt 는 실제로 더한 종목 수 */
@@ -237,17 +237,17 @@ export function openInvestorModal({ code } = {}) {
     if (asof && st.days === 'today' && lead) {
       asof.textContent = `${lead.rows[0] && !confirmed(lead.rows[0]) ? '장중 · ' : ''}${mmdd(lead.d[0].date)} 확정치`;
     }
-    const max = Math.max(...rows.map((r) => (r.s && r.s.net != null ? Math.abs(r.s.net) : 0))) || 1;
+    const max = Math.max(...rows.map((r) => (r.s ? Math.max(r.s.buy || 0, r.s.sell || 0) : 0))) || 1;   // 막대 기준 — 가장 큰 매수 · 매도 금액
     const guess = rows.some((r) => r.s && r.s.guess);
     const nm = SIDE_NAME[st.side];
     const totals = SIDES.map(([k, n2]) => ({ n: n2, t: sumMany(rows.map((r) => sumSide(r.d, k))) }));
     main.querySelector('.kh-ivm-g').innerHTML = `
-      <div class="kh-ivm-cap"><div>← ${nm} 순매도</div><div class="kh-ivm-mid">종목 · 거래대금 · 순매수</div><div>${nm} 순매수 →</div></div>
+      <div class="kh-ivm-cap"><div>← ${nm} 매도</div><div class="kh-ivm-mid">종목 · 거래대금 · 순매수</div><div>${nm} 매수 →</div></div>
       ${rows.map((r, i) => `<div class="kh-ivm-row${r.code === st.target ? ' is-on' : ''}" data-code="${r.code}">
-          ${netSide(r.s ? r.s.net : null, max, true, r.s ? r.s.sell : null)}
+          ${grossSide(r.s ? r.s.sell : null, max, true)}
           <div class="kh-ivm-mid"><b>${i + 1}. ${esc(r.name)}</b><br>
             <small>대금 ${wonEok(r.value)} · <span class="${signClass(r.s ? r.s.net : null)}">${eokS(r.s ? r.s.net : null)}</span></small></div>
-          ${netSide(r.s ? r.s.net : null, max, false, r.s ? r.s.buy : null)}</div>`).join('')}
+          ${grossSide(r.s ? r.s.buy : null, max, false)}</div>`).join('')}
       <div class="kh-ivm-tot">${totals.map(({ n: n2, t }) => `<div class="kh-ivm-tot-c">
           <div class="kh-ivm-tot-h">${n2} · ${t ? `위 ${t.cnt}종목 합` : '값 없음'}</div>
           <div class="kh-ivm-tot-v ${signClass(t ? t.net : null)}">${eokS(t ? t.net : null)}</div>
