@@ -7077,8 +7077,13 @@ class Handler(SimpleHTTPRequestHandler):
         """경제 지표(ECOS · FRED) — server/macro.py 머리 주석. `ecos` 키가 없는 서버는 상류로 넘긴다."""
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/macro/"):].strip("/")
-        if route not in ("regime", "series", "releases"):
-            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/macro/regime · /api/macro/series?ids= · /api/macro/releases 셋입니다."}, 404)
+        if route not in ("regime", "series", "releases", "calendar"):
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/macro/regime · /api/macro/series?ids= · /api/macro/releases · /api/macro/calendar 넷입니다."}, 404)
+            return
+        if route == "calendar":
+            # 일정 파일 + 한국 시각 — 키가 필요 없어 어느 서버든 자기 파일로 낸다(macro.calendar · 2026-10-26)
+            r = macro.calendar()
+            self._send_json(r, 200 if r.get("ok") else 500)
             return
         if not macro.ecos_key() and upstream_base():
             self._relay_upstream("경제 지표 키(ecos)가 이 서버에 없습니다", "macro")
