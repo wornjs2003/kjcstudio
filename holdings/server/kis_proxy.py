@@ -7078,8 +7078,13 @@ class Handler(SimpleHTTPRequestHandler):
         """경제 지표(ECOS · FRED) — server/macro.py 머리 주석. `ecos` 키가 없는 서버는 상류로 넘긴다."""
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/macro/"):].strip("/")
-        if route not in ("regime", "series", "releases"):
-            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/macro/regime · /api/macro/series?ids= · /api/macro/releases 셋입니다."}, 404)
+        if route not in ("regime", "series", "releases", "calendar"):
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/macro/regime · /api/macro/series?ids= · /api/macro/releases · /api/macro/calendar 넷입니다."}, 404)
+            return
+        if route == "calendar":
+            # 일정 파일 + 한국 시각 — 키가 필요 없어 어느 서버든 자기 파일로 낸다(macro.calendar · 2026-10-26)
+            r = macro.calendar()
+            self._send_json(r, 200 if r.get("ok") else 500)
             return
         if not macro.ecos_key() and upstream_base():
             self._relay_upstream("경제 지표 키(ecos)가 이 서버에 없습니다", "macro")
@@ -7389,6 +7394,18 @@ class Handler(SimpleHTTPRequestHandler):
                     "meta": {"count": len(rows), "code": code or None,
                              "lastPollAt": dart._meta_get("dart_last_poll")},
                 })
+                return
+
+            if route == "ir":
+                # 기업설명회(IR) 일시 — 본문에서 읽은 한국 날짜 · 시각(2026-10-26 · dart.read_ir).
+                # 앞으로 days 일(기본 14 · 최대 90) · past 일 앞까지(기본 0 · 최대 30)
+                def _n(k, d, hi):
+                    try:
+                        return max(0, min(hi, int((qs.get(k) or [str(d)])[0])))
+                    except ValueError:
+                        return d
+                rows, meta = dart.read_ir(_n("days", 14, 90), _n("past", 0, 30))
+                self._send_json({"ok": True, "data": rows, "meta": meta})
                 return
 
             if route == "poll":          # 5분을 기다리지 않고 지금 한 번 받아온다

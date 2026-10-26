@@ -391,6 +391,42 @@ def _fresh(rel, day, last):
     return last["d"] >= _expected(rel, day)
 
 
+# ── 고정 일정 파일에 한국 시각 (2026-10-26 재권님 「응 묶어」 · 작업우선순위 경유 · 개념정의 검수 덧말) ──
+#
+# `data/market-calendar.json` 의 줄마다 한국 시각(`kst`)을 붙여 낸다 — Insight 일정 칸이 미국 동부 → 한국 서머타임 셈을
+# 화면에서 손으로 하던 것을 서버 한 곳으로(위 `_release_at` 그대로 · `nextReleaseKst` 와 같은 셈).
+#   미국 줄   result.et(동부 시각) + 결과가 나오는 날(endDate 가 있으면 그 날 — FOMC 는 이틀째 14:00) → 한국 시각
+#   그 밖     시각이 파일에 없으면 kst = null — 지어내지 않는다(금통위는 시각을 안 적었다)
+# 파일은 서버가 읽는 그대로 내준다 — 줄을 고치는 자리는 그 파일 하나다.
+CAL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "market-calendar.json")
+
+
+def calendar():
+    """GET /api/macro/calendar — 일정 파일의 events 에 kst('YYYY-MM-DD HH:MM' · 한국) · kstDate 를 붙여 낸다."""
+    try:
+        with open(CAL_PATH, encoding="utf-8") as f:
+            cal = json.load(f)
+    except (OSError, ValueError) as e:
+        return {"ok": False, "error": "일정 파일을 못 읽었습니다: %s" % safe_message(e, 120)}
+    out = []
+    for ev in cal.get("events") or []:
+        row = dict(ev)
+        et = (ev.get("result") or {}).get("et")
+        day = ev.get("endDate") or ev.get("date")
+        kst = None
+        if et and day and ev.get("country") == "US":
+            try:
+                kst = _release_at({"et": et}, day)
+            except (ValueError, TypeError):
+                kst = None
+        row["kst"] = kst.strftime("%Y-%m-%d %H:%M") if kst else None
+        row["kstDate"] = kst.strftime("%Y-%m-%d") if kst else (ev.get("endDate") or ev.get("date"))
+        out.append(row)
+    return {"ok": True, "data": out,
+            "meta": {"count": len(out), "withKst": sum(1 for r in out if r["kst"]),
+                     "source": "holdings/data/market-calendar.json", "checkedAt": cal.get("확인일")}}
+
+
 def releases():
     """GET /api/macro/releases — 발표 지표마다 발표일(지난 · 다음)과 머리 숫자 · 등락.
     머리 숫자는 /api/macro/series 와 같은 값이다(같은 캐시) — 화면이 둘을 따로 받아도 갈리지 않는다."""
