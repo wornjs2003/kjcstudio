@@ -395,7 +395,7 @@ function odds(O) {
   const ph = { up: '선행 ↑', down: '선행 ↓' };   // 경기선행지수가 오르는 중 · 내리는 중 — 좁은 폭에 들어가게 짧게(뜻은 칸 설명에)
   box.innerHTML = `<table><thead><tr><th>발표</th><th>전체</th><th class="${now === 'up' ? 'now' : ''}">${ph.up}${now === 'up' ? ' (지금)' : ''}</th><th class="${now === 'down' ? 'now' : ''}">${ph.down}${now === 'down' ? ' (지금)' : ''}</th><th>다음 발표</th></tr></thead><tbody>`
     + `<tr class="base"><td>모든 날(견줄 값)</td><td>${B.all.up.toFixed(1)}%</td><td class="${now === 'up' ? 'now' : ''}">${B.up.up.toFixed(1)}%</td><td class="${now === 'down' ? 'now' : ''}">${B.down.up.toFixed(1)}%</td><td></td></tr>`
-    + O.releases.map(r => `<tr><td>${r.name}</td>${cell(r.all, B.all, '')}${cell(r.up, B.up, 'up')}${cell(r.down, B.down, 'down')}<td>${r.next ? r.next.slice(5) : '—'}</td></tr>`).join('')
+    + O.releases.map(r => `<tr data-rel="${String(r.key).toLowerCase()}"><td>${r.name}</td>${cell(r.all, B.all, '')}${cell(r.up, B.up, 'up')}${cell(r.down, B.down, 'down')}<td>${r.next ? r.next.slice(5) : '—'}</td></tr>`).join('')
     + `</tbody></table>`;
   document.getElementById('cap-odds').insertAdjacentHTML('beforeend', ` · 코스피 ${O.kospiFrom}~${O.kospiTo} · 경기선행 ${O.cliLast} 까지 · ${O.fetchedAt} 셈`);
 }
