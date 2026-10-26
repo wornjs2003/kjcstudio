@@ -76,6 +76,7 @@
         <div class="mk-card"><h2>업종 등락 — <span data-kr-date>—</span></h2><div class="cap">네이버 업종 분류 · 많이 오른 다섯과 많이 내린 다섯</div><div class="nv-tb one-col" id="kr-ind"></div></div>
         <div class="mk-card"><h2>크게 움직인 날 — 원인</h2><div class="cap">석 달 안 · 미국 ±2.5% · 한국 ±4% · 원인은 기사를 읽고 갈래 하나(Baker 외 NBER w28687) · 못 찾으면 「원인 모름」 · 「—」 은 아직 안 적음</div><div class="mv" id="kr-moves"></div></div>
         <div class="mk-card mk-wide"><h2>미국 지표 발표 다음 날 — 코스피가 오른 확률<span class="tag">계산</span></h2><div class="cap" id="cap-odds"><b>오늘 값의 예측이 아니라 1995년부터 과거에 그랬던 비율이다</b> · 미국 발표는 한국 밤이라 그다음 한국 거래일을 센다 · 국면 = 미국 경기선행지수가 오르는 중(선행 ↑) · 내리는 중(선행 ↓) — 발표 두 달 전 값 · 굵은 글씨 = 같은 국면의 모든 날보다 우연으로 보기 어려울 만큼 다름(표준오차 두 배 밖) · 발표값이 예상과 얼마나 달랐는지는 과거 예상치를 받을 곳이 없어 안 본다(Andersen 외 2007 은 그 몫에 반응한다고 했다) · FRED · 한국은행 ECOS · OECD</div><div class="odds" id="odds"></div></div>
+        <div class="mk-card mk-wide"><h2>다가오는 일정 — 이번 주<span class="tag">자동</span></h2><div class="cap" id="cap-cal">한국 시각 · 열 때 서버에서 받음 — 미국 지표는 서버 발표 일정(/api/macro/releases) · FOMC · 미국 실적은 홀딩스 일정 파일(holdings/data/market-calendar.json · 결과 알림과 같은 파일)</div><div class="odds" id="cal">—</div></div>   <!-- 2026-10-26 재권님 「응 만들어줘」(시안 (가)+(나)) · js/market-cal.js -->
       </div>
       </details>
       <details class="mk-fold" data-fold="ext"><summary class="mk-sec">대외변수<span class="mk-sec-s">지정학 위험(세계 · 한국) · 정책과 무역 불확실성 · 공포 지수 · 급한 대외 사건</span><span class="mk-sum" id="sum-ext">—</span></summary>   <!-- 2026-10-12 재권님 「대외변수에 들어갈만한것들 찾아보라」 → 「응 해줘」 · js/market-ext.js -->
@@ -96,6 +97,7 @@
 <script src="vendor/chart.umd.min.js"></script>   <!-- 그래프 — Chart.js 4.4.1 (vendor/README.md) -->
 <script type="module" src="js/market.js"></script>   <!-- 모듈 — 이름이 main.js 와 안 섞이게 -->
 <script type="module" src="js/market-note.js"></script>   <!-- 세션이 쓴 시황 — market.js 와 따로 -->
-<script type="module" src="js/market-ext.js"></script>   <!-- 대외변수 층 — market.js 와 따로 -->
+<script type="module" src="js/market-ext.js"></script>
+<script type="module" src="js/market-cal.js"></script>   <!-- 다가오는 일정 · 확률 표의 다음 발표 날짜 — market.js 와 따로 -->   <!-- 대외변수 층 — market.js 와 따로 -->
 </body>
 </html>
