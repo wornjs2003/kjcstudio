@@ -9,7 +9,7 @@
 //   · 색 — 달러인덱스 칩 바탕은 tone.js(100 위 빨강 · 아래 파랑 · 멀수록 짙게) · 오르내림 숫자는 글씨만 빨강 · 파랑(num-up · num-dn) · 시황 한 줄 속 +/− 숫자도 sign-color.js 로(2026-10-15 「전부 같은 룰이야」)
 //   · 칩을 누르면 시황분석 탭의 그 그래프로 — 그 칸이 접혀 있으면 열어 둔다(시황분석 탭이 기억하는 열린 칸 목록에 더한다)
 //   · 못 받은 값은 「—」
-import { live } from './live.js';
+import { live, latestNote } from './live.js';
 import { dxyIce } from './dxy.js';
 import { signColor } from './sign-color.js';
 import { ready as toneReady, paint } from '/assets/js/tone.js';
@@ -27,11 +27,11 @@ async function note() {
   const box = document.querySelector('[data-home-note]');
   if (!box) return;
   let N = null;
-  try { N = await (await fetch('data/market-note.json', { cache: 'no-store' })).json(); } catch (e) { /* 아래에서 「—」 */ }
+  N = await latestNote();   // 손 글 · 자동 글 중 새 것 — 못 읽으면 아래에서 「—」
   box.classList.add('in-note');
   box.innerHTML = '<b class="in-note-h">오늘의 시황 한 줄</b>'
     + `<span class="in-note-t" title="${esc(N && N.one)}">${N ? signColor(esc(N.one)) : '—'}</span>`
-    + (N ? `<span class="in-note-at">${esc(N.writtenAt)} 씀</span>` : '')
+    + (N ? `<span class="in-note-at">${N.auto ? '자동 · ' : ''}${esc(N.writtenAt)} 씀${N.failedAt ? ` · 못 만듦(${esc(N.failedAt)})` : ''}</span>` : '')
     + '<a class="in-note-more" href="market.html">자세히 ›</a>';
 }
 
