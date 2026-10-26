@@ -58,9 +58,12 @@ def _now():
     return datetime.now(KST)
 
 
+MARKET_OF = {}                  # 마지막으로 받은 마스터의 {code: "kospi" | "kosdaq"} — 넥장 보드(nxt_board)가 시장을 가른다
+
+
 def master_codes():
-    """코스피 · 코스닥 주권 {code: name}. 받기 실패면 예외."""
-    out = {}
+    """코스피 · 코스닥 주권 {code: name}. 받기 실패면 예외. 시장은 MARKET_OF 에 남긴다."""
+    out, mko = {}, {}
     for mk, tail in MASTER_TAIL.items():
         req = urllib.request.Request(MASTER % mk, headers={"User-Agent": "Mozilla/5.0 KJCStudio"})
         with urllib.request.urlopen(req, timeout=30) as r:
@@ -73,8 +76,11 @@ def master_codes():
             code = row[0:9].strip()
             if len(code) == 6:
                 out[code] = row[21:-tail].strip()
+                mko[code] = mk
     if len(out) < 1000:                       # 모양이 바뀌었으면 수가 크게 준다 — 그날은 쓰지 않는다
         raise RuntimeError("마스터에서 주권이 %d개뿐입니다(모양이 바뀌었을 수 있음)" % len(out))
+    MARKET_OF.clear()
+    MARKET_OF.update(mko)
     return out
 
 
