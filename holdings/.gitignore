@@ -47,6 +47,9 @@ secrets.json*
 # 「장외」 칩 — 애프터 마감(20:00) 뒤 받아 둔 장외 값 (2026-10-26 · kis_proxy.py AFTER_SNAP_PATH · 서버마다 제 것)
 .after-snap.json
 
+# 종목 풍선 — 섹터 · 주요 매출원을 받아 둔 것 (2026-10-26 · server/company_profile.py STORE_PATH · 서버마다 제 것)
+.company-profile.json
+
 # 파이썬 캐시
 __pycache__/
 *.py[cod]
