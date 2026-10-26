@@ -133,7 +133,7 @@ const BODY_HTML = `
          「영상분석을 미국장분석으로 이름 바꾸고 오늘 새벽 5시에 분석해서 보낸 걸 넣어줘 · 제목에 년월일 + 데일리장분석 · 클릭하면 내용」).
          장분석 줄은 누르면 그 자리에서 펼쳐진다(details) · 영상 줄은 전처럼 Insight report.html 로. 흰 카드로 묶는다 -->
     <!-- 2026-10-26 재권님 「미국장분석 -> 데일리분석 · 텔레그램으로 보내야 한다고 말한 메세지들이 여기에」 · 「응 그래」 · 「응 그렇게 해」 —
-         칸 이름 「데일리분석」 · 첫 탭은 그날 텔레그램 글(보낸 순서 · 서버 /api/telegram/today) · 영상 목록은 둘째 탭으로 남김.
+         칸 이름 「데일리분석」 · 첫 탭은 그날 텔레그램 글(최신이 위 · 서버 /api/telegram/today) · 영상 목록은 둘째 탭으로 남김.
          두 탭은 같은 높이 칸(.kh-dl-tabbody)에 갈아 끼운다 — 「보는 것을 바꿔도 자리는 그대로다」.
          줄을 누르면 모달은 왼쪽으로 넓어진 세부 창 · 전용 화면(daily.html)과 좁은 폭은 그 줄 아래로 펼친다 -->
     <section class="kh-dl-card kh-dl-video-card">
@@ -321,7 +321,8 @@ function tgListHtml(got) {
   if (!got) return '<div class="kh-dl-video-e">텔레그램 글 · 불러오지 못함</div>';
   if (got.meta && got.meta.ready === false) return `<div class="kh-dl-video-e">텔레그램 글 · 아직 기록이 없습니다 — ${esc(got.meta.note || '')}</div>`;
   if (!got.rows.length) return '<div class="kh-dl-video-e">텔레그램 글 · 오늘 보낸 것 —</div>';
-  return got.rows.map((x) => `
+  // 최신이 위 (2026-10-26 재권님 「데일리 분석은 최신 게 위에」) — 서버는 보낸 순서로 준다
+  return [...got.rows].sort((a, b) => (b.at || '').localeCompare(a.at || '') || (b.id || 0) - (a.id || 0)).map((x) => `
     <div class="kh-dl-video-row kh-dl-tg-row" data-tg-id="${esc(x.id)}" role="button" tabindex="0">
       <span class="kh-dl-tg-at">${esc(hhmm(x.at))}</span>
       <span class="kh-dl-video-k">${esc(x.kind || '알림')}</span>
