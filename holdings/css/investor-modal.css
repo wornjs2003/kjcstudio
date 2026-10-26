@@ -38,6 +38,10 @@
 .kh-ivm-fill.sell { background: var(--kh-down); border-radius: 4px 0 0 4px; }
 .kh-ivm-fill.buy  { background: var(--kh-up);   border-radius: 0 4px 4px 0; }
 .kh-ivm-amt { font-size: 11px; color: var(--kh-text-secondary); white-space: nowrap; }
+/* 그쪽 총액(왼쪽 매도 · 오른쪽 매수) — 칸 바깥 끝에 붙인다. 막대 · 순매수 글은 가운데 쪽 그대로 (2026-10-26) */
+.kh-ivm-gross { font-size: 11px; color: var(--kh-text-secondary); white-space: nowrap; flex: 0 0 auto; }
+.kh-ivm-side.l .kh-ivm-gross { margin-right: auto; }
+.kh-ivm-side.r .kh-ivm-gross { margin-left: auto; }
 .kh-ivm-big .kh-ivm-fill { height: 22px; }
 .kh-ivm-g .kh-ivm-side { min-height: 16px; }    /* 순매수 막대는 한쪽만 그린다 — 막대가 없는 줄도 같은 높이 */
 

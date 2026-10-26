@@ -102,11 +102,14 @@ function sideHtml(v, max, left) {
 }
 
 /** 순매수 막대 하나 — 순매도는 왼쪽(파랑) · 순매수는 오른쪽(빨강). 매수 · 매도를 따로 그리지 않는다 */
-function netSide(v, max, left) {
+/* gross — 그쪽 총액(왼쪽 매도 · 오른쪽 매수 · 백만원). 막대는 순매수 하나 그대로 두고, 바깥 끝에 매도 · 매수 금액을 늘 적는다
+   (2026-10-26 재권님 「사는게 더 많으면 사는것만 나오고 … 사고 파는 금액 다 나오도록」 · 작업우선순위 경유). 줄 높이는 그대로 — 같은 줄 안 글 */
+function netSide(v, max, left, gross) {
   const on = side(v) === (left ? 'down' : 'up');      // 방향은 sign.js 한 곳(「오르내림 숫자의 글씨 색은 한 셈이다」)
   const amt = on ? `<span class="kh-ivm-amt">${eokS(v)}</span>` : '';
   const bar = on ? `<div class="kh-ivm-fill ${left ? 'sell' : 'buy'}" style="width:${Math.max(1.5, (Math.abs(v) / max) * 82)}%"></div>` : '';
-  return `<div class="kh-ivm-side ${left ? 'l' : 'r'}">${left ? amt + bar : bar + amt}</div>`;
+  const g = gross === undefined ? '' : `<span class="kh-ivm-gross">${left ? '매도' : '매수'} ${eok(gross)}</span>`;
+  return `<div class="kh-ivm-side ${left ? 'l' : 'r'}">${left ? g + amt + bar : bar + amt + g}</div>`;
 }
 
 /** 여러 종목의 한 투자자 합 — 한 종목이라도 순매수 금액이 비면 순매수 합은 「—」 · cnt 는 실제로 더한 종목 수 */
@@ -241,10 +244,10 @@ export function openInvestorModal({ code } = {}) {
     main.querySelector('.kh-ivm-g').innerHTML = `
       <div class="kh-ivm-cap"><div>← ${nm} 순매도</div><div class="kh-ivm-mid">종목 · 거래대금 · 순매수</div><div>${nm} 순매수 →</div></div>
       ${rows.map((r, i) => `<div class="kh-ivm-row${r.code === st.target ? ' is-on' : ''}" data-code="${r.code}">
-          ${netSide(r.s ? r.s.net : null, max, true)}
+          ${netSide(r.s ? r.s.net : null, max, true, r.s ? r.s.sell : null)}
           <div class="kh-ivm-mid"><b>${i + 1}. ${esc(r.name)}</b><br>
             <small>대금 ${wonEok(r.value)} · <span class="${signClass(r.s ? r.s.net : null)}">${eokS(r.s ? r.s.net : null)}</span></small></div>
-          ${netSide(r.s ? r.s.net : null, max, false)}</div>`).join('')}
+          ${netSide(r.s ? r.s.net : null, max, false, r.s ? r.s.buy : null)}</div>`).join('')}
       <div class="kh-ivm-tot">${totals.map(({ n: n2, t }) => `<div class="kh-ivm-tot-c">
           <div class="kh-ivm-tot-h">${n2} · ${t ? `위 ${t.cnt}종목 합` : '값 없음'}</div>
           <div class="kh-ivm-tot-v ${signClass(t ? t.net : null)}">${eokS(t ? t.net : null)}</div>
