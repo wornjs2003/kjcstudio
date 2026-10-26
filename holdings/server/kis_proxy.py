@@ -62,6 +62,7 @@ import naver
 import naver_period
 import toss
 import macro
+import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-25 · server/events.py 머리 주석)
 import market_index
 import crypto            # 가상자산 — 업비트 공개 시세(2026-10-14 · server/crypto.py 머리 주석)
 import news
@@ -6522,6 +6523,13 @@ class Handler(SimpleHTTPRequestHandler):
         if (self.path or "").startswith("/api/macro/"):
             self._handle_macro()
             return
+        if (self.path or "").rstrip("/") == "/api/events/status":
+            # 결과 알림 바퀴의 상태 — 무엇을 기다리나 · 꺼져 있으면 보냈을 글(preview). 바퀴는 보내는 서버에서만 돈다
+            st = events.status()
+            if not st.get("startedAt"):
+                st["note"] = "이 서버에서는 결과 알림 바퀴가 안 돕니다 — 보내는 서버(메인 %d)에서만 돕니다" % MAIN_PORT
+            self._send_json({"ok": True, "data": st})
+            return
         if (self.path or "").startswith("/api/market/"):
             self._handle_market()
             return
@@ -8131,6 +8139,14 @@ def main():
     #
     # **열쇠를 비우는 것으로 막지 않는다.** 폴더마다 갈려 있고
     # (`kjc-home` 은 비었는데 `kjc-dev3` 은 살아 있다) **키 파일을 만지게 된다.**
+    # 실적 · FOMC · 미국 지표 결과 알림 (2026-10-25 재권님 「가」 · server/events.py) — 신호 감시와 같은 문 하나(보내는 서버만).
+    # **`events.SEND = False` 가 기본이다** — 바퀴는 돌되 안 보내고, 보냈을 글을 /api/events/status 에 남긴다. 켜기는 재권님 지시로
+    if not SLOW and is_sender(args.port) and events.start():
+        # 조용한 시간은 `dart.QUIET_FROM`·`QUIET_TO` 에서 만든다 — 여기 박으면 그쪽을 고쳤을 때 이 줄만 낡는다
+        print("  결과 알림 : 사용 (%d초마다 · 밤 %02d~%02d시 것은 %02d:00 한 통%s)"
+              % (events.TICK, dart.QUIET_FROM // 60, dart.QUIET_TO // 60, dart.QUIET_TO // 60,
+                 "" if events.SEND else " · **발송 꺼짐 — 미리보기만**"))
+
     if not SLOW and is_sender(args.port) and signal_watch.start(sys.modules[__name__]):
         # **시각을 여기 박지 않는다.** `SESSION_FROM`·`SESSION_TO` 에서 만든다 —
         # 박으면 그쪽을 고쳤을 때 이 줄만 낡는다. 2026-09-23 에 대상을 50 으로
