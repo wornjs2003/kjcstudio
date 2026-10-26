@@ -2885,6 +2885,8 @@ def fetch_price(cfg, code):
         "bps": _num(o.get("bps")),
         "high52": _num(o.get("w52_hgpr"), int),
         "low52": _num(o.get("w52_lwpr"), int),
+        # 상장주식수(주) — 투자자 누적 순매수를 %p 로 나눌 때 쓴다(holding_flow · 2026-10-26)
+        "listed": _num(o.get("lstn_stcn"), int),
         "source": "KIS",
         "mode": cfg["mode"],
     }
@@ -3568,6 +3570,28 @@ def _inv_long_read(code, upto, limit):
     except sqlite3.Error:
         return []
     return [json.loads(r["row"]) for r in rs]
+
+
+def holding_flow(cfg, code):
+    """투자자별 누적 순매수(%p) — 차트 보조지표 「누적 순매수」 칸 (2026-10-26 재권님 「다」 · 작업우선순위 경유).
+
+    **보유비중이 아니다.** 거래소는 종목별로 외국인 보유만 집계하고 기관 · 개인 보유 비중은 공개 출처가 없다(10-26 조사).
+    그래서 셋을 같은 잣대로 — 셈 첫날부터 사들인 주식(순매수 수량 합) ÷ 상장주식수 × 100. 첫날 앞까지는 0 에서 시작한다.
+    줄은 `fetch_investor_long` 그대로(확정치 · 3달 · 쓰는 서버가 날마다 쌓는다) — 장중 오늘 빈 줄은 뺀다.
+    상장주식수를 못 받으면 셈하지 않고 None(0 으로 나누지 않는다)."""
+    rows = [r for r in (fetch_investor_long(cfg, code, INVESTOR_LONG_DAYS) or [])
+            if r.get("date") and all((r.get(k) or {}).get("net") is not None for k in ("foreign", "inst", "person"))]
+    listed = (fetch_price(cfg, code) or {}).get("listed")
+    if not rows or not listed:
+        return None
+    rows.sort(key=lambda r: r["date"])
+    acc = {"foreign": 0, "inst": 0, "person": 0}
+    out = []
+    for r in rows:
+        for k in acc:
+            acc[k] += r[k]["net"]
+        out.append({"date": r["date"], **{k: round(v / listed * 100, 4) for k, v in acc.items()}})
+    return {"start": out[0]["date"], "listed": listed, "rows": out}
 
 
 def fetch_investor_long(cfg, code, days=INVESTOR_LONG_DAYS):
@@ -7870,6 +7894,21 @@ class Handler(SimpleHTTPRequestHandler):
                         "provisional": False,
                     },
                 })
+                return
+
+            # 차트 보조지표 「누적 순매수」 칸 (2026-10-26 · `holding_flow`)
+            if route == "holding-flow":
+                code = (qs.get("code") or [""])[0].strip()
+                if not (code.isdigit() and len(code) == 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                hf = holding_flow(cfg, code)
+                if not hf:
+                    self._send_json({"ok": False, "error": "투자자 줄이나 상장주식수를 못 받았습니다."}, 503)
+                    return
+                self._send_json({"ok": True, "data": hf["rows"],
+                                 "meta": {"code": code, "start": hf["start"], "listed": hf["listed"], "unit": "%p",
+                                          "note": "보유비중 아님 · 셈 첫날부터 누적 순매수 ÷ 상장주식수"}})
                 return
 
             # 투자자 지표 모달 「그래프」 판 (2026-10-16 · `investor_board`)
