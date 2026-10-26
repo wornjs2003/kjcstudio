@@ -634,6 +634,88 @@ def check_extra(proxy, names=None, codes=None):
     return hit
 
 
+# ── 관심종목 볼린저 하단 닿음 (2026-10-26) ─────────────────────
+#
+# 재권님 — 「관심종목에 있는 종목들은 5분봉이 볼린져 밴드 하단 터치하면 텔레그램으로 보내도록 해줘」(13:1x) ·
+# 되닿음은 「다시 닿으면 알려주는 방향으로」 (작업우선순위 경유). 위 「바닥 신호」(하단 + 양봉 + MACD + RSI 가 동시에)와
+# 다른 알림이다 — 하단에 닿기만 하면 간다. 같은 봉에 둘 다 날 수 있다.
+#
+#     대상     **화면 관심종목** — `dart.WATCH_CODES`(= market.js WATCHLIST · check-watchlist-sync.py 가 맞춰 봄).
+#              위 신호들이 보는 코스피 상위 50 이 아니다
+#     띠       위 `bollinger` · `BB_PERIOD` · `BB_MULT` 그대로(chart.js 와 check-indicators.py 가 맞춰 봄) — 새 숫자를 안 박는다.
+#              차트처럼 **모든 5분봉 종가**(장 전 · 장 뒤 봉 포함)로 셈한다 — 화면 띠와 같아야 「화면엔 닿았는데 안 온다」 가 안 된다
+#     닿음     그 봉 **저가 ≤ 하단** · **정규장 봉만**(`REGULAR_FROM` ~ `REGULAR_TO`)
+#     되닿음   닿은 뒤 **저가가 하단 위인 봉이 하나 나오면** 다시 「닿을 수 있음」 — 그 뒤 또 닿으면 또 보낸다.
+#              그날 첫 정규장 봉은 늘 「닿을 수 있음」 에서 시작한다
+#
+# 셈(2026-10-26 · 메인 DB 5분봉 · 10-13~10-26 10거래일 · 관심 7): 하루 약 24통 — 봉마다였으면 66 · 종목마다 하루 한 번이면 7.
+#
+# **보내기는 따로 켠다** — `BB_SEND`. 꺼져 있으면 판정만 하고 로그에 「[신호·안보냄]」. 8765 만 돈다(`kis_proxy` 가 `is_sender` 로 부름).
+# **서버가 낮에 다시 뜨면** 그날 앞서 닿았던 봉들이 한꺼번에 나가지 않게, 마지막 두 봉 밖의 닿음은 보내지 않고 기록만 한다.
+BB_SEND = False
+BB_KIND = "bb_low"
+BB_RECENT = 2               # 이 수만큼 최근 봉의 닿음만 보낸다 — 그 앞은 「이미 지난 것」 으로 기록만
+
+
+def bb_low_touches(rows, day):
+    """그날 정규장에서 하단에 닿은 봉들(되닿음 규칙대로) — [{ts, low, close, band, n}] 과거→최신."""
+    _up, lo = bollinger([r["close"] for r in rows])
+    out, armed = [], True
+    for i, r in enumerate(rows):
+        t = str(r["ts"])
+        if t[:8] != day or not (REGULAR_FROM <= t[8:12] <= REGULAR_TO) or lo[i] is None:
+            continue
+        if r["low"] <= lo[i]:
+            if armed:
+                out.append({"ts": r["ts"], "low": r["low"], "close": r["close"], "band": round(lo[i]),
+                            "n": len(out) + 1})
+                armed = False
+        else:
+            armed = True
+    return out
+
+
+def format_bb(code, name, ev):
+    who = name if name and name != code else code
+    t = str(ev["ts"])
+    when = "%s:%s" % (t[8:10], t[10:12]) if len(t) >= 12 else ""
+    return ("⬇ 볼린저 하단 · %s%s · %s\n"
+            "저가 %s원 · 하단 %s원 · 현재가 %s원\n"
+            "오늘 %d번째 · 5분봉 · 정규장 기준 · 참고용입니다"
+            % (who, " (%s)" % code if who != code else "", when,
+               format(ev["low"], ","), format(ev["band"], ","), format(ev["close"], ","), ev["n"]))
+
+
+def check_bb(proxy, names=None):
+    """관심종목 하단 닿음 — 보낸(또는 로그에 남긴) 건수."""
+    _init(proxy)
+    names = names if names is not None else code_names(proxy)
+    day = time.strftime("%Y%m%d")
+    hit = 0
+    for code in dart.WATCH_CODES:
+        try:
+            rows = proxy.read_candles(code, PERIOD, EXTRA_BARS)
+            if not rows or str(rows[-1]["ts"])[:8] != day:
+                continue
+            recent = {r["ts"] for r in rows[-BB_RECENT:]}
+            for ev in bb_low_touches(rows, day):
+                if _already(proxy, code, ev["ts"], BB_KIND):
+                    continue
+                if ev["ts"] in recent:
+                    text = format_bb(code, (names or {}).get(code, code), ev)
+                    if BB_SEND:
+                        ok, err = dart.telegram_send(text)
+                        if not ok:
+                            print("  [신호] 보내지 못했습니다: %s" % err)
+                    else:
+                        print("  [신호·안보냄] %s" % text.replace("\n", " / "))
+                    hit += 1
+                _mark(proxy, code, ev["ts"], BB_KIND, day)
+        except Exception as e:
+            print("  [신호] %s 볼린저 하단 판정 실패: %s" % (code, type(e).__name__))
+    return hit
+
+
 # ── 루프 ──────────────────────────────────────────────────────
 
 _last_ts = {}          # code -> 마지막으로 본 봉. 새 봉일 때만 계산한다
@@ -648,7 +730,8 @@ def start(proxy, names=None):
             try:
                 if _in_session():
                     fresh = False
-                    for code in watch_codes(proxy):
+                    # 관심종목(볼린저 하단 알림)도 함께 본다 — 코스피 상위 50 밖일 수 있다
+                    for code in list(dict.fromkeys(list(watch_codes(proxy)) + list(dart.WATCH_CODES))):
                         rows = proxy.read_candles(code, PERIOD, 1)
                         ts = rows[0]["ts"] if rows else None
                         if ts and _last_ts.get(code) != ts:
@@ -659,6 +742,7 @@ def start(proxy, names=None):
                     if fresh:
                         n = check_once(proxy, names)
                         n += check_extra(proxy, names)
+                        n += check_bb(proxy, names)
                         if n:
                             print("  [신호] %d건" % n)
             except Exception as e:
