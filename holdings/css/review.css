@@ -9,7 +9,9 @@
    ========================================================================== */
 
 .rv-app { padding: calc(var(--nav-height) + 12px) 12px 40px; max-width: var(--grid-max); margin: 0 auto; box-sizing: border-box; }
-.rv { background: var(--kh-bg-card); border-radius: 16px; padding: 14px 12px; }
+.rv { display: flex; flex-direction: column; gap: 12px; }
+/* 달력 카드 · 쓰는 카드 — 둘로 가른다 (2026-10-26 「달력과 작성하는곳을 분리」) */
+.rv-main, .rv-side-col { background: var(--kh-bg-card); border-radius: 16px; padding: 14px 12px; }
 
 /* ── 머리줄 ── */
 .rv-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -58,47 +60,60 @@
 .rv-wd-b .rv-chip.down, .rv-band .rv-chip.down { background: var(--kh-down-dim); color: var(--kh-down); }
 .rv-none { font-size: 0.72rem; color: var(--kh-text-dim); }
 
-/* ── 그날 칸 ── */
-.rv-day { margin-top: 14px; border-top: 1px solid var(--kh-border); padding-top: 12px; }
-.rv-cal:empty + .rv-side-col .rv-day { margin-top: 0; border-top: 0; padding-top: 0; }
-.rv-day-h { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+/* ── 그날 칸 — 맨 위 쓰는 칸 · 아래 다른 종목 접어서(2026-10-26 시안 v5) ── */
+.rv-day-h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .rv-day-h b { font-size: 0.98rem; color: var(--kh-text-primary); }
-.rv-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--kh-border); font-size: 0.86rem; }
-.rv-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--kh-text-primary); font-weight: 700; text-decoration: none; }
+.rv-btns { margin-left: auto; display: flex; gap: 6px; }
+.rv-btn { font: inherit; font-size: 0.8rem; border: 1px solid var(--kh-border-strong); border-radius: 8px; padding: 4px 10px; background: var(--kh-bg-card); color: var(--kh-text-primary); cursor: pointer; }
+.rv-btn:disabled { color: var(--kh-text-dim); cursor: default; }
+.rv-btns .rv-save { margin-left: 0; }
+.rv-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--kh-text-primary); font-weight: 700; text-align: left; }
 .rv-amt { font-weight: 700; }
-.rv-q { font-size: 0.78rem; flex: none; }   /* 색은 sign.js 의 kh-up · kh-down · kh-mut 가 준다 */
-.rv-p { text-align: right; font-variant-numeric: tabular-nums; flex: none; }
-.rv-why { flex-basis: 100%; font-size: 0.76rem; color: var(--kh-text-muted); margin: -4px 0 0 32px; }
-.rv-del { background: none; border: 0; color: var(--kh-text-dim); cursor: pointer; font-size: 0.8rem; padding: 2px 4px; }
-.rv-del:hover { color: var(--kh-text-primary); }
-.rv-rowwrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-bottom: 1px solid var(--kh-border); padding: 6px 0; }
-.rv-rowwrap .rv-row { border: 0; padding: 2px 0; flex: 1 1 100%; }
-.rv-empty { font-size: 0.8rem; color: var(--kh-text-muted); padding: 8px 0; }
+.rv-q { font-size: 0.78rem; }   /* 색은 sign.js 의 kh-up · kh-down · kh-mut 가 준다 */
+.rv-p { font-variant-numeric: tabular-nums; }
+.rv-why { font-size: 0.78rem; color: var(--kh-text-secondary); margin-top: 4px; white-space: pre-wrap; }
 
-/* 기록 더하기 */
-.rv-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; background: var(--kh-bg-surface); border-radius: 10px; padding: 10px; }
+/* 쓰는 칸 */
+.rv-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--kh-bg-surface); border-radius: 10px; padding: 10px; }
 .rv-form input, .rv-form textarea { font: inherit; font-size: 0.85rem; border: 1px solid var(--kh-border-strong); border-radius: 6px; padding: 7px 8px; background: var(--kh-bg-card); color: var(--kh-text-primary); min-width: 0; box-sizing: border-box; }
 .rv-form .full { grid-column: 1 / -1; }
+/* 차익 · 퍼센트 칸 글씨 — 위 .rv-form input 의 글씨 색을 sign.js 클래스가 이기게(색 값은 theme.css 변수 그대로) */
+.rv-form input.kh-up { color: var(--kh-up); }
+.rv-form input.kh-down { color: var(--kh-down); }
+.rv-form-h { grid-column: 1 / -1; font-size: 0.74rem; font-weight: 700; color: var(--kh-text-secondary); }
+.rv-form .rv-why-in { min-height: 120px; resize: vertical; }
 .rv-form .rv-hint { grid-column: 1 / -1; font-size: 0.7rem; color: var(--kh-text-muted); }
-.rv-form .rv-new { background: none; border: 0; padding: 0; font: inherit; color: var(--kh-accent); cursor: pointer; text-decoration: underline; }
-.rv-rowwrap { cursor: pointer; }
-.rv-rowwrap.is-edit { background: var(--kh-bg-surface); border-radius: 6px; }
+.rv-form .rv-hint:empty { display: none; }
 
-/* 그날 회고 */
-.rv-memo-h { margin-top: 14px; font-size: 0.82rem; font-weight: 700; color: var(--kh-text-primary); }
-.rv-memo { margin-top: 6px; width: 100%; min-height: 80px; box-sizing: border-box; font: inherit; font-size: 0.85rem; border: 1px solid var(--kh-border-strong); border-radius: 8px; padding: 10px; background: var(--kh-bg-surface); color: var(--kh-text-primary); resize: vertical; }
+/* 다른 종목 — 접으면 이름만 */
+.rv-others-h { margin-top: 14px; font-size: 0.82rem; font-weight: 700; color: var(--kh-text-primary); }
+.rv-fold { border-bottom: 1px solid var(--kh-border); }
+.rv-fold-h { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; padding: 9px 2px; font: inherit; font-size: 0.86rem; cursor: pointer; }
+.rv-chev { width: 14px; flex: none; color: var(--kh-text-secondary); font-size: 0.75rem; }
+.rv-fold-b { padding: 0 2px 10px 24px; font-size: 0.82rem; }
+.rv-fold-n { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rv-acts { margin-left: auto; display: flex; gap: 4px; }
+.rv-act { font: inherit; font-size: 0.76rem; background: none; border: 0; padding: 2px 4px; color: var(--kh-text-secondary); cursor: pointer; text-decoration: none; }
+.rv-act:hover { color: var(--kh-text-primary); }
 
 /* ── 넓은 화면 — 달력 왼쪽 · 그날 칸 오른쪽 ── */
 @media (min-width: 701px) {
   .rv-app { padding: calc(var(--nav-height) + 16px) var(--nav-gutter) 60px; max-width: none; }
-  .rv { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 0 24px; padding: 20px 24px; align-items: start; }
-  .rv-top { grid-column: 1 / -1; }
-  .rv-cal { grid-column: 1; }
-  .rv-side-col { grid-column: 2; }
+  .rv { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 0 16px; align-items: stretch; }
+  .rv-main { grid-column: 1; padding: 20px 24px; min-width: 0; }
+  .rv-side-col { grid-column: 2; padding: 20px; display: flex; flex-direction: column; min-height: 0; }
+  /* 일 보기 — 달력이 비면 쓰는 카드가 머리줄 아래 한 열로 */
+  .rv:has(.rv-cal:empty) { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .rv:has(.rv-cal:empty) .rv-side-col { grid-column: 1; max-width: 760px; }
   .rv-cal:empty { display: none; }
-  .rv-cal:empty + .rv-side-col { grid-column: 1 / -1; max-width: 760px; }
-  .rv-day { margin-top: 0; border-top: 0; padding-top: 0; }
-  .rv-cell { min-height: 112px; padding: 4px; text-align: left; }
+  /* 쓰는 카드는 달력 카드 높이에 맞춘다 — 회고 글 칸과 다른 종목 목록이 남는 높이를 반씩 받고,
+     목록이 자기 몫을 넘치면 그만큼 회고 글 칸이 줄어든다(최소 72px) · 2026-10-26 「밑에 목록에 따라서 조절 · 기본 1/2」 */
+  .rv-day { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .rv-day .rv-form { flex: 1 1 0; min-height: 0; grid-template-rows: auto auto auto minmax(72px, 1fr); }
+  .rv-day .rv-form .rv-why-in { min-height: 0; height: 100%; resize: none; }
+  .rv-day .rv-others { flex: 1 1 0; }
+  /* 달력 세로 1.5배 — 칸 112 → 168 (2026-10-26 「달력세로로 지금보다 1.5배로」) */
+  .rv-cell { min-height: 168px; padding: 4px; text-align: left; }
   .rv-cell .rv-d { display: block; margin: 0 auto 3px; text-align: center; }
   .rv-cell .rv-chip { display: flex; border-radius: 4px; padding: 2px 5px; margin: 0 0 2px; box-shadow: none; font-size: 0.74rem; }
   .rv-cell .rv-chip > span { display: inline; overflow: hidden; text-overflow: ellipsis; }

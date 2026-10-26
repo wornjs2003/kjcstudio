@@ -1,8 +1,8 @@
 /* ==========================================================================
    주식 회고 (review.html) — 구글 캘린더 모양 · 월 · 주 · 일 (2026-10-07 재권님 「응 이대로 해줘」)
 
-   매매 하나 = 띠 하나(종목 아이콘 + 이름 · 시세차익 + 빨강 / − 파랑 — 2026-10-26). 날짜를 누르면 그날 매매 줄 +
-   기록 더하기 + 그날 회고. **예시 데이터는 없다** — 적은 것만 보인다(holdings/CLAUDE.md 「데이터 규칙」).
+   매매 하나 = 띠 하나(종목 아이콘 + 이름 · 시세차익 + 빨강 / − 파랑 — 2026-10-26). 날짜를 누르면 오른쪽 카드 맨 위에
+   쓰는 칸(첫 종목을 불러 둠) · 그 아래 다른 종목을 접어서(이름만) — 2026-10-26 시안 v5 「응 진행해」. **예시 데이터는 없다** — 적은 것만 보인다(holdings/CLAUDE.md 「데이터 규칙」).
 
    ── 저장 ──
    문서 하나 `/api/board/doc/stock-review` (docstore — 저장마다 직전 것을 남긴다 · 저장소 git 에는 안 올라감).
@@ -44,7 +44,8 @@ let doc = { v: 1, trades: [], days: {} };
 let view = 'month';
 let pick = todayYmd();          // 고른 날
 let stocks = [];                // [{ code, name }]
-let editId = null;              // 다시 불러 고치는 매매 id — 없으면 새 기록 (2026-10-26 「다 작성하지 않아도 저장되도록」)
+let editId;                     // 쓰는 칸에 불러 둔 매매 id — null 새 기록 · undefined 날짜를 막 골라 아직 안 정함(첫 종목을 불러 둔다)
+const openIds = new Set();      // 펼쳐 둔 다른 종목 줄
 
 /* 보는 상태(보기 · 고른 날)는 사람마다 다르다 — 브라우저에만 둔다 */
 try {
@@ -175,34 +176,46 @@ function paintWeek() {
    **줄을 누르면 그 기록을 아래 칸에 다시 불러 이어 쓴다**(2026-10-26 — 빈 칸을 남기고 저장하게 됐으니 나중에 채울 길) */
 function paintDay() {
   const list = tradesOn(pick);
+  /* 날짜를 누르면 쓰는 칸이 맨 위 — 그날 기록이 있으면 첫 종목을 불러 둔다(「작성하기」 를 누른 뒤만 빈 칸) */
+  if (editId === undefined && list[0]) editId = list[0].id;   // 기록이 아직 안 왔으면 undefined 로 두어 온 뒤에 정한다
   const ed = editId ? doc.trades.find((x) => x.id === editId && x.d === pick) : null;
-  if (!ed) editId = null;
+  if (!ed && editId) editId = null;
   const val = (k) => esc(ed && ed[k] != null ? ed[k] : '');
-  const rows = list.length ? list.map((t) => `<div class="rv-rowwrap${t.id === editId ? ' is-edit' : ''}" data-edit="${esc(t.id)}" title="눌러서 이어 쓰기">
-      <div class="rv-row">
-        ${iconHtml(stockOf(t))}
-        ${t.code ? `<a class="rv-nm" href="./?code=${esc(t.code)}">${esc(nameOf(t))}</a>` : `<span class="rv-nm">${esc(nameOf(t))}</span>`}
-        <span class="rv-p ${signClass(t.pnl)}">${wonS(t.pnl)}</span>
-        <span class="rv-q ${signClass(t.pct)}">${pctS(t.pct)}</span>
-        <button class="rv-del" type="button" data-del="${esc(t.id)}" title="지우기" aria-label="지우기">✕</button>
-      </div>
-      ${t.why ? `<div class="rv-why">${esc(t.why)}</div>` : ''}
-      ${t.qty != null || t.price != null ? `<div class="rv-why">옛 기록 — ${t.side === 'sell' ? '매도' : '매수'}${t.qty != null ? ' · ' + Number(t.qty).toLocaleString('ko-KR') + '주' : ''}${t.price != null ? ' · ' + won(Number(t.price)) : ''}</div>` : ''}</div>`).join('')
-    : '<div class="rv-empty">이날 적은 매매가 없습니다</div>';
+  /* 다른 종목 — 쓰는 칸 아래에 접어 둔다 · 접으면 이름만 · ▸ 를 누르면 차익 · % · 회고 · 수정 · 지우기 */
+  const others = list.filter((t) => t.id !== editId);
+  const rows = others.map((t) => {
+    const open = openIds.has(t.id);
+    return `<div class="rv-fold${open ? ' is-open' : ''}">
+      <button type="button" class="rv-fold-h" data-fold="${esc(t.id)}" aria-expanded="${open}">
+        <span class="rv-chev" aria-hidden="true">${open ? '▾' : '▸'}</span>${iconHtml(stockOf(t))}<span class="rv-nm">${esc(nameOf(t))}</span>
+      </button>
+      ${open ? `<div class="rv-fold-b">
+        <div class="rv-fold-n"><span class="rv-p ${signClass(t.pnl)}">${wonS(t.pnl)}</span> <span class="rv-q ${signClass(t.pct)}">${pctS(t.pct)}</span>
+          <span class="rv-acts">${t.code ? `<a class="rv-act" href="./?code=${esc(t.code)}">종목 보기</a>` : ''}
+          <button type="button" class="rv-act" data-edit="${esc(t.id)}">수정</button>
+          <button type="button" class="rv-act" data-del="${esc(t.id)}">지우기</button></span></div>
+        ${t.why ? `<div class="rv-why">${esc(t.why)}</div>` : ''}
+        ${t.qty != null || t.price != null ? `<div class="rv-why">옛 기록 — ${t.side === 'sell' ? '매도' : '매수'}${t.qty != null ? ' · ' + Number(t.qty).toLocaleString('ko-KR') + '주' : ''}${t.price != null ? ' · ' + won(Number(t.price)) : ''}</div>` : ''}
+      </div>` : ''}</div>`;
+  }).join('');
 
-  /* 「저장하기」 는 그날 칸 날짜 줄 오른쪽(2026-10-26 「기록더하기는 저장하기로 바꾸고 버튼이 위쪽에」) — 아래 기록 칸을 보낸다 */
-  return `<div class="rv-day-h"><b>${dayLabel(pick)}</b><button class="rv-save" type="submit" form="rv-form">저장하기</button></div>
-    ${rows}
+  /* 날짜 줄 오른쪽 — 작성하기 · 수정하기 · 저장하기(2026-10-26 재권님 「저장하기 왼쪽에 작성하기 버튼 · 수정하기 버튼」).
+     「그날 회고」 칸은 뺐다 — 회고는 종목마다 쓴다(같은 날 「그날 회고는 필요없을듯 · 종목에 작성된게 있어서」). 적어 둔 글(doc.days)은 지우지 않는다 */
+  return `<div class="rv-day-h"><b>${dayLabel(pick)}</b>
+      <span class="rv-btns">
+        <button class="rv-btn" type="button" id="rv-write">작성하기</button>
+        <button class="rv-btn" type="button" id="rv-edit"${list.length ? '' : ' disabled'}>수정하기</button>
+        <button class="rv-save" type="submit" form="rv-form">저장하기</button>
+      </span></div>
     <form class="rv-form" id="rv-form" autocomplete="off">
+      <span class="rv-form-h">${ed ? `쓰는 중 — ${esc(nameOf(ed))}` : '새로 쓰기'}</span>
       <input class="full" id="rv-stock" list="rv-stocks" placeholder="종목 이름 또는 코드" value="${ed ? esc(ed.name || ed.code || '') : ''}" />
       <input id="rv-pnl" type="number" step="1" inputmode="numeric" placeholder="시세차익(원) · 손해는 −" value="${val('pnl')}" />
       <input id="rv-pct" type="number" step="0.01" inputmode="decimal" placeholder="퍼센트(%)" value="${val('pct')}" />
-      <span class="rv-hint" id="rv-hint">${ed ? `${esc(nameOf(ed))} 기록을 고치는 중 — 위 「저장하기」 · <button type="button" class="rv-new" id="rv-new">새로 적기</button>`
-        : '빈 칸이 있어도 위 「저장하기」 로 남습니다 — 줄을 누르면 다시 불러 이어 씁니다'}</span>
-      <input class="full" id="rv-why" placeholder="한 줄 — 왜 그랬나" value="${val('why')}" />
+      <textarea class="full rv-why-in" id="rv-why" placeholder="이 종목 회고 — 잘한 것 · 아쉬운 것 · 다음엔 어떻게">${val('why')}</textarea>
+      <span class="rv-hint" id="rv-hint"></span>
     </form>
-    <div class="rv-memo-h">그날 회고</div>
-    <textarea class="rv-memo" id="rv-memo" placeholder="잘한 것 · 아쉬운 것 · 다음엔 어떻게">${esc(doc.days[pick] || '')}</textarea>`;
+    ${others.length ? `<div class="rv-others"><div class="rv-others-h">이날 다른 종목 ${others.length}</div>${rows}</div>` : '<div class="rv-others"></div>'}`;
 }
 
 function paintTitle() {
@@ -234,77 +247,75 @@ function bindDay() {
   const form = $('#rv-form');
   if (!form) return;
   const stockIn = $('#rv-stock'), hint = $('#rv-hint');
-  /* 저장 — 날짜 줄의 「저장하기」(form="rv-form") · 엔터. **빈 칸이 있어도 남긴다**(2026-10-26 재권님 「다 작성하지 않아도 저장되도록」).
-     안 남기는 것은 기록 칸 넷(종목 · 차익 · 퍼센트 · 한 줄)이 다 빈 때 하나다 — 그때는 그날 회고 글만 바로 남긴다.
+  /* 저장 — 날짜 줄의 「저장하기」(form="rv-form"). **빈 칸이 있어도 남긴다**(2026-10-26 재권님 「다 작성하지 않아도 저장되도록」).
+     안 남기는 것은 기록 칸 넷(종목 · 차익 · 퍼센트 · 회고)이 다 빈 새 기록 하나다.
      목록에 없는 이름은 코드 없이 이름 그대로 둔다 · 빈 차익 · 퍼센트는 null(화면에 —).
-     옛 기록의 매수 · 매도 · 수량 · 가격 칸은 지우지 않는다 — 줄 아래 「옛 기록」 으로 보인다 */
+     옛 기록의 매수 · 매도 · 수량 · 가격 칸은 지우지 않는다 — 펼친 줄 아래 「옛 기록」 으로 보인다 */
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    flushMemo();
     const raw = stockIn.value.trim();
     const pnlRaw = $('#rv-pnl').value, pctRaw = $('#rv-pct').value, why = $('#rv-why').value.trim();
-    if (!raw && pnlRaw === '' && pctRaw === '' && !why) {
-      if (!editId) {
-        hint.textContent = doc.days[pick] ? '매매 칸이 비어 그날 회고 글만 남겼습니다' : '적은 것이 없어 저장할 것이 없습니다';
-        return;
-      }
+    if (!raw && pnlRaw === '' && pctRaw === '' && !why && !editId) {
+      hint.textContent = '적은 것이 없어 저장할 것이 없습니다';
+      return;
     }
     const s = findStock(raw) || (/^\d{6}$/.test(raw) ? { code: raw, name: raw } : { code: '', name: raw });
     const num = (v) => (v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
     const rec = { code: s.code, name: s.name, pnl: num(pnlRaw), pct: num(pctRaw), why };
     const old = editId && doc.trades.find((x) => x.id === editId);
     if (old) Object.assign(old, rec, { at: new Date().toISOString() });
-    else doc.trades.push({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, d: pick, ...rec, at: new Date().toISOString() });
-    editId = null;
+    else {
+      const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      doc.trades.push({ id, d: pick, ...rec, at: new Date().toISOString() });
+      editId = id;                       // 저장한 것을 쓰는 칸에 그대로 둔다
+    }
     store.save();
     paint();
   });
-  const nw = $('#rv-new');
-  if (nw) nw.addEventListener('click', () => { editId = null; paint(); });
-  $('#rv-day').querySelectorAll('[data-edit]').forEach((w) => w.addEventListener('click', (e) => {
-    if (e.target.closest('a, [data-del]')) return;
-    const t = doc.trades.find((x) => x.id === w.dataset.edit);
-    if (!t) return;
-    editId = t.id;
+  /* 시세차익 · 퍼센트 칸 글씨 색 — 적는 대로 오름 빨강 · 내림 파랑 · 0 · 빈 칸은 색 없음(2026-10-26 재권님 「마이너스일때와 플러스일때 컬러도 자동」).
+     셈은 sign.js 한 곳(「오르내림 숫자의 글씨 색은 한 셈이다」) */
+  ['#rv-pnl', '#rv-pct'].forEach((sel) => {
+    const el = $(sel);
+    const tint = () => { el.classList.remove('kh-up', 'kh-down', 'kh-flat', 'kh-mut'); if (el.value !== '') el.classList.add(signClass(Number(el.value))); };
+    el.addEventListener('input', tint);
+    tint();
+  });
+  /* 작성하기 — 빈 칸으로 새 종목 · 수정하기 — 쓰는 칸이 비어 있으면 그날 첫 종목을 불러 온다 */
+  $('#rv-write').addEventListener('click', () => { editId = null; paint(); $('#rv-stock').focus(); });
+  $('#rv-edit').addEventListener('click', () => {
+    if (!editId) { const t = tradesOn(pick)[0]; if (!t) return; editId = t.id; paint(); }
+    $('#rv-why').focus();
+  });
+  $('#rv-day').querySelectorAll('[data-fold]').forEach((b) => b.addEventListener('click', () => {
+    const id = b.dataset.fold;
+    if (openIds.has(id)) openIds.delete(id); else openIds.add(id);
     paint();
+  }));
+  $('#rv-day').querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => {
+    editId = b.dataset.edit; openIds.delete(editId); paint(); $('#rv-why').focus();
   }));
   $('#rv-day').querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => {
     const t = doc.trades.find((x) => x.id === b.dataset.del);
     if (!t || !window.confirm(`${nameOf(t)} 기록을 지울까요?`)) return;
     doc.trades = doc.trades.filter((x) => x.id !== t.id);
-    if (editId === t.id) editId = null;
+    openIds.delete(t.id);
     store.save();
     paint();
   }));
-  const memo = $('#rv-memo');
-  memo.addEventListener('input', () => {
-    clearTimeout(memoTimer);
-    memoTimer = setTimeout(flushMemo, 500);
-  });
 }
 
-/* 그날 회고 글 — 쓰는 대로 0.5초 뒤 남기고, 「저장」 을 누르면 그 자리에서 남긴다 */
-let memoTimer = null;
-function flushMemo() {
-  clearTimeout(memoTimer);
-  const memo = $('#rv-memo');
-  if (!memo) return;
-  const now = doc.days[pick] || '';
-  const v = memo.value.trim() ? memo.value : '';
-  if (v === now) return;
-  if (v) doc.days[pick] = v; else delete doc.days[pick];
-  store.save();
-  if (view !== 'day') $('#rv-cal').innerHTML = view === 'month' ? paintMonth() : paintWeek();
-}
+/* 그날 회고 칸은 2026-10-26 에 뺐다 — 적어 둔 글(doc.days)은 문서에 그대로 둔다(지우지 않는다) */
 
 /* ── 머리줄 · 달력 손잡이(한 번만) ── */
+function dayChanged() { editId = undefined; openIds.clear(); }
 function move(dir) {
+  dayChanged();
   if (view === 'month') { const d = fromYmd(pick); pick = ymd(new Date(d.getFullYear(), d.getMonth() + dir, 1)); }
   else pick = addDays(pick, view === 'week' ? 7 * dir : dir);
   keepView(); paint();
 }
 document.querySelectorAll('[data-move]').forEach((b) => b.addEventListener('click', () => move(Number(b.dataset.move))));
-$('#rv-today').addEventListener('click', () => { pick = todayYmd(); keepView(); paint(); });
+$('#rv-today').addEventListener('click', () => { pick = todayYmd(); dayChanged(); keepView(); paint(); });
 $('#rv-seg').addEventListener('click', (e) => {
   const b = e.target.closest('[data-view]');
   if (!b || b.dataset.view === view) return;
@@ -313,6 +324,7 @@ $('#rv-seg').addEventListener('click', (e) => {
 $('#rv-cal').addEventListener('click', (e) => {
   const c = e.target.closest('[data-day]');
   if (!c) return;
+  if (c.dataset.day !== pick) dayChanged();
   pick = c.dataset.day; keepView(); paint();
   /* 폰은 그날 칸이 달력 아래라 눌러도 안 보일 수 있다 — 그 칸으로 내린다 */
   if (!matchMedia('(min-width: 701px)').matches) $('#rv-day').scrollIntoView({ behavior: 'smooth', block: 'start' });

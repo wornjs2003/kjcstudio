@@ -142,7 +142,7 @@ const BODY_HTML = `
           <button type="button" role="tab" data-dl-tab="tg" class="is-on">텔레그램 글</button>
           <button type="button" role="tab" data-dl-tab="video">미국장 분석</button>
         </span>
-        <span class="kh-dl-src" data-dl-tg-src>오늘 보낸 순서</span></div>
+        <span class="kh-dl-src" data-dl-tg-src>오늘 · 최신이 위</span></div>
       <div class="kh-dl-tabbody">
         <div class="kh-dl-tg" data-dl-tg></div>
         <div class="kh-dl-video" data-dl-video hidden></div>
@@ -415,7 +415,7 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
     tgRows = got ? got.rows : [];
     tgBox.innerHTML = tgListHtml(got);
     const src = root.querySelector('[data-dl-tg-src]');
-    if (src && got && got.meta && got.meta.ready !== false) src.textContent = `오늘 보낸 순서 · 보냄 ${got.meta.sent || 0} · 꺼짐 ${got.meta.off || 0}`;
+    if (src && got && got.meta && got.meta.ready !== false) src.textContent = `오늘 · 최신이 위 · 보냄 ${got.meta.sent || 0} · 꺼짐 ${got.meta.off || 0}`;
   });
   const closeInline = () => { tgBox?.querySelector('.kh-dl-tgd-inline')?.remove(); };
   const pickTg = (id) => {
