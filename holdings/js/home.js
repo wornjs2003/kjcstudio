@@ -1149,7 +1149,49 @@ const SORTS = {
           head: '거래대금', show: showValue },
   down: { label: '하락',   key: (p) => p.pct,  dir: 1,
           head: '거래대금', show: showValue },
+  /* 장외 — 정규장 종가 이후(넥스트레이드 애프터 · 다음 날 프리마켓) **오른 종목만**, 종가 대비 등락률 순
+     (2026-10-26 재권님 「종가 이후에 오른종목들 상위만 … 종가대비 등락률만 표기되도록」 · 작업우선순위 경유).
+     값(regPct · regClose)은 서버가 통합 시세에 싣는다(kis_proxy.py `attach_reg_close`) — 화면은 셈하지 않는다.
+     정규장 중에는 서버가 안 실어 줄이 비고, 그때 글은 `afterEmpty` 가 적는다.
+     `pct` 는 맨 오른쪽 등락률 칸에 무엇을 적나 — 이 칩만 전일 대비가 아니라 종가 대비다 */
+  after:{ label: '장외', key: (p) => p.regPct, only: (v) => v > 0,
+          head: '종가', show: (code, p) => (p && p.regClose ? fmtPriceOf(code, p.regClose) : '—'),
+          pct: (p) => p.regPct, note: '종가 대비 오른 종목',
+          /* 정규장 중에는 서버가 앞 회차 20:00 장외 마감 값을 싣는다(regFrozen = 그 회차 날) —
+             가격 칸도 그 장외 값이어야 등락률과 맞는다(재권님 「전날 20 시에 멈추는걸로 해줘」 · 2026-10-26) */
+          price: (p) => (p.regFrozen ? p.regAfterPrice : p.price) },
 };
+
+/* 가격 칸의 값 — 장외 칩이 정규장 중이면 앞 회차 20:00 장외 마감 값 · 나머지는 지금 시세 */
+const priceOf = (p, sortId = sortBy) => {
+  const f = SORTS[sortId] && SORTS[sortId].price;
+  return f ? f(p) : p.price;
+};
+
+/* 맨 오른쪽 등락률 칸의 값 — 칩이 정한다(장외는 종가 대비 · 나머지는 전일 대비). 값이 없으면 null(0 으로 두지 않는다) */
+const pctOf = (p, sortId = sortBy) => {
+  if (!p) return null;
+  const f = SORTS[sortId] && SORTS[sortId].pct;
+  const v = f ? f(p) : p.pct;
+  return Number.isFinite(v) ? v : null;
+};
+
+/* 「어제」 · 「10-23(금)」 — 정규장 중 장외 값이 어느 저녁 것인지. 한국 시각으로 센다(marketPhase 와 같은 보정) */
+function frozenDayLabel(iso) {
+  const kst = new Date(Date.now() + 9 * 3600 * 1000);
+  kst.setUTCDate(kst.getUTCDate() - 1);
+  if (kst.toISOString().slice(0, 10) === iso) return '어제';
+  const d = new Date(iso + 'T00:00:00Z');
+  return `${iso.slice(5)}(${'일월화수목금토'[d.getUTCDay()]})`;
+}
+
+/* 장외 칩에 줄이 하나도 없을 때 적는 글 — 정규장 중이면 장외 거래가 없는 때다 */
+function afterEmpty() {
+  const ph = marketPhase().id;
+  return ph === 'regular' || ph === 'single'
+    ? '어제 20:00 장외 마감 값을 못 받았습니다'
+    : '종가보다 오른 종목이 아직 없습니다';
+}
 
 /* 상승 · 하락은 **등락률 그대로** 세운다 — 거래대금 문턱을 뺐다 (2026-10-14 · 재권님 「가」).
    전에는 「거래대금 1,000억 이상만」(지시 — 1000억)이었는데, 10:56 실측으로 코스피 200 중 20개만 넘어
@@ -1211,6 +1253,7 @@ function rowList(sortId = sortBy, mkt = market) {
   const dir = sort.dir ?? -1;               // 기본은 큰 것부터
   return base
     .map(s => ({ s, v: val(s) }))
+    .filter(({ v }) => !sort.only || (v != null && sort.only(v)))   // 장외 — 오른 종목만 남긴다(거르기)
     .sort((a, b) => {
       if (a.v == null && b.v == null) return a.s.rank - b.s.rank;
       if (a.v == null) return 1;
@@ -1351,9 +1394,14 @@ function paintSortNote() {
 
   /* 「관심」 은 **줄 세우는 기준이 아니라 거르는 것**이라 「순」 이 안 붙는다.
      그대로 두면 「관심 순」 이 되는데, 시가총액 순으로 세운 것을 걸렀을 뿐이다. */
-  const bits = [s.filter ? `${s.label}만 · 시가총액 순` : `${s.label} 순`];
+  const bits = [s.filter ? `${s.label}만 · 시가총액 순` : s.note ? `${s.label} · ${s.note}` : `${s.label} 순`];
+  /* 장외 칩이 정규장 중이면 지금 값이 아니라 앞 회차 20:00 마감 값이다 — 그렇다고 적고, 「N초 전 값」 은 안 붙인다
+     (그것은 지금 시세가 얼마나 묵었나라 이 값에는 맞지 않는다). 한 줄에 들어가게 짧게 — 두 줄이면 표가 밀린다 */
+  const frozenAt = sortBy === 'after'
+    ? Object.values(rowPrices || {}).find((p) => p && p.regFrozen)?.regFrozen : null;
+  if (frozenAt) bits.push(`${frozenDayLabel(frozenAt)} 20:00 마감 기준`);
 
-  const fresh = freshNote();
+  const fresh = frozenAt ? null : freshNote();
   if (fresh) bits.push(`<b class="${fresh.cls}">${fresh.text}</b>`);
 
   el.innerHTML = bits.join(' <span class="kh-mut">·</span> ');
@@ -1525,8 +1573,8 @@ function paintRankModal() {
     return `<tr>
       <td class="kh-rkm-rk">${s.rank}</td>
       <td class="l"><span class="kh-nm">${iconHtml(s)}<b>${s.name}</b></span></td>
-      <td class="kh-num">${p ? fmtPriceOf(s.code, p.price) : '···'}</td>
-      <td class="kh-num ${p ? dirClass(p.pct) : 'kh-mut'}">${p ? fmtPct(p.pct) : '—'}</td>
+      <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, rankModalSort)) : '···'}</td>
+      <td class="kh-num ${p ? dirClass(pctOf(p, rankModalSort)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, rankModalSort)) : '—'}</td>
       <td class="kh-num">${p ? showValue(s.code, p) : '···'}</td>
       <td class="kh-num">${showCap(s.code)}</td>
       <td class="kh-num">${p ? fmtShareCount(p.volume) : '···'}</td>
@@ -1534,7 +1582,8 @@ function paintRankModal() {
   }).join('');
   /* 카드와 같다 — 고른 시장 목록이 아직 안 왔으면 빈 표 대신 그렇다고 적는다 */
   const empty = !list.length && universe
-    ? `<tr><td colspan="7" class="kh-mut">${marketDef(rankModalMarket).label} 목록을 아직 받지 못했습니다</td></tr>` : '';
+    ? `<tr><td colspan="7" class="kh-mut">${SORTS[rankModalSort]?.only ? afterEmpty()
+      : `${marketDef(rankModalMarket).label} 목록을 아직 받지 못했습니다`}</td></tr>` : '';
 
   /* 칸 폭을 못 박는다 (table-layout: fixed).
      남는 폭을 종목 칸이 먹어서 종목과 현재가 사이가 **559px** 까지 벌어져
@@ -1632,13 +1681,15 @@ function paintRows(priceMap) {
   const list = rowList();
   /* 고른 시장의 목록이 비었다 — 서버가 아직 그 시장을 안 준다. 빈 표로 두면 고장처럼 보인다 */
   if (!list.length && universe) {
-    $('kh-rows').innerHTML = `<tr><td colspan="5" class="kh-mut">${
-      MARKETS.find(m => m.id === market)?.label || market} 목록을 아직 받지 못했습니다</td></tr>`;
+    $('kh-rows').innerHTML = `<tr><td colspan="5" class="kh-mut">${SORTS[sortBy]?.only ? afterEmpty()
+      : `${MARKETS.find(m => m.id === market)?.label || market} 목록을 아직 받지 못했습니다`}</td></tr>`;
+    paintRowHead();
+    paintSortNote();
     return;
   }
   $('kh-rows').innerHTML = list.map(s => {
     const live = priceMap && priceMap[s.code];
-    const cls = live ? dirClass(live.pct) : 'kh-mut';
+    const cls = live ? dirClass(pctOf(live)) : 'kh-mut';
     /* 거래대금 · 시가총액 · 매수매도 비율 · 산업은 2026-09-17 에 뺐다.
        칸이 368px 로 좁아져 아홉 열이 안 들어갔고, 그 넷은 고른 종목 것만
        차트 옆 패널에 보여주기로 했다 (지시). */
@@ -1650,9 +1701,9 @@ function paintRows(priceMap) {
         ${iconHtml(s)}
         <b>${s.name}</b></span></td>
       <td class="kh-num"><span
-        >${live ? fmtPriceOf(s.code, live.price) : '···'}</span></td>
+        >${live ? fmtPriceOf(s.code, priceOf(live)) : '···'}</span></td>
       <td class="kh-num kh-metric">${sortCell(s.code, live)}</td>
-      <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(live.pct) : '—'}</td>
+      <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(pctOf(live)) : '—'}</td>
     </tr>`;
   }).join('');
 
@@ -1964,16 +2015,16 @@ function paintOneRow(code, live) {
   {
     const tr = $('kh-rows').querySelector(`tr[data-code="${code}"]`);
     if (!tr || !live) return;
-    const cls = dirClass(live.pct);
+    const cls = dirClass(pctOf(live));
     tr.children[2].innerHTML =
-      `<span>${fmtPriceOf(code, live.price)}</span>`;
+      `<span>${fmtPriceOf(code, priceOf(live))}</span>`;
     /* 「전일대비」 자리에는 지금 줄 세운 기준값이 온다. 오르내림이 아니라
        크기라서 등락 색을 입히지 않는다. */
     tr.children[3].className = 'kh-num kh-metric';
     tr.children[3].textContent = sortCell(code, live);
     tr.children[4].className = 'kh-num ' + cls;
     tr.children[4].style.fontWeight = '500';
-    tr.children[4].textContent = fmtPct(live.pct);
+    tr.children[4].textContent = fmtPct(pctOf(live));
   }
 }
 

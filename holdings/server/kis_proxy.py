@@ -2981,6 +2981,13 @@ def fetch_quotes_multi(cfg, codes):
                 "source": "KIS",
             }
 
+    # 장 밖(통합 시세)이면 그 회차 정규장 종가와 종가 대비 등락률을 함께 싣는다 — 아래 `attach_reg_close`.
+    # 정규장 중이면 오늘 아침 장 시작 전에 받아 둔 장외 값을 싣는다 — `attach_after_snap`
+    if div == "UN" and out:
+        attach_reg_close(cfg, out)
+    elif out:
+        attach_after_snap(out)
+
     # 받아둔다. 오류만 있고 값이 하나도 없으면 담지 않는다 — 다음 요청이
     # 다시 시도해야 한다.
     if out:
@@ -2991,6 +2998,174 @@ def fetch_quotes_multi(cfg, codes):
                 for k in list(_multi_cache)[:50]:
                     _multi_cache.pop(k, None)
     return out, errors
+
+
+# ---------------------------------------------------------------- 장외 — 정규장 종가 대비
+# 재권님 「종가 이후에 오른종목들 상위만 따로 보고싶은데 … 실시간 순위에 장외 라고 하나 만들어서 거기서 종가대비
+# 등락률만 표기되도록 해줘」(2026-10-26 · 작업우선순위 경유). 홈 순위 칸 「장외」 칩이 쓰고, 개발1 의 「장 뒤 등락률을
+# 정규장 종가 대비로」 도 같은 값을 가져다 쓴다 — 서버가 한 번 받는다(「같은 값은 한 곳에만 둔다」).
+#
+#   장 밖 시세   통합(UN) 멀티 — 넥스트레이드 애프터마켓(15:30 뒤) · 프리마켓(08:00~) 값이 들어 있다(quote_market_div)
+#   정규장 종가  정규장(J) 멀티의 현재가 — 장이 끝난 뒤에는 그 회차 종가다
+#   응답 칸      regClose(정규장 종가) · regPct(종가 대비 등락률 %) · regDate(그 종가의 날)
+#
+# **종가는 회차마다 한 번만 받고 다음 정규장이 열릴 때까지 쥔다.** 장이 끝나면 안 바뀌는 값이라 다시 물을 까닭이 없다
+# (200종목이면 멀티 7건 · 하루 한 번). 15:30 그 1분은 종가가 막 정해지는 때라 받지 않는다 — 그 사이 regPct 는 없다.
+# **확인 못 한 것** — KRX 시간외 단일가(16:00~18:00)가 정규장(J) 현재가를 움직이는지 · 통합(UN) 시세에 드는지.
+# 처음 받은 값을 쥐므로 움직여도 종가가 흔들리지는 않는다. 공휴일은 못 가른다 — 그날 J 현재가는 전 거래일 종가라 값은 맞다.
+REG_CLOSE_READY = (15, 31)      # 이 시각부터 그날 종가로 받는다
+
+_reg_close = {}                 # code -> (회차 날짜 "YYYY-MM-DD", 종가)
+_reg_lock = threading.Lock()
+
+
+def reg_session_day(now=None):
+    """지금 쥐어야 할 정규장 종가가 어느 날 것인지. 받을 때가 아니면 None.
+
+    정규장 중(09:00~15:31 전)은 None — 그때는 장외가 아니다. 토 · 일 · 아침 9시 전은 앞 평일."""
+    now = now or datetime.now(KST)
+    hm = (now.hour, now.minute)
+    if now.weekday() < 5 and KRX_OPEN <= hm < REG_CLOSE_READY:
+        return None
+    day = now.date()
+    if now.weekday() >= 5 or hm < KRX_OPEN:
+        day -= timedelta(days=1)
+        while day.weekday() >= 5:
+            day -= timedelta(days=1)
+    return day.isoformat()
+
+
+def fetch_reg_closes(cfg, codes):
+    """그 회차 정규장 종가 {code: 종가}. 쥔 것은 다시 안 묻는다. 못 받은 종목은 빠진다(0 으로 넣지 않는다)."""
+    day = reg_session_day()
+    if not day:
+        return {}, None
+    with _reg_lock:
+        have = {c: v[1] for c, v in ((c, _reg_close.get(c)) for c in codes) if v and v[0] == day}
+    need = [c for c in codes if c not in have]
+    for i in range(0, len(need), MULTI_MAX):
+        chunk = need[i:i + MULTI_MAX]
+        params = {}
+        for n, code in enumerate(chunk, start=1):
+            params["FID_COND_MRKT_DIV_CODE_%d" % n] = "J"
+            params["FID_INPUT_ISCD_%d" % n] = code
+        try:
+            data = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/intstock-multprice", params, "FHKST11300006")
+        except RuntimeError as e:
+            print("[장외] 정규장 종가 못 받음: %s" % safe_message(e), flush=True)
+            continue
+        got = {}
+        for r in out_rows(data, "output"):
+            code = (r.get("inter_shrn_iscd") or "").strip()
+            close = _num(r.get("inter2_prpr"), int)
+            if code and close and close > 0:
+                got[code] = close
+        with _reg_lock:
+            for code, close in got.items():
+                _reg_close[code] = (day, close)
+            if len(_reg_close) > 3000:          # 지난 회차 것을 걷는다
+                for c in [c for c, v in _reg_close.items() if v[0] != day]:
+                    _reg_close.pop(c, None)
+        have.update(got)
+    return have, day
+
+
+# 정규장 중(09:00~15:31) 「장외」 칩은 **전날 20:00 애프터 마감 값**을 그대로 보인다
+# (2026-10-26 재권님 「다음 장 시작전의 종가로 해줘」 → 「전날 20 시에 멈추는걸로 해줘」 · 작업우선순위 경유 —
+# 아침 프리마켓(08:00~08:50) 몫은 안 넣는다). 정규장 중에는 통합 시세가 장중 값이라 그때 물어서는 못 얻는다 —
+# 그래서 **애프터가 끝난 뒤(AFTER_SNAP_AT) 한 번** 순위 목록 전부(dart.universe_rows · 코스피 200 + 코스닥 150 ·
+# 통합 멀티 12건)를 받아 쥐고 파일에도 남긴다(재시작해도 남게). 그 시각에 꺼져 있었으면 프리마켓이 열리기 전
+# (08:00 전)까지 · 주말 동안 늦게라도 받는다 — 그 사이 통합 시세는 20:00 마감 값 그대로라서다.
+# 못 받았으면 그날은 값이 없다 — 화면이 「못 받았다」 로 적는다(0 으로 채우지 않는다).
+AFTER_SNAP_AT = (20, 1)
+NXT_PRE_OPEN = (8, 0)           # 넥스트레이드 프리마켓 시작 — 이때부터는 20:00 값이 아니다
+AFTER_SNAP_PATH = os.path.join(HOLDINGS_DIR, ".after-snap.json")
+_after_snap = {"day": None, "at": None, "rows": {}}
+
+
+def _load_after_snap():
+    try:
+        with open(AFTER_SNAP_PATH, encoding="utf-8") as f:
+            j = json.load(f)
+        if isinstance(j, dict) and isinstance(j.get("rows"), dict):
+            _after_snap.update(day=j.get("day"), at=j.get("at"), rows=j["rows"])
+    except (OSError, ValueError):
+        pass
+
+
+def take_after_snap(cfg):
+    """장 시작 직전 순위 목록의 장외 값을 받아 쥔다. 받은 종목 수를 돌려준다."""
+    codes = [r["stock_code"] for r in dart.universe_rows(None)]
+    if not codes:
+        return 0
+    quotes, _errors = fetch_quotes_multi(cfg, codes)       # 08:58 은 통합(UN) — regClose · regPct 가 붙어 온다
+    rows = {c: {"price": q.get("price"), "regClose": q["regClose"], "regPct": q["regPct"], "regDate": q.get("regDate")}
+            for c, q in quotes.items() if q.get("regPct") is not None}
+    now = datetime.now(KST)
+    snap = {"day": reg_session_day(now), "at": now.strftime("%H:%M"), "rows": rows}
+    _after_snap.update(snap)
+    try:
+        write_json_atomic(AFTER_SNAP_PATH, snap, indent=None)
+    except Exception as e:
+        print("[장외] 장 시작 전 값 저장 못 함 (%s)" % type(e).__name__, flush=True)
+    return len(rows)
+
+
+def start_after_snap(cfg):
+    """애프터 마감 뒤 한 번 장외 값을 받는다(회차마다 한 번). 키가 없으면 안 돈다."""
+    _load_after_snap()
+    if not cfg:
+        return False
+
+    def loop():
+        while True:
+            now = datetime.now(KST)
+            hm = (now.hour, now.minute)
+            today = reg_session_day(now)          # 이 장외 값이 붙는 정규장 날
+            quiet = now.weekday() >= 5 or hm >= AFTER_SNAP_AT or hm < NXT_PRE_OPEN   # 넥스트레이드가 쉬는 때
+            if quiet and today and _after_snap.get("day") != today:
+                try:
+                    n = take_after_snap(cfg)
+                    print("[장외] 장 시작 전 장외 값 %d종목 받음 (%s)" % (n, now.strftime("%H:%M")), flush=True)
+                except Exception as e:
+                    print("[장외] 장 시작 전 장외 값 못 받음 (%s)" % type(e).__name__, flush=True)
+                    _after_snap["day"] = today          # 그날 한 번만 — 되풀이해 KIS 를 두드리지 않는다
+            time.sleep(20)
+
+    threading.Thread(target=loop, daemon=True, name="after-snap").start()
+    return True
+
+
+def attach_after_snap(out):
+    """정규장 중 시세 묶음에 앞 회차 20:00 장외 마감 값을 싣는다 — regFrozen(그 회차 날)으로 「지금 값이 아니다」 를 알린다."""
+    day = datetime.now(KST).date() - timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    if _after_snap.get("day") != day.isoformat():       # 앞 평일 저녁 것만 — 더 묵은 것은 안 싣는다
+        return
+    rows = _after_snap.get("rows") or {}
+    for code, q in out.items():
+        r = rows.get(code)
+        if not r:
+            continue
+        q["regClose"] = r["regClose"]
+        q["regPct"] = r["regPct"]
+        q["regDate"] = r.get("regDate")
+        q["regAfterPrice"] = r.get("price")
+        q["regFrozen"] = _after_snap.get("day")
+
+
+def attach_reg_close(cfg, out):
+    """통합 시세 묶음에 regClose · regPct · regDate 를 붙인다. 종가를 못 받은 종목은 칸을 안 만든다."""
+    closes, day = fetch_reg_closes(cfg, list(out))
+    for code, q in out.items():
+        close = closes.get(code)
+        price = q.get("price")
+        if not close or not price:
+            continue
+        q["regClose"] = close
+        q["regPct"] = round((price / close - 1) * 100, 2)
+        q["regDate"] = day
 
 
 # ---------------------------------------------------------------- 업종 · 순위 · 투자자
@@ -7953,6 +8128,10 @@ def main():
     elif start_prefill(cfg):
         print("  5분봉 준비 : 코스피 상위 %d종목을 뒤에서 미리 받습니다"
               % PREFILL_TOP)
+
+    # 「장외」 칩 — 애프터 마감 뒤 한 번 순위 목록의 장외 값을 받아 쥔다 (2026-10-26 · 통합 멀티 12건쯤)
+    if start_after_snap(cfg):
+        print("  장외 값    : %02d:%02d 뒤 한 번 받아 다음 정규장 중에 보입니다" % AFTER_SNAP_AT)
 
     # 투자자 지표 모달 판을 한 번 미리 짓는다 — 뜬 직후 첫 열기가 기다리지 않게 (2026-10-16)
     if cfg and not SLOW:
