@@ -1188,18 +1188,96 @@ def format_message(row):
     return "\n".join(lines)
 
 
+# ── 공시 알림을 묶고 핵심을 한 줄로 (2026-10-26 재권님 「DART 링크를 주는 게 아니고 해당 내용 정리해서」 · (가) 「응 그래」) ──
+# 같은 바퀴(5분)에 같은 회사 · 같은 종류 공시가 여럿이면 한 통으로 묶는다 — 그날 삼성바이오로직스 임원 신고가 세 통으로 갔다.
+# 종류마다 OpenDART 의 칸별 API 가 있으면 한 줄로 정리한다. 지금은 임원 지분 신고 하나(elestock.json) — 다른 종류는 지금처럼 제목 · 링크.
+# 정리용 호출은 묶음(회사)마다 한 번 · 관심종목만이다. 못 받거나 그 접수번호가 없으면 정리 없이 제출자만 적는다(지어내지 않는다).
+ELESTOCK_WORD = "임원ㆍ주요주주특정증권등소유상황보고서"
+
+
+def _num(s):
+    try:
+        return int(str(s).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def fetch_elestock(corp_code):
+    """임원 · 주요주주 소유보고 목록 — {접수번호: 한 줄}. 못 받으면 {}"""
+    key = get_key()
+    if not key or not corp_code:
+        return {}
+    try:
+        raw = _dart_get(DART_API + "/elestock.json?" + urllib.parse.urlencode(
+            {"crtfc_key": key, "corp_code": corp_code}), 15)
+        j = json.loads(raw.decode("utf-8", "replace"))
+    except Exception as e:
+        _meta_set("dart_last_error", "임원 소유보고: %s" % safe_message(e, 100))
+        return {}
+    out = {}
+    for x in j.get("list") or []:
+        cnt, d = _num(x.get("sp_stock_lmp_cnt")), _num(x.get("sp_stock_lmp_irds_cnt"))
+        who = (x.get("repror") or "").strip()
+        pos = (x.get("isu_exctv_ofcps") or "").strip()
+        if pos in ("", "-"):
+            pos = "주요주주" if (x.get("isu_main_shrholdr") or "-").strip() not in ("", "-") else ""
+        parts = ["%s%s" % (who, " " + pos if pos else "")]
+        if cnt is not None:
+            parts.append("%s주%s" % ("{:,}".format(cnt), "" if d is None else " (%+d주)" % d if d else " (변동 0)"))
+        rate = (x.get("sp_stock_lmp_rate") or "").strip()
+        if rate and rate != "-":
+            parts.append("지분 %s%%" % rate)
+        out[x.get("rcept_no")] = " — ".join(parts[:1]) + (" — " + " · ".join(parts[1:]) if parts[1:] else "")
+    return out
+
+
+def _corp_code_of(stock_code):
+    with _db_lock, db_conn() as conn:
+        r = conn.execute("SELECT corp_code FROM dart_corps WHERE stock_code = ?", (stock_code,)).fetchone()
+    return r[0] if r else None
+
+
+def format_group(rows):
+    """같은 회사 · 같은 종류 공시 여럿(또는 하나)을 한 통으로 — 정리할 수 있는 종류면 사람마다 한 줄"""
+    if len(rows) == 1 and ELESTOCK_WORD not in rows[0]["report_nm"]:
+        return format_message(rows[0])
+    head = rows[0]
+    detail = fetch_elestock(_corp_code_of(head["stock_code"])) if ELESTOCK_WORD in head["report_nm"] else {}
+    dt = head.get("rcept_dt") or ""
+    when = "%s-%s" % (dt[4:6], dt[6:8]) if len(dt) == 8 else dt
+    lines = ["📢 %s (%s)" % (head["corp_name"], head["stock_code"]),
+             head["report_nm"] + (" %d건" % len(rows) if len(rows) > 1 else "")]
+    for r in rows:
+        one = detail.get(r["rcept_no"])
+        if one:
+            lines.append("· " + one)
+        elif r.get("flr_nm") and r["flr_nm"] != r["corp_name"]:
+            lines.append("· 제출: %s" % r["flr_nm"])
+    lines.append("접수 %s" % when)
+    lines.append("원문: " + VIEWER % rows[0]["rcept_no"] + (" 외 %d건" % (len(rows) - 1) if len(rows) > 1 else ""))
+    return "\n".join(lines)
+
+
 def notify(rows):
-    """관심종목 공시만 보낸다. 보낸 것은 표시해 두어 두 번 보내지 않는다."""
-    sent = 0
+    """관심종목 공시만 보낸다. 같은 회사 · 같은 종류는 한 통으로 묶는다. 보낸 것은 표시해 두어 두 번 보내지 않는다."""
+    groups = {}
     for row in rows:
         if row["stock_code"] not in WATCH_CODES:
             continue
-        ok, _err = telegram_send(format_message(row))
+        groups.setdefault((row["stock_code"], row["report_nm"]), []).append(row)
+    sent = 0
+    for grp in groups.values():
+        try:
+            text = format_group(grp)
+        except Exception as e:          # 정리가 깨져도 알림은 간다 — 옛 모양 하나씩
+            _meta_set("dart_last_error", "공시 묶기: %s" % safe_message(e, 100))
+            text = "\n\n".join(format_message(r) for r in grp)
+        ok, _err = telegram_send(text)
         with _db_lock, db_conn() as conn:
-            conn.execute("UPDATE dart_disclosures SET notified = ? WHERE rcept_no = ?",
-                         (1 if ok else 0, row["rcept_no"]))
+            conn.executemany("UPDATE dart_disclosures SET notified = ? WHERE rcept_no = ?",
+                             [(1 if ok else 0, r["rcept_no"]) for r in grp])
         if ok:
-            sent += 1
+            sent += len(grp)
             time.sleep(0.4)      # 텔레그램 초당 제한을 건드리지 않게 천천히
     return sent
 
