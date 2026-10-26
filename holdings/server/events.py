@@ -7,7 +7,7 @@
 
 ── 무엇을 보나 · 결과를 어디서 받나 ──
 
-    한국 실적   관심종목(`dart.WATCH_CODES`)의 「영업(잠정)실적」 공시 — 공시 바퀴가 이미 받아 둔 것(market.db)을 읽고,
+    한국 실적   관심종목(`dart.watchlist()` · 화면 하트 목록)의 「영업(잠정)실적」 공시 — 공시 바퀴가 이미 받아 둔 것(market.db)을 읽고,
                 본문 표(DART 화면)에서 매출 · 영업이익 · 순이익과 전분기 · 전년 대비를 읽는다
     FOMC        고정 일정 파일(`data/market-calendar.json`)의 FOMC 줄 `result.type = "fomc"` —
                 연준 보도 목록(RSS)의 「Federal Reserve issues FOMC statement」 를 읽어 금리 범위와 올림 · 내림 · 동결
@@ -204,7 +204,7 @@ def format_earnings_kr(name, code, title, url, parsed):
 def kr_earnings_today(day):
     """그날(한국 날짜 'YYYYMMDD') 관심종목 잠정실적 공시 — 공시 바퀴가 market.db 에 받아 둔 것."""
     out = []
-    for code in dart.WATCH_CODES:
+    for code in dart.watchlist():
         for r in dart.read_disclosures(code, 20):
             if r["date"] == day and EARN_WORD in (r["title"] or ""):
                 out.append(r)
