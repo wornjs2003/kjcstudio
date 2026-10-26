@@ -64,6 +64,8 @@ export function mountStockDetail(host, { view, onOne } = {}) {
   async function loadAsking() {
     if (!code) return;
     const mine = ++seq;
+    /* 미국 종목은 호가(매수 · 매도 잔량)를 안 받는다 — 국내 호가 주소라 400 이 났다(qa 10-15 · 2026-10-26 고침). 비율 칸은 비운다 */
+    if (isUsCode(code)) { buyPct = null; paint(); return; }
     try {
       const r = await apiFetch(viewUrl(`/api/kis/asking?code=${code}`, view), { cache: 'no-store' });
       if (!r || !r.ok) throw new Error(r && r.status);
@@ -122,7 +124,7 @@ export function mountStockDetail(host, { view, onOne } = {}) {
   }
 
   /* 주소는 고른 종목을 따라간다 — `setCode` 가 `refresh()` 로 알린다 */
-  timer = watch({ url: () => (code ? viewUrl(`/api/kis/asking?code=${code}`, view) : null),
+  timer = watch({ url: () => (code && !isUsCode(code) ? viewUrl(`/api/kis/asking?code=${code}`, view) : null),   // 미국은 안 지켜본다
                   onChange: () => loadAsking(), key: ASK_RELOAD_KEY, fallbackMs: ASK_RELOAD_FALLBACK_MS });
   liveTimer = watch({ url: () => (code ? viewUrl(`/api/kis/price?code=${code}`, view) : null),
                       onChange: () => loadLive(), key: LIVE_RELOAD_KEY, fallbackMs: LIVE_RELOAD_FALLBACK_MS });
