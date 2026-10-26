@@ -64,6 +64,7 @@ import naver_period
 import toss
 import macro
 import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-25 · server/events.py 머리 주석)
+import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
 import market_index
 import crypto            # 가상자산 — 업비트 공개 시세(2026-10-14 · server/crypto.py 머리 주석)
 import news
@@ -6713,6 +6714,13 @@ class Handler(SimpleHTTPRequestHandler):
         if (self.path or "").startswith("/api/macro/"):
             self._handle_macro()
             return
+        if (self.path or "").rstrip("/") == "/api/nxt-pre/status":
+            # 장 전 거래량 2배 바퀴의 상태 — 마지막으로 돈 날 · 종목 수 · 2배 수 · 꺼져 있으면 보냈을 글(preview)
+            st = nxt_pre.status()
+            if not st.get("lastRunAt"):
+                st["note"] = "아직 안 돌았습니다 — 보내는 서버(메인 %d)에서 평일 08:51 에 돕니다" % MAIN_PORT
+            self._send_json({"ok": True, "data": st})
+            return
         if (self.path or "").rstrip("/") == "/api/events/status":
             # 결과 알림 바퀴의 상태 — 무엇을 기다리나 · 꺼져 있으면 보냈을 글(preview). 바퀴는 보내는 서버에서만 돈다
             st = events.status()
@@ -8367,6 +8375,12 @@ def main():
         print("  결과 알림 : 사용 (%d초마다 · 밤 %02d~%02d시 것은 %02d:00 한 통%s)"
               % (events.TICK, dart.QUIET_FROM // 60, dart.QUIET_TO // 60, dart.QUIET_TO // 60,
                  "" if events.SEND else " · **발송 꺼짐 — 미리보기만**"))
+
+    # 넥스트레이드 장 전 거래량 2배 목록(2026-10-26 · server/nxt_pre.py) — 같은 문(보내는 서버만) · **`nxt_pre.SEND = False` 가 기본**
+    if not SLOW and is_sender(args.port) and nxt_pre.start(sys.modules[__name__]):
+        print("  장 전 거래량 : 사용 (평일 %02d:%02d 한 번 · 전날의 %.0f배 · 전날 %s주 이상%s)"
+              % (nxt_pre.RUN_AT[0], nxt_pre.RUN_AT[1], nxt_pre.RATIO, format(nxt_pre.MIN_PREV, ","),
+                 "" if nxt_pre.SEND else " · **발송 꺼짐 — 미리보기만**"))
 
     if not SLOW and is_sender(args.port) and signal_watch.start(sys.modules[__name__]):
         # **시각을 여기 박지 않는다.** `SESSION_FROM`·`SESSION_TO` 에서 만든다 —
