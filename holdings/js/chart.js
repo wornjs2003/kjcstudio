@@ -718,15 +718,18 @@ const PANE_H_DEF = { vol: 110, macd: 110, rsi: 110 };
  * 새 호출이 없다. 화면이 이미 갖고 있는 봉으로 계산한다.
  */
 const VP_BINS = 20;              // 가격을 몇 칸으로 나눌지
-/* **5분봉만 40칸** (2026-10-26 재권님 「5분봉 매물대를 좀더 세분화 해줘」 → 20 · 40 · 60 그림 비교 뒤 「40」).
-   5분봉은 서버가 최근 10거래일 봉을 다 주므로(kis_proxy `view_days`) 가격 범위가 넓어, 20칸이면 처음 보이는
-   120봉 자리에 칸이 5개쯤밖에 안 걸렸다(삼성전자 실측 · 한 칸 2,275원). 일봉 · 주봉 · 월봉은 20 그대로 */
-const VP_BINS_BY = { '5m': 40 };
-const vpBins = (period) => VP_BINS_BY[period] || VP_BINS;
-/* **한 칸이 호가 한 단위보다 좁아지지 않게 칸 수를 줄인다** — 좁아지면 거래가 없는 칸이 끼어 막대가 줄무늬로
-   빈다(10일 동안 덜 움직인 종목). 국내 호가 단위 — 한국거래소 2023-01-25 개편 기준(2천 · 5천 · 2만 · 5만 · 20만 ·
-   50만원 경계에 1 · 5 · 10 · 50 · 100 · 500 · 1,000원). 범위 위끝 가격의 단위로 재야 그 범위 어디서도 칸이
-   단위보다 안 좁다. 미국 종목(소수 둘째 자리)은 이 셈을 안 탄다 */
+/* **5분봉은 그날 장의 봉만 · 한 칸 = 호가 한 단위** (2026-10-26 재권님 「5분봉 매물대는 5분봉에 맞게 돼야 하지 않을까?
+   그날 호가창에 맞춰서 돼야 할 것 같은데」 → 가 · 나 · 다 그림 비교 뒤 「가」). 그날 호가창과 같은 줄로 나뉜다 —
+   삼성전자 10-26 실측 500원 칸 14개. 그 전(같은 날 오전)에는 받아 둔 10거래일 전부를 40칸으로 고르게 나눴다.
+   「그날 장」 은 날짜 글자로 가르지 않는다 — 미국 봉은 한국 시각이라 장 하나가 자정을 넘는다. 마지막 봉에서 거꾸로
+   가다 봉 사이가 VP_SESSION_GAP 분 넘게 비면 거기서 끊는다(국내 20:00 → 08:00 · 미국 장 사이 모두 그보다 길다).
+   호가 단위로 칸이 VP_TICK_MAX 를 넘으면(1원 단위 종목이 크게 움직인 날 등) 단위의 2 · 5 · 10 … 배로 묶는다.
+   일봉 · 주봉 · 월봉은 20칸 그대로 */
+const VP_DAY_PERIODS = new Set(['5m']);
+const VP_SESSION_GAP = 180;      // 분
+const VP_TICK_MAX = 40;
+const VP_TICK_MULT = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+const US_TICK = 0.01;            // 미국 1달러 이상 호가 단위
 const KR_TICKS = [[2000, 1], [5000, 5], [20000, 10], [50000, 50], [200000, 100], [500000, 500], [Infinity, 1000]];
 const krTick = (price) => KR_TICKS.find(([upTo]) => price < upTo)[1];
 /* 가장 긴 막대가 그림 영역 오른쪽 끝에 거의 닿는다 (2026-09-18 지시 —
@@ -777,24 +780,53 @@ const VP_REFRESH_MS = 2000;      // 다시 그리는 주기 (지시)
  * 이것을 펴 넣으면 된다. */
 const NO_SCALE = { autoscaleInfoProvider: () => null };
 
-function volumeProfile(candles, bins = VP_BINS, tickFloor = false) {
-  const rows = (candles || []).filter((c) =>
-    Number.isFinite(c.high) && Number.isFinite(c.low));
-  if (rows.length < 2) return null;
+/* ts(YYYYMMDDHHMM) → 분. 모양이 다르면 null — 그때는 장을 못 가르므로 받은 봉 전부를 쓴다 */
+function tsMinutes(ts) {
+  const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(String(ts || ''));
+  return m ? Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5]) / 60000 : null;
+}
+function lastSession(rows) {
+  let i = rows.length - 1;
+  while (i > 0) {
+    const a = tsMinutes(rows[i - 1].ts), b = tsMinutes(rows[i].ts);
+    if (a == null || b == null) return rows;
+    if (b - a > VP_SESSION_GAP) break;
+    i--;
+  }
+  return rows.slice(i);
+}
 
-  const lo = Math.min(...rows.map((c) => c.low));
+function volumeProfile(candles, period, kr) {
+  let rows = (candles || []).filter((c) =>
+    Number.isFinite(c.high) && Number.isFinite(c.low));
+  const byTick = VP_DAY_PERIODS.has(period);
+  if (byTick) rows = lastSession(rows);
+  if (rows.length < 1) return null;
+
+  let lo = Math.min(...rows.map((c) => c.low));
   const hi = Math.max(...rows.map((c) => c.high));
-  if (!(hi > lo)) return null;
-  if (tickFloor) bins = Math.max(2, Math.min(bins, Math.floor((hi - lo) / krTick(hi))));
-  const step = (hi - lo) / bins;
+  let bins, step;
+  if (byTick) {
+    /* 칸 경계를 호가 자리에 맞춘다 — 한 칸이 호가 한 줄(또는 그 배수)이다 */
+    const unit = kr ? krTick(hi) : US_TICK;
+    const k = VP_TICK_MULT.find((m) => Math.round((hi - lo) / (unit * m)) + 1 <= VP_TICK_MAX) || VP_TICK_MULT.at(-1);
+    step = unit * k;
+    lo = Math.floor(lo / step + 1e-9) * step;
+    bins = Math.round((hi - lo) / step) + 1;
+  } else {
+    if (rows.length < 2 || !(hi > lo)) return null;
+    bins = VP_BINS;
+    if (kr) bins = Math.max(2, Math.min(bins, Math.floor((hi - lo) / krTick(hi))));
+    step = (hi - lo) / bins;
+  }
 
   const acc = new Array(bins).fill(0);
   let total = 0;
   for (const c of rows) {
     const v = Number(c.volume);
     if (!Number.isFinite(v) || v <= 0) continue;   // 거래량이 없는 봉은 건너뛴다
-    const a = Math.max(0, Math.min(bins - 1, Math.floor((c.low - lo) / step)));
-    const b = Math.max(0, Math.min(bins - 1, Math.floor((c.high - lo) / step)));
+    const a = Math.max(0, Math.min(bins - 1, Math.floor((c.low - lo) / step + 1e-6)));
+    const b = Math.max(0, Math.min(bins - 1, Math.floor((c.high - lo) / step + 1e-6)));
     const share = v / (b - a + 1);
     for (let i = a; i <= b; i++) acc[i] += share;
     total += v;
@@ -1085,7 +1117,7 @@ export function createStockChart(container, candles, opts = {}) {
     if (!vpLayer) return;
     if (!indOn().has('vp') || !candleSeries) { vpLayer.innerHTML = ''; return; }
 
-    const prof = volumeProfile(candles, vpBins(period), priceDigits === 0);
+    const prof = volumeProfile(candles, period, priceDigits === 0);
     if (!prof) { vpLayer.innerHTML = ''; return; }
 
     const w = Math.max(0, vpLayer.clientWidth - AXIS_W);   // 가격축 자리는 비운다
