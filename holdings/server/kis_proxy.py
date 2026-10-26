@@ -65,6 +65,7 @@ import toss
 import macro
 import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-25 · server/events.py 머리 주석)
 import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
+import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
 import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
 import intraday_alerts  # 장중 알림 — 상승 VI · +20% 급등(2026-10-26 · server/intraday_alerts.py 머리 주석)
 import market_index
@@ -6751,6 +6752,20 @@ class Handler(SimpleHTTPRequestHandler):
             rows, meta = tglog.today(day or None)
             self._send_json({"ok": True, "data": rows, "meta": meta})
             return
+        if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/nxt/board":
+            # 넥장 보드(Insight 「투자 전략」) — 날마다 종가 · 장외 · 프리장 · 야간선물 · 장외 오름 · 내림 상위(server/nxt_board.py)
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            market = (q.get("market") or ["kospi"])[0]
+            if market not in ("kospi", "kosdaq"):
+                self._send_json({"ok": False, "error": "market 은 kospi · kosdaq 둘입니다."}, 400)
+                return
+            try:
+                days = int((q.get("days") or ["5"])[0])
+            except ValueError:
+                days = 5
+            self._send_json({"ok": True, "data": nxt_board.board(sys.modules[__name__], market, days),
+                             "meta": nxt_board.status()})
+            return
         if (self.path or "").rstrip("/") == "/api/nxt-pre/status":
             # 장 전 거래량 2배 바퀴의 상태 — 마지막으로 돈 날 · 종목 수 · 2배 수 · 꺼져 있으면 보냈을 글(preview)
             st = nxt_pre.status()
@@ -8436,6 +8451,9 @@ def main():
                  "" if events.SEND else " · **발송 꺼짐 — 미리보기만**"))
 
     # 넥스트레이드 장 전 거래량 2배 목록(2026-10-26 · server/nxt_pre.py) — 같은 문(보내는 서버만) · **`nxt_pre.SEND = False` 가 기본**
+    if not SLOW and is_sender(args.port) and nxt_board.start(sys.modules[__name__]):
+        print("  넥장 보드 : 사용 (평일 %02d:%02d 종가 · %02d:%02d 장외 · %02d:%02d 야간선물 저장 · /api/nxt/board)"
+              % (nxt_board.CLOSE_AT + nxt_board.AFTER_AT + nxt_board.FUT_AT))
     if not SLOW and is_sender(args.port) and nxt_pre.start(sys.modules[__name__]):
         print("  장 전 거래량 : 사용 (평일 %02d:%02d 한 번 · 전날의 %.0f배 · 전날 %s주 이상%s)"
               % (nxt_pre.RUN_AT[0], nxt_pre.RUN_AT[1], nxt_pre.RATIO, format(nxt_pre.MIN_PREV, ","),
