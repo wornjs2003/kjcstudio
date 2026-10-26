@@ -26,6 +26,7 @@ import os
 import re
 import sqlite3
 
+import docstore            # 관심종목 문서(watchlist) — watchlist()
 import marketdb
 import tglog                # 오늘 보낸 텔레그램 글 기록(2026-10-26) — telegram_send 가 적는다
 import threading
@@ -75,8 +76,14 @@ COLLECT_MARKETS = ["Y", "K"]
 # 전 종목으로 넓히면서 하루 400~600건이 쌓인다. 30일이면 1.5만 건쯤이다.
 RETENTION_DAYS = 30
 
-# 텔레그램을 보낼 종목.
-# js/data/market.js 의 WATCHLIST 와 같아야 한다. 한쪽만 고치면 어긋난다.
+# 관심종목 — **원천은 화면의 하트 목록이다** (2026-10-26 재권님 「관심종목 등록하면 서버에도 적용되게 해줘」 →
+# 「하트 목록을 서버 관심목록으로 합칠까요」 에 「응 우선 그렇게 해줘」). 화면(`holdings/js/store/favorites.js`)이
+# 문서 저장 `/api/board/doc/watchlist` 에 `[{code, name}]` 로 쓰고, 다른 서버는 그 주소를 8765 로 넘긴다
+# (`KJC_BOARD_UPSTREAM`) — 그래서 목록은 8765 의 문서 하나다. 하트를 끄면 공시 · 실적 · 신호 알림도 멈춘다.
+#
+# 서버는 `watchlist()` 로 읽는다 — 부를 때마다 파일 시각을 보고 바뀌었으면 다시 읽어 **재시작 없이** 따라간다.
+# 아래 `WATCH_CODES` 는 **첫 값**이다 — 문서가 아직 없거나 못 읽을 때만 쓴다(그 문서는 화면이 처음 열릴 때 만든다).
+# js/data/market.js 의 WATCHLIST 와 같아야 한다(check-watchlist-sync.py) — 화면 첫 값도 그것이다.
 # 카카오를 뺀 이유는 그 파일의 WATCHLIST 위 주석에 있다 (2026-09-23 지시).
 WATCH_CODES = [
     "005930",  # 삼성전자
@@ -87,6 +94,36 @@ WATCH_CODES = [
     "207940",  # 삼성바이오로직스
     "068270",  # 셀트리온
 ]
+
+WATCH_DOC = "watchlist"
+_watch_cache = {"at": None, "codes": None}
+
+
+def watchlist():
+    """관심종목 코드 목록 — 문서 `watchlist`(화면 하트 목록). 없거나 깨졌으면 `WATCH_CODES`.
+
+    국내 여섯 자리 코드만 낸다 — 공시 · 실적 · 신호가 그것만 본다. 문서 모양은 `{items: [{code, name}]}` —
+    문서 층이 빈 값(`[]`)을 안 쓰므로 감쌌다. 그래서 하트를 다 끄면 빈 목록이 오고, 첫 값으로 되돌리지 않는다
+    (「없다」 와 「비었다」 는 다르다).
+    """
+    try:
+        at = docstore.doc_updated_at(WATCH_DOC)
+    except Exception:
+        at = None
+    if at is None:
+        return list(WATCH_CODES)
+    if _watch_cache["at"] != at:
+        data = docstore.read_doc(WATCH_DOC)
+        data = data.get("items") if isinstance(data, dict) else None   # {items: [...]} — 빈 목록도 저장되게 감쌌다
+        if not isinstance(data, list):
+            return list(WATCH_CODES)
+        codes = []
+        for x in data:
+            c = x.get("code") if isinstance(x, dict) else x
+            if isinstance(c, str) and re.fullmatch(r"\d{6}", c) and c not in codes:
+                codes.append(c)
+        _watch_cache.update(at=at, codes=codes)
+    return list(_watch_cache["codes"])
 
 # 언제 물어볼 것인가.
 # DART 접수는 평일에만 있다. 07:00 이전과 20:00 이후는 물어봐야 새 것이 없다.
@@ -921,7 +958,7 @@ def parse_ir(body):
 
 def ir_codes():
     """본문을 읽을 종목 — 코스피 200 · 코스닥 150(대상 표) · 지수 구성 · 관심. 표를 박지 않고 그날 표에서 센다."""
-    codes = set(WATCH_CODES)
+    codes = set(watchlist())
     try:
         codes.update(r["stock_code"] for r in universe_rows(None))
     except Exception:
@@ -1051,7 +1088,7 @@ def status():
         "lastPollAt": _meta_get("dart_last_poll"),
         # 고치기 전에 저장된 값이 남아 있을 수 있어 돌려줄 때 한 번 더 거른다
         "lastPollError": scrub(_meta_get("dart_last_error")) or None,
-        "watchCodes": WATCH_CODES,
+        "watchCodes": watchlist(),
         "usage": dart_usage(),
     }
 
@@ -1261,8 +1298,9 @@ def format_group(rows):
 def notify(rows):
     """관심종목 공시만 보낸다. 같은 회사 · 같은 종류는 한 통으로 묶는다. 보낸 것은 표시해 두어 두 번 보내지 않는다."""
     groups = {}
+    watch = set(watchlist())
     for row in rows:
-        if row["stock_code"] not in WATCH_CODES:
+        if row["stock_code"] not in watch:
             continue
         groups.setdefault((row["stock_code"], row["report_nm"]), []).append(row)
     sent = 0
@@ -1328,7 +1366,7 @@ def poll_once(key, quiet_first_run=True):
     mark = 1 if ((first_run and quiet_first_run) or not NOTIFY_LOCAL) else 0
 
     # 종목코드가 있는 것은 전부 담는다 (2026-09-15 지시).
-    # 텔레그램은 그대로 관심종목만 간다 — notify() 가 WATCH_CODES 로 거른다.
+    # 텔레그램은 그대로 관심종목만 간다 — notify() 가 watchlist() 로 거른다.
     fresh = save_disclosures(items, notified=mark)
     sent = 0 if mark else notify(fresh)
 
