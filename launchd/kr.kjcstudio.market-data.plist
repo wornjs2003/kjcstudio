@@ -8,6 +8,8 @@
        평일 06:30 — 세계 거시(정책금리 · 물가 · 경기선행 · 국채 금리 · 나라 ETF) · 네이버 시장지표 · 대외변수(지정학 위험 · 불확실성 · VIX · OVX).
                     월요일만 미국 지표 발표 다음 날 확률(release-odds)도.
        평일 16:10 — 네이버 시장지표만 한 번 더(한국 장 마감 15:30 뒤 값 · 국내 시장 · 업종 등락).
+       두 판 다 끝에 — 자동 시황 글(company-setup/tools/write-market-note.py · 2026-10-26 재권님 「응 해줘」) — 위에서 받은 값 파일과
+                    8765 서버 값으로 market-note-live.json 을 쓴다(검사 통과해야 씀 · 못 만들면 옛 글에 failedAt · 밖으로 안 보냄).
        한 프로그램이 시각을 보고 고른다 — 12시 전이면 아침 몫, 뒤면 오후 몫.
        **하나가 실패해도 다음 것은 돈다** (`;` 로 잇는다 · `&amp;&amp;` 가 아니다). 실패한 도구는 옛 파일을 그대로 둔다.
        받는 파일은 `*-live.json` 이고 `.gitignore` 에 있다 — 메인 폴더를 여럿이 쓰므로 매일 미커밋이 생기지 않게(커밋된 `*.json` 은 덮지 않는다).
@@ -21,7 +23,7 @@
   <array>
     <string>/bin/sh</string>
     <string>-c</string>
-    <string>echo "== $(date '+%F %T')"; if [ "$(date +%H)" -lt 12 ]; then /usr/bin/python3 -u company-setup/tools/fetch-world-macro.py --port 8765 --out company-setup/data/world-macro-live.json --also /Users/kjc/service/company-setup/data/world-macro-live.json; /usr/bin/python3 -u company-setup/tools/fetch-naver-macro.py --out company-setup/data/naver-macro-live.json --also /Users/kjc/service/company-setup/data/naver-macro-live.json; /usr/bin/python3 -u company-setup/tools/fetch-external-risk.py --out company-setup/data/external-risk-live.json --also /Users/kjc/service/company-setup/data/external-risk-live.json; if [ "$(date +%u)" = 1 ] || [ ! -f company-setup/data/release-odds-live.json ]; then /usr/bin/python3 -u company-setup/tools/fetch-release-odds.py --out company-setup/data/release-odds-live.json --also /Users/kjc/service/company-setup/data/release-odds-live.json; fi; else /usr/bin/python3 -u company-setup/tools/fetch-naver-macro.py --out company-setup/data/naver-macro-live.json --also /Users/kjc/service/company-setup/data/naver-macro-live.json; fi</string>
+    <string>echo "== $(date '+%F %T')"; if [ "$(date +%H)" -lt 12 ]; then /usr/bin/python3 -u company-setup/tools/fetch-world-macro.py --port 8765 --out company-setup/data/world-macro-live.json --also /Users/kjc/service/company-setup/data/world-macro-live.json; /usr/bin/python3 -u company-setup/tools/fetch-naver-macro.py --out company-setup/data/naver-macro-live.json --also /Users/kjc/service/company-setup/data/naver-macro-live.json; /usr/bin/python3 -u company-setup/tools/fetch-external-risk.py --out company-setup/data/external-risk-live.json --also /Users/kjc/service/company-setup/data/external-risk-live.json; if [ "$(date +%u)" = 1 ] || [ ! -f company-setup/data/release-odds-live.json ]; then /usr/bin/python3 -u company-setup/tools/fetch-release-odds.py --out company-setup/data/release-odds-live.json --also /Users/kjc/service/company-setup/data/release-odds-live.json; fi; else /usr/bin/python3 -u company-setup/tools/fetch-naver-macro.py --out company-setup/data/naver-macro-live.json --also /Users/kjc/service/company-setup/data/naver-macro-live.json; fi; /usr/bin/python3 -u company-setup/tools/write-market-note.py --port 8765 --out company-setup/data/market-note-live.json --also /Users/kjc/service/company-setup/data/market-note-live.json</string>
   </array>
   <key>WorkingDirectory</key>
   <string>/Users/kjc/work/KJCStudio</string>
