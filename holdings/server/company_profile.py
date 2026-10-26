@@ -201,12 +201,19 @@ def profile(code, refresh=True):
             changed = True
         dt = rec.get("dart")
         key = dart.get_key()
-        stale = _age(dt) > (FAIL_TTL if (not dt or not dt.get("product")) else DART_TTL) or (dt or {}).get("v") != DART_VER
+        # 판(DART_VER)이 다르면 다시 받는 것은 **받아 둔 표가 있을 때만** — 실패 기록(고유번호 · 정기보고서 없음 · 예외)은
+        # 판 표시가 없어도 FAIL_TTL 을 따른다. 안 그러면 풍선을 띄울 때마다 DART 를 다시 부른다(개념정의 검수 10-26 13:12)
+        # 받다가 오류가 났으면(failAt) 그때부터 FAIL_TTL — 쥔 옛 표는 그대로 보이되 판이 달라도 그동안 다시 안 부른다(qa 검수 10-26 13:14)
+        old_ver = bool(dt and dt.get("product")) and dt.get("v") != DART_VER
+        if dt and dt.get("failAt"):
+            stale = _age({"at": dt["failAt"]}) > FAIL_TTL
+        else:
+            stale = old_ver or _age(dt) > (FAIL_TTL if (not dt or not dt.get("product")) else DART_TTL)
         if key and stale:
             try:
                 rec["dart"] = fetch_dart(code, key, dt)
             except Exception as e:
-                rec["dart"] = dict(dt or {}, at=_now(), error="DART 못 받음: %s" % safe_message(e, 80))
+                rec["dart"] = dict(dt or {}, failAt=_now(), error="DART 못 받음: %s" % safe_message(e, 80))
             changed = True
         if changed:
             with _lock:
