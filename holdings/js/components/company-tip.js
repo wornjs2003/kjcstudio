@@ -15,12 +15,9 @@ import { apiFetch } from '../data/api.js';
 
 const CSS = '/assets/css/glossary.css';
 /* 공용 풍선에 없는 두 가지만 여기 둔다 — 화면 좌표 자리(모달 z-index 200 보다 위) · 매출 표. 색은 토큰만 */
-/* 풍선은 화면 높이를 안 넘는다 — 넘치면 풍선 안에서 스크롤(좁은 폭 · qa 검수 10-26). 표가 풍선보다 넓으면 표 칸만 가로로 민다 */
-const OWN = `.kh-cotip{position:fixed;z-index:300;top:0;left:0;max-height:calc(100vh - 16px);overflow-y:auto;overscroll-behavior:contain}
-.kh-cotip-w{overflow-x:auto;margin:2px 0 6px}
-.kh-cotip-t{min-width:100%;border-collapse:collapse;font-size:.72rem;line-height:1.45;color:var(--text-primary)}
+const OWN = `.kh-cotip{position:fixed;z-index:300;top:0;left:0}
+.kh-cotip-t{width:100%;border-collapse:collapse;margin:2px 0 6px;font-size:.72rem;line-height:1.45;color:var(--text-primary)}
 .kh-cotip-t td{padding:2px 4px;vertical-align:top;border-top:1px solid var(--kh-border)}
-.kh-cotip-t td.n{white-space:nowrap}
 .kh-cotip-t tr:first-child td{color:var(--text-muted);border-top:0}`;
 const LONG_MS = 450;                     // 길게 누르기로 보는 시간 — 그리기 시간이 아니라 손가락 판정이다
 const got = new Map();                   // code -> 받은 값(또는 받는 중 Promise)
@@ -49,16 +46,9 @@ function html(name, d) {
     ? `<p class="gl-short">${d.summary.map(esc).join('<br>')}</p>` : '';
   let tbl = '';
   if (d.products && d.products.rows?.length) {
-    /* 원본의 합친 칸(spans — [줄, 칸])을 살린다 — 안 살리면 「매출액 · 비중」 이 한 칸씩 밀린다. 숫자 칸 · 짧은 글은 안 꺾는다 */
-    const sp = d.products.spans || [];
-    const cell = (c, i, j) => {
-      const [rs, cs] = (sp[i] && sp[i][j]) || [1, 1];
-      const n = /^[\d,.%△()\-\s]+$/.test(c) || c.length <= 6 ? ' class="n"' : '';
-      return `<td${rs > 1 ? ` rowspan="${rs}"` : ''}${cs > 1 ? ` colspan="${cs}"` : ''}${n}>${esc(c)}</td>`;
-    };
-    const rows = d.products.rows.map((r, i) => `<tr>${r.map((c, j) => cell(c, i, j)).join('')}</tr>`).join('');
+    const rows = d.products.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('');
     tbl = `<div class="gl-kv"><span>매출 구성</span><span>${esc(d.products.unit || '')}${d.products.cut ? ' · 앞부분만' : ''}</span></div>
-      <div class="kh-cotip-w"><table class="kh-cotip-t">${rows}</table></div>`;
+      <table class="kh-cotip-t">${rows}</table>`;
   }
   const src = [];
   if (sum || sec.length) src.push(`네이버 · FnGuide 기업개요`);
@@ -75,10 +65,7 @@ function place() {
   let left = Math.min(a.left, window.innerWidth - 8 - w);
   left = Math.max(8, left);
   let top = a.bottom + 6;
-  if (top + h > window.innerHeight - 8) {
-    if (a.top - 6 - h > 8) top = a.top - 6 - h;                       // 위로 들어가면 위로
-    else top = Math.max(8, window.innerHeight - 8 - h);               // 둘 다 안 되면 화면 안에 붙인다(높이는 max-height 가 막는다)
-  }
+  if (top + h > window.innerHeight - 8 && a.top - 6 - h > 8) top = a.top - 6 - h;
   tip.style.left = `${Math.round(left)}px`;
   tip.style.top = `${Math.round(top)}px`;
 }
@@ -118,11 +105,8 @@ export function mountCompanyTip() {
   });
   document.addEventListener('mouseout', (e) => {
     if (!fine || !anchor) return;
-    const to = e.relatedTarget;
     const el = e.target.closest('[data-co]');
-    /* 풍선 안으로 옮기면 열어 둔다 — 긴 표 · 좁은 폭에서 풍선 안을 스크롤해야 한다. 풍선에서 나가면 닫는다(이름으로 돌아가면 그대로) */
-    if (el === anchor && !el.contains(to) && !(tip && tip.contains(to))) hide();
-    else if (tip && e.target.closest('.kh-cotip') && !tip.contains(to) && !(anchor && anchor.contains(to))) hide();
+    if (el === anchor && !el.contains(e.relatedTarget)) hide();
   });
   /* 터치 — 길게 누르기 */
   let timer = null, startX = 0, startY = 0;
