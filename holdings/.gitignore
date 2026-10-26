@@ -44,7 +44,7 @@ secrets.json*
 .kis-token-cache.json
 .kis-token-cache-2.json
 
-# 「장외」 칩 — 장 시작 직전에 받아 둔 장외 값 (2026-10-26 · kis_proxy.py AFTER_SNAP_PATH · 서버마다 제 것)
+# 「장외」 칩 — 애프터 마감(20:00) 뒤 받아 둔 장외 값 (2026-10-26 · kis_proxy.py AFTER_SNAP_PATH · 서버마다 제 것)
 .after-snap.json
 
 # 파이썬 캐시

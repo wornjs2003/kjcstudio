@@ -3012,7 +3012,8 @@ def fetch_quotes_multi(cfg, codes):
 # **종가는 회차마다 한 번만 받고 다음 정규장이 열릴 때까지 쥔다.** 장이 끝나면 안 바뀌는 값이라 다시 물을 까닭이 없다
 # (200종목이면 멀티 7건 · 하루 한 번). 15:30 그 1분은 종가가 막 정해지는 때라 받지 않는다 — 그 사이 regPct 는 없다.
 # **확인 못 한 것** — KRX 시간외 단일가(16:00~18:00)가 정규장(J) 현재가를 움직이는지 · 통합(UN) 시세에 드는지.
-# 처음 받은 값을 쥐므로 움직여도 종가가 흔들리지는 않는다. 공휴일은 못 가른다 — 그날 J 현재가는 전 거래일 종가라 값은 맞다.
+# 처음 받은 값을 쥐므로 움직여도 종가가 흔들리지는 않는다. 공휴일은 아직 안 가른다 — 그날 J 현재가는 전 거래일 종가라 값은 맞다
+# (가르려면 서버의 「오늘 국내 5분봉이 들었나」 셈을 쓸 수 있다 · 개념정의 검수 덧말).
 REG_CLOSE_READY = (15, 31)      # 이 시각부터 그날 종가로 받는다
 
 _reg_close = {}                 # code -> (회차 날짜 "YYYY-MM-DD", 종가)
@@ -3036,13 +3037,18 @@ def reg_session_day(now=None):
 
 
 def fetch_reg_closes(cfg, codes):
-    """그 회차 정규장 종가 {code: 종가}. 쥔 것은 다시 안 묻는다. 못 받은 종목은 빠진다(0 으로 넣지 않는다)."""
+    """그 회차 정규장 종가 {code: 종가}. 쥔 것은 다시 안 묻는다. 못 받은 종목은 빠진다(0 으로 넣지 않는다).
+
+    **응답은 왔는데 종가가 없거나 0 인 종목도 그 회차에는 다시 안 묻는다** — 종가 자리에 None 을 쥔다.
+    안 쥐면 그런 종목 하나 때문에 장 밖 시세를 물을 때마다 J 멀티가 다시 나간다(qa 검수 · 가짜 kis_get 으로 세 번 → 3건).
+    KIS 오류로 응답을 못 받은 묶음은 쥐지 않는다 — 다음에 다시 묻는다."""
     day = reg_session_day()
     if not day:
         return {}, None
     with _reg_lock:
-        have = {c: v[1] for c, v in ((c, _reg_close.get(c)) for c in codes) if v and v[0] == day}
-    need = [c for c in codes if c not in have]
+        held = {c: v[1] for c, v in ((c, _reg_close.get(c)) for c in codes) if v and v[0] == day}
+    have = {c: v for c, v in held.items() if v}
+    need = [c for c in codes if c not in held]
     for i in range(0, len(need), MULTI_MAX):
         chunk = need[i:i + MULTI_MAX]
         params = {}
@@ -3061,8 +3067,8 @@ def fetch_reg_closes(cfg, codes):
             if code and close and close > 0:
                 got[code] = close
         with _reg_lock:
-            for code, close in got.items():
-                _reg_close[code] = (day, close)
+            for code in chunk:                  # 응답에 없거나 종가가 빈 종목은 None — 이 회차에는 다시 안 묻는다
+                _reg_close[code] = (day, got.get(code))
             if len(_reg_close) > 3000:          # 지난 회차 것을 걷는다
                 for c in [c for c, v in _reg_close.items() if v[0] != day]:
                     _reg_close.pop(c, None)
@@ -3079,6 +3085,7 @@ def fetch_reg_closes(cfg, codes):
 # 못 받았으면 그날은 값이 없다 — 화면이 「못 받았다」 로 적는다(0 으로 채우지 않는다).
 AFTER_SNAP_AT = (20, 1)
 NXT_PRE_OPEN = (8, 0)           # 넥스트레이드 프리마켓 시작 — 이때부터는 20:00 값이 아니다
+AFTER_SNAP_RETRY_SEC = 600      # 못 받았으면(0종목 · 오류) 10분 뒤 다시 — 그 사이 KIS 를 두드리지 않는다
 AFTER_SNAP_PATH = os.path.join(HOLDINGS_DIR, ".after-snap.json")
 _after_snap = {"day": None, "at": None, "rows": {}}
 
@@ -3094,13 +3101,18 @@ def _load_after_snap():
 
 
 def take_after_snap(cfg):
-    """장 시작 직전 순위 목록의 장외 값을 받아 쥔다. 받은 종목 수를 돌려준다."""
+    """애프터 마감(20:00) 뒤 순위 목록의 장외 값을 받아 쥔다. 받은 종목 수를 돌려준다.
+
+    **0종목이면 쥐지도 파일에 남기지도 않는다** — 그날로 적으면 그 밤 다시 안 받아 다음 정규장 중 칸이 통째로 빈다
+    (qa 검수 · 20:01 에 KIS 오류가 나는 경우). 다시 받는 간격은 고리가 정한다(AFTER_SNAP_RETRY_SEC)."""
     codes = [r["stock_code"] for r in dart.universe_rows(None)]
     if not codes:
         return 0
-    quotes, _errors = fetch_quotes_multi(cfg, codes)       # 08:58 은 통합(UN) — regClose · regPct 가 붙어 온다
+    quotes, _errors = fetch_quotes_multi(cfg, codes)       # 20:01 뒤는 통합(UN) — regClose · regPct 가 붙어 온다
     rows = {c: {"price": q.get("price"), "regClose": q["regClose"], "regPct": q["regPct"], "regDate": q.get("regDate")}
             for c, q in quotes.items() if q.get("regPct") is not None}
+    if not rows:
+        return 0
     now = datetime.now(KST)
     snap = {"day": reg_session_day(now), "at": now.strftime("%H:%M"), "rows": rows}
     _after_snap.update(snap)
@@ -3118,18 +3130,20 @@ def start_after_snap(cfg):
         return False
 
     def loop():
+        tried = 0.0                               # 마지막으로 받아 본 때 — 못 받았으면 AFTER_SNAP_RETRY_SEC 뒤 다시
         while True:
             now = datetime.now(KST)
             hm = (now.hour, now.minute)
             today = reg_session_day(now)          # 이 장외 값이 붙는 정규장 날
             quiet = now.weekday() >= 5 or hm >= AFTER_SNAP_AT or hm < NXT_PRE_OPEN   # 넥스트레이드가 쉬는 때
-            if quiet and today and _after_snap.get("day") != today:
+            if (quiet and today and _after_snap.get("day") != today
+                    and time.time() - tried >= AFTER_SNAP_RETRY_SEC):
+                tried = time.time()
                 try:
                     n = take_after_snap(cfg)
-                    print("[장외] 장 시작 전 장외 값 %d종목 받음 (%s)" % (n, now.strftime("%H:%M")), flush=True)
+                    print("[장외] 20:00 장외 마감 값 %d종목 받음 (%s)" % (n, now.strftime("%H:%M")), flush=True)
                 except Exception as e:
-                    print("[장외] 장 시작 전 장외 값 못 받음 (%s)" % type(e).__name__, flush=True)
-                    _after_snap["day"] = today          # 그날 한 번만 — 되풀이해 KIS 를 두드리지 않는다
+                    print("[장외] 20:00 장외 마감 값 못 받음 (%s)" % type(e).__name__, flush=True)
             time.sleep(20)
 
     threading.Thread(target=loop, daemon=True, name="after-snap").start()
