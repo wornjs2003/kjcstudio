@@ -61,7 +61,6 @@ export async function fetchLiveIndices() {
     /* 선물은 목록이 아니라 따로 온다. 배열에 실어 보내면 지수 카드가 하나 더
        생겨 버리므로, 목록에 표시만 달아 둔다. */
     j.data.futures = j.futures || null;
-    j.data.futuresNight = j.futuresNight || null;   // KRX 야간선물 (2026-10-26)
     return j.data;
   } catch {
     return null;

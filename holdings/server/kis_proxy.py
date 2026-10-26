@@ -2556,46 +2556,17 @@ FUTURES_CODE = "10100000"
 FUTURES_TTL = 5
 _fut_cache = {}
 
-# ── KRX 야간선물 (2026-10-26 지시 — 「응 채워줘」) ─────────────────────
-# 같은 조회(FHMIF10000000 · 10100000)에 시장구분 "CM" 을 주면 KRX 야간장 값이 온다
-# (2026-10-25 실측 — F 863.30 · CM 861.70 −1.60). 전일비 기준(futs_sdpr)은 그 야간장
-# 앞 주간장 종가다. 응답에 시각 칸이 없어 **열렸는지는 시계로 가른다.**
-#
-# 야간장은 18:00 ~ 다음 날 06:00(05:50~06:00 은 종가 단일가). 2025-06 부터 KRX 가
-# 직접 연다. 18:00 이 정규장 휴장일이면 그날 밤은 안 열린다 — 주말은 거르지만
-# **공휴일 목록은 없어 그날은 「야간장 중」 으로 잘못 보인다**(값은 지난 밤 그대로).
-FUTURES_NIGHT_OPEN_MIN = 18 * 60
-FUTURES_NIGHT_CLOSE_MIN = 6 * 60
-# 야간장 밖에는 값이 안 바뀐다 — 화면이 1초마다 물어도 KIS 로 덜 나가게 길게 둔다.
-FUTURES_NIGHT_IDLE_TTL = 300
 
-
-def futures_night_open(now=None):
-    """지금 KRX 야간장이 열려 있나 — 주말 밤은 닫힘. 공휴일은 못 가른다."""
-    now = now or datetime.now(KST)
-    hm = now.hour * 60 + now.minute
-    if FUTURES_NIGHT_CLOSE_MIN <= hm < FUTURES_NIGHT_OPEN_MIN:
-        return False
-    start = now if hm >= FUTURES_NIGHT_OPEN_MIN else now - timedelta(days=1)
-    return start.weekday() < 5
-
-
-def fetch_futures(cfg, mrkt="F"):
-    """코스피200 선물 최근월물. mrkt "F" 주간 · "CM" KRX 야간. 못 받으면 None — 화면은 그 칸만 비운다."""
-    night = mrkt == "CM"
-    is_open = futures_night_open() if night else None
-    ttl = FUTURES_TTL if (not night or is_open) else FUTURES_NIGHT_IDLE_TTL
-    key = "k200-night" if night else "k200"
-    hit = _fut_cache.get(key)
-    if hit and (time.time() - hit[0]) < ttl:
-        if night:
-            return dict(hit[1], open=is_open)
+def fetch_futures(cfg):
+    """코스피200 선물 최근월물. 못 받으면 None — 화면은 그 칸만 비운다."""
+    hit = _fut_cache.get("k200")
+    if hit and (time.time() - hit[0]) < FUTURES_TTL:
         return hit[1]
     try:
         data = kis_get(
             cfg,
             "/uapi/domestic-futureoption/v1/quotations/inquire-price",
-            {"FID_COND_MRKT_DIV_CODE": mrkt, "FID_INPUT_ISCD": FUTURES_CODE},
+            {"FID_COND_MRKT_DIV_CODE": "F", "FID_INPUT_ISCD": FUTURES_CODE},
             "FHMIF10000000",
         )
     except RuntimeError:
@@ -2613,13 +2584,7 @@ def fetch_futures(cfg, mrkt="F"):
         "volume": _num(o.get("acml_vol"), int),
         "source": "KIS",
     }
-    if night:
-        # 열렸는지 · 장 시간은 서버가 알려 준다 — 화면이 시계를 따로 들지 않게
-        row["open"] = is_open
-        row["hours"] = "%02d:%02d~%02d:%02d" % (
-            FUTURES_NIGHT_OPEN_MIN // 60, FUTURES_NIGHT_OPEN_MIN % 60,
-            FUTURES_NIGHT_CLOSE_MIN // 60, FUTURES_NIGHT_CLOSE_MIN % 60)
-    _fut_cache[key] = (time.time(), row)
+    _fut_cache["k200"] = (time.time(), row)
     return row
 
 
@@ -7730,16 +7695,13 @@ class Handler(SimpleHTTPRequestHandler):
                 # 국내 · 해외 · 선물을 **함께 진행한다** (2026-09-18).
                 # 하나씩 기다리면 셋의 응답 시간이 그대로 더해졌다.
                 # 해외 지수·환율도 같은 응답에 실어 보낸다 — 화면이 한 번만 부르면 된다.
-                with ThreadPoolExecutor(max_workers=3) as pool:
+                with ThreadPoolExecutor(max_workers=2) as pool:
                     f_all = pool.submit(fetch_indices_all, cfg, with_chart, want_ovs)
                     f_fut = pool.submit(fetch_futures, cfg)
-                    f_night = pool.submit(fetch_futures, cfg, "CM")   # KRX 야간 (2026-10-26)
                     data, errors = f_all.result()
                     futures = f_fut.result()
-                    futures_night = f_night.result()
                 self._send_json({"ok": bool(data), "data": data,
-                                 "futures": futures, "futuresNight": futures_night,
-                                 "errors": errors or None})
+                                 "futures": futures, "errors": errors or None})
                 return
 
             if route == "sectors":
