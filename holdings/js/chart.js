@@ -105,6 +105,10 @@ export const INDICATORS = [
   { key: 'vol',  name: '거래량',      pane: 'own'   },
   { key: 'macd', name: 'MACD',       pane: 'own'   },
   { key: 'rsi',  name: 'RSI',        pane: 'own'   },
+  /* 누적 순매수(외국인 · 기관 · 개인 %p) — 2026-10-26 재권님 「차트 보조지표에 외국인 기관 개인 보유비중」 → 시안 넷 중 「다」.
+     **보유비중이 아니다** — 기관 · 개인 보유 비중은 공개 출처가 없어 셋 다 같은 잣대(셈 첫날부터 순매수 ÷ 상장주식수)로 그린다.
+     값은 서버 /api/kis/holding-flow 가 셈해 내준다(kis_proxy.py holding_flow) — 화면은 날짜를 봉에 맞춰 놓기만 한다 */
+  { key: 'hf',   name: '누적 순매수',  pane: 'own'   },
 ];
 
 /* 같은 화면의 차트들이 함께 맞춘다. 한 곳에서 켜면 나머지도 따라간다 */
@@ -706,7 +710,7 @@ export function onIndicatorChange(fn) {
 }
 
 const PANE_H_KEY = 'kh.chart.pane-h';
-const PANE_H_DEF = { vol: 110, macd: 110, rsi: 110 };
+const PANE_H_DEF = { vol: 110, macd: 110, rsi: 110, hf: 110 };
 
 /* ── 매물대 (2026-09-18 지시) ─────────────────
  *
@@ -837,7 +841,21 @@ const OWN_PANES = [
   { key: 'vol',  label: '거래량', par: '20' },
   { key: 'macd', label: 'MACD',  par: '12, 26, 9' },
   { key: 'rsi',  label: 'RSI',   par: '14' },
+  { key: 'hf',   label: '누적 순매수 %p', par: '보유비중 아님' },
 ];
+
+/* 누적 순매수 값 — 종목마다 한 번 받아 들고 있는다(값을 들고 있는 것 · 언제 다시 받을지는 서버 캐시가 정한다) */
+const _hf = new Map();
+function loadHf(code) {
+  if (!/^\d{6}$/.test(code || '')) return Promise.resolve(null);
+  if (!_hf.has(code)) {
+    _hf.set(code, apiFetch(`/api/kis/holding-flow?code=${code}`)
+      .then((r) => (r && r.ok ? r.json() : null))
+      .then((j) => (j && j.ok ? { rows: j.data || [], start: j.meta && j.meta.start } : null))
+      .catch(() => { _hf.delete(code); return null; }));
+  }
+  return _hf.get(code);
+}
 
 export function createStockChart(container, candles, opts = {}) {
   /* candles 는 setData 로 바뀐다 (인자를 그대로 쓰지 않는다) */
@@ -1475,6 +1493,31 @@ export function createStockChart(container, candles, opts = {}) {
     return { values: r.values, sig };
   }
 
+  /* 누적 순매수 칸 — 선 셋(외국인 · 기관 · 개인 · 보조지표 색 ind1 · ind2 · ind3)과 0 점선. 값은 봉마다 「그 날짜까지의 마지막 값」
+     (분봉은 그날 값 · 셈 첫날 앞은 비움). 받기 전에는 빈 칸으로 두고, 오면 그 자리에서 채운다 */
+  function drawHf(ch) {
+    const keys = [['foreign', COLOR.ind1], ['inst', COLOR.ind2], ['person', COLOR.ind3]];
+    const lines = keys.map(([, col]) => addLine(ch, { color: col, lineWidth: 2, lastValueVisible: true }));
+    try { lines[0].createPriceLine({ price: 0, color: COLOR.cross, lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' }); } catch { /* 선만 생략 */ }
+    const calc = { foreign: [], inst: [], person: [], start: null };
+    const code = drawnCode;
+    loadHf(code).then((hf) => {
+      if (!hf || code !== drawnCode) return;
+      const rows = hf.rows;
+      let j = -1;
+      keys.forEach(([k]) => { calc[k] = []; });
+      candles.forEach((c) => {
+        const d = String(c.ts).slice(0, 8);
+        while (j + 1 < rows.length && rows[j + 1].date <= d) j += 1;
+        keys.forEach(([k]) => calc[k].push(j >= 0 ? rows[j][k] : null));
+      });
+      calc.start = hf.start;
+      try { keys.forEach(([k], n) => lines[n].setData(put(calc[k]))); } catch { /* 칸이 그새 사라졌다 */ }
+      paintPaneTags(candles.length - 1);
+    });
+    return calc;
+  }
+
   function build() {
     /* 보던 자리를 기억했다가 되돌린다. 지표를 켜고 끌 때마다 창이
        처음으로 돌아가면 보던 구간을 다시 찾아가야 한다 (2026-09-18 지시). */
@@ -1548,7 +1591,7 @@ export function createStockChart(container, candles, opts = {}) {
         : fitH[p.key];
       box.style.height = h + 'px';
 
-      const ch = track(mkChart(box, h, idx === list.length - 1, p.key === 'price' ? priceDigits : 0));
+      const ch = track(mkChart(box, h, idx === list.length - 1, p.key === 'price' ? priceDigits : p.key === 'hf' ? 2 : 0));   // 누적 순매수는 %p 소수 둘째
       const item = { key: p.key, el, box, chart: ch, fut, futB };
       panes.push(item);
 
@@ -1556,6 +1599,7 @@ export function createStockChart(container, candles, opts = {}) {
       if (p.key === 'vol')   item.calc = drawVol(ch);
       if (p.key === 'macd')  item.calc = drawMacd(ch);
       if (p.key === 'rsi')   item.calc = drawRsi(ch);
+      if (p.key === 'hf')    item.calc = drawHf(ch);
 
       /* 아래 칸에는 이름표와 닫기, 위쪽 경계에는 끌개 */
       if (p.key !== 'price') {
@@ -1643,6 +1687,14 @@ export function createStockChart(container, candles, opts = {}) {
           one(p.calc.vSignal[i], COLOR.ma5),
           one(p.calc.vHist[i], p.calc.vHist[i] >= 0 ? COLOR.up : COLOR.down),
         ].join('<span class="kh-mut" style="margin:0 3px">·</span>');
+      }
+      if (p.key === 'hf') {
+        const f = (nm, v, col) => '<span style="color:' + col + '">' + nm + ' ' +
+          (v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(2)) + '</span>';
+        const st = p.calc.start;
+        n.innerHTML = (st ? '<span class="kh-mut">' + st.slice(4, 6) + '-' + st.slice(6) + '부터 · </span>' : '') +
+          [f('외국인', p.calc.foreign[i], COLOR.ind1), f('기관', p.calc.inst[i], COLOR.ind2), f('개인', p.calc.person[i], COLOR.ind3)]
+            .join('<span class="kh-mut" style="margin:0 3px">·</span>');
       }
       if (p.key === 'rsi') {
         const f = (v, col) => '<span style="color:' + col + '">' +
@@ -1909,7 +1961,7 @@ export function createStockChart(container, candles, opts = {}) {
       let range = null;
       try { range = main && main.timeScale().getVisibleLogicalRange(); } catch { /* 없으면 그대로 */ }
       panes.slice(1).forEach((p) => {
-        const draw = p.key === 'vol' ? drawVol : p.key === 'macd' ? drawMacd : p.key === 'rsi' ? drawRsi : null;
+        const draw = p.key === 'vol' ? drawVol : p.key === 'macd' ? drawMacd : p.key === 'rsi' ? drawRsi : p.key === 'hf' ? drawHf : null;
         if (!draw) return;
         (p.chart.__khSeries || []).forEach((sr) => { try { p.chart.removeSeries(sr); } catch { /* 이미 없다 */ } });
         p.chart.__khSeries = [];
