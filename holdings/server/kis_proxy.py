@@ -66,6 +66,7 @@ import macro
 import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-25 · server/events.py 머리 주석)
 import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
 import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
+import intraday_alerts  # 장중 알림 — 상승 VI · +20% 급등(2026-10-26 · server/intraday_alerts.py 머리 주석)
 import market_index
 import crypto            # 가상자산 — 업비트 공개 시세(2026-10-14 · server/crypto.py 머리 주석)
 import news
@@ -2563,7 +2564,8 @@ _fut_cache = {}
 #
 # 야간장은 18:00 ~ 다음 날 06:00(05:50~06:00 은 종가 단일가). 2025-06 부터 KRX 가
 # 직접 연다. 18:00 이 정규장 휴장일이면 그날 밤은 안 열린다 — 주말은 거르지만
-# **공휴일 목록은 없어 그날은 「야간장 중」 으로 잘못 보인다**(값은 지난 밤 그대로).
+# **공휴일은 아직 안 가른다 — 그날은 「야간장 중」 으로 잘못 보인다**(값은 지난 밤 그대로). 이 파일의 휴장일 가르기
+# (오늘 국내 5분봉이 들었나) 셈을 쓰면 닫힌다(개념정의 10-26) — 아직 안 했다.
 FUTURES_NIGHT_OPEN_MIN = 18 * 60
 FUTURES_NIGHT_CLOSE_MIN = 6 * 60
 # 야간장 밖에는 값이 안 바뀐다 — 화면이 1초마다 물어도 KIS 로 덜 나가게 길게 둔다.
@@ -2571,7 +2573,7 @@ FUTURES_NIGHT_IDLE_TTL = 300
 
 
 def futures_night_open(now=None):
-    """지금 KRX 야간장이 열려 있나 — 주말 밤은 닫힘. 공휴일은 못 가른다."""
+    """지금 KRX 야간장이 열려 있나 — 주말 밤은 닫힘. 공휴일은 아직 안 가른다."""
     now = now or datetime.now(KST)
     hm = now.hour * 60 + now.minute
     if FUTURES_NIGHT_CLOSE_MIN <= hm < FUTURES_NIGHT_OPEN_MIN:
@@ -6756,6 +6758,13 @@ class Handler(SimpleHTTPRequestHandler):
                 st["note"] = "아직 안 돌았습니다 — 보내는 서버(메인 %d)에서 평일 08:51 에 돕니다" % MAIN_PORT
             self._send_json({"ok": True, "data": st})
             return
+        if (self.path or "").rstrip("/") == "/api/alerts/status":
+            # 장중 알림 바퀴(상승 VI · +20% 급등) — 오늘 몇 건 · 몇 통 · 꺼져 있으면 보냈을 글(preview). 보내는 서버에서만 돈다
+            st = intraday_alerts.status()
+            if not st.get("startedAt"):
+                st["note"] = "이 서버에서는 장중 알림 바퀴가 안 돕니다 — 보내는 서버(메인 %d)에서만 돕니다" % MAIN_PORT
+            self._send_json({"ok": True, "data": st})
+            return
         if (self.path or "").rstrip("/") == "/api/events/status":
             # 결과 알림 바퀴의 상태 — 무엇을 기다리나 · 꺼져 있으면 보냈을 글(preview). 바퀴는 보내는 서버에서만 돈다
             st = events.status()
@@ -8431,6 +8440,14 @@ def main():
         print("  장 전 거래량 : 사용 (평일 %02d:%02d 한 번 · 전날의 %.0f배 · 전날 %s주 이상%s)"
               % (nxt_pre.RUN_AT[0], nxt_pre.RUN_AT[1], nxt_pre.RATIO, format(nxt_pre.MIN_PREV, ","),
                  "" if nxt_pre.SEND else " · **발송 꺼짐 — 미리보기만**"))
+
+    # 장중 알림 — 상승 VI · +20% 급등 (2026-10-26 · server/intraday_alerts.py) — 같은 문 하나(보내는 서버만).
+    # **`intraday_alerts.SEND` 는 둘 다 꺼진 채가 기본이다** — 바퀴는 돌되 안 보내고 /api/alerts/status 에 보냈을 글을 남긴다. 켜기는 재권님 지시로
+    if not SLOW and is_sender(args.port) and intraday_alerts.start(sys.modules[__name__]):
+        _st = intraday_alerts.status()
+        print("  장중 알림 : 사용 (상승 VI · +%d%% 급등 · %d초마다 · %s · 발송 %s)"
+              % (intraday_alerts.SURGE_PCT, intraday_alerts.TICK, _st["session"],
+                 " · ".join("%s %s" % (k, "켜짐" if v else "**꺼짐**") for k, v in _st["send"].items())))
 
     if not SLOW and is_sender(args.port) and signal_watch.start(sys.modules[__name__]):
         # **시각을 여기 박지 않는다.** `SESSION_FROM`·`SESSION_TO` 에서 만든다 —
