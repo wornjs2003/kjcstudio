@@ -324,7 +324,7 @@ function setupCatFilter() {
 let mkKey = null;                       // 큰 차트에 띄운 지표 — null 이면 종목 차트
 let mkWant = null;                      // 마지막으로 누른 지표(받는 사이 다른 것을 누르면 옛 응답을 버린다)
 let mkDrop = null;                      // 지표 차트 지우기
-const MK_HIDE = ['kh-big-ic', 'kh-big-link', 'kh-dt'];          // 지표에는 없는 칸 — 자리는 두고 가린다
+const MK_HIDE = ['kh-big-ic', 'kh-big-fav', 'kh-big-link', 'kh-dt'];          // 지표에는 없는 칸 — 자리는 두고 가린다
 const MK_HIDE_SEL = ['.kh-idx-ai', '.kh-ind-menu'];
 const MK_LOCK = ['.kh-idx-head', '#kh-big-foot'];
 
@@ -672,6 +672,13 @@ function paintBigHead(s2) {
   paintIcon($('kh-dt-ic'), s2);
   const nameEl = $('kh-idx-name');
   if (nameEl) { nameEl.textContent = s2.name; nameEl.dataset.co = s2.code; }   // 종목 풍선(company-tip.js)
+
+  const fav = $('kh-big-fav');
+  if (fav) {
+    fav.dataset.fav = s2.code;
+    fav.dataset.favName = s2.name;
+    paintBigFav();
+  }
 
   const link = $('kh-big-link');
   if (link) {
@@ -1449,8 +1456,23 @@ function bindHearts(root) {
 
 /* 목록이 바뀌면 화면의 모든 순위 숫자를 맞춘다 — 한 줄만 고치면 같은
    종목이 다른 자리에 또 있을 때 어긋난다 */
+/* 큰 차트 머리줄의 하트 (2026-10-26 지시 — 「자세히 왼쪽에 즐겨찾기 추가」 · 「가」). 순위 숫자와 같은 목록을 본다 */
+function paintBigFav() {
+  const btn = $('kh-big-fav');
+  if (!btn || !btn.dataset.fav) return;
+  const on = isFav(btn.dataset.fav);
+  btn.classList.toggle('is-on', on);
+  btn.title = on ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기';
+  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+}
+$('kh-big-fav')?.addEventListener('click', (e) => {
+  const btn = e.currentTarget;
+  if (btn.dataset.fav) toggleFav(btn.dataset.fav, btn.dataset.favName);
+});
+
 onFavChange(() => {
   document.querySelectorAll('.kh-rk[data-fav]').forEach(paintFavCell);
+  paintBigFav();
 
   /* 「관심종목」 으로 보고 있으면 **목록 자체가 바뀐다** — 뺀 종목이 표에
      남아 있으면 안 된다. 다른 기준일 때는 줄 세우는 값이 안 바뀌므로

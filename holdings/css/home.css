@@ -922,6 +922,10 @@
 /* flex 를 끄고 높이를 직접 준다 (2026-09-17 지시).
    flex: 1 이면 「남는 자리를 먹는」 규칙이 먼저라 height 가 안 먹는다. */
 /* .kh-idx-head .kh-fold 의 알약 모양은 .kh-fold 로 올렸다 (2026-09-22) */
+/* 큰 차트 하트는 「자세히 ›」 바로 왼쪽 (2026-10-26 지시) — 오른쪽으로 미는 일을 하트가 맡고 「자세히」 는 그 옆에 붙는다.
+   모양은 .kh-heart(frame.css) 그대로 */
+.kh-idx-head .kh-big-fav { margin-left: auto; flex-shrink: 0; }
+.kh-idx-head .kh-big-fav + .kh-fold { margin-left: 0; }
 .kh-idx-chart { flex: none; height: 550px; }
 
 /* 오른쪽 패널 — 왼쪽 차트의 그 종목 이야기다 */
