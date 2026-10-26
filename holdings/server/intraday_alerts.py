@@ -129,6 +129,16 @@ def _vi_line(r):
         kind, (r.get("hts_kor_isnm") or "").strip(), _hms(r.get("cntg_vi_hour")), _won(r.get("vi_prc")), gap, tail)
 
 
+def _vi_in_session(hhmmss):
+    """발동 시각이 정규장 안인가 — KIS VI 현황은 넥스트레이드 시간(08:00~ · ~20:00) VI 도 준다(data-sources 2-0 · 10-23 실측)."""
+    s = (hhmmss or "").strip().zfill(6)
+    try:
+        m = int(s[0:2]) * 60 + int(s[2:4])
+    except ValueError:
+        return False
+    return SESSION_FROM <= m <= SESSION_TO
+
+
 def _vi_new(proxy, day):
     rows = _vi_rows(proxy, day)
     new = []
@@ -136,8 +146,11 @@ def _vi_new(proxy, day):
         key = ((r.get("mksc_shrn_iscd") or "").strip(), (r.get("cntg_vi_hour") or "").strip())
         if key not in _seen["vi"]:
             _seen["vi"].add(key)
-            new.append(r)
-    full = len(rows) >= 30 and len(new) == len(rows)
+            # 장 전 · 장 뒤 VI 는 본 것으로만 치고 안 보낸다 — 안 그러면 09:00 첫 바퀴에 08시대 VI 가 한 통에 몰려 간다
+            # (재권님 「정규장만」 · 2026-10-26 qa 검수)
+            if _vi_in_session(key[1]):
+                new.append(r)
+    full = len(rows) >= 30 and len(new) == len(rows)       # 넘침도 정규장 VI 로만 센다
     new.sort(key=lambda r: r.get("cntg_vi_hour") or "")
     return [_vi_line(r) for r in new], full
 
@@ -145,6 +158,11 @@ def _vi_new(proxy, day):
 # ── +20% 급등 ───────────────────────────────────────────────────────
 
 def _surge_new(proxy, now, baseline):
+    # 09:00 직후 순위 캐시(`MOVERS_TTL`)는 장 전(넥스트레이드 포함 · 통합) 순위일 수 있다 — 캐시 열쇠에 시장 구분이 없다.
+    # 그 동안은 건너뛴다. 안 그러면 장 전에만 +20% 였던 종목이 「정규장 급등」 으로 간다(2026-10-26 개념정의 검수 덧말)
+    since_open = (now.hour * 60 + now.minute - SESSION_FROM) * 60 + now.second
+    if not baseline and 0 <= since_open < getattr(proxy, "MOVERS_TTL", 30) + TICK:
+        return [], False
     cfg = proxy.load_secrets()
     rows = proxy.fetch_movers(cfg, "up", "all") or []
     lines = []

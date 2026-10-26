@@ -8442,7 +8442,7 @@ def main():
                  "" if nxt_pre.SEND else " · **발송 꺼짐 — 미리보기만**"))
 
     # 장중 알림 — 상승 VI · +20% 급등 (2026-10-26 · server/intraday_alerts.py) — 같은 문 하나(보내는 서버만).
-    # **`intraday_alerts.SEND` 는 둘 다 꺼진 채가 기본이다** — 바퀴는 돌되 안 보내고 /api/alerts/status 에 보냈을 글을 남긴다. 켜기는 재권님 지시로
+    # 발송 스위치는 `intraday_alerts.SEND`(둘 다 켬 · 재권님 「둘다 켜」 10-26). 꺼 두면 바퀴는 돌되 안 보내고 /api/alerts/status 에 보냈을 글을 남긴다
     if not SLOW and is_sender(args.port) and intraday_alerts.start(sys.modules[__name__]):
         _st = intraday_alerts.status()
         print("  장중 알림 : 사용 (상승 VI · +%d%% 급등 · %d초마다 · %s · 발송 %s)"
