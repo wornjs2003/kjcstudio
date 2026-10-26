@@ -1185,11 +1185,18 @@ function frozenDayLabel(iso) {
   return `${iso.slice(5)}(${'일월화수목금토'[d.getUTCDay()]})`;
 }
 
+/* 앞 평일(한국 시각) — 정규장 중 장외 칸이 기다리는 회차 날. 서버 attach_after_snap 과 같은 셈이다(공휴일은 아직 안 가른다) */
+function prevWeekdayIso() {
+  const d = new Date(Date.now() + 9 * 3600 * 1000);
+  do { d.setUTCDate(d.getUTCDate() - 1); } while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+  return d.toISOString().slice(0, 10);
+}
+
 /* 장외 칩에 줄이 하나도 없을 때 적는 글 — 정규장 중이면 장외 거래가 없는 때다 */
 function afterEmpty() {
   const ph = marketPhase().id;
   return ph === 'regular' || ph === 'single'
-    ? '어제 20:00 장외 마감 값을 못 받았습니다'
+    ? `${frozenDayLabel(prevWeekdayIso())} 20:00 장외 마감 값을 못 받았습니다`
     : '종가보다 오른 종목이 아직 없습니다';
 }
 
