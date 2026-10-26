@@ -116,8 +116,6 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
   function paintHead(liveRaw) {
     paintIcon($('#kh-ic'), stock);
     setText('#kh-name', stock.name);
-    const nm = $('#kh-name');
-    if (nm) nm.dataset.co = stock.code;          // 종목 풍선(company-tip.js · 홈이 건다)
     setText('#kh-code', stock.code);
 
     const price = $('#kh-price');
