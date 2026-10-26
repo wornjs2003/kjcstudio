@@ -387,6 +387,7 @@ def stocks(kind, no):
                 "pct": _num(s.get("fluctuationsRatio")),
                 "volume": _num(s.get("accumulatedTradingVolume")),
                 "value": _num(s.get("accumulatedTradingValue")),
+                "cap": _num(s.get("marketValue")),          # 시총 · 억원(2026-10-26 · 테마 종목 펼침에 씀)
             })
         return {"rows": rows, "name": j.get("groupName") or j.get("name")}
 
