@@ -643,7 +643,7 @@ def check_extra(proxy, names=None, codes=None):
 # 되닿음은 「다시 닿으면 알려주는 방향으로」 (작업우선순위 경유). 위 「바닥 신호」(하단 + 양봉 + MACD + RSI 가 동시에)와
 # 다른 알림이다 — 하단에 닿기만 하면 간다. 같은 봉에 둘 다 날 수 있다.
 #
-#     대상     **화면 관심종목** — `dart.watchlist()`(화면 하트 목록 · 2026-10-26).
+#     대상     **화면 관심종목** — `dart.WATCH_CODES`(= market.js WATCHLIST · check-watchlist-sync.py 가 맞춰 봄).
 #              위 신호들이 보는 코스피 상위 50 이 아니다
 #     띠       위 `bollinger` · `BB_PERIOD` · `BB_MULT` 그대로(chart.js 와 check-indicators.py 가 맞춰 봄) — 새 숫자를 안 박는다.
 #              차트처럼 **모든 5분봉 종가**(장 전 · 장 뒤 봉 포함)로 셈한다 — 화면 띠와 같아야 「화면엔 닿았는데 안 온다」 가 안 된다
@@ -695,7 +695,7 @@ def check_bb(proxy, names=None):
     names = names if names is not None else code_names(proxy)
     day = time.strftime("%Y%m%d")
     hit = 0
-    for code in dart.watchlist():
+    for code in dart.WATCH_CODES:
         try:
             rows = proxy.read_candles(code, PERIOD, EXTRA_BARS)
             if not rows or str(rows[-1]["ts"])[:8] != day:
@@ -735,7 +735,7 @@ def start(proxy, names=None):
                 if _in_session():
                     fresh = False
                     # 관심종목(볼린저 하단 알림)도 함께 본다 — 코스피 상위 50 밖일 수 있다
-                    for code in list(dict.fromkeys(list(watch_codes(proxy)) + dart.watchlist())):
+                    for code in list(dict.fromkeys(list(watch_codes(proxy)) + list(dart.WATCH_CODES))):
                         rows = proxy.read_candles(code, PERIOD, 1)
                         ts = rows[0]["ts"] if rows else None
                         if ts and _last_ts.get(code) != ts:

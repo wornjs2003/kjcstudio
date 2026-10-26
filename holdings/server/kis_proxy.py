@@ -5088,7 +5088,7 @@ def _prefill_codes():
     except Exception:
         codes = []
     if not codes:                      # 순위가 아직 없으면 관심종목이라도
-        codes = dart.watchlist()
+        codes = list(dart.WATCH_CODES)
 
     # **화면이 최근에 본 것부터 간다** (2026-10-01 지시 — 네 단계).
     # 모달이 열린 종목이 가장 최근이라 맨 앞에 서고, 보이는 줄이 그다음,
@@ -8330,7 +8330,7 @@ def main():
         elif not dart.telegram_config():
             _al = "꺼짐 (secrets.json 의 telegram 없음)"
         else:
-            _al = "텔레그램 켜짐 (관심종목 %d개)" % len(dart.watchlist())
+            _al = "텔레그램 켜짐 (관심종목 %d개)" % len(dart.WATCH_CODES)
         print("  알림      : %s" % _al)
     else:
         print("  공시 수집 : 꺼짐 (setup-dart.bat 으로 인증키를 넣어주세요)")
