@@ -159,11 +159,16 @@ function paintMkt() {
 
        현물   코스피200 지수. 이미 카드로 받고 있는 값을 그대로 쓴다
        선물   코스피200 최근월물. 지수보다 먼저 움직여 방향을 가늠하는 데 쓴다
-       야간   아직 코드를 못 찾았다. 자리만 만들어 둔다
+       야간   KRX 야간선물(18:00~06:00 · 2026-10-26). 전일비는 앞 주간장 종가 대비.
+              열렸는지 · 장 시간은 서버가 준다. 닫혀 있으면 지난 밤 마지막 값 + 「마감」
 
      선물은 월물 이름("F 202612")을 함께 보여줘 어느 월물인지 알 수 있게 한다. */
   const spot = (lastIndices || []).find(x => x.code === 'KOSPI200');
   const f = (lastIndices || {}).futures;
+  const n = (lastIndices || {}).futuresNight;
+  const nightNote = n
+    ? `${n.open ? n.hours : '마감'} · 거래 ${fmtNum(n.volume)}`
+    : '';
 
   const one = (label, value, pct, change, note) => `
     <span class="kh-fut-1">
@@ -179,7 +184,7 @@ function paintMkt() {
     <span class="kh-mkt-fut">
       ${one('현물', spot ? spot.value : null, spot && spot.changePct)}
       ${one('선물', f ? f.price : null, f && f.changePct, null, f ? f.name : '')}
-      ${one('야간', null, null, null, '코드 찾는 중')}
+      ${one('야간', n ? n.price : null, n && n.changePct, null, nightNote)}
     </span>`;
 
   el.innerHTML = `
