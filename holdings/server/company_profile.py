@@ -158,7 +158,12 @@ def fetch_dart(code, key, prev=None):
         return {"at": _now(), "product": None, "error": "정기보고서 없음"}
     rep = reps[0]
     if prev and prev.get("rcept") == rep["rcept_no"] and "product" in prev and prev.get("v") == DART_VER:
-        return dict(prev, at=_now())
+        # 같은 보고서 — 다시 안 받는다. 앞서 오류로 붙은 failAt · error 는 뗀다(안 떼면 failAt 이 묵어 매번 다시 부른다 · 개념정의 검수 13:16)
+        out = {k: v for k, v in prev.items() if k not in ("failAt", "error")}
+        if not out.get("product"):
+            out["error"] = "「주요 제품」 절에 매출 표 없음"
+        out["at"] = _now()
+        return out
     raw = dart._dart_get(dart.DART_API + "/document.xml?" + urllib.parse.urlencode(
         {"crtfc_key": key, "rcept_no": rep["rcept_no"]}), 40)
     z = zipfile.ZipFile(io.BytesIO(raw))
