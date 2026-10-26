@@ -64,6 +64,7 @@ import naver_period
 import toss
 import macro
 import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-25 · server/events.py 머리 주석)
+import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
 import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
 import market_index
 import crypto            # 가상자산 — 업비트 공개 시세(2026-10-14 · server/crypto.py 머리 주석)
@@ -6713,6 +6714,16 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if (self.path or "").startswith("/api/macro/"):
             self._handle_macro()
+            return
+        if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/telegram/today":
+            # 그날 텔레그램 글 — 보냄 · 꺼짐 · 조용한 시간 · 실패를 보낸 순서로(데일리분석 모달의 「데일리분석」 칸)
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            day = (q.get("day") or [""])[0].strip()
+            if day and not (day.isdigit() and len(day) == 8):
+                self._send_json({"ok": False, "error": "day 는 YYYYMMDD 여덟 자리입니다."}, 400)
+                return
+            rows, meta = tglog.today(day or None)
+            self._send_json({"ok": True, "data": rows, "meta": meta})
             return
         if (self.path or "").rstrip("/") == "/api/nxt-pre/status":
             # 장 전 거래량 2배 바퀴의 상태 — 마지막으로 돈 날 · 종목 수 · 2배 수 · 꺼져 있으면 보냈을 글(preview)

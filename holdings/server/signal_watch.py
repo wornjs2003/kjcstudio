@@ -43,6 +43,7 @@ import threading
 import time
 
 import dart
+import tglog
 
 # ── 정하는 값 — 여기 한 곳에 모은다 ────────────────────────────
 #
@@ -389,6 +390,7 @@ def check_once(proxy, names=None):
                 else:
                     # 만드는 동안에는 로그에만 남긴다 (위 SEND 설명 참고)
                     print("  [신호·안보냄] %s" % text.replace("\n", " / "))
+                    tglog.note(text, "off")
                 _mark(proxy, code, sig["ts"], sig["kind"], day)
                 hit += 1
         except Exception as e:
@@ -585,6 +587,7 @@ def _emit_extra(proxy, key, name, sig, day):
             print("  [신호] 보내지 못했습니다: %s" % err)
     else:
         print("  [신호·안보냄] %s" % text.replace("\n", " / "))
+        tglog.note(text, "off")
     _mark(proxy, key, sig["ts"], sig["kind"], day)
 
 
@@ -709,6 +712,7 @@ def check_bb(proxy, names=None):
                             print("  [신호] 보내지 못했습니다: %s" % err)
                     else:
                         print("  [신호·안보냄] %s" % text.replace("\n", " / "))
+                        tglog.note(text, "off")
                     hit += 1
                 _mark(proxy, code, ev["ts"], BB_KIND, day)
         except Exception as e:

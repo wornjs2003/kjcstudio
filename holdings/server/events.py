@@ -50,6 +50,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import dart
+import tglog
 import macro
 from secrets_guard import safe_message
 
@@ -507,6 +508,7 @@ def _emit(text, state, now):
     if not SEND:
         _status["preview"] = (_status["preview"] + [{"at": now.isoformat(timespec="seconds"),
                                                      "night": dart.in_quiet(now.timestamp()), "text": text}])[-20:]
+        tglog.note(text, "off")
         return True
     if dart.in_quiet(now.timestamp()):
         state.setdefault("queue", []).append(text)
