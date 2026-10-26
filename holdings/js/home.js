@@ -43,7 +43,7 @@ import { apiFetch, viewUrl } from './data/api.js';
 import { lookupStock } from './data/lookup-stock.js';
 /* 지수 띠 — 칸 목록 · 표시 · 그리기는 components/index-strip.js 한 곳에 있다 (2026-10-01 home.js 에서 빼냄).
    데일리분석 모달의 「주요 지수」 가 같은 띠를 쓴다 */
-import { INDEX_CELLS, stripHtml } from './components/index-strip.js';
+import { INDEX_CELLS, stripHtml, patchStrip } from './components/index-strip.js';
 import { loadIndicators, peekIndicators, loadIndicator, peekIndicator, chipsHtml, headOf,
          drawIndicator, MK_TERM, loadMaterials, peekMaterials, materialsShell,
          paintMaterials, loadCrypto, CRYPTO_CHIP } from './components/market-index.js';
@@ -223,7 +223,7 @@ function paintStrip(indices) {
     }
     return;
   }
-  if (top) top.innerHTML = stripHtml(indices);
+  if (top) patchStrip(top, stripHtml(indices));      // 달라진 조각만 — 국기를 다시 그리지 않는다(index-strip.js patchStrip)
   paintIxFilter();
 }
 

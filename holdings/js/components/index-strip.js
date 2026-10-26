@@ -80,6 +80,36 @@ export function badgeFor(i) {
 }
 
 /** 띠 칸들을 그린다. indices 는 /api/kis/indices 의 data 배열 */
+/* 띠를 새 값으로 고친다 — **통째로 다시 그리지 않고 달라진 조각만** 바꾼다 (2026-10-26 재권님 「코스피 태극기 아이콘이
+ * 깜빡이는데 이거 수정해줘」 · 작업우선순위 경유).
+ *
+ * 전에는 지수 값이 올 때마다 `innerHTML = stripHtml(…)` 로 띠를 통째로 갈았다. 8765 실측(13:1x · 60초) — 띠를 37번
+ * 다시 그려 국기 그림(svg <use href="./img/flags.svg#…">)을 370개 지웠다 다시 넣었다. 바깥 파일을 가리키는 <use> 는
+ * 새로 넣을 때마다 다시 붙이는 동안 한 박자 비어 그것이 깜빡임으로 보였다.
+ *
+ * 지금은 같은 자리 노드끼리 견주어 속성 · 글자만 고치고, 같은 노드(국기 · 배지)는 손대지 않는다. 칸 수나 모양이 다르면
+ * (불러오는 중 → 값) 그 칸만 갈아 끼운다. 칸 크기는 그대로다 — 들어가는 글이 전과 같다. 데일리 칸(daily-view.js)은
+ * 한 번 그리고 마는 글이라 stripHtml 그대로 쓴다. */
+export function patchStrip(host, html) {
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  const next = [...t.content.children];
+  if (next.length !== host.children.length) { host.replaceChildren(...next); return; }
+  next.forEach((n, i) => patchNode(host.children[i], n));
+}
+
+function patchNode(o, n) {
+  if (o.isEqualNode(n)) return;
+  if (o.nodeType !== n.nodeType || o.nodeName !== n.nodeName) { o.replaceWith(n); return; }
+  if (o.nodeType === 3) { o.nodeValue = n.nodeValue; return; }          // 글자
+  if (o.nodeType !== 1) { o.replaceWith(n); return; }
+  for (const a of [...o.attributes]) if (!n.hasAttribute(a.name)) o.removeAttribute(a.name);
+  for (const a of [...n.attributes]) if (o.getAttribute(a.name) !== a.value) o.setAttribute(a.name, a.value);
+  const oc = [...o.childNodes], nc = [...n.childNodes];
+  if (oc.length !== nc.length) { o.replaceChildren(...nc); return; }
+  nc.forEach((c, i) => patchNode(oc[i], c));
+}
+
 export function stripHtml(indices, cells = INDEX_CELLS) {
   const byCode = Object.fromEntries((indices || []).map(i => [i.code, i]));
   return cells.map(cell => {
