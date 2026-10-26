@@ -56,7 +56,6 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 같은 폴더(server/)의 모듈들. 스크립트로 실행하므로 바로 잡힌다.
 import dart
-import company_profile
 import us_universe
 import us_sectors
 import naver
@@ -7353,16 +7352,6 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             if route == "status":
                 self._send_json({"ok": True, "data": dart.status()})
-                return
-
-            # 종목 풍선 — 섹터 · 주요 매출원 (2026-10-26 · company_profile.py). 네이버 몫은 DART 키가 없어도 낸다
-            if route == "profile":
-                code = (qs.get("code") or [""])[0].strip()
-                if not re.fullmatch(r"\d{6}", code):
-                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
-                    return
-                rec = company_profile.profile(code)
-                self._send_json({"ok": True, "data": company_profile.public(code, rec)})
                 return
 
             key = dart.get_key()

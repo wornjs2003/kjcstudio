@@ -34,7 +34,6 @@ import { openSectorModal } from './components/sector-modal.js';
 import { mountStockPanel } from './components/stock-panel.js';
 import { mountStockDetail } from './components/stock-detail.js';
 import { mountMobileFold } from './components/mobile-fold.js';
-import { mountCompanyTip } from './components/company-tip.js';
 /* fetchIndexMinutes · fetchIndexCandles 는 여기서 안 쓴다 (2026-09-17).
    큰 차트가 지수에서 종목으로 바뀌면서 종목 캔들(chart.js 의 fetchCandles)로
    갈아탔다. 두 함수는 지수 화면을 만들 때 쓸 수 있게 live.js 에 남겨 뒀다. */
@@ -671,7 +670,7 @@ function paintBigHead(s2) {
      패널 넷이 다 이 종목 이야기인데 어느 종목인지는 여기 머리줄에만 있었다. */
   paintIcon($('kh-dt-ic'), s2);
   const nameEl = $('kh-idx-name');
-  if (nameEl) { nameEl.textContent = s2.name; nameEl.dataset.co = s2.code; }   // 종목 풍선(company-tip.js)
+  if (nameEl) nameEl.textContent = s2.name;
 
   const link = $('kh-big-link');
   if (link) {
@@ -1580,7 +1579,7 @@ function paintRankModal() {
     const cap = capOf(s.code);
     return `<tr>
       <td class="kh-rkm-rk">${s.rank}</td>
-      <td class="l"><span class="kh-nm">${iconHtml(s)}<b data-co="${s.code}">${s.name}</b></span></td>
+      <td class="l"><span class="kh-nm">${iconHtml(s)}<b>${s.name}</b></span></td>
       <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, rankModalSort)) : '···'}</td>
       <td class="kh-num ${p ? dirClass(pctOf(p, rankModalSort)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, rankModalSort)) : '—'}</td>
       <td class="kh-num">${p ? showValue(s.code, p) : '···'}</td>
@@ -1707,7 +1706,7 @@ function paintRows(priceMap) {
         >${s.rank}</td>
       <td class="l"><span class="kh-nm">
         ${iconHtml(s)}
-        <b data-co="${s.code}">${s.name}</b></span></td>
+        <b>${s.name}</b></span></td>
       <td class="kh-num"><span
         >${live ? fmtPriceOf(s.code, priceOf(live)) : '···'}</span></td>
       <td class="kh-num kh-metric">${sortCell(s.code, live)}</td>
@@ -2689,6 +2688,3 @@ $('kh-rank-more')?.addEventListener('click', openRankModal);
    **맨 끝에서 부른다.** 위에서 칸들을 다 그린 뒤라야 단추를 붙일 자리가 있다.
    나중에 다시 그려지는 칸은 그 모듈이 스스로 다시 붙인다. */
 mountMobileFold();
-
-/* 종목 이름에 섹터 · 주요 매출원 풍선 (2026-10-26 · components/company-tip.js) — 이름 글자의 data-co 를 본다 */
-mountCompanyTip();
