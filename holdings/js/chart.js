@@ -718,6 +718,17 @@ const PANE_H_DEF = { vol: 110, macd: 110, rsi: 110 };
  * 새 호출이 없다. 화면이 이미 갖고 있는 봉으로 계산한다.
  */
 const VP_BINS = 20;              // 가격을 몇 칸으로 나눌지
+/* **5분봉만 40칸** (2026-10-26 재권님 「5분봉 매물대를 좀더 세분화 해줘」 → 20 · 40 · 60 그림 비교 뒤 「40」).
+   5분봉은 서버가 최근 10거래일 봉을 다 주므로(kis_proxy `view_days`) 가격 범위가 넓어, 20칸이면 처음 보이는
+   120봉 자리에 칸이 5개쯤밖에 안 걸렸다(삼성전자 실측 · 한 칸 2,275원). 일봉 · 주봉 · 월봉은 20 그대로 */
+const VP_BINS_BY = { '5m': 40 };
+const vpBins = (period) => VP_BINS_BY[period] || VP_BINS;
+/* **한 칸이 호가 한 단위보다 좁아지지 않게 칸 수를 줄인다** — 좁아지면 거래가 없는 칸이 끼어 막대가 줄무늬로
+   빈다(10일 동안 덜 움직인 종목). 국내 호가 단위 — 한국거래소 2023-01-25 개편 기준(2천 · 5천 · 2만 · 5만 · 20만 ·
+   50만원 경계에 1 · 5 · 10 · 50 · 100 · 500 · 1,000원). 범위 위끝 가격의 단위로 재야 그 범위 어디서도 칸이
+   단위보다 안 좁다. 미국 종목(소수 둘째 자리)은 이 셈을 안 탄다 */
+const KR_TICKS = [[2000, 1], [5000, 5], [20000, 10], [50000, 50], [200000, 100], [500000, 500], [Infinity, 1000]];
+const krTick = (price) => KR_TICKS.find(([upTo]) => price < upTo)[1];
 /* 가장 긴 막대가 그림 영역 오른쪽 끝에 거의 닿는다 (2026-09-18 지시 —
    "가장 긴게 차트 화면 오른쪽 거의 끝에맞춰져서 정렬"). 1.0 이면 딱 닿아서
    가격축 선과 붙어 보이므로 조금 남긴다. */
@@ -766,7 +777,7 @@ const VP_REFRESH_MS = 2000;      // 다시 그리는 주기 (지시)
  * 이것을 펴 넣으면 된다. */
 const NO_SCALE = { autoscaleInfoProvider: () => null };
 
-function volumeProfile(candles, bins = VP_BINS) {
+function volumeProfile(candles, bins = VP_BINS, tickFloor = false) {
   const rows = (candles || []).filter((c) =>
     Number.isFinite(c.high) && Number.isFinite(c.low));
   if (rows.length < 2) return null;
@@ -774,6 +785,7 @@ function volumeProfile(candles, bins = VP_BINS) {
   const lo = Math.min(...rows.map((c) => c.low));
   const hi = Math.max(...rows.map((c) => c.high));
   if (!(hi > lo)) return null;
+  if (tickFloor) bins = Math.max(2, Math.min(bins, Math.floor((hi - lo) / krTick(hi))));
   const step = (hi - lo) / bins;
 
   const acc = new Array(bins).fill(0);
@@ -1073,7 +1085,7 @@ export function createStockChart(container, candles, opts = {}) {
     if (!vpLayer) return;
     if (!indOn().has('vp') || !candleSeries) { vpLayer.innerHTML = ''; return; }
 
-    const prof = volumeProfile(candles);
+    const prof = volumeProfile(candles, vpBins(period), priceDigits === 0);
     if (!prof) { vpLayer.innerHTML = ''; return; }
 
     const w = Math.max(0, vpLayer.clientWidth - AXIS_W);   // 가격축 자리는 비운다
