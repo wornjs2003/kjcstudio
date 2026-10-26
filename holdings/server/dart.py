@@ -27,6 +27,7 @@ import re
 import sqlite3
 
 import marketdb
+import tglog                # 오늘 보낸 텔레그램 글 기록(2026-10-26) — telegram_send 가 적는다
 import threading
 import time
 import urllib.error
@@ -1152,6 +1153,13 @@ def _telegram_post(cfg, text):
 
 
 def telegram_send(text):
+    """보낸다 — 그리고 그 결과를 `tglog` 에 한 줄(보냄 · 조용한 시간 · 실패). 모든 발송이 여기를 지나므로 기록도 여기 하나다."""
+    ok, why = _telegram_send(text)
+    tglog.note(text, "sent" if ok else ("quiet" if why == QUIET_REASON else "fail"), None if ok else scrub(why))
+    return ok, why
+
+
+def _telegram_send(text):
     if in_quiet():
         return False, QUIET_REASON
     cfg = telegram_config()

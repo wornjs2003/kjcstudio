@@ -28,6 +28,7 @@ import zipfile
 from datetime import datetime, timedelta, timezone
 
 import dart
+import tglog
 from secrets_guard import safe_message
 
 KST = timezone(timedelta(hours=9))
@@ -185,6 +186,7 @@ def run_once(proxy, day=None):
             _status["error"] = "보내지 못했습니다: %s" % err
     else:
         print("  [장 전 거래량·안보냄] %d종목 — %s" % (len(hits), text.split("\n")[0]))
+        tglog.note(text, "off")
     return dict(_status)
 
 
