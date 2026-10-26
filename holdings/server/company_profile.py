@@ -39,6 +39,7 @@ NAVER_URL = "https://navercomp.wisereport.co.kr/v2/company/c1010001.aspx?cmp_cd=
 UA = "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/120 Safari/537.36"
 TBL_ROWS, TBL_CELL = 12, 60    # 표는 줄 · 칸 그대로 옮기되 길이만 자른다(해석하지 않는다)
 SUMMARY_MAX = 3
+DART_VER = 2                   # 쥔 DART 값의 모양 — 바뀌면 다시 받는다(2: 합친 칸 spans · qa 검수 10-26)
 
 _store = None
 _lock = threading.Lock()
@@ -109,12 +110,24 @@ def _section(x, pat):
     return None
 
 
-def _tables(sec):
+def _span(attrs, name):
+    m = re.search(name + r'\s*=\s*"?(\d+)', attrs or "", re.I)
+    return int(m.group(1)) if m and int(m.group(1)) > 1 else 1
+
+
+def _tables(sec, spans=False):
+    """표마다 줄 목록. spans=True 면 (줄 목록, 칸마다 [줄 합침, 칸 합침]) — 원본의 ROWSPAN · COLSPAN 을 남겨야
+    화면이 칸을 제자리에 놓는다(안 남기면 「매출액 · 비중」 줄이 한 칸씩 왼쪽으로 밀린다 · qa 검수 10-26)."""
     out = []
     for m in re.finditer(r"<TABLE(.*?)</TABLE>", sec or "", re.S):
-        rows = [[_clean(c)[:TBL_CELL] for c in re.findall(r"<T[DHEU][^>]*>(.*?)</T[DHEU]>", tr, re.S)]
-                for tr in re.findall(r"<TR[^>]*>(.*?)</TR>", m.group(1), re.S)]
-        out.append([r for r in rows if any(r)])
+        rows, sp = [], []
+        for tr in re.findall(r"<TR[^>]*>(.*?)</TR>", m.group(1), re.S):
+            cells = re.findall(r"<T[DHEU]([^>]*)>(.*?)</T[DHEU]>", tr, re.S)
+            row = [_clean(c)[:TBL_CELL] for _a, c in cells]
+            if any(row):
+                rows.append(row)
+                sp.append([[_span(a, "ROWSPAN"), _span(a, "COLSPAN")] for a, _c in cells])
+        out.append((rows, sp) if spans else rows)
     return out
 
 
@@ -144,19 +157,27 @@ def fetch_dart(code, key, prev=None):
     if not reps:
         return {"at": _now(), "product": None, "error": "정기보고서 없음"}
     rep = reps[0]
-    if prev and prev.get("rcept") == rep["rcept_no"] and "product" in prev:
-        return dict(prev, at=_now())
+    if prev and prev.get("rcept") == rep["rcept_no"] and "product" in prev and prev.get("v") == DART_VER:
+        # 같은 보고서 — 다시 안 받는다. 앞서 오류로 붙은 failAt · error 는 뗀다(안 떼면 failAt 이 묵어 매번 다시 부른다 · 개념정의 검수 13:16)
+        out = {k: v for k, v in prev.items() if k not in ("failAt", "error")}
+        if not out.get("product"):
+            out["error"] = "「주요 제품」 절에 매출 표 없음"
+        out["at"] = _now()
+        return out
     raw = dart._dart_get(dart.DART_API + "/document.xml?" + urllib.parse.urlencode(
         {"crtfc_key": key, "rcept_no": rep["rcept_no"]}), 40)
     z = zipfile.ZipFile(io.BytesIO(raw))
     main = [n for n in z.namelist() if re.fullmatch(r"\d+\.xml", n)] or z.namelist()
     x = z.read(main[0]).decode("utf-8", "replace")
-    out = {"at": _now(), "rcept": rep["rcept_no"], "report": rep["report_nm"].strip(), "reportDate": rep["rcept_dt"],
+    out = {"at": _now(), "v": DART_VER, "rcept": rep["rcept_no"], "report": rep["report_nm"].strip(), "reportDate": rep["rcept_dt"],
            "from": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=" + rep["rcept_no"], "product": None}
-    ts = _tables(_section(x, r"주요\s*제품"))
-    for i, t in enumerate(ts):
+    pairs = _tables(_section(x, r"주요\s*제품"), spans=True)
+    ts = [t for t, _sp in pairs]
+    for i, (t, sp) in enumerate(pairs):
         if len(t) >= 2 and re.search(r"매출|비율|비중", " ".join(t[0])):
             out["product"] = {"rows": t[:TBL_ROWS], "unit": _unit_before(ts, i), "cut": len(t) > TBL_ROWS}
+            if any(c != [1, 1] for r in sp[:TBL_ROWS] for c in r):
+                out["product"]["spans"] = sp[:TBL_ROWS]
             break
     if not out["product"]:
         out["error"] = "「주요 제품」 절에 매출 표 없음"
@@ -185,11 +206,19 @@ def profile(code, refresh=True):
             changed = True
         dt = rec.get("dart")
         key = dart.get_key()
-        if key and _age(dt) > (FAIL_TTL if (not dt or not dt.get("product")) else DART_TTL):
+        # 판(DART_VER)이 다르면 다시 받는 것은 **받아 둔 표가 있을 때만** — 실패 기록(고유번호 · 정기보고서 없음 · 예외)은
+        # 판 표시가 없어도 FAIL_TTL 을 따른다. 안 그러면 풍선을 띄울 때마다 DART 를 다시 부른다(개념정의 검수 10-26 13:12)
+        # 받다가 오류가 났으면(failAt) 그때부터 FAIL_TTL — 쥔 옛 표는 그대로 보이되 판이 달라도 그동안 다시 안 부른다(qa 검수 10-26 13:14)
+        old_ver = bool(dt and dt.get("product")) and dt.get("v") != DART_VER
+        if dt and dt.get("failAt"):
+            stale = _age({"at": dt["failAt"]}) > FAIL_TTL
+        else:
+            stale = old_ver or _age(dt) > (FAIL_TTL if (not dt or not dt.get("product")) else DART_TTL)
+        if key and stale:
             try:
                 rec["dart"] = fetch_dart(code, key, dt)
             except Exception as e:
-                rec["dart"] = dict(dt or {}, at=_now(), error="DART 못 받음: %s" % safe_message(e, 80))
+                rec["dart"] = dict(dt or {}, failAt=_now(), error="DART 못 받음: %s" % safe_message(e, 80))
             changed = True
         if changed:
             with _lock:

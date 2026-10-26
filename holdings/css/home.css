@@ -294,6 +294,21 @@
    (CLAUDE.md 「진한 색 바탕에는 흰 글씨」). 등락률 색도 여기서는 묻는다 */
 .kh-scm-chips .kh-chip.is-active b { color: var(--kh-text-on-fill); }
 
+/* ── 칩 줄 바로 아래 펼친 묶음 (2026-10-26 재권님 「가 · 받아」) ──
+   그 칩이 있는 줄 끝에 끼우는 한 줄 폭 칸 — 그 아래 칩 줄만 밀린다(누른 사람이 시킨 펼치기). 흰 카드 · 선 없음 */
+.kh-scm-open { flex-basis: 100%; position: relative; box-sizing: border-box;
+               background: var(--kh-bg-card); border-radius: var(--kh-radius-lg, 12px); padding: 14px 16px 10px; margin: 4px 0 8px; }
+.kh-scm-open .kh-scm-gh { padding-right: 28px; }
+.kh-scm-x { position: absolute; top: 10px; right: 12px; background: none; border: 0; font-size: 1rem; color: var(--kh-text-muted); cursor: pointer; }
+.kh-scm-open .kh-sc-bar { display: block; width: 100%; height: 4px; margin-bottom: 6px; }
+.kh-scm-open .kh-scm-list { max-height: 420px; }
+.kh-scm-open table { table-layout: auto; }
+.kh-scm-open col.c-nm { width: auto; }
+.kh-scm-open col.c-pr, .kh-scm-open col.c-pc { width: 130px; }
+.kh-scm-open col.c-am, .kh-scm-open col.c-cap { width: 150px; }
+.kh-scm-open tbody td b { display: inline; }
+.kh-scm-cd { margin-left: 6px; font-size: 0.74rem; }
+
 /* ── 셋을 나란히 (2026-09-22 지시) ─────────────────────────
    「모달 띄우면 업종일때는 업종 3개가 보여져야하고 테마일때는 테마가 3개」.
    카드와 같은 셋이고, 모달이 넓어 **거래대금까지** 더 보인다. */
@@ -369,6 +384,16 @@
   .kh-scm-cnt { white-space: nowrap; }
   .kh-scm-chips .kh-chip,
   .kh-scm-span .kh-chip { min-height: 30px; align-items: center; }
+  /* 펼친 칸(2026-10-26) — 다섯 칸이 390 에 들게 좁히고 코드는 뺀다 · 목록은 본문과 함께 굴린다 */
+  .kh-scm-open { padding: 12px 10px 8px; }
+  .kh-scm-open .kh-scm-list { max-height: none; }
+  .kh-scm-open table { table-layout: fixed; font-size: 0.78rem; }
+  .kh-scm-open col.c-pr { width: 64px; }
+  .kh-scm-open col.c-pc { width: 56px; }
+  .kh-scm-open col.c-am, .kh-scm-open col.c-cap { width: 58px; }
+  .kh-scm-open thead th, .kh-scm-open tbody td { padding-left: 4px; padding-right: 4px; white-space: normal; }
+  .kh-scm-open tbody td b { display: block; }
+  .kh-scm-cd { display: none; }
 }
 
 /* ── 데일리분석 칸 (kh-rank 줄) ─────────────────────────────

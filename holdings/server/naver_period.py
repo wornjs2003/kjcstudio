@@ -16,6 +16,12 @@
 ── 표 ──
 
     naver_period_stock   code · name · c0(마지막 종가) · pw · pm(주간 · 월간 등락률 %) · ts(마지막 종가 날짜)
+                         · vw · vm(주간 · 월간 거래대금 추정 — 날마다 거래량 × 종가의 합 · 백만원) · cap(시가총액 · 억원)
+                         (2026-10-26 재권님 「받아」 — 주간 · 월간에도 거래대금 · 시총. **네이버를 더 부르지 않는다** —
+                          거래량은 이미 받는 일별 종가 응답에 · 시총은 이미 받는 묶음 종목 목록에 들어 있다)
+
+    **거래대금은 추정이다.** 네이버 일별 시세는 거래대금을 안 주고 거래량만 준다 — 그날 거래량 × 그날 종가를 기간만큼
+    더한다(장중 값이 종가와 달라 실제와 몇 % 어긋날 수 있다). 일간 칸의 거래대금(네이버가 준 값)과 단위(백만원)는 같다.
 
 **액면병합 · 분할 날만 그날 등락률로 바꾼다.** 네이버 일별 종가는 그것을 고치지 않은 값이다 —
 2026-10-08 실측으로 씨아이테크가 907 → 7,670원(그날 등락률 −15.44%)이라 종가로 견주면 +700% 가 되고,
@@ -51,7 +57,8 @@ MAX_GROUP_COUNT = 1000        # 「기타」 처럼 분류가 아닌 묶음은 �
 
 SCHEMA = [
     """CREATE TABLE IF NOT EXISTS naver_period_stock (
-         code TEXT PRIMARY KEY, name TEXT, c0 REAL, pw REAL, pm REAL, ts TEXT, updated_at TEXT)""",
+         code TEXT PRIMARY KEY, name TEXT, c0 REAL, pw REAL, pm REAL, ts TEXT, updated_at TEXT,
+         vw REAL, vm REAL, cap REAL)""",
     """CREATE TABLE IF NOT EXISTS naver_period_member (
          kind TEXT NOT NULL, no INTEGER NOT NULL, code TEXT NOT NULL, PRIMARY KEY (kind, no, code))""",
     """CREATE TABLE IF NOT EXISTS naver_period_group (
@@ -88,12 +95,20 @@ def _num(v):
         return None
 
 
+# 2026-10-26 에 더한 칸 — 옛 표에는 없다. 쓰기 서버가 붙이고, 읽기 서버는 칸이 없으면 NULL 로 읽는다(`_stock_cols`)
+NEW_COLS = (("vw", "REAL"), ("vm", "REAL"), ("cap", "REAL"))
+
+
 def db_init():
     if not marketdb.writable():
         return
     with dart._db_lock, dart.db_conn() as conn:
         for q in SCHEMA:
             conn.execute(q)
+        have = {r[1] for r in conn.execute("PRAGMA table_info(naver_period_stock)")}
+        for col, typ in NEW_COLS:
+            if col not in have:
+                conn.execute("ALTER TABLE naver_period_stock ADD COLUMN %s %s" % (col, typ))
 
 
 # ── 받기 ────────────────────────────────────────────────────────────────
@@ -117,22 +132,29 @@ def _members(kind, no):
         for s in rows:
             code = (s.get("itemCode") or "").strip()
             if len(code) == 6:
-                out.append((code, s.get("stockName")))
+                out.append((code, s.get("stockName"), _num(s.get("marketValue"))))   # 시총 · 억원(네이버 칸 그대로)
         if len(rows) < PAGE:
             return out
         page += 1
 
 
 def _closes(code):
-    """최근 → 과거 순 (날짜, 종가, 그날 등락률%) 21개까지 — 20일 변화에 앞 하루가 더 든다"""
+    """최근 → 과거 순 (날짜, 종가, 그날 등락률%, 거래량) 21개까지 — 20일 변화에 앞 하루가 더 든다"""
     j = _get("%s/stock/%s/price?pageSize=%d&page=1" % (BASE, code, SPAN_BACK["m"] + 1)) or []
     out = []
     for r in j if isinstance(j, list) else []:
         c = _num(r.get("closePrice"))
         d = (r.get("localTradedAt") or "")[:10].replace("-", "")
         if c and len(d) == 8:
-            out.append((d, c, _num(r.get("fluctuationsRatio"))))
+            out.append((d, c, _num(r.get("fluctuationsRatio")), _num(r.get("accumulatedTradingVolume"))))
     return out
+
+
+def _value(cl, n):
+    """최근 n 거래일 거래대금 추정(백만원) — 날마다 거래량 × 종가의 합. 날이 모자라거나 거래량이 빠진 날이 있으면 None(0 이 아니다)"""
+    if len(cl) < n or any(r[3] is None for r in cl[:n]):
+        return None
+    return sum(r[1] * r[3] for r in cl[:n]) / 1e6
 
 
 def _chain(cl, n):
@@ -160,14 +182,16 @@ def run():
     try:
         db_init()
         now = datetime.now(KST).isoformat(timespec="seconds")
-        groups, members, names = [], [], {}
+        groups, members, names, caps = [], [], {}, {}
         for kind in ("industry", "theme"):
             for pos, g in enumerate(_all_groups(kind)):
                 no = int(g["no"])
                 groups.append((kind, no, g.get("name"), pos))
-                for code, name in _members(kind, no):
+                for code, name, cap in _members(kind, no):
                     members.append((kind, no, code))
                     names[code] = name
+                    if cap is not None:
+                        caps[code] = cap
         stocks = []
         for code in names:
             try:
@@ -177,7 +201,8 @@ def run():
             if not cl:
                 continue
             stocks.append((code, names[code], cl[0][1], _chain(cl, SPAN_BACK["w"]),
-                           _chain(cl, SPAN_BACK["m"]), cl[0][0], now))
+                           _chain(cl, SPAN_BACK["m"]), cl[0][0], now,
+                           _value(cl, SPAN_BACK["w"]), _value(cl, SPAN_BACK["m"]), caps.get(code)))
         if not groups or not stocks:
             raise RuntimeError("네이버에서 받은 것이 없습니다")
         # **다 받은 뒤에 갈아끼운다** — 반쯤 받다 끊기면 옛 값을 그대로 둔다
@@ -187,7 +212,8 @@ def run():
             conn.execute("DELETE FROM naver_period_stock")    # 상장폐지 종목이 남지 않게
             conn.executemany("INSERT OR REPLACE INTO naver_period_group VALUES (?, ?, ?, ?)", groups)
             conn.executemany("INSERT OR REPLACE INTO naver_period_member VALUES (?, ?, ?)", members)
-            conn.executemany("INSERT OR REPLACE INTO naver_period_stock VALUES (?, ?, ?, ?, ?, ?, ?)", stocks)
+            conn.executemany("INSERT OR REPLACE INTO naver_period_stock (code, name, c0, pw, pm, ts, updated_at, vw, vm, cap) "
+                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", stocks)
         dart._meta_set("naver_period_date", datetime.now(KST).strftime("%Y%m%d"))
         out = {"groups": len(groups), "stocks": len(stocks), "calls": state["calls"] - c0,
                "sec": round(time.time() - t0)}
@@ -285,12 +311,22 @@ def groups(kind, span):
     return {"rows": out, "total": len(out), "asof": asof}
 
 
+def _stock_cols():
+    """새 칸(vw · vm · cap) 중 표에 있는 것 — 읽기 서버는 8765 가 새 코드로 받기 전까지 칸이 없다"""
+    got = _read("PRAGMA table_info(naver_period_stock)") or []
+    return {r["name"] for r in got}
+
+
 def stocks(kind, no, span):
-    """그 묶음의 종목 → 기간 등락률 큰 순. 가격은 마지막 종가. 받은 것이 없으면 None."""
+    """그 묶음의 종목 → 기간 등락률 큰 순. 가격은 마지막 종가. 받은 것이 없으면 None.
+    `value` 는 그 기간 거래대금 추정(백만원 — 일간과 같은 단위) · `cap` 은 시총(억원). 칸이 아직 없으면 None."""
     if kind not in ("industry", "theme") or span not in SPAN_BACK:
         raise ValueError("kind · span 이 올바르지 않습니다.")
-    rows = _read("""SELECT s.code, s.name, s.c0, s.pw, s.pm, s.ts FROM naver_period_member m
-                      JOIN naver_period_stock s ON s.code = m.code WHERE m.kind = ? AND m.no = ?""",
+    have = _stock_cols()
+    vcol = ("s.vw" if span == "w" else "s.vm") if {"vw", "vm"} <= have else "NULL"
+    ccol = "s.cap" if "cap" in have else "NULL"
+    rows = _read("""SELECT s.code, s.name, s.c0, s.pw, s.pm, s.ts, %s AS v, %s AS cap FROM naver_period_member m
+                      JOIN naver_period_stock s ON s.code = m.code WHERE m.kind = ? AND m.no = ?""" % (vcol, ccol),
                  (kind, int(no)))
     if rows is None:
         return None
@@ -299,6 +335,6 @@ def stocks(kind, no, span):
         p = _pct(r, span)
         out.append({"code": r["code"], "name": r["name"], "price": r["c0"],
                     "amt": (r["c0"] - r["c0"] / (1.0 + p / 100.0)) if (r["c0"] and p is not None and p > -100) else None,
-                    "pct": p, "volume": None, "value": None})
+                    "pct": p, "volume": None, "value": r["v"], "cap": r["cap"], "valueEst": True})
     out.sort(key=lambda r: (r["pct"] is None, -(r["pct"] or 0)))
     return out

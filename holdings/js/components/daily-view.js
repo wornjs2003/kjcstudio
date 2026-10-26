@@ -132,9 +132,21 @@ const BODY_HTML = `
     <!-- 「오늘의 뉴스」 제목 아래 — 시황분석 세션이 쓴 미국장 분석 + 영상 분석을 한 목록으로 (2026-10-01 영상 · 2026-10-07 재권님
          「영상분석을 미국장분석으로 이름 바꾸고 오늘 새벽 5시에 분석해서 보낸 걸 넣어줘 · 제목에 년월일 + 데일리장분석 · 클릭하면 내용」).
          장분석 줄은 누르면 그 자리에서 펼쳐진다(details) · 영상 줄은 전처럼 Insight report.html 로. 흰 카드로 묶는다 -->
+    <!-- 2026-10-26 재권님 「미국장분석 -> 데일리분석 · 텔레그램으로 보내야 한다고 말한 메세지들이 여기에」 · 「응 그래」 · 「응 그렇게 해」 —
+         칸 이름 「데일리분석」 · 첫 탭은 그날 텔레그램 글(최신이 위 · 서버 /api/telegram/today) · 영상 목록은 둘째 탭으로 남김.
+         두 탭은 같은 높이 칸(.kh-dl-tabbody)에 갈아 끼운다 — 「보는 것을 바꿔도 자리는 그대로다」.
+         줄을 누르면 모달은 왼쪽으로 넓어진 세부 창 · 전용 화면(daily.html)과 좁은 폭은 그 줄 아래로 펼친다 -->
     <section class="kh-dl-card kh-dl-video-card">
-      <div class="kh-dl-ch"><b>미국장 분석</b><span class="kh-dl-src">시황분석</span></div>
-      <div class="kh-dl-video" data-dl-video></div>
+      <div class="kh-dl-ch"><b>데일리분석</b>
+        <span class="kh-dl-tabs" role="tablist">
+          <button type="button" role="tab" data-dl-tab="tg" class="is-on">텔레그램 글</button>
+          <button type="button" role="tab" data-dl-tab="video">미국장 분석</button>
+        </span>
+        <span class="kh-dl-src" data-dl-tg-src>오늘 보낸 순서</span></div>
+      <div class="kh-dl-tabbody">
+        <div class="kh-dl-tg" data-dl-tg></div>
+        <div class="kh-dl-video" data-dl-video hidden></div>
+      </div>
     </section>
 
     <div class="kh-dl-body">
@@ -289,6 +301,52 @@ function analysisListHtml(items, n = 99) {
       <span class="kh-dl-video-m">${esc(x.show || '')} · ${esc(x.date || '')}</span>
     </a>`).join('');
 }
+/* ── 그날 텔레그램 글 (2026-10-26) ──
+   서버가 쌓는다 — 모든 발송이 지나는 dart.telegram_send 와 꺼진 스위치 자리(server/tglog.py). 화면은 받은 대로 그린다.
+   상태 넷: 보냄 · 꺼짐(스위치가 꺼져 미리보기만) · 조용한 시간(밤 22~07시라 안 감) · 실패 */
+const TG_STATUS = { sent: ['보냄', 'is-sent'], off: ['꺼짐 · 미리보기', 'is-off'], quiet: ['조용한 시간', 'is-off'], fail: ['실패', 'is-fail'] };
+async function loadTelegramToday() {
+  try {
+    const r = await apiFetch('/api/telegram/today', { cache: 'no-store' });
+    const b = r ? await r.json() : null;
+    return b && b.ok ? { rows: b.data || [], meta: b.meta || {} } : null;
+  } catch { return null; }
+}
+function tgStatusHtml(st) {
+  const [t, c] = TG_STATUS[st] || [st || '—', 'is-off'];
+  return `<span class="kh-dl-tg-st ${c}">${esc(t)}</span>`;
+}
+/** 목록 — 못 받으면 「불러오지 못함」 · 서버에 기록 표가 아직 없으면 「아직」 · 없으면 「—」(없음은 0 이 아니다) */
+function tgListHtml(got) {
+  if (!got) return '<div class="kh-dl-video-e">텔레그램 글 · 불러오지 못함</div>';
+  if (got.meta && got.meta.ready === false) return `<div class="kh-dl-video-e">텔레그램 글 · 아직 기록이 없습니다 — ${esc(got.meta.note || '')}</div>`;
+  if (!got.rows.length) return '<div class="kh-dl-video-e">텔레그램 글 · 오늘 보낸 것 —</div>';
+  // 최신이 위 (2026-10-26 재권님 「데일리 분석은 최신 게 위에」) — 서버는 보낸 순서로 준다
+  return [...got.rows].sort((a, b) => (b.at || '').localeCompare(a.at || '') || (b.id || 0) - (a.id || 0)).map((x) => `
+    <div class="kh-dl-video-row kh-dl-tg-row" data-tg-id="${esc(x.id)}" role="button" tabindex="0">
+      <span class="kh-dl-tg-at">${esc(hhmm(x.at))}</span>
+      <span class="kh-dl-video-k">${esc(x.kind || '알림')}</span>
+      <span class="kh-dl-video-t">${esc(x.head || '')}</span>
+      ${tgStatusHtml(x.status)}
+    </div>`).join('');
+}
+/** 세부 — 글 그대로 · 시각 · 종류 · 상태 · 관련 종목(첫 줄의 코드) */
+export function tgDetailHtml(x, { closeBtn = true } = {}) {
+  const name = x.code ? ((x.head || '').match(/^\S+\s+(.+?)\s*\(/) || [])[1] || x.code : null;
+  return `
+    <div class="kh-dl-tgd-h">
+      <span class="kh-dl-video-k">${esc(x.kind || '알림')}</span>
+      <span class="kh-dl-tgd-at">${esc(todayLabel())} ${esc(hhmm(x.at))}</span>
+      ${tgStatusHtml(x.status)}
+      ${closeBtn ? '<button type="button" class="kh-dl-tgd-x" data-tgd-close aria-label="닫기">✕</button>' : ''}
+    </div>
+    ${x.why ? `<div class="kh-dl-tgd-why">${esc(x.why)}</div>` : ''}
+    <div class="kh-dl-tgd-l">텔레그램 글 그대로</div>
+    <pre class="kh-dl-tgd-text">${esc(x.text || '')}</pre>
+    ${x.code ? `<div class="kh-dl-tgd-l">관련 종목</div>
+      <a class="kh-dl-tgd-stock" href="./?code=${encodeURIComponent(x.code)}"><b>${esc(name)}</b><span>${esc(x.code)}</span><span class="kh-dl-tgd-go">종목 열기 ›</span></a>` : ''}`;
+}
+
 /** 오늘 저장본을 받아 온다. 없으면 `null` (07:30 전이면 그렇다).
  *
  * **첫 화면 카드도 이것을 쓴다.** 두 곳에서 같은 주소를 따로 부르면
@@ -329,7 +387,7 @@ export async function loadDailyDoc() {
  * @returns {{ destroy: Function, reload: Function }}
  */
 export function mountDaily(root, { side = null, past = null, indexHost = null,
-                                   onIndices = null, onHead = null } = {}) {
+                                   onIndices = null, onHead = null, onPick = null } = {}) {
   if (!root) return { destroy() {}, reload() {} };
 
   root.insertAdjacentHTML('beforeend', BODY_HTML);
@@ -345,6 +403,58 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
   /* 「오늘의 뉴스」 제목 아래 — 영상 분석 목록 (2026-10-01) */
   const videoBox = root.querySelector('[data-dl-video]');
   if (videoBox) loadAnalysisList().then((items) => { videoBox.innerHTML = analysisListHtml(items); });
+
+  /* 「데일리분석」 칸 — 텔레그램 글 · 탭 · 줄 누르기 (2026-10-26).
+     `onPick` 을 받으면(모달) 고른 줄을 그쪽에 넘긴다 — 모달이 왼쪽에 세부 창을 연다. 안 받으면(전용 화면) 그 줄 아래로 펼친다.
+     **좁은 폭은 모달이어도 아래로 펼친다** — 옆으로 넓힐 자리가 없다(`onPick` 이 false 를 돌려주면 그렇게 한다) */
+  const tgBox = root.querySelector('[data-dl-tg]');
+  let tgRows = [];
+  let tgOpen = null;
+  const drawTg = () => loadTelegramToday().then((got) => {
+    if (dead || !tgBox) return;
+    tgRows = got ? got.rows : [];
+    tgBox.innerHTML = tgListHtml(got);
+    const src = root.querySelector('[data-dl-tg-src]');
+    if (src && got && got.meta && got.meta.ready !== false) src.textContent = `오늘 보낸 순서 · 보냄 ${got.meta.sent || 0} · 꺼짐 ${got.meta.off || 0}`;
+  });
+  const closeInline = () => { tgBox?.querySelector('.kh-dl-tgd-inline')?.remove(); };
+  const pickTg = (id) => {
+    const row = tgRows.find((r) => String(r.id) === String(id));
+    if (!row) return;
+    const again = tgOpen === row.id;
+    tgOpen = again ? null : row.id;
+    tgBox.querySelectorAll('.kh-dl-tg-row').forEach((el) => el.classList.toggle('is-pick', !again && el.dataset.tgId === String(row.id)));
+    closeInline();
+    if (onPick && onPick(again ? null : row, () => { tgOpen = null; tgBox.querySelectorAll('.is-pick').forEach((el) => el.classList.remove('is-pick')); }) !== false) return;
+    if (again) return;
+    const el = tgBox.querySelector(`[data-tg-id="${CSS.escape(String(row.id))}"]`);
+    el?.insertAdjacentHTML('afterend', `<div class="kh-dl-tgd kh-dl-tgd-inline">${tgDetailHtml(row)}</div>`);
+  };
+  if (tgBox) {
+    drawTg();
+    tgBox.addEventListener('click', (e) => {
+      if (e.target.closest('[data-tgd-close]')) { pickTg(tgOpen); return; }
+      if (e.target.closest('a')) return;
+      const r = e.target.closest('[data-tg-id]');
+      if (r) pickTg(r.dataset.tgId);
+    });
+    tgBox.addEventListener('keydown', (e) => {
+      const r = e.target.closest('[data-tg-id]');
+      if (r && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); pickTg(r.dataset.tgId); }
+    });
+  }
+  root.querySelector('.kh-dl-tabs')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-dl-tab]');
+    if (!b) return;
+    const tg = b.dataset.dlTab === 'tg';
+    root.querySelectorAll('[data-dl-tab]').forEach((x) => x.classList.toggle('is-on', x === b));
+    if (tgBox) tgBox.hidden = !tg;
+    if (videoBox) videoBox.hidden = tg;
+    const src = root.querySelector('[data-dl-tg-src]');
+    if (src) src.hidden = !tg;
+    if (tg) drawTg();                       // 탭을 다시 열 때 새로 받는다 — 화면이 주기를 두지 않는다
+    else if (onPick && tgOpen != null) pickTg(tgOpen);   // 영상 탭으로 가면 세부 창을 닫는다
+  });
 
   /* 찾는 범위를 자기 자리 안으로 좁힌다. 문서 전체에서 찾지 않는 이유는
      파일 맨 위 주석에 있다. */
@@ -954,8 +1064,50 @@ export function openDailyModal() {
   ixRow.className = 'kh-dl-ixrow';
   m.shell.insertBefore(ixRow, m.body);
 
+  /* ── 세부 창 — 「데일리분석」 칸의 줄을 누르면 모달이 **왼쪽으로** 넓어져 그 자리에 연다 (2026-10-26 「응 그렇게 해」) ──
+     넓히는 양 = 창 폭(TG_W) + 틈(본문 칸 사이 틈과 같은 14). 모달은 가운데라 넓히면 양쪽으로 반씩 퍼지므로 판(stage)을
+     그 반만큼 왼쪽으로 밀어 **오른쪽 가장자리를 제자리**에 둔다(종목 모달 서랍과 같은 생각 · modal.css .kh-stage).
+     **창 폭은 모달 왼쪽 빈자리(26 은 남김)에 맞춘다** — 최대 TG_W. 재권님 창(2560)은 빈자리가 537 이라 523 이 된다(2026-10-26 실측 ·
+     560 을 고집하면 오른쪽 가장자리가 37 밀렸다). 빈자리가 TG_MIN 보다 작으면 **넓히지 않고 모달 안 왼쪽을 덮는다**(작업우선순위 안).
+     좁은 폭(≤1180 · 한 열)은 false 를 돌려 그 줄 아래로 펼친다. 닫기 — ✕ · 같은 줄 다시 누름 · Esc 는 모달째 닫힌다(모달 쪽 손잡이 그대로) */
+  const TG_W = 560, TG_MIN = 420, TG_GAP = 14;
+  const stage = m.shell.parentElement;
+  let tgPanel = null;
+  function tgClose() {
+    if (!tgPanel) return;
+    tgPanel.remove(); tgPanel = null;
+    m.shell.style.setProperty('--kh-mw', 'min(1434px, 100vw - 52px)');
+    stage.style.transform = '';
+    wrap.style.paddingLeft = '';
+  }
+  function onPick(row, unpick) {
+    if (matchMedia('(max-width: 1180px)').matches) { tgClose(); return false; }
+    if (!row) { tgClose(); return true; }
+    if (!tgPanel) {
+      const leftRoom = m.shell.getBoundingClientRect().left - 26;   // 모달 왼쪽 빈자리
+      const w = Math.min(TG_W, leftRoom - TG_GAP);
+      const widen = w >= TG_MIN;
+      const add = w + TG_GAP;
+      tgPanel = document.createElement('aside');
+      tgPanel.className = 'kh-dl-tgd kh-dl-tgd-side' + (widen ? '' : ' is-over');
+      tgPanel.setAttribute('aria-label', '텔레그램 글 세부');
+      tgPanel.addEventListener('click', (e) => { if (e.target.closest('[data-tgd-close]')) { tgClose(); unpick(); } });
+      m.shell.appendChild(tgPanel);
+      if (widen) {
+        tgPanel.style.width = `${w}px`;
+        m.shell.style.setProperty('--kh-mw', `${1434 + add}px`);
+        stage.style.transform = `translateX(${-add / 2}px)`;     // 반만큼 왼쪽으로 — 오른쪽 가장자리 제자리
+        wrap.style.paddingLeft = `${26 + add}px`;
+      }
+    }
+    tgPanel.style.top = `${m.body.offsetTop}px`;
+    tgPanel.innerHTML = tgDetailHtml(row);
+    return true;
+  }
+
   inst = mountDaily(main, {
     side: msg,
+    onPick,
     /* 「지난 분석」 칸은 없앴다 — 번호 탭이 그 자리다. */
     past: false,
     indexHost: ixRow,

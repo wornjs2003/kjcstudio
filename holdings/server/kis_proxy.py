@@ -64,6 +64,8 @@ import naver_period
 import toss
 import macro
 import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-25 · server/events.py 머리 주석)
+import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
+import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
 import market_index
 import crypto            # 가상자산 — 업비트 공개 시세(2026-10-14 · server/crypto.py 머리 주석)
 import news
@@ -2884,6 +2886,8 @@ def fetch_price(cfg, code):
         "bps": _num(o.get("bps")),
         "high52": _num(o.get("w52_hgpr"), int),
         "low52": _num(o.get("w52_lwpr"), int),
+        # 상장주식수(주) — 투자자 누적 순매수를 %p 로 나눌 때 쓴다(holding_flow · 2026-10-26)
+        "listed": _num(o.get("lstn_stcn"), int),
         "source": "KIS",
         "mode": cfg["mode"],
     }
@@ -3567,6 +3571,28 @@ def _inv_long_read(code, upto, limit):
     except sqlite3.Error:
         return []
     return [json.loads(r["row"]) for r in rs]
+
+
+def holding_flow(cfg, code):
+    """투자자별 누적 순매수(%p) — 차트 보조지표 「누적 순매수」 칸 (2026-10-26 재권님 「다」 · 작업우선순위 경유).
+
+    **보유비중이 아니다.** 거래소는 종목별로 외국인 보유만 집계하고 기관 · 개인 보유 비중은 공개 출처가 없다(10-26 조사).
+    그래서 셋을 같은 잣대로 — 셈 첫날부터 사들인 주식(순매수 수량 합) ÷ 상장주식수 × 100. 첫날 앞까지는 0 에서 시작한다.
+    줄은 `fetch_investor_long` 그대로(확정치 · 3달 · 쓰는 서버가 날마다 쌓는다) — 장중 오늘 빈 줄은 뺀다.
+    상장주식수를 못 받으면 셈하지 않고 None(0 으로 나누지 않는다)."""
+    rows = [r for r in (fetch_investor_long(cfg, code, INVESTOR_LONG_DAYS) or [])
+            if r.get("date") and all((r.get(k) or {}).get("net") is not None for k in ("foreign", "inst", "person"))]
+    listed = (fetch_price(cfg, code) or {}).get("listed")
+    if not rows or not listed:
+        return None
+    rows.sort(key=lambda r: r["date"])
+    acc = {"foreign": 0, "inst": 0, "person": 0}
+    out = []
+    for r in rows:
+        for k in acc:
+            acc[k] += r[k]["net"]
+        out.append({"date": r["date"], **{k: round(v / listed * 100, 4) for k, v in acc.items()}})
+    return {"start": out[0]["date"], "listed": listed, "rows": out}
 
 
 def fetch_investor_long(cfg, code, days=INVESTOR_LONG_DAYS):
@@ -6713,6 +6739,23 @@ class Handler(SimpleHTTPRequestHandler):
         if (self.path or "").startswith("/api/macro/"):
             self._handle_macro()
             return
+        if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/telegram/today":
+            # 그날 텔레그램 글 — 보냄 · 꺼짐 · 조용한 시간 · 실패를 보낸 순서로(데일리분석 모달의 「데일리분석」 칸)
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            day = (q.get("day") or [""])[0].strip()
+            if day and not (day.isdigit() and len(day) == 8):
+                self._send_json({"ok": False, "error": "day 는 YYYYMMDD 여덟 자리입니다."}, 400)
+                return
+            rows, meta = tglog.today(day or None)
+            self._send_json({"ok": True, "data": rows, "meta": meta})
+            return
+        if (self.path or "").rstrip("/") == "/api/nxt-pre/status":
+            # 장 전 거래량 2배 바퀴의 상태 — 마지막으로 돈 날 · 종목 수 · 2배 수 · 꺼져 있으면 보냈을 글(preview)
+            st = nxt_pre.status()
+            if not st.get("lastRunAt"):
+                st["note"] = "아직 안 돌았습니다 — 보내는 서버(메인 %d)에서 평일 08:51 에 돕니다" % MAIN_PORT
+            self._send_json({"ok": True, "data": st})
+            return
         if (self.path or "").rstrip("/") == "/api/events/status":
             # 결과 알림 바퀴의 상태 — 무엇을 기다리나 · 꺼져 있으면 보냈을 글(preview). 바퀴는 보내는 서버에서만 돈다
             st = events.status()
@@ -7078,8 +7121,13 @@ class Handler(SimpleHTTPRequestHandler):
         """경제 지표(ECOS · FRED) — server/macro.py 머리 주석. `ecos` 키가 없는 서버는 상류로 넘긴다."""
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/macro/"):].strip("/")
-        if route not in ("regime", "series", "releases"):
-            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/macro/regime · /api/macro/series?ids= · /api/macro/releases 셋입니다."}, 404)
+        if route not in ("regime", "series", "releases", "calendar"):
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/macro/regime · /api/macro/series?ids= · /api/macro/releases · /api/macro/calendar 넷입니다."}, 404)
+            return
+        if route == "calendar":
+            # 일정 파일 + 한국 시각 — 키가 필요 없어 어느 서버든 자기 파일로 낸다(macro.calendar · 2026-10-26)
+            r = macro.calendar()
+            self._send_json(r, 200 if r.get("ok") else 500)
             return
         if not macro.ecos_key() and upstream_base():
             self._relay_upstream("경제 지표 키(ecos)가 이 서버에 없습니다", "macro")
@@ -7389,6 +7437,18 @@ class Handler(SimpleHTTPRequestHandler):
                     "meta": {"count": len(rows), "code": code or None,
                              "lastPollAt": dart._meta_get("dart_last_poll")},
                 })
+                return
+
+            if route == "ir":
+                # 기업설명회(IR) 일시 — 본문에서 읽은 한국 날짜 · 시각(2026-10-26 · dart.read_ir).
+                # 앞으로 days 일(기본 14 · 최대 90) · past 일 앞까지(기본 0 · 최대 30)
+                def _n(k, d, hi):
+                    try:
+                        return max(0, min(hi, int((qs.get(k) or [str(d)])[0])))
+                    except ValueError:
+                        return d
+                rows, meta = dart.read_ir(_n("days", 14, 90), _n("past", 0, 30))
+                self._send_json({"ok": True, "data": rows, "meta": meta})
                 return
 
             if route == "poll":          # 5분을 기다리지 않고 지금 한 번 받아온다
@@ -7845,6 +7905,21 @@ class Handler(SimpleHTTPRequestHandler):
                         "provisional": False,
                     },
                 })
+                return
+
+            # 차트 보조지표 「누적 순매수」 칸 (2026-10-26 · `holding_flow`)
+            if route == "holding-flow":
+                code = (qs.get("code") or [""])[0].strip()
+                if not (code.isdigit() and len(code) == 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                hf = holding_flow(cfg, code)
+                if not hf:
+                    self._send_json({"ok": False, "error": "투자자 줄이나 상장주식수를 못 받았습니다."}, 503)
+                    return
+                self._send_json({"ok": True, "data": hf["rows"],
+                                 "meta": {"code": code, "start": hf["start"], "listed": hf["listed"], "unit": "%p",
+                                          "note": "보유비중 아님 · 셈 첫날부터 누적 순매수 ÷ 상장주식수"}})
                 return
 
             # 투자자 지표 모달 「그래프」 판 (2026-10-16 · `investor_board`)
@@ -8350,6 +8425,12 @@ def main():
         print("  결과 알림 : 사용 (%d초마다 · 밤 %02d~%02d시 것은 %02d:00 한 통%s)"
               % (events.TICK, dart.QUIET_FROM // 60, dart.QUIET_TO // 60, dart.QUIET_TO // 60,
                  "" if events.SEND else " · **발송 꺼짐 — 미리보기만**"))
+
+    # 넥스트레이드 장 전 거래량 2배 목록(2026-10-26 · server/nxt_pre.py) — 같은 문(보내는 서버만) · **`nxt_pre.SEND = False` 가 기본**
+    if not SLOW and is_sender(args.port) and nxt_pre.start(sys.modules[__name__]):
+        print("  장 전 거래량 : 사용 (평일 %02d:%02d 한 번 · 전날의 %.0f배 · 전날 %s주 이상%s)"
+              % (nxt_pre.RUN_AT[0], nxt_pre.RUN_AT[1], nxt_pre.RATIO, format(nxt_pre.MIN_PREV, ","),
+                 "" if nxt_pre.SEND else " · **발송 꺼짐 — 미리보기만**"))
 
     if not SLOW and is_sender(args.port) and signal_watch.start(sys.modules[__name__]):
         # **시각을 여기 박지 않는다.** `SESSION_FROM`·`SESSION_TO` 에서 만든다 —

@@ -50,6 +50,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import dart
+import tglog
 import macro
 from secrets_guard import safe_message
 
@@ -135,19 +136,8 @@ def _frac(s):
 # ── 한국 실적 — DART 잠정실적 공시 본문 ─────────────────────────────
 
 def dart_body(rcept_no):
-    """공시 본문 HTML(EUC-KR → 글). 첫 화면에서 문서 번호를 찾아 그 문서를 받는다."""
-    main = _get(dart.VIEWER % rcept_no).decode("utf-8", "replace")
-    m = re.search(r'viewDoc\("%s",\s*"(\d+)"' % rcept_no, main)
-    if not m:
-        raise RuntimeError("공시 문서 번호를 못 찾았습니다")
-    raw = _get("https://dart.fss.or.kr/report/viewer.do?rcpNo=%s&dcmNo=%s&eleId=0&offset=0&length=0&dtd=HTML"
-               % (rcept_no, m.group(1)))
-    for enc in ("cp949", "utf-8"):
-        try:
-            return raw.decode(enc)
-        except UnicodeDecodeError:
-            continue
-    return raw.decode("utf-8", "replace")
+    """공시 본문 — dart.viewer_body 한 곳(2026-10-26 IR 일시 읽기와 함께 옮김)."""
+    return dart.viewer_body(rcept_no)
 
 
 def parse_earnings_kr(body):
@@ -518,6 +508,7 @@ def _emit(text, state, now):
     if not SEND:
         _status["preview"] = (_status["preview"] + [{"at": now.isoformat(timespec="seconds"),
                                                      "night": dart.in_quiet(now.timestamp()), "text": text}])[-20:]
+        tglog.note(text, "off")
         return True
     if dart.in_quiet(now.timestamp()):
         state.setdefault("queue", []).append(text)

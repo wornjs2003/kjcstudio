@@ -458,5 +458,42 @@
 .kh-dl-video-m { font-size: 0.75rem; color: var(--kh-text-muted); flex-shrink: 0; }
 .kh-dl-video-e { font-size: 0.8rem; color: var(--kh-text-muted); padding: 6px 2px; }
 
+/* ── 「데일리분석」 칸 — 탭 · 텔레그램 글 · 세부 (2026-10-26 재권님 「응 그렇게 해」) ──
+   두 탭은 같은 높이 칸에 갈아 끼운다 — 「보는 것을 바꿔도 자리는 그대로다」. 높이는 시안 그림(줄 열넷)에 맞춘 값 */
+.kh-dl-video-card .kh-dl-ch { display: flex; align-items: center; gap: 14px; }
+.kh-dl-video-card .kh-dl-ch .kh-dl-src { margin-left: auto; }
+.kh-dl-tabs { display: inline-flex; gap: 4px; background: var(--kh-bg-surface); border-radius: 8px; padding: 2px; }
+.kh-dl-tabs button { background: none; border: 0; font: inherit; font-size: 0.8rem; padding: 3px 10px; border-radius: 6px; color: var(--kh-text-muted); cursor: pointer; }
+.kh-dl-tabs button.is-on { background: var(--kh-bg-card); color: var(--kh-text-primary); font-weight: 700; }
+.kh-dl-tabbody { height: 540px; overflow: auto; }
+/* 전용 화면(daily.html)에는 모달의 `.kh-modal [hidden]` 규칙이 없다 — 위 `.kh-dl-video { display: flex }` 가 hidden 을 이겨 두 탭이 함께 보였다(2026-10-26 좁은 폭 실측) */
+.kh-dl-tabbody > [hidden] { display: none; }
+.kh-dl-tg-row { cursor: pointer; }
+.kh-dl-tg-row.is-pick { background: var(--kh-accent-dim); border-radius: 8px; }
+.kh-dl-tg-row .kh-dl-video-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.kh-dl-tg-at { width: 42px; flex-shrink: 0; font-size: 0.78rem; color: var(--kh-text-muted); font-variant-numeric: tabular-nums; }
+.kh-dl-tg-st { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: var(--kh-radius-pill, 99px); flex-shrink: 0; }
+.kh-dl-tg-st.is-sent { background: var(--kh-accent-dim); color: var(--kh-accent); }
+.kh-dl-tg-st.is-off  { background: var(--kh-bg-surface); color: var(--kh-text-muted); }
+.kh-dl-tg-st.is-fail { background: var(--kh-down-dim); color: var(--kh-down); }
+/* 세부 — 모달 왼쪽 창(.kh-dl-tgd-side) · 그 줄 아래 펼침(.kh-dl-tgd-inline) 같은 안쪽 모양 */
+.kh-dl-tgd-side {
+  position: absolute; left: 26px; bottom: 26px; width: 560px; overflow: auto; box-sizing: border-box;
+  background: var(--kh-bg-card); border-radius: var(--kh-radius-lg, 14px); padding: 22px 24px; z-index: 3;
+}
+.kh-dl-tgd-side.is-over { left: 0; border-radius: 0; box-shadow: var(--kh-shadow-lg); }
+.kh-dl-tgd-inline { padding: 12px 4px 16px; border-bottom: 1px solid var(--kh-border); }
+.kh-dl-tgd-h { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.kh-dl-tgd-at { font-size: 0.8rem; color: var(--kh-text-muted); }
+.kh-dl-tgd-x { margin-left: auto; background: none; border: 0; font-size: 1.1rem; color: var(--kh-text-muted); cursor: pointer; }
+.kh-dl-tgd-why { font-size: 0.78rem; color: var(--kh-text-muted); margin-bottom: 10px; }
+.kh-dl-tgd-l { font-size: 0.78rem; color: var(--kh-text-muted); margin: 0 0 6px; }
+.kh-dl-tgd-text { margin: 0 0 18px; white-space: pre-wrap; word-break: break-word; font: inherit; font-size: 0.9rem; line-height: 1.7;
+  background: var(--kh-bg-surface); border-radius: 10px; padding: 14px 16px; color: var(--kh-text-primary); }
+.kh-dl-tgd-stock { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-top: 1px solid var(--kh-border);
+  border-bottom: 1px solid var(--kh-border); text-decoration: none; color: var(--kh-text-primary); }
+.kh-dl-tgd-stock span { font-size: 0.8rem; color: var(--kh-text-muted); }
+.kh-dl-tgd-go { margin-left: auto; color: var(--kh-accent) !important; }
+
 /* 창 머리 바로 아래 줄 — 주요 지수 띠 (2026-10-01 · 전 「1」 탭 자리). 머리와 같은 흰 면에 아래 구분선 */
 .kh-dl-ixrow { flex: 0 0 auto; background: var(--kh-bg-card); box-shadow: 0 1px 0 var(--kh-border); padding: 4px 16px; }
