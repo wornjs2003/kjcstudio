@@ -30,12 +30,19 @@
    **이 브라우저에서 처음 서버와 맞출 때는 합친다** — 이 브라우저 하트를 서버 목록에 더한다.
    그 뒤로는 서버가 원천이다. 그래야 기기마다 따로 담아 둔 하트가 첫날 사라지지 않는다.
    서버에 문서가 아직 없으면 이 브라우저 목록으로 만든다.
+
+   **단, 사람이 하트를 누른 적이 있는 브라우저만 합치고 만든다** (`TOUCHED`). 헤드리스 도구
+   (shot · check-layout · check-chart)는 늘 새 프로필로 열어 기본 `WATCHLIST` 를 들고 있다 —
+   그것을 더하면 재권님이 끈 하트가 화면 찍기 한 번에 되살아나 알림이 다시 간다(2026-10-26 개념정의 검수).
+   누른 적이 없는 브라우저는 서버 것을 받기만 한다. 이 코드 전에 하트를 누른 브라우저는 옛 저장(`KEY`)이
+   있으므로 그것으로 누른 것으로 친다 — 옛 코드는 누를 때만 그 칸을 썼다.
    ========================================================================== */
 
 import { WATCHLIST } from '../data/market.js';
 
 const KEY = 'kh:favorites:v1';
 const SYNCED = 'kh:favorites:synced';      // 이 브라우저 하트를 서버에 한 번 합쳤나
+const TOUCHED = 'kh:favorites:touched';    // 이 브라우저에서 사람이 하트를 누른 적이 있나
 const DOC = '/api/board/doc/watchlist';
 
 /* 바뀔 때마다 알려줄 곳 — 순위표 · 사이드바가 각각 건다 */
@@ -130,20 +137,23 @@ async function pull() {
   const srv = await fetchServer();
   if (srv === undefined) return;                       // 못 닿음 — 들고 있는 값 그대로
   const local = read();
-  if (srv === null) {                                  // 서버에 아직 없다 — 이 브라우저 목록으로 만든다
-    if (await pushServer(local)) flag(SYNCED, true);
-    return;
+  const touched = flag(TOUCHED);
+  if (srv === null) {                                  // 서버에 아직 없다
+    if (touched && (await pushServer(local))) flag(SYNCED, true);   // 사람이 누른 목록이면 그것으로 만든다
+    return;                                            // 아니면 안 만든다 — 서버는 첫 값(WATCH_CODES)을 쓴다
   }
   let arr = srv;
-  if (!flag(SYNCED)) {                                 // 이 브라우저에서 처음 — 하트를 더한다
+  if (touched && !flag(SYNCED)) {                      // 이 브라우저에서 처음 — 사람이 담은 하트를 더한다
     const add = local.filter(x => !srv.some(s => s.code === x.code));
     if (add.length) {
       arr = srv.concat(add);
       if (!(await pushServer(arr, f => f.concat(add.filter(x => !f.some(s => s.code === x.code))))))
         return;
     }
-    flag(SYNCED, true);
   }
+  /* 서버와 맞췄다 — 누른 적 없는 브라우저도 세운다. 안 세우면 아래 옛 저장 판정이 다음에 이 목록을 「누른 것」 으로 읽어,
+     다른 기기에서 뺀 종목을 다시 더한다 */
+  flag(SYNCED, true);
   if (!same(arr, local)) store(arr);
 }
 
@@ -163,6 +173,7 @@ export function toggleFav(code, name) {
     return out;
   };
   const on = !isFav(code);
+  flag(TOUCHED, true);
   store(apply(read(), on));
   /* 쓰기는 한 줄로 세운다 — 빨리 여러 번 누르면 PUT 이 같은 `updatedAt` 으로 겹쳐 서로 409 를 내고
      마지막 상태가 어긋났다(2026-10-26 헤드리스 시험). 차례가 오면 그때의 목록을 보낸다 */
@@ -172,6 +183,9 @@ export function toggleFav(code, name) {
 
 /** 목록이 바뀔 때마다 부른다 */
 export function onFavChange(fn) { if (typeof fn === 'function') listeners.push(fn); }
+
+/* 이 코드 전에 하트를 누른 브라우저 — 옛 코드는 누를 때만 `KEY` 를 썼다. 서버와 한 번도 안 맞췄으면 누른 것으로 친다 */
+try { if (localStorage.getItem(KEY) && !flag(SYNCED)) flag(TOUCHED, true); } catch (_) {}
 
 /* 화면이 뜰 때 · 탭을 다시 볼 때 서버 것을 받는다 — 다른 기기에서 담은 것이 따라온다. 쓰기와 같은 줄에 선다 */
 const pullQueued = () => { queue = queue.then(pull); };
