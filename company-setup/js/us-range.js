@@ -42,7 +42,12 @@ const KO = {
   const rows = (ix && ix.data) || [];
   const spx = rows.find(x => x.code === 'SPX'), vix = rows.find(x => x.code === 'VIX');
   const blk = k => (uo && uo[k] && uo[k].data) || null;
-  const F = (blk('futures') || {}).rows || [], fut = s => (F.find(r => r.sym === s) || {}).pct;
+  // 서버는 못 받으면 앞 값을 그대로 주고 표시를 붙인다 — 묶음째면 그 묶음 error · 선물 한 줄이면 그 줄 stale(서버 us_outlook.py).
+  // 그 표시를 버리면 앞 값이 지금 값처럼 보인다 — 줄마다 「못 받음 · HH:MM 값」 · 「앞 값」 을 붙인다(10-27 개념정의 검수).
+  const hm = k => (uo && uo[k] && uo[k].fetchedAt ? uo[k].fetchedAt.slice(11, 16) : '—');
+  const miss = k => (uo && uo[k] && uo[k].error ? ` <span class="old">못 받음 · ${hm(k)} 값</span>` : '');
+  const F = (blk('futures') || {}).rows || [], fr = s => F.find(r => r.sym === s) || {};
+  const fut = s => pct(fr(s).pct) + (fr(s).stale ? ' <span class="old">앞 값</span>' : '');
   const O = blk('options'), V = blk('vix'), M = blk('fomc'), E = (blk('econ') || {}).rows || [];
   const r = (k, v) => `<div class="r"><span>${k}</span><span>${v}</span></div>`;
   const g = t => `<div class="g">${t}</div>`;
@@ -53,9 +58,9 @@ const KO = {
     html.push(
       r('기준 종가', `<b>${n(spx.value)}</b> (${day(spx.asOf)})`),
       r('VIX', `<b>${n(vix.value)}</b>`),   // 날짜는 안 붙인다 — KIS 가 asOf 를 오늘 날짜로 주지만 값은 마지막 미국 종가다(10-26 실측 · Cboe 10-23 종가 19.45 와 같음)
-      V ? r('VIX 지난 1년 중 위치', `<b>${n(V.pctile1y, 0)}%</b> · 1년 ${n(V.min1y)} ~ ${n(V.max1y)}`) : '',
+      V ? r('VIX 지난 1년 중 위치', `<b>${n(V.pctile1y, 0)}%</b> · 1년 ${n(V.min1y)} ~ ${n(V.max1y)}${miss('vix')}`) : '',
       r('하루 흔들림(VIX 셈)', `<b>±${n(sd * 100)}%</b> · ±${n(pt, 1)}`),
-      O ? r('하루 흔들림(옵션 시장)', `<b>±${n(O.expectedMovePct)}%</b> · ±${n(O.expectedMove, 1)} · 만기 ${O.expiry ? O.expiry.slice(5) : '—'}`) : '',
+      O ? r('하루 흔들림(옵션 시장)', `<b>±${n(O.expectedMovePct)}%</b> · ±${n(O.expectedMove, 1)} · 만기 ${O.expiry ? O.expiry.slice(5) : '—'}${miss('options')}`) : '',
       r('68% 범위', `<b>${band(1)}</b>`),
       r('95% 범위', `<b>${band(1.96)}</b>`),
     );
@@ -63,12 +68,12 @@ const KO = {
 
   // 지금 기울기 — 선물 · FOMC(회의가 사흘 안일 때만)
   const lean = [];
-  if (F.length) lean.push(r('S&amp;P · 나스닥 선물', `<b>${pct(fut('ES=F'))}</b> · <b>${pct(fut('NQ=F'))}</b>`));
+  if (F.length) lean.push(r('S&amp;P · 나스닥 선물', `<b>${fut('ES=F')}</b> · <b>${fut('NQ=F')}</b>${miss('futures')}`));
   if (M && M.meeting) {
     const left = (new Date(M.meeting + 'T00:00:00-05:00') - Date.now()) / 864e5;
-    if (left > -1 && left <= 3) {
-      const hold = 100 - (M.cut25Prob || 0) - (M.hike25Prob || 0);
-      lean.push(r(`FOMC ${M.meeting.slice(5)} (금리 결정)`, `인하 <b>${n(M.cut25Prob, 0)}%</b> · 동결 <b>${n(hold, 0)}%</b> · 인상 <b>${n(M.hike25Prob, 0)}%</b>`));
+    if (left > -1 && left <= 3 && M.cut25Prob != null && M.hike25Prob != null) {   // 확률이 없으면 줄을 뺀다 — 0 으로 메우면 「동결 100%」 로 둔갑한다
+      const hold = 100 - M.cut25Prob - M.hike25Prob;
+      lean.push(r(`FOMC ${M.meeting.slice(5)} (금리 결정)`, `인하 <b>${n(M.cut25Prob, 0)}%</b> · 동결 <b>${n(hold, 0)}%</b> · 인상 <b>${n(M.hike25Prob, 0)}%</b>${miss('fomc')}`));
     }
   }
   if (lean.length) html.push(g('지금 기울기 — 방향 예측이 아님'), ...lean);
@@ -89,10 +94,9 @@ const KO = {
     .filter(e => KO[e.name] && e.consensus && e.ms >= now - 36e5 && e.ms < now + 20 * 36e5)
     .filter(e => { const k = e.name + e.ms; if (seen.has(k)) return false; seen.add(k); return true; })   // 같은 지표가 단위만 달리 두 줄 오면 앞 것
     .sort((a, b) => a.ms - b.ms);
-  if (ev.length) html.push(g('오늘 밤 지표 — 한국 시각 · 예상 / 지난'),
+  if (ev.length) html.push(g(`오늘 밤 지표 — 한국 시각 · 예상 / 지난${miss('econ')}`),
     ...ev.map(e => r(`${kst(e.ms)} ${KO[e.name]}`, `${e.actual ? `결과 <b>${e.actual}</b> · ` : ''}<b>${e.consensus}</b> / ${e.previous || '—'}`)));
 
-  const at = uo && uo.futures && uo.futures.fetchedAt ? uo.futures.fetchedAt.slice(11, 16) : null;
-  html.push(`<div class="src">S&amp;P 500 · VIX — KIS · 선물 야후(10분 늦음) · 옵션 Cboe(15분 늦음) · 지표 나스닥 · FOMC 연방기금 선물${at ? ` · ${at} 받음` : ' · 서버 값 못 받음'}</div>`);
+  html.push(`<div class="src">S&amp;P 500 · VIX — KIS · 선물 야후(10분 늦음) · 옵션 Cboe(15분 늦음) · 지표 나스닥 · FOMC 연방기금 선물${uo ? ` · 받은 시각 선물 ${hm('futures')} · 옵션 ${hm('options')} · 지표 ${hm('econ')}` : ' · 서버 값 못 받음'}</div>`);
   out.innerHTML = html.join('');
 })();
