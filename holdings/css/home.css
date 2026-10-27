@@ -467,6 +467,9 @@
 .kh-sub-chip { font-size: 0.72rem; padding: 4px 10px; }
 .kh-sub-chip.is-on { outline: 1.5px solid var(--kh-text-primary); outline-offset: -1.5px; color: var(--kh-text-primary); }
 .kh-chip-hit, .kh-flow-x { font-weight: 700; color: var(--kh-accent); }
+/* 좁은 폭 「테마」 — 카드 높이를 묶었을 때 표가 남는 높이를 채운다(home.js lockRankHeight · qa 4baa8ec) */
+.kh-rank-card.is-hlock { display: flex; flex-direction: column; }
+.kh-rank-card.is-hlock .kh-rank-scroll { max-height: none; flex: 1 1 0; min-height: 0; }
 .kh-flow-x { font-size: 10px; margin-left: 4px; }
 /* 시장 칩이 셋(코스피 · 코스닥 · 테마)이 되면서 머리줄 글자가 꺾였다(제목 「실시간 순위」 두 줄 · 머리 61 → 81px) — 시안처럼 한 줄로 */
 .kh-rank-card .kh-tabs:has(#kh-rank-mkt), .kh-rank-card .kh-tabs:has(#kh-rank-mkt) * { white-space: nowrap; }   /* Insight 도 .kh-rank-card 를 써서 홀딩스 순위 머리에만 */

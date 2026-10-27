@@ -1117,7 +1117,7 @@ function themeSubChipsHtml() {
   if (themeBig === FLOW) {
     const d = flowData;
     if (!d) return `<span class="kh-mut">${flowFail ? '수급을 못 받았습니다' : '수급을 받는 중'}</span>`;
-    if (!d.prevDay) return '<span class="kh-mut">어제 넥스트 거래량이 아직 없어 견줄 수 없습니다</span>';
+    if (!d.prevDay) return '<span class="kh-mut">넥스트 5분 거래량을 쌓는 중 — 어제 값이 생기는 다음 거래일부터 견줍니다</span>';
     const one = (sel, label, n, title) => `<button class="kh-chip kh-sub-chip${flowSel === sel ? ' is-on' : ''}" type="button"
       data-flow="${sel}"${title ? ` title="${escT(title)}"` : ''}>${escT(label)}${n == null ? '' : ` <b class="kh-chip-hit">${n}</b>`}</button>`;
     return one('all', `전체 ${(d.hits || []).length}`, null)
@@ -1134,8 +1134,7 @@ function themeSubChipsHtml() {
 function themeNote() {
   if (themeBig === FLOW) {
     const d = flowData;
-    if (!d) return flowFail ? '수급을 못 받았습니다' : '수급을 받는 중';
-    if (!d.prevDay) return '수급 — 넥스트 5분 거래량을 쌓는 중입니다 · 어제 값이 생기는 다음 거래일부터 견줍니다';
+    if (!d || !d.prevDay) return '수급 — 넥스트 5분 거래량을 어제 같은 구간과 견줍니다';   // 왜 비었는지는 칩 둘째 줄 한 곳에
     const at = d.slot ? `${d.slot.slice(0, 2)}:${d.slot.slice(2)}` : '—';
     const head = `수급 — 넥스트 ${at} 까지 5분 거래량이 어제 같은 구간의 ${d.ratio}배 이상`;
     if (flowSel === 'etc') return `${head} · 기타(어느 테마에도 없음) ${(d.etc || []).length}종목 · 배율 순`;
@@ -1149,6 +1148,26 @@ function themeNote() {
   return `${escT(themeBig)} · ${escT(themeShort(t.name))} · ${t.count ?? '—'}종목 중 ${n} · 시가총액 순 · 네이버`
     + (flowMap.size ? ' · <b class="kh-flow-x">수급</b> = 넥스트 거래량 2배' : '');
 }
+
+/* 좁은 폭(700px 이하 — home.css 의 그 @media 와 같은 값 · @media 에는 변수를 못 쓴다)에서는 순위 카드가 내용만큼 늘고 준다.
+ * 「테마」 를 누르면 수급이 비어 줄거나 칩 둘째 줄로 늘어 아래 칸이 밀렸다(qa 4baa8ec · 621 → 371 → 669) —
+ * 누르기 직전 높이로 카드를 묶고 표가 남는 높이를 채운다(「보는 것을 바꿔도 자리는 그대로다」 · 숫자를 박지 않고 그 자리에서 잰다).
+ * 「테마」 를 떠나면 푼다. 넓은 폭은 카드 높이가 이미 잡혀 있어 안 묶는다. */
+const NARROW = window.matchMedia('(max-width: 700px)');
+function lockRankHeight(on) {
+  const card = $('kh-rank-scroll')?.closest('.kh-rank-card');
+  if (!card) return;
+  if (on && NARROW.matches) {
+    if (!card.classList.contains('is-hlock')) {
+      card.style.height = `${card.getBoundingClientRect().height}px`;
+      card.classList.add('is-hlock');
+    }
+    return;
+  }
+  card.style.height = '';
+  card.classList.remove('is-hlock');
+}
+NARROW.addEventListener('change', () => { if (!NARROW.matches) lockRankHeight(false); });
 
 /* 위 줄 · 아래 줄 누르기 — 카드와 모달이 같이 쓴다. 바뀌었으면 true */
 async function themeClick(e) {
@@ -1535,6 +1554,7 @@ function setupMarkets() {
     const b = e.target.closest('[data-mkt]');
     if (!b || b.dataset.mkt === market) return;
     market = b.dataset.mkt;
+    lockRankHeight(market === 'THEME');   // 좁은 폭 — 그리기 전에 잰다
     host.querySelectorAll('[data-mkt]').forEach(x =>
       x.classList.toggle('is-active', x === b));
     const box = $('kh-rank-scroll');
@@ -1567,6 +1587,7 @@ async function syncMarketGroup() {
   const wantUs = ixCat === '미국';
   if (wantUs === isUsMarket(market)) return;
   market = wantUs ? US_MARKETS[0].id : MARKETS[0].id;
+  lockRankHeight(false);
   if (wantUs) await Promise.all(US_MARKETS.map((m) => (usRows[m.id] ? true : loadUsBoard(m.id))));
   const host = $('kh-rank-mkt');
   if (host) host.innerHTML = marketChipsHtml(market);
@@ -1841,7 +1862,7 @@ function paintRankModal() {
   }).join('');
   /* 카드와 같다 — 고른 시장 목록이 아직 안 왔으면 빈 표 대신 그렇다고 적는다 */
   const empty = !list.length && universe
-    ? `<tr><td colspan="7" class="kh-mut">${th ? themeNote() : SORTS[rankModalSort]?.only ? afterEmpty()
+    ? `<tr><td colspan="7" class="kh-mut">${th ? '—' : SORTS[rankModalSort]?.only ? afterEmpty()
       : `${marketDef(rankModalMarket).label} 목록을 아직 받지 못했습니다`}</td></tr>` : '';
 
   /* 칸 폭을 못 박는다 (table-layout: fixed).
@@ -1950,9 +1971,10 @@ function paintRows(priceMap) {
   /* 고른 시장의 목록이 비었다 — 서버가 아직 그 시장을 안 준다. 빈 표로 두면 고장처럼 보인다 */
   if (!list.length && universe) {
     $('kh-rows').innerHTML = `<tr><td colspan="5" class="kh-mut">${SORTS[sortBy]?.only ? afterEmpty()
-      : market === 'THEME' ? themeNote()
+      : market === 'THEME' ? '—'
       : `${MARKETS.find(m => m.id === market)?.label || market} 목록을 아직 받지 못했습니다`}</td></tr>`;
     paintRowHead();
+    paintRowFoot();      // 빈 표에서도 아래 종목 수를 맞춘다 — 안 부르면 앞 화면의 「200종목」 이 남았다
     paintSortNote();
     return;
   }

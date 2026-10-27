@@ -40,7 +40,7 @@ KST = timezone(timedelta(hours=9))
 OPEN, CLOSE = (8, 0), (20, 0)       # 넥스트 프리 08:00 ~ 애프터 20:00
 SLOT_MIN = 5
 RATIO = 2.0                          # 「2배 이상」
-MIN_PREV = 10000                     # 어제 그 구간 거래량 문턱(주) — 장 전 알림(nxt_pre.MIN_PREV)과 같은 값 · 이슈 ⑥ 안 「응」
+MIN_PREV = nxt_pre.MIN_PREV          # 어제 그 구간 거래량 문턱(주) — 장 전 알림과 같은 값을 불러 쓴다(이슈 ⑥ 안 「응」 · 개념정의 덧말)
 KEEP_DAYS = 4
 TICK = 10
 FLOW_TTL = 30                        # 읽기 캐시(초) — 롱폴이 같은 값을 거듭 읽을 때 DB 를 덜 연다
@@ -171,7 +171,15 @@ def sweep(proxy, day, slot):
         have_prev = first or bool(prev)
         rows = []
         for c, v in cum.items():
-            vol = (v - (prev.get(c) or 0)) if have_prev else None    # 앞 경계가 없으면 구간을 못 가른다
+            # 앞 경계가 통째로 없거나(서버가 내려가 있었음) **그 종목 줄만 없으면**(멀티 시세가 그 종목만 못 받았거나 앞 구간까지
+            # 거래가 없던 종목) 구간을 못 가른다 — 앞 누적을 0 으로 보면 하루 누적이 한 구간으로 잡혀 배율이 부푼다(개념정의 덧말).
+            # 첫 구간(08:05)만 앞 누적 0 이 맞다
+            if first:
+                vol = v
+            elif have_prev and c in prev:
+                vol = v - prev[c]
+            else:
+                vol = None
             rows.append((day, slot, c, v, vol if (vol is None or vol >= 0) else None))
         conn.executemany("INSERT OR REPLACE INTO nx_slot (day, slot, code, cum, vol) VALUES (?,?,?,?,?)", rows)
         days = [r[0] for r in conn.execute("SELECT DISTINCT day FROM nx_slot ORDER BY day DESC")]
