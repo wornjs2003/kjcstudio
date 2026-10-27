@@ -66,6 +66,7 @@ import macro
 import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-25 · server/events.py 머리 주석)
 import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
+import intraday_flow    # 당일 수급 — 장중 1분마다 시장 투자자 · 프로그램 매매를 쌓아 5분 구간으로 · /api/kis/flow-today(2026-10-27 · server/intraday_flow.py)
 import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
 import intraday_alerts  # 장중 알림 — 상승 VI · +20% 급등(2026-10-26 · server/intraday_alerts.py 머리 주석)
 import market_index
@@ -1946,7 +1947,8 @@ def out_rows(data, key):
 #
 # **폴백은 둔다** — 읽기라 어느 쪽이 받아도 값이 같다. 보드(쓰는 곳 · 폴백 없음)와
 # 다른 자리다. `4xx` 는 상류가 제대로 답한 것이라 **그대로 내려보낸다.**
-HIGH_RELAY_ROUTES = ("chart", "index-candles", "index-minutes")
+HIGH_RELAY_ROUTES = ("chart", "index-candles", "index-minutes",
+                     "flow-today")   # 당일 수급 — 쌓는 곳이 8765 하나라 「고른 종목」 표시가 거기 닿아야 한다(2026-10-27)
 
 
 def _valid_ymd(ymd):
@@ -8091,6 +8093,26 @@ class Handler(SimpleHTTPRequestHandler):
                 })
                 return
 
+            # 당일 수급 — 투자자 지표 모달 「당일」 탭 (2026-10-27 · `intraday_flow`)
+            if route == "flow-today":
+                code = (qs.get("code") or [""])[0].strip()
+                if code and not (code.isdigit() and len(code) == 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                try:
+                    step = int((qs.get("step") or ["5"])[0])
+                except ValueError:
+                    step = 5
+                if step not in intraday_flow.STEPS:
+                    self._send_json({"ok": False, "error": "step 은 %s 중 하나입니다." % " · ".join(map(str, intraday_flow.STEPS))}, 400)
+                    return
+                intraday_flow.want(code)
+                self._send_json({"ok": True, "data": intraday_flow.today(sys.modules[__name__], code or None, step),
+                                 "meta": {"step": step, "market": "코스피", "cacheTtl": intraday_flow.CACHE_TTL,
+                                          "units": {"market": "백만원 · 천주", "program": "백만원(수량 없음)", "stock": "원 · 주"},
+                                          "session": "평일 09:00~15:30", "collector": intraday_flow.status()}})
+                return
+
             # 증권사 매매 상위 5 (2026-10-27 · `fetch_investor_member`)
             if route == "investor-member":
                 code = (qs.get("code") or [""])[0].strip()
@@ -8630,6 +8652,11 @@ def main():
     if not SLOW and is_sender(args.port) and nxt_board.start(sys.modules[__name__]):
         print("  넥장 보드 : 사용 (평일 %02d:%02d 종가 · %02d:%02d 장외 · %02d:%02d 야간선물 저장 · /api/nxt/board)"
               % (nxt_board.CLOSE_AT + nxt_board.AFTER_AT + nxt_board.FUT_AT))
+    # 당일 수급(2026-10-27 · server/intraday_flow.py) — 같은 문(보내는 서버만) · 알림 없음.
+    # `KJC_FLOW_COLLECT=1` 은 시험 서버(자기 DB)에서 바퀴를 돌려 보는 자리다 — 세션 서버는 메인 DB 를 읽기 전용으로 열어 쓸 수 없다
+    if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and intraday_flow.start(sys.modules[__name__]):
+        print("  당일 수급 : 사용 (평일 09:00~15:30 · 1분마다 시장 투자자 · 종목 프로그램 · %d분마다 시장 프로그램 · /api/kis/flow-today)"
+              % intraday_flow.PGM_EVERY)
     if not SLOW and is_sender(args.port) and nxt_pre.start(sys.modules[__name__]):
         print("  장 전 거래량 : 사용 (평일 %02d:%02d 한 번 · 전날의 %.0f배 · 전날 %s주 이상%s)"
               % (nxt_pre.RUN_AT[0], nxt_pre.RUN_AT[1], nxt_pre.RATIO, format(nxt_pre.MIN_PREV, ","),

@@ -18,6 +18,9 @@
                 장중에는 오늘 줄이 비어 지난 거래일 값이 나온다(2026-10-22 재권님 「응 해줘」 · 시안 다섯 자리)
        차트     고른 종목(또는 코스피 · 코스닥)의 분 · 일 · 월봉 + 아래 그 종목의 개인 · 외국인 · 기관 양쪽 막대.
                 기간은 **점선 네모로 고른 구간**, 안 골랐으면 **차트에 보이는 구간**이다
+       당일     오늘 장중 5분마다 — 코스피 외국인 · 기관 · 개인 · 코스피 프로그램 · 고른 종목 프로그램의 매수 · 매도 · 순매수(막대 + 표) ·
+                고른 종목의 장중 잠정치(하루 다섯 번) · 기관 안 · 증권사 상위 5 (2026-10-27 재권님 시안 「ㄴ · 매수랑 매도 둘다」 ·
+                「모달 창 밖으로 길어지지 않게」 — 칸마다 높이를 잡고 표는 칸 안에서 내린다)
 
    ── 실시간 순위 ──
    공용 모달의 오른쪽 서랍 손잡이(▶)로 연다. 내용은 **홈 실시간 순위 칸(.kh-rank-card) 그 자체**를 옮겨 온다 —
@@ -31,6 +34,8 @@
        투자자            /api/kis/investor?code=&span=60 — net · netAmt(백만원) · buyAmt · sellAmt(백만원)
                          매수 · 매도 금액이 없는 줄(옛 서버)은 수량 × 종가로 어림하고 「어림」 이라 적는다
        차트              /api/kis/chart · /api/kis/index-candles · /api/kis/index-minutes
+       당일              /api/kis/flow-today?code=&step=5(서버가 1분마다 쌓은 것 · server/intraday_flow.py) · investor-estimate ·
+                         investor-member · investor?span=5 의 instDetail(확정치 · 15:40 뒤) — 다시 묻는 주기는 서버 값(intraday_flow.CACHE_TTL)
    투자자 값은 하루 단위뿐이다 — 분봉에서 고른 구간은 **그 날짜들의 하루 값**을 더한다. 장중 오늘 줄(확정 전)은 빼고 그렇다고 적는다.
    ========================================================================== */
 
@@ -38,6 +43,7 @@ import { apiFetch } from '../data/api.js';
 import { openModal } from './modal.js';
 import { mountStockSearch } from './stock-search.js';
 import { signClass } from '../../../assets/js/sign.js';
+import { watch } from '../store/longpoll.js';
 
 const CSS_HREF = new URL('../../css/investor-modal.css', import.meta.url).href;
 const SIDES = [['person', '개인'], ['foreign', '외국인'], ['inst', '기관']];
@@ -46,7 +52,9 @@ const DAYS = [['today', '오늘', 1], ['d5', '5일', 5], ['m1', '한달', 20], [
 const TOP_N = 15;
 const INDEX = { KOSPI: '코스피', KOSDAQ: '코스닥' };
 const PERIODS = [['5m', '분봉'], ['D', '일봉'], ['M', '월봉']];
-const SHOW_BARS = { '5m': 156, D: 60, M: 24 };   // 처음 보이는 봉 수 — 5분봉 이틀 · 일봉 석 달 · 월봉 2년
+const SHOW_BARS = { '5m': 156, D: 60, M: 24 };
+const FLOW_KEY = 'intraday_flow.CACHE_TTL';    // 「당일」 탭이 다시 묻는 주기 — 서버 값
+const FLOW_FALLBACK_MS = 60000;   // 처음 보이는 봉 수 — 5분봉 이틀 · 일봉 석 달 · 월봉 2년
 
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const eok = (mil) => (mil == null ? '—' : `${Math.round(mil / 100).toLocaleString()}억`);           // 백만원 → 억
@@ -131,7 +139,7 @@ export function openInvestorModal({ code } = {}) {
   ensureCss();
   const st = { tab: 'graph', side: 'foreign', days: 'today', mkt: 'ALL', target: code || '005930', names: {},
     period: 'D', box: null };
-  let chart = null, series = null, bars = [], main = null;
+  let chart = null, series = null, bars = [], main = null, flowWatch = null;
 
   const rankCard = document.querySelector('.kh-rank-card');
   const home = rankCard && { parent: rankCard.parentNode, next: rankCard.nextSibling };
@@ -146,7 +154,7 @@ export function openInvestorModal({ code } = {}) {
       icon: '수',
       name: '투자자 지표',
       sub: '한국투자증권 확정치',
-      tabs: [{ id: 'graph', label: '그래프' }, { id: 'chart', label: '차트' }],
+      tabs: [{ id: 'graph', label: '그래프' }, { id: 'chart', label: '차트' }, { id: 'today', label: '당일' }],
       tab: st.tab,
       tabsNote: rankCard ? '오른쪽 ▶ 실시간 순위에서 종목을 누르면 차트가 그 종목으로' : '',
       onTab: (id) => { st.tab = id; paint(); },
@@ -155,7 +163,7 @@ export function openInvestorModal({ code } = {}) {
       if (rankCard && rankBox) { if (on) rankBox.appendChild(rankCard); else putBack(); }
       requestAnimationFrame(() => resizeChart());
     },
-    onClose: () => { putBack(); if (chart) { chart.remove(); chart = null; } },
+    onClose: () => { putBack(); stopFlow(); if (chart) { chart.remove(); chart = null; } },
   });
 
   m.body.innerHTML = `<div class="kh-ivm"><div class="kh-ivm-main"></div>
@@ -192,7 +200,7 @@ export function openInvestorModal({ code } = {}) {
     st.target = c;
     if (name) st.names[c] = name;
     st.box = null;
-    if (st.tab !== 'chart') { st.tab = 'chart'; m.head.setTab('chart'); }
+    if (st.tab !== 'chart' && st.tab !== 'today') { st.tab = 'chart'; m.head.setTab('chart'); }   // 당일 탭에서 고르면 그 탭 그대로 · 그 종목으로
     paint();
   }
 
@@ -429,8 +437,129 @@ export function openInvestorModal({ code } = {}) {
     paintSides();
   }
 
+  /* ── 당일 탭 — 5분마다 매수 · 매도 · 순매수 ──
+     금액 단위가 칸마다 다르다 — 시장 · 시장 프로그램 백만원 · 종목 프로그램 원(서버 meta.units). 「없음」 은 null 그대로 「—」 */
+  const fmtMil = (v, sign = true) => (v == null ? '—' : `${sign && v > 0 ? '+' : ''}${(v / 100).toFixed(Math.abs(v) < 1000 ? 1 : 0)}억`);
+  const fmtWon = (v, sign = true) => (v == null ? '—' : `${sign && v > 0 ? '+' : ''}${(v / 1e8).toFixed(1)}억`);
+  const fmtChu = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${Math.round(v).toLocaleString()}천주`);
+  const fmtJu = (v, sign = true) => (v == null ? '—' : `${sign && v > 0 ? '+' : ''}${Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + '만' : Math.round(v).toLocaleString()}주`);
+  const hhmm = (t) => (t ? `${t.slice(0, 2)}:${t.slice(2, 4)}` : '');
+  const stockCode = () => (/^\d{6}$/.test(st.target) ? st.target : null);
+  function stopFlow() { if (flowWatch) { flowWatch.stop(); flowWatch = null; } }
+
+  /* 막대 칸 — 구간마다 위 매수 · 아래 매도 · 검은 가로줄 순매수. groups 가 여럿이면 나란히(색 = 그 투자자) */
+  function bsSvg(rows, groups) {
+    if (!rows.length) return '<div class="kh-ivt-empty">아직 쌓인 구간이 없습니다 · 평일 09:00~15:30</div>';
+    const W = 600, H = 110;
+    const vals = rows.flatMap((r) => groups.flatMap((g) => [g.v(r).buy || 0, -(g.v(r).sell || 0)]));
+    const top = Math.max(1, ...vals) * 1.08, bot = Math.min(-1, ...vals) * 1.08;
+    const y = (v) => (top - v) / (top - bot) * H;
+    const cw = (W - 12) / rows.length, gw = cw * 0.8 / groups.length, bw = Math.max(2, gw * 0.8);
+    const marks = rows.map((r, i) => groups.map((g, j) => {
+      const v = g.v(r), x = 6 + cw * i + cw * 0.1 + gw * (j + 0.5), y0 = y(0);
+      return `${v.buy == null ? '' : `<rect x="${x - bw / 2}" width="${bw}" y="${y(v.buy)}" height="${Math.max(0.5, y0 - y(v.buy))}" style="fill:var(${g.up})"/>`}
+        ${v.sell == null ? '' : `<rect x="${x - bw / 2}" width="${bw}" y="${y0}" height="${Math.max(0.5, y(-v.sell) - y0)}" style="fill:var(${g.down})${g.up === g.down ? ';opacity:.45' : ''}"/>`}
+        ${v.net == null ? '' : `<line x1="${x - bw / 2 - 1}" x2="${x + bw / 2 + 1}" y1="${y(v.net)}" y2="${y(v.net)}" style="stroke:var(--kh-text-primary);stroke-width:2"/>`}`;
+    }).join('')).join('');
+    const every = Math.ceil(rows.length / 8);
+    const lab = rows.map((r, i) => (i % every ? '' : `<text x="${6 + cw * (i + 0.5)}" y="${H + 14}" text-anchor="middle" style="fill:var(--kh-text-secondary);font-size:12px">${hhmm(r.t)}</text>`)).join('');
+    return `<svg class="kh-ivt-svg" viewBox="0 -2 ${W} ${H + 20}"><line x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}" style="stroke:var(--kh-border-strong)"/>${marks}${lab}</svg>`;
+  }
+  /* 표 — 시각이 세로 · 최근이 위. 칸 안에서 내린다(모달이 안 길어지게) */
+  const bsCell = (v, f, fq) => `<td><b class="${signClass(v.net)}">${f(v.net)}</b>${fq ? ` <small>${fq(v.netQty)}</small>` : ''}<br>
+    <small><span class="kh-up">${f(v.buy, false)}</span> / <span class="kh-down">${f(v.sell, false)}</span></small></td>`;
+  const bsTable = (rows, cols) => `<div class="kh-ivt-tb"><table><thead><tr><th>구간</th>${cols.map((c) => `<th>${c.h}</th>`).join('')}</tr></thead>
+    <tbody>${rows.slice().reverse().map((r) => `<tr><td>${hhmm(r.t)}~</td>${cols.map((c) => c.f(r)).join('')}</tr>`).join('')}</tbody></table></div>`;
+  const KEY_NOTE = '<div class="kh-ivt-note">위 막대 매수 · 아래 막대 매도 · 검은 줄 순매수 · 표는 굵게 순매수 · 작게 <span class="kh-up">매수</span> / <span class="kh-down">매도</span></div>';
+  const WHO3 = [['frgn', '외국인', '--kh-ind-1'], ['orgn', '기관', '--kh-ind-2'], ['prsn', '개인', '--kh-ind-3']];
+  const PG = { up: '--kh-up', down: '--kh-down' };
+
+  async function loadToday() {
+    const code = stockCode();
+    const [flow, est, mem, inv] = await Promise.all([
+      getJson(`/api/kis/flow-today?step=5${code ? `&code=${code}` : ''}`),
+      code ? getJson(`/api/kis/investor-estimate?code=${code}`) : null,
+      code ? getJson(`/api/kis/investor-member?code=${code}`) : null,
+      code ? getJson(`/api/kis/investor?code=${code}&span=5`) : null,
+    ]);
+    if (code && !st.names[code]) {      // 처음 연 종목은 이름표가 아직 없다 — 시세에서 이름만 받는다(서버 캐시)
+      const q = await getJson(`/api/kis/quotes?codes=${code}`);
+      const nmq = q && q.data && q.data[code] && q.data[code].name;
+      if (nmq) st.names[code] = nmq;
+    }
+    if (st.tab !== 'today' || !main.querySelector('.kh-ivt')) return;
+    const d = (flow && flow.data) || {};
+    const mk = d.market || { rows: [] }, pg = d.program || { rows: [] }, sk = d.stock || null;
+    const last = mk.last || null, nm = nameOf(code || '') || code;
+    const card = (cls, head, body) => `<section class="kh-ivt-card ${cls}"><div class="kh-ivt-h">${head}</div>${body}</section>`;
+
+    const total = last ? `${WHO3.map(([k, n]) => { const v = (last[k] || {}).net;
+      return `<div class="kh-ivt-tot"><span>${n}</span><b class="${signClass(v)}">${fmtMil(v)}</b></div>`; }).join('')}
+      <div class="kh-ivt-inst">기관 안 —${[['scrt', '증권'], ['ivtr', '투신'], ['pe_fund', '사모'], ['bank', '은행'], ['insu', '보험'], ['mrbn', '종금'], ['fund', '기금'], ['etc_corp', '기타법인']]
+        .map(([k, n]) => ` <span>${n} <b class="${signClass((last.inst || {})[k])}">${fmtMil((last.inst || {})[k])}</b></span>`).join('')}</div>`
+      : '<div class="kh-ivt-empty">아직 쌓인 값이 없습니다</div>';
+
+    const mkBody = bsSvg(mk.rows, WHO3.map(([k, , c]) => ({ v: (r) => r[k] || {}, up: c, down: c })))
+      + `<div class="kh-ivt-lg">${WHO3.map(([, n, c]) => `<span style="color:var(${c})">■ ${n}</span>`).join('')}</div>`
+      + bsTable(mk.rows, WHO3.map(([k, n, c]) => ({ h: `<span style="color:var(${c})">${n}</span>`, f: (r) => bsCell(r[k] || {}, fmtMil, fmtChu) })));
+    const pgBody = bsSvg(pg.rows, [{ v: (r) => r, ...PG }]) + bsTable(pg.rows, [{ h: '금액', f: (r) => bsCell(r, fmtMil) }]);
+    const skBody = !code ? '<div class="kh-ivt-empty">「차트」 탭 · 검색 · 실시간 순위에서 종목을 고르면 그 종목이 나옵니다</div>'
+      : bsSvg((sk && sk.rows) || [], [{ v: (r) => r, ...PG }])
+        + bsTable((sk && sk.rows) || [], [{ h: '금액', f: (r) => bsCell(r, fmtWon) },
+          { h: '수량', f: (r) => bsCell({ net: r.netQty, buy: r.buyQty, sell: r.sellQty }, fmtJu) }]);
+
+    /* 종목 장중 잠정치 — 하루 다섯 번 · 외국인 · 기관 누적(주) · 응답에 시각이 없다 */
+    const er = (est && est.data && est.data.rows) || [];
+    const estBody = !code ? '' : `<div class="kh-ivt-seg">${[1, 2, 3, 4, 5].map((g) => { const e = er.find((x) => x.seq === g);
+      return `<div><small>${g}회차</small>외 <b class="${signClass(e && e.foreign)}">${e ? fmtJu(e.foreign).replace('주', '') : '—'}</b><br>기 <b class="${signClass(e && e.inst)}">${e ? fmtJu(e.inst).replace('주', '') : '—'}</b></div>`; }).join('')}</div>
+      <div class="kh-ivt-note">증권사 집계 잠정치 · 마감 뒤 확정치와 다름 · 개인은 안 줌</div>`;
+
+    /* 기관 안 · 외국인 등록/미등록 — 확정치(마감 15:40 뒤). 맨 위 확정 줄 */
+    const ir = ((inv && inv.data) || []).find((r) => r.instDetail);
+    const names = (inv && inv.meta && inv.meta.instDetail) || [];
+    const instBody = !code ? '' : !ir ? '<div class="kh-ivt-empty">확정치 없음 — 15:40 뒤</div>'
+      : `<div class="kh-ivt-inst">${mmdd(ir.date)} 확정 —${names.map(([k, n]) => { const v = (ir.instDetail[k] || {}).netAmt;
+        return ` <span>${esc(n)} <b class="${signClass(v)}">${fmtMil(v)}</b></span>`; }).join('')}
+        ${[['foreignReg', '외국인 등록'], ['foreignNreg', '외국인 미등록'], ['etcCorp', '기타법인']].map(([k, n]) => { const v = (ir[k] || {}).netAmt;
+          return ` <span>${n} <b class="${signClass(v)}">${fmtMil(v)}</b></span>`; }).join('')}</div>`;
+
+    /* 증권사 상위 5 — 오늘 장중 누적 */
+    const mb = mem && mem.data;
+    const side = (arr, cls) => (arr || []).map((x, i) => `<li><span>${i + 1}. ${esc(x.name)}${x.foreign ? ' <small>외국계</small>' : ''}</span><b class="${cls}">${fmtJu(x.qty, false)}</b></li>`).join('') || '<li>—</li>';
+    const memBody = !code ? '' : !mb ? '<div class="kh-ivt-empty">못 받음</div>'
+      : `<div class="kh-ivt-mem"><div><small>매도 상위</small><ol>${side(mb.sell, 'kh-down')}</ol></div><div><small>매수 상위</small><ol>${side(mb.buy, 'kh-up')}</ol></div></div>`;
+
+    const at = mk.lastAt ? `${hhmm(mk.lastAt)} 까지` : '';
+    main.querySelector('.kh-ivt').innerHTML = `
+      <div class="kh-ivt-col">
+        ${card('', `코스피 — 투자자별 순매수 <small>오늘 누계 · ${at}</small>`, total)}
+        ${code ? card('', `${esc(nm)} — 외국인 · 기관 장중 <small>하루 다섯 번 · 주</small>`, estBody) : ''}
+        ${code ? card('', `${esc(nm)} — 증권사 상위 5 <small>오늘 장중 누적</small>`, memBody) : ''}
+      </div>
+      <div class="kh-ivt-col">
+        ${card('is-tall', `코스피 투자자별 5분마다 <small>매수 · 매도 · 순매수 · 금액 · 수량(천주)</small>`, mkBody + KEY_NOTE)}
+        ${code ? card('', `${esc(nm)} — 기관 안 · 외국인 등록/미등록`, instBody) : ''}
+      </div>
+      <div class="kh-ivt-col">
+        ${card('', `코스피 프로그램 5분마다 <small>차익 + 비차익 · 수량은 KIS 가 안 줌</small>`, pgBody)}
+        ${card('', `${code ? esc(nm) : '종목'} 프로그램 5분마다 <small>${sk && !sk.rows.length && sk.watching ? '지금부터 쌓는 중' : '금액 · 수량'}</small>`, skBody)}
+      </div>`;
+  }
+
+  function paintToday() {
+    main.innerHTML = `<div class="kh-ivm-bar-row"><span class="kh-ivm-asof">오늘 장중 · 5분마다 · 코스피</span>
+      <span class="kh-ivm-mut">관심종목은 장중 내내 · 고른 종목은 고른 때부터 쌓입니다</span></div><div class="kh-ivt"><span class="kh-ivm-mut">불러오는 중</span></div>`;
+    loadToday();
+    stopFlow();
+    flowWatch = watch({ url: () => `/api/kis/flow-today?step=5${stockCode() ? `&code=${stockCode()}` : ''}`,
+      onChange: () => loadToday(), key: FLOW_KEY, fallbackMs: FLOW_FALLBACK_MS });
+  }
+
   function paint() {
-    if (st.tab === 'graph') { if (chart) { chart.remove(); chart = null; } paintGraph(); }
+    if (st.tab !== 'today') stopFlow();
+    if (st.tab === 'graph' || st.tab === 'today') { if (chart) { chart.remove(); chart = null; } }
+    if (st.tab === 'graph') paintGraph();
+    else if (st.tab === 'today') paintToday();
     else paintChart();
   }
   paint();

@@ -109,3 +109,40 @@
 .kh-ivm-period { margin: 10px 0 6px; font-size: 13px; }
 .kh-ivm-note { margin-top: 10px; font-size: 12px; color: var(--kh-text-secondary); }
 .kh-ivm-mut { font-size: 13px; color: var(--kh-text-secondary); }
+
+/* ── 당일 탭 (2026-10-27 재권님 시안 「ㄴ · 매수랑 매도 둘다」 · 「모달 창 밖으로 길어지지 않게」) ──
+   좁은 폭은 한 줄로 쌓고, 넓어지면 둘 · 셋으로 나눈다(위 두 경계 그대로). **표는 칸 안에서 내린다** — 하루치(5분 78구간)가
+   쌓여도 칸 높이가 그대로라 모달이 안 길어진다 */
+.kh-ivt { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.kh-ivt-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.kh-ivt-card { background: var(--kh-bg-surface); border-radius: var(--kh-radius-md); padding: 12px 14px; min-width: 0; }
+.kh-ivt-h { font-size: 13px; font-weight: 700; margin-bottom: 8px; color: var(--kh-text-primary); }
+.kh-ivt-h small { font-weight: 400; color: var(--kh-text-secondary); margin-left: 6px; }
+.kh-ivt-svg { width: 100%; height: auto; display: block; }
+.kh-ivt-tb { max-height: 180px; overflow: auto; margin-top: 6px; }
+.kh-ivt-tb table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: right; }
+.kh-ivt-tb th { position: sticky; top: 0; background: var(--kh-bg-surface); font-weight: 400; font-size: 11px; color: var(--kh-text-secondary); padding: 2px 6px; }
+.kh-ivt-tb td { padding: 3px 6px; border-top: 1px solid var(--kh-border); white-space: nowrap; vertical-align: top; }
+.kh-ivt-tb td:first-child, .kh-ivt-tb th:first-child { text-align: left; }
+.kh-ivt-tb small { font-size: 11px; color: var(--kh-text-secondary); }
+.kh-ivt-tot { display: flex; justify-content: space-between; font-size: 13px; padding: 2px 0; }
+.kh-ivt-inst { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--kh-text-secondary); margin-top: 6px; }
+.kh-ivt-lg { display: flex; gap: 10px; font-size: 12px; margin-top: 4px; }
+.kh-ivt-note { font-size: 11px; color: var(--kh-text-secondary); margin-top: 6px; }
+.kh-ivt-empty { font-size: 12px; color: var(--kh-text-secondary); padding: 16px 0; text-align: center; }
+.kh-ivt-seg { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; font-size: 12px; text-align: center; }
+.kh-ivt-seg > div { background: var(--kh-bg-card); border-radius: 6px; padding: 6px 2px; }
+.kh-ivt-seg small { display: block; color: var(--kh-text-secondary); }
+.kh-ivt-mem { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; }
+.kh-ivt-mem ol { list-style: none; margin: 4px 0 0; padding: 0; }
+.kh-ivt-mem li { display: flex; justify-content: space-between; gap: 6px; padding: 1px 0; }
+.kh-ivt-mem small { color: var(--kh-text-secondary); }
+@media (min-width: 701px) {
+  .kh-ivt { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kh-ivt-col:last-child { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1181px) {
+  .kh-ivt { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .kh-ivt-col:last-child { grid-column: auto; display: flex; }
+  .kh-ivt-card.is-tall .kh-ivt-tb { max-height: 260px; }
+}
