@@ -505,22 +505,37 @@
      왼쪽   위 「데일리분석」 칸과 아래 줄(일정 · 뉴스)이 남는 높이를 반씩 · 칸마다 안 스크롤
      오른쪽 텔레그램 글 칸이 남는 높이 전부 · 안 스크롤
    두 탭(텔레그램 글 · 미국장 분석)은 같은 높이 칸에 갈아 끼우는 것 그대로다 — 높이를 숫자 대신 남는 높이로 잡았을 뿐.
-   **넓은 폭 모달에서만** — 한 열로 쌓이는 폭(1180px 이하 · 위 @media)과 전용 화면(daily.html)은 그대로 둔다. */
-@media (min-width: 1181px) {
-  .kh-modal-scroll:has(> .kh-dl-wrap) { display: flex; flex-direction: column; }
-  .kh-modal .kh-dl-wrap { flex: 1 1 0; min-height: 0; align-items: stretch; }
+   카드 아래 여백(16px)은 그대로 둔다 — 세로 줄(flex) 안이라 남는 높이 셈에 들어가 넘치지 않는다.
+   **넓은 폭 모달에서만** — 이 파일은 max-width 로 좁은 폭을 덧붙이는 방식이라 그대로 따른다(「모바일 퍼스트」 1번 ·
+   개념정의 검수 10-27): 한 열로 쌓이는 폭은 위 `@media (max-width: 1180px)` 문턱 그대로 아래에서 되돌린다.
+   전용 화면(daily.html)은 `.kh-modal` 이 없어 안 걸린다. */
+.kh-modal-scroll:has(> .kh-dl-wrap) { display: flex; flex-direction: column; }
+.kh-modal .kh-dl-wrap { flex: 1 1 0; min-height: 0; align-items: stretch; }
+.kh-modal .kh-dl-main,
+.kh-modal .kh-dl-msg { display: flex; flex-direction: column; min-height: 0; }
+.kh-modal .kh-dl-main > * { flex: none; }
+.kh-modal .kh-dl-main > .kh-dl-video-card { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.kh-modal .kh-dl-video-card .kh-dl-tabbody { height: auto; flex: 1 1 0; min-height: 0; }
+.kh-modal .kh-dl-main > .kh-dl-body { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.kh-modal .kh-dl-body > .kh-dl-row { flex: 1 1 0; min-height: 0; align-items: stretch; }
+.kh-modal .kh-dl-row > .kh-dl-card,
+.kh-modal .kh-dl-col > .kh-dl-card { min-height: 0; overflow: auto; }
+.kh-modal .kh-dl-col { min-height: 0; }
+.kh-modal .kh-dl-col > .kh-dl-card { flex: 1 1 0; }
+.kh-modal .kh-dl-msg > .kh-dl-card { flex: none; }
+.kh-modal .kh-dl-msg > .kh-dl-tgcard { flex: 1 1 0; min-height: 0; overflow: auto; }
+
+/* 한 열로 쌓이는 폭에서는 위 모달 규칙을 모두 되돌린다 — 바깥 스크롤로 내려 보는 원래 모양 */
+@media (max-width: 1180px) {
+  .kh-modal-scroll:has(> .kh-dl-wrap) { display: block; }
+  .kh-modal .kh-dl-wrap { flex: none; min-height: auto; align-items: start; }
   .kh-modal .kh-dl-main,
-  .kh-modal .kh-dl-msg { display: flex; flex-direction: column; min-height: 0; }
-  .kh-modal .kh-dl-main > * { flex: none; }
-  .kh-modal .kh-dl-main > .kh-dl-video-card { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
-  .kh-modal .kh-dl-video-card .kh-dl-tabbody { height: auto; flex: 1 1 0; min-height: 0; }
-  .kh-modal .kh-dl-main > .kh-dl-body { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
-  .kh-modal .kh-dl-body > .kh-dl-row { flex: 1 1 0; min-height: 0; align-items: stretch; }
+  .kh-modal .kh-dl-msg,
+  .kh-modal .kh-dl-main > .kh-dl-video-card,
+  .kh-modal .kh-dl-main > .kh-dl-body { display: block; min-height: auto; }
+  .kh-modal .kh-dl-video-card .kh-dl-tabbody { height: 540px; flex: none; }
+  .kh-modal .kh-dl-body > .kh-dl-row { flex: none; min-height: auto; align-items: start; }
   .kh-modal .kh-dl-row > .kh-dl-card,
-  .kh-modal .kh-dl-col > .kh-dl-card { min-height: 0; overflow: auto; margin-bottom: 0; }
-  .kh-modal .kh-dl-col { min-height: 0; gap: 16px; }
-  .kh-modal .kh-dl-col > .kh-dl-card { flex: 1 1 0; }
-  .kh-modal .kh-dl-msg > .kh-dl-card { flex: none; }
-  .kh-modal .kh-dl-msg > .kh-dl-tgcard { flex: 1 1 0; min-height: 0; overflow: auto; }
-  .kh-modal .kh-dl-msg > .kh-dl-card:last-child { margin-bottom: 0; }
+  .kh-modal .kh-dl-col > .kh-dl-card,
+  .kh-modal .kh-dl-msg > .kh-dl-tgcard { min-height: auto; overflow: visible; flex: none; }
 }
