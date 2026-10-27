@@ -445,11 +445,10 @@ export function openInvestorModal({ code } = {}) {
   const fmtJu = (v, sign = true) => (v == null ? '—' : `${sign && v > 0 ? '+' : ''}${Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + '만' : Math.round(v).toLocaleString()}주`);
   const hhmm = (t) => (t ? `${t.slice(0, 2)}:${t.slice(2, 4)}` : '');
   const stockCode = () => (/^\d{6}$/.test(st.target) ? st.target : null);
-  /* 빈 칸 문구 — 쌓는 서버(8765)가 아닌 곳은 「없음」 이 아니라 「여기서는 안 쌓는다」 다(서버 meta.collector.running · 개념정의 검수 10-27).
-     못 받았으면 「못 받음」 — 셋을 한 문구로 내면 「못 받음」 이 「없음」 으로 둔갑한다 */
+  /* 빈 칸 문구 — 못 받았으면 「못 받음」 · 받았는데 비었으면 「아직 없음」. 둘을 한 문구로 내면 「못 받음」 이 「없음」 으로 둔갑한다.
+     다른 서버(세션 · 8764)도 8765 로 넘기거나 메인 DB 를 읽어 같은 값을 보므로 「여기서는 안 쌓는다」 갈래는 두지 않는다(10-27 정정) */
   const FLOW_EMPTY = {
     wait: '아직 쌓인 구간이 없습니다 · 평일 09:00~15:30',
-    notHere: '이 서버는 당일 수급을 쌓지 않습니다 — 내부(8765)에서만 보입니다',
     fail: '당일 수급을 못 받았습니다',
   };
   let flowEmpty = FLOW_EMPTY.wait;
@@ -498,10 +497,7 @@ export function openInvestorModal({ code } = {}) {
     if (st.tab !== 'today' || !main.querySelector('.kh-ivt')) return;
     const d = (flow && flow.data) || {};
     const mk = d.market || { rows: [] }, pg = d.program || { rows: [] }, sk = d.stock || null;
-    const col = flow && flow.meta && flow.meta.collector;
-    flowEmpty = !flow || !flow.data ? FLOW_EMPTY.fail
-      : col && col.running === false && !mk.rows.length && !pg.rows.length && !(sk && sk.rows && sk.rows.length) ? FLOW_EMPTY.notHere
-        : FLOW_EMPTY.wait;
+    flowEmpty = !flow || !flow.data ? FLOW_EMPTY.fail : FLOW_EMPTY.wait;
     const last = mk.last || null, nm = nameOf(code || '') || code;
     const card = (cls, head, body) => `<section class="kh-ivt-card ${cls}"><div class="kh-ivt-h">${head}</div>${body}</section>`;
 
