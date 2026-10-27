@@ -63,6 +63,7 @@ import naver
 import naver_period
 import toss
 import macro
+import note_alert      # 시황 글 알림 — 자동 시황 글이 새로 써지면 텔레그램 한 통(2026-10-27 · server/note_alert.py)
 import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-25 · server/events.py 머리 주석)
 import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
@@ -8649,6 +8650,11 @@ def main():
         print("  결과 알림 : 사용 (%d초마다 · 밤 %02d~%02d시 것은 %02d:00 한 통%s)"
               % (events.TICK, dart.QUIET_FROM // 60, dart.QUIET_TO // 60, dart.QUIET_TO // 60,
                  "" if events.SEND else " · **발송 꺼짐 — 미리보기만**"))
+
+    # 시황 글 알림(2026-10-27 · server/note_alert.py) — 같은 문(보내는 서버만) · 켜기 스위치가 따로 없다(재권님 「가」 = 8765 가 보낸다)
+    if not SLOW and is_sender(args.port) and note_alert.start():
+        print("  시황 글 알림 : 사용 (%d초마다 market-note-live.json 의 at · 밤 %02d~%02d시 것은 %02d:00)"
+              % (note_alert.TICK, dart.QUIET_FROM // 60, dart.QUIET_TO // 60, dart.QUIET_TO // 60))
 
     # 넥스트레이드 장 전 거래량 2배 목록(2026-10-26 · server/nxt_pre.py) — 같은 문(보내는 서버만) · **`nxt_pre.SEND = False` 가 기본**
     if not SLOW and is_sender(args.port) and nxt_board.start(sys.modules[__name__]):
