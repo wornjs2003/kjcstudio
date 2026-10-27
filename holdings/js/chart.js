@@ -53,15 +53,8 @@ const COLOR = {
   get ichUp()    { return alpha('up', ICH_CLOUD_ALPHA); },
   get ichDown()  { return alpha('down', ICH_CLOUD_ALPHA); },
 
-  /* 값이 없는 구간 — **미래**(아직 안 온 봉). 2026-09-29 지시 —
-     「미래에 아직 안나온 값은 파란색으로」. 진하기는 아래 NODATA_ALPHA 한 곳에서 정한다 */
-  get noData()   { return alpha('nodata', NODATA_ALPHA); },
 };
 
-/* 미래 영역의 진하기. **가장 뒤에 깔리는 배경이라 차트의 파란 것 중 가장 옅다** —
-   하락 봉 1.0 · 매물대 VP_ALPHA · RSI 띠 0.10 · 여기.
-   재권님이 화면을 보시고 조절하실 값이라 **한 곳에만** 둔다. */
-const NODATA_ALPHA = 0.06;
 
 /* 일목 구름 · 선행스팬 선의 진하기 — 구름은 배경이라 옅게(매물대 0.16 보다 옅다), 선행 선은 경계만 보이게 */
 const ICH_CLOUD_ALPHA = 0.12;
@@ -247,11 +240,20 @@ export function barsToFetch(periodId) {
 const RIGHT_PAD = 4;
 const ichPad = () => (indOn().has('ich') ? IND_PERIOD.ichB : 0);
 
+/* 지금 시각(마지막 봉)을 차트 폭의 7:3 자리에 둔다 — 오른쪽 3 을 비운다 (2026-10-27 재권님 「차트가 그려지는 지금 시각이 맨 오른쪽이
+   아니라 7/3 정도 지점으로」 · 「다른거 건들지 말고 오른쪽 3비우는거랑 빈자리 파랑을 없애는거」).
+   **봉 굵기는 그대로다** — 보는 창의 봉 칸 수(initBars)는 안 바꾸고 그 안에서 오른쪽 3할을 비운다(5분 120칸이면 봉 84 · 빈칸 36).
+   빈칸은 봉 칸 수라 확대 · 축소하면 비율은 움직인다. 일목의 26봉 자리가 더 넓으면 그쪽을 쓴다(둘을 더하지 않는다 — 일목을 켜고 꺼도 그 안이면 자리가 안 움직인다) */
+const RIGHT_EMPTY = 0.3;
+const rightPad = (bars) => Math.max(Math.round(bars * RIGHT_EMPTY), RIGHT_PAD + ichPad());
+
 function showLastBars(chart, total, bars = VISIBLE_BARS) {
   const ts = chart.timeScale();
   try {
-    /* from 이 음수여도 된다. 그만큼 왼쪽이 빈다 */
-    const pad = ichPad();
+    /* from 이 음수여도 된다. 그만큼 왼쪽이 빈다.
+       빈칸 한도(rightOffset)도 같은 값으로 — 한도가 작으면 라이브러리가 봉을 굵게 다시 맞춘다(위 일목 주석) */
+    const pad = rightPad(bars);
+    ts.applyOptions({ rightOffset: pad });
     ts.setVisibleLogicalRange({ from: total - bars + pad, to: total - 1 + pad });
   } catch {
     ts.fitContent();          // 라이브러리 판이 다르면 예전대로
@@ -939,7 +941,7 @@ export function createStockChart(container, candles, opts = {}) {
         minimumWidth: AXIS_W,            // 좌우 끝을 맞추는 핵심. 위 주석 참고
       },
       timeScale: {
-        borderColor: COLOR.border, rightOffset: RIGHT_PAD + ichPad(), fixLeftEdge: false,
+        borderColor: COLOR.border, rightOffset: rightPad(VISIBLE_BARS), fixLeftEdge: false,
         timeVisible: MINUTE_PERIODS.has(period), secondsVisible: false,
         visible: axis,
       },
@@ -1171,58 +1173,9 @@ export function createStockChart(container, candles, opts = {}) {
     vpLayer.innerHTML = out.join('');
   }
 
-  /* ── 미래 영역 — 아직 안 온 봉 자리를 옅은 파랑으로 깐다 (2026-09-29 지시) ──
-   *
-   * 재권님 말씀 — 「**미래에 아직 안나온 값은 파란색으로**」.
-   *
-   * **오른쪽은 늘 비어 있다.** 위 mkChart 의 `rightOffset: 4` 라 마지막 봉
-   * 오른쪽에 4봉만큼 자리가 남고, 끌거나 줄이면 더 넓어진다. 거기가 「아직
-   * 안 온」 자리다 — 없는 자리를 새로 만드는 것이 아니다.
-   *
-   * **칸마다 깐다.** 가격 칸만 칠하면 아래 거래량·MACD·RSI 에서 띠가 끊겨
-   * 보인다. 그 칸들도 미래에는 값이 없으므로 같이 칠하는 것이 맞다.
-   *
-   * **매물대와 같은 층 방식이다** — 차트 canvas **뒤**에 DOM 을 깔고,
-   * `.kh-pane-box` 가 곱하기로 섞여 비쳐 보인다 (stock.css 의 그 주석 참고).
-   * 위에 얹으면 봉과 축 글자가 가려진다.
-   *
-   * ⚠️ **왼쪽(과거쪽)은 칠하지 않는다.** 거기는 「정말 없는 것」 과 「아직 안
-   * 받은 것」 이 갈리는 자리다. 받아올 수 있는데 칠하면 **「없다」 고 거짓으로
-   * 알린다.** 오른쪽은 받을 방법이 없어 언제나 칠해도 맞는다 —
-   * **색 이름은 하나(`--kh-nodata-rgb`)지만 판정은 둘이다.**
-   */
-  function drawFuture() {
-    const total = candles.length;
-    for (const p of panes) {
-      const band = p.futB;
-      if (!band) continue;
-      const hide = () => { band.style.display = 'none'; };
-      if (total < 2) { hide(); continue; }
-
-      let x0;
-      try {
-        const ts = p.chart.timeScale();
-        const xLast = ts.logicalToCoordinate(total - 1);
-        const xPrev = ts.logicalToCoordinate(total - 2);
-        if (xLast == null || xPrev == null) { hide(); continue; }
-        x0 = xLast + (xLast - xPrev) / 2;          // 마지막 봉의 오른쪽 끝
-      } catch { hide(); continue; }                // 아직 그릴 준비가 안 됐다
-
-      /* 가격축 자리는 비운다 — 매물대와 같은 이유다(좌우 끝이 어긋난다) */
-      const right = Math.max(0, p.fut.clientWidth - AXIS_W);
-      if (!(x0 < right)) { hide(); continue; }     // 미래 자리가 없다
-
-      /* 시간축이 보이는 칸(맨 아래)은 그 띠를 덮지 않는다 — 날짜 뒤가 파래진다 */
-      let axisH = 0;
-      try { axisH = p.chart.timeScale().height() || 0; } catch { /* 없으면 0 */ }
-
-      band.style.display = '';
-      band.style.left = Math.max(0, x0) + 'px';
-      band.style.width = (right - Math.max(0, x0)) + 'px';
-      band.style.bottom = axisH + 'px';
-      band.style.background = COLOR.noData;
-    }
-  }
+  /* ── 미래 영역(오른쪽 빈 자리의 옅은 파랑)은 2026-10-27 에 걷어냈다 ──
+   * 재권님 「안 그려지는 곳 파랑은 없어도 될 것 같아」 · 「빈자리 파랑을 없애는거」(2026-09-29 「미래에 아직 안나온 값은
+   * 파란색으로」 를 거둠). 오른쪽 빈 자리 폭은 RIGHT_EMPTY 가 정한다. 되살리려면 git 이력의 drawFuture · .kh-fut */
 
   /* 2초마다 다시 그린다 (지시). 차트를 끌거나 확대하면 그 자리에서 따라
      그린다 — 2초를 기다리면 봉과 어긋나 보인다. */
@@ -1232,9 +1185,6 @@ export function createStockChart(container, candles, opts = {}) {
       if (document.hidden) return;           // 안 보이는 탭은 쉰다
       drawProfile();
       drawCloud();
-      /* 미래 영역도 여기서 다시 잰다. **창 크기가 바뀌는 것을 잡는 자리가
-         이것뿐이다** — 확대·끌기는 위 구독이 잡지만 크기 변경은 구독이 안 온다 */
-      drawFuture();
     }, VP_REFRESH_MS);
   }
 
@@ -1407,11 +1357,14 @@ export function createStockChart(container, candles, opts = {}) {
     const ichWas = !!ichCalc;
     dropOverlay(ch);
     drawOverlay(ch);
-    /* 일목을 켜고 끄면 오른쪽 26봉 자리를 열고 닫는다(ichPad) — 칸마다 같은 값이어야 좌우 끝이 맞는다 */
+    /* 일목을 켜고 끄면 오른쪽 빈칸이 26봉 자리보다 좁을 때만 넓히고 좁힌다(rightPad) — 칸마다 같은 값이어야 좌우 끝이 맞는다 */
     if (ichWas !== !!ichCalc) {
-      panes.forEach((p) => { try { p.chart.timeScale().applyOptions({ rightOffset: RIGHT_PAD + ichPad() }); } catch { /* 칸이 사라졌다 */ } });
-      if (keep && keep.to >= candles.length - 2) {                // 맨 오른쪽을 보던 중이면 봉 폭 그대로 26봉 민다
-        const d = (ichCalc ? 1 : -1) * IND_PERIOD.ichB;
+      let was = null;
+      try { was = ch.timeScale().options().rightOffset; } catch { /* 모르면 안 민다 */ }
+      const pad = rightPad(keep ? Math.round(keep.to - keep.from) + 1 : VISIBLE_BARS);
+      panes.forEach((p) => { try { p.chart.timeScale().applyOptions({ rightOffset: pad }); } catch { /* 칸이 사라졌다 */ } });
+      if (keep && was != null && keep.to >= candles.length - 2) {  // 맨 오른쪽을 보던 중이면 봉 폭 그대로 늘어난 만큼 민다
+        const d = pad - was;
         keep = { from: keep.from + d, to: keep.to + d };
       }
     }
@@ -1429,7 +1382,6 @@ export function createStockChart(container, candles, opts = {}) {
 
     drawProfile();          // 매물대도 새 축에 맞춰 다시 그린다
     drawCloud();            // 일목 구름도
-    drawFuture();           // 미래 영역도 (봉 자리가 바뀌었다)
     /* 라이브러리가 나중에 제 계산을 밀어넣으므로 한 박자 뒤에 잰다 */
     requestAnimationFrame(() => checkScale(scaleBefore));
 
@@ -1606,15 +1558,6 @@ export function createStockChart(container, candles, opts = {}) {
         ichLayer.style.width = '100%'; ichLayer.style.height = '100%';
         el.appendChild(ichLayer);
       }
-      /* 미래 영역도 배경이라 차트보다 먼저 넣는다. **칸마다** 하나씩이다 —
-         가격 칸만 두면 아래 칸에서 띠가 끊겨 보인다 (drawFuture 주석 참고) */
-      const fut = document.createElement('div');
-      fut.className = 'kh-fut';
-      const futB = document.createElement('div');
-      futB.className = 'kh-fut-b';
-      futB.style.display = 'none';        // 자리를 잴 수 있을 때 drawFuture 가 켠다
-      fut.appendChild(futB);
-      el.appendChild(fut);
       el.appendChild(box);
       container.appendChild(el);
 
@@ -1624,7 +1567,7 @@ export function createStockChart(container, candles, opts = {}) {
       box.style.height = h + 'px';
 
       const ch = track(mkChart(box, h, idx === list.length - 1, p.key === 'price' ? priceDigits : p.key === 'hf' ? 2 : 0));   // 누적 순매수는 %p 소수 둘째
-      const item = { key: p.key, el, box, chart: ch, fut, futB };
+      const item = { key: p.key, el, box, chart: ch };
       panes.push(item);
 
       if (p.key === 'price') { drawCandle(ch); drawOverlay(ch); freeVert(ch, box); }
@@ -1668,9 +1611,6 @@ export function createStockChart(container, candles, opts = {}) {
            띠와 봉이 어긋나 보인다 (2026-09-18). */
         drawProfile();
         drawCloud();
-        /* 미래 영역은 **봉의 자리로 왼쪽 끝을 잡으므로** 확대·끌기마다
-           다시 잰다. 안 하면 봉만 움직이고 파란 자리가 남는다 */
-        drawFuture();
       });
 
       ch.subscribeCrosshairMove((param) => {
@@ -1699,8 +1639,7 @@ export function createStockChart(container, candles, opts = {}) {
     lockPriceRange();
     drawProfile();
     drawCloud();
-    drawFuture();
-    requestAnimationFrame(() => { lockPriceRange(); drawProfile(); drawCloud(); drawFuture(); });
+    requestAnimationFrame(() => { lockPriceRange(); drawProfile(); drawCloud(); });
     startProfileLoop();
     checkAlign();
   }
@@ -2107,10 +2046,15 @@ export function createStockChart(container, candles, opts = {}) {
        `redrawOverlay` 가 같은 이유로 `requestAnimationFrame` 을 쓴다. */
     setView(v, bars) {
       const last = candles.length - 1;
-      const to = v ? last - v.fromRight : last + ichPad();      // 처음 보는 기간이면 일목 26봉 자리도(ichPad)
-      const from = v ? to - v.bars : to - (bars || VISIBLE_BARS);
+      const n = bars || VISIBLE_BARS;
+      const pad = rightPad(v ? v.bars : n);                   // 오른쪽 3 비우기(RIGHT_EMPTY) · 일목 26봉 자리
+      const to = v ? last - v.fromRight : last + pad;
+      const from = v ? to - v.bars : to - n;
       const put = () => panes.forEach((p) => {
-        try { p.chart.timeScale().setVisibleLogicalRange({ from, to }); }
+        try {
+          p.chart.timeScale().applyOptions({ rightOffset: pad });
+          p.chart.timeScale().setVisibleLogicalRange({ from, to });
+        }
         catch { /* 칸이 아직 없다 */ }
       });
       put();
