@@ -447,7 +447,14 @@ _call_times = []                 # 최근 호출 시각 (사용량 측정용)
 # 서버가 상류를 못 써 **폴백으로 직접 부르는 동안**은 그 서버 몫이 따로라 합이
 # 넘을 수 있다 — 공유 줄(`_shared_slot`)이 간격으로만 막는다.
 _send_lock = threading.Lock()
-_send_times = [collections.deque(), collections.deque()]     # 키마다 하나
+_send_times = [collections.deque(), collections.deque()]     # 키마다 하나 — 항목은 [보낸 시각, 응답 온 시각 또는 None]
+# **응답이 오기 전까지 자리를 잡고 있는다** (2026-10-27 재권님 「한도를 초과해서 가져오는걸 막아야지」 · 「대기했다가 가져와야지」).
+# 전에는 「보낸 시각이 지난 1초 안인 수」 를 셌는데 KIS 는 **받은 시각**으로 센다 — 닿기까지 수십 ms 가 들쭉날쭉해
+# 우리 셈으로 19~20 일 때 받는 쪽에서 몰려 거절됐다(10-27 8765 거절 8번 중 7번). 이제 **응답이 안 온 것 + 응답이
+# 지난 1초 안에 온 것**을 센다 — KIS 가 받은 시각은 보낸 뒤 · 응답 전 사이라 어느 1초에도 한도를 넘겨 닿지 못한다.
+# 한도(`KIS_CALLS_PER_SEC`)는 그대로다. 응답을 못 적은 채 남는 자리(예외 길)는 `SEND_GATE_STALE` 뒤 풀린다
+SEND_GATE_STALE = 16.0           # 초 — urlopen 시간 한도(15)보다 조금 길게
+_gate_tl = threading.local()     # 이 스레드가 마지막으로 잡은 자리 — kis_get 이 응답 뒤 적는다
 _send_stat = {"held": 0, "heldMs": 0.0, "maxIn1s": 0,
               "perKey": [{"maxIn1s": 0, "sent": 0}, {"maxIn1s": 0, "sent": 0}]}
 
@@ -894,12 +901,21 @@ def _send_gate(n_keys=1):
             now = time.monotonic()
             for k in range(n):
                 dq = _send_times[k]
-                while dq and dq[0] <= now - 1.0:
-                    dq.popleft()
+                keep = [e for e in dq
+                        if not ((e[1] is not None and e[1] <= now - 1.0)
+                                or (e[1] is None and e[0] <= now - SEND_GATE_STALE))]
+                if len(keep) != len(dq):
+                    dq.clear()
+                    dq.extend(keep)
             k = min(range(n), key=lambda i: len(_send_times[i]))
             dq = _send_times[k]
             if len(dq) < limit:
-                dq.append(now)
+                prev = getattr(_gate_tl, "entry", None)
+                if prev is not None and prev[1] is None:
+                    prev[1] = now            # 앞에 잡고 안 보낸 자리(토큰 받기 · 키 바꿈)는 여기서 놓는다
+                entry = [now, None]
+                dq.append(entry)
+                _gate_tl.entry = entry
                 pk = _send_stat["perKey"][k]
                 pk["sent"] += 1
                 if len(dq) > pk["maxIn1s"]:
@@ -911,8 +927,11 @@ def _send_gate(n_keys=1):
                     _send_stat["held"] += 1
                     _send_stat["heldMs"] += held * 1000.0
                 return k
-            # 가장 먼저 1초를 벗어나는 순간까지 — **`SEND_GATE_PAD` 여유**
-            pause = min(_send_times[i][0] for i in range(n)) + 1.0 - now + SEND_GATE_PAD
+            # 응답이 온 것 중 가장 먼저 1초를 벗어나는 순간까지 — **`SEND_GATE_PAD` 여유**.
+            # 다 아직 응답 전이면 짧게 쉬고 다시 본다
+            done = [e[1] for i in range(n) for e in _send_times[i] if e[1] is not None]
+            pause = (min(done) + 1.0 - now + SEND_GATE_PAD) if done else 0.02
+            pause = max(0.005, pause)
         time.sleep(pause)
         held += pause
 
@@ -1076,6 +1095,7 @@ def usage_stats():
         # **누적.** 창 안에서만 보면 「지금 안 넘고 있다」 와 「한 번도 안
         # 넘었다」 가 안 갈린다. 재시작하면 0 이다
         "overrunsTotal": _over_total,
+        "overrunGiveUps": _over_giveup,          # 거절을 KIS_OVER_RETRY 번 다시 보내도 못 받은 수 (10-27)
         "overrunLastAt": _over_last_at,
         "gapNowSec": round(_gap_now(), 4),
         "sharedQueue": _shared_fail == 0,
@@ -1981,7 +2001,24 @@ def _kis_via_upstream(base, path, params, tr_id):
     return body.get("data")
 
 
-def kis_get(cfg, path, params, tr_id, _retry=1):
+KIS_OVER_RETRY = 10          # 한도 초과(EGW00201) 거절을 1초씩 쉬며 다시 보내는 최대 횟수 (2026-10-27 재권님 「대기했다가 가져와야지」)
+_over_giveup = 0             # 그만큼 다시 보내도 못 받은 수 — stats 의 overrunGiveUps
+
+
+def _gate_release():
+    e = getattr(_gate_tl, "entry", None)
+    if e is not None and e[1] is None:
+        e[1] = time.monotonic()
+
+
+def _over_gave_up():
+    global _over_giveup
+    _over_giveup += 1
+    sys.stderr.write("  [KIS] %s 한도 초과 거절이 %d번 이어져 이번 것은 못 받음 — 누적 %d건\n"
+                     % (_stamp(), KIS_OVER_RETRY + 1, _over_giveup))
+
+
+def kis_get(cfg, path, params, tr_id, _retry=1, _over=0):
     # ── 상류가 있으면 넘긴다 (2026-10-01) ──
     _base = upstream_base()
     if _base:
@@ -2040,8 +2077,11 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
     })
     try:
         _t_resp0 = time.time()
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            raw = resp.read()
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                raw = resp.read()
+        finally:
+            _gate_release()            # 응답이 왔다(또는 실패) — 이때부터 1초 동안 자리를 센다
         # **왕복만 잰다** — JSON 해석은 우리 쪽 일이라 뺀다.
         _me[2] = (time.time() - _t_resp0) * 1000.0
         _me[3] = "ok"
@@ -2051,32 +2091,37 @@ def kis_get(cfg, path, params, tr_id, _retry=1):
         _me[2] = (time.time() - _t_resp0) * 1000.0
         _me[3] = "HTTP%s" % e.code
         detail = scrub(e.read().decode("utf-8", "replace"))[:300]
-        # 초당 건수 초과(EGW00201)는 잠깐 쉬었다 한 번만 다시 시도한다.
-        if "EGW00201" in detail and _retry > 0:
+        # 초당 건수 초과(EGW00201)는 1초씩 쉬며 받을 때까지 다시 보낸다 — 최대 KIS_OVER_RETRY 번
+        # (2026-10-27 재권님 「한도 초과하면 막는게 아니고 대기했다가 가져와야지」 · 전에는 한 번만 다시 시도)
+        if "EGW00201" in detail:
             _me[3] = "EGW00201"
             _ring_dump(_me)
             note_overrun()                     # ㉡ 세어 두면 간격이 늘어난다
-            time.sleep(1.0)
-            return kis_get(cfg, path, params, tr_id, _retry - 1)
+            if _over < KIS_OVER_RETRY:
+                time.sleep(1.0)
+                return kis_get(cfg, path, params, tr_id, _retry, _over + 1)
+            _over_gave_up()
         # **거부당한 토큰(EGW00123)은 버리고 한 번만 다시 받는다** (2026-09-22 지시).
         # 이것이 없으면 캐시가 스스로 만료될 때까지 몇십 분이고 계속 실패한다.
         if "EGW00123" in detail and _retry > 0:
             _drop_token_cache(cfg["mode"], _token_path(_kc))
-            return kis_get(cfg, path, params, tr_id, _retry - 1)
+            return kis_get(cfg, path, params, tr_id, _retry - 1, _over)
         raise RuntimeError("KIS 호출 실패 (HTTP %s): %s" % (e.code, detail))
     except urllib.error.URLError as e:
         raise RuntimeError("KIS 호출 실패 (네트워크): %s" % safe_message(e.reason))
 
     if str(data.get("rt_cd", "0")) != "0":
-        if data.get("msg_cd") == "EGW00201" and _retry > 0:
+        if data.get("msg_cd") == "EGW00201":
             _me[3] = "EGW00201"
             _ring_dump(_me)
             note_overrun()                     # ㉡
-            time.sleep(1.0)
-            return kis_get(cfg, path, params, tr_id, _retry - 1)
+            if _over < KIS_OVER_RETRY:
+                time.sleep(1.0)
+                return kis_get(cfg, path, params, tr_id, _retry, _over + 1)
+            _over_gave_up()
         if data.get("msg_cd") == "EGW00123" and _retry > 0:
             _drop_token_cache(cfg["mode"], _token_path(_kc))
-            return kis_get(cfg, path, params, tr_id, _retry - 1)
+            return kis_get(cfg, path, params, tr_id, _retry - 1, _over)
         raise RuntimeError("KIS 오류: %s (%s)" % (data.get("msg1", "알 수 없음"), data.get("msg_cd", "")))
     return data
 
