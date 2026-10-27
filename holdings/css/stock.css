@@ -157,6 +157,9 @@
 /* ── 좁은 화면 ──────────────────────────── */
 @media (max-width: 1500px) {
   .kh-head-stats { grid-template-columns: repeat(2, auto); }
+  /* 두 칸 짜임이면 묶음이 네 줄로 높아져 머리 줄(이름 · 검색칸 · ✕) 바로 밑까지 올라온다 — 얹으면 검색칸 · ✕ 를 덮었다
+     (2026-10-27 qa 검수 · 모달 폭 776). 그래서 묶음 첫 줄로 둔다(머리가 한 줄 길어진다) */
+  .kh-head .kh-head-src { position: static; grid-column: 1 / -1; white-space: normal; }
 }
 @media (max-width: 1100px) {
   .kh-grid { grid-template-columns: 1fr 1fr; }
