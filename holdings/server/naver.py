@@ -55,6 +55,7 @@ TTL = 30
 # 다시 부르지 않도록 넉넉히 받아 둡니다.
 LIST_SIZE = 20
 STOCK_SIZE = 10
+STOCK_SIZE_ALL = 100     # 「전부」 — 실시간 순위 「테마」 칩(2026-10-27). 2026-10-27 실측 테마 가장 큰 것 97종목 · 한 번에 받음 0.05초
 
 # ── 「기타」 는 업종이 아니다 (2026-09-18) ──────────────────────────
 #
@@ -376,14 +377,17 @@ def _cap_rank(code):
         return None          # 표가 아직 없을 수 있다. 순위만 빠진다
 
 
-def stocks(kind, no):
-    """그 업종·테마의 종목. **등락률 내림차순**이라 앞에서부터 상승률 TOP 입니다."""
+def stocks(kind, no, full=False):
+    """그 업종·테마의 종목. **등락률 내림차순**이라 앞에서부터 상승률 TOP 입니다.
+
+    `full` 이면 상위 10 이 아니라 그 묶음 전부(STOCK_SIZE_ALL 까지) — 실시간 순위 「테마」 칩이 시가총액 순으로 다시 세운다.
+    캐시 열쇠를 따로 둔다 — 「지금 뜨는 산업」 의 상위 10 은 그대로다."""
     if kind not in ("industry", "theme"):
         raise ValueError("kind 는 industry 또는 theme 여야 합니다.")
     no = int(no)
 
     def make():
-        j = _get("%s/%s/%d?page=1&pageSize=%d" % (BASE, kind, no, STOCK_SIZE))
+        j = _get("%s/%s/%d?page=1&pageSize=%d" % (BASE, kind, no, STOCK_SIZE_ALL if full else STOCK_SIZE))
         rows = []
         for s in (j.get("stocks") or []):
             code = (s.get("itemCode") or "").strip()
@@ -399,6 +403,6 @@ def stocks(kind, no):
                 "value": _num(s.get("accumulatedTradingValue")),
                 "cap": _num(s.get("marketValue")),          # 시총 · 억원(2026-10-26 · 테마 종목 펼침에 씀)
             })
-        return {"rows": rows, "name": j.get("groupName") or j.get("name")}
+        return {"rows": rows, "name": j.get("groupName") or j.get("name"), "total": _num(j.get("totalCount"))}
 
-    return _cached("s:%s:%d" % (kind, no), make)
+    return _cached("s:%s:%d%s" % (kind, no, ":all" if full else ""), make)

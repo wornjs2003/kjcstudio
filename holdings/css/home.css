@@ -453,6 +453,13 @@
    (재권님 「왜 코스피 코스닥 옆에 있지?」 · 「응 맞아」) 다시 제목 옆 한 줄로 되돌렸다 */
 .kh-rank-card .kh-tabs > .kh-rank-mkt { padding: 0; margin: 0 auto 0 12px; gap: 4px; flex-wrap: nowrap; }
 .kh-rank-mkt .kh-chip { padding: 4px 9px; font-size: 0.73rem; }
+/* 실시간 순위 「테마」 칩 — 테마 스무 개를 한 줄로 두고 가로로 민다(줄 수가 늘어 표가 밀리지 않게 · 2026-10-27).
+   가로로 미는 띠라 막대는 감춘다(「스크롤바는 한 벌만 쓴다」 의 「감추는 것」) */
+.kh-chips.kh-theme-strip { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.kh-chips.kh-theme-strip::-webkit-scrollbar { display: none; }
+.kh-chips.kh-theme-strip .kh-chip { flex-shrink: 0; }
+/* 시장 칩이 셋(코스피 · 코스닥 · 테마)이 되면서 머리줄 글자가 꺾였다(제목 「실시간 순위」 두 줄 · 머리 61 → 81px) — 시안처럼 한 줄로 */
+.kh-rank-card .kh-tabs:has(#kh-rank-mkt), .kh-rank-card .kh-tabs:has(#kh-rank-mkt) * { white-space: nowrap; }   /* Insight 도 .kh-rank-card 를 써서 홀딩스 순위 머리에만 */
 .kh-rank .kh-tab.is-active,
 .kh-rank-card .kh-tab.is-active { background: none; font-weight: 700; }
 /* 「자세히 ›」 — 차트 머리줄과 실시간 순위 머리줄 둘이 쓴다.

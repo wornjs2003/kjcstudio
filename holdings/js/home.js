@@ -991,7 +991,60 @@ let universe = null;        // [{code, name, rank, cap, market}]
 const MARKETS = [
   { id: 'KOSPI', label: '코스피', ix: 'KOSPI' },
   { id: 'KOSDAQ', label: '코스닥', ix: 'KOSDAQ' },
+  { id: 'THEME', label: '테마', ix: 'KOSPI' },
 ];
+
+/* ── 「테마」 칩 (2026-10-27 재권님 「국내 테마별 대장주 · 주도주 표를 실시간으로」 → 「여기말고 실시간 순위에」 ·
+ * 시안 「이 모양이야」 · 개발1 창 「응」) ──
+ * 누르면 정렬 칩 줄이 **오늘 등락률 상위 테마 20** 으로 바뀌고(한 줄 가로 밀기), 테마를 누르면 표가 그 테마 종목을
+ * **시가총액 순**으로 보인다. 목록은 네이버(서버 /api/naver/groups?kind=theme · /api/naver/stocks?…&all=1)가 주고,
+ * 가격 · 등락률은 다른 줄과 같은 길(보이는 줄의 통합 시세)로 채운다 — 네이버 값은 첫 그림에만 깐다.
+ * 따로 도는 주기를 두지 않는다 — 테마 칩 · 「테마」 칩을 누를 때 받는다(서버 캐시가 주기를 정한다).
+ * 카드와 모달이 같은 테마를 본다(themeNo 하나). */
+const THEME_TOP = 20;
+let themes = null;            // [{no, name, pct, count}] — 오늘 등락률 순 상위 THEME_TOP
+let themeNo = null;           // 고른 테마 번호
+const themeRows = {};         // { no: [{code, name, cap(억원)}] } — 시가총액 순
+const themeShort = (n) => String(n || '').replace(/\(.*?\)/g, '').trim();
+const themeOf = (no) => (themes || []).find((t) => t.no === no);
+const themeCap = (code) => {
+  const r = (themeRows[themeNo] || []).find((x) => x.code === code);
+  return r && r.cap != null ? fmtMoneyKr(r.cap) : '—';
+};
+
+async function loadThemes() {
+  try {
+    const r = await apiFetch('/api/naver/groups?kind=theme', { cache: 'no-store' });
+    const j = r && await r.json();
+    if (!j || !j.ok || !Array.isArray(j.data)) return false;
+    themes = j.data.slice(0, THEME_TOP).map((t) => ({ no: t.no, name: t.name, pct: t.pct, count: t.count }));
+    if (!themeOf(themeNo)) themeNo = themes.length ? themes[0].no : null;
+    return true;
+  } catch { return false; }
+}
+
+async function loadThemeRows(no) {
+  if (no == null) return false;
+  try {
+    const r = await apiFetch(`/api/naver/stocks?kind=theme&no=${no}&all=1`, { cache: 'no-store' });
+    const j = r && await r.json();
+    if (!j || !j.ok || !Array.isArray(j.data)) return false;
+    const rows = j.data.slice().sort((a, b) => (b.cap ?? -1) - (a.cap ?? -1));
+    themeRows[no] = rows.map((x) => ({ code: x.code, name: x.name, cap: x.cap }));
+    rows.forEach((x) => {          // 첫 그림용 — 통합 시세가 오면 그 값이 덮는다
+      if (x.price != null && !rowPrices[x.code]) {
+        rowPrices[x.code] = { price: x.price, amt: x.amt, pct: x.pct, volume: x.volume, value: x.value, name: x.name };
+      }
+    });
+    return true;
+  } catch { return false; }
+}
+
+/* 「테마」 를 볼 때 목록 둘을 채운다 — 테마 칩을 누를 때마다 다시 받는다(서버 캐시 30초) */
+async function refreshTheme() {
+  await loadThemes();
+  await loadThemeRows(themeNo);
+}
 let market = 'KOSPI';
 const marketOf = (x) => x.market || 'KOSPI';
 
@@ -1216,6 +1269,11 @@ function afterEmpty() {
 let sortBy = 'cap';
 
 function rowList(sortId = sortBy, mkt = market) {
+  if (mkt === 'THEME') {        // 테마 — 정렬 칩과 무관하게 시가총액 순 그대로
+    return (themeRows[themeNo] || []).map((x, i) => ({
+      code: x.code, name: x.name, sector: '', brand: brandColor(x.code, x.name), rank: i + 1,
+    }));
+  }
   const us = isUsMarket(mkt);
   if (!universe && !us) return WATCHLIST.map((s, i) => ({ ...s, rank: i + 1 }));
 
@@ -1278,6 +1336,23 @@ function rowList(sortId = sortBy, mkt = market) {
     .map(({ s }, i) => ({ ...s, rank: i + 1 }));
 }
 
+/* 정렬 칩 줄 — 「테마」 를 보면 그 자리가 테마 칩(오늘 등락률 순 20 · 한 줄 가로 밀기)으로 바뀐다 */
+function themeChipsHtml() {
+  if (!themes) return '<span class="kh-mut">테마 목록을 받는 중</span>';
+  return themes.map((t) => `<button class="kh-chip${t.no === themeNo ? ' is-active' : ''}" type="button"
+    data-theme="${t.no}" title="${t.name} · ${fmtPct(t.pct)} · ${t.count}종목">${themeShort(t.name)}</button>`).join('');
+}
+
+function paintSortChips() {
+  const host = $('kh-sorts');
+  if (!host) return;
+  const th = market === 'THEME';
+  host.classList.toggle('kh-theme-strip', th);
+  host.innerHTML = th ? themeChipsHtml() : Object.entries(SORTS).map(([id, x]) =>
+    `<button class="kh-chip${id === sortBy ? ' is-active' : ''}" type="button"
+      data-sort="${id}">${x.label}</button>`).join('');
+}
+
 /* 단추를 누르면 줄 세우는 기준이 바뀐다. 서버는 안 부른다 —
    이미 가진 시세로 다시 세우기만 한다. */
 function setupSorts() {
@@ -1292,11 +1367,21 @@ function setupSorts() {
    *
    * 전에는 「♥ N개 담음」 을 뒤에 다시 붙였는데, 그 칸을 2026-09-22 에
    * 뺐다 (아래 paintFavCount 자리 참고). 이제 칩만 들어간다. */
-  host.innerHTML = Object.entries(SORTS).map(([id, x]) =>
-    `<button class="kh-chip${id === sortBy ? ' is-active' : ''}" type="button"
-      data-sort="${id}">${x.label}</button>`).join('');
+  paintSortChips();
 
-  host.addEventListener('click', (e) => {
+  host.addEventListener('click', async (e) => {
+    const t = e.target.closest('[data-theme]');
+    if (t) {                       // 테마 칩 — 그 테마 종목을 시가총액 순으로
+      const no = Number(t.dataset.theme);
+      if (no === themeNo) return;
+      themeNo = no;
+      host.querySelectorAll('[data-theme]').forEach(x => x.classList.toggle('is-active', x === t));
+      await loadThemeRows(no);
+      const box = $('kh-rank-scroll');
+      if (box) box.scrollTop = 0;
+      paintRows(rowPrices);
+      return;
+    }
     const b = e.target.closest('[data-sort]');
     if (!b || b.dataset.sort === sortBy) return;
     sortBy = b.dataset.sort;
@@ -1327,6 +1412,8 @@ function setupMarkets() {
       pickTopRow();                      // 미국 칩은 그 표 1위로 — 시안 그대로(재권님 「응 이모양으로 해줘」)
       return;
     }
+    if (market === 'THEME') await refreshTheme();
+    paintSortChips();
     paintRows(rowPrices);
     paintSortNote();
     scheduleFetch();
@@ -1349,6 +1436,7 @@ async function syncMarketGroup() {
   if (wantUs) await Promise.all(US_MARKETS.map((m) => (usRows[m.id] ? true : loadUsBoard(m.id))));
   const host = $('kh-rank-mkt');
   if (host) host.innerHTML = marketChipsHtml(market);
+  paintSortChips();
   const box = $('kh-rank-scroll');
   if (box) box.scrollTop = 0;
   paintRows(rowPrices);
@@ -1405,6 +1493,14 @@ function freshNote() {
 function paintSortNote() {
   const el = $('kh-sort-note');
   if (!el) return;
+  if (market === 'THEME') {      // 「소캠 · 11종목 중 11 · 시가총액 순 · 네이버」 — 시안 그대로
+    const t = themeOf(themeNo);
+    el.innerHTML = t
+      ? `${themeShort(t.name)} · ${t.count}종목 중 ${(themeRows[themeNo] || []).length} · 시가총액 순 · 네이버`
+      : '테마 목록을 아직 받지 못했습니다';
+    noteAt = Date.now();
+    return;
+  }
   const s = SORTS[sortBy];
 
   /* 「관심」 은 **줄 세우는 기준이 아니라 거르는 것**이라 「순」 이 안 붙는다.
@@ -1493,6 +1589,7 @@ onFavChange(() => {
 
 /* 지금 줄 세운 기준의 값 한 칸 */
 function sortCell(code, live) {
+  if (market === 'THEME') return themeCap(code);
   const s = SORTS[sortBy];
   if (!s || !s.show) return '—';
   return s.show(code, live);
@@ -1501,7 +1598,7 @@ function sortCell(code, live) {
 /* 표 머리글도 기준에 따라 바뀐다 */
 function paintRowHead() {
   const th = $('kh-th-metric');
-  if (th) th.textContent = (SORTS[sortBy] || {}).head || '전일대비';
+  if (th) th.textContent = market === 'THEME' ? '시가총액' : ((SORTS[sortBy] || {}).head || '전일대비');
 }
 
 /* ── 실시간 순위 모달 ─────────────────────────────────────
@@ -1597,22 +1694,23 @@ function rankHeadStats() {
 function paintRankModal() {
   if (!rankModal) return;
   const list = rowList(rankModalSort, rankModalMarket);
+  const th = rankModalMarket === 'THEME';
+  const sid = th ? 'cap' : rankModalSort;
   const rows = list.map((s) => {
     const p = rowPrices && rowPrices[s.code];
-    const cap = capOf(s.code);
     return `<tr>
       <td class="kh-rkm-rk">${s.rank}</td>
       <td class="l"><span class="kh-nm">${iconHtml(s)}<b data-co="${s.code}">${s.name}</b></span></td>
-      <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, rankModalSort)) : '···'}</td>
-      <td class="kh-num ${p ? dirClass(pctOf(p, rankModalSort)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, rankModalSort)) : '—'}</td>
+      <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, sid)) : '···'}</td>
+      <td class="kh-num ${p ? dirClass(pctOf(p, sid)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, sid)) : '—'}</td>
       <td class="kh-num">${p ? showValue(s.code, p) : '···'}</td>
-      <td class="kh-num">${showCap(s.code)}</td>
+      <td class="kh-num">${th ? themeCap(s.code) : showCap(s.code)}</td>
       <td class="kh-num">${p ? fmtShareCount(p.volume) : '···'}</td>
     </tr>`;
   }).join('');
   /* 카드와 같다 — 고른 시장 목록이 아직 안 왔으면 빈 표 대신 그렇다고 적는다 */
   const empty = !list.length && universe
-    ? `<tr><td colspan="7" class="kh-mut">${SORTS[rankModalSort]?.only ? afterEmpty()
+    ? `<tr><td colspan="7" class="kh-mut">${th ? '테마 종목을 아직 받지 못했습니다' : SORTS[rankModalSort]?.only ? afterEmpty()
       : `${marketDef(rankModalMarket).label} 목록을 아직 받지 못했습니다`}</td></tr>` : '';
 
   /* 칸 폭을 못 박는다 (table-layout: fixed).
@@ -1625,6 +1723,7 @@ function paintRankModal() {
      `data-sort` 는 좁은 폭에서 기준 칸 하나만 남기려고 단다(css/home.css · 2026-10-08) */
   rankModal.body.innerHTML = `<div class="kh-rkm" data-sort="${rankModalSort}">
     <div class="kh-chips kh-rkm-mkt" data-rkm-mkt>${marketChipsHtml(rankModalMarket)}</div>
+    ${th ? `<div class="kh-chips kh-theme-strip" data-rkm-theme>${themeChipsHtml()}</div>` : ''}
     <table>
       <colgroup>
         <col class="c-rk"><col class="c-nm"><col class="c-pr"><col class="c-pc">
@@ -1647,8 +1746,18 @@ function paintRankModal() {
     if (isUsMarket(rankModalMarket) && !usRows[rankModalMarket]) {
       loadUsBoard(rankModalMarket).then(() => paintRankModal());
     }
+    if (rankModalMarket === 'THEME') refreshTheme().then(() => paintRankModal());
     paintRankModal();
     scheduleFetch();
+  });
+
+  rankModal.body.querySelector('[data-rkm-theme]')?.addEventListener('click', async (e) => {
+    const t = e.target.closest('[data-theme]');
+    if (!t || Number(t.dataset.theme) === themeNo) return;
+    themeNo = Number(t.dataset.theme);          // 카드와 같은 테마를 본다
+    await loadThemeRows(themeNo);
+    paintSortChips();
+    paintRows(rowPrices);                       // 모달도 함께 다시 그린다
   });
 
   rankModal.head.setBig(rankHeadBig());
@@ -1712,14 +1821,16 @@ function paintRows(priceMap) {
   /* 고른 시장의 목록이 비었다 — 서버가 아직 그 시장을 안 준다. 빈 표로 두면 고장처럼 보인다 */
   if (!list.length && universe) {
     $('kh-rows').innerHTML = `<tr><td colspan="5" class="kh-mut">${SORTS[sortBy]?.only ? afterEmpty()
+      : market === 'THEME' ? '테마 종목을 아직 받지 못했습니다'
       : `${MARKETS.find(m => m.id === market)?.label || market} 목록을 아직 받지 못했습니다`}</td></tr>`;
     paintRowHead();
     paintSortNote();
     return;
   }
+  const sid = market === 'THEME' ? 'cap' : sortBy;     // 테마는 정렬 칩(장외 등)의 값 셈을 안 탄다
   $('kh-rows').innerHTML = list.map(s => {
     const live = priceMap && priceMap[s.code];
-    const cls = live ? dirClass(pctOf(live)) : 'kh-mut';
+    const cls = live ? dirClass(pctOf(live, sid)) : 'kh-mut';
     /* 거래대금 · 시가총액 · 매수매도 비율 · 산업은 2026-09-17 에 뺐다.
        칸이 368px 로 좁아져 아홉 열이 안 들어갔고, 그 넷은 고른 종목 것만
        차트 옆 패널에 보여주기로 했다 (지시). */
@@ -1731,9 +1842,9 @@ function paintRows(priceMap) {
         ${iconHtml(s)}
         <b data-co="${s.code}">${s.name}</b></span></td>
       <td class="kh-num"><span
-        >${live ? fmtPriceOf(s.code, priceOf(live)) : '···'}</span></td>
+        >${live ? fmtPriceOf(s.code, priceOf(live, sid)) : '···'}</span></td>
       <td class="kh-num kh-metric">${sortCell(s.code, live)}</td>
-      <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(pctOf(live)) : '—'}</td>
+      <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(pctOf(live, sid)) : '—'}</td>
     </tr>`;
   }).join('');
 

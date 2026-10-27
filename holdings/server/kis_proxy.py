@@ -7486,11 +7486,12 @@ class Handler(SimpleHTTPRequestHandler):
                 if not no.isdigit():
                     self._send_json({"ok": False, "error": "no 에 묶음 번호가 필요합니다."}, 400)
                     return
-                s = naver.stocks(kind, no)
+                # all=1 — 상위 10 이 아니라 그 묶음 전부(실시간 순위 「테마」 칩 · 2026-10-27)
+                s = naver.stocks(kind, no, (qs.get("all") or [""])[0] == "1")
                 self._send_json({
                     "ok": True, "data": s["rows"],
                     "meta": {"kind": kind, "no": int(no), "name": s["name"],
-                             "count": len(s["rows"]), "source": "네이버"},
+                             "count": len(s["rows"]), "total": s.get("total"), "source": "네이버"},
                 })
                 return
 
