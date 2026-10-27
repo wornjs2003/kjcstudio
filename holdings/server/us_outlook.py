@@ -94,8 +94,12 @@ def _futures():
                          "at": datetime.fromtimestamp(t, KST).isoformat(timespec="minutes")})
         except Exception as e:
             errs[sym] = safe_message(e, 120)
-            rows.append({"sym": sym, "name": name, "v": None, "prev": None, "pct": None, "at": None})
-    if all(r["v"] is None for r in rows):
+            # 그 줄만 못 받았으면 앞에 받은 줄을 그대로 낸다(`stale`) — 묶음 전체를 못 받았을 때와 같은 모양(10-27 qa 덧말)
+            with _lock:
+                old = next((r for r in ((_state["futures"]["data"] or {}).get("rows") or []) if r.get("sym") == sym), None)
+            rows.append(dict(old, stale=True) if old and old.get("v") is not None
+                        else {"sym": sym, "name": name, "v": None, "prev": None, "pct": None, "at": None})
+    if not any(r["v"] is not None and not r.get("stale") for r in rows):
         raise RuntimeError("야후에서 하나도 못 받았습니다 — " + "; ".join("%s %s" % kv for kv in list(errs.items())[:2]))
     return {"rows": rows, "errors": errs, "source": "야후 파이낸스(10분쯤 늦음)"}
 
