@@ -497,3 +497,30 @@
 
 /* 창 머리 바로 아래 줄 — 주요 지수 띠 (2026-10-01 · 전 「1」 탭 자리). 머리와 같은 흰 면에 아래 구분선 */
 .kh-dl-ixrow { flex: 0 0 auto; background: var(--kh-bg-card); box-shadow: 0 1px 0 var(--kh-border); padding: 4px 16px; }
+
+/* ── 모달에서는 한 화면 안에 — 바깥 스크롤 없이 칸마다 안에서 굴린다 (2026-10-27 재권님 「창 밑으로 내려간 것들 창 안에
+   보여지도록 해줘」 · 「응」) ──
+   재권님 창(2560×1359) 실측 12:1x — 몸통 스크롤 902px 에 안 내용 2813px. 「오늘 일정」 · 「오늘 뉴스」(1298px) ·
+   텔레그램 글(2516px)이 몸통을 한참 내려야 보였다. 그래서 몸통은 모달 높이에 맞추고:
+     왼쪽   위 「데일리분석」 칸과 아래 줄(일정 · 뉴스)이 남는 높이를 반씩 · 칸마다 안 스크롤
+     오른쪽 텔레그램 글 칸이 남는 높이 전부 · 안 스크롤
+   두 탭(텔레그램 글 · 미국장 분석)은 같은 높이 칸에 갈아 끼우는 것 그대로다 — 높이를 숫자 대신 남는 높이로 잡았을 뿐.
+   **넓은 폭 모달에서만** — 한 열로 쌓이는 폭(1180px 이하 · 위 @media)과 전용 화면(daily.html)은 그대로 둔다. */
+@media (min-width: 1181px) {
+  .kh-modal-scroll:has(> .kh-dl-wrap) { display: flex; flex-direction: column; }
+  .kh-modal .kh-dl-wrap { flex: 1 1 0; min-height: 0; align-items: stretch; }
+  .kh-modal .kh-dl-main,
+  .kh-modal .kh-dl-msg { display: flex; flex-direction: column; min-height: 0; }
+  .kh-modal .kh-dl-main > * { flex: none; }
+  .kh-modal .kh-dl-main > .kh-dl-video-card { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+  .kh-modal .kh-dl-video-card .kh-dl-tabbody { height: auto; flex: 1 1 0; min-height: 0; }
+  .kh-modal .kh-dl-main > .kh-dl-body { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+  .kh-modal .kh-dl-body > .kh-dl-row { flex: 1 1 0; min-height: 0; align-items: stretch; }
+  .kh-modal .kh-dl-row > .kh-dl-card,
+  .kh-modal .kh-dl-col > .kh-dl-card { min-height: 0; overflow: auto; margin-bottom: 0; }
+  .kh-modal .kh-dl-col { min-height: 0; gap: 16px; }
+  .kh-modal .kh-dl-col > .kh-dl-card { flex: 1 1 0; }
+  .kh-modal .kh-dl-msg > .kh-dl-card { flex: none; }
+  .kh-modal .kh-dl-msg > .kh-dl-tgcard { flex: 1 1 0; min-height: 0; overflow: auto; }
+  .kh-modal .kh-dl-msg > .kh-dl-card:last-child { margin-bottom: 0; }
+}
