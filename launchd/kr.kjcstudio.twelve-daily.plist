@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kr.kjcstudio.twelve-daily</string>
+  <!-- 「12시에 만나요」 그날 회차를 맥미니가 혼자 정리해 Insight 영상 분석에 쌓는다 (2026-10-27 지시 —
+       「맥미니로 옮겨」 · 「맥미니에서 1주일동안 돌게 해주고 그다음에 다되면 나한테 다시 물어보게 해」).
+       `company-setup/tools/twelve-daily.py` 가 자막을 받고 무인 claude -p(도구 없음)로 글만 받아 8765 보드 문서에 저장한다.
+       **돈이 든다** — 2026-10-27 실측 한 번 1.30~1.34달러(정가 기준). 날마다 카드 「매일 정리해 쌓기」 에 비용 한 줄.
+       **1주일 시험** — 도구의 END(2026-11-03) 다음 날부터는 돌지 않고 카드에 「계속할까요」 를 한 번 묻는다.
+       하루 두 번(13:47 · 15:47) — 방송은 11:5x~13:0x · 자막이 늦으면 두 번째에 받는다. 이미 썼으면 두 번째는 아무것도 안 한다(돈 안 듦).
+       설치는 「켜기」(재권님 지시):
+           cp launchd/kr.kjcstudio.twelve-daily.plist ~/Library/LaunchAgents/
+           launchctl load ~/Library/LaunchAgents/kr.kjcstudio.twelve-daily.plist -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>-u</string>
+    <string>company-setup/tools/twelve-daily.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/kjc/work/KJCStudio</string>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>13</integer><key>Minute</key><integer>47</integer></dict>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>47</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>13</integer><key>Minute</key><integer>47</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>47</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>13</integer><key>Minute</key><integer>47</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>47</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>13</integer><key>Minute</key><integer>47</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>47</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>13</integer><key>Minute</key><integer>47</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>47</integer></dict>
+  </array>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/twelve-daily.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/twelve-daily.log</string>
+</dict>
+</plist>
