@@ -154,6 +154,25 @@ def save_futures(proxy, day):
     return len(rows)
 
 
+def latest_futures(proxy):
+    """오늘 06:01 에 저장한 야간선물 — {day, rows: {which: {name, last, pct}}} · 오늘 저장분이 없으면 None.
+
+    데일리분석 07:30 글이 읽는다(daily.night_lines). **저장 시각(saved_at)이 오늘인 것만** 낸다 —
+    06:01 을 놓친 날 지난 값을 오늘 것처럼 보내지 않는다. 표가 없으면(한 번도 안 돈 서버) None.
+    """
+    today = _now().strftime("%Y-%m-%d")
+    with proxy._db_lock, proxy.db_conn() as conn:
+        try:
+            rs = [dict(r) for r in conn.execute(
+                "SELECT day, which, name, last, pct, saved_at FROM nxt_fut WHERE day = (SELECT MAX(day) FROM nxt_fut)")]
+        except Exception:
+            return None
+    rs = [r for r in rs if (r.get("saved_at") or "")[:10] == today]
+    if not rs:
+        return None
+    return {"day": rs[0]["day"], "rows": {r["which"]: {"name": r["name"], "last": r["last"], "pct": r["pct"]} for r in rs}}
+
+
 def _pct(a, b):
     return round((a / b - 1) * 100, 2) if a and b else None
 

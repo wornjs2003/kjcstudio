@@ -8569,6 +8569,8 @@ def main():
             # 처음에 `issues` 로 적었다가 실제로 불러 보고 잡았다 (2026-09-22).
             get_issues=lambda: (news.fetch_issues() or {}).get("rows") or [],
             get_strong=lambda: _daily_strong(load_secrets()),
+            # 야간선물 — 06:01 에 nxt_board 가 저장한 오늘 것을 읽기만 한다(KIS 안 부름 · 2026-10-27)
+            get_night=lambda: nxt_board.latest_futures(sys.modules[__name__]),
             # 발송은 공시와 같은 통로를 쓴다. **`NOTIFY_LOCAL` 과 무관하다** —
             # 그것은 공시만 막는다 (dart.py 주석 참고).
             #
