@@ -303,7 +303,30 @@ def sector_sides(sectors):
 
 # ── 문안 ──
 
-def build_telegram(indices=None, sectors=None, issues=None, schedule=None, now=None, strong=None):
+def night_lines(night):
+    """야간선물 절 — 06:01 에 nxt_board 가 저장한 것(그날 저장분만 · 낡은 값을 오늘 것처럼 안 적는다).
+
+    `night` = {day, rows: {kospi200: {name, last, pct}, kosdaq150: …}} 또는 None.
+    못 받은 날은 절을 빼지 않고 「못 받음」 으로 적는다 — 빼면 폰에서 빠진 줄을 모른다.
+    (2026-10-27 재권님 「야간선물은 아침에 텔레그램에 추가됬나?」 → 「응」)
+    """
+    day = "".join(ch for ch in str((night or {}).get("day") or "") if ch.isdigit())     # nxt_fut 은 20261026 꼴
+    head = "야간선물 (%s.%s 밤 · 06:00 마감)" % (day[4:6], day[6:8]) if len(day) == 8 else "야간선물 (06:00 마감)"
+    rows = (night or {}).get("rows") or {}
+    out = ["", head]
+    for which, label in NIGHT_ROWS:
+        r = rows.get(which) or {}
+        if r.get("last") is None:
+            out.append("· %s 못 받음" % label)
+        else:
+            out.append(("· %s %s %s" % (label, f"{float(r['last']):,.2f}", pct(r.get("pct")))).rstrip())
+    return out
+
+
+NIGHT_ROWS = (("kospi200", "코스피200"), ("kosdaq150", "코스닥150"))
+
+
+def build_telegram(indices=None, sectors=None, issues=None, schedule=None, now=None, strong=None, night=None):
     """폰으로 가는 글을 만든다. `buildTelegram()` 을 그대로 옮긴 것이다."""
     L = [f"📊 데일리분석 · {today_label(now)}"]
 
@@ -339,6 +362,8 @@ def build_telegram(indices=None, sectors=None, issues=None, schedule=None, now=N
     if away:
         L += ["", "해외 (현지 마감)"] + away
 
+    L += night_lines(night)
+
     if issues:
         L += ["", "오늘 뉴스"]
         seen = set()
@@ -373,7 +398,7 @@ def build_telegram(indices=None, sectors=None, issues=None, schedule=None, now=N
 
     # 화면에는 빨간 자국으로 남아 있는 칸들이다. 문안에서 통째로 빼면 폰에서는
     # 무엇이 빠졌는지 알 수 없다. 붙으면 이 줄을 지운다.
-    L += ["", "연결 예정", "· 미국 업종", "· 야간선물 · 다우존스"]
+    L += ["", "연결 예정", "· 미국 업종", "· 다우존스"]
     L += ["", "전문 보기 › thekjcstudio.com/holdings/daily.html"]
     return "\n".join(L)
 
@@ -438,7 +463,7 @@ def purge_old(keep=KEEP):
     return gone
 
 
-def save_today(indices, sectors, issues, schedule=None, now=None, strong=None):
+def save_today(indices, sectors, issues, schedule=None, now=None, strong=None, night=None):
     """그날 것을 저장한다. 이미 있으면 **안 쓰고** `None` 을 돌려준다.
 
     **원본을 그대로 담는다.** 화면이 그리는 것만 추리면 나중에 다른 것을
@@ -463,7 +488,8 @@ def save_today(indices, sectors, issues, schedule=None, now=None, strong=None):
         # **그날 실제로 보낸 글**을 남긴다. 다시 만들 수는 있지만, 그때 코드로
         # 만든 것이라 나중에 코드가 바뀌면 달라진다.
         "strong": strong or [],
-        "telegram": build_telegram(indices, sectors, issues, sch, now, strong),
+        "night": night,
+        "telegram": build_telegram(indices, sectors, issues, sch, now, strong, night),
     }
     # `history=False` — 날짜가 키라 같은 이름을 다시 쓰는 일이 같은 날 두 번뿐이고,
     # 그때는 덮는 것이 맞다. 열 장이 이미 이력이다.
@@ -471,7 +497,7 @@ def save_today(indices, sectors, issues, schedule=None, now=None, strong=None):
     return data if ok else None
 
 
-def start_daily(get_indices, get_sectors, get_issues, send=None, keep=KEEP, get_strong=None):
+def start_daily(get_indices, get_sectors, get_issues, send=None, keep=KEEP, get_strong=None, get_night=None):
     """07:30 루프를 띄운다. `kis_proxy` 가 한 줄로 부른다.
 
     `send(text)` 를 주면 저장한 뒤 그 글을 보낸다. 안 주면 저장만 한다 —
@@ -491,7 +517,14 @@ def start_daily(get_indices, get_sectors, get_issues, send=None, keep=KEEP, get_
                 strong = build_strong(get_strong())
             except Exception as e:
                 print("데일리분석 강한 종목 못 셈 — %s: %s" % (type(e).__name__, safe_message(e)), flush=True)
-        data = save_today(get_indices(), get_sectors(), get_issues(), None, now, strong)
+        # 야간선물은 DB 를 읽기만 한다(06:01 에 nxt_board 가 저장) — 못 읽어도 「못 받음」 으로 적고 나머지는 저장한다
+        night = None
+        if get_night:
+            try:
+                night = get_night()
+            except Exception as e:
+                print("데일리분석 야간선물 못 읽음 — %s: %s" % (type(e).__name__, safe_message(e)), flush=True)
+        data = save_today(get_indices(), get_sectors(), get_issues(), None, now, strong, night)
         if not data:
             return
         purge_old(keep)

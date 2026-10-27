@@ -63,6 +63,7 @@ import naver
 import naver_period
 import toss
 import macro
+import note_alert      # 시황 글 알림 — 자동 시황 글이 새로 써지면 텔레그램 한 통(2026-10-27 · server/note_alert.py)
 import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-25 · server/events.py 머리 주석)
 import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
@@ -3511,7 +3512,7 @@ def fetch_investor(cfg, code, days=INVESTOR_DAYS):
 # 부르지 않는다. 그 밖 시각에는 쌓인 것만 읽는다 — 장중에 「3달」 을 눌러도 KIS 를 안 부른다.
 # 모든 종목을 미리 받지 않는다 — 열어 본 종목만 하루 두 번이다.
 INVESTOR_LONG_DAYS = 60          # 「3달」 이 더하는 거래일 수
-INVESTOR_LONG_OPEN = (15, 40)    # 이 시각부터 받을 수 있다 (위 실측)
+INVESTOR_LONG_OPEN = (15, 41)    # 이 시각부터 받는다 — 15:40:00~05 에도 아직 거절됐다(2026-10-27 8765 · 30종목 OPSQ2001 · 10분 뒤 다시 받기로 채워짐)
 INVESTOR_LONG_RETRY = 600        # 못 받았으면 이만큼 쉬었다 다시 (초)
 _inv_long_fail = {}              # code -> 못 받은 시각
 # 아래 `SCHEMA` 에도 들지만 `db_init` 이 서버가 뜰 때 늘 도는 것은 아니라 쌓을 때 한 번 더 부른다
@@ -7529,11 +7530,12 @@ class Handler(SimpleHTTPRequestHandler):
                 if not no.isdigit():
                     self._send_json({"ok": False, "error": "no 에 묶음 번호가 필요합니다."}, 400)
                     return
-                s = naver.stocks(kind, no)
+                # all=1 — 상위 10 이 아니라 그 묶음 전부(실시간 순위 「테마」 칩 · 2026-10-27)
+                s = naver.stocks(kind, no, (qs.get("all") or [""])[0] == "1")
                 self._send_json({
                     "ok": True, "data": s["rows"],
                     "meta": {"kind": kind, "no": int(no), "name": s["name"],
-                             "count": len(s["rows"]), "source": "네이버"},
+                             "count": len(s["rows"]), "total": s.get("total"), "source": "네이버"},
                 })
                 return
 
@@ -8274,8 +8276,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return
 
             if route in ("us-sectors", "us-sector-stocks"):
-                # 「지금 뜨는 산업」 미국 칸 — 섹터 ETF 열하나 (2026-10-08 지시 · `us_sectors.py` 머리글).
-                # 구성 종목 등락률은 봉 표만 읽는다. ETF 열하나의 일봉만 KIS 를 탄다(봉 캐시가 수를 정한다)
+                # 「지금 뜨는 산업」 미국 칸 — 섹터 ETF 열둘(반도체 XSD 2026-10-27) (2026-10-08 지시 · `us_sectors.py` 머리글).
+                # 구성 종목 등락률은 봉 표만 읽는다. ETF 열둘의 일봉만 KIS 를 탄다(봉 캐시가 수를 정한다)
                 span = (qs.get("span") or ["d"])[0].strip()
                 if span not in us_sectors.SPAN_BACK:
                     self._send_json({"ok": False, "error": "span 은 d · w · m 중 하나여야 합니다."}, 400)
@@ -8635,6 +8637,8 @@ def main():
             # 처음에 `issues` 로 적었다가 실제로 불러 보고 잡았다 (2026-09-22).
             get_issues=lambda: (news.fetch_issues() or {}).get("rows") or [],
             get_strong=lambda: _daily_strong(load_secrets()),
+            # 야간선물 — 06:01 에 nxt_board 가 저장한 오늘 것을 읽기만 한다(KIS 안 부름 · 2026-10-27)
+            get_night=lambda: nxt_board.latest_futures(sys.modules[__name__]),
             # 발송은 공시와 같은 통로를 쓴다. **`NOTIFY_LOCAL` 과 무관하다** —
             # 그것은 공시만 막는다 (dart.py 주석 참고).
             #
@@ -8691,6 +8695,11 @@ def main():
         print("  결과 알림 : 사용 (%d초마다 · 밤 %02d~%02d시 것은 %02d:00 한 통%s)"
               % (events.TICK, dart.QUIET_FROM // 60, dart.QUIET_TO // 60, dart.QUIET_TO // 60,
                  "" if events.SEND else " · **발송 꺼짐 — 미리보기만**"))
+
+    # 시황 글 알림(2026-10-27 · server/note_alert.py) — 같은 문(보내는 서버만) · 켜기 스위치가 따로 없다(재권님 「가」 = 8765 가 보낸다)
+    if not SLOW and is_sender(args.port) and note_alert.start():
+        print("  시황 글 알림 : 사용 (%d초마다 market-note-live.json 의 at · 밤 %02d~%02d시 것은 %02d:00)"
+              % (note_alert.TICK, dart.QUIET_FROM // 60, dart.QUIET_TO // 60, dart.QUIET_TO // 60))
 
     # 넥스트레이드 장 전 거래량 2배 목록(2026-10-26 · server/nxt_pre.py) — 같은 문(보내는 서버만) · **`nxt_pre.SEND = False` 가 기본**
     if not SLOW and is_sender(args.port) and nxt_board.start(sys.modules[__name__]):

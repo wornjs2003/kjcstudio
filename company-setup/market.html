@@ -45,7 +45,7 @@
       <h2 class="mk-sec">분석</h2>
       <div class="mk-card mk-note"><h2>세션이 쓴 시황</h2><div id="note">—</div></div>   <!-- 2026-10-12 재권님 「이 분석 시황분석의 맨위에 넣어줘」 · data/market-note.json · js/market-note.js -->
       <div class="mk-card"><h2>오늘의 시황</h2><p class="one" id="one">—</p></div>
-      <div class="mk-card" id="us-range"><h2>오늘 밤 미국장 예상 범위 — S&amp;P 500<span class="tag">계산</span></h2><div class="cap">방향이 아니라 움직일 크기다 · 하루 흔들림 = 기준 종가 × VIX ÷ √252(1년 거래일) · 68% = 1배 · 95% = 1.96배(정규분포 가정이라 실제로는 95% 밖이 더 자주 난다) · 서버 KIS 값 · 옵션 · 지수 선물 · 지표 예상치는 서버에 오면 더한다</div><div class="nv-tb one-col" data-range>—</div></div>   <!-- 2026-10-26 재권님 「가능한 부분만 통계적으로」 → 「응 해봐」 · js/us-range.js -->
+      <div class="mk-card" id="us-range"><h2>오늘 밤 미국장 예상 범위 — S&amp;P 500<span class="tag">계산</span></h2><div class="cap">방향이 아니라 움직일 크기다 · 하루 흔들림 = 기준 종가 × VIX ÷ √252(1년 거래일) · 68% = 1배 · 95% = 1.96배(정규분포 가정이라 실제로는 95% 밖이 더 자주 난다) · 옵션 · 선물 · 지표는 서버가 받아 준 값이다</div><div class="nv-tb one-col" data-range>—</div></div>   <!-- 2026-10-26 재권님 「가능한 부분만 통계적으로」 → 「응 해봐」 · js/us-range.js -->
       <div class="mk-card" id="text"><h2>왜 그렇게 보나</h2><div class="cap">문단은 이 화면이 값으로 만든다 · 「근거」 를 누르면 쓴 값 · 시각 · 출처와 읽는 법이 나온다</div></div>
       <div class="mk-grid">
         <div class="mk-card"><h2>투자 시계 — 지금 국면(어림)</h2><div class="cap">메릴린치 투자 시계(2004) · 성장 = OECD 경기선행지수 석 달 방향 · 물가 = 월 물가 석 달 방향 · 칸 이름 옆은 그 국면에 과거 강했던 자산</div><div class="ck" id="clock"></div></div>
@@ -100,6 +100,6 @@
 <script type="module" src="js/market-note.js"></script>   <!-- 세션이 쓴 시황 — market.js 와 따로 -->
 <script type="module" src="js/market-ext.js"></script>   <!-- 대외변수 층 — market.js 와 따로 -->
 <script type="module" src="js/market-cal.js"></script>   <!-- 다가오는 일정 · 확률 표의 다음 발표 날짜 — market.js 와 따로 -->
-<script src="js/us-range.js"></script>
+<script type="module" src="js/us-range.js"></script>
 </body>
 </html>

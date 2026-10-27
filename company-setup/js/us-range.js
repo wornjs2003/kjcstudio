@@ -2,26 +2,101 @@
 // 방향은 예측하지 않는다 — 하루 방향은 통계로 잘 안 맞고(뉴욕 연준 「개장 반전」 2021), 맞출 수 있는 것은 움직일 크기다.
 //   하루 1표준편차 = 기준 종가 × VIX/100 ÷ √252   (VIX = 앞으로 30일 연율 흔들림 · 252 = 1년 거래일)
 //   68% 범위 = 1배 · 95% 범위 = 1.96배 (정규분포 가정 — 실제 수익은 꼬리가 두꺼워 95% 밖이 더 자주 난다)
-// 값은 서버 /api/kis/indices 의 S&P 500 · VIX(KIS) 하나 — 홀딩스 지수 띠와 같은 값. 못 받으면 「—」(0 으로 메우지 않는다).
-// 옵션이 매긴 오늘 범위(스트래들) · 지수 선물 · 지표 예상치는 서버에 오면 이 칸에 더한다 — 지금은 없다(temp/시황분석1-미장예측.html)
+// 값은 서버 둘 — /api/kis/indices 의 S&P 500 · VIX(KIS · 홀딩스 지수 띠와 같은 값) · /api/market/us-outlook(선물 · 옵션 · 지표 · FOMC · VIX 1년).
+// 2단계(2026-10-27 재권님 시안 → 「응 해줘」) — 옵션이 매긴 오늘 흔들림 · VIX 1년 위치 · 선물 기울기 · FOMC · 오늘 밤 지표.
+// 못 받은 값은 「—」 이거나 그 줄을 뺀다(0 으로 메우지 않는다).
+import { signClass, NUM } from '/assets/js/sign.js';
+
+// 지표 이름 — 서버(나스닥 일정)가 영어로 준다. 여기 이름이 없는 지표는 화면에 안 낸다(화면 글은 한국어 · 2026-10-08 룰).
+// 이 표를 쓰는 화면이 하나뿐이라 여기 둔다 — 둘째 화면이 생기면 서버 쪽 한 곳으로 옮긴다(「같은 값은 한 곳에만 둔다」).
+const KO = {
+  'CPI': '소비자물가(CPI)', 'Core CPI': '근원 소비자물가', 'CPI (MoM)': '소비자물가(전월비)', 'CPI (YoY)': '소비자물가(전년비)',
+  'Core CPI (MoM)': '근원 소비자물가(전월비)', 'Core CPI (YoY)': '근원 소비자물가(전년비)',
+  'PPI': '생산자물가(PPI)', 'Core PPI': '근원 생산자물가', 'PPI (MoM)': '생산자물가(전월비)', 'Core PPI (MoM)': '근원 생산자물가(전월비)',
+  'Core PCE Price Index': '근원 PCE 물가', 'Core PCE Price Index (MoM)': '근원 PCE 물가(전월비)', 'Core PCE Price Index (YoY)': '근원 PCE 물가(전년비)',
+  'PCE Price Index': 'PCE 물가', 'GDP': '국내총생산(GDP)', 'GDP (QoQ)': '국내총생산(전기비)',
+  'Nonfarm Payrolls': '비농업 고용', 'Unemployment Rate': '실업률', 'Average Hourly Earnings (MoM)': '시간당 임금(전월비)',
+  'Initial Jobless Claims': '신규 실업수당 청구', 'Continuing Jobless Claims': '계속 실업수당 청구',
+  'ADP Nonfarm Employment Change': 'ADP 민간 고용', 'JOLTs Job Openings': '구인 건수(JOLTS)',
+  'ISM Manufacturing PMI': 'ISM 제조업', 'ISM Non-Manufacturing PMI': 'ISM 서비스업', 'ISM Services PMI': 'ISM 서비스업',
+  'S&P Global Manufacturing PMI': 'S&P 제조업 PMI', 'S&P Global Services PMI': 'S&P 서비스업 PMI',
+  'Retail Sales (MoM)': '소매판매(전월비)', 'Core Retail Sales (MoM)': '근원 소매판매(전월비)',
+  'Durable Goods Orders': '내구재 주문', 'Core Durable Goods Orders': '근원 내구재 주문',
+  'Industrial Production (MoM)': '산업생산(전월비)', 'Housing Starts': '주택 착공', 'New Home Sales': '신규 주택 판매',
+  'Existing Home Sales': '기존 주택 판매', 'Pending Home Sales (MoM)': '주택 매매 계약(전월비)', 'House Price Index': '주택가격지수',
+  'CB Consumer Confidence': '소비자 신뢰지수(CB)', 'Michigan Consumer Sentiment': '미시간 소비자 심리',
+  'Philadelphia Fed Manufacturing Index': '필라델피아 제조업 지수', 'NY Empire State Manufacturing Index': '뉴욕 제조업 지수',
+  'Richmond Manufacturing Index': '리치먼드 제조업 지수', 'Goods Trade Balance': '상품 무역수지', 'Trade Balance': '무역수지',
+  'Crude Oil Inventories': '원유 재고', 'Fed Interest Rate Decision': '미국 기준금리 결정',
+};
+
 (async () => {
   const box = document.getElementById('us-range');
   if (!box) return;
   const out = box.querySelector('[data-range]');
-  const n = (x, d = 2) => Number(x).toLocaleString('ko-KR', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const n = (x, d = 2) => (x == null || !isFinite(x) ? '—' : Number(x).toLocaleString('ko-KR', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const pct = x => { const c = signClass(x, NUM), t = x == null || !isFinite(x) ? '—' : `${x > 0 ? '+' : ''}${n(x)}%`; return c ? `<span class="${c}">${t}</span>` : t; };
   const day = s => (s && /^\d{8}$/.test(s) ? `${s.slice(4, 6)}-${s.slice(6)}` : '—');
-  let rows = [];
-  try { rows = ((await (await fetch('/api/kis/indices', { cache: 'no-store' })).json()).data) || []; } catch (e) { rows = []; }
+  const get = async u => { try { return await (await fetch(u, { cache: 'no-store' })).json(); } catch (e) { return null; } };
+  const [ix, uo] = await Promise.all([get('/api/kis/indices'), get('/api/market/us-outlook')]);
+  const rows = (ix && ix.data) || [];
   const spx = rows.find(x => x.code === 'SPX'), vix = rows.find(x => x.code === 'VIX');
-  if (!spx || !vix || !(spx.value > 0) || !(vix.value > 0)) { out.innerHTML = '<div class="r"><span>S&amp;P 500 · VIX 를 서버에서 못 받음</span><b>—</b></div>'; return; }
-  const sd = vix.value / 100 / Math.sqrt(252);            // 하루 1표준편차(비율)
-  const pt = spx.value * sd;
-  const band = k => `${n(spx.value - k * pt)} ~ ${n(spx.value + k * pt)}`;
-  out.innerHTML = [
-    ['기준 종가', `<b>${n(spx.value)}</b> (${day(spx.asOf)})`],
-    ['VIX', `<b>${n(vix.value)}</b>`],   // 날짜는 안 붙인다 — KIS 가 asOf 를 오늘 날짜로 주지만 값은 마지막 미국 종가다(10-26 실측 · Cboe 10-23 종가 19.45 와 같음)
-    ['하루 흔들림(1표준편차)', `<b>±${n(sd * 100)}%</b> · ±${n(pt, 1)}`],
-    ['68% 범위', `<b>${band(1)}</b>`],
-    ['95% 범위', `<b>${band(1.96)}</b>`],
-  ].map(([k, v]) => `<div class="r"><span>${k}</span><span>${v}</span></div>`).join('');
+  const blk = k => (uo && uo[k] && uo[k].data) || null;
+  // 서버는 못 받으면 앞 값을 그대로 주고 표시를 붙인다 — 묶음째면 그 묶음 error · 선물 한 줄이면 그 줄 stale(서버 us_outlook.py).
+  // 그 표시를 버리면 앞 값이 지금 값처럼 보인다 — 줄마다 「못 받음 · HH:MM 값」 · 「앞 값」 을 붙인다(10-27 개념정의 검수).
+  const hm = k => (uo && uo[k] && uo[k].fetchedAt ? uo[k].fetchedAt.slice(11, 16) : '—');
+  const miss = k => (uo && uo[k] && uo[k].error ? ` <span class="old">못 받음 · ${hm(k)} 값</span>` : '');
+  const F = (blk('futures') || {}).rows || [], fr = s => F.find(r => r.sym === s) || {};
+  const fut = s => pct(fr(s).pct) + (fr(s).stale ? ' <span class="old">앞 값</span>' : '');
+  const O = blk('options'), V = blk('vix'), M = blk('fomc'), E = (blk('econ') || {}).rows || [];
+  const r = (k, v) => `<div class="r"><span>${k}</span><span>${v}</span></div>`;
+  const g = t => `<div class="g">${t}</div>`;
+  const html = [g('통계로 잰 크기')];
+  if (spx && vix && spx.value > 0 && vix.value > 0) {
+    const sd = vix.value / 100 / Math.sqrt(252), pt = spx.value * sd;
+    const band = k => `${n(spx.value - k * pt)} ~ ${n(spx.value + k * pt)}`;
+    html.push(
+      r('기준 종가', `<b>${n(spx.value)}</b> (${day(spx.asOf)})`),
+      r('VIX', `<b>${n(vix.value)}</b>`),   // 날짜는 안 붙인다 — KIS 가 asOf 를 오늘 날짜로 주지만 값은 마지막 미국 종가다(10-26 실측 · Cboe 10-23 종가 19.45 와 같음)
+      V ? r('VIX 지난 1년 중 위치', `<b>${n(V.pctile1y, 0)}%</b> · 1년 ${n(V.min1y)} ~ ${n(V.max1y)}${miss('vix')}`) : '',
+      r('하루 흔들림(VIX 셈)', `<b>±${n(sd * 100)}%</b> · ±${n(pt, 1)}`),
+      O ? r('하루 흔들림(옵션 시장)', `<b>±${n(O.expectedMovePct)}%</b> · ±${n(O.expectedMove, 1)} · 만기 ${O.expiry ? O.expiry.slice(5) : '—'}${miss('options')}`) : '',
+      r('68% 범위', `<b>${band(1)}</b>`),
+      r('95% 범위', `<b>${band(1.96)}</b>`),
+    );
+  } else html.push(r('S&amp;P 500 · VIX 를 서버에서 못 받음', '<b>—</b>'));
+
+  // 지금 기울기 — 선물 · FOMC(회의가 사흘 안일 때만)
+  const lean = [];
+  if (F.length) lean.push(r('S&amp;P · 나스닥 선물', `<b>${fut('ES=F')}</b> · <b>${fut('NQ=F')}</b>${miss('futures')}`));
+  if (M && M.meeting) {
+    const left = (new Date(M.meeting + 'T00:00:00-05:00') - Date.now()) / 864e5;
+    if (left > -1 && left <= 3 && M.cut25Prob != null && M.hike25Prob != null) {   // 확률이 없으면 줄을 뺀다 — 0 으로 메우면 「동결 100%」 로 둔갑한다
+      const hold = 100 - M.cut25Prob - M.hike25Prob;
+      lean.push(r(`FOMC ${M.meeting.slice(5)} (금리 결정)`, `인하 <b>${n(M.cut25Prob, 0)}%</b> · 동결 <b>${n(hold, 0)}%</b> · 인상 <b>${n(M.hike25Prob, 0)}%</b>${miss('fomc')}`));
+    }
+  }
+  if (lean.length) html.push(g('지금 기울기 — 방향 예측이 아님'), ...lean);
+
+  // 오늘 밤 지표 — 서버는 미국 동부 날짜 · 시각을 준다. 한국 시각으로 바꿔 지금부터 20시간 안의 것만 · 예상치 있는 것만.
+  const etToMs = (d, t) => {   // 미국 동부 벽시계 → 실제 시각. 서머타임(4시간) · 아닐 때(5시간) 중 그 시각이 맞는 쪽
+    const [y, mo, dd] = d.split('-').map(Number), [h, mi] = t.split(':').map(Number);
+    for (const off of [4, 5]) {
+      const ms = Date.UTC(y, mo - 1, dd, h + off, mi);
+      const hh = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hourCycle: 'h23' }).format(ms));
+      if (hh === h) return ms;
+    }
+    return NaN;
+  };
+  const kst = ms => new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms);
+  const now = Date.now(), seen = new Set();
+  const ev = E.map(e => ({ ...e, ms: e.date && e.time ? etToMs(e.date, e.time) : NaN }))
+    .filter(e => KO[e.name] && e.consensus && e.ms >= now - 36e5 && e.ms < now + 20 * 36e5)
+    .filter(e => { const k = e.name + e.ms; if (seen.has(k)) return false; seen.add(k); return true; })   // 같은 지표가 단위만 달리 두 줄 오면 앞 것
+    .sort((a, b) => a.ms - b.ms);
+  if (ev.length) html.push(g(`오늘 밤 지표 — 한국 시각 · 예상 / 지난${miss('econ')}`),
+    ...ev.map(e => r(`${kst(e.ms)} ${KO[e.name]}`, `${e.actual ? `결과 <b>${e.actual}</b> · ` : ''}<b>${e.consensus}</b> / ${e.previous || '—'}`)));
+
+  html.push(`<div class="src">S&amp;P 500 · VIX — KIS · 선물 야후(10분 늦음) · 옵션 Cboe(15분 늦음) · 지표 나스닥 · FOMC 연방기금 선물${uo ? ` · 받은 시각 선물 ${hm('futures')} · 옵션 ${hm('options')} · 지표 ${hm('econ')}` : ' · 서버 값 못 받음'}</div>`);
+  out.innerHTML = html.join('');
 })();
