@@ -3511,7 +3511,7 @@ def fetch_investor(cfg, code, days=INVESTOR_DAYS):
 # 부르지 않는다. 그 밖 시각에는 쌓인 것만 읽는다 — 장중에 「3달」 을 눌러도 KIS 를 안 부른다.
 # 모든 종목을 미리 받지 않는다 — 열어 본 종목만 하루 두 번이다.
 INVESTOR_LONG_DAYS = 60          # 「3달」 이 더하는 거래일 수
-INVESTOR_LONG_OPEN = (15, 40)    # 이 시각부터 받을 수 있다 (위 실측)
+INVESTOR_LONG_OPEN = (15, 41)    # 이 시각부터 받는다 — 15:40:00~05 에도 아직 거절됐다(2026-10-27 8765 · 30종목 OPSQ2001 · 10분 뒤 다시 받기로 채워짐)
 INVESTOR_LONG_RETRY = 600        # 못 받았으면 이만큼 쉬었다 다시 (초)
 _inv_long_fail = {}              # code -> 못 받은 시각
 # 아래 `SCHEMA` 에도 들지만 `db_init` 이 서버가 뜰 때 늘 도는 것은 아니라 쌓을 때 한 번 더 부른다
