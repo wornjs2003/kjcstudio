@@ -1556,6 +1556,7 @@ RELAY_TTL_NAMES = {
     "domestic-stock/inquire-investor-daily-by-market": "INVESTOR_FLOW_TTL",
     "domestic-stock/inquire-investor": "INVESTOR_TTL",
     "domestic-stock/investor-trend-estimate": "INVESTOR_EST_TTL",
+    "domestic-stock/inquire-member": "INVESTOR_MEMBER_TTL",
     "domestic-stock/foreign-institution-total": "INVESTOR_TOP_TTL",
     "domestic-stock/inquire-ccnl": "TICKS_TTL",
     "domestic-stock/inquire-asking-price-exp-ccn": "ASKING_TTL",
@@ -3475,6 +3476,21 @@ INVESTOR_DAILY_SQL = """CREATE TABLE IF NOT EXISTS investor_daily (
 _inv_long_lock = threading.Lock()
 
 
+# 기관 세부 · 외국인 등록/미등록 (2026-10-27 재권님 「응 해줘」 · 투자자 세분화) — FHPTJ04160001 에만 온다.
+# 칸 이름이 갈래마다 다르다 — 사모 · 기타기관 · 기타법인은 `_ntby_vol` 이고 나머지는 `_ntby_qty`(2026-10-26 실측).
+# 그래서 둘 다 본다. 없는 칸은 None — 0 으로 바꾸지 않는다
+INV_INST_DETAIL = (("scrt", "증권"), ("ivtr", "투신"), ("pe_fund", "사모"), ("bank", "은행"),
+                   ("insu", "보험"), ("mrbn", "종금"), ("fund", "기금"), ("etc_orgt", "기타기관"))
+INV_DETAIL_KEYS = ("instDetail", "foreignReg", "foreignNreg", "etcCorp")   # 줄에 붙는 열쇠 — 없는 날은 None
+
+
+def _inv_net(r, prefix):
+    qty = r.get(prefix + "_ntby_qty")
+    if qty is None:
+        qty = r.get(prefix + "_ntby_vol")
+    return {"net": _num(qty, int), "netAmt": _num(r.get(prefix + "_ntby_tr_pbmn"), int)}
+
+
 def _inv_long_row(r):
     def side(prefix):
         return {
@@ -3492,6 +3508,10 @@ def _inv_long_row(r):
         "person": side("prsn"),
         "foreign": side("frgn"),
         "inst": side("orgn"),
+        "instDetail": {k: _inv_net(r, k) for k, _n in INV_INST_DETAIL},
+        "foreignReg": _inv_net(r, "frgn_reg"),
+        "foreignNreg": _inv_net(r, "frgn_nreg"),
+        "etcCorp": _inv_net(r, "etc_corp"),
     }
 
 
@@ -3514,7 +3534,7 @@ def _inv_long_fetch(cfg, code):
     import datetime
     now = datetime.datetime.now(KST)
     today = now.strftime("%Y%m%d")
-    key = "inv60:" + code
+    key = "inv60d:" + code      # 세부 칸이 붙은 판(10-27) — 옛 열쇠 `inv60:` 로 쌓인 날도 한 번 다시 받는다
     if (now.hour, now.minute) < INVESTOR_LONG_OPEN or not marketdb.writable():
         return False
     if _meta_get(key) == today:
@@ -3574,6 +3594,88 @@ def _inv_long_read(code, upto, limit):
     except sqlite3.Error:
         return []
     return [json.loads(r["row"]) for r in rs]
+
+
+def _inv_attach_detail(code, rows):
+    """30거래일 줄(FHKST01010900 · 세부 없음)에 쌓인 같은 날 세부를 붙인다 — 받은 줄은 안 건드리고 새 줄로.
+
+    세부는 마감 뒤 확정치라 장중 오늘 줄 · 아직 안 쌓인 날은 None 이다(0 으로 채우지 않는다)."""
+    dates = [r["date"] for r in rows if r.get("date")]
+    got = {}
+    if dates:
+        try:
+            with _db_lock, db_conn() as conn:
+                rs = conn.execute(
+                    "SELECT date, row FROM investor_daily WHERE code = ? AND date BETWEEN ? AND ?",
+                    (code, min(dates), max(dates))).fetchall()
+        except sqlite3.Error:
+            rs = []
+        for x in rs:
+            d = json.loads(x["row"])
+            if d.get("instDetail") is not None:
+                got[x["date"]] = d
+    out = []
+    for r in rows:
+        d = got.get(r.get("date"))
+        nr = dict(r)
+        for k in INV_DETAIL_KEYS:
+            nr[k] = d.get(k) if d else None
+        out.append(nr)
+    return out
+
+
+# ── 증권사 매매 상위 5 (2026-10-27 재권님 「응 해줘」 · 투자자 세분화 ②) ──────────
+# FHKST01010600(inquire-member) — 오늘 장중 누적. 매도 · 매수 상위 다섯 회원사와 외국계 합.
+# 장중에도 온다(10-27 11:3x 실측 · 8765 넘기기). KRX 회원사라 시장은 `J`.
+INVESTOR_MEMBER_TTL = 60
+_investor_member_cache = {}
+
+
+def fetch_investor_member(cfg, code):
+    cached = _ttl_get(_investor_member_cache, code, INVESTOR_MEMBER_TTL)
+    if cached is not None:
+        return cached
+    data = kis_get(
+        cfg,
+        "/uapi/domestic-stock/v1/quotations/inquire-member",
+        {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code},
+        "FHKST01010600",
+    )
+    if not isinstance(data, dict) or str(data.get("rt_cd")) != "0":
+        return None
+    o = data.get("output")
+    o = (o[0] if o else {}) if isinstance(o, list) else (o or {})
+
+    def side(pfx):
+        out = []
+        for i in range(1, 6):
+            name = (o.get("%s_mbcr_name%d" % (pfx, i)) or "").strip()
+            if not name:
+                continue
+            out.append({
+                "no": o.get("%s_mbcr_no%d" % (pfx, i)),
+                "name": name,
+                "qty": _num(o.get("total_%s_qty%d" % (pfx, i)), int),
+                "pct": _num(o.get("%s_mbcr_rlim%d" % (pfx, i))),
+                "chg": _num(o.get("%s_qty_icdc%d" % (pfx, i)), int),     # 직전 조회 대비 늘어난 수량 — KIS 가 주는 그대로
+                "foreign": o.get("%s_mbcr_glob_yn_%d" % (pfx, i)) == "Y",
+            })
+        return out
+
+    out = {
+        "sell": side("seln"),
+        "buy": side("shnu"),
+        "foreignFirms": {
+            "sell": _num(o.get("glob_total_seln_qty"), int),
+            "buy": _num(o.get("glob_total_shnu_qty"), int),
+            "net": _num(o.get("glob_ntby_qty"), int),
+            "sellPct": _num(o.get("glob_seln_rlim")),
+            "buyPct": _num(o.get("glob_shnu_rlim")),
+        },
+        "volume": _num(o.get("acml_vol"), int),
+    }
+    _investor_member_cache[code] = (time.time(), out)
+    return out
 
 
 def holding_flow(cfg, code):
@@ -7916,6 +8018,12 @@ class Handler(SimpleHTTPRequestHandler):
                     data = fetch_investor_long(cfg, code, min(span, INVESTOR_LONG_DAYS))
                 else:
                     data = fetch_investor(cfg, code)
+                    try:                         # 세부는 쌓인 줄에서 온다 — 15:40 뒤 처음 열 때 한 번 쌓는다(3달과 같은 받기)
+                        _inv_long_fetch(cfg, code)
+                    except Exception as e:
+                        _inv_long_fail[code] = time.time()
+                        print("[투자자 3달] %s 받다 멈춤 — %s" % (code, safe_message(e, 120)))
+                data = _inv_attach_detail(code, data or [])
                 self._send_json({
                     "ok": bool(data), "data": data,
                     "meta": {
@@ -7927,8 +8035,27 @@ class Handler(SimpleHTTPRequestHandler):
                         # 종목별은 확정치다 (docs/kis-sector-investor.md).
                         # 상위 목록(investor-top)만 가집계라 거기만 그렇게 적는다.
                         "provisional": False,
+                        # 줄마다 instDetail(기관 세부) · foreignReg/foreignNreg(외국인 등록/미등록) · etcCorp(기타법인)
+                        # — 마감(15:40) 뒤 확정치라 장중 오늘 · 아직 안 쌓인 날은 null (2026-10-27)
+                        "instDetail": [[k, n] for k, n in INV_INST_DETAIL],
+                        "detailOpen": "%02d:%02d" % INVESTOR_LONG_OPEN,
                     },
                 })
+                return
+
+            # 증권사 매매 상위 5 (2026-10-27 · `fetch_investor_member`)
+            if route == "investor-member":
+                code = (qs.get("code") or [""])[0].strip()
+                if not (code.isdigit() and len(code) == 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                mb = fetch_investor_member(cfg, code)
+                if not mb:
+                    self._send_json({"ok": False, "error": "증권사 매매 상위를 못 받았습니다."}, 503)
+                    return
+                self._send_json({"ok": True, "data": mb,
+                                 "meta": {"code": code, "qtyUnit": "주", "pctUnit": "%",
+                                          "span": "오늘 장중 누적(KRX 회원사)", "cacheTtl": INVESTOR_MEMBER_TTL}})
                 return
 
             # 차트 보조지표 「누적 순매수」 칸 (2026-10-26 · `holding_flow`)
@@ -8167,7 +8294,7 @@ def apply_slow():
     global PRICE_CACHE_TTL, INDEX_TTL, INDEX_MINUTE_TTL, OVERSEAS_TTL
     global MULTI_CACHE_TTL, SECTOR_TTL, MOVERS_TTL, FUTURES_TTL
     global INVESTOR_TOP_TTL, INVESTOR_FLOW_TTL, INVESTOR_TTL, ASKING_TTL
-    global INVESTOR_EST_TTL
+    global INVESTOR_EST_TTL, INVESTOR_MEMBER_TTL
 
     SLOW = True
     PRICE_CACHE_TTL = SLOW_TTL          # 25 → 300
@@ -8180,6 +8307,7 @@ def apply_slow():
     INVESTOR_FLOW_TTL = max(INVESTOR_FLOW_TTL, SLOW_TTL)   # 이미 600 이라 그대로
     INVESTOR_TTL = SLOW_TTL             # 60 → 300
     INVESTOR_EST_TTL = SLOW_TTL         # 60 → 300
+    INVESTOR_MEMBER_TTL = SLOW_TTL      # 60 → 300
     ASKING_TTL = SLOW_SHORT_TTL         #  3 → 60. 호가는 원래 아주 짧다
     FUTURES_TTL = SLOW_SHORT_TTL        #   5 → 60. 화면이 1초마다 물어보는 자리다
     MULTI_CACHE_TTL = SLOW_SHORT_TTL    #  2 → 60. 순위표가 한 번에 훑는 자리다
