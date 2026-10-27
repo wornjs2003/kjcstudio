@@ -534,8 +534,9 @@ def _et_date_of_kst(ts12):
 def _quote_row(conn, code, info):
     """한 종목의 시세 한 줄 — 순위 표와 시세(`us_quote`)가 함께 쓴다. **DB 만 읽는다.**
 
-    값은 마지막 5분봉 종가다 — 장외(프리 · 애프터)까지 같다(2026-10-27). 등락은 **그 봉의 날 앞 거래일 정규장 종가**
-    대비다 — 국내 넥스트레이드 애프터가 전일 종가 대비인 것과 같은 셈이다. `session` 이 그 봉이 어느 장인지 알리고,
+    값은 마지막 5분봉 종가다 — 장외(프리 · 애프터)까지 같다(2026-10-27). 등락은 프리 · 정규장이면 **앞 거래일 정규장
+    종가**, 애프터면 **그날 정규장 종가** 대비다(재권님 「애프터는 종가 기준으로 등락률」 · 10-27) — 그날 정규장 종가가
+    아직 없으면 앞 거래일 종가로 떨어진다. `prev` 가 그 기준 값이다. `session` 이 그 봉이 어느 장인지 알리고,
     `regularPrice` 는 정규장 값(애프터면 그날 정규장 종가 · 프리면 앞날 종가 · 정규장이면 값 그대로)이다.
     거래량 · 거래대금 · 시가 · 고가 · 저가는 정규장 것만 센다 — 프리 중에는 앞 세션 것이다."""
     row = {"code": code, "name": (info.get(code) or {}).get("name_ko") or code,
@@ -584,17 +585,20 @@ def _quote_row(conn, code, info):
     price = (dbar["close"] if dbar else last["close"]) if ses == "regular" else last["close"]
     row.update(price=price, asof=last["ts"], session=ses,
                regularPrice=price if ses == "regular" else reg_close)
-    row["volume"] = (dbar["volume"] if dbar and dbar["volume"] else sum(b["volume"] or 0 for b in reg))
-    row["value"] = round(sum((b["close"] or 0) * (b["volume"] or 0) for b in reg))
+    # 정규장 봉이 하나도 없으면 0 이 아니라 None — 못 쟀다(개념정의 덧말 · 10-27)
+    row["volume"] = (dbar["volume"] if dbar and dbar["volume"] else
+                     (sum(b["volume"] or 0 for b in reg) if reg else None))
+    row["value"] = round(sum((b["close"] or 0) * (b["volume"] or 0) for b in reg)) if reg else None
     if reg:
         row.update(open=reg[0]["open"], high=max(b["high"] for b in reg if b["high"] is not None),
                    low=min(b["low"] for b in reg if b["low"] is not None))
     elif dbar:
         row.update(open=dbar["open"], high=dbar["high"], low=dbar["low"])
-    if prev and prev["close"]:
-        row["prev"] = prev["close"]
-        row["amt"] = round(price - prev["close"], 4)
-        row["pct"] = round(row["amt"] / prev["close"] * 100, 2)
+    base = reg_close if ses == "after" and reg_close else (prev["close"] if prev else None)
+    if base:
+        row["prev"] = base
+        row["amt"] = round(price - base, 4)
+        row["pct"] = round(row["amt"] / base * 100, 2)
     return row
 
 
@@ -629,7 +633,7 @@ def us_quote(code):
     chg, pct = row["amt"], row["pct"]
     nm = info.get(code) or {}
     row.update(name=nm.get("name_ko") or nm.get("name_en") or code, change=chg, changePct=pct,
-               sign="2" if (chg or 0) > 0 else ("5" if (chg or 0) < 0 else "3"),
+               sign=None if chg is None else ("2" if chg > 0 else ("5" if chg < 0 else "3")),
                per=extra.get("per"), pbr=extra.get("pbr"), eps=extra.get("eps"), bps=extra.get("bps"),
                high52=hl["h"] if hl else None, low52=hl["l"] if hl else None, source="DB")
     return row

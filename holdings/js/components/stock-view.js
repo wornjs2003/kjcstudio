@@ -187,7 +187,9 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
       sub.className = 'kh-price-sub kh-num ' + cls;
       /* 미국 장외 봉 값이면 앞에 「프리마켓 · 」 · 「애프터 · 」 — 등락은 그때도 앞 거래일 정규장 종가 대비다(서버 us_quote) */
       const ses = us ? usSessionLabel(live) : '';
-      sub.textContent = (ses ? ses + ' · ' : '') + '어제보다 ' + (us ? fmtDelta(live.amt, live.pct, '달러', 2) : fmtDelta(live.amt, live.pct));
+      // 애프터 등락은 그날 정규장 종가 대비다(서버 us_universe._quote_row · 10-27)
+      const base = us && live.session === 'after' && live.regularPrice != null ? '종가보다 ' : '어제보다 ';
+      sub.textContent = (ses ? ses + ' · ' : '') + base + (us ? fmtDelta(live.amt, live.pct, '달러', 2) : fmtDelta(live.amt, live.pct));
     }
 
     setHtml('#kh-r1',  rangeBar(live.low, live.high, live.price));
