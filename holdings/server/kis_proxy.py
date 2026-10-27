@@ -69,6 +69,7 @@ import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20
 import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
 import intraday_alerts  # 장중 알림 — 상승 VI · +20% 급등(2026-10-26 · server/intraday_alerts.py 머리 주석)
 import market_index
+import us_outlook  # 미국장 예측용 값 — 지수 선물 · SPX 옵션 · 지표 예상치 · FOMC 기대 · VIX 이력(2026-10-27 · server/us_outlook.py 머리 주석)
 import crypto            # 가상자산 — 업비트 공개 시세(2026-10-14 · server/crypto.py 머리 주석)
 import news
 import news_store
@@ -7279,8 +7280,8 @@ class Handler(SimpleHTTPRequestHandler):
         재시작 전에 볼 수 있게. 토스처럼 토큰을 끊는 일이 없어 이 폴백은 해가 없다. 응답 `servedBy` 가 어디서 받았나다."""
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/market/"):].strip("/")
-        if route not in ("indicators", "indicator", "materials", "crypto"):
-            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= · /api/market/materials · /api/market/crypto 넷입니다."}, 404)
+        if route not in ("indicators", "indicator", "materials", "crypto", "us-outlook"):
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= · /api/market/materials · /api/market/crypto · /api/market/us-outlook 다섯입니다."}, 404)
             return
         base = upstream_base()
         if base:
@@ -7310,6 +7311,8 @@ class Handler(SimpleHTTPRequestHandler):
             r = market_index.materials()
         elif route == "crypto":
             r = crypto.items()
+        elif route == "us-outlook":
+            r = us_outlook.outlook()
         else:
             key = (urllib.parse.parse_qs(parsed.query).get("key") or [""])[0].strip()
             # 가상자산 종목도 같은 주소로 일봉을 낸다 — 큰 차트가 한 길로 그리게(응답 모양이 같다)
