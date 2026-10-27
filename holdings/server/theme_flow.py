@@ -279,6 +279,8 @@ def start(proxy):
                             print("  [수급] %s 테마 소속 %s테마 받음" % (day, n), flush=True)
                         except Exception as e:
                             _status["error"] = "테마 소속: " + safe_message(e, 120)
+                        now = _now()                           # 테마 소속을 받는 동안(36초쯤) 지난 시각으로 구간을 정하지 않게 다시 잰다
+                        hm = now.hour * 60 + now.minute
                     slot = _slot_of(now)
                     if OPEN[0] * 60 + OPEN[1] + SLOT_MIN <= hm <= CLOSE[0] * 60 + CLOSE[1] and done != (day, slot):
                         done = (day, slot)
