@@ -209,7 +209,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
     setText('#kh-vol', fmtShareCount(live.volume));
     setText('#kh-cap', big(live.marketCap));
 
-    setText('#kh-m-per', live.per != null ? live.per + '배' : '—');
+    /* PER 칸은 아래 loadFlow 가 네이버 추정PER(선행)로 채운다 (2026-10-27 재권님 「응」) — 여기서 지난 실적 PER 로 덮지 않는다 */
     setText('#kh-m-pbr', live.pbr != null ? live.pbr + '배' : '—');
     setText('#kh-m-cap', big(live.marketCap));
     setText('#kh-m-vol', fmtShareCount(live.volume));
@@ -436,6 +436,17 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
       const b = await r.json();
       const d = b.data || {};
       const flow = Array.isArray(d.flow) ? d.flow : [];
+
+      /* 선행 PER — 증권사 추정 EPS 평균으로 셈한 네이버 「추정PER」 (2026-10-27 재권님 「응」).
+         추정치가 없는 종목은 「—」. 셈은 서버(naver.integration 의 consensus) 한 곳이다 */
+      const cns = d.consensus || {};
+      const perEl = $('#kh-m-per');
+      if (perEl) {
+        perEl.textContent = cns.per != null ? cns.per + '배' : '—';
+        perEl.title = cns.per != null
+          ? `네이버 · 증권사 추정 평균 EPS ${cns.eps != null ? fmtNum(cns.eps) + '원' : '—'} 기준 · ${cns.date || '날짜 모름'} 집계`
+          : '증권사 추정치가 없는 종목입니다';
+      }
 
       /* 머리 통계 — 가장 최근 날짜의 순매수와 시총 순위 */
       const last = flow[0];

@@ -342,10 +342,20 @@ def integration(code):
         for t in (j.get("totalInfos") or []):
             info[t.get("code")] = {"name": t.get("key"), "value": t.get("value")}
 
+        # 선행 PER(2026-10-27 재권님 「응」) — 증권사 추정 EPS 평균으로 셈한 네이버 「추정PER」.
+        # 화면 · Insight 가 같은 이 값을 쓴다. 추정치가 없는 종목은 None(화면 「—」) — 0 으로 두지 않는다.
+        cns = j.get("consensusInfo") or {}
+        consensus = {
+            "per": _num(re.sub(r"[^0-9.,+-]", "", (info.get("cnsPer") or {}).get("value") or "")),
+            "eps": _num(re.sub(r"[^0-9.,+-]", "", (info.get("cnsEps") or {}).get("value") or "")),
+            "date": cns.get("createDate"),        # 추정치를 모은 날 — 화면 출처 표시에 쓴다
+        }
+
         return {
             "name": j.get("stockName"),
             "flow": flow,
             "info": info,
+            "consensus": consensus,
             "rank": _cap_rank(code),
         }
 

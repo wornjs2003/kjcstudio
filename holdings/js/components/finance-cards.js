@@ -146,7 +146,7 @@ function cardPerBand(w, h, band, why) {
   const mx = niceMax(Math.max(...all, 0));
   const n = pts.length;
   const f = frame(null, w, h, {
-    title: 'PER 밴드', unit: '원', max: band ? mx : null, fmt: v => (v / 1e4).toFixed(0) + '만',
+    title: 'PER 밴드 · 지난 실적 기준', unit: '원', max: band ? mx : null, fmt: v => (v / 1e4).toFixed(0) + '만',
     xlabels: n ? [[0, pts[0].ts.slice(2, 4) + '.' + pts[0].ts.slice(4, 6)], [.5, pts[Math.floor(n / 2)].ts.slice(2, 4) + '.' + pts[Math.floor(n / 2)].ts.slice(4, 6)], [1, pts[n - 1].ts.slice(2, 4) + '.' + pts[n - 1].ts.slice(4, 6)]] : [],
     legend: band ? [['fc-c-pri', '수정주가', '일봉 종가'],
                     ...band.multiples.map((m, i) => [['fc-c-grn', 'fc-c-acc', 'fc-c-dim'][i], `${m}배`, `TTM EPS(KIS 재무비율 eps · 분기 4개 합) × 이 기간 PER ${['최저', '가운데', '최고'][i]} · 분기 말부터 그 EPS 를 썼다(실제 발표는 늦다)`])]
