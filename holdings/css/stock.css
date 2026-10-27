@@ -29,6 +29,13 @@
   display: grid; grid-template-columns: repeat(4, auto);
   gap: 7px 30px; font-size: 0.78rem;
 }
+/* 출처 한 줄 — 여덟 칸이 한투(KIS) · 네이버 · 아침 저장본에서 섞여 오므로 묶음 위에 적는다 (2026-10-27 재권님 「응 해줘」 · 시안 c).
+   넓은 폭에서는 묶음 위에 얹어(자리 차지 안 함) 머리 높이가 그대로다 — 시안에서 전후 px 같음을 쟀다 */
+.kh-head-stats { position: relative; }
+.kh-head-src {
+  position: absolute; left: 0; bottom: calc(100% + 4px);
+  font-size: 0.68rem; color: var(--kh-text-muted); white-space: nowrap;
+}
 .kh-st { display: flex; align-items: center; gap: 10px; }
 .kh-st > span:first-child { color: var(--kh-text-muted); white-space: nowrap; }
 .kh-st b { font-weight: 500; margin-left: auto; }
@@ -174,6 +181,8 @@
   }
   .kh-head .kh-st { min-width: 0; }
   .kh-head .kh-st:has(.kh-rng) { grid-column: 1 / -1; }
+  /* 좁은 폭은 묶음이 현재가 바로 아래라 얹을 자리가 없다 — 묶음 첫 줄로 둔다(한 줄 늘어남) */
+  .kh-head .kh-head-src { position: static; grid-column: 1 / -1; white-space: normal; }
   .kh-head .kh-st .kh-rng { margin-left: auto; }
 
   /* 탭 — 글자가 한 자씩 세로로 꺾였다. 한 줄로 두고 넘치면 가로로 민다(모달 탭과 같다) */

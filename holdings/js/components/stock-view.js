@@ -450,6 +450,14 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
 
       /* 머리 통계 — 가장 최근 날짜의 순매수와 시총 순위 */
       const last = flow[0];
+      /* 출처 한 줄 — 순매수는 네이버가 준 가장 최근 날짜를 붙인다. 네이버가 늦으면 날짜가 묵은 것이 그대로 보인다
+         (2026-10-06 순매수가 나흘 묵은 것을 아무도 몰랐다) · 순위는 아침에 받아 둔 네이버 시총 순위 */
+      const srcEl = $('#kh-src');
+      if (srcEl) {
+        const day = last && last.date ? `${last.date.slice(4, 6)}.${last.date.slice(6, 8)}` : '—';
+        srcEl.textContent = '출처 · 한국투자증권 실시간 · 외국인·기관 순매수 네이버 ' + day
+          + (d.rank != null ? ' · 시총 순위 네이버 아침' : '');
+      }
       if (last) {
         setHtml('#kh-foreign', shares(last.foreign));
         setHtml('#kh-inst', shares(last.inst));
