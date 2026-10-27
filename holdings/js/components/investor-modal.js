@@ -52,9 +52,9 @@ const DAYS = [['today', '오늘', 1], ['d5', '5일', 5], ['m1', '한달', 20], [
 const TOP_N = 15;
 const INDEX = { KOSPI: '코스피', KOSDAQ: '코스닥' };
 const PERIODS = [['5m', '분봉'], ['D', '일봉'], ['M', '월봉']];
-const SHOW_BARS = { '5m': 156, D: 60, M: 24 };
+const SHOW_BARS = { '5m': 156, D: 60, M: 24 };   // 처음 보이는 봉 수 — 5분봉 이틀 · 일봉 석 달 · 월봉 2년
 const FLOW_KEY = 'intraday_flow.CACHE_TTL';    // 「당일」 탭이 다시 묻는 주기 — 서버 값
-const FLOW_FALLBACK_MS = 60000;   // 처음 보이는 봉 수 — 5분봉 이틀 · 일봉 석 달 · 월봉 2년
+const FLOW_FALLBACK_MS = 60000;
 
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const eok = (mil) => (mil == null ? '—' : `${Math.round(mil / 100).toLocaleString()}억`);           // 백만원 → 억
@@ -445,11 +445,19 @@ export function openInvestorModal({ code } = {}) {
   const fmtJu = (v, sign = true) => (v == null ? '—' : `${sign && v > 0 ? '+' : ''}${Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + '만' : Math.round(v).toLocaleString()}주`);
   const hhmm = (t) => (t ? `${t.slice(0, 2)}:${t.slice(2, 4)}` : '');
   const stockCode = () => (/^\d{6}$/.test(st.target) ? st.target : null);
+  /* 빈 칸 문구 — 쌓는 서버(8765)가 아닌 곳은 「없음」 이 아니라 「여기서는 안 쌓는다」 다(서버 meta.collector.running · 개념정의 검수 10-27).
+     못 받았으면 「못 받음」 — 셋을 한 문구로 내면 「못 받음」 이 「없음」 으로 둔갑한다 */
+  const FLOW_EMPTY = {
+    wait: '아직 쌓인 구간이 없습니다 · 평일 09:00~15:30',
+    notHere: '이 서버는 당일 수급을 쌓지 않습니다 — 내부(8765)에서만 보입니다',
+    fail: '당일 수급을 못 받았습니다',
+  };
+  let flowEmpty = FLOW_EMPTY.wait;
   function stopFlow() { if (flowWatch) { flowWatch.stop(); flowWatch = null; } }
 
   /* 막대 칸 — 구간마다 위 매수 · 아래 매도 · 검은 가로줄 순매수. groups 가 여럿이면 나란히(색 = 그 투자자) */
   function bsSvg(rows, groups) {
-    if (!rows.length) return '<div class="kh-ivt-empty">아직 쌓인 구간이 없습니다 · 평일 09:00~15:30</div>';
+    if (!rows.length) return `<div class="kh-ivt-empty">${flowEmpty}</div>`;
     const W = 600, H = 110;
     const vals = rows.flatMap((r) => groups.flatMap((g) => [g.v(r).buy || 0, -(g.v(r).sell || 0)]));
     const top = Math.max(1, ...vals) * 1.08, bot = Math.min(-1, ...vals) * 1.08;
@@ -490,6 +498,10 @@ export function openInvestorModal({ code } = {}) {
     if (st.tab !== 'today' || !main.querySelector('.kh-ivt')) return;
     const d = (flow && flow.data) || {};
     const mk = d.market || { rows: [] }, pg = d.program || { rows: [] }, sk = d.stock || null;
+    const col = flow && flow.meta && flow.meta.collector;
+    flowEmpty = !flow || !flow.data ? FLOW_EMPTY.fail
+      : col && col.running === false && !mk.rows.length && !pg.rows.length && !(sk && sk.rows && sk.rows.length) ? FLOW_EMPTY.notHere
+        : FLOW_EMPTY.wait;
     const last = mk.last || null, nm = nameOf(code || '') || code;
     const card = (cls, head, body) => `<section class="kh-ivt-card ${cls}"><div class="kh-ivt-h">${head}</div>${body}</section>`;
 
@@ -497,7 +509,7 @@ export function openInvestorModal({ code } = {}) {
       return `<div class="kh-ivt-tot"><span>${n}</span><b class="${signClass(v)}">${fmtMil(v)}</b></div>`; }).join('')}
       <div class="kh-ivt-inst">기관 안 —${[['scrt', '증권'], ['ivtr', '투신'], ['pe_fund', '사모'], ['bank', '은행'], ['insu', '보험'], ['mrbn', '종금'], ['fund', '기금'], ['etc_corp', '기타법인']]
         .map(([k, n]) => ` <span>${n} <b class="${signClass((last.inst || {})[k])}">${fmtMil((last.inst || {})[k])}</b></span>`).join('')}</div>`
-      : '<div class="kh-ivt-empty">아직 쌓인 값이 없습니다</div>';
+      : `<div class="kh-ivt-empty">${flowEmpty === FLOW_EMPTY.wait ? '아직 쌓인 값이 없습니다' : flowEmpty}</div>`;
 
     const mkBody = bsSvg(mk.rows, WHO3.map(([k, , c]) => ({ v: (r) => r[k] || {}, up: c, down: c })))
       + `<div class="kh-ivt-lg">${WHO3.map(([, n, c]) => `<span style="color:var(${c})">■ ${n}</span>`).join('')}</div>`
