@@ -8230,8 +8230,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return
 
             if route in ("us-sectors", "us-sector-stocks"):
-                # 「지금 뜨는 산업」 미국 칸 — 섹터 ETF 열하나 (2026-10-08 지시 · `us_sectors.py` 머리글).
-                # 구성 종목 등락률은 봉 표만 읽는다. ETF 열하나의 일봉만 KIS 를 탄다(봉 캐시가 수를 정한다)
+                # 「지금 뜨는 산업」 미국 칸 — 섹터 ETF 열둘(반도체 XSD 2026-10-27) (2026-10-08 지시 · `us_sectors.py` 머리글).
+                # 구성 종목 등락률은 봉 표만 읽는다. ETF 열둘의 일봉만 KIS 를 탄다(봉 캐시가 수를 정한다)
                 span = (qs.get("span") or ["d"])[0].strip()
                 if span not in us_sectors.SPAN_BACK:
                     self._send_json({"ok": False, "error": "span 은 d · w · m 중 하나여야 합니다."}, 400)

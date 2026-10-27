@@ -1,11 +1,11 @@
-"""「지금 뜨는 산업」 의 미국 칸 — SPDR 섹터 ETF 11개 (2026-10-08 지시).
+"""「지금 뜨는 산업」 의 미국 칸 — SPDR 섹터 ETF 11개 + 반도체(XSD · 2026-10-27) (2026-10-08 지시).
 
 재권님 말씀 — 「지금뜨는산업 국내 미국 에서 미국클릭이 안되고 주간 월간도 안되는데」.
-국내 칸은 네이버 업종(`naver.py`)이고, 미국은 업종을 주는 곳이 없어 **섹터 ETF 열하나**를 업종으로 쓴다.
+국내 칸은 네이버 업종(`naver.py`)이고, 미국은 업종을 주는 곳이 없어 **섹터 ETF 열하나**(+ 반도체 XSD · 2026-10-27)를 업종으로 쓴다.
 
 ── 값이 어디서 오나 ──
 
-    섹터 등락률      그 ETF 의 일봉(KIS) — `get_chart` 를 그대로 탄다. 열하나라 봉 캐시(`fresh_sec`)가 수를 정한다
+    섹터 등락률      그 ETF 의 일봉(KIS) — `get_chart` 를 그대로 탄다. 열둘이라 봉 캐시(`fresh_sec`)가 수를 정한다
     구성 종목        State Street 가 날마다 내는 보유 종목 파일(xlsx) — 하루 한 번 받는다
     종목 등락률      **봉 표(candles)에 이미 있는 일봉**만 읽는다 — KIS 를 더 안 부른다.
                     메인 서버(8765)가 장 전에 S&P500 · 나스닥100 전 종목의 일봉을 받아 둔다(`start_us_prefill`).
@@ -26,12 +26,19 @@ import threading
 import time
 import urllib.request
 import zipfile
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
-#: 섹터 ETF 열하나 — 이름은 화면에 나가는 한글 이름이다
+_KST, _NY = ZoneInfo("Asia/Seoul"), ZoneInfo("America/New_York")
+
+#: 섹터 ETF 열둘 — 이름은 화면에 나가는 한글 이름이다
 SECTORS = (
     ("XLK", "기술"), ("XLF", "금융"), ("XLE", "에너지"), ("XLV", "헬스케어"),
     ("XLI", "산업재"), ("XLY", "경기소비재"), ("XLP", "필수소비재"), ("XLU", "유틸리티"),
     ("XLB", "소재"), ("XLRE", "부동산"), ("XLC", "커뮤니케이션"),
+    # 반도체 — SPDR 11 섹터에는 칸이 없고 기술(XLK) 안에 섞여 있다. 같은 State Street 파일을 내는 SPDR S&P 반도체 ETF.
+    # 종목 비중이 같은(동일가중) ETF 라 엔비디아도 다른 종목과 같은 무게다 (2026-10-27 재권님 「전날 반도체가 떴는데 반도체가 없는게」 → 「응」)
+    ("XSD", "반도체"),
 )
 SECTOR_NAME = dict(SECTORS)
 
@@ -145,13 +152,25 @@ def _symbol(tic, known):
 
 # ── 등락률 ──────────────────────────────────────────────────────────────────
 
+def _us_day(ts_kst):
+    """5분봉 시각(한국 시각 'YYYYMMDDHHMM') → 그 봉의 미국 날짜 'YYYYMMDD'.
+
+    일봉 ts 는 미국 날짜, 5분봉 ts 는 한국 시각이다. 앞 8자를 그대로 견주면 미국장이 끝난 뒤(한국 새벽 05:00 마감봉)
+    5분봉이 늘 「다음 날」 로 보여 장중으로 읽혔다 — 구성 종목 하루 등락률이 마감값끼리 견준 ≈0% 가 됐다
+    (2026-10-27 실측 · NVDA 실제 +2.39% → +0.03%). 서머타임은 ZoneInfo 가 가린다."""
+    try:
+        return datetime.strptime(ts_kst[:12], "%Y%m%d%H%M").replace(tzinfo=_KST).astimezone(_NY).strftime("%Y%m%d")
+    except (TypeError, ValueError):
+        return ts_kst[:8]
+
+
 def _change(bars_d, bars_5m, back):
     """(지금 값, 견준 값, 등락률%) — 봉이 모자라면 등락률은 None."""
     if not bars_d:
         return None, None, None
     closes = [b["close"] for b in bars_d if b.get("close") is not None]
     now = closes[-1] if closes else None
-    if bars_5m and bars_d and bars_5m[-1]["ts"][:8] > bars_d[-1]["ts"][:8]:
+    if bars_5m and bars_d and _us_day(bars_5m[-1]["ts"]) > bars_d[-1]["ts"][:8]:
         now = bars_5m[-1]["close"]           # 장중 — 오늘 일봉이 아직 없다
         closes.append(now)
     if now is None or len(closes) <= back:
@@ -181,7 +200,7 @@ def _member_rows(etf, span, read_candles, known):
 
 
 def groups(span, get_chart, read_candles, known):
-    """섹터 열하나 → 등락률 큰 순. 국내 `naver.groups` 와 같은 칸 이름을 쓴다(화면이 같은 코드로 그린다).
+    """섹터 열둘 → 등락률 큰 순. 국내 `naver.groups` 와 같은 칸 이름을 쓴다(화면이 같은 코드로 그린다).
 
     rise · steady · fall 은 **봉이 있는 구성 종목만** 센다 — `count` 는 보유 종목 전체, `measured` 는 센 수.
     """
