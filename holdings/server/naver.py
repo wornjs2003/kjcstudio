@@ -158,6 +158,39 @@ def groups(kind="industry"):
     return _cached("g:" + kind, make)
 
 
+def groups_all(kind="theme"):
+    """업종 · 테마 **전부**(등락률 순) — groups() 는 상위 LIST_SIZE 만 준다.
+
+    실시간 순위 「테마」 의 큰 테마 · 작은 테마 두 줄이 쓴다(2026-10-27 · theme_flow.py). 2026-10-27 실측 테마 264개 · 100개씩 세 번.
+    분류가 아닌 큰 칸(MAX_GROUP_COUNT 넘는 것)은 groups() 처럼 거른다.
+    """
+    if kind not in ("industry", "theme"):
+        raise ValueError("kind 는 industry 또는 theme 여야 합니다.")
+
+    def make():
+        rows, page, total = [], 1, None
+        while page <= 10:
+            try:
+                j = _get("%s/%s?page=%d&pageSize=100" % (BASE, kind, page))
+            except Exception:
+                if rows:          # 마지막 장 다음은 404 로 온다(2026-10-27 실측) — 받은 데까지
+                    break
+                raise
+            gs = j.get("groups") or []
+            total = _num(j.get("totalCount"))
+            for g in gs:
+                if (_num(g.get("totalCount")) or 0) > MAX_GROUP_COUNT:
+                    continue
+                rows.append({"no": g.get("no"), "name": g.get("name"), "pct": _num(g.get("changeRate")),
+                             "count": _num(g.get("totalCount")) or 0})
+            if len(gs) < 100 or (total is not None and page * 100 >= total):
+                break
+            page += 1
+        return {"rows": rows, "total": total}
+
+    return _cached("ga:" + kind, make)
+
+
 def news(code, size=NEWS_SIZE):
     """종목별 뉴스. **바깥이 배열**이고 각 묶음 안에 items 가 있다.
 

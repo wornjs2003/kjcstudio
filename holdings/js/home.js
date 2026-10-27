@@ -995,56 +995,189 @@ const MARKETS = [
   { id: 'THEME', label: '테마', ix: 'KOSPI' },
 ];
 
-/* ── 「테마」 칩 (2026-10-27 재권님 「국내 테마별 대장주 · 주도주 표를 실시간으로」 → 「여기말고 실시간 순위에」 ·
- * 시안 「이 모양이야」 · 개발1 창 「응」) ──
- * 누르면 정렬 칩 줄이 **오늘 등락률 상위 테마 20** 으로 바뀌고(한 줄 가로 밀기), 테마를 누르면 표가 그 테마 종목을
- * **시가총액 순**으로 보인다. 목록은 네이버(서버 /api/naver/groups?kind=theme · /api/naver/stocks?…&all=1)가 주고,
- * 가격 · 등락률은 다른 줄과 같은 길(보이는 줄의 통합 시세)로 채운다 — 네이버 값은 첫 그림에만 깐다.
- * 따로 도는 주기를 두지 않는다 — 테마 칩 · 「테마」 칩을 누를 때 받는다(서버 캐시가 주기를 정한다).
- * 카드와 모달이 같은 테마를 본다(themeNo 하나). */
-const THEME_TOP = 20;
-let themes = null;            // [{no, name, pct, count}] — 오늘 등락률 순 상위 THEME_TOP
-let themeNo = null;           // 고른 테마 번호
+/* ── 「테마」 칩 (2026-10-27 재권님 「국내 테마별 대장주 · 주도주 표를 실시간으로」 → 「여기말고 실시간 순위에」 · 시안 「이 모양이야」 →
+ * 「반도체 관련된 종목과 그날 급등하거나 수급이 몰리는 테마만」 → 「넥스트장에 5분봉별로 거래량 체크하고 전날 5분봉과 거래량이 2배 이상인
+ * 종목들의 등락률과 해당 종목이 많은 섹터를」 → 「거래량2배 - 수급 이라는 이름으로 · 큰테마들로 옆으로 나열 · 큰테마 밑에 작은테마」 ·
+ * 「수급 하위의 테마에 기타」 · 「수급옆에 숫자는 없어도」 · 「이대로 한번 해줘」) ──
+ *
+ *     위 줄(#kh-sorts)    수급 · 반도체 · AI·통신 … · 기타 — 큰 테마(서버 /api/nxt/themes · 나누기는 서버 theme_flow.BIG 한 곳)
+ *     아래 줄(#kh-sorts2) 수급이면 「전체 · 수급 종목이 든 테마(그 안 수 ) · 기타」, 큰 테마면 그 작은 테마들
+ *     표                 수급 — 2배 종목을 배율 순(넷째 칸 ×배율) · 작은 테마 — 그 종목 전부를 시가총액 순 · 수급 종목에 「수급」
+ *
+ * 수급은 서버(/api/nxt/flow)가 넥스트 5분 구간마다 세어 내준다 — 화면은 롱폴로 지켜볼 뿐 셈하지 않는다.
+ * 가격 · 등락률은 다른 줄과 같은 길(보이는 줄의 통합 시세). 카드와 모달이 같은 고른 값을 본다. */
+const FLOW = '수급';
+let themeGroups = null;       // [{name, themes: [{no, name, pct, count}]}] — 큰 테마 차례
+let themeGroupsFail = false;
+let themeBig = FLOW;          // 고른 큰 테마(수급 포함)
+let themeNo = null;           // 큰 테마 아래 고른 작은 테마
+let flowSel = 'all';          // 수급 아래 줄 — 'all' · 'etc' · 테마 번호
+let flowData = null;          // /api/nxt/flow 의 data
+let flowFail = false;
+let flowMap = new Map();      // 수급 종목 code → {ratio, name …}
+const FLOW_FALLBACK_MS = 60000;   // 롱폴을 모르는 서버에서만 — 서버가 5분마다 바꾼다
 const themeRows = {};         // { no: [{code, name, cap(억원)}] } — 시가총액 순
+const escT = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const themeShort = (n) => String(n || '').replace(/\(.*?\)/g, '').trim();
-const themeOf = (no) => (themes || []).find((t) => t.no === no);
+/* 괄호를 떼면 이름이 겹치는 것(2차전지(전고체) · 2차전지(소재/부품))은 괄호 안 첫 낱말을 붙인다 — 「2차전지·소재」 */
+function themeLabel(t, list) {
+  const b = themeShort(t.name);
+  if ((list || []).filter((y) => themeShort(y.name) === b).length < 2) return b;
+  const m = /\(([^/)]+)/.exec(t.name || '');
+  return m ? `${b}·${m[1].trim()}` : b;
+}
+const bigThemes = () => ((themeGroups || []).find((g) => g.name === themeBig) || {}).themes || [];
+const themeOf = (no) => bigThemes().find((t) => t.no === no);
+const flowTheme = (no) => ((flowData && flowData.themes) || []).find((t) => t.no === no);
 const themeCap = (code) => {
   const r = (themeRows[themeNo] || []).find((x) => x.code === code);
   return r && r.cap != null ? fmtMoneyKr(r.cap) : '—';
 };
+/* 넷째 칸 — 수급이면 배율, 큰 테마면 시가총액 */
+const themeMetric = (code) => {
+  if (themeBig !== FLOW) return themeCap(code);
+  const h = flowMap.get(code);
+  return h ? `×${h.ratio.toFixed(1)}` : '—';
+};
 
-async function loadThemes() {
+/* 큰 테마 쪽 표에서 수급 종목 옆 「수급」 */
+const themeBadge = (code) => (themeBig !== FLOW && flowMap.has(code) ? ' <b class="kh-flow-x">수급</b>' : '');
+
+async function getJson(u) {
   try {
-    const r = await apiFetch('/api/naver/groups?kind=theme', { cache: 'no-store' });
+    const r = await apiFetch(u, { cache: 'no-store' });
     const j = r && await r.json();
-    if (!j || !j.ok || !Array.isArray(j.data)) return false;
-    themes = j.data.slice(0, THEME_TOP).map((t) => ({ no: t.no, name: t.name, pct: t.pct, count: t.count }));
-    if (!themeOf(themeNo)) themeNo = themes.length ? themes[0].no : null;
-    return true;
-  } catch { return false; }
+    return j && j.ok ? j.data : null;
+  } catch { return null; }
+}
+
+async function loadThemeGroups() {
+  const d = await getJson('/api/nxt/themes');
+  themeGroupsFail = !d;
+  if (d) themeGroups = d.groups || [];
+  return !!d;
+}
+
+async function loadFlow() {
+  const d = await getJson('/api/nxt/flow');
+  flowFail = !d;
+  if (d) {
+    flowData = d;
+    flowMap = new Map((d.hits || []).map((h) => [h.code, h]));
+  }
+  return !!d;
 }
 
 async function loadThemeRows(no) {
   if (no == null) return false;
-  try {
-    const r = await apiFetch(`/api/naver/stocks?kind=theme&no=${no}&all=1`, { cache: 'no-store' });
-    const j = r && await r.json();
-    if (!j || !j.ok || !Array.isArray(j.data)) return false;
-    const rows = j.data.slice().sort((a, b) => (b.cap ?? -1) - (a.cap ?? -1));
-    themeRows[no] = rows.map((x) => ({ code: x.code, name: x.name, cap: x.cap }));
-    rows.forEach((x) => {          // 첫 그림용 — 통합 시세가 오면 그 값이 덮는다
-      if (x.price != null && !rowPrices[x.code]) {
-        rowPrices[x.code] = { price: x.price, amt: x.amt, pct: x.pct, volume: x.volume, value: x.value, name: x.name };
-      }
-    });
-    return true;
-  } catch { return false; }
+  const d = await getJson(`/api/naver/stocks?kind=theme&no=${no}&all=1`);
+  if (!Array.isArray(d)) return false;
+  const rows = d.slice().sort((a, b) => (b.cap ?? -1) - (a.cap ?? -1));
+  themeRows[no] = rows.map((x) => ({ code: x.code, name: x.name, cap: x.cap }));
+  rows.forEach((x) => {          // 첫 그림용 — 통합 시세가 오면 그 값이 덮는다
+    if (x.price != null && !rowPrices[x.code]) {
+      rowPrices[x.code] = { price: x.price, amt: x.amt, pct: x.pct, volume: x.volume, value: x.value, name: x.name };
+    }
+  });
+  return true;
 }
 
-/* 「테마」 를 볼 때 목록 둘을 채운다 — 테마 칩을 누를 때마다 다시 받는다(서버 캐시 30초) */
+/* 「테마」 를 볼 때 — 큰 테마 · 수급을 받고, 큰 테마를 보고 있으면 그 작은 테마 종목도 */
 async function refreshTheme() {
-  await loadThemes();
-  await loadThemeRows(themeNo);
+  await Promise.all([themeGroups ? true : loadThemeGroups(), loadFlow()]);
+  if (themeBig !== FLOW) {
+    if (!themeOf(themeNo)) themeNo = (bigThemes()[0] || {}).no ?? null;
+    await loadThemeRows(themeNo);
+  }
+}
+
+/* 표에 올릴 줄 — 수급은 배율 순, 작은 테마는 시가총액 순 */
+function themeList() {
+  if (themeBig === FLOW) {
+    const d = flowData || {};
+    const codes = flowSel === 'all' ? (d.hits || []).map((h) => h.code)
+      : flowSel === 'etc' ? (d.etc || []) : ((flowTheme(flowSel) || {}).codes || []);
+    return codes.filter((c) => flowMap.has(c))
+      .sort((a, b) => flowMap.get(b).ratio - flowMap.get(a).ratio)
+      .map((c) => ({ code: c, name: flowMap.get(c).name || c }));
+  }
+  return themeRows[themeNo] || [];
+}
+
+/* 위 줄 · 아래 줄 칩 */
+function themeBigChipsHtml() {
+  const flow = `<button class="kh-chip kh-flow-chip${themeBig === FLOW ? ' is-active' : ''}" type="button" data-tbig="${FLOW}">${FLOW}</button>`
+    + '<span class="kh-chip-bar"></span>';
+  if (!themeGroups) return flow + `<span class="kh-mut">${themeGroupsFail ? '테마 목록을 못 받았습니다' : '테마 목록을 받는 중'}</span>`;
+  return flow + themeGroups.map((g) => `<button class="kh-chip${g.name === themeBig ? ' is-active' : ''}" type="button"
+    data-tbig="${escT(g.name)}" title="작은 테마 ${g.themes.length}">${escT(g.name)}</button>`).join('');   // 숫자는 안 붙인다(재권님 「반도체나 다른 테마도 숫자는 빼고」)
+}
+
+function themeSubChipsHtml() {
+  if (themeBig === FLOW) {
+    const d = flowData;
+    if (!d) return `<span class="kh-mut">${flowFail ? '수급을 못 받았습니다' : '수급을 받는 중'}</span>`;
+    if (!d.prevDay) return '<span class="kh-mut">어제 넥스트 거래량이 아직 없어 견줄 수 없습니다</span>';
+    const one = (sel, label, n, title) => `<button class="kh-chip kh-sub-chip${flowSel === sel ? ' is-on' : ''}" type="button"
+      data-flow="${sel}"${title ? ` title="${escT(title)}"` : ''}>${escT(label)}${n == null ? '' : ` <b class="kh-chip-hit">${n}</b>`}</button>`;
+    return one('all', `전체 ${(d.hits || []).length}`, null)
+      + (d.themes || []).map((t) => one(t.no, themeLabel(t, d.themes), t.n, `${t.name} · ${t.total ?? '—'}종목 중 ${t.n}`)).join('')
+      + one('etc', '기타', (d.etc || []).length, '어느 테마에도 없는 수급 종목(ETF 등)');
+  }
+  const list = bigThemes();
+  if (!list.length) return '<span class="kh-mut">이 큰 테마에 작은 테마가 없습니다</span>';
+  return list.map((t) => `<button class="kh-chip kh-sub-chip${t.no === themeNo ? ' is-on' : ''}" type="button" data-theme="${t.no}"
+    title="${escT(t.name)} · ${t.pct == null ? '—' : fmtPct(t.pct)} · ${t.count ?? '—'}종목">${escT(themeLabel(t, list))}</button>`).join('');
+}
+
+/* 아래 기준 한 줄 */
+function themeNote() {
+  if (themeBig === FLOW) {
+    const d = flowData;
+    if (!d) return flowFail ? '수급을 못 받았습니다' : '수급을 받는 중';
+    if (!d.prevDay) return '수급 — 넥스트 5분 거래량을 쌓는 중입니다 · 어제 값이 생기는 다음 거래일부터 견줍니다';
+    const at = d.slot ? `${d.slot.slice(0, 2)}:${d.slot.slice(2)}` : '—';
+    const head = `수급 — 넥스트 ${at} 까지 5분 거래량이 어제 같은 구간의 ${d.ratio}배 이상`;
+    if (flowSel === 'etc') return `${head} · 기타(어느 테마에도 없음) ${(d.etc || []).length}종목 · 배율 순`;
+    const t = flowTheme(flowSel);
+    if (t) return `${head} · ${escT(themeShort(t.name))} ${t.total ?? '—'}종목 중 ${t.n} · 배율 순`;
+    return `${head} ${(d.hits || []).length}종목 · 배율 순`;
+  }
+  const t = themeOf(themeNo);
+  if (!t) return themeGroupsFail ? '테마 목록을 못 받았습니다' : '테마를 고르십시오';
+  const n = (themeRows[themeNo] || []).length;
+  return `${escT(themeBig)} · ${escT(themeShort(t.name))} · ${t.count ?? '—'}종목 중 ${n} · 시가총액 순 · 네이버`
+    + (flowMap.size ? ' · <b class="kh-flow-x">수급</b> = 넥스트 거래량 2배' : '');
+}
+
+/* 위 줄 · 아래 줄 누르기 — 카드와 모달이 같이 쓴다. 바뀌었으면 true */
+async function themeClick(e) {
+  const g = e.target.closest('[data-tbig]');
+  if (g) {
+    if (g.dataset.tbig === themeBig) return false;
+    themeBig = g.dataset.tbig;
+    if (themeBig === FLOW) { flowSel = 'all'; await loadFlow(); } else {
+      themeNo = (bigThemes()[0] || {}).no ?? null;
+      await loadThemeRows(themeNo);
+    }
+    return true;
+  }
+  const f = e.target.closest('[data-flow]');
+  if (f) {
+    const v = /^\d+$/.test(f.dataset.flow) ? Number(f.dataset.flow) : f.dataset.flow;
+    if (v === flowSel) return false;
+    flowSel = v;
+    return true;
+  }
+  const t = e.target.closest('[data-theme]');
+  if (t) {
+    const no = Number(t.dataset.theme);
+    if (no === themeNo) return false;
+    themeNo = no;
+    await loadThemeRows(no);
+    return true;
+  }
+  return false;
 }
 let market = 'KOSPI';
 const marketOf = (x) => x.market || 'KOSPI';
@@ -1271,8 +1404,8 @@ function afterEmpty() {
 let sortBy = 'cap';
 
 function rowList(sortId = sortBy, mkt = market) {
-  if (mkt === 'THEME') {        // 테마 — 정렬 칩과 무관하게 시가총액 순 그대로
-    return (themeRows[themeNo] || []).map((x, i) => ({
+  if (mkt === 'THEME') {        // 테마 — 정렬 칩과 무관하게(수급은 배율 순 · 작은 테마는 시가총액 순)
+    return themeList().map((x, i) => ({
       code: x.code, name: x.name, sector: '', brand: brandColor(x.code, x.name), rank: i + 1,
     }));
   }
@@ -1338,21 +1471,20 @@ function rowList(sortId = sortBy, mkt = market) {
     .map(({ s }, i) => ({ ...s, rank: i + 1 }));
 }
 
-/* 정렬 칩 줄 — 「테마」 를 보면 그 자리가 테마 칩(오늘 등락률 순 20 · 한 줄 가로 밀기)으로 바뀐다 */
-function themeChipsHtml() {
-  if (!themes) return '<span class="kh-mut">테마 목록을 받는 중</span>';
-  return themes.map((t) => `<button class="kh-chip${t.no === themeNo ? ' is-active' : ''}" type="button"
-    data-theme="${t.no}" title="${t.name} · ${fmtPct(t.pct)} · ${t.count}종목">${themeShort(t.name)}</button>`).join('');
-}
-
+/* 정렬 칩 줄 — 「테마」 를 보면 그 자리가 큰 테마 줄이 되고, 아래 줄(#kh-sorts2)에 작은 테마가 나온다 */
 function paintSortChips() {
   const host = $('kh-sorts');
   if (!host) return;
   const th = market === 'THEME';
   host.classList.toggle('kh-theme-strip', th);
-  host.innerHTML = th ? themeChipsHtml() : Object.entries(SORTS).map(([id, x]) =>
+  host.innerHTML = th ? themeBigChipsHtml() : Object.entries(SORTS).map(([id, x]) =>
     `<button class="kh-chip${id === sortBy ? ' is-active' : ''}" type="button"
       data-sort="${id}">${x.label}</button>`).join('');
+  const sub = $('kh-sorts2');
+  if (sub) {
+    sub.hidden = !th;
+    sub.innerHTML = th ? themeSubChipsHtml() : '';
+  }
 }
 
 /* 단추를 누르면 줄 세우는 기준이 바뀐다. 서버는 안 부른다 —
@@ -1371,19 +1503,19 @@ function setupSorts() {
    * 뺐다 (아래 paintFavCount 자리 참고). 이제 칩만 들어간다. */
   paintSortChips();
 
+  /* 「테마」 의 위 줄 · 아래 줄 — 바뀌면 칩 · 표를 다시 그린다 */
+  const onTheme = async (e) => {
+    if (market !== 'THEME' || !(await themeClick(e))) return false;
+    paintSortChips();
+    const box = $('kh-rank-scroll');
+    if (box) box.scrollTop = 0;
+    paintRows(rowPrices);
+    return true;
+  };
+  $('kh-sorts2')?.addEventListener('click', onTheme);
+
   host.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-theme]');
-    if (t) {                       // 테마 칩 — 그 테마 종목을 시가총액 순으로
-      const no = Number(t.dataset.theme);
-      if (no === themeNo) return;
-      themeNo = no;
-      host.querySelectorAll('[data-theme]').forEach(x => x.classList.toggle('is-active', x === t));
-      await loadThemeRows(no);
-      const box = $('kh-rank-scroll');
-      if (box) box.scrollTop = 0;
-      paintRows(rowPrices);
-      return;
-    }
+    if (market === 'THEME') { await onTheme(e); return; }
     const b = e.target.closest('[data-sort]');
     if (!b || b.dataset.sort === sortBy) return;
     sortBy = b.dataset.sort;
@@ -1495,11 +1627,8 @@ function freshNote() {
 function paintSortNote() {
   const el = $('kh-sort-note');
   if (!el) return;
-  if (market === 'THEME') {      // 「소캠 · 11종목 중 11 · 시가총액 순 · 네이버」 — 시안 그대로
-    const t = themeOf(themeNo);
-    el.innerHTML = t
-      ? `${themeShort(t.name)} · ${t.count}종목 중 ${(themeRows[themeNo] || []).length} · 시가총액 순 · 네이버`
-      : '테마 목록을 아직 받지 못했습니다';
+  if (market === 'THEME') {
+    el.innerHTML = themeNote();
     noteAt = Date.now();
     return;
   }
@@ -1591,7 +1720,7 @@ onFavChange(() => {
 
 /* 지금 줄 세운 기준의 값 한 칸 */
 function sortCell(code, live) {
-  if (market === 'THEME') return themeCap(code);
+  if (market === 'THEME') return themeMetric(code);
   const s = SORTS[sortBy];
   if (!s || !s.show) return '—';
   return s.show(code, live);
@@ -1600,7 +1729,7 @@ function sortCell(code, live) {
 /* 표 머리글도 기준에 따라 바뀐다 */
 function paintRowHead() {
   const th = $('kh-th-metric');
-  if (th) th.textContent = market === 'THEME' ? '시가총액' : ((SORTS[sortBy] || {}).head || '전일대비');
+  if (th) th.textContent = market === 'THEME' ? (themeBig === FLOW ? '거래량' : '시가총액') : ((SORTS[sortBy] || {}).head || '전일대비');
 }
 
 /* ── 실시간 순위 모달 ─────────────────────────────────────
@@ -1702,17 +1831,17 @@ function paintRankModal() {
     const p = rowPrices && rowPrices[s.code];
     return `<tr>
       <td class="kh-rkm-rk">${s.rank}</td>
-      <td class="l"><span class="kh-nm">${iconHtml(s)}<b data-co="${s.code}">${s.name}</b></span></td>
+      <td class="l"><span class="kh-nm">${iconHtml(s)}<b data-co="${s.code}">${escT(s.name)}</b>${th ? themeBadge(s.code) : ''}</span></td>
       <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, sid)) : '···'}</td>
       <td class="kh-num ${p ? dirClass(pctOf(p, sid)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, sid)) : '—'}</td>
       <td class="kh-num">${p ? showValue(s.code, p) : '···'}</td>
-      <td class="kh-num">${th ? themeCap(s.code) : showCap(s.code)}</td>
-      <td class="kh-num">${p ? fmtShareCount(p.volume) : '···'}</td>
+      <td class="kh-num">${th && themeBig !== FLOW ? themeCap(s.code) : showCap(s.code)}</td>
+      <td class="kh-num">${th && themeBig === FLOW ? themeMetric(s.code) : (p ? fmtShareCount(p.volume) : '···')}</td>
     </tr>`;
   }).join('');
   /* 카드와 같다 — 고른 시장 목록이 아직 안 왔으면 빈 표 대신 그렇다고 적는다 */
   const empty = !list.length && universe
-    ? `<tr><td colspan="7" class="kh-mut">${th ? '테마 종목을 아직 받지 못했습니다' : SORTS[rankModalSort]?.only ? afterEmpty()
+    ? `<tr><td colspan="7" class="kh-mut">${th ? themeNote() : SORTS[rankModalSort]?.only ? afterEmpty()
       : `${marketDef(rankModalMarket).label} 목록을 아직 받지 못했습니다`}</td></tr>` : '';
 
   /* 칸 폭을 못 박는다 (table-layout: fixed).
@@ -1725,7 +1854,8 @@ function paintRankModal() {
      `data-sort` 는 좁은 폭에서 기준 칸 하나만 남기려고 단다(css/home.css · 2026-10-08) */
   rankModal.body.innerHTML = `<div class="kh-rkm" data-sort="${rankModalSort}">
     <div class="kh-chips kh-rkm-mkt" data-rkm-mkt>${marketChipsHtml(rankModalMarket)}</div>
-    ${th ? `<div class="kh-chips kh-theme-strip" data-rkm-theme>${themeChipsHtml()}</div>` : ''}
+    ${th ? `<div class="kh-chips kh-theme-strip" data-rkm-theme>${themeBigChipsHtml()}</div>
+    <div class="kh-chips kh-theme-strip kh-sorts2" data-rkm-theme>${themeSubChipsHtml()}</div>` : ''}
     <table>
       <colgroup>
         <col class="c-rk"><col class="c-nm"><col class="c-pr"><col class="c-pc">
@@ -1733,7 +1863,7 @@ function paintRankModal() {
       </colgroup>
       <thead><tr>
         <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
-        <th>거래대금</th><th>시가총액</th><th>거래량</th>
+        <th>거래대금</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th>
       </tr></thead>
       <tbody>${rows || empty}</tbody>
     </table>
@@ -1753,14 +1883,11 @@ function paintRankModal() {
     scheduleFetch();
   });
 
-  rankModal.body.querySelector('[data-rkm-theme]')?.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-theme]');
-    if (!t || Number(t.dataset.theme) === themeNo) return;
-    themeNo = Number(t.dataset.theme);          // 카드와 같은 테마를 본다
-    await loadThemeRows(themeNo);
+  rankModal.body.querySelectorAll('[data-rkm-theme]').forEach((row) => row.addEventListener('click', async (e) => {
+    if (!(await themeClick(e))) return;         // 카드와 같은 고른 값을 본다
     paintSortChips();
     paintRows(rowPrices);                       // 모달도 함께 다시 그린다
-  });
+  }));
 
   rankModal.head.setBig(rankHeadBig());
   rankModal.head.setStats(rankHeadStats());
@@ -1823,7 +1950,7 @@ function paintRows(priceMap) {
   /* 고른 시장의 목록이 비었다 — 서버가 아직 그 시장을 안 준다. 빈 표로 두면 고장처럼 보인다 */
   if (!list.length && universe) {
     $('kh-rows').innerHTML = `<tr><td colspan="5" class="kh-mut">${SORTS[sortBy]?.only ? afterEmpty()
-      : market === 'THEME' ? '테마 종목을 아직 받지 못했습니다'
+      : market === 'THEME' ? themeNote()
       : `${MARKETS.find(m => m.id === market)?.label || market} 목록을 아직 받지 못했습니다`}</td></tr>`;
     paintRowHead();
     paintSortNote();
@@ -1842,7 +1969,7 @@ function paintRows(priceMap) {
         >${s.rank}</td>
       <td class="l"><span class="kh-nm">
         ${iconHtml(s)}
-        <b data-co="${s.code}">${s.name}</b></span></td>
+        <b data-co="${s.code}">${market === 'THEME' ? escT(s.name) : s.name}</b>${market === 'THEME' ? themeBadge(s.code) : ''}</span></td>
       <td class="kh-num"><span
         >${live ? fmtPriceOf(s.code, priceOf(live, sid)) : '···'}</span></td>
       <td class="kh-num kh-metric">${sortCell(s.code, live)}</td>
@@ -2642,6 +2769,15 @@ loadUniverse().then(() => {
             paintSortNote();
           },
           key: 'kis_proxy.MULTI_CACHE_TTL', fallbackMs: ROW_FALLBACK_MS });
+  /* 「테마」 의 수급 — 서버가 넥스트 5분 구간마다 다시 센다(/api/nxt/flow · theme_flow.py). 「테마」 를 안 보면 쉰다 */
+  watch({ url: () => (market === 'THEME' || (rankModal && rankModalMarket === 'THEME') ? '/api/nxt/flow' : null),
+          onChange: async () => {
+            await loadFlow();
+            if (market !== 'THEME' && !(rankModal && rankModalMarket === 'THEME')) return;
+            paintSortChips();
+            paintRows(rowPrices);
+          },
+          key: null, fallbackMs: FLOW_FALLBACK_MS });
 
   /* 큰 차트도 계속 다시 받는다. 한 번 그린 뒤 장이 진행돼도 선이 멈춰
      있으면 안 된다 (2026-09-15 지적). 바뀌었다는 알림이 오면 `chart.js` 가

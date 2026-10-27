@@ -66,6 +66,7 @@ import macro
 import note_alert      # 시황 글 알림 — 자동 시황 글이 새로 써지면 텔레그램 한 통(2026-10-27 · server/note_alert.py)
 import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-25 · server/events.py 머리 주석)
 import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
+import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 테마 · 수급(넥스트 5분 거래량 2배) (2026-10-27 · server/theme_flow.py)
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
 import intraday_flow    # 당일 수급 — 장중 1분마다 시장 투자자 · 프로그램 매매를 쌓아 5분 구간으로 · /api/kis/flow-today(2026-10-27 · server/intraday_flow.py)
 import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
@@ -1706,7 +1707,8 @@ LONGPOLL_MAX_URLS = 12     # 한 연결이 묶어 볼 수 있는 주소 수
 #
 # **KIS 밖 넷(공시 · 뉴스 · 보드 · 정적)은 예산 계산에 안 넣는다** — 안쪽 호출이 그 라우트의
 # 캐시를 그대로 타므로(뉴스 `NEWS_TTL` · `MOVES_TTL`) 롱폴이 바깥 호출을 늘리지 않는다.
-LONGPOLL_PREFIXES = ("/api/kis/", "/api/dart/", "/api/news/", "/api/board/doc/", "/holdings/data/")
+# "/api/nxt/" — 수급(theme_flow.flow)이 5분마다 바뀌어 화면이 지켜본다(2026-10-27). DB · 네이버 캐시만 읽어 KIS 를 더 안 부른다
+LONGPOLL_PREFIXES = ("/api/kis/", "/api/dart/", "/api/news/", "/api/board/doc/", "/holdings/data/", "/api/nxt/")
 
 
 def _lp_url_ok(u):
@@ -6947,6 +6949,16 @@ class Handler(SimpleHTTPRequestHandler):
             rows, meta = tglog.today(day or None)
             self._send_json({"ok": True, "data": rows, "meta": meta})
             return
+        if urllib.parse.urlparse(self.path).path.rstrip("/") in ("/api/nxt/flow", "/api/nxt/themes"):
+            # 실시간 순위 「테마」(server/theme_flow.py) — flow: 수급(넥스트 5분 거래량 2배) · themes: 큰 테마별 작은 테마(네이버 264)
+            try:
+                if self.path.split("?")[0].rstrip("/").endswith("/flow"):
+                    self._send_json({"ok": True, "data": theme_flow.flow(sys.modules[__name__]), "meta": theme_flow.status()})
+                else:
+                    self._send_json({"ok": True, "data": theme_flow.big(), "meta": {"source": "네이버 · 큰 테마는 이름 낱말로 나눔(theme_flow.BIG)"}})
+            except Exception as e:
+                self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
+            return
         if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/nxt/board":
             # 넥장 보드(Insight 「투자 전략」) — 날마다 종가 · 장외 · 프리장 · 야간선물 · 장외 오름 · 내림 상위(server/nxt_board.py)
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -8702,6 +8714,11 @@ def main():
               % (note_alert.TICK, dart.QUIET_FROM // 60, dart.QUIET_TO // 60, dart.QUIET_TO // 60))
 
     # 넥스트레이드 장 전 거래량 2배 목록(2026-10-26 · server/nxt_pre.py) — 같은 문(보내는 서버만) · **`nxt_pre.SEND = False` 가 기본**
+    # 수급 — 넥스트 5분 거래량(2026-10-27 · server/theme_flow.py) · 같은 문(보내는 서버만) · 알림은 없다(화면만)
+    if not SLOW and is_sender(args.port) and theme_flow.start(sys.modules[__name__]):
+        print("  수급 : 사용 (평일 %02d:%02d~%02d:%02d %d분마다 넥스트 거래량 · 어제 같은 구간 %s배 · /api/nxt/flow)"
+              % (theme_flow.OPEN + theme_flow.CLOSE + (theme_flow.SLOT_MIN, theme_flow.RATIO)))
+
     if not SLOW and is_sender(args.port) and nxt_board.start(sys.modules[__name__]):
         print("  넥장 보드 : 사용 (평일 %02d:%02d 종가 · %02d:%02d 장외 · %02d:%02d 야간선물 저장 · /api/nxt/board)"
               % (nxt_board.CLOSE_AT + nxt_board.AFTER_AT + nxt_board.FUT_AT))

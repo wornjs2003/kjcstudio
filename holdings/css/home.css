@@ -458,6 +458,16 @@
 .kh-chips.kh-theme-strip { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 .kh-chips.kh-theme-strip::-webkit-scrollbar { display: none; }
 .kh-chips.kh-theme-strip .kh-chip { flex-shrink: 0; }
+/* 「테마」 두 줄 — 위 줄 큰 테마(앞에 「수급」) · 아래 줄 작은 테마 (2026-10-27 재권님 「이대로 한번 해줘」 · 시안 개발1-t4) */
+.kh-chips.kh-sorts2 { padding-top: 0; }
+.kh-chips.kh-sorts2[hidden] { display: none; }
+.kh-flow-chip { color: var(--kh-accent); font-weight: 600; }
+.kh-flow-chip.is-active { background: var(--kh-accent); color: var(--kh-text-on-fill); }
+.kh-chip-bar { flex: 0 0 1px; align-self: stretch; margin: 4px 2px; background: var(--kh-border); }
+.kh-sub-chip { font-size: 0.72rem; padding: 4px 10px; }
+.kh-sub-chip.is-on { outline: 1.5px solid var(--kh-text-primary); outline-offset: -1.5px; color: var(--kh-text-primary); }
+.kh-chip-hit, .kh-flow-x { font-weight: 700; color: var(--kh-accent); }
+.kh-flow-x { font-size: 10px; margin-left: 4px; }
 /* 시장 칩이 셋(코스피 · 코스닥 · 테마)이 되면서 머리줄 글자가 꺾였다(제목 「실시간 순위」 두 줄 · 머리 61 → 81px) — 시안처럼 한 줄로 */
 .kh-rank-card .kh-tabs:has(#kh-rank-mkt), .kh-rank-card .kh-tabs:has(#kh-rank-mkt) * { white-space: nowrap; }   /* Insight 도 .kh-rank-card 를 써서 홀딩스 순위 머리에만 */
 .kh-rank .kh-tab.is-active,
