@@ -13,7 +13,7 @@ import { fetchCandles, fetchCandlesSince, peekCandles, watchCandles, createStock
   chartView, setChartView, chartStockChanged } from './chart.js';
 import { color } from './theme.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount,
-  dirClass, marketPhase, isUsCode, fmtPriceOf, fmtUsdBig, priceDigitsOf } from './utils/format.js';
+  dirClass, marketPhase, isUsCode, fmtPriceOf, fmtUsdBig, priceDigitsOf, usSessionLabel } from './utils/format.js';
 import { favList, isFav, toggleFav, onFavChange } from './store/favorites.js';
 /* mountWatchSide · mountVBar 는 첫 화면에서 안 쓴다 (2026-09-17).
    관심 목록은 순위표의 「관심」 칩으로 들어갔고, 세로 아이콘 바는
@@ -710,11 +710,12 @@ function paintBigPrice() {
   }
   /* 값이 그대로면 손대지 않는다. 0.2초마다 받는데 매번 클래스를 다시 붙이면
      깜빡임이 계속 돌아 숫자가 쉬지 않고 흔들린다 (2026-09-14 지적). */
-  const stamp = `${selectedCode}|${live.price}|${live.pct}`;
+  const ses = usSessionLabel(live);            // 미국 장외 봉 값이면 「프리마켓」 · 「애프터」 (2026-10-27)
+  const stamp = `${selectedCode}|${live.price}|${live.pct}|${ses}`;
   if (bigShown === stamp) return;
   bigShown = stamp;
   el.className = 'kh-idx-v kh-num ' + dirClass(live.pct);
-  el.textContent = `${fmtPriceOf(selectedCode, live.price)}  ${fmtPct(live.pct)}`;
+  el.textContent = `${fmtPriceOf(selectedCode, live.price)}  ${fmtPct(live.pct)}${ses ? '  ' + ses : ''}`;
 }
 
 /* 큰 차트 — 고른 종목을 그린다.
@@ -1036,7 +1037,8 @@ function applyUsBoard(id, data) {
   rows.forEach((x) => {
     if (x.price == null) return;
     rowPrices[x.code] = { price: x.price, prev: x.prev, amt: x.amt, pct: x.pct,
-                          volume: x.volume, value: x.value, name: x.name, currency: 'USD' };
+                          volume: x.volume, value: x.value, name: x.name, currency: 'USD',
+                          session: x.session, regularPrice: x.regularPrice };
   });
 }
 

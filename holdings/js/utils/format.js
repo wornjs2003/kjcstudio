@@ -217,6 +217,8 @@ export function marketPhase(now = new Date()) {
    국내 종목코드는 6자리 숫자, 미국은 대문자로 시작하는 티커(AAPL · BRK/B)다 — 서버 `us_universe.TICKER_RE` 와 같은 모양.
    가격은 달러 소수 둘째 자리, 큰 금액(시가총액 · 거래대금)은 「조 · 억 달러」 로 한국어 단위를 쓴다. */
 export const isUsCode = (code) => /^[A-Z][A-Z0-9./-]{0,9}$/.test(code || '');
+/* 미국 값이 장외 봉에서 왔으면 그 이름 — 서버 시세의 `session`(pre · regular · after · 2026-10-27). 정규장 · 국내는 '' */
+export const usSessionLabel = (p) => ({ pre: '프리마켓', after: '애프터' }[p && p.session] || '');
 
 export function fmtUsd(v) {
   return v == null || Number.isNaN(v) ? '—' : '$' + fmtNum(v, 2);

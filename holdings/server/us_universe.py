@@ -56,8 +56,11 @@ US_REFRESH_SEC = 3600
 # 재권님이 따로 말씀이 없으셔서 기본으로 정했다. 바꾸시면 이 두 줄만 고친다.
 #: 미국 봉의 시각을 한국 시각으로 보인다 (False 면 미국 현지 시각)
 US_SHOW_KST = True
-#: 정규장(미국 09:30~16:00)만 넣는다 (False 면 프리 · 애프터마켓 04:00~20:00 까지)
-US_REGULAR_ONLY = True
+#: 정규장(미국 09:30~16:00)만 넣는다 (False 면 프리 · 애프터마켓 04:00~20:00 까지).
+#: 2026-10-27 재권님 「미국 정규장도 5분봉이면 될거같아 · 간략화」 · 「응」 → False — 장외 값도 5분봉으로 받는다.
+#: KIS 5분봉이 04:00~20:00 을 준다(같은 날 AAPL 실측 — 응답 머리 stim 040000 · etim 200000 · 애프터 47봉).
+#: 현재가 상세(price-detail)는 장외를 안 준다(last = 정규장 종가) — 그래서 미국 값은 5분봉 하나로 낸다
+US_REGULAR_ONLY = False
 
 _UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
 
@@ -444,6 +447,8 @@ from zoneinfo import ZoneInfo
 ET = ZoneInfo("America/New_York")
 #: 정규장 — 동부 시각 분(09:30 · 16:00). 미리받기는 마감 봉(16:00)이 닫히는 16:05 까지 돈다
 SESSION_OPEN_MIN, SESSION_CLOSE_MIN = 9 * 60 + 30, 16 * 60
+#: 장외까지 — 프리마켓 04:00 · 애프터마켓 20:00(동부). 5분봉 바퀴는 이 사이를 돈다(2026-10-27)
+EXT_OPEN_MIN, EXT_CLOSE_MIN = 4 * 60, 20 * 60
 #: 장 전 창 — 동부 07:15~09:15(지금 한국 20:15~22:15 · 서머타임이 끝나면 21:15~23:15). 국내가 넥스트레이드까지
 #: 끝난(한국 20:10) 뒤 · 미국 개장 전. 이 사이에 목록 · 시총 · 일·주·월·년봉 · 지난 세션 5분봉을 나눠 받는다
 #: (2026-10-07 재권님 「나스닥은 장전에 미리 받을 수 있는 거 먼저 받아놔 한번에 받으면 부담스러우니」 · 「분산으로」).
@@ -475,16 +480,39 @@ def session_state(now=None):
     return "after", d, m
 
 
-def session_open_kst(et_date):
-    """그날 동부 09:30 이 한국 시각으로 몇 시인가 → 봉 ts 와 견줄 YYYYMMDDHHMM.
+def et_min_kst(et_date, minute):
+    """그날 동부 `minute` 분이 한국 시각으로 몇 시인가 → 봉 ts 와 견줄 YYYYMMDDHHMM.
 
     `US_SHOW_KST` 가 꺼져 있으면 봉 ts 가 현지 시각이므로 현지 그대로 돌려준다.
     """
-    t = datetime.strptime(et_date, "%Y%m%d").replace(
-        hour=SESSION_OPEN_MIN // 60, minute=SESSION_OPEN_MIN % 60, tzinfo=ET)
+    t = datetime.strptime(et_date, "%Y%m%d").replace(hour=minute // 60, minute=minute % 60, tzinfo=ET)
     if US_SHOW_KST:
         t = t.astimezone(KST)
     return t.strftime("%Y%m%d%H%M")
+
+
+def session_open_kst(et_date):
+    """그날 동부 09:30(정규장 시작)을 봉 ts 모양으로."""
+    return et_min_kst(et_date, SESSION_OPEN_MIN)
+
+
+def bar_session(ts12):
+    """봉 ts → 그 봉이 어느 장인가 "pre" · "regular" · "after". 동부 시각으로 센다 — 거르는 줄(`REGULAR_FROM` ·
+    `REGULAR_TO`)과 같은 경계다(16:00 봉에 종가 동시호가가 들어 정규장이다)."""
+    t = datetime.strptime(ts12, "%Y%m%d%H%M")
+    if US_SHOW_KST:
+        t = t.replace(tzinfo=KST).astimezone(ET)
+    hms = t.strftime("%H%M%S")
+    if hms < REGULAR_FROM:
+        return "pre"
+    return "regular" if hms <= REGULAR_TO else "after"
+
+
+def in_ext_hours(now=None):
+    """지금 5분봉 바퀴가 돌 때인가(평일 동부 04:00~20:05 · 마지막 봉이 닫히는 5분까지) → (그런가, 동부 날짜, 지금 분)."""
+    now = now or et_now()
+    d, m = now.strftime("%Y%m%d"), now.hour * 60 + now.minute
+    return (now.weekday() < 5 and EXT_OPEN_MIN <= m <= EXT_CLOSE_MIN + 5), d, m
 
 
 # ── 미국 순위 표 (묶음 4 앞 조각 · 2026-10-07 재권님 「ㄱ 으로 해줘」) ────────────────────
@@ -503,68 +531,113 @@ def _et_date_of_kst(ts12):
     return t.astimezone(ET).strftime("%Y%m%d")
 
 
+def _quote_row(conn, code, info):
+    """한 종목의 시세 한 줄 — 순위 표와 시세(`us_quote`)가 함께 쓴다. **DB 만 읽는다.**
+
+    값은 마지막 5분봉 종가다 — 장외(프리 · 애프터)까지 같다(2026-10-27). 등락은 **그 봉의 날 앞 거래일 정규장 종가**
+    대비다 — 국내 넥스트레이드 애프터가 전일 종가 대비인 것과 같은 셈이다. `session` 이 그 봉이 어느 장인지 알리고,
+    `regularPrice` 는 정규장 값(애프터면 그날 정규장 종가 · 프리면 앞날 종가 · 정규장이면 값 그대로)이다.
+    거래량 · 거래대금 · 시가 · 고가 · 저가는 정규장 것만 센다 — 프리 중에는 앞 세션 것이다."""
+    row = {"code": code, "name": (info.get(code) or {}).get("name_ko") or code,
+           "price": None, "prev": None, "amt": None, "pct": None, "volume": None,
+           "value": None, "marketCap": None, "asof": None, "currency": "USD",
+           "session": None, "regularPrice": None, "open": None, "high": None, "low": None}
+    cap = conn.execute("SELECT value FROM sync_meta WHERE key=?", ("uscap:" + code,)).fetchone()
+    if cap:
+        try:
+            row["marketCap"] = float(cap["value"])
+        except (TypeError, ValueError):
+            pass
+    last = conn.execute(
+        "SELECT ts, close FROM candles WHERE code=? AND period='5m' ORDER BY ts DESC LIMIT 1",
+        (code,)).fetchone()
+    if not last:
+        # 5분봉이 없는 종목(S&P500 만 든 종목 등) — 마지막 일봉 둘로 값을 낸다
+        d2 = conn.execute(
+            "SELECT ts, open, high, low, close, volume FROM candles WHERE code=? AND period='D' "
+            "ORDER BY ts DESC LIMIT 2", (code,)).fetchall()
+        if d2:
+            row.update(price=d2[0]["close"], volume=d2[0]["volume"], asof=d2[0]["ts"], session="regular",
+                       regularPrice=d2[0]["close"], open=d2[0]["open"], high=d2[0]["high"], low=d2[0]["low"])
+            if len(d2) > 1 and d2[1]["close"]:
+                row["prev"] = d2[1]["close"]
+                row["amt"] = round(d2[0]["close"] - d2[1]["close"], 4)
+                row["pct"] = round(row["amt"] / d2[1]["close"] * 100, 2)
+        return row
+    day, ses = _et_date_of_kst(last["ts"]), bar_session(last["ts"])
+    prev = conn.execute(
+        "SELECT ts, close FROM candles WHERE code=? AND period='D' AND ts < ? ORDER BY ts DESC LIMIT 1",
+        (code, day)).fetchone()
+    rday = (prev["ts"] if prev else None) if ses == "pre" else day     # 정규장 값을 셀 날
+    reg, dbar = [], None
+    if rday:
+        reg = conn.execute(
+            "SELECT open, high, low, close, volume FROM candles WHERE code=? AND period='5m' "
+            "AND ts >= ? AND ts <= ? ORDER BY ts",
+            (code, session_open_kst(rday), et_min_kst(rday, SESSION_CLOSE_MIN))).fetchall()
+        # 그날 일봉이 있으면(장 마감 뒤) 그 종가 · 거래량이 공식 값이다 — 5분봉 마지막 종가는 마감 동시호가
+        # 뒤 체결이 섞여 조금 다르다(2026-10-07 NVDA 5분 239.29 · 일봉 239.24)
+        dbar = conn.execute(
+            "SELECT open, high, low, close, volume FROM candles WHERE code=? AND period='D' AND ts=?",
+            (code, rday)).fetchone()
+    reg_close = dbar["close"] if dbar else (reg[-1]["close"] if reg else None)
+    price = (dbar["close"] if dbar else last["close"]) if ses == "regular" else last["close"]
+    row.update(price=price, asof=last["ts"], session=ses,
+               regularPrice=price if ses == "regular" else reg_close)
+    row["volume"] = (dbar["volume"] if dbar and dbar["volume"] else sum(b["volume"] or 0 for b in reg))
+    row["value"] = round(sum((b["close"] or 0) * (b["volume"] or 0) for b in reg))
+    if reg:
+        row.update(open=reg[0]["open"], high=max(b["high"] for b in reg if b["high"] is not None),
+                   low=min(b["low"] for b in reg if b["low"] is not None))
+    elif dbar:
+        row.update(open=dbar["open"], high=dbar["high"], low=dbar["low"])
+    if prev and prev["close"]:
+        row["prev"] = prev["close"]
+        row["amt"] = round(price - prev["close"], 4)
+        row["pct"] = round(row["amt"] / prev["close"] * 100, 2)
+    return row
+
+
 def us_board(index_code=NDX100):
-    """나스닥100 순위 표 → [{code, name, price, prev, amt, pct, volume, value, marketCap, asof}] (DB 만).
+    """나스닥100 순위 표 → [{code, name, price, prev, amt, pct, volume, value, marketCap, asof, session, …}] (DB 만).
 
     칸 이름은 국내 `/api/kis/quotes` 와 같게 둔다 — 순위 표 코드(home.js)가 한 길로 두 표를 그린다.
     `value`(거래대금)는 5분봉 종가×거래량 합이라 어림값이다 — 응답 meta 의 `valueIsEstimate` 가 알린다."""
     codes = members(index_code)
     info = _symbols()
-    out = []
     with dart._db_lock, dart.db_conn() as conn:
-        for code in codes:
-            last = conn.execute(
-                "SELECT ts, close FROM candles WHERE code=? AND period='5m' ORDER BY ts DESC LIMIT 1",
-                (code,)).fetchone()
-            row = {"code": code, "name": (info.get(code) or {}).get("name_ko") or code,
-                   "price": None, "prev": None, "amt": None, "pct": None, "volume": None,
-                   "value": None, "marketCap": None, "asof": None, "currency": "USD"}
-            cap = conn.execute("SELECT value FROM sync_meta WHERE key=?", ("uscap:" + code,)).fetchone()
-            if cap:
-                try:
-                    row["marketCap"] = float(cap["value"])
-                except (TypeError, ValueError):
-                    pass
-            if not last:
-                # 5분봉이 없는 종목(S&P500 만 든 종목 등) — 마지막 일봉 둘로 값을 낸다
-                d2 = conn.execute(
-                    "SELECT ts, close, volume FROM candles WHERE code=? AND period='D' ORDER BY ts DESC LIMIT 2",
-                    (code,)).fetchall()
-                if d2:
-                    row["price"], row["volume"], row["asof"] = d2[0]["close"], d2[0]["volume"], d2[0]["ts"]
-                    if len(d2) > 1 and d2[1]["close"]:
-                        row["prev"] = d2[1]["close"]
-                        row["amt"] = round(d2[0]["close"] - d2[1]["close"], 4)
-                        row["pct"] = round(row["amt"] / d2[1]["close"] * 100, 2)
-            if last:
-                day = _et_date_of_kst(last["ts"])
-                start = session_open_kst(day)
-                bars = conn.execute(
-                    "SELECT close, volume FROM candles WHERE code=? AND period='5m' AND ts >= ? AND ts <= ?",
-                    (code, start, last["ts"])).fetchall()
-                prev = conn.execute(
-                    "SELECT close FROM candles WHERE code=? AND period='D' AND ts < ? ORDER BY ts DESC LIMIT 1",
-                    (code, day)).fetchone()
-                # 그날 일봉이 있으면(장 마감 뒤) 그 종가 · 거래량이 공식 값이다 — 5분봉 마지막 종가는 마감 동시호가
-                # 뒤 체결이 섞여 조금 다르다(2026-10-07 NVDA 5분 239.29 · 일봉 239.24)
-                dbar = conn.execute(
-                    "SELECT close, volume FROM candles WHERE code=? AND period='D' AND ts=?",
-                    (code, day)).fetchone()
-                price = dbar["close"] if dbar else last["close"]
-                row["price"], row["asof"] = price, last["ts"]
-                row["volume"] = (dbar["volume"] if dbar and dbar["volume"] else
-                                 sum(b["volume"] or 0 for b in bars))
-                row["value"] = round(sum((b["close"] or 0) * (b["volume"] or 0) for b in bars))
-                if prev and prev["close"]:
-                    row["prev"] = prev["close"]
-                    row["amt"] = round(price - prev["close"], 4)
-                    row["pct"] = round(row["amt"] / prev["close"] * 100, 2)
-            out.append(row)
-    return out
+        return [_quote_row(conn, code, info) for code in codes]
+
+
+def us_quote(code):
+    """한 종목 시세 — 국내 세 모양(price · prices · quotes)이 쓰는 칸을 `us_price` 와 같은 이름으로 낸다. **DB 만 읽는다**
+    (2026-10-27 · 미국은 5분봉 하나로). PER · PBR · EPS · BPS 는 하루 한 번 받아 둔 것(`usinfo:`), 52주 고저는 일봉에서 센다.
+    5분봉도 일봉도 없으면 None — 부르는 쪽이 KIS 로 받는다."""
+    info = _symbols()
+    with dart._db_lock, dart.db_conn() as conn:
+        row = _quote_row(conn, code, info)
+        if row["price"] is None:
+            return None
+        hl = conn.execute(
+            "SELECT MAX(high) AS h, MIN(low) AS l FROM (SELECT high, low FROM candles WHERE code=? AND period='D' "
+            "ORDER BY ts DESC LIMIT 252)", (code,)).fetchone()
+        extra = conn.execute("SELECT value FROM sync_meta WHERE key=?", ("usinfo:" + code,)).fetchone()
+    try:
+        extra = json.loads(extra["value"]) if extra else {}
+    except (TypeError, ValueError):
+        extra = {}
+    chg, pct = row["amt"], row["pct"]
+    nm = info.get(code) or {}
+    row.update(name=nm.get("name_ko") or nm.get("name_en") or code, change=chg, changePct=pct,
+               sign="2" if (chg or 0) > 0 else ("5" if (chg or 0) < 0 else "3"),
+               per=extra.get("per"), pbr=extra.get("pbr"), eps=extra.get("eps"), bps=extra.get("bps"),
+               high52=hl["h"] if hl else None, low52=hl["l"] if hl else None, source="DB")
+    return row
 
 
 def save_caps(kis_get, cfg, codes):
-    """시가총액을 하루 한 번 받아 둔다(현재가 상세 · 종목마다 1건). 장 마감 뒤 바퀴가 부른다."""
+    """시가총액 · PER · PBR · EPS · BPS 를 하루 한 번 받아 둔다(현재가 상세 · 종목마다 1건). 장 전 바퀴가 부른다.
+    시세(`us_quote`)가 이것을 쓴다 — 화면이 물을 때마다 KIS 를 부르지 않게(2026-10-27)."""
     n = 0
     for code in codes:
         try:
@@ -574,5 +647,6 @@ def save_caps(kis_get, cfg, codes):
         if p.get("marketCap"):
             dart._meta_set("uscap:" + code, str(p["marketCap"]))
             n += 1
+        dart._meta_set("usinfo:" + code, json.dumps({k: p.get(k) for k in ("per", "pbr", "eps", "bps")}))
         time.sleep(0.3)
     return n

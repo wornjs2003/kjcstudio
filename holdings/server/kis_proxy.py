@@ -5936,11 +5936,38 @@ def _get_chart_us(cfg, code, period, limit):
     return rows, fetched, "KIS" if fetched else "DB"
 
 
+_us_members = {"at": 0.0, "set": frozenset()}
+
+
+def _us_member_set():
+    """미리받기 묶음(나스닥100 ∪ S&P500)을 1분 들고 있는다 — 시세를 부를 때마다 표를 읽지 않게."""
+    if time.time() - _us_members["at"] > 60:
+        try:
+            _us_members["set"] = frozenset(us_universe.all_members())
+        except Exception:
+            pass                                    # 표가 아직 없다 — 옛 것을 쓴다(처음이면 빈 것 → KIS 로)
+        _us_members["at"] = time.time()
+    return _us_members["set"]
+
+
 def _us_quotes(cfg, codes):
-    """미국 티커 여럿의 시세 → (data, errors). KIS 해외에 여러 종목 한 번에 받는 시세가 없어 종목마다 1건이고,
-    국내와 같은 시세 캐시(`PRICE_CACHE_TTL`)를 탄다. 한 요청에 `US_QUOTES_MAX` 개까지만 받는다."""
+    """미국 티커 여럿의 시세 → (data, errors). 한 요청에 `US_QUOTES_MAX` 개까지만 받는다.
+
+    **묶음 종목은 DB 의 5분봉으로 낸다 — KIS 를 안 부른다**(2026-10-27 재권님 「미국 정규장도 5분봉이면 될거같아 ·
+    간략화」 · 「응」). 미리받기가 장외까지 5분마다 쌓으므로 값은 최대 5분 늦다. 묶음 밖 종목 · 아직 봉이 없는 종목만
+    전처럼 현재가 상세를 종목마다 1건 부르고 국내와 같은 시세 캐시(`PRICE_CACHE_TTL`)를 탄다."""
     data, errors = {}, {}
+    members = _us_member_set()
     for code in codes[:US_QUOTES_MAX]:
+        if code in members:
+            try:
+                row = us_universe.us_quote(code)
+            except Exception as e:
+                row = None
+                _us_log("%s 시세 DB 읽기 실패 (%s) — KIS 로" % (code, type(e).__name__))
+            if row is not None:
+                data[code] = row
+                continue
         ck = "us:" + code
         hit = _cache_get(ck)
         if hit is None:
@@ -5992,7 +6019,7 @@ def _us_today_seen(code, et_date):
         _us_log("%s 확인 실패 — KIS 오류 (%s) · 휴장으로 보지 않고 다음 칸에 다시 봄"
                 % (code, safe_message(e, 80)))
         return None
-    start = us_universe.session_open_kst(et_date)
+    start = us_universe.et_min_kst(et_date, us_universe.EXT_OPEN_MIN)   # 프리마켓(04:00) 봉부터 센다 (2026-10-27)
     return any(b["ts"] >= start for b in bars)
 
 
@@ -6069,6 +6096,21 @@ def start_us_prefill(cfg, port):
         _us_log("마감 뒤(%s) 일봉 %d/%d종목 · KIS %d건 · %.0f초 · 초당 %.2f건"
                 % (et_date, done, len(codes), n, time.time() - t0, n / max(1.0, time.time() - t0)))
 
+    busy = {"pre": False, "post": False}
+
+    def in_bg(key, fn, *args):
+        """장 전 · 마감 뒤 바퀴는 따로 돈다 — 한 줄에서 돌면 그동안(장 전 창 두 시간) 5분봉 바퀴가 멈춘다.
+        5분봉 바퀴가 프리마켓 · 애프터마켓까지 돌게 되면서 나눴다 (2026-10-27)."""
+        def run():
+            try:
+                fn(*args)
+            except Exception as e:
+                _us_log("%s 바퀴 오류 (%s)" % (key, type(e).__name__))
+            finally:
+                busy[key] = False
+        busy[key] = True
+        threading.Thread(target=run, daemon=True, name="prefill-us-" + key).start()
+
     def loop():
         time.sleep(PREFILL_START_SEC)
         state = {"holiday": None, "seen": None, "pre": None, "slot": None, "probe": None, "post": None}
@@ -6077,27 +6119,29 @@ def start_us_prefill(cfg, port):
                 st, d, m = us_universe.session_state()
                 codes = us_universe.all_members()
                 pre, pd, _left = us_universe.in_premarket()
-                if pre and codes and state["pre"] != pd:
+                if pre and codes and state["pre"] != pd and not busy["pre"]:
                     state["pre"] = pd                     # 하루 한 번 — 다 못 받아도 그날은 다시 안 돈다
-                    pre_round(codes, pd)
-                elif (st == "after" and codes and state["post"] != d
-                      and m >= us_universe.SESSION_CLOSE_MIN + US_POST_AFTER_MIN):
+                    in_bg("pre", pre_round, codes, pd)
+                if (st == "after" and codes and state["post"] != d and not busy["post"]
+                        and m >= us_universe.SESSION_CLOSE_MIN + US_POST_AFTER_MIN):
                     # 하루 한 번 — 휴장일이면 받은 마지막 봉이 앞 거래일이라 그대로 맞다. 재시작 뒤에도 그날 한 번 돈다
                     state["post"] = d
-                    post_round(codes, d)
-                elif st == "open" and codes and state["holiday"] != d:
-                    slot = (d, (m - us_universe.SESSION_OPEN_MIN) // 5)
+                    in_bg("post", post_round, codes, d)
+                # 5분봉 바퀴 — 프리마켓부터 애프터마켓까지(동부 04:00~20:05 · 2026-10-27). 전에는 정규장만 돌았다
+                ext, ed, em = us_universe.in_ext_hours()
+                if ext and codes and state["holiday"] != ed:
+                    slot = (ed, em // 5)
                     if slot != state["slot"]:
-                        if state["seen"] != d and state["probe"] != slot:   # 오늘 봉이 아직 — 칸마다 한 번만 한 종목으로 본다
+                        if state["seen"] != ed and state["probe"] != slot:   # 오늘 봉이 아직 — 칸마다 한 번만 한 종목으로 본다
                             state["probe"] = slot
-                            seen = _us_today_seen(codes[0], d)
+                            seen = _us_today_seen(codes[0], ed)
                             if seen:
-                                state["seen"] = d
-                                _us_log("오늘(%s) 장이 열렸다 — 미리받기 시작" % d)
-                            elif seen is False and m >= us_universe.HOLIDAY_JUDGE_MIN:
-                                state["holiday"] = d
-                                _us_log("오늘(%s) 동부 10:00 까지 봉이 없다 — 휴장으로 보고 멈춤" % d)
-                        if state["seen"] == d:
+                                state["seen"] = ed
+                                _us_log("오늘(%s) 봉이 들어왔다 — 미리받기 시작" % ed)
+                            elif seen is False and em >= us_universe.HOLIDAY_JUDGE_MIN:
+                                state["holiday"] = ed
+                                _us_log("오늘(%s) 동부 10:00 까지 봉이 없다 — 휴장으로 보고 멈춤" % ed)
+                        if state["seen"] == ed:
                             state["slot"] = slot
                             # 화면이 본 종목부터 · 모달로 연 묶음 밖 미국 종목도 그 바퀴에 (2026-10-12 · 설계서 3번).
                             # 목록 밖은 `PREFILL_HOT_SEC` 안에 본 것만 — 한 번 본 종목이 바퀴마다 계속 붙지 않게

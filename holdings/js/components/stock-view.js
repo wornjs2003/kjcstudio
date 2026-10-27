@@ -28,7 +28,7 @@ import { fetchCandles, fetchCandlesSince, watchCandles, createStockChart, maLege
   chartView, setChartView, chartStockChanged } from '../chart.js';
 import { getMemo, setMemo } from '../store/memo.js';
 import { fmtNum, fmtWon, fmtMoneyKr, fmtShareCount, fmtDelta, dirClass,
-  isUsCode, fmtPriceOf, fmtUsdBig, priceDigitsOf } from '../utils/format.js';
+  isUsCode, fmtPriceOf, fmtUsdBig, priceDigitsOf, usSessionLabel } from '../utils/format.js';
 import { paintIcon } from './stock-icon.js';
 import { mountDisclosures } from './disclosures.js';
 import { mountStockPanel } from './stock-panel.js';
@@ -185,7 +185,9 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
     price.textContent = fmtPriceOf(stock.code, live.price);
     if (sub) {
       sub.className = 'kh-price-sub kh-num ' + cls;
-      sub.textContent = '어제보다 ' + (us ? fmtDelta(live.amt, live.pct, '달러', 2) : fmtDelta(live.amt, live.pct));
+      /* 미국 장외 봉 값이면 앞에 「프리마켓 · 」 · 「애프터 · 」 — 등락은 그때도 앞 거래일 정규장 종가 대비다(서버 us_quote) */
+      const ses = us ? usSessionLabel(live) : '';
+      sub.textContent = (ses ? ses + ' · ' : '') + '어제보다 ' + (us ? fmtDelta(live.amt, live.pct, '달러', 2) : fmtDelta(live.amt, live.pct));
     }
 
     setHtml('#kh-r1',  rangeBar(live.low, live.high, live.price));
