@@ -41,6 +41,8 @@
 /* 지금 값 — 이름 · 값 · 전날 대비. 오른 것은 연한 빨강 바탕에 진한 빨강(한국식) */
 .mk .nv-tb { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px 16px; font-size: 12.5px; }
 .mk .nv-tb .g { font-size: 11.5px; color: var(--kh-text-muted); margin: 6px 0 0; }
+.mk .nv-tb .src { font-size: 11px; color: var(--kh-text-muted); margin: 6px 0 0; }   /* #us-range 맨 아래 출처 · 받은 시각 */
+.mk #us-range .nv-tb { max-width: 560px; }   /* 글과 값이 멀어 안 읽힌다(10-27 재권님) — 줄 폭을 좁혀 값을 글 곁에 둔다 · 좁은 폭은 그대로 */
 .mk .nv-tb .r { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
 .mk .nv-tb .r b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .mk .nv-tb .p { font-size: 11px; padding: 0 6px; border-radius: 99px; margin-left: 6px; font-variant-numeric: tabular-nums; }
