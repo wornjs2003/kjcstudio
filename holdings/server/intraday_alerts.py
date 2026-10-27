@@ -29,7 +29,7 @@
 ── 보내기 ──
 
     `dart.telegram_send` 하나(조용한 시간 · 4,096자 나누기 그대로). 보내는 서버는 메인(`is_sender`) 하나 — `kis_proxy` 가 거기서만 띄운다.
-    **`SEND` 는 둘 다 켰다** — 재권님 「둘다 켜」(10-26 · 그날 실측 VI 4시간 61통 · 급등 하루 20종목을 드린 뒤). 따로 끌 수 있다.
+    **`SEND` — VI 는 끄고 급등만 켰다** — 「둘다 켜」(10-26) 뒤 첫날 오전에 VI 가 103통이 되자 재권님 「VI 이건 안해도 될거같아」(10-27). 따로 끌 수 있다.
     꺼 두면 바퀴는 돌되 안 보내고, 보냈을 글을 `/api/alerts/status` 의 `preview` 에 남긴다. 몇 통 갔는지는 거기 `today`.
 
 ── 못 하는 것 ──
@@ -47,7 +47,7 @@ from secrets_guard import safe_message
 
 KST = timezone(timedelta(hours=9))
 
-SEND = {"vi": True, "surge": True}     # 켬 — 재권님 「둘다 켜」(10-26 17:0x · 「내일 받을수 있게 해줘」 뒤). 끄려면 여기 False
+SEND = {"vi": False, "surge": True}    # VI 끔 — 재권님 「VI 이건 안해도 될거같아」(10-27 · 첫날 10:36 까지 103통). 급등은 켬 — 「둘다 켜」(10-26)
 TICK = 10                    # 초. 하루 정규장 2,340바퀴쯤 · VI 는 KIS 초당 0.1 · 급등은 순위 캐시를 탄다
 SESSION_FROM = 9 * 60        # 09:00
 SESSION_TO = 15 * 60 + 30    # 15:30 — 정규장만(재권님 「정규장만」 10-26)
