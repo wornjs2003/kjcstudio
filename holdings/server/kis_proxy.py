@@ -68,6 +68,7 @@ import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-2
 import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
 import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 테마 · 수급(넥스트 5분 거래량 2배) (2026-10-27 · server/theme_flow.py)
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
+import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 · 색 = 등락률 · /api/kis/heatmap(2026-10-27 · server/heatmap.py)
 import intraday_flow    # 당일 수급 — 장중 1분마다 시장 투자자 · 프로그램 매매를 쌓아 5분 구간으로 · /api/kis/flow-today(2026-10-27 · server/intraday_flow.py)
 import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
 import intraday_alerts  # 장중 알림 — 상승 VI · +20% 급등(2026-10-26 · server/intraday_alerts.py 머리 주석)
@@ -8361,6 +8362,34 @@ class Handler(SimpleHTTPRequestHandler):
                         "resting": True,
                     },
                 })
+                return
+
+            if route == "heatmap":
+                # 첫 화면 시장 지도 (2026-10-27 재권님 「응 시작해」 · `heatmap.py` 머리글). 국내는 멀티 시세 4번 ·
+                # 미국은 「지금 뜨는 산업」 미국 칸 섹터 캐시를 함께 쓴다(봉 표만 · KIS 더 안 부름)
+                mk = (qs.get("market") or ["kr"])[0].strip().lower()
+                if mk not in ("kr", "us"):
+                    self._send_json({"ok": False, "error": "market 은 kr · us 중 하나여야 합니다."}, 400)
+                    return
+                try:
+                    if mk == "kr":
+                        data = heatmap.kr(sys.modules[__name__], cfg)
+                    else:
+                        known = us_universe.symbol_map()
+
+                        def sector_stocks(etf):
+                            key = "%s:d" % etf
+                            got = _ttl_get(_us_sector_cache, key, SECTOR_TTL)
+                            if got is None:
+                                got = us_sectors.stocks(etf, "d", read_candles, known)
+                                _us_sector_cache[key] = (time.time(), got)
+                            return got
+                        data = heatmap.us(sys.modules[__name__], read_candles, known, sector_stocks)
+                except Exception as e:
+                    self._send_json({"ok": False, "error": safe_message(e)}, 502)
+                    return
+                self._send_json({"ok": True, "data": data, "meta": {
+                    "market": mk, "cacheTtl": heatmap.HEATMAP_TTL, "source": data.get("source")}})
                 return
 
             if route in ("us-sectors", "us-sector-stocks"):
