@@ -9,16 +9,16 @@
    종목을 누르면 onPick(code, name) — 부르는 쪽(home.js)이 순위표 줄과 같은 길(selectStock)로 차트를 띄우고 이 덮개를 내린다.
 
    색 — 오르면 --kh-up · 내리면 --kh-down · 0 은 색 없음 · 값 없음은 흐림(방향은 sign.js).
-   짙기 폭 FULL_PCT 는 시안 값이다 — 「기준이 있는 수치는 … 셈은 tone.js 한 곳」 에 들어 tone.js 로 옮긴다(2026-10-28 검수 걸림 · 재권님 「응」)
+   짙기 폭 FULL_PCT 는 시안 값이다 — 「기준이 있는 수치는 … 셈은 tone.js 한 곳」 에 드는지는 재권님께 여쭌 자리다(2026-10-27)
    ========================================================================== */
 
 import { side } from '/assets/js/sign.js';
 import { apiFetch } from '../data/api.js';
 import { watch } from '../store/longpoll.js';
 
-const FULL_PCT = 10;                     // 이 등락률(±%)에서 가장 짙다 — 재권님 「0~10까지 · 그 이상은 같은 색」(10-28) · tone.js 로 옮기기 전 임시
+const FULL_PCT = 3;                      // 이 등락률(±%)에서 가장 짙다 — 시안 그대로
 const ALPHA = [0.18, 1];                 // 가장 옅음 · 가장 짙음
-const INK_PCT = 4;                       // 바탕 농도 k 0.4 부터 흰 글씨 — tone.js onFill 로 옮기기 전 임시
+const INK_PCT = 1.2;                     // 이보다 크게 움직인 칸은 바탕이 짙어 흰 글씨
 const TITLE = { kr: '국내 시장 지도', us: '미국 시장 지도' };
 const FOOT = {
   kr: '코스피 시가총액 상위 70 · 코스닥 상위 40 · 업종은 KIS 종목 목록의 지수업종',

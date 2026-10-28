@@ -13,9 +13,7 @@
     순으로 이름이 있는 첫 칸(「제조」 처럼 너무 넓은 대분류는 건너뛴다). 이름은 업종 지수 응답(fetch_sectors)의 이름 그대로
   - 그 파일의 시가총액(억원)은 **전날 종가 기준**이다 — 2026-10-27 실측 삼성전자 12,452,573억 ↔ 순위표 1,248.2조. 그래서
     지금 값 = 파일 값 × 지금가 / 전날 종가
-  - **등락률 · 지금가 · 전날 종가** — 순위표와 같은 멀티 시세(kis_proxy.fetch_quotes_multi · 30종목씩 한 바퀴 = KIS 4번).
-    정규장 중은 KRX · 장 밖은 통합(넥스트레이드)이다 — holdings/CLAUDE.md 「시세 표기 규칙」. 응답은 HEATMAP_TTL 동안 그대로 낸다
-    (재권님 「주가가 바뀌면 바뀌도록 적용해줘」 2026-10-28 — 60초에서 줄임 · 화면은 롱폴로 바뀐 것을 받는다)
+  - **등락률 · 지금가 · 전날 종가** — 멀티 시세(KRX · 30종목씩) 한 바퀴 = KIS 4번. 응답은 HEATMAP_TTL 동안 그대로 낸다
   - 업종 분류는 증권사 것 그대로다 — 지주사가 「금융」 · 알테오젠이 「일반서비스」 에 들어간다(재권님이 그대로 쓰기로 함)
 
 미국
@@ -39,7 +37,7 @@ import us_sectors
 
 KR_TOP = {"kospi": 70, "kosdaq": 40}       # 시안 그대로 — 재권님 「응 맞아」(2026-10-27)
 US_TOP = 110
-HEATMAP_TTL = 5                             # 응답을 그대로 내는 초 — 보는 동안 KIS 초당 0.8건(2026-10-28 8765 실측 초당 1.6건 · 예산 40)
+HEATMAP_TTL = 60                            # 응답을 그대로 내는 초 — 지도는 초 단위로 안 본다(업종 지수 SECTOR_TTL 과 같은 값)
 WIDE = ("제조",)                            # 대분류 중 너무 넓어 업종으로 안 쓰는 이름
 US_SKIP = ("XSD",)                          # 기술(XLK)과 겹치는 반도체 ETF
 
@@ -87,6 +85,24 @@ def master():
         return out
 
 
+def _multi_krx(proxy, cfg, codes):
+    """{code: {price, prev, pct}} — 멀티 시세 KRX"""
+    out = {}
+    for i in range(0, len(codes), nxt_pre.MULTI_MAX):
+        params = {}
+        for n, c in enumerate(codes[i:i + nxt_pre.MULTI_MAX], 1):
+            params["FID_COND_MRKT_DIV_CODE_%d" % n] = "J"
+            params["FID_INPUT_ISCD_%d" % n] = c
+        data = proxy.kis_get(cfg, "/uapi/domestic-stock/v1/quotations/intstock-multprice", params, "FHKST11300006")
+        for r in (data or {}).get("output") or []:
+            code = (r.get("inter_shrn_iscd") or "").strip()
+            if code:
+                out[code] = {"price": proxy._num(r.get("inter2_prpr"), int),
+                             "prev": proxy._num(r.get("inter2_prdy_clpr"), int),
+                             "pct": proxy._num(r.get("prdy_ctrt"))}
+    return out
+
+
 def kr(proxy, cfg):
     hit = _cache.get("kr")
     if hit and time.time() - hit[0] < HEATMAP_TTL:
@@ -99,7 +115,7 @@ def kr(proxy, cfg):
         pass                                         # 이름표를 못 받으면 업종은 「기타」 — 지도는 그린다
     m = master()
     picks = {mk: m[mk][:n] for mk, n in KR_TOP.items()}
-    q, _errs = proxy.fetch_quotes_multi(cfg, [r["code"] for rows in picks.values() for r in rows])
+    q = _multi_krx(proxy, cfg, [r["code"] for rows in picks.values() for r in rows])
     groups, missing = [], []
     for mk, label in (("kospi", "코스피"), ("kosdaq", "코스닥")):
         secs = {}
@@ -116,7 +132,7 @@ def kr(proxy, cfg):
         groups.append({"name": label, "sectors": _sorted(secs)})
     out = {"market": "kr", "groups": groups, "asof": datetime.now(_KST).isoformat(timespec="seconds"),
            "capUnit": "억원", "capNote": "종목 목록 파일(전날 종가) × 지금가 ÷ 전날 종가", "missing": missing,
-           "div": proxy.quote_market_div(), "source": "KIS 종목 목록 · KIS 멀티 시세"}
+           "source": "KIS 종목 목록 · KIS 멀티 시세"}
     _cache["kr"] = (time.time(), out)
     return out
 

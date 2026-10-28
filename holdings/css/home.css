@@ -1685,8 +1685,6 @@
 .kh-hm { position: absolute; inset: 0; z-index: 30; background: var(--kh-bg-card); border-radius: inherit;
   padding: 18px 20px 14px; display: flex; flex-direction: column; gap: 10px; }
 .kh-hm[hidden] { display: none; }
-/* 좁은 폭의 접기 단추(.kh-foldbtn)는 지도 덮개 위에 둔다 — 덮개가 단추를 가려 카드를 못 접었다(2026-10-28 qa · 390px) */
-.kh-idx-main.is-hm > .kh-foldbtn { z-index: 31; }
 .kh-hm-head { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
 .kh-hm-title { font-size: 1.28rem; font-weight: 700; color: var(--kh-text-primary); white-space: nowrap; }
 .kh-hm-sub { font-size: 0.8rem; color: var(--kh-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
