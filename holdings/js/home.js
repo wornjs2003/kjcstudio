@@ -1118,6 +1118,7 @@ function themeSubChipsHtml() {
     const d = flowData;
     if (!d) return `<span class="kh-mut">${flowFail ? '수급을 못 받았습니다' : '수급을 받는 중'}</span>`;
     if (!d.prevDay) return '<span class="kh-mut">넥스트 5분 거래량을 쌓는 중 — 어제 값이 생기는 다음 거래일부터 견줍니다</span>';
+    if (!d.compared) return '<span class="kh-mut">어제 같은 구간 값이 없어 아직 견줄 수 없습니다 — 어제 값이 있는 구간이 오면 견줍니다</span>';
     const one = (sel, label, n, title) => `<button class="kh-chip kh-sub-chip${flowSel === sel ? ' is-on' : ''}" type="button"
       data-flow="${sel}"${title ? ` title="${escT(title)}"` : ''}>${escT(label)}${n == null ? '' : ` <b class="kh-chip-hit">${n}</b>`}</button>`;
     return one('all', `전체 ${(d.hits || []).length}`, null)
@@ -1134,7 +1135,7 @@ function themeSubChipsHtml() {
 function themeNote() {
   if (themeBig === FLOW) {
     const d = flowData;
-    if (!d || !d.prevDay) return '수급 — 넥스트 5분 거래량을 어제 같은 구간과 견줍니다';   // 왜 비었는지는 칩 둘째 줄 한 곳에
+    if (!d || !d.prevDay || !d.compared) return '수급 — 넥스트 5분 거래량을 어제 같은 구간과 견줍니다';   // 왜 비었는지는 칩 둘째 줄 한 곳에
     const at = d.slot ? `${d.slot.slice(0, 2)}:${d.slot.slice(2)}` : '—';
     const head = `수급 — 넥스트 ${at} 까지 5분 거래량이 어제 같은 구간의 ${d.ratio}배 이상`;
     if (flowSel === 'etc') return `${head} · 기타(어느 테마에도 없음) ${(d.etc || []).length}종목 · 배율 순`;

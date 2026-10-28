@@ -6953,7 +6953,7 @@ class Handler(SimpleHTTPRequestHandler):
             # 실시간 순위 「테마」(server/theme_flow.py) — flow: 수급(넥스트 5분 거래량 2배) · themes: 큰 테마별 작은 테마(네이버 264)
             try:
                 if self.path.split("?")[0].rstrip("/").endswith("/flow"):
-                    self._send_json({"ok": True, "data": theme_flow.flow(sys.modules[__name__]), "meta": theme_flow.status()})
+                    self._send_json({"ok": True, "data": theme_flow.flow(sys.modules[__name__]), "meta": theme_flow.status(sys.modules[__name__])})
                 else:
                     self._send_json({"ok": True, "data": theme_flow.big(), "meta": {"source": "네이버 · 큰 테마는 이름 낱말로 나눔(theme_flow.BIG)"}})
             except Exception as e:

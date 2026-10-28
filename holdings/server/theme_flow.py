@@ -257,8 +257,18 @@ def flow(proxy):
     return out
 
 
-def status():
-    return dict(_status, open="%02d:%02d" % OPEN, close="%02d:%02d" % CLOSE, slotMin=SLOT_MIN)
+def status(proxy=None):
+    st = dict(_status)
+    if st.get("memberDay") is None and proxy is not None:   # 재시작 뒤 — 오늘 소속을 이미 받아 둬 refresh 를 건너뛴 때
+        try:
+            with proxy._db_lock, proxy.db_conn() as conn:
+                r = conn.execute("SELECT v FROM theme_member_meta WHERE k = 'day'").fetchone()
+                n = conn.execute("SELECT COUNT(DISTINCT no) FROM theme_member").fetchone()
+            if r:
+                st.update(memberDay=r[0], memberThemes=n[0] if n else None)
+        except Exception:
+            pass
+    return dict(st, open="%02d:%02d" % OPEN, close="%02d:%02d" % CLOSE, slotMin=SLOT_MIN)
 
 
 def start(proxy):
