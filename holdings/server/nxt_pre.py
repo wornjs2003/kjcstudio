@@ -147,7 +147,7 @@ def format_list(day, prev_day, hits):
             % (d, prev_day[4:6], prev_day[6:8], format(MIN_PREV, ","), len(hits)))
     lines = []
     for h in hits:
-        pct = "—" if h["pct"] is None else "%+.1f%%" % h["pct"]
+        pct = "—" if h["pct"] is None else "0.0%" if round(h["pct"], 1) == 0 else "%+.1f%%" % h["pct"]   # 0 은 부호 없이
         price = "—" if not h["price"] else format(h["price"], ",") + "원"
         lines.append("%s(%s) %.1f배 · 오늘 %s주 · 전날 %s주 · 장외가 %s · 종가 대비 %s"
                      % (h["name"], h["code"], h["ratio"], format(h["vol"], ","), format(h["prev"], ","), price, pct))
