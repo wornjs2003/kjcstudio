@@ -2946,6 +2946,8 @@ def fetch_price(cfg, code):
         "source": "KIS",
         "mode": cfg["mode"],
     }
+    if div == "UN":
+        overnight_price(code, out)          # 자정 뒤 08:00 전 — 어제 20:00 넥장 마감 값으로(아래 `overnight_row`)
     _cache_put(ck, out)
     return out
 
@@ -3045,6 +3047,7 @@ def fetch_quotes_multi(cfg, codes):
     # 정규장 중이면 오늘 아침 장 시작 전에 받아 둔 장외 값을 싣는다 — `attach_after_snap`
     if div == "UN" and out:
         attach_reg_close(cfg, out)
+        overnight_quotes(out)               # 자정 뒤 08:00 전 — 어제 20:00 넥장 마감 값으로(아래 `overnight_row`)
     elif out:
         attach_after_snap(out)
 
@@ -3071,10 +3074,15 @@ def fetch_quotes_multi(cfg, codes):
 #
 # **종가는 회차마다 한 번만 받고 다음 정규장이 열릴 때까지 쥔다.** 장이 끝나면 안 바뀌는 값이라 다시 물을 까닭이 없다
 # (200종목이면 멀티 7건 · 하루 한 번). 15:30 그 1분은 종가가 막 정해지는 때라 받지 않는다 — 그 사이 regPct 는 없다.
-# **확인 못 한 것** — KRX 시간외 단일가(16:00~18:00)가 정규장(J) 현재가를 움직이는지 · 통합(UN) 시세에 드는지.
-# 처음 받은 값을 쥐므로 움직여도 종가가 흔들리지는 않는다. 공휴일은 아직 안 가른다 — 그날 J 현재가는 전 거래일 종가라 값은 맞다
-# (가르려면 서버의 「오늘 국내 5분봉이 들었나」 셈을 쓸 수 있다 · 개념정의 검수 덧말).
-REG_CLOSE_READY = (15, 31)      # 이 시각부터 그날 종가로 받는다
+# **종가는 정규장(J) 일봉의 그날 종가로 받는다** (2026-10-28 고침). 전에는 J 멀티의 「지금가」 를 처음 물을 때 쥐었는데
+# 그 값이 종가가 아니었다 — 10-27 에 삼성전자 223,000 · SK하이닉스 1,363,000 · 삼성전자우 171,900 을 쥐었고, J 일봉 종가 ·
+# 오늘(10-28) KIS · 네이버의 전일 종가는 222,000 · 1,341,000 · 171,100 이었다(08:4x 실측). 장외 칩이 하루 저녁 내내 틀린
+# 기준으로 셈했다(재권님 「삼성 하이닉스도 많이 올랐는데 제대로 안나오는데」 → 「종가대비해서 해야해」 · 2026-10-28).
+# J 멀티 지금가가 언제 어떻게 움직였는지는 못 가렸다 — 시간외 단일가(16:00~18:00)일 수 있다.
+# 일봉은 한 종목에 한 번 묻는다 — 순위 목록 종목이면 하루 350번쯤. 쥔 것은 그 회차에 다시 안 묻는다.
+# **일봉에 그날 줄이 없으면 쥐지 않는다**(장이 안 열린 날 · 아직 안 들어온 때) — 다음에 다시 묻는다.
+# 08:00~09:00 은 넥스트레이드 프리마켓 값을 그 종가와 견준다 — 재권님 「장외는 8시되면 리셋해줘」 → (가) 「종가대비」.
+REG_CLOSE_READY = (15, 40)      # 이 시각부터 그날 종가로 받는다 — 15:30 동시호가 결과가 일봉에 들 때를 넉넉히 둔다
 
 _reg_close = {}                 # code -> (회차 날짜 "YYYY-MM-DD", 종가)
 _reg_lock = threading.Lock()
@@ -3096,43 +3104,48 @@ def reg_session_day(now=None):
     return day.isoformat()
 
 
-def fetch_reg_closes(cfg, codes):
-    """그 회차 정규장 종가 {code: 종가}. 쥔 것은 다시 안 묻는다. 못 받은 종목은 빠진다(0 으로 넣지 않는다).
+def _reg_close_daily(cfg, code, day):
+    """정규장(J) 일봉에서 그 날의 종가. 그 날 줄이 없으면 None — 아직 없는 것이지 0 이 아니다."""
+    ymd = day.replace("-", "")
+    start = (datetime.strptime(ymd, "%Y%m%d") - timedelta(days=7)).strftime("%Y%m%d")
+    data = kis_get(
+        cfg,
+        "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+        {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code,
+         "FID_INPUT_DATE_1": start, "FID_INPUT_DATE_2": ymd,
+         "FID_PERIOD_DIV_CODE": "D", "FID_ORG_ADJ_PRC": "0"},
+        "FHKST03010100",
+    )
+    for r in out_rows(data, "output2"):
+        if str(r.get("stck_bsop_date")) == ymd:
+            close = _num(r.get("stck_clpr"), int)
+            return close if close and close > 0 else None
+    return None
 
-    **응답은 왔는데 종가가 없거나 0 인 종목도 그 회차에는 다시 안 묻는다** — 종가 자리에 None 을 쥔다.
-    안 쥐면 그런 종목 하나 때문에 장 밖 시세를 물을 때마다 J 멀티가 다시 나간다(qa 검수 · 가짜 kis_get 으로 세 번 → 3건).
-    KIS 오류로 응답을 못 받은 묶음은 쥐지 않는다 — 다음에 다시 묻는다."""
+
+def fetch_reg_closes(cfg, codes):
+    """그 회차 정규장 종가 {code: 종가} — 정규장(J) 일봉에서. 쥔 것은 다시 안 묻는다. 못 받은 종목은 빠진다(0 으로 넣지 않는다).
+
+    KIS 오류 · 그 날 줄이 없는 종목은 쥐지 않는다 — 다음에 다시 묻는다."""
     day = reg_session_day()
     if not day:
         return {}, None
     with _reg_lock:
-        held = {c: v[1] for c, v in ((c, _reg_close.get(c)) for c in codes) if v and v[0] == day}
-    have = {c: v for c, v in held.items() if v}
-    need = [c for c in codes if c not in held]
-    for i in range(0, len(need), MULTI_MAX):
-        chunk = need[i:i + MULTI_MAX]
-        params = {}
-        for n, code in enumerate(chunk, start=1):
-            params["FID_COND_MRKT_DIV_CODE_%d" % n] = "J"
-            params["FID_INPUT_ISCD_%d" % n] = code
+        have = {c: v[1] for c, v in ((c, _reg_close.get(c)) for c in codes) if v and v[0] == day}
+    for code in [c for c in codes if c not in have]:
         try:
-            data = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/intstock-multprice", params, "FHKST11300006")
+            close = _reg_close_daily(cfg, code, day)
         except RuntimeError as e:
-            print("[장외] 정규장 종가 못 받음: %s" % safe_message(e), flush=True)
+            print("[장외] 정규장 종가 못 받음 %s: %s" % (code, safe_message(e)), flush=True)
             continue
-        got = {}
-        for r in out_rows(data, "output"):
-            code = (r.get("inter_shrn_iscd") or "").strip()
-            close = _num(r.get("inter2_prpr"), int)
-            if code and close and close > 0:
-                got[code] = close
+        if not close:
+            continue
+        have[code] = close
         with _reg_lock:
-            for code in chunk:                  # 응답에 없거나 종가가 빈 종목은 None — 이 회차에는 다시 안 묻는다
-                _reg_close[code] = (day, got.get(code))
+            _reg_close[code] = (day, close)
             if len(_reg_close) > 3000:          # 지난 회차 것을 걷는다
                 for c in [c for c, v in _reg_close.items() if v[0] != day]:
                     _reg_close.pop(c, None)
-        have.update(got)
     return have, day
 
 
@@ -3191,11 +3204,23 @@ def start_after_snap(cfg):
 
     def loop():
         tried = 0.0                               # 마지막으로 받아 본 때 — 못 받았으면 AFTER_SNAP_RETRY_SEC 뒤 다시
+        warmed = None                             # 정규장 종가를 미리 받아 둔 회차
         while True:
             now = datetime.now(KST)
             hm = (now.hour, now.minute)
+            sday = reg_session_day(now)
+            if sday and sday == now.date().isoformat() and warmed != sday:     # 그 날 15:40 뒤 한 번 — 순위 목록 종목 종가
+                warmed = sday
+                try:
+                    codes = [r["stock_code"] for r in dart.universe_rows(None)]
+                    have, _d = fetch_reg_closes(cfg, codes)
+                    print("[장외] 정규장 종가 %d/%d종목 받음 (%s)" % (len(have), len(codes), now.strftime("%H:%M")), flush=True)
+                except Exception as e:
+                    print("[장외] 정규장 종가 미리 받기 못 함 (%s)" % type(e).__name__, flush=True)
             today = reg_session_day(now)          # 이 장외 값이 붙는 정규장 날
-            quiet = now.weekday() >= 5 or hm >= AFTER_SNAP_AT or hm < NXT_PRE_OPEN   # 넥스트레이드가 쉬는 때
+            # 그 회차 저녁 20:01~24:00 에만 받는다. 자정이 지나면 KIS 통합 시세가 20:00 마감 값이 아니다
+            # (2026-10-28 07:5x 실측 — 아래 `overnight_row`). 전에는 08:00 전 · 주말에도 늦게 받았는데 그때 받으면 틀린 값을 쥔다
+            quiet = today == now.date().isoformat() and hm >= AFTER_SNAP_AT
             if (quiet and today and _after_snap.get("day") != today
                     and time.time() - tried >= AFTER_SNAP_RETRY_SEC):
                 tried = time.time()
@@ -3240,6 +3265,57 @@ def attach_reg_close(cfg, out):
         q["regClose"] = close
         q["regPct"] = round((price / close - 1) * 100, 2)
         q["regDate"] = day
+
+
+# 자정 뒤 넥스트레이드 프리마켓(08:00) 전에는 KIS 통합(UN) 시세가 **어제 20:00 넥장 마감 값이 아니다** (2026-10-28 07:5x 실측 · 8765).
+#   삼성전자 222,000 · SK하이닉스 1,341,000 · 삼성전자우 171,100  ↔  어제 20:01 받아 둔 224,500 · 1,374,000 · 173,400
+#   그 시간에 전일 대비 0 · 시가 · 거래량 0 이 함께 온다
+# 그 값이 무엇인지는 못 가렸다. 그대로 쓰면 장외 칩 등락률이 내린 것으로 나오고, 차트 마지막 5분봉이 그 값으로 끌려 내려가
+# 긴 음봉이 된다 — 재권님 「장전에 음봉 길게 나오는건 이상한거 같은데」 · 「삼성 하이닉스도 많이 올랐는데 제대로 안나오는데」 →
+# 「00:00~08:00 은 어제 20:01 받아 둔 값을 시세로」 에 「응」(2026-10-28).
+# 그래서 그때는 20:01 에 받아 둔 값(`_after_snap` · 순위 목록 종목)으로 지금가를 덮는다. 받아 둔 것이 없는 종목은 그대로 둔다.
+#   지금가 = 20:00 넥장 마감 · 기준(prev) = 그 회차 정규장 종가 · 등락 = 종가 대비 — 08:00 프리마켓이 열리면 전일 대비의 기준이 바로 그 종가다
+#   거래량 · 시가 · 고가 · 저가는 받아 둔 것이 없어 **None**(0 이 아니다 — 못 받은 값)
+# 주말 · 월요일 새벽도 같다(금요일 20:01 값). 넥스트레이드가 쉬는 때라 값이 안 바뀐다.
+# **확인 못 한 것** — 지수(코스피 · 코스닥)도 그 시간 전일 대비 0 이 오는데 받아 둔 것이 없어 이 셈 밖이다.
+def overnight_row(code, now=None):
+    """자정 뒤 08:00 전이면 그 종목의 어제 20:00 넥장 마감 값(받아 둔 것). 아니면 None."""
+    now = now or datetime.now(KST)
+    day = reg_session_day(now)
+    if not day or now.date().isoformat() == day:          # 그 회차 저녁(자정 전)은 통합 시세가 맞다
+        return None
+    if now.weekday() < 5 and (now.hour, now.minute) >= NXT_PRE_OPEN:
+        return None
+    if _after_snap.get("day") != day:
+        return None
+    r = (_after_snap.get("rows") or {}).get(code)
+    if not r or not r.get("price") or not r.get("regClose"):
+        return None
+    return r
+
+
+def overnight_quotes(out, now=None):
+    """멀티 시세 묶음({code: {...}})을 밤사이 받아 둔 값으로 덮는다."""
+    for code, q in out.items():
+        r = overnight_row(code, now)
+        if not r:
+            continue
+        price, close = r["price"], r["regClose"]
+        q.update(price=price, prev=close, amt=price - close, pct=r["regPct"],
+                 open=None, high=None, low=None, volume=None, value=None,
+                 regClose=close, regPct=r["regPct"], regDate=r.get("regDate"), overnight=_after_snap.get("day"))
+
+
+def overnight_price(code, o, now=None):
+    """단건 시세(fetch_price 모양)를 밤사이 받아 둔 값으로 덮는다."""
+    r = overnight_row(code, now)
+    if not r:
+        return
+    price, close = r["price"], r["regClose"]
+    change = price - close
+    o.update(price=price, change=change, changePct=r["regPct"],
+             sign="2" if change > 0 else ("5" if change < 0 else "3"),
+             open=None, high=None, low=None, volume=None, value=None, overnight=_after_snap.get("day"))
 
 
 # ---------------------------------------------------------------- 업종 · 순위 · 투자자
