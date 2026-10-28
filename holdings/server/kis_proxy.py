@@ -3069,11 +3069,13 @@ def fetch_quotes_multi(cfg, codes):
 # 정규장 종가 대비로」 도 같은 값을 가져다 쓴다 — 서버가 한 번 받는다(「같은 값은 한 곳에만 둔다」).
 #
 #   장 밖 시세   통합(UN) 멀티 — 넥스트레이드 애프터마켓(15:30 뒤) · 프리마켓(08:00~) 값이 들어 있다(quote_market_div)
-#   정규장 종가  정규장(J) 멀티의 현재가 — 장이 끝난 뒤에는 그 회차 종가다
+#   정규장 종가  정규장(J) 일봉의 그날 종가 — 아래 `_reg_close_daily`
 #   응답 칸      regClose(정규장 종가) · regPct(종가 대비 등락률 %) · regDate(그 종가의 날)
 #
 # **종가는 회차마다 한 번만 받고 다음 정규장이 열릴 때까지 쥔다.** 장이 끝나면 안 바뀌는 값이라 다시 물을 까닭이 없다
-# (200종목이면 멀티 7건 · 하루 한 번). 15:30 그 1분은 종가가 막 정해지는 때라 받지 않는다 — 그 사이 regPct 는 없다.
+# (종목마다 일봉 1건 · 회차에 한 번). 15:30 마감부터 REG_CLOSE_READY(15:40) 전까지는 종가가 일봉에 들어오기를 기다리느라
+# 받지 않는다 — **그 10분은 regPct 가 없고 「장외」 칩이 빈다**(정규장 중 쓰던 앞 회차 20:00 값도 15:30 에 내려간다).
+# 빈칸으로 둔다 — 그 사이 값을 지어내지 않는다(「못 쟀으면 0 이 아니라 「못 쟀다」 고 낸다」).
 # **종가는 정규장(J) 일봉의 그날 종가로 받는다** (2026-10-28 고침). 전에는 J 멀티의 「지금가」 를 처음 물을 때 쥐었는데
 # 그 값이 종가가 아니었다 — 10-27 에 삼성전자 223,000 · SK하이닉스 1,363,000 · 삼성전자우 171,900 을 쥐었고, J 일봉 종가 ·
 # 오늘(10-28) KIS · 네이버의 전일 종가는 222,000 · 1,341,000 · 171,100 이었다(08:4x 실측). 장외 칩이 하루 저녁 내내 틀린
@@ -3086,12 +3088,13 @@ REG_CLOSE_READY = (15, 40)      # 이 시각부터 그날 종가로 받는다 �
 
 _reg_close = {}                 # code -> (회차 날짜 "YYYY-MM-DD", 종가)
 _reg_lock = threading.Lock()
+_reg_inflight = set()           # 지금 일봉을 받는 중인 종목 — 다른 요청은 다시 묻지 않고 건너뛴다(다음 요청에 나온다)
 
 
 def reg_session_day(now=None):
     """지금 쥐어야 할 정규장 종가가 어느 날 것인지. 받을 때가 아니면 None.
 
-    정규장 중(09:00~15:31 전)은 None — 그때는 장외가 아니다. 토 · 일 · 아침 9시 전은 앞 평일."""
+    09:00~15:40(REG_CLOSE_READY) 전은 None — 정규장 중이거나 종가가 일봉에 아직 안 든 때다. 토 · 일 · 아침 9시 전은 앞 평일."""
     now = now or datetime.now(KST)
     hm = (now.hour, now.minute)
     if now.weekday() < 5 and KRX_OPEN <= hm < REG_CLOSE_READY:
@@ -3130,26 +3133,34 @@ def fetch_reg_closes(cfg, codes):
     day = reg_session_day()
     if not day:
         return {}, None
+    # 받는 중인 종목은 다른 요청(같은 순간 들어온 순위표 · 15:40 미리 받기 바퀴)이 다시 묻지 않는다 — 기다리지 않고 빼고 돌려준다.
+    # 재시작 직후 · 15:40 처럼 쥔 것이 없을 때 요청마다 같은 종목 일봉을 겹쳐 물어 KIS 를 몇 배로 쓰던 자리(qa 덧말 · 2026-10-28).
     with _reg_lock:
         have = {c: v[1] for c, v in ((c, _reg_close.get(c)) for c in codes) if v and v[0] == day}
-    for code in [c for c in codes if c not in have]:
-        try:
-            close = _reg_close_daily(cfg, code, day)
-        except RuntimeError as e:
-            print("[장외] 정규장 종가 못 받음 %s: %s" % (code, safe_message(e)), flush=True)
-            continue
-        if not close:
-            continue
-        have[code] = close
+        mine = [c for c in dict.fromkeys(codes) if c not in have and c not in _reg_inflight]
+        _reg_inflight.update(mine)
+    try:
+        for code in mine:
+            try:
+                close = _reg_close_daily(cfg, code, day)
+            except RuntimeError as e:
+                print("[장외] 정규장 종가 못 받음 %s: %s" % (code, safe_message(e)), flush=True)
+                continue
+            if not close:
+                continue
+            have[code] = close
+            with _reg_lock:
+                _reg_close[code] = (day, close)
+                if len(_reg_close) > 3000:          # 지난 회차 것을 걷는다
+                    for c in [c for c, v in _reg_close.items() if v[0] != day]:
+                        _reg_close.pop(c, None)
+    finally:
         with _reg_lock:
-            _reg_close[code] = (day, close)
-            if len(_reg_close) > 3000:          # 지난 회차 것을 걷는다
-                for c in [c for c, v in _reg_close.items() if v[0] != day]:
-                    _reg_close.pop(c, None)
+            _reg_inflight.difference_update(mine)
     return have, day
 
 
-# 정규장 중(09:00~15:31) 「장외」 칩은 **전날 20:00 애프터 마감 값**을 그대로 보인다
+# 정규장 중(09:00~15:30) 「장외」 칩은 **전날 20:00 애프터 마감 값**을 그대로 보인다
 # (2026-10-26 재권님 「다음 장 시작전의 종가로 해줘」 → 「전날 20 시에 멈추는걸로 해줘」 · 작업우선순위 경유 —
 # 아침 프리마켓(08:00~08:50) 몫은 안 넣는다). 정규장 중에는 통합 시세가 장중 값이라 그때 물어서는 못 얻는다 —
 # 그래서 **애프터가 끝난 뒤(AFTER_SNAP_AT) 한 번** 순위 목록 전부(dart.universe_rows · 코스피 200 + 코스닥 150 ·
