@@ -1874,6 +1874,9 @@ export function createStockChart(container, candles, opts = {}) {
     setData(next, nextPeriod, code) {
       if (!next || !next.length) return;
       candles = next;
+      /* 기간이 바뀌면 거래량 기준도 다시 잡는다 — 분봉이 아닐 때는 liveVol 이 안 움직여, 5분 → 일 → 5분으로 돌아오면
+         그 사이 거래량이 끝 봉 하나에 몰렸다(qa 검수 2026-10-29) */
+      if (nextPeriod && nextPeriod !== period) liveVol = null;
       if (nextPeriod) period = nextPeriod;
       vpRange = null;          // 종목·기간이 바뀌면 세로 범위를 다시 잡는다
       /* 앞 종목의 시세 · 전일 종가가 남으면 안 된다 — 홈 큰 차트는 같은 차트에 다른 종목을 setData 로 다시 쓴다
@@ -2029,7 +2032,7 @@ export function createStockChart(container, candles, opts = {}) {
         high: Math.max(last.high, px),
         low: Math.min(last.low, px),
         /* 끝 봉 거래량이 없으면 더하지 않는다 — 없음을 0 으로 두고 더하면 막대가 그 몇 초치만 된다(개념정의 검수 2026-10-29) */
-        ...(addVol && Number.isFinite(Number(last.volume)) ? { volume: Number(last.volume) + addVol } : {}),
+        ...(addVol && last.volume != null && Number.isFinite(Number(last.volume)) ? { volume: Number(last.volume) + addVol } : {}),
       };
       candles[i] = next;
       overlaid = next;
