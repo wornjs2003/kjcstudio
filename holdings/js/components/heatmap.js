@@ -9,16 +9,14 @@
    종목을 누르면 onPick(code, name) — 부르는 쪽(home.js)이 순위표 줄과 같은 길(selectStock)로 차트를 띄우고 이 덮개를 내린다.
 
    색 — 오르면 --kh-up · 내리면 --kh-down · 0 은 색 없음 · 값 없음은 흐림(방향은 sign.js).
-   짙기 폭 FULL_PCT 는 시안 값이다 — 「기준이 있는 수치는 … 셈은 tone.js 한 곳」 에 들어 tone.js 로 옮긴다(2026-10-28 검수 걸림 · 재권님 「응」)
+   짙기 · 흰 글씨 문턱은 assets/js/tone.js 의 paint('chg_pct', …, 'fill') · onFill — 폭은 data/metrics.json 「chg_pct」(「기준이 있는 수치는 … 셈은 tone.js 한 곳」)
    ========================================================================== */
 
 import { side } from '/assets/js/sign.js';
+import { ready, paint, onFill } from '/assets/js/tone.js';
 import { apiFetch } from '../data/api.js';
 import { watch } from '../store/longpoll.js';
 
-const FULL_PCT = 10;                     // 이 등락률(±%)에서 가장 짙다 — 재권님 「0~10까지 · 그 이상은 같은 색」(10-28) · tone.js 로 옮기기 전 임시
-const ALPHA = [0.18, 1];                 // 가장 옅음 · 가장 짙음
-const INK_PCT = 4;                       // 바탕 농도 k 0.4 부터 흰 글씨 — tone.js onFill 로 옮기기 전 임시
 const TITLE = { kr: '국내 시장 지도', us: '미국 시장 지도' };
 const FOOT = {
   kr: '코스피 시가총액 상위 70 · 코스닥 상위 40 · 업종은 KIS 종목 목록의 지수업종',
@@ -65,13 +63,11 @@ function worst(row, short) {
 function fill(pct) {
   const sd = side(pct);
   if (!sd) return 'var(--kh-border)';
-  if (sd === 'flat') return 'var(--kh-bg)';
-  const k = Math.min(Math.abs(pct) / FULL_PCT, 1);
-  return `rgb(var(--kh-${sd}-rgb) / ${(ALPHA[0] + (ALPHA[1] - ALPHA[0]) * k).toFixed(2)})`;
+  return paint('chg_pct', pct, 'fill') || 'var(--kh-bg)';   // 0(보합)이면 '' → 바탕색
 }
 function inkClass(pct) {
   const sd = side(pct);
-  if (sd === 'up' || sd === 'down') return Math.abs(pct) >= INK_PCT ? 'is-fill' : `kh-${sd}`;
+  if (sd === 'up' || sd === 'down') return onFill('chg_pct', pct) ? 'is-fill' : `kh-${sd}`;
   return 'kh-mut';
 }
 const pctTxt = (p) => (side(p) ? (p > 0 ? '+' : '') + p.toFixed(2) + '%' : '—');
@@ -102,6 +98,7 @@ export function mountHeatmap(card, { onPick }) {
       if (want !== market) return;                 // 받는 사이 갈래가 바뀌었다
       if (!j.ok) { area.innerHTML = `<div class="kh-hm-empty">지도를 못 받았습니다 — ${esc(j.error)}</div>`; return; }
       last = j.data;
+      await ready;                                 // 지표 표(chg_pct)를 읽은 뒤 칠한다
       draw();
     } catch {
       if (want === market && !last) area.innerHTML = '<div class="kh-hm-empty">지도를 못 받았습니다</div>';
