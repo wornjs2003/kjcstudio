@@ -29,6 +29,7 @@ import { bindDailyMenu, loadDailyDoc, dailyDocUrl } from './components/daily-vie
 import { fetchIssues, fetchFeed, paintIssues, paintLoading } from './components/news-list.js';
 import { bindNewsModal } from './components/news-modal.js';
 import { mountSectors } from './components/sectors.js';
+import { mountHeatmap } from './components/heatmap.js';
 import { mountStockSearch } from './components/stock-search.js';
 import { openSectorModal } from './components/sector-modal.js';
 import { mountStockPanel } from './components/stock-panel.js';
@@ -307,8 +308,20 @@ function setupCatFilter() {
       if (top && lastIndices) top.innerHTML = stripHtml(lastIndices);
     }
     paintIxFilter();
+    paintHeatmap();
     syncMarketGroup();
   }));
+}
+
+/* 갈래에 맞는 시장 지도를 큰 차트 자리에 (2026-10-27 재권님 「홈이나 국내 미국 을 누르면 첫화면이 이런식으로 코스피 코스닥 등등이」 ·
+   시안 (가) 「응 맞아」). 홈 · 국내 → 국내 지도 · 미국 → 미국 지도 · 그 밖 갈래는 지도를 내린다.
+   지도에서 종목을 누르면 순위표 줄과 같은 길(selectStock)로 그 종목 차트가 된다 — components/heatmap.js */
+let heatmapView = null;                 // mountHeatmap 결과 — 아래 「시작」 에서 붙인다(selectStock 이 먼저 불릴 수 있다)
+function paintHeatmap() {
+  if (!heatmapView) return;
+  const want = (ixCat === '홈' || ixCat === '국내') ? 'kr' : ixCat === '미국' ? 'us' : null;
+  if (want) heatmapView.show(want);
+  else heatmapView.hide();
 }
 
 /* ── 시장지표 갈래 (2026-10-12 · 재권님 「응 해줘」 · 시안 2판) ─────────────
@@ -1578,7 +1591,7 @@ function setupMarkets() {
 /* 순위 표 1위 종목을 고른다 — 순위 줄을 누른 것과 같은 길(selectStock) */
 function pickTopRow() {
   const top = rowList()[0];
-  if (top) selectStock(top.code);
+  if (top) selectStock(top.code, { keepMap: true });   // 갈래가 바꾼 것 — 지도는 그대로 두고 아래 차트만 그 종목으로
 }
 
 /* 갈래 띠가 「미국」 ↔ 그 밖으로 바뀌면 시장 칩 묶음을 갈아 끼우고 그 표 1위를 고른다
@@ -2626,7 +2639,8 @@ window.addEventListener('popstate', () => {
   historyMoved = false;
 });
 
-function selectStock(code) {
+function selectStock(code, opt = {}) {
+  if (!opt.keepMap && heatmapView) heatmapView.hide();   // 사람이 종목을 골랐다 — 지도를 내리고 그 종목 차트(2026-10-27)
   leaveMarket();                        // 종목을 고르면 큰 차트는 그 종목으로 돌아간다
   selectedCode = code;
   document.querySelectorAll('#kh-rows tr').forEach(tr =>
@@ -2670,6 +2684,10 @@ mountIndicatorMenu(document.querySelector('.kh-ind-menu'));
 /* 「지금 뜨는 산업」 — 업종 이름 단추를 누르면 그 종목이 나온다 (2026-09-18 지시).
    값은 네이버에서 오고 첫 화면을 막지 않는다 — 목록 한 번이 0.03초다. */
 const sectors = mountSectors(document.querySelector('.kh-sc-card'));
+
+/* 첫 화면 시장 지도 — 지금 갈래(처음은 홈)에 맞게 띄운다 · 위 paintHeatmap */
+heatmapView = mountHeatmap(document.querySelector('.kh-idx-main'), { onPick: (code, name) => pickSectorStock(code, name) });
+paintHeatmap();
 
 /* 갈래 줄 검색칸 — 고르면 **순위표 줄 · 산업 칸과 같은 길**(큰 차트 · 패널 · 현재가가 그 종목)
    (2026-10-06 지시 · 재권님 (가)). 모달은 그 뒤 「자세히 ›」. */

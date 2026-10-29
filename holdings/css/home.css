@@ -1677,3 +1677,30 @@
   body[data-nav="holdings"] .kh-cs-btn { min-width: 24px; min-height: 24px; }
   body[data-nav="holdings"] .kh-cat a { min-width: 24px; flex-shrink: 0; text-align: center; }
 }
+
+/* 첫 화면 시장 지도 — 큰 차트 카드 위에 덮개로 얹는다 (2026-10-27 재권님 「응 맞아」 · 「응 시작해」 · components/heatmap.js).
+   카드 크기는 그대로다 — 덮개는 카드 안을 꽉 채울 뿐 자리를 차지하지 않는다(「보는 것을 바꿔도 자리는 그대로다」).
+   차트 쪽 그리기 도구(z-index 있음)가 덮개 위로 비치지 않게 위로 올린다 */
+.kh-idx-main { position: relative; }
+.kh-hm { position: absolute; inset: 0; z-index: 30; background: var(--kh-bg-card); border-radius: inherit;
+  padding: 18px 20px 14px; display: flex; flex-direction: column; gap: 10px; }
+.kh-hm[hidden] { display: none; }
+/* 좁은 폭의 접기 단추(.kh-foldbtn)는 지도 덮개 위에 둔다 — 덮개가 단추를 가려 카드를 못 접었다(2026-10-28 qa · 390px) */
+.kh-idx-main.is-hm > .kh-foldbtn { z-index: 31; }
+.kh-hm-head { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.kh-hm-title { font-size: 1.28rem; font-weight: 700; color: var(--kh-text-primary); white-space: nowrap; }
+.kh-hm-sub { font-size: 0.8rem; color: var(--kh-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kh-hm-area { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.kh-hm-foot { font-size: 0.75rem; color: var(--kh-text-secondary); }
+.kh-hm-empty { padding: 40px 0; text-align: center; color: var(--kh-text-secondary); }
+.kh-hm-mk { position: absolute; top: 0; font-size: 0.75rem; font-weight: 700; color: var(--kh-text-secondary); }
+.kh-hm-sec { position: absolute; outline: 1px solid var(--kh-bg); pointer-events: none; }
+.kh-hm-secn { position: absolute; font-size: 0.7rem; color: var(--kh-text-secondary); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; pointer-events: none; }
+.kh-hm-cell { position: absolute; border: 0; padding: 0; margin: 0; border-radius: 4px; cursor: pointer; font: inherit;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden;
+  text-align: center; line-height: 1.15; white-space: nowrap; }
+.kh-hm-cell b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.kh-hm-cell.is-fill { color: var(--kh-text-on-fill); }
+.kh-hm-cell.kh-mut { color: var(--kh-text-secondary); }
+.kh-hm-cell:hover { outline: 2px solid var(--kh-text-primary); outline-offset: -2px; }
