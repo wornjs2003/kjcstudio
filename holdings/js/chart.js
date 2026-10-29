@@ -1210,7 +1210,7 @@ export function createStockChart(container, candles, opts = {}) {
      「모바일에서 차트의 캔들이 상하로 길게 보이는데 지금의 1/3이 기본이 되게」 → 그림을 보시고 「지금의 1/3으로 더 줄여봐」).
      가운데를 그대로 두고 위아래로 PHONE_STRETCH 배 넓힌다. 넓은 폭은 손대지 않는다. */
   const PHONE_STRETCH = 9;
-  const PHONE_MQ = window.matchMedia('(max-width: 700px)');
+  const PHONE_MQ = window.matchMedia('(max-width: 700px)');   // home.css @media · mobile-fold.js 와 같은 700px — 바꾸면 셋을 함께
   function phoneStretch() {
     if (!PHONE_MQ.matches) return undefined;
     return (orig) => {
@@ -1218,7 +1218,9 @@ export function createStockChart(container, candles, opts = {}) {
       if (!r || !r.priceRange) return r;
       const { minValue: lo, maxValue: hi } = r.priceRange;
       const mid = (lo + hi) / 2, half = (hi - lo) / 2 * PHONE_STRETCH;
-      return { ...r, priceRange: { minValue: mid - half, maxValue: mid + half } };
+      /* 가격은 0 밑이 없다 — 월 · 년봉처럼 고저 차가 크면 아래 끝이 음수로 가 눈금에 「-400,000」 이 떴다(qa 2026-10-28).
+         아래만 0 에서 자른다 */
+      return { ...r, priceRange: { minValue: lo >= 0 ? Math.max(0, mid - half) : mid - half, maxValue: mid + half } };
     };
   }
 
