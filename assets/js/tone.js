@@ -6,13 +6,16 @@
 //   tone('dxy', 102.18)          → { side: 'up', k: 0.58 }      쪽 · 짙기(0~1). 이름이 없거나 값이 없으면 { side: null, k: 0 }
 //   paint('dxy', 102.18, 'bg')   → 'rgb(240 68 82 / 20%)'         바탕 · 'line' 은 선 · 점. 색을 안 칠할 자리는 ''
 //   has('dxy')                   → true                           표에 있나(경고 없음) — 여러 지표를 돌며 칠할 때 먼저 묻는다
+//   paint('chg_pct', 5.2, 'fill') → 'rgb(240 68 82 / 61%)'          칸을 꽉 채우는 바탕(시장 지도) — 위에 글씨가 올라간다
+//   onFill('chg_pct', 5.2)        → true                           그 칸 바탕이 짙어 글씨를 흰색(--kh-text-on-fill)으로 써야 하나
 // · 색 값은 들고 있지 않는다 — 부를 때마다 theme.css 의 --kh-up-rgb · --kh-down-rgb · --kh-text-secondary 를 읽는다
 // · 짙기를 불투명도로 옮기는 범위만 여기 한 곳에 둔다(바탕은 옅게 · 선은 진하게)
 // · 글씨에는 쓰지 않는다 — 옅은 글씨는 안 읽힌다(「색 바탕 위의 글씨」)
 // · 지표 표에 없거나 기준 · 폭이 빈 이름은 색을 안 칠하고 콘솔에 한 번 알린다 — 짐작한 색을 내지 않는다
 import { side } from './sign.js';
 const DATA = new URL('../../data/metrics.json', import.meta.url);
-const RANGE = { bg: [0.06, 0.30], line: [0.35, 1] };   // 선 · 점은 35% 부터 — 그보다 옅으면 가는 선이 안 보인다
+const RANGE = { bg: [0.06, 0.30], line: [0.35, 1], fill: [0.18, 1] };   // 선 · 점은 35% 부터 — 그보다 옅으면 가는 선이 안 보인다 · fill 은 칸을 색으로 꽉 채우는 자리(시장 지도 · 2026-10-28)
+const INK_K = 0.4;   // fill 바탕이 이 짙기(k)부터 글씨를 흰색으로 — 그보다 옅으면 검정(「색 바탕 위의 글씨」) · 등락률이면 4%(재권님 2026-10-28)
 
 let byId = new Map();
 const warned = new Set();
@@ -42,9 +45,15 @@ export function paint(id, v, where = 'bg') {
   const { side, k } = tone(id, v);
   if (!side) return '';
   if (side === 'flat') return where === 'line' ? css('--kh-text-secondary') : '';   // 못 읽으면 '' 로 떨어진다
-  if (!RANGE[where]) { warn('where:' + where, `paint 의 자리는 'bg' · 'line' 둘입니다(받은 것 「${where}」) — 색을 안 칠합니다`); return ''; }
+  if (!RANGE[where]) { warn('where:' + where, `paint 의 자리는 'bg' · 'line' · 'fill' 셋입니다(받은 것 「${where}」) — 색을 안 칠합니다`); return ''; }
   const [lo, hi] = RANGE[where];
   const rgb = css(side === 'up' ? '--kh-up-rgb' : '--kh-down-rgb');
   if (!rgb) { warn('css', 'theme.css 의 --kh-up-rgb · --kh-down-rgb 를 못 읽었습니다 — 색을 안 칠합니다'); return ''; }
   return `rgb(${rgb} / ${Math.round((lo + (hi - lo) * k) * 100)}%)`;
+}
+
+/** fill 바탕 위 글씨를 흰색으로 써야 하나 — 쪽이 위 · 아래이고 짙기가 INK_K 이상이면 true. 기준과 같거나 값 · 이름이 없으면 false */
+export function onFill(id, v) {
+  const { side, k } = tone(id, v);
+  return (side === 'up' || side === 'down') && k >= INK_K;
 }
