@@ -917,6 +917,7 @@ export function createStockChart(container, candles, opts = {}) {
   let lastLive = null;          // 마지막으로 받은 시세 — 서버 봉을 덧붙여 맨 오른쪽이 서버 값으로 돌아가면 다시 얹는다
   let serverLast = null;        // 시세를 얹기 전 서버가 준 맨 오른쪽 봉 — 아침 7시에 정규장 종가로 되돌릴 때 쓴다
   let overlaid = null;          // updateLast 가 얹어 만든 봉 — 이것이 아니면 맨 오른쪽은 서버가 새로 준 봉이다
+  let liveVol = null;           // 마지막 시세의 하루 누적 거래량 — 분봉 끝 봉에 그 차이를 더한다(매물대가 바로 따라오게)
   let drawnCode = opts.code || null;   // 지금 그린 종목 — setData 가 다른 종목을 받을 때만 위 값을 지운다
   const priceLines = [];
   let syncing = false;
@@ -1877,7 +1878,7 @@ export function createStockChart(container, candles, opts = {}) {
       vpRange = null;          // 종목·기간이 바뀌면 세로 범위를 다시 잡는다
       /* 앞 종목의 시세 · 전일 종가가 남으면 안 된다 — 홈 큰 차트는 같은 차트에 다른 종목을 setData 로 다시 쓴다
          (qa 검수 2026-10-15). 같은 종목을 다시 그릴 때(기간 바꿈 · 다시 받기)는 그대로 둔다. 종목을 모르면(code 없이 부름) 지운다 */
-      if (!code || code !== drawnCode) { lastLive = null; api.prevClose = null; }
+      if (!code || code !== drawnCode) { lastLive = null; liveVol = null; api.prevClose = null; }
       drawnCode = code || null;
       serverLast = null; overlaid = null;   // 새 서버 봉이 왔다 — 앞 종목 · 앞 판의 되돌릴 봉을 버린다 (qa 2026-10-15 · 7~9시 삼성 → 하닉이 삼성 봉으로 덮임)
       priceLines.length = 0;
@@ -2010,12 +2011,23 @@ export function createStockChart(container, candles, opts = {}) {
       }
       if (last !== overlaid) serverLast = last;   // 서버가 준 봉 위에 처음 얹는다 — 그 봉을 남겨 둔다
       const px = live.price;
-      if (last.close === px) return;          // 안 움직였으면 그릴 것이 없다
+      /* **분봉은 거래량도 얹는다** (2026-10-28 재권님 「5분봉에서 주식을 사고 팔면 매물대의 그래프가 바로 적용이 되야」 →
+         「응 해줘」). 전에는 값만 얹고 거래량은 서버가 5분봉을 새로 받을 때(fresh_sec 30초)만 바뀌어 매물대가 30초쯤
+         멈췄다가 한꺼번에 움직였다. 시세의 하루 누적 거래량이 직전보다 늘어난 만큼 끝 봉에 더한다 — 줄었으면(날이 바뀜 ·
+         종목이 바뀜) 기준만 다시 잡는다. 서버 봉이 오면 그 값으로 바로잡힌다(appendBars). KIS 호출은 늘지 않는다 */
+      let addVol = 0;
+      const cum = Number(live.volume);
+      if (MINUTE_PERIODS.has(period) && Number.isFinite(cum)) {
+        if (liveVol != null && cum > liveVol) addVol = cum - liveVol;
+        liveVol = cum;
+      }
+      if (last.close === px && !addVol) return;   // 안 움직였으면 그릴 것이 없다
       const next = {
         ...last,
         close: px,
         high: Math.max(last.high, px),
         low: Math.min(last.low, px),
+        ...(addVol ? { volume: (Number(last.volume) || 0) + addVol } : {}),
       };
       candles[i] = next;
       overlaid = next;
