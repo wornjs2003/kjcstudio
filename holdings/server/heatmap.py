@@ -99,7 +99,7 @@ def kr(proxy, cfg):
         pass                                         # 이름표를 못 받으면 업종은 「기타」 — 지도는 그린다
     m = master()
     picks = {mk: m[mk][:n] for mk, n in KR_TOP.items()}
-    q, _errs = proxy.fetch_quotes_multi(cfg, [r["code"] for rows in picks.values() for r in rows])
+    q, _errs = proxy.fetch_quotes_multi(cfg, [r["code"] for rows in picks.values() for r in rows], max_age=HEATMAP_TTL)
     groups, missing = [], []
     for mk, label in (("kospi", "코스피"), ("kosdaq", "코스닥")):
         secs = {}

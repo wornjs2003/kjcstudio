@@ -1431,7 +1431,7 @@ _board_stat = {"calls": 0, "errors": 0, "lastError": None}
 # 재권님 지시 — 「둘 다 할 거니 정해서 진행」. **(가) 먼저.**
 #
 # ⚠️ **`relay` 는 `kis_get` 레벨이라 위쪽 캐시 열 곳을 모두 건너뛴다**
-# (`_price_cache` · `_chart_cache` · `_index_cache` · `_multi_cache` ·
+# (`_price_cache` · `_chart_cache` · `_index_cache` · `_quote_cache` ·
 # `_sector_cache` · `_movers_cache` · `_inv_flow_cache` · `_investor_cache` ·
 # `_fut_cache` · `_ovs_cache`). 그 캐시들은 전부 **화면 API 함수 안**에 있고
 # 그 함수가 **그 아래로** `kis_get` 을 부른다.
@@ -2979,30 +2979,41 @@ MULTI_MAX = 30
 # 않았을 뿐, 배포본과 같은 구멍이었다.
 MULTI_CACHE_TTL = 2
 
-_multi_cache = {}
+_quote_cache = {}                  # 종목코드 → (받은 시각, 시장 구분 J · UN, 그 줄) — 묶음이 아니라 종목 단위
 _multi_lock = threading.Lock()
+QUOTE_CACHE_MAX = 4000             # 넘으면 오래된 것부터 치운다(한 종목 줄은 작다 · 코스피 + 코스닥 다 담아도 넘지 않는 수)
 
 
-def _multi_key(codes, div):
-    """묶음이 같으면 같은 키. 순서가 달라도 같은 것으로 본다."""
-    return div + ":" + ",".join(sorted(codes))
-
-
-def fetch_quotes_multi(cfg, codes):
+def fetch_quotes_multi(cfg, codes, max_age=None):
     """목록용 시세. 30종목씩 묶어 부른다. {code: {...}} 로 돌려준다.
 
-    같은 묶음을 MULTI_CACHE_TTL 초 안에 다시 물으면 받아둔 값을 준다.
-    화면이 부르는 횟수는 그대로이고 KIS 호출만 줄어든다.
+    받은 값을 **종목 단위**로 들고 있다가, 누가 묻든 그 종목이 `max_age` 초 안에 받은 것이면 그 값을 쓰고
+    없는 종목만 30개씩 묶어 KIS 에 묻는다 — 순위표 · 시장 지도 · 장외 순위가 같은 종목을 따로 받지 않게
+    (2026-10-29 재권님 「지도에 있는값은 어디에서 가져오지? 이미 가져온 값을 그리는게 아닌가?」 → (가) 「응 해줘」).
+    전에는 묶음(종목 목록 전체)을 열쇠로 들고 있어 묶음이 조금만 달라도 겹치는 종목까지 다시 받았다.
+
+    · max_age — 부르는 쪽이 허용하는 나이(초). 기본은 MULTI_CACHE_TTL 이고 그보다 짧게는 못 준다(--slow 서버의 60초가 그대로 듣게).
+      시장 지도는 자기 응답 주기(heatmap.HEATMAP_TTL)를 준다 — 원래 그만큼 묵은 값을 내던 자리라 칸끼리 받은 시각이 달라도 그 안이다
+    · 정규장(J) ↔ 통합(UN)이 바뀌면 옛 쪽 값은 안 쓴다(줄마다 구분을 함께 적어 둔다)
+    · 장 밖 값(attach_reg_close · overnight_quotes · attach_after_snap)은 새로 받은 종목에만 붙인다 — 들고 있던 줄은 이미 붙어 있다
+    · 내줄 때는 줄을 복사한다 — 한 곳이 고쳐도 다른 곳이 안 바뀌게
+    · 오류는 이번에 새로 물은 종목 것만 돌려준다 — 못 받은 종목은 담지 않아 다음 요청이 다시 묻는다
     """
     div = quote_market_div()
-    key = _multi_key(codes, div)
+    age = max(MULTI_CACHE_TTL, max_age or 0)
     now = time.time()
+    got, need = {}, []
     with _multi_lock:
-        hit = _multi_cache.get(key)
-        if hit and (now - hit[0]) < MULTI_CACHE_TTL:
-            _stats["cache_hits"] += 1
-            return hit[1]
-
+        for code in codes:
+            hit = _quote_cache.get(code)
+            if hit and hit[1] == div and (now - hit[0]) < age:
+                got[code] = hit[2]
+            else:
+                need.append(code)
+    if not need:
+        _stats["cache_hits"] += 1
+        return {c: dict(r) for c, r in got.items()}, {}
+    codes = need
     out, errors = {}, {}
 
     for i in range(0, len(codes), MULTI_MAX):
@@ -3052,16 +3063,18 @@ def fetch_quotes_multi(cfg, codes):
     elif out:
         attach_after_snap(out)
 
-    # 받아둔다. 오류만 있고 값이 하나도 없으면 담지 않는다 — 다음 요청이
-    # 다시 시도해야 한다.
+    # 받아둔다 — 받은 종목만. 못 받은 종목은 안 담아 다음 요청이 다시 묻는다
     if out:
+        t = time.time()
         with _multi_lock:
-            _multi_cache[key] = (time.time(), (out, errors))
-            # 순위표를 오르내리면 묶음이 계속 바뀐다. 위쪽을 막아 둔다.
-            if len(_multi_cache) > 200:
-                for k in list(_multi_cache)[:50]:
-                    _multi_cache.pop(k, None)
-    return out, errors
+            for code, row in out.items():
+                _quote_cache[code] = (t, div, row)
+            if len(_quote_cache) > QUOTE_CACHE_MAX:
+                for k, _v in sorted(_quote_cache.items(), key=lambda kv: kv[1][0])[:len(_quote_cache) // 4]:
+                    _quote_cache.pop(k, None)
+    res = {c: dict(r) for c, r in got.items()}
+    res.update({c: dict(r) for c, r in out.items()})
+    return res, errors
 
 
 # ---------------------------------------------------------------- 장외 — 정규장 종가 대비
