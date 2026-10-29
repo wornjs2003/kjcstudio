@@ -1983,8 +1983,9 @@ export function createStockChart(container, candles, opts = {}) {
      * 범례를 다시 계산하면 막대 하나 고치는 비용이 전체 다시 그리기가 된다.
      * 그래서 **지표는 다음 `setData` 때 따라온다.**
      *
-     * **거래량은 건드리지 않는다.** 5분봉의 거래량은 그 5분간의 것이고
-     * `live.volume` 은 **하루 누적**이다. 섞으면 막대 하나가 하루치가 된다.
+     * **분봉은 하루 누적이 늘어난 만큼만 끝 봉 거래량에 더한다(아래).** 5분봉의
+     * 거래량은 그 5분간의 것이고 `live.volume` 은 **하루 누적**이다 — 누적을
+     * 그대로 넣으면 막대 하나가 하루치가 된다. 일봉 이상은 거래량을 안 건드린다.
      *
      * `time` 을 기존 마지막 봉과 **같게** 만들어야 갱신이 된다 — 다르면
      * 라이브러리가 **새 봉을 붙인다.** */
@@ -2027,7 +2028,8 @@ export function createStockChart(container, candles, opts = {}) {
         close: px,
         high: Math.max(last.high, px),
         low: Math.min(last.low, px),
-        ...(addVol ? { volume: (Number(last.volume) || 0) + addVol } : {}),
+        /* 끝 봉 거래량이 없으면 더하지 않는다 — 없음을 0 으로 두고 더하면 막대가 그 몇 초치만 된다(개념정의 검수 2026-10-29) */
+        ...(addVol && Number.isFinite(Number(last.volume)) ? { volume: Number(last.volume) + addVol } : {}),
       };
       candles[i] = next;
       overlaid = next;
