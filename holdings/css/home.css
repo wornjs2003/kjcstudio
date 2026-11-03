@@ -950,10 +950,7 @@
 /* ── 고른 지수 + 오른쪽 패널 ── */
 /* 큰 지수 차트가 왼쪽 칸이다. 미리보기와 같은 이유로 min-width 를 눌러 둔다
    (2026-09-17 — 위 .kh-rank 주석 참고) */
-/* 오른쪽 패널(투자자 정보 · AI 분석 · 종목 뉴스)은 배율을 안 곱한다 — 아래 줄 데일리분석 칸(.kh-rank 의 340px)과 세로선이 이어져야 한다
-   (위 .kh-rank 주석 「세로선이 이어진다」). 6145156 창 맞춤에서 여기만 --kh-s 를 곱해 큰 창에서 위가 49px 넓어져 어긋났다 —
-   재권님 「창 세로칸이 안맞는데. 투자자 정보를 데일리분석에 맞추고 거기에 맞게 차트 가로로 늘려줘」(11-03 18:57) · 차트(1fr)가 그만큼 넓어진다 */
-.kh-idx { display: grid; grid-template-columns: 1fr 340px; gap: 14px; }
+.kh-idx { display: grid; grid-template-columns: 1fr calc(340px * var(--kh-s, 1)); gap: 14px; }
 .kh-idx > * { min-width: 0; }
 .kh-idx-main { padding: 18px 20px 14px; display: flex; flex-direction: column; }
 .kh-idx-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
