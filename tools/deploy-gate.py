@@ -90,13 +90,18 @@ def main(argv):
         print("옮길 커밋이 없다(%s)" % rng)
         return 0
 
-    # Revert 와 그 원본을 뺀다 — **되돌림 사슬로 센다** (2026-11-03 재권님 「응」 · 창구가 찾음).
-    # X · Revert X · Reapply X(= Revert 「Revert X」) · Revert 「Reapply X」 … 는 원본 하나에 매달린 사슬이다.
-    # 범위 안 개수가 짝수면 서로 지워져 순 변화가 없다 → 전부 뺀다. 홀수면 **맨 끝 하나**가 변경을 들고 나가 → 그것만 통과 줄을 받는다.
-    # 전에는 「되돌림을 되돌린 것은 빼지 않는다」(2026-10-16 qa 시뮬 — X · Revert X · Reapply X 가 다 빠졌다) 한 줄이라,
-    # Reapply 를 다시 되돌린 것(순 변화 0)까지 둘 다 셈에 남아 문턱이 막혔다(11-03 04efa3b · 2672f4b · 5090cc8 · b15271f).
-    # 원본이 범위 밖(이미 옮긴 것)이면 지금처럼 홀로 된 되돌림은 뺀다 — 무르는 일이라 검수 대상이 아니다.
-    # staging 은 걸린 것을 **머지째** 되돌린다 — 원본이 머지면 그 머지로 들어온 묶음도 뺀다(고친 판 · 되살림이 제 통과 줄을 받는다).
+    # Revert 와 그 원본을 뺀다 — **되돌림 사슬을 「옮기기 전 · 뒤 상태」 로 센다** (2026-11-03 재권님 「응」 · 창구가 찾음 · qa 시뮬로 고침).
+    # X · Revert X · Reapply X(= Revert 「Revert X」) · Revert 「Reapply X」 … 는 뿌리(원본) 하나에 매달린 사슬이다. 고리 하나가 변경을 한 번 뒤집는다.
+    # 옮기기 전(A) 상태 = 뿌리 · 고리 중 A 에 이미 든 것의 수가 홀이면 「변경 있음」. 뒤 상태 = 거기에 범위 안 고리 수를 더해 홀이면 「있음」.
+    # **없던 변경이 생길 때만** 범위 안 가장 새 고리 하나가 통과 줄을 받는다 — 나머지(그대로 · 무르기)는 전부 뺀다.
+    # 처음 판(1d2140d)은 범위 안 개수만 세어, 이미 무른 것을 다시 살리는 Reapply 하나를 「뿌리 범위 밖」 이라 뺐다(qa F · F2 · M5).
+    # staging 은 걸린 것을 **머지째** 되돌린다 — 뿌리가 머지면 그 머지로 들어온 묶음도 뺀다(변경은 남긴 고리가 들고 나간다).
+    A, B = rng.split("..", 1)
+    A, B = A or "HEAD", B or "HEAD"
+
+    def anc(x, y):
+        return subprocess.run(["git", "-C", ROOT, "merge-base", "--is-ancestor", x, y]).returncode == 0
+
     inr = set(commits)
     rev_of = {}
     for c in commits:
@@ -110,31 +115,29 @@ def main(argv):
         m = re.search(r"This reverts commit ([0-9a-f]{7,40})", git("log", "-1", "--format=%B", h))
         return full(m.group(1)) if m else None
 
-    chains = {}                             # 뿌리 → 범위 안 사슬 고리(새것부터 · rev-list 차례)
+    chains = {}                             # 뿌리 → [범위 안 고리(새것부터 · rev-list 차례), 뿌리 포함 고리 전부]
     for c in commits:
         if c not in rev_of:
             continue
-        root, seen = c, set()
+        root, seen = c, {c}
         while True:
             up = parent_of(root)
             if not up or up in seen:
                 break
-            seen.add(root)
+            seen.add(up)
             root = up
-        chains.setdefault(root, []).append(c)
+        ch = chains.setdefault(root, [[], set()])
+        ch[0].append(c)
+        ch[1].update(seen)
 
     drop = set()
-    for root, revs in chains.items():
-        members = revs + ([root] if root in inr else [])
-        keep = None
-        if root in inr and len(members) % 2 == 1:
-            keep = revs[0]                  # 맨 끝(가장 새것) 되돌림 고리가 변경을 들고 나간다
-        is_merge = len(git("rev-list", "--parents", "-n", "1", root).split()) > 2
-        if is_merge and len(revs) % 2 == 0:
-            keep = revs[0]                  # 머지째 되돌렸다가 되살렸다 — 되살림이 묶음 변경을 들고 나간다
-        drop.update(x for x in members if x != keep)
-        if is_merge:
-            ps = git("rev-list", "--parents", "-n", "1", root).split()[1:]
+    for root, (revs, links) in chains.items():
+        before = sum(1 for x in links if anc(x, A))
+        inside = sum(1 for x in links if not anc(x, A) and anc(x, B))
+        keep = revs[0] if before % 2 == 0 and (before + inside) % 2 == 1 else None
+        drop.update(x for x in links if x in inr and x != keep)
+        ps = git("rev-list", "--parents", "-n", "1", root).split()[1:]
+        if len(ps) > 1:                     # 뿌리가 머지 — 딸려 온 묶음도 뺀다
             drop.update(x for x in git("rev-list", "%s..%s" % (ps[0], root)).split() if x in inr)
 
     need = []
