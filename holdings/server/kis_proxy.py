@@ -7387,13 +7387,24 @@ class Handler(SimpleHTTPRequestHandler):
         ctx = body.get("context") if isinstance(body.get("context"), dict) else {}
         code = str(ctx.get("code") or "").strip()
         quote = None
-        if code and _code_ok(code) and not us_universe.is_us(code):
-            try:
-                quote = fetch_price(load_secrets(), code)
-            except Exception as e:
-                print("[claude] 시세 못 붙임 %s — %s" % (code, safe_message(e, 80)), flush=True)
+        indices = {}
         try:
-            data = claude_chat.ask(body.get("question"), ctx, body.get("history"), quote)
+            cfg = load_secrets()
+            if code and _code_ok(code) and not us_universe.is_us(code):
+                try:
+                    quote = fetch_price(cfg, code)
+                except Exception as e:
+                    print("[claude] 시세 못 붙임 %s — %s" % (code, safe_message(e, 80)), flush=True)
+            for icode, iname in INDEX_DEFS[:2]:   # 코스피 · 코스닥 — 「오늘 시장」 물음의 바탕(2026-11-03 18:5x)
+                try:
+                    v = fetch_index(cfg, icode)
+                    indices[iname] = {k: v.get(k) for k in ("value", "change", "changePct", "high", "low", "up", "down")}
+                except Exception as e:
+                    print("[claude] 지수 못 붙임 %s — %s" % (iname, safe_message(e, 80)), flush=True)
+        except Exception as e:
+            print("[claude] 열쇠 못 읽음 — %s" % safe_message(e, 80), flush=True)
+        try:
+            data = claude_chat.ask(body.get("question"), ctx, body.get("history"), quote, indices)
         except ValueError as e:
             self._send_json({"ok": False, "error": safe_message(e, 120)}, 400)
             return
