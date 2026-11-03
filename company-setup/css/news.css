@@ -5,7 +5,7 @@
 .mk .nd-ly .r.h { display: none; }
 .mk .nd-ly .n { color: var(--kh-accent); font-weight: 700; }
 .mk .nd-ly b { font-weight: 600; }
-.mk .nd-ly .what, .mk .nd-ly .gap { color: var(--kh-text-secondary); font-size: 12px; }
+.mk .nd-ly .what, .mk .nd-ly .gap, .mk .nd-bars .gap { color: var(--kh-text-secondary); font-size: 12px; }
 .mk .nd-st { display: inline-block; padding: 1px 9px; border-radius: 99px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
 .mk .nd-st.ok { background: var(--kh-accent-dim); color: var(--kh-accent); }
 .mk .nd-st.part { background: var(--kh-bg); color: var(--kh-text-primary); }

@@ -16,13 +16,16 @@ const ST = { ok: '쌓이는 중', part: '재료만', no: '없음', miss: '못 �
 const st = k => `<span class="nd-st ${k === 'miss' ? 'no' : k}">${ST[k]}</span>`;
 
 (async () => {
-  // 보관 기간은 서버가 정한다(NEWS_KEEP_DAYS) — 여기서는 넉넉히 168시간(7일)을 묻고, 서버가 그만큼 안 갖고 있으면 있는 만큼 온다
+  // 보관 기간은 서버가 정한다(news_store.py NEWS_KEEP_DAYS · 2026-11-03 재권님 「한 달」) — 화면은 기간을 들지 않는다.
+  // 「서버가 가진 것 전부」 를 받으려고 hours 를 아주 크게 묻는다 — 서버는 가진 만큼만 준다. 화면에는 보관 일수 대신 가장 오래된 기사 날짜를 보인다
   const [ns, tp, ds, tg] = await Promise.all([
-    get('/api/news/stored?hours=168&limit=5000'), get('/api/news/topics'), get('/api/dart/status'), get('/holdings/data/disclosure-tags.json'),
+    get('/api/news/stored?hours=100000&limit=20000'), get('/api/news/topics'), get('/api/dart/status'), get('/holdings/data/disclosure-tags.json'),
   ]);
   const groups = (ns && ns.ok && ns.data) || null;
   const total = ns && ns.meta && ns.meta.total;
   const items = groups ? groups.flatMap(g => [g, ...(g.others || [])]) : null;
+  // 서버는 묶음 안 기사를 넷까지만 실어 준다(news_store.groups) — 나머지는 수(more)만 온다. 날짜 · 언론사를 모르는 그 수를 따로 낸다(합이 머리 건수와 맞게 · 2026-11-03 qa 검수)
+  const hidden = groups ? groups.reduce((a, g) => a + Math.max(0, (g.more || 0) - (g.others || []).length), 0) : 0;
   const dart = (ds && ds.ok && ds.data) || null;
   const bundles = (tg && tg['묶음']) || null;
   const topics = (tp && tp.ok && tp.data) || null;
@@ -36,7 +39,7 @@ const st = k => `<span class="nd-st ${k === 'miss' ? 'no' : k}">${ST[k]}</span>`
     { n: '①', name: '기사 원본', what: '제목 · 언론사 · 시각 · 원문 주소 · 공시',
       st: items ? 'ok' : 'miss',
       now: items ? `기사 <b>${nf(total ? total.count : items.length)}건</b>` + (dart ? ` · 공시 <b>${nf(dart.disclosures)}건</b>` : '') : '—',
-      gap: '본문 없음(제목만) · 해외 기사 없음 · 7일 지나면 지움' },
+      gap: `본문 없음(제목만) · 해외 기사 없음 · 오래된 기사는 서버가 지움(지금 가장 오래된 것 ${total ? total.from.slice(5, 10) : '—'})` },
     { n: '②', name: '종목 이름표', what: '기사 속 회사 이름 → 종목코드 · 별명',
       st: dart ? 'part' : 'miss', now: dart ? `회사 목록 <b>${nf(dart.corps)}</b>(공시 회사표)` : '—',
       gap: '기사와 종목을 잇는 표 없음 · 별명(「삼전닉스」 등) 없음' },
@@ -76,13 +79,15 @@ const st = k => `<span class="nd-st ${k === 'miss' ? 'no' : k}">${ST[k]}</span>`
     const by = {};
     items.forEach(x => { const d = (x.at || '').slice(0, 10); if (d) by[d] = (by[d] || 0) + 1; });
     const days = Object.keys(by).sort(), mx = Math.max(...days.map(d => by[d]));
-    $('nd-days').innerHTML = days.map(d => `<div class="b"><span>${d.slice(5)}</span><i style="width:${(by[d] / mx * 100).toFixed(0)}%"></i><span>${by[d]}</span></div>`).join('');
+    $('nd-days').innerHTML = days.map(d => `<div class="b"><span>${d.slice(5)}</span><i style="width:${(by[d] / mx * 100).toFixed(0)}%"></i><span>${by[d]}</span></div>`).join('')
+      + (hidden ? `<div class="b"><span>모름</span><span class="gap">묶음 안에서 잘려 날짜를 모름</span><span>${hidden}</span></div>` : '');
   } else $('nd-days').textContent = '못 받음';
 
   // ── 층 펼친 칸 ──
   const kv = (o, n) => Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => `<div><b>${nf(v)}</b>${esc(k)}</div>`).join('');
   if (items) {
     const src = {}; items.forEach(x => { src[x.source || '—'] = (src[x.source || '—'] || 0) + 1; });
+    if (hidden) src['모름(묶음 안에서 잘림)'] = hidden;
     $('nd-src').innerHTML = kv(src, 8);
     $('sum-nd1').innerHTML = `<span class="sl"><b>기사 ${nf(total ? total.count : items.length)}${dart ? ` · 공시 ${nf(dart.disclosures)}` : ''}</b>언론사 ${Object.keys(src).length} · 주제 ${ns.meta.topics ? Object.keys(ns.meta.topics).length : '—'} · 「중요」 규칙에 걸린 묶음 ${groups.filter(g => g.alert).length}</span>`;
   } else { $('nd-src').textContent = '못 받음'; $('sum-nd1').textContent = '못 받음'; }
