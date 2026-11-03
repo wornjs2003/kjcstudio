@@ -29,6 +29,15 @@ function loadHist() {
 }
 function saveHist(a) { try { localStorage.setItem(HIST_KEY, JSON.stringify(a.slice(-HIST_MAX))); } catch { /* 저장 못 해도 대화는 이 창에 남는다 */ } }
 
+/* 답의 꾸밈 둘만 살린다 — [글](https://…) 링크(새 탭)와 **굵게**. 먼저 전부 이스케이프하고 그 뒤 바꾼다 —
+   답 글이 HTML 로 들어가지 않게. 주소는 http · https 만 */
+function esc(t) { return String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function rich(t) {
+  return esc(t)
+    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, txt, url) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${txt}</a>`)
+    .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
+}
+
 /* 「보고 있는 것」 — 첫 화면 큰 칸이 시장 지도면 그 이름, 아니면 큰 차트. 종목은 늘 함께 보낸다 —
    지도를 보는 중에도 「이 종목 요약」 이 그 아래 고른 종목(머리줄 #kh-idx-name — 종목 풍선이 쓰는 그 칸)을 가리키게 */
 function context() {
@@ -95,7 +104,7 @@ export function mountClaudeRail() {
   function bubble(m) {
     const d = document.createElement('div');
     d.className = 'kh-rail-msg is-' + m.who;
-    d.textContent = m.text;
+    if (m.who === 'ai') d.innerHTML = rich(m.text); else d.textContent = m.text;
     if (m.who === 'ai' && m.secs != null) {
       const s = document.createElement('small');
       s.textContent = `${m.secs}초`;
