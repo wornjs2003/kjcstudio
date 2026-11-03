@@ -41,6 +41,7 @@ import urllib.parse
 import urllib.request
 import http.client
 import hashlib
+import gzip
 from datetime import datetime, timedelta, timezone
 
 # 파일을 안전하게 쓴다 — 쓰다 죽어도 옛 내용이 남는다 (2026-09-22)
@@ -1684,6 +1685,10 @@ def policy_values(draw_ms=None):
 LONGPOLL_ON = (os.environ.get("KJC_LONGPOLL") or "").strip().lower() in ("1", "true", "yes", "on")
 LONGPOLL_MAX_HOLD = 12.0
 LONGPOLL_STEP_SEC = 1.0
+
+# 응답 줄이기 (2026-11-03 · `Handler._send_body`) — 이보다 작은 본문은 그대로 · 수준 5 는 138KB 를 1ms 대에 12KB 대로
+GZIP_MIN = 1024
+GZIP_LEVEL = 5
 LONGPOLL_MAX_ACTIVE = 32
 _lp_lock = threading.Lock()
 _lp_stat = {"active": 0, "total": 0, "changed": 0, "busy": 0}
@@ -6793,10 +6798,26 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _send_json(self, obj, status=200):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self._send_body(status, body, "application/json; charset=utf-8")
+
+    def _send_body(self, status, body, ctype, cache="no-store"):
+        """본문을 내보낸다 — **받는 쪽이 gzip 을 받으면 줄여서** (2026-11-03 재권님 「종목 클릭하면 5분봉 로딩이
+        느린데 이유 찾아봐」 → 「응 해봐」). 서버는 받아 둔 5분봉을 0.02~0.1초에 내는데 외부접속(8764 → Cloudflare →
+        기기)에서 2.4~3.1초 걸렸다 — 한 번에 138KB 를 그대로 보냈고 gzip 이면 12.8KB 다(032830 실측).
+        `GZIP_MIN` 보다 작으면 줄이지 않는다(줄이는 값보다 머리가 크다). 이미 gzip 인 본문(1f 8b)은 그대로 —
+        상류를 부르는 `urllib` 는 gzip 을 청하지 않아 상류 본문은 늘 날것이지만 두 번 싸지 않게 막아 둔다."""
+        if (len(body) >= GZIP_MIN and body[:2] != b"\x1f\x8b"
+                and "gzip" in (self.headers.get("Accept-Encoding") or "").lower()):
+            body = gzip.compress(body, compresslevel=GZIP_LEVEL)
+            self.send_response(status)
+            self.send_header("Content-Encoding", "gzip")
+        else:
+            self.send_response(status)
+        self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Vary", "Accept-Encoding")
+        if cache:
+            self.send_header("Cache-Control", cache)
         self.end_headers()
         self.wfile.write(body)
 
@@ -7151,11 +7172,7 @@ class Handler(SimpleHTTPRequestHandler):
             _up_stat["lastError"] = safe_message(e)
             return False
         _up_stat["routeCalls"] += 1
-        self.send_response(code)
-        self.send_header("content-type", rct or "application/json; charset=utf-8")
-        self.send_header("content-length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        self._send_body(code, body, rct or "application/json; charset=utf-8", cache=None)
         return True
 
     def _board_via_upstream(self, base):
@@ -7210,11 +7227,7 @@ class Handler(SimpleHTTPRequestHandler):
             }, status=503)
             return
         _board_stat["calls"] += 1
-        self.send_response(code)
-        self.send_header("content-type", rct or "application/json; charset=utf-8")
-        self.send_header("content-length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        self._send_body(code, body, rct or "application/json; charset=utf-8", cache=None)
 
     def _handle_board(self):
         """문서 저장 — 보드 셋 · AI 분석 · 데일리분석이 함께 쓴다.
@@ -7503,12 +7516,7 @@ class Handler(SimpleHTTPRequestHandler):
             # 지표 key 를 상류가 모르면 400(「모르는 지표」) — 새로 더한 key(가상자산 등)를 상류 재시작 전에 볼 수 있게 그때도 여기서 받는다
             if not (status == 404 or (status == 403 and not body.lstrip().startswith(b"{"))
                     or (status == 400 and route == "indicator")):
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Content-Length", str(len(body)))
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
-                self.wfile.write(body)
+                self._send_body(status, body, "application/json; charset=utf-8")
                 return
         if route == "indicators":
             r = market_index.indicators()
@@ -7546,12 +7554,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json({"ok": False, "error": "상류(8765)에 못 닿았습니다 — %s" % safe_message(e),
                              "source": source}, 502)
             return
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        self._send_body(status, body, "application/json; charset=utf-8")
 
     def _handle_naver(self):
         parsed = urllib.parse.urlparse(self.path)
