@@ -27,6 +27,7 @@
 
 import { watch } from '../store/longpoll.js';
 import { ready as toneReady, tone, paint } from '../../../assets/js/tone.js';
+import { side as signSide } from '../../../assets/js/sign.js';
 
 const ID = 'buy_share';                         // data/metrics.json 의 이름
 const KEYS = { mem: 'kis_proxy.INVESTOR_MEMBER_TTL', flow: 'intraday_flow.CACHE_TTL' };
@@ -38,9 +39,8 @@ let data = { mem: null, flow: null };           // 마지막으로 받은 값 �
 /* 앞 값과 견준 쪽 — 같은 종목의 앞 값이 있을 때만. 늘어난 것이 없으면 앞 쪽 그대로 */
 function dirOf(prev, buy, sell, c) {
   if (!prev || prev.code !== c || prev.buy == null || buy == null) return null;
-  const db = buy - prev.buy, ds = sell - prev.sell;
-  if (db === ds) return prev.dir || null;
-  return db > ds ? 'up' : 'down';
+  const sd = signSide((buy - prev.buy) - (sell - prev.sell));   // 방향 셈은 sign.js 한 곳(개념정의 검수 11-03)
+  return sd === 'up' || sd === 'down' ? sd : (prev.dir || null);
 }
 let watches = null;
 let footEl = null;
@@ -68,8 +68,8 @@ function dot(p, d) {
   const { side, k } = p == null ? { side: null, k: 0 } : tone(ID, p);
   if (side !== 'up' && side !== 'down') return '<span class="kh-ff-bar"><i class="kh-ff-mid"></i></span>';
   const x = 50 + (side === 'up' ? 1 : -1) * k * 50;
-  /* 색은 앞 값과 견준 쪽(d) · 짙기는 누적 몫(p) 그대로 — 쪽만 다르면 기준을 사이에 두고 뒤집은 값으로 tone.js 에 묻는다 */
-  const c = !d ? 'var(--kh-text-muted)' : paint(ID, d === side ? p : 100 - p, 'line');
+  /* 색은 앞 값과 견준 쪽(d) · 짙기는 누적 몫(p) 그대로 — 칠할 쪽은 tone.js 넷째 인자로 준다(기준 숫자를 화면에 안 둔다 · 515eafc) */
+  const c = !d ? 'var(--kh-text-muted)' : paint(ID, p, 'line', d);
   const fill = side === 'up' ? `left:50%;width:${(x - 50).toFixed(1)}%` : `left:${x.toFixed(1)}%;width:${(50 - x).toFixed(1)}%`;
   return `<span class="kh-ff-bar"><i class="kh-ff-mid"></i><i class="kh-ff-fill ${side}" style="${fill};background:${c}"></i>` +
     `<i class="kh-ff-dot" style="left:${x.toFixed(1)}%;background:${c};--kh-ff-c:${c}"></i></span>`;
