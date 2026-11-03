@@ -202,13 +202,14 @@ function paintDay() {
       </div>` : ''}</div>`;
   }).join('');
 
-  /* 날짜 줄 오른쪽 — 작성하기 · 수정하기 · 저장하기(2026-10-26 재권님 「저장하기 왼쪽에 작성하기 버튼 · 수정하기 버튼」).
+  /* 날짜 줄 오른쪽 — 작성 · 수정 · 저장 · 삭제(2026-10-26 재권님 「저장하기 왼쪽에 작성하기 버튼 · 수정하기 버튼」 · 2026-11-03 「작성 수정 저장 삭제」 — 이름을 줄여 넷이 한 줄에).
      「그날 회고」 칸은 뺐다 — 회고는 종목마다 쓴다(같은 날 「그날 회고는 필요없을듯 · 종목에 작성된게 있어서」). 적어 둔 글(doc.days)은 지우지 않는다 */
   return `<div class="rv-day-h"><b>${dayLabel(pick)}</b>
       <span class="rv-btns">
-        <button class="rv-btn" type="button" id="rv-write">작성하기</button>
-        <button class="rv-btn" type="button" id="rv-edit"${list.length ? '' : ' disabled'}>수정하기</button>
-        <button class="rv-save" type="submit" form="rv-form">저장하기</button>
+        <button class="rv-btn" type="button" id="rv-write">작성</button>
+        <button class="rv-btn" type="button" id="rv-edit"${list.length ? '' : ' disabled'}>수정</button>
+        <button class="rv-save" type="submit" form="rv-form">저장</button>
+        <button class="rv-btn" type="button" id="rv-del"${ed ? '' : ' disabled'}>삭제</button>
       </span></div>
     <form class="rv-form" id="rv-form" autocomplete="off">
       <span class="rv-form-h">${ed ? `쓰는 중 — ${esc(nameOf(ed))}` : '새로 쓰기'}</span>
@@ -216,8 +217,8 @@ function paintDay() {
       <div class="full rv-legs" id="rv-legs"><div class="rv-leg rv-leg-hd" aria-hidden="true"><span>매수가(원)</span><span>매도가(원)</span><span>수량(주)</span><span></span></div>${(ed && Array.isArray(ed.legs) && ed.legs.length ? ed.legs : [{}]).map(legRow).join('')}
         <button type="button" class="rv-addleg" id="rv-addleg">+ 매매 더하기</button>
         <div class="rv-sum" id="rv-sum"></div></div>
-      <label class="rv-unit"><input id="rv-pnl" data-fmt="int" type="text" inputmode="numeric" placeholder="시세차익 · 손해는 −" value="${val('pnl')}" /><span>원</span></label>
-      <label class="rv-unit"><input id="rv-pct" data-fmt="dec" type="text" inputmode="decimal" placeholder="수익률" value="${val('pct')}" /><span>%</span></label>
+      <label class="rv-unit"><button type="button" class="rv-clr" data-clr title="수익금 · 수익률 · 매매 줄 지우기" aria-label="수익금 지우기">×</button><input id="rv-pnl" data-fmt="int" type="text" inputmode="numeric" placeholder="시세차익 · 손해는 −" value="${val('pnl')}" /><span>원</span></label>
+      <label class="rv-unit"><button type="button" class="rv-clr" data-clr title="수익금 · 수익률 · 매매 줄 지우기" aria-label="수익률 지우기">×</button><input id="rv-pct" data-fmt="dec" type="text" inputmode="decimal" placeholder="수익률" value="${val('pct')}" /><span>%</span></label>
       <textarea class="full rv-why-in" id="rv-why" placeholder="이 종목 회고 — 잘한 것 · 아쉬운 것 · 다음엔 어떻게">${val('why')}</textarea>
       <span class="rv-hint" id="rv-hint"></span>
     </form>
@@ -322,7 +323,8 @@ function statsHtml() {
       <div><span>기록</span><b>${all.n}</b></div>
       <div><span>이익 · 손해</span><b>${all.win} · ${all.loss}</b></div>
     </div>
-    <div class="rv-sm-note">${all.blank ? `차익 빈 기록 ${all.blank}건은 수익금에서 뺌 · ` : ''}수익률은 매수가 · 수량을 적은 기록 ${all.pctN}건으로 셈</div>
+    <div class="rv-sm-note rv-sm-act"><span>${all.blank ? `차익 빈 기록 ${all.blank}건은 수익금에서 뺌 · ` : ''}수익률은 매수가 · 수량을 적은 기록 ${all.pctN}건으로 셈</span>
+      <button type="button" class="rv-sm-xl" data-export${okRange && list.length ? '' : ' disabled'}>⤓ 엑셀로 내보내기</button></div>
     <div class="rv-sm-tb">
       <div class="rv-sm-row rv-sm-hd">${th('name', '종목')}${th('pnl', '수익금')}${th('pct', '수익률')}${th('n', '건수')}</div>
       ${rows.map(({ t, s }) => `<div class="rv-sm-row"><span class="rv-sm-nm">${iconHtml(stockOf(t))}${esc(nameOf(t))}</span>${pnlB(s.sum)}${pctB(s.pct)}<span class="rv-sm-n">${s.n}</span></div>`).join('')
@@ -330,11 +332,43 @@ function statsHtml() {
     </div>`;
 }
 const statSub = () => { const [a, b] = statRange(); return /^\d{8}$/.test(a) && /^\d{8}$/.test(b) ? (a === b ? dayLabel(a) : `${dayLabel(a)} – ${dayLabel(b)}`) : ''; };
+/* 엑셀로 내보내기 — 모달에서 고른 기간을 CSV 로(2026-11-03 재권님 「엑셀로 내보내기」 → 그림 「응 그렇게 만들어」).
+   매매 줄 하나 = 한 줄 · 매매 줄 없는 기록은 수익금 · 수익률 · 회고만 한 줄. 셈은 trade-costs.js 그대로 · 못 셈은 빈 칸.
+   엑셀이 한글을 깨지 않게 맨 앞에 BOM · 칸은 큰따옴표로 감싼다. 글자 색은 CSV 가 못 담는다 */
+const MARKET_KO = { KOSPI: '코스피', KOSDAQ: '코스닥' };
+function exportCsv() {
+  const [a, b] = statRange();
+  if (!(/^\d{8}$/.test(a) && /^\d{8}$/.test(b) && a <= b)) return;
+  const head = ['날짜', '종목', '시장', '매수가', '매도가', '수량', '시세차익', '거래세', '농특세', '수수료', '수익금', '수익률(%)', '회고'];
+  const out = [head];
+  const cell = (v) => (v == null ? '' : v);
+  doc.trades.filter((t) => t.d >= a && t.d <= b).sort((x, y) => (x.d < y.d ? -1 : x.d > y.d ? 1 : 0)).forEach((t) => {
+    const mk = (findStock(t.code) || findStock(t.name) || {}).market;
+    const base = [isoOf(t.d), nameOf(t), MARKET_KO[mk] || ''];
+    const legs = (Array.isArray(t.legs) ? t.legs : []).filter((l) => l && (l.buy != null || l.sell != null || l.qty != null));
+    if (!legs.length) { out.push([...base, '', '', '', '', '', '', '', cell(numOf(t.pnl)), cell(numOf(t.pct)), t.why || '']); return; }
+    legs.forEach((l) => {
+      const c = legCost(numOf(l.buy), numOf(l.sell), numOf(l.qty), mk);
+      const tx = c && c.taxes ? Object.fromEntries(c.taxes) : null;
+      out.push([...base, cell(numOf(l.buy)), cell(numOf(l.sell)), cell(numOf(l.qty)), c ? c.gross : '',
+        tx ? tx['거래세'] ?? 0 : '', tx ? tx['농특세'] ?? 0 : '', c ? cell(c.fee) : '', c ? cell(c.net) : '',
+        c && c.pct != null ? +c.pct.toFixed(2) : '', t.why || '']);
+    });
+  });
+  const csv = '\ufeff' + out.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const el = document.createElement('a');
+  el.href = url; el.download = `주식회고_${isoOf(a)}_${isoOf(b)}.csv`;
+  document.body.appendChild(el); el.click(); el.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function openStats() {
   const m = openModal({ label: '수익금 모아 보기', width: 720, fade: false, head: { name: '수익금 모아 보기', sub: statSub() } });
   const draw = () => { m.body.innerHTML = `<div class="rv-sm">${statsHtml()}</div>`; m.head?.setSub?.(statSub()); };
   m.body.addEventListener('click', (e) => {
     const per = e.target.closest('[data-per]'), so = e.target.closest('[data-sort]');
+    if (e.target.closest('[data-export]')) { exportCsv(); return; }
     if (per) {
       if (per.dataset.per === 'custom') { const [a, b] = statRange(); stat.from = stat.from || isoOf(a); stat.to = stat.to || isoOf(b); }
       stat.p = per.dataset.per; draw();
@@ -446,6 +480,17 @@ function bindDay() {
     if (rm) { rm.closest('.rv-leg').remove(); if (!legsBox.querySelector('.rv-leg:not(.rv-leg-hd)')) $('#rv-addleg').insertAdjacentHTML('beforebegin', legRow({})); recalc(); }
   });
   recalc();
+  /* × — 수익금 · 수익률 · 매매 줄을 한 번에 비운다(2026-11-03 재권님 「수익금에 작성한거 지우는것도 필요해」).
+     셈으로 채운 값은 매매 줄이 남아 있으면 다시 차므로 줄까지 비운다 · 저장은 「저장하기」 를 눌러야 된다 */
+  form.querySelectorAll('[data-clr]').forEach((b) => b.addEventListener('click', (e) => {
+    e.preventDefault();
+    legsBox.querySelectorAll('.rv-leg:not(.rv-leg-hd)').forEach((r) => r.remove());
+    $('#rv-addleg').insertAdjacentHTML('beforebegin', legRow({}));
+    const pnl = $('#rv-pnl'), pct = $('#rv-pct');
+    pnl.value = pct.value = ''; delete pnl.dataset.auto; delete pct.dataset.auto;
+    recalc();
+    hint.textContent = '수익금 · 수익률 · 매매 줄을 비웠습니다 — 「저장」 을 누르면 저장됩니다';
+  }));
   /* 작성하기 — 빈 칸으로 새 종목 · 수정하기 — 쓰는 칸이 비어 있으면 그날 첫 종목을 불러 온다 */
   $('#rv-write').addEventListener('click', () => { editId = null; paint(); $('#rv-stock').focus(); });
   $('#rv-edit').addEventListener('click', () => {
@@ -460,6 +505,17 @@ function bindDay() {
   $('#rv-day').querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => {
     editId = b.dataset.edit; openIds.delete(editId); paint(); $('#rv-why').focus();
   }));
+  /* 삭제 — 쓰는 칸에 불러 둔 기록을 지운다(2026-11-03 재권님 「작성 수정 저장 삭제 요렇게 버튼이 있어야해」) ·
+     새로 쓰는 중이면 지울 것이 없어 흐리다 · 묻고 지운다(아래 줄의 「지우기」 와 같은 길) */
+  $('#rv-del').addEventListener('click', () => {
+    const t = editId && doc.trades.find((x) => x.id === editId);
+    if (!t || !window.confirm(`${nameOf(t)} 기록을 지울까요?`)) return;
+    doc.trades = doc.trades.filter((x) => x.id !== t.id);
+    openIds.delete(t.id);
+    editId = undefined;                // 남은 기록이 있으면 그 첫 종목을 불러 둔다
+    store.save();
+    paint();
+  });
   $('#rv-day').querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => {
     const t = doc.trades.find((x) => x.id === b.dataset.del);
     if (!t || !window.confirm(`${nameOf(t)} 기록을 지울까요?`)) return;

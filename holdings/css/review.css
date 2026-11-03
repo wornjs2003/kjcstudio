@@ -98,7 +98,10 @@
 .rv-form input[readonly] { background: var(--kh-bg-surface); }
 /* 시세차익 · 퍼센트 칸 뒤 단위(원 · %) — 칸 안 오른쪽에 붙인다 */
 .rv-unit { position: relative; display: block; min-width: 0; }
-.rv-unit input { width: 100%; padding-right: 26px; text-align: right; }
+.rv-unit input { width: 100%; padding-left: 24px; padding-right: 26px; text-align: right; }
+/* × — 수익금 · 수익률 · 매매 줄 비우기 (2026-11-03) · 칸 안 왼쪽 */
+.rv-clr { position: absolute; left: 4px; top: 50%; transform: translateY(-50%); z-index: 1; font: inherit; font-size: 0.85rem; background: none; border: 0; padding: 2px 5px; color: var(--kh-text-muted); cursor: pointer; }
+.rv-clr:hover { color: var(--kh-text-primary); }
 .rv-unit span { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); font-size: 0.85rem; color: var(--kh-text-secondary); pointer-events: none; }
 
 /* 다른 종목 — 접으면 이름만 */
@@ -124,6 +127,9 @@
 .rv-sm-sum span { font-size: 0.74rem; color: var(--kh-text-secondary); }
 .rv-sm-sum b { font-size: 1.1rem; font-weight: 700; }
 .rv-sm-note { margin-top: 6px; font-size: 0.72rem; color: var(--kh-text-secondary); }
+.rv-sm-act { display: flex; align-items: center; gap: 8px; }
+.rv-sm-xl { margin-left: auto; flex: none; font: inherit; font-size: 0.78rem; font-weight: 600; background: var(--kh-bg-card); border: 1px solid var(--kh-border-strong); border-radius: 8px; padding: 4px 12px; color: var(--kh-text-primary); cursor: pointer; }
+.rv-sm-xl:disabled { color: var(--kh-text-muted); cursor: default; }
 .rv-sm-tb { margin-top: 14px; }
 .rv-sm-row { display: grid; grid-template-columns: minmax(0, 1fr) 120px 80px 48px; gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--kh-border); }
 .rv-sm-row > b, .rv-sm-n { text-align: right; font-weight: 600; }
