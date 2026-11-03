@@ -90,26 +90,52 @@ def main(argv):
         print("옮길 커밋이 없다(%s)" % rng)
         return 0
 
-    # Revert 와 그 원본을 뺀다
-    drop = set()
+    # Revert 와 그 원본을 뺀다 — **되돌림 사슬로 센다** (2026-11-03 재권님 「응」 · 창구가 찾음).
+    # X · Revert X · Reapply X(= Revert 「Revert X」) · Revert 「Reapply X」 … 는 원본 하나에 매달린 사슬이다.
+    # 범위 안 개수가 짝수면 서로 지워져 순 변화가 없다 → 전부 뺀다. 홀수면 **맨 끝 하나**가 변경을 들고 나가 → 그것만 통과 줄을 받는다.
+    # 전에는 「되돌림을 되돌린 것은 빼지 않는다」(2026-10-16 qa 시뮬 — X · Revert X · Reapply X 가 다 빠졌다) 한 줄이라,
+    # Reapply 를 다시 되돌린 것(순 변화 0)까지 둘 다 셈에 남아 문턱이 막혔다(11-03 04efa3b · 2672f4b · 5090cc8 · b15271f).
+    # 원본이 범위 밖(이미 옮긴 것)이면 지금처럼 홀로 된 되돌림은 뺀다 — 무르는 일이라 검수 대상이 아니다.
+    # staging 은 걸린 것을 **머지째** 되돌린다 — 원본이 머지면 그 머지로 들어온 묶음도 뺀다(고친 판 · 되살림이 제 통과 줄을 받는다).
+    inr = set(commits)
+    rev_of = {}
     for c in commits:
-        body = git("log", "-1", "--format=%B", c)
-        m = re.search(r"This reverts commit ([0-9a-f]{7,40})", body)
+        m = re.search(r"This reverts commit ([0-9a-f]{7,40})", git("log", "-1", "--format=%B", c))
         if m:
-            orig = full(m.group(1))
-            # **되돌림을 되돌린 것은 빼지 않는다** — 무른 것을 되살리는 커밋이라 변경이 그대로 나간다(2026-10-16 qa 시뮬 —
-            # X · Revert X · Revert 「Revert X」 셋이 다 빠져 「닿는 커밋 없음」 으로 지나갔다). 그 커밋이 제 통과 줄을 받는다
-            if orig and re.search(r"This reverts commit [0-9a-f]{7,40}", git("log", "-1", "--format=%B", orig)):
-                continue
-            drop.add(c)
-            if orig in commits:
-                drop.add(orig)
-            # staging 은 걸린 것을 **머지째** 되돌린다(「Revert "staging 에 … 합침"」) — 그 머지로 들어온 묶음도 뺀다.
-            # 고친 판이 다시 올라오면 그 판(되살림 커밋)이 제 통과 줄을 받는다
-            if orig:
-                ps = git("rev-list", "--parents", "-n", "1", orig).split()[1:]
-                if len(ps) > 1:
-                    drop.update(x for x in git("rev-list", "%s..%s" % (ps[0], orig)).split() if x in commits)
+            rev_of[c] = full(m.group(1))
+
+    def parent_of(h):                       # 범위 밖 되돌림 고리도 따라간다(뿌리를 찾으려고)
+        if h in rev_of:
+            return rev_of[h]
+        m = re.search(r"This reverts commit ([0-9a-f]{7,40})", git("log", "-1", "--format=%B", h))
+        return full(m.group(1)) if m else None
+
+    chains = {}                             # 뿌리 → 범위 안 사슬 고리(새것부터 · rev-list 차례)
+    for c in commits:
+        if c not in rev_of:
+            continue
+        root, seen = c, set()
+        while True:
+            up = parent_of(root)
+            if not up or up in seen:
+                break
+            seen.add(root)
+            root = up
+        chains.setdefault(root, []).append(c)
+
+    drop = set()
+    for root, revs in chains.items():
+        members = revs + ([root] if root in inr else [])
+        keep = None
+        if root in inr and len(members) % 2 == 1:
+            keep = revs[0]                  # 맨 끝(가장 새것) 되돌림 고리가 변경을 들고 나간다
+        is_merge = len(git("rev-list", "--parents", "-n", "1", root).split()) > 2
+        if is_merge and len(revs) % 2 == 0:
+            keep = revs[0]                  # 머지째 되돌렸다가 되살렸다 — 되살림이 묶음 변경을 들고 나간다
+        drop.update(x for x in members if x != keep)
+        if is_merge:
+            ps = git("rev-list", "--parents", "-n", "1", root).split()[1:]
+            drop.update(x for x in git("rev-list", "%s..%s" % (ps[0], root)).split() if x in inr)
 
     need = []
     for c in commits:
