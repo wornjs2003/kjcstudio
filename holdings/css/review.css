@@ -84,22 +84,6 @@
 .rv-form .rv-why-in { min-height: 120px; resize: vertical; }
 .rv-form .rv-hint { grid-column: 1 / -1; font-size: 0.7rem; color: var(--kh-text-muted); }
 .rv-form .rv-hint:empty { display: none; }
-/* 매매 줄 — 매수가 · 매도가 · 수량 · 지우기, 그 아래 셈한 줄(2026-11-03). 셈한 숫자 색은 sign.js 클래스(.kh-up · .kh-down) 그대로 */
-.rv-legs { display: flex; flex-direction: column; gap: 6px; }
-.rv-leg { display: grid; grid-template-columns: 1fr 1fr 0.7fr 24px; gap: 6px; align-items: center; }
-/* 칸 이름 줄 — 값을 넣으면 칸 안 안내 글이 사라져 매수 · 매도가 안 갈려서(2026-11-03 재권님 「매수 매도 칸이 잘 인지 되도록 해」) */
-.rv-leg-hd { font-size: 0.72rem; font-weight: 700; color: var(--kh-text-secondary); margin-bottom: -2px; }
-.rv-rmleg, .rv-addleg { font: inherit; font-size: 0.76rem; background: none; border: 0; padding: 2px 4px; color: var(--kh-text-secondary); cursor: pointer; }
-.rv-rmleg:hover, .rv-addleg:hover { color: var(--kh-text-primary); }
-.rv-addleg { align-self: flex-start; }
-.rv-sum { font-size: 0.74rem; color: var(--kh-text-secondary); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
-.rv-sum:empty { display: none; }
-.rv-sum b { font-size: 0.82rem; font-weight: 700; }
-.rv-form input[readonly] { background: var(--kh-bg-surface); }
-/* 시세차익 · 퍼센트 칸 뒤 단위(원 · %) — 칸 안 오른쪽에 붙인다 */
-.rv-unit { position: relative; display: block; min-width: 0; }
-.rv-unit input { width: 100%; padding-right: 26px; text-align: right; }
-.rv-unit span { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); font-size: 0.85rem; color: var(--kh-text-secondary); pointer-events: none; }
 
 /* 다른 종목 — 접으면 이름만 */
 .rv-others-h { margin-top: 14px; font-size: 0.82rem; font-weight: 700; color: var(--kh-text-primary); }
@@ -125,7 +109,7 @@
   /* 쓰는 카드는 달력 카드 높이에 맞춘다 — 회고 글 칸과 다른 종목 목록이 남는 높이를 반씩 받고,
      목록이 자기 몫을 넘치면 그만큼 회고 글 칸이 줄어든다(최소 72px) · 2026-10-26 「밑에 목록에 따라서 조절 · 기본 1/2」 */
   .rv-day { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-  .rv-day .rv-form { flex: 1 1 0; min-height: 0; grid-template-rows: auto auto auto auto minmax(72px, 1fr); }
+  .rv-day .rv-form { flex: 1 1 0; min-height: 0; grid-template-rows: auto auto auto minmax(72px, 1fr); }
   .rv-day .rv-form .rv-why-in { min-height: 0; height: 100%; resize: none; }
   .rv-day .rv-others { flex: 1 1 0; }
   /* 달력 세로 1.5배 — 칸 112 → 168 (2026-10-26 「달력세로로 지금보다 1.5배로」) */

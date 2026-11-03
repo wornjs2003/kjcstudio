@@ -10,8 +10,7 @@
    이 파일은 문서 모양과 합치는 법만 갖는다.
 
        { v: 1,
-         trades: [{ id, d: 'YYYYMMDD', code, name, pnl, pct, why, at, legs }],  pnl 시세차익(원) · pct 퍼센트 — 빈 칸은 null
-                                                                            legs [{ buy, sell, qty }] 몇 차 매매 — 있으면 pnl · pct 는 거기서 셈(세금 · 수수료 뺀 값 · 2026-11-03)
+         trades: [{ id, d: 'YYYYMMDD', code, name, pnl, pct, why, at }],     pnl 시세차익(원) · pct 퍼센트 — 빈 칸은 null
                                                                             (2026-10-26 전 기록은 side · qty · price 를 그대로 갖는다)
          days:   { 'YYYYMMDD': '그날 회고 글' } }
 
@@ -23,7 +22,6 @@ import { iconHtml } from './components/stock-icon.js';
 import { brandColor, WATCHLIST } from './data/market.js';
 import { apiFetch } from './data/api.js';
 import { side as dirOf, signClass } from '../../assets/js/sign.js';
-import { legCost, sumCosts } from './data/trade-costs.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -45,7 +43,7 @@ const dayLabel = (s) => { const d = fromYmd(s); return `${d.getMonth() + 1}월 $
 let doc = { v: 1, trades: [], days: {} };
 let view = 'month';
 let pick = todayYmd();          // 고른 날
-let stocks = [];                // [{ code, name, market }]
+let stocks = [];                // [{ code, name }]
 let editId;                     // 쓰는 칸에 불러 둔 매매 id — null 새 기록 · undefined 날짜를 막 골라 아직 안 정함(첫 종목을 불러 둔다)
 const openIds = new Set();      // 펼쳐 둔 다른 종목 줄
 
@@ -212,53 +210,13 @@ function paintDay() {
     <form class="rv-form" id="rv-form" autocomplete="off">
       <span class="rv-form-h">${ed ? `쓰는 중 — ${esc(nameOf(ed))}` : '새로 쓰기'}</span>
       <input class="full" id="rv-stock" list="rv-stocks" placeholder="종목 이름 또는 코드" value="${ed ? esc(ed.name || ed.code || '') : ''}" />
-      <div class="full rv-legs" id="rv-legs"><div class="rv-leg rv-leg-hd" aria-hidden="true"><span>매수가(원)</span><span>매도가(원)</span><span>수량(주)</span><span></span></div>${(ed && Array.isArray(ed.legs) && ed.legs.length ? ed.legs : [{}]).map(legRow).join('')}
-        <button type="button" class="rv-addleg" id="rv-addleg">+ 매매 더하기</button>
-        <div class="rv-sum" id="rv-sum"></div></div>
-      <label class="rv-unit"><input id="rv-pnl" data-fmt="int" type="text" inputmode="numeric" placeholder="시세차익 · 손해는 −" value="${val('pnl')}" /><span>원</span></label>
-      <label class="rv-unit"><input id="rv-pct" data-fmt="dec" type="text" inputmode="decimal" placeholder="수익률" value="${val('pct')}" /><span>%</span></label>
+      <input id="rv-pnl" type="number" step="1" inputmode="numeric" placeholder="시세차익(원) · 손해는 −" value="${val('pnl')}" />
+      <input id="rv-pct" type="number" step="0.01" inputmode="decimal" placeholder="퍼센트(%)" value="${val('pct')}" />
       <textarea class="full rv-why-in" id="rv-why" placeholder="이 종목 회고 — 잘한 것 · 아쉬운 것 · 다음엔 어떻게">${val('why')}</textarea>
       <span class="rv-hint" id="rv-hint"></span>
     </form>
     ${others.length ? `<div class="rv-others"><div class="rv-others-h">이날 다른 종목 ${others.length}</div>${rows}</div>` : '<div class="rv-others"></div>'}`;
 }
-
-/* 매매 한 줄 — 매수가 · 매도가 · 수량(2026-11-03 재권님 「매수가격 매도가격 수량 넣으면 차익과 수익률은 자동으로」).
-   1차 · 2차처럼 여러 번이면 줄을 더한다. 셈은 holdings/js/data/trade-costs.js 한 곳 — 세율 · 수수료율도 거기 */
-const legRow = (l) => {
-  const v = (k) => (l && l[k] != null ? esc(l[k]) : '');
-  return `<div class="rv-leg"><input data-k="buy" data-fmt="pos" type="text" inputmode="numeric" placeholder="매수가(원)" value="${v('buy')}" />
-    <input data-k="sell" data-fmt="pos" type="text" inputmode="numeric" placeholder="매도가(원)" value="${v('sell')}" />
-    <input data-k="qty" data-fmt="pos" type="text" inputmode="numeric" placeholder="수량(주)" value="${v('qty')}" />
-    <button type="button" class="rv-rmleg" data-rmleg aria-label="이 매매 줄 지우기">×</button></div>`;
-};
-/* 숫자 칸은 글 칸이다 — 세 자리마다 쉼표를 찍으려고(2026-11-03 재권님 「소수점 및 금액에 , 있는것도 필요해」). 읽을 때 쉼표를 뗀다 */
-const plainNum = (v) => String(v ?? '').replace(/[^\d.\-]/g, '');
-const numOf = (v) => { const p = plainNum(v); return p === '' || p === '-' || !Number.isFinite(Number(p)) ? null : Number(p); };
-/* 칸 종류 — pos 0 이상 정수(매수가 · 매도가 · 수량) · int 정수(시세차익 · 손해는 −) · dec 소수 둘째 자리까지(퍼센트) */
-const fmtNum = (raw, kind) => {
-  let p = plainNum(raw);
-  const neg = kind !== 'pos' && p.startsWith('-');
-  p = p.replace(/-/g, '');
-  let [i, f] = p.split('.');
-  i = (i || '').replace(/^0+(?=\d)/, '');
-  const g = i.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return (neg ? '-' : '') + g + (kind === 'dec' && f !== undefined ? '.' + f.slice(0, 2) : '');
-};
-/* 적는 동안 쉼표를 다시 찍는다 — 커서는 뒤에서 센 자리 그대로 */
-const fmtField = (el) => {
-  const back = el.value.length - (el.selectionStart ?? el.value.length);
-  el.value = fmtNum(el.value, el.dataset.fmt);
-  if (document.activeElement === el) { const at = Math.max(0, el.value.length - back); el.setSelectionRange(at, at); }
-};
-const legsIn = () => [...document.querySelectorAll('#rv-legs .rv-leg:not(.rv-leg-hd)')].map((r) => {
-  const g = (k) => numOf(r.querySelector(`[data-k="${k}"]`).value);
-  return { el: r, buy: g('buy'), sell: g('sell'), qty: g('qty') };
-});
-const feeS = (f) => (f == null ? '— (율 미정)' : f.toLocaleString('ko-KR') + '원');
-/* 세금 — 코스피는 거래세 · 농특세 둘, 코스닥은 거래세 하나(시장마다 다름 · trade-costs.js). 시장을 모르면 — */
-const taxS = (c) => (c.taxes ? c.taxes.map(([n, v]) => `${n} ${v.toLocaleString('ko-KR')}원`).join(' · ') : '세금 — (시장 모름)');
-const costLine = (c) => `<span>시세차익 ${wonS(c.gross)} · ${taxS(c)} · 수수료 ${feeS(c.fee)}</span>`;
 
 function paintTitle() {
   const d = fromYmd(pick);
@@ -297,14 +255,13 @@ function bindDay() {
     e.preventDefault();
     const raw = stockIn.value.trim();
     const pnlRaw = $('#rv-pnl').value, pctRaw = $('#rv-pct').value, why = $('#rv-why').value.trim();
-    if (!raw && pnlRaw === '' && pctRaw === '' && !why && !editId && !legsIn().some((l) => l.buy != null || l.sell != null || l.qty != null)) {
+    if (!raw && pnlRaw === '' && pctRaw === '' && !why && !editId) {
       hint.textContent = '적은 것이 없어 저장할 것이 없습니다';
       return;
     }
     const s = findStock(raw) || (/^\d{6}$/.test(raw) ? { code: raw, name: raw } : { code: '', name: raw });
-    const num = numOf;
-    const legs = legsIn().filter((l) => l.buy != null || l.sell != null || l.qty != null).map(({ buy, sell, qty }) => ({ buy, sell, qty }));
-    const rec = { code: s.code, name: s.name, pnl: num(pnlRaw), pct: num(pctRaw), why, legs };
+    const num = (v) => (v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+    const rec = { code: s.code, name: s.name, pnl: num(pnlRaw), pct: num(pctRaw), why };
     const old = editId && doc.trades.find((x) => x.id === editId);
     if (old) Object.assign(old, rec, { at: new Date().toISOString() });
     else {
@@ -315,42 +272,14 @@ function bindDay() {
     store.save();
     paint();
   });
-  form.querySelectorAll('[data-fmt]').forEach((el) => { el.value = fmtNum(el.value, el.dataset.fmt); });
-  form.addEventListener('input', (e) => { if (e.target.dataset && e.target.dataset.fmt) fmtField(e.target); }, true);
   /* 시세차익 · 퍼센트 칸 글씨 색 — 적는 대로 오름 빨강 · 내림 파랑 · 0 · 빈 칸은 색 없음(2026-10-26 재권님 「마이너스일때와 플러스일때 컬러도 자동」).
      셈은 sign.js 한 곳(「오르내림 숫자의 글씨 색은 한 셈이다」) */
   ['#rv-pnl', '#rv-pct'].forEach((sel) => {
     const el = $(sel);
-    const tint = () => { el.classList.remove('kh-up', 'kh-down', 'kh-flat', 'kh-mut'); if (numOf(el.value) != null) el.classList.add(signClass(numOf(el.value))); };
+    const tint = () => { el.classList.remove('kh-up', 'kh-down', 'kh-flat', 'kh-mut'); if (el.value !== '') el.classList.add(signClass(Number(el.value))); };
     el.addEventListener('input', tint);
-    el.addEventListener('rv-calc', tint);
     tint();
   });
-  /* 매매 줄 → 줄마다 순차익 · 수익률, 합계는 시세차익 · 퍼센트 칸에 넣고 잠근다(손으로 고치면 셈과 갈려서).
-     세 칸이 다 찬 줄이 없으면 두 칸은 전처럼 손으로 적는다 — 옛 기록 · 매매 줄 없이 적는 날 */
-  const recalc = () => {
-    const rows = legsIn();
-    const market = findStock($('#rv-stock').value)?.market;
-    /* 셈은 줄마다 하고 보이는 것은 맨 아래 한 줄뿐(2026-11-03 재권님 「사이에 글은 필요없고 밑에만」) */
-    const costs = rows.map((r) => legCost(r.buy, r.sell, r.qty, market));
-    const t = sumCosts(costs), pnl = $('#rv-pnl'), pct = $('#rv-pct'), sum = $('#rv-sum');
-    sum.innerHTML = t ? `${costs.filter(Boolean).length > 1 ? '합계 ' : ''}<b class="${signClass(t.net)}">${wonS(t.net)}</b> <b class="${signClass(t.pct)}">${pctS(+t.pct.toFixed(2))}</b>
-      ${costLine(t)}` : '';
-    pnl.readOnly = pct.readOnly = !!t;
-    pnl.title = pct.title = t ? '매매 줄에서 셈한 값(세금 · 수수료 뺀 것)' : '';
-    if (t) { pnl.value = fmtNum(String(t.net), 'int'); pct.value = fmtNum(t.pct.toFixed(2), 'dec'); }
-    [pnl, pct].forEach((el) => el.dispatchEvent(new Event('rv-calc')));
-    rows.forEach((r, i) => { r.el.querySelector('[data-rmleg]').hidden = rows.length < 2 && i === 0; });
-  };
-  const legsBox = $('#rv-legs');
-  legsBox.addEventListener('input', recalc);
-  $('#rv-stock').addEventListener('input', recalc);
-  legsBox.addEventListener('click', (e) => {
-    if (e.target.closest('#rv-addleg')) { $('#rv-addleg').insertAdjacentHTML('beforebegin', legRow({})); recalc(); [...legsBox.querySelectorAll('.rv-leg:not(.rv-leg-hd)')].pop()?.querySelector('[data-k="buy"]').focus(); }
-    const rm = e.target.closest('[data-rmleg]');
-    if (rm) { rm.closest('.rv-leg').remove(); if (!legsBox.querySelector('.rv-leg:not(.rv-leg-hd)')) $('#rv-addleg').insertAdjacentHTML('beforebegin', legRow({})); recalc(); }
-  });
-  recalc();
   /* 작성하기 — 빈 칸으로 새 종목 · 수정하기 — 쓰는 칸이 비어 있으면 그날 첫 종목을 불러 온다 */
   $('#rv-write').addEventListener('click', () => { editId = null; paint(); $('#rv-stock').focus(); });
   $('#rv-edit').addEventListener('click', () => {
@@ -409,14 +338,12 @@ store.load();
 
 (async () => {
   const seen = new Set();
-  /* market — 세금이 시장마다 달라서 함께 든다(코스피 · 코스닥 · 2026-11-03) */
-  const add = (code, name, market) => { if (code && name && !seen.has(code)) { seen.add(code); stocks.push({ code, name, market }); } };
-  WATCHLIST.forEach((s) => add(s.code, s.name, s.market));
+  const add = (code, name) => { if (code && name && !seen.has(code)) { seen.add(code); stocks.push({ code, name }); } };
+  WATCHLIST.forEach((s) => add(s.code, s.name));
   try {
     const r = await apiFetch('/api/dart/universe', { cache: 'no-store' });
     const j = r ? await r.json() : null;
-    ((j && j.data) || []).forEach((x) => add(x.code, x.name, x.market));
+    ((j && j.data) || []).forEach((x) => add(x.code, x.name));
   } catch { /* 관심종목만으로 간다 */ }
   $('#rv-stocks').innerHTML = stocks.map((s) => `<option value="${esc(s.name)}">${esc(s.code)}</option>`).join('');
-  $('#rv-legs')?.dispatchEvent(new Event('input'));   // 목록이 늦게 오면 시장을 알고 다시 셈한다
 })();
