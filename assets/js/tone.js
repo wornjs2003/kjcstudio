@@ -8,6 +8,9 @@
 //   has('dxy')                   → true                           표에 있나(경고 없음) — 여러 지표를 돌며 칠할 때 먼저 묻는다
 //   paint('chg_pct', 5.2, 'fill') → 'rgb(240 68 82 / 61%)'          칸을 꽉 채우는 바탕(시장 지도) — 위에 글씨가 올라간다
 //   onFill('chg_pct', 5.2)        → true                           그 칸 바탕이 짙어 글씨를 흰색(--kh-text-on-fill)으로 써야 하나
+//   paint('buy_share', 62, 'line', 'down') → 'rgb(49 130 246 / 66%)'  쪽을 정해 칠하기 — 짙기는 값(62 → 기준 50 에서 12)으로 · 빨강/파랑은 준 쪽으로.
+//                                 값의 쪽과 칠할 쪽이 다른 자리(홀딩스 바닥 줄 원 — 자리는 누적 몫 · 색은 앞 값과 견준 쪽 · 2026-11-03 재권님 「응 해줘」).
+//                                 화면이 기준을 들고 값을 뒤집지 않게 한다(「100 - p」 는 기준을 박는 것이다). 쪽은 'up' · 'down' 만 받는다
 // · 색 값은 들고 있지 않는다 — 부를 때마다 theme.css 의 --kh-up-rgb · --kh-down-rgb · --kh-text-secondary 를 읽는다
 // · 짙기를 불투명도로 옮기는 범위만 여기 한 곳에 둔다(바탕은 옅게 · 선은 진하게)
 // · 글씨에는 쓰지 않는다 — 옅은 글씨는 안 읽힌다(「색 바탕 위의 글씨」)
@@ -41,9 +44,13 @@ export function tone(id, v) {
   return { side: side(d), k: Math.min(Math.abs(d) / it.full, 1) };   // 방향은 sign.js 한 곳(2026-10-15)
 }
 
-export function paint(id, v, where = 'bg') {
-  const { side, k } = tone(id, v);
+export function paint(id, v, where = 'bg', force) {
+  let { side, k } = tone(id, v);
   if (!side) return '';
+  if (force !== undefined) {
+    if (force !== 'up' && force !== 'down') { warn('force:' + force, `paint 의 넷째 인자(칠할 쪽)는 'up' · 'down' 둘입니다(받은 것 「${force}」) — 색을 안 칠합니다`); return ''; }
+    side = force;   // 짙기 k 는 값 그대로 — 기준과 같으면(k 0) 그 쪽의 가장 옅은 색
+  }
   if (side === 'flat') return where === 'line' ? css('--kh-text-secondary') : '';   // 못 읽으면 '' 로 떨어진다
   if (!RANGE[where]) { warn('where:' + where, `paint 의 자리는 'bg' · 'line' · 'fill' 셋입니다(받은 것 「${where}」) — 색을 안 칠합니다`); return ''; }
   const [lo, hi] = RANGE[where];
