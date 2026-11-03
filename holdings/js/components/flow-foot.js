@@ -7,7 +7,10 @@
 
        외국계 창구 [──●──] 13:55   프로그램 [──●──] 13:55
 
-   원 자리 = **매수 몫**(매수 ÷ (매수 + 매도) · 가운데 50%). 오른쪽이 매수세 · 왼쪽이 매도세 · 멀수록 짙다.
+   원 자리 = **오늘 누적 매수 몫**(매수 ÷ (매수 + 매도) · 가운데 50%). 오른쪽으로 갈수록 매수 쪽 · 멀수록 짙다.
+   원 색 = **앞 값과 견준 새 몫**(재권님 11-03 「1분마다 정보를 가져오니 그정보가 전값이랑 비교해서 매수세면 원이 빨강
+   매도세면 파랑」) — 새로 받은 값의 매수 · 매도가 앞 값보다 각각 얼마 늘었나를 견줘 매수가 더 늘었으면 빨강 · 매도가 더 늘었으면 파랑.
+   늘어난 것이 없으면 앞 색 그대로 · 앞 값이 아직 없으면(이 화면에서 첫 값) 회색. 짙기는 누적 몫의 짙기 그대로다.
    기준 · 폭은 지표 표(data/metrics.json 의 buy_share)에 있고 쪽 · 짙기 셈은 assets/js/tone.js 한 곳이다
    (「기준이 있는 수치는 위 빨강 · 아래 파랑, 멀수록 짙게」) — 표에 없으면 원을 가운데 회색으로 두고 tone.js 가 콘솔에 알린다.
    글자는 **정보가 들어온 시각**이다 — 금액은 안 쓴다.
@@ -31,6 +34,14 @@ const FALLBACK_MS = 60000;                      // 서버 값마저 못 받았�
 
 let code = null;
 let data = { mem: null, flow: null };           // 마지막으로 받은 값 — 바닥 줄을 다시 그려도 깜빡이지 않게 들고 있는다
+
+/* 앞 값과 견준 쪽 — 같은 종목의 앞 값이 있을 때만. 늘어난 것이 없으면 앞 쪽 그대로 */
+function dirOf(prev, buy, sell, c) {
+  if (!prev || prev.code !== c || prev.buy == null || buy == null) return null;
+  const db = buy - prev.buy, ds = sell - prev.sell;
+  if (db === ds) return prev.dir || null;
+  return db > ds ? 'up' : 'down';
+}
 let watches = null;
 let footEl = null;
 
@@ -48,16 +59,17 @@ function items() {
   const rows = (sk && sk.rows) || [];
   const sum = (k) => (rows.length ? rows.reduce((a, r) => a + (r[k] || 0), 0) : null);
   return [
-    { n: '외국계 창구', p: ff ? share(ff.buy, ff.sell) : null, t: data.mem && data.mem.code === code ? data.mem.at : null },
-    { n: '프로그램', p: share(sum('buy'), sum('sell')), t: sk ? hm(sk.lastAt) : null },
+    { n: '외국계 창구', p: ff ? share(ff.buy, ff.sell) : null, t: data.mem && data.mem.code === code ? data.mem.at : null, d: data.mem && data.mem.code === code ? data.mem.dir : null },
+    { n: '프로그램', p: share(sum('buy'), sum('sell')), t: sk ? hm(sk.lastAt) : null, d: sk ? sk.dir : null },
   ];
 }
 
-function dot(p) {
+function dot(p, d) {
   const { side, k } = p == null ? { side: null, k: 0 } : tone(ID, p);
   if (side !== 'up' && side !== 'down') return '<span class="kh-ff-bar"><i class="kh-ff-mid"></i></span>';
   const x = 50 + (side === 'up' ? 1 : -1) * k * 50;
-  const c = paint(ID, p, 'line');
+  /* 색은 앞 값과 견준 쪽(d) · 짙기는 누적 몫(p) 그대로 — 쪽만 다르면 기준을 사이에 두고 뒤집은 값으로 tone.js 에 묻는다 */
+  const c = !d ? 'var(--kh-text-muted)' : paint(ID, d === side ? p : 100 - p, 'line');
   const fill = side === 'up' ? `left:50%;width:${(x - 50).toFixed(1)}%` : `left:${x.toFixed(1)}%;width:${(50 - x).toFixed(1)}%`;
   return `<span class="kh-ff-bar"><i class="kh-ff-mid"></i><i class="kh-ff-fill ${side}" style="${fill};background:${c}"></i>` +
     `<i class="kh-ff-dot" style="left:${x.toFixed(1)}%;background:${c};--kh-ff-c:${c}"></i></span>`;
@@ -72,8 +84,8 @@ function render() {
     footEl.insertBefore(el, footEl.lastElementChild);   // 왼쪽 설명 뒤 · 오른쪽 출처 앞
   }
   el.innerHTML = items().map((x) =>
-    `<span class="kh-ff-it" title="${x.n} — 원이 오른쪽이면 매수세 · 왼쪽이면 매도세 · 시각은 정보가 들어온 때">` +
-    `<span class="kh-ff-n">${x.n}</span>${dot(x.p)}<span class="kh-ff-t">${x.t || '—'}</span></span>`).join('');
+    `<span class="kh-ff-it" title="${x.n} — 원 자리는 오늘 누적(오른쪽 매수 · 왼쪽 매도) · 원 색은 앞 값보다 매수가 더 늘면 빨강 · 매도가 더 늘면 파랑 · 시각은 정보가 들어온 때">` +
+    `<span class="kh-ff-n">${x.n}</span>${dot(x.p, x.d)}<span class="kh-ff-t">${x.t || '—'}</span></span>`).join('');
 }
 
 async function loadMem() {
@@ -81,7 +93,11 @@ async function loadMem() {
   if (!c) return;
   const j = await get(`/api/kis/investor-member?code=${c}`);
   if (c !== code) return;
-  if (j && j.data) data.mem = { code: c, foreignFirms: j.data.foreignFirms || null, at: j.data.at || null };
+  if (j && j.data) {
+    const ff = j.data.foreignFirms || null;
+    const prev = data.mem && data.mem.foreignFirms ? { code: data.mem.code, buy: data.mem.foreignFirms.buy, sell: data.mem.foreignFirms.sell, dir: data.mem.dir } : null;
+    data.mem = { code: c, foreignFirms: ff, at: j.data.at || null, dir: ff ? dirOf(prev, ff.buy, ff.sell, c) : null };
+  }
   render();
 }
 
@@ -91,7 +107,12 @@ async function loadFlow() {
   const j = await get(`/api/kis/flow-today?step=5&code=${c}`);
   if (c !== code) return;
   const sk = j && j.data && j.data.stock;
-  if (sk) data.flow = { code: c, rows: sk.rows || [], lastAt: sk.lastAt || null };
+  if (sk) {
+    const rows = sk.rows || [];
+    const sum = (k) => (rows.length ? rows.reduce((a, r) => a + (r[k] || 0), 0) : null);
+    const buy = sum('buy'), sell = sum('sell');
+    data.flow = { code: c, rows, lastAt: sk.lastAt || null, buy, sell, dir: dirOf(data.flow, buy, sell, c) };
+  }
   render();
 }
 
