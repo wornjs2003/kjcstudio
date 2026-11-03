@@ -7362,7 +7362,18 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _handle_claude_ask(self):
         """화면이 보낸 물음 · 보는 것 · 앞 대화에 **서버가 받은 시세**를 붙여 claude 에 묻는다.
-        시세는 화면 숫자를 옮기지 않고 서버 것을 쓴다 — 화면이 주면 두 벌이 된다. 못 받으면 시세 없이 묻는다."""
+        시세는 화면 숫자를 옮기지 않고 서버 것을 쓴다 — 화면이 주면 두 벌이 된다. 못 받으면 시세 없이 묻는다.
+
+        **본문 종류가 application/json 이 아니면 415 로 돌려보낸다** (2026-11-03 개념정의 검수 권고) — text/plain 은 브라우저의
+        「단순 요청」 이라 맥미니에서 연 아무 웹페이지가 미리 묻기(preflight) 없이 여기로 보내 claude 를 돌릴 수 있다(답은 못 읽어도
+        돈은 나간다). json 만 받으면 다른 출처는 미리 묻기에 걸리고, 이 서버는 OPTIONS 에 허용을 안 주므로 거기서 막힌다."""
+        if (self.headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
+            try:
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            except Exception:
+                pass
+            self._send_json({"ok": False, "error": "본문은 application/json 이어야 합니다."}, 415)
+            return
         try:
             n = int(self.headers.get("Content-Length") or 0)
             if n > 64 * 1024:
