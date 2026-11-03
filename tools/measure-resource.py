@@ -401,7 +401,7 @@ def main(argv):
         print("     이동 창(시작 → 끝)  " + ", ".join("%s %s → %s" % (k, v[0], v[1]) for k, v in w.items()))
     def show_log(label, counts):
         if counts is None:
-            print("     [KIS] 로그 %s  못 쟀다 — 로그 파일이 이 폴더에 없다(메인 폴더에서 돌린다)" % label)
+            print("     [KIS] 로그 %s  못 쟀다 — 로그 파일이 이 폴더에 없다(개발 폴더에서 돌린다)" % label)
         elif not counts:
             print("     [KIS] 로그 %s  0건 (측정 구간에 KIS 호출 줄이 안 붙었다)" % label)
         else:

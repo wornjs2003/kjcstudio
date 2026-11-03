@@ -96,7 +96,7 @@ def session_name():
             for a in agents:
                 if pane and a.get("pane_id") == pane:
                     return title(a)
-            # 3순위 cwd — 같은 폴더에 둘이 앉으면(메인 폴더) 못 가르므로 하나일 때만
+            # 3순위 cwd — 같은 폴더에 둘이 앉으면(개발 폴더) 못 가르므로 하나일 때만
             here = os.path.realpath(os.getcwd())
             same = [a for a in agents if os.path.realpath(a.get("cwd") or "") == here]
             if len(same) == 1:

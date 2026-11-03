@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
-"""PreToolUse(Bash · Edit · Write) 훅 — 메인 자리를 재권님 허락 없이 건드리지 못하게 막는다 (2026-10-01 지시).
+"""PreToolUse(Bash · Edit · Write) 훅 — 개발 · 메인 자리를 재권님 허락 없이 건드리지 못하게 막는다 (2026-10-01 지시).
 
 재권님 말씀 그대로 — 「메인쪽은 내 허락없이 절대 건들면 안되는곳이야 안정장치를 여러개 만들어줘」.
 
 2026-10-01 17:4x 에 한 세션이 시험 코드에서 `KJC_DB_PATH` 로 **메인 8765 의 market.db 를 쓰기 모드로** 가리켜
-journal_mode 가 WAL 로 바뀌었다(-wal · -shm 생김). 그 세션은 메인 폴더에 있지도 않았다 — **경로만 적으면 어디서든
+journal_mode 가 WAL 로 바뀌었다(-wal · -shm 생김). 그 세션은 개발 폴더에 있지도 않았다 — **경로만 적으면 어디서든
 닿는다.** 그래서 폴더가 아니라 **명령·경로**를 본다.
 
-**메인 자리란** — 메인 폴더(`/Users/kjc/work/KJCStudio`)와 서비스방(`/Users/kjc/service` · 외부접속이 보는 자리 ·
+**개발 · 메인 자리란** — 개발 폴더(`/Users/kjc/work/KJCStudio`)와 메인(`/Users/kjc/service` · 외부접속이 보는 자리 ·
 재권님 「범위에 넣어줘」)의 **데이터와 돌고 있는 것**이다. 소스 코드가 아니다(그것은 레인 룰이 본다).
 
     데이터        두 폴더의 holdings/market.db(+ -wal · -shm) · holdings/data/ · holdings/secrets.json · holdings/.kis-token-cache.json
                   + 열쇠 파일 한 벌의 자리 ~/.kjc/ (폴더째 · 2026-10-12)
     돌고 있는 것   8765 · 8764 프로세스 — 재시작 · 죽이기 · install.command · launchd 등록(kr.kjcstudio.kis-proxy · service-8764)
-    서비스방 트리   git merge · checkout · reset · pull 로 그 폴더를 바꾸는 것 — 옮기기는 service-deploy.command 로만
+    메인 트리   git merge · checkout · reset · pull 로 그 폴더를 바꾸는 것 — 옮기기는 service-deploy.command 로만
 
 **두 갈래로 본다 (2026-10-01 · 네 판째).**
 
@@ -83,7 +83,7 @@ KILL_NAMES = r"kis_proxy|holdings/server|kr\.kjcstudio|python3?$|^python3?$|Pyth
 def _deny(reason):
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse", "permissionDecision": "deny",
-        "permissionDecisionReason": "메인 자리입니다 — 재권님 허락 없이 건드리지 않습니다 (CLAUDE.md 「메인 자리는 재권님 허락 없이 건드리지 않는다」). "
+        "permissionDecisionReason": "개발 · 메인 자리입니다 — 재권님 허락 없이 건드리지 않습니다 (CLAUDE.md 「개발 · 메인 자리는 재권님 허락 없이 건드리지 않는다」). "
         + reason + " 허락을 받았으면 명령 앞에 KJC_MAIN_OK=1 을 붙이십시오 — 그 사용은 logs/main-ok.log 에 남습니다."}}, ensure_ascii=False))
 
 
@@ -171,7 +171,7 @@ def head_of(ws):
     while i < len(ws) and ws[i] in ("sudo", "nohup", "time", "env", "exec", "command"):
         i += 1
     # `bash ./launchd/install.command 8765` · `sh service-deploy.command` — 셸로 부른 스크립트는 그 스크립트를 머리로 본다
-    # (2026-10-14 · qa 시뮬이 찾음 · 재권님 「응 해줘」 — 전에는 머리가 「bash」 라 메인서버 올리기가 그냥 지나갔다).
+    # (2026-10-14 · qa 시뮬이 찾음 · 재권님 「응 해줘」 — 전에는 머리가 「bash」 라 개발 서버 올리기가 그냥 지나갔다).
     # 옵션(-x · -e · -l …)은 넘기되 `-c` 는 그대로 둔다 — 그 뒤는 스크립트 파일이 아니라 프로그램 글이다
     # `-n` 이 든 묶음은 문법 검사라 실행하지 않는다 — 셸을 머리로 둔다(qa 재생 오탐 7 · `sh -n launchd/install.command`).
     # `-o` · `-O` 는 값을 하나 받는다. `-c` 묶음(-c · -lc …)의 글은 check_bash 가 셸 조각으로 다시 판정한다(shell_c).
@@ -208,7 +208,7 @@ def is_main_path(tok, cwd):
         for p in MAIN_DATA:
             full = os.path.normpath(os.path.join(root, p))
             if t == full or t.startswith(full + "/") or (p.endswith("market.db") and t.startswith(full)):
-                return ("서비스방 " if root == SERVICE else "") + p
+                return ("메인 " if root == SERVICE else "") + p
     return ""
 
 
@@ -250,7 +250,7 @@ def check_text(text, cwd, argv_hit=""):
     if argv_hit:
         for line in text.split("\n"):
             if "sys.argv" in line and re.search(r"\bconnect\s*\(", line) and "mode=ro" not in line:
-                return "파이썬 connect() 로 인자로 받은 메인 DB(%s)를 쓰기 가능하게 엽니다." % argv_hit + HOWTO
+                return "파이썬 connect() 로 인자로 받은 개발 DB(%s)를 쓰기 가능하게 엽니다." % argv_hit + HOWTO
             if re.search(r"\bopen\s*\(\s*sys\.argv\[\d+\]\s*,\s*[\"'][rb]*[wax+]", line):
                 return "파이썬 open() 으로 인자로 받은 메인 데이터(%s)를 쓰기 모드로 엽니다." % argv_hit
     for m in re.finditer(PATH_RE, text):
@@ -265,7 +265,7 @@ def check_text(text, cwd, argv_hit=""):
         if re.search(r"\bopen\s*\(\s*" + WRAP + r"[rb]?\\?[\"']?$", before) and re.match(r"[\"']?\\?[\"']?\s*\)?\s*,\s*\\?[\"']?[rwax+b]*[wax+]", after):
             return "파이썬 open() 으로 메인 데이터(%s)를 쓰기 모드로 엽니다." % hit
         if re.search(r"\bconnect\s*\(\s*" + WRAP + r"[\"']?(file:)?\\?[\"']?$", before) and "mode=ro" not in line:
-            return "파이썬 connect() 로 메인 DB(%s)를 쓰기 가능하게 엽니다." % hit + HOWTO
+            return "파이썬 connect() 로 개발 DB(%s)를 쓰기 가능하게 엽니다." % hit + HOWTO
         if re.search(r"\b(remove|unlink|rename|replace|rmtree|write_text|write_bytes|copyfile|copy2?|move)\s*\(\s*" + WRAP + r"[rb]?\\?[\"']?$", before):
             return "파이썬 호출로 메인 데이터(%s)를 바꾸는 명령입니다." % hit
     return ""
@@ -318,10 +318,10 @@ def check_segment(seg, cwd, prev_seg, prev_hit):
             sql = " ".join(a for a in args if not is_main_path(a, cwd) and not a.startswith("-")
                            and not re.match(r"^\d*[<>]", a) and a != "&")
             if not sql.strip():
-                return "sqlite3 로 메인 DB(%s)를 대화형으로 엽니다." % hit + HOWTO
+                return "sqlite3 로 개발 DB(%s)를 대화형으로 엽니다." % hit + HOWTO
             stmts = [x for x in sql.split(";") if x.strip()]
             if any(not re.match(READ_SQL, x) or re.search(WRITE_SQL, x) for x in stmts):
-                return "sqlite3 로 메인 DB(%s)에 읽기가 아닌 질의를 보냅니다." % hit + HOWTO
+                return "sqlite3 로 개발 DB(%s)에 읽기가 아닌 질의를 보냅니다." % hit + HOWTO
 
     # 리다이렉트는 머리와 무관하다 — 대상이 상대 경로여도 cwd 로 풀어 본다(「cd ~/.kjc; echo x > a.json」 이 빠졌다 · qa 2026-10-12)
     for r in re.finditer(r"(?<![<\w])>{1,2}\s*[\"']?([^\s\"'|;&]+)", seg):
@@ -343,12 +343,12 @@ def check_segment(seg, cwd, prev_seg, prev_hit):
         nums = [a for a in args if re.fullmatch(r"\d{4}", a)]
         has_var = any("$" in a for a in args)
         if (not nums and not has_var) or any(n in GUARD_PORTS for n in nums):
-            return "install.command 을 포트 없이(=전부) 또는 8765 · 8764 로 돌리면 메인·서비스방 서버가 재시작됩니다."
+            return "install.command 을 포트 없이(=전부) 또는 8765 · 8764 로 돌리면 개발 서버 · 메인 서버가 재시작됩니다."
     if head == "service-deploy.command":
-        return "service-deploy.command 는 서비스방을 바꾸고 8764 를 다시 띄웁니다 — 재권님 지시로만 돌립니다."
+        return "service-deploy.command 는 메인을 바꾸고 8764 를 다시 띄웁니다 — 재권님 지시로만 돌립니다."
     if head == "launchctl" and args and args[0] in ("unload", "bootout", "kickstart", "stop", "start", "kill", "remove", "disable"):
         if re.search(GUARD_LABELS, seg):
-            return "launchctl 로 메인(kr.kjcstudio.kis-proxy) 또는 서비스방(kr.kjcstudio.service-8764) 서버를 내리거나 올리는 명령입니다."
+            return "launchctl 로 개발 서버(kr.kjcstudio.kis-proxy) 또는 메인(kr.kjcstudio.service-8764) 서버를 내리거나 올리는 명령입니다."
     if head in ("kill", "pkill", "killall") or (head == "xargs" and re.search(r"\b(kill|pkill)\b", seg)):
         joined = " ".join(args) + " " + (prev_seg if head == "xargs" else "")
         if any(p in joined for p in GUARD_PORTS) or re.search(GUARD_LABELS, joined):
@@ -357,10 +357,10 @@ def check_segment(seg, cwd, prev_seg, prev_hit):
            and not re.search(r"--port\s*\d{4}|\b87(6[6-9]|7\d)\b", joined):
             return "이름으로 kis_proxy 를 죽이면 여섯 서버가 함께 죽습니다 — 포트를 적으십시오."
         if head == "killall" and any(re.search(r"^[Pp]ython3?$", a) for a in args):
-            return "killall python3 은 메인 8765 · 서비스방 8764 까지 죽입니다."
+            return "killall python3 은 개발 서버 8765 · 메인 8764 까지 죽입니다."
     if head == "xargs" and re.search(r"\b(rm|mv|truncate|chmod)\b", seg) and prev_hit:
         return "xargs 로 메인 데이터(%s)를 지우거나 바꾸는 명령입니다." % prev_hit
-    # ── 서비스방 작업 트리를 바꾸는 git ──
+    # ── 메인 작업 트리를 바꾸는 git ──
     if head == "git":
         tree = cwd
         if "-C" in args:
@@ -370,7 +370,7 @@ def check_segment(seg, cwd, prev_seg, prev_hit):
         sub = next((a for a in args if not a.startswith("-") and a != tree), "")
         if sub in ("merge", "checkout", "switch", "reset", "pull", "clean", "restore", "rebase", "cherry-pick", "revert", "stash") \
            and is_service_tree(tree, cwd):
-            return "서비스방(/Users/kjc/service)의 작업 트리를 바꾸는 git 명령입니다 — 옮기기는 service-deploy.command 로, 재권님 지시로."
+            return "메인(/Users/kjc/service)의 작업 트리를 바꾸는 git 명령입니다 — 옮기기는 service-deploy.command 로, 재권님 지시로."
     return ""
 
 
