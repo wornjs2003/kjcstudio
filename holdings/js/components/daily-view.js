@@ -136,7 +136,6 @@ const BODY_HTML = `
          칸 이름 「데일리분석」 · 첫 탭은 그날 텔레그램 글(최신이 위 · 서버 /api/telegram/today) · 영상 목록은 둘째 탭으로 남김.
          두 탭은 같은 높이 칸(.kh-dl-tabbody)에 갈아 끼운다 — 「보는 것을 바꿔도 자리는 그대로다」.
          줄을 누르면 모달은 왼쪽으로 넓어진 세부 창 · 전용 화면(daily.html)과 좁은 폭은 그 줄 아래로 펼친다 -->
-    <div class="kh-dl-pair">
     <section class="kh-dl-card kh-dl-video-card">
       <div class="kh-dl-ch"><b>데일리분석</b>
         <span class="kh-dl-tabs" role="tablist">
@@ -149,52 +148,6 @@ const BODY_HTML = `
         <div class="kh-dl-video" data-dl-video hidden></div>
       </div>
     </section>
-    <!-- 오른쪽 세로 긴 칸 — 오늘 일정 · 오늘 뉴스 · 중요 알림을 이름 탭으로 갈아 끼운다 (2026-11-03 재권님 「세로로 길게 있으면 좋을거 같은데
-         ui 구성 바꿔봐. 오늘일정 오늘뉴스 중요알림은 세로로 길어진 창에 넣어서 해당 이름 누르면 바뀌게끔」 → 시황분석 시안 「응 맞아」 ·
-         개발1 착수 안 「그렇게 해」). 왼쪽 「데일리분석」 칸과 나란히 같은 높이 · 셋은 같은 높이 칸(.kh-dl-tabbody)에 갈아 끼운다 —
-         「보는 것을 바꿔도 자리는 그대로다」. 처음은 「오늘 뉴스」(시안 그대로). 전에는 아래 줄에 일정 · 알림(왼쪽) + 뉴스(오른쪽)로 나란히 있었다
-         (2026-09-21 「중요알람은 오늘뉴스의 왼쪽으로」 · 「오늘 일정도 오늘뉴스 옆으로」). 좁은 폭은 두 칸이 위아래 한 열 -->
-    <section class="kh-dl-card kh-dl-info-card">
-      <div class="kh-dl-ch">
-        <span class="kh-dl-tabs" role="tablist" data-dl-info-tabs>
-          <button type="button" role="tab" data-dl-info="sch">오늘 일정</button>
-          <button type="button" role="tab" data-dl-info="news" class="is-on">오늘 뉴스</button>
-          <button type="button" role="tab" data-dl-info="alert">중요 알림</button>
-        </span>
-      </div>
-      <div class="kh-dl-tabbody">
-        <div class="kh-dl-pane" data-dl-info-p="sch" hidden>
-          <div class="kh-dl-pane-h">
-            <span class="kh-dl-why">날짜가 미리 정해진 것만</span>
-            <span class="kh-dl-src">market-calendar.json</span>
-          </div>
-          <div class="kh-dl-sch" id="kh-dl-sch"></div>
-        </div>
-        <div class="kh-dl-pane" data-dl-info-p="news">
-          <div class="kh-dl-pane-h">
-            <span class="kh-dl-why">주제로 묶어 최근 순서로</span>
-            <span class="kh-dl-src" id="kh-dl-news-src">경제지 RSS</span>
-          </div>
-          <div class="kh-dl-news" id="kh-dl-news"></div>
-        </div>
-        <!-- 중요 알림 — 무엇을 바로 받을지 정하는 자리 (2026-09-21 지시)
-             재권님 말씀 — "중요한 데이터라고 정의할수 있는 공간도 있어야 할거같아",
-             "정의 파일은 데일리 분석에다가 공간 만들어서 거기서 지정하거나 타이핑 하게".
-             여기서 고친 것은 data/news-alerts.json 에 저장된다. 서버가 그 파일을
-             읽어 판정하므로, 낱말을 넣으면 다음 수집부터 바로 걸린다. -->
-        <div class="kh-dl-pane" data-dl-info-p="alert" hidden>
-          <div class="kh-dl-pane-h">
-            <span class="kh-dl-why">걸리면 하루 3번을 기다리지 않고 바로 보냅니다</span>
-            <span class="kh-dl-src" id="kh-dl-al-src">news-alerts.json</span>
-          </div>
-          <div class="kh-dl-alerts" id="kh-dl-alerts">불러오는 중</div>
-          <p class="kh-dl-al-note" id="kh-dl-al-note">
-            낱말이 제목에 들어 있으면 걸립니다. <b>정규식도 됩니다</b> — 예: <code>수출 .*억달러</code>
-          </p>
-        </div>
-      </div>
-    </section>
-    </div>
 
     <div class="kh-dl-body">
 
@@ -209,6 +162,57 @@ const BODY_HTML = `
           </div>
           <div class="kh-dl-idx" id="kh-dl-idx"></div>
         </section>
+
+        <!-- 왼쪽 — 오늘 일정 · 중요 알림 / 오른쪽 — 오늘 뉴스
+             (2026-09-21 지시 — "중요알람은 오늘뉴스의 왼쪽으로",
+              뒤이어 "오늘 일정도 오늘뉴스 옆으로 이동해줘").
+             왼쪽은 폭이 정해진 것들(일정 줄·낱말 칩)이고, 오른쪽 뉴스는
+             제목이 길수록 좋아 남는 폭을 다 준다.
+             좁은 화면에서는 아래 CSS 가 한 열로 되돌린다. -->
+        <div class="kh-dl-row">
+          <div class="kh-dl-col">
+        <!-- 오늘 일정 -->
+        <section class="kh-dl-card">
+          <div class="kh-dl-ch">
+            <b>오늘 일정</b>
+            <span class="kh-dl-why">날짜가 미리 정해진 것만</span>
+            <span class="kh-dl-src">market-calendar.json</span>
+          </div>
+          <div class="kh-dl-sch" id="kh-dl-sch"></div>
+        </section>
+
+        <!-- 중요 알림 — 무엇을 바로 받을지 정하는 자리 (2026-09-21 지시)
+
+             재권님 말씀 — "중요한 데이터라고 정의할수 있는 공간도 있어야 할거같아",
+             "정의 파일은 데일리 분석에다가 공간 만들어서 거기서 지정하거나 타이핑 하게".
+
+             여기서 고친 것은 data/news-alerts.json 에 저장된다. 서버가 그 파일을
+             읽어 판정하므로, 낱말을 넣으면 다음 수집부터 바로 걸린다. -->
+        <section class="kh-dl-card">
+          <div class="kh-dl-ch">
+            <b>중요 알림</b>
+            <span class="kh-dl-why">걸리면 하루 3번을 기다리지 않고 바로 보냅니다</span>
+            <span class="kh-dl-src" id="kh-dl-al-src">news-alerts.json</span>
+          </div>
+          <div class="kh-dl-alerts" id="kh-dl-alerts">불러오는 중</div>
+          <p class="kh-dl-al-note" id="kh-dl-al-note">
+            낱말이 제목에 들어 있으면 걸립니다. <b>정규식도 됩니다</b> — 예: <code>수출 .*억달러</code>
+          </p>
+        </section>
+
+          </div>
+        <!-- 오늘 뉴스 -->
+        <section class="kh-dl-card">
+          <div class="kh-dl-ch">
+            <b>오늘 뉴스</b>
+            <span class="kh-dl-why">주제로 묶어 최근 순서로</span>
+            <span class="kh-dl-src" id="kh-dl-news-src">경제지 RSS</span>
+          </div>
+          <div class="kh-dl-news" id="kh-dl-news"></div>
+        </section>
+
+        </div>
+
 
     </div>
 
@@ -288,7 +292,7 @@ function analysisListHtml(items, n = 99) {
   if (!items.length) return '<div class="kh-dl-video-e">미국장 분석 · —</div>';
   return items.slice(0, n).map((x) => x.kind === 'us' ? `
     <details class="kh-dl-video-row kh-dl-us" data-us-id="${esc(x.id)}">
-      <summary><span class="kh-dl-video-k">${x.sort === 'sector' ? '섹터' : '장분석'}</span><span class="kh-dl-video-t">${esc(x.title)}</span><span class="kh-dl-video-m">${esc(x.sentAt || '')} 발송</span></summary>
+      <summary><span class="kh-dl-video-k">장분석</span><span class="kh-dl-video-t">${esc(x.title)}</span><span class="kh-dl-video-m">${esc(x.sentAt || '')} 발송</span></summary>
       <div class="kh-dl-us-body">${x.text ? `<pre class="kh-dl-us-text">${esc(x.text)}</pre>` : '<div class="kh-dl-video-e">본문 없음</div>'}</div>
     </details>` : `
     <a class="kh-dl-video-row" href="../company-setup/report.html?id=${encodeURIComponent(x.id)}">
@@ -450,16 +454,6 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
     if (src) src.hidden = !tg;
     if (tg) drawTg();                       // 탭을 다시 열 때 새로 받는다 — 화면이 주기를 두지 않는다
     else if (onPick && tgOpen != null) pickTg(tgOpen);   // 영상 탭으로 가면 세부 창을 닫는다
-  });
-  /* 오른쪽 칸 — 오늘 일정 · 오늘 뉴스 · 중요 알림 이름 탭 (2026-11-03). 내용은 이미 그려 둔 셋을 숨기고 보일 뿐 — 새로 받지 않는다 */
-  const info = root.querySelector('.kh-dl-info-card');
-  info?.querySelector('[data-dl-info-tabs]')?.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-dl-info]');
-    if (!b) return;
-    info.querySelectorAll('[data-dl-info]').forEach((x) => x.classList.toggle('is-on', x === b));
-    info.querySelectorAll('[data-dl-info-p]').forEach((p) => { p.hidden = p.dataset.dlInfoP !== b.dataset.dlInfo; });
-    const body = info.querySelector('.kh-dl-tabbody');
-    if (body) body.scrollTop = 0;
   });
 
   /* 찾는 범위를 자기 자리 안으로 좁힌다. 문서 전체에서 찾지 않는 이유는
