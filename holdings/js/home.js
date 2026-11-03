@@ -37,6 +37,7 @@ import { mountStockDetail } from './components/stock-detail.js';
 import { mountMobileFold } from './components/mobile-fold.js';
 import { mountCompanyTip } from './components/company-tip.js';
 import { mountClaudeRail } from './components/claude-rail.js';
+import { paintFlowFoot } from './components/flow-foot.js';
 /* fetchIndexMinutes · fetchIndexCandles 는 여기서 안 쓴다 (2026-09-17).
    큰 차트가 지수에서 종목으로 바뀌면서 종목 캔들(chart.js 의 fetchCandles)로
    갈아탔다. 두 함수는 지수 화면을 만들 때 쓸 수 있게 live.js 에 남겨 뒀다. */
@@ -433,7 +434,7 @@ async function showMarket(key) {
   if (v) { v.className = 'kh-idx-v kh-num ' + h.dirClass; v.textContent = h.value; }
   if (yr) yr.textContent = h.range;
   if (per) per.innerHTML = `<span class="kh-chip live" style="cursor:default">${h.per}</span>`;
-  if (foot) foot.innerHTML = `<span title="${h.footTitle}">${h.foot[0]}</span><span title="${j.source || ''}">${h.foot[1]}</span>`;
+  if (foot) { foot.innerHTML = `<span title="${h.footTitle}">${h.foot[0]}</span><span title="${j.source || ''}">${h.foot[1]}</span>`; paintFlowFoot(foot, null); }
   if (host) {
     if (mkDrop) mkDrop();
     try { mkDrop = drawIndicator(host, j); }
@@ -855,6 +856,7 @@ async function paintBigChart(opt = {}) {
     foot.innerHTML = bigPeriod === '5m'
       ? `<span>${ma}${drewPrev ? ` · ${PREV_CLOSE_NOTE}` : ''}</span><span>한국투자증권 실시간</span>`
       : `<span>${ma} · ${label}봉 ${candles.length}개</span><span>한국투자증권</span>`;
+    paintFlowFoot(foot, st.code);           // 외국계 창구 · 프로그램 매수세 / 매도세 — 바닥 줄을 새로 썼으니 다시 붙인다(2026-11-03)
   }
   if (fromStore) catchUpBigChart(key);      // 받아 둔 뒤에 생긴 봉 · 빈 칸만 받아 붙인다
 }
