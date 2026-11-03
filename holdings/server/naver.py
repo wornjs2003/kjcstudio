@@ -217,6 +217,8 @@ def news(code, size=NEWS_SIZE):
             rows.append({
                 "title": html.unescape((it.get("title") or "").strip()),
                 "office": (it.get("officeName") or "").strip(),
+                # 네이버 언론사 번호 — 받는 곳 목록 (다) 와 대 본다(news.press_tally · 2026-11-03)
+                "officeId": oid,
                 "at": (it.get("datetime") or "").strip(),
                 # 같은 사건을 쓴 기사 수. 1 이면 안 적는다
                 "more": max(0, len(items) - 1),
@@ -288,9 +290,14 @@ def news_related(code):
     rows = news(code)
     terms = stock_terms(code)
     if not terms:
-        return rows, {"candidates": len(rows), "kept": len(rows), "filtered": False}
-    kept = [r for r in rows if any(t in _norm(r.get("title")) for t in terms)]
-    return kept, {"candidates": len(rows), "kept": len(kept), "filtered": True}
+        kept, info = rows, {"candidates": len(rows), "kept": len(rows), "filtered": False}
+    else:
+        kept = [r for r in rows if any(t in _norm(r.get("title")) for t in terms)]
+        info = {"candidates": len(rows), "kept": len(kept), "filtered": True}
+    # 받는 곳 목록 (다) 언론인지 — 표시만 하고 빼지 않는다(2026-11-03 재권님 「나」). 줄마다 listed · meta 에 press
+    import news as _news
+    kept, info["press"] = _news.press_tally(kept)
+    return kept, info
 
 
 def discuss(code, size=DISCUSS_SIZE):

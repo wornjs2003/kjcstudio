@@ -97,6 +97,42 @@ def load_topics():
     return {"topics": topics, "drop": drop, "feeds": feeds}
 
 
+def listed_press():
+    """목록 (다) 언론 항목의 네이버 언론사 번호 묶음. 목록을 못 읽으면 None — 빈 묶음과 가른다.
+
+    2026-11-03 룰 「뉴스를 받는 곳은 한 목록에서만」 — 찾는 길(네이버)로 받은 기사를 이 번호로 대 본다.
+    """
+    try:
+        with open(TOPICS_PATH, encoding="utf-8") as f:
+            raw = json.load(f)
+    except Exception:
+        return None
+    return {str(f.get("언론사")).strip() for f in (raw.get("feeds") or [])
+            if str(f.get("갈래") or "").startswith("(다)") and f.get("언론사")}
+
+
+def press_tally(rows, key="officeId"):
+    """찾는 길로 받은 기사에 목록 안인지 붙이고 센다. **빼지 않는다** — 2026-11-03 재권님 「나」(표시만 먼저).
+
+    각 줄에 `listed` — True 목록 안 · False 목록 밖 · None 출처 못 읽음(번호가 없거나 목록을 못 읽음).
+    돌려주는 것: (새 줄들, {"in", "out", "unknown", "listOk", "filtered": False}). 들어온 줄은 고치지 않는다(캐시를 함께 쓴다).
+    Insight 도구(company-setup/tools/fetch-naver-news.py)도 이것을 부른다 — 셈을 두 벌 두지 않는다.
+    """
+    ok = listed_press()
+    out, n = [], {"in": 0, "out": 0, "unknown": 0}
+    for r in rows or []:
+        r = dict(r)
+        oid = str(r.get(key) or "").strip()
+        if ok is None or not oid:
+            r["listed"] = None; n["unknown"] += 1
+        elif oid in ok:
+            r["listed"] = True; n["in"] += 1
+        else:
+            r["listed"] = False; n["out"] += 1
+        out.append(r)
+    return out, dict(n, listOk=ok is not None, filtered=False)
+
+
 def _dropped(title, drop):
     """자동 생성 시세 기사인가."""
     return any(w and w in title for w in drop)
