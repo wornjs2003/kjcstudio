@@ -44,6 +44,7 @@
   max-width: 88%; padding: 9px 12px; border-radius: 12px; font-size: 0.85rem; line-height: 1.6;
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
+.kh-rail-msg a { color: var(--kh-accent); }
 .kh-rail-msg small { display: block; margin-top: 4px; font-size: 0.7rem; color: var(--kh-text-secondary); }
 .kh-rail-msg.is-me { align-self: flex-end; background: var(--kh-accent-dim); color: var(--kh-accent); }
 .kh-rail-msg.is-ai { align-self: flex-start; background: var(--kh-bg); color: var(--kh-text-primary); }
