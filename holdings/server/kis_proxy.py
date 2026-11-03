@@ -67,6 +67,7 @@ import macro
 import note_alert      # 시황 글 알림 — 자동 시황 글이 새로 써지면 텔레그램 한 통(2026-10-27 · server/note_alert.py)
 import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-25 · server/events.py 머리 주석)
 import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
+import claude_chat     # 홀딩스 오른쪽 Claude 창 — 맥미니 claude 를 한 번씩 부른다 · POST /api/claude/ask(2026-11-03 · server/claude_chat.py)
 import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 테마 · 수급(넥스트 5분 거래량 2배) (2026-10-27 · server/theme_flow.py)
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
 import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 · 색 = 등락률 · /api/kis/heatmap(2026-10-27 · server/heatmap.py)
@@ -7346,6 +7347,52 @@ class Handler(SimpleHTTPRequestHandler):
             # 경로에 이름이 섞여 있을 수 있어 종류만 올린다
             self._send_json({"ok": False, "error": "저장하지 못했습니다 (%s)" % type(e).__name__},
                             status=500)
+
+    def do_POST(self):
+        """POST 는 Claude 창 하나뿐이다 — 물음 · 앞 대화가 길어 주소(GET)에 못 싣는다 (2026-11-03 · server/claude_chat.py)."""
+        if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/claude/ask":
+            self._handle_claude_ask()
+            return
+        try:
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))   # 딸려 온 본문을 먼저 비운다(아래 do_PUT 주석)
+        except Exception:
+            pass
+        self._send_json({"ok": False, "error": "POST 는 /api/claude/ask 에만 됩니다."}, 405)
+
+    def _handle_claude_ask(self):
+        """화면이 보낸 물음 · 보는 것 · 앞 대화에 **서버가 받은 시세**를 붙여 claude 에 묻는다.
+        시세는 화면 숫자를 옮기지 않고 서버 것을 쓴다 — 화면이 주면 두 벌이 된다. 못 받으면 시세 없이 묻는다."""
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > 64 * 1024:
+                raise ValueError("본문이 너무 큽니다")
+            body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
+            if not isinstance(body, dict):
+                raise ValueError("본문은 JSON 한 덩어리여야 합니다")
+        except Exception as e:
+            self._send_json({"ok": False, "error": safe_message(e, 120)}, 400)
+            return
+        ctx = body.get("context") if isinstance(body.get("context"), dict) else {}
+        code = str(ctx.get("code") or "").strip()
+        quote = None
+        if code and _code_ok(code) and not us_universe.is_us(code):
+            try:
+                quote = fetch_price(load_secrets(), code)
+            except Exception as e:
+                print("[claude] 시세 못 붙임 %s — %s" % (code, safe_message(e, 80)), flush=True)
+        try:
+            data = claude_chat.ask(body.get("question"), ctx, body.get("history"), quote)
+        except ValueError as e:
+            self._send_json({"ok": False, "error": safe_message(e, 120)}, 400)
+            return
+        except claude_chat.Busy as e:
+            self._send_json({"ok": False, "error": str(e)}, 429)
+            return
+        except Exception as e:
+            self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
+            return
+        data["quoted"] = bool(quote)
+        self._send_json({"ok": True, "data": data})
 
     def do_PUT(self):
         """쓰기는 한 곳뿐이다 — 「중요」 알림 규칙 (2026-09-21 지시).

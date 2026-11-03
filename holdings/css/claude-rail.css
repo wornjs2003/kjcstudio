@@ -29,21 +29,35 @@
 .kh-rail-hd b { font-size: 1.1rem; color: var(--kh-text-primary); }
 .kh-rail-st { font-size: 0.75rem; color: var(--kh-text-secondary); background: var(--kh-bg); padding: 3px 8px; border-radius: 999px; }
 .kh-rail-x {
-  margin-left: auto; border: 0; background: none; cursor: pointer;
+  border: 0; background: none; cursor: pointer;
   color: var(--kh-text-secondary); font-size: 1.2rem; line-height: 1; padding: 4px;
 }
 .kh-rail-ctx { margin: 0 18px; padding: 10px 12px; background: var(--kh-bg); border-radius: 12px; font-size: 0.82rem; color: var(--kh-text-secondary); }
 .kh-rail-ctx b { color: var(--kh-text-primary); }
-/* 미정: 대화 자리 — Claude 연동을 붙이기 전이라 빨간 바탕(「아직 안 정해진 자리는 빨간 바탕으로 남긴다」) · 연동이 붙으면 지운다 */
+/* 대화 자리 — 2026-11-03 연동(server/claude_chat.py)을 붙여 빨간 바탕(미정)을 지웠다 */
 .kh-rail-body {
-  flex: 1; min-height: 0; margin: 14px 18px; padding: 16px; border-radius: 12px;
-  display: flex; align-items: center; justify-content: center; text-align: center;
-  background: var(--kh-danger-faint); color: var(--kh-danger); font-size: 0.85rem; line-height: 1.6;
+  flex: 1; min-height: 0; margin: 14px 18px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.kh-rail-empty { margin: auto; text-align: center; font-size: 0.82rem; line-height: 1.6; color: var(--kh-text-secondary); padding: 0 12px; }
+.kh-rail-msg {
+  max-width: 88%; padding: 9px 12px; border-radius: 12px; font-size: 0.85rem; line-height: 1.6;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.kh-rail-msg small { display: block; margin-top: 4px; font-size: 0.7rem; color: var(--kh-text-secondary); }
+.kh-rail-msg.is-me { align-self: flex-end; background: var(--kh-accent-dim); color: var(--kh-accent); }
+.kh-rail-msg.is-ai { align-self: flex-start; background: var(--kh-bg); color: var(--kh-text-primary); }
+.kh-rail-msg.is-wait { align-self: flex-start; background: var(--kh-bg); color: var(--kh-text-secondary); }
+.kh-rail-msg.is-err { align-self: flex-start; background: var(--kh-danger-faint); color: var(--kh-danger); }
+.kh-rail-st.is-busy { background: var(--kh-accent-dim); color: var(--kh-accent); }
+.kh-rail-clr {
+  margin-left: auto; border: 0; background: none; cursor: pointer; font: inherit;
+  font-size: 0.75rem; color: var(--kh-text-secondary); padding: 4px 6px;
 }
 .kh-rail-quick { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 18px 10px; }
 .kh-rail-quick button {
   border: 0; font: inherit; font-size: 0.8rem; padding: 6px 10px; border-radius: 999px;
-  background: var(--kh-bg); color: var(--kh-text-primary);
+  background: var(--kh-bg); color: var(--kh-text-primary); cursor: pointer;
 }
 .kh-rail-in { display: flex; gap: 8px; padding: 0 18px 18px; }
 .kh-rail-in input {
@@ -52,7 +66,7 @@
 }
 .kh-rail-in button {
   border: 0; border-radius: 10px; padding: 0 16px; font: inherit; font-weight: 700; font-size: 0.85rem;
-  background: var(--kh-accent); color: var(--kh-text-on-fill);
+  background: var(--kh-accent); color: var(--kh-text-on-fill); cursor: pointer;
 }
 .kh-rail-quick button:disabled, .kh-rail-in :disabled { cursor: default; opacity: 0.6; }
 
