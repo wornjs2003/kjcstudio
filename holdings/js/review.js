@@ -334,11 +334,15 @@ function bindDay() {
     /* 셈은 줄마다 하고 보이는 것은 맨 아래 한 줄뿐(2026-11-03 재권님 「사이에 글은 필요없고 밑에만」) */
     const costs = rows.map((r) => legCost(r.buy, r.sell, r.qty, market));
     const t = sumCosts(costs), pnl = $('#rv-pnl'), pct = $('#rv-pct'), sum = $('#rv-sum');
-    sum.innerHTML = t ? `${costs.filter(Boolean).length > 1 ? '합계 ' : ''}<b class="${signClass(t.net)}">${wonS(t.net)}</b> <b class="${signClass(t.pct)}">${pctS(+t.pct.toFixed(2))}</b>
-      ${costLine(t)}` : '';
-    pnl.readOnly = pct.readOnly = !!t;
-    pnl.title = pct.title = t ? '매매 줄에서 셈한 값(세금 · 수수료 뺀 것)' : '';
-    if (t) { pnl.value = fmtNum(String(t.net), 'int'); pct.value = fmtNum(t.pct.toFixed(2), 'dec'); }
+    /* 시장을 몰라 세금을 못 셌으면 수익금 · 수익률을 내지 않고 두 칸도 잠그지 않는다 — 세금 빠진 값이 확정값처럼 저장되지 않게 */
+    const ok = t && t.net != null;
+    sum.innerHTML = !t ? '' : ok ? `${costs.filter(Boolean).length > 1 ? '합계 ' : ''}<b class="${signClass(t.net)}">${wonS(t.net)}</b> <b class="${signClass(t.pct)}">${pctS(+t.pct.toFixed(2))}</b>
+      ${costLine(t)}` : `<b class="kh-mut">수익금 · 수익률 셈 못 함 — 종목의 시장을 몰라 세금을 못 셈</b> ${costLine(t)}`;
+    pnl.readOnly = pct.readOnly = !!ok;
+    pnl.title = pct.title = ok ? '매매 줄에서 셈한 값(세금 · 수수료 뺀 것)' : '';
+    /* 셈으로 채운 값은 표시를 달아 두고, 셈이 없어지면(줄을 비움 · 시장 모름) 지운다 — 남겨 두면 손으로 적은 값처럼 저장된다(2026-11-03 qa 검수) */
+    if (ok) { pnl.value = fmtNum(String(t.net), 'int'); pct.value = fmtNum(t.pct.toFixed(2), 'dec'); pnl.dataset.auto = pct.dataset.auto = '1'; }
+    else if (pnl.dataset.auto) { pnl.value = pct.value = ''; delete pnl.dataset.auto; delete pct.dataset.auto; }
     [pnl, pct].forEach((el) => el.dispatchEvent(new Event('rv-calc')));
     rows.forEach((r, i) => { r.el.querySelector('[data-rmleg]').hidden = rows.length < 2 && i === 0; });
   };
@@ -410,7 +414,12 @@ store.load();
 (async () => {
   const seen = new Set();
   /* market — 세금이 시장마다 달라서 함께 든다(코스피 · 코스닥 · 2026-11-03) */
-  const add = (code, name, market) => { if (code && name && !seen.has(code)) { seen.add(code); stocks.push({ code, name, market }); } };
+  /* 관심종목 줄에는 market 이 없는 것이 있다 — 뒤 출처(universe)가 같은 코드의 시장을 알면 채운다(2026-11-03 개념정의 검수) */
+  const add = (code, name, market) => {
+    if (!code || !name) return;
+    if (seen.has(code)) { const o = stocks.find((x) => x.code === code); if (o && !o.market && market) o.market = market; return; }
+    seen.add(code); stocks.push({ code, name, market });
+  };
   WATCHLIST.forEach((s) => add(s.code, s.name, s.market));
   try {
     const r = await apiFetch('/api/dart/universe', { cache: 'no-store' });
