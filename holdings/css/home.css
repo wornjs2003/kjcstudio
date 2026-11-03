@@ -133,7 +133,7 @@
  * 있었다 — 여기에 `.kh-sec-card` 까지 더하면 **같은 값이 세 곳**이 된다.
  *
  * **이 값을 고치면 둘이 함께 움직인다.** 한쪽만 고칠 길이 없다. */
-.kh-rank, .kh-side-wrap { --kh-row-h: 255px; }
+.kh-rank, .kh-side-wrap { --kh-row-h: calc(255px * var(--kh-s, 1)); }   /* --kh-s — 아래 「칸을 창에 맞춰 키운다」(2026-11-03) */
 
 .kh-rank {
   margin-top: 14px; display: grid;
@@ -950,7 +950,7 @@
 /* ── 고른 지수 + 오른쪽 패널 ── */
 /* 큰 지수 차트가 왼쪽 칸이다. 미리보기와 같은 이유로 min-width 를 눌러 둔다
    (2026-09-17 — 위 .kh-rank 주석 참고) */
-.kh-idx { display: grid; grid-template-columns: 1fr 340px; gap: 14px; }
+.kh-idx { display: grid; grid-template-columns: 1fr calc(340px * var(--kh-s, 1)); gap: 14px; }
 .kh-idx > * { min-width: 0; }
 .kh-idx-main { padding: 18px 20px 14px; display: flex; flex-direction: column; }
 .kh-idx-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
@@ -971,7 +971,7 @@
    모양은 .kh-heart(frame.css) 그대로 */
 .kh-idx-head .kh-big-fav { margin-left: auto; flex-shrink: 0; }
 .kh-idx-head .kh-big-fav + .kh-fold { margin-left: 0; }
-.kh-idx-chart { flex: none; height: 550px; }
+.kh-idx-chart { --kh-big-h: 550px; flex: none; height: calc(var(--kh-big-h) * var(--kh-s, 1)); }   /* --kh-s — 아래 「칸을 창에 맞춰 키운다」 */
 
 /* 오른쪽 패널 — 왼쪽 차트의 그 종목 이야기다 */
 /* 세부사항 줄(.kh-dt)과 패널 셋(.kh-p3)의 모양은 `css/frame.css` 에 있다.
@@ -991,7 +991,7 @@
    이 값도 같이 봐야 한다. */
 .kh-idxp {
   padding: 16px 18px; display: flex; flex-direction: column; gap: 2px;
-  max-height: 690px; overflow-y: auto; min-height: 0;
+  max-height: calc(550px * var(--kh-s, 1) + 140px); overflow-y: auto; min-height: 0;   /* 차트 높이 + 140 — 차트가 창에 맞춰 커지면 같이 (2026-11-03) */
 }
 .kh-idxp-s { padding: 13px 0; border-bottom: 1px solid var(--kh-border); }
 .kh-idxp-s:last-child { border-bottom: 0; }
@@ -1704,3 +1704,28 @@
 .kh-hm-cell.is-fill { color: var(--kh-text-on-fill); }
 .kh-hm-cell.kh-mut { color: var(--kh-text-secondary); }
 .kh-hm-cell:hover { outline: 2px solid var(--kh-text-primary); outline-offset: -2px; }
+
+/* ── 칸을 창에 맞춰 키운다 · 글자는 그대로 (2026-11-03 재권님 「창 크기에 맞게 조절되게」 · 「처음 화면이 안보이는것 없이
+   채워져야해」 · 「비율은 그대로여야 하고」 · 「창이 커지는건 커지는건데 안에 폰트는 그대로 유지해줘」) ──
+   칸 크기만 배율 --kh-s 를 곱한다 — 틀 폭(1800) · 오른쪽 순위 칸(368) · 투자자 정보 칸(340) · 큰 차트(550) · 아래 줄(255). 글자 · 여백은 그대로다.
+   배율은 home.js 의 fitScale 이 준다 — 틀이 창 폭에, 처음 화면(아래 줄까지)이 창 높이에 들어가는 값 중 작은 쪽.
+   변수는 홀딩스 첫 화면만 준다 — Insight 도 이 파일을 걸지만 변수가 없어 1 이다.
+   **1281px 이상에서만** — 그보다 좁으면 frame.css 의 1280px 규칙이 틀을 바꾼다. 368 은 frame.css .kh-app-wide 와 같은 값이다.
+   **지금 모습보다 작은 창에서는 글자까지 함께 줄인다**(재권님 「세로로 줄이면 잘리면 안되고 … 가로도 같이」 → 「작은 창일 때만 글자도」 「응 그래」) —
+   그때는 --kh-s 가 1 이고 --kh-z(zoom)가 1 아래다. 글자를 그대로 두고 칸만 줄이면 0.4배 가까이 줄어 글자가 세로로 꺾였다(높이 900 창 실측) */
+/* 창 가장자리와 틀 사이에 남기는 여백 — 아래와 좌우 각각(재권님 「너무 딱 맞아서 답답해 여백을 넣어줘」 2026-11-03). home.js fitScale 이 읽는다 */
+:root { --kh-fit-gap: 32px; }
+@media (min-width: 1281px) {
+  body[data-nav="holdings"] > .kh-app-wide {
+    max-width: calc(var(--grid-max) * var(--kh-s, 1));
+    grid-template-columns: 1fr calc(368px * var(--kh-s, 1));
+    zoom: var(--kh-z, 1);
+    padding-top: calc(var(--nav-height) / var(--kh-z, 1));   /* 줄여도 메뉴(안 줄임) 아래에 딱 붙게 */
+  }
+  /* 큰 차트는 줄인 배율을 되돌려 그린다 — 차트 라이브러리가 zoom 을 몰라 마우스 자리가 배율만큼 어긋난다(2026-11-03 시험 —
+     zoom 1.5 에서 getBoundingClientRect 폭 150 · clientWidth 100 · 라이브러리는 clientX − rect.left). 차지하는 크기는 같다 */
+  body[data-nav="holdings"] > .kh-app-wide .kh-idx-chart {
+    zoom: calc(1 / var(--kh-z, 1));
+    height: calc(var(--kh-big-h) * var(--kh-s, 1) * var(--kh-z, 1));
+  }
+}

@@ -1846,6 +1846,22 @@ export function createStockChart(container, candles, opts = {}) {
   };
   remap();
 
+  /* 담긴 칸의 크기가 바뀌면 칸을 다시 나눈다 (2026-11-03 재권님 — 홈 창 맞춤에서 창을 줄이니 큰 차트 · MACD · RSI 가
+     지도 · 아래 줄 위로 넘쳐 그려졌다). 칸마다 차트를 만들 때 그때의 폭 · 높이를 박아 두어, 칸이 줄어도 옛 크기로 남았다.
+     크기가 멈춘 뒤 한 번만 build() 한다 — build 가 보던 구간을 지킨다. 숫자는 끌기를 마칠 때까지 기다리는 짬이다(서버 주기 아님) */
+  let sizedAs = '';
+  let sizeTimer = null;
+  const sizeKey = () => container.clientWidth + 'x' + container.clientHeight;
+  const sizeRo = window.ResizeObserver ? new ResizeObserver(() => {
+    clearTimeout(sizeTimer);
+    sizeTimer = setTimeout(() => {
+      const k = sizeKey();
+      if (k === sizedAs || !container.clientWidth || !container.clientHeight) return;
+      sizedAs = k;
+      build();
+    }, 150);
+  }) : null;
+
   const api = {
     get chart() { return panes[0] && panes[0].chart; },
     get candleSeries() { return candleSeries; },
@@ -2099,6 +2115,8 @@ export function createStockChart(container, candles, opts = {}) {
 
     destroy() {
       _indSync.delete(syncInd);
+      if (sizeRo) sizeRo.disconnect();
+      clearTimeout(sizeTimer);
       if (vpTimer) { clearInterval(vpTimer); vpTimer = null; }   // 매물대 타이머
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
@@ -2111,6 +2129,8 @@ export function createStockChart(container, candles, opts = {}) {
   };
 
   build();
+  sizedAs = sizeKey();
+  if (sizeRo) sizeRo.observe(container);
 
   return api;
 }

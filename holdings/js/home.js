@@ -3004,3 +3004,35 @@ mountMobileFold();
 
 /* 종목 이름에 섹터 · 주요 매출원 풍선 (2026-10-26 · components/company-tip.js) — 이름 글자의 data-co 를 본다 */
 mountCompanyTip();
+
+/* 칸 배율 · 줄임 배율 (2026-11-03 재권님 「비율은 그대로」 · 「안에 폰트는 그대로 유지해줘」 · 「세로로 줄이면 잘리면 안되고 … 가로도 같이」 ·
+   「작은 창일 때만 글자도」 → 「응 그래」) — home.css 「칸을 창에 맞춰 키운다」 의 --kh-s · --kh-z 를 준다.
+   본문 높이 = 글자 · 여백(그대로) + 큰 차트 · 아래 줄(× s). 지금 잰 값을 배율로 되돌려 「그대로인 몫」 과 「s 로 크는 몫」 을 얻는다.
+     키울 때(맞는 s ≥ 1)   --kh-s = s · --kh-z = 1   칸만 커지고 글자는 그대로
+     줄일 때(맞는 s < 1)   --kh-s = 1 · --kh-z = z   지금 모습 통째로 z 배 — 글자까지
+   둘 다 폭(틀 1800)과 높이(창 − 메뉴) 중 작은 쪽에 맞춘다. 1281px 아래는 둘 다 안 준다(그 폭은 틀이 바뀐다) */
+function fitScale() {
+  const main = document.querySelector('body > .kh-app-wide .kh-main');
+  const chart = $('kh-big-chart'), row = main?.querySelector('.kh-rank');
+  if (!main || !chart || !row) return;
+  const root = document.documentElement, css = getComputedStyle(root);
+  if (!matchMedia('(min-width: 1281px)').matches) {
+    root.style.removeProperty('--kh-s'); root.style.removeProperty('--kh-z'); return;
+  }
+  const s0 = parseFloat(css.getPropertyValue('--kh-s')) || 1;
+  const z0 = main.currentCSSZoom || 1;
+  const grow = (chart.getBoundingClientRect().height + row.getBoundingClientRect().height) / z0 / s0;
+  const fixed = main.getBoundingClientRect().height / z0 - grow * s0;
+  const nav = parseFloat(css.getPropertyValue('--nav-height')) || 0;
+  const grid = parseFloat(css.getPropertyValue('--grid-max'));
+  if (!grow || !grid) return;
+  const gap = parseFloat(css.getPropertyValue('--kh-fit-gap')) || 0;   // 창 가장자리 여백 — 아래 · 좌우 (home.css)
+  const room = innerHeight - nav - gap, wide = (root.clientWidth - 2 * gap) / grid;
+  let s = Math.min(wide, (room - fixed) / grow), z = 1;
+  if (s < 1) { s = 1; z = Math.max(0.1, Math.min(wide, room / (fixed + grow))); }   // 0.1 — 0 · 음수만 막는다
+  if (Math.abs(s - s0) > 0.002) root.style.setProperty('--kh-s', s.toFixed(4));
+  if (Math.abs(z - z0) > 0.002) root.style.setProperty('--kh-z', z.toFixed(4));
+}
+fitScale();
+addEventListener('resize', fitScale);
+if (window.ResizeObserver) new ResizeObserver(fitScale).observe(document.querySelector('body > .kh-app-wide .kh-main') || document.body);
