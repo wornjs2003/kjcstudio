@@ -57,7 +57,8 @@ def log(msg):
 def tool(name):
     p = shutil.which(name, path=os.pathsep.join(PATH_ADD + [os.environ.get("PATH", "")]))
     if not p:
-        raise SystemExit("%s 를 못 찾았습니다(PATH)" % name)
+        # SystemExit 가 아니라 RuntimeError — main 의 except Exception 이 잡아 「숫자만」 으로 간다(qa 검수 11-03)
+        raise RuntimeError("%s 를 못 찾았습니다(PATH)" % name)
     return p
 
 
@@ -85,7 +86,10 @@ def gather():
     idx = {i["code"]: i for i in raw["data"]}
     sp = idx.get("SPX") or {}
     day = sp.get("asOf") or ""
-    sectors = sorted(get("/api/kis/us-sectors")["data"], key=lambda s: s.get("pct") or 0, reverse=True)
+    allsec = get("/api/kis/us-sectors")["data"]
+    # 등락률이 없는 섹터는 0 으로 두지 않는다 — 정렬 · 강약 뽑기에서 빼고 「그 밖」 에 「—」 로 낸다(개념정의 검수 11-03)
+    sectors = sorted((x for x in allsec if isinstance(x.get("pct"), (int, float))), key=lambda x: x["pct"], reverse=True)
+    nopct = [x for x in allsec if not isinstance(x.get("pct"), (int, float))]
     for s in sectors:
         try:
             rows = get("/api/kis/us-sector-stocks?" + urllib.parse.urlencode({"no": s["no"]}))["data"]
@@ -94,10 +98,11 @@ def gather():
             rows = []
         rows = [r for r in rows if isinstance(r.get("pct"), (int, float))]
         rows.sort(key=lambda r: r["pct"], reverse=True)
-        s["top"] = rows[:2]
-        s["bottom"] = [r for r in rows[-2:][::-1] if r not in rows[:2]]
+        # ⬆ 는 오른 종목만 · ⬇ 는 내린 종목만 — 오른 종목이 하나뿐인 날 내린 종목이 ⬆ 에 섞이지 않게(qa 검수 11-03)
+        s["top"] = [r for r in rows if r["pct"] > 0][:2]
+        s["bottom"] = [r for r in rows if r["pct"] < 0][-2:][::-1]
     ind = {i["key"]: i for i in get("/api/market/indicators")["items"]}
-    return {"day": day, "idx": idx, "sectors": sectors, "ind": ind, "night": raw.get("futuresNight") or {}}
+    return {"day": day, "idx": idx, "sectors": sectors, "ind": ind, "nopct": nopct, "night": raw.get("futuresNight") or {}}
 
 
 # ---------------------------------------------------------------- 클로드
@@ -108,7 +113,7 @@ def ask_claude(data):
     brief = {
         "미국장 날짜": data["day"],
         "지수": {k: data["idx"][k].get("changePct") for k in ("SPX", "NASDAQ", "NDX", "SOX", "VIX") if k in data["idx"]},
-        "섹터": [{"no": x["no"], "이름": x["name"], "등락률": round(x.get("pct") or 0, 2),
+        "섹터": [{"no": x["no"], "이름": x["name"], "등락률": round(x["pct"], 2) if isinstance(x.get("pct"), (int, float)) else None,
                  "강한 종목": [(r["name"], r["code"], round(r["pct"], 1)) for r in x["top"]],
                  "약한 종목": [(r["name"], r["code"], round(r["pct"], 1)) for r in x["bottom"]]} for x in picks],
         "코스피200 야간선물 등락률": (data.get("night") or {}).get("changePct"),
@@ -200,7 +205,7 @@ def compose(data, ai):
             L.append("⬇ " + stocks(x["bottom"]))
     block("🔥 강한 섹터", s[:PICK])
     block("🧊 약한 섹터", s[-PICK:][::-1])
-    mid = s[PICK:-PICK] if len(s) > PICK * 2 else []
+    mid = (s[PICK:-PICK] if len(s) > PICK * 2 else []) + list(data.get("nopct") or [])
     if mid:
         L += ["", "📋 그 밖"]
         L.extend("%s %s %s" % (dot(x.get("pct")), x["name"], pct(x.get("pct"))) for x in mid)
