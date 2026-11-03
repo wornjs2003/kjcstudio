@@ -17,36 +17,66 @@
     "한 곳이 실패해도 화면은 돌지만, 늘 실패하는 곳을 목록에 두면 오류가 늘 떠 있다.",
     "대신 아시아경제·머니투데이·한경 경제·매경 경제를 넣었다. 건수는 더 늘었다."
   ],
+  "받는곳": [
+    "뉴스를 받는 곳 목록은 이 파일의 feeds 한 곳이다. 다른 파일 · 코드에 받는 곳 주소를 따로 두지 않는다.",
+    "넣는 것은 재권님이 정하신다 (2026-11-03 룰 「뉴스를 받는 곳은 한 목록에서만」 · company-setup/README.md).",
+    "항목 칸 — 갈래: (가) 1차 출처 / (나) 증권사 리포트 / (다) 언론 · 들인날: 이 목록에 처음 들어온 날(git 이력) · 근거: 왜 믿고 받나 · 지시한날: 재권님이 넣으라 하신 날(기록이 없으면 「확인 못 함」).",
+    "모르는 칸은 「확인 못 함」 으로 둔다. 짐작해 채우지 않는다."
+  ],
   "feeds": [
     {
       "id": "hk",
       "label": "한국경제",
-      "url": "https://www.hankyung.com/feed/finance"
+      "url": "https://www.hankyung.com/feed/finance",
+      "갈래": "(다) 언론",
+      "들인날": "2026-09-15(537acdc)",
+      "근거": "네이버 콘텐츠 제휴로 읽힘 — company-setup/data/naver-news.json(10-01)의 기사가 n.news.naver.com/mnews/article/015 로 네이버 안에서 열림(세션 판단 · 네이버 공식 목록 원문은 못 찾음) · 콘텐츠 제휴 기준은 뉴스제휴위원회 심사 90점 이상(서울신문 2026-02-20 https://m.seoul.co.kr/news/2026/02/20/20260220500265)",
+      "지시한날": "확인 못 함 — 들인 커밋 메시지에 재권님 말씀이 없음"
     },
     {
       "id": "hk-ec",
       "label": "한국경제",
-      "url": "https://www.hankyung.com/feed/economy"
+      "url": "https://www.hankyung.com/feed/economy",
+      "갈래": "(다) 언론",
+      "들인날": "2026-09-15(5841b2f)",
+      "근거": "네이버 콘텐츠 제휴로 읽힘 — company-setup/data/naver-news.json(10-01)의 기사가 n.news.naver.com/mnews/article/015 로 네이버 안에서 열림(세션 판단 · 네이버 공식 목록 원문은 못 찾음) · 콘텐츠 제휴 기준은 뉴스제휴위원회 심사 90점 이상(서울신문 2026-02-20 https://m.seoul.co.kr/news/2026/02/20/20260220500265)",
+      "지시한날": "확인 못 함 — 들인 커밋 메시지에 재권님 말씀이 없음"
     },
     {
       "id": "mk",
       "label": "매일경제",
-      "url": "https://www.mk.co.kr/rss/50200011/"
+      "url": "https://www.mk.co.kr/rss/50200011/",
+      "갈래": "(다) 언론",
+      "들인날": "2026-09-15(537acdc)",
+      "근거": "네이버 콘텐츠 제휴로 읽힘 — company-setup/data/naver-news.json(10-01)의 기사가 n.news.naver.com/mnews/article/009 로 네이버 안에서 열림(세션 판단 · 네이버 공식 목록 원문은 못 찾음) · 콘텐츠 제휴 기준은 뉴스제휴위원회 심사 90점 이상(서울신문 2026-02-20 https://m.seoul.co.kr/news/2026/02/20/20260220500265)",
+      "지시한날": "확인 못 함 — 들인 커밋 메시지에 재권님 말씀이 없음"
     },
     {
       "id": "mk-ec",
       "label": "매일경제",
-      "url": "https://www.mk.co.kr/rss/30100041/"
+      "url": "https://www.mk.co.kr/rss/30100041/",
+      "갈래": "(다) 언론",
+      "들인날": "2026-09-15(5841b2f)",
+      "근거": "네이버 콘텐츠 제휴로 읽힘 — company-setup/data/naver-news.json(10-01)의 기사가 n.news.naver.com/mnews/article/009 로 네이버 안에서 열림(세션 판단 · 네이버 공식 목록 원문은 못 찾음) · 콘텐츠 제휴 기준은 뉴스제휴위원회 심사 90점 이상(서울신문 2026-02-20 https://m.seoul.co.kr/news/2026/02/20/20260220500265)",
+      "지시한날": "확인 못 함 — 들인 커밋 메시지에 재권님 말씀이 없음"
     },
     {
       "id": "asiae",
       "label": "아시아경제",
-      "url": "https://www.asiae.co.kr/rss/economy.htm"
+      "url": "https://www.asiae.co.kr/rss/economy.htm",
+      "갈래": "(다) 언론",
+      "들인날": "2026-09-15(5841b2f)",
+      "근거": "확인 못 함 — 네이버 증권 뉴스 파일(company-setup/data/naver-news.json)에 그 언론사 기사가 없음",
+      "지시한날": "확인 못 함 — 들인 커밋 메시지에 재권님 말씀이 없음"
     },
     {
       "id": "mt",
       "label": "머니투데이",
-      "url": "https://rss.mt.co.kr/mt_news.xml"
+      "url": "https://rss.mt.co.kr/mt_news.xml",
+      "갈래": "(다) 언론",
+      "들인날": "2026-09-15(5841b2f)",
+      "근거": "네이버 콘텐츠 제휴로 읽힘 — company-setup/data/naver-news.json(10-01)의 기사가 n.news.naver.com/mnews/article/008 로 네이버 안에서 열림(세션 판단 · 네이버 공식 목록 원문은 못 찾음) · 콘텐츠 제휴 기준은 뉴스제휴위원회 심사 90점 이상(서울신문 2026-02-20 https://m.seoul.co.kr/news/2026/02/20/20260220500265)",
+      "지시한날": "확인 못 함 — 들인 커밋 메시지에 재권님 말씀이 없음"
     }
   ],
   "topics": [
