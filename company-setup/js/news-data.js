@@ -87,9 +87,10 @@ const st = k => `<span class="nd-st ${k === 'miss' ? 'no' : k}">${ST[k]}</span>`
   const kv = (o, n) => Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => `<div><b>${nf(v)}</b>${esc(k)}</div>`).join('');
   if (items) {
     const src = {}; items.forEach(x => { src[x.source || '—'] = (src[x.source || '—'] || 0) + 1; });
+    const nSrc = Object.keys(src).length; // 언론사 수는 「모름」 을 넣기 전에 센다(qa 11-04)
     if (hidden) src['모름(묶음 안에서 잘림)'] = hidden;
     $('nd-src').innerHTML = kv(src, 8);
-    $('sum-nd1').innerHTML = `<span class="sl"><b>기사 ${nf(total ? total.count : items.length)}${dart ? ` · 공시 ${nf(dart.disclosures)}` : ''}</b>언론사 ${Object.keys(src).length} · 주제 ${ns.meta.topics ? Object.keys(ns.meta.topics).length : '—'} · 「중요」 규칙에 걸린 묶음 ${groups.filter(g => g.alert).length}</span>`;
+    $('sum-nd1').innerHTML = `<span class="sl"><b>기사 ${nf(total ? total.count : items.length)}${dart ? ` · 공시 ${nf(dart.disclosures)}` : ''}</b>언론사 ${nSrc} · 주제 ${ns.meta.topics ? Object.keys(ns.meta.topics).length : '—'} · 「중요」 규칙에 걸린 묶음 ${groups.filter(g => g.alert).length}</span>`;
   } else { $('nd-src').textContent = '못 받음'; $('sum-nd1').textContent = '못 받음'; }
   $('nd-topic').innerHTML = ns && ns.meta && ns.meta.topics ? kv(ns.meta.topics, 8) : '못 받음';
 
