@@ -217,8 +217,8 @@ function paintDay() {
       <div class="full rv-legs" id="rv-legs"><div class="rv-leg rv-leg-hd" aria-hidden="true"><span>매수가(원)</span><span>매도가(원)</span><span>수량(주)</span><span></span></div>${(ed && Array.isArray(ed.legs) && ed.legs.length ? ed.legs : [{}]).map(legRow).join('')}
         <button type="button" class="rv-addleg" id="rv-addleg">+ 매매 더하기</button>
         <div class="rv-sum" id="rv-sum"></div></div>
-      <label class="rv-unit"><button type="button" class="rv-clr" data-clr title="수익금 · 수익률 · 매매 줄 지우기" aria-label="수익금 지우기">×</button><input id="rv-pnl" data-fmt="int" type="text" inputmode="numeric" placeholder="시세차익 · 손해는 −" value="${val('pnl')}" /><span>원</span></label>
-      <label class="rv-unit"><button type="button" class="rv-clr" data-clr title="수익금 · 수익률 · 매매 줄 지우기" aria-label="수익률 지우기">×</button><input id="rv-pct" data-fmt="dec" type="text" inputmode="decimal" placeholder="수익률" value="${val('pct')}" /><span>%</span></label>
+      <div class="rv-unit"><button type="button" class="rv-clr" data-clr title="수익금 · 수익률 · 매매 줄 지우기" aria-label="수익금 지우기">×</button><input id="rv-pnl" data-fmt="int" type="text" inputmode="numeric" placeholder="수익금 · 손해는 −" value="${val('pnl')}" /><span>원</span></div>
+      <div class="rv-unit"><button type="button" class="rv-clr" data-clr title="수익금 · 수익률 · 매매 줄 지우기" aria-label="수익률 지우기">×</button><input id="rv-pct" data-fmt="dec" type="text" inputmode="decimal" placeholder="수익률" value="${val('pct')}" /><span>%</span></div>
       <textarea class="full rv-why-in" id="rv-why" placeholder="이 종목 회고 — 잘한 것 · 아쉬운 것 · 다음엔 어떻게">${val('why')}</textarea>
       <span class="rv-hint" id="rv-hint"></span>
     </form>
