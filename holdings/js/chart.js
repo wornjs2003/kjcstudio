@@ -1239,14 +1239,15 @@ export function createStockChart(container, candles, opts = {}) {
       if (vpLayer && indOn().has('vp')) {
         vpLayer.querySelectorAll('.kh-vp-t').forEach((t) => { vpRight = Math.max(vpRight, t.offsetLeft + t.offsetWidth); });
       }
-      const end = [-1e9, -1e9, -1e9];
+      /* 좁은 칸(휴대폰 · 500 폭)은 한 줄만 — 세 줄이면 낮은 가격 칸 윗부분을 이름표가 덮었다(2026-11-03 qa 19:38) */
+      const end = w >= 900 ? [-1e9, -1e9, -1e9] : [-1e9];
       layer.querySelectorAll('.kh-sess-t').forEach((t) => {
         const left = Math.max(+t.dataset.x + 3, vpRight ? vpRight + 4 : 0);
         const row = end.findIndex((e) => left >= e);
         if (row < 0) { t.remove(); return; }
         t.classList.add('r' + row);
         t.style.left = left.toFixed(1) + 'px';
-        end[row] = left + t.offsetWidth + 6;
+        end[row] = left + t.offsetWidth + 10;        // 이름표 사이 틈 — 6 이면 붙어 읽혔다(qa)
       });
     });
   }
