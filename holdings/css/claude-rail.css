@@ -1,0 +1,77 @@
+/* ==========================================================================
+   오른쪽 Claude 줄 · 창 (2026-11-03 재권님 「화면 오른쪽에 항상 따라다니는 세로로 긴 창 하나도 추가해줘. 그창에 버튼을 누르면
+   claude 와 연동되도록 개발 할거야」 → 「세로로 긴줄이 있고 아이콘을 눌렀을때 열리도록」 → 그림 넷 「응 맞아」)
+
+   새 파일이라 좁은 폭(폰) 모양이 기본이다 — 「모바일 퍼스트」.
+     폰          오른쪽 아래 둥근 단추 · 누르면 창이 화면 전체
+     768px 이상   오른쪽 세로 줄(--kh-rail-bar) 늘 보임 · 누르면 창(--kh-rail-panel)이 열리고 본문이 그만큼 좁아진다
+   본문을 미는 폭은 --kh-rail-w 하나다 — claude-rail.js 가 html 에 주고, home.js 창 맞춤(fitScale)이 그 폭을 빼고 배율을 푼다.
+   메뉴 줄(nav.css · 함께 쓰는 파일)은 안 건드린다 — 줄은 메뉴 줄 아래에서 시작한다.
+   ========================================================================== */
+
+:root { --kh-rail-bar: 52px; --kh-rail-panel: 360px; }
+
+.kh-rail-fab {
+  position: fixed; right: 16px; bottom: 20px; z-index: 70;
+  width: 52px; height: 52px; border: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--kh-accent); color: var(--kh-text-on-fill); box-shadow: var(--kh-shadow-lg); cursor: pointer;
+}
+.kh-rail-bar { display: none; }
+
+.kh-rail-panel {
+  position: fixed; inset: 0; z-index: 90;   /* 폰은 화면 전체 — 메뉴 줄(80)도 덮는다 · 모달(200)보다 아래 */
+  display: flex; flex-direction: column; background: var(--kh-bg-card);
+}
+.kh-rail-panel[hidden], .kh-rail-fab[hidden] { display: none; }
+
+.kh-rail-hd { display: flex; align-items: center; gap: 8px; padding: 18px 18px 12px; }
+.kh-rail-hd b { font-size: 1.1rem; color: var(--kh-text-primary); }
+.kh-rail-st { font-size: 0.75rem; color: var(--kh-text-secondary); background: var(--kh-bg); padding: 3px 8px; border-radius: 999px; }
+.kh-rail-x {
+  margin-left: auto; border: 0; background: none; cursor: pointer;
+  color: var(--kh-text-secondary); font-size: 1.2rem; line-height: 1; padding: 4px;
+}
+.kh-rail-ctx { margin: 0 18px; padding: 10px 12px; background: var(--kh-bg); border-radius: 12px; font-size: 0.82rem; color: var(--kh-text-secondary); }
+.kh-rail-ctx b { color: var(--kh-text-primary); }
+/* 미정: 대화 자리 — Claude 연동을 붙이기 전이라 빨간 바탕(「아직 안 정해진 자리는 빨간 바탕으로 남긴다」) · 연동이 붙으면 지운다 */
+.kh-rail-body {
+  flex: 1; min-height: 0; margin: 14px 18px; padding: 16px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  background: var(--kh-danger-faint); color: var(--kh-danger); font-size: 0.85rem; line-height: 1.6;
+}
+.kh-rail-quick { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 18px 10px; }
+.kh-rail-quick button {
+  border: 0; font: inherit; font-size: 0.8rem; padding: 6px 10px; border-radius: 999px;
+  background: var(--kh-bg); color: var(--kh-text-primary);
+}
+.kh-rail-in { display: flex; gap: 8px; padding: 0 18px 18px; }
+.kh-rail-in input {
+  flex: 1; min-width: 0; border: 1px solid var(--kh-border); border-radius: 10px; padding: 10px 12px;
+  font: inherit; font-size: 0.85rem; color: var(--kh-text-primary); background: var(--kh-bg-card);
+}
+.kh-rail-in button {
+  border: 0; border-radius: 10px; padding: 0 16px; font: inherit; font-weight: 700; font-size: 0.85rem;
+  background: var(--kh-accent); color: var(--kh-text-on-fill);
+}
+.kh-rail-quick button:disabled, .kh-rail-in :disabled { cursor: default; opacity: 0.6; }
+
+@media (min-width: 768px) {
+  body.has-kh-rail { padding-right: var(--kh-rail-w, 0px); }
+  .kh-rail-fab { display: none; }
+  .kh-rail-bar {
+    position: fixed; right: 0; top: var(--nav-height, 0px); bottom: 0; z-index: 70; width: var(--kh-rail-bar);
+    display: flex; flex-direction: column; align-items: center; gap: 12px; padding-top: 16px;
+    background: var(--kh-bg-card); border-left: 1px solid var(--kh-border);
+  }
+  .kh-rail-ic {
+    width: 36px; height: 36px; border: 0; border-radius: 10px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--kh-accent-dim); color: var(--kh-accent);
+  }
+  .kh-rail-ic.is-on { background: var(--kh-accent); color: var(--kh-text-on-fill); }
+  .kh-rail-panel {
+    inset: auto; top: var(--nav-height, 0px); bottom: 0; right: var(--kh-rail-bar); width: var(--kh-rail-panel); z-index: 70;
+    border-left: 1px solid var(--kh-border);
+  }
+}
