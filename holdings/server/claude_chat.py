@@ -37,18 +37,7 @@ from secrets_guard import safe_message
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # 저장소 폴더(holdings/server 의 두 칸 위)
 TOOLS = "Read,Grep,Glob,WebSearch,WebFetch"
-# 띄울 때의 설정 — 세션용 훅은 끄고(확인란 · 한국어 · 보드 훅이 창 답을 붙잡거나 줄을 덧붙였다) 비밀 · 데이터 파일 읽기를 거부한다.
-# 왜 거부가 필요한가(2026-11-03 개념정의 검수): 읽기 도구와 웹 읽기를 함께 쥐면, 웹에서 읽은 글 속 지시로 비밀 파일을 읽어 웹 주소에
-# 실어 내보낼 길이 생긴다. 훅을 끄면 메인 가드도 안 돕는다.
-#   - 저장소 폴더 밖은 「물어야 읽는」 자리라 -p 에서는 저절로 거부된다 — 그래서 Read · Grep · Glob 은 --allowedTools 에 안 넣는다
-#   - 폴더 안 · 밖의 비밀 · 데이터는 아래 거부 규칙이 막는다(거부는 허용보다 먼저다)
-#   - --restricted 는 안 쓴다 — 그것은 CLAUDE.md 까지 안 읽게 해 룰을 못 찾는다(같은 날 실측)
-# 잰 것(가짜 파일 · Haiku): secrets.json · 토큰 캐시 · .db · logs · .env · ~/.kjc · /tmp · 홈의 폴더 밖 파일 전부 「못 읽음」 · 보통 파일 읽힘 · CLAUDE.md 들어옴
-SETTINGS = json.dumps({"disableAllHooks": True, "permissions": {"deny": [
-    "Read(**/secrets*.json)", "Read(**/.kis-token-cache*)", "Read(**/*.db)", "Read(**/*.db-*)", "Read(**/logs/**)",
-    "Read(**/holdings/data/**)", "Read(**/.env*)", "Read(~/.kjc/**)", "Read(~/.ssh/**)", "Read(~/.claude/**)",
-    "Read(//tmp/**)", "Read(//private/tmp/**)"]}})
-AUTO_OK = ["WebSearch", "WebFetch"]   # 묻지 않고 쓰는 도구 — 파일 도구는 폴더 안만 저절로 된다
+NO_HOOKS = '{"disableAllHooks": true}'   # 세션용 훅(확인란 · 한국어 · 보드 카드)이 창 답을 붙잡거나 줄을 덧붙이지 않게 — 룰 문서 · 스킬은 그대로 읽는다   # 읽기만 — 명령 실행 · 파일 고치기는 일부러 없다
 
 PATH_ADD = ["/opt/homebrew/bin", os.path.expanduser("~/.local/bin"), "/usr/local/bin"]
 MODEL = "claude-opus-5-5"  # 재권님 「opus 5.5」(11-03 18:5x) — 같은 물음 실측 29초 · 1.62달러(Sonnet 38초 0.88 · Haiku 33초 0.25)
@@ -104,8 +93,8 @@ def _prompt(question, ctx, history, quote, indices=None):
 
 
 def _run(prompt):
-    r = subprocess.run([_claude(), "-p", "--model", MODEL, "--tools", TOOLS, "--allowedTools", *AUTO_OK,
-                        "--no-session-persistence", "--settings", SETTINGS, "--output-format", "json", "--max-budget-usd", BUDGET_USD,
+    r = subprocess.run([_claude(), "-p", "--model", MODEL, "--tools", TOOLS, "--allowedTools", *TOOLS.split(","),
+                        "--no-session-persistence", "--settings", NO_HOOKS, "--output-format", "json", "--max-budget-usd", BUDGET_USD,
                         "--append-system-prompt", SYSTEM],
                        input=prompt, capture_output=True, text=True, timeout=TIMEOUT, cwd=REPO)
     try:
