@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kr.kjcstudio.us-sector-morning</string>
+  <!-- 미국 섹터 아침 알림 — 화~토 07:00 텔레그램 한 통 (2026-11-03 재권님 「응 해줘」 · 시황분석 창 18:27 ·
+       카드 「화요일 새벽 미국 증시 섹터별 분석」).
+       `company-setup/tools/us-sector-morning.py --send` 가 06:45 에 떠서 글을 엮고 07:00(도구의 SEND_AT)까지 기다렸다 보낸다.
+       **--send 와 KJC_ROLE=server 가 함께 있을 때만 보낸다** — 알림은 개발 서버(8765) 자리에서만 나간다(「알림은 개발 서버에서만 나간다」).
+       **돈이 든다** — 무인 claude -p 한 번 약 0.75~0.85달러(2026-11-03 시황분석 실측).
+       화~토인 까닭 — 미국 장(월~금 밤)이 끝난 다음 날 아침이다.
+       설치는 「켜기」(재권님 지시):
+           cp launchd/kr.kjcstudio.us-sector-morning.plist ~/Library/LaunchAgents/
+           launchctl load ~/Library/LaunchAgents/kr.kjcstudio.us-sector-morning.plist -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>-u</string>
+    <string>company-setup/tools/us-sector-morning.py</string>
+    <string>--send</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>KJC_ROLE</key>
+    <string>server</string>
+  </dict>
+  <key>WorkingDirectory</key>
+  <string>/Users/kjc/work/KJCStudio</string>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>45</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>45</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>45</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>45</integer></dict>
+    <dict><key>Weekday</key><integer>6</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>45</integer></dict>
+  </array>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/us-sector-morning.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/us-sector-morning.log</string>
+</dict>
+</plist>
