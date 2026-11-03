@@ -1757,17 +1757,3 @@
   border: 2px solid var(--kh-bg-card);
   box-shadow: 0 0 0 1px var(--kh-ff-c), 0 1px 3px var(--kh-ff-c);
 }
-/* 자리가 모자랄 때 (qa 11-03 · 폭 500 에서 왼쪽 설명이 낱말마다 꺾이고 오른쪽이 잘렸다)
-   넓은 창 — 줄을 안 바꾸고 막대부터 줄인다(96 → 40px) · 왼쪽 설명은 안 꺾고 · 오른쪽 출처는 말줄임 — 바닥 줄 높이 그대로
-   좁은 창(700px 이하) — 이 줄만 아랫줄로 내린다(바닥 줄이 한 줄 늘어난다) */
-.kh-big-foot:has(.kh-flow-foot) > span:first-child { flex: none; white-space: nowrap; }
-.kh-big-foot:has(.kh-flow-foot) > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kh-flow-foot { flex: 0 1 auto; min-width: 0; }
-.kh-ff-it { flex: 0 1 auto; min-width: 0; }
-.kh-ff-bar { flex: 0 1 96px; min-width: 40px; }
-@media (max-width: 700px) {
-  .kh-big-foot:has(.kh-flow-foot) { flex-wrap: wrap; row-gap: 6px; }
-  .kh-flow-foot { order: 3; flex-basis: 100%; margin: 0; gap: 12px; }
-  .kh-ff-it { flex: 1 1 0; }
-  .kh-ff-bar { flex: 1 1 96px; max-width: 96px; }
-}
