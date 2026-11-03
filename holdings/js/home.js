@@ -827,7 +827,7 @@ async function paintBigChart(opt = {}) {
   } else {
     dropBigChart();
     host.innerHTML = '';
-    bigChart = createStockChart(host, candles, { period, showVolume: true, priceDigits: digits, code: st.code });
+    bigChart = createStockChart(host, candles, { period, showVolume: true, priceDigits: digits, code: st.code, sessions: true });   // sessions — 나라별 장 시각 세로선(큰 차트만 · 11-03)
     bigDigits = digits;
   }
   bigDrawnKey = key;
