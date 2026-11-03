@@ -2,9 +2,10 @@
    오른쪽 Claude 줄 · 창 (2026-11-03 재권님 「화면 오른쪽에 항상 따라다니는 세로로 긴 창 하나도 추가해줘. 그창에 버튼을 누르면
    claude 와 연동되도록 개발 할거야」 → 「세로로 긴줄이 있고 아이콘을 눌렀을때 열리도록」 → 그림 넷 「응 맞아」)
 
-   넓은 창 — 오른쪽 세로 줄(아이콘)이 늘 보이고, 누르면 창이 열려 본문을 그만큼 민다.
+   넓은 창 — 오른쪽 세로 줄(아이콘)이 늘 보이고, 누르면 창이 본문 위를 덮어 열린다(모달처럼 · 본문은 안 움직인다 ·
+           재권님 「모달 창처럼 위를 덮는 방향으로」 11-03 — 밀면 폭 1000 에서 순위 칸이 창 밑으로 잘렸다) · Esc 로도 닫힌다.
    폰     — 오른쪽 아래 둥근 단추 · 누르면 창이 화면 전체.
-   본문을 미는 폭은 html 의 --kh-rail-w 하나다(줄 + 열린 창) — home.js 창 맞춤(fitScale)이 그 폭을 빼고 배율을 푼다.
+   본문을 미는 폭은 html 의 --kh-rail-w 하나다(세로 줄만) — home.js 창 맞춤(fitScale)이 그 폭을 빼고 배율을 푼다.
    열림 · 닫힘은 이 브라우저에만 기억한다(보는 자리 기억 — 「화면이 가져도 되는 것」).
 
    Claude 연동은 아직 없다 — 대화 자리는 빨간 바탕(미정) · 입력 · 바로 묻기는 눌리지 않는다. 연동을 붙이면 여기를 채운다.
@@ -61,9 +62,7 @@ export function mountClaudeRail() {
     ic.classList.toggle('is-on', open);
     if (open) panel.querySelector('.kh-rail-now').textContent = context();
     const css = getComputedStyle(root);
-    const w = wide.matches
-      ? (parseFloat(css.getPropertyValue('--kh-rail-bar')) || 0) + (open ? parseFloat(css.getPropertyValue('--kh-rail-panel')) || 0 : 0)
-      : 0;
+    const w = wide.matches ? parseFloat(css.getPropertyValue('--kh-rail-bar')) || 0 : 0;   // 열린 창은 덮으므로 폭에 안 넣는다
     root.style.setProperty('--kh-rail-w', w + 'px');
   }
   function set(v) { open = v; save(v); apply(); }
@@ -71,6 +70,7 @@ export function mountClaudeRail() {
   ic.addEventListener('click', () => set(!open));
   fab.addEventListener('click', () => set(true));
   panel.querySelector('.kh-rail-x').addEventListener('click', () => set(false));
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && open && !document.querySelector('.kh-veil')) set(false); });
   wide.addEventListener('change', apply);
   apply();
 }

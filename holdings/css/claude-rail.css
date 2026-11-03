@@ -4,7 +4,7 @@
 
    새 파일이라 좁은 폭(폰) 모양이 기본이다 — 「모바일 퍼스트」.
      폰          오른쪽 아래 둥근 단추 · 누르면 창이 화면 전체
-     768px 이상   오른쪽 세로 줄(--kh-rail-bar) 늘 보임 · 누르면 창(--kh-rail-panel)이 열리고 본문이 그만큼 좁아진다
+     768px 이상   오른쪽 세로 줄(--kh-rail-bar) 늘 보임 · 누르면 창(--kh-rail-panel)이 본문 위를 덮어 열린다(모달처럼 · 본문은 그대로)
    본문을 미는 폭은 --kh-rail-w 하나다 — claude-rail.js 가 html 에 주고, home.js 창 맞춤(fitScale)이 그 폭을 빼고 배율을 푼다.
    메뉴 줄(nav.css · 함께 쓰는 파일)은 안 건드린다 — 줄은 메뉴 줄 아래에서 시작한다.
    ========================================================================== */
@@ -72,6 +72,6 @@
   .kh-rail-ic.is-on { background: var(--kh-accent); color: var(--kh-text-on-fill); }
   .kh-rail-panel {
     inset: auto; top: var(--nav-height, 0px); bottom: 0; right: var(--kh-rail-bar); width: var(--kh-rail-panel); z-index: 70;
-    border-left: 1px solid var(--kh-border);
+    border-left: 1px solid var(--kh-border); box-shadow: var(--kh-shadow-lg);
   }
 }
