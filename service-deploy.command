@@ -1,5 +1,5 @@
 #!/bin/sh
-# 작업방에서 만든 것을 **서비스방으로 옮긴다** (2026-09-30 지시).
+# 작업방에서 만든 것을 **메인으로 옮긴다** (2026-09-30 지시).
 #
 # 재권님 말씀 — 「맥미니 내부에서 작업할곳과 실제 대이터를 나눌 필요는 있어뵈는데」.
 #
@@ -16,7 +16,7 @@
 #
 # ■ 데이터는 안 건드린다
 #
-# 서비스방은 **자기 `market.db`** 를 갖고 자기 서버가 거기에 쓴다
+# 메인은 **자기 `market.db`** 를 갖고 자기 서버가 거기에 쓴다
 # (「전부 두 벌」 — 2026-09-30 지시). 코드만 옮긴다.
 #
 # ■ 되돌리기
@@ -32,11 +32,11 @@ SERVICE=/Users/kjc/service
 PORT=8764
 
 echo ""
-echo "  ── 작업방 → 서비스방 ────────────────────────────────"
+echo "  ── 작업방 → 메인 ────────────────────────────────"
 echo ""
 
 if [ ! -d "$SERVICE/.git" ] && [ ! -f "$SERVICE/.git" ]; then
-  echo "  서비스방이 없습니다: $SERVICE"
+  echo "  메인이 없습니다: $SERVICE"
   echo "  먼저 만들어야 합니다."
   exit 1
 fi
@@ -94,7 +94,7 @@ if git -C "$SERVICE" diff --name-only "$before" "$after" | grep -q '^holdings/se
 fi
 
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://localhost:$PORT/api/kis/health" || echo 000)
-echo "  서비스방 상태: $code  (200 이면 정상)"
+echo "  메인 상태: $code  (200 이면 정상)"
 echo ""
 echo "  ──────────────────────────────────────────────────────"
 echo ""

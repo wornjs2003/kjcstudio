@@ -538,7 +538,6 @@ function move(dir) {
 }
 document.querySelectorAll('[data-move]').forEach((b) => b.addEventListener('click', () => move(Number(b.dataset.move))));
 $('#rv-stats-open').addEventListener('click', openStats);
-$('#rv-today').addEventListener('click', () => { pick = todayYmd(); dayChanged(); keepView(); paint(); });
 $('#rv-seg').addEventListener('click', (e) => {
   const b = e.target.closest('[data-view]');
   if (!b || b.dataset.view === view) return;

@@ -36,6 +36,15 @@
       "full": 10,
       "src": "종목 · 지수의 오늘 등락률(전날 종가 대비) — 8765 시세 응답의 등락률 칸. 정규장은 KRX · 장 밖은 통합(holdings 「시세 표기 규칙」)",
       "how": "재권님 지정 2026-10-28(「지도 짙기는 0~10까지」) — 1년 값으로 재지 않았다. 첫 사용처 홈 시장 지도 칸 바탕(paint 'fill' · 흰 글씨 문턱 onFill)"
+    },
+    {
+      "id": "buy_share",
+      "name": "매수 몫",
+      "unit": "%",
+      "base": 50,
+      "full": 25,
+      "src": "매수 ÷ (매수 + 매도) × 100. 외국계 창구 = 8765 /api/kis/investor-member 의 foreignFirms.buy · sell(수량 · KRX 회원사 중 외국계 합) · 프로그램 = /api/kis/flow-today?code=&step=5 의 stock.rows 의 buy · sell 합(원) — 둘 다 오늘 장중 누적",
+      "how": "재권님 지정 2026-11-03(폭 25 — 매수 몫 75% · 25% 에서 가장 짙음 · 개발3 제안) — 1년 값으로 재지 않았다(창구 · 프로그램 지난 날 기록이 저장소 · 서버에 없음 · 개발3 확인). 첫 사용처 홀딩스 큰 차트 바닥 줄 원(holdings/js/components/flow-foot.js · paint 'line')"
     }
   ]
 }

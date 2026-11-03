@@ -32,7 +32,13 @@
      `.site-nav` 는 `left:0; right:0` 이라 여기서 `100%` 는 화면 폭이다.
      1800 · 16 은 `theme.css` 의 `--grid-max` · `--grid-inset` 에서 온다. `holdings/css/frame.css` 의
      `.kh-app` · `.kh-main` 도 그 둘을 쓰면 복제가 없다 — 그 전까지 `tools/check-rules.py` 가 대조한다. */
-  --nav-gutter: max(var(--grid-inset), calc((100% - var(--grid-max)) / 2 + var(--grid-inset)));
+  --nav-gutter: max(calc(var(--grid-inset) * var(--kh-z, 1)),
+                    calc((100% - var(--kh-rail-w, 0px) - var(--grid-max) * var(--kh-s, 1) * var(--kh-z, 1)) / 2
+                         + var(--grid-inset) * var(--kh-z, 1)));
+  /* **기준은 홀딩스 첫 화면 본문이다 (2026-11-03 재권님 「본문에 맞춰」).** 그 화면은 큰 창에서 틀을 `--kh-s` 배만큼 키우고
+     작은 창에서 통째로 `--kh-z` 배 줄이며(holdings/js/home.js fitScale) 오른쪽에 Claude 줄 · 창 폭 `--kh-rail-w` 를 비운다
+     (holdings/js/components/claude-rail.js). 셋 다 그 화면이 `html` 에 줄 때만 있고, **없으면 기본값(1 · 1 · 0px)이라
+     다른 구역은 위 식 그대로다** — 구역별 예외를 두지 않는 채로 맞춘다. 오른쪽 여백에는 줄 폭을 더한다(아래 .site-nav). */
 
   /* 메뉴 로고와 푸터가 쓰는 글꼴. base.css 와 같은 값이다. */
   --font-body: "Noto Sans KR", "Roboto", "Apple SD Gothic Neo", sans-serif;
@@ -114,7 +120,7 @@
   row-gap: 15px;      /* 로고와 메뉴 줄 사이 */
   height: var(--nav-height);
   /* 모든 구역이 같은 기준선이다 — 위 `--nav-gutter` 참조 (2026-10-01) */
-  padding: 0 var(--nav-gutter);
+  padding: 0 calc(var(--nav-gutter) + var(--kh-rail-w, 0px)) 0 var(--nav-gutter);   /* 오른쪽은 홀딩스 Claude 줄 폭만큼 더 — 위 `--nav-gutter` */
   background: var(--nav-bg);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);

@@ -3831,6 +3831,7 @@ def fetch_investor_member(cfg, code):
             "buyPct": _num(o.get("glob_shnu_rlim")),
         },
         "volume": _num(o.get("acml_vol"), int),
+        "at": datetime.now(KST).strftime("%H:%M"),     # KIS 에서 받은 시각 — 큰 차트 바닥 줄이 「정보가 들어온 시각」 으로 쓴다(2026-11-03)
     }
     _investor_member_cache[code] = (time.time(), out)
     return out
