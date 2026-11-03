@@ -1224,18 +1224,30 @@ export function createStockChart(container, candles, opts = {}) {
       layer.style.width = w + 'px';
       layer.style.bottom = n === panes.length - 1 ? TIME_AXIS_H + 'px' : '0';
       const out = [];
-      const end = [-1e9, -1e9];                       // 이름표 두 줄의 오른쪽 끝(어림) — 둘 다 막히면 그 이름표는 뺀다(선은 그대로)
       marks.forEach((m) => {
         if (m.x < 0 || m.x > w) return;
         if (m.x2 != null && m.x2 > m.x) out.push(`<i class="kh-sess-b" style="left:${m.x.toFixed(1)}px;width:${(Math.min(m.x2, w) - m.x).toFixed(1)}px"></i>`);
         out.push(`<i class="kh-sess-l" style="left:${m.x.toFixed(1)}px"></i>`);
-        if (n !== 0) return;
-        const row = m.x >= end[0] ? 0 : m.x >= end[1] ? 1 : -1;
-        if (row < 0) return;
-        end[row] = m.x + 6 + m.label.length * 10;    // 0.66rem 글자 하나 ≈ 10px(한글)
-        out.push(`<span class="kh-sess-t r${row}" style="left:${(m.x + 3).toFixed(1)}px">${m.label}</span>`);
+        if (n === 0) out.push(`<span class="kh-sess-t" data-x="${m.x.toFixed(1)}">${m.label}</span>`);
       });
       layer.innerHTML = out.join('');
+      if (n !== 0) return;
+      /* 이름표 자리 — 실제 글자 폭을 재서 세 줄 중 빈 줄에 둔다(2026-11-03 qa — 16:00 「시간외」 가 두 줄로는 막혀 빠졌다).
+         매물대가 켜져 있으면 왼쪽 비율 글자(.kh-vp-t) 끝보다 오른쪽에서 시작한다(qa — 「1.3%일본 오후장」 으로 붙어 읽혔다).
+         세 줄 다 막히면 그 이름표만 뺀다 — 선은 남는다(좁은 폭) */
+      let vpRight = 0;
+      if (vpLayer && indOn().has('vp')) {
+        vpLayer.querySelectorAll('.kh-vp-t').forEach((t) => { vpRight = Math.max(vpRight, t.offsetLeft + t.offsetWidth); });
+      }
+      const end = [-1e9, -1e9, -1e9];
+      layer.querySelectorAll('.kh-sess-t').forEach((t) => {
+        const left = Math.max(+t.dataset.x + 3, vpRight ? vpRight + 4 : 0);
+        const row = end.findIndex((e) => left >= e);
+        if (row < 0) { t.remove(); return; }
+        t.classList.add('r' + row);
+        t.style.left = left.toFixed(1) + 'px';
+        end[row] = left + t.offsetWidth + 6;
+      });
     });
   }
 
