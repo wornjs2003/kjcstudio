@@ -4,7 +4,7 @@
 재권님 말씀 — 「차트쪽 작업된것들 중간에 고장나는지 안나는지 확인을 항상 할수있는 장치가 필요해」.
 
     python3 tools/check-chart.py                  8765 의 첫 화면 · 종목 화면을 연기 검사한다
-    python3 tools/check-chart.py --port 8764      다른 서버(서비스방 등)
+    python3 tools/check-chart.py --port 8764      다른 서버(메인 등)
     python3 tools/check-chart.py --code 000660    종목 화면에 쓸 종목 (기본 005930)
     python3 tools/check-chart.py --json <경로>    결과를 JSON 으로도 남긴다 (기본 logs/check-chart.json)
 

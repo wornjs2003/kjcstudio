@@ -246,7 +246,8 @@ def c_nav_gutter():
     for m in re.finditer(r"([^{}]*data-nav=[^{}]*\.site-nav[^{}]*)\{([^}]*)\}", nav_code):
         if re.search(r"\bpadding(-left|-right)?\s*:", m.group(2)):
             hits.append("nav.css — 구역별 예외: " + " ".join(m.group(1).split()))
-    if not re.search(r"--nav-gutter\s*:\s*max\(\s*var\(--grid-inset\)", nav_code):
+    gut = re.search(r"--nav-gutter\s*:([^;]*);", nav_code)   # 식 모양은 박지 않는다 — 두 바탕값이 식 안에 있는지만 (2026-11-03 홀딩스 배율이 들어옴)
+    if not gut or "var(--grid-inset)" not in gut.group(1) or "var(--grid-max)" not in gut.group(1):
         hits.append("nav.css 의 --nav-gutter 가 theme.css 의 --grid-inset · --grid-max 로 계산되지 않는다")
     gmax = re.search(r"--grid-max\s*:\s*(\d+)px", theme_code)
     gins = re.search(r"--grid-inset\s*:\s*(\d+)px", theme_code)
@@ -309,7 +310,7 @@ def c_shared_css():
     return "거는 쪽이 둘 이상인 구역 파일 (CSS·JS)", n, hits, LOOK, (지시, "「같이쓴다」 (2026-10-01) — 고치면 거는 화면 전부를 보고 다른 쪽 세션에 먼저 알린다")
 
 def c_main_guard():
-    """메인 자리는 재권님 허락 없이 건드리지 않는다 (2026-10-01 지시) — 장치가 조용히 꺼지는 것을 잡는다.
+    """개발 · 메인 자리는 재권님 허락 없이 건드리지 않는다 (2026-10-01 지시) — 장치가 조용히 꺼지는 것을 잡는다.
 
     훅 등록(settings.json) · 훅 파일 · 스킬 · deny 셋이 **다 있어야** 한다. 하나라도 빠지면 위반.
     2026-10-01 17:4x 에 한 세션이 메인 8765 의 market.db 를 쓰기 모드로 열어 journal_mode 가 바뀌었다.
@@ -328,8 +329,8 @@ def c_main_guard():
         hits.append(".claude/skills/main-guard/SKILL.md 가 없다")
     deny = st.get("permissions", {}).get("deny", [])
     if not any("install.command 8765" in x for x in deny) or not any(x.endswith("kr.kjcstudio.kis-proxy)") for x in deny):
-        hits.append(".claude/settings.json deny 에 메인 자리 항목(install.command 8765 · launchctl 메인)이 없다")
-    return "메인 자리 안전장치가 빠짐", n, hits, BAD, (지시, "「메인쪽은 내 허락없이 절대 건들면 안되는곳이야 안정장치를 여러개 만들어줘」 (2026-10-01)")
+        hits.append(".claude/settings.json deny 에 개발 · 메인 자리 항목(install.command 8765 · launchctl 개발 서버)이 없다")
+    return "개발 · 메인 자리 안전장치가 빠짐", n, hits, BAD, (지시, "「메인쪽은 내 허락없이 절대 건들면 안되는곳이야 안정장치를 여러개 만들어줘」 (2026-10-01)")
 
 def c_main_ok_log():
     """KJC_MAIN_OK=1 을 쓴 기록 — 허락은 기계가 못 보니 **몇 번 썼는지**를 「봐야 할 자리」 로 낸다 (작업우선순위 · 홈페이지_정리 검토)."""
@@ -643,9 +644,51 @@ def c_same_source():
     return "서버와 같은 바깥 출처를 따로 받는 곳", n, hits, LOOK, (지시, "「홀딩스와 인사이트에 중복된 값들 … 룰 잡아봐」 (2026-10-14) — 받는 곳은 서버 하나")
 
 
+OLD_PLACE = re.compile("메인서버|메인 폴더|메인 DB|서비스방")
+
+
+def _unquoted(line):
+    """「…」(겹쳐도) · 백틱 안을 뺀 글. 인용 · 절 참조 · 코드 이름은 옛 이름 그대로 둔다."""
+    out, depth, tick = [], 0, False
+    for ch in line:
+        if ch == "`" and depth == 0:
+            tick = not tick
+            continue
+        if not tick and ch == "「":
+            depth += 1
+            continue
+        if not tick and ch == "」" and depth:
+            depth -= 1
+            continue
+        if not tick and not depth:
+            out.append(ch)
+    return "".join(out)
+
+
+def c_old_place_names():
+    """자리 이름 — 메인 = 회사 페이지(8764) · 개발 서버 = 8765 (2026-11-03 지시) — 옛 이름이 남은 자리를 센다.
+    범위는 룰 문서(CLAUDE.md 꼴) · 스킬 · 도구 글. 「…」 · 백틱 · 「>」 인용 줄은 뺀다. 「메인」 단독은 뜻이 둘이라 안 센다."""
+    hits, n = [], 0
+    me = os.path.relpath(os.path.abspath(__file__), ROOT).replace("\\", "/")
+    for p in walk(".md", ".py"):
+        name = os.path.basename(p)
+        if p == me:
+            continue
+        if not (name == "CLAUDE.md" or p.startswith(".claude/skills/") or (p.startswith("tools/") and p.endswith(".py"))):
+            continue
+        n += 1
+        for i, line in enumerate(rd(os.path.join(ROOT, p)).split("\n"), 1):
+            if line.lstrip().startswith(">"):
+                continue
+            m = OLD_PLACE.search(_unquoted(line))
+            if m:
+                hits.append("%s:%d — %s" % (p, i, m.group(0)))
+    return "옛 자리 이름(메인서버 · 메인 폴더 · 메인 DB · 서비스방)", n, hits, LOOK, (지시, "「회사페이지를 메인이라 하고 기존의 메인은 개발이라 정정 하자」 (2026-11-03) — 인용 · 백틱 안은 그대로")
+
+
 CHECKS = [c_bat_nonascii, c_py_encoding, c_send_error_korean,
           c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec, c_nav_gutter, c_shared_css, c_main_guard, c_main_ok_log, c_screen_timers,
-          c_glossary, c_glossary_copy, c_same_source]
+          c_glossary, c_glossary_copy, c_same_source, c_old_place_names]
 
 
 def main():

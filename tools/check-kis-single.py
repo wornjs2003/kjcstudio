@@ -6,7 +6,7 @@
 **셋을 본다.** 대상 개수를 함께 낸다 — 「대상 0개」 를 `0` 으로 내지 않는다.
 
     a. 토큰 캐시   `git worktree list` 의 폴더마다 `holdings/.kis-token-cache.json` 을 보고,
-                  **메인 폴더 밖의 것이 8765 기동 뒤에 갱신됐으면** 위반.
+                  **개발 폴더 밖의 것이 8765 기동 뒤에 갱신됐으면** 위반.
                   옛 파일이 남은 것은 위반이 아니다 — 지울 필요가 없다.
                   ⚠️ 8765 가 죽어 폴백이 돌면 그때도 생긴다. 살아 있는 서버의
                   `stats.upstreamFallbacks` 와 함께 읽는다 (아래 d).
@@ -19,7 +19,7 @@
     d. 살아 있는 서버  `/api/kis/stats` 에 `upstream` 이 있으면 센다. 없으면 「아직」.
 
 **값을 박지 않는다.** 폴더는 `git worktree list` 로, plist 는 `launchd/` 글롭으로,
-변수 이름은 plist 에서 읽어 온다. 메인 폴더는 이 파일의 위치다.
+변수 이름은 plist 에서 읽어 온다. 개발 폴더는 이 파일의 위치다.
 """
 import glob
 import io

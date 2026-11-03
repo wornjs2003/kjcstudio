@@ -114,7 +114,7 @@ def main():
     reason = ("확인란에 파일 경로가 있습니다 — Herdr 는 파일 경로를 자기 뷰어로 열고 크롬으로 안 넘깁니다. "
               "CLAUDE.md 「그림 · 화면은 http 주소로 드린다」. 파일을 저장소 temp/ 에 두고 "
               "`http://localhost:<포트>/temp/<세션이름>-<무엇>.png` 꼴로 백틱에 감싸 다시 써 주십시오 "
-              "(메인 폴더 세션은 8765 · 외부접속이면 파일을 보내고 그 말은 본문에).\n"
+              "(개발 폴더 세션은 8765 · 외부접속이면 파일을 보내고 그 말은 본문에).\n"
               + "\n".join("  · " + h for h in hits[:5]))
     if MODE == "block":
         print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))

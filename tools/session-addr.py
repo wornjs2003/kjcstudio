@@ -5,7 +5,7 @@
 
 왜 끊기나 (2026-10-02 실측)
   SendMessage 의 이름(`kjcstudio-b4` 같은 것)은 **세션이 다시 뜰 때마다 바뀐다** — 개념정의가 아침 `kjcstudio-8c`
-  에서 재시작 뒤 `kjcstudio-b4` 가 됐다. 그 이름에는 세션 이름(개념정의 · qa …)이 없고, 메인 폴더 창 넷은 겉으로
+  에서 재시작 뒤 `kjcstudio-b4` 가 됐다. 그 이름에는 세션 이름(개념정의 · qa …)이 없고, 개발 폴더 창 넷은 겉으로
   가를 수 없다. 옛 이름을 기억해 두고 보내면 **없는 이름**이라 안 가거나, 같은 폴더의 엉뚱한 세션에 간다.
 
 그래서 기억하지 않고 **그 자리에서 센다.**
@@ -64,7 +64,7 @@ def sid_of(pid, known=()):
       (known)가 후보에 있으면 그것을 쓴다. 없으면 --resume, 그것도 없으면 연 파일 중 가장 최근 것."""
     cands = []
     # **1순위 — Claude Code 가 프로세스마다 적는 ~/.claude/sessions/<pid>.json 의 sessionId** (2026-10-03).
-    # /clear 하면 여기가 새 id 로 바뀐다. --resume 은 처음 그대로라, 메인 폴더처럼 창이 여럿인 곳에서
+    # /clear 하면 여기가 새 id 로 바뀐다. --resume 은 처음 그대로라, 개발 폴더처럼 창이 여럿인 곳에서
     # /clear 한 창(개념정의 · 작업우선순위)이 「?(창 이름 없음)」 이 됐다(작업우선순위 09:0x 지적).
     try:
         with open(os.path.expanduser("~/.claude/sessions/%s.json" % pid), encoding="utf-8") as f:
@@ -146,7 +146,7 @@ def table():
         else:
             loose.append((pid, s, sid))
     # 못 맞춘 프로세스는 **같은 폴더에서 짝 없는 창이 하나뿐일 때만** 그 창으로 맞춘다 — 둘 이상이면 모른다고 둔다
-    # (메인 폴더처럼 창이 여럿인 곳은 짐작하지 않는다). 2026-10-02 개발1 /clear 뒤 이 길로 갈렸다
+    # (개발 폴더처럼 창이 여럿인 곳은 짐작하지 않는다). 2026-10-02 개발1 /clear 뒤 이 길로 갈렸다
     taken = set(best)
     rest = []
     for pid, s, sid in loose:
