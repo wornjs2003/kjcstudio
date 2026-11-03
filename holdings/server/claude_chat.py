@@ -47,7 +47,7 @@ TOOLS = "Read,Grep,Glob,WebSearch,WebFetch"
 SETTINGS = json.dumps({"disableAllHooks": True, "permissions": {"deny": [
     "Read(**/secrets*.json)", "Read(**/.kis-token-cache*)", "Read(**/*.db)", "Read(**/*.db-*)", "Read(**/logs/**)",
     "Read(**/holdings/data/**)", "Read(**/.env*)", "Read(~/.kjc/**)", "Read(~/.ssh/**)", "Read(~/.claude/**)",
-    "Read(//tmp/**)", "Read(//private/tmp/**)"]}})
+    "Read(//tmp/**)", "Read(//private/tmp/**)", "Read(**/.claude/settings*.json)", "Read(**/.git/**)"]}})
 AUTO_OK = ["WebSearch", "WebFetch"]   # 묻지 않고 쓰는 도구 — 파일 도구는 폴더 안만 저절로 된다
 
 PATH_ADD = ["/opt/homebrew/bin", os.path.expanduser("~/.local/bin"), "/usr/local/bin"]
