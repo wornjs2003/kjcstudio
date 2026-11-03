@@ -13,7 +13,6 @@ import { apiFetch, viewUrl } from './data/api.js';
 import { watch } from './store/longpoll.js';
 import { mountDraw } from './chart-draw.js';
 import { signClass } from '../../assets/js/sign.js';
-import { sessionMarks } from './data/sessions.js';
 
 /* 차트는 canvas 라 CSS 를 상속받지 못해 색을 문자열로 넘겨야 한다.
    그 값은 theme.js 가 ../assets/css/theme.css 에서 읽어 오므로, 색을 바꿀
@@ -904,8 +903,6 @@ export function createStockChart(container, candles, opts = {}) {
   let period = opts.period || 'D';
   /* 가격 눈금 소수 자리 — 국내 0 · 미국 2(달러 · 2026-10-07 나스닥100). 정수로 두면 미국 종목 눈금이 「244 · 244 · 243」 처럼 겹쳤다 */
   const priceDigits = opts.priceDigits || 0;
-  /* 나라별 장 여는 · 닫는 시각 세로선 — 부르는 쪽이 켤 때만(홈 큰 차트 · 2026-11-03 재권님 「안 1로 해줘」) · 분봉에서만 */
-  const showSessions = opts.sessions === true;
 
   container.classList.add('kh-panes');
 
@@ -1177,68 +1174,6 @@ export function createStockChart(container, candles, opts = {}) {
     vpLayer.innerHTML = out.join('');
   }
 
-  /* ── 나라별 장 여는 · 닫는 시각 세로선 (2026-11-03 재권님 「안 1로 해줘」) ──
-   * 시각 표와 한국 시각 셈은 data/sessions.js 한 곳(서머타임은 브라우저 시간대 표가 셈). 칸마다 맨 위에 층을 얹고
-   * (누르기는 안 받는다) 가격 칸에만 이름표를 단다. 봉이 없는 시각(장 사이 빈 자리)은 앞뒤 봉 사이에 비례로 둔다 —
-   * 마지막 봉 뒤는 같은 날일 때만 봉 간격으로 늘려 둔다. 칸 크기는 안 건드린다(층은 position: absolute). */
-  function drawSess() {
-    if (!panes.length) return;
-    const on = showSessions && MINUTE_PERIODS.has(period) && candles.length > 1;
-    const ts0 = panes[0].chart.timeScale();
-    let marks = [];
-    if (on) {
-      const tt = candles.map((c) => toChartTime(c.ts, period));
-      const dd = candles.map((c) => String(c.ts).slice(0, 8));
-      const days = [...new Set(dd)];
-      const step = tt[tt.length - 1] - tt[tt.length - 2];
-      const lastDay = days[days.length - 1];
-      const idxOf = (t, day) => {
-        if (t < tt[0]) return null;
-        let lo = 0, hi = tt.length - 1;
-        if (t > tt[hi]) return day === lastDay && step > 0 ? hi + (t - tt[hi]) / step : null;
-        while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (tt[mid] <= t) lo = mid; else hi = mid; }
-        if (tt[lo] === t) return lo;
-        if (tt[hi] === t) return hi;
-        if (dd[lo] !== day || dd[hi] !== day) return null;   // 밤사이 빈 자리(전날 마지막 봉 ~ 오늘 첫 봉)에는 긋지 않는다
-        return lo + (t - tt[lo]) / (tt[hi] - tt[lo]);
-      };
-      const xOf = (t, day) => {
-        const i = idxOf(t, day);
-        if (i == null) return null;
-        try { return ts0.logicalToCoordinate(i); } catch { return null; }
-      };
-      days.forEach((day) => {
-        sessionMarks([day]).forEach((m) => {
-          const x = xOf(m.t, day);
-          if (x == null) return;
-          const x2 = m.until != null ? xOf(m.until, day) : null;
-          marks.push({ x, x2, label: m.label });
-        });
-      });
-    }
-    panes.forEach((p, n) => {
-      let layer = p.el.querySelector(':scope > .kh-sess');
-      if (!on) { if (layer) layer.remove(); return; }
-      if (!layer) { layer = document.createElement('div'); layer.className = 'kh-sess'; p.el.insertBefore(layer, p.box); }   // 차트보다 먼저 — 매물대처럼 봉 뒤에 깔린다
-      const w = Math.max(0, p.el.clientWidth - AXIS_W);
-      layer.style.width = w + 'px';
-      layer.style.bottom = n === panes.length - 1 ? TIME_AXIS_H + 'px' : '0';
-      const out = [];
-      const end = [-1e9, -1e9];                       // 이름표 두 줄의 오른쪽 끝(어림) — 둘 다 막히면 그 이름표는 뺀다(선은 그대로)
-      marks.forEach((m) => {
-        if (m.x < 0 || m.x > w) return;
-        if (m.x2 != null && m.x2 > m.x) out.push(`<i class="kh-sess-b" style="left:${m.x.toFixed(1)}px;width:${(Math.min(m.x2, w) - m.x).toFixed(1)}px"></i>`);
-        out.push(`<i class="kh-sess-l" style="left:${m.x.toFixed(1)}px"></i>`);
-        if (n !== 0) return;
-        const row = m.x >= end[0] ? 0 : m.x >= end[1] ? 1 : -1;
-        if (row < 0) return;
-        end[row] = m.x + 6 + m.label.length * 10;    // 0.66rem 글자 하나 ≈ 10px(한글)
-        out.push(`<span class="kh-sess-t r${row}" style="left:${(m.x + 3).toFixed(1)}px">${m.label}</span>`);
-      });
-      layer.innerHTML = out.join('');
-    });
-  }
-
   /* ── 미래 영역(오른쪽 빈 자리의 옅은 파랑)은 2026-10-27 에 걷어냈다 ──
    * 재권님 「안 그려지는 곳 파랑은 없어도 될 것 같아」 · 「빈자리 파랑을 없애는거」(2026-09-29 「미래에 아직 안나온 값은
    * 파란색으로」 를 거둠). 오른쪽 빈 자리 폭은 RIGHT_EMPTY 가 정한다. 되살리려면 git 이력의 drawFuture · .kh-fut */
@@ -1250,7 +1185,7 @@ export function createStockChart(container, candles, opts = {}) {
     vpTimer = setInterval(() => {
       if (document.hidden) return;           // 안 보이는 탭은 쉰다
       drawProfile();
-      drawCloud(); drawSess();
+      drawCloud();
     }, VP_REFRESH_MS);
   }
 
@@ -1466,7 +1401,7 @@ export function createStockChart(container, candles, opts = {}) {
     }
 
     drawProfile();          // 매물대도 새 축에 맞춰 다시 그린다
-    drawCloud(); drawSess();            // 일목 구름도
+    drawCloud();            // 일목 구름도
     /* 라이브러리가 나중에 제 계산을 밀어넣으므로 한 박자 뒤에 잰다 */
     requestAnimationFrame(() => checkScale(scaleBefore));
 
@@ -1695,7 +1630,7 @@ export function createStockChart(container, candles, opts = {}) {
         /* 봉이 움직이면 매물대도 그 자리에서 따라간다. 2초를 기다리면
            띠와 봉이 어긋나 보인다 (2026-09-18). */
         drawProfile();
-        drawCloud(); drawSess();
+        drawCloud();
       });
 
       ch.subscribeCrosshairMove((param) => {
@@ -1723,8 +1658,8 @@ export function createStockChart(container, candles, opts = {}) {
     /* 봉이 자리를 잡은 뒤에 세로 범위를 굳힌다. 그려지기 전에 재면 값이 없다 */
     lockPriceRange();
     drawProfile();
-    drawCloud(); drawSess();
-    requestAnimationFrame(() => { lockPriceRange(); drawProfile(); drawCloud(); drawSess(); });
+    drawCloud();
+    requestAnimationFrame(() => { lockPriceRange(); drawProfile(); drawCloud(); });
     startProfileLoop();
     checkAlign();
   }

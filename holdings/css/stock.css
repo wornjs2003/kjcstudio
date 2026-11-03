@@ -342,17 +342,6 @@
 }
 .kh-vp-t.is-now { color: var(--kh-up); font-weight: 700; }
 
-/* ── 나라별 장 여는 · 닫는 시각 세로선 (2026-11-03 재권님 「안 1로 해줘」) ──
-   매물대처럼 봉 뒤에 깔린다(chart.js drawSess). 폭 · 아래 끝은 코드가 가격축 · 시간축 자리를 빼고 준다. */
-.kh-sess { position: absolute; left: 0; top: 0; bottom: 0; z-index: 0; pointer-events: none; overflow: hidden; }
-.kh-sess-l { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--kh-text-secondary); opacity: .45; }
-.kh-sess-b { position: absolute; top: 0; bottom: 0; background: var(--kh-text-secondary); opacity: .07; }
-.kh-sess-t {
-  position: absolute; top: 56px; white-space: nowrap;   /* 위 두 줄(시고저종 · 이동평균 범례) 아래 */
-  font-size: 0.66rem; font-weight: 600; color: var(--kh-text-secondary);
-}
-.kh-sess-t.r1 { top: 70px; }
-
 /* 미래 영역(.kh-fut · 오른쪽 빈 자리 옅은 파랑)은 2026-10-27 에 걷어냈다 — chart.js 의 RIGHT_EMPTY 주석 */
 
 /* 칸 이름표 — 그림 위에 겹친다. 닫기 · 이름 · 지금 값 */
