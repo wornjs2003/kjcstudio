@@ -13,6 +13,8 @@
     python3 tools/shot.py <주소> <저장할 png>                       재권님 창 크기로
     python3 tools/shot.py <주소> <저장할 png> --phone               폰(390×844)
     python3 tools/shot.py <주소> <저장할 png> --phone --tall 2100   폰 화면을 세로로 길게
+    python3 tools/shot.py <주소> <저장할 png> --full                재권님 창 폭 그대로 · 페이지 끝까지(창 높이는 안 바꾼다)
+    python3 tools/shot.py <주소> <저장할 png> --tall 2400           재권님 창 폭 그대로 · 창 높이만 늘려서
     python3 tools/shot.py <주소> <저장할 png> --webgl               3D · 지구본처럼 WebGL 로 그리는 화면
     python3 tools/shot.py <주소> <저장할 png> --wait 8              다 그려지기를 더 기다린다(초 · 기본 3)
     python3 tools/shot.py --size                                    지금 기준 크기만 보기
@@ -23,6 +25,12 @@
 **크롬을 디버깅 포트로 직접 조종한다** (`tools/check-layout.py` 와 같은 길). 첫 판은 `--screenshot` 한 줄로 찍었는데,
 홀딩스가 롱폴링으로 서버 연결을 계속 열어 두어 **찍은 뒤에도 크롬이 안 끝나 30~90초씩 걸리고 가끔 실패했다**
 (2026-10-06 실측). 지금은 열고 → 다 그려질 때까지(그림 칸 수 · 문서 높이가 1초 동안 그대로) 기다리고 → 찍고 → 닫는다.
+
+**길게 찍어도 폭은 바꾸지 않는다 (2026-11-03 재권님 「이전이랑 크기를 왜 맘대로 바꿔서 보기 힘들게」 → 「응 고쳐」).**
+그 전에는 `--tall` 이 `--phone` 에서만 먹어, 긴 페이지를 한 장에 담으려면 폭을 390 으로 바꿀 수밖에 없었다.
+`--full` 은 창은 그대로 두고 페이지 끝까지 찍는다(창 높이를 바꾸면 `vh` 로 짠 칸이 다시 배치된다 — 그래서 이쪽을 권한다).
+**같은 계열 그림(이름 끝 숫자만 다른 `tg` · `tg2` · 같은 이름 다시 찍기)의 폭이 앞 그림과 다르면 알린다** — 막지 않는다.
+폭을 바꿔야 하면 재권님께 먼저 말씀드린다(「찍는 창 크기도 창 크기다」). 세로 길이는 글 길이로 늘 바뀌니 안 센다.
 
 종료 — 0 찍음 · 2 못 찍음(기준 크기를 아직 안 쟀다 · 크롬 없음 · 서버 없음). **2 를 「찍었다」 로 읽지 않는다.**
 스크롤바는 숨기지 않는다 — 재권님 화면과 조건이 가깝다(check-layout 과 같은 이유).
@@ -98,6 +106,44 @@ def viewer(out, tall):
         print("보기: %s   ← temp/ 밖이라 http 주소가 없다 — 재권님께 드릴 그림은 temp/ 에 찍는다" % page)
 
 
+def png_size(path):
+    """PNG 머리에서 (폭, 높이) 픽셀. 못 읽으면 None."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(24)
+        if head[:8] != b"\x89PNG\r\n\x1a\n":
+            return None
+        return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+    except Exception:
+        return None
+
+
+def series_before(out):
+    """같은 계열의 앞 그림 (경로, (폭, 높이)) — 같은 이름을 다시 찍으면 덮이기 전 그것, 아니면 이름 끝 숫자만 다른 것 중 가장 최근.
+    없으면 None. 계열은 이름 끝 숫자를 뗀 것으로 가른다(`시황분석-tg2` → `시황분석-tg`)."""
+    if os.path.exists(out):
+        s = png_size(out)
+        return (out, s) if s else None
+    base = os.path.dirname(out)
+    key = os.path.splitext(os.path.basename(out))[0].rstrip("0123456789").rstrip("-_")
+    if not key:
+        return None   # 이름이 숫자뿐(1.png)이면 계열을 못 가른다 — 남의 숫자 그림과 묶지 않는다 (qa 11-03)
+    best = None
+    try:
+        names = os.listdir(base)
+    except Exception:
+        return None
+    for n in names:
+        stem, ext = os.path.splitext(n)
+        if ext.lower() != ".png" or stem.rstrip("0123456789").rstrip("-_") != key:
+            continue
+        p = os.path.join(base, n)
+        s = png_size(p)
+        if s and (best is None or os.path.getmtime(p) > best[2]):
+            best = (p, s, os.path.getmtime(p))
+    return (best[0], best[1]) if best else None
+
+
 def arg(argv, name, default=None):
     return argv[argv.index(name) + 1] if name in argv and argv.index(name) + 1 < len(argv) else default
 
@@ -111,16 +157,20 @@ def main(argv):
         print("기준 창 크기:", ("%d × %d · 배율 %s (%s)" % (size[0], size[1], view_dpr(), SIZE_FILE)) if size else "**아직 안 쟀다**")
         return 0 if size else 2
     if len(argv) < 2:
-        print("쓰는 법: python3 tools/shot.py <주소> <저장할 png> [--phone] [--webgl] [--wait 초]")
+        print("쓰는 법: python3 tools/shot.py <주소> <저장할 png> [--phone] [--full] [--tall 높이] [--webgl] [--wait 초]")
         return 2
     url, out = argv[0], os.path.abspath(argv[1])
     phone = "--phone" in argv
     dpr = 1.0 if phone else view_dpr()
+    full = "--full" in argv
     if phone:
         size = (PHONE[0], int(arg(argv, "--tall", PHONE[1])))
     if not size:
         print("✗ 못 찍음 — 재권님 창 크기를 아직 안 쟀다(%s 없음). 개념정의에 알리십시오." % SIZE_FILE)
         return 2
+    if not phone and "--tall" in argv:
+        size = (size[0], int(arg(argv, "--tall", size[1])))   # 폭은 재권님 창 그대로 · 높이만
+    before = series_before(out)
     if not CL.CHROME:
         print("✗ 못 찍음 — 크롬을 못 찾았다(KJC_CHROME 으로 줄 수 있다)")
         return 2
@@ -180,14 +230,27 @@ def main(argv):
                 still = 0
             last = st
         time.sleep(wait)
-        r = call("Page.captureScreenshot", {"format": "png"})
+        shot = {"format": "png"}
+        h = size[1]
+        if full:
+            # 창은 그대로 두고 문서 끝까지 — 창 높이를 바꾸면 vh 로 짠 칸이 다시 배치된다
+            h = max(int(js("Math.max(document.documentElement.scrollHeight, document.body.scrollHeight)") or size[1]), size[1])
+            shot.update({"captureBeyondViewport": True,
+                         "clip": {"x": 0, "y": 0, "width": size[0], "height": h, "scale": 1}})
+        r = call("Page.captureScreenshot", shot)
         data = r.get("result", {}).get("data")
         if not data:
             print("✗ 못 찍음 — 크롬이 그림을 안 줬다")
             return 2
         open(out, "wb").write(base64.b64decode(data))
-        print("찍음: %s · %d × %d · 배율 %s%s" % (out, size[0], size[1], dpr, " (폰)" if phone else " (재권님 창)"))
-        viewer(out, "--tall" in argv)
+        print("찍음: %s · %d × %d%s · 배율 %s%s" % (out, size[0], h, " (페이지 끝까지)" if full else "", dpr,
+                                                  " (폰)" if phone else " (재권님 창)"))
+        now = png_size(out)
+        if before and now and before[1][0] != now[0]:
+            print("⚠ 앞 그림과 폭이 다릅니다 — %s 는 %d × %d 였고 이번은 %d × %d (픽셀)."
+                  % (os.path.basename(before[0]), before[1][0], before[1][1], now[0], now[1]))
+            print("  폭을 바꿨으면 재권님께 먼저 말씀드립니다. 긴 페이지는 --full 이 폭을 안 바꿉니다(「찍는 창 크기도 창 크기다」).")
+        viewer(out, "--tall" in argv or full)
         return 0
     except urllib.error.URLError:
         print("✗ 못 찍음 — 서버가 없다")
