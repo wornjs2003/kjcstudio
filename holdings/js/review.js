@@ -24,6 +24,7 @@ import { brandColor, WATCHLIST } from './data/market.js';
 import { apiFetch } from './data/api.js';
 import { side as dirOf, signClass } from '../../assets/js/sign.js';
 import { legCost, sumCosts } from './data/trade-costs.js';
+import { openModal } from './components/modal.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -260,6 +261,96 @@ const feeS = (f) => (f == null ? '— (율 미정)' : f.toLocaleString('ko-KR') 
 const taxS = (c) => (c.taxes ? c.taxes.map(([n, v]) => `${n} ${v.toLocaleString('ko-KR')}원`).join(' · ') : '세금 — (시장 모름)');
 const costLine = (c) => `<span>시세차익 ${wonS(c.gross)} · ${taxS(c)} · 수수료 ${feeS(c.fee)}</span>`;
 
+/* ── 수익금 모아 보기 — 「수익금」 단추가 여는 모달 (2026-11-03 재권님 「창의 비율이 달라지지 않는 상태에서 봐야해 ·
+   1일 5일 한달 은 내가 기간 정하면 그 기간안에 수익금과 수익률이 나와야 하고 종목을 소팅할수 있도록」).
+   달력 · 쓰는 칸 배치는 건드리지 않는다. 기간 끝은 고른 날(pick) — 1일 · 5일(평일 다섯) · 1달 · 직접(시작 · 끝).
+   수익금은 기록의 시세차익(pnl · 매매 줄이 있으면 세금 · 수수료 뺀 값) · 차익이 빈 기록은 빼고 몇 건인지 적는다(없음을 0 으로 세지 않는다).
+   수익률은 매수 금액을 아는 기록(매매 줄)만으로 — 수익금 합 ÷ 매수 금액 합. 그런 기록이 없으면 — */
+const STAT_PERIODS = [['1d', '1일'], ['5d', '5일'], ['1m', '1달'], ['custom', '직접']];
+let stat = { p: '1m', from: '', to: '', sort: 'pnl', dir: -1 };
+const isoOf = (y) => `${y.slice(0, 4)}-${y.slice(4, 6)}-${y.slice(6, 8)}`;
+const ymdOfIso = (s) => String(s || '').replace(/-/g, '');
+function statRange() {
+  if (stat.p === 'custom') return [ymdOfIso(stat.from), ymdOfIso(stat.to)];
+  const end = pick;
+  if (stat.p === '1d') return [end, end];
+  if (stat.p === '5d') {
+    let d = end, n = fromYmd(d).getDay() % 6 ? 1 : 0;
+    while (n < 5) { d = addDays(d, -1); if (fromYmd(d).getDay() % 6) n += 1; }
+    return [d, end];
+  }
+  const e = fromYmd(end), s = new Date(e.getFullYear(), e.getMonth() - 1, e.getDate() + 1);
+  return [ymd(s), end];
+}
+const buyAmtOf = (t) => (Array.isArray(t.legs) ? t.legs.reduce((a, l) => {
+  const c = legCost(numOf(l.buy), numOf(l.sell), numOf(l.qty), 'KOSPI');   // 시장은 매수 금액에 안 든다
+  return c ? a + c.buyAmt : a; }, 0) : 0);
+function tally(list) {
+  const p = list.filter((t) => numOf(t.pnl) != null);
+  const v = p.map((t) => numOf(t.pnl));
+  const known = p.filter((t) => buyAmtOf(t) > 0);
+  const kSum = known.reduce((a, t) => a + numOf(t.pnl), 0), kBuy = known.reduce((a, t) => a + buyAmtOf(t), 0);
+  return { n: list.length, blank: list.length - p.length, sum: v.length ? v.reduce((a, x) => a + x, 0) : null,
+    win: v.filter((x) => x > 0).length, loss: v.filter((x) => x < 0).length,
+    pct: kBuy > 0 ? (kSum / kBuy) * 100 : null, pctN: known.length };
+}
+const pnlB = (v) => `<b class="${v == null ? 'kh-mut' : signClass(v)}">${v == null ? '—' : wonS(v)}</b>`;
+const pctB = (v) => `<b class="${v == null ? 'kh-mut' : signClass(v)}">${v == null ? '—' : pctS(+v.toFixed(2))}</b>`;
+function statsHtml() {
+  const [a, b] = statRange();
+  const okRange = /^\d{8}$/.test(a) && /^\d{8}$/.test(b) && a <= b;
+  const list = okRange ? doc.trades.filter((t) => t.d >= a && t.d <= b) : [];
+  const all = tally(list);
+  const by = new Map();
+  list.forEach((t) => { const k = t.code || t.name || ''; if (!by.has(k)) by.set(k, []); by.get(k).push(t); });
+  const key = { name: (r) => nameOf(r.t), pnl: (r) => r.s.sum, pct: (r) => r.s.pct, n: (r) => r.s.n }[stat.sort];
+  const rows = [...by.values()].map((ts) => ({ t: ts[0], s: tally(ts) })).sort((x, y) => {
+    const u = key(x), w = key(y);
+    if (u == null && w == null) return 0;
+    if (u == null) return 1;                       // 빈 값은 늘 아래
+    if (w == null) return -1;
+    return (typeof u === 'string' ? u.localeCompare(w, 'ko') : u - w) * stat.dir;
+  });
+  const th = (k, label) => `<button type="button" class="rv-sm-th${stat.sort === k ? ' is-on' : ''}" data-sort="${k}">${label}${stat.sort === k ? (stat.dir < 0 ? ' ▼' : ' ▲') : ''}</button>`;
+  return `<div class="rv-sm-per">${STAT_PERIODS.map(([k, l]) => `<button type="button" class="rv-sm-p${stat.p === k ? ' is-on' : ''}" data-per="${k}">${l}</button>`).join('')}
+      <input type="date" id="rv-sm-from" value="${okRange || stat.p === 'custom' ? isoOf(a || pick) : ''}" />
+      <span>–</span><input type="date" id="rv-sm-to" value="${okRange || stat.p === 'custom' ? isoOf(b || pick) : ''}" /></div>
+    ${okRange ? '' : '<div class="rv-sm-note">시작일이 끝일보다 뒤입니다 — 기간을 다시 골라 주십시오</div>'}
+    <div class="rv-sm-sum">
+      <div><span>수익금</span>${pnlB(all.sum)}</div>
+      <div><span>수익률</span>${pctB(all.pct)}</div>
+      <div><span>기록</span><b>${all.n}</b></div>
+      <div><span>이익 · 손해</span><b>${all.win} · ${all.loss}</b></div>
+    </div>
+    <div class="rv-sm-note">${all.blank ? `차익 빈 기록 ${all.blank}건은 수익금에서 뺌 · ` : ''}수익률은 매수가 · 수량을 적은 기록 ${all.pctN}건으로 셈</div>
+    <div class="rv-sm-tb">
+      <div class="rv-sm-row rv-sm-hd">${th('name', '종목')}${th('pnl', '수익금')}${th('pct', '수익률')}${th('n', '건수')}</div>
+      ${rows.map(({ t, s }) => `<div class="rv-sm-row"><span class="rv-sm-nm">${iconHtml(stockOf(t))}${esc(nameOf(t))}</span>${pnlB(s.sum)}${pctB(s.pct)}<span class="rv-sm-n">${s.n}</span></div>`).join('')
+        || '<div class="rv-sm-empty">이 기간에 적은 기록이 없습니다</div>'}
+    </div>`;
+}
+const statSub = () => { const [a, b] = statRange(); return /^\d{8}$/.test(a) && /^\d{8}$/.test(b) ? (a === b ? dayLabel(a) : `${dayLabel(a)} – ${dayLabel(b)}`) : ''; };
+function openStats() {
+  const m = openModal({ label: '수익금 모아 보기', width: 720, fade: false, head: { name: '수익금 모아 보기', sub: statSub() } });
+  const draw = () => { m.body.innerHTML = `<div class="rv-sm">${statsHtml()}</div>`; m.head?.setSub?.(statSub()); };
+  m.body.addEventListener('click', (e) => {
+    const per = e.target.closest('[data-per]'), so = e.target.closest('[data-sort]');
+    if (per) {
+      if (per.dataset.per === 'custom') { const [a, b] = statRange(); stat.from = stat.from || isoOf(a); stat.to = stat.to || isoOf(b); }
+      stat.p = per.dataset.per; draw();
+    } else if (so) {
+      const k = so.dataset.sort;
+      stat.dir = stat.sort === k ? -stat.dir : (k === 'name' ? 1 : -1); stat.sort = k; draw();
+    }
+  });
+  m.body.addEventListener('change', (e) => {
+    if (e.target.id === 'rv-sm-from' || e.target.id === 'rv-sm-to') {
+      stat.p = 'custom'; stat.from = $('#rv-sm-from', m.body).value; stat.to = $('#rv-sm-to', m.body).value; draw();
+    }
+  });
+  draw();
+}
+
 function paintTitle() {
   const d = fromYmd(pick);
   let t;
@@ -390,6 +481,7 @@ function move(dir) {
   keepView(); paint();
 }
 document.querySelectorAll('[data-move]').forEach((b) => b.addEventListener('click', () => move(Number(b.dataset.move))));
+$('#rv-stats-open').addEventListener('click', openStats);
 $('#rv-today').addEventListener('click', () => { pick = todayYmd(); dayChanged(); keepView(); paint(); });
 $('#rv-seg').addEventListener('click', (e) => {
   const b = e.target.closest('[data-view]');
