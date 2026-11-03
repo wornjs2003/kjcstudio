@@ -179,6 +179,15 @@ def compose(data, ai):
     L = ["🇺🇸 미국장 섹터 정리 · %s 마감" % title_day, "━━━━━━━━━━━━━━"]
     if ai.get("headline"):
         L.append("📌 " + ai["headline"])
+    # 한국장 볼 것은 맨 위 — 야간선물 · 해석 세 줄(재권님 「야간 선물은 맨위쪽으로」 · 「한국장에서 볼것 이걸 다 맨 위로」 11-03)
+    L += ["", "🇰🇷 한국장 볼 것"]
+    nf = data.get("night") or {}
+    v = nf.get("changePct")
+    if isinstance(nf.get("price"), (int, float)):
+        L.append("🌙 %s 코스피200 야간선물 %.2f %s%s" % (dot(v), nf["price"], pct(v), "" if nf.get("open") else "  (마감)"))
+    else:
+        L.append("🌙 ⚪ 코스피200 야간선물 — 못 받음")
+    L.extend("%s %s" % ("①②③④⑤"[i] if i < 5 else "·", k) for i, k in enumerate(ai.get("korea") or []))
     L += ["", "📊 지수"]
     for k, n in (("SPX", "S&P500"), ("NASDAQ", "나스닥"), ("SOX", "반도체지수"), ("VIX", "VIX")):
         v = (idx.get(k) or {}).get("changePct")
@@ -209,15 +218,6 @@ def compose(data, ai):
     if mid:
         L += ["", "📋 그 밖"]
         L.extend("%s %s %s" % (dot(x.get("pct")), x["name"], pct(x.get("pct"))) for x in mid)
-    L += ["", "🇰🇷 한국장 볼 것"]
-    nf = data.get("night") or {}
-    v = nf.get("changePct")
-    if isinstance(nf.get("price"), (int, float)):
-        L.append("%s 코스피200 야간선물 %.2f %s%s" % (dot(v), nf["price"], pct(v), "" if nf.get("open") else "  (마감)"))
-    else:
-        L.append("⚪ 코스피200 야간선물 — 못 받음")
-    if ai.get("korea"):
-        L.extend("%s %s" % ("①②③④⑤"[i] if i < 5 else "·", k) for i, k in enumerate(ai["korea"]))
     srcs = []
     for x in s[:PICK] + s[-PICK:]:
         u = (why.get(x["no"]) or {}).get("src")
