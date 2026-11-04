@@ -8440,6 +8440,14 @@ class Handler(SimpleHTTPRequestHandler):
                 return
 
             # 증권사 매매 상위 5 (2026-10-27 · `fetch_investor_member`)
+            # 순위표 섹터 — 종목 → WICS 이름 · 쥔 것만 · 뒤에서 채운다 (2026-11-04 · company_profile.py)
+            # 「sectors」 는 업종 지수 주소라 이름을 갈랐다
+            if route == "stock-sectors":
+                self._send_json({"ok": True, "data": company_profile.sectors(),
+                                 "meta": {"source": "네이버(FnGuide) WICS", "fill": company_profile.fill_status(),
+                                          "cacheTtl": company_profile.SECTOR_LIST_TTL}})
+                return
+
             if route == "investor-member":
                 code = (qs.get("code") or [""])[0].strip()
                 if not (code.isdigit() and len(code) == 6):
@@ -8813,6 +8821,9 @@ def main():
     if cfg and not SLOW:
         threading.Thread(target=lambda: (time.sleep(20), investor_board(cfg)), daemon=True,
                          name="investor-board-warm").start()
+
+    # 순위표 섹터 — 순위 목록의 WICS 를 뒤에서 한 종목씩 채운다 · 네이버만 · --slow 는 더 느리게 (2026-11-04)
+    company_profile.start_sector_fill(lambda: [r["stock_code"] for r in dart.universe_rows(None)], slow=SLOW)
 
     # 미국 종목 목록(나스닥100 · 거래소 코드) — 하루 한 번 · KIS 호출 없음 (2026-10-07)
     # 「지금 뜨는 산업」 국내 주간 · 월간 — 장 마감 뒤 하루 한 번 · 네이버만 (2026-10-08)
