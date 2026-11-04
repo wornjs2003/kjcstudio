@@ -132,6 +132,18 @@ def _run(prompt):
     return text, out.get("total_cost_usd")
 
 
+def precheck(question):
+    """자료를 꺼내기 전에 거를 것을 먼저 거른다 — 빈 물음 · 너무 긴 물음은 ValueError, 돌고 있으면 Busy.
+    (2026-11-04 qa — 거절될 물음에도 KIS · 네이버를 먼저 불렀다.) 잠금은 ask 가 다시 잡는다 — 그 사이에 끼면 거기서 Busy."""
+    question = (question or "").strip()
+    if not question:
+        raise ValueError("물음이 비었습니다")
+    if len(question) > MAX_QUESTION:
+        raise ValueError("물음은 %d 자까지입니다" % MAX_QUESTION)
+    if _lock.locked():
+        raise Busy("앞 물음에 답하는 중입니다 — 끝나면 다시 보내 주십시오")
+
+
 def ask(question, ctx=None, history=None, sources=None):
     """물음 하나 → {"text", "secs", "costUsd"}. sources 는 {자료 이름: 내용} — kis_proxy 가 페이지별 표로 고른다.
     돌고 있으면 Busy · 실패면 RuntimeError(문구는 가린 것)."""

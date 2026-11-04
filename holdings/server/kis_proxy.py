@@ -6800,13 +6800,16 @@ CLAUDE_DISCLOSURES = 10     # 종목 공시 몇 건
 
 
 def _claude_indices(cfg, ctx):
-    out = {}
+    out, fails = {}, 0
     for icode, iname in INDEX_DEFS[:2]:   # 코스피 · 코스닥 — 「오늘 시장」 물음의 바탕(2026-11-03 18:5x)
         try:
             v = fetch_index(cfg, icode)
             out[iname] = {k: v.get(k) for k in ("value", "change", "changePct", "high", "low", "up", "down")}
         except Exception as e:
             out[iname] = {"못 받음": safe_message(e, 80)}
+            fails += 1
+    if fails == len(out):   # 둘 다 못 받았으면 자료 전체가 「못 받음」 — data.sources 에 받은 것으로 세지 않게(2026-11-04 qa)
+        return {"못 받음": "; ".join("%s %s" % (n, v["못 받음"]) for n, v in out.items())}
     return out
 
 
@@ -6841,6 +6844,8 @@ def _claude_quote(cfg, ctx):
 
 def _claude_stock_news(cfg, ctx):
     rows, info = naver.news_related(ctx["code"])   # listed(받는 곳 목록 안 · 밖)는 press_tally 가 이미 붙였다
+    if not rows:
+        return []   # 빈 것은 claude_sources 가 「0건(읽음)」 으로 적는다
     return {"뉴스": [{k: r.get(k) for k in ("title", "office", "listed", "at", "url")} for r in rows[:CLAUDE_NEWS_STOCK]],
             "출처": "네이버(찾는 길)"}
 
@@ -6874,7 +6879,9 @@ def claude_sources(ctx):
         if need_code and not has_code:
             continue
         try:
-            out[name] = fn(cfg, dict(ctx, code=code))
+            v = fn(cfg, dict(ctx, code=code))
+            # 읽었는데 0건이면 그렇다고 적는다 — 빈 [] 로는 「없다」 와 「못 읽었다」 를 Claude 가 못 가른다(2026-11-04 qa)
+            out[name] = v if v not in ([], {}, None) else {"0건(읽음)": "읽었으나 해당하는 것이 없습니다"}
         except Exception as e:
             out[name] = {"못 받음": safe_message(e, 80)}
             print("[claude] %s 못 붙임 — %s" % (name, safe_message(e, 80)), flush=True)
@@ -7477,6 +7484,14 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json({"ok": False, "error": safe_message(e, 120)}, 400)
             return
         ctx = body.get("context") if isinstance(body.get("context"), dict) else {}
+        try:
+            claude_chat.precheck(body.get("question"))   # 거절될 물음이면 자료를 꺼내기 전에 돌려보낸다(2026-11-04 qa)
+        except ValueError as e:
+            self._send_json({"ok": False, "error": safe_message(e, 120)}, 400)
+            return
+        except claude_chat.Busy as e:
+            self._send_json({"ok": False, "error": str(e)}, 429)
+            return
         sources = claude_sources(ctx)   # 페이지별 표(CLAUDE_SOURCES)로 고른 서버 자료 — 2026-11-04
         try:
             data = claude_chat.ask(body.get("question"), ctx, body.get("history"), sources)
