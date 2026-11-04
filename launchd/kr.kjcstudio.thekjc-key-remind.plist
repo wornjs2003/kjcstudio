@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kr.kjcstudio.thekjc-key-remind</string>
+  <!-- thekjc.co.kr 앞문 서버 관리 열쇠 갱신 알림 — 달마다 1일 10:00 (2026-11-04 재권님 「1년단위로 갱신이 되도록」).
+       `tools/thekjc-front/admin-key.py remind --send` 가 메일로 보낸 지 1년(값은 그 도구의 RENEW_DAYS)이 넘었거나
+       보낸 기록이 없거나 · 보낸 뒤 갈고 다시 안 보냈으면 텔레그램 한 통. 아니면 아무것도 안 보낸다.
+       **--send 와 KJC_ROLE=server 가 함께 있을 때만 보낸다** — 알림은 개발 서버(8765) 자리에서만 나간다.
+       설치는 「켜기」(재권님 지시):
+           cp launchd/kr.kjcstudio.thekjc-key-remind.plist ~/Library/LaunchAgents/
+           launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/kr.kjcstudio.thekjc-key-remind.plist -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>-u</string>
+    <string>tools/thekjc-front/admin-key.py</string>
+    <string>remind</string>
+    <string>--send</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>KJC_ROLE</key>
+    <string>server</string>
+  </dict>
+  <key>WorkingDirectory</key>
+  <string>/Users/kjc/work/KJCStudio</string>
+  <key>StartCalendarInterval</key>
+  <dict><key>Day</key><integer>1</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/thekjc-key-remind.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/thekjc-key-remind.log</string>
+</dict>
+</plist>

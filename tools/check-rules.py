@@ -686,9 +686,47 @@ def c_old_place_names():
     return "옛 자리 이름(메인서버 · 메인 폴더 · 메인 DB · 서비스방)", n, hits, LOOK, (지시, "「회사페이지를 메인이라 하고 기존의 메인은 개발이라 정정 하자」 (2026-11-03) — 인용 · 백틱 안은 그대로")
 
 
+_KEY_HEAD = re.compile("-" * 5 + r"BEGIN (?:OPENSSH |RSA |EC |DSA )?PRIVATE KEY" + "-" * 5)   # 조각으로 적는다 — 이 파일 자신이 안 걸리게
+_BCRYPT = re.compile(r"\$2[aby]\$\d\d\$[./A-Za-z0-9]{53}")                                  # 비밀번호 해시 한 벌(60자) 전체만 — 낱말 언급은 안 걸린다
+
+
+def c_secret_in_repo():
+    """저장소(공개 GitHub)에 개인 열쇠 · 비밀번호 해시가 들어왔나 (2026-11-04 「thekjc.co.kr 앞문 서버」 룰).
+
+    룰이 「GitHub 에는 설정만」 이다 — 서버 설정 사본(`tools/thekjc-front/server/`)을 고치다 해시 한 줄이 따라 들어오는 날을
+    막는다(홈페이지_정리 검토). 범위는 장바구니에 담긴 것까지 포함한 추적 파일 전부(`git ls-files`) — 폴더를 박지 않는다.
+    """
+    name = "저장소에 개인 열쇠 · 비밀번호 해시"
+    try:
+        out = subprocess.run(["git", "ls-files", "-z"], capture_output=True, text=True, cwd=ROOT).stdout
+    except Exception:
+        return name, 0, [], BAD, (지시, "git ls-files 를 못 돌렸다")
+    hits, n = [], 0
+    for rel in out.split("\0"):
+        if not rel or any(s in "/" + rel for s in SKIP):
+            continue
+        p = os.path.join(ROOT, rel)
+        try:
+            if os.path.getsize(p) > 2_000_000:
+                continue
+            with open(p, "rb") as f:
+                raw = f.read()
+        except OSError:
+            continue
+        if b"\0" in raw[:4096]:
+            continue
+        n += 1
+        s = raw.decode("utf-8", "replace")
+        if _KEY_HEAD.search(s):
+            hits.append("%s — 개인 열쇠 머리" % rel)
+        if _BCRYPT.search(s):
+            hits.append("%s — 비밀번호 해시(bcrypt)" % rel)
+    return name, n, hits, BAD, (지시, "2026-11-04 재권님 「깃허브에서 백업」 — 설정만 · 열쇠 · 비밀번호는 두지 않는다(공개 저장소)")
+
+
 CHECKS = [c_bat_nonascii, c_py_encoding, c_send_error_korean,
           c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec, c_nav_gutter, c_shared_css, c_main_guard, c_main_ok_log, c_screen_timers,
-          c_glossary, c_glossary_copy, c_same_source, c_old_place_names]
+          c_glossary, c_glossary_copy, c_same_source, c_old_place_names, c_secret_in_repo]
 
 
 def main():
