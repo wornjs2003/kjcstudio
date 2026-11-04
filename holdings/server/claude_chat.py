@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""홀딩스 오른쪽 Claude 창 — 서버가 맥미니에 로그인된 claude 를 한 번씩 부른다.
+"""오른쪽 Claude 창(지금은 홀딩스 · 나중에 페이지 전체) — 서버가 맥미니에 로그인된 claude 를 한 번씩 부른다.
 
 2026-11-03 재권님 「홀딩스 창에 클로드 연결하기 위해 준비한 것들 있는데 이거 이제 연결해야 할 거 같아」 →
 길 둘((가) 맥미니 claude · (나) API 키)을 여쭈어 「가로 해줘 나중에 나를 고민해보자」.
@@ -24,6 +24,12 @@
   - **도구는 읽기만** — 파일 읽기 · 찾기 · 웹 검색 · 웹 읽기(TOOLS). 명령 실행 · 파일 고치기는 없다(목록에 없으면 못 쓴다)
   - 지수(코스피 · 코스닥)도 서버가 붙인다 — kis_proxy 가 indices 로 넘긴다
   - 창에서 답하는 법(맞는 룰을 찾아 따르고 근거를 붙인다)은 창 지침서(스킬)가 정한다 — 개념정의 몫 · 그 전까지는 SYSTEM 이 대신한다
+
+2026-11-04 바꿈 — 재권님 「응 그렇게 해」(정확도 보강) · 「결국은 페이지 전체에다가 넣을거라 그걸 고려해야」 → 「응 그렇게 해」.
+  - 서버가 쌓아 둔 자료(데일리 분석 요약 · 쌓인 시장 뉴스 · 종목 뉴스 · 공시)를 **이름 → 내용 묶음(sources)** 하나로 받는다.
+    무엇을 붙일지는 kis_proxy 의 페이지별 표(CLAUDE_SOURCES)가 정한다 — 페이지가 늘어도 이 파일은 안 고친다
+  - 못 받은 자료는 {"못 받음": 까닭} 으로 온다 — 빈 값을 「없음」 으로 넘기지 않는다
+  - 창 이름에 페이지를 박지 않는다 — 지금 보는 페이지는 화면이 보낸 context 가 알린다
 """
 
 import json
@@ -57,13 +63,16 @@ TIMEOUT = 300             # 초 — 이보다 오래 걸리면 끊고 「못 받
 MAX_QUESTION = 2000       # 글자 — 물음 한 번
 MAX_HISTORY = 12          # 앞 대화 몇 줄까지 함께 보내나(물음 · 답 한 줄씩)
 MAX_HISTORY_CHARS = 1500  # 앞 대화 한 줄의 글자 상한
+MAX_SOURCE_CHARS = 6000   # 자료 하나의 글자 상한 — 넘으면 자르고 「잘림」 을 적는다
 
 SYSTEM = (
-    "너는 KJC Holdings 주식 화면 오른쪽 창의 도우미다. 상대는 이 화면을 보는 재권님이다.\n"
+    "너는 KJC Studio 페이지 오른쪽 창의 도우미다. 상대는 이 페이지를 보는 재권님이다. 지금 보는 페이지는 아래 「화면」 의 「보는 화면」 이다.\n"
     "- 한국어로만, 존댓말로, 짧게 답한다. 표 · 제목(#) 같은 꾸밈 없이 문장과 줄바꿈만 쓴다.\n"
     "- 먼저 이 저장소의 룰(CLAUDE.md · holdings/CLAUDE.md · .claude/skills)에서 물음에 맞는 것을 찾아 그 룰대로 알아본다. 파일은 읽기만 한다.\n"
-    "- 시세 · 지수 숫자는 아래 「화면」 에 준 값(서버가 방금 받은 것)을 쓴다. 거기 없는 숫자는 지어내지 말고 「지금 받은 값에 없다」 고 말한다.\n"
-    "- 오늘 뉴스 · 까닭은 웹 검색으로 찾고, 확인한 기사 주소를 답 끝에 붙인다. 못 찾으면 못 찾았다고 말한다.\n"
+    "- 아래 「서버 자료」 는 이 서버가 받아 쌓아 둔 것이다(지수 · 시세 · 데일리 분석 · 뉴스 · 공시 등). 먼저 이것을 쓴다. "
+    "숫자는 여기 있는 값만 쓰고, 없는 숫자는 지어내지 말고 「지금 받은 값에 없다」 고 말한다. 「못 받음」 인 자료는 없는 것으로 친다.\n"
+    "- 뉴스의 listed 가 false 인 기사는 받는 곳 목록 밖 언론사다. 낮게 치고, 근거로 쓰면 「목록 밖 언론사」 라고 밝힌다.\n"
+    "- 서버 자료로 모자랄 때만 웹 검색으로 더 찾는다. 근거로 삼은 기사 · 공시 주소를 답 끝에 붙인다. 못 찾으면 못 찾았다고 말한다.\n"
     "- 답 끝에 근거로 삼은 룰이 있으면 그 절 이름을 한 줄로 적는다.\n"
     "- 너는 세션이 아니라 화면 옆 창이다. 세션끼리의 일(보드 카드 · 커밋 · 확인란 줄 · 「지금 답하실 것은 없습니다」)은 하지도 쓰지도 않는다.\n"
     "- 사라 · 팔라는 말은 하지 않는다. 판단 재료와 볼 점을 말한다."
@@ -84,15 +93,18 @@ def _claude():
     return p
 
 
-def _prompt(question, ctx, history, quote, indices=None):
-    screen = {"보는 화면": ctx or {}}
-    if indices:
-        screen["지수(서버가 방금 받은 값)"] = indices
-    if quote:
-        keep = ("price", "change", "changePct", "open", "high", "low", "volume", "value",
-                "marketCap", "per", "pbr", "eps", "bps", "high52", "low52")
-        screen["시세(서버가 방금 받은 값 · 원)"] = {k: quote.get(k) for k in keep if quote.get(k) is not None}
-    lines = ["화면:", json.dumps(screen, ensure_ascii=False)]
+def _source_text(name, value):
+    t = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+    if len(t) > MAX_SOURCE_CHARS:
+        t = t[:MAX_SOURCE_CHARS] + " …(잘림)"
+    return "[%s]\n%s" % (name, t)
+
+
+def _prompt(question, ctx, history, sources=None):
+    lines = ["화면:", json.dumps({"보는 화면": ctx or {}}, ensure_ascii=False)]
+    if sources:
+        lines.append("\n서버 자료:")
+        lines.extend(_source_text(k, v) for k, v in sources.items())
     talk = [h for h in (history or []) if isinstance(h, dict) and h.get("text")][-MAX_HISTORY:]
     if talk:
         lines.append("\n앞 대화:")
@@ -120,8 +132,9 @@ def _run(prompt):
     return text, out.get("total_cost_usd")
 
 
-def ask(question, ctx=None, history=None, quote=None, indices=None):
-    """물음 하나 → {"text", "secs", "costUsd"}. 돌고 있으면 Busy · 실패면 RuntimeError(문구는 가린 것)."""
+def ask(question, ctx=None, history=None, sources=None):
+    """물음 하나 → {"text", "secs", "costUsd"}. sources 는 {자료 이름: 내용} — kis_proxy 가 페이지별 표로 고른다.
+    돌고 있으면 Busy · 실패면 RuntimeError(문구는 가린 것)."""
     question = (question or "").strip()
     if not question:
         raise ValueError("물음이 비었습니다")
@@ -133,7 +146,7 @@ def ask(question, ctx=None, history=None, quote=None, indices=None):
     try:
         _stat["calls"] += 1
         try:
-            text, cost = _run(_prompt(question, ctx, history, quote, indices))
+            text, cost = _run(_prompt(question, ctx, history, sources))
         except Exception as e:
             _stat["fails"] += 1
             _stat["lastError"] = ("%d 초 안에 답이 안 왔습니다" % TIMEOUT

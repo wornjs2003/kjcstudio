@@ -6789,6 +6789,98 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
 
 # ---------------------------------------------------------------- HTTP 핸들러
 
+# ── Claude 창에 붙이는 서버 자료 — 페이지별 표 하나 (2026-11-04 · 재권님 「응 그렇게 해」 두 번) ──
+# 화면은 「어느 페이지 · 무엇을 보나 · 종목」 만 보내고, 무엇을 붙일지는 이 표가 정한다.
+# 창을 다른 페이지에 걸면(나중 · 따로 지시) 그 페이지 이름으로 한 줄을 더한다 — 무엇을 넘길지는 그 페이지 담당이 채운다.
+# 열쇠는 화면이 보내는 context.screen 그대로다(지금 홀딩스 첫 화면이 「홈」 을 보낸다).
+# 자료는 서버가 이미 받아 쌓는 것만 꺼낸다 — 새로 받는 길을 만들지 않는다. 못 꺼내면 {"못 받음": 까닭}.
+CLAUDE_NEWS_MARKET = 30     # 쌓인 시장 뉴스 묶음 몇 건
+CLAUDE_NEWS_STOCK = 15      # 종목 뉴스 몇 건
+CLAUDE_DISCLOSURES = 10     # 종목 공시 몇 건
+
+
+def _claude_indices(cfg, ctx):
+    out = {}
+    for icode, iname in INDEX_DEFS[:2]:   # 코스피 · 코스닥 — 「오늘 시장」 물음의 바탕(2026-11-03 18:5x)
+        try:
+            v = fetch_index(cfg, icode)
+            out[iname] = {k: v.get(k) for k in ("value", "change", "changePct", "high", "low", "up", "down")}
+        except Exception as e:
+            out[iname] = {"못 받음": safe_message(e, 80)}
+    return out
+
+
+def _claude_daily(cfg, ctx):
+    """오늘 데일리 분석 — 아침에 나간 요약 글(telegram 칸). 오늘 날짜 문서가 없으면 「못 받음」.
+    보드 상류가 있으면 거기서 읽는다(/api/board 와 같은 자리를 보게)."""
+    name = daily.doc_name(datetime.now(KST).replace(tzinfo=None))
+    up = board_upstream_base()
+    if up:
+        req = urllib.request.Request(up + "/api/board/doc/" + name, headers={"X-KJC-Prio": "low"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = (json.loads(r.read().decode("utf-8")) or {}).get("data")
+    else:
+        data = docstore.read_doc(name)
+    if not isinstance(data, dict) or not data.get("telegram"):
+        return {"못 받음": "오늘(%s) 데일리 분석 글이 아직 없습니다" % name[len(daily.DOC_PREFIX):]}
+    return {"쓴 시각": data.get("at"), "글": data.get("telegram")}
+
+
+def _claude_market_news(cfg, ctx):
+    rows = news_store.groups(hours=24, limit=CLAUDE_NEWS_MARKET)
+    return [{"제목": g.get("title"), "주소": g.get("link"), "갈래": g.get("topicLabel"), "시각": g.get("at"),
+             "출처": g.get("source"), "같은 사건 기사 수": g.get("more")} for g in rows]
+
+
+def _claude_quote(cfg, ctx):
+    q = fetch_price(cfg, ctx["code"])
+    keep = ("price", "change", "changePct", "open", "high", "low", "volume", "value",
+            "marketCap", "per", "pbr", "eps", "bps", "high52", "low52")
+    return {k: q.get(k) for k in keep if q.get(k) is not None}
+
+
+def _claude_stock_news(cfg, ctx):
+    rows, info = naver.news_related(ctx["code"])   # listed(받는 곳 목록 안 · 밖)는 press_tally 가 이미 붙였다
+    return {"뉴스": [{k: r.get(k) for k in ("title", "office", "listed", "at", "url")} for r in rows[:CLAUDE_NEWS_STOCK]],
+            "출처": "네이버(찾는 길)"}
+
+
+def _claude_disclosures(cfg, ctx):
+    rows = dart.read_disclosures(ctx["code"], CLAUDE_DISCLOSURES)
+    return [{k: r.get(k) for k in ("title", "filer", "date", "url")} for r in rows]
+
+
+CLAUDE_SOURCES = {
+    "*":  [("지수(서버가 방금 받은 값)", _claude_indices, False),
+           ("오늘 데일리 분석 요약", _claude_daily, False),
+           ("지난 24시간 쌓인 시장 뉴스", _claude_market_news, False)],
+    "홈": [("보는 종목 시세(서버가 방금 받은 값 · 원)", _claude_quote, True),
+           ("보는 종목 뉴스", _claude_stock_news, True),
+           ("보는 종목 공시", _claude_disclosures, True)],
+}   # (이름, 꺼내는 함수, 국내 종목 코드가 있어야 하나)
+
+
+def claude_sources(ctx):
+    """페이지별 표에서 자료를 골라 {이름: 내용} 으로. 하나가 터져도 나머지는 붙인다."""
+    code = str(ctx.get("code") or "").strip()
+    has_code = bool(code) and _code_ok(code) and not us_universe.is_us(code)
+    try:
+        cfg = load_secrets()
+    except Exception as e:
+        cfg = None
+        print("[claude] 열쇠 못 읽음 — %s" % safe_message(e, 80), flush=True)
+    out = {}
+    for name, fn, need_code in CLAUDE_SOURCES["*"] + CLAUDE_SOURCES.get(str(ctx.get("screen") or ""), []):
+        if need_code and not has_code:
+            continue
+        try:
+            out[name] = fn(cfg, dict(ctx, code=code))
+        except Exception as e:
+            out[name] = {"못 받음": safe_message(e, 80)}
+            print("[claude] %s 못 붙임 — %s" % (name, safe_message(e, 80)), flush=True)
+    return out
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=SITE_ROOT, **kwargs)
@@ -7361,8 +7453,8 @@ class Handler(SimpleHTTPRequestHandler):
         self._send_json({"ok": False, "error": "POST 는 /api/claude/ask 에만 됩니다."}, 405)
 
     def _handle_claude_ask(self):
-        """화면이 보낸 물음 · 보는 것 · 앞 대화에 **서버가 받은 시세**를 붙여 claude 에 묻는다.
-        시세는 화면 숫자를 옮기지 않고 서버 것을 쓴다 — 화면이 주면 두 벌이 된다. 못 받으면 시세 없이 묻는다.
+        """화면이 보낸 물음 · 보는 것 · 앞 대화에 **서버 자료**(페이지별 표 CLAUDE_SOURCES)를 붙여 claude 에 묻는다.
+        숫자는 화면 것을 옮기지 않고 서버 것을 쓴다 — 화면이 주면 두 벌이 된다. 못 받은 자료는 「못 받음」 으로 붙인다.
 
         **본문 종류가 application/json 이 아니면 415 로 돌려보낸다** (2026-11-03 개념정의 검수 권고) — text/plain 은 브라우저의
         「단순 요청」 이라 맥미니에서 연 아무 웹페이지가 미리 묻기(preflight) 없이 여기로 보내 claude 를 돌릴 수 있다(답은 못 읽어도
@@ -7385,26 +7477,9 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json({"ok": False, "error": safe_message(e, 120)}, 400)
             return
         ctx = body.get("context") if isinstance(body.get("context"), dict) else {}
-        code = str(ctx.get("code") or "").strip()
-        quote = None
-        indices = {}
+        sources = claude_sources(ctx)   # 페이지별 표(CLAUDE_SOURCES)로 고른 서버 자료 — 2026-11-04
         try:
-            cfg = load_secrets()
-            if code and _code_ok(code) and not us_universe.is_us(code):
-                try:
-                    quote = fetch_price(cfg, code)
-                except Exception as e:
-                    print("[claude] 시세 못 붙임 %s — %s" % (code, safe_message(e, 80)), flush=True)
-            for icode, iname in INDEX_DEFS[:2]:   # 코스피 · 코스닥 — 「오늘 시장」 물음의 바탕(2026-11-03 18:5x)
-                try:
-                    v = fetch_index(cfg, icode)
-                    indices[iname] = {k: v.get(k) for k in ("value", "change", "changePct", "high", "low", "up", "down")}
-                except Exception as e:
-                    print("[claude] 지수 못 붙임 %s — %s" % (iname, safe_message(e, 80)), flush=True)
-        except Exception as e:
-            print("[claude] 열쇠 못 읽음 — %s" % safe_message(e, 80), flush=True)
-        try:
-            data = claude_chat.ask(body.get("question"), ctx, body.get("history"), quote, indices)
+            data = claude_chat.ask(body.get("question"), ctx, body.get("history"), sources)
         except ValueError as e:
             self._send_json({"ok": False, "error": safe_message(e, 120)}, 400)
             return
@@ -7414,7 +7489,7 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as e:
             self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
             return
-        data["quoted"] = bool(quote)
+        data["sources"] = [k for k, v in sources.items() if not (isinstance(v, dict) and "못 받음" in v)]
         self._send_json({"ok": True, "data": data})
 
     def do_PUT(self):
