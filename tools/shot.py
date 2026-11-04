@@ -11,7 +11,7 @@
 찍기는 이 도구 하나로 한다. 창 크기를 명령에 직접 적으면 훅(`tools/hook-view-size.py`)이 막는다.
 
     python3 tools/shot.py <주소> <저장할 png>                       재권님 창 크기로
-    python3 tools/shot.py <주소> <저장할 png> --phone               폰(390×844)
+    python3 tools/shot.py <주소> <저장할 png> --phone               좁은 폭(390×844) · 배율은 재권님 창 높이로 센다
     python3 tools/shot.py <주소> <저장할 png> --phone --tall 2100   폰 화면을 세로로 길게
     python3 tools/shot.py <주소> <저장할 png> --full                재권님 창 폭 그대로 · 페이지 끝까지(창 높이는 안 바꾼다)
     python3 tools/shot.py <주소> <저장할 png> --tall 2400           재권님 창 폭 그대로 · 창 높이만 늘려서
@@ -21,6 +21,8 @@
 
 **찍으면 그림 옆에 `<이름>-보기.html` 을 함께 만든다** — 재권님께는 그 주소를 드린다(그림 그대로는 배율만큼 크게 보인다 ·
 「찍은 그림은 창에 맞춰 한눈에 보이게 드린다」 · 2026-10-14).
+**좁은 폭(`--phone`) 그림은 창 높이에 맞춘 폭으로 보이고, 흐리지 않게 배율을 올려 찍는다 (2026-11-04 재권님 「폰보기 화면이 너무 작아」).**
+배율은 `phone_dpr()` — 재권님 창 높이 × 배율 ÷ 좁은 폭 높이를 올림한다(2560×1359 · 1.5 창이면 3). 칸 배치를 셈하는 폭(390)은 그대로다.
 
 **크롬을 디버깅 포트로 직접 조종한다** (`tools/check-layout.py` 와 같은 길). 첫 판은 `--screenshot` 한 줄로 찍었는데,
 홀딩스가 롱폴링으로 서버 연결을 계속 열어 두어 **찍은 뒤에도 크롬이 안 끝나 30~90초씩 걸리고 가끔 실패했다**
@@ -38,6 +40,7 @@
 import base64
 import importlib.util
 import json
+import math
 import os
 import subprocess
 import sys
@@ -83,17 +86,30 @@ def view_dpr():
         return 1.0
 
 
-def viewer(out, tall):
+def phone_dpr():
+    """좁은 폭 그림의 찍기 배율 — 보기 페이지가 창 높이에 맞춰 키워도 흐리지 않을 만큼(2026-11-04).
+    재권님 창 높이(CSS) × 그 창의 배율 = 실제 픽셀 높이 · 그것을 좁은 폭 높이로 나눠 올림. 창 크기를 못 쟀으면 1."""
+    size = view_size()
+    if not size:
+        return 1.0
+    return float(max(1, math.ceil(size[1] * view_dpr() / PHONE[1])))
+
+
+def viewer(out, tall, phone=False):
     """찍은 그림 옆에 「창에 맞춰 보기」 페이지를 만든다 (2026-10-14 재권님 「화면보다 크게 해서 보여주는 이유가 뭐야?」 ·
     「한눈에 안들어오잖아」 → 룰 「찍은 그림은 창에 맞춰 한눈에 보이게 드린다」).
 
-    그림은 배율만큼 픽셀이 많아(재권님 창 1.5) 그대로 열면 화면보다 크게 보인다. 보기 페이지는 **줄이기만 하고 키우지 않는다**
-    (폰 그림을 넓은 창에서 키우면 또 「크다」). 창 크기 그림은 가로 · 세로 다 들어오게, `--tall` 은 가로만 맞추고 세로 스크롤.
+    그림은 배율만큼 픽셀이 많아(재권님 창 1.5) 그대로 열면 화면보다 크게 보인다. 창 크기 그림은 **줄이기만 한다** — 가로 · 세로 다 들어오게,
+    `--tall` · `--full` 은 가로만 맞추고 세로 스크롤. **좁은 폭 그림은 창 높이에 맞춘 폭**(창 높이 × 390/844 · 창 폭보다 넓으면 창 폭)으로
+    보인다 — `--tall` 이어도 같은 폭이고 세로만 스크롤한다(2026-11-04 재권님 「폰보기 화면이 너무 작아」).
     그림은 `?t=<찍은 시각>` 으로 불러 같은 이름으로 다시 찍어도 옛 그림이 안 보인다. 이름은 그림 이름 뒤에 `-보기` 만 붙인다."""
     base, name = os.path.dirname(out), os.path.basename(out)
     stem = os.path.splitext(name)[0]
     page = os.path.join(base, stem + "-보기.html")
-    fit = "max-width:100%;height:auto" if tall else "max-width:100vw;max-height:100vh;width:auto;height:auto"
+    if phone:
+        fit = "width:min(100vw,calc(100vh * %d / %d));height:auto" % PHONE
+    else:
+        fit = "max-width:100%;height:auto" if tall else "max-width:100vw;max-height:100vh;width:auto;height:auto"
     html = ("<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>%s</title>"
             "<style>html,body{margin:0}body{display:flex;justify-content:center}img{display:block;%s}</style>"
             "<img src=\"%s?t=%d\" alt=\"%s\">\n") % (stem, fit, name, int(time.time()), stem)
@@ -161,7 +177,7 @@ def main(argv):
         return 2
     url, out = argv[0], os.path.abspath(argv[1])
     phone = "--phone" in argv
-    dpr = 1.0 if phone else view_dpr()
+    dpr = phone_dpr() if phone else view_dpr()
     full = "--full" in argv
     if phone:
         size = (PHONE[0], int(arg(argv, "--tall", PHONE[1])))
@@ -246,11 +262,12 @@ def main(argv):
         print("찍음: %s · %d × %d%s · 배율 %s%s" % (out, size[0], h, " (페이지 끝까지)" if full else "", dpr,
                                                   " (폰)" if phone else " (재권님 창)"))
         now = png_size(out)
-        if before and now and before[1][0] != now[0]:
+        # 좁은 폭은 셈하는 폭이 늘 390 이라 뺀다 — 픽셀 폭은 배율(창 높이)을 따라 바뀐다
+        if not phone and before and now and before[1][0] != now[0]:
             print("⚠ 앞 그림과 폭이 다릅니다 — %s 는 %d × %d 였고 이번은 %d × %d (픽셀)."
                   % (os.path.basename(before[0]), before[1][0], before[1][1], now[0], now[1]))
             print("  폭을 바꿨으면 재권님께 먼저 말씀드립니다. 긴 페이지는 --full 이 폭을 안 바꿉니다(「찍는 창 크기도 창 크기다」).")
-        viewer(out, "--tall" in argv or full)
+        viewer(out, "--tall" in argv or full, phone)
         return 0
     except urllib.error.URLError:
         print("✗ 못 찍음 — 서버가 없다")
