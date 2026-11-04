@@ -761,6 +761,11 @@
 .kh-nm { display: flex; align-items: center; gap: 10px; }
 .kh-nm .kh-ic { width: 28px; height: 28px; font-size: 0.6rem; }
 .kh-nm b { font-weight: 500; }
+/* 이름 옆 섹터(WICS) — 회색 작은 글자 · 한 줄 · 길면 줄여 줄 높이가 안 바뀌게 (2026-11-04 · home.js sectorTag) */
+.kh-nm-sec {
+  font-size: 0.7rem; color: var(--kh-text-muted); white-space: nowrap;
+  max-width: 7.5em; overflow: hidden; text-overflow: ellipsis; margin-left: -4px;
+}
 .kh-ratio { display: flex; align-items: center; gap: 7px; justify-content: flex-end; font-size: 0.76rem; }
 .kh-ratio-bar { width: 86px; height: 3px; background: var(--kh-bg-active); border-radius: 2px; }
 .kh-sect { font-size: 0.76rem; color: var(--kh-text-secondary); }

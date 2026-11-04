@@ -186,6 +186,21 @@ def fetch_dart(code, key, prev=None):
 
 # ---------------------------------------------------------------- 묶기
 
+def _naver_stale(nv):
+    return _age(nv) > (FAIL_TTL if (not nv or nv.get("error") and not nv.get("summary")) else PROFILE_TTL)
+
+
+def _refresh_naver(code, rec):
+    """네이버 몫이 낡았으면 다시 받아 rec 에 넣는다 → 받았나. 풍선(profile)과 순위 섹터 채우기(아래)가 같이 쓴다."""
+    if not _naver_stale(rec.get("naver")):
+        return False
+    try:
+        rec["naver"] = fetch_naver(code)
+    except Exception as e:
+        rec["naver"] = {"at": _now(), "error": "네이버 못 받음: %s" % safe_message(e, 80)}
+    return True
+
+
 def profile(code, refresh=True):
     """{naver, dart} — 쥔 것이 낡았으면 그 자리에서 다시 받는다(refresh=False 면 쥔 것만)."""
     with _lock:
@@ -196,14 +211,7 @@ def profile(code, refresh=True):
     with lk:
         with _lock:
             rec = dict(_load().get(code) or {})
-        changed = False
-        nv = rec.get("naver")
-        if _age(nv) > (FAIL_TTL if (not nv or nv.get("error") and not nv.get("summary")) else PROFILE_TTL):
-            try:
-                rec["naver"] = fetch_naver(code)
-            except Exception as e:
-                rec["naver"] = {"at": _now(), "error": "네이버 못 받음: %s" % safe_message(e, 80)}
-            changed = True
+        changed = _refresh_naver(code, rec)
         dt = rec.get("dart")
         key = dart.get_key()
         # 판(DART_VER)이 다르면 다시 받는 것은 **받아 둔 표가 있을 때만** — 실패 기록(고유번호 · 정기보고서 없음 · 예외)은
@@ -240,3 +248,67 @@ def public(code, rec):
         "productsReport": dt.get("report"), "productsDate": dt.get("reportDate"),
         "productsFrom": dt.get("from"), "productsError": dt.get("error") if not dt.get("product") else None,
     }
+
+
+# ---------------------------------------------------------------- 순위표 섹터 (2026-11-04)
+# 재권님 「실시간 순위 종목 이름 옆에 섹터」 → 출처 「응 해 — 네이버 WICS 로」(11-04 · 보드 카드 「실시간 순위 종목 이름 옆 섹터 표기」).
+# 풍선과 같은 값(위 naver.wics)을 쓴다 — 받는 곳이 하나라 풍선과 순위표의 이름이 안 갈린다.
+# 순위 목록(350종목쯤)을 한 번에 받지 않고 뒤에서 한 종목씩 채운다 — 네이버 몫만(DART 는 풍선을 열 때만 · 하루 한도).
+# 다 채운 뒤에는 SECTOR_RECHECK_SEC 마다 낡은 것(PROFILE_TTL)만 다시 본다.
+
+SECTOR_FILL_SEC = 3.0          # 한 종목 받고 다음 종목까지 — 네이버를 몰아 부르지 않게 · --slow 서버는 SECTOR_SLOW_X 배
+SECTOR_SLOW_X = 5
+SECTOR_RECHECK_SEC = 3600      # 다 채운 뒤 낡은 것을 다시 보는 간격
+SECTOR_LIST_TTL = 60           # 화면이 롱폴을 못 쓸 때 다시 묻는 간격(폴백) — 채우는 동안 조금씩 는다
+
+_fill = {"started": False, "done": 0, "left": None, "at": None}
+
+
+def sectors():
+    """{code: WICS 이름} — 쥔 것만 낸다(받지 않는다). 없는 종목은 안 넣는다 — 화면은 빈칸으로 둔다."""
+    with _lock:
+        st = _load()
+        return {c: (r.get("naver") or {}).get("wics") for c, r in st.items()
+                if (r.get("naver") or {}).get("wics")}
+
+
+def fill_status():
+    return dict(_fill)
+
+
+def start_sector_fill(get_codes, slow=False):
+    """뒤에서 순위 목록의 섹터를 채운다. get_codes() → 종목 코드 목록(순위 목록 · 부를 때마다 새로)."""
+    if _fill["started"]:
+        return False
+    _fill["started"] = True
+    gap = SECTOR_FILL_SEC * (SECTOR_SLOW_X if slow else 1)
+
+    def loop():
+        time.sleep(30)                      # 뜬 직후의 다른 일과 겹치지 않게
+        while True:
+            try:
+                codes = [c for c in (get_codes() or []) if re.fullmatch(r"\d{6}", c or "")]
+            except Exception:
+                codes = []
+            with _lock:
+                st = _load()
+                todo = [c for c in codes if _naver_stale((st.get(c) or {}).get("naver"))]
+            _fill["left"] = len(todo)
+            for c in todo:
+                with _lock:
+                    lk = _busy.setdefault(c, threading.Lock())
+                with lk:
+                    with _lock:
+                        rec = dict(_load().get(c) or {})
+                    if _refresh_naver(c, rec):
+                        with _lock:
+                            _load()[c] = rec
+                            _save()
+                _fill["done"] += 1
+                _fill["left"] -= 1
+                _fill["at"] = _now()
+                time.sleep(gap)
+            time.sleep(SECTOR_RECHECK_SEC)
+
+    threading.Thread(target=loop, daemon=True, name="sector-fill").start()
+    return True
