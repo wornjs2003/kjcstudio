@@ -11,6 +11,8 @@
       강한 섹터 셋 · 약한 섹터 셋의 「까닭」 과 출처 주소 · 한국장 볼 것(해석이라고 표시)을 쓴다
     4 글을 엮어 07:00 이 될 때까지 기다렸다 보낸다 — 조용한 시간(22:00~07:00)은 dart.telegram_send 가 막는다
     5 보드 카드 「미국 섹터 정리 아침 7시」 에 한 줄 — 보냄/안 보냄 · 비용(달러) · 걸린 초
+    6 보냈으면 그 글 그대로를 보드 문서 `us-market-index` 맨 앞에 한 건 — 홀딩스 데일리분석 모달 「미국장 분석」 탭이 읽는다
+      (2026-11-03 재권님 「그곳에 데일리 미국섹터 분석글들이 쌓여야 할거같은데」 · 시안 「응 맞아」). 같은 날 다시 돌면 그날 것을 갈아 끼운다
 
 보내는 자리 — 텔레그램은 dart.telegram_send 하나로만 나간다(조용한 시간 · 나눠 보내기 · 토큰 가리기가 거기 있다).
 **--send 와 KJC_ROLE=server 가 함께 있을 때만** 텔레그램 칸을 읽는다(「알림은 메인서버에서만 나간다」 의 이 도구 쪽 겹).
@@ -29,6 +31,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -231,6 +234,36 @@ def compose(data, ai):
     return "\n".join(L)
 
 
+# ---------------------------------------------------------------- 쌓기
+
+DOC = "us-market-index"
+
+
+def keep(text, day):
+    """보낸 글을 보드 문서 맨 앞에 한 건. 읽고 → 고치고 → 쓰기 · 409(남이 먼저 씀)면 한 번 다시.
+    못 써도 발송은 이미 끝났으므로 False 만 돌려준다(카드에 적힌다).
+    갈래 칸 이름은 `sort` — `kind` 로 두면 화면(daily-view.js)이 「kind: us」 를 덮어써 영상 줄로 잘못 그린다(11-03 코드로 읽음)."""
+    now = dt.datetime.now(KST)
+    item = {"id": "us-sector-%s" % now.strftime("%Y%m%d"), "sort": "sector", "date": now.strftime("%Y-%m-%d"),
+            "title": "%s 미국 섹터 아침" % now.strftime("%Y-%m-%d"), "sentAt": now.strftime("%H:%M"),
+            "author": "시황분석", "note": "미국 %s 마감 · 텔레그램으로 보낸 글 그대로" % day, "text": text}
+    url = SERVER + "/api/board/doc/" + DOC
+    for _ in range(2):
+        body = get("/api/board/doc/" + DOC)
+        doc = body.get("data") or {}
+        items = [x for x in (doc.get("items") or []) if x.get("id") != item["id"]]
+        doc["items"] = [item] + items
+        req = urllib.request.Request(url, data=json.dumps({"data": doc, "updatedAt": body.get("updatedAt")}).encode(),
+                                     headers={"Content-Type": "application/json"}, method="PUT")
+        try:
+            with urllib.request.urlopen(req, timeout=20):
+                return True
+        except urllib.error.HTTPError as e:
+            if e.code != 409:
+                raise
+    return False
+
+
 # ---------------------------------------------------------------- 보내기
 
 def send(text):
@@ -288,9 +321,16 @@ def main():
         return 0
     ok, why = send(text)
     log("보냄" if ok else "못 보냄 — " + why)
-    card("%s %s · 비용 %s달러 · %s초 · 글자 %d" % ("보냄" if ok else "못 보냄(%s)" % why[:60], data["day"],
+    kept = "—"
+    if ok:
+        try:
+            kept = "쌓음" if keep(text, data["day"]) else "못 쌓음(409 두 번)"
+        except Exception as e:
+            kept = "못 쌓음(%s)" % safe_message(e, 60)
+        log("미국장 분석 탭 — " + kept)
+    card("%s %s · 비용 %s달러 · %s초 · 글자 %d · 미국장 분석 탭 %s" % ("보냄" if ok else "못 보냄(%s)" % why[:60], data["day"],
                                               ("%.2f" % cost) if isinstance(cost, (int, float)) else "—",
-                                              secs if secs is not None else "—", len(text)))
+                                              secs if secs is not None else "—", len(text), kept))
     return 0 if ok else 1
 
 
