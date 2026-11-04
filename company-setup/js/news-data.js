@@ -4,6 +4,7 @@
 //   /api/news/topics   뉴스 주제어 묶음 (holdings/data/news-topics.json)
 //   /api/dart/status   공시 · 회사 목록 · 상위 종목 수
 //   /holdings/data/disclosure-tags.json   공시 딱지 묶음(홀딩스 공시 칸과 같은 파일)
+//   /holdings/data/news-topics.json   받는 곳 목록 feeds · 찾는 길(서버가 읽는 파일 그대로 · /api/news/topics 는 주제만 준다 · 2026-11-04 재권님 「응」)
 // 못 받은 값은 「—」 · 「못 받음」 으로 낸다(0 으로 메우지 않는다).
 // 층 상태(쌓이는 중 · 재료만 · 없음)는 받은 값으로 가른다 — 값이 있는데 「없음」 으로 남지 않게.
 
@@ -18,8 +19,9 @@ const st = k => `<span class="nd-st ${k === 'miss' ? 'no' : k}">${ST[k]}</span>`
 (async () => {
   // 보관 기간은 서버가 정한다(news_store.py NEWS_KEEP_DAYS · 2026-11-03 재권님 「한 달」) — 화면은 기간을 들지 않는다.
   // 「서버가 가진 것 전부」 를 받으려고 hours 를 아주 크게 묻는다 — 서버는 가진 만큼만 준다. 화면에는 보관 일수 대신 가장 오래된 기사 날짜를 보인다
-  const [ns, tp, ds, tg] = await Promise.all([
+  const [ns, tp, ds, tg, fl] = await Promise.all([
     get('/api/news/stored?hours=100000&limit=20000'), get('/api/news/topics'), get('/api/dart/status'), get('/holdings/data/disclosure-tags.json'),
+    get('/holdings/data/news-topics.json'),
   ]);
   const groups = (ns && ns.ok && ns.data) || null;
   const total = ns && ns.meta && ns.meta.total;
@@ -92,6 +94,18 @@ const st = k => `<span class="nd-st ${k === 'miss' ? 'no' : k}">${ST[k]}</span>`
     $('nd-src').innerHTML = kv(src, 8);
     $('sum-nd1').innerHTML = `<span class="sl"><b>기사 ${nf(total ? total.count : items.length)}${dart ? ` · 공시 ${nf(dart.disclosures)}` : ''}</b>언론사 ${nSrc} · 주제 ${ns.meta.topics ? Object.keys(ns.meta.topics).length : '—'} · 「중요」 규칙에 걸린 묶음 ${groups.filter(g => g.alert).length}</span>`;
   } else { $('nd-src').textContent = '못 받음'; $('sum-nd1').textContent = '못 받음'; }
+  // 받는 곳 목록 — 같은 언론사의 주소 여럿은 한 줄로(주소 수만 붙인다) · 찾는 길은 아래 따로. 빈 칸은 「확인 못 함」 그대로(목록 머리 「모르는 칸은 확인 못 함」)
+  const feeds = (fl && Array.isArray(fl.feeds)) ? fl.feeds : null;
+  if (feeds) {
+    const by = new Map();
+    feeds.forEach(f => { const k = f.label || f.id; const o = by.get(k); if (o) o.n++; else by.set(k, { ...f, n: 1 }); });
+    const ways = (fl['찾는길'] && fl['찾는길']['길']) || [];
+    const cut = s => esc(String(s || '확인 못 함').split(' · ')[0]);
+    const row = (f, extra) => `<div class="r"><b>${esc(f.label || f.id)}${extra}</b><span class="nd-st part">${esc(f['갈래'] || '갈래 없음')}</span>`
+      + `<span class="gap">들인 날 ${esc(f['들인날'] || '확인 못 함')} · 지시 ${cut(f['지시한날'])}</span><span class="gap why" title="${esc(f['근거'] || '')}">근거 ${cut(f['근거'])}</span></div>`;
+    $('nd-feeds').innerHTML = [...by.values()].map(f => row(f, (f['언론사'] ? ` <small>번호 ${esc(f['언론사'])}</small>` : '') + (f.n > 1 ? ` <small>주소 ${f.n}</small>` : ''))).join('')
+      + ways.map(w => row(w, ' <small>받는 곳이 아님 · 언론사로 가림(지금은 표시만)</small>')).join('');
+  } else $('nd-feeds').textContent = '못 받음';
   $('nd-topic').innerHTML = ns && ns.meta && ns.meta.topics ? kv(ns.meta.topics, 8) : '못 받음';
 
   $('sum-nd2').innerHTML = dart ? `<span class="sl"><b>회사 ${nf(dart.corps)}</b>기사와 잇는 표 · 별명 — 없음</span>` : '못 받음';

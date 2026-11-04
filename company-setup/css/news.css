@@ -23,6 +23,10 @@
 .mk .nd-chips { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; }
 .mk .nd-chips span { background: var(--kh-bg); border-radius: 99px; padding: 2px 10px; color: var(--kh-text-secondary); }
 .mk .nd-chips b { color: var(--kh-text-primary); font-weight: 600; margin-right: 4px; }
+.mk .nd-feeds { font-size: 12.5px; }
+.mk .nd-feeds .r { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 8px 0; border-bottom: 1px solid var(--kh-border); align-items: baseline; }
+.mk .nd-feeds .r > .gap { grid-column: 1 / -1; font-size: 12px; }
+.mk .nd-feeds small { color: var(--kh-text-muted); font-weight: 400; margin-left: 4px; }
 
 @media (min-width: 900px) {
   .mk .nd-ly .r { grid-template-columns: 30px 140px minmax(0, 1.4fr) 90px minmax(0, 1.2fr) minmax(0, 1.3fr); gap: 10px; }
@@ -30,4 +34,6 @@
   .mk .nd-ly .r.h { display: grid; color: var(--kh-text-muted); font-size: 11.5px; padding-top: 0; }
   .mk .nd-kv { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .mk .nd-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mk .nd-feeds .r { grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1.3fr) minmax(0, 2fr); }
+  .mk .nd-feeds .r > .gap { grid-column: auto; }
 }
