@@ -134,7 +134,10 @@ def _run(prompt):
 
 def precheck(question):
     """자료를 꺼내기 전에 거를 것을 먼저 거른다 — 빈 물음 · 너무 긴 물음은 ValueError, 돌고 있으면 Busy.
-    (2026-11-04 qa — 거절될 물음에도 KIS · 네이버를 먼저 불렀다.) 잠금은 ask 가 다시 잡는다 — 그 사이에 끼면 거기서 Busy."""
+    (2026-11-04 qa — 거절될 물음에도 KIS · 네이버를 먼저 불렀다.) 잠금은 ask 가 다시 잡는다 — 그 사이에 끼면 거기서 Busy.
+    물음이 글자가 아니면(숫자 · 목록 등) ValueError — 전에는 .strip() 에서 터져 400 이 아닌 오류가 났다(2026-11-05)."""
+    if question is not None and not isinstance(question, str):
+        raise ValueError("물음은 글자여야 합니다")
     question = (question or "").strip()
     if not question:
         raise ValueError("물음이 비었습니다")

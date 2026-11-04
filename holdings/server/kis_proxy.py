@@ -6814,7 +6814,8 @@ def _claude_indices(cfg, ctx):
 
 
 def _claude_daily(cfg, ctx):
-    """오늘 데일리 분석 — 아침에 나간 요약 글(telegram 칸). 오늘 날짜 문서가 없으면 「못 받음」.
+    """오늘 데일리 분석 — 아침에 나간 요약 글(telegram 칸). 오늘 날짜 문서가 없으면 「0건(읽음)」 —
+    읽기는 됐고 글이 아직 없는 것이다(2026-11-05 · 읽기 자체가 터지면 claude_sources 가 「못 받음」).
     보드 상류가 있으면 거기서 읽는다(/api/board 와 같은 자리를 보게)."""
     name = daily.doc_name(datetime.now(KST).replace(tzinfo=None))
     up = board_upstream_base()
@@ -6825,7 +6826,7 @@ def _claude_daily(cfg, ctx):
     else:
         data = docstore.read_doc(name)
     if not isinstance(data, dict) or not data.get("telegram"):
-        return {"못 받음": "오늘(%s) 데일리 분석 글이 아직 없습니다" % name[len(daily.DOC_PREFIX):]}
+        return {"0건(읽음)": "오늘(%s) 데일리 분석 글이 아직 없습니다" % name[len(daily.DOC_PREFIX):]}
     return {"쓴 시각": data.get("at"), "글": data.get("telegram")}
 
 
@@ -6839,7 +6840,10 @@ def _claude_quote(cfg, ctx):
     q = fetch_price(cfg, ctx["code"])
     keep = ("price", "change", "changePct", "open", "high", "low", "volume", "value",
             "marketCap", "per", "pbr", "eps", "bps", "high52", "low52")
-    return {k: q.get(k) for k in keep if q.get(k) is not None}
+    out = {k: q.get(k) for k in keep if q.get(k) is not None}
+    if not out:   # 시세는 늘 있어야 한다 — 칸이 다 비어 왔으면 「0건(읽음)」 이 아니라 「못 받음」(2026-11-05)
+        raise RuntimeError("시세 칸이 모두 비어 왔습니다")
+    return out
 
 
 def _claude_stock_news(cfg, ctx):
