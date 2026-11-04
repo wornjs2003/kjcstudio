@@ -38,7 +38,7 @@
 | 사무실 인터넷 IP 가 바뀜 | 통로가 끊겨 회사 페이지가 안 뜬다 · 관리도 못 들어감 | 가비아 보안 그룹 22번 줄의 IP 를 새 사무실 IP 로(재권님 손). 새 IP 는 `curl -s https://api.ipify.org` |
 | 통로 열쇠가 샘 | 그 열쇠로는 명령을 못 치고 18764 하나만 연다 | 새 열쇠를 만들어 `/home/tunnel/.ssh/authorized_keys` 를 갈고 옛 것을 지운다 |
 | 관리 열쇠가 샘 | 사무실 인터넷 밖에서는 문에 안 닿는다 | `admin-key.py rotate` → `seal` → 메일 → `sent` |
-| **관리 열쇠를 잃음** | 서버 설정을 못 고친다 · 회사 페이지는 계속 돈다 | ① 메일의 잠근 파일 → `! python3 tools/thekjc-front/admin-key.py open <파일>` |
+| **관리 열쇠를 잃음** | 서버 설정을 못 고친다 · 회사 페이지는 계속 돈다 | ① 메일의 잠근 파일 → **맥 터미널 앱에서** `python3 tools/thekjc-front/admin-key.py open <파일>`(Claude 창의 `!` 로는 비밀번호를 못 묻는다) |
 | 메일도 없음 · 비밀번호도 잊음 | 〃 | ② 가비아 웹 콘솔 — **있는지 확인 안 됨.** 있어도 계정에 비밀번호가 없어(`passwd -S` L) 그대로는 못 들어간다 |
 | 그것도 안 됨 · 서버를 잃음 | 〃 | ③ 아래 「다시 세우기」 — 가비아에 새 서버를 만들고 이 폴더대로 |
 
@@ -62,5 +62,5 @@
 `launchd/kr.kjcstudio.thekjc-key-remind.plist` 가 달마다 1일 10:00 에 `admin-key.py remind --send` 를 부른다 —
 메일로 보낸 지 1년(값은 `admin-key.py` 의 `RENEW_DAYS`)이 넘었거나 보낸 기록이 없으면 텔레그램 한 통. **설치는 켜기라 재권님 지시로.**
 
-    알림이 오면     재권님 「해」 뒤 개념정의가 rotate → 재권님이 `! … seal` → 메일로 보냄 → 세션이 sent
+    알림이 오면     재권님 「해」 뒤 개념정의가 rotate → 재권님이 **맥 터미널 앱에서** `… seal`(세션이 터미널 창을 띄워 드린다) → 메일로 보냄 → 세션이 sent
     지금 상태      python3 tools/thekjc-front/admin-key.py status

@@ -8,7 +8,7 @@
     python3 tools/thekjc-front/admin-key.py remind      갈 때가 됐으면 텔레그램 한 통(launchd 가 부른다 · --send + KJC_ROLE=server 일 때만)
     python3 tools/thekjc-front/admin-key.py open <잠근 파일>   잠근 파일을 풀어 열쇠로 되돌린다(사고 때)
 
-**seal · open 은 비밀번호를 화면에 안 보이게 묻는다 — 세션이 아니라 재권님이 친다.** 이 창에서는 `! python3 …` 로 친다.
+**seal · open 은 비밀번호를 화면에 안 보이게 묻는다 — 세션이 아니라 재권님이 친다.** Claude 창의 `!` 로는 안 된다(키보드 입력 창이 없어 멈춘다 · 2026-11-04 잼) — 맥 터미널 앱에서 친다. 세션은 `osascript` 로 터미널 창을 띄워 줄 수 있다.
 비밀번호는 저장소 · 보드 · 메시지 · 메일 본문 어디에도 두지 않는다.
 룰은 CLAUDE.md 「thekjc.co.kr 앞문 서버 — 관리 열쇠는 잠가 메일에 · 1년마다 간다 · GitHub 에는 설정만」. 다시 세우는 순서는 같은 폴더 README.md.
 """
@@ -122,7 +122,7 @@ def cmd_rotate(_):
     st["rotated_at"] = now().isoformat(timespec="seconds")
     save(st)
     print("열쇠를 갈았습니다 — 새 것으로 들어가지고 옛 것은 서버와 맥미니에서 지웠습니다(서버 열쇠 줄 %s)" % r.stdout.strip())
-    print("다음: 잠근 파일 만들기 → `! python3 tools/thekjc-front/admin-key.py seal`")
+    print("다음: 잠근 파일 만들기 — 맥 터미널 앱에서 `cd /Users/kjc/work/KJCStudio && python3 tools/thekjc-front/admin-key.py seal`")
     return 0
 
 
@@ -131,7 +131,7 @@ def cmd_seal(_):
         print("열쇠가 없습니다: %s" % KEY)
         return 2
     if not sys.stdin.isatty():
-        print("비밀번호를 화면에 안 보이게 물어야 해서, 이 창에서 `! python3 tools/thekjc-front/admin-key.py seal` 로 쳐 주십시오")
+        print("비밀번호를 화면에 안 보이게 물어야 해서 키보드 입력 창이 있어야 합니다 — Claude 창의 `!` 로는 안 됩니다. 맥 터미널 앱에서 `cd /Users/kjc/work/KJCStudio && python3 tools/thekjc-front/admin-key.py seal` 로 쳐 주십시오")
         return 2
     out = os.path.expanduser("~/Desktop/thekjc-열쇠-%s.enc" % now().strftime("%Y%m%d"))
     print("잠글 비밀번호를 두 번 묻습니다 — 화면에 안 보입니다. 이 비밀번호는 수첩에만 적고 메일에는 쓰지 마십시오.")
@@ -166,7 +166,7 @@ def cmd_sent(_):
 
 def cmd_open(a):
     if not sys.stdin.isatty():
-        print("비밀번호를 화면에 안 보이게 물어야 해서 `! python3 tools/thekjc-front/admin-key.py open <파일>` 로 쳐 주십시오")
+        print("비밀번호를 화면에 안 보이게 물어야 해서 키보드 입력 창이 있어야 합니다 — Claude 창의 `!` 로는 안 됩니다. 맥 터미널 앱에서 `cd /Users/kjc/work/KJCStudio && python3 tools/thekjc-front/admin-key.py open <파일>` 로 쳐 주십시오")
         return 2
     out = KEY if not os.path.exists(KEY) else KEY + ".from-mail"
     r = subprocess.run(["openssl", "enc", "-d"] + CIPHER[:-1] + ["-in", a.file, "-out", out])
