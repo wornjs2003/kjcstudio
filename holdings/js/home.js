@@ -1983,6 +1983,28 @@ function paintRankModalNote() {
     fresh ? `${RANK_TABS_NOTE} · ${fresh.text}` : RANK_TABS_NOTE);
 }
 
+/* 이름 옆 섹터 — 네이버(FnGuide) WICS 이름 (2026-11-04 재권님 「실시간 순위 종목 이름 옆 섹터」 → 출처 「응 해 — 네이버 WICS 로」).
+   값은 서버(company_profile.py)가 뒤에서 한 종목씩 채워 /api/kis/stock-sectors 로 낸다 — 못 받은 종목은 빈칸.
+   테마 목록은 테마 배지가 그 자리라 안 붙인다. 바뀌면 서버가 알린다(롱폴) — 화면에 주기를 두지 않는다. */
+let sectorMap = {};
+const SECTOR_FALLBACK_MS = 60000;      // 서버 값마저 못 받았을 때만
+function sectorTag(code) {
+  const v = sectorMap[code];
+  return v ? `<span class="kh-nm-sec" title="${escT(v)} (WICS)">${escT(v)}</span>` : '';
+}
+async function loadSectors() {
+  try {
+    const r = await apiFetch('/api/kis/stock-sectors', { cache: 'no-store' });
+    const j = r.ok ? await r.json() : null;
+    if (!j || !j.data) return;
+    const changed = JSON.stringify(j.data) !== JSON.stringify(sectorMap);
+    sectorMap = j.data;
+    if (changed && universe) paintRows(rowPrices);
+  } catch { /* 못 받으면 빈칸 그대로 */ }
+}
+watch({ url: () => '/api/kis/stock-sectors', onChange: loadSectors, key: 'company_profile.SECTOR_LIST_TTL', fallbackMs: SECTOR_FALLBACK_MS });
+loadSectors();
+
 function paintRows(priceMap) {
   const list = rowList();
   /* 고른 시장의 목록이 비었다 — 서버가 아직 그 시장을 안 준다. 빈 표로 두면 고장처럼 보인다 */
@@ -2008,7 +2030,7 @@ function paintRows(priceMap) {
         >${s.rank}</td>
       <td class="l"><span class="kh-nm">
         ${iconHtml(s)}
-        <b data-co="${s.code}">${market === 'THEME' ? escT(s.name) : s.name}</b>${market === 'THEME' ? themeBadge(s.code) : ''}</span></td>
+        <b data-co="${s.code}">${market === 'THEME' ? escT(s.name) : s.name}</b>${market === 'THEME' ? themeBadge(s.code) : sectorTag(s.code)}</span></td>
       <td class="kh-num"><span
         >${live ? fmtPriceOf(s.code, priceOf(live, sid)) : '···'}</span></td>
       <td class="kh-num kh-metric">${sortCell(s.code, live)}</td>
