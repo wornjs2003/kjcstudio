@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>투자 전략 · Insight</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css" />
+<link rel="stylesheet" href="../assets/css/common.css" />
+<link rel="stylesheet" href="../assets/css/nav.css" />
+<!-- 시황분석과 같은 틀 — 홀딩스 CSS 를 같이 쓴다(「거는 쪽이 둘 이상인 파일」) · 이 화면 전용은 css/strategy.css(좁은 폭부터 · 「모바일 퍼스트」) -->
+<link rel="stylesheet" href="../holdings/css/frame.css" />
+<link rel="stylesheet" href="../holdings/css/home.css" />
+<link rel="stylesheet" href="css/insight.css" />
+<link rel="stylesheet" href="css/strategy.css" />
+</head>
+<body data-nav="company-setup" data-site-root="../">
+<div id="site-nav"></div>
+
+<!-- 투자 전략 — 장외 → 다음 날 아침 표 (2026-10-26 재권님 「종가 후 넥장에서 오른 종목과 내린 종목들 리스트 업해서 … 계속 모니터링」 →
+     「인사이트 안에 투자전략에다가 리스트 … 세로로 종목들 · 코스닥 코스피 나눠서 · 가로로 종가/장외/야간선물/프리장 한 묶음 · 날마다 가로로 쌓여」 →
+     「맨위에 코스피 코스닥 버튼 · 실시간 순위처럼」 → 「응 세로로 2배 늘려서 진행해줘」 · 작업우선순위 경유 · 시안 temp/넥장시안3.png). 값 · 글 규칙은 js/strategy.js 머리 -->
+<div class="kh-app kh-app-wide">
+  <main class="kh-main">
+    <!-- 갈래 탭은 첫 화면(index.html)과 같은 줄 · 같은 순서 -->
+    <nav class="kh-cat" aria-label="갈래">
+      <a href="./">홈</a>
+      <a href="market.html">시황분석</a>
+      <a href="#">경제 지표</a>
+      <a href="#">산업 분석</a>
+      <a href="news.html">뉴스 분석</a>
+      <a href="report.html">영상 분석</a>
+      <a href="analysis.html">종목 분석</a>
+      <a href="chart-analysis.html">차트분석</a>
+      <a class="is-on" href="strategy.html">투자 전략</a>
+      <span class="kh-cat-my">증권사 리포트</span>
+    </nav>
+    <!-- 종목 고르는 룰 (2026-11-05 재권님 「투자전략에는 어떤 종목을 사서 할지에 대한 룰을 잡을려고해 시안 잡아보라고 해」 · 「너는 투자전략에다가 투자전략에 대한걸 해줘야 할거같아」 →
+         시안 temp/rule.png → 「우선 이렇게 해서 올려놔」). 지금은 틀만 — 룰 숫자 · 오늘 걸린 종목 · 지난 성적은 아직 없다.
+         첫 룰 「전일 거래량 급등」 은 자동 관심종목 물음(보드 카드 「전일 거래량 급등 종목 기준 확인」)과 같은 기준이다 — 정해지면 기준은 서버 한 곳에 두고 이 칸은 받아 쓴다 -->
+    <section class="st rl">
+      <div class="st-meta">룰 숫자는 아직 정하지 않아 빨간 빈칸으로 둠</div>
+      <h2 class="st-sec">종목 고르는 룰</h2>
+      <div class="st-tg" role="tablist" aria-label="룰">
+        <button class="kh-chip is-active" role="tab">전일 거래량 급등</button>
+        <span class="kh-chip rl-add" aria-disabled="true">＋ 룰 더하기</span>
+      </div>
+      <div class="rl-grid">
+        <div class="st-card">
+          <h3 class="rl-h">룰 — 전일 거래량 급등</h3>
+          <div class="st-cap">한 룰은 다섯 칸 — 무엇을 고르나 · 언제 사나 · 언제 파나 · 얼마나 사나 · 무엇을 빼나</div>
+          <!-- 미정: 빨간 빈칸의 숫자 · 사는 때 · 빼는 것 — 재권님이 정하신다(「아직 안 정해진 자리는 빨간 바탕으로 남긴다」) -->
+          <table class="rl-tb">
+            <tr><th>고르는 조건</th><td>앞 거래일 정규장 등락률 <span class="rl-blank">(&nbsp;)</span>% 이상<br>거래량이 20일 평균의 <span class="rl-blank">(&nbsp;)</span>배 이상<br><span class="rl-sug">개발 안: 15% · 5배(추천값 · 정한 값 아님) — 자동 관심종목과 같은 기준을 한 곳에 둠</span><br><span class="rl-sug">＋ 조건 더하기 — 수급(외국인 · 기관 순매수) · 시가총액 · 차트(이동평균 위) · 뉴스 · 공시</span></td></tr>
+            <tr><th>사는 때</th><td><span class="rl-blank">(&nbsp;)</span> <span class="rl-sug">예: 다음 날 프리장 · 시가 · 눌림(전일 종가 근처)</span></td></tr>
+            <tr><th>파는 때</th><td>목표 +<span class="rl-blank">(&nbsp;)</span>% · 손절 −<span class="rl-blank">(&nbsp;)</span>% · <span class="rl-blank">(&nbsp;)</span>거래일 지나면 정리</td></tr>
+            <tr><th>얼마나</th><td>한 종목 <span class="rl-blank">(&nbsp;)</span>% · 동시에 <span class="rl-blank">(&nbsp;)</span>종목까지</td></tr>
+            <tr><th>빼는 것</th><td><span class="rl-blank">(&nbsp;)</span> <span class="rl-sug">예: 관리종목 · 거래정지 · 스팩 · 우선주</span></td></tr>
+          </table>
+        </div>
+        <div class="st-card">
+          <h3 class="rl-h">오늘 이 룰에 걸린 종목</h3>
+          <div class="st-cap">평일 아침 서버가 셈 · 걸린 종목은 관심종목에 「자동」 으로 들어감(자동 관심종목 물음과 한 기준)</div>
+          <div class="st-err">— 아직 셈이 없음</div>
+          <h3 class="rl-h rl-h2">지난 성적</h3>
+          <div class="st-cap">걸렸던 종목이 그 뒤 1 · 3 · 5거래일에 어떻게 됐나 — 룰이 맞는지 보는 칸</div>
+          <div class="st-err">— 쌓인 것 없음</div>
+        </div>
+      </div>
+    </section>
+    <section class="st">
+      <div class="st-meta" id="st-meta">값을 받는 중…</div>
+      <h2 class="st-sec">장외 · 야간선물 · 프리장 — 날마다 쌓기</h2>
+      <div class="st-tg" id="st-tg" role="tablist" aria-label="시장">
+        <button class="kh-chip is-active" data-market="kospi" role="tab">코스피</button>
+        <button class="kh-chip" data-market="kosdaq" role="tab">코스닥</button>
+      </div>
+      <div class="st-card">
+        <div class="st-cap" id="st-cap">장외에서 많이 오른 · 내린 종목 — 하루 한 묶음씩 오른쪽으로 쌓임 · 장외 · 프리장은 정규장 종가 대비 % · 야간선물은 시장 하나라 맨 윗줄에만</div>
+        <div class="st-box" id="st-box">—</div>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="../assets/js/main.js"></script>
+<script type="module" src="js/strategy.js"></script>
+</body>
+</html>
