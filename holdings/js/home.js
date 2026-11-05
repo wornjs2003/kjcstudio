@@ -1396,7 +1396,7 @@ const SORTS = {
      관심처럼 순위 목록과 따로 오는 목록이라 `list` 로 준다(시장 칩과 무관 · 코스피 · 코스닥 함께) */
   /* 줄마다 셋이 **각각 얼마 사는지**(억) · 오늘 셋 다 샀다가 한 곳이라도 매도로 바뀐 종목은 맨 위에 흐리게 남긴다
      (11-05 재권님 「동시매수하다가 어느 한곳이 매도로 바뀌는것도 파악을 할수있게」 → 시안 「좋아 각각 얼마 사는지로」) */
-  buy:  { label: '매수', list: () => (jointRows ? [...jointFlipped.map((x) => ({ ...x, flip: true })), ...jointRows] : null),
+  buy:  { label: '매수', list: () => (jointRows ? [...jointFlipped, ...jointRows] : null),
           head: '외 · 기 · 프 순매수(억)', show: (code) => jointCell(code), html: true,
           note: () => jointNote(),
           empty: () => (!jointMeta || jointMeta.pending ? '불러오는 중'
@@ -1413,11 +1413,12 @@ const eokSigned = (won) => { if (won == null) return '—'; const v = Math.round
 /* 한 칸 — 셋의 순매수(억 · 오름 빨강 · 내림 파랑)를 한 줄에(11-05 재권님 「외 기 프 한줄로 해줘」). 13:19 에 표가 순위 칸 밖으로
    밀린 것은 폭이 아니라 시세 갱신이 이 칸을 글자로 넣던 탓이었다(paintOneRow · html). 빠진 종목만 아랫줄 「무엇이 매도로 바뀜 시각」.
    ≈ 는 상위 30 밖이라 그 종목 가집계 수량 × 현재가로 어림한 값(서버 approx) */
-function jointCell(code) {
+function jointCell(code, narrow = false) {
   const r = jointOf(code);
   if (!r) return '—';
   const one = ([k, n]) => `<span class="${r[k] == null ? 'kh-mut' : dirClass(r[k])}">${n} ${(r.approx || []).includes(k) ? '≈' : ''}${eokSigned(r[k])}</span>`;
-  const line = (html, mut) => `<div class="${mut ? 'kh-mut' : ''}" style="white-space:nowrap;font-size:${mut ? 11 : 12}px">${html}</div>`;
+  /* narrow — 순위 모달 칸. 외 · 기 · 프는 한 줄(11-05 재권님 「외 기 프 는 한줄로」) · 까닭 글만 줄바꿈(한 줄이면 옆 칸 위로 넘쳤다 · 11-05 8772) */
+  const line = (html, mut) => `<div class="${mut ? 'kh-mut' : ''}" style="white-space:${mut && narrow ? 'normal' : 'nowrap'};font-size:${mut ? 11 : 12}px">${html}</div>`;
   const names = (ks) => (ks || []).map((k) => JOINT_NAME[k]).join(' · ');
   /* 합은 안 적는다(11-05 재권님 「합은 빼준 상태로」) — 차례는 그대로 서버가 셋 합 큰 순으로 준다 */
   const body = line(JOINT_SIDES.map(one).join(' '));
@@ -1427,10 +1428,10 @@ function jointCell(code) {
   return body + line(`${why} ${r.at || ''}`, true);
 }
 /* 안내 줄 — 몇 종목 · 빠진 수 · 못 받은 수 · 값마다 갱신 주기(외 · 기 입력 시각과 서버가 다시 받는 주기는 서버가 준다) */
-function jointNote() {
+function jointNote(short = false) {
   const m = jointMeta || {};
   const bits = [];          // 종목 수는 표가 보인다 — 안내 줄이 세 줄로 넘어가면 표가 짧아져 넣지 않는다
-  if (jointFlipped.length) bits.push(`빠짐 ${jointFlipped.length}`);
+  if (!short && jointFlipped.length) bits.push(`빠짐 ${jointFlipped.length}`);        // short(모달 탭 옆) — 빠짐 수는 표가 보인다
   if (m.programMissing) bits.push(`프로그램 못 받은 ${m.programMissing}종목 빠짐`);
   if (m.listFail) bits.push('외국인 · 기관 순위 못 받음(앞 값)');
   const per = Object.values(m.estSlots || {});
@@ -1449,10 +1450,11 @@ async function loadJoint() {
     const r = await apiFetch('/api/kis/joint-buy', { cache: 'no-store' });
     const j = r && r.ok ? await r.json() : null;
     if (j && j.meta) jointMeta = j.meta;
-    if (j && j.ok && Array.isArray(j.data)) { jointRows = j.data; jointFlipped = Array.isArray(j.flipped) ? j.flipped : []; }
+    /* 빠진 종목에는 받을 때 flip 을 붙인다 — 목록에 넣을 때만 붙이면 jointOf 가 찾은 항목에 없어 까닭 줄이 안 나왔다(11-05 qa) */
+    if (j && j.ok && Array.isArray(j.data)) { jointRows = j.data; jointFlipped = Array.isArray(j.flipped) ? j.flipped.map((x) => ({ ...x, flip: true })) : []; }
   } catch { /* 못 받으면 들고 있던 것 그대로 */ }
   if (sortBy === 'buy') { paintRows(rowPrices); paintSortNote(); }
-  if (rankModal && rankModalSort === 'buy') paintRankModal();
+  if (rankModal && rankModalSort === 'buy') { paintRankModal(); paintRankModalNote(); }
 }
 
 /* 가격 칸의 값 — 장외 칩이 정규장 중이면 앞 회차 20:00 장외 마감 값 · 나머지는 지금 시세 */
@@ -1891,7 +1893,7 @@ function paintRowHead() {
    639px 가 비어 있었다 (2026-09-22 지시 — "모달 가로는 정보에 맞춰서
    좀더 좁게"). **고정 px 로 둔다** — max-content 로 두면 탭을 바꿀 때
    폭이 달라져 「보는 것을 바꿔도 자리는 그대로다」 를 깬다. */
-const RANK_MODAL_WIDTH = 850;
+const RANK_MODAL_WIDTH = 1000;   // 850 → 1000 — 「매수」 탭 외 · 기 · 프를 한 줄로 넣느라(11-05 재권님 「모달 옆으로 더 늘려」)
 
 /* 순위 모달 탭 줄 오른쪽 설명. **뒤에 신선도가 붙는다**(2026-09-23) —
    850px 에서 잘리지 않는지는 재서 확인한다. 원래 문장은 「목록이 좁아 뺐던
@@ -1950,6 +1952,27 @@ function rankHeadStats() {
 }
 
 /* 본문 — 표만 그린다. 머리는 modal-head.js 가 들고 있다 */
+/* 「전일비」 칸 — 지금 시간대(프리장 · 정규장 · 애프터)의 오늘 거래량 ÷ 어제 같은 시간대(%). 셈은 서버(server/session_volume.py) ·
+   화면은 받은 값을 그린다 · 없음은 「—」(2026-11-05 재권님 「프리장은 프리장끼리」 → 「응 그렇게 해줘」) */
+let volRatio = {}, volMeta = null, volWatch = null;
+const VOL_FALLBACK_MS = 60000;      // 「전일비」 — 서버 값마저 못 받았을 때만
+async function loadVolRatio() {
+  if (!rankModal) return;
+  const codes = rowList(rankModalSort, rankModalMarket).map((s) => s.code).filter((c) => /^\d{6}$/.test(c));
+  if (!codes.length) return;
+  try {
+    const r = await apiFetch(`/api/kis/vol-ratio?codes=${codes.join(',')}`, { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    if (j && j.data) { volRatio = j.data; volMeta = j.meta || null; }
+  } catch { /* 못 받으면 들고 있던 것 그대로 */ }
+  if (rankModal) paintRankModal();
+}
+const volRatioCell = (code) => {
+  const v = volRatio[code];
+  return v == null ? '<span class="kh-mut">—</span>' : `${Math.round(v).toLocaleString()}%`;
+};
+const volRatioHead = () => `전일비${volMeta && volMeta.label ? `<small class="kh-mut">(${volMeta.label})</small>` : ''}`;
+
 function paintRankModal() {
   if (!rankModal) return;
   const list = rowList(rankModalSort, rankModalMarket, 'all');
@@ -1957,19 +1980,20 @@ function paintRankModal() {
   const sid = th ? 'cap' : rankModalSort;
   const rows = list.map((s) => {
     const p = rowPrices && rowPrices[s.code];
-    return `<tr>
+    return `<tr${s.flip ? ' style="opacity:.55"' : ''}>
       <td class="kh-rkm-rk">${s.rank}</td>
       <td class="l"><span class="kh-nm">${iconHtml(s)}<b data-co="${s.code}">${escT(s.name)}</b>${th ? themeBadge(s.code) : ''}</span></td>
       <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, sid)) : '···'}</td>
       <td class="kh-num ${p ? dirClass(pctOf(p, sid)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, sid)) : '—'}</td>
-      <td class="kh-num">${p ? showValue(s.code, p) : '···'}</td>
+      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : p ? showValue(s.code, p) : '···'}</td>
       <td class="kh-num">${th && themeBig !== FLOW ? themeCap(s.code) : showCap(s.code)}</td>
       <td class="kh-num">${th && themeBig === FLOW ? themeMetric(s.code) : (p ? fmtShareCount(p.volume) : '···')}</td>
+      <td class="kh-num">${volRatioCell(s.code)}</td>
     </tr>`;
   }).join('');
   /* 카드와 같다 — 고른 시장 목록이 아직 안 왔으면 빈 표 대신 그렇다고 적는다 */
   const empty = !list.length && universe
-    ? `<tr><td colspan="7" class="kh-mut">${th ? '—' : SORTS[rankModalSort]?.only ? afterEmpty() : SORTS[rankModalSort]?.empty ? SORTS[rankModalSort].empty()
+    ? `<tr><td colspan="8" class="kh-mut">${th ? '—' : SORTS[rankModalSort]?.only ? afterEmpty() : SORTS[rankModalSort]?.empty ? SORTS[rankModalSort].empty()
       : `${marketDef(rankModalMarket).label} 목록을 아직 받지 못했습니다`}</td></tr>` : '';
 
   /* 칸 폭을 못 박는다 (table-layout: fixed).
@@ -1987,11 +2011,11 @@ function paintRankModal() {
     <table>
       <colgroup>
         <col class="c-rk"><col class="c-nm"><col class="c-pr"><col class="c-pc">
-        <col class="c-am"><col class="c-cap"><col class="c-vol">
+        <col class="c-am"><col class="c-cap"><col class="c-vol"><col class="c-vr">
       </colgroup>
       <thead><tr>
         <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
-        <th>거래대금</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th>
+        <th>${sid === 'buy' ? '외·기·프(억)' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
       </tr></thead>
       <tbody>${rows || empty}</tbody>
     </table>
@@ -2008,6 +2032,7 @@ function paintRankModal() {
     }
     if (rankModalMarket === 'THEME') refreshTheme().then(() => paintRankModal());
     paintRankModal();
+    loadVolRatio();
     scheduleFetch();
   });
 
@@ -2046,14 +2071,17 @@ function openRankModal() {
       /* 모달에서 고른 기준은 첫 화면 순위표와 **따로 둔다** — 모달에서
          거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면 무엇을 눌러
          그렇게 됐는지 알 수 없다 (2026-09-22). */
-      onTab(id) { rankModalSort = id; paintRankModal(); if (id === 'buy') loadJoint(); },
+      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); loadVolRatio(); },
     },
-    onClose() { rankModal = null; },
+    onClose() { rankModal = null; if (volWatch) { volWatch.stop(); volWatch = null; } },
   });
   rankModal = m;
   rankModalSort = sortBy;
   rankModalMarket = market;     // 목록에서 보던 시장으로 열린다
   paintRankModal();
+  loadVolRatio();
+  /* 바뀌었나는 대표 한 종목으로 본다 — 서버가 지금 누적을 CACHE_TTL 마다 새로 받으니 그때마다 바뀌어 전체를 다시 받는다 */
+  if (!volWatch) volWatch = watch({ url: () => (rankModal ? '/api/kis/vol-ratio?codes=005930' : null), onChange: loadVolRatio, key: 'session_volume.CACHE_TTL', fallbackMs: VOL_FALLBACK_MS });
   paintRankModalNote();
 }
 
@@ -2069,8 +2097,9 @@ function openRankModal() {
 function paintRankModalNote() {
   if (!rankModal) return;
   const fresh = freshNote();
-  rankModal.head.setTabsNote(
-    fresh ? `${RANK_TABS_NOTE} · ${fresh.text}` : RANK_TABS_NOTE);
+  /* 「매수」 탭은 갱신 주기만 짧게 — 길면 탭 글자가 세로로 눌렸다(11-05 8772) */
+  const base = rankModalSort === 'buy' && rankModalMarket !== 'THEME' ? jointNote(true) : RANK_TABS_NOTE;
+  rankModal.head.setTabsNote(fresh ? `${base} · ${fresh.text}` : base);
 }
 
 /* 이름 옆 섹터 — 네이버(FnGuide) WICS 이름 (2026-11-04 재권님 「실시간 순위 종목 이름 옆 섹터」 → 출처 「응 해 — 네이버 WICS 로」).
@@ -2110,6 +2139,7 @@ function paintRows(priceMap) {
     return;
   }
   const sid = market === 'THEME' ? 'cap' : sortBy;     // 테마는 정렬 칩(장외 등)의 값 셈을 안 탄다
+  $('kh-rows').closest('.kh-rank-card')?.setAttribute('data-sort', sid);   // 좁은 폭에서 「매수」 는 값 칸을 남긴다(css/home.css)
   $('kh-rows').innerHTML = list.map(s => {
     const live = priceMap && priceMap[s.code];
     const cls = live ? dirClass(pctOf(live, sid)) : 'kh-mut';
