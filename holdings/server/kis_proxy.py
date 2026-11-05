@@ -1149,6 +1149,8 @@ def usage_stats():
         # 쓰고 있어 남겨 둔다 — 같은 값이 여기에도 들어오지만 **한 곳에서
         # 나오므로 갈리지 않는다.** 화면을 옮기면 위 줄을 지운다.
         "timing": timing_values(),
+        # 「장외」 칩을 비워 두는 시각(평일) — 화면이 빈 칸 까닭 글을 이 값으로 짓는다. 시각은 아래 AFTER_CLEAR_AT · AFTER_CLEAR_UNTIL 한 곳
+        "afterClear": {"from": "%02d:%02d" % AFTER_CLEAR_AT, "until": "%02d:%02d" % AFTER_CLEAR_UNTIL},
     }
 
 
