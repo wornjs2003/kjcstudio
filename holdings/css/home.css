@@ -249,13 +249,13 @@
   .kh-rkm .kh-nm { gap: 5px; }
   .kh-rkm col:nth-child(n+5),
   .kh-rkm tr > :nth-child(n+5) { display: none; }
-  .kh-rkm:is([data-sort="value"], [data-sort="up"], [data-sort="down"], [data-sort="buy"]) :is(col, tr > *):nth-child(5),
+  .kh-rkm:is([data-sort="value"], [data-sort="up"], [data-sort="down"], [data-sort="buy"], [data-sort="pre"]) :is(col, tr > *):nth-child(5),
   .kh-rkm:is([data-sort="fav"], [data-sort="cap"]) :is(col, tr > *):nth-child(6),
   .kh-rkm[data-sort="vol"] :is(col, tr > *):nth-child(7) { display: revert; }
   /* 「매수」 탭은 외 · 기 · 프 한 줄이라 그 칸을 넓히고 현재가를 줄인다(11-05 재권님 「외 기 프 는 한줄로」) — 종목 칸(auto)이 나머지를 받는다 */
-  .kh-rkm[data-sort="buy"] col.c-am { width: 142px; }
-  .kh-rkm[data-sort="buy"] col.c-pr { width: 70px; }
-  .kh-rkm[data-sort="buy"] tr > :nth-child(5) > div { font-size: 11px !important; }
+  .kh-rkm:is([data-sort="buy"], [data-sort="pre"]) col.c-am { width: 142px; }
+  .kh-rkm:is([data-sort="buy"], [data-sort="pre"]) col.c-pr { width: 70px; }
+  .kh-rkm:is([data-sort="buy"], [data-sort="pre"]) tr > :nth-child(5) > div { font-size: 11px !important; }
   /* 시장 칩은 누르는 자리 28px 이상 */
   .kh-rkm-mkt .kh-chip { min-height: 30px; }
 }
@@ -807,8 +807,8 @@
      등락률까지 자르면 오르내림을 알 수 없으므로 그것은 건드리지 않는다. */
   .kh-rank-card th:nth-child(4), .kh-rank-card td:nth-child(4) { display: none; }
   /* 「매수」 는 값 칸(외 · 기 · 프 · 빠진 까닭)이 그 칩의 내용이라 남기고 등락률을 감춘다 (2026-11-05 qa — 좁은 폭에서 값이 안 보였다) */
-  .kh-rank-card[data-sort="buy"] th:nth-child(4), .kh-rank-card[data-sort="buy"] td:nth-child(4) { display: table-cell; }
-  .kh-rank-card[data-sort="buy"] th:nth-child(5), .kh-rank-card[data-sort="buy"] td:nth-child(5) { display: none; }
+  .kh-rank-card:is([data-sort="buy"], [data-sort="pre"]) th:nth-child(4), .kh-rank-card:is([data-sort="buy"], [data-sort="pre"]) td:nth-child(4) { display: table-cell; }
+  .kh-rank-card:is([data-sort="buy"], [data-sort="pre"]) th:nth-child(5), .kh-rank-card:is([data-sort="buy"], [data-sort="pre"]) td:nth-child(5) { display: none; }
 }
 
 /* ══ 지수 영역 (2026-09-14 개편) ═══════════════════════════
@@ -1376,6 +1376,11 @@
   font-size: 0.74rem; color: var(--kh-text-muted);
 }
 .kh-sort-note b { font-weight: 600; }
+/* 「프리장」 칩 업종 띠 — 한 줄 · 넘치면 옆으로 민다(막대는 감춘다 — 가로로 미는 띠 · 글자가 잘려 더 있음을 안다) */
+.kh-pre-sec { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; white-space: nowrap;
+  font-size: 0.74rem; color: var(--kh-text-secondary); padding: 0 14px 8px; margin-top: -4px; }
+.kh-pre-sec::-webkit-scrollbar { display: none; }
+.kh-pre-sec-it b { font-weight: 600; }
 /* 아직 채우는 중 — 파랑. 다 차면 사라진다 */
 .kh-sort-note .kh-accent { color: var(--kh-accent); }
 
