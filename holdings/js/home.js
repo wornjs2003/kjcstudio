@@ -14,7 +14,8 @@ import { fetchCandles, fetchCandlesSince, peekCandles, watchCandles, createStock
 import { color } from './theme.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount,
   dirClass, marketPhase, isUsCode, fmtPriceOf, fmtUsdBig, priceDigitsOf, usSessionLabel } from './utils/format.js';
-import { favList, isFav, toggleFav, onFavChange } from './store/favorites.js';
+import { favList, isFav, toggleFav, onFavChange, favGroups, ungroupedCodes } from './store/favorites.js';
+import { openGroupPicker } from './components/fav-groups.js';
 /* mountWatchSide · mountVBar 는 첫 화면에서 안 쓴다 (2026-09-17).
    관심 목록은 순위표의 「관심」 칩으로 들어갔고, 세로 아이콘 바는
    그만큼 오른쪽 칸을 넓히려고 감췄다. 다른 화면은 그대로 쓴다. */
@@ -1438,8 +1439,32 @@ function afterEmpty() {
    아주 작은 종목은 애초에 없다. ETF 도 넣는다(재권님 「etf도 필요해」) */
 
 let sortBy = 'cap';
+/* 「관심」 을 볼 때 고른 묶음 — 'all' 전체 · 'none' 미분류 · 묶음 id (2026-11-05 · 아래 favGroupChipsHtml) */
+let favGroup = 'all';
 
-function rowList(sortId = sortBy, mkt = market) {
+/* 고른 묶음에 든 종목 코드 — 'all' 이면 null(거르지 않음). 지운 묶음이면 전체로 돌아간다 */
+function favGroupCodes(grp) {
+  if (grp === 'all') return null;
+  if (grp === 'none') return new Set(ungroupedCodes());
+  const g = favGroups().find((x) => x.id === grp);
+  if (!g) { favGroup = 'all'; return null; }
+  return new Set(g.codes);
+}
+
+/* 「관심」 아래 줄 — 전체 · 묶음들 · 미분류. 작은 테마 줄과 같은 칩이다(2026-11-05 시안 10:44 「응 해줘」) */
+function favGroupChipsHtml() {
+  const groups = favGroups();
+  if (favGroup !== 'all' && favGroup !== 'none' && !groups.some((g) => g.id === favGroup)) favGroup = 'all';
+  const one = (id, label, n) => `<button class="kh-chip kh-sub-chip${favGroup === id ? ' is-on' : ''}" type="button"
+    data-fg="${escT(id)}">${escT(label)} <b class="kh-chip-hit">${n}</b></button>`;
+  const none = ungroupedCodes().length;
+  return one('all', '전체', favList().length)
+    + groups.map((g) => one(g.id, g.name, g.codes.length)).join('')
+    + (groups.length || none ? one('none', '미분류', none) : '')
+    + (groups.length ? '' : '<span class="kh-mut">순위 숫자를 눌러 담을 때 묶음을 만듭니다</span>');
+}
+
+function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
   if (mkt === 'THEME') {        // 테마 — 정렬 칩과 무관하게(수급은 배율 순 · 작은 테마는 시가총액 순)
     return themeList().map((x, i) => ({
       code: x.code, name: x.name, sector: '', brand: brandColor(x.code, x.name), rank: i + 1,
@@ -1466,7 +1491,8 @@ function rowList(sortId = sortBy, mkt = market) {
    * 안 바뀐다. 처음 켰을 때의 기본값일 뿐이다 (favorites.js:43).
    * 그것을 쓰면 담고 빼도 이 칩이 그대로여서 「한 곳에만 둔다」 가 깨진다. */
   if (sort && sort.filter) {
-    const fav = favList();
+    const only = favGroupCodes(grp);
+    const fav = only ? favList().filter((f) => only.has(f.code)) : favList();
     const want = new Set(fav.map((f) => f.code));
     const inside = all.filter((s) => want.has(s.code));   // 시장을 안 가린다 — 위 MARKETS 주석
 
@@ -1518,8 +1544,9 @@ function paintSortChips() {
       data-sort="${id}">${x.label}</button>`).join('');
   const sub = $('kh-sorts2');
   if (sub) {
-    sub.hidden = !th;
-    sub.innerHTML = th ? themeSubChipsHtml() : '';
+    const fav = !th && sortBy === 'fav';
+    sub.hidden = !th && !fav;
+    sub.innerHTML = th ? themeSubChipsHtml() : fav ? favGroupChipsHtml() : '';
   }
 }
 
@@ -1548,15 +1575,23 @@ function setupSorts() {
     paintRows(rowPrices);
     return true;
   };
-  $('kh-sorts2')?.addEventListener('click', onTheme);
+  $('kh-sorts2')?.addEventListener('click', (e) => {
+    if (market === 'THEME') { onTheme(e); return; }
+    const b = e.target.closest('[data-fg]');        // 관심 묶음
+    if (!b || b.dataset.fg === favGroup) return;
+    favGroup = b.dataset.fg;
+    paintSortChips();
+    const box = $('kh-rank-scroll');
+    if (box) box.scrollTop = 0;
+    paintRows(rowPrices);
+  });
 
   host.addEventListener('click', async (e) => {
     if (market === 'THEME') { await onTheme(e); return; }
     const b = e.target.closest('[data-sort]');
     if (!b || b.dataset.sort === sortBy) return;
     sortBy = b.dataset.sort;
-    host.querySelectorAll('[data-sort]').forEach(x =>
-      x.classList.toggle('is-active', x === b));
+    paintSortChips();                // 「관심」 이면 아래 묶음 줄이 나온다
     paintRows(rowPrices);
   });
 }
@@ -1714,7 +1749,7 @@ function bindHearts(root) {
   root.querySelectorAll('.kh-rk[data-fav]').forEach(td => {
     td.addEventListener('click', (e) => {
       e.stopPropagation();          // 줄 고르기로 번지지 않게
-      toggleFav(td.dataset.fav, td.dataset.favName);
+      if (toggleFav(td.dataset.fav, td.dataset.favName)) openGroupPicker(td, td.dataset.fav, td.dataset.favName);
     });
   });
 }
@@ -1732,7 +1767,7 @@ function paintBigFav() {
 }
 $('kh-big-fav')?.addEventListener('click', (e) => {
   const btn = e.currentTarget;
-  if (btn.dataset.fav) toggleFav(btn.dataset.fav, btn.dataset.favName);
+  if (btn.dataset.fav && toggleFav(btn.dataset.fav, btn.dataset.favName)) openGroupPicker(btn, btn.dataset.fav, btn.dataset.favName);
 });
 
 onFavChange(() => {
@@ -1742,7 +1777,7 @@ onFavChange(() => {
   /* 「관심종목」 으로 보고 있으면 **목록 자체가 바뀐다** — 뺀 종목이 표에
      남아 있으면 안 된다. 다른 기준일 때는 줄 세우는 값이 안 바뀌므로
      숫자 색만 고치면 된다 (위 두 줄). 모달도 같은 기준이면 함께 그린다. */
-  if (sortBy === 'fav') paintRows(rowPrices);
+  if (sortBy === 'fav') { if (market !== 'THEME') paintSortChips(); paintRows(rowPrices); }   // 묶음 칩의 수도 따라간다
   if (rankModal && rankModalSort === 'fav') paintRankModal();
 });
 
@@ -1855,14 +1890,14 @@ function rankHeadStats() {
     { label: '코스피200', ...idx('KOSPI200') },
     { label: '코스닥 등락', ...counts('KOSDAQ') },
     { label: 'KRX100', ...idx('KRX100') },
-    { label: '줄 세운 종목', value: rowList(rankModalSort, rankModalMarket).length + '개' },
+    { label: '줄 세운 종목', value: rowList(rankModalSort, rankModalMarket, 'all').length + '개' },
   ];
 }
 
 /* 본문 — 표만 그린다. 머리는 modal-head.js 가 들고 있다 */
 function paintRankModal() {
   if (!rankModal) return;
-  const list = rowList(rankModalSort, rankModalMarket);
+  const list = rowList(rankModalSort, rankModalMarket, 'all');
   const th = rankModalMarket === 'THEME';
   const sid = th ? 'cap' : rankModalSort;
   const rows = list.map((s) => {

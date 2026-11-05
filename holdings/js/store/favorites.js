@@ -36,6 +36,11 @@
    그것을 더하면 재권님이 끈 하트가 화면 찍기 한 번에 되살아나 알림이 다시 간다(2026-10-26 개념정의 검수).
    누른 적이 없는 브라우저는 서버 것을 받기만 한다. 이 코드 전에 하트를 누른 브라우저는 옛 저장(`KEY`)이
    있으므로 그것으로 누른 것으로 친다 — 옛 코드는 누를 때만 그 칸을 썼다.
+   ── 묶음 (2026-11-05 재권님 「관심종목 카테고리화」 → (가) 한 종목이 여러 묶음에 → 시안 「응 해줘」) ──
+
+   같은 문서에 `groups: [{id, name, codes}]` 를 더한다 — 서버(`dart.watchlist()`)는 `items` 만 읽으므로 알림은 그대로다.
+   어느 묶음에도 없는 담은 종목이 「미분류」 다(따로 저장하지 않는다 — 셈한다). 하트를 끄면 모든 묶음에서 빠진다.
+   **쓸 때는 늘 둘을 함께 보낸다** — 한쪽만 보내면 다른 쪽이 문서에서 지워진다.
    ========================================================================== */
 
 import { WATCHLIST } from '../data/market.js';
@@ -43,6 +48,7 @@ import { WATCHLIST } from '../data/market.js';
 const KEY = 'kh:favorites:v1';
 const SYNCED = 'kh:favorites:synced';      // 이 브라우저 하트를 서버에 한 번 합쳤나
 const TOUCHED = 'kh:favorites:touched';    // 이 브라우저에서 사람이 하트를 누른 적이 있나
+const GKEY = 'kh:favorites:groups:v1';  // 묶음 — 들고 있는 값(서버 문서의 groups)
 const DOC = '/api/board/doc/watchlist';
 
 /* 바뀔 때마다 알려줄 곳 — 순위표 · 사이드바가 각각 건다 */
@@ -81,6 +87,29 @@ function store(arr) {
   listeners.forEach(fn => { try { fn(arr); } catch (_) {} });
 }
 
+function cleanGroups(arr) {
+  const out = [];
+  for (const g of Array.isArray(arr) ? arr : []) {
+    if (!g || typeof g.id !== 'string' || typeof g.name !== 'string' || !g.name.trim()) continue;
+    if (out.some(o => o.id === g.id)) continue;
+    const codes = [...new Set((g.codes || []).filter(c => typeof c === 'string'))];
+    out.push({ id: g.id, name: g.name.trim(), codes });
+  }
+  return out;
+}
+
+function readGroups() {
+  try { return cleanGroups(JSON.parse(localStorage.getItem(GKEY) || '[]')); } catch (_) { return []; }
+}
+
+function storeGroups(groups, quiet) {
+  try { localStorage.setItem(GKEY, JSON.stringify(groups)); } catch (_) {}
+  if (!quiet) listeners.forEach(fn => { try { fn(read()); } catch (_) {} });
+}
+
+/** 지금 들고 있는 둘 */
+function state() { return { items: read(), groups: readGroups() }; }
+
 function flag(k, v) {
   try {
     if (v === undefined) return localStorage.getItem(k) === '1';
@@ -91,7 +120,7 @@ function flag(k, v) {
 
 /* ── 서버 ──────────────────────────────────────────────────────────── */
 
-/** 서버 목록. 문서가 없으면 `null` · 못 닿으면 `undefined` */
+/** 서버 문서 `{items, groups}`. 문서가 없으면 `null` · 못 닿으면 `undefined`. 묶음 칸이 아직 없으면 groups 는 `null` */
 async function fetchServer() {
   try {
     const r = await fetch(DOC, { cache: 'no-store' });
@@ -100,28 +129,30 @@ async function fetchServer() {
     if (!j.ok) return undefined;
     serverAt = j.updatedAt || null;
     const items = j.data && Array.isArray(j.data.items) ? j.data.items : null;
-    return items ? clean(items) : null;
+    if (!items) return null;
+    return { items: clean(items), groups: Array.isArray(j.data.groups) ? cleanGroups(j.data.groups) : null };
   } catch (_) {
     return undefined;
   }
 }
 
-/** 통째로 쓴다. 그 사이 남이 썼으면(409) 다시 읽어 `redo` 를 얹고 한 번 더 쓴다 */
-async function pushServer(arr, redo) {
+/** 통째로 쓴다(`{items, groups}`). 그 사이 남이 썼으면(409) 다시 읽어 `redo` 를 얹고 한 번 더 쓴다 */
+async function pushServer(st, redo) {
   for (let i = 0; i < 2; i++) {
     try {
       const r = await fetch(DOC, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: { items: arr }, updatedAt: serverAt }),
+        body: JSON.stringify({ data: { items: st.items, groups: st.groups }, updatedAt: serverAt }),
       });
       const j = await r.json().catch(() => ({}));
       if (r.ok && j.ok) { serverAt = j.updatedAt || serverAt; return true; }
       if (r.status !== 409 || !redo) break;
       const fresh = await fetchServer();
-      if (!Array.isArray(fresh)) break;
-      arr = redo(fresh);
-      store(arr);
+      if (!fresh) break;
+      st = redo({ items: fresh.items, groups: fresh.groups || [] });
+      storeGroups(st.groups, true);
+      store(st.items);
     } catch (_) { break; }
   }
   console.warn('[관심종목] 서버에 못 썼습니다 — 이 브라우저에만 바뀌었습니다');
@@ -132,22 +163,29 @@ function same(a, b) {
   return a.length === b.length && a.every((x, i) => x.code === b[i].code && x.name === b[i].name);
 }
 
+function sameGroups(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
 /** 서버 것을 받아 들고 있는 값을 바꾼다 */
 async function pull() {
-  const srv = await fetchServer();
-  if (srv === undefined) return;                       // 못 닿음 — 들고 있는 값 그대로
+  const got = await fetchServer();
+  if (got === undefined) return;                       // 못 닿음 — 들고 있는 값 그대로
   const local = read();
   const touched = flag(TOUCHED);
-  if (srv === null) {                                  // 서버에 아직 없다
-    if (touched && (await pushServer(local))) flag(SYNCED, true);   // 사람이 누른 목록이면 그것으로 만든다
+  if (got === null) {                                  // 서버에 아직 없다
+    if (touched && (await pushServer(state()))) flag(SYNCED, true);   // 사람이 누른 목록이면 그것으로 만든다
     return;                                            // 아니면 안 만든다 — 서버는 첫 값(WATCH_CODES)을 쓴다
   }
+  const srv = got.items;
+  /* 묶음 — 서버에 칸이 있으면 그것이 원천이다. 없으면(묶음 전 문서) 이 브라우저 것을 그대로 들고 있다가 다음 쓰기에 실린다 */
+  const groups = got.groups || readGroups();
+  if (!sameGroups(groups, readGroups())) storeGroups(groups, true);
   let arr = srv;
   if (touched && !flag(SYNCED)) {                      // 이 브라우저에서 처음 — 사람이 담은 하트를 더한다
     const add = local.filter(x => !srv.some(s => s.code === x.code));
     if (add.length) {
       arr = srv.concat(add);
-      if (!(await pushServer(arr, f => f.concat(add.filter(x => !f.some(s => s.code === x.code))))))
+      if (!(await pushServer({ items: arr, groups },
+        f => ({ items: f.items.concat(add.filter(x => !f.items.some(s => s.code === x.code))), groups: f.groups }))))
         return;
     }
   }
@@ -155,6 +193,7 @@ async function pull() {
      다른 기기에서 뺀 종목을 다시 더한다 */
   flag(SYNCED, true);
   if (!same(arr, local)) store(arr);
+  else listeners.forEach(fn => { try { fn(arr); } catch (_) {} });   // 묶음만 바뀌었어도 다시 그린다
 }
 
 /* ── 밖에 내는 것 ───────────────────────────────────────────────────── */
@@ -167,18 +206,60 @@ export function isFav(code) { return read().some(x => x.code === code); }
 
 /** 담거나 뺀다. 담은 뒤 상태(true=담김)를 돌려준다. 서버에는 뒤에서 쓴다 */
 export function toggleFav(code, name) {
-  const apply = (arr, on) => {
-    const out = arr.filter(x => x.code !== code);
-    if (on) out.push({ code, name: name || code });
-    return out;
+  const apply = (st, on) => {
+    const items = st.items.filter(x => x.code !== code);
+    if (on) items.push({ code, name: name || code });
+    /* 끄면 모든 묶음에서도 뺀다 — 묶음에만 남은 종목은 담은 것이 아니다 */
+    const groups = on ? st.groups : st.groups.map(g => ({ ...g, codes: g.codes.filter(c => c !== code) }));
+    return { items, groups };
   };
   const on = !isFav(code);
   flag(TOUCHED, true);
-  store(apply(read(), on));
+  const next = apply(state(), on);
+  storeGroups(next.groups, true);
+  store(next.items);
   /* 쓰기는 한 줄로 세운다 — 빨리 여러 번 누르면 PUT 이 같은 `updatedAt` 으로 겹쳐 서로 409 를 내고
      마지막 상태가 어긋났다(2026-10-26 헤드리스 시험). 차례가 오면 그때의 목록을 보낸다 */
-  queue = queue.then(() => pushServer(read(), fresh => apply(fresh, on)));
+  queue = queue.then(() => pushServer(state(), fresh => apply(fresh, on)));
   return on;
+}
+
+/* ── 묶음 ── */
+
+/** 묶음 목록 `[{id, name, codes}]` — 만든 순서. codes 는 지금 담긴 종목만 */
+export function favGroups() {
+  const have = new Set(read().map(x => x.code));
+  return readGroups().map(g => ({ ...g, codes: g.codes.filter(c => have.has(c)) }));
+}
+
+/** 어느 묶음에도 없는 담은 종목 코드 — 「미분류」 */
+export function ungroupedCodes() {
+  const inAny = new Set(readGroups().flatMap(g => g.codes));
+  return read().map(x => x.code).filter(c => !inAny.has(c));
+}
+
+function writeGroups(op) {
+  flag(TOUCHED, true);
+  const st = state();
+  storeGroups(op(st.groups));
+  queue = queue.then(() => pushServer(state(), fresh => ({ items: fresh.items, groups: op(fresh.groups) })));
+}
+
+/** 종목 하나를 묶음 하나에 넣거나 뺀다 */
+export function setInGroup(code, id, on) {
+  writeGroups(groups => groups.map(g => g.id !== id ? g
+    : { ...g, codes: on ? [...new Set([...g.codes, code])] : g.codes.filter(c => c !== code) }));
+}
+
+/** 새 묶음을 만든다. 같은 이름이 있으면 그것을 쓴다. 만든(또는 있던) 묶음 id 를 돌려준다 */
+export function addGroup(name) {
+  name = String(name || '').trim();
+  if (!name) return null;
+  const had = readGroups().find(g => g.name === name);
+  if (had) return had.id;
+  const id = 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  writeGroups(groups => groups.some(g => g.name === name) ? groups : [...groups, { id, name, codes: [] }]);
+  return readGroups().find(g => g.name === name)?.id || id;
 }
 
 /** 목록이 바뀔 때마다 부른다 */

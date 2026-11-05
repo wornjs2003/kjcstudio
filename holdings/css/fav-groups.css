@@ -1,0 +1,26 @@
+/* ==========================================================================
+   관심종목 묶음 고르기 창 (2026-11-05 · components/fav-groups.js)
+   새 파일이라 좁은 폭 모양이 기본이다 — 「모바일 퍼스트」. 창은 떠 있는 상자라 넓은 폭에서도 모양이 같다.
+   묶음 칩 줄은 home.css 의 작은 테마 줄(.kh-sorts2 · .kh-sub-chip)을 그대로 쓴다 — 여기 다시 적지 않는다.
+   ========================================================================== */
+
+.kh-fg {
+  position: fixed; z-index: 250;   /* 순위표 위 · 모달(200)에서 열려도 그 위 */
+  width: 220px; max-width: calc(100vw - 16px); padding: 12px;
+  border-radius: 12px; background: var(--kh-bg-card); box-shadow: var(--kh-shadow-lg);
+  font-size: 0.82rem; color: var(--kh-text-primary);
+}
+.kh-fg-hd { display: block; margin-bottom: 6px; font-size: 0.85rem; }
+.kh-fg-list { max-height: 220px; overflow-y: auto; }
+.kh-fg-row { display: flex; align-items: center; gap: 8px; padding: 5px 2px; cursor: pointer; }
+.kh-fg-none { padding: 4px 2px; color: var(--kh-text-secondary); }
+.kh-fg-hint { margin: 4px 2px 8px; font-size: 0.75rem; color: var(--kh-text-secondary); }
+.kh-fg-add { display: flex; gap: 6px; }
+.kh-fg-add input {
+  flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--kh-border); border-radius: 8px;
+  font: inherit; color: var(--kh-text-primary); background: var(--kh-bg-card);
+}
+.kh-fg-add button {
+  border: 0; border-radius: 8px; padding: 0 10px; font: inherit; font-weight: 700; cursor: pointer;
+  background: var(--kh-accent); color: var(--kh-text-on-fill);
+}
