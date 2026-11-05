@@ -33,7 +33,7 @@ export function withLive(code, row) {
   const t = freshTick(code);
   if (!t) return row;
   const out = { ...(row || {}) };
-  for (const k of ['price', 'amt', 'pct', 'open', 'volume', 'value']) {
+  for (const k of ['price', 'amt', 'pct', 'open', 'volume', 'value', 'power']) {
     if (t[k] != null) out[k] = t[k];
   }
   if (t.high != null) out.high = out.high != null ? Math.max(out.high, t.high) : t.high;

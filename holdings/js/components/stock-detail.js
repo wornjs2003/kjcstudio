@@ -29,6 +29,8 @@
 import { apiFetch, viewUrl } from '../data/api.js';
 import { fmtMoneyKr, fmtUsdBig, isUsCode } from '../utils/format.js';
 import { watch } from '../store/longpoll.js';
+import { signClass } from '/assets/js/sign.js';
+import { ready as toneReady, has as toneHas, paint as tonePaint } from '/assets/js/tone.js';
 
 /* **주기를 갖지 않는다 — 바뀌면 서버가 알려 준다** (2026-10-02 · 재권님 「주는 대로
    받아야」). `store/longpoll.js` 가 한 연결로 묻는다. 서버가 롱폴을 모르면 호가는
@@ -46,6 +48,7 @@ const ASK_RELOAD_FALLBACK_MS = 5000;
    주기는 서버의 `PRICE_CACHE_TTL` 이다(위). */
 const LIVE_RELOAD_KEY = 'kis_proxy.PRICE_CACHE_TTL';
 const LIVE_RELOAD_FALLBACK_MS = 30_000;
+const POWER_RELOAD_FALLBACK_MS = 3_000;    // 체결강도 — 서버 값(kis_proxy.TICKS_TTL)을 못 받았을 때만
 
 /* `onOne(code, 단건)` — 단건을 받을 때마다 알린다 (2026-10-06 지시 — 「로딩 순서 체크해 봐」 → 「응」).
    첫 화면의 52주 칸과 큰 차트 머리 현재가가 **같은 단건을 따로 또 부르거나**(같은 주소 두 번)
@@ -56,11 +59,13 @@ export function mountStockDetail(host, { view, onOne } = {}) {
   let code = null;
   let live = null;          // 순위표가 준 시세 (가격·거래량)
   let one = null;           // 고른 종목만 따로 받은 것 (시가총액·거래대금)
+  let power = null;         // 체결강도(100 기준) — /api/kis/ticks 의 power · 실시간 체결이 오면 그 값이 이긴다(2026-11-05 재권님 「체결강도를 차트랑 모달 차트에」 → (나) 머리줄)
   let missing = false;      // 서버가 「없는 종목 코드」(404 · notFound) 라고 했다 — 0원으로 그리지 않는다(2026-11-05)
   let buyPct = null;        // 매수 잔량 비중
   let seq = 0;
   let timer = null;
   let liveTimer = null;
+  let powerTimer = null;
 
   async function loadAsking() {
     if (!code) return;
@@ -123,7 +128,18 @@ export function mountStockDetail(host, { view, onOne } = {}) {
         <i class="buy" style="width:${buyPct}%"></i><i class="sell" style="width:${100 - buyPct}%"></i>
       </span>`;
 
-    host.innerHTML = `
+    /* 체결강도 — 실시간 체결(live.power)이 있으면 그것 · 없으면 체결 목록의 값. 100 위 빨강 · 아래 파랑(sign.js) ·
+       바탕 짙기는 지표 표(data/metrics.json)의 trade_power 가 있을 때만(tone.js · 「기준이 있는 수치는 위 빨강 · 아래 파랑」) */
+    const pw = src.power != null ? Number(src.power) : power;
+    const pwOk = pw != null && Number.isFinite(pw);
+    const pwBg = pwOk && toneHas('trade_power') ? tonePaint('trade_power', pw, 'bg') : '';
+    /* 종목 화면(stock.html)은 차트 칸이 좁아 이 줄이 두 줄로 꺾여 칸이 30px 커진다(11-05 check-layout) — 거기는 「체결」 칸에 이미 체결강도가 있어 넣지 않는다.
+       홈 큰 차트 · 모달만(재권님 「차트랑 모달 차트에」) */
+    const pwHere = !!host.closest('.kh-modal, .kh-idx-main');
+    const pwHtml = isUsCode(code) || !pwHere ? '' : `
+      <span class="kh-dt-i" title="체결강도 — 100 보다 크면 사는 쪽 체결이 많습니다"><span class="kh-dt-l">체결강도</span><b class="kh-dt-pw ${pwOk ? signClass(pw - 100) : 'kh-mut'}"${pwBg ? ` style="background:${pwBg}"` : ''}>${pwOk ? pw.toFixed(2) : '—'}</b></span>`;
+
+    host.innerHTML = `${pwHtml}
       <span class="kh-dt-i" title="${exact ? '서버가 준 실제 거래대금입니다'
         : '현재가 × 거래량으로 어림한 값입니다'}">
         <span class="kh-dt-l">거래대금${exact ? '' : '<i>어림</i>'}</span><b>${amt}</b></span>
@@ -131,11 +147,27 @@ export function mountStockDetail(host, { view, onOne } = {}) {
       ${bs}`;
   }
 
+  async function loadPower() {
+    if (!code || isUsCode(code)) return;
+    const mine = seq;
+    try {
+      const r = await apiFetch(viewUrl(`/api/kis/ticks?code=${code}`, view), { cache: 'no-store' });
+      const b = r && r.ok ? await r.json() : null;
+      if (mine !== seq) return;
+      power = b && b.meta && b.meta.power != null ? Number(b.meta.power) : null;
+    } catch { power = null; }
+    paint();
+  }
+
   /* 주소는 고른 종목을 따라간다 — `setCode` 가 `refresh()` 로 알린다 */
   timer = watch({ url: () => (code && !isUsCode(code) ? viewUrl(`/api/kis/asking?code=${code}`, view) : null),   // 미국은 안 지켜본다
                   onChange: () => loadAsking(), key: ASK_RELOAD_KEY, fallbackMs: ASK_RELOAD_FALLBACK_MS });
   liveTimer = watch({ url: () => (code ? viewUrl(`/api/kis/price?code=${code}`, view) : null),
                       onChange: () => loadLive(), key: LIVE_RELOAD_KEY, fallbackMs: LIVE_RELOAD_FALLBACK_MS });
+  /* 체결강도 — 체결 목록이 바뀌면 서버가 알려 준다(주기는 서버 `kis_proxy.TICKS_TTL`) */
+  powerTimer = watch({ url: () => (code && !isUsCode(code) ? viewUrl(`/api/kis/ticks?code=${code}`, view) : null),
+                       onChange: () => loadPower(), key: 'kis_proxy.TICKS_TTL', fallbackMs: POWER_RELOAD_FALLBACK_MS });
+  toneReady.then(() => paint());          // 지표 표를 읽은 뒤 바탕 짙기를 칠한다
   paint();
 
   return {
@@ -145,10 +177,13 @@ export function mountStockDetail(host, { view, onOne } = {}) {
       buyPct = null;
       one = null;
       missing = false;
+      power = null;
       paint();
       loadAsking();
+      loadPower();
       loadLive();
       timer.refresh();          // 쥔 연결이 옛 종목을 보고 있다
+      if (powerTimer) powerTimer.refresh();
     },
     /** **받아 둔 단건 응답을 그대로 내준다** (2026-09-30 지시 —
      *  「모달에 있는건 가져와야지 왜 안가져오고있지?」).
@@ -182,6 +217,7 @@ export function mountStockDetail(host, { view, onOne } = {}) {
     destroy() {
       if (timer) timer.stop();
       if (liveTimer) liveTimer.stop();
+      if (powerTimer) powerTimer.stop();
     },
   };
 }
