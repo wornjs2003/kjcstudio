@@ -1389,7 +1389,10 @@ const SORTS = {
      `pct` 는 맨 오른쪽 등락률 칸에 무엇을 적나 — 이 칩만 전일 대비가 아니라 종가 대비다 */
   after:{ label: '장외', key: (p) => p.regPct, only: (v) => v > 0,
           head: '종가', show: (code, p) => (p && p.regClose ? fmtPriceOf(code, p.regClose) : '—'),
-          pct: (p) => p.regPct, note: '종가 대비 오른 종목' },
+          pct: (p) => p.regPct, note: '종가 대비 오른 종목',
+          /* 정규장 중에는 서버가 앞 회차 20:00 장외 마감 값을 싣는다(regFrozen = 그 회차 날) —
+             가격 칸도 그 장외 값이어야 등락률과 맞는다(재권님 「전날 20 시에 멈추는걸로 해줘」 · 2026-10-26) */
+          price: (p) => (p.regFrozen ? p.regAfterPrice : p.price) },
 };
 
 /* 가격 칸의 값 — 장외 칩이 정규장 중이면 앞 회차 20:00 장외 마감 값 · 나머지는 지금 시세 */
@@ -1406,14 +1409,27 @@ const pctOf = (p, sortId = sortBy) => {
   return Number.isFinite(v) ? v : null;
 };
 
-/* 장외 칩에 줄이 하나도 없을 때 적는 글 — 평일 07:00~15:30 은 서버가 장외 값을 비워 둔다(kis_proxy.py `after_cleared` ·
-   2026-11-05 재권님 「아침 7시에 리셋되게 해줘」 → (가)). 그때는 줄이 없는 까닭을 적는다 */
-function afterEmpty() {
+/* 「어제」 · 「10-23(금)」 — 정규장 중 장외 값이 어느 저녁 것인지. 한국 시각으로 센다(marketPhase 와 같은 보정) */
+function frozenDayLabel(iso) {
   const kst = new Date(Date.now() + 9 * 3600 * 1000);
-  const hm = kst.getUTCHours() * 60 + kst.getUTCMinutes();
-  const wd = kst.getUTCDay() >= 1 && kst.getUTCDay() <= 5;
-  return wd && hm >= 7 * 60 && hm < 15 * 60 + 30
-    ? '장외 값은 15:30 애프터부터 · 아침 7시에 비웁니다'
+  kst.setUTCDate(kst.getUTCDate() - 1);
+  if (kst.toISOString().slice(0, 10) === iso) return '어제';
+  const d = new Date(iso + 'T00:00:00Z');
+  return `${iso.slice(5)}(${'일월화수목금토'[d.getUTCDay()]})`;
+}
+
+/* 앞 평일(한국 시각) — 정규장 중 장외 칸이 기다리는 회차 날. 서버 attach_after_snap 과 같은 셈이다(공휴일은 아직 안 가른다) */
+function prevWeekdayIso() {
+  const d = new Date(Date.now() + 9 * 3600 * 1000);
+  do { d.setUTCDate(d.getUTCDate() - 1); } while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+  return d.toISOString().slice(0, 10);
+}
+
+/* 장외 칩에 줄이 하나도 없을 때 적는 글 — 정규장 중이면 장외 거래가 없는 때다 */
+function afterEmpty() {
+  const ph = marketPhase().id;
+  return ph === 'regular' || ph === 'single'
+    ? `${frozenDayLabel(prevWeekdayIso())} 20:00 장외 마감 값을 못 받았습니다`
     : '종가보다 오른 종목이 아직 없습니다';
 }
 
@@ -1694,7 +1710,13 @@ function paintSortNote() {
   /* 「관심」 은 **줄 세우는 기준이 아니라 거르는 것**이라 「순」 이 안 붙는다.
      그대로 두면 「관심 순」 이 되는데, 시가총액 순으로 세운 것을 걸렀을 뿐이다. */
   const bits = [s.filter ? `${s.label}만 · 시가총액 순` : s.note ? `${s.label} · ${s.note}` : `${s.label} 순`];
-  const fresh = freshNote();
+  /* 장외 칩이 정규장 중이면 지금 값이 아니라 앞 회차 20:00 마감 값이다 — 그렇다고 적고, 「N초 전 값」 은 안 붙인다
+     (그것은 지금 시세가 얼마나 묵었나라 이 값에는 맞지 않는다). 한 줄에 들어가게 짧게 — 두 줄이면 표가 밀린다 */
+  const frozenAt = sortBy === 'after'
+    ? Object.values(rowPrices || {}).find((p) => p && p.regFrozen)?.regFrozen : null;
+  if (frozenAt) bits.push(`${frozenDayLabel(frozenAt)} 20:00 마감 기준`);
+
+  const fresh = frozenAt ? null : freshNote();
   if (fresh) bits.push(`<b class="${fresh.cls}">${fresh.text}</b>`);
 
   el.innerHTML = bits.join(' <span class="kh-mut">·</span> ');

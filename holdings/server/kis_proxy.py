@@ -3001,7 +3001,7 @@ def fetch_quotes_multi(cfg, codes, max_age=None):
     · max_age — 부르는 쪽이 허용하는 나이(초). 기본은 MULTI_CACHE_TTL 이고 그보다 짧게는 못 준다(--slow 서버의 60초가 그대로 듣게).
       시장 지도는 자기 응답 주기(heatmap.HEATMAP_TTL)를 준다 — 원래 그만큼 묵은 값을 내던 자리라 칸끼리 받은 시각이 달라도 그 안이다
     · 정규장(J) ↔ 통합(UN)이 바뀌면 옛 쪽 값은 안 쓴다(줄마다 구분을 함께 적어 둔다)
-    · 장 밖 값(attach_reg_close · overnight_quotes)은 새로 받은 종목에만 붙인다 — 들고 있던 줄은 이미 붙어 있다
+    · 장 밖 값(attach_reg_close · overnight_quotes · attach_after_snap)은 새로 받은 종목에만 붙인다 — 들고 있던 줄은 이미 붙어 있다
     · 내줄 때는 줄을 복사한다 — 한 곳이 고쳐도 다른 곳이 안 바뀌게
     · 오류는 이번에 새로 물은 종목 것만 돌려준다 — 못 받은 종목은 담지 않아 다음 요청이 다시 묻는다
     """
@@ -3062,14 +3062,12 @@ def fetch_quotes_multi(cfg, codes, max_age=None):
             }
 
     # 장 밖(통합 시세)이면 그 회차 정규장 종가와 종가 대비 등락률을 함께 싣는다 — 아래 `attach_reg_close`.
-    # 평일 아침 07:00 부터 정규장이 끝날 때까지는 장외 값을 싣지 않는다 — 아래 `after_cleared`
+    # 정규장 중이면 오늘 아침 장 시작 전에 받아 둔 장외 값을 싣는다 — `attach_after_snap`
     if div == "UN" and out:
         attach_reg_close(cfg, out)
         overnight_quotes(out)               # 자정 뒤 08:00 전 — 어제 20:00 넥장 마감 값으로(아래 `overnight_row`)
-        if after_cleared():
-            for q in out.values():
-                for k in ("regClose", "regPct", "regDate"):
-                    q.pop(k, None)
+    elif out:
+        attach_after_snap(out)
 
     # 받아둔다 — 받은 종목만. 못 받은 종목은 안 담아 다음 요청이 다시 묻는다
     if out:
@@ -3182,7 +3180,7 @@ def fetch_reg_closes(cfg, codes):
     return have, day
 
 
-# 정규장 중(09:00~15:30) 「장외」 칩은 **전날 20:00 애프터 마감 값**을 그대로 보였다 — 2026-11-05 에 07:00~15:30 빈 칸으로 바뀜(after_cleared). 아래는 밤사이 값을 쥐는 까닭으로 남는다
+# 정규장 중(09:00~15:30) 「장외」 칩은 **전날 20:00 애프터 마감 값**을 그대로 보인다
 # (2026-10-26 재권님 「다음 장 시작전의 종가로 해줘」 → 「전날 20 시에 멈추는걸로 해줘」 · 작업우선순위 경유 —
 # 아침 프리마켓(08:00~08:50) 몫은 안 넣는다). 정규장 중에는 통합 시세가 장중 값이라 그때 물어서는 못 얻는다 —
 # 그래서 **애프터가 끝난 뒤(AFTER_SNAP_AT) 한 번** 순위 목록 전부(dart.universe_rows · 코스피 200 + 코스닥 150 ·
@@ -3268,18 +3266,23 @@ def start_after_snap(cfg):
     return True
 
 
-# 「장외」 칩은 평일 아침 07:00 에 비우고 정규장이 끝날 때(15:30)까지 빈 칸이다 (2026-11-05 재권님 「실시간 목록에 장외는 본장이
-# 시작하면 리셋해줘야 하는데 … 아침 7시에 리셋되게 해줘」 → (가) 「15:30 애프터가 열릴 때까지 빈 칸」 · 작업우선순위 경유).
-# 전에는 정규장 중에 앞 회차 20:00 장외 마감 값을 얼려 실었다(attach_after_snap · 10-26 「전날 20 시에 멈추는걸로」) — 그것을 걷어냈다.
-# 밤사이(00:00~07:00) 값은 그대로 어제 20:00 마감 값이다(overnight_quotes · take_after_snap 이 쥔 것)
-AFTER_CLEAR_AT = (7, 0)
-AFTER_CLEAR_UNTIL = (15, 30)
-
-
-def after_cleared(now=None):
-    """지금 「장외」 값을 비워 둘 때인가 — 평일 07:00~15:30. 공휴일은 아직 안 가른다."""
-    now = now or datetime.now(KST)
-    return now.weekday() < 5 and AFTER_CLEAR_AT <= (now.hour, now.minute) < AFTER_CLEAR_UNTIL
+def attach_after_snap(out):
+    """정규장 중 시세 묶음에 앞 회차 20:00 장외 마감 값을 싣는다 — regFrozen(그 회차 날)으로 「지금 값이 아니다」 를 알린다."""
+    day = datetime.now(KST).date() - timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    if _after_snap.get("day") != day.isoformat():       # 앞 평일 저녁 것만 — 더 묵은 것은 안 싣는다
+        return
+    rows = _after_snap.get("rows") or {}
+    for code, q in out.items():
+        r = rows.get(code)
+        if not r:
+            continue
+        q["regClose"] = r["regClose"]
+        q["regPct"] = r["regPct"]
+        q["regDate"] = r.get("regDate")
+        q["regAfterPrice"] = r.get("price")
+        q["regFrozen"] = _after_snap.get("day")
 
 
 def attach_reg_close(cfg, out):
