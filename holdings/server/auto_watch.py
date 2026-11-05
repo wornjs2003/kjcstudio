@@ -47,7 +47,8 @@ SORTS = ("mult", "pct")
 ADD = False                     # 08:00 관심 목록 넣기 — 아직 없다(머리 주석 「넣기」)
 TICK = 30
 HOLIDAY_SAME = 0.9              # 앞 날과 종가 · 거래량이 똑같은 종목이 이만큼이면 휴장(거래가 있는 날에 우연히 같을 수는 없다)
-RETRY_SEC = 300                 # 그날 값을 못 받았을 때 다시 도는 간격 — 창(15:41~16:00) 안에서만
+RETRY_SEC = 300
+BUSY_RETRY_SEC = 60             # 뜰 때 채우기가 자물쇠를 쥐고 있을 때 바퀴가 다시 보는 간격                 # 그날 값을 못 받았을 때 다시 도는 간격 — 창(15:41~16:00) 안에서만
 
 _SCHEMA = (
     """CREATE TABLE IF NOT EXISTS auto_watch_day (
@@ -131,7 +132,7 @@ def save_today(proxy, day, codes=None):
         _status.update(error="감시 대상 표(dart_universe)가 비었습니다 — dart 가 받은 뒤 다시")
         return None
     got = _multi_j(proxy, cfg, [m[0] for m in mem])
-    if not got:                      # 「못 받음」 — 휴장과 가른다. None 이면 바퀴가 RETRY_SEC 뒤 다시 돈다
+    if not got or all(r["vol"] is None for r in got.values()):   # 「못 받음」(줄은 왔는데 거래량 칸이 다 없음도) — 휴장과 가른다. None 이면 바퀴가 RETRY_SEC 뒤 다시 돈다
         _status.update(error="멀티 시세를 하나도 못 받음 — 다시 돈다")
         return None
     if not sum((r["vol"] or 0) for r in got.values()):
@@ -220,6 +221,8 @@ def run(proxy, day, codes=None):
         b = backfill(proxy, day, codes)
         n = save_today(proxy, day, codes)
         _status.update(runDay=day, runAt=_now().isoformat(timespec="seconds"), saved=n)
+        if n:                        # 저장했으면 앞서 남은 「못 받음」 을 지운다 — meta 를 읽는 쪽이 헷갈리지 않게(qa 덧 11-05)
+            _status.update(error=None)
         return {"backfill": b, "saved": n}
     finally:
         _run_lock.release()
@@ -345,7 +348,7 @@ def start(proxy):
                     try:
                         r = run(proxy, day)
                         if r is None:                        # 뜰 때 채우기가 돌고 있다 — 1분 뒤 다시
-                            _status.update(runDay=None, retryAt=time.time() + 60)
+                            _status.update(runDay=None, retryAt=time.time() + BUSY_RETRY_SEC)
                         elif r.get("saved") is None:         # 못 받음 — 창 안에서 RETRY_SEC 뒤 다시
                             _status.update(runDay=None, retryAt=time.time() + RETRY_SEC)
                         print("  [자동 관심종목] %s 앞 날 채움 %s종목 · 그날 값 %s종목" % (day, (r or {}).get("backfill"), (r or {}).get("saved")))
