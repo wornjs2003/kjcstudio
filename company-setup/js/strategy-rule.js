@@ -78,6 +78,8 @@ const pctTxt = (x) => { if (x == null || !Number.isFinite(Number(x))) return '�
 const IDX = { KOSPI: '코스피', KOSDAQ: '코스닥' };
 const mmdd = (d) => { const m = String(d || '').match(/(\d{4})-?(\d{2})-?(\d{2})/); return m ? `${m[2]}-${m[3]}` : (d || '—'); };
 
+// 신고가 부근 표시 (11-05 「가랑 나랑 구분만 되면」) — 서버가 붙여 주는 nearHigh(부근인가) · nearHighOnly(위 조건 밖인데 부근이라 더 넣음) 그대로 · 맨 위로 올리는 것도 서버 순서
+const nhTag = (p) => (!p.nearHigh ? '' : `<span class="aw-nh${p.nearHighOnly ? ' only' : ''}">${p.nearHighOnly ? '신고가 부근만' : '신고가 부근'}</span>`);
 async function loadAw() {
   let j = null, st = 0;
   try { const r = await fetch(AW, { cache: 'no-store' }); st = r.status; j = r.ok ? await r.json() : null; } catch (e) { j = null; }
@@ -85,6 +87,7 @@ async function loadAw() {
   if (!d) { awBox.innerHTML = `<div class="st-err">— 서버 값을 못 받음(${st || '연결 안 됨'})</div>`; awCap.textContent = '서버가 위 룰 값으로 고른 종목'; awHow.textContent = ''; return; }
   const rule = d.rule || {}, picked = Array.isArray(d.picked) ? d.picked : [];
   awPicked = d.day ? picked : []; awDay = d.day || '';
+  if (ahD) renderAh();
   if (why.code && !awPicked.some((p) => p.code === why.code)) { why.code = ''; whyBox.innerHTML = '<div class="st-err">— 종목을 누르면 여기 나옵니다</div>'; }   // 다시 고른 목록에 없으면 비움
   const by = rule.sortBy === 'pct' ? '등락률 순' : '배수 순';
   const unset = d.day && d.ready === false;   // 기준 칸(등락률 · 배수)이 비면 서버가 거르지 않는다 — 「없음」 이 아니라 「안 거름」(개념정의 검수 11-05)
@@ -96,7 +99,7 @@ async function loadAw() {
   else if (unset) awBox.innerHTML = '<div class="st-err">— 기준(등락률 · 배수) 칸이 비어 아직 안 거름 — 왼쪽 칸을 채우고 검색을 누르십시오</div>';
   else if (!picked.length) awBox.innerHTML = '<div class="st-err">— 이 룰에 걸린 종목 없음</div>';
   else awBox.innerHTML = `<div class="st-scroll"><table class="aw-tb"><tr><th>종목</th><th>시장</th><th>종가</th><th>등락률</th><th>거래량</th><th>20일 평균</th><th>배수</th></tr>${picked.map((p) =>
-    `<tr data-code="${esc(p.code || '')}"${p.code && p.code === why.code ? ' class="is-on"' : ''}><td class="st-name"><b>${esc(p.name || '—')}</b> <small>${esc(p.code || '')}</small></td><td>${esc(IDX[p.idx] || p.idx || '—')}</td><td>${num(p.close)}</td><td>${pctTxt(p.pct)}</td><td>${num(p.vol)}</td><td>${num(p.avg20)}</td><td><b>${p.mult == null ? '—' : `${num(p.mult, 2)}배`}</b></td></tr>`).join('')}</table></div>`;
+    `<tr data-code="${esc(p.code || '')}"${p.code && p.code === why.code ? ' class="is-on"' : ''}><td class="st-name"><b>${esc(p.name || '—')}</b> <small>${esc(p.code || '')}</small>${nhTag(p)}</td><td>${esc(IDX[p.idx] || p.idx || '—')}</td><td>${num(p.close)}</td><td>${pctTxt(p.pct)}</td><td>${num(p.vol)}</td><td>${num(p.avg20)}</td><td><b>${p.mult == null ? '—' : `${num(p.mult, 2)}배`}</b></td></tr>`).join('')}</table></div>`;
   // 이 룰은 이렇게 셈합니다 — 재권님 11-05 「이거를 투자전략에다가 넣어줘」(개발 그림 dev-autowatch) · 수 · 시각 · 빠진 칸은 응답 그대로(화면에 박지 않는다)
   const u = m.universe || {};
   const KNAME = { sectorPct: '재료(미국장 섹터) 칸', exclude: '빼는 것 칸' };   // 서버가 칸 열쇠로 적어 보낸다 — 화면에는 칸 이름으로
@@ -154,5 +157,56 @@ go.addEventListener('click', async () => {
   go.disabled = false; go.textContent = '검색';
   meta.textContent = `${lastWarn ? `${lastWarn} · ` : ''}검색함 ${hm()} — 위 룰 값으로 서버가 다시 고름`;
 });
+// 지난 성적 (11-05 재권님 「…투자전략에다가 데이터 넣어줘야해」 · 작업우선순위 배분) — 서버 /api/auto-watch/history 그대로 그린다 ·
+// 오름 · 내림 · 비율 · 평균은 서버 셈(summary · total) · 결과가 아직이면 null → 「아직」(0 이 아니다) · 날 수는 화면이 고르는 보기 범위
+const AH = '/api/auto-watch/history', AH_DAYS = 30;
+const ahBox = document.getElementById('ah'), ahCap = document.getElementById('ah-cap');
+const nOr = (x, t) => (x == null ? t : num(x));
+const pctOr = (x) => (x == null ? '아직' : pctTxt(x));
+// 어제 판 단추 (11-05 재권님 「하루전 2일전 3일전 4일전 이 있어야 되고 5일 10일 한달 이버튼도 따로 있어야해」) —
+// 날 단추는 서버가 남긴 날 목록에서 「현재」 날을 뺀 순서(n번째 앞 남긴 날 · 단추에 날짜는 안 붙임 — 11-05 「어제옆에 날짜는 필요없어」 · 그 날짜는 표 머리 줄이 보인다) ·
+// 기간 단추(가장 많이 걸린 종목 상위 20 · 기간 상승률)는 서버 셈을 기다린다 — 화면은 세지 않는다
+const AH_SPAN = [['5d', '5일'], ['10d', '10일'], ['1m', '한달']];
+let ahD = null, ahSt = 0, ahSel = 'b0';
+const tabs = [...document.querySelectorAll('.aw-tab')], panes = [...document.querySelectorAll('.aw-pane')];
+async function loadAh() {
+  const { st, j } = await getJson(`${AH}?days=${AH_DAYS}`);
+  ahSt = st; ahD = (j && j.data) || null;
+  renderAh();
+}
+function renderAh() {
+  const d = ahD;
+  if (!d) { ahBox.innerHTML = `<div class="st-err">— 서버 값을 못 받음(${ahSt || '연결 안 됨'})</div>`; return; }
+  const t = d.total || {};
+  const list = (Array.isArray(d.list) ? d.list : []).filter((g) => !awDay || ymd(g.day) !== ymd(awDay)).sort((x, y) => ymd(y.day).localeCompare(ymd(x.day)));
+  ahCap.textContent = `걸렸던 종목이 다음 거래일 종가에 어떻게 됐나 — 지난 ${AH_DAYS}일 쌓인 것 · 룰이 맞는지 보는 칸`;
+  const sum = `<div class="ah-sum"><span>걸림 <b>${nOr(t.picks, '—')}</b></span><span>결과 남 <b>${nOr(t.done, '—')}</b> · 아직 ${nOr(t.pending, '—')}${t.missing ? ` · 값 없음 ${num(t.missing)}` : ''}</span>`
+    + `<span>오름 <b>${nOr(t.up, '—')}</b> · 내림 <b>${nOr(t.down, '—')}</b> · 보합 ${nOr(t.flat, '—')}</span>`
+    + `<span>오른 비율 <b>${t.upRate == null ? '아직' : `${num(t.upRate, 1)}%`}</b></span><span>다음날 평균 <b>${t.avgNext == null ? '아직' : pctTxt(t.avgNext)}</b></span></div>`;
+  let body;
+  if (ahSel[0] === 'b') {
+    const g = list[Number(ahSel.slice(1))];
+    if (!g) body = `<div class="st-err">— 그날 남긴 것 없음${list.length ? ` — 남긴 날 ${num(list.length)}일뿐` : (d.note ? ` — ${esc(d.note)}` : '')}</div>`;
+    else {
+      const s2 = g.summary || {};
+      const head = `<tr class="ah-day"><td colspan="5"><b>${mmdd(g.day)} 걸림</b> → ${g.nextDay ? `${mmdd(g.nextDay)} 종가` : '다음 거래일 아직'} · ${num((g.picks || []).length)}종목`
+        + `${s2.missing ? ` · 값 없음 ${num(s2.missing)}` : ''}${s2.done ? ` · 오름 ${nOr(s2.up, '—')} · 내림 ${nOr(s2.down, '—')}${s2.avgNext == null ? '' : ` · 평균 ${pctTxt(s2.avgNext)}`}` : ''}</td></tr>`;
+      const row = (p) => `<tr><td class="st-name"><b>${esc(p.name || '—')}</b> <small>${esc(p.code || '')}</small></td><td>${esc(IDX[p.idx] || p.idx || '—')}</td><td>${pctTxt(p.pct)}</td><td>${p.mult == null ? '—' : `${num(p.mult, 2)}배`}</td><td><b>${p.missing ? '값 없음' : pctOr(p.next && p.next.pct)}</b></td></tr>`;   // missing — 다음 거래일은 왔는데 그 종목 값이 없음(거래정지 · 못 받음 · 개발 5e499c2) · 「아직」 과 가른다
+      body = `<div class="st-scroll"><table class="ah-tb"><tr><th>종목</th><th>시장</th><th>그날</th><th>배수</th><th>다음날</th></tr>${head}${(g.picks || []).map(row).join('')}</table></div>`;
+    }
+  } else {
+    body = `<div class="st-err">— ${esc(AH_SPAN.find(([k]) => k === ahSel)[1])} 동안 가장 많이 걸린 종목 상위 20 · 기간 상승률 — 서버 셈을 기다림(아직 없음)</div>`;
+  }
+  ahBox.innerHTML = sum + body;
+}
+
+// 현재 · 어제 판 바꾸기 — 같은 자리에서 갈아 끼운다(높이는 CSS 가 같게 잡는다)
+tabs.forEach((b) => b.addEventListener('click', () => {
+  tabs.forEach((x) => { const on = x === b; x.classList.toggle('is-on', on); x.setAttribute('aria-selected', on ? 'true' : 'false'); });
+  panes.forEach((p) => { p.hidden = p.dataset.pane !== b.dataset.pane; });
+  if (b.dataset.ah) { ahSel = b.dataset.ah; renderAh(); }   // 어제 · 2~4일전 · 5일 · 10일 · 한달 — 같은 어제 판에 그 단추 것을 그림
+}));
+
 load();
 loadAw();
+loadAh();

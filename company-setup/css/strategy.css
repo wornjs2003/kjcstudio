@@ -73,3 +73,22 @@
   .rl .rl-grid { grid-template-columns: minmax(0, .72fr) minmax(0, 1.4fr) minmax(0, .88fr); }
   .rl .aw-why-card { grid-column: auto; }
 }
+/* 지난 성적 (11-05 · 서버 /api/auto-watch/history) — 날이 쌓여도 칸 높이는 그대로(안에서 스크롤 · 「보는 것을 바꿔도 자리는 그대로다」) */
+/* 현재 · 어제 판 (11-05 「…옆에 어제 라고 해서 거기 누르면 쌓여있는게」) — 두 판 높이를 같게 잡아 눌러 바꿔도 아래가 안 밀림 · 넘치면 안에서 스크롤 */
+.rl .aw-box { height: 420px; overflow-y: auto; }
+.rl .aw-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.rl .aw-tab { font: inherit; font-size: 14px; font-weight: 600; padding: 0 0 3px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--kh-text-muted); cursor: pointer; }
+.rl .aw-tab.is-on { color: var(--kh-text-primary); border-bottom-color: var(--kh-text-primary); }
+.rl .ah-sum { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; margin: 0 0 6px; }
+.rl .ah-sum b { font-weight: 600; }
+.rl .ah-sum span { color: var(--kh-text-secondary); }
+.rl table.ah-tb { width: 100%; min-width: 0; }
+.rl .ah-tb th:first-child, .rl .ah-tb td:first-child { text-align: left; }
+.rl .ah-tb .ah-day td { text-align: left; color: var(--kh-text-secondary); font-size: 12px; background: var(--kh-bg); }
+.rl .ah-tb .ah-day b { color: var(--kh-text-primary); font-weight: 600; }
+.rl .aw-pane > .st-cap { min-height: 3.4em; }   /* 두 판 머리 글 줄 수가 달라도 표 시작 자리를 같게 */
+/* 머리 단추 사이 가름 — 날(어제~4일전) · 기간(5일 · 10일 · 한달) */
+.rl .ah-gap { width: 1px; height: 14px; background: var(--kh-border-strong); }
+/* 신고가 부근 표시 — (가) 걸림 + 부근은 진한 바탕 · (나) 부근만은 옅은 바탕(「색 바탕 위의 글씨」) */
+.rl .aw-nh { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 99px; font-size: 11px; font-weight: 600; background: var(--kh-accent); color: var(--kh-text-on-fill); }
+.rl .aw-nh.only { background: var(--kh-accent-dim); color: var(--kh-accent); }
