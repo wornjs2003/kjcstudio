@@ -248,7 +248,7 @@
   pointer-events: none;
 }
 .kh-lg-tag b { font-weight: 600; }
-.kh-lg-tag i { font-style: normal; color: var(--kh-text-muted); }
+.kh-lg-tag i { font-style: normal; font-size: 0.62rem; color: var(--kh-text-muted); }
 .kh-lg-tag[hidden] { display: none; }
 
 /* 이동평균 칩 — 눌러서 끄고 켠다. 범례 전체는 pointer-events 를 막아 두었으므로
@@ -539,4 +539,5 @@
 .kh-lg-pin.is-hi { color: var(--kh-up); transform: translate(-50%, calc(-100% - 4px)); }
 .kh-lg-pin.is-lo { color: var(--kh-down); transform: translate(-50%, 4px); }
 .kh-lg-pin b { font-weight: 600; }
+.kh-lg-pin i { font-style: normal; font-size: 0.62rem; color: var(--kh-text-muted); }   /* 숫자 뒤 기준 글씨 (2026-11-05) */
 .kh-lg-pin[hidden] { display: none; }
