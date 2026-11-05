@@ -19,6 +19,7 @@
     받기       8765(보내는 서버)만 OpenDART 를 부른다 — 5분마다 최근 FETCH_DAYS 날의 공급계약 · 자사주 공시 중 아직 안 받은 것을
                한 바퀴 FETCH_MAX 건까지. 한 건에 한 번 받아 market.db 의 good_news_detail 에 둔다(하루 쓸 값은 dart._dart_get 이 센다).
                잠깐 실패(transient)는 RETRY_BASE_SEC 부터 두 배씩 늘려 RETRY_MAX 번까지 다시 받고, 404 · 400 같은 답과 그 밖 오류는 바로 굳는다
+               OpenDART 하루 한도(본문 status 020 · HTTP 429 아님)는 다음날 07:00 에 다시(횟수 안 셈) · 800 · 900(점검 · 정의 안 된 오류)은 잠깐 실패로 셈
                다른 서버는 쌓인 것을 읽기만 한다 — 아직 안 받은 것은 「못 가름 · 상세 아직 안 받음」
     주소       GET /api/good-news?days=7&code=005930 — 모양은 compute() 주석 · 「없음」 은 null(0 아님) · 알림은 없다
 """
@@ -48,6 +49,8 @@ GAP_SEC = 0.3
 PRE_LOOK_CAL_DAYS = 120         # 「이미 오름」 종가를 찾는 달력 날
 RETRY_MAX = 5                   # 잠깐 실패(연결 끊김 · 시간 넘김 · 429 · 5xx)를 몇 번까지 다시 받나 — 넘으면 「못 가름」 으로 굳는다
 RETRY_BASE_SEC = 600            # 첫 다시 받기까지 — 그 뒤 실패마다 두 배(10 · 20 · 40 · 80분)
+DART_LIMIT = "020"              # OpenDART 하루 한도 초과 — HTTP 429 가 아니라 본문 status 로 온다 · 다음날 07:00 에 다시(횟수를 안 센다)
+DART_RETRY = ("800", "900")     # 시스템 점검 · 정의되지 않은 오류 — 잠깐 실패로 셈(간격 · 횟수 그대로). 013(자료 없음) 같은 것은 굳는다
 
 
 _SCHEMA = (
@@ -55,6 +58,7 @@ _SCHEMA = (
         rcept_no TEXT PRIMARY KEY, kind TEXT, size_pct REAL, purpose TEXT, error TEXT, fetched_at TEXT)""",
 )
 _ADD_COLS = ("tries INTEGER DEFAULT 0", "retry_at TEXT")   # 11-05 덧 — 처음 판 표에 붙인다(retry_at 이 있으면 그 시각 뒤 다시 받는다 · null 이면 굳음)
+_limit_until = {"at": None}      # 020 을 받으면 그 시각(다음날 07:00)까지 바퀴를 안 돈다 — 한도 뒤에 5분마다 한 번씩 더 묻지 않게
 _status = {"fetchAt": None, "fetched": None, "pending": None, "error": None, "dartCalls": 0}
 _lock = threading.Lock()
 
@@ -104,11 +108,23 @@ def is_corrected(report_nm):
 
 # ---------------------------------------------------------------- 상세 받기 (보내는 서버만)
 
+class DartStatus(Exception):
+    """OpenDART 가 본문 status 로 준 실패 — 코드는 .code."""
+    def __init__(self, code, msg):
+        super().__init__("OpenDART %s %s" % (code, msg or ""))
+        self.code = code
+
+
 def _doc_text(key, rno):
     raw = dart._dart_get(dart.DART_API + "/document.xml?" + urllib.parse.urlencode({"crtfc_key": key, "rcept_no": rno}), 40)
     _status["dartCalls"] += 1
     if raw[:2] != b"PK":
-        raise ValueError("본문이 zip 이 아님: " + raw[:80].decode("utf-8", "replace"))
+        head = raw[:400].decode("utf-8", "replace")
+        m = re.search(r"<status>\s*(\d+)\s*</status>", head) or re.search(r'"status"\s*:\s*"(\d+)"', head)
+        if m:
+            mm = re.search(r"<message>(.*?)</message>", head) or re.search(r'"message"\s*:\s*"([^"]*)"', head)
+            raise DartStatus(m.group(1), mm.group(1) if mm else None)
+        raise ValueError("본문이 zip 이 아님: " + head[:80])
     z = zipfile.ZipFile(io.BytesIO(raw))
     x = z.read(z.namelist()[0]).decode("utf-8", "replace")
     x = re.sub(r"<style.*?</style>", " ", x, flags=re.S)
@@ -132,7 +148,7 @@ def _purpose(key, rno, corp_code, rcept_dt):
     _status["dartCalls"] += 1
     j = json.loads(raw.decode("utf-8", "replace"))
     if j.get("status") != "000":
-        raise ValueError("자기주식 취득 결정 상세 %s %s" % (j.get("status"), j.get("message")))
+        raise DartStatus(j.get("status"), "자기주식 취득 결정 상세 " + str(j.get("message") or ""))
     lst = j.get("list") or []
     for it in lst:
         if it.get("rcept_no") == rno:
@@ -152,6 +168,8 @@ def purpose_side(p, ln):
 
 def transient(e):
     """다시 물으면 될 수 있는 실패인가 — 연결 끊김 · 시간 넘김 · 429(너무 잦음) · 5xx. 404 · 400 같은 답은 다시 물어도 같아 아니다."""
+    if isinstance(e, DartStatus):
+        return e.code in DART_RETRY
     if isinstance(e, urllib.error.HTTPError):
         return e.code == 429 or e.code >= 500
     return isinstance(e, OSError)
@@ -174,6 +192,27 @@ def _todo(proxy, since):
     return out
 
 
+def _failed(e, tries):
+    """받기 실패 → (error 글, tries, retry_at). 잠깐 실패면 간격을 두 배씩 늘려 RETRY_MAX 번까지 · 그 뒤나 그 밖 실패는 굳음(retry_at None)."""
+    err = safe_message(e, 160)
+    if not transient(e):
+        return err, tries, None
+    tries += 1
+    if tries >= RETRY_MAX:
+        _status["error"] = "잠깐 실패 %d번 — 더 안 받음: %s" % (tries, err)
+        return _status["error"], tries, None
+    at = _now() + timedelta(seconds=RETRY_BASE_SEC * 2 ** (tries - 1))
+    _status["error"] = "잠깐 실패 %d번째 · %s 에 다시: %s" % (tries, at.strftime("%H:%M"), err)
+    return _status["error"], tries, at.isoformat(timespec="seconds")
+
+
+def _save(proxy, rno, ln, size, purpose, err, tries, retry_at):
+    with proxy._db_lock, proxy.db_conn() as conn:
+        conn.execute("INSERT OR REPLACE INTO good_news_detail (rcept_no, kind, size_pct, purpose, error, fetched_at, tries, retry_at) "
+                     "VALUES (?,?,?,?,?,?,?,?)",
+                     (rno, ln["갈래"], size, purpose, err, _now().isoformat(timespec="seconds"), tries, retry_at))
+
+
 def fetch_round(proxy):
     """아직 안 받은 상세를 FETCH_MAX 건까지 받는다 → 받은 수 · 바쁘면 None."""
     if not _lock.acquire(blocking=False):
@@ -183,6 +222,8 @@ def fetch_round(proxy):
         if not key:
             _status["error"] = "OpenDART 키 없음"
             return 0
+        if _limit_until["at"] and _now() < _limit_until["at"]:
+            return 0                 # 하루 한도(020) — 다음날 07:00 까지 쉰다(_status.error 는 그대로)
         _init(proxy)
         _status["error"] = None      # 지난 바퀴 오류는 이 바퀴가 다시 적는다
         todo = _todo(proxy, (_now() - timedelta(days=FETCH_DAYS)).strftime("%Y%m%d"))
@@ -199,21 +240,19 @@ def fetch_round(proxy):
             except dart.DartBudgetExceeded as e:
                 _status["error"] = safe_message(e, 120)
                 break
-            except Exception as e:
-                err = safe_message(e, 160)
-                if transient(e):     # 잠깐 실패 — 간격을 두 배씩 늘려 RETRY_MAX 번까지 다시 · 그 뒤 굳음
-                    tries += 1
-                    if tries < RETRY_MAX:
-                        retry_at = _now() + timedelta(seconds=RETRY_BASE_SEC * 2 ** (tries - 1))
-                        err = "잠깐 실패 %d번째 · %s 에 다시: %s" % (tries, retry_at.strftime("%H:%M"), err)
-                        retry_at = retry_at.isoformat(timespec="seconds")
-                    else:
-                        err = "잠깐 실패 %d번 — 더 안 받음: %s" % (tries, err)
+            except DartStatus as e:
+                if e.code == DART_LIMIT:     # 하루 한도 — 남은 것도 오늘은 못 받는다 · 다음날 07:00 에 다시(횟수 안 셈)
+                    dart._note_020()
+                    nxt = (_now() + timedelta(days=1)).replace(hour=7, minute=0, second=0, microsecond=0)
+                    err = "OpenDART 하루 한도(020) — %s 에 다시" % nxt.strftime("%m-%d %H:%M")
+                    _save(proxy, rno, ln, None, None, err, tries, nxt.isoformat(timespec="seconds"))
                     _status["error"] = err
-            with proxy._db_lock, proxy.db_conn() as conn:
-                conn.execute("INSERT OR REPLACE INTO good_news_detail (rcept_no, kind, size_pct, purpose, error, fetched_at, tries, retry_at) "
-                             "VALUES (?,?,?,?,?,?,?,?)",
-                             (rno, ln["갈래"], size, purpose, err, _now().isoformat(timespec="seconds"), tries, retry_at))
+                    _limit_until["at"] = nxt
+                    break
+                err, tries, retry_at = _failed(e, tries)
+            except Exception as e:
+                err, tries, retry_at = _failed(e, tries)
+            _save(proxy, rno, ln, size, purpose, err, tries, retry_at)
             got += 1
             time.sleep(GAP_SEC)
         _status.update(fetchAt=_now().isoformat(timespec="seconds"), fetched=got, pending=max(0, len(todo) - got))

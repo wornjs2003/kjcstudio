@@ -39,6 +39,7 @@ Insight 종목분석 ⑥-9 국면 재료 다섯 줄(경기종합지수 · 금리
 KIS 예산은 안 쓴다. 토스처럼 토큰을 서로 끊는 일은 없다.
 
 **못 받은 값은 0 이 아니라 `v: null` · `error` 다** — 그 계열만 비고 나머지는 나온다.
+**다만 들고 있던 값이 있으면 비우지 않는다** — 옛 값 그대로 · `error` · `failedAt`(못 받은 시각)만 붙는다(2026-11-05 · 뒤에서 받는 사이 잠깐 실패로 화면 값이 사라지지 않게).
 """
 import csv
 import io
@@ -282,6 +283,15 @@ def _shape(meta, source, pts, error=None):
             "error": error}
 
 
+def _keep_old(sid, msg):
+    """못 받은 계열 — 들고 있던 값이 있으면 그대로 두고 error · failedAt 만 붙인다(「두 구역이 같은 값을 쓰면」 1번 · 개념정의 검수 11-05).
+    없으면 None — 부르는 쪽이 빈 계열(points [])을 만든다."""
+    old = (_cache["series"] or {}).get(sid)
+    if not old or not old.get("points"):
+        return None
+    return dict(old, error=msg, failedAt=datetime.now(KST).isoformat(timespec="seconds"))
+
+
 def _fetch_all():
     key = ecos_key()
     full, series = {}, {}
@@ -302,14 +312,15 @@ def _fetch_all():
             msg = safe_message(e, 160)
             if key:
                 msg = msg.replace(key, "<가림>")
-            series[r["id"]] = _shape(r, src, None, msg)
+            series[r["id"]] = _keep_old(r["id"], msg) or _shape(r, src, None, msg)
     for d in DERIVED:
         base = full.get(d["from"])
         src = series[d["from"]]["source"]
         if base:
             series[d["id"]] = _shape(dict(d, fred=RAW_BY[d["from"]].get("fred")), src, _derive(d["how"], base))
         else:
-            series[d["id"]] = _shape(d, src, None, "원 계열(%s)을 못 받았습니다" % d["from"])
+            msg = "원 계열(%s)을 못 받았습니다" % d["from"]
+            series[d["id"]] = _keep_old(d["id"], msg) or _shape(d, src, None, msg)
     return series
 
 

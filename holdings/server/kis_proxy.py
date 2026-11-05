@@ -1868,6 +1868,8 @@ def _resolve_upstream(raw):
     return raw
 
 
+UPSTREAM_TIMEOUT = 60             # 상류(8765)로 넘긴 요청을 기다리는 초 — 경제지표 · 시장지표 · 그 밖 넘김이 함께 쓴다(개념정의 검수 11-05)
+
 def upstream_base():
     """KIS 를 넘길 상류."""
     return _resolve_upstream(KIS_UPSTREAM_RAW)
@@ -7853,7 +7855,7 @@ class Handler(SimpleHTTPRequestHandler):
         base = upstream_base()
         if base:
             try:
-                with urllib.request.urlopen(base + self.path, timeout=60) as resp:
+                with urllib.request.urlopen(base + self.path, timeout=UPSTREAM_TIMEOUT) as resp:
                     status, body = resp.status, resp.read()
             except urllib.error.HTTPError as e:
                 status, body = e.code, e.read()
@@ -7893,7 +7895,7 @@ class Handler(SimpleHTTPRequestHandler):
         base = upstream_base()
         if base:
             try:
-                with urllib.request.urlopen(base + self.path, timeout=60) as resp:
+                with urllib.request.urlopen(base + self.path, timeout=UPSTREAM_TIMEOUT) as resp:
                     status, body = resp.status, resp.read()
             except urllib.error.HTTPError as e:
                 status, body = e.code, e.read()
@@ -7935,7 +7937,7 @@ class Handler(SimpleHTTPRequestHandler):
                              "source": source}, 503)
             return
         try:
-            with urllib.request.urlopen(base + self.path, timeout=60) as resp:
+            with urllib.request.urlopen(base + self.path, timeout=UPSTREAM_TIMEOUT) as resp:
                 status, body = resp.status, resp.read()
         except urllib.error.HTTPError as e:
             status, body = e.code, e.read()
