@@ -46,6 +46,8 @@ RULE_DOC, RULE_KEY = "strategy-rules", "volsurge"
 SORTS = ("mult", "pct")
 ADD = False                     # 08:00 관심 목록 넣기 — 아직 없다(머리 주석 「넣기」)
 TICK = 30
+HOLIDAY_SAME = 0.9              # 앞 날과 종가 · 거래량이 똑같은 종목이 이만큼이면 휴장(거래가 있는 날에 우연히 같을 수는 없다)
+RETRY_SEC = 300                 # 그날 값을 못 받았을 때 다시 도는 간격 — 창(15:41~16:00) 안에서만
 
 _SCHEMA = (
     """CREATE TABLE IF NOT EXISTS auto_watch_day (
@@ -127,10 +129,23 @@ def save_today(proxy, day, codes=None):
         mem = [m for m in mem if m[0] in codes]
     if not mem:
         _status.update(error="감시 대상 표(dart_universe)가 비었습니다 — dart 가 받은 뒤 다시")
-        return 0
+        return None
     got = _multi_j(proxy, cfg, [m[0] for m in mem])
+    if not got:                      # 「못 받음」 — 휴장과 가른다. None 이면 바퀴가 RETRY_SEC 뒤 다시 돈다
+        _status.update(error="멀티 시세를 하나도 못 받음 — 다시 돈다")
+        return None
     if not sum((r["vol"] or 0) for r in got.values()):
-        _status.update(error="거래량 합이 0 — 휴장으로 보고 저장 안 함")
+        _status.update(error="받은 거래량 합이 0 — 휴장으로 보고 저장 안 함")
+        return 0
+    # 평일 휴장(공휴일) — J 멀티가 앞 거래일 값을 그대로 주면 거래량 합이 0 이 아니다(qa 검수 11-05 · 안 잼).
+    # 받은 종목 거의 전부의 종가 · 거래량이 앞에 쌓인 날과 같으면 휴장으로 본다
+    with proxy._db_lock, proxy.db_conn() as conn:
+        last = conn.execute("SELECT MAX(day) FROM auto_watch_day WHERE day < ?", (day,)).fetchone()[0]
+        prev = {r[0]: (r[1], r[2]) for r in conn.execute(
+            "SELECT code, close, vol FROM auto_watch_day WHERE day = ?", (last,))} if last else {}
+    both = [c for c in got if c in prev]
+    if both and sum(1 for c in both if (got[c]["close"], got[c]["vol"]) == prev[c]) >= HOLIDAY_SAME * len(both):
+        _status.update(error="종가 · 거래량이 %s 와 같음 — 휴장으로 보고 저장 안 함" % last)
         return 0
     stamp = _now().isoformat(timespec="seconds")
     rows = [(day, c, idx, name or got[c]["name"], got[c]["close"], got[c]["pct"], got[c]["vol"], "multi", stamp)
@@ -185,6 +200,18 @@ def backfill(proxy, until, codes=None):
     return done
 
 
+def _fill_locked(proxy, day):
+    """뜰 때 채우기 — run 과 같은 자물쇠. 이미 돌고 있으면 안 한다."""
+    if not _run_lock.acquire(blocking=False):
+        return None
+    try:
+        return backfill(proxy, day)
+    except Exception as e:
+        _status["error"] = safe_message(e, 160)
+    finally:
+        _run_lock.release()
+
+
 def run(proxy, day, codes=None):
     """그날 한 바퀴 — 앞 날 채우기 · 그날 값 저장. 겹쳐 돌지 않는다."""
     if not _run_lock.acquire(blocking=False):
@@ -230,7 +257,7 @@ def compute(proxy):
         rule        { prevPct, volMult, sortBy, autoMax } — 문서 값 그대로(빈칸 null) · sortBy 는 쓴 값
         ready       기준 둘(prevPct · volMult)이 다 있나
         picked      [{ code, name, idx, close, pct, vol, avg20, mult }] — 걸린 종목 · 줄 세운 차례 · autoMax 로 자름
-        pool        대상 종목 수(시가총액 상위 중 주권) · measured: 그날 값과 앞 20거래일이 다 있는 수 · short: 앞 날이 모자란 수
+        pool        대상 종목 수(시가총액 상위 중 주권) · measured: 그날 값과 앞 20거래일이 다 있는 수 · noToday: 그날 값이 없는 수 · short: 그날 값은 있는데 앞 20거래일이 모자란 수
         hitAll      자르기 전 걸린 수
     """
     if proxy.marketdb.writable():
@@ -243,7 +270,7 @@ def compute(proxy):
     out = {"day": None, "rule": {"prevPct": prev_pct, "volMult": vol_mult, "sortBy": sort_by,
                                  "autoMax": int(auto_max) if auto_max else None, "from": src},
            "ready": prev_pct is not None and vol_mult is not None,
-           "picked": [], "pool": len(mem), "measured": None, "short": None, "hitAll": None}
+           "picked": [], "pool": len(mem), "measured": None, "noToday": None, "short": None, "hitAll": None}
     with proxy._db_lock, proxy.db_conn() as conn:
         try:
             row = conn.execute("SELECT day FROM auto_watch_day WHERE src = 'multi' GROUP BY day ORDER BY day DESC LIMIT 1").fetchone()
@@ -262,18 +289,21 @@ def compute(proxy):
             lst = hist.setdefault(code, [])
             if len(lst) < AVG_DAYS:
                 lst.append(vol)
-    rows, short = [], 0
+    rows, short, no_today = [], 0, 0
     for code, idx, name in mem:
         t = today.get(code)
         h = [v for v in hist.get(code, []) if v is not None]
-        if not t or len(h) < AVG_DAYS:
+        if not t:
+            no_today += 1
+            continue
+        if len(h) < AVG_DAYS:
             short += 1
             continue
         avg = sum(h) / len(h)
         mult = round(t[5] / avg, 2) if avg and t[5] is not None else None
         rows.append({"code": code, "name": name or t[2], "idx": idx, "close": t[3], "pct": t[4], "vol": t[5],
                      "avg20": round(avg), "mult": mult})
-    out["measured"], out["short"] = len(rows), short
+    out["measured"], out["noToday"], out["short"] = len(rows), no_today, short
     if not out["ready"]:
         return out
     hit = [r for r in rows if r["pct"] is not None and r["mult"] is not None
@@ -293,14 +323,15 @@ def status():
 
 
 def start(proxy):
-    """보내는 서버가 뜰 때 한 번 — 평일 15:41 바퀴. 그 시각을 지나 떴고 그날 값이 없으면 앞 날 채우기만 먼저 한다."""
+    """보내는 서버가 뜰 때 한 번 — 평일 15:41 바퀴. 뜰 때마다 앞 날이 모자란 종목만 먼저 채운다(다 찼으면 KIS 0번).
+    뜰 때 채우기도 _run_lock 안에서 돈다 — 15:41 바퀴와 겹치면 바퀴가 1분 뒤 다시 본다(일봉을 두 번 묻지 않게 · qa 검수 11-05)."""
     def loop():
         time.sleep(60)
         try:
             _init(proxy)
             now = _now()
             if members(proxy):
-                th = threading.Thread(target=backfill, args=(proxy, now.strftime("%Y%m%d")), daemon=True, name="auto-watch-fill")
+                th = threading.Thread(target=_fill_locked, args=(proxy, now.strftime("%Y%m%d")), daemon=True, name="auto-watch-fill")
                 th.start()
         except Exception as e:
             _status["error"] = safe_message(e, 160)
@@ -308,10 +339,15 @@ def start(proxy):
             try:
                 now = _now()
                 day = now.strftime("%Y%m%d")
-                if now.weekday() < 5 and RUN_AT <= (now.hour, now.minute) < RUN_UNTIL and _status["runDay"] != day:
-                    _status["runDay"] = day                  # 실패해도 그날은 한 번
+                if now.weekday() < 5 and RUN_AT <= (now.hour, now.minute) < RUN_UNTIL and _status["runDay"] != day \
+                        and time.time() >= (_status.get("retryAt") or 0):
+                    _status["runDay"] = day                  # 저장했거나 휴장이면 그날은 한 번
                     try:
                         r = run(proxy, day)
+                        if r is None:                        # 뜰 때 채우기가 돌고 있다 — 1분 뒤 다시
+                            _status.update(runDay=None, retryAt=time.time() + 60)
+                        elif r.get("saved") is None:         # 못 받음 — 창 안에서 RETRY_SEC 뒤 다시
+                            _status.update(runDay=None, retryAt=time.time() + RETRY_SEC)
                         print("  [자동 관심종목] %s 앞 날 채움 %s종목 · 그날 값 %s종목" % (day, (r or {}).get("backfill"), (r or {}).get("saved")))
                     except Exception as e:
                         _status["error"] = safe_message(e, 160)
