@@ -3899,11 +3899,16 @@ def fetch_investor_long(cfg, code, days=INVESTOR_LONG_DAYS):
 #   판이 PRICE_CACHE_TTL 보다 낡았으면  들고 있던 판을 **먼저 내주고** 뒤에서 다시 짓는다
 #   판이 없거나 INVESTOR_BOARD_STALE_TTL 보다 낡았으면  그 자리에서 짓는다(서버가 막 떴을 때 · 오래 쉰 뒤)
 # 시세는 `fetch_quotes_multi` · 투자자 줄은 `fetch_investor_long` 그대로 — 서버 캐시를 함께 쓴다.
-# 서버가 뜰 때 한 번 미리 짓는다(`--slow` 는 안 함). 판을 늘 돌려 짓지는 않는다 — 묻는 사람이 있을 때만 KIS 를 쓴다.
+# 서버가 뜰 때 한 번 미리 짓는다(`--slow` 는 안 함).
+# **장중(평일 정규장)에는 INVESTOR_BOARD_REFRESH_INTERVAL 마다 뒤에서 다시 짓는다** (2026-11-05 재권님 「응 해줘」) —
+# 묻는 사람이 있을 때만 짓던 때는 판이 STALE_TTL 을 넘기면 첫 여는 사람이 그 자리에서 5초를 기다렸다
+# (11-05 10:18 · 8772 실측 — 시세 350종목 30개씩 열두 묶음 1.53초 + 상위 30여 종목 투자자 줄). 한 번 짓는 데 KIS 42건쯤.
+# 장 밖에는 안 돈다 — 값이 안 바뀐다.
 INVESTOR_BOARD_TOP = 15            # 시장마다 줄 수 (화면 그래프 탭)
 INVESTOR_BOARD_STALE_TTL = 300     # 이보다 낡은 판은 먼저 내주지 않고 다시 지어 낸다 (초)
 INVESTOR_BOARD_MARKETS = ("ALL", "KOSPI", "KOSDAQ")
 INVESTOR_BOARD_WORKERS = 6         # 투자자 줄을 동시에 받는 수 — 호출 간격은 kis_get 이 지킨다
+INVESTOR_BOARD_REFRESH_INTERVAL = 300   # 장중 뒤에서 다시 짓는 주기 (초) — STALE_TTL 안에서 늘 새 판이 있게
 _inv_board = {"at": 0.0, "data": None}
 _inv_board_lock = threading.Lock()         # 판을 읽고 바꾸는 자리
 _inv_board_build = threading.Lock()        # 짓는 것은 한 번에 하나
@@ -3968,6 +3973,25 @@ def investor_board(cfg):
     _investor_board_rebuild(cfg, True)
     with _inv_board_lock:
         return _inv_board["data"], _inv_board["at"]
+
+
+def start_investor_board_refresh(cfg):
+    """장중에 그래프 판을 INVESTOR_BOARD_REFRESH_INTERVAL 마다 다시 짓는 바퀴. 키가 없으면 안 돈다."""
+    if not cfg:
+        return False
+
+    def loop():
+        while True:
+            now = datetime.now(KST)
+            if now.weekday() < 5 and KRX_OPEN <= (now.hour, now.minute) < KRX_CLOSE:
+                with _inv_board_lock:
+                    age = time.time() - _inv_board["at"]
+                if age >= INVESTOR_BOARD_REFRESH_INTERVAL:
+                    _investor_board_rebuild(cfg, False)
+            time.sleep(30)
+
+    threading.Thread(target=loop, daemon=True, name="investor-board-refresh").start()
+    return True
 
 
 # ── 재무 다섯 — 모달 「투자 지표」 칸 재무 카드 (2026-10-02 지시) ──────────
@@ -8820,6 +8844,7 @@ def main():
     if cfg and not SLOW:
         threading.Thread(target=lambda: (time.sleep(20), investor_board(cfg)), daemon=True,
                          name="investor-board-warm").start()
+        start_investor_board_refresh(cfg)
 
     # 순위표 섹터 — 순위 목록의 WICS 를 뒤에서 한 종목씩 채운다 · 네이버만 · --slow 는 더 느리게 (2026-11-04)
     company_profile.start_sector_fill(lambda: [r["stock_code"] for r in dart.universe_rows(None)], slow=SLOW)
