@@ -57,6 +57,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 같은 폴더(server/)의 모듈들. 스크립트로 실행하므로 바로 잡힌다.
 import dart
+import dart_gov      # 지배구조 — 상장사마다 최대주주 · 타법인 출자(2026-11-05 · server/dart_gov.py 머리 주석)
 import company_profile
 import us_universe
 import kis_ws
@@ -8257,6 +8258,20 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": True, "data": company_profile.public(code, rec)})
                 return
 
+            # 지배구조 — 쌓인 것을 읽기만 한다(받기는 dart_gov 바퀴 · 8765). 키가 없어도 낸다
+            if route == "gov":
+                code = (qs.get("code") or [""])[0].strip()
+                if not re.fullmatch(r"\d{6}", code):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                data, meta = dart_gov.gov(code)
+                self._send_json({"ok": True, "data": data, "meta": meta})
+                return
+            if route == "gov/links":
+                data, meta = dart_gov.links()
+                self._send_json({"ok": True, "data": data, "meta": meta})
+                return
+
             key = dart.get_key()
             if not key:
                 self._send_json({
@@ -9320,6 +9335,8 @@ def main():
     elif dart.start_poller():
         print("  공시 수집 : 사용 (코스피 상위 %d종목 · %d분마다)"
               % (dart.UNIVERSE_SIZE, dart.POLL_INTERVAL // 60))
+        print("  지배구조   : %s" % ("밤마다 받음(20:00~07:00)" if dart_gov.start_filler()
+                                    else "꺼짐 — dart_gov.GOV_FETCH(켜기는 재권님 지시)"))
         # **`NOTIFY_LOCAL` 을 함께 본다** (2026-09-22).
         #
         # 전에는 열쇠(`secrets.json`)만 보고 「텔레그램 켜짐」 으로 찍었다.
