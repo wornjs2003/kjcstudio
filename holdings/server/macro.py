@@ -23,11 +23,19 @@ Insight 종목분석 ⑥-9 국면 재료 다섯 줄(경기종합지수 · 금리
 
 월간 자료라 **하루 한 번** 받는다(`MACRO_TTL`). 다만 발표일을 알면 **발표 뒤에 다시 받는다** —
 하루를 기다리면 발표 값이 최대 하루 늦는다(2026-10-15). 다시 받는 때는 발표 시각 한 시간 뒤와 다음날 07:00 이다. 한 계열이라도 못 받았으면 30분 뒤 다시 받는다(`MACRO_RETRY_TTL`).
-화면은 주기로 묻지 않고 열 때 한 번 받는다. 응답의 `cacheTtlSec` 이 지금 값이다.
+화면은 주기로 묻지 않고 열 때 한 번 받는다. 응답의 `cacheTtlSec` 이 지금 값이다(기한이 지나 새로 받는 중이면 0).
+
+**요청이 바깥을 기다리지 않는다 (2026-11-05 재권님 「응 그렇게 해줘」).** 메인(8764)에서 /api/macro/releases 가 12~14초 걸렸다 —
+캐시가 비었거나 기한이 지나면 그 요청 안에서 바깥 35번(ECOS 9 · FRED 16 · FRED 발표일 10)을 차례로 불렀다.
+    기한이 지났으면   들고 있던 값을 바로 내고 새 값은 뒤에서 받는다(_kick) — 받는 동안 `refreshing: true`
+    비었으면          그때만 요청 안에서 받는다(서버가 막 떴을 때 · 미리 받기가 아직 안 끝났을 때)
+    미리 받기         보내는 서버(8765)가 뜨자마자 받고 1분마다 기한을 본다 — start()
 
 ── 어느 서버가 받나 ──
 
-`ecos` 키가 있는 서버는 직접 받고, 없는 서버는 상류(`KJC_KIS_UPSTREAM`)로 넘긴다 — kis_proxy 의 `_handle_macro`.
+**받는 곳은 8765 하나다** — 상류(`KJC_KIS_UPSTREAM`)가 있는 서버(메인 8764 · 세션 · 중간서버)는 8765 로 넘긴다(kis_proxy 의 `_handle_macro`).
+8765 에 못 닿거나 8765 가 이 주소를 모르면(404 · JSON 아닌 403) 그때만 자기가 받는다 — 시장지표(`_handle_market`)와 같은 꼴.
+그 전에는 키가 있는 서버마다 따로 받았다(메인 · 8765 · 세션 각자 35번).
 KIS 예산은 안 쓴다. 토스처럼 토큰을 서로 끊는 일은 없다.
 
 **못 받은 값은 0 이 아니라 `v: null` · `error` 다** — 그 계열만 비고 나머지는 나온다.
@@ -145,6 +153,32 @@ _lock = threading.Lock()
 _cache = {"at": 0.0, "ttl": 0, "series": None, "fetchedAt": None}
 _rel_lock = threading.Lock()
 _rel = {"at": 0.0, "ttl": 0, "dates": None, "error": None}
+_busy = {"series": False, "rel": False}     # 뒤에서 받는 중인가 — 같은 받기를 둘 띄우지 않는다
+_busy_lock = threading.Lock()
+TICK = 60                    # 미리 받기가 기한을 보는 간격
+
+
+def _kick(name, fn):
+    """fn 을 뒤에서 한 번 돌린다 — 이미 돌고 있으면 안 띄운다."""
+    with _busy_lock:
+        if _busy[name]:
+            return
+        _busy[name] = True
+
+    def run():
+        try:
+            fn()
+        except Exception:
+            pass                 # 받기 안의 오류는 각 계열 error 로 남는다
+        finally:
+            with _busy_lock:
+                _busy[name] = False
+    threading.Thread(target=run, name="macro-" + name, daemon=True).start()
+
+
+def refreshing():
+    with _busy_lock:
+        return _busy["series"] or _busy["rel"]
 
 
 def ecos_key():
@@ -279,22 +313,52 @@ def _fetch_all():
     return series
 
 
+def _refresh_series():
+    """바깥에서 전 계열을 받아 캐시를 바꾼다 — 잠금 밖에서 받고 바꿀 때만 잠근다."""
+    now = time.time()
+    s = _fetch_all()
+    bad = any(v["error"] for v in s.values())
+    ttl = MACRO_RETRY_TTL if bad else MACRO_TTL
+    nxt = _next_refresh(now)
+    if nxt is not None:
+        ttl = max(60, min(ttl, int(nxt - now)))
+    with _lock:
+        _cache.update(at=now, ttl=ttl, series=s, fetchedAt=datetime.now(KST).isoformat(timespec="seconds"))
+
+
+_fill_lock = threading.Lock()
+
+
 def bundle():
-    """전 계열 — 캐시가 살아 있으면 그것을. 돌려주는 것: (series, fetchedAt, 남은 캐시 초)."""
+    """전 계열 — 돌려주는 것: (series, fetchedAt, 남은 캐시 초). 기한이 지났으면 들고 있던 값을 내고 뒤에서 새로 받는다."""
     _release_dates()                 # 발표일을 알아야 「발표 뒤 다시 받기」 때를 잡는다 — 하루 한 번만 실제로 받는다
     with _lock:
-        now = time.time()
-        if _cache["series"] is None or now - _cache["at"] >= _cache["ttl"]:
-            s = _fetch_all()
-            bad = any(v["error"] for v in s.values())
-            ttl = MACRO_RETRY_TTL if bad else MACRO_TTL
-            nxt = _next_refresh(now)
-            if nxt is not None:
-                ttl = max(60, min(ttl, int(nxt - now)))
-            _cache.update(at=now, ttl=ttl, series=s,
-                          fetchedAt=datetime.now(KST).isoformat(timespec="seconds"))
-        left = int(_cache["ttl"] - (now - _cache["at"]))
+        have = _cache["series"] is not None
+        expired = not have or time.time() - _cache["at"] >= _cache["ttl"]
+    if not have:
+        with _fill_lock:             # 비었을 때만 요청 안에서 — 여럿이 같이 와도 한 번만 받는다
+            with _lock:
+                have = _cache["series"] is not None
+            if not have:
+                _refresh_series()
+    elif expired:
+        _kick("series", _refresh_series)
+    with _lock:
+        left = int(_cache["ttl"] - (time.time() - _cache["at"]))
         return _cache["series"], _cache["fetchedAt"], max(left, 0)
+
+
+def start():
+    """보내는 서버(8765)가 뜰 때 한 번 — 바로 받아 두고 TICK 초마다 기한을 본다(지났으면 뒤에서 새로 받는다)."""
+    def loop():
+        while True:
+            try:
+                bundle()
+            except Exception:
+                pass
+            time.sleep(TICK)
+    threading.Thread(target=loop, name="macro-prefetch", daemon=True).start()
+    return True
 
 
 def regime():
@@ -316,8 +380,18 @@ def pick(ids):
 # ── 발표일 ──
 
 def _release_dates():
-    """{발표 key: ['YYYY-MM-DD', …]} — 앞뒤 넉넉히(지난 40일 · 앞 90일). 하루 한 번 받는다. 못 받으면 (None, 오류)."""
+    """{발표 key: ['YYYY-MM-DD', …]} — 앞뒤 넉넉히(지난 40일 · 앞 90일). 하루 한 번 받는다. 못 받으면 (None, 오류).
+    기한이 지났으면 들고 있던 것을 내고 뒤에서 새로 받는다 · 비었을 때만 요청 안에서 받는다."""
     with _rel_lock:
+        if _rel["dates"] is not None:
+            if time.time() - _rel["at"] >= _rel["ttl"]:
+                _kick("rel", _fetch_release_dates)
+            return _rel["dates"], _rel["error"]
+    return _fetch_release_dates()
+
+
+def _fetch_release_dates():
+    with _rel_lock:                  # 받는 동안 잠근다 — 비었을 때 여럿이 와도 한 번만 받는다
         now = time.time()
         if _rel["dates"] is not None and now - _rel["at"] < _rel["ttl"]:
             return _rel["dates"], _rel["error"]
@@ -460,5 +534,5 @@ def releases():
                      for i in r.get("also", [])},
             "error": main.get("error"),
         })
-    return {"ok": bool(dates), "fetchedAt": at, "cacheTtlSec": left, "datesNote": "미국 날짜(FRED release/dates)",
+    return {"ok": bool(dates), "fetchedAt": at, "cacheTtlSec": left, "refreshing": refreshing(), "datesNote": "미국 날짜(FRED release/dates)",
             "datesError": err, "releases": items}
