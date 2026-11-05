@@ -1150,6 +1150,8 @@ def usage_stats():
         # 쓰고 있어 남겨 둔다 — 같은 값이 여기에도 들어오지만 **한 곳에서
         # 나오므로 갈리지 않는다.** 화면을 옮기면 위 줄을 지운다.
         "timing": timing_values(),
+        # 「장외」 칩을 비워 두는 시각(평일) — 화면이 빈 칸 까닭 글을 이 값으로 짓는다. 시각은 아래 AFTER_CLEAR_AT · AFTER_CLEAR_UNTIL 한 곳
+        "afterClear": {"from": "%02d:%02d" % AFTER_CLEAR_AT, "until": "%02d:%02d" % AFTER_CLEAR_UNTIL},
     }
 
 
@@ -3002,7 +3004,7 @@ def fetch_quotes_multi(cfg, codes, max_age=None):
     · max_age — 부르는 쪽이 허용하는 나이(초). 기본은 MULTI_CACHE_TTL 이고 그보다 짧게는 못 준다(--slow 서버의 60초가 그대로 듣게).
       시장 지도는 자기 응답 주기(heatmap.HEATMAP_TTL)를 준다 — 원래 그만큼 묵은 값을 내던 자리라 칸끼리 받은 시각이 달라도 그 안이다
     · 정규장(J) ↔ 통합(UN)이 바뀌면 옛 쪽 값은 안 쓴다(줄마다 구분을 함께 적어 둔다)
-    · 장 밖 값(attach_reg_close · overnight_quotes · attach_after_snap)은 새로 받은 종목에만 붙인다 — 들고 있던 줄은 이미 붙어 있다
+    · 장 밖 값(attach_reg_close · overnight_quotes)은 새로 받은 종목에만 붙인다 — 들고 있던 줄은 이미 붙어 있다
     · 내줄 때는 줄을 복사한다 — 한 곳이 고쳐도 다른 곳이 안 바뀌게
     · 오류는 이번에 새로 물은 종목 것만 돌려준다 — 못 받은 종목은 담지 않아 다음 요청이 다시 묻는다
     """
@@ -3063,12 +3065,14 @@ def fetch_quotes_multi(cfg, codes, max_age=None):
             }
 
     # 장 밖(통합 시세)이면 그 회차 정규장 종가와 종가 대비 등락률을 함께 싣는다 — 아래 `attach_reg_close`.
-    # 정규장 중이면 오늘 아침 장 시작 전에 받아 둔 장외 값을 싣는다 — `attach_after_snap`
+    # 평일 아침 07:00 부터 정규장이 끝날 때까지는 장외 값을 싣지 않는다 — 아래 `after_cleared`
     if div == "UN" and out:
         attach_reg_close(cfg, out)
         overnight_quotes(out)               # 자정 뒤 08:00 전 — 어제 20:00 넥장 마감 값으로(아래 `overnight_row`)
-    elif out:
-        attach_after_snap(out)
+        if after_cleared():
+            for q in out.values():
+                for k in ("regClose", "regPct", "regDate"):
+                    q.pop(k, None)
 
     # 받아둔다 — 받은 종목만. 못 받은 종목은 안 담아 다음 요청이 다시 묻는다
     if out:
@@ -3181,7 +3185,7 @@ def fetch_reg_closes(cfg, codes):
     return have, day
 
 
-# 정규장 중(09:00~15:30) 「장외」 칩은 **전날 20:00 애프터 마감 값**을 그대로 보인다
+# 정규장 중(09:00~15:30) 「장외」 칩은 **전날 20:00 애프터 마감 값**을 그대로 보였다 — 2026-11-05 에 07:00~15:30 빈 칸으로 바뀜(after_cleared). 아래는 밤사이 값을 쥐는 까닭으로 남는다
 # (2026-10-26 재권님 「다음 장 시작전의 종가로 해줘」 → 「전날 20 시에 멈추는걸로 해줘」 · 작업우선순위 경유 —
 # 아침 프리마켓(08:00~08:50) 몫은 안 넣는다). 정규장 중에는 통합 시세가 장중 값이라 그때 물어서는 못 얻는다 —
 # 그래서 **애프터가 끝난 뒤(AFTER_SNAP_AT) 한 번** 순위 목록 전부(dart.universe_rows · 코스피 200 + 코스닥 150 ·
@@ -3267,23 +3271,18 @@ def start_after_snap(cfg):
     return True
 
 
-def attach_after_snap(out):
-    """정규장 중 시세 묶음에 앞 회차 20:00 장외 마감 값을 싣는다 — regFrozen(그 회차 날)으로 「지금 값이 아니다」 를 알린다."""
-    day = datetime.now(KST).date() - timedelta(days=1)
-    while day.weekday() >= 5:
-        day -= timedelta(days=1)
-    if _after_snap.get("day") != day.isoformat():       # 앞 평일 저녁 것만 — 더 묵은 것은 안 싣는다
-        return
-    rows = _after_snap.get("rows") or {}
-    for code, q in out.items():
-        r = rows.get(code)
-        if not r:
-            continue
-        q["regClose"] = r["regClose"]
-        q["regPct"] = r["regPct"]
-        q["regDate"] = r.get("regDate")
-        q["regAfterPrice"] = r.get("price")
-        q["regFrozen"] = _after_snap.get("day")
+# 「장외」 칩은 평일 아침 07:00 에 비우고 정규장이 끝날 때(15:30)까지 빈 칸이다 (2026-11-05 재권님 「실시간 목록에 장외는 본장이
+# 시작하면 리셋해줘야 하는데 … 아침 7시에 리셋되게 해줘」 → (가) 「15:30 애프터가 열릴 때까지 빈 칸」 · 작업우선순위 경유).
+# 전에는 정규장 중에 앞 회차 20:00 장외 마감 값을 얼려 실었다(attach_after_snap · 10-26 「전날 20 시에 멈추는걸로」) — 그것을 걷어냈다.
+# 밤사이(00:00~07:00) 값은 그대로 어제 20:00 마감 값이다(overnight_quotes · take_after_snap 이 쥔 것)
+AFTER_CLEAR_AT = (7, 0)
+AFTER_CLEAR_UNTIL = (15, 30)
+
+
+def after_cleared(now=None):
+    """지금 「장외」 값을 비워 둘 때인가 — 평일 07:00~15:30. 공휴일은 아직 안 가른다."""
+    now = now or datetime.now(KST)
+    return now.weekday() < 5 and AFTER_CLEAR_AT <= (now.hour, now.minute) < AFTER_CLEAR_UNTIL
 
 
 def attach_reg_close(cfg, out):
@@ -3901,11 +3900,16 @@ def fetch_investor_long(cfg, code, days=INVESTOR_LONG_DAYS):
 #   판이 PRICE_CACHE_TTL 보다 낡았으면  들고 있던 판을 **먼저 내주고** 뒤에서 다시 짓는다
 #   판이 없거나 INVESTOR_BOARD_STALE_TTL 보다 낡았으면  그 자리에서 짓는다(서버가 막 떴을 때 · 오래 쉰 뒤)
 # 시세는 `fetch_quotes_multi` · 투자자 줄은 `fetch_investor_long` 그대로 — 서버 캐시를 함께 쓴다.
-# 서버가 뜰 때 한 번 미리 짓는다(`--slow` 는 안 함). 판을 늘 돌려 짓지는 않는다 — 묻는 사람이 있을 때만 KIS 를 쓴다.
+# 서버가 뜰 때 한 번 미리 짓는다(`--slow` 는 안 함).
+# **장중(평일 정규장)에는 INVESTOR_BOARD_REFRESH_INTERVAL 마다 뒤에서 다시 짓는다** (2026-11-05 재권님 「응 해줘」) —
+# 묻는 사람이 있을 때만 짓던 때는 판이 STALE_TTL 을 넘기면 첫 여는 사람이 그 자리에서 5초를 기다렸다
+# (11-05 10:18 · 8772 실측 — 시세 350종목 30개씩 열두 묶음 1.53초 + 상위 30여 종목 투자자 줄). 한 번 짓는 데 KIS 42건쯤.
+# 장 밖에는 안 돈다 — 값이 안 바뀐다.
 INVESTOR_BOARD_TOP = 15            # 시장마다 줄 수 (화면 그래프 탭)
 INVESTOR_BOARD_STALE_TTL = 300     # 이보다 낡은 판은 먼저 내주지 않고 다시 지어 낸다 (초)
 INVESTOR_BOARD_MARKETS = ("ALL", "KOSPI", "KOSDAQ")
 INVESTOR_BOARD_WORKERS = 6         # 투자자 줄을 동시에 받는 수 — 호출 간격은 kis_get 이 지킨다
+INVESTOR_BOARD_REFRESH_INTERVAL = INVESTOR_BOARD_STALE_TTL - 60   # 장중 뒤에서 다시 짓는 주기 (초) — 바퀴가 30초마다 깨고 짓는 데 몇 초 걸려도 판 나이가 STALE_TTL 을 안 넘게 60초 앞당김(개념정의 검수 덧)
 _inv_board = {"at": 0.0, "data": None}
 _inv_board_lock = threading.Lock()         # 판을 읽고 바꾸는 자리
 _inv_board_build = threading.Lock()        # 짓는 것은 한 번에 하나
@@ -3970,6 +3974,25 @@ def investor_board(cfg):
     _investor_board_rebuild(cfg, True)
     with _inv_board_lock:
         return _inv_board["data"], _inv_board["at"]
+
+
+def start_investor_board_refresh(cfg):
+    """장중에 그래프 판을 INVESTOR_BOARD_REFRESH_INTERVAL 마다 다시 짓는 바퀴. 키가 없으면 안 돈다."""
+    if not cfg:
+        return False
+
+    def loop():
+        while True:
+            now = datetime.now(KST)
+            if now.weekday() < 5 and KRX_OPEN <= (now.hour, now.minute) < KRX_CLOSE:
+                with _inv_board_lock:
+                    age = time.time() - _inv_board["at"]
+                if age >= INVESTOR_BOARD_REFRESH_INTERVAL:
+                    _investor_board_rebuild(cfg, False)
+            time.sleep(30)
+
+    threading.Thread(target=loop, daemon=True, name="investor-board-refresh").start()
+    return True
 
 
 # ── 재무 다섯 — 모달 「투자 지표」 칸 재무 카드 (2026-10-02 지시) ──────────
@@ -8829,6 +8852,7 @@ def main():
     if cfg and not SLOW:
         threading.Thread(target=lambda: (time.sleep(20), investor_board(cfg)), daemon=True,
                          name="investor-board-warm").start()
+        start_investor_board_refresh(cfg)
 
     # 순위표 섹터 — 순위 목록의 WICS 를 뒤에서 한 종목씩 채운다 · 네이버만 · --slow 는 더 느리게 (2026-11-04)
     company_profile.start_sector_fill(lambda: [r["stock_code"] for r in dart.universe_rows(None)], slow=SLOW)

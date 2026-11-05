@@ -43,8 +43,8 @@
       "unit": "%",
       "base": 50,
       "full": 25,
-      "src": "매수 ÷ (매수 + 매도) × 100. 외국계 창구 = 8765 /api/kis/investor-member 의 foreignFirms.buy · sell(수량 · KRX 회원사 중 외국계 합) · 프로그램 = /api/kis/flow-today?code=&step=5 의 stock.rows 의 buy · sell 합(원) — 둘 다 오늘 장중 누적",
-      "how": "재권님 지정 2026-11-03(폭 25 — 매수 몫 75% · 25% 에서 가장 짙음 · 개발3 제안) — 1년 값으로 재지 않았다(창구 · 프로그램 지난 날 기록이 저장소 · 서버에 없음 · 개발3 확인). 첫 사용처 홀딩스 큰 차트 바닥 줄 원(holdings/js/components/flow-foot.js · paint 'line')"
+      "src": "매수 ÷ (매수 + 매도) × 100. 외국계 창구 = 8765 /api/kis/investor-member 의 foreignFirms.buy · sell(수량 · 외국계 회원사 합 · 오늘 누적 — 1분 값이 없다) · 종목 프로그램 = /api/kis/flow-today?code=&step=1 의 stock.rows 의 buy · sell(원 · 거래소와 넥스트레이드 합 · 08:00~20:00) — 원은 최근 5분(거래 있던 1분 칸 다섯) 합 · 오늘 누적은 세로 눈금",
+      "how": "재권님 지정 2026-11-03(폭 25 — 매수 몫 75% · 25% 에서 가장 짙음 · 개발3 제안) — 1년 값으로 재지 않았다(창구 · 프로그램 지난 날 기록이 저장소 · 서버에 없음 · 개발3 확인). 첫 사용처 홀딩스 큰 차트 바닥 줄 원(holdings/js/components/flow-foot.js · paint 'line') · 종목 화면 · 모달 차트도 같은 바닥 줄"
     }
   ]
 }
