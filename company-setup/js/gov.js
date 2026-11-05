@@ -17,7 +17,8 @@ const key = (n) => String(n || '').replace(/㈜|\(주\)|주식회사|\s/g, ''); 
 const show = (n) => String(n || '').replace(/㈜|\(주\)|\n/g, '').replace(/(?<=[가-힣]) (?=[가-힣](\s|$))/g, '').trim();   // 「이 재 용」 → 「이재용」
 const num = (v) => { const x = parseFloat(String(v ?? '').replace(/,/g, '')); return Number.isFinite(x) ? x : null; };
 const pc = (p) => p == null ? '' : ` ${+p.toFixed(1)}%`;
-const COMMON = new Set(['보통주', '의결권 있는 주식']);   // 회사마다 표기가 둘이다(2026-11-05 일곱 종목 실측)
+const COMMON = new Set(['보통주', '의결권있는주식']);   // 띄어쓰기를 빼고 견준다 — 「보통주」 · 「의결권 있는 주식」 · 「의결권있는 주식」(SK스퀘어) 셋 다(2026-11-05 실측 · 개발1)
+const isCommon = (k) => COMMON.has(String(k || '').replace(/\s/g, ''));
 const SUM = new Set(['계', '합계']);
 
 async function api(u) {
@@ -36,7 +37,7 @@ function holderKind(t) {
   return '특수관계인';
 }
 function split(d, codeOf) {
-  const major = (d.major || []).filter((r) => COMMON.has(r.stock_knd));
+  const major = (d.major || []).filter((r) => isCommon(r.stock_knd));
   const total = major.find((r) => SUM.has(r.nm));
   const H = {};
   for (const r of major) {
@@ -47,7 +48,7 @@ function split(d, codeOf) {
   const B = { sub: [], rel: [], part: [], abroad: [], fund: [], simple: [] };
   for (const r of d.invest || []) {
     const n = r.inv_prm; if (!n || SUM.has(n)) continue;
-    const p = num(r.trmend_blce_qota_rt), it = { n: show(n), p, code: /[가-힣]/.test(n) ? codeOf(n) : null };   // 영문 약칭(해외 법인 「HMM」 등)은 상장사 이름과 우연히 같다 — 한글 이름만 맞춘다(2026-11-05 시험에서 현대차 해외 법인 HMM 이 상장사 HMM 으로 붙음)
+    const p = num(r.trmend_blce_qota_rt), it = { n: show(n), p, code: /[가-힣]|㈜|\(주\)|주식회사/.test(n) ? codeOf(n) : null };   // 한글 이름이거나 ㈜ · (주) · 주식회사가 붙은 영문 이름만(「SK㈜」 → SK) — 서버 links 와 같은 기준(개발1)   // 영문 약칭(해외 법인 「HMM」 등)은 상장사 이름과 우연히 같다 — 한글 이름만 맞춘다(2026-11-05 시험에서 현대차 해외 법인 HMM 이 상장사 HMM 으로 붙음)
     if (r.invstmnt_purps !== '경영참여') B.simple.push(it);
     else if (/조합|투자신탁|펀드|사모/.test(n)) B.fund.push(it);
     else if (!/[가-힣]/.test(n)) B.abroad.push(it);
