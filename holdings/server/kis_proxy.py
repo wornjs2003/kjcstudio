@@ -8094,6 +8094,19 @@ class Handler(SimpleHTTPRequestHandler):
             # 파싱하지 않으므로 빠르고, 지나간 기사도 남아 있다.
             if route == "stored":
                 qs = urllib.parse.parse_qs(parsed.query)
+                # **`all=1` — 보관 기간(`news_store.NEWS_KEEP_DAYS`) 안 전부** (2026-11-05 · 「캐시 · 주기 · 한도 값을 화면에 박지 않는다」).
+                # 화면이 기간 · 개수를 들지 않는다. 서버 상한(`NEWS_STORED_MAX`)을 넘으면 새것부터 그만큼만 내고 `truncated` 로 알린다
+                if (qs.get("all") or [""])[0] == "1":
+                    hours = news_store.NEWS_KEEP_DAYS * 24
+                    rows = news_store.groups(hours=hours, limit=None)
+                    found = len(rows)
+                    rows = rows[:news_store.NEWS_STORED_MAX]
+                    self._send_json({"ok": True, "data": rows,
+                                     "meta": {"hours": hours, "count": len(rows), "found": found,
+                                              "truncated": found > len(rows), "max": news_store.NEWS_STORED_MAX,
+                                              "topics": news_store.counts(hours),
+                                              "total": news_store.total()}})
+                    return
                 hours = int((qs.get("hours") or ["24"])[0])
                 limit = int((qs.get("limit") or ["80"])[0])
                 rows = news_store.groups(hours=hours, limit=limit)
