@@ -470,6 +470,7 @@ export function openInvestorModal({ code } = {}) {
       flowWatch = watch({ url: () => (st.tab === 'chart' && /^\d{6}$/.test(st.target) ? `/api/kis/investor-estimate?code=${st.target}` : null),
         onChange: () => paintSides(), key: EST_KEY, fallbackMs: FLOW_FALLBACK_MS });
     }
+    if (!INDEX[st.target] && st.period !== 'D') st.period = 'D';   // 칩을 그리기 전에 — 지수 분봉 · 월봉에서 종목으로 오면 「일봉」 이 켜진 채로(qa 덧 11-05)
     main.innerHTML = `<div class="kh-ivm-bar-row">
         ${chips('target', [[INDEX[st.target] ? (st.lastStock || code || '005930') : st.target, '종목'], ['KOSPI', '코스피'], ['KOSDAQ', '코스닥']], st.target)}
         ${chips('period', INDEX[st.target] ? PERIODS : AMT_PERIODS, st.period)}
@@ -490,7 +491,6 @@ export function openInvestorModal({ code } = {}) {
     if (!st.names[st.target] && !INDEX[st.target]) {
       loadBoard('ALL', 1).then(() => { const f = st.names[st.target]; if (f) { const n = main.querySelector('.kh-ivm-name'); if (n) n.textContent = f; } });
     }
-    if (!INDEX[st.target] && st.period !== 'D') st.period = 'D';
     const want = `${st.target}|${st.period}`;
     const amt = !INDEX[st.target];
     const got = amt ? await amountBars() : await candles();
