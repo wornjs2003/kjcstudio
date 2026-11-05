@@ -1733,44 +1733,4 @@
   }
 }
 
-/* 큰 차트 바닥 줄 — 외국계 창구 · 프로그램 매수세 / 매도세 (2026-11-03 · components/flow-foot.js)
-   원 자리 · 색 짙기는 tone.js 가 셈해 style 로 준다. 여기는 모양만 — 바닥 줄 높이를 안 바꾸게 글줄 안에 든다 */
-.kh-flow-foot {
-  display: inline-flex; align-items: center; gap: 10px;
-  margin: 0 auto 0 20px; white-space: nowrap; line-height: 1;
-}
-.kh-ff-it { display: inline-flex; align-items: center; gap: 7px; }
-.kh-ff-n { color: var(--kh-text-secondary); }
-.kh-ff-t { color: var(--kh-text-secondary); font-variant-numeric: tabular-nums; }
-.kh-ff-bar {
-  position: relative; display: inline-block; flex: none;
-  width: 96px; height: 12px; margin: 0 6px;   /* 48 → 96 — 재권님 11-03 「2배 길게」 */
-}
-.kh-ff-bar::before {        /* 띠 — 왼쪽 매도(파랑) · 가운데 회색 · 오른쪽 매수(빨강) */
-  content: ''; position: absolute; left: 0; right: 0; top: 4px; height: 4px; border-radius: 2px;
-  background: linear-gradient(to right, rgb(var(--kh-down-rgb) / 22%), var(--kh-border) 50%, rgb(var(--kh-up-rgb) / 22%));
-}
-.kh-ff-mid { position: absolute; left: calc(50% - 0.5px); top: 2px; width: 1px; height: 8px; background: var(--kh-text-muted); }
-.kh-ff-fill { position: absolute; top: 4px; height: 4px; opacity: 0.6; }
-.kh-ff-fill.up { border-radius: 0 2px 2px 0; }
-.kh-ff-fill.down { border-radius: 2px 0 0 2px; }
-.kh-ff-dot {
-  position: absolute; top: 0; width: 12px; height: 12px; margin-left: -6px;
-  box-sizing: border-box; border-radius: 50%;
-  border: 2px solid var(--kh-bg-card);
-  box-shadow: 0 0 0 1px var(--kh-ff-c), 0 1px 3px var(--kh-ff-c);
-}
-/* 자리가 모자랄 때 (qa 11-03 · 폭 500 에서 왼쪽 설명이 낱말마다 꺾이고 오른쪽이 잘렸다)
-   넓은 창 — 줄을 안 바꾸고 막대부터 줄인다(96 → 40px) · 왼쪽 설명은 안 꺾고 · 오른쪽 출처는 말줄임 — 바닥 줄 높이 그대로
-   좁은 창(700px 이하) — 이 줄만 아랫줄로 내린다(바닥 줄이 한 줄 늘어난다) */
-.kh-big-foot:has(.kh-flow-foot) > span:first-child { flex: none; white-space: nowrap; }
-.kh-big-foot:has(.kh-flow-foot) > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kh-flow-foot { flex: 0 1 auto; min-width: 0; }
-.kh-ff-it { flex: 0 1 auto; min-width: 0; }
-.kh-ff-bar { flex: 0 1 96px; min-width: 40px; }
-@media (max-width: 700px) {
-  .kh-big-foot:has(.kh-flow-foot) { flex-wrap: wrap; row-gap: 6px; }
-  .kh-flow-foot { order: 3; flex-basis: 100%; margin: 0; gap: 12px; }
-  .kh-ff-it { flex: 1 1 0; }
-  .kh-ff-bar { flex: 1 1 96px; max-width: 96px; }
-}
+/* 큰 차트 바닥 줄(외국계 창구 · 프로그램 매수세 / 매도세)의 모양은 css/flow-foot.css 로 옮겼다 — 종목 화면 · 모달 차트도 같은 줄을 단다(2026-11-05) */
