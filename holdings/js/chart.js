@@ -2339,7 +2339,7 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
       <span><i>고</i><b data-f="high" class="kh-up">—</b></span>
       <span><i>저</i><b data-f="low" class="kh-down">—</b></span>
       <span><i>종</i><b data-f="close">—</b></span>
-      <span><i>등락</i><b data-f="chg">—</b></span>
+      <span><i>시가 대비</i><b data-f="chg">—</b></span>
       <span class="kh-lg-vs"><i>현재가 대비</i><b data-f="vs">—</b></span>
       ${showVolume ? '<span class="kh-lg-vol"><i>거래량</i><b data-f="volume">—</b></span>' : ''}
     </div>
@@ -2422,7 +2422,7 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     const cur = candles.length ? candles[candles.length - 1].close : null;
     const pct = cur ? (price - cur) / cur * 100 : null;
     pin.innerHTML = `<b>${fmtPrice(price, dec)}</b>`
-      + ` <span class="${pct == null ? '' : updn(pct)}">${pct == null ? '—' : `${sign(pct)}${pct.toFixed(2)}%`}</span>`;
+      + ` <span class="${pct == null ? '' : updn(pct)}">${pct == null ? '—' : `${sign(pct)}${pct.toFixed(2)}%`}</span> <i>현재가 대비</i>`;
     pin.hidden = false;
     /* 칸 왼끝 · 오른끝에서 칸 밖으로 넘치지 않게 안으로 당긴다 */
     const half = pin.offsetWidth / 2;
@@ -2461,9 +2461,11 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     const ox = cv ? cv.getBoundingClientRect().left - container.getBoundingClientRect().left : 0;
     const oy = cv ? cv.getBoundingClientRect().top - container.getBoundingClientRect().top : 0;
     tag.innerHTML = `<b>${fmtPrice(price, dec)}</b>`
-      + `<br><b class="${pct == null ? '' : updn(pct)}">${fmtPct(pct)}</b>`
-      + `<br><b class="${toHi == null ? '' : updn(toHi)}">${fmtPct(toHi)}</b>`
-      + `<br><b class="${toLo == null ? '' : updn(toLo)}">${fmtPct(toLo)}</b>`;
+      + `<br><b class="${pct == null ? '' : updn(pct)}">${fmtPct(pct)}</b> <i>현재가 대비</i>`
+      + `<br><b class="${toHi == null ? '' : updn(toHi)}">${fmtPct(toHi)}</b> <i>최고까지</i>`
+      + `<br><b class="${toLo == null ? '' : updn(toLo)}">${fmtPct(toLo)}</b> <i>최저까지</i>`;
+    /* 숫자 뒤 흐린 작은 글씨로 기준 — 2026-11-05 재권님 「어느거 대비인지 간단하게 설명써줘」 → 안 「응」(10-22 「이름은 빼라」 를 되돌림).
+       최고 · 최저는 보이는 화면 안 값(visibleExtremes) · 현재가 = 맨 오른쪽 봉 종가 */
     tag.style.left = `${ox + point.x}px`;
     tag.hidden = false;
     /* 칸 오른끝에서 넘치면 마우스 왼쪽에 둔다 (qa 검수 · 좁은 폭 오른끝 5~8px 넘침) */
