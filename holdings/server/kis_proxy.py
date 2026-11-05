@@ -7421,7 +7421,7 @@ class Handler(SimpleHTTPRequestHandler):
         if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/auto-watch":
             # 자동 관심종목(server/auto_watch.py) — 쌓인 값을 부를 때마다 투자전략 룰(strategy-rules)로 거르고 줄 세운다 · KIS 를 안 부른다
             try:
-                self._send_json({"ok": True, "data": auto_watch.compute(sys.modules[__name__]), "meta": auto_watch.status()})
+                self._send_json({"ok": True, "data": auto_watch.compute(sys.modules[__name__]), "meta": auto_watch.status(sys.modules[__name__])})
             except Exception as e:
                 self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
             return

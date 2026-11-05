@@ -41,6 +41,9 @@
    같은 문서에 `groups: [{id, name, codes}]` 를 더한다 — 서버(`dart.watchlist()`)는 `items` 만 읽으므로 알림은 그대로다.
    어느 묶음에도 없는 담은 종목이 「미분류」 다(따로 저장하지 않는다 — 셈한다). 하트를 끄면 모든 묶음에서 빠진다.
    **쓸 때는 늘 둘을 함께 보낸다** — 한쪽만 보내면 다른 쪽이 문서에서 지워진다.
+   ── 자동 관심종목 (2026-11-05) ──
+   서버(server/auto_watch.py)가 같은 문서에 `auto: {code: {day, added}}` 와 묶음 「자동」(id auto)을 쓴다. 화면은 auto 를
+   고치지 않고 마지막으로 읽은 그대로 돌려보낸다 — 하트를 끄거나 다른 묶음에 담은 것은 서버가 다음 바퀴에 읽어 셈한다.
    ========================================================================== */
 
 import { WATCHLIST } from '../data/market.js';
@@ -55,6 +58,7 @@ const DOC = '/api/board/doc/watchlist';
 const listeners = [];
 
 let serverAt = null;                        // 서버 문서를 마지막으로 읽은 때(updatedAt) — PUT 에 돌려보낸다
+let serverAuto = null;                      // 서버 문서의 auto(자동 관심종목 표시 · server/auto_watch.py) — 화면은 안 고치고 받은 그대로 돌려보낸다
 let queue = Promise.resolve();              // 서버 쓰기 차례
 
 function clean(arr) {
@@ -128,6 +132,7 @@ async function fetchServer() {
     const j = await r.json();
     if (!j.ok) return undefined;
     serverAt = j.updatedAt || null;
+    serverAuto = j.data && j.data.auto && typeof j.data.auto === 'object' ? j.data.auto : null;
     const items = j.data && Array.isArray(j.data.items) ? j.data.items : null;
     if (!items) return null;
     return { items: clean(items), groups: Array.isArray(j.data.groups) ? cleanGroups(j.data.groups) : null };
@@ -143,7 +148,8 @@ async function pushServer(st, redo) {
       const r = await fetch(DOC, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: { items: st.items, groups: st.groups }, updatedAt: serverAt }),
+        // auto 는 서버(자동 관심종목)가 쓰는 칸 — 빠뜨리면 통째로 쓰는 이 PUT 이 지운다
+        body: JSON.stringify({ data: { items: st.items, groups: st.groups, ...(serverAuto ? { auto: serverAuto } : {}) }, updatedAt: serverAt }),
       });
       const j = await r.json().catch(() => ({}));
       if (r.ok && j.ok) { serverAt = j.updatedAt || serverAt; return true; }

@@ -113,14 +113,19 @@ def watchlist():
     if at is None:
         return list(WATCH_CODES)
     if _watch_cache["at"] != at:
-        data = docstore.read_doc(WATCH_DOC)
-        data = data.get("items") if isinstance(data, dict) else None   # {items: [...]} — 빈 목록도 저장되게 감쌌다
+        doc = docstore.read_doc(WATCH_DOC)
+        data = doc.get("items") if isinstance(doc, dict) else None   # {items: [...]} — 빈 목록도 저장되게 감쌌다
         if not isinstance(data, list):
             return list(WATCH_CODES)
+        # 자동 관심종목이 새로 넣은 것(auto[code].added)은 알림에서 뺀다 — 날마다 십여 개씩 들어와 알림이 쏟아지지 않게.
+        # 재권님이 다른 묶음에 담았으면 그 종목은 재권님 것이라 알린다(auto_watch.merge_watch 와 같은 셈 · 2026-11-05)
+        auto = doc.get("auto") if isinstance(doc.get("auto"), dict) else {}
+        mine = {c for g in doc.get("groups") or [] if isinstance(g, dict) and g.get("id") != "auto" for c in g.get("codes") or []}
+        skip = {c for c, v in auto.items() if isinstance(v, dict) and v.get("added") and c not in mine}
         codes = []
         for x in data:
             c = x.get("code") if isinstance(x, dict) else x
-            if isinstance(c, str) and re.fullmatch(r"\d{6}", c) and c not in codes:
+            if isinstance(c, str) and re.fullmatch(r"\d{6}", c) and c not in codes and c not in skip:
                 codes.append(c)
         _watch_cache.update(at=at, codes=codes)
     return list(_watch_cache["codes"])

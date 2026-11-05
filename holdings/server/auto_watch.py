@@ -20,7 +20,12 @@
               응답 meta.notCounted 에 적는다
     저장      market.db 의 `auto_watch_day`(날 · 종목 · 지수 · 이름 · 종가 · 등락률 · 거래량 · 어디서)
     주소      GET /api/auto-watch — 모양은 compute() 주석 · 「없음」 은 null(0 아님)
-    넣기      08:00 에 관심 목록에 넣는 일은 **아직 없다**(ADD = False 자리만) — 넣는 모양 · 하트 화면의 「자동」 표시 보존을 만든 뒤 켜기를 따로 여쭌다
+    넣기      **그날 값을 쌓은 바로 뒤**(정규장이 끝난 15:41 판) 걸린 종목을 관심 목록(문서 watchlist)과 묶음 「자동」 에 넣는다 — apply_watch()
+              (2026-11-05 재권님 「넣는건 정규장이 끝나면 바로 넣는 방향으로 수정해」 · 처음 안은 다음날 08:00 이었다). 쌓아 둔 값을 쓰므로 KIS 0번.
+              문서에 `auto: {code: {day, added}}` 를 둔다 — day 넣은 날 · added 이 셈이 하트 목록에 새로 넣었나(원래 하트가 있던 종목은 false).
+              KEEP_DAYS 거래일 뒤 「자동」 묶음에서 빼고, added 인 종목은 하트 목록에서도 뺀다 — 단 재권님이 다른 묶음에 담았으면 그때부터 재권님 것(added 를 내림).
+              하트를 끈 종목은 auto 에서도 지운다. **added 종목은 알림(dart.watchlist)에서 뺀다** — 날마다 십여 개씩 들어와 알림이 쏟아지지 않게.
+              **켜기는 ADD 하나다 — 지금 False**(관심 목록 · 알림이 바뀌는 일이라 켜기는 따로 여쭌다)
 
 8765 만 받는다(`kis_proxy` 가 `is_sender` 로 부른다) · 읽기는 어느 서버든 자기 DB 로. 알림은 없다.
 """
@@ -44,11 +49,14 @@ MULTI_MAX = 30
 GAP_SEC = 0.15                  # 묶음 사이 쉼 — 예산은 kis_get 이 지키지만 다른 받기에 비켜선다
 RULE_DOC, RULE_KEY = "strategy-rules", "volsurge"
 SORTS = ("mult", "pct")
-ADD = False                     # 08:00 관심 목록 넣기 — 아직 없다(머리 주석 「넣기」)
+ADD = False                     # 정규장 뒤 관심 목록 넣기 — 만들었고 꺼 둠(머리 주석 「넣기」 · 켜기는 재권님 지시로)
+WATCH_DOC = "watchlist"
+AUTO_GROUP = {"id": "auto", "name": "자동"}
+KEEP_DAYS = 5                   # 넣은 날 뒤 이 거래일이 지나면 뺀다(재권님 「5거래일 뒤 자동 것만 빼기」)
 TICK = 30
 HOLIDAY_SAME = 0.9              # 앞 날과 종가 · 거래량이 똑같은 종목이 이만큼이면 휴장(거래가 있는 날에 우연히 같을 수는 없다)
-RETRY_SEC = 300
-BUSY_RETRY_SEC = 60             # 뜰 때 채우기가 자물쇠를 쥐고 있을 때 바퀴가 다시 보는 간격                 # 그날 값을 못 받았을 때 다시 도는 간격 — 창(15:41~16:00) 안에서만
+RETRY_SEC = 300                 # 그날 값을 못 받았을 때 다시 도는 간격 — 창(15:41~16:00) 안에서만
+BUSY_RETRY_SEC = 60             # 뜰 때 채우기가 자물쇠를 쥐고 있을 때 바퀴가 다시 보는 간격
 
 _SCHEMA = (
     """CREATE TABLE IF NOT EXISTS auto_watch_day (
@@ -223,9 +231,88 @@ def run(proxy, day, codes=None):
         _status.update(runDay=day, runAt=_now().isoformat(timespec="seconds"), saved=n)
         if n:                        # 저장했으면 앞서 남은 「못 받음」 을 지운다 — meta 를 읽는 쪽이 헷갈리지 않게(qa 덧 11-05)
             _status.update(error=None)
+            if ADD:
+                try:
+                    apply_watch(proxy, day)
+                except Exception as e:
+                    _status["addLast"] = {"day": day, "error": safe_message(e, 160)}
         return {"backfill": b, "saved": n}
     finally:
         _run_lock.release()
+
+
+def _trading_days(proxy):
+    """값을 쌓은 날들(오름차순) — 「몇 거래일 지났나」 를 센다."""
+    with proxy._db_lock, proxy.db_conn() as conn:
+        return [r[0] for r in conn.execute("SELECT DISTINCT day FROM auto_watch_day WHERE src = 'multi' ORDER BY day")]
+
+
+def merge_watch(doc, picks, day, days):
+    """관심 목록 문서 → 새 문서 · 넣은 코드 · 뺀 코드. 문서를 읽고 쓰는 일과 떼어 둬 시험할 수 있게 했다."""
+    items = [dict(x) for x in doc.get("items") or [] if isinstance(x, dict) and x.get("code")]
+    groups = [dict(g, codes=list(g.get("codes") or [])) for g in doc.get("groups") or [] if isinstance(g, dict) and g.get("id")]
+    auto = {c: dict(v) for c, v in (doc.get("auto") or {}).items() if isinstance(v, dict)}
+    grp = next((g for g in groups if g["id"] == AUTO_GROUP["id"]), None)
+    if grp is None:
+        grp = dict(AUTO_GROUP, codes=[])
+        groups.append(grp)
+    have = {x["code"] for x in items}
+    other = {c for g in groups if g["id"] != AUTO_GROUP["id"] for c in g["codes"]}
+    added, removed = [], []
+    for code in list(auto):
+        info = auto[code]
+        if code not in have:         # 재권님이 하트를 껐다 — 자동 표시도 지운다
+            del auto[code]
+            if code in grp["codes"]:
+                grp["codes"].remove(code)
+            continue
+        if info.get("added") and code in other:
+            info["added"] = False    # 다른 묶음에 담았다 — 그때부터 재권님 것
+        if sum(1 for d in days if info.get("day", "") < d <= day) >= KEEP_DAYS:
+            if code in grp["codes"]:
+                grp["codes"].remove(code)
+            if info.get("added"):
+                items = [x for x in items if x["code"] != code]
+            del auto[code]
+            removed.append(code)
+    have = {x["code"] for x in items}
+    for p in picks:
+        code = p["code"]
+        if code in auto:             # 다시 걸렸다 — 넣은 날을 오늘로(5거래일이 다시 시작)
+            auto[code]["day"] = day
+        else:
+            auto[code] = {"day": day, "added": code not in have}
+            if code not in have:
+                items.append({"code": code, "name": p.get("name") or code})
+            added.append(code)
+        if code not in grp["codes"]:
+            grp["codes"].append(code)
+    out = dict(doc, items=items, groups=groups, auto=auto)
+    return out, added, removed
+
+
+def apply_watch(proxy, day):
+    """그날 걸린 종목을 관심 목록에 넣고 오래된 자동 것을 뺀다 — 보내는 서버(8765)만 · 그날 값을 쌓은 바로 뒤."""
+    d = compute(proxy)
+    if not d["ready"] or not d["day"] or d["day"] != day:
+        _status["addLast"] = {"day": day, "skip": "룰 칸이 비었거나 그날 값이 아님(%s)" % d["day"]}
+        return None
+    days = _trading_days(proxy)
+    for _ in range(3):               # 그 사이 화면이 썼으면(충돌) 다시 읽어 얹는다
+        at = docstore.doc_updated_at(WATCH_DOC)
+        doc = docstore.read_doc(WATCH_DOC)
+        if not isinstance(doc, dict) or not isinstance(doc.get("items"), list):
+            _status["addLast"] = {"day": day, "skip": "관심 목록 문서가 없음 — 화면에서 하트를 한 번 누르면 생긴다"}
+            return None
+        new, added, removed = merge_watch(doc, d["picked"], day, days)
+        try:
+            docstore.write_doc(WATCH_DOC, new, if_updated_at=at)
+        except docstore.DocConflict:
+            continue
+        _status["addLast"] = {"day": day, "at": _now().isoformat(timespec="seconds"), "added": added, "removed": removed}
+        return _status["addLast"]
+    _status["addLast"] = {"day": day, "error": "관심 목록 문서를 세 번 다 남이 먼저 썼음"}
+    return None
 
 
 def rules(proxy):
@@ -317,10 +404,19 @@ def compute(proxy):
     return out
 
 
-def status():
+def status(proxy=None):
     s = dict(_status)
+    if proxy is not None and not s.get("runAt"):   # 재시작으로 메모리가 비었으면 DB 의 쌓은 시각(qa 덧 11-05 — 8764 · 재시작 뒤 「셈 시각」 이 빔)
+        try:
+            with proxy._db_lock, proxy.db_conn() as conn:
+                r = conn.execute("SELECT day, MAX(saved_at), COUNT(*) FROM auto_watch_day WHERE src = 'multi' "
+                                 "GROUP BY day ORDER BY day DESC LIMIT 1").fetchone()
+            if r:
+                s.update(runDay=r[0], runAt=r[1], saved=r[2], runFrom="DB")
+        except Exception:
+            pass
     s["notCounted"] = ["sectorPct — 종목 ↔ 미국 섹터 표가 아직 없음", "exclude — 글 칸이라 못 셈(ETF 는 주권 거르기로 빠짐)"]
-    s["add"] = "꺼짐 — 08:00 관심 목록 넣기는 아직 없음" if not ADD else "켜짐"
+    s["add"] = "꺼짐 — 정규장 뒤 관심 목록 넣기는 만들어 두고 꺼 둠" if not ADD else "켜짐 — 그날 값을 쌓은 바로 뒤 관심 목록 · 「자동」 묶음에 넣음"
     s["runWindow"] = "평일 %02d:%02d~%02d:%02d" % (RUN_AT + RUN_UNTIL)
     return s
 
