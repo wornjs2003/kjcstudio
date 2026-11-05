@@ -401,11 +401,17 @@ def _release_dates():
     return _fetch_release_dates()
 
 
+_rel_fill_lock = threading.Lock()
+
+
 def _fetch_release_dates():
-    with _rel_lock:                  # 받는 동안 잠근다 — 비었을 때 여럿이 와도 한 번만 받는다
-        now = time.time()
-        if _rel["dates"] is not None and now - _rel["at"] < _rel["ttl"]:
-            return _rel["dates"], _rel["error"]
+    """FRED 발표일 10번 — 받는 동안은 _rel_fill_lock 만 쥔다(받기끼리 한 줄) · _rel_lock 은 바꿀 때만 —
+    뒤에서 받는 사이 들어온 요청이 그 4초를 기다리지 않게(qa 검수 11-05 · 계열 쪽 _refresh_series 와 같은 꼴)."""
+    with _rel_fill_lock:
+        with _rel_lock:
+            now = time.time()
+            if _rel["dates"] is not None and now - _rel["at"] < _rel["ttl"]:
+                return _rel["dates"], _rel["error"]
         key = fred_key()
         today = datetime.now(KST).date()
         out, err = {}, None
@@ -422,8 +428,9 @@ def _fetch_release_dates():
                     out[r["key"]] = [d.get("date") for d in j.get("release_dates") or [] if d.get("date")]
                 except Exception as e:
                     err = safe_message(e, 160).replace(key, "<가림>")
-        _rel.update(at=now, ttl=MACRO_RETRY_TTL if err else RELEASE_TTL, dates=out if out else None, error=err)
-        return _rel["dates"], err
+        with _rel_lock:              # 하나도 못 받았으면 들고 있던 발표일을 지우지 않는다(계열 쪽 _keep_old 와 같은 뜻)
+            _rel.update(at=now, ttl=MACRO_RETRY_TTL if err else RELEASE_TTL, dates=out or _rel["dates"], error=err)
+            return _rel["dates"], err
 
 
 def _next_refresh(now):

@@ -19,7 +19,7 @@
     받기       8765(보내는 서버)만 OpenDART 를 부른다 — 5분마다 최근 FETCH_DAYS 날의 공급계약 · 자사주 공시 중 아직 안 받은 것을
                한 바퀴 FETCH_MAX 건까지. 한 건에 한 번 받아 market.db 의 good_news_detail 에 둔다(하루 쓸 값은 dart._dart_get 이 센다).
                잠깐 실패(transient)는 RETRY_BASE_SEC 부터 두 배씩 늘려 RETRY_MAX 번까지 다시 받고, 404 · 400 같은 답과 그 밖 오류는 바로 굳는다
-               OpenDART 하루 한도(본문 status 020 · HTTP 429 아님)는 다음날 07:00 에 다시(횟수 안 셈) · 800 · 900(점검 · 정의 안 된 오류)은 잠깐 실패로 셈
+               OpenDART 하루 한도(본문 status 020 · HTTP 429 아님)는 다음 공시 받기 시작(dart.POLL_FROM · 07:00)에 다시(횟수 안 셈) · 800 · 900(점검 · 정의 안 된 오류)은 잠깐 실패로 셈
                다른 서버는 쌓인 것을 읽기만 한다 — 아직 안 받은 것은 「못 가름 · 상세 아직 안 받음」
     주소       GET /api/good-news?days=7&code=005930 — 모양은 compute() 주석 · 「없음」 은 null(0 아님) · 알림은 없다
 """
@@ -49,7 +49,7 @@ GAP_SEC = 0.3
 PRE_LOOK_CAL_DAYS = 120         # 「이미 오름」 종가를 찾는 달력 날
 RETRY_MAX = 5                   # 잠깐 실패(연결 끊김 · 시간 넘김 · 429 · 5xx)를 몇 번까지 다시 받나 — 넘으면 「못 가름」 으로 굳는다
 RETRY_BASE_SEC = 600            # 첫 다시 받기까지 — 그 뒤 실패마다 두 배(10 · 20 · 40 · 80분)
-DART_LIMIT = "020"              # OpenDART 하루 한도 초과 — HTTP 429 가 아니라 본문 status 로 온다 · 다음날 07:00 에 다시(횟수를 안 센다)
+DART_LIMIT = "020"              # OpenDART 하루 한도 초과 — HTTP 429 가 아니라 본문 status 로 온다 · 다음 공시 받기 시작(dart.POLL_FROM)에 다시(횟수를 안 센다)
 DART_RETRY = ("800", "900")     # 시스템 점검 · 정의되지 않은 오류 — 잠깐 실패로 셈(간격 · 횟수 그대로). 013(자료 없음) 같은 것은 굳는다
 
 
@@ -58,7 +58,7 @@ _SCHEMA = (
         rcept_no TEXT PRIMARY KEY, kind TEXT, size_pct REAL, purpose TEXT, error TEXT, fetched_at TEXT)""",
 )
 _ADD_COLS = ("tries INTEGER DEFAULT 0", "retry_at TEXT")   # 11-05 덧 — 처음 판 표에 붙인다(retry_at 이 있으면 그 시각 뒤 다시 받는다 · null 이면 굳음)
-_limit_until = {"at": None}      # 020 을 받으면 그 시각(다음날 07:00)까지 바퀴를 안 돈다 — 한도 뒤에 5분마다 한 번씩 더 묻지 않게
+_limit_until = {"at": None}      # 020 을 받으면 그 시각(다음 POLL_FROM)까지 바퀴를 안 돈다 — 한도 뒤에 5분마다 한 번씩 더 묻지 않게
 _status = {"fetchAt": None, "fetched": None, "pending": None, "error": None, "dartCalls": 0}
 _lock = threading.Lock()
 
@@ -192,6 +192,15 @@ def _todo(proxy, since):
     return out
 
 
+def _next_poll_from():
+    """다음 dart.POLL_FROM(공시 받기 시작 · 07:00) — 지금이 그 전이면 오늘, 지났으면 내일.
+    다트 하루 건수는 자정에 다시 세지만 자정 바로 뒤가 아니라 이 시각을 고른다 — 공시 받기(dart 바퀴)가 그때부터 돌아
+    그날 첫 받기와 한도를 함께 쓰고, 새벽에 받을 새 공시도 거의 없다(개념정의 · qa 검수 11-05)."""
+    now = _now()
+    at = now.replace(hour=dart.POLL_FROM // 60, minute=dart.POLL_FROM % 60, second=0, microsecond=0)
+    return at if now < at else at + timedelta(days=1)
+
+
 def _failed(e, tries):
     """받기 실패 → (error 글, tries, retry_at). 잠깐 실패면 간격을 두 배씩 늘려 RETRY_MAX 번까지 · 그 뒤나 그 밖 실패는 굳음(retry_at None)."""
     err = safe_message(e, 160)
@@ -223,7 +232,7 @@ def fetch_round(proxy):
             _status["error"] = "OpenDART 키 없음"
             return 0
         if _limit_until["at"] and _now() < _limit_until["at"]:
-            return 0                 # 하루 한도(020) — 다음날 07:00 까지 쉰다(_status.error 는 그대로)
+            return 0                 # 하루 한도(020) — 다음 POLL_FROM 까지 쉰다(_status.error 는 그대로)
         _init(proxy)
         _status["error"] = None      # 지난 바퀴 오류는 이 바퀴가 다시 적는다
         todo = _todo(proxy, (_now() - timedelta(days=FETCH_DAYS)).strftime("%Y%m%d"))
@@ -241,9 +250,9 @@ def fetch_round(proxy):
                 _status["error"] = safe_message(e, 120)
                 break
             except DartStatus as e:
-                if e.code == DART_LIMIT:     # 하루 한도 — 남은 것도 오늘은 못 받는다 · 다음날 07:00 에 다시(횟수 안 셈)
+                if e.code == DART_LIMIT:     # 하루 한도 — 남은 것도 오늘은 못 받는다 · 다음 받기 시작에 다시(횟수 안 셈)
                     dart._note_020()
-                    nxt = (_now() + timedelta(days=1)).replace(hour=7, minute=0, second=0, microsecond=0)
+                    nxt = _next_poll_from()
                     err = "OpenDART 하루 한도(020) — %s 에 다시" % nxt.strftime("%m-%d %H:%M")
                     _save(proxy, rno, ln, None, None, err, tries, nxt.isoformat(timespec="seconds"))
                     _status["error"] = err
