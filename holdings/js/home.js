@@ -1418,12 +1418,15 @@ const eokSigned = (won) => { if (won == null) return '—'; const v = Math.round
 function jointCell(code, narrow = false) {
   const r = jointOf(code);
   if (!r) return '—';
-  const one = ([k, n]) => `<span class="${r[k] == null ? 'kh-mut' : dirClass(r[k])}">${n} ${(r.approx || []).includes(k) ? '≈' : ''}${eokSigned(r[k])}</span>`;
+  /* ≈ — 상위 30 밖이라 가집계로 어림한 쪽 · 마감 뒤 확정치를 못 받아 가집계로 남은 줄의 외 · 기(r.basis 'estimate' · 11-05 개념정의 검수) */
+  const est = (k) => (r.approx || []).includes(k) || (r.basis === 'estimate' && k !== 'program');
+  const one = ([k, n]) => `<span class="${r[k] == null ? 'kh-mut' : dirClass(r[k])}">${n} ${est(k) ? '≈' : ''}${eokSigned(r[k])}</span>`;
   /* narrow — 순위 모달 칸. 외 · 기 · 프는 한 줄(11-05 재권님 「외 기 프 는 한줄로」) · 까닭 글만 줄바꿈(한 줄이면 옆 칸 위로 넘쳤다 · 11-05 8772) */
   const line = (html, mut) => `<div class="${mut ? 'kh-mut' : ''}" style="white-space:${mut && narrow ? 'normal' : 'nowrap'};font-size:${mut ? 11 : 12}px">${html}</div>`;
   const names = (ks) => (ks || []).map((k) => JOINT_NAME[k]).join(' · ');
   /* 합은 안 적는다(11-05 재권님 「합은 빼준 상태로」) — 차례는 그대로 서버가 셋 합 큰 순으로 준다 */
-  const body = line(JOINT_SIDES.map(one).join(' '));
+  /* 단위 「억」 은 줄 끝에 한 번(11-05 재권님 「금액으로 다 맞춰줘」 — 안내 줄에 넣으면 빠짐이 있을 때 두 줄로 넘었다) */
+  const body = line(`${JOINT_SIDES.map(one).join(' ')}<span class="kh-mut">억</span>`);
   if (!r.flip) return body;
   const why = [(r.sold || []).length ? `${names(r.sold)} 매도로 바뀜` : '', (r.unknown || []).length ? `${names(r.unknown)} 값 모름` : '']
     .filter(Boolean).join(' · ') || '셋 다 매수에서 빠짐';
@@ -1432,7 +1435,7 @@ function jointCell(code, narrow = false) {
 /* 안내 줄 — 몇 종목 · 빠진 수 · 못 받은 수 · 값마다 갱신 주기(외 · 기 입력 시각과 서버가 다시 받는 주기는 서버가 준다) */
 function jointNote(short = false) {
   const m = jointMeta || {};
-  const bits = ['억 단위'];      // 종목 수는 표가 보인다 — 안내 줄이 세 줄로 넘어가면 표가 짧아져 넣지 않는다 · 값 단위 「억」 을 맨 앞에(11-05 재권님 「금액으로 다 맞춰줘」)
+  const bits = [];          // 종목 수는 표가 보인다 — 안내 줄이 세 줄로 넘어가면 표가 짧아져 넣지 않는다
   if (!short && jointFlipped.length) bits.push(`빠짐 ${jointFlipped.length}`);        // short(모달 탭 옆) — 빠짐 수는 표가 보인다
   if (m.programMissing) bits.push(`프로그램 못 받은 ${m.programMissing}종목 빠짐`);
   if (m.listFail) bits.push('외국인 · 기관 순위 못 받음(앞 값)');
@@ -1442,11 +1445,19 @@ function jointNote(short = false) {
   const hm = `${String(kst.getUTCHours()).padStart(2, '0')}:${String(kst.getUTCMinutes()).padStart(2, '0')}`;
   const next = slots.find((t) => t > hm);
   /* 한 줄에 들어가게 줄여 쓴다 — 두 줄이 되면 표가 17px 짧아진다(다른 칩은 한 줄 · 11-05 8772 실측). 입력 시각은 서버 meta.estSlots */
-  /* 15:40 뒤 서버가 그날 확정치로 바꿔 주면(meta.basis) 「확정」 — 그 전에는 가집계 다음 입력 시각 */
-  if (m.basis === 'confirmed') bits.push('외·기 확정');
+  /* 15:40 뒤 서버가 그날 확정치로 바꿔 주면(meta.confirmed · estimated — 줄 수) 「확정」 · 못 받아 가집계로 남은 줄이 있으면 그 수도 —
+     그 전에는 가집계 다음 입력 시각 */
+  /* 정규장이 끝나면(서버 meta.phase 'closed') 판은 정규장 기준으로 남는다 — 장외에는 안 바뀐다는 것을 맨 앞에 적는다
+     (11-05 재권님 「정규장 끝나면 정규장에서 좋았던 종목들을 남겨놓는 방향 … 이 상황에 대해 인지가 가능하도록」) */
+  const closed = m.phase === 'closed';
+  if (closed) bits.unshift('정규장 마감 고정');     // 「고정」 — 장외에는 안 바뀐다 · 한 줄에 들게 줄여 씀
+  if (m.confirmed != null) bits.push(m.estimated ? `외·기 확정${m.confirmed}·어림${m.estimated}` : '외·기 확정');
+  else if (closed) bits.push('외·기 확정 전');
   else if (per.length) bits.push(`외·기 ${next ? `다음 ${next}` : '오늘 끝'}`);
-  bits.push('프 실시간');
-  if (m.cacheTtl) bits.push(`${m.cacheTtl >= 60 ? `${Math.round(m.cacheTtl / 60)}분` : `${m.cacheTtl}초`}마다`);
+  if (!closed) {
+    bits.push('프 실시간');
+    if (m.cacheTtl) bits.push(`${m.cacheTtl >= 60 ? `${Math.round(m.cacheTtl / 60)}분` : `${m.cacheTtl}초`}마다`);
+  }
   return bits.join(' · ');
 }
 async function loadJoint() {

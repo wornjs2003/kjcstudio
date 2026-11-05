@@ -4373,15 +4373,36 @@ def fetch_investor_top(cfg, direction="buy", market="all", by="qty", limit=10):
 # **빠진 종목** (11-05 재권님 「동시매수하다가 어느 한곳이 매도로 바뀌는것도 파악을 할수있게」) — 그날 한 번이라도 셋 다 샀다가
 # 빠진 종목을 flipped 로 낸다. 어느 쪽이 매도(0 이하)로 바뀌었나 · 상위 30 밖으로 밀려 값을 모르는 쪽 · 처음 빠진 것을 본 시각.
 # 다시 셋 다 사면 flipped 에서 지운다. 프로그램을 못 받은 종목은 빠진 것으로 세지 않는다(못 받은 것이지 판 것이 아니다).
-_joint_buy = {"at": 0.0, "data": None, "retry": False, "day": None, "seen": {}, "flipped": {}}
+_joint_buy = {"at": 0.0, "data": None, "retry": False, "day": None, "seen": {}, "flipped": {}, "frozen": None}
 JOINT_RETRY_MIN = 60                        # 못 받은 것이 있는 판을 다시 짓는 최소 간격 (초)
 JOINT_FIRST_WAIT = 12                       # 첫 판을 기다리는 최대 시간 (초) — 묻는 쪽만 기다리고 판 자리는 안 막는다
 _joint_buy_lock = threading.Lock()          # 판을 읽고 바꾸는 자리
 _joint_buy_build = threading.Lock()         # 짓는 것은 한 번에 하나
+_program_reg_cache = {}                     # code → (날, 그날 거래소 프로그램 순매수 원) — 정규장 마감 뒤 「매수」 판
 
 
-def _program_net_today(cfg, code):
-    """종목 프로그램 그날 누적 순매수 금액(원). 못 받으면 None."""
+def _program_net_today(cfg, code, reg=False):
+    """종목 프로그램 그날 누적 순매수 금액(원). 못 받으면 None.
+
+    reg=True — 정규장이 끝난 뒤. 체결 줄(FHPPG04650101)은 최근 30줄만 줘 15:30 의 누적을 못 꺼낸다(11-05 17:36 실측 —
+    17:35 ~ 17:17 만 옴). 그래서 일별 주소(FHPPG04650201)의 그날 줄을 **거래소(J)** 로 받는다 — 외 · 기 확정치(FHKST01010900 · J)와
+    같은 거래소 기준이라 셋이 한 기준이 된다. 넥스트레이드(프리 · 애프터 · 메인마켓) 체결은 안 든다
+    (11-05 재권님 「정규장 끝나면 정규장에서 좋았던 종목들을 남겨놓는 방향」)."""
+    if reg:
+        day = datetime.now(KST).strftime("%Y%m%d")
+        hit = _program_reg_cache.get(code)
+        if hit and hit[0] == day:
+            return hit[1]
+        try:
+            data = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/program-trade-by-stock-daily",
+                           {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code, "FID_INPUT_DATE_1": day}, "FHPPG04650201")
+        except RuntimeError:
+            return None
+        r = next((x for x in (data.get("output") or []) if (x.get("stck_bsop_date") or "").strip() == day), None)
+        v = _num(r.get("whol_smtn_ntby_tr_pbmn"), int) if r else None
+        if v is not None:
+            _program_reg_cache[code] = (day, v)     # 그날 거래소 합은 마감 뒤 안 바뀐다 — 하루 한 번
+        return v
     try:
         data = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/program-trade-by-stock",
                        {"FID_COND_MRKT_DIV_CODE": "UN", "FID_INPUT_ISCD": code}, "FHPPG04650101")
@@ -4407,8 +4428,13 @@ def _joint_buy_make(cfg):
     iamt = lambda c: won(((i.get(c) or {}).get("inst") or {}).get("amt")) if c in i else None
     # 마감 뒤(15:40~)에는 외국인 · 기관 값을 그날 확정치로 — 후보(두 가집계 목록이 겹친 종목)는 그대로 · 확정치를 못 받은 종목만 가집계
     # (11-05 재권님 「가」 — 확정치에서 한 곳이라도 판 종목은 빠진 종목으로 넘어간다)
+    # 정규장이 끝나면(15:30~) 판은 정규장 기준으로 남는다 — 프로그램은 그날 거래소 합(일별) · 외 · 기는 15:40 부터 확정치.
+    # 장외(넥스트레이드 애프터) 체결은 섞지 않는다(11-05 재권님 「프리장 정규장 만 가능하면 거기에 맞게만 보여주고 정규장 끝나면
+    # 정규장에서 좋았던 종목들을 남겨놓는 방향」) · 프리장(08:00~)은 외 · 기 가집계 첫 입력(09:30) 전이라 판이 비어 있다
+    reg_over = now.weekday() >= 5 or (now.hour, now.minute) >= KRX_CLOSE or (now.hour, now.minute) < NXT_PRE_OPEN
     conf = {}
-    if now.weekday() < 5 and (now.hour, now.minute) >= REG_CLOSE_READY:
+    closed = now.weekday() < 5 and (now.hour, now.minute) >= REG_CLOSE_READY
+    if closed:
         def cf(c):
             if c not in conf:
                 conf[c] = investor_confirmed_today(cfg, c, now)
@@ -4416,12 +4442,15 @@ def _joint_buy_make(cfg):
         famt0, iamt0 = famt, iamt
         famt = lambda c: cf(c)["foreign"] if cf(c) else famt0(c)
         iamt = lambda c: cf(c)["inst"] if cf(c) else iamt0(c)
+    # 줄마다 외 · 기 값이 무엇인가 — 마감 뒤에만 싣는다(확정치 confirmed · 확정치를 못 받아 가집계로 남은 estimate) · 장중은 싣지 않는다
+    # (11-05 개념정의 검수 — 판 전체를 confirmed 로 내면 가집계로 남은 줄이 가려진다)
+    basis = (lambda c: "confirmed" if conf.get(c) else "estimate") if conf is not None and closed else (lambda c: None)
     rows, missing, prog = [], 0, {}
     for code in [c for c in f if c in i]:
         fa, ia = famt(code), iamt(code)
         if not fa or not ia or fa <= 0 or ia <= 0:
             continue
-        pg = _program_net_today(cfg, code)
+        pg = _program_net_today(cfg, code, reg_over)
         prog[code] = pg
         if pg is None:
             missing += 1
@@ -4430,9 +4459,10 @@ def _joint_buy_make(cfg):
             continue
         r = f[code]
         rows.append({"code": code, "name": r.get("name"), "price": r.get("price"), "pct": r.get("pct"),
-                     "foreign": fa, "inst": ia, "program": pg, "sum": fa + ia + pg})
+                     "foreign": fa, "inst": ia, "program": pg, "sum": fa + ia + pg, "basis": basis(code)})
     rows.sort(key=lambda x: -x["sum"])
-    return {"rows": rows, "f": f, "i": i, "famt": famt, "iamt": iamt, "prog": prog, "conf": conf,
+    return {"rows": rows, "f": f, "i": i, "famt": famt, "iamt": iamt, "prog": prog, "conf": conf, "basis": basis,
+            "reg": reg_over, "phase": "closed" if reg_over else "live",
             "candidates": len(set(f) & set(i)), "programMissing": missing,
             "errors": len(errors or {}), "hm": now.strftime("%H:%M"), "day": now.date().isoformat()}
 
@@ -4457,7 +4487,7 @@ def _joint_buy_rebuild(cfg):
                 st["flipped"].pop(r["code"], None)
             gone = [c for c in st["seen"] if c not in now_codes and c not in st["flipped"]]
         # 빠진 종목의 프로그램 값 — 판 밖에서 받는다(겹침 후보가 아니었으면 아직 안 받았다)
-        extra = {c: (m["prog"][c] if c in m["prog"] else _program_net_today(cfg, c)) for c in gone}
+        extra = {c: (m["prog"][c] if c in m["prog"] else _program_net_today(cfg, c, m["reg"])) for c in gone}
         # 외국인 · 기관 상위 30 밖으로 밀린 쪽은 값을 모른다 — 그 종목의 장중 가집계(누적 수량) × 현재가로 어림해 가른다
         # (11-05 13:19 8772 — 빠짐 넷이 다 「상위 30 밖」 이었다. 아직 사는 종목을 빠진 것으로 적지 않게)
         blind = [c for c in gone if m["famt"](c) is None or m["iamt"](c) is None]
@@ -4484,25 +4514,31 @@ def _joint_buy_rebuild(cfg):
                 if fa and ia and pg > 0 and fa > 0 and ia > 0:     # 셋 다 아직 산다 — 빠진 것이 아니다(값 일부는 어림)
                     back.append({"code": c, "name": st["seen"].get(c), "price": (px.get(c) or {}).get("price"),
                                  "pct": (px.get(c) or {}).get("pct"), "foreign": fa, "inst": ia, "program": pg,
-                                 "sum": fa + ia + pg, "approx": approx})
+                                 "sum": fa + ia + pg, "approx": approx, "basis": m["basis"](c)})
                     continue
                 sold = [k for k, v in (("foreign", fa), ("inst", ia), ("program", pg)) if v is not None and v <= 0]
                 unknown = [k for k, v in (("foreign", fa), ("inst", ia)) if v is None]
                 st["flipped"][c] = {"code": c, "name": st["seen"].get(c), "foreign": fa, "inst": ia, "program": pg,
-                                    "sold": sold, "unknown": unknown, "at": m["hm"]}
+                                    "sold": sold, "unknown": unknown, "at": m["hm"], "basis": m["basis"](c)}
             for c, x in list(st["flipped"].items()):     # 이미 빠진 종목도 값은 새로(바뀐 시각은 처음 본 때 그대로)
                 if c in gone:
                     continue
                 fa, ia = m["famt"](c), m["iamt"](c)
-                x.update(foreign=fa, inst=ia, unknown=[k for k, v in (("foreign", fa), ("inst", ia)) if v is None])
+                x.update(foreign=fa, inst=ia, unknown=[k for k, v in (("foreign", fa), ("inst", ia)) if v is None], basis=m["basis"](c))
             rows = sorted(m["rows"] + back, key=lambda x: -x["sum"])
             st["data"] = {"rows": rows, "flipped": sorted(st["flipped"].values(), key=lambda x: x["at"], reverse=True),
-                          # basis — 외국인 · 기관 값이 무엇인가(확정이 하나라도 들었으면 confirmed · 못 받은 종목은 가집계 그대로)
-                          "basis": "confirmed" if any(m["conf"].values()) else "estimate",
+                          # 외 · 기 값을 확정치로 낸 줄 · 가집계로 남은 줄의 수(rows + flipped · 마감 뒤에만 셈 · 장중은 None)
+                          "confirmed": sum(1 for x in rows + list(st["flipped"].values()) if x.get("basis") == "confirmed") if m["conf"] else None,
+                          "estimated": sum(1 for x in rows + list(st["flipped"].values()) if x.get("basis") == "estimate") if m["conf"] else None,
+                          "phase": m["phase"],     # live 정규장 중 · closed 정규장이 끝나 그 기준으로 남겨 둔 판
                           "candidates": m["candidates"], "programMissing": m["programMissing"],
                           "listFail": False, "errors": m["errors"]}
             st["at"] = time.time()
             st["retry"] = m["programMissing"] > 0 or m["errors"] > 0
+            # 정규장이 끝나고 외 · 기가 다 확정 · 프로그램 다 받은 판이면 그날 판으로 굳힌다 — 다음 평일 프리장(08:00)까지 다시 안 짓는다.
+            # 밤 · 주말 · 자정이 지나도 「정규장에서 좋았던 종목」 이 남고, 날이 바뀌어 그날 줄이 없어 판이 비는 일도 없다
+            done = m["phase"] == "closed" and m["conf"] and not st["data"]["estimated"] and not m["programMissing"] and not m["errors"]
+            st["frozen"] = m["day"] if done else None
     except Exception as e:
         print("[매수 칩] 짓다 멈춤 — %s" % safe_message(e, 120))
     finally:
@@ -4512,7 +4548,11 @@ def _joint_buy_rebuild(cfg):
 def fetch_joint_buy(cfg):
     """(판, 지은 시각). 판이 없으면 뒤에서 짓기 시작하고 (None, 0)."""
     with _joint_buy_lock:
-        at, data, retry = _joint_buy["at"], _joint_buy["data"], _joint_buy["retry"]
+        at, data, retry, frozen = _joint_buy["at"], _joint_buy["data"], _joint_buy["retry"], _joint_buy["frozen"]
+    now = datetime.now(KST)
+    if data is not None and frozen and not (now.date().isoformat() > frozen and now.weekday() < 5
+                                            and (now.hour, now.minute) >= NXT_PRE_OPEN):
+        return data, at                          # 굳힌 판 — 다음 평일 08:00 까지 그대로
     age = time.time() - at
     # 못 받은 것이 있는 판(retry)도 JOINT_RETRY_MIN 안에는 다시 안 짓는다 — 한 종목 프로그램이 늘 비면 부를 때마다 KIS 14건 남짓을
     # 되풀이한다(11-05 qa 덧 · 롱폴이 켜진 8765)
@@ -8677,9 +8717,11 @@ class Handler(SimpleHTTPRequestHandler):
                              "pending": data is None,
                              "candidates": d.get("candidates"), "programMissing": d.get("programMissing"),
                              "listFail": bool(d.get("listFail")), "errors": d.get("errors"),
-                             "amtUnit": "원", "basis": d.get("basis") or "estimate",
-                             "provisional": (d.get("basis") or "estimate") != "confirmed",
-                             "note": "외국인 · 기관은 장중 증권사 가집계(하루 네 번) · 15:40 뒤 그날 확정치(basis) · 프로그램은 그날 누적 · "
+                             "amtUnit": "원", "confirmed": d.get("confirmed"), "estimated": d.get("estimated"),
+                             "phase": d.get("phase"), "regClose": "%02d:%02d" % KRX_CLOSE,
+                             # 가집계(추정)가 한 줄이라도 섞였나 — 장중은 전부 · 마감 뒤는 estimated 가 1 이상일 때
+                             "provisional": d.get("confirmed") is None or bool(d.get("estimated")),
+                             "note": "외국인 · 기관은 장중 증권사 가집계(하루 네 번) · 15:40 뒤 그날 확정치(줄마다 basis · 수는 confirmed · estimated) · 프로그램은 그날 누적 · "
                                      "셋 다 순매수 양수 · flipped 는 오늘 셋 다 샀다가 빠진 종목",
                              "estSlots": INVESTOR_EST_SLOTS,
                              "cacheTtl": INVESTOR_TOP_TTL},
