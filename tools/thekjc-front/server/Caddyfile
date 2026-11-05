@@ -17,7 +17,7 @@ thekjc.co.kr {
 		format json
 	}
 	basic_auth {
-		kjc <비밀번호 해시 — caddy hash-password 로 만든다 · 저장소에 두지 않는다>
+		thekjc <비밀번호 해시 — caddy hash-password 로 만든다 · 저장소에 두지 않는다>
 	}
 	reverse_proxy 127.0.0.1:18764 {
 		header_up -Authorization
