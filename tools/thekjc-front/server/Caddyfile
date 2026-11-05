@@ -8,7 +8,12 @@ www.thekjc.co.kr {
 	redir https://thekjc.co.kr{uri} permanent
 }
 
-thekjc.co.kr {
+# 옛 주소 — 2026-11-05 재권님 「가비아 길로 돌리」 · Cloudflare DNS 가 이 서버를 가리키면(프록시 끔) 인증서를 스스로 받는다
+www.thekjcstudio.com {
+	redir https://thekjcstudio.com{uri} permanent
+}
+
+thekjc.co.kr, thekjcstudio.com {
 	log {
 		output file /var/log/caddy/thekjc-access.log {
 			roll_size 20MiB

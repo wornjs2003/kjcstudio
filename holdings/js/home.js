@@ -53,6 +53,7 @@ import { loadIndicators, peekIndicators, loadIndicator, peekIndicator, chipsHtml
          paintMaterials, loadCrypto, CRYPTO_CHIP } from './components/market-index.js';
 import { everyServerMs, serverData } from './store/timing.js';
 import { watch } from './store/longpoll.js';
+import { watchLive, withLive } from './store/live-tick.js';
 
 
 
@@ -936,6 +937,7 @@ const _oneSeed = new Map();        // 종목코드 → { price, pct } — 세부
 /* 세부사항 칸(stock-detail.js)이 단건을 받으면 불린다 — 52주 칸과 머리 현재가가 그것을 같이 쓴다.
    전에는 52주 칸이 **같은 주소를 따로 한 번 더** 불렀다(2026-10-06 실측 · 종목을 고를 때마다 두 번). */
 function takeOne(code, one) {
+  if (!one) return;                       // 「없는 종목」 알림(stock-detail · 2026-11-05) — 받을 값이 없다
   _range.set(code, { lo: one.low52, hi: one.high52, price: one.price });
   if (one.price != null) _oneSeed.set(code, { price: one.price, pct: one.changePct });
   if (code === selectedCode) { paintYearRange(); paintBigPrice(); }
@@ -2349,6 +2351,8 @@ function applyFreshPrices(map) {
 function applyPrices(map) {
   if (!map) return;
   rowPrices = { ...rowPrices, ...map };
+  /* 고른 종목은 실시간 체결이 더 새것이면 그 값으로 — 묶음 시세가 2초 묵은 값으로 다시 와도 가격 · 끝 봉이 뒤로 안 간다(2026-11-05 · store/live-tick.js) */
+  if (selectedCode && rowPrices[selectedCode]) rowPrices[selectedCode] = withLive(selectedCode, rowPrices[selectedCode]);
   /* 다시 들어왔을 때 빈 칸부터 시작하지 않도록 남겨 둔다.
 
      frame.js 도 같은 키에 저장한다. 거기는 관심종목 8개뿐이고 여기는
@@ -2944,6 +2948,15 @@ loadUniverse().then(() => {
   panel3.setCode(selectedCode);
   detail.setCode(selectedCode);
   detail.update(rowPrices && rowPrices[selectedCode]);
+  /* 큰 차트로 보고 있는 종목은 **체결마다** 머리 가격 · 끝 봉을 움직인다 (2026-11-05 재권님 「내가 보고있는 차트와 차트모달은 캔들 움직임이
+     빠르게」 → (나) 실시간 체결). 지도가 차트를 덮고 있거나 모달이 열려 있으면 쉰다 — 모달은 자기 종목을 따로 지켜본다(stock-view.js).
+     서버에 실시간이 없으면(꺼짐) watchLive 가 아무것도 안 한다 — 아래 묶음 시세가 전처럼 2초마다 움직인다 */
+  watchLive(() => ((heatmapView && heatmapView.market) || stockModal ? null : selectedCode), () => {
+    if (!selectedCode) return;
+    rowPrices = { ...rowPrices, [selectedCode]: withLive(selectedCode, rowPrices[selectedCode]) };
+    paintBigPrice();
+    if (bigChart && bigDrawnKey === bigChartKey) bigChart.updateLast(rowPrices[selectedCode]);
+  });
   /* 보고 있는 줄은 **값이 바뀌면 서버가 알려 준다.** 시세 띠·관심 사이드바와 별개다.
      스크롤해 보이는 줄이 바뀌면 주소가 바뀌고, 그 순간 새로 받는다 */
   watch({ url: () => { const c = quoteCodes(); return c.length ? viewUrl('/api/kis/quotes?codes=' + c.join(','), 'row') : null; },

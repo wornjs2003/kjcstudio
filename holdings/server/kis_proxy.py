@@ -59,6 +59,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import dart
 import company_profile
 import us_universe
+import kis_ws
 import us_sectors
 import naver
 import naver_period
@@ -1139,6 +1140,10 @@ def usage_stats():
         "prioLowYields": _prio_stat["lowYields"],
         # ⓓ 롱폴링 — 꺼져 있으면 `longpoll: false` 이고 셈은 0 이다(그 자리가 없으므로)
         "longpoll": LONGPOLL_ON,
+        # 실시간 체결(웹소켓 · 2026-11-05) — 화면은 `kisWs` 가 참일 때만 `/api/kis/live` 를 묻는다.
+        # 넘기는 서버는 8765 에 물어 그쪽이 꺼져 있으면 `on:false` 를 받는다(화면이 그때 쉰다)
+        "kisWs": kis_ws.KIS_WS_ON or bool(upstream_base()),
+        "kisWsStats": kis_ws.stats(),
         "longpollPrefixes": list(LONGPOLL_PREFIXES),
         "longpollActive": _lp_stat["active"],
         "longpollTotal": _lp_stat["total"],
@@ -2876,6 +2881,11 @@ def _num(v, cast=float):
         return None
 
 
+class NoSuchStock(RuntimeError):
+    """그런 종목 코드가 없다 — KIS 가 오류 없이 값을 전부 0 으로 준다(2026-11-05 · 999999 실측).
+    「없음」 을 0원으로 내지 않으려고 따로 가른다(CLAUDE.md 「못 쟀으면 `0` 이 아니라 「못 쟀다」 고 낸다」)."""
+
+
 def fetch_price(cfg, code):
     """국내 주식 현재가 조회. 시장 기준은 지금 시각에 따라 정해진다.
 
@@ -2909,6 +2919,8 @@ def fetch_price(cfg, code):
     ck = "one:" + code
     cached = _cache_get(ck)
     if cached is not None:
+        if cached.get("notFound"):
+            raise NoSuchStock("없는 종목 코드입니다 (%s)" % code)
         return cached
 
     div = quote_market_div()
@@ -2960,6 +2972,11 @@ def fetch_price(cfg, code):
         "source": "KIS",
         "mode": cfg["mode"],
     }
+    # **없는 종목** — 현재가도 상장주식수도 0 이면 그런 코드가 없는 것이다(거래정지 종목도 상장주식수 · 마지막 값은 있다).
+    # 0원 · 0억원으로 내지 않고 따로 알린다 · 같은 코드를 캐시 동안 다시 묻지 않게 그 사실도 담아 둔다
+    if not out["price"] and not out["listed"]:
+        _cache_put(ck, {"notFound": True})
+        raise NoSuchStock("없는 종목 코드입니다 (%s)" % code)
     if div == "UN":
         overnight_price(code, out)          # 자정 뒤 08:00 전 — 어제 20:00 넥장 마감 값으로(아래 `overnight_row`)
     _cache_put(ck, out)
@@ -6076,6 +6093,9 @@ def save_candles(code, period, candles):
     막으면 넷이 다 안전하다. **깃발(`writable`)과 실패(예외)를 둘 다 본다** —
     깃발이 켜진 서버에서도 디스크 · 권한 · 잠금으로 실패할 수 있다.
     """
+    # **값이 0 인 봉은 넣지 않는다** — 없는 종목 코드에 KIS 가 0 봉(거래량 -9223372036854775808)을 준다(2026-11-05 999999 실측).
+    # 가격이 0 인 봉은 어느 종목에도 없다
+    candles = [c for c in (candles or []) if (c.get("close") or 0) > 0]
     if not candles:
         return 0
     if not marketdb.writable():
@@ -8081,6 +8101,19 @@ class Handler(SimpleHTTPRequestHandler):
             # 파싱하지 않으므로 빠르고, 지나간 기사도 남아 있다.
             if route == "stored":
                 qs = urllib.parse.parse_qs(parsed.query)
+                # **`all=1` — 보관 기간(`news_store.NEWS_KEEP_DAYS`) 안 전부** (2026-11-05 · 「캐시 · 주기 · 한도 값을 화면에 박지 않는다」).
+                # 화면이 기간 · 개수를 들지 않는다. 서버 상한(`NEWS_STORED_MAX`)을 넘으면 새것부터 그만큼만 내고 `truncated` 로 알린다
+                if (qs.get("all") or [""])[0] == "1":
+                    hours = news_store.NEWS_KEEP_DAYS * 24
+                    rows = news_store.groups(hours=hours, limit=None)
+                    found = len(rows)
+                    rows = rows[:news_store.NEWS_STORED_MAX]
+                    self._send_json({"ok": True, "data": rows,
+                                     "meta": {"hours": hours, "count": len(rows), "found": found,
+                                              "truncated": found > len(rows), "max": news_store.NEWS_STORED_MAX,
+                                              "topics": news_store.counts(hours),
+                                              "total": news_store.total()}})
+                    return
                 hours = int((qs.get("hours") or ["24"])[0])
                 limit = int((qs.get("limit") or ["80"])[0])
                 rows = news_store.groups(hours=hours, limit=limit)
@@ -8293,6 +8326,28 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json(longpoll(us, _qb.get("h") or [], hold))
             return
 
+        # ── 실시간 체결 (2026-11-05 · server/kis_ws.py) ── 새 체결이 올 때까지 쥐었다가 낸다.
+        # 켠 서버(`KJC_KIS_WS=1` · 8765)만 증권사와 붙는다 — 그 밖은 상류(8765)로 넘긴다. 둘 다 아니면 `on:false`
+        if route == "live":
+            code = (qs.get("code") or [""])[0].strip().upper()
+            if not re.fullmatch(r"[0-9A-Z]{6}", code):
+                self._send_json({"ok": False, "error": "code 는 여섯 자리 종목코드여야 합니다."}, 400)
+                return
+            if kis_ws.KIS_WS_ON:
+                try:
+                    _seq = int((qs.get("seq") or ["0"])[0])
+                    _hold = float((qs.get("hold") or [str(kis_ws.LIVE_HOLD_SEC)])[0])
+                except ValueError:
+                    self._send_json({"ok": False, "error": "seq · hold 는 숫자여야 합니다."}, 400)
+                    return
+                self._send_json(kis_ws.live(code, _seq, _hold))
+                return
+            _hb = upstream_base()
+            if _hb and self._kis_route_via_upstream(_hb):
+                return
+            self._send_json({"ok": True, "on": False})
+            return
+
         if route == "policy":
             # `drawMs` 는 화면이 잰 그리는 시간. 없거나 이상하면 `None` — 하한에서 뺀다.
             try:
@@ -8381,7 +8436,10 @@ class Handler(SimpleHTTPRequestHandler):
                         return
                     self._send_json({"ok": True, "data": data[code]})
                     return
-                self._send_json({"ok": True, "data": fetch_price(cfg, code)})
+                try:
+                    self._send_json({"ok": True, "data": fetch_price(cfg, code)})
+                except NoSuchStock as e:
+                    self._send_json({"ok": False, "notFound": True, "error": safe_message(e)}, 404)
                 return
 
             if route == "stats":
@@ -8431,6 +8489,7 @@ class Handler(SimpleHTTPRequestHandler):
                 # 화면이 마지막으로 받은 봉 시각을 since 로 보내면 **그 시각 이후의 봉 전부**(그 봉 포함 — 진행 중이라
                 # 값이 바뀌었을 수 있다)를 준다. 1개든 20개든. 전에는 30초마다 1,266개를 통째로 보냈다(10-07 실측).
                 # 위 계산(get_chart · drop_before_first_trade)은 그대로 다 하고 **보내기만** 줄인다 — KIS 호출은 그대로다.
+                rows = [r for r in rows if (r.get("close") or 0) > 0]   # 0 봉은 내지 않는다(없는 종목 · 위 `save_candles` 와 같은 선)
                 since = (qs.get("since") or [""])[0].strip()
                 total = len(rows)
                 if since.isdigit():
@@ -9321,6 +9380,12 @@ def main():
         print("  장중 알림 : 사용 (상승 VI · +%d%% 급등 · %d초마다 · %s · 발송 %s)"
               % (intraday_alerts.SURGE_PCT, intraday_alerts.TICK, _st["session"],
                  " · ".join("%s %s" % (k, "켜짐" if v else "**꺼짐**") for k, v in _st["send"].items())))
+
+    # 실시간 체결 — 키 읽기 · 시세 기준을 넘겨 둔다. 연결은 화면이 처음 물을 때 붙는다(아무도 안 보면 안 붙는다)
+    kis_ws.configure(load_secrets, quote_market_div)
+    if kis_ws.KIS_WS_ON:
+        print("  실시간 체결 : 사용 (보는 종목만 · 최대 %d종목 · %d초 안 보면 뺌 · 끊기면 %d→%d초 쉬고 다시)"
+              % (kis_ws.LIVE_MAX_CODES, kis_ws.LIVE_IDLE_SEC, kis_ws.RECONNECT_MIN_SEC, kis_ws.RECONNECT_MAX_SEC))
 
     if not SLOW and is_sender(args.port) and signal_watch.start(sys.modules[__name__]):
         # **시각을 여기 박지 않는다.** `SESSION_FROM`·`SESSION_TO` 에서 만든다 —

@@ -51,11 +51,12 @@ const LIVE_RELOAD_FALLBACK_MS = 30_000;
    첫 화면의 52주 칸과 큰 차트 머리 현재가가 **같은 단건을 따로 또 부르거나**(같은 주소 두 번)
    **1초 넘는 묶음 시세를 기다리던** 것을 이 응답 하나로 칠한다. 증권사 호출이 한 건 준다. */
 export function mountStockDetail(host, { view, onOne } = {}) {
-  if (!host) return { setCode() {}, update() {}, destroy() {} };
+  if (!host) return { setCode() {}, update() {}, destroy() {}, full() { return null; }, missing() { return false; } };
 
   let code = null;
   let live = null;          // 순위표가 준 시세 (가격·거래량)
   let one = null;           // 고른 종목만 따로 받은 것 (시가총액·거래대금)
+  let missing = false;      // 서버가 「없는 종목 코드」(404 · notFound) 라고 했다 — 0원으로 그리지 않는다(2026-11-05)
   let buyPct = null;        // 매수 잔량 비중
   let seq = 0;
   let timer = null;
@@ -83,15 +84,22 @@ export function mountStockDetail(host, { view, onOne } = {}) {
     const mine = seq;
     try {
       const r = await apiFetch(viewUrl(`/api/kis/price?code=${code}`, view), { cache: 'no-store' });
+      if (r && r.status === 404) {
+        const b = await r.json().catch(() => null);
+        if (mine !== seq) return;
+        missing = !!(b && b.notFound);
+        throw new Error('404');
+      }
       if (!r || !r.ok) throw new Error(r && r.status);
       const b = await r.json();
       if (mine !== seq) return;          // 그새 종목이 바뀌었다
       one = (b && b.ok && b.data) ? b.data : null;
+      missing = false;
     } catch {
       one = null;
     }
     paint();
-    if (one && onOne) onOne(code, one);
+    if ((one || missing) && onOne) onOne(code, one);   // 「없는 종목」 도 알린다 — 머리가 「불러오는 중」 에 남지 않게
   }
 
   function paint() {
@@ -136,6 +144,7 @@ export function mountStockDetail(host, { view, onOne } = {}) {
       code = next;
       buyPct = null;
       one = null;
+      missing = false;
       paint();
       loadAsking();
       loadLive();
@@ -158,6 +167,11 @@ export function mountStockDetail(host, { view, onOne } = {}) {
      *  멀티가 덮지 못한다.** */
     full() {
       return one;
+    },
+
+    /** 서버가 그런 종목 코드가 없다고 했나 — 머리를 「없는 종목 코드」 로 그린다 */
+    missing() {
+      return missing;
     },
 
     /** 시세가 새로 왔을 때 부른다 — 거래대금·시가총액이 그것으로 그려진다 */
