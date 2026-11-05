@@ -69,6 +69,7 @@ import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-2
 import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
 import claude_chat     # 홀딩스 오른쪽 Claude 창 — 맥미니 claude 를 한 번씩 부른다 · POST /api/claude/ask(2026-11-03 · server/claude_chat.py)
 import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 테마 · 수급(넥스트 5분 거래량 2배) (2026-10-27 · server/theme_flow.py)
+import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스닥 150 중 전일 거래량 급등 · 투자전략 룰로 거르고 줄 세움 · /api/auto-watch(2026-11-05 · server/auto_watch.py)
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
 import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 · 색 = 등락률 · /api/kis/heatmap(2026-10-27 · server/heatmap.py)
 import intraday_flow    # 당일 수급 — 장중 1분마다 시장 투자자 · 프로그램 매매를 쌓아 5분 구간으로 · /api/kis/flow-today(2026-10-27 · server/intraday_flow.py)
@@ -3899,11 +3900,16 @@ def fetch_investor_long(cfg, code, days=INVESTOR_LONG_DAYS):
 #   판이 PRICE_CACHE_TTL 보다 낡았으면  들고 있던 판을 **먼저 내주고** 뒤에서 다시 짓는다
 #   판이 없거나 INVESTOR_BOARD_STALE_TTL 보다 낡았으면  그 자리에서 짓는다(서버가 막 떴을 때 · 오래 쉰 뒤)
 # 시세는 `fetch_quotes_multi` · 투자자 줄은 `fetch_investor_long` 그대로 — 서버 캐시를 함께 쓴다.
-# 서버가 뜰 때 한 번 미리 짓는다(`--slow` 는 안 함). 판을 늘 돌려 짓지는 않는다 — 묻는 사람이 있을 때만 KIS 를 쓴다.
+# 서버가 뜰 때 한 번 미리 짓는다(`--slow` 는 안 함).
+# **장중(평일 정규장)에는 INVESTOR_BOARD_REFRESH_INTERVAL 마다 뒤에서 다시 짓는다** (2026-11-05 재권님 「응 해줘」) —
+# 묻는 사람이 있을 때만 짓던 때는 판이 STALE_TTL 을 넘기면 첫 여는 사람이 그 자리에서 5초를 기다렸다
+# (11-05 10:18 · 8772 실측 — 시세 350종목 30개씩 열두 묶음 1.53초 + 상위 30여 종목 투자자 줄). 한 번 짓는 데 KIS 42건쯤.
+# 장 밖에는 안 돈다 — 값이 안 바뀐다.
 INVESTOR_BOARD_TOP = 15            # 시장마다 줄 수 (화면 그래프 탭)
 INVESTOR_BOARD_STALE_TTL = 300     # 이보다 낡은 판은 먼저 내주지 않고 다시 지어 낸다 (초)
 INVESTOR_BOARD_MARKETS = ("ALL", "KOSPI", "KOSDAQ")
 INVESTOR_BOARD_WORKERS = 6         # 투자자 줄을 동시에 받는 수 — 호출 간격은 kis_get 이 지킨다
+INVESTOR_BOARD_REFRESH_INTERVAL = INVESTOR_BOARD_STALE_TTL - 60   # 장중 뒤에서 다시 짓는 주기 (초) — 바퀴가 30초마다 깨고 짓는 데 몇 초 걸려도 판 나이가 STALE_TTL 을 안 넘게 60초 앞당김(개념정의 검수 덧)
 _inv_board = {"at": 0.0, "data": None}
 _inv_board_lock = threading.Lock()         # 판을 읽고 바꾸는 자리
 _inv_board_build = threading.Lock()        # 짓는 것은 한 번에 하나
@@ -3968,6 +3974,25 @@ def investor_board(cfg):
     _investor_board_rebuild(cfg, True)
     with _inv_board_lock:
         return _inv_board["data"], _inv_board["at"]
+
+
+def start_investor_board_refresh(cfg):
+    """장중에 그래프 판을 INVESTOR_BOARD_REFRESH_INTERVAL 마다 다시 짓는 바퀴. 키가 없으면 안 돈다."""
+    if not cfg:
+        return False
+
+    def loop():
+        while True:
+            now = datetime.now(KST)
+            if now.weekday() < 5 and KRX_OPEN <= (now.hour, now.minute) < KRX_CLOSE:
+                with _inv_board_lock:
+                    age = time.time() - _inv_board["at"]
+                if age >= INVESTOR_BOARD_REFRESH_INTERVAL:
+                    _investor_board_rebuild(cfg, False)
+            time.sleep(30)
+
+    threading.Thread(target=loop, daemon=True, name="investor-board-refresh").start()
+    return True
 
 
 # ── 재무 다섯 — 모달 「투자 지표」 칸 재무 카드 (2026-10-02 지시) ──────────
@@ -7185,6 +7210,13 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
             return
+        if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/auto-watch":
+            # 자동 관심종목(server/auto_watch.py) — 쌓인 값을 부를 때마다 투자전략 룰(strategy-rules)로 거르고 줄 세운다 · KIS 를 안 부른다
+            try:
+                self._send_json({"ok": True, "data": auto_watch.compute(sys.modules[__name__]), "meta": auto_watch.status()})
+            except Exception as e:
+                self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
+            return
         if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/nxt/board":
             # 넥장 보드(Insight 「투자 전략」) — 날마다 종가 · 장외 · 프리장 · 야간선물 · 장외 오름 · 내림 상위(server/nxt_board.py)
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -8820,6 +8852,7 @@ def main():
     if cfg and not SLOW:
         threading.Thread(target=lambda: (time.sleep(20), investor_board(cfg)), daemon=True,
                          name="investor-board-warm").start()
+        start_investor_board_refresh(cfg)
 
     # 순위표 섹터 — 순위 목록의 WICS 를 뒤에서 한 종목씩 채운다 · 네이버만 · --slow 는 더 느리게 (2026-11-04)
     company_profile.start_sector_fill(lambda: [r["stock_code"] for r in dart.universe_rows(None)], slow=SLOW)
@@ -9028,6 +9061,10 @@ def main():
     if not SLOW and is_sender(args.port) and nxt_board.start(sys.modules[__name__]):
         print("  넥장 보드 : 사용 (평일 %02d:%02d 종가 · %02d:%02d 장외 · %02d:%02d 야간선물 저장 · /api/nxt/board)"
               % (nxt_board.CLOSE_AT + nxt_board.AFTER_AT + nxt_board.FUT_AT))
+    # 자동 관심종목(2026-11-05 · server/auto_watch.py) — 같은 문(보내는 서버만) · 값 쌓기만 · 관심 목록 넣기는 아직 없다(auto_watch.ADD)
+    if not SLOW and is_sender(args.port) and auto_watch.start(sys.modules[__name__]):
+        print("  자동 관심종목 : 사용 (평일 %02d:%02d 코스피 시총 200 · 코스닥 150 값 쌓기 · /api/auto-watch%s)"
+              % (auto_watch.RUN_AT + ("" if auto_watch.ADD else " · **관심 목록 넣기 없음**",)))
     # 당일 수급(2026-10-27 · server/intraday_flow.py) — 같은 문(보내는 서버만) · 알림 없음.
     # `KJC_FLOW_COLLECT=1` 은 시험 서버(자기 DB)에서 바퀴를 돌려 보는 자리다 — 세션 서버는 메인 DB 를 읽기 전용으로 열어 쓸 수 없다
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and intraday_flow.start(sys.modules[__name__]):
