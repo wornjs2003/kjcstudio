@@ -937,6 +937,7 @@ const _oneSeed = new Map();        // 종목코드 → { price, pct } — 세부
 /* 세부사항 칸(stock-detail.js)이 단건을 받으면 불린다 — 52주 칸과 머리 현재가가 그것을 같이 쓴다.
    전에는 52주 칸이 **같은 주소를 따로 한 번 더** 불렀다(2026-10-06 실측 · 종목을 고를 때마다 두 번). */
 function takeOne(code, one) {
+  if (!one) return;                       // 「없는 종목」 알림(stock-detail · 2026-11-05) — 받을 값이 없다
   _range.set(code, { lo: one.low52, hi: one.high52, price: one.price });
   if (one.price != null) _oneSeed.set(code, { price: one.price, pct: one.changePct });
   if (code === selectedCode) { paintYearRange(); paintBigPrice(); }

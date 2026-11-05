@@ -2881,6 +2881,11 @@ def _num(v, cast=float):
         return None
 
 
+class NoSuchStock(RuntimeError):
+    """그런 종목 코드가 없다 — KIS 가 오류 없이 값을 전부 0 으로 준다(2026-11-05 · 999999 실측).
+    「없음」 을 0원으로 내지 않으려고 따로 가른다(CLAUDE.md 「못 쟀으면 `0` 이 아니라 「못 쟀다」 고 낸다」)."""
+
+
 def fetch_price(cfg, code):
     """국내 주식 현재가 조회. 시장 기준은 지금 시각에 따라 정해진다.
 
@@ -2914,6 +2919,8 @@ def fetch_price(cfg, code):
     ck = "one:" + code
     cached = _cache_get(ck)
     if cached is not None:
+        if cached.get("notFound"):
+            raise NoSuchStock("없는 종목 코드입니다 (%s)" % code)
         return cached
 
     div = quote_market_div()
@@ -2965,6 +2972,11 @@ def fetch_price(cfg, code):
         "source": "KIS",
         "mode": cfg["mode"],
     }
+    # **없는 종목** — 현재가도 상장주식수도 0 이면 그런 코드가 없는 것이다(거래정지 종목도 상장주식수 · 마지막 값은 있다).
+    # 0원 · 0억원으로 내지 않고 따로 알린다 · 같은 코드를 캐시 동안 다시 묻지 않게 그 사실도 담아 둔다
+    if not out["price"] and not out["listed"]:
+        _cache_put(ck, {"notFound": True})
+        raise NoSuchStock("없는 종목 코드입니다 (%s)" % code)
     if div == "UN":
         overnight_price(code, out)          # 자정 뒤 08:00 전 — 어제 20:00 넥장 마감 값으로(아래 `overnight_row`)
     _cache_put(ck, out)
@@ -6074,6 +6086,9 @@ def save_candles(code, period, candles):
     막으면 넷이 다 안전하다. **깃발(`writable`)과 실패(예외)를 둘 다 본다** —
     깃발이 켜진 서버에서도 디스크 · 권한 · 잠금으로 실패할 수 있다.
     """
+    # **값이 0 인 봉은 넣지 않는다** — 없는 종목 코드에 KIS 가 0 봉(거래량 -9223372036854775808)을 준다(2026-11-05 999999 실측).
+    # 가격이 0 인 봉은 어느 종목에도 없다
+    candles = [c for c in (candles or []) if (c.get("close") or 0) > 0]
     if not candles:
         return 0
     if not marketdb.writable():
@@ -8401,7 +8416,10 @@ class Handler(SimpleHTTPRequestHandler):
                         return
                     self._send_json({"ok": True, "data": data[code]})
                     return
-                self._send_json({"ok": True, "data": fetch_price(cfg, code)})
+                try:
+                    self._send_json({"ok": True, "data": fetch_price(cfg, code)})
+                except NoSuchStock as e:
+                    self._send_json({"ok": False, "notFound": True, "error": safe_message(e)}, 404)
                 return
 
             if route == "stats":
@@ -8451,6 +8469,7 @@ class Handler(SimpleHTTPRequestHandler):
                 # 화면이 마지막으로 받은 봉 시각을 since 로 보내면 **그 시각 이후의 봉 전부**(그 봉 포함 — 진행 중이라
                 # 값이 바뀌었을 수 있다)를 준다. 1개든 20개든. 전에는 30초마다 1,266개를 통째로 보냈다(10-07 실측).
                 # 위 계산(get_chart · drop_before_first_trade)은 그대로 다 하고 **보내기만** 줄인다 — KIS 호출은 그대로다.
+                rows = [r for r in rows if (r.get("close") or 0) > 0]   # 0 봉은 내지 않는다(없는 종목 · 위 `save_candles` 와 같은 선)
                 since = (qs.get("since") or [""])[0].strip()
                 total = len(rows)
                 if since.isdigit():

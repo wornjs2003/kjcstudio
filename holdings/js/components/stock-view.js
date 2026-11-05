@@ -138,7 +138,8 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
     const oneNow = detailApi && detailApi.full ? detailApi.full() : null;
     if (!liveRaw && !oneNow) {
       price.className = 'kh-price kh-num kh-mut';
-      price.textContent = '불러오는 중';
+      /* 서버가 「없는 종목 코드」 라고 했으면 그렇게 적는다 — 0원으로도 「불러오는 중」 으로도 두지 않는다(2026-11-05) */
+      price.textContent = detailApi && detailApi.missing && detailApi.missing() ? '없는 종목 코드입니다' : '불러오는 중';
       if (sub) sub.textContent = '';
       return;
     }
