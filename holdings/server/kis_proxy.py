@@ -69,7 +69,6 @@ import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-2
 import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
 import claude_chat     # 홀딩스 오른쪽 Claude 창 — 맥미니 claude 를 한 번씩 부른다 · POST /api/claude/ask(2026-11-03 · server/claude_chat.py)
 import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 테마 · 수급(넥스트 5분 거래량 2배) (2026-10-27 · server/theme_flow.py)
-import good_news       # 「좋은 뉴스」 판정 — 공시마다 갈래 · 방향 · 크기 · 자사주 목적 · 이미 오름 · /api/good-news(2026-11-05 · server/good_news.py)
 import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스닥 150 중 전일 거래량 급등 · 투자전략 룰로 거르고 줄 세움 · /api/auto-watch(2026-11-05 · server/auto_watch.py)
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
 import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 · 색 = 등락률 · /api/kis/heatmap(2026-10-27 · server/heatmap.py)
@@ -7211,23 +7210,6 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
             return
-        if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/good-news":
-            # 「좋은 뉴스」 판정(server/good_news.py) — 쌓인 공시를 부를 때마다 투자전략 칸(newsPreDays · newsMinSizePct)으로 판정 · OpenDART 를 안 부른다
-            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            try:
-                days = int((q.get("days") or [good_news.DAYS_DEFAULT])[0])
-            except ValueError:
-                self._send_json({"ok": False, "error": "days 는 1~%d 정수입니다." % good_news.DAYS_MAX}, 400)
-                return
-            code = (q.get("code") or [""])[0].strip()
-            if code and not re.fullmatch(r"[0-9A-Z]{6}", code):
-                self._send_json({"ok": False, "error": "code 는 종목코드 여섯 자입니다."}, 400)
-                return
-            try:
-                self._send_json({"ok": True, "data": good_news.compute(sys.modules[__name__], days, code or None), "meta": good_news.status()})
-            except Exception as e:
-                self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
-            return
         if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/auto-watch":
             # 자동 관심종목(server/auto_watch.py) — 쌓인 값을 부를 때마다 투자전략 룰(strategy-rules)로 거르고 줄 세운다 · KIS 를 안 부른다
             try:
@@ -9080,9 +9062,6 @@ def main():
         print("  넥장 보드 : 사용 (평일 %02d:%02d 종가 · %02d:%02d 장외 · %02d:%02d 야간선물 저장 · /api/nxt/board)"
               % (nxt_board.CLOSE_AT + nxt_board.AFTER_AT + nxt_board.FUT_AT))
     # 자동 관심종목(2026-11-05 · server/auto_watch.py) — 같은 문(보내는 서버만) · 값 쌓기만 · 관심 목록 넣기는 아직 없다(auto_watch.ADD)
-    # 「좋은 뉴스」 판정(2026-11-05 · server/good_news.py) — 같은 문(보내는 서버만) · 공급계약 · 자사주 상세를 5분마다 받아 쌓기만 · 알림 없음
-    if not SLOW and is_sender(args.port) and good_news.start(sys.modules[__name__]):
-        print("  좋은 뉴스 판정 : 사용 (5분마다 공급계약 본문 · 자사주 취득 상세 받기 · /api/good-news)")
     if not SLOW and is_sender(args.port) and auto_watch.start(sys.modules[__name__]):
         print("  자동 관심종목 : 사용 (평일 %02d:%02d 코스피 시총 200 · 코스닥 150 값 쌓기 · /api/auto-watch%s)"
               % (auto_watch.RUN_AT + ("" if auto_watch.ADD else " · **관심 목록 넣기 없음**",)))
