@@ -18,6 +18,7 @@
 
     받기       8765(보내는 서버)만 OpenDART 를 부른다 — 5분마다 최근 FETCH_DAYS 날의 공급계약 · 자사주 공시 중 아직 안 받은 것을
                한 바퀴 FETCH_MAX 건까지. 한 건에 한 번 받아 market.db 의 good_news_detail 에 둔다(하루 쓸 값은 dart._dart_get 이 센다).
+               잠깐 실패(transient)는 RETRY_BASE_SEC 부터 두 배씩 늘려 RETRY_MAX 번까지 다시 받고, 404 · 400 같은 답과 그 밖 오류는 바로 굳는다
                다른 서버는 쌓인 것을 읽기만 한다 — 아직 안 받은 것은 「못 가름 · 상세 아직 안 받음」
     주소       GET /api/good-news?days=7&code=005930 — 모양은 compute() 주석 · 「없음」 은 null(0 아님) · 알림은 없다
 """
@@ -27,6 +28,7 @@ import os
 import re
 import threading
 import time
+import urllib.error
 import urllib.parse
 import zipfile
 from datetime import datetime, timedelta, timezone
@@ -44,12 +46,15 @@ FETCH_MAX = 30                  # 한 바퀴에 받는 건수 — 하루 공급�
 TICK = 300
 GAP_SEC = 0.3
 PRE_LOOK_CAL_DAYS = 120         # 「이미 오름」 종가를 찾는 달력 날
+RETRY_MAX = 5                   # 잠깐 실패(연결 끊김 · 시간 넘김 · 429 · 5xx)를 몇 번까지 다시 받나 — 넘으면 「못 가름」 으로 굳는다
+RETRY_BASE_SEC = 600            # 첫 다시 받기까지 — 그 뒤 실패마다 두 배(10 · 20 · 40 · 80분)
 
 
 _SCHEMA = (
     """CREATE TABLE IF NOT EXISTS good_news_detail (
         rcept_no TEXT PRIMARY KEY, kind TEXT, size_pct REAL, purpose TEXT, error TEXT, fetched_at TEXT)""",
 )
+_ADD_COLS = ("tries INTEGER DEFAULT 0", "retry_at TEXT")   # 11-05 덧 — 처음 판 표에 붙인다(retry_at 이 있으면 그 시각 뒤 다시 받는다 · null 이면 굳음)
 _status = {"fetchAt": None, "fetched": None, "pending": None, "error": None, "dartCalls": 0}
 _lock = threading.Lock()
 
@@ -66,6 +71,10 @@ def _init(proxy):
     with proxy._db_lock, proxy.db_conn() as conn:
         for q in _SCHEMA:
             conn.execute(q)
+        have = {r[1] for r in conn.execute("PRAGMA table_info(good_news_detail)")}
+        for col in _ADD_COLS:
+            if col.split()[0] not in have:
+                conn.execute("ALTER TABLE good_news_detail ADD COLUMN " + col)
 
 
 _tags = {"mtime": None, "rows": []}
@@ -141,19 +150,27 @@ def purpose_side(p, ln):
     return "위" if up and not out else "밖" if out and not up else None
 
 
+def transient(e):
+    """다시 물으면 될 수 있는 실패인가 — 연결 끊김 · 시간 넘김 · 429(너무 잦음) · 5xx. 404 · 400 같은 답은 다시 물어도 같아 아니다."""
+    if isinstance(e, urllib.error.HTTPError):
+        return e.code == 429 or e.code >= 500
+    return isinstance(e, OSError)
+
+
 def _todo(proxy, since):
     with proxy._db_lock, proxy.db_conn() as conn:
         rows = conn.execute(
-            "SELECT d.rcept_no, d.corp_code, d.report_nm, d.rcept_dt FROM dart_disclosures d "
+            "SELECT d.rcept_no, d.corp_code, d.report_nm, d.rcept_dt, COALESCE(g.tries, 0) FROM dart_disclosures d "
             "LEFT JOIN good_news_detail g ON g.rcept_no = d.rcept_no "
-            "WHERE d.rcept_dt >= ? AND g.rcept_no IS NULL ORDER BY d.rcept_no DESC", (since,)).fetchall()
+            "WHERE d.rcept_dt >= ? AND (g.rcept_no IS NULL OR (g.retry_at IS NOT NULL AND g.retry_at <= ?)) "
+            "ORDER BY d.rcept_no DESC", (since, _now().isoformat(timespec="seconds"))).fetchall()
     out = []
-    for rno, cc, nm, dt in rows:
+    for rno, cc, nm, dt, tries in rows:
         if is_corrected(nm):
             continue
         ln = lane_of(nm)
         if ln and (ln.get("크기") or ln.get("목적")):
-            out.append((rno, cc, dt, ln))
+            out.append((rno, cc, dt, ln, tries))
     return out
 
 
@@ -170,8 +187,8 @@ def fetch_round(proxy):
         _status["error"] = None      # 지난 바퀴 오류는 이 바퀴가 다시 적는다
         todo = _todo(proxy, (_now() - timedelta(days=FETCH_DAYS)).strftime("%Y%m%d"))
         got = 0
-        for rno, cc, dt, ln in todo[:FETCH_MAX]:
-            size = purpose = err = None
+        for rno, cc, dt, ln, tries in todo[:FETCH_MAX]:
+            size = purpose = err = retry_at = None
             try:
                 if ln.get("크기") == "매출액대비":
                     size = size_from_text(_doc_text(key, rno))
@@ -182,14 +199,21 @@ def fetch_round(proxy):
             except dart.DartBudgetExceeded as e:
                 _status["error"] = safe_message(e, 120)
                 break
-            except OSError as e:     # 연결 끊김 · 시간 넘김(URLError · timeout 포함) — 행을 안 써 다음 바퀴에 다시 받는다
-                _status["error"] = "다음 바퀴에 다시: " + safe_message(e, 120)
-                continue
             except Exception as e:
                 err = safe_message(e, 160)
+                if transient(e):     # 잠깐 실패 — 간격을 두 배씩 늘려 RETRY_MAX 번까지 다시 · 그 뒤 굳음
+                    tries += 1
+                    if tries < RETRY_MAX:
+                        retry_at = _now() + timedelta(seconds=RETRY_BASE_SEC * 2 ** (tries - 1))
+                        err = "잠깐 실패 %d번째 · %s 에 다시: %s" % (tries, retry_at.strftime("%H:%M"), err)
+                        retry_at = retry_at.isoformat(timespec="seconds")
+                    else:
+                        err = "잠깐 실패 %d번 — 더 안 받음: %s" % (tries, err)
+                    _status["error"] = err
             with proxy._db_lock, proxy.db_conn() as conn:
-                conn.execute("INSERT OR REPLACE INTO good_news_detail VALUES (?,?,?,?,?,?)",
-                             (rno, ln["갈래"], size, purpose, err, _now().isoformat(timespec="seconds")))
+                conn.execute("INSERT OR REPLACE INTO good_news_detail (rcept_no, kind, size_pct, purpose, error, fetched_at, tries, retry_at) "
+                             "VALUES (?,?,?,?,?,?,?,?)",
+                             (rno, ln["갈래"], size, purpose, err, _now().isoformat(timespec="seconds"), tries, retry_at))
             got += 1
             time.sleep(GAP_SEC)
         _status.update(fetchAt=_now().isoformat(timespec="seconds"), fetched=got, pending=max(0, len(todo) - got))
