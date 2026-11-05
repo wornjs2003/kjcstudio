@@ -5926,23 +5926,30 @@ def drop_before_first_trade(rows):
 
 
 def aggregate_minutes(bars, minutes):
-    """1분봉을 N분봉으로 묶는다 (KIS 는 5분봉을 직접 주지 않는다)."""
-    buckets = {}
+    """1분봉을 N분봉으로 묶는다 (KIS 는 5분봉을 직접 주지 않는다).
+
+    **거래량 0 줄은 시가 · 고가 · 저가 · 종가에 안 섞는다** (2026-11-05 재권님 「응」 · 작업우선순위 배분).
+    15:30~15:39 에 KIS J 는 마감 체결을 「지금 분」 줄로 옮겨 싣고 1530 줄을 거래량 0 · 체결 아닌 값으로 준다
+    (pin_carried_trade 머리 10-06 관찰) — 그 줄이 15:30 칸의 첫 줄이라 시가가 되고 고가에도 섞였다(10-07 삼성전자 269,500 ·
+    종가 · 거래량은 맞았다). 「없음」 을 값으로 쓰지 않는다. **칸 안에 거래가 하나도 없을 때만** 마지막 줄 종가로 납작봉을 둔다
+    — 마감 동시호가 뒤 15:35 처럼 거래가 없는 진짜 구간(drop_before_first_trade 가 처음 · 마지막 체결 밖을 뺀다)."""
+    groups = {}
     for b in sorted(bars, key=lambda x: x["ts"]):
         hhmm = b["ts"][8:12]
         slot = (int(hhmm[:2]) * 60 + int(hhmm[2:])) // minutes * minutes
-        key = b["ts"][:8] + "%02d%02d" % (slot // 60, slot % 60)
-        g = buckets.get(key)
-        if not g:
-            buckets[key] = {"ts": key, "open": b["open"], "high": b["high"],
-                            "low": b["low"], "close": b["close"],
-                            "volume": b["volume"] or 0}
+        groups.setdefault(b["ts"][:8] + "%02d%02d" % (slot // 60, slot % 60), []).append(b)
+    out = []
+    for key in sorted(groups):
+        rows = groups[key]
+        traded = [r for r in rows if (r["volume"] or 0) > 0]
+        if traded:
+            out.append({"ts": key, "open": traded[0]["open"], "high": max(r["high"] for r in traded),
+                        "low": min(r["low"] for r in traded), "close": traded[-1]["close"],
+                        "volume": sum(r["volume"] for r in traded)})
         else:
-            g["high"] = max(g["high"], b["high"])
-            g["low"] = min(g["low"], b["low"])
-            g["close"] = b["close"]
-            g["volume"] += (b["volume"] or 0)
-    return [buckets[k] for k in sorted(buckets)]
+            c = rows[-1]["close"]
+            out.append({"ts": key, "open": c, "high": c, "low": c, "close": c, "volume": 0})
+    return out
 
 
 def pin_carried_trade(raw, bars, stored, minutes):
