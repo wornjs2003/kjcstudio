@@ -116,7 +116,8 @@ go.addEventListener('click', async () => {
   await Promise.allSettled([...pend]);
   await loadAw();
   go.disabled = false; go.textContent = '검색';
-  meta.textContent = `검색함 ${hm()} — 위 룰 값으로 서버가 다시 고름`;
+  const back = /되돌렸습니다|저장 못 함|다시 읽었습니다/.test(meta.textContent) ? `${meta.textContent} · ` : '';   // 칸을 되돌린 까닭이 덮이지 않게(qa 덧 11-05)
+  meta.textContent = `${back}검색함 ${hm()} — 위 룰 값으로 서버가 다시 고름`;
 });
 load();
 loadAw();
