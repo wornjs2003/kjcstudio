@@ -10,7 +10,7 @@
    11-05 — 「코스피 외국인도 있고 외국계 창구도 있는데 이유가 뭐야?」 → 「전부다 그종목에 매수매도가 필요한건데」 → 안 「응」(개발2 창).
    코스피 전체 묶음을 빼고 그 종목의 외국인 · 기관을 넣었다.
 
-       외국계 창구 [──●──] 13:55   종목 프로그램 [──●┃─] 13:55  │  외국인 +12.3만주 · 기관 −4.1만주 3회차 가집계
+       외국계 창구 [──●──] 13:55   종목 프로그램 [──●┃─] 13:55  │  외국인 +45.1억 · 기관 −4.1억 확정(장중 ≈ … 3회차 추정)
 
    원 자리 · 색 짙기 = **최근 5분(RECENT 칸 — 거래가 있던 1분 칸만 센다) 매수 몫**(매수 ÷ (매수 + 매도) · 가운데 50%).
    오른쪽 · 빨강이면 지금 사는 쪽이 세다 · 멀수록 짙다. 세로 눈금 = **오늘 누적 매수 몫**.
@@ -27,7 +27,8 @@
                     시각 = 서버가 KIS 에서 받은 시각(at)
      프로그램       /api/kis/flow-today?code=&step=1 의 stock.rows(원 · 서버가 1분마다 쌓음)
                     시각 = 거래가 있던 마지막 1분 칸
-     외국인 · 기관   /api/kis/investor-estimate?code= 의 latest(증권사 추정가집계 · 순매수 수량 하나 — 매수 · 매도가 따로 없어 원으로
+     외국인 · 기관   /api/kis/investor-estimate?code= 의 amount(순매수 금액 · 원 — 15:40 뒤 그날 확정치 · 그 전 가집계 수량 × 현재가 ≈ ·
+                    11-05 재권님 「금액으로 다 맞춰줘」). 아래는 가집계 latest 이야기(순매수 수량 하나 — 매수 · 매도가 따로 없어 원으로
                     못 그린다 · 오름 빨강 · 내림 파랑 글씨는 assets/js/sign.js). 하루 다섯 회차(입력 외국인 09:30 · 11:20 · 13:20 · 14:30 /
                     기관 10:00 · 11:20 · 13:20 · 14:30) · 응답에 시각이 없어 회차로 적는다 · 마감 뒤 확정치와 다르다
 
@@ -70,11 +71,11 @@ function shares(rows, pick) {
   return { p: share(sum(last, 'buy'), sum(last, 'sell')), c: share(sum(live, 'buy'), sum(live, 'sell')), t: live[live.length - 1].t };
 }
 
-/* 수량(주) → 「+12.3만주」 · 없으면 「—」 */
-function ju(v) {
+/* 금액(원) → 「+45.1억」 · 어림이면 앞에 ≈ · 없으면 「—」 (2026-11-05 재권님 「금액으로 다 맞춰줘」 — 전에는 만주였다) */
+function eok(v, approx) {
   if (v == null) return '—';
-  const a = Math.abs(v), sg = v > 0 ? '+' : v < 0 ? '−' : '';
-  return sg + (a >= 10000 ? `${(a / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}만주` : `${a.toLocaleString('ko-KR')}주`);
+  const a = Math.abs(v) / 1e8, sg = v > 0 ? '+' : v < 0 ? '−' : '';
+  return `${approx ? '≈' : ''}${sg}${a.toLocaleString('ko-KR', { maximumFractionDigits: a < 100 ? 1 : 0 })}억`;
 }
 
 function dot(p, c) {
@@ -113,12 +114,16 @@ export function createFlowFoot() {
     ];
   }
 
+  /* 외국인 · 기관 순매수 금액 — 서버 amount 하나를 그대로(마감 뒤 15:40~ 그날 확정치 · 그 전 가집계 수량 × 현재가 어림 ≈) */
   function estHtml() {
-    const est = data.est && data.est.code === code ? data.est.latest : null;
-    const one = (n, v) => `<span class="kh-ff-n">${n}</span><b class="kh-ff-q ${signClass(v)}">${ju(v)}</b>`;
-    return `<span class="kh-ff-it" title="증권사 추정가집계 · 순매수 수량 · 하루 다섯 회차 · 마감 뒤 확정치와 다름">` +
-      `${one('외국인', est ? est.foreign : null)}${one('기관', est ? est.inst : null)}` +
-      `<span class="kh-ff-t">${est && est.seq ? `${est.seq}회차 가집계` : '가집계 전'}</span></span>`;
+    const a = data.est && data.est.code === code ? data.est.amount : null;
+    const conf = a && a.basis === 'confirmed';
+    const one = (n, v) => `<span class="kh-ff-n">${n}</span><b class="kh-ff-q ${signClass(v)}">${eok(v, a && a.approx)}</b>`;
+    const tag = conf ? '확정' : a && a.seq ? `${a.seq}회차 추정` : '가집계 전';
+    const tip = conf ? '한국투자증권 그날 확정치 · 순매수 금액' : '증권사 추정가집계 수량 × 현재가(어림) · 하루 다섯 회차 · 마감 뒤 확정치로 바뀜';
+    return `<span class="kh-ff-it" title="${tip}">` +
+      `${one('외국인', a ? a.foreign : null)}${one('기관', a ? a.inst : null)}` +
+      `<span class="kh-ff-t">${tag}</span></span>`;
   }
 
   function render() {
@@ -149,7 +154,7 @@ export function createFlowFoot() {
     if (!c) return;
     const j = await get(`/api/kis/investor-estimate?code=${c}`);
     if (c !== code) return;
-    if (j && j.data) data.est = { code: c, latest: j.data.latest || null };
+    if (j && j.data) data.est = { code: c, latest: j.data.latest || null, amount: j.data.amount || null };
     render();
   }
 
