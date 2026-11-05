@@ -11,9 +11,12 @@
     무엇을      시장 투자자  FHPTJ04030000(999 · S001 = 코스피) · 외국인 · 기관 · 개인 매수 · 매도 · 순 금액(백만원) · 수량(천주)과 기관 안
                 시장 프로그램 FHPPG04600101(K = 코스피) · 1분 줄 30개 · 차익 + 비차익 매수 · 매도 · 순(백만원) · 수량은 KIS 가 안 준다
                 종목 프로그램 FHPPG04650101 · 체결 줄 30개(삼성전자는 2분쯤) · 매수 · 매도 · 순 금액(원) · 수량(주)
-    언제        평일 09:00~15:30 · 1분마다 시장 투자자 · 종목 프로그램 / 25분마다 시장 프로그램(한 번에 30분치라 겹쳐 받는다)
+    언제        평일 09:00~15:30 · 1분마다 시장 투자자 / 25분마다 시장 프로그램(한 번에 30분치라 겹쳐 받는다)
+                종목 프로그램은 평일 08:00~20:00 · 1분마다 · **통합(거래소 + 넥스트레이드 · 시장 구분 UN)** — 프리장 · 넥장에도 큰 차트 바닥 줄
+                원이 서게(2026-11-05 재권님 「프리장 넥장에도 원이 있어야 하는데」 → 안 「응」 · 개발2 창). 08:38 실측 — 구분 J 는 0줄 ·
+                NX · UN 은 프리마켓 30줄(삼성전자 08:36 매수 18.7만주 · 매도 4.8만주). 거래소 값(kind pgs)과 섞이지 않게 kind pgu 로 쌓는다
     어느 종목    관심종목(dart.watchlist()) 전부 + 화면이 고른 종목(이 주소를 부른 뒤 WANT_SEC 동안) — 재권님 「둘 다」
-    하루 몇 번   시장 약 390 + 시장 프로그램 약 16 + 종목 390 × 관심종목 수(7개면 약 2,730) + 고른 종목 1분에 1번
+    하루 몇 번   시장 약 390 + 시장 프로그램 약 16 + 종목 720 × 관심종목 수 + 고른 종목 1분에 1번(종목은 11-05 전 390 → 720)
     저장        market.db `flow_snap`(날 · 갈래 · 코드 · 분 · 그 분의 누적값 JSON). 누적값을 두고 구간 값은 낼 때 뺄셈한다
     주소        GET /api/kis/flow-today?code=&step=5 — 모양은 today() 주석. 「없음」 은 null(0 아님)
     코스닥       시장 번호를 아직 못 맞췄다(10-26 1001 은 0 만 왔다) — 코스피만 낸다. 맞추면 MKT 에 더한다
@@ -32,6 +35,9 @@ from secrets_guard import safe_message
 KST = timezone(timedelta(hours=9))
 
 OPEN, CLOSE = (9, 0), (15, 31)      # 15:30 마감 값까지 한 번 더 받는다
+STOCK_OPEN, STOCK_CLOSE = (8, 0), (20, 1)   # 종목 프로그램 — 넥스트레이드 프리마켓 08:00 ~ 애프터마켓 20:00 마감 값까지
+STOCK_DIV = "UN"                    # 종목 프로그램 시장 구분 — 통합(거래소 + 넥스트레이드)
+STOCK_KIND = "pgu"                  # 통합 값의 갈래 이름 — 옛 거래소 값(pgs)과 섞이면 누계 뺄셈이 튄다
 TICK = 15                           # 바퀴 — 분이 바뀌었나만 본다
 PGM_EVERY = 25                      # 시장 프로그램은 한 번에 30분치 — 25분마다면 안 빈다
 WANT_SEC = 30 * 60                  # 화면이 고른 종목을 몇 초 동안 쌓나(모달을 닫은 뒤에도 그만큼)
@@ -127,14 +133,14 @@ def snap_program_market(proxy, cfg, day):
 
 
 def snap_program_stock(proxy, cfg, day, code):
-    rows = _get(proxy, cfg, "program-trade-by-stock", {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code},
+    rows = _get(proxy, cfg, "program-trade-by-stock", {"FID_COND_MRKT_DIV_CODE": STOCK_DIV, "FID_INPUT_ISCD": code},
                 "FHPPG04650101").get("output") or []
     last = {}
     for r in rows:                  # 체결 줄 → 분마다 그 분의 마지막(가장 늦은) 누적값
         t = r.get("bsop_hour") or ""
         if len(t) >= 4 and (t[:4] not in last or t > last[t[:4]][0]):
             last[t[:4]] = (t, r)
-    out = [(day, "pgs", code, hm, {
+    out = [(day, STOCK_KIND, code, hm, {
         "buy": _i(r.get("whol_smtn_shnu_tr_pbmn")), "sell": _i(r.get("whol_smtn_seln_tr_pbmn")), "net": _i(r.get("whol_smtn_ntby_tr_pbmn")),
         "buyQty": _i(r.get("whol_smtn_shnu_vol")), "sellQty": _i(r.get("whol_smtn_seln_vol")), "netQty": _i(r.get("whol_smtn_ntby_qty")),
         "price": _i(r.get("stck_prpr"))}) for hm, (t, r) in last.items()]
@@ -144,6 +150,10 @@ def snap_program_stock(proxy, cfg, day, code):
 
 def _in_session(now):
     return now.weekday() < 5 and OPEN <= (now.hour, now.minute) < CLOSE
+
+
+def _in_stock_session(now):
+    return now.weekday() < 5 and STOCK_OPEN <= (now.hour, now.minute) < STOCK_CLOSE
 
 
 def _err(e):
@@ -158,21 +168,23 @@ def start(proxy):
             try:
                 now = _now()
                 hm = now.strftime("%H%M")
-                if _in_session(now) and _status["lastMinute"] != now.strftime("%Y%m%d") + hm:
+                if _in_stock_session(now) and _status["lastMinute"] != now.strftime("%Y%m%d") + hm:
                     _status["lastMinute"] = now.strftime("%Y%m%d") + hm
                     day = now.strftime("%Y%m%d")
                     cfg = proxy.load_secrets()
-                    try:
-                        snap_market(proxy, cfg, day, hm)
-                    except Exception as e:
-                        _err(e)
+                    krx = _in_session(now)
+                    if krx:
+                        try:
+                            snap_market(proxy, cfg, day, hm)
+                        except Exception as e:
+                            _err(e)
                     for c in _codes(proxy):
                         try:
                             snap_program_stock(proxy, cfg, day, c)
                         except Exception as e:
                             _err(e)
                     mins = now.hour * 60 + now.minute
-                    if _status["lastPgm"] is None or _status["lastPgm"][0] != day or mins - _status["lastPgm"][1] >= PGM_EVERY or hm == "1530":
+                    if krx and (_status["lastPgm"] is None or _status["lastPgm"][0] != day or mins - _status["lastPgm"][1] >= PGM_EVERY or hm == "1530"):
                         try:
                             snap_program_market(proxy, cfg, day)
                             _status["lastPgm"] = (day, mins)
@@ -208,18 +220,19 @@ def _sub(a, b):
     return None if a is None or b is None else a - b
 
 
-def _buckets(snaps, step, pick):
+def _buckets(snaps, step, pick, start=9 * 60):
     """누적 스냅샷 → 구간 값. 구간 값 = 그 구간의 마지막 스냅샷 − 앞 구간의 마지막 스냅샷.
-    09:00 에 시작하는 첫 구간만 앞 값을 0 으로 둔다(누계가 개장에서 시작). 그 밖에 앞 값이 없는 구간은 뺀다(모른다)."""
+    시작 시각(start · 분 — 거래소 09:00 · 통합 종목 프로그램 08:00)에 여는 첫 구간만 앞 값을 0 으로 둔다(누계가 개장에서 시작).
+    그 밖에 앞 값이 없는 구간은 뺀다(모른다)."""
     last = {}
     for hm, v in snaps:
         m = int(hm[:2]) * 60 + int(hm[2:])
-        b = (m - 1) // step * step if m > 9 * 60 else 9 * 60      # 09:05 에 받은 값은 09:00~09:05 구간의 끝
+        b = (m - 1) // step * step if m > start else start      # 09:05 에 받은 값은 09:00~09:05 구간의 끝
         last[b] = v
     out, prev = [], None
     for b in sorted(last):
         cur = pick(last[b])
-        if prev is None and b == 9 * 60:
+        if prev is None and b == start:
             prev = {k: 0 for k in cur}
         if prev is not None:
             out.append(dict({k: _sub(cur.get(k), prev.get(k)) for k in cur}, t="%02d%02d" % divmod(b, 60)))
@@ -231,7 +244,7 @@ def today(proxy, code=None, step=5):
     """GET /api/kis/flow-today 의 data —
         market   {rows: [{t, frgn: {buy, sell, net, buyQty, sellQty, netQty}, orgn, prsn}], last: 마지막 누계(같은 모양 + inst), lastAt}
         program  {rows: [{t, buy, sell, net}], lastAt}                          금액 백만원 · 수량 없음
-        stock    {code, rows: [{t, buy, sell, net, buyQty, sellQty, netQty}], lastAt, watching}   금액 원 · 수량 주
+        stock    {code, rows: [{t, buy, sell, net, buyQty, sellQty, netQty}], lastAt, watching}   금액 원 · 수량 주 · 통합 08:00~20:00
       t = 구간 시작 「HHMM」 · 값은 그 구간 동안 늘어난 양 · 모르는 칸은 null."""
     day = _now().strftime("%Y%m%d")
     mk = _load(proxy, day, "mkt", "KOSPI")
@@ -247,7 +260,8 @@ def today(proxy, code=None, step=5):
         for w in WHO:
             r[w] = {k: r.pop(f"{w}.{k}") for k in ("buy", "sell", "net", "buyQty", "sellQty", "netQty")}
     if code:
-        st = _load(proxy, day, "pgs", code)
-        out["stock"] = {"code": code, "rows": _buckets(st, step, lambda v: {k: v.get(k) for k in ("buy", "sell", "net", "buyQty", "sellQty", "netQty")}),
+        st = _load(proxy, day, STOCK_KIND, code)
+        out["stock"] = {"code": code, "rows": _buckets(st, step, lambda v: {k: v.get(k) for k in ("buy", "sell", "net", "buyQty", "sellQty", "netQty")},
+                                                       STOCK_OPEN[0] * 60 + STOCK_OPEN[1]),
                         "lastAt": st[-1][0] if st else None, "watching": code in _want}
     return out
