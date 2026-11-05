@@ -4310,6 +4310,58 @@ def fetch_investor_top(cfg, direction="buy", market="all", by="qty", limit=10):
         out[who] = rows[:max(1, min(limit, MOVERS_MAX))]
     return out, errors
 
+# ── 셋이 함께 사는 종목 — 홈 실시간 순위 「매수」 칩 (2026-11-05 재권님 「프로그램 기관 외국인이 동시에 사고있는 종목들
+# 볼수있는 방법좀 마련해봐」 → 「실시간 순위에 버튼 하나 만들고 거기에 넣어줘 · 매수 라는 버튼」) ──
+#
+#   외국인 · 기관   fetch_investor_top(금액 순 · 시장 전체) 두 목록(30줄씩)이 **둘 다** 순매수 양수인 종목 — **가집계**
+#   프로그램        그 종목만 FHPPG04650101(통합 UN) 체결 줄 맨 위의 그날 누적 순매수 금액(원)이 양수인 것
+#   차례            세 순매수 금액 합이 큰 순 · 금액 하한은 아직 없다(재권님이 넣으실 칸)
+# 한 번 짓는 데 KIS 2건 + 겹친 종목 수(11-05 12:38 실측 12) · 가집계 목록과 같은 INVESTOR_TOP_TTL 동안 들고 있다(--slow 면 그 값이 바뀐다)
+_joint_buy = {"at": 0.0, "data": None}
+_joint_buy_lock = threading.Lock()
+
+
+def _program_net_today(cfg, code):
+    """종목 프로그램 그날 누적 순매수 금액(원). 못 받으면 None."""
+    try:
+        data = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/program-trade-by-stock",
+                       {"FID_COND_MRKT_DIV_CODE": "UN", "FID_INPUT_ISCD": code}, "FHPPG04650101")
+    except RuntimeError:
+        return None
+    rows = [r for r in (data.get("output") or []) if (r.get("bsop_hour") or "").strip()]
+    if not rows:
+        return None
+    last = max(rows, key=lambda r: r.get("bsop_hour") or "")
+    return _num(last.get("whol_smtn_ntby_tr_pbmn"), int)
+
+
+def fetch_joint_buy(cfg):
+    """(줄, 지은 시각). 줄 = [{code, name, price, pct, foreign, inst, program, sum}] — 금액 단위는 원."""
+    with _joint_buy_lock:
+        if _joint_buy["data"] is not None and time.time() - _joint_buy["at"] < INVESTOR_TOP_TTL:
+            return _joint_buy["data"], _joint_buy["at"]
+        tops, errors = fetch_investor_top(cfg, "buy", "all", "amt", MOVERS_MAX)
+        f = {r["code"]: r for r in tops.get("foreign") or []}
+        i = {r["code"]: r for r in tops.get("inst") or []}
+        rows = []
+        for code, r in f.items():
+            fa = (r.get("foreign") or {}).get("amt")
+            ia = ((i.get(code) or {}).get("inst") or {}).get("amt")
+            if code not in i or not fa or not ia or fa <= 0 or ia <= 0:
+                continue
+            pg = _program_net_today(cfg, code)
+            if not pg or pg <= 0:
+                continue
+            fw, iw = fa * 1_000_000, ia * 1_000_000          # 백만원 → 원
+            rows.append({"code": code, "name": r.get("name"), "price": r.get("price"), "pct": r.get("pct"),
+                         "foreign": fw, "inst": iw, "program": pg, "sum": fw + iw + pg})
+        rows.sort(key=lambda x: -x["sum"])
+        data = {"rows": rows, "candidates": len(set(f) & set(i)), "errors": errors}
+        if f or i:                                  # 둘 다 못 받았으면 들고 있던 것을 덮지 않는다
+            _joint_buy["at"], _joint_buy["data"] = time.time(), data
+        return (_joint_buy["data"] or data), (_joint_buy["at"] or time.time())
+
+
 # ---------------------------------------------------------------- 저장 계층 (SQLite)
 # 배포본은 Cloudflare D1 을 쓰고, 로컬은 같은 구조를 SQLite 파일로 둔다.
 # 차트는 과거 데이터가 필요한데 볼 때마다 KIS 를 부르면 호출량을 감당할 수 없다.
@@ -8357,6 +8409,19 @@ class Handler(SimpleHTTPRequestHandler):
                              "order": "과거→최근",
                              "qtyUnit": "천주", "amtUnit": "백만원",
                              "cacheTtl": INVESTOR_FLOW_TTL},
+                })
+                return
+
+            # 홈 실시간 순위 「매수」 칩 — 외국인 · 기관 · 프로그램이 함께 사는 종목 (2026-11-05 · `fetch_joint_buy`)
+            if route == "joint-buy":
+                data, at = fetch_joint_buy(cfg)
+                self._send_json({
+                    "ok": True, "data": data["rows"],
+                    "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S"),
+                             "candidates": data["candidates"], "errors": len(data["errors"] or {}),
+                             "amtUnit": "원", "provisional": True,
+                             "note": "외국인 · 기관은 증권사 가집계(하루 네 번) · 프로그램은 그날 누적 · 셋 다 순매수 양수",
+                             "cacheTtl": INVESTOR_TOP_TTL},
                 })
                 return
 
