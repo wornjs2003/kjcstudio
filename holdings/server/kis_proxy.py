@@ -73,6 +73,7 @@ import good_news       # 「좋은 뉴스」 판정 — 공시마다 갈래 · �
 import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스닥 150 중 전일 거래량 급등 · 투자전략 룰로 거르고 줄 세움 · /api/auto-watch(2026-11-05 · server/auto_watch.py)
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
 import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 · 색 = 등락률 · /api/kis/heatmap(2026-10-27 · server/heatmap.py)
+import session_volume   # 시간대별 거래량 · 전일비 — 프리장 · 정규장 · 애프터 끝에 순위 종목 누적 거래량 저장 · /api/kis/vol-ratio(2026-11-05 · server/session_volume.py)
 import intraday_flow    # 당일 수급 — 장중 1분마다 시장 투자자 · 프로그램 매매를 쌓아 5분 구간으로 · /api/kis/flow-today(2026-10-27 · server/intraday_flow.py)
 import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
 import intraday_alerts  # 장중 알림 — 상승 VI · +20% 급등(2026-10-26 · server/intraday_alerts.py 머리 주석)
@@ -8529,6 +8530,16 @@ class Handler(SimpleHTTPRequestHandler):
                 return
 
             # 홈 실시간 순위 「매수」 칩 — 외국인 · 기관 · 프로그램이 함께 사는 종목 (2026-11-05 · `fetch_joint_buy`)
+            # 실시간 순위 모달 「전일비」 — 지금 시간대(프리장 · 정규장 · 애프터)끼리 오늘 ÷ 어제 (2026-11-05 · server/session_volume.py)
+            if route == "vol-ratio":
+                codes = [c for c in ((qs.get("codes") or [""])[0]).split(",") if c.isdigit() and len(c) == 6][:300]
+                name, label, prev_day, data = session_volume.ratio(sys.modules[__name__], cfg, codes)
+                self._send_json({"ok": True, "data": data,
+                                 "meta": {"session": name, "label": label, "prevDay": prev_day, "unit": "%",
+                                          "note": "통합(거래소 + 넥스트레이드) 누적 거래량 · 지금 시간대의 오늘 ÷ 어제 같은 시간대 전체 · 저장 없는 날은 null",
+                                          "cacheTtl": session_volume.CACHE_TTL}})
+                return
+
             if route == "joint-buy":
                 data, at = fetch_joint_buy(cfg)
                 d = data or {}
@@ -9256,6 +9267,8 @@ def main():
               % (auto_watch.RUN_AT + ("" if auto_watch.ADD else " · **관심 목록 넣기 없음**",)))
     # 당일 수급(2026-10-27 · server/intraday_flow.py) — 같은 문(보내는 서버만) · 알림 없음.
     # `KJC_FLOW_COLLECT=1` 은 시험 서버(자기 DB)에서 바퀴를 돌려 보는 자리다 — 세션 서버는 메인 DB 를 읽기 전용으로 열어 쓸 수 없다
+    if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and session_volume.start(sys.modules[__name__]):
+        print("  시간대 거래량 : 평일 %s 에 순위 종목 누적 거래량 저장(전일비)" % " · ".join(b[3][:2] + ":" + b[3][2:] for b in session_volume.BOUNDS))
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and intraday_flow.start(sys.modules[__name__]):
         print("  당일 수급 : 사용 (평일 09:00~15:30 · 1분마다 시장 투자자 · 종목 프로그램 · %d분마다 시장 프로그램 · /api/kis/flow-today)"
               % intraday_flow.PGM_EVERY)

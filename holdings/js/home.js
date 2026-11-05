@@ -1950,6 +1950,27 @@ function rankHeadStats() {
 }
 
 /* 본문 — 표만 그린다. 머리는 modal-head.js 가 들고 있다 */
+/* 「전일비」 칸 — 지금 시간대(프리장 · 정규장 · 애프터)의 오늘 거래량 ÷ 어제 같은 시간대(%). 셈은 서버(server/session_volume.py) ·
+   화면은 받은 값을 그린다 · 없음은 「—」(2026-11-05 재권님 「프리장은 프리장끼리」 → 「응 그렇게 해줘」) */
+let volRatio = {}, volMeta = null, volWatch = null;
+const VOL_FALLBACK_MS = 60000;      // 「전일비」 — 서버 값마저 못 받았을 때만
+async function loadVolRatio() {
+  if (!rankModal) return;
+  const codes = rowList(rankModalSort, rankModalMarket).map((s) => s.code).filter((c) => /^\d{6}$/.test(c));
+  if (!codes.length) return;
+  try {
+    const r = await apiFetch(`/api/kis/vol-ratio?codes=${codes.join(',')}`, { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    if (j && j.data) { volRatio = j.data; volMeta = j.meta || null; }
+  } catch { /* 못 받으면 들고 있던 것 그대로 */ }
+  if (rankModal) paintRankModal();
+}
+const volRatioCell = (code) => {
+  const v = volRatio[code];
+  return v == null ? '<span class="kh-mut">—</span>' : `${Math.round(v).toLocaleString()}%`;
+};
+const volRatioHead = () => `전일비${volMeta && volMeta.label ? `<small class="kh-mut">(${volMeta.label})</small>` : ''}`;
+
 function paintRankModal() {
   if (!rankModal) return;
   const list = rowList(rankModalSort, rankModalMarket, 'all');
@@ -1965,11 +1986,12 @@ function paintRankModal() {
       <td class="kh-num">${p ? showValue(s.code, p) : '···'}</td>
       <td class="kh-num">${th && themeBig !== FLOW ? themeCap(s.code) : showCap(s.code)}</td>
       <td class="kh-num">${th && themeBig === FLOW ? themeMetric(s.code) : (p ? fmtShareCount(p.volume) : '···')}</td>
+      <td class="kh-num">${volRatioCell(s.code)}</td>
     </tr>`;
   }).join('');
   /* 카드와 같다 — 고른 시장 목록이 아직 안 왔으면 빈 표 대신 그렇다고 적는다 */
   const empty = !list.length && universe
-    ? `<tr><td colspan="7" class="kh-mut">${th ? '—' : SORTS[rankModalSort]?.only ? afterEmpty() : SORTS[rankModalSort]?.empty ? SORTS[rankModalSort].empty()
+    ? `<tr><td colspan="8" class="kh-mut">${th ? '—' : SORTS[rankModalSort]?.only ? afterEmpty() : SORTS[rankModalSort]?.empty ? SORTS[rankModalSort].empty()
       : `${marketDef(rankModalMarket).label} 목록을 아직 받지 못했습니다`}</td></tr>` : '';
 
   /* 칸 폭을 못 박는다 (table-layout: fixed).
@@ -1987,11 +2009,11 @@ function paintRankModal() {
     <table>
       <colgroup>
         <col class="c-rk"><col class="c-nm"><col class="c-pr"><col class="c-pc">
-        <col class="c-am"><col class="c-cap"><col class="c-vol">
+        <col class="c-am"><col class="c-cap"><col class="c-vol"><col class="c-vr">
       </colgroup>
       <thead><tr>
         <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
-        <th>거래대금</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th>
+        <th>거래대금</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
       </tr></thead>
       <tbody>${rows || empty}</tbody>
     </table>
@@ -2008,6 +2030,7 @@ function paintRankModal() {
     }
     if (rankModalMarket === 'THEME') refreshTheme().then(() => paintRankModal());
     paintRankModal();
+    loadVolRatio();
     scheduleFetch();
   });
 
@@ -2046,14 +2069,17 @@ function openRankModal() {
       /* 모달에서 고른 기준은 첫 화면 순위표와 **따로 둔다** — 모달에서
          거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면 무엇을 눌러
          그렇게 됐는지 알 수 없다 (2026-09-22). */
-      onTab(id) { rankModalSort = id; paintRankModal(); if (id === 'buy') loadJoint(); },
+      onTab(id) { rankModalSort = id; paintRankModal(); if (id === 'buy') loadJoint(); loadVolRatio(); },
     },
-    onClose() { rankModal = null; },
+    onClose() { rankModal = null; if (volWatch) { volWatch.stop(); volWatch = null; } },
   });
   rankModal = m;
   rankModalSort = sortBy;
   rankModalMarket = market;     // 목록에서 보던 시장으로 열린다
   paintRankModal();
+  loadVolRatio();
+  /* 바뀌었나는 대표 한 종목으로 본다 — 서버가 지금 누적을 CACHE_TTL 마다 새로 받으니 그때마다 바뀌어 전체를 다시 받는다 */
+  if (!volWatch) volWatch = watch({ url: () => (rankModal ? '/api/kis/vol-ratio?codes=005930' : null), onChange: loadVolRatio, key: 'session_volume.CACHE_TTL', fallbackMs: VOL_FALLBACK_MS });
   paintRankModalNote();
 }
 
