@@ -805,18 +805,9 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeParts()
 (async () => {
   const q = new URLSearchParams(location.search), id = (q.get('map') || 'ai').replace(/[^a-z0-9_-]/gi, '');
   try {
-    // ?map=parent — 자료를 파일이 아니라 띄운 쪽(같은 출처)이 postMessage 로 준다. 종목 분석 「지배구조」 가 종목마다 공시로 지도를 만들어 넘긴다
-    // (2026-11-05 · js/gov.js). 띄운 쪽은 이 틀이 「ready」 를 보내면 { kjcMap: 자료 } 를 보낸다
-    const data = id === 'parent'
-      ? await new Promise((ok) => {
-          addEventListener('message', function on(e) {
-            if (e.origin !== location.origin || !e.data || !e.data.kjcMap) return;
-            removeEventListener('message', on); ok(e.data.kjcMap);
-          });
-          parent.postMessage({ kjcMapReady: true }, location.origin);
-        })
-      : await (async () => { const r = await fetch(`data/maps/${id}.json`, { cache: 'no-store' }); if (!r.ok) throw new Error(r.status); return r.json(); })();
-    build(data);
+    const r = await fetch(`data/maps/${id}.json`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    build(await r.json());
     await loadCards();
     if (q.get('parts')) openParts(q.get('parts').replace(/[^A-Za-z0-9._-]/g, ''));   // ?parts=hbm3d.html — 검수용
     if (q.get('co')) openCard(q.get('co').replace(/[^A-Za-z0-9]/g, ''));   // ?co=000660 — 카드를 바로 연다(링크 · 검수용)

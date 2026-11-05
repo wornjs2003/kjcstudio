@@ -304,24 +304,3 @@ mark.in-find-hit.is-cur { background: var(--kh-cat-amber); color: var(--kh-text-
 .in-mac-c .num-up, .in-note-t .num-up { color: var(--kh-up); } .in-mac-c .num-dn, .in-note-t .num-dn { color: var(--kh-down); }
 .kh-mkt.in-mac > .in-mac-more { position: sticky; right: 0; flex: none; margin-left: auto; padding: 0 6px; background: var(--kh-bg); color: var(--kh-text-muted); font-weight: 700; }
 .kh-mkt.in-mac > .in-mac-more[hidden] { display: none; }
-
-/* 종목 분석 — 「분석」 · 「지배구조」 두 갈래 (2026-11-05 · js/gov.js). 지배구조를 고르면 분석 칸들을 숨기고 지배구조 칸만 보인다 */
-.in-gov-tabs { padding: 0 0 10px; }
-.in-gov-off { display: none !important; }
-.in-gov-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 4px 0 10px; }
-.in-gov-head h2 { margin: 0; font-size: 1.35rem; }
-.in-gov-views { display: inline-flex; gap: 4px; }
-.in-gov-find { margin-left: auto; }
-.in-gov-find input { font: inherit; padding: 3px 8px; border: 1px solid var(--kh-border); border-radius: var(--kh-radius-sm); background: var(--kh-bg-card); color: var(--kh-text-primary); width: 180px; }
-.in-gov-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 6px; font-size: 0.82rem; }
-.in-gov-group b { margin-right: 6px; }
-.in-gov-more { color: var(--kh-text-secondary); font-size: 0.78rem; margin-left: 6px; }
-.in-gov-ring { margin: 0 0 4px; }
-/* 흐름도 틀 — 높이를 잡아 둔다. 종목을 바꿔도 칸 크기가 안 움직이게(「보는 것을 바꿔도 자리는 그대로다」) · 안의 지도는 flowmap 이 틀에 맞춰 줄인다 */
-.in-gov-frame { display: block; width: 100%; height: 720px; border: 0; border-radius: var(--kh-radius-md); background: var(--kh-bg); }
-.in-gov-tbls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
-@media (min-width: 1180px) { .in-gov-tbls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
-.in-gov-tbls .num { text-align: right; white-space: nowrap; }
-.in-gov-tops { padding: 0 0 6px; border-bottom: 1px solid var(--kh-border); margin-bottom: 8px; }
-.in-gov-n { margin-left: 5px; font-size: 0.72rem; color: var(--kh-text-secondary); }
-.in-gov-ring a { color: inherit; }
