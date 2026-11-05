@@ -20,6 +20,12 @@
               응답 meta.notCounted 에 적는다
     저장      market.db 의 `auto_watch_day`(날 · 종목 · 지수 · 이름 · 종가 · 등락률 · 거래량 · 어디서)
     주소      GET /api/auto-watch — 모양은 compute() 주석 · 「없음」 은 null(0 아님)
+    신고가 부근 52주 최고 종가(그날 앞 365일 auto_watch_day 의 가장 높은 J 종가) 위아래 nearHighPct % 안 — 룰 칸 nearHighPct(빈칸이면 안 거름)
+              (2026-11-05 재권님 「신고가 부근에 있는 종목도 넣어주고 그건 소팅의 조건이라기보단 맨위에 올려줘」 · 「위아래 10% 차이」 · 「둘다해」 ·
+              기간 「가」 = 52주). 조건에 걸린 것 중 부근 → nearHigh · 조건 밖인데 부근 → nearHigh + nearHighOnly 로 더 넣음 · 둘 다 맨 위(그 안은 지금 줄 세우기).
+              52주 일봉이 모자란 종목은 뜰 때 J 일봉으로 한 번 채운다(backfill_year · 종목당 YEAR_CHUNKS 번 · auto_watch_yearfill 에 적어 다시 안 받는다)
+    기간 상위 history() 의 top — 최근 5 · 10 · 20 거래일(한 달 = 20거래일로 셈)에 걸린 횟수 상위 TOP_N(재권님 「5일 10일 한달 … 상위 20개 · 기간별 상승 퍼센트」).
+              상승 % 는 그 기간 안 처음 걸린 날 종가 → 마지막 쌓은 날 종가(재권님 「가」 · 시황분석1 전달)
     결과      그날 걸린 종목(compute 의 picked)을 auto_watch_pick 에 남기고(넣기가 꺼져 있어도 · record_picks), 다음 거래일 값을 쌓으면
               그 종목의 다음 날 종가 등락률을 붙여 낸다 — GET /api/auto-watch/history(history()). 셈은 부를 때 auto_watch_day 에서 한다(따로 안 쌓는다).
               (2026-11-05 재권님 「관심종목에 등록된 종목들 다음날 상승인지 하락인지 이거 쌓아놔야 하는데 투자전략에다가 데이터 넣어줘야해」 → 「응 만들어.」)
@@ -57,6 +63,10 @@ SORTS = ("mult", "pct")
 ADD = False                     # 정규장 뒤 관심 목록 넣기 — 만들었고 꺼 둠(머리 주석 「넣기」 · 켜기는 재권님 지시로)
 WATCH_DOC = "watchlist"
 AUTO_GROUP = {"id": dart.AUTO_GROUP_ID, "name": "자동"}
+YEAR_DAYS = 365                 # 「52주」 를 달력 날로
+YEAR_CHUNKS = 3                 # 1년 일봉을 몇 번에 나눠 묻나 — KIS 일봉은 한 번에 100줄까지
+TOP_PERIODS = {"d5": 5, "d10": 10, "d20": 20}   # 기간 상위의 거래일 수 — 「한 달」 은 20거래일
+TOP_N = 20
 KEEP_DAYS = 5                   # 넣은 날 뒤 이 거래일이 지나면 뺀다(재권님 「5거래일 뒤 자동 것만 빼기」)
 TICK = 30
 HOLIDAY_SAME = 0.9              # 앞 날과 종가 · 거래량이 똑같은 종목이 이만큼이면 휴장(거래가 있는 날에 우연히 같을 수는 없다)
@@ -72,6 +82,8 @@ _SCHEMA = (
     """CREATE TABLE IF NOT EXISTS auto_watch_pick (
         day TEXT NOT NULL, code TEXT NOT NULL, rank INTEGER, name TEXT, idx TEXT,
         close INTEGER, pct REAL, mult REAL, rule TEXT, saved_at TEXT, PRIMARY KEY (day, code))""",
+    # 52주 일봉을 한 번 채운 종목 — 새로 상장해 1년이 안 되는 종목을 뜰 때마다 다시 묻지 않게
+    "CREATE TABLE IF NOT EXISTS auto_watch_yearfill (code TEXT PRIMARY KEY, at TEXT)",
 )
 
 _status = {"runDay": None, "runAt": None, "saved": None, "backfillAt": None, "backfillCodes": None,
@@ -218,12 +230,54 @@ def backfill(proxy, until, codes=None):
     return done
 
 
+def backfill_year(proxy, until):
+    """52주 최고 종가를 셀 1년 일봉이 없는 종목을 J 일봉으로 한 번 채운다(종목당 YEAR_CHUNKS 번) → 채운 종목 수."""
+    _init(proxy)
+    cfg = proxy.load_secrets()
+    lo = (datetime.strptime(until, "%Y%m%d") - timedelta(days=YEAR_DAYS)).strftime("%Y%m%d")
+    with proxy._db_lock, proxy.db_conn() as conn:
+        first = {r[0]: r[1] for r in conn.execute("SELECT code, MIN(day) FROM auto_watch_day GROUP BY code")}
+        done_codes = {r[0] for r in conn.execute("SELECT code FROM auto_watch_yearfill")}
+    need = [m for m in members(proxy) if m[0] not in done_codes and (first.get(m[0]) or "99999999") > lo]
+    span = YEAR_DAYS // YEAR_CHUNKS + 1
+    done = 0
+    for code, idx, name in need:
+        bars, ok = [], True
+        for k in range(YEAR_CHUNKS):
+            a = datetime.strptime(lo, "%Y%m%d") + timedelta(days=k * span)
+            b = min(a + timedelta(days=span - 1), datetime.strptime(until, "%Y%m%d") - timedelta(days=1))
+            try:
+                bars += proxy._bars_once(cfg, code, "D", a.strftime("%Y%m%d"), b.strftime("%Y%m%d"), "J")
+                _status["kisCalls"] += 1
+            except Exception as e:
+                _status["error"] = "%s 1년 일봉: %s" % (code, safe_message(e, 120))
+                ok = False
+                break
+            time.sleep(GAP_SEC)
+        if not ok:
+            continue
+        bars = sorted({b["ts"]: b for b in bars if b.get("ts") and b["ts"] < until and b.get("close")}.values(), key=lambda b: b["ts"])
+        stamp = _now().isoformat(timespec="seconds")
+        rows = [(b["ts"], code, idx, name, b["close"],
+                 round((b["close"] - bars[i - 1]["close"]) / bars[i - 1]["close"] * 100, 2) if i and bars[i - 1]["close"] else None,
+                 b.get("volume"), "daily", stamp) for i, b in enumerate(bars)]
+        with proxy._db_lock, proxy.db_conn() as conn:
+            conn.executemany("INSERT OR IGNORE INTO auto_watch_day (day, code, idx, name, close, pct, vol, src, saved_at) "
+                             "VALUES (?,?,?,?,?,?,?,?,?)", rows)
+            conn.execute("INSERT OR REPLACE INTO auto_watch_yearfill VALUES (?, ?)", (code, stamp))
+        done += 1
+    _status.update(yearfillAt=_now().isoformat(timespec="seconds"), yearfillCodes=done, yearfillNeed=len(need))
+    return done
+
+
 def _fill_locked(proxy, day):
-    """뜰 때 채우기 — run 과 같은 자물쇠. 이미 돌고 있으면 안 한다."""
+    """뜰 때 채우기 — run 과 같은 자물쇠. 이미 돌고 있으면 안 한다. 20거래일 다음에 52주."""
     if not _run_lock.acquire(blocking=False):
         return None
     try:
-        return backfill(proxy, day)
+        n = backfill(proxy, day)
+        backfill_year(proxy, day)
+        return n
     except Exception as e:
         _status["error"] = safe_message(e, 160)
     finally:
@@ -284,6 +338,7 @@ def history(proxy, days=30):
                  missing  다음 거래일은 왔는데 그 종목 값이 없다(거래정지 · 못 받음) — 「아직」 과 가른다(qa 덧 11-05)
         summary  { picks, done(결과 붙은 수), pending(다음 거래일이 아직 안 옴), missing(왔는데 값 없음), up, down, flat,
                    upRate(%), avgNext(%) } — 비율 · 평균은 done 만으로 · 결과가 없으면 null
+        top      기간 상위 — _top() 주석(days 와 무관하게 최근 5 · 10 · 20 거래일)
         total    모든 날을 합친 summary
     """
     days = int(days)
@@ -294,7 +349,7 @@ def history(proxy, days=30):
             pick_days = [r[0] for r in conn.execute(
                 "SELECT DISTINCT day FROM auto_watch_pick ORDER BY day DESC LIMIT ?", (days,))]
         except Exception:            # 표가 아직 없다
-            return {"list": [], "total": _summary([]), "note": "아직 남긴 날 없음 — 8765 가 평일 15:41 판 뒤에 처음 남긴다"}
+            return {"list": [], "total": _summary([]), "top": _top(conn, []), "note": "아직 남긴 날 없음 — 8765 가 평일 15:41 판 뒤에 처음 남긴다"}
         trade_days = [r[0] for r in conn.execute("SELECT DISTINCT day FROM auto_watch_day WHERE src = 'multi' ORDER BY day")]
         out, allp = [], []
         for day in pick_days:
@@ -317,7 +372,36 @@ def history(proxy, days=30):
             except ValueError:
                 rl = None
             out.append({"day": day, "nextDay": nxt, "rule": rl, "picks": picks, "summary": _summary(picks)})
-    return {"list": out, "total": _summary(allp)}
+        top = _top(conn, trade_days)
+    return {"list": out, "total": _summary(allp), "top": top}
+
+
+def _top(conn, trade_days):
+    """{d5 · d10 · d20: { from, to, days, items: [{ code, name, count, firstDay, lastDay, firstClose, close, gainPct }] }} — 걸린 횟수 상위 TOP_N.
+    gainPct 는 그 기간 안 처음 걸린 날 종가 → 마지막 쌓은 날 종가(없으면 null). 같은 횟수면 마지막 걸린 날이 늦은 것 · 오른 것이 위."""
+    if not trade_days:
+        return {k: {"from": None, "to": None, "days": 0, "items": []} for k in TOP_PERIODS}
+    last = trade_days[-1]
+    now = {r[0]: r[1] for r in conn.execute("SELECT code, close FROM auto_watch_day WHERE day = ? AND src = 'multi'", (last,))}
+    out = {}
+    for k, n in TOP_PERIODS.items():
+        span = trade_days[-n:]
+        rows = conn.execute("SELECT code, name, day, close FROM auto_watch_pick WHERE day >= ? AND day <= ? ORDER BY day",
+                            (span[0], span[-1])).fetchall()
+        agg = {}
+        for code, name, day, close in rows:
+            a = agg.setdefault(code, {"code": code, "name": name, "count": 0, "firstDay": day, "firstClose": close})
+            a["count"] += 1
+            a["lastDay"] = day
+        items = []
+        for a in agg.values():
+            c = now.get(a["code"])
+            a["close"] = c
+            a["gainPct"] = round((c / a["firstClose"] - 1) * 100, 2) if c and a["firstClose"] else None
+            items.append(a)
+        items.sort(key=lambda a: (a["count"], a["lastDay"], a["gainPct"] if a["gainPct"] is not None else float("-inf")), reverse=True)
+        out[k] = {"from": span[0], "to": span[-1], "days": len(span), "items": items[:TOP_N]}
+    return out
 
 
 def _summary(picks):
@@ -435,7 +519,9 @@ def compute(proxy):
         day         셈한 날(가장 최근에 그날 값이 저장된 날) · 없으면 null
         rule        { prevPct, volMult, sortBy, autoMax } — 문서 값 그대로(빈칸 null) · sortBy 는 쓴 값
         ready       기준 둘(prevPct · volMult)이 다 있나
-        picked      [{ code, name, idx, close, pct, vol, avg20, mult }] — 걸린 종목 · 줄 세운 차례 · autoMax 로 자름
+        picked      [{ code, name, idx, close, pct, vol, avg20, mult, high52, highGapPct, nearHigh, nearHighOnly }] — 걸린 종목 · 줄 세운 차례 · autoMax 로 자름
+                    high52 그날 앞 52주 최고 종가(모자라면 null) · highGapPct 그날 종가가 그보다 몇 % 위아래 · nearHigh 부근(맨 위) · nearHighOnly 조건 밖인데 부근이라 더 넣음
+        nearHighAll 자르기 전 부근 수 · nearOnlyAll 그중 조건 밖으로 더 넣은 수
         pool        대상 종목 수(시가총액 상위 중 주권) · measured: 그날 값과 앞 20거래일이 다 있는 수 · noToday: 그날 값이 없는 수 · short: 그날 값은 있는데 앞 20거래일이 모자란 수
         hitAll      자르기 전 걸린 수
     """
@@ -445,9 +531,12 @@ def compute(proxy):
     prev_pct, vol_mult = _num_or_none(rule.get("prevPct")), _num_or_none(rule.get("volMult"))
     sort_by = rule.get("sortBy") if rule.get("sortBy") in SORTS else "mult"
     auto_max = _num_or_none(rule.get("autoMax"))
+    near_pct = _num_or_none(rule.get("nearHighPct"))
+    if near_pct is not None and near_pct < 0:
+        near_pct = None
     mem = members(proxy)
     out = {"day": None, "rule": {"prevPct": prev_pct, "volMult": vol_mult, "sortBy": sort_by,
-                                 "autoMax": int(auto_max) if auto_max else None, "from": src},
+                                 "autoMax": int(auto_max) if auto_max else None, "nearHighPct": near_pct, "from": src},
            "ready": prev_pct is not None and vol_mult is not None,
            "picked": [], "pool": len(mem), "measured": None, "noToday": None, "short": None, "hitAll": None}
     with proxy._db_lock, proxy.db_conn() as conn:
@@ -468,6 +557,9 @@ def compute(proxy):
             lst = hist.setdefault(code, [])
             if len(lst) < AVG_DAYS:
                 lst.append(vol)
+        hi = {r[0]: r[1] for r in conn.execute(
+            "SELECT code, MAX(close) FROM auto_watch_day WHERE day < ? AND day >= ? AND close IS NOT NULL GROUP BY code",
+            (day, (datetime.strptime(day, "%Y%m%d") - timedelta(days=YEAR_DAYS)).strftime("%Y%m%d")))}
     rows, short, no_today = [], 0, 0
     for code, idx, name in mem:
         t = today.get(code)
@@ -480,15 +572,28 @@ def compute(proxy):
             continue
         avg = sum(h) / len(h)
         mult = round(t[5] / avg, 2) if avg and t[5] is not None else None
+        h = hi.get(code)
+        gap = round((t[3] / h - 1) * 100, 2) if h and t[3] is not None else None
         rows.append({"code": code, "name": name or t[2], "idx": idx, "close": t[3], "pct": t[4], "vol": t[5],
-                     "avg20": round(avg), "mult": mult})
+                     "avg20": round(avg), "mult": mult, "high52": h, "highGapPct": gap,
+                     "nearHigh": near_pct is not None and gap is not None and abs(gap) <= near_pct, "nearHighOnly": False})
     out["measured"], out["noToday"], out["short"] = len(rows), no_today, short
     if not out["ready"]:
         return out
     hit = [r for r in rows if r["pct"] is not None and r["mult"] is not None
            and r["pct"] >= prev_pct and r["mult"] >= vol_mult]
-    hit.sort(key=lambda r: (r[sort_by], r["mult" if sort_by == "pct" else "pct"]), reverse=True)
     out["hitAll"] = len(hit)
+    ids = {r["code"] for r in hit}
+    for r in rows:                   # 조건 밖인데 신고가 부근 — 더 넣는다(재권님 「둘다해」)
+        if r["nearHigh"] and r["code"] not in ids:
+            r["nearHighOnly"] = True
+            hit.append(r)
+    other = "mult" if sort_by == "pct" else "pct"
+    low = float("-inf")
+    hit.sort(key=lambda r: (r[sort_by] if r[sort_by] is not None else low, r[other] if r[other] is not None else low), reverse=True)
+    hit.sort(key=lambda r: not r["nearHigh"])     # 부근 묶음을 맨 위로 — 그 안은 위 줄 세우기 그대로(정렬이 안정적이다)
+    out["nearHighAll"] = sum(1 for r in hit if r["nearHigh"])
+    out["nearOnlyAll"] = sum(1 for r in hit if r["nearHighOnly"])
     out["picked"] = hit[:int(auto_max)] if auto_max and auto_max > 0 else hit
     return out
 
