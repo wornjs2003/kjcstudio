@@ -3376,6 +3376,8 @@ SECTOR_TTL = 60            # 업종 지수는 초 단위로 움직이지 않는�
 MOVERS_TTL = 30            # 상승률 순위는 장중에 자주 바뀐다
 MOVERS_MAX = 30            # KIS 가 한 번에 주는 행 수 (더 달라고 해도 30개다)
 INVESTOR_TOP_TTL = 120     # 가집계라 하루 네 번만 갱신된다 (아래 주석 참조)
+# 가집계가 들어오는 시각(KIS 설명 · ±10분) — 화면이 「다음 입력」 을 이 값으로 적는다(「매수」 칩 · 2026-11-05)
+INVESTOR_EST_SLOTS = {"foreign": ("09:30", "11:20", "13:20", "14:30"), "inst": ("10:00", "11:20", "13:20", "14:30")}
 INVESTOR_FLOW_TTL = 600    # 일별 자료라 장중에 한 번 바뀐다
 INVESTOR_FLOW_DAYS = 30    # 화면이 보여주는 기간
 
@@ -4315,9 +4317,21 @@ def fetch_investor_top(cfg, direction="buy", market="all", by="qty", limit=10):
 #   외국인 · 기관   fetch_investor_top(금액 순 · 시장 전체) 두 목록(30줄씩)이 **둘 다** 순매수 양수인 종목 — **가집계**
 #   프로그램        그 종목만 FHPPG04650101(통합 UN) 체결 줄 맨 위의 그날 누적 순매수 금액(원)이 양수인 것
 #   차례            세 순매수 금액 합이 큰 순 · 금액 하한은 아직 없다(재권님이 넣으실 칸)
-# 한 번 짓는 데 KIS 2건 + 겹친 종목 수(11-05 12:38 실측 12) · 가집계 목록과 같은 INVESTOR_TOP_TTL 동안 들고 있다(--slow 면 그 값이 바뀐다)
-_joint_buy = {"at": 0.0, "data": None}
-_joint_buy_lock = threading.Lock()
+# 한 번 짓는 데 KIS 2건 + 겹친 종목 수(11-05 12:38 실측 12) + 오늘 빠진 종목 수 · 가집계 목록과 같은 INVESTOR_TOP_TTL 동안 들고 있다
+#
+# **뒤에서 짓는다** — 묻는 쪽은 들고 있던 판을 바로 받고, 낡았으면 뒤에서 다시 짓는다(처음 부를 때 KIS 14건을 쥔 채
+# 기다리면 8.9초였다 · 11-05 13:00 qa 실측). 판이 아직 없으면 빈 줄과 pending 을 낸다 — 화면은 「불러오는 중」.
+#
+# **「없음」 과 「못 받음」 을 가른다** (11-05 개념정의 검수) — 프로그램 값을 못 받은 종목은 빼되 그 수를 programMissing 으로
+# 낸다 · 외국인 · 기관 목록을 둘 다 못 받으면 listFail 로 내고 들고 있던 판을 덮지 않는다 · 못 받은 것이 있는 판은 다음 물음에
+# 바로 다시 짓는다(들고 있는 시간을 안 채운다).
+#
+# **빠진 종목** (11-05 재권님 「동시매수하다가 어느 한곳이 매도로 바뀌는것도 파악을 할수있게」) — 그날 한 번이라도 셋 다 샀다가
+# 빠진 종목을 flipped 로 낸다. 어느 쪽이 매도(0 이하)로 바뀌었나 · 상위 30 밖으로 밀려 값을 모르는 쪽 · 처음 빠진 것을 본 시각.
+# 다시 셋 다 사면 flipped 에서 지운다. 프로그램을 못 받은 종목은 빠진 것으로 세지 않는다(못 받은 것이지 판 것이 아니다).
+_joint_buy = {"at": 0.0, "data": None, "retry": False, "day": None, "seen": {}, "flipped": {}}
+_joint_buy_lock = threading.Lock()          # 판을 읽고 바꾸는 자리
+_joint_buy_build = threading.Lock()         # 짓는 것은 한 번에 하나
 
 
 def _program_net_today(cfg, code):
@@ -4334,31 +4348,115 @@ def _program_net_today(cfg, code):
     return _num(last.get("whol_smtn_ntby_tr_pbmn"), int)
 
 
+def _joint_buy_make(cfg):
+    """판을 새로 짓는다. 금액 단위는 원 · 값이 없으면 None."""
+    now = datetime.now(KST)
+    tops, errors = fetch_investor_top(cfg, "buy", "all", "amt", MOVERS_MAX)
+    f = {r["code"]: r for r in tops.get("foreign") or []}
+    i = {r["code"]: r for r in tops.get("inst") or []}
+    if not f and not i:
+        return {"listFail": True, "errors": len(errors or {})}
+    won = lambda side: None if side is None else side * 1_000_000          # 백만원 → 원
+    famt = lambda c: won(((f.get(c) or {}).get("foreign") or {}).get("amt")) if c in f else None
+    iamt = lambda c: won(((i.get(c) or {}).get("inst") or {}).get("amt")) if c in i else None
+    rows, missing, prog = [], 0, {}
+    for code in [c for c in f if c in i]:
+        fa, ia = famt(code), iamt(code)
+        if not fa or not ia or fa <= 0 or ia <= 0:
+            continue
+        pg = _program_net_today(cfg, code)
+        prog[code] = pg
+        if pg is None:
+            missing += 1
+            continue
+        if pg <= 0:
+            continue
+        r = f[code]
+        rows.append({"code": code, "name": r.get("name"), "price": r.get("price"), "pct": r.get("pct"),
+                     "foreign": fa, "inst": ia, "program": pg, "sum": fa + ia + pg})
+    rows.sort(key=lambda x: -x["sum"])
+    return {"rows": rows, "f": f, "i": i, "famt": famt, "iamt": iamt, "prog": prog,
+            "candidates": len(set(f) & set(i)), "programMissing": missing,
+            "errors": len(errors or {}), "hm": now.strftime("%H:%M"), "day": now.date().isoformat()}
+
+
+def _joint_buy_rebuild(cfg):
+    if not _joint_buy_build.acquire(blocking=False):
+        return
+    try:
+        m = _joint_buy_make(cfg)
+        with _joint_buy_lock:
+            if m.get("listFail"):                # 두 목록 다 못 받음 — 들고 있던 판을 덮지 않고 그렇다고만 적는다
+                if _joint_buy["data"] is not None:
+                    _joint_buy["data"] = dict(_joint_buy["data"], listFail=True)
+                _joint_buy["retry"] = True
+                return
+            st = _joint_buy
+            if st["day"] != m["day"]:
+                st["day"], st["seen"], st["flipped"] = m["day"], {}, {}
+            now_codes = {r["code"] for r in m["rows"]}
+            for r in m["rows"]:
+                st["seen"][r["code"]] = r["name"]
+                st["flipped"].pop(r["code"], None)
+            gone = [c for c in st["seen"] if c not in now_codes and c not in st["flipped"]]
+        # 빠진 종목의 프로그램 값 — 판 밖에서 받는다(겹침 후보가 아니었으면 아직 안 받았다)
+        extra = {c: (m["prog"][c] if c in m["prog"] else _program_net_today(cfg, c)) for c in gone}
+        # 외국인 · 기관 상위 30 밖으로 밀린 쪽은 값을 모른다 — 그 종목의 장중 가집계(누적 수량) × 현재가로 어림해 가른다
+        # (11-05 13:19 8772 — 빠짐 넷이 다 「상위 30 밖」 이었다. 아직 사는 종목을 빠진 것으로 적지 않게)
+        blind = [c for c in gone if m["famt"](c) is None or m["iamt"](c) is None]
+        px = fetch_quotes_multi(cfg, blind)[0] if blind else {}
+        guess = {}
+        for c in blind:
+            try:
+                e = (fetch_investor_estimate(cfg, c) or {}).get("latest") or {}
+            except RuntimeError:
+                e = {}
+            p0 = (px.get(c) or {}).get("price")
+            guess[c] = {k: (e.get(k) * p0 if e.get(k) is not None and p0 else None) for k in ("foreign", "inst")}
+        back = []
+        with _joint_buy_lock:
+            st = _joint_buy
+            for c in gone:
+                pg = extra[c]
+                if pg is None:                   # 못 받음 — 판 것이 아니다
+                    continue
+                fa, ia = m["famt"](c), m["iamt"](c)
+                approx = [k for k, v in (("foreign", fa), ("inst", ia)) if v is None and (guess.get(c) or {}).get(k) is not None]
+                fa = fa if fa is not None else (guess.get(c) or {}).get("foreign")
+                ia = ia if ia is not None else (guess.get(c) or {}).get("inst")
+                if fa and ia and pg > 0 and fa > 0 and ia > 0:     # 셋 다 아직 산다 — 빠진 것이 아니다(값 일부는 어림)
+                    back.append({"code": c, "name": st["seen"].get(c), "price": (px.get(c) or {}).get("price"),
+                                 "pct": (px.get(c) or {}).get("pct"), "foreign": fa, "inst": ia, "program": pg,
+                                 "sum": fa + ia + pg, "approx": approx})
+                    continue
+                sold = [k for k, v in (("foreign", fa), ("inst", ia), ("program", pg)) if v is not None and v <= 0]
+                unknown = [k for k, v in (("foreign", fa), ("inst", ia)) if v is None]
+                st["flipped"][c] = {"code": c, "name": st["seen"].get(c), "foreign": fa, "inst": ia, "program": pg,
+                                    "sold": sold, "unknown": unknown, "at": m["hm"]}
+            for c, x in list(st["flipped"].items()):     # 이미 빠진 종목도 값은 새로(바뀐 시각은 처음 본 때 그대로)
+                if c in gone:
+                    continue
+                fa, ia = m["famt"](c), m["iamt"](c)
+                x.update(foreign=fa, inst=ia, unknown=[k for k, v in (("foreign", fa), ("inst", ia)) if v is None])
+            rows = sorted(m["rows"] + back, key=lambda x: -x["sum"])
+            st["data"] = {"rows": rows, "flipped": sorted(st["flipped"].values(), key=lambda x: x["at"], reverse=True),
+                          "candidates": m["candidates"], "programMissing": m["programMissing"],
+                          "listFail": False, "errors": m["errors"]}
+            st["at"] = time.time()
+            st["retry"] = m["programMissing"] > 0 or m["errors"] > 0
+    except Exception as e:
+        print("[매수 칩] 짓다 멈춤 — %s" % safe_message(e, 120))
+    finally:
+        _joint_buy_build.release()
+
+
 def fetch_joint_buy(cfg):
-    """(줄, 지은 시각). 줄 = [{code, name, price, pct, foreign, inst, program, sum}] — 금액 단위는 원."""
+    """(판, 지은 시각). 판이 없으면 뒤에서 짓기 시작하고 (None, 0)."""
     with _joint_buy_lock:
-        if _joint_buy["data"] is not None and time.time() - _joint_buy["at"] < INVESTOR_TOP_TTL:
-            return _joint_buy["data"], _joint_buy["at"]
-        tops, errors = fetch_investor_top(cfg, "buy", "all", "amt", MOVERS_MAX)
-        f = {r["code"]: r for r in tops.get("foreign") or []}
-        i = {r["code"]: r for r in tops.get("inst") or []}
-        rows = []
-        for code, r in f.items():
-            fa = (r.get("foreign") or {}).get("amt")
-            ia = ((i.get(code) or {}).get("inst") or {}).get("amt")
-            if code not in i or not fa or not ia or fa <= 0 or ia <= 0:
-                continue
-            pg = _program_net_today(cfg, code)
-            if not pg or pg <= 0:
-                continue
-            fw, iw = fa * 1_000_000, ia * 1_000_000          # 백만원 → 원
-            rows.append({"code": code, "name": r.get("name"), "price": r.get("price"), "pct": r.get("pct"),
-                         "foreign": fw, "inst": iw, "program": pg, "sum": fw + iw + pg})
-        rows.sort(key=lambda x: -x["sum"])
-        data = {"rows": rows, "candidates": len(set(f) & set(i)), "errors": errors}
-        if f or i:                                  # 둘 다 못 받았으면 들고 있던 것을 덮지 않는다
-            _joint_buy["at"], _joint_buy["data"] = time.time(), data
-        return (_joint_buy["data"] or data), (_joint_buy["at"] or time.time())
+        at, data, retry = _joint_buy["at"], _joint_buy["data"], _joint_buy["retry"]
+    if data is None or retry or time.time() - at >= INVESTOR_TOP_TTL:
+        threading.Thread(target=_joint_buy_rebuild, args=(cfg,), daemon=True, name="joint-buy").start()
+    return data, at
 
 
 # ---------------------------------------------------------------- 저장 계층 (SQLite)
@@ -8407,12 +8505,17 @@ class Handler(SimpleHTTPRequestHandler):
             # 홈 실시간 순위 「매수」 칩 — 외국인 · 기관 · 프로그램이 함께 사는 종목 (2026-11-05 · `fetch_joint_buy`)
             if route == "joint-buy":
                 data, at = fetch_joint_buy(cfg)
+                d = data or {}
                 self._send_json({
-                    "ok": True, "data": data["rows"],
-                    "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S"),
-                             "candidates": data["candidates"], "errors": len(data["errors"] or {}),
+                    "ok": data is not None, "data": d.get("rows") or [], "flipped": d.get("flipped") or [],
+                    "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S") if at else None,
+                             "pending": data is None,
+                             "candidates": d.get("candidates"), "programMissing": d.get("programMissing"),
+                             "listFail": bool(d.get("listFail")), "errors": d.get("errors"),
                              "amtUnit": "원", "provisional": True,
-                             "note": "외국인 · 기관은 증권사 가집계(하루 네 번) · 프로그램은 그날 누적 · 셋 다 순매수 양수",
+                             "note": "외국인 · 기관은 증권사 가집계(하루 네 번) · 프로그램은 그날 누적 · 셋 다 순매수 양수 · "
+                                     "flipped 는 오늘 셋 다 샀다가 빠진 종목",
+                             "estSlots": INVESTOR_EST_SLOTS,
                              "cacheTtl": INVESTOR_TOP_TTL},
                 })
                 return
