@@ -4,18 +4,21 @@
 //
 // 값은 서버 한 곳에서 받는다(루트 「두 구역이 같은 값을 쓰면」) — OpenDART 사업보고서의 두 표를 서버가 상장사마다 받아 둔다.
 //   GET /api/dart/gov?code=<6자리>   → data: { code, name, year, major:[최대주주 현황 원문 줄], invest:[타법인 출자 현황 원문 줄] } · 안 받았으면 data:null
-//   GET /api/dart/gov/links          → data: { edges:[[주주 code, 회사 code, 지분%]], names:{code:name}, alias:{정식 이름:code}, heads:{code:[최대주주 이름, 상장사 code|null, 지분%]} } · meta: { done, total }
+//                                      줄마다 matchedCode — 서버가 맞춘 상장사 6자리 · 못 맞추면 null(맞추는 셈은 서버 한 곳 · 화면은 안 맞춘다 · 2026-11-05 개념정의 검수)
+//   GET /api/dart/gov/links          → data: { edges, names:{code:name}, heads:{code:[최대주주 이름, 상장사 code|null, 지분%]},
+//                                      groups:[{ top(사람 · 비상장 이름|null), holding(code), cycle:[code…], members:[{ code, parent, pct, depth }] }] } · meta: { done, total }
 // 화면은 원문 줄을 갈래로 나눠 흐름도 자료(flowmap.html 의 지도 모양 · data/maps/README.md)를 만들고, 흐름도 틀에 postMessage 로 넘긴다.
-// 「지배구조 상위」 는 종목마다 최대주주를 위로 따라가 닿는 끝이다(links.heads — 종목마다 최대주주 [이름, 상장사 code|null, 지분]) —
-//   삼성전자 → 삼성생명 → 삼성물산 → 이재용(사람) 이면 상위는 삼성물산 · 맨 위는 이재용. 서로 물린 고리(현대차 → 현대모비스 → 기아 → 현대차)는 고리째 상위.
-//   그룹 이름을 짐작해 붙이지 않는다 — 상위 회사 이름으로 부른다. 상장사가 둘 이상 매달린 상위만 줄에 올린다
+// 「지배구조 상위」 는 서버가 셈한 links.groups 다 — 종목마다 최대주주를 위로 따라가 닿는 끝(사람 · 비상장 아래 첫 상장사, 또는 서로 물린 고리째).
+//   삼성전자 → 삼성생명 → 삼성물산 → 이재용 이면 상위 삼성물산 · 맨 위 이재용. SK하이닉스 → SK스퀘어 → SK → 최태원 이면 상위 SK(2026-11-05 재권님
+//   「하이닉스도 sk 계열사 중에 하난데 모회사처럼 해줘서」 → 서버 groups · 개발1). 셈은 서버 한 곳 — 화면은 다시 셈하지 않는다.
+//   그룹 이름을 짐작해 붙이지 않는다 — 상위 회사 이름으로 부른다
 //   (2026-11-05 재권님 「재배구조의 상위가 거기 있어야 되고 그걸 클릭하면 그 종목과 엮인 다른 종목들이 보여줘야」).
 // 못 받은 값은 0 · 빈칸으로 메우지 않고 「아직」 · — 로 낸다.
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const key = (n) => String(n || '').replace(/㈜|\(주\)|주식회사|\s/g, '');                  // 이름 맞추기 — 서버 links 와 같은 방식
 const show = (n) => String(n || '').replace(/㈜|\(주\)|\n/g, '').replace(/(?<=[가-힣]) (?=[가-힣](\s|$))/g, '').trim();   // 「이 재 용」 → 「이재용」
 const num = (v) => { const x = parseFloat(String(v ?? '').replace(/,/g, '')); return Number.isFinite(x) ? x : null; };
+const fx = (v) => v == null ? '—' : `${v.toFixed(2)}%`;   // 지분 글 — 못 받은 값은 —
 const pc = (p) => p == null ? '' : ` ${+p.toFixed(1)}%`;
 const COMMON = new Set(['보통주', '의결권있는주식']);   // 띄어쓰기를 빼고 견준다 — 「보통주」 · 「의결권 있는 주식」 · 「의결권있는 주식」(SK스퀘어) 셋 다(2026-11-05 실측 · 개발1)
 const isCommon = (k) => COMMON.has(String(k || '').replace(/\s/g, ''));
@@ -36,19 +39,21 @@ function holderKind(t) {
   if (/계열/.test(t)) return '계열회사';
   return '특수관계인';
 }
-function split(d, codeOf) {
+function split(d) {
   const major = (d.major || []).filter((r) => isCommon(r.stock_knd));
   const total = major.find((r) => SUM.has(r.nm));
   const H = {};
   for (const r of major) {
     if (SUM.has(r.nm) || !r.relate) continue;
     const k = holderKind(r.relate), n = show(r.nm).replace('(특별계정)', '');
-    (H[k] ||= new Map()).set(n, (H[k].get(n) || 0) + (num(r.trmend_posesn_stock_qota_rt) || 0));
+    const o = (H[k] ||= new Map()).get(n) || { v: null, code: null };
+    const x = num(r.trmend_posesn_stock_qota_rt); if (x != null) o.v = (o.v ?? 0) + x;   // 값이 하나도 없으면 null 그대로 — 0% 로 보이지 않게(「못 쟀으면 0 이 아니라 못 쟀다」 · 개념정의 검수)
+    o.code = o.code || r.matchedCode || null; H[k].set(n, o);
   }
   const B = { sub: [], rel: [], part: [], abroad: [], fund: [], simple: [] };
   for (const r of d.invest || []) {
     const n = r.inv_prm; if (!n || SUM.has(n)) continue;
-    const p = num(r.trmend_blce_qota_rt), it = { n: show(n), p, code: /[가-힣]|㈜|\(주\)|주식회사/.test(n) ? codeOf(n) : null };   // 한글 이름이거나 ㈜ · (주) · 주식회사가 붙은 영문 이름만(「SK㈜」 → SK) — 서버 links 와 같은 기준(개발1)   // 영문 약칭(해외 법인 「HMM」 등)은 상장사 이름과 우연히 같다 — 한글 이름만 맞춘다(2026-11-05 시험에서 현대차 해외 법인 HMM 이 상장사 HMM 으로 붙음)
+    const p = num(r.trmend_blce_qota_rt), it = { n: show(n), p, code: r.matchedCode || null };   // 영문 약칭(해외 법인 「HMM」 등)은 상장사 이름과 우연히 같다 — 한글 이름만 맞춘다(2026-11-05 시험에서 현대차 해외 법인 HMM 이 상장사 HMM 으로 붙음)
     if (r.invstmnt_purps !== '경영참여') B.simple.push(it);
     else if (/조합|투자신탁|펀드|사모/.test(n)) B.fund.push(it);
     else if (!/[가-힣]/.test(n)) B.abroad.push(it);
@@ -61,13 +66,13 @@ function split(d, codeOf) {
 }
 
 // ── 흐름도 자료(flowmap 지도 모양) ──
-function mapOf(d, S, codeOf) {
-  const listed = (n) => codeOf(n) ? '▶ ' : '';
+function mapOf(d, S) {
+  const listed = (o) => o.code ? '▶ ' : '';
   const hold = ['최대주주 본인', '계열회사', '특수관계인', '재단', '임원'].filter((k) => S.H[k]).map((k, i) => {
-    const L = [...S.H[k]].sort((a, b) => b[1] - a[1]), sum = L.reduce((s, x) => s + x[1], 0);
-    if (k === '임원' && L.length > 3) return { id: 'h' + i, type: 'node', k, t: `${L.length}명`, d: `합 ${sum.toFixed(2)}%` };
-    return { id: 'h' + i, type: 'node', k, t: L.slice(0, 4).map(([n]) => listed(n) + n).join(' · ') + (L.length > 4 ? ` 외 ${L.length - 4}` : ''),
-      d: L.slice(0, 4).map(([n, v]) => `${n} ${v.toFixed(2)}%`).join(' · ') + (L.length > 1 ? ` · 합 ${sum.toFixed(2)}%` : '') };
+    const L = [...S.H[k]].sort((a, b) => (b[1].v ?? -1) - (a[1].v ?? -1)), got = L.filter((x) => x[1].v != null), sum = got.length ? got.reduce((s, x) => s + x[1].v, 0) : null;
+    if (k === '임원' && L.length > 3) return { id: 'h' + i, type: 'node', k, t: `${L.length}명`, d: `합 ${fx(sum)}` };
+    return { id: 'h' + i, type: 'node', k, t: L.slice(0, 4).map(([n, o]) => listed(o) + n).join(' · ') + (L.length > 4 ? ` 외 ${L.length - 4}` : ''),
+      d: L.slice(0, 4).map(([n, o]) => `${n} ${fx(o.v)}`).join(' · ') + (L.length > 1 ? ` · 합 ${fx(sum)}` : '') };
   });
   const few = (L, c) => L.slice(0, c).map((x) => x.n + pc(x.p)).join(' · ') + (L.length > c ? ` 외 ${L.length - c}곳` : '');
   const r1 = [['sub', '자회사 — 50% 넘게'], ['rel', '관계회사 — 20~50%'], ['part', '경영참여 — 20% 아래']].filter(([k]) => S.B[k].length)
@@ -90,45 +95,38 @@ function mapOf(d, S, codeOf) {
 
 
 const box = $('[data-gov]'), art = $('#in-doc');
-let LINKS = null, NAMES = {}, BYKEY = new Map(), HEADS = {}, TOP = new Map(), GROUPS = [], view = 'flow', cur = null, curTop = null, frameMap = null;
-const codeOf = (n) => BYKEY.get(key(n)) || null;
+let LINKS = null, NAMES = {}, HEADS = {}, TOP = new Map(), GROUPS = [], view = 'flow', cur = null, curTop = null, frameMap = null;
 const nm = (c) => NAMES[c] || c;
 
-// ── 지배구조 상위 — 최대주주를 위로 따라간다 ──
-function climb(c) {
-  const path = [c], seen = new Set([c]);
-  for (;;) {
-    const h = HEADS[path[path.length - 1]];
-    if (!h || !h[1] || !NAMES[h[1]]) return { top: path[path.length - 1], path, apex: h ? h[0] : null, ring: null };   // 사람 · 비상장 · 안 받은 곳에서 멈춘다
-    if (seen.has(h[1])) { const k = path.indexOf(h[1]); return { top: 'ring:' + path.slice(k).sort().join('-'), path, apex: null, ring: path.slice(k) }; }
-    path.push(h[1]); seen.add(h[1]);
-  }
-}
+// ── 지배구조 상위 — 서버가 셈한 묶음(links.groups)을 그대로 쓴다 · 화면은 다시 셈하지 않는다 ──
+const gid = (g) => g.holding || 'cycle:' + [...(g.cycle || [])].sort().join('-');
 function buildTops() {
-  TOP = new Map(); const G = new Map();
-  for (const c of Object.keys(HEADS)) { const r = climb(c); TOP.set(c, r); (G.get(r.top) || G.set(r.top, { id: r.top, ring: r.ring, apex: r.apex, members: [] }).get(r.top)).members.push(c); }
-  for (const g of G.values()) { if (!g.ring && HEADS[g.id] && !g.members.includes(g.id)) g.members.push(g.id); if (!g.ring && !g.apex && HEADS[g.id]) g.apex = HEADS[g.id][0]; }
-  GROUPS = [...G.values()].filter((g) => g.members.length >= 2).sort((a, b) => b.members.length - a.members.length);
+  TOP = new Map();
+  GROUPS = (LINKS.groups || []).map((g) => ({ ...g, id: gid(g), by: new Map((g.members || []).map((m) => [m.code, m])) }));
+  for (const g of GROUPS) for (const m of g.members || []) TOP.set(m.code, g.id);
 }
-const topName = (g) => g.ring ? g.ring.map(nm).join(' · ') : nm(g.id);
+const topName = (g) => g.cycle && g.cycle.length ? g.cycle.map(nm).join(' · ') : nm(g.holding);
+const codesOf = (g) => (g.members || []).map((m) => m.code);
+function pathOf(g, c) {   // 그 종목에서 최대주주 상장사(parent)를 따라 위로 — 묶음 안에서만
+  const out = [c], seen = new Set([c]);
+  for (let m = g.by.get(c); m && m.parent && g.by.has(m.parent) && !seen.has(m.parent); m = g.by.get(m.parent)) { out.push(m.parent); seen.add(m.parent); }
+  return out.reverse();
+}
 
-// 상위 하나의 흐름도 — 맨 위(사람 · 비상장) → 상위 회사 → 그 아래로 최대주주 줄을 따라 한 칸씩
+// 상위 하나의 흐름도 — 맨 위(사람 · 비상장) → 지주 · 고리(depth 0) → 그 아래 단마다 한 칸
 function groupMap(g) {
-  const depth = new Map(), order = g.ring ? [...g.ring] : [g.id];
-  if (g.ring) g.ring.forEach((c) => depth.set(c, 1)); else depth.set(g.id, 1);   // 고리 회사는 한 칸에 모은다 — 서로 물린 줄은 칸 아래 「최대주주 …」 글로 읽는다
-  const kids = (c) => g.members.filter((m) => !depth.has(m) && HEADS[m] && HEADS[m][1] === c);
-  for (let q = [...order]; q.length;) { const c = q.shift(); for (const k of kids(c)) { depth.set(k, depth.get(c) + 1); q.push(k); } }
-  const cols = []; for (const [c, dpt] of depth) (cols[dpt] ||= []).push(c);
-  const node = (c) => ({ id: 'c' + c, type: 'node', k: c, t: nm(c), d: HEADS[c] ? `최대주주 ${HEADS[c][0]} ${HEADS[c][2] ?? '—'}%` : '최대주주 자료 아직' });
+  const cols = [];
+  for (const m of g.members || []) (cols[(m.depth ?? 0)] ||= []).push(m);
+  const node = (m) => ({ id: 'c' + m.code, type: 'node', k: m.code, t: nm(m.code),
+    d: m.parent ? `최대주주 ${nm(m.parent)} ${m.pct ?? '—'}%` : (HEADS[m.code] ? `최대주주 ${HEADS[m.code][0]} ${HEADS[m.code][2] ?? '—'}%` : '최대주주 자료 아직') });
   const columns = [];
-  if (g.apex) columns.push({ head: '맨 위', items: [{ id: 'apex', type: 'node', k: '최대주주', t: g.apex, d: '사람 · 비상장 · 아직 안 받은 곳' }] });
-  cols.forEach((L, i) => { if (L) columns.push({ head: i === 1 ? (g.ring ? '서로 물린 고리' : '지배구조 상위') : `${i - 1}단 아래`, items: L.map(node) }); });
+  if (g.top) columns.push({ head: '맨 위', items: [{ id: 'apex', type: 'node', k: '최대주주', t: g.top, d: '사람 · 비상장' }] });
+  cols.forEach((L, i) => { if (L) columns.push({ head: i === 0 ? (g.cycle && g.cycle.length ? '서로 물린 고리' : '지배구조 상위') : `${i}단 아래`, items: L.map(node) }); });
   const links = [];
-  if (g.apex) links.push(['apex', 'c' + (g.ring ? g.ring[0] : g.id), 'own']);
-  for (const [c] of depth) { const h = HEADS[c]; if (h && h[1] && depth.has(h[1]) && depth.get(h[1]) < depth.get(c)) links.push(['c' + h[1], 'c' + c, 'own']); }
-  const extra = [];
-  return { id: 'gov-top', title: topName(g), asOf: 'DART 사업보고서 · 최대주주', note: '최대주주 줄만 이었다 — 칸 아래 「최대주주 …」 가 그 줄의 지분',
-    columns, lineTypes: { own: { label: '최대주주 → 회사', color: 'accent' } }, links, extra, info: {}, stocks: [] };
+  if (g.top) for (const m of (cols[0] || [])) links.push(['apex', 'c' + m.code, 'own']);
+  for (const m of g.members || []) if (m.parent && g.by.has(m.parent) && (g.by.get(m.parent).depth ?? 0) < (m.depth ?? 0)) links.push(['c' + m.parent, 'c' + m.code, 'own']);
+  return { id: 'gov-top', title: topName(g), asOf: 'DART 사업보고서 · 최대주주', note: '서버가 최대주주 줄로 묶은 것 — 칸 아래 「최대주주 …」 가 그 줄의 지분',
+    columns, lineTypes: { own: { label: '최대주주 → 회사', color: 'accent' } }, links, extra: [], info: {}, stocks: [] };
 }
 
 function setTab(t) {
@@ -154,7 +152,7 @@ addEventListener('message', (e) => {
 
 function table(d, S) {
   const hr = ['최대주주 본인', '계열회사', '특수관계인', '재단', '임원'].filter((k) => S.H[k])
-    .flatMap((k) => [...S.H[k]].sort((a, b) => b[1] - a[1]).map(([n, v]) => `<tr><td>${esc(n)}</td><td>${esc(k)}</td><td class="num">${v.toFixed(2)}%</td></tr>`)).join('');
+    .flatMap((k) => [...S.H[k]].sort((a, b) => (b[1].v ?? -1) - (a[1].v ?? -1)).map(([n, { v }]) => `<tr><td>${esc(n)}</td><td>${esc(k)}</td><td class="num">${fx(v)}</td></tr>`)).join('');
   const lab = { sub: '자회사', rel: '관계회사', part: '경영참여 20% 아래', abroad: '해외 법인', fund: '투자조합 · 펀드', simple: '단순투자' };
   const ir = Object.entries(S.B).flatMap(([k, L]) => L.map((x) => `<tr><td>${esc(x.n)}${x.code ? ' <span class="in-pill ok">상장</span>' : ''}</td><td>${lab[k]}</td><td class="num">${x.p == null ? '—' : x.p + '%'}</td></tr>`)).join('');
   return `<div class="in-gov-tbls"><div class="in-tblx"><table class="in-tbl"><tr><th>주주</th><th>관계</th><th>보통주 지분</th></tr>${hr || '<tr><td colspan="3">—</td></tr>'}</table></div>
@@ -166,25 +164,25 @@ function rows() {
   const tops = $('[data-gov-tops]', box), mem = $('[data-gov-group]', box), path = $('[data-gov-ring]', box);
   const shown = GROUPS.slice(0, 40); const g = GROUPS.find((x) => x.id === curTop);
   if (g && !shown.includes(g)) shown.push(g);
-  tops.innerHTML = `<b>지배구조 상위</b>${shown.map((x) => `<button type="button" class="kh-chip${x.id === curTop ? ' is-active' : ''}" data-gov-top="${esc(x.id)}">${esc(topName(x))}<span class="in-gov-n">${x.members.length}</span></button>`).join('')}`
+  tops.innerHTML = `<b>지배구조 상위</b>${shown.map((x) => `<button type="button" class="kh-chip${x.id === curTop ? ' is-active' : ''}" data-gov-top="${esc(x.id)}">${esc(topName(x))}<span class="in-gov-n">${(x.members || []).length}</span></button>`).join('')}`
     + (GROUPS.length > shown.length ? `<span class="in-gov-more">외 ${GROUPS.length - shown.length}곳 — 위 찾기 칸으로</span>` : '')
     + (GROUPS.length ? '' : '<span class="in-gov-more">상장사가 둘 이상 매달린 상위가 아직 없다</span>');
-  mem.innerHTML = g ? `<b>${esc(topName(g))} 아래</b>${g.members.map((c) => `<button type="button" class="kh-chip${c === cur ? ' is-active' : ''}" data-gov-code="${esc(c)}">${esc(nm(c))}</button>`).join('')}` : '';
-  const r = cur && TOP.get(cur);
-  path.innerHTML = r && cur ? `<b>위에서 이 종목까지</b> — ${r.apex ? `${esc(r.apex)} › ` : ''}${[...r.path].reverse().map((c) => `<a href="#" data-gov-code="${esc(c)}">${esc(nm(c))}</a>`).join(' › ')}${r.ring ? ' (맨 위가 서로 물린 고리)' : ''}` : '';
+  mem.innerHTML = g ? `<b>${esc(topName(g))} 아래</b>${codesOf(g).map((c) => `<button type="button" class="kh-chip${c === cur ? ' is-active' : ''}" data-gov-code="${esc(c)}">${esc(nm(c))}</button>`).join('')}` : '';
+  const cg = cur && GROUPS.find((x) => x.id === TOP.get(cur));
+  path.innerHTML = cg ? `<b>위에서 이 종목까지</b> — ${cg.top ? `${esc(cg.top)} › ` : ''}${pathOf(cg, cur).map((c) => `<a href="#" data-gov-code="${esc(c)}">${esc(nm(c))}</a>`).join(' › ')}${cg.cycle && cg.cycle.length ? ' (맨 위가 서로 물린 고리)' : ''}` : '';
 }
 
 async function drawTop(id) {
   curTop = id; cur = null; rows();
   const g = GROUPS.find((x) => x.id === id), body = $('[data-gov-body]', box), src = $('[data-gov-src]', box);
   if (!g) return;
-  src.textContent = `${topName(g)} 아래 상장사 ${g.members.length}곳 — 최대주주 줄을 따라 이었다 · 칸 이름 아래 칩을 누르면 그 종목의 주주 · 가진 회사`;
+  src.textContent = `${topName(g)} 아래 상장사 ${(g.members || []).length}곳 — 서버가 최대주주 줄로 묶었다 · 칸 이름 아래 칩을 누르면 그 종목의 주주 · 가진 회사`;
   frameMap = groupMap(g); body.innerHTML = frame();
 }
 
 async function draw(code) {
   cur = code; const u = new URL(location.href); u.searchParams.set('gov', code); history.replaceState(null, '', u);
-  const r = TOP.get(code); curTop = r && GROUPS.some((g) => g.id === r.top) ? r.top : null; rows();
+  curTop = TOP.get(code) || null; rows();
   const body = $('[data-gov-body]', box), src = $('[data-gov-src]', box);
   let j;
   try { j = await api(`/api/dart/gov?code=${encodeURIComponent(code)}`); }
@@ -192,10 +190,10 @@ async function draw(code) {
   if (cur !== code) return;
   const d = j.data;
   if (!d) { body.innerHTML = `<p class="in-doc-p"><span class="in-pill no">아직</span> ${esc(nm(code))} 의 사업보고서 두 표를 서버가 아직 받지 않았습니다${j.meta && j.meta.total ? `(${j.meta.done ?? '—'} / ${j.meta.total}곳 받음)` : ''}</p>`; src.textContent = ''; return; }
-  const S = split(d, codeOf);
+  const S = split(d);
   src.innerHTML = `DART ${esc(d.year)}년 사업보고서 · 최대주주 현황 · 타법인 출자 현황 ${S.investN}곳 · 서버 ${esc((j.meta && j.meta.fetchedAt) || '')} 받음 · ▶ 붙은 이름 = 상장사`;
   if (view === 'table') { frameMap = null; body.innerHTML = table(d, S); return; }
-  frameMap = mapOf(d, S, codeOf);
+  frameMap = mapOf(d, S);
   body.innerHTML = frame();
 }
 
@@ -211,7 +209,6 @@ async function start() {
   try {
     const j = await api('/api/dart/gov/links');
     LINKS = j.data || {}; NAMES = LINKS.names || {}; HEADS = LINKS.heads || {};
-    BYKEY = new Map([...Object.entries(NAMES).map(([c, n]) => [key(n), c]), ...Object.entries(LINKS.alias || {}).map(([n, c]) => [key(n), c])]);   // alias — 정식 이름(삼성생명보험 → 삼성생명)
     buildTops();
     $('#gov-names').innerHTML = Object.entries(NAMES).map(([c, n]) => `<option value="${esc(n)} ${esc(c)}">`).join('');
     if (j.meta && j.meta.total && j.meta.done < j.meta.total) $('[data-gov-src]', box).insertAdjacentHTML('beforebegin', `<p class="in-rp-note"><span class="in-pill half">받는 중</span> 서버가 ${j.meta.done} / ${j.meta.total}곳 받았다 — 상위 · 아래 종목은 받은 회사까지만 보인다</p>`);

@@ -38,7 +38,7 @@
       <span class="kh-cat-my">증권사 리포트</span>
     </nav>
     <!-- 종목 고르는 룰 (2026-11-05 재권님 「투자전략에는 어떤 종목을 사서 할지에 대한 룰을 잡을려고해 시안 잡아보라고 해」 · 「너는 투자전략에다가 투자전략에 대한걸 해줘야 할거같아」 →
-         시안 temp/rule.png → 「우선 이렇게 해서 올려놔」 → 11-05 「고르는 조건에 재료도 추가해줘 재료라 함은 해당 종목과 연관된 좋은 뉴스나 미국장의 같은 섹터의 상승」). 룰 숫자는 재권님이 칸에 넣고 · 오늘 걸린 종목은 서버(/api/auto-watch)가 그 값으로 고른다(11-05 「응 해봐」 · 시안 temp/aw-1256.png) · 지난 성적은 아직 없다.
+         시안 temp/rule.png → 「우선 이렇게 해서 올려놔」 → 11-05 「고르는 조건에 재료도 추가해줘 재료라 함은 해당 종목과 연관된 좋은 뉴스나 미국장의 같은 섹터의 상승」). 룰 숫자는 재권님이 칸에 넣고 · 오늘 걸린 종목은 서버(/api/auto-watch)가 그 값으로 고른다(11-05 「응 해봐」 · 시안 temp/aw-1256.png) · 지난 성적은 서버(/api/auto-watch/history)가 셈한다.
          첫 룰 「전일 거래량 급등」 은 자동 관심종목 물음(보드 카드 「전일 거래량 급등 종목 기준 확인」)과 같은 기준이다 — 정해지면 기준은 서버 한 곳에 두고 이 칸은 받아 쓴다 -->
     <section class="st rl">
       <div class="st-meta" id="rl-meta">룰 값을 받는 중…</div>
@@ -55,18 +55,28 @@
           <!-- 미정: 빈칸은 재권님이 직접 넣으신다(11-05 「그 숫자는 내가 넣을 수 있게 해줘」) — 비어 있는 칸만 빨간 바탕(「아직 안 정해진 자리는 빨간 바탕으로 남긴다」) · 넣은 값은 js/strategy-rule.js 가 서버 문서에 둔다 -->
           <table class="rl-tb" id="rl-tb">
             <tr><th>고르는 조건</th><td>앞 거래일 정규장 등락률 <input class="rl-in rl-num" data-k="prevPct" inputmode="decimal" aria-label="앞 거래일 등락률 기준(%)">% 이상<br>거래량이 20일 평균의 <input class="rl-in rl-num" data-k="volMult" inputmode="decimal" aria-label="거래량 배수 기준(20일 평균의 몇 배)" data-min="0">배 이상<br>재료 — 그 종목과 연관된 좋은 뉴스 또는 전날 밤 미국장 같은 섹터 상승 <input class="rl-in rl-num" data-k="sectorPct" inputmode="decimal" aria-label="미국장 같은 섹터 상승 기준(%)">% 이상<br><span class="rl-sug">개발 안: 15% · 5배(추천값 · 정한 값 아님) — 자동 관심종목과 같은 기준을 한 곳에 둠</span><br><span class="rl-sug">＋ 조건 더하기 — 수급(외국인 · 기관 순매수) · 시가총액 · 차트(이동평균 위) · 공시</span></td></tr>
+            <!-- 신고가 부근 (11-05 재권님 「신고가 부근에 있는 종목도 넣어주고 그건 소팅의 조건이라기보단 맨위에 올려줘」 → 「가랑 나랑 구분만 되면 될거같아 신고가 부근이라 함은 위아래 10% 차이」) —
+                 (가) 위 조건에 걸린 종목 중 부근인 것 · (나) 위 조건 밖이어도 부근인 것 — 둘 다 맨 위 · 표에서 갈라 보임 · 셈(52주 최고 종가 · 위아래 몇 %)은 서버 -->
+            <tr><th>신고가 부근</th><td>52주 최고 종가의 위아래 <input class="rl-in rl-num" data-k="nearHighPct" inputmode="decimal" aria-label="신고가 부근 기준(52주 최고 종가 위아래 몇 %)" data-min="0">% 안이면 맨 위에 <span class="rl-sug">위 조건에 걸린 것 · 안 걸린 것 둘 다 — 표에서 갈라 보임</span></td></tr>
             <tr><th>줄 세우기</th><td><select class="rl-in rl-sel" data-k="sortBy" aria-label="오늘 걸린 종목을 줄 세우는 기준"><option value="mult">배수 순</option><option value="pct">등락률 순</option></select> · 최대 <input class="rl-in rl-num" data-k="autoMax" inputmode="numeric" aria-label="오늘 걸린 종목을 몇 개까지 보일지" data-min="0" data-int>종목까지 <span class="rl-sug">빈칸이면 걸린 종목 전부</span></td></tr>
           </table>
         </div>
         <div class="st-card">
-          <h3 class="rl-h">오늘 이 룰에 걸린 종목</h3>
-          <!-- 서버 /api/auto-watch 가 위 룰 값으로 거르고 줄 세운 것을 그대로 그린다 — 거르는 셈은 화면에 두지 않는다 · 그리기는 js/strategy-rule.js -->
-          <div class="st-cap" id="aw-cap">서버가 위 룰 값으로 고른 종목</div>
-          <div id="aw"><div class="st-err">값을 받는 중…</div></div>
+          <!-- 현재 · 어제 (11-05 재권님 「오늘 이룰에 걸린종목 옆에 어제 라고 해서 거기 누르면 쌓여있는게 나오면 돼 · 오늘 이룰에 걸린종목 은 이름을 현재로 바꿔주고」 → 「하루전 2일전 3일전 4일전 · 5일 10일 한달 버튼도 따로」 → 「하루전 옆으로 있는 버튼들 다 어제 옆으로 이동해」 — 「어제」 가 하루전) —
+               같은 자리에서 갈아 끼운다 · 두 판 높이는 같게(「보는 것을 바꿔도 자리는 그대로다」) · 그리기는 js/strategy-rule.js -->
+          <h3 class="rl-h aw-tabs" role="tablist" aria-label="걸린 종목"><button type="button" class="aw-tab is-on" data-pane="now" role="tab" aria-selected="true">현재</button><button type="button" class="aw-tab" data-pane="hist" data-ah="b0" role="tab" aria-selected="false">어제</button><button type="button" class="aw-tab" data-pane="hist" data-ah="b1" role="tab" aria-selected="false">2일전</button><button type="button" class="aw-tab" data-pane="hist" data-ah="b2" role="tab" aria-selected="false">3일전</button><button type="button" class="aw-tab" data-pane="hist" data-ah="b3" role="tab" aria-selected="false">4일전</button><span class="ah-gap" aria-hidden="true"></span><button type="button" class="aw-tab" data-pane="hist" data-ah="5d" role="tab" aria-selected="false">5일</button><button type="button" class="aw-tab" data-pane="hist" data-ah="10d" role="tab" aria-selected="false">10일</button><button type="button" class="aw-tab" data-pane="hist" data-ah="1m" role="tab" aria-selected="false">한달</button></h3>
+          <!-- 현재 — 서버 /api/auto-watch 가 위 룰 값으로 거르고 줄 세운 것을 그대로 그린다 — 거르는 셈은 화면에 두지 않는다 -->
+          <div class="aw-pane" data-pane="now">
+            <div class="st-cap" id="aw-cap">서버가 위 룰 값으로 고른 종목</div>
+            <div class="aw-box" id="aw"><div class="st-err">값을 받는 중…</div></div>
+          </div>
+          <!-- 어제 — 서버 /api/auto-watch/history 가 날마다 걸린 종목과 다음 거래일 종가 등락을 셈해 준다(작업우선순위 배분 · 개발 06220f8) ·
+               화면은 그리기만(오름 · 내림 셈 없음) · 결과 없음은 「아직」(0 아님) -->
+          <div class="aw-pane" data-pane="hist" hidden>
+            <div class="st-cap" id="ah-cap">걸렸던 종목이 다음 거래일 종가에 어떻게 됐나 — 룰이 맞는지 보는 칸</div>
+            <div class="aw-box" id="ah"><div class="st-err">값을 받는 중…</div></div>
+          </div>
           <div class="st-cap aw-how" id="aw-how"></div>
-          <h3 class="rl-h rl-h2">지난 성적</h3>
-          <div class="st-cap">걸렸던 종목이 그 뒤 1 · 3 · 5거래일에 어떻게 됐나 — 룰이 맞는지 보는 칸</div>
-          <div class="st-err">— 쌓인 것 없음</div>
         </div>
         <!-- 오른 까닭 (11-05 재권님 「오늘종목 옆에 칸 추가해서 거기에 종목 클릭하면 상승이유 넣어줘」) — 누른 종목의 그날 앞뒤 공시 · 뉴스를 서버 두 주소에서 받아 날짜로만 모은다 ·
              까닭인지 가리는 셈은 두지 않는다(사람이 본다) · 서버가 고른 종목마다 붙여 주면 그쪽으로 옮긴다 · 그리기는 js/strategy-rule.js -->
