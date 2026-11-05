@@ -202,10 +202,10 @@
    현재가 94 · 등락률 75 · 거래대금 80 · 시가총액 91 · 거래량 80 = 762).
    종목만 240 으로 줄였다 — 그래서 아주 긴 ETF 이름은 「…」 로 잘린다. */
 .kh-rkm col.c-rk  { width: 52px; }
-.kh-rkm col.c-nm  { width: 172px; }   /* 240 → 172 — 「전일비」 칸(c-vr 68)을 모달 폭 안에 넣느라 (2026-11-05) */
+.kh-rkm col.c-nm  { width: 200px; }   /* 240 → 172 — 「전일비」 칸(c-vr 68)을 모달 폭 안에 넣느라 · 모달 1000 으로 넓혀 200 (2026-11-05) */
 .kh-rkm col.c-pr  { width: 106px; }
 .kh-rkm col.c-pc  { width: 88px; }
-.kh-rkm col.c-am  { width: 96px; }
+.kh-rkm col.c-am  { width: 230px; }   /* 96 → 230 — 「매수」 탭 외 · 기 · 프 한 줄(11-05 재권님) */
 .kh-rkm col.c-cap { width: 104px; }
 .kh-rkm col.c-vol { width: 92px; }
 .kh-rkm col.c-vr  { width: 68px; }
@@ -249,9 +249,13 @@
   .kh-rkm .kh-nm { gap: 5px; }
   .kh-rkm col:nth-child(n+5),
   .kh-rkm tr > :nth-child(n+5) { display: none; }
-  .kh-rkm:is([data-sort="value"], [data-sort="up"], [data-sort="down"]) :is(col, tr > *):nth-child(5),
+  .kh-rkm:is([data-sort="value"], [data-sort="up"], [data-sort="down"], [data-sort="buy"]) :is(col, tr > *):nth-child(5),
   .kh-rkm:is([data-sort="fav"], [data-sort="cap"]) :is(col, tr > *):nth-child(6),
   .kh-rkm[data-sort="vol"] :is(col, tr > *):nth-child(7) { display: revert; }
+  /* 「매수」 탭은 외 · 기 · 프 한 줄이라 그 칸을 넓히고 현재가를 줄인다(11-05 재권님 「외 기 프 는 한줄로」) — 종목 칸(auto)이 나머지를 받는다 */
+  .kh-rkm[data-sort="buy"] col.c-am { width: 142px; }
+  .kh-rkm[data-sort="buy"] col.c-pr { width: 70px; }
+  .kh-rkm[data-sort="buy"] tr > :nth-child(5) > div { font-size: 11px !important; }
   /* 시장 칩은 누르는 자리 28px 이상 */
   .kh-rkm-mkt .kh-chip { min-height: 30px; }
 }
@@ -802,6 +806,9 @@
      첫째 칸(순위 숫자)은 담고 빼는 자리라 남긴다 (2026-09-18).
      등락률까지 자르면 오르내림을 알 수 없으므로 그것은 건드리지 않는다. */
   .kh-rank-card th:nth-child(4), .kh-rank-card td:nth-child(4) { display: none; }
+  /* 「매수」 는 값 칸(외 · 기 · 프 · 빠진 까닭)이 그 칩의 내용이라 남기고 등락률을 감춘다 (2026-11-05 qa — 좁은 폭에서 값이 안 보였다) */
+  .kh-rank-card[data-sort="buy"] th:nth-child(4), .kh-rank-card[data-sort="buy"] td:nth-child(4) { display: table-cell; }
+  .kh-rank-card[data-sort="buy"] th:nth-child(5), .kh-rank-card[data-sort="buy"] td:nth-child(5) { display: none; }
 }
 
 /* ══ 지수 영역 (2026-09-14 개편) ═══════════════════════════
