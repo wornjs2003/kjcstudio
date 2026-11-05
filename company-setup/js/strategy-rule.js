@@ -13,6 +13,7 @@ const RULE = 'volsurge';
 const meta = document.getElementById('rl-meta');
 const ins = [...document.querySelectorAll('#rl-tb .rl-in')];
 let doc = { rules: {} }, at = null;
+let lastWarn = '';   // 마지막으로 칸을 되돌리거나 저장하지 못한 까닭 — 검색 단추가 덮지 않게 이어 쓴다 · 저장이 되면 비운다
 const hm = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
 function fill() {
@@ -44,7 +45,7 @@ async function save(el) {
   let v = raw === '' ? null : raw;
   if (v != null && !el.classList.contains('rl-txt') && el.tagName !== 'SELECT') {
     const x = Number(raw.replace(/,/g, ''));
-    const back = (msg) => { el.value = el.dataset.v || ''; meta.textContent = `${msg} — 그 칸은 되돌렸습니다`; };
+    const back = (msg) => { el.value = el.dataset.v || ''; lastWarn = `${msg} — 그 칸은 되돌렸습니다`; meta.textContent = lastWarn; };
     if (!Number.isFinite(x)) return back('숫자만 넣을 수 있습니다');
     if ('min' in el.dataset && x < Number(el.dataset.min)) return back(`${el.dataset.min} 이상만 넣을 수 있습니다(손절은 빼기표 없이 넣습니다)`);
     if ('int' in el.dataset && !Number.isInteger(x)) return back('정수만 넣을 수 있습니다');
@@ -55,16 +56,17 @@ async function save(el) {
   meta.textContent = '저장하는 중…';
   try {
     const r = await fetch(DOC, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: doc, ...(at ? { updatedAt: at } : {}) }) });
-    if (r.status === 409) { await load(); meta.textContent = '그 사이 다른 곳에서 고쳐 다시 읽었습니다 — 한 번 더 넣어 주십시오'; return; }
+    if (r.status === 409) { await load(); lastWarn = '그 사이 다른 곳에서 고쳐 다시 읽었습니다 — 한 번 더 넣어 주십시오'; meta.textContent = lastWarn; return; }
     if (!r.ok) throw new Error(String(r.status));
     const j = await r.json().catch(() => null);
     at = (j && (j.updatedAt ?? (j.data && j.data.updatedAt))) ?? at;
     el.value = v == null ? '' : String(v); // 「1,000」 · 「1e3」 을 저장된 값(1000)으로 보인다
     el.dataset.v = el.value;
     const n = ins.filter((x) => x.value === '').length;
+    lastWarn = '';
     meta.textContent = `저장됨 ${hm()}${n ? ` · 빈칸 ${n}개 남음` : ' · 다 들어감'}`;
   } catch (e) {
-    meta.textContent = `저장 못 함(${e.message || '연결 안 됨'}) — 넣은 값은 이 화면에만 있습니다`;
+    lastWarn = `저장 못 함(${e.message || '연결 안 됨'}) — 넣은 값은 이 화면에만 있습니다`; meta.textContent = lastWarn;
   }
 }
 
@@ -116,8 +118,7 @@ go.addEventListener('click', async () => {
   await Promise.allSettled([...pend]);
   await loadAw();
   go.disabled = false; go.textContent = '검색';
-  const back = /되돌렸습니다|저장 못 함|다시 읽었습니다/.test(meta.textContent) ? `${meta.textContent} · ` : '';   // 칸을 되돌린 까닭이 덮이지 않게(qa 덧 11-05)
-  meta.textContent = `${back}검색함 ${hm()} — 위 룰 값으로 서버가 다시 고름`;
+  meta.textContent = `${lastWarn ? `${lastWarn} · ` : ''}검색함 ${hm()} — 위 룰 값으로 서버가 다시 고름`;
 });
 load();
 loadAw();
