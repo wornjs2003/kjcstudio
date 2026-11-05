@@ -38,7 +38,7 @@
 .rl .rl-in:focus { outline: 2px solid var(--kh-accent); outline-offset: 0; }
 .rl .rl-sug { color: var(--kh-text-muted); font-size: 11.5px; }
 @media (min-width: 701px) {
-  .rl .rl-grid { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }   /* 룰 칸은 좁게 · 걸린 종목은 넓게(11-05 재권님 「룰 칸을 더 줄여줘 다른거 늘리고」) */
+  .rl .rl-grid { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
 }
 /* 오늘 이 룰에 걸린 종목 (2026-11-05) — 위 장외 표와 같은 표 모양 · 다른 것만 */
 .rl table.aw-tb { width: 100%; min-width: 0; }
@@ -53,23 +53,3 @@
 .rl .rl-hrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .rl .rl-go { font: inherit; font-size: 12.5px; font-weight: 600; padding: 4px 14px; border: 0; border-radius: var(--kh-radius-sm); background: var(--kh-accent); color: var(--kh-text-on-fill); cursor: pointer; }
 .rl .rl-go:disabled { opacity: .6; cursor: default; }
-/* 오른 까닭 (11-05 재권님 「오늘종목 옆에 칸 추가해서 … 종목 클릭하면 상승이유」) — 좁으면 아래로 · 701~1180 은 두 칸 아래 한 줄 · 1181 부터 옆 셋째 칸(이미 쓰는 경계) */
-.rl .aw-tb tr[data-code] { cursor: pointer; }
-.rl .aw-tb tr[data-code]:hover td, .rl .aw-tb tr.is-on td { background: var(--kh-bg); }
-.rl .aw-why { max-height: 560px; overflow-y: auto; }   /* 종목마다 글 수가 달라도 칸 높이는 그대로(「보는 것을 바꿔도 자리는 그대로다」) */
-.rl .aw-why-h { font-weight: 600; margin: 0 0 6px; }
-.rl .aw-why-h small { color: var(--kh-text-muted); font-weight: 400; }
-.rl .aw-why-s { color: var(--kh-text-secondary); font-weight: 600; font-size: 12px; margin: 10px 0 2px; }
-.rl .aw-why ul { list-style: none; margin: 0; padding: 0; }
-.rl .aw-why li { padding: 5px 0; border-bottom: 1px solid var(--kh-border); }
-.rl .aw-why li a { color: var(--kh-text-primary); text-decoration: none; }
-.rl .aw-why li a:hover { text-decoration: underline; }
-.rl .aw-why li small { color: var(--kh-text-muted); margin-left: 6px; }
-.rl .aw-why .aw-out { color: var(--kh-text-muted); font-size: 11px; background: var(--kh-bg); border-radius: 99px; padding: 0 6px; margin-left: 4px; }
-@media (min-width: 701px) {
-  .rl .aw-why-card { grid-column: 1 / -1; }
-}
-@media (min-width: 1181px) {
-  .rl .rl-grid { grid-template-columns: minmax(0, .72fr) minmax(0, 1.4fr) minmax(0, .88fr); }
-  .rl .aw-why-card { grid-column: auto; }
-}
