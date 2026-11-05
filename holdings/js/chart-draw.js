@@ -5,7 +5,9 @@
    → 시안 둘 → 18:1x 「오른쪽 위에가 더 좋겠는데, 칸은 좀더 작게」 → 「응 좋아」.
 
    자리   가격 칸 안 오른쪽 위(가격축 바로 왼쪽)에 겹쳐 얹는다 — 칸 크기 · 배치는 그대로
-   단추   추세선 — 차트를 두 번 눌러 두 점 · 수평선 — 한 번 눌러 그 가격 · 지우개 — 이 종목에 그린 것 전부
+   단추   추세선 — 차트를 두 번 눌러 두 점 · 수평선 — 한 번 눌러 그 가격 · 지우개 — 켜고 선을 누르면 그 선 하나 ·
+          휴지통 — 이 종목에 그린 것 전부 (재권님 11-05 13:1x 「추세선 한꺼번에 지우는거랑 지우개 버튼 만들어서 클릭하면
+          추세선과 저항선 지울수 있게」 — 한꺼번에 지우기는 휴지통이 이미 하고 있어 그대로 두고 지우개를 더함)
           고른 단추는 다시 누르거나 Esc 를 누를 때까지 켜져 있다 — 이어서 여러 줄을 긋는다
           (재권님 18:2x 「첫번째 추세선 그리고 두번째 그리는데 안그려져」 — 앞에는 한 줄을 그으면 저절로 꺼졌다)
    미리 보기  추세선 첫 점을 찍은 뒤(또는 끄는 동안) 마우스가 있는 봉까지 점선이 따라 그려지고 둘째 점을 찍으면 굳는다
@@ -36,15 +38,17 @@ const CSS_HREF = new URL('../css/chart-draw.css', import.meta.url).href;
 const ICON = {
   trend: '<svg width="14" height="14" viewBox="0 0 18 18" aria-hidden="true"><line x1="3" y1="15" x2="15" y2="3" stroke="currentColor" stroke-width="1.6"/><circle cx="3" cy="15" r="2" fill="currentColor"/><circle cx="15" cy="3" r="2" fill="currentColor"/></svg>',
   hline: '<svg width="14" height="14" viewBox="0 0 18 18" aria-hidden="true"><line x1="1" y1="9" x2="17" y2="9" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="9" r="2" fill="currentColor"/></svg>',
+  eraser: '<svg width="14" height="14" viewBox="0 0 18 18" aria-hidden="true"><path d="M10.5 3.5l4 4-7 7H4.5l-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 7l4 4M8 14.5h7" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
   erase: '<svg width="14" height="14" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 5h12M7 5V3h4v2M5 5l1 10h6l1-10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
 };
 const TIP = {
   trend: '추세선 — 차트를 두 번 눌러 두 점을 잇습니다',
   hline: '수평선 — 누른 자리 가격에 가로선을 긋습니다',
+  eraser: '지우개 — 누른 추세선 · 수평선 하나만 지웁니다',
   erase: '이 종목에 그린 선을 모두 지웁니다',
 };
 
-let mode = null;          // 'trend' · 'hline' · null — 칸을 다시 만들어도 이어진다
+let mode = null;          // 'trend' · 'hline' · 'eraser' · null — 칸을 다시 만들어도 이어진다
 let modeCode = null;
 let pend = null;          // 추세선 첫 점 { ts, p } — 두 번 누르는 사이에 칸이 다시 만들어져도(시세 갱신) 이어진다
 
@@ -120,9 +124,11 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
   const paintBar = () => {
     bar.querySelectorAll('[data-draw]').forEach((b) => b.classList.toggle('is-on', b.dataset.draw === mode));
     pane.classList.toggle('kh-drawing', !!mode);
+    pane.classList.toggle('kh-erasing', mode === 'eraser');
   };
 
   function clearGhost() { ghostFrom = null; ghostTo = null; paint(); }
+
 
   function clearFirst() {
     pend = null;
@@ -139,19 +145,30 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
   }
 
   /* 덧그림 — 그릴 것이 바뀌었거나 끌기 · 확대 · 칸 크기가 바뀌면 다시 긋는다 */
+  /* 쉬는 동안 값싸게 — 그릴 것이 바뀌면 ver 를 올리고(paint), 돌기는 숫자 몇 개만 견준다.
+     그릴 것이 없으면(추세선 · 첫 점 · 미리 보기 다 없음) 한 번 비우고 아무것도 안 잰다
+     (qa 검수 11-05 13:4x — 서명을 JSON 으로 매 그림 세어 가만히 둔 화면 10초에 브라우저 일이 0.1 → 0.44초) */
   let sig = '';
+  let ver = 0;
+  let empty = false;
   function paint() {
-    sig = '';
+    ver++;
     redraw();
   }
   function redraw() {
     if (!cv.isConnected) return;
+    const none = !data.t.length && !(mode === 'trend' && (pend || ghostTo));
+    if (none) {
+      if (!empty) { const c = cv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height); empty = true; sig = ''; }
+      return;
+    }
+    empty = false;
     const W = box.clientWidth, H = box.clientHeight, dpr = window.devicePixelRatio || 1;
     let tsc, lr;
     try { tsc = chart.timeScale(); lr = tsc.getVisibleLogicalRange(); } catch { return; }
     let y0 = null, y1 = null;
     try { y0 = series.coordinateToPrice(0); y1 = series.coordinateToPrice(H); } catch { /* 아직 */ }
-    const s2 = [W, H, dpr, lr && lr.from, lr && lr.to, y0, y1, mode, data.t.length, JSON.stringify([pend, ghostFrom, ghostTo])].join('|');
+    const s2 = [W, H, dpr, lr && lr.from, lr && lr.to, y0, y1, ver].join('|');
     if (s2 === sig) return;
     sig = s2;
     if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
@@ -194,8 +211,14 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
     }
     ctx.restore();
   }
-  let loopRaf = 0;
-  const loop = () => { redraw(); loopRaf = requestAnimationFrame(loop); };
+  /* 다시 긋는 때 — 끌기 · 확대(시간축 범위) · 칸 크기 · 칸 위 마우스(세로축 끌기 · 휠 포함) · 새 봉.
+     매 그림 돌지 않는다(qa 검수 11-05 13:4x — 선이 있으면 가만히 둔 화면 10초에 브라우저 일이 0.1 → 0.45초). 한 그림에 한 번으로 묶는다 */
+  let qRaf = 0;
+  const queue = () => { if (!qRaf) qRaf = requestAnimationFrame(() => { qRaf = 0; redraw(); }); };
+  let ro = null;
+  try { chart.timeScale().subscribeVisibleLogicalRangeChange(queue); } catch { /* 칸이 사라졌다 */ }
+  try { ro = new ResizeObserver(queue); ro.observe(box); } catch { /* 없으면 크기 바뀔 때 못 따라간다 */ }
+  ['pointermove', 'wheel', 'pointerup'].forEach((t) => pane.addEventListener(t, queue, { passive: true }));
 
   function setMode(m) {
     mode = mode === m ? null : m;
@@ -210,7 +233,7 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
       drawn.h.push(series.createPriceLine({
         price: p, color: inkOf(c), lineWidth: H_WIDTH, lineStyle: LC.LineStyle.Solid, axisLabelVisible: true, title: '',
       }));
-    } catch { /* 칸이 막 사라졌다 */ }
+    } catch { drawn.h.push(null); /* 칸이 막 사라졌다 — 자리만 맞춰 둔다(지우개가 data.h 와 같은 번호로 지운다) */ }
   }
 
   data.h.forEach(addH);
@@ -272,13 +295,15 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
     const from = pend || (down ? pointAt(down) : null);
     if (!from) return;
     ghostFrom = pend ? null : from;
-    ghostTo = pointAt(at(e));                        // 덧그림 돌기가 다음 그림에서 긋는다
+    ghostTo = pointAt(at(e));
+    paint();                                         // 미리 보기
   };
   const onUp = (e) => {
     if (!down || !mode) { down = null; return; }
     const d = down, u = at(e);
     down = null;
     clearGhost();
+    if (mode === 'eraser') { eraseAt(u); return; }
     if (mode === 'hline') {
       if (u.p == null) return;
       const h = { p: u.p, c: nextC() };
@@ -299,9 +324,46 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
     trend(pend, pt);
   };
 
+  /* 지우개 — 누른 자리에서 HIT px 안에 있는 선 중 가장 가까운 하나를 지운다. 없으면 아무것도 안 한다 */
+  const HIT = 6;
+  function eraseAt(u) {
+    const r = box.getBoundingClientRect();
+    const x = u.x - r.left, y = u.y - r.top;
+    let best = null;
+    const take = (kind, i, dist) => { if (dist <= HIT && (!best || dist < best.dist)) best = { kind, i, dist }; };
+    data.h.forEach((h, i) => {
+      let hy = null;
+      try { hy = series.priceToCoordinate(hOf(h).p); } catch { /* 칸이 사라졌다 */ }
+      if (hy != null) take('h', i, Math.abs(hy - y));
+    });
+    let tsc = null;
+    try { tsc = chart.timeScale(); } catch { /* 칸이 사라졌다 */ }
+    data.t.forEach((t, i) => {
+      const ia = idxOf(t.a), ib = idxOf(t.b);
+      if (!tsc || ia < 0 || ib < 0 || ia === ib) return;     // 지금 안 보이는 선은 못 누른다
+      let ax, ay, bx, by;
+      try { ax = tsc.logicalToCoordinate(ia); ay = series.priceToCoordinate(t.a.p); bx = tsc.logicalToCoordinate(ib); by = series.priceToCoordinate(t.b.p); } catch { return; }
+      if ([ax, ay, bx, by].some((v) => v == null)) return;
+      const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+      const k = L2 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L2)) : 0;
+      take('t', i, Math.hypot(x - (ax + k * dx), y - (ay + k * dy)));
+    });
+    if (!best) return;
+    if (best.kind === 'h') {
+      const l = drawn.h[best.i];
+      if (l) { try { series.removePriceLine(l); } catch { /* 이미 사라짐 */ } }
+      drawn.h.splice(best.i, 1);
+      data.h.splice(best.i, 1);
+    } else {
+      data.t.splice(best.i, 1);
+    }
+    save(code, data);
+    paint();
+  }
+
   function eraseAll() {
     clearFirst();
-    drawn.h.forEach((l) => { try { series.removePriceLine(l); } catch { /* 이미 사라짐 */ } });
+    drawn.h.forEach((l) => { if (l) { try { series.removePriceLine(l); } catch { /* 이미 사라짐 */ } } });
     drawn.h = [];
     data = { h: [], t: [] };
     save(code, data);
@@ -326,18 +388,21 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
   window.addEventListener('pointerup', onUp, true);
   nav(!mode);
   paintBar();
-  loop();
+  paint();
 
   return {
     destroy() {
       pane.removeEventListener('pointerdown', onDown, true);
       pane.removeEventListener('pointermove', onMove, true);
       window.removeEventListener('pointerup', onUp, true);
-      cancelAnimationFrame(loopRaf);
+      if (qRaf) cancelAnimationFrame(qRaf);
+      try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(queue); } catch { /* 칸이 사라졌다 */ }
+      if (ro) ro.disconnect();
+      ['pointermove', 'wheel', 'pointerup'].forEach((t) => pane.removeEventListener(t, queue));
       cv.remove();
       document.removeEventListener('keydown', onKey);
       bar.remove();
-      pane.classList.remove('kh-drawing');
+      pane.classList.remove('kh-drawing', 'kh-erasing');
     },
   };
 }
