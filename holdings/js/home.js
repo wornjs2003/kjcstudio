@@ -1390,28 +1390,7 @@ const SORTS = {
   after:{ label: '장외', key: (p) => p.regPct, only: (v) => v > 0,
           head: '종가', show: (code, p) => (p && p.regClose ? fmtPriceOf(code, p.regClose) : '—'),
           pct: (p) => p.regPct, note: '종가 대비 오른 종목' },
-  /* 매수 — 외국인 · 기관 · 프로그램이 **셋 다** 순매수인 종목, 셋 합이 큰 순 (2026-11-05 재권님 「프로그램 기관 외국인이 동시에
-     사고있는 종목들 볼수있는 방법좀 마련해봐」 → 「실시간 순위에 버튼 하나 만들고 거기에 넣어줘 · 매수 라는 버튼」).
-     고르는 것은 서버다(kis_proxy.py `fetch_joint_buy` · 외국인 · 기관은 가집계) — 화면은 받은 차례 그대로 그린다.
-     관심처럼 순위 목록과 따로 오는 목록이라 `list` 로 준다(시장 칩과 무관 · 코스피 · 코스닥 함께) */
-  buy:  { label: '매수', list: () => jointRows, head: '셋 순매수',
-          show: (code) => { const r = jointOf(code); return r ? fmtMoneyKr(r.sum / 1e8) : '—'; },     // 서버는 원 · 이 글은 억
-          note: '외국인 · 기관 · 프로그램 모두 순매수 · 합 순',
-          empty: () => (jointRows ? '셋이 함께 사는 종목이 아직 없습니다' : '불러오는 중') },
 };
-
-/* 「매수」 칩 목록 — 서버가 준 줄 그대로. 못 받았으면 null(빈 목록과 가른다) */
-let jointRows = null;
-const jointOf = (code) => (jointRows || []).find((r) => r.code === code) || null;
-async function loadJoint() {
-  try {
-    const r = await apiFetch('/api/kis/joint-buy', { cache: 'no-store' });
-    const j = r && r.ok ? await r.json() : null;
-    if (j && Array.isArray(j.data)) jointRows = j.data;
-  } catch { /* 못 받으면 들고 있던 것 그대로 */ }
-  if (sortBy === 'buy') paintRows(rowPrices);
-  if (rankModal && rankModalSort === 'buy') paintRankModal();
-}
 
 /* 가격 칸의 값 — 장외 칩이 정규장 중이면 앞 회차 20:00 장외 마감 값 · 나머지는 지금 시세 */
 const priceOf = (p, sortId = sortBy) => {
@@ -1519,12 +1498,6 @@ function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
     return [...inside, ...outside].map((s, i) => ({ ...s, rank: i + 1 }));
   }
 
-  if (sort && sort.list && !us) {          // 매수 — 서버가 고른 줄 · 그 차례 그대로
-    return (sort.list() || []).map((x, i) => ({
-      code: x.code, name: x.name, sector: '', brand: brandColor(x.code, x.name), rank: i + 1,
-    }));
-  }
-
   if (!sort || !sort.key) return base;      // 시가총액은 목록 순서 그대로
 
   /* 값이 아직 안 온 종목은 뒤로 보낸다. 0 으로 치면 「거래량 0위」 가 된다 */
@@ -1608,7 +1581,6 @@ function setupSorts() {
     sortBy = b.dataset.sort;
     paintSortChips();                // 「관심」 이면 아래 묶음 줄이 나온다
     paintRows(rowPrices);
-    if (sortBy === 'buy') loadJoint();
   });
 }
 
@@ -1924,7 +1896,7 @@ function paintRankModal() {
   }).join('');
   /* 카드와 같다 — 고른 시장 목록이 아직 안 왔으면 빈 표 대신 그렇다고 적는다 */
   const empty = !list.length && universe
-    ? `<tr><td colspan="7" class="kh-mut">${th ? '—' : SORTS[rankModalSort]?.only ? afterEmpty() : SORTS[rankModalSort]?.empty ? SORTS[rankModalSort].empty()
+    ? `<tr><td colspan="7" class="kh-mut">${th ? '—' : SORTS[rankModalSort]?.only ? afterEmpty()
       : `${marketDef(rankModalMarket).label} 목록을 아직 받지 못했습니다`}</td></tr>` : '';
 
   /* 칸 폭을 못 박는다 (table-layout: fixed).
@@ -2001,7 +1973,7 @@ function openRankModal() {
       /* 모달에서 고른 기준은 첫 화면 순위표와 **따로 둔다** — 모달에서
          거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면 무엇을 눌러
          그렇게 됐는지 알 수 없다 (2026-09-22). */
-      onTab(id) { rankModalSort = id; paintRankModal(); if (id === 'buy') loadJoint(); },
+      onTab(id) { rankModalSort = id; paintRankModal(); },
     },
     onClose() { rankModal = null; },
   });
@@ -2047,8 +2019,6 @@ async function loadSectors() {
     if (changed && universe) paintRows(rowPrices);
   } catch { /* 못 받으면 빈칸 그대로 */ }
 }
-const JOINT_FALLBACK_MS = 300000;     // 「매수」 칩 — 서버 값마저 못 받았을 때만
-watch({ url: () => (sortBy === 'buy' ? '/api/kis/joint-buy' : null), onChange: loadJoint, key: 'kis_proxy.INVESTOR_TOP_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => '/api/kis/stock-sectors', onChange: loadSectors, key: 'company_profile.SECTOR_LIST_TTL', fallbackMs: SECTOR_FALLBACK_MS });
 loadSectors();
 
@@ -2056,7 +2026,7 @@ function paintRows(priceMap) {
   const list = rowList();
   /* 고른 시장의 목록이 비었다 — 서버가 아직 그 시장을 안 준다. 빈 표로 두면 고장처럼 보인다 */
   if (!list.length && universe) {
-    $('kh-rows').innerHTML = `<tr><td colspan="5" class="kh-mut">${SORTS[sortBy]?.only ? afterEmpty() : SORTS[sortBy]?.empty ? SORTS[sortBy].empty()
+    $('kh-rows').innerHTML = `<tr><td colspan="5" class="kh-mut">${SORTS[sortBy]?.only ? afterEmpty()
       : market === 'THEME' ? '—'
       : `${MARKETS.find(m => m.id === market)?.label || market} 목록을 아직 받지 못했습니다`}</td></tr>`;
     paintRowHead();
