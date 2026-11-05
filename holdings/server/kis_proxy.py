@@ -4203,28 +4203,6 @@ def fetch_investor_estimate(cfg, code):
     return out
 
 
-def investor_confirmed_today(cfg, code, now=None):
-    """오늘 확정 외국인 · 기관 순매수 금액(원) — 평일 REG_CLOSE_READY(15:40) 뒤 그날 줄에 금액이 들었을 때만. 아니면 None.
-
-    장 마감 뒤에는 가집계(14:30 입력이 마지막)가 아니라 이 값을 쓴다 — 바닥 줄 · 「매수」 칩 · 투자자 정보가 같은 값이 되게
-    (2026-11-05 재권님 한국전력 — 「차트에서 매수매도와 실시간의 매수랑의 차이가 있는데 이건 왜이렇지?」 → 「가로 해고 금액으로 다 맞춰줘」).
-    값은 fetch_investor(종목 투자자 · 들고 있는 동안은 KIS 를 다시 안 부른다) 그대로 · 백만원 → 원."""
-    now = now or datetime.now(KST)
-    if now.weekday() >= 5 or (now.hour, now.minute) < REG_CLOSE_READY:
-        return None
-    try:
-        rows = fetch_investor(cfg, code) or []
-    except RuntimeError:
-        return None
-    day = now.strftime("%Y%m%d")
-    r = next((x for x in rows if x.get("date") == day), None)
-    fa = ((r or {}).get("foreign") or {}).get("netAmt")
-    ia = ((r or {}).get("inst") or {}).get("netAmt")
-    if fa is None or ia is None:
-        return None
-    return {"date": day, "foreign": fa * 1_000_000, "inst": ia * 1_000_000}
-
-
 # 체결은 한 번에 30줄이 온다. 화면이 그보다 많이 보여줄 일이 없다.
 TICKS_TTL = 3              # 장중에는 계속 쌓인다. **화면이 이 값을 받아 그 주기로 돈다** (2026-10-02 · 재권님 「나」)
 _ticks_cache = {}
@@ -4405,17 +4383,6 @@ def _joint_buy_make(cfg):
     won = lambda side: None if side is None else side * 1_000_000          # 백만원 → 원
     famt = lambda c: won(((f.get(c) or {}).get("foreign") or {}).get("amt")) if c in f else None
     iamt = lambda c: won(((i.get(c) or {}).get("inst") or {}).get("amt")) if c in i else None
-    # 마감 뒤(15:40~)에는 외국인 · 기관 값을 그날 확정치로 — 후보(두 가집계 목록이 겹친 종목)는 그대로 · 확정치를 못 받은 종목만 가집계
-    # (11-05 재권님 「가」 — 확정치에서 한 곳이라도 판 종목은 빠진 종목으로 넘어간다)
-    conf = {}
-    if now.weekday() < 5 and (now.hour, now.minute) >= REG_CLOSE_READY:
-        def cf(c):
-            if c not in conf:
-                conf[c] = investor_confirmed_today(cfg, c, now)
-            return conf[c]
-        famt0, iamt0 = famt, iamt
-        famt = lambda c: cf(c)["foreign"] if cf(c) else famt0(c)
-        iamt = lambda c: cf(c)["inst"] if cf(c) else iamt0(c)
     rows, missing, prog = [], 0, {}
     for code in [c for c in f if c in i]:
         fa, ia = famt(code), iamt(code)
@@ -4432,7 +4399,7 @@ def _joint_buy_make(cfg):
         rows.append({"code": code, "name": r.get("name"), "price": r.get("price"), "pct": r.get("pct"),
                      "foreign": fa, "inst": ia, "program": pg, "sum": fa + ia + pg})
     rows.sort(key=lambda x: -x["sum"])
-    return {"rows": rows, "f": f, "i": i, "famt": famt, "iamt": iamt, "prog": prog, "conf": conf,
+    return {"rows": rows, "f": f, "i": i, "famt": famt, "iamt": iamt, "prog": prog,
             "candidates": len(set(f) & set(i)), "programMissing": missing,
             "errors": len(errors or {}), "hm": now.strftime("%H:%M"), "day": now.date().isoformat()}
 
@@ -4497,8 +4464,6 @@ def _joint_buy_rebuild(cfg):
                 x.update(foreign=fa, inst=ia, unknown=[k for k, v in (("foreign", fa), ("inst", ia)) if v is None])
             rows = sorted(m["rows"] + back, key=lambda x: -x["sum"])
             st["data"] = {"rows": rows, "flipped": sorted(st["flipped"].values(), key=lambda x: x["at"], reverse=True),
-                          # basis — 외국인 · 기관 값이 무엇인가(확정이 하나라도 들었으면 confirmed · 못 받은 종목은 가집계 그대로)
-                          "basis": "confirmed" if any(m["conf"].values()) else "estimate",
                           "candidates": m["candidates"], "programMissing": m["programMissing"],
                           "listFail": False, "errors": m["errors"]}
             st["at"] = time.time()
@@ -8657,10 +8622,9 @@ class Handler(SimpleHTTPRequestHandler):
                              "pending": data is None,
                              "candidates": d.get("candidates"), "programMissing": d.get("programMissing"),
                              "listFail": bool(d.get("listFail")), "errors": d.get("errors"),
-                             "amtUnit": "원", "basis": d.get("basis") or "estimate",
-                             "provisional": (d.get("basis") or "estimate") != "confirmed",
-                             "note": "외국인 · 기관은 장중 증권사 가집계(하루 네 번) · 15:40 뒤 그날 확정치(basis) · 프로그램은 그날 누적 · "
-                                     "셋 다 순매수 양수 · flipped 는 오늘 셋 다 샀다가 빠진 종목",
+                             "amtUnit": "원", "provisional": True,
+                             "note": "외국인 · 기관은 증권사 가집계(하루 네 번) · 프로그램은 그날 누적 · 셋 다 순매수 양수 · "
+                                     "flipped 는 오늘 셋 다 샀다가 빠진 종목",
                              "estSlots": INVESTOR_EST_SLOTS,
                              "cacheTtl": INVESTOR_TOP_TTL},
                 })
@@ -8852,24 +8816,10 @@ class Handler(SimpleHTTPRequestHandler):
                     self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
                     return
                 data = fetch_investor_estimate(cfg, code)
-                # amount — 화면이 금액(원)으로 그리는 값 하나(11-05 재권님 「금액으로 다 맞춰줘」). 마감 뒤 확정치가 있으면 그것(basis
-                # confirmed) · 없으면 최신 회차 수량 × 현재가(approx · 증권사 가집계는 수량만 준다) · 못 셈은 None
-                conf = investor_confirmed_today(cfg, code)
-                if conf:
-                    amount = {"basis": "confirmed", "date": conf["date"], "foreign": conf["foreign"], "inst": conf["inst"], "approx": False}
-                else:
-                    lt = (data or {}).get("latest") or {}
-                    try:
-                        p0 = ((fetch_quotes_multi(cfg, [code])[0] or {}).get(code) or {}).get("price")
-                    except RuntimeError:
-                        p0 = None
-                    amount = {"basis": "estimate", "seq": lt.get("seq"), "approx": True,
-                              **{k: (lt.get(k) * p0 if lt.get(k) is not None and p0 else None) for k in ("foreign", "inst")}}
-                data = dict(data or {}, amount=amount)
                 self._send_json({
-                    "ok": bool(data.get("latest") or conf), "data": data,
+                    "ok": bool(data and data.get("latest")), "data": data,
                     "meta": {
-                        "code": code, "qtyUnit": "주", "amtUnit": "원",
+                        "code": code, "qtyUnit": "주",
                         # **확정치가 아니다. 화면에 그대로 적어야 한다**
                         "provisional": True,
                         "person": False,     # 개인은 이 응답에 없다

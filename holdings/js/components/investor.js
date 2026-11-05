@@ -95,11 +95,11 @@ function bar(v, w) {
        + `<span class="kh-iv-half r">${buy}</span>`;
 }
 
-/* 금액(백만원) → 억. 차트 바닥 줄 · 「매수」 칩과 같은 단위로 맞춘다(2026-11-05 재권님 「금액으로 다 맞춰줘」 — 전에는 만주였다) */
-function man(n, approx = false) {
+/* 주 → 만주. 칸이 좁아 그대로 쓰면 자리를 다 먹는다 */
+function man(n) {
   if (n == null || !Number.isFinite(n)) return '—';
-  const v = n / 100;
-  return `${approx ? '≈' : ''}${v > 0 ? '+' : ''}${v.toLocaleString('ko-KR', { maximumFractionDigits: Math.abs(v) < 100 ? 1 : 0 })}억`;
+  const v = n / 10000;
+  return `${v > 0 ? '+' : ''}${v.toFixed(1)}만주`;
 }
 
 /**
@@ -118,7 +118,7 @@ export function mountInvestor({ box, tabs } = {}) {
   let view = 'today';       // today | days
   let timer = null;
   let seq = 0;              // 늦게 온 응답이 새 종목을 덮지 않게
-  let top = null;           // 장중 가집계 금액(백만원 · 수량 × 현재가 어림) — { foreign, inst }
+  let top = null;           // 장중 가집계 — { foreign, inst }
   let topMiss = false;      // 상위 목록에 이 종목이 없다
   let longFill = true;      // 이 서버가 3달 옛 줄을 스스로 받나(서버 meta) — 읽기만 하는 서버는 false
 
@@ -140,10 +140,8 @@ export function mountInvestor({ box, tabs } = {}) {
     if (!todayMissing()) { top = null; topMiss = false; return; }
     const est = await get(`/api/kis/investor-estimate?code=${code}`);
     if (mine !== seq) return;
-    /* 서버가 가집계 수량 × 현재가로 어림한 금액(원 · amount) — 백만원으로 바꿔 확정치(netAmt)와 같은 자리에 둔다 */
-    const a = est && est.data ? est.data.amount : null;
-    const mil = (w) => (w == null ? null : w / 1e6);
-    top = a && (a.foreign != null || a.inst != null) ? { foreign: mil(a.foreign), inst: mil(a.inst) } : null;
+    const l = est && est.ok && est.data ? est.data.latest : null;
+    top = l && (l.foreign != null || l.inst != null) ? l : null;
     topMiss = !top;
     paint();
   }
@@ -215,7 +213,7 @@ export function mountInvestor({ box, tabs } = {}) {
        그대로 두고 「—」 가 나간다. */
     const prov = todayMissing() && !!top;
     const net = (s) => {
-      const v = (d[s.key] || {}).netAmt;
+      const v = (d[s.key] || {}).net;
       if (v != null) return v;
       return prov && top[s.key] != null ? top[s.key] : null;
     };
@@ -226,7 +224,7 @@ export function mountInvestor({ box, tabs } = {}) {
       const w = Math.abs(n) / max * 50;      // 가운데에서 한쪽으로 최대 50%
       return `<div class="kh-iv-r2">
         <span class="kh-iv-n2">${s.name}</span>
-        <span class="kh-iv-v2 ${dirClass(v)}">${man(v, prov && (d[s.key] || {}).netAmt == null && v != null)}</span>
+        <span class="kh-iv-v2 ${dirClass(v)}">${man(v)}</span>
         <span class="kh-iv-bar">${bar(n, w)}</span></div>`;
     }).join('');
     return `<div class="kh-iv-rows">${rows2}</div>
@@ -245,7 +243,7 @@ export function mountInvestor({ box, tabs } = {}) {
       /* **시각을 적지 않는다.** 응답에 시각이 없다 — `bsop_hour_gb` 는 회차
          번호일 뿐이고, 회차와 시각의 대응은 아직 못 박지 않았다.
          대신 「하루 네 번만 바뀐다」 를 적어 **멈춘 것으로 오해하지 않게** 한다. */
-      return `장중 <b>추정가집계</b>(수량 × 현재가 ≈) · 한국투자증권 ·
+      return `장중 <b>추정가집계</b> · 한국투자증권 ·
         <span class="kh-mut">하루 네 번 갱신 · 개인은 마감 뒤</span> · ${dir}`;
     }
     if (topMiss) {
@@ -270,7 +268,7 @@ export function mountInvestor({ box, tabs } = {}) {
     /* **막대는 세 줄 합 가운데 가장 큰 것에 견준다** (2026-10-14 지시 — 「빨간색 파란색은
        그날의 최고값대비로」 · (ㄱ)). 전에는 「하루 최댓값 × 날 수」 에 견줘 날이 많을수록
        막대가 짧아졌다(한달 외국인 -3377만주가 반쪽의 17%). 「오늘」 칸과 같은 방식이다 */
-    const sums = SIDES.map((s) => days.reduce((a2, d) => a2 + ((d[s.key] || {}).netAmt || 0), 0));
+    const sums = SIDES.map((s) => days.reduce((a2, d) => a2 + ((d[s.key] || {}).net || 0), 0));
     const max = Math.max(...sums.map(Math.abs)) || 1;
     /* 5일 · 한달도 가로 막대다. **합계가 아니라 그 날들을 더한 값**을 보여준다 —
        오늘 것만 보면 하루 흐름이고, 닷새를 더하면 추세가 읽힌다. */
@@ -278,7 +276,7 @@ export function mountInvestor({ box, tabs } = {}) {
       /* **여기서는 `|| 0` 이 맞다** — 더하는 자리라 `null` 을 그냥 두면
          합이 통째로 `NaN` 이 된다. 다만 **닷새가 전부 `null` 이면**
          합이 0 이 되어 「0주」 처럼 보이므로, 그때만 「—」 로 낸다. */
-      const vals = days.map((d) => (d[s.key] || {}).netAmt);
+      const vals = days.map((d) => (d[s.key] || {}).net);
       const any = vals.some((v) => v != null);
       const sum = vals.reduce((a2, v) => a2 + (v || 0), 0);
       const shown = any ? sum : null;        // 글자·색용
