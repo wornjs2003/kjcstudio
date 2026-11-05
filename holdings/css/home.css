@@ -202,12 +202,13 @@
    현재가 94 · 등락률 75 · 거래대금 80 · 시가총액 91 · 거래량 80 = 762).
    종목만 240 으로 줄였다 — 그래서 아주 긴 ETF 이름은 「…」 로 잘린다. */
 .kh-rkm col.c-rk  { width: 52px; }
-.kh-rkm col.c-nm  { width: 240px; }
+.kh-rkm col.c-nm  { width: 172px; }   /* 240 → 172 — 「전일비」 칸(c-vr 68)을 모달 폭 안에 넣느라 (2026-11-05) */
 .kh-rkm col.c-pr  { width: 106px; }
 .kh-rkm col.c-pc  { width: 88px; }
 .kh-rkm col.c-am  { width: 96px; }
 .kh-rkm col.c-cap { width: 104px; }
 .kh-rkm col.c-vol { width: 92px; }
+.kh-rkm col.c-vr  { width: 68px; }
 
 /* border-collapse 를 separate 로 둔다. collapse 로는 `thead th` 의
    sticky 가 안 먹었다 — 굴리면 표머리가 그대로 밀려 올라갔다 (재서 확인).
@@ -243,7 +244,7 @@
   .kh-rkm col.c-nm { width: auto; }
   .kh-rkm col.c-pr { width: 80px; }
   .kh-rkm col.c-pc { width: 58px; }
-  .kh-rkm col.c-am, .kh-rkm col.c-cap, .kh-rkm col.c-vol { width: 78px; }
+  .kh-rkm col.c-am, .kh-rkm col.c-cap, .kh-rkm col.c-vol, .kh-rkm col.c-vr { width: 78px; }
   .kh-rkm thead th, .kh-rkm tbody td { padding-left: 3px; padding-right: 3px; }
   .kh-rkm .kh-nm { gap: 5px; }
   .kh-rkm col:nth-child(n+5),
