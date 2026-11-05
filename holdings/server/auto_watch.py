@@ -280,11 +280,15 @@ def history(proxy, days=30):
 
         days     최근 몇 날(걸린 기록이 있는 날 · 1~120)
         list     [{ day, nextDay(다음 거래일 · 아직이면 null), rule, picks: [{ code, name, rank, idx, close, pct, mult,
-                    next: { pct, close, side('up' · 'down' · 'flat') } | null }], summary }] — 새 날부터
-        summary  { picks, done(결과 붙은 수), pending(아직), up, down, flat, upRate(%), avgNext(%) } — 결과가 없으면 비율 · 평균은 null
+                    next: { pct, close, side('up' · 'down' · 'flat') } | null, missing }], summary }] — 새 날부터
+                 missing  다음 거래일은 왔는데 그 종목 값이 없다(거래정지 · 못 받음) — 「아직」 과 가른다(qa 덧 11-05)
+        summary  { picks, done(결과 붙은 수), pending(다음 거래일이 아직 안 옴), missing(왔는데 값 없음), up, down, flat,
+                   upRate(%), avgNext(%) } — 비율 · 평균은 done 만으로 · 결과가 없으면 null
         total    모든 날을 합친 summary
     """
-    days = max(1, min(120, int(days or 30)))
+    days = int(days)
+    if not 1 <= days <= 120:
+        raise ValueError("days 는 1~120 정수입니다.")
     with proxy._db_lock, proxy.db_conn() as conn:
         try:
             pick_days = [r[0] for r in conn.execute(
@@ -305,7 +309,8 @@ def history(proxy, days=30):
             for code, name, rank, idx, close, pct, mult, rule in rows:
                 r = res.get(code)
                 nx = {"pct": r[0], "close": r[1], "side": _side(r[0])} if r and r[0] is not None else None
-                picks.append({"code": code, "name": name, "rank": rank, "idx": idx, "close": close, "pct": pct, "mult": mult, "next": nx})
+                picks.append({"code": code, "name": name, "rank": rank, "idx": idx, "close": close, "pct": pct, "mult": mult, "next": nx,
+                              "missing": bool(nxt) and nx is None})
             allp += picks
             try:
                 rl = json.loads(rows[0][7]) if rows else None
@@ -318,7 +323,8 @@ def history(proxy, days=30):
 def _summary(picks):
     done = [p["next"] for p in picks if p["next"]]
     up = sum(1 for x in done if x["side"] == "up")
-    return {"picks": len(picks), "done": len(done), "pending": len(picks) - len(done), "up": up,
+    missing = sum(1 for p in picks if p.get("missing"))
+    return {"picks": len(picks), "done": len(done), "pending": len(picks) - len(done) - missing, "missing": missing, "up": up,
             "down": sum(1 for x in done if x["side"] == "down"), "flat": sum(1 for x in done if x["side"] == "flat"),
             "upRate": round(up * 100 / len(done), 1) if done else None,
             "avgNext": round(sum(x["pct"] for x in done) / len(done), 2) if done else None}
@@ -516,7 +522,7 @@ def start(proxy):
                 last = conn.execute("SELECT MAX(day) FROM auto_watch_day WHERE src = 'multi'").fetchone()[0]
                 have = last and conn.execute("SELECT 1 FROM auto_watch_pick WHERE day = ? LIMIT 1", (last,)).fetchone()
             if last and not have and not (RUN_AT <= (now.hour, now.minute) < RUN_UNTIL and last == now.strftime("%Y%m%d")):
-                record_picks(proxy, last)            # 이 코드 전에 쌓은 날(그날 룰 그대로 셈) — 바퀴 창 안이면 바퀴가 남긴다
+                record_picks(proxy, last)            # 이 코드 전에 쌓은 날 — 그날 룰이 아니라 **지금 룰 칸**으로 셈(그 사이 고쳤으면 다를 수 있다 · qa 덧 11-05) · 바퀴 창 안이면 바퀴가 남긴다
             if members(proxy):
                 th = threading.Thread(target=_fill_locked, args=(proxy, now.strftime("%Y%m%d")), daemon=True, name="auto-watch-fill")
                 th.start()

@@ -7500,6 +7500,8 @@ class Handler(SimpleHTTPRequestHandler):
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             try:
                 days = int((q.get("days") or ["30"])[0])
+                if not 1 <= days <= 120:
+                    raise ValueError
             except ValueError:
                 self._send_json({"ok": False, "error": "days 는 1~120 정수입니다."}, 400)
                 return
