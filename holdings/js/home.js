@@ -1432,7 +1432,7 @@ function jointCell(code, narrow = false) {
 /* 안내 줄 — 몇 종목 · 빠진 수 · 못 받은 수 · 값마다 갱신 주기(외 · 기 입력 시각과 서버가 다시 받는 주기는 서버가 준다) */
 function jointNote(short = false) {
   const m = jointMeta || {};
-  const bits = [];          // 종목 수는 표가 보인다 — 안내 줄이 세 줄로 넘어가면 표가 짧아져 넣지 않는다
+  const bits = ['억 단위'];      // 종목 수는 표가 보인다 — 안내 줄이 세 줄로 넘어가면 표가 짧아져 넣지 않는다 · 값 단위 「억」 을 맨 앞에(11-05 재권님 「금액으로 다 맞춰줘」)
   if (!short && jointFlipped.length) bits.push(`빠짐 ${jointFlipped.length}`);        // short(모달 탭 옆) — 빠짐 수는 표가 보인다
   if (m.programMissing) bits.push(`프로그램 못 받은 ${m.programMissing}종목 빠짐`);
   if (m.listFail) bits.push('외국인 · 기관 순위 못 받음(앞 값)');
@@ -1442,7 +1442,9 @@ function jointNote(short = false) {
   const hm = `${String(kst.getUTCHours()).padStart(2, '0')}:${String(kst.getUTCMinutes()).padStart(2, '0')}`;
   const next = slots.find((t) => t > hm);
   /* 한 줄에 들어가게 줄여 쓴다 — 두 줄이 되면 표가 17px 짧아진다(다른 칩은 한 줄 · 11-05 8772 실측). 입력 시각은 서버 meta.estSlots */
-  if (per.length) bits.push(`외·기 ${next ? `다음 ${next}` : '오늘 끝'}`);
+  /* 15:40 뒤 서버가 그날 확정치로 바꿔 주면(meta.basis) 「확정」 — 그 전에는 가집계 다음 입력 시각 */
+  if (m.basis === 'confirmed') bits.push('외·기 확정');
+  else if (per.length) bits.push(`외·기 ${next ? `다음 ${next}` : '오늘 끝'}`);
   bits.push('프 실시간');
   if (m.cacheTtl) bits.push(`${m.cacheTtl >= 60 ? `${Math.round(m.cacheTtl / 60)}분` : `${m.cacheTtl}초`}마다`);
   return bits.join(' · ');
