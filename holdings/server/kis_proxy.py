@@ -9356,6 +9356,9 @@ def main():
               % (nxt_board.CLOSE_AT + nxt_board.AFTER_AT + nxt_board.FUT_AT))
     # 당일 수급(2026-10-27 · server/intraday_flow.py) — 같은 문(보내는 서버만) · 알림 없음.
     # `KJC_FLOW_COLLECT=1` 은 시험 서버(자기 DB)에서 바퀴를 돌려 보는 자리다 — 세션 서버는 메인 DB 를 읽기 전용으로 열어 쓸 수 없다
+    if not SLOW and is_sender(args.port) and pre_flow.start(sys.modules[__name__]):
+        print("  프리장 판   : 평일 %02d:%02d~%02d:%02d 에 %d초마다 지어 market.db pre_flow_board 에 남김(「프리장」 칩)"
+              % (pre_flow.PRE_OPEN + pre_flow.PRE_CLOSE + (pre_flow.FLOW_TTL,)))
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and session_volume.start(sys.modules[__name__]):
         print("  시간대 거래량 : 평일 %s 에 순위 종목 누적 거래량 저장(전일비)" % " · ".join(b[3][:2] + ":" + b[3][2:] for b in session_volume.BOUNDS))
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and intraday_flow.start(sys.modules[__name__]):
