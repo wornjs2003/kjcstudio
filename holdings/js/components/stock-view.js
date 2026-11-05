@@ -35,6 +35,7 @@ import { mountStockPanel } from './stock-panel.js';
 import { mountStockDetail } from './stock-detail.js';
 import { mountIndicatorMenu } from './indicator-menu.js';
 import { mountFinanceCards } from './finance-cards.js';
+import { createFlowFoot } from './flow-foot.js';
 import { apiFetch, viewUrl } from '../data/api.js';
 import { everyServerMs } from '../store/timing.js';
 import { watch } from '../store/longpoll.js';
@@ -92,6 +93,11 @@ export async function loadStockMain(url = './stock.html') {
  */
 export function mountStockView(root, stock, { onBack, view } = {}) {
   const $ = sel => root.querySelector(sel);
+
+  /* 차트 바닥 줄 — 외국계 창구 · 프로그램 매수세 / 매도세 · 외국인 · 기관 가집계. 홈 큰 차트와 같은 줄 (2026-11-05 재권님
+     「차트 모달로 띄우면 거기에도 나와야해」 → 「응 해」). 국내 종목만 — 미국 종목은 받을 값이 없어 칸째 안 보인다(flow-foot.css) */
+  const flowFoot = createFlowFoot();
+  if (!isUsCode(stock.code)) flowFoot.paint($('.kh-chart-foot'), stock.code);
 
   let chart = null;
   /* **보던 기간을 이어받는다** (2026-09-29 지시). 첫 화면에서 이 화면으로
@@ -572,6 +578,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
       /* **안 떼면 열 때마다 쌓인다** — 지표 메뉴는 `document` 에 손잡이 셋을
          걸고 `onIndicatorChange` 에 하나를 더 건다 (2026-09-23). */
       if (indMenu) indMenu.destroy();
+      flowFoot.destroy();
     },
   };
 }

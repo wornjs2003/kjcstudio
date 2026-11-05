@@ -76,6 +76,8 @@
 }
 .kh-per-tools { margin-left: auto; display: flex; gap: 11px; color: var(--kh-text-dim); font-size: 0.9rem; }
 .kh-chart-box { flex: 1; min-height: 250px; border-radius: var(--kh-radius-md); overflow: hidden; }
+/* 바닥 줄(flow-foot.css)이 붙으면 그 높이(30px)만큼 차트를 줄여 칸 · 화면 높이를 그대로 둔다 (2026-11-05 · 모달과 같은 셈) */
+.kh-w-body:has(> .kh-chart-foot .kh-flow-foot) > .kh-chart-box { min-height: 220px; }
 
 /* 투자 지표 */
 .kh-mgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
