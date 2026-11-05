@@ -10,7 +10,12 @@
           (재권님 18:2x 「첫번째 추세선 그리고 두번째 그리는데 안그려져」 — 앞에는 한 줄을 그으면 저절로 꺼졌다)
    미리 보기  추세선 첫 점을 찍은 뒤(또는 끄는 동안) 마우스가 있는 봉까지 점선이 따라 그려지고 둘째 점을 찍으면 굳는다
           (재권님 11-05 10:3x 「차트에 선그릴때 클릭후 마우스 이동하면 이동하는 곳에 맞춰서 선이 미리 보여지게」).
-          수평선은 한 번에 그어지고 십자선 가로줄이 이미 그 자리를 보여 따로 두지 않는다. 봉 없는 빈자리에서는 점선을 감춘다
+          수평선은 한 번에 그어지고 십자선 가로줄이 이미 그 자리를 보여 따로 두지 않는다
+   빈칸     차트 오른쪽 봉 없는 빈칸(미래 쪽)에도 점을 찍는다 — 선은 두 점 사이만
+          (재권님 11-05 13:1x 「추세선 그리는거 차트 안그려진곳까지도 그려지도록」 → 「가」).
+          빈칸의 점은 「그때 마지막 봉 시각 + 몇 봉 뒤」 로 적는다 — 봉 칸 수라 **찍은 주기에서만** 그린다(다른 주기에서는 그 자리를 모른다).
+          그래서 추세선 · 첫 점 · 미리 보기는 라이브러리 선이 아니라 칸 위 덧그림 캔버스에 긋는다(일목 구름과 같은 길 ·
+          logicalToCoordinate) — 라이브러리 선에 미래 시각을 넣으면 시간축이 늘어 봉 자리가 움직인다. 세로 범위는 안 건드린다
    기억   종목마다 브라우저에 둔다(localStorage · 「값을 들고 있는 것」). 주기를 바꿔도 같은 선이 보인다 —
           점은 봉 시각(서버 ts)으로 적어 두고 그릴 때 지금 주기의 그 시각 봉에 붙인다.
           지금 받아 둔 봉 밖에 있는 점이 있으면 그 추세선은 그리지 않는다(지어낸 자리에 긋지 않는다)
@@ -96,10 +101,14 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
   /* 수평선 한 칸 — 옛 저장(숫자만)도 받는다 */
   const hOf = (x) => (typeof x === 'number' ? { p: x, c: 0 } : x);
   let data = load(code);
-  const drawn = { h: [], t: [] };     // 그린 선(라이브러리 것) — 지울 때 쓴다
-  let firstMark = null;               // 첫 점 — 눌렀다는 표시로 그 자리에 점 하나(재권님 「클릭하면 점 나오고 다시 클릭하면 연결」)
-  let ghost = null;                   // 미리 보기 점선 — 첫 점(또는 누른 자리)에서 마우스 자리까지
-  let ghostRaf = 0;
+  const drawn = { h: [] };            // 그린 수평선(라이브러리 것) — 지울 때 쓴다
+  let ghostTo = null;                 // 미리 보기 점선의 끝(마우스 자리 점) — 첫 점(또는 누른 자리)에서 여기까지
+  let ghostFrom = null;
+  const box = pane.querySelector('.kh-pane-box') || pane;
+  /* 추세선 · 첫 점(재권님 「클릭하면 점 나오고 다시 클릭하면 연결」) · 미리 보기를 긋는 덧그림 — 칸 크기는 그대로 */
+  const cv = document.createElement('canvas');
+  cv.className = 'kh-draw-cv';
+  box.appendChild(cv);
 
   const bar = document.createElement('div');
   bar.className = 'kh-draw';
@@ -113,35 +122,80 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
     pane.classList.toggle('kh-drawing', !!mode);
   };
 
-  function clearGhost() {
-    if (ghostRaf) { cancelAnimationFrame(ghostRaf); ghostRaf = 0; }
-    if (ghost) { try { chart.removeSeries(ghost); } catch { /* 이미 사라짐 */ } ghost = null; }
-  }
+  function clearGhost() { ghostFrom = null; ghostTo = null; paint(); }
 
   function clearFirst() {
     pend = null;
     clearGhost();
-    if (firstMark) { try { chart.removeSeries(firstMark); } catch { /* 이미 사라짐 */ } firstMark = null; }
   }
 
-  /* 미리 보기 — 시작 점 { ts, p } 에서 마우스 자리 q 까지. 같은 봉이거나 봉 없는 빈자리면 감춘다 */
-  function showGhost(from, q) {
-    const ia = from ? snap(candles, from.ts) : -1;
-    const ib = q && q.i != null && q.p != null ? q.i : -1;
-    if (ia < 0 || ib < 0 || ia === ib) { if (ghost) { try { ghost.setData([]); } catch { /* 칸이 사라졌다 */ } } return; }
-    const pts = [{ time: timeOf(ia), value: from.p }, { time: timeOf(ib), value: q.p }];
-    if (ia > ib) pts.reverse();
-    try {
-      if (!ghost) {
-        ghost = chart.addSeries(LC.LineSeries, {
-          color: inkOf(nextC()), lineWidth: 2, lineStyle: LC.LineStyle.Dashed, lastValueVisible: false, priceLineVisible: false,
-          crosshairMarkerVisible: false, pointMarkersVisible: false,
-          autoscaleInfoProvider: () => null,        // 미리 보기도 세로 범위를 움직이지 않게
-        });
-      }
-      ghost.setData(pts);
-    } catch { /* 칸이 사라졌다 */ }
+  /* 적어 둔 점 → 지금 봉 줄의 논리 자리(봉 번호 · 빈칸이면 마지막 봉 번호보다 크다). 못 정하면 -1 */
+  function idxOf(pt) {
+    if (!pt) return -1;
+    const base = snap(candles, pt.ts);
+    if (base < 0) return -1;
+    if (!pt.k) return base;
+    return pt.per === period ? base + pt.k : -1;     // 빈칸 점은 찍은 주기에서만
   }
+
+  /* 덧그림 — 그릴 것이 바뀌었거나 끌기 · 확대 · 칸 크기가 바뀌면 다시 긋는다 */
+  let sig = '';
+  function paint() {
+    sig = '';
+    redraw();
+  }
+  function redraw() {
+    if (!cv.isConnected) return;
+    const W = box.clientWidth, H = box.clientHeight, dpr = window.devicePixelRatio || 1;
+    let tsc, lr;
+    try { tsc = chart.timeScale(); lr = tsc.getVisibleLogicalRange(); } catch { return; }
+    let y0 = null, y1 = null;
+    try { y0 = series.coordinateToPrice(0); y1 = series.coordinateToPrice(H); } catch { /* 아직 */ }
+    const s2 = [W, H, dpr, lr && lr.from, lr && lr.to, y0, y1, mode, data.t.length, JSON.stringify([pend, ghostFrom, ghostTo])].join('|');
+    if (s2 === sig) return;
+    sig = s2;
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
+      cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+      cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    }
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const xy = (i, p) => {
+      try {
+        const x = tsc.logicalToCoordinate(i), y = series.priceToCoordinate(p);
+        return x == null || y == null ? null : [x, y];
+      } catch { return null; }
+    };
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, Math.max(0, W - axisW), H); ctx.clip();
+    const dotAt = (q, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(q[0], q[1], DOT_R, 0, Math.PI * 2); ctx.fill(); };
+    const seg = (a, b, c, dash) => {
+      ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.setLineDash(dash ? [6, 4] : []);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); ctx.setLineDash([]);
+    };
+    data.t.forEach((t) => {
+      const ia = idxOf(t.a), ib = idxOf(t.b);
+      if (ia < 0 || ib < 0 || ia === ib) return;     // 받아 둔 봉 밖 · 같은 봉 · 다른 주기의 빈칸 점 — 긋지 않는다
+      const a = xy(ia, t.a.p), b = xy(ib, t.b.p);
+      if (!a || !b) return;
+      const c = inkOf(t.c);
+      seg(a, b, c, false); dotAt(a, c); dotAt(b, c);
+    });
+    if (mode === 'trend') {
+      const fi = idxOf(ghostFrom || pend);
+      const f = fi >= 0 ? xy(fi, (ghostFrom || pend).p) : null;
+      if (f && ghostTo) {
+        const gi = idxOf(ghostTo);
+        const g = gi >= 0 && gi !== fi ? xy(gi, ghostTo.p) : null;
+        if (g) seg(f, g, inkOf(nextC()), true);     // 미리 보기는 점선 · 다음에 그을 색
+      }
+      if (f && pend) dotAt(f, ink);                 // 첫 점
+    }
+    ctx.restore();
+  }
+  let loopRaf = 0;
+  const loop = () => { redraw(); loopRaf = requestAnimationFrame(loop); };
 
   function setMode(m) {
     mode = mode === m ? null : m;
@@ -159,33 +213,12 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
     } catch { /* 칸이 막 사라졌다 */ }
   }
 
-  function addT(t) {
-    const ia = snap(candles, t.a.ts), ib = snap(candles, t.b.ts);
-    if (ia < 0 || ib < 0 || ia === ib) return;     // 받아 둔 봉 밖 · 같은 봉 — 긋지 않는다
-    const [x, y] = ia < ib ? [t.a, t.b] : [t.b, t.a];
-    const [i0, i1] = ia < ib ? [ia, ib] : [ib, ia];
-    try {
-      const s = chart.addSeries(LC.LineSeries, {
-        color: inkOf(t.c), lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
-        crosshairMarkerVisible: false, pointMarkersVisible: true, pointMarkersRadius: DOT_R,
-        autoscaleInfoProvider: () => null,          // 그린 선이 세로 범위를 움직이지 않게
-      });
-      s.setData([{ time: timeOf(i0), value: x.p }, { time: timeOf(i1), value: y.p }]);
-      drawn.t.push(s);
-    } catch { /* 칸이 막 사라졌다 */ }
-  }
-
   data.h.forEach(addH);
-  data.t.forEach(addT);
-  if (mode === 'trend' && pend) {              // 칸이 다시 만들어졌다 — 찍어 둔 첫 점을 다시 보인다
-    const i = snap(candles, pend.ts);
-    if (i >= 0) showFirst(timeOf(i), pend.p); else pend = null;
-  }
+  if (mode === 'trend' && pend && idxOf(pend) < 0) pend = null;   // 칸이 다시 만들어졌다 — 찍어 둔 첫 점은 덧그림이 다시 보인다
 
   /* 누르기는 차트 라이브러리의 클릭이 아니라 칸에서 직접 받는다 (재권님 18:3x 「선끼리 크로스 시키면 안그려지는데」).
      라이브러리 클릭은 누르는 사이 손이 조금만 움직여도 「끌기」 로 읽혀 안 온다 — 그리는 동안은 차트 끌기 · 확대를 멈추고
      눌렀다 뗀 자리를 직접 잰다. 끌어서 긋는 것도 된다(누른 자리 → 뗀 자리) */
-  const box = pane.querySelector('.kh-pane-box') || pane;
   /* 깊은 사본으로 쥔다 — `chart.options()` 가 돌려주는 객체는 라이브러리 안의 것 그대로라, 끌 때 같이 false 로 바뀌어
      되돌릴 값이 사라졌다(qa 검수 18:5x — 켰다 끄면 큰 차트가 안 끌림 · 18:5x 직접 재서 확인) */
   const keepNav = (() => { try { const o = chart.options(); return JSON.parse(JSON.stringify({ handleScroll: o.handleScroll, handleScale: o.handleScale })); } catch { return null; } })();
@@ -198,24 +231,32 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
     try { chart.applyOptions(on ? keepNav : navOff); } catch { /* 칸이 사라졌다 */ }
   };
 
-  /* 칸 안 좌표 → { i(봉 자리), time, p(가격) } — 봉이 없는 자리(오른쪽 빈칸)는 i 가 null */
+  /* 칸 안 좌표 → { i(봉 자리), k(마지막 봉 뒤 몇 봉 — 오른쪽 빈칸), p(가격) } — 왼쪽 봉 밖은 i · k 가 다 null */
   function at(e) {
     const r = box.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
-    let p = null, time = null;
-    try { p = series.coordinateToPrice(y); time = chart.timeScale().coordinateToTime(x); } catch { /* 칸이 사라졌다 */ }
-    const i = time != null ? idxOfTime(time) : null;
-    return { i: i == null ? null : i, time, p: p != null && Number.isFinite(p) ? p : null, x: e.clientX, y: e.clientY };
+    let p = null, time = null, lg = null;
+    try { p = series.coordinateToPrice(y); time = chart.timeScale().coordinateToTime(x); lg = chart.timeScale().coordinateToLogical(x); } catch { /* 칸이 사라졌다 */ }
+    let i = time != null ? idxOfTime(time) : null;
+    let k = null;
+    const last = candles.length - 1;
+    if (i == null && lg != null && Math.round(lg) > last) k = Math.round(lg) - last;   // 오른쪽 빈칸
+    return { i: i == null ? null : i, k, p: p != null && Number.isFinite(p) ? p : null, x: e.clientX, y: e.clientY };
   }
 
-  function pointAt(q) { return q.i == null || q.p == null ? null : { ts: String(candles[q.i].ts), p: q.p }; }
+  function pointAt(q) {
+    if (q.p == null || !candles.length) return null;
+    if (q.i != null) return { ts: String(candles[q.i].ts), p: q.p };
+    if (q.k) return { ts: String(candles[candles.length - 1].ts), k: q.k, per: period, p: q.p };
+    return null;
+  }
 
   function trend(a, b) {
     const t = { a, b, c: nextC() };
     clearFirst();
     data.t.push(t);
     save(code, data);
-    addT(t);
+    paint();
   }
 
   let down = null;
@@ -230,9 +271,8 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
     if (mode !== 'trend') return;
     const from = pend || (down ? pointAt(down) : null);
     if (!from) return;
-    const q = at(e);
-    if (ghostRaf) cancelAnimationFrame(ghostRaf);
-    ghostRaf = requestAnimationFrame(() => { ghostRaf = 0; showGhost(from, q); });
+    ghostFrom = pend ? null : from;
+    ghostTo = pointAt(at(e));                        // 덧그림 돌기가 다음 그림에서 긋는다
   };
   const onUp = (e) => {
     if (!down || !mode) { down = null; return; }
@@ -255,28 +295,17 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
     }
     const pt = pointAt(u);
     if (!pt) return;                                 // 봉 없는 빈자리
-    if (!pend) { pend = pt; showFirst(u.time, pt.p); return; }
+    if (!pend) { pend = pt; paint(); return; }
     trend(pend, pt);
   };
-
-  function showFirst(time, p) {
-    try {
-      firstMark = chart.addSeries(LC.LineSeries, {
-        color: ink, lineVisible: false, lastValueVisible: false, priceLineVisible: false,
-        crosshairMarkerVisible: false, pointMarkersVisible: true, pointMarkersRadius: DOT_R,
-        autoscaleInfoProvider: () => null,
-      });
-      firstMark.setData([{ time, value: p }]);
-    } catch { /* 없어도 된다 — 둘째 점에서 그대로 이어진다 */ }
-  }
 
   function eraseAll() {
     clearFirst();
     drawn.h.forEach((l) => { try { series.removePriceLine(l); } catch { /* 이미 사라짐 */ } });
-    drawn.t.forEach((s) => { try { chart.removeSeries(s); } catch { /* 이미 사라짐 */ } });
-    drawn.h = []; drawn.t = [];
+    drawn.h = [];
     data = { h: [], t: [] };
     save(code, data);
+    paint();
     mode = null;
     nav(true);
     paintBar();
@@ -297,13 +326,15 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
   window.addEventListener('pointerup', onUp, true);
   nav(!mode);
   paintBar();
+  loop();
 
   return {
     destroy() {
       pane.removeEventListener('pointerdown', onDown, true);
       pane.removeEventListener('pointermove', onMove, true);
       window.removeEventListener('pointerup', onUp, true);
-      if (ghostRaf) cancelAnimationFrame(ghostRaf);
+      cancelAnimationFrame(loopRaf);
+      cv.remove();
       document.removeEventListener('keydown', onKey);
       bar.remove();
       pane.classList.remove('kh-drawing');
