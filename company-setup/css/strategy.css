@@ -32,7 +32,10 @@
 .rl table.rl-tb { width: 100%; min-width: 0; }
 .rl .rl-tb th, .rl .rl-tb td { white-space: normal; text-align: left; vertical-align: top; padding: 7px 6px; }
 .rl .rl-tb th { width: 6.5em; white-space: nowrap; }
-.rl .rl-blank { display: inline-block; min-width: 3.2em; padding: 0 6px; border-radius: var(--kh-radius-sm); background: var(--kh-danger-faint); color: var(--kh-danger); text-align: center; }
+.rl .rl-in { font: inherit; width: 4.2em; padding: 1px 6px; border: 1px solid var(--kh-border-strong); border-radius: var(--kh-radius-sm); background: var(--kh-bg-card); color: var(--kh-text-primary); text-align: center; }
+.rl .rl-in.rl-txt { width: 14em; text-align: left; }
+.rl .rl-in:placeholder-shown { background: var(--kh-danger-faint); border-color: transparent; color: var(--kh-danger); }   /* 비어 있으면 빨간 빈칸 — 미정 */
+.rl .rl-in:focus { outline: 2px solid var(--kh-accent); outline-offset: 0; }
 .rl .rl-sug { color: var(--kh-text-muted); font-size: 11.5px; }
 @media (min-width: 701px) {
   .rl .rl-grid { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
