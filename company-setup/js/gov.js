@@ -18,6 +18,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const show = (n) => String(n || '').replace(/㈜|\(주\)|\n/g, '').replace(/(?<=[가-힣]) (?=[가-힣](\s|$))/g, '').trim();   // 「이 재 용」 → 「이재용」
 const num = (v) => { const x = parseFloat(String(v ?? '').replace(/,/g, '')); return Number.isFinite(x) ? x : null; };
+const fx = (v) => v == null ? '—' : `${v.toFixed(2)}%`;   // 지분 글 — 못 받은 값은 —
 const pc = (p) => p == null ? '' : ` ${+p.toFixed(1)}%`;
 const COMMON = new Set(['보통주', '의결권있는주식']);   // 띄어쓰기를 빼고 견준다 — 「보통주」 · 「의결권 있는 주식」 · 「의결권있는 주식」(SK스퀘어) 셋 다(2026-11-05 실측 · 개발1)
 const isCommon = (k) => COMMON.has(String(k || '').replace(/\s/g, ''));
@@ -45,8 +46,9 @@ function split(d) {
   for (const r of major) {
     if (SUM.has(r.nm) || !r.relate) continue;
     const k = holderKind(r.relate), n = show(r.nm).replace('(특별계정)', '');
-    const o = (H[k] ||= new Map()).get(n) || { v: 0, code: null };
-    o.v += num(r.trmend_posesn_stock_qota_rt) || 0; o.code = o.code || r.matchedCode || null; H[k].set(n, o);
+    const o = (H[k] ||= new Map()).get(n) || { v: null, code: null };
+    const x = num(r.trmend_posesn_stock_qota_rt); if (x != null) o.v = (o.v ?? 0) + x;   // 값이 하나도 없으면 null 그대로 — 0% 로 보이지 않게(「못 쟀으면 0 이 아니라 못 쟀다」 · 개념정의 검수)
+    o.code = o.code || r.matchedCode || null; H[k].set(n, o);
   }
   const B = { sub: [], rel: [], part: [], abroad: [], fund: [], simple: [] };
   for (const r of d.invest || []) {
@@ -67,10 +69,10 @@ function split(d) {
 function mapOf(d, S) {
   const listed = (o) => o.code ? '▶ ' : '';
   const hold = ['최대주주 본인', '계열회사', '특수관계인', '재단', '임원'].filter((k) => S.H[k]).map((k, i) => {
-    const L = [...S.H[k]].sort((a, b) => b[1].v - a[1].v), sum = L.reduce((s, x) => s + x[1].v, 0);
-    if (k === '임원' && L.length > 3) return { id: 'h' + i, type: 'node', k, t: `${L.length}명`, d: `합 ${sum.toFixed(2)}%` };
+    const L = [...S.H[k]].sort((a, b) => (b[1].v ?? -1) - (a[1].v ?? -1)), got = L.filter((x) => x[1].v != null), sum = got.length ? got.reduce((s, x) => s + x[1].v, 0) : null;
+    if (k === '임원' && L.length > 3) return { id: 'h' + i, type: 'node', k, t: `${L.length}명`, d: `합 ${fx(sum)}` };
     return { id: 'h' + i, type: 'node', k, t: L.slice(0, 4).map(([n, o]) => listed(o) + n).join(' · ') + (L.length > 4 ? ` 외 ${L.length - 4}` : ''),
-      d: L.slice(0, 4).map(([n, o]) => `${n} ${o.v.toFixed(2)}%`).join(' · ') + (L.length > 1 ? ` · 합 ${sum.toFixed(2)}%` : '') };
+      d: L.slice(0, 4).map(([n, o]) => `${n} ${fx(o.v)}`).join(' · ') + (L.length > 1 ? ` · 합 ${fx(sum)}` : '') };
   });
   const few = (L, c) => L.slice(0, c).map((x) => x.n + pc(x.p)).join(' · ') + (L.length > c ? ` 외 ${L.length - c}곳` : '');
   const r1 = [['sub', '자회사 — 50% 넘게'], ['rel', '관계회사 — 20~50%'], ['part', '경영참여 — 20% 아래']].filter(([k]) => S.B[k].length)
@@ -150,7 +152,7 @@ addEventListener('message', (e) => {
 
 function table(d, S) {
   const hr = ['최대주주 본인', '계열회사', '특수관계인', '재단', '임원'].filter((k) => S.H[k])
-    .flatMap((k) => [...S.H[k]].sort((a, b) => b[1].v - a[1].v).map(([n, { v }]) => `<tr><td>${esc(n)}</td><td>${esc(k)}</td><td class="num">${v.toFixed(2)}%</td></tr>`)).join('');
+    .flatMap((k) => [...S.H[k]].sort((a, b) => (b[1].v ?? -1) - (a[1].v ?? -1)).map(([n, { v }]) => `<tr><td>${esc(n)}</td><td>${esc(k)}</td><td class="num">${fx(v)}</td></tr>`)).join('');
   const lab = { sub: '자회사', rel: '관계회사', part: '경영참여 20% 아래', abroad: '해외 법인', fund: '투자조합 · 펀드', simple: '단순투자' };
   const ir = Object.entries(S.B).flatMap(([k, L]) => L.map((x) => `<tr><td>${esc(x.n)}${x.code ? ' <span class="in-pill ok">상장</span>' : ''}</td><td>${lab[k]}</td><td class="num">${x.p == null ? '—' : x.p + '%'}</td></tr>`)).join('');
   return `<div class="in-gov-tbls"><div class="in-tblx"><table class="in-tbl"><tr><th>주주</th><th>관계</th><th>보통주 지분</th></tr>${hr || '<tr><td colspan="3">—</td></tr>'}</table></div>
