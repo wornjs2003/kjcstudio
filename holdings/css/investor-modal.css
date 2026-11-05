@@ -108,6 +108,9 @@
 }
 .kh-ivm-period { margin: 10px 0 6px; font-size: 13px; }
 .kh-ivm-note { margin-top: 10px; font-size: 12px; color: var(--kh-text-secondary); }
+/* 「차트」 탭 오늘 줄 — 장중 가집계(2026-11-05) */
+.kh-ivm-est { margin: 4px 0 8px; font-size: 13px; color: var(--kh-text-primary); }
+.kh-ivm-est small { color: var(--kh-text-secondary); }
 .kh-ivm-mut { font-size: 13px; color: var(--kh-text-secondary); }
 
 /* ── 당일 탭 (2026-10-27 재권님 시안 「ㄴ · 매수랑 매도 둘다」 · 「모달 창 밖으로 길어지지 않게」) ──
