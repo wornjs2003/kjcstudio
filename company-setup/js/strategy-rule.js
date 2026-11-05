@@ -84,6 +84,8 @@ async function loadAw() {
   const d = j && j.data, m = (j && j.meta) || {};
   if (!d) { awBox.innerHTML = `<div class="st-err">— 서버 값을 못 받음(${st || '연결 안 됨'})</div>`; awCap.textContent = '서버가 위 룰 값으로 고른 종목'; awHow.textContent = ''; return; }
   const rule = d.rule || {}, picked = Array.isArray(d.picked) ? d.picked : [];
+  awPicked = d.day ? picked : []; awDay = d.day || '';
+  if (why.code && !awPicked.some((p) => p.code === why.code)) { why.code = ''; whyBox.innerHTML = '<div class="st-err">— 종목을 누르면 여기 나옵니다</div>'; }   // 다시 고른 목록에 없으면 비움
   const by = rule.sortBy === 'pct' ? '등락률 순' : '배수 순';
   const unset = d.day && d.ready === false;   // 기준 칸(등락률 · 배수)이 비면 서버가 거르지 않는다 — 「없음」 이 아니라 「안 거름」(개념정의 검수 11-05)
   awCap.textContent = unset ? `${mmdd(d.day)} 기준 · 아직 안 거름`
@@ -94,11 +96,12 @@ async function loadAw() {
   else if (unset) awBox.innerHTML = '<div class="st-err">— 기준(등락률 · 배수) 칸이 비어 아직 안 거름 — 왼쪽 칸을 채우고 검색을 누르십시오</div>';
   else if (!picked.length) awBox.innerHTML = '<div class="st-err">— 이 룰에 걸린 종목 없음</div>';
   else awBox.innerHTML = `<div class="st-scroll"><table class="aw-tb"><tr><th>종목</th><th>시장</th><th>종가</th><th>등락률</th><th>거래량</th><th>20일 평균</th><th>배수</th></tr>${picked.map((p) =>
-    `<tr><td class="st-name"><b>${esc(p.name || '—')}</b> <small>${esc(p.code || '')}</small></td><td>${esc(IDX[p.idx] || p.idx || '—')}</td><td>${num(p.close)}</td><td>${pctTxt(p.pct)}</td><td>${num(p.vol)}</td><td>${num(p.avg20)}</td><td><b>${p.mult == null ? '—' : `${num(p.mult, 2)}배`}</b></td></tr>`).join('')}</table></div>`;
+    `<tr data-code="${esc(p.code || '')}"${p.code && p.code === why.code ? ' class="is-on"' : ''}><td class="st-name"><b>${esc(p.name || '—')}</b> <small>${esc(p.code || '')}</small></td><td>${esc(IDX[p.idx] || p.idx || '—')}</td><td>${num(p.close)}</td><td>${pctTxt(p.pct)}</td><td>${num(p.vol)}</td><td>${num(p.avg20)}</td><td><b>${p.mult == null ? '—' : `${num(p.mult, 2)}배`}</b></td></tr>`).join('')}</table></div>`;
   // 이 룰은 이렇게 셈합니다 — 재권님 11-05 「이거를 투자전략에다가 넣어줘」(개발 그림 dev-autowatch) · 수 · 시각 · 빠진 칸은 응답 그대로(화면에 박지 않는다)
   const u = m.universe || {};
   const KNAME = { sectorPct: '재료(미국장 섹터) 칸', exclude: '빼는 것 칸' };   // 서버가 칸 열쇠로 적어 보낸다 — 화면에는 칸 이름으로
-  const not = (m.notCounted || []).map((x) => String(x).replace(/^(\w+)/, (k) => KNAME[k] || k));
+  const have = new Set(ins.map((el) => el.dataset.k));   // 화면에 없는 칸(11-05 뺀 「빼는 것」 등)은 「아직 없음」 에 안 적는다
+  const not = (m.notCounted || []).filter((x) => { const k = (String(x).match(/^(\w+)/) || [])[1]; return !k || !(k in KNAME) || have.has(k); }).map((x) => String(x).replace(/^(\w+)/, (k) => KNAME[k] || k));
   if (m.add) not.unshift(`관심종목에 넣기 — ${m.add}`);
   const li = (h, t) => `<li><b>${h}</b> ${esc(t)}</li>`;
   awHow.innerHTML = `<div class="aw-how-h">이 룰은 이렇게 셈합니다</div><ul>${[
@@ -108,6 +111,37 @@ async function loadAw() {
     ...not.map((x) => li('아직 없음', x)),
   ].join('')}</ul>${d.note && d.day ? `<div>${esc(d.note)}</div>` : ''}`;
 }
+
+// 오른 까닭 (11-05 재권님 「오늘종목 옆에 칸 추가해서 거기에 종목 클릭하면 상승이유 넣어줘」) — 누른 종목 하나만 서버 두 주소를 부른다(종목 뉴스 · 공시) ·
+// 그날과 앞 WHY_BACK 날(달력)에 나온 것만 날짜로 모은다 — 까닭인지 가리는 셈은 두지 않는다 · 받는 곳 목록 밖 언론사는 표시만(서버 listed 값 그대로)
+const whyBox = document.getElementById('aw-why');
+const WHY_BACK = 3;   // 그날 앞 며칠까지 볼지 — 화면이 고르는 보기 범위(서버를 다시 묻는 주기가 아니다)
+let awPicked = [], awDay = '';
+const why = { code: '', seq: 0 };
+const ymd = (x) => String(x || '').replace(/\D/g, '').slice(0, 8);
+const fromDay = (day) => { const m = ymd(day).match(/(\d{4})(\d{2})(\d{2})/); if (!m) return ''; const t = new Date(+m[1], +m[2] - 1, +m[3] - WHY_BACK); return `${t.getFullYear()}${String(t.getMonth() + 1).padStart(2, '0')}${String(t.getDate()).padStart(2, '0')}`; };
+const hmTxt = (at) => { const t = String(at || ''); return t.length >= 12 ? `${t.slice(4, 6)}-${t.slice(6, 8)} ${t.slice(8, 10)}:${t.slice(10, 12)}` : mmdd(t); };
+async function getJson(u) { try { const r = await fetch(u, { cache: 'no-store' }); return { st: r.status, j: r.ok ? await r.json() : null }; } catch (e) { return { st: 0, j: null }; } }
+async function showWhy(code) {
+  const p = awPicked.find((x) => x.code === code); if (!p) return;
+  why.code = code; const seq = ++why.seq;
+  awBox.querySelectorAll('tr[data-code]').forEach((tr) => tr.classList.toggle('is-on', tr.dataset.code === code));
+  const head = `<div class="aw-why-h">${esc(p.name || code)} <small>${esc(code)} · ${mmdd(awDay)} ${pctTxt(p.pct)} · 거래량 ${p.mult == null ? '—' : `${num(p.mult, 2)}배`}</small></div>`;
+  whyBox.innerHTML = `${head}<div class="st-err">— 받는 중…</div>`;
+  const [ds, nw] = await Promise.all([getJson(`/api/dart/disclosures?code=${encodeURIComponent(code)}&limit=40`), getJson(`/api/naver/news?code=${encodeURIComponent(code)}`)]);
+  if (seq !== why.seq) return;   // 그사이 다른 종목을 눌렀다
+  const lo = fromDay(awDay), hi = ymd(awDay);
+  const inWin = (d) => { const x = ymd(d); return x && x >= lo && x <= hi; };
+  const sec = (title, res, rows, item) => `<div class="aw-why-s">${title}</div>${!res.j ? `<div class="st-err">— 서버 값을 못 받음(${res.st || '연결 안 됨'})</div>` : rows.length ? `<ul>${rows.map(item).join('')}</ul>` : '<div class="st-err">— 이 기간에 없음</div>'}`;
+  const dis = ((ds.j && ds.j.data) || []).filter((x) => inWin(x.date));
+  const nws = ((nw.j && nw.j.data) || []).filter((x) => inWin(x.at)).sort((a, b) => (b.listed === true) - (a.listed === true) || String(b.at).localeCompare(String(a.at)));
+  const link = (u, t) => (u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a>` : esc(t));
+  whyBox.innerHTML = head
+    + `<div class="st-cap">${mmdd(lo)} ~ ${mmdd(hi)} 에 나온 것</div>`
+    + sec('공시', ds, dis, (x) => `<li>${link(x.url, x.title || '—')}<small>${mmdd(x.date)}${x.filer && x.filer !== p.name ? ` · ${esc(x.filer)}` : ''}</small></li>`)
+    + sec('뉴스', nw, nws, (x) => `<li>${link(x.url, x.title || '—')}<small>${hmTxt(x.at)} · ${esc(x.office || '—')}</small>${x.listed === false ? '<span class="aw-out">목록 밖</span>' : ''}</li>`);
+}
+awBox.addEventListener('click', (e) => { const tr = e.target.closest('tr[data-code]'); if (tr) showWhy(tr.dataset.code); });
 
 const pend = new Set();   // 아직 끝나지 않은 저장 — 검색은 이것이 다 끝난 뒤 부른다
 ins.forEach((el) => el.addEventListener('change', () => { const p = save(el); pend.add(p); p.finally(() => pend.delete(p)); }));
