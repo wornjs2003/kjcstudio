@@ -15,3 +15,5 @@
 .kh-draw-b:hover { background: var(--kh-accent-dim); }
 .kh-draw-b.is-on { background: var(--kh-accent-dim); color: var(--kh-accent); }
 .kh-drawing .kh-pane-box { cursor: crosshair; }
+/* 추세선 · 첫 점 · 미리 보기 덧그림 — 칸 위에 겹칠 뿐 자리를 차지하지 않고 누르기는 아래 차트가 받는다 */
+.kh-draw-cv { position: absolute; left: 0; top: 0; z-index: 5; pointer-events: none; }
