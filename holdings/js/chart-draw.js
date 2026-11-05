@@ -211,12 +211,14 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
     }
     ctx.restore();
   }
-  /* 다시 긋는 때 — 끌기 · 확대(시간축 범위) · 칸 크기 · 칸 위 마우스(세로축 끌기 · 휠 포함) · 새 봉.
+  /* 다시 긋는 때 — 끌기 · 확대(시간축 범위) · 칸 크기 · 칸 위 마우스(세로축 끌기 · 휠 포함) · 새 봉 ·
+     봉 값이 바뀜(장중 시세가 새 고가 · 저가로 세로 범위를 바꿀 때 — 개념정의 검수 11-05 13:5x).
      매 그림 돌지 않는다(qa 검수 11-05 13:4x — 선이 있으면 가만히 둔 화면 10초에 브라우저 일이 0.1 → 0.45초). 한 그림에 한 번으로 묶는다 */
   let qRaf = 0;
   const queue = () => { if (!qRaf) qRaf = requestAnimationFrame(() => { qRaf = 0; redraw(); }); };
   let ro = null;
   try { chart.timeScale().subscribeVisibleLogicalRangeChange(queue); } catch { /* 칸이 사라졌다 */ }
+  try { series.subscribeDataChanged(queue); } catch { /* 없으면 마우스를 댈 때 따라온다 */ }
   try { ro = new ResizeObserver(queue); ro.observe(box); } catch { /* 없으면 크기 바뀔 때 못 따라간다 */ }
   ['pointermove', 'wheel', 'pointerup'].forEach((t) => pane.addEventListener(t, queue, { passive: true }));
 
@@ -397,6 +399,7 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
       window.removeEventListener('pointerup', onUp, true);
       if (qRaf) cancelAnimationFrame(qRaf);
       try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(queue); } catch { /* 칸이 사라졌다 */ }
+      try { series.unsubscribeDataChanged(queue); } catch { /* 칸이 사라졌다 */ }
       if (ro) ro.disconnect();
       ['pointermove', 'wheel', 'pointerup'].forEach((t) => pane.removeEventListener(t, queue));
       cv.remove();
