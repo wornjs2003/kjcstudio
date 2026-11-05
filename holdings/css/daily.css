@@ -348,31 +348,23 @@
   font-size: 0.72rem;
 }
 
-/* 중요 알림(왼쪽) · 오늘 뉴스(오른쪽) — 한 줄에 나란히 (2026-09-21 지시)
-
-   재권님 말씀 — "중요알람은 오늘뉴스의 왼쪽으로 있어야 할거같은데".
-
-   왼쪽은 낱말 칩이라 폭이 정해져 있고, 오른쪽 뉴스는 제목이 길수록 좋다.
-   그래서 왼쪽만 고정 폭으로 잡고 나머지를 뉴스에 준다. */
-.kh-dl-row {
-  display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px;
-  align-items: start;
+/* 가운데 두 칸 — 왼쪽 「데일리분석」 · 오른쪽 「오늘 일정 · 오늘 뉴스 · 중요 알림」 이름 탭 (2026-11-03 재권님 「세로로 길게 있으면
+   좋을거 같은데 ui 구성 바꿔봐 … 해당 이름 누르면 바뀌게끔」 → 시황분석 시안 「응 맞아」). 두 칸은 같은 폭 · 같은 높이(시안 그대로).
+   전에는 아래 줄에 일정 · 알림(왼쪽 340px) + 뉴스(오른쪽)였다 — 그 줄(.kh-dl-row · .kh-dl-col)은 없어졌다.
+   좁으면 한 열로 — 위 「데일리분석」 · 아래 이름 탭 칸 */
+.kh-dl-pair {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px;
+  align-items: stretch;
 }
-.kh-dl-row > .kh-dl-card { margin-bottom: 16px; }
-
-/* 왼쪽 칸 — 오늘 일정과 중요 알림이 세로로 쌓인다 (2026-09-21 지시
-   — "오늘 일정도 오늘뉴스 옆으로 이동해줘") */
-.kh-dl-col { display: flex; flex-direction: column; min-width: 0; }
-.kh-dl-col > .kh-dl-card:last-child { margin-bottom: 16px; }
-
-/* 좁으면 한 열로 되돌린다 — 340px 칸이 남으면 낱말이 한 줄에 하나씩 된다 */
+.kh-dl-pair > .kh-dl-card { margin-bottom: 16px; min-width: 0; }
+/* 이름 탭 칸 — 칸 안의 머리줄(무엇 · 출처)은 고른 탭마다 내용 위에 둔다 */
+.kh-dl-info-card .kh-dl-ch { display: flex; align-items: center; gap: 14px; }
+.kh-dl-pane-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 0 0 10px; }
+.kh-dl-pane-h .kh-dl-src { margin-left: auto; }
+.kh-dl-info-card .kh-dl-al-words { gap: 6px; }
 @media (max-width: 1100px) {
-  .kh-dl-row { grid-template-columns: 1fr; }
+  .kh-dl-pair { grid-template-columns: minmax(0, 1fr); }
 }
-
-/* 왼쪽 칸에서는 낱말이 세로로 쌓이므로 줄 간격을 조금 넓힌다 */
-.kh-dl-row .kh-dl-al-words { gap: 6px; }
-.kh-dl-row .kh-dl-al-add { min-width: 100%; }
 
 /* ── 모달로 열었을 때 ─────────────────────────────────────────────
    「데일리분석」 메뉴를 누르면 모달이 뜬다 (2026-09-21 지시).
@@ -502,7 +494,7 @@
    보여지도록 해줘」 · 「응」) ──
    재권님 창(2560×1359) 실측 12:1x — 몸통 스크롤 902px 에 안 내용 2813px. 「오늘 일정」 · 「오늘 뉴스」(1298px) ·
    텔레그램 글(2516px)이 몸통을 한참 내려야 보였다. 그래서 몸통은 모달 높이에 맞추고:
-     왼쪽   위 「데일리분석」 칸과 아래 줄(일정 · 뉴스)이 남는 높이를 반씩 · 칸마다 안 스크롤
+     왼쪽   「데일리분석」 칸과 이름 탭 칸(일정 · 뉴스 · 알림)이 나란히 남는 높이 전부 · 칸마다 안 스크롤 (2026-11-03 두 칸으로)
      오른쪽 텔레그램 글 칸이 남는 높이 전부 · 안 스크롤
    두 탭(텔레그램 글 · 미국장 분석)은 같은 높이 칸에 갈아 끼우는 것 그대로다 — 높이를 숫자 대신 남는 높이로 잡았을 뿐.
    카드 아래 여백(16px)은 그대로 둔다 — 세로 줄(flex) 안이라 남는 높이 셈에 들어가 넘치지 않는다.
@@ -514,14 +506,9 @@
 .kh-modal .kh-dl-main,
 .kh-modal .kh-dl-msg { display: flex; flex-direction: column; min-height: 0; }
 .kh-modal .kh-dl-main > * { flex: none; }
-.kh-modal .kh-dl-main > .kh-dl-video-card { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
-.kh-modal .kh-dl-video-card .kh-dl-tabbody { height: auto; flex: 1 1 0; min-height: 0; }
-.kh-modal .kh-dl-main > .kh-dl-body { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
-.kh-modal .kh-dl-body > .kh-dl-row { flex: 1 1 0; min-height: 0; align-items: stretch; }
-.kh-modal .kh-dl-row > .kh-dl-card,
-.kh-modal .kh-dl-col > .kh-dl-card { min-height: 0; overflow: auto; }
-.kh-modal .kh-dl-col { min-height: 0; }
-.kh-modal .kh-dl-col > .kh-dl-card { flex: 1 1 0; }
+.kh-modal .kh-dl-main > .kh-dl-pair { flex: 1 1 0; min-height: 0; }
+.kh-modal .kh-dl-pair > .kh-dl-card { min-height: 0; display: flex; flex-direction: column; }
+.kh-modal .kh-dl-pair .kh-dl-tabbody { height: auto; flex: 1 1 0; min-height: 0; }
 .kh-modal .kh-dl-msg > .kh-dl-card { flex: none; }
 .kh-modal .kh-dl-msg > .kh-dl-tgcard { flex: 1 1 0; min-height: 0; overflow: auto; }
 
@@ -530,12 +517,9 @@
   .kh-modal-scroll:has(> .kh-dl-wrap) { display: block; }
   .kh-modal .kh-dl-wrap { flex: none; min-height: auto; align-items: start; }
   .kh-modal .kh-dl-main,
-  .kh-modal .kh-dl-msg,
-  .kh-modal .kh-dl-main > .kh-dl-video-card,
-  .kh-modal .kh-dl-main > .kh-dl-body { display: block; min-height: auto; }
-  .kh-modal .kh-dl-video-card .kh-dl-tabbody { height: 540px; flex: none; }
-  .kh-modal .kh-dl-body > .kh-dl-row { flex: none; min-height: auto; align-items: start; }
-  .kh-modal .kh-dl-row > .kh-dl-card,
-  .kh-modal .kh-dl-col > .kh-dl-card,
+  .kh-modal .kh-dl-msg { display: block; min-height: auto; }
+  .kh-modal .kh-dl-main > .kh-dl-pair { flex: none; min-height: auto; }
+  .kh-modal .kh-dl-pair > .kh-dl-card { display: block; min-height: auto; }
+  .kh-modal .kh-dl-pair .kh-dl-tabbody { height: 540px; flex: none; }
   .kh-modal .kh-dl-msg > .kh-dl-tgcard { min-height: auto; overflow: visible; flex: none; }
 }

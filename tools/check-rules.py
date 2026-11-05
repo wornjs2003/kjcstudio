@@ -686,9 +686,67 @@ def c_old_place_names():
     return "옛 자리 이름(메인서버 · 메인 폴더 · 메인 DB · 서비스방)", n, hits, LOOK, (지시, "「회사페이지를 메인이라 하고 기존의 메인은 개발이라 정정 하자」 (2026-11-03) — 인용 · 백틱 안은 그대로")
 
 
+_D5 = "-" * 5   # 조각으로 적는다 — 이 파일 자신이 안 걸리게
+_KEY_HEAD = re.compile(_D5 + r"BEGIN (?:(?:OPENSSH |RSA |EC |DSA |ENCRYPTED )?PRIVATE KEY|PGP PRIVATE KEY BLOCK)" + _D5)
+_PPK = re.compile(r"(?m)^PuTTY-User-Key-File-\d+: ")                                    # PuTTY 열쇠 파일 첫 줄
+_BCRYPT = re.compile(r"\$2[aby]\$\d\d\$[./A-Za-z0-9]{53}")                                # 비밀번호 해시 한 벌(60자) 전체만 — 낱말 언급은 안 걸린다
+_BCRYPT_B64 = re.compile(r"JDJ[hi5]JD[A-Za-z0-9+/]{74,}={0,2}")                         # 옛 Caddy 꼴 — 그 해시를 base64 로 싼 것(80자)
+
+
+def c_secret_in_repo():
+    """저장소(공개 GitHub)에 개인 열쇠 · 비밀번호 해시가 들어왔나 (2026-11-04 「thekjc.co.kr 앞문 서버」 룰).
+
+    룰이 「GitHub 에는 설정만」 이다 — 서버 설정 사본(`tools/thekjc-front/server/`)을 고치다 해시 한 줄이 따라 들어오는 날을
+    막는다(홈페이지_정리 검토). 범위는 추적 파일 전부 — 폴더를 박지 않고 SKIP 도 안 뺀다(vendor 안 열쇠도 공개된다).
+    **작업 폴더가 아니라 장바구니(인덱스) 내용을 읽는다** — 커밋에 들어가는 것은 그것이다. 작업 파일만 보면 담은 뒤 지운 열쇠가
+    지나가고, 남이 안 담은 파일 때문에 내 커밋이 막힌다(2026-11-04 qa 시뮬).
+    """
+    name = "저장소에 개인 열쇠 · 비밀번호 해시"
+    try:
+        out = subprocess.run(["git", "ls-files", "-s", "-z"], capture_output=True, cwd=ROOT).stdout
+    except Exception:
+        return name, 0, [], BAD, (지시, "git ls-files 를 못 돌렸다")
+    ents = []
+    for e in out.split(b"\0"):
+        if not e:
+            continue
+        head, rel = e.split(b"\t", 1)
+        mode, sha = head.split()[:2]
+        if mode == b"160000":   # 하위 저장소
+            continue
+        ents.append((sha.decode(), rel.decode("utf-8", "replace")))
+    if not ents:
+        return name, 0, [], BAD, (지시, "장바구니가 비었다 — 못 쟀다")
+    try:
+        r = subprocess.run(["git", "cat-file", "--batch"], input="".join(s + "\n" for s, _ in ents).encode(),
+                           capture_output=True, cwd=ROOT).stdout
+    except Exception:
+        return name, 0, [], BAD, (지시, "git cat-file 을 못 돌렸다")
+    hits, n, pos = [], 0, 0
+    for sha, rel in ents:
+        nl = r.index(b"\n", pos)
+        size = int(r[pos:nl].split()[2])
+        raw = r[nl + 1: nl + 1 + size]
+        pos = nl + 1 + size + 1
+        if size > 2_000_000:
+            continue
+        if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+            s = raw.decode("utf-16", "replace")
+        elif b"\0" in raw[:4096]:
+            continue
+        else:
+            s = raw.decode("utf-8", "replace")
+        n += 1
+        if _KEY_HEAD.search(s) or _PPK.search(s):
+            hits.append("%s — 개인 열쇠" % rel)
+        if _BCRYPT.search(s) or _BCRYPT_B64.search(s):
+            hits.append("%s — 비밀번호 해시(bcrypt)" % rel)
+    return name, n, hits, BAD, (지시, "2026-11-04 재권님 「깃허브에서 백업」 — 설정만 · 열쇠 · 비밀번호는 두지 않는다(공개 저장소)")
+
+
 CHECKS = [c_bat_nonascii, c_py_encoding, c_send_error_korean,
           c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec, c_nav_gutter, c_shared_css, c_main_guard, c_main_ok_log, c_screen_timers,
-          c_glossary, c_glossary_copy, c_same_source, c_old_place_names]
+          c_glossary, c_glossary_copy, c_same_source, c_old_place_names, c_secret_in_repo]
 
 
 def main():
@@ -753,9 +811,11 @@ def main():
         print("  **못 잰 검사가 있습니다.** 「0」 이 아니라 「안 봤다」 입니다:")
         for u in unmeasured:
             print("      " + u)
-        return 2
 
-    return 1 if bad_total else 0
+    # 위반이 먼저다 — 다른 검사 하나가 「못 쟀다」 라고 잰 위반까지 통과(2)가 되면 안 된다(2026-11-04 qa — 열쇠가 나갈 뻔한 자리)
+    if bad_total:
+        return 1
+    return 2 if unmeasured else 0
 
 
 if __name__ == "__main__":

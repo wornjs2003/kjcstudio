@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>뉴스 분석 · Insight</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css" />
+<link rel="stylesheet" href="../assets/css/common.css" />
+<link rel="stylesheet" href="../assets/css/nav.css" />
+<!-- 시황분석과 같은 틀 — 홀딩스 CSS · market.css 를 같이 쓴다(「거는 쪽이 둘 이상인 파일」) · 이 화면 전용은 css/news.css -->
+<link rel="stylesheet" href="../holdings/css/frame.css" />
+<link rel="stylesheet" href="../holdings/css/home.css" />
+<link rel="stylesheet" href="css/insight.css" />
+<link rel="stylesheet" href="css/market.css" />
+<link rel="stylesheet" href="css/news.css" />
+</head>
+<body data-nav="company-setup" data-site-root="../">
+<div id="site-nav"></div>
+
+<!-- 뉴스 분석 — 뉴스를 분석하는 화면이 아니라 「분석하기 위한 데이터를 구축하는」 현황 화면이다 (2026-11-03 재권님 「뉴스를 분석하는게 아닌 뉴스를 분석하기 위한
+     데이터를 구축하는거야」 → 여섯 층 시안 「응 그래」 → 「이대로 만들어봐. 만들면서 개선하자」 · 시황분석1). 값은 전부 서버 주소 — js/news-data.js 머리 -->
+<div class="kh-app kh-app-wide">
+  <main class="kh-main">
+    <!-- 갈래 탭은 첫 화면(index.html)과 같은 줄 · 같은 순서 -->
+    <nav class="kh-cat" aria-label="갈래">
+      <a href="./">홈</a>
+      <a href="market.html">시황분석</a>
+      <a href="#">경제 지표</a>
+      <a href="#">산업 분석</a>
+      <a class="is-on" href="news.html">뉴스 분석</a>
+      <a href="report.html">영상 분석</a>
+      <a href="analysis.html">종목 분석</a>
+      <a href="chart-analysis.html">차트분석</a>
+      <a href="strategy.html">투자 전략</a>
+      <span class="kh-cat-my">증권사 리포트</span>
+    </nav>
+    <section class="mk">
+      <div class="mk-body" style="margin-right:0">
+      <div class="mk-meta" id="nd-meta">값을 받는 중…</div>
+
+      <h2 class="mk-sec">구축 현황</h2>
+      <div class="mk-card"><h2>오늘의 구축 상태</h2><p class="one" id="nd-one">—</p></div>
+      <div class="mk-card"><h2>여섯 층 한눈에<span class="tag">데이터</span></h2>
+        <div class="cap">뉴스 한 건마다 매길 여덟 칸(누구 이야기 · 사건 갈래 · 처음 소식인가 · 방향 · 크기 · 확인 정도 · 출처와 시각 · 연결 종목)을 채우려고 쌓는 재료 · 「없음」 은 아직 안 만든 것이다(못 받는 것이 아님)</div>
+        <div class="nd-ly" id="nd-layers">—</div>
+      </div>
+      <div class="mk-grid nd-two">
+        <div class="mk-card"><h2>여덟 칸 — 지금 채울 수 있나</h2><div class="cap">층이 쌓이면 채워지는 칸</div><div class="nd-fill" id="nd-fill">—</div></div>
+        <div class="mk-card"><h2>① 기사 원본 — 날마다 쌓인 수</h2><div class="cap">서버 뉴스 저장소 · 언론사 RSS · 주제어로 거른 것만 · 묶음 안 기사까지 센다 · 서버가 묶음 안 기사를 넷까지만 주어 넘는 것은 「모름」</div><div class="nd-bars" id="nd-days">—</div></div>
+      </div>
+
+      <!-- 층마다 접고 편다 — 시황분석과 같은 모양(처음엔 접힘) -->
+      <details class="mk-fold" data-fold="nd1"><summary class="mk-sec">① 기사 원본<span class="mk-sec-s">언론사 · 주제 · 공시</span><span class="mk-sum" id="sum-nd1">—</span></summary>
+        <div class="mk-grid nd-two">
+          <div class="mk-card"><h2>언론사별</h2><div class="nd-kv" id="nd-src">—</div></div>
+          <div class="mk-card"><h2>주제별</h2><div class="nd-kv" id="nd-topic">—</div></div>
+        </div>
+        <div class="mk-card"><h2>받는 곳 목록</h2><div class="cap">기사를 받는 곳은 이 목록에 있는 것뿐이다 · 넣고 빼는 것은 재권님이 정하신다 · 목록 파일 holdings/data/news-topics.json 의 「받는곳」(서버가 읽는 파일)</div><div class="nd-feeds" id="nd-feeds">—</div></div>
+      </details>
+      <details class="mk-fold" data-fold="nd2"><summary class="mk-sec">② 종목 이름표<span class="mk-sec-s">회사 이름 → 종목코드 · 별명</span><span class="mk-sum" id="sum-nd2">—</span></summary></details>
+      <details class="mk-fold" data-fold="nd3"><summary class="mk-sec">③ 사건 갈래 사전<span class="mk-sec-s">갈래 · 낱말 · 방향</span><span class="mk-sum" id="sum-nd3">—</span></summary>
+        <div class="mk-grid nd-two">
+          <div class="mk-card"><h2>공시 딱지 묶음</h2><div class="cap">홀딩스 공시 칸이 쓰는 갈래 · 공시 보고서 이름에 든 낱말로 가른다</div><div class="nd-chips" id="nd-tags">—</div></div>
+          <div class="mk-card"><h2>뉴스 주제</h2><div class="cap">기사를 받을 때 거르는 주제어 묶음 — 사건 갈래가 아니다</div><div class="nd-chips" id="nd-topics">—</div></div>
+        </div>
+      </details>
+      <details class="mk-fold" data-fold="nd4"><summary class="mk-sec">④ 크기 재료<span class="mk-sec-s">매출 · 시가총액</span><span class="mk-sum" id="sum-nd4">—</span></summary></details>
+      <details class="mk-fold" data-fold="nd5"><summary class="mk-sec">⑤ 같은 사건 묶음<span class="mk-sec-s">첫 보도 · 묶인 기사</span><span class="mk-sum" id="sum-nd5">—</span></summary>
+        <div class="mk-card"><h2>기사가 많이 묶인 사건</h2><div class="cap">제목 낱말 겹침으로 묶은 것 · 맨 앞이 첫 보도</div><div class="nd-list" id="nd-groups">—</div></div>
+      </details>
+      <details class="mk-fold" data-fold="nd6"><summary class="mk-sec">⑥ 사후 반응<span class="mk-sec-s">사건 뒤 주가 · 거래량</span><span class="mk-sum" id="sum-nd6">—</span></summary></details>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="../assets/js/main.js"></script>
+<script type="module" src="js/news-data.js"></script>
+</body>
+</html>

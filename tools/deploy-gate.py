@@ -138,7 +138,18 @@ def main(argv):
         drop.update(x for x in links if x in inr and x != keep)
         ps = git("rev-list", "--parents", "-n", "1", root).split()[1:]
         if len(ps) > 1:                     # 뿌리가 머지 — 딸려 온 묶음도 뺀다
-            drop.update(x for x in git("rev-list", "%s..%s" % (ps[0], root)).split() if x in inr)
+            # 어느 쪽이 「딸려 온」 쪽인지는 되돌림이 기준으로 삼은 부모(revert -m N)가 정한다 — 본문 「reversing changes made to <부모>」.
+            # 첫 부모로만 셈하면, 세션 가지가 만든 머지(첫 부모 = 세션 가지)를 staging 이 ff 로 받아 -m 2 로 되돌렸을 때
+            # 반대쪽(staging 쪽)을 빼고 세션 커밋이 남았다(11-03 창구 · 5c5ec36 · 024facf). 그 줄이 없으면 첫 부모.
+            base = ps[0]
+            for x in sorted(links):
+                if parent_of(x) != root:
+                    continue
+                m = re.search(r"reversing\s+changes\s+made\s+to\s+([0-9a-f]{7,40})", git("log", "-1", "--format=%B", x))
+                if m and full(m.group(1)) in ps:
+                    base = full(m.group(1))
+                    break
+            drop.update(x for x in git("rev-list", "%s..%s" % (base, root)).split() if x in inr)
 
     need = []
     for c in commits:

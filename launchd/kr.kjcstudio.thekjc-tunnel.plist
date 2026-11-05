@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kr.kjcstudio.thekjc-tunnel</string>
+  <!-- thekjc.co.kr 통로 — 맥미니가 가비아 서버(thekjc-front · 1.201.111.167)로 SSH 연결을 걸어 두고,
+       서버 안쪽 127.0.0.1:18764 를 맥미니 메인(127.0.0.1:8764)으로 잇는다 (2026-11-04 재권님 「응 그렇게 해」 · 개념정의 창).
+       서버의 Caddy(비밀번호 문 · fail2ban)가 그 18764 로 넘긴다. 공유기 구멍 · 관리자 권한 · 8764 변경 없음.
+       열쇠는 통로 전용 ~/.ssh/thekjc-tunnel — 서버가 이 열쇠에 명령 실행 · 접속 창을 막고 127.0.0.1:18764 하나만 열게 한다
+       (/home/tunnel/.ssh/authorized_keys 의 restrict · permitlisten).
+       끊기면 launchd 가 30초 뒤 다시 건다. 30초마다 신호 · 세 번 못 받으면 끊고 다시(서버도 같은 값 · sshd_config.d/60-tunnel.conf).
+       약점 — 서버 22번은 사무실 IP 만 받는다(보안 그룹). 사무실 IP 가 바뀌면 그 숫자를 고칠 때까지 끊긴다.
+       설치는 「켜기」:
+           cp launchd/kr.kjcstudio.thekjc-tunnel.plist ~/Library/LaunchAgents/
+           launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/kr.kjcstudio.thekjc-tunnel.plist
+       끄기:
+           launchctl bootout gui/$(id -u)/kr.kjcstudio.thekjc-tunnel -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/ssh</string>
+    <string>-N</string>
+    <string>-i</string>
+    <string>/Users/kjc/.ssh/thekjc-tunnel</string>
+    <string>-o</string><string>IdentitiesOnly=yes</string>
+    <string>-o</string><string>BatchMode=yes</string>
+    <string>-o</string><string>StrictHostKeyChecking=yes</string>
+    <string>-o</string><string>ExitOnForwardFailure=yes</string>
+    <string>-o</string><string>ServerAliveInterval=30</string>
+    <string>-o</string><string>ServerAliveCountMax=3</string>
+    <string>-o</string><string>ConnectTimeout=15</string>
+    <string>-R</string>
+    <string>127.0.0.1:18764:127.0.0.1:8764</string>
+    <string>tunnel@1.201.111.167</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+  <key>StandardOutPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/thekjc-tunnel.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/thekjc-tunnel.log</string>
+</dict>
+</plist>
