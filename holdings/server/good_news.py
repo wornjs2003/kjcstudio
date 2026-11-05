@@ -10,11 +10,11 @@
     갈래 · 방향  holdings/data/disclosure-tags.json 의 「방향」 줄 한 곳(공시 제목의 낱말로 가른다 · 위에서 먼저 걸린 것 하나)
     크기       공급계약 — 공시 본문(OpenDART document.xml)의 「매출액 대비(%)」 칸을 그대로 읽는다(11-05 15:18 잼 · 동성화인텍 25.9)
     목적       자사주 취득 — OpenDART 자기주식 취득 결정 상세(tsstkAqDecsn)의 취득목적(aq_pp) 글을 낱말로 가른다
-               소각 · 주주가치 · 주주환원 · 주가안정 · 기업가치 → 위 / 임직원 · 보상 · 상여 · 우리사주 · 주식매수선택권 → 판정 밖 / 둘 다 · 아무것도 → 못 가름
+               가르는 낱말은 갈래 파일 「자사주 취득」 항목의 목적위 · 목적밖 한 곳 — 위만 → 위 / 밖만 → 판정 밖 / 둘 다 · 아무것도 → 못 가름
     이미 오름   공시 날 앞 마지막 거래일 종가 ÷ 그보다 newsPreDays 거래일 앞 종가 − 1 (%) — 자동 관심종목이 쌓는 J 종가(auto_watch_day),
                없으면 차트 일봉(candles D · 통합). 판정에는 안 쓰고 값만 낸다(기준 칸이 아직 없다)
     기준       투자전략 문서 strategy-rules 의 volsurge 칸 — newsPreDays(정수) · newsMinSizePct(0 이상). 빈칸이면 「기준 없음」(0 으로 안 메운다)
-    판정       맞음 · 아님 · 못 가름 · 판정 밖 + 까닭 한 줄
+    판정       맞음 · 아님 · 못 가름 · 판정 밖 + 까닭 한 줄 — 크기 기준(newsMinSizePct)이 빈칸이면 크기를 견주지 않았으니 「못 가름」(맞음 아님 · 개념정의 검수 11-05)
 
     받기       8765(보내는 서버)만 OpenDART 를 부른다 — 5분마다 최근 FETCH_DAYS 날의 공급계약 · 자사주 공시 중 아직 안 받은 것을
                한 바퀴 FETCH_MAX 건까지. 한 건에 한 번 받아 market.db 의 good_news_detail 에 둔다(하루 쓸 값은 dart._dart_get 이 센다).
@@ -45,8 +45,6 @@ TICK = 300
 GAP_SEC = 0.3
 PRE_LOOK_CAL_DAYS = 120         # 「이미 오름」 종가를 찾는 달력 날
 
-UP_WORDS = ("소각", "주주가치", "주주환원", "주가안정", "주가의안정", "기업가치")
-OUT_WORDS = ("임직원", "보상", "상여", "우리사주", "주식매수선택권", "스톡옵션")
 
 _SCHEMA = (
     """CREATE TABLE IF NOT EXISTS good_news_detail (
@@ -135,10 +133,11 @@ def _purpose(key, rno, corp_code, rcept_dt):
     raise ValueError("상세에 그 접수번호 없음(그날 그 회사 상세 %d건)" % len(lst))
 
 
-def purpose_side(p):
-    """취득목적 글 → '위' · '밖' · None(못 가름)."""
+def purpose_side(p, ln):
+    """취득목적 글 → '위' · '밖' · None(못 가름). 낱말은 갈래 파일의 목적위 · 목적밖(없으면 못 가름)."""
     t = _flat(p)
-    up, out = any(w in t for w in UP_WORDS), any(w in t for w in OUT_WORDS)
+    up = any(_flat(w) in t for w in ln.get("목적위") or [])
+    out = any(_flat(w) in t for w in ln.get("목적밖") or [])
     return "위" if up and not out else "밖" if out and not up else None
 
 
@@ -168,6 +167,7 @@ def fetch_round(proxy):
             _status["error"] = "OpenDART 키 없음"
             return 0
         _init(proxy)
+        _status["error"] = None      # 지난 바퀴 오류는 이 바퀴가 다시 적는다
         todo = _todo(proxy, (_now() - timedelta(days=FETCH_DAYS)).strftime("%Y%m%d"))
         got = 0
         for rno, cc, dt, ln in todo[:FETCH_MAX]:
@@ -182,6 +182,9 @@ def fetch_round(proxy):
             except dart.DartBudgetExceeded as e:
                 _status["error"] = safe_message(e, 120)
                 break
+            except OSError as e:     # 연결 끊김 · 시간 넘김(URLError · timeout 포함) — 행을 안 써 다음 바퀴에 다시 받는다
+                _status["error"] = "다음 바퀴에 다시: " + safe_message(e, 120)
+                continue
             except Exception as e:
                 err = safe_message(e, 160)
             with proxy._db_lock, proxy.db_conn() as conn:
@@ -260,7 +263,7 @@ def judge(row, ln, det, min_size):
         chk["dirUp" if ln.get("목적") else "size"] = None
         return "못 가름", "상세 아직 안 받음(8765 가 5분마다 받는다)", chk
     if ln.get("목적"):
-        side = purpose_side(det["purpose"]) if det["purpose"] is not None else None
+        side = purpose_side(det["purpose"], ln) if det["purpose"] is not None else None
         if side == "밖":
             chk["upLane"] = chk["dirUp"] = False
             return "판정 밖", "취득 목적이 임직원 보상 쪽 — 「%s」" % det["purpose"], chk
@@ -274,7 +277,7 @@ def judge(row, ln, det, min_size):
             return "못 가름", "크기 못 읽음 — %s" % (det["error"] or "칸 없음"), chk
         if min_size is None:
             chk["size"] = None
-            return "맞음", "%s · 매출액 대비 %.1f%% · 크기 기준 없음(빈칸)" % (ln["갈래"], size), chk
+            return "못 가름", "크기 기준 없음(newsMinSizePct 빈칸) · 매출액 대비 %.1f%%" % size, chk
         chk["size"] = size >= min_size
         if not chk["size"]:
             return "아님", "매출액 대비 %.1f%% < 기준 %g%%" % (size, min_size), chk
