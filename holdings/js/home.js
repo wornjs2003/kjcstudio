@@ -1410,6 +1410,7 @@ const SORTS = {
           empty: () => (!preMeta ? '불러오는 중'
             : preMeta.noTrade ? '넥스트레이드 프리장 거래가 아직 없습니다'
             : preMeta.phase === 'before' ? `프리장은 ${preMeta.preOpen} 부터 · 지금은 앞 판이 없습니다`
+            : preMeta.phase === 'live' ? `아직 오늘 판이 없습니다 — 서버가 ${Math.round((preMeta.cacheTtl || 180) / 60)}분마다 짓습니다`
             : '프리장 판 없음 — 그 시각 짓지 않았거나 못 남겼습니다') },     // 까닭을 단정하지 않는다(qa 덧 11-05 · 「못 쟀으면 못 쟀다」)
 };
 

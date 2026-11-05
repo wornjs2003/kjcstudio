@@ -45,7 +45,7 @@ MIN_PREV = nxt_pre.MIN_PREV   # 거래량 배율 — 앞 날 장 전 거래량 �
 SECTOR_MIN = 3           # 업종 묶음 — 거래가 있는 종목이 이 수 이상인 업종만
 SECTOR_TOP = 6           # 업종 묶음 — 평균 등락률 크기 큰 순 몇 개
 
-_st = {"at": 0.0, "data": None, "day": None, "final": False}
+_st = {"at": 0.0, "data": None, "day": None, "final": False, "read": 0.0}     # read — 읽는 서버가 DB 를 마지막으로 읽은 때
 _SCHEMA = """CREATE TABLE IF NOT EXISTS pre_flow_board (
     day TEXT PRIMARY KEY, data TEXT NOT NULL, final INTEGER, saved_at TEXT)"""
 _writer = {"on": False}      # start() 를 부른 서버(8765)만 DB 에 쓴다
@@ -173,13 +173,20 @@ def _save(proxy, m, final):
 
 
 def _load_saved(proxy):
-    """DB 에 남은 가장 최근 판 (판, 굳혔나) — 없거나 못 읽으면 (None, False)."""
+    """DB 에 남은 가장 최근 판 (판, 굳혔나, 남긴 때 epoch) — 없거나 못 읽으면 (None, False, 0).
+    남긴 때는 그날 · saved_at 으로 센다 — 읽은 지금으로 두면 아침 판이 방금 받은 값처럼 보였다(qa 덧 11-05)."""
     try:
         with proxy.db_conn() as conn:
-            r = conn.execute("SELECT data, final FROM pre_flow_board ORDER BY day DESC LIMIT 1").fetchone()
-        return (json.loads(r[0]), bool(r[1])) if r else (None, False)
+            r = conn.execute("SELECT data, final, day, saved_at FROM pre_flow_board ORDER BY day DESC LIMIT 1").fetchone()
+        if not r:
+            return None, False, 0.0
+        try:
+            built = datetime.strptime(r[2] + r[3], "%Y%m%d%H:%M:%S").replace(tzinfo=KST).timestamp()
+        except (TypeError, ValueError):
+            built = 0.0
+        return json.loads(r[0]), bool(r[1]), built
     except Exception:
-        return None, False
+        return None, False, 0.0
 
 
 def _rebuild(proxy, cfg):
@@ -200,19 +207,31 @@ def _rebuild(proxy, cfg):
 
 
 def fetch(proxy, cfg):
-    """(판, 지은 시각, phase). 프리장 동안은 낡으면 뒤에서 다시 짓고, 08:50~09:00 에 한 번 굳힌다."""
+    """(판, 지은 시각, phase). 쓰는 서버(start 를 부른 8765)는 프리장 동안 낡으면 뒤에서 다시 짓고 08:50~09:00 에 한 번 굳힌다 ·
+    읽는 서버는 DB 에 남은 판만 읽는다."""
     now = _now()
     ph = phase(now)
     day = now.strftime("%Y%m%d")
     with _lock:
         data, at, sday, final = _st["data"], _st["at"], _st["day"], _st["final"]
     hm = (now.hour, now.minute)
+    if not _writer["on"]:
+        # 읽는 서버(8764 · 세션) — 짓지 않는다(받는 곳은 서버 하나 · 개념정의 검수 11-05). 판이 없거나 FLOW_TTL 보다 낡았으면
+        # 쓰는 서버가 남긴 판을 다시 읽는다. 프리장 중인데 DB 에 오늘 판이 아직 없으면 None — 화면은 「아직」
+        if data is None or time.time() - _st["read"] >= FLOW_TTL:
+            saved, sfinal, built = _load_saved(proxy)
+            with _lock:
+                _st["data"], _st["day"], _st["final"], _st["at"], _st["read"] = saved, (saved or {}).get("day"), sfinal, built, time.time()
+            data, at = saved, built
+        if ph == "live" and data and data.get("day") != day:
+            return None, at, ph
+        return data, at, ph
     if data is None or (sday != day and ph != "live"):
-        saved, sfinal = _load_saved(proxy)        # 재시작 뒤 · 다른 서버 — 보내는 서버가 남긴 그날(또는 앞 날) 판
+        saved, sfinal, built = _load_saved(proxy)   # 재시작 뒤 — 이 서버가 남긴 그날(또는 앞 날) 판 · at 은 남긴 때
         if saved:
             with _lock:
                 _st["data"], _st["day"], _st["final"] = saved, saved.get("day"), sfinal
-                _st["at"] = _st["at"] or time.time()
+                _st["at"] = built or _st["at"]
             data, sday, final, at = saved, saved.get("day"), sfinal, _st["at"]
     want = (ph == "live" and (data is None or sday != day or time.time() - at >= FLOW_TTL)) or \
            (ph == "closed" and now.weekday() < 5 and PRE_CLOSE <= hm < MAIN_OPEN and not (sday == day and final))
