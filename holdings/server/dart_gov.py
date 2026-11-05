@@ -20,7 +20,7 @@
 건마다 GOV_GAP_SEC 쉼 · 시가총액 큰 회사(dart_universe)부터 · 그 뒤 나머지. 하루 쓸 값(dart.DART_DAILY_BUDGET)의
 남은 양이 GOV_RESERVE 아래면 멈춘다 — 공시 알림 몫이다. 부르는 것은 전부 dart._dart_get 을 거쳐 하루 셈에 든다.
 
-**켜기는 GOV_FETCH 다 — 기본 꺼짐.** 켜는 것은 재권님 지시로 한다(「켜기」). 꺼져 있어도 두 주소는 쌓인 것을 낸다.
+**켜기는 GOV_FETCH 다** — 2026-11-05 재권님 「응 켜」 로 켰다. 꺼도 두 주소는 쌓인 것을 낸다.
 쌓는 것은 공시를 받는 쓰기 서버(8765) 하나 — 읽기 전용 DB 서버(8764 등)는 같은 표를 읽기만 한다.
 
 다시 받기 — 사업보고서는 해에 한 번이라, 받은 해가 지난해보다 앞이면(새 보고서가 나왔을 수 있다) GOV_RETRY_DAYS 뒤 다시 본다.
@@ -48,12 +48,12 @@ from secrets_guard import safe_message
 
 KST = dart.KST
 
-GOV_FETCH = False            # 켜기 — 재권님 지시로만 True (위 머리말)
+GOV_FETCH = True             # 켜기 — 재권님 「응 켜」(2026-11-05 19:1x · 개발1 창) · 끄려면 False
 GOV_NIGHT_CALLS = 4000       # 한 밤에 이만큼까지(재권님 「응 그래」 · 11-05)
 GOV_GAP_SEC = 2.0            # 건마다 쉼
 GOV_RESERVE = 2000           # 하루 쓸 값이 이만큼 남으면 멈춘다 — 공시 알림 몫
 GOV_RETRY_DAYS = 30          # 받은 해가 지난해보다 앞 · 건너뛴 곳을 다시 볼 날수
-GOV_FROM_H, GOV_TO_H = 20, 7  # 밤 — 20:00 부터 다음 날 07:00 앞까지(공시 바퀴 POLL_FROM · POLL_TO 의 밖)
+GOV_FROM_H, GOV_TO_H = dart.POLL_TO // 60, dart.POLL_FROM // 60   # 밤 — 공시 바퀴(POLL_FROM ~ POLL_TO)의 밖 · 값은 dart.py 한 곳
 GOV_TICK_SEC = 60            # 받을 때가 아닐 때 다시 보는 간격
 
 MARKETS = ("Y", "K")         # 코스피 · 코스닥 — 코넥스(N) · 기타(E)는 뺀다(재권님 18:0x)
