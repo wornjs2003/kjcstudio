@@ -59,6 +59,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import dart
 import company_profile
 import us_universe
+import kis_ws
 import us_sectors
 import naver
 import naver_period
@@ -1139,6 +1140,10 @@ def usage_stats():
         "prioLowYields": _prio_stat["lowYields"],
         # ⓓ 롱폴링 — 꺼져 있으면 `longpoll: false` 이고 셈은 0 이다(그 자리가 없으므로)
         "longpoll": LONGPOLL_ON,
+        # 실시간 체결(웹소켓 · 2026-11-05) — 화면은 `kisWs` 가 참일 때만 `/api/kis/live` 를 묻는다.
+        # 넘기는 서버는 8765 에 물어 그쪽이 꺼져 있으면 `on:false` 를 받는다(화면이 그때 쉰다)
+        "kisWs": kis_ws.KIS_WS_ON or bool(upstream_base()),
+        "kisWsStats": kis_ws.stats(),
         "longpollPrefixes": list(LONGPOLL_PREFIXES),
         "longpollActive": _lp_stat["active"],
         "longpollTotal": _lp_stat["total"],
@@ -8286,6 +8291,28 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json(longpoll(us, _qb.get("h") or [], hold))
             return
 
+        # ── 실시간 체결 (2026-11-05 · server/kis_ws.py) ── 새 체결이 올 때까지 쥐었다가 낸다.
+        # 켠 서버(`KJC_KIS_WS=1` · 8765)만 증권사와 붙는다 — 그 밖은 상류(8765)로 넘긴다. 둘 다 아니면 `on:false`
+        if route == "live":
+            code = (qs.get("code") or [""])[0].strip().upper()
+            if not re.fullmatch(r"[0-9A-Z]{6}", code):
+                self._send_json({"ok": False, "error": "code 는 여섯 자리 종목코드여야 합니다."}, 400)
+                return
+            if kis_ws.KIS_WS_ON:
+                try:
+                    _seq = int((qs.get("seq") or ["0"])[0])
+                    _hold = float((qs.get("hold") or [str(kis_ws.LIVE_HOLD_SEC)])[0])
+                except ValueError:
+                    self._send_json({"ok": False, "error": "seq · hold 는 숫자여야 합니다."}, 400)
+                    return
+                self._send_json(kis_ws.live(code, _seq, _hold))
+                return
+            _hb = upstream_base()
+            if _hb and self._kis_route_via_upstream(_hb):
+                return
+            self._send_json({"ok": True, "on": False})
+            return
+
         if route == "policy":
             # `drawMs` 는 화면이 잰 그리는 시간. 없거나 이상하면 `None` — 하한에서 뺀다.
             try:
@@ -9314,6 +9341,12 @@ def main():
         print("  장중 알림 : 사용 (상승 VI · +%d%% 급등 · %d초마다 · %s · 발송 %s)"
               % (intraday_alerts.SURGE_PCT, intraday_alerts.TICK, _st["session"],
                  " · ".join("%s %s" % (k, "켜짐" if v else "**꺼짐**") for k, v in _st["send"].items())))
+
+    # 실시간 체결 — 키 읽기 · 시세 기준을 넘겨 둔다. 연결은 화면이 처음 물을 때 붙는다(아무도 안 보면 안 붙는다)
+    kis_ws.configure(load_secrets, quote_market_div)
+    if kis_ws.KIS_WS_ON:
+        print("  실시간 체결 : 사용 (보는 종목만 · 최대 %d종목 · %d초 안 보면 뺌 · 끊기면 %d→%d초 쉬고 다시)"
+              % (kis_ws.LIVE_MAX_CODES, kis_ws.LIVE_IDLE_SEC, kis_ws.RECONNECT_MIN_SEC, kis_ws.RECONNECT_MAX_SEC))
 
     if not SLOW and is_sender(args.port) and signal_watch.start(sys.modules[__name__]):
         # **시각을 여기 박지 않는다.** `SESSION_FROM`·`SESSION_TO` 에서 만든다 —

@@ -39,6 +39,7 @@ import { createFlowFoot } from './flow-foot.js';
 import { apiFetch, viewUrl } from '../data/api.js';
 import { everyServerMs } from '../store/timing.js';
 import { watch } from '../store/longpoll.js';
+import { watchLive, withLive } from '../store/live-tick.js';
 
 /* 서버가 5분마다 공시를 받아 두므로 화면도 그 주기에 맞춘다 */
 /* **서버가 정한다** (2026-10-02 · 서버리소스 화면 묶음 ⑥).
@@ -131,6 +132,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
     if (!price) return;
 
     if (liveRaw) lastLiveRaw = liveRaw;
+    liveRaw = withLive(stock.code, liveRaw);      // 실시간 체결이 더 새것이면 그 값으로(2026-11-05 · store/live-tick.js)
     /* **단건만 와도 그린다** (2026-10-12 · 재권님 「응 가로 해줘」). 묶음 시세(카드 · 보이는 줄)는
        고른 종목 · 관심 · 보이는 줄만 받아, 그 밖 종목을 주소로 연 모달은 머리가 「불러오는 중」 에 남았다 */
     const oneNow = detailApi && detailApi.full ? detailApi.full() : null;
@@ -541,6 +543,8 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
   const tickWatch = watch({ url: () => (dead ? null : viewUrl(`/api/kis/ticks?code=${stock.code}`, view)),
                            onChange: () => loadTicks(),
                            key: TICKS_RELOAD_KEY, fallbackMs: TICKS_RELOAD_FALLBACK_MS });
+  /* 이 모달 종목의 체결마다 머리 가격 · 끝 봉을 움직인다 (2026-11-05 재권님 「차트모달은 캔들 움직임이 빠르게」) — 서버에 실시간이 없으면 쉰다 */
+  const liveWatch = watchLive(() => (dead ? null : stock.code), () => { if (!dead) paintHead(lastLiveRaw); });
   const stopFlow = everyServerMs(FLOW_RELOAD_KEY, FLOW_RELOAD_FALLBACK_MS,
                                  () => { if (!dead) loadFlow(); });
 
@@ -570,6 +574,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
       if (chart) { chart.destroy(); chart = null; }
       if (reloadTimer) { reloadTimer(); reloadTimer = null; }   // everyServerMs 가 준 멈추는 함수
       tickWatch.stop();
+      liveWatch.stop();
       chartWatch.stop();
       stopFlow();                 // everyServerMs 가 준 멈추는 함수
       panel3.destroy();
