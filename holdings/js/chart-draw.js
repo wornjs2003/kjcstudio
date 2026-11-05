@@ -8,6 +8,9 @@
    단추   추세선 — 차트를 두 번 눌러 두 점 · 수평선 — 한 번 눌러 그 가격 · 지우개 — 이 종목에 그린 것 전부
           고른 단추는 다시 누르거나 Esc 를 누를 때까지 켜져 있다 — 이어서 여러 줄을 긋는다
           (재권님 18:2x 「첫번째 추세선 그리고 두번째 그리는데 안그려져」 — 앞에는 한 줄을 그으면 저절로 꺼졌다)
+   미리 보기  추세선 첫 점을 찍은 뒤(또는 끄는 동안) 마우스가 있는 봉까지 점선이 따라 그려지고 둘째 점을 찍으면 굳는다
+          (재권님 11-05 10:3x 「차트에 선그릴때 클릭후 마우스 이동하면 이동하는 곳에 맞춰서 선이 미리 보여지게」).
+          수평선은 한 번에 그어지고 십자선 가로줄이 이미 그 자리를 보여 따로 두지 않는다. 봉 없는 빈자리에서는 점선을 감춘다
    기억   종목마다 브라우저에 둔다(localStorage · 「값을 들고 있는 것」). 주기를 바꿔도 같은 선이 보인다 —
           점은 봉 시각(서버 ts)으로 적어 두고 그릴 때 지금 주기의 그 시각 봉에 붙인다.
           지금 받아 둔 봉 밖에 있는 점이 있으면 그 추세선은 그리지 않는다(지어낸 자리에 긋지 않는다)
@@ -95,6 +98,8 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
   let data = load(code);
   const drawn = { h: [], t: [] };     // 그린 선(라이브러리 것) — 지울 때 쓴다
   let firstMark = null;               // 첫 점 — 눌렀다는 표시로 그 자리에 점 하나(재권님 「클릭하면 점 나오고 다시 클릭하면 연결」)
+  let ghost = null;                   // 미리 보기 점선 — 첫 점(또는 누른 자리)에서 마우스 자리까지
+  let ghostRaf = 0;
 
   const bar = document.createElement('div');
   bar.className = 'kh-draw';
@@ -108,9 +113,34 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
     pane.classList.toggle('kh-drawing', !!mode);
   };
 
+  function clearGhost() {
+    if (ghostRaf) { cancelAnimationFrame(ghostRaf); ghostRaf = 0; }
+    if (ghost) { try { chart.removeSeries(ghost); } catch { /* 이미 사라짐 */ } ghost = null; }
+  }
+
   function clearFirst() {
     pend = null;
+    clearGhost();
     if (firstMark) { try { chart.removeSeries(firstMark); } catch { /* 이미 사라짐 */ } firstMark = null; }
+  }
+
+  /* 미리 보기 — 시작 점 { ts, p } 에서 마우스 자리 q 까지. 같은 봉이거나 봉 없는 빈자리면 감춘다 */
+  function showGhost(from, q) {
+    const ia = from ? snap(candles, from.ts) : -1;
+    const ib = q && q.i != null && q.p != null ? q.i : -1;
+    if (ia < 0 || ib < 0 || ia === ib) { if (ghost) { try { ghost.setData([]); } catch { /* 칸이 사라졌다 */ } } return; }
+    const pts = [{ time: timeOf(ia), value: from.p }, { time: timeOf(ib), value: q.p }];
+    if (ia > ib) pts.reverse();
+    try {
+      if (!ghost) {
+        ghost = chart.addSeries(LC.LineSeries, {
+          color: inkOf(nextC()), lineWidth: 2, lineStyle: LC.LineStyle.Dashed, lastValueVisible: false, priceLineVisible: false,
+          crosshairMarkerVisible: false, pointMarkersVisible: false,
+          autoscaleInfoProvider: () => null,        // 미리 보기도 세로 범위를 움직이지 않게
+        });
+      }
+      ghost.setData(pts);
+    } catch { /* 칸이 사라졌다 */ }
   }
 
   function setMode(m) {
@@ -196,10 +226,19 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
     down = at(e);
     e.preventDefault();
   };
+  const onMove = (e) => {
+    if (mode !== 'trend') return;
+    const from = pend || (down ? pointAt(down) : null);
+    if (!from) return;
+    const q = at(e);
+    if (ghostRaf) cancelAnimationFrame(ghostRaf);
+    ghostRaf = requestAnimationFrame(() => { ghostRaf = 0; showGhost(from, q); });
+  };
   const onUp = (e) => {
     if (!down || !mode) { down = null; return; }
     const d = down, u = at(e);
     down = null;
+    clearGhost();
     if (mode === 'hline') {
       if (u.p == null) return;
       const h = { p: u.p, c: nextC() };
@@ -254,6 +293,7 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
   bar.addEventListener('click', onBar);
   document.addEventListener('keydown', onKey);
   pane.addEventListener('pointerdown', onDown, true);
+  pane.addEventListener('pointermove', onMove, true);
   window.addEventListener('pointerup', onUp, true);
   nav(!mode);
   paintBar();
@@ -261,7 +301,9 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
   return {
     destroy() {
       pane.removeEventListener('pointerdown', onDown, true);
+      pane.removeEventListener('pointermove', onMove, true);
       window.removeEventListener('pointerup', onUp, true);
+      if (ghostRaf) cancelAnimationFrame(ghostRaf);
       document.removeEventListener('keydown', onKey);
       bar.remove();
       pane.classList.remove('kh-drawing');
