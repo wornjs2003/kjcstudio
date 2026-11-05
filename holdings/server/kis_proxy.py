@@ -4331,6 +4331,8 @@ def fetch_investor_top(cfg, direction="buy", market="all", by="qty", limit=10):
 # 빠진 종목을 flipped 로 낸다. 어느 쪽이 매도(0 이하)로 바뀌었나 · 상위 30 밖으로 밀려 값을 모르는 쪽 · 처음 빠진 것을 본 시각.
 # 다시 셋 다 사면 flipped 에서 지운다. 프로그램을 못 받은 종목은 빠진 것으로 세지 않는다(못 받은 것이지 판 것이 아니다).
 _joint_buy = {"at": 0.0, "data": None, "retry": False, "day": None, "seen": {}, "flipped": {}}
+JOINT_RETRY_MIN = 60                        # 못 받은 것이 있는 판을 다시 짓는 최소 간격 (초)
+JOINT_FIRST_WAIT = 12                       # 첫 판을 기다리는 최대 시간 (초) — 묻는 쪽만 기다리고 판 자리는 안 막는다
 _joint_buy_lock = threading.Lock()          # 판을 읽고 바꾸는 자리
 _joint_buy_build = threading.Lock()         # 짓는 것은 한 번에 하나
 
@@ -4455,8 +4457,16 @@ def fetch_joint_buy(cfg):
     """(판, 지은 시각). 판이 없으면 뒤에서 짓기 시작하고 (None, 0)."""
     with _joint_buy_lock:
         at, data, retry = _joint_buy["at"], _joint_buy["data"], _joint_buy["retry"]
-    if data is None or retry or time.time() - at >= INVESTOR_TOP_TTL:
-        threading.Thread(target=_joint_buy_rebuild, args=(cfg,), daemon=True, name="joint-buy").start()
+    age = time.time() - at
+    # 못 받은 것이 있는 판(retry)도 JOINT_RETRY_MIN 안에는 다시 안 짓는다 — 한 종목 프로그램이 늘 비면 부를 때마다 KIS 14건 남짓을
+    # 되풀이한다(11-05 qa 덧 · 롱폴이 켜진 8765)
+    if data is None or age >= INVESTOR_TOP_TTL or (retry and age >= JOINT_RETRY_MIN):
+        t = threading.Thread(target=_joint_buy_rebuild, args=(cfg,), daemon=True, name="joint-buy")
+        t.start()
+        if data is None:            # 첫 판은 JOINT_FIRST_WAIT 까지 기다려 본다 — pending 만 내면 롱폴이 꺼진 서버에서 화면이 다음 주기까지 「불러오는 중」(11-05 8772)
+            t.join(JOINT_FIRST_WAIT)
+            with _joint_buy_lock:
+                at, data = _joint_buy["at"], _joint_buy["data"]
     return data, at
 
 
