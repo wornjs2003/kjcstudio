@@ -20,8 +20,13 @@
     없음        못 받은 값은 None(0 아님) · 넥스트레이드 거래량 합이 0 이면 휴장 · 장 전으로 보고 판을 비운다(nxt_pre 와 같은 셈)
 
 KIS 는 proxy.kis_get(예산 · 토큰은 그쪽) · 한 번 짓는 데 멀티 12건 + TOP_N 건.
+
+**보내는 서버(8765)가 묻는 이 없이도 짓고 그날 판을 DB 에 남긴다** (11-05 qa 덧 — 메모리에만 두면 아무도 안 열었거나 재시작하면
+그날 판이 사라졌다). start() 바퀴가 프리장 동안 FLOW_TTL 마다 · 08:50~09:00 에 한 번 지어 market.db `pre_flow_board`(날 · 판 JSON)에
+쓴다. 다른 서버(세션 · 8764)는 메모리에 판이 없으면 그 표를 읽는다(세션 서버는 메인 DB 를 읽기 전용) — 하루 KIS 900건쯤(17번 × 52).
 """
 
+import json
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -41,6 +46,9 @@ SECTOR_MIN = 3           # 업종 묶음 — 거래가 있는 종목이 이 수 
 SECTOR_TOP = 6           # 업종 묶음 — 평균 등락률 크기 큰 순 몇 개
 
 _st = {"at": 0.0, "data": None, "day": None, "final": False}
+_SCHEMA = """CREATE TABLE IF NOT EXISTS pre_flow_board (
+    day TEXT PRIMARY KEY, data TEXT NOT NULL, final INTEGER, saved_at TEXT)"""
+_writer = {"on": False}      # start() 를 부른 서버(8765)만 DB 에 쓴다
 _lock = threading.Lock()
 _build = threading.Lock()
 
@@ -154,6 +162,26 @@ def _make(proxy, cfg):
             "day": day, "hm": now.strftime("%H:%M")}
 
 
+def _save(proxy, m, final):
+    try:
+        with proxy._db_lock, proxy.db_conn() as conn:
+            conn.execute(_SCHEMA)
+            conn.execute("INSERT OR REPLACE INTO pre_flow_board (day, data, final, saved_at) VALUES (?,?,?,?)",
+                         (m["day"], json.dumps(m, ensure_ascii=False), 1 if final else 0, _now().strftime("%H:%M:%S")))
+    except Exception as e:
+        print("  [프리장] 저장 못 함 (%s)" % type(e).__name__, flush=True)
+
+
+def _load_saved(proxy):
+    """DB 에 남은 가장 최근 판 (판, 굳혔나) — 없거나 못 읽으면 (None, False)."""
+    try:
+        with proxy.db_conn() as conn:
+            r = conn.execute("SELECT data, final FROM pre_flow_board ORDER BY day DESC LIMIT 1").fetchone()
+        return (json.loads(r[0]), bool(r[1])) if r else (None, False)
+    except Exception:
+        return None, False
+
+
 def _rebuild(proxy, cfg):
     if not _build.acquire(blocking=False):
         return
@@ -163,6 +191,8 @@ def _rebuild(proxy, cfg):
         with _lock:
             _st["data"], _st["at"], _st["day"] = m, time.time(), m["day"]
             _st["final"] = ph == "closed"          # 08:50~09:00 에 지은 판 — 그날 판으로 굳힌다
+        if _writer["on"] and not m.get("noTrade"):
+            _save(proxy, m, ph == "closed")
     except Exception as e:
         print("  [프리장] 짓다 멈춤 (%s)" % type(e).__name__, flush=True)
     finally:
@@ -177,6 +207,13 @@ def fetch(proxy, cfg):
     with _lock:
         data, at, sday, final = _st["data"], _st["at"], _st["day"], _st["final"]
     hm = (now.hour, now.minute)
+    if data is None or (sday != day and ph != "live"):
+        saved, sfinal = _load_saved(proxy)        # 재시작 뒤 · 다른 서버 — 보내는 서버가 남긴 그날(또는 앞 날) 판
+        if saved:
+            with _lock:
+                _st["data"], _st["day"], _st["final"] = saved, saved.get("day"), sfinal
+                _st["at"] = _st["at"] or time.time()
+            data, sday, final, at = saved, saved.get("day"), sfinal, _st["at"]
     want = (ph == "live" and (data is None or sday != day or time.time() - at >= FLOW_TTL)) or \
            (ph == "closed" and now.weekday() < 5 and PRE_CLOSE <= hm < MAIN_OPEN and not (sday == day and final))
     if want:
@@ -187,3 +224,20 @@ def fetch(proxy, cfg):
             with _lock:
                 data, at = _st["data"], _st["at"]
     return data, at, ph
+
+
+def start(proxy):
+    """보내는 서버가 뜰 때 한 번 — 묻는 이 없이 프리장 판을 짓고 DB 에 남기는 바퀴."""
+    _writer["on"] = True
+
+    def loop():
+        time.sleep(30)
+        while True:
+            try:
+                fetch(proxy, proxy.load_secrets())
+            except Exception as e:
+                print("  [프리장] 바퀴 멈춤 (%s)" % type(e).__name__, flush=True)
+            time.sleep(30)
+
+    threading.Thread(target=loop, daemon=True, name="pre-flow-loop").start()
+    return True
