@@ -40,16 +40,3 @@
 @media (min-width: 701px) {
   .rl .rl-grid { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
 }
-/* 오늘 이 룰에 걸린 종목 (2026-11-05) — 위 장외 표와 같은 표 모양 · 다른 것만 */
-.rl table.aw-tb { width: 100%; min-width: 0; }
-.rl .aw-tb .st-name { background: var(--kh-bg-card); }
-.rl .aw-how { margin: 8px 0 0; }
-.rl select.rl-in { width: auto; text-align: left; }
-.rl .aw-tb th:first-child { text-align: left; }
-.rl .aw-how ul { margin: 2px 0 0; padding-left: 1.2em; }
-.rl .aw-how b { color: var(--kh-text-secondary); font-weight: 600; }
-.rl .aw-how-h { color: var(--kh-text-secondary); font-weight: 600; margin-top: 4px; }
-/* 검색 단추 (11-05 재권님 「오른쪽 위에 검색 버튼」) — 룰 카드 머리 오른쪽 */
-.rl .rl-hrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.rl .rl-go { font: inherit; font-size: 12.5px; font-weight: 600; padding: 4px 14px; border: 0; border-radius: var(--kh-radius-sm); background: var(--kh-accent); color: var(--kh-text-on-fill); cursor: pointer; }
-.rl .rl-go:disabled { opacity: .6; cursor: default; }

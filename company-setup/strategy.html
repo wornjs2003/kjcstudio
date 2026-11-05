@@ -38,7 +38,7 @@
       <span class="kh-cat-my">증권사 리포트</span>
     </nav>
     <!-- 종목 고르는 룰 (2026-11-05 재권님 「투자전략에는 어떤 종목을 사서 할지에 대한 룰을 잡을려고해 시안 잡아보라고 해」 · 「너는 투자전략에다가 투자전략에 대한걸 해줘야 할거같아」 →
-         시안 temp/rule.png → 「우선 이렇게 해서 올려놔」 → 11-05 「고르는 조건에 재료도 추가해줘 재료라 함은 해당 종목과 연관된 좋은 뉴스나 미국장의 같은 섹터의 상승」). 룰 숫자는 재권님이 칸에 넣고 · 오늘 걸린 종목은 서버(/api/auto-watch)가 그 값으로 고른다(11-05 「응 해봐」 · 시안 temp/aw-1256.png) · 지난 성적은 아직 없다.
+         시안 temp/rule.png → 「우선 이렇게 해서 올려놔」 → 11-05 「고르는 조건에 재료도 추가해줘 재료라 함은 해당 종목과 연관된 좋은 뉴스나 미국장의 같은 섹터의 상승」). 지금은 틀만 — 룰 숫자 · 오늘 걸린 종목 · 지난 성적은 아직 없다.
          첫 룰 「전일 거래량 급등」 은 자동 관심종목 물음(보드 카드 「전일 거래량 급등 종목 기준 확인」)과 같은 기준이다 — 정해지면 기준은 서버 한 곳에 두고 이 칸은 받아 쓴다 -->
     <section class="st rl">
       <div class="st-meta" id="rl-meta">룰 값을 받는 중…</div>
@@ -49,12 +49,11 @@
       </div>
       <div class="rl-grid">
         <div class="st-card">
-          <h3 class="rl-h rl-hrow">룰 — 전일 거래량 급등<button type="button" class="rl-go" id="rl-go" aria-label="이 룰 값으로 오늘 걸린 종목 다시 찾기">검색</button></h3>
+          <h3 class="rl-h">룰 — 전일 거래량 급등</h3>
           <div class="st-cap">한 룰은 다섯 칸 — 무엇을 고르나 · 언제 사나 · 언제 파나 · 얼마나 사나 · 무엇을 빼나</div>
           <!-- 미정: 빈칸은 재권님이 직접 넣으신다(11-05 「그 숫자는 내가 넣을 수 있게 해줘」) — 비어 있는 칸만 빨간 바탕(「아직 안 정해진 자리는 빨간 바탕으로 남긴다」) · 넣은 값은 js/strategy-rule.js 가 서버 문서에 둔다 -->
           <table class="rl-tb" id="rl-tb">
             <tr><th>고르는 조건</th><td>앞 거래일 정규장 등락률 <input class="rl-in rl-num" data-k="prevPct" inputmode="decimal" aria-label="앞 거래일 등락률 기준(%)">% 이상<br>거래량이 20일 평균의 <input class="rl-in rl-num" data-k="volMult" inputmode="decimal" aria-label="거래량 배수 기준(20일 평균의 몇 배)" data-min="0">배 이상<br>재료 — 그 종목과 연관된 좋은 뉴스 또는 전날 밤 미국장 같은 섹터 상승 <input class="rl-in rl-num" data-k="sectorPct" inputmode="decimal" aria-label="미국장 같은 섹터 상승 기준(%)">% 이상<br><span class="rl-sug">개발 안: 15% · 5배(추천값 · 정한 값 아님) — 자동 관심종목과 같은 기준을 한 곳에 둠</span><br><span class="rl-sug">＋ 조건 더하기 — 수급(외국인 · 기관 순매수) · 시가총액 · 차트(이동평균 위) · 공시</span></td></tr>
-            <tr><th>줄 세우기</th><td><select class="rl-in rl-sel" data-k="sortBy" aria-label="오늘 걸린 종목을 줄 세우는 기준"><option value="mult">배수 순</option><option value="pct">등락률 순</option></select> · 최대 <input class="rl-in rl-num" data-k="autoMax" inputmode="numeric" aria-label="오늘 걸린 종목을 몇 개까지 보일지" data-min="0" data-int>종목까지 <span class="rl-sug">빈칸이면 걸린 종목 전부</span></td></tr>
             <tr><th>사는 때</th><td><input class="rl-in rl-txt" data-k="buyWhen"  aria-label="사는 때"> <span class="rl-sug">예: 다음 날 프리장 · 시가 · 눌림(전일 종가 근처)</span></td></tr>
             <tr><th>파는 때</th><td>목표 +<input class="rl-in rl-num" data-k="targetPct" inputmode="decimal" aria-label="목표 수익률(%)" data-min="0">% · 손절 −<input class="rl-in rl-num" data-k="stopPct" inputmode="decimal" aria-label="손절 하락률(%) — 양수로 넣음" data-min="0">% · <input class="rl-in rl-num" data-k="holdDays" inputmode="numeric" aria-label="정리까지 거래일 수" data-min="0" data-int>거래일 지나면 정리</td></tr>
             <tr><th>얼마나</th><td>한 종목 <input class="rl-in rl-num" data-k="perStockPct" inputmode="decimal" aria-label="한 종목 비중(%)" data-min="0">% · 동시에 <input class="rl-in rl-num" data-k="maxStocks" inputmode="numeric" aria-label="동시에 들고 있을 종목 수" data-min="0" data-int>종목까지</td></tr>
@@ -63,10 +62,8 @@
         </div>
         <div class="st-card">
           <h3 class="rl-h">오늘 이 룰에 걸린 종목</h3>
-          <!-- 서버 /api/auto-watch 가 위 룰 값으로 거르고 줄 세운 것을 그대로 그린다 — 거르는 셈은 화면에 두지 않는다 · 그리기는 js/strategy-rule.js -->
-          <div class="st-cap" id="aw-cap">서버가 위 룰 값으로 고른 종목</div>
-          <div id="aw"><div class="st-err">값을 받는 중…</div></div>
-          <div class="st-cap aw-how" id="aw-how"></div>
+          <div class="st-cap">평일 아침 서버가 셈 · 걸린 종목은 관심종목에 「자동」 으로 들어감(자동 관심종목 물음과 한 기준)</div>
+          <div class="st-err">— 아직 셈이 없음</div>
           <h3 class="rl-h rl-h2">지난 성적</h3>
           <div class="st-cap">걸렸던 종목이 그 뒤 1 · 3 · 5거래일에 어떻게 됐나 — 룰이 맞는지 보는 칸</div>
           <div class="st-err">— 쌓인 것 없음</div>
