@@ -319,8 +319,8 @@ mark.in-find-hit.is-cur { background: var(--kh-cat-amber); color: var(--kh-text-
 .in-gov-ring { margin: 0 0 4px; }
 /* 흐름도 틀 — 높이를 잡아 둔다. 종목을 바꿔도 칸 크기가 안 움직이게(「보는 것을 바꿔도 자리는 그대로다」) · 안의 지도는 flowmap 이 틀에 맞춰 줄인다 */
 .in-gov-frame { display: block; width: 100%; height: 720px; border: 0; border-radius: var(--kh-radius-md); background: var(--kh-bg); }
-.in-gov-tbls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
-@media (min-width: 1180px) { .in-gov-tbls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.in-gov-tbls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 1179px) { .in-gov-tbls { grid-template-columns: minmax(0, 1fr); } }   /* 이 파일 방식(넓은 폭 기본 + max-width · 234줄 주석) — 2026-11-05 개념정의 검수 */
 .in-gov-tbls .num { text-align: right; white-space: nowrap; }
 .in-gov-tops { padding: 0 0 6px; border-bottom: 1px solid var(--kh-border); margin-bottom: 8px; }
 .in-gov-n { margin-left: 5px; font-size: 0.72rem; color: var(--kh-text-secondary); }
