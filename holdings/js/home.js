@@ -1401,7 +1401,68 @@ const SORTS = {
           empty: () => (!jointMeta || jointMeta.pending ? '불러오는 중'
             : jointMeta.listFail ? '못 받음 — 외국인 · 기관 순매수 순위'
             : '셋이 함께 사는 종목이 아직 없습니다') },
+  /* 프리장 — 넥스트레이드 프리마켓(08:00~08:50)에 프로그램이 몰리는 종목 (2026-11-05 재권님 「프리장에 프로그램 몰리는것 만들어줘.
+     이걸 참고해서 매매를 할수있게 다른것들도 같이 챙겨서」 → 안 「응 만들어」). 고르는 것 · 차례 · 굳히는 때는 서버다(server/pre_flow.py)
+     — 순위 목록 중 프리장 거래대금 상위 · 프로그램 순매수 큰 순 · 08:50~09:00 에 그날 판으로 굳힘. 화면은 받은 차례 그대로 그린다 */
+  pre:  { label: '프리장', list: () => preRows,
+          head: '프리장 프 · 대금(억) · 거래량', show: (code) => preCell(code), html: true,
+          note: () => preNote(),
+          empty: () => (!preMeta ? '불러오는 중'
+            : preMeta.noTrade ? '넥스트레이드 프리장 거래가 아직 없습니다'
+            : preMeta.phase === 'before' ? `프리장은 ${preMeta.preOpen} 부터 · 지금은 앞 판이 없습니다`
+            : '오늘 프리장 판이 없습니다 — 서버가 그 시각 꺼져 있었습니다') },
 };
+
+/* 「프리장」 칩 — 서버가 준 줄 그대로. 못 받았으면 null(빈 목록과 가른다) */
+let preRows = null, preMeta = null, preSectors = [];
+const preOf = (code) => (preRows || []).find((r) => r.code === code) || null;
+/* 윗줄 프로그램 순매수(억 · 오름 빨강 · 내림 파랑) · 아랫줄 프리장 거래대금(억 · 어림) · 앞 거래일 장 전 거래량 대비 배율 · 공시 표시(제목은 풍선) */
+function preCell(code) {
+  const r = preOf(code);
+  if (!r) return '—';
+  const pg = `<span class="${r.program == null ? 'kh-mut' : dirClass(r.program)}">프 ${eokSigned(r.program)}${r.program == null ? '' : '억'}</span>`;
+  const amt = r.amt == null ? '—' : `≈${Math.round(r.amt / 1e8).toLocaleString()}`;
+  const ratio = r.ratio == null ? '' : ` <span class="${r.ratio >= 2 ? 'kh-up' : 'kh-mut'}">${r.ratio}배</span>`;
+  const disc = (r.disc || []).length ? ` <span class="kh-accent" title="${r.disc.map((t) => t.replace(/"/g, '&quot;')).join('\n')}">공시${r.disc.length > 1 ? r.disc.length : ''}</span>` : '';
+  /* 두 줄 — 한 줄이면 순위 칸에서 종목 이름이 한 글자로 눌렸다(11-05 8772 · 2560 창) */
+  return `<div style="white-space:nowrap;font-size:12px;line-height:1.3">${pg}</div>` +
+    `<div style="white-space:nowrap;font-size:11px;line-height:1.3"><span class="kh-mut">대금</span> ${amt}<span class="kh-mut">억</span>${ratio}${disc}</div>`;
+}
+/* 안내 줄 — 프리장 중이면 몇 시 판 · 다시 받는 주기(서버 값) · 08:50 뒤에는 「프리장 마감 고정」 · 외 · 기는 09:30 부터라는 것 */
+function preNote() {
+  const m = preMeta || {};
+  const bits = [];
+  if (m.phase === 'live') bits.push(`${m.builtAt || '—'} 판`, `${m.cacheTtl >= 60 ? `${Math.round(m.cacheTtl / 60)}분` : `${m.cacheTtl}초`}마다`);
+  else if (m.day) bits.push(`${m.day.slice(4, 6)}.${m.day.slice(6)} 프리장 마감 고정`);
+  if (m.programMissing) bits.push(`프 못 받은 ${m.programMissing}`);
+  bits.push('외·기 09:30~');      // 대금 상위 몇 종목인지는 머리 풍선 · 서버 meta.topN — 줄이 두 줄로 안 넘게 줄여 씀
+  return bits.join(' · ');
+}
+/* 업종 띠 — 같은 업종끼리 프리장 등락을 묶은 것(서버 sectors · 평균 등락률 크기 큰 순). 안내 줄 바로 아래 한 줄 · 넘치면 옆으로 민다
+   (11-05 재권님 「프리장에 동일업종들이 등락이 많은것도 표기가 되면 좋을거같은데」). 「프리장」 칩일 때만 보인다 */
+function paintPreSectors() {
+  const note = $('kh-sort-note');
+  if (!note) return;
+  let box = $('kh-pre-sec');
+  const on = sortBy === 'pre' && market !== 'THEME' && preSectors.length;
+  if (!on) { if (box) box.hidden = true; return; }
+  if (!box) { box = document.createElement('div'); box.id = 'kh-pre-sec'; box.className = 'kh-pre-sec'; note.after(box); }
+  box.hidden = false;
+  const pct = (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
+  box.innerHTML = '<span class="kh-mut">업종</span>' + preSectors.map((g) =>
+    `<span class="kh-pre-sec-it" title="${g.n}종목 · 오른 ${g.up} · 내린 ${g.down} · 많이 움직인 ${g.top.map((x) => `${x.name} ${pct(x.pct)}`).join(' · ')}">` +
+    `${g.name} <b class="${dirClass(g.avg)}">${pct(g.avg)}</b> <span class="kh-mut">${g.up}↑${g.down}↓</span></span>`).join('');
+}
+async function loadPre() {
+  try {
+    const r = await apiFetch('/api/kis/pre-flow', { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    if (j && j.meta) preMeta = j.meta;
+    if (j && j.ok && Array.isArray(j.data)) { preRows = j.data; preSectors = Array.isArray(j.sectors) ? j.sectors : []; }
+  } catch { /* 못 받으면 들고 있던 것 그대로 */ }
+  if (sortBy === 'pre') { paintRows(rowPrices); paintSortNote(); }
+  if (rankModal && rankModalSort === 'pre') { paintRankModal(); paintRankModalNote(); }
+}
 
 /* 「매수」 칩 목록 — 서버가 준 줄 그대로. 못 받았으면 null(빈 목록과 가른다) */
 let jointRows = null, jointFlipped = [], jointMeta = null;
@@ -1633,6 +1694,7 @@ function setupSorts() {
       x.classList.toggle('is-active', x === b));
     paintRows(rowPrices);
     if (sortBy === 'buy') loadJoint();
+    if (sortBy === 'pre') loadPre();
   });
 }
 
@@ -1756,6 +1818,7 @@ function paintSortNote() {
 
   el.innerHTML = bits.join(' <span class="kh-mut">·</span> ');
   noteAt = Date.now();
+  paintPreSectors();
 }
 
 /* ── 즐겨찾기 하트 (2026-09-18 지시) ─────────
@@ -1963,7 +2026,7 @@ function paintRankModal() {
       <td class="l"><span class="kh-nm">${iconHtml(s)}<b data-co="${s.code}">${escT(s.name)}</b>${th ? themeBadge(s.code) : ''}</span></td>
       <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, sid)) : '···'}</td>
       <td class="kh-num ${p ? dirClass(pctOf(p, sid)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, sid)) : '—'}</td>
-      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : p ? showValue(s.code, p) : '···'}</td>
+      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
       <td class="kh-num">${th && themeBig !== FLOW ? themeCap(s.code) : showCap(s.code)}</td>
       <td class="kh-num">${th && themeBig === FLOW ? themeMetric(s.code) : (p ? fmtShareCount(p.volume) : '···')}</td>
       <td class="kh-num">${volRatioCell(s.code)}</td>
@@ -1993,7 +2056,7 @@ function paintRankModal() {
       </colgroup>
       <thead><tr>
         <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
-        <th>${sid === 'buy' ? '외·기·프(억)' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
+        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
       </tr></thead>
       <tbody>${rows || empty}</tbody>
     </table>
@@ -2049,7 +2112,7 @@ function openRankModal() {
       /* 모달에서 고른 기준은 첫 화면 순위표와 **따로 둔다** — 모달에서
          거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면 무엇을 눌러
          그렇게 됐는지 알 수 없다 (2026-09-22). */
-      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); loadVolRatio(); },
+      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); loadVolRatio(); },
     },
     onClose() { rankModal = null; if (volWatch) { volWatch.stop(); volWatch = null; } },
   });
@@ -2076,7 +2139,7 @@ function paintRankModalNote() {
   if (!rankModal) return;
   const fresh = freshNote();
   /* 「매수」 탭은 갱신 주기만 짧게 — 길면 탭 글자가 세로로 눌렸다(11-05 8772) */
-  const base = rankModalSort === 'buy' && rankModalMarket !== 'THEME' ? jointNote(true) : RANK_TABS_NOTE;
+  const base = rankModalMarket === 'THEME' ? RANK_TABS_NOTE : rankModalSort === 'buy' ? jointNote(true) : rankModalSort === 'pre' ? preNote() : RANK_TABS_NOTE;
   rankModal.head.setTabsNote(fresh ? `${base} · ${fresh.text}` : base);
 }
 
@@ -2101,6 +2164,7 @@ async function loadSectors() {
 }
 const JOINT_FALLBACK_MS = 300000;     // 「매수」 칩 — 서버 값마저 못 받았을 때만
 watch({ url: () => (sortBy === 'buy' ? '/api/kis/joint-buy' : null), onChange: loadJoint, key: 'kis_proxy.INVESTOR_TOP_TTL', fallbackMs: JOINT_FALLBACK_MS });
+watch({ url: () => (sortBy === 'pre' ? '/api/kis/pre-flow' : null), onChange: loadPre, key: 'pre_flow.FLOW_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => '/api/kis/stock-sectors', onChange: loadSectors, key: 'company_profile.SECTOR_LIST_TTL', fallbackMs: SECTOR_FALLBACK_MS });
 loadSectors();
 

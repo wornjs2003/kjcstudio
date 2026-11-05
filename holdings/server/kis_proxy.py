@@ -66,6 +66,7 @@ import toss
 import macro
 import note_alert      # 시황 글 알림 — 자동 시황 글이 새로 써지면 텔레그램 한 통(2026-10-27 · server/note_alert.py)
 import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-25 · server/events.py 머리 주석)
+import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 · /api/kis/pre-flow(2026-11-05 · server/pre_flow.py)
 import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
 import claude_chat     # 홀딩스 오른쪽 Claude 창 — 맥미니 claude 를 한 번씩 부른다 · POST /api/claude/ask(2026-11-03 · server/claude_chat.py)
 import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 테마 · 수급(넥스트 5분 거래량 2배) (2026-10-27 · server/theme_flow.py)
@@ -4379,8 +4380,9 @@ def _program_net_today(cfg, code, reg=False):
             return None
         r = next((x for x in (data.get("output") or []) if (x.get("stck_bsop_date") or "").strip() == day), None)
         v = _num(r.get("whol_smtn_ntby_tr_pbmn"), int) if r else None
-        if v is not None:
-            _program_reg_cache[code] = (day, v)     # 그날 거래소 합은 마감 뒤 안 바뀐다 — 하루 한 번
+        now = datetime.now(KST)
+        if v is not None and (now.hour, now.minute) >= REG_CLOSE_READY:
+            _program_reg_cache[code] = (day, v)     # 15:40 뒤 받은 값만 그날 들고 있는다 — 15:30~15:40 은 일별 줄이 덜 모였을 수 있다(개념정의 덧 11-05)
         return v
     try:
         data = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/program-trade-by-stock",
@@ -8597,6 +8599,24 @@ class Handler(SimpleHTTPRequestHandler):
                                  "meta": {"session": name, "label": label, "prevDay": prev_day, "unit": "%",
                                           "note": "통합(거래소 + 넥스트레이드) 누적 거래량 · 지금 시간대의 오늘 ÷ 어제 같은 시간대 전체 · 저장 없는 날은 null",
                                           "cacheTtl": session_volume.CACHE_TTL}})
+                return
+
+            # 프리장(넥스트레이드 08:00~08:50) 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 (2026-11-05 · server/pre_flow.py)
+            if route == "pre-flow":
+                data, at, ph = pre_flow.fetch(sys.modules[__name__], cfg)
+                d = data or {}
+                self._send_json({
+                    "ok": data is not None, "data": d.get("rows") or [], "sectors": d.get("sectors") or [],
+                    "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S") if at else None,
+                             "day": d.get("day"), "builtAt": d.get("hm"), "phase": ph, "noTrade": bool(d.get("noTrade")),
+                             "candidates": d.get("candidates"), "programMissing": d.get("programMissing"),
+                             "amtUnit": "원", "topN": pre_flow.TOP_N,
+                             "preOpen": "%02d:%02d" % pre_flow.PRE_OPEN, "preClose": "%02d:%02d" % pre_flow.PRE_CLOSE,
+                             "note": "넥스트레이드 프리마켓 · 순위 목록 중 프리장 거래대금(현재가 × 거래량 · 어림) 상위 topN 의 프로그램 그날 누적 · "
+                                     "등락률은 전일 정규장 종가 대비 · ratio 는 앞 거래일 장 전 거래량 대비 · disc 는 앞 평일 15:30 뒤 공시 · "
+                                     "08:50~09:00 에 그날 판으로 굳힘",
+                             "cacheTtl": pre_flow.FLOW_TTL},
+                })
                 return
 
             if route == "joint-buy":
