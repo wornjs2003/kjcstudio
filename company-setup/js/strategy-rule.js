@@ -83,10 +83,13 @@ async function loadAw() {
   if (!d) { awBox.innerHTML = `<div class="st-err">— 서버 값을 못 받음(${st || '연결 안 됨'})</div>`; awCap.textContent = '서버가 위 룰 값으로 고른 종목'; awHow.textContent = ''; return; }
   const rule = d.rule || {}, picked = Array.isArray(d.picked) ? d.picked : [];
   const by = rule.sortBy === 'pct' ? '등락률 순' : '배수 순';
-  awCap.textContent = d.day
+  const unset = d.day && d.ready === false;   // 기준 칸(등락률 · 배수)이 비면 서버가 거르지 않는다 — 「없음」 이 아니라 「안 거름」(개념정의 검수 11-05)
+  awCap.textContent = unset ? `${mmdd(d.day)} 기준 · 아직 안 거름`
+    : d.day
     ? `${mmdd(d.day)} 기준 · 걸린 ${num(d.hitAll)}종목${rule.autoMax != null ? ` 중 ${num(picked.length)}개 보임` : ''} · 셈한 ${num(d.measured)}(그날 값 없음 ${num(d.noToday)} · 앞 20거래일 모자람 ${num(d.short)}) · ${by}${m.runAt ? ` · 셈 ${esc(String(m.runAt).slice(11, 16) || m.runAt)}` : ''}`
     : '서버가 위 룰 값으로 고른 종목';
   if (!d.day) awBox.innerHTML = `<div class="st-err">— 아직 셈이 없음${m.runWindow ? `(${esc(m.runWindow)} 에 셈)` : ''}</div>`;
+  else if (unset) awBox.innerHTML = '<div class="st-err">— 기준(등락률 · 배수) 칸이 비어 아직 안 거름 — 왼쪽 칸을 채우고 검색을 누르십시오</div>';
   else if (!picked.length) awBox.innerHTML = '<div class="st-err">— 이 룰에 걸린 종목 없음</div>';
   else awBox.innerHTML = `<div class="st-scroll"><table class="aw-tb"><tr><th>종목</th><th>시장</th><th>종가</th><th>등락률</th><th>거래량</th><th>20일 평균</th><th>배수</th></tr>${picked.map((p) =>
     `<tr><td class="st-name"><b>${esc(p.name || '—')}</b> <small>${esc(p.code || '')}</small></td><td>${esc(IDX[p.idx] || p.idx || '—')}</td><td>${num(p.close)}</td><td>${pctTxt(p.pct)}</td><td>${num(p.vol)}</td><td>${num(p.avg20)}</td><td><b>${p.mult == null ? '—' : `${num(p.mult, 2)}배`}</b></td></tr>`).join('')}</table></div>`;
