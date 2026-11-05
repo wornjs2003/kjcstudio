@@ -20,6 +20,10 @@
               응답 meta.notCounted 에 적는다
     저장      market.db 의 `auto_watch_day`(날 · 종목 · 지수 · 이름 · 종가 · 등락률 · 거래량 · 어디서)
     주소      GET /api/auto-watch — 모양은 compute() 주석 · 「없음」 은 null(0 아님)
+    결과      그날 걸린 종목(compute 의 picked)을 auto_watch_pick 에 남기고(넣기가 꺼져 있어도 · record_picks), 다음 거래일 값을 쌓으면
+              그 종목의 다음 날 종가 등락률을 붙여 낸다 — GET /api/auto-watch/history(history()). 셈은 부를 때 auto_watch_day 에서 한다(따로 안 쌓는다).
+              (2026-11-05 재권님 「관심종목에 등록된 종목들 다음날 상승인지 하락인지 이거 쌓아놔야 하는데 투자전략에다가 데이터 넣어줘야해」 → 「응 만들어.」)
+              다음 날 시가 · 장중 고가는 쌓지 않아 못 센다 — 종가 대비 종가만
     넣기      **그날 값을 쌓은 바로 뒤**(정규장이 끝난 15:41 판) 걸린 종목을 관심 목록(문서 watchlist)과 묶음 「자동」 에 넣는다 — apply_watch()
               (2026-11-05 재권님 「넣는건 정규장이 끝나면 바로 넣는 방향으로 수정해」 · 처음 안은 다음날 08:00 이었다). 쌓아 둔 값을 쓰므로 KIS 0번.
               문서에 `auto: {code: {day, added}}` 를 둔다 — day 넣은 날 · added 이 셈이 하트 목록에 새로 넣었나(원래 하트가 있던 종목은 false).
@@ -36,6 +40,7 @@ import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+import dart
 import docstore
 import nxt_pre
 from secrets_guard import safe_message
@@ -51,7 +56,7 @@ RULE_DOC, RULE_KEY = "strategy-rules", "volsurge"
 SORTS = ("mult", "pct")
 ADD = False                     # 정규장 뒤 관심 목록 넣기 — 만들었고 꺼 둠(머리 주석 「넣기」 · 켜기는 재권님 지시로)
 WATCH_DOC = "watchlist"
-AUTO_GROUP = {"id": "auto", "name": "자동"}
+AUTO_GROUP = {"id": dart.AUTO_GROUP_ID, "name": "자동"}
 KEEP_DAYS = 5                   # 넣은 날 뒤 이 거래일이 지나면 뺀다(재권님 「5거래일 뒤 자동 것만 빼기」)
 TICK = 30
 HOLIDAY_SAME = 0.9              # 앞 날과 종가 · 거래량이 똑같은 종목이 이만큼이면 휴장(거래가 있는 날에 우연히 같을 수는 없다)
@@ -63,6 +68,10 @@ _SCHEMA = (
         day TEXT NOT NULL, code TEXT NOT NULL, idx TEXT, name TEXT,
         close INTEGER, pct REAL, vol INTEGER, src TEXT, saved_at TEXT, PRIMARY KEY (day, code))""",
     "CREATE INDEX IF NOT EXISTS idx_auto_watch_code ON auto_watch_day (code, day DESC)",
+    # 그날 룰에 걸린 종목 — 룰 칸을 나중에 고쳐도 「그날 무엇이 걸렸나」 가 안 바뀌게 그때 것을 남긴다(record_picks)
+    """CREATE TABLE IF NOT EXISTS auto_watch_pick (
+        day TEXT NOT NULL, code TEXT NOT NULL, rank INTEGER, name TEXT, idx TEXT,
+        close INTEGER, pct REAL, mult REAL, rule TEXT, saved_at TEXT, PRIMARY KEY (day, code))""",
 )
 
 _status = {"runDay": None, "runAt": None, "saved": None, "backfillAt": None, "backfillCodes": None,
@@ -231,6 +240,10 @@ def run(proxy, day, codes=None):
         _status.update(runDay=day, runAt=_now().isoformat(timespec="seconds"), saved=n)
         if n:                        # 저장했으면 앞서 남은 「못 받음」 을 지운다 — meta 를 읽는 쪽이 헷갈리지 않게(qa 덧 11-05)
             _status.update(error=None)
+            try:
+                record_picks(proxy, day)
+            except Exception as e:
+                _status["pickError"] = safe_message(e, 160)
             if ADD:
                 try:
                     apply_watch(proxy, day)
@@ -239,6 +252,76 @@ def run(proxy, day, codes=None):
         return {"backfill": b, "saved": n}
     finally:
         _run_lock.release()
+
+
+def record_picks(proxy, day):
+    """그날 걸린 종목을 auto_watch_pick 에 남긴다 — 같은 날 다시 돌면(재시작) 그날 것을 바꿔 쓴다 → 남긴 수 · 룰이 비었으면 None."""
+    d = compute(proxy)
+    if not d["ready"] or d["day"] != day:
+        _status["pickLast"] = {"day": day, "skip": "룰 칸이 비었거나 그날 값이 아님(%s)" % d["day"]}
+        return None
+    rule = json.dumps(d["rule"], ensure_ascii=False)
+    at = _now().isoformat(timespec="seconds")
+    with proxy._db_lock, proxy.db_conn() as conn:
+        conn.execute("DELETE FROM auto_watch_pick WHERE day = ?", (day,))
+        conn.executemany("INSERT INTO auto_watch_pick VALUES (?,?,?,?,?,?,?,?,?,?)",
+                         [(day, p["code"], i + 1, p["name"], p["idx"], p["close"], p["pct"], p["mult"], rule, at)
+                          for i, p in enumerate(d["picked"])])
+    _status["pickLast"] = {"day": day, "at": at, "picked": len(d["picked"])}
+    return len(d["picked"])
+
+
+def _side(pct):
+    return None if pct is None else "up" if pct > 0 else "down" if pct < 0 else "flat"
+
+
+def history(proxy, days=30):
+    """GET /api/auto-watch/history 의 data — 걸린 날마다 종목 · 다음 거래일 결과.
+
+        days     최근 몇 날(걸린 기록이 있는 날 · 1~120)
+        list     [{ day, nextDay(다음 거래일 · 아직이면 null), rule, picks: [{ code, name, rank, idx, close, pct, mult,
+                    next: { pct, close, side('up' · 'down' · 'flat') } | null }], summary }] — 새 날부터
+        summary  { picks, done(결과 붙은 수), pending(아직), up, down, flat, upRate(%), avgNext(%) } — 결과가 없으면 비율 · 평균은 null
+        total    모든 날을 합친 summary
+    """
+    days = max(1, min(120, int(days or 30)))
+    with proxy._db_lock, proxy.db_conn() as conn:
+        try:
+            pick_days = [r[0] for r in conn.execute(
+                "SELECT DISTINCT day FROM auto_watch_pick ORDER BY day DESC LIMIT ?", (days,))]
+        except Exception:            # 표가 아직 없다
+            return {"list": [], "total": _summary([]), "note": "아직 남긴 날 없음 — 8765 가 평일 15:41 판 뒤에 처음 남긴다"}
+        trade_days = [r[0] for r in conn.execute("SELECT DISTINCT day FROM auto_watch_day WHERE src = 'multi' ORDER BY day")]
+        out, allp = [], []
+        for day in pick_days:
+            nxt = next((d for d in trade_days if d > day), None)
+            rows = conn.execute("SELECT code, name, rank, idx, close, pct, mult, rule FROM auto_watch_pick WHERE day = ? ORDER BY rank",
+                                (day,)).fetchall()
+            res = {}
+            if nxt:
+                res = {r[0]: (r[1], r[2]) for r in conn.execute(
+                    "SELECT code, pct, close FROM auto_watch_day WHERE day = ? AND src = 'multi'", (nxt,))}
+            picks = []
+            for code, name, rank, idx, close, pct, mult, rule in rows:
+                r = res.get(code)
+                nx = {"pct": r[0], "close": r[1], "side": _side(r[0])} if r and r[0] is not None else None
+                picks.append({"code": code, "name": name, "rank": rank, "idx": idx, "close": close, "pct": pct, "mult": mult, "next": nx})
+            allp += picks
+            try:
+                rl = json.loads(rows[0][7]) if rows else None
+            except ValueError:
+                rl = None
+            out.append({"day": day, "nextDay": nxt, "rule": rl, "picks": picks, "summary": _summary(picks)})
+    return {"list": out, "total": _summary(allp)}
+
+
+def _summary(picks):
+    done = [p["next"] for p in picks if p["next"]]
+    up = sum(1 for x in done if x["side"] == "up")
+    return {"picks": len(picks), "done": len(done), "pending": len(picks) - len(done), "up": up,
+            "down": sum(1 for x in done if x["side"] == "down"), "flat": sum(1 for x in done if x["side"] == "flat"),
+            "upRate": round(up * 100 / len(done), 1) if done else None,
+            "avgNext": round(sum(x["pct"] for x in done) / len(done), 2) if done else None}
 
 
 def _trading_days(proxy):
@@ -429,6 +512,11 @@ def start(proxy):
         try:
             _init(proxy)
             now = _now()
+            with proxy._db_lock, proxy.db_conn() as conn:
+                last = conn.execute("SELECT MAX(day) FROM auto_watch_day WHERE src = 'multi'").fetchone()[0]
+                have = last and conn.execute("SELECT 1 FROM auto_watch_pick WHERE day = ? LIMIT 1", (last,)).fetchone()
+            if last and not have and not (RUN_AT <= (now.hour, now.minute) < RUN_UNTIL and last == now.strftime("%Y%m%d")):
+                record_picks(proxy, last)            # 이 코드 전에 쌓은 날(그날 룰 그대로 셈) — 바퀴 창 안이면 바퀴가 남긴다
             if members(proxy):
                 th = threading.Thread(target=_fill_locked, args=(proxy, now.strftime("%Y%m%d")), daemon=True, name="auto-watch-fill")
                 th.start()
