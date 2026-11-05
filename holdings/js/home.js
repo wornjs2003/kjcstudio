@@ -1394,22 +1394,64 @@ const SORTS = {
      사고있는 종목들 볼수있는 방법좀 마련해봐」 → 「실시간 순위에 버튼 하나 만들고 거기에 넣어줘 · 매수 라는 버튼」).
      고르는 것은 서버다(kis_proxy.py `fetch_joint_buy` · 외국인 · 기관은 가집계) — 화면은 받은 차례 그대로 그린다.
      관심처럼 순위 목록과 따로 오는 목록이라 `list` 로 준다(시장 칩과 무관 · 코스피 · 코스닥 함께) */
-  buy:  { label: '매수', list: () => jointRows, head: '셋 순매수',
-          show: (code) => { const r = jointOf(code); return r ? fmtMoneyKr(r.sum / 1e8) : '—'; },     // 서버는 원 · 이 글은 억
-          note: '외국인 · 기관 · 프로그램 모두 순매수 · 합 순',
-          empty: () => (jointRows ? '셋이 함께 사는 종목이 아직 없습니다' : '불러오는 중') },
+  /* 줄마다 셋이 **각각 얼마 사는지**(억) · 오늘 셋 다 샀다가 한 곳이라도 매도로 바뀐 종목은 맨 위에 흐리게 남긴다
+     (11-05 재권님 「동시매수하다가 어느 한곳이 매도로 바뀌는것도 파악을 할수있게」 → 시안 「좋아 각각 얼마 사는지로」) */
+  buy:  { label: '매수', list: () => (jointRows ? [...jointFlipped.map((x) => ({ ...x, flip: true })), ...jointRows] : null),
+          head: '외 · 기 · 프 순매수(억)', show: (code) => jointCell(code), html: true,
+          note: () => jointNote(),
+          empty: () => (!jointMeta || jointMeta.pending ? '불러오는 중'
+            : jointMeta.listFail ? '못 받음 — 외국인 · 기관 순매수 순위'
+            : '셋이 함께 사는 종목이 아직 없습니다') },
 };
 
 /* 「매수」 칩 목록 — 서버가 준 줄 그대로. 못 받았으면 null(빈 목록과 가른다) */
-let jointRows = null;
-const jointOf = (code) => (jointRows || []).find((r) => r.code === code) || null;
+let jointRows = null, jointFlipped = [], jointMeta = null;
+const jointOf = (code) => (jointRows || []).find((r) => r.code === code) || jointFlipped.find((r) => r.code === code) || null;
+const JOINT_SIDES = [['foreign', '외'], ['inst', '기'], ['program', '프']];
+const JOINT_NAME = { foreign: '외국인', inst: '기관', program: '프로그램' };
+const eokSigned = (won) => { if (won == null) return '—'; const v = Math.round(won / 1e8); return `${v > 0 ? '+' : ''}${v.toLocaleString()}`; };
+/* 한 칸 — 셋의 순매수(억 · 오름 빨강 · 내림 파랑)를 한 줄에(11-05 재권님 「외 기 프 한줄로 해줘」). 13:19 에 표가 순위 칸 밖으로
+   밀린 것은 폭이 아니라 시세 갱신이 이 칸을 글자로 넣던 탓이었다(paintOneRow · html). 빠진 종목만 아랫줄 「무엇이 매도로 바뀜 시각」.
+   ≈ 는 상위 30 밖이라 그 종목 가집계 수량 × 현재가로 어림한 값(서버 approx) */
+function jointCell(code) {
+  const r = jointOf(code);
+  if (!r) return '—';
+  const one = ([k, n]) => `<span class="${r[k] == null ? 'kh-mut' : dirClass(r[k])}">${n} ${(r.approx || []).includes(k) ? '≈' : ''}${eokSigned(r[k])}</span>`;
+  const line = (html, mut) => `<div class="${mut ? 'kh-mut' : ''}" style="white-space:nowrap;font-size:${mut ? 11 : 12}px">${html}</div>`;
+  const names = (ks) => (ks || []).map((k) => JOINT_NAME[k]).join(' · ');
+  /* 합은 안 적는다(11-05 재권님 「합은 빼준 상태로」) — 차례는 그대로 서버가 셋 합 큰 순으로 준다 */
+  const body = line(JOINT_SIDES.map(one).join(' '));
+  if (!r.flip) return body;
+  const why = [(r.sold || []).length ? `${names(r.sold)} 매도로 바뀜` : '', (r.unknown || []).length ? `${names(r.unknown)} 값 모름` : '']
+    .filter(Boolean).join(' · ') || '셋 다 매수에서 빠짐';
+  return body + line(`${why} ${r.at || ''}`, true);
+}
+/* 안내 줄 — 몇 종목 · 빠진 수 · 못 받은 수 · 값마다 갱신 주기(외 · 기 입력 시각과 서버가 다시 받는 주기는 서버가 준다) */
+function jointNote() {
+  const m = jointMeta || {};
+  const bits = [];          // 종목 수는 표가 보인다 — 안내 줄이 세 줄로 넘어가면 표가 짧아져 넣지 않는다
+  if (jointFlipped.length) bits.push(`빠짐 ${jointFlipped.length}`);
+  if (m.programMissing) bits.push(`프로그램 못 받은 ${m.programMissing}종목 빠짐`);
+  if (m.listFail) bits.push('외국인 · 기관 순위 못 받음(앞 값)');
+  const per = Object.values(m.estSlots || {});
+  const slots = [...new Set(per.flat())].sort();
+  const kst = new Date(Date.now() + 9 * 3600 * 1000);
+  const hm = `${String(kst.getUTCHours()).padStart(2, '0')}:${String(kst.getUTCMinutes()).padStart(2, '0')}`;
+  const next = slots.find((t) => t > hm);
+  /* 한 줄에 들어가게 줄여 쓴다 — 두 줄이 되면 표가 17px 짧아진다(다른 칩은 한 줄 · 11-05 8772 실측). 입력 시각은 서버 meta.estSlots */
+  if (per.length) bits.push(`외·기 ${next ? `다음 ${next}` : '오늘 끝'}`);
+  bits.push('프 실시간');
+  if (m.cacheTtl) bits.push(`${m.cacheTtl >= 60 ? `${Math.round(m.cacheTtl / 60)}분` : `${m.cacheTtl}초`}마다`);
+  return bits.join(' · ');
+}
 async function loadJoint() {
   try {
     const r = await apiFetch('/api/kis/joint-buy', { cache: 'no-store' });
     const j = r && r.ok ? await r.json() : null;
-    if (j && Array.isArray(j.data)) jointRows = j.data;
+    if (j && j.meta) jointMeta = j.meta;
+    if (j && j.ok && Array.isArray(j.data)) { jointRows = j.data; jointFlipped = Array.isArray(j.flipped) ? j.flipped : []; }
   } catch { /* 못 받으면 들고 있던 것 그대로 */ }
-  if (sortBy === 'buy') paintRows(rowPrices);
+  if (sortBy === 'buy') { paintRows(rowPrices); paintSortNote(); }
   if (rankModal && rankModalSort === 'buy') paintRankModal();
 }
 
@@ -1520,8 +1562,10 @@ function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
   }
 
   if (sort && sort.list && !us) {          // 매수 — 서버가 고른 줄 · 그 차례 그대로
-    return (sort.list() || []).map((x, i) => ({
-      code: x.code, name: x.name, sector: '', brand: brandColor(x.code, x.name), rank: i + 1,
+    let n = 0;
+    return (sort.list() || []).map((x) => ({
+      code: x.code, name: x.name, sector: '', brand: brandColor(x.code, x.name),
+      rank: x.flip ? '—' : ++n, flip: !!x.flip,                // 빠진 종목은 순위 없이 흐리게(paintRows)
     }));
   }
 
@@ -1725,7 +1769,8 @@ function paintSortNote() {
 
   /* 「관심」 은 **줄 세우는 기준이 아니라 거르는 것**이라 「순」 이 안 붙는다.
      그대로 두면 「관심 순」 이 되는데, 시가총액 순으로 세운 것을 걸렀을 뿐이다. */
-  const bits = [s.filter ? `${s.label}만 · 시가총액 순` : s.note ? `${s.label} · ${s.note}` : `${s.label} 순`];
+  const note = typeof s.note === 'function' ? s.note() : s.note;
+  const bits = [s.filter ? `${s.label}만 · 시가총액 순` : note ? `${s.label} · ${note}` : `${s.label} 순`];
   const fresh = freshNote();
   if (fresh) bits.push(`<b class="${fresh.cls}">${fresh.text}</b>`);
 
@@ -2071,7 +2116,7 @@ function paintRows(priceMap) {
     /* 거래대금 · 시가총액 · 매수매도 비율 · 산업은 2026-09-17 에 뺐다.
        칸이 368px 로 좁아져 아홉 열이 안 들어갔고, 그 넷은 고른 종목 것만
        차트 옆 패널에 보여주기로 했다 (지시). */
-    return `<tr data-code="${s.code}" class="${s.code === selectedCode ? 'is-active' : ''}">
+    return `<tr data-code="${s.code}" class="${s.code === selectedCode ? 'is-active' : ''}"${s.flip ? ' style="opacity:.55"' : ''}>
       <td class="kh-rk${isFav(s.code) ? ' is-fav' : ''}" data-fav="${s.code}"
         data-fav-name="${s.name}" title="${isFav(s.code) ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기'}"
         >${s.rank}</td>
@@ -2399,7 +2444,9 @@ function paintOneRow(code, live) {
     /* 「전일대비」 자리에는 지금 줄 세운 기준값이 온다. 오르내림이 아니라
        크기라서 등락 색을 입히지 않는다. */
     tr.children[3].className = 'kh-num kh-metric';
-    tr.children[3].textContent = sortCell(code, live);
+    /* 「매수」 칸은 셋을 두 줄 html 로 그린다 — 글자로 넣으면 태그가 그대로 보이고 표가 칸 밖으로 밀린다(11-05 8772) */
+    if (market !== 'THEME' && SORTS[sortBy]?.html) tr.children[3].innerHTML = sortCell(code, live);
+    else tr.children[3].textContent = sortCell(code, live);
     tr.children[4].className = 'kh-num ' + cls;
     tr.children[4].style.fontWeight = '500';
     tr.children[4].textContent = fmtPct(pctOf(live));
