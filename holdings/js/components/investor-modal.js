@@ -16,7 +16,8 @@
        그래프   거래대금 순 종목들 — 순매수 막대 하나(순매도는 왼쪽 파랑 · 순매수는 오른쪽 빨강). 개인 · 외국인 · 기관 · 기간을 고른다.
                 아래에 개인 · 외국인 · 기관별 금액 칸 셋(위 종목들 합). 「오늘」 옆에 어느 날 확정치인지 적는다 —
                 장중에는 오늘 줄이 비어 지난 거래일 값이 나온다(2026-10-22 재권님 「응 해줘」 · 시안 다섯 자리)
-       차트     고른 종목(또는 코스피 · 코스닥)의 분 · 일 · 월봉 + 아래 그 종목의 개인 · 외국인 · 기관 양쪽 막대.
+       차트     종목은 날마다 순매수 금액 막대 + 쌓은 선(일봉만 · 11-05) · 코스피 · 코스닥은 분 · 일 · 월봉 +
+                아래 그 종목의 개인 · 외국인 · 기관 양쪽 막대.
                 기간은 **점선 네모로 고른 구간**, 안 골랐으면 **차트에 보이는 구간**이다
        당일     오늘 장중 5분마다 — 코스피 외국인 · 기관 · 개인 · 코스피 프로그램 · 고른 종목 프로그램의 매수 · 매도 · 순매수(막대 + 표) ·
                 고른 종목의 장중 잠정치(하루 다섯 번) · 기관 안 · 증권사 상위 5 (2026-10-27 재권님 시안 「ㄴ · 매수랑 매도 둘다」 ·
@@ -53,6 +54,10 @@ const DAYS = [['today', '오늘', 1], ['d5', '5일', 5], ['m1', '한달', 20], [
 const TOP_N = 15;
 const INDEX = { KOSPI: '코스피', KOSDAQ: '코스닥' };
 const PERIODS = [['5m', '분봉'], ['D', '일봉'], ['M', '월봉']];
+/* 종목 금액 차트 — 일봉만. 분봉은 투자자 값이 하루 단위라 없고, 월봉은 서버 투자자 값이 60거래일까지라 막대가 서너 개뿐이라 뺐다
+   (11-05 qa 덧 → 재권님 「가」) */
+const AMT_PERIODS = PERIODS.filter(([k]) => k === 'D');
+const CHART_SIDES = [['foreign', '외국인', '--kh-ind-1'], ['inst', '기관', '--kh-ind-2'], ['person', '개인', '--kh-ind-3']];
 const SHOW_BARS = { '5m': 156, D: 60, M: 24 };   // 처음 보이는 봉 수 — 5분봉 이틀 · 일봉 석 달 · 월봉 2년
 const FLOW_KEY = 'intraday_flow.CACHE_TTL';    // 「당일」 탭이 다시 묻는 주기 — 서버 값
 const FLOW_FALLBACK_MS = 60000;
@@ -272,6 +277,50 @@ export function openInvestorModal({ code } = {}) {
   }
 
   /* ── 차트 탭 ── */
+  /* 종목이면 주가가 아니라 금액이다(2026-11-05 재권님 「차트 투자자 지표에 주가 아니고 금액으로」 → 시안 vc 「응」) —
+     날마다 개인 · 외국인 · 기관 순매수 금액(막대 · 왼쪽 축) + 그 기간 첫날부터 쌓은 금액(선 · 오른쪽 축). 값은 투자자 줄의
+     netAmt(백만원 → 억) 그대로 · 없는 날은 그리지 않는다(0 아님) · 확정 전 오늘 줄도 비운다. 투자자 값은 하루 단위라 분봉은 없다.
+     지수(코스피 · 코스닥)는 종목별 투자자 값이 없어 전처럼 지수 봉을 그린다 */
+  async function amountBars() {
+    const rows = (await investorRows(st.target)).slice().reverse();          // 오래된 날 → 최근
+    const day = rows.map((r) => ({ ts: r.date, last: r.date, close: r.close,
+      v: CHART_SIDES.map(([k]) => (confirmed(r) && (r[k] || {}).netAmt != null ? r[k].netAmt / 100 : null)) }));
+    return day;
+  }
+  /** 한 날에 막대 셋을 나란히 — 라이브러리 히스토그램은 같은 날 막대를 겹쳐 그려 직접 그린다(custom series) */
+  function groupBarSeries(colors) {
+    let data = null;
+    const renderer = {
+      draw(target, toY) {
+        if (!data || !data.visibleRange) return;
+        target.useBitmapCoordinateSpace(({ context: c, horizontalPixelRatio: hr, verticalPixelRatio: vr }) => {
+          const sp = data.barSpacing, w = (sp * 0.8) / colors.length, y0 = toY(0);
+          if (y0 == null) return;
+          c.globalAlpha = 0.45;
+          for (let i = data.visibleRange.from; i < data.visibleRange.to; i++) {
+            const b = data.bars[i];
+            (b.originalData.v || []).forEach((x, j) => {
+              if (x == null) return;
+              const y = toY(x);
+              if (y == null) return;
+              c.fillStyle = colors[j];
+              c.fillRect(Math.round((b.x - sp * 0.4 + w * j) * hr), Math.round(Math.min(y, y0) * vr),
+                Math.max(1, Math.floor((w - 0.5) * hr)), Math.max(1, Math.round(Math.abs(y - y0) * vr)));
+            });
+          }
+          c.globalAlpha = 1;
+        });
+      },
+    };
+    return {
+      renderer: () => renderer,
+      update: (d) => { data = d; },
+      priceValueBuilder: (d) => { const v = (d.v || []).filter((x) => x != null); return v.length ? [Math.min(0, ...v), Math.max(0, ...v), v[v.length - 1]] : [0, 0, 0]; },
+      isWhitespace: (d) => !d.v || d.v.every((x) => x == null),
+      defaultOptions: () => ({}),
+      destroy: () => {},
+    };
+  }
   async function candles() {
     const t = st.target;
     if (INDEX[t]) {
@@ -320,7 +369,7 @@ export function openInvestorModal({ code } = {}) {
     from = Math.max(0, Math.min(bars.length - 1, from));
     to = Math.max(0, Math.min(bars.length - 1, to));
     if (from > to) [from, to] = [to, from];
-    return { from: bars[from].ts.slice(0, 8), to: bars[to].ts.slice(0, 8), boxed: !!st.box };
+    return { from: bars[from].ts.slice(0, 8), to: (bars[to].last || bars[to].ts).slice(0, 8), boxed: !!st.box };
   }
 
   async function paintSides() {
@@ -371,6 +420,48 @@ export function openInvestorModal({ code } = {}) {
         투자자 값은 하루 단위라 분봉에서는 그 날짜들의 하루 값을 더함</div>`;
   }
 
+  /* 막대(왼쪽 축) · 선(오른쪽 축) — 선은 제 값 범위에 꽉 차게(11-05 재권님 「선으로 된거는 좀더 디테일하게」 — 0 을 가운데 두니 선이
+     칸의 반쯤에 눌려 있었다). 막대 축은 0 이 선 축의 0 과 같은 높이에 오게 맞춘다(위 = 산 쪽 · 아래 = 판 쪽) */
+  function paintAmount(LC, el) {
+    const colors = CHART_SIDES.map(([, , c]) => cssVar(c));
+    const fmt = (v) => `${v > 0 ? '+' : ''}${Math.round(v).toLocaleString()}`;
+    /* 범례 자리 — 폭을 숫자로 가르지 않고 범례가 실제로 차지한 높이만큼 위를 비운다(좁은 폭은 두 줄 · 기준 폭은 CSS 한 곳 · 개념정의 검수) */
+    const leg = document.createElement('div');
+    leg.className = 'kh-ivm-leg';
+    el.appendChild(leg);
+    chart.applyOptions({ leftPriceScale: { visible: true, borderColor: cssVar('--kh-chart-border') }, localization: { priceFormatter: fmt } });
+    const cum = CHART_SIDES.map((_, j) => { let s = 0; return bars.map((b) => { if (b.v[j] == null) return null; s += b.v[j]; return s; }); });
+    /* 보이는 봉만으로 범위를 잡는다 — 밀거나 넓히면 그 구간에 맞게 다시 꽉 찬다 */
+    const vis = () => { const r = chart.timeScale().getVisibleLogicalRange(); return r ? [Math.max(0, Math.floor(r.from)), Math.min(bars.length - 1, Math.ceil(r.to))] : [0, bars.length - 1]; };
+    const ranges = () => {
+      const [a, b] = vis();
+      const lv = cum.flatMap((c) => c.slice(a, b + 1)).filter((x) => x != null), bv = bars.slice(a, b + 1).flatMap((x) => x.v).filter((x) => x != null);
+      let hi = Math.max(0, ...lv), lo = Math.min(0, ...lv);
+      const pad = (hi - lo || 1) * 0.06; hi += hi > 0 ? pad : 0; lo -= lo < 0 ? pad : 0;
+      let f = (hi - 0) / ((hi - lo) || 1);                  // 위에서 0 까지의 몫
+      f = Math.min(0.85, Math.max(0.15, f));                // 0 이 맨 끝이면 막대 한쪽이 안 보인다 — 15% 는 남긴다
+      const span = Math.max(hi / f, -lo / (1 - f)); hi = span * f; lo = -span * (1 - f);
+      const k = Math.max(1, Math.max(0, ...bv) / f, -Math.min(0, ...bv) / (1 - f));
+      return { line: { minValue: lo, maxValue: hi }, bar: { minValue: -k * (1 - f), maxValue: k * f } };
+    };
+    const bs = chart.addCustomSeries(groupBarSeries(colors), { priceScaleId: 'left', lastValueVisible: false, priceLineVisible: false,
+      autoscaleInfoProvider: () => ({ priceRange: ranges().bar }) });
+    bs.setData(bars.map((b) => (b.v.every((x) => x == null) ? { time: toTime(b.ts) } : { time: toTime(b.ts), v: b.v })));
+    CHART_SIDES.forEach((_, j) => {
+      const ls = chart.addSeries(LC.LineSeries, { color: colors[j], lineWidth: 2, priceScaleId: 'right', lastValueVisible: true, priceLineVisible: false,
+        crosshairMarkerVisible: true, crosshairMarkerRadius: 3, autoscaleInfoProvider: () => ({ priceRange: ranges().line }) });
+      ls.setData(bars.map((b, i) => (cum[j][i] == null ? { time: toTime(b.ts) } : { time: toTime(b.ts), value: cum[j][i] })));
+    });
+    series = bs;
+    const last = (a) => { for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return a[i]; return null; };
+    leg.innerHTML = `<span class="kh-ivm-mut">막대 날마다 · 선 쌓은 값(억)</span>${CHART_SIDES.map(([, n, c], j) => {
+      const d = last(bars.map((b) => b.v[j])), s = last(cum[j]);
+      return `<span><i style="background:var(${c})"></i>${n} <b class="${signClass(d)}">${d == null ? '—' : fmt(d)}</b> · 쌓은 <b class="${signClass(s)}">${s == null ? '—' : fmt(s)}</b></span>`;
+    }).join('')}`;
+    const top = Math.min(0.35, (leg.offsetHeight + 8) / (el.clientHeight || 1));
+    chart.applyOptions({ leftPriceScale: { scaleMargins: { top, bottom: 0.04 } }, rightPriceScale: { scaleMargins: { top, bottom: 0.04 } } });
+  }
+
   async function paintChart() {
     if (chart) { chart.remove(); chart = null; }
     /* 종목이면 장중 가집계 회차가 바뀔 때 오늘 줄을 다시 그린다 — 주기는 서버 값(EST_KEY) */
@@ -379,9 +470,10 @@ export function openInvestorModal({ code } = {}) {
       flowWatch = watch({ url: () => (st.tab === 'chart' && /^\d{6}$/.test(st.target) ? `/api/kis/investor-estimate?code=${st.target}` : null),
         onChange: () => paintSides(), key: EST_KEY, fallbackMs: FLOW_FALLBACK_MS });
     }
+    if (!INDEX[st.target] && st.period !== 'D') st.period = 'D';   // 칩을 그리기 전에 — 지수 분봉 · 월봉에서 종목으로 오면 「일봉」 이 켜진 채로(qa 덧 11-05)
     main.innerHTML = `<div class="kh-ivm-bar-row">
         ${chips('target', [[INDEX[st.target] ? (st.lastStock || code || '005930') : st.target, '종목'], ['KOSPI', '코스피'], ['KOSDAQ', '코스닥']], st.target)}
-        ${chips('period', PERIODS, st.period)}
+        ${chips('period', INDEX[st.target] ? PERIODS : AMT_PERIODS, st.period)}
         <span class="kh-chips"><button class="kh-chip kh-ivm-pickbtn${st.picking ? ' is-active' : ''}" type="button">▭ 구간 고르기</button>
           <button class="kh-chip kh-ivm-clear" type="button">구간 지우기</button></span>
         <span class="kh-ivm-name">${esc(nameOf(st.target))}</span></div>
@@ -400,7 +492,8 @@ export function openInvestorModal({ code } = {}) {
       loadBoard('ALL', 1).then(() => { const f = st.names[st.target]; if (f) { const n = main.querySelector('.kh-ivm-name'); if (n) n.textContent = f; } });
     }
     const want = `${st.target}|${st.period}`;
-    const got = await candles();
+    const amt = !INDEX[st.target];
+    const got = amt ? await amountBars() : await candles();
     if (st.tab !== 'chart' || want !== `${st.target}|${st.period}`) return;
     const el = main.querySelector('.kh-ivm-chart');
     const LC = window.LightweightCharts;
@@ -415,12 +508,14 @@ export function openInvestorModal({ code } = {}) {
       rightPriceScale: { borderColor: cssVar('--kh-chart-border') },
       crosshair: { vertLine: { color: cssVar('--kh-chart-crosshair') }, horzLine: { color: cssVar('--kh-chart-crosshair') } },
     });
-    series = chart.addSeries(LC.CandlestickSeries, {
-      upColor: cssVar('--kh-up'), downColor: cssVar('--kh-down'), borderVisible: false,
-      wickUpColor: cssVar('--kh-up'), wickDownColor: cssVar('--kh-down'),
-      ...(INDEX[st.target] ? {} : { priceFormat: { type: 'custom', minMove: 1, formatter: (v) => Math.round(v).toLocaleString() } }),
-    });
-    series.setData(bars.map((b) => ({ time: toTime(b.ts), open: b.open, high: b.high, low: b.low, close: b.close })));
+    if (amt) paintAmount(LC, el);
+    else {
+      series = chart.addSeries(LC.CandlestickSeries, {
+        upColor: cssVar('--kh-up'), downColor: cssVar('--kh-down'), borderVisible: false,
+        wickUpColor: cssVar('--kh-up'), wickDownColor: cssVar('--kh-down'),
+      });
+      series.setData(bars.map((b) => ({ time: toTime(b.ts), open: b.open, high: b.high, low: b.low, close: b.close })));
+    }
     if (bars.length) {
       const n = SHOW_BARS[st.period] || 60;
       chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, bars.length - n), to: bars.length - 1 });

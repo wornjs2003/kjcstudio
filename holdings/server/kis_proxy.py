@@ -1873,6 +1873,8 @@ def _resolve_upstream(raw):
     return raw
 
 
+UPSTREAM_TIMEOUT = 60             # 상류(8765)로 넘긴 요청을 기다리는 초 — 경제지표 · 시장지표 · 그 밖 넘김이 함께 쓴다(개념정의 검수 11-05)
+
 def upstream_base():
     """KIS 를 넘길 상류."""
     return _resolve_upstream(KIS_UPSTREAM_RAW)
@@ -7842,7 +7844,9 @@ class Handler(SimpleHTTPRequestHandler):
         self._relay_upstream("토스는 8765 에서만 부릅니다", "toss")
 
     def _handle_macro(self):
-        """경제 지표(ECOS · FRED) — server/macro.py 머리 주석. `ecos` 키가 없는 서버는 상류로 넘긴다."""
+        """경제 지표(ECOS · FRED) — server/macro.py 머리 주석. 상류가 있는 서버(메인 8764 · 세션)는 8765 로 넘기고,
+        8765 에 못 닿거나 8765 가 이 주소를 모르면 그때만 자기가 받는다(2026-11-05 · 시장지표와 같은 꼴 — 그 전에는 키가 있는 서버마다 따로 받아
+        메인이 12~14초 기다렸다)."""
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/macro/"):].strip("/")
         if route not in ("regime", "series", "releases", "calendar"):
@@ -7853,9 +7857,22 @@ class Handler(SimpleHTTPRequestHandler):
             r = macro.calendar()
             self._send_json(r, 200 if r.get("ok") else 500)
             return
-        if not macro.ecos_key() and upstream_base():
-            self._relay_upstream("경제 지표 키(ecos)가 이 서버에 없습니다", "macro")
-            return
+        base = upstream_base()
+        if base:
+            try:
+                with urllib.request.urlopen(base + self.path, timeout=UPSTREAM_TIMEOUT) as resp:
+                    status, body = resp.status, resp.read()
+            except urllib.error.HTTPError as e:
+                status, body = e.code, e.read()
+            except (urllib.error.URLError, OSError):
+                status, body = None, b""     # 8765 에 못 닿음 — 아래에서 자기가 받는다
+            # 상류가 이 주소를 모른다(옛 코드 404 · JSON 아닌 403) · 못 닿았다 — 그때만 여기서 받는다
+            if status is not None and not (status == 404 or (status == 403 and not body.lstrip().startswith(b"{"))):
+                self._send_body(status, body, "application/json; charset=utf-8")
+                return
+            if not macro.ecos_key():
+                self._send_json({"ok": False, "error": "상류(8765)에 못 닿았고 이 서버에는 경제 지표 키(ecos)가 없습니다", "source": "macro"}, 502)
+                return
         if route == "regime":
             r = macro.regime()
         elif route == "releases":
@@ -7883,7 +7900,7 @@ class Handler(SimpleHTTPRequestHandler):
         base = upstream_base()
         if base:
             try:
-                with urllib.request.urlopen(base + self.path, timeout=60) as resp:
+                with urllib.request.urlopen(base + self.path, timeout=UPSTREAM_TIMEOUT) as resp:
                     status, body = resp.status, resp.read()
             except urllib.error.HTTPError as e:
                 status, body = e.code, e.read()
@@ -7925,7 +7942,7 @@ class Handler(SimpleHTTPRequestHandler):
                              "source": source}, 503)
             return
         try:
-            with urllib.request.urlopen(base + self.path, timeout=60) as resp:
+            with urllib.request.urlopen(base + self.path, timeout=UPSTREAM_TIMEOUT) as resp:
                 status, body = resp.status, resp.read()
         except urllib.error.HTTPError as e:
             status, body = e.code, e.read()
@@ -9296,6 +9313,9 @@ def main():
         print("  넥장 보드 : 사용 (평일 %02d:%02d 종가 · %02d:%02d 장외 · %02d:%02d 야간선물 저장 · /api/nxt/board)"
               % (nxt_board.CLOSE_AT + nxt_board.AFTER_AT + nxt_board.FUT_AT))
     # 자동 관심종목(2026-11-05 · server/auto_watch.py) — 같은 문(보내는 서버만) · 값 쌓기만 · 관심 목록 넣기는 아직 없다(auto_watch.ADD)
+    # 경제 지표 미리 받기(2026-11-05 · server/macro.py start) — 받는 곳은 8765 하나 · 다른 서버는 넘겨 받는다 · 요청이 바깥 35번을 기다리지 않게
+    if not SLOW and is_sender(args.port) and macro.start():
+        print("  경제 지표     : 미리 받기 (뜰 때 · %d초마다 기한 확인 · 기한이 지나도 들고 있던 값을 내고 뒤에서 받음)" % macro.TICK)
     # 「좋은 뉴스」 판정(2026-11-05 · server/good_news.py) — 같은 문(보내는 서버만) · 공급계약 · 자사주 상세를 5분마다 받아 쌓기만 · 알림 없음
     if not SLOW and is_sender(args.port) and good_news.start(sys.modules[__name__]):
         print("  좋은 뉴스 판정 : 사용 (5분마다 공급계약 본문 · 자사주 취득 상세 받기 · /api/good-news)")

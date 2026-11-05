@@ -102,6 +102,12 @@
 @media (min-width: 701px) { .kh-ivm-chart { height: 320px; } }
 .kh-ivm-pick { position: absolute; inset: 0 0 28px 0; cursor: crosshair; z-index: 3; display: none; }
 .kh-ivm-chart.is-picking .kh-ivm-pick { display: block; }
+/* 금액 차트 범례 — 차트 칸 안 위(축 이름 칸 옆) · 차트는 범례 높이만큼 위를 비운다(paintAmount 가 범례 높이를 재서 scaleMargins) ·
+   이 파일처럼 좁은 폭이 기본 · 넓은 폭은 min-width 로 덧붙인다(개념정의 검수 11-05) */
+.kh-ivm-leg { position: absolute; left: 70px; right: 58px; top: 2px; z-index: 3; display: flex; flex-wrap: wrap; gap: 2px 10px;
+  font-size: 11px; color: var(--kh-text-secondary); pointer-events: none; }
+@media (min-width: 701px) { .kh-ivm-leg { left: 76px; right: 70px; font-size: 12px; gap: 4px 14px; } }
+.kh-ivm-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
 .kh-ivm-box {
   position: absolute; top: 0; bottom: 28px; z-index: 2; pointer-events: none;
   border: 1.5px dashed var(--kh-accent); background: var(--kh-accent-dim);
