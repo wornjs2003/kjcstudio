@@ -23,6 +23,10 @@
 		<string>1</string>
 		<key>KJC_LONGPOLL</key>
 		<string>1</string>
+		<!-- **실시간 체결 웹소켓 켜기 (2026-11-05 재권님 「응 켜」 · 개념정의 창).** server/kis_ws.py 가 이 스위치일 때만 증권사 체결 웹소켓에 붙는다 —
+		     8765 하나만 켠다. 서비스방(8764)은 KJC_KIS_UPSTREAM 으로 8765 에서 넘겨받는다(연결이 둘이 되지 않게). 끄려면 이 두 줄을 빼고 다시 올린다. -->
+		<key>KJC_KIS_WS</key>
+		<string>1</string>
 	</dict>
 	<key>KeepAlive</key>
 	<true/>
