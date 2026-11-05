@@ -50,7 +50,7 @@ import { INDEX_CELLS, stripHtml, patchStrip } from './components/index-strip.js'
 import { loadIndicators, peekIndicators, loadIndicator, peekIndicator, chipsHtml, headOf,
          drawIndicator, MK_TERM, loadMaterials, peekMaterials, materialsShell,
          paintMaterials, loadCrypto, CRYPTO_CHIP } from './components/market-index.js';
-import { everyServerMs } from './store/timing.js';
+import { everyServerMs, serverData } from './store/timing.js';
 import { watch } from './store/longpoll.js';
 
 
@@ -1405,14 +1405,18 @@ const pctOf = (p, sortId = sortBy) => {
   return Number.isFinite(v) ? v : null;
 };
 
-/* 장외 칩에 줄이 하나도 없을 때 적는 글 — 평일 07:00~15:30 은 서버가 장외 값을 비워 둔다(kis_proxy.py `after_cleared` ·
-   2026-11-05 재권님 「아침 7시에 리셋되게 해줘」 → (가)). 그때는 줄이 없는 까닭을 적는다 */
+/* 장외 칩에 줄이 하나도 없을 때 적는 글 — 평일 아침 그 시각부터 정규장이 끝날 때까지는 서버가 장외 값을 비워 둔다(kis_proxy.py `after_cleared` ·
+   2026-11-05 재권님 「아침 7시에 리셋되게 해줘」 → (가)). 그때는 줄이 없는 까닭을 적는다.
+   **시각은 서버가 준다**(/api/kis/stats 의 afterClear · 「같은 값은 한 곳에만 둔다」) — 못 받았으면 까닭 글을 안 짓는다 */
 function afterEmpty() {
+  const ac = serverData('afterClear');
+  const min = (s) => { const m = /^(\d\d):(\d\d)$/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
+  const from = min(ac && ac.from), until = min(ac && ac.until);
   const kst = new Date(Date.now() + 9 * 3600 * 1000);
   const hm = kst.getUTCHours() * 60 + kst.getUTCMinutes();
   const wd = kst.getUTCDay() >= 1 && kst.getUTCDay() <= 5;
-  return wd && hm >= 7 * 60 && hm < 15 * 60 + 30
-    ? '장외 값은 15:30 애프터부터 · 아침 7시에 비웁니다'
+  return from != null && until != null && wd && hm >= from && hm < until
+    ? `장외 값은 ${ac.until} 애프터부터 · 아침 ${ac.from}에 비웁니다`
     : '종가보다 오른 종목이 아직 없습니다';
 }
 
