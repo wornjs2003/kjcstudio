@@ -3871,6 +3871,9 @@ def fetch_investor_member(cfg, code):
     return out
 
 
+HF_SHARE_DAYS = 20                          # 누적 순매수 칸 「거래 몫」 을 세는 최근 거래일 수
+
+
 def holding_flow(cfg, code):
     """투자자별 누적 순매수(%p) — 차트 보조지표 「누적 순매수」 칸 (2026-10-26 재권님 「다」 · 작업우선순위 경유).
 
@@ -3884,13 +3887,21 @@ def holding_flow(cfg, code):
     if not rows or not listed:
         return None
     rows.sort(key=lambda r: r["date"])
+    # 주체별 비율 — 최근 HF_SHARE_DAYS 거래일 셋이 사고판 금액(매수 + 매도) 합에서 각자 몫(%) · 셋 합 100 · 기타법인은 안 셈
+    # (2026-11-06 재권님 「차트에 누적 순매수에 주체별 비율도 있어야해」 → 「각각 그래프선 끝에 넣어」 · chart.js drawHfEnds)
+    # 금액이 빈 줄은 빼고 센다 · 남는 줄이 없거나 합이 0 이면 None(0% 로 내지 않는다)
+    tail = [r for r in rows if all((r.get(k) or {}).get("buyAmt") is not None and (r.get(k) or {}).get("sellAmt") is not None
+                                   for k in ("foreign", "inst", "person"))][-HF_SHARE_DAYS:]
+    vol = {k: sum(r[k]["buyAmt"] + r[k]["sellAmt"] for r in tail) for k in ("foreign", "inst", "person")}
+    tot = sum(vol.values())
+    share = {**{k: round(v / tot * 100, 1) for k, v in vol.items()}, "days": len(tail)} if tail and tot > 0 else None
     acc = {"foreign": 0, "inst": 0, "person": 0}
     out = []
     for r in rows:
         for k in acc:
             acc[k] += r[k]["net"]
         out.append({"date": r["date"], **{k: round(v / listed * 100, 4) for k, v in acc.items()}})
-    return {"start": out[0]["date"], "listed": listed, "rows": out}
+    return {"start": out[0]["date"], "listed": listed, "rows": out, "share": share}
 
 
 def fetch_investor_long(cfg, code, days=INVESTOR_LONG_DAYS):
@@ -8991,7 +9002,8 @@ class Handler(SimpleHTTPRequestHandler):
                     return
                 self._send_json({"ok": True, "data": hf["rows"],
                                  "meta": {"code": code, "start": hf["start"], "listed": hf["listed"], "unit": "%p",
-                                          "note": "보유비중 아님 · 셈 첫날부터 누적 순매수 ÷ 상장주식수"}})
+                                          "share": hf.get("share"),
+                                          "note": "보유비중 아님 · 셈 첫날부터 누적 순매수 ÷ 상장주식수 · share 는 최근 days 거래일 셋의 매수 + 매도 금액 합에서 각자 몫(%)"}})
                 return
 
             # 투자자 지표 모달 「그래프」 판 (2026-10-16 · `investor_board`)
