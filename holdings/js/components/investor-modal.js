@@ -19,8 +19,6 @@
        차트     종목은 날마다 순매수 금액 막대 + 쌓은 선(일봉만 · 11-05) · 코스피 · 코스닥은 분 · 일 · 월봉 +
                 아래 그 종목의 개인 · 외국인 · 기관 양쪽 막대.
                 기간은 **점선 네모로 고른 구간**, 안 골랐으면 **차트에 보이는 구간**이다
-       매매 동향  외국인 · 기관 순매수 순위(가집계 · 코스피 · 코스닥 합쳐 100까지) · 「특이 매수」 = 전일 순매도 → 오늘 순매수 「전환」 강도 순 ·
-                날짜를 고르면 그날 남긴 판(2026-11-06 재권님 사진 「이거 만들고 싶어」 → (가) 외국인 · 기관 먼저 · 「순차로 해줘」)
        당일     오늘 장중 5분마다 — 코스피 외국인 · 기관 · 개인 · 코스피 프로그램 · 고른 종목 프로그램의 매수 · 매도 · 순매수(막대 + 표) ·
                 고른 종목의 장중 잠정치(하루 다섯 번) · 기관 안 · 증권사 상위 5 (2026-10-27 재권님 시안 「ㄴ · 매수랑 매도 둘다」 ·
                 「모달 창 밖으로 길어지지 않게」 — 칸마다 높이를 잡고 표는 칸 안에서 내린다)
@@ -37,7 +35,6 @@
        투자자            /api/kis/investor?code=&span=60 — net · netAmt(백만원) · buyAmt · sellAmt(백만원)
                          매수 · 매도 금액이 없는 줄(옛 서버)은 수량 × 종가로 어림하고 「어림」 이라 적는다
        차트              /api/kis/chart · /api/kis/index-candles · /api/kis/index-minutes
-       매매 동향         /api/kis/flow-rank?who=&day=(server/flow_rank.py) — 다시 묻는 주기는 서버 값(kis_proxy.INVESTOR_TOP_TTL)
        당일              /api/kis/flow-today?code=&step=5(서버가 1분마다 쌓은 것 · server/intraday_flow.py) · investor-estimate ·
                          investor-member · investor?span=5 의 instDetail(확정치 · 15:40 뒤) — 다시 묻는 주기는 서버 값(intraday_flow.CACHE_TTL)
    투자자 값은 하루 단위뿐이다 — 분봉에서 고른 구간은 **그 날짜들의 하루 값**을 더한다. 장중 오늘 줄(확정 전)은 빼고 그렇다고 적는다.
@@ -65,7 +62,6 @@ const SHOW_BARS = { '5m': 156, D: 60, M: 24 };   // 처음 보이는 봉 수 —
 const FLOW_KEY = 'intraday_flow.CACHE_TTL';    // 「당일」 탭이 다시 묻는 주기 — 서버 값
 const FLOW_FALLBACK_MS = 60000;
 const EST_KEY = 'kis_proxy.INVESTOR_EST_TTL';   // 「차트」 탭 오늘 줄(장중 가집계)을 다시 묻는 주기 — 서버 값
-const RANK_KEY = 'kis_proxy.INVESTOR_TOP_TTL';  // 「매매 동향」 탭이 다시 묻는 주기 — 서버 값(가집계 순위 캐시)
 const INV_KEY = 'kis_proxy.INVESTOR_TTL';       // 투자자 줄을 다시 받는 주기 — 서버 값(15:40 확정치가 모달을 연 채로도 들어오게)
 
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -151,7 +147,7 @@ const mmdd = (d) => (d ? `${d.slice(4, 6)}-${d.slice(6, 8)}` : '');
 /** 열 곳: 투자자 정보 칸의 「자세히 ›」 — code 는 그 칸이 보던 종목 */
 export function openInvestorModal({ code } = {}) {
   ensureCss();
-  const st = { tab: 'graph', trWho: 'foreign', trView: 'actor', trDay: '', side: 'foreign', days: 'today', mkt: 'ALL', target: code || '005930', names: {},
+  const st = { tab: 'graph', side: 'foreign', days: 'today', mkt: 'ALL', target: code || '005930', names: {},
     period: 'D', box: null };
   let chart = null, series = null, bars = [], main = null, flowWatch = null;
 
@@ -168,7 +164,7 @@ export function openInvestorModal({ code } = {}) {
       icon: '수',
       name: '투자자 지표',
       sub: '한국투자증권 확정치',
-      tabs: [{ id: 'graph', label: '그래프' }, { id: 'chart', label: '차트' }, { id: 'today', label: '당일' }, { id: 'trend', label: '매매 동향' }],
+      tabs: [{ id: 'graph', label: '그래프' }, { id: 'chart', label: '차트' }, { id: 'today', label: '당일' }],
       tab: st.tab,
       tabsNote: rankCard ? '오른쪽 ▶ 실시간 순위에서 종목을 누르면 차트가 그 종목으로' : '',
       onTab: (id) => { st.tab = id; paint(); },
@@ -707,97 +703,11 @@ export function openInvestorModal({ code } = {}) {
       onChange: () => loadToday(), key: FLOW_KEY, fallbackMs: FLOW_FALLBACK_MS });
   }
 
-  /* ── 매매 동향 탭 — 외국인 · 기관 순매수 순위 · 특이 매수(전일 순매도 → 오늘 순매수) ──
-     오늘은 가집계(증권사 장중 입력 · 하루 네 번) · 전일은 확정치 · 날짜를 고르면 그날 남긴 판. 줄을 누르면 차트 탭이 그 종목 */
-  let tr = null;
-  const trUrl = () => (st.trView === 'actor' ? '/api/kis/flow-rank?view=actor'
-    : `/api/kis/flow-rank?who=${st.trWho}${st.trDay ? `&day=${st.trDay}` : ''}`);
-  /* 주체별 — 종목마다 주체 순매수(확정치) · 매수 우위 주체가 많은 종목이 위. 기관계는 기관 안 여덟의 합이라 칸만 두고 세지 않는다(서버 sumOf) */
-  function actorDraw(box, b) {
-    const acts = b.actors || [];
-    const sub = new Set(Object.values(b.sumOf || {}).flat());
-    const lead = new Set(b.lead || []);
-    const head = acts.map(([k, n]) => `<th class="${sub.has(k) && !lead.has(k) ? 'kh-ivd-sub' : ''}${lead.has(k) ? ' kh-ivr-lead' : ''}">${esc(n)}</th>`).join('');
-    const cell = (v) => (v == null ? '<td>—</td>' : `<td class="${signClass(v)}${v > 0 ? ' kh-ivr-buy' : ''}">${trEok(v)}</td>`);
-    const tags = (x) => (x.top ? '<span class="kh-ivr-tag">기관 · 외국인 · 프로그램 매수</span>' : '') + (x.fund ? '<span class="kh-ivr-tag is-both">연기금 매수</span>' : '');
-    const line = (x) => `<tr data-code="${esc(x.code)}" class="${x.top ? 'is-top' : ''}"><td><b>${esc(x.name)}</b>${tags(x)}</td>
-      <td class="kh-ivr-n"><b>${x.buyers}</b><small>/${x.counted}</small></td>${acts.map(([k]) => cell((x.net || {})[k])).join('')}</tr>`;
-    const day = b.day ? fdDate(`${b.day.slice(0, 4)}-${b.day.slice(4, 6)}-${b.day.slice(6)}`) : '—';
-    box.innerHTML = `<div class="kh-ivt-tb kh-ivr-tb"><table><thead><tr><th>종목</th><th>매수 우위</th>${head}</tr></thead>
-      <tbody>${(b.rows || []).length ? b.rows.map(line).join('') : '<tr><td colspan="99" class="kh-ivm-mut">쌓인 종목이 없습니다</td></tr>'}</tbody></table></div>
-      <div class="kh-ivt-note">${esc(b.basis || '')} ${day} · 순매수 억원 · 바탕 칠한 칸이 순매수 · 줄 차례 = ① 기관 · 외국인 · 프로그램 셋 다 매수 ② 연기금 매수 ③ 셋 중 산 수 ④ 매수 우위 주체 수 ⑤ 순매수 금액 합 ·
-        「매수 우위」 = 순매수인 주체 수 / 값이 있는 주체 수(개인 · 외국인 · 기관 안 여덟 · 기타법인 — 기관계는 기관 안의 합 · 프로그램은 매매 방식이라 세지 않음) ·${b.pgMissing ? ` 프로그램 받는 중 ${b.pgMissing}종목 ·` : ''}
-        종목별 주체 세부는 KIS 가 15:40 뒤에만 줘서 장중에는 지난 거래일 값 · 지금은 화면에서 열어 본 ${(b.rows || []).length}종목만 쌓여 있음</div>`;
-    box.querySelectorAll('tr[data-code]').forEach((el) => el.addEventListener('click', () => pick(el.dataset.code, el.querySelector('b').textContent)));
-  }
-  /* 억원 · 10억 아래는 소수 한 자리 — 1억 안쪽 순매도가 「−0억」 으로 보이지 않게 */
-  const trEok = (mil) => { if (mil == null) return '—'; const v = mil / 100, t = Math.abs(v) < 10 ? v.toFixed(1) : Math.round(v).toLocaleString();
-    return `${v > 0 ? '+' : ''}${t}억`; };
-  const trPct = (n) => (n == null ? '—' : `${n > 0 ? '+' : ''}${Number(n).toFixed(2)}%`);
-  function trDraw() {
-    const box = main.querySelector('.kh-ivr');
-    if (!box) return;
-    const b = tr && tr.data;
-    const meta = (tr && tr.meta) || {};
-    const sel = main.querySelector('.kh-ivr-day');
-    if (sel) {
-      const today = b && !st.trDay ? b.day : '';
-      const days = [...new Set([...(today ? [today] : []), ...(meta.days || [])])];
-      sel.innerHTML = `<option value="">오늘 · 가집계</option>${days.filter((d) => d !== (b && !st.trDay ? b.day : '')).map((d) =>
-        `<option value="${esc(d)}"${d === st.trDay ? ' selected' : ''}>${fdDate(`${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`)} 남긴 판</option>`).join('')}`;
-    }
-    if (b && st.trView === 'actor') { actorDraw(box, b); return; }
-    if (!b) { box.innerHTML = `<div class="kh-ivt-empty">${tr && tr.ok === false ? esc(tr.error || '못 받았습니다') : (st.trDay ? '그날 남긴 판이 없습니다' : '불러오는 중')}</div>`; return; }
-    const byCode = Object.fromEntries((b.rows || []).map((x) => [x.code, x]));
-    const sp = (b.special || []).map((c) => byCode[c]).filter(Boolean);
-    main.querySelectorAll('.kh-chips[data-g="trView"] .kh-chip').forEach((el) => {
-      if (el.dataset.v === 'special') el.textContent = `특이 매수(${sp.length})`;
-    });
-    const list = st.trView === 'special' ? sp : (b.rows || []);
-    const other = st.trWho === 'foreign' ? '기관' : '외국인';
-    const line = (x) => {
-      const tags = [x.flip ? '<span class="kh-ivr-tag">전환</span>' : '', x.both ? `<span class="kh-ivr-tag is-both">${other}도 순매수</span>` : ''].join('');
-      const prev = trEok(x.prevNet);
-      return `<tr data-code="${esc(x.code)}"><td><b>${esc(x.name || x.code)}</b> <small>${x.market === 'KOSDAQ' ? '코스닥' : '코스피'} · 순매수 ${x.rank}위</small>${tags}</td>
-        <td class="${signClass(x.net)}">${trEok(x.net)}</td><td class="${signClass(x.prevNet)}">${prev}</td>
-        <td>${x.power == null ? '—' : `${x.power.toFixed(1)}%`}</td><td class="${signClass(x.pct)}">${trPct(x.pct)}</td></tr>`;
-    };
-    const wait = b.prevMissing ? ` · 전일 확정치 받는 중 ${b.prevMissing}종목` : '';
-    box.innerHTML = `<div class="kh-ivt-tb kh-ivr-tb"><table><thead><tr><th>종목</th><th>오늘 순매수</th><th>전일 순매수</th><th>강도</th><th>등락률</th></tr></thead>
-      <tbody>${list.length ? list.map(line).join('') : `<tr><td colspan="5" class="kh-ivm-mut">${st.trView === 'special' ? (b.prevMissing ? '전일 확정치를 받는 중입니다' : '전일 순매도 → 오늘 순매수로 바뀐 종목이 없습니다') : '순매수 종목이 없습니다'}</td></tr>`}</tbody></table></div>
-      <div class="kh-ivt-note">${esc(b.basis || '')} ${esc(b.at || '')} 기준 · 순위는 코스피 · 코스닥 순매수 상위(수량 · 금액)를 합친 ${b.rows.length}종목 안 차례 · 억원 · 강도 = 오늘 순매수 ÷ 거래대금(거래량 × 현재가)${b.rows.some((x) => x.both) ? ` · ${other}도 순매수면 그 몫을 더함` : ''} · 전일은 확정치${wait}${b.errors ? ` · 못 받음 ${esc(b.errors)}` : ''}</div>`;
-    box.querySelectorAll('tr[data-code]').forEach((el) => el.addEventListener('click', () => pick(el.dataset.code, (byCode[el.dataset.code] || {}).name)));
-  }
-  async function loadTrend() {
-    const want = trUrl();
-    const r = await getJson(want);
-    if (st.tab !== 'trend' || trUrl() !== want || !main.querySelector('.kh-ivr')) return;
-    tr = r;
-    trDraw();
-  }
-  function paintTrend() {
-    const actor = st.trView === 'actor';   // 주체별 — 서버가 프로그램을 뒤에서 채우는 동안 같은 주소를 서버 주기로 다시 묻는다
-    main.innerHTML = `<div class="kh-ivm-bar-row">${chips('trView', [['actor', '주체별'], ['rank', '순위'], ['special', '특이 매수']], st.trView)}
-      ${actor ? '<span class="kh-ivm-mut">기관 · 외국인 · 프로그램이 함께 산 종목이 맨 위 · 그다음 연기금</span>'
-        : `${chips('trWho', [['foreign', '외국인'], ['inst', '기관']], st.trWho)}
-      <select class="kh-ivr-day" aria-label="날짜"><option value="">오늘 · 가집계</option></select>
-      <span class="kh-ivm-mut">특이 매수 = 전일 순매도 → 오늘 순매수 · 강도 순</span>`}</div><div class="kh-ivr"><span class="kh-ivm-mut">불러오는 중</span></div>`;
-    bindChips((g, v) => { const was = st.trView; st[g] = v;
-      if (g === 'trWho' || (g === 'trView' && (v === 'actor') !== (was === 'actor'))) { tr = null; paintTrend(); } else {
-      main.querySelectorAll(`.kh-chips[data-g="${g}"] .kh-chip`).forEach((el) => el.classList.toggle('is-active', el.dataset.v === v)); trDraw(); } });
-    if (!actor) main.querySelector('.kh-ivr-day').addEventListener('change', (e) => { st.trDay = e.target.value; tr = null; trDraw(); loadTrend(); });
-    if (tr) trDraw();
-    loadTrend();
-    stopFlow();
-    flowWatch = watch({ url: () => trUrl(), onChange: () => loadTrend(), key: RANK_KEY, fallbackMs: FLOW_FALLBACK_MS });
-  }
-
   function paint() {
-    if (st.tab !== 'today' && st.tab !== 'trend') stopFlow();
-    if (st.tab !== 'chart') { if (chart) { chart.remove(); chart = null; } }
+    if (st.tab !== 'today') stopFlow();
+    if (st.tab === 'graph' || st.tab === 'today') { if (chart) { chart.remove(); chart = null; } }
     if (st.tab === 'graph') paintGraph();
     else if (st.tab === 'today') paintToday();
-    else if (st.tab === 'trend') paintTrend();
     else paintChart();
   }
   paint();

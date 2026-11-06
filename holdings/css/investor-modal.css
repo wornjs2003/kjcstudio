@@ -155,20 +155,3 @@
   .kh-ivt-col:last-child { grid-column: auto; display: flex; }
   .kh-ivt-card.is-tall .kh-ivt-tb { max-height: 260px; }
 }
-
-/* 매매 동향 탭 — 순위 표 · 「전환」 같은 표시는 연한 바탕에 진한 글씨(색 바탕 위의 글씨) */
-.kh-ivr { display: flex; flex-direction: column; gap: 6px; }
-.kh-ivr-tb { max-height: 420px; font-variant-numeric: tabular-nums; }
-.kh-ivr-tb tbody tr { cursor: pointer; }
-.kh-ivr-tb tbody tr:hover td { background: var(--kh-bg-surface); }
-.kh-ivr-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font-size: 11px; background: var(--kh-up-dim); color: var(--kh-up); }
-.kh-ivr-tag.is-both { background: var(--kh-accent-dim); color: var(--kh-accent); }
-.kh-ivr-tb td.kh-ivr-buy { background: var(--kh-up-dim); }
-.kh-ivr-tb th.kh-ivr-lead { color: var(--kh-text-primary); font-weight: 700; }
-.kh-ivr-tb tr.is-top td:first-child { box-shadow: inset 3px 0 0 var(--kh-up); }
-.kh-ivr-tb td.kh-ivr-n { text-align: center; }
-.kh-ivr-tb td.kh-ivr-n small { color: var(--kh-text-secondary); }
-.kh-ivr-day { font: inherit; font-size: 12px; border: 0; background: var(--kh-bg-surface); color: var(--kh-text-primary); border-radius: 6px; padding: 3px 6px; }
-@media (min-width: 701px) {
-  .kh-ivr-tb { max-height: 720px; }
-}
