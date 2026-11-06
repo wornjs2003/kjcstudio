@@ -1489,11 +1489,30 @@ function jointCell(code, narrow = false) {
   const names = (ks) => (ks || []).map((k) => JOINT_NAME[k]).join(' · ');
   /* 합은 안 적는다(11-05 재권님 「합은 빼준 상태로」) — 차례는 그대로 서버가 셋 합 큰 순으로 준다 */
   /* 단위 「억」 은 줄 끝에 한 번(11-05 재권님 「금액으로 다 맞춰줘」 — 안내 줄에 넣으면 빠짐이 있을 때 두 줄로 넘었다) */
-  const body = line(`${JOINT_SIDES.map(one).join(' ')}<span class="kh-mut">억</span>`);
+  /* 연 — 연기금 그날 확정치(15:45 뒤 쌓기 · 그 전 「—」 · 언제 채우는지는 표 위 갱신 줄) · 줄마다 시각은 안 넣는다
+     (11-06 재권님 「2 안 넣어도 돼 · 갱신시간은 해당 실시간 목록 위에 써주고 종목에는 외 기 프 연 이렇게」) */
+  const body = line(`${[...JOINT_SIDES, ['fund', '연']].map(one).join(' ')}<span class="kh-mut">억</span>`);
   if (!r.flip) return body;
   const why = [(r.sold || []).length ? `${names(r.sold)} 매도로 바뀜` : '', (r.unknown || []).length ? `${names(r.unknown)} 값 모름` : '']
     .filter(Boolean).join(' · ') || '셋 다 매수에서 빠짐';
   return body + line(`${why} ${r.at || ''}`, true);
+}
+/* 갱신 시각은 표 위 한 줄에만 (2026-11-06 재권님 「언제 받은 값인지 실시간으로 갱신되면 좋을거같어」 → 「갱신시간도 같이 넣어줘」 →
+   「갱신시간은 해당 실시간 목록 위에 써주고 종목에는 외 기 프 연 이렇게」). 서버는 판마다 처음 잡힌 시각 · 횟수(first · hits)를 계속 쌓는다 —
+   화면에는 지금 안 그린다 */
+const kstHm = () => { const k = new Date(Date.now() + 9 * 3600 * 1000); return `${String(k.getUTCHours()).padStart(2, '0')}:${String(k.getUTCMinutes()).padStart(2, '0')}`; };
+const slotNext = (s) => (s && s.length ? ([...s].find((t) => t > kstHm()) || `내일 ${s[0]}`) : null);
+/* 갱신 줄 — 표 위 한 줄 · 다음에 바뀌는 시각(프는 서버가 다시 짓는 때 = 받은 시각 + 서버 cacheTtl · 외 · 기는 다음 가집계 회차).
+   정규장이 끝나 판이 고정이면(서버 phase closed) 그렇다고만 적는다 */
+function jointUpd() {
+  const m = jointMeta || {};
+  if (!m.asof) return '';
+  if (m.phase === 'closed') return `정규장 마감 고정 · 연기금 ${m.fundIn ? `${m.fundIn}종목 들어옴` : `${m.fundAt || '—'} 뒤 채움`}`;
+  const t0 = Date.parse(m.asof.replace(' ', 'T') + '+09:00');
+  const nx = m.cacheTtl && Number.isFinite(t0) ? new Date(t0 + m.cacheTtl * 1000 + 9 * 3600 * 1000).toISOString().slice(11, 16) : '—';
+  const es = m.estSlots || {};
+  /* 한 줄로 — 두 줄이면 표가 17px 더 짧아진다(14:59 8772 · 0.74rem 에서 꺾임) */
+  return `갱신 프 <b>${nx}</b> · 외 <b>${slotNext(es.foreign) || '—'}</b> · 기 <b>${slotNext(es.inst) || '—'}</b> · 연 <b>${m.fundIn ? '들어옴' : m.fundAt || '—'}</b>`;
 }
 /* 안내 줄 — 몇 종목 · 빠진 수 · 못 받은 수 · 값마다 갱신 주기(외 · 기 입력 시각과 서버가 다시 받는 주기는 서버가 준다) */
 function jointNote(short = false) {
@@ -1844,6 +1863,7 @@ function paintSortNote() {
   if (market === 'THEME') {
     el.innerHTML = themeNote();
     noteAt = Date.now();
+    if ($('kh-joint-upd')) $('kh-joint-upd').hidden = true;
     return;
   }
   const s = SORTS[sortBy];
@@ -1858,6 +1878,8 @@ function paintSortNote() {
   el.innerHTML = bits.join(' <span class="kh-mut">·</span> ');
   noteAt = Date.now();
   paintPreSectors();
+  const upd = $('kh-joint-upd');      // 「매수」 칩에만 — 다른 칩에서는 숨는다(11-06)
+  if (upd) { const t = sortBy === 'buy' ? jointUpd() : ''; upd.hidden = !t; upd.innerHTML = t; }
 }
 
 /* ── 즐겨찾기 하트 (2026-09-18 지시) ─────────
