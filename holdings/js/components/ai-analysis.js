@@ -32,6 +32,10 @@ import { isUsCode } from '../utils/format.js';
    (2026-10-02 · 재권님 「이거 안대로 수정먼저하고」 · `store/longpoll.js`).
    서버가 이 주소를 지켜보지 못하면 아래 대체값 주기로 다시 읽는다 */
 const AI_FILE = './data/ai-analysis.json';
+/* Insight 종목 리포트 저장본 — 시황분석이 쓴 문서(company-setup/tools/save-stock-report.py · savedAt). 이 칸 글보다 새것이면 그리로 잇는다
+   (2026-11-06 재권님 「나」 — 홈 훑기 1번 「AI 분석 칸이 한 달 전 글」). 종목마다 한 번만 읽는다 */
+const REPORT_DOC = code => `/company-setup/data/stock-report/docs/${code}.json`;
+const REPORT_PAGE = code => `/company-setup/stock-report.html?code=${code}`;
 const RELOAD_FALLBACK_MS = 30 * 60 * 1000;
 
 function esc(s) {
@@ -44,6 +48,16 @@ function whenText(at) {
   const t = String(at || '');
   if (t.length < 16) return '';
   return `${t.slice(5, 7)}.${t.slice(8, 10)} ${t.slice(11, 16)}`;
+}
+
+/* '2026-10-06T17:24:00+09:00' · '2026-10-13 09:38' → '2026-10-06 17:24' (견주기 · 날짜 셈용) */
+const norm = at => String(at || '').replace('T', ' ').slice(0, 16);
+/* 오늘(한국)과 며칠 떨어졌나 — 글이 낡았는지 가른다. 오늘 쓴 글이 아니면 낡음이다(값은 날마다 움직인다) */
+function daysAgo(at) {
+  const d = norm(at).slice(0, 10);
+  if (d.length < 10) return null;
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  return Math.round((Date.parse(today) - Date.parse(d)) / 864e5);
 }
 
 const PARTS = [
@@ -65,6 +79,7 @@ export function mountAiAnalysis({ box, when } = {}) {
   let code = null;
   let doc = null;          // 파일 전체
   let timer = null;
+  const reports = {};      // 종목 → 저장본 { savedAt } · 없으면 false · 읽는 중이면 없음
 
   async function load() {
     try {
@@ -92,11 +107,11 @@ export function mountAiAnalysis({ box, when } = {}) {
       return;
     }
     const d = code ? doc.codes[code] : null;
+    const rep = reportLink(d);
     /* 배지 — 종목 글에 at(쓴 시각) · writer(쓴 세션)가 있으면 그것을, 없으면 파일의 at (2026-10-06 · 종목별로 따로 쓰기 시작) */
     if (when) when.textContent = d && d.at ? `${d.writer ? d.writer + ' · ' : ''}${whenText(d.at)}` : doc.at ? whenText(doc.at) : '—';
     if (!d) {
-      box.innerHTML = '<span class="kh-mut">이 종목은 아직 없습니다 —'
-        + ' 관심종목부터 쓰고 있습니다</span>';
+      box.innerHTML = rep || '<span class="kh-mut">이 종목은 아직 쓴 글이 없습니다</span>';
       return;
     }
 
@@ -112,7 +127,30 @@ export function mountAiAnalysis({ box, when } = {}) {
       : `<div class="kh-todo"><b>컨센서스는 아직 연결하지 않았습니다</b>
            증권사 목표주가를 받아올 곳을 정하는 중입니다.</div>`;
 
-    box.innerHTML = parts + cons;
+    /* 낡은 글 — 오늘 쓴 것이 아니면 머리에 며칠 전 글인지 적고 본문을 흐리게 한다. 쓴 시각이 없으면 「언제 쓴 글인지 모름」 */
+    const n = daysAgo(d.at || doc.at);
+    const old = n == null || n > 0;
+    const head = old
+      ? `<div class="kh-ai-old">${n == null ? '언제 쓴 글인지 모릅니다' : `${norm(d.at || doc.at).slice(5, 10)} 에 쓴 글 · ${n}일 지남`} — 그 뒤 값은 반영 안 됨</div>`
+      : '';
+    box.innerHTML = (rep || '') + head + `<div class="${old ? 'kh-ai-stale' : ''}">${parts + cons}</div>`;
+  }
+
+  /* Insight 리포트 저장본이 이 칸 글보다 새것(또는 이 칸 글이 없음)이면 이어 주는 줄. 아직 안 읽었으면 읽고 다시 그린다 */
+  function reportLink(d) {
+    if (!code) return '';
+    const r = reports[code];
+    if (r === undefined) {
+      const c = code;
+      reports[c] = false;
+      apiFetch(REPORT_DOC(c), { cache: 'no-store' })
+        .then(x => x && x.ok ? x.json() : null)
+        .then(j => { if (j && j.savedAt) { reports[c] = { savedAt: j.savedAt }; if (code === c) paint(); } })
+        .catch(() => {});
+      return '';
+    }
+    if (!r || (d && norm(d.at || (doc && doc.at)) >= norm(r.savedAt))) return '';
+    return `<a class="kh-ai-rep" href="${REPORT_PAGE(code)}" target="_blank" rel="noopener">더 새 글 — Insight 종목 리포트(${esc(norm(r.savedAt).slice(5, 10))} 저장) 열기 ›</a>`;
   }
 
   /* 서버는 주소를 **절대 경로**로 받는다 — 이 화면 자리에서 풀어 넘긴다 */
