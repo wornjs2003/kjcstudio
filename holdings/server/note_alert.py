@@ -28,7 +28,7 @@ from secrets_guard import safe_message
 KST = timezone(timedelta(hours=9))
 HERE = os.path.dirname(os.path.abspath(__file__))
 NOTE = os.path.join(HERE, "..", "..", "company-setup", "data", "market-note-live.json")
-LINK = "https://thekjcstudio.com/company-setup/market.html"
+LINK = "https://thekjc.co.kr/company-setup/market.html"
 TEXT = "시황 글 올렸습니다\n" + LINK
 STATE_KEY = "note_alert_state"      # market.db sync_meta — {"seen": 마지막으로 본(보낸) at, "sentAt": 보낸 시각}
 TICK = 60
