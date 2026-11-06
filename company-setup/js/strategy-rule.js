@@ -6,8 +6,8 @@
 //   · 「오늘 이 룰에 걸린 종목」 — 서버 /api/auto-watch 가 이 문서를 부를 때마다 다시 읽어 거르고 줄 세운다. 화면은 그 결과를 그리기만 하고(거르는 셈을 두지 않는다)
 //     칸은 바꾸면 바로 저장되고, 「검색」 단추를 누르면 저장이 끝난 뒤 다시 부른다(11-05 재권님 「숫자 바꾸고 나서 오른쪽 위에 검색 버튼 누르면 검색되게 해줘」) · 「없음」(null) 은 0 이 아니라 「—」 · 받는 방법 줄도 응답의 meta 로 쓴다(서버 상수를 화면에 다시 적지 않는다)
 //   · 칸을 떠나면(change) 바로 저장 · 숫자 칸에 숫자가 아닌 글 · data-min 밑 · data-int 칸의 소수는 넣지 않고 그 칸을 되돌린다 · 남이 그 사이 고쳤으면(409) 다시 읽고 알린다
-import { signClass, NUM } from '/assets/js/sign.js';
-import { everyServerMs } from '/holdings/js/store/timing.js';   // 장중 다시 받는 주기 — 서버 auto_watch.LIVE_SEC 값(화면에 안 박는다)   // 오르내림 글씨 색 — 셈은 sign.js 한 곳
+import { signClass, NUM } from '/assets/js/sign.js';   // 오르내림 글씨 색 — 셈은 sign.js 한 곳
+import { everyServerMs } from '/holdings/js/store/timing.js';   // 장중 다시 받는 주기 — 서버 auto_watch.LIVE_SEC 값(화면에 안 박는다)
 const DOC = '/api/board/doc/strategy-rules';
 const AW = '/api/auto-watch';
 const RULE = 'volsurge';
