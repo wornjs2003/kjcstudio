@@ -79,7 +79,7 @@ const IDX = { KOSPI: '코스피', KOSDAQ: '코스닥' };
 const mmdd = (d) => { const m = String(d || '').match(/(\d{4})-?(\d{2})-?(\d{2})/); return m ? `${m[2]}-${m[3]}` : (d || '—'); };
 
 // 신고가 부근 표시 (11-05 「가랑 나랑 구분만 되면」) — 서버가 붙여 주는 nearHigh(부근인가) · nearHighOnly(위 조건 밖인데 부근이라 더 넣음) 그대로 · 맨 위로 올리는 것도 서버 순서
-const nhTag = (p) => (!p.nearHigh ? '' : `<span class="aw-nh${p.nearHighOnly ? ' only' : ''}">${p.nearHighOnly ? '신고가 부근만' : '신고가 부근'}</span>`);
+const nhTag = (p) => (!p.nearHigh ? '' : `<span class="aw-nh${p.nearHighOnly ? ' only' : ''}"${p.high52 != null ? ` title="52주 최고 종가 ${num(p.high52)} · ${p.highGapPct == null ? '—' : `${p.highGapPct > 0 ? '+' : ''}${num(p.highGapPct, 2)}%`}"` : ''}>${p.nearHighOnly ? '신고가 부근만' : '신고가 부근'}</span>`);
 async function loadAw() {
   let j = null, st = 0;
   try { const r = await fetch(AW, { cache: 'no-store' }); st = r.status; j = r.ok ? await r.json() : null; } catch (e) { j = null; }
@@ -165,8 +165,8 @@ const nOr = (x, t) => (x == null ? t : num(x));
 const pctOr = (x) => (x == null ? '아직' : pctTxt(x));
 // 어제 판 단추 (11-05 재권님 「하루전 2일전 3일전 4일전 이 있어야 되고 5일 10일 한달 이버튼도 따로 있어야해」) —
 // 날 단추는 서버가 남긴 날 목록에서 「현재」 날을 뺀 순서(n번째 앞 남긴 날 · 단추에 날짜는 안 붙임 — 11-05 「어제옆에 날짜는 필요없어」 · 그 날짜는 표 머리 줄이 보인다) ·
-// 기간 단추(가장 많이 걸린 종목 상위 20 · 기간 상승률)는 서버 셈을 기다린다 — 화면은 세지 않는다
-const AH_SPAN = [['5d', '5일'], ['10d', '10일'], ['1m', '한달']];
+// 기간 단추(가장 많이 걸린 종목 상위 20 · 기간 상승률)는 서버 data.top 그대로 — 화면은 세지 않는다
+const AH_SPAN = [['5d', '5일', 'd5'], ['10d', '10일', 'd10'], ['1m', '한달', 'd20']];
 let ahD = null, ahSt = 0, ahSel = 'b0';
 const tabs = [...document.querySelectorAll('.aw-tab')], panes = [...document.querySelectorAll('.aw-pane')];
 async function loadAh() {
@@ -180,7 +180,7 @@ function renderAh() {
   const t = d.total || {};
   const list = (Array.isArray(d.list) ? d.list : []).filter((g) => !awDay || ymd(g.day) !== ymd(awDay)).sort((x, y) => ymd(y.day).localeCompare(ymd(x.day)));
   ahCap.textContent = `걸렸던 종목이 다음 거래일 종가에 어떻게 됐나 — 지난 ${AH_DAYS}일 쌓인 것 · 룰이 맞는지 보는 칸`;
-  const sum = `<div class="ah-sum"><span>걸림 <b>${nOr(t.picks, '—')}</b></span><span>결과 남 <b>${nOr(t.done, '—')}</b> · 아직 ${nOr(t.pending, '—')}${t.missing ? ` · 값 없음 ${num(t.missing)}` : ''}</span>`
+  const sum = `<div class="ah-sum"><span>지난 ${AH_DAYS}일 · 오늘 포함 합계</span><span>걸림 <b>${nOr(t.picks, '—')}</b></span><span>결과 남 <b>${nOr(t.done, '—')}</b> · 아직 ${nOr(t.pending, '—')}${t.missing ? ` · 값 없음 ${num(t.missing)}` : ''}</span>`
     + `<span>오름 <b>${nOr(t.up, '—')}</b> · 내림 <b>${nOr(t.down, '—')}</b> · 보합 ${nOr(t.flat, '—')}</span>`
     + `<span>오른 비율 <b>${t.upRate == null ? '아직' : `${num(t.upRate, 1)}%`}</b></span><span>다음날 평균 <b>${t.avgNext == null ? '아직' : pctTxt(t.avgNext)}</b></span></div>`;
   let body;
@@ -195,7 +195,14 @@ function renderAh() {
       body = `<div class="st-scroll"><table class="ah-tb"><tr><th>종목</th><th>시장</th><th>그날</th><th>배수</th><th>다음날</th></tr>${head}${(g.picks || []).map(row).join('')}</table></div>`;
     }
   } else {
-    body = `<div class="st-err">— ${esc(AH_SPAN.find(([k]) => k === ahSel)[1])} 동안 가장 많이 걸린 종목 상위 20 · 기간 상승률 — 서버 셈을 기다림(아직 없음)</div>`;
+    // 기간 상위 20 — 서버 data.top(d5 · d10 · d20 — 한달 = 20거래일 · 개발 891bc95) 그대로 · 상승 % 는 그 기간 처음 걸린 날 종가 → 마지막 종가(재권님 「가」)
+    const span = AH_SPAN.find(([k]) => k === ahSel), tp = (d.top || {})[span[2]];
+    if (!tp) body = `<div class="st-err">— ${esc(span[1])} 상위 — 서버 값 없음(아직 안 올라옴)</div>`;
+    else if (!(tp.items || []).length) body = `<div class="st-err">— ${esc(span[1])} 동안 걸린 종목 없음</div>`;
+    else {
+      const row = (x, i) => `<tr><td class="st-name"><b>${i + 1}. ${esc(x.name || '—')}</b> <small>${esc(x.code || '')}</small></td><td><b>${nOr(x.count, '—')}번</b></td><td>${mmdd(x.firstDay)} ~ ${mmdd(x.lastDay)}</td><td>${num(x.firstClose)} → ${num(x.close)}</td><td><b>${x.gainPct == null ? '—' : pctTxt(x.gainPct)}</b></td></tr>`;
+      body = `<div class="st-scroll"><table class="ah-tb"><tr><th>종목</th><th>걸린 횟수</th><th>처음 ~ 마지막 걸림</th><th>처음 걸린 날 종가 → 지금</th><th>상승</th></tr><tr class="ah-day"><td colspan="5"><b>${esc(span[1])}</b> · ${mmdd(tp.from)} ~ ${mmdd(tp.to)} · 걸린 날 ${nOr(tp.days, '—')}일 · 걸린 횟수 많은 순 상위 ${num(tp.items.length)}</td></tr>${tp.items.map(row).join('')}</table></div>`;
+    }
   }
   ahBox.innerHTML = sum + body;
 }
