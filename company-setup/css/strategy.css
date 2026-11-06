@@ -25,7 +25,7 @@
 }
 /* 종목 고르는 룰 (2026-11-05) — 위 표와 같은 카드 · 글 크기를 쓰고 다른 것만 덧붙인다 */
 .st.rl { margin: 0 0 28px; }
-.rl .rl-grid { display: grid; gap: 12px; }
+.rl .rl-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }   /* 좁은 폭에서도 칸이 표 너비만큼 안 늘게 — 넓은 표는 칸 안 가로 스크롤(.st-scroll) · 판을 바꿀 때 위 룰 표 줄바꿈이 안 바뀜(qa 11-05) */
 .rl .rl-h { font-size: 14px; margin: 0 0 6px; }
 .rl .rl-h2 { margin-top: 16px; }
 .rl .rl-add { color: var(--kh-text-muted); cursor: default; }
