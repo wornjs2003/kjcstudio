@@ -18,6 +18,11 @@
 
 둘째 — 확인란 줄의 `holdings/stock.html` 은 알리기만 한다(2026-10-07 · 「홀딩스 작업은 홈 첫 화면으로 보여 드린다」).
 
+셋째 — 주소 바로 뒤에 붙은 글자(2026-11-06 재권님 「…market.html로 이렇게 주면 링크열때 에러나잖아」 · 「주소는 백틱으로 감싼다」 아래 줄).
+  확인란 줄 — 백틱으로 감싼 http 주소의 닫는 백틱 바로 뒤가 띄어쓰기 · 줄 끝이 아니면 막는다(괄호 · 마침표 · 쉼표도 · 누르면 그 글자까지 주소로 잡힌다).
+  본문 줄 — 같은 꼴을 알리기만. 긴 한글 주소(한글 GLUE_HANGUL 자 넘게)는 줄이 꺾여 앞부분만 눌릴 수 있어 알리기만.
+  안 세는 것 — 코드블록 안 · 「 」 인용 안 · 백틱 없는 맨 주소(hook-confirm-box 의 「백틱 없는 http」 가 잡는다).
+
 걸리면 턴을 끝내지 않고(decision: block) 「http 주소로 다시」 를 돌려준다. 같은 턴에 두 번 막지 않는다
 (`stop_hook_active`). `KJC_LINK_HOOK=block|look|off` — 기본은 알리기만.
 """
@@ -109,6 +114,34 @@ def stock_views(text):
     return out
 
 
+GLUED = re.compile(r"`(https?://[^`\s]+)`(?=[^\s])")
+# 확인란 줄은 닫는 백틱 뒤에 무엇이든 붙으면 막는다 — 괄호 · 마침표 · 쉼표도(11-06 재권님 「나 처럼 링크주면 에러난다고 몇번을 말하지?」 ·
+# 열리는지 꼴마다 가리지 않는다 · 한 칸 띄우면 끝이라 싸다)
+TICK_URL = re.compile(r"`(https?://[^`\s]+)`")
+GLUE_HANGUL = 20                # 주소 안 한글이 이만큼 넘으면 줄이 꺾여 앞부분만 눌릴 수 있다(10-14 「긴 한글 주소는 403」)
+
+
+def glued(text):
+    """(확인란 줄 붙은 주소, 본문 줄 붙은 주소, 긴 한글 주소) — 코드블록 · 「 」 안은 뺀다."""
+    from urllib.parse import unquote
+    box, body, long_ = [], [], []
+    fence = False
+    for l in (text or "").splitlines():
+        if l.lstrip().startswith("```"):
+            fence = not fence
+            continue
+        if fence:
+            continue
+        line = re.sub(r"「[^」]*」", "", l)
+        for m in GLUED.finditer(line):
+            nxt = line[m.end():m.end() + 1]
+            (box if CONFIRM.match(l) else body).append(m.group(1))
+        for u in TICK_URL.findall(line):
+            if sum(1 for ch in unquote(u) if "\uac00" <= ch <= "\ud7a3") > GLUE_HANGUL:
+                long_.append(u)
+    return box, body, long_
+
+
 def main():
     try:
         data = json.load(sys.stdin)
@@ -117,6 +150,13 @@ def main():
     if MODE == "off" or data.get("stop_hook_active"):
         return 0
     text = data.get("last_assistant_message") or last_text(data.get("transcript_path") or "")
+    gbox, gbody, glong = glued(text)
+    if gbox and MODE == "block":
+        print(json.dumps({"decision": "block", "reason":
+            "확인란 주소 바로 뒤에 글자가 붙어 있습니다 — 누르면 그 글자까지 주소로 잡혀 안 열립니다. 닫는 백틱 뒤를 한 칸 띄우거나 "
+            "주소를 줄 끝에 두고 다시 써 주십시오(CLAUDE.md 「주소는 백틱으로 감싼다」 아래 「주소 바로 뒤에 글자를 붙이지 않는다」).\n"
+            + "\n".join("  · " + u for u in gbox[:5])}, ensure_ascii=False))
+        return 0
     hits = find(text)
     if not hits:
         notes = []
@@ -126,6 +166,10 @@ def main():
             notes.append("확인란에 종목 화면(holdings/stock.html) 링크가 있습니다 — 홀딩스 일은 홈 첫 화면(/holdings/)으로 보여 드립니다. "
                          "모달이면 /holdings/?code=<종목>. 종목 화면 자체를 고쳤으면 지나가도 됩니다 "
                          "(CLAUDE.md 「홀딩스 작업은 홈 첫 화면으로 보여 드린다」).")
+        if gbox or gbody:
+            notes.append("주소 바로 뒤에 글자가 붙어 있습니다 — " + " · ".join((gbox + gbody)[:3]) + ". 한 칸 띄우거나 주소를 줄 끝에 두십시오.")
+        if glong:
+            notes.append("한글이 긴 주소가 있습니다 — 줄이 꺾여 앞부분만 눌릴 수 있습니다(403). 파일 이름을 짧게 해 주십시오: " + " · ".join(glong[:2]))
         sv = stock_views(text)
         if sv:
             notes.append("확인란 그림이 종목 화면(holdings/stock.html)을 찍은 것입니다 — " + " · ".join(sv[:3]) + ". 홀딩스 일은 "
