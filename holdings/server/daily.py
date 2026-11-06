@@ -399,7 +399,7 @@ def build_telegram(indices=None, sectors=None, issues=None, schedule=None, now=N
     # 화면에는 빨간 자국으로 남아 있는 칸들이다. 문안에서 통째로 빼면 폰에서는
     # 무엇이 빠졌는지 알 수 없다. 붙으면 이 줄을 지운다.
     L += ["", "연결 예정", "· 미국 업종", "· 다우존스"]
-    L += ["", "전문 보기 › thekjcstudio.com/holdings/daily.html"]
+    L += ["", "전문 보기 › thekjc.co.kr/holdings/daily.html"]
     return "\n".join(L)
 
 
