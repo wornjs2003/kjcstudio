@@ -924,6 +924,7 @@ export function createStockChart(container, candles, opts = {}) {
   let drawnCode = opts.code || null;   // 지금 그린 종목 — setData 가 다른 종목을 받을 때만 위 값을 지운다
   const priceLines = [];
   let syncing = false;
+  const quiet = new Set();      // 늦게 값을 받는 칸(누적 순매수) — 받는 동안은 가로 범위를 다른 칸에 퍼뜨리지 않는다(drawHf)
   let draw = null;              // 그리기 도구(추세선 · 수평선 · 지우개) — build() 가 칸을 새로 만들 때마다 다시 붙인다 · chart-draw.js
 
   function mkChart(box, h, axis, digits = 0) {   // digits — 가격 칸만 미국 2 · 거래량 · MACD · RSI 칸은 0(소수가 붙으면 「16,953,846.00」)
@@ -1583,6 +1584,11 @@ export function createStockChart(container, candles, opts = {}) {
     try { lines[0].createPriceLine({ price: 0, color: COLOR.cross, lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' }); } catch { /* 선만 생략 */ }
     const calc = { foreign: [], inst: [], person: [], start: null };
     const code = drawnCode;
+    /* 값이 오기 전에도 봉 개수를 가격 칸과 맞춰 둔다(빈 자리) — 0개인 칸이 값을 늦게 받으면 그 칸 가로 범위가 다시 잡히고,
+       칸 맞추기(subscribeVisibleLogicalRangeChange)가 그 범위를 가격 칸까지 퍼뜨려 끝 2~3봉만 왼쪽에 남았다
+       (2026-11-06 재권님 「종목 바꾸면 차트가 이상한곳으로 이동」 · MACD · RSI · 누적 순매수를 함께 켠 홈 큰 차트) */
+    try { const blank = put(candles.map(() => null)); lines.forEach((ln) => ln.setData(blank)); } catch { /* 칸이 아직 없다 */ }
+    quiet.add(ch);                // 값이 올 때까지(못 받으면 끝까지) 이 칸은 범위를 퍼뜨리지 않는다 — 아래 칸 맞추기 주석
     loadHf(code).then((hf) => {
       if (!hf || code !== drawnCode) return;
       const rows = hf.rows;
@@ -1594,7 +1600,18 @@ export function createStockChart(container, candles, opts = {}) {
         keys.forEach(([k]) => calc[k].push(j >= 0 ? rows[j][k] : null));
       });
       calc.start = hf.start;
+      /* 값을 넣는 동안과 그 한 박자 뒤까지 이 칸은 범위를 퍼뜨리지 않고(quiet), 끝나면 가격 칸 범위를 받아 맞춘다 —
+         라이브러리가 값을 받은 뒤 나중에 제 계산을 밀어넣는다(redrawOverlay 와 같은 까닭). 들고 있던 범위로 되돌리면
+         그 범위를 잡은 때에 따라 봉 폭이 흔들려(8770 실측 둘 중 하나) 가격 칸 쪽을 기준으로 삼는다 */
       try { keys.forEach(([k], n) => lines[n].setData(put(calc[k]))); } catch { /* 칸이 그새 사라졌다 */ }
+      const follow = () => {
+        try {
+          const r = panes[0] && panes[0].chart !== ch && panes[0].chart.timeScale().getVisibleLogicalRange();
+          if (r) ch.timeScale().setVisibleLogicalRange(r);
+        } catch { /* 칸이 사라졌다 */ }
+      };
+      follow();
+      requestAnimationFrame(() => { follow(); requestAnimationFrame(() => { follow(); quiet.delete(ch); }); });
       paintPaneTags(candles.length - 1);
     });
     return calc;
@@ -1697,7 +1714,7 @@ export function createStockChart(container, candles, opts = {}) {
         showLastBars(ch, candles.length);
       }
       ch.timeScale().subscribeVisibleLogicalRangeChange((r) => {
-        if (syncing || !r) return;
+        if (syncing || !r || quiet.has(ch)) return;
         syncing = true;
         panes.forEach((o) => {
           if (o.chart !== ch) {
@@ -2048,6 +2065,10 @@ export function createStockChart(container, candles, opts = {}) {
       const main = panes[0] && panes[0].chart;
       let range = null;
       try { range = main && main.timeScale().getVisibleLogicalRange(); } catch { /* 없으면 그대로 */ }
+      /* 선을 지우고 다시 긋는 동안은 칸 맞추기를 막는다 — 그 사이 빈 칸(누적 순매수는 값이 늦게 온다)이 「봉 0개」 범위(-84~36)를
+         다른 칸에 퍼뜨려 가격 칸이 맨 앞 봉으로 밀렸다(2026-11-06 · 8770 기록으로 잼). 범위는 아래에서 칸마다 직접 맞춘다 */
+      const wasSync = syncing;
+      syncing = true;
       panes.slice(1).forEach((p) => {
         const draw = p.key === 'vol' ? drawVol : p.key === 'macd' ? drawMacd : p.key === 'rsi' ? drawRsi : p.key === 'hf' ? drawHf : null;
         if (!draw) return;
@@ -2056,6 +2077,7 @@ export function createStockChart(container, candles, opts = {}) {
         p.calc = draw(p.chart);
         if (range) { try { p.chart.timeScale().setVisibleLogicalRange(range); } catch { /* 아직 없음 */ } }
       });
+      syncing = wasSync;
       paintPaneTags(candles.length - 1);
       if (lastLive) api.updateLast(lastLive);     // 덧붙인 서버 봉이 맨 오른쪽을 서버 값으로 돌려놓았다 — 지금 시세로
       return tail.length;
