@@ -73,6 +73,7 @@ import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tgl
 import claude_chat     # 홀딩스 오른쪽 Claude 창 — 맥미니 claude 를 한 번씩 부른다 · POST /api/claude/ask(2026-11-03 · server/claude_chat.py)
 import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 테마 · 수급(넥스트 5분 거래량 2배) (2026-10-27 · server/theme_flow.py)
 import good_news       # 「좋은 뉴스」 판정 — 공시마다 갈래 · 방향 · 크기 · 자사주 목적 · 이미 오름 · /api/good-news(2026-11-05 · server/good_news.py)
+import vwap            # VWAP(거래량 가중 평균가) — 국내 분봉에 그날 정규장 누적 값 `vwap` 을 붙인다(2026-11-06 · server/vwap.py)
 import fear_greed      # 공포·탐욕 지수 — 코스피 · 삼성전자 · SK하이닉스 · /api/market/fear-greed(2026-11-06 · server/fear_greed.py)
 import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스닥 150 중 전일 거래량 급등 · 투자전략 룰로 거르고 줄 세움 · /api/auto-watch(2026-11-05 · server/auto_watch.py)
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
@@ -8635,6 +8636,8 @@ class Handler(SimpleHTTPRequestHandler):
                 # 값이 바뀌었을 수 있다)를 준다. 1개든 20개든. 전에는 30초마다 1,266개를 통째로 보냈다(10-07 실측).
                 # 위 계산(get_chart · drop_before_first_trade)은 그대로 다 하고 **보내기만** 줄인다 — KIS 호출은 그대로다.
                 rows = [r for r in rows if (r.get("close") or 0) > 0]   # 0 봉은 내지 않는다(없는 종목 · 위 `save_candles` 와 같은 선)
+                if PERIODS[period]["kis"] is None and _is_kr_code(code):
+                    rows = vwap.attach(rows)            # since 로 자르기 전에 — 그날 첫 봉부터 누적이라(2026-11-06)
                 since = (qs.get("since") or [""])[0].strip()
                 total = len(rows)
                 if since.isdigit():

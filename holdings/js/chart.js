@@ -30,6 +30,7 @@ const COLOR = {
   get ma20()   { return color('ma20'); },
   get ma60()   { return color('ma60'); },
   get ma200()  { return color('ma200'); },
+  get vwap()   { return color('text-primary'); },   // VWAP 점선 — 이동평균 넷과 안 겹치는 검정(2026-11-06 그림)
   /* 보조지표 — theme.css 에 이미 다섯이 있다 (--kh-ind-1 … 5) */
   get ind1()   { return color('ind-1'); },     // 파랑
   get ind2()   { return color('ind-2'); },     // 주황
@@ -96,6 +97,9 @@ export const INDICATORS = [
   { key: 'ma',   name: '이동평균선',  pane: 'price' },
   /* 일목균형표 (2026-10-15) — 전환 · 기준 · 후행은 차트 선, 선행스팬 둘과 구름은 매물대처럼 봉 뒤 층(drawCloud) */
   { key: 'ich',  name: '일목균형표',  pane: 'price' },
+  /* VWAP(거래량 가중 평균가 · 2026-11-06 재권님 「응 만들어」) — 분봉에만 그린다. 셈은 서버 server/vwap.py 한 곳이고
+     봉에 붙어 온 `vwap` 을 선으로만 잇는다(그날 정규장 09:00 부터 누적 · 일봉 이상에는 뜻이 없어 안 그림) */
+  { key: 'vwap', name: 'VWAP(분봉)',  pane: 'price' },
   { key: 'vol',  name: '거래량',      pane: 'own'   },
   { key: 'macd', name: 'MACD',       pane: 'own'   },
   { key: 'rsi',  name: 'RSI',        pane: 'own'   },
@@ -111,7 +115,7 @@ const _indSync = new Set();
 const IND_ON_KEY = 'kh.chart.ind-on';
 /* 사용자가 이미 본 적 있는 지표. 나중에 붙인 것을 한 번 켜 주는 데 쓴다 */
 const IND_SEEN_KEY = 'kh.chart.ind-seen';
-const IND_NEW = ['vp'];          // 2026-09-18 에 붙인 것
+const IND_NEW = ['vp', 'vwap'];  // 2026-09-18 매물대 · 2026-11-06 VWAP — 처음 한 번 켜 준다
 let _indOn = null;
 
 export function indOn() {
@@ -124,7 +128,7 @@ export function indOn() {
   const names = INDICATORS.map((x) => x.key);
   _indOn = new Set(Array.isArray(saved)
     ? saved.filter((k) => names.includes(k))
-    : ['ma', 'vol', 'vp']);    // 처음 열면 이동평균 · 거래량 · 매물대
+    : ['ma', 'vol', 'vp', 'vwap']);    // 처음 열면 이동평균 · 거래량 · 매물대 · VWAP(분봉에서만 보임 · 2026-11-06)
 
   /* **나중에 생긴 지표는 처음 한 번 켜 준다** (2026-09-18).
      저장된 설정이 있으면 기본값을 안 보므로, 새로 붙인 것이 화면에
@@ -1365,6 +1369,12 @@ export function createStockChart(container, candles, opts = {}) {
         sr.setData(put(ichCalc[k]));
         overlay.push(sr);
       });
+    }
+    if (indOn().has('vwap') && MINUTE_PERIODS.has(period)) {
+      /* 점선 · 가격 축에 「VWAP」 이름표 — 세로 범위에서 뺀다(NO_SCALE) */
+      const sr = addLine(ch, { color: COLOR.vwap, lineWidth: 2, lineStyle: 2, lastValueVisible: true, title: 'VWAP', ...NO_SCALE });
+      sr.setData(put(candles.map((c) => (c.vwap == null ? null : c.vwap))));
+      overlay.push(sr);
     }
     if (indOn().has('bb')) {
       const bb = bollinger(candles, period);
