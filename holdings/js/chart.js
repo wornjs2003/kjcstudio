@@ -1647,7 +1647,7 @@ export function createStockChart(container, candles, opts = {}) {
     for (let i = 1; i < at.length; i++) at[i].y = Math.max(at[i].y, at[i - 1].y + HF_END_GAP);
     box.innerHTML = at.map((x) => `<span style="position:absolute;right:0;top:${Math.round(x.y - 8)}px;white-space:nowrap;` +
       `font-size:11px;font-weight:600;color:${nm[x.k][1]};background:rgb(var(--kh-paper-rgb, 255 255 255) / 82%);padding:0 3px;border-radius:3px">` +
-      `${nm[x.k][0]} ${x.v > 0 ? '+' : ''}${x.v.toFixed(2)} · ${Math.round(sh[x.k])}%</span>`).join('');
+      `${nm[x.k][0]} <span class="${signClass(Number(x.v.toFixed(2)))}">${x.v > 0 ? '+' : ''}${x.v.toFixed(2)}</span> · ${Math.round(sh[x.k])}%</span>`).join('');
   }
 
   function build() {
@@ -1808,8 +1808,9 @@ export function createStockChart(container, candles, opts = {}) {
         ].join('<span class="kh-mut" style="margin:0 3px">·</span>');
       }
       if (p.key === 'hf') {
-        const f = (nm, v, col) => '<span style="color:' + col + '">' + nm + ' ' +
-          (v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(2)) + '</span>';
+        /* 이름은 선 색 · 숫자는 사면 빨강 · 팔면 파랑(sign.js — 2026-11-06 재권님 「오늘 사고 파는숫자는 파랑 빨강으로 해줘」) */
+        const f = (nm, v, col) => '<span style="color:' + col + '">' + nm + '</span> <span class="' +
+          signClass(v == null ? v : Number(v.toFixed(2))) + '">' + (v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(2)) + '</span>';
         const st = p.calc.start;
         n.innerHTML = (st ? '<span class="kh-mut">' + st.slice(4, 6) + '-' + st.slice(6) + '부터 · </span>' : '') +
           [f('외국인', p.calc.foreign[i], COLOR.ind1), f('기관', p.calc.inst[i], COLOR.ind2), f('개인', p.calc.person[i], COLOR.ind3)]
