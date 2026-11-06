@@ -1729,7 +1729,9 @@ LONGPOLL_MAX_URLS = 32     # 한 연결이 묶어 볼 수 있는 주소 수 — 
 # **KIS 밖 넷(공시 · 뉴스 · 보드 · 정적)은 예산 계산에 안 넣는다** — 안쪽 호출이 그 라우트의
 # 캐시를 그대로 타므로(뉴스 `NEWS_TTL` · `MOVES_TTL`) 롱폴이 바깥 호출을 늘리지 않는다.
 # "/api/nxt/" — 수급(theme_flow.flow)이 5분마다 바뀌어 화면이 지켜본다(2026-10-27). DB · 네이버 캐시만 읽어 KIS 를 더 안 부른다
-LONGPOLL_PREFIXES = ("/api/kis/", "/api/dart/", "/api/news/", "/api/board/doc/", "/holdings/data/", "/api/nxt/")
+# "/api/alerts/" — 그날 VI · 급등 목록(2026-11-06 · DB 한 줄만 읽어 KIS 를 안 부른다)
+LONGPOLL_PREFIXES = ("/api/kis/", "/api/dart/", "/api/news/", "/api/board/doc/", "/holdings/data/", "/api/nxt/",
+                     "/api/alerts/")
 
 
 def _lp_url_ok(u):
@@ -7571,6 +7573,11 @@ class Handler(SimpleHTTPRequestHandler):
             if not st.get("startedAt"):
                 st["note"] = "이 서버에서는 장중 알림 바퀴가 안 돕니다 — 보내는 서버(메인 %d)에서만 돕니다" % MAIN_PORT
             self._send_json({"ok": True, "data": st})
+            return
+        if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/alerts/today":
+            # 그날 본 상승 VI · +20% 급등 목록 — 홈 「오늘 VI · 급등」 칸(2026-11-06). 바퀴는 보내는 서버에서만 돌고
+            # 목록은 개발 DB(sync_meta)에 있어 **어느 서버든 같은 것을 읽는다**(intraday_alerts.today)
+            self._send_json({"ok": True, "data": intraday_alerts.today()})
             return
         if (self.path or "").rstrip("/") == "/api/events/status":
             # 결과 알림 바퀴의 상태 — 무엇을 기다리나 · 꺼져 있으면 보냈을 글(preview). 바퀴는 보내는 서버에서만 돈다
