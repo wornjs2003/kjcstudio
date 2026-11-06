@@ -6,7 +6,8 @@
 //   · 「오늘 이 룰에 걸린 종목」 — 서버 /api/auto-watch 가 이 문서를 부를 때마다 다시 읽어 거르고 줄 세운다. 화면은 그 결과를 그리기만 하고(거르는 셈을 두지 않는다)
 //     칸은 바꾸면 바로 저장되고, 「검색」 단추를 누르면 저장이 끝난 뒤 다시 부른다(11-05 재권님 「숫자 바꾸고 나서 오른쪽 위에 검색 버튼 누르면 검색되게 해줘」) · 「없음」(null) 은 0 이 아니라 「—」 · 받는 방법 줄도 응답의 meta 로 쓴다(서버 상수를 화면에 다시 적지 않는다)
 //   · 칸을 떠나면(change) 바로 저장 · 숫자 칸에 숫자가 아닌 글 · data-min 밑 · data-int 칸의 소수는 넣지 않고 그 칸을 되돌린다 · 남이 그 사이 고쳤으면(409) 다시 읽고 알린다
-import { signClass, NUM } from '/assets/js/sign.js';   // 오르내림 글씨 색 — 셈은 sign.js 한 곳
+import { signClass, NUM } from '/assets/js/sign.js';
+import { everyServerMs } from '/holdings/js/store/timing.js';   // 장중 다시 받는 주기 — 서버 auto_watch.LIVE_SEC 값(화면에 안 박는다)   // 오르내림 글씨 색 — 셈은 sign.js 한 곳
 const DOC = '/api/board/doc/strategy-rules';
 const AW = '/api/auto-watch';
 const RULE = 'volsurge';
@@ -80,6 +81,21 @@ const mmdd = (d) => { const m = String(d || '').match(/(\d{4})-?(\d{2})-?(\d{2})
 
 // 신고가 부근 표시 (11-05 「가랑 나랑 구분만 되면」) — 서버가 붙여 주는 nearHigh(부근인가) · nearHighOnly(위 조건 밖인데 부근이라 더 넣음) 그대로 · 맨 위로 올리는 것도 서버 순서
 const nhTag = (p) => (!p.nearHigh ? '' : `<span class="aw-nh${p.nearHighOnly ? ' only' : ''}"${p.high52 != null ? ` title="52주 최고 종가 ${num(p.high52)} · ${p.highGapPct == null ? '—' : `${p.highGapPct > 0 ? '+' : ''}${num(p.highGapPct, 2)}%`}"` : ''}>${p.nearHighOnly ? '신고가 부근만' : '신고가 부근'}</span>`);
+// 장중 상위 (11-06 재권님 「관심종목에 실시간으로」 · 「장중 값으로 갱신」 · 「상위 20개만」) — 서버 meta.live 그대로(순서 · 개수도 서버) ·
+// 그날 확정 판(d.day)이 같은 날로 나오면 장중 표는 내린다 — 못 받았으면 서버 글(liveError)을 그대로
+const liveHm = (at) => (String(at || '').match(/T(\d{2}:\d{2})/) || [])[1] || '—';
+function liveHtml(m, d) {
+  const L = m.live;
+  if (m.liveError && !L) return `<div class="st-err">— 장중: ${esc(m.liveError)}</div>`;
+  if (!L || !L.day || (d.day && ymd(d.day) >= ymd(L.day))) return '';
+  const top = Array.isArray(L.top) ? L.top : [];
+  const cap = `장중 ${liveHm(L.at)} · 장 ${L.frac == null ? '—' : num(L.frac * 100)}% 지남 · 관심종목에 넣는 상위 ${num(top.length)}${L.hitAll != null ? `(걸린 ${num(L.hitAll)})` : ''}`;
+  if (L.ready === false) return `<div class="aw-why-s">${cap}</div><div class="st-err">— 기준 칸이 비어 장중에도 안 거름</div>`;
+  if (!top.length) return `<div class="aw-why-s">${cap}</div><div class="st-err">— 지금 걸린 종목 없음</div>`;
+  return `<div class="aw-why-s">${cap}</div><div class="st-scroll"><table class="aw-tb"><tr><th>종목</th><th>등락률</th><th>배수(장 지난 비율 대비)</th></tr>${top.map((p) =>
+    `<tr><td class="st-name"><b>${esc(p.name || '—')}</b> <small>${esc(p.code || '')}</small>${nhTag(p)}</td><td>${pctTxt(p.pct)}</td><td><b>${p.mult == null ? '—' : `${num(p.mult, 2)}배`}</b></td></tr>`).join('')}</table></div>
+    <div class="aw-why-s">${mmdd(d.day)} 확정 판(15:41)</div>`;
+}
 async function loadAw() {
   let j = null, st = 0;
   try { const r = await fetch(AW, { cache: 'no-store' }); st = r.status; j = r.ok ? await r.json() : null; } catch (e) { j = null; }
@@ -95,22 +111,23 @@ async function loadAw() {
     : d.day
     ? `${mmdd(d.day)} 기준 · 걸린 ${num(d.hitAll)}종목${rule.autoMax != null ? ` 중 ${num(picked.length)}개 보임` : ''} · 셈한 ${num(d.measured)}(그날 값 없음 ${num(d.noToday)} · 앞 20거래일 모자람 ${num(d.short)}) · ${by}${m.runAt ? ` · 셈 ${esc(String(m.runAt).slice(11, 16) || m.runAt)}` : ''}`
     : '서버가 위 룰 값으로 고른 종목';
-  if (!d.day) awBox.innerHTML = `<div class="st-err">— 아직 셈이 없음${m.runWindow ? `(${esc(m.runWindow)} 에 셈)` : ''}</div>`;
+  if (!d.day) awBox.innerHTML = `${liveHtml(m, d)}<div class="st-err">— 아직 셈이 없음${m.runWindow ? `(${esc(m.runWindow)} 에 셈)` : ''}</div>`;
   else if (unset) awBox.innerHTML = '<div class="st-err">— 기준(등락률 · 배수) 칸이 비어 아직 안 거름 — 왼쪽 칸을 채우고 검색을 누르십시오</div>';
-  else if (!picked.length) awBox.innerHTML = '<div class="st-err">— 이 룰에 걸린 종목 없음</div>';
-  else awBox.innerHTML = `<div class="st-scroll"><table class="aw-tb"><tr><th>종목</th><th>시장</th><th>종가</th><th>등락률</th><th>거래량</th><th>20일 평균</th><th>배수</th></tr>${picked.map((p) =>
+  else if (!picked.length) awBox.innerHTML = `${liveHtml(m, d)}<div class="st-err">— 이 룰에 걸린 종목 없음</div>`;
+  else awBox.innerHTML = `${liveHtml(m, d)}<div class="st-scroll"><table class="aw-tb"><tr><th>종목</th><th>시장</th><th>종가</th><th>등락률</th><th>거래량</th><th>20일 평균</th><th>배수</th></tr>${picked.map((p) =>
     `<tr data-code="${esc(p.code || '')}"${p.code && p.code === why.code ? ' class="is-on"' : ''}><td class="st-name"><b>${esc(p.name || '—')}</b> <small>${esc(p.code || '')}</small>${nhTag(p)}</td><td>${esc(IDX[p.idx] || p.idx || '—')}</td><td>${num(p.close)}</td><td>${pctTxt(p.pct)}</td><td>${num(p.vol)}</td><td>${num(p.avg20)}</td><td><b>${p.mult == null ? '—' : `${num(p.mult, 2)}배`}</b></td></tr>`).join('')}</table></div>`;
   // 이 룰은 이렇게 셈합니다 — 재권님 11-05 「이거를 투자전략에다가 넣어줘」(개발 그림 dev-autowatch) · 수 · 시각 · 빠진 칸은 응답 그대로(화면에 박지 않는다)
   const u = m.universe || {};
   const KNAME = { sectorPct: '재료(미국장 섹터) 칸', exclude: '빼는 것 칸' };   // 서버가 칸 열쇠로 적어 보낸다 — 화면에는 칸 이름으로
   const have = new Set(ins.map((el) => el.dataset.k));   // 화면에 없는 칸(11-05 뺀 「빼는 것」 등)은 「아직 없음」 에 안 적는다
   const not = (m.notCounted || []).filter((x) => { const k = (String(x).match(/^(\w+)/) || [])[1]; return !k || !(k in KNAME) || have.has(k); }).map((x) => String(x).replace(/^(\w+)/, (k) => KNAME[k] || k));
-  if (m.add) not.unshift(`관심종목에 넣기 — ${m.add}`);
   const li = (h, t) => `<li><b>${h}</b> ${esc(t)}</li>`;
   awHow.innerHTML = `<div class="aw-how-h">이 룰은 이렇게 셈합니다</div><ul>${[
     li('대상', `코스피 · 코스닥 시가총액 상위 ${num(u.rows)}종목 중 주권(ETF 뺌) — 지금 ${num(d.pool ?? u.stocks)}종목`),
     li('언제', `${m.runWindow || '—'} · 그날 종가 · 등락률 · 거래량을 쌓음 · 거래량 기준은 앞 20거래일 평균`),
+    ...(m.liveWindow ? [li('장중', `${m.liveWindow} — 그때 시세로 거래량을 「20일 평균 × 장 지난 비율」 과 견줌 · 장중 값은 쌓지 않고 그날 확정은 위 셈`)] : []),
     li('기준', '위 룰 칸 값 — 칸을 고치면 시세를 다시 받지 않고 쌓인 값으로 바로 다시 거르고 줄 세움'),
+    ...(m.add ? [li('관심종목에 넣기', m.add)] : []),   // 켜짐 · 꺼짐은 서버 글 그대로 — 「아직 없음」 머리에 두면 켜진 뒤 틀림(qa 11-06)
     ...not.map((x) => li('아직 없음', x)),
   ].join('')}</ul>${d.note && d.day ? `<div>${esc(d.note)}</div>` : ''}`;
 }
@@ -216,4 +233,5 @@ tabs.forEach((b) => b.addEventListener('click', () => {
 
 load();
 loadAw();
+everyServerMs('auto_watch.LIVE_SEC', 300_000, loadAw);   // 서버 장중 바퀴 주기를 그대로 — 뒤 숫자는 서버가 그 값을 안 줄 때만(FALLBACK)
 loadAh();
