@@ -3297,7 +3297,9 @@ def start_after_snap(cfg):
 # 「장외」 칩은 평일 아침 07:00 에 비우고 정규장이 끝날 때(15:30)까지 빈 칸이다 (2026-11-05 재권님 「실시간 목록에 장외는 본장이
 # 시작하면 리셋해줘야 하는데 … 아침 7시에 리셋되게 해줘」 → (가) 「15:30 애프터가 열릴 때까지 빈 칸」 · 작업우선순위 경유).
 # 전에는 정규장 중에 앞 회차 20:00 장외 마감 값을 얼려 실었다(attach_after_snap · 10-26 「전날 20 시에 멈추는걸로」) — 그것을 걷어냈다.
-# 밤사이(00:00~07:00) 값은 그대로 어제 20:00 마감 값이다(overnight_quotes · take_after_snap 이 쥔 것)
+# 밤사이(00:00~07:00) 값은 그대로 어제 20:00 마감 값이다(overnight_quotes · take_after_snap 이 쥔 것).
+# 07:00~08:00(프리장 전)은 국내 종목을 어제 정규장 종가 · 등락률 0 으로 낸다 — 새 회차 기준가가 그 종가다
+# (2026-11-06 재권님 「아침 7시 되면 … 국내종목은 등락률이 0이 되어야」 → (가) 「값도 어제 정규장 종가로 · 0%」)
 AFTER_CLEAR_AT = (7, 0)
 AFTER_CLEAR_UNTIL = (15, 30)
 
@@ -3354,8 +3356,9 @@ def overnight_quotes(out, now=None):
         r = overnight_row(code, now)
         if not r:
             continue
-        price, close = r["price"], r["regClose"]
-        q.update(price=price, prev=close, amt=price - close, pct=r["regPct"],
+        close = r["regClose"]
+        price, pct = (close, 0.0) if after_cleared(now) else (r["price"], r["regPct"])
+        q.update(price=price, prev=close, amt=price - close, pct=pct,
                  open=None, high=None, low=None, volume=None, value=None,
                  regClose=close, regPct=r["regPct"], regDate=r.get("regDate"), overnight=_after_snap.get("day"))
 
@@ -3365,9 +3368,10 @@ def overnight_price(code, o, now=None):
     r = overnight_row(code, now)
     if not r:
         return
-    price, close = r["price"], r["regClose"]
+    close = r["regClose"]
+    price, pct = (close, 0.0) if after_cleared(now) else (r["price"], r["regPct"])
     change = price - close
-    o.update(price=price, change=change, changePct=r["regPct"],
+    o.update(price=price, change=change, changePct=pct,
              sign="2" if change > 0 else ("5" if change < 0 else "3"),
              open=None, high=None, low=None, volume=None, value=None, overnight=_after_snap.get("day"))
 
