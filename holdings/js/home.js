@@ -981,7 +981,7 @@ async function paintYearRange() {
       <span class="kh-num kh-up">${fmtPriceOf(code, r.hi)}</span>
     </div>
     <div class="kh-head-yr-note kh-mut">
-      지금 <b>${fmtPriceOf(code, cur)}</b> · 최저에서 <b>${(at * 100).toFixed(0)}%</b> 자리</div>`;
+      지금 <b>${fmtPriceOf(code, cur)}</b> · 52주(장중) 최저에서 <b>${(at * 100).toFixed(0)}%</b> 자리</div>`;
 }
 
 /* 세부사항(거래대금 · 시가총액 · 매수매도)은 차트 머리줄로 갔다 (2026-09-21 지시).
