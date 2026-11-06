@@ -54,6 +54,7 @@ import { loadIndicators, peekIndicators, loadIndicator, peekIndicator, chipsHtml
          paintMaterials, loadCrypto, CRYPTO_CHIP } from './components/market-index.js';
 import { everyServerMs, serverData } from './store/timing.js';
 import { watch } from './store/longpoll.js';
+import { sectorShort } from './data/sector-short.js';
 import { watchLive, withLive } from './store/live-tick.js';
 
 
@@ -1376,7 +1377,7 @@ const SORTS = {
   /* 칩 낱말은 **「총액」·「대금」** 이다 (2026-09-22 지시). 넷째 칸 머리글
      (`head`)은 「시가총액」·「거래대금」 그대로다 — 거기는 폭이 넉넉하다.
      칩 여섯이 352px 칸(쓸 수 있는 폭 316px)에 한 줄로 들어가야 해서 줄였다. */
-  cap:  { label: '총액', key: null, head: '시가총액', show: showCap },
+  cap:  { label: '시총', key: null, head: '시가총액', show: showCap },   // 「총액」 → 「시총」(11-06 재권님 홈 열둘 10 — 시가총액인지 모호)
   value:{ label: '대금', key: (p) => valueOf(p),
           head: '거래대금', show: showValue },
   vol:  { label: '거래량',   key: (p) => p.volume,
@@ -2333,7 +2334,7 @@ let sectorMap = {};
 const SECTOR_FALLBACK_MS = 60000;      // 서버 값마저 못 받았을 때만
 function sectorTag(code) {
   const v = sectorMap[code];
-  return v ? `<span class="kh-nm-sec" title="${escT(v)} (WICS)">${escT(v)}</span>` : '';
+  return v ? `<span class="kh-nm-sec" title="${escT(v)} (WICS)">${escT(sectorShort(v))}</span>` : '';   // 긴 이름은 줄임 표(data/sector-short.js · 11-06)
 }
 async function loadSectors() {
   try {
