@@ -45,6 +45,15 @@
       "full": 25,
       "src": "매수 ÷ (매수 + 매도) × 100. 외국계 창구 = 8765 /api/kis/investor-member 의 foreignFirms.buy · sell(수량 · 외국계 회원사 합 · 오늘 누적 — 1분 값이 없다) · 종목 프로그램 = /api/kis/flow-today?code=&step=1 의 stock.rows 의 buy · sell(원 · 거래소와 넥스트레이드 합 · 08:00~20:00) — 원은 최근 5분(거래 있던 1분 칸 다섯) 합 · 오늘 누적은 세로 눈금",
       "how": "재권님 지정 2026-11-03(폭 25 — 매수 몫 75% · 25% 에서 가장 짙음 · 개발3 제안) — 1년 값으로 재지 않았다(창구 · 프로그램 지난 날 기록이 저장소 · 서버에 없음 · 개발3 확인). 첫 사용처 홀딩스 큰 차트 바닥 줄 원(holdings/js/components/flow-foot.js · paint 'line') · 종목 화면 · 모달 차트도 같은 바닥 줄"
+    },
+    {
+      "id": "fear_greed",
+      "name": "공포·탐욕 지수",
+      "unit": "",
+      "base": 50,
+      "full": 50,
+      "src": "8765 /api/market/fear-greed?key=KOSPI|005930|000660 의 score(0~100 · holdings/server/fear_greed.py 한 곳 — 요소 일곱 각각 지난 250거래일 안 자리 0~100 · 같은 무게 · 못 잰 요소 빼고 평균 · 종목판은 52주 자리). 50 위 탐욕 · 아래 공포. 25 선은 서버가 내준다(line)",
+      "how": "재권님 지정 2026-11-06(「응 해」 · 기준 50 · 폭 50) — 점수가 지난 250거래일 안의 자리라 1년 값이 0~100 을 다 쓰도록 짜여 있어 끝(0 · 100)에서 가장 짙음. 1년 값을 따로 재지는 않았다. 첫 사용처 홀딩스 큰 차트 위 단추 · 모달(holdings/js/components/fear-greed.js)"
     }
   ]
 }
