@@ -3059,7 +3059,7 @@ document.addEventListener('click', (e) => {
    차트 종목이 바뀌면 selectStock 이 setCode 로 알린다. */
 /* 고른 종목 패널 — 투자자 정보 · AI 분석 · 종목 뉴스가 1/3씩 (2026-09-21 지시).
    **마크업까지 그 컴포넌트가 만든다** — 모달·종목 화면이 같은 것을 쓴다. */
-const panel3 = mountStockPanel($('kh-panel3'), { code: selectedCode });
+const panel3 = mountStockPanel($('kh-panel3'), { code: selectedCode, depth: true });   // 호가 10단 작은 막대는 홈만(2026-11-06)
 
 /* 세부사항 — 차트 머리줄의 보조지표 옆 */
 const detail = mountStockDetail($('kh-dt'), { view: 'direct', onOne: takeOne });   // 첫 화면에서 크게 보는 종목

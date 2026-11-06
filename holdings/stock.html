@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="./css/frame.css" />
   <link rel="stylesheet" href="./css/stock.css" />
   <link rel="stylesheet" href="./css/flow-foot.css" />
+  <link rel="stylesheet" href="./css/depth.css" />
 </head>
 <body data-nav="holdings" data-site-root="../">
 
@@ -93,13 +94,11 @@
       <div class="kh-w" data-p="ask">
         <div class="kh-w-head">
           <span class="kh-w-grip">⠿</span><span class="kh-w-title">호가</span>
-          <span class="kh-w-x">✕</span><span class="kh-bd kh-bd-soon">연결 예정</span>
+          <span class="kh-w-x">✕</span><span class="kh-bd kh-bd-on">한국투자증권</span>
           <span class="kh-w-plus">＋</span>
         </div>
-        <div class="kh-w-body"><div class="kh-soon">
-          <div class="kh-soon-t">매수 · 매도 10단계</div>
-          <div class="kh-soon-s">붙일 것: KIS 주식현재가 호가</div>
-        </div></div>
+        <!-- 매수 · 매도 10단계 — components/depth.js 의 mountDepthTable 이 채운다 (2026-11-06) -->
+        <div class="kh-w-body">불러오는 중</div>
       </div>
 
       <!-- 토스의 '일반주문' 자리 — 여기서는 사고판 내역을 적어 둔다 -->
