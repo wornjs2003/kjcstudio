@@ -33,7 +33,6 @@ import { mountSectors } from './components/sectors.js';
 import { mountHeatmap } from './components/heatmap.js';
 import { mountStockSearch } from './components/stock-search.js';
 import { openSectorModal } from './components/sector-modal.js';
-import { mountFearGreed } from './components/fear-greed.js';
 import { mountStockPanel } from './components/stock-panel.js';
 import { mountStockDetail } from './components/stock-detail.js';
 import { mountMobileFold } from './components/mobile-fold.js';
@@ -2912,7 +2911,6 @@ setInterval(() => {
   paintRankModalNote();
 }, 1000);
 mountIndicatorMenu(document.querySelector('.kh-ind-menu'));
-mountFearGreed(document.getElementById('kh-fg-open'));
 
 /* 「지금 뜨는 산업」 — 업종 이름 단추를 누르면 그 종목이 나온다 (2026-09-18 지시).
    값은 네이버에서 오고 첫 화면을 막지 않는다 — 목록 한 번이 0.03초다. */
