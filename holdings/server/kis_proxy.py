@@ -72,6 +72,7 @@ import claude_chat     # 홀딩스 오른쪽 Claude 창 — 맥미니 claude 를
 import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 테마 · 수급(넥스트 5분 거래량 2배) (2026-10-27 · server/theme_flow.py)
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
 import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 · 색 = 등락률 · /api/kis/heatmap(2026-10-27 · server/heatmap.py)
+import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
 import session_volume   # 시간대별 거래량 · 전일비 — 프리장 · 정규장 · 애프터 끝에 순위 종목 누적 거래량 저장 · /api/kis/vol-ratio(2026-11-05 · server/session_volume.py)
 import intraday_flow    # 당일 수급 — 장중 1분마다 시장 투자자 · 프로그램 매매를 쌓아 5분 구간으로 · /api/kis/flow-today(2026-10-27 · server/intraday_flow.py)
 import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
@@ -4363,6 +4364,7 @@ JOINT_FIRST_WAIT = 12                       # 첫 판을 기다리는 최대 시
 _joint_buy_lock = threading.Lock()          # 판을 읽고 바꾸는 자리
 _joint_buy_build = threading.Lock()         # 짓는 것은 한 번에 하나
 _program_reg_cache = {}                     # code → (날, 그날 거래소 프로그램 순매수 원) — 정규장 마감 뒤 「매수」 판
+_program_at = {}                            # code → 그 값의 시각(HH:MM:SS) — 장중은 체결 줄 맨 위 시각 · 마감 뒤 일별 값은 정규장 마감 시각(「매수」 칩 줄마다 · 11-06)
 
 
 def _program_net_today(cfg, code, reg=False):
@@ -4385,6 +4387,8 @@ def _program_net_today(cfg, code, reg=False):
         r = next((x for x in (data.get("output") or []) if (x.get("stck_bsop_date") or "").strip() == day), None)
         v = _num(r.get("whol_smtn_ntby_tr_pbmn"), int) if r else None
         now = datetime.now(KST)
+        if v is not None:
+            _program_at[code] = "%02d:%02d:00" % KRX_CLOSE
         if v is not None and (now.hour, now.minute) >= REG_CLOSE_READY:
             _program_reg_cache[code] = (day, v)     # 15:40 뒤 받은 값만 그날 들고 있는다 — 15:30~15:40 은 일별 줄이 덜 모였을 수 있다(개념정의 덧 11-05)
         return v
@@ -4397,6 +4401,9 @@ def _program_net_today(cfg, code, reg=False):
     if not rows:
         return None
     last = max(rows, key=lambda r: r.get("bsop_hour") or "")
+    h = (last.get("bsop_hour") or "").strip()
+    if len(h) == 6:
+        _program_at[code] = "%s:%s:%s" % (h[:2], h[2:4], h[4:])
     return _num(last.get("whol_smtn_ntby_tr_pbmn"), int)
 
 
@@ -4524,6 +4531,20 @@ def _joint_buy_rebuild(cfg):
             # 밤 · 주말 · 자정이 지나도 「정규장에서 좋았던 종목」 이 남고, 날이 바뀌어 그날 줄이 없어 판이 비는 일도 없다
             done = m["phase"] == "closed" and m["conf"] and not st["data"]["estimated"] and not m["programMissing"] and not m["errors"]
             st["frozen"] = m["day"] if done else None
+            data = st["data"]
+        # 쌓기 — 판을 지을 때마다 그날 종목별 처음 잡힌 시각 · 잡힌 횟수 · 가장 큰 합(쓰기 되는 서버만 DB 에 남긴다) ·
+        # 15:45 뒤 쌓인 확정치에서 연기금 · 개인 (2026-11-06 재권님 「이거 실시간으로 쌓으면서 이걸 실시간 순위에 매수에 넣어줘」 → 「응 넣어」)
+        acc = flow_rank.joint_track(sys.modules[__name__], m["day"], data["rows"], m["hm"])
+        more = flow_rank.joint_more(sys.modules[__name__], m["day"], [x["code"] for x in data["rows"] + data["flipped"]])
+        with _joint_buy_lock:
+            for x in data["rows"] + data["flipped"]:
+                a0 = acc.get(x["code"]) or {}
+                x.update(first=a0.get("first"), hits=a0.get("hits") or 0, pgAt=_program_at.get(x["code"]),
+                         fund=(more.get(x["code"]) or {}).get("fund"), person=(more.get(x["code"]) or {}).get("person"))
+            # 연기금 값이 들어온 뒤(15:45 뒤 쌓기) 차례 — 셋 다 매수 안에서 연기금도 사는 종목 먼저, 그다음 셋 합(재권님 「그다음이 연기금」)
+            if any(x.get("fund") is not None for x in data["rows"]):
+                data["rows"].sort(key=lambda x: (not ((x.get("fund") or 0) > 0), -x["sum"]))
+            data["fundIn"] = sum(1 for x in data["rows"] if x.get("fund") is not None)
     except Exception as e:
         print("[매수 칩] 짓다 멈춤 — %s" % safe_message(e, 120))
     finally:
@@ -8639,8 +8660,34 @@ class Handler(SimpleHTTPRequestHandler):
                              "note": "외국인 · 기관은 장중 증권사 가집계(하루 네 번) · 15:40 뒤 그날 확정치(줄마다 basis · 수는 confirmed · estimated) · 프로그램은 그날 누적 · "
                                      "셋 다 순매수 양수 · flipped 는 오늘 셋 다 샀다가 빠진 종목",
                              "estSlots": INVESTOR_EST_SLOTS,
+                             # 쌓기(11-06) — 줄마다 first(처음 셋 다 산 시각) · hits(그날 판에 잡힌 횟수) · pgAt(프로그램 값의 시각) ·
+                             # fund · person(연기금 · 개인 그날 확정치 원 · 15:45 뒤 쌓기 전에는 null) · fundIn 은 연기금 값이 든 줄 수
+                             "fundIn": d.get("fundIn"), "fundAt": "%02d:%02d" % flow_rank.COLLECT_AT,
                              "cacheTtl": INVESTOR_TOP_TTL},
                 })
+                return
+
+            if route == "flow-rank":
+                # 투자자 매매 동향 모달 (2026-11-06 · server/flow_rank.py) — 오늘은 가집계를 합쳐 셈 · 지난 날은 저장한 판
+                if (qs.get("view") or [""])[0] == "actor":
+                    day = (qs.get("day") or [""])[0].strip() or None
+                    self._send_json({"ok": True, "data": flow_rank.actor_board(sys.modules[__name__], day, cfg),
+                                     "meta": {"note": "종목별 확정치(FHPTJ04160001 · 15:40 뒤에만 받힘) · 화면에서 열어 본 종목만 쌓임 · 억 = 백만원 ÷ 100"}})
+                    return
+                who = (qs.get("who") or ["foreign"])[0].strip().lower()
+                if who not in flow_rank.WHO:
+                    self._send_json({"ok": False, "error": "who 는 foreign 또는 inst 여야 합니다."}, 400)
+                    return
+                day = (qs.get("day") or [""])[0].strip() or None
+                if day and not (day.isdigit() and len(day) == 8):
+                    self._send_json({"ok": False, "error": "day 는 YYYYMMDD 여야 합니다."}, 400)
+                    return
+                b = flow_rank.board(sys.modules[__name__], cfg, who, day)
+                self._send_json({"ok": True, "data": b,
+                                 "meta": {"days": flow_rank.days(sys.modules[__name__]), "limit": flow_rank.LIMIT,
+                                          "note": "가집계(증권사 장중 입력 · 외국인 09:30 · 11:20 · 13:20 · 14:30 / 기관 10:00 · 11:20 · 13:20 · 14:30) · "
+                                                  "전일은 확정치 · 강도 = 순매수 ÷ 거래대금(거래량 × 현재가) × 100 · 동시 순매수면 다른 쪽 몫을 더함",
+                                          "cacheTtl": INVESTOR_TOP_TTL}})
                 return
 
             if route == "investor-top":
@@ -9363,6 +9410,9 @@ def main():
     if not SLOW and is_sender(args.port) and pre_flow.start(sys.modules[__name__]):
         print("  프리장 판   : 평일 %02d:%02d~%02d:%02d 에 %d초마다 지어 market.db pre_flow_board 에 남김(「프리장」 칩)"
               % (pre_flow.PRE_OPEN + pre_flow.PRE_CLOSE + (pre_flow.FLOW_TTL,)))
+    if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and flow_rank.start(sys.modules[__name__]):
+        print("  투자자 매매 동향 : 평일 %02d:%02d 뒤 외국인 · 기관 순위 판을 market.db flow_rank 에 남김 · %02d:%02d 뒤 순위 · 감시 종목 주체 확정치 쌓음"
+              % (flow_rank.SAVE_AT + flow_rank.COLLECT_AT))
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and session_volume.start(sys.modules[__name__]):
         print("  시간대 거래량 : 평일 %s 에 순위 종목 누적 거래량 저장(전일비)" % " · ".join(b[3][:2] + ":" + b[3][2:] for b in session_volume.BOUNDS))
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and intraday_flow.start(sys.modules[__name__]):
