@@ -48,6 +48,8 @@
 .kh-ff-bar { flex: 0 1 96px; min-width: 36px; }
 /* 오늘 누적 눈금 · 묶음 가름줄 (11-04 — 원은 최근 5분 몫으로 바뀌고 누적은 눈금으로 남는다) */
 .kh-ff-cum { position: absolute; top: 0; width: 2px; height: 12px; margin-left: -1px; border-radius: 1px; background: var(--kh-text-secondary); }
+.kh-ff-cum.up { background: var(--kh-up); }       /* 오늘 누적이 매수 쪽(11-06 재권님) */
+.kh-ff-cum.down { background: var(--kh-down); }   /* 매도 쪽 */
 .kh-ff-sep { flex: none; width: 1px; height: 12px; background: var(--kh-border-strong); }
 .kh-ff-dot.is-none { background: var(--kh-text-muted); box-shadow: 0 0 0 1px var(--kh-text-muted); }   /* 값 없음 — 가운데 회색 원 */
 .kh-ff-q { flex: none; font-weight: 500; font-variant-numeric: tabular-nums; }   /* 가집계 순매수 수량 — 오르내림 글씨 색(sign.js) */

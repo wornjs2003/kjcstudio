@@ -82,7 +82,10 @@ function dot(p, c) {
   const { side, k } = p == null ? { side: null, k: 0 } : tone(ID, p);
   const tick = c == null ? '' : (() => { const t = tone(ID, c);
     const x = t.side === 'up' || t.side === 'down' ? 50 + (t.side === 'up' ? 1 : -1) * t.k * 50 : 50;
-    return `<i class="kh-ff-cum" style="left:${x.toFixed(1)}%"></i>`; })();
+    /* 눈금 색 — 오늘 누적이 매수 쪽이면 빨강 · 매도 쪽이면 파랑 · 반반이면 회색(2026-11-06 재권님 「그선을 매수쪽이면 빨강 매도쪽이면 파랑」).
+       쪽은 위 tone 셈 그대로 · 색은 css 의 오르내림 변수 */
+    const sd = t.side === 'up' || t.side === 'down' ? ' ' + t.side : '';
+    return `<i class="kh-ff-cum${sd}" style="left:${x.toFixed(1)}%"></i>`; })();
   // 값이 없거나(장 전 · 거래 없음) 정확히 가운데면 원을 가운데 회색으로 둔다(11-05 재권님 「장전이면 중간으로 해놓고」)
   if (side !== 'up' && side !== 'down') return `<span class="kh-ff-bar"><i class="kh-ff-mid"></i>${tick}` +
     '<i class="kh-ff-dot is-none" style="left:50%"></i></span>';
