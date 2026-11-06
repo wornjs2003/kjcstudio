@@ -709,6 +709,9 @@ export function openInvestorModal({ code } = {}) {
 
   /* ── 매매 동향 탭 — 외국인 · 기관 순매수 순위 · 특이 매수(전일 순매도 → 오늘 순매수) ──
      오늘은 가집계(증권사 장중 입력 · 하루 네 번) · 전일은 확정치 · 날짜를 고르면 그날 남긴 판. 줄을 누르면 차트 탭이 그 종목 */
+  /* 날짜 「MM-DD(요일)」 — 매매 동향 · 날마다 수급이 함께 쓴다 */
+  const KDAY = '일월화수목금토';
+  const fdDate = (s) => { const x = new Date(`${s}T00:00:00Z`); return s && !isNaN(x) ? `${s.slice(5)}(${KDAY[x.getUTCDay()]})` : esc(s || '—'); };
   let tr = null;
   const trUrl = () => (st.trView === 'actor' ? '/api/kis/flow-rank?view=actor'
     : `/api/kis/flow-rank?who=${st.trWho}${st.trDay ? `&day=${st.trDay}` : ''}`);
