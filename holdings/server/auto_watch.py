@@ -40,6 +40,11 @@
               끈 날부터 KEEP_DAYS 거래일 동안 다시 안 넣는다(auto_watch_off). 그날 넣었는지는 auto_watch_add 에 남긴다 —
               화면이 문서를 저장할 때 items · groups · auto 만 다시 쓰므로 표시를 문서에 두면 지워진다.
               서버가 15:41 판 뒤에 떴으면(재시작 · 꺼져 있었음) 뜰 때 마지막 날 것을 한 번 넣는다 — 그날 이미 넣었으면 안 넣는다.
+    장중      평일 LIVE_FROM~15:30 LIVE_SEC 마다 멀티 시세(쌓지 않음 · KIS 30종목에 한 번)로 **오늘 지금까지** 등락률 · 누적 거래량을 보고
+              같은 룰로 거른다 — 거래량은 「20일 평균 × 장이 지난 비율(09:00~15:30 중)」 과 견준다. 줄 세운 상위 ADD_TOP 개만 관심 목록에 넣고,
+              그날 넣었다가 상위 밖으로 밀린 것은 그 바퀴에서 뺀다(앞 날에 넣었던 종목이면 그 날로 돌린다). 15:41 판이 그날 확정이다.
+              (2026-11-06 재권님 「관심종목에 실시간으로 적용하는걸로 바꾸자」 · 「나」 · 「장중 값으로 갱신」 · 「상위 20개만」 → 안 「응 만들어」)
+              값은 GET /api/auto-watch 의 meta.live(그때 상위 · 시각 · 지난 비율) — 쌓지 않는다(쌓는 것은 15:41 판 하나)
 
 8765 만 받는다(`kis_proxy` 가 `is_sender` 로 부른다) · 읽기는 어느 서버든 자기 DB 로. 알림은 없다.
 """
@@ -75,6 +80,10 @@ KEEP_DAYS = 5                   # 넣은 날 뒤 이 거래일이 지나면 뺀�
 TICK = 30
 HOLIDAY_SAME = 0.9              # 앞 날과 종가 · 거래량이 똑같은 종목이 이만큼이면 휴장(거래가 있는 날에 우연히 같을 수는 없다)
 RETRY_SEC = 300                 # 그날 값을 못 받았을 때 다시 도는 간격 — 창(15:41~16:00) 안에서만
+ADD_TOP = 20                    # 관심 목록에 넣는 것은 줄 세운 상위 이만큼(재권님 「상위 20개만」 11-06) — 장중 · 15:41 같다
+LIVE_FROM = (9, 30)             # 장중 거르기 시작 — 장 처음 몇 분은 누적 거래량 ÷ 지난 비율이 쉽게 2배를 넘는다
+LIVE_SEC = 300                  # 장중 바퀴 간격(멀티 시세 30종목에 한 번 · 309종목이면 11번쯤)
+SESSION = ((9, 0), (15, 30))    # 정규장 — 지난 비율의 분모
 BUSY_RETRY_SEC = 60             # 뜰 때 채우기가 자물쇠를 쥐고 있을 때 바퀴가 다시 보는 간격
 
 _SCHEMA = (
@@ -94,6 +103,7 @@ _SCHEMA = (
     "CREATE TABLE IF NOT EXISTS auto_watch_off (code TEXT PRIMARY KEY, day TEXT)",
 )
 
+_live = {}                      # 장중 마지막 바퀴 {day, at, frac, got} — 쌓지 않는다
 _status = {"runDay": None, "runAt": None, "saved": None, "backfillAt": None, "backfillCodes": None,
            "kisCalls": 0, "error": None}
 _run_lock = threading.Lock()
@@ -428,10 +438,11 @@ def _trading_days(proxy):
         return [r[0] for r in conn.execute("SELECT DISTINCT day FROM auto_watch_day WHERE src = 'multi' ORDER BY day")]
 
 
-def merge_watch(doc, picks, day, days, off=None):
+def merge_watch(doc, picks, day, days, off=None, replace_day=False):
     """관심 목록 문서 → 새 문서 · 넣은 코드 · 뺀 코드 · 하트 끔 표(off · {code: day}) · 안 넣은 코드. 문서를 읽고 쓰는 일과 떼어 둬 시험할 수 있게 했다.
     off 는 고친 사본을 돌려준다 — 부르는 쪽이 DB 에 쓴다."""
     off = dict(off or {})
+    keep = {p["code"] for p in picks if not p.get("nearHighOnly")}
     items = [dict(x) for x in doc.get("items") or [] if isinstance(x, dict) and x.get("code")]
     groups = [dict(g, codes=list(g.get("codes") or [])) for g in doc.get("groups") or [] if isinstance(g, dict) and g.get("id")]
     auto = {c: dict(v) for c, v in (doc.get("auto") or {}).items() if isinstance(v, dict)}
@@ -459,6 +470,20 @@ def merge_watch(doc, picks, day, days, off=None):
                 items = [x for x in items if x["code"] != code]
             del auto[code]
             removed.append(code)
+    if replace_day:                  # 그날 넣었는데 이번 상위 밖으로 밀렸다 — 앞 날 것이면 그 날로 돌리고 아니면 뺀다(장중 · 15:41 판)
+        for code in list(auto):
+            info = auto[code]
+            if info.get("day") != day or code in keep:
+                continue
+            if info.get("prevDay"):
+                info["day"] = info.pop("prevDay")
+                continue
+            if code in grp["codes"]:
+                grp["codes"].remove(code)
+            if info.get("added"):
+                items = [x for x in items if x["code"] != code]
+            del auto[code]
+            removed.append(code)
     have = {x["code"] for x in items}
     for code in list(off):           # 다시 하트를 켰거나 기간이 지났으면 푼다
         if code in have or sum(1 for d in days if off[code] < d <= day) >= KEEP_DAYS:
@@ -472,8 +497,10 @@ def merge_watch(doc, picks, day, days, off=None):
         if code in off:
             skipped.append(code + ":하트 끔")
             continue
-        if code in auto:             # 다시 걸렸다 — 넣은 날을 오늘로(5거래일이 다시 시작)
-            auto[code]["day"] = day
+        if code in auto:             # 다시 걸렸다 — 넣은 날을 오늘로(5거래일이 다시 시작) · 앞 날은 prevDay 에(그날 상위 밖으로 밀리면 돌린다)
+            if auto[code].get("day") != day:
+                auto[code]["prevDay"] = auto[code].get("day")
+                auto[code]["day"] = day
         else:
             auto[code] = {"day": day, "added": code not in have}
             if code not in have:
@@ -485,12 +512,14 @@ def merge_watch(doc, picks, day, days, off=None):
     return out, added, removed, off, skipped
 
 
-def apply_watch(proxy, day):
+def apply_watch(proxy, day, live=None):
     """그날 걸린 종목을 관심 목록에 넣고 오래된 자동 것을 뺀다 — 보내는 서버(8765)만 · 그날 값을 쌓은 바로 뒤."""
-    d = compute(proxy)
+    d = compute(proxy, live)
+    key = "liveAdd" if live else "addLast"
     if not d["ready"] or not d["day"] or d["day"] != day:
-        _status["addLast"] = {"day": day, "skip": "룰 칸이 비었거나 그날 값이 아님(%s)" % d["day"]}
+        _status[key] = {"day": day, "skip": "룰 칸이 비었거나 그날 값이 아님(%s)" % d["day"]}
         return None
+    picks = [p for p in d["picked"] if not p.get("nearHighOnly")][:ADD_TOP]
     days = _trading_days(proxy)
     with proxy._db_lock, proxy.db_conn() as conn:
         off = dict(conn.execute("SELECT code, day FROM auto_watch_off").fetchall())
@@ -498,9 +527,10 @@ def apply_watch(proxy, day):
         at = docstore.doc_updated_at(WATCH_DOC)
         doc = docstore.read_doc(WATCH_DOC)
         if not isinstance(doc, dict) or not isinstance(doc.get("items"), list):
-            _status["addLast"] = {"day": day, "skip": "관심 목록 문서가 없음 — 화면에서 하트를 한 번 누르면 생긴다"}
+            _status[key] = {"day": day, "skip": "관심 목록 문서가 없음 — 화면에서 하트를 한 번 누르면 생긴다"}
             return None
-        new, added, removed, off2, skipped = merge_watch(doc, d["picked"], day, days, off)
+        new, added, removed, off2, skipped = merge_watch(doc, picks, day, days, off, replace_day=True)
+        skipped += [p["code"] + ":부근만" for p in d["picked"] if p.get("nearHighOnly")]
         try:
             docstore.write_doc(WATCH_DOC, new, if_updated_at=at)
         except docstore.DocConflict:
@@ -509,11 +539,13 @@ def apply_watch(proxy, day):
         with proxy._db_lock, proxy.db_conn() as conn:
             conn.execute("DELETE FROM auto_watch_off")
             conn.executemany("INSERT INTO auto_watch_off VALUES (?, ?)", sorted(off2.items()))
-            conn.execute("INSERT OR REPLACE INTO auto_watch_add VALUES (?, ?, ?, ?, ?)",
-                         (day, stamp, ",".join(added), ",".join(removed), ",".join(skipped)))
-        _status["addLast"] = {"day": day, "at": stamp, "added": added, "removed": removed, "skipped": skipped}
-        return _status["addLast"]
-    _status["addLast"] = {"day": day, "error": "관심 목록 문서를 세 번 다 남이 먼저 썼음"}
+            if not live:             # 장중 바퀴는 「그날 넣음」 표시를 안 남긴다 — 15:41 판(또는 뜰 때)이 그날 확정이다
+                conn.execute("INSERT OR REPLACE INTO auto_watch_add VALUES (?, ?, ?, ?, ?)",
+                             (day, stamp, ",".join(added), ",".join(removed), ",".join(skipped)))
+        _status[key] = {"day": day, "at": stamp, "added": added, "removed": removed, "skipped": skipped,
+                        "top": [p["code"] for p in picks]}
+        return _status[key]
+    _status[key] = {"day": day, "error": "관심 목록 문서를 세 번 다 남이 먼저 썼음"}
     return None
 
 
@@ -542,7 +574,7 @@ def _num_or_none(v):
         return None
 
 
-def compute(proxy):
+def compute(proxy, live=None):
     """GET /api/auto-watch 의 data — 쌓인 값을 지금 룰로 거르고 줄 세운다. KIS 를 안 부른다.
 
         day         셈한 날(가장 최근에 그날 값이 저장된 날) · 없으면 null
@@ -553,6 +585,7 @@ def compute(proxy):
         nearHighAll 자르기 전 부근 수 · nearOnlyAll 그중 조건 밖으로 더 넣은 수
         pool        대상 종목 수(시가총액 상위 중 주권) · measured: 그날 값과 앞 20거래일이 다 있는 수 · noToday: 그날 값이 없는 수 · short: 그날 값은 있는데 앞 20거래일이 모자란 수
         hitAll      자르기 전 걸린 수
+        live 를 주면(장중 바퀴) 그날 값 대신 그 시세를 쓰고 거래량은 「20일 평균 × frac」 과 견준다 — mode live · frac · at 이 붙는다
     """
     if proxy.marketdb.writable():
         _init(proxy)                 # 읽기 전용 서버(세션 · 8764)는 8765 가 만든 표를 읽기만 한다
@@ -577,8 +610,13 @@ def compute(proxy):
             out["note"] = "아직 쌓인 값 없음 — 8765 가 평일 15:41 에 처음 쌓는다"
             return out
         day = out["day"] = row[0]
-        today = {r[0]: r for r in conn.execute(
-            "SELECT code, idx, name, close, pct, vol FROM auto_watch_day WHERE day = ?", (day,))}
+        if live:                     # 장중 — 오늘 값은 쌓지 않은 시세 · 앞 20거래일은 오늘 앞 쌓인 날
+            day = out["day"] = live["day"]
+            out.update(mode="live", frac=round(live["frac"], 3), at=live["at"])
+            today = {c: (c, None, v["name"], v["close"], v["pct"], v["vol"]) for c, v in live["got"].items() if v.get("close")}
+        else:
+            today = {r[0]: r for r in conn.execute(
+                "SELECT code, idx, name, close, pct, vol FROM auto_watch_day WHERE day = ?", (day,))}
         hist = {}
         for code, vol in conn.execute(
                 "SELECT code, vol FROM auto_watch_day WHERE day < ? AND day >= ? ORDER BY code, day DESC",
@@ -600,7 +638,8 @@ def compute(proxy):
             short += 1
             continue
         avg = sum(h) / len(h)
-        mult = round(t[5] / avg, 2) if avg and t[5] is not None else None
+        base = avg * (live["frac"] if live else 1)
+        mult = round(t[5] / base, 2) if base and t[5] is not None else None
         h = hi.get(code)
         gap = round((t[3] / h - 1) * 100, 2) if h and t[3] is not None else None
         rows.append({"code": code, "name": name or t[2], "idx": idx, "close": t[3], "pct": t[4], "vol": t[5],
@@ -627,6 +666,39 @@ def compute(proxy):
     return out
 
 
+def _frac(now):
+    a = SESSION[0][0] * 60 + SESSION[0][1]
+    b = SESSION[1][0] * 60 + SESSION[1][1]
+    return min(max((now.hour * 60 + now.minute - a) / (b - a), 0.0), 1.0)
+
+
+def live_once(proxy, now=None):
+    """장중 한 바퀴 — 멀티 시세를 받아(쌓지 않음) _live 에 두고, ADD 면 상위 ADD_TOP 을 관심 목록에. 받은 종목 수 · 못 받으면 None."""
+    now = now or _now()
+    day = now.strftime("%Y%m%d")
+    mem = members(proxy)
+    if not mem:
+        return None
+    got = _multi_j(proxy, proxy.load_secrets(), [m[0] for m in mem])
+    if not got or not sum((r["vol"] or 0) for r in got.values()):
+        _status["liveError"] = "%s 장중 시세를 못 받음(또는 거래량 0)" % now.strftime("%H:%M")
+        return None
+    _live.clear()
+    _live.update(day=day, at=now.isoformat(timespec="seconds"), frac=_frac(now), got=got)
+    _status["liveError"] = None
+    d = compute(proxy, dict(_live))
+    _status["live"] = {"day": day, "at": _live["at"], "frac": round(_live["frac"], 3), "ready": d["ready"],
+                       "measured": d["measured"], "hitAll": d["hitAll"],
+                       "top": [{k: p.get(k) for k in ("code", "name", "pct", "mult", "nearHigh", "nearHighOnly")}
+                               for p in d["picked"] if not p.get("nearHighOnly")][:ADD_TOP]}
+    if ADD:
+        try:
+            apply_watch(proxy, day, dict(_live))
+        except Exception as e:
+            _status["liveAdd"] = {"day": day, "error": safe_message(e, 160)}
+    return len(got)
+
+
 def status(proxy=None):
     s = dict(_status)
     if proxy is not None and not s.get("runAt"):   # 재시작으로 메모리가 비었으면 DB 의 쌓은 시각(qa 덧 11-05 — 8764 · 재시작 뒤 「셈 시각」 이 빔)
@@ -642,6 +714,7 @@ def status(proxy=None):
     s["add"] = "꺼짐 — 정규장 뒤 관심 목록 넣기는 만들어 두고 꺼 둠" if not ADD else \
         "켜짐 — 그날 값을 쌓은 바로 뒤(또는 그 뒤 서버가 뜰 때 한 번) 관심 목록 · 「자동」 묶음에 넣음 · 부근만 · 하트 끈 종목은 안 넣음"
     s["runWindow"] = "평일 %02d:%02d~%02d:%02d" % (RUN_AT + RUN_UNTIL)
+    s["liveWindow"] = "평일 %02d:%02d~%02d:%02d · %d초마다 · 상위 %d개 넣기" % (LIVE_FROM + SESSION[1] + (LIVE_SEC, ADD_TOP))
     return s
 
 
@@ -672,10 +745,18 @@ def start(proxy):
                 th.start()
         except Exception as e:
             _status["error"] = safe_message(e, 160)
+        last_live = 0.0
         while True:
             try:
                 now = _now()
                 day = now.strftime("%Y%m%d")
+                if now.weekday() < 5 and LIVE_FROM <= (now.hour, now.minute) < SESSION[1] \
+                        and time.time() - last_live >= LIVE_SEC and not _run_lock.locked():
+                    last_live = time.time()
+                    try:
+                        live_once(proxy, now)
+                    except Exception as e:
+                        _status["liveError"] = safe_message(e, 160)
                 if now.weekday() < 5 and RUN_AT <= (now.hour, now.minute) < RUN_UNTIL and _status["runDay"] != day \
                         and time.time() >= (_status.get("retryAt") or 0):
                     _status["runDay"] = day                  # 저장했거나 휴장이면 그날은 한 번
