@@ -1425,7 +1425,74 @@ const SORTS = {
           empty: () => (!viMeta ? '불러오는 중'
             : !viMeta.saved ? `오늘 기록이 아직 없습니다 — 정규장(${viMeta.session}) 에 서버가 ${viMeta.tickSec}초마다 봅니다`
             : '오늘 걸린 종목이 아직 없습니다') },
+  /* 공매도 — 감시 대상(코스피200 · 코스닥150) 종목의 공매도 거래대금 · 비율, 아래 줄에서 금액 · 비율 순과 1일 · 5일 · 한달 · 1년을 고른다
+     (2026-11-06 재권님 「공매도 하위에 값을 추가해야해. 소팅하는건 금액과 비율이 있어야되고 1일 5일 한달 1년 도 필요해」 → 받는 법 「나로 해줘」).
+     쌓고 셈하는 것은 서버다(server/short_sale.py · /api/kis/short-sale) — 화면은 받은 차례 그대로 그린다.
+     **장중 실시간 값은 없다** — 거래소가 장 뒤에 낸다. 그날 값이 나오기 전에는 전 거래일까지다(안내 줄에 날짜) */
+  ssts: { label: '공매도', list: () => sstsRows,
+          head: '공매도 비율 · 금액', show: (code) => sstsCell(code), html: true,
+          note: () => sstsNote(),
+          empty: () => (!sstsMeta ? '불러오는 중'
+            : !sstsMeta.saved ? '공매도 표가 아직 비어 있습니다 — 개발 서버가 장 뒤에 종목마다 쌓습니다'
+            : '이 기간 공매도가 있는 종목이 없습니다') },
 };
+
+/* 「공매도」 칩 — 서버가 세운 차례 그대로. 못 받았으면 null(빈 목록과 가른다) */
+let sstsRows = null, sstsMeta = null, sstsBy = {};
+let sstsSort = 'amt', sstsPeriod = '1d';
+const SSTS_FALLBACK_MS = 600000;      // 서버가 롱폴을 못 줄 때만
+const SSTS_SORTS = [['amt', '금액'], ['ratio', '비율']];
+const SSTS_PERIODS = [['1d', '1일'], ['5d', '5일'], ['1m', '한달'], ['1y', '1년']];
+const sstsUrl = () => `/api/kis/short-sale?period=${sstsPeriod}&sort=${sstsSort}`;
+function sstsCell(code) {
+  const r = sstsBy[code];
+  if (!r) return '—';
+  const pct = r.ratio == null ? '—' : `${r.ratio.toFixed(2)}%`;
+  const amt = r.amt == null ? '—' : `${Math.round(r.amt / 1e8).toLocaleString()}억`;
+  /* 고른 순서가 위 줄 · 굵게 */
+  const top = sstsSort === 'ratio' ? pct : amt, bottom = sstsSort === 'ratio' ? amt : pct;
+  return `<div style="white-space:nowrap;font-size:12px;line-height:1.3;font-weight:600">${top}</div>` +
+    `<div style="white-space:nowrap;font-size:11px;line-height:1.3" class="kh-mut">${bottom}</div>`;
+}
+const ymdDot = (d) => (d ? `${d.slice(4, 6)}.${d.slice(6)}` : '—');
+function sstsNote() {
+  const m = sstsMeta || {};
+  if (!m.saved) return '감시 대상 공매도';
+  const span = m.dFrom === m.dTo ? ymdDot(m.dTo) : `${ymdDot(m.dFrom)}~${ymdDot(m.dTo)}`;
+  return `${span} · ${(SSTS_SORTS.find(([id]) => id === sstsSort) || [])[1]} 순 · ${m.count}종목`;
+}
+function sstsSubChipsHtml() {
+  const one = (k, id, label, on) => `<button class="kh-chip kh-sub-chip${on ? ' is-on' : ''}" type="button" data-ss-${k}="${id}">${label}</button>`;
+  return SSTS_SORTS.map(([id, l]) => one('sort', id, l, id === sstsSort)).join('')
+    + '<span class="kh-mut" aria-hidden="true">·</span>'
+    + SSTS_PERIODS.map(([id, l]) => one('per', id, l, id === sstsPeriod)).join('');
+}
+/* 아래 줄을 누르면 — 금액 · 비율 · 기간을 바꾸고 다시 받는다. 첫 화면 · 모달이 같은 값을 쓴다 */
+function sstsClick(e) {
+  const b = e.target.closest('[data-ss-sort],[data-ss-per]');
+  if (!b) return false;
+  if (b.dataset.ssSort) sstsSort = b.dataset.ssSort;
+  if (b.dataset.ssPer) sstsPeriod = b.dataset.ssPer;
+  if (sortBy === 'ssts') paintSortChips();
+  sstsWatch?.refresh();
+  loadSsts();
+  return true;
+}
+async function loadSsts() {
+  const url = sstsUrl();
+  try {
+    const r = await apiFetch(url, { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    if (j && j.ok && url === sstsUrl()) {          // 그 사이 고른 것이 바뀌었으면 버린다
+      sstsMeta = j.meta || {};
+      sstsRows = (j.rows || []).map((x) => ({ code: x.code, name: x.name }));
+      sstsBy = Object.fromEntries((j.rows || []).map((x) => [x.code, x]));
+    }
+  } catch { /* 못 받으면 들고 있던 것 그대로 */ }
+  if (sortBy === 'ssts') { paintRows(rowPrices); paintSortNote(); }
+  if (rankModal && rankModalSort === 'ssts') paintRankModal();
+}
+let sstsWatch = null;
 
 /* 「VI·급등」 칩 — 서버가 준 일(최신이 위)을 종목마다 한 줄로 묶는다. 못 받았으면 null(빈 목록과 가른다) */
 let viRows = null, viMeta = null, viBy = {};
@@ -1750,8 +1817,9 @@ function paintSortChips() {
   const sub = $('kh-sorts2');
   if (sub) {
     const fav = !th && sortBy === 'fav';
-    sub.hidden = !th && !fav;
-    sub.innerHTML = th ? themeSubChipsHtml() : fav ? favGroupChipsHtml() : '';
+    const ss = !th && sortBy === 'ssts';
+    sub.hidden = !th && !fav && !ss;
+    sub.innerHTML = th ? themeSubChipsHtml() : fav ? favGroupChipsHtml() : ss ? sstsSubChipsHtml() : '';
   }
 }
 
@@ -1782,6 +1850,7 @@ function setupSorts() {
   };
   $('kh-sorts2')?.addEventListener('click', (e) => {
     if (market === 'THEME') { onTheme(e); return; }
+    if (sstsClick(e)) return;                       // 공매도 금액 · 비율 · 기간
     const b = e.target.closest('[data-fg]');        // 관심 묶음
     if (!b || b.dataset.fg === favGroup) return;
     favGroup = b.dataset.fg;
@@ -1801,6 +1870,7 @@ function setupSorts() {
     if (sortBy === 'buy') loadJoint();
     if (sortBy === 'pre') loadPre();
     if (sortBy === 'vi') loadVi();
+    if (sortBy === 'ssts') loadSsts();
   });
 }
 
@@ -2135,7 +2205,7 @@ function paintRankModal() {
       <td class="l"><span class="kh-nm">${iconHtml(s)}<b data-co="${s.code}">${escT(s.name)}</b>${th ? themeBadge(s.code) : ''}</span></td>
       <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, sid)) : '···'}</td>
       <td class="kh-num ${p ? dirClass(pctOf(p, sid)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, sid)) : '—'}</td>
-      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'vi' ? viCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
+      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'vi' ? viCell(s.code) : sid === 'ssts' ? sstsCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
       <td class="kh-num">${th && themeBig !== FLOW ? themeCap(s.code) : showCap(s.code)}</td>
       <td class="kh-num">${th && themeBig === FLOW ? themeMetric(s.code) : (p ? fmtShareCount(p.volume) : '···')}</td>
       <td class="kh-num">${volRatioCell(s.code)}</td>
@@ -2158,6 +2228,7 @@ function paintRankModal() {
     <div class="kh-chips kh-rkm-mkt" data-rkm-mkt>${marketChipsHtml(rankModalMarket)}</div>
     ${th ? `<div class="kh-chips kh-theme-strip" data-rkm-theme>${themeBigChipsHtml()}</div>
     <div class="kh-chips kh-theme-strip kh-sorts2" data-rkm-theme>${themeSubChipsHtml()}</div>` : ''}
+    ${!th && sid === 'ssts' ? `<div class="kh-chips kh-sorts2" data-rkm-ssts>${sstsSubChipsHtml()}</div>` : ''}
     <table>
       <colgroup>
         <col class="c-rk"><col class="c-nm"><col class="c-pr"><col class="c-pc">
@@ -2165,7 +2236,7 @@ function paintRankModal() {
       </colgroup>
       <thead><tr>
         <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
-        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'vi' ? '때 · 무엇' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
+        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'vi' ? '때 · 무엇' : sid === 'ssts' ? '공매도' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
       </tr></thead>
       <tbody>${rows || empty}</tbody>
     </table>
@@ -2191,6 +2262,9 @@ function paintRankModal() {
     paintSortChips();
     paintRows(rowPrices);                       // 모달도 함께 다시 그린다
   }));
+  rankModal.body.querySelector('[data-rkm-ssts]')?.addEventListener('click', (e) => {
+    if (sstsClick(e)) paintRankModal();         // 카드와 같은 고른 값(금액 · 비율 · 기간)을 본다
+  });
 
   rankModal.head.setBig(rankHeadBig());
   rankModal.head.setStats(rankHeadStats());
@@ -2221,7 +2295,7 @@ function openRankModal() {
       /* 모달에서 고른 기준은 첫 화면 순위표와 **따로 둔다** — 모달에서
          거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면 무엇을 눌러
          그렇게 됐는지 알 수 없다 (2026-09-22). */
-      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'vi') loadVi(); loadVolRatio(); },
+      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'vi') loadVi(); if (id === 'ssts') loadSsts(); loadVolRatio(); },
     },
     onClose() { rankModal = null; if (volWatch) { volWatch.stop(); volWatch = null; } },
   });
@@ -2248,7 +2322,7 @@ function paintRankModalNote() {
   if (!rankModal) return;
   const fresh = freshNote();
   /* 「매수」 탭은 갱신 주기만 짧게 — 길면 탭 글자가 세로로 눌렸다(11-05 8772) */
-  const base = rankModalMarket === 'THEME' ? RANK_TABS_NOTE : rankModalSort === 'buy' ? jointNote(true) : rankModalSort === 'pre' ? preNote() : rankModalSort === 'vi' ? viNote() : RANK_TABS_NOTE;
+  const base = rankModalMarket === 'THEME' ? RANK_TABS_NOTE : rankModalSort === 'buy' ? jointNote(true) : rankModalSort === 'pre' ? preNote() : rankModalSort === 'vi' ? viNote() : rankModalSort === 'ssts' ? sstsNote() : RANK_TABS_NOTE;
   rankModal.head.setTabsNote(fresh ? `${base} · ${fresh.text}` : base);
 }
 
@@ -2275,6 +2349,7 @@ const JOINT_FALLBACK_MS = 300000;     // 「매수」 칩 — 서버 값마저 �
 watch({ url: () => (sortBy === 'buy' ? '/api/kis/joint-buy' : null), onChange: loadJoint, key: 'kis_proxy.INVESTOR_TOP_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => (sortBy === 'pre' ? '/api/kis/pre-flow' : null), onChange: loadPre, key: 'pre_flow.FLOW_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => (sortBy === 'vi' || (rankModal && rankModalSort === 'vi') ? '/api/alerts/today' : null), onChange: loadVi, key: null, fallbackMs: VI_FALLBACK_MS });
+sstsWatch = watch({ url: () => (sortBy === 'ssts' || (rankModal && rankModalSort === 'ssts') ? sstsUrl() : null), onChange: loadSsts, key: null, fallbackMs: SSTS_FALLBACK_MS });
 watch({ url: () => '/api/kis/stock-sectors', onChange: loadSectors, key: 'company_profile.SECTOR_LIST_TTL', fallbackMs: SECTOR_FALLBACK_MS });
 loadSectors();
 

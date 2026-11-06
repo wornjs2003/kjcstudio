@@ -81,6 +81,7 @@ import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매
 import session_volume   # 시간대별 거래량 · 전일비 — 프리장 · 정규장 · 애프터 끝에 순위 종목 누적 거래량 저장 · /api/kis/vol-ratio(2026-11-05 · server/session_volume.py)
 import intraday_flow    # 당일 수급 — 장중 1분마다 시장 투자자 · 프로그램 매매를 쌓아 5분 구간으로 · /api/kis/flow-today(2026-10-27 · server/intraday_flow.py)
 import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
+import short_sale  # 공매도 — 감시 대상 종목마다 일별 공매도를 쌓아 「공매도」 칩에 냄(2026-11-06 · server/short_sale.py 머리 주석)
 import intraday_alerts  # 장중 알림 — 상승 VI · +20% 급등(2026-10-26 · server/intraday_alerts.py 머리 주석)
 import market_index
 import us_outlook  # 미국장 예측용 값 — 지수 선물 · SPX 옵션 · 지표 예상치 · FOMC 기대 · VIX 이력(2026-10-27 · server/us_outlook.py 머리 주석)
@@ -8778,6 +8779,10 @@ class Handler(SimpleHTTPRequestHandler):
                 return
 
             # 프리장(넥스트레이드 08:00~08:50) 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 (2026-11-05 · server/pre_flow.py)
+            if route == "short-sale":
+                # 실시간 순위 「공매도」 칩 — 쌓아 둔 표(short_daily)에서 셈만 한다. KIS 를 부르지 않는다(쌓는 것은 short_sale.start)
+                self._send_json({"ok": True, **short_sale.ranking((qs.get("period") or ["1d"])[0], (qs.get("sort") or ["amt"])[0])})
+                return
             if route == "pre-flow":
                 data, at, ph = pre_flow.fetch(sys.modules[__name__], cfg)
                 d = data or {}
@@ -9597,6 +9602,11 @@ def main():
         print("  장중 알림 : 사용 (상승 VI · +%d%% 급등 · %d초마다 · %s · 발송 %s)"
               % (intraday_alerts.SURGE_PCT, intraday_alerts.TICK, _st["session"],
                  " · ".join("%s %s" % (k, "켜짐" if v else "**꺼짐**") for k, v in _st["send"].items())))
+
+    # 공매도 — 감시 대상 종목마다 KIS 「공매도 일별추이」 를 쌓는다(쓰기 서버만 · 처음 1년치 약 1,050번 · 그 뒤 새 날마다 350번쯤)
+    if not SLOW and is_sender(args.port) and short_sale.start(sys.modules[__name__]):
+        print("  공매도 : 사용 (감시 대상 종목마다 일별 · %d초마다 기준 종목(%s)으로 새 날을 봄 · 쌓는 표 short_daily)"
+              % (short_sale.TICK_SEC, short_sale.SENTINEL))
 
     # 실시간 체결 — 키 읽기 · 시세 기준을 넘겨 둔다. 연결은 화면이 처음 물을 때 붙는다(아무도 안 보면 안 붙는다)
     kis_ws.configure(load_secrets, quote_market_div)
