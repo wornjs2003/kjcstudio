@@ -886,7 +886,7 @@ function loadHf(code) {
   if (!_hf.has(code)) {
     _hf.set(code, apiFetch(`/api/kis/holding-flow?code=${code}`)
       .then((r) => (r && r.ok ? r.json() : null))
-      .then((j) => (j && j.ok ? { rows: j.data || [], start: j.meta && j.meta.start } : null))
+      .then((j) => (j && j.ok ? { rows: j.data || [], start: j.meta && j.meta.start, share: (j.meta && j.meta.share) || null } : null))
       .catch(() => { _hf.delete(code); return null; }));
   }
   return _hf.get(code);
@@ -1264,7 +1264,7 @@ export function createStockChart(container, candles, opts = {}) {
     vpTimer = setInterval(() => {
       if (document.hidden) return;           // 안 보이는 탭은 쉰다
       drawProfile();
-      drawCloud(); drawSess();
+      drawCloud(); drawSess(); drawHfEnds();
     }, VP_REFRESH_MS);
   }
 
@@ -1480,7 +1480,7 @@ export function createStockChart(container, candles, opts = {}) {
     }
 
     drawProfile();          // 매물대도 새 축에 맞춰 다시 그린다
-    drawCloud(); drawSess();            // 일목 구름도
+    drawCloud(); drawSess(); drawHfEnds();            // 일목 구름도
     /* 라이브러리가 나중에 제 계산을 밀어넣으므로 한 박자 뒤에 잰다 */
     requestAnimationFrame(() => checkScale(scaleBefore));
 
@@ -1580,9 +1580,9 @@ export function createStockChart(container, candles, opts = {}) {
      (분봉은 그날 값 · 셈 첫날 앞은 비움). 받기 전에는 빈 칸으로 두고, 오면 그 자리에서 채운다 */
   function drawHf(ch) {
     const keys = [['foreign', COLOR.ind1], ['inst', COLOR.ind2], ['person', COLOR.ind3]];
-    const lines = keys.map(([, col]) => addLine(ch, { color: col, lineWidth: 2, lastValueVisible: true }));
+    const lines = keys.map(([, col]) => addLine(ch, { color: col, lineWidth: 2, lastValueVisible: false }));   // 끝 값은 drawHfEnds 가 그림 칸 안에(축 눈금과 안 겹치게)
     try { lines[0].createPriceLine({ price: 0, color: COLOR.cross, lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' }); } catch { /* 선만 생략 */ }
-    const calc = { foreign: [], inst: [], person: [], start: null };
+    const calc = { foreign: [], inst: [], person: [], start: null, share: null, lines, ch };
     const code = drawnCode;
     /* 값이 오기 전에도 봉 개수를 가격 칸과 맞춰 둔다(빈 자리) — 0개인 칸이 값을 늦게 받으면 그 칸 가로 범위가 다시 잡히고,
        칸 맞추기(subscribeVisibleLogicalRangeChange)가 그 범위를 가격 칸까지 퍼뜨려 끝 2~3봉만 왼쪽에 남았다
@@ -1600,10 +1600,12 @@ export function createStockChart(container, candles, opts = {}) {
         keys.forEach(([k]) => calc[k].push(j >= 0 ? rows[j][k] : null));
       });
       calc.start = hf.start;
+      calc.share = hf.share;
       /* 값을 넣는 동안과 그 한 박자 뒤까지 이 칸은 범위를 퍼뜨리지 않고(quiet), 끝나면 가격 칸 범위를 받아 맞춘다 —
          라이브러리가 값을 받은 뒤 나중에 제 계산을 밀어넣는다(redrawOverlay 와 같은 까닭). 들고 있던 범위로 되돌리면
          그 범위를 잡은 때에 따라 봉 폭이 흔들려(8770 실측 둘 중 하나) 가격 칸 쪽을 기준으로 삼는다 */
       try { keys.forEach(([k], n) => lines[n].setData(put(calc[k]))); } catch { /* 칸이 그새 사라졌다 */ }
+      drawHfEnds();
       const follow = () => {
         try {
           const r = panes[0] && panes[0].chart !== ch && panes[0].chart.timeScale().getVisibleLogicalRange();
@@ -1615,6 +1617,37 @@ export function createStockChart(container, candles, opts = {}) {
       paintPaneTags(candles.length - 1);
     });
     return calc;
+  }
+
+  /* 주체별 비율 — 누적 순매수 선마다 끝(가격축 바로 앞 · 그 선의 마지막 값 높이)에 「외 36%」
+     (2026-11-06 재권님 「차트에 누적 순매수에 주체별 비율도 있어야해」 → 「각각 그래프선 끝에 넣어」 → 「숫자가 아래 숫자랑 안겹치게」).
+     축 이름표(series title · 끝 값 이름표)로 두면 가격축 눈금 숫자 위에 겹쳐서 끝 값과 함께 그림 칸 안에 글로 둔다(「기 +0.09 · 39%」). 값은 서버 share(최근 N거래일 셋의
+     매수 + 매도 금액에서 각자 몫 · 셋 합 100) · 못 받으면 안 적는다. 세 글이 서로 겹치면 위아래로 벌린다.
+     세로 자리는 끌기 · 확대 · 2초 다시 그리기 때마다 따라간다(drawSess 와 같은 자리에서 부른다) */
+  const HF_END_GAP = 15;                     // 글 사이 최소 세로 간격(px) — 글자 높이 남짓
+  function drawHfEnds() {
+    const p = panes.find((x) => x.key === 'hf');
+    if (!p || !p.calc) return;
+    let box = p.el.querySelector('.kh-hf-ends');
+    const sh = p.calc.share;
+    if (!sh || !p.calc.lines) { if (box) box.innerHTML = ''; return; }
+    if (!box) {
+      box = document.createElement('div');
+      box.className = 'kh-hf-ends';
+      box.style.cssText = `position:absolute;top:0;bottom:0;right:${AXIS_W + 4}px;width:0;pointer-events:none;z-index:4`;
+      p.el.appendChild(box);
+    }
+    const nm = { foreign: ['외', COLOR.ind1], inst: ['기', COLOR.ind2], person: ['개', COLOR.ind3] };
+    const at = ['foreign', 'inst', 'person'].map((k, n) => {
+      const v = (p.calc[k] || []).filter((x) => x != null).pop();
+      let y = null;
+      try { y = v == null ? null : p.calc.lines[n].priceToCoordinate(v); } catch { /* 칸이 그새 사라졌다 */ }
+      return { k, y, v };
+    }).filter((x) => x.y != null && sh[x.k] != null).sort((a, b) => a.y - b.y);
+    for (let i = 1; i < at.length; i++) at[i].y = Math.max(at[i].y, at[i - 1].y + HF_END_GAP);
+    box.innerHTML = at.map((x) => `<span style="position:absolute;right:0;top:${Math.round(x.y - 8)}px;white-space:nowrap;` +
+      `font-size:11px;font-weight:600;color:${nm[x.k][1]};background:rgb(var(--kh-paper-rgb, 255 255 255) / 82%);padding:0 3px;border-radius:3px">` +
+      `${nm[x.k][0]} ${x.v > 0 ? '+' : ''}${x.v.toFixed(2)} · ${Math.round(sh[x.k])}%</span>`).join('');
   }
 
   function build() {
@@ -1725,7 +1758,7 @@ export function createStockChart(container, candles, opts = {}) {
         /* 봉이 움직이면 매물대도 그 자리에서 따라간다. 2초를 기다리면
            띠와 봉이 어긋나 보인다 (2026-09-18). */
         drawProfile();
-        drawCloud(); drawSess();
+        drawCloud(); drawSess(); drawHfEnds();
       });
 
       ch.subscribeCrosshairMove((param) => {
@@ -1753,8 +1786,8 @@ export function createStockChart(container, candles, opts = {}) {
     /* 봉이 자리를 잡은 뒤에 세로 범위를 굳힌다. 그려지기 전에 재면 값이 없다 */
     lockPriceRange();
     drawProfile();
-    drawCloud(); drawSess();
-    requestAnimationFrame(() => { lockPriceRange(); drawProfile(); drawCloud(); drawSess(); });
+    drawCloud(); drawSess(); drawHfEnds();
+    requestAnimationFrame(() => { lockPriceRange(); drawProfile(); drawCloud(); drawSess(); drawHfEnds(); });
     startProfileLoop();
     checkAlign();
   }
