@@ -43,6 +43,7 @@
 /* 오늘 이 룰에 걸린 종목 (2026-11-05) — 위 장외 표와 같은 표 모양 · 다른 것만 */
 .rl table.aw-tb { width: 100%; min-width: 0; }
 .rl .aw-tb .st-name { background: var(--kh-bg-card); }
+.rl .aw-tb td.st-name { white-space: normal; min-width: 7.5em; }   /* 이름 · 신고가 표시가 길면 칸 안에서 줄을 바꿔 맨 오른쪽 「배수」 가 판 밖으로 안 밀림(qa 11-06) */
 .rl .aw-how { margin: 8px 0 0; }
 .rl select.rl-in { width: auto; text-align: left; }
 .rl .aw-tb th:first-child { text-align: left; }
