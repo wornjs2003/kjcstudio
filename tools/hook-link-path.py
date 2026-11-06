@@ -86,6 +86,29 @@ def raw_pngs(text):
     return out
 
 
+TEMP_VIEW = re.compile(r"/temp/([^\s`'\"()<>?#]+?-%EB%B3%B4%EA%B8%B0\.html|[^\s`'\"()<>?#]+?-보기\.html)", re.I)
+SHOT_URL = re.compile(r'<meta name="kjc-shot-url" content="([^"]*)"')
+
+
+def stock_views(text):
+    """확인란 줄의 보기 페이지 중 종목 화면(holdings/stock.html)을 찍은 것 — shot.py 가 남긴 kjc-shot-url 로 가른다 (2026-11-06)."""
+    from urllib.parse import unquote
+    out = []
+    for l in (text or "").splitlines():
+        if not CONFIRM.match(l):
+            continue
+        for m in TEMP_VIEW.findall(l):
+            name = unquote(m)
+            try:
+                head = open(os.path.join(TEMP_DIR, name), encoding="utf-8").read(2000)
+            except Exception:
+                continue
+            u = SHOT_URL.search(head)
+            if u and "holdings/stock.html" in u.group(1):
+                out.append(name)
+    return out
+
+
 def main():
     try:
         data = json.load(sys.stdin)
@@ -103,6 +126,11 @@ def main():
             notes.append("확인란에 종목 화면(holdings/stock.html) 링크가 있습니다 — 홀딩스 일은 홈 첫 화면(/holdings/)으로 보여 드립니다. "
                          "모달이면 /holdings/?code=<종목>. 종목 화면 자체를 고쳤으면 지나가도 됩니다 "
                          "(CLAUDE.md 「홀딩스 작업은 홈 첫 화면으로 보여 드린다」).")
+        sv = stock_views(text)
+        if sv:
+            notes.append("확인란 그림이 종목 화면(holdings/stock.html)을 찍은 것입니다 — " + " · ".join(sv[:3]) + ". 홀딩스 일은 "
+                         "홈 큰 차트(/holdings/) + 모달(/holdings/?code=<종목>) 그림으로 다시 드려 주십시오 · 종목 화면은 check-layout 값과 줄 꺾임을 글로. "
+                         "종목 화면 자체를 고쳤으면 지나가도 됩니다(CLAUDE.md 「홀딩스 작업은 홈 첫 화면으로 보여 드린다」).")
         raw = raw_pngs(text)
         if raw:
             notes.append("확인란에 찍은 그림 원본 주소가 있습니다 — 그대로 열면 배율만큼 화면보다 크게 보입니다. 옆에 있는 보기 페이지 주소로 "

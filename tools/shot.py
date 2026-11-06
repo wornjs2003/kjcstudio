@@ -95,14 +95,16 @@ def phone_dpr():
     return float(max(1, math.ceil(size[1] * view_dpr() / PHONE[1])))
 
 
-def viewer(out, tall, phone=False):
+def viewer(out, tall, phone=False, url=""):
     """찍은 그림 옆에 「창에 맞춰 보기」 페이지를 만든다 (2026-10-14 재권님 「화면보다 크게 해서 보여주는 이유가 뭐야?」 ·
     「한눈에 안들어오잖아」 → 룰 「찍은 그림은 창에 맞춰 한눈에 보이게 드린다」).
 
     그림은 배율만큼 픽셀이 많아(재권님 창 1.5) 그대로 열면 화면보다 크게 보인다. 창 크기 그림은 **줄이기만 한다** — 가로 · 세로 다 들어오게,
     `--tall` · `--full` 은 가로만 맞추고 세로 스크롤. **좁은 폭 그림은 창 높이에 맞춘 폭**(창 높이 × 390/844 · 창 폭보다 넓으면 창 폭)으로
     보인다 — `--tall` 이어도 같은 폭이고 세로만 스크롤한다(2026-11-04 재권님 「폰보기 화면이 너무 작아」).
-    그림은 `?t=<찍은 시각>` 으로 불러 같은 이름으로 다시 찍어도 옛 그림이 안 보인다. 이름은 그림 이름 뒤에 `-보기` 만 붙인다."""
+    그림은 `?t=<찍은 시각>` 으로 불러 같은 이름으로 다시 찍어도 옛 그림이 안 보인다. 이름은 그림 이름 뒤에 `-보기` 만 붙인다.
+    찍은 주소를 `<meta name="kjc-shot-url">` 에 남긴다 — 종목 화면(holdings/stock.html)이면 머리에 한 줄을 적고 훅(hook-link-path)이 그것을 센다
+    (2026-11-06 재권님 「스케일 맘대로 바꾸는거 계속 반복되는데」 → CLAUDE.md 「홀딩스 작업은 홈 첫 화면으로 보여 드린다」)."""
     base, name = os.path.dirname(out), os.path.basename(out)
     stem = os.path.splitext(name)[0]
     page = os.path.join(base, stem + "-보기.html")
@@ -110,16 +112,28 @@ def viewer(out, tall, phone=False):
         fit = "width:min(100vw,calc(100vh * %d / %d));height:auto" % PHONE
     else:
         fit = "max-width:100%;height:auto" if tall else "max-width:100vw;max-height:100vh;width:auto;height:auto"
+    stock = "holdings/stock.html" in (url or "")
+    note = ("<div style=\"position:fixed;top:0;left:0;right:0;padding:6px 12px;font:13px sans-serif;background:var(--kh-bg-card);color:var(--kh-text-secondary)\">"
+            "종목 화면 그림 — 홈 첫 화면이 기준(칸 배치가 홈과 달라 차트가 다른 크기로 보입니다)</div>"
+            "<link rel=\"stylesheet\" href=\"/assets/css/theme.css\">") if stock else ""
     html = ("<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>%s</title>"
+            "<meta name=\"kjc-shot-url\" content=\"%s\">"
             "<style>html,body{margin:0}body{display:flex;justify-content:center}img{display:block;%s}</style>"
-            "<img src=\"%s?t=%d\" alt=\"%s\">\n") % (stem, fit, name, int(time.time()), stem)
+            "%s<img src=\"%s?t=%d\" alt=\"%s\">\n") % (stem, html_attr(url), fit, note, name, int(time.time()), stem)
     open(page, "w", encoding="utf-8").write(html)
+    if stock:
+        print("알림: 종목 화면(holdings/stock.html)을 찍었습니다 — 홀딩스 일은 홈 큰 차트(/holdings/) · 모달(/holdings/?code=<종목>) 그림으로 드립니다. "
+              "종목 화면 자체를 고친 때만 이 그림을 드립니다(CLAUDE.md 「홀딩스 작업은 홈 첫 화면으로 보여 드린다」)")
     parts = page.replace("\\", "/").split("/")
     rel = "/".join(parts[parts.index("temp"):]) if "temp" in parts else None
     if rel:
         print("보기: http://localhost:<내 서버 포트>/%s   ← 확인란에는 이 주소(창에 맞춰 한눈에)" % rel)
     else:
         print("보기: %s   ← temp/ 밖이라 http 주소가 없다 — 재권님께 드릴 그림은 temp/ 에 찍는다" % page)
+
+
+def html_attr(v):
+    return str(v or "").replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;")
 
 
 def png_size(path):
@@ -267,7 +281,7 @@ def main(argv):
             print("⚠ 앞 그림과 폭이 다릅니다 — %s 는 %d × %d 였고 이번은 %d × %d (픽셀)."
                   % (os.path.basename(before[0]), before[1][0], before[1][1], now[0], now[1]))
             print("  폭을 바꿨으면 재권님께 먼저 말씀드립니다. 긴 페이지는 --full 이 폭을 안 바꿉니다(「찍는 창 크기도 창 크기다」).")
-        viewer(out, "--tall" in argv or full, phone)
+        viewer(out, "--tall" in argv or full, phone, url)
         return 0
     except urllib.error.URLError:
         print("✗ 못 찍음 — 서버가 없다")
