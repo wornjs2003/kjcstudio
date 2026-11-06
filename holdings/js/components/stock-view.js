@@ -310,7 +310,9 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
       if (dead || key !== periodId) return;
       if (!candles.length) throw new Error('빈 응답');
       host.innerHTML = '';
-      chart = createStockChart(host, candles, { period, showVolume: true, priceDigits: priceDigitsOf(stock.code), code: stock.code });   // code — 그리기 도구가 종목마다 선을 기억한다
+      /* code — 그리기 도구가 종목마다 선을 기억한다 · sessions — 나라별 장 시각 세로선을 홈 큰 차트와 같게
+         (2026-11-06 재권님 「차트에 추가된거 차트모달에도 같이 당연히 적용되야 … 외국장 개장이 차트모달에 없네」) */
+      chart = createStockChart(host, candles, { period, showVolume: true, priceDigits: priceDigitsOf(stock.code), code: stock.code, sessions: true });
 
       /* **이 기간에서 보던 자리로.** 처음이면 최신 쪽 `initBars` 개를 본다.
          몇 개인지는 `CHART_PERIODS` 가 정한다 — 여기 적으면 낡는다.
