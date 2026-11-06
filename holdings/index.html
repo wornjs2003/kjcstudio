@@ -24,6 +24,7 @@
   <link rel="stylesheet" href="./css/fav-groups.css" />
   <!-- 모달 안에는 종목 화면이 통째로 들어간다. 그 화면의 CSS 도 함께 필요하다 -->
   <link rel="stylesheet" href="./css/stock.css" />
+  <link rel="stylesheet" href="./css/fear-greed.css" />
   <link rel="stylesheet" href="./css/flow-foot.css" />
   <link rel="stylesheet" href="./css/news.css" />
   <link rel="stylesheet" href="./css/modal.css" />
@@ -122,6 +123,9 @@
             <button type="button" class="kh-ind-open">보조지표 <i>⌄</i></button>
             <div class="kh-ind-list" hidden></div>
           </div>
+          <!-- 공포·탐욕 지수 (2026-11-06 지시 — 「차트에 위쪽에 버튼을 만들고 누르면 보여지게」). 단추는 코스피 점수 · 누르면 모달(코스피 · 삼성전자 · SK하이닉스).
+               components/fear-greed.js 가 채운다 -->
+          <button type="button" class="kh-ind-open kh-fg-open" id="kh-fg-open">공포·탐욕 <b>—</b></button>
           <!-- 세부사항 — 보조지표 옆 (2026-09-21 지시).
                오른쪽 패널에 있던 것을 여기로 옮겼다. **「자세히」 단추는 두지
                않는다** — 종목 이름 줄의 것 하나만 남는다.

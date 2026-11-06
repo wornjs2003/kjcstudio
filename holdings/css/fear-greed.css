@@ -1,0 +1,53 @@
+/* 공포·탐욕 지수 단추 · 모달 (2026-11-06 · js/components/fear-greed.js) — 홈 첫 화면만 건다 */
+.kh-fg-open b { font-weight: 700; margin-left: 2px; }
+
+.fg-wrap { padding: 6px 24px 24px; }
+.fg-tabs { display: flex; gap: 4px; margin: 0 0 12px; }
+.fg-tabs button {
+  font: inherit; font-size: 0.82rem; padding: 6px 12px; border: 0; cursor: pointer;
+  border-radius: var(--kh-radius-sm); background: var(--kh-bg-surface); color: var(--kh-text-secondary);
+}
+.fg-tabs button.is-on { background: var(--kh-text-primary); color: var(--kh-text-on-fill); }
+/* 탭을 바꿔도 칸 높이가 그대로 — 셋 다 같은 모양이라 가장 큰 것에 맞춘 높이를 잡아 둔다 */
+.fg-body { min-height: 760px; font-size: 0.86rem; }
+.fg-empty { padding: 40px 0; color: var(--kh-text-muted); }
+.fg-top { font-size: 0.78rem; }
+.fg-big { display: flex; align-items: baseline; gap: 10px; margin: 10px 0 8px; }
+.fg-big b { font-size: 2.4rem; line-height: 1; }
+.fg-big span { font-size: 1.1rem; font-weight: 700; }
+.fg-gauge {
+  position: relative; height: 10px; border-radius: 5px; margin: 18px 0 4px;
+  background: linear-gradient(90deg, rgb(var(--kh-down-rgb) / .55), rgb(var(--kh-down-rgb) / .12) 45%,
+    var(--kh-bg-surface) 50%, rgb(var(--kh-up-rgb) / .12) 55%, rgb(var(--kh-up-rgb) / .55));
+}
+.fg-gauge i { position: absolute; display: block; transform: translateX(-50%); }
+.fg-gauge .fg-now { top: -4px; width: 18px; height: 18px; border-radius: 50%; background: var(--kh-bg-card);
+  border: 3px solid var(--kh-text-primary); box-sizing: border-box; }
+.fg-gauge .fg-ar { position: absolute; top: 1px; line-height: 0; }
+.fg-gauge .fg-ar svg { display: block; }
+.fg-gauge .fg-ar-l { right: 18px; }
+.fg-gauge .fg-ar-r { left: 18px; }
+/* 25 세로선(재권님 「공포지수 25에 세로선」) */
+.fg-gauge .fg-25 { top: -8px; width: 0; height: 26px; border-left: 1px solid var(--kh-text-secondary); }
+.fg-gauge .fg-25 em { position: absolute; top: -14px; left: -7px; font-style: normal; font-size: 0.66rem; color: var(--kh-text-secondary); }
+.fg-zones { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--kh-text-muted); }
+.fg-zones .on { color: var(--kh-text-primary); font-weight: 700; }
+.fg-chg { margin: 10px 0; }
+.fg-box { background: var(--kh-bg-surface); border-radius: var(--kh-radius-sm); padding: 9px 12px; margin: 10px 0; }
+.fg-body h4 { font-size: 0.86rem; margin: 16px 0 6px; }
+.fg-body h4 .kh-mut { font-weight: 400; font-size: 0.72rem; }
+.fg-svg { display: block; width: 100%; height: 150px; overflow: visible; }
+.fg-svg .fg-fear { fill: rgb(var(--kh-down-rgb) / .07); }
+.fg-svg .fg-l25 { stroke: var(--kh-text-secondary); vector-effect: non-scaling-stroke; }
+.fg-svg .fg-l50 { stroke: var(--kh-border); vector-effect: non-scaling-stroke; }
+.fg-svg .fg-path { fill: none; stroke: var(--kh-text-primary); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.fg-svg .fg-first { fill: var(--kh-up); }
+.fg-svg .fg-again { fill: var(--kh-bg-card); stroke: var(--kh-up); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.fg-svg .fg-lbl, .fg-svg .fg-ax { font-size: 10px; fill: var(--kh-text-secondary); }
+.fg-f { display: grid; grid-template-columns: 82px 1fr 30px; gap: 2px 10px; align-items: center; margin: 8px 0; }
+.fg-f .nm { font-weight: 500; }
+.fg-f .bar { position: relative; height: 6px; border-radius: 3px; background: var(--kh-bg-surface); }
+.fg-f .bar i { position: absolute; top: -4px; width: 2px; height: 14px; background: var(--kh-text-primary); }
+.fg-f .sc { text-align: right; font-weight: 700; }
+.fg-f .ds { grid-column: 2 / 4; font-size: 0.74rem; color: var(--kh-text-muted); }
+.fg-note { margin-top: 14px; font-size: 0.74rem; }

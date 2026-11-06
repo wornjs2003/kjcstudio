@@ -73,6 +73,7 @@ import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tgl
 import claude_chat     # 홀딩스 오른쪽 Claude 창 — 맥미니 claude 를 한 번씩 부른다 · POST /api/claude/ask(2026-11-03 · server/claude_chat.py)
 import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 테마 · 수급(넥스트 5분 거래량 2배) (2026-10-27 · server/theme_flow.py)
 import good_news       # 「좋은 뉴스」 판정 — 공시마다 갈래 · 방향 · 크기 · 자사주 목적 · 이미 오름 · /api/good-news(2026-11-05 · server/good_news.py)
+import fear_greed      # 공포·탐욕 지수 — 코스피 · 삼성전자 · SK하이닉스 · /api/market/fear-greed(2026-11-06 · server/fear_greed.py)
 import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스닥 150 중 전일 거래량 급등 · 투자전략 룰로 거르고 줄 세움 · /api/auto-watch(2026-11-05 · server/auto_watch.py)
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
 import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 · 색 = 등락률 · /api/kis/heatmap(2026-10-27 · server/heatmap.py)
@@ -8013,8 +8014,8 @@ class Handler(SimpleHTTPRequestHandler):
         재시작 전에 볼 수 있게. 토스처럼 토큰을 끊는 일이 없어 이 폴백은 해가 없다. 응답 `servedBy` 가 어디서 받았나다."""
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/market/"):].strip("/")
-        if route not in ("indicators", "indicator", "materials", "crypto", "us-outlook"):
-            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= · /api/market/materials · /api/market/crypto · /api/market/us-outlook 다섯입니다."}, 404)
+        if route not in ("indicators", "indicator", "materials", "crypto", "us-outlook", "fear-greed"):
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= · /api/market/materials · /api/market/crypto · /api/market/us-outlook · /api/market/fear-greed?key= 여섯입니다."}, 404)
             return
         base = upstream_base()
         if base:
@@ -8041,6 +8042,10 @@ class Handler(SimpleHTTPRequestHandler):
             r = crypto.items()
         elif route == "us-outlook":
             r = us_outlook.outlook()
+        elif route == "fear-greed":           # 공포·탐욕 지수(server/fear_greed.py) — key KOSPI · 005930 · 000660 · 일봉 · 쌓인 수급으로 셈 · KIS 를 새로 안 부른다
+            key = (urllib.parse.parse_qs(parsed.query).get("key") or ["KOSPI"])[0].strip().upper()
+            r = dict(fear_greed.all_targets(sys.modules[__name__], key), meta=fear_greed.status())
+            r["ok"] = bool(r["data"].get("ready"))
         else:
             key = (urllib.parse.parse_qs(parsed.query).get("key") or [""])[0].strip()
             # 가상자산 종목도 같은 주소로 일봉을 낸다 — 큰 차트가 한 길로 그리게(응답 모양이 같다)
@@ -9506,6 +9511,10 @@ def main():
     # 「좋은 뉴스」 판정(2026-11-05 · server/good_news.py) — 같은 문(보내는 서버만) · 공급계약 · 자사주 상세를 5분마다 받아 쌓기만 · 알림 없음
     if not SLOW and is_sender(args.port) and good_news.start(sys.modules[__name__]):
         print("  좋은 뉴스 판정 : 사용 (5분마다 공급계약 본문 · 자사주 취득 상세 받기 · /api/good-news)")
+    # 공포·탐욕 25 풀림 알림(2026-11-06 · server/fear_greed.py) — 같은 문(보내는 서버만) · 평일 15:45 뒤 한 번 · SEND 가 꺼져 있으면 기록만
+    if not SLOW and is_sender(args.port) and fear_greed.start(sys.modules[__name__]):
+        print("  공포·탐욕    : 25 풀림 보기 (평일 %02d:%02d 뒤 한 번 · 알림 %s · /api/market/fear-greed)"
+              % (fear_greed.ALERT_AT + ("켜짐" if fear_greed.SEND else "꺼짐",)))
     if not SLOW and is_sender(args.port) and auto_watch.start(sys.modules[__name__]):
         print("  자동 관심종목 : 사용 (평일 %02d:%02d 코스피 시총 200 · 코스닥 150 값 쌓기 · /api/auto-watch%s)"
               % (auto_watch.RUN_AT + ("" if auto_watch.ADD else " · **관심 목록 넣기 없음**",)))
