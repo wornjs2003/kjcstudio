@@ -2211,6 +2211,16 @@ export function createStockChart(container, candles, opts = {}) {
       });
       put();
       requestAnimationFrame(put);
+      /* **매물대를 켜 세로 범위를 굳혀 두었으면 이 보기로 한 번 다시 굳힌다** (2026-11-06 재권님 홈 열둘 3 「일봉이 납작함」).
+         굳히기(lockPriceRange)는 칸을 그릴 때(build · 처음 VISIBLE_BARS 보기)의 범위를 잡는데, 화면은 곧바로 이 함수로
+         기간마다의 보기(일봉 90봉 등)로 바꾼다 — 그 사이 안 보이게 된 높은 봉(52주 최고 쪽)까지 눈금에 남아 삼성 일봉이
+         16만~42만에 봉이 17만~29만으로 얇게 그려졌다(8765 · 14:52 잼). 이 함수는 종목 · 기간을 바꿔 그린 직후에만 불리므로
+         「종목 · 기간이 바뀔 때만 다시 잡는다」(lockPriceRange 주석)와 같다. 자동 눈금이 새 보기로 다시 셈한 뒤(두 박자) 잰다 */
+      if (indOn().has('vp') && candleSeries) {
+        vpRange = null;
+        try { candleSeries.applyOptions(priceFix()); } catch { /* 칸이 아직 없다 */ }
+        requestAnimationFrame(() => requestAnimationFrame(() => { lockPriceRange(); drawProfile(); }));
+      }
     },
 
     destroy() {
