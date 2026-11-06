@@ -168,6 +168,20 @@ def _multi_j(proxy, cfg, codes):
     return out
 
 
+def _same_as_prev(proxy, day, got):
+    """평일 휴장(공휴일) — J 멀티가 앞 거래일 값을 그대로 주면 거래량 합이 0 이 아니다(qa 검수 11-05).
+    받은 종목 거의 전부(HOLIDAY_SAME)의 종가 · 거래량이 앞에 쌓인 날과 같으면 그 날을 낸다 · 아니면 None.
+    15:41 판(save_today)과 장중 바퀴(live_once)가 함께 쓴다(qa 검수 11-06 — 장중 쪽에 이 셈이 없어 공휴일에 20종목을 넣었다)."""
+    with proxy._db_lock, proxy.db_conn() as conn:
+        last = conn.execute("SELECT MAX(day) FROM auto_watch_day WHERE day < ?", (day,)).fetchone()[0]
+        prev = {r[0]: (r[1], r[2]) for r in conn.execute(
+            "SELECT code, close, vol FROM auto_watch_day WHERE day = ?", (last,))} if last else {}
+    both = [c for c in got if c in prev]
+    if both and sum(1 for c in both if (got[c]["close"], got[c]["vol"]) == prev[c]) >= HOLIDAY_SAME * len(both):
+        return last
+    return None
+
+
 def save_today(proxy, day, codes=None):
     """그날 종가 · 등락률 · 거래량 — 15:41~15:59. 저장한 종목 수. 거래량 합이 0 이면(휴장) 안 쓴다."""
     _init(proxy)
@@ -185,14 +199,8 @@ def save_today(proxy, day, codes=None):
     if not sum((r["vol"] or 0) for r in got.values()):
         _status.update(error="받은 거래량 합이 0 — 휴장으로 보고 저장 안 함")
         return 0
-    # 평일 휴장(공휴일) — J 멀티가 앞 거래일 값을 그대로 주면 거래량 합이 0 이 아니다(qa 검수 11-05 · 안 잼).
-    # 받은 종목 거의 전부의 종가 · 거래량이 앞에 쌓인 날과 같으면 휴장으로 본다
-    with proxy._db_lock, proxy.db_conn() as conn:
-        last = conn.execute("SELECT MAX(day) FROM auto_watch_day WHERE day < ?", (day,)).fetchone()[0]
-        prev = {r[0]: (r[1], r[2]) for r in conn.execute(
-            "SELECT code, close, vol FROM auto_watch_day WHERE day = ?", (last,))} if last else {}
-    both = [c for c in got if c in prev]
-    if both and sum(1 for c in both if (got[c]["close"], got[c]["vol"]) == prev[c]) >= HOLIDAY_SAME * len(both):
+    last = _same_as_prev(proxy, day, got)
+    if last:
         _status.update(error="종가 · 거래량이 %s 와 같음 — 휴장으로 보고 저장 안 함" % last)
         return 0
     stamp = _now().isoformat(timespec="seconds")
@@ -531,10 +539,12 @@ def apply_watch(proxy, day, live=None):
             return None
         new, added, removed, off2, skipped = merge_watch(doc, picks, day, days, off, replace_day=True)
         skipped += [p["code"] + ":부근만" for p in d["picked"] if p.get("nearHighOnly")]
-        try:
-            docstore.write_doc(WATCH_DOC, new, if_updated_at=at)
-        except docstore.DocConflict:
-            continue
+        same = new == doc         # 바뀐 것이 없으면 안 쓴다 — 장중 5분마다 문서 · 이력이 쌓이지 않게(개념정의 검수 11-06)
+        if not same:
+            try:
+                docstore.write_doc(WATCH_DOC, new, if_updated_at=at)
+            except docstore.DocConflict:
+                continue
         stamp = _now().isoformat(timespec="seconds")
         with proxy._db_lock, proxy.db_conn() as conn:
             conn.execute("DELETE FROM auto_watch_off")
@@ -542,7 +552,7 @@ def apply_watch(proxy, day, live=None):
             if not live:             # 장중 바퀴는 「그날 넣음」 표시를 안 남긴다 — 15:41 판(또는 뜰 때)이 그날 확정이다
                 conn.execute("INSERT OR REPLACE INTO auto_watch_add VALUES (?, ?, ?, ?, ?)",
                              (day, stamp, ",".join(added), ",".join(removed), ",".join(skipped)))
-        _status[key] = {"day": day, "at": stamp, "added": added, "removed": removed, "skipped": skipped,
+        _status[key] = {"day": day, "at": stamp, "added": added, "removed": removed, "skipped": skipped, "unchanged": same,
                         "top": [p["code"] for p in picks]}
         return _status[key]
     _status[key] = {"day": day, "error": "관심 목록 문서를 세 번 다 남이 먼저 썼음"}
@@ -683,6 +693,10 @@ def live_once(proxy, now=None):
     if not got or not sum((r["vol"] or 0) for r in got.values()):
         _status["liveError"] = "%s 장중 시세를 못 받음(또는 거래량 0)" % now.strftime("%H:%M")
         return None
+    last = _same_as_prev(proxy, day, got)
+    if last:
+        _status["liveError"] = "%s 종가 · 거래량이 %s 와 같음 — 휴장으로 보고 건너뜀" % (now.strftime("%H:%M"), last)
+        return 0
     _live.clear()
     _live.update(day=day, at=now.isoformat(timespec="seconds"), frac=_frac(now), got=got)
     _status["liveError"] = None
