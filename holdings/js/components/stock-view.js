@@ -32,6 +32,7 @@ import { fmtNum, fmtWon, fmtMoneyKr, fmtShareCount, fmtDelta, dirClass,
 import { paintIcon } from './stock-icon.js';
 import { mountDisclosures } from './disclosures.js';
 import { mountStockPanel } from './stock-panel.js';
+import { mountDepthTable } from './depth.js';
 import { mountStockDetail } from './stock-detail.js';
 import { mountIndicatorMenu } from './indicator-menu.js';
 import { mountFinanceCards } from './finance-cards.js';
@@ -533,6 +534,9 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
   /* 오른쪽 패널 셋 — 첫 화면과 같은 컴포넌트다 (2026-09-21 지시).
      모달과 종목 페이지가 각자 제 root 안에서 찾으므로 서로 안 겹친다. */
   const panel3 = mountStockPanel($('#kh-panel3'), { code: stock.code });
+  /* 「호가」 칸 — 10단 표(2026-11-06 · components/depth.js). 모달에서는 이 칸이 빠져 있다(css/modal.css · 2026-09-17 지시) */
+  const askTable = mountDepthTable($('.kh-w[data-p="ask"] .kh-w-body'));
+  askTable.setCode(stock.code);
   /* 단건이 오면 머리도 다시 그린다 (2026-10-12). 전에는 머리가 다음 묶음 시세를 기다려 시가총액이
      0.5~2.7초 「—」 였다 — 아래 머리줄은 0.07~0.39초에 이미 같은 값을 들고 있었다(8765 실측) */
   const detail = mountStockDetail($('#kh-dt'), { view, onOne: () => { if (!dead) paintHead(lastLiveRaw); } });
@@ -581,6 +585,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
       chartWatch.stop();
       stopFlow();                 // everyServerMs 가 준 멈추는 함수
       panel3.destroy();
+      askTable.destroy();
       detail.destroy();
       finance.destroy();
       /* **안 떼면 열 때마다 쌓인다** — 지표 메뉴는 `document` 에 손잡이 셋을

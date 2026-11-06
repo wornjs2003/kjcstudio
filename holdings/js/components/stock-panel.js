@@ -28,6 +28,7 @@ import { mountInvestor } from './investor.js';
 import { mountAiAnalysis } from './ai-analysis.js';
 import { mountStockNews } from './stock-news.js';
 import { openInvestorModal } from './investor-modal.js';
+import { mountDepth } from './depth.js';
 
 const HTML = `
   <div class="kh-p3-s kh-iv-s">
@@ -43,6 +44,7 @@ const HTML = `
            클래스는 「자세히 ›」 하나(kh-fold · 스킬 modal) · 여백만 줄여 머리 줄 높이를 지킨다(css/home.css) -->
       <a class="kh-fold kh-iv-more" role="button" tabindex="0">자세히 ›</a></div>
     <div class="kh-p3-b kh-iv-box">불러오는 중</div>
+    <div class="kh-dp-box"></div>
   </div>
 
   <div class="kh-p3-s kh-ai-s">
@@ -259,7 +261,7 @@ function mountResize(root) {
  *   root : 이 안에 마크업을 만든다 (.kh-p3)
  * setCode(code) 로 종목을 바꾸고, destroy() 로 끝낸다.
  */
-export function mountStockPanel(root, { code = null } = {}) {
+export function mountStockPanel(root, { code = null, depth: withDepth = false } = {}) {
   if (!root) return { setCode() {}, destroy() {} };
 
   root.classList.add('kh-p3');
@@ -276,8 +278,11 @@ export function mountStockPanel(root, { code = null } = {}) {
   const investor = mountInvestor({ box: q('.kh-iv-box'), tabs: q('.kh-iv-tabs') });
   const ai = mountAiAnalysis({ box: q('.kh-ai-box'), when: q('.kh-ai-when') });
   const news = mountStockNews(q('.kh-nw-box'), { limit: 8 });
+  /* 호가 10단 — 투자자 정보 칸 빈자리(2026-11-06). **홈만 켠다** — 종목 화면 · 모달 서랍의 이 칸에는 빈자리가 없어 아래 AI 분석 칸을 덮었고,
+     종목 화면에는 「호가」 칸(10단 표)이 따로 있다 */
+  const depth = withDepth ? mountDepth(q('.kh-dp-box')) : { setCode() {}, destroy() {} };
 
-  if (code) { investor.setCode(code); ai.setCode(code); news.setCode(code); }
+  if (code) { investor.setCode(code); ai.setCode(code); news.setCode(code); depth.setCode(code); }
 
   /* 「자세히 ›」 — 지금 이 칸이 보는 종목으로 투자자 지표 모달을 연다 */
   let cur = code;
@@ -295,9 +300,11 @@ export function mountStockPanel(root, { code = null } = {}) {
       investor.setCode(next);
       ai.setCode(next);
       news.setCode(next);
+      depth.setCode(next);
     },
     destroy() {
       investor.destroy();
+      depth.destroy();
       ai.destroy();
       if (news.destroy) news.destroy();
       MOUNTED.delete(root);

@@ -38,6 +38,7 @@
     급등 +20% 넘는 종목이 30개를 넘으면 30위 밖은 못 본다 — 30위가 `SURGE_PCT` 이상이던 바퀴를 `overflow` 로 센다
 """
 
+import json
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -53,6 +54,8 @@ SESSION_FROM = 9 * 60        # 09:00
 SESSION_TO = 15 * 60 + 30    # 15:30 — 정규장만(재권님 「정규장만」 10-26)
 SURGE_PCT = 20.0             # 전일 종가 대비 이 % 이상을 처음 볼 때 (재권님 「20% 이상」)
 PREVIEW_MAX = 40             # 꺼져 있을 때 남겨 둘 글 수
+LIST_KEY = "intraday_today"  # sync_meta — 그날 본 VI · 급등 목록(홈 「오늘 VI · 급등」 칸 · /api/alerts/today)
+LIST_MAX = 600               # 그날 목록에 남길 줄 수 — 넘으면 오래된 것부터 뺀다(VI 가 많은 날 첫 오전 103통 · 10-27)
 
 VI_PATH = "/uapi/domestic-stock/v1/quotations/inquire-vi-status"
 VI_TR = "FHPST01390000"
@@ -67,6 +70,8 @@ _status = {"startedAt": None, "lastTick": None, "lastError": None, "day": None,
            "today": _blank_day(), "preview": {k: [] for k in SEND}}
 _seen = {k: set() for k in SEND}   # vi: (코드, 발동 시각) · surge: 코드 — 그날 것만
 _baseline_done = False             # 뜬 뒤 첫 목록을 「보낸 것」 으로 쳤나 (「가」)
+_list = {"day": None, "items": []}  # 그날 본 것 — 보내기와 따로 **개발 DB 에 남긴다**(재권님 11-06 「응 해봐」 · 재시작에도 안 비게)
+_list_keys = set()
 
 
 def _in_session(now):
@@ -152,7 +157,26 @@ def _vi_new(proxy, day):
                 new.append(r)
     full = len(rows) >= 30 and len(new) == len(rows)       # 넘침도 정규장 VI 로만 센다
     new.sort(key=lambda r: r.get("cntg_vi_hour") or "")
+    for r in new:
+        _list_add(_vi_item(r))
     return [_vi_line(r) for r in new], full
+
+
+def _num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _vi_item(r):
+    gaps = [g for g in (_num(r.get("vi_dprt")), _num(r.get("vi_dmc_dprt"))) if g]
+    cnt = (r.get("vi_count") or "").strip()
+    return {"kind": "vi", "t": _hms(r.get("cntg_vi_hour")),
+            "code": (r.get("mksc_shrn_iscd") or "").strip(), "name": (r.get("hts_kor_isnm") or "").strip(),
+            "sub": VI_KIND.get((r.get("vi_kind_code") or "").strip(), ""),
+            "pct": max(gaps) if gaps else None, "price": _num(r.get("vi_prc")),
+            "count": int(cnt) if cnt.isdigit() and cnt != "0" else None}
 
 
 # ── +20% 급등 ───────────────────────────────────────────────────────
@@ -172,6 +196,11 @@ def _surge_new(proxy, now, baseline):
         if pct is None or pct < SURGE_PCT or not code or code in _seen["surge"]:
             continue
         _seen["surge"].add(code)
+        # 목록에는 뜬 직후 처음 본 것도 넣는다 — 시각은 **이 서버가 처음 본 때**다(넘은 때가 아니다 · `late`).
+        # 정규장 밖(장 뒤에 뜬 서버의 첫 바퀴)은 안 넣는다 — 그때 순위는 넥스트레이드가 섞인다
+        if _in_session(now):
+            _list_add({"kind": "surge", "t": now.strftime("%H:%M:%S"), "code": code, "name": r.get("name") or code,
+                       "sub": "+%d%%" % SURGE_PCT, "pct": pct, "price": _num(r.get("price")), "late": bool(baseline)})
         if baseline:
             continue
         value = None
@@ -184,6 +213,70 @@ def _surge_new(proxy, now, baseline):
     last = rows[-1].get("pct") if len(rows) >= 30 else None
     full = last is not None and last >= SURGE_PCT
     return lines, full
+
+
+# ── 그날 목록 (홈 「오늘 VI · 급등」 칸 · 2026-11-06) ──────────────────────
+#
+# 보내기(`_seen` · 메모리)와 따로 둔다. **보낸 것이 아니라 본 것**을 남긴다 — VI 는 발송을 꺼 두었어도(`SEND`) 목록에는 든다.
+# 그날 것만 `sync_meta` 한 줄(JSON)에 둔다. 쓰는 것은 바퀴가 도는 서버(개발 서버 8765) 하나이고, 읽기 전용 서버
+# (8764 · 8767 · 세션)는 같은 DB 를 읽어 같은 목록을 낸다. 날이 바뀌면 덮어쓴다.
+
+def _list_key(it):
+    return (it["kind"], it["code"], it["t"] if it["kind"] == "vi" else "")
+
+
+def _list_load(day):
+    """그날 저장해 둔 목록을 되살린다 — 재시작 뒤 첫 바퀴 전에."""
+    _list["day"], _list["items"] = day, []
+    _list_keys.clear()
+    try:
+        got = json.loads(dart._meta_get(LIST_KEY) or "null") or {}
+    except (ValueError, TypeError):
+        got = {}
+    if got.get("day") == day:
+        for it in got.get("items") or []:
+            k = _list_key(it)
+            if k not in _list_keys:
+                _list_keys.add(k)
+                _list["items"].append(it)
+
+
+def _list_add(it):
+    k = _list_key(it)
+    if not it.get("code") or k in _list_keys:
+        return
+    _list_keys.add(k)
+    _list["items"].append(it)
+    _list["dirty"] = True
+
+
+def _list_save(now):
+    if not _list.pop("dirty", False):
+        return
+    _list["items"].sort(key=lambda it: it.get("t") or "")
+    del _list["items"][:-LIST_MAX]
+    dart._meta_set(LIST_KEY, json.dumps({"day": _list["day"], "items": _list["items"],
+                                        "savedAt": now.isoformat(timespec="seconds")}, ensure_ascii=False))
+
+
+def today():
+    """`/api/alerts/today` — 그날 본 VI · 급등을 **최신이 위**로. 어느 서버든 DB 를 읽는다.
+
+    `meta` 에 저장 시각 · 정규장 시각 · 바퀴 주기를 싣는다 — 롱폴 해시는 `meta` 를 빼고 세므로
+    목록이 안 바뀌면 「바뀜」 이 안 난다. 저장한 것이 없으면 `items` 는 비고 `meta.saved` 가 `false` 다
+    (「아직 안 돌았다」 와 「그날 0건」 을 가른다)."""
+    day = datetime.now(KST).strftime("%Y%m%d")
+    try:
+        got = json.loads(dart._meta_get(LIST_KEY) or "null") or {}
+    except (ValueError, TypeError):
+        got = {}
+    same = got.get("day") == day
+    items = list(reversed(got.get("items") or [])) if same else []
+    return {"day": day, "items": items,
+            "meta": {"saved": same, "savedAt": got.get("savedAt") if same else None, "surgePct": SURGE_PCT,
+                     "session": "%02d:%02d~%02d:%02d" % (SESSION_FROM // 60, SESSION_FROM % 60,
+                                                         SESSION_TO // 60, SESSION_TO % 60),
+                     "tickSec": TICK, "max": LIST_MAX}}
 
 
 # ── 바퀴 ────────────────────────────────────────────────────────────
@@ -215,6 +308,8 @@ def tick(proxy, now=None):
         _status["preview"] = {k: [] for k in SEND}
         for s in _seen.values():
             s.clear()
+    if _list["day"] != day:
+        _list_load(day)
     baseline = not _baseline_done
     if not baseline and not _in_session(now):
         return
@@ -229,6 +324,7 @@ def tick(proxy, now=None):
         if not baseline:
             _emit(kind, lines, full and not baseline, now)
     _baseline_done = True            # 「가」 — 뜬 뒤 첫 목록은 보낸 것으로 친다
+    _list_save(now)
     if errors:
         raise RuntimeError(" · ".join(errors))
 
