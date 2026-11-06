@@ -1625,6 +1625,7 @@ export function createStockChart(container, candles, opts = {}) {
      매수 + 매도 금액에서 각자 몫 · 셋 합 100) · 못 받으면 안 적는다. 세 글이 서로 겹치면 위아래로 벌린다.
      세로 자리는 끌기 · 확대 · 2초 다시 그리기 때마다 따라간다(drawSess 와 같은 자리에서 부른다) */
   const HF_END_GAP = 15;                     // 글 사이 최소 세로 간격(px) — 글자 높이 남짓
+  const HF_END_W = 100;                      // 끝 글이 차지하는 폭 어림(px) — 「외 -0.78 · 36%」 남짓
   function drawHfEnds() {
     const p = panes.find((x) => x.key === 'hf');
     if (!p || !p.calc) return;
@@ -1644,10 +1645,28 @@ export function createStockChart(container, candles, opts = {}) {
       try { y = v == null ? null : p.calc.lines[n].priceToCoordinate(v); } catch { /* 칸이 그새 사라졌다 */ }
       return { k, y, v };
     }).filter((x) => x.y != null && sh[x.k] != null).sort((a, b) => a.y - b.y);
+    /* 좁은 칸(종목 화면 · 폭 556)에서는 왼쪽 이름표가 오른쪽 끝까지 닿아 글이 그 위에 겹쳤다(11-06 16:1x 8772 실측) —
+       이름표가 글 자리(오른쪽 HF_END_W)까지 오면 글을 이름표 아래로 내리고, 칸 밑을 넘으면 칸 안으로 올린다 */
+    const pr = p.el.getBoundingClientRect();
+    const tag = p.el.querySelector('.kh-pane-tag');
+    const tr = tag ? tag.getBoundingClientRect() : null;
+    const top0 = tr && tr.right > pr.right - AXIS_W - 4 - HF_END_W ? tr.bottom - pr.top + 1 : 0;
+    at.forEach((x) => { x.y = Math.max(x.y, top0 + 8); });
     for (let i = 1; i < at.length; i++) at[i].y = Math.max(at[i].y, at[i - 1].y + HF_END_GAP);
+    const over = at.length ? at[at.length - 1].y + 8 - (pr.height - 1) : 0;
+    if (over > 0) at.forEach((x) => { x.y -= over; });
+    /* 그래도 칸이 모자라면(이름표 아래 남는 높이 < 글 줄 수 × 간격) 세 글을 이름표 바로 아래 한 줄로 */
+    const row = at.length && at[0].y < top0 + 8;
+    const one = (x) => `${nm[x.k][0]} <span class="${signClass(Number(x.v.toFixed(2)))}">${x.v > 0 ? '+' : ''}${x.v.toFixed(2)}</span> · ${Math.round(sh[x.k])}%`;
+    if (row) {
+      box.innerHTML = `<span style="position:absolute;right:0;top:${Math.round(top0)}px;white-space:nowrap;font-size:11px;font-weight:600;` +
+        `background:rgb(var(--kh-paper-rgb) / 82%);padding:0 3px;border-radius:3px">` +
+        at.map((x) => `<span style="color:${nm[x.k][1]};margin-left:6px">${one(x)}</span>`).join('') + '</span>';
+      return;
+    }
     box.innerHTML = at.map((x) => `<span style="position:absolute;right:0;top:${Math.round(x.y - 8)}px;white-space:nowrap;` +
-      `font-size:11px;font-weight:600;color:${nm[x.k][1]};background:rgb(var(--kh-paper-rgb, 255 255 255) / 82%);padding:0 3px;border-radius:3px">` +
-      `${nm[x.k][0]} <span class="${signClass(Number(x.v.toFixed(2)))}">${x.v > 0 ? '+' : ''}${x.v.toFixed(2)}</span> · ${Math.round(sh[x.k])}%</span>`).join('');
+      `font-size:11px;font-weight:600;color:${nm[x.k][1]};background:rgb(var(--kh-paper-rgb) / 82%);padding:0 3px;border-radius:3px">` +
+      `${one(x)}</span>`).join('');
   }
 
   function build() {
