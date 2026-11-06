@@ -84,7 +84,7 @@ export function mountDepthTable(host) {
 export function mountDepth(host) {
   return makeDepth(host, (host, code, data, failed) => {
     host.classList.add('kh-dp');
-    const head = '<b class="kh-dp-t">호가 10단</b>';
+    const head = '<b class="kh-dp-t"><span data-term="호가 10단">호가 10단</span></b>';   // 풍선 — 용어집 「호가 10단」(읽는 법 넷)
     if (isUsCode(code)) { host.innerHTML = `<div class="kh-dp-h">${head}<span>미국 종목은 호가를 안 받습니다</span></div>`; return; }
     const { ask, bid } = sides(data);
     if (!ask.length && !bid.length) { host.innerHTML = `<div class="kh-dp-h">${head}<span>${emptyText(data, failed)}</span></div>`; return; }
