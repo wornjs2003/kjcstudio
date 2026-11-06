@@ -10,14 +10,20 @@
  */
 import { openModal } from './modal.js';
 import { apiFetch } from '../data/api.js';
-import { signClass } from '/assets/js/sign.js';
+import { signClass, KH } from '/assets/js/sign.js';
+import { tone as toneOf, paint, ready as toneReady } from '/assets/js/tone.js';
 
 const URL = '/api/market/fear-greed';
 const TABS = [['KOSPI', '코스피'], ['005930', '삼성전자'], ['000660', 'SK하이닉스']];
 const ZN = ['극도의 공포', '공포', '중립', '탐욕', '극도의 탐욕'];
 
 const md = d => d ? d.slice(4, 6) + '-' + d.slice(6) : '—';
-const tone = s => s == null ? 'kh-mut' : signClass(s - 50);
+/* 점수의 위 · 아래와 막대 짙기는 지표 표(data/metrics.json · fear_greed)의 기준 · 폭으로 tone.js 가 셈한다 — 화면은 기준을 들지 않는다
+   (「기준이 있는 수치는 위 빨강 · 아래 파랑, 멀수록 짙게 — 셈은 한 곳」 · 개념정의 검수 11-06) */
+const METRIC = 'fear_greed';
+const tone = s => { const t = toneOf(METRIC, s).side; return t ? KH[t] : KH.none; };
+const STOPS = [0, 10, 25, 40, 50, 60, 75, 90, 100];
+const gaugeBg = () => 'linear-gradient(90deg, ' + STOPS.map(v => `${paint(METRIC, v, 'bg') || 'var(--kh-bg-surface)'} ${v}%`).join(', ') + ')';
 const delta = v => v == null ? '<b class="kh-mut">—</b>'
   : `<b class="${signClass(v)}">${v > 0 ? '▲' : v < 0 ? '▼' : ''}${Math.abs(v)}</b>`;
 const pct = (v, n = 1) => v == null ? '—' : (v * 100).toFixed(n) + '%';
@@ -69,7 +75,6 @@ function chart(d, line) {
   return `<svg class="fg-svg" viewBox="0 -14 ${W} ${H + 30}" preserveAspectRatio="none">
     <rect x="0" y="${y(line)}" width="${W}" height="${H - y(line)}" class="fg-fear"/>
     <line x1="0" x2="${W}" y1="${y(line)}" y2="${y(line)}" class="fg-l25"/>
-    <line x1="0" x2="${W}" y1="${y(50)}" y2="${y(50)}" class="fg-l50"/>
     <path d="${path}" class="fg-path"/>${dots}
     <text x="0" y="${H + 14}" class="fg-ax">${md(h[0][0])}</text>
     <text x="${W}" y="${H + 14}" class="fg-ax" text-anchor="end">${md(h[n - 1][0])}</text>
@@ -87,7 +92,7 @@ function render(box, j) {
   box.innerHTML = `
     <div class="fg-top"><span class="kh-mut">${d.live ? '오늘 장중(마감 전)' : md(d.day) + ' 장 마감'} 기준 · 0~100 낮을수록 공포</span></div>
     <div class="fg-big"><b class="${tone(d.score)}">${d.score}</b><span class="${tone(d.score)}">${d.zone}</span></div>
-    <div class="fg-gauge"><i class="fg-25" style="left:${line}%"><em>${line}</em></i><i class="fg-now" style="left:${d.score}%">${trend(d.d5)}</i></div>
+    <div class="fg-gauge" style="background:${gaugeBg()}"><i class="fg-25" style="left:${line}%"><em>${line}</em></i><i class="fg-now" style="left:${d.score}%">${trend(d.d5)}</i></div>
     <div class="fg-zones">${ZN.map((t, i) => `<span class="${i === z ? 'on' : ''}">${t}</span>`).join('')}</div>
     <div class="fg-chg">5일 전 대비 ${delta(d.d5)} · 20일 전 대비 ${delta(d.d20)}</div>
     <div class="fg-box">${runBox}</div>
@@ -124,7 +129,7 @@ export function mountFearGreed(btn) {
   if (!btn) return;
   let last = null;
   const b = btn.querySelector('b');
-  load('KOSPI').then(j => {
+  Promise.all([load('KOSPI'), toneReady]).then(([j]) => {
     last = j;
     const s = j && j.data && j.data.ready ? j.data.score : null;
     b.textContent = s == null ? '—' : s;

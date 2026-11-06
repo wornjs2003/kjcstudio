@@ -15,11 +15,7 @@
 .fg-big { display: flex; align-items: baseline; gap: 10px; margin: 10px 0 8px; }
 .fg-big b { font-size: 2.4rem; line-height: 1; }
 .fg-big span { font-size: 1.1rem; font-weight: 700; }
-.fg-gauge {
-  position: relative; height: 10px; border-radius: 5px; margin: 18px 0 4px;
-  background: linear-gradient(90deg, rgb(var(--kh-down-rgb) / .55), rgb(var(--kh-down-rgb) / .12) 45%,
-    var(--kh-bg-surface) 50%, rgb(var(--kh-up-rgb) / .12) 55%, rgb(var(--kh-up-rgb) / .55));
-}
+.fg-gauge { position: relative; height: 10px; border-radius: 5px; margin: 18px 0 4px; background: var(--kh-bg-surface); }   /* 바탕 짙기는 fear-greed.js 가 tone.js 로 칠한다 */
 .fg-gauge i { position: absolute; display: block; transform: translateX(-50%); }
 .fg-gauge .fg-now { top: -4px; width: 18px; height: 18px; border-radius: 50%; background: var(--kh-bg-card);
   border: 3px solid var(--kh-text-primary); box-sizing: border-box; }
@@ -37,9 +33,8 @@
 .fg-body h4 { font-size: 0.86rem; margin: 16px 0 6px; }
 .fg-body h4 .kh-mut { font-weight: 400; font-size: 0.72rem; }
 .fg-svg { display: block; width: 100%; height: 150px; overflow: visible; }
-.fg-svg .fg-fear { fill: rgb(var(--kh-down-rgb) / .07); }
+.fg-svg .fg-fear { fill: rgb(var(--kh-down-rgb) / .07); }   /* 0~25 범위 띠 — 기준 수치 짙기 룰 밖(개념정의 검수 11-06) */
 .fg-svg .fg-l25 { stroke: var(--kh-text-secondary); vector-effect: non-scaling-stroke; }
-.fg-svg .fg-l50 { stroke: var(--kh-border); vector-effect: non-scaling-stroke; }
 .fg-svg .fg-path { fill: none; stroke: var(--kh-text-primary); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
 .fg-svg .fg-first { fill: var(--kh-up); }
 .fg-svg .fg-again { fill: var(--kh-bg-card); stroke: var(--kh-up); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
