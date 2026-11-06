@@ -48,8 +48,8 @@ function rows(d) {
   const P = d.parts || {}, R = d.raw || {}, mk = d.kind === 'market';
   return [
     ['모멘텀', P.mom, `${mk ? '코스피' : '주가'} 125일선 대비 ${pct(R.mom)}`],
-    ['주가 강도', P.hl, mk ? (R.hl == null ? '52주 신고가 − 신저가 — 그날 종목 일봉이 다 쌓이면 셈' : `52주 신고가 − 신저가 = 잰 ${d.hlN}종목의 ${pct(R.hl)}`)
-                         : `52주 최저~최고 사이 ${pct(R.hl, 0)} 자리`],
+    ['주가 강도', P.hl, mk ? (R.hl == null ? '52주 종가 신고가 − 신저가 — 그날 종목 일봉이 다 쌓이면 셈' : `52주 종가 신고가 − 신저가 = 잰 ${d.hlN}종목의 ${pct(R.hl)}`)
+                         : `52주 종가 최저~최고 사이 ${pct(R.hl, 0)} 자리`],
     [mk ? '시장 폭' : '오른 날 비중', P.breadth, mk ? (R.breadth == null ? '20일 오른 종목의 거래대금 비중 — 그날 종목 일봉이 다 쌓이면 셈' : `20일 오른 종목의 거래대금 비중 ${pct(R.breadth)}`)
                                              : `20일 중 오른 날의 거래대금 비중 ${pct(R.breadth)}`],
     ['변동성', P.vol, d.volRatio == null ? '20일 변동성 —' : `20일 변동성 = 1년 평균의 ${d.volRatio.toFixed(2)}배`],
