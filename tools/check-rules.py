@@ -269,10 +269,12 @@ def c_nav_gutter():
 # 처음에는 CSS 링크만 셌다가 Insight 가 `../../holdings/js/components/modal.js` 를 import 하는 것을
 # 놓쳤다 (2026-10-02 · 창구 카드). **상대 경로를 거는 파일 자리에서 풀어 구역을 견준다** — 깊이를 박지 않는다.
 _SHARED_REF = [
-    ((".html",), re.compile(r'<link[^>]*\bhref="(\.\.?/[^"]+\.css)"')),
-    ((".html",), re.compile(r'<script[^>]*\bsrc="(\.\.?/[^"]+\.m?js)"')),
-    ((".html", ".js"), re.compile(r"""(?:\bfrom\s*|\bimport\s*\(?\s*)['"](\.\.?/[^'"]+\.m?js)['"]""")),
+    ((".html",), re.compile(r'<link[^>]*\bhref="((?:\.\.?/|/(?!/))[^"]+\.css)"')),
+    ((".html",), re.compile(r'<script[^>]*\bsrc="((?:\.\.?/|/(?!/))[^"]+\.m?js)"')),
+    ((".html", ".js"), re.compile(r"""(?:\bfrom\s*|\bimport\s*\(?\s*)['"]((?:\.\.?/|/(?!/))[^'"]+\.m?js)['"]""")),
 ]
+# `/` 로 시작하는 주소(/holdings/…)는 저장소 뿌리에서 푼다 — 처음 판은 ./ · ../ 만 세서 Insight 가 /holdings/js/store/timing.js 를
+# 건 것이 「거는 쪽 둘 이상」 에 안 나왔다(2026-11-06 qa 찾음 · 재권님 「응」). `//` 로 시작하는 바깥 주소는 안 센다
 _PUBLIC = ("assets/",)   # 룰이 정한 공용 자리 (「공통 자원은 루트에 하나만 둔다」)
 
 
@@ -289,7 +291,9 @@ def shared_files():
             if not p.endswith(exts):
                 continue
             for m in rx.finditer(text):
-                t = os.path.normpath(os.path.join(os.path.dirname(p), m.group(1))).replace("\\", "/")
+                ref = m.group(1)
+                base = "" if ref.startswith("/") else os.path.dirname(p)
+                t = os.path.normpath(os.path.join(base, ref.lstrip("/"))).replace("\\", "/")
                 if t.startswith("..") or "/" not in t or t.startswith(_PUBLIC):
                     continue
                 if t.split("/", 1)[0] == src_zone:
