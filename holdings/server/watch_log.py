@@ -148,8 +148,19 @@ def board(proxy, day=None):
     return {"day": day, "saved": bool(saved), "days": days(proxy), "counts": cnt, "rows": rows}
 
 
+def _market_open(proxy, day):
+    """그날 국내 장이 열렸나 — 국내 종목(숫자 여섯 자리) 5분봉이 하나라도 쌓였으면 열린 날.
+    휴장 평일(한글날 · 성탄절 등)은 미국 종목 5분봉만 있고 국내는 0 이다(10-09 국내 0 · 11-06 406 종목 · qa 검수 11-07)."""
+    with proxy.db_conn() as conn:
+        return conn.execute("SELECT 1 FROM candles WHERE period = '5m' AND ts >= ? AND ts < ? "
+                            "AND code GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]' LIMIT 1", (day, day + "~")).fetchone() is not None
+
+
 def save(proxy, cfg, day):
-    """그날 종목 줄을 남긴다 — 5분봉이 없는 종목은 먼저 받아 채운다(쓰기 되는 서버만)."""
+    """그날 종목 줄을 남긴다 — 5분봉이 없는 종목은 먼저 받아 채운다(쓰기 되는 서버만).
+    휴장 평일이면 아무것도 안 남기고 None — 빈 날이 날 고르기에 안 생기고 KIS 도 안 부른다."""
+    if not _market_open(proxy, day):
+        return None
     src = sources(proxy, day)
     filled = 0
     for code in src:
@@ -173,6 +184,16 @@ def save(proxy, cfg, day):
     return len(rows), filled
 
 
+def _saved_day(proxy, day):
+    """그날 줄이 이미 표에 있나 — 20:05 뒤 서버를 다시 켜도 한 번 남긴 날을 다시 쓰지 않는다
+    (다시 쓰면 장중에만 쌓이는 「매수」 목록이 비어 그 표시가 빠진 줄로 덮인다 · 개념정의 검수 11-07)."""
+    try:
+        with proxy.db_conn() as conn:
+            return conn.execute("SELECT 1 FROM watch_log WHERE day = ? LIMIT 1", (day,)).fetchone() is not None
+    except Exception:
+        return False                 # 표가 아직 없음 — 처음 남기는 날
+
+
 def status():
     return dict(_status, saveAt="%02d:%02d" % SAVE_AT)
 
@@ -189,7 +210,15 @@ def start(proxy):
                 now = _now()
                 day = now.strftime("%Y%m%d")
                 if now.weekday() < 5 and (now.hour, now.minute) >= SAVE_AT and _status.get("saved") != day:
-                    n, filled = save(proxy, proxy.load_secrets(), day)
+                    if _saved_day(proxy, day):
+                        _status.update(saved=day)
+                        continue
+                    got = save(proxy, proxy.load_secrets(), day)
+                    if got is None:
+                        _status.update(saved=day, filled=None, error=None)
+                        print("  [종목 기록] %s 국내 장이 안 열린 날 — 안 남김" % day, flush=True)
+                        continue
+                    n, filled = got
                     _status.update(saved=day, filled=filled, error=None)
                     print("  [종목 기록] %s %d종목 남김 · 5분봉 받아 채움 %d" % (day, n, filled), flush=True)
             except Exception as e:
