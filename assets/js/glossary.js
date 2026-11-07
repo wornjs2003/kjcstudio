@@ -98,7 +98,10 @@ function show(sp) {
   const sr = sp.getBoundingClientRect(), w = open.offsetWidth, h = open.offsetHeight;
   const left = Math.max(8, Math.min(sr.left, window.innerWidth - 8 - w));
   let top = sr.bottom + 6;
-  if (top + h > window.innerHeight - 8 && sr.top - 6 - h >= 8) { top = sr.top - 6 - h; open.classList.add('up'); }
+  if (top + h > window.innerHeight - 8) {
+    if (sr.top - 6 - h >= 8) { top = sr.top - 6 - h; open.classList.add('up'); }
+    else top = Math.max(8, window.innerHeight - 8 - h);   // 위아래 다 모자라면 화면 안에 붙인다 — 넘친 만큼은 풍선 안 스크롤(company-tip 의 place 와 같음 · qa 11-07 좁은 폭 「호가 10단」)
+  }
   open.style.left = `${Math.round(left)}px`; open.style.top = `${Math.round(top)}px`;
 }
 function hide() { clearTimeout(hideTimer); if (open) { open.remove(); open = openFor = null; } }
