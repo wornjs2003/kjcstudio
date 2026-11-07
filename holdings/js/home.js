@@ -917,11 +917,23 @@ async function paintDailyMini() {
     host.replaceChildren(note);
     return;
   }
+  /* 글 첫 줄(「📊 데일리분석 · 날짜」)은 칸 제목과 겹쳐 화면에서만 빼고, 그 자리에 「전 거래일 마감 값 · 작성 시각」 을
+     굵게 둔다 — 지수가 어제 값이라는 표시가 약했다 (2026-11-07 재권님 「응 그렇게 해」 · 홈 9). 07:30 텔레그램 글은 그대로다. */
+  const lines = doc.telegram.split('\n');
+  if (lines[0].includes('데일리분석')) lines.shift();
+  while (lines.length && !lines[0].trim()) lines.shift();
+  const at = new Date(doc.at || '');
+  const head = document.createElement('div');
+  head.className = 'kh-dlm-head';
+  head.textContent = Number.isNaN(at.getTime())
+    ? '전 거래일 마감 값'
+    : `전 거래일 마감 값 · ${at.getMonth() + 1}월 ${at.getDate()}일 `
+      + `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')} 작성`;
   /* `textContent` 로 넣는다 — 글자만 담으므로 이스케이프가 필요 없다. */
   const pre = document.createElement('pre');
   pre.className = 'kh-dlm-tg';
-  pre.textContent = doc.telegram;
-  host.replaceChildren(pre);
+  pre.textContent = lines.join('\n');
+  host.replaceChildren(head, pre);
 }
 
 paintDailyMini();
