@@ -98,7 +98,7 @@ export const INDICATORS = [
   /* 일목균형표 (2026-10-15) — 전환 · 기준 · 후행은 차트 선, 선행스팬 둘과 구름은 매물대처럼 봉 뒤 층(drawCloud) */
   { key: 'ich',  name: '일목균형표',  pane: 'price' },
   /* VWAP(거래량 가중 평균가 · 2026-11-06 재권님 「응 만들어」) — 분봉에만 그린다. 셈은 서버 server/vwap.py 한 곳이고
-     봉에 붙어 온 `vwap` 을 선으로만 잇는다(그날 정규장 09:00 부터 누적 · 일봉 이상에는 뜻이 없어 안 그림) */
+     봉에 붙어 온 `vwap` 을 선으로만 잇는다(장 전 08:00 · 정규장 09:00 · 장 후 15:40 에서 각각 0 부터 누적 — 토스와 같게 11-07 · 일봉 이상에는 뜻이 없어 안 그림) */
   { key: 'vwap', name: 'VWAP(분봉)',  pane: 'price' },
   { key: 'vol',  name: '거래량',      pane: 'own'   },
   { key: 'macd', name: 'MACD',       pane: 'own'   },
@@ -1373,7 +1373,8 @@ export function createStockChart(container, candles, opts = {}) {
     if (indOn().has('vwap') && MINUTE_PERIODS.has(period)) {
       /* 점선 · 가격 축에 「VWAP」 이름표 — 세로 범위에서 뺀다(NO_SCALE) */
       const sr = addLine(ch, { color: COLOR.vwap, lineWidth: 2, lineStyle: 2, lastValueVisible: true, title: 'VWAP', ...NO_SCALE });
-      sr.setData(put(candles.map((c) => (c.vwap == null ? null : c.vwap))));
+      /* 장 사이 빈 칸(08:50 · 15:30 · 밤)은 점을 빼 선을 잇는다 — 토스처럼 장이 바뀌는 자리에서 꺾여 이어진다(11-07) */
+      sr.setData(candles.filter((c) => c.vwap != null).map((c) => ({ time: toChartTime(c.ts, period), value: c.vwap })));
       overlay.push(sr);
     }
     if (indOn().has('bb')) {
