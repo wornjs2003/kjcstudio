@@ -1771,7 +1771,9 @@
 /* 창 가장자리와 틀 사이에 남기는 여백 — 아래와 좌우 각각(재권님 「너무 딱 맞아서 답답해 여백을 넣어줘」 2026-11-03). home.js fitScale 이 읽는다 */
 :root { --kh-fit-gap: 32px; }
 @media (min-width: 1281px) {
-  body[data-nav="holdings"] > .kh-app-wide {
+  /* Insight 도 같은 틀 — 배율은 그 화면 fit.js 가 홀딩스가 남긴 바탕값(kh-fit-base)으로 푼다(2026-11-07 재권님 「홀딩스 기준으로 다 맞춰」 → (가)) */
+  body[data-nav="holdings"] > .kh-app-wide,
+  body[data-nav="company-setup"] > .kh-app-wide {
     max-width: calc(var(--grid-max) * var(--kh-s, 1));
     grid-template-columns: 1fr calc(368px * var(--kh-s, 1));
     zoom: var(--kh-z, 1);

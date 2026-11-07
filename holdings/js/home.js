@@ -3448,6 +3448,11 @@ function fitScale() {
   if (!grow || !grid) return;
   const gap = parseFloat(css.getPropertyValue('--kh-fit-gap')) || 0;   // 창 가장자리 여백 — 아래 · 좌우 (home.css)
   const rail = parseFloat(css.getPropertyValue('--kh-rail-w')) || 0;     // 오른쪽 Claude 줄 · 창이 민 폭 (components/claude-rail.js)
+  /* 바탕값을 남긴다 — Insight 가 자기 창 크기로 같은 식을 다시 푼다 (2026-11-07 재권님 「홀딩스 기준으로 다 맞춰」 → (가) · 시황분석 fit.js).
+     fixed · grow 는 s=1 · z=1 로 되돌린 px, rail 은 Claude 줄 폭. 간단모드에서는 칸이 달라 안 남긴다 */
+  if (!document.body.classList.contains('kh-simple')) {
+    try { localStorage.setItem('kh-fit-base', JSON.stringify({ fixed: Math.round(fixed), grow: Math.round(grow), rail })); } catch { /* 저장 못 씀 — Insight 는 제 기본값 */ }
+  }
   const room = innerHeight - nav - gap, wide = (root.clientWidth - rail - 2 * gap) / grid;
   let s = Math.min(wide, (room - fixed) / grow), z = 1;
   if (s < 1) { s = 1; z = Math.max(0.1, Math.min(wide, room / (fixed + grow))); }   // 0.1 — 0 · 음수만 막는다
