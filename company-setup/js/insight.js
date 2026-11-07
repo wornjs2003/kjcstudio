@@ -102,7 +102,7 @@
   try {
     const r = await fetch('data/stock-analysis.json', { cache: 'no-store' });
     const maps = ((await r.json()).items || []).map(x => ({ x, id: (String(x.page || '').match(/flowmap\.html\?map=([a-z0-9_-]+)/i) || [])[1] })).filter(m => m.id);
-    chips.innerHTML = maps.map(m => `<button class="kh-chip${m.id === current() ? ' is-active' : ''}" data-map="${esc(m.id)}" title="${esc(m.x.title)}">${esc(m.x.name || m.id)}</button>`).join('');
+    chips.innerHTML = maps.map(m => `<button class="kh-chip${m.id === current() ? ' is-active' : ''}" data-map="${esc(m.id)}" data-tip="${esc(m.x.title)}">${esc(m.x.name || m.id)}</button>`).join('');
     chips.addEventListener('click', e => { const b = e.target.closest('.kh-chip'); if (b) setMap(b.dataset.map); });
     setAsof(current());
   } catch (e) {
