@@ -126,7 +126,7 @@ const BODY_HTML = `
            안이라 백틱 하나가 문자열을 닫아 화면이 통째로 안 그려진다.
            2026-09-23 에 실제로 그렇게 됐고, node --check 는 통과했다
            (문법은 유효하고 잘리는 자리만 달라진다). -->
-      <span class="kh-dl-chip" id="kh-dl-send">07:30 발송</span>
+      <span class="kh-dl-chip" id="kh-dl-send">국내 16:00 · 미국 07:00 발송</span>
     </header>
 
     <!-- 「오늘의 뉴스」 제목 아래 — 시황분석 세션이 쓴 미국장 분석 + 영상 분석을 한 목록으로 (2026-10-01 영상 · 2026-10-07 재권님
@@ -244,6 +244,12 @@ const SIDE_HTML = `
     <section class="kh-dl-card kh-dl-tgcard">
     <div class="kh-side-head">
       <b>텔레그램</b>
+      <!-- 국내 데일리(평일 16:00) · 미국 데일리(화~토 07:00) — 첫 화면 칸 탭과 같은 둘 (2026-11-07 · 모달이 원본).
+           이름은 짧게 — daily.html 오른쪽 칸이 좁아 「데일리분석 · 미국 데일리」 면 머리줄이 두 줄(24 → 48px)이 됐다 -->
+      <span class="kh-dl-tabs" role="tablist" data-dl-send-tabs>
+        <button type="button" role="tab" data-dl-send="kr" class="is-on">국내</button>
+        <button type="button" role="tab" data-dl-send="us">미국</button>
+      </span>
       <span class="kh-side-toggle" id="kh-dl-tg-w">아직 보내지 않았습니다</span>
     </div>
     <!-- 폰에서는 이 칸이 맨 위라 화면 제목보다 먼저 나온다.
@@ -352,19 +358,49 @@ export function tgDetailHtml(x, { closeBtn = true } = {}) {
  * 한국 시간 아침에 **어제 날짜**가 나온다.
  */
 /** 오늘 저장본의 주소 — 첫 화면(home.js)이 롱폴로 지켜볼 때도 이것을 쓴다. 날짜 만드는 법은 여기 한 곳이다 */
-export function dailyDocUrl() {
-  return `/api/board/doc/daily-${new Date().toLocaleDateString('sv-SE').replace(/-/g, '')}`;
+/* 국내(`daily-` · 평일 16:00)와 미국(`usdaily-` · 화~토 07:00) 두 갈래 (2026-11-07 재권님 「미국데일리 분석」 탭 · 「오후 4시로」).
+   접두사는 서버 `daily.py` 의 DOC_PREFIX · US_PREFIX 와 같다. */
+const DOC_PREFIX = { kr: 'daily-', us: 'usdaily-' };
+/* 오늘 것이 아직 없으면 이만큼 앞 날까지 거슬러 가장 최근 것을 보인다 — 국내는 16:00 전 · 주말, 미국은 일 · 월 아침.
+   전에는 「어제 것을 보여주지 않는다」 였는데 16:00 로 옮기며 하루 대부분이 빈 칸이 되어 바꿨다 — 칸 머리 줄이 날짜 · 작성 시각을 적는다 */
+const DOC_BACK_DAYS = 6;
+
+function ymd(d) { return d.toLocaleDateString('sv-SE').replace(/-/g, ''); }
+
+export function dailyDocUrl(kind = 'kr') {
+  return `/api/board/doc/${DOC_PREFIX[kind]}${ymd(new Date())}`;
 }
 
-export async function loadDailyDoc() {
-  try {
-    const r = await apiFetch(dailyDocUrl(), { cache: 'no-store' });
-    if (!r || !r.ok) return null;          // 404 면 오늘 것이 아직 없다
-    const b = await r.json();
-    return (b && b.ok && b.data) || null;
-  } catch {
-    return null;
+export async function loadDailyDoc(kind = 'kr') {
+  for (let i = 0; i <= DOC_BACK_DAYS; i++) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    try {
+      const r = await apiFetch(`/api/board/doc/${DOC_PREFIX[kind]}${ymd(d)}`, { cache: 'no-store' });
+      if (!r || !r.ok) continue;          // 404 면 그날 것이 없다
+      const b = await r.json();
+      if (b && b.ok && b.data) return b.data;
+    } catch { return null; }
   }
+  return null;
+}
+
+/** 저장본 머리 한 줄 — 「11월 7일 장 마감 값 · 16:02 작성」 꼴. 첫 화면 칸과 모달 텔레그램 칸이 같이 쓴다 */
+export function dailyDocHead(doc, kind = 'kr') {
+  const at = new Date(doc && doc.at || '');
+  if (Number.isNaN(at.getTime())) return kind === 'us' ? '미국 마감 값' : '마감 값';
+  const md = `${at.getMonth() + 1}월 ${at.getDate()}일`;
+  const hm = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+  if (kind === 'us') return `미국 마감 값 · ${md} ${hm} 작성`;
+  /* 16:00 전에 만든 것(2026-11-07 전 07:30 저장본)은 전 거래일 마감이다 */
+  return at.getHours() < 15 ? `전 거래일 마감 값 · ${md} ${hm} 작성` : `${md} 장 마감 값 · ${hm} 작성`;
+}
+
+/** 텔레그램 글에서 첫 줄(「📊 데일리분석 · 날짜」 · 「🇺🇸 미국 데일리 · 날짜」)과 그 뒤 빈 줄을 뺀다 — 칸 제목 · 탭과 겹친다 */
+export function dailyDocBody(doc) {
+  const lines = String(doc && doc.telegram || '').split('\n');
+  if (/데일리/.test(lines[0] || '')) lines.shift();
+  while (lines.length && !lines[0].trim()) lines.shift();
+  return lines.join('\n');
 }
 
 /* ── 붙이기 ─────────────────────────────── */
@@ -865,20 +901,34 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
 
      **그날 보낸 글을 그대로 보여준다** — 「폰에 이렇게 도착합니다」 라는
      문구에 맞다. 장중에 값이 바뀌면 오히려 「내가 받은 것과 다르네」 가 된다. */
-  let savedDoc = null;          // 오늘 저장본. 없으면 null
+  let savedDoc = null;          // 가장 최근 저장본. 없으면 null
+  let sendKind = 'kr';          // 텔레그램 칸 탭 — kr 국내 · us 미국
 
   async function drawTelegram() {
     const box = $side('kh-dl-tg');
     if (!box) return;
-    savedDoc = await loadDailyDoc();
-    /* 07:30 전에는 그날 것이 없다. **어제 것을 보여주지 않는다** —
-       날짜를 착각하게 된다. */
+    if (!box.dataset.bound) {
+      box.dataset.bound = '1';
+      for (const b of (side || root).querySelectorAll('[data-dl-send]')) {
+        b.addEventListener('click', () => {
+          sendKind = b.dataset.dlSend;
+          for (const x of (side || root).querySelectorAll('[data-dl-send]')) x.classList.toggle('is-on', x === b);
+          drawTelegram();
+        });
+      }
+    }
+    const kind = sendKind;
+    savedDoc = await loadDailyDoc(kind);
+    if (kind !== sendKind) return;
+    /* 오늘 것이 없으면 가장 최근 것(loadDailyDoc 이 거슬러 찾는다) — 어느 날 것인지 아래 cap 에 적는다 (2026-11-07 · 16:00 로 옮기며) */
     box.textContent = savedDoc
       ? savedDoc.telegram
-      : '오늘 것은 아침 07:30 에 만들어집니다.';
+      : (kind === 'us' ? '미국 데일리는 화~토 아침 07:00 에 만들어집니다.' : '데일리분석은 평일 16:00 에 만들어집니다.');
+    const w = $side('kh-dl-tg-w');
+    if (w) w.textContent = !savedDoc ? '아직 없습니다' : savedDoc.sent ? '보냄' : (savedDoc.sendError ? '보내지 못함' : '저장만');
     /* 폰에서는 이 칸이 화면 제목보다 위에 온다. 어느 날 것인지 여기 적는다. */
     const cap = $side('kh-dl-tg-cap');
-    if (cap) cap.textContent = `데일리분석 ${todayLabel()} · 폰에 이렇게 도착합니다`;
+    if (cap) cap.textContent = savedDoc ? `${dailyDocHead(savedDoc, kind)} · 폰에 이렇게 도착합니다` : '폰에 이렇게 도착합니다';
   }
 
   /* ── 그리기 ─────────────────────────────── */
