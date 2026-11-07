@@ -443,6 +443,12 @@
   white-space: pre-wrap; word-break: break-word;
   color: var(--kh-text-secondary);
 }
+/* 글 머리 — 이 값이 언제 것인지(전 거래일 마감 · 작성 시각). 홈 9 · 2026-11-07 */
+.kh-dlm-head {
+  align-self: flex-start; font-size: 0.82rem; font-weight: 700;
+  color: var(--kh-text-primary); padding: 2px 8px;
+  border-radius: var(--kh-radius-sm, 6px); background: var(--kh-bg);
+}
 .kh-dlm-n { font-size: 0.78rem; color: var(--kh-text-secondary); font-weight: 500; }
 .kh-dlm-v {
   margin-left: auto; font-size: 0.92rem; font-weight: 700;
