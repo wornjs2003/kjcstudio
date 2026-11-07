@@ -438,7 +438,7 @@ async function showMarket(key) {
   if (v) { v.className = 'kh-idx-v kh-num ' + h.dirClass; v.textContent = h.value; }
   if (yr) { yr.textContent = h.range; yr.dataset.stamp = ''; }   // 종목으로 돌아오면 52주 줄을 다시 칠하게(paintYearRange 의 stamp)
   if (per) per.innerHTML = `<span class="kh-chip live" style="cursor:default">${h.per}</span>`;
-  if (foot) { foot.innerHTML = `<span title="${h.footTitle}">${h.foot[0]}</span><span title="${j.source || ''}">${h.foot[1]}</span>`; paintFlowFoot(foot, null); }
+  if (foot) { foot.innerHTML = `<span data-tip="${h.footTitle}">${h.foot[0]}</span><span${j.source ? ` data-tip="${j.source}"` : ''}>${h.foot[1]}</span>`; paintFlowFoot(foot, null); }
   if (host) {
     if (mkDrop) mkDrop();
     try { mkDrop = drawIndicator(host, j); }
@@ -533,7 +533,7 @@ async function showMaterial(key, name) {
       /* 한 줄로 — 글이 길어 두 줄이 되면 아래 표 칸이 그만큼 줄었다(2026-10-14 실측 602 → 585). 다 못 보이면 마우스를 올려 본다 */
       if (asof) {
         Object.assign(asof.style, { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' });
-        asof.title = `${name} — ${(e && e.message) || '날짜별 값을 받지 못했습니다'}`;
+        asof.dataset.tip = `${name} — ${(e && e.message) || '날짜별 값을 받지 못했습니다'}`;
         asof.textContent = `· ${asof.title}`;
       }
       return;
@@ -1159,7 +1159,7 @@ function themeBigChipsHtml() {
     + '<span class="kh-chip-bar"></span>';
   if (!themeGroups) return flow + `<span class="kh-mut">${themeGroupsFail ? '테마 목록을 못 받았습니다' : '테마 목록을 받는 중'}</span>`;
   return flow + themeGroups.map((g) => `<button class="kh-chip${g.name === themeBig ? ' is-active' : ''}" type="button"
-    data-tbig="${escT(g.name)}" title="작은 테마 ${g.themes.length}">${escT(g.name)}</button>`).join('');   // 숫자는 안 붙인다(재권님 「반도체나 다른 테마도 숫자는 빼고」)
+    data-tbig="${escT(g.name)}" data-tip="작은 테마 ${g.themes.length}">${escT(g.name)}</button>`).join('');   // 숫자는 안 붙인다(재권님 「반도체나 다른 테마도 숫자는 빼고」)
 }
 
 function themeSubChipsHtml() {
@@ -1169,7 +1169,7 @@ function themeSubChipsHtml() {
     if (!d.prevDay) return '<span class="kh-mut">넥스트 5분 거래량을 쌓는 중 — 어제 값이 생기는 다음 거래일부터 견줍니다</span>';
     if (!d.compared) return '<span class="kh-mut">어제 같은 구간 값이 없어 아직 견줄 수 없습니다 — 어제 값이 있는 구간이 오면 견줍니다</span>';
     const one = (sel, label, n, title) => `<button class="kh-chip kh-sub-chip${flowSel === sel ? ' is-on' : ''}" type="button"
-      data-flow="${sel}"${title ? ` title="${escT(title)}"` : ''}>${escT(label)}${n == null ? '' : ` <b class="kh-chip-hit">${n}</b>`}</button>`;
+      data-flow="${sel}"${title ? ` data-tip="${escT(title)}"` : ''}>${escT(label)}${n == null ? '' : ` <b class="kh-chip-hit">${n}</b>`}</button>`;
     return one('all', `전체 ${(d.hits || []).length}`, null)
       + (d.themes || []).map((t) => one(t.no, themeLabel(t, d.themes), t.n, `${t.name} · ${t.total ?? '—'}종목 중 ${t.n}`)).join('')
       + one('etc', '기타', (d.etc || []).length, '어느 테마에도 없는 수급 종목(ETF 등)');
@@ -1177,7 +1177,7 @@ function themeSubChipsHtml() {
   const list = bigThemes();
   if (!list.length) return '<span class="kh-mut">이 큰 테마에 작은 테마가 없습니다</span>';
   return list.map((t) => `<button class="kh-chip kh-sub-chip${t.no === themeNo ? ' is-on' : ''}" type="button" data-theme="${t.no}"
-    title="${escT(t.name)} · ${t.pct == null ? '—' : fmtPct(t.pct)} · ${t.count ?? '—'}종목">${escT(themeLabel(t, list))}</button>`).join('');
+    data-tip="${escT(t.name)} · ${t.pct == null ? '—' : fmtPct(t.pct)} · ${t.count ?? '—'}종목">${escT(themeLabel(t, list))}</button>`).join('');
 }
 
 /* 아래 기준 한 줄 */
@@ -1466,6 +1466,23 @@ const SORTS = {
             : '이 기간 공매도가 있는 종목이 없습니다') },
 };
 
+/* 칩 설명 — 칩 위에 마우스를 1초 올려 두면 뜬다(공용 풍선 data-tip · 2026-11-07 재권님 「급등 매수 장외 등 해당 버튼 위에 마우스 1초이상
+   올리고 있으면 설명뜨게」 → 「전부 통일」). 위 칩 줄과 「자세히」 모달 탭이 같이 쓴다 — 글은 여기 한 곳. 기준은 위 SORTS 주석 · 서버 그대로 */
+const SORT_TIPS = {
+  fav: '하트로 담은 관심종목만 걸러 시가총액 순으로 봅니다',
+  cap: '시가총액이 큰 순 — 위 코스피 · 코스닥으로 시장을 고릅니다',
+  value: '오늘 거래대금이 큰 순',
+  vol: '오늘 거래량이 큰 순',
+  up: '오늘 전일 대비 많이 오른 순',
+  down: '오늘 전일 대비 많이 내린 순',
+  after: '정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 07:00 ~ 15:30 은 비어 있습니다',
+  buy: '외국인 · 기관 · 프로그램이 셋 다 순매수인 종목, 셋 합이 큰 순(외국인 · 기관은 장중 가집계)\n셋 다 샀다가 한 곳이라도 매도로 바뀐 종목은 맨 위에 흐리게',
+  pre: '넥스트레이드 프리마켓(08:00 ~ 08:50) 거래대금 상위 중 프로그램 순매수가 큰 순\n08:50 ~ 09:00 에 그날 판으로 굳힙니다',
+  vi: '오늘 정규장에 상승 VI 가 걸렸거나 전일 대비 +20% 를 넘은 종목, 최근 것이 위',
+  ssts: '코스피200 · 코스닥150 종목의 공매도 거래대금 · 비율(공매도 대금 ÷ 전체 거래대금) 순\n아래 줄에서 금액 · 비율 · 1일 · 5일 · 한달 · 1년 · 장중 값은 없고 거래소가 장 뒤에 냅니다',
+};
+const sortTipAttr = (id) => (SORT_TIPS[id] ? ` data-tip="${escT(SORT_TIPS[id])}" data-tip-h="${escT(SORTS[id].label)}"` : '');
+
 /* 「공매도」 칩 — 서버가 세운 차례 그대로. 못 받았으면 null(빈 목록과 가른다) */
 let sstsRows = null, sstsMeta = null, sstsBy = {};
 let sstsSort = 'amt', sstsPeriod = '1d';
@@ -1571,7 +1588,7 @@ function preCell(code) {
   const pg = `<span class="${r.program == null ? 'kh-mut' : dirClass(r.program)}">프 ${eokSigned(r.program)}${r.program == null ? '' : '억'}</span>`;
   const amt = r.amt == null ? '—' : `≈${Math.round(r.amt / 1e8).toLocaleString()}`;
   const ratio = r.ratio == null ? '' : ` <span class="${r.ratio >= 2 ? 'kh-up' : 'kh-mut'}">${r.ratio}배</span>`;
-  const disc = (r.disc || []).length ? ` <span class="kh-accent" title="${r.disc.map((t) => t.replace(/"/g, '&quot;')).join('\n')}">공시${r.disc.length > 1 ? r.disc.length : ''}</span>` : '';
+  const disc = (r.disc || []).length ? ` <span class="kh-accent" data-tip="${r.disc.map((t) => t.replace(/"/g, '&quot;')).join('\n')}">공시${r.disc.length > 1 ? r.disc.length : ''}</span>` : '';
   /* 두 줄 — 한 줄이면 순위 칸에서 종목 이름이 한 글자로 눌렸다(11-05 8772 · 2560 창) */
   return `<div style="white-space:nowrap;font-size:12px;line-height:1.3">${pg}</div>` +
     `<div style="white-space:nowrap;font-size:11px;line-height:1.3"><span class="kh-mut">대금</span> ${amt}<span class="kh-mut">억</span>${ratio}${disc}</div>`;
@@ -1598,7 +1615,7 @@ function paintPreSectors() {
   box.hidden = false;
   const pct = (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
   box.innerHTML = '<span class="kh-mut">업종</span>' + preSectors.map((g) =>
-    `<span class="kh-pre-sec-it" title="${g.n}종목 · 오른 ${g.up} · 내린 ${g.down} · 많이 움직인 ${g.top.map((x) => `${x.name} ${pct(x.pct)}`).join(' · ')}">` +
+    `<span class="kh-pre-sec-it" data-tip="${g.n}종목 · 오른 ${g.up} · 내린 ${g.down} · 많이 움직인 ${g.top.map((x) => `${x.name} ${pct(x.pct)}`).join(' · ')}">` +
     `${g.name} <b class="${dirClass(g.avg)}">${pct(g.avg)}</b> <span class="kh-mut">${g.up}↑${g.down}↓</span></span>`).join('');
 }
 async function loadPre() {
@@ -1842,7 +1859,7 @@ function paintSortChips() {
   host.classList.toggle('kh-theme-strip', th);
   host.innerHTML = th ? themeBigChipsHtml() : Object.entries(SORTS).map(([id, x]) =>
     `<button class="kh-chip${id === sortBy ? ' is-active' : ''}" type="button"
-      data-sort="${id}">${x.label}</button>`).join('');
+      data-sort="${id}"${sortTipAttr(id)}>${x.label}</button>`).join('');
   const sub = $('kh-sorts2');
   if (sub) {
     const fav = !th && sortBy === 'fav';
@@ -2316,7 +2333,7 @@ function openRankModal() {
       stats: rankHeadStats(),
       /* 850px 에서 세 열이면 눌려 줄바꿈된다 (재서 확인) */
       statCols: 2,
-      tabs: Object.entries(SORTS).map(([id, x]) => ({ id, label: x.label })),
+      tabs: Object.entries(SORTS).map(([id, x]) => ({ id, label: x.label, tip: SORT_TIPS[id], tipH: x.label })),
       tab: sortBy,              // 목록에서 보던 기준으로 열린다
       /* 글자는 `RANK_TABS_NOTE` 에 있다 — 여는 자리와 1초마다 다시 적는
          자리(`paintRankModalNote`) 둘이 같은 것을 써야 한다. */
@@ -2362,7 +2379,7 @@ let sectorMap = {};
 const SECTOR_FALLBACK_MS = 60000;      // 서버 값마저 못 받았을 때만
 function sectorTag(code) {
   const v = sectorMap[code];
-  return v ? `<span class="kh-nm-sec" title="${escT(v)} (WICS)">${escT(sectorShort(v))}</span>` : '';   // 긴 이름은 줄임 표(data/sector-short.js · 11-06)
+  return v ? `<span class="kh-nm-sec" data-tip="${escT(v)} (WICS)">${escT(sectorShort(v))}</span>` : '';   // 긴 이름은 줄임 표(data/sector-short.js · 11-06)
 }
 async function loadSectors() {
   try {
