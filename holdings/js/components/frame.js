@@ -12,6 +12,7 @@ import { fetchLivePrices, fetchLiveIndices, applyLiveToStock } from '../data/liv
 import { watch } from '../store/longpoll.js';
 import { fmtWon, fmtPct, fmtNum, dirClass, fmtDeltaAmount } from '../utils/format.js';
 import { iconHtml } from './stock-icon.js';
+import './market-event.js';   // 시장 전체 사건 띠(서킷브레이커) — 홀딩스 화면 전부에 · 흐름 밖에 떠 칸을 안 움직인다
 
 /* 아직 받아올 곳이 없는 시세 띠 항목.
 
