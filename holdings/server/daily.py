@@ -358,11 +358,8 @@ def build_telegram(indices=None, sectors=None, issues=None, schedule=None, now=N
         if k and (k.get("up") or k.get("down")):
             L.append(f"상승 {k.get('up')} · 하락 {k.get('down')}")
 
-    away = [ln for ln in (_index_line(c, *rows[c], ix) for c in AWAY_CODES) if ln]
-    if away:
-        L += ["", "해외 (현지 마감)"] + away
-
-    L += night_lines(night)
+    # 해외 지수 · 야간선물 · 「연결 예정(미국 업종 · 다우존스)」 은 07:00 「미국 데일리」(`build_us_telegram`)로 옮겼다
+    # (2026-11-07 재권님 「데일리 분석은 … 오후 4시로 바꾸고 여기에는 국내 관련된것만」 → 탭 시안 「응」)
 
     if issues:
         L += ["", "오늘 뉴스"]
@@ -396,6 +393,28 @@ def build_telegram(indices=None, sectors=None, issues=None, schedule=None, now=N
     if strong and STRONG_SEND:
         L += strong_lines(strong)
 
+    L += ["", "전문 보기 › thekjc.co.kr/holdings/daily.html"]
+    return "\n".join(L)
+
+
+def build_us_telegram(indices=None, night=None, overnight=None, now=None):
+    """07:00 「미국 데일리」 글 — 해외 마감 지수 · 야간선물 · 밤사이 결과(events 가 조용한 시간에 쌓은 것) 한 통.
+
+    (2026-11-07 재권님 「데일리 분석 옆에 텝 하나 … 미국데일리 분석 … 아침에 텔레그램에서 7시에 보내주는 메세지 여기에」 →
+    「(가) 한 통으로」 「응」.) `overnight` 는 events 의 글 목록 — 없으면 「없음」 으로 적는다(빼면 안 온 것과 안 갈린다).
+    `None` 이면 그 서버가 밤사이 결과를 안 다룬다 — 절을 뺀다.
+    """
+    L = [f"🇺🇸 미국 데일리 · {today_label(now)}"]
+    rows = {c: (label, pat) for c, label, pat in INDEX_ROWS}
+    ix = list(indices or [])
+    away = [ln for ln in (_index_line(c, *rows[c], ix) for c in AWAY_CODES) if ln]
+    L += ["", "해외 (현지 마감)"] + (away or ["· 못 받음"])
+    L += night_lines(night)
+    if overnight is not None:
+        if overnight:
+            L += ["", "🌙 밤사이 결과 (%d건)" % len(overnight), ""] + ["\n\n".join(overnight)]
+        else:
+            L += ["", "🌙 밤사이 결과 — 없음"]
     # 화면에는 빨간 자국으로 남아 있는 칸들이다. 문안에서 통째로 빼면 폰에서는
     # 무엇이 빠졌는지 알 수 없다. 붙으면 이 줄을 지운다.
     L += ["", "연결 예정", "· 미국 업종", "· 다우존스"]
@@ -404,8 +423,11 @@ def build_telegram(indices=None, sectors=None, issues=None, schedule=None, now=N
 
 
 # ──────────────────────────────────────────────────────────────
-# 아침 07:30 — 저장하고 보낸다
+# 국내 16:00 · 미국 07:00 — 저장하고 보낸다
 # ──────────────────────────────────────────────────────────────
+#
+# 2026-11-07 재권님 — 국내 데일리를 07:30 → **16:00**(장 마감 뒤 · 그날 마감 값) · 국내 것만. 해외 · 야간선물 · 밤사이 결과는
+# **07:00 「미국 데일리」** 한 통으로. 아래 07:30 이야기는 그 전의 경위다.
 #
 # 재권님 지시 — 「데일리는 아침 7시반에 저장하고 그걸 요약한 텔레그램용을
 # 나한테 보내줘」 · 「항상 켜놓는 서버가 있을 거야 거기에 맞춰서 해」.
@@ -431,7 +453,11 @@ from secrets_guard import safe_message
 import docstore
 
 KEEP = 10                    # 몇 장까지 쌓나 (2026-09-22 지시 — 「30개는 많고 10개만」)
-SEND_AT = 7 * 60 + 30        # 07:30 (분)
+SEND_AT = 16 * 60            # 국내 16:00 (분) — 정규장 15:30 마감 뒤 · 2026-11-07 전에는 07:30
+KR_WEEKDAYS = (0, 1, 2, 3, 4)          # 국내는 평일만(월~금) — 주말에 만들면 금요일 마감을 또 적는다 · 공휴일은 못 가린다
+US_SEND_AT = 7 * 60          # 미국 07:00 (분) — 조용한 시간(22:00~07:00)이 끝나는 때 · 미국 장은 한국 05:00~06:00 에 마감
+US_WEEKDAYS = (1, 2, 3, 4, 5)          # 화~토 아침 — 전날 밤 미국 장이 열린 날만(일 · 월 아침은 미국 장이 없었다)
+US_PREFIX = "usdaily-"       # `daily-` 로 시작하지 않게 — purge_old 가 접두사로 세어 국내 열 장과 섞인다
 TICK = 300                   # 5분마다 깨어난다. `dart-poller` 와 같은 주기다
 DOC_PREFIX = "daily-"
 
@@ -441,7 +467,17 @@ def doc_name(now=None):
     return DOC_PREFIX + (now or datetime.now()).strftime("%Y%m%d")
 
 
-def purge_old(keep=KEEP):
+def us_doc_name(now=None):
+    """`usdaily-20261107` — 07:00 미국 데일리."""
+    return US_PREFIX + (now or datetime.now()).strftime("%Y%m%d")
+
+
+def kr_due(now=None):
+    """국내 데일리를 만드는 날인가(평일) — 하트비트도 이것을 본다."""
+    return (now or datetime.now()).weekday() in KR_WEEKDAYS
+
+
+def purge_old(keep=KEEP, prefix=DOC_PREFIX):
     """열한 번째부터 지운다.
 
     **층은 안 지운다.** `docstore` 는 문서 하나를 안전하게 읽고 쓰는 것까지이고
@@ -450,7 +486,7 @@ def purge_old(keep=KEEP):
     이름이 `daily-YYYYMMDD` 라 **그냥 정렬하면 오래된 것이 앞**이다.
     날짜를 따로 뜯을 필요가 없다.
     """
-    names = sorted(docstore.list_docs(DOC_PREFIX))
+    names = sorted(docstore.list_docs(prefix))
     if len(names) <= keep:
         return 0
     gone = 0
@@ -506,8 +542,8 @@ def start_daily(get_indices, get_sectors, get_issues, send=None, keep=KEEP, get_
     """
     def once():
         now = datetime.now()
-        if now.hour * 60 + now.minute < SEND_AT:
-            return                              # 아직 07:30 전
+        if not kr_due(now) or now.hour * 60 + now.minute < SEND_AT:
+            return                              # 주말이거나 아직 16:00 전
         if docstore.read_doc(doc_name(now)) is not None:
             return                              # 오늘 것이 이미 있다
         # 강한 종목은 KIS 를 종목마다 한 번(구성 종목 수만큼) 부른다 — 못 받아도 나머지는 저장한다
@@ -529,28 +565,7 @@ def start_daily(get_indices, get_sectors, get_issues, send=None, keep=KEEP, get_
             return
         purge_old(keep)
         if send:
-            # **보냈는지 남긴다** (2026-10-06 재권님 「응 해줘」). 전에는 실패를 `pass` 로 삼키고
-            # 성공도 안 적어 「갔나」 를 아무도 못 셌다. 못 보내도 저장은 남는다(그대로).
-            # 오류 문구는 `safe_message` 로 가린다 — 로그와 저장본(API 로 나간다) 둘 다 「밖」 이다
-            #
-            # **`send` 는 실패해도 예외를 안 낸다** — `dart.telegram_send` 는 `(ok, 까닭)` 을 돌려준다.
-            # 전에는 그 값을 안 봐서 실패도 `sent = True` 로 적혔다 (2026-10-12). 예외는 그대로 잡는다.
-            sent, err = False, None
-            try:
-                r = send(data["telegram"])
-                if isinstance(r, tuple) and r and not r[0]:
-                    err = safe_message(Exception(r[1] if len(r) > 1 else "보내지 못함"))
-                else:
-                    sent = True
-            except Exception as e:
-                err = "%s: %s" % (type(e).__name__, safe_message(e))
-            if sent:
-                print("데일리분석 발송함 — %s" % now.strftime("%H:%M"), flush=True)
-            else:
-                print("데일리분석 발송 실패 — %s" % err, flush=True)
-            data["sent"] = sent
-            data["sendError"] = err
-            docstore.write_doc(doc_name(now), data, history=False)
+            _send_mark(send, data, doc_name(now), now, "데일리분석")
 
     # **같은 오류는 한 번만 적는다** (2026-09-22 지시).
     #
@@ -589,5 +604,94 @@ def start_daily(get_indices, get_sectors, get_issues, send=None, keep=KEEP, get_
                           flush=True)
             time.sleep(TICK)
 
-    threading.Thread(target=loop, daemon=True, name="daily-0730").start()
+    threading.Thread(target=loop, daemon=True, name="daily-kr-1600").start()
+    return True
+
+
+def _send_mark(send, data, name, now, label):
+    """보내고 결과를 저장본에 적는다 — 국내 · 미국이 같이 쓴다.
+
+    **보냈는지 남긴다** (2026-10-06 재권님 「응 해줘」). 전에는 실패를 `pass` 로 삼키고
+    성공도 안 적어 「갔나」 를 아무도 못 셌다. 못 보내도 저장은 남는다(그대로).
+    오류 문구는 `safe_message` 로 가린다 — 로그와 저장본(API 로 나간다) 둘 다 「밖」 이다
+
+    **`send` 는 실패해도 예외를 안 낸다** — `dart.telegram_send` 는 `(ok, 까닭)` 을 돌려준다.
+    전에는 그 값을 안 봐서 실패도 `sent = True` 로 적혔다 (2026-10-12). 예외는 그대로 잡는다.
+    """
+    sent, err = False, None
+    try:
+        r = send(data["telegram"])
+        if isinstance(r, tuple) and r and not r[0]:
+            err = safe_message(Exception(r[1] if len(r) > 1 else "보내지 못함"))
+        else:
+            sent = True
+    except Exception as e:
+        err = "%s: %s" % (type(e).__name__, safe_message(e))
+    if sent:
+        print("%s 발송함 — %s" % (label, now.strftime("%H:%M")), flush=True)
+    else:
+        print("%s 발송 실패 — %s" % (label, err), flush=True)
+    data["sent"] = sent
+    data["sendError"] = err
+    docstore.write_doc(name, data, history=False)
+
+
+def _loop(once, name, label):
+    """5분마다 `once()` — 같은 오류는 한 번만 적는다(아래 start_daily 의 긴 주석 그대로)."""
+    last_err = [None]
+
+    def loop():
+        time.sleep(5)
+        while True:
+            try:
+                once()
+                last_err[0] = None
+            except Exception as e:
+                key = "%s: %s" % (type(e).__name__, safe_message(e))
+                if key != last_err[0]:
+                    last_err[0] = key
+                    print("%s 저장 실패 — %s" % (label, key), flush=True)
+                    print("  (같은 오류는 다시 안 적습니다. 5분마다 계속 시도합니다)", flush=True)
+            time.sleep(TICK)
+
+    threading.Thread(target=loop, daemon=True, name=name).start()
+
+
+def start_us_daily(get_indices, get_night=None, take_overnight=None, send=None, keep=KEEP):
+    """07:00 미국 데일리 루프 — `kis_proxy` 가 국내 것 옆에 한 줄로 부른다.
+
+    `take_overnight()` 은 events 가 조용한 시간에 쌓은 글을 **꺼내고 비운다** — 이 글이 그것을 싣고 가므로
+    events 가 따로 「🌙 밤사이 결과」 를 안 보낸다(못 꺼내 간 날은 events 가 07:30 에 전처럼 보낸다 · events.OVERNIGHT_FLUSH_AT).
+    보내는 서버에서만 넘긴다 — 아니면 `None` 이라 그 절을 뺀다.
+    """
+    def once():
+        now = datetime.now()
+        if now.weekday() not in US_WEEKDAYS or now.hour * 60 + now.minute < US_SEND_AT:
+            return
+        name = us_doc_name(now)
+        if docstore.read_doc(name) is not None:
+            return
+        indices = get_indices()
+        night = None
+        if get_night:
+            try:
+                night = get_night()
+            except Exception as e:
+                print("미국 데일리 야간선물 못 읽음 — %s: %s" % (type(e).__name__, safe_message(e)), flush=True)
+        overnight = take_overnight() if take_overnight else None
+        data = {
+            "date": now.strftime("%Y-%m-%d"),
+            "at": now.isoformat(timespec="seconds"),
+            "indices": indices or [],
+            "night": night,
+            "overnight": overnight,
+            "telegram": build_us_telegram(indices, night, overnight, now),
+        }
+        if not docstore.write_doc(name, data, history=False):
+            return
+        purge_old(keep, US_PREFIX)
+        if send:
+            _send_mark(send, data, name, now, "미국 데일리")
+
+    _loop(once, "daily-us-0700", "미국 데일리")
     return True

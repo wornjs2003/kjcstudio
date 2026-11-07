@@ -22,7 +22,9 @@
 ── 언제 보내나 ──
 
     낮(07:00~22:00)   결과를 읽은 그 바퀴에 바로 한 통
-    밤(22:00~07:00)   쌓아 두었다가 07:00 이 지난 첫 바퀴에 「🌙 밤사이 결과」 한 통 — 07:30 데일리 글 앞
+    밤(22:00~07:00)   쌓아 두었다가 **07:00 「미국 데일리」 한 통에 실린다**(daily.start_us_daily 가 `take_overnight()` 로 꺼내 간다 ·
+                      2026-11-07 재권님 「(가)」). 07:30(`OVERNIGHT_FLUSH_AT`)까지 안 꺼내 갔으면(미국 데일리가 안 도는 일 · 월 아침 ·
+                      실패) 전처럼 「🌙 밤사이 결과」 한 통으로 보낸다 — 조용히 빠지지 않게
     끝내 못 받음      기다림이 지나면(`GIVE_UP_H`) 「결과를 못 받았습니다 — 주소」 한 줄을 같은 길로 — 조용히 빠지지 않게
 
 발송은 `dart.telegram_send` 하나다(조용한 시간 · 4,096자 나누기 그대로). **보내는 서버는 메인(`is_sender`) 하나** —
@@ -66,6 +68,7 @@ CAL_PATH = os.path.join(HERE, "..", "data", "market-calendar.json")
 SEC_UA = "KJCStudio contact@kjcstudio.kr"     # SEC 는 연락처가 든 이름표를 요구한다(공정 접근 규칙)
 FED_RSS = "https://www.federalreserve.gov/feeds/press_monetary.xml"
 EARN_WORD = "영업(잠정)실적"                     # 잠정실적 공정공시 제목에 늘 든다
+OVERNIGHT_FLUSH_AT = 7 * 60 + 30               # 밤사이 묶음을 미국 데일리가 안 가져갔으면 이때 따로 보낸다(분)
 STATE_KEY = "events_state"                      # market.db sync_meta — {보낸 것 · 못 받음 표시 · 밤사이 쌓인 글}
 
 _lock = threading.Lock()
@@ -527,7 +530,8 @@ def tick(now=None):
         if not SEND:
             done.update(_status.setdefault("_mem", {}))   # 꺼져 있으면 디스크에 안 쓴다 — 기억은 이 프로세스 안에만
         # 밤사이 쌓인 것 — 조용한 시간이 끝난 첫 바퀴에 한 통
-        if SEND and state.get("queue") and not dart.in_quiet(now.timestamp()):
+        if (SEND and state.get("queue") and not dart.in_quiet(now.timestamp())
+                and now.hour * 60 + now.minute >= OVERNIGHT_FLUSH_AT):
             body = "🌙 밤사이 결과 (%d건)\n\n%s" % (len(state["queue"]), "\n\n".join(state["queue"]))
             ok, why = dart.telegram_send(body)
             if ok:
@@ -560,6 +564,19 @@ def tick(now=None):
             _status.setdefault("_mem", {}).update(done)
         _status["tracked"] = tracked
         _status["lastTick"] = now.isoformat(timespec="seconds")
+
+
+def take_overnight():
+    """밤사이 쌓인 결과 글을 꺼내고 비운다 — 07:00 미국 데일리가 부른다. 꺼져 있으면(SEND False) 빈 목록."""
+    if not SEND:
+        return []
+    with _lock:
+        state = _load_state()
+        q = list(state.get("queue") or [])
+        if q:
+            state["queue"] = []
+            _save_state(state, datetime.now(KST))
+        return q
 
 
 def start():
