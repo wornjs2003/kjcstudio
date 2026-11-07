@@ -6023,6 +6023,49 @@ def _minutes_need_day(code, period, rows, gap_check=True):
     return gap > MINUTE_REFILL_GAP
 
 
+def flatten_carried(rows):
+    """분봉에서 **바로 앞 봉과 시가 · 고가 · 저가 · 종가 · 거래량이 다 같은 봉**을 거래 없는 납작봉으로 바꾼다 — 화면에 낼 때만 (2026-11-07).
+
+    재권님 — 「vwap 값 … 토스증권에서 보는값이랑 많이 다른거같아」 → 토스 그림 대조 → 「올리고 원인찾아서 개선해줘」 →
+    「그게 데이터상 맞으면 고쳐」. KIS 는 체결이 없는 동안 마지막 체결을 「지금 분」 줄로 옮겨 싣는다(pin_carried_trade 머리) —
+    그 줄이 칸마다 남아 **같은 봉이 거래량째 되풀이**됐다. 개발 DB 로 잰 것(10-20 ~ 11-07 · 5분봉):
+
+        15:25 칸   거래량이 실린 375 칸 중 322 칸이 15:20 칸과 다섯 값이 같음 — 15:20~15:30 은 KRX 종가 단일가 · 넥스트레이드 쉼이라
+                  그 칸에 체결이 날 수 없다
+        11-06     09:05~09:30 코스피 거래 0 구간(카카오 · LG전자 0주 · 코스닥은 정상 · 토스 삼성도 빈칸)에 장중 1분봉을 받던 큰 종목
+                  21 개만 09:10~09:25 네 칸이 09:05 봉 복사(삼성 200,642주 × 4)
+
+    **되풀이의 첫 칸**(09:05 · 15:20)도 앞 분 체결을 옮겨 실은 것이라 앞 봉에 합치고 납작하게 한다(토스 그림 대조 · 아래 줄).
+    차트 캔들 · 거래량 막대 · VWAP 이 함께 틀렸다. **저장은 그대로 두고** 응답에서만 바꾼다(drop_before_first_trade 와 같은 자리) —
+    지난 봉도 내줄 때 고쳐진다. 거래량 0 봉끼리는 원래 같으니 거래량이 있는 봉만 본다. 다섯 값이 다 같은 진짜 체결은 사실상 없다고 본다.
+    **일봉 거래량과 5분봉 합은 이것과 따로 크게 갈린다**(삼성 하루 900만주 안팎 · 복사 없는 날도) — 그 대조로는 이 고침을 가르지 못한다.
+    """
+    out = [dict(r) for r in rows]
+    sig = lambda r: (r.get("ts", "")[:8], r.get("open"), r.get("high"), r.get("low"), r.get("close"), r.get("volume"))
+    i = 0
+    while i < len(out):
+        j = i
+        while j + 1 < len(out) and (out[j + 1].get("volume") or 0) > 0 and sig(out[j + 1]) == sig(out[i]):
+            j += 1
+        if j > i and (out[i].get("volume") or 0) > 0:
+            # 되풀이의 **첫 칸도** 옮겨 실린 것이다 — 앞 분(09:04 · 15:19)의 체결이라 앞 봉에 합친다.
+            # 토스 그림(11-06)에서 09:05 · 15:20 칸이 비어 있고 09:00 봉 고가가 그 칸 고가(181,500)와 맞았다
+            p = out[i - 1] if i > 0 else None
+            if p is not None and p.get("ts", "")[:8] == out[i].get("ts", "")[:8] and (p.get("volume") or 0) > 0:
+                f = out[i]
+                p["high"] = max(p["high"], f["high"])
+                p["low"] = min(p["low"], f["low"])
+                p["close"] = f["close"]
+                p["volume"] = p["volume"] + f["volume"]
+            for k in range(i, j + 1):
+                c = out[k].get("close")
+                out[k].update(open=c, high=c, low=c, volume=0)
+            i = j + 1
+        else:
+            i += 1
+    return out
+
+
 def drop_before_first_trade(rows):
     """분봉에서 **그날 첫 체결 전 · 마지막 체결 뒤의 거래량 0 봉**을 뺀다 — 화면에 낼 때만 (2026-10-03 지시).
 
@@ -8662,6 +8705,8 @@ class Handler(SimpleHTTPRequestHandler):
                 if period == "5m":
                     kick_kr_open_fill(cfg, code)        # 지수 밖 종목이면 지난 거래일을 뒤에서 한 번 (2026-10-16)
                 if PERIODS[period]["kis"] is None:      # 분봉(1m · 5m)만 — 일봉 이상은 받은 그대로
+                    if _is_kr_code(code):
+                        rows = flatten_carried(rows)    # 앞 봉 복사 → 거래 없는 납작봉(2026-11-07)
                     rows = drop_before_first_trade(rows)
                 # ── 안 받은 봉만 (2026-10-07 지시 — 「아직 안 받은 봉만 받아 덧붙이고, 받아 둔 봉은 다시 받지 않는다」) ──
                 # 화면이 마지막으로 받은 봉 시각을 since 로 보내면 **그 시각 이후의 봉 전부**(그 봉 포함 — 진행 중이라
