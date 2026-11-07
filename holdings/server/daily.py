@@ -457,6 +457,11 @@ SEND_AT = 16 * 60            # 국내 16:00 (분) — 정규장 15:30 마감 뒤
 KR_WEEKDAYS = (0, 1, 2, 3, 4)          # 국내는 평일만(월~금) — 주말에 만들면 금요일 마감을 또 적는다 · 공휴일은 못 가린다
 US_SEND_AT = 7 * 60          # 미국 07:00 (분) — 조용한 시간(22:00~07:00)이 끝나는 때 · 미국 장은 한국 05:00~06:00 에 마감
 US_WEEKDAYS = (1, 2, 3, 4, 5)          # 화~토 아침 — 전날 밤 미국 장이 열린 날만(일 · 월 아침은 미국 장이 없었다)
+# 보내는 창 — 이 시각을 넘겨 처음 도는 날(서버를 낮에 다시 띄운 날)은 그날 것을 만들지 않는다. 안 그러면 재시작한 그 시각에
+# 「미국 데일리」 · 「데일리분석」 한 통이 엉뚱한 때 간다(개념정의 검수 11-07 — 토 14시 재시작이면 미국 데일리가 14시에 감)
+US_SEND_UNTIL = 10 * 60
+KR_SEND_UNTIL = 22 * 60      # 조용한 시간(22:00~) 전까지
+# 미국 휴장일(추수감사절 다음 날 아침 등)은 못 가린다 — 그날은 전날 값이 「미국 마감」 으로 한 번 더 간다
 US_PREFIX = "usdaily-"       # `daily-` 로 시작하지 않게 — purge_old 가 접두사로 세어 국내 열 장과 섞인다
 TICK = 300                   # 5분마다 깨어난다. `dart-poller` 와 같은 주기다
 DOC_PREFIX = "daily-"
@@ -542,8 +547,8 @@ def start_daily(get_indices, get_sectors, get_issues, send=None, keep=KEEP, get_
     """
     def once():
         now = datetime.now()
-        if not kr_due(now) or now.hour * 60 + now.minute < SEND_AT:
-            return                              # 주말이거나 아직 16:00 전
+        if not kr_due(now) or not (SEND_AT <= now.hour * 60 + now.minute < KR_SEND_UNTIL):
+            return                              # 주말이거나 16:00~22:00 밖
         if docstore.read_doc(doc_name(now)) is not None:
             return                              # 오늘 것이 이미 있다
         # 강한 종목은 KIS 를 종목마다 한 번(구성 종목 수만큼) 부른다 — 못 받아도 나머지는 저장한다
@@ -657,16 +662,16 @@ def _loop(once, name, label):
     threading.Thread(target=loop, daemon=True, name=name).start()
 
 
-def start_us_daily(get_indices, get_night=None, take_overnight=None, send=None, keep=KEEP):
+def start_us_daily(get_indices, get_night=None, peek_overnight=None, clear_overnight=None, send=None, keep=KEEP):
     """07:00 미국 데일리 루프 — `kis_proxy` 가 국내 것 옆에 한 줄로 부른다.
 
-    `take_overnight()` 은 events 가 조용한 시간에 쌓은 글을 **꺼내고 비운다** — 이 글이 그것을 싣고 가므로
-    events 가 따로 「🌙 밤사이 결과」 를 안 보낸다(못 꺼내 간 날은 events 가 07:30 에 전처럼 보낸다 · events.OVERNIGHT_FLUSH_AT).
-    보내는 서버에서만 넘긴다 — 아니면 `None` 이라 그 절을 뺀다.
+    `peek_overnight()` 은 events 가 조용한 시간에 쌓은 글을 **읽기만** 하고, 이 글이 **보내진 뒤** `clear_overnight(n)` 으로 비운다 —
+    그래서 events 가 따로 「🌙 밤사이 결과」 를 안 보낸다. 못 보냈거나 못 실은 날은 events 가 07:30 에 전처럼 보낸다(events.OVERNIGHT_FLUSH_AT).
+    보내는 서버에서만 넘긴다 — 아니면 `None` 이라 그 절을 뺀다. events 가 꺼져 있어도 `None`(「없음」 이 아니다).
     """
     def once():
         now = datetime.now()
-        if now.weekday() not in US_WEEKDAYS or now.hour * 60 + now.minute < US_SEND_AT:
+        if now.weekday() not in US_WEEKDAYS or not (US_SEND_AT <= now.hour * 60 + now.minute < US_SEND_UNTIL):
             return
         name = us_doc_name(now)
         if docstore.read_doc(name) is not None:
@@ -678,7 +683,7 @@ def start_us_daily(get_indices, get_night=None, take_overnight=None, send=None, 
                 night = get_night()
             except Exception as e:
                 print("미국 데일리 야간선물 못 읽음 — %s: %s" % (type(e).__name__, safe_message(e)), flush=True)
-        overnight = take_overnight() if take_overnight else None
+        overnight = peek_overnight() if peek_overnight else None
         data = {
             "date": now.strftime("%Y-%m-%d"),
             "at": now.isoformat(timespec="seconds"),
@@ -692,6 +697,8 @@ def start_us_daily(get_indices, get_night=None, take_overnight=None, send=None, 
         purge_old(keep, US_PREFIX)
         if send:
             _send_mark(send, data, name, now, "미국 데일리")
+            if data.get("sent") and overnight and clear_overnight:
+                clear_overnight(len(overnight))
 
     _loop(once, "daily-us-0700", "미국 데일리")
     return True

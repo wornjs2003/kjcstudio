@@ -22,7 +22,7 @@
 ── 언제 보내나 ──
 
     낮(07:00~22:00)   결과를 읽은 그 바퀴에 바로 한 통
-    밤(22:00~07:00)   쌓아 두었다가 **07:00 「미국 데일리」 한 통에 실린다**(daily.start_us_daily 가 `take_overnight()` 로 꺼내 간다 ·
+    밤(22:00~07:00)   쌓아 두었다가 **07:00 「미국 데일리」 한 통에 실린다**(daily.start_us_daily 가 `peek_overnight()` 로 읽고 보낸 뒤 `clear_overnight()` 로 비운다 ·
                       2026-11-07 재권님 「(가)」). 07:30(`OVERNIGHT_FLUSH_AT`)까지 안 꺼내 갔으면(미국 데일리가 안 도는 일 · 월 아침 ·
                       실패) 전처럼 「🌙 밤사이 결과」 한 통으로 보낸다 — 조용히 빠지지 않게
     끝내 못 받음      기다림이 지나면(`GIVE_UP_H`) 「결과를 못 받았습니다 — 주소」 한 줄을 같은 길로 — 조용히 빠지지 않게
@@ -566,17 +566,25 @@ def tick(now=None):
         _status["lastTick"] = now.isoformat(timespec="seconds")
 
 
-def take_overnight():
-    """밤사이 쌓인 결과 글을 꺼내고 비운다 — 07:00 미국 데일리가 부른다. 꺼져 있으면(SEND False) 빈 목록."""
+def peek_overnight():
+    """밤사이 쌓인 결과 글을 **읽기만** 한다 — 07:00 미국 데일리가 싣는다. 꺼져 있으면(SEND False) `None` — 「없음」 이 아니라 「안 다룸」.
+
+    비우는 것은 보낸 뒤 `clear_overnight(n)` — 미국 데일리 발송이 실패하면 안 비워 07:30 에 전처럼 따로 간다(개념정의 검수 11-07).
+    """
     if not SEND:
-        return []
+        return None
+    with _lock:
+        return list(_load_state().get("queue") or [])
+
+
+def clear_overnight(n):
+    """앞에서 n 개를 지운다 — 미국 데일리가 그만큼 실어 보낸 뒤."""
+    if not SEND or not n:
+        return
     with _lock:
         state = _load_state()
-        q = list(state.get("queue") or [])
-        if q:
-            state["queue"] = []
-            _save_state(state, datetime.now(KST))
-        return q
+        state["queue"] = (state.get("queue") or [])[n:]
+        _save_state(state, datetime.now(KST))
 
 
 def start():

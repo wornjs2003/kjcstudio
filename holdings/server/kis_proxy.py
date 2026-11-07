@@ -9563,7 +9563,8 @@ def main():
         daily.start_us_daily(
             get_indices=lambda: fetch_indices_all(load_secrets(), with_chart=False)[0],
             get_night=lambda: nxt_board.latest_futures(sys.modules[__name__]),
-            take_overnight=(events.take_overnight if (is_sender(args.port) and not SLOW) else None),
+            peek_overnight=(events.peek_overnight if (is_sender(args.port) and not SLOW) else None),
+            clear_overnight=(events.clear_overnight if (is_sender(args.port) and not SLOW) else None),
             send=_us_send,
         )
         print("  미국 데일리 : 화~토 %02d:%02d 에 저장 (%s)"
