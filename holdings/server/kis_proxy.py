@@ -78,6 +78,7 @@ import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스�
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
 import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 · 색 = 등락률 · /api/kis/heatmap(2026-10-27 · server/heatmap.py)
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
+import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
 import session_volume   # 시간대별 거래량 · 전일비 — 프리장 · 정규장 · 애프터 끝에 순위 종목 누적 거래량 저장 · /api/kis/vol-ratio(2026-11-05 · server/session_volume.py)
 import intraday_flow    # 당일 수급 — 장중 1분마다 시장 투자자 · 프로그램 매매를 쌓아 5분 구간으로 · /api/kis/flow-today(2026-10-27 · server/intraday_flow.py)
 import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
@@ -7550,6 +7551,21 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
             return
+        if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/watch-log":
+            # 종목 기록(server/watch_log.py) — 그날 관심 · 자동 · VI · 급등 · 매수 종목의 전일비 · 프리 · 정규 · 애프터 · 5분봉 · KIS 를 안 부른다
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            day = (q.get("day") or [""])[0]
+            if day and not (day.isdigit() and len(day) == 8):
+                self._send_json({"ok": False, "error": "day 는 YYYYMMDD 입니다."}, 400)
+                return
+            try:
+                self._send_json({"ok": True, "data": watch_log.board(sys.modules[__name__], day or None),
+                                 "meta": dict(watch_log.status(), unit="%",
+                                              note="pct 전일비(전일 일봉 종가 → 마지막 5분봉) · pre 프리장(전일 종가 → 08:55 봉) · reg 정규장(프리장 끝 → 15:30 봉) · "
+                                                   "aft 애프터(정규장 끝 → 마지막) · 봉이 없으면 null · line 은 [HHMM, 종가] 5분봉 · saved false 면 지금 DB 로 셈")})
+            except Exception as e:
+                self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
+            return
         if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/auto-watch":
             # 자동 관심종목(server/auto_watch.py) — 쌓인 값을 부를 때마다 투자전략 룰(strategy-rules)로 거르고 줄 세운다 · KIS 를 안 부른다
             try:
@@ -9589,6 +9605,8 @@ def main():
     if not SLOW and is_sender(args.port) and pre_flow.start(sys.modules[__name__]):
         print("  프리장 판   : 평일 %02d:%02d~%02d:%02d 에 %d초마다 지어 market.db pre_flow_board 에 남김(「프리장」 칩)"
               % (pre_flow.PRE_OPEN + pre_flow.PRE_CLOSE + (pre_flow.FLOW_TTL,)))
+    if not SLOW and is_sender(args.port) and watch_log.start(sys.modules[__name__]):
+        print("  종목 기록   : 평일 %02d:%02d 에 관심 · 자동 · VI · 급등 · 매수 종목 줄을 market.db watch_log 에 남김 · /api/watch-log" % watch_log.SAVE_AT)
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and flow_rank.start(sys.modules[__name__]):
         print("  투자자 매매 동향 : 평일 %02d:%02d 뒤 외국인 · 기관 순위 판을 market.db flow_rank 에 남김 · %02d:%02d 뒤 순위 · 감시 종목 주체 확정치 쌓음"
               % (flow_rank.SAVE_AT + flow_rank.COLLECT_AT))
