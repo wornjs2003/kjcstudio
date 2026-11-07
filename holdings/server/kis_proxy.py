@@ -85,6 +85,7 @@ import intraday_flow    # 당일 수급 — 장중 1분마다 시장 투자자 �
 import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
 import short_sale  # 공매도 — 감시 대상 종목마다 일별 공매도를 쌓아 「공매도」 칩에 냄(2026-11-06 · server/short_sale.py 머리 주석)
 import intraday_alerts  # 장중 알림 — 상승 VI · +20% 급등(2026-10-26 · server/intraday_alerts.py 머리 주석)
+import market_event     # 시장 전체 사건 — 서킷브레이커 추정 · 거래소 공시 확인(2026-11-07 · server/market_event.py 머리 주석) · /api/alerts/market-event
 import market_index
 import us_outlook  # 미국장 예측용 값 — 지수 선물 · SPX 옵션 · 지표 예상치 · FOMC 기대 · VIX 이력(2026-10-27 · server/us_outlook.py 머리 주석)
 import crypto            # 가상자산 — 업비트 공개 시세(2026-10-14 · server/crypto.py 머리 주석)
@@ -7608,6 +7609,13 @@ class Handler(SimpleHTTPRequestHandler):
                 st["note"] = "이 서버에서는 장중 알림 바퀴가 안 돕니다 — 보내는 서버(메인 %d)에서만 돕니다" % MAIN_PORT
             self._send_json({"ok": True, "data": st})
             return
+        if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/alerts/market-event":
+            # 서킷브레이커(추정 · 거래소 공시로 확인) — 홈 맨 위 띠. 바퀴는 보내는 서버에서만 돌고 사건은 개발 DB 표라 어느 서버든 같은 것을 읽는다
+            try:
+                self._send_json({"ok": True, "data": market_event.board(sys.modules[__name__]), "meta": market_event.status()})
+            except Exception as e:
+                self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
+            return
         if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/alerts/today":
             # 그날 본 상승 VI · +20% 급등 목록 — 홈 「오늘 VI · 급등」 칸(2026-11-06). 바퀴는 보내는 서버에서만 돌고
             # 목록은 개발 DB(sync_meta)에 있어 **어느 서버든 같은 것을 읽는다**(intraday_alerts.today)
@@ -9646,6 +9654,9 @@ def main():
 
     # 장중 알림 — 상승 VI · +20% 급등 (2026-10-26 · server/intraday_alerts.py) — 같은 문 하나(보내는 서버만).
     # 발송 스위치는 `intraday_alerts.SEND`(VI 끔 10-27 · 급등 켬 10-26). 꺼 두면 바퀴는 돌되 안 보내고 /api/alerts/status 에 보냈을 글을 남긴다
+    if not SLOW and is_sender(args.port) and market_event.start(sys.modules[__name__], args.port):
+        print("  시장 사건 : 서킷브레이커 추정(코스피 · 코스닥 %d초마다) · 거래소 공시 확인(%d초마다) · 발송 %s · /api/alerts/market-event"
+              % (market_event.TICK_SEC, market_event.KIND_SEC, "켬" if market_event.SEND else "끔"))
     if not SLOW and is_sender(args.port) and intraday_alerts.start(sys.modules[__name__]):
         _st = intraday_alerts.status()
         print("  장중 알림 : 사용 (상승 VI · +%d%% 급등 · %d초마다 · %s · 발송 %s)"
