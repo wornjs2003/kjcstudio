@@ -63,7 +63,7 @@ function daysAgo(at) {
 const PARTS = [
   { key: 'summary', label: '값' },
   { key: 'flow', label: '수급' },
-  { key: 'news', label: '뉴스' },
+  /* 「뉴스」 문단은 뺐다 — 종목 뉴스 칸과 겹친다 (2026-11-07 홈 8 · 재권님 「응」) */
 ];
 
 /**

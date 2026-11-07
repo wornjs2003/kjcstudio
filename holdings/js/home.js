@@ -27,7 +27,7 @@ import { mountDisclosures } from './components/disclosures.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
 import { mountSchedule } from './components/schedule.js';
 import { bindDailyMenu, loadDailyDoc, dailyDocUrl, dailyDocHead, dailyDocBody } from './components/daily-view.js';
-import { fetchIssues, fetchFeed, paintIssues, paintLoading } from './components/news-list.js';
+import { fetchStored, fetchFeed, paintIssues, paintLoading } from './components/news-list.js';
 import { bindNewsModal } from './components/news-modal.js';
 import { mountSectors } from './components/sectors.js';
 import { mountHeatmap } from './components/heatmap.js';
@@ -3284,8 +3284,8 @@ async function drawSideNews() {
   /* 처음 켤 때만 적는다. 받아 둔 것이 있으면 갱신마다 깜빡이게 된다 */
   if (host && !host.children.length) paintLoading(host, { compact: true });
 
-  /* 이 칸은 **시장 이슈만** 쓴다. 가벼운 쪽(`issues`)으로 먼저 그린다 */
-  paintIssues(host, await fetchIssues(), { compact: true, limit: SIDE_NEWS_N });
+  /* 이 칸은 **서버가 쌓아 둔 기사(같은 사건 묶음) 하나만** 읽는다 (2026-11-07 홈 8 · 재권님 「응」 — 전에는 issues) */
+  paintIssues(host, await fetchStored(), { compact: true, limit: SIDE_NEWS_N });
 
   /* ── 뉴스 모달이 쓸 「종목 뉴스」 를 여기서 데워 둔다 (2026-10-01 지시) ──
    *
