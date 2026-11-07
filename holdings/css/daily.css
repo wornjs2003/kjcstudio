@@ -457,10 +457,6 @@
 .kh-dl-tabs { display: inline-flex; gap: 4px; background: var(--kh-bg-surface); border-radius: 8px; padding: 2px; }
 .kh-dl-tabs button { background: none; border: 0; font: inherit; font-size: 0.8rem; padding: 3px 10px; border-radius: 6px; color: var(--kh-text-muted); cursor: pointer; }
 .kh-dl-tabs button.is-on { background: var(--kh-bg-card); color: var(--kh-text-primary); font-weight: 700; }
-/* 텔레그램 칸 머리 — 국내 · 미국 탭과 보냄 표시가 줄을 넘기지 않게 (2026-11-07) */
-.kh-side-head [data-dl-send-tabs], .kh-side-head .kh-side-toggle { white-space: nowrap; }
-.kh-side-head [data-dl-send-tabs] { padding: 0; }
-.kh-side-head [data-dl-send-tabs] button { padding: 1px 8px; }   /* 머리줄 높이 24px 그대로 — 기본 탭이면 29 */
 .kh-dl-tabbody { height: 540px; overflow: auto; }
 /* 전용 화면(daily.html)에는 모달의 `.kh-modal [hidden]` 규칙이 없다 — 위 `.kh-dl-video { display: flex }` 가 hidden 을 이겨 두 탭이 함께 보였다(2026-10-26 좁은 폭 실측) */
 .kh-dl-tabbody > [hidden] { display: none; }

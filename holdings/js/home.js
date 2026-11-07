@@ -26,7 +26,7 @@ import { loadStockMain, mountStockView } from './components/stock-view.js';
 import { mountDisclosures } from './components/disclosures.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
 import { mountSchedule } from './components/schedule.js';
-import { bindDailyMenu, loadDailyDoc, dailyDocUrl, dailyDocHead, dailyDocBody } from './components/daily-view.js';
+import { bindDailyMenu, loadDailyDoc, dailyDocUrl } from './components/daily-view.js';
 import { fetchIssues, fetchFeed, paintIssues, paintLoading } from './components/news-list.js';
 import { bindNewsModal } from './components/news-modal.js';
 import { mountSectors } from './components/sectors.js';
@@ -877,7 +877,7 @@ function paintIndices(indices) {
   lastIndices = indices;
   paintStrip(indices);
   paintMkt();          // 상승·하락 종목 수가 여기 들어 있다
-  /* 데일리 칸은 **지수를 안 쓴다** — 저장본(국내 16:00 · 미국 07:00)을 읽으므로 여기서 안 부른다
+  /* 데일리 칸은 **지수를 안 쓴다** — 07:30 저장본을 읽으므로 여기서 안 부른다
      (2026-09-22). 제 주기로 따로 돈다. */
   /* 순위 모달 머리의 수치 격자가 지수로 만들어진다. 열려 있으면 같이 맞춘다 —
      따로 부르지 않는다 (같은 값을 두 번 부르면 두 자리가 어긋난다). */
@@ -887,7 +887,7 @@ function paintIndices(indices) {
   }
 }
 
-/* 데일리분석 칸 — **저장본의 문안**(국내 16:00 · 미국 07:00)을 보여준다.
+/* 데일리분석 칸 — **07:30 저장본의 문안**을 보여준다.
  *
  * 2026-09-22 지시 — 「데일리분석 홀딩스 화면일 때 보여지는 건 텔레그램에
  * 보내는 메세지가 보여지게끔 해줘. **지수가 아니라**」.
@@ -905,50 +905,43 @@ function paintIndices(indices) {
  */
 /* **바뀌면 서버가 알려 준다** (2026-10-03 · 「화면에 박힌 주기 지우기」). 그날 저장본 주소를 롱폴로
    지켜본다 — 날짜가 바뀌면 `dailyDocUrl()` 이 새 주소를 낸다. 아래 값은 롱폴이 꺼진 서버에서만 쓰는
-   대체값이다 — 저장본에는 서버 쪽 짝 값이 없다(국내 평일 16:00 · 미국 화~토 07:00 에 한 번씩 만들어진다). */
+   대체값이다 — 저장본에는 서버 쪽 짝 값이 없다(하루 한 번 07:30 에 만들어진다). */
 const DAILY_DOC_FALLBACK_MS = 600_000;
-
-/* 칸 머리 탭 둘 — 「데일리분석」(국내 · 평일 16:00) · 「미국 데일리」(화~토 07:00) (2026-11-07 재권님 「데일리 분석 옆에 텝 하나 …
-   미국데일리 분석」 → 시안 「응」). 같은 칸에 갈아 끼운다 — 「보는 것을 바꿔도 자리는 그대로다」(칸 높이는 카드가 정한다). */
-let dailyKind = 'kr';
 
 async function paintDailyMini() {
   const host = $('kh-dlm');
   if (!host) return;
-  const kind = dailyKind;
-  const doc = await loadDailyDoc(kind);
-  if (kind !== dailyKind) return;            // 받는 사이 탭이 바뀌었다
+  const doc = await loadDailyDoc();
   if (!doc || !doc.telegram) {
+    /* 07:30 전에는 그날 것이 없다. **어제 것을 보여주지 않는다** —
+       날짜를 착각하게 된다 (모달도 같은 판단이다). */
     const note = document.createElement('div');
     note.className = 'kh-dlm-note';
-    note.textContent = kind === 'us' ? '미국 데일리는 화~토 아침 07:00 에 만들어집니다' : '데일리분석은 평일 16:00 에 만들어집니다';
+    note.textContent = '오늘 것은 아침 07:30 에 만들어집니다';
     host.replaceChildren(note);
     return;
   }
-  /* 글 첫 줄(「📊 데일리분석 · 날짜」)은 칸 제목과 겹쳐 화면에서만 빼고, 그 자리에 이 값이 언제 것인지를 굵게 둔다
-     (2026-11-07 홈 9 · 재권님 「응 그렇게 해」). 텔레그램 글은 그대로다. 머리 · 본문 셈은 daily-view.js 한 곳(모달과 같이 쓴다). */
+  /* 글 첫 줄(「📊 데일리분석 · 날짜」)은 칸 제목과 겹쳐 화면에서만 빼고, 그 자리에 「전 거래일 마감 값 · 작성 시각」 을
+     굵게 둔다 — 지수가 어제 값이라는 표시가 약했다 (2026-11-07 재권님 「응 그렇게 해」 · 홈 9). 07:30 텔레그램 글은 그대로다. */
+  const lines = doc.telegram.split('\n');
+  if (lines[0].includes('데일리분석')) lines.shift();
+  while (lines.length && !lines[0].trim()) lines.shift();
+  const at = new Date(doc.at || '');
   const head = document.createElement('div');
   head.className = 'kh-dlm-head';
-  head.textContent = dailyDocHead(doc, kind);
+  head.textContent = Number.isNaN(at.getTime())
+    ? '전 거래일 마감 값'
+    : `전 거래일 마감 값 · ${at.getMonth() + 1}월 ${at.getDate()}일 `
+      + `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')} 작성`;
   /* `textContent` 로 넣는다 — 글자만 담으므로 이스케이프가 필요 없다. */
   const pre = document.createElement('pre');
   pre.className = 'kh-dlm-tg';
-  pre.textContent = dailyDocBody(doc);
+  pre.textContent = lines.join('\n');
   host.replaceChildren(head, pre);
 }
 
-for (const b of document.querySelectorAll('.kh-dlm-card [data-dlm-kind]')) {
-  b.addEventListener('click', () => {
-    if (dailyKind === b.dataset.dlmKind) return;
-    dailyKind = b.dataset.dlmKind;
-    for (const x of document.querySelectorAll('.kh-dlm-card [data-dlm-kind]')) x.classList.toggle('is-active', x === b);
-    paintDailyMini();
-  });
-}
-
 paintDailyMini();
-watch({ url: () => dailyDocUrl('kr'), onChange: () => { if (dailyKind === 'kr') paintDailyMini(); }, key: null, fallbackMs: DAILY_DOC_FALLBACK_MS });
-watch({ url: () => dailyDocUrl('us'), onChange: () => { if (dailyKind === 'us') paintDailyMini(); }, key: null, fallbackMs: DAILY_DOC_FALLBACK_MS });
+watch({ url: dailyDocUrl, onChange: paintDailyMini, key: null, fallbackMs: DAILY_DOC_FALLBACK_MS });
 
 /* 52주 최저·최고 — 고른 종목 기준.
  *

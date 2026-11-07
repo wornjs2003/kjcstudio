@@ -201,8 +201,6 @@ def _daily_today(now=None):
         lt = time.localtime(t)
         if lt.tm_hour * 60 + lt.tm_min < daily.SEND_AT + DAILY_GRACE_MIN:
             return None
-        if lt.tm_wday not in daily.KR_WEEKDAYS:
-            return None                    # 국내 데일리는 평일만 만든다 (2026-11-07 · 16:00 로 옮기며)
 
         day = time.strftime("%Y%m%d", lt)
         return os.path.exists(os.path.join(docstore.DOC_ROOT, "daily-%s.json" % day))

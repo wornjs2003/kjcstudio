@@ -2518,19 +2518,14 @@ DAILY_STRONG_MARKETS = [("KPI200", "코스피", "0001"), ("KQI150", "코스닥",
 DAILY_STRONG_DAYS = 45       # 달력 날 — 한 달(20거래일)을 덮고 휴장을 감안
 
 
-DAILY_CLOSE_MIN = 15 * 60 + 40      # 정규장(15:30) 마감 봉이 확정되는 때(분) — 데일리 강한 종목이 이 뒤면 오늘 봉을 넣는다
-
-
 def _daily_strong(cfg):
     """구성 종목 일봉 · 지수 일봉을 날짜와 함께 모아 `daily.build_strong` 에 넘길 모양으로.
 
     **종목마다 KIS 한 번**(일봉 한 번에 100개 · 45일이면 한 번에 온다) — 구성 종목 수만큼 부른다.
-    오늘 봉은 정규장이 끝난 뒤(`DAILY_CLOSE_MIN` · 16:00 데일리)에만 넣는다 — 장 전 · 장중 봉은 뺀다(2026-11-07 전에는 07:30 이라 늘 뺐다). 구성 목록은 `dart.index_members_map()` 그대로 — 그쪽이 하루 한 번 새로 받는다.
+    오늘(장 전 07:30) 봉은 뺀다. 구성 목록은 `dart.index_members_map()` 그대로 — 그쪽이 하루 한 번 새로 받는다.
     """
     now = datetime.now(KST)
     today = now.strftime("%Y%m%d")
-    if now.hour * 60 + now.minute >= DAILY_CLOSE_MIN:
-        today = (now + timedelta(days=1)).strftime("%Y%m%d")     # 마감 뒤 — 오늘 봉까지 센다(아래 `< today`)
     dfrom = (now - timedelta(days=DAILY_STRONG_DAYS)).strftime("%Y%m%d")
     names = {}
     try:
@@ -9526,7 +9521,8 @@ def main():
             # 처음에 `issues` 로 적었다가 실제로 불러 보고 잡았다 (2026-09-22).
             get_issues=lambda: (news.fetch_issues() or {}).get("rows") or [],
             get_strong=lambda: _daily_strong(load_secrets()),
-            # 야간선물은 07:00 미국 데일리로 옮겼다(아래 start_us_daily · 2026-11-07)
+            # 야간선물 — 06:01 에 nxt_board 가 저장한 오늘 것을 읽기만 한다(KIS 안 부름 · 2026-10-27)
+            get_night=lambda: nxt_board.latest_futures(sys.modules[__name__]),
             # 발송은 공시와 같은 통로를 쓴다. **`NOTIFY_LOCAL` 과 무관하다** —
             # 그것은 공시만 막는다 (dart.py 주석 참고).
             #
@@ -9555,19 +9551,8 @@ def main():
                      if not IS_SERVER
                      else ("저장만 — 메인(%d)에서만 보냅니다" % MAIN_PORT
                            if not is_sender(args.port) else "저장만 — 열쇠 없음")))
-        print("  데일리분석 : 평일 %02d:%02d 에 저장 · 최근 %d장 (%s)"
+        print("  데일리분석 : 아침 %02d:%02d 에 저장 · 최근 %d장 (%s)"
               % (daily.SEND_AT // 60, daily.SEND_AT % 60, daily.KEEP, _tg))
-        # 미국 데일리 — 07:00 해외 마감 · 야간선물 · 밤사이 결과 한 통 (2026-11-07 재권님 「(가)」 · daily.start_us_daily)
-        # 밤사이 결과는 보내는 서버에서만 꺼내 간다 — events 바퀴도 그 서버에서만 돈다
-        _us_send = (dart.telegram_send if (dart.telegram_config() and is_sender(args.port)) else None)
-        daily.start_us_daily(
-            get_indices=lambda: fetch_indices_all(load_secrets(), with_chart=False)[0],
-            get_night=lambda: nxt_board.latest_futures(sys.modules[__name__]),
-            take_overnight=(events.take_overnight if (is_sender(args.port) and not SLOW) else None),
-            send=_us_send,
-        )
-        print("  미국 데일리 : 화~토 %02d:%02d 에 저장 (%s)"
-              % (daily.US_SEND_AT // 60, daily.US_SEND_AT % 60, _tg))
 
     # 볼린저·MACD·RSI 가 동시에 맞는 자리를 본다 (2026-09-22 지시).
     # **KIS 를 새로 안 부른다** — 미리받기가 쌓아 둔 5분봉을 읽기만 한다.
