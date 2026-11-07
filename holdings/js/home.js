@@ -2234,7 +2234,7 @@ function paintRankModal() {
     const p = rowPrices && rowPrices[s.code];
     return `<tr${s.flip ? ' style="opacity:.55"' : ''}>
       <td class="kh-rkm-rk">${s.rank}</td>
-      <td class="l"><span class="kh-nm">${iconHtml(s)}<b data-co="${s.code}">${escT(s.name)}</b>${th ? themeBadge(s.code) : ''}</span></td>
+      <td class="l"><span class="kh-nm">${iconHtml(s)}<b>${escT(s.name)}</b>${coQ(s)}${th ? themeBadge(s.code) : ''}</span></td>
       <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, sid)) : '···'}</td>
       <td class="kh-num ${p ? dirClass(pctOf(p, sid)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, sid)) : '—'}</td>
       <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'vi' ? viCell(s.code) : sid === 'ssts' ? sstsCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
@@ -2363,6 +2363,11 @@ function paintRankModalNote() {
    테마 목록은 테마 배지가 그 자리라 안 붙인다. 바뀌면 서버가 알린다(롱폴) — 화면에 주기를 두지 않는다. */
 let sectorMap = {};
 const SECTOR_FALLBACK_MS = 60000;      // 서버 값마저 못 받았을 때만
+/* 종목 설명 풍선 자리 — 이름 옆 작은 ? 에만 단다(이름 위에서는 안 뜬다 · 2026-11-07 재권님 「종목이름옆에 ? 넣어주고 거기위에 올릴때
+   뜨게」 · 작업우선순위 경유). 풍선 코드는 components/company-tip.js 그대로 — data-co 가 붙은 자리에 뜬다 */
+function coQ(s) {
+  return `<i class="kh-co-q" data-co="${s.code}" data-co-name="${escT(s.name)}" aria-label="종목 설명">?</i>`;
+}
 function sectorTag(code) {
   const v = sectorMap[code];
   return v ? `<span class="kh-nm-sec" title="${escT(v)} (WICS)">${escT(sectorShort(v))}</span>` : '';   // 긴 이름은 줄임 표(data/sector-short.js · 11-06)
@@ -2411,7 +2416,7 @@ function paintRows(priceMap) {
         >${s.rank}</td>
       <td class="l"><span class="kh-nm">
         ${iconHtml(s)}
-        <b data-co="${s.code}">${market === 'THEME' ? escT(s.name) : s.name}</b>${market === 'THEME' ? themeBadge(s.code) : sectorTag(s.code)}</span></td>
+        <b>${market === 'THEME' ? escT(s.name) : s.name}</b>${coQ(s)}${market === 'THEME' ? themeBadge(s.code) : sectorTag(s.code)}</span></td>
       <td class="kh-num"><span
         >${live ? fmtPriceOf(s.code, priceOf(live, sid)) : '···'}</span></td>
       <td class="kh-num kh-metric">${sortCell(s.code, live)}</td>

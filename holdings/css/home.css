@@ -772,6 +772,14 @@
 .kh-nm { display: flex; align-items: center; gap: 10px; }
 .kh-nm .kh-ic { width: 28px; height: 28px; font-size: 0.6rem; }
 .kh-nm b { font-weight: 500; }
+/* 이름 옆 ? — 여기에 올리면 종목 설명 풍선(섹터 · 매출 구성) · 순위 표 · 「자세히」 모달 표 (2026-11-07 · home.js coQ) */
+.kh-co-q {
+  flex: none; width: 14px; height: 14px; border-radius: 50%; margin-left: -6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 700 0.6rem/1 inherit; font-style: normal; cursor: help;
+  color: var(--kh-text-muted); background: var(--kh-bg-surface);
+}
+.kh-co-q:hover { color: var(--kh-text-primary); background: var(--kh-bg-active); }
 /* 이름 옆 섹터(WICS) — 회색 작은 글자 · 한 줄 · 길면 줄여 줄 높이가 안 바뀌게 (2026-11-04 · home.js sectorTag) */
 .kh-nm-sec {
   font-size: 0.7rem; color: var(--kh-text-muted); white-space: nowrap;
