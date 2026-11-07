@@ -173,6 +173,16 @@ def save(proxy, cfg, day):
     return len(rows), filled
 
 
+def _saved_day(proxy, day):
+    """그날 줄이 이미 표에 있나 — 20:05 뒤 서버를 다시 켜도 한 번 남긴 날을 다시 쓰지 않는다
+    (다시 쓰면 장중에만 쌓이는 「매수」 목록이 비어 그 표시가 빠진 줄로 덮인다 · 개념정의 검수 11-07)."""
+    try:
+        with proxy.db_conn() as conn:
+            return conn.execute("SELECT 1 FROM watch_log WHERE day = ? LIMIT 1", (day,)).fetchone() is not None
+    except Exception:
+        return False                 # 표가 아직 없음 — 처음 남기는 날
+
+
 def status():
     return dict(_status, saveAt="%02d:%02d" % SAVE_AT)
 
@@ -189,6 +199,9 @@ def start(proxy):
                 now = _now()
                 day = now.strftime("%Y%m%d")
                 if now.weekday() < 5 and (now.hour, now.minute) >= SAVE_AT and _status.get("saved") != day:
+                    if _saved_day(proxy, day):
+                        _status.update(saved=day)
+                        continue
                     n, filled = save(proxy, proxy.load_secrets(), day)
                     _status.update(saved=day, filled=filled, error=None)
                     print("  [종목 기록] %s %d종목 남김 · 5분봉 받아 채움 %d" % (day, n, filled), flush=True)
