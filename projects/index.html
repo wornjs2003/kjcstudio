@@ -1066,12 +1066,33 @@ dlg.overlay.addEventListener("click", function (e) {
   if (e.target === dlg.overlay) closeDlg(null);
 });
 
-dlg.input.addEventListener("keydown", function (e) {
-  if (e.key !== "Enter") return;
-  if (e.isComposing || e.keyCode === 229) return;   /* 한글 조합 확정 */
-  e.preventDefault();
-  dlg.ok.click();
-});
+/* Enter 로 넣기 — **한글을 치다 바로 Enter 를 누르면 한 번에 들어가게** (2026-11-07 재권님 「카드추가하고 세부사항 추가하는게
+   동작안하는거 같은데」). 맥 크롬은 마지막 글자가 조합 중일 때 누른 Enter 를 「조합 확정」 으로만 쓰고(isComposing) 다시 안 보낸다 —
+   전에는 그 Enter 를 버려서 Enter 를 한 번 더 눌러야 들어갔고, 한 번만 누르면 「안 된다」 로 보였다.
+   그래서 조합 중 Enter 를 기억했다가 조합이 끝나면(compositionend) 그때 넣는다. 조합이 끝난 뒤 Enter 가 한 번 더 오는
+   브라우저(사파리)는 겹쳐 두 번 들어가지 않게 바로 뒤 것을 막는다. Shift+Enter 는 줄바꿈 자리라 건드리지 않는다 */
+function onEnter(el, fn) {
+  let pend = false, last = 0;
+  function run(e) {
+    if (Date.now() - last < 120) return;
+    last = Date.now();
+    fn(e);
+  }
+  el.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" || e.shiftKey) return;
+    if (e.isComposing || e.keyCode === 229) { pend = true; return; }
+    e.preventDefault();
+    run(e);
+  });
+  el.addEventListener("compositionend", function () {
+    if (!pend) return;
+    pend = false;
+    setTimeout(function () { run(null); }, 0);
+  });
+  el.addEventListener("blur", function () { pend = false; });
+}
+
+onEnter(dlg.input, function () { dlg.ok.click(); });
 
 document.addEventListener("keydown", function (e) {
   if (dlg.overlay.hidden) return;
@@ -2065,13 +2086,7 @@ function drawTask() {
     autoGrow(title);
     touch(t); save();
   });
-  title.addEventListener("keydown", function (e) {
-    if (e.key !== "Enter") return;
-    if (e.isComposing || e.keyCode === 229) return;   /* 한글 조합 확정 */
-    if (e.shiftKey) return;
-    e.preventDefault();
-    title.blur();
-  });
+  onEnter(title, function () { title.blur(); });      /* 한글 조합 중 Enter 도 한 번에(위 onEnter) */
   tmBox.appendChild(title);
   requestAnimationFrame(function () { autoGrow(title); });
 
@@ -2219,10 +2234,7 @@ function drawTask() {
   subAdd.className = "tm-in";
   subAdd.placeholder = "세부 항목을 적고 Enter";
   subAdd.style.marginTop = "6px";
-  subAdd.addEventListener("keydown", function (e) {
-    if (e.key !== "Enter") return;
-    if (e.isComposing || e.keyCode === 229) return;
-    e.preventDefault();
+  onEnter(subAdd, function () {                       /* 한글 조합 중 Enter 도 한 번에(위 onEnter) */
     const v = subAdd.value.trim();
     if (!v) return;
     t.subs.push({ id: "s" + Date.now() + Math.random().toString(36).slice(2, 5), text: v, done: false });
