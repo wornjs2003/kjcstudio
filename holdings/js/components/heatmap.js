@@ -139,7 +139,7 @@ export function mountHeatmap(card, { onPick }) {
           const txt = c.w > 34 && c.h > 22
             ? `<b style="font-size:${fs.toFixed(1)}px">${esc(c.name)}</b>${pctFits ? `<span style="font-size:${pf.toFixed(1)}px">${pctTxt(c.pct)}</span>` : ''}` : '';
           html += `<button type="button" class="kh-hm-cell ${inkClass(c.pct)}" data-code="${esc(c.code)}" data-name="${esc(c.name)}"
-            title="${esc(c.name)} ${pctTxt(c.pct)}" style="left:${c.x + 1}px;top:${c.y + 1}px;width:${c.w - 2}px;height:${c.h - 2}px;background:${fill(c.pct)}">${txt}</button>`;
+            data-tip="${esc(c.name)} ${pctTxt(c.pct)}" style="left:${c.x + 1}px;top:${c.y + 1}px;width:${c.w - 2}px;height:${c.h - 2}px;background:${fill(c.pct)}">${txt}</button>`;
         }
       }
     }

@@ -1800,7 +1800,7 @@ export function createStockChart(container, candles, opts = {}) {
         tag.className = 'kh-pane-tag';
         tag.innerHTML =
           '<span class="x" data-pane-close="' + p.key + '" title="닫기">✕</span>' +
-          '<span class="nm" data-doc="' + p.key + '">' + def.label + ' (' + def.par + ')</span>' +
+          '<span class="nm" data-doc="' + p.key + '" data-tip-ref="#kh-ind-doc-' + p.key + '">' + def.label + ' (' + def.par + ')</span>' +
           '<span class="v" data-pane-v="' + p.key + '"></span>';
         el.appendChild(tag);
 
@@ -2445,11 +2445,11 @@ function maChip(m) {
     /* 못 그린 선은 왜 없는지 적는다. 빠뜨린 것과 자료가 모자란 것은 다르다.
        「끈 것」(색이 남은 채 흐림)과도 구분된다 */
     return `<span class="kh-lg-c is-short"
-      title="봉이 ${m.short}개뿐입니다. ${m.period}개가 있어야 그립니다"
+      data-tip="봉이 ${m.short}개뿐입니다. ${m.period}개가 있어야 그립니다"
       >MA${m.period} 봉 부족</span>`;
   }
   return `<button type="button" class="kh-lg-c" data-ma="${m.period}"
-    style="color: var(--kh-${m.key})" title="눌러서 끄고 켭니다"
+    style="color: var(--kh-${m.key})" data-tip="눌러서 끄고 켭니다"
     ><span>MA${m.period}</span><b data-f="ma${m.period}">—</b></button>`;
 }
 
@@ -2830,7 +2830,7 @@ export function maLegend(maSeries) {
   const off = maOff();
   const items = maSeries
     .map((m) => (m.short != null
-      ? `<span class="kh-lg-short" title="봉이 ${m.short}개뿐입니다. ${m.period}개가 있어야 그립니다"
+      ? `<span class="kh-lg-short" data-tip="봉이 ${m.short}개뿐입니다. ${m.period}개가 있어야 그립니다"
            >MA${m.period} 봉 부족</span>`
       /* 색만 인라인이다. 선 색과 같아야 어느 선인지 알아보는데, 그 값은
          MA_LINES 가 정하므로 CSS 에 네 줄을 또 적으면 목록이 둘이 된다.

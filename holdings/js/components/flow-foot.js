@@ -124,7 +124,7 @@ export function createFlowFoot() {
     const one = (n, v) => `<span class="kh-ff-n">${n}</span><b class="kh-ff-q ${signClass(v)}">${eok(v, a && a.approx)}</b>`;
     const tag = conf ? '확정' : a && a.seq ? `${a.seq}회차 추정` : '가집계 전';
     const tip = conf ? '한국투자증권 그날 확정치 · 순매수 금액' : '증권사 추정가집계 수량 × 현재가(어림) · 하루 다섯 회차 · 마감 뒤 확정치로 바뀜';
-    return `<span class="kh-ff-it" title="${tip}">` +
+    return `<span class="kh-ff-it" data-tip="${tip}">` +
       `${one('외국인', a ? a.foreign : null)}${one('기관', a ? a.inst : null)}` +
       `<span class="kh-ff-t">${tag}</span></span>`;
   }
@@ -138,7 +138,7 @@ export function createFlowFoot() {
       footEl.insertBefore(el, footEl.lastElementChild);   // 왼쪽 설명 뒤 · 오른쪽 출처 앞
     }
     el.innerHTML = items().map((grp, gi) => grp.map((x, i) =>
-      `<span class="kh-ff-it" title="${x.n} — ${x.c == null && gi === 0 ? '원은 오늘 누적(창구는 1분 값 없음)' : TIP}">` +
+      `<span class="kh-ff-it" data-tip="${x.n} — ${x.c == null && gi === 0 ? '원은 오늘 누적(창구는 1분 값 없음)' : TIP}">` +
       `<span class="kh-ff-n">${x.n}</span>${dot(x.p, x.c)}${i === grp.length - 1 ? `<span class="kh-ff-t">${x.t || '—'}</span>` : ''}</span>`).join('')).join('') +
       '<span class="kh-ff-sep"></span>' + estHtml();
   }

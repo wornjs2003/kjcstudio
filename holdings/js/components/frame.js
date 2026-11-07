@@ -207,7 +207,7 @@ export function mountVBar(el, active) {
     const body = `<span class="sq">${i.icon}</span>${i.label}`;
     return i.href
       ? `<a class="${cls}" href="${i.href}">${body}</a>`
-      : `<span class="${cls}" title="아직 만들지 않은 화면입니다">${body}</span>`;
+      : `<span class="${cls}" data-tip="아직 만들지 않은 화면입니다">${body}</span>`;
   }).join('');
 }
 

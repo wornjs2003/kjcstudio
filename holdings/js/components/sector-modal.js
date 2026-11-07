@@ -263,7 +263,7 @@ export function openSectorModal(snap, opt = {}) {
       <div class="kh-chips kh-scm-span">${spanChipsHtml(span, mkt)}</div>
       <div class="kh-scm-chips">${groups.map((x, i) => `
         <button class="kh-chip${open && i === from ? ' is-active' : ''}"
-          data-i="${i}" title="${open && i === from ? '다시 누르면 접습니다' : '이 묶음의 종목을 바로 아래에 펼칩니다'}">
+          data-i="${i}" data-tip="${open && i === from ? '다시 누르면 접습니다' : '이 묶음의 종목을 바로 아래에 펼칩니다'}">
           ${esc(x.name)}<b class="${dirClass(x.pct)}">${fmtPct(x.pct)}</b>
         </button>`).join('')}</div>
     </div>`;
@@ -316,10 +316,10 @@ export function openSectorModal(snap, opt = {}) {
       <div class="kh-scm-gh">
         ${rank === 1 ? '<span class="kh-scm-fire" aria-hidden="true">🔥</span>' : ''}
         <b class="kh-scm-rk">${rank}위</b>
-        <b class="kh-scm-gn" title="${esc(g.name)}">${esc(g.name)}</b>
+        <b class="kh-scm-gn" data-tip="${esc(g.name)}">${esc(g.name)}</b>
         <b class="kh-scm-pc ${dirClass(g.pct)}">${fmtPct(g.pct)}</b>
       </div>
-      <span class="kh-sc-bar" title="상승 ${g.rise} · 보합 ${g.steady} · 하락 ${g.fall}">
+      <span class="kh-sc-bar" data-tip="상승 ${g.rise} · 보합 ${g.steady} · 하락 ${g.fall}">
         <i class="up" style="width:${g.rise / sum * 100}%"></i>
         <i class="fl" style="width:${g.steady / sum * 100}%"></i>
         <i class="dn" style="width:${g.fall / sum * 100}%"></i>
@@ -356,7 +356,7 @@ export function openSectorModal(snap, opt = {}) {
         </tr></thead>
         <tbody>${rows.map(st => `
           <tr data-code="${esc(st.code)}">
-            <td><b title="${esc(st.name)}">${esc(st.name)}</b><span class="kh-mut kh-scm-cd">${esc(st.code)}</span></td>
+            <td><b data-tip="${esc(st.name)}">${esc(st.name)}</b><span class="kh-mut kh-scm-cd">${esc(st.code)}</span></td>
             <td class="r kh-num">${fmtPriceOf(st.code, st.price)}</td>
             <td class="r kh-num ${dirClass(st.pct)}">${fmtPct(st.pct)}</td>
             <td class="r kh-num">${st.value != null ? fmtMoneyKr(st.value / 100) : '—'}</td>

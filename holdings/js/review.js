@@ -127,7 +127,7 @@ const short = (n) => {
 };
 const chipAmt = (t) => (Number.isFinite(+t.pnl) && t.pnl !== null && t.pnl !== '' ? short(+t.pnl)
   : Number.isFinite(+t.pct) && t.pct !== null && t.pct !== '' ? pctS(t.pct) : '');
-const chip = (t) => `<span class="rv-chip ${dirOf(pnlOf(t)) || 'none'}" title="${esc(nameOf(t))}${t.pnl != null ? ' ' + esc(wonS(t.pnl)) : ''}">${iconHtml(stockOf(t))}<span>${esc(nameOf(t))}${chipAmt(t) ? ` <b class="rv-amt">${chipAmt(t)}</b>` : ''}</span></span>`;
+const chip = (t) => `<span class="rv-chip ${dirOf(pnlOf(t)) || 'none'}" data-tip="${esc(nameOf(t))}${t.pnl != null ? ' ' + esc(wonS(t.pnl)) : ''}">${iconHtml(stockOf(t))}<span>${esc(nameOf(t))}${chipAmt(t) ? ` <b class="rv-amt">${chipAmt(t)}</b>` : ''}</span></span>`;
 const won = (n) => (Number.isFinite(n) ? n.toLocaleString('ko-KR') + '원' : '—');
 const plus = (n) => (n > 0 ? '+' : '');
 const wonS = (n) => (n == null || n === '' || !Number.isFinite(+n) ? '—' : plus(+n) + (+n).toLocaleString('ko-KR') + '원');
@@ -217,8 +217,8 @@ function paintDay() {
       <div class="full rv-legs" id="rv-legs"><div class="rv-leg rv-leg-hd" aria-hidden="true"><span>매수가(원)</span><span>매도가(원)</span><span>수량(주)</span><span></span></div>${(ed && Array.isArray(ed.legs) && ed.legs.length ? ed.legs : [{}]).map(legRow).join('')}
         <button type="button" class="rv-addleg" id="rv-addleg">+ 매매 더하기</button>
         <div class="rv-sum" id="rv-sum"></div></div>
-      <div class="rv-unit"><button type="button" class="rv-clr" data-clr title="수익금 · 수익률 · 매매 줄 지우기" aria-label="수익금 지우기">×</button><input id="rv-pnl" data-fmt="int" type="text" inputmode="numeric" placeholder="수익금 · 손해는 −" value="${val('pnl')}" /><span>원</span></div>
-      <div class="rv-unit"><button type="button" class="rv-clr" data-clr title="수익금 · 수익률 · 매매 줄 지우기" aria-label="수익률 지우기">×</button><input id="rv-pct" data-fmt="dec" type="text" inputmode="decimal" placeholder="수익률" value="${val('pct')}" /><span>%</span></div>
+      <div class="rv-unit"><button type="button" class="rv-clr" data-clr data-tip="수익금 · 수익률 · 매매 줄 지우기" aria-label="수익금 지우기">×</button><input id="rv-pnl" data-fmt="int" type="text" inputmode="numeric" placeholder="수익금 · 손해는 −" value="${val('pnl')}" /><span>원</span></div>
+      <div class="rv-unit"><button type="button" class="rv-clr" data-clr data-tip="수익금 · 수익률 · 매매 줄 지우기" aria-label="수익률 지우기">×</button><input id="rv-pct" data-fmt="dec" type="text" inputmode="decimal" placeholder="수익률" value="${val('pct')}" /><span>%</span></div>
       <textarea class="full rv-why-in" id="rv-why" placeholder="이 종목 회고 — 잘한 것 · 아쉬운 것 · 다음엔 어떻게">${val('why')}</textarea>
       <span class="rv-hint" id="rv-hint"></span>
     </form>
@@ -464,7 +464,7 @@ function bindDay() {
     sum.innerHTML = !t ? '' : ok ? `${costs.filter(Boolean).length > 1 ? '합계 ' : ''}<b class="${signClass(t.net)}">${wonS(t.net)}</b> <b class="${signClass(t.pct)}">${pctS(+t.pct.toFixed(2))}</b>
       ${costLine(t)}` : `<b class="kh-mut">수익금 · 수익률 셈 못 함 — 종목의 시장을 몰라 세금을 못 셈</b> ${costLine(t)}`;
     pnl.readOnly = pct.readOnly = !!ok;
-    pnl.title = pct.title = ok ? '매매 줄에서 셈한 값(세금 · 수수료 뺀 것)' : '';
+    for (const el of [pnl, pct]) { if (ok) el.dataset.tip = '매매 줄에서 셈한 값(세금 · 수수료 뺀 것)'; else delete el.dataset.tip; }
     /* 셈으로 채운 값은 표시를 달아 두고, 셈이 없어지면(줄을 비움 · 시장 모름) 지운다 — 남겨 두면 손으로 적은 값처럼 저장된다(2026-11-03 qa 검수) */
     if (ok) { pnl.value = fmtNum(String(t.net), 'int'); pct.value = fmtNum(t.pct.toFixed(2), 'dec'); pnl.dataset.auto = pct.dataset.auto = '1'; }
     else if (pnl.dataset.auto) { pnl.value = pct.value = ''; delete pnl.dataset.auto; delete pct.dataset.auto; }
