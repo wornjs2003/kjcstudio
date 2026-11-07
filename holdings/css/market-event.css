@@ -1,0 +1,13 @@
+/* 시장 전체 사건 띠 — 서킷브레이커 (2026-11-07 · js/components/market-event.js)
+   화면 흐름 밖(fixed) · 위 가운데 — 칸 크기 · 자리가 안 움직인다(「보는 것을 바꿔도 자리는 그대로다」 · 「작업용」 띠와 같은 길).
+   지수가 내려 걸린 것이라 내림 색 — 「연한 바탕 + 진한 글씨」(「색 바탕 위의 글씨」). 마우스는 통과시킨다 */
+.kh-mkev {
+  position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 950;
+  pointer-events: none;
+  background: var(--kh-down-dim);
+  color: var(--kh-down);
+  font-size: 0.82rem; font-weight: 700; line-height: 1.5;
+  padding: 6px 14px; border-radius: 10px;
+  backdrop-filter: blur(6px);
+}
+.kh-mkev[hidden] { display: none; }
