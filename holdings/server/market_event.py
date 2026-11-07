@@ -67,6 +67,9 @@ SIDECAR = (("코스피", "10100000", 5.0, None, None),          # 시장 · 선�
 SIDECAR_MIN = 5
 SIDECAR_LAST = 14 * 60 + 50                     # 이 시각부터는 안 걸림
 KIND_WORDS_SC = ("사이드카", "Sidecar", "프로그램매매", "효력정지", "효력 정지")
+# 사건을 **새로 만드는** 길은 시장 전체를 뜻하는 낱말만 — 넓은 낱말(효력정지 · 프로그램매매 · 매매거래중단)은 회사 공시
+# (「주주총회결의 효력정지 가처분」 · 종목 하나의 매매거래 중단)에도 붙어, 우리 셈이 이미 만든 사건에 「확인됨」 을 붙일 때만 쓴다(qa 검수 11-07)
+KIND_NEW_WORDS = ("서킷", "Circuit", "사이드카", "Sidecar")
 SEND = False                                    # 켜기는 재권님 지시로
 
 _SCHEMA = """CREATE TABLE IF NOT EXISTS market_event (
@@ -271,7 +274,9 @@ def _kind_tick(proxy, port, day):
             continue                 # 시장을 못 가름 — kind 목록에만
         m = _st["m"][name]
         ev = next((e for e in reversed(m["events"]) if not e.get("confirmed") and e.get("type", "cb") == typ), None)
-        if ev is None:               # 우리 셈이 놓침 — 공시로 사건을 만든다
+        if ev is None and not any(w in title for w in KIND_NEW_WORDS):
+            continue                 # 넓은 낱말뿐 — 우리 셈 사건이 없으면 새로 안 만든다
+        if ev is None:               # 우리 셈이 놓침 — 시장 전체 낱말 공시로 사건을 만든다
             ev = {"type": typ, "stage": None, "at": _st["kindAt"], "value": m["value"], "pct": m["pct"], "est": False}
             if typ == "sc":
                 t0 = datetime.strptime(_st["kindAt"], "%H:%M:%S")
