@@ -978,7 +978,7 @@
 .kh-idx-ai {
   margin-left: auto; font-size: 0.8rem; color: var(--kh-accent);
   background: var(--kh-accent-dim); border-radius: 999px; padding: 5px 12px;
-  flex-shrink: 0;
+  flex-shrink: 0; text-decoration: none;   /* 리포트로 가는 링크가 됨(2026-11-07) — 알약 모양은 그대로 */
 }
 /* flex 를 끄고 높이를 직접 준다 (2026-09-17 지시).
    flex: 1 이면 「남는 자리를 먹는」 규칙이 먼저라 height 가 안 먹는다. */
