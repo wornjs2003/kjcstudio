@@ -40,6 +40,12 @@
     <!-- 종목 고르는 룰 (2026-11-05 재권님 「투자전략에는 어떤 종목을 사서 할지에 대한 룰을 잡을려고해 시안 잡아보라고 해」 · 「너는 투자전략에다가 투자전략에 대한걸 해줘야 할거같아」 →
          시안 temp/rule.png → 「우선 이렇게 해서 올려놔」 → 11-05 「고르는 조건에 재료도 추가해줘 재료라 함은 해당 종목과 연관된 좋은 뉴스나 미국장의 같은 섹터의 상승」). 룰 숫자는 재권님이 칸에 넣고 · 오늘 걸린 종목은 서버(/api/auto-watch)가 그 값으로 고른다(11-05 「응 해봐」 · 시안 temp/aw-1256.png) · 지난 성적은 서버(/api/auto-watch/history)가 셈한다.
          첫 룰 「전일 거래량 급등」 은 자동 관심종목 물음(보드 카드 「전일 거래량 급등 종목 기준 확인」)과 같은 기준이다 — 정해지면 기준은 서버 한 곳에 두고 이 칸은 받아 쓴다 -->
+    <!-- 하위 탭 (11-07 재권님 「기록을 어디에다가 쌓아놔야 하는데 투자전략에다가 하위로 텝 만들어서 넣어노면 좋을거같은데」(개발2 창) → 시안 temp/시황분석1-wl-rec.png 에 「응」) —
+         「룰 · 장외」 는 지금 화면 그대로 · 「종목 기록」 은 서버 /api/watch-log(server/watch_log.py · 주식 레인)를 그린다 · 그리기는 js/strategy-log.js -->
+    <div class="st-sub" role="tablist" aria-label="투자 전략">
+      <button type="button" class="st-sub-b is-on" data-tab="rule" role="tab" aria-selected="true">룰 · 장외</button><button type="button" class="st-sub-b" data-tab="log" role="tab" aria-selected="false">종목 기록</button>
+    </div>
+    <div class="st-tab" data-tab="rule">
     <section class="st rl">
       <div class="st-meta" id="rl-meta">룰 값을 받는 중…</div>
       <h2 class="st-sec">종목 고르는 룰</h2>
@@ -99,10 +105,27 @@
         <div class="st-box" id="st-box">—</div>
       </div>
     </section>
+    </div>
+    <!-- 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목의 전일비 · 프리 · 정규 · 애프터 · 08:00~20:00 5분봉(개발2 시안 칸 그대로) · 날짜는 서버가 쌓은 날만 넘긴다 -->
+    <div class="st-tab" data-tab="log" hidden>
+      <section class="st wl">
+        <div class="st-meta" id="wl-meta">값을 받는 중…</div>
+        <h2 class="st-sec">종목 기록 — 날마다 쌓기</h2>
+        <div class="st-card">
+          <div class="wl-head">
+            <div class="wl-chips" id="wl-chips" role="tablist" aria-label="어디서 온 종목"></div>
+            <div class="wl-day"><button type="button" class="wl-nav" id="wl-prev" aria-label="앞 날">‹</button><span id="wl-day">—</span><button type="button" class="wl-nav" id="wl-next" aria-label="뒤 날">›</button></div>
+          </div>
+          <div class="wl-box st-scroll" id="wl-box">—</div>
+          <div class="st-cap wl-cap">전일비 = 전일 정규장 종가 → 마지막 5분봉 · 프리장 = 전일 종가 → 08:55 봉 · 정규장 = 프리장 끝 → 15:30 봉 · 애프터 = 15:30 → 마지막 · 평일 20:05 에 쌓음 · 선의 회색 = 프리 · 애프터 · 점선 = 전일 종가</div>
+        </div>
+      </section>
+    </div>
   </main>
 </div>
 <script src="../assets/js/main.js"></script>
 <script type="module" src="js/strategy.js"></script>
 <script type="module" src="js/strategy-rule.js"></script>
+<script type="module" src="js/strategy-log.js"></script>
 </body>
 </html>

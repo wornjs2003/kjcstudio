@@ -93,3 +93,22 @@
 /* 신고가 부근 표시 — (가) 걸림 + 부근은 진한 바탕 · (나) 부근만은 옅은 바탕(「색 바탕 위의 글씨」) */
 .rl .aw-nh { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 99px; font-size: 11px; font-weight: 600; background: var(--kh-accent); color: var(--kh-text-on-fill); }
 .rl .aw-nh.only { background: var(--kh-accent-dim); color: var(--kh-accent); }
+/* 하위 탭 · 종목 기록 (11-07) — 새 칸이라 좁은 폭부터 · 넓을 때 덧붙임 없음(표는 칸 안 가로 스크롤) */
+.st-sub { display: flex; gap: 18px; margin: 4px 0 14px; border-bottom: 1px solid var(--kh-border); }
+.st-sub-b { font: inherit; font-size: 15px; font-weight: 600; padding: 0 0 6px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--kh-text-muted); cursor: pointer; }
+.st-sub-b.is-on { color: var(--kh-text-primary); border-bottom-color: var(--kh-text-primary); }
+.wl .wl-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; }
+.wl .wl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.wl .wl-day { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.wl .wl-nav { font: inherit; width: 26px; height: 26px; border: 0; border-radius: 99px; background: var(--kh-bg); color: var(--kh-text-secondary); cursor: pointer; }
+.wl .wl-nav:disabled { opacity: .35; cursor: default; }
+.wl .wl-box { height: 640px; overflow: auto; }   /* 날짜를 넘겨도 칸 높이 그대로(「보는 것을 바꿔도 자리는 그대로다」 — 갈아 끼우기) · 칩으로 거르면 안에서 줄어듦 */
+.wl .wl-tb th:last-child { text-align: left; }
+.wl .wl-src span { font-size: 11px; padding: 0 6px; border-radius: 99px; background: var(--kh-accent-dim); color: var(--kh-accent); margin-left: 3px; }
+.wl .wl-tb svg { display: block; }
+.wl .wl-ss { fill: var(--kh-bg); }
+.wl .wl-sl { stroke: var(--kh-border-strong); }
+.wl .wl-pv { stroke: var(--kh-text-muted); stroke-dasharray: 2 2; }
+.wl .wl-ln { fill: none; stroke: var(--kh-text-secondary); stroke-width: 1.3; }
+.wl .wl-ln.up { stroke: var(--kh-up); } .wl .wl-ln.down { stroke: var(--kh-down); }
+.wl .wl-cap { margin: 8px 0 0; }
