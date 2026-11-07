@@ -34,7 +34,6 @@ import { openModal } from './modal.js';
 import { stripHtml } from './index-strip.js';
 import { apiFetch } from '../data/api.js';
 import { watch } from '../store/longpoll.js';
-import { everyServerMs } from '../store/timing.js';
 import { signClass } from '../../../assets/js/sign.js';
 
 /* 화면을 열어둔 채로도 새 것이 들어오도록. 서버가 5분마다 받으므로 그보다 짧게. */
@@ -42,9 +41,6 @@ import { signClass } from '../../../assets/js/sign.js';
    이것은 **그 값마저 못 받았을 때**의 대체값이다 (「화면은 서버에 주기로 묻지 않는다」) */
 const FALLBACK_MS = 60_000;
 
-/* 몇 시간치를 보여줄 것인가. 하루를 넘겨서 봐야 「어제 이슈」가 남는다
-   (2026-09-21 지시 — "그전날 이슈를 놓치지 않게"). */
-const NEWS_HOURS = 36;
 
 /* 한 주제 칸에 몇 줄까지 펼쳐 둘 것인가. 나머지는 접는다 —
    80줄을 한 줄로 늘어놓으면 못 읽는다. */
@@ -149,33 +145,25 @@ const BODY_HTML = `
         <div class="kh-dl-video" data-dl-video hidden></div>
       </div>
     </section>
-    <!-- 오른쪽 세로 긴 칸 — 오늘 일정 · 오늘 뉴스 · 중요 알림을 이름 탭으로 갈아 끼운다 (2026-11-03 재권님 「세로로 길게 있으면 좋을거 같은데
+    <!-- 오른쪽 세로 긴 칸 — 오늘 일정 · 중요 알림을 이름 탭으로 갈아 끼운다 (2026-11-03 재권님 「세로로 길게 있으면 좋을거 같은데
          ui 구성 바꿔봐. 오늘일정 오늘뉴스 중요알림은 세로로 길어진 창에 넣어서 해당 이름 누르면 바뀌게끔」 → 시황분석 시안 「응 맞아」 ·
          개발1 착수 안 「그렇게 해」). 왼쪽 「데일리분석」 칸과 나란히 같은 높이 · 셋은 같은 높이 칸(.kh-dl-tabbody)에 갈아 끼운다 —
-         「보는 것을 바꿔도 자리는 그대로다」. 처음은 「오늘 뉴스」(시안 그대로). 전에는 아래 줄에 일정 · 알림(왼쪽) + 뉴스(오른쪽)로 나란히 있었다
+         「보는 것을 바꿔도 자리는 그대로다」. 「오늘 뉴스」 탭은 2026-11-07 에 뺐다 — 뉴스는 첫 화면 뉴스 칸 한 곳(홈 8 · 재권님 「응」 · 시황분석 시안) · 그래서 처음은 「오늘 일정」. 전에는 아래 줄에 일정 · 알림(왼쪽) + 뉴스(오른쪽)로 나란히 있었다
          (2026-09-21 「중요알람은 오늘뉴스의 왼쪽으로」 · 「오늘 일정도 오늘뉴스 옆으로」). 좁은 폭은 두 칸이 위아래 한 열 -->
     <section class="kh-dl-card kh-dl-info-card">
       <div class="kh-dl-ch">
         <span class="kh-dl-tabs" role="tablist" data-dl-info-tabs>
-          <button type="button" role="tab" data-dl-info="sch">오늘 일정</button>
-          <button type="button" role="tab" data-dl-info="news" class="is-on">오늘 뉴스</button>
+          <button type="button" role="tab" data-dl-info="sch" class="is-on">오늘 일정</button>
           <button type="button" role="tab" data-dl-info="alert">중요 알림</button>
         </span>
       </div>
       <div class="kh-dl-tabbody">
-        <div class="kh-dl-pane" data-dl-info-p="sch" hidden>
+        <div class="kh-dl-pane" data-dl-info-p="sch">
           <div class="kh-dl-pane-h">
             <span class="kh-dl-why">날짜가 미리 정해진 것만</span>
             <span class="kh-dl-src">market-calendar.json</span>
           </div>
           <div class="kh-dl-sch" id="kh-dl-sch"></div>
-        </div>
-        <div class="kh-dl-pane" data-dl-info-p="news">
-          <div class="kh-dl-pane-h">
-            <span class="kh-dl-why">주제로 묶어 최근 순서로</span>
-            <span class="kh-dl-src" id="kh-dl-news-src">경제지 RSS</span>
-          </div>
-          <div class="kh-dl-news" id="kh-dl-news"></div>
         </div>
         <!-- 중요 알림 — 무엇을 바로 받을지 정하는 자리 (2026-09-21 지시)
              재권님 말씀 — "중요한 데이터라고 정의할수 있는 공간도 있어야 할거같아",
@@ -451,7 +439,7 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
     if (tg) drawTg();                       // 탭을 다시 열 때 새로 받는다 — 화면이 주기를 두지 않는다
     else if (onPick && tgOpen != null) pickTg(tgOpen);   // 영상 탭으로 가면 세부 창을 닫는다
   });
-  /* 오른쪽 칸 — 오늘 일정 · 오늘 뉴스 · 중요 알림 이름 탭 (2026-11-03). 내용은 이미 그려 둔 셋을 숨기고 보일 뿐 — 새로 받지 않는다 */
+  /* 오른쪽 칸 — 오늘 일정 · 중요 알림 이름 탭 (2026-11-03 · 뉴스 탭은 11-07 뺌). 내용은 이미 그려 둔 셋을 숨기고 보일 뿐 — 새로 받지 않는다 */
   const info = root.querySelector('.kh-dl-info-card');
   info?.querySelector('[data-dl-info-tabs]')?.addEventListener('click', (e) => {
     const b = e.target.closest('[data-dl-info]');
@@ -469,14 +457,10 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
 
   /* 인스턴스마다 따로 갖는다. 모듈 바깥에 두면 두 벌이 떴을 때 섞인다. */
   let indices = [];
-  let issues = [];
-  let newsMeta = null;
   let schedule = [];
   let sectors = [];
   let alertRules = null;
 
-  /* 쌓아 둔 것을 읽었나, RSS 로 물러섰나. 화면이 그 차이를 적는다 */
-  let stored = true;
 
   /* 멈출 수 있게 손잡이를 쥐고 있는다. 모달을 닫고도 계속 돌면 보이지도
      않는 칸 때문에 서버 연결을 쥐고 있게 된다. */
@@ -507,53 +491,6 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
       sectors = Array.isArray(b.data) ? b.data : [];
     } catch {
       sectors = [];
-    }
-  }
-
-  /* **쌓아 둔 것을 읽는다** (2026-09-21 지시 — "받는족족 쌓아놓고 데일리분석에
-     계속 쌓아지게").
-
-     전에는 `/api/news/feed` 로 **그때 RSS 를 받아** 그렸다. 화면을 열 때마다
-     파싱해서 느렸고(0.62초), 화면을 안 열고 있으면 그 사이 기사는 사라졌다.
-     이제 서버가 5분마다 쌓아 두고 **같은 사건끼리 묶어** 둔다 — 화면은 읽기만
-     한다(0.005초 실측).
-
-     한 줄이 묶음 하나다 — 대표 기사 + `more`(같은 사건을 쓴 기사 수). */
-  async function loadNews() {
-    try {
-      const r = await apiFetch(`/api/news/stored?hours=${NEWS_HOURS}`, { cache: 'no-store' });
-      if (!r || !r.ok) throw new Error(r.status);
-      const b = await r.json();
-      const rows = Array.isArray(b.data) ? b.data : [];
-      /* **빈 것도 물러선다.** 확인용 서버(--slow)는 뉴스 수집을 안 돌려서
-         표가 비어 있다. 「쌓인 것이 없다」 를 「뉴스가 없다」 로 보여주면
-         그 서버에서는 이 칸이 영영 빈다 (2026-09-21 실측). */
-      if (!rows.length) throw new Error('쌓인 것이 없습니다');
-      issues = rows;
-      newsMeta = b.meta || null;
-      stored = true;
-      return;
-    } catch { /* 아래에서 물러선다 */ }
-
-    /* **쌓아 둔 것이 없으면 그때 RSS 를 받는다** (2026-09-21).
-
-       `stored` 는 이 PC 의 market.db 를 읽는 자리라 **워커에는 넣을 수 없다.**
-       배포본에서 열면 404 이고, 그대로 두면 뉴스 칸이 통째로 빈다 —
-       쌓기를 붙이기 전에는 `feed` 로 잘 나오던 자리다. 그래서 물러선다.
-
-       물러선 쪽은 **묶음이 없다.** 서버가 쌓을 때 묶는 것이라 그때그때 받은
-       것에는 `more` 가 없다. 화면이 그 사실을 적는다. */
-    try {
-      const r = await apiFetch('/api/news/feed', { cache: 'no-store' });
-      if (!r || !r.ok) throw new Error(r && r.status);
-      const b = await r.json();
-      issues = (b.data && Array.isArray(b.data.issues)) ? b.data.issues : [];
-      newsMeta = null;
-      stored = false;
-    } catch {
-      issues = [];
-      newsMeta = null;
-      stored = false;
     }
   }
 
@@ -706,61 +643,6 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
     };
 
     box.innerHTML = col('오른 업종', up, 'up') + col('내린 업종', down, 'down');
-  }
-
-  /* ── ③ 오늘 뉴스 ────────────────────────── */
-
-  function drawNews() {
-    const box = $('kh-dl-news');
-    const src = $('kh-dl-news-src');
-    if (!box) return;
-
-    if (!issues.length) {
-      box.innerHTML = '<div class="kh-dl-todo"><b>뉴스를 받지 못했습니다</b>'
-        + '<span>중계 서버가 꺼져 있으면 이 칸이 비어 있습니다.</span></div>';
-      return;
-    }
-    if (src) {
-      if (stored) {
-        const total = (newsMeta && newsMeta.total && newsMeta.total.count) || issues.length;
-        src.textContent = `쌓아 둔 것 ${total}건 · 최근 ${NEWS_HOURS}시간 ${issues.length}묶음`;
-      } else {
-        /* 배포본에서 열면 이쪽이다 — 쌓는 것은 이 PC 의 서버가 한다 */
-        src.textContent = `경제지 RSS ${issues.length}건 · 묶음은 이 PC 에서만 보입니다`;
-      }
-    }
-
-    /* **주제별로 칸을 나눈다** (2026-09-21 지시 — "뉴스별로 정리해서 보면").
-       한 줄로 길게 늘어놓으면 80줄이 되어 무슨 일이 있었는지가 안 읽힌다.
-       칸마다 위에서 PER_TOPIC 줄만 펼치고 나머지는 접는다. */
-    const byTopic = new Map();
-    for (const n of issues) {
-      const key = n.topicLabel || '기타';
-      if (!byTopic.has(key)) byTopic.set(key, []);
-      byTopic.get(key).push(n);
-    }
-    const topics = [...byTopic.entries()].sort((a, b) => b[1].length - a[1].length);
-
-    box.innerHTML = topics.map(([label, rows]) => {
-      const head = rows.slice(0, PER_TOPIC);
-      const rest = rows.slice(PER_TOPIC);
-      const line = (n) => `
-        <a class="kh-dl-news-row" href="${esc(n.link)}" target="_blank" rel="noopener">
-          <span>
-            <span class="kh-dl-news-t">${n.alert ? `<i class="kh-dl-hot">${esc(n.alert)}</i>` : ''}${esc(n.title)}</span>
-            <span class="kh-dl-news-m">${esc(n.source || '')} · ${esc(hhmm(n.at))}${
-              n.more ? ` · <b>외 ${n.more}건</b>` : ''}</span>
-          </span>
-        </a>`;
-      return `
-        <div class="kh-dl-topic-box">
-          <div class="kh-dl-topic-h"><span class="kh-dl-topic">${esc(label)}</span>
-            <i>${rows.length}묶음</i></div>
-          ${head.map(line).join('')}
-          ${rest.length ? `<details class="kh-dl-more">
-            <summary>나머지 ${rest.length}묶음</summary>${rest.map(line).join('')}</details>` : ''}
-        </div>`;
-    }).join('');
   }
 
   /* ── ④ 중요 알림 규칙 ──────────────────────
@@ -924,7 +806,6 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
 
     await Promise.all([
       ixDone, secDone,
-      then(loadNews, '뉴스', drawNews),
       then(loadSchedule, '일정', drawSchedule),
       then(loadAlerts, '알림', drawAlerts),
       Promise.resolve(safe('문안', drawTelegram)).catch((e) => {
@@ -987,8 +868,6 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
             onChange: () => loadIndices().then(() => { redraw('지수', drawIndices); if (!dead && onIndices) onIndices(indices); }) }).stop,
     watch({ url: () => '/api/kis/sectors', key: 'kis_proxy.SECTOR_TTL', fallbackMs: FALLBACK_MS,
             onChange: () => loadSectors().then(() => redraw('섹터', drawSectors)) }).stop,
-    everyServerMs('news_store.COLLECT_INTERVAL', FALLBACK_MS,
-                  () => loadNews().then(() => { if (!dead) safe('뉴스', drawNews); })),
   );
 
   return {
