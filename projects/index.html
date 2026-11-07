@@ -532,6 +532,17 @@ h1 {
 /* 참고 링크 */
 .lnk { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--pj-radius-sm); }
 .lnk:hover { background: var(--pj-bg-elevated); }
+/* 첨부 (2026-11-07) — 그림은 작게 늘어놓고 누르면 새 탭에 원본 */
+.att-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.att { position: relative; width: 120px; display: flex; flex-direction: column; gap: 4px; }
+.att a { display: block; width: 120px; height: 90px; border-radius: var(--pj-radius-sm); overflow: hidden; background: var(--pj-bg-elevated); }
+.att img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.att-doc { display: flex !important; align-items: center; justify-content: center; color: var(--pj-text-secondary); text-decoration: none; font-size: 13px; }
+.att-nm { font-size: 11px; color: var(--pj-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-del { position: absolute; top: 2px; right: 2px; opacity: 1; }
+.att-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.att-add { border: 0; border-radius: var(--pj-radius-sm); padding: 6px 10px; font: inherit; font-size: 13px; background: var(--pj-bg-elevated); color: var(--pj-text-primary); cursor: pointer; }
+.att-hint { font-size: 12px; color: var(--pj-text-secondary); }
 .lnk a {
   flex: 1; font-size: 13px; font-weight: 500; color: var(--pj-accent);
   text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1071,10 +1082,11 @@ dlg.overlay.addEventListener("click", function (e) {
    전에는 그 Enter 를 버려서 Enter 를 한 번 더 눌러야 들어갔고, 한 번만 누르면 「안 된다」 로 보였다.
    그래서 조합 중 Enter 를 기억했다가 조합이 끝나면(compositionend) 그때 넣는다. 조합이 끝난 뒤 Enter 가 한 번 더 오는
    브라우저(사파리)는 겹쳐 두 번 들어가지 않게 바로 뒤 것을 막는다. Shift+Enter 는 줄바꿈 자리라 건드리지 않는다 */
+const ENTER_TWIN_MS = 120;    // 조합이 끝난 뒤 같은 Enter 가 한 번 더 오는 사이(사파리) — 이 안의 두 번째는 막는다(입력 박자 · 서버와 무관)
 function onEnter(el, fn) {
   let pend = false, last = 0;
   function run(e) {
-    if (Date.now() - last < 120) return;
+    if (Date.now() - last < ENTER_TWIN_MS) return;
     last = Date.now();
     fn(e);
   }
@@ -1492,6 +1504,7 @@ function buildLane(p, col, colIdx) {
 function fillTask(t) {
   if (!t.subs)  t.subs = [];
   if (!t.links) t.links = [];
+  if (!t.files) t.files = [];
   if (typeof t.due !== "string")      t.due = "";
   if (typeof t.memo !== "string")     t.memo = "";
   if (!t.priority)                    t.priority = "normal";
@@ -1827,6 +1840,13 @@ function buildTask(p, t, colIdx) {
     mini.appendChild(c);
   }
 
+  if ((t.files || []).length) {
+    const c = document.createElement("span");
+    c.className = "mini-chip";
+    c.textContent = "📎 " + t.files.length;
+    mini.appendChild(c);
+  }
+
   if ((t.memo || "").trim()) {
     const c = document.createElement("span");
     c.className = "mini-chip";
@@ -2032,6 +2052,68 @@ function bindSort(el, p, t) {
 const tmOverlay = document.getElementById("tmOverlay");
 const tmBox = document.getElementById("tm");
 let openTaskRef = null;   /* { p, t } */
+
+/* ── 첨부 올리기 — 서버에 하나씩 보내고 받은 이름표를 카드에 붙인다 ── */
+let fileRule = null;          // 서버가 주는 한도 · 종류(/api/board/health) — 화면에 박지 않는다
+function loadFileRule() {
+  if (fileRule) return Promise.resolve(fileRule);
+  return fetch("/api/board/health", { cache: "no-store" }).then(function (r) { return r.json(); })
+    .then(function (j) { fileRule = { max: j.fileMaxBytes || 0, types: j.fileTypes || [] }; return fileRule; })
+    .catch(function () { return { max: 0, types: [] }; });
+}
+function fileSize(n) {
+  if (!(n >= 0)) return "—";
+  return n < 1024 * 1024 ? Math.max(1, Math.round(n / 1024)) + "KB" : (n / 1024 / 1024).toFixed(1) + "MB";
+}
+function attachHint(text) {
+  const h = document.getElementById("attHint");
+  if (h) h.textContent = text;
+}
+function attachFiles(t, list) {
+  const files = Array.prototype.slice.call(list || []);
+  if (!files.length) return;
+  loadFileRule().then(function (rule) {
+    if (!rule.types.length) { attachHint("서버에 첨부 받는 자리가 아직 없습니다 — 서버를 다시 켜야 합니다"); return; }
+    let chain = Promise.resolve(), ok = 0, bad = [];
+    files.forEach(function (file) {
+      chain = chain.then(function () {
+        if (rule.types.indexOf(file.type) < 0) { bad.push((file.name || "붙여넣은 것") + "(종류)"); return; }
+        if (rule.max && file.size > rule.max) { bad.push((file.name || "붙여넣은 것") + "(" + fileSize(rule.max) + " 넘음)"); return; }
+        attachHint("올리는 중… " + (file.name || "붙여넣은 그림"));
+        return fetch("/api/board/file", { method: "PUT", headers: { "Content-Type": file.type }, body: file })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (!j || !j.ok) { bad.push((file.name || "붙여넣은 것") + "(" + ((j && j.error) || "실패") + ")"); return; }
+            t.files.push({ id: j.id, url: j.url, name: file.name || ("붙여넣은 그림 " + new Date().toLocaleTimeString("ko-KR")),
+                           type: file.type, size: j.size });
+            ok++;
+          })
+          .catch(function () { bad.push((file.name || "붙여넣은 것") + "(서버 연결 안 됨)"); });
+      });
+    });
+    chain.then(function () {
+      if (ok) { touch(t); save(); }
+      if (openTaskRef && openTaskRef.t === t) drawTask();
+      attachHint(bad.length ? "못 올림: " + bad.join(" · ") : ok + "개 올렸습니다");
+    });
+  });
+}
+
+/* 작업 창이 열려 있으면 붙여넣기(캡처) · 끌어다 놓기로도 넣는다 — 글을 붙여넣을 때는 건드리지 않는다(파일이 있을 때만) */
+document.addEventListener("paste", function (e) {
+  if (!openTaskRef || !e.clipboardData) return;
+  const files = Array.prototype.filter.call(e.clipboardData.files || [], function (f) { return f && f.type; });
+  if (!files.length) return;
+  e.preventDefault();
+  attachFiles(openTaskRef.t, files);
+});
+["dragover", "drop"].forEach(function (ev) {
+  document.getElementById("tm").addEventListener(ev, function (e) {
+    if (!e.dataTransfer || !Array.prototype.some.call(e.dataTransfer.types || [], function (x) { return x === "Files"; })) return;
+    e.preventDefault();
+    if (ev === "drop" && openTaskRef) attachFiles(openTaskRef.t, e.dataTransfer.files);
+  });
+});
 
 function openTask(p, t) {
   openTaskRef = { p: p, t: fillTask(t) };
@@ -2293,6 +2375,70 @@ function drawTask() {
     drawTask();
   });
   tmBox.appendChild(linkAdd);
+
+  /* ── 첨부 — 그림 · PDF (2026-11-07 재권님 「프로젝트에서 카드 작성할때 첨부파일 이미지도 추가가능하게」 · 「보드에 이미지 도 첨부할수있게」) ──
+     파일은 서버 `files/` 에 따로 두고 카드에는 이름표만(holdings/server/docstore.py 「카드에 붙인 파일」).
+     넣는 길 셋 — 「+ 파일 · 그림」 단추 · 이 창에서 붙여넣기(캡처) · 끌어다 놓기. 한도 · 종류는 서버 값(/api/board/health) */
+  const secFile = document.createElement("div");
+  secFile.className = "tm-sec";
+  secFile.innerHTML = '<b>첨부</b>';
+  tmBox.appendChild(secFile);
+
+  const grid = document.createElement("div");
+  grid.className = "att-grid";
+  t.files.forEach(function (f) {
+    const cell = document.createElement("div");
+    cell.className = "att";
+    const a = document.createElement("a");
+    a.href = f.url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    if (/^image\//.test(f.type || "")) {
+      const img = document.createElement("img");
+      img.src = f.url;
+      img.alt = f.name || "";
+      img.loading = "lazy";
+      a.appendChild(img);
+    } else {
+      a.className = "att-doc";
+      a.textContent = "📄 PDF";
+    }
+    cell.appendChild(a);
+    const nm = document.createElement("span");
+    nm.className = "att-nm";
+    nm.textContent = (f.name || f.id) + " · " + fileSize(f.size);
+    cell.appendChild(nm);
+    const del = document.createElement("button");
+    del.className = "sub-del att-del";
+    del.textContent = "×";
+    del.addEventListener("click", function () {
+      t.files = t.files.filter(function (x) { return x.id !== f.id; });
+      touch(t); save();
+      drawTask();
+    });
+    cell.appendChild(del);
+    grid.appendChild(cell);
+  });
+  tmBox.appendChild(grid);
+
+  const pick = document.createElement("input");
+  pick.type = "file";
+  pick.multiple = true;
+  pick.hidden = true;
+  pick.accept = "image/png,image/jpeg,image/gif,image/webp,application/pdf";
+  pick.addEventListener("change", function () { attachFiles(t, pick.files); pick.value = ""; });
+  const addFile = document.createElement("button");
+  addFile.className = "att-add";
+  addFile.textContent = "+ 파일 · 그림";
+  addFile.addEventListener("click", function () { pick.click(); });
+  const hint = document.createElement("span");
+  hint.className = "att-hint";
+  hint.id = "attHint";
+  hint.textContent = "캡처를 이 창에 붙여넣거나 끌어다 놓아도 됩니다";
+  const row = document.createElement("div");
+  row.className = "att-row";
+  row.append(addFile, hint, pick);
+  tmBox.appendChild(row);
 
   /* ── 메모 ── */
   const secMemo = document.createElement("div");
