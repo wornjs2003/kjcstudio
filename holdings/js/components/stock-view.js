@@ -101,6 +101,27 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
   const flowFoot = createFlowFoot();
   if (!isUsCode(stock.code)) flowFoot.paint($('.kh-chart-foot'), stock.code);
 
+  /* 차트만 보기 — 모달에서만 (2026-11-07 재권님 「모달창에서 차트만 보기 누르면 … 모달크기가 화면창에 맞춰서 커지고 차트 쪽이 가득
+     채워지도록」 → 시안 「응 맞아」). 누르면 모달 · 판에 is-chart-only 를 달아 머리 · 서랍 · 다른 칸을 내리고 모달을 창 크기로 키운다
+     (modal.css). 차트는 칸 크기를 스스로 따라간다(chart.js 의 ResizeObserver). 종목 화면(stock.html)에는 단추가 없다 */
+  (function mountChartOnly() {
+    const modal = root.closest('.kh-modal');
+    const title = $('.kh-w[data-p="chart"] .kh-w-title');
+    if (!modal || !title) return;
+    const stage = modal.closest('.kh-stage');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'kh-only-btn';
+    const paint = () => { btn.textContent = modal.classList.contains('is-chart-only') ? '↙ 원래대로' : '⤢ 차트만 보기'; };
+    btn.addEventListener('click', () => {
+      const on = modal.classList.toggle('is-chart-only');
+      if (stage) stage.classList.toggle('is-chart-only', on);
+      paint();
+    });
+    paint();
+    title.after(btn);
+  })();
+
   let chart = null;
   /* **보던 기간을 이어받는다** (2026-09-29 지시). 첫 화면에서 이 화면으로
      올 때 페이지가 새로 뜨므로 `sessionStorage` 를 거친다 */
