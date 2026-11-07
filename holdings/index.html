@@ -62,7 +62,7 @@
       <a href="#">시장 흐름</a>
       <!-- 「내 기록」(글자뿐 · 기능 없음) 자리를 종목 검색칸으로 (2026-10-06 지시) — js/components/stock-search.js 가 채운다 -->
       <!-- 간단모드 단추 — 검색칸 바로 왼쪽 · 누르면 큰 차트와 실시간 순위만 남는다 · 다시 누르면 원래대로 (2026-11-07 재권님 「이대로 만들어줘」 · js/home.js 가 켠다) -->
-      <button type="button" class="kh-simple-btn" id="kh-simple" aria-pressed="false" title="큰 차트와 실시간 순위만 보기">간단</button>
+      <button type="button" class="kh-simple-btn" id="kh-simple" aria-pressed="false" data-tip="큰 차트와 실시간 순위만 보기">간단</button>
       <span data-stock-search></span>
     </nav>
 
@@ -186,7 +186,7 @@
               <svg class="kh-sc-flag" aria-hidden="true"><use href="./img/flags.svg#kh-flag-kr"></use></svg>국내</button>
             <!-- 미국은 SPDR 섹터 ETF 열하나를 업종으로 쓴다 (2026-10-08 지시 —
                  「미국클릭이 안되고」). 서버 server/us_sectors.py · 테마는 없다 -->
-            <button class="kh-chip" data-mkt="us" title="미국 — S&amp;P500 섹터 ETF 열하나">
+            <button class="kh-chip" data-mkt="us" data-tip="미국 — S&amp;P500 섹터 ETF 열하나">
               <svg class="kh-sc-flag" aria-hidden="true"><use href="./img/flags.svg#kh-flag-us"></use></svg>미국</button>
           </span>
           <i class="kh-sc-sep" aria-hidden="true"></i>

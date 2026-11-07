@@ -89,7 +89,7 @@ export function mountDepth(host) {
     const { ask, bid } = sides(data);
     if (!ask.length && !bid.length) { host.innerHTML = `<div class="kh-dp-h">${head}<span>${emptyText(data, failed)}</span></div>`; return; }
     const max = Math.max(1, ...ask.map(l => l.qty), ...bid.map(l => l.qty));
-    const bar = (l, side) => `<i class="kh-dp-${side}" title="${fmt(l.price)}원 · ${fmt(l.qty)}주" style="height:${Math.max(6, Math.round(l.qty / max * 100))}%"></i>`;
+    const bar = (l, side) => `<i class="kh-dp-${side}" data-tip="${fmt(l.price)}원 · ${fmt(l.qty)}주" style="height:${Math.max(6, Math.round(l.qty / max * 100))}%"></i>`;
     const near = bid[0] || ask[ask.length - 1];
     host.innerHTML = `
       <div class="kh-dp-h">${head}

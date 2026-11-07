@@ -444,20 +444,7 @@
 .kh-ind-list label:hover { background: var(--kh-bg-hover); }
 .kh-ind-list input { margin: 0; accent-color: var(--kh-accent); }
 
-/* 지표 설명 풍선. 글은 data/indicators.json 에 있다 */
-.kh-ind-tip {
-  position: fixed; z-index: 99; max-width: 330px;
-  background: var(--kh-text-primary); color: var(--kh-text-on-fill);
-  border-radius: 9px; padding: 11px 13px;
-  font-size: 0.78rem; line-height: 1.65; pointer-events: none;
-  box-shadow: var(--kh-shadow-md);
-}
-.kh-ind-tip[hidden] { display: none; }
-.kh-ind-tip b { display: block; font-size: 0.84rem; margin-bottom: 3px; }
-.kh-ind-tip b span { opacity: .6; font-weight: 400; }
-.kh-ind-tip .why { color: var(--kh-ma5); margin-bottom: 6px; }
-.kh-ind-tip p { margin: 0 0 4px; opacity: .88; }
-.kh-ind-tip p:last-child { margin: 0; }
+/* 지표 설명 풍선(.kh-ind-tip)은 2026-11-07 에 공용 풍선(.gl-tip · glossary.js data-tip-ref)으로 옮겨 지웠다 — 글은 그대로 data/indicators.json */
 
 /* ══ 체결 · 일별 매매동향 (2026-09-21 지시 — A 종목 화면) ═══════════
 

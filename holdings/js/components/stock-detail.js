@@ -124,7 +124,7 @@ export function mountStockDetail(host, { view, onOne } = {}) {
         <span class="kh-dt-l">매수·매도</span>
         <b class="kh-up">${buyPct}%</b><b class="kh-down"> · ${(Math.round((100 - buyPct) * 10) / 10)}%</b>
       </span>
-      <span class="kh-dt-bar" title="지금 걸려 있는 주문입니다 — 체결된 것이 아닙니다">
+      <span class="kh-dt-bar" data-tip="지금 걸려 있는 주문입니다 — 체결된 것이 아닙니다">
         <i class="buy" style="width:${buyPct}%"></i><i class="sell" style="width:${100 - buyPct}%"></i>
       </span>`;
 
@@ -137,10 +137,10 @@ export function mountStockDetail(host, { view, onOne } = {}) {
        홈 큰 차트 · 모달만(재권님 「차트랑 모달 차트에」) */
     const pwHere = !!host.closest('.kh-modal, .kh-idx-main');
     const pwHtml = isUsCode(code) || !pwHere ? '' : `
-      <span class="kh-dt-i" title="체결강도 — 100 보다 크면 사는 쪽 체결이 많습니다"><span class="kh-dt-l">체결강도</span><b class="kh-dt-pw ${pwOk ? signClass(pw - 100) : 'kh-mut'}"${pwBg ? ` style="background:${pwBg}"` : ''}>${pwOk ? pw.toFixed(2) : '—'}</b></span>`;
+      <span class="kh-dt-i" data-tip="체결강도 — 100 보다 크면 사는 쪽 체결이 많습니다"><span class="kh-dt-l">체결강도</span><b class="kh-dt-pw ${pwOk ? signClass(pw - 100) : 'kh-mut'}"${pwBg ? ` style="background:${pwBg}"` : ''}>${pwOk ? pw.toFixed(2) : '—'}</b></span>`;
 
     host.innerHTML = `${pwHtml}
-      <span class="kh-dt-i" title="${exact ? '서버가 준 실제 거래대금입니다'
+      <span class="kh-dt-i" data-tip="${exact ? '서버가 준 실제 거래대금입니다'
         : '현재가 × 거래량으로 어림한 값입니다'}">
         <span class="kh-dt-l">거래대금${exact ? '' : '<i>어림</i>'}</span><b>${amt}</b></span>
       <span class="kh-dt-i"><span class="kh-dt-l">시가총액</span><b>${cap}</b></span>

@@ -237,7 +237,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
     setText('#kh-amt', amtRaw == null ? '—' : (us ? fmtUsdBig(amtRaw) : fmtMoneyKr(Math.round(amtRaw / 1e8))));
     const amtEl = $('#kh-amt');
     if (amtEl) {
-      amtEl.title = amtExact ? '서버가 준 실제 거래대금입니다'
+      amtEl.dataset.tip = amtExact ? '서버가 준 실제 거래대금입니다'
                              : '현재가 × 거래량으로 어림한 값입니다';
       amtEl.classList.toggle('kh-approx', !amtExact);
     }
@@ -480,7 +480,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
       const perEl = $('#kh-m-per');
       if (perEl) {
         perEl.textContent = cns.per != null ? cns.per + '배' : '—';
-        perEl.title = cns.per != null
+        perEl.dataset.tip = cns.per != null
           ? `네이버 · 증권사 추정 평균 EPS ${cns.eps != null ? fmtNum(cns.eps) + '원' : '—'} 기준 · ${cns.date || '날짜 모름'} 집계`
           : '증권사 추정치가 없는 종목입니다';
       }
@@ -506,7 +506,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
       const rankEl = $('#kh-rank');
       if (rankEl) {
         rankEl.textContent = d.rank != null ? `${d.rank}위` : '—';
-        rankEl.title = d.rank != null
+        rankEl.dataset.tip = d.rank != null
           ? '코스피 시가총액 순위 (매일 아침 갱신)'
           : '코스피 200위 밖이거나, 이 PC 의 서버가 아니어서 순위를 모릅니다';
       }

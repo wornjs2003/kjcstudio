@@ -135,7 +135,7 @@ export function buildHead(spec = {}) {
 
       ${(spec.tabs && spec.tabs.length) ? `<div class="kh-mh-tabs">
         ${spec.tabs.map((t) => `<button class="kh-mh-tab${t.id === state.tab ? ' is-on' : ''}"
-          type="button" data-mh-tab="${esc(t.id)}">${esc(t.label)}</button>`).join('')}
+          type="button" data-mh-tab="${esc(t.id)}"${t.tip ? ` data-tip="${esc(t.tip)}"${t.tipH ? ` data-tip-h="${esc(t.tipH)}"` : ''}` : ''}>${esc(t.label)}</button>`).join('')}
         ${state.tabsNote ? `<span class="kh-mh-tabs-r">${esc(state.tabsNote)}</span>` : ''}
       </div>` : ''}`;
 
