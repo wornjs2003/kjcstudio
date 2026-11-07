@@ -112,6 +112,18 @@ export async function fetchIssues() {
   return null;
 }
 
+/** 서버가 쌓아 둔 기사(같은 사건 묶음) — 홈 오른쪽 뉴스 칸이 쓴다. 못 받으면 null.
+ *  (2026-11-07 홈 8 · 재권님 「응」 — 뉴스 네 곳 중 이 칸은 서버 저장본 하나만 읽는다. 모양은 issues 와 같고 group · more · others 가 더 있다) */
+export async function fetchStored() {
+  try {
+    const r = await apiFetch('/api/news/stored', { cache: 'no-store' });
+    if (!r) return null;
+    const j = await r.json();
+    if (j && j.ok && Array.isArray(j.data)) return j.data;
+  } catch { /* 아래에서 못 받았다고 적는다 */ }
+  return null;
+}
+
 /* 마지막으로 받아 둔 feed. **모달이 열릴 때 즉시 꺼내 쓴다.**
  *
  * 왜 들고 있나 — `moves`(종목 뉴스)는 서버가 KIS 를 두 시장에 나눠 물어야
