@@ -1322,7 +1322,8 @@ export function createStockChart(container, candles, opts = {}) {
      **한 번 굳히면 끌 때도 풀지 않는다.** 풀면 자동 스케일이 돌아오면서
      그 순간 화면이 바뀐다 — 「지표를 켜고 꺼도 차트 크기가 바뀌지 않는다」
      를 끄는 쪽에서 어기게 된다 (2026-09-18 실측 420 → 484px).
-     차트를 새로 그리거나 종목·기간이 바뀔 때만 다시 잡는다. */
+     차트를 새로 그리거나 종목·기간이 바뀔 때만 다시 잡는다.
+     **휠 · 끌기로 보는 봉을 바꿀 때도 다시 잡는다** (2026-11-07 · 아래 fitVisible) — 지표를 켜고 끌 때는 그대로다. */
   function lockPriceRange() {
     if (!indOn().has('vp')) return;            // 끌 때는 건드리지 않는다
     if (vpRange) return;                       // 이미 굳혀 두었다
@@ -1338,6 +1339,42 @@ export function createStockChart(container, candles, opts = {}) {
       vpRange = { min: edge.bot + m.bottom * span, max: edge.top - m.top * span };
       candleSeries.applyOptions(priceFix());
     } catch { /* 아직 그릴 준비가 안 됐다 */ }
+  }
+
+  /* ── 휠 · 끌기로 보는 봉이 바뀌면 세로를 그 봉에 맞춘다 (2026-11-07 재권님 「차트 휠 드래그 해서 캔들개수 조정될때 캔들의 최대값
+     최소값에 맞게 높이도 보는 화면에 맞게 조절되게」 → 안 「나머지는 안대로」 · 「매물대가 켜져있어도 휠움직이면 맞춰서 되야할거같아.
+     횔움직이는 동안 매물대가 꺼지고 멈추면 다시그려서 나와도 돼」) ──
+     자동 눈금은 원래 보이는 봉에 맞춘다(이동평균 · 볼린저 같은 겹침은 NO_SCALE 로 빠져 있다). 안 맞던 것은 둘이다 —
+       매물대를 켜면 세로를 굳힌다(위 lockPriceRange)   → 사람이 휠 · 끌기로 보기를 바꾸면 굳힘을 풀고, 그동안 매물대를 감췄다가
+                                                         멈추면(FIT_REST_MS) 새 보기로 다시 굳혀 그린다
+       가격 칸을 위아래로 끈 뒤에는 자동 눈금이 꺼진 채다(freeVert) → 휠을 굴리면 다시 켠다. 끌기는 그대로 둔다(위아래로 끈 자리를 지킨다)
+     **지표를 켜고 끌 때는 그대로 굳힌다** — 이것은 사람이 보기를 바꾼 때만 돈다(마우스 · 휠이 차트 위에서 막 움직였을 때).
+     새 봉이 붙거나 종목 · 기간을 바꿔 보기가 바뀌는 것(setView)은 사람이 움직인 것이 아니라 건드리지 않는다 */
+  const FIT_REST_MS = 250;     // 휠 · 끌기가 이만큼 멈추면 매물대를 다시 굳혀 그린다(그리기 박자 · 서버와 무관)
+  const USER_MS = 700;         // 차트 위 휠 · 누름 뒤 이만큼 안에 바뀐 보기를 「사람이 바꾼 것」 으로 본다
+  let userAt = 0, wheelAt = 0, fitTimer = null;
+  container.addEventListener('wheel', () => { userAt = wheelAt = Date.now(); }, { passive: true, capture: true });
+  container.addEventListener('pointerdown', () => { userAt = Date.now(); }, { capture: true });
+  container.addEventListener('pointermove', (e) => { if (e.buttons) userAt = Date.now(); }, { capture: true });
+
+  function fitVisible() {
+    const now = Date.now();
+    if (now - userAt > USER_MS || !candleSeries || !panes[0]) return;
+    if (now - wheelAt <= USER_MS) {
+      try { panes[0].chart.priceScale('right').applyOptions({ autoScale: true }); } catch { /* 이미 정리됨 */ }
+    }
+    if (!indOn().has('vp')) return;            // 굳힌 것이 없으면 자동 눈금이 알아서 맞춘다
+    if (vpRange) {
+      vpRange = null;
+      try { candleSeries.applyOptions(priceFix()); } catch { /* 칸이 아직 없다 */ }
+    }
+    if (vpLayer) vpLayer.style.visibility = 'hidden';
+    clearTimeout(fitTimer);
+    fitTimer = setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(() => {
+      lockPriceRange();
+      if (vpLayer) vpLayer.style.visibility = '';
+      drawProfile();
+    })), FIT_REST_MS);
   }
 
   function drawCandle(ch) {
@@ -1787,6 +1824,7 @@ export function createStockChart(container, candles, opts = {}) {
           }
         });
         syncing = false;
+        fitVisible();                          // 사람이 휠 · 끌기로 바꿨으면 세로를 보이는 봉에 맞춘다(위 fitVisible)
         /* 봉이 움직이면 매물대도 그 자리에서 따라간다. 2초를 기다리면
            띠와 봉이 어긋나 보인다 (2026-09-18). */
         drawProfile();
@@ -2295,6 +2333,7 @@ export function createStockChart(container, candles, opts = {}) {
     destroy() {
       _indSync.delete(syncInd);
       if (sizeRo) sizeRo.disconnect();
+      clearTimeout(fitTimer);
       clearTimeout(sizeTimer);
       if (vpTimer) { clearInterval(vpTimer); vpTimer = null; }   // 매물대 타이머
       document.removeEventListener('mousemove', onMove);
