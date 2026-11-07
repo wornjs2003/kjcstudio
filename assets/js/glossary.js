@@ -118,9 +118,14 @@ const inOpen = (n) => !!(open && n instanceof Node && (open.contains(n) || openF
     if (!fine || !inOpen(e.target) || inOpen(e.relatedTarget)) return;
     clearTimeout(hideTimer); hideTimer = setTimeout(hide, 150);    // 낱말과 풍선 사이 6px 틈을 지나는 동안은 기다린다
   });
-  document.addEventListener('focusin', (e) => { const sp = e.target.closest('[data-term]'); if (sp && sp !== openFor) show(sp); });
+  /* 누름으로 생긴 포커스는 focusin 에서 열지 않는다 — 곧 오는 click 이 열고 닫는다. 전에는 focusin 이 열고 이어 온 click 이
+     같은 낱말이라 닫아, 좁은 화면에서 처음 누르면 안 열렸다(2026-11-07 qa 덧 · 재권님 「응」). 키보드(Tab) 포커스는 그대로 연다 */
+  let pressed = null;
+  document.addEventListener('pointerdown', (e) => { pressed = e.target.closest('[data-term]'); }, true);
+  document.addEventListener('focusin', (e) => { const sp = e.target.closest('[data-term]'); if (sp && sp !== openFor && sp !== pressed) show(sp); });
   document.addEventListener('click', (e) => {                   // 좁은 폭 — 누르면 열고 다른 곳을 누르면 닫는다
     if (e.target.closest('.gl-tip')) return;                     // 풍선 안(출처 링크 · 원문 보기)은 그대로
+    pressed = null;
     const sp = e.target.closest('[data-term]');
     if (!sp) { hide(); return; }
     if (sp === openFor) hide(); else show(sp);
