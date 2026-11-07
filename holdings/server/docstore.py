@@ -531,3 +531,67 @@ def list_history(name):
         return []
     head = name + "-"
     return sorted(f[:-5] for f in names if f.startswith(head) and f.endswith(".json"))
+
+
+# ── 카드에 붙인 파일 (2026-11-07 재권님 「프로젝트에서 카드 작성할때 첨부파일 이미지도 추가가능하게 개선해줘」 ·
+#    「보드에 이미지 도 첨부할수있게 해줘」) ──────────────────────────────────────────────
+#
+# 파일은 문서(JSON) 안에 넣지 않는다 — 보드 문서는 저장할 때마다 통째로 오가서, 그림을 넣으면 저장 한 번이 수 MB 가 된다.
+# **문서 옆 `files/` 에 따로 두고 카드에는 이름표(id · 이름 · 크기)만 남긴다.**
+# 이 PC 안에만 있다(「저장은 이 PC 안에만 둔다」) — git 저장소(`.git`)는 문서를 **이름으로만** 담으므로(`_git_ready`) 여기 파일은 안 들어간다.
+# 한 번 넣은 파일은 고치지 않는다(이름이 곧 내용) — 그래서 덮어쓰기 · 되살리기가 필요 없다.
+# 카드에서 지워도 파일은 남는다 — 다른 카드 · 되돌린 저장본이 가리킬 수 있어서다.
+FILE_DIRNAME = "files"
+FILE_MAX_BYTES = 10 * 1024 * 1024          # 한 파일 크기 한도 — 화면은 /api/board/health 로 받는다(박지 않는다)
+FILE_TYPES = {                             # 받는 종류 → 붙일 확장자. 그림과 PDF 만(브라우저가 열어도 스크립트가 안 도는 것)
+    "image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp",
+    "application/pdf": ".pdf",
+}
+_FILE_RE = re.compile(r"^[0-9a-z]{8,40}\.(png|jpg|gif|webp|pdf)$")
+
+
+class FileRefused(ValueError):
+    """받지 않는 파일 — `status` 는 응답 코드(400 종류 · 413 크기)."""
+    def __init__(self, msg, status=400):
+        ValueError.__init__(self, msg)
+        self.status = status
+
+
+def save_file(raw, ctype):
+    """파일 하나를 `files/` 에 쓰고 id(파일 이름)를 돌려준다."""
+    ctype = (ctype or "").split(";", 1)[0].strip().lower()
+    ext = FILE_TYPES.get(ctype)
+    if not ext:
+        raise FileRefused("받는 파일은 그림(png · jpg · gif · webp)과 PDF 뿐입니다.")
+    if not raw:
+        raise FileRefused("빈 파일입니다.")
+    if len(raw) > FILE_MAX_BYTES:
+        raise FileRefused("파일이 %dMB 보다 큽니다." % (FILE_MAX_BYTES // (1024 * 1024)), 413)
+    fid = "%x%s%s" % (int(time.time() * 1000), os.urandom(4).hex(), ext)
+    folder = os.path.join(DOC_ROOT, FILE_DIRNAME)
+    os.makedirs(folder, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix=".up-")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(raw)
+        os.replace(tmp, os.path.join(folder, fid))
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    return fid
+
+
+def file_path(fid):
+    """id 로 파일 자리를 낸다. 모양이 틀리면(`../` 등) None."""
+    if not fid or not _FILE_RE.match(fid):
+        return None
+    p = os.path.join(DOC_ROOT, FILE_DIRNAME, fid)
+    return p if os.path.isfile(p) else None
+
+
+def file_type(fid):
+    ext = os.path.splitext(fid or "")[1]
+    for k, v in FILE_TYPES.items():
+        if v == ext:
+            return k
+    return "application/octet-stream"
