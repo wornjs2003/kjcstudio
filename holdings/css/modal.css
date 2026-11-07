@@ -765,3 +765,26 @@
 .kh-fin-c .fc-c-acc { fill: var(--kh-accent); }     .kh-fin-c .fc-s-acc { stroke: var(--kh-accent); }
 .kh-fin-c .fc-c-grn { fill: var(--kh-tag-news); }   .kh-fin-c .fc-s-grn { stroke: var(--kh-tag-news); }
 .kh-fin-c .fc-c-pri { fill: var(--kh-text-primary); } .kh-fin-c .fc-s-pri { stroke: var(--kh-text-primary); }
+
+/* ── 차트만 보기 (2026-11-07 재권님 「모달창에서 차트만 보기 누르면 … 모달크기가 화면창에 맞춰서 커지고 차트 쪽이 가득 채워지도록」
+   → 시안 「응 맞아」) ──
+   단추는 components/stock-view.js 가 모달 안 차트 칸 머리에만 붙인다. 누르면 모달 · 판에 is-chart-only —
+   모달을 창 크기(가장자리 16px 씩 남김)로 키우고 머리 · 서랍 · 다른 칸을 내려 차트 칸 하나만 남긴다. 다시 누르면 그대로 돌아간다.
+   서랍을 펼친 배치(.kh-stage.has-left …)보다 앞서야 해서 칸 배치에 !important 를 쓴다 */
+.kh-only-btn {
+  border: 0; border-radius: 6px; padding: 4px 8px; margin-left: 4px;
+  font: inherit; font-size: 0.74rem; font-weight: 600; line-height: 1;
+  background: var(--kh-bg-active); color: var(--kh-text-secondary); cursor: pointer; white-space: nowrap;
+}
+.kh-only-btn:hover { color: var(--kh-text-primary); }
+.kh-stage.is-chart-only { --kh-mw: calc(100vw - 32px); transform: none; }
+.kh-modal.is-chart-only { height: calc(100vh - 32px); }
+.kh-modal.is-chart-only .kh-main {
+  padding-top: 22px;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) !important;
+  grid-template-areas: "chart" "chart" !important;
+}
+.kh-modal.is-chart-only .kh-head,
+.kh-modal.is-chart-only .kh-drawer-tab,
+.kh-modal.is-chart-only .kh-w:not([data-p="chart"]) { display: none !important; }
