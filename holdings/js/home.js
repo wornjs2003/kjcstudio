@@ -839,7 +839,8 @@ async function paintBigChart(opt = {}) {
   } else {
     dropBigChart();
     host.innerHTML = '';
-    bigChart = createStockChart(host, candles, { period, showVolume: true, priceDigits: digits, code: st.code, sessions: true });   // sessions — 나라별 장 시각 세로선(큰 차트만 · 11-03)
+    bigChart = createStockChart(host, candles, { period, showVolume: true, priceDigits: digits, code: st.code, sessions: true,   // sessions — 나라별 장 시각 세로선(큰 차트만 · 11-03)
+                                                 ownOff: () => document.body.classList.contains('kh-simple') });   // ownOff — 간단모드면 보조 칸을 안 그림(11-07)
     bigDigits = digits;
   }
   bigDrawnKey = key;
@@ -3459,4 +3460,19 @@ function fitScale() {
 }
 fitScale();
 addEventListener('resize', fitScale);
+
+/* 간단모드 (2026-11-07 재권님 「종목이름 코드 왼쪽에 간단모드 버튼 만들어서 이거 누르면 이 이미지대로만」 → 시안 2 「이대로 만들어줘」).
+   검색칸 왼쪽 「간단」 단추로 켜고 끈다 — 모양은 home.css 「간단모드」 · 보조 칸은 큰 차트의 ownOff 가 뺀다(보조지표 설정은 안 바꿈).
+   켠 상태는 이 브라우저에 기억한다(보는 상태 — 「화면이 가져도 되는 것」) */
+const SIMPLE_KEY = 'kh.home.simple';
+function setSimple(on, save = true) {
+  document.body.classList.toggle('kh-simple', on);
+  const b = $('kh-simple');
+  if (b) b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  if (save) { try { localStorage.setItem(SIMPLE_KEY, on ? '1' : '0'); } catch { /* 저장 못 씀 — 이번만 */ } }
+  if (bigChart && bigChart.syncPanes) bigChart.syncPanes();
+  fitScale();
+}
+$('kh-simple')?.addEventListener('click', () => setSimple(!document.body.classList.contains('kh-simple')));
+try { if (localStorage.getItem(SIMPLE_KEY) === '1') setSimple(true, false); } catch { /* 저장 못 읽음 — 기본(끔) */ }
 if (window.ResizeObserver) new ResizeObserver(fitScale).observe(document.querySelector('body > .kh-app-wide .kh-main') || document.body);
