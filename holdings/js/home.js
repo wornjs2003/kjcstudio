@@ -56,6 +56,7 @@ import { everyServerMs, serverData } from './store/timing.js';
 import { watch } from './store/longpoll.js';
 import { sectorShort } from './data/sector-short.js';
 import { watchLive, withLive } from './store/live-tick.js';
+import { REPORT_PAGE } from './components/ai-analysis.js';   // 머리줄 AI 단추 주소 — AI 분석 칸과 같은 곳
 
 
 
@@ -698,6 +699,9 @@ function paintBigHead(s2) {
     fav.dataset.favName = s2.name;
     paintBigFav();
   }
+
+  const ai = $('kh-big-ai');
+  if (ai) ai.href = REPORT_PAGE(s2.code);   // AI 분석 칸의 리포트 열기와 같은 주소(ai-analysis.js 한 곳)
 
   const link = $('kh-big-link');
   if (link) {

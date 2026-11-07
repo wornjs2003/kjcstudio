@@ -35,7 +35,7 @@ const AI_FILE = './data/ai-analysis.json';
 /* Insight 종목 리포트 저장본 — 시황분석이 쓴 문서(company-setup/tools/save-stock-report.py · savedAt). 이 칸 글보다 새것이면 그리로 잇는다
    (2026-11-06 재권님 「나」 — 홈 훑기 1번 「AI 분석 칸이 한 달 전 글」). 종목마다 한 번만 읽는다 */
 const REPORT_DOC = code => `/company-setup/data/stock-report/docs/${code}.json`;
-const REPORT_PAGE = code => `/company-setup/stock-report.html?code=${code}`;
+export const REPORT_PAGE = code => `/company-setup/stock-report.html?code=${code}`;
 const RELOAD_FALLBACK_MS = 30 * 60 * 1000;
 
 function esc(s) {
