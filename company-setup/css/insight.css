@@ -102,12 +102,9 @@
 .in-src[data-src="ECOS"]  { color: var(--kh-cat-amber);  background: var(--kh-cat-amber-dim); }
 .in-src[data-src="DART"]  { color: var(--kh-cat-violet); background: var(--kh-cat-violet-dim); }
 .in-src[data-src="계산"], .in-src[data-src="세션"] { color: var(--kh-text-muted); background: var(--kh-overlay-faint); }   /* 받아 온 값이 아니다 */
-/* 받는 법 풍선 (2026-10-08 재권님 「각 값들을 어떻게 가져오는지 알수있게」) — 배지에 마우스를 올리면(폰은 눌러 초점) 풍선. 모양은 용어 풍선(.in-term-tip) 그대로 · CSS 만 */
-.in-how { position: relative; cursor: help; outline: none; }
-.in-how > .in-term-tip { display: none; }
-.in-how:hover > .in-term-tip, .in-how:focus > .in-term-tip { display: block; }
-.in-how.r > .in-term-tip { left: auto; right: 0; }
-.in-how .in-term-tip code { font-size: 0.74rem; }
+/* 받는 법 배지 (2026-10-08 재권님 「각 값들을 어떻게 가져오는지 알수있게」) — 마우스를 1초 올려 두면 공용 풍선(.gl-tip · assets/js/glossary.js 의 data-tip-ref)이 뜬다.
+   옛 CSS :hover 풍선(.in-term-tip)은 2026-11-07 「설명 풍선은 … 1초 올려 두면 뜬다」 로 걷어냄 */
+.in-how { cursor: help; outline: none; }
 .in-vt-sample { margin: 0 0 10px; font-size: 0.8rem; color: var(--kh-text-secondary); }
 /* 오른쪽 「종목」 목록 · 좁은 화면(오른쪽 칸이 숨는 1280px 이하)의 종목 줄 (2026-10-06 재권님 「차례 대신에 종목」) */
 .in-stocks a.is-on { color: var(--kh-text-primary); font-weight: 700; }
@@ -241,18 +238,6 @@
 .in-doc-ol li { margin: 4px 0; }
 .in-doc-ol li b { color: var(--kh-text-primary); }
 
-/* ── 풍선 안 모양 — 받는 법 배지(.in-how)가 쓴다. 용어 풍선 자체는 2026-10-12 에 공용(assets/js/glossary.js · assets/css/glossary.css)으로 옮겼다 · 좁은 폭부터 */
-.in-term-tip { position: absolute; left: 0; top: calc(100% + 6px); z-index: 40; width: min(420px, 88vw); background: var(--kh-bg-card); border-radius: var(--kh-radius-md); box-shadow: var(--kh-shadow-lg, var(--shadow-lg)); padding: 10px 12px; text-align: left; font-weight: 400; font-style: normal; font-size: 0.8rem; line-height: 1.6; color: var(--kh-text-secondary); white-space: normal; text-decoration: none; cursor: auto; }
-.in-term-tip.up { top: auto; bottom: calc(100% + 6px); }
-.in-term-h { display: block; color: var(--kh-text-primary); font-size: 0.88rem; margin-bottom: 4px; }
-.in-term-kv { display: grid; grid-template-columns: 4.6em minmax(0, 1fr); gap: 6px; margin: 3px 0; }
-.in-term-kv span { color: var(--kh-text-muted); }
-.in-term-tip blockquote { margin: 6px 0 2px; padding: 6px 10px; background: var(--kh-bg); border-radius: var(--kh-radius-sm); font-size: 0.78rem; }
-.in-term-src { font-size: 0.72rem; margin-bottom: 4px; }
-.in-term-src a { color: var(--kh-accent); text-decoration: none; }
-.in-term-none { margin: 6px 0; padding: 5px 10px; background: var(--kh-danger-faint); color: var(--kh-danger); border-radius: var(--kh-radius-sm); font-size: 0.76rem; }
-.in-term-note { margin: 6px 0 0; font-size: 0.76rem; }
-td .in-term-tip, .in-vt-stat .in-term-tip { font-weight: 400; }
 /* 지금 계산 ④ · ⑤ · ⑥ 바로 가기 — 위 메뉴 줄 밑에 제목이 가리지 않게 (2026-10-07 재권님 「칸만 있고 밑에 클릭하면 경영진 같은 게 안 나오는데」) */
 #calc-body h3[id] { scroll-margin-top: 96px; }
 /* 인용 — 한국어 본문 · 원문(영어)은 접어 둔다 (2026-10-07 · 개념정의가 룰로 올리는 모양) */

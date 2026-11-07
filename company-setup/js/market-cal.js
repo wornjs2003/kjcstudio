@@ -21,7 +21,7 @@ const NONE = '99';   // 시각 없는 줄은 그날 맨 뒤
   const fix = (n = 0) => {
     const rows = document.querySelectorAll('#odds tr[data-rel]');
     if (!rows.length) return n < 40 && setTimeout(() => fix(n + 1), 250);
-    rows.forEach(tr => { const r = rel.find(x => x.key === tr.dataset.rel); if (r && r.nextRelease) { tr.lastElementChild.textContent = r.nextRelease.slice(5); tr.lastElementChild.title = '서버 발표 일정'; } });
+    rows.forEach(tr => { const r = rel.find(x => x.key === tr.dataset.rel); if (r && r.nextRelease) { tr.lastElementChild.textContent = r.nextRelease.slice(5); tr.lastElementChild.dataset.tip = '서버 발표 일정'; } });
   };
   if (rel.length) fix();
 

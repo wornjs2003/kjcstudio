@@ -102,14 +102,14 @@ const st = k => `<span class="nd-st ${k === 'miss' ? 'no' : k}">${ST[k]}</span>`
     const ways = (fl['찾는길'] && fl['찾는길']['길']) || [];
     const cut = s => esc(String(s || '확인 못 함').split(' · ')[0]);
     const row = (f, extra) => `<div class="r"><b>${esc(f.label || f.id)}${extra}</b><span class="nd-st part">${esc(f['갈래'] || '갈래 없음')}</span>`
-      + `<span class="gap">들인 날 ${esc(f['들인날'] || '확인 못 함')} · 지시 ${cut(f['지시한날'])}</span><span class="gap why" title="${esc(f['근거'] || '')}">근거 ${cut(f['근거'])}</span></div>`;
+      + `<span class="gap">들인 날 ${esc(f['들인날'] || '확인 못 함')} · 지시 ${cut(f['지시한날'])}</span><span class="gap why" data-tip="${esc(f['근거'] || '')}">근거 ${cut(f['근거'])}</span></div>`;
     $('nd-feeds').innerHTML = [...by.values()].map(f => row(f, (f['언론사'] ? ` <small>번호 ${esc(f['언론사'])}</small>` : '') + (f.n > 1 ? ` <small>주소 ${f.n}</small>` : ''))).join('')
       + ways.map(w => row(w, ' <small>받는 곳이 아님 · 언론사로 가림(지금은 표시만)</small>')).join('');
   } else $('nd-feeds').textContent = '못 받음';
   $('nd-topic').innerHTML = ns && ns.meta && ns.meta.topics ? kv(ns.meta.topics, 8) : '못 받음';
 
   $('sum-nd2').innerHTML = dart ? `<span class="sl"><b>회사 ${nf(dart.corps)}</b>기사와 잇는 표 · 별명 — 없음</span>` : '못 받음';
-  $('nd-tags').innerHTML = bundles ? bundles.map(b => `<span title="${esc(b['뜻'])}"><b>${esc(b.label)}</b>${(b['말'] || []).length}낱말</span>`).join('') : '못 받음';
+  $('nd-tags').innerHTML = bundles ? bundles.map(b => `<span data-tip="${esc(b['뜻'])}"><b>${esc(b.label)}</b>${(b['말'] || []).length}낱말</span>`).join('') : '못 받음';
   $('nd-topics').innerHTML = topics ? topics.filter(t => t.on !== false).map(t => `<span><b>${esc(t.label)}</b>${(t.keywords || []).length}낱말</span>`).join('') : '못 받음';
   $('sum-nd3').innerHTML = `<span class="sl"><b>공시 딱지 ${bundles ? bundles.length : '—'}묶음</b>뉴스 기사 갈래 · 방향 — 없음</span>`;
   $('sum-nd4').innerHTML = dart ? `<span class="sl"><b>시가총액 상위 ${nf(dart.universe)}</b>매출은 종목마다 서버 재무 · 사건과 대는 자리 — 없음</span>` : '못 받음';
