@@ -3,8 +3,7 @@
  *
  *   값      서버 /api/dart/profile?code= 하나(server/company_profile.py) — 네이버(FnGuide) 기업개요 + DART 정기보고서 매출 표.
  *           화면은 셈하지 않고 받은 것을 그대로 보인다. 받은 값은 이 탭에서만 들고 있는다(언제 다시 받을지는 서버가 정한다)
- *   자리    `data-co="<종목코드>"` 를 단 곳 — 큰 차트 머리 · 종목 모달 제목은 이름 글자, 순위 표 · 「자세히」 모달 표는 이름 옆 ?
- *           (2026-11-07 재권님 「종목이름옆에 ? 넣어주고 거기위에 올릴때 뜨게」 · 이름은 `data-co-name`).
+ *   자리    이름 글자에 `data-co="<종목코드>"` 를 단다 — 순위 표 · 「자세히」 모달 표 · 큰 차트 머리 · 종목 모달 제목.
  *           풍선은 document 에 한 번만 건다(나중에 그린 칸도 그대로 걸린다)
  *   모양    공용 용어 풍선(assets/css/glossary.css 의 .gl-tip · .gl-h · .gl-short · .gl-kv · .gl-src)을 그대로 쓴다 — 세 번째 풍선
  *           모양을 만들지 않는다. 그 파일은 용어집 코드(assets/js/glossary.js)가 걸어 두므로 여기서는 없을 때만 건다.
@@ -92,7 +91,7 @@ async function show(el) {
   tip = document.createElement('div');
   tip.className = 'gl-tip kh-cotip';
   tip.setAttribute('role', 'tooltip');
-  const name = el.dataset.coName || el.textContent.trim();     // 순위 표는 이름 옆 ? 에 달려 이름을 따로 싣는다(2026-11-07)
+  const name = el.textContent.trim();
   const now = got.get(code);
   tip.innerHTML = html(name, now instanceof Promise ? null : now);
   document.body.appendChild(tip);
