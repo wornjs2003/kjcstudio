@@ -7773,7 +7773,50 @@ class Handler(SimpleHTTPRequestHandler):
                 # git 으로 남기는데, 켜졌는지·쌓이는지를 여기서 본다.
                 # 주소나 문서 이름은 안 낸다 — 켜짐 여부와 개수만이다.
                 "git": docstore.git_status(),
+                # 카드에 붙이는 파일의 한도 · 종류 — 화면이 이 값을 받아 쓴다(「캐시·주기·한도 값을 화면에 박지 않는다」)
+                "fileMaxBytes": docstore.FILE_MAX_BYTES,
+                "fileTypes": sorted(docstore.FILE_TYPES),
             })
+            return
+
+        # ── 카드에 붙인 파일 (2026-11-07 · docstore 「카드에 붙인 파일」) ──
+        #   PUT /api/board/file            본문이 파일 그대로 · Content-Type 이 종류  → {"ok", "id", "url", "size"}
+        #   GET /api/board/file/<id>        그 파일(한 번 넣으면 안 바뀌어 오래 받아 둔다)
+        if path == "/api/board/file":
+            n = int(self.headers.get("Content-Length") or 0)
+            if self.command != "PUT":
+                self._send_json({"ok": False, "error": "파일은 PUT 으로 보내 주십시오."}, status=405)
+                return
+            if n > docstore.FILE_MAX_BYTES:
+                left = n
+                while left > 0:                       # 큰 본문도 비우고 답한다(안 읽으면 보내는 쪽 연결이 깨진다)
+                    chunk = self.rfile.read(min(left, 1 << 20))
+                    if not chunk:
+                        break
+                    left -= len(chunk)
+                self._send_json({"ok": False, "error": "파일이 %dMB 보다 큽니다."
+                                 % (docstore.FILE_MAX_BYTES // (1024 * 1024))}, status=413)
+                return
+            raw = self.rfile.read(n)
+            try:
+                fid = docstore.save_file(raw, self.headers.get("Content-Type"))
+            except docstore.FileRefused as e:
+                self._send_json({"ok": False, "error": str(e)}, status=e.status)
+                return
+            except OSError as e:
+                self._send_json({"ok": False, "error": safe_message(e)}, status=500)
+                return
+            self._send_json({"ok": True, "id": fid, "url": "/api/board/file/" + fid, "size": len(raw)})
+            return
+        m = re.match(r"^/api/board/file/([^/]+)$", path)
+        if m:
+            fp = docstore.file_path(urllib.parse.unquote(m.group(1)))
+            if not fp:
+                self._send_json({"ok": False, "error": "그런 파일이 없습니다."}, status=404)
+                return
+            with open(fp, "rb") as f:
+                data = f.read()
+            self._send_body(200, data, docstore.file_type(fp), cache="private, max-age=31536000, immutable")
             return
 
         m = re.match(r"^/api/board/doc/([^/]+)$", path)
