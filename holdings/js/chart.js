@@ -903,6 +903,8 @@ export function createStockChart(container, candles, opts = {}) {
   if (!candles || !candles.length) throw new Error('표시할 데이터가 없습니다');
 
   const showVolume = opts.showVolume !== false;
+  /* 홈 간단모드 — 켜 둔 보조 칸(거래량 · MACD · RSI · 누적 순매수)을 잠시 안 그린다. 보조지표 설정은 그대로다 (2026-11-07 재권님 「이대로 만들어줘」) */
+  const ownOff = typeof opts.ownOff === 'function' ? opts.ownOff : () => false;
   const showMA = opts.showMA !== false;
   const showLegend = opts.showLegend !== false;
   let period = opts.period || 'D';
@@ -1695,7 +1697,7 @@ export function createStockChart(container, candles, opts = {}) {
     /* **세 화면이 같은 규칙으로 간다 (2026-09-18 지시).** 좁다고 칸을 빼지 않는다 —
        종목 화면에서 켠 것이 모달과 첫 화면에도 그대로 있어야 한다. */
     const own = OWN_PANES.filter((x) =>
-      indOn().has(x.key) && (x.key !== 'vol' || showVolume));
+      indOn().has(x.key) && (x.key !== 'vol' || showVolume) && !ownOff());
     const list = [{ key: 'price' }, ...own];
     /* **칸 높이에 다 안 들어가면 보조 칸을 비율대로 줄인다**(최소 PANE_MIN · 2026-10-08 재권님 — 「칸을 줄여」).
        좁은 폭 홈 큰 차트는 367px(home.css 2/3 지시)인데 가격 120 + 보조 110×3 = 453 이라 86px 이 칸 밖으로
@@ -1930,7 +1932,7 @@ export function createStockChart(container, candles, opts = {}) {
   /* 칸이 늘거나 줄 때만 전부 다시 만든다. 가격 칸 위 지표는 그 자리에서 */
   function ownKeys() {
     return OWN_PANES
-      .filter((x) => indOn().has(x.key) && (x.key !== 'vol' || showVolume))
+      .filter((x) => indOn().has(x.key) && (x.key !== 'vol' || showVolume) && !ownOff())
       .map((x) => x.key).join(',');
   }
   let curOwn = '';
@@ -2027,6 +2029,9 @@ export function createStockChart(container, candles, opts = {}) {
     get maSeries() { return maSeries; },
     get candles() { return candles; },
     legend: null,
+
+    /* 간단모드를 켜고 끈 뒤 — 보조 칸을 다시 짠다(ownOff 가 바뀜) */
+    syncPanes() { syncInd(); },
 
     addPriceLine(o) {
       try {

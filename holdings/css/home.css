@@ -856,6 +856,15 @@
    **Insight 화면도 이 파일을 건다** — 이 클래스들만 더했고 .kh-cat · .kh-cat-my 는 안 고쳤다. */
 .kh-cat-search { margin-left: auto; padding-bottom: 6px; display: flex; align-items: center; }
 .kh-cs-btn { display: none; }
+/* 간단모드 단추 — 검색칸 바로 왼쪽(2026-11-07). 검색칸이 하던 「오른쪽으로 밀기」 를 단추가 맡는다 · 높이는 검색칸과 같아 줄이 안 커진다 */
+.kh-simple-btn {
+  margin: 0 8px 6px auto; height: 28px; padding: 0 12px; flex: none;
+  border: 1px solid var(--kh-border-strong); border-radius: 999px;
+  background: var(--kh-bg-card); color: var(--kh-text-secondary); font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+}
+.kh-simple-btn[aria-pressed="true"] { background: var(--kh-text-primary); border-color: var(--kh-text-primary); color: var(--kh-text-on-fill); }
+.kh-simple-btn + .kh-cat-search { margin-left: 0; }
+@media (max-width: 1280px) { .kh-simple-btn { display: none; } }
 .kh-cs-in {
   width: 200px; height: 28px; box-sizing: border-box; padding: 0 10px;
   border: 1px solid var(--kh-border-strong); border-radius: var(--kh-radius-sm);
@@ -1738,6 +1747,18 @@
 .kh-hm-cell.is-fill { color: var(--kh-text-on-fill); }
 .kh-hm-cell.kh-mut { color: var(--kh-text-secondary); }
 .kh-hm-cell:hover { outline: 2px solid var(--kh-text-primary); outline-offset: -2px; }
+
+/* ── 간단모드 (2026-11-07 재권님 「종목이름 코드 왼쪽에 간단모드 버튼 … 이 이미지대로만」 → 시안 2 「이대로 만들어줘」) ──
+   body.kh-simple 일 때 큰 차트와 실시간 순위만 남긴다. 숨김: 오른쪽 칸(투자자 정보 · 호가 · AI 분석 · 종목 뉴스) · 아래 줄 ·
+   뉴스 공시 칸. 큰 차트는 오른쪽 칸 자리까지 가로로, 아래 줄(255 × 배율 + 사이 14) 자리까지 세로로 늘린다 — 문서 높이가 그대로라
+   창 맞춤(fitScale)이 흔들리지 않는다. 보조 칸은 chart.js 의 ownOff 가 뺀다(설정은 그대로). 1281px 이상에서만 — 그 아래는 틀이 다르다 */
+@media (min-width: 1281px) {
+  body.kh-simple .kh-idx { grid-template-columns: 1fr; }
+  body.kh-simple .kh-idx > .kh-idxp,
+  body.kh-simple .kh-rank,
+  body.kh-simple .kh-nwdc-card { display: none; }
+  body.kh-simple .kh-idx-chart { --kh-big-h: 819px; }   /* 550 + 아래 줄 255 + 사이 14 */
+}
 
 /* ── 칸을 창에 맞춰 키운다 · 글자는 그대로 (2026-11-03 재권님 「창 크기에 맞게 조절되게」 · 「처음 화면이 안보이는것 없이
    채워져야해」 · 「비율은 그대로여야 하고」 · 「창이 커지는건 커지는건데 안에 폰트는 그대로 유지해줘」) ──
