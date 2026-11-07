@@ -85,38 +85,50 @@ function tipHtml(it) {
   return `<div class="gl-tip" role="tooltip"><b class="gl-h">${esc(it.term)}</b><p class="gl-short">${esc(it.short)}</p>${al}${q}${miss}${weak}${note}</div>`;
 }
 
-let open = null;
+/* 풍선은 화면 맨 바깥(body)에 붙이고 낱말 자리에 맞춰 띄운다 (2026-11-07 재권님 「응」 · 개발1 이 찾음).
+   전에는 낱말 바로 안에 붙여서, 스크롤 · 넘침 숨김 칸(실시간 순위 · 종목 화면 칸) 안의 낱말이면 칸 가장자리에서 잘렸고
+   그 줄의 글씨 크기 · 줄바꿈 안 함도 물려받았다. 스크롤하면 자리가 어긋나므로 닫는다 — 풍선 안 스크롤은 그대로 */
+let open = null, openFor = null, hideTimer = 0;
 function show(sp) {
   hide();
   const it = find(sp.dataset.term); if (!it) return;
   if (!sp.classList.contains('gl-term')) { sp.classList.add('gl-term'); sp.tabIndex = 0; }   // 나중에 그린 표시
-  sp.insertAdjacentHTML('beforeend', tipHtml(it)); open = sp.lastElementChild;
-  // 화면 안에 들어오게 — 오른쪽이 넘치면 왼쪽으로 밀고, 왼쪽도 넘치면 8px 안쪽으로(좁은 폭 · 표 칸 안)
-  const sr = sp.getBoundingClientRect(); const w = open.offsetWidth; let left = 0;
-  if (sr.left + w > window.innerWidth - 8) left = window.innerWidth - 8 - w - sr.left;
-  if (sr.left + left < 8) left = 8 - sr.left;
-  open.style.left = `${Math.round(left)}px`;
-  const r = open.getBoundingClientRect();
-  if (r.bottom > window.innerHeight - 8 && r.top > r.height + 16) open.classList.add('up');
+  document.body.insertAdjacentHTML('beforeend', tipHtml(it)); open = document.body.lastElementChild; openFor = sp;
+  // 화면 안에 들어오게 — 아래가 모자라면 낱말 위로, 좌우는 8px 안쪽으로(좁은 폭 · 표 칸 안)
+  const sr = sp.getBoundingClientRect(), w = open.offsetWidth, h = open.offsetHeight;
+  const left = Math.max(8, Math.min(sr.left, window.innerWidth - 8 - w));
+  let top = sr.bottom + 6;
+  if (top + h > window.innerHeight - 8 && sr.top - 6 - h >= 8) { top = sr.top - 6 - h; open.classList.add('up'); }
+  open.style.left = `${Math.round(left)}px`; open.style.top = `${Math.round(top)}px`;
 }
-function hide() { if (open) { open.remove(); open = null; } }
+function hide() { clearTimeout(hideTimer); if (open) { open.remove(); open = openFor = null; } }
+const inOpen = (n) => !!(open && n instanceof Node && (open.contains(n) || openFor.contains(n)));   // 낱말이나 그 풍선 안
 
 (async () => {
   await ready;
   document.querySelectorAll('[data-glossary]').forEach(wrap);
   mark();
   const fine = window.matchMedia('(hover: hover)').matches;
-  document.addEventListener('mouseover', (e) => { if (!fine) return; const sp = e.target.closest('[data-term]'); if (sp && !sp.contains(open)) show(sp); });
-  document.addEventListener('mouseout', (e) => { if (!fine) return; const sp = e.target.closest('[data-term]'); if (sp && open && sp.contains(open) && !sp.contains(e.relatedTarget)) hide(); });
-  document.addEventListener('focusin', (e) => { const sp = e.target.closest('[data-term]'); if (sp && !sp.contains(open)) show(sp); });
+  document.addEventListener('mouseover', (e) => {
+    if (!fine) return;
+    if (inOpen(e.target)) { clearTimeout(hideTimer); return; }    // 낱말에서 풍선으로 옮겨도 안 닫는다(출처 링크를 누를 수 있게)
+    const sp = e.target.closest('[data-term]'); if (sp) show(sp);
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (!fine || !inOpen(e.target) || inOpen(e.relatedTarget)) return;
+    clearTimeout(hideTimer); hideTimer = setTimeout(hide, 150);    // 낱말과 풍선 사이 6px 틈을 지나는 동안은 기다린다
+  });
+  document.addEventListener('focusin', (e) => { const sp = e.target.closest('[data-term]'); if (sp && sp !== openFor) show(sp); });
   document.addEventListener('click', (e) => {                   // 좁은 폭 — 누르면 열고 다른 곳을 누르면 닫는다
     if (e.target.closest('.gl-tip')) return;                     // 풍선 안(출처 링크 · 원문 보기)은 그대로
     const sp = e.target.closest('[data-term]');
     if (!sp) { hide(); return; }
-    if (open && sp.contains(open)) hide(); else show(sp);
+    if (sp === openFor) hide(); else show(sp);
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });
+  document.addEventListener('scroll', (e) => { if (open && !open.contains(e.target)) hide(); }, true);   // 칸 · 화면 스크롤
+  window.addEventListener('resize', hide);
   // 주소에 ?term=낱말 이 있으면 그 낱말로 가서 풍선을 연 채 둔다 — 링크로 가리키기 · 찍어서 보여 드릴 때
   const q = new URLSearchParams(location.search).get('term');
-  if (q) { const sp = [...document.querySelectorAll('.gl-term')].find((x) => x.dataset.term.startsWith(q) || x.textContent === q); if (sp) { sp.scrollIntoView({ block: 'center' }); show(sp); } }
+  if (q) { const sp = [...document.querySelectorAll('.gl-term')].find((x) => x.dataset.term.startsWith(q) || x.textContent === q); if (sp) { sp.scrollIntoView({ block: 'center' }); setTimeout(() => show(sp), 150); } }   // 스크롤이 끝난 뒤 연다 — 스크롤하면 닫히므로
 })();

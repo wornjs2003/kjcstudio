@@ -3,10 +3,10 @@
    색은 접두사 없는 토큰. 빨간 줄(미정)과 모서리는 접두사 없는 토큰이 아직 없어 --kh- 를 쓴다 — 생기면 바꾼다 */
 .gl-term { position: relative; text-decoration: underline dotted; text-underline-offset: 3px; text-decoration-color: var(--text-muted); cursor: help; outline: none; }
 .gl-term:focus-visible { text-decoration-style: solid; }
-.gl-tip { position: absolute; left: 0; top: calc(100% + 6px); z-index: 40; width: min(420px, 88vw); background: var(--bg-card); border-radius: var(--kh-radius-md);
+/* 풍선은 body 에 붙어 낱말 자리에 띄운다(glossary.js 가 left · top 을 준다) · 모달(200)보다 위 — company-tip 과 같은 층 (2026-11-07) */
+.gl-tip { position: fixed; left: 0; top: 0; z-index: 300; width: min(420px, 88vw); max-height: calc(100vh - 16px); overflow-y: auto; overscroll-behavior: contain; background: var(--bg-card); border-radius: var(--kh-radius-md);
           box-shadow: var(--shadow-lg); padding: 10px 12px; text-align: left; font-weight: 400; font-style: normal; font-size: 0.8rem; line-height: 1.6;
           color: var(--text-secondary); white-space: normal; text-decoration: none; cursor: auto; }
-.gl-tip.up { top: auto; bottom: calc(100% + 6px); }
 .gl-h { display: block; color: var(--text-primary); font-size: 0.88rem; }
 .gl-short { margin: 2px 0 6px; color: var(--text-primary); }
 .gl-kv { display: grid; grid-template-columns: 4.6em minmax(0, 1fr); gap: 6px; margin: 3px 0; }
