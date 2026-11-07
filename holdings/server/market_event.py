@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""시장 전체 사건 — 서킷브레이커(주식 매매거래 중단)를 알아차린다 (2026-11-07 · 작업우선순위 배분 ①).
+"""시장 전체 사건 — 서킷브레이커(주식 매매거래 중단) · 사이드카(프로그램 호가 정지)를 알아차린다 (2026-11-07 · 작업우선순위 배분 ①).
 
 재권님 — 「서킷브레이크 같은 일/ 비슷한 다른 이벤트가 발생했을때 우리쪽 대응이 되어있는지 확인해봐」 → 「응 만들어줘. 해당 이벤트가
 발생했을때 가져오는 정보들도 정확히 가져오도록 다 체크해야돼」(작업우선순위 창) → 「서킷 브레이커 같은게 발도하면 알려주는곳 찾아봐」 →
@@ -29,6 +29,14 @@
     못 쟀다. 시장 낱말(코스닥 · 유가증권 · 코스피)로 그 시장 사건에 「확인됨」 을 붙이고, 못 가르면 kind 목록에만 둔다.
     우리 셈이 놓쳤는데 KIND 가 먼저 오면 그 시장에 단계 모름(stage None) · 확인됨 사건을 만든다.
 
+── 사이드카(2026-11-07 · 재권님 「응」 — 서킷과 같은 모양) ──
+
+    코스피  코스피200 선물(최근월 연결 10100000 · 서버가 이미 받음 fetch_futures)이 전일 종가보다 ±5% 넘게 1분
+    코스닥  코스닥150 선물(최근월 연결 10600000 · 11-07 KIS 로 받힘 확인 — 코스닥150F 202612)이 ±6% 넘게,
+            그리고 코스닥150 지수(3003)가 같은 쪽으로 ±3% 넘게 1분
+    → 내리면 프로그램 매도 · 오르면 매수 호가 효력 SIDECAR_MIN 분 정지 · 시장마다 하루 한 번 · SIDECAR_LAST(14:50) 뒤에는 안 걸림(다올 안내 · 원문 못 열어 봄)
+    거래소 공시 낱말 KIND_WORDS_SC 로 「확인됨」. 2026 에 자주 걸려(기사 「일상된 사이드카」) 알림은 켤 때 건수를 따로 잰다
+
 ── 남기기 · 알림 ──
 
     사건은 쓰기 되는 서버의 market.db market_event 표에 한 줄씩 — 그 순간 지수 · 등락률 · 시각(발동 날 「가져오는 정보가 맞나」 를 재는 바탕 · 카드 ⑧).
@@ -54,11 +62,17 @@ SESSION_FROM, SESSION_TO = 9 * 60, 15 * 60 + 30
 KIND_RSS = ("https://kind.krx.co.kr/disclosure/rsstodaydistribute.do?method=searchRssTodayDistribute"
             "&repIsuSrtCd=&mktTpCd=0&searchCorpName=&currentPageSize=100")
 KIND_WORDS = ("서킷", "Circuit", "매매거래중단", "매매거래 중단")
+SIDECAR = (("코스피", "10100000", 5.0, None, None),          # 시장 · 선물 코드 · 선물 % · 함께 볼 지수 · 지수 %
+           ("코스닥", "10600000", 6.0, "3003", 3.0))
+SIDECAR_MIN = 5
+SIDECAR_LAST = 14 * 60 + 50                     # 이 시각부터는 안 걸림
+KIND_WORDS_SC = ("사이드카", "Sidecar", "프로그램매매", "효력정지", "효력 정지")
 SEND = False                                    # 켜기는 재권님 지시로
 
 _SCHEMA = """CREATE TABLE IF NOT EXISTS market_event (
     day TEXT NOT NULL, market TEXT NOT NULL, kind TEXT NOT NULL, stage INTEGER, at TEXT NOT NULL,
     value REAL, pct REAL, row TEXT, PRIMARY KEY (day, market, kind, at))"""
+_fut = {}                                      # 코스닥150 선물 — 화면이 안 받는 값이라 여기서만 짧게 둔다
 _lock = threading.Lock()
 _st = {"day": None, "m": {}, "kind": [], "kindAt": None, "kindError": None, "error": None, "preview": [], "sent": 0}
 
@@ -69,7 +83,8 @@ def _now():
 
 def _fresh(day):
     _st.update(day=day, kind=[], kindAt=None, preview=[], sent=0,
-               m={name: {"stage": 0, "events": [], "since": None, "value": None, "pct": None, "at": None} for _, name in MARKETS})
+               m={name: {"stage": 0, "events": [], "since": None, "value": None, "pct": None, "at": None,
+                         "sc": {"since": None, "side": None, "done": False, "fpct": None, "ipct": None}} for _, name in MARKETS})
 
 
 def _hm(dt):
@@ -77,7 +92,9 @@ def _hm(dt):
 
 
 def phase(ev, now):
-    """사건 하나가 지금 어느 때인가 — halt 매매 중단 · single 단일가 · closed 그날 끝 · done 지남."""
+    """사건 하나가 지금 어느 때인가 — halt 매매 중단 · single 단일가 · closed 그날 끝 · sidecar 프로그램 호가 정지 · done 지남."""
+    if ev.get("type") == "sc":
+        return "sidecar" if ev.get("until") and now.strftime("%H:%M:%S") < ev["until"] else "done"
     if ev.get("stage") == 3:
         return "closed"
     if not ev.get("haltUntil"):
@@ -92,7 +109,7 @@ def phase(ev, now):
 
 def _event(stage, at, value, pct):
     t0 = datetime.strptime(at, "%H:%M:%S")
-    ev = {"stage": stage, "at": at, "value": value, "pct": pct, "est": True, "confirmed": False, "kind": None}
+    ev = {"type": "cb", "stage": stage, "at": at, "value": value, "pct": pct, "est": True, "confirmed": False, "kind": None}
     if stage in (1, 2):
         ev["haltUntil"] = (t0 + timedelta(minutes=HALT_MIN)).strftime("%H:%M:%S")
         ev["singleUntil"] = (t0 + timedelta(minutes=HALT_MIN + SINGLE_MIN)).strftime("%H:%M:%S")
@@ -105,13 +122,14 @@ def check(name, value, pct, now):
     m.update(value=value, pct=pct, at=_hm(now))
     if value is None or pct is None or m["stage"] >= 3:
         return None
-    if m["events"] and phase(m["events"][-1], now) in ("halt", "single"):
+    cbs = [e for e in m["events"] if e.get("type", "cb") == "cb"]
+    if cbs and phase(cbs[-1], now) in ("halt", "single"):
         m["since"] = None
         return None
     nxt, thr = STAGES[m["stage"]]
     ok = pct <= thr
     if ok and nxt > 1:
-        base = next((e["value"] for e in reversed(m["events"]) if e.get("stage") == nxt - 1 and e.get("value")), None)
+        base = next((e["value"] for e in reversed(cbs) if e.get("stage") == nxt - 1 and e.get("value")), None)
         ok = base is None or value <= base * (1 - MORE_DROP / 100)
     if not ok:
         m["since"] = None
@@ -125,6 +143,53 @@ def check(name, value, pct, now):
     m["stage"], m["since"] = nxt, None
     m["events"].append(ev)
     return ev
+
+
+def check_sc(name, fpct, ipct, need_i, now):
+    """사이드카 — 선물 등락률(fpct) · 함께 볼 지수 등락률(ipct · 코스닥만)로. 발동이면 새 사건(시험이 그대로 부른다)."""
+    m = _st["m"][name]
+    sc = m["sc"]
+    sc.update(fpct=fpct, ipct=ipct)
+    defn = next(d for d in SIDECAR if d[0] == name)
+    if sc["done"] or fpct is None or (need_i and ipct is None):
+        sc["since"] = None
+        return None
+    side = "sell" if fpct <= -defn[2] else ("buy" if fpct >= defn[2] else None)
+    if side and need_i:
+        if not ((side == "sell" and ipct <= -defn[4]) or (side == "buy" and ipct >= defn[4])):
+            side = None
+    if not side or side != sc["side"]:
+        sc["side"], sc["since"] = side, (now if side else None)
+        return None
+    if (now - sc["since"]).total_seconds() < HOLD_SEC:
+        return None
+    t0 = sc["since"] + timedelta(seconds=HOLD_SEC)
+    if t0.hour * 60 + t0.minute >= SIDECAR_LAST:
+        sc["side"], sc["since"] = None, None     # 14:50 뒤 — 걸지 않고 다음 바퀴에 다시 센다(그래도 안 걸린다)
+        return None
+    ev = {"type": "sc", "side": side, "at": _hm(t0), "until": _hm(t0 + timedelta(minutes=SIDECAR_MIN)),
+          "value": None, "pct": fpct, "ipct": ipct, "est": True, "confirmed": False, "kind": None}
+    sc.update(done=True, since=None)
+    m["events"].append(ev)
+    return ev
+
+
+def _kq_fut(proxy, cfg, code):
+    hit = _fut.get(code)
+    if hit and time.time() - hit[0] < TICK_SEC / 2:
+        return hit[1]
+    d = proxy.kis_get(cfg, "/uapi/domestic-futureoption/v1/quotations/inquire-price",
+                      {"FID_COND_MRKT_DIV_CODE": "F", "FID_INPUT_ISCD": code}, "FHMIF10000000")
+    v = proxy._num((d.get("output1") or {}).get("futs_prdy_ctrt"))
+    _fut[code] = (time.time(), v)
+    return v
+
+
+def _fut_pct(proxy, cfg, code):
+    if code == proxy.FUTURES_CODE:          # 코스피200 — 서버가 이미 받는 값(캐시)을 그대로
+        row = proxy.fetch_futures(cfg)
+        return row.get("changePct") if row else None
+    return _kq_fut(proxy, cfg, code)
 
 
 def _index(proxy, cfg, code):
@@ -155,11 +220,19 @@ def _restore(proxy, day):
         if m is None:
             continue
         m["events"].append(ev)
+        if ev.get("type") == "sc":
+            m["sc"]["done"] = True
         if ev.get("stage"):
             m["stage"] = max(m["stage"], ev["stage"])
 
 
 def _text(name, ev):
+    if ev.get("type") == "sc":
+        side = {"sell": "매도", "buy": "매수"}.get(ev.get("side"), "")
+        tag = "확인됨" if ev.get("confirmed") else "추정"
+        pct = "" if ev.get("pct") is None else " · 선물 %+.2f%%" % ev["pct"]
+        until = (" — %s 까지 프로그램 %s 호가 정지" % (ev["until"][:5], side)) if ev.get("until") else " — 거래소 공시"
+        return "[%s 사이드카 · %s] %s %s 발동%s%s" % (side, tag, name, ev["at"][:5], pct, until)
     if ev.get("stage") == 3:
         act = "그날 장 끝"
     elif ev.get("haltUntil"):
@@ -189,20 +262,26 @@ def _kind_tick(proxy, port, day):
     _st["kindAt"] = _hm(_now())
     for title in re.findall(r"<item>.*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", xml, re.S):
         title = title.strip()
-        if not any(w in title for w in KIND_WORDS) or title in _st["kind"]:
+        typ = "sc" if any(w in title for w in KIND_WORDS_SC) else ("cb" if any(w in title for w in KIND_WORDS) else None)
+        if typ is None or title in _st["kind"]:
             continue
         _st["kind"].append(title)
         name = "코스닥" if "코스닥" in title else ("코스피" if ("유가" in title or "코스피" in title or "KOSPI" in title) else None)
         if name is None:
             continue                 # 시장을 못 가름 — kind 목록에만
         m = _st["m"][name]
-        ev = next((e for e in reversed(m["events"]) if not e.get("confirmed")), None)
+        ev = next((e for e in reversed(m["events"]) if not e.get("confirmed") and e.get("type", "cb") == typ), None)
         if ev is None:               # 우리 셈이 놓침 — 공시로 사건을 만든다
-            ev = {"stage": None, "at": _st["kindAt"], "value": m["value"], "pct": m["pct"], "est": False}
+            ev = {"type": typ, "stage": None, "at": _st["kindAt"], "value": m["value"], "pct": m["pct"], "est": False}
+            if typ == "sc":
+                t0 = datetime.strptime(_st["kindAt"], "%H:%M:%S")
+                ev.update(stage=None, side=("sell" if "매도" in title else ("buy" if "매수" in title else None)),
+                          until=(t0 + timedelta(minutes=SIDECAR_MIN)).strftime("%H:%M:%S"), pct=m["sc"]["fpct"])
+                m["sc"]["done"] = True
             m["events"].append(ev)
             _alert(proxy, port, name, dict(ev, confirmed=True))
         ev.update(confirmed=True, kind=title, kindAt=_st["kindAt"])
-        _save(proxy, day, name, "cb", ev)
+        _save(proxy, day, name, typ, ev)
 
 
 def tick(proxy, cfg, port, now=None):
@@ -221,6 +300,14 @@ def tick(proxy, cfg, port, now=None):
             if ev:
                 print("  [시장 사건] %s 서킷 %d단계(추정) %s · 지수 %s (%.2f%%)" % (name, ev["stage"], ev["at"], value, pct), flush=True)
                 _save(proxy, day, name, "cb", ev)
+                _alert(proxy, port, name, ev)
+        for name, fcode, _fp, icode, _ip in SIDECAR:
+            fpct = _fut_pct(proxy, cfg, fcode)
+            ipct = _index(proxy, cfg, icode)[1] if icode else None
+            ev = check_sc(name, fpct, ipct, bool(icode), now)
+            if ev:
+                print("  [시장 사건] %s %s 사이드카(추정) %s · 선물 %.2f%%" % (name, ev["side"], ev["at"], fpct), flush=True)
+                _save(proxy, day, name, "sc", ev)
                 _alert(proxy, port, name, ev)
 
 
@@ -247,16 +334,18 @@ def board(proxy, now=None):
         for _, name in MARKETS:
             m = (_st["m"].get(name) if _st["day"] == day else None) or {"stage": 0, "events": []}
             evs = [dict(e, phase=phase(e, now)) for e in (db.get(name) or m["events"])]
-            cur = next((e for e in reversed(evs) if e["phase"] in ("halt", "single", "closed")), None)
+            live = [e for e in evs if e["phase"] in ("halt", "single", "closed", "sidecar")]
+            cur = next((e for e in reversed(live) if e.get("type", "cb") == "cb"), None) or (live[-1] if live else None)
             out[name] = {"stage": max([e.get("stage") or 0 for e in evs] + [0]), "value": m.get("value"), "pct": m.get("pct"), "at": m.get("at"),
-                         "now": cur, "events": evs}
+                         "now": cur, "live": live, "events": evs}
         return {"day": day, "markets": out, "kind": list(_st["kind"]), "kindAt": _st["kindAt"]}
 
 
 def status():
     return {"send": SEND, "sent": _st["sent"], "preview": list(_st["preview"]), "error": _st["error"],
             "kindError": _st["kindError"], "tickSec": TICK_SEC, "kindSec": KIND_SEC,
-            "rule": "1단계 −8%% · 2단계 −15%%(+1단계보다 1%%) · 3단계 −20%%(+2단계보다 1%%) · 1분 이어짐 · 중단 %d분 · 단일가 %d분" % (HALT_MIN, SINGLE_MIN)}
+            "rule": "서킷 1단계 −8%% · 2단계 −15%%(+1단계보다 1%%) · 3단계 −20%%(+2단계보다 1%%) · 1분 이어짐 · 중단 %d분 · 단일가 %d분 / "
+                    "사이드카 코스피200 선물 ±5%% · 코스닥150 선물 ±6%% + 코스닥150 지수 ±3%% · 1분 · %d분 · 하루 한 번 · 14:50 뒤 안 걸림" % (HALT_MIN, SINGLE_MIN, SIDECAR_MIN)}
 
 
 def start(proxy, port):

@@ -1,7 +1,7 @@
-/* 시장 전체 사건 띠 — 서킷브레이커 (2026-11-07 · 작업우선순위 배분 ① · 재권님 「응 그래 다른이벤트들도 대응해야해」)
+/* 시장 전체 사건 띠 — 서킷브레이커 · 사이드카 (2026-11-07 · 작업우선순위 배분 ① · 재권님 「응 그래 다른이벤트들도 대응해야해」)
 
    서버(`/api/alerts/market-event` · server/market_event.py)가 지수로 추정한 서킷 · 거래소 공시로 확인한 것을 그대로 그린다 —
-   셈은 서버 한 곳이고 화면은 「지금 걸려 있는 것」 만 띄운다(매매 중단 · 단일가 · 그날 장 끝).
+   셈은 서버 한 곳이고 화면은 「지금 걸려 있는 것」 만 띄운다(매매 중단 · 단일가 · 그날 장 끝 · 사이드카 5분).
    **화면 흐름 밖에 띄운다** — 「작업용」 띠(frame.css `.kh-envbar`)처럼 fixed 라 칸 크기 · 자리가 안 움직인다.
    받는 주기는 서버 값(`market_event.TICK_SEC`)이고 롱폴이 켜져 있으면 바뀔 때 받는다. */
 import { watch } from '../store/longpoll.js';
@@ -19,6 +19,12 @@ function css() {
 }
 
 function line(name, ev) {
+  if (ev.type === 'sc') {
+    const side = ev.side === 'buy' ? '매수' : ev.side === 'sell' ? '매도' : '';
+    const tag = ev.confirmed ? '확인됨' : '추정';
+    const until = ev.until ? ` · ${ev.until.slice(0, 5)} 까지 프로그램 ${side} 호가 정지` : '';
+    return `${name} ${side} 사이드카(${tag}) ${ev.at.slice(0, 5)} 발동${until}`;
+  }
   const st = ev.stage ? `${ev.stage}단계` : '단계 모름';
   const tag = ev.confirmed ? '확인됨' : '추정';
   const until = ev.phase === 'halt' ? ` · ${ev.haltUntil.slice(0, 5)} 까지 ${PHASE.halt}`
@@ -32,7 +38,7 @@ async function draw() {
   try { const r = await fetch(URL, { cache: 'no-store' }); j = r.ok ? await r.json() : null; } catch { j = null; }
   if (!(j && j.ok && j.data && j.data.markets)) return;   // 못 받았으면 지난 모습 그대로 — 띠를 지우지 않는다
   const ms = j.data.markets;
-  const rows = Object.entries(ms).filter(([, m]) => m && m.now).map(([name, m]) => line(name, m.now));
+  const rows = Object.entries(ms).flatMap(([name, m]) => ((m && (m.live || (m.now ? [m.now] : []))) || []).map((ev) => line(name, ev)));
   if (!rows.length) { if (box) box.hidden = true; return; }
   if (!box) {
     css();
