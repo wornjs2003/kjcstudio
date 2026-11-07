@@ -6,11 +6,13 @@
 장마다 0 부터 다시 센다 (2026-11-07 재권님 「vwap 값 … 토스증권에서 보는값이랑 많이 다른거같아」 → 「토스랑 비교하고 봐봐」 →
 「토스꺼 분석해서 똑같이 해줘」). 토스 그림(삼성 11-06 5분봉)을 눈금으로 읽어 맞춘 값 — 우리 봉으로 장마다 새로 셈한 것과
 장 전 08:45 179,480 ↔ 179,539 · 정규장 11:50 188,440 ↔ 188,464 · 15:10 189,400 ↔ 189,382 · 장 후 20:00 191,700 ↔ 191,788.
-(정규장 두 값은 토스 그림에 09:00~09:25 봉이 없어 09:30 부터 셈한 것이다 — 우리는 09:00 부터 센다.)
+**거래가 멈췄다 다시 열리면 새로 센다** — 장 안에서 앞 체결 봉과 GAP_RESET 분 넘게 떨어져 거래가 나면 0 부터(1분봉 · 5분봉 같은 셈 — 칸 수가 아니라 시각으로).
+11-06 은 09:05~09:30 코스피 거래 정지 뒤 토스가 09:30 봉부터 다시 셌다(정규장 차 중앙 −1,048 → −13원) · 평소 날 11-02 · 11-03 은
+그런 구간이 없어 그대로(중앙 −100 · +7원 — 토스 그림 픽셀 대조 · 봉 고저가로 눈금 맞춤).
 처음 판(정규장 09:00~15:30 만)은 장 전 · 장 후 선이 없었고, 하루 통째로 셈한 판(11-07 잠깐)은 토스보다 2,000~4,000원 낮았다.
 
     vwap = Σ(대표가 × 거래량) ÷ Σ거래량      대표가 = (고가 + 저가 + 종가) ÷ 3
-    장(SESSIONS)마다 0 부터 · 장 밖 봉과 거래량 0 이 이어진 앞쪽은 None
+    장(SESSIONS)마다 0 부터 · 장 안에서 앞 체결 봉과 GAP_RESET 분 넘게 떨어진 체결부터 다시 0 부터 · 장 밖 봉과 거래량 0 이 이어진 앞쪽은 None
     바로 앞 봉과 시 · 고 · 저 · 종 · 거래량이 다 같은 봉은 더하지 않는다 — KIS 가 빈 칸을 앞 봉 그대로 채워 주어
     거래량이 두 번 들어갔다(11-06 삼성 09:05~09:25 다섯 칸 · 15:25 = 15:20)
 """
@@ -23,6 +25,9 @@ SESSIONS = (
 )
 
 
+GAP_RESET = 20                 # 분 — 앞 체결 봉 시각과 이만큼 넘게 떨어져 거래가 나면 새로 센다(서킷브레이커 매매 정지 20분 · 11-06 은 09:00 → 09:30)
+
+
 def _session(hm):
     for name, a, b in SESSIONS:
         if a <= hm < b:
@@ -32,7 +37,7 @@ def _session(hm):
 
 def attach(rows):
     """분봉 목록(ts 오름차순)의 각 봉에 `vwap` 을 붙인다. 장 밖 봉은 None. 목록을 그대로 돌려준다."""
-    key, pv, vol, prev = None, 0.0, 0, None
+    key, pv, vol, prev, last = None, 0.0, 0, None, None
     for r in rows:
         ts = str(r.get("ts", ""))
         d, hm = ts[:8], ts[8:12]
@@ -41,13 +46,18 @@ def attach(rows):
             r["vwap"] = None
             continue
         if (d, ses) != key:
-            key, pv, vol = (d, ses), 0.0, 0
+            key, pv, vol, last = (d, ses), 0.0, 0, None
         v = r.get("volume") or 0
         hi, lo, cl = r.get("high"), r.get("low"), r.get("close")
         sig = (r.get("open"), hi, lo, cl, v)
         dup, prev = sig == prev, sig
         if v > 0 and hi and lo and cl and not dup:
+            now = int(hm[:2]) * 60 + int(hm[2:])
+            if last is not None and now - last > GAP_RESET:
+                pv, vol = 0.0, 0
+            last = now
             pv += (hi + lo + cl) / 3.0 * v
             vol += v
-        r["vwap"] = round(pv / vol, 2) if vol else None
+        # 거래 없는 칸에는 점을 안 찍는다 — 토스는 거래가 있는 칸끼리 곧게 잇는다(11-06 09:00 → 09:30 사선 · 재권님 「9시에서 9시반 모양이 다른데」 11-07)
+        r["vwap"] = round(pv / vol, 2) if vol and v > 0 and not dup else None
     return rows
