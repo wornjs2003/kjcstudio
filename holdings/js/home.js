@@ -436,7 +436,7 @@ async function showMarket(key) {
   const per = $('kh-idx-per'), foot = $('kh-big-foot'), host = $('kh-big-chart');
   if (name) { name.textContent = h.name; setMkTerm(MK_TERM[key]); }
   if (v) { v.className = 'kh-idx-v kh-num ' + h.dirClass; v.textContent = h.value; }
-  if (yr) yr.textContent = h.range;
+  if (yr) { yr.textContent = h.range; yr.dataset.stamp = ''; }   // 종목으로 돌아오면 52주 줄을 다시 칠하게(paintYearRange 의 stamp)
   if (per) per.innerHTML = `<span class="kh-chip live" style="cursor:default">${h.per}</span>`;
   if (foot) { foot.innerHTML = `<span title="${h.footTitle}">${h.foot[0]}</span><span title="${j.source || ''}">${h.foot[1]}</span>`; paintFlowFoot(foot, null); }
   if (host) {
@@ -735,6 +735,10 @@ function paintBigPrice() {
   bigShown = stamp;
   el.className = 'kh-idx-v kh-num ' + dirClass(live.pct);
   el.textContent = `${fmtPriceOf(selectedCode, live.price)}  ${fmtPct(live.pct)}${ses ? '  ' + ses : ''}`;
+  /* 52주 막대 · 「지금 ○○원 · ○% 자리」 도 같은 순간 같은 값으로 (2026-11-06 재권님 「응」 · 홈 훑기 4).
+     전에는 종목을 고를 때만 칠해 큰 가격만 체결마다 움직이고 그 줄은 옛 값에 멈춰 있었다(189,000 ↔ 188,900).
+     52주 최고 · 최저는 이미 받아 둔 것만 쓴다 — 다시 받지 않는다 */
+  if (_range.has(selectedCode)) paintYearRange();
 }
 
 /* 큰 차트 — 고른 종목을 그린다.
@@ -954,6 +958,7 @@ async function paintYearRange() {
   let r = _range.get(code);
   if (!r) {
     el.textContent = '불러오는 중';
+    el.dataset.stamp = '';
     /* 세부사항 칸이 있으면 그 단건이 오면서 takeOne 이 채운다 — 여기서 또 부르지 않는다 */
     if ($('kh-dt')) return;
     /* 52주 값은 하루에 한 번 바뀔까 말까다. 한 번 받으면 쥐고 있는다 —
@@ -968,12 +973,15 @@ async function paintYearRange() {
     } catch { return; }
   }
   if (rangeKey !== code) return;              // 그 사이 다른 종목을 골랐다
-  if (r.lo == null || r.hi == null) { el.textContent = '값이 없습니다'; return; }
+  if (r.lo == null || r.hi == null) { el.textContent = '값이 없습니다'; el.dataset.stamp = ''; return; }
 
-  /* 지금 값은 시세 쪽이 더 새것이다. 없으면 받아둔 값으로 물러선다. */
-  const live = rowPrices && rowPrices[code];
+  /* 지금 값 — 큰 가격(paintBigPrice)과 **같은 것**을 본다: 묶음 시세 → 단건 → 받아 둔 값 */
+  const live = (rowPrices && rowPrices[code]) || _oneSeed.get(code);
   const cur = (live && live.price != null) ? live.price : r.price;
   const at = Math.max(0, Math.min(1, (cur - r.lo) / Math.max(1e-9, r.hi - r.lo)));
+  const yrStamp = `${code}|${r.lo}|${r.hi}|${cur}`;      // 같으면 손대지 않는다 — 체결마다 불려도 다시 그리지 않게
+  if (el.dataset.stamp === yrStamp) return;
+  el.dataset.stamp = yrStamp;
   el.innerHTML = `
     <div class="kh-yr">
       <span class="kh-num kh-down">${fmtPriceOf(code, r.lo)}</span>
