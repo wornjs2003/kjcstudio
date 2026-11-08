@@ -85,6 +85,7 @@ import intraday_flow    # 당일 수급 — 장중 1분마다 시장 투자자 �
 import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
 import short_sale  # 공매도 — 감시 대상 종목마다 일별 공매도를 쌓아 「공매도」 칩에 냄(2026-11-06 · server/short_sale.py 머리 주석)
 import intraday_alerts  # 장중 알림 — 상승 VI · +20% 급등(2026-10-26 · server/intraday_alerts.py 머리 주석)
+import market_hours     # 장 시각 한 곳 — 평소 시각 + 그날 값(KIS 휴장일 · 바뀐 시각 표 · 거래소 공시)(2026-11-07 · server/market_hours.py 머리 주석) · /api/alerts/market-hours
 import market_event     # 시장 전체 사건 — 서킷브레이커 추정 · 거래소 공시 확인(2026-11-07 · server/market_event.py 머리 주석) · /api/alerts/market-event
 import market_index
 import us_outlook  # 미국장 예측용 값 — 지수 선물 · SPX 옵션 · 지표 예상치 · FOMC 기대 · VIX 이력(2026-10-27 · server/us_outlook.py 머리 주석)
@@ -7609,6 +7610,13 @@ class Handler(SimpleHTTPRequestHandler):
                 st["note"] = "이 서버에서는 장중 알림 바퀴가 안 돕니다 — 보내는 서버(메인 %d)에서만 돕니다" % MAIN_PORT
             self._send_json({"ok": True, "data": st})
             return
+        if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/alerts/market-hours":
+            # 장 시각 한 곳 — 오늘 열리나 · 몇 시에 열고 닫나 · 앞날 쉬는 날 · 바뀐 날 · 거래소 공시 거래시간 글. 휴장일 표는 개발 DB 라 어느 서버든 같다
+            try:
+                self._send_json({"ok": True, "data": market_hours.board(sys.modules[__name__]), "meta": market_hours.status()})
+            except Exception as e:
+                self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
+            return
         if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/alerts/market-event":
             # 서킷브레이커(추정 · 거래소 공시로 확인) — 홈 맨 위 띠. 바퀴는 보내는 서버에서만 돌고 사건은 개발 DB 표라 어느 서버든 같은 것을 읽는다
             try:
@@ -9697,6 +9705,9 @@ def main():
 
     # 장중 알림 — 상승 VI · +20% 급등 (2026-10-26 · server/intraday_alerts.py) — 같은 문 하나(보내는 서버만).
     # 발송 스위치는 `intraday_alerts.SEND`(VI 끔 10-27 · 급등 켬 10-26). 꺼 두면 바퀴는 돌되 안 보내고 /api/alerts/status 에 보냈을 글을 남긴다
+    if not SLOW and is_sender(args.port) and market_hours.start(sys.modules[__name__]):
+        print("  장 시각   : 휴장일 하루 한 번(%02d:%02d 뒤 · KIS) · 바뀐 시각 표 /api/board/doc/%s · 거래소 공시 거래시간 글 · /api/alerts/market-hours"
+              % (market_hours.HOLIDAY_AT + (market_hours.DOC,)))
     if not SLOW and is_sender(args.port) and market_event.start(sys.modules[__name__], args.port):
         print("  시장 사건 : 서킷브레이커 추정(코스피 · 코스닥 %d초마다) · 거래소 공시 확인(%d초마다) · 발송 %s · /api/alerts/market-event"
               % (market_event.TICK_SEC, market_event.KIND_SEC, "켬" if market_event.SEND else "끔"))

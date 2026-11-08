@@ -22,7 +22,7 @@
 
 ── 어떻게 ──
 
-    평일 정규장(SESSION_FROM~SESSION_TO) 에 TICK_SEC 마다 두 지수의 등락률을 본다 — 화면이 받아 둔 지수 캐시가 살아 있으면 그것을,
+    그날 정규장(market_hours.in_regular — 휴장일 · 수능날 같은 바뀐 시각을 따른다)에 TICK_SEC 마다 두 지수의 등락률을 본다 — 화면이 받아 둔 지수 캐시가 살아 있으면 그것을,
     아니면 지수 하나 조회(fetch_index · 한 바퀴 KIS 최대 2건). 다음 단계 조건이 처음 맞은 시각부터 HOLD_SEC 이 지나면 발동으로 적는다
     (그 시각 = 조건이 맞기 시작한 때 + 1분). 매매 중단 · 단일가 중에는 다음 단계를 안 본다(지수가 멈춰 있다).
     KIND 는 정규장에 KIND_SEC 마다 오늘의공시 RSS 를 읽어 제목에 서킷 낱말(KIND_WORDS)이 든 글을 모은다 — 정확한 제목 · 올라오는 늦음은
@@ -48,6 +48,8 @@ import re
 import threading
 import time
 import urllib.request
+
+import market_hours
 from datetime import datetime, timedelta, timezone
 
 KST = timezone(timedelta(hours=9))
@@ -58,7 +60,6 @@ HOLD_SEC = 60                                   # 조건이 이만큼 이어져�
 HALT_MIN, SINGLE_MIN = 20, 10                   # 매매 중단 · 그 뒤 단일가
 TICK_SEC = 10
 KIND_SEC = 60
-SESSION_FROM, SESSION_TO = 9 * 60, 15 * 60 + 30
 KIND_RSS = ("https://kind.krx.co.kr/disclosure/rsstodaydistribute.do?method=searchRssTodayDistribute"
             "&repIsuSrtCd=&mktTpCd=0&searchCorpName=&currentPageSize=100")
 KIND_WORDS = ("서킷", "Circuit", "매매거래중단", "매매거래 중단")
@@ -75,7 +76,8 @@ SEND = False                                    # 켜기는 재권님 지시로
 _SCHEMA = """CREATE TABLE IF NOT EXISTS market_event (
     day TEXT NOT NULL, market TEXT NOT NULL, kind TEXT NOT NULL, stage INTEGER, at TEXT NOT NULL,
     value REAL, pct REAL, row TEXT, PRIMARY KEY (day, market, kind, at))"""
-_fut = {}                                      # 코스닥150 선물 — 화면이 안 받는 값이라 여기서만 짧게 둔다
+_fut = {}
+_proxy = [None]                                 # tick 이 받은 proxy — 사이드카 마감 셈이 그날 장 시각을 읽는다                                      # 코스닥150 선물 — 화면이 안 받는 값이라 여기서만 짧게 둔다
 _lock = threading.Lock()
 _st = {"day": None, "m": {}, "kind": [], "kindAt": None, "kindError": None, "error": None, "preview": [], "sent": 0}
 
@@ -167,7 +169,11 @@ def check_sc(name, fpct, ipct, need_i, now):
     if (now - sc["since"]).total_seconds() < HOLD_SEC:
         return None
     t0 = sc["since"] + timedelta(seconds=HOLD_SEC)
-    if t0.hour * 60 + t0.minute >= SIDECAR_LAST:
+    last = SIDECAR_LAST
+    if _proxy[0] is not None:                       # 그날 정규장 끝이 바뀌었으면(수능날 16:30) 40분 전도 따라 옮긴다
+        c = market_hours.today(_proxy[0], now=now)["reg"][1]
+        last = int(c[:2]) * 60 + int(c[2:]) - (15 * 60 + 30 - SIDECAR_LAST)
+    if t0.hour * 60 + t0.minute >= last:
         sc["side"], sc["since"] = None, None     # 14:50 뒤 — 걸지 않고 다음 바퀴에 다시 센다(그래도 안 걸린다)
         return None
     ev = {"type": "sc", "side": side, "at": _hm(t0), "until": _hm(t0 + timedelta(minutes=SIDECAR_MIN)),
@@ -291,13 +297,13 @@ def _kind_tick(proxy, port, day):
 
 def tick(proxy, cfg, port, now=None):
     now = now or _now()
+    _proxy[0] = proxy
     day = now.strftime("%Y%m%d")
     with _lock:
         if _st["day"] != day:
             _fresh(day)
             _restore(proxy, day)
-        mins = now.hour * 60 + now.minute
-        if now.weekday() >= 5 or not (SESSION_FROM <= mins < SESSION_TO):
+        if not market_hours.in_regular(proxy, now):     # 휴장일 · 바뀐 시각(수능날 등)을 따른다 — 장 시각 한 곳
             return
         for code, name in MARKETS:
             value, pct = _index(proxy, cfg, code)
@@ -366,8 +372,7 @@ def start(proxy, port):
             except Exception as e:
                 _st["error"] = proxy.safe_message(e, 120)
             now = _now()
-            mins = now.hour * 60 + now.minute
-            if now.weekday() < 5 and SESSION_FROM <= mins < SESSION_TO and time.time() - last_kind >= KIND_SEC:
+            if market_hours.in_regular(proxy, now) and time.time() - last_kind >= KIND_SEC:
                 last_kind = time.time()
                 try:
                     with _lock:
