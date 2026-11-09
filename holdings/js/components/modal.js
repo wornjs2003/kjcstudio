@@ -111,7 +111,7 @@ export function openModal({ label = '', drawers = null, head = null, width = nul
     const x = document.createElement('button');
     x.type = 'button';
     x.className = 'kh-modal-x kh-modal-xf';
-    x.title = '닫기 (Esc)';
+    x.dataset.tip = '닫기 (Esc)';
     x.setAttribute('aria-label', '닫기');
     x.textContent = '✕';
     x.addEventListener('click', () => close());
@@ -136,7 +136,7 @@ export function openModal({ label = '', drawers = null, head = null, width = nul
       const tab = document.createElement('button');
       tab.className = `kh-drawer-tab is-${side}`;
       tab.type = 'button';
-      tab.title = d.label;
+      tab.dataset.tip = d.label;
       tab.setAttribute('aria-label', d.label);
       tab.innerHTML = '<span class="kh-drawer-arrow"></span>';
       tab.addEventListener('click', () => toggle(side));
