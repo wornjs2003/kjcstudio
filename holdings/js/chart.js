@@ -897,27 +897,34 @@ function paneH() {
    (가운데 자리만 보이는 봉에 맞춘다 — 안 그러면 다른 종목 봉이 칸 밖에 놓인다).
    (2026-11-09 재권님 「차트 높이 조절하면 다른종목으로 이동했을때 조절된거 유지되게」 → 「나」(봉 길이) →
    「높이의 70% 로 맞춰주고 내가 조정을 하면 조정한대로 고정되도록 해줘」).
-   고정한 폭은 칸 높이(paneH)처럼 localStorage — 새로고침해도 남는다(보는 상태). 가격 눈금을 두 번 누르면 풀려 다시 70% 맞춤 */
+   고정한 폭은 칸 높이(paneH)처럼 localStorage — 새로고침해도 남는다(보는 상태). 가격 눈금을 두 번 누르면 풀려 다시 70% 맞춤.
+   **기간(5분 · 일 · 주 · 월 · 년)마다 따로 기억한다** (2026-11-09 재권님 「응 그래」) — 5분봉에서 좁힌 폭이 월봉에 그대로 가면
+   봉이 칸 밖으로 크게 잘린다(오르내림 폭이 기간마다 열 배 넘게 다르다 · 개념정의 덧). 종목을 바꿀 때는 그대로다 */
 const PRICE_FILL = 0.7;
 const V_SPAN_KEY = 'kh.chart.v-span';
 const V_SPAN_MIN = 0.001, V_SPAN_MAX = 5;   // 세로 폭(가격 대비) — 손이 미끄러져 0 이나 터무니없는 값이 남지 않게
-let _vSpan;                                   // undefined = 아직 안 읽음 · null = 자동(70%) · 수 = 고정한 폭
-function vSpan() {
-  if (_vSpan === undefined) {
-    _vSpan = null;
+let _vSpan = null;                            // 기간 → 고정한 폭(없으면 자동 70%) · 처음 부를 때 읽는다
+function vSpanMap() {
+  if (!_vSpan) {
+    _vSpan = {};
     try {
-      const v = parseFloat(localStorage.getItem(V_SPAN_KEY));
-      if (v >= V_SPAN_MIN && v <= V_SPAN_MAX) _vSpan = v;
+      const v = JSON.parse(localStorage.getItem(V_SPAN_KEY) || '{}');   // 기간마다 따로 두기 전 한 숫자로 둔 값은 버린다(객체가 아니면)
+      if (v && typeof v === 'object') {
+        Object.keys(v).forEach((k) => { if (v[k] >= V_SPAN_MIN && v[k] <= V_SPAN_MAX) _vSpan[k] = v[k]; });
+      }
     } catch { /* 없으면 자동 */ }
   }
   return _vSpan;
 }
-function setVSpan(v) {
-  _vSpan = v == null ? null : Math.max(V_SPAN_MIN, Math.min(V_SPAN_MAX, v));
-  try {
-    if (_vSpan == null) localStorage.removeItem(V_SPAN_KEY);
-    else localStorage.setItem(V_SPAN_KEY, String(_vSpan));
-  } catch { /* 저장 못 씀 */ }
+function vSpan(per) {
+  const v = vSpanMap()[per];
+  return v == null ? null : v;
+}
+function setVSpan(per, v) {
+  const m = vSpanMap();
+  if (v == null) delete m[per];
+  else m[per] = Math.max(V_SPAN_MIN, Math.min(V_SPAN_MAX, v));
+  try { localStorage.setItem(V_SPAN_KEY, JSON.stringify(m)); } catch { /* 저장 못 씀 */ }
 }
 
 function savePaneH() {
@@ -1090,7 +1097,7 @@ export function createStockChart(container, candles, opts = {}) {
     }, { capture: true });
     box.addEventListener('dblclick', (e) => {
       if (!onAxis(e)) return;
-      setVSpan(null);                         // 고정을 풀고 다시 70% 맞춤
+      setVSpan(period, null);                 // 이 기간의 고정을 풀고 다시 70% 맞춤
       vpRange = null;
       try { candleSeries.applyOptions(priceFix()); } catch { /* 칸이 아직 없다 */ }
       requestAnimationFrame(() => requestAnimationFrame(() => { lockPriceRange(); drawProfile(); }));
@@ -1380,10 +1387,10 @@ export function createStockChart(container, candles, opts = {}) {
   /* 자동 눈금에 좁은 폭 늘림(phoneStretch)을 곱하고, 사람이 고정한 세로 폭(vSpan)이 있으면 그 폭으로 바꾼다.
      라이브러리는 이 범위 위아래에 여백(scaleMargins)을 얹으므로, 보이는 폭이 고정 폭이 되게 여백만큼 덜어 준다 */
   function stretchProvider() {
-    const ph = phoneStretch(), span = vSpan();
-    if (!ph && span == null) return undefined;
-    return (orig) => {
+    const ph = phoneStretch();
+    return (orig) => {                         // 기간은 부를 때 읽는다 — 기간을 바꿔도 이 함수를 다시 안 붙일 수 있어서
       const r = ph ? ph(orig) : orig();
+      const span = vSpan(period);
       if (span == null || !r || !r.priceRange) return r;
       const { minValue: lo, maxValue: hi } = r.priceRange;
       const mid = (lo + hi) / 2;
@@ -1409,7 +1416,7 @@ export function createStockChart(container, candles, opts = {}) {
     if (!user) return;
     const mid = (user.top + user.bot) / 2;
     if (!(mid > 0)) return;
-    setVSpan((user.top - user.bot) / mid);
+    setVSpan(period, (user.top - user.bot) / mid);
     vpRange = null;
     try { candleSeries.applyOptions(priceFix()); ch.priceScale('right').applyOptions({ autoScale: true }); } catch { return; }
     requestAnimationFrame(() => requestAnimationFrame(() => { lockPriceRange(); drawProfile(); }));
