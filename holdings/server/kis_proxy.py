@@ -2053,6 +2053,30 @@ def _over_gave_up():
                      % (_stamp(), KIS_OVER_RETRY + 1, _over_giveup))
 
 
+# ── KIS 가 살아 있나 (2026-11-09 · 이벤트 대응 ⑦ · 재권님 「응」) ──
+# 실제로 KIS 로 나간 호출의 성공 · 실패만 센다(상류로 넘긴 것 · 캐시는 안 센다 — 그 서버가 센다).
+# **실패는 길이 끊긴 것만** — 네트워크 · 시간 초과 · HTTP 5xx · 한도 초과를 끝내 못 받은 것. 「없는 종목」 같은 KIS 업무 오류(rt_cd ≠ 0)는
+# KIS 가 응답한 것이라 장애로 안 센다. market_event.py 가 이 값을 1분 바퀴로 읽어 「3분 이어짐」 이면 맨 위 띠를 띄운다
+_kis_health = {"lastOk": None, "lastFail": None, "failSince": None, "lastError": None}
+
+
+def _kis_ok():
+    _kis_health.update(lastOk=time.time(), failSince=None)
+
+
+def _kis_fail(msg):
+    now = time.time()
+    if _kis_health["failSince"] is None:
+        _kis_health["failSince"] = now
+    _kis_health.update(lastFail=now, lastError=msg)
+
+
+def kis_health():
+    """지금 KIS 길 — 마지막 성공 · 실패 · 실패가 이어진 처음 · 최근 60초 한도 초과 수."""
+    now = time.time()
+    return dict(_kis_health, overruns60s=sum(1 for t in list(_over_times) if now - t < OVER_WINDOW))
+
+
 def kis_get(cfg, path, params, tr_id, _retry=1, _over=0):
     # ── 상류가 있으면 넘긴다 (2026-10-01) ──
     _base = upstream_base()
@@ -2136,14 +2160,21 @@ def kis_get(cfg, path, params, tr_id, _retry=1, _over=0):
                 time.sleep(1.0)
                 return kis_get(cfg, path, params, tr_id, _retry, _over + 1)
             _over_gave_up()
+            _kis_fail("한도 초과를 끝내 못 받음")
         # **거부당한 토큰(EGW00123)은 버리고 한 번만 다시 받는다** (2026-09-22 지시).
         # 이것이 없으면 캐시가 스스로 만료될 때까지 몇십 분이고 계속 실패한다.
         if "EGW00123" in detail and _retry > 0:
             _drop_token_cache(cfg["mode"], _token_path(_kc))
             return kis_get(cfg, path, params, tr_id, _retry - 1, _over)
+        if e.code >= 500:
+            _kis_fail("HTTP %s" % e.code)
         raise RuntimeError("KIS 호출 실패 (HTTP %s): %s" % (e.code, detail))
     except urllib.error.URLError as e:
+        _kis_fail("네트워크")
         raise RuntimeError("KIS 호출 실패 (네트워크): %s" % safe_message(e.reason))
+    except (TimeoutError, ConnectionError) as e:
+        _kis_fail("시간 초과 · 끊김")
+        raise RuntimeError("KIS 호출 실패 (시간 초과 · 끊김): %s" % safe_message(e))
 
     if str(data.get("rt_cd", "0")) != "0":
         if data.get("msg_cd") == "EGW00201":
@@ -2154,10 +2185,13 @@ def kis_get(cfg, path, params, tr_id, _retry=1, _over=0):
                 time.sleep(1.0)
                 return kis_get(cfg, path, params, tr_id, _retry, _over + 1)
             _over_gave_up()
+            _kis_fail("한도 초과를 끝내 못 받음")
         if data.get("msg_cd") == "EGW00123" and _retry > 0:
             _drop_token_cache(cfg["mode"], _token_path(_kc))
             return kis_get(cfg, path, params, tr_id, _retry - 1, _over)
+        _kis_ok()                              # KIS 가 응답은 했다 — 업무 오류는 장애가 아니다
         raise RuntimeError("KIS 오류: %s (%s)" % (data.get("msg1", "알 수 없음"), data.get("msg_cd", "")))
+    _kis_ok()
     return data
 
 

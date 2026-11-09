@@ -37,6 +37,15 @@
     → 내리면 프로그램 매도 · 오르면 매수 호가 효력 SIDECAR_MIN 분 정지 · 시장마다 하루 한 번 · SIDECAR_LAST(14:50) 뒤에는 안 걸림(다올 안내 · 원문 못 열어 봄)
     거래소 공시 낱말 KIND_WORDS_SC 로 「확인됨」. 2026 에 자주 걸려(기사 「일상된 사이드카」) 알림은 켤 때 건수를 따로 잰다
 
+── KIS 장애 · 실시간 체결 끊김 · 한도 초과 몰림(2026-11-09 · 이벤트 대응 ⑦ · 재권님 「응」) ──
+
+    KIS        kis_proxy.kis_health() — 실제 나간 호출이 길 끊김(네트워크 · 시간 초과 · 5xx · 한도 초과를 끝내 못 받음)으로 실패한 채
+               성공이 한 번도 없이 SYS_HOLD_SEC 이 지나면
+    실시간 체결  kis_ws.stats() — 켜져 있는데(on) 연결이 안 된(connected False) 채 SYS_HOLD_SEC
+    한도 초과   최근 60초 한도 초과(EGW00201)가 OVER_BURST 번 넘는 채 SYS_HOLD_SEC
+    → 맨 위 띠 한 줄 · 풀리면 그 사건에 끝 시각을 적고 띠가 사라진다. 보는 때는 그날 장 전 시작 ~ 장 후 끝(market_hours).
+    사건은 market_event 표(market 「시스템」 · kind sys)라 다른 서버도 같은 띠를 낸다. 알림은 SEND 그대로(꺼짐)
+
 ── 남기기 · 알림 ──
 
     사건은 쓰기 되는 서버의 market.db market_event 표에 한 줄씩 — 그 순간 지수 · 등락률 · 시각(발동 날 「가져오는 정보가 맞나」 를 재는 바탕 · 카드 ⑧).
@@ -72,6 +81,13 @@ KIND_WORDS_SC = ("사이드카", "Sidecar", "프로그램매매", "효력정지"
 # (「주주총회결의 효력정지 가처분」 · 종목 하나의 매매거래 중단)에도 붙어, 우리 셈이 이미 만든 사건에 「확인됨」 을 붙일 때만 쓴다(qa 검수 11-07)
 KIND_NEW_WORDS = ("서킷", "Circuit", "사이드카", "Sidecar")
 SEND = False                                    # 켜기는 재권님 지시로
+SYS_HOLD_SEC = 180
+OVER_BURST = 5
+SYS = "시스템"                                   # 표의 market 자리
+SYS_TEXT = {"kis": "KIS 응답이 끊겼습니다 — 시세 · 차트가 늦을 수 있습니다",
+            "ws": "실시간 체결 연결이 끊겼습니다 — 다시 붙는 중",
+            "over": "KIS 한도 초과가 몰립니다 — 값이 늦게 들어옵니다"}
+_sys = {k: {"since": None, "ev": None} for k in SYS_TEXT}
 
 _SCHEMA = """CREATE TABLE IF NOT EXISTS market_event (
     day TEXT NOT NULL, market TEXT NOT NULL, kind TEXT NOT NULL, stage INTEGER, at TEXT NOT NULL,
@@ -214,7 +230,7 @@ def _save(proxy, day, name, kind, ev):
     with proxy._db_lock, proxy.db_conn() as conn:
         conn.execute(_SCHEMA)
         conn.execute("INSERT OR REPLACE INTO market_event (day, market, kind, stage, at, value, pct, row) VALUES (?,?,?,?,?,?,?,?)",
-                     (day, name, kind, ev.get("stage"), ev["at"], ev.get("value"), ev.get("pct"), json.dumps(ev, ensure_ascii=False)))
+                     (day, name, kind, ev.get("stage"), ev.get("key") or ev["at"], ev.get("value"), ev.get("pct"), json.dumps(ev, ensure_ascii=False)))
 
 
 def _restore(proxy, day):
@@ -236,6 +252,8 @@ def _restore(proxy, day):
 
 
 def _text(name, ev):
+    if ev.get("type") == "sys":
+        return "[KIS 장애] %s (%s~)" % (SYS_TEXT.get(ev.get("what"), ""), ev["at"][:5])
     if ev.get("type") == "sc":
         side = {"sell": "매도", "buy": "매수"}.get(ev.get("side"), "")
         tag = "확인됨" if ev.get("confirmed") else "추정"
@@ -334,6 +352,51 @@ def _db_events(proxy, day):
     return out
 
 
+def sys_check(name, bad, now):
+    """KIS 장애 한 갈래 — bad 가 SYS_HOLD_SEC 이어지면 새 사건 · 풀리면 사건에 끝을 적는다. (새 사건 또는 끝난 사건, 무엇) 을 돌려준다."""
+    x = _sys[name]
+    if bad:
+        if x["since"] is None:
+            x["since"] = now
+        if x["ev"] is None and (now - x["since"]).total_seconds() >= SYS_HOLD_SEC:
+            x["ev"] = {"type": "sys", "what": name, "at": _hm(x["since"]), "end": None,
+                       "key": _hm(x["since"]) + " " + name}   # 표 열쇠 — 같은 순간 둘이 끊겨도 서로 안 덮는다
+            return x["ev"], "new"
+        return None, None
+    x["since"] = None
+    if x["ev"] is not None:
+        ev, x["ev"] = x["ev"], None
+        ev["end"] = _hm(now)
+        return ev, "end"
+    return None, None
+
+
+def sys_tick(proxy, port, now=None):
+    now = now or _now()
+    t = market_hours.today(proxy, now=now)
+    hm = now.strftime("%H%M")
+    if t["open"] is False or not (t["pre"][0] <= hm < t["after"][1]):
+        bads = {k: False for k in SYS_TEXT}            # 장 밖 — 걸린 것이 있으면 끝을 적는다
+    else:
+        h = proxy.kis_health()
+        fs = h.get("failSince")
+        try:
+            ws = proxy.kis_ws.stats()
+        except Exception:
+            ws = {}
+        bads = {"kis": bool(fs) and time.time() - fs >= 0 and (h.get("lastOk") or 0) < fs,
+                "ws": bool(ws.get("on")) and not ws.get("connected"),
+                "over": (h.get("overruns60s") or 0) >= OVER_BURST}
+    day = now.strftime("%Y%m%d")
+    for k, bad in bads.items():
+        ev, what = sys_check(k, bad, now)
+        if ev:
+            print("  [시장 사건] %s %s %s" % (SYS_TEXT[k], "시작" if what == "new" else "풀림", ev["end"] or ev["at"]), flush=True)
+            _save(proxy, day, SYS, "sys", ev)
+            if what == "new":
+                _alert(proxy, port, SYS, ev)
+
+
 def board(proxy, now=None):
     """주소 /api/alerts/market-event 의 data — 사건은 개발 DB 표에서 읽어 **어느 서버든 같은 것**(바퀴는 보내는 서버에서만 돈다).
     지수 · 등락률은 바퀴가 도는 서버의 메모리 값이라 다른 서버에서는 None."""
@@ -349,7 +412,8 @@ def board(proxy, now=None):
             cur = next((e for e in reversed(live) if e.get("type", "cb") == "cb"), None) or (live[-1] if live else None)
             out[name] = {"stage": max([e.get("stage") or 0 for e in evs] + [0]), "value": m.get("value"), "pct": m.get("pct"), "at": m.get("at"),
                          "now": cur, "live": live, "events": evs}
-        return {"day": day, "markets": out, "kind": list(_st["kind"]), "kindAt": _st["kindAt"]}
+        sys_live = [dict(e, text=SYS_TEXT.get(e.get("what"), "")) for e in (db.get(SYS) or []) if not e.get("end")]
+        return {"day": day, "markets": out, "sys": sys_live, "kind": list(_st["kind"]), "kindAt": _st["kindAt"]}
 
 
 def status():
@@ -369,6 +433,10 @@ def start(proxy, port):
             try:
                 tick(proxy, proxy.load_secrets(), port)
                 _st["error"] = None
+            except Exception as e:
+                _st["error"] = proxy.safe_message(e, 120)
+            try:
+                sys_tick(proxy, port)              # 서킷 셈이 KIS 오류로 멈춰도 장애 셈은 돈다 — 따로 잡는다
             except Exception as e:
                 _st["error"] = proxy.safe_message(e, 120)
             now = _now()
