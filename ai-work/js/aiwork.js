@@ -353,7 +353,7 @@ function drawDetail() {
     <div class="aw-modal" role="dialog" aria-modal="true">
       <div class="aw-m-h">
         <span class="aw-m-no">${esc(stage.no)} ${esc(stage.label)}</span>
-        <button class="aw-m-x" type="button" title="닫기">✕</button>
+        <button class="aw-m-x" type="button" data-tip="닫기" aria-label="닫기">✕</button>
       </div>
       <input class="aw-m-title" type="text" value="${esc(t.text)}" placeholder="무엇을 합니까?">
 
