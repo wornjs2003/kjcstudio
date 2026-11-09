@@ -355,7 +355,7 @@ def _targets(proxy, cfg):
     try:
         import dart
         codes += [r["stock_code"] for r in dart.universe_rows(None)
-                  if (r.get("stock_code") or "").isdigit() and len(r["stock_code"]) == 6]
+                  if (r["stock_code"] or "").isdigit() and len(r["stock_code"]) == 6]   # sqlite3.Row — .get 없음(11-09 · 전에는 여기서 조용히 빠졌다)
     except Exception:
         pass                       # 감시 목록을 못 읽으면 순위 종목만
     return list(dict.fromkeys(codes))
