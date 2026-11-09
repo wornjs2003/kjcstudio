@@ -303,6 +303,12 @@
   --kh-font-sans: "Noto Sans KR", "Pretendard", "Roboto",
                   -apple-system, BlinkMacSystemFont, sans-serif;
   --kh-font-mono: "JetBrains Mono", "SF Mono", Menlo, Monaco, Consolas, monospace;
+  /* 홈 글자 단계 넷 (2026-11-09 재권님 「화면에 보이는 폰트 크기가 큰거 작은거 섞여있는데 이거 정리해줘」 → 그림 「응」).
+     홈 CSS(holdings/css/home.css)의 글자 크기는 이 넷만 쓴다 — 큰 가격 · 큰 제목(18px 넘는 것)과 좁은 폭 바닥(11px)은 밖 */
+  --kh-fs-sm: 11px;     /* 작게 — 둘째 줄 · 출처 · 시각 · 이름표 */
+  --kh-fs-md: 12.5px;   /* 본문 — 종목 이름 · 뉴스 제목 · 표 숫자 */
+  --kh-fs-lg: 14px;     /* 강조 — 칸 제목 · 탭 · 가격 */
+  --kh-fs-xl: 16px;     /* 제목 */
 
   /* ── 서브 페이지(analysis·roadmap)가 쓰는 이름 ──
      값은 위와 같고 이름만 다르다. h-page.css 계열에서 참조한다. */
