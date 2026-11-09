@@ -5470,7 +5470,8 @@ MINUTE_REFILL_GAP = 60
 # ⚠️ **화면이 느려지면 안 된다.** 모든 KIS 호출이 초당 10건 줄에 서므로,
 # 미리 받기가 연달아 부르면 그 뒤에 온 화면 요청이 밀린다. 종목 사이에
 # 쉬어서 그 틈으로 화면 요청이 들어가게 한다.
-PREFILL_TOP = 100          # 코스피 상위 몇 종목까지
+# 받는 종목은 순위 목록 전부(코스피 200 · 코스닥 150 · `dart.UNIVERSE_SIZES`) — 2026-11-09 바닥 신호를 그 목록으로 넓히며(재권님 「판정 조건은 코스피 200 코스닥 150」)
+# 전에는 코스피 상위 100(`PREFILL_TOP`)이었다. 새 봉만 받으므로 종목마다 5분에 한 번쯤 — 늘어난 250종목은 초당 1번 안쪽(그날 예산 초당 40 중 약 13 사용)
 # 종목 하나를 마치고 쉬는 시간 — 화면에 양보한다.
 #
 # 2.0 초로 뒀더니 **KIS 예산의 3분의 2를 계속 쓰고 있었다** (2026-09-17 실측
@@ -5747,8 +5748,8 @@ def _ui_order(codes, keep=None, keep_sec=None):
 def _prefill_codes():
     """미리 받을 종목. 코스피 시가총액 상위 순서."""
     try:
-        # 코스피만 — 코스닥 150 이 같은 표에 들어와도 미리 받기는 넓히지 않는다 (2026-10-06 · KIS 호출이 는다)
-        codes = [r["stock_code"] for r in dart.universe_rows("KOSPI", PREFILL_TOP)]
+        # 순위 목록 전부 — 코스피가 먼저(2026-11-09 · 바닥 신호 signal_watch.low_codes 와 같은 목록. 그 전 10-06 에는 코스피 100 만)
+        codes = [r["stock_code"] for r in dart.universe_rows(None)]
     except Exception:
         codes = []
     if not codes:                      # 순위가 아직 없으면 관심종목이라도
@@ -7740,6 +7741,11 @@ class Handler(SimpleHTTPRequestHandler):
             # 목록은 개발 DB(sync_meta)에 있어 **어느 서버든 같은 것을 읽는다**(intraday_alerts.today)
             self._send_json({"ok": True, "data": intraday_alerts.today()})
             return
+        if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/signals/today":
+            # 그날 걸린 바닥 신호(볼린저 하단 · MACD 매도세 줄어듦 · RSI 30 위로 — 같은 봉) — 홈 실시간 순위 「볼린저」 칸(2026-11-09).
+            # 판정 · 기록은 보내는 서버의 신호 바퀴가 하고 기록은 DB 라 어느 서버든 읽는다(signal_watch.today_lows)
+            self._send_json({"ok": True, "data": signal_watch.today_lows(sys.modules[__name__])})
+            return
         if (self.path or "").rstrip("/") == "/api/events/status":
             # 결과 알림 바퀴의 상태 — 무엇을 기다리나 · 꺼져 있으면 보냈을 글(preview). 바퀴는 보내는 서버에서만 돈다
             st = events.status()
@@ -9549,8 +9555,8 @@ def main():
         print("  느린 모드  : 시세 %d초 · 미리받기/공시/뉴스수집 **끔** (--slow)"
               % SLOW_TTL)
     elif start_prefill(cfg):
-        print("  5분봉 준비 : 코스피 상위 %d종목을 뒤에서 미리 받습니다"
-              % PREFILL_TOP)
+        print("  5분봉 준비 : 순위 목록(코스피 · 코스닥 %s)을 뒤에서 미리 받습니다"
+              % " · ".join("%s %d" % (m, n) for m, n in dart.UNIVERSE_SIZES))
 
     # 「장외」 칩 — 애프터 마감 뒤 한 번 순위 목록의 장외 값을 받아 쥔다 (2026-10-26 · 통합 멀티 12건쯤)
     if start_after_snap(cfg):
@@ -9849,8 +9855,9 @@ def main():
         # 박으면 그쪽을 고쳤을 때 이 줄만 낡는다. 2026-09-23 에 대상을 50 으로
         # 넓히고 시간을 08~20 으로 바꾸면서 **이 줄이 「관심종목 … 장중만」 인
         # 채로 남았다.** 「값을 바꾸고 옆 설명을 안 고친」 자리다.
-        print("  신호 감시 : 사용 (감시 대상 %d개 · %d초마다 · %02d~%02d시%s)"
+        print("  신호 감시 : 사용 (감시 대상 %d개 · 바닥 신호 %d개 · %d초마다 · %02d~%02d시%s)"
               % (len(signal_watch.watch_codes(sys.modules[__name__])),
+                 len(signal_watch.low_codes(sys.modules[__name__])),
                  signal_watch.LOOP_SEC,
                  signal_watch.SESSION_FROM // 60, signal_watch.SESSION_TO // 60,
                  "" if signal_watch.SEND else " · **발송 꺼짐**"))
