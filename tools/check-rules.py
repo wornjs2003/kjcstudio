@@ -336,6 +336,26 @@ def c_main_guard():
         hits.append(".claude/settings.json deny 에 개발 · 메인 자리 항목(install.command 8765 · launchctl 개발 서버)이 없다")
     return "개발 · 메인 자리 안전장치가 빠짐", n, hits, BAD, (지시, "「메인쪽은 내 허락없이 절대 건들면 안되는곳이야 안정장치를 여러개 만들어줘」 (2026-10-01)")
 
+def c_rule_sync():
+    """룰 문서는 폴더가 뒤처져도 최신을 읽는다 (2026-11-09 지시) — 훅이 조용히 꺼지는 것을 잡는다.
+
+    tools/hook-rule-sync.py 가 세 자리(SessionStart · UserPromptSubmit · PreToolUse)에 **다 등록돼 있어야** 한다.
+    PreToolUse 는 세션 간 메시지 턴(UserPromptSubmit 이 안 돈다)을 잡는 자리라 빠지면 창구 · 작업우선순위 · qa 가 비게 된다.
+    """
+    hits, n = [], 4
+    try:
+        st = json.loads(rd(os.path.join(ROOT, ".claude/settings.json")) or "{}")
+    except Exception:
+        st = {}
+    for ev in ("SessionStart", "UserPromptSubmit", "PreToolUse"):
+        gs = st.get("hooks", {}).get(ev, [])
+        if not any("hook-rule-sync" in h.get("command", "") for g in gs for h in g.get("hooks", [])
+                   if ev != "PreToolUse" or g.get("matcher") in ("*", "", None)):
+            hits.append(".claude/settings.json %s 에 hook-rule-sync 훅 등록이 없다%s" % (ev, " (모든 도구 matcher 로)" if ev == "PreToolUse" else ""))
+    if not os.path.exists(os.path.join(ROOT, "tools/hook-rule-sync.py")):
+        hits.append("tools/hook-rule-sync.py 가 없다")
+    return "룰 최신 읽기 훅이 빠짐", n, hits, BAD, (지시, "「룰을 공통으로 다 세션별로 잘 읽을 수 있도록」 (2026-11-09)")
+
 def c_main_ok_log():
     """KJC_MAIN_OK=1 을 쓴 기록 — 허락은 기계가 못 보니 **몇 번 썼는지**를 「봐야 할 자리」 로 낸다 (작업우선순위 · 홈페이지_정리 검토)."""
     p = os.path.join(ROOT, "logs", "main-ok.log")
@@ -749,7 +769,7 @@ def c_secret_in_repo():
 
 
 CHECKS = [c_bat_nonascii, c_py_encoding, c_send_error_korean,
-          c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec, c_nav_gutter, c_shared_css, c_main_guard, c_main_ok_log, c_screen_timers,
+          c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec, c_nav_gutter, c_shared_css, c_main_guard, c_rule_sync, c_main_ok_log, c_screen_timers,
           c_glossary, c_glossary_copy, c_same_source, c_old_place_names, c_secret_in_repo]
 
 
