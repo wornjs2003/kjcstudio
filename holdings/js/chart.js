@@ -357,6 +357,18 @@ function liveOverlayHours(now = new Date()) {
   return false;
 }
 
+/* 지금 시각이 드는 분봉 칸의 시작 — 서버 ts 와 같은 꼴(한국 시각 'YYYYMMDDHHMM'). 미국 분봉도 서버가 한국 시각으로 적는다.
+   분봉이 아니면 null. updateLast 가 「경계를 넘었나」 를 볼 때만 쓴다 */
+const SLOT_MIN = { '1m': 1, '5m': 5 };
+function nowSlot(period, now = new Date()) {
+  const n = SLOT_MIN[period];
+  if (!n) return null;
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit',
+    day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now).map((x) => [x.type, x.value]));
+  const mm = String(Math.floor(Number(p.minute) / n) * n).padStart(2, '0');
+  return `${p.year}${p.month}${p.day}${p.hour}${mm}`;
+}
+
 /* 서버 ts → 라이브러리 시간 형식
    일/주/월/년봉: 'YYYY-MM-DD'
    분봉: UNIX 초 (같은 날 안에서 시각을 구분해야 하므로) */
@@ -892,6 +904,41 @@ function paneH() {
   } catch { /* 없으면 기본값 */ }
   return _paneH;
 }
+/* 세로 높이 — 기본은 보이는 봉의 최고 · 최저가 가격 칸 높이의 PRICE_FILL(70%)를 차지하게 맞춘다. **사람이 세로를 조정하면
+   그 세로 폭(가격 대비 %)으로 고정한다** — 휠 · 끌기로 보는 봉이 바뀌어도, 다른 종목 · 기간으로 가도 그 폭 그대로 그린다
+   (가운데 자리만 보이는 봉에 맞춘다 — 안 그러면 다른 종목 봉이 칸 밖에 놓인다).
+   (2026-11-09 재권님 「차트 높이 조절하면 다른종목으로 이동했을때 조절된거 유지되게」 → 「나」(봉 길이) →
+   「높이의 70% 로 맞춰주고 내가 조정을 하면 조정한대로 고정되도록 해줘」).
+   고정한 폭은 칸 높이(paneH)처럼 localStorage — 새로고침해도 남는다(보는 상태). 가격 눈금을 두 번 누르면 풀려 다시 70% 맞춤.
+   **기간(5분 · 일 · 주 · 월 · 년)마다 따로 기억한다** (2026-11-09 재권님 「응 그래」) — 5분봉에서 좁힌 폭이 월봉에 그대로 가면
+   봉이 칸 밖으로 크게 잘린다(오르내림 폭이 기간마다 열 배 넘게 다르다 · 개념정의 덧). 종목을 바꿀 때는 그대로다 */
+const PRICE_FILL = 0.7;
+const V_SPAN_KEY = 'kh.chart.v-span';
+const V_SPAN_MIN = 0.001, V_SPAN_MAX = 5;   // 세로 폭(가격 대비) — 손이 미끄러져 0 이나 터무니없는 값이 남지 않게
+let _vSpan = null;                            // 기간 → 고정한 폭(없으면 자동 70%) · 처음 부를 때 읽는다
+function vSpanMap() {
+  if (!_vSpan) {
+    _vSpan = {};
+    try {
+      const v = JSON.parse(localStorage.getItem(V_SPAN_KEY) || '{}');   // 기간마다 따로 두기 전 한 숫자로 둔 값은 버린다(객체가 아니면)
+      if (v && typeof v === 'object') {
+        Object.keys(v).forEach((k) => { if (v[k] >= V_SPAN_MIN && v[k] <= V_SPAN_MAX) _vSpan[k] = v[k]; });
+      }
+    } catch { /* 없으면 자동 */ }
+  }
+  return _vSpan;
+}
+function vSpan(per) {
+  const v = vSpanMap()[per];
+  return v == null ? null : v;
+}
+function setVSpan(per, v) {
+  const m = vSpanMap();
+  if (v == null) delete m[per];
+  else m[per] = Math.max(V_SPAN_MIN, Math.min(V_SPAN_MAX, v));
+  try { localStorage.setItem(V_SPAN_KEY, JSON.stringify(m)); } catch { /* 저장 못 씀 */ }
+}
+
 function savePaneH() {
   try { localStorage.setItem(PANE_H_KEY, JSON.stringify(_paneH)); } catch { /* 저장 못 씀 */ }
 }
@@ -948,6 +995,7 @@ export function createStockChart(container, candles, opts = {}) {
   let lastLive = null;          // 마지막으로 받은 시세 — 서버 봉을 덧붙여 맨 오른쪽이 서버 값으로 돌아가면 다시 얹는다
   let serverLast = null;        // 시세를 얹기 전 서버가 준 맨 오른쪽 봉 — 아침 7시에 정규장 종가로 되돌릴 때 쓴다
   let overlaid = null;          // updateLast 가 얹어 만든 봉 — 이것이 아니면 맨 오른쪽은 서버가 새로 준 봉이다
+  let provisional = null;       // updateLast 가 경계를 넘어 먼저 세운 분봉 — 서버 봉이 오면 갈아 끼운다
   let liveVol = null;           // 마지막 시세의 하루 누적 거래량 — 분봉 끝 봉에 그 차이를 더한다(매물대가 바로 따라오게)
   let drawnCode = opts.code || null;   // 지금 그린 종목 — setData 가 다른 종목을 받을 때만 위 값을 지운다
   const priceLines = [];
@@ -1045,11 +1093,28 @@ export function createStockChart(container, candles, opts = {}) {
          그냥 한 번 누르는 것만으로 **제자리로 튕긴다** — 값을 읽으려고
          누르는 일이 흔하므로 그 자리가 바로 걸린다 */
       if (!moved && wasAuto) set(true);
+      if (moved) setTimeout(keepStretch, 0);   // 위아래로 끈 세로 폭을 고정한다(위 keepStretch)
       y0 = null;
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
     }
+
+    /* 가격 눈금을 끌어 바꾼 세로 폭도 고정한다 — 라이브러리가 눈금 끌기에서 자동 눈금을 끈다. 놓은 뒤 keepStretch 가 재 고정한다.
+       눈금을 두 번 누르면 라이브러리가 제자리로 돌리는데, 그때 고정한 세로 폭도 풀어 다시 70% 맞춤으로 */
+    const onAxis = (e) => e.clientX > box.getBoundingClientRect().right - AXIS_W;
+    box.addEventListener('pointerdown', (e) => {
+      if (!onAxis(e)) return;
+      const done = () => { window.removeEventListener('pointerup', done); setTimeout(keepStretch, 0); };
+      window.addEventListener('pointerup', done);
+    }, { capture: true });
+    box.addEventListener('dblclick', (e) => {
+      if (!onAxis(e)) return;
+      setVSpan(period, null);                 // 이 기간의 고정을 풀고 다시 70% 맞춤
+      vpRange = null;
+      try { candleSeries.applyOptions(priceFix()); } catch { /* 칸이 아직 없다 */ }
+      requestAnimationFrame(() => requestAnimationFrame(() => { lockPriceRange(); drawProfile(); }));
+    });
 
     plot.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;   // 왼쪽 버튼만
@@ -1332,8 +1397,46 @@ export function createStockChart(container, candles, opts = {}) {
     };
   }
 
+  /* 자동 눈금에 좁은 폭 늘림(phoneStretch)을 곱하고, 사람이 고정한 세로 폭(vSpan)이 있으면 그 폭으로 바꾼다.
+     라이브러리는 이 범위 위아래에 여백(scaleMargins)을 얹으므로, 보이는 폭이 고정 폭이 되게 여백만큼 덜어 준다 */
+  function stretchProvider() {
+    const ph = phoneStretch();
+    return (orig) => {                         // 기간은 부를 때 읽는다 — 기간을 바꿔도 이 함수를 다시 안 붙일 수 있어서
+      const r = ph ? ph(orig) : orig();
+      const span = vSpan(period);
+      if (span == null || !r || !r.priceRange) return r;
+      const { minValue: lo, maxValue: hi } = r.priceRange;
+      const mid = (lo + hi) / 2;
+      let fill = PRICE_FILL;
+      try {
+        const m = candleSeries.priceScale().options().scaleMargins;
+        if (m) fill = 1 - m.top - m.bottom;
+      } catch { /* 기본 비율 */ }
+      const half = Math.abs(mid) * span * fill / 2;
+      return { ...r, priceRange: { minValue: lo >= 0 ? Math.max(0, mid - half) : mid - half, maxValue: mid + half } };
+    };
+  }
+
+  /* 사람이 세로를 바꾼 뒤(위아래로 끌기 · 가격 눈금 끌기 — 둘 다 자동 눈금을 끈다) 그 세로 폭을 가격 대비로 재 고정하고,
+     자동 눈금을 다시 켠다(가운데는 보이는 봉에 맞추고 폭은 고정 — 위 stretchProvider) */
+  function keepStretch() {
+    const ch = panes[0] && panes[0].chart;
+    if (!ch || !candleSeries) return;
+    let auto = true;
+    try { auto = ch.priceScale('right').options().autoScale !== false; } catch { return; }
+    if (auto) return;                          // 세로를 안 바꿨다
+    const user = readScale();
+    if (!user) return;
+    const mid = (user.top + user.bot) / 2;
+    if (!(mid > 0)) return;
+    setVSpan(period, (user.top - user.bot) / mid);
+    vpRange = null;
+    try { candleSeries.applyOptions(priceFix()); ch.priceScale('right').applyOptions({ autoScale: true }); } catch { return; }
+    requestAnimationFrame(() => requestAnimationFrame(() => { lockPriceRange(); drawProfile(); }));
+  }
+
   function priceFix() {
-    if (!indOn().has('vp') || !vpRange) return { autoscaleInfoProvider: phoneStretch() };
+    if (!indOn().has('vp') || !vpRange) return { autoscaleInfoProvider: stretchProvider() };
     const { min, max } = vpRange;
     return { autoscaleInfoProvider: () => ({ priceRange: { minValue: min, maxValue: max } }) };
   }
@@ -1853,7 +1956,12 @@ export function createStockChart(container, candles, opts = {}) {
       const item = { key: p.key, el, box, chart: ch };
       panes.push(item);
 
-      if (p.key === 'price') { drawCandle(ch); drawOverlay(ch); freeVert(ch, box); }
+      if (p.key === 'price') {
+        /* 보이는 봉이 칸 높이의 PRICE_FILL 을 차지하게 — 남는 30% 는 위(범례 자리 · 더 넓게)와 아래로 나눈다 */
+        const top = showLegend ? 0.2 : 0.15;
+        try { ch.priceScale('right').applyOptions({ scaleMargins: { top, bottom: 1 - PRICE_FILL - top } }); } catch { /* 옛 라이브러리 */ }
+        drawCandle(ch); drawOverlay(ch); freeVert(ch, box);
+      }
       if (p.key === 'vol')   item.calc = drawVol(ch);
       if (p.key === 'macd')  item.calc = drawMacd(ch);
       if (p.key === 'rsi')   item.calc = drawRsi(ch);
@@ -1866,7 +1974,7 @@ export function createStockChart(container, candles, opts = {}) {
         const tag = document.createElement('div');
         tag.className = 'kh-pane-tag';
         tag.innerHTML =
-          '<span class="x" data-pane-close="' + p.key + '" title="닫기">✕</span>' +
+          '<span class="x" data-pane-close="' + p.key + '" data-tip="닫기" aria-label="닫기">✕</span>' +
           '<span class="nm" data-doc="' + p.key + '" data-tip-ref="#kh-ind-doc-' + p.key + '">' + def.label + ' (' + def.par + ')</span>' +
           '<span class="v" data-pane-v="' + p.key + '"></span>';
         el.appendChild(tag);
@@ -2175,7 +2283,7 @@ export function createStockChart(container, candles, opts = {}) {
          (qa 검수 2026-10-15). 같은 종목을 다시 그릴 때(기간 바꿈 · 다시 받기)는 그대로 둔다. 종목을 모르면(code 없이 부름) 지운다 */
       if (!code || code !== drawnCode) { lastLive = null; liveVol = null; api.prevClose = null; }
       drawnCode = code || null;
-      serverLast = null; overlaid = null;   // 새 서버 봉이 왔다 — 앞 종목 · 앞 판의 되돌릴 봉을 버린다 (qa 2026-10-15 · 7~9시 삼성 → 하닉이 삼성 봉으로 덮임)
+      serverLast = null; overlaid = null; provisional = null;   // 새 서버 봉이 왔다 — 앞 종목 · 앞 판의 되돌릴 봉을 버린다 (qa 2026-10-15 · 7~9시 삼성 → 하닉이 삼성 봉으로 덮임)
       priceLines.length = 0;
       remap();
       build();
@@ -2198,6 +2306,14 @@ export function createStockChart(container, candles, opts = {}) {
      * 돌려주는 값: 고친 봉 수(0 이면 그릴 것이 없었다) · 통째였으면 -1. */
     appendBars(bars) {
       if (!bars || !bars.length || !candles.length) return 0;
+      /* 화면이 먼저 세운 봉(updateLast)이 끝에 있는데 서버가 그 앞 칸을 고쳐 보내면 — 서버가 아직 새 칸을 안 받은 때다 —
+         그 봉을 잠시 내려놓고 앞 칸을 끝 봉으로 고친 뒤 다시 얹는다. 안 그러면 앞 칸이 「끝이 아닌 자리」 가 되어 통째로 다시 그린다.
+         서버가 그 칸(이나 그 뒤)을 보내면 서버 봉이 이긴다 */
+      let held = null;
+      if (provisional && candles[candles.length - 1] === provisional && bars.some((b) => b && b.ts && b.ts < provisional.ts)) {
+        held = candles.pop();
+        provisional = null;
+      }
       const same = (a, b) => a.open === b.open && a.high === b.high && a.low === b.low
         && a.close === b.close && a.volume === b.volume;
       const at = new Map(candles.map((c, i) => [c.ts, i]));
@@ -2223,17 +2339,27 @@ export function createStockChart(container, candles, opts = {}) {
         if (lastLive) api.updateLast(lastLive);   // 맨 오른쪽을 지금 시세로 (qa 검수 · 주봉 「현재」 가 서버 봉 값)
         return -1;
       }
-      if (!tail.length) return 0;
+      if (!tail.length && !held) return 0;
       for (const b of tail) {
         if (b.ts === candles[candles.length - 1].ts) candles[candles.length - 1] = b;
         else candles.push(b);
+        if (held) continue;                  // 내려놓은 봉이 있으면 시리즈는 아래에서 한 번에 다시 넣는다
         try {
           candleSeries.update({ time: toChartTime(b.ts, period), open: b.open, high: b.high, low: b.low, close: b.close });
         } catch { /* 칸이 아직 없다 */ }
       }
+      if (held) {
+        if (!bars.some((b) => b && b.ts && b.ts >= held.ts)) { candles.push(held); provisional = held; }
+        /* 시리즈 끝에 화면이 세운 봉이 있어 앞 칸은 update 로 못 고친다(라이브러리는 끝 봉만 고친다) — 봉 시리즈만 다시 넣는다 */
+        try {
+          candleSeries.setData(candles.map((c) => ({
+            time: toChartTime(c.ts, period), open: c.open, high: c.high, low: c.low, close: c.close,
+          })));
+        } catch { /* 칸이 아직 없다 */ }
+      }
       /* 매물대를 켜 세로 범위를 굳혀 두었으면(lockPriceRange) 새 봉이 그 밖으로 나갈 수 있다 — 그만큼만 넓힌다.
          통째로 다시 재면 켤 때 굳힌 뜻(안 움직임)이 깨진다 */
-      if (vpRange) {
+      if (vpRange && tail.length) {
         const hi = Math.max(...tail.map((b) => b.high)), lo = Math.min(...tail.map((b) => b.low));
         if (hi > vpRange.max || lo < vpRange.min) {
           vpRange = { min: Math.min(vpRange.min, lo), max: Math.max(vpRange.max, hi) };
@@ -2261,7 +2387,7 @@ export function createStockChart(container, candles, opts = {}) {
       syncing = wasSync;
       paintPaneTags(candles.length - 1);
       if (lastLive) api.updateLast(lastLive);     // 덧붙인 서버 봉이 맨 오른쪽을 서버 값으로 돌려놓았다 — 지금 시세로
-      return tail.length;
+      return tail.length || 1;
     },
 
     resetView(bars) {
@@ -2321,6 +2447,20 @@ export function createStockChart(container, candles, opts = {}) {
       if (MINUTE_PERIODS.has(period) && Number.isFinite(cum)) {
         if (liveVol != null && cum > liveVol) addVol = cum - liveVol;
         liveVol = cum;
+      }
+      /* **분봉 경계를 넘었으면 새 봉을 먼저 세운다** (2026-11-09 재권님 「5분봉 그리는게 5분이 됬을때 바로 적용이 안되는거 같은데」
+         → 「응」). 서버는 5분봉을 30초마다 받아 경계 뒤 10~30초 늦게 새 봉을 낸다(11-09 10:55 · 11:00 · 11:05 잼 — 12 · 27 · 10초).
+         그 사이 시세를 끝 봉에 얹으면 경계 뒤 체결이 앞 봉에 쌓였다. 지금 시각 칸이 끝 봉 칸보다 뒤이고 **거래량이 늘었을 때만**
+         (진짜 체결 — 창을 처음 열 때 · 장 밖의 묵은 시세로는 안 세운다) 그 시세로 새 봉을 붙인다. 서버 봉이 오면 appendBars 가
+         같은 칸을 서버 값으로 갈아 끼운다. KIS 호출은 늘지 않는다 */
+      if (addVol > 0 && String(last.ts).length >= 12) {
+        const slot = nowSlot(period);
+        if (slot && slot > String(last.ts)) {
+          const bar = { ts: slot, open: px, high: px, low: px, close: px, volume: addVol };
+          provisional = bar;
+          api.appendBars([bar]);   // 봉 · 아래 칸 · 겹침을 덧붙이기 길 그대로 붙인다
+          return;
+        }
       }
       if (last.close === px && !addVol) return;   // 안 움직였으면 그릴 것이 없다
       const next = {

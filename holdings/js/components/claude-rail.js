@@ -57,12 +57,13 @@ export function mountClaudeRail() {
   const bar = document.createElement('nav');
   bar.className = 'kh-rail-bar';
   bar.setAttribute('aria-label', 'Claude');
-  bar.innerHTML = `<button type="button" class="kh-rail-ic" title="Claude">${ICON}</button>`;
+  bar.innerHTML = `<button type="button" class="kh-rail-ic" data-tip="Claude" aria-label="Claude">${ICON}</button>`;
 
   const fab = document.createElement('button');
   fab.type = 'button';
   fab.className = 'kh-rail-fab';
-  fab.title = 'Claude';
+  fab.dataset.tip = 'Claude';
+  fab.setAttribute('aria-label', 'Claude');
   fab.innerHTML = ICON;
 
   const panel = document.createElement('aside');
@@ -70,7 +71,7 @@ export function mountClaudeRail() {
   panel.hidden = true;
   panel.innerHTML = `<div class="kh-rail-hd"><b>Claude</b><span class="kh-rail-st">준비</span>
       <button type="button" class="kh-rail-clr" data-tip="이 브라우저에 남은 대화를 지웁니다">대화 지우기</button>
-      <button type="button" class="kh-rail-x" title="닫기" aria-label="닫기">×</button></div>
+      <button type="button" class="kh-rail-x" data-tip="닫기" aria-label="닫기">×</button></div>
     <div class="kh-rail-ctx">보고 있는 것 — <b class="kh-rail-now"></b><br>보내면 이 화면과 서버가 받은 시세를 함께 보냅니다</div>
     <div class="kh-rail-body" aria-live="polite"></div>
     <div class="kh-rail-quick">${QUICK.map((q) => `<button type="button">${q}</button>`).join('')}</div>

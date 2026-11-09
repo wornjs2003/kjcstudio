@@ -314,8 +314,8 @@ function statsHtml() {
   });
   const th = (k, label) => `<button type="button" class="rv-sm-th${stat.sort === k ? ' is-on' : ''}" data-sort="${k}">${label}${stat.sort === k ? (stat.dir < 0 ? ' ▼' : ' ▲') : ''}</button>`;
   return `<div class="rv-sm-per">${STAT_PERIODS.map(([k, l]) => `<button type="button" class="rv-sm-p${stat.p === k ? ' is-on' : ''}" data-per="${k}">${l}</button>`).join('')}
-      <input type="date" id="rv-sm-from" value="${okRange || stat.p === 'custom' ? isoOf(a || pick) : ''}" />
-      <span>–</span><input type="date" id="rv-sm-to" value="${okRange || stat.p === 'custom' ? isoOf(b || pick) : ''}" /></div>
+      <span class="rv-sm-range"><input type="date" id="rv-sm-from" value="${okRange || stat.p === 'custom' ? isoOf(a || pick) : ''}" />
+      <span>–</span><input type="date" id="rv-sm-to" value="${okRange || stat.p === 'custom' ? isoOf(b || pick) : ''}" /></span></div>
     ${okRange ? '' : '<div class="rv-sm-note">시작일이 끝일보다 뒤입니다 — 기간을 다시 골라 주십시오</div>'}
     <div class="rv-sm-sum">
       <div><span>수익금</span>${pnlB(all.sum)}</div>

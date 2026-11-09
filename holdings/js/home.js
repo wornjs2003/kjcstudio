@@ -1481,7 +1481,7 @@ const SORT_TIPS = {
   down: '오늘 전일 대비 많이 내린 순',
   after: '정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 09:00 ~ 15:40 은 비어 있습니다',
   buy: '외국인 · 기관 · 프로그램이 셋 다 순매수인 종목, 셋 합이 큰 순(외국인 · 기관은 장중 가집계)\n셋 다 샀다가 한 곳이라도 매도로 바뀐 종목은 맨 위에 흐리게',
-  pre: '코스피 200 · 코스닥 150 종목 중 넥스트레이드 프리마켓(08:00 ~ 08:50) 프로그램 순매수가 큰 순\n08:50 ~ 09:00 에 그날 판으로 굳힙니다',
+  pre: '코스피 200 · 코스닥 150 종목 중 넥스트레이드 프리마켓(08:00 ~ 08:50) 거래대금 상위 안에서 프로그램 순매수가 큰 순\n08:50 ~ 09:00 에 그날 판으로 굳힙니다',
   vi: '오늘 정규장에 상승 VI 가 걸렸거나 전일 대비 +20% 를 넘은 종목, 최근 것이 위',
   ssts: '코스피200 · 코스닥150 종목의 공매도 거래대금 · 비율(공매도 대금 ÷ 전체 거래대금) 순\n아래 줄에서 금액 · 비율 · 1일 · 5일 · 한달 · 1년 · 장중 값은 없고 거래소가 장 뒤에 냅니다',
 };
@@ -2067,7 +2067,7 @@ function paintSortNote() {
 function paintFavCell(td) {
   const on = isFav(td.dataset.fav);
   td.classList.toggle('is-fav', on);
-  td.title = on ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기';
+  td.dataset.tip = on ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기';
 }
 
 /* 그려 둔 순위 숫자에 동작을 건다. 표를 다시 그릴 때마다 부른다 */
@@ -2089,7 +2089,8 @@ function paintBigFav() {
   if (!btn || !btn.dataset.fav) return;
   const on = isFav(btn.dataset.fav);
   btn.classList.toggle('is-on', on);
-  btn.title = on ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기';
+  btn.dataset.tip = on ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기';
+  btn.setAttribute('aria-label', btn.dataset.tip);
   btn.setAttribute('aria-pressed', on ? 'true' : 'false');
 }
 $('kh-big-fav')?.addEventListener('click', (e) => {
@@ -2425,7 +2426,7 @@ function paintRows(priceMap) {
        차트 옆 패널에 보여주기로 했다 (지시). */
     return `<tr data-code="${s.code}" class="${s.code === selectedCode ? 'is-active' : ''}"${s.flip ? ' style="opacity:.55"' : ''}>
       <td class="kh-rk${isFav(s.code) ? ' is-fav' : ''}" data-fav="${s.code}"
-        data-fav-name="${s.name}" title="${isFav(s.code) ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기'}"
+        data-fav-name="${s.name}" data-tip="${isFav(s.code) ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기'}"
         >${s.rank}</td>
       <td class="l"><span class="kh-nm">
         ${iconHtml(s)}
@@ -3036,7 +3037,7 @@ function addModalActions(main, code) {
   const act = document.createElement('div');
   act.className = 'kh-head-act';
   act.innerHTML = `
-    <button class="kh-modal-x" title="닫기 (Esc)" aria-label="닫기">✕</button>`;
+    <button class="kh-modal-x" data-tip="닫기 (Esc)" aria-label="닫기">✕</button>`;
   act.querySelector('.kh-modal-x').addEventListener('click', closeModal);
   top.appendChild(act);
 }

@@ -172,7 +172,7 @@ const BODY_HTML = `
              읽어 판정하므로, 낱말을 넣으면 다음 수집부터 바로 걸린다. -->
         <div class="kh-dl-pane" data-dl-info-p="alert" hidden>
           <div class="kh-dl-pane-h">
-            <span class="kh-dl-why">걸리면 하루 3번을 기다리지 않고 바로 보냅니다</span>
+            <span class="kh-dl-why">즉시알림은 바로 · 모아서는 정기 묶음 맨 위로</span>
             <span class="kh-dl-src" id="kh-dl-al-src">news-alerts.json</span>
           </div>
           <div class="kh-dl-alerts" id="kh-dl-alerts">불러오는 중</div>
@@ -731,31 +731,38 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
       return;
     }
 
-    box.innerHTML = alertRules['즉시알림'].map((rule, ri) => `
+    /* 갈래 둘 — 「즉시알림」(바로 보냄) · 「모아서」(정기 묶음 맨 위 칸 · 관심종목 · 2026-10-12 뉴스 알림 정리). 전에는 즉시알림만 그려
+       관심종목을 화면에서 넣고 뺄 수 없었다(2026-11-09 · 재권님 「순차로해」 차례 3). 파일은 통째로 저장하므로 두 갈래가 같이 간다 */
+    const GROUPS = [['즉시알림', '바로 보냄'], ['모아서', '정기 묶음 맨 위에 모음']];
+    const ruleHtml = (g, rule, ri) => `
       <div class="kh-dl-al-rule${rule['켬'] === false ? ' is-off' : ''}">
         <div class="kh-dl-al-h">
-          <label><input type="checkbox" data-rule="${ri}"
+          <label><input type="checkbox" data-rule="${g}:${ri}"
             ${rule['켬'] === false ? '' : 'checked'}> ${esc(rule['이름'] || '이름 없음')}</label>
           <i>${(rule['제목에'] || []).length}개</i>
         </div>
         <div class="kh-dl-al-words">
           ${(rule['제목에'] || []).map((w, wi) => `
             <span class="kh-dl-al-w">${esc(w)}
-              <button type="button" data-del="${ri}:${wi}" title="빼기">×</button></span>`).join('')}
-          <input class="kh-dl-al-add" data-add="${ri}" placeholder="낱말을 적고 Enter">
+              <button type="button" data-del="${g}:${ri}:${wi}" data-tip="빼기" aria-label="빼기">×</button></span>`).join('')}
+          <input class="kh-dl-al-add" data-add="${g}:${ri}" placeholder="낱말을 적고 Enter">
         </div>
-      </div>`).join('');
+      </div>`;
+    box.innerHTML = GROUPS.filter(([g]) => Array.isArray(alertRules[g]) && alertRules[g].length)
+      .map(([g, how]) => `<div class="kh-dl-al-g"><b>${esc(g)}</b> <span>${how}</span></div>`
+        + alertRules[g].map((rule, ri) => ruleHtml(g, rule, ri)).join('')).join('');
 
+    const at = (key) => { const [g, ri] = key.split(':'); return alertRules[g][Number(ri)]; };
     box.querySelectorAll('[data-rule]').forEach((el) => {
       el.addEventListener('change', () => {
-        alertRules['즉시알림'][Number(el.dataset.rule)]['켬'] = el.checked;
+        at(el.dataset.rule)['켬'] = el.checked;
         drawAlerts(); saveAlerts();
       });
     });
     box.querySelectorAll('[data-del]').forEach((el) => {
       el.addEventListener('click', () => {
-        const [ri, wi] = el.dataset.del.split(':').map(Number);
-        alertRules['즉시알림'][ri]['제목에'].splice(wi, 1);
+        const [g, ri, wi] = el.dataset.del.split(':');
+        alertRules[g][Number(ri)]['제목에'].splice(Number(wi), 1);
         drawAlerts(); saveAlerts();
       });
     });
@@ -764,7 +771,7 @@ export function mountDaily(root, { side = null, past = null, indexHost = null,
         if (e.key !== 'Enter') return;
         const word = el.value.trim();
         if (!word) return;
-        alertRules['즉시알림'][Number(el.dataset.add)]['제목에'].push(word);
+        at(el.dataset.add)['제목에'].push(word);
         drawAlerts(); saveAlerts();
       });
     });
