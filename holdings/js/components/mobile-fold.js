@@ -54,8 +54,8 @@ function button(name, on) {
   b.setAttribute('aria-expanded', on ? 'false' : 'true');
   /* 글자가 아니라 꺾쇠다. 접히면 오른쪽(▸), 펴지면 아래(▾) */
   b.textContent = on ? '▸' : '▾';
-  b.title = on ? '펴기' : '접기';
-  b.setAttribute('aria-label', b.title);
+  b.dataset.tip = on ? '펴기' : '접기';
+  b.setAttribute('aria-label', b.dataset.tip);
   return b;
 }
 
@@ -88,8 +88,8 @@ function onClick(e) {
   const on = !el.classList.contains('is-fold');
   el.classList.toggle('is-fold', on);
   b.textContent = on ? '▸' : '▾';
-  b.title = on ? '펴기' : '접기';
-  b.setAttribute('aria-label', b.title);
+  b.dataset.tip = on ? '펴기' : '접기';
+  b.setAttribute('aria-label', b.dataset.tip);
   b.setAttribute('aria-expanded', on ? 'false' : 'true');
   const folded = read();
   folded[on ? 'add' : 'delete'](name);
