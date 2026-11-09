@@ -9685,8 +9685,11 @@ def main():
     # **`events.SEND = False` 가 기본이다** — 바퀴는 돌되 안 보내고, 보냈을 글을 /api/events/status 에 남긴다. 켜기는 재권님 지시로
     if not SLOW and is_sender(args.port) and events.start():
         # 조용한 시간은 `dart.QUIET_FROM`·`QUIET_TO` 에서 만든다 — 여기 박으면 그쪽을 고쳤을 때 이 줄만 낡는다
-        print("  결과 알림 : 사용 (%d초마다 · 밤 %02d~%02d시 것은 %02d:00 한 통%s)"
-              % (events.TICK, dart.QUIET_FROM // 60, dart.QUIET_TO // 60, dart.QUIET_TO // 60,
+        # 밤 결과는 07:00 미국 데일리 한 통에 실린다 · 못 실은 날만 events.OVERNIGHT_FLUSH_AT 에 따로(2026-11-07 c0d4d81) — 시각은 그 상수들에서
+        print("  결과 알림 : 사용 (%d초마다 · 밤 %02d~%02d시 것은 %02d:%02d 미국 데일리에 실음 · 못 실으면 %02d:%02d 따로%s)"
+              % (events.TICK, dart.QUIET_FROM // 60, dart.QUIET_TO // 60,
+                 daily.US_SEND_AT // 60, daily.US_SEND_AT % 60,
+                 events.OVERNIGHT_FLUSH_AT // 60, events.OVERNIGHT_FLUSH_AT % 60,
                  "" if events.SEND else " · **발송 꺼짐 — 미리보기만**"))
 
     # 시황 글 알림(2026-10-27 · server/note_alert.py) — 같은 문(보내는 서버만) · 켜기 스위치가 따로 없다(재권님 「가」 = 8765 가 보낸다)
