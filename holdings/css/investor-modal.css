@@ -156,6 +156,25 @@
   .kh-ivt-card.is-tall .kh-ivt-tb { max-height: 260px; }
 }
 
+/* ── 1분 흐름 탭 (2026-11-04 재권님 「투자자지표 모달에다가 연결 · 실시간」 · 시안 「응 그렇게 해줘」) ──
+   좁은 폭이 기본 — 누계 칸은 감겨 내려가고, 표는 칸 안에서 내린다(모달이 안 길어지게) */
+.kh-ivf { display: flex; flex-direction: column; gap: 10px; }
+.kh-ivf-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.kh-ivf-tot {
+  border: 0; cursor: pointer; text-align: left; font: inherit; min-width: 84px;
+  background: var(--kh-bg-surface); border-radius: var(--kh-radius-md); padding: 6px 10px;
+  font-size: 12px; color: var(--kh-text-secondary);
+}
+.kh-ivf-tot.is-on { box-shadow: inset 0 0 0 1px var(--kh-border-strong); }
+.kh-ivf-tot i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+.kh-ivf-tot b { display: block; font-size: 15px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.kh-ivf-svg { width: 100%; height: 200px; display: block; }
+.kh-ivf-tb { max-height: 240px; font-variant-numeric: tabular-nums; }
+/* 날마다 수급 탭 — 날짜 세로 · 갈래 가로(열이 많아 칸 안에서 가로로도 민다) */
+.kh-ivd { display: flex; flex-direction: column; gap: 6px; }
+.kh-ivd-tb { max-height: 420px; font-variant-numeric: tabular-nums; }
+.kh-ivd-tb th.kh-ivd-sub { color: var(--kh-text-tertiary, var(--kh-text-secondary)); opacity: .7; }
+.kh-ivd-today td { background: var(--kh-bg-surface); }
 /* 매매 동향 탭 — 순위 표 · 「전환」 같은 표시는 연한 바탕에 진한 글씨(색 바탕 위의 글씨) */
 .kh-ivr { display: flex; flex-direction: column; gap: 6px; }
 .kh-ivr-tb { max-height: 420px; font-variant-numeric: tabular-nums; }
@@ -171,4 +190,7 @@
 .kh-ivr-day { font: inherit; font-size: 12px; border: 0; background: var(--kh-bg-surface); color: var(--kh-text-primary); border-radius: 6px; padding: 3px 6px; }
 @media (min-width: 701px) {
   .kh-ivr-tb { max-height: 720px; }
+  .kh-ivd-tb { max-height: 720px; }
+  .kh-ivf-svg { height: 260px; }
+  .kh-ivf-tb { max-height: 380px; }
 }
