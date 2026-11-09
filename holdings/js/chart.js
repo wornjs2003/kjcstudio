@@ -74,6 +74,7 @@ const MA_LINES = [[5, 'ma5'], [20, 'ma20'], [60, 'ma60'], [200, 'ma200']];
 export const IND_PERIOD = {
   bb: 20,                                  // 볼린저 밴드
   rsi: 14,
+  stoK: 14, stoSlow: 3, stoD: 3,           // 스토캐스틱(Slow) — 기간 14 · %K 를 3봉 평균 · %D 는 그 %K 의 3봉 평균
   macdFast: 12, macdSlow: 26, macdSig: 9,
   vol: 20,                                 // 거래량 이동평균
   ichA: 9, ichB: 26, ichC: 52,             // 일목균형표
@@ -103,6 +104,8 @@ export const INDICATORS = [
   { key: 'vol',  name: '거래량',      pane: 'own'   },
   { key: 'macd', name: 'MACD',       pane: 'own'   },
   { key: 'rsi',  name: 'RSI',        pane: 'own'   },
+  /* 스토캐스틱(Slow · 2026-11-09 재권님 「차트에 스토케스특 보조지표라고 있는데 이것도 추가해줘」) — RSI 와 같은 꼴(0~100 · 20 · 80 띠) */
+  { key: 'sto',  name: '스토캐스틱',  pane: 'own'   },
   /* 누적 순매수(외국인 · 기관 · 개인 %p) — 2026-10-26 재권님 「차트 보조지표에 외국인 기관 개인 보유비중」 → 시안 넷 중 「다」.
      **보유비중이 아니다** — 기관 · 개인 보유 비중은 공개 출처가 없어 셋 다 같은 잣대(셈 첫날부터 순매수 ÷ 상장주식수)로 그린다.
      값은 서버 /api/kis/holding-flow 가 셈해 내준다(kis_proxy.py holding_flow) — 화면은 날짜를 봉에 맞춰 놓기만 한다 */
@@ -206,6 +209,7 @@ const IND_WARMUP = [
   ...MA_LINES.map(([p]) => p),                            // 이동평균 — 지금은 200 이 가장 길다
   IND_PERIOD.macdSlow + IND_PERIOD.macdSig - 1,           // MACD 신호선
   IND_PERIOD.bb, IND_PERIOD.rsi, IND_PERIOD.vol,
+  IND_PERIOD.stoK + IND_PERIOD.stoSlow + IND_PERIOD.stoD - 2,   // 스토캐스틱 %D
   IND_PERIOD.ichC + IND_PERIOD.ichB,                      // 일목 선행스팬2 (뒤로 b 만큼 민다)
 ];
 
@@ -469,6 +473,23 @@ export function rsi(candles, barPeriod, period = IND_PERIOD.rsi) {
   return { data: out, values: vals, period };
 }
 
+/* 스토캐스틱(Slow) — 빠른 %K = (종가 − 그 기간 최저) ÷ (최고 − 최저) × 100, 그것을 stoSlow 봉 평균한 것이 %K,
+   %K 를 stoD 봉 평균한 것이 %D. 최고 = 최저(봉이 다 같은 값)면 그 봉은 50 으로 둔다(0 으로 나누지 않게) */
+export function stochastic(candles, barPeriod, n = IND_PERIOD.stoK, slow = IND_PERIOD.stoSlow, dN = IND_PERIOD.stoD) {
+  const fast = new Array(candles.length).fill(null);
+  for (let i = n - 1; i < candles.length; i++) {
+    let hi = -Infinity, lo = Infinity;
+    for (let j = i - n + 1; j <= i; j++) {
+      if (candles[j].high > hi) hi = candles[j].high;
+      if (candles[j].low < lo) lo = candles[j].low;
+    }
+    fast[i] = hi > lo ? (candles[i].close - lo) / (hi - lo) * 100 : 50;
+  }
+  const k = smaOf(fast, slow);
+  const d = smaOf(k, dN);
+  return { k, d, n };
+}
+
 /* MACD — 12일선과 26일선의 차이(macd), 그것의 9일 지수이동평균(signal),
    그리고 둘의 차이(hist). hist 가 0 을 넘나드는 자리가 추세가 바뀌는 자리다. */
 export function macd(candles, barPeriod, fast = IND_PERIOD.macdFast,
@@ -717,7 +738,7 @@ export function onIndicatorChange(fn) {
 }
 
 const PANE_H_KEY = 'kh.chart.pane-h';
-const PANE_H_DEF = { vol: 110, macd: 110, rsi: 110, hf: 110 };
+const PANE_H_DEF = { vol: 110, macd: 110, rsi: 110, sto: 110, hf: 110 };
 
 /* ── 매물대 (2026-09-18 지시) ─────────────────
  *
@@ -880,6 +901,7 @@ const OWN_PANES = [
   { key: 'vol',  label: '거래량', par: '20' },
   { key: 'macd', label: 'MACD',  par: '12, 26, 9' },
   { key: 'rsi',  label: 'RSI',   par: '14' },
+  { key: 'sto',  label: '스토캐스틱', par: IND_PERIOD.stoK + ', ' + IND_PERIOD.stoSlow + ', ' + IND_PERIOD.stoD },
   { key: 'hf',   label: '누적 순매수 %p', par: '보유비중 아님' },
 ];
 
@@ -1626,6 +1648,50 @@ export function createStockChart(container, candles, opts = {}) {
     return { values: r.values, sig };
   }
 
+  /* 스토캐스틱(Slow) — 그 기간 최고 · 최저 사이 어디쯤에서 끝났나를 0~100 으로. 80 위 과열 · 20 아래 침체.
+     띠 · 채움 · 0~100 고정 · 기준 점선은 RSI(drawRsi)와 같은 꼴이다(같은 칸이 나란히 있어도 한 모양으로 읽히게) */
+  function drawSto(ch) {
+    const r = stochastic(candles, period);
+    const flat = (v, col) => {
+      const sr = ch.addSeries(LC.AreaSeries, {
+        lineColor: 'transparent', topColor: col, bottomColor: col,
+        priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      });
+      sr.setData(candles.map((c) => ({ time: toChartTime(c.ts, period), value: v })));
+    };
+    flat(80, COLOR.rsiBand);        // 20~80 을 옅게
+    flat(20, COLOR.cardBg);         // 아래를 카드 색으로 덮어 띠만 남긴다
+
+    const over = ch.addSeries(LC.BaselineSeries, {
+      baseValue: { type: 'price', price: 80 },
+      topFillColor1: COLOR.up + '55', topFillColor2: COLOR.up + '22',
+      bottomFillColor1: 'transparent', bottomFillColor2: 'transparent',
+      topLineColor: 'transparent', bottomLineColor: 'transparent',
+      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+    });
+    over.setData(put(r.k.map((v) => v == null ? null : Math.max(v, 80))));
+    const under = ch.addSeries(LC.BaselineSeries, {
+      baseValue: { type: 'price', price: 20 },
+      topFillColor1: 'transparent', topFillColor2: 'transparent',
+      bottomFillColor1: COLOR.down + '22', bottomFillColor2: COLOR.down + '55',
+      topLineColor: 'transparent', bottomLineColor: 'transparent',
+      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+    });
+    under.setData(put(r.k.map((v) => v == null ? null : Math.min(v, 20))));
+
+    const ln = addLine(ch, { color: COLOR.ind1, lineWidth: 2, lastValueVisible: true,
+      autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }) });
+    ln.setData(put(r.k));
+    addLine(ch, { color: COLOR.ind2, lineWidth: 1, lastValueVisible: true }).setData(put(r.d));
+    [80, 50, 20].forEach((v) => {
+      try {
+        ln.createPriceLine({ price: v, color: COLOR.cross, lineWidth: 1,
+          lineStyle: 2, axisLabelVisible: false, title: '' });
+      } catch { /* 라이브러리 버전이 다르면 선만 생략 */ }
+    });
+    return { k: r.k, d: r.d };
+  }
+
   /* 누적 순매수 칸 — 선 셋(외국인 · 기관 · 개인 · 보조지표 색 ind1 · ind2 · ind3)과 0 점선. 값은 봉마다 「그 날짜까지의 마지막 값」
      (분봉은 그날 값 · 셈 첫날 앞은 비움). 받기 전에는 빈 칸으로 두고, 오면 그 자리에서 채운다 */
   function drawHf(ch) {
@@ -1791,6 +1857,7 @@ export function createStockChart(container, candles, opts = {}) {
       if (p.key === 'vol')   item.calc = drawVol(ch);
       if (p.key === 'macd')  item.calc = drawMacd(ch);
       if (p.key === 'rsi')   item.calc = drawRsi(ch);
+      if (p.key === 'sto')   item.calc = drawSto(ch);
       if (p.key === 'hf')    item.calc = drawHf(ch);
 
       /* 아래 칸에는 이름표와 닫기, 위쪽 경계에는 끌개 */
@@ -1885,6 +1952,13 @@ export function createStockChart(container, candles, opts = {}) {
         n.innerHTML = (st ? '<span class="kh-mut">' + st.slice(4, 6) + '-' + st.slice(6) + '부터 · </span>' : '') +
           [f('외국인', p.calc.foreign[i], COLOR.ind1), f('기관', p.calc.inst[i], COLOR.ind2), f('개인', p.calc.person[i], COLOR.ind3)]
             .join('<span class="kh-mut" style="margin:0 3px">·</span>');
+      }
+      if (p.key === 'sto') {
+        const f = (nm, v, col) => '<span style="color:' + col + '">' + nm + ' ' +
+          (v == null ? '—' : v.toFixed(2)) + '</span>';
+        n.innerHTML = f('%K', p.calc.k[i], COLOR.ind1) +
+          '<span class="kh-mut" style="margin:0 3px">·</span>' +
+          f('%D', p.calc.d[i], COLOR.ind2);
       }
       if (p.key === 'rsi') {
         const f = (v, col) => '<span style="color:' + col + '">' +
@@ -2177,7 +2251,7 @@ export function createStockChart(container, candles, opts = {}) {
       const wasSync = syncing;
       syncing = true;
       panes.slice(1).forEach((p) => {
-        const draw = p.key === 'vol' ? drawVol : p.key === 'macd' ? drawMacd : p.key === 'rsi' ? drawRsi : p.key === 'hf' ? drawHf : null;
+        const draw = p.key === 'vol' ? drawVol : p.key === 'macd' ? drawMacd : p.key === 'rsi' ? drawRsi : p.key === 'sto' ? drawSto : p.key === 'hf' ? drawHf : null;
         if (!draw) return;
         (p.chart.__khSeries || []).forEach((sr) => { try { p.chart.removeSeries(sr); } catch { /* 이미 없다 */ } });
         p.chart.__khSeries = [];
@@ -2668,6 +2742,8 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
         t = `${fmtPrice(c.vLo[i], dec)}~${fmtPrice(c.vUp[i], dec)}`;
       } else if (x.key === 'rsi' && c.values[i] != null) {
         t = c.values[i].toFixed(1);
+      } else if (x.key === 'sto' && c.k[i] != null) {
+        t = c.k[i].toFixed(1) + (c.d[i] != null ? ' / ' + c.d[i].toFixed(1) : '');
       } else if (x.key === 'macd' && c.vHist[i] != null) {
         t = fmtPrice(c.vHist[i], 2);
       } else if (x.key === 'vma' && c.values[i] != null) {
