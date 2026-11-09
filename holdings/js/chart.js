@@ -892,6 +892,41 @@ function paneH() {
   } catch { /* 없으면 기본값 */ }
   return _paneH;
 }
+/* 세로 높이 — 기본은 보이는 봉의 최고 · 최저가 가격 칸 높이의 PRICE_FILL(70%)를 차지하게 맞춘다. **사람이 세로를 조정하면
+   그 세로 폭(가격 대비 %)으로 고정한다** — 휠 · 끌기로 보는 봉이 바뀌어도, 다른 종목 · 기간으로 가도 그 폭 그대로 그린다
+   (가운데 자리만 보이는 봉에 맞춘다 — 안 그러면 다른 종목 봉이 칸 밖에 놓인다).
+   (2026-11-09 재권님 「차트 높이 조절하면 다른종목으로 이동했을때 조절된거 유지되게」 → 「나」(봉 길이) →
+   「높이의 70% 로 맞춰주고 내가 조정을 하면 조정한대로 고정되도록 해줘」).
+   고정한 폭은 칸 높이(paneH)처럼 localStorage — 새로고침해도 남는다(보는 상태). 가격 눈금을 두 번 누르면 풀려 다시 70% 맞춤.
+   **기간(5분 · 일 · 주 · 월 · 년)마다 따로 기억한다** (2026-11-09 재권님 「응 그래」) — 5분봉에서 좁힌 폭이 월봉에 그대로 가면
+   봉이 칸 밖으로 크게 잘린다(오르내림 폭이 기간마다 열 배 넘게 다르다 · 개념정의 덧). 종목을 바꿀 때는 그대로다 */
+const PRICE_FILL = 0.7;
+const V_SPAN_KEY = 'kh.chart.v-span';
+const V_SPAN_MIN = 0.001, V_SPAN_MAX = 5;   // 세로 폭(가격 대비) — 손이 미끄러져 0 이나 터무니없는 값이 남지 않게
+let _vSpan = null;                            // 기간 → 고정한 폭(없으면 자동 70%) · 처음 부를 때 읽는다
+function vSpanMap() {
+  if (!_vSpan) {
+    _vSpan = {};
+    try {
+      const v = JSON.parse(localStorage.getItem(V_SPAN_KEY) || '{}');   // 기간마다 따로 두기 전 한 숫자로 둔 값은 버린다(객체가 아니면)
+      if (v && typeof v === 'object') {
+        Object.keys(v).forEach((k) => { if (v[k] >= V_SPAN_MIN && v[k] <= V_SPAN_MAX) _vSpan[k] = v[k]; });
+      }
+    } catch { /* 없으면 자동 */ }
+  }
+  return _vSpan;
+}
+function vSpan(per) {
+  const v = vSpanMap()[per];
+  return v == null ? null : v;
+}
+function setVSpan(per, v) {
+  const m = vSpanMap();
+  if (v == null) delete m[per];
+  else m[per] = Math.max(V_SPAN_MIN, Math.min(V_SPAN_MAX, v));
+  try { localStorage.setItem(V_SPAN_KEY, JSON.stringify(m)); } catch { /* 저장 못 씀 */ }
+}
+
 function savePaneH() {
   try { localStorage.setItem(PANE_H_KEY, JSON.stringify(_paneH)); } catch { /* 저장 못 씀 */ }
 }
@@ -1045,11 +1080,28 @@ export function createStockChart(container, candles, opts = {}) {
          그냥 한 번 누르는 것만으로 **제자리로 튕긴다** — 값을 읽으려고
          누르는 일이 흔하므로 그 자리가 바로 걸린다 */
       if (!moved && wasAuto) set(true);
+      if (moved) setTimeout(keepStretch, 0);   // 위아래로 끈 세로 폭을 고정한다(위 keepStretch)
       y0 = null;
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
     }
+
+    /* 가격 눈금을 끌어 바꾼 세로 폭도 고정한다 — 라이브러리가 눈금 끌기에서 자동 눈금을 끈다. 놓은 뒤 keepStretch 가 재 고정한다.
+       눈금을 두 번 누르면 라이브러리가 제자리로 돌리는데, 그때 고정한 세로 폭도 풀어 다시 70% 맞춤으로 */
+    const onAxis = (e) => e.clientX > box.getBoundingClientRect().right - AXIS_W;
+    box.addEventListener('pointerdown', (e) => {
+      if (!onAxis(e)) return;
+      const done = () => { window.removeEventListener('pointerup', done); setTimeout(keepStretch, 0); };
+      window.addEventListener('pointerup', done);
+    }, { capture: true });
+    box.addEventListener('dblclick', (e) => {
+      if (!onAxis(e)) return;
+      setVSpan(period, null);                 // 이 기간의 고정을 풀고 다시 70% 맞춤
+      vpRange = null;
+      try { candleSeries.applyOptions(priceFix()); } catch { /* 칸이 아직 없다 */ }
+      requestAnimationFrame(() => requestAnimationFrame(() => { lockPriceRange(); drawProfile(); }));
+    });
 
     plot.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;   // 왼쪽 버튼만
@@ -1332,8 +1384,46 @@ export function createStockChart(container, candles, opts = {}) {
     };
   }
 
+  /* 자동 눈금에 좁은 폭 늘림(phoneStretch)을 곱하고, 사람이 고정한 세로 폭(vSpan)이 있으면 그 폭으로 바꾼다.
+     라이브러리는 이 범위 위아래에 여백(scaleMargins)을 얹으므로, 보이는 폭이 고정 폭이 되게 여백만큼 덜어 준다 */
+  function stretchProvider() {
+    const ph = phoneStretch();
+    return (orig) => {                         // 기간은 부를 때 읽는다 — 기간을 바꿔도 이 함수를 다시 안 붙일 수 있어서
+      const r = ph ? ph(orig) : orig();
+      const span = vSpan(period);
+      if (span == null || !r || !r.priceRange) return r;
+      const { minValue: lo, maxValue: hi } = r.priceRange;
+      const mid = (lo + hi) / 2;
+      let fill = PRICE_FILL;
+      try {
+        const m = candleSeries.priceScale().options().scaleMargins;
+        if (m) fill = 1 - m.top - m.bottom;
+      } catch { /* 기본 비율 */ }
+      const half = Math.abs(mid) * span * fill / 2;
+      return { ...r, priceRange: { minValue: lo >= 0 ? Math.max(0, mid - half) : mid - half, maxValue: mid + half } };
+    };
+  }
+
+  /* 사람이 세로를 바꾼 뒤(위아래로 끌기 · 가격 눈금 끌기 — 둘 다 자동 눈금을 끈다) 그 세로 폭을 가격 대비로 재 고정하고,
+     자동 눈금을 다시 켠다(가운데는 보이는 봉에 맞추고 폭은 고정 — 위 stretchProvider) */
+  function keepStretch() {
+    const ch = panes[0] && panes[0].chart;
+    if (!ch || !candleSeries) return;
+    let auto = true;
+    try { auto = ch.priceScale('right').options().autoScale !== false; } catch { return; }
+    if (auto) return;                          // 세로를 안 바꿨다
+    const user = readScale();
+    if (!user) return;
+    const mid = (user.top + user.bot) / 2;
+    if (!(mid > 0)) return;
+    setVSpan(period, (user.top - user.bot) / mid);
+    vpRange = null;
+    try { candleSeries.applyOptions(priceFix()); ch.priceScale('right').applyOptions({ autoScale: true }); } catch { return; }
+    requestAnimationFrame(() => requestAnimationFrame(() => { lockPriceRange(); drawProfile(); }));
+  }
+
   function priceFix() {
-    if (!indOn().has('vp') || !vpRange) return { autoscaleInfoProvider: phoneStretch() };
+    if (!indOn().has('vp') || !vpRange) return { autoscaleInfoProvider: stretchProvider() };
     const { min, max } = vpRange;
     return { autoscaleInfoProvider: () => ({ priceRange: { minValue: min, maxValue: max } }) };
   }
@@ -1853,7 +1943,12 @@ export function createStockChart(container, candles, opts = {}) {
       const item = { key: p.key, el, box, chart: ch };
       panes.push(item);
 
-      if (p.key === 'price') { drawCandle(ch); drawOverlay(ch); freeVert(ch, box); }
+      if (p.key === 'price') {
+        /* 보이는 봉이 칸 높이의 PRICE_FILL 을 차지하게 — 남는 30% 는 위(범례 자리 · 더 넓게)와 아래로 나눈다 */
+        const top = showLegend ? 0.2 : 0.15;
+        try { ch.priceScale('right').applyOptions({ scaleMargins: { top, bottom: 1 - PRICE_FILL - top } }); } catch { /* 옛 라이브러리 */ }
+        drawCandle(ch); drawOverlay(ch); freeVert(ch, box);
+      }
       if (p.key === 'vol')   item.calc = drawVol(ch);
       if (p.key === 'macd')  item.calc = drawMacd(ch);
       if (p.key === 'rsi')   item.calc = drawRsi(ch);
