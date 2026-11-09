@@ -317,6 +317,10 @@
 }
 
 /* ══ 중요 알림 규칙 — 여기서 고친다 (2026-09-21 지시) ═══════ */
+/* 알림 규칙 갈래 머리 — 즉시알림 · 모아서 (2026-11-09) */
+.kh-dl-al-g { font-size: 0.78rem; margin: 10px 0 4px; color: var(--kh-text-primary); }
+.kh-dl-al-g:first-child { margin-top: 0; }
+.kh-dl-al-g span { color: var(--kh-text-muted); font-size: 0.72rem; }
 .kh-dl-al-rule { padding: 9px 0; border-bottom: 1px solid var(--kh-border); }
 .kh-dl-al-rule:last-child { border-bottom: 0; }
 .kh-dl-al-rule.is-off { opacity: 0.45; }
