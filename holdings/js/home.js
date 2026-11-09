@@ -20,6 +20,7 @@ import { openGroupPicker } from './components/fav-groups.js';
    관심 목록은 순위표의 「관심」 칩으로 들어갔고, 세로 아이콘 바는
    그만큼 오른쪽 칸을 넓히려고 감췄다. 다른 화면은 그대로 쓴다. */
 import { startLiveLoop } from './components/frame.js';
+import { solveFit } from '../../assets/js/fit-solve.js';
 import { iconHtml, paintIcon } from './components/stock-icon.js';
 import { openModal, closeModal } from './components/modal.js';
 import { loadStockMain, mountStockView } from './components/stock-view.js';
@@ -3536,9 +3537,8 @@ function fitScale() {
   if (!document.body.classList.contains('kh-simple')) {
     try { localStorage.setItem('kh-fit-base', JSON.stringify({ fixed: Math.round(fixed), grow: Math.round(grow), rail })); } catch { /* 저장 못 씀 — Insight 는 제 기본값 */ }
   }
-  const room = innerHeight - nav - gap, wide = (root.clientWidth - rail - 2 * gap) / grid;
-  let s = Math.min(wide, (room - fixed) / grow), z = 1;
-  if (s < 1) { s = 1; z = Math.max(0.1, Math.min(wide, room / (fixed + grow))); }   // 0.1 — 0 · 음수만 막는다
+  /* 배율 식은 Insight 와 한 곳(assets/js/fit-solve.js · 2026-11-09 「같은 값은 한 곳에만 둔다」) — 여기는 재서 넘기기만 한다 */
+  const { s, z } = solveFit({ fixed, grow, rail, w: root.clientWidth, h: innerHeight, nav, grid, gap });
   if (Math.abs(s - s0) > 0.002) root.style.setProperty('--kh-s', s.toFixed(4));
   if (Math.abs(z - z0) > 0.002) root.style.setProperty('--kh-z', z.toFixed(4));
 }
