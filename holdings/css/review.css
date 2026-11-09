@@ -121,7 +121,8 @@
 .rv-sm-p { font: inherit; font-size: 0.8rem; background: var(--kh-bg-card); border: 0; border-radius: 8px; padding: 5px 12px; color: var(--kh-text-secondary); cursor: pointer; }
 .rv-sm-p.is-on { background: var(--kh-accent); color: var(--kh-text-on-fill); }
 .rv-sm-per input { font: inherit; font-size: 0.8rem; border: 1px solid var(--kh-border-strong); border-radius: 6px; padding: 4px 6px; background: var(--kh-bg-card); color: var(--kh-text-primary); }
-.rv-sm-per input:first-of-type { margin-left: auto; }
+/* 날짜 두 칸과 「–」 은 한 덩어리로 줄을 넘긴다 — 좁은 폭(500)에서 「–」 만 첫 줄 끝에 남던 것(qa 11-0x · 2026-11-09) */
+.rv-sm-range { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; margin-left: auto; }
 .rv-sm-sum { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
 .rv-sm-sum > div { background: var(--kh-bg-card); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
 .rv-sm-sum span { font-size: 0.74rem; color: var(--kh-text-secondary); }
