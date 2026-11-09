@@ -9,9 +9,12 @@
  *           모양을 만들지 않는다. 그 파일은 용어집 코드(assets/js/glossary.js)가 걸어 두므로 여기서는 없을 때만 건다.
  *           **자리만 다르다** — 순위 표는 스크롤 칸 안이라 칸 안에 붙이면 잘린다. 그래서 body 에 붙이고 화면 좌표(fixed)로 둔다.
  *           칸 크기를 안 건드린다(「보는 것을 바꿔도 자리는 그대로다」)
- *   터치    짧게 누르면 지금처럼 줄 고르기 · **길게 누르면** 풍선(그때 뒤따르는 누르기는 삼킨다) · 다른 곳을 누르면 닫힘
+ *   뜨는 때  마우스를 이름에 1초(공용 HOVER_DELAY_MS) 올려 두면 — 그 전에 벗어나면 안 뜬다 (2026-11-07 룰)
+ *   터치    짧게 누르면 지금처럼 줄 고르기 · **길게 누르면**(공용 LONG_MS) 풍선(그때 뒤따르는 누르기는 삼킨다) · 다른 곳을 누르면 닫힘
  */
 import { apiFetch } from '../data/api.js';
+/* 1초 머무르기 · 길게 누르기 값은 공용 풍선 한 곳(2026-11-07 「설명 풍선은 … 1초 올려 두면 뜬다」) — 여기 숫자를 두지 않는다 */
+import { HOVER_DELAY_MS, LONG_MS } from '/assets/js/glossary.js';
 
 const CSS = '/assets/css/glossary.css';
 /* 공용 풍선에 없는 두 가지만 여기 둔다 — 화면 좌표 자리(모달 z-index 200 보다 위) · 매출 표. 색은 토큰만 */
@@ -22,9 +25,8 @@ const OWN = `.kh-cotip{position:fixed;z-index:300;top:0;left:0;max-height:calc(1
 .kh-cotip-t td{padding:2px 4px;vertical-align:top;border-top:1px solid var(--kh-border)}
 .kh-cotip-t td.n{white-space:nowrap}
 .kh-cotip-t tr:first-child td{color:var(--text-muted);border-top:0}`;
-const LONG_MS = 450;                     // 길게 누르기로 보는 시간 — 그리기 시간이 아니라 손가락 판정이다
 const got = new Map();                   // code -> 받은 값(또는 받는 중 Promise)
-let tip = null, anchor = null, swallowClick = false;
+let tip = null, anchor = null, swallowClick = false, pending = null, hoverTimer = null;
 
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -114,11 +116,17 @@ export function mountCompanyTip() {
     if (!fine) return;
     if (anchor && !anchor.isConnected) hide();         // 표를 다시 그려 이름 칸이 바뀌었다 — mouseout 이 안 온다
     const el = e.target.closest('[data-co]');
-    if (el && el !== anchor) show(el);
+    if (!el || el === anchor || el === pending) return;
+    clearTimeout(hoverTimer);
+    pending = el;
+    hoverTimer = setTimeout(() => { if (pending === el && el.isConnected) show(el); pending = null; }, HOVER_DELAY_MS);
   });
   document.addEventListener('mouseout', (e) => {
-    if (!fine || !anchor) return;
+    if (!fine) return;
     const to = e.relatedTarget;
+    /* 1초 전에 벗어나면 띄우지 않는다 */
+    if (pending && e.target.closest('[data-co]') === pending && !pending.contains(to)) { clearTimeout(hoverTimer); pending = null; }
+    if (!anchor) return;
     const el = e.target.closest('[data-co]');
     /* 풍선 안으로 옮기면 열어 둔다 — 긴 표 · 좁은 폭에서 풍선 안을 스크롤해야 한다. 풍선에서 나가면 닫는다(이름으로 돌아가면 그대로) */
     if (el === anchor && !el.contains(to) && !(tip && tip.contains(to))) hide();

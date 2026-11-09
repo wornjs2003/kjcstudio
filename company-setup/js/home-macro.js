@@ -30,7 +30,7 @@ async function note() {
   N = await latestNote();   // 손 글 · 자동 글 중 새 것 — 못 읽으면 아래에서 「—」
   box.classList.add('in-note');
   box.innerHTML = '<b class="in-note-h">오늘의 시황 한 줄</b>'
-    + `<span class="in-note-t" title="${esc(N && N.one)}">${N ? signColor(esc(N.one)) : '—'}</span>`
+    + `<span class="in-note-t" data-tip="${esc(N && N.one)}">${N ? signColor(esc(N.one)) : '—'}</span>`
     + (N ? `<span class="in-note-at">${N.auto ? '자동 · ' : ''}${esc(N.writtenAt)} 씀${N.failedAt ? ` · 못 만듦(${esc(N.failedAt)})` : ''}</span>` : '')
     + '<a class="in-note-more" href="market.html">자세히 ›</a>';
 }
@@ -76,7 +76,7 @@ async function macro() {
   ];
   row.classList.add('in-mac');
   row.innerHTML = '<span class="in-mac-h">오늘의 핵심</span>'
-    + CH.map(([n, t, fold, id, bg, tip]) => `<a class="in-mac-c" href="market.html#${id}" data-fold="${fold}"${bg ? ` style="background:${bg}"` : ''}${tip ? ` title="${esc(tip)}"` : ''}><b>${n}</b><span>${t}</span></a>`).join('')
+    + CH.map(([n, t, fold, id, bg, tip]) => `<a class="in-mac-c" href="market.html#${id}" data-fold="${fold}"${bg ? ` style="background:${bg}"` : ''}${tip ? ` data-tip="${esc(tip)}"` : ''}><b>${n}</b><span>${t}</span></a>`).join('')
     + '<span class="in-mac-more" aria-hidden="true">›</span>';
   row.addEventListener('click', e => {
     const a = e.target.closest('a.in-mac-c'); if (!a) return;

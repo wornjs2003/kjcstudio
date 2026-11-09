@@ -80,7 +80,7 @@ const IDX = { KOSPI: '코스피', KOSDAQ: '코스닥' };
 const mmdd = (d) => { const m = String(d || '').match(/(\d{4})-?(\d{2})-?(\d{2})/); return m ? `${m[2]}-${m[3]}` : (d || '—'); };
 
 // 신고가 부근 표시 (11-05 「가랑 나랑 구분만 되면」) — 서버가 붙여 주는 nearHigh(부근인가) · nearHighOnly(위 조건 밖인데 부근이라 더 넣음) 그대로 · 맨 위로 올리는 것도 서버 순서
-const nhTag = (p) => (!p.nearHigh ? '' : `<span class="aw-nh${p.nearHighOnly ? ' only' : ''}"${p.high52 != null ? ` title="52주 최고 종가 ${num(p.high52)} · ${p.highGapPct == null ? '—' : `${p.highGapPct > 0 ? '+' : ''}${num(p.highGapPct, 2)}%`}"` : ''}>${p.nearHighOnly ? '신고가 부근만' : '신고가 부근'}</span>`);
+const nhTag = (p) => (!p.nearHigh ? '' : `<span class="aw-nh${p.nearHighOnly ? ' only' : ''}"${p.high52 != null ? ` data-tip="52주 최고 종가 ${num(p.high52)} · ${p.highGapPct == null ? '—' : `${p.highGapPct > 0 ? '+' : ''}${num(p.highGapPct, 2)}%`}"` : ''}>${p.nearHighOnly ? '신고가 부근만' : '신고가 부근'}</span>`);
 // 장중 상위 (11-06 재권님 「관심종목에 실시간으로」 · 「장중 값으로 갱신」 · 「상위 20개만」) — 서버 meta.live 그대로(순서 · 개수도 서버) ·
 // 그날 확정 판(d.day)이 같은 날로 나오면 장중 표는 내린다 — 못 받았으면 서버 글(liveError)을 그대로
 const liveHm = (at) => (String(at || '').match(/T(\d{2}:\d{2})/) || [])[1] || '—';

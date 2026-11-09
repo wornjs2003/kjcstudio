@@ -101,7 +101,7 @@ export function spanChipsHtml(cur = 'd', mkt = 'kr') {
     const ok = ready.includes(s.id);
     return `<button class="kh-chip${s.id === cur ? ' is-active' : ''}${
       ok ? '' : ' kh-todo-chip'}" data-span="${s.id}"${
-      ok ? '' : ` disabled title="${SPAN_NOT_READY}"`}>${s.label}</button>`;
+      ok ? '' : ` disabled data-tip="${SPAN_NOT_READY}"`}>${s.label}</button>`;
   }).join('');
 }
 
@@ -216,10 +216,10 @@ export function mountSectors(root) {
       `<div class="kh-sc-ch">
          ${rank === 1 ? '<span class="kh-sc-fire" aria-hidden="true">🔥</span>' : ''}
          <b class="kh-sc-rk">${rank}위</b>
-         <span class="kh-sc-nm" title="${g.name}">${g.name}</span>
+         <span class="kh-sc-nm" data-tip="${g.name}">${g.name}</span>
          <b class="kh-sc-pc ${dirClass(g.pct)}">${fmtPct(g.pct)}</b>
        </div>
-       <span class="kh-sc-bar" title="상승 ${g.rise} · 보합 ${g.steady} · 하락 ${g.fall}">
+       <span class="kh-sc-bar" data-tip="상승 ${g.rise} · 보합 ${g.steady} · 하락 ${g.fall}">
          <i class="up" style="width:${g.rise / sum * 100}%"></i>
          <i class="fl" style="width:${g.steady / sum * 100}%"></i>
          <i class="dn" style="width:${g.fall / sum * 100}%"></i>
@@ -244,7 +244,7 @@ export function mountSectors(root) {
    *  두 곳에 적으면 한쪽만 고쳐져 줄 모양이 갈린다 */
   function stockRowHtml(st) {
     return `<a class="kh-sc-st" data-code="${st.code}" href="./stock.html?code=${st.code}">
-         <span class="kh-sc-stn" title="${st.name}">${st.name}</span>
+         <span class="kh-sc-stn" data-tip="${st.name}">${st.name}</span>
          <span class="kh-sc-stp">
            <b class="kh-num">${fmtPriceOf(st.code, st.price)}</b>
            <i class="kh-num ${dirClass(st.pct)}">${fmtPct(st.pct)}</i>
@@ -299,7 +299,7 @@ export function mountSectors(root) {
     };
     set('.kh-sc-rk', `${rank}위`);
     const nm = col.querySelector('.kh-sc-nm');
-    if (nm && nm.textContent !== g.name) { nm.textContent = g.name; nm.title = g.name; }
+    if (nm && nm.textContent !== g.name) { nm.textContent = g.name; nm.dataset.tip = g.name; }
     const pc = col.querySelector('.kh-sc-pc');
     if (pc) {
       const t = fmtPct(g.pct);
@@ -312,7 +312,7 @@ export function mountSectors(root) {
     const bar = col.querySelector('.kh-sc-bar');
     if (bar) {
       const title = `상승 ${g.rise} · 보합 ${g.steady} · 하락 ${g.fall}`;
-      if (bar.title !== title) bar.title = title;
+      if (bar.dataset.tip !== title) bar.dataset.tip = title;
       const w = (sel, v) => {
         const el = bar.querySelector(sel);
         const t = `${v / sum * 100}%`;
@@ -341,7 +341,7 @@ export function mountSectors(root) {
 
   function patchRow(a, st) {
     const n = a.querySelector('.kh-sc-stn');
-    if (n && n.textContent !== st.name) { n.textContent = st.name; n.title = st.name; }
+    if (n && n.textContent !== st.name) { n.textContent = st.name; n.dataset.tip = st.name; }
     const price = a.querySelector('.kh-sc-stp b');
     const pt = fmtPriceOf(st.code, st.price);
     if (price && price.textContent !== pt) price.textContent = pt;
@@ -378,7 +378,7 @@ export function mountSectors(root) {
     kindHost.querySelectorAll('[data-kind]').forEach((x) => {
       const off = mkt === 'us' && x.dataset.kind !== 'industry';
       x.disabled = off;
-      x.title = off ? '미국은 업종(섹터 ETF)만 있습니다' : '';
+      if (off) x.dataset.tip = '미국은 업종(섹터 ETF)만 있습니다'; else delete x.dataset.tip;
       x.classList.toggle('is-active', x.dataset.kind === kind);
     });
   }
