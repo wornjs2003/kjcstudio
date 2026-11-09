@@ -46,6 +46,13 @@
     → 맨 위 띠 한 줄 · 풀리면 그 사건에 끝 시각을 적고 띠가 사라진다. 보는 때는 그날 장 전 시작 ~ 장 후 끝(market_hours).
     사건은 market_event 표(market 「시스템」 · kind sys)라 다른 서버도 같은 띠를 낸다. 알림은 SEND 그대로(꺼짐)
 
+── 사건 동안 기록(2026-11-09 · 이벤트 대응 ⑧ · 재권님 「응」) ──
+
+    서킷(중단 · 단일가) · 사이드카 · KIS 장애가 걸려 있는 동안 LOG_SEC 마다 지수 둘(MARKETS)과 대표 종목(LOG_CODES)의 값 · 거래량을
+    market_event_log 표에 한 줄씩 — 다음 사건 날 「5분봉 · 수급 · 순위가 맞게 쌓였나」 를 이 기록과 대 본다.
+    값은 서버 캐시(지수 · 현재가)를 먼저 쓰고 없으면 한 번 부른다(사건 동안만 · 1분에 KIS 최대 4건). 쓰기 되는 서버만.
+    10-15 서킷 날 5분봉에서 찾은 것 — 중단 중 12:45 · 13:00 봉에 12:38 마지막 1분봉 거래량이 다시 들어감(KIS 과거 1분봉에는 그 시각 봉 없음)
+
 ── 남기기 · 알림 ──
 
     사건은 쓰기 되는 서버의 market.db market_event 표에 한 줄씩 — 그 순간 지수 · 등락률 · 시각(발동 날 「가져오는 정보가 맞나」 를 재는 바탕 · 카드 ⑧).
@@ -88,6 +95,10 @@ SYS_TEXT = {"kis": "KIS 응답이 끊겼습니다 — 시세 · 차트가 늦을
             "ws": "실시간 체결 연결이 끊겼습니다 — 다시 붙는 중",
             "over": "KIS 한도 초과가 몰립니다 — 값이 늦게 들어옵니다"}
 _sys = {k: {"since": None, "ev": None} for k in SYS_TEXT}
+LOG_SEC = 60
+LOG_CODES = ("005930", "000660")
+_LOG_SCHEMA = """CREATE TABLE IF NOT EXISTS market_event_log (day TEXT NOT NULL, at TEXT NOT NULL, row TEXT NOT NULL, PRIMARY KEY (day, at))"""
+_log_at = [0.0]
 
 _SCHEMA = """CREATE TABLE IF NOT EXISTS market_event (
     day TEXT NOT NULL, market TEXT NOT NULL, kind TEXT NOT NULL, stage INTEGER, at TEXT NOT NULL,
@@ -412,6 +423,46 @@ def sys_tick(proxy, port, now=None):
                 _alert(proxy, port, SYS, ev)
 
 
+def _live_now(now):
+    """지금 걸려 있는 사건 갈래들 — 서킷 중단 · 단일가 · 사이드카 · KIS 장애."""
+    out = []
+    for name, m in _st["m"].items():
+        for e in m["events"]:
+            ph = phase(e, now)
+            if ph in ("halt", "single", "sidecar"):
+                out.append("%s %s" % (name, ph))
+    out += ["시스템 %s" % k for k, x in _sys.items() if x["ev"] is not None]
+    return out
+
+
+def log_tick(proxy, cfg, now=None):
+    """사건이 걸려 있으면 LOG_SEC 마다 한 줄 — 무엇이 걸렸나 · 지수 · 대표 종목 값과 거래량."""
+    now = now or _now()
+    with _lock:
+        live = _live_now(now)
+    if not live or time.time() - _log_at[0] < LOG_SEC or not proxy.marketdb.writable():
+        return None
+    _log_at[0] = time.time()
+    row = {"live": live, "idx": {}, "stocks": {}}
+    for code, name in MARKETS:
+        try:
+            v, p = _index(proxy, cfg, code)
+            row["idx"][name] = {"value": v, "pct": p}
+        except Exception as e:
+            row["idx"][name] = {"error": proxy.safe_message(e, 80)}
+    for code in LOG_CODES:
+        try:
+            x = proxy.fetch_price(cfg, code)
+            row["stocks"][code] = {k: x.get(k) for k in ("price", "changePct", "volume", "value", "status")}
+        except Exception as e:
+            row["stocks"][code] = {"error": proxy.safe_message(e, 80)}
+    with proxy._db_lock, proxy.db_conn() as conn:
+        conn.execute(_LOG_SCHEMA)
+        conn.execute("INSERT OR REPLACE INTO market_event_log (day, at, row) VALUES (?,?,?)",
+                     (now.strftime("%Y%m%d"), _hm(now), json.dumps(row, ensure_ascii=False)))
+    return row
+
+
 def board(proxy, now=None):
     """주소 /api/alerts/market-event 의 data — 사건은 개발 DB 표에서 읽어 **어느 서버든 같은 것**(바퀴는 보내는 서버에서만 돈다).
     지수 · 등락률은 바퀴가 도는 서버의 메모리 값이라 다른 서버에서는 None."""
@@ -452,6 +503,10 @@ def start(proxy, port):
                 _st["error"] = proxy.safe_message(e, 120)
             try:
                 sys_tick(proxy, port)              # 서킷 셈이 KIS 오류로 멈춰도 장애 셈은 돈다 — 따로 잡는다
+            except Exception as e:
+                _st["error"] = proxy.safe_message(e, 120)
+            try:
+                log_tick(proxy, proxy.load_secrets())
             except Exception as e:
                 _st["error"] = proxy.safe_message(e, 120)
             now = _now()
