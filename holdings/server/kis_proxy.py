@@ -2985,6 +2985,8 @@ def fetch_price(cfg, code):
         "low52": _num(o.get("w52_lwpr"), int),
         # 상장주식수(주) — 투자자 누적 순매수를 %p 로 나눌 때 쓴다(holding_flow · 2026-10-26)
         "listed": _num(o.get("lstn_stcn"), int),
+        # 종목 상태 칩 — 이벤트 대응 ④⑤⑥(2026-11-09 · 재권님 「응」) · 같은 응답이라 KIS 를 더 안 부른다(`stock_status`)
+        "status": stock_status(o),
         "source": "KIS",
         "mode": cfg["mode"],
     }
@@ -2996,6 +2998,38 @@ def fetch_price(cfg, code):
     if div == "UN":
         overnight_price(code, out)          # 자정 뒤 08:00 전 — 어제 20:00 넥장 마감 값으로(아래 `overnight_row`)
     _cache_put(ck, out)
+    return out
+
+
+# ── 종목 상태 — 거래정지 · 관리 · 시장경고 · 단기과열 · 정리매매 · 상한가 · 하한가 (2026-11-09 · 이벤트 대응 ④⑤⑥) ──
+# 현재가(inquire-price) 응답 칸 그대로 — 공식 예제(open-trading-api chk_inquire_price)의 칸 이름 · 값 뜻은 11-09 공식 종목 마스터
+# (kospi_code.mst 거래정지 · 관리종목 · 시장경고 · 단기과열 · 정리매매)로 고른 종목을 이 응답과 대 봐서 맞췄다:
+#     거래정지 DH오토넥스 000300 → iscd_stat_cls_code 58 · 관리종목 다이나맥 000040 → mang_issu_cls_code Y(상태 51) ·
+#     정리매매 CJ씨푸드1우 011155 → sltr_yn Y · 투자주의 깨끗한나라 004540 → mrkt_warn_cls_code 01 · 투자경고 에이엔피 015260 → 02 ·
+#     단기과열 흥국화재우 000545 → short_over_yn Y · 보통 삼성전자 → 상태 55 · 나머지 N/00
+# **못 본 것** — 시장경고 03(투자위험 · 그날 해당 종목 없음) · temp_stop_yn Y(임시정지) · 상한가 · 하한가는 prdy_vrss_sign 1 · 4(이 파일 위 주석)
+STOCK_WARN = {"01": "투자주의", "02": "투자경고", "03": "투자위험"}
+
+
+def stock_status(o):
+    """현재가 응답 한 줄 → 칩 목록 [{"t": 글, "k": "danger" · "up" · "down"}] · 해당 없으면 빈 목록."""
+    out = []
+    if o.get("iscd_stat_cls_code") == "58":
+        out.append({"t": "거래정지", "k": "danger"})
+    elif o.get("temp_stop_yn") == "Y":
+        out.append({"t": "임시정지", "k": "danger"})
+    if o.get("sltr_yn") == "Y":
+        out.append({"t": "정리매매", "k": "danger"})
+    if o.get("mang_issu_cls_code") == "Y":
+        out.append({"t": "관리종목", "k": "danger"})
+    if STOCK_WARN.get(o.get("mrkt_warn_cls_code")):
+        out.append({"t": STOCK_WARN[o["mrkt_warn_cls_code"]], "k": "danger"})
+    if o.get("short_over_yn") == "Y":
+        out.append({"t": "단기과열", "k": "danger"})
+    if o.get("prdy_vrss_sign") == "1":
+        out.append({"t": "상한가", "k": "up"})
+    elif o.get("prdy_vrss_sign") == "4":
+        out.append({"t": "하한가", "k": "down"})
     return out
 
 
