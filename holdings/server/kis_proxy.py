@@ -4374,6 +4374,11 @@ def fetch_asking(cfg, code):
 
     비율은 「지금 사자가 얼마나 몰려 있나」다. 체결된 것이 아니라 **대기 중인
     주문**이므로, 장이 끝나면 의미가 옅어진다 — 화면에 그렇게 적는다.
+
+    **통합(UN) 호가다** (2026-11-09 재권님 「호가창에 매수잔량 매도잔량이 정확한건지 확인해봐」 → 「응 그래」).
+    전에는 늘 KRX(J)만 받아 넥스트레이드 잔량이 빠졌다 — 삼성전자 10:46:50 매도 잔량 합 J 69,798 · NX 81,867 · UN 151,844 /
+    매수 J 26,548 · NX 11,646 · UN 38,184(하이닉스도 같은 꼴). 15:30 뒤 넥스트레이드 장에서도 KRX 호가를 냈다.
+    차트 봉도 통합이라(`MARKET_DIV_CHART`) 같은 값을 쓴다. 합계는 KIS 의 총잔량 그대로다.
     """
     cached = _ttl_get(_asking_cache, code, ASKING_TTL)
     if cached is not None:
@@ -4381,7 +4386,7 @@ def fetch_asking(cfg, code):
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
-        {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code},
+        {"FID_COND_MRKT_DIV_CODE": MARKET_DIV_CHART, "FID_INPUT_ISCD": code},
         "FHKST01010200",
     )
     o = data.get("output1") or {}
@@ -5118,11 +5123,33 @@ def fetch_bars_back(cfg, code, period, want):
     return sorted(seen.values(), key=lambda x: x["ts"])
 
 
-def minute_market_div(hour):
-    """분봉을 **어느 시장부터 물어볼까.** 구간의 시각으로 정한다.
+_UN_THIN = {}   # minute_market_div — {종목: 날짜} 그날 UN 이 비어 J 로 바꿔 받은 종목(우선주 · ETF) · 그날은 J 먼저
 
-        정규장 09:00~15:30   J  (KRX)
-        그 밖                UN (통합)
+
+def _note_un_thin(code, first, used, used_nz):
+    """UN 을 먼저 물었다가 J 로 바꿔 받았으면 그날은 그 종목을 J 먼저 묻는다 — 바퀴마다 두 번 부르지 않게.
+
+    **J 쪽에 거래가 2개 넘게 있을 때만 적는다.** 15:30~16:00 처럼 둘 다 거래가 0~1개인 칸에서는 비겨서 J 를 고르는데,
+    그것으로 보통주를 적으면 그날 정규장을 다시 J 로 받아 넥스트레이드 몫이 또 빠진다."""
+    if code and first == MARKET_DIV_CHART and used == "J" and used_nz >= 2:
+        _UN_THIN[code] = datetime.now(KST).strftime("%Y%m%d")
+
+
+def minute_market_div(hour, code=None):
+    """분봉을 **어느 시장부터 물어볼까.**
+
+        보통        UN (통합)
+        그날 UN 이 비었던 종목(우선주 · ETF)   J  (KRX)
+
+    ── **정규장도 통합이다** (2026-11-09 재권님 「응」 · 카드 「일봉 거래량과 5분봉 합이 크게 갈림」) ──
+
+    전에는 정규장 09:00~15:30 을 J 먼저 물었다(아래 2026-09-17 고침). 그래서 **정규장 5분봉 거래량에 넥스트레이드 몫이 빠졌다** —
+    개발 DB 삼성 · 하이닉스 11-03 ~ 11-06 로 잼: 5분봉 합 + 넥스트레이드 정규장 거래량(nx_slot) = 일봉(통합)과 1~3% 안 ·
+    5분봉 합만으로는 일봉의 약 75%. 차트 봉은 통합이 기준이라(holdings/CLAUDE.md 「차트 봉은 통합(`UN`)이다」) 분봉도 맞춘다.
+    UN 이 못 주는 우선주 · ETF 는 아래 폴백(거래 있는 봉 1개 이하 → J)이 받고, 그날은 `_UN_THIN` 이 J 를 먼저 묻게 해 두 번 부르지 않는다.
+    **새로 받는 봉부터다** — 이미 저장된 정규장 봉은 J 값 그대로다.
+
+    아래는 그 전의 기록이다.
 
     ⚠️ **이것은 「먼저 물어볼 쪽」 이고 최종 선택이 아니다.**
     `fetch_minutes_from_kis` 가 받아 보고 모자라면 **다른 쪽으로 한 번 더** 받는다.
@@ -5161,12 +5188,9 @@ def minute_market_div(hour):
     **그래서 시각 분기는 그대로 두고 폴백을 민감하게 한다** — 변경이 작고,
     정규장에 `J` 를 먼저 묻는 2026-09-17 고침도 살아 있다.
     """
-    try:
-        m = int(hour[:2]) * 60 + int(hour[2:4])
-    except Exception:
-        return MARKET_DIV_CHART
-    hm = (m // 60, m % 60)
-    return "J" if KRX_OPEN <= hm < KRX_CLOSE else MARKET_DIV_CHART
+    if code and _UN_THIN.get(code) == datetime.now(KST).strftime("%Y%m%d"):
+        return "J"
+    return MARKET_DIV_CHART
 
 
 def fetch_minutes_from_kis(cfg, code, hour=None):
@@ -5225,7 +5249,7 @@ def fetch_minutes_from_kis(cfg, code, hour=None):
     if hour is None:
         m = minute_scan_start()
         hour = "%02d%02d00" % (m // 60, m % 60)
-    first = minute_market_div(hour)
+    first = minute_market_div(hour, code)
     out = _minutes_one_market(cfg, code, hour, first)
     nz = sum(1 for b in out if (b["volume"] or 0) > 0)
     # ⚠️ **「전부 0 이면」 으로는 샌다 — 「1개 이하」 로 본다** (2026-10-01).
@@ -5252,6 +5276,7 @@ def fetch_minutes_from_kis(cfg, code, hour=None):
         # `J` 의 빈 줄은 마지막 체결가다.
         alt_nz = sum(1 for b in alt if (b["volume"] or 0) > 0)
         if alt_nz > nz or (alt_nz == nz and other == "J" and alt):
+            _note_un_thin(code, first, other, alt_nz)
             return alt
     return out
 
@@ -5932,6 +5957,25 @@ def _dwmy_slot(period, now):
     return d.strftime("%Y%m%d")
 
 
+def _kr_evening_tail(cfg, code, day):
+    """그날 **저녁 마지막 두 시간(18:01~20:00) 1분봉을 지난 날 길로 다시 받아** 5분봉을 덮는다 → 저장한 봉 수 (2026-11-09).
+
+    재권님 — 「토스증권이랑 비교해서 거기랑 맞춰줘」. 토스 1분봉과 견주니 19:30~20:00 칸만 우리 거래량이 토스의
+    9~34% 였다(삼성 · 하이닉스 11-03 ~ 11-06 · 19:25 칸까지는 꼭 같음). 미리받기가 그 30분 칸이 **끝나기 전에** 받은 덜 찬 봉이
+    그대로 남은 것이다. KIS 지난 날 분봉(`_kr_past_chunk`)으로 다시 받으면 그 칸이 토스와 칸마다 같았다(11-06 삼성).
+    그래서 통합 거래가 끝난 뒤 한 바퀴(`DWMY_AT_MIN`)에 종목마다 한 번(120개 = 두 시간) 받는다.
+    받은 범위 안에 다섯 분이 다 든 5분 칸만 덮는다 — 맨 앞 조각 칸으로 멀쩡한 봉을 덮지 않게(`_keep_covered_slots` 와 같은 뜻).
+    """
+    end = "%02d%02d00" % (MINUTE_DAY_END // 60, MINUTE_DAY_END % 60)
+    rows = [b for b in _kr_past_chunk(cfg, code, day, end) if b["ts"][:8] == day]
+    if not rows:
+        return 0
+    first = min(int(b["ts"][8:10]) * 60 + int(b["ts"][10:12]) for b in rows)
+    bars = [b for b in aggregate_minutes(rows, 5)
+            if int(b["ts"][8:10]) * 60 + int(b["ts"][10:12]) >= first]
+    return save_candles(code, "5m", bars)
+
+
 def start_dwmy_prefill(cfg):
     """일·주·월·년봉을 거래일마다 한 번(`DWMY_AT_MIN`) 한 바퀴 받는다.
 
@@ -5948,6 +5992,16 @@ def start_dwmy_prefill(cfg):
             try:
                 now = datetime.now(KST)
                 if now.hour * 60 + now.minute >= DWMY_AT_MIN:
+                    tail_day = _dwmy_slot("T", now)
+                    for code in _ui_order(_prefill_codes()):     # 저녁 마지막 칸 다시 받기(`_kr_evening_tail`)
+                        if not _is_kr_code(code) or _meta_get("pfT:%s" % code) == tail_day:
+                            continue
+                        try:
+                            _kr_evening_tail(cfg, code, tail_day)
+                        except Exception:
+                            pass   # 한 종목이 실패해도 나머지는 간다
+                        _meta_set("pfT:%s" % code, tail_day)
+                        time.sleep((PREFILL_BUSY_REST_SEC if _ui_busy() else DWMY_REST_SEC) * fill_factor())
                     # 화면이 본 종목부터 (2026-10-12 · 설계서 3번) — 화면이 없으면 지금처럼 종목코드 순
                     for code in _ui_order(_dwmy_codes()):
                         got = False
@@ -6097,6 +6151,10 @@ def _minutes_need_day(code, period, rows, gap_check=True):
     return gap > MINUTE_REFILL_GAP
 
 
+CARRY_CLOSE_FROM, CARRY_CLOSE_TO = "1520", "1535"   # flatten_carried — 이 시각에 시작한 되풀이는 옮겨 실린 것
+CARRY_MIN_RUN = 4                                  # flatten_carried — 이 칸 수 이상 이어진 되풀이도
+
+
 def flatten_carried(rows):
     """분봉에서 **바로 앞 봉과 시가 · 고가 · 저가 · 종가 · 거래량이 다 같은 봉**을 거래 없는 납작봉으로 바꾼다 — 화면에 낼 때만 (2026-11-07).
 
@@ -6113,6 +6171,15 @@ def flatten_carried(rows):
     차트 캔들 · 거래량 막대 · VWAP 이 함께 틀렸다. **저장은 그대로 두고** 응답에서만 바꾼다(drop_before_first_trade 와 같은 자리) —
     지난 봉도 내줄 때 고쳐진다. 거래량 0 봉끼리는 원래 같으니 거래량이 있는 봉만 본다. 다섯 값이 다 같은 진짜 체결은 사실상 없다고 본다.
     **일봉 거래량과 5분봉 합은 이것과 따로 크게 갈린다**(삼성 하루 900만주 안팎 · 복사 없는 날도) — 그 대조로는 이 고침을 가르지 못한다.
+
+    **두 갈래에만 건다** (같은 날 qa 가 돌려보냄 · 개발 DB 10-20 ~ 11-07 5분봉 되풀이 묶음 1,355 를 갈라 잼).
+    처음 판은 되풀이면 다 걸어, 거래 드문 종목의 장 후 둘 · 세 칸(1~10주 · 995 묶음)까지 첫 칸 거래를 앞 봉에 합쳤다
+    (000080 10-21 16:00 종가 15,790 → 15,800). 그 칸이 옮겨 실린 것인지는 토스 대조가 없다 — 대조한 것은 아래 둘뿐이다.
+
+        CARRY_CLOSE_FROM ~ TO   15:20 ~ 15:35 에서 시작한 되풀이 — 종가 단일가 · 넥스트레이드 쉼이라 체결이 날 수 없다(324 묶음)
+        CARRY_MIN_RUN 칸 이상    넷 칸 넘게 이어진 되풀이 — 11-06 거래 정지 구간(09:05 ~ 09:25 · 다섯 칸 · 21 종목) 같은 것(36 묶음)
+
+    그 밖(둘 · 세 칸)은 받은 그대로 둔다.
     """
     out = [dict(r) for r in rows]
     sig = lambda r: (r.get("ts", "")[:8], r.get("open"), r.get("high"), r.get("low"), r.get("close"), r.get("volume"))
@@ -6121,10 +6188,14 @@ def flatten_carried(rows):
         j = i
         while j + 1 < len(out) and (out[j + 1].get("volume") or 0) > 0 and sig(out[j + 1]) == sig(out[i]):
             j += 1
-        if j > i and (out[i].get("volume") or 0) > 0:
-            # 되풀이의 **첫 칸도** 옮겨 실린 것이다 — 앞 분(09:04 · 15:19)의 체결이라 앞 봉에 합친다.
-            # 토스 그림(11-06)에서 09:05 · 15:20 칸이 비어 있고 09:00 봉 고가가 그 칸 고가(181,500)와 맞았다
-            p = out[i - 1] if i > 0 else None
+        hm = out[i].get("ts", "")[8:12]
+        at_close = CARRY_CLOSE_FROM <= hm <= CARRY_CLOSE_TO
+        if j > i and (out[i].get("volume") or 0) > 0 and (at_close or j - i + 1 >= CARRY_MIN_RUN):
+            # 긴 되풀이(09:05 ~)의 **첫 칸도** 옮겨 실린 것이다 — 앞 분(09:04)의 체결이라 앞 봉에 합친다.
+            # 토스 그림(11-06)에서 09:05 칸이 비어 있고 09:00 봉 고가가 그 칸 고가(181,500)와 맞았다.
+            # **15:20 되풀이는 합치지 않고 뺀다** (2026-11-09 토스 1분봉 대조 · 재권님 「토스증권이랑 비교해서 거기랑 맞춰줘」) —
+            # 합치면 15:15 칸이 토스보다 그 칸 거래량만큼 많았다(삼성 11-05 +64,173 · 11-06 +206,823). 안 합치면 15:15 칸이 토스와 같다
+            p = out[i - 1] if i > 0 and not at_close else None
             if p is not None and p.get("ts", "")[:8] == out[i].get("ts", "")[:8] and (p.get("volume") or 0) > 0:
                 f = out[i]
                 p["high"] = max(p["high"], f["high"])
@@ -6886,7 +6957,7 @@ def _kr_past_one_market(cfg, code, day, hour, div):
 def _kr_past_chunk(cfg, code, day, hour):
     """한 쪽을 받되 시장은 `fetch_minutes_from_kis` 와 같이 고른다 — 먼저 물을 쪽은 `minute_market_div`,
     거래 있는 봉이 1개 이하면 다른 쪽으로 한 번 더 받아 더 많은 쪽(같으면 `J`). 까닭은 그 함수 주석에 있다."""
-    first = minute_market_div(hour)
+    first = minute_market_div(hour, code)
     out = _kr_past_one_market(cfg, code, day, hour, first)
     nz = sum(1 for b in out if (b["volume"] or 0) > 0)
     if nz <= 1:
@@ -6895,6 +6966,7 @@ def _kr_past_chunk(cfg, code, day, hour):
         alt = _kr_past_one_market(cfg, code, day, hour, other)
         alt_nz = sum(1 for b in alt if (b["volume"] or 0) > 0)
         if alt_nz > nz or (alt_nz == nz and other == "J" and alt):
+            _note_un_thin(code, first, other, alt_nz)
             return alt
     return out
 
