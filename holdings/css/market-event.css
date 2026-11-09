@@ -11,3 +11,12 @@
   backdrop-filter: blur(6px);
 }
 .kh-mkev[hidden] { display: none; }
+
+/* 종목 상태 칩 — 거래정지 · 관리종목 · 투자주의/경고/위험 · 단기과열 · 정리매매 · 상한가 · 하한가 (2026-11-09 · 이벤트 대응 ④⑤⑥ ·
+   js/components/stock-detail.js 가 세부사항 줄 맨 앞에 붙인다). 사건 띠와 같은 「시장 · 종목 사건」 이라 여기 둔다 —
+   frame.css 는 Insight 도 거는 파일이라 피했다. 「연한 바탕 + 진한 글씨」 · 경고는 위험 색 · 상한가 오름 · 하한가 내림 */
+.kh-dt-st { display: inline-flex; gap: 4px; white-space: nowrap; }
+.kh-st-chip { font-size: 0.72rem; font-weight: 700; line-height: 18px; padding: 0 7px; border-radius: 6px; }
+.kh-st-chip.danger { background: var(--kh-danger-faint); color: var(--kh-danger); }
+.kh-st-chip.up { background: var(--kh-up-dim); color: var(--kh-up); }
+.kh-st-chip.down { background: var(--kh-down-dim); color: var(--kh-down); }

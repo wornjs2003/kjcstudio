@@ -56,6 +56,8 @@ async function draw() {
   if (hours) lastHours = hours;
   const ms = (lastEv && lastEv.markets) || {};
   const rows = Object.entries(ms).flatMap(([name, m]) => ((m && (m.live || (m.now ? [m.now] : []))) || []).map((e) => line(name, e)));
+  /* KIS 장애 · 실시간 체결 끊김 · 한도 초과 몰림(이벤트 대응 ⑦) — 서버가 3분 이어진 것만 준다 · 풀리면 빠진다 */
+  for (const e of ((lastEv && lastEv.sys) || [])) rows.push(`${e.text} (${e.at.slice(0, 5)}~)`);
   const hl = hoursLine(lastHours);
   if (hl) rows.unshift(hl);
   if (!rows.length) { if (box) box.hidden = true; return; }
@@ -70,5 +72,6 @@ async function draw() {
   box.innerHTML = rows.map((t) => `<div>⚠ ${t}</div>`).join('');
 }
 
+css();          // 종목 상태 칩(stock-detail.js)도 이 파일의 모양을 쓴다 — 띠가 없을 때도 싣는다
 draw();
 watch({ url: () => URL, onChange: draw, key: KEY, fallbackMs: FALLBACK_MS });

@@ -114,7 +114,7 @@
         <div class="st-card">
           <div class="wl-head">
             <div class="wl-chips" id="wl-chips" role="tablist" aria-label="어디서 온 종목"></div>
-            <div class="wl-day"><button type="button" class="wl-nav" id="wl-prev" aria-label="앞 날">‹</button><span id="wl-day">—</span><button type="button" class="wl-nav" id="wl-next" aria-label="뒤 날">›</button></div>
+            <div class="wl-day"><button type="button" class="wl-nav" id="wl-prev" aria-label="앞 날" data-tip="앞 날">‹</button><span id="wl-day">—</span><button type="button" class="wl-nav" id="wl-next" aria-label="뒤 날" data-tip="뒤 날">›</button></div>
           </div>
           <div class="wl-box st-scroll" id="wl-box">—</div>
           <div class="st-cap wl-cap">전일비 = 전일 정규장 종가 → 마지막 5분봉 · 프리장 = 전일 종가 → 08:55 봉 · 정규장 = 프리장 끝 → 15:30 봉 · 애프터 = 15:30 → 마지막 · 평일 20:05 에 쌓음 · 선의 회색 = 프리 · 애프터 · 점선 = 전일 종가</div>
@@ -128,5 +128,6 @@
 <script type="module" src="js/strategy-rule.js"></script>
 <script type="module" src="js/strategy-log.js"></script>
 <script type="module" src="/assets/js/glossary.js"></script>   <!-- 설명 풍선 — 마우스를 1초 올려 두면 뜨는 공용 풍선(data-tip) · 「설명 풍선은 … 1초 올려 두면 뜬다」(2026-11-07) -->
+<script type="module" src="js/fit.js"></script>   <!-- 틀을 홀딩스 첫 화면과 같은 넓이로 (2026-11-07) -->
 </body>
 </html>

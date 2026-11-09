@@ -289,7 +289,7 @@ let sel = null, scenario = null;
 const EMPTY = '<h2>칸을 눌러 보세요</h2><div class="empty">그 칸의 설명 · 종목 · 볼 것 · 이어진 칸이 여기 뜹니다.</div>';
 const el = id => map.querySelector(`[data-id="${id}"]`);
 const f3d = () => typeof Flow3D !== 'undefined' && Flow3D.on();   // 흐름도 3D(js/flow3d.js) — 그 파일이 못 떠도 2D 흐름도는 돈다
-const chip = st => `<span class="stk${st.grade ? ' g-' + (GRADE_NO[st.grade] || 4) : ''}"${(st.code || st.ticker) ? ` data-co="${esc(st.code || st.ticker)}" title="회사 카드 열기"` : ''}>${esc(st.name)}${st.grade ? `<i>${esc(GRADES[st.grade] || st.grade)}</i>` : ''}</span>`;
+const chip = st => `<span class="stk${st.grade ? ' g-' + (GRADE_NO[st.grade] || 4) : ''}"${(st.code || st.ticker) ? ` data-co="${esc(st.code || st.ticker)}" data-tip="회사 카드 열기"` : ''}>${esc(st.name)}${st.grade ? `<i>${esc(GRADES[st.grade] || st.grade)}</i>` : ''}</span>`;
 const stocksOf = id => STOCKS.filter(st => st.node === id || (st.also || []).includes(id));
 
 // ── 자료로 화면을 짓는다 ──
@@ -829,5 +829,6 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeParts()
 })();
 </script>
 <script src="js/flow3d.js"></script>
+<script type="module" src="/assets/js/glossary.js"></script>   <!-- 설명 풍선 — 마우스를 1초 올려 두면 뜨는 공용 풍선(data-tip) · 「설명 풍선은 … 1초 올려 두면 뜬다」(2026-11-09 단추 이름까지) -->
 </body>
 </html>
