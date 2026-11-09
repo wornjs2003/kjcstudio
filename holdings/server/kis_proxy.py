@@ -4384,9 +4384,8 @@ def fetch_asking(cfg, code):
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
         # 넥스트레이드에 없는 종목(우선주 · ETF)은 KRX(J) — 장 후 UN 합이 J 보다 훨씬 작게 왔다(11-09 15:43 · 005935 매도 J 47,126 · UN 12,258 ·
-        # 069500 매수 J 140,960 · UN 36,063 · 1호가는 같음 · qa 검수). 그날 분봉에서 UN 이 비어 J 로 받은 종목(_UN_THIN)을 그대로 쓴다 — 호출 안 늚
-        {"FID_COND_MRKT_DIV_CODE": "J" if _UN_THIN.get(code) == datetime.now(KST).strftime("%Y%m%d") else MARKET_DIV_CHART,
-         "FID_INPUT_ISCD": code},
+        # 069500 매수 J 140,960 · UN 36,063 · 1호가는 같음 · qa 검수). 가르는 것은 _nx_absent 한 곳
+        {"FID_COND_MRKT_DIV_CODE": "J" if _nx_absent(cfg, code) else MARKET_DIV_CHART, "FID_INPUT_ISCD": code},
         "FHKST01010200",
     )
     o = data.get("output1") or {}
@@ -5126,6 +5125,41 @@ def fetch_bars_back(cfg, code, period, want):
 _UN_THIN = {}   # minute_market_div — {종목: 날짜} 그날 UN 이 비어 J 로 바꿔 받은 종목(우선주 · ETF) · 그날은 J 먼저
 
 
+def _un_thin_today(code):
+    """그날 분봉에서 UN 이 비어 J 로 받은 종목인가 — minute_market_div · _nx_absent 가 함께 쓰는 셈 한 곳."""
+    return bool(code) and _UN_THIN.get(code) == datetime.now(KST).strftime("%Y%m%d")
+
+
+_NX_PROBE = {}   # _nx_absent — {종목: (날짜, 넥스트레이드에 없나)} 그날 한 번 물어 둔 것
+
+
+def _nx_absent(cfg, code):
+    """**넥스트레이드에 없는 종목인가** — 호가를 KRX(J)로 받을지 가른다 (2026-11-09 qa 검수 e4ed242 돌아옴).
+
+    처음 판은 _UN_THIN(그날 분봉을 KIS 로 받은 프로세스에만 찬다)만 봤는데, 메인(8764) · 중간(8767)은 차트를 8765 에 통째로 넘기고
+    호가는 자기 프로세스에서 받아 표가 늘 비었다 — 외부접속이 보는 8764 에서 안 들었다. 그래서 **그날 한 번 넥스트레이드(NX) 호가를 물어
+    본다** — 넥스트레이드에 없는 종목은 총잔량 · 1호가가 빈 값으로 온다(11-09 15:43 · 005935 · 069500 빈 값 · 005930 · 247540 값 있음).
+    종목마다 하루 한 번 · 프로세스마다 한 번 늘 뿐이다. **08:00~20:00(넥스트레이드 장)에 물은 것만 그날 값으로 둔다** — 그 밖에는
+    넥스트레이드 종목도 비어 올 수 있어 적지 않고 _UN_THIN 만 본다. 아침 첫 호가도 이 길로 풀린다(분봉을 받기 전이어도)."""
+    if _un_thin_today(code):
+        return True
+    now = datetime.now(KST)
+    day = now.strftime("%Y%m%d")
+    hit = _NX_PROBE.get(code)
+    if hit and hit[0] == day:
+        return hit[1]
+    if not ("0800" <= now.strftime("%H%M") < "2000"):
+        return False
+    try:
+        o = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
+                    {"FID_COND_MRKT_DIV_CODE": "NX", "FID_INPUT_ISCD": code}, "FHKST01010200").get("output1") or {}
+    except Exception:
+        return False                     # 못 물었다 — 적지 않고 다음에 다시 묻는다 · 그동안은 UN
+    absent = not (o.get("total_askp_rsqn") or o.get("total_bidp_rsqn") or o.get("askp1") or o.get("bidp1"))
+    _NX_PROBE[code] = (day, absent)
+    return absent
+
+
 def _note_un_thin(code, first, used, used_nz):
     """UN 을 먼저 물었다가 J 로 바꿔 받았으면 그날은 그 종목을 J 먼저 묻는다 — 바퀴마다 두 번 부르지 않게.
 
@@ -5188,7 +5222,7 @@ def minute_market_div(hour, code=None):
     **그래서 시각 분기는 그대로 두고 폴백을 민감하게 한다** — 변경이 작고,
     정규장에 `J` 를 먼저 묻는 2026-09-17 고침도 살아 있다.
     """
-    if code and _UN_THIN.get(code) == datetime.now(KST).strftime("%Y%m%d"):
+    if _un_thin_today(code):
         return "J"
     return MARKET_DIV_CHART
 
@@ -6176,7 +6210,7 @@ def flatten_carried(rows):
     (000080 10-21 16:00 종가 15,790 → 15,800). 그 칸이 옮겨 실린 것인지는 토스 대조가 없다 — 대조한 것은 아래 둘뿐이다.
 
         CARRY_CLOSE_FROM ~ TO   15:20 ~ 15:35 에서 시작한 되풀이 — 종가 단일가 · 넥스트레이드 쉼이라 체결이 날 수 없다(324 묶음)
-        CARRY_MIN_RUN 칸 이상    다섯 칸 이상 이어진 되풀이 — 11-06 거래 정지 구간(09:05 ~ 09:25 · 다섯 칸 · 21 종목) 같은 것(36 묶음)
+        CARRY_MIN_RUN 칸 이상    다섯 칸 이상 이어진 되풀이 — 11-06 거래 정지 구간(09:05 ~ 09:25 · 다섯 칸 · 21 종목) 같은 것(다섯 칸 이상 26 묶음 · 11-09 개발 DB 사본 다시 셈 — 네 칸 14 묶음은 뺌)
 
     그 밖(둘 · 세 칸)은 받은 그대로 둔다.
     """
