@@ -8,12 +8,12 @@
 /* ── 공지 배너 ───────────────────────────── */
 .kh-notice {
   display: flex; align-items: center; justify-content: center; gap: 12px;
-  padding: 12px; font-size: 0.86rem; margin-bottom: 14px;
+  padding: 12px; font-size: var(--kh-fs-lg); margin-bottom: 14px;
 }
 .kh-notice-btn {
   border: 1px solid var(--kh-border-strong);
   border-radius: var(--kh-radius-sm);
-  padding: 5px 12px; font-size: 0.8rem; color: var(--kh-text-secondary);
+  padding: 5px 12px; font-size: var(--kh-fs-md); color: var(--kh-text-secondary);
   cursor: pointer;
 }
 .kh-notice-x { color: var(--kh-text-muted); cursor: pointer; }
@@ -22,13 +22,13 @@
 .kh-top { display: grid; grid-template-columns: 296px 1fr 276px; gap: 14px; }
 
 .kh-big { padding: 18px 20px; display: flex; flex-direction: column; }
-.kh-big-n { font-size: 0.86rem; color: var(--kh-text-secondary); font-weight: 500; }
+.kh-big-n { font-size: var(--kh-fs-lg); color: var(--kh-text-secondary); font-weight: 500; }
 .kh-big-v { font-size: 1.85rem; font-weight: 700; letter-spacing: -0.03em; margin-top: 6px; }
-.kh-big-c { font-size: 0.86rem; font-weight: 500; }
+.kh-big-c { font-size: var(--kh-fs-lg); font-weight: 500; }
 .kh-big-chart { flex: 1; min-height: 92px; margin-top: 10px; }
 .kh-big-foot {
   display: flex; justify-content: space-between;
-  font-size: 0.74rem; color: var(--kh-text-muted);
+  font-size: var(--kh-fs-md); color: var(--kh-text-muted);
   margin-top: 8px; border-top: 1px solid var(--kh-border); padding-top: 9px;
 }
 
@@ -67,18 +67,18 @@
 .kh-ig-spark { width: 52px; height: 28px; flex-shrink: 0; }
 .kh-ig-txt { min-width: 0; flex: 1; }
 .kh-ig-n {
-  font-size: 0.78rem; color: var(--kh-text-secondary);
+  font-size: var(--kh-fs-md); color: var(--kh-text-secondary);
   display: flex; align-items: center; gap: 5px; white-space: nowrap;
 }
-.kh-ig-v { font-size: 0.98rem; font-weight: 600; margin-top: 2px; letter-spacing: -0.01em; }
-.kh-ig-c { font-size: 0.74rem; font-weight: 500; }
-.kh-ig-go { font-size: 0.78rem; color: var(--kh-accent); margin-top: 3px; }
-.kh-ig-wait { font-size: 0.74rem; color: var(--kh-text-dim); margin-top: 3px; }
+.kh-ig-v { font-size: var(--kh-fs-xl); font-weight: 600; margin-top: 2px; letter-spacing: -0.01em; }
+.kh-ig-c { font-size: var(--kh-fs-md); font-weight: 500; }
+.kh-ig-go { font-size: var(--kh-fs-md); color: var(--kh-accent); margin-top: 3px; }
+.kh-ig-wait { font-size: var(--kh-fs-md); color: var(--kh-text-dim); margin-top: 3px; }
 
 /* 오른쪽 — 오늘의 한 줄 + 주요 일정 */
 .kh-rightcol { display: flex; flex-direction: column; gap: 10px; }
 .kh-aibtn {
-  align-self: flex-end; font-size: 0.78rem; color: var(--kh-accent);
+  align-self: flex-end; font-size: var(--kh-fs-md); color: var(--kh-accent);
   background: var(--kh-accent-dim); padding: 7px 13px; border-radius: 999px;
 }
 /* 주요 일정 · 최근 공시 — 오른쪽 열에 나란히 놓인 두 카드.
@@ -91,12 +91,12 @@
 .kh-recent .kh-dc { flex: 1; }
 .kh-sched-h {
   display: flex; align-items: center; justify-content: space-between;
-  font-size: 0.88rem; font-weight: 600; margin-bottom: 8px;
+  font-size: var(--kh-fs-lg); font-weight: 600; margin-bottom: 8px;
 }
-.kh-sched-s { font-size: 0.78rem; color: var(--kh-text-secondary); line-height: 1.6; margin-bottom: 12px; }
+.kh-sched-s { font-size: var(--kh-fs-md); color: var(--kh-text-secondary); line-height: 1.6; margin-bottom: 12px; }
 .kh-sched-i {
   display: flex; align-items: center; gap: 8px;
-  font-size: 0.78rem; color: var(--kh-text-muted); padding: 4px 0;
+  font-size: var(--kh-fs-md); color: var(--kh-text-muted); padding: 4px 0;
 }
 .kh-sched-i .d {
   width: 5px; height: 5px; border-radius: 50%;
@@ -214,13 +214,13 @@
    sticky 가 안 먹었다 — 굴리면 표머리가 그대로 밀려 올라갔다 (재서 확인).
    그래서 줄 사이 선은 `tr` 이 아니라 `td` 가 그린다. */
 .kh-rkm table {
-  width: 100%; table-layout: fixed; font-size: 0.86rem;
+  width: 100%; table-layout: fixed; font-size: var(--kh-fs-lg);
   border-collapse: separate; border-spacing: 0;
 }
 .kh-rkm thead th {
   position: sticky; top: 0; z-index: 1;
   background: var(--kh-bg); text-align: right;
-  padding: 0 10px 9px; font-size: 0.76rem; font-weight: 600;
+  padding: 0 10px 9px; font-size: var(--kh-fs-md); font-weight: 600;
   color: var(--kh-text-muted); white-space: nowrap;
 }
 .kh-rkm thead th.l, .kh-rkm tbody td.l { text-align: left; }
@@ -239,7 +239,7 @@
    기준은 `.kh-rkm` 의 data-sort(home.js 의 paintRankModal). 탭을 바꾸면 그 한 칸만 갈아 끼워진다 */
 @media (max-width: 700px) {
   .kh-rkm { padding: 6px 14px 44px; }
-  .kh-rkm table { font-size: 0.8rem; }
+  .kh-rkm table { font-size: var(--kh-fs-md); }
   .kh-rkm col.c-rk { width: 24px; }
   .kh-rkm col.c-nm { width: auto; }
   .kh-rkm col.c-pr { width: 80px; }
@@ -287,14 +287,14 @@
    받는다. `flex: 1` 을 주면 이 줄이 늘어나고 아래 표가 밀린다. */
 .kh-scm-span { flex: none; display: flex; gap: 6px; margin-bottom: 10px; }
 .kh-scm-cols { flex: 1; min-height: 0; }
-.kh-scm-empty { padding: 28px 0; text-align: center; font-size: 0.86rem; }
+.kh-scm-empty { padding: 28px 0; text-align: center; font-size: var(--kh-fs-lg); }
 
 /* 묶음 칩 — 카드는 여섯인데 여기는 **받아 온 스물을 다 놓는다**.
    900px 에서 세 줄쯤 된다. 줄 수가 묶음 이름 길이에 따라 달라지므로
    아래 표가 밀리는데, **모달 높이는 안 바뀐다**(본문이 굴러간다). */
 .kh-scm-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .kh-scm-chips .kh-chip { display: inline-flex; align-items: baseline; gap: 6px; }
-.kh-scm-chips .kh-chip b { font-size: 0.74rem; font-weight: 700; }
+.kh-scm-chips .kh-chip b { font-size: var(--kh-fs-md); font-weight: 700; }
 /* 고른 칩은 바탕이 진하다 — 그 위 글씨는 흰색이어야 읽힌다
    (CLAUDE.md 「진한 색 바탕에는 흰 글씨」). 등락률 색도 여기서는 묻는다 */
 .kh-scm-chips .kh-chip.is-active b { color: var(--kh-text-on-fill); }
@@ -304,7 +304,7 @@
 .kh-scm-open { flex-basis: 100%; position: relative; box-sizing: border-box;
                background: var(--kh-bg-card); border-radius: var(--kh-radius-lg, 12px); padding: 14px 16px 10px; margin: 4px 0 8px; }
 .kh-scm-open .kh-scm-gh { padding-right: 28px; }
-.kh-scm-x { position: absolute; top: 10px; right: 12px; background: none; border: 0; font-size: 1rem; color: var(--kh-text-muted); cursor: pointer; }
+.kh-scm-x { position: absolute; top: 10px; right: 12px; background: none; border: 0; font-size: var(--kh-fs-xl); color: var(--kh-text-muted); cursor: pointer; }
 .kh-scm-open .kh-sc-bar { display: block; width: 100%; height: 4px; margin-bottom: 6px; }
 .kh-scm-open .kh-scm-list { max-height: 420px; }
 .kh-scm-open table { table-layout: auto; }
@@ -312,7 +312,7 @@
 .kh-scm-open col.c-pr, .kh-scm-open col.c-pc { width: 130px; }
 .kh-scm-open col.c-am, .kh-scm-open col.c-cap { width: 150px; }
 .kh-scm-open tbody td b { display: inline; }
-.kh-scm-cd { margin-left: 6px; font-size: 0.74rem; }
+.kh-scm-cd { margin-left: 6px; font-size: var(--kh-fs-md); }
 
 /* ── 셋을 나란히 (2026-09-22 지시) ─────────────────────────
    「모달 띄우면 업종일때는 업종 3개가 보여져야하고 테마일때는 테마가 3개」.
@@ -328,13 +328,13 @@
 .kh-scm-vr { width: 1px; flex: none; background: var(--kh-border); }
 
 .kh-scm-gh { display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px; }
-.kh-scm-fire { font-size: 0.85rem; line-height: 1; }
-.kh-scm-rk { font-size: 0.86rem; font-weight: 700; flex: none; }
-.kh-scm-gn { font-size: 0.9rem; font-weight: 700; min-width: 0;
+.kh-scm-fire { font-size: var(--kh-fs-lg); line-height: 1; }
+.kh-scm-rk { font-size: var(--kh-fs-lg); font-weight: 700; flex: none; }
+.kh-scm-gn { font-size: var(--kh-fs-lg); font-weight: 700; min-width: 0;
              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kh-scm-pc { font-size: 0.86rem; font-weight: 700; flex: none; margin-left: auto; }
+.kh-scm-pc { font-size: var(--kh-fs-lg); font-weight: 700; flex: none; margin-left: auto; }
 .kh-scm-col .kh-sc-bar { width: 100%; height: 4px; margin-bottom: 6px; }
-.kh-scm-cnt { display: flex; font-size: 0.74rem; margin-bottom: 10px; }
+.kh-scm-cnt { display: flex; font-size: var(--kh-fs-md); margin-bottom: 10px; }
 .kh-scm-cnt > :nth-child(2) { margin-left: auto; margin-right: 10px; }
 .kh-scm-tot { margin-left: 10px; }
 /* 목록만 굴러간다 — 머리는 붙어 있어야 어느 묶음인지 안 사라진다.
@@ -350,13 +350,13 @@
    `collapse` 로는 `thead th` 의 sticky 가 안 먹어 표머리가 밀려 올라간다
    (실시간 순위 모달에서 먼저 겪었다). 줄 사이 선은 `td` 가 그린다. */
 .kh-scm table {
-  width: 100%; table-layout: fixed; font-size: 0.86rem;
+  width: 100%; table-layout: fixed; font-size: var(--kh-fs-lg);
   border-collapse: separate; border-spacing: 0;
 }
 .kh-scm thead th {
   position: sticky; top: 0; z-index: 1;
   background: var(--kh-bg); text-align: left;
-  padding: 0 10px 9px; font-size: 0.76rem; font-weight: 600;
+  padding: 0 10px 9px; font-size: var(--kh-fs-md); font-weight: 600;
   color: var(--kh-text-muted); white-space: nowrap;
 }
 .kh-scm thead th.r, .kh-scm tbody td.r { text-align: right; }
@@ -392,7 +392,7 @@
   /* 펼친 칸(2026-10-26) — 다섯 칸이 390 에 들게 좁히고 코드는 뺀다 · 목록은 본문과 함께 굴린다 */
   .kh-scm-open { padding: 12px 10px 8px; }
   .kh-scm-open .kh-scm-list { max-height: none; }
-  .kh-scm-open table { table-layout: fixed; font-size: 0.78rem; }
+  .kh-scm-open table { table-layout: fixed; font-size: var(--kh-fs-md); }
   .kh-scm-open col.c-pr { width: 64px; }
   .kh-scm-open col.c-pc { width: 56px; }
   .kh-scm-open col.c-am, .kh-scm-open col.c-cap { width: 58px; }
@@ -442,23 +442,23 @@
 }
 /* 문안 — 줄바꿈을 그대로 살린다. 폰에 가는 글과 같은 모양이어야 한다. */
 .kh-dlm-tg {
-  margin: 0; font-family: inherit; font-size: 0.74rem; line-height: 1.55;
+  margin: 0; font-family: inherit; font-size: var(--kh-fs-md); line-height: 1.55;
   white-space: pre-wrap; word-break: break-word;
   color: var(--kh-text-secondary);
 }
 /* 글 머리 — 이 값이 언제 것인지(전 거래일 마감 · 작성 시각). 홈 9 · 2026-11-07 */
 .kh-dlm-head {
-  align-self: flex-start; font-size: 0.82rem; font-weight: 700;
+  align-self: flex-start; font-size: var(--kh-fs-md); font-weight: 700;
   color: var(--kh-text-primary); padding: 2px 8px;
   border-radius: var(--kh-radius-sm, 6px); background: var(--kh-bg);
 }
-.kh-dlm-n { font-size: 0.78rem; color: var(--kh-text-secondary); font-weight: 500; }
+.kh-dlm-n { font-size: var(--kh-fs-md); color: var(--kh-text-secondary); font-weight: 500; }
 .kh-dlm-v {
-  margin-left: auto; font-size: 0.92rem; font-weight: 700;
+  margin-left: auto; font-size: var(--kh-fs-lg); font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.kh-dlm-c { font-size: 0.78rem; font-weight: 600; font-variant-numeric: tabular-nums; }
-.kh-dlm-note { font-size: 0.72rem; color: var(--kh-text-dim); margin-top: auto; }
+.kh-dlm-c { font-size: var(--kh-fs-md); font-weight: 600; font-variant-numeric: tabular-nums; }
+.kh-dlm-note { font-size: var(--kh-fs-sm); color: var(--kh-text-dim); margin-top: auto; }
 
 .kh-rank .kh-tabs, .kh-rank-card .kh-tabs { padding: 15px 18px 10px; }
 /* 시장 칩 — 탭 줄 안이라 칩 줄의 아래 여백(10px)을 지우고 제목 바로 옆에 붙인다.
@@ -466,7 +466,7 @@
    2026-10-14 에 「원자재 · 가상자산」 칩을 더해 제목 아랫줄로 내렸다가, 그 둘을 「시장지표」 갈래 오른쪽 칸으로 옮기면서
    (재권님 「왜 코스피 코스닥 옆에 있지?」 · 「응 맞아」) 다시 제목 옆 한 줄로 되돌렸다 */
 .kh-rank-card .kh-tabs > .kh-rank-mkt { padding: 0; margin: 0 auto 0 12px; gap: 4px; flex-wrap: nowrap; }
-.kh-rank-mkt .kh-chip { padding: 4px 9px; font-size: 0.73rem; }
+.kh-rank-mkt .kh-chip { padding: 4px 9px; font-size: var(--kh-fs-sm); }
 /* 실시간 순위 「테마」 칩 — 테마 스무 개를 한 줄로 두고 가로로 민다(줄 수가 늘어 표가 밀리지 않게 · 2026-10-27).
    가로로 미는 띠라 막대는 감춘다(「스크롤바는 한 벌만 쓴다」 의 「감추는 것」) */
 .kh-chips.kh-theme-strip { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
@@ -478,7 +478,7 @@
 .kh-flow-chip { color: var(--kh-accent); font-weight: 600; }
 .kh-flow-chip.is-active { background: var(--kh-accent); color: var(--kh-text-on-fill); }
 .kh-chip-bar { flex: 0 0 1px; align-self: stretch; margin: 4px 2px; background: var(--kh-border); }
-.kh-sub-chip { font-size: 0.72rem; padding: 4px 10px; }
+.kh-sub-chip { font-size: var(--kh-fs-sm); padding: 4px 10px; }
 .kh-sub-chip.is-on { outline: 1.5px solid var(--kh-text-primary); outline-offset: -1.5px; color: var(--kh-text-primary); }
 .kh-chip-hit, .kh-flow-x { font-weight: 700; color: var(--kh-accent); }
 /* 좁은 폭 「테마」 — 카드 높이를 묶었을 때 표가 남는 높이를 채운다(home.js lockRankHeight · qa 4baa8ec) */
@@ -495,7 +495,7 @@
    순위 쪽은 아무 꾸밈 없이 브라우저 기본으로 나왔다. */
 .kh-fold {
   margin-left: auto; flex-shrink: 0; cursor: pointer;
-  font-size: 0.78rem; color: var(--kh-text-secondary);
+  font-size: var(--kh-fs-md); color: var(--kh-text-secondary);
   background: var(--kh-bg-surface); border-radius: 999px;
   padding: 6px 13px; text-decoration: underline;
   /* 굵기를 못 박는다 — 뉴스 머리줄(.kh-sched-h)이 굵어서 그 안에 놓인 것만
@@ -506,14 +506,14 @@
 
 .kh-chips { display: flex; gap: 6px; padding: 0 18px 10px; flex-wrap: wrap; align-items: center; }
 .kh-chip {
-  font-size: 0.78rem; padding: 6px 12px; border-radius: 999px;
+  font-size: var(--kh-fs-md); padding: 6px 12px; border-radius: 999px;
   background: var(--kh-bg-surface); color: var(--kh-text-secondary);
   cursor: pointer; border: 0; font-family: inherit;
 }
 .kh-chip.is-active { background: var(--kh-text-primary); color: var(--kh-text-on-fill); font-weight: 500; }
 .kh-chip.is-check { background: var(--kh-accent-dim); color: var(--kh-accent); font-weight: 500; }
 .kh-chip-sep { width: 1px; height: 15px; background: var(--kh-border-strong); margin: 0 3px; }
-.kh-asof { padding: 0 18px 8px; font-size: 0.75rem; color: var(--kh-text-muted); }
+.kh-asof { padding: 0 18px 8px; font-size: var(--kh-fs-md); color: var(--kh-text-muted); }
 
 /* 순위 표 */
 
@@ -530,10 +530,10 @@
 .kh-rank-card table { width: 100%; border-collapse: collapse; }
 .kh-rank-card th {
   color: var(--kh-text-muted); font-weight: 400; text-align: right;
-  padding: 8px 16px; font-size: 0.76rem;
+  padding: 8px 16px; font-size: var(--kh-fs-md);
 }
 .kh-rank-card th.l, .kh-rank-card td.l { text-align: left; }
-.kh-rank-card td { padding: 11px 16px; text-align: right; font-size: 0.86rem; }
+.kh-rank-card td { padding: 11px 16px; text-align: right; font-size: var(--kh-fs-lg); }
 /* 줄 위에서 커서 모양이 안 바뀌게 한다 (2026-09-17 지시).
    손가락(pointer)만 지웠더니 글자 위에서 I 모양(글자 고르기)이 됐다.
    기본값이 auto 라 글자를 만나면 그렇게 된다. 화살표로 못 박는다.
@@ -548,7 +548,7 @@
 .kh-rank-card tbody tr.is-active .kh-nm b,
 .kh-rank-card tbody tr.is-active td:first-child { color: var(--kh-accent); font-weight: 700; }
 .kh-rank-card tbody tr + tr td { border-top: 1px solid var(--kh-border); }
-.kh-rk { width: 20px; color: var(--kh-text-muted); font-size: 0.8rem; }
+.kh-rk { width: 20px; color: var(--kh-text-muted); font-size: var(--kh-fs-md); }
 
 /* 「이 종목 공시」를 아래로 내리려고 `margin-top: auto` 를 넣었다가 **뺐다**
    (2026-09-18). 아래쪽 `.kh-idxp-dc { flex: 1 }` 가 이미 남는 공간을 다
@@ -561,7 +561,7 @@
    가로 막대로는 그 방향을 말할 수 없어 세로로 세웠다. */
 .kh-iv-tabs { padding: 0; margin-left: auto; gap: 4px; flex-wrap: nowrap; }
 /* 여백 6px — 「3달」 단추가 늘어 머리 줄(304px)에 넷이 한 줄로 들게 (2026-10-15 재권님 「응 해줘」) */
-.kh-iv-tabs .kh-chip { padding: 3px 6px; font-size: 0.7rem; }
+.kh-iv-tabs .kh-chip { padding: 3px 6px; font-size: var(--kh-fs-sm); }
 
 /* **옛 세로막대 규칙을 걷어냈다** (2026-09-21).
 
@@ -578,7 +578,7 @@
    준 자리가 안 먹고 **막대가 가운데를 걸쳤다.** 죽은 규칙인 줄 알았는데
    한 줄이 살아 있었다. 새 모양은 전부 `css/frame.css` 에 있다. */
 
-.kh-iv-note { font-size: 0.7rem; color: var(--kh-text-muted); padding-top: 6px; line-height: 1.6; }
+.kh-iv-note { font-size: var(--kh-fs-sm); color: var(--kh-text-muted); padding-top: 6px; line-height: 1.6; }
 
 /* ── 보는 것을 바꿔도 자리는 그대로다 (2026-09-18 지시) ──────────
    루트 CLAUDE.md 「보는 것을 바꿔도 자리는 그대로다」 의 한 자리다.
@@ -610,15 +610,15 @@
 .kh-bs-wrap { padding-top: 10px; }
 .kh-bs-h {
   display: flex; align-items: baseline; justify-content: space-between;
-  font-size: 0.78rem; color: var(--kh-text-secondary); margin-bottom: 5px;
+  font-size: var(--kh-fs-md); color: var(--kh-text-secondary); margin-bottom: 5px;
 }
 /* **기간이 없는 값이다.** 투자자 정보와 달리 오늘도 5일도 아니고
    지금 이 순간 걸려 있는 주문이라, 그것을 제목 옆에 적는다 */
 .kh-bs-when {
-  margin-left: 5px; font-size: 0.68rem; font-weight: 500;
+  margin-left: 5px; font-size: var(--kh-fs-sm); font-weight: 500;
   color: var(--kh-text-muted);
 }
-.kh-bs-pct { font-size: 0.78rem; font-weight: 700; }
+.kh-bs-pct { font-size: var(--kh-fs-md); font-weight: 700; }
 .kh-bs-pct i { color: var(--kh-text-dim); font-style: normal; margin: 0 2px; }
 .kh-bs { display: flex; height: 7px; border-radius: 4px; overflow: hidden; }
 .kh-bs i { display: block; height: 100%; }
@@ -626,7 +626,7 @@
 .kh-bs .sell { background: var(--kh-down); }
 
 /* 제목 옆 종목 아이콘 (2026-09-18 지시) */
-.kh-idxp-ic { width: 18px; height: 18px; font-size: 0.6rem; flex-shrink: 0; }
+.kh-idxp-ic { width: 18px; height: 18px; font-size: var(--kh-fs-sm); flex-shrink: 0; }
 
 /* 「종목 뉴스」를 아래로 내린다 (2026-09-18 지시 — 50px 뒤 "아래로" 한 번 더).
 
@@ -711,12 +711,12 @@
 .kh-sc-vr { width: 1px; flex: none; background: var(--kh-border); }
 
 .kh-sc-ch { display: flex; align-items: baseline; gap: 5px; margin-bottom: 7px; }
-.kh-sc-fire { font-size: 0.78rem; line-height: 1; }
-.kh-sc-rk { font-size: 0.8rem; font-weight: 700; flex: none; }
+.kh-sc-fire { font-size: var(--kh-fs-md); line-height: 1; }
+.kh-sc-rk { font-size: var(--kh-fs-md); font-weight: 700; flex: none; }
 /* 묶음 이름이 길면 「…」 로 줄인다 — 테마에 30자짜리가 있다 */
-.kh-sc-nm { font-size: 0.82rem; min-width: 0;
+.kh-sc-nm { font-size: var(--kh-fs-md); min-width: 0;
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kh-sc-pc { font-size: 0.8rem; font-weight: 700; flex: none; margin-left: auto; }
+.kh-sc-pc { font-size: var(--kh-fs-md); font-weight: 700; flex: none; margin-left: auto; }
 
 /* 오른 종목 · 내린 종목 막대 — 네이버에만 있는 값이다.
    **칸 폭을 꽉 채운다** — 전에는 42px 짜리가 머리줄 오른쪽에 붙어 있었다 */
@@ -727,24 +727,24 @@
 .kh-sc-bar .fl { background: var(--kh-border-strong); }
 .kh-sc-bar .dn { background: var(--kh-down); }
 
-.kh-sc-cnt { display: flex; font-size: 0.7rem; margin-bottom: 9px; }
+.kh-sc-cnt { display: flex; font-size: var(--kh-fs-sm); margin-bottom: 9px; }
 .kh-sc-cnt b { font-weight: 600; }
 .kh-sc-cnt > :nth-child(2) { margin-left: auto; margin-right: 9px; }
-.kh-sc-lb { font-size: 0.7rem; font-weight: 700;
+.kh-sc-lb { font-size: var(--kh-fs-sm); font-weight: 700;
             color: var(--kh-text-secondary); margin-bottom: 3px; }
 
 /* **밑줄을 지운다.** `<a>` 라 브라우저 기본 밑줄이 붙는데, 종목 이름과
    가격 둘 다에 그어져 표처럼 안 읽혔다 (2026-09-22 실측 — `underline`). */
 .kh-sc-st { display: flex; align-items: center; gap: 8px;
-            padding: 4px 0; font-size: 0.78rem; color: inherit;
+            padding: 4px 0; font-size: var(--kh-fs-md); color: inherit;
             text-decoration: none; }
 .kh-sc-st:hover { background: var(--kh-bg-hover); }
 .kh-sc-stn { flex: 1; min-width: 0;
              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kh-sc-stp { text-align: right; flex: none; line-height: 1.3; }
-.kh-sc-stp b { display: block; font-size: 0.78rem; font-weight: 600; }
-.kh-sc-stp i { display: block; font-style: normal; font-size: 0.68rem; }
-.kh-sc-empty { padding: 10px 0; font-size: 0.78rem; }
+.kh-sc-stp b { display: block; font-size: var(--kh-fs-md); font-weight: 600; }
+.kh-sc-stp i { display: block; font-style: normal; font-size: var(--kh-fs-sm); }
+.kh-sc-empty { padding: 10px 0; font-size: var(--kh-fs-md); }
 
 /* ── 즐겨찾기 = 순위 숫자 (2026-09-18 지시) ───
    칸을 하나 더 만들면 그만큼 종목명이 좁아진다. 그래서 왼쪽 순위 숫자가
@@ -773,16 +773,16 @@
 /* 「담은 개수」 칸(.kh-fav-count)은 2026-09-22 에 지웠다 — 「관심」 칩이
    같은 일을 하게 돼 두 번 말하는 자리가 됐다. */
 .kh-nm { display: flex; align-items: center; gap: 10px; }
-.kh-nm .kh-ic { width: 28px; height: 28px; font-size: 0.6rem; }
+.kh-nm .kh-ic { width: 28px; height: 28px; font-size: var(--kh-fs-sm); }
 .kh-nm b { font-weight: 500; }
 /* 이름 옆 섹터(WICS) — 회색 작은 글자 · 한 줄 · 길면 줄여 줄 높이가 안 바뀌게 (2026-11-04 · home.js sectorTag) */
 .kh-nm-sec {
-  font-size: 0.7rem; color: var(--kh-text-muted); white-space: nowrap;
+  font-size: var(--kh-fs-sm); color: var(--kh-text-muted); white-space: nowrap;
   max-width: 7.5em; overflow: hidden; text-overflow: ellipsis; margin-left: -4px;
 }
-.kh-ratio { display: flex; align-items: center; gap: 7px; justify-content: flex-end; font-size: 0.76rem; }
+.kh-ratio { display: flex; align-items: center; gap: 7px; justify-content: flex-end; font-size: var(--kh-fs-md); }
 .kh-ratio-bar { width: 86px; height: 3px; background: var(--kh-bg-active); border-radius: 2px; }
-.kh-sect { font-size: 0.76rem; color: var(--kh-text-secondary); }
+.kh-sect { font-size: var(--kh-fs-md); color: var(--kh-text-secondary); }
 
 /* 미리보기 카드(.kh-pv)는 2026-09-17 에 없앴다.
    위의 큰 차트가 같은 종목을 더 크게 그리고 있어서 5분봉이 두 번 나왔다.
@@ -835,7 +835,7 @@
   margin: -2px 0 14px; padding: 0 4px;
 }
 .kh-cat a {
-  padding: 0 0 12px; font-size: 0.98rem; font-weight: 500;
+  padding: 0 0 12px; font-size: var(--kh-fs-xl); font-weight: 500;
   color: var(--kh-text-muted); text-decoration: none;
   position: relative; white-space: nowrap;
 }
@@ -847,7 +847,7 @@
 }
 .kh-cat-my {
   margin-left: auto; color: var(--kh-text-secondary);
-  font-weight: 700; font-size: 0.92rem; padding-bottom: 12px;
+  font-weight: 700; font-size: var(--kh-fs-lg); padding-bottom: 12px;
 }
 
 /* ── 종목 검색칸 — 갈래 줄 오른쪽 끝 (2026-10-06 지시 · 「내 기록」 자리) ──
@@ -860,7 +860,7 @@
 .kh-simple-btn {
   margin: 0 8px 6px auto; height: 28px; padding: 0 12px; flex: none;
   border: 1px solid var(--kh-border-strong); border-radius: 999px;
-  background: var(--kh-bg-card); color: var(--kh-text-secondary); font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  background: var(--kh-bg-card); color: var(--kh-text-secondary); font: inherit; font-size: var(--kh-fs-md); font-weight: 600; cursor: pointer;
 }
 .kh-simple-btn[aria-pressed="true"] { background: var(--kh-text-primary); border-color: var(--kh-text-primary); color: var(--kh-text-on-fill); }
 .kh-simple-btn + .kh-cat-search { margin-left: 0; }
@@ -868,7 +868,7 @@
 .kh-cs-in {
   width: 200px; height: 28px; box-sizing: border-box; padding: 0 10px;
   border: 1px solid var(--kh-border-strong); border-radius: var(--kh-radius-sm);
-  background: var(--kh-bg-card); color: var(--kh-text-primary); font: inherit; font-size: 0.86rem;
+  background: var(--kh-bg-card); color: var(--kh-text-primary); font: inherit; font-size: var(--kh-fs-lg);
 }
 .kh-cs-in::placeholder { color: var(--kh-text-muted); }
 .kh-cs-in:focus { outline: none; border-color: var(--kh-accent); }
@@ -877,14 +877,14 @@
   background: var(--kh-bg-float); border-radius: var(--kh-radius-md); box-shadow: var(--kh-shadow-lg);
   max-height: 360px; overflow-y: auto;
 }
-.kh-cs-row { display: flex; align-items: baseline; gap: 8px; padding: 7px 12px; cursor: pointer; font-size: 0.88rem; }
+.kh-cs-row { display: flex; align-items: baseline; gap: 8px; padding: 7px 12px; cursor: pointer; font-size: var(--kh-fs-lg); }
 .kh-cs-row.is-on, .kh-cs-row:hover { background: var(--kh-bg-hover); }
 .kh-cs-name { font-weight: 500; color: var(--kh-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kh-cs-code { color: var(--kh-text-secondary); font-size: 0.8rem; }
-.kh-cs-mkt { margin-left: auto; font-size: 0.76rem; }
-.kh-cs-none { padding: 9px 12px; font-size: 0.84rem; }
+.kh-cs-code { color: var(--kh-text-secondary); font-size: var(--kh-fs-md); }
+.kh-cs-mkt { margin-left: auto; font-size: var(--kh-fs-md); }
+.kh-cs-none { padding: 9px 12px; font-size: var(--kh-fs-lg); }
 /* 최근 고른 종목의 시장 묶음 이름 (2026-10-14 · stock-search.js 의 「최근 고른 종목」) */
-.kh-cs-grp { padding: 8px 12px 3px; font-size: 0.74rem; font-weight: 500; }
+.kh-cs-grp { padding: 8px 12px 3px; font-size: var(--kh-fs-md); font-weight: 500; }
 .kh-cs-grp ~ .kh-cs-grp { margin-top: 4px; border-top: 1px solid var(--kh-border); padding-top: 9px; }
 @media (max-width: 700px) {
   /* 좁은 화면 — 돋보기만 두고, 누르면 칸이 화면 위쪽에 가로로 펼쳐진다 */
@@ -906,7 +906,7 @@
 /* ── 장 상태 줄 ── */
 .kh-mkt {
   display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
-  font-size: 0.82rem; color: var(--kh-text-secondary);
+  font-size: var(--kh-fs-md); color: var(--kh-text-secondary);
   margin-bottom: 13px; padding-left: 4px;
 }
 .kh-mkt > span { display: inline-flex; align-items: center; gap: 7px; }
@@ -916,7 +916,7 @@
 .kh-mkt b.kh-mkt-note { color: var(--kh-text-primary); }
 .kh-chip {
   background: var(--kh-bg-surface); border-radius: var(--kh-radius-sm);
-  padding: 3px 8px; font-size: 0.73rem; color: var(--kh-text-secondary); font-weight: 500;
+  padding: 3px 8px; font-size: var(--kh-fs-sm); color: var(--kh-text-secondary); font-weight: 500;
 }
 .kh-chip.live { background: var(--kh-tag-news-dim); color: var(--kh-tag-news); }
 .kh-pdot {
@@ -961,13 +961,13 @@
 }
 .kh-ix-h { display: flex; align-items: center; gap: 8px; }
 .kh-ix-n {
-  font-size: 0.86rem; font-weight: 600; color: var(--kh-text-primary);
+  font-size: var(--kh-fs-lg); font-weight: 600; color: var(--kh-text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .kh-ix-h .kh-bd { margin-left: auto; flex-shrink: 0; }
 .kh-ix-b { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
 .kh-ix-v { font-size: 1.32rem; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; }
-.kh-ix-c { font-size: 0.8rem; font-weight: 500; margin-top: 2px; white-space: nowrap; }
+.kh-ix-c { font-size: var(--kh-fs-md); font-weight: 500; margin-top: 2px; white-space: nowrap; }
 /* 작은 추이선(.kh-ix-s)의 크기 규칙도 2026-09-17 에 지웠다.
    home.js 가 sparkSvg 를 아예 안 그리므로 붙는 요소가 없다 (아래 주석 참고). */
 
@@ -988,13 +988,13 @@
 .kh-idx > * { min-width: 0; }
 .kh-idx-main { padding: 18px 20px 14px; display: flex; flex-direction: column; }
 .kh-idx-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
-.kh-idx-head .kh-ic { width: 32px; height: 32px; font-size: 0.62rem; flex-shrink: 0; }
+.kh-idx-head .kh-ic { width: 32px; height: 32px; font-size: var(--kh-fs-sm); flex-shrink: 0; }
 .kh-idx-name { font-size: 1.28rem; font-weight: 700; white-space: nowrap; }
 /* 현재가와 등락률. 종목을 옮길 때마다 글자 수가 달라지는데, 이름이
    따라 밀리면 눈이 어지럽다. 그래서 이름은 nowrap 이고 이 칸이 남는 폭을 먹는다. */
-.kh-idx-v { font-size: 1.02rem; font-weight: 600; min-width: 0; }
+.kh-idx-v { font-size: var(--kh-fs-xl); font-weight: 600; min-width: 0; }
 .kh-idx-ai {
-  margin-left: auto; font-size: 0.8rem; color: var(--kh-accent);
+  margin-left: auto; font-size: var(--kh-fs-md); color: var(--kh-accent);
   background: var(--kh-accent-dim); border-radius: 999px; padding: 5px 12px;
   flex-shrink: 0;
 }
@@ -1031,7 +1031,7 @@
 .kh-idxp-s:last-child { border-bottom: 0; }
 .kh-idxp-h {
   display: flex; align-items: center; gap: 8px;
-  font-size: 0.9rem; font-weight: 700; margin-bottom: 7px;
+  font-size: var(--kh-fs-lg); font-weight: 700; margin-bottom: 7px;
 }
 .kh-idxp-h .kh-bd { margin-left: auto; }
 .kh-idxp-i { width: 19px; height: 19px; border-radius: 6px; flex-shrink: 0; }
@@ -1039,7 +1039,7 @@
 .kh-idxp-i.ac { background: var(--kh-accent-dim); }
 .kh-idxp-i.wn { background: var(--kh-tag-notice-dim); }
 .kh-idxp-i.mu { background: var(--kh-bg-surface); }
-.kh-idxp-b { font-size: 0.8rem; color: var(--kh-text-secondary); line-height: 1.7; }
+.kh-idxp-b { font-size: var(--kh-fs-md); color: var(--kh-text-secondary); line-height: 1.7; }
 
 /* 공시 칸만 제 안에서 굴러간다. 공시는 몇 건인지 미리 알 수 없어서,
    그냥 두면 이 칸이 길어진 만큼 패널이 차트보다 세로로 커진다. */
@@ -1095,7 +1095,7 @@
 .kh-ix-badge {
   width: 17px; height: 17px; flex-shrink: 0;
   border-radius: 4px; display: grid; place-items: center;
-  font-size: 0.6rem; font-weight: 700; letter-spacing: -0.02em;
+  font-size: var(--kh-fs-sm); font-weight: 700; letter-spacing: -0.02em;
   color: var(--kh-text-on-fill);
 }
 .kh-ix-badge.vix { background: var(--kh-text-muted); }
@@ -1108,12 +1108,12 @@
 /* ── 순위표 더 보기 ── */
 .kh-more {
   display: flex; justify-content: center; align-items: center;
-  padding: 14px 0 18px; font-size: 0.82rem; color: var(--kh-text-muted);
+  padding: 14px 0 18px; font-size: var(--kh-fs-md); color: var(--kh-text-muted);
 }
 .kh-more button {
   border: 0; font-family: inherit; cursor: pointer;
   background: var(--kh-bg-surface); color: var(--kh-text-secondary);
-  border-radius: 999px; padding: 9px 18px; font-size: 0.82rem; font-weight: 500;
+  border-radius: 999px; padding: 9px 18px; font-size: var(--kh-fs-md); font-weight: 500;
 }
 .kh-more button:hover { background: var(--kh-bg-active); }
 
@@ -1142,7 +1142,7 @@
 /* 장 상태 줄 옆의 상승·보합·하락 종목 수 (2026-09-15 지시로 우측 패널에서 옮겨 옴) */
 .kh-mkt-cnt { display: inline-flex; align-items: center; gap: 6px; }
 .kh-mkt-cnt b { font-weight: 700; }
-.kh-mkt-cnt .kh-mut { font-size: 0.76rem; margin-right: 4px; }
+.kh-mkt-cnt .kh-mut { font-size: var(--kh-fs-md); margin-right: 4px; }
 
 /* 넥장(넥스트레이드) — 정규장은 아니지만 거래가 도는 시간이라
    장마감 회색과는 구분해 준다 (2026-09-15) */
@@ -1157,7 +1157,7 @@
   padding-left: 14px; border-left: 1px solid var(--kh-border-strong);
 }
 .kh-mkt-fut b { font-weight: 700; }
-.kh-mkt-fut .kh-mut { font-size: 0.76rem; }
+.kh-mkt-fut .kh-mut { font-size: var(--kh-fs-md); }
 .kh-fut-1 { display: inline-flex; align-items: center; gap: 5px; margin-right: 12px; }
 .kh-fut-1:last-child { margin-right: 0; }
 
@@ -1167,7 +1167,7 @@
 .kh-idx-per button {
   border: 0; font-family: inherit; cursor: pointer;
   background: none; color: var(--kh-text-muted);
-  font-size: 0.82rem; font-weight: 500;
+  font-size: var(--kh-fs-md); font-weight: 500;
   padding: 6px 11px; border-radius: var(--kh-radius-sm);
 }
 .kh-idx-per button:hover { background: var(--kh-bg-surface); color: var(--kh-text-secondary); }
@@ -1176,7 +1176,7 @@
 }
 
 /* 연중 최저·최고 막대 */
-.kh-yr { display: flex; align-items: center; gap: 9px; font-size: 0.8rem; }
+.kh-yr { display: flex; align-items: center; gap: 9px; font-size: var(--kh-fs-md); }
 .kh-yr-bar {
   position: relative; flex: 1; height: 5px; border-radius: 3px;
   background: linear-gradient(90deg, var(--kh-down-dim), var(--kh-up-dim));
@@ -1196,11 +1196,11 @@
 .kh-head-yr {
   display: flex; align-items: center; gap: 9px;
   margin-left: 10px; min-width: 0;
-  font-size: 0.74rem; color: var(--kh-text-muted);
+  font-size: var(--kh-fs-md); color: var(--kh-text-muted);
 }
 .kh-head-yr .kh-yr { margin: 0; gap: 7px; }
 .kh-head-yr .kh-yr-bar { width: 84px; }
-.kh-head-yr .kh-num { font-size: 0.74rem; }
+.kh-head-yr .kh-num { font-size: var(--kh-fs-md); }
 .kh-head-yr .kh-head-yr-note {
   margin-top: 0; white-space: nowrap; color: var(--kh-text-secondary);
 }
@@ -1220,7 +1220,7 @@
 .kh-sec-card > .kh-sched-h {
   padding: 0 18px;
   display: flex; align-items: center; justify-content: space-between;
-  font-size: 0.88rem; font-weight: 700; margin-bottom: 9px;
+  font-size: var(--kh-fs-lg); font-weight: 700; margin-bottom: 9px;
 }
 /* 굴러가는 칸은 왼쪽만 띄운다 — 오른쪽은 막대 자리다.
    높이를 정해 둔다 — 안 정하면 목록만큼 카드가 길어져 밑선이 내려간다.
@@ -1243,7 +1243,7 @@
 .kh-nwdc-tabs { display: flex; align-items: center; gap: 12px; }
 .kh-nwdc-t {
   border: 0; background: none; padding: 0; cursor: pointer;
-  font-family: inherit; font-size: 0.88rem; font-weight: 700;
+  font-family: inherit; font-size: var(--kh-fs-lg); font-weight: 700;
   /* 흰 바탕이므로 글씨는 검정. 고르지 않은 쪽만 흐리게 둔다
      (CLAUDE.md 「색 바탕 위의 글씨」 — 흰 바탕엔 검정). */
   color: var(--kh-text-muted);
@@ -1267,21 +1267,21 @@
 }
 /* 투자자 정보 머리줄의 「자세히 ›」(출처 배지 자리 · 2026-10-15 투자자 지표 모달) — 위와 같은 까닭으로 여백만 줄인다.
    그대로 두면 머리줄이 22 → 30px 로 두꺼워졌다(실측) */
-.kh-iv-s .kh-p3-h .kh-fold { padding: 2px 9px; font-size: 0.72rem; }
+.kh-iv-s .kh-p3-h .kh-fold { padding: 2px 9px; font-size: var(--kh-fs-sm); }
 
 
 /* 매물대 칸 — 순위표에서 뺀 셋 (2026-09-17) */
 .kh-vol-rows { display: flex; flex-direction: column; gap: 9px; margin-top: 2px; }
-.kh-vol-row { display: flex; align-items: center; font-size: 0.82rem; }
+.kh-vol-row { display: flex; align-items: center; font-size: var(--kh-fs-md); }
 .kh-vol-row > span:first-child { color: var(--kh-text-muted); }
 /* 어림값이라는 표시. 숨기지 않고 작게 붙여 둔다 */
 .kh-vol-row i {
-  font-style: normal; font-size: 0.68rem;
+  font-style: normal; font-size: var(--kh-fs-sm);
   color: var(--kh-text-dim); margin-left: 3px;
 }
 .kh-vol-row > b { margin-left: auto; font-weight: 600; }
-.kh-vol-row > .kh-mut { margin-left: auto; font-size: 0.78rem; }
-.kh-vol-note { margin-top: 9px; font-size: 0.74rem; }
+.kh-vol-row > .kh-mut { margin-left: auto; font-size: var(--kh-fs-md); }
+.kh-vol-note { margin-top: 9px; font-size: var(--kh-fs-md); }
 
 
 /* ── 지수 (2026-09-17 배치) ────────────────
@@ -1299,7 +1299,7 @@
 }
 .kh-ix:hover { background: none; box-shadow: none; transform: none; }
 /* 글자 크기는 아래 「현물 · 선물 · 야간」 줄과 같다 (.kh-mkt 의 0.82rem) */
-.kh-ix, .kh-ix-n, .kh-ix-v, .kh-ix-c { font-size: 0.82rem; }
+.kh-ix, .kh-ix-n, .kh-ix-v, .kh-ix-c { font-size: var(--kh-fs-md); }
 .kh-ix-v { font-weight: 500; }
 .kh-ix-h { gap: 6px; }
 .kh-ix-b { display: flex; align-items: baseline; gap: 7px; }
@@ -1360,7 +1360,7 @@
   width: 22px; height: 22px; padding: 0;
   border: 0; border-radius: 50%;
   background: var(--kh-bg-surface); color: var(--kh-text-secondary);
-  font-family: inherit; font-size: 0.95rem; line-height: 1;
+  font-family: inherit; font-size: var(--kh-fs-xl); line-height: 1;
   cursor: pointer;
 }
 .kh-ixbar-btn:hover { background: var(--kh-bg-active); }
@@ -1374,14 +1374,14 @@
   padding: 6px 10px;
   background: var(--kh-up-dim); color: var(--kh-up);
   border-radius: var(--kh-radius-sm);
-  font-size: 0.82rem; font-weight: 600;
+  font-size: var(--kh-fs-md); font-weight: 600;
 }
 
 /* 「자세히 ›」 — 눌러야 창이 뜨는 자리라 단추로 보이게 한다 */
 
 /* 「주요 지수」 카드 안 — 세로로 한 줄씩 */
 .kh-ix-chips { padding: 0; margin-left: auto; gap: 4px; flex-wrap: nowrap; }
-.kh-ix-chips .kh-chip { padding: 4px 9px; font-size: 0.73rem; }
+.kh-ix-chips .kh-chip { padding: 4px 9px; font-size: var(--kh-fs-sm); }
 /* `.kh-ix-scroll` 도 함께 지웠다 (2026-09-22). 카드 안에서 세로로
    굴리던 칸인데 카드가 없다. `.kh-ix-chips` 는 남긴다 —
    「지금 뜨는 산업」 카드가 같은 모양을 쓴다. */
@@ -1391,12 +1391,12 @@
    급상승·급하락의 거르는 기준과, 값이 묵었으면 몇 분 전인지도 여기 나온다. */
 .kh-sort-note {
   padding: 0 14px 8px;
-  font-size: 0.74rem; color: var(--kh-text-muted);
+  font-size: var(--kh-fs-md); color: var(--kh-text-muted);
 }
 .kh-sort-note b { font-weight: 600; }
 /* 「프리장」 칩 업종 띠 — 한 줄 · 넘치면 옆으로 민다(막대는 감춘다 — 가로로 미는 띠 · 글자가 잘려 더 있음을 안다) */
 .kh-pre-sec { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; white-space: nowrap;
-  font-size: 0.74rem; color: var(--kh-text-secondary); padding: 0 14px 8px; margin-top: -4px; }
+  font-size: var(--kh-fs-md); color: var(--kh-text-secondary); padding: 0 14px 8px; margin-top: -4px; }
 .kh-pre-sec::-webkit-scrollbar { display: none; }
 .kh-pre-sec-it b { font-weight: 600; }
 /* 아직 채우는 중 — 파랑. 다 차면 사라진다 */
@@ -1405,13 +1405,13 @@
 /* ══ AI 분석 (2026-09-21 지시) ═══════════════════════════════
    세션이 써 둔 글을 읽어 보여주는 칸이다. 줄이 셋(값·수급·뉴스)이고
    각 줄은 짧은 이름표와 문장으로 나뉜다. */
-.kh-ai-p { display: flex; gap: 8px; padding: 5px 0; font-size: 0.78rem; line-height: 1.65; }
+.kh-ai-p { display: flex; gap: 8px; padding: 5px 0; font-size: var(--kh-fs-md); line-height: 1.65; }
 .kh-ai-p + .kh-ai-p { border-top: 1px solid var(--kh-border); }
 .kh-ai-l {
   flex: none; width: 34px; font-weight: 700; color: var(--kh-text-secondary);
-  font-size: 0.74rem; padding-top: 1px;
+  font-size: var(--kh-fs-md); padding-top: 1px;
 }
-.kh-ai-s .kh-todo { margin-top: 8px; font-size: 0.74rem; }
+.kh-ai-s .kh-todo { margin-top: 8px; font-size: var(--kh-fs-md); }
 
 /* **칸 높이를 못 박는다** (2026-09-21 지적 — "ai분석 넣으면서 세로로 거기가
    길어져서 길어진거잖아").
@@ -1429,9 +1429,9 @@
 /* 언제 쓴 글인지. 값은 움직이는데 글은 안 움직이므로 시각을 늘 보인다 */
 #kh-ai-when { font-variant-numeric: tabular-nums; }
 /* 낡은 글 · 더 새 글로 잇기 (2026-11-06 재권님 「나」 — 한 달 전 글이 새 글처럼 보였다). 새 클래스만 더함 — Insight 화면은 안 쓴다 */
-.kh-ai-old { font-size: 0.74rem; font-weight: 700; color: var(--kh-text-secondary); padding: 2px 0 4px; }
+.kh-ai-old { font-size: var(--kh-fs-md); font-weight: 700; color: var(--kh-text-secondary); padding: 2px 0 4px; }
 .kh-ai-stale { opacity: 0.5; }
-.kh-ai-rep { display: block; font-size: 0.76rem; font-weight: 700; color: var(--kh-accent); padding: 2px 0 4px; text-decoration: none; }
+.kh-ai-rep { display: block; font-size: var(--kh-fs-md); font-weight: 700; color: var(--kh-accent); padding: 2px 0 4px; text-decoration: none; }
 
 /* ══ 폰 (2026-09-22 지시 — 「모바일에서 이렇게 보여지도록」) ═══════════
    **맨 끝에 둔다.** 특이도가 같으면 뒤가 이긴다. 같은 날 이 규칙을 두 번
@@ -1528,7 +1528,7 @@
     position: absolute; top: 7px; right: 8px; z-index: 3;
     width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%;
     background: var(--kh-bg-surface); color: var(--kh-text-secondary);
-    font-family: inherit; font-size: 0.78rem; line-height: 1; cursor: pointer;
+    font-family: inherit; font-size: var(--kh-fs-md); line-height: 1; cursor: pointer;
   }
   /* **천장을 풀어야 접힌다.** `.kh-rank > .kh-card` 가 255px 로 못 박혀 있어
      그대로 두면 접어도 카드가 그 높이로 남는다. */
@@ -1732,13 +1732,13 @@
 .kh-idx-main.is-hm > .kh-foldbtn { z-index: 31; }
 .kh-hm-head { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
 .kh-hm-title { font-size: 1.28rem; font-weight: 700; color: var(--kh-text-primary); white-space: nowrap; }
-.kh-hm-sub { font-size: 0.8rem; color: var(--kh-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kh-hm-sub { font-size: var(--kh-fs-md); color: var(--kh-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kh-hm-area { position: relative; flex: 1; min-height: 0; overflow: hidden; }
-.kh-hm-foot { font-size: 0.75rem; color: var(--kh-text-secondary); }
+.kh-hm-foot { font-size: var(--kh-fs-md); color: var(--kh-text-secondary); }
 .kh-hm-empty { padding: 40px 0; text-align: center; color: var(--kh-text-secondary); }
-.kh-hm-mk { position: absolute; top: 0; font-size: 0.75rem; font-weight: 700; color: var(--kh-text-secondary); }
+.kh-hm-mk { position: absolute; top: 0; font-size: var(--kh-fs-md); font-weight: 700; color: var(--kh-text-secondary); }
 .kh-hm-sec { position: absolute; outline: 1px solid var(--kh-bg); pointer-events: none; }
-.kh-hm-secn { position: absolute; font-size: 0.7rem; color: var(--kh-text-secondary); white-space: nowrap; overflow: hidden;
+.kh-hm-secn { position: absolute; font-size: var(--kh-fs-sm); color: var(--kh-text-secondary); white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; pointer-events: none; }
 .kh-hm-cell { position: absolute; border: 0; padding: 0; margin: 0; border-radius: 4px; cursor: pointer; font: inherit;
   display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden;
