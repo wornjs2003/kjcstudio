@@ -27,6 +27,7 @@ KIS 는 proxy.kis_get(예산 · 토큰은 그쪽) · 한 번 짓는 데 멀티 1
 """
 
 import json
+import os
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -72,8 +73,9 @@ def phase(now=None):
 
 def _universe():
     import dart
+    # 줄은 sqlite3.Row 라 `.get` 이 없다 — 11-09 까지 여기서 AttributeError 로 판이 한 번도 안 지어졌다(8765 로그 「짓다 멈춤」 · 개발2 잼)
     return [r["stock_code"] for r in dart.universe_rows(None)
-            if (r.get("stock_code") or "").isdigit() and len(r["stock_code"]) == 6]
+            if (r["stock_code"] or "").isdigit() and len(r["stock_code"]) == 6]
 
 
 def _prev_weekday(now):
@@ -201,7 +203,10 @@ def _rebuild(proxy, cfg):
         if _writer["on"] and not m.get("noTrade"):
             _save(proxy, m, ph == "closed")
     except Exception as e:
-        print("  [프리장] 짓다 멈춤 (%s)" % type(e).__name__, flush=True)
+        # 어디서 멈췄는지 함께 찍는다 — 이름만 찍어 11-09 에 까닭을 로그로 못 갈랐다
+        import traceback
+        tb = traceback.extract_tb(e.__traceback__)[-1]
+        print("  [프리장] 짓다 멈춤 (%s · %s:%s)" % (type(e).__name__, os.path.basename(tb.filename), tb.lineno), flush=True)
     finally:
         _build.release()
 
