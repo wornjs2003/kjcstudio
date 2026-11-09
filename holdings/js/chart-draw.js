@@ -118,7 +118,7 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
   bar.className = 'kh-draw';
   bar.style.right = (axisW + 6) + 'px';
   bar.innerHTML = Object.keys(ICON).map((k) =>
-    `<button type="button" class="kh-draw-b" data-draw="${k}" title="${TIP[k]}" aria-label="${TIP[k]}">${ICON[k]}</button>`).join('');
+    `<button type="button" class="kh-draw-b" data-draw="${k}" data-tip="${TIP[k]}" aria-label="${TIP[k]}">${ICON[k]}</button>`).join('');
   pane.appendChild(bar);
 
   const paintBar = () => {

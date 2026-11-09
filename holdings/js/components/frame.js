@@ -137,7 +137,7 @@ export function mountWatchSide(el, { activeCode } = {}) {
       </span>
       <button type="button" class="kh-wl-heart kh-heart is-on"
         data-fav="${s.code}" data-fav-name="${s.name}"
-        title="즐겨찾기에서 빼기">♥</button>
+        data-tip="즐겨찾기에서 빼기" aria-label="즐겨찾기에서 빼기">♥</button>
     </a>`;
     }).join('');
 

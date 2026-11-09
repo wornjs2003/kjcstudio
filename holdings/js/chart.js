@@ -1961,7 +1961,7 @@ export function createStockChart(container, candles, opts = {}) {
         const tag = document.createElement('div');
         tag.className = 'kh-pane-tag';
         tag.innerHTML =
-          '<span class="x" data-pane-close="' + p.key + '" title="닫기">✕</span>' +
+          '<span class="x" data-pane-close="' + p.key + '" data-tip="닫기" aria-label="닫기">✕</span>' +
           '<span class="nm" data-doc="' + p.key + '" data-tip-ref="#kh-ind-doc-' + p.key + '">' + def.label + ' (' + def.par + ')</span>' +
           '<span class="v" data-pane-v="' + p.key + '"></span>';
         el.appendChild(tag);

@@ -2067,7 +2067,7 @@ function paintSortNote() {
 function paintFavCell(td) {
   const on = isFav(td.dataset.fav);
   td.classList.toggle('is-fav', on);
-  td.title = on ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기';
+  td.dataset.tip = on ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기';
 }
 
 /* 그려 둔 순위 숫자에 동작을 건다. 표를 다시 그릴 때마다 부른다 */
@@ -2089,7 +2089,8 @@ function paintBigFav() {
   if (!btn || !btn.dataset.fav) return;
   const on = isFav(btn.dataset.fav);
   btn.classList.toggle('is-on', on);
-  btn.title = on ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기';
+  btn.dataset.tip = on ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기';
+  btn.setAttribute('aria-label', btn.dataset.tip);
   btn.setAttribute('aria-pressed', on ? 'true' : 'false');
 }
 $('kh-big-fav')?.addEventListener('click', (e) => {
@@ -2425,7 +2426,7 @@ function paintRows(priceMap) {
        차트 옆 패널에 보여주기로 했다 (지시). */
     return `<tr data-code="${s.code}" class="${s.code === selectedCode ? 'is-active' : ''}"${s.flip ? ' style="opacity:.55"' : ''}>
       <td class="kh-rk${isFav(s.code) ? ' is-fav' : ''}" data-fav="${s.code}"
-        data-fav-name="${s.name}" title="${isFav(s.code) ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기'}"
+        data-fav-name="${s.name}" data-tip="${isFav(s.code) ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기'}"
         >${s.rank}</td>
       <td class="l"><span class="kh-nm">
         ${iconHtml(s)}
@@ -3025,7 +3026,7 @@ function addModalActions(main, code) {
   const act = document.createElement('div');
   act.className = 'kh-head-act';
   act.innerHTML = `
-    <button class="kh-modal-x" title="닫기 (Esc)" aria-label="닫기">✕</button>`;
+    <button class="kh-modal-x" data-tip="닫기 (Esc)" aria-label="닫기">✕</button>`;
   act.querySelector('.kh-modal-x').addEventListener('click', closeModal);
   top.appendChild(act);
 }
