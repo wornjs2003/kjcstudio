@@ -6,7 +6,7 @@
 **개수를 여기 적지 않는다.** 자리가 없어질 수 있다 — 2026-10-06 에
 배포본 워커(`holdings/worker/`)를 지웠다. 아래 `SOURCES` 가 세는 자리다.
 
-    holdings/js/data/market.js    WATCHLIST          브라우저가 화면에 그린다
+    holdings/js/data/market.js    WATCHLIST_CODES    브라우저가 화면에 그린다(이름 · 색은 MARKET_STOCKS 에서 채운다 · 2026-11-09)
     holdings/server/dart.py       WATCH_CODES        로컬 서버가 텔레그램을 보낸다
 
 한쪽만 고치면 화면에는 있는데 알림이 안 온다. 어느 쪽도 오류를 내지 않아 눈으로는 못 찾는다.
@@ -46,7 +46,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))            # 저장소 루트
 
 # (표시 이름, 파일, 배열이 시작되는 문구)
 SOURCES = [
-    ("market.js  WATCHLIST",         "holdings/js/data/market.js",    "export const WATCHLIST = ["),
+    ("market.js  WATCHLIST_CODES",   "holdings/js/data/market.js",    "const WATCHLIST_CODES = ["),
     ("dart.py    WATCH_CODES",       "holdings/server/dart.py",       "WATCH_CODES = ["),
 ]
 
@@ -83,8 +83,8 @@ def read_array(rel, start):
 
 
 ITEM = re.compile(r"""code:\s*["'](\d{6})["']\s*,\s*name:\s*["']([^"']+)["']""")
+# 관심종목은 코드만 두고 MARKET_STOCKS 줄을 가져다 쓰므로(2026-11-09) 여기서 함께 센다
 LISTED_SOURCES = [
-    ("WATCHLIST",     "export const WATCHLIST = ["),
     ("MARKET_STOCKS", "export const MARKET_STOCKS = ["),
 ]
 
@@ -143,7 +143,7 @@ def listed(port):
     renamed = [(l, c, n, (got[c] or {}).get("name")) for l, c, n in want
                if c in got and (got[c] or {}).get("name") and (got[c] or {}).get("name") != n]
 
-    print("  market.js  WATCHLIST + MARKET_STOCKS   %d종목 (서버 %d · 응답 %d)" % (len(codes), port, len(got)))
+    print("  market.js  MARKET_STOCKS   %d종목 (서버 %d · 응답 %d)" % (len(codes), port, len(got)))
     if renamed:
         print()
         print("  봐야 할 자리 — 이름이 다릅니다 (막지 않습니다)")
