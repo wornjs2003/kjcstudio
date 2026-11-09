@@ -2878,7 +2878,18 @@ function findStock(code) {
   return rowList().find(s => s.code === code)
       || WATCHLIST.find(s => s.code === code)
       || EXTRA_STOCKS.get(code)
+      || anyListed(code)
       || null;
+}
+
+/* 거른 목록에서 빠진 종목도 찾는다 (2026-11-04 재권님 「장외 종목을 클릭했는데 차트가 다른게 나오네」).
+   장외 칩은 「오른 종목만」 거르는데 줄은 그려 둔 채 값만 바뀐다 — 0.00% 가 된 줄(SK)을 누르면 rowList 에 없어
+   paintBigChart 가 조용히 빠져나가, 큰 차트 · 이름은 앞 종목(NH투자증권)에 남고 값 · 뉴스만 새 종목이 됐다.
+   거르기 전 전체 목록(universe · 미국 표)에서 한 번 더 찾는다 */
+function anyListed(code) {
+  const x = (universe || []).find(s => s.code === code)
+      || Object.values(usRows || {}).flat().find(s => s && s.code === code);
+  return x ? { code: x.code, name: x.name, sector: '', brand: brandColor(x.code, x.name) } : null;
 }
 
 /* 미리보기 카드(paintPreview · drawPreviewChart)는 2026-09-17 에 지웠다.

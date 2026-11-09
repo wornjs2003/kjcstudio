@@ -68,7 +68,6 @@ import toss
 import macro
 import note_alert      # 시황 글 알림 — 자동 시황 글이 새로 써지면 텔레그램 한 통(2026-10-27 · server/note_alert.py)
 import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-25 · server/events.py 머리 주석)
-import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 · /api/kis/pre-flow(2026-11-05 · server/pre_flow.py)
 import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
 import claude_chat     # 홀딩스 오른쪽 Claude 창 — 맥미니 claude 를 한 번씩 부른다 · POST /api/claude/ask(2026-11-03 · server/claude_chat.py)
 import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 테마 · 수급(넥스트 5분 거래량 2배) (2026-10-27 · server/theme_flow.py)
@@ -78,6 +77,8 @@ import fear_greed      # 공포·탐욕 지수 — 코스피 · 삼성전자 · 
 import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스닥 150 중 전일 거래량 급등 · 투자전략 룰로 거르고 줄 세움 · /api/auto-watch(2026-11-05 · server/auto_watch.py)
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
 import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 · 색 = 등락률 · /api/kis/heatmap(2026-10-27 · server/heatmap.py)
+import flow_board       # 수급 정리판 — 투자자 갈래별 순매수(오늘 · 날마다 · 상위 종목)를 한 주소로 · /api/kis/flow-board(2026-11-04 · server/flow_board.py)
+import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 · /api/kis/pre-flow(2026-11-05 · server/pre_flow.py)
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
 import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
 import session_volume   # 시간대별 거래량 · 전일비 — 프리장 · 정규장 · 애프터 끝에 순위 종목 누적 거래량 저장 · /api/kis/vol-ratio(2026-11-05 · server/session_volume.py)
@@ -3652,6 +3653,8 @@ def fetch_investor_flow(cfg, market="KOSPI", days=INVESTOR_FLOW_DAYS):
                 "retail": _investor_side(r, "prsn"),
                 "foreign": _investor_side(r, "frgn"),
                 "inst": _investor_side(r, "orgn"),
+                # 기관 세부 · 기타법인 · 외국인 등록/미등록 — 같은 응답에 있다(docs/kis-sector-investor.md 3절 · 2026-11-04 flow_board 가 씀)
+                "detail": {p: _investor_side(r, p) for p in flow_board.DETAIL},
                 "source": "KIS",
             })
         rows.reverse()                       # 과거 → 최근
@@ -8972,6 +8975,24 @@ class Handler(SimpleHTTPRequestHandler):
                              "qtyUnit": "천주", "amtUnit": "백만원",
                              "cacheTtl": INVESTOR_FLOW_TTL},
                 })
+                return
+
+            if route == "flow-board":
+                # 수급 정리판 — Insight 「투자 전략」 (2026-11-04 · server/flow_board.py) · 새로 KIS 를 부르지 않고 이미 받는 셋을 모은다
+                try:
+                    days = max(1, min(int((qs.get("days") or [str(flow_board.DAYS_DEFAULT)])[0]), flow_board.DAYS_MAX))
+                    step = int((qs.get("step") or [str(flow_board.STEP_DEFAULT)])[0])
+                except ValueError:
+                    self._send_json({"ok": False, "error": "days · step 은 숫자입니다."}, 400)
+                    return
+                if step not in intraday_flow.STEPS:
+                    self._send_json({"ok": False, "error": "step 은 %s 중 하나입니다." % " · ".join(map(str, intraday_flow.STEPS))}, 400)
+                    return
+                self._send_json({"ok": True, "data": flow_board.board(sys.modules[__name__], cfg, days, step),
+                                 "meta": {"days": days, "step": step, "amtUnit": "백만원", "qtyUnit": "천주",
+                                          "today": "코스피만 · 장중 1분마다 쌓은 누계(intraday_flow)",
+                                          "daysNote": "확정치 · 과거→최근", "top": "가집계 — 외국인 09:30 · 11:20 · 13:20 · 14:30 / 기관 10:00 · 11:20 · 13:20 · 14:30",
+                                          "cacheTtl": flow_board.CACHE_TTL}})
                 return
 
             # 홈 실시간 순위 「매수」 칩 — 외국인 · 기관 · 프로그램이 함께 사는 종목 (2026-11-05 · `fetch_joint_buy`)
