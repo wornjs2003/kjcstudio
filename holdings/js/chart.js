@@ -2473,6 +2473,7 @@ export function createStockChart(container, candles, opts = {}) {
       };
       candles[i] = next;
       overlaid = next;
+      if (last === provisional) provisional = next;   // 먼저 세운 봉에 시세가 또 얹혀도 appendBars 가 그 봉을 알아보게 (qa 검수 11-09)
       try {
         candleSeries.update({
           time: toChartTime(next.ts, period),
