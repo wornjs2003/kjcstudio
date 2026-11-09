@@ -62,15 +62,11 @@
    **공시·뉴스는 그대로 받는다** (지시 — 「공시는 받자」). 그래서 `dart.py` 에는
    **일부러 남겨 두었다** — 빠뜨린 것이 아니다.
    `MARKET_STOCKS` 에도 그대로 있다(종목 정보라 빼면 이름·색이 사라진다). */
-export const WATCHLIST = [
-  { code: '005930', name: '삼성전자',            sector: '반도체', brand: '#1428a0' },
-  { code: '000660', name: 'SK하이닉스',          sector: '반도체', brand: '#e5231b' },
-  { code: '035420', name: 'NAVER',               sector: 'IT', brand: '#03c75a' },
-  { code: '005380', name: '현대차',              sector: '자동차', brand: '#002c5f' },
-  { code: '373220', name: 'LG에너지솔루션',      sector: '2차전지', brand: '#a50034' },
-  { code: '207940', name: '삼성바이오로직스',    sector: '바이오', brand: '#0d4a9a' },
-  { code: '068270', name: '셀트리온',            sector: '바이오', brand: '#00a0e9' },
-];
+/* 관심종목은 **코드만** 둔다 (2026-11-09 재권님 「응 해놔」). 이름 · 업종 · 색 · 시장은 아래 `MARKET_STOCKS` 한 곳이다 —
+   전에는 일곱이 두 목록에 따로 적혀 관심 쪽에만 시장 칸이 없었고, 주식 회고(review.js)가 그 칸을 빈 값으로 읽었다
+   (「같은 값은 한 곳에만 둔다」). 차례는 이 목록 차례다. 서버 쪽 같은 목록은 dart.py WATCH_CODES —
+   대조는 holdings/tools/check-watchlist-sync.py 가 이 배열을 읽는다. 채운 `WATCHLIST` 는 MARKET_STOCKS 아래에 있다. */
+const WATCHLIST_CODES = ['005930', '000660', '035420', '005380', '373220', '207940', '068270'];
 
 /* 「자주 보는 종목」(PRIORITY_CODES) 은 2026-09-18 에 없앴다.
    그 둘만 5초, 나머지는 30초로 받았는데 **같은 화면에서 종목마다 기준
@@ -125,6 +121,13 @@ export const MARKET_STOCKS = [
   { code: '086520', name: '에코프로',            market: 'KOSDAQ', sector: '2차전지', brand: '#004097' },
   { code: '042700', name: '한미반도체',          market: 'KOSPI', sector: '반도체', brand: '#14429d' },
 ];
+
+/* 관심종목 — 위 `WATCHLIST_CODES` 차례로 `MARKET_STOCKS` 줄을 가져온다. 전체 목록에 없는 코드는 짐작해 채우지 않고 빼며 콘솔에 알린다. */
+export const WATCHLIST = WATCHLIST_CODES.flatMap((code) => {
+  const s = MARKET_STOCKS.find((x) => x.code === code);
+  if (!s) console.error('[market.js] 관심종목 ' + code + ' 이 MARKET_STOCKS 에 없습니다 — 뺐습니다');
+  return s ? [s] : [];
+});
 
 /* ── 차트 기간 버튼 ── */
 /* 차트 기간 — **한 곳에서만 정한다.**
