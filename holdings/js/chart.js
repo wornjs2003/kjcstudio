@@ -357,6 +357,18 @@ function liveOverlayHours(now = new Date()) {
   return false;
 }
 
+/* 지금 시각이 드는 분봉 칸의 시작 — 서버 ts 와 같은 꼴(한국 시각 'YYYYMMDDHHMM'). 미국 분봉도 서버가 한국 시각으로 적는다.
+   분봉이 아니면 null. updateLast 가 「경계를 넘었나」 를 볼 때만 쓴다 */
+const SLOT_MIN = { '1m': 1, '5m': 5 };
+function nowSlot(period, now = new Date()) {
+  const n = SLOT_MIN[period];
+  if (!n) return null;
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit',
+    day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now).map((x) => [x.type, x.value]));
+  const mm = String(Math.floor(Number(p.minute) / n) * n).padStart(2, '0');
+  return `${p.year}${p.month}${p.day}${p.hour}${mm}`;
+}
+
 /* 서버 ts → 라이브러리 시간 형식
    일/주/월/년봉: 'YYYY-MM-DD'
    분봉: UNIX 초 (같은 날 안에서 시각을 구분해야 하므로) */
@@ -983,6 +995,7 @@ export function createStockChart(container, candles, opts = {}) {
   let lastLive = null;          // 마지막으로 받은 시세 — 서버 봉을 덧붙여 맨 오른쪽이 서버 값으로 돌아가면 다시 얹는다
   let serverLast = null;        // 시세를 얹기 전 서버가 준 맨 오른쪽 봉 — 아침 7시에 정규장 종가로 되돌릴 때 쓴다
   let overlaid = null;          // updateLast 가 얹어 만든 봉 — 이것이 아니면 맨 오른쪽은 서버가 새로 준 봉이다
+  let provisional = null;       // updateLast 가 경계를 넘어 먼저 세운 분봉 — 서버 봉이 오면 갈아 끼운다
   let liveVol = null;           // 마지막 시세의 하루 누적 거래량 — 분봉 끝 봉에 그 차이를 더한다(매물대가 바로 따라오게)
   let drawnCode = opts.code || null;   // 지금 그린 종목 — setData 가 다른 종목을 받을 때만 위 값을 지운다
   const priceLines = [];
@@ -2270,7 +2283,7 @@ export function createStockChart(container, candles, opts = {}) {
          (qa 검수 2026-10-15). 같은 종목을 다시 그릴 때(기간 바꿈 · 다시 받기)는 그대로 둔다. 종목을 모르면(code 없이 부름) 지운다 */
       if (!code || code !== drawnCode) { lastLive = null; liveVol = null; api.prevClose = null; }
       drawnCode = code || null;
-      serverLast = null; overlaid = null;   // 새 서버 봉이 왔다 — 앞 종목 · 앞 판의 되돌릴 봉을 버린다 (qa 2026-10-15 · 7~9시 삼성 → 하닉이 삼성 봉으로 덮임)
+      serverLast = null; overlaid = null; provisional = null;   // 새 서버 봉이 왔다 — 앞 종목 · 앞 판의 되돌릴 봉을 버린다 (qa 2026-10-15 · 7~9시 삼성 → 하닉이 삼성 봉으로 덮임)
       priceLines.length = 0;
       remap();
       build();
@@ -2293,6 +2306,14 @@ export function createStockChart(container, candles, opts = {}) {
      * 돌려주는 값: 고친 봉 수(0 이면 그릴 것이 없었다) · 통째였으면 -1. */
     appendBars(bars) {
       if (!bars || !bars.length || !candles.length) return 0;
+      /* 화면이 먼저 세운 봉(updateLast)이 끝에 있는데 서버가 그 앞 칸을 고쳐 보내면 — 서버가 아직 새 칸을 안 받은 때다 —
+         그 봉을 잠시 내려놓고 앞 칸을 끝 봉으로 고친 뒤 다시 얹는다. 안 그러면 앞 칸이 「끝이 아닌 자리」 가 되어 통째로 다시 그린다.
+         서버가 그 칸(이나 그 뒤)을 보내면 서버 봉이 이긴다 */
+      let held = null;
+      if (provisional && candles[candles.length - 1] === provisional && bars.some((b) => b && b.ts && b.ts < provisional.ts)) {
+        held = candles.pop();
+        provisional = null;
+      }
       const same = (a, b) => a.open === b.open && a.high === b.high && a.low === b.low
         && a.close === b.close && a.volume === b.volume;
       const at = new Map(candles.map((c, i) => [c.ts, i]));
@@ -2318,17 +2339,27 @@ export function createStockChart(container, candles, opts = {}) {
         if (lastLive) api.updateLast(lastLive);   // 맨 오른쪽을 지금 시세로 (qa 검수 · 주봉 「현재」 가 서버 봉 값)
         return -1;
       }
-      if (!tail.length) return 0;
+      if (!tail.length && !held) return 0;
       for (const b of tail) {
         if (b.ts === candles[candles.length - 1].ts) candles[candles.length - 1] = b;
         else candles.push(b);
+        if (held) continue;                  // 내려놓은 봉이 있으면 시리즈는 아래에서 한 번에 다시 넣는다
         try {
           candleSeries.update({ time: toChartTime(b.ts, period), open: b.open, high: b.high, low: b.low, close: b.close });
         } catch { /* 칸이 아직 없다 */ }
       }
+      if (held) {
+        if (!bars.some((b) => b && b.ts && b.ts >= held.ts)) { candles.push(held); provisional = held; }
+        /* 시리즈 끝에 화면이 세운 봉이 있어 앞 칸은 update 로 못 고친다(라이브러리는 끝 봉만 고친다) — 봉 시리즈만 다시 넣는다 */
+        try {
+          candleSeries.setData(candles.map((c) => ({
+            time: toChartTime(c.ts, period), open: c.open, high: c.high, low: c.low, close: c.close,
+          })));
+        } catch { /* 칸이 아직 없다 */ }
+      }
       /* 매물대를 켜 세로 범위를 굳혀 두었으면(lockPriceRange) 새 봉이 그 밖으로 나갈 수 있다 — 그만큼만 넓힌다.
          통째로 다시 재면 켤 때 굳힌 뜻(안 움직임)이 깨진다 */
-      if (vpRange) {
+      if (vpRange && tail.length) {
         const hi = Math.max(...tail.map((b) => b.high)), lo = Math.min(...tail.map((b) => b.low));
         if (hi > vpRange.max || lo < vpRange.min) {
           vpRange = { min: Math.min(vpRange.min, lo), max: Math.max(vpRange.max, hi) };
@@ -2356,7 +2387,7 @@ export function createStockChart(container, candles, opts = {}) {
       syncing = wasSync;
       paintPaneTags(candles.length - 1);
       if (lastLive) api.updateLast(lastLive);     // 덧붙인 서버 봉이 맨 오른쪽을 서버 값으로 돌려놓았다 — 지금 시세로
-      return tail.length;
+      return tail.length || 1;
     },
 
     resetView(bars) {
@@ -2416,6 +2447,20 @@ export function createStockChart(container, candles, opts = {}) {
       if (MINUTE_PERIODS.has(period) && Number.isFinite(cum)) {
         if (liveVol != null && cum > liveVol) addVol = cum - liveVol;
         liveVol = cum;
+      }
+      /* **분봉 경계를 넘었으면 새 봉을 먼저 세운다** (2026-11-09 재권님 「5분봉 그리는게 5분이 됬을때 바로 적용이 안되는거 같은데」
+         → 「응」). 서버는 5분봉을 30초마다 받아 경계 뒤 10~30초 늦게 새 봉을 낸다(11-09 10:55 · 11:00 · 11:05 잼 — 12 · 27 · 10초).
+         그 사이 시세를 끝 봉에 얹으면 경계 뒤 체결이 앞 봉에 쌓였다. 지금 시각 칸이 끝 봉 칸보다 뒤이고 **거래량이 늘었을 때만**
+         (진짜 체결 — 창을 처음 열 때 · 장 밖의 묵은 시세로는 안 세운다) 그 시세로 새 봉을 붙인다. 서버 봉이 오면 appendBars 가
+         같은 칸을 서버 값으로 갈아 끼운다. KIS 호출은 늘지 않는다 */
+      if (addVol > 0 && String(last.ts).length >= 12) {
+        const slot = nowSlot(period);
+        if (slot && slot > String(last.ts)) {
+          const bar = { ts: slot, open: px, high: px, low: px, close: px, volume: addVol };
+          provisional = bar;
+          api.appendBars([bar]);   // 봉 · 아래 칸 · 겹침을 덧붙이기 길 그대로 붙인다
+          return;
+        }
       }
       if (last.close === px && !addVol) return;   // 안 움직였으면 그릴 것이 없다
       const next = {
