@@ -70,5 +70,6 @@ async function draw() {
   box.innerHTML = rows.map((t) => `<div>⚠ ${t}</div>`).join('');
 }
 
+css();          // 종목 상태 칩(stock-detail.js)도 이 파일의 모양을 쓴다 — 띠가 없을 때도 싣는다
 draw();
 watch({ url: () => URL, onChange: draw, key: KEY, fallbackMs: FALLBACK_MS });
