@@ -7,7 +7,7 @@ if (box) {
   box.className = 'in-find';
   box.innerHTML = `<input type="search" class="in-find-q" placeholder="이 화면에서 찾기 — 예: 산업 성장성" aria-label="이 화면에서 찾기">
     <button type="button" class="in-find-go">찾기</button>
-    <button type="button" class="in-find-nav" data-d="-1" aria-label="앞 자리">▲</button><button type="button" class="in-find-nav" data-d="1" aria-label="다음 자리">▼</button>
+    <button type="button" class="in-find-nav" data-d="-1" aria-label="앞 자리" data-tip="앞 자리">▲</button><button type="button" class="in-find-nav" data-d="1" aria-label="다음 자리" data-tip="다음 자리">▼</button>
     <span class="in-find-n" aria-live="polite"></span>`;
   const q = box.querySelector('.in-find-q'), n = box.querySelector('.in-find-n');
   let hits = [], cur = -1, last = '';
