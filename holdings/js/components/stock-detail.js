@@ -139,7 +139,12 @@ export function mountStockDetail(host, { view, onOne } = {}) {
     const pwHtml = isUsCode(code) || !pwHere ? '' : `
       <span class="kh-dt-i" title="체결강도 — 100 보다 크면 사는 쪽 체결이 많습니다"><span class="kh-dt-l">체결강도</span><b class="kh-dt-pw ${pwOk ? signClass(pw - 100) : 'kh-mut'}"${pwBg ? ` style="background:${pwBg}"` : ''}>${pwOk ? pw.toFixed(2) : '—'}</b></span>`;
 
-    host.innerHTML = `${pwHtml}
+    /* 종목 상태 칩 — 거래정지 · 관리종목 · 투자주의/경고/위험 · 단기과열 · 정리매매 · 상한가 · 하한가 (2026-11-09 · 이벤트 대응 ④⑤⑥ · 재권님 「응」).
+       고르는 셈은 서버(kis_proxy.py `stock_status`) — 화면은 받은 글 그대로. 해당될 때만 줄 맨 앞에 붙는다(그때만 줄이 그만큼 길어진다) */
+    const st = Array.isArray(src.status) ? src.status : [];
+    const stHtml = st.length ? `<span class="kh-dt-st">${st.map((x) => `<span class="kh-st-chip ${x.k === 'up' ? 'up' : x.k === 'down' ? 'down' : 'danger'}">${x.t}</span>`).join('')}</span>` : '';
+
+    host.innerHTML = `${stHtml}${pwHtml}
       <span class="kh-dt-i" title="${exact ? '서버가 준 실제 거래대금입니다'
         : '현재가 × 거래량으로 어림한 값입니다'}">
         <span class="kh-dt-l">거래대금${exact ? '' : '<i>어림</i>'}</span><b>${amt}</b></span>
