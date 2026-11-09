@@ -86,7 +86,7 @@ def fetch_un_volumes(proxy, cfg, codes):
 def _universe():
     import dart
     return [r["stock_code"] for r in dart.universe_rows(None)
-            if (r.get("stock_code") or "").isdigit() and len(r["stock_code"]) == 6]
+            if (r["stock_code"] or "").isdigit() and len(r["stock_code"]) == 6]   # sqlite3.Row — .get 없음(11-09 qa · 11-05 부터 여기서 멈췄다)
 
 
 def snap(proxy, cfg, day, bound):
