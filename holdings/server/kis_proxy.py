@@ -4386,7 +4386,10 @@ def fetch_asking(cfg, code):
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
-        {"FID_COND_MRKT_DIV_CODE": MARKET_DIV_CHART, "FID_INPUT_ISCD": code},
+        # 넥스트레이드에 없는 종목(우선주 · ETF)은 KRX(J) — 장 후 UN 합이 J 보다 훨씬 작게 왔다(11-09 15:43 · 005935 매도 J 47,126 · UN 12,258 ·
+        # 069500 매수 J 140,960 · UN 36,063 · 1호가는 같음 · qa 검수). 그날 분봉에서 UN 이 비어 J 로 받은 종목(_UN_THIN)을 그대로 쓴다 — 호출 안 늚
+        {"FID_COND_MRKT_DIV_CODE": "J" if _UN_THIN.get(code) == datetime.now(KST).strftime("%Y%m%d") else MARKET_DIV_CHART,
+         "FID_INPUT_ISCD": code},
         "FHKST01010200",
     )
     o = data.get("output1") or {}
@@ -6152,7 +6155,7 @@ def _minutes_need_day(code, period, rows, gap_check=True):
 
 
 CARRY_CLOSE_FROM, CARRY_CLOSE_TO = "1520", "1535"   # flatten_carried — 이 시각에 시작한 되풀이는 옮겨 실린 것
-CARRY_MIN_RUN = 4                                  # flatten_carried — 이 칸 수 이상 이어진 되풀이도
+CARRY_MIN_RUN = 5                                  # flatten_carried — 이 칸 수 이상 이어진 되풀이도(토스로 맞춘 것은 11-06 다섯 칸뿐 · qa 11-09)
 
 
 def flatten_carried(rows):
@@ -6177,7 +6180,7 @@ def flatten_carried(rows):
     (000080 10-21 16:00 종가 15,790 → 15,800). 그 칸이 옮겨 실린 것인지는 토스 대조가 없다 — 대조한 것은 아래 둘뿐이다.
 
         CARRY_CLOSE_FROM ~ TO   15:20 ~ 15:35 에서 시작한 되풀이 — 종가 단일가 · 넥스트레이드 쉼이라 체결이 날 수 없다(324 묶음)
-        CARRY_MIN_RUN 칸 이상    넷 칸 넘게 이어진 되풀이 — 11-06 거래 정지 구간(09:05 ~ 09:25 · 다섯 칸 · 21 종목) 같은 것(36 묶음)
+        CARRY_MIN_RUN 칸 이상    다섯 칸 이상 이어진 되풀이 — 11-06 거래 정지 구간(09:05 ~ 09:25 · 다섯 칸 · 21 종목) 같은 것(36 묶음)
 
     그 밖(둘 · 세 칸)은 받은 그대로 둔다.
     """
