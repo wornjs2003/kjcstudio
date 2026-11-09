@@ -241,6 +241,12 @@ def _restore(proxy, day):
         return                       # 표가 아직 없음
     for name, row in rows:
         ev = json.loads(row)
+        if name == SYS:                  # 서버를 다시 켤 때 열려 있던 장애 — 되살려야 회복 때 끝 시각을 적는다(qa 검수 11-09)
+            x = _sys.get(ev.get("what"))
+            if x is not None and not ev.get("end"):
+                x["ev"] = ev
+                x["since"] = datetime.strptime(day + ev["at"], "%Y%m%d%H:%M:%S").replace(tzinfo=KST)
+            continue
         m = _st["m"].get(name)
         if m is None:
             continue
@@ -313,14 +319,21 @@ def _kind_tick(proxy, port, day):
         _save(proxy, day, name, typ, ev)
 
 
+def _ensure_day(proxy, day):
+    """그날 처음이면(서버를 막 켰거나 날이 바뀜) 기억을 비우고 표에서 되살린다 — 서킷 셈 · 장애 셈 어느 쪽이 먼저 불러도. _lock 안에서 부른다."""
+    if _st["day"] != day:
+        _fresh(day)
+        for x in _sys.values():
+            x.update(since=None, ev=None)
+        _restore(proxy, day)
+
+
 def tick(proxy, cfg, port, now=None):
     now = now or _now()
     _proxy[0] = proxy
     day = now.strftime("%Y%m%d")
     with _lock:
-        if _st["day"] != day:
-            _fresh(day)
-            _restore(proxy, day)
+        _ensure_day(proxy, day)
         if not market_hours.in_regular(proxy, now):     # 휴장일 · 바뀐 시각(수능날 등)을 따른다 — 장 시각 한 곳
             return
         for code, name in MARKETS:
@@ -373,6 +386,8 @@ def sys_check(name, bad, now):
 
 def sys_tick(proxy, port, now=None):
     now = now or _now()
+    with _lock:
+        _ensure_day(proxy, now.strftime("%Y%m%d"))
     t = market_hours.today(proxy, now=now)
     hm = now.strftime("%H%M")
     if t["open"] is False or not (t["pre"][0] <= hm < t["after"][1]):
