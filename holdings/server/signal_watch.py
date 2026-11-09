@@ -77,7 +77,7 @@ NEED_BARS = 120        # 판정에 쓸 봉 수. MACD 가 26+9 를 쓰므로 넉�
 
 BB_PERIOD, BB_MULT = 20, 2      # 볼린저 — chart.js 와 같은 값
 RSI_PERIOD = 14                 # Wilder
-RSI_LOW = 30                    # **바닥** — 이 선을 **위로** 뚫을 때
+RSI_LOW = 30                    # **바닥** — 직전이 이 선 아래이고 이번이 직전보다 오를 때(2026-11-09 · 그 전은 위로 뚫을 때)
 RSI_HIGH = 70                   # **고점** — 이 선을 **아래로** 뚫을 때
 MACD_FAST, MACD_SLOW, MACD_SIG = 12, 26, 9
 
@@ -194,7 +194,7 @@ def judge(rows):
 
         바닥(low)   ① 볼린저 **하단**을 **저가**가 건드리고 그 봉이 **양봉**
                     ② MACD 히스토그램이 **음수인데 직전보다 큼** (매도세가 약해진다)
-                    ③ RSI 가 직전 < 30, 이번 ≥ 30 (**아래에서 위로** 뚫는다)
+                    ③ RSI 가 직전 < 30 이고 이번이 직전보다 큼 (**30 아래에서 오르기 시작** · 2026-11-09 — 그 전은 30 을 넘은 봉)
 
         고점(high)  ① 볼린저 **상단**을 **고가**가 건드리고 그 봉이 **음봉**
                     ② MACD 히스토그램이 **양수인데 작아짐** (매수세가 약해진다)
@@ -238,7 +238,9 @@ def judge(rows):
         if not (i > 0 and rsi_v[i] is not None and rsi_v[i - 1] is not None):
             return False
         if kind == "low":
-            return rsi_v[i - 1] < RSI_LOW <= rsi_v[i]
+            # 30 아래에서 오르기 시작한 봉 — 직전이 30 아래이고 이번이 직전보다 높다(30 을 넘었는지는 안 본다).
+            # 2026-11-09 재권님 「30아래에서 위로 올라갈때 로 바꿔줘」 — 그 전(09-22 ~)은 「직전 < 30 ≤ 이번」(선을 넘은 봉)
+            return rsi_v[i - 1] < RSI_LOW and rsi_v[i] > rsi_v[i - 1]
         return rsi_v[i - 1] > RSI_HIGH >= rsi_v[i]
 
     out = []
@@ -329,6 +331,53 @@ def watch_codes(proxy):
     return WATCH_FALLBACK
 
 
+def low_codes(proxy):
+    """바닥 신호(low) 대상 — 순위 목록 전부(코스피 200 · 코스닥 150 · `dart.UNIVERSE_SIZES`).
+
+    2026-11-09 재권님 — 「판정 조건은 코스피 200 코스닥 150」 · 「이 룰에 맞게 수정되는걸 볼린져랑 텔레그램에 보내줘」.
+    **바닥 신호만 넓힌다** — 고점 신호(high)와 신호 넷(`check_extra`)은 `watch_codes`(코스피 상위 50) 그대로다.
+    판정 식(`judge` · 세 신호가 같은 봉)은 안 바뀐다. 5분봉은 미리받기(`kis_proxy._prefill_codes`)가 같은 목록을 받는다.
+    표를 못 읽으면 `watch_codes` 로 물러선다.
+    """
+    try:
+        rows = [r["stock_code"] for r in dart.universe_rows(None)]
+        if rows:
+            return rows
+    except Exception:
+        pass
+    return watch_codes(proxy)
+
+
+def today_lows(proxy):
+    """`/api/signals/today` — 그날 걸린 바닥 신호를 **최신이 위**로. 화면 실시간 순위 「볼린저」 칸이 읽는다.
+
+    기록(`signal_sent` · kind 'low')과 그 봉(`candles` 5분봉)을 읽기만 한다 — 판정은 바퀴(`check_once`)가 한다.
+    어느 서버든 DB 를 읽는다. 봉을 못 찾으면 값 칸은 `None`(0 으로 안 메운다)."""
+    day = time.strftime("%Y%m%d")
+    names = code_names(proxy)
+    items = []
+    try:
+        _init(proxy)
+        with proxy._db_lock, proxy.db_conn() as conn:
+            got = conn.execute(
+                "SELECT s.code, s.ts, c.close, c.low FROM signal_sent s "
+                "LEFT JOIN candles c ON c.code = s.code AND c.period = ? AND c.ts = s.ts "
+                "WHERE s.kind = 'low' AND s.day = ? ORDER BY s.ts DESC, s.sent_at DESC", (PERIOD, day)).fetchall()
+        for code, ts, close, low in got:
+            items.append({"code": code, "name": names.get(code, code), "ts": str(ts),
+                          "t": "%s:%s" % (str(ts)[8:10], str(ts)[10:12]) if len(str(ts)) >= 12 else "",
+                          "close": close, "low": low})
+        ok = True
+    except Exception as e:
+        print("  [신호] 오늘 바닥 신호 읽기 실패: %s" % type(e).__name__)
+        ok = False
+    return {"day": day, "items": items,
+            "meta": {"read": ok, "period": PERIOD, "bb": "%d·%g" % (BB_PERIOD, BB_MULT), "rsi": RSI_LOW,
+                     "sameBar": SAME_BAR, "send": SEND,
+                     "session": "%02d:%02d~%02d:%02d" % (SESSION_FROM // 60, SESSION_FROM % 60,
+                                                         SESSION_TO // 60, SESSION_TO % 60)}}
+
+
 def code_names(proxy):
     """종목 이름 — `dart_universe` 에서 읽는다 (2026-09-23 지시 —
     「종목이름이 번혼데 내가 인지하도록 해줘야지」).
@@ -373,10 +422,13 @@ def check_once(proxy, names=None):
     day = time.strftime("%Y%m%d")
     hit = 0
 
-    for code in watch_codes(proxy):
+    high_ok = set(watch_codes(proxy))       # 고점 신호는 코스피 상위 50 만 — 바닥만 넓혔다(2026-11-09 · low_codes)
+    for code in dict.fromkeys(list(high_ok) + low_codes(proxy)):
         try:
             rows = proxy.read_candles(code, PERIOD, NEED_BARS)
             for sig in judge(rows):
+                if sig["kind"] != "low" and code not in high_ok:
+                    continue
                 # **같은 봉 중복만 막는다.** 하루 횟수는 안 센다 (위 LOOP_SEC 주석).
                 if _already(proxy, code, sig["ts"], sig["kind"]):
                     continue
@@ -735,7 +787,8 @@ def start(proxy, names=None):
                 if _in_session():
                     fresh = False
                     # 관심종목(볼린저 하단 알림)도 함께 본다 — 코스피 상위 50 밖일 수 있다
-                    for code in list(dict.fromkeys(list(watch_codes(proxy)) + dart.watchlist())):
+                    # 바닥 신호 대상(코스피 200 · 코스닥 150 · low_codes)도 — 2026-11-09
+                    for code in list(dict.fromkeys(list(watch_codes(proxy)) + low_codes(proxy) + dart.watchlist())):
                         rows = proxy.read_candles(code, PERIOD, 1)
                         ts = rows[0]["ts"] if rows else None
                         if ts and _last_ts.get(code) != ts:

@@ -1454,6 +1454,15 @@ const SORTS = {
           empty: () => (!viMeta ? '불러오는 중'
             : !viMeta.saved ? `오늘 기록이 아직 없습니다 — 정규장(${viMeta.session}) 에 서버가 ${viMeta.tickSec}초마다 봅니다`
             : '오늘 걸린 종목이 아직 없습니다') },
+  /* 볼린저 — 오늘 바닥 신호가 걸린 종목, 최근 것이 위 (2026-11-09 재권님 「나 인데 같이 봐야할께 rsi 가 30이하에서 올라가면서 mscd 의 매도세가 줄어들때」 ·
+     「이 세개의 신호가 동시에 나올때」 · 「판정 조건은 코스피 200 코스닥 150」 · RSI 는 「30아래에서 위로 올라갈때 로 바꿔줘」). 판정 · 기록은 서버다
+     (server/signal_watch.py judge · /api/signals/today) — 텔레그램 바닥 신호와 같은 기록이라 칸과 알림이 안 갈린다. 화면은 종목마다 한 줄로 묶어 가장 늦은 봉을 적는다 */
+  bb:   { label: '볼린저', list: () => bbRows,
+          head: '바닥 봉', show: (code) => bbCell(code), html: true,
+          note: () => bbNote(),
+          empty: () => (!bbMeta ? '불러오는 중'
+            : !bbMeta.read ? '못 읽음 — 서버의 바닥 신호 기록'
+            : `오늘 걸린 종목이 아직 없습니다 — 서버가 ${bbMeta.session} 에 새 5분봉마다 봅니다`) },
   /* 공매도 — 감시 대상(코스피200 · 코스닥150) 종목의 공매도 거래대금 · 비율, 아래 줄에서 금액 · 비율 순과 1일 · 5일 · 한달 · 1년을 고른다
      (2026-11-06 재권님 「공매도 하위에 값을 추가해야해. 소팅하는건 금액과 비율이 있어야되고 1일 5일 한달 1년 도 필요해」 → 받는 법 「나로 해줘」).
      쌓고 셈하는 것은 서버다(server/short_sale.py · /api/kis/short-sale) — 화면은 받은 차례 그대로 그린다.
@@ -1479,6 +1488,7 @@ const SORT_TIPS = {
   buy: '외국인 · 기관 · 프로그램이 셋 다 순매수인 종목, 셋 합이 큰 순(외국인 · 기관은 장중 가집계)\n셋 다 샀다가 한 곳이라도 매도로 바뀐 종목은 맨 위에 흐리게',
   pre: '코스피 200 · 코스닥 150 종목 중 넥스트레이드 프리마켓(08:00 ~ 08:50) 거래대금 상위 안에서 프로그램 순매수가 큰 순\n08:50 ~ 09:00 에 그날 판으로 굳힙니다',
   vi: '오늘 정규장에 상승 VI 가 걸렸거나 전일 대비 +20% 를 넘은 종목, 최근 것이 위',
+  bb: '바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록',
   ssts: '코스피200 · 코스닥150 종목의 공매도 거래대금 · 비율(공매도 대금 ÷ 전체 거래대금) 순\n아래 줄에서 금액 · 비율 · 1일 · 5일 · 한달 · 1년 · 장중 값은 없고 거래소가 장 뒤에 냅니다',
 };
 const sortTipAttr = (id) => (SORT_TIPS[id] ? ` data-tip="${escT(SORT_TIPS[id])}" data-tip-h="${escT(SORTS[id].label)}"` : '');
@@ -1576,6 +1586,44 @@ async function loadVi() {
   } catch { /* 못 받으면 들고 있던 것 그대로 */ }
   if (sortBy === 'vi') { paintRows(rowPrices); paintSortNote(); }
   if (rankModal && rankModalSort === 'vi') { paintRankModal(); paintRankModalNote(); }
+}
+
+/* 「볼린저」 칩 — 서버가 준 바닥 신호(최신이 위)를 종목마다 한 줄로 묶는다. 못 받았으면 null(빈 목록과 가른다) */
+let bbRows = null, bbMeta = null, bbBy = {};
+const BB_FALLBACK_MS = 60000;      // 서버가 롱폴을 못 줄 때만
+function bbCell(code) {
+  const g = bbBy[code];
+  if (!g) return '—';
+  const it = g.last;
+  const won = it.close == null ? '—' : `${Number(it.close).toLocaleString()}원`;
+  /* 한 줄 — 둘째 줄을 달면 그 줄만 높아진다(11-09 재권님 「화면에 맞게 보여지는게 아니고」). 같은 종목이 여러 번이면 「×N」 */
+  /* 가격까지 적으면 종목 이름이 잘렸다(11-09 2560 창 · 「LG에너지솔…」) — 그 봉 값은 1초 풍선으로 */
+  const tip = `${escT(it.t || '')} 봉 · 종가 ${won} · 저가 ${it.low == null ? '—' : `${Number(it.low).toLocaleString()}원`}${g.n > 1 ? ` · 오늘 ${g.n}번` : ''}`;
+  return `<div style="white-space:nowrap;font-size:12px;line-height:1.3" data-tip="${tip}"><span class="kh-up">바닥 ${escT(it.t || '')}</span>${g.n > 1 ? ` <span class="kh-mut">×${g.n}</span>` : ''}</div>`;
+}
+function bbNote() {
+  const n = (bbRows || []).length;
+  return `오늘 · 5분봉 · ${n}종목 · 최근 것이 위`;     // 짧게 — 길면 두 줄로 꺾여 칸이 밀렸다(11-09). 대상 · 조건은 칩 풍선에
+}
+async function loadBb() {
+  try {
+    const r = await apiFetch('/api/signals/today', { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    const d = j && j.ok ? j.data : null;
+    if (d) {
+      bbMeta = d.meta || {};
+      const by = {}, rows = [];
+      for (const it of d.items || []) {          // 서버가 최신이 위로 준다 — 처음 만난 것이 그 종목의 마지막 봉
+        if (!it.code) continue;
+        let g = by[it.code];
+        if (!g) { g = by[it.code] = { last: it, n: 0 }; rows.push({ code: it.code, name: it.name }); }
+        g.n += 1;
+      }
+      bbBy = by; bbRows = rows;
+    }
+  } catch { /* 못 받으면 들고 있던 것 그대로 */ }
+  if (sortBy === 'bb') { paintRows(rowPrices); paintSortNote(); }
+  if (rankModal && rankModalSort === 'bb') { paintRankModal(); paintRankModalNote(); }
 }
 
 /* 「프리장」 칩 — 서버가 준 줄 그대로. 못 받았으면 null(빈 목록과 가른다) */
@@ -1916,6 +1964,7 @@ function setupSorts() {
     if (sortBy === 'buy') loadJoint();
     if (sortBy === 'pre') loadPre();
     if (sortBy === 'vi') loadVi();
+    if (sortBy === 'bb') loadBb();
     if (sortBy === 'ssts') loadSsts();
   });
 }
@@ -2252,7 +2301,7 @@ function paintRankModal() {
       <td class="l"><span class="kh-nm">${iconHtml(s)}<b data-co="${s.code}">${escT(s.name)}</b>${th ? themeBadge(s.code) : ''}</span></td>
       <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, sid)) : '···'}</td>
       <td class="kh-num ${p ? dirClass(pctOf(p, sid)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, sid)) : '—'}</td>
-      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'vi' ? viCell(s.code) : sid === 'ssts' ? sstsCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
+      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'vi' ? viCell(s.code) : sid === 'bb' ? bbCell(s.code) : sid === 'ssts' ? sstsCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
       <td class="kh-num">${th && themeBig !== FLOW ? themeCap(s.code) : showCap(s.code)}</td>
       <td class="kh-num">${th && themeBig === FLOW ? themeMetric(s.code) : (p ? fmtShareCount(p.volume) : '···')}</td>
       <td class="kh-num">${volRatioCell(s.code)}</td>
@@ -2283,7 +2332,7 @@ function paintRankModal() {
       </colgroup>
       <thead><tr>
         <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
-        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'vi' ? '때 · 무엇' : sid === 'ssts' ? '공매도' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
+        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'vi' ? '때 · 무엇' : sid === 'bb' ? '바닥 봉' : sid === 'ssts' ? '공매도' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
       </tr></thead>
       <tbody>${rows || empty}</tbody>
     </table>
@@ -2342,7 +2391,7 @@ function openRankModal() {
       /* 모달에서 고른 기준은 첫 화면 순위표와 **따로 둔다** — 모달에서
          거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면 무엇을 눌러
          그렇게 됐는지 알 수 없다 (2026-09-22). */
-      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'vi') loadVi(); if (id === 'ssts') loadSsts(); loadVolRatio(); },
+      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'vi') loadVi(); if (id === 'bb') loadBb(); if (id === 'ssts') loadSsts(); loadVolRatio(); },
     },
     onClose() { rankModal = null; if (volWatch) { volWatch.stop(); volWatch = null; } },
   });
@@ -2369,7 +2418,7 @@ function paintRankModalNote() {
   if (!rankModal) return;
   const fresh = freshNote();
   /* 「매수」 탭은 갱신 주기만 짧게 — 길면 탭 글자가 세로로 눌렸다(11-05 8772) */
-  const base = rankModalMarket === 'THEME' ? RANK_TABS_NOTE : rankModalSort === 'buy' ? jointNote(true) : rankModalSort === 'pre' ? preNote() : rankModalSort === 'vi' ? viNote() : rankModalSort === 'ssts' ? sstsNote() : RANK_TABS_NOTE;
+  const base = rankModalMarket === 'THEME' ? RANK_TABS_NOTE : rankModalSort === 'buy' ? jointNote(true) : rankModalSort === 'pre' ? preNote() : rankModalSort === 'vi' ? viNote() : rankModalSort === 'bb' ? bbNote() : rankModalSort === 'ssts' ? sstsNote() : RANK_TABS_NOTE;
   rankModal.head.setTabsNote(fresh ? `${base} · ${fresh.text}` : base);
 }
 
@@ -2396,6 +2445,7 @@ const JOINT_FALLBACK_MS = 300000;     // 「매수」 칩 — 서버 값마저 �
 watch({ url: () => (sortBy === 'buy' ? '/api/kis/joint-buy' : null), onChange: loadJoint, key: 'kis_proxy.INVESTOR_TOP_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => (sortBy === 'pre' ? '/api/kis/pre-flow' : null), onChange: loadPre, key: 'pre_flow.FLOW_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => (sortBy === 'vi' || (rankModal && rankModalSort === 'vi') ? '/api/alerts/today' : null), onChange: loadVi, key: null, fallbackMs: VI_FALLBACK_MS });
+watch({ url: () => (sortBy === 'bb' || (rankModal && rankModalSort === 'bb') ? '/api/signals/today' : null), onChange: loadBb, key: null, fallbackMs: BB_FALLBACK_MS });
 sstsWatch = watch({ url: () => (sortBy === 'ssts' || (rankModal && rankModalSort === 'ssts') ? sstsUrl() : null), onChange: loadSsts, key: null, fallbackMs: SSTS_FALLBACK_MS });
 watch({ url: () => '/api/kis/stock-sectors', onChange: loadSectors, key: 'company_profile.SECTOR_LIST_TTL', fallbackMs: SECTOR_FALLBACK_MS });
 loadSectors();
