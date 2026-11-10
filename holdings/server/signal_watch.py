@@ -348,6 +348,34 @@ def low_codes(proxy):
     return watch_codes(proxy)
 
 
+LOW_CAP_PER_CALL = 5          # 한 번 부를 때 시총을 새로 받을 종목 수 — 종목당 하루 한 번(현재가 조회 · 재권님 「가」 11-10)
+LOW_CAP_TRIES = 3             # 못 받은 종목은 이만큼만 다시 묻는다 — 그 뒤로는 「cap 없음」 그대로
+_low_caps = {"day": "", "cap": {}, "tried": {}}   # 종목코드 → 시총(억원) · 물은 횟수 — 그날 것만
+
+
+def _low_caps_for(proxy, day, codes):
+    """바닥 신호 종목의 시총(억원 · `fetch_price` 의 marketCap) — 홈 「볼린저」 칸 둘째 줄 · 1조 거르기가 읽는다.
+    VI · 급등 칸(intraday_alerts._fill_caps)과 같은 모양 — 종목당 하루 한 번 · 못 받으면 칸을 안 만든다(0 으로 안 적는다)."""
+    c = _low_caps
+    if c["day"] != day:
+        c.update(day=day, cap={}, tried={})
+    need = [k for k in dict.fromkeys(codes) if k not in c["cap"] and c["tried"].get(k, 0) < LOW_CAP_TRIES]
+    if need:
+        try:
+            cfg = proxy.load_secrets()
+        except Exception:
+            cfg = None
+        for k in need[:LOW_CAP_PER_CALL]:
+            c["tried"][k] = c["tried"].get(k, 0) + 1
+            try:
+                cap = (proxy.fetch_price(cfg, k) or {}).get("marketCap") if cfg else None
+            except Exception:
+                cap = None
+            if cap is not None:
+                c["cap"][k] = cap
+    return c["cap"]
+
+
 def today_lows(proxy):
     """`/api/signals/today` — 그날 걸린 바닥 신호를 **최신이 위**로. 화면 실시간 순위 「볼린저」 칸이 읽는다.
 
@@ -371,6 +399,14 @@ def today_lows(proxy):
     except Exception as e:
         print("  [신호] 오늘 바닥 신호 읽기 실패: %s" % type(e).__name__)
         ok = False
+    if ok and items:
+        try:
+            caps = _low_caps_for(proxy, day, [it["code"] for it in items])
+            for it in items:
+                if it["code"] in caps:
+                    it["cap"] = caps[it["code"]]
+        except Exception as e:
+            print("  [신호] 바닥 신호 시총 받기 실패: %s" % type(e).__name__)
     return {"day": day, "items": items,
             "meta": {"read": ok, "period": PERIOD, "bb": "%d·%g" % (BB_PERIOD, BB_MULT), "rsi": RSI_LOW,
                      "sameBar": SAME_BAR, "send": SEND,
