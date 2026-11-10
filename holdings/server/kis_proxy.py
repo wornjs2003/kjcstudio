@@ -4525,17 +4525,8 @@ def fetch_finance(cfg, code):
         return _fin_num((rows.get(ym, {}).get(key) or {}).get(field))
 
     def quarter(ym, field):
-        """연 누적 → 분기. 1분기는 그대로, 아니면 같은 해 앞 분기를 뺀다."""
-        cur = g(ym, "income", field)
-        if cur is None:
-            return None
-        prev = {"03": None, "06": "03", "09": "06", "12": "09"}.get(ym[4:])
-        if ym[4:] == "03":
-            return cur
-        if prev is None:
-            return None
-        before = g(ym[:4] + prev, "income", field)
-        return None if before is None else cur - before
+        """연 누적 → 분기 — 셈은 `_q_from_ytd` 한 곳(아래 종목 여럿 주소도 같은 셈을 쓴다)."""
+        return _q_from_ytd({k: g(k, "income", field) for k in rows}, ym)
 
     out = []
     for ym in sorted(rows):
@@ -4574,6 +4565,171 @@ def fetch_finance(cfg, code):
     if out:
         _finance_cache[code] = (time.time(), data)
     return data
+
+def _q_from_ytd(ytd, ym):
+    """연 누적 → 분기 값 하나. 1분기는 그대로, 아니면 같은 해 앞 분기 누적을 뺀다. 못 세면 `None`.
+    `ytd` 는 결산 년월(`YYYYMM`) → 누적 값(없음은 `None`)."""
+    cur = ytd.get(ym)
+    if cur is None:
+        return None
+    if ym[4:] == "03":
+        return cur
+    prev = {"06": "03", "09": "06", "12": "09"}.get(ym[4:])
+    if prev is None:
+        return None
+    before = ytd.get(ym[:4] + prev)
+    return None if before is None else cur - before
+
+
+# ── 산업 분석 재무 — 종목 여럿의 분기 매출 · 영업이익 (2026-11-10 재권님 「응 그렇게 해」 · 작업우선순위 배분) ──
+#
+# Insight 산업 분석 화면(`company-setup/industry.html`)이 업종 · 테마 종목 190여 개의 연간 3년 + 분기 7개를
+# 한 번에 본다. 위 `fetch_finance` 는 종목 하나에 API 다섯 · 6시간 캐시라 190번 부르면 KIS 를 950번 부른다.
+# 그래서 **손익(income-statement) 하나만** 부르고, 받은 줄(연 누적)은 `fin_quarter` 표에 쌓는다.
+# **DART 로 따로 받지 않는다** — 재권님 「이미 받아놓는곳 있지않아?」 → 이 주소 위에 더하는 안에 「응 그렇게 해」.
+# 같은 값을 두 곳에서 받으면 숫자가 갈린다(「같은 값은 한 곳에만 둔다」).
+#
+# **언제 다시 받나** — 쌓인 마지막 분기 **다음 분기의 보고서 마감**(분기 끝 + `FIN_REPORT_DAYS` · 4분기는
+# `FIN_REPORT_DAYS_Q4`)이 지났으면 받는다. 3/31 · 5/15 · 8/14 · 11/14 와 같다. 받아도 아직 안 나왔으면
+# `FINANCE_TTL` 동안 그 종목을 다시 부르지 않는다. 쌓인 줄은 다시 받을 때 KIS 가 준 값으로 갈아 쓴다(정정 반영).
+#
+# **처음 채우기는 뒤에서 돈다** — 190종목을 한 요청 안에서 받으면 KIS 예산 따라 수십 초가 걸린다. 응답은 쌓인 것 +
+# `meta.pending`(받는 중인 종목)이고, 화면은 `meta.retryAfterSec` 뒤 다시 묻는다 — 그 값도 서버가 정한다
+# (「캐시·주기·한도 값을 화면에 박지 않는다」).
+#
+# **쓰는 것은 8765 하나다**(`marketdb.writable`). 읽기 전용 서버는 표를 읽고, 없는 종목은 받아 메모리에만 둔다.
+# **기준(연결 · 별도)** — KIS 응답에 그 칸이 없다. 2026-11-10 삼성전자 2026년 2분기 매출(1,714,995억)이 DART 연결 값과
+# 같았다 — 한 종목만 대 봤다.
+FIN_MULTI_MAX = 300              # 한 번에 묻는 종목 수 상한
+FIN_MULTI_QUARTERS = 7           # 기본 분기 수 · 연간 해 수
+FIN_MULTI_YEARS = 3
+FIN_REPORT_DAYS = 45             # 분기 · 반기 보고서 마감 — 분기 끝 뒤 날 수
+FIN_REPORT_DAYS_Q4 = 90          # 사업보고서 마감
+FIN_MULTI_RETRY_SEC = 15         # 받는 중이면 화면이 다시 물을 때까지
+FIN_QUARTER_SQL = """CREATE TABLE IF NOT EXISTS fin_quarter (
+         code     TEXT NOT NULL,
+         ym       TEXT NOT NULL,
+         sale_ytd REAL,
+         op_ytd   REAL,
+         at       INTEGER NOT NULL,
+         PRIMARY KEY (code, ym)
+       )"""
+_finq_mem = {}          # code -> {ym: (매출 누적, 영업이익 누적)} — 읽기 전용 서버 · 쓰기 실패 때
+_finq_tried = {}        # code -> 마지막으로 KIS 를 부른 시각
+_finq_pending = set()   # 지금 뒤에서 받는 중인 종목
+_finq_lock = threading.Lock()
+
+
+def _finq_next_due(last_ym):
+    """쌓인 마지막 분기 다음 분기의 보고서 마감일(date)."""
+    y, m = int(last_ym[:4]), int(last_ym[4:]) + 3
+    if m > 12:
+        y, m = y + 1, m - 12
+    end = datetime(y, m, 31 if m in (3, 12) else 30).date()
+    return end + timedelta(days=FIN_REPORT_DAYS_Q4 if m == 12 else FIN_REPORT_DAYS)
+
+
+def _finq_load(codes):
+    """쌓인 줄 — code -> {ym: (매출 누적, 영업이익 누적)}. 표가 아직 없으면 빈 것."""
+    out = {c: dict(_finq_mem.get(c) or {}) for c in codes}
+    conn = None
+    try:
+        conn = marketdb.connect()
+        conn.execute(FIN_QUARTER_SQL)
+        for i in range(0, len(codes), 500):
+            part = codes[i:i + 500]
+            q = "SELECT code, ym, sale_ytd, op_ytd FROM fin_quarter WHERE code IN (%s)" % ",".join("?" * len(part))
+            for r in conn.execute(q, part):
+                out[r["code"]].setdefault(r["ym"], (r["sale_ytd"], r["op_ytd"]))
+    except sqlite3.Error as e:
+        if not _db_missing(e):
+            print(f"[재무 여럿] 표 읽기 실패: {safe_message(e, 120)}", flush=True)
+    finally:
+        if conn is not None:
+            conn.close()
+    return out
+
+
+def _finq_fetch(cfg, code):
+    """KIS 손익 하나 → {ym: (매출 누적, 영업이익 누적)}. 못 받으면 None."""
+    path, tr = {k: (p, t) for k, p, t in _FIN_APIS}["income"]
+    try:
+        got = out_rows(kis_get(cfg, path, {"FID_DIV_CLS_CODE": "1", "FID_COND_MRKT_DIV_CODE": "J",
+                                           "FID_INPUT_ISCD": code}, tr), "output")
+    except Exception as e:
+        print(f"[KIS] 재무 여럿 {code} 실패: {safe_message(e, 120)}", flush=True)
+        return None
+    rows = {}
+    for r in got:
+        ym = str(r.get("stac_yymm") or "").strip()
+        if len(ym) == 6 and ym.isdigit():
+            rows[ym] = (_fin_num(r.get("sale_account")), _fin_num(r.get("bsop_prti")))
+    return rows or None
+
+
+def _finq_save(code, rows):
+    """받은 줄을 쌓는다. 쓰는 서버가 아니거나 쓰기가 실패하면 메모리에만."""
+    if marketdb.writable():
+        conn = None
+        try:
+            conn = marketdb.connect()
+            conn.execute(FIN_QUARTER_SQL)
+            now = int(time.time())
+            conn.executemany("INSERT OR REPLACE INTO fin_quarter (code, ym, sale_ytd, op_ytd, at) VALUES (?,?,?,?,?)",
+                             [(code, ym, v[0], v[1], now) for ym, v in rows.items()])
+            conn.commit()
+            with _finq_lock:
+                _finq_mem.pop(code, None)
+            return
+        except sqlite3.Error as e:
+            print(f"[재무 여럿] 쌓기 실패 {code}: {safe_message(e, 120)}", flush=True)
+        finally:
+            if conn is not None:
+                conn.close()
+    with _finq_lock:
+        _finq_mem[code] = rows
+
+
+def _finq_fill(cfg, codes):
+    """뒤에서 차례로 받는다 — KIS 예산은 `kis_get` 이 지킨다."""
+    try:
+        for c in codes:
+            rows = _finq_fetch(cfg, c)
+            _finq_tried[c] = time.time()
+            if rows:
+                _finq_save(c, rows)
+            with _finq_lock:
+                _finq_pending.discard(c)
+    finally:
+        with _finq_lock:
+            _finq_pending.difference_update(codes)
+
+
+def _finq_shape(rows, nq, ny):
+    """쌓인 누적 줄 → 화면 모양. 분기 값은 누적에서 뺀다 · 연간은 12월 누적."""
+    sale = {k: v[0] for k, v in rows.items()}
+    op = {k: v[1] for k, v in rows.items()}
+    yms = sorted(rows)
+    return {
+        "quarters": [{"ym": ym, "sale": _q_from_ytd(sale, ym), "op": _q_from_ytd(op, ym)} for ym in yms[-nq:]],
+        "years": [{"year": ym[:4], "sale": sale[ym], "op": op[ym]} for ym in yms if ym.endswith("12")][-ny:],
+        "last": yms[-1] if yms else None,
+    }
+
+
+def fetch_finance_multi(cfg, codes, nq, ny):
+    """종목 여럿의 분기 · 연간 매출 · 영업이익(억원). (data, 받는 중인 종목)."""
+    have = _finq_load(codes)
+    now, today = time.time(), datetime.now(KST).date()
+    with _finq_lock:
+        todo = [c for c in codes if c not in _finq_pending
+                and now - _finq_tried.get(c, 0) >= FINANCE_TTL
+                and (not have[c] or today >= _finq_next_due(max(have[c])))]
+        _finq_pending.update(todo)
+        pending = sorted(c for c in codes if c in _finq_pending)
+    if todo:
+        threading.Thread(target=_finq_fill, args=(cfg, todo), daemon=True, name="fin-multi").start()
+    return {c: _finq_shape(have[c], nq, ny) for c in codes}, pending
 
 # ── 종목별 장중 추정가집계 (2026-09-22 지시) ────────────────────
 #
@@ -9838,6 +9994,32 @@ class Handler(SimpleHTTPRequestHandler):
             # ── 지금 보고 있는 그 종목 (2026-09-18 지시) ──
             # 위 investor-top 과 다르다. 그쪽은 「상위 목록」이고 가집계이며,
             # 이쪽은 「이 종목」이고 확정치다.
+            if route == "finance-multi":
+                # 산업 분석 화면 — 종목 여럿의 분기 · 연간 매출 · 영업이익 (`fetch_finance_multi` 머리 주석)
+                raw = (qs.get("codes") or [""])[0]
+                codes = list(dict.fromkeys(c.strip() for c in raw.split(",") if c.strip()))
+                if not codes or len(codes) > FIN_MULTI_MAX or not all(c.isdigit() and len(c) == 6 for c in codes):
+                    self._send_json({"ok": False, "error": "codes 는 6자리 숫자를 쉼표로 · 최대 %d개입니다." % FIN_MULTI_MAX}, 400)
+                    return
+
+                def _n(name, dflt, hi):
+                    try:
+                        return max(1, min(hi, int((qs.get(name) or [dflt])[0])))
+                    except (TypeError, ValueError):
+                        return dflt
+                nq, ny = _n("quarters", FIN_MULTI_QUARTERS, 40), _n("years", FIN_MULTI_YEARS, 10)
+                data, pending = fetch_finance_multi(cfg, codes, nq, ny)
+                self._send_json({
+                    "ok": True, "data": data,
+                    "meta": {
+                        "count": len(codes), "unit": "억원", "quarters": nq, "years": ny,
+                        "pending": pending, "retryAfterSec": FIN_MULTI_RETRY_SEC if pending else None,
+                        "source": "한국투자증권 손익계산서(%s)" % {k: t for k, _p, t in _FIN_APIS}["income"],
+                        # 분기 sale/op = 연 누적에서 같은 해 앞 분기 누적을 뺌 · 연간 = 12월 누적 · 못 세면 None
+                        # 기준(연결 · 별도) 칸은 KIS 가 안 준다 — 머리 주석
+                    },
+                })
+                return
             if route == "finance":
                 code = (qs.get("code") or [""])[0].strip()
                 if not (code.isdigit() and len(code) == 6):
