@@ -2775,16 +2775,30 @@ _fo_stk = {"day": None, "map": None}
 _fo_bars = {}                         # 월물 코드 → (시각, 끝난 월물인가, 봉들) — 끝난 월물은 다시 안 묻는다
 
 
+_fo_master = {}                       # 마스터 주소 → (날, 글) — 하루 한 번 받는다(주식선물 · 주식옵션 · 코스피200 옵션)
+
+
+def _fo_master_text(url):
+    """KIS 선물옵션 종목 마스터(zip 안 cp949 글) — 하루 한 번."""
+    today = datetime.now(KST).strftime("%Y%m%d")
+    hit = _fo_master.get(url)
+    if hit and hit[0] == today:
+        return hit[1]
+    import io, zipfile
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 KJCStudio"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        z = zipfile.ZipFile(io.BytesIO(r.read()))
+    text = z.read(z.namelist()[0]).decode("cp949", "replace")
+    _fo_master[url] = (today, text)
+    return text
+
+
 def _fo_stk_prefix():
     """{종목코드: (월물 앞자리, 이름)} — 마스터를 하루 한 번 받는다. 상품 앞자리는 「월물코드 = 앞자리 + 해 끝자리 + 달 두 자리」 에 맞는 줄에서만 뽑는다."""
     today = datetime.now(KST).strftime("%Y%m%d")
     if _fo_stk["day"] == today and _fo_stk["map"]:
         return _fo_stk["map"]
-    import io, zipfile
-    req = urllib.request.Request(FO_STK_MASTER, headers={"User-Agent": "Mozilla/5.0 KJCStudio"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        z = zipfile.ZipFile(io.BytesIO(r.read()))
-    text = z.read(z.namelist()[0]).decode("cp949", "replace")
+    text = _fo_master_text(FO_STK_MASTER)
     out = {}
     for line in text.split("\n"):
         f = line.rstrip("\r").split("|")
@@ -2878,6 +2892,152 @@ def fetch_stock_futures_daily(cfg, codes):
         except RuntimeError as e:
             out[code] = {"name": name, "bars": None, "error": safe_message(e)}
     return out
+
+
+# ── 주식선물 · 종목 풋 · 코스피200 풋/콜 지금 값 — 한 주소 (2026-11-10 · 작업우선순위 배분 · 시황분석 탭 몫) ──
+# 재권님 「종목별로 실시간 선물 풋 알수있나?」 → 잼 → 안에 「응」 → 「그럼 5분으로 바꿔서 해」 →
+# 「화면을 보면 그때 바로 값 가져오고 5분단위로 불러오는 방향」.  GET /api/kis/fo-snapshot?codes=005930,000660
+# **누가 물을 때만 받는다** — 받은 값은 FO_SNAP_TTL(장중) · FO_SNAP_TTL_CLOSED(장 밖) 동안 다시 쓴다. 혼자 도는 받기는 없다.
+# 값은 현재가 조회(inquire-price · FHMIF10000000) 하나로 받는다 — 시장 JF 주식선물 · JO 주식옵션 · O 코스피200 옵션(11-10 잼 · 모두 정상).
+# 월물 · 행사가 코드는 KIS 마스터에서 — 주식은 fo_stk_code_mts(1 선물 · 5 콜 · 6 풋), 코스피200 은 fo_idx_code_mts(5 콜 · 6 풋 · 미니 · 위클리는 안 씀).
+# **코스피200 풋/콜 비율은 등가격 둘레 행사가만 센다** — 콜풋 전광판(display-board-callput)은 한 번에 행사가 100줄을 위에서부터만 주고
+# (11-10 잼 · 1,347.5 ~ 1,595 · 지수 814) 이어받기 머리줄을 우리 kis_get 이 아직 못 보낸다 — 그래서 그 표를 안 쓰고 둘레 행사가를 하나씩 묻는다.
+# 어느 월물 · 행사가 범위로 셌는지는 응답에 그대로 낸다.
+FO_IDX_MASTER = "https://new.real.download.dws.co.kr/common/master/fo_idx_code_mts.mst.zip"
+FO_SNAP_TTL = 300                     # 장중(파생 주간 08:45~15:45) 받은 값을 다시 쓰는 초 — 재권님 「5분」
+FO_SNAP_TTL_CLOSED = 600              # 장 밖
+FO_SNAP_PUTS = 5                      # 종목마다 현재가에 가까운 풋 행사가 몇 줄
+FO_SNAP_K200_SIDE = 5                 # 코스피200 등가격 위아래 행사가 몇 칸씩(콜 · 풋 각각 2×이것+1 줄)
+_fo_snap = {}                         # 열쇠 → (시각, 값)
+_fo_snap_lock = threading.Lock()
+
+
+def _fo_snap_ttl():
+    now = datetime.now(KST)
+    hm = now.hour * 100 + now.minute
+    return FO_SNAP_TTL if now.weekday() < 5 and 845 <= hm < 1545 else FO_SNAP_TTL_CLOSED
+
+
+def _fo_options(url, under):
+    """{(콜풋, 월 YYYYMM): [(행사가, 코드)]} — 그 기초자산(주식 종목코드 · 코스피200 은 "2001")의 정규 옵션."""
+    out = {}
+    for line in _fo_master_text(url).split("\n"):
+        f = line.rstrip("\r").split("|")
+        if len(f) < 9 or f[0] not in ("5", "6") or f[7].strip() != under:
+            continue
+        m = re.search(r"(?:^|\s)([CP]) (\d{6})\b", f[3])     # 「미니P」 · 위클리는 앞이 붙어 안 걸린다
+        if not m:
+            continue
+        try:
+            strike = float(f[5])
+        except ValueError:
+            continue
+        out.setdefault((m.group(1), m.group(2)), []).append((strike, f[1].strip()))
+    return out
+
+
+def _fo_quote(cfg, div, code):
+    """현재가 조회 한 줄 — 못 받으면 None."""
+    try:
+        d = kis_get(cfg, "/uapi/domestic-futureoption/v1/quotations/inquire-price",
+                    {"FID_COND_MRKT_DIV_CODE": div, "FID_INPUT_ISCD": code}, "FHMIF10000000")
+    except RuntimeError:
+        return None, None
+    o1 = d.get("output1") if isinstance(d.get("output1"), dict) else {}
+    o3 = d.get("output3") if isinstance(d.get("output3"), dict) else {}
+    price = _num(o1.get("futs_prpr"), float)
+    if not o1 or price is None:
+        return None, None
+    row = {"code": code, "name": (o1.get("hts_kor_isnm") or "").strip() or None, "price": price,
+           "change": _num(o1.get("futs_prdy_vrss"), float), "volume": _num(o1.get("acml_vol"), int),
+           "openInterest": _num(o1.get("hts_otst_stpl_qty"), int)}
+    if div in ("JO", "O"):
+        row["iv"] = _num(o1.get("hts_ints_vltl"), float)
+    return row, _num(o3.get("bstp_nmix_prpr"), float)       # 뒤 값 = 코스피200 지수(11-10 잼 814.31)
+
+
+def _fo_front(opts, kind):
+    """가장 가까운 달(지금 달 이후) 월물."""
+    months = sorted(m for (k, m) in opts if k == kind and m >= datetime.now(KST).strftime("%Y%m"))
+    return months[0] if months else None
+
+
+def _fo_snap_stock(cfg, code):
+    pre = _fo_stk_prefix()
+    if code not in pre:
+        return {"name": None, "futures": None, "puts": None, "error": "주식선물이 없는 종목"}
+    head, name = pre[code]
+    opts = _fo_options(FO_STK_MASTER, code)
+    month = _fo_front(opts, "P")
+    fut = None
+    for ym in sorted({m for (_, m) in opts} | {datetime.now(KST).strftime("%Y%m")}):
+        if ym < datetime.now(KST).strftime("%Y%m"):
+            continue
+        fut, _ = _fo_quote(cfg, "JF", "%s%s%s" % (head, ym[3], ym[4:]))
+        if fut:
+            fut["month"] = ym
+            break
+    puts = None
+    if month and fut:
+        near = sorted(opts[("P", month)], key=lambda x: abs(x[0] - fut["price"]))[:FO_SNAP_PUTS]
+        puts = []
+        for strike, ocode in sorted(near):
+            row, _ = _fo_quote(cfg, "JO", ocode)
+            puts.append(dict(row or {"code": ocode, "price": None}, strike=strike))
+    return {"name": name, "futures": fut, "puts": puts, "putMonth": month,
+            "putNote": "행사가는 선물 현재가에 가까운 %d줄" % FO_SNAP_PUTS if puts else None}
+
+
+def _fo_snap_k200(cfg):
+    opts = _fo_options(FO_IDX_MASTER, "2001")
+    month = _fo_front(opts, "P")
+    if not month or ("C", month) not in opts:
+        return {"error": "코스피200 옵션 목록을 못 읽음"}
+    puts = sorted(opts[("P", month)])
+    _, k200 = _fo_quote(cfg, "O", puts[len(puts) // 2][1])
+    if not k200:
+        return {"error": "코스피200 지수를 못 받음"}
+    strikes = sorted(s for s, _ in puts)
+    atm = min(range(len(strikes)), key=lambda i: abs(strikes[i] - k200))
+    pick = strikes[max(0, atm - FO_SNAP_K200_SIDE): atm + FO_SNAP_K200_SIDE + 1]
+    sums = {"C": [0, 0, 0], "P": [0, 0, 0]}                 # 거래량 · 미결제 · 못 받은 줄
+    for kind in ("C", "P"):
+        codes = dict(opts[(kind, month)])
+        for s in pick:
+            row, _ = _fo_quote(cfg, "O", codes[s]) if s in codes else (None, None)
+            if row and row["volume"] is not None and row["openInterest"] is not None:
+                sums[kind][0] += row["volume"]
+                sums[kind][1] += row["openInterest"]
+            else:
+                sums[kind][2] += 1
+    ratio = lambda p, c: round(p / c, 3) if c else None
+    return {"index": k200, "month": month, "strikes": [pick[0], pick[-1]], "strikeCount": len(pick),
+            "callVolume": sums["C"][0], "putVolume": sums["P"][0], "callOI": sums["C"][1], "putOI": sums["P"][1],
+            "putCallVolume": ratio(sums["P"][0], sums["C"][0]), "putCallOI": ratio(sums["P"][1], sums["C"][1]),
+            "missing": sums["C"][2] + sums["P"][2]}
+
+
+def fetch_fo_snapshot(cfg, codes):
+    """{stocks: {종목코드: {name, futures, puts, putMonth}}, kospi200: {...}, at} — 받은 값은 _fo_snap_ttl() 동안 다시 쓴다."""
+    out = {"stocks": {}, "kospi200": None}
+    with _fo_snap_lock:                                       # 같은 때 둘이 물어도 KIS 는 한 번
+        ttl = _fo_snap_ttl()
+        for key in list(codes) + ["K200"]:
+            hit = _fo_snap.get(key)
+            if not (hit and time.time() - hit[0] < ttl):
+                try:
+                    val = _fo_snap_k200(cfg) if key == "K200" else _fo_snap_stock(cfg, key)
+                except Exception as e:                        # 마스터를 못 받음 등
+                    val = {"error": "못 받음 — " + safe_message(e)}
+                hit = (time.time(), val)
+                if "error" not in val or val.get("error") == "주식선물이 없는 종목":
+                    _fo_snap[key] = hit
+            row = dict(hit[1], at=datetime.fromtimestamp(hit[0], KST).strftime("%H:%M:%S"))
+            if key == "K200":
+                out["kospi200"] = row
+            else:
+                out["stocks"][key] = row
+    return out, ttl
 
 
 def fetch_index_daily(cfg, names):
@@ -9716,6 +9876,23 @@ class Handler(SimpleHTTPRequestHandler):
                                           "note": "주식선물 주간장 최근월물 — 그날 봉이 있는 가장 가까운 달 · 만기 다음 날 다음 달물(roll) · "
                                                   "prevClose 는 같은 월물 전날 종가 · contract 는 KIS 월물 코드 · "
                                                   "오늘 봉은 장중이면 아직 안 끝난 값 · bars null = 못 받음(0 이 아님)"}})
+                return
+
+            # 주식선물 · 종목 풋 · 코스피200 풋/콜 지금 값(위 fetch_fo_snapshot)
+            if route == "fo-snapshot":
+                codes = [c.strip() for c in (qs.get("codes") or ["005930,000660"])[0].split(",") if c.strip()]
+                if not codes or len(codes) > 5 or not all(c.isdigit() and len(c) == 6 for c in codes):
+                    self._send_json({"ok": False, "error": "codes 는 6자리 숫자 종목코드 1~5개(쉼표로)여야 합니다."}, 400)
+                    return
+                data, ttl = fetch_fo_snapshot(cfg, codes)
+                self._send_json({"ok": any((v.get("futures") or v.get("puts")) for v in data["stocks"].values()) or "index" in (data["kospi200"] or {}),
+                                 "data": data,
+                                 "meta": {"cacheTtl": ttl, "ttlOpen": FO_SNAP_TTL, "ttlClosed": FO_SNAP_TTL_CLOSED,
+                                          "note": "KIS 현재가 조회 · 누가 물을 때만 받고 cacheTtl 초 동안 같은 값 · at = 받은 시각 · "
+                                                  "futures 는 주식선물 최근월물(month) · puts 는 putMonth 풋 중 선물 현재가에 가까운 행사가 · "
+                                                  "kospi200 비율은 그 월물 등가격 둘레 strikes 범위(strikeCount 줄)의 콜 · 풋 합 — 시장 전체가 아님 · "
+                                                  "iv 는 KIS 내재변동성 칸 그대로(단위 미확인 · 종목 옵션 0.7 꼴) · price 는 마지막 체결가라 그날 거래 0 이면 전날 값 · "
+                                                  "missing = 못 받은 줄 수 · null = 못 받음(0 이 아님)"}})
                 return
 
             if route == "index-minutes":
