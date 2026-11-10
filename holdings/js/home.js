@@ -1378,6 +1378,10 @@ async function loadUniverse() {
 
 /* 시가총액은 목록(dart_universe)이 갖고 있다. 네이버 시총 순위에서 온 값이고
    단위는 억원이라 fmtMoneyKr 이 그대로 받는다. */
+const RANK_MIN_CAP_EOK = 3000;     // 실시간 순위 VI · 볼린저 · 관심 · 장외 · 매수 · 프리장 줄은 시가총액 이 값(억원 · 3천억) 이상만 — 재권님 11-10(VI 「가」 · 볼린저 「1조 이상만」 →
+                                    // 「1조를 3천억 으로 바꿔줘」 · 「가 고 관심이랑 장외랑 매수랑 포함이야」 · 「프리장도」). 한 곳. 시총을 못 받은 종목 · 미국 종목은 남긴다(못 잰 것을 「작다」 로 치지 않는다)
+const capBelowMin = (code) => { if (isUsCode(code)) return false; const c = capOf(code); return c != null && c < RANK_MIN_CAP_EOK; };
+const CAP_MIN_TXT = `시가총액 ${fmtMoneyKr(RANK_MIN_CAP_EOK)} 이상만`;   // 칩 풍선 글 — 값은 위 상수 하나
 function capOf(code) {
   if (isUsCode(code)) {
     for (const id of Object.keys(usRows)) {
@@ -1467,7 +1471,7 @@ const SORTS = {
      값(regPct · regClose)은 서버가 통합 시세에 싣는다(kis_proxy.py `attach_reg_close`) — 화면은 셈하지 않는다.
      정규장 중에는 서버가 안 실어 줄이 비고, 그때 글은 `afterEmpty` 가 적는다.
      `pct` 는 맨 오른쪽 등락률 칸에 무엇을 적나 — 이 칩만 전일 대비가 아니라 종가 대비다 */
-  after:{ label: '장외', key: (p) => p.regPct, only: (v) => v > 0,
+  after:{ label: '장외', key: (p) => p.regPct, only: (v) => v > 0, capMin: true,
           head: '종가', show: (code, p) => (p && p.regClose ? fmtPriceOf(code, p.regClose) : '—'),
           pct: (p) => p.regPct, note: '종가 대비 오른 종목' },
   /* 매수 — 외국인 · 기관 · 프로그램이 **셋 다** 순매수인 종목, 셋 합이 큰 순 (2026-11-05 재권님 「프로그램 기관 외국인이 동시에
@@ -1476,7 +1480,7 @@ const SORTS = {
      관심처럼 순위 목록과 따로 오는 목록이라 `list` 로 준다(시장 칩과 무관 · 코스피 · 코스닥 함께) */
   /* 줄마다 셋이 **각각 얼마 사는지**(억) · 오늘 셋 다 샀다가 한 곳이라도 매도로 바뀐 종목은 맨 위에 흐리게 남긴다
      (11-05 재권님 「동시매수하다가 어느 한곳이 매도로 바뀌는것도 파악을 할수있게」 → 시안 「좋아 각각 얼마 사는지로」) */
-  buy:  { label: '매수', list: () => (jointRows ? [...jointFlipped, ...jointRows] : null),
+  buy:  { label: '매수', list: () => (jointRows ? [...jointFlipped, ...jointRows] : null), capMin: true,
           head: '외 · 기 · 프 순매수(억)', show: (code) => jointCell(code), html: true,
           note: () => jointNote(),
           empty: () => (!jointMeta || jointMeta.pending ? '불러오는 중'
@@ -1485,7 +1489,7 @@ const SORTS = {
   /* 프리장 — 넥스트레이드 프리마켓(08:00~08:50)에 프로그램이 몰리는 종목 (2026-11-05 재권님 「프리장에 프로그램 몰리는것 만들어줘.
      이걸 참고해서 매매를 할수있게 다른것들도 같이 챙겨서」 → 안 「응 만들어」). 고르는 것 · 차례 · 굳히는 때는 서버다(server/pre_flow.py)
      — 순위 목록 중 프리장 거래대금 상위 · 프로그램 순매수 큰 순 · 08:50~09:00 에 그날 판으로 굳힘. 화면은 받은 차례 그대로 그린다 */
-  pre:  { label: '프리장', list: () => preRows,
+  pre:  { label: '프리장', list: () => preRows, capMin: true,
           head: '프리장 프 · 대금(억) · 거래량', show: (code) => preCell(code), html: true,
           note: () => preNote(),
           empty: () => (!preMeta ? '불러오는 중'
@@ -1526,17 +1530,17 @@ const SORTS = {
 /* 칩 설명 — 칩 위에 마우스를 1초 올려 두면 뜬다(공용 풍선 data-tip · 2026-11-07 재권님 「급등 매수 장외 등 해당 버튼 위에 마우스 1초이상
    올리고 있으면 설명뜨게」 → 「전부 통일」). 위 칩 줄과 「자세히」 모달 탭이 같이 쓴다 — 글은 여기 한 곳. 기준은 위 SORTS 주석 · 서버 그대로 · 장외 · 매수 · 프리장은 개발2 가 코드로 대 봄(11-07) */
 const SORT_TIPS = {
-  fav: '하트로 담은 관심종목만 걸러 시가총액 순으로 봅니다',
+  fav: `하트로 담은 관심종목만 걸러 시가총액 순으로 봅니다 · ${CAP_MIN_TXT}`,
   cap: '시가총액이 큰 순 — 위 코스피 · 코스닥으로 시장을 고릅니다',
   value: '오늘 거래대금이 큰 순',
   vol: '오늘 거래량이 큰 순',
   up: '오늘 전일 대비 많이 오른 순',
   down: '오늘 전일 대비 많이 내린 순',
-  after: '정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 09:00 ~ 15:40 은 비어 있습니다',
-  buy: '외국인 · 기관 · 프로그램이 셋 다 순매수인 종목, 셋 합이 큰 순(외국인 · 기관은 장중 가집계)\n셋 다 샀다가 한 곳이라도 매도로 바뀐 종목은 맨 위에 흐리게',
-  pre: '코스피 200 · 코스닥 150 종목 중 넥스트레이드 프리마켓(08:00 ~ 08:50) 거래대금 상위 안에서 프로그램 순매수가 큰 순\n08:50 ~ 09:00 에 그날 판으로 굳힙니다',
-  vi: '오늘 정규장에 상승 VI 가 걸렸거나(시가총액 1조 이상만) 전일 대비 +20% 를 넘은 종목, 최근 것이 위',
-  bb: '바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · 시가총액 1조 이상만 · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록',
+  after: `정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 09:00 ~ 15:40 은 비어 있습니다 · ${CAP_MIN_TXT}`,
+  buy: `외국인 · 기관 · 프로그램이 셋 다 순매수인 종목, 셋 합이 큰 순(외국인 · 기관은 장중 가집계)\n셋 다 샀다가 한 곳이라도 매도로 바뀐 종목은 맨 위에 흐리게 · ${CAP_MIN_TXT}`,
+  pre: `코스피 200 · 코스닥 150 종목 중 넥스트레이드 프리마켓(08:00 ~ 08:50) 거래대금 상위 안에서 프로그램 순매수가 큰 순\n08:50 ~ 09:00 에 그날 판으로 굳힙니다 · ${CAP_MIN_TXT}`,
+  vi: `오늘 정규장에 상승 VI 가 걸렸거나(VI 는 ${CAP_MIN_TXT}) 전일 대비 +20% 를 넘은 종목, 최근 것이 위`,
+  bb: `바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · ${CAP_MIN_TXT} · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록`,
   ssts: '코스피200 · 코스닥150 종목의 공매도 거래대금 · 비율(공매도 대금 ÷ 전체 거래대금) 순\n아래 줄에서 금액 · 비율 · 1일 · 5일 · 한달 · 1년 · 장중 값은 없고 거래소가 장 뒤에 냅니다',
 };
 const sortTipAttr = (id) => (SORT_TIPS[id] ? ` data-tip="${escT(SORT_TIPS[id])}" data-tip-h="${escT(SORTS[id].label)}"` : '');
@@ -1600,7 +1604,6 @@ let sstsWatch = null;
 
 /* 「VI·급등」 칩 — 서버가 준 일(최신이 위)을 종목마다 한 줄로 묶는다. 못 받았으면 null(빈 목록과 가른다) */
 let viRows = null, viMeta = null, viBy = {};
-const RANK_MIN_CAP_EOK = 10000;    // VI 줄 · 볼린저 줄은 시가총액 이 값(억원 · 1조) 이상만 — 재권님 11-10(VI 「가」 · 볼린저 「1조 이상만」 · 「가」). 한 곳
 const VI_FALLBACK_MS = 30000;      // 서버가 롱폴을 못 줄 때만
 function viCell(code) {
   const g = viBy[code];
@@ -1630,7 +1633,7 @@ async function loadVi() {
       const by = {}, rows = [];
       for (const it of d.items || []) {          // 서버가 최신이 위로 준다 — 처음 만난 것이 그 종목의 마지막 일
         if (!it.code) continue;
-        // VI 는 시총 1조(1만 억원) 이상만 — 재권님 「vi종목은 시총1조가 넘지않는건 안보여도 돼」 → 「가」(11-10). 급등 줄은 그대로.
+        // VI 는 시총 RANK_MIN_CAP_EOK 이상만 — 재권님 「vi종목은 시총1조가 넘지않는건 안보여도 돼」 → 「가」 → 「1조를 3천억 으로」(11-10). 급등 줄은 그대로.
         // 시총을 아직 못 받은 줄은 남긴다 — 못 잰 것을 「작다」 로 치지 않는다(서버가 다음 바퀴에 채운다)
         const capEok = it.cap ?? capOf(it.code);
         if (it.kind === 'vi' && capEok != null && capEok < RANK_MIN_CAP_EOK) continue;
@@ -1676,7 +1679,7 @@ async function loadBb() {
       const by = {}, rows = [];
       for (const it of d.items || []) {          // 서버가 최신이 위로 준다 — 처음 만난 것이 그 종목의 마지막 봉
         if (!it.code) continue;
-        // 시총 1조 이상만 — 재권님 「볼린져에도 시가총액 넣어주고 1조 이상만」(11-10). 못 받은 줄은 남긴다(VI 와 같은 까닭)
+        // 시총 RANK_MIN_CAP_EOK 이상만 — 재권님 「볼린져에도 시가총액 넣어주고 1조 이상만」 → 「1조를 3천억 으로」(11-10). 못 받은 줄은 남긴다(VI 와 같은 까닭)
         const capEok = it.cap ?? capOf(it.code);
         if (capEok != null && capEok < RANK_MIN_CAP_EOK) continue;
         let g = by[it.code];
@@ -1919,7 +1922,7 @@ function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
     const only = favGroupCodes(grp);
     const fav = only ? favList().filter((f) => only.has(f.code)) : favList();
     const want = new Set(fav.map((f) => f.code));
-    const inside = all.filter((s) => want.has(s.code));   // 시장을 안 가린다 — 위 MARKETS 주석
+    const inside = all.filter((s) => want.has(s.code) && !capBelowMin(s.code));   // 시장을 안 가린다 — 위 MARKETS 주석 · 시총 RANK_MIN_CAP_EOK 미만은 뺀다
 
     /* 순위 200 밖에서 담은 종목은 뒤에 붙인다. 빼면 **담았는데 안 보인다**
        가 된다. 이름은 담을 때 함께 저장돼 있다 (favorites.js 주석).
@@ -1937,7 +1940,7 @@ function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
 
   if (sort && sort.list && !us) {          // 매수 — 서버가 고른 줄 · 그 차례 그대로
     let n = 0;
-    return (sort.list() || []).map((x) => ({
+    return (sort.list() || []).filter((x) => !sort.capMin || !capBelowMin(x.code)).map((x) => ({   // 매수 · 프리장 — 시총 RANK_MIN_CAP_EOK 미만은 뺀다
       code: x.code, name: x.name, sector: '', brand: brandColor(x.code, x.name),
       rank: x.flip ? '—' : ++n, flip: !!x.flip,                // 빠진 종목은 순위 없이 흐리게(paintRows)
     }));
@@ -1957,6 +1960,7 @@ function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
   return base
     .map(s => ({ s, v: val(s) }))
     .filter(({ v }) => !sort.only || (v != null && sort.only(v)))   // 장외 — 오른 종목만 남긴다(거르기)
+    .filter(({ s }) => !sort.capMin || !capBelowMin(s.code))          // 장외 — 시총 RANK_MIN_CAP_EOK 미만은 뺀다
     .sort((a, b) => {
       if (a.v == null && b.v == null) return a.s.rank - b.s.rank;
       if (a.v == null) return 1;
