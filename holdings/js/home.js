@@ -716,11 +716,24 @@ function paintBigHead(s2) {
 
 /* 현재가와 등락률. 시세가 들어올 때마다 불린다. */
 let bigShown = null;
+const _expect = new Map();   // 장 전 예상 체결가 — 세부사항 칸(stock-detail)이 호가와 함께 받아 알린다(2026-11-10 재권님 「나」)
 function paintBigPrice() {
   const el = $('kh-big-v');
   if (!el || mkKey) return;
   /* 묶음 시세가 아직 안 왔으면 세부사항 칸이 받은 단건으로 먼저 칠한다 — 묶음이 오면 그것이 덮는다
      (2026-10-06 실측: 단건은 0.2초에 와 있는데 묶음을 기다려 1.7초에 칠해졌다) */
+  /* 장 전 동시호가 동안은 현재가 자리에 예상 체결가를 「예상」 과 함께(2026-11-10 재권님 「나」) — 서버가 그때만 준다 */
+  const ex = _expect.get(selectedCode);
+  if (ex) {
+    const st = `ex|${selectedCode}|${ex.price}|${ex.pct}`;
+    if (bigShown === st) return;
+    bigShown = st;
+    el.className = 'kh-idx-v kh-num ' + dirClass(ex.pct);
+    el.textContent = `예상 ${fmtPriceOf(selectedCode, ex.price)}  ${fmtPct(ex.pct)}`;
+    el.dataset.tip = '장 전 동시호가 예상 체결가입니다 — 정규장이 열릴 때 시가로 정해집니다';
+    return;
+  }
+  delete el.dataset.tip;
   const live = (rowPrices && rowPrices[selectedCode]) || _oneSeed.get(selectedCode);
   if (!live) {
     el.className = 'kh-idx-v kh-num kh-mut';
@@ -3246,7 +3259,8 @@ document.addEventListener('click', (e) => {
 const panel3 = mountStockPanel($('kh-panel3'), { code: selectedCode, depth: true });   // 호가 10단 작은 막대는 홈만(2026-11-06)
 
 /* 세부사항 — 차트 머리줄의 보조지표 옆 */
-const detail = mountStockDetail($('kh-dt'), { view: 'direct', onOne: takeOne });   // 첫 화면에서 크게 보는 종목
+const detail = mountStockDetail($('kh-dt'), { view: 'direct', onOne: takeOne,
+  onExpect: (c, ex) => { if (ex) _expect.set(c, ex); else _expect.delete(c); bigShown = null; paintBigPrice(); } });   // 첫 화면에서 크게 보는 종목
 if (selectedCode) detail.setCode(selectedCode);
 
 paintBigPeriods();

@@ -40,6 +40,7 @@ KST = timezone(timedelta(hours=9))
 PRE_OPEN, PRE_CLOSE = "0800", "0850"
 REG_OPEN, REG_CLOSE = "0900", "1530"
 AFTER_CLOSE = "2000"
+PREOPEN_AUCTION_MIN = 30             # 정규장 여는 시각 앞 동시호가(KRX 08:30~09:00) 길이 — 예상 체결가가 오는 때(2026-11-10 · kis_proxy fetch_asking)
 HOLIDAY_AT = (6, 30)                 # 이 시각 뒤 하루 한 번 휴장일 조회
 TICK_SEC = 60
 NOTICE_SEC = 600
@@ -115,6 +116,17 @@ def in_regular(proxy, now=None):
         return False
     hm = now.strftime("%H%M")
     return t["reg"][0] <= hm < t["reg"][1]
+
+
+def in_preopen_auction(proxy, now=None):
+    """지금 장 전 동시호가인가 — 그날 정규장 여는 시각 앞 PREOPEN_AUCTION_MIN 분. 휴장이면 False · 바뀐 시각(수능 10:00)을 따른다."""
+    now = now or _now()
+    t = today(proxy, now=now)
+    if t["open"] is False:
+        return False
+    o = t["reg"][0]
+    m = int(o[:2]) * 60 + int(o[2:]) - PREOPEN_AUCTION_MIN
+    return "%02d%02d" % (m // 60, m % 60) <= now.strftime("%H%M") < o
 
 
 def fetch_holidays(proxy, cfg, day):

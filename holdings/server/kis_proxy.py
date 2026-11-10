@@ -4406,9 +4406,36 @@ def fetch_asking(cfg, code):
         "bid": {"total": tot_bid, "levels": bid},
         # 사자 비중. 50 보다 크면 사려는 주문이 더 쌓여 있다는 뜻이다
         "buyPct": round(tot_bid / both * 100, 1) if both else None,
+        "expect": _preopen_expect(cfg, code, data),
     }
     _asking_cache[code] = (time.time(), out)
     return out
+
+
+def _preopen_expect(cfg, code, data):
+    """**장 전 예상 체결가** — 장 전 동시호가(market_hours.in_preopen_auction) 동안만 낸다 · 그 밖은 None (2026-11-10 재권님 「응 해줘」 →
+    자리는 「나」 — 종목 이름 옆 현재가 자리에 「예상」 과 함께).
+
+    KIS 호가 응답 output2 에 예상 체결가(antc_cnpr) · 예상 거래량(antc_vol) · 기준가(stck_sdpr)가 온다 — 전에는 output2 를 버렸다.
+    통합(UN)으로 받은 응답은 antc_cnpr 이 "0" 으로 왔다(11-10 09:12 005930 · J 는 199,400 = 그날 시가) — 그래서 받은 응답에 값이 없으면
+    KRX(J)로 한 번 더 묻는다(동시호가 30분 · 호가 캐시 ASKING_TTL 마다 한 번). 전일 대비는 기준가로 셈한다(부호 칸을 읽지 않는다).
+    **아직 못 잰 것** — 08:30~09:00 에 UN 응답에도 값이 오는지(오면 J 를 다시 안 묻는다)."""
+    try:
+        if not market_hours.in_preopen_auction(sys.modules[__name__]):
+            return None
+        o2 = data.get("output2") or {}
+        if not (_num(o2.get("antc_cnpr"), int) or 0) > 0:
+            o2 = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
+                         {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code}, "FHKST01010200").get("output2") or {}
+        price = _num(o2.get("antc_cnpr"), int) or 0
+        base = _num(o2.get("stck_sdpr"), int) or 0
+        if price <= 0:
+            return None                      # 아직 예상가가 없다(동시호가 첫 주문 전) — 0 원으로 내지 않는다
+        return {"price": price, "amt": price - base if base else None,
+                "pct": round((price - base) / base * 100, 2) if base else None,
+                "volume": _num(o2.get("antc_vol"), int)}
+    except Exception:
+        return None                          # 못 받았다 — 예상가 없이 호가만 낸다
 
 
 def fetch_investor_top(cfg, direction="buy", market="all", by="qty", limit=10):
