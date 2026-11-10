@@ -4943,8 +4943,10 @@ SCHEMA = [
          key TEXT PRIMARY KEY, value TEXT, updated_at TEXT
        )""",
     INVESTOR_DAILY_SQL,      # 「3달」 — 위 `fetch_investor_long`
-    *EXPECT_SQL,             # 예상 체결가가 맞았나 — 위 `_expect_note`
 ]
+# 예상 체결가 표(EXPECT_SQL)는 여기 두지 않는다 — db_init 은 읽기 전용 서버(8764 · 8767 · 세션)에서도 돌아, 표가 아직 없으면
+# CREATE 가 「readonly database」 로 터져 지수 봉까지 못 낸다(2026-11-10 11:5x 8766 실측 · 6420cd3 에 넣었다 뺌).
+# 쓰는 서버만 처음 적을 때 만든다(_expect_note · _expect_actual) · 읽는 쪽은 표가 없으면 「쌓인 것 없음」(expect_report)
 
 # 기간별 설정
 #   fresh_sec : 이 시간이 지나면 최근 구간을 다시 받는다 (장중 당일 캔들 갱신용)
