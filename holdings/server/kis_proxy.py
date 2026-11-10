@@ -2906,7 +2906,7 @@ def fetch_stock_futures_daily(cfg, codes):
 FO_IDX_MASTER = "https://new.real.download.dws.co.kr/common/master/fo_idx_code_mts.mst.zip"
 FO_SNAP_TTL = 300                     # 장중(파생 주간 08:45~15:45) 받은 값을 다시 쓰는 초 — 재권님 「5분」
 FO_SNAP_TTL_CLOSED = 600              # 장 밖
-FO_SNAP_PUTS = 5                      # 종목마다 현재가에 가까운 풋 행사가 몇 줄
+FO_SNAP_PUTS = 5                      # 종목마다 현재가에 가까운 행사가 몇 줄 — 콜 · 풋 각각
 FO_SNAP_K200_SIDE = 5                 # 코스피200 등가격 위아래 행사가 몇 칸씩(콜 · 풋 각각 2×이것+1 줄)
 _fo_snap = {}                         # 열쇠 → (시각, 값)
 _fo_snap_lock = threading.Lock()
@@ -2977,15 +2977,18 @@ def _fo_snap_stock(cfg, code):
         if fut:
             fut["month"] = ym
             break
-    puts = None
-    if month and fut:
-        near = sorted(opts[("P", month)], key=lambda x: abs(x[0] - fut["price"]))[:FO_SNAP_PUTS]
-        puts = []
+    side = {}                         # 콜 · 풋을 따로 — 재권님 「풋옵션 콜옵션은 구분되어야해」(11-10)
+    for kind in ("C", "P"):
+        if not (month and fut and (kind, month) in opts):
+            side[kind] = None
+            continue
+        near = sorted(opts[(kind, month)], key=lambda x: abs(x[0] - fut["price"]))[:FO_SNAP_PUTS]
+        side[kind] = []
         for strike, ocode in sorted(near):
             row, _ = _fo_quote(cfg, "JO", ocode)
-            puts.append(dict(row or {"code": ocode, "price": None}, strike=strike))
-    return {"name": name, "futures": fut, "puts": puts, "putMonth": month,
-            "putNote": "행사가는 선물 현재가에 가까운 %d줄" % FO_SNAP_PUTS if puts else None}
+            side[kind].append(dict(row or {"code": ocode, "price": None}, strike=strike))
+    return {"name": name, "futures": fut, "calls": side["C"], "puts": side["P"], "putMonth": month, "optionMonth": month,
+            "putNote": "행사가는 선물 현재가에 가까운 %d줄 — 콜 · 풋 각각" % FO_SNAP_PUTS if side["P"] else None}
 
 
 def _fo_snap_k200(cfg):
@@ -9889,7 +9892,7 @@ class Handler(SimpleHTTPRequestHandler):
                                  "data": data,
                                  "meta": {"cacheTtl": ttl, "ttlOpen": FO_SNAP_TTL, "ttlClosed": FO_SNAP_TTL_CLOSED,
                                           "note": "KIS 현재가 조회 · 누가 물을 때만 받고 cacheTtl 초 동안 같은 값 · at = 받은 시각 · "
-                                                  "futures 는 주식선물 최근월물(month) · puts 는 putMonth 풋 중 선물 현재가에 가까운 행사가 · "
+                                                  "futures 는 주식선물 최근월물(month) · calls · puts 는 optionMonth 콜 · 풋을 따로 — 각각 선물 현재가에 가까운 행사가 · "
                                                   "kospi200 비율은 그 월물 등가격 둘레 strikes 범위(strikeCount 줄)의 콜 · 풋 합 — 시장 전체가 아님 · "
                                                   "iv 는 KIS 내재변동성 칸 그대로(단위 미확인 · 종목 옵션 0.7 꼴) · price 는 마지막 체결가라 그날 거래 0 이면 전날 값 · "
                                                   "missing = 못 받은 줄 수 · null = 못 받음(0 이 아님)"}})
