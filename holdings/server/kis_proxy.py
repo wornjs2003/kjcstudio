@@ -3901,6 +3901,11 @@ def _inv_attach_detail(code, rows):
 # 장중에도 온다(10-27 11:3x 실측 · 8765 넘기기). KRX 회원사라 시장은 `J`.
 INVESTOR_MEMBER_TTL = 60
 _investor_member_cache = {}
+# 외국계 창구 「최근 5분」 — KIS 는 오늘 누적만 준다. 받을 때마다 누적을 쌓아 두고 지금 − 5분 전으로 센다
+# (2026-11-10 재권님 「외국계 창구도 세로굵은줄 넣어줘」 → 안 「응」). 그 종목을 누가 볼 때만 받으므로 처음 5분은 recent 가 없다.
+# 「5분」 은 바닥 줄 프로그램 칸(flow-foot.js 의 RECENT · 1분 칸 다섯)과 같은 창이다 — 바꾸면 둘 다
+MEMBER_RECENT_SEC = 300
+_member_snaps = {}                          # code → (그날 날짜, [(시각초, 매수 누적, 매도 누적), …])
 
 
 def fetch_investor_member(cfg, code):
@@ -3947,7 +3952,24 @@ def fetch_investor_member(cfg, code):
         "volume": _num(o.get("acml_vol"), int),
         "at": datetime.now(KST).strftime("%H:%M"),     # KIS 에서 받은 시각 — 큰 차트 바닥 줄이 「정보가 들어온 시각」 으로 쓴다(2026-11-03)
     }
-    _investor_member_cache[code] = (time.time(), out)
+    ff = out["foreignFirms"]
+    now = time.time()
+    day = datetime.now(KST).strftime("%Y-%m-%d")
+    d, snaps = _member_snaps.get(code) or (day, [])
+    if d != day:
+        snaps = []
+    if ff["buy"] is not None and ff["sell"] is not None:
+        snaps.append((now, ff["buy"], ff["sell"]))
+    snaps = [x for x in snaps if x[0] >= now - MEMBER_RECENT_SEC * 3]
+    _member_snaps[code] = (day, snaps)
+    old = [x for x in snaps if x[0] <= now - MEMBER_RECENT_SEC]
+    ff["recent"] = None
+    if old and ff["buy"] is not None and ff["sell"] is not None:
+        b0, s0 = old[-1][1], old[-1][2]
+        rb, rs = ff["buy"] - b0, ff["sell"] - s0
+        if rb >= 0 and rs >= 0:             # 누적이 줄었으면(KIS 값 흔들림) 셈하지 않는다 — 없음으로 둔다
+            ff["recent"] = {"buy": rb, "sell": rs, "sec": int(now - old[-1][0])}
+    _investor_member_cache[code] = (now, out)
     return out
 
 
