@@ -1506,7 +1506,7 @@ const SORT_TIPS = {
   buy: '외국인 · 기관 · 프로그램이 셋 다 순매수인 종목, 셋 합이 큰 순(외국인 · 기관은 장중 가집계)\n셋 다 샀다가 한 곳이라도 매도로 바뀐 종목은 맨 위에 흐리게',
   pre: '코스피 200 · 코스닥 150 종목 중 넥스트레이드 프리마켓(08:00 ~ 08:50) 거래대금 상위 안에서 프로그램 순매수가 큰 순\n08:50 ~ 09:00 에 그날 판으로 굳힙니다',
   vi: '오늘 정규장에 상승 VI 가 걸렸거나(시가총액 1조 이상만) 전일 대비 +20% 를 넘은 종목, 최근 것이 위',
-  bb: '바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록',
+  bb: '바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · 시가총액 1조 이상만 · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록',
   ssts: '코스피200 · 코스닥150 종목의 공매도 거래대금 · 비율(공매도 대금 ÷ 전체 거래대금) 순\n아래 줄에서 금액 · 비율 · 1일 · 5일 · 한달 · 1년 · 장중 값은 없고 거래소가 장 뒤에 냅니다',
 };
 const sortTipAttr = (id) => (SORT_TIPS[id] ? ` data-tip="${escT(SORT_TIPS[id])}" data-tip-h="${escT(SORTS[id].label)}"` : '');
@@ -1570,7 +1570,7 @@ let sstsWatch = null;
 
 /* 「VI·급등」 칩 — 서버가 준 일(최신이 위)을 종목마다 한 줄로 묶는다. 못 받았으면 null(빈 목록과 가른다) */
 let viRows = null, viMeta = null, viBy = {};
-const VI_MIN_CAP_EOK = 10000;      // VI 줄은 시가총액 이 값(억원 · 1조) 이상만 — 재권님 11-10
+const RANK_MIN_CAP_EOK = 10000;    // VI 줄 · 볼린저 줄은 시가총액 이 값(억원 · 1조) 이상만 — 재권님 11-10(VI 「가」 · 볼린저 「1조 이상만」 · 「가」). 한 곳
 const VI_FALLBACK_MS = 30000;      // 서버가 롱폴을 못 줄 때만
 function viCell(code) {
   const g = viBy[code];
@@ -1603,7 +1603,7 @@ async function loadVi() {
         // VI 는 시총 1조(1만 억원) 이상만 — 재권님 「vi종목은 시총1조가 넘지않는건 안보여도 돼」 → 「가」(11-10). 급등 줄은 그대로.
         // 시총을 아직 못 받은 줄은 남긴다 — 못 잰 것을 「작다」 로 치지 않는다(서버가 다음 바퀴에 채운다)
         const capEok = it.cap ?? capOf(it.code);
-        if (it.kind === 'vi' && capEok != null && capEok < VI_MIN_CAP_EOK) continue;
+        if (it.kind === 'vi' && capEok != null && capEok < RANK_MIN_CAP_EOK) continue;
         let g = by[it.code];
         if (!g) { g = by[it.code] = { last: it, vi: 0, surge: false }; rows.push({ code: it.code, name: it.name }); }
         if (it.kind === 'vi') g.vi += 1; else g.surge = true;
@@ -1627,7 +1627,10 @@ function bbCell(code) {
   /* 한 줄 — 둘째 줄을 달면 그 줄만 높아진다(11-09 재권님 「화면에 맞게 보여지는게 아니고」). 같은 종목이 여러 번이면 「×N」 */
   /* 가격까지 적으면 종목 이름이 잘렸다(11-09 2560 창 · 「LG에너지솔…」) — 그 봉 값은 1초 풍선으로 */
   const tip = `${escT(it.t || '')} 봉 · 종가 ${won} · 저가 ${it.low == null ? '—' : `${Number(it.low).toLocaleString()}원`}${g.n > 1 ? ` · 오늘 ${g.n}번` : ''}`;
-  return `<div style="white-space:nowrap;font-size:12px;line-height:1.3" data-tip="${tip}"><span class="kh-up">바닥 ${escT(it.t || '')}</span>${g.n > 1 ? ` <span class="kh-mut">×${g.n}</span>` : ''}</div>`;
+  /* 둘째 줄 시가총액 — VI · 급등 칸과 같은 모양(재권님 11-10 「가」 · 11-09 한 줄로 줄였던 것을 이 지시로 둘째 줄을 단다) */
+  const cap = g.cap != null ? `시총 ${fmtMoneyKr(g.cap)}` : capOf(code) != null ? `시총 ${showCap(code)}` : '';
+  return `<div style="white-space:nowrap;font-size:12px;line-height:1.3" data-tip="${tip}"><span class="kh-up">바닥 ${escT(it.t || '')}</span>${g.n > 1 ? ` <span class="kh-mut">×${g.n}</span>` : ''}</div>` +
+    `<div style="white-space:nowrap;font-size:11px;line-height:1.3" class="kh-mut">${cap}</div>`;
 }
 function bbNote() {
   const n = (bbRows || []).length;
@@ -1643,9 +1646,13 @@ async function loadBb() {
       const by = {}, rows = [];
       for (const it of d.items || []) {          // 서버가 최신이 위로 준다 — 처음 만난 것이 그 종목의 마지막 봉
         if (!it.code) continue;
+        // 시총 1조 이상만 — 재권님 「볼린져에도 시가총액 넣어주고 1조 이상만」(11-10). 못 받은 줄은 남긴다(VI 와 같은 까닭)
+        const capEok = it.cap ?? capOf(it.code);
+        if (capEok != null && capEok < RANK_MIN_CAP_EOK) continue;
         let g = by[it.code];
         if (!g) { g = by[it.code] = { last: it, n: 0 }; rows.push({ code: it.code, name: it.name }); }
         g.n += 1;
+        if (g.cap == null && it.cap != null) g.cap = it.cap;   // 서버가 종목당 한 번 받아 둔 시총(억원)
       }
       bbBy = by; bbRows = rows;
     }
