@@ -31,3 +31,56 @@
 .sb td.biz{font-size:12.5px;color:var(--kh-text-secondary);min-width:170px;max-width:210px}
 .sb td.c,.sb td.n,.sb td.q,.sb th{white-space:nowrap}
 .sb th.key{color:var(--kh-text-primary);font-weight:700}
+/* 산업 분석 분류 줄 · 「반도체 소부장」 화면 (2026-11-10 「응 그렇게 만들어줘」 · 시안 temp/시황분석-sbx4) — 칩 줄은 영상 분석과 같은 .kh-chips.in-subcat(insight.css)
+   좁은 폭이 기본(1열) · 넓으면 @media (min-width) 로 칸을 늘린다(모바일 퍼스트) · 판정 알약은 초록(호재) · 주황(악재) · 회색 — 등락 빨강 · 파랑과 섞이지 않게 */
+.ind-board{padding:4px 0 8px;color:var(--kh-text-primary)}
+.ind-board h1{font-size:22px;margin:0 0 4px}
+.ind-board .sub{color:var(--kh-text-secondary);font-size:13px;margin:0 0 14px}
+.ind-topics{margin:0;padding:0;list-style:none;font-size:14px;line-height:1.9}
+.ind-topics a{color:var(--kh-text-primary);font-weight:700}
+.ind-topics small{color:var(--kh-text-secondary);font-size:11.5px}
+.ind-topics small.on{color:var(--kh-accent)}
+.sw-card{background:var(--kh-bg-card);border-radius:16px;padding:16px 18px}
+.sw-card h2{font-size:17px;font-weight:800;margin:0 0 4px}
+.sw-hero{display:grid;grid-template-columns:1fr;gap:14px;align-items:center;background:var(--kh-bg-card);border-radius:16px;padding:20px 22px}
+.sw-hero .k{font-size:13px;font-weight:700;color:var(--kh-text-secondary);letter-spacing:.02em}
+.sw-hero .big{font-size:28px;font-weight:800;line-height:1.2}
+.sw-hero .one{font-size:15px;line-height:1.7}
+.sw-hero .one a{color:var(--kh-accent);font-weight:600}
+.sw-hero .one .sub{color:var(--kh-text-secondary);font-size:14px;margin:0}
+.sw .u{color:rgb(var(--kh-ok-rgb))} .sw .d{color:rgb(var(--kh-warn-rgb))} .sw .big.z{color:var(--kh-text-primary)}
+.sw-leg{font-size:13px;color:var(--kh-text-secondary)}
+.sw-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--kh-bg);margin:8px 0 2px}
+.sw-bar i{display:block} .sw-bar i.u{background:rgb(var(--kh-ok-rgb))} .sw-bar i.d{background:rgb(var(--kh-warn-rgb))} .sw-bar i.z{background:var(--kh-border)}
+.sw-cols{display:grid;grid-template-columns:1fr;gap:14px}
+.sw-col{background:var(--kh-bg-card);border-radius:16px;padding:16px 14px 14px}
+.sw-col h3{margin:0 2px 2px;font-size:17px;font-weight:800}
+.sw-col .cnt{font-size:12.5px;color:var(--kh-text-secondary);margin:0 2px 10px}
+.sw-t{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:10px 12px;background:var(--kh-bg);border-radius:12px;margin-top:8px}
+.sw-t .n{font-size:13px;color:var(--kh-text-secondary)}
+.sw-t .v{font-size:17px;font-weight:700} .sw-t .v small{font-size:12.5px;font-weight:500;margin-left:2px}
+.sw-t .v2{font-size:14px} .sw-t .v2 b{font-size:16px}
+.sw-t .p{font-size:13px;font-weight:600;margin-left:6px}
+.sw-t .why{grid-column:1/-1;font-size:12.5px;color:var(--kh-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:18px}
+.sw-pill{align-self:start;justify-self:end;font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.sw-pill.u{background:rgb(var(--kh-ok-rgb) / .14);color:rgb(var(--kh-ok-rgb))}
+.sw-pill.d{background:rgb(var(--kh-warn-rgb) / .14);color:rgb(var(--kh-warn-rgb))}
+.sw-pill.z{background:var(--kh-bg);color:var(--kh-text-secondary)}
+.sw-stale{font-size:11.5px;color:var(--kh-text-secondary)}
+.sw-news{display:grid;grid-template-columns:1fr;gap:14px}
+.sw-news ul{margin:10px 0 4px;padding:0;list-style:none;font-size:14px;line-height:1.6}
+.sw-news li{padding:7px 12px;background:var(--kh-bg);border-radius:10px;margin-top:6px}
+.sw-news a{color:var(--kh-text-primary);text-decoration:none}
+.sw-news li small{color:var(--kh-text-secondary);margin-left:6px}
+.sw-fold{background:var(--kh-bg-card);border-radius:16px;padding:14px 18px}
+.sw-fold summary{cursor:pointer;font-size:16px;font-weight:700}
+.sw-fold summary .s{font-size:12.5px;font-weight:400;color:var(--kh-text-secondary);margin-left:10px}
+.sw-scroll{overflow-x:auto;margin:8px 0}
+.sw-fold table{width:100%;border-collapse:collapse;font-size:13.5px}
+.sw-fold td,.sw-fold th{padding:7px 8px;border-bottom:1px solid var(--kh-border);text-align:left;vertical-align:top}
+.sw-fold th{color:var(--kh-text-secondary);font-weight:500;font-size:12.5px}
+.sw-fold a{color:var(--kh-accent)}
+.sw-h{font-size:19px;font-weight:800;margin:26px 0 10px}
+.sw-h small{font-size:13px;font-weight:400;color:var(--kh-text-secondary);margin-left:8px}
+@media (min-width: 641px){.sw-hero{grid-template-columns:minmax(260px,1fr) 2fr}.sw-news{grid-template-columns:1fr 1fr}}
+@media (min-width: 1100px){.sw-cols{grid-template-columns:repeat(3,1fr)}}
