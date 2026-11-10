@@ -7045,6 +7045,32 @@ def vol_prev_day(code, today):
     return {"day": day, "from": VOL_PREV_FROM, "to": VOL_PREV_TO, "bars": bars, "total": sum(v for _, v in bars)}
 
 
+def vol_same_time(code, now=None):
+    """오늘 · 전날 정규장 거래량을 **같은 시각까지** 같은 자리(DB 5분봉 09:00~15:30)에서 센다 — 「전날 같은 시각 대비 %」 (2026-11-10).
+
+    분자 · 분모를 같은 봉에서 센다 — 처음 판은 분자를 머리줄 누적 거래량으로 셌는데 그 값이 15:30 에 정규장에서 통합(넥스트레이드 포함)으로 바뀌고
+    장 뒤 거래가 분자에만 쌓여 마감 뒤 79% 가 122% 로 뛰었다(qa 15:45 돌려보냄). 오늘 봉은 **다 끝난 봉만** — 지금 도는 봉은 덜 찼다.
+    전날 봉이 없으면 None(「못 받음」) · 오늘 끝난 봉이 아직 없으면 today · upto 가 None(장 전 · 그 종목 봉이 아직 안 쌓임)."""
+    now = now or datetime.now(KST)
+    today = now.strftime("%Y%m%d")
+    prev = vol_prev_day(code, today)
+    if prev is None:
+        return None
+    now_min = now.hour * 60 + now.minute
+    with _db_lock, db_conn() as conn:
+        rows = conn.execute(
+            """SELECT substr(ts, 9, 4) AS hm, volume FROM candles
+                 WHERE code = ? AND period = '5m' AND substr(ts, 1, 8) = ? AND substr(ts, 9, 4) BETWEEN ? AND ?
+                 ORDER BY ts""", (code, today, VOL_PREV_FROM, VOL_PREV_TO)).fetchall()
+    done = [(r["hm"], r["volume"]) for r in rows
+            if r["volume"] is not None and int(r["hm"][:2]) * 60 + int(r["hm"][2:]) + 5 <= now_min]
+    upto = done[-1][0] if done else None
+    return {"day": today, "prevDay": prev["day"], "from": VOL_PREV_FROM, "to": VOL_PREV_TO, "upto": upto,
+            "today": sum(v for _, v in done) if done else None,
+            "prev": sum(v for hm, v in prev["bars"] if hm <= upto) if upto else None,
+            "prevTotal": prev["total"]}
+
+
 def _view_limit(code, period, limit):
     """`view_days` 가 있는 기간이면 최근 그 날짜 수만큼의 봉 수로 limit 를 넓힌다. 줄이지는 않는다.
 
@@ -10001,9 +10027,9 @@ class Handler(SimpleHTTPRequestHandler):
                 if not (code.isdigit() and len(code) == 6):
                     self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
                     return
-                data = vol_prev_day(code, datetime.now(KST).strftime("%Y%m%d"))
+                data = vol_same_time(code)
                 self._send_json({"ok": data is not None, "data": data,
-                                 "meta": {"code": code, "unit": "주", "source": "DB 에 쌓인 5분봉(KIS 를 새로 안 부름)",
+                                 "meta": {"code": code, "unit": "주", "source": "DB 에 쌓인 5분봉 — 오늘 · 전날 정규장 같은 시각까지(KIS 를 새로 안 부름)",
                                           "note": None if data else "전날 5분봉이 아직 안 쌓였습니다"}})
                 return
 

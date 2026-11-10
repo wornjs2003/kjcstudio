@@ -29,26 +29,6 @@
 import { apiFetch, viewUrl } from '../data/api.js';
 import { fmtMoneyKr, fmtUsdBig, fmtShareCount, isUsCode } from '../utils/format.js';
 
-/* 전날 정규장 5분봉(받은 한 벌)은 종목 · 날짜마다 들고 있는다 — 모달과 홈이 같은 종목을 열어도 한 번만 묻는다 */
-const volPrevCache = new Map();
-const KST_MS = 9 * 3600 * 1000;
-const kstNow = () => new Date(Date.now() + KST_MS);
-const kstDay = () => kstNow().toISOString().slice(0, 10).replace(/-/g, '');
-const hmMin = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(2, 4));
-/* 전날 그 시각까지의 정규장 거래량 — 지금 시각이 든 5분봉은 지난 몫만큼 나눠 더한다. 장 전은 null(「—」) · 장 뒤는 하루 전체 */
-function prevSameTime(d) {
-  const n = kstNow();
-  const t = n.getUTCHours() * 60 + n.getUTCMinutes() + n.getUTCSeconds() / 60;
-  if (t < hmMin(d.from)) return null;
-  if (t >= hmMin(d.to)) return d.total;
-  let sum = 0;
-  for (const [hm, v] of d.bars) {
-    const a = hmMin(hm);
-    if (a + 5 <= t) sum += v;
-    else if (a < t) sum += v * (t - a) / 5;
-  }
-  return sum > 0 ? sum : null;
-}
 import { watch } from '../store/longpoll.js';
 import { signClass } from '/assets/js/sign.js';
 import { ready as toneReady, has as toneHas, paint as tonePaint, tone as toneOf } from '/assets/js/tone.js';
@@ -69,7 +49,8 @@ const ASK_RELOAD_FALLBACK_MS = 5000;
    주기는 서버의 `PRICE_CACHE_TTL` 이다(위). */
 const LIVE_RELOAD_KEY = 'kis_proxy.PRICE_CACHE_TTL';
 const LIVE_RELOAD_FALLBACK_MS = 30_000;
-const POWER_RELOAD_FALLBACK_MS = 3_000;    // 체결강도 — 서버 값(kis_proxy.TICKS_TTL)을 못 받았을 때만
+const POWER_RELOAD_FALLBACK_MS = 3_000;
+const VOL_PREV_FALLBACK_MS = 60_000;     // 전날 같은 시각 대비 거래량 — 서버가 롱폴을 못 줄 때만    // 체결강도 — 서버 값(kis_proxy.TICKS_TTL)을 못 받았을 때만
 
 /* `onOne(code, 단건)` — 단건을 받을 때마다 알린다 (2026-10-06 지시 — 「로딩 순서 체크해 봐」 → 「응」).
    첫 화면의 52주 칸과 큰 차트 머리 현재가가 **같은 단건을 따로 또 부르거나**(같은 주소 두 번)
@@ -88,6 +69,7 @@ export function mountStockDetail(host, { view, onOne, onExpect } = {}) {
   let timer = null;
   let liveTimer = null;
   let powerTimer = null;
+  let vpTimer = null;
 
   async function loadAsking() {
     if (!code) return;
@@ -109,12 +91,12 @@ export function mountStockDetail(host, { view, onOne, onExpect } = {}) {
   }
 
   /* 전날 같은 시각 대비 거래량 (2026-11-10 재권님 「차트에 전날 거래대비 몇 % 인지 … 시간대별로 갱신 … 전날 그래도 같이」 → 「나」 같은 시각 · 「가」 이 줄).
-     서버는 전날 정규장 5분봉을 하루 한 벌 준다(`/api/kis/vol-prev` · DB 에 쌓인 봉 · KIS 를 새로 안 부름). 그 봉을 지금 시각까지 더한 것이 분모이고,
-     분자는 이 줄이 이미 받는 누적 거래량(src.volume · 정규장)이다 — 시세가 바뀔 때마다 paint 가 다시 센다. 다시 묻는 주기는 없다(들고 있는 값). */
+     서버가 오늘 · 전날을 **같은 자리**(DB 5분봉 09:00~15:30 · 오늘 끝난 봉 시각까지)에서 세어 준다(`/api/kis/vol-prev`).
+     분자를 머리줄 누적 거래량으로 두면 15:30 에 정규장 → 통합으로 바뀌어 마감 뒤 79% 가 122% 로 뛰었다(qa 11-10 돌려보냄).
+     새 봉이 쌓이면 서버가 알려 준다(롱폴) — 화면이 다시 묻는 주기는 없다 */
+  let vpData = null;
   async function loadVolPrev() {
-    if (!code || isUsCode(code)) return;
-    const key = `${code}|${kstDay()}`;
-    if (volPrevCache.has(key)) { paint(); return; }
+    if (!code || isUsCode(code)) { vpData = null; return; }
     const mine = seq;
     let d = null;
     try {
@@ -122,8 +104,9 @@ export function mountStockDetail(host, { view, onOne, onExpect } = {}) {
       const b = r && r.ok ? await r.json() : null;
       d = b && b.ok ? b.data : null;
     } catch { d = null; }
-    volPrevCache.set(key, d);
-    if (mine === seq) paint();
+    if (mine !== seq) return;
+    vpData = d;
+    paint();
   }
 
   async function loadLive() {
@@ -187,9 +170,9 @@ export function mountStockDetail(host, { view, onOne, onExpect } = {}) {
     const stHtml = st.length ? `<span class="kh-dt-st">${st.map((x) => `<span class="kh-st-chip ${x.k === 'up' ? 'up' : x.k === 'down' ? 'down' : 'danger'}">${x.t}</span>`).join('')}</span>` : '';
 
     /* 전날 같은 시각 대비 거래량 — 체결강도와 같은 자리(홈 큰 차트 · 모달)만. 종목 화면은 이 줄이 꺾여 칸이 커진다(위 pwHere 까닭 그대로) */
-    const vp = pwHere && !isUsCode(code) ? volPrevCache.get(`${code}|${kstDay()}`) : undefined;
-    const vpBase = vp ? prevSameTime(vp) : null;
-    const vpPct = vpBase && src.volume != null ? Math.round(Number(src.volume) / vpBase * 100) : null;
+    const vp = pwHere && !isUsCode(code) ? vpData : null;
+    const vpBase = vp && vp.prev > 0 ? vp.prev : null;
+    const vpPct = vpBase && vp.today != null ? Math.round(vp.today / vpBase * 100) : null;
     // 전날 5분봉이 없으면(지수 · 아직 안 쌓인 종목) 칸을 안 붙인다 — 「—」 칸 하나로도 이 줄이 꺾여 차트가 줄었다(check-layout · 지수 차트 per-row 21 → 45)
     /* 색 — 많으면 빨강 · 적으면 파랑 · 비슷하면 검정, 멀수록 바탕이 짙게(재권님 11-10 「나」 · 「나」). 기준 100 · 비슷함 폭 · 가장 짙은 폭은
        지표 표(data/metrics.json)의 vol_prev_pct 한 곳 · 셈은 tone.js — 화면에 숫자를 두지 않는다. 표에 없으면 색 없이 그린다 */
@@ -197,7 +180,7 @@ export function mountStockDetail(host, { view, onOne, onExpect } = {}) {
     const vpCls = vpPct == null ? 'kh-mut' : vpT?.side === 'up' ? 'kh-up' : vpT?.side === 'down' ? 'kh-down' : '';
     const vpBg = vpT ? tonePaint('vol_prev_pct', vpPct, 'bg') : '';
     const vpHtml = !vp ? '' : `
-      <span class="kh-dt-i" data-vp data-tip="오늘 정규장 누적 거래량 ÷ 전날(${vp ? `${vp.day.slice(4, 6)}-${vp.day.slice(6)}` : '—'}) 같은 시각까지의 정규장 거래량 · 전날 값은 5분봉을 더한 것">
+      <span class="kh-dt-i" data-vp data-tip="오늘 정규장 거래량 ÷ 전날(${vp.prevDay.slice(4, 6)}-${vp.prevDay.slice(6)}) 같은 시각까지의 정규장 거래량 · 둘 다 5분봉을 더한 것${vp.upto ? ` · ${vp.upto.slice(0, 2)}:${vp.upto.slice(2)} 봉까지` : ''}">
         <span class="kh-dt-l">거래량 전날 같은 시각 대비</span><b class="kh-dt-pw ${vpCls}"${vpBg ? ` style="background:${vpBg}"` : ''}>${vpPct == null ? '—' : `${vpPct.toLocaleString('ko-KR')}%`}</b>
         <span class="kh-dt-l">전날 ${vpBase == null ? '—' : fmtShareCount(Math.round(vpBase))}</span></span>`;
 
@@ -251,9 +234,11 @@ export function mountStockDetail(host, { view, onOne, onExpect } = {}) {
   /* 체결강도 — 체결 목록이 바뀌면 서버가 알려 준다(주기는 서버 `kis_proxy.TICKS_TTL`) */
   powerTimer = watch({ url: () => (code && !isUsCode(code) ? viewUrl(`/api/kis/ticks?code=${code}`, view) : null),
                        onChange: () => loadPower(), key: 'kis_proxy.TICKS_TTL', fallbackMs: POWER_RELOAD_FALLBACK_MS });
+  /* 전날 같은 시각 대비 거래량 — 새 5분봉이 쌓이면 서버가 알려 준다. 홈 큰 차트 · 모달만(종목 화면 빼냄 — 까닭: 그 줄이 꺾여 칸이 커짐 · 재권님 「맞아 커밋해」 11-10) */
+  vpTimer = watch({ url: () => (code && !isUsCode(code) && host.closest('.kh-modal, .kh-idx-main') ? `/api/kis/vol-prev?code=${code}` : null),
+                    onChange: () => loadVolPrev(), key: null, fallbackMs: VOL_PREV_FALLBACK_MS });
   toneReady.then(() => paint());          // 지표 표를 읽은 뒤 바탕 짙기를 칠한다
   paint();
-  loadVolPrev();
 
   return {
     /** 장 전 예상 체결가 {price, amt, pct, volume} — 동시호가가 아니면 null */
@@ -271,8 +256,10 @@ export function mountStockDetail(host, { view, onOne, onExpect } = {}) {
       loadAsking();
       loadPower();
       loadLive();
+      vpData = null;
       loadVolPrev();
-      timer.refresh();          // 쥔 연결이 옛 종목을 보고 있다
+      timer.refresh();
+      if (vpTimer) vpTimer.refresh();          // 쥔 연결이 옛 종목을 보고 있다
       if (powerTimer) powerTimer.refresh();
     },
     /** **받아 둔 단건 응답을 그대로 내준다** (2026-09-30 지시 —
@@ -308,6 +295,7 @@ export function mountStockDetail(host, { view, onOne, onExpect } = {}) {
       if (timer) timer.stop();
       if (liveTimer) liveTimer.stop();
       if (powerTimer) powerTimer.stop();
+      if (vpTimer) vpTimer.stop();
       if (fitRo) fitRo.disconnect();
     },
   };
