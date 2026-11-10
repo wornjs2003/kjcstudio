@@ -2660,6 +2660,51 @@ def _ovs_daily(cfg, div, code, start):
     return [rows[k] for k in sorted(rows) if k >= start]
 
 
+def _stock_daily_j(cfg, code, start):
+    """종목 정규장(KRX · J) 일봉 start(YYYYMMDD)부터 오늘까지 — 옛것부터. 한 번에 100줄이라 앞으로 물어 간다(많아야 네 번)."""
+    rows, end = {}, datetime.now(KST).strftime("%Y%m%d")
+    for _ in range(4):
+        d = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+                    {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code, "FID_INPUT_DATE_1": start,
+                     "FID_INPUT_DATE_2": end, "FID_PERIOD_DIV_CODE": "D", "FID_ORG_ADJ_PRC": "0"}, "FHKST03010100")
+        got = [r for r in out_rows(d, "output2") if r.get("stck_bsop_date")]
+        for r in got:
+            close = _num(r.get("stck_clpr"), int)
+            if not close:
+                continue                      # 0 · 빈 줄은 못 받은 날 — 넣지 않는다
+            rows[r["stck_bsop_date"]] = {"date": r["stck_bsop_date"], "open": _num(r.get("stck_oprc"), int),
+                                         "high": _num(r.get("stck_hgpr"), int), "low": _num(r.get("stck_lwpr"), int),
+                                         "close": close, "volume": _num(r.get("acml_vol"), int)}
+        first = min((r["stck_bsop_date"] for r in got), default=None)
+        if len(got) < 100 or not first or first <= start:
+            break
+        end = (datetime.strptime(first, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
+    return [rows[k] for k in sorted(rows) if k >= start]
+
+
+def fetch_stock_daily(cfg, codes):
+    """종목 정규장(KRX · J) 일봉 몇 달 — {code: {name, market:"J", bars | None, error?}} (2026-11-10 · 작업우선순위 배분 ④).
+    재권님(시황분석 창) 「오늘 하이닉스는 11.49% 오른 적이 없는데」 → 기준은 정규장 종가. 차트 일봉(/api/kis/chart)은 통합(UN · MARKET_DIV_CHART)이라
+    종가가 20:00 애프터 끝 값 · 시가가 넥스트레이드 프리장 첫 값이다 — 11-09 SK하이닉스 J 시 1,130,000 · 종 1,136,000 ↔ UN 시 1,165,000 · 종 1,114,000
+    (삼성 J 187,200 · 189,900 ↔ UN 190,900 · 187,100 · 11-10 12:1x 잼). 기간 · 받아 두는 초는 지수와 같은 INDEX_DAILY_MONTHS · INDEX_DAILY_TTL."""
+    start = (datetime.now(KST) - timedelta(days=INDEX_DAILY_MONTHS * 31)).strftime("%Y%m%d")
+    out = {}
+    try:
+        names = {c: q.get("name") for c, q in fetch_quotes_multi(cfg, codes)[0].items()}   # 이름 — 서버 시세 캐시를 함께 쓴다
+    except RuntimeError:
+        names = {}
+    for code in codes:
+        try:
+            hit = _idx_daily.get("J:" + code)
+            if not (hit and time.time() - hit[0] < INDEX_DAILY_TTL and hit[1] == start):
+                hit = (time.time(), start, _stock_daily_j(cfg, code, start))
+                _idx_daily["J:" + code] = hit
+            out[code] = {"name": names.get(code), "market": "J", "bars": hit[2] or None}
+        except RuntimeError as e:
+            out[code] = {"name": names.get(code), "market": "J", "bars": None, "error": safe_message(e)}
+    return out
+
+
 def fetch_index_daily(cfg, names):
     """{이름: {name, unit, market, bars:[{date, open, high, low, close}] | None, error?}} — 못 받은 지수는 bars None(0 이 아니다)."""
     start = (datetime.now(KST) - timedelta(days=INDEX_DAILY_MONTHS * 31)).strftime("%Y%m%d")
@@ -9271,6 +9316,19 @@ class Handler(SimpleHTTPRequestHandler):
                                           "names": [n for _, n in INDEX_DEFS] + [d[0] for d in OVERSEAS_DEFS],
                                           "note": "date 는 그 시장의 거래일(미국은 현지 날짜) · 국내 오늘 봉은 장중이면 아직 안 끝난 값 · "
                                                   "bars null = 못 받음(0 이 아님)"}})
+                return
+
+            # 종목 정규장(KRX · J) 일봉 몇 달 — 지수 일봉(index-daily)과 같은 모양(위 fetch_stock_daily)
+            if route == "stock-daily":
+                codes = [c.strip() for c in (qs.get("codes") or [""])[0].split(",") if c.strip()]
+                if not codes or len(codes) > 10 or not all(c.isdigit() and len(c) == 6 for c in codes):
+                    self._send_json({"ok": False, "error": "codes 는 6자리 숫자 종목코드 1~10개(쉼표로)여야 합니다."}, 400)
+                    return
+                data = fetch_stock_daily(cfg, codes)
+                self._send_json({"ok": any(v.get("bars") for v in data.values()), "data": data,
+                                 "meta": {"months": INDEX_DAILY_MONTHS, "cacheTtl": INDEX_DAILY_TTL, "market": "J",
+                                          "note": "정규장(KRX · 09:00~15:30) 시가 · 고가 · 저가 · 종가 — 넥스트레이드 프리장 · 애프터 빠짐 · "
+                                                  "오늘 봉은 장중이면 아직 안 끝난 값 · bars null = 못 받음(0 이 아님)"}})
                 return
 
             if route == "index-minutes":
