@@ -212,6 +212,16 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
     /* 미국 종목(2026-10-07 나스닥100 · S&P500)은 달러 — 가격 소수 둘째 자리 · 큰 금액 「조 · 억 달러」 */
     const us = isUsCode(stock.code);
     const big = (v) => (v == null ? '—' : (us ? fmtUsdBig(v) : fmtMoneyKr(v)));
+    /* 장 전 동시호가 동안은 예상 체결가를 「예상」 과 함께(2026-11-10 재권님 「나」) — 서버가 그때만 준다(kis_proxy._preopen_expect) */
+    const ex = detailApi && detailApi.expect ? detailApi.expect() : null;
+    if (ex) {
+      const ec = dirClass(ex.pct);
+      price.className = 'kh-price kh-num ' + ec;
+      price.textContent = `예상 ${fmtPriceOf(stock.code, ex.price)}`;
+      price.dataset.tip = '장 전 동시호가 예상 체결가입니다 — 정규장이 열릴 때 시가로 정해집니다';
+      if (sub) { sub.className = 'kh-price-sub kh-num ' + ec; sub.textContent = '예상 체결가 · 어제보다 ' + fmtDelta(ex.amt, ex.pct); }
+    } else {
+    delete price.dataset.tip;
     price.className = 'kh-price kh-num ' + cls;
     price.textContent = fmtPriceOf(stock.code, live.price);
     if (sub) {
@@ -221,6 +231,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
       // 애프터 등락은 그날 정규장 종가 대비다(서버 us_universe._quote_row · 10-27)
       const base = us && live.session === 'after' && live.regularPrice != null ? '종가보다 ' : '어제보다 ';
       sub.textContent = (ses ? ses + ' · ' : '') + base + (us ? fmtDelta(live.amt, live.pct, '달러', 2) : fmtDelta(live.amt, live.pct));
+    }
     }
 
     setHtml('#kh-r1',  rangeBar(live.low, live.high, live.price));
@@ -560,7 +571,8 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
   askTable.setCode(stock.code);
   /* 단건이 오면 머리도 다시 그린다 (2026-10-12). 전에는 머리가 다음 묶음 시세를 기다려 시가총액이
      0.5~2.7초 「—」 였다 — 아래 머리줄은 0.07~0.39초에 이미 같은 값을 들고 있었다(8765 실측) */
-  const detail = mountStockDetail($('#kh-dt'), { view, onOne: () => { if (!dead) paintHead(lastLiveRaw); } });
+  const detail = mountStockDetail($('#kh-dt'), { view, onOne: () => { if (!dead) paintHead(lastLiveRaw); },
+                                                 onExpect: () => { if (!dead) paintHead(lastLiveRaw); } });
   detailApi = detail;
   /* 재무 카드 다섯 — 모달 「투자 지표」 칸에만 붙는다 (2026-10-02 지시 · finance-cards.js) */
   const finance = mountFinanceCards(root, stock);
