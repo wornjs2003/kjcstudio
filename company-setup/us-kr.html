@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>미국→국내 · Insight</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/theme.css" />
+<link rel="stylesheet" href="../assets/css/common.css" />
+<link rel="stylesheet" href="../assets/css/nav.css" />
+<!-- 시황분석과 같은 틀 — 홀딩스 CSS 를 같이 쓴다(「거는 쪽이 둘 이상인 파일」) · 이 화면 전용은 css/us-kr.css -->
+<link rel="stylesheet" href="../holdings/css/frame.css" />
+<link rel="stylesheet" href="../holdings/css/home.css" />
+<link rel="stylesheet" href="css/insight.css" />
+<link rel="stylesheet" href="css/us-kr.css" />
+</head>
+<body data-nav="company-setup" data-site-root="../">
+<div id="site-nav"></div>
+
+<!-- 미국→국내 날마다 표 (2026-11-10 재권님 「미국 나스닥 s&P500 필라델피아 반도체 등락률에 따른 국내 코스피 삼성전자 하이닉스 주가의 프리장시작가 시가 최고가 종가를
+     최근 6개월 날마다 작성해서 어디에 올려놓아주면 좋을거같어」(작업우선순위 경유) → 둘 자리 「나」 — 새 화면 한 장).
+     값은 전부 서버가 준다 — 지수 /api/kis/index-daily(주식페이지_개발 · 기간 · 주기는 서버 meta) · 종목 /api/kis/chart · 프리장 시작가는 서버 값이 오기 전까지 「못 받음」. 그리기는 js/us-kr.js -->
+<div class="kh-app kh-app-wide">
+  <main class="kh-main">
+    <nav class="kh-cat" aria-label="갈래">
+      <a href="./">홈</a>
+      <a href="market.html">시황분석</a>
+      <a class="is-on" href="us-kr.html">미국→국내</a>
+      <a href="#">경제 지표</a>
+      <a href="industry.html">산업 분석</a>
+      <a href="news.html">뉴스 분석</a>
+      <a href="report.html">영상 분석</a>
+      <a href="analysis.html">종목 분석</a>
+      <a href="chart-analysis.html">차트분석</a>
+      <a href="strategy.html">투자 전략</a>
+      <span class="kh-cat-my">증권사 리포트</span>
+    </nav>
+    <section class="uk">
+      <h1>미국 3지수 → 다음 날 국내 — 날마다</h1>
+      <p class="uk-sub" id="uk-sub">불러오는 중…</p>
+      <p class="uk-how">한 줄 = 국내 거래일 하루. 왼쪽은 <b>그 전날 밤 미국장</b>의 등락률(전 거래일 종가 대비), 오른쪽은 그날 국내 값. 국내 값 아래 작은 글씨는 <b>전날 정규장 종가 대비</b> 등락률 · 오름 빨강 · 내림 파랑. <b>필반보다 더 오른 정도</b> = 그날 종가 등락률 − 전날 밤 필라델피아 반도체 등락률 — 빨강 「필반보다 강함」 · 파랑 「필반보다 약함」. 코스피는 같은 셈으로 <b>S&amp;P500</b> 과 견준다. 예: 필반 −7.20% 인 다음 날(11.02) 삼성전자 +1.78% 면 +8.98(필반보다 8.98 만큼 더 오름).</p>
+      <div class="uk-scroll"><table class="uk-t" id="uk-t"></table></div>
+      <p class="uk-foot" id="uk-foot"></p>
+    </section>
+  </main>
+</div>
+<script src="../assets/js/main.js"></script>
+<script type="module" src="js/us-kr.js"></script>
+<script type="module" src="/assets/js/glossary.js"></script>
+<script type="module" src="js/fit.js"></script>
+</body>
+</html>
