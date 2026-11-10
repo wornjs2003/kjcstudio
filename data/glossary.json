@@ -927,6 +927,189 @@
    "match": [
     "급등 +20%"
    ]
+  },
+  {
+   "id": "미결제약정",
+   "term": "미결제약정",
+   "short": "아직 정산 · 반대매매로 닫히지 않고 남아 있는 선물 · 옵션 계약 수 — 거래량은 그날 사고판 수, 미결제는 지금 열려 있는 수",
+   "aliases": "미결제 · 미결제 잔고 · Open Interest(영문)",
+   "group": "선물 · 옵션",
+   "quotes": [],
+   "missing": "출처 못 찾음(우리 정의) — 증권사 거래설명서는 남은 계약 수로 증거금을 셈한다는 쓰임만 있고 뜻 문장이 없었다 · CME 한국어 용어사전(https://www.cmegroup.com/ko/education/glossary.html)은 2026-11-10 열리지 않음",
+   "weak": false,
+   "note": [],
+   "used": "시황분석 탭 「선물 · 옵션(콜 · 풋)」 칸(company-setup/js/fo-snap.js · 2026-11-10)",
+   "match": [
+    "미결제약정",
+    "미결제"
+   ]
+  },
+  {
+   "id": "콜옵션",
+   "term": "콜옵션",
+   "short": "정해 둔 가격(행사가)에 살 수 있는 권리 — 오를 거라 보면 산다",
+   "aliases": "콜 · Call Option(영문)",
+   "group": "선물 · 옵션",
+   "quotes": [
+    {
+     "source": "KB Think — 콜옵션 풋옵션 개념과 차이",
+     "url": "https://kbthink.com/stock/options.html",
+     "text": "콜옵션은 특정 자산을 사전에 정한 가격으로 살 수 있는 권리예요."
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "note": [],
+   "used": "시황분석 탭 「선물 · 옵션(콜 · 풋)」 칸(company-setup/js/fo-snap.js · 2026-11-10)",
+   "match": [
+    "콜옵션",
+    "콜"
+   ]
+  },
+  {
+   "id": "풋옵션",
+   "term": "풋옵션",
+   "short": "정해 둔 가격(행사가)에 팔 수 있는 권리 — 내릴 거라 보거나 내림을 대비할 때 산다",
+   "aliases": "풋 · Put Option(영문)",
+   "group": "선물 · 옵션",
+   "quotes": [
+    {
+     "source": "KB Think — 콜옵션 풋옵션 개념과 차이",
+     "url": "https://kbthink.com/stock/options.html",
+     "text": "풋옵션은 특정 자산을 사전에 정한 가격으로 팔 수 있는 권리예요."
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "note": [],
+   "used": "시황분석 탭 「선물 · 옵션(콜 · 풋)」 칸(company-setup/js/fo-snap.js · 2026-11-10)",
+   "match": [
+    "풋옵션",
+    "풋"
+   ]
+  },
+  {
+   "id": "행사가",
+   "term": "행사가",
+   "short": "옵션에서 미리 정해 둔, 사거나 팔 수 있는 가격",
+   "aliases": "행사가격 · Strike Price(영문)",
+   "group": "선물 · 옵션",
+   "quotes": [
+    {
+     "source": "KB Think — 콜옵션 풋옵션 개념과 차이",
+     "url": "https://kbthink.com/stock/options.html",
+     "text": "행사가격: 옵션 계약에서 미리 정해진, 기초자산을 사거나 팔 수 있는 가격"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "note": [],
+   "used": "시황분석 탭 「선물 · 옵션(콜 · 풋)」 칸(company-setup/js/fo-snap.js · 2026-11-10)",
+   "match": [
+    "행사가격",
+    "행사가"
+   ]
+  },
+  {
+   "id": "주식선물",
+   "term": "주식선물",
+   "short": "삼성전자 같은 개별 주식을 정한 날 · 정한 가격에 사고팔기로 미리 약속하는 한국거래소 계약",
+   "aliases": "개별주식선물",
+   "group": "선물 · 옵션",
+   "quotes": [
+    {
+     "text": "개별 주식을 기초자산으로 하는 선물 — 결제월은 분기월 4개 · 비분기월 2개(요약해 옮김)",
+     "source": "한국투자증권 상품 안내 — 주식선물",
+     "url": "https://securities.koreainvestment.com/main/customer/tradetransfer/_static/TF04da030000.jsp"
+    }
+   ],
+   "missing": null,
+   "weak": true,
+   "note": [
+    "인용은 검색 요약을 옮긴 것 — 원문 화면은 직접 못 엶(2026-11-10)"
+   ],
+   "used": "시황분석 탭 「선물 · 옵션(콜 · 풋)」 칸(company-setup/js/fo-snap.js · 2026-11-10)",
+   "match": [
+    "주식선물"
+   ]
+  },
+  {
+   "id": "최근월물",
+   "term": "최근월물",
+   "short": "같은 선물 · 옵션 가운데 만기가 가장 가까운 달 것 — 거래가 가장 많이 몰린다",
+   "aliases": "근월물 · Front Month(영문)",
+   "group": "선물 · 옵션",
+   "quotes": [],
+   "missing": "출처 못 찾음(우리 정의) — 우리 서버는 「그날 봉이 있는 가장 가까운 달」 을 최근월물로 쓴다(holdings/server/kis_proxy.py fetch_stock_futures_daily)",
+   "weak": false,
+   "note": [],
+   "used": "시황분석 탭 「선물 · 옵션(콜 · 풋)」 칸(company-setup/js/fo-snap.js · 2026-11-10)",
+   "match": [
+    "최근월물"
+   ]
+  },
+  {
+   "id": "풋콜비율",
+   "term": "풋/콜 비율",
+   "short": "풋 거래량(또는 미결제)을 콜로 나눈 값 — 1 보다 크면 내림 대비가 오름 기대보다 많다",
+   "aliases": "풋콜 비율 · Put/Call Ratio(영문)",
+   "group": "선물 · 옵션",
+   "quotes": [],
+   "missing": "출처 못 찾음(우리 정의) — 우리 화면 값은 시장 전체가 아니라 그 월물 등가격 위아래 11칸 합이다(holdings/server/kis_proxy.py fo-snapshot)",
+   "weak": false,
+   "note": [],
+   "used": "시황분석 탭 「선물 · 옵션(콜 · 풋)」 칸(company-setup/js/fo-snap.js · 2026-11-10)",
+   "match": [
+    "풋/콜 비율",
+    "풋콜 비율",
+    "풋/콜"
+   ]
+  },
+  {
+   "id": "VIX",
+   "term": "VIX",
+   "short": "S&P500 옵션 값으로 셈한 앞으로 한 달 미국 주가의 예상 흔들림 — 높을수록 불안 · 30 을 넘으면 극도의 공포로 보는 경우가 많다",
+   "aliases": "공포 지수 · 변동성 지수 · CBOE VIX",
+   "group": "시장 지표",
+   "quotes": [
+    {
+     "text": "S&P 500 지수 옵션 가격에 담긴, 가까운 앞날의 변동성에 대한 시장 예상을 보여 주는 대표 지표",
+     "orig": "is a leading measure of market expectations of near-term volatility conveyed by S&P 500 Index® (SPX) option prices.",
+     "translated": true,
+     "source": "Cboe — VIX Index",
+     "url": "https://www.cboe.com/tradable_products/vix/"
+    }
+   ],
+   "missing": null,
+   "weak": false,
+   "note": [
+    "「30 을 넘으면 극도의 공포」 는 시황 글에서 흔히 쓰는 선이지 Cboe 정의가 아니다(인베스팅닷컴 시황 「불확실성 확대에 VIX 30 돌파」 · 검색 요약)",
+    "기간은 Cboe 화면이 「VIX Index (1 month)」 로 적는다"
+   ],
+   "used": "Insight 산업 분석 「반도체 소부장」 화면(company-setup/js/industry.js · 2026-11-10)",
+   "match": [
+    "VIX",
+    "공포 지수"
+   ]
+  },
+  {
+   "id": "지정학위험지수",
+   "term": "지정학 위험 지수",
+   "short": "주요 신문에 전쟁 · 테러 · 분쟁 기사가 얼마나 자주 나오는지로 셈한 지수 — 1985~2019 평균이 100",
+   "aliases": "GPR · Geopolitical Risk Index(영문) · Caldara · Iacoviello 지수",
+   "group": "시장 지표",
+   "quotes": [],
+   "missing": null,
+   "weak": true,
+   "note": [
+    "원 논문(Caldara · Iacoviello · 미 연준)과 자료 화면(https://www.matteoiacoviello.com/gpr.htm)은 2026-11-10 열리지 않음 — 뜻은 Insight 대외변수 자료(external-risk) 머리 설명과 같게 적음"
+   ],
+   "used": "Insight 산업 분석 「반도체 소부장」 화면(company-setup/js/industry.js · 2026-11-10) · 시황분석 탭 대외변수",
+   "match": [
+    "지정학 위험 지수",
+    "지정학 위험",
+    "GPR"
+   ]
   }
  ]
 }
