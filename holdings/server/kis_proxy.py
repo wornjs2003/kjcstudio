@@ -2682,6 +2682,62 @@ def _stock_daily_j(cfg, code, start):
     return [rows[k] for k in sorted(rows) if k >= start]
 
 
+# ── 일봉 쌓기 — 끝난 날은 market.db 에 들고 오늘 쪽만 다시 받는다 (2026-11-10 재권님 「로딩이 느린데 오늘값을 빼고 나머지는 저장해야 할거같아」 → 안에 「응」) ──
+# 전에는 INDEX_DAILY_TTL 이 지나거나 재시작하면 6개월치를 KIS 에 통째로 다시 물었다(지수 · 종목 하나에 2건 · 화면 하나에 10건 남짓 ·
+# 시황분석 14:07 잼). 이제 끝난 날 봉은 daily_store 에 쌓고(쓰는 서버 8765 만), 다시 받을 때는 마지막 쌓인 날 DAILY_REFETCH_DAYS 앞부터만 묻는다.
+# 읽기 전용 서버는 표를 읽기만 하고 받은 것은 메모리에 들고 있다(_daily_mem). 지수 국내는 이미 candles 표라 안 거친다.
+DAILY_SQL = ("CREATE TABLE IF NOT EXISTS daily_store (kind TEXT NOT NULL, code TEXT NOT NULL, date TEXT NOT NULL, "
+             "open REAL, high REAL, low REAL, close REAL, volume INTEGER, PRIMARY KEY (kind, code, date))",)
+DAILY_REFETCH_DAYS = 10         # 다시 받을 때 마지막 날에서 거슬러 올라가는 날 — 늦게 고쳐진 값 · 빠진 날을 덮는다
+_daily_mem = {}                 # (kind, code) → {date: bar} — 쌓지 못하는 서버의 몫 · 쓰는 서버도 표를 다시 안 읽게
+
+
+def _as_int(v):
+    """표에서 읽은 REAL(189900.0)을 원 단위 정수로 — _num(…, int) 은 "189900.0" 을 못 읽는다."""
+    return None if v is None else int(round(float(v)))
+
+
+def _daily_settled_day(kind):
+    """그 시장의 오늘 날짜 — 이보다 앞선 날 봉만 끝난 것으로 쌓는다. 미국은 뉴욕 날짜(장중 봉이 그 날짜)."""
+    if kind == "OVS":
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("America/New_York")).strftime("%Y%m%d")
+    return datetime.now(KST).strftime("%Y%m%d")
+
+
+def _daily_stored(kind, code, start, fetch, done=False):
+    """kind · code 의 일봉 start 부터 — 쌓인 것 + 모자란 쪽만 fetch(d1) 로 받아 합친다. done 이면(끝난 월물) 쌓인 것이 있으면 안 묻는다."""
+    mem = _daily_mem.setdefault((kind, code), {})
+    if not mem:
+        try:
+            with _db_lock, db_conn() as conn:
+                for r in conn.execute("SELECT date, open, high, low, close, volume FROM daily_store WHERE kind=? AND code=?", (kind, code)):
+                    mem[r[0]] = {"date": r[0], "open": r[1], "high": r[2], "low": r[3], "close": r[4], "volume": r[5]}
+        except sqlite3.Error:
+            pass                                 # 표가 아직 없다(쓰는 서버가 처음 쌓을 때 만든다) — 통째로 받는다
+    have = sorted(d for d in mem if d >= start)
+    if not (done and have):
+        d1 = start
+        if have and have[0] <= (datetime.strptime(start, "%Y%m%d") + timedelta(days=7)).strftime("%Y%m%d"):
+            d1 = max(start, (datetime.strptime(have[-1], "%Y%m%d") - timedelta(days=DAILY_REFETCH_DAYS)).strftime("%Y%m%d"))
+        new = fetch(d1)
+        for b in new:
+            mem[b["date"]] = {k: b.get(k) for k in ("date", "open", "high", "low", "close", "volume")}
+        settled = _daily_settled_day(kind)
+        put = [(kind, code, b["date"], b.get("open"), b.get("high"), b.get("low"), b["close"], b.get("volume"))
+               for b in new if b["date"] < settled]
+        if put and marketdb.writable():
+            try:
+                with _db_lock, db_conn() as conn:
+                    for sql in DAILY_SQL:
+                        conn.execute(sql)
+                    conn.executemany("INSERT INTO daily_store VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(kind, code, date) DO UPDATE SET "
+                                     "open=excluded.open, high=excluded.high, low=excluded.low, close=excluded.close, volume=excluded.volume", put)
+            except sqlite3.Error as e:
+                print("[일봉] 쌓기 실패 — %s" % safe_message(e, 120), flush=True)
+    return [mem[d] for d in sorted(mem) if d >= start]
+
+
 def fetch_stock_daily(cfg, codes):
     """종목 정규장(KRX · J) 일봉 몇 달 — {code: {name, market:"J", bars | None, error?}} (2026-11-10 · 작업우선순위 배분 ④).
     재권님(시황분석 창) 「오늘 하이닉스는 11.49% 오른 적이 없는데」 → 기준은 정규장 종가. 차트 일봉(/api/kis/chart)은 통합(UN · MARKET_DIV_CHART)이라
@@ -2697,11 +2753,129 @@ def fetch_stock_daily(cfg, codes):
         try:
             hit = _idx_daily.get("J:" + code)
             if not (hit and time.time() - hit[0] < INDEX_DAILY_TTL and hit[1] == start):
-                hit = (time.time(), start, _stock_daily_j(cfg, code, start))
+                hit = (time.time(), start, [dict(b, open=_as_int(b["open"]), high=_as_int(b["high"]), low=_as_int(b["low"]), close=_as_int(b["close"]))
+                                            for b in _daily_stored("J", code, start, lambda d1, c=code: _stock_daily_j(cfg, c, d1))])
                 _idx_daily["J:" + code] = hit
             out[code] = {"name": names.get(code), "market": "J", "bars": hit[2] or None}
         except RuntimeError as e:
             out[code] = {"name": names.get(code), "market": "J", "bars": None, "error": safe_message(e)}
+    return out
+
+
+# ── 주식선물 최근월물 일봉 몇 달 — 날마다 그날의 최근월물을 이어 붙인다 (2026-11-10 · 작업우선순위 배분 ③) ──
+# 재권님 「선물대비 등락도 추가해줘」 → 「하이닉스 삼전」 → 안(그날 최근월물을 이어 붙이고 · 만기 다음 날 다음 달물로 ·
+# 봉마다 같은 월물 전날 종가를 함께)에 「응」.  GET /api/kis/stock-futures-daily?codes=005930,000660
+# 월물 코드는 KIS 종목 마스터(주식선물)에서 그 종목의 상품 앞자리를 읽어 만든다 — 삼성전자 A11611 = "A11" + 해 끝자리 6 + 달 11
+# (2026-11-10 잼 · 하이닉스 A50611). 지난 월물도 일봉이 온다(A11605 59줄 · A11610 60줄). 한 월물 한 번 묻기(100줄 안).
+# **그날의 최근월물 = 그날 봉이 있는 월물 중 가장 가까운 달** — 만기일 셈(둘째 목요일 · 휴장이면 앞당김)을 따로 안 한다.
+# 만기월물은 만기일까지 봉이 있고 다음 날부터 없으니, 봉이 있나로 저절로 갈린다.
+FO_STK_MASTER = "https://new.real.download.dws.co.kr/common/master/fo_stk_code_mts.mst.zip"
+_fo_stk = {"day": None, "map": None}
+_fo_bars = {}                         # 월물 코드 → (시각, 끝난 월물인가, 봉들) — 끝난 월물은 다시 안 묻는다
+
+
+def _fo_stk_prefix():
+    """{종목코드: (월물 앞자리, 이름)} — 마스터를 하루 한 번 받는다. 상품 앞자리는 「월물코드 = 앞자리 + 해 끝자리 + 달 두 자리」 에 맞는 줄에서만 뽑는다."""
+    today = datetime.now(KST).strftime("%Y%m%d")
+    if _fo_stk["day"] == today and _fo_stk["map"]:
+        return _fo_stk["map"]
+    import io, zipfile
+    req = urllib.request.Request(FO_STK_MASTER, headers={"User-Agent": "Mozilla/5.0 KJCStudio"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        z = zipfile.ZipFile(io.BytesIO(r.read()))
+    text = z.read(z.namelist()[0]).decode("cp949", "replace")
+    out = {}
+    for line in text.split("\n"):
+        f = line.rstrip("\r").split("|")
+        if len(f) < 9 or f[0] != "1":
+            continue
+        m = re.search(r"\bF (\d{6})\b", f[3])
+        code, under = f[1].strip(), f[7].strip()
+        if not m or len(under) != 6 or under in out:
+            continue
+        ym = m.group(1)
+        if code.endswith(ym[3] + ym[4:]):
+            out[under] = (code[:-3], f[3].split(" F ")[0].strip())
+    if len(out) < 50:                  # 모양이 바뀌었으면 수가 크게 준다 — 그날은 쓰지 않는다
+        raise RuntimeError("주식선물 목록에서 종목이 %d개뿐입니다(모양이 바뀌었을 수 있음)" % len(out))
+    _fo_stk["day"], _fo_stk["map"] = today, out
+    return out
+
+
+def _fo_month_bars(cfg, fcode, d1, d2, done):
+    """한 월물의 일봉 d1~d2 — 옛것부터. 끝난 월물은 들고 있고, 아니면 INDEX_DAILY_TTL 동안 들고 있다."""
+    hit = _fo_bars.get(fcode)
+    if hit and hit[3] == (d1, d2) and (hit[1] or time.time() - hit[0] < INDEX_DAILY_TTL):
+        return hit[2]
+
+    def ask(a):
+        d = kis_get(cfg, "/uapi/domestic-futureoption/v1/quotations/inquire-daily-fuopchartprice",
+                    {"FID_COND_MRKT_DIV_CODE": "JF", "FID_INPUT_ISCD": fcode, "FID_INPUT_DATE_1": a,
+                     "FID_INPUT_DATE_2": d2, "FID_PERIOD_DIV_CODE": "D"}, "FHKIF03020100")
+        got = []
+        for r in out_rows(d, "output2"):
+            close = _num(r.get("futs_prpr"), int)
+            if not r.get("stck_bsop_date") or not close:
+                continue                       # 0 · 빈 줄은 못 받은 날 — 넣지 않는다
+            got.append({"date": r["stck_bsop_date"], "open": _num(r.get("futs_oprc"), int), "high": _num(r.get("futs_hgpr"), int),
+                        "low": _num(r.get("futs_lwpr"), int), "close": close, "volume": _num(r.get("acml_vol"), int)})
+        return got
+    bars = [{k: (_as_int(v) if k != "date" else v) for k, v in b.items()}
+            for b in _daily_stored("FO", fcode, d1, ask, done=done) if b["date"] <= d2]
+    _fo_bars[fcode] = (time.time(), done, bars, (d1, d2))
+    return bars
+
+
+def fetch_stock_futures_daily(cfg, codes):
+    """{종목코드: {name, bars:[{date, contract, open, high, low, close, prevClose, volume, roll?}] | None, error?}}.
+    prevClose 는 **같은 월물**의 전 거래일 종가 — 갈아탄 날(roll)도 새 월물 자기 전날 값이라 등락률이 월물 차이로 튀지 않는다.
+    그 월물 전날 봉이 없으면(상장 첫날) prevClose null."""
+    now = datetime.now(KST)
+    today = now.strftime("%Y%m%d")
+    start = (now - timedelta(days=INDEX_DAILY_MONTHS * 31)).strftime("%Y%m%d")
+    try:
+        pre = _fo_stk_prefix()
+    except Exception as e:
+        return {c: {"name": None, "bars": None, "error": "주식선물 목록을 못 받음 — " + safe_message(e)} for c in codes}
+    out = {}
+    for code in codes:
+        if code not in pre:
+            out[code] = {"name": None, "bars": None, "error": "주식선물이 없는 종목"}
+            continue
+        head, name = pre[code]
+        try:
+            y, m = int(start[:4]), int(start[4:6])
+            months = []
+            while (y, m) <= (now.year + (now.month == 12), now.month % 12 + 1):    # 시작 달부터 다음 달까지
+                months.append((y, m))
+                y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+            per = {}                               # 월물 코드 → 봉들
+            for y, m in months:
+                fcode = "%s%d%02d" % (head, y % 10, m)
+                py, pm = (y - 1, 12) if m == 1 else (y, m - 1)
+                d1 = max("%04d%02d01" % (py, pm), (datetime.strptime(start, "%Y%m%d") - timedelta(days=10)).strftime("%Y%m%d"))
+                d2 = min("%04d%02d31" % (y, m), today)
+                if d1 > d2:
+                    continue
+                done = "%04d%02d" % (y, m) < today[:6]                            # 지난달 월물은 끝났다
+                per[fcode] = _fo_month_bars(cfg, fcode, d1, d2, done)
+            front = {}                             # 날짜 → (월물 코드, 봉 차례) — 그날 봉이 있는 가장 가까운 달
+            for fcode in per:                      # 넣은 차례가 곧 달 차례(가까운 달 먼저)
+                for i, b in enumerate(per[fcode]):
+                    if b["date"] >= start and b["date"] not in front:
+                        front[b["date"]] = (fcode, i)
+            bars, last = [], None
+            for d in sorted(front):
+                fcode, i = front[d]
+                b = per[fcode][i]
+                row = dict(b, contract=fcode, prevClose=per[fcode][i - 1]["close"] if i > 0 else None)
+                if last and last != fcode:
+                    row["roll"] = True             # 이날부터 다음 달물 — 만기 다음 날
+                last = fcode
+                bars.append(row)
+            out[code] = {"name": name, "bars": bars or None}
+        except RuntimeError as e:
+            out[code] = {"name": name, "bars": None, "error": safe_message(e)}
     return out
 
 
@@ -2721,7 +2895,8 @@ def fetch_index_daily(cfg, names):
                 key, div, code, label, unit = ovs[name]
                 hit = _idx_daily.get(key)
                 if not (hit and time.time() - hit[0] < INDEX_DAILY_TTL and hit[1] == start):
-                    hit = (time.time(), start, _ovs_daily(cfg, div, code, start))
+                    hit = (time.time(), start, [{k: b[k] for k in ("date", "open", "high", "low", "close")}
+                                                for b in _daily_stored("OVS", key, start, lambda d1, dv=div, c=code: _ovs_daily(cfg, dv, c, d1))])
                     _idx_daily[key] = hit
                 out[name] = {"name": label, "market": "overseas", "unit": unit, "kisCode": code, "bars": hit[2] or None}
             else:
@@ -9328,6 +9503,20 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": any(v.get("bars") for v in data.values()), "data": data,
                                  "meta": {"months": INDEX_DAILY_MONTHS, "cacheTtl": INDEX_DAILY_TTL, "market": "J",
                                           "note": "정규장(KRX · 09:00~15:30) 시가 · 고가 · 저가 · 종가 — 넥스트레이드 프리장 · 애프터 빠짐 · "
+                                                  "오늘 봉은 장중이면 아직 안 끝난 값 · bars null = 못 받음(0 이 아님)"}})
+                return
+
+            # 주식선물 최근월물 일봉 몇 달 — 날마다 그날의 최근월물(위 fetch_stock_futures_daily)
+            if route == "stock-futures-daily":
+                codes = [c.strip() for c in (qs.get("codes") or [""])[0].split(",") if c.strip()]
+                if not codes or len(codes) > 10 or not all(c.isdigit() and len(c) == 6 for c in codes):
+                    self._send_json({"ok": False, "error": "codes 는 6자리 숫자 종목코드 1~10개(쉼표로)여야 합니다."}, 400)
+                    return
+                data = fetch_stock_futures_daily(cfg, codes)
+                self._send_json({"ok": any(v.get("bars") for v in data.values()), "data": data,
+                                 "meta": {"months": INDEX_DAILY_MONTHS, "cacheTtl": INDEX_DAILY_TTL,
+                                          "note": "주식선물 주간장 최근월물 — 그날 봉이 있는 가장 가까운 달 · 만기 다음 날 다음 달물(roll) · "
+                                                  "prevClose 는 같은 월물 전날 종가 · contract 는 KIS 월물 코드 · "
                                                   "오늘 봉은 장중이면 아직 안 끝난 값 · bars null = 못 받음(0 이 아님)"}})
                 return
 
