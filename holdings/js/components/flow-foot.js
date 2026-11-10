@@ -12,7 +12,7 @@
 
        외국계 창구 [──●──] 13:55   종목 프로그램 [──●┃─] 13:55  │  외국인 +45.1억 · 기관 −4.1억 확정(장중 ≈ … 3회차 추정)
 
-   원 자리 · 색 짙기 = **최근 5분(RECENT 칸 — 거래가 있던 1분 칸만 센다) 매수 몫**(매수 ÷ (매수 + 매도) · 가운데 50%).
+   원 자리 · 색 짙기 = **최근 창(서버가 주는 windowSec ÷ 60 칸 — 거래가 있던 1분 칸만 센다 · 지금 5분) 매수 몫**(매수 ÷ (매수 + 매도) · 가운데 50%).
    오른쪽 · 빨강이면 지금 사는 쪽이 세다 · 멀수록 짙다. 세로 눈금 = **오늘 누적 매수 몫**.
    11-03 판은 원 자리를 오늘 누적으로 · 색을 「화면을 연 뒤 앞 값과 견준 것」 으로 셌다 — 누적은 하루치가 쌓여 잘 안 움직이고
    (11-04 삼성전자 프로그램 누적 38.5% 인데 막판 1분 몫 53~78%) 앞 값이 없을 때(처음 연 때 · 장 마감 뒤)는 회색으로 남아
@@ -41,7 +41,9 @@ import { ready as toneReady, tone, paint } from '../../../assets/js/tone.js';
 import { signClass } from '../../../assets/js/sign.js';
 
 const ID = 'buy_share';                         // data/metrics.json 의 이름
-const RECENT = 5;                               // 원이 보는 최근 1분 칸 수 — 셈 범위이지 다시 묻는 주기가 아니다
+/* 원이 보는 최근 창(분) — 서버가 investor-member 의 foreignFirms.windowSec 으로 내준다(값은 kis_proxy.py 의 MEMBER_RECENT_SEC 한 곳 ·
+   2026-11-10 개념정의 검수). 아직 못 받았을 때만 이 값 — 셈 범위이지 다시 묻는 주기가 아니다 */
+const RECENT_FALLBACK = 5;
 const KEYS = { mem: 'kis_proxy.INVESTOR_MEMBER_TTL', flow: 'intraday_flow.CACHE_TTL', est: 'kis_proxy.INVESTOR_EST_TTL' };
 const FALLBACK_MS = 60000;                      // 서버 값마저 못 받았을 때만
 
@@ -63,12 +65,12 @@ function share(buy, sell) {
   return buy / (buy + sell) * 100;
 }
 
-/* 1분 칸들 → { p: 최근 RECENT 칸 몫, c: 오늘 누적 몫, t: 거래가 있던 마지막 칸 시각 }. pick 은 칸에서 {buy, sell} 을 꺼낸다 */
-function shares(rows, pick) {
+/* 1분 칸들 → { p: 최근 recent 칸 몫, c: 오늘 누적 몫, t: 거래가 있던 마지막 칸 시각 }. pick 은 칸에서 {buy, sell} 을 꺼낸다 */
+function shares(rows, pick, recent) {
   const live = (rows || []).map((r) => ({ t: r.t, v: pick(r) })).filter((x) => x.v && (x.v.buy || x.v.sell));
   if (!live.length) return { p: null, c: null, t: null };
   const sum = (list, k) => list.reduce((a, x) => a + (x.v[k] || 0), 0);
-  const last = live.slice(-RECENT);
+  const last = live.slice(-recent);
   return { p: share(sum(last, 'buy'), sum(last, 'sell')), c: share(sum(live, 'buy'), sum(live, 'sell')), t: live[live.length - 1].t };
 }
 
@@ -97,7 +99,7 @@ function dot(p, c) {
     `<i class="kh-ff-dot" style="left:${x.toFixed(1)}%;background:${col};--kh-ff-c:${col}"></i></span>`;
 }
 
-const TIP = '원 = 최근 5분 매수 몫(오른쪽 · 빨강이면 사는 쪽이 셈 · 멀수록 짙게) · 가운데 회색 세로줄 = 반반(50%) 기준 · 색 세로줄 = 오늘 하루 쌓인 매수 몫(빨강 사는 쪽 · 파랑 파는 쪽 · 반반이면 회색) · ' +
+const tipText = (m) => `원 = 최근 ${m}분 매수 몫(오른쪽 · 빨강이면 사는 쪽이 셈 · 멀수록 짙게) · 가운데 회색 세로줄 = 반반(50%) 기준 · 색 세로줄 = 오늘 하루 쌓인 매수 몫(빨강 사는 쪽 · 파랑 파는 쪽 · 반반이면 회색) · ` +
   '읽는 법 — 원이 오른쪽 · 줄이 왼쪽이면 오늘은 팔다가 최근 사는 쪽으로 돌아서는 중 · 반대면 사다가 팔기 시작 · 같은 쪽이면 오늘 흐름이 이어짐 · 시각은 정보가 들어온 때';
 
 /* 바닥 줄 하나 — 홈 큰 차트와 종목 화면(모달) 차트가 각자 하나씩 갖는다 (2026-11-05 재권님 「모달로 띄우면 거기에도 나와야해」 → 「응 해」).
@@ -108,11 +110,17 @@ export function createFlowFoot() {
   let watches = null;
   let footEl = null;
 
+  /* 최근 창(분) — 서버가 내준 창구 windowSec 을 쓴다. 못 받았으면 FALLBACK */
+  function recentMin() {
+    const w = data.mem && data.mem.foreignFirms && data.mem.foreignFirms.windowSec;
+    return w > 0 ? Math.max(1, Math.round(w / 60)) : RECENT_FALLBACK;
+  }
+
   function items() {
     const mem = data.mem && data.mem.code === code ? data.mem : null;
     const ff = mem && mem.foreignFirms;
     const fl = data.flow && data.flow.code === code ? data.flow : null;
-    const sk = shares(fl && fl.stock && fl.stock.rows, (r) => r);
+    const sk = shares(fl && fl.stock && fl.stock.rows, (r) => r, recentMin());
     return [
       ff && ff.recent
         ? [{ n: '외국계 창구', p: share(ff.recent.buy, ff.recent.sell), c: share(ff.buy, ff.sell), t: mem.at }]
@@ -142,7 +150,7 @@ export function createFlowFoot() {
       footEl.insertBefore(el, footEl.lastElementChild);   // 왼쪽 설명 뒤 · 오른쪽 출처 앞
     }
     el.innerHTML = items().map((grp, gi) => grp.map((x, i) =>
-      `<span class="kh-ff-it" data-tip="${x.n} — ${x.c == null && gi === 0 ? '원은 오늘 누적 — 화면을 연 뒤 5분이 지나면 원은 최근 5분 · 세로줄은 오늘 누적으로 바뀜' : TIP}">` +
+      `<span class="kh-ff-it" data-tip="${x.n} — ${x.c == null && gi === 0 ? `원은 오늘 누적 — 화면을 연 뒤 ${recentMin()}분이 지나면 원은 최근 ${recentMin()}분 · 세로줄은 오늘 누적으로 바뀜` : tipText(recentMin())}">` +
       `<span class="kh-ff-n">${x.n}</span>${dot(x.p, x.c)}${i === grp.length - 1 ? `<span class="kh-ff-t">${x.t || '—'}</span>` : ''}</span>`).join('')).join('') +
       '<span class="kh-ff-sep"></span>' + estHtml();
   }

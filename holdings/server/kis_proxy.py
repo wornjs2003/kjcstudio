@@ -3926,7 +3926,7 @@ INVESTOR_MEMBER_TTL = 60
 _investor_member_cache = {}
 # 외국계 창구 「최근 5분」 — KIS 는 오늘 누적만 준다. 받을 때마다 누적을 쌓아 두고 지금 − 5분 전으로 센다
 # (2026-11-10 재권님 「외국계 창구도 세로굵은줄 넣어줘」 → 안 「응」). 그 종목을 누가 볼 때만 받으므로 처음 5분은 recent 가 없다.
-# 「5분」 은 바닥 줄 프로그램 칸(flow-foot.js 의 RECENT · 1분 칸 다섯)과 같은 창이다 — 바꾸면 둘 다
+# 이 창 길이를 foreignFirms.windowSec 으로 내주고 바닥 줄(flow-foot.js)이 프로그램 칸 셈에도 그것을 읽는다 — 값은 여기 한 곳
 MEMBER_RECENT_SEC = 300
 _member_snaps = {}                          # code → (그날 날짜, [(시각초, 매수 누적, 매도 누적), …])
 
@@ -3971,6 +3971,7 @@ def fetch_investor_member(cfg, code):
             "net": _num(o.get("glob_ntby_qty"), int),
             "sellPct": _num(o.get("glob_seln_rlim")),
             "buyPct": _num(o.get("glob_shnu_rlim")),
+            "windowSec": MEMBER_RECENT_SEC,     # 「최근」 창 길이 — 바닥 줄 원이 프로그램 · 창구 둘 다 이 값으로 센다(2026-11-10 개념정의 검수)
         },
         "volume": _num(o.get("acml_vol"), int),
         "at": datetime.now(KST).strftime("%H:%M"),     # KIS 에서 받은 시각 — 큰 차트 바닥 줄이 「정보가 들어온 시각」 으로 쓴다(2026-11-03)
