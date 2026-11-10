@@ -15,6 +15,7 @@
 import { side } from '/assets/js/sign.js';
 import { ready, paint, onFill } from '/assets/js/tone.js';
 import { apiFetch } from '../data/api.js';
+import { expectTip } from '../utils/format.js';
 import { watch } from '../store/longpoll.js';
 
 const TITLE = { kr: '국내 시장 지도', us: '미국 시장 지도' };
@@ -135,11 +136,11 @@ export function mountHeatmap(card, { onPick }) {
           let fs = Math.max(9, Math.min(22, Math.min(c.w, c.h) / 4.2, (c.w - 6) / (String(c.name).length * 1.05)));
           if (low) fs = Math.max(8, Math.min(fs, (c.h - 4) / 2.3));
           const pf = low ? fs : Math.max(10, fs * 0.72);
-          const pctFits = c.h >= 24 && (c.w - 6) >= pctTxt(c.pct).length * pf * 0.6;
+          const pctFits = c.h >= 24 && (c.w - 6) >= (pctTxt(c.pct).length + (c.expect ? 3 : 0)) * pf * 0.6;   // 「예상 」 세 글자 몫
           const txt = c.w > 34 && c.h > 22
-            ? `<b style="font-size:${fs.toFixed(1)}px">${esc(c.name)}</b>${pctFits ? `<span style="font-size:${pf.toFixed(1)}px">${pctTxt(c.pct)}</span>` : ''}` : '';
+            ? `<b style="font-size:${fs.toFixed(1)}px">${esc(c.name)}</b>${pctFits ? `<span style="font-size:${pf.toFixed(1)}px">${c.expect ? '예상 ' : ''}${pctTxt(c.pct)}</span>` : ''}` : '';
           html += `<button type="button" class="kh-hm-cell ${inkClass(c.pct)}" data-code="${esc(c.code)}" data-name="${esc(c.name)}"
-            data-tip="${esc(c.name)} ${pctTxt(c.pct)}" style="left:${c.x + 1}px;top:${c.y + 1}px;width:${c.w - 2}px;height:${c.h - 2}px;background:${fill(c.pct)}">${txt}</button>`;
+            data-tip="${esc(c.name)} ${c.expect ? '예상 ' : ''}${pctTxt(c.pct)}${c.expect ? ' · ' + expectTip({ kind: c.expect }) : ''}" style="left:${c.x + 1}px;top:${c.y + 1}px;width:${c.w - 2}px;height:${c.h - 2}px;background:${fill(c.pct)}">${txt}</button>`;
         }
       }
     }
