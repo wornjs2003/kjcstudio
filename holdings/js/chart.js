@@ -891,6 +891,10 @@ function volumeProfile(candles, period, kr) {
 const PANE_MIN = 60, PRICE_MIN = 120;
 /* 칸이 모자라 줄일 때만 쓰는 둘(build 의 fitH) — 시간축 높이는 폰 390 · 005930 5분봉 모달에서 잰 값(2026-10-08 · 약 28px) */
 const TIME_AXIS_H = 28, FIT_MIN = 40;
+/* **가격 칸은 차트 칸 높이의 이 비율 밑으로 안 내려간다** (2026-11-10 재권님 「응」 — 칸이 낮으면 보조 칸도 같은 비율로 줄여 가격 칸을
+   절반 넘게 지키기). 그날 재권님 크롬이 localhost 를 167% 확대해 홈이 0.62배로 줄었는데, 보조 칸은 저장한 px(60 · 60 · 110) 그대로
+   남고 가격 칸만 121px 로 눌려 가격 눈금 숫자가 사라졌다. 넓은 화면(가격 칸이 이미 절반 넘는 곳)은 그대로다 */
+const PRICE_SHARE = 0.5;
 
 let _paneH = null;
 function paneH() {
@@ -911,18 +915,26 @@ function paneH() {
    「높이의 70% 로 맞춰주고 내가 조정을 하면 조정한대로 고정되도록 해줘」).
    고정한 폭은 칸 높이(paneH)처럼 localStorage — 새로고침해도 남는다(보는 상태). 가격 눈금을 두 번 누르면 풀려 다시 70% 맞춤.
    **기간(5분 · 일 · 주 · 월 · 년)마다 따로 기억한다** (2026-11-09 재권님 「응 그래」) — 5분봉에서 좁힌 폭이 월봉에 그대로 가면
-   봉이 칸 밖으로 크게 잘린다(오르내림 폭이 기간마다 열 배 넘게 다르다 · 개념정의 덧). 종목을 바꿀 때는 그대로다 */
+   봉이 칸 밖으로 크게 잘린다(오르내림 폭이 기간마다 열 배 넘게 다르다 · 개념정의 덧). 종목을 바꿀 때는 그대로다.
+   **위아래로 옮긴 자리도 함께 기억한다** (2026-11-10 재권님 「차트를 내가 이동하는데 원래로 돌아가는 현상이 있어」 → 「5분봉 일봉 주봉 월봉 /
+   차트와 차트모달은 같이」 → 「위아래도 움직이는것도 고정」) — 전에는 폭만 두고 가운데를 보이는 봉에 다시 맞춰, 끌어 놓은 자리가 손을 떼자마자
+   제자리로 돌아갔다. 이제 「보이는 봉의 가운데보다 얼마나 위 · 아래로 옮겼나」(가격 대비)를 폭과 함께 둔다 — 넘겨 보거나 새 봉이 붙어도
+   옮긴 자리가 봉을 따라간다. 홈 큰 차트 · 모달 · 종목 화면이 한 값을 쓴다 */
 const PRICE_FILL = 0.7;
 const V_SPAN_KEY = 'kh.chart.v-span';
 const V_SPAN_MIN = 0.001, V_SPAN_MAX = 5;   // 세로 폭(가격 대비) — 손이 미끄러져 0 이나 터무니없는 값이 남지 않게
-let _vSpan = null;                            // 기간 → 고정한 폭(없으면 자동 70%) · 처음 부를 때 읽는다
+const V_SHIFT_MAX = 0.9;                      // 위아래로 옮긴 정도(가격 대비) — 봉이 영영 안 보이는 자리에 남지 않게
+let _vSpan = null;                            // 기간 → { s: 고정한 폭, d: 위아래로 옮긴 정도 }(없으면 자동 70%) · 처음 부를 때 읽는다
 function vSpanMap() {
   if (!_vSpan) {
     _vSpan = {};
     try {
       const v = JSON.parse(localStorage.getItem(V_SPAN_KEY) || '{}');   // 기간마다 따로 두기 전 한 숫자로 둔 값은 버린다(객체가 아니면)
       if (v && typeof v === 'object') {
-        Object.keys(v).forEach((k) => { if (v[k] >= V_SPAN_MIN && v[k] <= V_SPAN_MAX) _vSpan[k] = v[k]; });
+        Object.keys(v).forEach((k) => {
+          const x = typeof v[k] === 'number' ? { s: v[k], d: 0 } : v[k];   // 11-10 전에는 폭 숫자 하나였다
+          if (x && x.s >= V_SPAN_MIN && x.s <= V_SPAN_MAX) _vSpan[k] = { s: x.s, d: Math.abs(x.d) <= V_SHIFT_MAX ? x.d : 0 };
+        });
       }
     } catch { /* 없으면 자동 */ }
   }
@@ -932,10 +944,10 @@ function vSpan(per) {
   const v = vSpanMap()[per];
   return v == null ? null : v;
 }
-function setVSpan(per, v) {
+function setVSpan(per, s, d = 0) {
   const m = vSpanMap();
-  if (v == null) delete m[per];
-  else m[per] = Math.max(V_SPAN_MIN, Math.min(V_SPAN_MAX, v));
+  if (s == null) delete m[per];
+  else m[per] = { s: Math.max(V_SPAN_MIN, Math.min(V_SPAN_MAX, s)), d: Math.max(-V_SHIFT_MAX, Math.min(V_SHIFT_MAX, d || 0)) };
   try { localStorage.setItem(V_SPAN_KEY, JSON.stringify(m)); } catch { /* 저장 못 씀 */ }
 }
 
@@ -1399,14 +1411,17 @@ export function createStockChart(container, candles, opts = {}) {
 
   /* 자동 눈금에 좁은 폭 늘림(phoneStretch)을 곱하고, 사람이 고정한 세로 폭(vSpan)이 있으면 그 폭으로 바꾼다.
      라이브러리는 이 범위 위아래에 여백(scaleMargins)을 얹으므로, 보이는 폭이 고정 폭이 되게 여백만큼 덜어 준다 */
+  let lastBase = null;
   function stretchProvider() {
     const ph = phoneStretch();
     return (orig) => {                         // 기간은 부를 때 읽는다 — 기간을 바꿔도 이 함수를 다시 안 붙일 수 있어서
       const r = ph ? ph(orig) : orig();
-      const span = vSpan(period);
-      if (span == null || !r || !r.priceRange) return r;
+      const fix = vSpan(period);
+      if (fix == null || !r || !r.priceRange) return r;
+      const span = fix.s;
       const { minValue: lo, maxValue: hi } = r.priceRange;
-      const mid = (lo + hi) / 2;
+      lastBase = (lo + hi) / 2;                  // 자동 눈금이 잡은 가운데(옮기기 전) — keepStretch 가 옮긴 정도를 이것으로 바로잡는다
+      const mid = lastBase * (1 + fix.d);        // 보이는 봉의 가운데에서 사람이 옮긴 만큼
       let fill = PRICE_FILL;
       try {
         const m = candleSeries.priceScale().options().scaleMargins;
@@ -1427,12 +1442,44 @@ export function createStockChart(container, candles, opts = {}) {
     if (auto) return;                          // 세로를 안 바꿨다
     const user = readScale();
     if (!user) return;
-    const mid = (user.top + user.bot) / 2;
+    /* 가운데는 위아래 여백(scaleMargins)을 뺀 안쪽의 가운데 — 자동 눈금이 잡는 범위도 그 안쪽이다. 여백이 위아래 다르면(위가 크다)
+       칸 끝의 가운데와 갈려, 놓자마자 그만큼 밀렸다(2026-11-10 실측 0.7%) */
+    let mt = 0, mb = 0;
+    try { const m = candleSeries.priceScale().options().scaleMargins; if (m) { mt = m.top; mb = m.bottom; } } catch { /* 여백 없음 */ }
+    const edge = user.top - user.bot;
+    const mid = ((user.bot + mb * edge) + (user.top - mt * edge)) / 2;
     if (!(mid > 0)) return;
-    setVSpan(period, (user.top - user.bot) / mid);
+    const span = edge / mid;
+    const base = visibleMid();                 // 자동 눈금이 잡을 가운데의 어림 — 거기서 얼마나 옮겼나를 둔다
+    setVSpan(period, span, base > 0 ? mid / base - 1 : 0);
     vpRange = null;
+    lastBase = null;
     try { candleSeries.applyOptions(priceFix()); ch.priceScale('right').applyOptions({ autoScale: true }); } catch { return; }
-    requestAnimationFrame(() => requestAnimationFrame(() => { lockPriceRange(); drawProfile(); }));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      /* 어림은 봉 배열로 셈해 라이브러리가 잡은 가운데와 조금(2026-11-10 실측 0.7%) 다를 수 있다 — 자동 눈금이 실제로 잡은 가운데로 바로잡는다 */
+      const fix = vSpan(period);
+      if (lastBase > 0 && fix && Math.abs(mid / lastBase - 1 - fix.d) > 1e-4) {
+        setVSpan(period, span, mid / lastBase - 1);
+        vpRange = null;
+        try { candleSeries.applyOptions(priceFix()); } catch { /* 칸이 아직 없다 */ }
+        requestAnimationFrame(() => requestAnimationFrame(() => { lockPriceRange(); drawProfile(); }));
+        return;
+      }
+      lockPriceRange(); drawProfile();
+    }));
+  }
+
+  /* 보이는 봉의 최고 · 최저 가운데 — 자동 눈금이 잡는 가운데와 같다(겹침 선은 NO_SCALE 로 빠져 있다) */
+  function visibleMid() {
+    const ch = panes[0] && panes[0].chart;
+    if (!ch || !candles || !candles.length) return null;
+    let r = null;
+    try { r = ch.timeScale().getVisibleLogicalRange(); } catch { return null; }
+    if (!r) return null;
+    const a = Math.max(0, Math.ceil(r.from)), b = Math.min(candles.length - 1, Math.floor(r.to));
+    let hi = -Infinity, lo = Infinity;
+    for (let i = a; i <= b; i++) { if (candles[i].high > hi) hi = candles[i].high; if (candles[i].low < lo) lo = candles[i].low; }
+    return hi >= lo ? (hi + lo) / 2 : null;
   }
 
   function priceFix() {
@@ -1980,7 +2027,8 @@ export function createStockChart(container, candles, opts = {}) {
        좁은 폭 홈 큰 차트는 367px(home.css 2/3 지시)인데 가격 120 + 보조 110×3 = 453 이라 86px 이 칸 밖으로
        넘쳐 RSI 가 잘렸다. 줄인 값은 저장하지 않는다 — 넓은 화면(들어가는 곳)은 지금 높이 그대로다. */
     const want = own.reduce((a, x) => a + paneH()[x.key], 0);
-    const room = container.clientHeight - PRICE_MIN - own.length;   // 칸 사이 경계선 1px 씩(stock.css .kh-pane + .kh-pane)
+    const priceFloor = Math.max(PRICE_MIN, Math.round(container.clientHeight * PRICE_SHARE));
+    const room = container.clientHeight - priceFloor - own.length;   // 칸 사이 경계선 1px 씩(stock.css .kh-pane + .kh-pane)
     const shrink = want > room && room > 0;
     /* **줄일 때는 시간축 자리를 먼저 떼어 맨 아래 칸에 얹는다** (2026-10-08 재권님 — 「RSI 값이 밑이 잘리는데 … 칸 조절좀 해봐」).
        시간축은 맨 아래 칸 안에 그려져 약 TIME_AXIS_H 를 먹는다 — 칸을 똑같이 60 씩 주면 맨 아래 칸(대개 RSI)만
@@ -2019,7 +2067,7 @@ export function createStockChart(container, candles, opts = {}) {
       container.appendChild(el);
 
       const h = p.key === 'price'
-        ? Math.max(PRICE_MIN, container.clientHeight - below)
+        ? Math.max(priceFloor, container.clientHeight - below)
         : fitH[p.key];
       box.style.height = h + 'px';
 
@@ -2259,7 +2307,7 @@ export function createStockChart(container, candles, opts = {}) {
   function onMove(e) {
     if (!drag || e.pointerId !== drag.id) return;
     const d = e.clientY - drag.y;
-    const minA = drag.above.key === 'price' ? PRICE_MIN : PANE_MIN;
+    const minA = drag.above.key === 'price' ? Math.max(PRICE_MIN, Math.round(container.clientHeight * PRICE_SHARE)) : PANE_MIN;
     const a = Math.max(minA, Math.min(drag.aH + drag.bH - PANE_MIN, drag.aH + d));
     setPaneH(drag.above, a);
     setPaneH(drag.below, drag.aH + drag.bH - a);
