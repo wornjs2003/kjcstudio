@@ -6807,29 +6807,40 @@ def drop_before_first_trade(rows):
             if r["ts"][:8] in first and first[r["ts"][:8]] <= i <= last[r["ts"][:8]]]
 
 
-def aggregate_minutes(bars, minutes):
+def aggregate_minutes(bars, minutes, stored=None):
     """1분봉을 N분봉으로 묶는다 (KIS 는 5분봉을 직접 주지 않는다).
 
     **거래량 0 줄은 시가 · 고가 · 저가 · 종가에 안 섞는다** (2026-11-05 재권님 「응」 · 작업우선순위 배분).
     15:30~15:39 에 KIS J 는 마감 체결을 「지금 분」 줄로 옮겨 싣고 1530 줄을 거래량 0 · 체결 아닌 값으로 준다
     (pin_carried_trade 머리 10-06 관찰) — 그 줄이 15:30 칸의 첫 줄이라 시가가 되고 고가에도 섞였다(10-07 삼성전자 269,500 ·
     종가 · 거래량은 맞았다). 「없음」 을 값으로 쓰지 않는다. **칸 안에 거래가 하나도 없을 때만** 마지막 줄 종가로 납작봉을 둔다
-    — 마감 동시호가 뒤 15:35 처럼 거래가 없는 진짜 구간(drop_before_first_trade 가 처음 · 마지막 체결 밖을 뺀다)."""
+    — 마감 동시호가 뒤 15:35 처럼 거래가 없는 진짜 구간(drop_before_first_trade 가 처음 · 마지막 체결 밖을 뺀다).
+
+    **거래 없는 칸의 값은 바로 앞 체결 종가다** (같은 날 qa 덧 · 재권님 「응 고쳐」). 그 칸 줄도 거래량 0 이라 그 종가는 체결이 아니다 —
+    개발 DB 1분봉 거래 0 칸 83 중 53 이 마지막 체결 종가와 달랐다(069500 10-02 15:35~20:00 = 111,520 전일 종가 ↔ 마감 체결 112,060).
+    같은 날 앞 칸에 체결이 있으면 그 종가를 잇는다. 이번에 받은 묶음 첫 칸이면 stored({ts: 저장된 봉})에서 그날 그 앞의 마지막 체결 칸을 찾는다.
+    그날 첫 칸부터 체결이 없으면(장 전 · 하루 내내 거래 없음) 이을 값이 없어 그 줄 종가 그대로 둔다."""
     groups = {}
     for b in sorted(bars, key=lambda x: x["ts"]):
         hhmm = b["ts"][8:12]
         slot = (int(hhmm[:2]) * 60 + int(hhmm[2:])) // minutes * minutes
         groups.setdefault(b["ts"][:8] + "%02d%02d" % (slot // 60, slot % 60), []).append(b)
-    out = []
+    out, carry = [], {}
     for key in sorted(groups):
         rows = groups[key]
+        day = key[:8]
         traded = [r for r in rows if (r["volume"] or 0) > 0]
         if traded:
             out.append({"ts": key, "open": traded[0]["open"], "high": max(r["high"] for r in traded),
                         "low": min(r["low"] for r in traded), "close": traded[-1]["close"],
                         "volume": sum(r["volume"] for r in traded)})
+            carry[day] = traded[-1]["close"]
         else:
-            c = rows[-1]["close"]
+            if day not in carry and stored:
+                prev = [t for t, b in stored.items() if t[:8] == day and t < key and (b.get("volume") or 0) > 0]
+                if prev:
+                    carry[day] = stored[max(prev)]["close"]
+            c = carry.get(day, rows[-1]["close"])
             out.append({"ts": key, "open": c, "high": c, "low": c, "close": c, "volume": 0})
     return out
 
@@ -7840,11 +7851,10 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
                 # **지금 칸 + 아직 안 끝난 지난 칸 몇 개** (2026-10-06). 전에는 지금까지 30분만
                 # 받아, 한 종목을 다시 찾는 데 30분이 넘으면 그 사이가 영영 비었다.
                 raw, cover = fetch_minutes_day(cfg, code, MINUTE_PAST_PER_CALL)
-            bars = aggregate_minutes(raw, 5) if period == "5m" else raw
+            stored = _stored_day(code, period, max(b["ts"] for b in raw)[:8]) if raw else {}
+            bars = aggregate_minutes(raw, 5, stored) if period == "5m" else raw
             if raw:   # 「지금 줄」 로 옮겨 실린 마지막 체결을 제자리로 (pin_carried_trade 주석)
-                last_day = max(b["ts"] for b in raw)[:8]
-                bars = pin_carried_trade(raw, bars, _stored_day(code, period, last_day),
-                                         5 if period == "5m" else 1)
+                bars = pin_carried_trade(raw, bars, stored, 5 if period == "5m" else 1)
             if period == "5m" and cover is not None:
                 bars = _keep_covered_slots(bars, cover, _minutes_now_min())
         fetched = save_candles(code, period, bars)
