@@ -1396,8 +1396,10 @@ export function createStockChart(container, candles, opts = {}) {
   /* 좁은 폭(모바일 · 700px 이하)에서는 봉이 위아래로 길어 보인다 — 칸은 세로로 긴데 폭이 좁아서다.
      **칸 크기는 그대로 두고** 세로 범위만 넓혀 봉 길이를 처음의 1/9 로 둔다 (2026-10-28 재권님
      「모바일에서 차트의 캔들이 상하로 길게 보이는데 지금의 1/3이 기본이 되게」 → 그림을 보시고 「지금의 1/3으로 더 줄여봐」).
-     가운데를 그대로 두고 위아래로 PHONE_STRETCH 배 넓힌다. 넓은 폭은 손대지 않는다. */
-  const PHONE_STRETCH = 9;
+     가운데를 그대로 두고 위아래로 PHONE_STRETCH 배 넓힌다. 넓은 폭은 손대지 않는다.
+     2026-11-10 재권님 「모바일에서 차트 캔들높이가 세로로 너무 작은데」 → 세 안 그림(9 · 3 · 1배) → 「나」 — 1배(늘림 없음 · 넓은 폭과 같은 셈).
+     모바일 차트 칸이 생각보다 낮아 9배면 봉이 한 줄로 눌렸다. 값만 1 로 두고 셈 자리는 남긴다(다시 정하시면 이 값 하나) */
+  const PHONE_STRETCH = 1;
   const PHONE_MQ = window.matchMedia('(max-width: 700px)');   // home.css @media · mobile-fold.js 와 같은 700px — 바꾸면 셋을 함께
   function phoneStretch() {
     if (!PHONE_MQ.matches) return undefined;
