@@ -6,7 +6,7 @@ const US = [['NASDAQ', '나스닥'], ['SPX', 'S&P500'], ['SOX', '필라델피아
 const KR = [['005930', '삼성전자'], ['000660', 'SK하이닉스']];
 const $ = (id) => document.getElementById(id);
 const fmt = (v, dp = 0) => v == null ? '—' : Number(v).toLocaleString('ko-KR', { minimumFractionDigits: dp, maximumFractionDigits: dp });
-const pct = (a, b) => (a == null || !b) ? null : (a / b - 1) * 100;
+const pct = (a, b) => (a == null || !b) ? null : Math.round((a / b - 1) * 10000) / 100 || 0;   // 보이는 두 자리로 반올림한 값으로 부호 · 색을 정한다 — -0.004 가 「-0.00%」 파랑이 되지 않게(qa 11-10)
 const pctTxt = (p) => p == null ? '—' : (p > 0 ? '+' : '') + p.toFixed(2) + '%';
 const ppTxt = (p) => p == null ? '—' : (p > 0 ? '+' : '') + p.toFixed(2);
 const ppWord = (p, by) => p > 0 ? by + '보다 강함' : p < 0 ? by + '보다 약함' : by + '과 같음';   // 칸 숫자는 %p 를 떼고 뜻을 글로(11-10 재권님 「필반보다 더 오른 정도로 해주고 더 인지 쉽도록」)
@@ -29,6 +29,7 @@ function prevMap(bars) {           // date → 전 거래일 종가
 // 「○○보다 더 오른 정도」 칸 — 숫자(등락률 차이) · 아래 한 줄 뜻 · 옅은 바탕 · 하나라도 없으면 못 받음
 function relCell(rel, by) {
   if (rel == null) return '<td class="na">못 받음</td>';
+  rel = Math.round(rel * 100) / 100 || 0;   // 보이는 두 자리로 먼저 반올림 — 0.004 가 「+0.00 · 강함」 빨강으로 나오지 않게(-0 도 0)
   return `<td class="rel rel-${signClass(rel)}"><b class="${signClass(rel)}">${ppTxt(rel)}</b><i>${ppWord(rel, by)}</i></td>`;
 }
 
