@@ -53,9 +53,9 @@ async function main() {
   if (!kospi) { $('uk-sub').textContent = '코스피 일봉을 못 받음'; return; }
   const first = kospi[0].date;
   // 오늘 줄이 장중인지 — 장 시각은 서버(/api/alerts/market-hours)가 준다(화면에 15:30 을 박지 않는다) · 못 받으면 오늘 줄을 장중으로 본다(종가로 둔갑하지 않게)
-  let live = null;
+  let live = null, mh = null;
   try {
-    const mh = (await json('/api/alerts/market-hours')).data.today;
+    mh = (await json('/api/alerts/market-hours')).data.today;
     const d = new Date(), hm = String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0');
     live = (mh && (!mh.open ? null : hm < mh.reg[1] ? mh.day : null));
   } catch (e) {
@@ -109,6 +109,16 @@ async function main() {
   const now = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
   $('uk-sub').textContent = `${day(first)} ~ ${day(kospi[kospi.length - 1].date)} · 국내 거래일 ${kospi.length}일 · 기간은 서버 값(${idx.meta.months}개월) · ${now} 에 받음`;
   $('uk-foot').innerHTML = '출처 — 지수: 서버 /api/kis/index-daily(KIS) · 종목: 서버 /api/kis/stock-daily(KIS 정규장 일봉 · 09:00~15:30 · 등락률은 전날 정규장 종가 대비) · 미국 날짜는 현지 날짜 · '
-    + '프리장 시작가는 서버에 아직 없어 「못 받음」(받는 길은 개발1 이 재는 중 — 「아직」 이지 「영영」 이 아님) · 오늘 줄은 장이 끝나기 전이면 종가를 「마감 전」 으로 두고 지금 값만 흐리게 · 그 줄의 시가 · 최고가도 장중 값';
+    + '프리장 시작가는 서버에 아직 없어 「못 받음」(받는 길은 개발1 이 재는 중 — 「아직」 이지 「영영」 이 아님) · 오늘 줄은 장이 끝나기 전이면 종가를 「마감 전」 으로 두고 지금 값만 흐리게 · 그 줄의 시가 · 최고가도 장중 값'
+    + ' · 열어 둔 채여도 장이 끝나면 한 번 다시 받아 오늘 줄을 종가로 바꿈';
+  // 장중에 열어 둔 화면 — 장 마감(서버가 준 reg 끝) 뒤 서버가 일봉을 다시 받을 때까지(서버 meta.cacheTtl) 기다렸다가 한 번만 다시 받는다
+  // (11-10 재권님 「날마다 갱신되도록 해줘」 → 「응 해줘」) · 몇 초마다 묻는 주기가 아니다 — 시각도 기다림도 서버 값(「캐시·주기·한도 값을 화면에 박지 않는다」)
+  if (live && mh && mh.reg && idx.meta && idx.meta.cacheTtl != null) {
+    const c = mh.reg[1], at = new Date();
+    at.setHours(+c.slice(0, 2), +c.slice(2, 4), 0, 0);
+    const wait = Math.max(0, at - Date.now()) + idx.meta.cacheTtl * 1000;
+    clearTimeout(main.again);
+    main.again = setTimeout(main, wait);
+  }
 }
 main();
