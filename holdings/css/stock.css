@@ -173,6 +173,10 @@
   .kh-head-main { flex-direction: column; align-items: flex-start; gap: 14px; }
   .kh-head-stats { margin-left: 0; width: 100%; }
   .kh-mgrid { grid-template-columns: repeat(2, 1fr); }
+  /* 차트 머리줄 — 390 폭에서 이평 범례가 제목 · 단추 옆 좁은 틈에 밀려 세로로 접혔다(2026-11-10 재권님 「응」).
+     범례를 머리줄 아래 한 줄로 내린다. 모달도 이 머리줄을 쓴다 */
+  .kh-w[data-p="chart"] .kh-w-head { flex-wrap: wrap; }
+  #kh-chart-legend { flex-basis: 100%; margin-left: 0; }
 
   /* 머리 통계 — 390 폭에서 오른쪽 칸(거래대금 · 시총 순위 · 거래량 · 시가총액)이 11px 넘쳐 잘렸다
      (2026-10-13 전수 검수). 모달(modal.css 「머리 통계는 두 칸씩」)과 같은 짜임 — 반 칸씩 고르게 나누고
