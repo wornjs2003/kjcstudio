@@ -34,7 +34,31 @@ export async function loadIndicators() {
 }
 export const peekIndicators = () => listCache;
 
+/* 지수를 큰 차트에 — 열쇠 `ix:<지수 코드>`(2026-11-10 재권님 「국외」 갈래 · 「응 그렇게 해줘」). 서버 /api/kis/index-daily 의 일봉을
+   지표와 같은 모양으로 바꿔 같은 그리기(drawIndicator · headOf)를 쓴다. 기간은 서버가 정한다(meta.months) */
+export const IX_KEY = 'ix:';
+async function loadIndexBars(key) {
+  const code = key.slice(IX_KEY.length);
+  const r = await apiFetch(`/api/kis/index-daily?codes=${encodeURIComponent(code)}`, { cache: 'no-store' });
+  const j = r && await r.json();
+  const x = j && j.data && j.data[code];
+  if (!x || !x.bars || !x.bars.length) throw new Error((x && x.error) || '그 지수를 못 받았습니다');
+  const d8 = (d) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+  const t = new Date();
+  const out = {
+    ok: true, fixed: 0,
+    source: x.source || (x.market === 'overseas' ? '한국투자증권 해외지수' : '한국투자증권'),
+    fetchedAt: `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}T`
+      + `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`,
+    item: { key, name: x.name, unit: x.unit || 'pt', digits: 2, kind: 'candle', span: `${(j.meta && j.meta.months) || ''}달` },
+    bars: x.bars.map((b) => ({ d: d8(b.date), o: b.open ?? b.close, h: b.high ?? b.close, l: b.low ?? b.close, c: b.close })),
+  };
+  barsCache.set(key, out);
+  return out;
+}
+
 export async function loadIndicator(key) {
+  if (String(key).startsWith(IX_KEY)) return loadIndexBars(key);
   const r = await apiFetch(`/api/market/indicator?key=${encodeURIComponent(key)}`, { cache: 'no-store' });
   const j = r && await r.json();
   if (!j || !j.ok) throw new Error((j && j.error) || '그 지표를 못 받았습니다');
@@ -103,15 +127,16 @@ export function headOf(j, now = null) {
   const lo = Math.min(...b.map(x => it.kind === 'candle' ? x.l : x.c));
   const hi = Math.max(...b.map(x => it.kind === 'candle' ? x.h : x.c));
   const u = it.unit === '원' ? '원' : tail(it);
+  const sp = it.span || '1년';                       // 지수(ix:)는 서버가 내주는 기간 · 지표는 1년
   return {
     name: it.name,
     value: `${fmtIx(last.c, it.digits)}${u}  ${c == null ? '' : (c > 0 ? '+' : '') + fmtIx(c, it.digits)}`,
     dirClass: dir(c),
-    range: `1년 최저 ${fmtIx(lo, it.digits)} · 최고 ${fmtIx(hi, it.digits)}`,
-    per: `1년 · ${it.kind === 'candle' ? '일봉' : '종가 선'}`,
+    range: `${sp} 최저 ${fmtIx(lo, it.digits)} · 최고 ${fmtIx(hi, it.digits)}`,
+    per: `${sp} · ${it.kind === 'candle' ? '일봉' : '종가 선'}`,
     /* 아래 줄은 짧게 — 종목 차트의 줄보다 길면 폰에서 한 줄 더 넘어가 카드가 커진다(2026-10-12 실측 17px).
        자세한 말은 마우스를 올리면 뜬다 */
-    foot: [`1년 ${it.kind === 'candle' ? '일봉' : '종가'} ${b.length}개 · ${md(b[b.length - 1].d)}까지`
+    foot: [`${sp} ${it.kind === 'candle' ? '일봉' : '종가'} ${b.length}개 · ${md(b[b.length - 1].d)}까지`
              + (it.kind === 'candle' && j.fixed ? ` · 메운 날 ${j.fixed}` : ''),
            `${(j.source || '네이버').replace('네이버 증권 시장지표', '네이버')} · ${md((j.fetchedAt || '').slice(0, 10))} ${(j.fetchedAt || '').slice(11, 16)} 받음`],
     footTitle: it.kind === 'candle'

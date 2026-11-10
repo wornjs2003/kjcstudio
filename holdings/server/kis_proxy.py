@@ -2435,6 +2435,53 @@ OVERSEAS_DEFS = [
     ("VIX",    "N", "VIX",     "VIX",        "pt"),
 ]
 OVERSEAS_TTL = 60          # 해외장은 국내 장중에 거의 멈춰 있다
+
+# KIS 에 없는 나라 지수 — 네이버 해외 지수 일봉에서 받는다(2026-11-10 재권님 「받아오는게 있으면 이걸 홀딩스에서 받아오게 하고
+# 인사이트에서는 그 값을 가져다 쓰는방향으로 해줘」 · naver.foreign_index_daily). 홀딩스 「국외」 갈래 띠 · 큰 차트가 쓰고,
+# Insight 는 이 서버 주소(/api/kis/indices · /api/kis/index-daily)를 가져다 쓴다(「두 구역이 같은 값을 쓰면」 1번).
+# 열쇠 · 네이버 기호 · 이름 · 단위. 지금 값 = 마지막 일봉 종가 · 등락 = 그 앞 종가 대비(장중이면 그 나라 장중 값).
+NAVER_INDEX_DEFS = [
+    ("N225",   ".N225",  "일본 닛케이225", "pt"),
+    ("SSEC",   ".SSEC",  "중국 상해종합",  "pt"),
+    ("TWII",   ".TWII",  "대만 가권",     "pt"),
+    ("SENSEX", ".BSESN", "인도 SENSEX",  "pt"),
+    ("DAX",    ".GDAXI", "독일 DAX",     "pt"),
+]
+NAVER_INDEX_TTL = 300      # 네이버 해외 지수 일봉을 들고 있는 초 — 띠 · 큰 차트가 같은 것을 쓴다
+_nvx_cache = {}
+
+
+def _nvx_bars(key):
+    """네이버 해외 지수 일봉(들고 있는 것). 못 받으면 RuntimeError."""
+    hit = _nvx_cache.get(key)
+    if hit and time.time() - hit[0] < NAVER_INDEX_TTL:
+        return hit[1]
+    sym = {d[0]: d[1] for d in NAVER_INDEX_DEFS}[key]
+    try:
+        bars = naver.foreign_index_daily(sym)
+    except Exception as e:
+        raise RuntimeError("네이버 해외 지수 %s: %s" % (key, safe_message(e, 100)))
+    if not bars:
+        raise RuntimeError("네이버 해외 지수 %s: 빈 응답" % key)
+    _nvx_cache[key] = (time.time(), bars)
+    return bars
+
+
+def fetch_naver_indices():
+    """띠에 넣을 줄 — fetch_overseas 와 같은 모양(source 만 「네이버」). 하나가 실패해도 나머지는 낸다."""
+    rows, errors = [], {}
+    for key, _sym, name, unit in NAVER_INDEX_DEFS:
+        try:
+            b = _nvx_bars(key)
+            last, prev = b[-1], (b[-2] if len(b) > 1 else None)
+            chg = round(last["close"] - prev["close"], 2) if prev else None
+            rows.append({"code": key, "name": name, "unit": unit, "value": last["close"], "asOf": last["date"],
+                         "market": "overseas", "change": chg,
+                         "changePct": round(chg / prev["close"] * 100, 2) if prev and prev["close"] else None,
+                         "series": [x["close"] for x in b][-60:], "source": "네이버"})
+        except RuntimeError as e:
+            errors[key] = safe_message(e)
+    return rows, errors
 _ovs_cache = {}
 
 
@@ -3045,6 +3092,7 @@ def fetch_index_daily(cfg, names):
     start = (datetime.now(KST) - timedelta(days=INDEX_DAILY_MONTHS * 31)).strftime("%Y%m%d")
     dom = {n: c for c, n in INDEX_DEFS}
     ovs = {d[0]: d for d in OVERSEAS_DEFS}
+    nvx = {d[0]: d for d in NAVER_INDEX_DEFS}
     out = {}
     for name in names:
         try:
@@ -3060,6 +3108,12 @@ def fetch_index_daily(cfg, names):
                                                 for b in _daily_stored("OVS", key, start, lambda d1, dv=div, c=code: _ovs_daily(cfg, dv, c, d1))])
                     _idx_daily[key] = hit
                 out[name] = {"name": label, "market": "overseas", "unit": unit, "kisCode": code, "bars": hit[2] or None}
+            elif name in nvx:
+                key, sym, label, unit = nvx[name]
+                bars = [{k: b[k] for k in ("date", "open", "high", "low", "close")}
+                        for b in _daily_stored("NVX", key, start, lambda d1, k=key: [x for x in _nvx_bars(k) if x["date"] >= d1])]
+                out[name] = {"name": label, "market": "overseas", "unit": unit, "source": "네이버", "naverCode": sym,
+                             "bars": bars or None}
             else:
                 out[name] = {"name": name, "bars": None, "error": "모르는 지수 이름"}
         except RuntimeError as e:
@@ -3362,6 +3416,9 @@ def fetch_indices_all(cfg, with_chart=True, overseas=True):
             ovs, ovs_err = f_ovs.result()
             data = data + ovs
             errors.update(ovs_err)
+            nvx, nvx_err = fetch_naver_indices()      # KIS 에 없는 나라 지수(NAVER_INDEX_DEFS) — 해외와 같은 자리 · 뒤에 붙인다
+            data = data + nvx
+            errors.update(nvx_err)
     return data, errors
 
 
@@ -9896,7 +9953,8 @@ class Handler(SimpleHTTPRequestHandler):
                 data = fetch_index_daily(cfg, names)
                 self._send_json({"ok": any(v.get("bars") for v in data.values()), "data": data,
                                  "meta": {"months": INDEX_DAILY_MONTHS, "cacheTtl": INDEX_DAILY_TTL,
-                                          "names": [n for _, n in INDEX_DEFS] + [d[0] for d in OVERSEAS_DEFS],
+                                          "names": [n for _, n in INDEX_DEFS] + [d[0] for d in OVERSEAS_DEFS]
+                                                   + [d[0] for d in NAVER_INDEX_DEFS],
                                           "note": "date 는 그 시장의 거래일(미국은 현지 날짜) · 국내 오늘 봉은 장중이면 아직 안 끝난 값 · "
                                                   "bars null = 못 받음(0 이 아님)"}})
                 return
