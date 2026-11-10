@@ -89,7 +89,8 @@ def master():
 
 def kr(proxy, cfg):
     hit = _cache.get("kr")
-    if hit and time.time() - hit[0] < HEATMAP_TTL:
+    kind = proxy.market_hours.auction(proxy)        # 동시호가("open" · "close")면 칸을 예상 체결가 등락률로 — 들어가고 나올 때 받아 둔 것을 안 쓴다
+    if hit and time.time() - hit[0] < HEATMAP_TTL and hit[1].get("auction") == kind:
         return hit[1]
     names = {}
     try:
@@ -111,12 +112,14 @@ def kr(proxy, cfg):
                 missing.append(r["code"])
             c1, c2, c3 = r["secs"]
             sec = next((names[c] for c in (c2, c3, c1) if c in names and names[c] not in WIDE), "기타")
+            ex = p.get("expect")                     # 동시호가 예상 체결가(kis_proxy._multi_expect · 2026-11-10 재권님 「종목들 다 넣어주고」)
             secs.setdefault(sec, []).append({"code": r["code"], "name": r["name"], "cap": round(cap) if cap else None,
-                                             "pct": p.get("pct"), "price": price})
+                                             "pct": ex["pct"] if ex else p.get("pct"), "price": ex["price"] if ex else price,
+                                             "expect": ex["kind"] if ex else None})
         groups.append({"name": label, "sectors": _sorted(secs)})
     out = {"market": "kr", "groups": groups, "asof": datetime.now(_KST).isoformat(timespec="seconds"),
            "capUnit": "억원", "capNote": "종목 목록 파일(전날 종가) × 지금가 ÷ 전날 종가", "missing": missing,
-           "div": proxy.quote_market_div(), "source": "KIS 종목 목록 · KIS 멀티 시세"}
+           "div": proxy.quote_market_div(), "source": "KIS 종목 목록 · KIS 멀티 시세", "auction": kind}
     _cache["kr"] = (time.time(), out)
     return out
 

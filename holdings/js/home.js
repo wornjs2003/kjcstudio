@@ -12,7 +12,7 @@ import { fetchCandles, fetchCandlesSince, peekCandles, watchCandles, createStock
   savePeriodId, loadPeriodId,
   chartView, setChartView, chartStockChanged } from './chart.js';
 import { color } from './theme.js';
-import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount,
+import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount, expectTip, expectTag,
   dirClass, marketPhase, isUsCode, fmtPriceOf, fmtUsdBig, priceDigitsOf, usSessionLabel } from './utils/format.js';
 import { favList, isFav, toggleFav, onFavChange, favGroups, ungroupedCodes } from './store/favorites.js';
 import { openGroupPicker } from './components/fav-groups.js';
@@ -720,21 +720,21 @@ function paintBigHead(s2) {
 
 /* 현재가와 등락률. 시세가 들어올 때마다 불린다. */
 let bigShown = null;
-const _expect = new Map();   // 장 전 예상 체결가 — 세부사항 칸(stock-detail)이 호가와 함께 받아 알린다(2026-11-10 재권님 「나」)
+const _expect = new Map();   // 동시호가(장 전 · 마감) 예상 체결가 — 세부사항 칸(stock-detail)이 호가와 함께 받아 알린다(2026-11-10 재권님 「나」)
 function paintBigPrice() {
   const el = $('kh-big-v');
   if (!el || mkKey) return;
   /* 묶음 시세가 아직 안 왔으면 세부사항 칸이 받은 단건으로 먼저 칠한다 — 묶음이 오면 그것이 덮는다
      (2026-10-06 실측: 단건은 0.2초에 와 있는데 묶음을 기다려 1.7초에 칠해졌다) */
-  /* 장 전 동시호가 동안은 현재가 자리에 예상 체결가를 「예상」 과 함께(2026-11-10 재권님 「나」) — 서버가 그때만 준다 */
+  /* 동시호가(장 전 · 마감) 동안은 현재가 자리에 예상 체결가를 「예상」 과 함께(2026-11-10 재권님 「나」) — 서버가 그때만 준다 */
   const ex = _expect.get(selectedCode);
   if (ex) {
     const st = `ex|${selectedCode}|${ex.price}|${ex.pct}`;
     if (bigShown === st) return;
     bigShown = st;
     el.className = 'kh-idx-v kh-num ' + dirClass(ex.pct);
-    el.textContent = `예상 ${fmtPriceOf(selectedCode, ex.price)}  ${fmtPct(ex.pct)}`;
-    el.dataset.tip = '장 전 동시호가 예상 체결가입니다 — 정규장이 열릴 때 시가로 정해집니다';
+    el.textContent = `예상 ${fmtPriceOf(selectedCode, ex.price)}${ex.pct == null ? '' : '  ' + fmtPct(ex.pct)}`;   // 기준가를 못 받았으면 등락률을 안 적는다
+    el.dataset.tip = expectTip(ex);
     return;
   }
   delete el.dataset.tip;
@@ -1735,14 +1735,16 @@ async function loadJoint() {
 /* 가격 칸의 값 — 장외 칩이 정규장 중이면 앞 회차 20:00 장외 마감 값 · 나머지는 지금 시세 */
 const priceOf = (p, sortId = sortBy) => {
   const f = SORTS[sortId] && SORTS[sortId].price;
-  return f ? f(p) : p.price;
+  return f ? f(p) : (p.expect ? p.expect.price : p.price);     // 동시호가 동안은 예상 체결가(서버가 그때만 싣는다 · utils/format.js expectTip)
 };
+/* 그 칸이 예상 체결가를 그리나 — 칩이 따로 값을 정하지 않는 칸에서만(장외 칩 등은 그 칩 값 그대로) */
+const expectOf = (p, sortId = sortBy) => (p && p.expect && !(SORTS[sortId] && (SORTS[sortId].price || SORTS[sortId].pct)) ? p.expect : null);
 
 /* 맨 오른쪽 등락률 칸의 값 — 칩이 정한다(장외는 종가 대비 · 나머지는 전일 대비). 값이 없으면 null(0 으로 두지 않는다) */
 const pctOf = (p, sortId = sortBy) => {
   if (!p) return null;
   const f = SORTS[sortId] && SORTS[sortId].pct;
-  const v = f ? f(p) : p.pct;
+  const v = f ? f(p) : (p.expect ? p.expect.pct : p.pct);
   return Number.isFinite(v) ? v : null;
 };
 
@@ -2445,8 +2447,8 @@ function paintRows(priceMap) {
       <td class="l"><span class="kh-nm">
         ${iconHtml(s)}
         <b data-co="${s.code}">${market === 'THEME' ? escT(s.name) : s.name}</b>${market === 'THEME' ? themeBadge(s.code) : sectorTag(s.code)}</span></td>
-      <td class="kh-num"><span
-        >${live ? fmtPriceOf(s.code, priceOf(live, sid)) : '···'}</span></td>
+      <td class="kh-num"><span${expectOf(live, sid) ? ` data-tip="${expectTip(live.expect)}"` : ''}
+        >${live ? (expectOf(live, sid) ? expectTag() : '') + fmtPriceOf(s.code, priceOf(live, sid)) : '···'}</span></td>
       <td class="kh-num kh-metric">${sortCell(s.code, live)}</td>
       <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(pctOf(live, sid)) : '—'}</td>
     </tr>`;
@@ -2763,8 +2765,9 @@ function paintOneRow(code, live) {
     const tr = $('kh-rows').querySelector(`tr[data-code="${code}"]`);
     if (!tr || !live) return;
     const cls = dirClass(pctOf(live));
+    const ex = expectOf(live);
     tr.children[2].innerHTML =
-      `<span>${fmtPriceOf(code, priceOf(live))}</span>`;
+      `<span${ex ? ` data-tip="${expectTip(ex)}"` : ''}>${ex ? expectTag() : ''}${fmtPriceOf(code, priceOf(live))}</span>`;
     /* 「전일대비」 자리에는 지금 줄 세운 기준값이 온다. 오르내림이 아니라
        크기라서 등락 색을 입히지 않는다. */
     tr.children[3].className = 'kh-num kh-metric';
