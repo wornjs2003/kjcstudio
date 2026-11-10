@@ -2626,6 +2626,66 @@ def _daily_indices(cfg):
     return rows
 
 
+# ── 지수 일봉 몇 달 — 국내 · 미국 지수를 한 주소로 (2026-11-10 · 작업우선순위 배분) ──
+# 재권님이 시황분석 창에서 「미국 3지수 등락률 ↔ 코스피 · 삼성전자 · 하이닉스 날마다 표」 를 Insight 새 화면으로 정하셨고
+# 서버 값이 없어 넘어왔다(「두 구역이 같은 값을 쓰면」 1번 — 바깥 값은 서버가 받고 Insight 는 가져온다) → 재권님 「응」.
+#   GET /api/kis/index-daily?codes=KOSPI,SPX,NASDAQ,SOX
+# 국내는 fetch_index_candles 의 일봉(DB · INDEX_KEEP) 그대로 · 미국은 KIS 해외지수 일봉(FHKST03030100) — 한 번에 100일까지라
+# (2026-11-10 11:50 SPX · COMP · SOX 다 100줄 · 새 날짜 먼저) 앞쪽을 한 번 더 묻는다. 받은 것은 INDEX_DAILY_TTL 동안 들고 있다.
+# 이름은 INDEX_DEFS(국내) · OVERSEAS_DEFS(해외)의 열쇠 그대로다(나스닥 종합은 NASDAQ · KIS 코드 COMP).
+INDEX_DAILY_MONTHS = 6          # 내주는 기간 — 화면이 정하지 않는다(「캐시·주기·한도 값을 화면에 박지 않는다」)
+INDEX_DAILY_TTL = 600           # 미국 지수 일봉을 들고 있는 초 — 장이 닫힌 낮에는 안 바뀐다 · 10분에 지수마다 KIS 2건
+_idx_daily = {}
+
+
+def _ovs_daily(cfg, div, code, start):
+    """해외지수 일봉 start(YYYYMMDD)부터 오늘까지 — 옛것부터. 100줄씩 앞으로 물어 간다(많아야 네 번)."""
+    rows, end = {}, datetime.now(KST).strftime("%Y%m%d")
+    for _ in range(4):
+        d = kis_get(cfg, "/uapi/overseas-price/v1/quotations/inquire-daily-chartprice",
+                    {"FID_COND_MRKT_DIV_CODE": div, "FID_INPUT_ISCD": code, "FID_INPUT_DATE_1": start,
+                     "FID_INPUT_DATE_2": end, "FID_PERIOD_DIV_CODE": "D"}, "FHKST03030100")
+        got = [r for r in out_rows(d, "output2") if r.get("stck_bsop_date")]
+        for r in got:
+            close = _num(r.get("ovrs_nmix_prpr"))
+            if not close:
+                continue                      # 0 · 빈 줄은 못 받은 날 — 넣지 않는다
+            rows[r["stck_bsop_date"]] = {"date": r["stck_bsop_date"], "open": _num(r.get("ovrs_nmix_oprc")),
+                                         "high": _num(r.get("ovrs_nmix_hgpr")), "low": _num(r.get("ovrs_nmix_lwpr")),
+                                         "close": close}
+        first = min((r["stck_bsop_date"] for r in got), default=None)
+        if len(got) < 100 or not first or first <= start:
+            break
+        end = (datetime.strptime(first, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
+    return [rows[k] for k in sorted(rows) if k >= start]
+
+
+def fetch_index_daily(cfg, names):
+    """{이름: {name, unit, market, bars:[{date, open, high, low, close}] | None, error?}} — 못 받은 지수는 bars None(0 이 아니다)."""
+    start = (datetime.now(KST) - timedelta(days=INDEX_DAILY_MONTHS * 31)).strftime("%Y%m%d")
+    dom = {n: c for c, n in INDEX_DEFS}
+    ovs = {d[0]: d for d in OVERSEAS_DEFS}
+    out = {}
+    for name in names:
+        try:
+            if name in dom:
+                bars = [{"date": str(b["ts"])[:8], "open": b["open"], "high": b["high"], "low": b["low"], "close": b["close"]}
+                        for b in fetch_index_candles(cfg, dom[name], "D") if str(b["ts"])[:8] >= start]
+                out[name] = {"name": name, "market": "domestic", "unit": "pt", "bars": bars or None}
+            elif name in ovs:
+                key, div, code, label, unit = ovs[name]
+                hit = _idx_daily.get(key)
+                if not (hit and time.time() - hit[0] < INDEX_DAILY_TTL and hit[1] == start):
+                    hit = (time.time(), start, _ovs_daily(cfg, div, code, start))
+                    _idx_daily[key] = hit
+                out[name] = {"name": label, "market": "overseas", "unit": unit, "kisCode": code, "bars": hit[2] or None}
+            else:
+                out[name] = {"name": name, "bars": None, "error": "모르는 지수 이름"}
+        except RuntimeError as e:
+            out[name] = {"name": name, "bars": None, "error": safe_message(e)}
+    return out
+
+
 def fetch_index_candles(cfg, code, period):
     """지수 봉. **받아둔 것을 DB 에서 읽고, 모자라거나 묵었을 때만 부른다.**
 
@@ -9186,6 +9246,17 @@ class Handler(SimpleHTTPRequestHandler):
                     "data": {"code": name, "period": period, "bars": bars},
                     "meta": {"count": len(bars), "label": INDEX_PERIODS[period]},
                 })
+                return
+
+            # 지수 일봉 몇 달 — 국내 · 미국을 한 번에(위 fetch_index_daily)
+            if route == "index-daily":
+                names = [x.strip().upper() for x in (qs.get("codes") or ["KOSPI,SPX,NASDAQ,SOX"])[0].split(",") if x.strip()][:12]
+                data = fetch_index_daily(cfg, names)
+                self._send_json({"ok": any(v.get("bars") for v in data.values()), "data": data,
+                                 "meta": {"months": INDEX_DAILY_MONTHS, "cacheTtl": INDEX_DAILY_TTL,
+                                          "names": [n for _, n in INDEX_DEFS] + [d[0] for d in OVERSEAS_DEFS],
+                                          "note": "date 는 그 시장의 거래일(미국은 현지 날짜) · 국내 오늘 봉은 장중이면 아직 안 끝난 값 · "
+                                                  "bars null = 못 받음(0 이 아님)"}})
                 return
 
             if route == "index-minutes":
