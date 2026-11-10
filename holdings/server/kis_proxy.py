@@ -3059,10 +3059,13 @@ def _fo_snap_k200(cfg):
     strikes = sorted(s for s, _ in puts)
     atm = min(range(len(strikes)), key=lambda i: abs(strikes[i] - k200))
     pick = strikes[max(0, atm - FO_SNAP_K200_SIDE): atm + FO_SNAP_K200_SIDE + 1]
+    near = sorted(sorted(pick, key=lambda s: abs(s - k200))[:FO_SNAP_PUTS])   # 줄로 낼 행사가 — 종목 칸과 같은 수
     sums = {"C": [0, 0, 0], "P": [0, 0, 0]}                 # 거래량 · 미결제 · 못 받은 줄
+    lines = {}                                              # 콜 · 풋 줄 — 재권님 「코스피200은 코스피로 나누고 여기도 적용해줘」(11-10)
     for kind in ("C", "P"):
         codes = dict(opts[(kind, month)])
         got = dict(zip([s for s in pick if s in codes], _fo_quotes(cfg, "O", [codes[s] for s in pick if s in codes])))
+        lines[kind] = [dict(got.get(s, (None, None))[0] or {"code": codes.get(s), "price": None}, strike=s) for s in near]
         for s in pick:
             row, _ = got.get(s, (None, None))
             if row and row["volume"] is not None and row["openInterest"] is not None:
@@ -3071,7 +3074,17 @@ def _fo_snap_k200(cfg):
             else:
                 sums[kind][2] += 1
     ratio = lambda p, c: round(p / c, 3) if c else None
-    return {"index": k200, "month": month, "strikes": [pick[0], pick[-1]], "strikeCount": len(pick),
+    fut = None                                              # 지수선물 최근월물 — 석 달마다라 옵션 월물과 다를 수 있다(11-10 A01612)
+    for line in _fo_master_text(FO_IDX_MASTER).split("\n"):
+        f = line.rstrip("\r").split("|")
+        m = re.search(r"^F (\d{6})$", f[3].strip()) if len(f) > 7 and f[0] == "1" and f[7].strip() == "2001" else None
+        if m and m.group(1) >= datetime.now(KST).strftime("%Y%m") and (fut is None or m.group(1) < fut[0]):
+            fut = (m.group(1), f[1].strip())
+    if fut:
+        row, _ = _fo_quote(cfg, "F", fut[1])
+        fut = dict(row, month=fut[0]) if row else None
+    return {"index": k200, "futures": fut, "calls": lines["C"], "puts": lines["P"], "optionMonth": month,
+            "month": month, "strikes": [pick[0], pick[-1]], "strikeCount": len(pick),
             "callVolume": sums["C"][0], "putVolume": sums["P"][0], "callOI": sums["C"][1], "putOI": sums["P"][1],
             "putCallVolume": ratio(sums["P"][0], sums["C"][0]), "putCallOI": ratio(sums["P"][1], sums["C"][1]),
             "missing": sums["C"][2] + sums["P"][2]}
@@ -10011,7 +10024,8 @@ class Handler(SimpleHTTPRequestHandler):
                                  "meta": {"cacheTtl": ttl, "ttlOpen": FO_SNAP_TTL, "ttlClosed": FO_SNAP_TTL_CLOSED,
                                           "note": "KIS 현재가 조회 · 누가 물을 때만 받고 cacheTtl 초 동안 같은 값 · at = 받은 시각 · "
                                                   "futures 는 주식선물 최근월물(month) · calls · puts 는 optionMonth 콜 · 풋을 따로 — 각각 선물 현재가에 가까운 행사가 · "
-                                                  "kospi200 비율은 그 월물 등가격 둘레 strikes 범위(strikeCount 줄)의 콜 · 풋 합 — 시장 전체가 아님 · "
+                                                  "kospi200 은 futures(지수선물 최근월물) · calls · puts(지수에 가까운 행사가 줄 · 종목 칸과 같은 모양) · "
+                                                  "비율은 그 월물 등가격 둘레 strikes 범위(strikeCount 줄)의 콜 · 풋 합 — 시장 전체가 아님 · "
                                                   "iv 는 KIS 내재변동성 칸 그대로(단위 미확인 · 종목 옵션 0.7 꼴) · price 는 마지막 체결가라 그날 거래 0 이면 전날 값 · "
                                                   "missing = 못 받은 줄 수 · null = 못 받음(0 이 아님)"}})
                 return
