@@ -17,7 +17,8 @@
    11-03 판은 원 자리를 오늘 누적으로 · 색을 「화면을 연 뒤 앞 값과 견준 것」 으로 셌다 — 누적은 하루치가 쌓여 잘 안 움직이고
    (11-04 삼성전자 프로그램 누적 38.5% 인데 막판 1분 몫 53~78%) 앞 값이 없을 때(처음 연 때 · 장 마감 뒤)는 회색으로 남아
    「매수가 강한데 빨강이 안 된다」 가 됐다.
-   외국계 창구는 1분 값이 없어(KIS 회원사 누적만 줌) 원이 오늘 누적이고 눈금이 없다.
+   외국계 창구는 1분 값이 없어(KIS 회원사 누적만 줌) 서버가 받을 때마다 누적을 쌓아 「지금 − 5분 전」 을 foreignFirms.recent 로 준다
+   (2026-11-10 재권님 「외국계 창고도 세로굵은줄 넣어줘」). recent 가 있으면 원 = 최근 5분 · 눈금 = 오늘 누적, 없으면(처음 5분) 원 = 오늘 누적 · 눈금 없음.
    기준 · 폭은 지표 표(data/metrics.json 의 buy_share)에 있고 쪽 · 짙기 셈은 assets/js/tone.js 한 곳이다
    (「기준이 있는 수치는 위 빨강 · 아래 파랑, 멀수록 짙게」) — 표에 없으면 원을 가운데 회색으로 두고 tone.js 가 콘솔에 알린다.
    글자는 **정보가 들어온 시각**이다 — 금액은 안 쓴다.
@@ -96,7 +97,8 @@ function dot(p, c) {
     `<i class="kh-ff-dot" style="left:${x.toFixed(1)}%;background:${col};--kh-ff-c:${col}"></i></span>`;
 }
 
-const TIP = '원 = 최근 5분 매수 몫(오른쪽 · 빨강이면 사는 쪽이 셈 · 멀수록 짙게) · 가운데 회색 세로줄 = 반반(50%) 기준 · 색 세로줄 = 오늘 하루 쌓인 매수 몫(빨강 사는 쪽 · 파랑 파는 쪽) · 시각은 정보가 들어온 때';
+const TIP = '원 = 최근 5분 매수 몫(오른쪽 · 빨강이면 사는 쪽이 셈 · 멀수록 짙게) · 가운데 회색 세로줄 = 반반(50%) 기준 · 색 세로줄 = 오늘 하루 쌓인 매수 몫(빨강 사는 쪽 · 파랑 파는 쪽 · 반반이면 회색) · ' +
+  '읽는 법 — 원이 오른쪽 · 줄이 왼쪽이면 오늘은 팔다가 최근 사는 쪽으로 돌아서는 중 · 반대면 사다가 팔기 시작 · 같은 쪽이면 오늘 흐름이 이어짐 · 시각은 정보가 들어온 때';
 
 /* 바닥 줄 하나 — 홈 큰 차트와 종목 화면(모달) 차트가 각자 하나씩 갖는다 (2026-11-05 재권님 「모달로 띄우면 거기에도 나와야해」 → 「응 해」).
    전에는 모듈에 하나만 있어 둘째 자리가 첫째를 빼앗았다 */
@@ -112,7 +114,9 @@ export function createFlowFoot() {
     const fl = data.flow && data.flow.code === code ? data.flow : null;
     const sk = shares(fl && fl.stock && fl.stock.rows, (r) => r);
     return [
-      [{ n: '외국계 창구', p: ff ? share(ff.buy, ff.sell) : null, c: null, t: mem ? mem.at : null }],
+      ff && ff.recent
+        ? [{ n: '외국계 창구', p: share(ff.recent.buy, ff.recent.sell), c: share(ff.buy, ff.sell), t: mem.at }]
+        : [{ n: '외국계 창구', p: ff ? share(ff.buy, ff.sell) : null, c: null, t: mem ? mem.at : null }],
       [{ n: '종목 프로그램', ...sk, t: hm(sk.t) }],
     ];
   }
@@ -138,7 +142,7 @@ export function createFlowFoot() {
       footEl.insertBefore(el, footEl.lastElementChild);   // 왼쪽 설명 뒤 · 오른쪽 출처 앞
     }
     el.innerHTML = items().map((grp, gi) => grp.map((x, i) =>
-      `<span class="kh-ff-it" data-tip="${x.n} — ${x.c == null && gi === 0 ? '원은 오늘 누적(창구는 1분 값 없음)' : TIP}">` +
+      `<span class="kh-ff-it" data-tip="${x.n} — ${x.c == null && gi === 0 ? '원은 오늘 누적 — 화면을 연 뒤 5분이 지나면 원은 최근 5분 · 세로줄은 오늘 누적으로 바뀜' : TIP}">` +
       `<span class="kh-ff-n">${x.n}</span>${dot(x.p, x.c)}${i === grp.length - 1 ? `<span class="kh-ff-t">${x.t || '—'}</span>` : ''}</span>`).join('')).join('') +
       '<span class="kh-ff-sep"></span>' + estHtml();
   }
