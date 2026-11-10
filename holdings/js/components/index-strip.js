@@ -39,8 +39,18 @@ export const INDEX_CELLS = [
   { code: 'SOX',    name: '필라델피아 반도체', icon: 'us' },
   { code: 'SX5E',   name: '유로STOXX50', icon: 'eu' },
   { code: 'HSCE',   name: '홍콩H',      icon: 'hk' },
+  /* KIS 에 없는 나라 지수 — 서버가 네이버 해외 지수 일봉으로 받는다(server/kis_proxy.py NAVER_INDEX_DEFS · 2026-11-10 재권님
+     「해외는 국외 주요국가의 지수가 나오면 좋을거같아」 · 「받아오는게 있으면 이걸 홀딩스에서 받아오게」). **more — 「국외」 갈래에서만
+     보인다.** 홈 띠 · 데일리분석 「주요 지수」 는 전과 같은 칸만 그린다(아래 BASE_CELLS · 「창 크기·배치는 지시 없이 바꾸지 않는다」) */
+  { code: 'N225',   name: '일본 닛케이225', icon: 'jp', more: true },
+  { code: 'SSEC',   name: '중국 상해종합',  icon: 'cn', more: true },
+  { code: 'TWII',   name: '대만 가권',     icon: 'tw', more: true },
+  { code: 'SENSEX', name: '인도 SENSEX',  icon: 'in', more: true },
+  { code: 'DAX',    name: '독일 DAX',     icon: 'de', more: true },
   { code: 'VIX',    name: 'VIX',      icon: 'vix' },
 ];
+/* 「국외」 갈래 밖에서 그리는 칸 — more 를 뺀 것 */
+export const BASE_CELLS = INDEX_CELLS.filter((c) => !c.more);
 
 /* 칸 앞에 붙는 표시.
    국기는 <use> 로 꺼내 쓰고(index.html 맨 위에 정의), 나머지는 글자 배지로 만든다.
@@ -50,7 +60,7 @@ export function cellIcon(kind) {
     return `<svg class="kh-ix-flag" viewBox="0 0 24 24" aria-hidden="true"
       ><use href="./img/flags.svg#kh-flag-${kind}"/></svg>`;
   }
-  const badge = { vix: 'V', oil: '油', au: 'Au', eu: 'EU', hk: 'HK' }[kind];
+  const badge = { vix: 'V', oil: '油', au: 'Au', eu: 'EU', hk: 'HK', jp: 'JP', cn: 'CN', tw: 'TW', in: 'IN', de: 'DE' }[kind];
   return badge ? `<span class="kh-ix-badge ${kind}" aria-hidden="true">${badge}</span>` : '';
 }
 
@@ -110,7 +120,7 @@ function patchNode(o, n) {
   nc.forEach((c, i) => patchNode(oc[i], c));
 }
 
-export function stripHtml(indices, cells = INDEX_CELLS) {
+export function stripHtml(indices, cells = BASE_CELLS) {
   const byCode = Object.fromEntries((indices || []).map(i => [i.code, i]));
   return cells.map(cell => {
     const i = cell.code ? byCode[cell.code] : null;
@@ -120,7 +130,7 @@ export function stripHtml(indices, cells = INDEX_CELLS) {
          연결은 됐는데 안 온 칸    → "불러오는 중"
          섞어 쓰면 연결이 안 된 건지 아직 안 온 건지 알 수 없다. */
       const soon = !cell.code;
-      return `<div class="kh-ix">
+      return `<div class="kh-ix" data-ix="${cell.code || ''}">
         <div class="kh-ix-h">${cellIcon(cell.icon)}<span class="kh-ix-n">${cell.name}</span>
           ${soon ? '<span class="kh-bd kh-bd-soon">연결 예정</span>' : ''}</div>
         <div class="kh-ix-v kh-num kh-mut"
@@ -136,7 +146,7 @@ export function stripHtml(indices, cells = INDEX_CELLS) {
        전에는 값만 있으면 무조건 "실시간" 이라 어제 종가도 실시간으로 보였다
        (2026-09-15 지적). */
     const badge = badgeFor(i);
-    return `<div class="kh-ix">
+    return `<div class="kh-ix" data-ix="${cell.code}">
       <div class="kh-ix-h">${cellIcon(cell.icon)}<span class="kh-ix-n">${cell.name}</span>
         <span class="kh-bd ${badge.live ? 'kh-bd-on' : (badge.text === '넥장' ? 'kh-bd-nx' : '')}"
           >${badge.text}</span></div>
