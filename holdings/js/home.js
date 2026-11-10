@@ -1505,7 +1505,7 @@ const SORT_TIPS = {
   after: '정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 09:00 ~ 15:40 은 비어 있습니다',
   buy: '외국인 · 기관 · 프로그램이 셋 다 순매수인 종목, 셋 합이 큰 순(외국인 · 기관은 장중 가집계)\n셋 다 샀다가 한 곳이라도 매도로 바뀐 종목은 맨 위에 흐리게',
   pre: '코스피 200 · 코스닥 150 종목 중 넥스트레이드 프리마켓(08:00 ~ 08:50) 거래대금 상위 안에서 프로그램 순매수가 큰 순\n08:50 ~ 09:00 에 그날 판으로 굳힙니다',
-  vi: '오늘 정규장에 상승 VI 가 걸렸거나 전일 대비 +20% 를 넘은 종목, 최근 것이 위',
+  vi: '오늘 정규장에 상승 VI 가 걸렸거나(시가총액 1조 이상만) 전일 대비 +20% 를 넘은 종목, 최근 것이 위',
   bb: '바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록',
   ssts: '코스피200 · 코스닥150 종목의 공매도 거래대금 · 비율(공매도 대금 ÷ 전체 거래대금) 순\n아래 줄에서 금액 · 비율 · 1일 · 5일 · 한달 · 1년 · 장중 값은 없고 거래소가 장 뒤에 냅니다',
 };
@@ -1570,6 +1570,7 @@ let sstsWatch = null;
 
 /* 「VI·급등」 칩 — 서버가 준 일(최신이 위)을 종목마다 한 줄로 묶는다. 못 받았으면 null(빈 목록과 가른다) */
 let viRows = null, viMeta = null, viBy = {};
+const VI_MIN_CAP_EOK = 10000;      // VI 줄은 시가총액 이 값(억원 · 1조) 이상만 — 재권님 11-10
 const VI_FALLBACK_MS = 30000;      // 서버가 롱폴을 못 줄 때만
 function viCell(code) {
   const g = viBy[code];
@@ -1577,8 +1578,12 @@ function viCell(code) {
   const it = g.last;
   const what = it.kind === 'vi' ? `VI ${escT(it.sub || '')}` : `급등 ${escT(it.sub || '')}`;
   const more = [g.vi ? `VI ${g.vi}` : '', g.surge ? '급등' : ''].filter(Boolean).join(' · ');
+  /* 둘째 줄 앞에 시가총액 — 서버가 VI · 급등 기록에 종목당 한 번 받아 둔 값(억원) · 없으면 순위 목록 값 · 둘 다 없으면 안 적는다
+     (재권님 「가」 · 「가」 11-10 — 목록 350 에 든 VI 종목이 208 중 12 라 서버가 받는다) */
+  const note = g.vi + (g.surge ? 1 : 0) > 1 ? `오늘 ${more}` : it.late ? '서버가 늦게 봄' : '';
+  const cap = g.cap != null ? `시총 ${fmtMoneyKr(g.cap)}` : capOf(code) != null ? `시총 ${showCap(code)}` : '';
   return `<div style="white-space:nowrap;font-size:12px;line-height:1.3"><span class="kh-up">${what}</span> <span class="kh-mut">${escT((it.t || '').slice(0, 5))}</span></div>` +
-    `<div style="white-space:nowrap;font-size:11px;line-height:1.3" class="kh-mut">${g.vi + (g.surge ? 1 : 0) > 1 ? `오늘 ${more}` : it.late ? '서버가 늦게 봄' : ''}</div>`;
+    `<div style="white-space:nowrap;font-size:11px;line-height:1.3" class="kh-mut">${[cap, note].filter(Boolean).join(' · ')}</div>`;
 }
 function viNote() {
   const m = viMeta || {};
@@ -1595,9 +1600,14 @@ async function loadVi() {
       const by = {}, rows = [];
       for (const it of d.items || []) {          // 서버가 최신이 위로 준다 — 처음 만난 것이 그 종목의 마지막 일
         if (!it.code) continue;
+        // VI 는 시총 1조(1만 억원) 이상만 — 재권님 「vi종목은 시총1조가 넘지않는건 안보여도 돼」 → 「가」(11-10). 급등 줄은 그대로.
+        // 시총을 아직 못 받은 줄은 남긴다 — 못 잰 것을 「작다」 로 치지 않는다(서버가 다음 바퀴에 채운다)
+        const capEok = it.cap ?? capOf(it.code);
+        if (it.kind === 'vi' && capEok != null && capEok < VI_MIN_CAP_EOK) continue;
         let g = by[it.code];
         if (!g) { g = by[it.code] = { last: it, vi: 0, surge: false }; rows.push({ code: it.code, name: it.name }); }
         if (it.kind === 'vi') g.vi += 1; else g.surge = true;
+        if (g.cap == null && it.cap != null) g.cap = it.cap;   // 서버가 종목당 한 번 받아 둔 시총(억원)
       }
       viBy = by; viRows = rows;
     }
