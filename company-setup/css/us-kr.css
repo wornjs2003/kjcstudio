@@ -1,0 +1,28 @@
+/* 미국→국내 날마다 표 (2026-11-10) — 좁은 폭부터(「모바일 퍼스트」) · 좁은 폭은 표 칸만 옆으로 민다 · 색은 theme.css 변수만 */
+.uk { padding: 4px 0 24px; font-size: 13px; line-height: 1.45; color: var(--kh-text-primary); }
+.uk h1 { font-size: 20px; margin: 0 0 4px; }
+.uk-sub, .uk-how, .uk-foot { color: var(--kh-text-secondary); font-size: 12.5px; margin: 0 0 8px; }
+.uk-how b { color: var(--kh-text-primary); }
+.uk-scroll { overflow-x: auto; }
+.uk-t { width: 100%; border-collapse: collapse; background: var(--kh-bg-card); border-radius: var(--kh-radius-md); overflow: hidden; }
+.uk-t th { background: var(--kh-bg); color: var(--kh-text-secondary); font-weight: 500; font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--kh-border); white-space: nowrap; }
+.uk-t th.g { border-left: 2px solid var(--kh-bg-card); }
+.uk-t td { padding: 5px 8px; border-bottom: 1px solid var(--kh-border); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.uk-t td.d { text-align: left; color: var(--kh-text-secondary); }
+.uk-t td.us { background: var(--kh-bg); font-weight: 600; }
+.uk-t td.g { border-left: 2px solid var(--kh-bg); }
+.uk-t td i { display: block; font-style: normal; font-size: 11px; }
+.uk-t td.rel { text-align: center; }   /* 필반보다 더 오른 정도 — 숫자는 굵게 · 아래 한 줄 뜻 · 바탕도 옅게 칠해 한눈에 */
+.uk-t td.rel b { font-size: 14px; }
+.uk-t td.rel i { color: inherit; }
+.uk-t td.rel-kh-up { background: var(--kh-up-dim); color: var(--kh-up); }
+.uk-t td.rel-kh-down { background: var(--kh-down-dim); color: var(--kh-down); }
+.uk-t td.na { color: var(--kh-text-muted); font-size: 11.5px; text-align: center; }
+.uk-t tr.live td { background: var(--kh-bg); }   /* 오늘 장중 줄 — 아직 안 끝난 값이라 회색 바탕 */
+.uk-t td.d i { display: block; font-style: normal; font-size: 11px; color: var(--kh-text-muted); }
+.uk-t td.na i { color: var(--kh-text-muted); }
+.uk-t td .kh-mut { color: var(--kh-text-muted); }
+@media (min-width: 900px) {
+  .uk { font-size: 14px; }
+  .uk h1 { font-size: 22px; }
+}
