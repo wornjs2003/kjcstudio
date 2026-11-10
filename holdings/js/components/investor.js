@@ -237,7 +237,8 @@ export function mountInvestor({ box, tabs } = {}) {
      같은 칸에 성격이 다른 값이 섞이므로, 무엇이 가집계인지 보이지 않으면
      읽을 수 없다. 「값이 없다」 와 「상위 목록에 없다」 도 갈라 적는다. */
   function todayNote(d) {
-    const dir = '<b class="kh-up">오른쪽 순매수</b> · <b class="kh-down">왼쪽 순매도</b>';
+    /* 막대가 왼쪽 순매도 · 오른쪽 순매수라 글도 그 차례로(2026-11-10 재권님 「매수 매도 그래프에 맞춰서 아래 매도 매수 글씨 순서 바꿔줘」) */
+    const dir = '<b class="kh-down">왼쪽 순매도</b> · <b class="kh-up">오른쪽 순매수</b>';
     if (!todayMissing()) {
       return `${dateText(d.date)} 확정 · 한국투자증권 · ${dir}`;
     }
