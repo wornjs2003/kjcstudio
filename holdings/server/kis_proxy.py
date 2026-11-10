@@ -3127,9 +3127,14 @@ def fetch_quotes_multi(cfg, codes, max_age=None):
                 need.append(code)
     if not need:
         _stats["cache_hits"] += 1
-        return {c: dict(r) for c, r in got.items()}, {}
+        res = {c: dict(r) for c, r in got.items()}
+        if not market_hours.auction(sys.modules[__name__]):   # 아래 끝자리와 같다 — 동시호가 때 받아 둔 예상가를 그 뒤에 안 낸다
+            for r in res.values():
+                r.pop("expect", None)
+        return res, {}
     codes = need
     out, errors = {}, {}
+    kind = market_hours.auction(sys.modules[__name__])      # 동시호가("open" · "close")면 줄마다 예상 체결가를 싣는다
 
     for i in range(0, len(codes), MULTI_MAX):
         chunk = codes[i:i + MULTI_MAX]
@@ -3168,7 +3173,21 @@ def fetch_quotes_multi(cfg, codes, max_age=None):
                 # 거래대금은 실제 값이 온다. 현재가×거래량으로 어림하지 않아도 된다.
                 "value": _num(r.get("acml_tr_pbmn"), int),
                 "source": "KIS",
+                "expect": _multi_expect(r, kind),    # 동시호가 동안만 — 아래 _multi_expect
             }
+        # 통합(UN)으로 물은 동시호가에 예상가가 하나도 안 왔으면 KRX(J)로 그 묶음을 한 번 더 묻는다 — 예상가 칸만 쓴다
+        # (11-10 09:12 호가 응답에서 UN 은 예상가 "0" · J 는 값이 있었다. 멀티 시세도 그런지는 **아직 못 잼** — 오면 이 길은 안 탄다)
+        if kind and div != "J" and not any(out.get(c, {}).get("expect") for c in chunk):
+            try:
+                jd = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/intstock-multprice",
+                             {k: ("J" if k.startswith("FID_COND") else v) for k, v in params.items()}, "FHKST11300006")
+                for r in out_rows(jd, "output"):
+                    c = (r.get("inter_shrn_iscd") or "").strip()
+                    if c in out:
+                        out[c]["expect"] = _multi_expect(r, kind)
+            except RuntimeError:
+                pass
+        _expect_note({c: out[c].get("expect") for c in chunk if c in out})
 
     # 장 밖(통합 시세)이면 그 회차 정규장 종가와 종가 대비 등락률을 함께 싣는다 — 아래 `attach_reg_close`.
     # 평일 아침 07:00 부터 정규장이 끝날 때까지는 장외 값을 싣지 않는다 — 아래 `after_cleared`
@@ -3189,8 +3208,12 @@ def fetch_quotes_multi(cfg, codes, max_age=None):
             if len(_quote_cache) > QUOTE_CACHE_MAX:
                 for k, _v in sorted(_quote_cache.items(), key=lambda kv: kv[1][0])[:len(_quote_cache) // 4]:
                     _quote_cache.pop(k, None)
+    _expect_actual(out, div)
     res = {c: dict(r) for c, r in got.items()}
     res.update({c: dict(r) for c, r in out.items()})
+    if not market_hours.auction(sys.modules[__name__]):       # 동시호가 때 받아 둔 줄을 그 뒤에 내줄 때는 예상가를 뗀다
+        for r in res.values():
+            r.pop("expect", None)
     return res, errors
 
 
@@ -4413,15 +4436,17 @@ def fetch_asking(cfg, code):
 
 
 def _preopen_expect(cfg, code, data):
-    """**장 전 예상 체결가** — 장 전 동시호가(market_hours.in_preopen_auction) 동안만 낸다 · 그 밖은 None (2026-11-10 재권님 「응 해줘」 →
-    자리는 「나」 — 종목 이름 옆 현재가 자리에 「예상」 과 함께).
+    """**동시호가 예상 체결가** — 장 전(08:30~09:00) · 마감(15:20~15:30) 동시호가 동안만 낸다(market_hours.auction) · 그 밖은 None
+    (2026-11-10 재권님 「응 해줘」 → 자리는 「나」 — 종목 이름 옆 현재가 자리에 「예상」 과 함께 → 「종가도 해줘」).
 
     KIS 호가 응답 output2 에 예상 체결가(antc_cnpr) · 예상 거래량(antc_vol) · 기준가(stck_sdpr)가 온다 — 전에는 output2 를 버렸다.
     통합(UN)으로 받은 응답은 antc_cnpr 이 "0" 으로 왔다(11-10 09:12 005930 · J 는 199,400 = 그날 시가) — 그래서 받은 응답에 값이 없으면
-    KRX(J)로 한 번 더 묻는다(동시호가 30분 · 호가 캐시 ASKING_TTL 마다 한 번). 전일 대비는 기준가로 셈한다(부호 칸을 읽지 않는다).
-    **아직 못 잰 것** — 08:30~09:00 에 UN 응답에도 값이 오는지(오면 J 를 다시 안 묻는다)."""
+    KRX(J)로 한 번 더 묻는다(동시호가 동안 · 호가 캐시 ASKING_TTL 마다 한 번). 전일 대비는 기준가로 셈한다(부호 칸을 읽지 않는다).
+    낸 값은 맞았는지 견주려고 expect_log 에 쌓는다(_expect_note).
+    **아직 못 잰 것** — 동시호가 중 UN 응답에도 값이 오는지(오면 J 를 다시 안 묻는다)."""
     try:
-        if not market_hours.in_preopen_auction(sys.modules[__name__]):
+        kind = market_hours.auction(sys.modules[__name__])
+        if not kind:
             return None
         o2 = data.get("output2") or {}
         if not (_num(o2.get("antc_cnpr"), int) or 0) > 0:
@@ -4431,11 +4456,152 @@ def _preopen_expect(cfg, code, data):
         base = _num(o2.get("stck_sdpr"), int) or 0
         if price <= 0:
             return None                      # 아직 예상가가 없다(동시호가 첫 주문 전) — 0 원으로 내지 않는다
-        return {"price": price, "amt": price - base if base else None,
-                "pct": round((price - base) / base * 100, 2) if base else None,
-                "volume": _num(o2.get("antc_vol"), int)}
+        ex = {"kind": kind, "price": price, "amt": price - base if base else None,
+              "pct": round((price - base) / base * 100, 2) if base else None,
+              "volume": _num(o2.get("antc_vol"), int)}
+        _expect_note({code: ex})
+        return ex
     except Exception:
         return None                          # 못 받았다 — 예상가 없이 호가만 낸다
+
+
+def _multi_expect(r, kind):
+    """멀티 시세 한 줄(FHKST11300006)에서 예상 체결가 — 기준가(inter2_sdpr) + 예상 전일 대비(intr_antc_cntg_vrss · 부호는 sign 칸).
+    예상 거래량이 0 이면 아직 예상가가 없는 것으로 본다(11-10 11:09 장중 005930 은 대비 0 · 거래량 0 이 왔다) — None."""
+    base = _num(r.get("inter2_sdpr"), int) or 0
+    vol = _num(r.get("intr_antc_vol"), int) or 0
+    if not kind or base <= 0 or vol <= 0:
+        return None
+    amt = abs(_num(r.get("intr_antc_cntg_vrss"), int) or 0)
+    if str(r.get("intr_antc_cntg_vrss_sign") or "") in ("4", "5"):
+        amt = -amt
+    return {"kind": kind, "price": base + amt, "amt": amt, "pct": round(amt / base * 100, 2), "volume": vol}
+
+
+# ── 예상 체결가가 맞았나 — 쌓아 두고 실제 시가 · 종가와 견준다 (2026-11-10 재권님 「예상체결가가 맞는지 데이터 쌓아놔」) ──
+# expect_log    동시호가 동안 종목마다 1분에 한 줄(그 분 마지막 값) — 호가(fetch_asking) · 멀티 시세(fetch_quotes_multi)가 받은 것
+# expect_actual 그 회차 실제 값 — 시가(open)는 정규장이 열린 뒤 첫 멀티 시세(J)의 시가 · 종가(close)는 15:40 뒤 정규장 종가(attach_reg_close)
+# 쓰는 것은 쓰기 서버(marketdb.writable · 8765)뿐이다. 보는 주소는 /api/kis/expect-log?day=YYYYMMDD
+EXPECT_SQL = ["""CREATE TABLE IF NOT EXISTS expect_log (
+         day TEXT NOT NULL, kind TEXT NOT NULL, code TEXT NOT NULL, hhmm TEXT NOT NULL,
+         price INTEGER, volume INTEGER, PRIMARY KEY (day, kind, code, hhmm))""",
+              """CREATE TABLE IF NOT EXISTS expect_actual (
+         day TEXT NOT NULL, kind TEXT NOT NULL, code TEXT NOT NULL, price INTEGER, saved_at TEXT,
+         PRIMARY KEY (day, kind, code))"""]
+_exp_seen = {}            # (day, kind) → {code: 마지막으로 적은 hhmm}
+_exp_done = {}            # (day, kind) → 실제 값을 적은 종목 set
+
+
+def _exp_codes(day, kind):
+    """그날 그 동시호가에 적어 둔 종목 — 재시작해도 DB 에서 한 번 다시 읽는다."""
+    key = (day, kind)
+    if key not in _exp_seen:
+        seen = {}
+        try:
+            with _db_lock, db_conn() as conn:
+                for c, h in conn.execute("SELECT code, MAX(hhmm) FROM expect_log WHERE day=? AND kind=? GROUP BY code", key):
+                    seen[c] = h
+        except sqlite3.Error:
+            pass
+        _exp_seen[key] = seen
+        for k in [k for k in _exp_seen if k[0] != day]:
+            _exp_seen.pop(k, None)
+    return _exp_seen[key]
+
+
+def _expect_note(rows):
+    """{code: expect} 를 expect_log 에 — 종목마다 그 분의 마지막 값으로 덮는다. 쓰기 서버가 아니면 아무것도 안 한다."""
+    if not rows or not marketdb.writable():
+        return
+    now = datetime.now(KST)
+    day, hhmm = now.strftime("%Y%m%d"), now.strftime("%H%M")
+    put = []
+    for code, ex in rows.items():
+        if ex and ex.get("price"):
+            put.append((day, ex["kind"], code, hhmm, ex["price"], ex.get("volume")))
+    if not put:
+        return
+    try:
+        with _db_lock, db_conn() as conn:
+            for sql in EXPECT_SQL:
+                conn.execute(sql)
+            conn.executemany("INSERT INTO expect_log VALUES (?,?,?,?,?,?) ON CONFLICT(day, kind, code, hhmm) "
+                             "DO UPDATE SET price=excluded.price, volume=excluded.volume", put)
+    except sqlite3.Error as e:
+        print("[예상] 쌓기 실패 — %s" % safe_message(e, 120), flush=True)
+        return
+    for d, k, c, h, _p, _v in put:
+        _exp_codes(d, k)[c] = h
+
+
+def _expect_actual(out, div):
+    """멀티 시세 묶음에서 그 회차 실제 시가 · 종가를 expect_actual 에 — 예상가를 적어 둔 종목만 · 한 번만."""
+    if not out or not marketdb.writable():
+        return
+    me = sys.modules[__name__]
+    now = datetime.now(KST)
+    day = now.strftime("%Y%m%d")
+    put = []
+    if div == "J" and market_hours.in_regular(me, now) and not market_hours.auction(me, now):
+        for code, q in out.items():
+            if code in _exp_codes(day, "open") and code not in _exp_done.setdefault((day, "open"), set()) and q.get("open"):
+                put.append((day, "open", code, q["open"]))
+    for code, q in out.items():
+        if (q.get("regDate") or "").replace("-", "") == day and q.get("regClose") and code in _exp_codes(day, "close") \
+                and code not in _exp_done.setdefault((day, "close"), set()):
+            put.append((day, "close", code, q["regClose"]))
+    if not put:
+        return
+    try:
+        with _db_lock, db_conn() as conn:
+            for sql in EXPECT_SQL:
+                conn.execute(sql)
+            conn.executemany("INSERT OR IGNORE INTO expect_actual VALUES (?,?,?,?,?)",
+                             [p + (now.isoformat(timespec="seconds"),) for p in put])
+    except sqlite3.Error as e:
+        print("[예상] 실제 값 쌓기 실패 — %s" % safe_message(e, 120), flush=True)
+        return
+    for d, k, c, _p in put:
+        _exp_done.setdefault((d, k), set()).add(c)
+    for k in [k for k in _exp_done if k[0] != day]:
+        _exp_done.pop(k, None)
+
+
+def expect_report(day):
+    """그날 예상 체결가가 맞았나 — 동시호가(open · close)마다 종목별로 마지막 예상가 · 실제 값 · 차이 · 몇 시 몇 분부터 실제 값과 같았나.
+    실제 값을 아직 못 적은 종목은 actual None(「못 잼」 — 0 이 아니다)."""
+    out = {"day": day, "open": [], "close": []}
+    try:
+        with _db_lock, db_conn() as conn:
+            logs = conn.execute("SELECT kind, code, hhmm, price, volume FROM expect_log WHERE day=? ORDER BY kind, code, hhmm",
+                                (day,)).fetchall()
+            act = {(k, c): p for k, c, p in conn.execute("SELECT kind, code, price FROM expect_actual WHERE day=?", (day,))}
+    except sqlite3.Error as e:
+        if "no such table" in str(e):        # 쓰기 서버(8765)가 아직 한 번도 안 적었다 — 오류가 아니라 「쌓인 것 없음」
+            return dict(out, empty="아직 쌓인 것 없음 — 동시호가(08:30~09:00 · 15:20~15:30)에 8765 가 적기 시작합니다")
+        return dict(out, error="못 읽음 — %s" % safe_message(e, 120))
+    by = {}
+    for kind, code, hhmm, price, vol in logs:
+        by.setdefault((kind, code), []).append((hhmm, price, vol))
+    for (kind, code), rows in sorted(by.items()):
+        actual = act.get((kind, code))
+        last = rows[-1]
+        since = None
+        if actual:
+            for hhmm, price, _v in reversed(rows):
+                if price != actual:
+                    break
+                since = hhmm
+        out[kind].append({"code": code, "samples": len(rows), "lastAt": last[0], "lastPrice": last[1], "lastVolume": last[2],
+                          "actual": actual, "diff": (last[1] - actual) if actual else None,
+                          "diffPct": round((last[1] / actual - 1) * 100, 3) if actual else None,
+                          "hit": (last[1] == actual) if actual else None, "sameSince": since})
+    for kind in ("open", "close"):
+        graded = [r for r in out[kind] if r["actual"]]
+        out[kind + "Summary"] = {"codes": len(out[kind]), "graded": len(graded),
+                                 "hit": sum(1 for r in graded if r["hit"]),
+                                 "avgAbsDiffPct": round(sum(abs(r["diffPct"]) for r in graded) / len(graded), 3) if graded else None}
+    return out
 
 
 def fetch_investor_top(cfg, direction="buy", market="all", by="qty", limit=10):
@@ -4751,6 +4917,7 @@ SCHEMA = [
          key TEXT PRIMARY KEY, value TEXT, updated_at TEXT
        )""",
     INVESTOR_DAILY_SQL,      # 「3달」 — 위 `fetch_investor_long`
+    *EXPECT_SQL,             # 예상 체결가가 맞았나 — 위 `_expect_note`
 ]
 
 # 기간별 설정
@@ -9448,6 +9615,18 @@ class Handler(SimpleHTTPRequestHandler):
                              "power": data["power"],
                              "market": quote_market_div()},
                 })
+                return
+
+            # 예상 체결가가 맞았나 — 그날 쌓은 것과 실제 시가 · 종가 (2026-11-10 · expect_report)
+            if route == "expect-log":
+                day = (qs.get("day") or [datetime.now(KST).strftime("%Y%m%d")])[0].strip()
+                if not (day.isdigit() and len(day) == 8):
+                    self._send_json({"ok": False, "error": "day 는 YYYYMMDD 여야 합니다."}, 400)
+                    return
+                data = expect_report(day)
+                self._send_json({"ok": "error" not in data, "data": data,
+                                 "meta": {"note": "lastPrice = 동시호가 마지막으로 적은 예상가 · actual = 실제 시가(open) · 정규장 종가(close) · "
+                                                  "actual 이 null 이면 아직 못 적음 · sameSince = 그 분부터 끝까지 실제 값과 같았음"}})
                 return
 
             if route == "asking":

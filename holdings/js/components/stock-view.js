@@ -28,7 +28,7 @@ import { fetchCandles, fetchCandlesSince, watchCandles, createStockChart, maLege
   chartView, setChartView, chartStockChanged } from '../chart.js';
 import { getMemo, setMemo } from '../store/memo.js';
 import { fmtNum, fmtWon, fmtMoneyKr, fmtShareCount, fmtDelta, dirClass,
-  isUsCode, fmtPriceOf, fmtUsdBig, priceDigitsOf, usSessionLabel } from '../utils/format.js';
+  isUsCode, fmtPriceOf, fmtUsdBig, priceDigitsOf, usSessionLabel, expectTip } from '../utils/format.js';
 import { paintIcon } from './stock-icon.js';
 import { mountDisclosures } from './disclosures.js';
 import { mountStockPanel } from './stock-panel.js';
@@ -212,14 +212,15 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
     /* 미국 종목(2026-10-07 나스닥100 · S&P500)은 달러 — 가격 소수 둘째 자리 · 큰 금액 「조 · 억 달러」 */
     const us = isUsCode(stock.code);
     const big = (v) => (v == null ? '—' : (us ? fmtUsdBig(v) : fmtMoneyKr(v)));
-    /* 장 전 동시호가 동안은 예상 체결가를 「예상」 과 함께(2026-11-10 재권님 「나」) — 서버가 그때만 준다(kis_proxy._preopen_expect) */
+    /* 동시호가(장 전 · 마감) 동안은 예상 체결가를 「예상」 과 함께(2026-11-10 재권님 「나」 · 「종가도 해줘」) — 서버가 그때만 준다(kis_proxy._preopen_expect) */
     const ex = detailApi && detailApi.expect ? detailApi.expect() : null;
     if (ex) {
       const ec = dirClass(ex.pct);
       price.className = 'kh-price kh-num ' + ec;
       price.textContent = `예상 ${fmtPriceOf(stock.code, ex.price)}`;
-      price.dataset.tip = '장 전 동시호가 예상 체결가입니다 — 정규장이 열릴 때 시가로 정해집니다';
-      if (sub) { sub.className = 'kh-price-sub kh-num ' + ec; sub.textContent = '예상 체결가 · 어제보다 ' + fmtDelta(ex.amt, ex.pct); }
+      price.dataset.tip = expectTip(ex);
+      // 기준가를 못 받았으면(amt null) 「어제보다」 를 안 붙인다 — 개념정의 · qa 덧(11-10)
+      if (sub) { sub.className = 'kh-price-sub kh-num ' + ec; sub.textContent = ex.amt == null ? '예상 체결가' : '예상 체결가 · 어제보다 ' + fmtDelta(ex.amt, ex.pct); }
     } else {
     delete price.dataset.tip;
     price.className = 'kh-price kh-num ' + cls;
