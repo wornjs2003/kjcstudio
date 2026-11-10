@@ -149,6 +149,7 @@ export function indOn() {
 
 function saveIndOn() {
   try { localStorage.setItem(IND_ON_KEY, JSON.stringify([..._indOn])); } catch { /* 저장 못 씀 */ }
+  memPush();
 }
 
 /* 아래 칸 하나가 먹는 높이 비율. 셋이 다 켜지면 가격이 절반 아래로 내려간다 */
@@ -937,10 +938,12 @@ function setVSpan(per, s, d = 0) {
   if (s == null) delete m[per];
   else m[per] = { s: Math.max(V_SPAN_MIN, Math.min(V_SPAN_MAX, s)), d: Math.max(-V_SHIFT_MAX, Math.min(V_SHIFT_MAX, d || 0)) };
   try { localStorage.setItem(V_SPAN_KEY, JSON.stringify(m)); } catch { /* 저장 못 씀 */ }
+  memPush();
 }
 
 function savePaneH() {
   try { localStorage.setItem(PANE_H_KEY, JSON.stringify(_paneH)); } catch { /* 저장 못 씀 */ }
+  memPush();
 }
 
 /* 제 칸을 갖는 지표. 순서가 곧 위에서 아래 순서다 */
@@ -2268,6 +2271,7 @@ export function createStockChart(container, candles, opts = {}) {
     else build();
   }
   _indSync.add(syncInd);
+  _memSync.add(build);
 
   /* ── 칸 높이 끌기 — 그 경계의 위아래 둘만 바뀐다 ──
      **pointer 이벤트로 듣는다** (2026-10-06 재권님 — 「모바일에서 보조지표 구분선을 끌어도 안 움직임」 · 「응 해줘」).
@@ -2622,6 +2626,7 @@ export function createStockChart(container, candles, opts = {}) {
 
     destroy() {
       _indSync.delete(syncInd);
+      _memSync.delete(build);
       if (sizeRo) sizeRo.disconnect();
       clearTimeout(fitTimer);
       clearTimeout(sizeTimer);
@@ -2689,7 +2694,66 @@ function maOff() {
 
 function saveMaOff() {
   try { localStorage.setItem(MA_OFF_KEY, JSON.stringify([..._maOff])); } catch { /* 저장 못 씀 */ }
+  memPush();
 }
+
+/* ── 차트 기억은 보관함 한 곳 · 기준은 thekjc.co.kr (2026-11-10 재권님 「기억을 내가 보는값으로 통일해줘 메인이 기준이야」 →
+   「https://thekjc.co.kr/holdings/ 여기야」 → 안에 「응 통일해」) ──
+   켠 지표 · 이평 끄기 · 칸 높이 · 세로 폭은 브라우저가 주소(출처)마다 따로 기억해서, 같은 코드여도 8765 · 세션 포트가 재권님 화면과
+   다르게 보였다(그날 8770 은 RSI 칸 110 · 8765 는 60). 그래서 보드 보관함 문서 하나(MEM_DOC)에 둔다 — 8764 · 8765 · 세션 포트가
+   같은 보관함을 쓴다(11-10 /api/board/health 로 잼). **쓰는 곳은 기준 화면(MEM_WRITER) 하나** — 다른 곳은 읽어 똑같이 그리기만 한다.
+   거기서 바꾼 것은 그 브라우저에만 남았다가 다시 열면 기준값으로 돌아간다(세션 시험 · 헤드리스 도구가 기준값을 못 바꾸게).
+   보관함을 못 읽으면 브라우저에 남은 값으로 그린다. 기준 화면도 처음에 읽는다 — 맥북 · 맥미니가 같은 값을 보게 */
+const MEM_DOC = '/api/board/doc/chart-view';
+const MEM_WRITER = ['thekjc.co.kr'];
+const MEM_KEYS = [IND_ON_KEY, IND_SEEN_KEY, MA_OFF_KEY, PANE_H_KEY, V_SPAN_KEY];
+const MEM_PUSH_MS = 800;          // 끌기 · 누르기를 모아 한 번 보낸다(그리기 쪽 지연 — 서버를 다시 묻는 주기가 아니다)
+const _memSync = new Set();       // 보관함 값으로 바뀌면 차트를 다시 짓는다
+const memWriter = (() => { try { return MEM_WRITER.includes(location.hostname); } catch { return false; } })();
+let memLoaded = false, memSent = null, memTimer = null;
+
+function memSnap() {
+  const o = {};
+  MEM_KEYS.forEach((k) => {
+    try { const raw = localStorage.getItem(k); if (raw != null) o[k] = JSON.parse(raw); } catch { /* 깨진 값은 뺀다 */ }
+  });
+  return o;
+}
+function memPush() {
+  if (!memWriter || !memLoaded) return;          // 읽기 전에 쓰면 다른 기기 값을 옛 값으로 덮는다
+  clearTimeout(memTimer);
+  memTimer = setTimeout(() => {
+    const data = memSnap();
+    const body = JSON.stringify(data);
+    if (body === memSent) return;
+    memSent = body;
+    apiFetch(MEM_DOC, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ data }) })
+      .catch(() => { memSent = null; });
+  }, MEM_PUSH_MS);
+}
+function memApply(data) {
+  if (JSON.stringify(memSnap()) === JSON.stringify(data)) return;   // 같으면 다시 안 짓는다(깜빡임)
+  MEM_KEYS.forEach((k) => {
+    try {
+      if (data[k] == null) localStorage.removeItem(k);
+      else localStorage.setItem(k, JSON.stringify(data[k]));
+    } catch { /* 저장 못 씀 — 이번 화면만 */ }
+  });
+  _indOn = null; _paneH = null; _vSpan = null; _maOff = null;
+  _memSync.forEach((fn) => fn());
+  _indSync.forEach((fn) => fn());
+  _legendSync.forEach((fn) => fn());
+}
+(async () => {
+  try {
+    const r = await apiFetch(MEM_DOC, { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    if (!j || !j.ok) return;
+    if (j.data && typeof j.data === 'object') { memSent = JSON.stringify(j.data); memApply(j.data); }
+    memLoaded = true;
+    if (!j.data) memPush();                       // 보관함이 비었으면 기준 화면의 브라우저 값을 올린다
+  } catch { /* 못 읽음 — 브라우저 값으로 그린다 */ }
+})();
 
 /* 차트 밖(패널 머리·차트 아래 줄)에 뿌려 둔 maLegend 도 함께 흐려 준다.
    그리는 곳이 달라 한 번에 못 고치므로 DOM 에서 찾아 맞춘다 */
