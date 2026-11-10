@@ -74,7 +74,7 @@ const POWER_RELOAD_FALLBACK_MS = 3_000;    // 체결강도 — 서버 값(kis_pr
 /* `onOne(code, 단건)` — 단건을 받을 때마다 알린다 (2026-10-06 지시 — 「로딩 순서 체크해 봐」 → 「응」).
    첫 화면의 52주 칸과 큰 차트 머리 현재가가 **같은 단건을 따로 또 부르거나**(같은 주소 두 번)
    **1초 넘는 묶음 시세를 기다리던** 것을 이 응답 하나로 칠한다. 증권사 호출이 한 건 준다. */
-export function mountStockDetail(host, { view, onOne } = {}) {
+export function mountStockDetail(host, { view, onOne, onExpect } = {}) {
   if (!host) return { setCode() {}, update() {}, destroy() {}, full() { return null; }, missing() { return false; } };
 
   let code = null;
@@ -83,6 +83,7 @@ export function mountStockDetail(host, { view, onOne } = {}) {
   let power = null;         // 체결강도(100 기준) — /api/kis/ticks 의 power · 실시간 체결이 오면 그 값이 이긴다(2026-11-05 재권님 「체결강도를 차트랑 모달 차트에」 → (나) 머리줄)
   let missing = false;      // 서버가 「없는 종목 코드」(404 · notFound) 라고 했다 — 0원으로 그리지 않는다(2026-11-05)
   let buyPct = null;        // 매수 잔량 비중
+  let expect = null;        // 동시호가(장 전 · 마감) 예상 체결가 — 서버가 동시호가 동안만 준다(kis_proxy._preopen_expect · 2026-11-10) · 그 밖은 null
   let seq = 0;
   let timer = null;
   let liveTimer = null;
@@ -92,13 +93,15 @@ export function mountStockDetail(host, { view, onOne } = {}) {
     if (!code) return;
     const mine = ++seq;
     /* 미국 종목은 호가(매수 · 매도 잔량)를 안 받는다 — 국내 호가 주소라 400 이 났다(qa 10-15 · 2026-10-26 고침). 비율 칸은 비운다 */
-    if (isUsCode(code)) { buyPct = null; paint(); return; }
+    if (isUsCode(code)) { buyPct = null; expect = null; paint(); return; }
     try {
       const r = await apiFetch(viewUrl(`/api/kis/asking?code=${code}`, view), { cache: 'no-store' });
       if (!r || !r.ok) throw new Error(r && r.status);
       const b = await r.json();
       if (mine !== seq) return;          // 그새 종목이 바뀌었다
       buyPct = (b.data && b.data.buyPct != null) ? b.data.buyPct : null;
+      const ex = (b.data && b.data.expect) || null;
+      if (JSON.stringify(ex) !== JSON.stringify(expect)) { expect = ex; if (onExpect) onExpect(code, expect); }   // 머리줄 현재가 자리가 「예상」 으로 바꿔 그린다
     } catch {
       buyPct = null;
     }
@@ -253,10 +256,14 @@ export function mountStockDetail(host, { view, onOne } = {}) {
   loadVolPrev();
 
   return {
+    /** 장 전 예상 체결가 {price, amt, pct, volume} — 동시호가가 아니면 null */
+    expect() { return expect; },
     setCode(next) {
       if (!next || next === code) return;
       code = next;
       buyPct = null;
+      if (expect && onExpect) onExpect(next, null);
+      expect = null;
       one = null;
       missing = false;
       power = null;

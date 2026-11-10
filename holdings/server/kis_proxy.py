@@ -68,7 +68,6 @@ import toss
 import macro
 import note_alert      # 시황 글 알림 — 자동 시황 글이 새로 써지면 텔레그램 한 통(2026-10-27 · server/note_alert.py)
 import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-25 · server/events.py 머리 주석)
-import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 · /api/kis/pre-flow(2026-11-05 · server/pre_flow.py)
 import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
 import claude_chat     # 홀딩스 오른쪽 Claude 창 — 맥미니 claude 를 한 번씩 부른다 · POST /api/claude/ask(2026-11-03 · server/claude_chat.py)
 import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 테마 · 수급(넥스트 5분 거래량 2배) (2026-10-27 · server/theme_flow.py)
@@ -78,6 +77,8 @@ import fear_greed      # 공포·탐욕 지수 — 코스피 · 삼성전자 · 
 import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스닥 150 중 전일 거래량 급등 · 투자전략 룰로 거르고 줄 세움 · /api/auto-watch(2026-11-05 · server/auto_watch.py)
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
 import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 · 색 = 등락률 · /api/kis/heatmap(2026-10-27 · server/heatmap.py)
+import flow_board       # 수급 정리판 — 투자자 갈래별 순매수(오늘 · 날마다 · 상위 종목)를 한 주소로 · /api/kis/flow-board(2026-11-04 · server/flow_board.py)
+import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 · /api/kis/pre-flow(2026-11-05 · server/pre_flow.py)
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
 import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
 import session_volume   # 시간대별 거래량 · 전일비 — 프리장 · 정규장 · 애프터 끝에 순위 종목 누적 거래량 저장 · /api/kis/vol-ratio(2026-11-05 · server/session_volume.py)
@@ -2626,6 +2627,286 @@ def _daily_indices(cfg):
     return rows
 
 
+# ── 지수 일봉 몇 달 — 국내 · 미국 지수를 한 주소로 (2026-11-10 · 작업우선순위 배분) ──
+# 재권님이 시황분석 창에서 「미국 3지수 등락률 ↔ 코스피 · 삼성전자 · 하이닉스 날마다 표」 를 Insight 새 화면으로 정하셨고
+# 서버 값이 없어 넘어왔다(「두 구역이 같은 값을 쓰면」 1번 — 바깥 값은 서버가 받고 Insight 는 가져온다) → 재권님 「응」.
+#   GET /api/kis/index-daily?codes=KOSPI,SPX,NASDAQ,SOX
+# 국내는 fetch_index_candles 의 일봉(DB · INDEX_KEEP) 그대로 · 미국은 KIS 해외지수 일봉(FHKST03030100) — 한 번에 100일까지라
+# (2026-11-10 11:50 SPX · COMP · SOX 다 100줄 · 새 날짜 먼저) 앞쪽을 한 번 더 묻는다. 받은 것은 INDEX_DAILY_TTL 동안 들고 있다.
+# 이름은 INDEX_DEFS(국내) · OVERSEAS_DEFS(해외)의 열쇠 그대로다(나스닥 종합은 NASDAQ · KIS 코드 COMP).
+INDEX_DAILY_MONTHS = 6          # 내주는 기간 — 화면이 정하지 않는다(「캐시·주기·한도 값을 화면에 박지 않는다」)
+INDEX_DAILY_TTL = 600           # 미국 지수 일봉을 들고 있는 초 — 장이 닫힌 낮에는 안 바뀐다 · 10분에 지수마다 KIS 2건
+_idx_daily = {}
+
+
+def _ovs_daily(cfg, div, code, start):
+    """해외지수 일봉 start(YYYYMMDD)부터 오늘까지 — 옛것부터. 100줄씩 앞으로 물어 간다(많아야 네 번)."""
+    rows, end = {}, datetime.now(KST).strftime("%Y%m%d")
+    for _ in range(4):
+        d = kis_get(cfg, "/uapi/overseas-price/v1/quotations/inquire-daily-chartprice",
+                    {"FID_COND_MRKT_DIV_CODE": div, "FID_INPUT_ISCD": code, "FID_INPUT_DATE_1": start,
+                     "FID_INPUT_DATE_2": end, "FID_PERIOD_DIV_CODE": "D"}, "FHKST03030100")
+        got = [r for r in out_rows(d, "output2") if r.get("stck_bsop_date")]
+        for r in got:
+            close = _num(r.get("ovrs_nmix_prpr"))
+            if not close:
+                continue                      # 0 · 빈 줄은 못 받은 날 — 넣지 않는다
+            rows[r["stck_bsop_date"]] = {"date": r["stck_bsop_date"], "open": _num(r.get("ovrs_nmix_oprc")),
+                                         "high": _num(r.get("ovrs_nmix_hgpr")), "low": _num(r.get("ovrs_nmix_lwpr")),
+                                         "close": close}
+        first = min((r["stck_bsop_date"] for r in got), default=None)
+        if len(got) < 100 or not first or first <= start:
+            break
+        end = (datetime.strptime(first, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
+    return [rows[k] for k in sorted(rows) if k >= start]
+
+
+def _stock_daily_j(cfg, code, start):
+    """종목 정규장(KRX · J) 일봉 start(YYYYMMDD)부터 오늘까지 — 옛것부터. 한 번에 100줄이라 앞으로 물어 간다(많아야 네 번)."""
+    rows, end = {}, datetime.now(KST).strftime("%Y%m%d")
+    for _ in range(4):
+        d = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+                    {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code, "FID_INPUT_DATE_1": start,
+                     "FID_INPUT_DATE_2": end, "FID_PERIOD_DIV_CODE": "D", "FID_ORG_ADJ_PRC": "0"}, "FHKST03010100")
+        got = [r for r in out_rows(d, "output2") if r.get("stck_bsop_date")]
+        for r in got:
+            close = _num(r.get("stck_clpr"), int)
+            if not close:
+                continue                      # 0 · 빈 줄은 못 받은 날 — 넣지 않는다
+            rows[r["stck_bsop_date"]] = {"date": r["stck_bsop_date"], "open": _num(r.get("stck_oprc"), int),
+                                         "high": _num(r.get("stck_hgpr"), int), "low": _num(r.get("stck_lwpr"), int),
+                                         "close": close, "volume": _num(r.get("acml_vol"), int)}
+        first = min((r["stck_bsop_date"] for r in got), default=None)
+        if len(got) < 100 or not first or first <= start:
+            break
+        end = (datetime.strptime(first, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
+    return [rows[k] for k in sorted(rows) if k >= start]
+
+
+# ── 일봉 쌓기 — 끝난 날은 market.db 에 들고 오늘 쪽만 다시 받는다 (2026-11-10 재권님 「로딩이 느린데 오늘값을 빼고 나머지는 저장해야 할거같아」 → 안에 「응」) ──
+# 전에는 INDEX_DAILY_TTL 이 지나거나 재시작하면 6개월치를 KIS 에 통째로 다시 물었다(지수 · 종목 하나에 2건 · 화면 하나에 10건 남짓 ·
+# 시황분석 14:07 잼). 이제 끝난 날 봉은 daily_store 에 쌓고(쓰는 서버 8765 만), 다시 받을 때는 마지막 쌓인 날 DAILY_REFETCH_DAYS 앞부터만 묻는다.
+# 읽기 전용 서버는 표를 읽기만 하고 받은 것은 메모리에 들고 있다(_daily_mem). 지수 국내는 이미 candles 표라 안 거친다.
+DAILY_SQL = ("CREATE TABLE IF NOT EXISTS daily_store (kind TEXT NOT NULL, code TEXT NOT NULL, date TEXT NOT NULL, "
+             "open REAL, high REAL, low REAL, close REAL, volume INTEGER, PRIMARY KEY (kind, code, date))",)
+DAILY_REFETCH_DAYS = 10         # 다시 받을 때 마지막 날에서 거슬러 올라가는 날 — 늦게 고쳐진 값 · 빠진 날을 덮는다
+_daily_mem = {}                 # (kind, code) → {date: bar} — 쌓지 못하는 서버의 몫 · 쓰는 서버도 표를 다시 안 읽게
+
+
+def _as_int(v):
+    """표에서 읽은 REAL(189900.0)을 원 단위 정수로 — _num(…, int) 은 "189900.0" 을 못 읽는다."""
+    return None if v is None else int(round(float(v)))
+
+
+def _daily_settled_day(kind):
+    """그 시장의 오늘 날짜 — 이보다 앞선 날 봉만 끝난 것으로 쌓는다. 미국은 뉴욕 날짜(장중 봉이 그 날짜)."""
+    if kind == "OVS":
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("America/New_York")).strftime("%Y%m%d")
+    return datetime.now(KST).strftime("%Y%m%d")
+
+
+def _daily_stored(kind, code, start, fetch, done=False):
+    """kind · code 의 일봉 start 부터 — 쌓인 것 + 모자란 쪽만 fetch(d1) 로 받아 합친다. done 이면(끝난 월물) 쌓인 것이 있으면 안 묻는다."""
+    mem = _daily_mem.setdefault((kind, code), {})
+    if not mem:
+        try:
+            with _db_lock, db_conn() as conn:
+                for r in conn.execute("SELECT date, open, high, low, close, volume FROM daily_store WHERE kind=? AND code=?", (kind, code)):
+                    mem[r[0]] = {"date": r[0], "open": r[1], "high": r[2], "low": r[3], "close": r[4], "volume": r[5]}
+        except sqlite3.Error:
+            pass                                 # 표가 아직 없다(쓰는 서버가 처음 쌓을 때 만든다) — 통째로 받는다
+    have = sorted(d for d in mem if d >= start)
+    if not (done and have):
+        d1 = start
+        if have and have[0] <= (datetime.strptime(start, "%Y%m%d") + timedelta(days=7)).strftime("%Y%m%d"):
+            d1 = max(start, (datetime.strptime(have[-1], "%Y%m%d") - timedelta(days=DAILY_REFETCH_DAYS)).strftime("%Y%m%d"))
+        new = fetch(d1)
+        for b in new:
+            mem[b["date"]] = {k: b.get(k) for k in ("date", "open", "high", "low", "close", "volume")}
+        settled = _daily_settled_day(kind)
+        put = [(kind, code, b["date"], b.get("open"), b.get("high"), b.get("low"), b["close"], b.get("volume"))
+               for b in new if b["date"] < settled]
+        if put and marketdb.writable():
+            try:
+                with _db_lock, db_conn() as conn:
+                    for sql in DAILY_SQL:
+                        conn.execute(sql)
+                    conn.executemany("INSERT INTO daily_store VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(kind, code, date) DO UPDATE SET "
+                                     "open=excluded.open, high=excluded.high, low=excluded.low, close=excluded.close, volume=excluded.volume", put)
+            except sqlite3.Error as e:
+                print("[일봉] 쌓기 실패 — %s" % safe_message(e, 120), flush=True)
+    return [mem[d] for d in sorted(mem) if d >= start]
+
+
+def fetch_stock_daily(cfg, codes):
+    """종목 정규장(KRX · J) 일봉 몇 달 — {code: {name, market:"J", bars | None, error?}} (2026-11-10 · 작업우선순위 배분 ④).
+    재권님(시황분석 창) 「오늘 하이닉스는 11.49% 오른 적이 없는데」 → 기준은 정규장 종가. 차트 일봉(/api/kis/chart)은 통합(UN · MARKET_DIV_CHART)이라
+    종가가 20:00 애프터 끝 값 · 시가가 넥스트레이드 프리장 첫 값이다 — 11-09 SK하이닉스 J 시 1,130,000 · 종 1,136,000 ↔ UN 시 1,165,000 · 종 1,114,000
+    (삼성 J 187,200 · 189,900 ↔ UN 190,900 · 187,100 · 11-10 12:1x 잼). 기간 · 받아 두는 초는 지수와 같은 INDEX_DAILY_MONTHS · INDEX_DAILY_TTL."""
+    start = (datetime.now(KST) - timedelta(days=INDEX_DAILY_MONTHS * 31)).strftime("%Y%m%d")
+    out = {}
+    try:
+        names = {c: q.get("name") for c, q in fetch_quotes_multi(cfg, codes)[0].items()}   # 이름 — 서버 시세 캐시를 함께 쓴다
+    except RuntimeError:
+        names = {}
+    for code in codes:
+        try:
+            hit = _idx_daily.get("J:" + code)
+            if not (hit and time.time() - hit[0] < INDEX_DAILY_TTL and hit[1] == start):
+                hit = (time.time(), start, [dict(b, open=_as_int(b["open"]), high=_as_int(b["high"]), low=_as_int(b["low"]), close=_as_int(b["close"]))
+                                            for b in _daily_stored("J", code, start, lambda d1, c=code: _stock_daily_j(cfg, c, d1))])
+                _idx_daily["J:" + code] = hit
+            out[code] = {"name": names.get(code), "market": "J", "bars": hit[2] or None}
+        except RuntimeError as e:
+            out[code] = {"name": names.get(code), "market": "J", "bars": None, "error": safe_message(e)}
+    return out
+
+
+# ── 주식선물 최근월물 일봉 몇 달 — 날마다 그날의 최근월물을 이어 붙인다 (2026-11-10 · 작업우선순위 배분 ③) ──
+# 재권님 「선물대비 등락도 추가해줘」 → 「하이닉스 삼전」 → 안(그날 최근월물을 이어 붙이고 · 만기 다음 날 다음 달물로 ·
+# 봉마다 같은 월물 전날 종가를 함께)에 「응」.  GET /api/kis/stock-futures-daily?codes=005930,000660
+# 월물 코드는 KIS 종목 마스터(주식선물)에서 그 종목의 상품 앞자리를 읽어 만든다 — 삼성전자 A11611 = "A11" + 해 끝자리 6 + 달 11
+# (2026-11-10 잼 · 하이닉스 A50611). 지난 월물도 일봉이 온다(A11605 59줄 · A11610 60줄). 한 월물 한 번 묻기(100줄 안).
+# **그날의 최근월물 = 그날 봉이 있는 월물 중 가장 가까운 달** — 만기일 셈(둘째 목요일 · 휴장이면 앞당김)을 따로 안 한다.
+# 만기월물은 만기일까지 봉이 있고 다음 날부터 없으니, 봉이 있나로 저절로 갈린다.
+FO_STK_MASTER = "https://new.real.download.dws.co.kr/common/master/fo_stk_code_mts.mst.zip"
+_fo_stk = {"day": None, "map": None}
+_fo_bars = {}                         # 월물 코드 → (시각, 끝난 월물인가, 봉들) — 끝난 월물은 다시 안 묻는다
+
+
+def _fo_stk_prefix():
+    """{종목코드: (월물 앞자리, 이름)} — 마스터를 하루 한 번 받는다. 상품 앞자리는 「월물코드 = 앞자리 + 해 끝자리 + 달 두 자리」 에 맞는 줄에서만 뽑는다."""
+    today = datetime.now(KST).strftime("%Y%m%d")
+    if _fo_stk["day"] == today and _fo_stk["map"]:
+        return _fo_stk["map"]
+    import io, zipfile
+    req = urllib.request.Request(FO_STK_MASTER, headers={"User-Agent": "Mozilla/5.0 KJCStudio"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        z = zipfile.ZipFile(io.BytesIO(r.read()))
+    text = z.read(z.namelist()[0]).decode("cp949", "replace")
+    out = {}
+    for line in text.split("\n"):
+        f = line.rstrip("\r").split("|")
+        if len(f) < 9 or f[0] != "1":
+            continue
+        m = re.search(r"\bF (\d{6})\b", f[3])
+        code, under = f[1].strip(), f[7].strip()
+        if not m or len(under) != 6 or under in out:
+            continue
+        ym = m.group(1)
+        if code.endswith(ym[3] + ym[4:]):
+            out[under] = (code[:-3], f[3].split(" F ")[0].strip())
+    if len(out) < 50:                  # 모양이 바뀌었으면 수가 크게 준다 — 그날은 쓰지 않는다
+        raise RuntimeError("주식선물 목록에서 종목이 %d개뿐입니다(모양이 바뀌었을 수 있음)" % len(out))
+    _fo_stk["day"], _fo_stk["map"] = today, out
+    return out
+
+
+def _fo_month_bars(cfg, fcode, d1, d2, done):
+    """한 월물의 일봉 d1~d2 — 옛것부터. 끝난 월물은 들고 있고, 아니면 INDEX_DAILY_TTL 동안 들고 있다."""
+    hit = _fo_bars.get(fcode)
+    if hit and hit[3] == (d1, d2) and (hit[1] or time.time() - hit[0] < INDEX_DAILY_TTL):
+        return hit[2]
+
+    def ask(a):
+        d = kis_get(cfg, "/uapi/domestic-futureoption/v1/quotations/inquire-daily-fuopchartprice",
+                    {"FID_COND_MRKT_DIV_CODE": "JF", "FID_INPUT_ISCD": fcode, "FID_INPUT_DATE_1": a,
+                     "FID_INPUT_DATE_2": d2, "FID_PERIOD_DIV_CODE": "D"}, "FHKIF03020100")
+        got = []
+        for r in out_rows(d, "output2"):
+            close = _num(r.get("futs_prpr"), int)
+            if not r.get("stck_bsop_date") or not close:
+                continue                       # 0 · 빈 줄은 못 받은 날 — 넣지 않는다
+            got.append({"date": r["stck_bsop_date"], "open": _num(r.get("futs_oprc"), int), "high": _num(r.get("futs_hgpr"), int),
+                        "low": _num(r.get("futs_lwpr"), int), "close": close, "volume": _num(r.get("acml_vol"), int)})
+        return got
+    bars = [{k: (_as_int(v) if k != "date" else v) for k, v in b.items()}
+            for b in _daily_stored("FO", fcode, d1, ask, done=done) if b["date"] <= d2]
+    _fo_bars[fcode] = (time.time(), done, bars, (d1, d2))
+    return bars
+
+
+def fetch_stock_futures_daily(cfg, codes):
+    """{종목코드: {name, bars:[{date, contract, open, high, low, close, prevClose, volume, roll?}] | None, error?}}.
+    prevClose 는 **같은 월물**의 전 거래일 종가 — 갈아탄 날(roll)도 새 월물 자기 전날 값이라 등락률이 월물 차이로 튀지 않는다.
+    그 월물 전날 봉이 없으면(상장 첫날) prevClose null."""
+    now = datetime.now(KST)
+    today = now.strftime("%Y%m%d")
+    start = (now - timedelta(days=INDEX_DAILY_MONTHS * 31)).strftime("%Y%m%d")
+    try:
+        pre = _fo_stk_prefix()
+    except Exception as e:
+        return {c: {"name": None, "bars": None, "error": "주식선물 목록을 못 받음 — " + safe_message(e)} for c in codes}
+    out = {}
+    for code in codes:
+        if code not in pre:
+            out[code] = {"name": None, "bars": None, "error": "주식선물이 없는 종목"}
+            continue
+        head, name = pre[code]
+        try:
+            y, m = int(start[:4]), int(start[4:6])
+            months = []
+            while (y, m) <= (now.year + (now.month == 12), now.month % 12 + 1):    # 시작 달부터 다음 달까지
+                months.append((y, m))
+                y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+            per = {}                               # 월물 코드 → 봉들
+            for y, m in months:
+                fcode = "%s%d%02d" % (head, y % 10, m)
+                py, pm = (y - 1, 12) if m == 1 else (y, m - 1)
+                d1 = max("%04d%02d01" % (py, pm), (datetime.strptime(start, "%Y%m%d") - timedelta(days=10)).strftime("%Y%m%d"))
+                d2 = min("%04d%02d31" % (y, m), today)
+                if d1 > d2:
+                    continue
+                done = "%04d%02d" % (y, m) < today[:6]                            # 지난달 월물은 끝났다
+                per[fcode] = _fo_month_bars(cfg, fcode, d1, d2, done)
+            front = {}                             # 날짜 → (월물 코드, 봉 차례) — 그날 봉이 있는 가장 가까운 달
+            for fcode in per:                      # 넣은 차례가 곧 달 차례(가까운 달 먼저)
+                for i, b in enumerate(per[fcode]):
+                    if b["date"] >= start and b["date"] not in front:
+                        front[b["date"]] = (fcode, i)
+            bars, last = [], None
+            for d in sorted(front):
+                fcode, i = front[d]
+                b = per[fcode][i]
+                row = dict(b, contract=fcode, prevClose=per[fcode][i - 1]["close"] if i > 0 else None)
+                if last and last != fcode:
+                    row["roll"] = True             # 이날부터 다음 달물 — 만기 다음 날
+                last = fcode
+                bars.append(row)
+            out[code] = {"name": name, "bars": bars or None}
+        except RuntimeError as e:
+            out[code] = {"name": name, "bars": None, "error": safe_message(e)}
+    return out
+
+
+def fetch_index_daily(cfg, names):
+    """{이름: {name, unit, market, bars:[{date, open, high, low, close}] | None, error?}} — 못 받은 지수는 bars None(0 이 아니다)."""
+    start = (datetime.now(KST) - timedelta(days=INDEX_DAILY_MONTHS * 31)).strftime("%Y%m%d")
+    dom = {n: c for c, n in INDEX_DEFS}
+    ovs = {d[0]: d for d in OVERSEAS_DEFS}
+    out = {}
+    for name in names:
+        try:
+            if name in dom:
+                bars = [{"date": str(b["ts"])[:8], "open": b["open"], "high": b["high"], "low": b["low"], "close": b["close"]}
+                        for b in fetch_index_candles(cfg, dom[name], "D") if str(b["ts"])[:8] >= start]
+                out[name] = {"name": name, "market": "domestic", "unit": "pt", "bars": bars or None}
+            elif name in ovs:
+                key, div, code, label, unit = ovs[name]
+                hit = _idx_daily.get(key)
+                if not (hit and time.time() - hit[0] < INDEX_DAILY_TTL and hit[1] == start):
+                    hit = (time.time(), start, [{k: b[k] for k in ("date", "open", "high", "low", "close")}
+                                                for b in _daily_stored("OVS", key, start, lambda d1, dv=div, c=code: _ovs_daily(cfg, dv, c, d1))])
+                    _idx_daily[key] = hit
+                out[name] = {"name": label, "market": "overseas", "unit": unit, "kisCode": code, "bars": hit[2] or None}
+            else:
+                out[name] = {"name": name, "bars": None, "error": "모르는 지수 이름"}
+        except RuntimeError as e:
+            out[name] = {"name": name, "bars": None, "error": safe_message(e)}
+    return out
+
+
 def fetch_index_candles(cfg, code, period):
     """지수 봉. **받아둔 것을 DB 에서 읽고, 모자라거나 묵었을 때만 부른다.**
 
@@ -3126,9 +3407,14 @@ def fetch_quotes_multi(cfg, codes, max_age=None):
                 need.append(code)
     if not need:
         _stats["cache_hits"] += 1
-        return {c: dict(r) for c, r in got.items()}, {}
+        res = {c: dict(r) for c, r in got.items()}
+        if not market_hours.auction(sys.modules[__name__]):   # 아래 끝자리와 같다 — 동시호가 때 받아 둔 예상가를 그 뒤에 안 낸다
+            for r in res.values():
+                r.pop("expect", None)
+        return res, {}
     codes = need
     out, errors = {}, {}
+    kind = market_hours.auction(sys.modules[__name__])      # 동시호가("open" · "close")면 줄마다 예상 체결가를 싣는다
 
     for i in range(0, len(codes), MULTI_MAX):
         chunk = codes[i:i + MULTI_MAX]
@@ -3167,7 +3453,21 @@ def fetch_quotes_multi(cfg, codes, max_age=None):
                 # 거래대금은 실제 값이 온다. 현재가×거래량으로 어림하지 않아도 된다.
                 "value": _num(r.get("acml_tr_pbmn"), int),
                 "source": "KIS",
+                "expect": _multi_expect(r, kind),    # 동시호가 동안만 — 아래 _multi_expect
             }
+        # 통합(UN)으로 물은 동시호가에 예상가가 하나도 안 왔으면 KRX(J)로 그 묶음을 한 번 더 묻는다 — 예상가 칸만 쓴다
+        # (11-10 09:12 호가 응답에서 UN 은 예상가 "0" · J 는 값이 있었다. 멀티 시세도 그런지는 **아직 못 잼** — 오면 이 길은 안 탄다)
+        if kind and div != "J" and not any(out.get(c, {}).get("expect") for c in chunk):
+            try:
+                jd = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/intstock-multprice",
+                             {k: ("J" if k.startswith("FID_COND") else v) for k, v in params.items()}, "FHKST11300006")
+                for r in out_rows(jd, "output"):
+                    c = (r.get("inter_shrn_iscd") or "").strip()
+                    if c in out:
+                        out[c]["expect"] = _multi_expect(r, kind)
+            except RuntimeError:
+                pass
+        _expect_note({c: out[c].get("expect") for c in chunk if c in out})
 
     # 장 밖(통합 시세)이면 그 회차 정규장 종가와 종가 대비 등락률을 함께 싣는다 — 아래 `attach_reg_close`.
     # 평일 아침 07:00 부터 정규장이 끝날 때까지는 장외 값을 싣지 않는다 — 아래 `after_cleared`
@@ -3188,8 +3488,12 @@ def fetch_quotes_multi(cfg, codes, max_age=None):
             if len(_quote_cache) > QUOTE_CACHE_MAX:
                 for k, _v in sorted(_quote_cache.items(), key=lambda kv: kv[1][0])[:len(_quote_cache) // 4]:
                     _quote_cache.pop(k, None)
+    _expect_actual(out, div)
     res = {c: dict(r) for c, r in got.items()}
     res.update({c: dict(r) for c, r in out.items()})
+    if not market_hours.auction(sys.modules[__name__]):       # 동시호가 때 받아 둔 줄을 그 뒤에 내줄 때는 예상가를 뗀다
+        for r in res.values():
+            r.pop("expect", None)
     return res, errors
 
 
@@ -3652,6 +3956,8 @@ def fetch_investor_flow(cfg, market="KOSPI", days=INVESTOR_FLOW_DAYS):
                 "retail": _investor_side(r, "prsn"),
                 "foreign": _investor_side(r, "frgn"),
                 "inst": _investor_side(r, "orgn"),
+                # 기관 세부 · 기타법인 · 외국인 등록/미등록 — 같은 응답에 있다(docs/kis-sector-investor.md 3절 · 2026-11-04 flow_board 가 씀)
+                "detail": {p: _investor_side(r, p) for p in flow_board.DETAIL},
                 "source": "KIS",
             })
         rows.reverse()                       # 과거 → 최근
@@ -3898,6 +4204,11 @@ def _inv_attach_detail(code, rows):
 # 장중에도 온다(10-27 11:3x 실측 · 8765 넘기기). KRX 회원사라 시장은 `J`.
 INVESTOR_MEMBER_TTL = 60
 _investor_member_cache = {}
+# 외국계 창구 「최근 5분」 — KIS 는 오늘 누적만 준다. 받을 때마다 누적을 쌓아 두고 지금 − 5분 전으로 센다
+# (2026-11-10 재권님 「외국계 창구도 세로굵은줄 넣어줘」 → 안 「응」). 그 종목을 누가 볼 때만 받으므로 처음 5분은 recent 가 없다.
+# 이 창 길이를 foreignFirms.windowSec 으로 내주고 바닥 줄(flow-foot.js)이 프로그램 칸 셈에도 그것을 읽는다 — 값은 여기 한 곳
+MEMBER_RECENT_SEC = 300
+_member_snaps = {}                          # code → (그날 날짜, [(시각초, 매수 누적, 매도 누적), …])
 
 
 def fetch_investor_member(cfg, code):
@@ -3940,11 +4251,29 @@ def fetch_investor_member(cfg, code):
             "net": _num(o.get("glob_ntby_qty"), int),
             "sellPct": _num(o.get("glob_seln_rlim")),
             "buyPct": _num(o.get("glob_shnu_rlim")),
+            "windowSec": MEMBER_RECENT_SEC,     # 「최근」 창 길이 — 바닥 줄 원이 프로그램 · 창구 둘 다 이 값으로 센다(2026-11-10 개념정의 검수)
         },
         "volume": _num(o.get("acml_vol"), int),
         "at": datetime.now(KST).strftime("%H:%M"),     # KIS 에서 받은 시각 — 큰 차트 바닥 줄이 「정보가 들어온 시각」 으로 쓴다(2026-11-03)
     }
-    _investor_member_cache[code] = (time.time(), out)
+    ff = out["foreignFirms"]
+    now = time.time()
+    day = datetime.now(KST).strftime("%Y-%m-%d")
+    d, snaps = _member_snaps.get(code) or (day, [])
+    if d != day:
+        snaps = []
+    if ff["buy"] is not None and ff["sell"] is not None:
+        snaps.append((now, ff["buy"], ff["sell"]))
+    snaps = [x for x in snaps if x[0] >= now - MEMBER_RECENT_SEC * 3]
+    _member_snaps[code] = (day, snaps)
+    old = [x for x in snaps if x[0] <= now - MEMBER_RECENT_SEC]
+    ff["recent"] = None
+    if old and ff["buy"] is not None and ff["sell"] is not None:
+        b0, s0 = old[-1][1], old[-1][2]
+        rb, rs = ff["buy"] - b0, ff["sell"] - s0
+        if rb >= 0 and rs >= 0:             # 누적이 줄었으면(KIS 값 흔들림) 셈하지 않는다 — 없음으로 둔다
+            ff["recent"] = {"buy": rb, "sell": rs, "sec": int(now - old[-1][0])}
+    _investor_member_cache[code] = (now, out)
     return out
 
 
@@ -4371,14 +4700,24 @@ def fetch_asking(cfg, code):
 
     비율은 「지금 사자가 얼마나 몰려 있나」다. 체결된 것이 아니라 **대기 중인
     주문**이므로, 장이 끝나면 의미가 옅어진다 — 화면에 그렇게 적는다.
+
+    **통합(UN) 호가다** (2026-11-09 재권님 「호가창에 매수잔량 매도잔량이 정확한건지 확인해봐」 → 「응 그래」).
+    전에는 늘 KRX(J)만 받아 넥스트레이드 잔량이 빠졌다 — 삼성전자 10:46:50 매도 잔량 합 J 69,798 · NX 81,867 · UN 151,844 /
+    매수 J 26,548 · NX 11,646 · UN 38,184(하이닉스도 같은 꼴). 15:30 뒤 넥스트레이드 장에서도 KRX 호가를 냈다.
+    차트 봉도 통합이라(`MARKET_DIV_CHART`) 같은 값을 쓴다. 합계는 KIS 의 총잔량 그대로다.
     """
     cached = _ttl_get(_asking_cache, code, ASKING_TTL)
     if cached is not None:
+        ex = cached.get("expect")
+        if ex and market_hours.auction(sys.modules[__name__]) != ex.get("kind"):
+            return dict(cached, expect=None)   # 09:00 · 15:30 이 지나면 받아 둔 예상가를 바로 뗀다 — 시가 · 종가로(재권님 「시가가 되면 바로 시가로」)
         return cached
     data = kis_get(
         cfg,
         "/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
-        {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code},
+        # 넥스트레이드에 없는 종목(우선주 · ETF)은 KRX(J) — 장 후 UN 합이 J 보다 훨씬 작게 왔다(11-09 15:43 · 005935 매도 J 47,126 · UN 12,258 ·
+        # 069500 매수 J 140,960 · UN 36,063 · 1호가는 같음 · qa 검수). 가르는 것은 _nx_absent 한 곳
+        {"FID_COND_MRKT_DIV_CODE": "J" if _nx_absent(cfg, code) else MARKET_DIV_CHART, "FID_INPUT_ISCD": code},
         "FHKST01010200",
     )
     o = data.get("output1") or {}
@@ -4396,8 +4735,178 @@ def fetch_asking(cfg, code):
         "bid": {"total": tot_bid, "levels": bid},
         # 사자 비중. 50 보다 크면 사려는 주문이 더 쌓여 있다는 뜻이다
         "buyPct": round(tot_bid / both * 100, 1) if both else None,
+        "expect": _preopen_expect(cfg, code, data),
     }
     _asking_cache[code] = (time.time(), out)
+    return out
+
+
+def _preopen_expect(cfg, code, data):
+    """**동시호가 예상 체결가** — 장 전(08:30~09:00) · 마감(15:20~15:30) 동시호가 동안만 낸다(market_hours.auction) · 그 밖은 None
+    (2026-11-10 재권님 「응 해줘」 → 자리는 「나」 — 종목 이름 옆 현재가 자리에 「예상」 과 함께 → 「종가도 해줘」).
+
+    KIS 호가 응답 output2 에 예상 체결가(antc_cnpr) · 예상 거래량(antc_vol) · 기준가(stck_sdpr)가 온다 — 전에는 output2 를 버렸다.
+    통합(UN)으로 받은 응답은 antc_cnpr 이 "0" 으로 왔다(11-10 09:12 005930 · J 는 199,400 = 그날 시가) — 그래서 받은 응답에 값이 없으면
+    KRX(J)로 한 번 더 묻는다(동시호가 동안 · 호가 캐시 ASKING_TTL 마다 한 번). 전일 대비는 기준가로 셈한다(부호 칸을 읽지 않는다).
+    낸 값은 맞았는지 견주려고 expect_log 에 쌓는다(_expect_note).
+    **아직 못 잰 것** — 동시호가 중 UN 응답에도 값이 오는지(오면 J 를 다시 안 묻는다)."""
+    try:
+        kind = market_hours.auction(sys.modules[__name__])
+        if not kind:
+            return None
+        o2 = data.get("output2") or {}
+        if not (_num(o2.get("antc_cnpr"), int) or 0) > 0:
+            o2 = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
+                         {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code}, "FHKST01010200").get("output2") or {}
+        price = _num(o2.get("antc_cnpr"), int) or 0
+        base = _num(o2.get("stck_sdpr"), int) or 0
+        if price <= 0:
+            return None                      # 아직 예상가가 없다(동시호가 첫 주문 전) — 0 원으로 내지 않는다
+        ex = {"kind": kind, "price": price, "amt": price - base if base else None,
+              "pct": round((price - base) / base * 100, 2) if base else None,
+              "volume": _num(o2.get("antc_vol"), int)}
+        _expect_note({code: ex})
+        return ex
+    except Exception:
+        return None                          # 못 받았다 — 예상가 없이 호가만 낸다
+
+
+def _multi_expect(r, kind):
+    """멀티 시세 한 줄(FHKST11300006)에서 예상 체결가 — 기준가(inter2_sdpr) + 예상 전일 대비(intr_antc_cntg_vrss · 부호는 sign 칸).
+    예상 거래량이 0 이면 아직 예상가가 없는 것으로 본다(11-10 11:09 장중 005930 은 대비 0 · 거래량 0 이 왔다) — None."""
+    base = _num(r.get("inter2_sdpr"), int) or 0
+    vol = _num(r.get("intr_antc_vol"), int) or 0
+    if not kind or base <= 0 or vol <= 0:
+        return None
+    amt = abs(_num(r.get("intr_antc_cntg_vrss"), int) or 0)
+    if str(r.get("intr_antc_cntg_vrss_sign") or "") in ("4", "5"):
+        amt = -amt
+    return {"kind": kind, "price": base + amt, "amt": amt, "pct": round(amt / base * 100, 2), "volume": vol}
+
+
+# ── 예상 체결가가 맞았나 — 쌓아 두고 실제 시가 · 종가와 견준다 (2026-11-10 재권님 「예상체결가가 맞는지 데이터 쌓아놔」) ──
+# expect_log    동시호가 동안 종목마다 1분에 한 줄(그 분 마지막 값) — 호가(fetch_asking) · 멀티 시세(fetch_quotes_multi)가 받은 것
+# expect_actual 그 회차 실제 값 — 시가(open)는 정규장이 열린 뒤 첫 멀티 시세(J)의 시가 · 종가(close)는 15:40 뒤 정규장 종가(attach_reg_close)
+# 쓰는 것은 쓰기 서버(marketdb.writable · 8765)뿐이다. 보는 주소는 /api/kis/expect-log?day=YYYYMMDD
+EXPECT_SQL = ["""CREATE TABLE IF NOT EXISTS expect_log (
+         day TEXT NOT NULL, kind TEXT NOT NULL, code TEXT NOT NULL, hhmm TEXT NOT NULL,
+         price INTEGER, volume INTEGER, PRIMARY KEY (day, kind, code, hhmm))""",
+              """CREATE TABLE IF NOT EXISTS expect_actual (
+         day TEXT NOT NULL, kind TEXT NOT NULL, code TEXT NOT NULL, price INTEGER, saved_at TEXT,
+         PRIMARY KEY (day, kind, code))"""]
+_exp_seen = {}            # (day, kind) → {code: 마지막으로 적은 hhmm}
+_exp_done = {}            # (day, kind) → 실제 값을 적은 종목 set
+
+
+def _exp_codes(day, kind):
+    """그날 그 동시호가에 적어 둔 종목 — 재시작해도 DB 에서 한 번 다시 읽는다."""
+    key = (day, kind)
+    if key not in _exp_seen:
+        seen = {}
+        try:
+            with _db_lock, db_conn() as conn:
+                for c, h in conn.execute("SELECT code, MAX(hhmm) FROM expect_log WHERE day=? AND kind=? GROUP BY code", key):
+                    seen[c] = h
+        except sqlite3.Error:
+            pass
+        _exp_seen[key] = seen
+        for k in [k for k in _exp_seen if k[0] != day]:
+            _exp_seen.pop(k, None)
+    return _exp_seen[key]
+
+
+def _expect_note(rows):
+    """{code: expect} 를 expect_log 에 — 종목마다 그 분의 마지막 값으로 덮는다. 쓰기 서버가 아니면 아무것도 안 한다."""
+    if not rows or not marketdb.writable():
+        return
+    now = datetime.now(KST)
+    day, hhmm = now.strftime("%Y%m%d"), now.strftime("%H%M")
+    put = []
+    for code, ex in rows.items():
+        if ex and ex.get("price"):
+            put.append((day, ex["kind"], code, hhmm, ex["price"], ex.get("volume")))
+    if not put:
+        return
+    try:
+        with _db_lock, db_conn() as conn:
+            for sql in EXPECT_SQL:
+                conn.execute(sql)
+            conn.executemany("INSERT INTO expect_log VALUES (?,?,?,?,?,?) ON CONFLICT(day, kind, code, hhmm) "
+                             "DO UPDATE SET price=excluded.price, volume=excluded.volume", put)
+    except sqlite3.Error as e:
+        print("[예상] 쌓기 실패 — %s" % safe_message(e, 120), flush=True)
+        return
+    for d, k, c, h, _p, _v in put:
+        _exp_codes(d, k)[c] = h
+
+
+def _expect_actual(out, div):
+    """멀티 시세 묶음에서 그 회차 실제 시가 · 종가를 expect_actual 에 — 예상가를 적어 둔 종목만 · 한 번만."""
+    if not out or not marketdb.writable():
+        return
+    me = sys.modules[__name__]
+    now = datetime.now(KST)
+    day = now.strftime("%Y%m%d")
+    put = []
+    if div == "J" and market_hours.in_regular(me, now) and not market_hours.auction(me, now):
+        for code, q in out.items():
+            if code in _exp_codes(day, "open") and code not in _exp_done.setdefault((day, "open"), set()) and q.get("open"):
+                put.append((day, "open", code, q["open"]))
+    for code, q in out.items():
+        if (q.get("regDate") or "").replace("-", "") == day and q.get("regClose") and code in _exp_codes(day, "close") \
+                and code not in _exp_done.setdefault((day, "close"), set()):
+            put.append((day, "close", code, q["regClose"]))
+    if not put:
+        return
+    try:
+        with _db_lock, db_conn() as conn:
+            for sql in EXPECT_SQL:
+                conn.execute(sql)
+            conn.executemany("INSERT OR IGNORE INTO expect_actual VALUES (?,?,?,?,?)",
+                             [p + (now.isoformat(timespec="seconds"),) for p in put])
+    except sqlite3.Error as e:
+        print("[예상] 실제 값 쌓기 실패 — %s" % safe_message(e, 120), flush=True)
+        return
+    for d, k, c, _p in put:
+        _exp_done.setdefault((d, k), set()).add(c)
+    for k in [k for k in _exp_done if k[0] != day]:
+        _exp_done.pop(k, None)
+
+
+def expect_report(day):
+    """그날 예상 체결가가 맞았나 — 동시호가(open · close)마다 종목별로 마지막 예상가 · 실제 값 · 차이 · 몇 시 몇 분부터 실제 값과 같았나.
+    실제 값을 아직 못 적은 종목은 actual None(「못 잼」 — 0 이 아니다)."""
+    out = {"day": day, "open": [], "close": []}
+    try:
+        with _db_lock, db_conn() as conn:
+            logs = conn.execute("SELECT kind, code, hhmm, price, volume FROM expect_log WHERE day=? ORDER BY kind, code, hhmm",
+                                (day,)).fetchall()
+            act = {(k, c): p for k, c, p in conn.execute("SELECT kind, code, price FROM expect_actual WHERE day=?", (day,))}
+    except sqlite3.Error as e:
+        if "no such table" in str(e):        # 쓰기 서버(8765)가 아직 한 번도 안 적었다 — 오류가 아니라 「쌓인 것 없음」
+            return dict(out, empty="아직 쌓인 것 없음 — 동시호가(08:30~09:00 · 15:20~15:30)에 8765 가 적기 시작합니다")
+        return dict(out, error="못 읽음 — %s" % safe_message(e, 120))
+    by = {}
+    for kind, code, hhmm, price, vol in logs:
+        by.setdefault((kind, code), []).append((hhmm, price, vol))
+    for (kind, code), rows in sorted(by.items()):
+        actual = act.get((kind, code))
+        last = rows[-1]
+        since = None
+        if actual:
+            for hhmm, price, _v in reversed(rows):
+                if price != actual:
+                    break
+                since = hhmm
+        out[kind].append({"code": code, "samples": len(rows), "lastAt": last[0], "lastPrice": last[1], "lastVolume": last[2],
+                          "actual": actual, "diff": (last[1] - actual) if actual else None,
+                          "diffPct": round((last[1] / actual - 1) * 100, 3) if actual else None,
+                          "hit": (last[1] == actual) if actual else None, "sameSince": since})
+    for kind in ("open", "close"):
+        graded = [r for r in out[kind] if r["actual"]]
+        out[kind + "Summary"] = {"codes": len(out[kind]), "graded": len(graded),
+                                 "hit": sum(1 for r in graded if r["hit"]),
+                                 "avgAbsDiffPct": round(sum(abs(r["diffPct"]) for r in graded) / len(graded), 3) if graded else None}
     return out
 
 
@@ -4715,6 +5224,9 @@ SCHEMA = [
        )""",
     INVESTOR_DAILY_SQL,      # 「3달」 — 위 `fetch_investor_long`
 ]
+# 예상 체결가 표(EXPECT_SQL)는 여기 두지 않는다 — db_init 은 읽기 전용 서버(8764 · 8767 · 세션)에서도 돌아, 표가 아직 없으면
+# CREATE 가 「readonly database」 로 터져 지수 봉까지 못 낸다(2026-11-10 11:5x 8766 실측 · 6420cd3 에 넣었다 뺌).
+# 쓰는 서버만 처음 적을 때 만든다(_expect_note · _expect_actual) · 읽는 쪽은 표가 없으면 「쌓인 것 없음」(expect_report)
 
 # 기간별 설정
 #   fresh_sec : 이 시간이 지나면 최근 구간을 다시 받는다 (장중 당일 캔들 갱신용)
@@ -4874,6 +5386,17 @@ def _refresh_index_spans(cfg):
                 pass                                # 하나 실패해도 나머지는 간다
     _meta_set(INDEX_SPAN_FIX, INDEX_SPAN_FIX_VER)
     return got
+
+
+def _db_missing(e):
+    """DB 표 · 칸이 아직 없어 난 오류인가 — 읽기 전용 서버는 표를 만들지 않는다(marketdb._ReadOnlyConn)."""
+    m = str(e)
+    return isinstance(e, sqlite3.OperationalError) and ("no such table" in m or "no such column" in m)
+
+
+# 그때 내는 응답 — 「서버 오류」 가 아니라 「아직 없음」(「못 쟀으면 0 이 아니라 못 쟀다」 · 2026-11-10 재권님 「응」)
+_DB_MISSING_BODY = {"ok": False, "data": None, "missing": True,
+                    "error": "아직 없음 — 이 값을 쌓는 표를 쓰는 서버(8765)가 아직 만들지 않았습니다"}
 
 
 def db_init():
@@ -5115,11 +5638,70 @@ def fetch_bars_back(cfg, code, period, want):
     return sorted(seen.values(), key=lambda x: x["ts"])
 
 
-def minute_market_div(hour):
-    """분봉을 **어느 시장부터 물어볼까.** 구간의 시각으로 정한다.
+_UN_THIN = {}   # minute_market_div — {종목: 날짜} 그날 UN 이 비어 J 로 바꿔 받은 종목(우선주 · ETF) · 그날은 J 먼저
 
-        정규장 09:00~15:30   J  (KRX)
-        그 밖                UN (통합)
+
+def _un_thin_today(code):
+    """그날 분봉에서 UN 이 비어 J 로 받은 종목인가 — minute_market_div · _nx_absent 가 함께 쓰는 셈 한 곳."""
+    return bool(code) and _UN_THIN.get(code) == datetime.now(KST).strftime("%Y%m%d")
+
+
+_NX_PROBE = {}   # _nx_absent — {종목: (날짜, 넥스트레이드에 없나)} 그날 한 번 물어 둔 것
+
+
+def _nx_absent(cfg, code):
+    """**넥스트레이드에 없는 종목인가** — 호가를 KRX(J)로 받을지 가른다 (2026-11-09 qa 검수 e4ed242 돌아옴).
+
+    처음 판은 _UN_THIN(그날 분봉을 KIS 로 받은 프로세스에만 찬다)만 봤는데, 메인(8764) · 중간(8767)은 차트를 8765 에 통째로 넘기고
+    호가는 자기 프로세스에서 받아 표가 늘 비었다 — 외부접속이 보는 8764 에서 안 들었다. 그래서 **그날 한 번 넥스트레이드(NX) 호가를 물어
+    본다** — 넥스트레이드에 없는 종목은 output1 이 통째로 빈다(11-09 15:43 · 11-10 07:59 · 005935 · 069500 · 있는 종목은 닫혀도 "0" 글자로 칸이 다 온다).
+    종목마다 하루 한 번 · 프로세스마다 한 번 늘 뿐이다. **08:00~20:00(넥스트레이드 장)에 물은 것만 그날 값으로 둔다** — 그 밖에는
+    넥스트레이드 종목도 비어 올 수 있어 적지 않고 _UN_THIN 만 본다. 아침 첫 호가도 이 길로 풀린다(분봉을 받기 전이어도)."""
+    if _un_thin_today(code):
+        return True
+    now = datetime.now(KST)
+    day = now.strftime("%Y%m%d")
+    hit = _NX_PROBE.get(code)
+    if hit and hit[0] == day:
+        return hit[1]
+    if not ("0800" <= now.strftime("%H%M") < "2000"):
+        return False
+    try:
+        o = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
+                    {"FID_COND_MRKT_DIV_CODE": "NX", "FID_INPUT_ISCD": code}, "FHKST01010200").get("output1") or {}
+    except Exception:
+        return False                     # 못 물었다 — 적지 않고 다음에 다시 묻는다 · 그동안은 UN
+    # **output1 이 통째로 비었나로 가른다** — 넥스트레이드에 없는 종목은 키가 하나도 없이 오고, 있는 종목은 장이 닫혀도 칸마다 글자 "0" 으로
+    # 온다(11-10 07:59 · 005935 · 069500 키 0 · 005930 · 247540 · 000660 키 71 · 다 "0"). 칸 값으로 가르면 "0" 이 참인 것에 기대게 된다(qa 권고)
+    absent = not o
+    _NX_PROBE[code] = (day, absent)
+    return absent
+
+
+def _note_un_thin(code, first, used, used_nz):
+    """UN 을 먼저 물었다가 J 로 바꿔 받았으면 그날은 그 종목을 J 먼저 묻는다 — 바퀴마다 두 번 부르지 않게.
+
+    **J 쪽에 거래가 2개 넘게 있을 때만 적는다.** 15:30~16:00 처럼 둘 다 거래가 0~1개인 칸에서는 비겨서 J 를 고르는데,
+    그것으로 보통주를 적으면 그날 정규장을 다시 J 로 받아 넥스트레이드 몫이 또 빠진다."""
+    if code and first == MARKET_DIV_CHART and used == "J" and used_nz >= 2:
+        _UN_THIN[code] = datetime.now(KST).strftime("%Y%m%d")
+
+
+def minute_market_div(hour, code=None):
+    """분봉을 **어느 시장부터 물어볼까.**
+
+        보통        UN (통합)
+        그날 UN 이 비었던 종목(우선주 · ETF)   J  (KRX)
+
+    ── **정규장도 통합이다** (2026-11-09 재권님 「응」 · 카드 「일봉 거래량과 5분봉 합이 크게 갈림」) ──
+
+    전에는 정규장 09:00~15:30 을 J 먼저 물었다(아래 2026-09-17 고침). 그래서 **정규장 5분봉 거래량에 넥스트레이드 몫이 빠졌다** —
+    개발 DB 삼성 · 하이닉스 11-03 ~ 11-06 로 잼: 5분봉 합 + 넥스트레이드 정규장 거래량(nx_slot) = 일봉(통합)과 1~3% 안 ·
+    5분봉 합만으로는 일봉의 약 75%. 차트 봉은 통합이 기준이라(holdings/CLAUDE.md 「차트 봉은 통합(`UN`)이다」) 분봉도 맞춘다.
+    UN 이 못 주는 우선주 · ETF 는 아래 폴백(거래 있는 봉 1개 이하 → J)이 받고, 그날은 `_UN_THIN` 이 J 를 먼저 묻게 해 두 번 부르지 않는다.
+    **새로 받는 봉부터다** — 이미 저장된 정규장 봉은 J 값 그대로다.
+
+    아래는 그 전의 기록이다.
 
     ⚠️ **이것은 「먼저 물어볼 쪽」 이고 최종 선택이 아니다.**
     `fetch_minutes_from_kis` 가 받아 보고 모자라면 **다른 쪽으로 한 번 더** 받는다.
@@ -5158,12 +5740,9 @@ def minute_market_div(hour):
     **그래서 시각 분기는 그대로 두고 폴백을 민감하게 한다** — 변경이 작고,
     정규장에 `J` 를 먼저 묻는 2026-09-17 고침도 살아 있다.
     """
-    try:
-        m = int(hour[:2]) * 60 + int(hour[2:4])
-    except Exception:
-        return MARKET_DIV_CHART
-    hm = (m // 60, m % 60)
-    return "J" if KRX_OPEN <= hm < KRX_CLOSE else MARKET_DIV_CHART
+    if _un_thin_today(code):
+        return "J"
+    return MARKET_DIV_CHART
 
 
 def fetch_minutes_from_kis(cfg, code, hour=None):
@@ -5222,7 +5801,7 @@ def fetch_minutes_from_kis(cfg, code, hour=None):
     if hour is None:
         m = minute_scan_start()
         hour = "%02d%02d00" % (m // 60, m % 60)
-    first = minute_market_div(hour)
+    first = minute_market_div(hour, code)
     out = _minutes_one_market(cfg, code, hour, first)
     nz = sum(1 for b in out if (b["volume"] or 0) > 0)
     # ⚠️ **「전부 0 이면」 으로는 샌다 — 「1개 이하」 로 본다** (2026-10-01).
@@ -5249,6 +5828,7 @@ def fetch_minutes_from_kis(cfg, code, hour=None):
         # `J` 의 빈 줄은 마지막 체결가다.
         alt_nz = sum(1 for b in alt if (b["volume"] or 0) > 0)
         if alt_nz > nz or (alt_nz == nz and other == "J" and alt):
+            _note_un_thin(code, first, other, alt_nz)
             return alt
     return out
 
@@ -5929,6 +6509,25 @@ def _dwmy_slot(period, now):
     return d.strftime("%Y%m%d")
 
 
+def _kr_evening_tail(cfg, code, day):
+    """그날 **저녁 마지막 두 시간(18:01~20:00) 1분봉을 지난 날 길로 다시 받아** 5분봉을 덮는다 → 저장한 봉 수 (2026-11-09).
+
+    재권님 — 「토스증권이랑 비교해서 거기랑 맞춰줘」. 토스 1분봉과 견주니 19:30~20:00 칸만 우리 거래량이 토스의
+    9~34% 였다(삼성 · 하이닉스 11-03 ~ 11-06 · 19:25 칸까지는 꼭 같음). 미리받기가 그 30분 칸이 **끝나기 전에** 받은 덜 찬 봉이
+    그대로 남은 것이다. KIS 지난 날 분봉(`_kr_past_chunk`)으로 다시 받으면 그 칸이 토스와 칸마다 같았다(11-06 삼성).
+    그래서 통합 거래가 끝난 뒤 한 바퀴(`DWMY_AT_MIN`)에 종목마다 한 번(120개 = 두 시간) 받는다.
+    받은 범위 안에 다섯 분이 다 든 5분 칸만 덮는다 — 맨 앞 조각 칸으로 멀쩡한 봉을 덮지 않게(`_keep_covered_slots` 와 같은 뜻).
+    """
+    end = "%02d%02d00" % (MINUTE_DAY_END // 60, MINUTE_DAY_END % 60)
+    rows = [b for b in _kr_past_chunk(cfg, code, day, end) if b["ts"][:8] == day]
+    if not rows:
+        return 0
+    first = min(int(b["ts"][8:10]) * 60 + int(b["ts"][10:12]) for b in rows)
+    bars = [b for b in aggregate_minutes(rows, 5)
+            if int(b["ts"][8:10]) * 60 + int(b["ts"][10:12]) >= first]
+    return save_candles(code, "5m", bars)
+
+
 def start_dwmy_prefill(cfg):
     """일·주·월·년봉을 거래일마다 한 번(`DWMY_AT_MIN`) 한 바퀴 받는다.
 
@@ -5945,6 +6544,16 @@ def start_dwmy_prefill(cfg):
             try:
                 now = datetime.now(KST)
                 if now.hour * 60 + now.minute >= DWMY_AT_MIN:
+                    tail_day = _dwmy_slot("T", now)
+                    for code in _ui_order(_prefill_codes()):     # 저녁 마지막 칸 다시 받기(`_kr_evening_tail`)
+                        if not _is_kr_code(code) or _meta_get("pfT:%s" % code) == tail_day:
+                            continue
+                        try:
+                            _kr_evening_tail(cfg, code, tail_day)
+                        except Exception:
+                            pass   # 한 종목이 실패해도 나머지는 간다
+                        _meta_set("pfT:%s" % code, tail_day)
+                        time.sleep((PREFILL_BUSY_REST_SEC if _ui_busy() else DWMY_REST_SEC) * fill_factor())
                     # 화면이 본 종목부터 (2026-10-12 · 설계서 3번) — 화면이 없으면 지금처럼 종목코드 순
                     for code in _ui_order(_dwmy_codes()):
                         got = False
@@ -6094,6 +6703,10 @@ def _minutes_need_day(code, period, rows, gap_check=True):
     return gap > MINUTE_REFILL_GAP
 
 
+CARRY_CLOSE_FROM, CARRY_CLOSE_TO = "1520", "1535"   # flatten_carried — 이 시각에 시작한 되풀이는 옮겨 실린 것
+CARRY_MIN_RUN = 5                                  # flatten_carried — 이 칸 수 이상 이어진 되풀이도(토스로 맞춘 것은 11-06 다섯 칸뿐 · qa 11-09)
+
+
 def flatten_carried(rows):
     """분봉에서 **바로 앞 봉과 시가 · 고가 · 저가 · 종가 · 거래량이 다 같은 봉**을 거래 없는 납작봉으로 바꾼다 — 화면에 낼 때만 (2026-11-07).
 
@@ -6110,6 +6723,15 @@ def flatten_carried(rows):
     차트 캔들 · 거래량 막대 · VWAP 이 함께 틀렸다. **저장은 그대로 두고** 응답에서만 바꾼다(drop_before_first_trade 와 같은 자리) —
     지난 봉도 내줄 때 고쳐진다. 거래량 0 봉끼리는 원래 같으니 거래량이 있는 봉만 본다. 다섯 값이 다 같은 진짜 체결은 사실상 없다고 본다.
     **일봉 거래량과 5분봉 합은 이것과 따로 크게 갈린다**(삼성 하루 900만주 안팎 · 복사 없는 날도) — 그 대조로는 이 고침을 가르지 못한다.
+
+    **두 갈래에만 건다** (같은 날 qa 가 돌려보냄 · 개발 DB 10-20 ~ 11-07 5분봉 되풀이 묶음 1,355 를 갈라 잼).
+    처음 판은 되풀이면 다 걸어, 거래 드문 종목의 장 후 둘 · 세 칸(1~10주 · 995 묶음)까지 첫 칸 거래를 앞 봉에 합쳤다
+    (000080 10-21 16:00 종가 15,790 → 15,800). 그 칸이 옮겨 실린 것인지는 토스 대조가 없다 — 대조한 것은 아래 둘뿐이다.
+
+        CARRY_CLOSE_FROM ~ TO   15:20 ~ 15:35 에서 시작한 되풀이 — 종가 단일가 · 넥스트레이드 쉼이라 체결이 날 수 없다(324 묶음)
+        CARRY_MIN_RUN 칸 이상    다섯 칸 이상 이어진 되풀이 — 11-06 거래 정지 구간(09:05 ~ 09:25 · 다섯 칸 · 21 종목) 같은 것(다섯 칸 이상 26 묶음 · 11-09 개발 DB 사본 다시 셈 — 네 칸 14 묶음은 뺌)
+
+    그 밖(둘 · 세 칸)은 받은 그대로 둔다.
     """
     out = [dict(r) for r in rows]
     sig = lambda r: (r.get("ts", "")[:8], r.get("open"), r.get("high"), r.get("low"), r.get("close"), r.get("volume"))
@@ -6118,10 +6740,14 @@ def flatten_carried(rows):
         j = i
         while j + 1 < len(out) and (out[j + 1].get("volume") or 0) > 0 and sig(out[j + 1]) == sig(out[i]):
             j += 1
-        if j > i and (out[i].get("volume") or 0) > 0:
-            # 되풀이의 **첫 칸도** 옮겨 실린 것이다 — 앞 분(09:04 · 15:19)의 체결이라 앞 봉에 합친다.
-            # 토스 그림(11-06)에서 09:05 · 15:20 칸이 비어 있고 09:00 봉 고가가 그 칸 고가(181,500)와 맞았다
-            p = out[i - 1] if i > 0 else None
+        hm = out[i].get("ts", "")[8:12]
+        at_close = CARRY_CLOSE_FROM <= hm <= CARRY_CLOSE_TO
+        if j > i and (out[i].get("volume") or 0) > 0 and (at_close or j - i + 1 >= CARRY_MIN_RUN):
+            # 긴 되풀이(09:05 ~)의 **첫 칸도** 옮겨 실린 것이다 — 앞 분(09:04)의 체결이라 앞 봉에 합친다.
+            # 토스 그림(11-06)에서 09:05 칸이 비어 있고 09:00 봉 고가가 그 칸 고가(181,500)와 맞았다.
+            # **15:20 되풀이는 합치지 않고 뺀다** (2026-11-09 토스 1분봉 대조 · 재권님 「토스증권이랑 비교해서 거기랑 맞춰줘」) —
+            # 합치면 15:15 칸이 토스보다 그 칸 거래량만큼 많았다(삼성 11-05 +64,173 · 11-06 +206,823). 안 합치면 15:15 칸이 토스와 같다
+            p = out[i - 1] if i > 0 and not at_close else None
             if p is not None and p.get("ts", "")[:8] == out[i].get("ts", "")[:8] and (p.get("volume") or 0) > 0:
                 f = out[i]
                 p["high"] = max(p["high"], f["high"])
@@ -6181,29 +6807,40 @@ def drop_before_first_trade(rows):
             if r["ts"][:8] in first and first[r["ts"][:8]] <= i <= last[r["ts"][:8]]]
 
 
-def aggregate_minutes(bars, minutes):
+def aggregate_minutes(bars, minutes, stored=None):
     """1분봉을 N분봉으로 묶는다 (KIS 는 5분봉을 직접 주지 않는다).
 
     **거래량 0 줄은 시가 · 고가 · 저가 · 종가에 안 섞는다** (2026-11-05 재권님 「응」 · 작업우선순위 배분).
     15:30~15:39 에 KIS J 는 마감 체결을 「지금 분」 줄로 옮겨 싣고 1530 줄을 거래량 0 · 체결 아닌 값으로 준다
     (pin_carried_trade 머리 10-06 관찰) — 그 줄이 15:30 칸의 첫 줄이라 시가가 되고 고가에도 섞였다(10-07 삼성전자 269,500 ·
     종가 · 거래량은 맞았다). 「없음」 을 값으로 쓰지 않는다. **칸 안에 거래가 하나도 없을 때만** 마지막 줄 종가로 납작봉을 둔다
-    — 마감 동시호가 뒤 15:35 처럼 거래가 없는 진짜 구간(drop_before_first_trade 가 처음 · 마지막 체결 밖을 뺀다)."""
+    — 마감 동시호가 뒤 15:35 처럼 거래가 없는 진짜 구간(drop_before_first_trade 가 처음 · 마지막 체결 밖을 뺀다).
+
+    **거래 없는 칸의 값은 바로 앞 체결 종가다** (같은 날 qa 덧 · 재권님 「응 고쳐」). 그 칸 줄도 거래량 0 이라 그 종가는 체결이 아니다 —
+    개발 DB 1분봉 거래 0 칸 83 중 53 이 마지막 체결 종가와 달랐다(069500 10-02 15:35~20:00 = 111,520 전일 종가 ↔ 마감 체결 112,060).
+    같은 날 앞 칸에 체결이 있으면 그 종가를 잇는다. 이번에 받은 묶음 첫 칸이면 stored({ts: 저장된 봉})에서 그날 그 앞의 마지막 체결 칸을 찾는다.
+    그날 첫 칸부터 체결이 없으면(장 전 · 하루 내내 거래 없음) 이을 값이 없어 그 줄 종가 그대로 둔다."""
     groups = {}
     for b in sorted(bars, key=lambda x: x["ts"]):
         hhmm = b["ts"][8:12]
         slot = (int(hhmm[:2]) * 60 + int(hhmm[2:])) // minutes * minutes
         groups.setdefault(b["ts"][:8] + "%02d%02d" % (slot // 60, slot % 60), []).append(b)
-    out = []
+    out, carry = [], {}
     for key in sorted(groups):
         rows = groups[key]
+        day = key[:8]
         traded = [r for r in rows if (r["volume"] or 0) > 0]
         if traded:
             out.append({"ts": key, "open": traded[0]["open"], "high": max(r["high"] for r in traded),
                         "low": min(r["low"] for r in traded), "close": traded[-1]["close"],
                         "volume": sum(r["volume"] for r in traded)})
+            carry[day] = traded[-1]["close"]
         else:
-            c = rows[-1]["close"]
+            if day not in carry and stored:
+                prev = [t for t, b in stored.items() if t[:8] == day and t < key and (b.get("volume") or 0) > 0]
+                if prev:
+                    carry[day] = stored[max(prev)]["close"]
+            c = carry.get(day, rows[-1]["close"])
             out.append({"ts": key, "open": c, "high": c, "low": c, "close": c, "volume": 0})
     return out
 
@@ -6907,7 +7544,7 @@ def _kr_past_one_market(cfg, code, day, hour, div):
 def _kr_past_chunk(cfg, code, day, hour):
     """한 쪽을 받되 시장은 `fetch_minutes_from_kis` 와 같이 고른다 — 먼저 물을 쪽은 `minute_market_div`,
     거래 있는 봉이 1개 이하면 다른 쪽으로 한 번 더 받아 더 많은 쪽(같으면 `J`). 까닭은 그 함수 주석에 있다."""
-    first = minute_market_div(hour)
+    first = minute_market_div(hour, code)
     out = _kr_past_one_market(cfg, code, day, hour, first)
     nz = sum(1 for b in out if (b["volume"] or 0) > 0)
     if nz <= 1:
@@ -6916,6 +7553,7 @@ def _kr_past_chunk(cfg, code, day, hour):
         alt = _kr_past_one_market(cfg, code, day, hour, other)
         alt_nz = sum(1 for b in alt if (b["volume"] or 0) > 0)
         if alt_nz > nz or (alt_nz == nz and other == "J" and alt):
+            _note_un_thin(code, first, other, alt_nz)
             return alt
     return out
 
@@ -7237,11 +7875,10 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
                 # **지금 칸 + 아직 안 끝난 지난 칸 몇 개** (2026-10-06). 전에는 지금까지 30분만
                 # 받아, 한 종목을 다시 찾는 데 30분이 넘으면 그 사이가 영영 비었다.
                 raw, cover = fetch_minutes_day(cfg, code, MINUTE_PAST_PER_CALL)
-            bars = aggregate_minutes(raw, 5) if period == "5m" else raw
+            stored = _stored_day(code, period, max(b["ts"] for b in raw)[:8]) if raw else {}
+            bars = aggregate_minutes(raw, 5, stored) if period == "5m" else raw
             if raw:   # 「지금 줄」 로 옮겨 실린 마지막 체결을 제자리로 (pin_carried_trade 주석)
-                last_day = max(b["ts"] for b in raw)[:8]
-                bars = pin_carried_trade(raw, bars, _stored_day(code, period, last_day),
-                                         5 if period == "5m" else 1)
+                bars = pin_carried_trade(raw, bars, stored, 5 if period == "5m" else 1)
             if period == "5m" and cover is not None:
                 bars = _keep_covered_slots(bars, cover, _minutes_now_min())
         fetched = save_candles(code, period, bars)
@@ -8629,6 +9266,9 @@ class Handler(SimpleHTTPRequestHandler):
 
             self._send_json({"ok": False, "error": "알 수 없는 경로입니다: %s" % route}, 404)
         except Exception as e:
+            if _db_missing(e):
+                self._send_json(_DB_MISSING_BODY)
+                return
             self._send_json({"ok": False, "error": "서버 오류: %s" % type(e).__name__}, 500)
 
     def _handle_kis(self):
@@ -8908,6 +9548,44 @@ class Handler(SimpleHTTPRequestHandler):
                 })
                 return
 
+            # 지수 일봉 몇 달 — 국내 · 미국을 한 번에(위 fetch_index_daily)
+            if route == "index-daily":
+                names = [x.strip().upper() for x in (qs.get("codes") or ["KOSPI,SPX,NASDAQ,SOX"])[0].split(",") if x.strip()][:12]
+                data = fetch_index_daily(cfg, names)
+                self._send_json({"ok": any(v.get("bars") for v in data.values()), "data": data,
+                                 "meta": {"months": INDEX_DAILY_MONTHS, "cacheTtl": INDEX_DAILY_TTL,
+                                          "names": [n for _, n in INDEX_DEFS] + [d[0] for d in OVERSEAS_DEFS],
+                                          "note": "date 는 그 시장의 거래일(미국은 현지 날짜) · 국내 오늘 봉은 장중이면 아직 안 끝난 값 · "
+                                                  "bars null = 못 받음(0 이 아님)"}})
+                return
+
+            # 종목 정규장(KRX · J) 일봉 몇 달 — 지수 일봉(index-daily)과 같은 모양(위 fetch_stock_daily)
+            if route == "stock-daily":
+                codes = [c.strip() for c in (qs.get("codes") or [""])[0].split(",") if c.strip()]
+                if not codes or len(codes) > 10 or not all(c.isdigit() and len(c) == 6 for c in codes):
+                    self._send_json({"ok": False, "error": "codes 는 6자리 숫자 종목코드 1~10개(쉼표로)여야 합니다."}, 400)
+                    return
+                data = fetch_stock_daily(cfg, codes)
+                self._send_json({"ok": any(v.get("bars") for v in data.values()), "data": data,
+                                 "meta": {"months": INDEX_DAILY_MONTHS, "cacheTtl": INDEX_DAILY_TTL, "market": "J",
+                                          "note": "정규장(KRX · 09:00~15:30) 시가 · 고가 · 저가 · 종가 — 넥스트레이드 프리장 · 애프터 빠짐 · "
+                                                  "오늘 봉은 장중이면 아직 안 끝난 값 · bars null = 못 받음(0 이 아님)"}})
+                return
+
+            # 주식선물 최근월물 일봉 몇 달 — 날마다 그날의 최근월물(위 fetch_stock_futures_daily)
+            if route == "stock-futures-daily":
+                codes = [c.strip() for c in (qs.get("codes") or [""])[0].split(",") if c.strip()]
+                if not codes or len(codes) > 10 or not all(c.isdigit() and len(c) == 6 for c in codes):
+                    self._send_json({"ok": False, "error": "codes 는 6자리 숫자 종목코드 1~10개(쉼표로)여야 합니다."}, 400)
+                    return
+                data = fetch_stock_futures_daily(cfg, codes)
+                self._send_json({"ok": any(v.get("bars") for v in data.values()), "data": data,
+                                 "meta": {"months": INDEX_DAILY_MONTHS, "cacheTtl": INDEX_DAILY_TTL,
+                                          "note": "주식선물 주간장 최근월물 — 그날 봉이 있는 가장 가까운 달 · 만기 다음 날 다음 달물(roll) · "
+                                                  "prevClose 는 같은 월물 전날 종가 · contract 는 KIS 월물 코드 · "
+                                                  "오늘 봉은 장중이면 아직 안 끝난 값 · bars null = 못 받음(0 이 아님)"}})
+                return
+
             if route == "index-minutes":
                 name = (qs.get("code") or ["KOSPI"])[0].strip().upper()
                 found = next((c for c, n in INDEX_DEFS if n == name), None)
@@ -9002,6 +9680,24 @@ class Handler(SimpleHTTPRequestHandler):
                              "qtyUnit": "천주", "amtUnit": "백만원",
                              "cacheTtl": INVESTOR_FLOW_TTL},
                 })
+                return
+
+            if route == "flow-board":
+                # 수급 정리판 — Insight 「투자 전략」 (2026-11-04 · server/flow_board.py) · 새로 KIS 를 부르지 않고 이미 받는 셋을 모은다
+                try:
+                    days = max(1, min(int((qs.get("days") or [str(flow_board.DAYS_DEFAULT)])[0]), flow_board.DAYS_MAX))
+                    step = int((qs.get("step") or [str(flow_board.STEP_DEFAULT)])[0])
+                except ValueError:
+                    self._send_json({"ok": False, "error": "days · step 은 숫자입니다."}, 400)
+                    return
+                if step not in intraday_flow.STEPS:
+                    self._send_json({"ok": False, "error": "step 은 %s 중 하나입니다." % " · ".join(map(str, intraday_flow.STEPS))}, 400)
+                    return
+                self._send_json({"ok": True, "data": flow_board.board(sys.modules[__name__], cfg, days, step),
+                                 "meta": {"days": days, "step": step, "amtUnit": "백만원", "qtyUnit": "천주",
+                                          "today": "코스피만 · 장중 1분마다 쌓은 누계(intraday_flow)",
+                                          "daysNote": "확정치 · 과거→최근", "top": "가집계 — 외국인 09:30 · 11:20 · 13:20 · 14:30 / 기관 10:00 · 11:20 · 13:20 · 14:30",
+                                          "cacheTtl": flow_board.CACHE_TTL}})
                 return
 
             # 홈 실시간 순위 「매수」 칩 — 외국인 · 기관 · 프로그램이 함께 사는 종목 (2026-11-05 · `fetch_joint_buy`)
@@ -9327,6 +10023,18 @@ class Handler(SimpleHTTPRequestHandler):
                 })
                 return
 
+            # 예상 체결가가 맞았나 — 그날 쌓은 것과 실제 시가 · 종가 (2026-11-10 · expect_report)
+            if route == "expect-log":
+                day = (qs.get("day") or [datetime.now(KST).strftime("%Y%m%d")])[0].strip()
+                if not (day.isdigit() and len(day) == 8):
+                    self._send_json({"ok": False, "error": "day 는 YYYYMMDD 여야 합니다."}, 400)
+                    return
+                data = expect_report(day)
+                self._send_json({"ok": "error" not in data, "data": data,
+                                 "meta": {"note": "lastPrice = 동시호가 마지막으로 적은 예상가 · actual = 실제 시가(open) · 정규장 종가(close) · "
+                                                  "actual 이 null 이면 아직 못 적음 · sameSince = 그 분부터 끝까지 실제 값과 같았음"}})
+                return
+
             if route == "asking":
                 code = (qs.get("code") or [""])[0].strip()
                 if not (code.isdigit() and len(code) == 6):
@@ -9483,6 +10191,9 @@ class Handler(SimpleHTTPRequestHandler):
         except RuntimeError as e:
             self._send_json({"ok": False, "error": safe_message(e)}, 502)
         except Exception as e:  # 예기치 못한 오류도 앱키가 새지 않게 요약만
+            if _db_missing(e):
+                self._send_json(_DB_MISSING_BODY)
+                return
             self._send_json({"ok": False, "error": "서버 오류: %s" % type(e).__name__}, 500)
 
 

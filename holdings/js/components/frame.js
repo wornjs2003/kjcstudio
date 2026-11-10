@@ -10,7 +10,7 @@ import { favList, toggleFav, onFavChange } from '../store/favorites.js';
 import * as lastSeen from '../store/last-seen.js';
 import { fetchLivePrices, fetchLiveIndices, applyLiveToStock } from '../data/live.js';
 import { watch } from '../store/longpoll.js';
-import { fmtWon, fmtPct, fmtNum, dirClass, fmtDeltaAmount } from '../utils/format.js';
+import { fmtWon, fmtPct, fmtNum, dirClass, fmtDeltaAmount, expectTip, expectTag } from '../utils/format.js';
 import { iconHtml } from './stock-icon.js';
 import './market-event.js';   // 시장 전체 사건 띠(서킷브레이커) — 홀딩스 화면 전부에 · 흐름 밖에 떠 칸을 안 움직인다
 
@@ -173,18 +173,22 @@ export function mountWatchSide(el, { activeCode } = {}) {
       const row = list.querySelector(`a[data-code="${s.code}"]`);
       if (!row) continue;
 
-      const stamp = `${live.price}|${live.pct}`;
+      /* 동시호가 동안은 예상 체결가를 「예상」 과 함께(utils/format.js expectTip — 서버가 그때만 싣는다) */
+      const ex = live.expect || null;
+      const q = ex || live;
+      const stamp = `${live.price}|${live.pct}|${ex ? ex.price + ex.kind : ''}`;
       if (shown[s.code] === stamp && row.dataset.painted) continue;
       shown[s.code] = stamp;
       row.dataset.painted = '1';
-      const cls = dirClass(live.pct);
+      const cls = dirClass(q.pct);
       const v = row.querySelector('.kh-wl-v');
       const c = row.querySelector('.kh-wl-c');
-      v.className = 'kh-num kh-wl-v';
-      v.textContent = fmtWon(live.price);
+      v.className = 'kh-num kh-wl-v' + (ex ? ' ' + cls : '');      // 예상가는 값도 오르내림 색(재권님 「예상도 등락색을 넣어줘」)
+      if (ex) { v.innerHTML = expectTag(ex) + fmtWon(ex.price); v.dataset.tip = expectTip(ex); }
+      else { v.textContent = fmtWon(live.price); delete v.dataset.tip; }
       c.className = 'kh-wl-c kh-num ' + cls;
       /* 등락금액을 등락률 앞에 (2026-09-14 지시). 순위표와 같은 표기다. */
-      c.textContent = `${fmtDeltaAmount(live.amt)} ${fmtPct(live.pct)}`;
+      c.textContent = `${fmtDeltaAmount(q.amt)} ${fmtPct(q.pct)}`;
     }
   }
 

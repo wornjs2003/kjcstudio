@@ -12,7 +12,7 @@ import { fetchCandles, fetchCandlesSince, peekCandles, watchCandles, createStock
   savePeriodId, loadPeriodId,
   chartView, setChartView, chartStockChanged } from './chart.js';
 import { color } from './theme.js';
-import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount,
+import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount, expectTip, expectTag,
   dirClass, marketPhase, isUsCode, fmtPriceOf, fmtUsdBig, priceDigitsOf, usSessionLabel } from './utils/format.js';
 import { favList, isFav, toggleFav, onFavChange, favGroups, ungroupedCodes } from './store/favorites.js';
 import { openGroupPicker } from './components/fav-groups.js';
@@ -20,6 +20,7 @@ import { openGroupPicker } from './components/fav-groups.js';
    관심 목록은 순위표의 「관심」 칩으로 들어갔고, 세로 아이콘 바는
    그만큼 오른쪽 칸을 넓히려고 감췄다. 다른 화면은 그대로 쓴다. */
 import { startLiveLoop } from './components/frame.js';
+import { solveFit } from '../../assets/js/fit-solve.js';
 import { iconHtml, paintIcon } from './components/stock-icon.js';
 import { openModal, closeModal } from './components/modal.js';
 import { loadStockMain, mountStockView } from './components/stock-view.js';
@@ -719,11 +720,24 @@ function paintBigHead(s2) {
 
 /* 현재가와 등락률. 시세가 들어올 때마다 불린다. */
 let bigShown = null;
+const _expect = new Map();   // 동시호가(장 전 · 마감) 예상 체결가 — 세부사항 칸(stock-detail)이 호가와 함께 받아 알린다(2026-11-10 재권님 「나」)
 function paintBigPrice() {
   const el = $('kh-big-v');
   if (!el || mkKey) return;
   /* 묶음 시세가 아직 안 왔으면 세부사항 칸이 받은 단건으로 먼저 칠한다 — 묶음이 오면 그것이 덮는다
      (2026-10-06 실측: 단건은 0.2초에 와 있는데 묶음을 기다려 1.7초에 칠해졌다) */
+  /* 동시호가(장 전 · 마감) 동안은 현재가 자리에 예상 체결가를 「예상」 과 함께(2026-11-10 재권님 「나」) — 서버가 그때만 준다 */
+  const ex = _expect.get(selectedCode);
+  if (ex) {
+    const st = `ex|${selectedCode}|${ex.price}|${ex.pct}`;
+    if (bigShown === st) return;
+    bigShown = st;
+    el.className = 'kh-idx-v kh-num ' + dirClass(ex.pct);
+    el.textContent = `예상 ${fmtPriceOf(selectedCode, ex.price)}${ex.pct == null ? '' : '  ' + fmtPct(ex.pct)}`;   // 기준가를 못 받았으면 등락률을 안 적는다
+    el.dataset.tip = expectTip(ex);
+    return;
+  }
+  delete el.dataset.tip;
   const live = (rowPrices && rowPrices[selectedCode]) || _oneSeed.get(selectedCode);
   if (!live) {
     el.className = 'kh-idx-v kh-num kh-mut';
@@ -1786,14 +1800,16 @@ async function loadJoint() {
 /* 가격 칸의 값 — 장외 칩이 정규장 중이면 앞 회차 20:00 장외 마감 값 · 나머지는 지금 시세 */
 const priceOf = (p, sortId = sortBy) => {
   const f = SORTS[sortId] && SORTS[sortId].price;
-  return f ? f(p) : p.price;
+  return f ? f(p) : (p.expect ? p.expect.price : p.price);     // 동시호가 동안은 예상 체결가(서버가 그때만 싣는다 · utils/format.js expectTip)
 };
+/* 그 칸이 예상 체결가를 그리나 — 칩이 따로 값을 정하지 않는 칸에서만(장외 칩 등은 그 칩 값 그대로) */
+const expectOf = (p, sortId = sortBy) => (p && p.expect && !(SORTS[sortId] && (SORTS[sortId].price || SORTS[sortId].pct)) ? p.expect : null);
 
 /* 맨 오른쪽 등락률 칸의 값 — 칩이 정한다(장외는 종가 대비 · 나머지는 전일 대비). 값이 없으면 null(0 으로 두지 않는다) */
 const pctOf = (p, sortId = sortBy) => {
   if (!p) return null;
   const f = SORTS[sortId] && SORTS[sortId].pct;
-  const v = f ? f(p) : p.pct;
+  const v = f ? f(p) : (p.expect ? p.expect.pct : p.pct);
   return Number.isFinite(v) ? v : null;
 };
 
@@ -2498,8 +2514,8 @@ function paintRows(priceMap) {
       <td class="l"><span class="kh-nm">
         ${iconHtml(s)}
         <b data-co="${s.code}">${market === 'THEME' ? escT(s.name) : s.name}</b>${market === 'THEME' ? themeBadge(s.code) : sectorTag(s.code)}</span></td>
-      <td class="kh-num"><span
-        >${live ? fmtPriceOf(s.code, priceOf(live, sid)) : '···'}</span></td>
+      <td class="kh-num"><span${expectOf(live, sid) ? ` class="${dirClass(live.expect.pct)}" data-tip="${expectTip(live.expect)}"` : ''}
+        >${live ? (expectOf(live, sid) ? expectTag(live.expect) : '') + fmtPriceOf(s.code, priceOf(live, sid)) : '···'}</span></td>
       <td class="kh-num kh-metric">${sortCell(s.code, live)}</td>
       <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(pctOf(live, sid)) : '—'}</td>
     </tr>`;
@@ -2816,8 +2832,9 @@ function paintOneRow(code, live) {
     const tr = $('kh-rows').querySelector(`tr[data-code="${code}"]`);
     if (!tr || !live) return;
     const cls = dirClass(pctOf(live));
+    const ex = expectOf(live);
     tr.children[2].innerHTML =
-      `<span>${fmtPriceOf(code, priceOf(live))}</span>`;
+      `<span${ex ? ` class="${dirClass(ex.pct)}" data-tip="${expectTip(ex)}"` : ''}>${ex ? expectTag(ex) : ''}${fmtPriceOf(code, priceOf(live))}</span>`;   // 예상가는 오르내림 색
     /* 「전일대비」 자리에는 지금 줄 세운 기준값이 온다. 오르내림이 아니라
        크기라서 등락 색을 입히지 않는다. */
     tr.children[3].className = 'kh-num kh-metric';
@@ -2945,7 +2962,18 @@ function findStock(code) {
   return rowList().find(s => s.code === code)
       || WATCHLIST.find(s => s.code === code)
       || EXTRA_STOCKS.get(code)
+      || anyListed(code)
       || null;
+}
+
+/* 거른 목록에서 빠진 종목도 찾는다 (2026-11-04 재권님 「장외 종목을 클릭했는데 차트가 다른게 나오네」).
+   장외 칩은 「오른 종목만」 거르는데 줄은 그려 둔 채 값만 바뀐다 — 0.00% 가 된 줄(SK)을 누르면 rowList 에 없어
+   paintBigChart 가 조용히 빠져나가, 큰 차트 · 이름은 앞 종목(NH투자증권)에 남고 값 · 뉴스만 새 종목이 됐다.
+   거르기 전 전체 목록(universe · 미국 표)에서 한 번 더 찾는다 */
+function anyListed(code) {
+  const x = (universe || []).find(s => s.code === code)
+      || Object.values(usRows || {}).flat().find(s => s && s.code === code);
+  return x ? { code: x.code, name: x.name, sector: '', brand: brandColor(x.code, x.name) } : null;
 }
 
 /* 미리보기 카드(paintPreview · drawPreviewChart)는 2026-09-17 에 지웠다.
@@ -3255,7 +3283,8 @@ document.addEventListener('click', (e) => {
 const panel3 = mountStockPanel($('kh-panel3'), { code: selectedCode, depth: true });   // 호가 10단 작은 막대는 홈만(2026-11-06)
 
 /* 세부사항 — 차트 머리줄의 보조지표 옆 */
-const detail = mountStockDetail($('kh-dt'), { view: 'direct', onOne: takeOne });   // 첫 화면에서 크게 보는 종목
+const detail = mountStockDetail($('kh-dt'), { view: 'direct', onOne: takeOne,
+  onExpect: (c, ex) => { if (ex) _expect.set(c, ex); else _expect.delete(c); bigShown = null; paintBigPrice(); } });   // 첫 화면에서 크게 보는 종목
 if (selectedCode) detail.setCode(selectedCode);
 
 paintBigPeriods();
@@ -3542,9 +3571,8 @@ function fitScale() {
   if (!document.body.classList.contains('kh-simple')) {
     try { localStorage.setItem('kh-fit-base', JSON.stringify({ fixed: Math.round(fixed), grow: Math.round(grow), rail })); } catch { /* 저장 못 씀 — Insight 는 제 기본값 */ }
   }
-  const room = innerHeight - nav - gap, wide = (root.clientWidth - rail - 2 * gap) / grid;
-  let s = Math.min(wide, (room - fixed) / grow), z = 1;
-  if (s < 1) { s = 1; z = Math.max(0.1, Math.min(wide, room / (fixed + grow))); }   // 0.1 — 0 · 음수만 막는다
+  /* 배율 식은 Insight 와 한 곳(assets/js/fit-solve.js · 2026-11-09 「같은 값은 한 곳에만 둔다」) — 여기는 재서 넘기기만 한다 */
+  const { s, z } = solveFit({ fixed, grow, rail, w: root.clientWidth, h: innerHeight, nav, grid, gap });
   if (Math.abs(s - s0) > 0.002) root.style.setProperty('--kh-s', s.toFixed(4));
   if (Math.abs(z - z0) > 0.002) root.style.setProperty('--kh-z', z.toFixed(4));
 }

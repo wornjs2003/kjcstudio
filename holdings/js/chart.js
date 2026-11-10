@@ -149,6 +149,7 @@ export function indOn() {
 
 function saveIndOn() {
   try { localStorage.setItem(IND_ON_KEY, JSON.stringify([..._indOn])); } catch { /* 저장 못 씀 */ }
+  memPush();
 }
 
 /* 아래 칸 하나가 먹는 높이 비율. 셋이 다 켜지면 가격이 절반 아래로 내려간다 */
@@ -891,6 +892,10 @@ function volumeProfile(candles, period, kr) {
 const PANE_MIN = 60, PRICE_MIN = 120;
 /* 칸이 모자라 줄일 때만 쓰는 둘(build 의 fitH) — 시간축 높이는 폰 390 · 005930 5분봉 모달에서 잰 값(2026-10-08 · 약 28px) */
 const TIME_AXIS_H = 28, FIT_MIN = 40;
+/* **가격 칸은 차트 칸 높이의 이 비율 밑으로 안 내려간다** (2026-11-10 재권님 「응」 — 칸이 낮으면 보조 칸도 같은 비율로 줄여 가격 칸을
+   절반 넘게 지키기). 그날 재권님 크롬이 localhost 를 167% 확대해 홈이 0.62배로 줄었는데, 보조 칸은 저장한 px(60 · 60 · 110) 그대로
+   남고 가격 칸만 121px 로 눌려 가격 눈금 숫자가 사라졌다. 넓은 화면(가격 칸이 이미 절반 넘는 곳)은 그대로다 */
+const PRICE_SHARE = 0.5;
 
 let _paneH = null;
 function paneH() {
@@ -911,18 +916,26 @@ function paneH() {
    「높이의 70% 로 맞춰주고 내가 조정을 하면 조정한대로 고정되도록 해줘」).
    고정한 폭은 칸 높이(paneH)처럼 localStorage — 새로고침해도 남는다(보는 상태). 가격 눈금을 두 번 누르면 풀려 다시 70% 맞춤.
    **기간(5분 · 일 · 주 · 월 · 년)마다 따로 기억한다** (2026-11-09 재권님 「응 그래」) — 5분봉에서 좁힌 폭이 월봉에 그대로 가면
-   봉이 칸 밖으로 크게 잘린다(오르내림 폭이 기간마다 열 배 넘게 다르다 · 개념정의 덧). 종목을 바꿀 때는 그대로다 */
+   봉이 칸 밖으로 크게 잘린다(오르내림 폭이 기간마다 열 배 넘게 다르다 · 개념정의 덧). 종목을 바꿀 때는 그대로다.
+   **위아래로 옮긴 자리도 함께 기억한다** (2026-11-10 재권님 「차트를 내가 이동하는데 원래로 돌아가는 현상이 있어」 → 「5분봉 일봉 주봉 월봉 /
+   차트와 차트모달은 같이」 → 「위아래도 움직이는것도 고정」) — 전에는 폭만 두고 가운데를 보이는 봉에 다시 맞춰, 끌어 놓은 자리가 손을 떼자마자
+   제자리로 돌아갔다. 이제 「보이는 봉의 가운데보다 얼마나 위 · 아래로 옮겼나」(가격 대비)를 폭과 함께 둔다 — 넘겨 보거나 새 봉이 붙어도
+   옮긴 자리가 봉을 따라간다. 홈 큰 차트 · 모달 · 종목 화면이 한 값을 쓴다 */
 const PRICE_FILL = 0.7;
 const V_SPAN_KEY = 'kh.chart.v-span';
 const V_SPAN_MIN = 0.001, V_SPAN_MAX = 5;   // 세로 폭(가격 대비) — 손이 미끄러져 0 이나 터무니없는 값이 남지 않게
-let _vSpan = null;                            // 기간 → 고정한 폭(없으면 자동 70%) · 처음 부를 때 읽는다
+const V_SHIFT_MAX = 0.9;                      // 위아래로 옮긴 정도(가격 대비) — 봉이 영영 안 보이는 자리에 남지 않게
+let _vSpan = null;                            // 기간 → { s: 고정한 폭, d: 위아래로 옮긴 정도 }(없으면 자동 70%) · 처음 부를 때 읽는다
 function vSpanMap() {
   if (!_vSpan) {
     _vSpan = {};
     try {
       const v = JSON.parse(localStorage.getItem(V_SPAN_KEY) || '{}');   // 기간마다 따로 두기 전 한 숫자로 둔 값은 버린다(객체가 아니면)
       if (v && typeof v === 'object') {
-        Object.keys(v).forEach((k) => { if (v[k] >= V_SPAN_MIN && v[k] <= V_SPAN_MAX) _vSpan[k] = v[k]; });
+        Object.keys(v).forEach((k) => {
+          const x = typeof v[k] === 'number' ? { s: v[k], d: 0 } : v[k];   // 11-10 전에는 폭 숫자 하나였다
+          if (x && x.s >= V_SPAN_MIN && x.s <= V_SPAN_MAX) _vSpan[k] = { s: x.s, d: Math.abs(x.d) <= V_SHIFT_MAX ? x.d : 0 };
+        });
       }
     } catch { /* 없으면 자동 */ }
   }
@@ -932,15 +945,17 @@ function vSpan(per) {
   const v = vSpanMap()[per];
   return v == null ? null : v;
 }
-function setVSpan(per, v) {
+function setVSpan(per, s, d = 0) {
   const m = vSpanMap();
-  if (v == null) delete m[per];
-  else m[per] = Math.max(V_SPAN_MIN, Math.min(V_SPAN_MAX, v));
+  if (s == null) delete m[per];
+  else m[per] = { s: Math.max(V_SPAN_MIN, Math.min(V_SPAN_MAX, s)), d: Math.max(-V_SHIFT_MAX, Math.min(V_SHIFT_MAX, d || 0)) };
   try { localStorage.setItem(V_SPAN_KEY, JSON.stringify(m)); } catch { /* 저장 못 씀 */ }
+  memPush();
 }
 
 function savePaneH() {
   try { localStorage.setItem(PANE_H_KEY, JSON.stringify(_paneH)); } catch { /* 저장 못 씀 */ }
+  memPush();
 }
 
 /* 제 칸을 갖는 지표. 순서가 곧 위에서 아래 순서다 */
@@ -1357,7 +1372,7 @@ export function createStockChart(container, candles, opts = {}) {
     vpTimer = setInterval(() => {
       if (document.hidden) return;           // 안 보이는 탭은 쉰다
       drawProfile();
-      drawCloud(); drawSess(); drawHfEnds();
+      drawCloud(); drawSess(); drawHfEnds(); drawBadges();
     }, VP_REFRESH_MS);
   }
 
@@ -1381,8 +1396,10 @@ export function createStockChart(container, candles, opts = {}) {
   /* 좁은 폭(모바일 · 700px 이하)에서는 봉이 위아래로 길어 보인다 — 칸은 세로로 긴데 폭이 좁아서다.
      **칸 크기는 그대로 두고** 세로 범위만 넓혀 봉 길이를 처음의 1/9 로 둔다 (2026-10-28 재권님
      「모바일에서 차트의 캔들이 상하로 길게 보이는데 지금의 1/3이 기본이 되게」 → 그림을 보시고 「지금의 1/3으로 더 줄여봐」).
-     가운데를 그대로 두고 위아래로 PHONE_STRETCH 배 넓힌다. 넓은 폭은 손대지 않는다. */
-  const PHONE_STRETCH = 9;
+     가운데를 그대로 두고 위아래로 PHONE_STRETCH 배 넓힌다. 넓은 폭은 손대지 않는다.
+     2026-11-10 재권님 「모바일에서 차트 캔들높이가 세로로 너무 작은데」 → 세 안 그림(9 · 3 · 1배) → 「나」 — 1배(늘림 없음 · 넓은 폭과 같은 셈).
+     모바일 차트 칸이 생각보다 낮아 9배면 봉이 한 줄로 눌렸다. 값만 1 로 두고 셈 자리는 남긴다(다시 정하시면 이 값 하나) */
+  const PHONE_STRETCH = 1;
   const PHONE_MQ = window.matchMedia('(max-width: 700px)');   // home.css @media · mobile-fold.js 와 같은 700px — 바꾸면 셋을 함께
   function phoneStretch() {
     if (!PHONE_MQ.matches) return undefined;
@@ -1399,14 +1416,17 @@ export function createStockChart(container, candles, opts = {}) {
 
   /* 자동 눈금에 좁은 폭 늘림(phoneStretch)을 곱하고, 사람이 고정한 세로 폭(vSpan)이 있으면 그 폭으로 바꾼다.
      라이브러리는 이 범위 위아래에 여백(scaleMargins)을 얹으므로, 보이는 폭이 고정 폭이 되게 여백만큼 덜어 준다 */
+  let lastBase = null;
   function stretchProvider() {
     const ph = phoneStretch();
     return (orig) => {                         // 기간은 부를 때 읽는다 — 기간을 바꿔도 이 함수를 다시 안 붙일 수 있어서
       const r = ph ? ph(orig) : orig();
-      const span = vSpan(period);
-      if (span == null || !r || !r.priceRange) return r;
+      const fix = vSpan(period);
+      if (fix == null || !r || !r.priceRange) return r;
+      const span = fix.s;
       const { minValue: lo, maxValue: hi } = r.priceRange;
-      const mid = (lo + hi) / 2;
+      lastBase = (lo + hi) / 2;                  // 자동 눈금이 잡은 가운데(옮기기 전) — keepStretch 가 옮긴 정도를 이것으로 바로잡는다
+      const mid = lastBase * (1 + fix.d);        // 보이는 봉의 가운데에서 사람이 옮긴 만큼
       let fill = PRICE_FILL;
       try {
         const m = candleSeries.priceScale().options().scaleMargins;
@@ -1427,12 +1447,44 @@ export function createStockChart(container, candles, opts = {}) {
     if (auto) return;                          // 세로를 안 바꿨다
     const user = readScale();
     if (!user) return;
-    const mid = (user.top + user.bot) / 2;
+    /* 가운데는 위아래 여백(scaleMargins)을 뺀 안쪽의 가운데 — 자동 눈금이 잡는 범위도 그 안쪽이다. 여백이 위아래 다르면(위가 크다)
+       칸 끝의 가운데와 갈려, 놓자마자 그만큼 밀렸다(2026-11-10 실측 0.7%) */
+    let mt = 0, mb = 0;
+    try { const m = candleSeries.priceScale().options().scaleMargins; if (m) { mt = m.top; mb = m.bottom; } } catch { /* 여백 없음 */ }
+    const edge = user.top - user.bot;
+    const mid = ((user.bot + mb * edge) + (user.top - mt * edge)) / 2;
     if (!(mid > 0)) return;
-    setVSpan(period, (user.top - user.bot) / mid);
+    const span = edge / mid;
+    const base = visibleMid();                 // 자동 눈금이 잡을 가운데의 어림 — 거기서 얼마나 옮겼나를 둔다
+    setVSpan(period, span, base > 0 ? mid / base - 1 : 0);
     vpRange = null;
+    lastBase = null;
     try { candleSeries.applyOptions(priceFix()); ch.priceScale('right').applyOptions({ autoScale: true }); } catch { return; }
-    requestAnimationFrame(() => requestAnimationFrame(() => { lockPriceRange(); drawProfile(); }));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      /* 어림은 봉 배열로 셈해 라이브러리가 잡은 가운데와 조금(2026-11-10 실측 0.7%) 다를 수 있다 — 자동 눈금이 실제로 잡은 가운데로 바로잡는다 */
+      const fix = vSpan(period);
+      if (lastBase > 0 && fix && Math.abs(mid / lastBase - 1 - fix.d) > 1e-4) {
+        setVSpan(period, span, mid / lastBase - 1);
+        vpRange = null;
+        try { candleSeries.applyOptions(priceFix()); } catch { /* 칸이 아직 없다 */ }
+        requestAnimationFrame(() => requestAnimationFrame(() => { lockPriceRange(); drawProfile(); }));
+        return;
+      }
+      lockPriceRange(); drawProfile();
+    }));
+  }
+
+  /* 보이는 봉의 최고 · 최저 가운데 — 자동 눈금이 잡는 가운데와 같다(겹침 선은 NO_SCALE 로 빠져 있다) */
+  function visibleMid() {
+    const ch = panes[0] && panes[0].chart;
+    if (!ch || !candles || !candles.length) return null;
+    let r = null;
+    try { r = ch.timeScale().getVisibleLogicalRange(); } catch { return null; }
+    if (!r) return null;
+    const a = Math.max(0, Math.ceil(r.from)), b = Math.min(candles.length - 1, Math.floor(r.to));
+    let hi = -Infinity, lo = Infinity;
+    for (let i = a; i <= b; i++) { if (candles[i].high > hi) hi = candles[i].high; if (candles[i].low < lo) lo = candles[i].low; }
+    return hi >= lo ? (hi + lo) / 2 : null;
   }
 
   function priceFix() {
@@ -1655,7 +1707,7 @@ export function createStockChart(container, candles, opts = {}) {
     }
 
     drawProfile();          // 매물대도 새 축에 맞춰 다시 그린다
-    drawCloud(); drawSess(); drawHfEnds();            // 일목 구름도
+    drawCloud(); drawSess(); drawHfEnds(); drawBadges();            // 일목 구름도
     /* 라이브러리가 나중에 제 계산을 밀어넣으므로 한 박자 뒤에 잰다 */
     requestAnimationFrame(() => checkScale(scaleBefore));
 
@@ -1669,15 +1721,16 @@ export function createStockChart(container, candles, opts = {}) {
 
   function drawVol(ch) {
     const h = ch.addSeries(LC.HistogramSeries, {
-      priceFormat: { type: 'volume' }, lastValueVisible: true, priceLineVisible: false,
+      priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false,
     });
+    badge(ch, h, null);                     // 축 값 배지는 drawBadges 가(SUB_BADGES) — 색은 마지막 막대 색
     /* 색을 진하게 두고 오름·내림 대비를 크게 한다 — 투명하면 한 덩어리로 보인다 */
     h.setData(candles.map((c) => ({
       time: toChartTime(c.ts, period), value: c.volume,
       color: c.close >= c.open ? COLOR.up : COLOR.down,
     })));
     const v = volumeMA(candles, period);
-    addLine(ch, { color: COLOR.ma20, lineWidth: 2, lastValueVisible: true })
+    badge(ch, addLine(ch, { color: COLOR.ma20, lineWidth: 2 }), COLOR.ma20)
       .setData(put(v.values));
     return { values: v.values };
   }
@@ -1685,7 +1738,7 @@ export function createStockChart(container, candles, opts = {}) {
   function drawMacd(ch) {
     const m = macd(candles, period);
     const peak = Math.max(...m.vHist.filter((x) => x != null).map(Math.abs), 1);
-    const hs = ch.addSeries(LC.HistogramSeries, { lastValueVisible: true, priceLineVisible: false });
+    const hs = badge(ch, ch.addSeries(LC.HistogramSeries, { lastValueVisible: false, priceLineVisible: false }), null);
     /* 막대 농도로 힘을 나타낸다 — 약하면 12%, 세면 100% */
     hs.setData(m.vHist.map((v, i) => v == null
       ? { time: toChartTime(candles[i].ts, period) }
@@ -1694,8 +1747,8 @@ export function createStockChart(container, candles, opts = {}) {
           color: (v >= 0 ? COLOR.up : COLOR.down) +
             Math.round(30 + 225 * Math.min(1, Math.abs(v) / peak)).toString(16).padStart(2, '0'),
         }));
-    addLine(ch, { color: COLOR.ma20, lineWidth: 2, lastValueVisible: true }).setData(put(m.vLine));
-    addLine(ch, { color: COLOR.ma5, lineWidth: 2, lastValueVisible: true }).setData(put(m.vSignal));
+    badge(ch, addLine(ch, { color: COLOR.ma20, lineWidth: 2 }), COLOR.ma20).setData(put(m.vLine));
+    badge(ch, addLine(ch, { color: COLOR.ma5, lineWidth: 2 }), COLOR.ma5).setData(put(m.vSignal));
     return m;
   }
 
@@ -1733,13 +1786,13 @@ export function createStockChart(container, candles, opts = {}) {
     /* **세로 범위는 늘 0~100** (2026-10-08 재권님 — 「RSI 값이 밑이 잘리는데 0~100 이 다 보여야 하는데」).
        전에는 값이 지나간 범위에 맞춰 늘고 줄어, 좁은 칸에서 30 띠 아래가 잘리고 값 배지가 칸 밑으로 밀렸다.
        칸의 다른 선(띠 · 70/30 채움 · 평균선)은 다 0~100 안이라 이 선 하나만 정해 주면 된다. */
-    const ln = addLine(ch, { color: COLOR.rsi, lineWidth: 2, lastValueVisible: true,
-      autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }) });
+    const ln = badge(ch, addLine(ch, { color: COLOR.rsi, lineWidth: 2,
+      autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }) }), COLOR.rsi);
     ln.setData(put(r.values));
 
     /* 두 번째 선 — RSI 의 14봉 평균 */
     const sig = smaOf(r.values, 14);
-    addLine(ch, { color: COLOR.rsiSig, lineWidth: 1, lastValueVisible: true }).setData(put(sig));
+    badge(ch, addLine(ch, { color: COLOR.rsiSig, lineWidth: 1 }), COLOR.rsiSig).setData(put(sig));
 
     /* 기준선 70 · 50 · 30 은 점선. 오른쪽 축에 배지는 붙이지 않는다 */
     [70, 50, 30].forEach((v) => {
@@ -1782,10 +1835,10 @@ export function createStockChart(container, candles, opts = {}) {
     });
     under.setData(put(r.k.map((v) => v == null ? null : Math.min(v, 20))));
 
-    const ln = addLine(ch, { color: COLOR.ind1, lineWidth: 2, lastValueVisible: true,
-      autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }) });
+    const ln = badge(ch, addLine(ch, { color: COLOR.ind1, lineWidth: 2,
+      autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }) }), COLOR.ind1);
     ln.setData(put(r.k));
-    addLine(ch, { color: COLOR.ind2, lineWidth: 1, lastValueVisible: true }).setData(put(r.d));
+    badge(ch, addLine(ch, { color: COLOR.ind2, lineWidth: 1 }), COLOR.ind2).setData(put(r.d));
     [80, 50, 20].forEach((v) => {
       try {
         ln.createPriceLine({ price: v, color: COLOR.cross, lineWidth: 1,
@@ -1843,6 +1896,75 @@ export function createStockChart(container, candles, opts = {}) {
      축 이름표(series title · 끝 값 이름표)로 두면 가격축 눈금 숫자 위에 겹쳐서 끝 값과 함께 그림 칸 안에 글로 둔다(「기 +0.09 · 39%」). 값은 서버 share(최근 N거래일 셋의
      매수 + 매도 금액에서 각자 몫 · 셋 합 100) · 못 받으면 안 적는다. 세 글이 서로 겹치면 위아래로 벌린다.
      세로 자리는 끌기 · 확대 · 2초 다시 그리기 때마다 따라간다(drawSess 와 같은 자리에서 부른다) */
+  /* SUB_BADGES — **보조 칸(거래량 · MACD · RSI · 스토캐스틱) 오른쪽 축의 값 배지는 우리가 그린다**
+     (2026-11-09 재권님 「rsi 잘려보이는데 보조지표들 다 켰다 껐다 하면서 잘리는것들 있는지 확인하고 수정해줘」 →
+     「빼라고 한적은 없고 잘린거 안잘리게 해달라고 한거같은데」). 라이브러리 배지는 한 칸의 배지들이 칸 위 · 아래 절반에
+     안 들어가면 칸 밖으로 밀어내 잘랐다 — 8770 실측(재권님 창 · 삼성 5분봉): 칸 111 에서 MACD(배지 셋) · 스토캐스틱(둘),
+     칸 70 에서 거래량 · MACD · RSI · 스토캐스틱 전부. 그래서 배지는 다 그대로 두고 **칸 전체 높이 안에서만** 비켜 놓는다 —
+     값 자리 → 서로 안 겹치게 아래로 → 칸 밑을 넘으면 위로 → 그래도 칸이 모자라면 간격을 칸 높이 ÷ 배지 수로 줄인다(조금 겹쳐도 칸 밖으로는 안 나간다).
+     값은 그 선의 마지막 값 · 숫자 꼴은 축 눈금과 같은 셈(mkChart 의 priceFormatter) · 색은 선 색(막대는 마지막 막대 색) */
+  const BADGE_H = 15;                        // 배지 높이(px) — 라이브러리 배지 남짓(글자 11px)
+  let badgeOf = new Map();                   // 칸 차트 → [{ sr, col }]
+  let badgeRaf = 0;
+  const BADGE_RETRY_MS = 300;                // 그리기 직후 값 · 높이를 아직 못 잴 때 다시 볼 때까지(그리기 지연 — 서버 주기가 아니다)
+  function badge(ch, sr, col) {
+    if (!badgeOf.has(ch)) badgeOf.set(ch, []);
+    badgeOf.get(ch).push({ sr, col });
+    /* 어느 길로 선을 새로 긋든(처음 그리기 · 봉 덧붙이기 · 기간 바꾸기) 다음 화면 갱신에 한 번 다시 그린다 — 값은 setData 뒤에 들어온다 */
+    if (!badgeRaf) badgeRaf = setTimeout(() => { badgeRaf = 0; drawBadges(); }, 0);
+    return sr;
+  }
+  function drawBadges() {
+    panes.forEach((p) => {
+      const list = badgeOf.get(p.chart);
+      if (!list || !p.el) return;
+      let box = p.el.querySelector('.kh-sub-badges');
+      if (!box) {
+        box = document.createElement('div');
+        box.className = 'kh-sub-badges';
+        box.style.cssText = `position:absolute;top:0;right:0;width:${AXIS_W}px;pointer-events:none;z-index:4`;
+        p.el.appendChild(box);
+      }
+      /* 그림 자리 높이 = 그 칸 가격축 캔버스 높이(맨 아래 칸은 시간축을 뺀 높이) */
+      const br = p.box.getBoundingClientRect();
+      let h = 0;
+      p.box.querySelectorAll('canvas').forEach((c) => {
+        const r = c.getBoundingClientRect();
+        if (r.left >= br.right - AXIS_W - 2 && r.height > h) h = r.height;
+      });
+      /* 높이를 못 읽음(라이브러리가 캔버스를 다시 잡는 중) — 그려 둔 배지를 비우지 않고 잠깐 뒤 다시 본다 */
+      if (!h) { if (!badgeRaf) badgeRaf = setTimeout(() => { badgeRaf = 0; drawBadges(); }, BADGE_RETRY_MS); return; }
+      box.style.height = h + 'px';
+      const at = [];
+      list.forEach(({ sr, col }) => {
+        let d = null;
+        try { d = sr.data(); } catch { return; }
+        for (let i = d.length - 1; i >= 0; i--) {
+          const v = d[i].value;
+          if (v == null || !Number.isFinite(v)) continue;
+          let y = null;
+          try { y = sr.priceToCoordinate(v); } catch { /* 칸이 그새 사라졌다 */ }
+          if (y != null) at.push({ y, v, col: col || d[i].color || COLOR.text });
+          break;
+        }
+      });
+      /* 선은 있는데 값 자리를 아직 못 잼(그리기 직후) — 잠깐 뒤 한 번 더. 2초 다시 그리기는 안 보이는 탭에서 쉬어서 그것만 기다리지 않는다 */
+      if (!at.length && list.length && !badgeRaf) badgeRaf = setTimeout(() => { badgeRaf = 0; drawBadges(); }, BADGE_RETRY_MS);
+      at.sort((a, b) => a.y - b.y);
+      /* 배지 가운데가 갈 수 있는 자리는 [BADGE_H/2, h - BADGE_H/2] — 칸이 모자라면 간격을 줄인다(조금 겹친다) */
+      const half = BADGE_H / 2;
+      const gap = at.length > 1 ? Math.max(0, Math.min(BADGE_H, (h - BADGE_H) / (at.length - 1))) : BADGE_H;
+      at.forEach((x) => { x.y = Math.max(half, Math.min(h - half, x.y)); });
+      for (let i = 1; i < at.length; i++) at[i].y = Math.max(at[i].y, at[i - 1].y + gap);
+      const over = at.length ? at[at.length - 1].y + half - h : 0;
+      if (over > 0) at.forEach((x) => { x.y -= over; });
+      const fmt = (v) => p.chart.options().localization.priceFormatter(v);
+      box.innerHTML = at.map((x) => `<span style="position:absolute;left:0;top:${Math.round(x.y - BADGE_H / 2)}px;height:${BADGE_H}px;` +
+        `line-height:${BADGE_H}px;padding:0 5px;font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums;` +
+        `color:var(--kh-text-on-fill);background:${x.col.length === 9 ? x.col.slice(0, 7) : x.col};border-radius:2px">${fmt(x.v)}</span>`).join('');
+    });
+  }
+
   const HF_END_GAP = 15;                     // 글 사이 최소 세로 간격(px) — 글자 높이 남짓
   const HF_END_W = 100;                      // 끝 글이 차지하는 폭 어림(px) — 「외 -0.78 · 36%」 남짓
   function drawHfEnds() {
@@ -1898,6 +2020,7 @@ export function createStockChart(container, candles, opts = {}) {
 
     panes.forEach((p) => { try { p.chart.remove(); } catch { /* 이미 정리됨 */ } });
     panes = [];
+    badgeOf = new Map();
     container.innerHTML = '';
 
     /* **세 화면이 같은 규칙으로 간다 (2026-09-18 지시).** 좁다고 칸을 빼지 않는다 —
@@ -1909,7 +2032,8 @@ export function createStockChart(container, candles, opts = {}) {
        좁은 폭 홈 큰 차트는 367px(home.css 2/3 지시)인데 가격 120 + 보조 110×3 = 453 이라 86px 이 칸 밖으로
        넘쳐 RSI 가 잘렸다. 줄인 값은 저장하지 않는다 — 넓은 화면(들어가는 곳)은 지금 높이 그대로다. */
     const want = own.reduce((a, x) => a + paneH()[x.key], 0);
-    const room = container.clientHeight - PRICE_MIN - own.length;   // 칸 사이 경계선 1px 씩(stock.css .kh-pane + .kh-pane)
+    const priceFloor = Math.max(PRICE_MIN, Math.round(container.clientHeight * PRICE_SHARE));
+    const room = container.clientHeight - priceFloor - own.length;   // 칸 사이 경계선 1px 씩(stock.css .kh-pane + .kh-pane)
     const shrink = want > room && room > 0;
     /* **줄일 때는 시간축 자리를 먼저 떼어 맨 아래 칸에 얹는다** (2026-10-08 재권님 — 「RSI 값이 밑이 잘리는데 … 칸 조절좀 해봐」).
        시간축은 맨 아래 칸 안에 그려져 약 TIME_AXIS_H 를 먹는다 — 칸을 똑같이 60 씩 주면 맨 아래 칸(대개 RSI)만
@@ -1948,7 +2072,7 @@ export function createStockChart(container, candles, opts = {}) {
       container.appendChild(el);
 
       const h = p.key === 'price'
-        ? Math.max(PRICE_MIN, container.clientHeight - below)
+        ? Math.max(priceFloor, container.clientHeight - below)
         : fitH[p.key];
       box.style.height = h + 'px';
 
@@ -2003,7 +2127,7 @@ export function createStockChart(container, candles, opts = {}) {
         /* 봉이 움직이면 매물대도 그 자리에서 따라간다. 2초를 기다리면
            띠와 봉이 어긋나 보인다 (2026-09-18). */
         drawProfile();
-        drawCloud(); drawSess(); drawHfEnds();
+        drawCloud(); drawSess(); drawHfEnds(); drawBadges();
       });
 
       ch.subscribeCrosshairMove((param) => {
@@ -2031,8 +2155,8 @@ export function createStockChart(container, candles, opts = {}) {
     /* 봉이 자리를 잡은 뒤에 세로 범위를 굳힌다. 그려지기 전에 재면 값이 없다 */
     lockPriceRange();
     drawProfile();
-    drawCloud(); drawSess(); drawHfEnds();
-    requestAnimationFrame(() => { lockPriceRange(); drawProfile(); drawCloud(); drawSess(); drawHfEnds(); });
+    drawCloud(); drawSess(); drawHfEnds(); drawBadges();
+    requestAnimationFrame(() => { lockPriceRange(); drawProfile(); drawCloud(); drawSess(); drawHfEnds(); drawBadges(); });
     startProfileLoop();
     checkAlign();
   }
@@ -2162,6 +2286,7 @@ export function createStockChart(container, candles, opts = {}) {
     else build();
   }
   _indSync.add(syncInd);
+  _memSync.add(build);
 
   /* ── 칸 높이 끌기 — 그 경계의 위아래 둘만 바뀐다 ──
      **pointer 이벤트로 듣는다** (2026-10-06 재권님 — 「모바일에서 보조지표 구분선을 끌어도 안 움직임」 · 「응 해줘」).
@@ -2188,7 +2313,7 @@ export function createStockChart(container, candles, opts = {}) {
   function onMove(e) {
     if (!drag || e.pointerId !== drag.id) return;
     const d = e.clientY - drag.y;
-    const minA = drag.above.key === 'price' ? PRICE_MIN : PANE_MIN;
+    const minA = drag.above.key === 'price' ? Math.max(PRICE_MIN, Math.round(container.clientHeight * PRICE_SHARE)) : PANE_MIN;
     const a = Math.max(minA, Math.min(drag.aH + drag.bH - PANE_MIN, drag.aH + d));
     setPaneH(drag.above, a);
     setPaneH(drag.below, drag.aH + drag.bH - a);
@@ -2381,11 +2506,13 @@ export function createStockChart(container, candles, opts = {}) {
         if (!draw) return;
         (p.chart.__khSeries || []).forEach((sr) => { try { p.chart.removeSeries(sr); } catch { /* 이미 없다 */ } });
         p.chart.__khSeries = [];
+        badgeOf.set(p.chart, []);              // 지운 선의 값 배지도 함께 비운다(SUB_BADGES)
         p.calc = draw(p.chart);
         if (range) { try { p.chart.timeScale().setVisibleLogicalRange(range); } catch { /* 아직 없음 */ } }
       });
       syncing = wasSync;
       paintPaneTags(candles.length - 1);
+      requestAnimationFrame(drawBadges);
       if (lastLive) api.updateLast(lastLive);     // 덧붙인 서버 봉이 맨 오른쪽을 서버 값으로 돌려놓았다 — 지금 시세로
       return tail.length || 1;
     },
@@ -2473,6 +2600,7 @@ export function createStockChart(container, candles, opts = {}) {
       };
       candles[i] = next;
       overlaid = next;
+      if (last === provisional) provisional = next;   // 먼저 세운 봉에 시세가 또 얹혀도 appendBars 가 그 봉을 알아보게 (qa 검수 11-09)
       try {
         candleSeries.update({
           time: toChartTime(next.ts, period),
@@ -2546,6 +2674,7 @@ export function createStockChart(container, candles, opts = {}) {
 
     destroy() {
       _indSync.delete(syncInd);
+      _memSync.delete(build);
       if (sizeRo) sizeRo.disconnect();
       clearTimeout(fitTimer);
       clearTimeout(sizeTimer);
@@ -2613,7 +2742,66 @@ function maOff() {
 
 function saveMaOff() {
   try { localStorage.setItem(MA_OFF_KEY, JSON.stringify([..._maOff])); } catch { /* 저장 못 씀 */ }
+  memPush();
 }
+
+/* ── 차트 기억은 보관함 한 곳 · 기준은 thekjc.co.kr (2026-11-10 재권님 「기억을 내가 보는값으로 통일해줘 메인이 기준이야」 →
+   「https://thekjc.co.kr/holdings/ 여기야」 → 안에 「응 통일해」) ──
+   켠 지표 · 이평 끄기 · 칸 높이 · 세로 폭은 브라우저가 주소(출처)마다 따로 기억해서, 같은 코드여도 8765 · 세션 포트가 재권님 화면과
+   다르게 보였다(그날 8770 은 RSI 칸 110 · 8765 는 60). 그래서 보드 보관함 문서 하나(MEM_DOC)에 둔다 — 8764 · 8765 · 세션 포트가
+   같은 보관함을 쓴다(11-10 /api/board/health 로 잼). **쓰는 곳은 기준 화면(MEM_WRITER) 하나** — 다른 곳은 읽어 똑같이 그리기만 한다.
+   거기서 바꾼 것은 그 브라우저에만 남았다가 다시 열면 기준값으로 돌아간다(세션 시험 · 헤드리스 도구가 기준값을 못 바꾸게).
+   보관함을 못 읽으면 브라우저에 남은 값으로 그린다. 기준 화면도 처음에 읽는다 — 맥북 · 맥미니가 같은 값을 보게 */
+const MEM_DOC = '/api/board/doc/chart-view';
+const MEM_WRITER = ['thekjc.co.kr'];
+const MEM_KEYS = [IND_ON_KEY, IND_SEEN_KEY, MA_OFF_KEY, PANE_H_KEY, V_SPAN_KEY];
+const MEM_PUSH_MS = 800;          // 끌기 · 누르기를 모아 한 번 보낸다(그리기 쪽 지연 — 서버를 다시 묻는 주기가 아니다)
+const _memSync = new Set();       // 보관함 값으로 바뀌면 차트를 다시 짓는다
+const memWriter = (() => { try { return MEM_WRITER.includes(location.hostname); } catch { return false; } })();
+let memLoaded = false, memSent = null, memTimer = null;
+
+function memSnap() {
+  const o = {};
+  MEM_KEYS.forEach((k) => {
+    try { const raw = localStorage.getItem(k); if (raw != null) o[k] = JSON.parse(raw); } catch { /* 깨진 값은 뺀다 */ }
+  });
+  return o;
+}
+function memPush() {
+  if (!memWriter || !memLoaded) return;          // 읽기 전에 쓰면 다른 기기 값을 옛 값으로 덮는다
+  clearTimeout(memTimer);
+  memTimer = setTimeout(() => {
+    const data = memSnap();
+    const body = JSON.stringify(data);
+    if (body === memSent) return;
+    memSent = body;
+    apiFetch(MEM_DOC, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ data }) })
+      .catch(() => { memSent = null; });
+  }, MEM_PUSH_MS);
+}
+function memApply(data) {
+  if (JSON.stringify(memSnap()) === JSON.stringify(data)) return;   // 같으면 다시 안 짓는다(깜빡임)
+  MEM_KEYS.forEach((k) => {
+    try {
+      if (data[k] == null) localStorage.removeItem(k);
+      else localStorage.setItem(k, JSON.stringify(data[k]));
+    } catch { /* 저장 못 씀 — 이번 화면만 */ }
+  });
+  _indOn = null; _paneH = null; _vSpan = null; _maOff = null;
+  _memSync.forEach((fn) => fn());
+  _indSync.forEach((fn) => fn());
+  _legendSync.forEach((fn) => fn());
+}
+(async () => {
+  try {
+    const r = await apiFetch(MEM_DOC, { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    if (!j || !j.ok) return;
+    if (j.data && typeof j.data === 'object') { memSent = JSON.stringify(j.data); memApply(j.data); }
+    memLoaded = true;
+    if (!j.data) memPush();                       // 보관함이 비었으면 기준 화면의 브라우저 값을 올린다
+  } catch { /* 못 읽음 — 브라우저 값으로 그린다 */ }
+})();
 
 /* 차트 밖(패널 머리·차트 아래 줄)에 뿌려 둔 maLegend 도 함께 흐려 준다.
    그리는 곳이 달라 한 번에 못 고치므로 DOM 에서 찾아 맞춘다 */

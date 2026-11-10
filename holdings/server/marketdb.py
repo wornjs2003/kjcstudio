@@ -38,6 +38,7 @@
 """
 
 import os
+import re
 import sqlite3
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -62,6 +63,38 @@ def writable():
     return not READONLY
 
 
+# 표를 만들고 고치는 글(CREATE · ALTER · DROP)이 머리에 오는지 — 주석 줄은 건너뛰고 본다
+_DDL = re.compile(r"^\s*(?:--[^\n]*\n\s*)*(CREATE|ALTER|DROP)\b", re.I)
+
+
+def _is_ddl(sql):
+    return bool(_DDL.match(sql or ""))
+
+
+class _ReadOnlyConn(sqlite3.Connection):
+    """읽기 전용 서버의 연결 — **표 만들기 · 고치기를 하지 않고 넘긴다** (2026-11-10 재권님 「응」 · 작업우선순위 배분).
+
+    모듈마다 서버가 뜰 때 · 부를 때 「CREATE TABLE IF NOT EXISTS」 · 「ALTER TABLE … ADD COLUMN」 을 돈다. 쓰는 서버(8765)는 그것이 맞지만
+    읽기 전용 서버(8764 · 8767 · 세션)에서는 표가 이미 있으면 아무 일도 없고, **없거나 칸이 모자라면 「attempt to write a readonly
+    database」 로 터져** 그 뒤 읽기까지 멈췄다 — 같은 날 두 번(6420cd3 예상가 표 · 04441ae 넥장 보드 main_vol). 모듈마다 막으면 다음 새 표에서
+    또 빠지므로 연결 한 곳에서 넘긴다. 표 · 칸이 없어 읽기가 실패하는 것은 그 자리에서 「없음」 으로 낸다(kis_proxy 오류 응답 · 각 읽기 길)."""
+    def execute(self, sql, *a):
+        if _is_ddl(sql):
+            return super().execute("SELECT 0 WHERE 0")
+        return super().execute(sql, *a)
+
+    def executemany(self, sql, *a):
+        if _is_ddl(sql):
+            return super().execute("SELECT 0 WHERE 0")
+        return super().executemany(sql, *a)
+
+    def executescript(self, script):
+        parts = [x for x in (script or "").split(";") if x.strip()]
+        if parts and all(_is_ddl(x) for x in parts):
+            return super().execute("SELECT 0 WHERE 0")
+        return super().executescript(script)
+
+
 def connect(timeout=10):
     """`market.db` 를 연다. 읽기 전용 서버면 `mode=ro` 로 연다.
 
@@ -71,7 +104,7 @@ def connect(timeout=10):
     """
     if READONLY:
         conn = sqlite3.connect(
-            "file:%s?mode=ro" % DB_PATH, uri=True, timeout=timeout)
+            "file:%s?mode=ro" % DB_PATH, uri=True, timeout=timeout, factory=_ReadOnlyConn)
     else:
         conn = sqlite3.connect(DB_PATH, timeout=timeout)
         _ensure_journal(conn)

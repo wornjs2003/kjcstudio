@@ -167,6 +167,16 @@ export function mountClaudeRail() {
   fab.addEventListener('click', () => set(true));
   panel.querySelector('.kh-rail-x').addEventListener('click', () => set(false));
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && open && !document.querySelector('.kh-veil')) set(false); });
+  /* 창 밖 본문을 누르면 접는다 — 누른 자리의 일(종목 고르기 등)도 그대로 한다(막지 않는다) · 좁은 폭도 같다
+     (2026-11-10 재권님 「클로드화면 말고 메인화면 아무데나 클릭하면 클로드 접히게」 → 「둘다 접기해」).
+     안 접는 것 — 창 · 세로 줄 아이콘 · 둥근 단추 안 · 모달(가림막 .kh-veil)이 떠 있을 때(그 클릭은 모달 일) · 설명 풍선(.gl-tip) 안 */
+  document.addEventListener('click', (e) => {
+    if (!open || document.querySelector('.kh-veil')) return;
+    const t = e.target;
+    if (!(t instanceof Element) || !t.isConnected) return;     // 누른 뒤 그 칸이 다시 그려져 빠졌으면 어디였는지 모른다 — 안 접는다
+    if (panel.contains(t) || bar.contains(t) || fab.contains(t) || t.closest('.gl-tip')) return;
+    set(false);
+  });
   wide.addEventListener('change', apply);
   apply();
 }

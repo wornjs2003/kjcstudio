@@ -19,6 +19,10 @@
        차트     종목은 날마다 순매수 금액 막대 + 쌓은 선(일봉만 · 11-05) · 코스피 · 코스닥은 분 · 일 · 월봉 +
                 아래 그 종목의 개인 · 외국인 · 기관 양쪽 막대.
                 기간은 **점선 네모로 고른 구간**, 안 골랐으면 **차트에 보이는 구간**이다
+       1분 흐름 오늘 장중 1분마다 코스피 투자자 갈래 누계 선 + 분마다 표 — 개인 · 외국인 · 기관계 · 기타법인 + 기관 안 여덟.
+                누계 칸을 누르면 선을 켜고 끈다(2026-11-04 재권님 「투자자지표 모달에다가 연결 · 실시간」 → 시안 「응 그렇게 해줘」)
+       날마다 수급  날짜를 세로로(새 날이 위 · 맨 위 「오늘 · 장중 잠정」) · 가로는 지수 등락률 → 투자자 갈래(서버 groups 순서 · 세부는 머리 글자 옅게) ·
+                코스피 · 코스닥 칩 · 억원 (2026-11-05 재권님 「날짜 쌓는걸 가로로 하지말고 세로로」 → 「투자자 지표 모달에 들어가야」 · 시황분석 · 작업우선순위 경유)
        매매 동향  외국인 · 기관 순매수 순위(가집계 · 코스피 · 코스닥 합쳐 100까지) · 「특이 매수」 = 전일 순매도 → 오늘 순매수 「전환」 강도 순 ·
                 날짜를 고르면 그날 남긴 판(2026-11-06 재권님 사진 「이거 만들고 싶어」 → (가) 외국인 · 기관 먼저 · 「순차로 해줘」)
        당일     오늘 장중 5분마다 — 코스피 외국인 · 기관 · 개인 · 코스피 프로그램 · 고른 종목 프로그램의 매수 · 매도 · 순매수(막대 + 표) ·
@@ -37,6 +41,8 @@
        투자자            /api/kis/investor?code=&span=60 — net · netAmt(백만원) · buyAmt · sellAmt(백만원)
                          매수 · 매도 금액이 없는 줄(옛 서버)은 수량 × 종가로 어림하고 「어림」 이라 적는다
        차트              /api/kis/chart · /api/kis/index-candles · /api/kis/index-minutes
+       날마다 수급       /api/kis/flow-board?days=20 의 days(확정치) · today.net(코스피 장중 잠정)
+       1분 흐름          /api/kis/flow-board?days=1&step=1 의 today(server/flow_board.py · 장중 잠정 · 코스피만)
        매매 동향         /api/kis/flow-rank?who=&day=(server/flow_rank.py) — 다시 묻는 주기는 서버 값(kis_proxy.INVESTOR_TOP_TTL)
        당일              /api/kis/flow-today?code=&step=5(서버가 1분마다 쌓은 것 · server/intraday_flow.py) · investor-estimate ·
                          investor-member · investor?span=5 의 instDetail(확정치 · 15:40 뒤) — 다시 묻는 주기는 서버 값(intraday_flow.CACHE_TTL)
@@ -151,7 +157,7 @@ const mmdd = (d) => (d ? `${d.slice(4, 6)}-${d.slice(6, 8)}` : '');
 /** 열 곳: 투자자 정보 칸의 「자세히 ›」 — code 는 그 칸이 보던 종목 */
 export function openInvestorModal({ code } = {}) {
   ensureCss();
-  const st = { tab: 'graph', trWho: 'foreign', trView: 'actor', trDay: '', side: 'foreign', days: 'today', mkt: 'ALL', target: code || '005930', names: {},
+  const st = { tab: 'graph', trWho: 'foreign', trView: 'actor', trDay: '', fdMkt: 'KOSPI', side: 'foreign', days: 'today', mkt: 'ALL', target: code || '005930', names: {},
     period: 'D', box: null };
   let chart = null, series = null, bars = [], main = null, flowWatch = null;
 
@@ -168,7 +174,7 @@ export function openInvestorModal({ code } = {}) {
       icon: '수',
       name: '투자자 지표',
       sub: '한국투자증권 확정치',
-      tabs: [{ id: 'graph', label: '그래프' }, { id: 'chart', label: '차트' }, { id: 'today', label: '당일' }, { id: 'trend', label: '매매 동향' }],
+      tabs: [{ id: 'graph', label: '그래프' }, { id: 'chart', label: '차트' }, { id: 'today', label: '당일' }, { id: 'flow1m', label: '1분 흐름' }, { id: 'flowday', label: '날마다 수급' }, { id: 'trend', label: '매매 동향' }],
       tab: st.tab,
       tabsNote: rankCard ? '오른쪽 ▶ 실시간 순위에서 종목을 누르면 차트가 그 종목으로' : '',
       onTab: (id) => { st.tab = id; paint(); },
@@ -707,6 +713,119 @@ export function openInvestorModal({ code } = {}) {
       onChange: () => loadToday(), key: FLOW_KEY, fallbackMs: FLOW_FALLBACK_MS });
   }
 
+  /* ── 1분 흐름 탭 — 코스피 투자자 갈래 1분 누계 ──
+     값은 장중 잠정(확정치와 다르다 — server/flow_board.py 머리). 「없음」 은 null 그대로 「—」 · 선에서도 끊는다 */
+  const F1_ON = new Set(['foreign', 'inst', 'person']);
+  const F1_COLOR = { foreign: '--kh-ind-1', inst: '--kh-ind-2', person: '--kh-ind-3', etcCorp: '--kh-ind-4', scrt: '--kh-ind-5' };
+  let f1 = null;
+  const f1Eok = (mil) => (mil == null ? null : Math.round(mil) / 100);
+  const f1Fmt = (v, d = 1) => { if (v == null) return '—'; const r = Number(v.toFixed(d)) || 0; return `${r > 0 ? '+' : ''}${r.toLocaleString('ko-KR', { maximumFractionDigits: d })}`; };
+  const f1Cls = (v) => signClass(v == null ? v : Number(v.toFixed(1)));
+  const f1Cum = (rows, k) => { let s = 0, any = false; return rows.map((r) => { if (r[k] == null) return any ? s / 100 : null; any = true; s += r[k]; return s / 100; }); };
+  function f1Svg(rows, keys) {
+    if (!rows.length) return `<div class="kh-ivt-empty">${flowEmpty}</div>`;
+    const W = 1000, H = 260, P = 52;
+    const ser = keys.map((k) => ({ k, v: f1Cum(rows, k) }));
+    const all = ser.flatMap((x) => x.v).filter((v) => v != null);
+    const lo = Math.min(0, ...all), hi = Math.max(0, ...all), n = Math.max(rows.length - 1, 1);
+    const x = (i) => P + (W - P - 12) * i / n, y = (v) => 6 + (H - 30) * (hi - v) / ((hi - lo) || 1);
+    const t = (tx, ty, a, txt) => `<text x="${tx}" y="${ty}" text-anchor="${a}" style="fill:var(--kh-text-secondary);font-size:12px">${txt}</text>`;
+    let g = `<line x1="${P}" x2="${W - 12}" y1="${y(0)}" y2="${y(0)}" style="stroke:var(--kh-border-strong)"/>`;
+    g += [hi, 0, lo].filter((v, i, a) => a.indexOf(v) === i).map((v) => t(P - 6, y(v) + 4, 'end', f1Fmt(v, 0))).join('');
+    g += rows.map((r, i) => (/(00|30)$/.test(r.t) ? t(x(i), H - 4, 'middle', hhmm(r.t)) : '')).join('');
+    for (const sr of ser) {
+      let d = '', pen = false;
+      sr.v.forEach((v, i) => { if (v == null) { pen = false; return; } d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`; pen = true; });
+      g += `<path d="${d}" fill="none" style="stroke:var(${F1_COLOR[sr.k] || '--kh-text-secondary'});stroke-width:2"/>`;
+    }
+    return `<svg class="kh-ivf-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}</svg>`;
+  }
+  function f1Draw() {
+    const box = main.querySelector('.kh-ivf');
+    if (!box || !f1) return;
+    const t = f1.today || {}, rows = t.rows || [];
+    const groups = (f1.groups || []).filter((g) => g.of !== 'foreign');    // 외국인 등록 · 미등록은 장중 칸이 없다
+    const keys = groups.filter((g) => F1_ON.has(g.key)).map((g) => g.key);
+    const last = t.net || {};
+    const tot = (list) => list.map((g) => { const v = f1Eok(last[g.key]), on = F1_ON.has(g.key);
+      return `<button type="button" class="kh-ivf-tot${on ? ' is-on' : ''}" data-k="${g.key}"><span>${on ? `<i style="background:var(${F1_COLOR[g.key] || '--kh-text-secondary'})"></i>` : ''}${esc(g.name)}</span>
+        <b class="${f1Cls(v)}">${v == null ? '—' : `${f1Fmt(v, 0)}억`}</b></button>`; }).join('');
+    const fc = f1Cum(rows, 'foreign');
+    const body = rows.map((r, i) => `<tr><td>${hhmm(r.t)}</td>${groups.map((g) => { const v = f1Eok(r[g.key]);
+      return `<td class="${f1Cls(v)}">${f1Fmt(v)}</td>`; }).join('')}<td class="${f1Cls(fc[i])}">${f1Fmt(fc[i], 0)}</td></tr>`).reverse().join('');
+    box.innerHTML = `
+      <div class="kh-ivf-row">${tot(groups.filter((g) => !g.of))}</div>
+      <div class="kh-ivf-row">${tot(groups.filter((g) => g.of === 'inst'))}</div>
+      ${f1Svg(rows, keys)}
+      <div class="kh-ivt-tb kh-ivf-tb"><table><thead><tr><th>시각</th>${groups.map((g) => `<th>${esc(g.name)}</th>`).join('')}<th>외국인 누계</th></tr></thead>
+        <tbody>${body || `<tr><td colspan="${groups.length + 2}">${flowEmpty}</td></tr>`}</tbody></table></div>
+      <div class="kh-ivt-note">누계 칸을 누르면 선을 켜고 끕니다 · 표는 그 1분 동안 순매수(억원) · 최근이 위</div>`;
+  }
+  async function loadFlow1m() {
+    const r = await getJson('/api/kis/flow-board?days=1&step=1');
+    if (st.tab !== 'flow1m' || !main.querySelector('.kh-ivf')) return;
+    f1 = r && r.data;
+    flowEmpty = !f1 ? FLOW_EMPTY.fail : FLOW_EMPTY.wait;
+    const t = (f1 && f1.today) || {};
+    const asof = main.querySelector('.kh-ivm-asof');
+    if (asof) asof.textContent = `오늘 장중 · 1분마다 · 코스피 · 누계(억원)${t.lastAt ? ` · ${hhmm(t.lastAt)} 까지` : ''}`;
+    if (!f1) { main.querySelector('.kh-ivf').innerHTML = `<div class="kh-ivt-empty">${FLOW_EMPTY.fail}</div>`; return; }
+    f1Draw();
+  }
+  function paintFlow1m() {
+    main.innerHTML = `<div class="kh-ivm-bar-row"><span class="kh-ivm-asof">오늘 장중 · 1분마다 · 코스피</span>
+      <span class="kh-ivm-mut">장중 잠정 — 확정치와 다를 수 있습니다 · 코스피만</span></div><div class="kh-ivf"><span class="kh-ivm-mut">불러오는 중</span></div>`;
+    main.querySelector('.kh-ivf').addEventListener('click', (e) => {
+      const b = e.target.closest('.kh-ivf-tot');
+      if (!b) return;
+      F1_ON.has(b.dataset.k) ? F1_ON.delete(b.dataset.k) : F1_ON.add(b.dataset.k);
+      f1Draw();
+    });
+    loadFlow1m();
+    stopFlow();
+    flowWatch = watch({ url: () => '/api/kis/flow-board?days=1&step=1', onChange: () => loadFlow1m(), key: FLOW_KEY, fallbackMs: FLOW_FALLBACK_MS });
+  }
+
+  /* ── 날마다 수급 탭 — 날짜 세로 · 투자자 갈래 가로 ──
+     days 는 확정치 · 맨 위 오늘 줄만 장중 잠정(코스피만). 「없음」 은 null 그대로 「—」 */
+  const FD_DAYS = 20;
+  let fd = null;
+  const fdEok = (mil) => { if (mil == null) return '<td>—</td>'; const v = Math.round(mil / 100) || 0;
+    return `<td class="${signClass(v)}">${v > 0 ? '+' : ''}${v.toLocaleString('ko-KR')}</td>`; };
+  const fdPct = (n) => (n == null ? '<td>—</td>' : `<td class="${signClass(n)}">${n > 0 ? '+' : ''}${Number(n).toFixed(2)}%</td>`);
+  function fdDraw() {
+    const box = main.querySelector('.kh-ivd');
+    if (!box) return;
+    if (!fd || !Array.isArray(fd.groups) || !fd.days) { box.innerHTML = `<div class="kh-ivt-empty">${FLOW_EMPTY.fail}</div>`; return; }
+    const G = fd.groups, mk = st.fdMkt;
+    const days = (fd.days[mk] || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const t = mk === 'KOSPI' ? fd.today : null;
+    const why = mk === 'KOSPI' ? ((t && t.reason) || '장중 값 없음') : '코스닥 장중 값은 서버가 아직 안 줍니다';
+    const today = `<tr class="kh-ivd-today"><td>오늘 · 장중 잠정${t && t.lastAt ? ` ${hhmm(t.lastAt)}` : ''}</td>${t && t.net
+      ? `<td>—</td>${G.map((g) => fdEok(t.net[g.key])).join('')}` : `<td colspan="${G.length + 1}" class="kh-ivm-mut">${esc(why)}</td>`}</tr>`;
+    const line = (x) => `<tr><td>${fdDate(x.date)}</td>${fdPct(x.indexPct)}${G.map((g) => fdEok((x.net || {})[g.key])).join('')}</tr>`;
+    const err = Object.keys(fd.errors || {}).filter((k) => k.startsWith('days') || k === 'today');
+    box.innerHTML = `<div class="kh-ivt-tb kh-ivd-tb"><table><thead><tr><th>날짜</th><th>지수</th>${G.map((g) => `<th class="${g.of ? 'kh-ivd-sub' : ''}">${esc(g.name)}</th>`).join('')}</tr></thead>
+      <tbody>${today}${days.length ? days.map(line).join('') : `<tr><td colspan="${G.length + 2}">아직 쌓인 날이 없습니다</td></tr>`}</tbody></table></div>
+      <div class="kh-ivt-note">순매수 · 억원 · 새 날이 위 · 옅은 머리는 묶음 안 세부(외국인 안 · 기관계 안)${err.length ? ` · 못 받은 자리 ${esc(err.join(', '))}` : ''}</div>`;
+  }
+  async function loadFlowDay() {
+    const r = await getJson(`/api/kis/flow-board?days=${FD_DAYS}`);
+    if (st.tab !== 'flowday' || !main.querySelector('.kh-ivd')) return;
+    fd = r && r.data;
+    fdDraw();
+  }
+  function paintFlowDay() {
+    main.innerHTML = `<div class="kh-ivm-bar-row">${chips('fdMkt', [['KOSPI', '코스피'], ['KOSDAQ', '코스닥']], st.fdMkt)}
+      <span class="kh-ivm-asof">날마다 투자자별 순매수 · 확정치 · 최근 ${FD_DAYS}거래일</span>
+      <span class="kh-ivm-mut">오늘 줄만 장중 잠정 — 확정치와 다를 수 있습니다</span></div><div class="kh-ivd"><span class="kh-ivm-mut">불러오는 중</span></div>`;
+    bindChips((g, v) => { st[g] = v; main.querySelectorAll('.kh-chips[data-g="fdMkt"] .kh-chip').forEach((b) => b.classList.toggle('is-active', b.dataset.v === v)); fdDraw(); });
+    if (fd) fdDraw();
+    loadFlowDay();
+    stopFlow();
+    flowWatch = watch({ url: () => `/api/kis/flow-board?days=${FD_DAYS}`, onChange: () => loadFlowDay(), key: FLOW_KEY, fallbackMs: FLOW_FALLBACK_MS });
+  }
+
   /* ── 매매 동향 탭 — 외국인 · 기관 순매수 순위 · 특이 매수(전일 순매도 → 오늘 순매수) ──
      오늘은 가집계(증권사 장중 입력 · 하루 네 번) · 전일은 확정치 · 날짜를 고르면 그날 남긴 판. 줄을 누르면 차트 탭이 그 종목 */
   /* 날짜 「MM-DD(요일)」 — 매매 동향 · 날마다 수급이 함께 쓴다 */
@@ -796,10 +915,12 @@ export function openInvestorModal({ code } = {}) {
   }
 
   function paint() {
-    if (st.tab !== 'today' && st.tab !== 'trend') stopFlow();
+    if (st.tab !== 'today' && st.tab !== 'flow1m' && st.tab !== 'flowday' && st.tab !== 'trend') stopFlow();
     if (st.tab !== 'chart') { if (chart) { chart.remove(); chart = null; } }
     if (st.tab === 'graph') paintGraph();
     else if (st.tab === 'today') paintToday();
+    else if (st.tab === 'flow1m') paintFlow1m();
+    else if (st.tab === 'flowday') paintFlowDay();
     else if (st.tab === 'trend') paintTrend();
     else paintChart();
   }

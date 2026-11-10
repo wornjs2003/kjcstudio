@@ -238,3 +238,16 @@ export function fmtUsdBig(v) {
 
 /* 차트 눈금 소수 자리 — 국내 0 · 미국 2 */
 export const priceDigitsOf = (code) => (isUsCode(code) ? 2 : 0);
+
+/* ── 동시호가 예상 체결가 (2026-11-10 재권님 「나」 · 「종가도 해줘」 · 「종목들 다 넣어주고」) ──
+   서버가 장 전(08:30~09:00) · 마감(15:20~15:30) 동시호가 동안만 시세 줄에 expect {kind, price, amt, pct, volume} 를 싣는다
+   (kis_proxy._preopen_expect · _multi_expect). 화면은 그 값을 지금가 자리에 「예상」 과 함께 그린다 — 낱말 · 설명 글은 이 두 함수 한 곳 */
+export function expectTip(ex) {
+  return ex && ex.kind === 'close'
+    ? '장 마감 동시호가 예상 체결가입니다 — 정규장이 닫힐 때 종가로 정해집니다'
+    : '장 전 동시호가 예상 체결가입니다 — 정규장이 열릴 때 시가로 정해집니다';
+}
+/* 「예상」 낱말도 오르내림 색으로(2026-11-10 재권님 「예상도 등락색을 넣어줘」) — 색 셈은 dirClass 그대로 */
+export function expectTag(ex) {
+  return `<i class="${dirClass(ex && ex.pct)}" style="font-style:normal;font-size:.8em;margin-right:3px">예상</i>`;
+}
