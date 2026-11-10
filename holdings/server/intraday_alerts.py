@@ -55,6 +55,8 @@ SESSION_TO = 15 * 60 + 30    # 15:30 — 정규장만(재권님 「정규장만�
 SURGE_PCT = 20.0             # 전일 종가 대비 이 % 이상을 처음 볼 때 (재권님 「20% 이상」)
 PREVIEW_MAX = 40             # 꺼져 있을 때 남겨 둘 글 수
 LIST_KEY = "intraday_today"  # sync_meta — 그날 본 VI · 급등 목록(홈 「오늘 VI · 급등」 칸 · /api/alerts/today)
+CAP_PER_TICK = 5             # 바퀴마다 시총을 받을 종목 수 — 그날 목록에 새로 든 종목만 · 종목당 하루 한 번(현재가 조회 · 재권님 「가」 11-10)
+CAP_TRIES = 3                # 못 받은 종목은 이만큼만 다시 묻는다 — 그 뒤로는 「cap 없음」 그대로
 LIST_MAX = 600               # 그날 목록에 남길 줄 수 — 넘으면 오래된 것부터 뺀다(VI 가 많은 날 첫 오전 103통 · 10-27)
 
 VI_PATH = "/uapi/domestic-stock/v1/quotations/inquire-vi-status"
@@ -72,6 +74,7 @@ _seen = {k: set() for k in SEND}   # vi: (코드, 발동 시각) · surge: 코�
 _baseline_done = False             # 뜬 뒤 첫 목록을 「보낸 것」 으로 쳤나 (「가」)
 _list = {"day": None, "items": []}  # 그날 본 것 — 보내기와 따로 **개발 DB 에 남긴다**(재권님 11-06 「응 해봐」 · 재시작에도 안 비게)
 _list_keys = set()
+_cap_tried = {}                     # 종목코드 → 시총을 물은 횟수 — 그날 것만
 
 
 def _in_session(now):
@@ -259,6 +262,41 @@ def _list_save(now):
                                         "savedAt": now.isoformat(timespec="seconds")}, ensure_ascii=False))
 
 
+def _fill_caps(proxy):
+    """그날 목록에서 시총(`cap` · 억원 · KIS `hts_avls`)이 없는 종목을 바퀴마다 `CAP_PER_TICK` 개까지 현재가 조회로 채운다.
+
+    홈 「VI · 급등」 칸 둘째 줄이 읽는다 — 화면이 이미 받는 순위 목록(350종목)에는 VI 종목이 거의 없어서다(11-10 · 208 중 12).
+    같은 종목은 하루 한 번만 묻는다 — 이미 받은 종목이 다시 뜨면 앞 줄 값을 옮겨 적는다.
+    못 받으면 `cap` 칸을 안 만든다(0 으로 적지 않는다) · `CAP_TRIES` 번까지 다시 묻는다."""
+    items = _list["items"]
+    known = {it["code"]: it["cap"] for it in items if it.get("cap") is not None}
+    need = []
+    for it in items:
+        c = it.get("code")
+        if not c or it.get("cap") is not None:
+            continue
+        if c in known:
+            it["cap"] = known[c]
+            _list["dirty"] = True
+        elif c not in need and _cap_tried.get(c, 0) < CAP_TRIES:
+            need.append(c)
+    if not need:
+        return
+    cfg = proxy.load_secrets()
+    for c in need[:CAP_PER_TICK]:
+        _cap_tried[c] = _cap_tried.get(c, 0) + 1
+        try:
+            cap = (proxy.fetch_price(cfg, c) or {}).get("marketCap")
+        except Exception:
+            cap = None
+        if cap is None:
+            continue
+        for it in items:
+            if it.get("code") == c:
+                it["cap"] = cap
+        _list["dirty"] = True
+
+
 def today():
     """`/api/alerts/today` — 그날 본 VI · 급등을 **최신이 위**로. 어느 서버든 DB 를 읽는다.
 
@@ -308,6 +346,7 @@ def tick(proxy, now=None):
         _status["preview"] = {k: [] for k in SEND}
         for s in _seen.values():
             s.clear()
+        _cap_tried.clear()
     if _list["day"] != day:
         _list_load(day)
     baseline = not _baseline_done
@@ -324,6 +363,10 @@ def tick(proxy, now=None):
         if not baseline:
             _emit(kind, lines, full and not baseline, now)
     _baseline_done = True            # 「가」 — 뜬 뒤 첫 목록은 보낸 것으로 친다
+    try:
+        _fill_caps(proxy)
+    except Exception as e:
+        errors.append("시총 %s: %s" % (type(e).__name__, safe_message(e, 80)))
     _list_save(now)
     if errors:
         raise RuntimeError(" · ".join(errors))
