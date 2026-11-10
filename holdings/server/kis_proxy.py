@@ -2955,6 +2955,7 @@ FO_SNAP_TTL = 300                     # 장중(파생 주간 08:45~15:45) 받은
 FO_SNAP_TTL_CLOSED = 600              # 장 밖
 FO_SNAP_PUTS = 5                      # 종목마다 현재가에 가까운 행사가 몇 줄 — 콜 · 풋 각각
 FO_SNAP_K200_SIDE = 5                 # 코스피200 등가격 위아래 행사가 몇 칸씩(콜 · 풋 각각 2×이것+1 줄)
+FO_SNAP_WORKERS = 4                   # 옵션 시세를 몇 건씩 한꺼번에 묻나 — 하나씩이면 첫 부름이 20초를 넘었다(11-10 8767 · 창구 잼)
 _fo_snap = {}                         # 열쇠 → (시각, 값)
 _fo_snap_lock = threading.Lock()
 
@@ -3003,6 +3004,15 @@ def _fo_quote(cfg, div, code):
     return row, _num(o3.get("bstp_nmix_prpr"), float)       # 뒤 값 = 코스피200 지수(11-10 잼 814.31)
 
 
+def _fo_quotes(cfg, div, codes):
+    """여러 코드를 FO_SNAP_WORKERS 건씩 한꺼번에 — [(줄, 지수)] 차례 그대로. 호출 수는 하나씩과 같다.
+    ⚠️ 넘어간 스레드는 낮음 표시를 잃어 높음으로 친다(위 PRIO_HEADER 주석) — 5분에 한 번 · 수십 건이라 그대로 둔다."""
+    if not codes:
+        return []
+    with ThreadPoolExecutor(max_workers=FO_SNAP_WORKERS) as ex:
+        return list(ex.map(lambda c: _fo_quote(cfg, div, c), codes))
+
+
 def _fo_front(opts, kind):
     """가장 가까운 달(지금 달 이후) 월물."""
     months = sorted(m for (k, m) in opts if k == kind and m >= datetime.now(KST).strftime("%Y%m"))
@@ -3029,11 +3039,10 @@ def _fo_snap_stock(cfg, code):
         if not (month and fut and (kind, month) in opts):
             side[kind] = None
             continue
-        near = sorted(opts[(kind, month)], key=lambda x: abs(x[0] - fut["price"]))[:FO_SNAP_PUTS]
-        side[kind] = []
-        for strike, ocode in sorted(near):
-            row, _ = _fo_quote(cfg, "JO", ocode)
-            side[kind].append(dict(row or {"code": ocode, "price": None}, strike=strike))
+        near = sorted(sorted(opts[(kind, month)], key=lambda x: abs(x[0] - fut["price"]))[:FO_SNAP_PUTS])
+        got = _fo_quotes(cfg, "JO", [c for _, c in near])
+        side[kind] = [dict(row or {"code": ocode, "price": None}, strike=strike)
+                      for (strike, ocode), (row, _) in zip(near, got)]
     return {"name": name, "futures": fut, "calls": side["C"], "puts": side["P"], "putMonth": month, "optionMonth": month,
             "putNote": "행사가는 선물 현재가에 가까운 %d줄 — 콜 · 풋 각각" % FO_SNAP_PUTS if side["P"] else None}
 
@@ -3053,8 +3062,9 @@ def _fo_snap_k200(cfg):
     sums = {"C": [0, 0, 0], "P": [0, 0, 0]}                 # 거래량 · 미결제 · 못 받은 줄
     for kind in ("C", "P"):
         codes = dict(opts[(kind, month)])
+        got = dict(zip([s for s in pick if s in codes], _fo_quotes(cfg, "O", [codes[s] for s in pick if s in codes])))
         for s in pick:
-            row, _ = _fo_quote(cfg, "O", codes[s]) if s in codes else (None, None)
+            row, _ = got.get(s, (None, None))
             if row and row["volume"] is not None and row["openInterest"] is not None:
                 sums[kind][0] += row["volume"]
                 sums[kind][1] += row["openInterest"]
