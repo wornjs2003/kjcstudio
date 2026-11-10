@@ -4405,6 +4405,9 @@ def fetch_asking(cfg, code):
     """
     cached = _ttl_get(_asking_cache, code, ASKING_TTL)
     if cached is not None:
+        ex = cached.get("expect")
+        if ex and market_hours.auction(sys.modules[__name__]) != ex.get("kind"):
+            return dict(cached, expect=None)   # 09:00 · 15:30 이 지나면 받아 둔 예상가를 바로 뗀다 — 시가 · 종가로(재권님 「시가가 되면 바로 시가로」)
         return cached
     data = kis_get(
         cfg,

@@ -2507,8 +2507,8 @@ function paintRows(priceMap) {
       <td class="l"><span class="kh-nm">
         ${iconHtml(s)}
         <b data-co="${s.code}">${market === 'THEME' ? escT(s.name) : s.name}</b>${market === 'THEME' ? themeBadge(s.code) : sectorTag(s.code)}</span></td>
-      <td class="kh-num"><span${expectOf(live, sid) ? ` data-tip="${expectTip(live.expect)}"` : ''}
-        >${live ? (expectOf(live, sid) ? expectTag() : '') + fmtPriceOf(s.code, priceOf(live, sid)) : '···'}</span></td>
+      <td class="kh-num"><span${expectOf(live, sid) ? ` class="${dirClass(live.expect.pct)}" data-tip="${expectTip(live.expect)}"` : ''}
+        >${live ? (expectOf(live, sid) ? expectTag(live.expect) : '') + fmtPriceOf(s.code, priceOf(live, sid)) : '···'}</span></td>
       <td class="kh-num kh-metric">${sortCell(s.code, live)}</td>
       <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(pctOf(live, sid)) : '—'}</td>
     </tr>`;
@@ -2827,7 +2827,7 @@ function paintOneRow(code, live) {
     const cls = dirClass(pctOf(live));
     const ex = expectOf(live);
     tr.children[2].innerHTML =
-      `<span${ex ? ` data-tip="${expectTip(ex)}"` : ''}>${ex ? expectTag() : ''}${fmtPriceOf(code, priceOf(live))}</span>`;
+      `<span${ex ? ` class="${dirClass(ex.pct)}" data-tip="${expectTip(ex)}"` : ''}>${ex ? expectTag(ex) : ''}${fmtPriceOf(code, priceOf(live))}</span>`;   // 예상가는 오르내림 색
     /* 「전일대비」 자리에는 지금 줄 세운 기준값이 온다. 오르내림이 아니라
        크기라서 등락 색을 입히지 않는다. */
     tr.children[3].className = 'kh-num kh-metric';

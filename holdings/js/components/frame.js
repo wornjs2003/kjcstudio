@@ -183,8 +183,8 @@ export function mountWatchSide(el, { activeCode } = {}) {
       const cls = dirClass(q.pct);
       const v = row.querySelector('.kh-wl-v');
       const c = row.querySelector('.kh-wl-c');
-      v.className = 'kh-num kh-wl-v';
-      if (ex) { v.innerHTML = expectTag() + fmtWon(ex.price); v.dataset.tip = expectTip(ex); }
+      v.className = 'kh-num kh-wl-v' + (ex ? ' ' + cls : '');      // 예상가는 값도 오르내림 색(재권님 「예상도 등락색을 넣어줘」)
+      if (ex) { v.innerHTML = expectTag(ex) + fmtWon(ex.price); v.dataset.tip = expectTip(ex); }
       else { v.textContent = fmtWon(live.price); delete v.dataset.tip; }
       c.className = 'kh-wl-c kh-num ' + cls;
       /* 등락금액을 등락률 앞에 (2026-09-14 지시). 순위표와 같은 표기다. */
