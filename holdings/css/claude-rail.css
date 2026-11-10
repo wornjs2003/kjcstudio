@@ -9,7 +9,7 @@
    메뉴 줄(nav.css · 함께 쓰는 파일)은 안 건드린다 — 줄은 메뉴 줄 아래에서 시작한다.
    ========================================================================== */
 
-:root { --kh-rail-bar: 52px; --kh-rail-panel: 360px; }
+:root { --kh-rail-bar: 52px; --kh-rail-panel: 540px; }   /* 창 폭 360 → 540(1.5배 · 2026-11-10 재권님 「클로드창 옆으로 지금보다 50% 늘려줘」) */
 
 .kh-rail-fab {
   position: fixed; right: 16px; bottom: 20px; z-index: 70;
