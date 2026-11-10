@@ -41,6 +41,9 @@ export function tone(id, v) {
   }
   if (v == null || !Number.isFinite(+v)) return { side: null, k: 0 };
   const d = +v - it.base;
+  // 비슷함 폭 — 항목에 flat 이 있으면 기준 ± flat 안(경계 포함)은 색 없음(2026-11-10 재권님 「비슷하면 검정」 · 거래량 전날 대비 95~105%).
+  // 폭 밖의 짙기는 그대로 기준에서 잰다. flat 칸이 없는 지표는 전과 같다
+  if (it.flat > 0 && Math.abs(d) <= it.flat) return { side: 'flat', k: 0 };
   return { side: side(d), k: Math.min(Math.abs(d) / it.full, 1) };   // 방향은 sign.js 한 곳(2026-10-15)
 }
 
