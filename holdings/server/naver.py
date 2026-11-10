@@ -34,6 +34,7 @@ import re
 import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -94,6 +95,25 @@ def _get(url):
     req = urllib.request.Request(url, headers=HEADERS)
     with urllib.request.urlopen(req, timeout=15) as r:
         return json.loads(r.read().decode("utf-8"))
+
+
+# 해외 지수 일봉 — 일본 · 중국 · 대만 · 인도 · 독일 (2026-11-10 재권님 「받아오는게 있으면 이걸 홀딩스에서 받아오게 하고 인사이트에서는
+# 그 값을 가져다 쓰는방향으로 해줘」). KIS 해외지수에는 이 나라들이 없다(kis_proxy.py OVERSEAS_DEFS 주석 · 2026-09-17 훑음).
+# 주소는 Insight 조사 표(company-setup/analysis.html 「일본(니케이 · 토픽스) · 중국 본토 …」 줄)에 「받힘」 으로 적혀 있던 것 —
+# 비공식이다. 한 번에 약 다섯 달(2026-11-10 16:4x 잼 · 다섯 다 110줄).
+FOREIGN_INDEX_URL = "https://api.stock.naver.com/chart/foreign/index/%s?periodType=dayCandle"
+
+
+def foreign_index_daily(symbol):
+    """네이버 해외 지수 일봉 — [{date, open, high, low, close}] 옛것부터. 종가가 없는 줄은 뺀다(0 으로 두지 않는다)."""
+    j = _get(FOREIGN_INDEX_URL % urllib.parse.quote(symbol))
+    rows = []
+    for r in (j or {}).get("priceInfos") or []:
+        d, c = str(r.get("localDate") or ""), _num(r.get("closePrice"))
+        if len(d) == 8 and d.isdigit() and c:
+            rows.append({"date": d, "open": _num(r.get("openPrice")), "high": _num(r.get("highPrice")),
+                         "low": _num(r.get("lowPrice")), "close": c})
+    return sorted(rows, key=lambda b: b["date"])
 
 
 def _cached(key, make):

@@ -52,7 +52,7 @@ import { lookupStock } from './data/lookup-stock.js';
 import { INDEX_CELLS, stripHtml, patchStrip } from './components/index-strip.js';
 import { loadIndicators, peekIndicators, loadIndicator, peekIndicator, chipsHtml, headOf,
          drawIndicator, MK_TERM, loadMaterials, peekMaterials, materialsShell,
-         paintMaterials, loadCrypto, CRYPTO_CHIP } from './components/market-index.js';
+         paintMaterials, loadCrypto, CRYPTO_CHIP, IX_KEY } from './components/market-index.js';
 import { everyServerMs, serverData } from './store/timing.js';
 import { watch } from './store/longpoll.js';
 import { sectorShort } from './data/sector-short.js';
@@ -232,7 +232,7 @@ function paintStrip(indices) {
     }
     return;
   }
-  if (top) patchStrip(top, stripHtml(indices));      // 달라진 조각만 — 국기를 다시 그리지 않는다(index-strip.js patchStrip)
+  if (top) patchStrip(top, stripHtml(indices, INDEX_CELLS));      // 달라진 조각만 — 국기를 다시 그리지 않는다(index-strip.js patchStrip)
   paintIxFilter();
 }
 
@@ -244,7 +244,7 @@ function paintStrip(indices) {
      기타  WTI 원유 · 금               (배지 oil · au)
 
    무리는 칸 앞의 표시로 가른다. 목록을 따로 두면 INDEX_CELLS 와 두 곳이 된다. */
-const IX_GROUP = { kr: 'kr', us: 'us', vix: 'us', eu: 'ov', hk: 'ov', oil: 'etc', au: 'etc' };
+const IX_GROUP = { kr: 'kr', us: 'us', vix: 'us', eu: 'ov', hk: 'ov', jp: 'ov', cn: 'ov', tw: 'ov', in: 'ov', de: 'ov', oil: 'etc', au: 'etc' };
 
 /* 갈래 띠의 낱말 → 어느 무리를 보여줄지 (2026-09-22 지시).
  *
@@ -268,6 +268,8 @@ const CAT_IX = {
 
 let ixCat = '홈';
 const MK_CAT = '시장 흐름';                 // 갈래 줄 낱말 — index.html 의 그 링크 글자와 같아야 한다(낱말로 건다)
+const OV_CAT = '국외';                      // 〃 — 누르면 큰 차트가 국외 첫 지수(2026-11-10 재권님 「응 그렇게 해줘」)
+let mkAuto = false;                         // 「시장 흐름」 에 막 들어왔는데 칩이 아직 안 왔다 — 오면 첫 칩을 큰 차트에
 
 function ixGroupOf(cell) {
   if (cell.icon === 'kr' || cell.icon === 'us') return cell.icon;
@@ -291,7 +293,9 @@ function paintIxFilter() {
   const want = CAT_IX[ixCat];
   [...host.children].forEach((el, i) => {
     const cell = INDEX_CELLS[i];
-    el.hidden = !cell ? true : (want ? !want.includes(ixGroupOf(cell)) : false);
+    /* more 칸(네이버 나라 지수)은 「국외」 에서만 — 홈 띠는 전과 같다(index-strip.js INDEX_CELLS 주석) */
+    el.hidden = !cell ? true : (want ? !want.includes(ixGroupOf(cell)) : !!cell.more);
+    el.classList.toggle('is-on', !!cell && mkKey === IX_KEY + cell.code);      // 큰 차트에 띄운 지수 — 값이 바뀌어 다시 그려도 남게
   });
   syncIxNav();
 }
@@ -313,11 +317,24 @@ function setupCatFilter() {
       leaveMkSide();
       leaveMarket();                                        // 다른 갈래로 — 큰 차트는 종목으로 돌아간다
       const top = $('kh-top-ix');
-      if (top && lastIndices) top.innerHTML = stripHtml(lastIndices);
+      if (top && lastIndices) top.innerHTML = stripHtml(lastIndices, INDEX_CELLS);
     }
+    /* 「국외」 · 「시장 흐름」 을 누르면 큰 차트가 그 갈래 첫 칸으로 — 국외는 첫 지수 · 시장 흐름은 첫 칩
+       (2026-11-10 재권님 「국외랑 시장흐름 클릭했을때 해당 관련 종목이 차트에 보여지게」 → 안에 「응 그렇게 해줘」).
+       다른 갈래로 나가면 종목 차트로 돌아간다(시장 흐름과 같은 길) */
+    if (was === OV_CAT && ixCat !== OV_CAT && ixCat !== MK_CAT) leaveMarket();
     paintIxFilter();
     paintHeatmap();
     syncMarketGroup();
+    if (ixCat === OV_CAT && was !== OV_CAT) {
+      const first = INDEX_CELLS.find((c) => ixGroupOf(c) === 'ov');
+      if (first) showMarket(IX_KEY + first.code);
+    }
+    if (ixCat === MK_CAT && was !== MK_CAT) {
+      const first = ((peekIndicators() || {}).items || [])[0];
+      if (first) showMarket(first.key);
+      else mkAuto = true;                                   // paintMkChips 가 칩을 받은 뒤 띄운다
+    }
   }));
 }
 
@@ -351,6 +368,15 @@ const MK_LOCK = ['.kh-idx-head', '#kh-big-foot'];
 
 /* 원/달러 칩은 지수띠(「미국 USD」 · KIS)와 같은 값 · 등락으로 — 홀딩스 안에서 같은 값이 둘로 갈렸다(지수띠 KIS · 칩 네이버 ·
    2026-10-14 재권님 「응 해줘」). 지수띠 코드 USDKRW ↔ 시장지표 key usdkrw 한 쌍만 잇는다. 큰 차트의 지난 일봉은 그대로 네이버 */
+/* 지수(ix:)를 큰 차트에 띄웠을 때 머리 값 · 등락을 띠 칸과 같게 — 일봉 끝은 어제 종가일 수 있다 */
+function ixLive(key) {
+  if (!String(key).startsWith(IX_KEY)) return null;
+  const x = (lastIndices || []).find((i) => i.code === key.slice(IX_KEY.length));
+  if (!x || x.value == null) return null;
+  const d = x.asOf ? `${x.asOf.slice(0, 4)}-${x.asOf.slice(4, 6)}-${x.asOf.slice(6, 8)}` : null;
+  return { last: { d, c: x.value }, prev: x.change == null ? null : { d: null, c: x.value - x.change } };
+}
+
 function mkLive() {
   const fx = (lastIndices || []).find((x) => x.code === 'USDKRW');
   if (!fx || fx.value == null) return {};
@@ -381,8 +407,9 @@ async function paintMkChips() {
   syncIxNav();
   try {
     const j = await loadIndicators();
-    if (ixCat !== MK_CAT) return;
+    if (ixCat !== MK_CAT) { mkAuto = false; return; }
     host.innerHTML = chipsHtml(j, mkKey, mkLive());
+    if (mkAuto) { mkAuto = false; if ((j.items || [])[0]) showMarket(j.items[0].key); }
   } catch {
     if (ixCat !== MK_CAT || had) return;
     host.innerHTML = `<div class="kh-ix"><div class="kh-ix-h"><span class="kh-ix-n">${MK_CAT}</span></div>`
@@ -415,6 +442,8 @@ async function showMarket(key) {
   mkKey = key;
   document.querySelectorAll('#kh-top-ix .kh-ix[data-mk]').forEach((el) =>
     el.classList.toggle('is-on', el.dataset.mk === key));
+  document.querySelectorAll('#kh-top-ix .kh-ix[data-ix]').forEach((el) =>
+    el.classList.toggle('is-on', IX_KEY + el.dataset.ix === key));
   if (mkSide) mkSide.querySelectorAll('tr[data-mat-key]').forEach((tr) =>      // 재료 칸 줄도 같은 표시(칩을 눌러도 줄 표시가 남지 않게)
     tr.classList.toggle('is-active', tr.dataset.matKey === key));
   setMkHidden(true);
@@ -433,7 +462,7 @@ async function showMarket(key) {
     if (mkWant !== key || mkKey !== key) return;
   }
   const chip = ((peekIndicators() || { items: [] }).items || []).find((x) => x.key === key) || matNow(key);
-  const h = headOf(j, mkLive()[key] || chip || null);      // 머리 값은 칩과 같게
+  const h = headOf(j, mkLive()[key] || ixLive(key) || chip || null);      // 머리 값은 칩 · 띠 칸과 같게
   const name = $('kh-idx-name'), v = $('kh-big-v'), yr = $('kh-year-range');
   const per = $('kh-idx-per'), foot = $('kh-big-foot'), host = $('kh-big-chart');
   if (name) { name.textContent = h.name; setMkTerm(MK_TERM[key]); }
@@ -560,6 +589,11 @@ function setupMarketChips() {
   const host = $('kh-top-ix');
   if (!host) return;
   host.addEventListener('click', (e) => {
+    if (ixCat === OV_CAT) {                                 // 국외 띠의 지수 칸 → 그 지수 차트
+      const cell = e.target.closest('.kh-ix[data-ix]');
+      if (cell && cell.dataset.ix) showMarket(IX_KEY + cell.dataset.ix);
+      return;
+    }
     if (ixCat !== MK_CAT) return;
     const chip = e.target.closest('.kh-ix[data-mk]');
     if (chip) showMarket(chip.dataset.mk);
