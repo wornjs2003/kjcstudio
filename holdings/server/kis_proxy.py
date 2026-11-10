@@ -5168,6 +5168,17 @@ def _refresh_index_spans(cfg):
     return got
 
 
+def _db_missing(e):
+    """DB 표 · 칸이 아직 없어 난 오류인가 — 읽기 전용 서버는 표를 만들지 않는다(marketdb._ReadOnlyConn)."""
+    m = str(e)
+    return isinstance(e, sqlite3.OperationalError) and ("no such table" in m or "no such column" in m)
+
+
+# 그때 내는 응답 — 「서버 오류」 가 아니라 「아직 없음」(「못 쟀으면 0 이 아니라 못 쟀다」 · 2026-11-10 재권님 「응」)
+_DB_MISSING_BODY = {"ok": False, "data": None, "missing": True,
+                    "error": "아직 없음 — 이 값을 쌓는 표를 쓰는 서버(8765)가 아직 만들지 않았습니다"}
+
+
 def db_init():
     with _db_lock, db_conn() as conn:
         for sql in SCHEMA:
@@ -9001,6 +9012,9 @@ class Handler(SimpleHTTPRequestHandler):
 
             self._send_json({"ok": False, "error": "알 수 없는 경로입니다: %s" % route}, 404)
         except Exception as e:
+            if _db_missing(e):
+                self._send_json(_DB_MISSING_BODY)
+                return
             self._send_json({"ok": False, "error": "서버 오류: %s" % type(e).__name__}, 500)
 
     def _handle_kis(self):
@@ -9884,6 +9898,9 @@ class Handler(SimpleHTTPRequestHandler):
         except RuntimeError as e:
             self._send_json({"ok": False, "error": safe_message(e)}, 502)
         except Exception as e:  # 예기치 못한 오류도 앱키가 새지 않게 요약만
+            if _db_missing(e):
+                self._send_json(_DB_MISSING_BODY)
+                return
             self._send_json({"ok": False, "error": "서버 오류: %s" % type(e).__name__}, 500)
 
 
