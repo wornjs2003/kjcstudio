@@ -10,7 +10,7 @@ import * as lastSeen from './store/last-seen.js';
 import { fetchCandles, fetchCandlesSince, peekCandles, watchCandles, createStockChart, maLegend,
   addPrevCloseLine, PREV_CLOSE_NOTE,
   savePeriodId, loadPeriodId,
-  chartView, setChartView, chartStockChanged } from './chart.js';
+  chartView, setChartView, chartStockChanged, MINUTE_PERIODS } from './chart.js';
 import { color } from './theme.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount, expectTip, expectTag,
   dirClass, marketPhase, isUsCode, fmtPriceOf, fmtUsdBig, priceDigitsOf, usSessionLabel } from './utils/format.js';
@@ -904,7 +904,7 @@ async function paintBigChart(opt = {}) {
 
   /* 5분봉에는 전일 종가선을 그어 둔다. **선 긋는 것은 `chart.js` 한 곳에 있다**
      (2026-09-23) — 모달·종목 화면도 같은 것을 써야 해서 옮겼다. */
-  const drewPrev = bigPeriod === '5m' && addPrevCloseLine(bigChart, candles,
+  const drewPrev = MINUTE_PERIODS.has(bigPeriod) && addPrevCloseLine(bigChart, candles,
     rowPrices[st.code] && rowPrices[st.code].prev);
 
   if (foot) {
@@ -914,7 +914,7 @@ async function paintBigChart(opt = {}) {
     const ma = bigChart ? maLegend(bigChart.maSeries) : '';
     /* **그었을 때만 적는다.** 전에는 5분봉이면 무조건 적었는데, 오늘 봉이
        첫 봉이면 선을 못 그어서 **없는 선을 가리키는 설명**이 남았다. */
-    foot.innerHTML = bigPeriod === '5m'
+    foot.innerHTML = MINUTE_PERIODS.has(bigPeriod)
       ? `<span>${ma}${drewPrev ? ` · ${PREV_CLOSE_NOTE}` : ''}</span><span>한국투자증권 실시간</span>`
       : `<span>${ma} · ${label}봉 ${candles.length}개</span><span>한국투자증권</span>`;
     paintFlowFoot(foot, st.code);           // 외국계 창구 · 프로그램 매수세 / 매도세 — 바닥 줄을 새로 썼으니 다시 붙인다(2026-11-03)
@@ -3046,7 +3046,7 @@ function applyPrices(map) {
   /* **양수 `prev` 가 왔을 때만 다시 긋는다.** KIS 가 `prev` 를 안 주는 때가 있어
      (`null`) 그대로 넘기면 봉 값으로 되돌아가 맞는 선을 지운다 (창구 검수). */
   const livePrev = rowPrices[selectedCode] && Number(rowPrices[selectedCode].prev);
-  if (drawnIsSelected && bigPeriod === '5m' && livePrev > 0) {
+  if (drawnIsSelected && MINUTE_PERIODS.has(bigPeriod) && livePrev > 0) {
     addPrevCloseLine(bigChart, bigChart.candles, livePrev);
   }
   if (typeof detail !== 'undefined' && detail) {
