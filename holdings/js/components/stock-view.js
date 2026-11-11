@@ -25,7 +25,7 @@ import { CHART_PERIODS, initBarsOf } from '../data/market.js';
 import { fetchCandles, fetchCandlesSince, watchCandles, createStockChart, maLegend,
   addPrevCloseLine, PREV_CLOSE_NOTE,
   savePeriodId, loadPeriodId,
-  chartView, setChartView, chartStockChanged } from '../chart.js';
+  chartView, setChartView, chartStockChanged, MINUTE_PERIODS } from '../chart.js';
 import { getMemo, setMemo } from '../store/memo.js';
 import { fmtNum, fmtWon, fmtMoneyKr, fmtShareCount, fmtDelta, dirClass,
   isUsCode, fmtPriceOf, fmtUsdBig, priceDigitsOf, usSessionLabel, expectTip } from '../utils/format.js';
@@ -206,7 +206,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
     /* 「전일」 점선은 시세의 `prev` 로 긋는다 (2026-10-02). 차트가 먼저
        그려졌으면 봉에서 뽑은 값이라 여기서 맞춘다 — 같으면 `chart.js` 가 건너뛴다. */
     if (Number(live.prev) > 0) lastPrev = Number(live.prev);   // null·0 은 안 덮는다
-    if (chart && periodId === '5m') addPrevCloseLine(chart, chart.candles, lastPrev);
+    if (chart && MINUTE_PERIODS.has(periodId)) addPrevCloseLine(chart, chart.candles, lastPrev);
 
     const cls = dirClass(live.pct);
     /* 미국 종목(2026-10-07 나스닥100 · S&P500)은 달러 — 가격 소수 둘째 자리 · 큰 금액 「조 · 억 달러」 */
@@ -317,7 +317,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
       if (dead || key !== periodId || !chart) return;
       chart.appendBars(add);
       /* 받아 둔 봉 사이가 고쳐지면 appendBars 가 칸을 새로 만들어 선이 사라진다 — 같은 선이면 다시 안 긋는다 */
-      if (periodId === '5m') addPrevCloseLine(chart, chart.candles, lastPrev);
+      if (MINUTE_PERIODS.has(periodId)) addPrevCloseLine(chart, chart.candles, lastPrev);
     } catch { /* 다음 알림 때 다시 받는다 */ }
     finally { catching = false; }
   }
@@ -359,7 +359,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
          (2026-09-23 모달 검수). 「오늘 올랐는지 내렸는지」 의 기준선이라,
          모달이 원본인 룰에서 빠져 있으면 안 된다. 선 긋는 것은
          `chart.js` 한 곳에 있다 — 여기 베끼지 않는다. */
-      const drewPrev = periodId === '5m' && addPrevCloseLine(chart, candles, lastPrev);
+      const drewPrev = MINUTE_PERIODS.has(periodId) && addPrevCloseLine(chart, candles, lastPrev);
 
       if (legend) {
         /* 출처에 「실시간」 을 붙이는 것은 5분봉일 때만이다 — 첫 화면 발이
@@ -372,7 +372,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
       /* 차트 머리의 출처 뱃지 — `stock.html` 은 「한국투자증권」 만 적어 두는데,
          5분봉이면 실시간 값이라 첫 화면과 같이 「실시간」 까지 적는다. */
       const bd = root.querySelector('.kh-w[data-p="chart"] .kh-bd');
-      if (bd) bd.textContent = periodId === '5m' ? '한국투자증권 실시간' : '한국투자증권';
+      if (bd) bd.textContent = MINUTE_PERIODS.has(periodId) ? '한국투자증권 실시간' : '한국투자증권';
       if (fromStore) refreshChart();          // 받아 둔 뒤에 생긴 봉 · 빈 칸만 받아 붙인다
     } catch {
       if (dead || key !== periodId) return;
