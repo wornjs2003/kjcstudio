@@ -916,7 +916,9 @@ function paneH() {
    「높이의 70% 로 맞춰주고 내가 조정을 하면 조정한대로 고정되도록 해줘」).
    고정한 폭은 칸 높이(paneH)처럼 localStorage — 새로고침해도 남는다(보는 상태). 가격 눈금을 두 번 누르면 풀려 다시 70% 맞춤.
    **기간(5분 · 일 · 주 · 월 · 년)마다 따로 기억한다** (2026-11-09 재권님 「응 그래」) — 5분봉에서 좁힌 폭이 월봉에 그대로 가면
-   봉이 칸 밖으로 크게 잘린다(오르내림 폭이 기간마다 열 배 넘게 다르다 · 개념정의 덧). 종목을 바꿀 때는 그대로다.
+   봉이 칸 밖으로 크게 잘린다(오르내림 폭이 기간마다 열 배 넘게 다르다 · 개념정의 덧).
+   **끌어 둔 그 종목에만 쓴다 — 마지막에 끈 종목 하나만 기억하고 다른 종목은 자동 맞춤** (2026-11-11 재권님 「가」) — 전에는 종목을 바꿔도
+   그대로라, 오르내림이 큰 종목(131290 · 5분봉 약 21%)에서 끈 폭 27% 가 삼성전자(약 5%)에 걸려 봉이 납작했다. 종목 이름표(c)가 없는 옛 값은 안 쓴다.
    **위아래로 옮긴 자리도 함께 기억한다** (2026-11-10 재권님 「차트를 내가 이동하는데 원래로 돌아가는 현상이 있어」 → 「5분봉 일봉 주봉 월봉 /
    차트와 차트모달은 같이」 → 「위아래도 움직이는것도 고정」) — 전에는 폭만 두고 가운데를 보이는 봉에 다시 맞춰, 끌어 놓은 자리가 손을 떼자마자
    제자리로 돌아갔다. 이제 「보이는 봉의 가운데보다 얼마나 위 · 아래로 옮겼나」(가격 대비)를 폭과 함께 둔다 — 넘겨 보거나 새 봉이 붙어도
@@ -925,7 +927,7 @@ const PRICE_FILL = 0.7;
 const V_SPAN_KEY = 'kh.chart.v-span';
 const V_SPAN_MIN = 0.001, V_SPAN_MAX = 5;   // 세로 폭(가격 대비) — 손이 미끄러져 0 이나 터무니없는 값이 남지 않게
 const V_SHIFT_MAX = 0.9;                      // 위아래로 옮긴 정도(가격 대비) — 봉이 영영 안 보이는 자리에 남지 않게
-let _vSpan = null;                            // 기간 → { s: 고정한 폭, d: 위아래로 옮긴 정도 }(없으면 자동 70%) · 처음 부를 때 읽는다
+let _vSpan = null;                            // 기간 → { s: 고정한 폭, d: 위아래로 옮긴 정도, c: 끈 종목 }(없으면 자동 70%) · 처음 부를 때 읽는다
 function vSpanMap() {
   if (!_vSpan) {
     _vSpan = {};
@@ -934,21 +936,21 @@ function vSpanMap() {
       if (v && typeof v === 'object') {
         Object.keys(v).forEach((k) => {
           const x = typeof v[k] === 'number' ? { s: v[k], d: 0 } : v[k];   // 11-10 전에는 폭 숫자 하나였다
-          if (x && x.s >= V_SPAN_MIN && x.s <= V_SPAN_MAX) _vSpan[k] = { s: x.s, d: Math.abs(x.d) <= V_SHIFT_MAX ? x.d : 0 };
+          if (x && x.s >= V_SPAN_MIN && x.s <= V_SPAN_MAX) _vSpan[k] = { s: x.s, d: Math.abs(x.d) <= V_SHIFT_MAX ? x.d : 0, c: x.c || null };
         });
       }
     } catch { /* 없으면 자동 */ }
   }
   return _vSpan;
 }
-function vSpan(per) {
+function vSpan(per, code) {
   const v = vSpanMap()[per];
-  return v == null ? null : v;
+  return v == null || !v.c || v.c !== code ? null : v;   // 끈 종목이 아니면 자동 맞춤
 }
-function setVSpan(per, s, d = 0) {
+function setVSpan(per, s, d = 0, code = null) {
   const m = vSpanMap();
   if (s == null) delete m[per];
-  else m[per] = { s: Math.max(V_SPAN_MIN, Math.min(V_SPAN_MAX, s)), d: Math.max(-V_SHIFT_MAX, Math.min(V_SHIFT_MAX, d || 0)) };
+  else m[per] = { s: Math.max(V_SPAN_MIN, Math.min(V_SPAN_MAX, s)), d: Math.max(-V_SHIFT_MAX, Math.min(V_SHIFT_MAX, d || 0)), c: code };
   try { localStorage.setItem(V_SPAN_KEY, JSON.stringify(m)); } catch { /* 저장 못 씀 */ }
   memPush();
 }
@@ -1421,7 +1423,7 @@ export function createStockChart(container, candles, opts = {}) {
     const ph = phoneStretch();
     return (orig) => {                         // 기간은 부를 때 읽는다 — 기간을 바꿔도 이 함수를 다시 안 붙일 수 있어서
       const r = ph ? ph(orig) : orig();
-      const fix = vSpan(period);
+      const fix = vSpan(period, drawnCode);
       if (fix == null || !r || !r.priceRange) return r;
       const span = fix.s;
       const { minValue: lo, maxValue: hi } = r.priceRange;
@@ -1456,15 +1458,15 @@ export function createStockChart(container, candles, opts = {}) {
     if (!(mid > 0)) return;
     const span = edge / mid;
     const base = visibleMid();                 // 자동 눈금이 잡을 가운데의 어림 — 거기서 얼마나 옮겼나를 둔다
-    setVSpan(period, span, base > 0 ? mid / base - 1 : 0);
+    setVSpan(period, span, base > 0 ? mid / base - 1 : 0, drawnCode);
     vpRange = null;
     lastBase = null;
     try { candleSeries.applyOptions(priceFix()); ch.priceScale('right').applyOptions({ autoScale: true }); } catch { return; }
     requestAnimationFrame(() => requestAnimationFrame(() => {
       /* 어림은 봉 배열로 셈해 라이브러리가 잡은 가운데와 조금(2026-11-10 실측 0.7%) 다를 수 있다 — 자동 눈금이 실제로 잡은 가운데로 바로잡는다 */
-      const fix = vSpan(period);
+      const fix = vSpan(period, drawnCode);
       if (lastBase > 0 && fix && Math.abs(mid / lastBase - 1 - fix.d) > 1e-4) {
-        setVSpan(period, span, mid / lastBase - 1);
+        setVSpan(period, span, mid / lastBase - 1, drawnCode);
         vpRange = null;
         try { candleSeries.applyOptions(priceFix()); } catch { /* 칸이 아직 없다 */ }
         requestAnimationFrame(() => requestAnimationFrame(() => { lockPriceRange(); drawProfile(); }));
