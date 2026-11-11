@@ -3651,9 +3651,8 @@ def fetch_quotes_multi(cfg, codes, max_age=None):
     if not need:
         _stats["cache_hits"] += 1
         res = {c: dict(r) for c, r in got.items()}
-        if not market_hours.auction(sys.modules[__name__]):   # 아래 끝자리와 같다 — 동시호가 때 받아 둔 예상가를 그 뒤에 안 낸다
-            for r in res.values():
-                r.pop("expect", None)
+        if not market_hours.auction(sys.modules[__name__]):   # 아래 끝자리와 같다 — 동시호가 뒤에는 남겨 두는 몇 분(_expect_held)만
+            _expect_after(res)
         return res, {}
     codes = need
     out, errors = {}, {}
@@ -3734,9 +3733,8 @@ def fetch_quotes_multi(cfg, codes, max_age=None):
     _expect_actual(out, div)
     res = {c: dict(r) for c, r in got.items()}
     res.update({c: dict(r) for c, r in out.items()})
-    if not market_hours.auction(sys.modules[__name__]):       # 동시호가 때 받아 둔 줄을 그 뒤에 내줄 때는 예상가를 뗀다
-        for r in res.values():
-            r.pop("expect", None)
+    if not market_hours.auction(sys.modules[__name__]):       # 동시호가 뒤에는 예상가를 뗀다 — 정규장을 연 뒤 몇 분만 마지막 값(_expect_held)
+        _expect_after(res)
     return res, errors
 
 
@@ -5107,9 +5105,8 @@ def fetch_asking(cfg, code):
     """
     cached = _ttl_get(_asking_cache, code, ASKING_TTL)
     if cached is not None:
-        ex = cached.get("expect")
-        if ex and market_hours.auction(sys.modules[__name__]) != ex.get("kind"):
-            return dict(cached, expect=None)   # 09:00 · 15:30 이 지나면 받아 둔 예상가를 바로 뗀다 — 시가 · 종가로(재권님 「시가가 되면 바로 시가로」)
+        if not market_hours.auction(sys.modules[__name__]):
+            return dict(cached, expect=_expect_held(code))   # 15:30 이 지나면 바로 뗀다 · 09:00 뒤는 몇 분 마지막 값(재권님 11-11 「본장 시작하면 5분후에 안보이도록」)
         return cached
     data = kis_get(
         cfg,
@@ -5134,7 +5131,7 @@ def fetch_asking(cfg, code):
         "bid": {"total": tot_bid, "levels": bid},
         # 사자 비중. 50 보다 크면 사려는 주문이 더 쌓여 있다는 뜻이다
         "buyPct": round(tot_bid / both * 100, 1) if both else None,
-        "expect": _preopen_expect(cfg, code, data),
+        "expect": _preopen_expect(cfg, code, data) or _expect_held(code),
     }
     _asking_cache[code] = (time.time(), out)
     return out
@@ -5214,12 +5211,42 @@ def _exp_codes(day, kind):
     return _exp_seen[key]
 
 
+_expect_last = {}         # code → (day, 동시호가 마지막 예상가) — 정규장을 연 뒤 몇 분 더 내는 값(_expect_held) · 서버마다 메모리
+
+
+def _expect_held(code):
+    """동시호가가 끝난 뒤에도 남겨 두는 예상가 — market_hours.expect_hold 가 "open" 인 동안(정규장 연 뒤 EXPECT_HOLD_MIN 분)
+    장 전 동시호가에 마지막으로 받은 값 그대로 · 그 밖은 None (2026-11-11 재권님 「예상 가격은 본장 시작하면 5분후에 안보이도록」).
+    메모리라 그 몇 분 사이에 서버가 다시 뜨면 남길 값이 없다 — 그때는 바로 시가로."""
+    if market_hours.auction(sys.modules[__name__]):
+        return None                          # 동시호가 중에는 새로 받은 값을 쓴다
+    kind = market_hours.expect_hold(sys.modules[__name__])
+    hit = _expect_last.get(code)
+    if not kind or not hit or hit[0] != datetime.now(KST).strftime("%Y%m%d") or hit[1].get("kind") != kind:
+        return None
+    return dict(hit[1])
+
+
+def _expect_after(rows):
+    """동시호가가 아닐 때 시세 줄들의 예상가 — 남겨 두는 몇 분이면 마지막 값 · 아니면 뗀다."""
+    for c, r in rows.items():
+        held = _expect_held(c)
+        if held:
+            r["expect"] = held
+        else:
+            r.pop("expect", None)
+
+
 def _expect_note(rows):
-    """{code: expect} 를 expect_log 에 — 종목마다 그 분의 마지막 값으로 덮는다. 쓰기 서버가 아니면 아무것도 안 한다."""
-    if not rows or not marketdb.writable():
-        return
+    """{code: expect} 를 expect_log 에 — 종목마다 그 분의 마지막 값으로 덮는다. 쓰기 서버가 아니면 아무것도 안 한다.
+    마지막 값은 어느 서버든 메모리에 쥔다(_expect_last — 정규장 연 뒤 몇 분 더 낸다)."""
     now = datetime.now(KST)
     day, hhmm = now.strftime("%Y%m%d"), now.strftime("%H%M")
+    for code, ex in (rows or {}).items():
+        if ex and ex.get("price"):
+            _expect_last[code] = (day, dict(ex))
+    if not rows or not marketdb.writable():
+        return
     put = []
     for code, ex in rows.items():
         if ex and ex.get("price"):
