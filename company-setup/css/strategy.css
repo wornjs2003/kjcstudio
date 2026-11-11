@@ -54,6 +54,13 @@
 .rl .rl-hrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .rl .rl-go { font: inherit; font-size: 12.5px; font-weight: 600; padding: 4px 14px; border: 0; border-radius: var(--kh-radius-sm); background: var(--kh-accent); color: var(--kh-text-on-fill); cursor: pointer; }
 .rl .rl-go:disabled { opacity: .6; cursor: default; }
+/* 관심 아래 칩 룰(js/strategy-chips.js · 11-11) — 칩을 바꾸면 수급 칸 · 검색 · 현재/어제 단추를 숨긴다(display 를 준 칸도 숨김이 이기게) · 진한 칸 = 룰 값(나중에 고칠 자리) */
+.rl [hidden] { display: none !important; }
+.rl #rl-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }   /* 칩 여덟 — 한 줄로 옆으로 밀어 봄(좁은 폭에서 글자가 세로로 꺾이지 않게) · 막대는 감춤(「감추는 것」 은 덮어쓰기가 아니다) */
+.rl #rl-chips::-webkit-scrollbar { display: none; }
+.rl #rl-chips > * { flex: none; white-space: nowrap; }
+.rl .cr-tab { display: inline-block; font-size: 14px; font-weight: 600; padding: 0 0 3px; border-bottom: 2px solid var(--kh-text-primary); color: var(--kh-text-primary); }   /* 칩 룰 판 머리 「현재」 — 수급 판의 현재 단추와 같은 모양 · 누르는 단추가 아님 */
+.rl .rl-v { display: inline-block; min-width: 2.2em; text-align: center; font-weight: 700; padding: 0 7px; margin: 0 2px; border-radius: var(--kh-radius-sm); background: var(--kh-bg); color: var(--kh-text-primary); }
 /* 오른 까닭 (11-05 재권님 「오늘종목 옆에 칸 추가해서 … 종목 클릭하면 상승이유」) — 좁으면 아래로 · 701~1180 은 두 칸 아래 한 줄 · 1181 부터 옆 셋째 칸(이미 쓰는 경계) */
 .rl .aw-tb tr[data-code] { cursor: pointer; }
 .rl .aw-tb tr[data-code]:hover td, .rl .aw-tb tr.is-on td { background: var(--kh-bg); }
