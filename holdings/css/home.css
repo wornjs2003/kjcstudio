@@ -865,6 +865,9 @@
 .kh-simple-btn[aria-pressed="true"] { background: var(--kh-text-primary); border-color: var(--kh-text-primary); color: var(--kh-text-on-fill); }
 .kh-simple-btn + .kh-cat-search { margin-left: 0; }
 @media (max-width: 1280px) { .kh-simple-btn { display: none; } }
+/* 크게보기 단추 — 「간단」 바로 오른쪽(2026-11-11) · 오른쪽으로 밀기는 「간단」 이 맡는다 · 지도가 없는 갈래에서는 자리만 남겨 「간단」 이 안 움직인다 */
+.kh-simple-btn + .kh-hm-bigbtn { margin-left: 0; }
+.kh-hm-bigbtn.is-off { visibility: hidden; }
 .kh-cs-in {
   width: 200px; height: 28px; box-sizing: border-box; padding: 0 10px;
   border: 1px solid var(--kh-border-strong); border-radius: var(--kh-radius-sm);
@@ -1731,6 +1734,11 @@
 .kh-hm { position: absolute; inset: 0; z-index: 30; background: var(--kh-bg-card); border-radius: inherit;
   padding: 18px 20px 14px; display: flex; flex-direction: column; gap: 10px; }
 .kh-hm[hidden] { display: none; }
+/* 크게보기(2026-11-11) — 지도만 창 가득. 덮개를 body 로 옮겨 띄운다(홈 본문은 zoom 이 걸려 그 안의 fixed 는 창을 못 채운다) */
+.kh-hm.is-big { position: fixed; inset: 0; z-index: 2000; border-radius: 0; padding: 20px 28px 16px; }
+.kh-hm-x { display: none; margin-left: auto; align-self: center; flex: none; width: 32px; height: 32px; border: 0; border-radius: 8px;
+  background: var(--kh-bg); color: var(--kh-text-primary); font: inherit; font-size: 18px; line-height: 1; cursor: pointer; }
+.kh-hm.is-big .kh-hm-x { display: block; }
 /* 좁은 폭의 접기 단추(.kh-foldbtn)는 지도 덮개 위에 둔다 — 덮개가 단추를 가려 카드를 못 접었다(2026-10-28 qa · 390px) */
 .kh-idx-main.is-hm > .kh-foldbtn { z-index: 31; }
 .kh-hm-head { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
