@@ -677,14 +677,16 @@ def c_same_source():
     return "서버와 같은 바깥 출처를 따로 받는 곳", n, hits, LOOK, (지시, "「홀딩스와 인사이트에 중복된 값들 … 룰 잡아봐」 (2026-10-14) — 받는 곳은 서버 하나")
 
 
-_SENDS = re.compile(r"telegram_send\(|api\.telegram\.org|sendMessage\b")
-_CALLS = re.compile(r"urlopen|Request\(|requests\.|_URL\b|BASE|--port|%d/")      # 서버를 부르는 주소 — 보내는 글이 아니다
+_SENDS = re.compile(r"telegram", re.I)   # 보내는 파일만이 아니라 글을 만드는 파일까지 — 글을 지어 넘기는 파일(daily.py)은 보내는 함수를 안 부른다(qa 11-11 시뮬)
+_DOCSTR = re.compile(r'"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'')
+_CALLS = re.compile(r"urlopen|Request\(|requests\.|_URL\b|\burl\b|BASE|--port|%d/")      # 서버를 부르는 주소 — 보내는 글이 아니다
 
 
 def c_alert_links():
     """알림 · 화면 밖으로 나가는 글의 링크는 메인 주소 한 곳에서 (2026-11-11 재권님 「옮긴 홈페이지룰로 통일해」).
 
-    텔레그램으로 보내는 파이썬 전부(폴더를 박지 않는다 — 보내는 함수를 부르는 파일을 센다)에서 주석이 아닌 줄에
+    텔레그램을 다루는 파이썬 전부(폴더를 박지 않는다 — 「telegram」 글자가 든 파일 · 글만 짓고 보내지는 않는 파일도 든다)에서
+    주석 · 세 겹 따옴표 설명 글이 아닌 줄에
     ① 메인 호스트(`MAIN_URL` 에서 읽음) · 옛 주소가 글자로 든 줄 — `MAIN_URL = …` 정의 줄은 뺀다
     ② localhost · 127.0.0.1 이 든 줄 중 서버를 부르는 주소(urlopen · requests · `*_URL` · BASE)가 아닌 것
     을 「봐야 할 자리」 로 낸다. **글로 나가는지는 사람이 가른다** — 막지 않는다. 바깥 출처 원문 링크(DART · SEC)는 안 센다(우리 주소가 아니다).
@@ -702,6 +704,7 @@ def c_alert_links():
         if not _SENDS.search(src):
             continue
         n += 1
+        src = _DOCSTR.sub(lambda m: "\n" * m.group(0).count("\n"), src)   # 설명 글은 빼되 줄 번호는 그대로
         for i, line in enumerate(src.split("\n"), 1):
             t = line.strip()
             if not t or t.startswith("#") or re.match(r"MAIN_URL\s*=", t):
@@ -709,7 +712,7 @@ def c_alert_links():
             code = t.split("  #")[0]
             if ours.search(code):
                 hits.append("%s:%d — 우리 주소를 글자로: %s" % (f, i, code[:80]))
-            elif re.search(r"localhost|127\.0\.0\.1", code) and not _CALLS.search(code):
+            elif re.search(r"(?:https?://)?(?:localhost|127\.0\.0\.1):(?:\d|%)", code) and not _CALLS.search(code):   # 포트가 붙은 주소 꼴만 — 소켓 · 서버 여는 줄 · 안내 낱말은 안 셈
                 hits.append("%s:%d — localhost(글로 나가는지 볼 것): %s" % (f, i, code[:80]))
     return "알림 글에 박힌 우리 주소 (MAIN_URL 밖)", n, hits, LOOK, (지시, "「텔레그램에 … 옮긴 홈페이지룰로 통일해」 (2026-11-11) — 링크는 MAIN_URL + 경로로만")
 
