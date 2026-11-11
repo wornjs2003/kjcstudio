@@ -7420,30 +7420,6 @@ def read_candles(code, period, limit):
     return [dict(r) for r in reversed(rows)]   # 차트는 과거 -> 최신 순
 
 
-VOL_PREV_FROM, VOL_PREV_TO = "0900", "1530"   # 정규장 5분봉(시작 시각) — 15:30 봉이 종가 단일가다. 시세의 누적 거래량(정규장)과 같은 범위
-
-
-def vol_prev_day(code, today):
-    """전날(오늘 앞의 마지막 거래일) 정규장 5분봉 거래량 — 「전날 같은 시각 대비 거래량 %」 의 분모 재료 (2026-11-10 재권님 「나」 · 「가」).
-
-    **DB 에 쌓인 봉만 읽는다 — KIS 를 새로 부르지 않는다.** 그 종목의 전날 5분봉이 없으면 None(「못 받음」 — 0 이 아니다).
-    화면이 지금 시각까지 더해 같은 시각 누적을 센다 — 서버는 하루 한 벌만 준다(화면이 다시 묻는 주기가 없다)."""
-    with _db_lock, db_conn() as conn:
-        day = conn.execute(
-            "SELECT MAX(substr(ts, 1, 8)) FROM candles WHERE code = ? AND period = '5m' AND substr(ts, 1, 8) < ?",
-            (code, today)).fetchone()[0]
-        if not day:
-            return None
-        rows = conn.execute(
-            """SELECT substr(ts, 9, 4) AS hm, volume FROM candles
-                 WHERE code = ? AND period = '5m' AND substr(ts, 1, 8) = ? AND substr(ts, 9, 4) BETWEEN ? AND ?
-                 ORDER BY ts""", (code, day, VOL_PREV_FROM, VOL_PREV_TO)).fetchall()
-    bars = [[r["hm"], r["volume"]] for r in rows if r["volume"] is not None]
-    if not bars:
-        return None
-    return {"day": day, "from": VOL_PREV_FROM, "to": VOL_PREV_TO, "bars": bars, "total": sum(v for _, v in bars)}
-
-
 def _view_limit(code, period, limit):
     """`view_days` 가 있는 기간이면 최근 그 날짜 수만큼의 봉 수로 limit 를 넓힌다. 줄이지는 않는다.
 
@@ -10437,18 +10413,6 @@ class Handler(SimpleHTTPRequestHandler):
                         "cacheTtl": INVESTOR_EST_TTL,
                     },
                 })
-                return
-
-            # 전날 정규장 5분봉 거래량 — 차트 위 「전날 같은 시각 대비 거래량 %」(2026-11-10 · vol_prev_day)
-            if route == "vol-prev":
-                code = (qs.get("code") or [""])[0].strip()
-                if not (code.isdigit() and len(code) == 6):
-                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
-                    return
-                data = vol_prev_day(code, datetime.now(KST).strftime("%Y%m%d"))
-                self._send_json({"ok": data is not None, "data": data,
-                                 "meta": {"code": code, "unit": "주", "source": "DB 에 쌓인 5분봉(KIS 를 새로 안 부름)",
-                                          "note": None if data else "전날 5분봉이 아직 안 쌓였습니다"}})
                 return
 
             # 최근 체결 30줄 (2026-09-21 지시 — A 종목 화면)
