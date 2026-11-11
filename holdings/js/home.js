@@ -347,6 +347,7 @@ function paintHeatmap() {
   const want = (ixCat === '홈' || ixCat === '국내') ? 'kr' : ixCat === '미국' ? 'us' : null;
   if (want) heatmapView.show(want);
   else heatmapView.hide();
+  $('kh-hm-big')?.classList.toggle('is-off', !want);   // 지도가 없는 갈래 — 단추는 자리만 남긴다(「간단」 이 안 움직이게)
 }
 
 /* ── 시장지표 갈래 (2026-10-12 · 재권님 「응 해줘」 · 시안 2판) ─────────────
@@ -3250,6 +3251,7 @@ const sectors = mountSectors(document.querySelector('.kh-sc-card'));
 
 /* 첫 화면 시장 지도 — 지금 갈래(처음은 홈)에 맞게 띄운다 · 위 paintHeatmap */
 heatmapView = mountHeatmap(document.querySelector('.kh-idx-main'), { onPick: (code, name) => pickSectorStock(code, name) });
+document.getElementById('kh-hm-big')?.addEventListener('click', () => heatmapView && heatmapView.big(true));   // 시장 지도 크게보기(2026-11-11)
 paintHeatmap();
 
 /* 갈래 줄 검색칸 — 고르면 **순위표 줄 · 산업 칸과 같은 길**(큰 차트 · 패널 · 현재가가 그 종목)

@@ -83,7 +83,8 @@ export function mountHeatmap(card, { onPick }) {
   box.className = 'kh-hm';
   box.hidden = true;
   box.innerHTML = `<div class="kh-hm-head"><span class="kh-hm-title"></span>
-      <span class="kh-hm-sub">칸 넓이 = 시가총액 · 색 = 오늘 등락률 · 종목을 누르면 이 자리에 그 종목 차트</span></div>
+      <span class="kh-hm-sub">칸 넓이 = 시가총액 · 색 = 오늘 등락률 · 종목을 누르면 이 자리에 그 종목 차트</span>
+      <button type="button" class="kh-hm-x" aria-label="크게보기 닫기" data-tip="크게보기 닫기(Esc)">✕</button></div>
     <div class="kh-hm-area"></div><div class="kh-hm-foot"></div>`;
   card.appendChild(box);
   const area = box.querySelector('.kh-hm-area');
@@ -147,9 +148,21 @@ export function mountHeatmap(card, { onPick }) {
     area.innerHTML = html;
   }
 
+  /* 크게보기 — 덮개를 body 로 옮겨 창 가득(home.css .kh-hm.is-big) · 닫으면 카드로 되돌린다. 그리기는 ResizeObserver 가 다시 한다 */
+  const bigOn = () => box.classList.contains('is-big');
+  function big(on) {
+    if (on === bigOn() || (on && box.hidden)) return;
+    box.classList.toggle('is-big', on);
+    (on ? document.body : card).appendChild(box);
+  }
+  box.querySelector('.kh-hm-x').addEventListener('click', () => big(false));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && bigOn()) big(false); });
+
   area.addEventListener('click', (e) => {
     const b = e.target.closest('.kh-hm-cell');
-    if (b) onPick(b.dataset.code, b.dataset.name);
+    if (!b) return;
+    big(false);                                    // 크게 보다 종목을 누르면 닫고 그 종목 차트로
+    onPick(b.dataset.code, b.dataset.name);
   });
 
   return {
@@ -168,11 +181,14 @@ export function mountHeatmap(card, { onPick }) {
     },
     hide() {
       if (box.hidden) return;
+      big(false);
       market = null;
       box.hidden = true;
       card.classList.remove('is-hm');
       if (sub) { sub.stop(); sub = null; }
     },
+    /** 크게보기 켜고 끄기 — 지도가 떠 있을 때만 켜진다 */
+    big,
     get market() { return market; },
   };
 }
