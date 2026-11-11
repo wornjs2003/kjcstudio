@@ -42,6 +42,7 @@ TICK = 60
 DAYS_MAX = 120
 OV_FROM = ("관심", "프리장", "VI·급등", "매수", "초반상승", "수급")   # 단타 셈 — 화면 home.js OV_CHIPS 와 같은 뜻(장외 빼고)
 
+PICK_AT = "15:41"               # 수급 · 거래량전날2배 시각 — auto_watch_day 그날 판이 굳는 때(SAVE_AT 과 다르다)
 _SCHEMA = "CREATE TABLE IF NOT EXISTS day_top (day TEXT PRIMARY KEY, saved_at TEXT, board TEXT NOT NULL)"
 _status = {"saved": None, "error": None}
 
@@ -114,10 +115,10 @@ def build(proxy, day):
             ru = {}
         if pct is not None and ru.get("prevPct") is not None and pct >= ru["prevPct"] \
                 and (ru.get("volMult") is None or (mult is not None and mult >= ru["volMult"])):
-            put(code, "수급", "15:41")
+            put(code, "수급", PICK_AT)
     for code, r in today.items():
         if r[5] and prev.get(code) and r[5] / prev[code] >= VOL_PREV_X:
-            put(code, "거래량전날2배", "15:41")
+            put(code, "거래량전날2배", PICK_AT)
     try:
         doc = docstore.read_doc("watchlist") or {}
         auto = set((doc.get("auto") or {}).keys()) if isinstance(doc.get("auto"), dict) else set()
