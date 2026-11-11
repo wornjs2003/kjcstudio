@@ -48,10 +48,10 @@
 .sw-hero .one{font-size:15px;line-height:1.7}
 .sw-hero .one a{color:var(--kh-accent);font-weight:600}
 .sw-hero .one .sub{color:var(--kh-text-secondary);font-size:14px;margin:0}
-.sw .u{color:rgb(var(--kh-ok-rgb))} .sw .d{color:rgb(var(--kh-warn-rgb))} .sw .big.z{color:var(--kh-text-primary)}
+.sw .u{color:var(--kh-up)} .sw .d{color:var(--kh-down)} .sw .big.z{color:var(--kh-text-primary)}
 .sw-leg{font-size:13px;color:var(--kh-text-secondary)}
 .sw-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--kh-bg);margin:8px 0 2px}
-.sw-bar i{display:block} .sw-bar i.u{background:rgb(var(--kh-ok-rgb))} .sw-bar i.d{background:rgb(var(--kh-warn-rgb))} .sw-bar i.z{background:var(--kh-border)}
+.sw-bar i{display:block} .sw-bar i.u{background:var(--kh-up)} .sw-bar i.d{background:var(--kh-down)} .sw-bar i.z{background:var(--kh-border)}
 .sw-cols{display:grid;grid-template-columns:1fr;gap:14px}
 .sw-col{background:var(--kh-bg-card);border-radius:16px;padding:16px 14px 14px}
 .sw-col h3{margin:0 2px 2px;font-size:17px;font-weight:800}
@@ -63,8 +63,8 @@
 .sw-t .p{font-size:13px;font-weight:600;margin-left:6px}
 .sw-t .why{grid-column:1/-1;font-size:12.5px;color:var(--kh-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:18px}
 .sw-pill{align-self:start;justify-self:end;font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap}
-.sw-pill.u{background:rgb(var(--kh-ok-rgb) / .14);color:rgb(var(--kh-ok-rgb))}
-.sw-pill.d{background:rgb(var(--kh-warn-rgb) / .14);color:rgb(var(--kh-warn-rgb))}
+.sw-pill.u{background:var(--kh-up-dim);color:var(--kh-up)}
+.sw-pill.d{background:var(--kh-down-dim);color:var(--kh-down)}
 .sw-pill.z{background:var(--kh-bg);color:var(--kh-text-secondary)}
 .sw-stale{font-size:11.5px;color:var(--kh-text-secondary)}
 .sw-news{display:grid;grid-template-columns:1fr;gap:14px}
@@ -86,7 +86,7 @@
 @media (min-width: 1100px){.sw-cols{grid-template-columns:repeat(3,1fr)}}
 
 /* 「이벤트」 칩 — 사건 → 국내 수혜 · 피해 섹터 표 (2026-11-11 재권님 「맞아 이대로 만들어」 · 시안 temp/시황분석-ev7 — 가운데 · 격자 상자 폭을 카드 줄에 맞춤)
-   좁은 폭부터 · 넓을 때 카드 두 줄 · 연쇄(세션 판단)는 격자에서 옅게 · 색은 theme.css 변수만 */
+   좁은 폭부터 · 넓을 때 카드 두 줄 · 연쇄(세션 판단)는 격자에서 괄호 · 작은 글씨(글씨는 옅게 두지 않음 — 개념정의 검수 11-11) · 색은 theme.css 변수만 */
 .evx-wrap{max-width:1134px;margin:0 auto;padding:4px 0 24px;color:var(--kh-text-primary)}
 .evx-wrap h1{font-size:22px;margin:0 0 4px}
 .evx-wrap .sub{color:var(--kh-text-secondary);font-size:13px;margin:0 0 6px}
@@ -99,7 +99,7 @@
 .evx-mx td{text-align:center;height:30px;width:64px;border-radius:7px;background:var(--kh-bg);font-weight:800;font-size:15px}
 .evx-mx td.p{background:var(--kh-up-dim);color:var(--kh-up)}.evx-mx td.m{background:var(--kh-down-dim);color:var(--kh-down)}
 .evx-mx td.pm{color:var(--kh-text-secondary);font-size:12px}
-.evx-mx td.p2{color:var(--kh-up);opacity:.55;font-weight:600;font-size:13px}.evx-mx td.m2{color:var(--kh-down);opacity:.55;font-weight:600;font-size:13px}
+.evx-mx td.p2{color:var(--kh-up);font-weight:500;font-size:12px}.evx-mx td.m2{color:var(--kh-down);font-weight:500;font-size:12px}
 .evx-mx td.pm2{color:var(--kh-text-secondary);font-weight:600;font-size:12px}
 .evx-mx a{color:inherit;text-decoration:none}
 .evx-leg{font-size:12.5px;color:var(--kh-text-secondary);margin-top:6px;text-align:center}
