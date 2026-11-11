@@ -1509,7 +1509,9 @@ const SORTS = {
           head: '첫 5분봉', show: (code) => riseCell(code), html: true,
           note: () => riseNote(),
           empty: () => (!riseMeta ? '불러오는 중'
+            : riseMeta.phase === 'closed' ? '오늘은 장이 열리지 않습니다'
             : riseMeta.phase === 'before' ? `${riseMeta.barTo} 첫 5분봉이 끝나면 고릅니다`
+            : riseMeta.phase === 'nodata' ? `못 셈 — 첫 5분봉(${riseMeta.barFrom}) 봉이 한 종목도 없습니다`
             : riseMeta.pending ? `첫 5분봉을 다 받기 기다리는 중 — ${riseMeta.pending}종목`
             : '첫 5분봉이 문턱 넘게 오른 종목이 없습니다') },
   /* VI·급등 — 오늘 정규장에 상승 VI 가 걸렸거나 +20% 를 넘은 종목, 최근 것이 위 (2026-11-06 재권님 「이거다 넣으면 좋을거 같은데」 →
