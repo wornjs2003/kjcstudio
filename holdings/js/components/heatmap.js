@@ -150,10 +150,13 @@ export function mountHeatmap(card, { onPick }) {
 
   /* 크게보기 — 덮개를 body 로 옮겨 창 가득(home.css .kh-hm.is-big) · 닫으면 카드로 되돌린다. 그리기는 ResizeObserver 가 다시 한다 */
   const bigOn = () => box.classList.contains('is-big');
-  function big(on) {
+  let bigThenHide = false;                         // 차트를 보던 중 크게 띄운 것 — 닫으면 지도를 다시 내려 그 차트로 돌아간다
+  function big(on, { fromChart = false } = {}) {
     if (on === bigOn() || (on && box.hidden)) return;
     box.classList.toggle('is-big', on);
     (on ? document.body : card).appendChild(box);
+    if (on) bigThenHide = fromChart;
+    else if (bigThenHide) { bigThenHide = false; view.hide(); }
   }
   box.querySelector('.kh-hm-x').addEventListener('click', () => big(false));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && bigOn()) big(false); });
@@ -161,11 +164,12 @@ export function mountHeatmap(card, { onPick }) {
   area.addEventListener('click', (e) => {
     const b = e.target.closest('.kh-hm-cell');
     if (!b) return;
+    bigThenHide = false;
     big(false);                                    // 크게 보다 종목을 누르면 닫고 그 종목 차트로
     onPick(b.dataset.code, b.dataset.name);
   });
 
-  return {
+  const view = {
     /** 'kr' | 'us' 지도를 띄운다 */
     show(next) {
       if (market !== next) { last = null; area.innerHTML = '<div class="kh-hm-empty">지도를 받는 중</div>'; }
@@ -191,4 +195,5 @@ export function mountHeatmap(card, { onPick }) {
     big,
     get market() { return market; },
   };
+  return view;
 }
