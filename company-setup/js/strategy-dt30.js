@@ -36,7 +36,17 @@ const ORDER_FN = { vi: (a, b) => has(b, 'VI·급등') - has(a, 'VI·급등') || 
 //   · 단타가 세는 칩(홀딩스 home.js OV_CHIPS 와 같은 일곱 · 서버 개발2 가 「앞의 일곱」 으로 줌) 마다 단추 · 그 아래 하위 칩(서버 rows[].subs 에서 모음 — 이름을 박지 않음)
 //   · 켜진 칩 · 하위 칩에 걸린 수(n)로 다시 줄 세움: n 많은 순 → 초반상승 % → 시가총액 — 서버 차례와 같은 셈 · n 0 인 종목은 뺌 · 상위 16 · 손익 · 평균이 그 차례로 다시 셈
 const DT_CHIPS = ['관심', '프리장', 'VI·급등', '장외', '매수', '초반상승', '수급'];
-const subsOf = (r, c) => { const v = r.subs && r.subs[c]; return Array.isArray(v) ? v : (v ? [v] : []); };
+const subsRaw = (r, c) => { const v = r.subs && r.subs[c]; return Array.isArray(v) ? v : (v ? [v] : []); };
+// VI·급등 하위는 겹치지 않게 둘로 (11-11 재권님 「그중 6개는 따로 분류가 가능하게 해줘」 → 「vi급등칩에 하위에 칩이 2개 있게 해줘」 — VI 43 · 급등 6 이 겹쳐 헷갈림)
+//   서버 subs 의 VI · 급등을 읽어 급등이 들었으면 「VI 급등」(VI 도 함께 걸린 것 포함), VI 만이면 「VI 급상승」 — 둘을 더하면 상위 칩 숫자 · 서버 이름이 둘이 아니면 그대로 둠
+const BOTH = { 'VI·급등': [['VI', '급등'], ['VI 급상승', 'VI 급등']] };   // 이름 — 재권님 「아래로 vi급상승 vi급등 이렇게 넣어줘」
+const subsOf = (r, c) => {
+  const a = subsRaw(r, c), b = BOTH[c]; if (!b) return a;
+  const [[x, y], [onlyX, withY]] = b, hx = a.includes(x), hy = a.includes(y);
+  const rest = a.filter((v) => v !== x && v !== y);
+  return hy ? [withY, ...rest] : hx ? [onlyX, ...rest] : rest;
+};
+const subOrder = (c, xs) => { const o = BOTH[c] ? BOTH[c][1] : []; return xs.sort((p, q) => ((o.indexOf(p) + 99) % 99) - ((o.indexOf(q) + 99) % 99) || p.localeCompare(q)); };
 const liveChip = (r, c) => { if (st.off.has(c) || !(r.chips || []).includes(c)) return false; const sb = subsOf(r, c); return !sb.length || sb.some((x) => !st.subOff.has(`${c}|${x}`)); };
 const nLive = (r) => DT_CHIPS.reduce((a, c) => a + (liveChip(r, c) ? 1 : 0), 0);
 const riseOf = (r) => (r.rise == null || !Number.isFinite(Number(r.rise)) ? -Infinity : Number(r.rise));   // 초반상승 % — 안 든 종목은 null → 맨 뒤
@@ -44,15 +54,15 @@ const byLive = (a, b) => nLive(b) - nLive(a) || (riseOf(b) - riseOf(a) || 0) || 
 // 칩 설명 — 마우스를 1초 올려 두면 뜨는 공용 풍선(data-tip · glossary.js) (11-11 재권님 「vi급등 옆에 vi 랑 급등이 따로 있는데 이건 각각 뭔지 설명을 넣어놔」)
 //   뜻은 서버 holdings/server/intraday_alerts.py 머리 글 그대로 · 급등 기준 % 는 서버 상수(SURGE_PCT) 한 곳이라 여기 숫자를 안 적음
 const TIP = {
-  'VI·급등': '장중 알림 둘 중 하나라도 걸린 종목 — 오른쪽 VI · 급등 칩으로 따로 켜고 끔',
-  'VI·급등|VI': '상승 VI — 값이 짧은 사이에 크게 올라 거래소가 잠깐(2분) 단일가 매매로 멈춰 세운 종목\n정규장만 · 한국투자증권 「VI 현황」 에서 받음',
-  'VI·급등|급등': '급등 — 전일 종가보다 서버가 정한 급등 기준 이상 오른 종목(그날 처음 넘을 때 한 번)\n정규장만 · 서버 상승률 순위(전 종목 30위)에서 봄',
+  'VI·급등': '장중 알림 둘(상승 VI · 급등) 중 하나라도 걸린 종목 — 오른쪽 VI 급상승 · VI 급등 두 칩으로 따로 켜고 끔(둘을 더하면 이 숫자)',
+  'VI·급등|VI 급상승': '상승 VI 만 걸리고 급등에는 안 든 종목\n상승 VI — 값이 짧은 사이에 크게 올라 거래소가 잠깐(2분) 단일가 매매로 멈춰 세운 종목 · 정규장만 · 한국투자증권 「VI 현황」 에서 받음',
+  'VI·급등|VI 급등': '급등에 든 종목 — 상승 VI 도 함께 걸린 것 포함(오르는 동안 보통 VI 가 먼저 걸림)\n급등 — 전일 종가보다 서버가 정한 급등 기준 이상 오른 종목(그날 처음 넘을 때 한 번) · 정규장만 · 서버 상승률 순위(전 종목 30위)에서 봄\nVI 급상승 · VI 급등 두 칩은 겹치지 않아 더하면 VI·급등 숫자',
 };
 const tipAt = (k) => (TIP[k] ? ` data-tip="${esc(TIP[k])}"` : '');
 function chipPanel(all) {
   return DT_CHIPS.map((c, i) => {
     const n = all.filter((r) => (r.chips || []).includes(c)).length;
-    const subs = [...new Set(all.flatMap((r) => subsOf(r, c)))].sort();
+    const subs = subOrder(c, [...new Set(all.flatMap((r) => subsOf(r, c)))]);
     const on = !st.off.has(c);
     // data-i — 칩마다 색(strategy.css 의 .dt-cg[data-i] · theme.css 변수) · 하위 칩은 상위 칩 색을 물려받음
     return `<span class="dt-cg${on ? '' : ' is-off'}" data-i="${i}"><button type="button" class="dt-mc${on ? ' is-on' : ''}" data-chip="${esc(c)}"${tipAt(c)} aria-pressed="${on}">${esc(c)}<b>${n}</b></button>${
@@ -166,8 +176,10 @@ async function load(day) {
   try { r = await fetch(day ? `${API}?day=${day}` : API, { cache: 'no-store' }); j = await r.json().catch(() => null); } catch (e) { r = null; }
   if (my !== st.seq) return;
   if (!r || !r.ok || !j || j.ok === false || !j.data) {
-    const why = !r ? '연결 안 됨' : r.status === 404 ? '서버가 아직 단타 30 을 쌓지 않음' : (j && j.error) || `서버 ${r.status}`;
-    $('dt-meta').textContent = `— 단타 30 값을 못 받음: ${why}`;
+    // 쌓인 날이 없으면 서버가 200 · ok false · meta.days [] 로 답함(개발2 0a3d5eb) — 「못 받음」 이 아니라 「아직 없음」(qa 11-11)
+    const none = r && r.ok && j && j.ok === false && Array.isArray(j.meta && j.meta.days) && !j.meta.days.length;
+    const why = !r ? '연결 안 됨' : none ? '아직 쌓인 날 없음 — 첫 판은 평일 09:06' : r.status === 404 ? '서버가 아직 단타 30 을 쌓지 않음' : (j && j.error) || `서버 ${r.status}`;
+    $('dt-meta').textContent = none ? `— 단타 30: ${why}` : `— 단타 30 값을 못 받음: ${why}`;
     $('dt-box').innerHTML = `<div class="st-err">— ${esc(why)}</div>`;
     return;
   }
