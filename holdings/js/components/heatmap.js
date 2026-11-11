@@ -84,6 +84,7 @@ export function mountHeatmap(card, { onPick }) {
   box.hidden = true;
   box.innerHTML = `<div class="kh-hm-head"><span class="kh-hm-title"></span>
       <span class="kh-hm-sub">칸 넓이 = 시가총액 · 색 = 오늘 등락률 · 종목을 누르면 이 자리에 그 종목 차트</span>
+      <button type="button" class="kh-hm-bigbtn" aria-label="시장 지도 크게보기" data-tip="시장 지도만 창 가득 크게 보기">크게보기</button>
       <button type="button" class="kh-hm-x" aria-label="크게보기 닫기" data-tip="크게보기 닫기(Esc)">✕</button></div>
     <div class="kh-hm-area"></div><div class="kh-hm-foot"></div>`;
   card.appendChild(box);
@@ -150,21 +151,18 @@ export function mountHeatmap(card, { onPick }) {
 
   /* 크게보기 — 덮개를 body 로 옮겨 창 가득(home.css .kh-hm.is-big) · 닫으면 카드로 되돌린다. 그리기는 ResizeObserver 가 다시 한다 */
   const bigOn = () => box.classList.contains('is-big');
-  let bigThenHide = false;                         // 차트를 보던 중 크게 띄운 것 — 닫으면 지도를 다시 내려 그 차트로 돌아간다
-  function big(on, { fromChart = false } = {}) {
+  function big(on) {
     if (on === bigOn() || (on && box.hidden)) return;
     box.classList.toggle('is-big', on);
     (on ? document.body : card).appendChild(box);
-    if (on) bigThenHide = fromChart;
-    else if (bigThenHide) { bigThenHide = false; view.hide(); }
   }
+  box.querySelector('.kh-hm-bigbtn').addEventListener('click', () => big(true));   // 단추는 지도 머리줄에 — 지도가 떠 있을 때만 보인다
   box.querySelector('.kh-hm-x').addEventListener('click', () => big(false));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && bigOn()) big(false); });
 
   area.addEventListener('click', (e) => {
     const b = e.target.closest('.kh-hm-cell');
     if (!b) return;
-    bigThenHide = false;
     big(false);                                    // 크게 보다 종목을 누르면 닫고 그 종목 차트로
     onPick(b.dataset.code, b.dataset.name);
   });
