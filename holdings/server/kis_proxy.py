@@ -47,6 +47,7 @@ from datetime import datetime, timedelta, timezone
 # 파일을 안전하게 쓴다 — 쓰다 죽어도 옛 내용이 남는다 (2026-09-22)
 from docstore import write_json_atomic
 import docstore
+import edit_key         # 수정 비밀번호 — 정해 둔 보드 문서는 재권님만 고친다(2026-11-11)
 import marketdb
 import re
 import signal_watch
@@ -8997,14 +8998,17 @@ class Handler(SimpleHTTPRequestHandler):
         바꿔 싣거나 500 으로 뭉개면 **덮어쓰기 막기가 그 자리에서 풀린다.**
         """
         raw = b""
-        if self.command == "PUT":
+        if self.command in ("PUT", "POST"):
             raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
         req = urllib.request.Request(base + (self.path or ""),
-                                     data=raw if self.command == "PUT" else None,
+                                     data=raw if self.command in ("PUT", "POST") else None,
                                      method=self.command)
         ct = self.headers.get("Content-Type")
         if ct:
             req.add_header("content-type", ct)
+        ek = self.headers.get(edit_key.HEADER)       # 수정 비밀번호 — 판정은 상류(8765) 한 곳에서(잠금 셈이 한 곳에 모인다)
+        if ek:
+            req.add_header(edit_key.HEADER, ek)
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 code, body = resp.getcode(), resp.read()
@@ -9051,6 +9055,23 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         path = (self.path or "").split("?", 1)[0].rstrip("/")
+
+        if path == "/api/board/edit-check":
+            # 수정 비밀번호가 맞는지만 묻는다(edit_key.py). json 만 받는다 — 다른 출처 페이지는 미리 묻기에서 막힌다(claude 묻기와 같은 까닭)
+            raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            if self.command != "POST" or (self.headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
+                self._send_json({"ok": False, "error": "POST · application/json 으로 보내 주십시오."}, status=405)
+                return
+            try:
+                doc = (json.loads(raw.decode("utf-8") or "{}") or {}).get("doc")
+            except Exception:
+                doc = None
+            if doc not in edit_key.PROTECTED:
+                self._send_json({"ok": False, "error": "수정 비밀번호로 지키는 문서가 아닙니다."}, status=400)
+                return
+            ok, why, locked = edit_key.check(self.headers.get(edit_key.HEADER))
+            self._send_json({"ok": True} if ok else {"ok": False, "error": why, "locked": locked}, status=200 if ok else 403)
+            return
 
         if path == "/api/board/health":
             self._send_json({
@@ -9127,6 +9148,12 @@ class Handler(SimpleHTTPRequestHandler):
 
             if self.command == "PUT":
                 raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                if name in edit_key.PROTECTED:
+                    # 재권님만 고치는 문서 — 머리글 수정 비밀번호가 맞을 때만 쓴다(edit_key.py · 2026-11-11)
+                    ok, why, locked = edit_key.check(self.headers.get(edit_key.HEADER))
+                    if not ok:
+                        self._send_json({"ok": False, "error": why, "locked": locked}, status=403)
+                        return
                 try:
                     body = json.loads(raw.decode("utf-8"))
                 except Exception:
@@ -9195,11 +9222,14 @@ class Handler(SimpleHTTPRequestHandler):
         if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/claude/ask":
             self._handle_claude_ask()
             return
+        if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/board/edit-check":
+            self._handle_board()          # 수정 비밀번호 맞는지 묻기 — 보드 길이라 세션 서버는 8765 로 넘긴다(edit_key.py)
+            return
         try:
             self.rfile.read(int(self.headers.get("Content-Length") or 0))   # 딸려 온 본문을 먼저 비운다(아래 do_PUT 주석)
         except Exception:
             pass
-        self._send_json({"ok": False, "error": "POST 는 /api/claude/ask 에만 됩니다."}, 405)
+        self._send_json({"ok": False, "error": "POST 는 /api/claude/ask · /api/board/edit-check 에만 됩니다."}, 405)
 
     def _handle_claude_ask(self):
         """화면이 보낸 물음 · 보는 것 · 앞 대화에 **서버 자료**(페이지별 표 CLAUDE_SOURCES)를 붙여 claude 에 묻는다.
