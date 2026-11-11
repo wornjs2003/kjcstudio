@@ -1517,7 +1517,7 @@ const SORTS = {
   /* 겹침 — 관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 중 **둘 이상**에 든 종목, 겹친 칩 수 많은 순 · 같으면 시가총액 순 (2026-11-11 재권님
      「관심 프리장 vi급등 장외 매수 이목록들(실시간 순위) … 여기에서 겹치는 종목들을 소팅해서 보여주면 좋을거같은데」 → (가) 새 칩).
      각 칩이 서버에서 받은 목록을 그대로 모아 센다(새로 고르는 셈이 아니다) — 칩마다 거르는 것(시총 · ETF)도 그 칩 그대로 */
-  ov:   { label: '겹침', list: () => ovRows(),
+  ov:   { label: '단타', list: () => ovRows(),   // 「겹침」 → 「오늘의종목」 → 「단타」 · 관심 아래 줄 맨 왼쪽(11-11 재권님)
           head: '겹친 칩', show: (code) => ovCell(code), html: true,
           note: () => ovNote(),
           empty: () => (ovWaiting().length ? `불러오는 중 — ${ovWaiting().map((id) => SORTS[id].label).join(' · ')}`
@@ -1557,7 +1557,7 @@ const SORTS = {
 const SORT_TIPS = {
   /* 관심 — 실제 차례를 그대로 적는다(rowList 의 filter 갈래 · 2026-11-11 재권님 「관심 에 종목버튼에 마우스 올리면 어떤 룰로 소팅되는지 설명 넣어줘」):
      순위 목록 차례(코스피 시가총액 순 → 코스닥 시가총액 순)에서 담은 것만 골라내고, 목록 밖에서 담은 종목은 담은 차례로 맨 뒤 */
-  fav: `하트로 담은 관심종목만 골라 봅니다\n차례 — ① 코스피 종목 시가총액 큰 순 ② 그다음 코스닥 종목 시가총액 큰 순 ③ 순위 목록(코스피 200 · 코스닥 150) 밖에서 담은 종목은 담은 차례대로 맨 뒤\n아래 묶음 칩을 고르면 그 묶음만(다시 누르면 전체) · ${CAP_MIN_TXT}\n함께 나오는 칩 줄(프리장 · 초반상승 · 겹침 · VI·급등 · 볼린저 · 공매도)은 관심과 따로 순위 목록 전체에서 고릅니다 — 칩마다 마우스를 올리면 고르는 기준이 뜹니다`,
+  fav: `하트로 담은 관심종목만 골라 봅니다\n차례 — ① 코스피 종목 시가총액 큰 순 ② 그다음 코스닥 종목 시가총액 큰 순 ③ 순위 목록(코스피 200 · 코스닥 150) 밖에서 담은 종목은 담은 차례대로 맨 뒤\n아래 묶음 칩을 고르면 그 묶음만(다시 누르면 전체) · ${CAP_MIN_TXT}\n함께 나오는 칩 줄(단타 · 프리장 · 초반상승 · VI·급등 · 볼린저 · 장외 · 수급 — 수급만 관심 안 「자동」 묶음)은 관심과 따로 순위 목록 전체에서 고릅니다 — 칩마다 마우스를 올리면 고르는 기준이 뜹니다`,
   cap: '시가총액이 큰 순 — 위 코스피 · 코스닥으로 시장을 고릅니다',
   value: '오늘 거래대금이 큰 순',
   vol: '오늘 거래량이 큰 순',
@@ -2114,14 +2114,18 @@ function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
 
 /* 「관심」 아래 줄(#kh-sorts-fav)로 가는 칩 — 위 줄에서는 빠지고, 「관심」 이나 이 칩을 볼 때만 나온다.
    거르는 것은 그대로 전 종목이다(관심 안에서 거르지 않는다 · 2026-11-11 재권님 「나」). 칩이 늘어 위 줄이 세 줄로 꺾이던 것도 이것으로 풀렸다 */
-const FAV_SUB = new Set(['pre', 'rise', 'ov', 'vi', 'bb', 'ssts']);
+/* 「단타」(ov · 옛 「겹침」 · 「오늘의종목」)는 이 줄 맨 왼쪽(2026-11-11 재권님 「겹침 -> 오늘의종목 으로 이름 바꾸고 가장 왼쪽에」 → 「관심종목 하위 버튼에서 가장왼쪽이야」) */
+const FAV_SUB_ORDER = ['ov', 'pre', 'rise', 'vi', 'bb', 'after'];   // 장외도 이 줄로 · 매수 · 공매도는 위 줄(11-11 재권님 「장외랑 매수도 관심 하위로」 → 「매수 공매도는 위로」)
+const FAV_SUB = new Set(FAV_SUB_ORDER);
 
 /* 「수급」 칩 — 서버(auto_watch)가 관심에 자동으로 담는 묶음 「자동」(id auto)을 「관심」 아래 줄 공매도 옆에 둔다.
    누르면 관심 중 그 묶음만 · 다시 누르면 관심 전체(2026-11-11 재권님 「자동버튼에 마우스 올리면 조건이 보이게 해주고 수급 이라는 이름으로 공매도 옆으로」).
    묶음 이름(문서의 「자동」)은 그대로 — 화면 글자만 「수급」. 조건 숫자는 서버 /api/auto-watch 의 data.rule · meta 를 받아 쓴다(박지 않는다) */
 const AUTO_FG = 'auto';
 let autoInfo = null;            // { rule, liveWindow, runWindow } — 못 받았으면 null
+let autoAsked = false;          // 이번 「관심」 열림에 이미 물었나 — 못 받아도 같은 열림 동안은 다시 안 묻는다(개념정의 검수 11-11 · 실패하면 쉬지 않고 다시 물었다)
 async function loadAutoInfo() {
+  autoAsked = true;
   try {
     const r = await apiFetch('/api/auto-watch', { cache: 'no-store' });
     const j = r && r.ok ? await r.json() : null;
@@ -2158,11 +2162,11 @@ function paintSortChips() {
   if (favRow) {
     favRow.hidden = !favOpen;
     const hasAuto = favGroups().some((g) => g.id === AUTO_FG);
-    favRow.innerHTML = favOpen ? Object.entries(SORTS).filter(([id]) => FAV_SUB.has(id))
+    favRow.innerHTML = favOpen ? FAV_SUB_ORDER.map((id) => [id, SORTS[id]])
       .map((e) => chip(e, e[0] === sortBy)).join('')
       + (hasAuto ? `<button class="kh-chip${sortBy === 'fav' && favGroup === AUTO_FG ? ' is-active' : ''}" type="button"
       data-fg-auto data-tip="${escT(autoTip())}" data-tip-h="수급">수급</button>` : '') : '';
-    if (favOpen && !autoInfo) loadAutoInfo();
+    if (favOpen && !autoInfo && !autoAsked) loadAutoInfo();
   }
   const sub = $('kh-sorts2');
   if (sub) {
@@ -2225,6 +2229,7 @@ function setupSorts() {
     if (!b) return;
     if (b.dataset.sort === 'fav' && favGroup === AUTO_FG) favGroup = 'all';   // 「관심」 을 누르면 관심 전체로
     else if (b.dataset.sort === sortBy) return;
+    if (b.dataset.sort === 'fav' && !FAV_SUB.has(sortBy)) autoAsked = false;  // 「관심」 을 새로 열면 못 받은 조건을 한 번 더 묻는다
     sortBy = b.dataset.sort;
     paintSortChips();                // 「관심」 이면 아래 묶음 줄이 나온다
     paintRows(rowPrices);
@@ -2424,6 +2429,7 @@ onFavChange(() => {
      남아 있으면 안 된다. 다른 기준일 때는 줄 세우는 값이 안 바뀌므로
      숫자 색만 고치면 된다 (위 두 줄). 모달도 같은 기준이면 함께 그린다. */
   if (sortBy === 'fav') { if (market !== 'THEME') paintSortChips(); paintRows(rowPrices); }   // 묶음 칩의 수도 따라간다
+  if (sortBy === 'ov') { paintRows(rowPrices); paintSortNote(); }    // 「단타」(ov) 는 관심도 센다 — 관심이 바뀌면 다시 센다(11-11 재권님 「겹침도 자주로」)
   if (rankModal && rankModalSort === 'fav') paintRankModal();
 });
 
@@ -3153,7 +3159,7 @@ function restChunk() {
 }
 
 function resortRowsIfMoved() {
-  if (!SORTS[sortBy]?.key) return;           // 총액 · 관심은 시세로 순서가 안 바뀐다
+  if (!SORTS[sortBy]?.key && sortBy !== 'ov') return;   // 총액 · 관심은 시세로 순서가 안 바뀐다 · 「단타」(ov) 는 「장외」 가 시세로 바뀌어 든 종목이 바뀐다(11-11 「겹침도 자주로」)
   const body = $('kh-rows');
   if (!body) return;
   const list = rowList();
