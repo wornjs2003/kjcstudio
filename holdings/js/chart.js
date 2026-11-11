@@ -1011,6 +1011,18 @@ function loadHf(code) {
   return _hf.get(code);
 }
 
+/* 가격 눈금 · 마우스 표의 숫자 틀 — 자릿수마다 한 번만 만든다 (2026-11-11 재권님 「응」 · 캔들 첫 그리기 줄이기).
+   전에는 숫자를 낼 때마다 toLocaleString 이 틀을 새로 만들어 그리기 셈 중 우리 코드 1위였다. 글자는 그대로다 */
+const _numFmt = new Map();
+function numFmt(digits) {
+  let f = _numFmt.get(digits);
+  if (!f) {
+    f = new Intl.NumberFormat('ko-KR', digits ? { minimumFractionDigits: digits, maximumFractionDigits: digits } : {});
+    _numFmt.set(digits, f);
+  }
+  return f;
+}
+
 export function createStockChart(container, candles, opts = {}) {
   /* candles 는 setData 로 바뀐다 (인자를 그대로 쓰지 않는다) */
   const LC = window.LightweightCharts;
@@ -1079,9 +1091,7 @@ export function createStockChart(container, candles, opts = {}) {
       },
       localization: {
         locale: 'ko-KR',
-        priceFormatter: (v) => (digits
-          ? v.toLocaleString('ko-KR', { minimumFractionDigits: digits, maximumFractionDigits: digits })
-          : Math.round(v).toLocaleString('ko-KR')),
+        priceFormatter: (v) => numFmt(digits).format(digits ? v : Math.round(v)),
       },
     });
   }
