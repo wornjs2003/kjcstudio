@@ -1481,11 +1481,11 @@ const SORTS = {
   /* 줄마다 셋이 **각각 얼마 사는지**(억) · 오늘 셋 다 샀다가 한 곳이라도 매도로 바뀐 종목은 맨 위에 흐리게 남긴다
      (11-05 재권님 「동시매수하다가 어느 한곳이 매도로 바뀌는것도 파악을 할수있게」 → 시안 「좋아 각각 얼마 사는지로」) */
   buy:  { label: '매수', list: () => (jointRows ? [...jointFlipped, ...jointRows] : null), capMin: true,
-          head: '외 · 기 · 프 순매수(억)', show: (code) => jointCell(code), html: true,
+          head: '차례 · 외 · 기 · 프 · 연(억)', show: (code) => jointCell(code), html: true,
           note: () => jointNote(),
           empty: () => (!jointMeta || jointMeta.pending ? '불러오는 중'
             : jointMeta.listFail ? '못 받음 — 외국인 · 기관 순매수 순위'
-            : '셋이 함께 사는 종목이 아직 없습니다') },
+            : '네 칸(①~④)에 드는 종목이 아직 없습니다') },
   /* 프리장 — 넥스트레이드 프리마켓(08:00~08:50)에 프로그램이 몰리는 종목 (2026-11-05 재권님 「프리장에 프로그램 몰리는것 만들어줘.
      이걸 참고해서 매매를 할수있게 다른것들도 같이 챙겨서」 → 안 「응 만들어」). 고르는 것 · 차례 · 굳히는 때는 서버다(server/pre_flow.py)
      — 순위 목록 중 프리장 거래대금 상위 · 프로그램 순매수 큰 순 · 08:50~09:00 에 그날 판으로 굳힘. 화면은 받은 차례 그대로 그린다 */
@@ -1515,7 +1515,7 @@ const SORTS = {
   ov:   { label: '단타', list: () => ovRows(),   // 「겹침」 → 「오늘의종목」 → 「단타」 · 관심 아래 줄 맨 왼쪽(11-11 재권님)
           head: '겹친 칩', show: (code) => ovCell(code), html: true,
           note: () => ovNote(),
-          empty: () => (ovWaiting().length ? `불러오는 중 — ${ovWaiting().map((id) => SORTS[id].label).join(' · ')}`
+          empty: () => (ovWaiting().length ? `불러오는 중 — ${ovWaiting().map(ovLabel).join(' · ')}`
             : '둘 이상의 칩에 함께 든 종목이 없습니다') },
   /* VI·급등 — 오늘 정규장에 상승 VI 가 걸렸거나 +20% 를 넘은 종목, 최근 것이 위 (2026-11-06 재권님 「이거다 넣으면 좋을거 같은데」 →
      자리 「실시간 순위에 칸 추가해서 넣어줘」). 세는 것 · 남기는 것은 서버다(server/intraday_alerts.py · /api/alerts/today) —
@@ -1559,11 +1559,11 @@ const SORT_TIPS = {
   up: '오늘 전일 대비 많이 오른 순',
   down: '오늘 전일 대비 많이 내린 순',
   after: `정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 09:00 ~ 15:40 은 비어 있습니다 · ${CAP_MIN_TXT}`,
-  buy: `외국인 · 기관 · 프로그램이 셋 다 순매수인 종목, 셋 합이 큰 순(외국인 · 기관은 장중 가집계)\n셋 다 샀다가 한 곳이라도 매도로 바뀐 종목은 맨 위에 흐리게 · ${CAP_MIN_TXT}`,
+  buy: `외국인 · 기관 순매수 금액 상위 30(장중 가집계)에 든 종목을 이 차례로 — ① 외국인 · 기관 · 연기금 · 프로그램 넷 다 ② 외국인 · 기관 · 프로그램 ③ 기관 · 연기금 ④ 외국인만 · 같은 칸 안은 산 금액 합 큰 순\n연기금은 15:45 확정치 뒤에만 있어 장중에는 ② ④ 만 찹니다 · 프로그램은 실시간 · 서버가 판을 다시 지을 때마다 차례가 바뀝니다\n칸에서 빠진 종목은 맨 위에 흐리게 · ${CAP_MIN_TXT}`,
   pre: `코스피 200 · 코스닥 150 종목 중 넥스트레이드 프리마켓(08:00 ~ 08:50) 거래대금 상위 안에서 프로그램 순매수가 큰 순\n08:50 ~ 09:00 에 그날 판으로 굳힙니다 · ${CAP_MIN_TXT}`,
   vi: `오늘 정규장에 상승 VI 가 걸렸거나(VI 는 ${CAP_MIN_TXT}) 전일 대비 +20% 를 넘은 종목, 최근 것이 위`,
   bb: `바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · ${CAP_MIN_TXT} · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록`,
-  ov: '관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 가운데 둘 이상의 칩에 함께 든 종목, 겹친 칩 수가 많은 순(같으면 시가총액 순)\n줄마다 어느 칩에 들었는지 적습니다 · 각 칩의 거르기(시가총액 · ETF)는 그 칩 그대로',
+  ov: '관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 · 수급 가운데 둘 이상의 칩에 함께 든 종목, 겹친 칩 수가 많은 순(같으면 시가총액 순)\n줄마다 어느 칩에 들었는지 적습니다 · 각 칩의 거르기(시가총액 · ETF)는 그 칩 그대로',
   get rise() {      // 문턱 숫자는 서버 meta — 받기 전에는 숫자 없이
     const m = riseMeta || {};
     const th = m.risePct != null ? ` ${m.risePct}% 이상` : '';
@@ -1777,14 +1777,19 @@ async function loadPre() {
 }
 
 /* 「겹침」 칩 — 여섯 칩의 목록을 모아 둘 이상에 든 종목. 목록은 각 칩이 받은 것 그대로(못 받은 칩은 「불러오는 중」 에 적는다) */
-const OV_CHIPS = ['fav', 'pre', 'vi', 'after', 'buy', 'rise'];
+const OV_CHIPS = ['fav', 'pre', 'vi', 'after', 'buy', 'rise', 'auto'];   // auto = 「수급」(관심 안 자동 묶음 · 11-11 재권님 「단타에 수급에 걸리는 종목도 넣어야해」)
+const ovLabel = (id) => (id === 'auto' ? '수급' : SORTS[id].label);
 function ovList(id) {
-  if (id === 'fav') return favList().filter((f) => !isUsCode(f.code) && !capBelowMin(f.code));
+  if (id === 'fav') {                // 자동 묶음 종목은 「수급」 으로 센다 — 관심으로도 세면 수급 종목은 늘 둘이 겹쳐 전부 단타가 된다
+    const g = favGroups().find((x) => x.id === AUTO_FG);
+    return favList().filter((f) => !isUsCode(f.code) && !capBelowMin(f.code) && !(g && g.codes.includes(f.code)));
+  }
   if (id === 'after') return [...rowList('after', 'KOSPI'), ...rowList('after', 'KOSDAQ')];
   if (id === 'buy') return jointRows;                              // 셋 다 사는 중인 줄만(빠진 줄 jointFlipped 은 안 셈)
   if (id === 'pre') return preRows && preRows.filter((x) => !capBelowMin(x.code));
   if (id === 'vi') return viRows;
   if (id === 'rise') return riseRows;
+  if (id === 'auto') { const g = favGroups().find((x) => x.id === AUTO_FG); return g ? favList().filter((f) => g.codes.includes(f.code) && !isUsCode(f.code)) : []; }
   return null;
 }
 const ovWaiting = () => OV_CHIPS.filter((id) => ovList(id) == null);
@@ -1805,11 +1810,11 @@ function ovCell(code) {
   const g = ovBy[code];
   if (!g) return '—';
   return `<div style="white-space:nowrap;font-size:12px;line-height:1.3"><b>${g.chips.length}</b><span class="kh-mut">개</span></div>` +
-    `<div style="white-space:nowrap;font-size:11px;line-height:1.3" class="kh-mut">${g.chips.map((id) => SORTS[id].label).join(' · ')}</div>`;
+    `<div style="white-space:nowrap;font-size:11px;line-height:1.3" class="kh-mut">${g.chips.map(ovLabel).join(' · ')}</div>`;
 }
 function ovNote() {
   const w = ovWaiting();
-  return `칩 ${OV_CHIPS.length}개 중 둘 이상${w.length ? ` · 못 받은 칩 ${w.map((id) => SORTS[id].label).join(' · ')}` : ''}`;
+  return `칩 ${OV_CHIPS.length}개 중 둘 이상${w.length ? ` · 못 받은 칩 ${w.map(ovLabel).join(' · ')}` : ''}`;
 }
 async function loadOv() { loadPre(); loadVi(); loadJoint(); loadRise(); }
 
@@ -1891,12 +1896,14 @@ const eokSigned = (won) => { if (won == null) return '—'; const v = Math.round
 /* 한 칸 — 셋의 순매수(억 · 오름 빨강 · 내림 파랑)를 한 줄에(11-05 재권님 「외 기 프 한줄로 해줘」). 13:19 에 표가 순위 칸 밖으로
    밀린 것은 폭이 아니라 시세 갱신이 이 칸을 글자로 넣던 탓이었다(paintOneRow · html). 빠진 종목만 아랫줄 「무엇이 매도로 바뀜 시각」.
    ≈ 는 상위 30 밖이라 그 종목 가집계 수량 × 현재가로 어림한 값(서버 approx) */
+const JOINT_TIER = { 1: ['①', '외국인 · 기관 · 연기금 · 프로그램 넷 다 순매수'], 2: ['②', '외국인 · 기관 · 프로그램 순매수'],
+  3: ['③', '기관 · 연기금 순매수'], 4: ['④', '외국인만 순매수'] };
 function jointCell(code, narrow = false) {
   const r = jointOf(code);
   if (!r) return '—';
   /* ≈ — 상위 30 밖이라 가집계로 어림한 쪽 · 마감 뒤 확정치를 못 받아 가집계로 남은 줄의 외 · 기(r.basis 'estimate' · 11-05 개념정의 검수) */
   const est = (k) => (r.approx || []).includes(k) || (r.basis === 'estimate' && k !== 'program');
-  const one = ([k, n]) => `<span class="${r[k] == null ? 'kh-mut' : dirClass(r[k])}">${n} ${est(k) ? '≈' : ''}${eokSigned(r[k])}</span>`;
+  const one = ([k, n]) => `<span class="${r[k] == null ? 'kh-mut' : dirClass(r[k])}">${n}${est(k) ? '≈' : ''}${eokSigned(r[k])}</span>`;   // 이름과 값 사이 띄움 없음 — 넷 + 차례가 한 줄에 들어 종목 이름이 안 잘리게(11-11)
   /* narrow — 순위 모달 칸. 외 · 기 · 프는 한 줄(11-05 재권님 「외 기 프 는 한줄로」) · 까닭 글만 줄바꿈(한 줄이면 옆 칸 위로 넘쳤다 · 11-05 8772) */
   const line = (html, mut) => `<div class="${mut ? 'kh-mut' : ''}" style="white-space:${mut && narrow ? 'normal' : 'nowrap'};font-size:${mut ? 11 : 12}px">${html}</div>`;
   const names = (ks) => (ks || []).map((k) => JOINT_NAME[k]).join(' · ');
@@ -1904,7 +1911,9 @@ function jointCell(code, narrow = false) {
   /* 단위 「억」 은 줄 끝에 한 번(11-05 재권님 「금액으로 다 맞춰줘」 — 안내 줄에 넣으면 빠짐이 있을 때 두 줄로 넘었다) */
   /* 연 — 연기금 그날 확정치(15:45 뒤 쌓기 · 그 전 「—」 · 언제 채우는지는 표 위 갱신 줄) · 줄마다 시각은 안 넣는다
      (11-06 재권님 「2 안 넣어도 돼 · 갱신시간은 해당 실시간 목록 위에 써주고 종목에는 외 기 프 연 이렇게」) */
-  const body = line(`${[...JOINT_SIDES, ['fund', '연']].map(one).join(' ')}<span class="kh-mut">억</span>`);
+  /* 차례 ①~④ — 서버 joint_tier(11-11 재권님 「셋다사는게 가장좋고 그다음이 외국인 기관 그다음이 기관 연기금 그다음이 외국인」) */
+  const tier = JOINT_TIER[r.tier] ? `<b data-tip="${escT(JOINT_TIER[r.tier][1])}">${JOINT_TIER[r.tier][0]}</b> ` : '';
+  const body = line(`${tier}${[...JOINT_SIDES, ['fund', '연']].map(one).join(' ')}<span class="kh-mut">억</span>`);
   if (!r.flip) return body;
   const why = [(r.sold || []).length ? `${names(r.sold)} 매도로 바뀜` : '', (r.unknown || []).length ? `${names(r.unknown)} 값 모름` : '']
     .filter(Boolean).join(' · ') || '셋 다 매수에서 빠짐';
