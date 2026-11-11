@@ -184,6 +184,57 @@ def board(proxy, day=None, all_rows=False):
     return b
 
 
+def filters(proxy):
+    """주소 /api/kis/day-top/filters 의 data — 쌓인 날 전부를 모아 필터별 셈 · 날별 셈 (2026-11-11 재권님 「이데이터를 쌓아두고 평균도 내야하는데
+    투자전략에 … 종목기록 옆에 필터 라고 이름만들어서 여기에 날짜별로 쌓으면」). 셈은 여기 한 곳 — 화면은 받은 대로 그린다.
+
+        days[]   최근 먼저 — {day, topN, universe, nextDay, filters: {이름: {top, all, next: 걸린 종목 다음 날 등락률 평균 | null, nextN}}}
+        filters  모든 날 합 — {name, top, all, topRate(상위 중 몫 %), allRate(전체 중 몫 %), lift(배 · topRate ÷ allRate), hit(적중 % · 걸린 것 중 상위),
+                 nextAvg(다음 날 등락률 평균 % · 다음 날이 온 종목만), nextUp(그중 오른 몫 %), nextN, days(걸린 날 수)} — 상위 중 많은 순
+    「없음」 은 null(0 아님) — 다음 날이 아직 안 온 날 · 대상이 0 인 칸."""
+    out, tot = [], {}
+    sum_top = sum_all = 0
+    for day in days(proxy):
+        b = board(proxy, day, True)
+        if not b:
+            continue
+        rows, n = b["rows"], b["meta"]["topN"]
+        top = {r["code"] for r in rows[:n]}
+        per = {}
+        for r in rows:
+            for f in r["filters"]:
+                a = per.setdefault(f, {"top": 0, "all": 0, "_nx": []})
+                a["all"] += 1
+                a["top"] += r["code"] in top
+                if r.get("next") is not None:
+                    a["_nx"].append(r["next"])
+        for f, a in per.items():
+            t = tot.setdefault(f, {"top": 0, "all": 0, "_nx": [], "days": 0})
+            t["top"] += a["top"]
+            t["all"] += a["all"]
+            t["_nx"] += a["_nx"]
+            t["days"] += 1
+            nx = a.pop("_nx")
+            a.update(next=round(sum(nx) / len(nx), 2) if nx else None, nextN=len(nx))
+        sum_top += min(n, len(rows))
+        sum_all += len(rows)
+        out.append({"day": day, "topN": n, "universe": len(rows), "nextDay": b["meta"].get("nextDay"), "filters": per})
+
+    def rate(a, b):
+        return round(a * 100 / b, 1) if b else None
+
+    fs = []
+    for f, t in tot.items():
+        nx = t["_nx"]
+        tr, ar = rate(t["top"], sum_top), rate(t["all"], sum_all)
+        fs.append({"name": f, "top": t["top"], "all": t["all"], "topRate": tr, "allRate": ar,
+                   "lift": round(tr / ar, 2) if tr is not None and ar else None, "hit": rate(t["top"], t["all"]),
+                   "nextAvg": round(sum(nx) / len(nx), 2) if nx else None, "nextUp": rate(sum(1 for v in nx if v > 0), len(nx)),
+                   "nextN": len(nx), "days": t["days"]})
+    fs.sort(key=lambda x: (-x["top"], -x["all"]))
+    return {"days": out, "filters": fs, "sumTop": sum_top, "sumAll": sum_all}
+
+
 def _saved_day(proxy, day):
     try:
         with proxy.db_conn() as conn:
