@@ -9,7 +9,7 @@
 **무엇을 세나 — 셋**
     (ㄱ) 답 없는 「묻는 중:」 이 STALE_DAYS 일 넘게 남은 카드
     (ㄴ) doing 인데 메모 줄 수가 STALE_DAYS 일 넘게 안 늘어난 카드
-    (ㄷ) 열린 카드(todo · doing · review)인데 메모에 적힌 커밋이 이미 origin/main 에 든 카드 — 끝났는데 안 닫힘.
+    (ㄷ) doing · review 카드인데 그 카드의 커밋(「커밋 <해시>」 줄 — post-commit 이 적는 꼴)이 이미 origin/main 에 든 카드 — 끝났는데 안 닫힘. 마지막 커밋 줄 뒤에 검수 줄 말고 다른 메모가 붙었으면 뺀다(일이 이어짐)
          창구가 옮겨 심은 것은 `cherry picked from commit <해시>` 줄로 거슬러 찾는다(세션 해시만 보면 영영 안 걸린다 · 창구 11-11 잼)
     마지막 메모 줄에 「홀딩」 이나 「뒤에 진행:」 이 있으면 뺀다 — 재권님이 미루신 것이다
 
@@ -37,7 +37,7 @@ if hasattr(sys.stdout, "reconfigure"):
 STALE_DAYS = 2                      # 이 날 수를 넘게 안 움직이면 멈춘 것으로 센다 — 한 곳
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = os.path.join(ROOT, "logs", "board-stale.json")
-HASH = re.compile(r"\b[0-9a-f]{7,12}\b")
+HASH = re.compile(r"커밋\s+([0-9a-f]{7,12})\b")   # 커밋 뒤 훅이 적는 「커밋 <해시>」 줄만 — 덧말 · 검수 통과 줄에 인용한 남의 해시는 안 센다(개발2 11-11 · 손 안 댄 todo 가 걸렸다)
 ORDER = re.compile(r"재권님[^「\n]{0,40}「")          # 재권님 말씀 인용 — 「재권님 「…」」 · 「재권님(창) 「…」」
 
 
@@ -166,7 +166,12 @@ def main(argv):
             why.append("(ㄱ) 답 없는 물음 %d일 — %s" % (days(ent["ask_since"]), ask[:60]))
         if col == "doing" and days(ent["since"]) > STALE_DAYS:
             why.append("(ㄴ) 메모 %d일 안 늘어남" % days(ent["since"]))
-        if sets and not t.get("standing"):
+        # (ㄷ) 은 doing · review 만 · 마지막 「커밋 …」 줄 뒤에 「검수 통과」 가 아닌 메모가 붙었으면 뺀다 — 「남은 것: …」 처럼 일이 이어지는 카드 ·
+        # 본 일은 main 에 가고 남은 하위로 todo 에 내린 카드가 날마다 다시 떴다(qa 11-11 시뮬 · 33 중 약 10)
+        ls = _lines(memo)
+        last = max((i for i, x in enumerate(ls) if HASH.search(x)), default=None)
+        tail_ok = last is not None and all("검수 통과" in x or "검수 걸림" in x or re.search(r"열 \w+ → \w+", x) for x in ls[last + 1:])
+        if sets and not t.get("standing") and col in ("doing", "review") and tail_ok:
             hs = []
             for h in dict.fromkeys(HASH.findall(memo)):
                 if h not in commit_ok:
