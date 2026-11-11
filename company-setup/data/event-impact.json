@@ -1,0 +1,777 @@
+{
+ "_읽는법": "사건 → 국내 수혜 · 피해 섹터 표(2026-11-10 재권님 「유가가 내려가면 수혜종목 전쟁이 종전되면 수혜종목 등등」 → 「응 해봐」 → 「대표업종 말고 대표섹터로 구분해줘 … 시황분석1이랑 논의해서」). 해석 룰이지 코드 룰이 아니다 — 데일리 「한국장 볼 것」 해석(tools/us-sector-morning.py) · Insight 화면이 이 표를 가져다 쓴다(같은 값은 한 곳에만). 축(axes)마다 반대 사건 둘을 up(오르면 · 격화 · 강화) · down(내리면 · 종전) 으로 짝짓고 짝이 없으면 한쪽만(시황분석1 의견 17:24). 칸: event · dir · good 수혜 · bad 피해 = [{sector(WICS 대분류 — data/industry-topics.json 과 같은 이름 · 「여러 섹터」 = 한 섹터로 못 묶음), topic(업종), stocks}] · note 단서 · basis 근거(source · url · checked: 「원문 읽음」 · 「검색 요약」 = 원문을 못 열고 검색 결과 요약만 봄 · 「우리 셈」) · since 넣은 날. 사건을 넣고 빼는 것은 재권님 결정으로만. 섹터 배정 · 업종 · 종목은 시황분석이 쓰고 근거가 없으면 「세션 판단」. 「지금 이 사건인가」 의 선(유가 몇 % 등)은 아직 없다 — 재권님께 여쭌 뒤 data/metrics.json 에. chain(연쇄 · 2026-11-11 재권님 「연결고리에 신경을」): 이 사건이 다른 길을 거쳐 닿는 2차 섹터 = [{via 거치는 길(「유가↑ → 물가↑ → 금리 인하 늦어짐」) · effect good/bad · sector · topic · stocks · link 거치는 다른 사건 카드의 event 이름(있을 때만 · reverse true 면 그 사건의 거꾸로) · checked}]. 1차(good · bad)보다 약하고 늦게 오는 것이라 화면에서는 옅게 그린다.",
+ "groups": [
+  "원자재",
+  "환율",
+  "금리",
+  "전쟁",
+  "미국",
+  "중국"
+ ],
+ "axes": [
+  {
+   "group": "원자재",
+   "axis": "유가",
+   "up": {
+    "event": "유가 급등",
+    "dir": "오름",
+    "good": [
+     {
+      "sector": "에너지",
+      "topic": "정유",
+      "stocks": [
+       "S-Oil",
+       "SK이노베이션"
+      ]
+     }
+    ],
+    "bad": [
+     {
+      "sector": "산업재",
+      "topic": "항공",
+      "stocks": [
+       "대한항공",
+       "제주항공"
+      ]
+     },
+     {
+      "sector": "소재",
+      "topic": "석유화학",
+      "stocks": [
+       "롯데케미칼"
+      ]
+     }
+    ],
+    "note": "유가 급락의 거꾸로 · 고유가가 길어지면 저가 항공사 이익 전망이 크게 깎임",
+    "basis": [
+     {
+      "source": "아시아경제 2026-04-06 — 고유가 · 환율에 제주항공 영업익 전망 59.8%↓",
+      "url": "https://core.asiae.co.kr/article/2026040615450278333",
+      "checked": "검색 요약"
+     }
+    ],
+    "since": "2026-11-10",
+    "chain": [
+     {
+      "via": "유가↑ → 무역수지 나빠짐 → 원화 약세",
+      "effect": "good",
+      "sector": "경기관련소비재",
+      "topic": "자동차(환율 덕)",
+      "stocks": [
+       "현대차",
+       "기아"
+      ],
+      "checked": "세션 판단",
+      "link": "원화 약세(원/달러 오름)",
+      "reverse": false
+     },
+     {
+      "via": "유가↑ → 물가↑ → 금리 인하가 늦어짐",
+      "effect": "bad",
+      "sector": "건강관리",
+      "topic": "바이오 · 성장주",
+      "stocks": [],
+      "checked": "세션 판단",
+      "link": "미국 금리 인하",
+      "reverse": true
+     },
+     {
+      "via": "유가↑ → 중동 산유국 돈이 늘어 발주↑",
+      "effect": "good",
+      "sector": "산업재",
+      "topic": "건설(중동 수주) · 조선(해양 설비)",
+      "stocks": [
+       "현대건설",
+       "삼성E&A"
+      ],
+      "checked": "세션 판단"
+     }
+    ]
+   },
+   "down": {
+    "event": "유가 급락",
+    "dir": "내림",
+    "good": [
+     {
+      "sector": "산업재",
+      "topic": "항공",
+      "stocks": [
+       "대한항공",
+       "제주항공"
+      ]
+     },
+     {
+      "sector": "소재",
+      "topic": "석유화학(나프타 원가 ↓)",
+      "stocks": [
+       "롯데케미칼"
+      ]
+     }
+    ],
+    "bad": [
+     {
+      "sector": "에너지",
+      "topic": "정유(재고 손실)",
+      "stocks": [
+       "S-Oil"
+      ]
+     }
+    ],
+    "note": "정유는 원유가 빨리 빠지고 제품가는 천천히 빠져 정제마진이 오히려 넓어질 때도 있음 · 항공은 환율도 함께 봐야 함",
+    "basis": [
+     {
+      "source": "한국경제 2026-07-24 — 국제유가 수혜 · 피해 섹터 총정리",
+      "url": "https://www.hankyung.com/article/202607243321i",
+      "checked": "검색 요약"
+     },
+     {
+      "source": "삿경제 — 종전 MOU에 유가 5% 급락 · 정유 · 항공 · 화학 희비",
+      "url": "https://sateconomy.co.kr/news/view/1065577317792036",
+      "checked": "검색 요약"
+     }
+    ],
+    "since": "2026-11-10",
+    "chain": [
+     {
+      "via": "유가↓ → 물가↓ → 금리 인하 여지",
+      "effect": "good",
+      "sector": "건강관리",
+      "topic": "바이오 · 성장주",
+      "stocks": [],
+      "checked": "세션 판단",
+      "link": "미국 금리 인하",
+      "reverse": false
+     },
+     {
+      "via": "유가↓ → 중동 발주가 줄어듦",
+      "effect": "bad",
+      "sector": "산업재",
+      "topic": "건설(중동 수주) · 조선(해양 설비)",
+      "stocks": [
+       "현대건설",
+       "삼성E&A"
+      ],
+      "checked": "세션 판단"
+     },
+     {
+      "via": "유가↓ → 무역수지 좋아짐 → 원화 강세",
+      "effect": "bad",
+      "sector": "경기관련소비재",
+      "topic": "자동차(환율 덕이 줄어듦)",
+      "stocks": [
+       "현대차",
+       "기아"
+      ],
+      "checked": "세션 판단",
+      "link": "원화 강세(원/달러 내림)",
+      "reverse": false
+     }
+    ]
+   }
+  },
+  {
+   "group": "원자재",
+   "axis": "미국 반도체 지수(필반)",
+   "up": {
+    "event": "필반 급등",
+    "dir": "오름",
+    "good": [
+     {
+      "sector": "IT",
+      "topic": "반도체",
+      "stocks": [
+       "삼성전자",
+       "SK하이닉스"
+      ]
+     },
+     {
+      "sector": "IT",
+      "topic": "반도체 소부장",
+      "stocks": [
+       "한미반도체"
+      ]
+     }
+    ],
+    "bad": [],
+    "note": "우리 셈(정규장 121일): 전날 밤 필반 움직임의 0.7~0.9배가 다음 날 시가에 반영되고 장중에는 더 따라가지 않음 · 소부장 근거는 산업 분석 소부장 화면 근거 12",
+    "basis": [
+     {
+      "source": "Insight 미국→국내 표 · 시황분석 셈(2026-11-10 12:19)",
+      "url": "/company-setup/us-kr.html",
+      "checked": "우리 셈"
+     }
+    ],
+    "since": "2026-11-10",
+    "chain": [
+     {
+      "via": "반도체 대형주 ↑ → 외국인 순매수 → 원화 강세",
+      "effect": "good",
+      "sector": "필수소비재",
+      "topic": "음식료(원재료 수입)",
+      "stocks": [],
+      "checked": "세션 판단",
+      "link": "원화 강세(원/달러 내림)",
+      "reverse": false
+     },
+     {
+      "via": "지수 ↑ → 거래대금 ↑",
+      "effect": "good",
+      "sector": "금융",
+      "topic": "증권",
+      "stocks": [
+       "키움증권",
+       "미래에셋증권"
+      ],
+      "checked": "세션 판단"
+     }
+    ]
+   }
+  },
+  {
+   "group": "환율",
+   "axis": "원/달러",
+   "up": {
+    "event": "원화 약세(원/달러 오름)",
+    "dir": "오름",
+    "good": [
+     {
+      "sector": "경기관련소비재",
+      "topic": "자동차",
+      "stocks": [
+       "현대차",
+       "기아"
+      ]
+     },
+     {
+      "sector": "산업재",
+      "topic": "조선",
+      "stocks": [
+       "HD한국조선해양"
+      ]
+     },
+     {
+      "sector": "여러 섹터",
+      "topic": "수출주",
+      "stocks": []
+     }
+    ],
+    "bad": [
+     {
+      "sector": "산업재",
+      "topic": "항공",
+      "stocks": [
+       "대한항공"
+      ]
+     },
+     {
+      "sector": "필수소비재",
+      "topic": "음식료(원재료 수입)",
+      "stocks": [
+       "CJ제일제당"
+      ]
+     },
+     {
+      "sector": "소재",
+      "topic": "철강 · 건설(원재료)",
+      "stocks": []
+     }
+    ],
+    "note": "항공은 연료 · 정비 · 공항 비용을 외화로 내서 17개 업종 중 유일하게 부정적(한국신용평가) · 조선은 환헤지로 회사마다 다름 · 현지 공장이 늘어 자동차 환율 효과는 예전보다 작음",
+    "basis": [
+     {
+      "source": "이투데이 — 달러 빚 많은 항공사 직격탄 · 車 · 조선 수혜",
+      "url": "https://www.etoday.co.kr/news/view/2166038",
+      "checked": "검색 요약"
+     },
+     {
+      "source": "스마트투데이 — 환율 1500원 · 달러 버는 업종 웃고 쓰는 업종 운다",
+      "url": "https://www.smarttoday.co.kr/ko-kr/articles/108193",
+      "checked": "검색 요약"
+     }
+    ],
+    "since": "2026-11-10",
+    "chain": [
+     {
+      "via": "수입 물가 ↑ → 한국은행 인하가 늦어짐",
+      "effect": "bad",
+      "sector": "건강관리",
+      "topic": "바이오 · 성장주",
+      "stocks": [],
+      "checked": "세션 판단",
+      "link": "미국 금리 인하",
+      "reverse": true
+     },
+     {
+      "via": "외국인 환차손 걱정 → 외국인 순매도",
+      "effect": "bad",
+      "sector": "IT",
+      "topic": "반도체 대형주(외국인 비중 큼)",
+      "stocks": [
+       "삼성전자",
+       "SK하이닉스"
+      ],
+      "checked": "세션 판단"
+     }
+    ]
+   },
+   "down": {
+    "event": "원화 강세(원/달러 내림)",
+    "dir": "내림",
+    "good": [
+     {
+      "sector": "산업재",
+      "topic": "항공",
+      "stocks": [
+       "대한항공"
+      ]
+     },
+     {
+      "sector": "필수소비재",
+      "topic": "음식료",
+      "stocks": [
+       "CJ제일제당"
+      ]
+     },
+     {
+      "sector": "금융",
+      "topic": "은행(외화환산이익)",
+      "stocks": [
+       "KB금융"
+      ]
+     }
+    ],
+    "bad": [
+     {
+      "sector": "여러 섹터",
+      "topic": "수출주",
+      "stocks": []
+     }
+    ],
+    "note": "은행은 환율이 내리면 외화환산이익 · 자본비율 개선(하나증권 최정욱)",
+    "basis": [
+     {
+      "source": "이투데이 — 환율과 업종 희비",
+      "url": "https://www.etoday.co.kr/news/view/2166038",
+      "checked": "검색 요약"
+     }
+    ],
+    "since": "2026-11-10",
+    "chain": [
+     {
+      "via": "외국인 환차익 기대 → 외국인 순매수",
+      "effect": "good",
+      "sector": "IT",
+      "topic": "반도체 대형주(외국인 비중 큼)",
+      "stocks": [
+       "삼성전자",
+       "SK하이닉스"
+      ],
+      "checked": "세션 판단"
+     },
+     {
+      "via": "해외여행 값이 싸짐 → 내국인 출국 ↑",
+      "effect": "good",
+      "sector": "경기관련소비재",
+      "topic": "여행",
+      "stocks": [
+       "하나투어",
+       "모두투어"
+      ],
+      "checked": "세션 판단"
+     }
+    ]
+   }
+  },
+  {
+   "group": "금리",
+   "axis": "미국 금리",
+   "down": {
+    "event": "미국 금리 인하",
+    "dir": "내림",
+    "good": [
+     {
+      "sector": "건강관리",
+      "topic": "바이오",
+      "stocks": [
+       "삼성바이오로직스",
+       "알테오젠"
+      ]
+     },
+     {
+      "sector": "여러 섹터",
+      "topic": "성장주",
+      "stocks": []
+     },
+     {
+      "sector": "금융",
+      "topic": "지주사",
+      "stocks": []
+     }
+    ],
+    "bad": [
+     {
+      "sector": "금융",
+      "topic": "은행(예대마진 축소 — 세션 판단)",
+      "stocks": []
+     }
+    ],
+    "note": "은행 피해는 통상 해석 — 이번 검색에서 근거 기사를 못 찾음",
+    "basis": [
+     {
+      "source": "헤럴드경제 2025-09-16 — 美 금리인하 뒤 성장주 재평가 · 바이오 프리미엄",
+      "url": "https://www.heraldk.com/article/2025091623000015915",
+      "checked": "검색 요약"
+     }
+    ],
+    "since": "2026-11-10",
+    "chain": [
+     {
+      "via": "달러 약세 → 원화 강세",
+      "effect": "good",
+      "sector": "필수소비재",
+      "topic": "음식료(원재료 수입)",
+      "stocks": [],
+      "checked": "세션 판단",
+      "link": "원화 강세(원/달러 내림)",
+      "reverse": false
+     },
+     {
+      "via": "신흥국으로 돈이 들어옴 → 거래대금 ↑",
+      "effect": "good",
+      "sector": "금융",
+      "topic": "증권",
+      "stocks": [
+       "키움증권",
+       "미래에셋증권"
+      ],
+      "checked": "세션 판단"
+     },
+     {
+      "via": "운용 금리 ↓ → 투자 이익 ↓",
+      "effect": "bad",
+      "sector": "금융",
+      "topic": "보험",
+      "stocks": [],
+      "checked": "세션 판단"
+     }
+    ]
+   }
+  },
+  {
+   "group": "전쟁",
+   "axis": "전쟁 · 지정학",
+   "up": {
+    "event": "전쟁 격화(중동 등)",
+    "dir": "격화",
+    "good": [
+     {
+      "sector": "산업재",
+      "topic": "방산(세션 판단)",
+      "stocks": [
+       "한화에어로스페이스",
+       "LIG넥스원"
+      ]
+     },
+     {
+      "sector": "에너지",
+      "topic": "정유",
+      "stocks": [
+       "S-Oil"
+      ]
+     }
+    ],
+    "bad": [
+     {
+      "sector": "산업재",
+      "topic": "항공",
+      "stocks": []
+     },
+     {
+      "sector": "경기관련소비재",
+      "topic": "여행",
+      "stocks": []
+     }
+    ],
+    "note": "방산 수혜는 세션 판단 — 이번 검색에서 근거 기사를 못 찾음 · 유가가 함께 오르면 위 「유가 급등」 도 같이 봄",
+    "basis": [],
+    "since": "2026-11-10",
+    "chain": [
+     {
+      "via": "유가 ↑",
+      "effect": "bad",
+      "sector": "소재",
+      "topic": "석유화학",
+      "stocks": [
+       "롯데케미칼"
+      ],
+      "checked": "세션 판단",
+      "link": "유가 급등",
+      "reverse": false
+     },
+     {
+      "via": "안전자산 선호 → 달러 강세 → 원화 약세",
+      "effect": "good",
+      "sector": "경기관련소비재",
+      "topic": "자동차(환율 덕)",
+      "stocks": [
+       "현대차",
+       "기아"
+      ],
+      "checked": "세션 판단",
+      "link": "원화 약세(원/달러 오름)",
+      "reverse": false
+     },
+     {
+      "via": "해상 항로 우회 → 운임 ↑",
+      "effect": "good",
+      "sector": "산업재",
+      "topic": "해운",
+      "stocks": [
+       "HMM"
+      ],
+      "checked": "세션 판단"
+     }
+    ]
+   },
+   "down": {
+    "event": "전쟁 종전 · 휴전",
+    "dir": "종전",
+    "good": [
+     {
+      "sector": "산업재",
+      "topic": "건설(중동 재건)",
+      "stocks": [
+       "현대건설",
+       "삼성E&A",
+       "DL이앤씨",
+       "GS건설"
+      ]
+     },
+     {
+      "sector": "에너지",
+      "topic": "에너지",
+      "stocks": []
+     },
+     {
+      "sector": "산업재",
+      "topic": "항공 · 여행(유가 안정)",
+      "stocks": []
+     }
+    ],
+    "bad": [
+     {
+      "sector": "산업재",
+      "topic": "방산(세션 판단)",
+      "stocks": []
+     }
+    ],
+    "note": "2026-04 미 · 이란 휴전 때 건설업종 하루 +17.4% · 다만 실제 수주까지는 시간이 걸린다는 신중론 · 건설기계는 이란 매출 비중이 작아 덤덤",
+    "basis": [
+     {
+      "source": "머니투데이 2026-04-08 — 종전 수혜 건설 · 에너지株",
+      "url": "https://www.mt.co.kr/article/2026040811131782718",
+      "checked": "검색 요약"
+     },
+     {
+      "source": "MTN 2026-06-28 — 중동 종전 합의에도 건설업 수혜 물음표",
+      "url": "https://news.mtn.co.kr/news-detail/2026062815243966071",
+      "checked": "검색 요약"
+     }
+    ],
+    "since": "2026-11-10",
+    "chain": [
+     {
+      "via": "유가 ↓",
+      "effect": "good",
+      "sector": "소재",
+      "topic": "석유화학(나프타 원가 ↓)",
+      "stocks": [
+       "롯데케미칼"
+      ],
+      "checked": "세션 판단",
+      "link": "유가 급락",
+      "reverse": false
+     },
+     {
+      "via": "재건 공사 → 철강 · 장비 수요 ↑",
+      "effect": "good",
+      "sector": "산업재",
+      "topic": "건설기계",
+      "stocks": [
+       "HD현대인프라코어"
+      ],
+      "checked": "세션 판단"
+     },
+     {
+      "via": "항로 정상화 → 운임 ↓",
+      "effect": "bad",
+      "sector": "산업재",
+      "topic": "해운",
+      "stocks": [
+       "HMM"
+      ],
+      "checked": "세션 판단"
+     }
+    ]
+   }
+  },
+  {
+   "group": "미국",
+   "axis": "미국 관세",
+   "up": {
+    "event": "미국 관세 강화",
+    "dir": "강화",
+    "good": [
+     {
+      "sector": "여러 섹터",
+      "topic": "미국 현지 생산이 많은 곳",
+      "stocks": []
+     },
+     {
+      "sector": "산업재",
+      "topic": "초고압 변압기(현지 생산 · 미국산 철강)",
+      "stocks": [
+       "HD현대일렉트릭",
+       "효성중공업"
+      ]
+     }
+    ],
+    "bad": [
+     {
+      "sector": "소재",
+      "topic": "철강",
+      "stocks": [
+       "POSCO홀딩스"
+      ]
+     },
+     {
+      "sector": "경기관련소비재",
+      "topic": "가전(생산지 따라)",
+      "stocks": []
+     },
+     {
+      "sector": "경기관련소비재",
+      "topic": "자동차",
+      "stocks": [
+       "현대차"
+      ]
+     }
+    ],
+    "note": "2026-02 미 대법원 상호관세 위법 판결 뒤 무역법 122조 10% 글로벌 관세 · 철강은 고관세 유지 · 자동차는 일본 · EU 와 관세가 같아져 상대 우위가 줄었다는 평가",
+    "basis": [
+     {
+      "source": "뉴시스 2025-07-31 — 관세협상 타결에 업종별 희비",
+      "url": "https://www.newsis.com/view/NISX20250731_0003274450",
+      "checked": "검색 요약"
+     },
+     {
+      "source": "증권사 산업 리포트 2026-04-10 — 232조 관세 변화 · 초고압변압기 수혜",
+      "url": "https://stock.pstatic.net/stock-research/industry/64/20260410_industry_494476000.pdf",
+      "checked": "검색 요약"
+     }
+    ],
+    "since": "2026-11-10",
+    "chain": [
+     {
+      "via": "수출 감소 걱정 → 원화 약세",
+      "effect": "bad",
+      "sector": "필수소비재",
+      "topic": "음식료(원재료 수입)",
+      "stocks": [],
+      "checked": "세션 판단",
+      "link": "원화 약세(원/달러 오름)",
+      "reverse": false
+     },
+     {
+      "via": "미국 물가 ↑ → 미국 금리 인하가 늦어짐",
+      "effect": "bad",
+      "sector": "건강관리",
+      "topic": "바이오 · 성장주",
+      "stocks": [],
+      "checked": "세션 판단",
+      "link": "미국 금리 인하",
+      "reverse": true
+     }
+    ]
+   }
+  },
+  {
+   "group": "중국",
+   "axis": "중국 경기",
+   "up": {
+    "event": "중국 경기부양",
+    "dir": "부양",
+    "good": [
+     {
+      "sector": "필수소비재",
+      "topic": "화장품",
+      "stocks": [
+       "아모레퍼시픽",
+       "코스맥스"
+      ]
+     },
+     {
+      "sector": "경기관련소비재",
+      "topic": "면세 · 카지노",
+      "stocks": [
+       "호텔신라"
+      ]
+     },
+     {
+      "sector": "소재",
+      "topic": "철강 · 화학",
+      "stocks": [
+       "POSCO홀딩스",
+       "롯데케미칼"
+      ]
+     },
+     {
+      "sector": "산업재",
+      "topic": "건설기계",
+      "stocks": []
+     }
+    ],
+    "bad": [],
+    "note": "근거 기사가 2019~2024 것뿐 — 2026 증권가 자료는 못 찾음 · 화장품 중국 실적 회복은 가시성이 낮다는 신중론도",
+    "basis": [
+     {
+      "source": "뉴스토마토 — 중국 회복 기대감에 화장품 · 카지노",
+      "url": "https://www.newstomato.com/ReadNews.aspx?no=1226092",
+      "checked": "검색 요약"
+     },
+     {
+      "source": "아시아경제 2024-10-17 — 소비 진작 · 제조업 투자 기대 HD현대건설기계 · 오리온 · 코스맥스",
+      "url": "https://core.asiae.co.kr/article/2024101707533112007",
+      "checked": "검색 요약"
+     }
+    ],
+    "since": "2026-11-10",
+    "chain": [
+     {
+      "via": "원자재 수요 ↑ → 구리 · 아연 값 ↑",
+      "effect": "good",
+      "sector": "소재",
+      "topic": "비철금속",
+      "stocks": [
+       "고려아연",
+       "풍산"
+      ],
+      "checked": "세션 판단"
+     },
+     {
+      "via": "위안화 강세 → 원화도 같이 강세",
+      "effect": "good",
+      "sector": "산업재",
+      "topic": "항공",
+      "stocks": [
+       "대한항공"
+      ],
+      "checked": "세션 판단",
+      "link": "원화 강세(원/달러 내림)",
+      "reverse": false
+     }
+    ]
+   }
+  }
+ ]
+}
