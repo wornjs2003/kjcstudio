@@ -8334,7 +8334,8 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
             if period == "5m" and cover is not None:
                 bars = _keep_covered_slots(bars, cover, _minutes_now_min())
         fetched = save_candles(code, period, bars)
-        if not conf["kis"] and period == "5m" and cover and any(hi >= fresh_m for _, hi in cover):
+        # 20:00 뒤 · 주말에 받으면 첫 칸이 하루 끝(MINUTE_DAY_END)에서 끝난다 — 그때도 그날 봉은 다 끝난 뒤 받은 것이라 적는다(qa 11-11 물음)
+        if not conf["kis"] and period == "5m" and cover and any(hi >= min(fresh_m, MINUTE_DAY_END) for _, hi in cover):
             _minutes_mark_fresh(code, fresh_m)       # 「지금 칸」 까지 받아 저장했다 — vol_same_time 이 이 분까지만 센다
         _meta_set(mkey, time.time())
         if fetched:
