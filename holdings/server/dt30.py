@@ -259,6 +259,8 @@ JOINT_TOP = 30                # 「매수」 어림 — 외 · 기 순매수 합
 VI_PROBE_PCT = 3.0            # 지난 날 VI 를 KIS 에 물을 종목 — 09:00 · 09:05 봉 고가가 앞 거래일 종가보다 이 % 이상(동적 VI 가장 낮은 문턱 · 코스피200 3%)
 QUIET = ((7, 30), (20, 10))   # 되채우기(VI 를 KIS 에 묻는다)를 안 하는 때 — 장 전 · 장중 · 넥장(20:00)까지 KIS 몫을 안 쓴다
 VI_WORKERS = 6                # VI 를 겹쳐 묻는 수
+# 서버가 뜨면 QUIET 와 상관없이 이번 주(월요일부터 어제까지) 거래일을 먼저 채운다 — 재권님 「어제랑 어그제라도 먼저 넣어노라고해」 → 「이번주꺼만 넣어줘」(11-12 08:4x) · 하루 VI 묻기 150번 남짓 · 사본 DB 로 두 날 65초
+RECENT_SKIP = ((9, 0), (9, 10))  # 그래도 이때는 미룬다 — 09:06 굳힘이 밀리지 않게
 
 
 def _trade_days(proxy, before, n):
@@ -394,14 +396,14 @@ def rebuild(proxy, day, prev, cfg=None):
                              "buy 는 09:05 봉 시가 · 시가총액 · 섹터 · 시장은 지금 값"}}
 
 
-def backfill(proxy, today):
-    """today 앞 BACKFILL_DAYS 거래일 중 판이 없는 날을 다시 세어 남긴다(라이브로 굳힌 날은 안 건드린다). 남긴 날 수."""
-    ds = _trade_days(proxy, today, BACKFILL_DAYS)
+def backfill(proxy, today, limit=BACKFILL_DAYS, since=None):
+    """today 앞 limit 거래일 중 판이 없는 날을 다시 세어 남긴다(라이브로 굳힌 날은 안 건드린다). 남긴 날 수."""
+    ds = _trade_days(proxy, today, limit)
     have = set(days(proxy))
     n = 0
     cfg = proxy.load_secrets()
-    for i, d in enumerate(ds[:BACKFILL_DAYS]):
-        if d in have or i + 1 >= len(ds):
+    for i, d in enumerate(ds[:limit]):
+        if d in have or i + 1 >= len(ds) or (since and d < since):
             continue
         b = rebuild(proxy, d, ds[i + 1], cfg)
         if b and b["rows"]:
@@ -451,12 +453,17 @@ def start(proxy):
 
     def loop():
         time.sleep(30)
-        filled = None
+        filled = recent = None
         while True:
             try:
                 now = _now()
                 day = now.strftime("%Y%m%d")
                 hm = now.hour * 60 + now.minute
+                if recent != day and not (RECENT_SKIP[0][0] * 60 + RECENT_SKIP[0][1] <= hm < RECENT_SKIP[1][0] * 60 + RECENT_SKIP[1][1]):
+                    recent = day
+                    n = backfill(proxy, day, BACKFILL_DAYS, since=(now - timedelta(days=now.weekday())).strftime("%Y%m%d"))
+                    if n:
+                        print("  [단타 30] 이번 주 %d일 먼저 다시 세어 남김" % n, flush=True)
                 if filled != day and not (QUIET[0][0] * 60 + QUIET[0][1] <= hm < QUIET[1][0] * 60 + QUIET[1][1]):
                     filled = day                 # 멈춰도 그날은 다시 안 돈다(20초마다 무거운 셈을 되풀이하지 않게)
                     n = backfill(proxy, day)
