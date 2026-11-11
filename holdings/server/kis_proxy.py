@@ -10293,6 +10293,14 @@ class Handler(SimpleHTTPRequestHandler):
                 })
                 return
 
+            if route == "day-top/filters":
+                # 쌓인 날 전부 모은 필터별 셈 · 날별 셈(server/day_top.filters) — 투자 전략 「필터」 탭 · KIS 안 부름 (2026-11-11 재권님)
+                self._send_json({"ok": True, "data": day_top.filters(sys.modules[__name__]),
+                                 "meta": {"minCapEok": day_top.MIN_CAP_EOK, "topN": day_top.TOP_N, "saveAt": "%02d:%02d" % day_top.SAVE_AT,
+                                          "note": "상위 = 그날 등락률 상위 topN · 전체 = 시가총액 minCapEok 억 이상 주식 · lift = 상위 중 몫 ÷ 전체 중 몫 · "
+                                                  "hit = 걸린 것 중 상위에 든 몫 · next = 걸린 종목 다음 거래일 종가 등락률(다음 날이 온 종목만) · % 단위"}})
+                return
+
             if route == "day-top":
                 # 등락 상위와 걸린 필터(server/day_top.py) — 남긴 날 판만 읽는다 · KIS 를 안 부른다
                 day = (qs.get("day") or [""])[0].strip()
