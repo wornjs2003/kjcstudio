@@ -6405,6 +6405,25 @@ def _minutes_mark_done(code, ends):
               _minutes_trade_day() + "|" + ",".join(str(x) for x in sorted(done)))
 
 
+def _minutes_fresh_upto(code):
+    """그 거래일에 「지금 칸」(지금까지 30분)을 마지막으로 받은 **분**(`sync_meta` 의 `m5upto:<코드>`) — 없으면 None.
+
+    그 분 앞에서 끝난 5분봉은 다 끝난 뒤 받은 값이다. 「전날 같은 시각 대비 거래량 %」 가 이것으로 덜 찬 봉을 뺀다
+    (2026-11-11 qa 돌려보냄 — 봉 끝 시각만 보고 세어 09:15 → 09:19 사이 하이닉스가 36% → 50% · 재권님 「가」)."""
+    v = _meta_get("m5upto:%s" % code) or ""
+    day, _, m = v.partition("|")
+    if day != _minutes_trade_day() or not m.isdigit():
+        return None
+    return int(m)
+
+
+def _minutes_mark_fresh(code, minute):
+    """「지금 칸」 을 받아 **저장한 뒤** 부른다 — 받기 전 분을 적는다(받는 데 몇 초 걸려도 그 뒤 분을 적지 않게). 줄지 않는다."""
+    old = _minutes_fresh_upto(code)
+    if old is None or minute > old:
+        _meta_set("m5upto:%s" % code, "%s|%d" % (_minutes_trade_day(), minute))
+
+
 def _keep_covered_slots(bars5, cover, now_m):
     """받은 범위에 다섯 분이 다 든 5분봉만 남긴다 — 지금 자라는 칸은 둔다.
 
@@ -7443,6 +7462,13 @@ def vol_same_time(code, now=None):
     if prev is None:
         return None
     now_min = now.hour * 60 + now.minute
+    # 봉 끝이 지났어도 그 뒤에 다시 받지 않았으면 덜 찬 값이다 — 「지금 칸」 을 마지막으로 받은 분까지만 센다(_minutes_fresh_upto).
+    # 그 기록이 없으면(오늘 아직 안 받음 · 기록 전 서버) 끝난 봉도 없는 것으로 본다 — 덜 찬 값을 내느니 「아직」 이다
+    fresh = _minutes_fresh_upto(code)
+    if today != _minutes_trade_day() or fresh is None:
+        now_min = -1
+    else:
+        now_min = min(now_min, fresh)
     with _db_lock, db_conn() as conn:
         rows = conn.execute(
             """SELECT substr(ts, 9, 4) AS hm, volume FROM candles
@@ -8262,6 +8288,7 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
             # (2026-09-17). 거래가 잦은 종목만 자주 열려 저절로 채워지고
             # 있었던 것이라, 종목마다 봉 개수가 크게 갈렸다.
             cover = None
+            fresh_m = _minutes_now_min()             # 받기 전 분 — 이 분 앞에서 끝난 봉은 다 찬 값으로 받는다
             if _minutes_need_day(code, period, rows, gap_check):
                 raw, cover = fetch_minutes_day(cfg, code)
                 _meta_set("dayfill:%s:%s" % (code, period), _minutes_trade_day())
@@ -8294,6 +8321,8 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
             if period == "5m" and cover is not None:
                 bars = _keep_covered_slots(bars, cover, _minutes_now_min())
         fetched = save_candles(code, period, bars)
+        if not conf["kis"] and period == "5m" and cover and any(hi >= fresh_m for _, hi in cover):
+            _minutes_mark_fresh(code, fresh_m)       # 「지금 칸」 까지 받아 저장했다 — vol_same_time 이 이 분까지만 센다
         _meta_set(mkey, time.time())
         if fetched:
             rows = read_candles(code, period, _view_limit(code, period, limit))
