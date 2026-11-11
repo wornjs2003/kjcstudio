@@ -1436,6 +1436,7 @@ const showCap = (code) => {
   return isUsCode(code) ? fmtUsdBig(c) : fmtMoneyKr(c);
 };
 
+const NOW_RISE_PCT = 3;           // 「현재상승」 문턱 — 시가 대비 %(재권님 11-11 「시가보다 3%이상」)
 const SORTS = {
   /* 관심종목 — **다른 다섯과 성격이 다르다.**
    *
@@ -1479,6 +1480,12 @@ const SORTS = {
   after:{ label: '장외', key: (p) => p.regPct, only: (v) => v > 0, capMin: true,
           head: '종가', show: (code, p) => (p && p.regClose ? fmtPriceOf(code, p.regClose) : '—'),
           pct: (p) => p.regPct, note: '종가 대비 오른 종목' },
+  /* 현재상승 — 지금 값이 그날 시가보다 NOW_RISE_PCT % 이상 높은 종목 · 시가 대비 큰 순(2026-11-11 재권님 「현재상승 이라는 버튼추가하고
+     여기는 시가보다 3%이상 올라있는 목록」). 시가 · 현재가는 통합 시세 그대로 — 셈은 시가 대비 % 하나 */
+  nowup:{ label: '현재상승', key: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), only: (v) => v >= NOW_RISE_PCT, capMin: true,
+          head: '시가', show: (code, p) => (p && p.open ? fmtPriceOf(code, p.open) : '—'),
+          pct: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), note: `시가 대비 +${NOW_RISE_PCT}% 이상`,
+          empty: () => `시가보다 +${NOW_RISE_PCT}% 이상 오른 종목이 없습니다(시세를 받는 중이면 잠시 뒤 채워짐)` },
   /* 매수 — 외국인 · 기관 · 프로그램이 **셋 다** 순매수인 종목, 셋 합이 큰 순 (2026-11-05 재권님 「프로그램 기관 외국인이 동시에
      사고있는 종목들 볼수있는 방법좀 마련해봐」 → 「실시간 순위에 버튼 하나 만들고 거기에 넣어줘 · 매수 라는 버튼」).
      고르는 것은 서버다(kis_proxy.py `fetch_joint_buy` · 외국인 · 기관은 가집계) — 화면은 받은 차례 그대로 그린다.
@@ -1557,7 +1564,7 @@ const SORTS = {
 const SORT_TIPS = {
   /* 관심 — 실제 차례를 그대로 적는다(rowList 의 filter 갈래 · 2026-11-11 재권님 「관심 에 종목버튼에 마우스 올리면 어떤 룰로 소팅되는지 설명 넣어줘」):
      순위 목록 차례(코스피 시가총액 순 → 코스닥 시가총액 순)에서 담은 것만 골라내고, 목록 밖에서 담은 종목은 담은 차례로 맨 뒤 */
-  fav: `하트로 담은 관심종목만 골라 봅니다\n차례 — ① 코스피 종목 시가총액 큰 순 ② 그다음 코스닥 종목 시가총액 큰 순 ③ 순위 목록(코스피 200 · 코스닥 150) 밖에서 담은 종목은 담은 차례대로 맨 뒤\n아래 묶음 칩을 고르면 그 묶음만(다시 누르면 전체) · ${CAP_MIN_TXT}\n함께 나오는 칩 줄(단타 · 프리장 · 초반상승 · VI·급등 · 볼린저 · 장외 · 수급 — 수급만 관심 안 「자동」 묶음)은 관심과 따로 순위 목록 전체에서 고릅니다 — 칩마다 마우스를 올리면 고르는 기준이 뜹니다`,
+  fav: `하트로 담은 관심종목만 골라 봅니다\n차례 — ① 코스피 종목 시가총액 큰 순 ② 그다음 코스닥 종목 시가총액 큰 순 ③ 순위 목록(코스피 200 · 코스닥 150) 밖에서 담은 종목은 담은 차례대로 맨 뒤\n아래 묶음 칩을 고르면 그 묶음만(다시 누르면 전체) · ${CAP_MIN_TXT}\n함께 나오는 칩 줄(단타 · 프리장 · 초반상승 · 현재상승 · VI·급등 · 볼린저 · 장외 · 수급 — 수급만 관심 안 「자동」 묶음)은 관심과 따로 순위 목록 전체에서 고릅니다 — 칩마다 마우스를 올리면 고르는 기준이 뜹니다`,
   cap: '시가총액이 큰 순 — 위 코스피 · 코스닥으로 시장을 고릅니다',
   value: '오늘 거래대금이 큰 순',
   vol: '오늘 거래량이 큰 순',
@@ -1566,6 +1573,7 @@ const SORT_TIPS = {
   after: `정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 09:00 ~ 15:40 은 비어 있습니다 · ${CAP_MIN_TXT}`,
   buy: `외국인 · 기관 순매수 금액 상위 30(장중 가집계)에 든 종목을 이 차례로 — ① 외국인 · 기관 · 연기금 · 프로그램 넷 다 ② 외국인 · 기관 · 프로그램 ③ 기관 · 연기금 ④ 외국인만 · 같은 칸 안은 산 금액 합 큰 순\n연기금은 15:45 확정치 뒤에만 있어 장중에는 ② ④ 만 찹니다 · 프로그램은 실시간 · 서버가 판을 다시 지을 때마다 차례가 바뀝니다\n칸에서 빠진 종목은 맨 위에 흐리게 · ${CAP_MIN_TXT}`,
   pre: `코스피 200 · 코스닥 150 종목 중 넥스트레이드 프리마켓(08:00 ~ 08:50) 거래대금 상위 안에서 프로그램 순매수가 큰 순\n08:50 ~ 09:00 에 그날 판으로 굳힙니다 · ${CAP_MIN_TXT}`,
+  nowup: `지금 값이 오늘 시가보다 +${NOW_RISE_PCT}% 이상 높은 종목, 시가 대비 큰 순 · 오른쪽 % 도 시가 대비\n위 코스피 · 코스닥으로 시장을 고릅니다 · ${CAP_MIN_TXT}`,
   vi: `오늘 정규장에 상승 VI 가 걸렸거나(VI 는 ${CAP_MIN_TXT}) 전일 대비 +20% 를 넘은 종목, 최근 것이 위`,
   bb: `바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · ${CAP_MIN_TXT} · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록`,
   ov: '관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 · 수급 가운데 둘 이상의 칩에 함께 든 종목, 겹친 칩 수가 많은 순(같으면 시가총액 순)\n줄마다 어느 칩에 들었는지 적습니다 · 각 칩의 거르기(시가총액 · ETF)는 그 칩 그대로',
@@ -1811,11 +1819,13 @@ function ovRows() {
   return Object.values(by).filter((g) => g.chips.length >= 2)
     .sort((a, b) => b.chips.length - a.chips.length || (capOf(b.code) ?? -1) - (capOf(a.code) ?? -1));
 }
+const OV_CHIP_W = 96;     // 단타 칸 칩 목록 폭(px) — 이보다 길면 줄을 바꾼다
 function ovCell(code) {
   const g = ovBy[code];
   if (!g) return '—';
   return `<div style="white-space:nowrap;font-size:12px;line-height:1.3"><b>${g.chips.length}</b><span class="kh-mut">개</span></div>` +
-    `<div style="white-space:nowrap;font-size:11px;line-height:1.3" class="kh-mut">${g.chips.map(ovLabel).join(' · ')}</div>`;
+    /* 칩 목록은 칸 안에서 줄을 바꾼다 — 한 줄로 두면 칸이 넓어져 종목 이름 · 섹터가 「에코…」 처럼 잘렸다(11-11 재권님 「종목이름이랑 섹터가 다 보이게」) */
+    `<div style="white-space:normal;max-width:${OV_CHIP_W}px;margin-left:auto;font-size:11px;line-height:1.3" class="kh-mut">${g.chips.map((id) => `<span style="white-space:nowrap">${ovLabel(id)}</span>`).join(' · ')}</div>`;   // 칩 이름 한가운데서는 안 끊는다
 }
 function ovNote() {
   const w = ovWaiting();
@@ -2124,7 +2134,7 @@ function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
 /* 「관심」 아래 줄(#kh-sorts-fav)로 가는 칩 — 위 줄에서는 빠지고, 「관심」 이나 이 칩을 볼 때만 나온다.
    거르는 것은 그대로 전 종목이다(관심 안에서 거르지 않는다 · 2026-11-11 재권님 「나」). 칩이 늘어 위 줄이 세 줄로 꺾이던 것도 이것으로 풀렸다 */
 /* 「단타」(ov · 옛 「겹침」 · 「오늘의종목」)는 이 줄 맨 왼쪽(2026-11-11 재권님 「겹침 -> 오늘의종목 으로 이름 바꾸고 가장 왼쪽에」 → 「관심종목 하위 버튼에서 가장왼쪽이야」) */
-const FAV_SUB_ORDER = ['ov', 'pre', 'rise', 'vi', 'bb', 'after'];   // 장외도 이 줄로 · 매수 · 공매도는 위 줄(11-11 재권님 「장외랑 매수도 관심 하위로」 → 「매수 공매도는 위로」)
+const FAV_SUB_ORDER = ['ov', 'pre', 'rise', 'nowup', 'vi', 'bb', 'after'];   // 현재상승은 초반상승 옆(11-11)   // 장외도 이 줄로 · 매수 · 공매도는 위 줄(11-11 재권님 「장외랑 매수도 관심 하위로」 → 「매수 공매도는 위로」)
 const FAV_SUB = new Set(FAV_SUB_ORDER);
 
 /* 「수급」 칩 — 서버(auto_watch)가 관심에 자동으로 담는 묶음 「자동」(id auto)을 「관심」 아래 줄 공매도 옆에 둔다.
@@ -2747,7 +2757,7 @@ function paintRows(priceMap) {
   const list = rowList();
   /* 고른 시장의 목록이 비었다 — 서버가 아직 그 시장을 안 준다. 빈 표로 두면 고장처럼 보인다 */
   if (!list.length && universe) {
-    $('kh-rows').innerHTML = `<tr><td colspan="5" class="kh-mut">${SORTS[sortBy]?.only ? afterEmpty() : SORTS[sortBy]?.empty ? SORTS[sortBy].empty()
+    $('kh-rows').innerHTML = `<tr><td colspan="5" class="kh-mut">${SORTS[sortBy]?.empty ? SORTS[sortBy].empty() : SORTS[sortBy]?.only ? afterEmpty()
       : market === 'THEME' ? '—'
       : `${MARKETS.find(m => m.id === market)?.label || market} 목록을 아직 받지 못했습니다`}</td></tr>`;
     paintRowHead();
