@@ -24,7 +24,8 @@
     저장      market.db `day_top`(날 · 판 JSON) — 평일 SAVE_AT 뒤 「매수」 판이 굳으면(외 · 기 확정 · 연기금 들어옴) 한 번 · 늦어도 SAVE_LATE
               쓰기 되는 서버(8765)만 · 한 번 남긴 날은 다시 안 쓴다(watch_log 와 같다)
     주소      GET /api/kis/day-top?day=YYYYMMDD[&all=1] — day 를 빼면 마지막 날 · 기본은 상위 TOP_N 줄 · all=1 이면 전부 ·
-              meta.days 는 남긴 날 목록(최근 먼저)
+              meta.days 는 남긴 날 목록(최근 먼저) · **주소는 KIS 를 안 부른다** — 판을 지을 때(하루 한 번)는 볼린저 칸의
+              signal_watch.today_lows 가 시가총액을 채우느라 몇 종목 시세를 부를 수 있다(qa 11-11)
 """
 import json
 import threading
@@ -111,8 +112,8 @@ def build(proxy, day):
             ru = json.loads(rule or "{}")
         except ValueError:
             ru = {}
-        if mult is not None and pct is not None and ru.get("volMult") is not None and ru.get("prevPct") is not None \
-                and mult >= ru["volMult"] and pct >= ru["prevPct"]:
+        if pct is not None and ru.get("prevPct") is not None and pct >= ru["prevPct"] \
+                and (ru.get("volMult") is None or (mult is not None and mult >= ru["volMult"])):
             put(code, "수급", "15:41")
     for code, r in today.items():
         if r[5] and prev.get(code) and r[5] / prev[code] >= VOL_PREV_X:

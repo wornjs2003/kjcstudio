@@ -589,7 +589,7 @@ def compute(proxy, live=None):
 
         day         셈한 날(가장 최근에 그날 값이 저장된 날) · 없으면 null
         rule        { prevPct, volMult, sortBy, autoMax } — 문서 값 그대로(빈칸 null) · sortBy 는 쓴 값
-        ready       기준 둘(prevPct · volMult)이 다 있나
+        ready       등락률 기준(prevPct)이 있나 — volMult 는 빈칸이면 거래량 조건 없음(11-11)
         picked      [{ code, name, idx, close, pct, vol, avg20, mult, high52, highGapPct, nearHigh, nearHighOnly }] — 걸린 종목 · 줄 세운 차례 · autoMax 로 자름
                     high52 그날 앞 52주 최고 종가(모자라면 null) · highGapPct 그날 종가가 그보다 몇 % 위아래 · nearHigh 부근(맨 위) · nearHighOnly 조건 밖인데 부근이라 더 넣음
         nearHighAll 자르기 전 부근 수 · nearOnlyAll 그중 조건 밖으로 더 넣은 수
@@ -609,7 +609,8 @@ def compute(proxy, live=None):
     mem = members(proxy)
     out = {"day": None, "rule": {"prevPct": prev_pct, "volMult": vol_mult, "sortBy": sort_by,
                                  "autoMax": int(auto_max) if auto_max else None, "nearHighPct": near_pct, "from": src},
-           "ready": prev_pct is not None and vol_mult is not None,
+           # volMult 는 빈칸이면 거래량 조건을 안 본다(2026-11-11 재권님 「20일 평균 거래량 2배는 룰 없애주고」 → 「가」 — 등락률만 · 등락률 큰 순)
+           "ready": prev_pct is not None,
            "picked": [], "pool": len(mem), "measured": None, "noToday": None, "short": None, "hitAll": None}
     with proxy._db_lock, proxy.db_conn() as conn:
         try:
@@ -646,20 +647,21 @@ def compute(proxy, live=None):
             continue
         if len(h) < AVG_DAYS:
             short += 1
-            continue
-        avg = sum(h) / len(h)
-        base = avg * (live["frac"] if live else 1)
+            if vol_mult is not None:     # 거래량 조건이 있을 때만 20거래일이 모자란 종목을 뺀다
+                continue
+        avg = sum(h) / len(h) if h else None
+        base = avg * (live["frac"] if live else 1) if avg else None
         mult = round(t[5] / base, 2) if base and t[5] is not None else None
         h = hi.get(code)
         gap = round((t[3] / h - 1) * 100, 2) if h and t[3] is not None else None
         rows.append({"code": code, "name": name or t[2], "idx": idx, "close": t[3], "pct": t[4], "vol": t[5],
-                     "avg20": round(avg), "mult": mult, "high52": h, "highGapPct": gap,
+                     "avg20": round(avg) if avg else None, "mult": mult, "high52": h, "highGapPct": gap,
                      "nearHigh": near_pct is not None and gap is not None and abs(gap) <= near_pct, "nearHighOnly": False})
     out["measured"], out["noToday"], out["short"] = len(rows), no_today, short
     if not out["ready"]:
         return out
-    hit = [r for r in rows if r["pct"] is not None and r["mult"] is not None
-           and r["pct"] >= prev_pct and r["mult"] >= vol_mult]
+    hit = [r for r in rows if r["pct"] is not None and r["pct"] >= prev_pct
+           and (vol_mult is None or (r["mult"] is not None and r["mult"] >= vol_mult))]
     out["hitAll"] = len(hit)
     ids = {r["code"] for r in hit}
     for r in rows:                   # 조건 밖인데 신고가 부근 — 더 넣는다(재권님 「둘다해」)
