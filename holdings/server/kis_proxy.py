@@ -78,6 +78,7 @@ import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스�
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
 import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 · 색 = 등락률 · /api/kis/heatmap(2026-10-27 · server/heatmap.py)
 import flow_board       # 수급 정리판 — 투자자 갈래별 순매수(오늘 · 날마다 · 상위 종목)를 한 주소로 · /api/kis/flow-board(2026-11-04 · server/flow_board.py)
+import open_rise        # 초반상승 — 정규장 첫 5분봉이 시가보다 오른 종목 · 실시간 순위 「초반상승」 칩 · /api/kis/open-rise(2026-11-11 · server/open_rise.py)
 import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 · /api/kis/pre-flow(2026-11-05 · server/pre_flow.py)
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
 import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
@@ -10204,6 +10205,22 @@ class Handler(SimpleHTTPRequestHandler):
                                      "등락률은 전일 정규장 종가 대비 · ratio 는 앞 거래일 장 전 거래량 대비 · disc 는 앞 평일 15:30 뒤 공시 · "
                                      "08:50~09:00 에 그날 판으로 굳힘",
                              "cacheTtl": pre_flow.FLOW_TTL},
+                })
+                return
+
+            if route == "open-rise":
+                # 초반상승 — 정규장 첫 5분봉(09:00~09:05)이 시가보다 RISE_PCT % 이상 올라 끝난 종목 (2026-11-11 · server/open_rise.py) · KIS 안 부름
+                d, at = open_rise.fetch(sys.modules[__name__])
+                bar_m = int(open_rise.BAR_HM[:2]) * 60 + int(open_rise.BAR_HM[2:])
+                self._send_json({
+                    "ok": True, "data": d["rows"],
+                    "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S"),
+                             "day": d["day"], "phase": d["phase"], "candidates": d["candidates"], "pending": d["pending"],
+                             "noBar": d["noBar"], "capMissing": d["capMissing"],
+                             "risePct": open_rise.RISE_PCT, "minCapEok": open_rise.MIN_CAP_EOK,
+                             "barFrom": "%02d:%02d" % divmod(bar_m, 60), "barTo": "%02d:%02d" % divmod(bar_m + 5, 60),
+                             "note": "DB 에 쌓인 5분봉 — 정규장 첫 봉 (종가 − 시가) ÷ 시가 · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
+                             "cacheTtl": open_rise.CACHE_TTL},
                 })
                 return
 
