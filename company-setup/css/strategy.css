@@ -119,3 +119,42 @@
 .wl .wl-ln { fill: none; stroke: var(--kh-text-secondary); stroke-width: 1.3; }
 .wl .wl-ln.up { stroke: var(--kh-up); } .wl .wl-ln.down { stroke: var(--kh-down); }
 .wl .wl-cap { margin: 8px 0 0; }
+
+/* 단타 30 (js/strategy-dt30.js · 11-11) — 위 날짜 줄은 30거래일 한 줄 옆 밀기 · 표 칸 높이는 날을 바꿔도 그대로(갈아 끼우기) */
+.dt .dt-days { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.dt .dt-days::-webkit-scrollbar { display: none; }
+.dt .dt-days > * { flex: none; white-space: nowrap; }
+.dt .dt-days small { margin-left: 4px; font-weight: 600; }
+.dt .dt-cap { margin: 0 0 8px; }
+.dt .dt-foot { margin: 8px 0 0; }
+.dt .dt-box { height: 640px; overflow: auto; }
+.dt table.dt-tb { width: 100%; border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
+.dt .dt-tb th { position: sticky; top: 0; z-index: 1; background: var(--kh-bg-card); font-size: 12px; font-weight: 600; color: var(--kh-text-muted); }
+.dt .dt-tb tr.dt-t2 th { top: 26px; }
+.dt .dt-tb th, .dt .dt-tb td { text-align: right; white-space: nowrap; padding: 6px 8px; }
+.dt .dt-tb td { border-bottom: 1px solid var(--kh-border); }
+.dt .dt-tb .dt-rk { text-align: center; width: 2em; color: var(--kh-text-muted); }
+.dt .dt-tb .st-name { text-align: left; }
+.dt .dt-tb .dt-buy { font-weight: 700; color: var(--kh-text-primary); }
+.dt .dt-tb th.dt-gp { text-align: center; color: var(--kh-text-secondary); }
+.dt .dt-tb th.dt-gp span { display: block; border-bottom: 1px solid var(--kh-border-strong); padding-bottom: 3px; }
+.dt .dt-tb tr.dt-avg td { font-weight: 700; background: var(--kh-bg); border-bottom: 0; }
+.dt .dt-tb .dt-last { font-weight: 700; }
+.dt .dt-tb .dt-ev { text-align: left; white-space: normal; min-width: 9em; }
+.dt .dt-evc { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; margin: 1px 4px 1px 0; border-radius: 99px; background: var(--kh-accent-dim); color: var(--kh-accent); white-space: nowrap; }   /* 이벤트 칩 — 연한 바탕 · 같은 색 진한 글씨(「색 바탕 위의 글씨」) */
+.dt .dt-tb .dt-sec { text-align: left; color: var(--kh-text-secondary); }
+.dt .dt-tb td.dt-sold { font-weight: 700; background: var(--kh-bg); }
+.dt .dt-tb td.dt-sold em { font-style: normal; font-size: 10.5px; font-weight: 600; margin-left: 4px; padding: 0 5px; border-radius: 99px; background: var(--kh-bg-card); color: var(--kh-text-secondary); }   /* 판 시각 — 「손절」 · 「꺾임」 */
+.dt .dt-tb td.dt-after { color: var(--kh-text-muted); background: var(--kh-bg); }   /* 판 뒤 — 평균에서 뺀 칸 · 흐리게 */
+.dt .dt-tb .dt-res { font-weight: 700; border-left: 1px solid var(--kh-border-strong); }
+.dt .dt-tb td.dt-res small { display: block; font-size: 10.5px; font-weight: 500; color: var(--kh-text-muted); }
+.dt .dt-tb .st-name small { font-weight: 400; }
+.dt .dt-pnl { margin: 0 0 8px; padding: 8px 12px; border-radius: var(--kh-radius-sm); background: var(--kh-bg); font-size: 13.5px; color: var(--kh-text-secondary); }   /* 손익 합계 — 상위 16 · 1천만원씩 · 거래세 뺌 */
+.dt .dt-pnl b { color: var(--kh-text-primary); }
+.dt .dt-tb .dt-pl { font-weight: 700; border-left: 1px solid var(--kh-border); }
+.dt .dt-tb td.dt-pl small { display: block; font-size: 10.5px; font-weight: 500; color: var(--kh-text-muted); }
+.dt .dt-fee { display: block; margin-top: 6px; font-size: 13px; }
+.dt .dt-fee input { font: inherit; width: 5em; padding: 1px 6px; border: 1px solid var(--kh-border-strong); border-radius: var(--kh-radius-sm); background: var(--kh-bg-card); color: var(--kh-text-primary); text-align: right; }
+.dt .dt-fee input:placeholder-shown { background: var(--kh-danger-faint); border-color: transparent; color: var(--kh-danger); }   /* 빈칸이면 빨간 바탕 — 재권님이 넣으실 값(「아직 안 정해진 자리는 빨간 바탕으로」) */
+.dt .dt-tb .dt-tx { font-size: 12px; color: var(--kh-text-secondary); white-space: nowrap; }
+.dt .dt-bar { display: flex; flex-wrap: wrap; gap: 6px 18px; }
