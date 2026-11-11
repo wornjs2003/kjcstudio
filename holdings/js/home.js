@@ -3251,7 +3251,13 @@ const sectors = mountSectors(document.querySelector('.kh-sc-card'));
 
 /* 첫 화면 시장 지도 — 지금 갈래(처음은 홈)에 맞게 띄운다 · 위 paintHeatmap */
 heatmapView = mountHeatmap(document.querySelector('.kh-idx-main'), { onPick: (code, name) => pickSectorStock(code, name) });
-document.getElementById('kh-hm-big')?.addEventListener('click', () => heatmapView && heatmapView.big(true));   // 시장 지도 크게보기(2026-11-11)
+/* 시장 지도 크게보기(2026-11-11) — 종목 차트로 바뀐 뒤 눌러도 그 갈래 지도를 크게 띄우고, 닫으면 보던 차트로 돌아간다(qa 11:2x 「눌러도 아무 일 없음」) */
+document.getElementById('kh-hm-big')?.addEventListener('click', () => {
+  if (!heatmapView) return;
+  const fromChart = !heatmapView.market;
+  if (fromChart) paintHeatmap();
+  heatmapView.big(true, { fromChart });
+});
 paintHeatmap();
 
 /* 갈래 줄 검색칸 — 고르면 **순위표 줄 · 산업 칸과 같은 길**(큰 차트 · 패널 · 현재가가 그 종목)
