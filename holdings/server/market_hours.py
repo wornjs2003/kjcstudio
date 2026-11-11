@@ -42,6 +42,7 @@ REG_OPEN, REG_CLOSE = "0900", "1530"
 AFTER_CLOSE = "2000"
 PREOPEN_AUCTION_MIN = 30             # 정규장 여는 시각 앞 동시호가(KRX 08:30~09:00) 길이 — 예상 체결가가 오는 때(2026-11-10 · kis_proxy fetch_asking)
 CLOSE_AUCTION_MIN = 10               # 정규장 닫는 시각 앞 마감 동시호가(KRX 15:20~15:30) 길이 — 예상 종가가 오는 때(2026-11-10 재권님 「종가도 해줘」)
+EXPECT_HOLD_MIN = 5                  # 정규장을 연 뒤 장 전 동시호가 마지막 예상가를 「예상」 으로 더 남겨 두는 길이(2026-11-11 재권님 「예상 가격은 본장 시작하면 5분후에 안보이도록」) · 마감 쪽은 없음
 HOLIDAY_AT = (6, 30)                 # 이 시각 뒤 하루 한 번 휴장일 조회
 TICK_SEC = 60
 NOTICE_SEC = 600
@@ -137,6 +138,21 @@ def auction(proxy, now=None):
     if shift(c, -CLOSE_AUCTION_MIN) <= hm < c:
         return "close"
     return None
+
+
+def expect_hold(proxy, now=None):
+    """장 전 동시호가가 끝난 뒤에도 그 마지막 예상가를 남겨 두는 때인가 — 동시호가 동안 auction() 그대로 ·
+    정규장 여는 시각부터 EXPECT_HOLD_MIN 분 동안 "open" · 아니면 None. 마감(15:30) 뒤에는 남기지 않는다(지시가 장 전 하나)."""
+    kind = auction(proxy, now)
+    if kind:
+        return kind
+    now = now or _now()
+    t = today(proxy, now=now)
+    if t["open"] is False:
+        return None
+    o = t["reg"][0]
+    v = int(o[:2]) * 60 + int(o[2:]) + EXPECT_HOLD_MIN
+    return "open" if o <= now.strftime("%H%M") < "%02d%02d" % (v // 60, v % 60) else None
 
 
 def in_preopen_auction(proxy, now=None):
