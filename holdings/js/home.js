@@ -2413,9 +2413,14 @@ function paintSortNote() {
      글줄 안 글자 단추라 줄 높이가 안 바뀐다 */
   const rescanBtn = sortBy === 'fav' || FAV_SUB.has(sortBy)
     ? `<button type="button" data-rescan${rescanBusy ? ' disabled' : ''} data-tip="${escT(rescanTip())}" data-tip-h="지금검색"
-        style="float:right;background:none;border:0;padding:0;font:inherit;font-weight:600;color:var(--kh-accent);cursor:pointer">${rescanBusy ? '찾는 중…' : '지금검색'}</button>`
+        style="flex:none;margin-left:8px;background:none;border:0;padding:0;font:inherit;font-weight:600;color:var(--kh-accent);cursor:pointer">${rescanBusy ? '찾는 중…' : '지금검색'}</button>`
     : '';
-  el.innerHTML = rescanBtn + bits.join(' <span class="kh-mut">·</span> ');
+  const text = bits.join(' <span class="kh-mut">·</span> ');
+  /* 단추가 붙으면 안내 글은 한 줄 — 넘치면 「…」 로 줄이고 전체는 1초 풍선(qa 11-11 · 단추 때문에 칩에 따라 26 → 44 두 줄이 됐다) */
+  el.innerHTML = rescanBtn
+    ? `<div style="display:flex;align-items:baseline"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+        data-tip="${escT(text.replace(/<[^>]+>/g, ''))}">${text}</span>${rescanBtn}</div>`
+    : text;
   noteAt = Date.now();
   paintPreSectors();
   paintChipSectors();
