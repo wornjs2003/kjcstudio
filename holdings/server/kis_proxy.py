@@ -83,6 +83,7 @@ import open_rise        # 초반상승 — 정규장 첫 5분봉이 시가보다
 import rescan           # 지금검색 — 관심 아래 칩 룰을 누를 때 다시 셈 · /api/kis/rescan(2026-11-11 · server/rescan.py)
 import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 · /api/kis/pre-flow(2026-11-05 · server/pre_flow.py)
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
+import day_top_fill     # 등락 상위 — 지난 거래일 판을 다시 세어 채움(장 쉬는 때 · 쓰는 서버만 · 2026-11-11 · server/day_top_fill.py)
 import day_top          # 등락 상위와 걸린 필터 — 날마다 장 뒤 한 번 쌓음 · /api/kis/day-top(2026-11-11 · server/day_top.py)
 import dt30             # 단타 30 판 — 평일 09:06 단타 상위 30 굳힘 · 30분마다 값 · 30거래일 · /api/kis/dt30(2026-11-11 · server/dt30.py)
 import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
@@ -6333,7 +6334,7 @@ def minute_scan_start(now=None):
     return cur                                # 그 밖에는 지금 시각까지만
 
 
-def fetch_minutes_day(cfg, code, max_past=None):
+def fetch_minutes_day(cfg, code, max_past=None, refill=False):
     """그날 1분봉을 모은다 → (봉 목록, 받은 범위 목록 [(시작 분, 끝 분)]).
 
     KIS 분봉 API 는 기준 시각부터 과거 30개만 돌려주므로, 시각을 30분씩
@@ -6354,6 +6355,10 @@ def fetch_minutes_day(cfg, code, max_past=None):
     끝 분이 5로 나눠 4가 남는 자리(…:59 · …:04)다 — 한 5분 칸이 두 묶음에 갈려 한쪽만 받으면
     덜 찬 봉이 된다(LG화학 11:00 봉 거래량 2,136 · 다시 묶으면 3,701).
 
+    `refill` — 「끝난 뒤 받음」 표(`m5done`)를 안 보고 그날을 다 받는다. 1분봉을 그날 처음 열 때만 쓴다(2026-11-11 재권님
+    「이렇게 그려야 하는데」 — 토스 1분봉처럼 빈 칸 없이). 그 표는 종목마다 하나라, 1분봉을 함께 저장하기 전에 5분봉으로 받은
+    칸은 1분봉이 비어 있다. 화면이 연 그 종목 하나만 · 그날 한 번이라 미리받기 호출은 안 는다.
+
     `max_past` — 이미 지난 칸을 이번에 몇 개까지 받나. 미리받기와 화면 열기가 한 번에
     오래 걸리지 않게 나눠 메운다(최근 칸부터). `None` 이면 다 받는다.
     """
@@ -6362,7 +6367,7 @@ def fetch_minutes_day(cfg, code, max_past=None):
     if start < MINUTE_DAY_START:
         return [], []
     now_m = _minutes_now_min()
-    got_min = _minutes_done_cover(_minutes_done(code))
+    got_min = set() if refill else _minutes_done_cover(_minutes_done(code))
     ends = _minute_chunk_ends(start)
     past = 0
     for t in ends:
@@ -6993,6 +6998,7 @@ def _kr_evening_tail(cfg, code, day):
     first = min(int(b["ts"][8:10]) * 60 + int(b["ts"][10:12]) for b in rows)
     bars = [b for b in aggregate_minutes(rows, 5)
             if int(b["ts"][8:10]) * 60 + int(b["ts"][10:12]) >= first]
+    save_candles(code, "1m", aggregate_minutes(rows, 1))   # 1분도 같은 두 시간을 덮는다 — 5분과 안 갈리게(2026-11-11)
     return save_candles(code, "5m", bars)
 
 
@@ -8351,10 +8357,13 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
             # (2026-09-17). 거래가 잦은 종목만 자주 열려 저절로 채워지고
             # 있었던 것이라, 종목마다 봉 개수가 크게 갈렸다.
             cover = None
+            marks = {}                       # 이번 바퀴에 적은 「받았다」 표 — 다른 분봉 기간에도 옮긴다(아래)
             fresh_m = _minutes_now_min()             # 받기 전 분 — 이 분 앞에서 끝난 봉은 다 찬 값으로 받는다
+            marks = {}                       # 이번 바퀴에 적은 「받았다」 표 — 다른 분봉 기간에도 옮긴다(아래)
             if _minutes_need_day(code, period, rows, gap_check):
-                raw, cover = fetch_minutes_day(cfg, code)
-                _meta_set("dayfill:%s:%s" % (code, period), _minutes_trade_day())
+                raw, cover = fetch_minutes_day(cfg, code, refill=(period == "1m"))
+                marks["dayfill"] = _minutes_trade_day()
+                _meta_set("dayfill:%s:%s" % (code, period), marks["dayfill"])
             elif rows and not _minutes_live():
                 # ④ 그 거래일 하루치를 이미 받았고 지금은 새 봉이 안 생긴다 —
                 # KIS 를 부르지 않는다(주말에 화면이 열려 있으면 30초마다 한 건씩 나갔다).
@@ -8371,21 +8380,40 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
                     except RuntimeError:
                         raw = []
                     _meta_set(_ck, _day)
+                    marks["dayclose"] = _day
                 else:
                     raw = []
             else:
                 # **지금 칸 + 아직 안 끝난 지난 칸 몇 개** (2026-10-06). 전에는 지금까지 30분만
                 # 받아, 한 종목을 다시 찾는 데 30분이 넘으면 그 사이가 영영 비었다.
                 raw, cover = fetch_minutes_day(cfg, code, MINUTE_PAST_PER_CALL)
-            stored = _stored_day(code, period, max(b["ts"] for b in raw)[:8]) if raw else {}
-            bars = aggregate_minutes(raw, 5, stored) if period == "5m" else raw
-            if raw:   # 「지금 줄」 로 옮겨 실린 마지막 체결을 제자리로 (pin_carried_trade 주석)
-                bars = pin_carried_trade(raw, bars, stored, 5 if period == "5m" else 1)
-            if period == "5m" and cover is not None:
-                bars = _keep_covered_slots(bars, cover, _minutes_now_min())
+            # **1분 · 5분을 함께 저장한다** (2026-11-11 재권님 「바로하라고해」 · 11-10 안 「응 해봐」). KIS 가 주는 것은 늘
+            # 1분 원본이라 한 번 받은 것으로 두 기간을 다 채운다 — 호출은 안 는다. 다른 기간에도 「방금 받았다」(sync ·
+            # dayfill · dayclose)를 적어, 화면이 그 기간을 열어도 KIS 를 다시 부르지 않는다. 미리받기도 이 길(5m)을 지난다.
+            # 1분도 aggregate_minutes(…, 1) 로 거친다 — 거래 0 줄을 앞 체결 종가로 잇는 셈이 같아야 둘이 안 갈린다.
+            day = max(b["ts"] for b in raw)[:8] if raw else None
+            bars = []
+            for p, m in (("1m", 1), ("5m", 5)):
+                st = _stored_day(code, p, day) if raw else {}
+                bs = aggregate_minutes(raw, m, st) if raw else []
+                if raw:   # 「지금 줄」 로 옮겨 실린 마지막 체결을 제자리로 (pin_carried_trade 주석)
+                    bs = pin_carried_trade(raw, bs, st, m)
+                if m == 5 and cover is not None:
+                    bs = _keep_covered_slots(bs, cover, _minutes_now_min())
+                if p == period:
+                    bars = bs
+                    continue
+                if bs:
+                    save_candles(code, p, bs)
+                _meta_set("sync:%s:%s" % (code, p), time.time())
+                for k, v in marks.items():   # 이번에 받은 것만 — 옛 표를 옮기면 덜 찬 날을 「하루치 받음」 으로 본다
+                    if k == "dayfill" and p == "1m":
+                        continue             # 5분 하루치는 받은 칸을 건너뛰어(m5done) 1분이 덜 찰 수 있다 — 1분은 제 하루치(refill)를 따로
+                    _meta_set("%s:%s:%s" % (k, code, p), v)
         fetched = save_candles(code, period, bars)
+        # 1분을 열어도 5분이 위에서 함께 저장되므로 같이 적는다(m5upto 는 종목마다 하나 · 11-12 staging 합치며)
         # 20:00 뒤 · 주말에 받으면 첫 칸이 하루 끝(MINUTE_DAY_END)에서 끝난다 — 그때도 그날 봉은 다 끝난 뒤 받은 것이라 적는다(qa 11-11 물음)
-        if not conf["kis"] and period == "5m" and cover and any(hi >= min(fresh_m, MINUTE_DAY_END) for _, hi in cover):
+        if not conf["kis"] and period in ("1m", "5m") and cover and any(hi >= min(fresh_m, MINUTE_DAY_END) for _, hi in cover):
             _minutes_mark_fresh(code, fresh_m)       # 「지금 칸」 까지 받아 저장했다 — vol_same_time 이 이 분까지만 센다
         _meta_set(mkey, time.time())
         if fetched:
@@ -10042,6 +10070,15 @@ class Handler(SimpleHTTPRequestHandler):
                     rows, fetched, source = get_chart(cfg, code, period, limit)
                 if period == "5m":
                     kick_kr_open_fill(cfg, code)        # 지수 밖 종목이면 지난 거래일을 뒤에서 한 번 (2026-10-16)
+                head_ts = None
+                if PERIODS[period]["kis"] is None and _is_kr_code(code) and rows:
+                    # **VWAP 는 그날 첫 봉부터 센다 — 받은 봉 수에서 잘린 날의 앞을 채워 셈하고 셈 뒤에 뗀다** (2026-11-11 재권님
+                    # 「1분봉 그건 맞는거 같은데 vwap값은 이상한데」). 차트는 봉 수(limit)로 받아, 1분봉 320개면 오늘 10시 무렵부터라
+                    # VWAP 가 그 뒤만 센 값(하이닉스 15:20 1,274,305 ↔ 하루 셈 1,249,553)이 됐다. 5분봉은 view_days 로 날째 받아 안 걸렸다
+                    head_ts = rows[0]["ts"]
+                    earlier = sorted((b for t, b in _stored_day(code, period, head_ts[:8]).items() if t < head_ts),
+                                     key=lambda b: b["ts"])
+                    rows = earlier + list(rows)
                 if PERIODS[period]["kis"] is None:      # 분봉(1m · 5m)만 — 일봉 이상은 받은 그대로
                     if _is_kr_code(code):
                         rows = flatten_carried(rows)    # 앞 봉 복사 → 거래 없는 납작봉(2026-11-07)
@@ -10053,6 +10090,8 @@ class Handler(SimpleHTTPRequestHandler):
                 rows = [r for r in rows if (r.get("close") or 0) > 0]   # 0 봉은 내지 않는다(없는 종목 · 위 `save_candles` 와 같은 선)
                 if PERIODS[period]["kis"] is None and _is_kr_code(code):
                     rows = vwap.attach(rows)            # since 로 자르기 전에 — 그날 첫 봉부터 누적이라(2026-11-06)
+                if head_ts:
+                    rows = [r for r in rows if str(r.get("ts", "")) >= head_ts]   # 셈하려고 채운 앞 봉은 뗀다 — 받은 봉 수 그대로
                 since = (qs.get("since") or [""])[0].strip()
                 total = len(rows)
                 if since.isdigit():
@@ -10309,7 +10348,7 @@ class Handler(SimpleHTTPRequestHandler):
                     return
                 b = day_top.board(sys.modules[__name__], day or None, (qs.get("all") or [""])[0] == "1")
                 self._send_json({"ok": b is not None, "data": b,
-                                 "meta": dict(day_top.status(), days=day_top.days(sys.modules[__name__]))})
+                                 "meta": dict(day_top.status(), days=day_top.days(sys.modules[__name__]), fill=day_top_fill.status())})
                 return
 
             if route == "dt30":
@@ -11196,6 +11235,8 @@ def main():
     if not SLOW and is_sender(args.port) and dt30.start(sys.modules[__name__]):
         print("  단타 30 판 : 평일 %s 단타 상위 %d 굳힘 · %s~%s %d분마다 값 · %d거래일 · /api/kis/dt30"
               % (dt30.status()["buyAt"], dt30.TOP_N, dt30.times()[0], dt30.times()[-1], dt30.TRACK_STEP, dt30.DAYS_KEEP))
+    if not SLOW and is_sender(args.port) and day_top_fill.start(sys.modules[__name__]):
+        print("  등락 상위 되채움: 지난 %d거래일 · %s" % (day_top_fill.FILL_DAYS, day_top_fill.status()["window"]))
     if not SLOW and is_sender(args.port) and day_top.start(sys.modules[__name__]):
         print("  등락 상위 : 평일 %02d:%02d 뒤(「매수」 판이 굳으면 · 늦어도 %02d:%02d) 시가총액 %d억 이상 등락률 판과 걸린 필터를 market.db day_top 에 남김 · /api/kis/day-top"
               % (day_top.SAVE_AT + day_top.SAVE_LATE + (day_top.MIN_CAP_EOK,)))

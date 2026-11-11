@@ -10,7 +10,7 @@ import * as lastSeen from './store/last-seen.js';
 import { fetchCandles, fetchCandlesSince, peekCandles, watchCandles, createStockChart, maLegend,
   addPrevCloseLine, PREV_CLOSE_NOTE,
   savePeriodId, loadPeriodId,
-  chartView, setChartView, chartStockChanged } from './chart.js';
+  chartView, setChartView, chartStockChanged, MINUTE_PERIODS } from './chart.js';
 import { color } from './theme.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount, expectTip, expectTag,
   dirClass, marketPhase, isUsCode, fmtPriceOf, fmtUsdBig, priceDigitsOf, usSessionLabel } from './utils/format.js';
@@ -761,7 +761,11 @@ function paintBigPrice() {
   /* 묶음 시세가 아직 안 왔으면 세부사항 칸이 받은 단건으로 먼저 칠한다 — 묶음이 오면 그것이 덮는다
      (2026-10-06 실측: 단건은 0.2초에 와 있는데 묶음을 기다려 1.7초에 칠해졌다) */
   /* 동시호가(장 전 · 마감) 동안은 현재가 자리에 예상 체결가를 「예상」 과 함께(2026-11-10 재권님 「나」) — 서버가 그때만 준다 */
-  const ex = _expect.get(selectedCode);
+  /* **묶음 시세에 그 종목이 있으면 그 값만 쓴다** (2026-11-11 재권님 「차트에 있는것과 실시간순위에 있는 예상값이 다른이유가 뭔지 찾아서 고쳐놔」).
+     전에는 늘 세부사항 칸이 호가와 함께 받은 값(_expect)을 썼는데, 순위는 묶음 시세 값을 써서 받은 시각이 달랐다 —
+     동시호가 동안 예상가는 몇 초 사이에도 바뀌어 머리 1,298,000 · 순위 1,300,000 처럼 갈렸다. 묶음 시세에 없는 종목(순위 밖 · 처음 불러오는 중)만 _expect */
+  const row = rowPrices && rowPrices[selectedCode];
+  const ex = row ? (row.expect || null) : _expect.get(selectedCode);
   if (ex) {
     const st = `ex|${selectedCode}|${ex.price}|${ex.pct}`;
     if (bigShown === st) return;
@@ -904,7 +908,7 @@ async function paintBigChart(opt = {}) {
 
   /* 5분봉에는 전일 종가선을 그어 둔다. **선 긋는 것은 `chart.js` 한 곳에 있다**
      (2026-09-23) — 모달·종목 화면도 같은 것을 써야 해서 옮겼다. */
-  const drewPrev = bigPeriod === '5m' && addPrevCloseLine(bigChart, candles,
+  const drewPrev = MINUTE_PERIODS.has(bigPeriod) && addPrevCloseLine(bigChart, candles,
     rowPrices[st.code] && rowPrices[st.code].prev);
 
   if (foot) {
@@ -914,7 +918,7 @@ async function paintBigChart(opt = {}) {
     const ma = bigChart ? maLegend(bigChart.maSeries) : '';
     /* **그었을 때만 적는다.** 전에는 5분봉이면 무조건 적었는데, 오늘 봉이
        첫 봉이면 선을 못 그어서 **없는 선을 가리키는 설명**이 남았다. */
-    foot.innerHTML = bigPeriod === '5m'
+    foot.innerHTML = MINUTE_PERIODS.has(bigPeriod)
       ? `<span>${ma}${drewPrev ? ` · ${PREV_CLOSE_NOTE}` : ''}</span><span>한국투자증권 실시간</span>`
       : `<span>${ma} · ${label}봉 ${candles.length}개</span><span>한국투자증권</span>`;
     paintFlowFoot(foot, st.code);           // 외국계 창구 · 프로그램 매수세 / 매도세 — 바닥 줄을 새로 썼으니 다시 붙인다(2026-11-03)
@@ -3046,7 +3050,7 @@ function applyPrices(map) {
   /* **양수 `prev` 가 왔을 때만 다시 긋는다.** KIS 가 `prev` 를 안 주는 때가 있어
      (`null`) 그대로 넘기면 봉 값으로 되돌아가 맞는 선을 지운다 (창구 검수). */
   const livePrev = rowPrices[selectedCode] && Number(rowPrices[selectedCode].prev);
-  if (drawnIsSelected && bigPeriod === '5m' && livePrev > 0) {
+  if (drawnIsSelected && MINUTE_PERIODS.has(bigPeriod) && livePrev > 0) {
     addPrevCloseLine(bigChart, bigChart.candles, livePrev);
   }
   if (typeof detail !== 'undefined' && detail) {

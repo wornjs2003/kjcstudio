@@ -337,6 +337,7 @@ export function chartStockChanged(code) {
 
 /* 화면의 기간 버튼 → 서버가 쓰는 기간 코드 */
 export const PERIOD_MAP = {
+  '1m': '1m',   // 1분봉 (2026-11-11)
   '5m': '5m',   // 5분봉
   '1d': 'D',    // 일봉
   '1w': 'W',    // 주봉
@@ -344,7 +345,7 @@ export const PERIOD_MAP = {
   '1y': 'Y',    // 년봉
 };
 
-const MINUTE_PERIODS = new Set(['1m', '5m']);
+export const MINUTE_PERIODS = new Set(['1m', '5m']);   // 분봉 — 전일 종가선 · 「실시간」 바닥 줄도 이것으로 가른다(home · stock-view)
 
 /* 일 · 주 · 월 · 년봉 맨 오른쪽에 시세를 얹는 때 — 평일 9시부터 다음 날 7시 전까지(금요일 저녁은 토요일 7시 전까지).
    그 밖(평일 7~9시 · 주말 낮)은 서버가 준 정규장 봉 그대로다 (2026-10-15 재권님 「다음날 아침7시에 정규장 종가로 변경해줘」).
@@ -771,7 +772,7 @@ const VP_BINS = 20;              // 가격을 몇 칸으로 나눌지
    가다 봉 사이가 VP_SESSION_GAP 분 넘게 비면 거기서 끊는다(국내 20:00 → 08:00 · 미국 장 사이 모두 그보다 길다).
    호가 단위로 칸이 VP_TICK_MAX 를 넘으면(1원 단위 종목이 크게 움직인 날 등) 단위의 2 · 5 · 10 … 배로 묶는다.
    일봉 · 주봉 · 월봉은 20칸 그대로 */
-const VP_DAY_PERIODS = new Set(['5m']);
+const VP_DAY_PERIODS = new Set(['1m', '5m']);
 const VP_SESSION_GAP = 180;      // 분
 const VP_TICK_MAX = 40;
 const VP_TICK_MULT = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
