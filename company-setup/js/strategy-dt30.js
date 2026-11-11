@@ -187,6 +187,13 @@ async function load(day, quiet) {
   let r = null, j = null;
   try { r = await fetch(day ? `${API}?day=${day}` : API, { cache: 'no-store' }); j = await r.json().catch(() => null); } catch (e) { r = null; }
   if (my !== st.seq) return;
+  if (quiet && (!r || !r.ok || !j || j.ok === false || !j.data)) {
+    // 장중 다시 받기가 한 번 실패하면 표 · 마지막 값은 두고 머리 줄에만 「못 받음」 · 다음 주기에 다시(qa 11-11 — 덮으면 표가 지워지고 다시 받기가 멈춤)
+    const hm = new Date().toTimeString().slice(0, 5);
+    $('dt-meta').textContent = `${$('dt-meta').textContent.replace(/ · 새 값 못 받음\([^)]*\)$/, '')} · 새 값 못 받음(${hm} · 다음 주기에 다시)`;
+    if (st.ms > 0 && st.day === day) again = setTimeout(() => { if (st.day === day) load(day, true); }, st.ms);
+    return;
+  }
   if (!r || !r.ok || !j || j.ok === false || !j.data) {
     // 쌓인 날이 없으면 서버가 200 · ok false · meta.days [] 로 답함(개발2 0a3d5eb) — 「못 받음」 이 아니라 「아직 없음」(qa 11-11)
     const none = r && r.ok && j && j.ok === false && Array.isArray(j.meta && j.meta.days) && !j.meta.days.length;
@@ -200,7 +207,7 @@ async function load(day, quiet) {
   st.day = d.day; st.data = d;
   paint(d);
   chips();
-  const ms = Number(m.refreshMs);
+  const ms = Number(m.refreshMs); st.ms = ms > 0 ? ms : 0;
   if (d.closed !== true && (d.rows || []).some((r) => r.now != null) && ms > 0 && d.day === st.days[0]) again = setTimeout(() => { if (st.day === d.day) load(d.day, true); }, ms);
 }
 
