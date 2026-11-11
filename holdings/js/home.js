@@ -1514,6 +1514,14 @@ const SORTS = {
             : riseMeta.phase === 'nodata' ? `못 셈 — 첫 5분봉(${riseMeta.barFrom}) 봉이 한 종목도 없습니다`
             : riseMeta.pending ? `첫 5분봉을 다 받기 기다리는 중 — ${riseMeta.pending}종목`
             : '첫 5분봉이 문턱 넘게 오른 종목이 없습니다') },
+  /* 겹침 — 관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 중 **둘 이상**에 든 종목, 겹친 칩 수 많은 순 · 같으면 시가총액 순 (2026-11-11 재권님
+     「관심 프리장 vi급등 장외 매수 이목록들(실시간 순위) … 여기에서 겹치는 종목들을 소팅해서 보여주면 좋을거같은데」 → (가) 새 칩).
+     각 칩이 서버에서 받은 목록을 그대로 모아 센다(새로 고르는 셈이 아니다) — 칩마다 거르는 것(시총 · ETF)도 그 칩 그대로 */
+  ov:   { label: '겹침', list: () => ovRows(),
+          head: '겹친 칩', show: (code) => ovCell(code), html: true,
+          note: () => ovNote(),
+          empty: () => (ovWaiting().length ? `불러오는 중 — ${ovWaiting().map((id) => SORTS[id].label).join(' · ')}`
+            : '둘 이상의 칩에 함께 든 종목이 없습니다') },
   /* VI·급등 — 오늘 정규장에 상승 VI 가 걸렸거나 +20% 를 넘은 종목, 최근 것이 위 (2026-11-06 재권님 「이거다 넣으면 좋을거 같은데」 →
      자리 「실시간 순위에 칸 추가해서 넣어줘」). 세는 것 · 남기는 것은 서버다(server/intraday_alerts.py · /api/alerts/today) —
      화면은 종목마다 한 줄로 묶어 가장 늦은 일을 적는다. 시세 칸은 다른 칩처럼 보이는 줄만 받는다 */
@@ -1558,6 +1566,7 @@ const SORT_TIPS = {
   pre: `코스피 200 · 코스닥 150 종목 중 넥스트레이드 프리마켓(08:00 ~ 08:50) 거래대금 상위 안에서 프로그램 순매수가 큰 순\n08:50 ~ 09:00 에 그날 판으로 굳힙니다 · ${CAP_MIN_TXT}`,
   vi: `오늘 정규장에 상승 VI 가 걸렸거나(VI 는 ${CAP_MIN_TXT}) 전일 대비 +20% 를 넘은 종목, 최근 것이 위`,
   bb: `바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · ${CAP_MIN_TXT} · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록`,
+  ov: '관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 가운데 둘 이상의 칩에 함께 든 종목, 겹친 칩 수가 많은 순(같으면 시가총액 순)\n줄마다 어느 칩에 들었는지 적습니다 · 각 칩의 거르기(시가총액 · ETF)는 그 칩 그대로',
   get rise() {      // 문턱 숫자는 서버 meta — 받기 전에는 숫자 없이
     const m = riseMeta || {};
     const th = m.risePct != null ? ` ${m.risePct}% 이상` : '';
@@ -1668,7 +1677,7 @@ async function loadVi() {
       viBy = by; viRows = rows;
     }
   } catch { /* 못 받으면 들고 있던 것 그대로 */ }
-  if (sortBy === 'vi') { paintRows(rowPrices); paintSortNote(); }
+  if (sortBy === 'vi' || sortBy === 'ov') { paintRows(rowPrices); paintSortNote(); }
   if (rankModal && rankModalSort === 'vi') { paintRankModal(); paintRankModalNote(); }
 }
 
@@ -1764,8 +1773,84 @@ async function loadPre() {
     if (j && j.meta) preMeta = j.meta;
     if (j && j.ok && Array.isArray(j.data)) { preRows = j.data; preSectors = Array.isArray(j.sectors) ? j.sectors : []; }
   } catch { /* 못 받으면 들고 있던 것 그대로 */ }
-  if (sortBy === 'pre') { paintRows(rowPrices); paintSortNote(); }
+  if (sortBy === 'pre' || sortBy === 'ov') { paintRows(rowPrices); paintSortNote(); }
   if (rankModal && rankModalSort === 'pre') { paintRankModal(); paintRankModalNote(); }
+}
+
+/* 「겹침」 칩 — 여섯 칩의 목록을 모아 둘 이상에 든 종목. 목록은 각 칩이 받은 것 그대로(못 받은 칩은 「불러오는 중」 에 적는다) */
+const OV_CHIPS = ['fav', 'pre', 'vi', 'after', 'buy', 'rise'];
+function ovList(id) {
+  if (id === 'fav') return favList().filter((f) => !isUsCode(f.code) && !capBelowMin(f.code));
+  if (id === 'after') return [...rowList('after', 'KOSPI'), ...rowList('after', 'KOSDAQ')];
+  if (id === 'buy') return jointRows;                              // 셋 다 사는 중인 줄만(빠진 줄 jointFlipped 은 안 셈)
+  if (id === 'pre') return preRows && preRows.filter((x) => !capBelowMin(x.code));
+  if (id === 'vi') return viRows;
+  if (id === 'rise') return riseRows;
+  return null;
+}
+const ovWaiting = () => OV_CHIPS.filter((id) => ovList(id) == null);
+let ovBy = {};
+function ovRows() {
+  const by = {};
+  for (const id of OV_CHIPS) {
+    for (const x of ovList(id) || []) {
+      const g = by[x.code] || (by[x.code] = { code: x.code, name: x.name, chips: [] });
+      if (!g.chips.includes(id)) g.chips.push(id);
+    }
+  }
+  ovBy = by;
+  return Object.values(by).filter((g) => g.chips.length >= 2)
+    .sort((a, b) => b.chips.length - a.chips.length || (capOf(b.code) ?? -1) - (capOf(a.code) ?? -1));
+}
+function ovCell(code) {
+  const g = ovBy[code];
+  if (!g) return '—';
+  return `<div style="white-space:nowrap;font-size:12px;line-height:1.3"><b>${g.chips.length}</b><span class="kh-mut">개</span></div>` +
+    `<div style="white-space:nowrap;font-size:11px;line-height:1.3" class="kh-mut">${g.chips.map((id) => SORTS[id].label).join(' · ')}</div>`;
+}
+function ovNote() {
+  const w = ovWaiting();
+  return `칩 ${OV_CHIPS.length}개 중 둘 이상${w.length ? ` · 못 받은 칩 ${w.map((id) => SORTS[id].label).join(' · ')}` : ''}`;
+}
+async function loadOv() { loadPre(); loadVi(); loadJoint(); loadRise(); }
+
+/* 섹터 띠 — 칩을 누르면 그 목록 종목들이 든 섹터(WICS)의 오늘 등락 · 그 목록에 몇 종목 (2026-11-11 재권님 「해당버튼 클릭하면 섹터가 오르고
+   내리는지도 표기해주고」). 섹터 등락은 서버가 주는 네이버 업종 등락 그대로(/api/naver/groups?all=1) — 화면은 이름으로 찾기만 한다.
+   「프리장」 은 프리장 업종 띠(paintPreSectors)가 이미 있어 그것을 둔다 */
+const SEC_CHIPS = new Set(['fav', 'vi', 'after', 'buy', 'rise', 'ov']);
+let industryAll = null;
+async function loadIndustryAll() {
+  try {
+    const r = await apiFetch('/api/naver/groups?kind=industry&all=1', { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    if (j && j.ok && Array.isArray(j.data)) { industryAll = {}; for (const g of j.data) industryAll[g.name] = g; }
+  } catch { /* 못 받으면 들고 있던 것 그대로 */ }
+  paintChipSectors();
+}
+function paintChipSectors() {
+  try { paintChipSectorsNow(); } catch { /* 첫 그림 때 섹터 표(sectorMap)가 아직 안 만들어졌다 — 받은 뒤 다시 그린다 */ }
+}
+function paintChipSectorsNow() {
+  const note = $('kh-sort-note');
+  if (!note) return;
+  let box = $('kh-chip-sec');
+  const on = market !== 'THEME' && SEC_CHIPS.has(sortBy);
+  const rows = on ? rowList() : [];
+  const by = {};
+  for (const s of rows) {
+    const name = sectorMap[s.code];
+    if (!name) continue;
+    (by[name] || (by[name] = [])).push(s.name);
+  }
+  const groups = Object.entries(by).map(([name, names]) => ({ name, names, g: industryAll && industryAll[name] }))
+    .sort((a, b) => b.names.length - a.names.length || Math.abs(b.g?.pct ?? 0) - Math.abs(a.g?.pct ?? 0));
+  if (!on || !groups.length) { if (box) box.hidden = true; return; }
+  if (!box) { box = document.createElement('div'); box.id = 'kh-chip-sec'; box.className = 'kh-pre-sec'; ($('kh-pre-sec') || note).after(box); }
+  box.hidden = false;
+  const pct = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(2)}%`);
+  box.innerHTML = '<span class="kh-mut">섹터</span>' + groups.map((x) =>
+    `<span class="kh-pre-sec-it" data-tip="${escT(`${x.name} 오늘 ${pct(x.g?.pct)}${x.g ? '' : '(업종 등락 못 받음)'} · 이 목록에 ${x.names.join(' · ')}`)}">` +
+    `${escT(sectorShort(x.name))} <b class="${x.g?.pct == null ? 'kh-mut' : dirClass(x.g.pct)}">${pct(x.g?.pct)}</b> <span class="kh-mut">${x.names.length}</span></span>`).join('');
 }
 
 /* 「초반상승」 칩 — 서버가 준 줄 그대로. 못 받았으면 null(빈 목록과 가른다) */
@@ -1794,7 +1879,7 @@ async function loadRise() {
     if (j && j.meta) riseMeta = j.meta;
     if (j && j.ok && Array.isArray(j.data)) riseRows = j.data;
   } catch { /* 못 받으면 들고 있던 것 그대로 */ }
-  if (sortBy === 'rise') { paintRows(rowPrices); paintSortNote(); }
+  if (sortBy === 'rise' || sortBy === 'ov') { paintRows(rowPrices); paintSortNote(); }
   if (rankModal && rankModalSort === 'rise') { paintRankModal(); paintRankModalNote(); }
 }
 
@@ -1879,7 +1964,7 @@ async function loadJoint() {
     /* 빠진 종목에는 받을 때 flip 을 붙인다 — 목록에 넣을 때만 붙이면 jointOf 가 찾은 항목에 없어 까닭 줄이 안 나왔다(11-05 qa) */
     if (j && j.ok && Array.isArray(j.data)) { jointRows = j.data; jointFlipped = Array.isArray(j.flipped) ? j.flipped.map((x) => ({ ...x, flip: true })) : []; }
   } catch { /* 못 받으면 들고 있던 것 그대로 */ }
-  if (sortBy === 'buy') { paintRows(rowPrices); paintSortNote(); }
+  if (sortBy === 'buy' || sortBy === 'ov') { paintRows(rowPrices); paintSortNote(); }
   if (rankModal && rankModalSort === 'buy') { paintRankModal(); paintRankModalNote(); }
 }
 
@@ -2088,6 +2173,8 @@ function setupSorts() {
     if (sortBy === 'buy') loadJoint();
     if (sortBy === 'pre') loadPre();
     if (sortBy === 'rise') loadRise();
+    if (sortBy === 'ov') loadOv();
+    if (SEC_CHIPS.has(sortBy) && !industryAll) loadIndustryAll();
     if (sortBy === 'vi') loadVi();
     if (sortBy === 'bb') loadBb();
     if (sortBy === 'ssts') loadSsts();
@@ -2216,6 +2303,7 @@ function paintSortNote() {
   el.innerHTML = bits.join(' <span class="kh-mut">·</span> ');
   noteAt = Date.now();
   paintPreSectors();
+  paintChipSectors();
   const upd = $('kh-joint-upd');      // 「매수」 칩에만 — 다른 칩에서는 숨는다(11-06)
   if (upd) { const t = sortBy === 'buy' ? jointUpd() : ''; upd.hidden = !t; upd.innerHTML = t; }
 }
@@ -2426,7 +2514,7 @@ function paintRankModal() {
       <td class="l"><span class="kh-nm">${iconHtml(s)}<b data-co="${s.code}">${escT(s.name)}</b>${th ? themeBadge(s.code) : ''}</span></td>
       <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, sid)) : '···'}</td>
       <td class="kh-num ${p ? dirClass(pctOf(p, sid)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, sid)) : '—'}</td>
-      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'rise' ? riseCell(s.code) : sid === 'vi' ? viCell(s.code) : sid === 'bb' ? bbCell(s.code) : sid === 'ssts' ? sstsCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
+      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'rise' ? riseCell(s.code) : sid === 'ov' ? ovCell(s.code) : sid === 'vi' ? viCell(s.code) : sid === 'bb' ? bbCell(s.code) : sid === 'ssts' ? sstsCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
       <td class="kh-num">${th && themeBig !== FLOW ? themeCap(s.code) : showCap(s.code)}</td>
       <td class="kh-num">${th && themeBig === FLOW ? themeMetric(s.code) : (p ? fmtShareCount(p.volume) : '···')}</td>
       <td class="kh-num">${volRatioCell(s.code)}</td>
@@ -2457,7 +2545,7 @@ function paintRankModal() {
       </colgroup>
       <thead><tr>
         <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
-        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'rise' ? '첫 5분봉' : sid === 'vi' ? '때 · 무엇' : sid === 'bb' ? '바닥 봉' : sid === 'ssts' ? '공매도' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
+        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'rise' ? '첫 5분봉' : sid === 'ov' ? '겹친 칩' : sid === 'vi' ? '때 · 무엇' : sid === 'bb' ? '바닥 봉' : sid === 'ssts' ? '공매도' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
       </tr></thead>
       <tbody>${rows || empty}</tbody>
     </table>
@@ -2516,7 +2604,7 @@ function openRankModal() {
       /* 모달에서 고른 기준은 첫 화면 순위표와 **따로 둔다** — 모달에서
          거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면 무엇을 눌러
          그렇게 됐는지 알 수 없다 (2026-09-22). */
-      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'rise') loadRise(); if (id === 'vi') loadVi(); if (id === 'bb') loadBb(); if (id === 'ssts') loadSsts(); loadVolRatio(); },
+      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'rise') loadRise(); if (id === 'ov') loadOv(); if (id === 'vi') loadVi(); if (id === 'bb') loadBb(); if (id === 'ssts') loadSsts(); loadVolRatio(); },
     },
     onClose() { rankModal = null; if (volWatch) { volWatch.stop(); volWatch = null; } },
   });
@@ -2543,7 +2631,7 @@ function paintRankModalNote() {
   if (!rankModal) return;
   const fresh = freshNote();
   /* 「매수」 탭은 갱신 주기만 짧게 — 길면 탭 글자가 세로로 눌렸다(11-05 8772) */
-  const base = rankModalMarket === 'THEME' ? RANK_TABS_NOTE : rankModalSort === 'buy' ? jointNote(true) : rankModalSort === 'pre' ? preNote() : rankModalSort === 'rise' ? riseNote() : rankModalSort === 'vi' ? viNote() : rankModalSort === 'bb' ? bbNote() : rankModalSort === 'ssts' ? sstsNote() : RANK_TABS_NOTE;
+  const base = rankModalMarket === 'THEME' ? RANK_TABS_NOTE : rankModalSort === 'buy' ? jointNote(true) : rankModalSort === 'pre' ? preNote() : rankModalSort === 'rise' ? riseNote() : rankModalSort === 'ov' ? ovNote() : rankModalSort === 'vi' ? viNote() : rankModalSort === 'bb' ? bbNote() : rankModalSort === 'ssts' ? sstsNote() : RANK_TABS_NOTE;
   rankModal.head.setTabsNote(fresh ? `${base} · ${fresh.text}` : base);
 }
 
@@ -2563,16 +2651,17 @@ async function loadSectors() {
     if (!j || !j.data) return;
     const changed = JSON.stringify(j.data) !== JSON.stringify(sectorMap);
     sectorMap = j.data;
-    if (changed && universe) paintRows(rowPrices);
+    if (changed && universe) { paintRows(rowPrices); paintChipSectors(); }
   } catch { /* 못 받으면 빈칸 그대로 */ }
 }
 const JOINT_FALLBACK_MS = 300000;     // 「매수」 칩 — 서버 값마저 못 받았을 때만
-watch({ url: () => (sortBy === 'buy' ? '/api/kis/joint-buy' : null), onChange: loadJoint, key: 'kis_proxy.INVESTOR_TOP_TTL', fallbackMs: JOINT_FALLBACK_MS });
-watch({ url: () => (sortBy === 'pre' ? '/api/kis/pre-flow' : null), onChange: loadPre, key: 'pre_flow.FLOW_TTL', fallbackMs: JOINT_FALLBACK_MS });
-watch({ url: () => (sortBy === 'rise' || (rankModal && rankModalSort === 'rise') ? '/api/kis/open-rise' : null), onChange: loadRise, key: 'open_rise.CACHE_TTL', fallbackMs: JOINT_FALLBACK_MS });
-watch({ url: () => (sortBy === 'vi' || (rankModal && rankModalSort === 'vi') ? '/api/alerts/today' : null), onChange: loadVi, key: null, fallbackMs: VI_FALLBACK_MS });
+watch({ url: () => (sortBy === 'buy' || sortBy === 'ov' ? '/api/kis/joint-buy' : null), onChange: loadJoint, key: 'kis_proxy.INVESTOR_TOP_TTL', fallbackMs: JOINT_FALLBACK_MS });
+watch({ url: () => (sortBy === 'pre' || sortBy === 'ov' ? '/api/kis/pre-flow' : null), onChange: loadPre, key: 'pre_flow.FLOW_TTL', fallbackMs: JOINT_FALLBACK_MS });
+watch({ url: () => (sortBy === 'rise' || sortBy === 'ov' || (rankModal && rankModalSort === 'rise') ? '/api/kis/open-rise' : null), onChange: loadRise, key: 'open_rise.CACHE_TTL', fallbackMs: JOINT_FALLBACK_MS });
+watch({ url: () => (sortBy === 'vi' || sortBy === 'ov' || (rankModal && rankModalSort === 'vi') ? '/api/alerts/today' : null), onChange: loadVi, key: null, fallbackMs: VI_FALLBACK_MS });
 watch({ url: () => (sortBy === 'bb' || (rankModal && rankModalSort === 'bb') ? '/api/signals/today' : null), onChange: loadBb, key: null, fallbackMs: BB_FALLBACK_MS });
 sstsWatch = watch({ url: () => (sortBy === 'ssts' || (rankModal && rankModalSort === 'ssts') ? sstsUrl() : null), onChange: loadSsts, key: null, fallbackMs: SSTS_FALLBACK_MS });
+watch({ url: () => (SEC_CHIPS.has(sortBy) && market !== 'THEME' ? '/api/naver/groups?kind=industry&all=1' : null), onChange: loadIndustryAll, key: 'naver.TTL', fallbackMs: SECTOR_FALLBACK_MS });
 watch({ url: () => '/api/kis/stock-sectors', onChange: loadSectors, key: 'company_profile.SECTOR_LIST_TTL', fallbackMs: SECTOR_FALLBACK_MS });
 loadSectors();
 

@@ -9493,6 +9493,13 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": False, "error": "span 은 d · w · m 중 하나여야 합니다."}, 400)
                 return
 
+            if route == "groups" and (qs.get("all") or [""])[0] == "1":
+                # 업종 · 테마 **전부** — 실시간 순위 칩의 섹터 띠가 종목 섹터 이름(WICS)으로 찾는다(상위 20 만으로는 60 중 18 만 맞음 · 2026-11-11)
+                g = naver.groups_all(kind)
+                self._send_json({"ok": True, "data": g["rows"],
+                                 "meta": {"kind": kind, "total": g["total"], "count": len(g["rows"]), "all": True,
+                                          "source": "네이버", "cacheTtl": naver.TTL}})
+                return
             if route == "groups":
                 g = naver.groups(kind)
                 self._send_json({
