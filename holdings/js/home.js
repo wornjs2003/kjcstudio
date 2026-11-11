@@ -2165,6 +2165,35 @@ function autoTip() {
     '기준 칸은 투자전략 「종목 고르는 룰」 에서 고칩니다'].filter(Boolean).join('\n');
 }
 
+/* 「지금검색」 — 누르면 서버가 매수 · 수급 · 프리장을 칩 룰대로 그 자리에서 다시 세고(server/rescan.py), 화면은 칩 목록을 전부 다시 받는다
+   (2026-11-11 재권님 「관심종목 하위에 지금검색 버튼 … 룰에 맞게 다시 검색해서 종목 보여지게」 → 「나」). 다시 셀 수 있는 간격 · 칩마다 결과는 서버가 준다 */
+let rescanBusy = false;
+let rescanLast = null;          // 서버가 준 { at, chips, cool, minSec, running } — 아직 안 눌렀으면 null
+const RESCAN_NAME = { buy: '매수', auto: '수급', pre: '프리장' };
+function rescanTip() {
+  const head = '칩 룰대로 지금 다시 찾습니다 — 매수 · 수급 · 프리장은 서버가 다시 세고, 나머지 칩은 다시 받습니다';
+  if (rescanBusy) return head + '\n찾는 중…';
+  if (!rescanLast) return head;
+  const r = rescanLast;
+  if (r.running) return head + '\n다른 창에서 세는 중 — 잠시 뒤 다시 눌러 주십시오';
+  return [head,
+    `${r.at ? r.at.slice(11, 16) : '—'} ${r.cool ? `앞 결과(${r.minSec}초 안에는 다시 안 셈 · ${r.cool}초 남음)` : '찾음'}`,
+    ...Object.entries(r.chips || {}).map(([k, v]) => `${RESCAN_NAME[k] || k} — ${v}`)].join('\n');
+}
+async function rescanNow() {
+  if (rescanBusy) return;
+  rescanBusy = true;
+  paintSortNote();
+  try {
+    const r = await apiFetch('/api/kis/rescan', { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    rescanLast = j && j.ok ? j.data : { at: null, chips: { 서버: '못 받음' }, cool: 0 };
+  } catch { rescanLast = { at: null, chips: { 서버: '못 받음' }, cool: 0 }; }
+  rescanBusy = false;
+  loadOv(); loadBb(); loadAutoInfo();        // 관심 「자동」 묶음은 관심 목록 롱폴로 따라온다
+  paintSortNote();
+}
+
 /* 정렬 칩 줄 — 「테마」 를 보면 그 자리가 큰 테마 줄이 되고, 아래 줄(#kh-sorts2)에 작은 테마가 나온다 */
 function paintSortChips() {
   const host = $('kh-sorts');
@@ -2261,6 +2290,7 @@ function setupSorts() {
     if (sortBy === 'ssts') loadSsts();
   };
   host.addEventListener('click', onSort);
+  $('kh-sort-note')?.addEventListener('click', (e) => { if (e.target.closest('[data-rescan]')) rescanNow(); });   // 「지금검색」 — 고른 칩은 그대로 두고 목록만 다시
   $('kh-sorts-fav')?.addEventListener('click', onSort);   // 「관심」 아래 줄 — 같은 칩이라 같은 길
 }
 
@@ -2383,7 +2413,13 @@ function paintSortNote() {
   const fresh = freshNote();
   if (fresh) bits.push(`<b class="${fresh.cls}">${fresh.text}</b>`);
 
-  el.innerHTML = bits.join(' <span class="kh-mut">·</span> ');
+  /* 「지금검색」 — 관심 아래 칩 줄을 볼 때만 이 줄 오른쪽 끝에(재권님 11-11 「항공이 보이는곳 위에 넣어」 = 섹터 띠 바로 위 줄).
+     글줄 안 글자 단추라 줄 높이가 안 바뀐다 */
+  const rescanBtn = sortBy === 'fav' || FAV_SUB.has(sortBy)
+    ? `<button type="button" data-rescan${rescanBusy ? ' disabled' : ''} data-tip="${escT(rescanTip())}" data-tip-h="지금검색"
+        style="float:right;background:none;border:0;padding:0;font:inherit;font-weight:600;color:var(--kh-accent);cursor:pointer">${rescanBusy ? '찾는 중…' : '지금검색'}</button>`
+    : '';
+  el.innerHTML = rescanBtn + bits.join(' <span class="kh-mut">·</span> ');
   noteAt = Date.now();
   paintPreSectors();
   paintChipSectors();
