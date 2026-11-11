@@ -201,7 +201,9 @@ async function load(day, quiet) {
     const none = r && r.ok && j && j.ok === false && Array.isArray(j.meta && j.meta.days) && !j.meta.days.length;
     const why = !r ? '연결 안 됨' : none ? '아직 쌓인 날 없음 — 첫 판은 평일 09:06' : r.status === 404 ? '서버가 아직 단타 30 을 쌓지 않음' : (j && j.error) || `서버 ${r.status}`;
     $('dt-meta').textContent = none ? `— 단타 30: ${why}` : `— 단타 30 값을 못 받음: ${why}`;
-    $('dt-box').innerHTML = `<div class="st-err">— ${esc(why)}</div>`;
+    $('dt-box').innerHTML = none
+      ? '<div class="dt-empty"><b>아직 쌓인 날 없음</b><span>오늘 09:06 첫 판이 나오고, 지난 30일은 서버 되채움이 들어간 날 밤에 채워집니다</span></div>'
+      : `<div class="st-err">— ${esc(why)}</div>`;
     return;
   }
   const d = j.data, m = j.meta || {};
