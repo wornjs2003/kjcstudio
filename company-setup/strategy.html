@@ -104,6 +104,21 @@
         </div>
       </div>
     </section>
+    <!-- 단타 30 (11-11 재권님 「단타 목록 상위 30개를 소팅해서 9시 6분에 배수하고 9시반 10시 등 30분 단위로 2시까지 가격 추적하도록 셋팅해줘, 아래에 프리장 넣기 처럼 그 위에 종목 넣어서」 →
+         시안 temp/시황분석1-dt30-1743 → 「응 이대로 만드는데 위에 날짜도 넣어줘 30일 추적가능하도록」) — 그날 판(09:06 단타 상위 30 · 30분마다 값)은 서버가 굳혀 쌓고 화면은 그린다 · 그리기는 js/strategy-dt30.js -->
+    <section class="st dt">
+      <div class="st-meta" id="dt-meta">값을 받는 중…</div>
+      <h2 class="st-sec">단타 30 — 09:06 매수 → 30분마다 14:00 까지</h2>
+      <div class="st-tg dt-days" id="dt-days" role="tablist" aria-label="날짜"></div>
+      <div class="st-card">
+        <div class="st-cap dt-cap" id="dt-cap">단타 목록 상위 30(겹친 칩 수 많은 순)을 09:06 값에 산 것으로 보고, 매수가 대비 몇 % 인지 30분마다 · 날마다 쌓음 · 30거래일</div>
+        <div class="dt-bar"><div class="st-tg dt-only" id="dt-only" role="tablist" aria-label="이벤트 거르기"></div><div class="st-tg dt-only" id="dt-order" role="tablist" aria-label="줄 세우기"></div></div>
+        <div class="dt-pnl" id="dt-pnl"><div id="dt-pnl-sum">—</div>
+          <label class="dt-fee">증권수수료 <input id="dt-fee" class="rl-in rl-num" inputmode="decimal" aria-label="증권수수료(%) — 살 때 · 팔 때 각각" placeholder="( )">% <span class="rl-sug">살 때 · 팔 때 각각 · 넣으면 저장되고 바로 다시 셈</span> <span id="dt-fee-msg" class="rl-sug"></span></label></div>
+        <div class="dt-box st-scroll" id="dt-box"><div class="st-err">—</div></div>
+        <div class="st-cap dt-foot">각 시각 = 그 시각에 끝난 5분봉 종가 · 평균 = 그 시각 값이 있는 종목만 · 단타 목록은 09:06 에 그날 판으로 굳힘</div>
+      </div>
+    </section>
     <section class="st">
       <div class="st-meta" id="st-meta">값을 받는 중…</div>
       <h2 class="st-sec">장외 · 야간선물 · 프리장 — 날마다 쌓기</h2>
@@ -138,6 +153,7 @@
 <script type="module" src="js/strategy.js"></script>
 <script type="module" src="js/strategy-rule.js"></script>
 <script type="module" src="js/strategy-chips.js"></script>
+<script type="module" src="js/strategy-dt30.js"></script>
 <script type="module" src="js/strategy-log.js"></script>
 <script type="module" src="/assets/js/glossary.js"></script>   <!-- 설명 풍선 — 마우스를 1초 올려 두면 뜨는 공용 풍선(data-tip) · 「설명 풍선은 … 1초 올려 두면 뜬다」(2026-11-07) -->
 <script type="module" src="js/fit.js"></script>   <!-- 틀을 홀딩스 첫 화면과 같은 넓이로 (2026-11-07) -->
