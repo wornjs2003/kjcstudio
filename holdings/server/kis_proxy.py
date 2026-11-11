@@ -5393,9 +5393,13 @@ def fetch_investor_top(cfg, direction="buy", market="all", by="qty", limit=10):
 # ── 셋이 함께 사는 종목 — 홈 실시간 순위 「매수」 칩 (2026-11-05 재권님 「프로그램 기관 외국인이 동시에 사고있는 종목들
 # 볼수있는 방법좀 마련해봐」 → 「실시간 순위에 버튼 하나 만들고 거기에 넣어줘 · 매수 라는 버튼」) ──
 #
-#   외국인 · 기관   fetch_investor_top(금액 순 · 시장 전체) 두 목록(30줄씩)이 **둘 다** 순매수 양수인 종목 — **가집계**
-#   프로그램        그 종목만 FHPPG04650101(통합 UN) 체결 줄 맨 위의 그날 누적 순매수 금액(원)이 양수인 것
-#   차례            세 순매수 금액 합이 큰 순 · 금액 하한은 아직 없다(재권님이 넣으실 칸)
+#   외국인 · 기관   fetch_investor_top(금액 순 · 시장 전체) 두 목록(30줄씩) 중 **한쪽에라도** 든 종목 — **가집계**
+#   프로그램        외국인 · 기관이 둘 다 사는 종목만 FHPPG04650101(통합 UN) 체결 줄 맨 위의 그날 누적 순매수 금액(원)
+#   연기금          flow_rank.joint_more — 15:45 뒤 쌓인 그날 확정치에서(그 전 None)
+#   차례(tier)      ① 외국인 · 기관 · 연기금 · 프로그램 넷 다 ② 외국인 · 기관 · 프로그램 ③ 기관 · 연기금 ④ 외국인만 — 같은 칸 안은 산 금액 합 큰 순
+#                   (2026-11-11 재권님 「외국인 기관 연기금 순으로 산걸 체크하고 셋다사는게 가장좋고 그다음이 외국인 기관 그다음이 기관 연기금
+#                   그다음이 외국인 순으로 줄세워서」 → 「1에 프로그램도 넣어주고 2에도 넣어줘」) · 넷에 안 드는 것(기관만 · 외국인 · 기관인데 프로그램 매도 등)은 뺀다
+#                   상위 30 밖이라 값을 모르는 쪽은 산 것으로 안 센다 · 연기금은 15:45 전에 모르므로 장중에는 ② ④ 만 찬다 — joint_tier 한 곳
 # 한 번 짓는 데 KIS 2건 + 겹친 종목 수(11-05 12:38 실측 12) + 오늘 빠진 종목 수 · 가집계 목록과 같은 INVESTOR_TOP_TTL 동안 들고 있다
 #
 # **뒤에서 짓는다** — 묻는 쪽은 들고 있던 판을 바로 받고, 낡았으면 뒤에서 다시 짓는다(처음 부를 때 KIS 14건을 쥔 채
@@ -5457,6 +5461,17 @@ def _program_net_today(cfg, code, reg=False):
     return _num(last.get("whol_smtn_ntby_tr_pbmn"), int)
 
 
+def joint_tier(fa, ia, pg, fund):
+    """「매수」 칩 차례 1~4 · 안 들면 None — 위 머리 주석 (tier). 값 None(모름)은 안 산 것으로 센다."""
+    b = lambda v: v is not None and v > 0
+    f, i, p, n = b(fa), b(ia), b(pg), b(fund)
+    if f and i and p and n: return 1
+    if f and i and p: return 2
+    if i and n: return 3
+    if f and not i: return 4
+    return None
+
+
 def _joint_buy_make(cfg):
     """판을 새로 짓는다. 금액 단위는 원 · 값이 없으면 None."""
     now = datetime.now(KST)
@@ -5488,24 +5503,27 @@ def _joint_buy_make(cfg):
     # (11-05 개념정의 검수 — 판 전체를 confirmed 로 내면 가집계로 남은 줄이 가려진다)
     basis = (lambda c: "confirmed" if conf.get(c) else "estimate") if conf is not None and closed else (lambda c: None)
     rows, missing, prog = [], 0, {}
-    for code in [c for c in f if c in i]:
+    cands = list(dict.fromkeys(list(f) + list(i)))
+    fund = {c: v.get("fund") for c, v in flow_rank.joint_more(sys.modules[__name__], now.date().isoformat(), cands).items()}
+    for code in cands:
         fa, ia = famt(code), iamt(code)
-        if not fa or not ia or fa <= 0 or ia <= 0:
+        pg = None
+        if fa and ia and fa > 0 and ia > 0:      # 프로그램은 ① ② 를 가를 때만 든다 — 외국인 · 기관 둘 다 사는 종목만 묻는다(KIS 건수 그대로)
+            pg = _program_net_today(cfg, code, reg_over)
+            prog[code] = pg
+            if pg is None:
+                missing += 1
+        t = joint_tier(fa, ia, pg, fund.get(code))
+        if t is None:
             continue
-        pg = _program_net_today(cfg, code, reg_over)
-        prog[code] = pg
-        if pg is None:
-            missing += 1
-            continue
-        if pg <= 0:
-            continue
-        r = f[code]
+        r = f.get(code) or i.get(code)
         rows.append({"code": code, "name": r.get("name"), "price": r.get("price"), "pct": r.get("pct"),
-                     "foreign": fa, "inst": ia, "program": pg, "sum": fa + ia + pg, "basis": basis(code)})
-    rows.sort(key=lambda x: -x["sum"])
+                     "foreign": fa, "inst": ia, "program": pg, "fund": fund.get(code), "tier": t,
+                     "sum": sum(v for v in (fa, ia, pg, fund.get(code)) if v and v > 0), "basis": basis(code)})
+    rows.sort(key=lambda x: (x["tier"], -x["sum"]))
     return {"rows": rows, "f": f, "i": i, "famt": famt, "iamt": iamt, "prog": prog, "conf": conf, "basis": basis,
             "reg": reg_over, "phase": "closed" if reg_over else "live",
-            "candidates": len(set(f) & set(i)), "programMissing": missing,
+            "candidates": len(cands), "programMissing": missing, "fund": fund,
             "errors": len(errors or {}), "hm": now.strftime("%H:%M"), "day": now.date().isoformat()}
 
 
@@ -5553,10 +5571,12 @@ def _joint_buy_rebuild(cfg):
                 approx = [k for k, v in (("foreign", fa), ("inst", ia)) if v is None and (guess.get(c) or {}).get(k) is not None]
                 fa = fa if fa is not None else (guess.get(c) or {}).get("foreign")
                 ia = ia if ia is not None else (guess.get(c) or {}).get("inst")
-                if fa and ia and pg > 0 and fa > 0 and ia > 0:     # 셋 다 아직 산다 — 빠진 것이 아니다(값 일부는 어림)
+                fu = m["fund"].get(c)
+                t = joint_tier(fa, ia, pg, fu)
+                if t is not None:                # 아직 넷 중 한 칸에 든다 — 빠진 것이 아니다(값 일부는 어림)
                     back.append({"code": c, "name": st["seen"].get(c), "price": (px.get(c) or {}).get("price"),
-                                 "pct": (px.get(c) or {}).get("pct"), "foreign": fa, "inst": ia, "program": pg,
-                                 "sum": fa + ia + pg, "approx": approx, "basis": m["basis"](c)})
+                                 "pct": (px.get(c) or {}).get("pct"), "foreign": fa, "inst": ia, "program": pg, "fund": fu, "tier": t,
+                                 "sum": sum(v for v in (fa, ia, pg, fu) if v and v > 0), "approx": approx, "basis": m["basis"](c)})
                     continue
                 sold = [k for k, v in (("foreign", fa), ("inst", ia), ("program", pg)) if v is not None and v <= 0]
                 unknown = [k for k, v in (("foreign", fa), ("inst", ia)) if v is None]
@@ -5567,7 +5587,7 @@ def _joint_buy_rebuild(cfg):
                     continue
                 fa, ia = m["famt"](c), m["iamt"](c)
                 x.update(foreign=fa, inst=ia, unknown=[k for k, v in (("foreign", fa), ("inst", ia)) if v is None], basis=m["basis"](c))
-            rows = sorted(m["rows"] + back, key=lambda x: -x["sum"])
+            rows = sorted(m["rows"] + back, key=lambda x: (x["tier"], -x["sum"]))
             st["data"] = {"rows": rows, "flipped": sorted(st["flipped"].values(), key=lambda x: x["at"], reverse=True),
                           # 외 · 기 값을 확정치로 낸 줄 · 가집계로 남은 줄의 수(rows + flipped · 마감 뒤에만 셈 · 장중은 None)
                           "confirmed": sum(1 for x in rows + list(st["flipped"].values()) if x.get("basis") == "confirmed") if m["conf"] else None,
@@ -5591,9 +5611,7 @@ def _joint_buy_rebuild(cfg):
                 a0 = acc.get(x["code"]) or {}
                 x.update(first=a0.get("first"), hits=a0.get("hits") or 0, pgAt=_program_at.get(x["code"]),
                          fund=(more.get(x["code"]) or {}).get("fund"), person=(more.get(x["code"]) or {}).get("person"))
-            # 연기금 값이 들어온 뒤(15:45 뒤 쌓기) 차례 — 셋 다 매수 안에서 연기금도 사는 종목 먼저, 그다음 셋 합(재권님 「그다음이 연기금」)
-            if any(x.get("fund") is not None for x in data["rows"]):
-                data["rows"].sort(key=lambda x: (not ((x.get("fund") or 0) > 0), -x["sum"]))
+            # 차례는 joint_tier 가 연기금까지 넣어 위에서 세웠다(11-11) — 여기서 다시 안 세운다
             data["fundIn"] = sum(1 for x in data["rows"] if x.get("fund") is not None)
     except Exception as e:
         print("[매수 칩] 짓다 멈춤 — %s" % safe_message(e, 120))
