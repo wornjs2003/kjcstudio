@@ -147,6 +147,7 @@ export const WATCHLIST = WATCHLIST_CODES.flatMap((code) => {
  * **이 값은 화면을 보고 정하는 것이라 자주 바뀐다.** 그래서 다른 곳 주석에
  * 숫자를 적지 않는다 — 여기가 유일한 자리다. */
 export const CHART_PERIODS = [
+  { id: '1m', label: '1분', initBars: 240 },
   { id: '5m', label: '5분', initBars: 120 },
   { id: '1d', label: '일',  initBars: 90  },
   { id: '1w', label: '주',  initBars: 30  },
