@@ -65,9 +65,14 @@ function toKstWall(y, m, d, hhmm, zone) {
  * @param {string[]} days  'YYYYMMDD'
  * @returns {{t:number, until:number|null, label:string}[]}  t · until 은 차트 시각 자리(초)
  */
+const _marksByDay = new Map();   // 'YYYYMMDD' → 그날 세로선(읽기만 — 부르는 쪽이 고치지 않는다)
+
 export function sessionMarks(days) {
   const out = [];
   days.forEach((s) => {
+    const hit = _marksByDay.get(s);              // 같은 날은 한 번만 셈 — 그리기마다 날마다 다시 셌다(2026-11-11 캔들 첫 그리기 줄이기)
+    if (hit) { out.push(...hit); return; }
+    const mine = [];
     const y = +s.slice(0, 4), m = +s.slice(4, 6), d = +s.slice(6, 8);
     const at = new Map();                         // 같은 한국 시각끼리 모은다
     SESSION_EVENTS.forEach((e) => {
@@ -81,8 +86,11 @@ export function sessionMarks(days) {
     });
     at.forEach((g) => {
       const label = [...g.byWhat].map(([what, who]) => who.join(' · ') + ' ' + what).join(' / ');
-      out.push({ t: g.t, until: g.until, label });
+      mine.push({ t: g.t, until: g.until, label });
     });
+    if (_marksByDay.size > 400) _marksByDay.clear();
+    _marksByDay.set(s, mine);
+    out.push(...mine);
   });
   return out.sort((a, b) => a.t - b.t);
 }

@@ -1,11 +1,12 @@
 // 산업 분석 — 섹터 분류 줄 · 「반도체 소부장」 화면 (2026-11-10 재권님 「섹터별로 클릭하면 거기에 섹터별로 정리해야할것들」 → 시안 temp/시황분석-sbx4 → 「응 그렇게 만들어줘」)
 // 섹터 · 주제 이름은 data/industry-topics.json · 소부장 화면의 칸 · 판정 규칙 · 근거는 data/industry-sobu.json — 코드에 이름 · 숫자를 두지 않는다.
 // 값은 서버(/api/kis/indices · /api/kis/us-board · /api/market/materials · /api/news/stored)와 Insight 자료(trade-flash · external-risk-live)에서 받는다. 못 받은 칸은 「못 받음」(0 으로 두지 않음).
-// 판정 = 움직인 방향 × 그 칸의 dir(오르면 소부장에 호재 1 · 악재 -1 · 양면 0). 알약 색은 초록 · 주황 · 회색 — 등락 숫자의 빨강 · 파랑과 섞이지 않게(시황분석1 의견 15:2x).
+// 판정 = 움직인 방향 × 그 칸의 dir(오르면 소부장에 호재 1 · 악재 -1 · 양면 0). 알약 색은 호재 빨강 · 악재 파랑 · 중립 회색 — 산업 분석 안 판정 색을 이벤트 칩(수혜 · 피해)과 하나로(재권님 「나」 11-11 · 그 전 초록 · 주황).
 import { signClass } from '/assets/js/sign.js';
+import { renderEvents } from './industry-events.js';
 
 const q = new URLSearchParams(location.search);
-const T = q.get('t'), S = q.get('s');
+const T = q.get('t'), S = q.get('s'), V = q.get('v');   // v=events — 「이벤트」 칩(사건 표)
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const num = (v, dp = 2) => v == null ? '—' : Number(v).toLocaleString('ko-KR', { minimumFractionDigits: dp, maximumFractionDigits: dp });
@@ -19,9 +20,10 @@ async function get(u) {
 
 function chips(topics) {
   const pages = topics.sectors.flatMap((s) => s.topics.filter((t) => t.page));
-  const on = T || (!S && pages[0] && pages[0].page);
+  const on = T || (!S && !V && pages[0] && pages[0].page);
   const chip = (href, name, act) => `<a class="kh-chip${act ? ' is-active' : ''}" href="${href}">${esc(name)}</a>`;
-  $('[data-ind-chips]').innerHTML = pages.map((t) => chip('industry.html?t=' + encodeURIComponent(t.page), t.name, on === t.page)).join('')
+  $('[data-ind-chips]').innerHTML = chip('industry.html?v=events', '이벤트', V === 'events')
+    + pages.map((t) => chip('industry.html?t=' + encodeURIComponent(t.page), t.name, on === t.page)).join('')
     + topics.sectors.map((s) => chip('industry.html?s=' + encodeURIComponent(s.name), s.name, S === s.name)).join('');
 }
 
@@ -142,6 +144,7 @@ async function main() {
   if (!topics) return;   // 목록을 못 받으면 소부장 표만 그대로
   chips(topics);
   if (S) return sectorStub(topics);
+  if (V === 'events') { $('section.sb').hidden = true; return renderEvents($('[data-ind-board]'), await get('data/event-impact.json'), topics); }
   await sobu();
 }
 main();

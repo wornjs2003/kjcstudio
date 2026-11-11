@@ -11,6 +11,7 @@
 **못 보는 것** — 세션이 실제로 읽었는지. 그것은 기계가 못 본다.
 """
 import json
+import re
 import os
 import sys
 
@@ -43,7 +44,68 @@ def main():
     print("  · 재권님이 답하실 것은 맨 아래 하나 · 한국어로만 · 숫자에는 뜻 — 「응답 규칙」")
     # 재시작마다 SendMessage 이름이 바뀌어 세션끼리 주소를 잃었다(2026-10-02 지시 「재발 안하게 룰 만들어줘」)
     print("  · 세션 간 메시지는 보낼 때마다 주소를 센다 — `python3 tools/session-addr.py`(세션 이름 → 지금 주소). 기억한 이름을 쓰지 않는다 · 첫 줄에 내 세션 이름")
+    if src in ("compact", "clear"):
+        open_work(root)
     return 0
+
+
+def open_work(root):
+    """압축 · /clear 뒤 그 세션의 열린 일을 보드에서 넣는다 — 「받은 지시는 끝나거나 재권님이 거두실 때까지 보드에 살아 있다」
+    (2026-11-11 지시 「응 만들어」). 압축 요약을 세션이 잘 쓰는 것에 기대지 않는다 — 카드가 원천이다.
+    11-10 1분봉 — 답 없는 물음이 압축 뒤 짧은 꼴로도 안 떠 다음날 재권님이 찾으셨다."""
+    import importlib.util
+    try:
+        spec = importlib.util.spec_from_file_location("board_card", os.path.join(root, "tools", "board-card.py"))
+        bc = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bc)
+        label = bc.label_of(bc.session_name())
+        if not label:
+            print("[열린 일] 못 읽음 — 세션 이름을 못 얻었다. `python3 tools/board-card.py --mine --label <담당>` 으로 보십시오")
+            return
+        doc, _ = bc.read()                      # 못 보면 Unseen — 「못 볼 때는 막지 않는다」 와 같은 셈(1.5초 · 503 · 5xx)
+    except Exception as e:
+        print("[열린 일] 못 읽음(%s) — 보드(8765)가 돌아오면 `python3 tools/board-card.py --mine` 으로 보십시오" % type(e).__name__)
+        return
+    rows, asks, after = [], [], []
+    for t in bc.tasks(doc):
+        if bc.who_of(t) != label:
+            continue
+        col = t.get("column") or "todo"
+        memo = t.get("memo") or ""
+        title = (t.get("text") or "")[:70]
+        if col in ("doing", "review"):
+            rows.append("%s · %s" % (col, title))
+        if col != "done":
+            q = bc.open_question(memo)
+            if q:
+                at = ""
+                for ln in memo.split("\n"):
+                    m = re.match(r"^\s*(\d{1,2}:\d{2})\s+묻는 중:", ln)
+                    if m:
+                        at = m.group(1)
+                asks.append("%s「%s」 — 카드 「%s」" % ((at + " ") if at else "", q, title[:40]))
+            ls = [x for x in memo.split("\n") if x.strip()]
+            if col == "todo" and ls and "뒤에 진행:" in ls[-1]:
+                after.append("%s — %s" % (title[:50], ls[-1].split("뒤에 진행:", 1)[1].strip()))
+    print("[열린 일 · %s] 보드에서 읽음 — 하던 일과 걸린 물음을 이것으로 잇는다" % label)
+    if not (rows or asks or after):
+        print("  · 열린 카드 · 걸린 물음 없음")
+        return
+    for r in rows[:8]:
+        print("  · " + r)
+    if len(rows) > 8:
+        print("  · … 외 %d장 — `python3 tools/board-card.py --mine`" % (len(rows) - 8))
+    for a in after[:5]:
+        print("  · 뒤에 진행: " + a)
+    if asks:
+        print("  답 없는 물음(앞 시각은 날짜 없이 시각만 — 메모에 날짜가 없다 · 오늘인지 며칠 전인지는 `python3 tools/board-stale.py` 로 본다)")
+        print("  — **자기 기록에서 답이 있었는지 먼저 본다.** 있었으면 `--answer` 로 닫고 안 올린다 ·"
+              " 없으면 다음 답 맨 아래에 「▶ 앞서 HH:MM 에 여쭌 것 그대로입니다 — <물음 한 줄>」 로 다시 올린다 ·"
+              " 물음 안의 커밋 번호는 일 이름으로 바꿔 옮긴다(Stop 훅 hook-hash 가 막는다)")
+        for a in asks[:5]:
+            print("  · " + a)
+        if len(asks) > 5:
+            print("  · … 외 %d개" % (len(asks) - 5))
 
 
 if __name__ == "__main__":

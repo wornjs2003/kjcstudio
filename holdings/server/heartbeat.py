@@ -12,7 +12,7 @@ Cron 에서 그것을 읽어 **끊겼으면** 텔레그램으로 알린다.
 
 **왜 KV 에 직접 쓰나** — 배포본은 Cloudflare Access 뒤라
 `https://thekjcstudio.com/api/*` 를 부르면 **302**(로그인 화면으로 보냄)가
-된다(2026-09-23 실측). `api.cloudflare.com` 은 Access 와 무관하다.
+된다(2026-09-23 실측 · 그때 주소 — 지금 메인 주소는 `dart.MAIN_URL`). `api.cloudflare.com` 은 Access 와 무관하다.
 재권님이 (가)서비스 토큰 · (나)경로 Bypass · (다)KV 직접 셋 중
 **(다)** 로 정하셨다 — Access 설정을 안 건드리는 쪽이다.
 

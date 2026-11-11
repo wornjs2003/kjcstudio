@@ -57,6 +57,10 @@ DART_DAILY_LIMIT = 20000
 # 재권님 2026-10-15 「절반만 안으로 만들어놔」. 무엇을 더 받을지는 나중에 정하신다.
 DART_DAILY_BUDGET = DART_DAILY_LIMIT // 2
 
+# 우리 홈페이지(메인) 주소 — 밖으로 나가는 글(텔레그램 등)의 링크는 이것 + 경로로만 쓴다.
+# 끝에 / 없음. 2026-11-11 재권님 「옮긴 홈페이지룰로 통일해」 — 알림 글이 모두 dart 를 불러 쓰므로 여기 둔다.
+MAIN_URL = "https://thekjc.co.kr"
+
 # 공시 원문 보기 주소. rcept_no 하나만 있으면 열린다.
 VIEWER = "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=%s"
 

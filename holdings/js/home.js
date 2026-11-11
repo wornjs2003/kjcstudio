@@ -1435,6 +1435,7 @@ const showCap = (code) => {
   return isUsCode(code) ? fmtUsdBig(c) : fmtMoneyKr(c);
 };
 
+const NOW_RISE_PCT = 3;           // 「현재상승」 문턱 — 시가 대비 %(재권님 11-11 「시가보다 3%이상」)
 const SORTS = {
   /* 관심종목 — **다른 다섯과 성격이 다르다.**
    *
@@ -1478,6 +1479,12 @@ const SORTS = {
   after:{ label: '장외', key: (p) => p.regPct, only: (v) => v > 0, capMin: true,
           head: '종가', show: (code, p) => (p && p.regClose ? fmtPriceOf(code, p.regClose) : '—'),
           pct: (p) => p.regPct, note: '종가 대비 오른 종목' },
+  /* 현재상승 — 지금 값이 그날 시가보다 NOW_RISE_PCT % 이상 높은 종목 · 시가 대비 큰 순(2026-11-11 재권님 「현재상승 이라는 버튼추가하고
+     여기는 시가보다 3%이상 올라있는 목록」). 시가 · 현재가는 통합 시세 그대로 — 셈은 시가 대비 % 하나 */
+  nowup:{ label: '현재상승', key: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), only: (v) => v >= NOW_RISE_PCT, capMin: true,
+          head: '시가', show: (code, p) => (p && p.open ? fmtPriceOf(code, p.open) : '—'),
+          pct: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), note: `시가 대비 +${NOW_RISE_PCT}% 이상`,
+          empty: () => `시가보다 +${NOW_RISE_PCT}% 이상 오른 종목이 없습니다(시세를 받는 중이면 잠시 뒤 채워짐)` },
   /* 매수 — 외국인 · 기관 · 프로그램이 **셋 다** 순매수인 종목, 셋 합이 큰 순 (2026-11-05 재권님 「프로그램 기관 외국인이 동시에
      사고있는 종목들 볼수있는 방법좀 마련해봐」 → 「실시간 순위에 버튼 하나 만들고 거기에 넣어줘 · 매수 라는 버튼」).
      고르는 것은 서버다(kis_proxy.py `fetch_joint_buy` · 외국인 · 기관은 가집계) — 화면은 받은 차례 그대로 그린다.
@@ -1485,11 +1492,11 @@ const SORTS = {
   /* 줄마다 셋이 **각각 얼마 사는지**(억) · 오늘 셋 다 샀다가 한 곳이라도 매도로 바뀐 종목은 맨 위에 흐리게 남긴다
      (11-05 재권님 「동시매수하다가 어느 한곳이 매도로 바뀌는것도 파악을 할수있게」 → 시안 「좋아 각각 얼마 사는지로」) */
   buy:  { label: '매수', list: () => (jointRows ? [...jointFlipped, ...jointRows] : null), capMin: true,
-          head: '외 · 기 · 프 순매수(억)', show: (code) => jointCell(code), html: true,
+          head: '차례 · 외 · 기 · 프 · 연(억)', show: (code) => jointCell(code), html: true,
           note: () => jointNote(),
           empty: () => (!jointMeta || jointMeta.pending ? '불러오는 중'
             : jointMeta.listFail ? '못 받음 — 외국인 · 기관 순매수 순위'
-            : '셋이 함께 사는 종목이 아직 없습니다') },
+            : '네 칸(①~④)에 드는 종목이 아직 없습니다') },
   /* 프리장 — 넥스트레이드 프리마켓(08:00~08:50)에 프로그램이 몰리는 종목 (2026-11-05 재권님 「프리장에 프로그램 몰리는것 만들어줘.
      이걸 참고해서 매매를 할수있게 다른것들도 같이 챙겨서」 → 안 「응 만들어」). 고르는 것 · 차례 · 굳히는 때는 서버다(server/pre_flow.py)
      — 순위 목록 중 프리장 거래대금 상위 · 프로그램 순매수 큰 순 · 08:50~09:00 에 그날 판으로 굳힘. 화면은 받은 차례 그대로 그린다 */
@@ -1501,6 +1508,26 @@ const SORTS = {
             : preMeta.phase === 'before' ? `프리장은 ${preMeta.preOpen} 부터 · 지금은 앞 판이 없습니다`
             : preMeta.phase === 'live' ? `아직 오늘 판이 없습니다 — 서버가 ${Math.round((preMeta.cacheTtl || 180) / 60)}분마다 짓습니다`
             : '프리장 판 없음 — 그 시각 짓지 않았거나 못 남겼습니다') },     // 까닭을 단정하지 않는다(qa 덧 11-05 · 「못 쟀으면 못 쟀다」)
+  /* 초반상승 — 정규장 첫 5분봉(09:00~09:05)이 시가보다 일정 % 이상 올라 끝난 종목 · 시가총액 문턱 이상 · 그 상승률 큰 순 (2026-11-11 재권님
+     「아침 9시5분 기준으로 양봉이 2% 이상이 되고 시가총액이 5천억 이상인 종목들 소팅해서 실시간 순위에 초반상승 이라고 만들어서 넣어줘」 → 「가」).
+     고르는 것 · 문턱 값은 서버다(server/open_rise.py · /api/kis/open-rise) — 화면은 받은 차례 그대로 그리고 글의 숫자도 meta 에서 읽는다 */
+  rise: { label: '초반상승', list: () => riseRows,
+          head: '첫 5분봉', show: (code) => riseCell(code), html: true,
+          note: () => riseNote(),
+          empty: () => (!riseMeta ? '불러오는 중'
+            : riseMeta.phase === 'closed' ? '오늘은 장이 열리지 않습니다'
+            : riseMeta.phase === 'before' ? `${riseMeta.barTo} 첫 5분봉이 끝나면 고릅니다`
+            : riseMeta.phase === 'nodata' ? `못 셈 — 첫 5분봉(${riseMeta.barFrom}) 봉이 한 종목도 없습니다`
+            : riseMeta.pending ? `첫 5분봉을 다 받기 기다리는 중 — ${riseMeta.pending}종목`
+            : '첫 5분봉이 문턱 넘게 오른 종목이 없습니다') },
+  /* 겹침 — 관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 중 **둘 이상**에 든 종목, 겹친 칩 수 많은 순 · 같으면 시가총액 순 (2026-11-11 재권님
+     「관심 프리장 vi급등 장외 매수 이목록들(실시간 순위) … 여기에서 겹치는 종목들을 소팅해서 보여주면 좋을거같은데」 → (가) 새 칩).
+     각 칩이 서버에서 받은 목록을 그대로 모아 센다(새로 고르는 셈이 아니다) — 칩마다 거르는 것(시총 · ETF)도 그 칩 그대로 */
+  ov:   { label: '단타', list: () => ovRows(),   // 「겹침」 → 「오늘의종목」 → 「단타」 · 관심 아래 줄 맨 왼쪽(11-11 재권님)
+          head: '겹친 칩', show: (code) => ovCell(code), html: true,
+          note: () => ovNote(),
+          empty: () => (ovWaiting().length ? `불러오는 중 — ${ovWaiting().map(ovLabel).join(' · ')}`
+            : '둘 이상의 칩에 함께 든 종목이 없습니다') },
   /* VI·급등 — 오늘 정규장에 상승 VI 가 걸렸거나 +20% 를 넘은 종목, 최근 것이 위 (2026-11-06 재권님 「이거다 넣으면 좋을거 같은데」 →
      자리 「실시간 순위에 칸 추가해서 넣어줘」). 세는 것 · 남기는 것은 서버다(server/intraday_alerts.py · /api/alerts/today) —
      화면은 종목마다 한 줄로 묶어 가장 늦은 일을 적는다. 시세 칸은 다른 칩처럼 보이는 줄만 받는다 */
@@ -1534,20 +1561,32 @@ const SORTS = {
 /* 칩 설명 — 칩 위에 마우스를 1초 올려 두면 뜬다(공용 풍선 data-tip · 2026-11-07 재권님 「급등 매수 장외 등 해당 버튼 위에 마우스 1초이상
    올리고 있으면 설명뜨게」 → 「전부 통일」). 위 칩 줄과 「자세히」 모달 탭이 같이 쓴다 — 글은 여기 한 곳. 기준은 위 SORTS 주석 · 서버 그대로 · 장외 · 매수 · 프리장은 개발2 가 코드로 대 봄(11-07) */
 const SORT_TIPS = {
-  fav: `하트로 담은 관심종목만 걸러 시가총액 순으로 봅니다 · ${CAP_MIN_TXT}`,
+  /* 관심 — 실제 차례를 그대로 적는다(rowList 의 filter 갈래 · 2026-11-11 재권님 「관심 에 종목버튼에 마우스 올리면 어떤 룰로 소팅되는지 설명 넣어줘」):
+     순위 목록 차례(코스피 시가총액 순 → 코스닥 시가총액 순)에서 담은 것만 골라내고, 목록 밖에서 담은 종목은 담은 차례로 맨 뒤 */
+  fav: `하트로 담은 관심종목만 골라 봅니다\n차례 — ① 코스피 종목 시가총액 큰 순 ② 그다음 코스닥 종목 시가총액 큰 순 ③ 순위 목록(코스피 200 · 코스닥 150) 밖에서 담은 종목은 담은 차례대로 맨 뒤\n아래 묶음 칩을 고르면 그 묶음만(다시 누르면 전체) · ${CAP_MIN_TXT}\n함께 나오는 칩 줄(단타 · 프리장 · 초반상승 · 현재상승 · VI·급등 · 볼린저 · 장외 · 수급 — 수급만 관심 안 「자동」 묶음)은 관심과 따로 순위 목록 전체에서 고릅니다 — 칩마다 마우스를 올리면 고르는 기준이 뜹니다`,
   cap: '시가총액이 큰 순 — 위 코스피 · 코스닥으로 시장을 고릅니다',
   value: '오늘 거래대금이 큰 순',
   vol: '오늘 거래량이 큰 순',
   up: '오늘 전일 대비 많이 오른 순',
   down: '오늘 전일 대비 많이 내린 순',
   after: `정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 09:00 ~ 15:40 은 비어 있습니다 · ${CAP_MIN_TXT}`,
-  buy: `외국인 · 기관 · 프로그램이 셋 다 순매수인 종목, 셋 합이 큰 순(외국인 · 기관은 장중 가집계)\n셋 다 샀다가 한 곳이라도 매도로 바뀐 종목은 맨 위에 흐리게 · ${CAP_MIN_TXT}`,
+  buy: `외국인 · 기관 순매수 금액 상위 30(장중 가집계)에 든 종목을 이 차례로 — ① 외국인 · 기관 · 연기금 · 프로그램 넷 다 ② 외국인 · 기관 · 프로그램 ③ 기관 · 연기금 ④ 외국인만 · 같은 칸 안은 산 금액 합 큰 순\n연기금은 15:45 확정치 뒤에만 있어 장중에는 ② ④ 만 찹니다 · 프로그램은 실시간 · 서버가 판을 다시 지을 때마다 차례가 바뀝니다\n칸에서 빠진 종목은 맨 위에 흐리게 · ${CAP_MIN_TXT}`,
   pre: `코스피 200 · 코스닥 150 종목 중 넥스트레이드 프리마켓(08:00 ~ 08:50) 거래대금 상위 안에서 프로그램 순매수가 큰 순\n08:50 ~ 09:00 에 그날 판으로 굳힙니다 · ${CAP_MIN_TXT}`,
+  nowup: `지금 값이 오늘 시가보다 +${NOW_RISE_PCT}% 이상 높은 종목, 시가 대비 큰 순 · 오른쪽 % 도 시가 대비\n위 코스피 · 코스닥으로 시장을 고릅니다 · ${CAP_MIN_TXT}`,
   vi: `오늘 정규장에 상승 VI 가 걸렸거나(VI 는 ${CAP_MIN_TXT}) 전일 대비 +20% 를 넘은 종목, 최근 것이 위`,
   bb: `바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · ${CAP_MIN_TXT} · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록`,
+  ov: '관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 · 수급 가운데 둘 이상의 칩에 함께 든 종목, 겹친 칩 수가 많은 순(같으면 시가총액 순)\n줄마다 어느 칩에 들었는지 적습니다 · 각 칩의 거르기(시가총액 · ETF)는 그 칩 그대로',
+  get rise() {      // 문턱 숫자는 서버 meta — 받기 전에는 숫자 없이
+    const m = riseMeta || {};
+    const th = m.risePct != null ? ` ${m.risePct}% 이상` : '';
+    const cap = m.minCapEok != null ? `시가총액 ${fmtMoneyKr(m.minCapEok)} 이상만` : '';
+    return `코스피 200 · 코스닥 150 종목(ETF 뺌) 중 정규장 첫 5분봉(${m.barFrom || '09:00'} ~ ${m.barTo || '09:05'})이 시가보다${th} 올라 끝난 종목, 그 상승률이 큰 순\n그 봉을 다 받은 뒤에 고르고 그날 판으로 굳습니다${cap ? ` · ${cap}` : ''}`;
+  },
   ssts: '코스피200 · 코스닥150 종목의 공매도 거래대금 · 비율(공매도 대금 ÷ 전체 거래대금) 순\n아래 줄에서 금액 · 비율 · 1일 · 5일 · 한달 · 1년 · 장중 값은 없고 거래소가 장 뒤에 냅니다',
 };
-const sortTipAttr = (id) => (SORT_TIPS[id] ? ` data-tip="${escT(SORT_TIPS[id])}" data-tip-h="${escT(SORTS[id].label)}"` : '');
+/* 「관심」 아래 줄 칩은 관심 종목 안에서 거르는 것이 아니다 — 자리만 관심 아래라 헷갈리지 않게 풍선 끝에 한 줄(2026-11-11 재권님 「어떤 룰에 의해 선별된 종목인지 인지가 되도록」) */
+const FAV_SUB_TIP = '\n관심 아래에 모아 둔 칩입니다 — 관심 종목만이 아니라 위 기준으로 순위 목록 전체에서 고릅니다';
+const sortTipAttr = (id) => (SORT_TIPS[id] ? ` data-tip="${escT(SORT_TIPS[id] + (FAV_SUB.has(id) ? FAV_SUB_TIP : ''))}" data-tip-h="${escT(SORTS[id].label)}"` : '');
 
 /* 「공매도」 칩 — 서버가 세운 차례 그대로. 못 받았으면 null(빈 목록과 가른다) */
 let sstsRows = null, sstsMeta = null, sstsBy = {};
@@ -1649,7 +1688,7 @@ async function loadVi() {
       viBy = by; viRows = rows;
     }
   } catch { /* 못 받으면 들고 있던 것 그대로 */ }
-  if (sortBy === 'vi') { paintRows(rowPrices); paintSortNote(); }
+  if (sortBy === 'vi' || sortBy === 'ov') { paintRows(rowPrices); paintSortNote(); }
   if (rankModal && rankModalSort === 'vi') { paintRankModal(); paintRankModalNote(); }
 }
 
@@ -1745,8 +1784,121 @@ async function loadPre() {
     if (j && j.meta) preMeta = j.meta;
     if (j && j.ok && Array.isArray(j.data)) { preRows = j.data; preSectors = Array.isArray(j.sectors) ? j.sectors : []; }
   } catch { /* 못 받으면 들고 있던 것 그대로 */ }
-  if (sortBy === 'pre') { paintRows(rowPrices); paintSortNote(); }
+  if (sortBy === 'pre' || sortBy === 'ov') { paintRows(rowPrices); paintSortNote(); }
   if (rankModal && rankModalSort === 'pre') { paintRankModal(); paintRankModalNote(); }
+}
+
+/* 「겹침」 칩 — 여섯 칩의 목록을 모아 둘 이상에 든 종목. 목록은 각 칩이 받은 것 그대로(못 받은 칩은 「불러오는 중」 에 적는다) */
+const OV_CHIPS = ['fav', 'pre', 'vi', 'after', 'buy', 'rise', 'auto'];   // auto = 「수급」(관심 안 자동 묶음 · 11-11 재권님 「단타에 수급에 걸리는 종목도 넣어야해」)
+const ovLabel = (id) => (id === 'auto' ? '수급' : SORTS[id].label);
+function ovList(id) {
+  if (id === 'fav') {                // 자동 묶음 종목은 「수급」 으로 센다 — 관심으로도 세면 수급 종목은 늘 둘이 겹쳐 전부 단타가 된다
+    const g = favGroups().find((x) => x.id === AUTO_FG);
+    return favList().filter((f) => !isUsCode(f.code) && !capBelowMin(f.code) && !(g && g.codes.includes(f.code)));
+  }
+  if (id === 'after') return [...rowList('after', 'KOSPI'), ...rowList('after', 'KOSDAQ')];
+  if (id === 'buy') return jointRows;                              // 셋 다 사는 중인 줄만(빠진 줄 jointFlipped 은 안 셈)
+  if (id === 'pre') return preRows && preRows.filter((x) => !capBelowMin(x.code));
+  if (id === 'vi') return viRows;
+  if (id === 'rise') return riseRows;
+  if (id === 'auto') { const g = favGroups().find((x) => x.id === AUTO_FG); return g ? favList().filter((f) => g.codes.includes(f.code) && !isUsCode(f.code)) : []; }
+  return null;
+}
+const ovWaiting = () => OV_CHIPS.filter((id) => ovList(id) == null);
+let ovBy = {};
+function ovRows() {
+  const by = {};
+  for (const id of OV_CHIPS) {
+    for (const x of ovList(id) || []) {
+      const g = by[x.code] || (by[x.code] = { code: x.code, name: x.name, chips: [] });
+      if (!g.chips.includes(id)) g.chips.push(id);
+    }
+  }
+  ovBy = by;
+  return Object.values(by).filter((g) => g.chips.length >= 2)
+    .sort((a, b) => b.chips.length - a.chips.length || (capOf(b.code) ?? -1) - (capOf(a.code) ?? -1));
+}
+const OV_CHIP_W = 96;     // 단타 칸 칩 목록 폭(px) — 이보다 길면 줄을 바꾼다
+function ovCell(code) {
+  const g = ovBy[code];
+  if (!g) return '—';
+  return `<div style="white-space:nowrap;font-size:12px;line-height:1.3"><b>${g.chips.length}</b><span class="kh-mut">개</span></div>` +
+    /* 칩 목록은 칸 안에서 줄을 바꾼다 — 한 줄로 두면 칸이 넓어져 종목 이름 · 섹터가 「에코…」 처럼 잘렸다(11-11 재권님 「종목이름이랑 섹터가 다 보이게」) */
+    `<div style="white-space:normal;max-width:${OV_CHIP_W}px;margin-left:auto;font-size:11px;line-height:1.3" class="kh-mut">${g.chips.map((id) => `<span style="white-space:nowrap">${ovLabel(id)}</span>`).join(' · ')}</div>`;   // 칩 이름 한가운데서는 안 끊는다
+}
+function ovNote() {
+  const w = ovWaiting();
+  return `칩 ${OV_CHIPS.length}개 중 둘 이상${w.length ? ` · 못 받은 칩 ${w.map(ovLabel).join(' · ')}` : ''}`;
+}
+async function loadOv() { loadPre(); loadVi(); loadJoint(); loadRise(); }
+
+/* 섹터 띠 — 칩을 누르면 그 목록 종목들이 든 섹터(WICS)의 오늘 등락 · 그 목록에 몇 종목 (2026-11-11 재권님 「해당버튼 클릭하면 섹터가 오르고
+   내리는지도 표기해주고」). 섹터 등락은 서버가 주는 네이버 업종 등락 그대로(/api/naver/groups?all=1) — 화면은 이름으로 찾기만 한다.
+   「프리장」 은 프리장 업종 띠(paintPreSectors)가 이미 있어 그것을 둔다 */
+const SEC_CHIPS = new Set(['fav', 'vi', 'after', 'buy', 'rise', 'ov']);
+let industryAll = null;
+async function loadIndustryAll() {
+  try {
+    const r = await apiFetch('/api/naver/groups?kind=industry&all=1', { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    if (j && j.ok && Array.isArray(j.data)) { industryAll = {}; for (const g of j.data) industryAll[g.name] = g; }
+  } catch { /* 못 받으면 들고 있던 것 그대로 */ }
+  paintChipSectors();
+}
+function paintChipSectors() {
+  try { paintChipSectorsNow(); } catch { /* 첫 그림 때 섹터 표(sectorMap)가 아직 안 만들어졌다 — 받은 뒤 다시 그린다 */ }
+}
+function paintChipSectorsNow() {
+  const note = $('kh-sort-note');
+  if (!note) return;
+  let box = $('kh-chip-sec');
+  const on = market !== 'THEME' && SEC_CHIPS.has(sortBy);
+  const rows = on ? rowList() : [];
+  const by = {};
+  for (const s of rows) {
+    const name = sectorMap[s.code];
+    if (!name) continue;
+    (by[name] || (by[name] = [])).push(s.name);
+  }
+  const groups = Object.entries(by).map(([name, names]) => ({ name, names, g: industryAll && industryAll[name] }))
+    .sort((a, b) => b.names.length - a.names.length || Math.abs(b.g?.pct ?? 0) - Math.abs(a.g?.pct ?? 0));
+  if (!on || !groups.length) { if (box) box.hidden = true; return; }
+  if (!box) { box = document.createElement('div'); box.id = 'kh-chip-sec'; box.className = 'kh-pre-sec'; ($('kh-pre-sec') || note).after(box); }
+  box.hidden = false;
+  const pct = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(2)}%`);
+  box.innerHTML = '<span class="kh-mut">섹터</span>' + groups.map((x) =>
+    `<span class="kh-pre-sec-it" data-tip="${escT(`${x.name} 오늘 ${pct(x.g?.pct)}${x.g ? '' : '(업종 등락 못 받음)'} · 이 목록에 ${x.names.join(' · ')}`)}">` +
+    `${escT(sectorShort(x.name))} <b class="${x.g?.pct == null ? 'kh-mut' : dirClass(x.g.pct)}">${pct(x.g?.pct)}</b> <span class="kh-mut">${x.names.length}</span></span>`).join('');
+}
+
+/* 「초반상승」 칩 — 서버가 준 줄 그대로. 못 받았으면 null(빈 목록과 가른다) */
+let riseRows = null, riseMeta = null;
+const riseOf = (code) => (riseRows || []).find((r) => r.code === code) || null;
+/* 첫 5분봉 상승률(시가 대비 · 오름 빨강) · 아랫줄 시가 → 09:05 가격 */
+function riseCell(code) {
+  const r = riseOf(code);
+  if (!r) return '—';
+  return `<div style="white-space:nowrap;font-size:12px;line-height:1.3"><span class="${dirClass(r.pct)}">+${r.pct.toFixed(2)}%</span></div>` +
+    `<div style="white-space:nowrap;font-size:11px;line-height:1.3" class="kh-mut">${fmtPriceOf(code, r.open)} → ${fmtPriceOf(code, r.close)}</div>`;
+}
+function riseNote() {
+  const m = riseMeta || {};
+  const bits = [];
+  if (m.day) bits.push(`${m.day.slice(4, 6)}.${m.day.slice(6)} 첫 5분봉`);
+  if (m.risePct != null) bits.push(`시가 대비 +${m.risePct}% 이상`);
+  if (m.pending) bits.push(`다 받기 기다림 ${m.pending}`);
+  else if (m.phase === 'done') bits.push('그날 판 고정');
+  return bits.join(' · ');
+}
+async function loadRise() {
+  try {
+    const r = await apiFetch('/api/kis/open-rise', { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    if (j && j.meta) riseMeta = j.meta;
+    if (j && j.ok && Array.isArray(j.data)) riseRows = j.data;
+  } catch { /* 못 받으면 들고 있던 것 그대로 */ }
+  if (sortBy === 'rise' || sortBy === 'ov') { paintRows(rowPrices); paintSortNote(); }
+  if (rankModal && rankModalSort === 'rise') { paintRankModal(); paintRankModalNote(); }
 }
 
 /* 「매수」 칩 목록 — 서버가 준 줄 그대로. 못 받았으면 null(빈 목록과 가른다) */
@@ -1758,12 +1910,14 @@ const eokSigned = (won) => { if (won == null) return '—'; const v = Math.round
 /* 한 칸 — 셋의 순매수(억 · 오름 빨강 · 내림 파랑)를 한 줄에(11-05 재권님 「외 기 프 한줄로 해줘」). 13:19 에 표가 순위 칸 밖으로
    밀린 것은 폭이 아니라 시세 갱신이 이 칸을 글자로 넣던 탓이었다(paintOneRow · html). 빠진 종목만 아랫줄 「무엇이 매도로 바뀜 시각」.
    ≈ 는 상위 30 밖이라 그 종목 가집계 수량 × 현재가로 어림한 값(서버 approx) */
+const JOINT_TIER = { 1: ['①', '외국인 · 기관 · 연기금 · 프로그램 넷 다 순매수'], 2: ['②', '외국인 · 기관 · 프로그램 순매수'],
+  3: ['③', '기관 · 연기금 순매수'], 4: ['④', '외국인만 순매수'] };
 function jointCell(code, narrow = false) {
   const r = jointOf(code);
   if (!r) return '—';
   /* ≈ — 상위 30 밖이라 가집계로 어림한 쪽 · 마감 뒤 확정치를 못 받아 가집계로 남은 줄의 외 · 기(r.basis 'estimate' · 11-05 개념정의 검수) */
   const est = (k) => (r.approx || []).includes(k) || (r.basis === 'estimate' && k !== 'program');
-  const one = ([k, n]) => `<span class="${r[k] == null ? 'kh-mut' : dirClass(r[k])}">${n} ${est(k) ? '≈' : ''}${eokSigned(r[k])}</span>`;
+  const one = ([k, n]) => `<span class="${r[k] == null ? 'kh-mut' : dirClass(r[k])}">${n}${est(k) ? '≈' : ''}${eokSigned(r[k])}</span>`;   // 이름과 값 사이 띄움 없음 — 넷 + 차례가 한 줄에 들어 종목 이름이 안 잘리게(11-11)
   /* narrow — 순위 모달 칸. 외 · 기 · 프는 한 줄(11-05 재권님 「외 기 프 는 한줄로」) · 까닭 글만 줄바꿈(한 줄이면 옆 칸 위로 넘쳤다 · 11-05 8772) */
   const line = (html, mut) => `<div class="${mut ? 'kh-mut' : ''}" style="white-space:${mut && narrow ? 'normal' : 'nowrap'};font-size:${mut ? 11 : 12}px">${html}</div>`;
   const names = (ks) => (ks || []).map((k) => JOINT_NAME[k]).join(' · ');
@@ -1771,7 +1925,9 @@ function jointCell(code, narrow = false) {
   /* 단위 「억」 은 줄 끝에 한 번(11-05 재권님 「금액으로 다 맞춰줘」 — 안내 줄에 넣으면 빠짐이 있을 때 두 줄로 넘었다) */
   /* 연 — 연기금 그날 확정치(15:45 뒤 쌓기 · 그 전 「—」 · 언제 채우는지는 표 위 갱신 줄) · 줄마다 시각은 안 넣는다
      (11-06 재권님 「2 안 넣어도 돼 · 갱신시간은 해당 실시간 목록 위에 써주고 종목에는 외 기 프 연 이렇게」) */
-  const body = line(`${[...JOINT_SIDES, ['fund', '연']].map(one).join(' ')}<span class="kh-mut">억</span>`);
+  /* 차례 ①~④ — 서버 joint_tier(11-11 재권님 「셋다사는게 가장좋고 그다음이 외국인 기관 그다음이 기관 연기금 그다음이 외국인」) */
+  const tier = JOINT_TIER[r.tier] ? `<b data-tip="${escT(JOINT_TIER[r.tier][1])}">${JOINT_TIER[r.tier][0]}</b> ` : '';
+  const body = line(`${tier}${[...JOINT_SIDES, ['fund', '연']].map(one).join(' ')}<span class="kh-mut">억</span>`);
   if (!r.flip) return body;
   const why = [(r.sold || []).length ? `${names(r.sold)} 매도로 바뀜` : '', (r.unknown || []).length ? `${names(r.unknown)} 값 모름` : '']
     .filter(Boolean).join(' · ') || '셋 다 매수에서 빠짐';
@@ -1830,7 +1986,7 @@ async function loadJoint() {
     /* 빠진 종목에는 받을 때 flip 을 붙인다 — 목록에 넣을 때만 붙이면 jointOf 가 찾은 항목에 없어 까닭 줄이 안 나왔다(11-05 qa) */
     if (j && j.ok && Array.isArray(j.data)) { jointRows = j.data; jointFlipped = Array.isArray(j.flipped) ? j.flipped.map((x) => ({ ...x, flip: true })) : []; }
   } catch { /* 못 받으면 들고 있던 것 그대로 */ }
-  if (sortBy === 'buy') { paintRows(rowPrices); paintSortNote(); }
+  if (sortBy === 'buy' || sortBy === 'ov') { paintRows(rowPrices); paintSortNote(); }
   if (rankModal && rankModalSort === 'buy') { paintRankModal(); paintRankModalNote(); }
 }
 
@@ -1889,11 +2045,11 @@ function favGroupChipsHtml() {
   if (favGroup !== 'all' && favGroup !== 'none' && !groups.some((g) => g.id === favGroup)) favGroup = 'all';
   const one = (id, label, n) => `<button class="kh-chip kh-sub-chip${favGroup === id ? ' is-on' : ''}" type="button"
     data-fg="${escT(id)}">${escT(label)} <b class="kh-chip-hit">${n}</b></button>`;
-  const none = ungroupedCodes().length;
-  return one('all', '전체', favList().length)
-    + groups.map((g) => one(g.id, g.name, g.codes.length)).join('')
-    + (groups.length || none ? one('none', '미분류', none) : '')
-    + (groups.length ? '' : '<span class="kh-mut">순위 숫자를 눌러 담을 때 묶음을 만듭니다</span>');
+  /* 「전체」 · 「미분류」 칩은 뺐다(2026-11-11 재권님 「전체랑 미분류 지우고」) — 아무 묶음도 안 고르면 전체이고,
+     켜진 묶음을 한 번 더 누르면 전체로 돌아간다(아래 kh-sorts2 누름). 'none' 은 칩이 없어 고를 길이 없다 */
+  const mine = groups.filter((g) => g.id !== AUTO_FG);   // 「자동」 은 위 줄 「수급」 칩으로 갔다
+  return mine.map((g) => one(g.id, g.name, g.codes.length)).join('')
+    + (mine.length ? '' : '<span class="kh-mut">순위 숫자를 눌러 담을 때 묶음을 만듭니다</span>');
 }
 
 function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
@@ -1974,15 +2130,91 @@ function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
     .map(({ s }, i) => ({ ...s, rank: i + 1 }));
 }
 
+/* 「관심」 아래 줄(#kh-sorts-fav)로 가는 칩 — 위 줄에서는 빠지고, 「관심」 이나 이 칩을 볼 때만 나온다.
+   거르는 것은 그대로 전 종목이다(관심 안에서 거르지 않는다 · 2026-11-11 재권님 「나」). 칩이 늘어 위 줄이 세 줄로 꺾이던 것도 이것으로 풀렸다 */
+/* 「단타」(ov · 옛 「겹침」 · 「오늘의종목」)는 이 줄 맨 왼쪽(2026-11-11 재권님 「겹침 -> 오늘의종목 으로 이름 바꾸고 가장 왼쪽에」 → 「관심종목 하위 버튼에서 가장왼쪽이야」) */
+const FAV_SUB_ORDER = ['ov', 'pre', 'rise', 'nowup', 'vi', 'bb', 'after'];   // 현재상승은 초반상승 옆(11-11)   // 장외도 이 줄로 · 매수 · 공매도는 위 줄(11-11 재권님 「장외랑 매수도 관심 하위로」 → 「매수 공매도는 위로」)
+const FAV_SUB = new Set(FAV_SUB_ORDER);
+
+/* 「수급」 칩 — 서버(auto_watch)가 관심에 자동으로 담는 묶음 「자동」(id auto)을 「관심」 아래 줄 공매도 옆에 둔다.
+   누르면 관심 중 그 묶음만 · 다시 누르면 관심 전체(2026-11-11 재권님 「자동버튼에 마우스 올리면 조건이 보이게 해주고 수급 이라는 이름으로 공매도 옆으로」).
+   묶음 이름(문서의 「자동」)은 그대로 — 화면 글자만 「수급」. 조건 숫자는 서버 /api/auto-watch 의 data.rule · meta 를 받아 쓴다(박지 않는다) */
+const AUTO_FG = 'auto';
+let autoInfo = null;            // { rule, liveWindow, runWindow } — 못 받았으면 null
+let autoAsked = false;          // 이번 「관심」 열림에 이미 물었나 — 못 받아도 같은 열림 동안은 다시 안 묻는다(개념정의 검수 11-11 · 실패하면 쉬지 않고 다시 물었다)
+async function loadAutoInfo() {
+  autoAsked = true;
+  try {
+    const r = await apiFetch('/api/auto-watch', { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    if (j && j.data && j.data.rule) autoInfo = { rule: j.data.rule, liveWindow: j.meta && j.meta.liveWindow, runWindow: j.meta && j.meta.runWindow };
+  } catch { /* 못 받으면 풍선은 「조건을 못 받음」 */ }
+  paintSortChips();
+}
+function autoTip() {
+  const head = '관심 종목 중 서버가 자동으로 담은 종목만 봅니다(관심 묶음 「자동」) · 다시 누르면 관심 전체';
+  if (!autoInfo) return head + '\n조건을 아직 못 받았습니다';
+  const ru = autoInfo.rule;
+  const cond = [ru.prevPct == null ? null : `앞 거래일 등락률 +${ru.prevPct}% 이상`,
+    ru.volMult == null ? null : `거래량이 20일 평균의 ${ru.volMult}배 이상`].filter(Boolean);
+  return [head,
+    `조건 — 코스피 시가총액 상위 200 · 코스닥 150 주식(ETF 뺌) 중 ${cond.length ? cond.join(' 그리고 ') : '조건 칸이 비어 있음'}`,
+    `차례 — ${ru.sortBy === 'pct' ? '등락률' : '거래량 배수'} 큰 순${ru.autoMax == null ? '' : ` · ${ru.autoMax}종목까지`}${ru.nearHighPct == null ? '' : ` · 52주 최고 종가 위아래 ${ru.nearHighPct}% 안이면 맨 위`}`,
+    autoInfo.liveWindow ? `장중 — ${autoInfo.liveWindow}` : null,
+    autoInfo.runWindow ? `그날 확정 — ${autoInfo.runWindow}` : null,
+    '기준 칸은 투자전략 「종목 고르는 룰」 에서 고칩니다'].filter(Boolean).join('\n');
+}
+
+/* 「지금검색」 — 누르면 서버가 매수 · 수급 · 프리장을 칩 룰대로 그 자리에서 다시 세고(server/rescan.py), 화면은 칩 목록을 전부 다시 받는다
+   (2026-11-11 재권님 「관심종목 하위에 지금검색 버튼 … 룰에 맞게 다시 검색해서 종목 보여지게」 → 「나」). 다시 셀 수 있는 간격 · 칩마다 결과는 서버가 준다 */
+let rescanBusy = false;
+let rescanLast = null;          // 서버가 준 { at, chips, cool, minSec, running } — 아직 안 눌렀으면 null
+const RESCAN_NAME = { buy: '매수', auto: '수급', pre: '프리장' };
+function rescanTip() {
+  const head = '칩 룰대로 지금 다시 찾습니다 — 매수 · 수급 · 프리장은 서버가 다시 세고, 나머지 칩은 다시 받습니다';
+  if (rescanBusy) return head + '\n찾는 중…';
+  if (!rescanLast) return head;
+  const r = rescanLast;
+  if (r.running) return head + '\n다른 창에서 세는 중 — 잠시 뒤 다시 눌러 주십시오';
+  return [head,
+    `${r.at ? r.at.slice(11, 16) : '—'} ${r.cool ? `앞 결과(${r.minSec}초 안에는 다시 안 셈 · ${r.cool}초 남음)` : '찾음'}`,
+    ...Object.entries(r.chips || {}).map(([k, v]) => `${RESCAN_NAME[k] || k} — ${v}`)].join('\n');
+}
+async function rescanNow() {
+  if (rescanBusy) return;
+  rescanBusy = true;
+  paintSortNote();
+  try {
+    const r = await apiFetch('/api/kis/rescan', { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    rescanLast = j && j.ok ? j.data : { at: null, chips: { 서버: '못 받음' }, cool: 0 };
+  } catch { rescanLast = { at: null, chips: { 서버: '못 받음' }, cool: 0 }; }
+  rescanBusy = false;
+  loadOv(); loadBb(); loadAutoInfo();        // 관심 「자동」 묶음은 관심 목록 롱폴로 따라온다
+  paintSortNote();
+}
+
 /* 정렬 칩 줄 — 「테마」 를 보면 그 자리가 큰 테마 줄이 되고, 아래 줄(#kh-sorts2)에 작은 테마가 나온다 */
 function paintSortChips() {
   const host = $('kh-sorts');
   if (!host) return;
   const th = market === 'THEME';
   host.classList.toggle('kh-theme-strip', th);
-  host.innerHTML = th ? themeBigChipsHtml() : Object.entries(SORTS).map(([id, x]) =>
-    `<button class="kh-chip${id === sortBy ? ' is-active' : ''}" type="button"
-      data-sort="${id}"${sortTipAttr(id)}>${x.label}</button>`).join('');
+  const chip = ([id, x], on) => `<button class="kh-chip${on ? ' is-active' : ''}" type="button"
+      data-sort="${id}"${sortTipAttr(id)}>${x.label}</button>`;
+  const favOpen = !th && (sortBy === 'fav' || FAV_SUB.has(sortBy));
+  host.innerHTML = th ? themeBigChipsHtml() : Object.entries(SORTS).filter(([id]) => !FAV_SUB.has(id))
+    .map((e) => chip(e, e[0] === sortBy || (e[0] === 'fav' && favOpen))).join('');
+  const favRow = $('kh-sorts-fav');
+  if (favRow) {
+    favRow.hidden = !favOpen;
+    const hasAuto = favGroups().some((g) => g.id === AUTO_FG);
+    favRow.innerHTML = favOpen ? FAV_SUB_ORDER.map((id) => [id, SORTS[id]])
+      .map((e) => chip(e, e[0] === sortBy)).join('')
+      + (hasAuto ? `<button class="kh-chip${sortBy === 'fav' && favGroup === AUTO_FG ? ' is-active' : ''}" type="button"
+      data-fg-auto data-tip="${escT(autoTip())}" data-tip-h="수급">수급</button>` : '') : '';
+    if (favOpen && !autoInfo && !autoAsked) loadAutoInfo();
+  }
   const sub = $('kh-sorts2');
   if (sub) {
     const fav = !th && sortBy === 'fav';
@@ -2021,27 +2253,45 @@ function setupSorts() {
     if (market === 'THEME') { onTheme(e); return; }
     if (sstsClick(e)) return;                       // 공매도 금액 · 비율 · 기간
     const b = e.target.closest('[data-fg]');        // 관심 묶음
-    if (!b || b.dataset.fg === favGroup) return;
-    favGroup = b.dataset.fg;
+    if (!b) return;
+    favGroup = b.dataset.fg === favGroup ? 'all' : b.dataset.fg;   // 켜진 묶음을 다시 누르면 전체로
     paintSortChips();
     const box = $('kh-rank-scroll');
     if (box) box.scrollTop = 0;
     paintRows(rowPrices);
   });
 
-  host.addEventListener('click', async (e) => {
+  const onSort = async (e) => {
     if (market === 'THEME') { await onTheme(e); return; }
+    if (e.target.closest('[data-fg-auto]')) {            // 「수급」 — 관심 중 자동 묶음만 · 다시 누르면 관심 전체
+      favGroup = sortBy === 'fav' && favGroup === AUTO_FG ? 'all' : AUTO_FG;
+      sortBy = 'fav';
+      paintSortChips();
+      const box = $('kh-rank-scroll');
+      if (box) box.scrollTop = 0;
+      paintRows(rowPrices);
+      return;
+    }
     const b = e.target.closest('[data-sort]');
-    if (!b || b.dataset.sort === sortBy) return;
+    if (!b) return;
+    if (b.dataset.sort === 'fav' && favGroup === AUTO_FG) favGroup = 'all';   // 「관심」 을 누르면 관심 전체로
+    else if (b.dataset.sort === sortBy) return;
+    if (b.dataset.sort === 'fav' && !FAV_SUB.has(sortBy)) autoAsked = false;  // 「관심」 을 새로 열면 못 받은 조건을 한 번 더 묻는다
     sortBy = b.dataset.sort;
     paintSortChips();                // 「관심」 이면 아래 묶음 줄이 나온다
     paintRows(rowPrices);
     if (sortBy === 'buy') loadJoint();
     if (sortBy === 'pre') loadPre();
+    if (sortBy === 'rise') loadRise();
+    if (sortBy === 'ov') loadOv();
+    if (SEC_CHIPS.has(sortBy) && !industryAll) loadIndustryAll();
     if (sortBy === 'vi') loadVi();
     if (sortBy === 'bb') loadBb();
     if (sortBy === 'ssts') loadSsts();
-  });
+  };
+  host.addEventListener('click', onSort);
+  $('kh-sort-note')?.addEventListener('click', (e) => { if (e.target.closest('[data-rescan]')) rescanNow(); });   // 「지금검색」 — 고른 칩은 그대로 두고 목록만 다시
+  $('kh-sorts-fav')?.addEventListener('click', onSort);   // 「관심」 아래 줄 — 같은 칩이라 같은 길
 }
 
 /* 시장 칩 — 누르면 그 시장 줄로 갈아 끼운다. 서버는 안 부른다(목록은 이미 있다).
@@ -2163,9 +2413,21 @@ function paintSortNote() {
   const fresh = freshNote();
   if (fresh) bits.push(`<b class="${fresh.cls}">${fresh.text}</b>`);
 
-  el.innerHTML = bits.join(' <span class="kh-mut">·</span> ');
+  /* 「지금검색」 — 관심 아래 칩 줄을 볼 때만 이 줄 오른쪽 끝에(재권님 11-11 「항공이 보이는곳 위에 넣어」 = 섹터 띠 바로 위 줄).
+     글줄 안 글자 단추라 줄 높이가 안 바뀐다 */
+  const rescanBtn = sortBy === 'fav' || FAV_SUB.has(sortBy)
+    ? `<button type="button" data-rescan${rescanBusy ? ' disabled' : ''} data-tip="${escT(rescanTip())}" data-tip-h="지금검색"
+        style="flex:none;margin-left:8px;background:none;border:0;padding:0;font:inherit;font-weight:600;color:var(--kh-accent);cursor:pointer">${rescanBusy ? '찾는 중…' : '지금검색'}</button>`
+    : '';
+  const text = bits.join(' <span class="kh-mut">·</span> ');
+  /* 단추가 붙으면 안내 글은 한 줄 — 넘치면 「…」 로 줄이고 전체는 1초 풍선(qa 11-11 · 단추 때문에 칩에 따라 26 → 44 두 줄이 됐다) */
+  el.innerHTML = rescanBtn
+    ? `<div style="display:flex;align-items:baseline"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+        data-tip="${escT(text.replace(/<[^>]+>/g, ''))}">${text}</span>${rescanBtn}</div>`
+    : text;
   noteAt = Date.now();
   paintPreSectors();
+  paintChipSectors();
   const upd = $('kh-joint-upd');      // 「매수」 칩에만 — 다른 칩에서는 숨는다(11-06)
   if (upd) { const t = sortBy === 'buy' ? jointUpd() : ''; upd.hidden = !t; upd.innerHTML = t; }
 }
@@ -2226,6 +2488,7 @@ onFavChange(() => {
      남아 있으면 안 된다. 다른 기준일 때는 줄 세우는 값이 안 바뀌므로
      숫자 색만 고치면 된다 (위 두 줄). 모달도 같은 기준이면 함께 그린다. */
   if (sortBy === 'fav') { if (market !== 'THEME') paintSortChips(); paintRows(rowPrices); }   // 묶음 칩의 수도 따라간다
+  if (sortBy === 'ov') { paintRows(rowPrices); paintSortNote(); }    // 「단타」(ov) 는 관심도 센다 — 관심이 바뀌면 다시 센다(11-11 재권님 「겹침도 자주로」)
   if (rankModal && rankModalSort === 'fav') paintRankModal();
 });
 
@@ -2376,7 +2639,7 @@ function paintRankModal() {
       <td class="l"><span class="kh-nm">${iconHtml(s)}<b data-co="${s.code}">${escT(s.name)}</b>${th ? themeBadge(s.code) : ''}</span></td>
       <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, sid)) : '···'}</td>
       <td class="kh-num ${p ? dirClass(pctOf(p, sid)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, sid)) : '—'}</td>
-      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'vi' ? viCell(s.code) : sid === 'bb' ? bbCell(s.code) : sid === 'ssts' ? sstsCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
+      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'rise' ? riseCell(s.code) : sid === 'ov' ? ovCell(s.code) : sid === 'vi' ? viCell(s.code) : sid === 'bb' ? bbCell(s.code) : sid === 'ssts' ? sstsCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
       <td class="kh-num">${th && themeBig !== FLOW ? themeCap(s.code) : showCap(s.code)}</td>
       <td class="kh-num">${th && themeBig === FLOW ? themeMetric(s.code) : (p ? fmtShareCount(p.volume) : '···')}</td>
       <td class="kh-num">${volRatioCell(s.code)}</td>
@@ -2407,7 +2670,7 @@ function paintRankModal() {
       </colgroup>
       <thead><tr>
         <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
-        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'vi' ? '때 · 무엇' : sid === 'bb' ? '바닥 봉' : sid === 'ssts' ? '공매도' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
+        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'rise' ? '첫 5분봉' : sid === 'ov' ? '겹친 칩' : sid === 'vi' ? '때 · 무엇' : sid === 'bb' ? '바닥 봉' : sid === 'ssts' ? '공매도' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
       </tr></thead>
       <tbody>${rows || empty}</tbody>
     </table>
@@ -2466,7 +2729,7 @@ function openRankModal() {
       /* 모달에서 고른 기준은 첫 화면 순위표와 **따로 둔다** — 모달에서
          거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면 무엇을 눌러
          그렇게 됐는지 알 수 없다 (2026-09-22). */
-      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'vi') loadVi(); if (id === 'bb') loadBb(); if (id === 'ssts') loadSsts(); loadVolRatio(); },
+      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'rise') loadRise(); if (id === 'ov') loadOv(); if (id === 'vi') loadVi(); if (id === 'bb') loadBb(); if (id === 'ssts') loadSsts(); loadVolRatio(); },
     },
     onClose() { rankModal = null; if (volWatch) { volWatch.stop(); volWatch = null; } },
   });
@@ -2493,7 +2756,7 @@ function paintRankModalNote() {
   if (!rankModal) return;
   const fresh = freshNote();
   /* 「매수」 탭은 갱신 주기만 짧게 — 길면 탭 글자가 세로로 눌렸다(11-05 8772) */
-  const base = rankModalMarket === 'THEME' ? RANK_TABS_NOTE : rankModalSort === 'buy' ? jointNote(true) : rankModalSort === 'pre' ? preNote() : rankModalSort === 'vi' ? viNote() : rankModalSort === 'bb' ? bbNote() : rankModalSort === 'ssts' ? sstsNote() : RANK_TABS_NOTE;
+  const base = rankModalMarket === 'THEME' ? RANK_TABS_NOTE : rankModalSort === 'buy' ? jointNote(true) : rankModalSort === 'pre' ? preNote() : rankModalSort === 'rise' ? riseNote() : rankModalSort === 'ov' ? ovNote() : rankModalSort === 'vi' ? viNote() : rankModalSort === 'bb' ? bbNote() : rankModalSort === 'ssts' ? sstsNote() : RANK_TABS_NOTE;
   rankModal.head.setTabsNote(fresh ? `${base} · ${fresh.text}` : base);
 }
 
@@ -2513,23 +2776,28 @@ async function loadSectors() {
     if (!j || !j.data) return;
     const changed = JSON.stringify(j.data) !== JSON.stringify(sectorMap);
     sectorMap = j.data;
-    if (changed && universe) paintRows(rowPrices);
+    if (changed && universe) { paintRows(rowPrices); paintChipSectors(); }
   } catch { /* 못 받으면 빈칸 그대로 */ }
 }
 const JOINT_FALLBACK_MS = 300000;     // 「매수」 칩 — 서버 값마저 못 받았을 때만
-watch({ url: () => (sortBy === 'buy' ? '/api/kis/joint-buy' : null), onChange: loadJoint, key: 'kis_proxy.INVESTOR_TOP_TTL', fallbackMs: JOINT_FALLBACK_MS });
-watch({ url: () => (sortBy === 'pre' ? '/api/kis/pre-flow' : null), onChange: loadPre, key: 'pre_flow.FLOW_TTL', fallbackMs: JOINT_FALLBACK_MS });
-watch({ url: () => (sortBy === 'vi' || (rankModal && rankModalSort === 'vi') ? '/api/alerts/today' : null), onChange: loadVi, key: null, fallbackMs: VI_FALLBACK_MS });
+watch({ url: () => (sortBy === 'buy' || sortBy === 'ov' ? '/api/kis/joint-buy' : null), onChange: loadJoint, key: 'kis_proxy.INVESTOR_TOP_TTL', fallbackMs: JOINT_FALLBACK_MS });
+watch({ url: () => (sortBy === 'pre' || sortBy === 'ov' ? '/api/kis/pre-flow' : null), onChange: loadPre, key: 'pre_flow.FLOW_TTL', fallbackMs: JOINT_FALLBACK_MS });
+watch({ url: () => (sortBy === 'rise' || sortBy === 'ov' || (rankModal && rankModalSort === 'rise') ? '/api/kis/open-rise' : null), onChange: loadRise, key: 'open_rise.CACHE_TTL', fallbackMs: JOINT_FALLBACK_MS });
+watch({ url: () => (sortBy === 'vi' || sortBy === 'ov' || (rankModal && rankModalSort === 'vi') ? '/api/alerts/today' : null), onChange: loadVi, key: null, fallbackMs: VI_FALLBACK_MS });
 watch({ url: () => (sortBy === 'bb' || (rankModal && rankModalSort === 'bb') ? '/api/signals/today' : null), onChange: loadBb, key: null, fallbackMs: BB_FALLBACK_MS });
 sstsWatch = watch({ url: () => (sortBy === 'ssts' || (rankModal && rankModalSort === 'ssts') ? sstsUrl() : null), onChange: loadSsts, key: null, fallbackMs: SSTS_FALLBACK_MS });
+watch({ url: () => (SEC_CHIPS.has(sortBy) && market !== 'THEME' ? '/api/naver/groups?kind=industry&all=1' : null), onChange: loadIndustryAll, key: 'naver.TTL', fallbackMs: SECTOR_FALLBACK_MS });
 watch({ url: () => '/api/kis/stock-sectors', onChange: loadSectors, key: 'company_profile.SECTOR_LIST_TTL', fallbackMs: SECTOR_FALLBACK_MS });
 loadSectors();
 
 function paintRows(priceMap) {
+  /* 칩 · 시장을 바꾸면 띠도 그 목록으로 — 전에는 안내 줄을 다시 쓸 때만 그려 앞 칩의 띠가 남았다(qa 11-11 돌려보냄) */
+  paintPreSectors();
+  paintChipSectors();
   const list = rowList();
   /* 고른 시장의 목록이 비었다 — 서버가 아직 그 시장을 안 준다. 빈 표로 두면 고장처럼 보인다 */
   if (!list.length && universe) {
-    $('kh-rows').innerHTML = `<tr><td colspan="5" class="kh-mut">${SORTS[sortBy]?.only ? afterEmpty() : SORTS[sortBy]?.empty ? SORTS[sortBy].empty()
+    $('kh-rows').innerHTML = `<tr><td colspan="5" class="kh-mut">${SORTS[sortBy]?.empty ? SORTS[sortBy].empty() : SORTS[sortBy]?.only ? afterEmpty()
       : market === 'THEME' ? '—'
       : `${MARKETS.find(m => m.id === market)?.label || market} 목록을 아직 받지 못했습니다`}</td></tr>`;
     paintRowHead();
@@ -2950,7 +3218,7 @@ function restChunk() {
 }
 
 function resortRowsIfMoved() {
-  if (!SORTS[sortBy]?.key) return;           // 총액 · 관심은 시세로 순서가 안 바뀐다
+  if (!SORTS[sortBy]?.key && sortBy !== 'ov') return;   // 총액 · 관심은 시세로 순서가 안 바뀐다 · 「단타」(ov) 는 「장외」 가 시세로 바뀌어 든 종목이 바뀐다(11-11 「겹침도 자주로」)
   const body = $('kh-rows');
   if (!body) return;
   const list = rowList();

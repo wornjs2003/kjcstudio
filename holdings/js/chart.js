@@ -289,8 +289,8 @@ function showLastBars(chart, total, bars = VISIBLE_BARS) {
  * 만족하는데 뒤엣것까지 맞는 쪽을 골랐다. **2026-09-29 에 실제로 옮겨 보고
  * 확인했다** — `location.href` 로 옮긴 뒤에도 값이 그대로 읽혔다.
  *
- * **보이는 위치·확대는 여기 저장하지 않는다.** 그것은 종목이 바뀌면 버리는
- * 값이라, 저장하면 「종목을 바꾸면 초기값」 이 깨진다. */
+ * **보이는 위치는 여기 저장하지 않는다.** 종목이 바뀌면 버리는 값이다.
+ * 확대(보는 봉 개수)는 2026-11-11 부터 종목을 바꿔도 이어진다 — 아래 barsMap. */
 const PERIOD_KEY = 'kh-chart-period';
 
 export function savePeriodId(id) {
@@ -326,7 +326,8 @@ export function chartView(periodId) { return _view.byPeriod[periodId]; }
 export function setChartView(periodId, v) { _view.byPeriod[periodId] = v; }
 
 /* 종목이 바뀌면 자리를 전부 버린다 (2026-09-29 지시 — 「종목을 바꾸면 각각이
-   초기화 값으로 돌아가서 보여지고」).
+   초기화 값으로 돌아가서 보여지고」). **봉 개수 · 봉 높이는 안 버린다** — 기간마다 이어진다
+   (2026-11-11 재권님 「다른종목으로 가면 이값이 적용된다」 · barsMap · vSpanMap).
 
    **기간은 안 버린다** — 「5분봉을 보다 다른종목으로 가면 5분봉」. 그래서
    자리만 여기서 다루고 기간은 `sessionStorage` 에 그대로 둔다. */
@@ -917,16 +918,21 @@ function paneH() {
    「높이의 70% 로 맞춰주고 내가 조정을 하면 조정한대로 고정되도록 해줘」).
    고정한 폭은 칸 높이(paneH)처럼 localStorage — 새로고침해도 남는다(보는 상태). 가격 눈금을 두 번 누르면 풀려 다시 70% 맞춤.
    **기간(5분 · 일 · 주 · 월 · 년)마다 따로 기억한다** (2026-11-09 재권님 「응 그래」) — 5분봉에서 좁힌 폭이 월봉에 그대로 가면
-   봉이 칸 밖으로 크게 잘린다(오르내림 폭이 기간마다 열 배 넘게 다르다 · 개념정의 덧). 종목을 바꿀 때는 그대로다.
+   봉이 칸 밖으로 크게 잘린다(오르내림 폭이 기간마다 열 배 넘게 다르다 · 개념정의 덧).
+   **종목을 바꿔도 그대로 이어진다 — 값은 「자동 맞춤에서 얼마나 키웠나 · 옮겼나」 다** (2026-11-11 재권님 「삼성전자를 기준으로 해서 처음 5분봉의
+   봉 갯수와 봉높이가 지정된다 … 조정하면 또 그 값이 저장된다」 · 「5분봉은 5분봉끼리 … 값을 공유한다」). 처음은 어느 종목이든 자동 맞춤이고,
+   끌면 「그 종목 자동 맞춤의 몇 배 폭(k) · 자동 가운데에서 그 폭의 몇 배 옮김(r)」 을 기간마다 둔다 — 다른 종목은 자기 자동 맞춤에 같은 배율을 쓴다.
+   가격 대비 % 로 두면 오르내림이 큰 종목(131290 · 5분봉 약 21%)에서 끈 폭 27% 가 삼성전자(약 5%)에 걸려 봉이 납작했다(같은 날 아침).
+   옛 꼴({ s, d } · 가격 대비)은 안 쓴다.
    **위아래로 옮긴 자리도 함께 기억한다** (2026-11-10 재권님 「차트를 내가 이동하는데 원래로 돌아가는 현상이 있어」 → 「5분봉 일봉 주봉 월봉 /
    차트와 차트모달은 같이」 → 「위아래도 움직이는것도 고정」) — 전에는 폭만 두고 가운데를 보이는 봉에 다시 맞춰, 끌어 놓은 자리가 손을 떼자마자
    제자리로 돌아갔다. 이제 「보이는 봉의 가운데보다 얼마나 위 · 아래로 옮겼나」(가격 대비)를 폭과 함께 둔다 — 넘겨 보거나 새 봉이 붙어도
    옮긴 자리가 봉을 따라간다. 홈 큰 차트 · 모달 · 종목 화면이 한 값을 쓴다 */
 const PRICE_FILL = 0.7;
 const V_SPAN_KEY = 'kh.chart.v-span';
-const V_SPAN_MIN = 0.001, V_SPAN_MAX = 5;   // 세로 폭(가격 대비) — 손이 미끄러져 0 이나 터무니없는 값이 남지 않게
-const V_SHIFT_MAX = 0.9;                      // 위아래로 옮긴 정도(가격 대비) — 봉이 영영 안 보이는 자리에 남지 않게
-let _vSpan = null;                            // 기간 → { s: 고정한 폭, d: 위아래로 옮긴 정도 }(없으면 자동 70%) · 처음 부를 때 읽는다
+const V_SPAN_MIN = 0.02, V_SPAN_MAX = 50;   // 세로 폭(자동 맞춤의 몇 배) — 손이 미끄러져 0 이나 터무니없는 값이 남지 않게
+const V_SHIFT_MAX = 20;                       // 위아래로 옮긴 정도(자동 맞춤 폭의 몇 배) — 봉이 영영 안 보이는 자리에 남지 않게
+let _vSpan = null;                            // 기간 → { k: 자동 맞춤 대비 폭, r: 자동 가운데에서 옮긴 정도 }(없으면 자동 70%) · 처음 부를 때 읽는다
 function vSpanMap() {
   if (!_vSpan) {
     _vSpan = {};
@@ -934,8 +940,8 @@ function vSpanMap() {
       const v = JSON.parse(localStorage.getItem(V_SPAN_KEY) || '{}');   // 기간마다 따로 두기 전 한 숫자로 둔 값은 버린다(객체가 아니면)
       if (v && typeof v === 'object') {
         Object.keys(v).forEach((k) => {
-          const x = typeof v[k] === 'number' ? { s: v[k], d: 0 } : v[k];   // 11-10 전에는 폭 숫자 하나였다
-          if (x && x.s >= V_SPAN_MIN && x.s <= V_SPAN_MAX) _vSpan[k] = { s: x.s, d: Math.abs(x.d) <= V_SHIFT_MAX ? x.d : 0 };
+          const x = v[k];                                                  // 가격 대비로 둔 옛 꼴(s · d)은 버린다 — 종목마다 뜻이 달랐다
+          if (x && x.k >= V_SPAN_MIN && x.k <= V_SPAN_MAX) _vSpan[k] = { k: x.k, r: Math.abs(x.r) <= V_SHIFT_MAX ? x.r : 0 };
         });
       }
     } catch { /* 없으면 자동 */ }
@@ -943,14 +949,39 @@ function vSpanMap() {
   return _vSpan;
 }
 function vSpan(per) {
-  const v = vSpanMap()[per];
-  return v == null ? null : v;
+  return vSpanMap()[per] || null;
 }
-function setVSpan(per, s, d = 0) {
+function setVSpan(per, k, r = 0) {
   const m = vSpanMap();
-  if (s == null) delete m[per];
-  else m[per] = { s: Math.max(V_SPAN_MIN, Math.min(V_SPAN_MAX, s)), d: Math.max(-V_SHIFT_MAX, Math.min(V_SHIFT_MAX, d || 0)) };
+  if (k == null) delete m[per];
+  else m[per] = { k: Math.max(V_SPAN_MIN, Math.min(V_SPAN_MAX, k)), r: Math.max(-V_SHIFT_MAX, Math.min(V_SHIFT_MAX, r || 0)) };
   try { localStorage.setItem(V_SPAN_KEY, JSON.stringify(m)); } catch { /* 저장 못 씀 */ }
+  memPush();
+}
+
+/* 보는 봉 개수(가로 확대)도 기간마다 하나 — 종목을 바꿔도 이어진다 (2026-11-11 재권님 「삼성전자를 기준으로 해서 처음 5분봉의 봉 갯수와 봉높이가
+   지정된다. 다른종목으로 갔을때도 같은 룰이다 … 거기서 조정하면 또 그 값이 저장된다」 · 「5분봉은 5분봉끼리 … 값을 공유한다」).
+   처음은 기간마다의 initBars(`data/market.js`)이고, 휠 · 끌기로 바꾸면 그 개수를 둔다. 보던 자리(넘겨 본 곳)는 그대로 종목이 바뀌면 버린다
+   (아래 chartStockChanged) — 새 종목은 최신 쪽 그 개수로 열린다. 세로 폭과 같이 보관함에 둔다 */
+const BARS_KEY = 'kh.chart.bars';
+const BARS_MIN = 10, BARS_MAX = 2000;          // 손이 미끄러져 터무니없는 값이 남지 않게
+let _bars = null;                              // 기간 → 보는 봉 칸 수(오른쪽 빈칸 포함 · initBars 와 같은 셈)
+function barsMap() {
+  if (!_bars) {
+    _bars = {};
+    try {
+      const v = JSON.parse(localStorage.getItem(BARS_KEY) || '{}');
+      if (v && typeof v === 'object') Object.keys(v).forEach((k) => { if (v[k] >= BARS_MIN && v[k] <= BARS_MAX) _bars[k] = v[k]; });
+    } catch { /* 없으면 기간 기본값 */ }
+  }
+  return _bars;
+}
+function setViewBars(per, n) {
+  const m = barsMap();
+  const x = Math.max(BARS_MIN, Math.min(BARS_MAX, Math.round(n)));
+  if (m[per] === x) return;
+  m[per] = x;
+  try { localStorage.setItem(BARS_KEY, JSON.stringify(m)); } catch { /* 저장 못 씀 */ }
   memPush();
 }
 
@@ -979,6 +1010,18 @@ function loadHf(code) {
       .catch(() => { _hf.delete(code); return null; }));
   }
   return _hf.get(code);
+}
+
+/* 가격 눈금 · 마우스 표의 숫자 틀 — 자릿수마다 한 번만 만든다 (2026-11-11 재권님 「응」 · 캔들 첫 그리기 줄이기).
+   전에는 숫자를 낼 때마다 toLocaleString 이 틀을 새로 만들어 그리기 셈 중 우리 코드 1위였다. 글자는 그대로다 */
+const _numFmt = new Map();
+function numFmt(digits) {
+  let f = _numFmt.get(digits);
+  if (!f) {
+    f = new Intl.NumberFormat('ko-KR', digits ? { minimumFractionDigits: digits, maximumFractionDigits: digits } : {});
+    _numFmt.set(digits, f);
+  }
+  return f;
 }
 
 export function createStockChart(container, candles, opts = {}) {
@@ -1049,9 +1092,7 @@ export function createStockChart(container, candles, opts = {}) {
       },
       localization: {
         locale: 'ko-KR',
-        priceFormatter: (v) => (digits
-          ? v.toLocaleString('ko-KR', { minimumFractionDigits: digits, maximumFractionDigits: digits })
-          : Math.round(v).toLocaleString('ko-KR')),
+        priceFormatter: (v) => numFmt(digits).format(digits ? v : Math.round(v)),
       },
     });
   }
@@ -1415,31 +1456,28 @@ export function createStockChart(container, candles, opts = {}) {
     };
   }
 
-  /* 자동 눈금에 좁은 폭 늘림(phoneStretch)을 곱하고, 사람이 고정한 세로 폭(vSpan)이 있으면 그 폭으로 바꾼다.
-     라이브러리는 이 범위 위아래에 여백(scaleMargins)을 얹으므로, 보이는 폭이 고정 폭이 되게 여백만큼 덜어 준다 */
-  let lastBase = null;
+  /* 자동 눈금에 좁은 폭 늘림(phoneStretch)을 곱하고, 사람이 고정한 세로 폭(vSpan)이 있으면 자동 맞춤에 그 배율을 쓴다 —
+     폭은 자동 폭의 k 배, 가운데는 자동 가운데에서 자동 폭의 r 배 옮긴 자리. 종목이 달라도 자기 자동 맞춤에 같은 배율이라 납작하지 않다 */
+  let lastAuto = null;                         // 자동 눈금이 마지막으로 잡은 범위(배율을 곱하기 전) — keepStretch 가 배율을 이것으로 바로잡는다
   function stretchProvider() {
     const ph = phoneStretch();
     return (orig) => {                         // 기간은 부를 때 읽는다 — 기간을 바꿔도 이 함수를 다시 안 붙일 수 있어서
       const r = ph ? ph(orig) : orig();
-      const fix = vSpan(period);
-      if (fix == null || !r || !r.priceRange) return r;
-      const span = fix.s;
+      if (!r || !r.priceRange) return r;
       const { minValue: lo, maxValue: hi } = r.priceRange;
-      lastBase = (lo + hi) / 2;                  // 자동 눈금이 잡은 가운데(옮기기 전) — keepStretch 가 옮긴 정도를 이것으로 바로잡는다
-      const mid = lastBase * (1 + fix.d);        // 보이는 봉의 가운데에서 사람이 옮긴 만큼
-      let fill = PRICE_FILL;
-      try {
-        const m = candleSeries.priceScale().options().scaleMargins;
-        if (m) fill = 1 - m.top - m.bottom;
-      } catch { /* 기본 비율 */ }
-      const half = Math.abs(mid) * span * fill / 2;
+      lastAuto = { lo, hi };
+      const fix = vSpan(period);
+      const w = hi - lo;
+      if (fix == null || !(w > 0)) return r;
+      const mid = (lo + hi) / 2 + fix.r * w;
+      const half = w * fix.k / 2;
+      /* 가격은 0 밑이 없다 — 아래만 0 에서 자른다(위 phoneStretch 와 같다) */
       return { ...r, priceRange: { minValue: lo >= 0 ? Math.max(0, mid - half) : mid - half, maxValue: mid + half } };
     };
   }
 
-  /* 사람이 세로를 바꾼 뒤(위아래로 끌기 · 가격 눈금 끌기 — 둘 다 자동 눈금을 끈다) 그 세로 폭을 가격 대비로 재 고정하고,
-     자동 눈금을 다시 켠다(가운데는 보이는 봉에 맞추고 폭은 고정 — 위 stretchProvider) */
+  /* 사람이 세로를 바꾼 뒤(위아래로 끌기 · 가격 눈금 끌기 — 둘 다 자동 눈금을 끈다) 그 세로를 「자동 맞춤의 몇 배 · 얼마나 옮김」 으로 재 고정하고,
+     자동 눈금을 다시 켠다(위 stretchProvider) */
   function keepStretch() {
     const ch = panes[0] && panes[0].chart;
     if (!ch || !candleSeries) return;
@@ -1448,35 +1486,44 @@ export function createStockChart(container, candles, opts = {}) {
     if (auto) return;                          // 세로를 안 바꿨다
     const user = readScale();
     if (!user) return;
-    /* 가운데는 위아래 여백(scaleMargins)을 뺀 안쪽의 가운데 — 자동 눈금이 잡는 범위도 그 안쪽이다. 여백이 위아래 다르면(위가 크다)
+    /* 자동 눈금이 잡는 범위는 위아래 여백(scaleMargins)을 뺀 안쪽이다 — 사람이 둔 범위도 그 안쪽으로 잰다. 여백이 위아래 다르면(위가 크다)
        칸 끝의 가운데와 갈려, 놓자마자 그만큼 밀렸다(2026-11-10 실측 0.7%) */
     let mt = 0, mb = 0;
     try { const m = candleSeries.priceScale().options().scaleMargins; if (m) { mt = m.top; mb = m.bottom; } } catch { /* 여백 없음 */ }
     const edge = user.top - user.bot;
-    const mid = ((user.bot + mb * edge) + (user.top - mt * edge)) / 2;
-    if (!(mid > 0)) return;
-    const span = edge / mid;
-    const base = visibleMid();                 // 자동 눈금이 잡을 가운데의 어림 — 거기서 얼마나 옮겼나를 둔다
-    setVSpan(period, span, base > 0 ? mid / base - 1 : 0);
+    const lo = user.bot + mb * edge, hi = user.top - mt * edge;
+    if (!(hi > lo)) return;
+    const put = (a) => {
+      const w = a && a.hi - a.lo;
+      if (!(w > 0)) return false;
+      setVSpan(period, (hi - lo) / w, ((lo + hi) / 2 - (a.lo + a.hi) / 2) / w);
+      return true;
+    };
+    if (!put(visibleRange())) return;          // 자동 눈금이 잡을 범위의 어림 — 끄는 동안 보는 봉이 바뀌었을 수 있어 봉 배열로 잰다
     vpRange = null;
-    lastBase = null;
+    lastAuto = null;
     try { candleSeries.applyOptions(priceFix()); ch.priceScale('right').applyOptions({ autoScale: true }); } catch { return; }
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      /* 어림은 봉 배열로 셈해 라이브러리가 잡은 가운데와 조금(2026-11-10 실측 0.7%) 다를 수 있다 — 자동 눈금이 실제로 잡은 가운데로 바로잡는다 */
+      /* 어림은 봉 배열로 셈해 라이브러리가 잡은 범위와 조금(좁은 폭 늘림 · 2026-11-10 실측 0.7%) 다를 수 있다 — 자동 눈금이 실제로 잡은 범위로 바로잡는다 */
       const fix = vSpan(period);
-      if (lastBase > 0 && fix && Math.abs(mid / lastBase - 1 - fix.d) > 1e-4) {
-        setVSpan(period, span, mid / lastBase - 1);
-        vpRange = null;
-        try { candleSeries.applyOptions(priceFix()); } catch { /* 칸이 아직 없다 */ }
-        requestAnimationFrame(() => requestAnimationFrame(() => { lockPriceRange(); drawProfile(); }));
-        return;
+      const a = lastAuto;
+      if (a && fix && a.hi > a.lo) {
+        const w = a.hi - a.lo;
+        const k = (hi - lo) / w, r = ((lo + hi) / 2 - (a.lo + a.hi) / 2) / w;
+        if (Math.abs(k - fix.k) > 1e-4 || Math.abs(r - fix.r) > 1e-4) {
+          put(a);
+          vpRange = null;
+          try { candleSeries.applyOptions(priceFix()); } catch { /* 칸이 아직 없다 */ }
+          requestAnimationFrame(() => requestAnimationFrame(() => { lockPriceRange(); drawProfile(); }));
+          return;
+        }
       }
       lockPriceRange(); drawProfile();
     }));
   }
 
-  /* 보이는 봉의 최고 · 최저 가운데 — 자동 눈금이 잡는 가운데와 같다(겹침 선은 NO_SCALE 로 빠져 있다) */
-  function visibleMid() {
+  /* 보이는 봉의 최고 · 최저 — 자동 눈금이 잡는 범위와 같다(겹침 선은 NO_SCALE 로 빠져 있다 · 좁은 폭 늘림은 빠진 어림) */
+  function visibleRange() {
     const ch = panes[0] && panes[0].chart;
     if (!ch || !candles || !candles.length) return null;
     let r = null;
@@ -1485,7 +1532,7 @@ export function createStockChart(container, candles, opts = {}) {
     const a = Math.max(0, Math.ceil(r.from)), b = Math.min(candles.length - 1, Math.floor(r.to));
     let hi = -Infinity, lo = Infinity;
     for (let i = a; i <= b; i++) { if (candles[i].high > hi) hi = candles[i].high; if (candles[i].low < lo) lo = candles[i].low; }
-    return hi >= lo ? (hi + lo) / 2 : null;
+    return hi >= lo ? { lo, hi } : null;
   }
 
   function priceFix() {
@@ -2125,6 +2172,7 @@ export function createStockChart(container, candles, opts = {}) {
         });
         syncing = false;
         fitVisible();                          // 사람이 휠 · 끌기로 바꿨으면 세로를 보이는 봉에 맞춘다(위 fitVisible)
+        if (Date.now() - userAt <= USER_MS) setViewBars(period, r.to - r.from);   // 사람이 바꾼 봉 개수를 이 기간 값으로(위 barsMap)
         /* 봉이 움직이면 매물대도 그 자리에서 따라간다. 2초를 기다리면
            띠와 봉이 어긋나 보인다 (2026-09-18). */
         drawProfile();
@@ -2648,7 +2696,7 @@ export function createStockChart(container, candles, opts = {}) {
        `redrawOverlay` 가 같은 이유로 `requestAnimationFrame` 을 쓴다. */
     setView(v, bars) {
       const last = candles.length - 1;
-      const n = bars || VISIBLE_BARS;
+      const n = barsMap()[period] || bars || VISIBLE_BARS;     // 이 기간에 사람이 둔 개수가 있으면 그것(위 barsMap)
       const pad = rightPad(v ? v.bars : n);                   // 오른쪽 3 비우기(RIGHT_EMPTY) · 일목 26봉 자리
       const to = v ? last - v.fromRight : last + pad;
       const from = v ? to - v.bars : to - n;
@@ -2755,7 +2803,7 @@ function saveMaOff() {
    보관함을 못 읽으면 브라우저에 남은 값으로 그린다. 기준 화면도 처음에 읽는다 — 맥북 · 맥미니가 같은 값을 보게 */
 const MEM_DOC = '/api/board/doc/chart-view';
 const MEM_WRITER = ['thekjc.co.kr'];
-const MEM_KEYS = [IND_ON_KEY, IND_SEEN_KEY, MA_OFF_KEY, PANE_H_KEY, V_SPAN_KEY];
+const MEM_KEYS = [IND_ON_KEY, IND_SEEN_KEY, MA_OFF_KEY, PANE_H_KEY, V_SPAN_KEY, BARS_KEY];
 const MEM_PUSH_MS = 800;          // 끌기 · 누르기를 모아 한 번 보낸다(그리기 쪽 지연 — 서버를 다시 묻는 주기가 아니다)
 const _memSync = new Set();       // 보관함 값으로 바뀌면 차트를 다시 짓는다
 const memWriter = (() => { try { return MEM_WRITER.includes(location.hostname); } catch { return false; } })();
@@ -2788,7 +2836,7 @@ function memApply(data) {
       else localStorage.setItem(k, JSON.stringify(data[k]));
     } catch { /* 저장 못 씀 — 이번 화면만 */ }
   });
-  _indOn = null; _paneH = null; _vSpan = null; _maOff = null;
+  _indOn = null; _paneH = null; _vSpan = null; _maOff = null; _bars = null;
   _memSync.forEach((fn) => fn());
   _indSync.forEach((fn) => fn());
   _legendSync.forEach((fn) => fn());

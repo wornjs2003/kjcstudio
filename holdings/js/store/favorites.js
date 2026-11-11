@@ -47,6 +47,7 @@
    ========================================================================== */
 
 import { WATCHLIST } from '../data/market.js';
+import { watch } from './longpoll.js';
 
 const KEY = 'kh:favorites:v1';
 const SYNCED = 'kh:favorites:synced';      // 이 브라우저 하트를 서버에 한 번 합쳤나
@@ -278,3 +279,8 @@ try { if (localStorage.getItem(KEY) && !flag(SYNCED)) flag(TOUCHED, true); } cat
 const pullQueued = () => { queue = queue.then(pull); };
 pullQueued();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) pullQueued(); });
+/* 서버 문서가 바뀌면 바로 받는다 — 서버(auto_watch)가 장중 몇 분마다 「자동」 묶음을 넣고 빼는데, 화면을 켜 둔 채로는
+   열 때 · 탭을 다시 볼 때만 받아 「수급」 칩이 안 따라왔다(2026-11-11 재권님 「실시간으로 계속 리스트업이 되면서 조정」 → 「응 고쳐」).
+   다른 칩과 같은 롱폴 한 연결에 얹는다 · 주기는 서버가 정한다 */
+const DOC_FALLBACK_MS = 300000;      // 서버가 롱폴을 못 줄 때만
+watch({ url: () => DOC, onChange: pullQueued, key: null, fallbackMs: DOC_FALLBACK_MS });

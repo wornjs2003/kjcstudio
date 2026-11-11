@@ -47,6 +47,7 @@ from datetime import datetime, timedelta, timezone
 # 파일을 안전하게 쓴다 — 쓰다 죽어도 옛 내용이 남는다 (2026-09-22)
 from docstore import write_json_atomic
 import docstore
+import edit_key         # 수정 비밀번호 — 정해 둔 보드 문서는 재권님만 고친다(2026-11-11)
 import marketdb
 import re
 import signal_watch
@@ -78,8 +79,12 @@ import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스�
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
 import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 · 색 = 등락률 · /api/kis/heatmap(2026-10-27 · server/heatmap.py)
 import flow_board       # 수급 정리판 — 투자자 갈래별 순매수(오늘 · 날마다 · 상위 종목)를 한 주소로 · /api/kis/flow-board(2026-11-04 · server/flow_board.py)
+import open_rise        # 초반상승 — 정규장 첫 5분봉이 시가보다 오른 종목 · 실시간 순위 「초반상승」 칩 · /api/kis/open-rise(2026-11-11 · server/open_rise.py)
+import rescan           # 지금검색 — 관심 아래 칩 룰을 누를 때 다시 셈 · /api/kis/rescan(2026-11-11 · server/rescan.py)
 import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 · /api/kis/pre-flow(2026-11-05 · server/pre_flow.py)
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
+import day_top          # 등락 상위와 걸린 필터 — 날마다 장 뒤 한 번 쌓음 · /api/kis/day-top(2026-11-11 · server/day_top.py)
+import dt30             # 단타 30 판 — 평일 09:06 단타 상위 30 굳힘 · 30분마다 값 · 30거래일 · /api/kis/dt30(2026-11-11 · server/dt30.py)
 import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
 import session_volume   # 시간대별 거래량 · 전일비 — 프리장 · 정규장 · 애프터 끝에 순위 종목 누적 거래량 저장 · /api/kis/vol-ratio(2026-11-05 · server/session_volume.py)
 import intraday_flow    # 당일 수급 — 장중 1분마다 시장 투자자 · 프로그램 매매를 쌓아 5분 구간으로 · /api/kis/flow-today(2026-10-27 · server/intraday_flow.py)
@@ -5392,9 +5397,13 @@ def fetch_investor_top(cfg, direction="buy", market="all", by="qty", limit=10):
 # ── 셋이 함께 사는 종목 — 홈 실시간 순위 「매수」 칩 (2026-11-05 재권님 「프로그램 기관 외국인이 동시에 사고있는 종목들
 # 볼수있는 방법좀 마련해봐」 → 「실시간 순위에 버튼 하나 만들고 거기에 넣어줘 · 매수 라는 버튼」) ──
 #
-#   외국인 · 기관   fetch_investor_top(금액 순 · 시장 전체) 두 목록(30줄씩)이 **둘 다** 순매수 양수인 종목 — **가집계**
-#   프로그램        그 종목만 FHPPG04650101(통합 UN) 체결 줄 맨 위의 그날 누적 순매수 금액(원)이 양수인 것
-#   차례            세 순매수 금액 합이 큰 순 · 금액 하한은 아직 없다(재권님이 넣으실 칸)
+#   외국인 · 기관   fetch_investor_top(금액 순 · 시장 전체) 두 목록(30줄씩) 중 **한쪽에라도** 든 종목 — **가집계**
+#   프로그램        외국인 · 기관이 둘 다 사는 종목만 FHPPG04650101(통합 UN) 체결 줄 맨 위의 그날 누적 순매수 금액(원)
+#   연기금          flow_rank.joint_more — 15:45 뒤 쌓인 그날 확정치에서(그 전 None)
+#   차례(tier)      ① 외국인 · 기관 · 연기금 · 프로그램 넷 다 ② 외국인 · 기관 · 프로그램 ③ 기관 · 연기금 ④ 외국인만 — 같은 칸 안은 산 금액 합 큰 순
+#                   (2026-11-11 재권님 「외국인 기관 연기금 순으로 산걸 체크하고 셋다사는게 가장좋고 그다음이 외국인 기관 그다음이 기관 연기금
+#                   그다음이 외국인 순으로 줄세워서」 → 「1에 프로그램도 넣어주고 2에도 넣어줘」) · 넷에 안 드는 것(기관만 · 외국인 · 기관인데 프로그램 매도 등)은 뺀다
+#                   상위 30 밖이라 값을 모르는 쪽은 산 것으로 안 센다 · 연기금은 15:45 전에 모르므로 장중에는 ② ④ 만 찬다 — joint_tier 한 곳
 # 한 번 짓는 데 KIS 2건 + 겹친 종목 수(11-05 12:38 실측 12) + 오늘 빠진 종목 수 · 가집계 목록과 같은 INVESTOR_TOP_TTL 동안 들고 있다
 #
 # **뒤에서 짓는다** — 묻는 쪽은 들고 있던 판을 바로 받고, 낡았으면 뒤에서 다시 짓는다(처음 부를 때 KIS 14건을 쥔 채
@@ -5456,6 +5465,17 @@ def _program_net_today(cfg, code, reg=False):
     return _num(last.get("whol_smtn_ntby_tr_pbmn"), int)
 
 
+def joint_tier(fa, ia, pg, fund):
+    """「매수」 칩 차례 1~4 · 안 들면 None — 위 머리 주석 (tier). 값 None(모름)은 안 산 것으로 센다."""
+    b = lambda v: v is not None and v > 0
+    f, i, p, n = b(fa), b(ia), b(pg), b(fund)
+    if f and i and p and n: return 1
+    if f and i and p: return 2
+    if i and n: return 3
+    if f and not i: return 4
+    return None
+
+
 def _joint_buy_make(cfg):
     """판을 새로 짓는다. 금액 단위는 원 · 값이 없으면 None."""
     now = datetime.now(KST)
@@ -5487,24 +5507,27 @@ def _joint_buy_make(cfg):
     # (11-05 개념정의 검수 — 판 전체를 confirmed 로 내면 가집계로 남은 줄이 가려진다)
     basis = (lambda c: "confirmed" if conf.get(c) else "estimate") if conf is not None and closed else (lambda c: None)
     rows, missing, prog = [], 0, {}
-    for code in [c for c in f if c in i]:
+    cands = list(dict.fromkeys(list(f) + list(i)))
+    fund = {c: v.get("fund") for c, v in flow_rank.joint_more(sys.modules[__name__], now.date().isoformat(), cands).items()}
+    for code in cands:
         fa, ia = famt(code), iamt(code)
-        if not fa or not ia or fa <= 0 or ia <= 0:
+        pg = None
+        if fa and ia and fa > 0 and ia > 0:      # 프로그램은 ① ② 를 가를 때만 든다 — 외국인 · 기관 둘 다 사는 종목만 묻는다(KIS 건수 그대로)
+            pg = _program_net_today(cfg, code, reg_over)
+            prog[code] = pg
+            if pg is None:
+                missing += 1
+        t = joint_tier(fa, ia, pg, fund.get(code))
+        if t is None:
             continue
-        pg = _program_net_today(cfg, code, reg_over)
-        prog[code] = pg
-        if pg is None:
-            missing += 1
-            continue
-        if pg <= 0:
-            continue
-        r = f[code]
+        r = f.get(code) or i.get(code)
         rows.append({"code": code, "name": r.get("name"), "price": r.get("price"), "pct": r.get("pct"),
-                     "foreign": fa, "inst": ia, "program": pg, "sum": fa + ia + pg, "basis": basis(code)})
-    rows.sort(key=lambda x: -x["sum"])
+                     "foreign": fa, "inst": ia, "program": pg, "fund": fund.get(code), "tier": t,
+                     "sum": sum(v for v in (fa, ia, pg, fund.get(code)) if v and v > 0), "basis": basis(code)})
+    rows.sort(key=lambda x: (x["tier"], -x["sum"]))
     return {"rows": rows, "f": f, "i": i, "famt": famt, "iamt": iamt, "prog": prog, "conf": conf, "basis": basis,
             "reg": reg_over, "phase": "closed" if reg_over else "live",
-            "candidates": len(set(f) & set(i)), "programMissing": missing,
+            "candidates": len(cands), "programMissing": missing, "fund": fund,
             "errors": len(errors or {}), "hm": now.strftime("%H:%M"), "day": now.date().isoformat()}
 
 
@@ -5552,10 +5575,12 @@ def _joint_buy_rebuild(cfg):
                 approx = [k for k, v in (("foreign", fa), ("inst", ia)) if v is None and (guess.get(c) or {}).get(k) is not None]
                 fa = fa if fa is not None else (guess.get(c) or {}).get("foreign")
                 ia = ia if ia is not None else (guess.get(c) or {}).get("inst")
-                if fa and ia and pg > 0 and fa > 0 and ia > 0:     # 셋 다 아직 산다 — 빠진 것이 아니다(값 일부는 어림)
+                fu = m["fund"].get(c)
+                t = joint_tier(fa, ia, pg, fu)
+                if t is not None:                # 아직 넷 중 한 칸에 든다 — 빠진 것이 아니다(값 일부는 어림)
                     back.append({"code": c, "name": st["seen"].get(c), "price": (px.get(c) or {}).get("price"),
-                                 "pct": (px.get(c) or {}).get("pct"), "foreign": fa, "inst": ia, "program": pg,
-                                 "sum": fa + ia + pg, "approx": approx, "basis": m["basis"](c)})
+                                 "pct": (px.get(c) or {}).get("pct"), "foreign": fa, "inst": ia, "program": pg, "fund": fu, "tier": t,
+                                 "sum": sum(v for v in (fa, ia, pg, fu) if v and v > 0), "approx": approx, "basis": m["basis"](c)})
                     continue
                 sold = [k for k, v in (("foreign", fa), ("inst", ia), ("program", pg)) if v is not None and v <= 0]
                 unknown = [k for k, v in (("foreign", fa), ("inst", ia)) if v is None]
@@ -5566,7 +5591,7 @@ def _joint_buy_rebuild(cfg):
                     continue
                 fa, ia = m["famt"](c), m["iamt"](c)
                 x.update(foreign=fa, inst=ia, unknown=[k for k, v in (("foreign", fa), ("inst", ia)) if v is None], basis=m["basis"](c))
-            rows = sorted(m["rows"] + back, key=lambda x: -x["sum"])
+            rows = sorted(m["rows"] + back, key=lambda x: (x["tier"], -x["sum"]))
             st["data"] = {"rows": rows, "flipped": sorted(st["flipped"].values(), key=lambda x: x["at"], reverse=True),
                           # 외 · 기 값을 확정치로 낸 줄 · 가집계로 남은 줄의 수(rows + flipped · 마감 뒤에만 셈 · 장중은 None)
                           "confirmed": sum(1 for x in rows + list(st["flipped"].values()) if x.get("basis") == "confirmed") if m["conf"] else None,
@@ -5590,9 +5615,7 @@ def _joint_buy_rebuild(cfg):
                 a0 = acc.get(x["code"]) or {}
                 x.update(first=a0.get("first"), hits=a0.get("hits") or 0, pgAt=_program_at.get(x["code"]),
                          fund=(more.get(x["code"]) or {}).get("fund"), person=(more.get(x["code"]) or {}).get("person"))
-            # 연기금 값이 들어온 뒤(15:45 뒤 쌓기) 차례 — 셋 다 매수 안에서 연기금도 사는 종목 먼저, 그다음 셋 합(재권님 「그다음이 연기금」)
-            if any(x.get("fund") is not None for x in data["rows"]):
-                data["rows"].sort(key=lambda x: (not ((x.get("fund") or 0) > 0), -x["sum"]))
+            # 차례는 joint_tier 가 연기금까지 넣어 위에서 세웠다(11-11) — 여기서 다시 안 세운다
             data["fundIn"] = sum(1 for x in data["rows"] if x.get("fund") is not None)
     except Exception as e:
         print("[매수 칩] 짓다 멈춤 — %s" % safe_message(e, 120))
@@ -6447,6 +6470,25 @@ def _minutes_mark_done(code, ends):
     done = _minutes_done(code) | set(ends)
     _meta_set("m5done:%s" % code,
               _minutes_trade_day() + "|" + ",".join(str(x) for x in sorted(done)))
+
+
+def _minutes_fresh_upto(code):
+    """그 거래일에 「지금 칸」(지금까지 30분)을 마지막으로 받은 **분**(`sync_meta` 의 `m5upto:<코드>`) — 없으면 None.
+
+    그 분 앞에서 끝난 5분봉은 다 끝난 뒤 받은 값이다. 「전날 같은 시각 대비 거래량 %」 가 이것으로 덜 찬 봉을 뺀다
+    (2026-11-11 qa 돌려보냄 — 봉 끝 시각만 보고 세어 09:15 → 09:19 사이 하이닉스가 36% → 50% · 재권님 「가」)."""
+    v = _meta_get("m5upto:%s" % code) or ""
+    day, _, m = v.partition("|")
+    if day != _minutes_trade_day() or not m.isdigit():
+        return None
+    return int(m)
+
+
+def _minutes_mark_fresh(code, minute):
+    """「지금 칸」 을 받아 **저장한 뒤** 부른다 — 받기 전 분을 적는다(받는 데 몇 초 걸려도 그 뒤 분을 적지 않게). 줄지 않는다."""
+    old = _minutes_fresh_upto(code)
+    if old is None or minute > old:
+        _meta_set("m5upto:%s" % code, "%s|%d" % (_minutes_trade_day(), minute))
 
 
 def _keep_covered_slots(bars5, cover, now_m):
@@ -7452,6 +7494,63 @@ def read_candles(code, period, limit):
     return [dict(r) for r in reversed(rows)]   # 차트는 과거 -> 최신 순
 
 
+VOL_PREV_FROM, VOL_PREV_TO = "0900", "1530"   # 정규장 5분봉(시작 시각) — 15:30 봉이 종가 단일가다. 시세의 누적 거래량(정규장)과 같은 범위
+
+
+def vol_prev_day(code, today):
+    """전날(오늘 앞의 마지막 거래일) 정규장 5분봉 거래량 — 「전날 같은 시각 대비 거래량 %」 의 분모 재료 (2026-11-10 재권님 「나」 · 「가」).
+
+    **DB 에 쌓인 봉만 읽는다 — KIS 를 새로 부르지 않는다.** 그 종목의 전날 5분봉이 없으면 None(「못 받음」 — 0 이 아니다).
+    화면이 지금 시각까지 더해 같은 시각 누적을 센다 — 서버는 하루 한 벌만 준다(화면이 다시 묻는 주기가 없다)."""
+    with _db_lock, db_conn() as conn:
+        day = conn.execute(
+            "SELECT MAX(substr(ts, 1, 8)) FROM candles WHERE code = ? AND period = '5m' AND substr(ts, 1, 8) < ?",
+            (code, today)).fetchone()[0]
+        if not day:
+            return None
+        rows = conn.execute(
+            """SELECT substr(ts, 9, 4) AS hm, volume FROM candles
+                 WHERE code = ? AND period = '5m' AND substr(ts, 1, 8) = ? AND substr(ts, 9, 4) BETWEEN ? AND ?
+                 ORDER BY ts""", (code, day, VOL_PREV_FROM, VOL_PREV_TO)).fetchall()
+    bars = [[r["hm"], r["volume"]] for r in rows if r["volume"] is not None]
+    if not bars:
+        return None
+    return {"day": day, "from": VOL_PREV_FROM, "to": VOL_PREV_TO, "bars": bars, "total": sum(v for _, v in bars)}
+
+
+def vol_same_time(code, now=None):
+    """오늘 · 전날 정규장 거래량을 **같은 시각까지** 같은 자리(DB 5분봉 09:00~15:30)에서 센다 — 「전날 같은 시각 대비 %」 (2026-11-10).
+
+    분자 · 분모를 같은 봉에서 센다 — 처음 판은 분자를 머리줄 누적 거래량으로 셌는데 그 값이 15:30 에 정규장에서 통합(넥스트레이드 포함)으로 바뀌고
+    장 뒤 거래가 분자에만 쌓여 마감 뒤 79% 가 122% 로 뛰었다(qa 15:45 돌려보냄). 오늘 봉은 **다 끝난 봉만** — 지금 도는 봉은 덜 찼다.
+    전날 봉이 없으면 None(「못 받음」) · 오늘 끝난 봉이 아직 없으면 today · upto 가 None(장 전 · 그 종목 봉이 아직 안 쌓임)."""
+    now = now or datetime.now(KST)
+    today = now.strftime("%Y%m%d")
+    prev = vol_prev_day(code, today)
+    if prev is None:
+        return None
+    now_min = now.hour * 60 + now.minute
+    # 봉 끝이 지났어도 그 뒤에 다시 받지 않았으면 덜 찬 값이다 — 「지금 칸」 을 마지막으로 받은 분까지만 센다(_minutes_fresh_upto).
+    # 그 기록이 없으면(오늘 아직 안 받음 · 기록 전 서버) 끝난 봉도 없는 것으로 본다 — 덜 찬 값을 내느니 「아직」 이다
+    fresh = _minutes_fresh_upto(code)
+    if today != _minutes_trade_day() or fresh is None:
+        now_min = -1
+    else:
+        now_min = min(now_min, fresh)
+    with _db_lock, db_conn() as conn:
+        rows = conn.execute(
+            """SELECT substr(ts, 9, 4) AS hm, volume FROM candles
+                 WHERE code = ? AND period = '5m' AND substr(ts, 1, 8) = ? AND substr(ts, 9, 4) BETWEEN ? AND ?
+                 ORDER BY ts""", (code, today, VOL_PREV_FROM, VOL_PREV_TO)).fetchall()
+    done = [(r["hm"], r["volume"]) for r in rows
+            if r["volume"] is not None and int(r["hm"][:2]) * 60 + int(r["hm"][2:]) + 5 <= now_min]
+    upto = done[-1][0] if done else None
+    return {"day": today, "prevDay": prev["day"], "from": VOL_PREV_FROM, "to": VOL_PREV_TO, "upto": upto,
+            "today": sum(v for _, v in done) if done else None,
+            "prev": sum(v for hm, v in prev["bars"] if hm <= upto) if upto else None,
+            "prevTotal": prev["total"]}
+
+
 def _view_limit(code, period, limit):
     """`view_days` 가 있는 기간이면 최근 그 날짜 수만큼의 봉 수로 limit 를 넓힌다. 줄이지는 않는다.
 
@@ -8258,6 +8357,7 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
             # 있었던 것이라, 종목마다 봉 개수가 크게 갈렸다.
             cover = None
             marks = {}                       # 이번 바퀴에 적은 「받았다」 표 — 다른 분봉 기간에도 옮긴다(아래)
+            fresh_m = _minutes_now_min()             # 받기 전 분 — 이 분 앞에서 끝난 봉은 다 찬 값으로 받는다
             if _minutes_need_day(code, period, rows, gap_check):
                 raw, cover = fetch_minutes_day(cfg, code, refill=(period == "1m"))
                 marks["dayfill"] = _minutes_trade_day()
@@ -8309,6 +8409,10 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
                         continue             # 5분 하루치는 받은 칸을 건너뛰어(m5done) 1분이 덜 찰 수 있다 — 1분은 제 하루치(refill)를 따로
                     _meta_set("%s:%s:%s" % (k, code, p), v)
         fetched = save_candles(code, period, bars)
+        # 1분을 열어도 5분이 위에서 함께 저장되므로 같이 적는다(m5upto 는 종목마다 하나 · 11-12 staging 합치며)
+        # 20:00 뒤 · 주말에 받으면 첫 칸이 하루 끝(MINUTE_DAY_END)에서 끝난다 — 그때도 그날 봉은 다 끝난 뒤 받은 것이라 적는다(qa 11-11 물음)
+        if not conf["kis"] and period in ("1m", "5m") and cover and any(hi >= min(fresh_m, MINUTE_DAY_END) for _, hi in cover):
+            _minutes_mark_fresh(code, fresh_m)       # 「지금 칸」 까지 받아 저장했다 — vol_same_time 이 이 분까지만 센다
         _meta_set(mkey, time.time())
         if fetched:
             rows = read_candles(code, period, _view_limit(code, period, limit))
@@ -8922,14 +9026,17 @@ class Handler(SimpleHTTPRequestHandler):
         바꿔 싣거나 500 으로 뭉개면 **덮어쓰기 막기가 그 자리에서 풀린다.**
         """
         raw = b""
-        if self.command == "PUT":
+        if self.command in ("PUT", "POST"):
             raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
         req = urllib.request.Request(base + (self.path or ""),
-                                     data=raw if self.command == "PUT" else None,
+                                     data=raw if self.command in ("PUT", "POST") else None,
                                      method=self.command)
         ct = self.headers.get("Content-Type")
         if ct:
             req.add_header("content-type", ct)
+        ek = self.headers.get(edit_key.HEADER)       # 수정 비밀번호 — 판정은 상류(8765) 한 곳에서(잠금 셈이 한 곳에 모인다)
+        if ek:
+            req.add_header(edit_key.HEADER, ek)
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 code, body = resp.getcode(), resp.read()
@@ -8976,6 +9083,23 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         path = (self.path or "").split("?", 1)[0].rstrip("/")
+
+        if path == "/api/board/edit-check":
+            # 수정 비밀번호가 맞는지만 묻는다(edit_key.py). json 만 받는다 — 다른 출처 페이지는 미리 묻기에서 막힌다(claude 묻기와 같은 까닭)
+            raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            if self.command != "POST" or (self.headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
+                self._send_json({"ok": False, "error": "POST · application/json 으로 보내 주십시오."}, status=405)
+                return
+            try:
+                doc = (json.loads(raw.decode("utf-8") or "{}") or {}).get("doc")
+            except Exception:
+                doc = None
+            if doc not in edit_key.PROTECTED:
+                self._send_json({"ok": False, "error": "수정 비밀번호로 지키는 문서가 아닙니다."}, status=400)
+                return
+            ok, why, locked = edit_key.check(self.headers.get(edit_key.HEADER))
+            self._send_json({"ok": True} if ok else {"ok": False, "error": why, "locked": locked}, status=200 if ok else 403)
+            return
 
         if path == "/api/board/health":
             self._send_json({
@@ -9052,6 +9176,12 @@ class Handler(SimpleHTTPRequestHandler):
 
             if self.command == "PUT":
                 raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                if name in edit_key.PROTECTED:
+                    # 재권님만 고치는 문서 — 머리글 수정 비밀번호가 맞을 때만 쓴다(edit_key.py · 2026-11-11)
+                    ok, why, locked = edit_key.check(self.headers.get(edit_key.HEADER))
+                    if not ok:
+                        self._send_json({"ok": False, "error": why, "locked": locked}, status=403)
+                        return
                 try:
                     body = json.loads(raw.decode("utf-8"))
                 except Exception:
@@ -9120,11 +9250,14 @@ class Handler(SimpleHTTPRequestHandler):
         if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/claude/ask":
             self._handle_claude_ask()
             return
+        if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/board/edit-check":
+            self._handle_board()          # 수정 비밀번호 맞는지 묻기 — 보드 길이라 세션 서버는 8765 로 넘긴다(edit_key.py)
+            return
         try:
             self.rfile.read(int(self.headers.get("Content-Length") or 0))   # 딸려 온 본문을 먼저 비운다(아래 do_PUT 주석)
         except Exception:
             pass
-        self._send_json({"ok": False, "error": "POST 는 /api/claude/ask 에만 됩니다."}, 405)
+        self._send_json({"ok": False, "error": "POST 는 /api/claude/ask · /api/board/edit-check 에만 됩니다."}, 405)
 
     def _handle_claude_ask(self):
         """화면이 보낸 물음 · 보는 것 · 앞 대화에 **서버 자료**(페이지별 표 CLAUDE_SOURCES)를 붙여 claude 에 묻는다.
@@ -9437,6 +9570,13 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": False, "error": "span 은 d · w · m 중 하나여야 합니다."}, 400)
                 return
 
+            if route == "groups" and (qs.get("all") or [""])[0] == "1":
+                # 업종 · 테마 **전부** — 실시간 순위 칩의 섹터 띠가 종목 섹터 이름(WICS)으로 찾는다(상위 20 만으로는 60 중 18 만 맞음 · 2026-11-11)
+                g = naver.groups_all(kind)
+                self._send_json({"ok": True, "data": g["rows"],
+                                 "meta": {"kind": kind, "total": g["total"], "count": len(g["rows"]), "all": True,
+                                          "source": "네이버", "cacheTtl": naver.TTL}})
+                return
             if route == "groups":
                 g = naver.groups(kind)
                 self._send_json({
@@ -10190,6 +10330,56 @@ class Handler(SimpleHTTPRequestHandler):
                 })
                 return
 
+            if route == "day-top/filters":
+                # 쌓인 날 전부 모은 필터별 셈 · 날별 셈(server/day_top.filters) — 투자 전략 「필터」 탭 · KIS 안 부름 (2026-11-11 재권님)
+                self._send_json({"ok": True, "data": day_top.filters(sys.modules[__name__]),
+                                 "meta": {"minCapEok": day_top.MIN_CAP_EOK, "topN": day_top.TOP_N, "saveAt": "%02d:%02d" % day_top.SAVE_AT,
+                                          "note": "상위 = 그날 등락률 상위 topN · 전체 = 시가총액 minCapEok 억 이상 주식 · lift = 상위 중 몫 ÷ 전체 중 몫 · "
+                                                  "hit = 걸린 것 중 상위에 든 몫 · next = 걸린 종목 다음 거래일 종가 등락률(다음 날이 온 종목만) · % 단위"}})
+                return
+
+            if route == "day-top":
+                # 등락 상위와 걸린 필터(server/day_top.py) — 남긴 날 판만 읽는다 · KIS 를 안 부른다
+                day = (qs.get("day") or [""])[0].strip()
+                if day and not (day.isdigit() and len(day) == 8):
+                    self._send_json({"ok": False, "error": "day 는 YYYYMMDD 입니다."}, 400)
+                    return
+                b = day_top.board(sys.modules[__name__], day or None, (qs.get("all") or [""])[0] == "1")
+                self._send_json({"ok": b is not None, "data": b,
+                                 "meta": dict(day_top.status(), days=day_top.days(sys.modules[__name__]))})
+                return
+
+            if route == "dt30":
+                # 단타 30 판(server/dt30.py) — 남긴 날 판을 읽는다 · 안 끝난 그날 판만 지금 값(멀티 시세 · 캐시 먼저)을 붙인다
+                day = (qs.get("day") or [""])[0].strip()
+                if day and not (day.isdigit() and len(day) == 8):
+                    self._send_json({"ok": False, "error": "day 는 YYYYMMDD 입니다."}, 400)
+                    return
+                b = dt30.board(sys.modules[__name__], day or None, cfg)
+                self._send_json({"ok": b is not None, "data": b,
+                                 "meta": dict(dt30.status(), days=dt30.days(sys.modules[__name__]))})
+                return
+
+            if route == "open-rise":
+                # 초반상승 — 정규장 첫 5분봉(여는 시각부터 5분 · market_hours)이 시가보다 RISE_PCT % 이상 올라 끝난 종목 (2026-11-11 · server/open_rise.py) · KIS 안 부름
+                d, at = open_rise.fetch(sys.modules[__name__])
+                self._send_json({
+                    "ok": True, "data": d["rows"],
+                    "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S"),
+                             "day": d["day"], "phase": d["phase"], "candidates": d["candidates"], "pending": d["pending"],
+                             "noBar": d["noBar"], "capMissing": d["capMissing"], "etfOut": d["etfOut"],
+                             "risePct": open_rise.RISE_PCT, "minCapEok": open_rise.MIN_CAP_EOK,
+                             "barFrom": d["barFrom"], "barTo": d["barTo"],
+                             "note": "DB 에 쌓인 5분봉 — 정규장 첫 봉 (종가 − 시가) ÷ 시가 · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
+                             "cacheTtl": open_rise.CACHE_TTL},
+                })
+                return
+
+            if route == "rescan":
+                # 「지금검색」 — 매수 · 수급 · 프리장을 그 자리에서 다시 셈(문턱 rescan.MIN_SEC) · 나머지 칩은 화면이 다시 받기만 (2026-11-11 재권님 「나」)
+                self._send_json({"ok": True, "data": rescan.run(sys.modules[__name__], cfg, pre_flow._writer["on"])})
+                return
+
             if route == "joint-buy":
                 data, at = fetch_joint_buy(cfg)
                 d = data or {}
@@ -10476,6 +10666,18 @@ class Handler(SimpleHTTPRequestHandler):
                         "cacheTtl": INVESTOR_EST_TTL,
                     },
                 })
+                return
+
+            # 전날 정규장 5분봉 거래량 — 차트 위 「전날 같은 시각 대비 거래량 %」(2026-11-10 · vol_prev_day)
+            if route == "vol-prev":
+                code = (qs.get("code") or [""])[0].strip()
+                if not (code.isdigit() and len(code) == 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                data = vol_same_time(code)
+                self._send_json({"ok": data is not None, "data": data,
+                                 "meta": {"code": code, "unit": "주", "source": "DB 에 쌓인 5분봉 — 오늘 · 전날 정규장 같은 시각까지(KIS 를 새로 안 부름)",
+                                          "note": None if data else "전날 5분봉이 아직 안 쌓였습니다"}})
                 return
 
             # 최근 체결 30줄 (2026-09-21 지시 — A 종목 화면)
@@ -11028,6 +11230,12 @@ def main():
     if not SLOW and is_sender(args.port) and pre_flow.start(sys.modules[__name__]):
         print("  프리장 판   : 평일 %02d:%02d~%02d:%02d 에 %d초마다 지어 market.db pre_flow_board 에 남김(「프리장」 칩)"
               % (pre_flow.PRE_OPEN + pre_flow.PRE_CLOSE + (pre_flow.FLOW_TTL,)))
+    if not SLOW and is_sender(args.port) and dt30.start(sys.modules[__name__]):
+        print("  단타 30 판 : 평일 %s 단타 상위 %d 굳힘 · %s~%s %d분마다 값 · %d거래일 · /api/kis/dt30"
+              % (dt30.status()["buyAt"], dt30.TOP_N, dt30.times()[0], dt30.times()[-1], dt30.TRACK_STEP, dt30.DAYS_KEEP))
+    if not SLOW and is_sender(args.port) and day_top.start(sys.modules[__name__]):
+        print("  등락 상위 : 평일 %02d:%02d 뒤(「매수」 판이 굳으면 · 늦어도 %02d:%02d) 시가총액 %d억 이상 등락률 판과 걸린 필터를 market.db day_top 에 남김 · /api/kis/day-top"
+              % (day_top.SAVE_AT + day_top.SAVE_LATE + (day_top.MIN_CAP_EOK,)))
     if not SLOW and is_sender(args.port) and watch_log.start(sys.modules[__name__]):
         print("  종목 기록   : 평일 %02d:%02d 에 관심 · 자동 · VI · 급등 · 매수 종목 줄을 market.db watch_log 에 남김 · /api/watch-log" % watch_log.SAVE_AT)
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and flow_rank.start(sys.modules[__name__]):

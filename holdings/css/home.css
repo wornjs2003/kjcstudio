@@ -1401,6 +1401,7 @@
 .kh-pre-sec { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; white-space: nowrap;
   font-size: var(--kh-fs-md); color: var(--kh-text-secondary); padding: 0 14px 8px; margin-top: -4px; }
 .kh-pre-sec::-webkit-scrollbar { display: none; }
+.kh-pre-sec[hidden] { display: none; }   /* 위 display:flex 가 hidden 을 이겨 칩을 바꿔도 띠가 남았다(qa 11-11) */
 .kh-pre-sec-it b { font-weight: 600; }
 /* 아직 채우는 중 — 파랑. 다 차면 사라진다 */
 .kh-sort-note .kh-accent { color: var(--kh-accent); }

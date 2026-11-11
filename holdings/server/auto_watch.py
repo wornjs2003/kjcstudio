@@ -107,6 +107,8 @@ _live = {}                      # 장중 마지막 바퀴 {day, at, frac, got} �
 _status = {"runDay": None, "runAt": None, "saved": None, "backfillAt": None, "backfillCodes": None,
            "kisCalls": 0, "error": None}
 _run_lock = threading.Lock()
+_live_lock = threading.Lock()     # 장중 한 바퀴 — 5분 바퀴와 「지금검색」(server/rescan.py)이 겹치지 않게
+_live_last = {"at": 0.0}         # 마지막 장중 바퀴(time.time()) — 「지금검색」 뒤 5분 바퀴가 곧바로 또 돌지 않게
 
 
 def _now():
@@ -589,7 +591,7 @@ def compute(proxy, live=None):
 
         day         셈한 날(가장 최근에 그날 값이 저장된 날) · 없으면 null
         rule        { prevPct, volMult, sortBy, autoMax } — 문서 값 그대로(빈칸 null) · sortBy 는 쓴 값
-        ready       기준 둘(prevPct · volMult)이 다 있나
+        ready       등락률 기준(prevPct)이 있나 — volMult 는 빈칸이면 거래량 조건 없음(11-11)
         picked      [{ code, name, idx, close, pct, vol, avg20, mult, high52, highGapPct, nearHigh, nearHighOnly }] — 걸린 종목 · 줄 세운 차례 · autoMax 로 자름
                     high52 그날 앞 52주 최고 종가(모자라면 null) · highGapPct 그날 종가가 그보다 몇 % 위아래 · nearHigh 부근(맨 위) · nearHighOnly 조건 밖인데 부근이라 더 넣음
         nearHighAll 자르기 전 부근 수 · nearOnlyAll 그중 조건 밖으로 더 넣은 수
@@ -609,7 +611,8 @@ def compute(proxy, live=None):
     mem = members(proxy)
     out = {"day": None, "rule": {"prevPct": prev_pct, "volMult": vol_mult, "sortBy": sort_by,
                                  "autoMax": int(auto_max) if auto_max else None, "nearHighPct": near_pct, "from": src},
-           "ready": prev_pct is not None and vol_mult is not None,
+           # volMult 는 빈칸이면 거래량 조건을 안 본다(2026-11-11 재권님 「20일 평균 거래량 2배는 룰 없애주고」 → 「가」 — 등락률만 · 등락률 큰 순)
+           "ready": prev_pct is not None,
            "picked": [], "pool": len(mem), "measured": None, "noToday": None, "short": None, "hitAll": None}
     with proxy._db_lock, proxy.db_conn() as conn:
         try:
@@ -646,20 +649,21 @@ def compute(proxy, live=None):
             continue
         if len(h) < AVG_DAYS:
             short += 1
-            continue
-        avg = sum(h) / len(h)
-        base = avg * (live["frac"] if live else 1)
+            if vol_mult is not None:     # 거래량 조건이 있을 때만 20거래일이 모자란 종목을 뺀다
+                continue
+        avg = sum(h) / len(h) if h else None
+        base = avg * (live["frac"] if live else 1) if avg else None
         mult = round(t[5] / base, 2) if base and t[5] is not None else None
         h = hi.get(code)
         gap = round((t[3] / h - 1) * 100, 2) if h and t[3] is not None else None
         rows.append({"code": code, "name": name or t[2], "idx": idx, "close": t[3], "pct": t[4], "vol": t[5],
-                     "avg20": round(avg), "mult": mult, "high52": h, "highGapPct": gap,
+                     "avg20": round(avg) if avg else None, "mult": mult, "high52": h, "highGapPct": gap,
                      "nearHigh": near_pct is not None and gap is not None and abs(gap) <= near_pct, "nearHighOnly": False})
     out["measured"], out["noToday"], out["short"] = len(rows), no_today, short
     if not out["ready"]:
         return out
-    hit = [r for r in rows if r["pct"] is not None and r["mult"] is not None
-           and r["pct"] >= prev_pct and r["mult"] >= vol_mult]
+    hit = [r for r in rows if r["pct"] is not None and r["pct"] >= prev_pct
+           and (vol_mult is None or (r["mult"] is not None and r["mult"] >= vol_mult))]
     out["hitAll"] = len(hit)
     ids = {r["code"] for r in hit}
     for r in rows:                   # 조건 밖인데 신고가 부근 — 더 넣는다(재권님 「둘다해」)
@@ -682,8 +686,25 @@ def _frac(now):
     return min(max((now.hour * 60 + now.minute - a) / (b - a), 0.0), 1.0)
 
 
+def in_live(now=None):
+    """장중 거르기 창 안인가 — 평일 LIVE_FROM~정규장 끝."""
+    now = now or _now()
+    return now.weekday() < 5 and LIVE_FROM <= (now.hour, now.minute) < SESSION[1]
+
+
 def live_once(proxy, now=None):
-    """장중 한 바퀴 — 멀티 시세를 받아(쌓지 않음) _live 에 두고, ADD 면 상위 ADD_TOP 을 관심 목록에. 받은 종목 수 · 못 받으면 None."""
+    """장중 한 바퀴 — 멀티 시세를 받아(쌓지 않음) _live 에 두고, ADD 면 상위 ADD_TOP 을 관심 목록에. 받은 종목 수 · 못 받으면 None ·
+    다른 바퀴가 돌고 있으면 기다리지 않고 False."""
+    if not _live_lock.acquire(blocking=False):
+        return False
+    try:
+        _live_last["at"] = time.time()
+        return _live_once(proxy, now)
+    finally:
+        _live_lock.release()
+
+
+def _live_once(proxy, now=None):
     now = now or _now()
     day = now.strftime("%Y%m%d")
     mem = members(proxy)
@@ -759,14 +780,11 @@ def start(proxy):
                 th.start()
         except Exception as e:
             _status["error"] = safe_message(e, 160)
-        last_live = 0.0
         while True:
             try:
                 now = _now()
                 day = now.strftime("%Y%m%d")
-                if now.weekday() < 5 and LIVE_FROM <= (now.hour, now.minute) < SESSION[1] \
-                        and time.time() - last_live >= LIVE_SEC and not _run_lock.locked():
-                    last_live = time.time()
+                if in_live(now) and time.time() - _live_last["at"] >= LIVE_SEC and not _run_lock.locked():
                     try:
                         live_once(proxy, now)
                     except Exception as e:
