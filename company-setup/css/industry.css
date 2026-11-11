@@ -84,3 +84,40 @@
 .sw-h small{font-size:13px;font-weight:400;color:var(--kh-text-secondary);margin-left:8px}
 @media (min-width: 641px){.sw-hero{grid-template-columns:minmax(260px,1fr) 2fr}.sw-news{grid-template-columns:1fr 1fr}}
 @media (min-width: 1100px){.sw-cols{grid-template-columns:repeat(3,1fr)}}
+
+/* 「이벤트」 칩 — 사건 → 국내 수혜 · 피해 섹터 표 (2026-11-11 재권님 「맞아 이대로 만들어」 · 시안 temp/시황분석-ev7 — 가운데 · 격자 상자 폭을 카드 줄에 맞춤)
+   좁은 폭부터 · 넓을 때 카드 두 줄 · 연쇄(세션 판단)는 격자에서 옅게 · 색은 theme.css 변수만 */
+.evx-wrap{max-width:1134px;margin:0 auto;padding:4px 0 24px;color:var(--kh-text-primary)}
+.evx-wrap h1{font-size:22px;margin:0 0 4px}
+.evx-wrap .sub{color:var(--kh-text-secondary);font-size:13px;margin:0 0 6px}
+.evx-gh{font-size:18px;font-weight:800;margin:26px 0 10px}.evx-gh small{font-size:12.5px;font-weight:400;color:var(--kh-text-secondary);margin-left:8px}
+.evx-box{background:var(--kh-bg-card);border-radius:16px;padding:14px 16px;box-sizing:border-box}
+.evx-scroll{overflow-x:auto}
+.evx-mx{border-collapse:separate;border-spacing:3px;font-size:13px;margin:0 auto}
+.evx-mx th{font-weight:600;font-size:12px;color:var(--kh-text-secondary);padding:4px;text-align:center;vertical-align:bottom;width:64px;line-height:1.3}
+.evx-mx th.sec,.evx-mx td.sec{position:sticky;left:0;background:var(--kh-bg-card);text-align:left;font-weight:700;color:var(--kh-text-primary);white-space:nowrap;padding-right:12px}
+.evx-mx td{text-align:center;height:30px;width:64px;border-radius:7px;background:var(--kh-bg);font-weight:800;font-size:15px}
+.evx-mx td.p{background:var(--kh-up-dim);color:var(--kh-up)}.evx-mx td.m{background:var(--kh-down-dim);color:var(--kh-down)}
+.evx-mx td.pm{color:var(--kh-text-secondary);font-size:12px}
+.evx-mx td.p2{color:var(--kh-up);opacity:.55;font-weight:600;font-size:13px}.evx-mx td.m2{color:var(--kh-down);opacity:.55;font-weight:600;font-size:13px}
+.evx-mx td.pm2{color:var(--kh-text-secondary);font-weight:600;font-size:12px}
+.evx-mx a{color:inherit;text-decoration:none}
+.evx-leg{font-size:12.5px;color:var(--kh-text-secondary);margin-top:6px;text-align:center}
+.evx-grid{display:grid;grid-template-columns:1fr;gap:14px}
+.evx-ax{background:var(--kh-bg-card);border-radius:16px;padding:16px 18px;scroll-margin-top:16px}
+.evx-ax h3{margin:0 0 10px;font-size:17px;font-weight:800}
+.evx-two{display:grid;grid-template-columns:1fr;gap:10px}
+.evx-side{background:var(--kh-bg);border-radius:12px;padding:12px 12px 10px}
+.evx-side .ev{font-size:14.5px;font-weight:800;margin-bottom:8px}.evx-side .ev span{font-size:12px;font-weight:500;color:var(--kh-text-secondary);margin-left:6px}
+.evx-lab{font-size:12px;font-weight:700;margin:8px 0 4px}.evx-lab.g{color:var(--kh-up)}.evx-lab.b{color:var(--kh-down)}.evx-lab.c{color:var(--kh-text-secondary)}
+.evx-it{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:4px 0}
+.evx-chip{font-size:12.5px;font-weight:700;padding:2px 10px;border-radius:999px;white-space:nowrap}
+.evx-chip.g{background:var(--kh-up-dim);color:var(--kh-up)}.evx-chip.b{background:var(--kh-down-dim);color:var(--kh-down)}
+.evx-it .t{font-size:13.5px}.evx-it .s,.evx-ch .s{font-size:12px;color:var(--kh-text-secondary)}
+.evx-ch{margin:5px 0;font-size:12.5px;line-height:1.45}.evx-ch .via{color:var(--kh-text-secondary)}.evx-ch .to{font-weight:700}
+.evx-ch .to.g{color:var(--kh-up)}.evx-ch .to.b{color:var(--kh-down)}.evx-ch a.lk{color:var(--kh-accent);text-decoration:none;font-size:12px;margin-left:4px}
+.evx-note{margin-top:8px;font-size:12.5px;color:var(--kh-text-secondary)}
+.evx-side details{margin-top:6px;font-size:12px}.evx-side summary{cursor:pointer;color:var(--kh-text-secondary)}.evx-side details a{color:var(--kh-accent)}
+.evx-none{font-size:12.5px;color:var(--kh-text-secondary)}
+@media (min-width:641px){.evx-two.both{grid-template-columns:1fr 1fr}}
+@media (min-width:1100px){.evx-grid{grid-template-columns:repeat(2,minmax(0,560px));justify-content:center}}
