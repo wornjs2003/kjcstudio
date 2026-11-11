@@ -2666,6 +2666,9 @@ watch({ url: () => '/api/kis/stock-sectors', onChange: loadSectors, key: 'compan
 loadSectors();
 
 function paintRows(priceMap) {
+  /* 칩 · 시장을 바꾸면 띠도 그 목록으로 — 전에는 안내 줄을 다시 쓸 때만 그려 앞 칩의 띠가 남았다(qa 11-11 돌려보냄) */
+  paintPreSectors();
+  paintChipSectors();
   const list = rowList();
   /* 고른 시장의 목록이 비었다 — 서버가 아직 그 시장을 안 준다. 빈 표로 두면 고장처럼 보인다 */
   if (!list.length && universe) {
