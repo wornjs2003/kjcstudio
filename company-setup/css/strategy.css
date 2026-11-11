@@ -128,6 +128,8 @@
 .dt .dt-cap { margin: 0 0 8px; }
 .dt .dt-foot { margin: 8px 0 0; }
 .dt .dt-box { height: 640px; overflow: auto; }
+.dt .dt-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; color: var(--kh-text-secondary); }   /* 쌓인 날 없음 — 빈 칸 가운데 크게 */
+.dt .dt-empty b { font-size: 20px; color: var(--kh-text-primary); }
 .dt table.dt-tb { width: 100%; border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
 .dt .dt-tb th { position: sticky; top: 0; z-index: 1; background: var(--kh-bg-card); font-size: 12px; font-weight: 600; color: var(--kh-text-muted); }
 .dt .dt-tb tr.dt-t2 th { top: 26px; }
