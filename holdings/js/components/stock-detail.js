@@ -183,9 +183,9 @@ export function mountStockDetail(host, { view, onOne, onExpect } = {}) {
     expect() { return expect; },
     setCode(next) {
       if (!next || next === code) return;
+      if (expect && onExpect) onExpect(code, null);   // 떠나는 종목의 예상가를 지운다 — 새 종목 코드로 지우면 옛 종목 값이 받는 쪽(home _expect)에 남아, 그 종목으로 돌아왔을 때 장중에도 「예상」 이 떴다(2026-11-11 재권님 「예상금액은 남아있는데」)
       code = next;
       buyPct = null;
-      if (expect && onExpect) onExpect(next, null);
       expect = null;
       one = null;
       missing = false;
