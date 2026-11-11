@@ -3060,10 +3060,13 @@ def _fo_snap_k200(cfg):
     strikes = sorted(s for s, _ in puts)
     atm = min(range(len(strikes)), key=lambda i: abs(strikes[i] - k200))
     pick = strikes[max(0, atm - FO_SNAP_K200_SIDE): atm + FO_SNAP_K200_SIDE + 1]
+    near = sorted(sorted(pick, key=lambda s: abs(s - k200))[:FO_SNAP_PUTS])   # 줄로 낼 행사가 — 종목 칸과 같은 수
     sums = {"C": [0, 0, 0], "P": [0, 0, 0]}                 # 거래량 · 미결제 · 못 받은 줄
+    lines = {}                                              # 콜 · 풋 줄 — 재권님 「코스피200은 코스피로 나누고 여기도 적용해줘」(11-10)
     for kind in ("C", "P"):
         codes = dict(opts[(kind, month)])
         got = dict(zip([s for s in pick if s in codes], _fo_quotes(cfg, "O", [codes[s] for s in pick if s in codes])))
+        lines[kind] = [dict(got.get(s, (None, None))[0] or {"code": codes.get(s), "price": None}, strike=s) for s in near]
         for s in pick:
             row, _ = got.get(s, (None, None))
             if row and row["volume"] is not None and row["openInterest"] is not None:
@@ -3072,7 +3075,17 @@ def _fo_snap_k200(cfg):
             else:
                 sums[kind][2] += 1
     ratio = lambda p, c: round(p / c, 3) if c else None
-    return {"index": k200, "month": month, "strikes": [pick[0], pick[-1]], "strikeCount": len(pick),
+    fut = None                                              # 지수선물 최근월물 — 석 달마다라 옵션 월물과 다를 수 있다(11-10 A01612)
+    for line in _fo_master_text(FO_IDX_MASTER).split("\n"):
+        f = line.rstrip("\r").split("|")
+        m = re.search(r"^F (\d{6})$", f[3].strip()) if len(f) > 7 and f[0] == "1" and f[7].strip() == "2001" else None
+        if m and m.group(1) >= datetime.now(KST).strftime("%Y%m") and (fut is None or m.group(1) < fut[0]):
+            fut = (m.group(1), f[1].strip())
+    if fut:
+        row, _ = _fo_quote(cfg, "F", fut[1])
+        fut = dict(row, month=fut[0]) if row else None
+    return {"index": k200, "futures": fut, "calls": lines["C"], "puts": lines["P"], "optionMonth": month,
+            "month": month, "strikes": [pick[0], pick[-1]], "strikeCount": len(pick),
             "callVolume": sums["C"][0], "putVolume": sums["P"][0], "callOI": sums["C"][1], "putOI": sums["P"][1],
             "putCallVolume": ratio(sums["P"][0], sums["C"][0]), "putCallOI": ratio(sums["P"][1], sums["C"][1]),
             "missing": sums["C"][2] + sums["P"][2]}
@@ -3639,9 +3652,8 @@ def fetch_quotes_multi(cfg, codes, max_age=None):
     if not need:
         _stats["cache_hits"] += 1
         res = {c: dict(r) for c, r in got.items()}
-        if not market_hours.auction(sys.modules[__name__]):   # 아래 끝자리와 같다 — 동시호가 때 받아 둔 예상가를 그 뒤에 안 낸다
-            for r in res.values():
-                r.pop("expect", None)
+        if not market_hours.auction(sys.modules[__name__]):   # 아래 끝자리와 같다 — 동시호가 뒤에는 남겨 두는 몇 분(_expect_held)만
+            _expect_after(res)
         return res, {}
     codes = need
     out, errors = {}, {}
@@ -3722,9 +3734,8 @@ def fetch_quotes_multi(cfg, codes, max_age=None):
     _expect_actual(out, div)
     res = {c: dict(r) for c, r in got.items()}
     res.update({c: dict(r) for c, r in out.items()})
-    if not market_hours.auction(sys.modules[__name__]):       # 동시호가 때 받아 둔 줄을 그 뒤에 내줄 때는 예상가를 뗀다
-        for r in res.values():
-            r.pop("expect", None)
+    if not market_hours.auction(sys.modules[__name__]):       # 동시호가 뒤에는 예상가를 뗀다 — 정규장을 연 뒤 몇 분만 마지막 값(_expect_held)
+        _expect_after(res)
     return res, errors
 
 
@@ -5095,9 +5106,8 @@ def fetch_asking(cfg, code):
     """
     cached = _ttl_get(_asking_cache, code, ASKING_TTL)
     if cached is not None:
-        ex = cached.get("expect")
-        if ex and market_hours.auction(sys.modules[__name__]) != ex.get("kind"):
-            return dict(cached, expect=None)   # 09:00 · 15:30 이 지나면 받아 둔 예상가를 바로 뗀다 — 시가 · 종가로(재권님 「시가가 되면 바로 시가로」)
+        if not market_hours.auction(sys.modules[__name__]):
+            return dict(cached, expect=_expect_held(code))   # 15:30 이 지나면 바로 뗀다 · 09:00 뒤는 몇 분 마지막 값(재권님 11-11 「본장 시작하면 5분후에 안보이도록」)
         return cached
     data = kis_get(
         cfg,
@@ -5122,7 +5132,7 @@ def fetch_asking(cfg, code):
         "bid": {"total": tot_bid, "levels": bid},
         # 사자 비중. 50 보다 크면 사려는 주문이 더 쌓여 있다는 뜻이다
         "buyPct": round(tot_bid / both * 100, 1) if both else None,
-        "expect": _preopen_expect(cfg, code, data),
+        "expect": _preopen_expect(cfg, code, data) or _expect_held(code),
     }
     _asking_cache[code] = (time.time(), out)
     return out
@@ -5202,12 +5212,42 @@ def _exp_codes(day, kind):
     return _exp_seen[key]
 
 
+_expect_last = {}         # code → (day, 동시호가 마지막 예상가) — 정규장을 연 뒤 몇 분 더 내는 값(_expect_held) · 서버마다 메모리
+
+
+def _expect_held(code):
+    """동시호가가 끝난 뒤에도 남겨 두는 예상가 — market_hours.expect_hold 가 "open" 인 동안(정규장 연 뒤 EXPECT_HOLD_MIN 분)
+    장 전 동시호가에 마지막으로 받은 값 그대로 · 그 밖은 None (2026-11-11 재권님 「예상 가격은 본장 시작하면 5분후에 안보이도록」).
+    메모리라 그 몇 분 사이에 서버가 다시 뜨면 남길 값이 없다 — 그때는 바로 시가로."""
+    if market_hours.auction(sys.modules[__name__]):
+        return None                          # 동시호가 중에는 새로 받은 값을 쓴다
+    kind = market_hours.expect_hold(sys.modules[__name__])
+    hit = _expect_last.get(code)
+    if not kind or not hit or hit[0] != datetime.now(KST).strftime("%Y%m%d") or hit[1].get("kind") != kind:
+        return None
+    return dict(hit[1])
+
+
+def _expect_after(rows):
+    """동시호가가 아닐 때 시세 줄들의 예상가 — 남겨 두는 몇 분이면 마지막 값 · 아니면 뗀다."""
+    for c, r in rows.items():
+        held = _expect_held(c)
+        if held:
+            r["expect"] = held
+        else:
+            r.pop("expect", None)
+
+
 def _expect_note(rows):
-    """{code: expect} 를 expect_log 에 — 종목마다 그 분의 마지막 값으로 덮는다. 쓰기 서버가 아니면 아무것도 안 한다."""
-    if not rows or not marketdb.writable():
-        return
+    """{code: expect} 를 expect_log 에 — 종목마다 그 분의 마지막 값으로 덮는다. 쓰기 서버가 아니면 아무것도 안 한다.
+    마지막 값은 어느 서버든 메모리에 쥔다(_expect_last — 정규장 연 뒤 몇 분 더 낸다)."""
     now = datetime.now(KST)
     day, hhmm = now.strftime("%Y%m%d"), now.strftime("%H%M")
+    for code, ex in (rows or {}).items():
+        if ex and ex.get("price"):
+            _expect_last[code] = (day, dict(ex))
+    if not rows or not marketdb.writable():
+        return
     put = []
     for code, ex in rows.items():
         if ex and ex.get("price"):
@@ -10041,7 +10081,8 @@ class Handler(SimpleHTTPRequestHandler):
                                  "meta": {"cacheTtl": ttl, "ttlOpen": FO_SNAP_TTL, "ttlClosed": FO_SNAP_TTL_CLOSED,
                                           "note": "KIS 현재가 조회 · 누가 물을 때만 받고 cacheTtl 초 동안 같은 값 · at = 받은 시각 · "
                                                   "futures 는 주식선물 최근월물(month) · calls · puts 는 optionMonth 콜 · 풋을 따로 — 각각 선물 현재가에 가까운 행사가 · "
-                                                  "kospi200 비율은 그 월물 등가격 둘레 strikes 범위(strikeCount 줄)의 콜 · 풋 합 — 시장 전체가 아님 · "
+                                                  "kospi200 은 futures(지수선물 최근월물) · calls · puts(지수에 가까운 행사가 줄 · 종목 칸과 같은 모양) · "
+                                                  "비율은 그 월물 등가격 둘레 strikes 범위(strikeCount 줄)의 콜 · 풋 합 — 시장 전체가 아님 · "
                                                   "iv 는 KIS 내재변동성 칸 그대로(단위 미확인 · 종목 옵션 0.7 꼴) · price 는 마지막 체결가라 그날 거래 0 이면 전날 값 · "
                                                   "missing = 못 받은 줄 수 · null = 못 받음(0 이 아님)"}})
                 return
