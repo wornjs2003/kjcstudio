@@ -1502,6 +1502,16 @@ const SORTS = {
             : preMeta.phase === 'before' ? `프리장은 ${preMeta.preOpen} 부터 · 지금은 앞 판이 없습니다`
             : preMeta.phase === 'live' ? `아직 오늘 판이 없습니다 — 서버가 ${Math.round((preMeta.cacheTtl || 180) / 60)}분마다 짓습니다`
             : '프리장 판 없음 — 그 시각 짓지 않았거나 못 남겼습니다') },     // 까닭을 단정하지 않는다(qa 덧 11-05 · 「못 쟀으면 못 쟀다」)
+  /* 초반상승 — 정규장 첫 5분봉(09:00~09:05)이 시가보다 일정 % 이상 올라 끝난 종목 · 시가총액 문턱 이상 · 그 상승률 큰 순 (2026-11-11 재권님
+     「아침 9시5분 기준으로 양봉이 2% 이상이 되고 시가총액이 5천억 이상인 종목들 소팅해서 실시간 순위에 초반상승 이라고 만들어서 넣어줘」 → 「가」).
+     고르는 것 · 문턱 값은 서버다(server/open_rise.py · /api/kis/open-rise) — 화면은 받은 차례 그대로 그리고 글의 숫자도 meta 에서 읽는다 */
+  rise: { label: '초반상승', list: () => riseRows,
+          head: '첫 5분봉', show: (code) => riseCell(code), html: true,
+          note: () => riseNote(),
+          empty: () => (!riseMeta ? '불러오는 중'
+            : riseMeta.phase === 'before' ? `${riseMeta.barTo} 첫 5분봉이 끝나면 고릅니다`
+            : riseMeta.pending ? `첫 5분봉을 다 받기 기다리는 중 — ${riseMeta.pending}종목`
+            : '첫 5분봉이 문턱 넘게 오른 종목이 없습니다') },
   /* VI·급등 — 오늘 정규장에 상승 VI 가 걸렸거나 +20% 를 넘은 종목, 최근 것이 위 (2026-11-06 재권님 「이거다 넣으면 좋을거 같은데」 →
      자리 「실시간 순위에 칸 추가해서 넣어줘」). 세는 것 · 남기는 것은 서버다(server/intraday_alerts.py · /api/alerts/today) —
      화면은 종목마다 한 줄로 묶어 가장 늦은 일을 적는다. 시세 칸은 다른 칩처럼 보이는 줄만 받는다 */
@@ -1546,6 +1556,12 @@ const SORT_TIPS = {
   pre: `코스피 200 · 코스닥 150 종목 중 넥스트레이드 프리마켓(08:00 ~ 08:50) 거래대금 상위 안에서 프로그램 순매수가 큰 순\n08:50 ~ 09:00 에 그날 판으로 굳힙니다 · ${CAP_MIN_TXT}`,
   vi: `오늘 정규장에 상승 VI 가 걸렸거나(VI 는 ${CAP_MIN_TXT}) 전일 대비 +20% 를 넘은 종목, 최근 것이 위`,
   bb: `바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · ${CAP_MIN_TXT} · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록`,
+  get rise() {      // 문턱 숫자는 서버 meta — 받기 전에는 숫자 없이
+    const m = riseMeta || {};
+    const th = m.risePct != null ? ` ${m.risePct}% 이상` : '';
+    const cap = m.minCapEok != null ? `시가총액 ${fmtMoneyKr(m.minCapEok)} 이상만` : '';
+    return `코스피 200 · 코스닥 150 종목 중 정규장 첫 5분봉(${m.barFrom || '09:00'} ~ ${m.barTo || '09:05'})이 시가보다${th} 올라 끝난 종목, 그 상승률이 큰 순\n그 봉을 다 받은 뒤에 고르고 그날 판으로 굳습니다${cap ? ` · ${cap}` : ''}`;
+  },
   ssts: '코스피200 · 코스닥150 종목의 공매도 거래대금 · 비율(공매도 대금 ÷ 전체 거래대금) 순\n아래 줄에서 금액 · 비율 · 1일 · 5일 · 한달 · 1년 · 장중 값은 없고 거래소가 장 뒤에 냅니다',
 };
 const sortTipAttr = (id) => (SORT_TIPS[id] ? ` data-tip="${escT(SORT_TIPS[id])}" data-tip-h="${escT(SORTS[id].label)}"` : '');
@@ -1748,6 +1764,36 @@ async function loadPre() {
   } catch { /* 못 받으면 들고 있던 것 그대로 */ }
   if (sortBy === 'pre') { paintRows(rowPrices); paintSortNote(); }
   if (rankModal && rankModalSort === 'pre') { paintRankModal(); paintRankModalNote(); }
+}
+
+/* 「초반상승」 칩 — 서버가 준 줄 그대로. 못 받았으면 null(빈 목록과 가른다) */
+let riseRows = null, riseMeta = null;
+const riseOf = (code) => (riseRows || []).find((r) => r.code === code) || null;
+/* 첫 5분봉 상승률(시가 대비 · 오름 빨강) · 아랫줄 시가 → 09:05 가격 */
+function riseCell(code) {
+  const r = riseOf(code);
+  if (!r) return '—';
+  return `<div style="white-space:nowrap;font-size:12px;line-height:1.3"><span class="${dirClass(r.pct)}">+${r.pct.toFixed(2)}%</span></div>` +
+    `<div style="white-space:nowrap;font-size:11px;line-height:1.3" class="kh-mut">${fmtPriceOf(code, r.open)} → ${fmtPriceOf(code, r.close)}</div>`;
+}
+function riseNote() {
+  const m = riseMeta || {};
+  const bits = [];
+  if (m.day) bits.push(`${m.day.slice(4, 6)}.${m.day.slice(6)} 첫 5분봉`);
+  if (m.risePct != null) bits.push(`시가 대비 +${m.risePct}% 이상`);
+  if (m.pending) bits.push(`다 받기 기다림 ${m.pending}`);
+  else if (m.phase === 'done') bits.push('그날 판 고정');
+  return bits.join(' · ');
+}
+async function loadRise() {
+  try {
+    const r = await apiFetch('/api/kis/open-rise', { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    if (j && j.meta) riseMeta = j.meta;
+    if (j && j.ok && Array.isArray(j.data)) riseRows = j.data;
+  } catch { /* 못 받으면 들고 있던 것 그대로 */ }
+  if (sortBy === 'rise') { paintRows(rowPrices); paintSortNote(); }
+  if (rankModal && rankModalSort === 'rise') { paintRankModal(); paintRankModalNote(); }
 }
 
 /* 「매수」 칩 목록 — 서버가 준 줄 그대로. 못 받았으면 null(빈 목록과 가른다) */
@@ -2039,6 +2085,7 @@ function setupSorts() {
     paintRows(rowPrices);
     if (sortBy === 'buy') loadJoint();
     if (sortBy === 'pre') loadPre();
+    if (sortBy === 'rise') loadRise();
     if (sortBy === 'vi') loadVi();
     if (sortBy === 'bb') loadBb();
     if (sortBy === 'ssts') loadSsts();
@@ -2377,7 +2424,7 @@ function paintRankModal() {
       <td class="l"><span class="kh-nm">${iconHtml(s)}<b data-co="${s.code}">${escT(s.name)}</b>${th ? themeBadge(s.code) : ''}</span></td>
       <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, sid)) : '···'}</td>
       <td class="kh-num ${p ? dirClass(pctOf(p, sid)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, sid)) : '—'}</td>
-      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'vi' ? viCell(s.code) : sid === 'bb' ? bbCell(s.code) : sid === 'ssts' ? sstsCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
+      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'rise' ? riseCell(s.code) : sid === 'vi' ? viCell(s.code) : sid === 'bb' ? bbCell(s.code) : sid === 'ssts' ? sstsCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
       <td class="kh-num">${th && themeBig !== FLOW ? themeCap(s.code) : showCap(s.code)}</td>
       <td class="kh-num">${th && themeBig === FLOW ? themeMetric(s.code) : (p ? fmtShareCount(p.volume) : '···')}</td>
       <td class="kh-num">${volRatioCell(s.code)}</td>
@@ -2408,7 +2455,7 @@ function paintRankModal() {
       </colgroup>
       <thead><tr>
         <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
-        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'vi' ? '때 · 무엇' : sid === 'bb' ? '바닥 봉' : sid === 'ssts' ? '공매도' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
+        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'rise' ? '첫 5분봉' : sid === 'vi' ? '때 · 무엇' : sid === 'bb' ? '바닥 봉' : sid === 'ssts' ? '공매도' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
       </tr></thead>
       <tbody>${rows || empty}</tbody>
     </table>
@@ -2467,7 +2514,7 @@ function openRankModal() {
       /* 모달에서 고른 기준은 첫 화면 순위표와 **따로 둔다** — 모달에서
          거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면 무엇을 눌러
          그렇게 됐는지 알 수 없다 (2026-09-22). */
-      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'vi') loadVi(); if (id === 'bb') loadBb(); if (id === 'ssts') loadSsts(); loadVolRatio(); },
+      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'rise') loadRise(); if (id === 'vi') loadVi(); if (id === 'bb') loadBb(); if (id === 'ssts') loadSsts(); loadVolRatio(); },
     },
     onClose() { rankModal = null; if (volWatch) { volWatch.stop(); volWatch = null; } },
   });
@@ -2494,7 +2541,7 @@ function paintRankModalNote() {
   if (!rankModal) return;
   const fresh = freshNote();
   /* 「매수」 탭은 갱신 주기만 짧게 — 길면 탭 글자가 세로로 눌렸다(11-05 8772) */
-  const base = rankModalMarket === 'THEME' ? RANK_TABS_NOTE : rankModalSort === 'buy' ? jointNote(true) : rankModalSort === 'pre' ? preNote() : rankModalSort === 'vi' ? viNote() : rankModalSort === 'bb' ? bbNote() : rankModalSort === 'ssts' ? sstsNote() : RANK_TABS_NOTE;
+  const base = rankModalMarket === 'THEME' ? RANK_TABS_NOTE : rankModalSort === 'buy' ? jointNote(true) : rankModalSort === 'pre' ? preNote() : rankModalSort === 'rise' ? riseNote() : rankModalSort === 'vi' ? viNote() : rankModalSort === 'bb' ? bbNote() : rankModalSort === 'ssts' ? sstsNote() : RANK_TABS_NOTE;
   rankModal.head.setTabsNote(fresh ? `${base} · ${fresh.text}` : base);
 }
 
@@ -2520,6 +2567,7 @@ async function loadSectors() {
 const JOINT_FALLBACK_MS = 300000;     // 「매수」 칩 — 서버 값마저 못 받았을 때만
 watch({ url: () => (sortBy === 'buy' ? '/api/kis/joint-buy' : null), onChange: loadJoint, key: 'kis_proxy.INVESTOR_TOP_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => (sortBy === 'pre' ? '/api/kis/pre-flow' : null), onChange: loadPre, key: 'pre_flow.FLOW_TTL', fallbackMs: JOINT_FALLBACK_MS });
+watch({ url: () => (sortBy === 'rise' || (rankModal && rankModalSort === 'rise') ? '/api/kis/open-rise' : null), onChange: loadRise, key: 'open_rise.CACHE_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => (sortBy === 'vi' || (rankModal && rankModalSort === 'vi') ? '/api/alerts/today' : null), onChange: loadVi, key: null, fallbackMs: VI_FALLBACK_MS });
 watch({ url: () => (sortBy === 'bb' || (rankModal && rankModalSort === 'bb') ? '/api/signals/today' : null), onChange: loadBb, key: null, fallbackMs: BB_FALLBACK_MS });
 sstsWatch = watch({ url: () => (sortBy === 'ssts' || (rankModal && rankModalSort === 'ssts') ? sstsUrl() : null), onChange: loadSsts, key: null, fallbackMs: SSTS_FALLBACK_MS });

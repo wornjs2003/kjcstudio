@@ -78,6 +78,7 @@ import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스�
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
 import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 · 색 = 등락률 · /api/kis/heatmap(2026-10-27 · server/heatmap.py)
 import flow_board       # 수급 정리판 — 투자자 갈래별 순매수(오늘 · 날마다 · 상위 종목)를 한 주소로 · /api/kis/flow-board(2026-11-04 · server/flow_board.py)
+import open_rise        # 초반상승 — 정규장 첫 5분봉이 시가보다 오른 종목 · 실시간 순위 「초반상승」 칩 · /api/kis/open-rise(2026-11-11 · server/open_rise.py)
 import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 · /api/kis/pre-flow(2026-11-05 · server/pre_flow.py)
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
 import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
@@ -6445,6 +6446,25 @@ def _minutes_mark_done(code, ends):
               _minutes_trade_day() + "|" + ",".join(str(x) for x in sorted(done)))
 
 
+def _minutes_fresh_upto(code):
+    """그 거래일에 「지금 칸」(지금까지 30분)을 마지막으로 받은 **분**(`sync_meta` 의 `m5upto:<코드>`) — 없으면 None.
+
+    그 분 앞에서 끝난 5분봉은 다 끝난 뒤 받은 값이다. 「전날 같은 시각 대비 거래량 %」 가 이것으로 덜 찬 봉을 뺀다
+    (2026-11-11 qa 돌려보냄 — 봉 끝 시각만 보고 세어 09:15 → 09:19 사이 하이닉스가 36% → 50% · 재권님 「가」)."""
+    v = _meta_get("m5upto:%s" % code) or ""
+    day, _, m = v.partition("|")
+    if day != _minutes_trade_day() or not m.isdigit():
+        return None
+    return int(m)
+
+
+def _minutes_mark_fresh(code, minute):
+    """「지금 칸」 을 받아 **저장한 뒤** 부른다 — 받기 전 분을 적는다(받는 데 몇 초 걸려도 그 뒤 분을 적지 않게). 줄지 않는다."""
+    old = _minutes_fresh_upto(code)
+    if old is None or minute > old:
+        _meta_set("m5upto:%s" % code, "%s|%d" % (_minutes_trade_day(), minute))
+
+
 def _keep_covered_slots(bars5, cover, now_m):
     """받은 범위에 다섯 분이 다 든 5분봉만 남긴다 — 지금 자라는 칸은 둔다.
 
@@ -7447,6 +7467,63 @@ def read_candles(code, period, limit):
     return [dict(r) for r in reversed(rows)]   # 차트는 과거 -> 최신 순
 
 
+VOL_PREV_FROM, VOL_PREV_TO = "0900", "1530"   # 정규장 5분봉(시작 시각) — 15:30 봉이 종가 단일가다. 시세의 누적 거래량(정규장)과 같은 범위
+
+
+def vol_prev_day(code, today):
+    """전날(오늘 앞의 마지막 거래일) 정규장 5분봉 거래량 — 「전날 같은 시각 대비 거래량 %」 의 분모 재료 (2026-11-10 재권님 「나」 · 「가」).
+
+    **DB 에 쌓인 봉만 읽는다 — KIS 를 새로 부르지 않는다.** 그 종목의 전날 5분봉이 없으면 None(「못 받음」 — 0 이 아니다).
+    화면이 지금 시각까지 더해 같은 시각 누적을 센다 — 서버는 하루 한 벌만 준다(화면이 다시 묻는 주기가 없다)."""
+    with _db_lock, db_conn() as conn:
+        day = conn.execute(
+            "SELECT MAX(substr(ts, 1, 8)) FROM candles WHERE code = ? AND period = '5m' AND substr(ts, 1, 8) < ?",
+            (code, today)).fetchone()[0]
+        if not day:
+            return None
+        rows = conn.execute(
+            """SELECT substr(ts, 9, 4) AS hm, volume FROM candles
+                 WHERE code = ? AND period = '5m' AND substr(ts, 1, 8) = ? AND substr(ts, 9, 4) BETWEEN ? AND ?
+                 ORDER BY ts""", (code, day, VOL_PREV_FROM, VOL_PREV_TO)).fetchall()
+    bars = [[r["hm"], r["volume"]] for r in rows if r["volume"] is not None]
+    if not bars:
+        return None
+    return {"day": day, "from": VOL_PREV_FROM, "to": VOL_PREV_TO, "bars": bars, "total": sum(v for _, v in bars)}
+
+
+def vol_same_time(code, now=None):
+    """오늘 · 전날 정규장 거래량을 **같은 시각까지** 같은 자리(DB 5분봉 09:00~15:30)에서 센다 — 「전날 같은 시각 대비 %」 (2026-11-10).
+
+    분자 · 분모를 같은 봉에서 센다 — 처음 판은 분자를 머리줄 누적 거래량으로 셌는데 그 값이 15:30 에 정규장에서 통합(넥스트레이드 포함)으로 바뀌고
+    장 뒤 거래가 분자에만 쌓여 마감 뒤 79% 가 122% 로 뛰었다(qa 15:45 돌려보냄). 오늘 봉은 **다 끝난 봉만** — 지금 도는 봉은 덜 찼다.
+    전날 봉이 없으면 None(「못 받음」) · 오늘 끝난 봉이 아직 없으면 today · upto 가 None(장 전 · 그 종목 봉이 아직 안 쌓임)."""
+    now = now or datetime.now(KST)
+    today = now.strftime("%Y%m%d")
+    prev = vol_prev_day(code, today)
+    if prev is None:
+        return None
+    now_min = now.hour * 60 + now.minute
+    # 봉 끝이 지났어도 그 뒤에 다시 받지 않았으면 덜 찬 값이다 — 「지금 칸」 을 마지막으로 받은 분까지만 센다(_minutes_fresh_upto).
+    # 그 기록이 없으면(오늘 아직 안 받음 · 기록 전 서버) 끝난 봉도 없는 것으로 본다 — 덜 찬 값을 내느니 「아직」 이다
+    fresh = _minutes_fresh_upto(code)
+    if today != _minutes_trade_day() or fresh is None:
+        now_min = -1
+    else:
+        now_min = min(now_min, fresh)
+    with _db_lock, db_conn() as conn:
+        rows = conn.execute(
+            """SELECT substr(ts, 9, 4) AS hm, volume FROM candles
+                 WHERE code = ? AND period = '5m' AND substr(ts, 1, 8) = ? AND substr(ts, 9, 4) BETWEEN ? AND ?
+                 ORDER BY ts""", (code, today, VOL_PREV_FROM, VOL_PREV_TO)).fetchall()
+    done = [(r["hm"], r["volume"]) for r in rows
+            if r["volume"] is not None and int(r["hm"][:2]) * 60 + int(r["hm"][2:]) + 5 <= now_min]
+    upto = done[-1][0] if done else None
+    return {"day": today, "prevDay": prev["day"], "from": VOL_PREV_FROM, "to": VOL_PREV_TO, "upto": upto,
+            "today": sum(v for _, v in done) if done else None,
+            "prev": sum(v for hm, v in prev["bars"] if hm <= upto) if upto else None,
+            "prevTotal": prev["total"]}
+
+
 def _view_limit(code, period, limit):
     """`view_days` 가 있는 기간이면 최근 그 날짜 수만큼의 봉 수로 limit 를 넓힌다. 줄이지는 않는다.
 
@@ -8252,6 +8329,7 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
             # (2026-09-17). 거래가 잦은 종목만 자주 열려 저절로 채워지고
             # 있었던 것이라, 종목마다 봉 개수가 크게 갈렸다.
             cover = None
+            fresh_m = _minutes_now_min()             # 받기 전 분 — 이 분 앞에서 끝난 봉은 다 찬 값으로 받는다
             if _minutes_need_day(code, period, rows, gap_check):
                 raw, cover = fetch_minutes_day(cfg, code)
                 _meta_set("dayfill:%s:%s" % (code, period), _minutes_trade_day())
@@ -8284,6 +8362,8 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
             if period == "5m" and cover is not None:
                 bars = _keep_covered_slots(bars, cover, _minutes_now_min())
         fetched = save_candles(code, period, bars)
+        if not conf["kis"] and period == "5m" and cover and any(hi >= fresh_m for _, hi in cover):
+            _minutes_mark_fresh(code, fresh_m)       # 「지금 칸」 까지 받아 저장했다 — vol_same_time 이 이 분까지만 센다
         _meta_set(mkey, time.time())
         if fetched:
             rows = read_candles(code, period, _view_limit(code, period, limit))
@@ -10154,6 +10234,22 @@ class Handler(SimpleHTTPRequestHandler):
                 })
                 return
 
+            if route == "open-rise":
+                # 초반상승 — 정규장 첫 5분봉(09:00~09:05)이 시가보다 RISE_PCT % 이상 올라 끝난 종목 (2026-11-11 · server/open_rise.py) · KIS 안 부름
+                d, at = open_rise.fetch(sys.modules[__name__])
+                bar_m = int(open_rise.BAR_HM[:2]) * 60 + int(open_rise.BAR_HM[2:])
+                self._send_json({
+                    "ok": True, "data": d["rows"],
+                    "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S"),
+                             "day": d["day"], "phase": d["phase"], "candidates": d["candidates"], "pending": d["pending"],
+                             "noBar": d["noBar"], "capMissing": d["capMissing"],
+                             "risePct": open_rise.RISE_PCT, "minCapEok": open_rise.MIN_CAP_EOK,
+                             "barFrom": "%02d:%02d" % divmod(bar_m, 60), "barTo": "%02d:%02d" % divmod(bar_m + 5, 60),
+                             "note": "DB 에 쌓인 5분봉 — 정규장 첫 봉 (종가 − 시가) ÷ 시가 · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
+                             "cacheTtl": open_rise.CACHE_TTL},
+                })
+                return
+
             if route == "joint-buy":
                 data, at = fetch_joint_buy(cfg)
                 d = data or {}
@@ -10440,6 +10536,18 @@ class Handler(SimpleHTTPRequestHandler):
                         "cacheTtl": INVESTOR_EST_TTL,
                     },
                 })
+                return
+
+            # 전날 정규장 5분봉 거래량 — 차트 위 「전날 같은 시각 대비 거래량 %」(2026-11-10 · vol_prev_day)
+            if route == "vol-prev":
+                code = (qs.get("code") or [""])[0].strip()
+                if not (code.isdigit() and len(code) == 6):
+                    self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
+                    return
+                data = vol_same_time(code)
+                self._send_json({"ok": data is not None, "data": data,
+                                 "meta": {"code": code, "unit": "주", "source": "DB 에 쌓인 5분봉 — 오늘 · 전날 정규장 같은 시각까지(KIS 를 새로 안 부름)",
+                                          "note": None if data else "전날 5분봉이 아직 안 쌓였습니다"}})
                 return
 
             # 최근 체결 30줄 (2026-09-21 지시 — A 종목 화면)
