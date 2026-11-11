@@ -8362,7 +8362,8 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
             if period == "5m" and cover is not None:
                 bars = _keep_covered_slots(bars, cover, _minutes_now_min())
         fetched = save_candles(code, period, bars)
-        if not conf["kis"] and period == "5m" and cover and any(hi >= fresh_m for _, hi in cover):
+        # 20:00 뒤 · 주말에 받으면 첫 칸이 하루 끝(MINUTE_DAY_END)에서 끝난다 — 그때도 그날 봉은 다 끝난 뒤 받은 것이라 적는다(qa 11-11 물음)
+        if not conf["kis"] and period == "5m" and cover and any(hi >= min(fresh_m, MINUTE_DAY_END) for _, hi in cover):
             _minutes_mark_fresh(code, fresh_m)       # 「지금 칸」 까지 받아 저장했다 — vol_same_time 이 이 분까지만 센다
         _meta_set(mkey, time.time())
         if fetched:
@@ -10235,16 +10236,15 @@ class Handler(SimpleHTTPRequestHandler):
                 return
 
             if route == "open-rise":
-                # 초반상승 — 정규장 첫 5분봉(09:00~09:05)이 시가보다 RISE_PCT % 이상 올라 끝난 종목 (2026-11-11 · server/open_rise.py) · KIS 안 부름
+                # 초반상승 — 정규장 첫 5분봉(여는 시각부터 5분 · market_hours)이 시가보다 RISE_PCT % 이상 올라 끝난 종목 (2026-11-11 · server/open_rise.py) · KIS 안 부름
                 d, at = open_rise.fetch(sys.modules[__name__])
-                bar_m = int(open_rise.BAR_HM[:2]) * 60 + int(open_rise.BAR_HM[2:])
                 self._send_json({
                     "ok": True, "data": d["rows"],
                     "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S"),
                              "day": d["day"], "phase": d["phase"], "candidates": d["candidates"], "pending": d["pending"],
                              "noBar": d["noBar"], "capMissing": d["capMissing"],
                              "risePct": open_rise.RISE_PCT, "minCapEok": open_rise.MIN_CAP_EOK,
-                             "barFrom": "%02d:%02d" % divmod(bar_m, 60), "barTo": "%02d:%02d" % divmod(bar_m + 5, 60),
+                             "barFrom": d["barFrom"], "barTo": d["barTo"],
                              "note": "DB 에 쌓인 5분봉 — 정규장 첫 봉 (종가 − 시가) ÷ 시가 · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
                              "cacheTtl": open_rise.CACHE_TTL},
                 })
