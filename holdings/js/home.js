@@ -1557,7 +1557,7 @@ const SORTS = {
 const SORT_TIPS = {
   /* 관심 — 실제 차례를 그대로 적는다(rowList 의 filter 갈래 · 2026-11-11 재권님 「관심 에 종목버튼에 마우스 올리면 어떤 룰로 소팅되는지 설명 넣어줘」):
      순위 목록 차례(코스피 시가총액 순 → 코스닥 시가총액 순)에서 담은 것만 골라내고, 목록 밖에서 담은 종목은 담은 차례로 맨 뒤 */
-  fav: `하트로 담은 관심종목만 골라 봅니다\n차례 — ① 코스피 종목 시가총액 큰 순 ② 그다음 코스닥 종목 시가총액 큰 순 ③ 순위 목록(코스피 200 · 코스닥 150) 밖에서 담은 종목은 담은 차례대로 맨 뒤\n위 칩 묶음을 고르면 그 묶음만 · ${CAP_MIN_TXT}`,
+  fav: `하트로 담은 관심종목만 골라 봅니다\n차례 — ① 코스피 종목 시가총액 큰 순 ② 그다음 코스닥 종목 시가총액 큰 순 ③ 순위 목록(코스피 200 · 코스닥 150) 밖에서 담은 종목은 담은 차례대로 맨 뒤\n아래 묶음 칩을 고르면 그 묶음만(다시 누르면 전체) · ${CAP_MIN_TXT}\n함께 나오는 칩 줄(프리장 · 초반상승 · 겹침 · VI·급등 · 볼린저 · 공매도)은 관심과 따로 순위 목록 전체에서 고릅니다 — 칩마다 마우스를 올리면 고르는 기준이 뜹니다`,
   cap: '시가총액이 큰 순 — 위 코스피 · 코스닥으로 시장을 고릅니다',
   value: '오늘 거래대금이 큰 순',
   vol: '오늘 거래량이 큰 순',
@@ -1577,7 +1577,9 @@ const SORT_TIPS = {
   },
   ssts: '코스피200 · 코스닥150 종목의 공매도 거래대금 · 비율(공매도 대금 ÷ 전체 거래대금) 순\n아래 줄에서 금액 · 비율 · 1일 · 5일 · 한달 · 1년 · 장중 값은 없고 거래소가 장 뒤에 냅니다',
 };
-const sortTipAttr = (id) => (SORT_TIPS[id] ? ` data-tip="${escT(SORT_TIPS[id])}" data-tip-h="${escT(SORTS[id].label)}"` : '');
+/* 「관심」 아래 줄 칩은 관심 종목 안에서 거르는 것이 아니다 — 자리만 관심 아래라 헷갈리지 않게 풍선 끝에 한 줄(2026-11-11 재권님 「어떤 룰에 의해 선별된 종목인지 인지가 되도록」) */
+const FAV_SUB_TIP = '\n관심 아래에 모아 둔 칩입니다 — 관심 종목만이 아니라 위 기준으로 순위 목록 전체에서 고릅니다';
+const sortTipAttr = (id) => (SORT_TIPS[id] ? ` data-tip="${escT(SORT_TIPS[id] + (FAV_SUB.has(id) ? FAV_SUB_TIP : ''))}" data-tip-h="${escT(SORTS[id].label)}"` : '');
 
 /* 「공매도」 칩 — 서버가 세운 차례 그대로. 못 받았으면 null(빈 목록과 가른다) */
 let sstsRows = null, sstsMeta = null, sstsBy = {};
@@ -2025,11 +2027,11 @@ function favGroupChipsHtml() {
   if (favGroup !== 'all' && favGroup !== 'none' && !groups.some((g) => g.id === favGroup)) favGroup = 'all';
   const one = (id, label, n) => `<button class="kh-chip kh-sub-chip${favGroup === id ? ' is-on' : ''}" type="button"
     data-fg="${escT(id)}">${escT(label)} <b class="kh-chip-hit">${n}</b></button>`;
-  const none = ungroupedCodes().length;
-  return one('all', '전체', favList().length)
-    + groups.map((g) => one(g.id, g.name, g.codes.length)).join('')
-    + (groups.length || none ? one('none', '미분류', none) : '')
-    + (groups.length ? '' : '<span class="kh-mut">순위 숫자를 눌러 담을 때 묶음을 만듭니다</span>');
+  /* 「전체」 · 「미분류」 칩은 뺐다(2026-11-11 재권님 「전체랑 미분류 지우고」) — 아무 묶음도 안 고르면 전체이고,
+     켜진 묶음을 한 번 더 누르면 전체로 돌아간다(아래 kh-sorts2 누름). 'none' 은 칩이 없어 고를 길이 없다 */
+  const mine = groups.filter((g) => g.id !== AUTO_FG);   // 「자동」 은 위 줄 「수급」 칩으로 갔다
+  return mine.map((g) => one(g.id, g.name, g.codes.length)).join('')
+    + (mine.length ? '' : '<span class="kh-mut">순위 숫자를 눌러 담을 때 묶음을 만듭니다</span>');
 }
 
 function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
@@ -2110,15 +2112,58 @@ function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
     .map(({ s }, i) => ({ ...s, rank: i + 1 }));
 }
 
+/* 「관심」 아래 줄(#kh-sorts-fav)로 가는 칩 — 위 줄에서는 빠지고, 「관심」 이나 이 칩을 볼 때만 나온다.
+   거르는 것은 그대로 전 종목이다(관심 안에서 거르지 않는다 · 2026-11-11 재권님 「나」). 칩이 늘어 위 줄이 세 줄로 꺾이던 것도 이것으로 풀렸다 */
+const FAV_SUB = new Set(['pre', 'rise', 'ov', 'vi', 'bb', 'ssts']);
+
+/* 「수급」 칩 — 서버(auto_watch)가 관심에 자동으로 담는 묶음 「자동」(id auto)을 「관심」 아래 줄 공매도 옆에 둔다.
+   누르면 관심 중 그 묶음만 · 다시 누르면 관심 전체(2026-11-11 재권님 「자동버튼에 마우스 올리면 조건이 보이게 해주고 수급 이라는 이름으로 공매도 옆으로」).
+   묶음 이름(문서의 「자동」)은 그대로 — 화면 글자만 「수급」. 조건 숫자는 서버 /api/auto-watch 의 data.rule · meta 를 받아 쓴다(박지 않는다) */
+const AUTO_FG = 'auto';
+let autoInfo = null;            // { rule, liveWindow, runWindow } — 못 받았으면 null
+async function loadAutoInfo() {
+  try {
+    const r = await apiFetch('/api/auto-watch', { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    if (j && j.data && j.data.rule) autoInfo = { rule: j.data.rule, liveWindow: j.meta && j.meta.liveWindow, runWindow: j.meta && j.meta.runWindow };
+  } catch { /* 못 받으면 풍선은 「조건을 못 받음」 */ }
+  paintSortChips();
+}
+function autoTip() {
+  const head = '관심 종목 중 서버가 자동으로 담은 종목만 봅니다(관심 묶음 「자동」) · 다시 누르면 관심 전체';
+  if (!autoInfo) return head + '\n조건을 아직 못 받았습니다';
+  const ru = autoInfo.rule;
+  const cond = [ru.prevPct == null ? null : `앞 거래일 등락률 +${ru.prevPct}% 이상`,
+    ru.volMult == null ? null : `거래량이 20일 평균의 ${ru.volMult}배 이상`].filter(Boolean);
+  return [head,
+    `조건 — 코스피 시가총액 상위 200 · 코스닥 150 주식(ETF 뺌) 중 ${cond.length ? cond.join(' 그리고 ') : '조건 칸이 비어 있음'}`,
+    `차례 — ${ru.sortBy === 'pct' ? '등락률' : '거래량 배수'} 큰 순${ru.autoMax == null ? '' : ` · ${ru.autoMax}종목까지`}${ru.nearHighPct == null ? '' : ` · 52주 최고 종가 위아래 ${ru.nearHighPct}% 안이면 맨 위`}`,
+    autoInfo.liveWindow ? `장중 — ${autoInfo.liveWindow}` : null,
+    autoInfo.runWindow ? `그날 확정 — ${autoInfo.runWindow}` : null,
+    '기준 칸은 투자전략 「종목 고르는 룰」 에서 고칩니다'].filter(Boolean).join('\n');
+}
+
 /* 정렬 칩 줄 — 「테마」 를 보면 그 자리가 큰 테마 줄이 되고, 아래 줄(#kh-sorts2)에 작은 테마가 나온다 */
 function paintSortChips() {
   const host = $('kh-sorts');
   if (!host) return;
   const th = market === 'THEME';
   host.classList.toggle('kh-theme-strip', th);
-  host.innerHTML = th ? themeBigChipsHtml() : Object.entries(SORTS).map(([id, x]) =>
-    `<button class="kh-chip${id === sortBy ? ' is-active' : ''}" type="button"
-      data-sort="${id}"${sortTipAttr(id)}>${x.label}</button>`).join('');
+  const chip = ([id, x], on) => `<button class="kh-chip${on ? ' is-active' : ''}" type="button"
+      data-sort="${id}"${sortTipAttr(id)}>${x.label}</button>`;
+  const favOpen = !th && (sortBy === 'fav' || FAV_SUB.has(sortBy));
+  host.innerHTML = th ? themeBigChipsHtml() : Object.entries(SORTS).filter(([id]) => !FAV_SUB.has(id))
+    .map((e) => chip(e, e[0] === sortBy || (e[0] === 'fav' && favOpen))).join('');
+  const favRow = $('kh-sorts-fav');
+  if (favRow) {
+    favRow.hidden = !favOpen;
+    const hasAuto = favGroups().some((g) => g.id === AUTO_FG);
+    favRow.innerHTML = favOpen ? Object.entries(SORTS).filter(([id]) => FAV_SUB.has(id))
+      .map((e) => chip(e, e[0] === sortBy)).join('')
+      + (hasAuto ? `<button class="kh-chip${sortBy === 'fav' && favGroup === AUTO_FG ? ' is-active' : ''}" type="button"
+      data-fg-auto data-tip="${escT(autoTip())}" data-tip-h="수급">수급</button>` : '') : '';
+    if (favOpen && !autoInfo) loadAutoInfo();
+  }
   const sub = $('kh-sorts2');
   if (sub) {
     const fav = !th && sortBy === 'fav';
@@ -2157,18 +2202,29 @@ function setupSorts() {
     if (market === 'THEME') { onTheme(e); return; }
     if (sstsClick(e)) return;                       // 공매도 금액 · 비율 · 기간
     const b = e.target.closest('[data-fg]');        // 관심 묶음
-    if (!b || b.dataset.fg === favGroup) return;
-    favGroup = b.dataset.fg;
+    if (!b) return;
+    favGroup = b.dataset.fg === favGroup ? 'all' : b.dataset.fg;   // 켜진 묶음을 다시 누르면 전체로
     paintSortChips();
     const box = $('kh-rank-scroll');
     if (box) box.scrollTop = 0;
     paintRows(rowPrices);
   });
 
-  host.addEventListener('click', async (e) => {
+  const onSort = async (e) => {
     if (market === 'THEME') { await onTheme(e); return; }
+    if (e.target.closest('[data-fg-auto]')) {            // 「수급」 — 관심 중 자동 묶음만 · 다시 누르면 관심 전체
+      favGroup = sortBy === 'fav' && favGroup === AUTO_FG ? 'all' : AUTO_FG;
+      sortBy = 'fav';
+      paintSortChips();
+      const box = $('kh-rank-scroll');
+      if (box) box.scrollTop = 0;
+      paintRows(rowPrices);
+      return;
+    }
     const b = e.target.closest('[data-sort]');
-    if (!b || b.dataset.sort === sortBy) return;
+    if (!b) return;
+    if (b.dataset.sort === 'fav' && favGroup === AUTO_FG) favGroup = 'all';   // 「관심」 을 누르면 관심 전체로
+    else if (b.dataset.sort === sortBy) return;
     sortBy = b.dataset.sort;
     paintSortChips();                // 「관심」 이면 아래 묶음 줄이 나온다
     paintRows(rowPrices);
@@ -2180,7 +2236,9 @@ function setupSorts() {
     if (sortBy === 'vi') loadVi();
     if (sortBy === 'bb') loadBb();
     if (sortBy === 'ssts') loadSsts();
-  });
+  };
+  host.addEventListener('click', onSort);
+  $('kh-sorts-fav')?.addEventListener('click', onSort);   // 「관심」 아래 줄 — 같은 칩이라 같은 길
 }
 
 /* 시장 칩 — 누르면 그 시장 줄로 갈아 끼운다. 서버는 안 부른다(목록은 이미 있다).
