@@ -50,13 +50,15 @@
     <section class="st rl">
       <div class="st-meta" id="rl-meta">룰 값을 받는 중…</div>
       <h2 class="st-sec">종목 고르는 룰</h2>
-      <div class="st-tg" role="tablist" aria-label="룰">
-        <button class="kh-chip is-active" role="tab">전일 거래량 급등</button>
+      <!-- 룰 칩 — 홀딩스 실시간 순위 「관심」 아래 칩 여덟을 같은 차례로(11-11 재권님 「strategy.html 여기에 실시간순위에 관심이라고 있는데 거기에 하위의 버튼별로 룰 정리해주고」 →
+           시안 temp/시황분석1-rules3 「이런거고 지금 관심 하위의 버튼별로 있는 룰 여기에 다 넣어줘야해」 → 「응 시작해」) · 수급 = 지금까지의 「전일 거래량 급등」 룰 · 그리기는 js/strategy-chips.js -->
+      <div class="st-tg" role="tablist" aria-label="룰" id="rl-chips">
+        <button type="button" class="kh-chip" role="tab" aria-selected="false" data-rule="ov">단타</button><button type="button" class="kh-chip" role="tab" aria-selected="false" data-rule="pre">프리장</button><button type="button" class="kh-chip" role="tab" aria-selected="false" data-rule="rise">초반상승</button><button type="button" class="kh-chip" role="tab" aria-selected="false" data-rule="nowup">현재상승</button><button type="button" class="kh-chip" role="tab" aria-selected="false" data-rule="vi">VI·급등</button><button type="button" class="kh-chip" role="tab" aria-selected="false" data-rule="bb">볼린저</button><button type="button" class="kh-chip" role="tab" aria-selected="false" data-rule="after">장외</button><button type="button" class="kh-chip is-active" role="tab" aria-selected="true" data-rule="volsurge">수급(전일 거래량 급등)</button>
         <span class="kh-chip rl-add" aria-disabled="true">＋ 룰 더하기</span>
       </div>
       <div class="rl-grid">
         <div class="st-card">
-          <h3 class="rl-h rl-hrow">룰 — 전일 거래량 급등<button type="button" class="rl-go" id="rl-go" aria-label="이 룰 값으로 오늘 걸린 종목 다시 찾기">검색</button></h3>
+          <h3 class="rl-h rl-hrow"><span id="rl-title">룰 — 전일 거래량 급등</span><button type="button" class="rl-go" id="rl-go" aria-label="이 룰 값으로 오늘 걸린 종목 다시 찾기">검색</button></h3>
           <div class="st-cap">무엇을 고르나 · 어떻게 줄 세우나</div>
           <!-- 사는 때 · 파는 때 · 얼마나 · 빼는 것 칸은 11-05 재권님 「룰칸에 줄세우기 밑으로 있는것들은 다 필요없어 지워」 로 뺐다 — 넣어 둔 값은 서버 문서에 그대로 둔다(지우지 않음) -->
           <!-- 미정: 빈칸은 재권님이 직접 넣으신다(11-05 「그 숫자는 내가 넣을 수 있게 해줘」) — 비어 있는 칸만 빨간 바탕(「아직 안 정해진 자리는 빨간 바탕으로 남긴다」) · 넣은 값은 js/strategy-rule.js 가 서버 문서에 둔다 -->
@@ -67,10 +69,13 @@
             <tr><th>신고가 부근</th><td>52주 최고 종가의 위아래 <input class="rl-in rl-num" data-k="nearHighPct" inputmode="decimal" aria-label="신고가 부근 기준(52주 최고 종가 위아래 몇 %)" data-min="0">% 안이면 맨 위에 <span class="rl-sug">위 조건에 걸린 것 · 안 걸린 것 둘 다 — 표에서 갈라 보임</span></td></tr>
             <tr><th>줄 세우기</th><td><select class="rl-in rl-sel" data-k="sortBy" aria-label="오늘 걸린 종목을 줄 세우는 기준"><option value="mult">배수 순</option><option value="pct">등락률 순</option></select> · 최대 <input class="rl-in rl-num" data-k="autoMax" inputmode="numeric" aria-label="오늘 걸린 종목을 몇 개까지 보일지" data-min="0" data-int>종목까지 <span class="rl-sug">빈칸이면 걸린 종목 전부</span></td></tr>
           </table>
+          <!-- 칩 룰(단타 · 프리장 · 초반상승 · 현재상승 · VI·급등 · 볼린저 · 장외) — 같은 틀에 그 룰 조건 · 값 · 지금은 보기만(고치기는 수정 비밀번호와 함께 뒤에 · 재권님 「우선 비밀번호는 나중에」) -->
+          <table class="rl-tb" id="rl-tb2" hidden></table>
         </div>
         <div class="st-card">
           <!-- 현재 · 어제 (11-05 재권님 「오늘 이룰에 걸린종목 옆에 어제 라고 해서 거기 누르면 쌓여있는게 나오면 돼 · 오늘 이룰에 걸린종목 은 이름을 현재로 바꿔주고」 → 「하루전 2일전 3일전 4일전 · 5일 10일 한달 버튼도 따로」 → 「하루전 옆으로 있는 버튼들 다 어제 옆으로 이동해」 — 「어제」 가 하루전) —
                같은 자리에서 갈아 끼운다 · 두 판 높이는 같게(「보는 것을 바꿔도 자리는 그대로다」) · 그리기는 js/strategy-rule.js -->
+          <h3 class="rl-h cr-h" id="cr-h" hidden><span class="cr-tab">현재</span></h3>
           <h3 class="rl-h aw-tabs" role="tablist" aria-label="걸린 종목"><button type="button" class="aw-tab is-on" data-pane="now" role="tab" aria-selected="true">현재</button><button type="button" class="aw-tab" data-pane="hist" data-ah="b0" role="tab" aria-selected="false">어제</button><button type="button" class="aw-tab" data-pane="hist" data-ah="b1" role="tab" aria-selected="false">2일전</button><button type="button" class="aw-tab" data-pane="hist" data-ah="b2" role="tab" aria-selected="false">3일전</button><button type="button" class="aw-tab" data-pane="hist" data-ah="b3" role="tab" aria-selected="false">4일전</button><span class="ah-gap" aria-hidden="true"></span><button type="button" class="aw-tab" data-pane="hist" data-ah="5d" role="tab" aria-selected="false">5일</button><button type="button" class="aw-tab" data-pane="hist" data-ah="10d" role="tab" aria-selected="false">10일</button><button type="button" class="aw-tab" data-pane="hist" data-ah="1m" role="tab" aria-selected="false">한달</button></h3>
           <!-- 현재 — 서버 /api/auto-watch 가 위 룰 값으로 거르고 줄 세운 것을 그대로 그린다 — 거르는 셈은 화면에 두지 않는다 -->
           <div class="aw-pane" data-pane="now">
@@ -83,6 +88,11 @@
             <div class="st-cap" id="ah-cap">걸렸던 종목이 다음 거래일 종가에 어떻게 됐나 — 룰이 맞는지 보는 칸</div>
             <div class="aw-box" id="ah"><div class="st-err">값을 받는 중…</div></div>
           </div>
+          <!-- 칩 룰의 종목 — 그 칩을 내는 서버 주소 그대로(홀딩스와 같은 주소) · 서버에 목록 주소가 없는 칩은 — -->
+          <div class="aw-pane" data-pane="chip" hidden>
+            <div class="st-cap" id="cr-cap">—</div>
+            <div class="aw-box" id="cr"><div class="st-err">—</div></div>
+          </div>
           <div class="st-cap aw-how" id="aw-how"></div>
         </div>
         <!-- 오른 까닭 (11-05 재권님 「오늘종목 옆에 칸 추가해서 거기에 종목 클릭하면 상승이유 넣어줘」) — 누른 종목의 그날 앞뒤 공시 · 뉴스를 서버 두 주소에서 받아 날짜로만 모은다 ·
@@ -92,6 +102,24 @@
           <div class="st-cap">왼쪽 종목을 누르면 그날 앞뒤 나온 공시 · 뉴스를 모읍니다 — 까닭인지는 보고 가립니다 · 시장 · 섹터 쪽 까닭(금리 · 돈이 옮겨 감)은 여기 안 잡힘</div>
           <div class="aw-why" id="aw-why"><div class="st-err">— 종목을 누르면 여기 나옵니다</div></div>
         </div>
+      </div>
+    </section>
+    <!-- 단타 30 (11-11 재권님 「단타 목록 상위 30개를 소팅해서 9시 6분에 배수하고 9시반 10시 등 30분 단위로 2시까지 가격 추적하도록 셋팅해줘, 아래에 프리장 넣기 처럼 그 위에 종목 넣어서」 →
+         시안 temp/시황분석1-dt30-1743 → 「응 이대로 만드는데 위에 날짜도 넣어줘 30일 추적가능하도록」) — 그날 판(09:06 단타 상위 30 · 30분마다 값)은 서버가 굳혀 쌓고 화면은 그린다 · 그리기는 js/strategy-dt30.js -->
+    <section class="st dt">
+      <div class="st-meta" id="dt-meta">값을 받는 중…</div>
+      <h2 class="st-sec">단타 — 09:06 매수 → 30분마다 14:00 까지</h2>
+      <div class="st-tg dt-days" id="dt-days" role="tablist" aria-label="날짜"></div>
+      <div class="st-card">
+        <div class="st-cap dt-cap" id="dt-cap">단타 목록(09:06 에 굳힌 후보 100 · 아래 칩을 켜고 끄면 겹친 수로 다시 줄 세움)을 09:06 값에 산 것으로 보고, 매수가 대비 몇 % 인지 30분마다 · 날마다 쌓음 · 30거래일</div>
+        <!-- 칩 영역 두 줄 (11-11 재권님 「여기 계층구조에 맞게 인지가 잘되고 보기 편하게 색도 넣어서 해줘」) — ① 단타 칩: 표 안 종목 머리 줄과 평균 줄 사이(js 가 그림) · 상위 칩마다 색 · 하위 칩은 같은 색 작은 칩으로 붙임 ② 보기: 거르기 · 줄 세우기는 회색 나눔 단추 -->
+        <div class="dt-ctl">
+          <div class="dt-row"><span class="dt-hd">보기</span><div class="dt-bar"><span class="dt-lb">거르기</span><div class="dt-seg" id="dt-only" role="tablist" aria-label="이벤트 거르기"></div><span class="dt-lb">줄 세우기</span><div class="dt-seg" id="dt-order" role="tablist" aria-label="줄 세우기"></div></div></div>
+        </div>
+        <div class="dt-pnl" id="dt-pnl"><div id="dt-pnl-sum">—</div>
+          <label class="dt-fee">증권수수료 <input id="dt-fee" class="rl-in rl-num" inputmode="decimal" aria-label="증권수수료(%) — 살 때 · 팔 때 각각" placeholder="( )">% <span class="rl-sug">살 때 · 팔 때 각각 · 넣으면 저장되고 바로 다시 셈</span> <span id="dt-fee-msg" class="rl-sug"></span></label></div>
+        <div class="dt-box st-scroll" id="dt-box"><div class="st-err">—</div></div>
+        <div class="st-cap dt-foot">각 시각 = 그 시각에 끝난 5분봉 종가 · 평균 = 그 시각 값이 있는 종목만 · 단타 목록은 09:06 에 그날 판으로 굳힘</div>
       </div>
     </section>
     <section class="st">
@@ -127,6 +155,8 @@
 <script src="../assets/js/main.js"></script>
 <script type="module" src="js/strategy.js"></script>
 <script type="module" src="js/strategy-rule.js"></script>
+<script type="module" src="js/strategy-chips.js"></script>
+<script type="module" src="js/strategy-dt30.js"></script>
 <script type="module" src="js/strategy-log.js"></script>
 <script type="module" src="/assets/js/glossary.js"></script>   <!-- 설명 풍선 — 마우스를 1초 올려 두면 뜨는 공용 풍선(data-tip) · 「설명 풍선은 … 1초 올려 두면 뜬다」(2026-11-07) -->
 <script type="module" src="js/fit.js"></script>   <!-- 틀을 홀딩스 첫 화면과 같은 넓이로 (2026-11-07) -->

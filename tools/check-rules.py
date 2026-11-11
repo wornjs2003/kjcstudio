@@ -628,7 +628,16 @@ def c_glossary_copy():
 
 
 _HOST = re.compile(r"https?://([A-Za-z0-9.-]+\.[A-Za-z]{2,})")
-_LOCAL = ("localhost", "127.0.0.1", "thekjcstudio.com")
+def _main_host():
+    """메인 주소의 호스트 — `holdings/server/dart.py` 의 `MAIN_URL` 한 곳에서 읽는다(값을 이 검사에 박지 않는다 ·
+    「알림 · 화면 밖으로 나가는 글의 링크는 메인 주소 한 곳에서」 2026-11-11). 못 읽으면 None."""
+    m = re.search(r'^MAIN_URL\s*=\s*["\']https?://([^/"\']+)', rd(os.path.join(ROOT, "holdings/server/dart.py")), re.M)
+    return m.group(1).lower() if m else None
+
+
+# 우리 주소 — 「바깥 주소 셈」 에서 뺀다. 메인 호스트는 상수에서 읽는다(전에는 옛 주소만 박혀 있어 새 메인이 바깥으로 세어졌다)
+# · 옛 주소(thekjcstudio.com)는 거둘지가 재권님 홀딩이라 그대로 둔다
+_LOCAL = tuple(x for x in ("localhost", "127.0.0.1", "thekjcstudio.com", _main_host()) if x)
 
 
 def _domain(h):
@@ -666,6 +675,46 @@ def c_same_source():
         if got:
             hits.append("%s — 서버도 받는 곳: %s" % (f, " · ".join(got)))
     return "서버와 같은 바깥 출처를 따로 받는 곳", n, hits, LOOK, (지시, "「홀딩스와 인사이트에 중복된 값들 … 룰 잡아봐」 (2026-10-14) — 받는 곳은 서버 하나")
+
+
+_SENDS = re.compile(r"telegram", re.I)   # 보내는 파일만이 아니라 글을 만드는 파일까지 — 글을 지어 넘기는 파일(daily.py)은 보내는 함수를 안 부른다(qa 11-11 시뮬)
+_DOCSTR = re.compile(r'"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'')
+_CALLS = re.compile(r"urlopen|Request\(|requests\.|_URL\b|\burl\b|BASE|--port|%d/")      # 서버를 부르는 주소 — 보내는 글이 아니다
+
+
+def c_alert_links():
+    """알림 · 화면 밖으로 나가는 글의 링크는 메인 주소 한 곳에서 (2026-11-11 재권님 「옮긴 홈페이지룰로 통일해」).
+
+    텔레그램을 다루는 파이썬 전부(폴더를 박지 않는다 — 「telegram」 글자가 든 파일 · 글만 짓고 보내지는 않는 파일도 든다)에서
+    주석 · 세 겹 따옴표 설명 글이 아닌 줄에
+    ① 메인 호스트(`MAIN_URL` 에서 읽음) · 옛 주소가 글자로 든 줄 — `MAIN_URL = …` 정의 줄은 뺀다
+    ② localhost · 127.0.0.1 이 든 줄 중 서버를 부르는 주소(urlopen · requests · `*_URL` · BASE)가 아닌 것
+    을 「봐야 할 자리」 로 낸다. **글로 나가는지는 사람이 가른다** — 막지 않는다. 바깥 출처 원문 링크(DART · SEC)는 안 센다(우리 주소가 아니다).
+    """
+    host = _main_host()
+    if not host:
+        return "알림 글에 박힌 우리 주소", 0, ["holdings/server/dart.py 에서 MAIN_URL 을 못 읽었다 — 못 쟀다"], LOOK, (지시, "「옮긴 홈페이지룰로 통일해」 (2026-11-11)")
+    ours = re.compile("|".join(re.escape(h) for h in (host, "thekjcstudio.com")), re.I)
+    me = os.path.relpath(os.path.abspath(__file__), ROOT).replace("\\", "/")
+    hits, n = [], 0
+    for f in walk(".py"):
+        if f == me:
+            continue
+        src = rd(os.path.join(ROOT, f))
+        if not _SENDS.search(src):
+            continue
+        n += 1
+        src = _DOCSTR.sub(lambda m: "\n" * m.group(0).count("\n"), src)   # 설명 글은 빼되 줄 번호는 그대로
+        for i, line in enumerate(src.split("\n"), 1):
+            t = line.strip()
+            if not t or t.startswith("#") or re.match(r"MAIN_URL\s*=", t):
+                continue
+            code = t.split("  #")[0]
+            if ours.search(code):
+                hits.append("%s:%d — 우리 주소를 글자로: %s" % (f, i, code[:80]))
+            elif re.search(r"(?:https?://)?(?:localhost|127\.0\.0\.1):(?:\d|%)", code) and not _CALLS.search(code):   # 포트가 붙은 주소 꼴만 — 소켓 · 서버 여는 줄 · 안내 낱말은 안 셈
+                hits.append("%s:%d — localhost(글로 나가는지 볼 것): %s" % (f, i, code[:80]))
+    return "알림 글에 박힌 우리 주소 (MAIN_URL 밖)", n, hits, LOOK, (지시, "「텔레그램에 … 옮긴 홈페이지룰로 통일해」 (2026-11-11) — 링크는 MAIN_URL + 경로로만")
 
 
 OLD_PLACE = re.compile("메인서버|메인 폴더|메인 DB|서비스방")
@@ -770,7 +819,7 @@ def c_secret_in_repo():
 
 CHECKS = [c_bat_nonascii, c_py_encoding, c_send_error_korean,
           c_scrollbar, c_common_css_link, c_bat_timeout, c_modal_links, c_hook_exec, c_nav_gutter, c_shared_css, c_main_guard, c_rule_sync, c_main_ok_log, c_screen_timers,
-          c_glossary, c_glossary_copy, c_same_source, c_old_place_names, c_secret_in_repo]
+          c_glossary, c_glossary_copy, c_same_source, c_alert_links, c_old_place_names, c_secret_in_repo]
 
 
 def main():

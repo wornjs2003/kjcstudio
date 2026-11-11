@@ -85,6 +85,7 @@ import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
 import day_top_fill     # 등락 상위 — 지난 거래일 판을 다시 세어 채움(장 쉬는 때 · 쓰는 서버만 · 2026-11-11 · server/day_top_fill.py)
 import day_top          # 등락 상위와 걸린 필터 — 날마다 장 뒤 한 번 쌓음 · /api/kis/day-top(2026-11-11 · server/day_top.py)
+import dt30             # 단타 30 판 — 평일 09:06 단타 상위 30 굳힘 · 30분마다 값 · 30거래일 · /api/kis/dt30(2026-11-11 · server/dt30.py)
 import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
 import session_volume   # 시간대별 거래량 · 전일비 — 프리장 · 정규장 · 애프터 끝에 순위 종목 누적 거래량 저장 · /api/kis/vol-ratio(2026-11-05 · server/session_volume.py)
 import intraday_flow    # 당일 수급 — 장중 1분마다 시장 투자자 · 프로그램 매매를 쌓아 5분 구간으로 · /api/kis/flow-today(2026-10-27 · server/intraday_flow.py)
@@ -10312,6 +10313,17 @@ class Handler(SimpleHTTPRequestHandler):
                                  "meta": dict(day_top.status(), days=day_top.days(sys.modules[__name__]), fill=day_top_fill.status())})
                 return
 
+            if route == "dt30":
+                # 단타 30 판(server/dt30.py) — 남긴 날 판을 읽는다 · 안 끝난 그날 판만 지금 값(멀티 시세 · 캐시 먼저)을 붙인다
+                day = (qs.get("day") or [""])[0].strip()
+                if day and not (day.isdigit() and len(day) == 8):
+                    self._send_json({"ok": False, "error": "day 는 YYYYMMDD 입니다."}, 400)
+                    return
+                b = dt30.board(sys.modules[__name__], day or None, cfg)
+                self._send_json({"ok": b is not None, "data": b,
+                                 "meta": dict(dt30.status(), days=dt30.days(sys.modules[__name__]))})
+                return
+
             if route == "open-rise":
                 # 초반상승 — 정규장 첫 5분봉(여는 시각부터 5분 · market_hours)이 시가보다 RISE_PCT % 이상 올라 끝난 종목 (2026-11-11 · server/open_rise.py) · KIS 안 부름
                 d, at = open_rise.fetch(sys.modules[__name__])
@@ -11182,6 +11194,9 @@ def main():
     if not SLOW and is_sender(args.port) and pre_flow.start(sys.modules[__name__]):
         print("  프리장 판   : 평일 %02d:%02d~%02d:%02d 에 %d초마다 지어 market.db pre_flow_board 에 남김(「프리장」 칩)"
               % (pre_flow.PRE_OPEN + pre_flow.PRE_CLOSE + (pre_flow.FLOW_TTL,)))
+    if not SLOW and is_sender(args.port) and dt30.start(sys.modules[__name__]):
+        print("  단타 30 판 : 평일 %s 단타 상위 %d 굳힘 · %s~%s %d분마다 값 · %d거래일 · /api/kis/dt30"
+              % (dt30.status()["buyAt"], dt30.TOP_N, dt30.times()[0], dt30.times()[-1], dt30.TRACK_STEP, dt30.DAYS_KEEP))
     if not SLOW and is_sender(args.port) and day_top_fill.start(sys.modules[__name__]):
         print("  등락 상위 되채움: 지난 %d거래일 · %s" % (day_top_fill.FILL_DAYS, day_top_fill.status()["window"]))
     if not SLOW and is_sender(args.port) and day_top.start(sys.modules[__name__]):
