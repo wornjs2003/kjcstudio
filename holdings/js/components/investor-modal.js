@@ -352,6 +352,13 @@ export function openInvestorModal({ code } = {}) {
   }
 
   /* 점선 네모 — 봉 순번(logical)으로 들고 있어 끌거나 넓혀도 그 봉에 붙어 있다 */
+  /* 시간 좌표는 그림 칸 기준이라 왼쪽 눈금(금액 차트 · 11-05)이 있으면 그 폭만큼 차트 칸 왼쪽에서 밀린다 —
+     상자를 잡을 때 빼고 그릴 때 더한다(2026-11-11 재권님 「6일 이후로 데이터가 없는데」 — 상자가 그 폭만큼 뒤 날짜를 골라 오늘(확정 전)이 잡혔다) */
+  const paneLeft = () => {
+    const sc = chart && chart.options().leftPriceScale;
+    return sc && sc.visible ? chart.priceScale('left').width() : 0;
+  };
+
   function placeBox() {
     const el = main && main.querySelector('.kh-ivm-box');
     if (!el) return;
@@ -362,7 +369,7 @@ export function openInvestorModal({ code } = {}) {
     if (a == null || b == null) { el.style.display = 'none'; return; }
     const half = (ts.options().barSpacing || 6) / 2;
     el.style.display = '';
-    el.style.left = `${Math.min(a, b) - half}px`;
+    el.style.left = `${paneLeft() + Math.min(a, b) - half}px`;
     el.style.width = `${Math.abs(b - a) + half * 2}px`;
   }
 
@@ -535,7 +542,7 @@ export function openInvestorModal({ code } = {}) {
     const pickEl = el.querySelector('.kh-ivm-pick');
     let start = null;
     const idxAt = (ev) => {
-      const x = ev.clientX - el.getBoundingClientRect().left;
+      const x = ev.clientX - el.getBoundingClientRect().left - paneLeft();
       const l = chart.timeScale().coordinateToLogical(x);
       return l == null ? null : Math.max(0, Math.min(bars.length - 1, Math.round(l)));
     };
