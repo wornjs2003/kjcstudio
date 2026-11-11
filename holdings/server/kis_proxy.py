@@ -79,6 +79,7 @@ import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20
 import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 · 색 = 등락률 · /api/kis/heatmap(2026-10-27 · server/heatmap.py)
 import flow_board       # 수급 정리판 — 투자자 갈래별 순매수(오늘 · 날마다 · 상위 종목)를 한 주소로 · /api/kis/flow-board(2026-11-04 · server/flow_board.py)
 import open_rise        # 초반상승 — 정규장 첫 5분봉이 시가보다 오른 종목 · 실시간 순위 「초반상승」 칩 · /api/kis/open-rise(2026-11-11 · server/open_rise.py)
+import rescan           # 지금검색 — 관심 아래 칩 룰을 누를 때 다시 셈 · /api/kis/rescan(2026-11-11 · server/rescan.py)
 import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 · /api/kis/pre-flow(2026-11-05 · server/pre_flow.py)
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
 import day_top          # 등락 상위와 걸린 필터 — 날마다 장 뒤 한 번 쌓음 · /api/kis/day-top(2026-11-11 · server/day_top.py)
@@ -10285,6 +10286,11 @@ class Handler(SimpleHTTPRequestHandler):
                              "note": "DB 에 쌓인 5분봉 — 정규장 첫 봉 (종가 − 시가) ÷ 시가 · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
                              "cacheTtl": open_rise.CACHE_TTL},
                 })
+                return
+
+            if route == "rescan":
+                # 「지금검색」 — 매수 · 수급 · 프리장을 그 자리에서 다시 셈(문턱 rescan.MIN_SEC) · 나머지 칩은 화면이 다시 받기만 (2026-11-11 재권님 「나」)
+                self._send_json({"ok": True, "data": rescan.run(sys.modules[__name__], cfg, pre_flow._writer["on"])})
                 return
 
             if route == "joint-buy":

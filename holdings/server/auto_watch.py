@@ -107,6 +107,8 @@ _live = {}                      # 장중 마지막 바퀴 {day, at, frac, got} �
 _status = {"runDay": None, "runAt": None, "saved": None, "backfillAt": None, "backfillCodes": None,
            "kisCalls": 0, "error": None}
 _run_lock = threading.Lock()
+_live_lock = threading.Lock()     # 장중 한 바퀴 — 5분 바퀴와 「지금검색」(server/rescan.py)이 겹치지 않게
+_live_last = {"at": 0.0}         # 마지막 장중 바퀴(time.time()) — 「지금검색」 뒤 5분 바퀴가 곧바로 또 돌지 않게
 
 
 def _now():
@@ -684,8 +686,25 @@ def _frac(now):
     return min(max((now.hour * 60 + now.minute - a) / (b - a), 0.0), 1.0)
 
 
+def in_live(now=None):
+    """장중 거르기 창 안인가 — 평일 LIVE_FROM~정규장 끝."""
+    now = now or _now()
+    return now.weekday() < 5 and LIVE_FROM <= (now.hour, now.minute) < SESSION[1]
+
+
 def live_once(proxy, now=None):
-    """장중 한 바퀴 — 멀티 시세를 받아(쌓지 않음) _live 에 두고, ADD 면 상위 ADD_TOP 을 관심 목록에. 받은 종목 수 · 못 받으면 None."""
+    """장중 한 바퀴 — 멀티 시세를 받아(쌓지 않음) _live 에 두고, ADD 면 상위 ADD_TOP 을 관심 목록에. 받은 종목 수 · 못 받으면 None ·
+    다른 바퀴가 돌고 있으면 기다리지 않고 False."""
+    if not _live_lock.acquire(blocking=False):
+        return False
+    try:
+        _live_last["at"] = time.time()
+        return _live_once(proxy, now)
+    finally:
+        _live_lock.release()
+
+
+def _live_once(proxy, now=None):
     now = now or _now()
     day = now.strftime("%Y%m%d")
     mem = members(proxy)
@@ -761,14 +780,11 @@ def start(proxy):
                 th.start()
         except Exception as e:
             _status["error"] = safe_message(e, 160)
-        last_live = 0.0
         while True:
             try:
                 now = _now()
                 day = now.strftime("%Y%m%d")
-                if now.weekday() < 5 and LIVE_FROM <= (now.hour, now.minute) < SESSION[1] \
-                        and time.time() - last_live >= LIVE_SEC and not _run_lock.locked():
-                    last_live = time.time()
+                if in_live(now) and time.time() - _live_last["at"] >= LIVE_SEC and not _run_lock.locked():
                     try:
                         live_once(proxy, now)
                     except Exception as e:
