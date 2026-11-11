@@ -425,6 +425,8 @@ Cloudflare 는 origin 의 `Cache-Control` 이 그 설정보다 **짧으면 덮�
     python3 tools/check-rules.py ; echo $?                                 종료 0 — 파이프 뒤에서 읽지 않는다
     python3 -m py_compile holdings/server/<파일>                           서버 파일이 들어 있으면
     git log --oneline staging..main | wc -l                                staging 이 main 을 다 받았나(머지 전 `git merge --ff-only main`)
+    git show <해시> -- '*.js' | grep '^+' | grep -cE 'handleScroll|handleScale|kineticScroll'   그래프 조작 옵션 글자가 더해졌나 —
+        0 이 아닌데 그 커밋에 CLAUDE.md 가 없으면 검수 요청에 「그래프 움직이기 표(①~⑩) 고쳤나」 한 줄(2026-11-11 룰 5번 · 막지 않는다)
 
 하나라도 어긋나면 합치지 않고 그 세션에 돌려보낸다(검수가 아니라 문턱이다 — 무엇이 어긋났는지 한 줄).
 
