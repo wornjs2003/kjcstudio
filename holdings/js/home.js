@@ -761,7 +761,11 @@ function paintBigPrice() {
   /* 묶음 시세가 아직 안 왔으면 세부사항 칸이 받은 단건으로 먼저 칠한다 — 묶음이 오면 그것이 덮는다
      (2026-10-06 실측: 단건은 0.2초에 와 있는데 묶음을 기다려 1.7초에 칠해졌다) */
   /* 동시호가(장 전 · 마감) 동안은 현재가 자리에 예상 체결가를 「예상」 과 함께(2026-11-10 재권님 「나」) — 서버가 그때만 준다 */
-  const ex = _expect.get(selectedCode);
+  /* **묶음 시세에 그 종목이 있으면 그 값만 쓴다** (2026-11-11 재권님 「차트에 있는것과 실시간순위에 있는 예상값이 다른이유가 뭔지 찾아서 고쳐놔」).
+     전에는 늘 세부사항 칸이 호가와 함께 받은 값(_expect)을 썼는데, 순위는 묶음 시세 값을 써서 받은 시각이 달랐다 —
+     동시호가 동안 예상가는 몇 초 사이에도 바뀌어 머리 1,298,000 · 순위 1,300,000 처럼 갈렸다. 묶음 시세에 없는 종목(순위 밖 · 처음 불러오는 중)만 _expect */
+  const row = rowPrices && rowPrices[selectedCode];
+  const ex = row ? (row.expect || null) : _expect.get(selectedCode);
   if (ex) {
     const st = `ex|${selectedCode}|${ex.price}|${ex.pct}`;
     if (bigShown === st) return;
