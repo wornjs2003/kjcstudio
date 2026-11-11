@@ -10242,7 +10242,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "ok": True, "data": d["rows"],
                     "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S"),
                              "day": d["day"], "phase": d["phase"], "candidates": d["candidates"], "pending": d["pending"],
-                             "noBar": d["noBar"], "capMissing": d["capMissing"],
+                             "noBar": d["noBar"], "capMissing": d["capMissing"], "etfOut": d["etfOut"],
                              "risePct": open_rise.RISE_PCT, "minCapEok": open_rise.MIN_CAP_EOK,
                              "barFrom": d["barFrom"], "barTo": d["barTo"],
                              "note": "DB 에 쌓인 5분봉 — 정규장 첫 봉 (종가 − 시가) ÷ 시가 · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",

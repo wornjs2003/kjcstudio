@@ -4,7 +4,9 @@
 재권님 — 「아침 9시5분 기준으로 양봉이 2% 이상이 되고 시가총액이 5천억 이상인 종목들 소팅해서 실시간 순위에 초반상승 이라고 만들어서
 넣어줘」(작업우선순위 창 11:25) → 「양봉 2%」 를 (가) 첫 5분봉 시가 대비 종가 · (나) 09:05 가격의 전일 종가 대비 로 여쭈어 「가」(개발1 창 11:41).
 
-    대상        순위 목록(dart.universe_rows · 코스피 200 · 코스닥 150) 중 시가총액 MIN_CAP_EOK 억원 이상
+    대상        순위 목록(dart.universe_rows · 코스피 200 · 코스닥 150) 중 시가총액 MIN_CAP_EOK 억원 이상 · **ETF 는 뺀다**(재권님 「가」 11-11)
+                ETF = 순위 목록에 있는데 OpenDART 기업 대응표(dart_corps)에 없고 코드 끝자리가 0 — 대응표에 없는 것은 ETF 와 우선주뿐이고
+                우선주는 끝자리가 0 이 아니다(11-11 개발 DB: 대응표 밖 42 = ETF 39 + 우선주 3 · 대응표 안에 끝자리 0 아닌 코드 0)
     셈          그날 09:00~09:05 5분봉(보통 날 여는 시각 — market_hours.today 의 usual reg[0] · 재권님 「아침 9시부터 9시 5분」) — (종가 − 시가) ÷ 시가 ≥ RISE_PCT %
                 늦게 여는 날(수능 등)은 그 봉이 없어 「못 셈」
                 장 시각 숫자를 이 파일에 두지 않는다(market_hours 머리 · 개념정의 검수 11-11)
@@ -33,14 +35,21 @@ CACHE_TTL = 60           # 같은 판을 다시 세지 않는 시간(초) — �
 _st = {"at": 0.0, "data": None}
 
 
-def _universe():
+def _universe(proxy):
+    """순위 목록 → (ETF 뺀 줄, 뺀 ETF 수)."""
     import dart
-    out = []
+    with proxy._db_lock, proxy.db_conn() as conn:
+        corps = {r[0] for r in conn.execute("SELECT stock_code FROM dart_corps WHERE stock_code <> ''")}
+    out, etf = [], 0
     for r in dart.universe_rows(None):
         code = r["stock_code"] or ""
-        if code.isdigit() and len(code) == 6:
-            out.append({"code": code, "name": r["name"], "market": r["market"], "cap": r["market_cap"]})
-    return out
+        if not (code.isdigit() and len(code) == 6):
+            continue
+        if corps and code not in corps and code.endswith("0"):
+            etf += 1                       # 대응표가 비었으면(못 읽음) 거르지 않는다 — 다 ETF 로 빼지 않게
+            continue
+        out.append({"code": code, "name": r["name"], "market": r["market"], "cap": r["market_cap"]})
+    return out, etf
 
 
 def build(proxy, now=None):
@@ -54,12 +63,12 @@ def build(proxy, now=None):
     bar_hm = t["usual"]["reg"][0]
     bar_end = int(bar_hm[:2]) * 60 + int(bar_hm[2:]) + BAR_MIN
     head = {"day": day, "barFrom": "%s:%s" % (bar_hm[:2], bar_hm[2:]), "barTo": "%02d:%02d" % divmod(bar_end, 60)}
-    empty = dict(head, rows=[], candidates=None, pending=None, noBar=None, capMissing=None)
+    empty = dict(head, rows=[], candidates=None, pending=None, noBar=None, capMissing=None, etfOut=None)
     if t["open"] is False:
         return dict(empty, phase="closed")
     if live_today and now.hour * 60 + now.minute < bar_end:
         return dict(empty, phase="before")
-    uni = _universe()
+    uni, etf = _universe(proxy)
     cap_missing = sum(1 for u in uni if u["cap"] is None)
     cand = [u for u in uni if u["cap"] is not None and u["cap"] >= MIN_CAP_EOK]
     codes = [u["code"] for u in cand]
@@ -89,7 +98,7 @@ def build(proxy, now=None):
                          "pct": round(pct, 2)})
     rows.sort(key=lambda x: -x["pct"])
     phase = "pending" if pending else "nodata" if cand and no_bar == len(cand) else "done"
-    return dict(head, phase=phase, rows=rows, candidates=len(cand), pending=pending, noBar=no_bar, capMissing=cap_missing)
+    return dict(head, phase=phase, rows=rows, candidates=len(cand), pending=pending, noBar=no_bar, capMissing=cap_missing, etfOut=etf)
 
 
 def fetch(proxy, now=None):
