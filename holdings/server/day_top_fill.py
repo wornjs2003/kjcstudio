@@ -44,8 +44,9 @@ FILL_FROM = (20, 30)            # 평일 이 뒤 — 넥장(20:00) · 저녁 받
 FILL_UNTIL = (7, 0)             # 평일 이 전
 VOL_AVG_DAYS = 20               # 수급 「20일 평균」(auto_watch.AVG_DAYS 와 같은 뜻)
 CALL_GAP = 0.12                 # KIS 부르기 사이 쉼(초) — 예산은 kis_get 이 지키고, 다른 받기에 비켜선다
-PRE_HOUR = "090500"
-JOINT_LIST = 30                 # 「매수」 후보 — 외국인 · 기관 순매수 금액 상위 몇씩(그날 판의 순위 목록 30줄과 같은 뜻 · 여기서는 대상 안에서 셈)             # 빠진 5분봉 — 이 시각에서 120분 거슬러 한 번
+PRE_HOUR = "090500"             # 빠진 5분봉 — 이 시각에서 120분 거슬러 한 번
+JOINT_LIST = 30                 # 「매수」 후보 — 외국인 · 기관 순매수 금액 상위 몇씩(그날 판의 순위 목록 30줄과 같은 뜻 · 여기서는 대상 안에서 셈)
+FILL_MARK = "되채움"             # saved_at 머리 — 그날 판과 되채운 판을 가른다
 
 _status = {"state": "안 돎", "done": [], "error": None, "at": None}
 _prog_cache = {}                # code -> {날: 프로그램 순매수 금액} — 한 바퀴 동안
@@ -69,8 +70,10 @@ def _hm(s):
 def targets(proxy):
     """되채울 날 — auto_watch_day 에 있는 거래일 중 day_top 이 처음 남긴 날 앞 FILL_DAYS 개(최근 먼저) · 이미 남긴 날 뺌."""
     with proxy.db_conn() as conn:
-        saved = {d for (d,) in conn.execute("SELECT day FROM day_top")} if _has_table(conn) else set()
-        first = min(saved) if saved else datetime.now(KST).strftime("%Y%m%d")
+        rows = list(conn.execute("SELECT day, saved_at FROM day_top")) if _has_table(conn) else []
+        saved = {d for d, _ in rows}
+        own = [d for d, at in rows if not (at or "").startswith(FILL_MARK)]       # 되채운 날은 빼고 센다 — 넣으면 하루 채울 때마다 창이 뒤로 밀린다(qa 11-12)
+        first = min(own) if own else datetime.now(KST).strftime("%Y%m%d")
         cand = [d for (d,) in conn.execute("SELECT DISTINCT day FROM auto_watch_day WHERE day < ? ORDER BY day DESC LIMIT ?",
                                            (first, FILL_DAYS))]
     return [d for d in cand if d not in saved]
@@ -267,10 +270,10 @@ def build(proxy, day, kis=True):
         vols = [v for (_, v) in (hist.get(c) or {}).values() if v]
         mult = r[5] / (sum(vols) / len(vols)) if r[5] and len(vols) >= VOL_AVG_DAYS else None
         if pp is not None and r[4] >= pp and (vm is None or (mult is not None and mult >= vm)):
-            put(c, "수급", "15:41")
+            put(c, "수급", day_top.PICK_AT)
         pv = (hist.get(c, {}).get(pd) or (None, None))[1] if pd else None
         if r[5] and pv and r[5] / pv >= day_top.VOL_PREV_X:
-            put(c, "거래량전날2배", "15:41")
+            put(c, "거래량전날2배", day_top.PICK_AT)
 
     rows = []
     for c in uni:
@@ -309,7 +312,7 @@ def save(proxy, day):
     with proxy._db_lock, proxy.db_conn() as conn:
         conn.execute(day_top._SCHEMA)
         conn.execute("INSERT OR IGNORE INTO day_top (day, saved_at, board) VALUES (?,?,?)",      # 그날 판(이미 남긴 날)은 안 덮는다
-                     (day, "되채움 " + datetime.now(KST).strftime("%m-%d %H:%M:%S"), json.dumps(b, ensure_ascii=False)))
+                     (day, FILL_MARK + " " + datetime.now(KST).strftime("%m-%d %H:%M:%S"), json.dumps(b, ensure_ascii=False)))
     return b
 
 
@@ -329,14 +332,15 @@ def start(proxy):
                         _status.update(state="채우는 중 %s" % d, at=datetime.now(KST).strftime("%H:%M:%S"))
                         try:
                             b = save(proxy, d)
+                            if b is None:
+                                raise ValueError("판 못 지음")             # 쓰기 불가 · 그날 판 없음 — 같은 날을 쉬지 않고 다시 잡지 않게(qa · 개념정의 11-12)
                         except Exception as e:
                             _failed.add(d)
                             _status["error"] = "%s %s" % (d, type(e).__name__)
                             print("  [등락 상위 되채움] %s 멈춤 (%s) — 이 서버가 다시 뜰 때까지 건너뜀" % (d, type(e).__name__), flush=True)
                             continue
-                        _status["done"].append({"day": d, "rows": len(b["rows"]) if b else None,
-                                                "calls": b["meta"]["calls"] if b else None})
-                        print("  [등락 상위 되채움] %s %s" % (d, "판 없음" if not b else "%d종목 · KIS %d번" % (len(b["rows"]), b["meta"]["calls"])), flush=True)
+                        _status["done"].append({"day": d, "rows": len(b["rows"]), "calls": b["meta"]["calls"]})
+                        print("  [등락 상위 되채움] %s %d종목 · KIS %d번" % (d, len(b["rows"]), b["meta"]["calls"]), flush=True)
                         continue
                     _status["state"] = "다 채움"
                 else:
