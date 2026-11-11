@@ -10283,12 +10283,12 @@ class Handler(SimpleHTTPRequestHandler):
                 return
 
             if route == "dt30":
-                # 단타 30 판(server/dt30.py) — 남긴 날 판만 읽는다 · KIS 를 안 부른다
+                # 단타 30 판(server/dt30.py) — 남긴 날 판을 읽는다 · 안 끝난 그날 판만 지금 값(멀티 시세 · 캐시 먼저)을 붙인다
                 day = (qs.get("day") or [""])[0].strip()
                 if day and not (day.isdigit() and len(day) == 8):
                     self._send_json({"ok": False, "error": "day 는 YYYYMMDD 입니다."}, 400)
                     return
-                b = dt30.board(sys.modules[__name__], day or None)
+                b = dt30.board(sys.modules[__name__], day or None, cfg)
                 self._send_json({"ok": b is not None, "data": b,
                                  "meta": dict(dt30.status(), days=dt30.days(sys.modules[__name__]))})
                 return
