@@ -8359,6 +8359,7 @@ def _get_chart_one(cfg, code, period, limit, gap_check=True):
             cover = None
             marks = {}                       # 이번 바퀴에 적은 「받았다」 표 — 다른 분봉 기간에도 옮긴다(아래)
             fresh_m = _minutes_now_min()             # 받기 전 분 — 이 분 앞에서 끝난 봉은 다 찬 값으로 받는다
+            marks = {}                       # 이번 바퀴에 적은 「받았다」 표 — 다른 분봉 기간에도 옮긴다(아래)
             if _minutes_need_day(code, period, rows, gap_check):
                 raw, cover = fetch_minutes_day(cfg, code, refill=(period == "1m"))
                 marks["dayfill"] = _minutes_trade_day()
