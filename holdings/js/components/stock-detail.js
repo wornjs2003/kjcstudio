@@ -49,8 +49,8 @@ const ASK_RELOAD_FALLBACK_MS = 5000;
    주기는 서버의 `PRICE_CACHE_TTL` 이다(위). */
 const LIVE_RELOAD_KEY = 'kis_proxy.PRICE_CACHE_TTL';
 const LIVE_RELOAD_FALLBACK_MS = 30_000;
-const POWER_RELOAD_FALLBACK_MS = 3_000;
-const VOL_PREV_FALLBACK_MS = 60_000;     // 전날 같은 시각 대비 거래량 — 서버가 롱폴을 못 줄 때만    // 체결강도 — 서버 값(kis_proxy.TICKS_TTL)을 못 받았을 때만
+const POWER_RELOAD_FALLBACK_MS = 3_000;    // 체결강도 — 서버 값(kis_proxy.TICKS_TTL)을 못 받았을 때만
+const VOL_PREV_FALLBACK_MS = 60_000;     // 전날 같은 시각 대비 거래량 — 서버가 롱폴을 못 줄 때만
 
 /* `onOne(code, 단건)` — 단건을 받을 때마다 알린다 (2026-10-06 지시 — 「로딩 순서 체크해 봐」 → 「응」).
    첫 화면의 52주 칸과 큰 차트 머리 현재가가 **같은 단건을 따로 또 부르거나**(같은 주소 두 번)
