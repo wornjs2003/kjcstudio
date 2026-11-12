@@ -83,25 +83,26 @@ def _stocks(proxy, since):
                 "SELECT DISTINCT code FROM auto_watch_day WHERE day >= ? AND code IN (%s)" % ",".join("?" * len(codes)), (since, *codes))} if codes else set()
             if seen:
                 codes = codes & seen
-        except sqlite3.OperationalError:
-            pass
+        except sqlite3.OperationalError as e:
+            print(f"[공포탐욕] 자동 관심종목 종가 표 못 읽음 — 대상은 상위 200 그대로: {safe_message(e, 120)}", flush=True)
         px = {c: {} for c in codes}
         if not codes:
             return px
-        for code, ts, cl, vol in conn.execute(
-                "SELECT code, ts, close, volume FROM candles WHERE period = 'D' AND close > 0 AND ts >= ? "
-                "AND code IN (%s)" % ",".join("?" * len(codes)), (since, *codes)):
-            px[code][ts] = (cl, vol or 0)
-        # 빈 날은 자동 관심종목이 매일 15:41~ 받아 두는 종가 · 거래량(auto_watch_day · 정규장 J)으로 채운다 — 일봉은 차트를 연 종목만 쌓여
+        # 값은 자동 관심종목이 매일 15:41~ 받아 두는 종가 · 거래량(auto_watch_day · 정규장 J)이 먼저다 — 일봉은 차트를 연 종목만 쌓여
         # 날마다 줄었다(11-02 193 → 11-11 144 → 11-12 장중 4 · 개발 DB 잼) · KIS 를 더 안 부른다 (2026-11-12 재권님 「공포 탐욕지수가 안나오는데」 → 「커밋해」).
-        # 일봉(통합 UN 종가)이 있으면 그것을 쓰고 없을 때만 채운다
+        # 한 종목 안에서 통합(UN) 일봉과 정규장(J) 값이 날마다 섞이면 이음 날 등락 · 거래량 비가 넥스트 몫만큼 흔들려(개념정의 검수 덧)
+        # 정규장 값으로 맞추고, 그 표에 빈 날만 일봉으로 채운다
         try:
             for code, day, cl, vol in conn.execute(
                     "SELECT code, day, close, vol FROM auto_watch_day WHERE close > 0 AND day >= ? "
                     "AND code IN (%s)" % ",".join("?" * len(codes)), (since, *codes)):
-                px[code].setdefault(day, (cl, vol or 0))
-        except sqlite3.OperationalError:
-            pass                              # 그 표가 없는 DB(옛 사본) — 일봉만으로 센다
+                px[code][day] = (cl, vol or 0)
+        except sqlite3.OperationalError as e:
+            print(f"[공포탐욕] 자동 관심종목 종가 표 못 읽음 — 일봉만으로 셈: {safe_message(e, 120)}", flush=True)
+        for code, ts, cl, vol in conn.execute(
+                "SELECT code, ts, close, volume FROM candles WHERE period = 'D' AND close > 0 AND ts >= ? "
+                "AND code IN (%s)" % ",".join("?" * len(codes)), (since, *codes)):
+            px[code].setdefault(ts, (cl, vol or 0))
     return px
 
 

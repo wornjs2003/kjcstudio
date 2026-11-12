@@ -15,8 +15,8 @@ day_top 은 11-11 부터 날마다 그날 판을 남긴다. 그 앞 FILL_DAYS �
       급등         그날 정규장 5분봉 고가 ÷ 앞 날 KRX 종가 − 1 ≥ intraday_alerts.SURGE_PCT — 처음 넘은 봉 시각.
                    정규장 5분봉이 없으면 일봉(D) 고가로 보고 시각은 빈칸
       초반상승     그날 정규장 첫 5분봉(market_hours 보통 날 여는 시각) 종가 ÷ 시가 − 1 ≥ open_rise.RISE_PCT
-      프리장       프리마켓(pre_flow.PRE_OPEN~PRE_CLOSE) 5분봉 거래대금(종가 × 거래량 합) 상위 pre_flow.TOP_N 중 넥스트레이드 프로그램 순매수 > 0 —
-                   지난 날 프로그램은 넥장 하루 합(프리 + 애프터)으로만 온다(KIS 프로그램 일별 NX · 11-11 잼) → 프리장 몫이 아님 · meta.approx
+      프리장       pre_flow.pick — 프리마켓(pre_flow.PRE_OPEN~PRE_CLOSE) 5분봉 거래대금(종가 × 거래량 합) · 등락률은 마지막 프리마켓 봉 종가 ÷
+                   앞 날 종가 − 1 · 오른 것 중 거래대금 상위 pre_flow.TOP_N(11-12 재권님 「상승인 종목 70개」 · 전에는 프로그램 > 0)
       볼린저       signal_sent(kind low) 그날 줄 중 그날 판을 남기는 때(day_top.SAVE_AT) 앞 — 그 봉 시각
       매수①~④     kis_proxy.joint_tier — 후보는 외국인 · 기관 순매수 금액 상위 JOINT_LIST 중 한쪽에라도 든 종목(목록 밖 쪽은 모름 — 그날 판과 같다).
                    외국인 · 기관 · 연기금은 investor_daily 확정치(연기금 = instDetail.fund), 프로그램은 KIS 프로그램 일별(J · 한 번에 30거래일 · 둘 다 살 때만).
@@ -227,13 +227,13 @@ def build(proxy, day, kis=True):
                 put(c, "급등", "%s:%s" % (up[0][:2], up[0][2:]))
             elif not reg and dhigh.get(c) and dhigh[c] >= lim:
                 put(c, "급등", "")
-        amt = sum((b[3] or 0) * (b[4] or 0) for b in bs if pre_from <= b[0] < pre_to)
+        pre = [b for b in bs if pre_from <= b[0] < pre_to]
+        amt = sum((b[3] or 0) * (b[4] or 0) for b in pre)
+        last = next((b[3] for b in reversed(pre) if b[3]), None)
         if amt > 0:
-            pre_amt[c] = amt
-    for c in sorted(pre_amt, key=lambda x: -pre_amt[x])[:pre_flow.TOP_N]:
-        pg = _program(proxy, c, day, calls, "NX") if kis else None
-        if pg is not None and pg > 0:
-            put(c, "프리장", "%02d:%02d" % pre_flow.PRE_CLOSE)      # 그날 판은 굳힌 때(08:50) — 같게
+            pre_amt[c] = {"code": c, "amt": amt, "pct": (last / prev_close - 1) * 100 if last and prev_close else None}
+    for c in pre_flow.pick(list(pre_amt.values())):
+        put(c, "프리장", "%02d:%02d" % pre_flow.PRE_CLOSE)      # 그날 판은 굳힌 때(08:50) — 같게
 
     for code, ts in lows:
         if code in today:
@@ -296,7 +296,7 @@ def build(proxy, day, kis=True):
             "meta": {"universe": len(rows), "topN": day_top.TOP_N, "minCapEok": day_top.MIN_CAP_EOK, "prevDay": pd, "volPrevX": day_top.VOL_PREV_X,
                      "rebuilt": True, "missing": ["관심"], "capNow": True, "calls": calls[0], "filled5m": filled, "noBar": no_bar,
                      "viFail": vi_fail if kis else None, "programFail": prog_fail if kis else None, "kis": kis,
-                     "approx": {"프리장": "프리마켓 거래대금 상위 중 넥스트레이드 프로그램 순매수 > 0 — 프로그램은 넥장 하루 합(프리 + 애프터)",
+                     "approx": {"프리장": "프리마켓 5분봉 거래대금 · 등락률은 마지막 프리마켓 봉 종가 ÷ 앞 날 종가(그날 판은 넥스트레이드 시세)",
                                 "매수": "대상 안 외 · 기 순매수 상위 30 · 장 끝 확정치(investor_daily · 프로그램 일별) · 처음 잡힌 시각 없음",
                                 "수급": "지금 룰로 셈",
                                 "급등": "정규장 5분봉 고가 기준 · 봉이 없으면 일봉 고가(시각 빈칸)"},

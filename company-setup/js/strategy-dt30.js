@@ -112,6 +112,25 @@ const taxTxt = (r) => { const m = String(r.market || '').toUpperCase(), T = TAX[
 const mean = (v) => (v.length ? v.reduce((a, b) => a + b, 0) / v.length : null);
 const sgn = (x) => (x == null ? '—' : `${x > 0 ? '+' : ''}${num(x, 2)}%`);
 
+// 어제 미국장 주요 값 — 그날 07:00 미국 데일리 텔레그램과 같은 저장본(/api/board/doc/usdaily-<그날> · 개발1 daily 서버가 씀) 그대로 · 칩 줄 오른쪽
+//   재권님 「오늘이면 어제장 미국 주요지수들 넣어줘 … 선물 반도체 에스앤피 나스닥」 → 자리 「단타 안에 칩 옆으로」(11-12) · 날짜를 바꾸면 그날 아침 것
+const US_NAMES = [['선물', (D) => D.night && D.night.rows && D.night.rows.kospi200, '야간선물 코스피200(그 전날 밤 · 06:00 마감)'], ['반도체', '필라델피아 반도체'], ['S&P', 'S&P 500'], ['나스닥', '나스닥 종합']];
+const usCache = {};
+const usHtml = (day) => {
+  const D = usCache[day];
+  if (D === undefined) return '<span class="dt-hd">어제 미국장</span><span class="st-err">받는 중…</span>';
+  if (D === null) return '<span class="dt-hd">어제 미국장</span><span class="st-err" data-tip="그날 아침 07:00 미국 데일리 저장본이 없음(07:00 전 · 주말 · 못 받음)">—</span>';
+  const one = ([lb, k, tip]) => { const x = typeof k === 'function' ? k(D) : (D.indices || []).find((i) => i.name === k); const v = x && (x.changePct ?? x.pct), val = x && (x.value ?? x.last);
+    return `<span class="dt-usi" data-tip="${esc(tip || `${k} · 현지 마감 · 07:00 텔레그램과 같은 값`)}">${esc(lb)} <b>${num(val, 2)}</b> ${pct(v == null ? null : Number(v))}</span>`; };
+  return `<span class="dt-hd">어제 미국장</span>${US_NAMES.map(one).join('')}`;
+};
+async function usLoad(day) {
+  if (!day || usCache[day] !== undefined) return;
+  try { const r = await fetch(`/api/board/doc/usdaily-${day}`, { cache: 'no-store' }); const j = r.ok ? await r.json() : null; usCache[day] = (j && j.data && (j.data.indices || j.data.night)) ? j.data : null; }
+  catch (e) { usCache[day] = null; }
+  const el = $('dt-us'); if (el && el.dataset.day === day) el.innerHTML = usHtml(day);
+}
+
 function paint(d) {
   atText(d.buyAt);
   st.miss = new Set(names(d.meta && d.meta.missing)); st.rebuilt = !!(d.meta && d.meta.rebuilt === true);
@@ -119,7 +138,8 @@ function paint(d) {
   const all = Array.isArray(d.rows) ? d.rows : [];
   const live = all.filter((r) => nLive(r) > 0).sort(byLive);   // 켜진 칩으로 다시 셈한 단타 차례
   // 칩 줄은 표 안 「종목」 머리 줄과 「평균」 줄 사이에 (11-11 재권님 「칩위치는 종목과 평균사이에 넣어줘」) · 표가 옆으로 밀려도 칩은 왼쪽에 붙어 있음(strategy.css)
-  const chipRow = (n) => `<tr class="dt-chiprow"><td colspan="${n}"><div class="dt-chips" id="dt-chips" aria-label="단타 칩 — 눌러서 켜고 끄기"><span class="dt-hd">단타 칩</span>${chipPanel(all)}</div></td></tr>`;
+  usLoad(d.day);
+  const chipRow = (n) => `<tr class="dt-chiprow"><td colspan="${n}"><div class="dt-chips" id="dt-chips" aria-label="단타 칩 — 눌러서 켜고 끄기"><span class="dt-hd">단타 칩</span>${chipPanel(all)}<span class="dt-us" id="dt-us" data-day="${esc(d.day || '')}">${usHtml(d.day)}</span></div></td></tr>`;
   const rows0 = st.only ? live.filter((r) => liveChip(r, st.only)) : live;   // 거르고 나서 순번 · 상위 16 · 평균을 다시 셈
   const rows = st.order ? [...rows0].sort(ORDER_FN[st.order]) : rows0;   // 줄 세우기를 바꾸면 순번 · 상위 16 을 그 차례로
   const L = times.length - 1;
