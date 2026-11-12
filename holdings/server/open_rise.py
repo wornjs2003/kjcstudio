@@ -4,7 +4,7 @@
 재권님 — 「아침 9시5분 기준으로 양봉이 2% 이상이 되고 시가총액이 5천억 이상인 종목들 소팅해서 실시간 순위에 초반상승 이라고 만들어서
 넣어줘」(작업우선순위 창 11:25) → 「양봉 2%」 를 (가) 첫 5분봉 시가 대비 종가 · (나) 09:05 가격의 전일 종가 대비 로 여쭈어 「가」(개발1 창 11:41).
 
-    대상        순위 목록(dart.universe_rows · 코스피 200 · 코스닥 150) 중 시가총액 MIN_CAP_EOK 억원 이상 · **ETF 는 뺀다**(재권님 「가」 11-11)
+    대상        순위 목록(dart.universe_rows · 시가총액 dart.UNIVERSE_MIN_CAP_EOK 이상) 중 시가총액 MIN_CAP_EOK 억원 이상 · **ETF 는 뺀다**(재권님 「가」 11-11)
                 ETF = 순위 목록에 있는데 OpenDART 기업 대응표(dart_corps)에 없고 코드 끝자리가 0 — 대응표에 없는 것은 ETF 와 우선주뿐이고
                 우선주는 끝자리가 0 이 아니다(11-11 개발 DB: 대응표 밖 42 = ETF 39 + 우선주 3 · 대응표 안에 끝자리 0 아닌 코드 0)
     셈          그날 09:00~09:05 5분봉(보통 날 여는 시각 — market_hours.today 의 usual reg[0] · 재권님 「아침 9시부터 9시 5분」) — (종가 − 시가) ÷ 시가 ≥ RISE_PCT %
@@ -28,13 +28,15 @@
 
 from datetime import datetime, timedelta, timezone
 
+import dart            # 시가총액 문턱(UNIVERSE_MIN_CAP_EOK) 한 곳 — 모듈을 읽을 때 쓴다
+
 import market_hours
 
 KST = timezone(timedelta(hours=9))
 
 BAR_MIN = 5              # 5분봉 한 봉의 길이(분)
 RISE_PCT = 2.0           # 첫 봉 시가 대비 종가 상승률 문턱(%)
-MIN_CAP_EOK = 5000       # 시가총액 문턱(억원 · 5천억 — 재권님 「3천억으로 통일」 → 「오전에 3천억이라고 한거 5천억으로 바꿔」 11-12) — dart_universe.market_cap 단위가 억원
+MIN_CAP_EOK = dart.UNIVERSE_MIN_CAP_EOK   # 시가총액 문턱(억원) — 대상 목록 문턱 그대로(한 곳 · 개념정의 검수 11-12) · 재권님 「3천억으로 통일」 → 「오전에 3천억이라고 한거 5천억으로 바꿔」 11-12 — dart_universe.market_cap 단위가 억원
 CACHE_TTL = 60           # 같은 판을 다시 세지 않는 시간(초) — 화면이 다시 묻는 주기도 이 값(서버 값)
 FIRST_GRACE_SEC = 3      # 첫 봉이 끝난 뒤 이만큼 기다렸다 받는다 — KIS 가 그 분을 닫을 틈
 FIRST_UNTIL_MIN = 10     # 첫 봉 끝에서 이 분이 지나면 먼저 받기를 그만둔다(남은 것은 미리받기 몫)
