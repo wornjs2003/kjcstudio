@@ -1177,6 +1177,15 @@
 .kh-mkt-fut .kh-mut { font-size: var(--kh-fs-md); }
 .kh-fut-1 { display: inline-flex; align-items: center; gap: 5px; margin-right: 12px; }
 .kh-fut-1:last-child { margin-right: 0; }
+/* 옵션 만기 칩 — 야간 옆 (2026-11-12 · home.js xpChip). 평소 회색 · 만기 앞 거래일~당일 빨강 채움 깜박임 · 세마녀의 날은 두 겹 테 + 더 빠르게 */
+.kh-xp { display: inline-flex; align-items: center; gap: 5px; margin: -2px 0 -2px 12px; padding: 2px 9px;   /* 위아래 -2 — 칩 여백이 줄 높이를 안 늘리게(check-layout 13 → 16 이었다) */
+  border-radius: 999px; white-space: nowrap;
+  font-size: var(--kh-fs-md); background: var(--kh-bg-surface); color: var(--kh-text-secondary); }
+.kh-xp b { color: var(--kh-text-primary); font-weight: 700; }
+.kh-xp.is-near, .kh-xp.is-witch { background: var(--kh-danger); color: var(--kh-text-on-fill); font-weight: 700; animation: kh-xp-blink 1s steps(2, start) infinite; }
+.kh-xp.is-near b, .kh-xp.is-witch b { color: var(--kh-text-on-fill); }
+.kh-xp.is-witch { font-weight: 800; padding: 2px 12px; box-shadow: 0 0 0 3px var(--kh-danger-faint), 0 0 0 5px var(--kh-danger); animation-duration: .6s; }
+@keyframes kh-xp-blink { to { opacity: .25; } }
 
 /* 큰 차트의 기간 고르기 (2026-09-15 지시) */
 /* 이름 아래 줄에 둔다. 전에는 오른쪽 끝에 붙여 두었다 (2026-09-15 지시) */
