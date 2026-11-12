@@ -600,5 +600,6 @@
 <script type="module" src="js/gov.js"></script>
 <script type="module" src="/assets/js/glossary.js"></script>   <!-- 용어 풍선 — 루트 data/glossary.json 한 곳 (2026-10-07 · 2026-10-12 공용으로 옮김 · 「용어 설명은 한 곳에만 쓴다」). 건너뛸 칸은 위 #in-doc 의 data-glossary-skip -->
 <script type="module" src="js/fit.js"></script>   <!-- 틀을 홀딩스 첫 화면과 같은 넓이로 (2026-11-07) -->
+<script type="module">import { mountClaudeRail } from '/assets/js/claude-rail.js'; if (self === top) mountClaudeRail(); /* 틀(iframe) 안에 들어간 화면에는 안 붙인다 */</script>
 </body>
 </html>
