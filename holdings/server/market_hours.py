@@ -186,6 +186,49 @@ def _notice_tick():
     _st["noticeAt"] = at
 
 
+OPT_EXPIRY_WEEK = 2                  # 코스피200 옵션 · 선물 만기 — 결제월 둘째 목요일 · 휴장이면 앞 거래일(KRX 상품명세 · qa 11-12)
+OPT_EXPIRY_WEEKDAY = 3               # 목요일(월=0)
+WITCH_MONTHS = (3, 6, 9, 12)         # 선물도 같은 날 만기 — 세마녀의 날
+OPT_EXPIRY_CLOSE = "1520"            # 만기일 정규장 끝(qa 11-12) — 화면 글에 그대로 쓴다
+
+
+def _expiry_of(proxy, y, m, now):
+    """그 달 옵션 만기일(date) — 둘째 목요일 · 휴장이면 앞 거래일로. 휴장일 표에 없는 평일은 연다고 본다(못 쟀으면 「표 밖」)."""
+    d = datetime(y, m, 1, tzinfo=KST).date()
+    d += timedelta(days=(OPT_EXPIRY_WEEKDAY - d.weekday()) % 7 + 7 * (OPT_EXPIRY_WEEK - 1))
+    sure = True
+    for _ in range(10):
+        t = today(proxy, day=d.strftime("%Y%m%d"), now=now)
+        if t["open"] is not False:
+            sure = sure and t["open"] is True
+            break
+        d -= timedelta(days=1)
+    return d, sure
+
+
+def _prev_trading(proxy, d, now):
+    for _ in range(10):
+        d -= timedelta(days=1)
+        if today(proxy, day=d.strftime("%Y%m%d"), now=now)["open"] is not False:
+            return d
+    return d
+
+
+def opt_expiry(proxy, now=None):
+    """이번 달 옵션 만기 — 그날이 지나면 다음 달 것 (2026-11-12 재권님 「야간선물옆에 이번달에 대한걸 적어주고 당일 -1 일부터 당일까지 깜박이게」 ·
+    「세마녀의날은 특히 더」 → 시안 「노랑도 빨강으로 · 더 진하게 · 깜박여야해」 → 「응 커밋해」).
+    {"day": YYYYMMDD, "witch": 선물 · 옵션 동시, "dday": 달력 날 수, "near": 앞 거래일 ~ 당일, "close": 만기일 끝 시각, "sure": 휴장일 표로 확인됐나}"""
+    now = now or _now()
+    td = now.date()
+    d, sure = _expiry_of(proxy, td.year, td.month, now)
+    if d < td:
+        y, m = (td.year + 1, 1) if td.month == 12 else (td.year, td.month + 1)
+        d, sure = _expiry_of(proxy, y, m, now)
+    near = td == d or td == _prev_trading(proxy, d, now)
+    return {"day": d.strftime("%Y%m%d"), "witch": d.month in WITCH_MONTHS, "dday": (d - td).days, "near": near,
+            "close": OPT_EXPIRY_CLOSE, "sure": sure}
+
+
 def board(proxy, now=None):
     now = now or _now()
     t = today(proxy, now=now)

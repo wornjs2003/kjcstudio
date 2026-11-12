@@ -190,11 +190,31 @@ function paintMkt() {
       ${note ? `<span class="kh-mut">${note}</span>` : ''}
     </span>`;
 
+  /* 옵션 만기 칩 — 야간 옆 (2026-11-12 재권님 「야간선물옆에 이번달에 대한걸 적어주고 당일 -1 일부터 당일까지 깜박이게」 · 「세마녀의날은 특히 더」 →
+     시안 「노랑도 빨강으로 하고 더 진하게 · 세마녀의날도 진하게 · 깜박여야해」 → 「응 커밋해」). 날짜 · 세마녀 · 깜박일 때는 서버(market_hours.opt_expiry)가 준다 —
+     화면은 받은 대로 글만 짓는다. 못 받으면 칩을 안 그린다 */
+  const xp = (lastIndices || {}).optExpiry;
+  const xpChip = (() => {
+    if (!xp || !xp.day) return '';
+    const d = new Date(+xp.day.slice(0, 4), +xp.day.slice(4, 6) - 1, +xp.day.slice(6, 8));
+    const md = `${xp.day.slice(4, 6)}-${xp.day.slice(6, 8)}(${'일월화수목금토'[d.getDay()]})`;
+    const when = xp.dday === 0 ? '오늘 ' : xp.dday === 1 ? '내일 ' : '';
+    const name = xp.witch ? '세마녀의 날' : '옵션 만기';
+    const tail = xp.near
+      ? (xp.witch ? '선물 · 옵션 동시 만기' : `${xp.close.slice(0, 2)}:${xp.close.slice(2)} 마감`)
+      : `D-${xp.dday}`;
+    const tip = `코스피200 옵션${xp.witch ? ' · 선물 동시' : ''} 만기일 — 그 달 둘째 목요일 · 휴장이면 앞 거래일 · 만기일 정규장은 ${xp.close.slice(0, 2)}:${xp.close.slice(2)} 에 끝납니다`
+      + (xp.near ? '\n만기 앞 거래일부터 당일까지 깜박입니다' : '') + (xp.sure ? '' : '\n휴장일 표에 아직 그날이 없어 평일로 셌습니다');
+    const cls = 'kh-xp' + (xp.near ? (xp.witch ? ' is-witch' : ' is-near') : '');
+    return `<span class="${cls}" data-tip="${tip}">${name} <b>${when}${md}</b> · ${tail}</span>`;
+  })();
+
   const futures = `
     <span class="kh-mkt-fut">
       ${one('현물', spot ? spot.value : null, spot && spot.changePct)}
       ${one('선물', f ? f.price : null, f && f.changePct, null, f ? f.name : '')}
       ${one('야간', n ? n.price : null, n && n.changePct, null, nightNote)}
+      ${xpChip}
     </span>`;
 
   el.innerHTML = `
