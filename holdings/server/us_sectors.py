@@ -66,13 +66,16 @@ KR_SECTOR_ETF = {
 
 
 def last_changes(conn):
-    """섹터 ETF 마다 가장 최근에 끝난 미국장 하루 등락률 {etf: (미국 날짜, %)} — 봉 표(candles)의 일봉 마지막 둘. 없으면 빠진다."""
+    """섹터 ETF 마다 가장 최근에 끝난 미국장 하루 등락률 {etf: (미국 날짜, %)} — 봉 표(candles)의 일봉 마지막 둘. 없으면 빠진다.
+    끝 봉 날짜가 다른 ETF 들의 가장 늦은 날보다 앞이면(그 ETF 일봉이 며칠 안 들어옴) 옛 날 등락을 「최근」 으로 쓰지 않고 뺀다 —
+    빠진 ETF 는 「못 셈」(개념정의 검수 덧 11-12)"""
     out = {}
     for etf, _ in SECTORS:
         r = conn.execute("SELECT ts, close FROM candles WHERE period = 'D' AND code = ? ORDER BY ts DESC LIMIT 2", (etf,)).fetchall()
         if len(r) == 2 and r[0][1] and r[1][1]:
             out[etf] = (str(r[0][0])[:8], round((r[0][1] / r[1][1] - 1) * 100, 2))
-    return out
+    last = max((d for d, _ in out.values()), default=None)
+    return {e: v for e, v in out.items() if v[0] == last}
 
 #: 기간 → 몇 봉 앞과 견주나
 SPAN_BACK = {"d": 1, "w": 5, "m": 20}
