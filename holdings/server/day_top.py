@@ -33,7 +33,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 KST = timezone(timedelta(hours=9))
-MIN_CAP_EOK = 3000            # 시가총액 문턱(억원) — 재권님 「시가통액 5천억이상」 → 「3천억으로 통일해」(11-12 · 단타 30 · 화면 RANK_MIN_CAP_EOK 와 같은 값)
+MIN_CAP_EOK = 5000            # 시가총액 문턱(억원) — 재권님 「시가통액 5천억이상」 → 「3천억으로 통일해」 → 「오전에 3천억이라고 한거 5천억으로 바꿔」(11-12)
 TOP_N = 40                    # 주소가 기본으로 내는 줄 수
 VOL_PREV_X = 2.0              # 「거래량 전날 2배」 시험 기준
 SAVE_AT = (16, 10)            # flow_rank 확정치 쌓기(15:45) · 「매수」 판 굳기를 기다린 뒤

@@ -73,7 +73,7 @@ def _daily(proxy, code):
 def _stocks(proxy, since):
     """코스피 시가총액 상위(dart 감시 목록 · 매일 07시) 종목의 일봉 — 우선주 포함 (2026-11-12 qa 검수 · 재권님 「우선주도 넣어」).
     전에는 일봉이 있는 6자리 전부를 세어 코스닥 · ETF 가 섞였다."""
-    codes = {r["stock_code"] for r in dart.universe_rows("KOSPI")}
+    codes = {r["stock_code"] for r in dart.universe_top_rows("KOSPI")}   # 상위 200 — 대상 표가 5천억 이상으로 넓어져도(11-12) 그대로
     px = {c: {} for c in codes}
     if not codes:
         return px
