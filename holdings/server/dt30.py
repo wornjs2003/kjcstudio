@@ -101,22 +101,7 @@ def chips_now(proxy, cfg, early=True):
                 g["name"] = name
 
     try:
-        doc = docstore.read_doc("watchlist")
-        if not isinstance(doc, dict):
-            raise ValueError("관심 문서 없음")              # 못 읽음을 0 종목으로 두지 않는다(qa 11-11)
-        auto = set((doc.get("auto") or {}).keys()) if isinstance(doc.get("auto"), dict) else set()
-        grp = [(g.get("name"), set(g.get("codes") or [])) for g in doc.get("groups") or []
-               if isinstance(g, dict) and g.get("id") != "auto"]          # 관심 하위 = 그 종목이 든 묶음(자동 묶음은 수급이라 뺀다)
-        for it in doc.get("items") or []:
-            if isinstance(it, dict):
-                c = it.get("code")
-                if c in auto:
-                    put(c, it.get("name"), "수급")
-                elif not small(c):
-                    put(c, it.get("name"), "관심")
-                    for gn, gc in grp:
-                        if c in gc:
-                            put(c, it.get("name"), "관심", gn)
+        watch_chips(docstore.read_doc("watchlist"), put, small)
     except Exception:
         missing += ["관심", "수급"]
     try:
@@ -163,6 +148,54 @@ def chips_now(proxy, cfg, early=True):
     except Exception:
         pass
     return hit, missing, cap, mkt
+
+
+def watch_chips(doc, put, small):
+    """관심 목록 문서 → 칩 — 하트 종목은 「관심」(하위 = 든 묶음 이름 · 시가총액 CAP_MIN_EOK 아래 뺌) · 자동 묶음은 「수급」. 오늘 판 · 지난 날 함께 쓴다."""
+    if not isinstance(doc, dict):
+        raise ValueError("관심 문서 없음")              # 못 읽음을 0 종목으로 두지 않는다(qa 11-11)
+    auto = set((doc.get("auto") or {}).keys()) if isinstance(doc.get("auto"), dict) else set()
+    grp = [(g.get("name"), set(g.get("codes") or [])) for g in doc.get("groups") or []
+           if isinstance(g, dict) and g.get("id") != "auto"]          # 관심 하위 = 그 종목이 든 묶음(자동 묶음은 수급이라 뺀다)
+    for it in doc.get("items") or []:
+        if isinstance(it, dict):
+            c = it.get("code")
+            if c in auto:
+                put(c, it.get("name"), "수급")
+            elif not small(c):
+                put(c, it.get("name"), "관심")
+                for gn, gc in grp:
+                    if c in gc:
+                        put(c, it.get("name"), "관심", gn)
+
+
+def watch_at(day):
+    """day 09:01 직전의 관심 목록 문서 — 보드 문서 저장 기록(docstore 의 git · 2026-10-26 부터)에서 꺼낸다. 기록이 없으면 None."""
+    import subprocess, docstore
+    at = "%s-%s-%s %02d:%02d:00 +0900" % (day[:4], day[4:6], day[6:], BUY_AT[0], BUY_AT[1])
+    r = subprocess.run(["git", "log", "-1", "--before=" + at, "--format=%H", "--", "watchlist.json"],
+                       cwd=docstore.DOC_ROOT, capture_output=True, timeout=10)
+    h = r.stdout.decode().strip() if r.returncode == 0 else ""
+    if not h:
+        return None
+    r = subprocess.run(["git", "show", h + ":watchlist.json"], cwd=docstore.DOC_ROOT, capture_output=True, timeout=10)
+    if r.returncode != 0:
+        return None
+    d = json.loads(r.stdout.decode("utf-8"))
+    return d.get("data") if isinstance(d, dict) and isinstance(d.get("data"), dict) and "items" not in d else d
+
+
+def chip_rules(proxy):
+    """화면 룰 표에 내줄 칩 룰 값 — 관심은 이 파일 문턱 · 수급(자동 관심)은 auto_watch 룰 문서 한 곳에서 읽는다."""
+    out = {"관심": {"capMinEok": CAP_MIN_EOK, "what": "하트 누른 종목 · 하위는 든 묶음 이름 · 자동 묶음은 수급"},
+           "하락뺌": {"dropBelowPct": DROP_BELOW_PCT}}
+    try:
+        import auto_watch
+        r, src = auto_watch.rules(proxy)
+        out["수급"] = dict(r, src=src)
+    except Exception:
+        out["수급"] = None                              # 못 읽음 — 빈 룰로 두지 않는다
+    return out
 
 
 EARLY_WORKERS = 6
@@ -225,7 +258,7 @@ def build(proxy, cfg, day, skip=()):
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(), "rows": rows, "closed": False,
-            "meta": {"rebuilt": False, "missing": [c for c in missing if c != "매수어림"], "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT,
+            "meta": {"rebuilt": False, "missing": [c for c in missing if c != "매수어림"], "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy),
                      "early": ["매수"] if "매수어림" in missing else [], "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
                      "order": "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순",
                      "note": "buy 는 굳힌 때(buyAt) 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
@@ -417,8 +450,9 @@ def track(proxy, cfg, b, hhmm, late):
 # ---------------------------------------------------------------- 지난 날 되채우기
 # 재권님 「관심을 제외하고 지난 20일의 정보가 필요해 가져올수 있는곳 찾아서 가져와줘」(18:0x) → 「지난 30일 데이터도 적용해서 넣어놔」(19:3x).
 # 개발 DB 에 쌓인 것으로 그날 09:06 판을 다시 센다 — VI 만 KIS 에 묻는다. 다시 센 날은 meta.rebuilt true · missing(못 센 칩) · approx(어림한 칩).
-#   관심       뺀다(재권님)
-#   수급       앞 거래일 auto_watch_day 값에 **지금** 수급 룰(auto_watch.compute · 문서 rules.volsurge)을 댄다 — 그날 룰이 달랐을 수 있어 어림
+#   관심 · 수급  그날 09:01 직전 관심 목록 문서(보드 문서 저장 기록 · watch_at)로 오늘 판과 같게 센다 — meta.watchSrc 「기록」
+#              (재권님 「투자 전략 단타안에 관심도 넣어주고 룰도 넣어줘」 11-12 → 안 「응」) · 시가총액은 지금 값
+#              기록이 없는 날(2026-10-26 전)은 관심 「못 받음」 · 수급은 앞 거래일 auto_watch_day 값에 **지금** 수급 룰을 댄 어림 — meta.watchSrc 「없음」
 #   프리장     그날 08:00~08:50 5분봉 거래대금(종가 × 거래량) 상위 pre_flow.TOP_N — 프로그램 순매수 기록이 없어 어림
 #   VI·급등    급등 — 09:00 · 09:05 봉 고가가 앞 거래일 종가보다 intraday_alerts.SURGE_PCT % 이상 · VI — KIS 「VI 현황」(날짜 · 종목) 에서 09:00~09:06 발동
 #              (VI_PROBE_PCT % 넘게 오른 종목만 묻는다 · QUIET 밖에서만 돈다)
@@ -465,7 +499,7 @@ def rebuild(proxy, day, prev, cfg=None):
                                          (day, int(day + "0906")))]
     names = {c: (r[1] or "") for c, r in pv.items()}
     names.update({r["stock_code"]: r["name"] for r in uni})
-    hit, missing, approx = {}, ["관심"] + ([] if cfg else ["VI"]), ["수급", "프리장", "매수"]
+    hit, missing, approx = {}, [] if cfg else ["VI"], ["프리장", "매수"]
 
     def put(code, chip, sub=None, **kw):
         g = hit.setdefault(code, {"name": names.get(code, ""), "chips": set(), "subs": {}})
@@ -474,13 +508,27 @@ def rebuild(proxy, day, prev, cfg=None):
         if sub and sub not in g["subs"].setdefault(chip, []):
             g["subs"][chip].append(sub)
 
-    try:                                                   # 수급 — 앞 거래일 값에 지금 룰
+    try:
+        wdoc = watch_at(day)
+    except Exception:
+        wdoc = None
+    watch_src = "기록" if isinstance(wdoc, dict) else "없음"
+    if watch_src == "기록":
+        watch_chips(wdoc, lambda c, n, chip, sub=None: put(_six(c), chip, sub) if _six(c) else None, small)
+    else:
+        missing.append("관심")
+    try:                                                   # 수급 — 기록이 없는 날만 앞 거래일 값에 지금 룰(어림)
+        if watch_src == "기록":
+            raise StopIteration
+        approx.append("수급")
         live = {"day": prev, "frac": 1, "at": "", "got": {c: {"name": r[1], "close": r[2], "pct": r[3], "vol": r[4]} for c, r in pv.items()}}
         res = auto_watch.compute(proxy, live=live)
         if not res.get("ready"):
             raise ValueError("수급 룰 못 읽음")             # 룰을 못 읽으면 「없음」 이 아니라 「못 셈」
         for r in res.get("picked") or []:
             put(r["code"], "수급")
+    except StopIteration:
+        pass
     except Exception:
         missing.append("수급")
     amt = {c: sum((b[2] or 0) * (b[3] or 0) for hm, b in d.items() if "0800" <= hm <= "0850") for c, d in bars.items()}
@@ -569,15 +617,21 @@ def rebuild(proxy, day, prev, cfg=None):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(), "rows": rows, "closed": True,
             "meta": {"rebuilt": True, "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": DROP_BELOW_PCT,
+                     "watchSrc": watch_src, "rules": chip_rules(proxy),
                      "capMinEok": CAP_MIN_EOK, "order": "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순",
-                     "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 뺌 · 수급 · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
+                     "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 · 수급은 그날 09:01 직전 관심 목록(watchSrc 기록 · 없으면 관심 못 받음 · 수급 어림) · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
                              "buy 는 09:05 봉 시가 · 시가총액 · 섹터 · 시장은 지금 값"}}
 
 
 def backfill(proxy, today, limit=BACKFILL_DAYS, since=None):
     """today 앞 limit 거래일 중 판이 없는 날을 다시 세어 남긴다(라이브로 굳힌 날은 안 건드린다). 남긴 날 수."""
     ds = _trade_days(proxy, today, limit)
-    have = set(days(proxy))
+    have = set()
+    for d in days(proxy):                              # 관심 없이 세어 둔 되채운 날(watchSrc 칸 전)은 한 번 다시 센다(11-12 「응」)
+        got = _load(proxy, d)
+        m = (got[0].get("meta") or {}) if got else {}
+        if not (m.get("rebuilt") and "watchSrc" not in m):
+            have.add(d)
     n = 0
     cfg = proxy.load_secrets()
     for i, d in enumerate(ds[:limit]):
