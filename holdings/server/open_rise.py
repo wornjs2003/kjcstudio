@@ -129,16 +129,16 @@ def _first_once(proxy, now):
     day = proxy._minutes_trade_day()
     if day != now.strftime("%Y%m%d"):
         return None
-    if _first.get("tday") != day:                  # 장 시각은 그날 한 번만 묻는다 — 고리가 1초마다 돈다(qa 덧 11-12)
-        _first.update(tday=day, t=market_hours.today(proxy, day=day, now=now))
-    t = _first["t"]
-    if t["open"] is False or t["reg"][0] != t["usual"]["reg"][0]:
-        return None                                # 휴장 · 늦게 여는 날(수능 등)은 그 봉이 없다 — 헛호출 안 함(qa 덧 11-12)
-    bar_hm = t["usual"]["reg"][0]
+    bar_hm = market_hours.REG_OPEN                 # 보통 날 여는 시각 — today() 의 usual 과 같은 값(한 곳)
     bar_end = int(bar_hm[:2]) * 60 + int(bar_hm[2:]) + BAR_MIN
     sec = now.hour * 3600 + now.minute * 60 + now.second
     if sec < bar_end * 60 + FIRST_GRACE_SEC or now.hour * 60 + now.minute >= bar_end + FIRST_UNTIL_MIN:
-        return None
+        return None                                # 창 밖에서는 장 시각을 묻지 않는다 — 고리가 1초마다 돈다(qa 덧 11-12)
+    if _first.get("tday") != day:                  # 창 안에서 그날 처음 한 번만 묻는다 — 자정에 붙잡으면 그 뒤 고친 장 시각을 못 본다(qa 덧 11-12)
+        _first.update(tday=day, t=market_hours.today(proxy, day=day, now=now))
+    t = _first["t"]
+    if t["open"] is False or t["reg"][0] != bar_hm:
+        return None                                # 휴장 · 늦게 여는 날(수능 등)은 그 봉이 없다 — 헛호출 안 함(qa 덧 11-12)
     uni, _ = _universe(proxy)
     codes = [u["code"] for u in uni if u["cap"] is not None and u["cap"] >= MIN_CAP_EOK]
     todo = [c for c in codes if (proxy._minutes_fresh_upto(c) or 0) < bar_end]
