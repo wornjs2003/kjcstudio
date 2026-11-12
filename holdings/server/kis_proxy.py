@@ -10342,7 +10342,7 @@ class Handler(SimpleHTTPRequestHandler):
                              "risePct": open_rise.RISE_PCT, "minCapEok": open_rise.MIN_CAP_EOK,
                              "barFrom": d["barFrom"], "barTo": d["barTo"],
                              "note": "DB 에 쌓인 5분봉 — 정규장 첫 봉 (종가 − 시가) ÷ 시가 · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
-                             "cacheTtl": open_rise.CACHE_TTL},
+                             "cacheTtl": open_rise.CACHE_TTL, "first": open_rise.first_status()},
                 })
                 return
 
@@ -11204,6 +11204,8 @@ def main():
     if not SLOW and is_sender(args.port) and dt30.start(sys.modules[__name__]):
         print("  단타 30 판 : 평일 %s 단타 상위 %d 굳힘 · %s~%s %d분마다 값 · %d거래일 · /api/kis/dt30"
               % (dt30.status()["buyAt"], dt30.TOP_N, dt30.times()[0], dt30.times()[-1], dt30.TRACK_STEP, dt30.DAYS_KEEP))
+    if not SLOW and is_sender(args.port) and open_rise.start(sys.modules[__name__]):
+        print("  초반상승   : 첫 5분봉이 끝나는 순간(+%d초) 대상 종목 첫 봉을 먼저 받음 · %d분 뒤 그만" % (open_rise.FIRST_GRACE_SEC, open_rise.FIRST_UNTIL_MIN))
     if not SLOW and is_sender(args.port) and day_top_fill.start(sys.modules[__name__]):
         print("  등락 상위 되채움: 지난 %d거래일 · %s" % (day_top_fill.FILL_DAYS, day_top_fill.status()["window"]))
     if not SLOW and is_sender(args.port) and day_top.start(sys.modules[__name__]):

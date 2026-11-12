@@ -18,7 +18,12 @@
                 nodata(대상이 있는데 첫 봉이 하나도 없음 — 「오른 종목 없음」 이 아니라 「못 쟀다」)
     없음        그날 봉이 없는 종목은 `noBar` 로 센다(0 아님)
 
-KIS 를 부르지 않는다. 값(2% · 5천억)은 이 파일 상수 한 곳 · 장 시각은 market_hours 한 곳 — 화면은 meta 로 받아 글에 쓴다.
+판은 KIS 를 부르지 않는다. 값(2% · 5천억)은 이 파일 상수 한 곳 · 장 시각은 market_hours 한 곳 — 화면은 meta 로 받아 글에 쓴다.
+
+    첫 봉 먼저   미리받기만 기다리면 화면이 열려 있는 동안 종목 사이를 쉬어 09:10 에 70~80종목뿐이었다(11-12 · 09:06 단타 판에 거의 빠짐).
+                그래서 쓰는 서버는 첫 봉이 끝나는 순간(+FIRST_GRACE_SEC) 대상 중 아직 끝난 뒤 안 받은 종목의 5분봉을 차례로 받는다 —
+                미리받기와 같은 get_chart(「지금 칸」 · 받은 분 표시) · 대상 수만큼 KIS(약 300종목) · FIRST_UNTIL_MIN 지나면 그만
+                (재권님 「9시부터 9시5분까지 미리 받게 하면 되지않아?」 → 덜 찬 봉이라 09:05 뒤에 받아야 함 → 「응 그렇게 해」 11-12)
 """
 
 from datetime import datetime, timedelta, timezone
@@ -31,6 +36,8 @@ BAR_MIN = 5              # 5분봉 한 봉의 길이(분)
 RISE_PCT = 2.0           # 첫 봉 시가 대비 종가 상승률 문턱(%)
 MIN_CAP_EOK = 5000       # 시가총액 문턱(억원 · 5천억) — dart_universe.market_cap 단위가 억원
 CACHE_TTL = 60           # 같은 판을 다시 세지 않는 시간(초) — 화면이 다시 묻는 주기도 이 값(서버 값)
+FIRST_GRACE_SEC = 3      # 첫 봉이 끝난 뒤 이만큼 기다렸다 받는다 — KIS 가 그 분을 닫을 틈
+FIRST_UNTIL_MIN = 10     # 첫 봉 끝에서 이 분이 지나면 먼저 받기를 그만둔다(남은 것은 미리받기 몫)
 
 _st = {"at": 0.0, "data": None}
 
@@ -108,3 +115,66 @@ def fetch(proxy, now=None):
         _st["data"] = build(proxy, now)
         _st["at"] = time.time()
     return _st["data"], _st["at"]
+
+
+_first = {"day": None, "got": 0, "left": None, "at": None, "error": None}
+
+
+def first_status():
+    return dict(_first)
+
+
+def _first_once(proxy, now):
+    """그날 첫 봉을 끝난 뒤 아직 안 받은 대상 종목을 받는다 → 남은 수. 그날 할 일이 아니면 None."""
+    day = proxy._minutes_trade_day()
+    if day != now.strftime("%Y%m%d"):
+        return None
+    t = market_hours.today(proxy, day=day, now=now)
+    if t["open"] is False:
+        return None
+    bar_hm = t["usual"]["reg"][0]
+    bar_end = int(bar_hm[:2]) * 60 + int(bar_hm[2:]) + BAR_MIN
+    sec = now.hour * 3600 + now.minute * 60 + now.second
+    if sec < bar_end * 60 + FIRST_GRACE_SEC or now.hour * 60 + now.minute >= bar_end + FIRST_UNTIL_MIN:
+        return None
+    uni, _ = _universe(proxy)
+    codes = [u["code"] for u in uni if u["cap"] is not None and u["cap"] >= MIN_CAP_EOK]
+    todo = [c for c in codes if (proxy._minutes_fresh_upto(c) or 0) < bar_end]
+    _first.update(day=day, left=len(todo), at=now.strftime("%H:%M:%S"))
+    cfg = proxy.load_secrets()
+    for c in todo:
+        if datetime.now(KST).hour * 60 + datetime.now(KST).minute >= bar_end + FIRST_UNTIL_MIN:
+            break
+        try:
+            proxy.get_chart(cfg, c, "5m", 1, gap_check=False)
+            _first["got"] += 1
+        except Exception as e:
+            _first["error"] = type(e).__name__
+        _first["left"] -= 1
+    _st["at"] = 0.0                              # 판을 바로 다시 센다
+    return _first["left"]
+
+
+def start(proxy):
+    """쓰는 서버가 뜰 때 한 번 — 날마다 첫 봉이 끝나는 순간 대상 종목 첫 봉을 먼저 받는다."""
+    import threading
+    import time
+    if not proxy.marketdb.writable():
+        return False
+
+    def loop():
+        done = None
+        while True:
+            now = datetime.now(KST)
+            try:
+                if done != now.strftime("%Y%m%d"):
+                    left = _first_once(proxy, now)
+                    if left is not None:
+                        done = now.strftime("%Y%m%d")
+                        print("  [초반상승] %s 첫 봉 먼저 받기 — %d종목 받음 · 남음 %d" % (now.strftime("%H:%M:%S"), _first["got"], left), flush=True)
+            except Exception as e:
+                _first["error"] = type(e).__name__
+            time.sleep(1)
+
+    threading.Thread(target=loop, daemon=True, name="open-rise-first").start()
+    return True
