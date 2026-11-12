@@ -88,6 +88,16 @@ export function fmtIx(v, digits) {
     : Number(v).toLocaleString('ko-KR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 /* 값 뒤 글자 — % · %p 만 붙인다(원 · 단위 없는 지수는 칩이 좁아 안 붙인다) */
+// 재료 줄 풍선 — 네이버 단위 코드를 우리 말로(재권님 「시장흐름 재료들 설명이 제대로 안나오는거 같은데」 → (가) 「가로」 11-12).
+// 이름 설명은 용어집(data/glossary.json · 개념정의)에 따로 — 여기는 단위만. 표에 없는 코드는 코드 그대로 「단위 …」
+const UNIT_KO = {
+  'USD/BBL': '1배럴당 달러', 'USD/U GAL': '1갤런(미국)당 달러', 'USD/MMBTU': '100만 BTU(열량)당 달러',
+  'USD/OZS': '1트로이온스당 달러', 'USD/TONNE': '1톤당 달러', 'USD/TONS': '1숏톤(907kg)당 달러',
+  'USD/DMT': '1건조톤(물기 뺀 1톤)당 달러', 'USD/LBS': '1파운드당 달러', 'USD/CWT': '100파운드당 달러',
+  'USc/LBS': '1파운드당 센트', 'USc/BSH': '1부셸당 센트', 'USD': '달러', 'KRW': '원',
+  '원/리터': '1리터당 원', '원/g': '1그램당 원',
+};
+const unitTip = (u) => UNIT_KO[u] ? `단위 — ${UNIT_KO[u]} (${u})` : `단위 — ${u}`;
 const tail = (it) => (it.unit === '%' || it.unit === '%p') ? it.unit : '';
 const md = (d) => d ? d.slice(5).replace('-', '.') : '';
 const dir = (c) => signClass(c);
@@ -273,7 +283,7 @@ export function paintMaterials(root, j, grp, sel) {
       for (const x of p.rows) {
         const c = signClass(x.pct);
         const key = x.code ? `n:${cat}:${x.code}` : '';
-        rows.push(`<tr${x.unit ? ` data-tip="${esc(x.unit)}"` : ''}${key ? ` data-mat-key="${esc(key)}" data-mat-name="${esc(x.name)}"` : ''}${key && key === sel ? ' class="is-active"' : ''}>
+        rows.push(`<tr${x.unit ? ` data-tip="${esc(unitTip(x.unit))}"` : ''}${key ? ` data-mat-key="${esc(key)}" data-mat-name="${esc(x.name)}"` : ''}${key && key === sel ? ' class="is-active"' : ''}>
           <td class="kh-rk"></td><td class="l"><span class="kh-nm"><b>${esc(x.name)}</b>${x.src ? ` <span class="kh-mut" style="font-size:.74rem" data-tip="이 줄 값은 ${esc(x.src)} — 네이버 줄이 늦어서">${esc(x.src.split(' ')[0])}</span>` : ''}</span></td>
           <td class="kh-num">${matFmt(x.v)}${pctUnit ? '%' : ''}</td>
           <td class="kh-num kh-metric kh-mut">${md(x.at)}</td>
