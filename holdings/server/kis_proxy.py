@@ -9664,6 +9664,13 @@ class Handler(SimpleHTTPRequestHandler):
                                  "meta": {"topics": r["topics"], "errors": r["errors"]}})
                 return
 
+            # 이슈 판 — 같은 사건 묶음을 「이슈」 로 올려 뜨거운 정도를 숫자로 (2026-11-12 재권님 「뉴스 이슈 만들기」 → 「응 올려놔」)
+            # 셈 · 기준 상수는 news_store.issues 한 곳 · `issues` 주소는 「지금 RSS 받기」 라 이름을 따로 둔다
+            if route == "hot":
+                r = news_store.issues()
+                self._send_json({"ok": True, "data": {"issues": r["issues"], "rising": r["rising"]}, "meta": r["meta"]})
+                return
+
             # 쌓아 둔 뉴스 — 묶음 단위 (2026-09-21 지시)
             #
             # `issues` 와 다르다. 저쪽은 **지금 RSS 를 받아** 돌려주고,
