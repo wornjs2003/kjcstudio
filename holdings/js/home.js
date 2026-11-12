@@ -1584,7 +1584,7 @@ const SORT_TIPS = {
   nowup: `지금 값이 오늘 시가보다 +${NOW_RISE_PCT}% 이상 높은 종목, 시가 대비 큰 순 · 오른쪽 % 도 시가 대비\n위 코스피 · 코스닥으로 시장을 고릅니다 · ${CAP_MIN_TXT}`,
   vi: `오늘 정규장에 상승 VI 가 걸렸거나(VI 는 ${CAP_MIN_TXT}) 전일 대비 +20% 를 넘은 종목, 최근 것이 위`,
   bb: `바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · ${CAP_MIN_TXT} · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록`,
-  ov: '관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 · 수급 가운데 둘 이상의 칩에 함께 든 종목, 겹친 칩 수가 많은 순(같으면 시가총액 순)\n줄마다 어느 칩에 들었는지 적습니다 · 각 칩의 거르기(시가총액 · ETF)는 그 칩 그대로',
+  ov: '관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 · 수급 가운데 둘 이상의 칩에 함께 든 종목, 겹친 칩 수가 많은 순(같으면 시가총액 순)\n전일 종가 대비 내린 종목은 뺍니다(등락률을 모르면 남김)\n줄마다 어느 칩에 들었는지 적습니다 · 각 칩의 거르기(시가총액 · ETF)는 그 칩 그대로',
   get rise() {      // 문턱 숫자는 서버 meta — 받기 전에는 숫자 없이
     const m = riseMeta || {};
     const th = m.risePct != null ? ` ${m.risePct}% 이상` : '';
@@ -1881,6 +1881,11 @@ function ovList(id) {
 }
 const ovWaiting = () => OV_CHIPS.filter((id) => ovList(id) == null);
 let ovBy = {};
+/* 하락 뺌 — 전일 종가 대비 등락률이 이 % 아래인 종목은 단타 줄에 안 넣는다. 등락률을 모르면 안 뺀다(못 잼은 하락이 아니다) ·
+   재권님 「단타에 하락인 종목은 필요없어」 → 「거래량 많은 종목중에 하락인건 제외한다는 룰 넣어봐」 → 홈 단타 줄에도 같게 「응」(11-12).
+   서버 단타 판 dt30.DROP_BELOW_PCT 와 같은 값 · 같은 셈이다 — 두 벌이다(보드 [미배분] 「단타 칩 목록 · 칩 문턱을 서버 한 곳에서」 에 적음) */
+const OV_DROP_BELOW_PCT = 0;
+const ovDown = (code) => { const v = rowPrices[code] && rowPrices[code].pct; return Number.isFinite(v) && v < OV_DROP_BELOW_PCT; };
 function ovRows() {
   const by = {};
   for (const id of OV_CHIPS) {
@@ -1890,7 +1895,7 @@ function ovRows() {
     }
   }
   ovBy = by;
-  return Object.values(by).filter((g) => g.chips.length >= 2)
+  return Object.values(by).filter((g) => g.chips.length >= 2 && !ovDown(g.code))
     .sort((a, b) => b.chips.length - a.chips.length || (capOf(b.code) ?? -1) - (capOf(a.code) ?? -1));
 }
 const OV_CHIP_W = 96;     // 단타 칸 칩 목록 폭(px) — 이보다 길면 줄을 바꾼다
@@ -1903,7 +1908,8 @@ function ovCell(code) {
 }
 function ovNote() {
   const w = ovWaiting();
-  return `칩 ${OV_CHIPS.length}개 중 둘 이상${w.length ? ` · 못 받은 칩 ${w.map(ovLabel).join(' · ')}` : ''}`;
+  const down = Object.values(ovBy).filter((g) => g.chips.length >= 2 && ovDown(g.code)).length;
+  return `칩 ${OV_CHIPS.length}개 중 둘 이상${down ? ` · 하락 ${down} 뺌` : ''}${w.length ? ` · 못 받은 칩 ${w.map(ovLabel).join(' · ')}` : ''}`;
 }
 async function loadOv() { loadPre(); loadVi(); loadJoint(); loadRise(); }
 
