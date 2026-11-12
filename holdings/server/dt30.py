@@ -630,7 +630,7 @@ def rebuild(proxy, day, prev, cfg=None):
                              "buy 는 09:05 봉 시가 · 시가총액 · 섹터 · 시장은 지금 값"}}
 
 
-def backfill(proxy, today, limit=BACKFILL_DAYS, since=None):
+def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
     """today 앞 limit 거래일 중 판이 없는 날을 다시 세어 남긴다(라이브로 굳힌 날은 안 건드린다). 남긴 날 수."""
     ds = _trade_days(proxy, today, limit)
     have = set()
@@ -648,6 +648,14 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None):
         if b and b["rows"]:
             _store(proxy, b)
             n += 1
+    if today_too and ds:                               # 오늘 판 — 14:00 칸까지 닫혔는데 오늘 바뀐 룰(meta.rules 칸) 전에 센 판이면 쌓인 값으로 한 번 다시 센다
+        got = _load(proxy, today)                      # (재권님 「오늘 마뀐걸로 새로 해서 해줘」 11-12 15:2x · 그때 고른 기록은 덮인다)
+        if got and got[0].get("closed") and "rules" not in (got[0].get("meta") or {}):
+            b = rebuild(proxy, today, ds[0], cfg)
+            if b and b["rows"]:
+                b["meta"]["redoneFromLive"] = True
+                _store(proxy, b)
+                n += 1
     return n
 
 
@@ -700,7 +708,7 @@ def start(proxy):
                 hm = now.hour * 60 + now.minute
                 if recent != day and not (RECENT_SKIP[0][0] * 60 + RECENT_SKIP[0][1] <= hm < RECENT_SKIP[1][0] * 60 + RECENT_SKIP[1][1]):
                     recent = day
-                    n = backfill(proxy, day, BACKFILL_DAYS, since=(now - timedelta(days=now.weekday())).strftime("%Y%m%d"))
+                    n = backfill(proxy, day, BACKFILL_DAYS, since=(now - timedelta(days=now.weekday())).strftime("%Y%m%d"), today_too=True)
                     if n:
                         print("  [단타 30] 이번 주 %d일 먼저 다시 세어 남김" % n, flush=True)
                 if filled != day and not (QUIET[0][0] * 60 + QUIET[0][1] <= hm < QUIET[1][0] * 60 + QUIET[1][1]):
