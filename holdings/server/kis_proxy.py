@@ -10325,7 +10325,8 @@ class Handler(SimpleHTTPRequestHandler):
                              "candidates": d.get("candidates"), "programMissing": d.get("programMissing"),
                              "amtUnit": "원", "topN": pre_flow.TOP_N,
                              "preOpen": "%02d:%02d" % pre_flow.PRE_OPEN, "preClose": "%02d:%02d" % pre_flow.PRE_CLOSE,
-                             "note": "넥스트레이드 프리마켓 · 순위 목록 중 프리장 거래대금(현재가 × 거래량 · 어림) 상위 topN 의 프로그램 그날 누적 · "
+                             "riseMinPct": pre_flow.RISE_MIN_PCT,
+                             "note": "넥스트레이드 프리마켓 · 순위 목록 중 전일 정규장 종가보다 오른 종목의 프리장 거래대금(현재가 × 거래량 · 어림) 상위 topN · 거래대금 큰 순 · program 은 그날 누적(칸만) · "
                                      "등락률은 전일 정규장 종가 대비 · ratio 는 앞 거래일 장 전 거래량 대비 · disc 는 앞 평일 15:30 뒤 공시 · "
                                      "08:50~09:00 에 그날 판으로 굳힘",
                              "cacheTtl": pre_flow.FLOW_TTL},
