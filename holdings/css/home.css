@@ -1403,6 +1403,11 @@
 .kh-pre-sec::-webkit-scrollbar { display: none; }
 .kh-pre-sec[hidden] { display: none; }   /* 위 display:flex 가 hidden 을 이겨 칩을 바꿔도 띠가 남았다(qa 11-11) */
 .kh-pre-sec-it b { font-weight: 600; }
+/* 「이벤트」 칩 갈래 띠 — 같은 띠 모양에 누르기만 더함(11-06) · 고른 갈래는 진한 글씨 */
+.kh-ev-lane { flex-wrap: wrap; row-gap: 4px; overflow-x: visible; white-space: normal; }   /* 갈래가 많아 옆으로 밀면 뒤쪽이 안 보였다(11-12 재권님 「다른게 안보여」) — 줄을 넘겨 다 보이게 · 갈래 하나는 안 꺾음 */
+.kh-ev-lane .kh-pre-sec-it { white-space: nowrap; }
+.kh-ev-lane .kh-pre-sec-it { cursor: pointer; }
+.kh-ev-lane .kh-pre-sec-it.is-on { color: var(--kh-text-primary); font-weight: 600; }
 /* 아직 채우는 중 — 파랑. 다 차면 사라진다 */
 .kh-sort-note .kh-accent { color: var(--kh-accent); }
 

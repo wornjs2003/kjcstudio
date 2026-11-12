@@ -1560,6 +1560,15 @@ const SORTS = {
           empty: () => (!sstsMeta ? '불러오는 중'
             : !sstsMeta.saved ? '공매도 표가 아직 비어 있습니다 — 개발 서버가 장 뒤에 종목마다 쌓습니다'
             : '이 기간 공매도가 있는 종목이 없습니다') },
+  /* 이벤트 — 회사 공시 중 갈래가 붙은 것(자사주 · 인수합병 · 주주환원 · 실적 · 위험 신호 …), 새 것이 위 (2026-11-06 재권님 「자사주 소각이나
+     인수합병이나 이런것들 등을 추릴수 있는게 필요해」 → 틀 「응 해줘」). 갈래 · 방향은 holdings/data/disclosure-tags.json 「방향」 한 곳 —
+     새 이벤트는 그 표에 한 줄 더하면 이 목록에 저절로 들어온다. 셈은 서버(server/good_news.py · /api/good-news) — 화면은 받은 차례 그대로 ·
+     종목마다 가장 새 공시 한 줄. 아래 띠의 갈래를 누르면 그 갈래만 */
+  ev:   { label: '이벤트', list: () => evList(),
+          head: '갈래 · 무엇', show: (code) => evCell(code), html: true,
+          note: () => evNote(),
+          empty: () => (!evMeta ? '불러오는 중'
+            : evLane ? `최근 ${EV_DAYS}일 「${escT(evLane)}」 공시가 없습니다` : `최근 ${EV_DAYS}일 이벤트 공시가 없습니다`) },
 };
 
 /* 칩 설명 — 칩 위에 마우스를 1초 올려 두면 뜬다(공용 풍선 data-tip · 2026-11-07 재권님 「급등 매수 장외 등 해당 버튼 위에 마우스 1초이상
@@ -1586,11 +1595,77 @@ const SORT_TIPS = {
     const cap = m.minCapEok != null ? `시가총액 ${fmtMoneyKr(m.minCapEok)} 이상만` : '';
     return `코스피 200 · 코스닥 150 종목(ETF 뺌) 중 정규장 첫 5분봉(${m.barFrom || '09:00'} ~ ${m.barTo || '09:05'})이 시가보다${th} 올라 끝난 종목, 그 상승률이 큰 순\n그 봉을 다 받은 뒤에 고르고 그날 판으로 굳습니다${cap ? ` · ${cap}` : ''}`;
   },
+  ev: '최근 사흘 회사 공시 중 갈래가 붙은 것(자사주 · 인수합병 · 주주환원 · 실적 · 위험 신호 …) — 종목마다 가장 새 공시 한 줄, 새 것이 위\n아래 띠에서 갈래를 누르면 그 갈래만',
   ssts: '코스피200 · 코스닥150 종목의 공매도 거래대금 · 비율(공매도 대금 ÷ 전체 거래대금) 순\n아래 줄에서 금액 · 비율 · 1일 · 5일 · 한달 · 1년 · 장중 값은 없고 거래소가 장 뒤에 냅니다',
 };
 /* 「관심」 아래 줄 칩은 관심 종목 안에서 거르는 것이 아니다 — 자리만 관심 아래라 헷갈리지 않게 풍선 끝에 한 줄(2026-11-11 재권님 「어떤 룰에 의해 선별된 종목인지 인지가 되도록」) */
 const FAV_SUB_TIP = '\n관심 아래에 모아 둔 칩입니다 — 관심 종목만이 아니라 위 기준으로 순위 목록 전체에서 고릅니다';
 const sortTipAttr = (id) => (SORT_TIPS[id] ? ` data-tip="${escT(SORT_TIPS[id] + (FAV_SUB.has(id) ? FAV_SUB_TIP : ''))}" data-tip-h="${escT(SORTS[id].label)}"` : '');
+/* 「이벤트」 칩 — /api/good-news 의 공시(새 것이 위)를 종목마다 한 줄로. 「절차 · 일정」 · 「임원 · 주요주주」 · 정정 공시는 뺀다. 못 받았으면 null(빈 목록과 가른다) */
+const EV_DAYS = 3;                 // 며칠 치를 보나 — 셈 범위이지 다시 묻는 주기가 아니다
+const EV_SKIP = new Set(['절차 · 일정', '임원 · 주요주주']);   // 갈래 표의 그 갈래 이름 — 일정 안내 · 임원 지분 보고서(사흘 247건 · 11-06)는 이벤트가 아니다
+const EV_FALLBACK_MS = 60000;      // 서버 값마저 못 받았을 때만
+let evRows = null, evMeta = null, evBy = {}, evLanes = [], evLane = null;
+const evList = () => (evRows ? (evLane ? evRows.filter((r) => evBy[r.code].lanes.has(evLane)) : evRows) : null);
+const evShown = (code) => { const g = evBy[code]; return g && (evLane ? g.items.find((x) => x.lane === evLane) : g.items[0]); };
+function evCell(code) {
+  const g = evBy[code], it = evShown(code);
+  if (!g || !it) return '—';
+  const cls = it.dir === '위' ? 'kh-up' : it.dir === '아래' ? 'kh-down' : '';
+  const size = it.sizePct != null ? ` · 매출 대비 ${it.sizePct}%` : '';
+  const more = g.items.length > 1 ? ` · 외 ${g.items.length - 1}건` : '';
+  return `<div style="white-space:nowrap;font-size:12px;line-height:1.3"><span class="${cls}">${escT(it.lane)}</span>` +
+    ` <span class="kh-mut">${escT(it.date.slice(4, 6))}-${escT(it.date.slice(6))}${size}${more}</span></div>` +
+    `<div style="white-space:nowrap;font-size:11px;line-height:1.3;max-width:11em;overflow:hidden;text-overflow:ellipsis" class="kh-mut" data-tip="${escT(it.title)}">${escT(it.title)}</div>`;
+}
+function evNote() {
+  const n = (evList() || []).length;
+  return `최근 ${EV_DAYS}일 · ${n}종목 · 새 것이 위`;
+}
+async function loadEv() {
+  try {
+    const r = await apiFetch(`/api/good-news?days=${EV_DAYS}`, { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    const d = j && j.ok ? j.data : null;
+    if (d) {
+      const by = {}, rows = [], cnt = new Map();
+      for (const it of d.items || []) {          // 서버가 새 것이 위로 준다
+        if (!it.code || EV_SKIP.has(it.lane) || (it.title || '').includes('정정')) continue;
+        let g = by[it.code];
+        if (!g) { g = by[it.code] = { items: [], lanes: new Set() }; rows.push({ code: it.code, name: it.name }); }
+        g.items.push(it);
+        if (!g.lanes.has(it.lane)) { g.lanes.add(it.lane); cnt.set(it.lane, (cnt.get(it.lane) || 0) + 1); }
+        if (!findStock(it.code)) addExtraStock(it.code, it.name);   // 순위 목록 밖 종목도 누르면 큰 차트로(pickSectorStock 과 같은 길)
+      }
+      evBy = by; evRows = rows; evMeta = { at: Date.now() };
+      evLanes = [...cnt].sort((a, b) => b[1] - a[1]);
+      if (evLane && !cnt.has(evLane)) evLane = null;
+    }
+  } catch { /* 못 받으면 들고 있던 것 그대로 */ }
+  if (sortBy === 'ev') { paintRows(rowPrices); paintSortNote(); }
+  if (rankModal && rankModalSort === 'ev') { paintRankModal(); paintRankModalNote(); }
+}
+/* 갈래 띠 — 「프리장」 업종 띠와 같은 자리 · 같은 모양(.kh-pre-sec · 한 줄 · 넘치면 옆으로 민다). 누르면 그 갈래만 · 다시 누르면 전체 */
+function paintEvLanes() {
+  const note = $('kh-sort-note');
+  if (!note) return;
+  let box = $('kh-ev-lane');
+  const on = sortBy === 'ev' && market !== 'THEME' && evLanes.length;
+  if (!on) { if (box) box.hidden = true; return; }
+  if (!box) {
+    box = document.createElement('div'); box.id = 'kh-ev-lane'; box.className = 'kh-pre-sec kh-ev-lane';
+    note.after(box);
+    box.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ev-lane]');
+      if (!b) return;
+      evLane = !b.dataset.evLane || b.dataset.evLane === evLane ? null : b.dataset.evLane;
+      paintRows(rowPrices); paintSortNote();
+    });
+  }
+  box.hidden = false;
+  box.innerHTML = `<span class="kh-pre-sec-it${evLane ? '' : ' is-on'}" data-ev-lane="">전체</span>` + evLanes.map(([ln, n]) =>
+    `<span class="kh-pre-sec-it${ln === evLane ? ' is-on' : ''}" data-ev-lane="${escT(ln)}">${escT(ln)} <span class="kh-mut">${n}</span></span>`).join('');
+}
 
 /* 「공매도」 칩 — 서버가 세운 차례 그대로. 못 받았으면 null(빈 목록과 가른다) */
 let sstsRows = null, sstsMeta = null, sstsBy = {};
@@ -2292,6 +2367,7 @@ function setupSorts() {
     if (sortBy === 'vi') loadVi();
     if (sortBy === 'bb') loadBb();
     if (sortBy === 'ssts') loadSsts();
+    if (sortBy === 'ev') loadEv();
   };
   host.addEventListener('click', onSort);
   $('kh-sort-note')?.addEventListener('click', (e) => { if (e.target.closest('[data-rescan]')) rescanNow(); });   // 「지금검색」 — 고른 칩은 그대로 두고 목록만 다시
@@ -2432,6 +2508,7 @@ function paintSortNote() {
   noteAt = Date.now();
   paintPreSectors();
   paintChipSectors();
+  paintEvLanes();
   const upd = $('kh-joint-upd');      // 「매수」 칩에만 — 다른 칩에서는 숨는다(11-06)
   if (upd) { const t = sortBy === 'buy' ? jointUpd() : ''; upd.hidden = !t; upd.innerHTML = t; }
 }
@@ -2643,7 +2720,7 @@ function paintRankModal() {
       <td class="l"><span class="kh-nm">${iconHtml(s)}<b data-co="${s.code}">${escT(s.name)}</b>${th ? themeBadge(s.code) : ''}</span></td>
       <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, sid)) : '···'}</td>
       <td class="kh-num ${p ? dirClass(pctOf(p, sid)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, sid)) : '—'}</td>
-      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'rise' ? riseCell(s.code) : sid === 'ov' ? ovCell(s.code) : sid === 'vi' ? viCell(s.code) : sid === 'bb' ? bbCell(s.code) : sid === 'ssts' ? sstsCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
+      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'rise' ? riseCell(s.code) : sid === 'ov' ? ovCell(s.code) : sid === 'vi' ? viCell(s.code) : sid === 'bb' ? bbCell(s.code) : sid === 'ssts' ? sstsCell(s.code) : sid === 'ev' ? evCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
       <td class="kh-num">${th && themeBig !== FLOW ? themeCap(s.code) : showCap(s.code)}</td>
       <td class="kh-num">${th && themeBig === FLOW ? themeMetric(s.code) : (p ? fmtShareCount(p.volume) : '···')}</td>
       <td class="kh-num">${volRatioCell(s.code)}</td>
@@ -2674,7 +2751,7 @@ function paintRankModal() {
       </colgroup>
       <thead><tr>
         <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
-        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'rise' ? '첫 5분봉' : sid === 'ov' ? '겹친 칩' : sid === 'vi' ? '때 · 무엇' : sid === 'bb' ? '바닥 봉' : sid === 'ssts' ? '공매도' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
+        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'rise' ? '첫 5분봉' : sid === 'ov' ? '겹친 칩' : sid === 'vi' ? '때 · 무엇' : sid === 'bb' ? '바닥 봉' : sid === 'ssts' ? '공매도' : sid === 'ev' ? '갈래 · 무엇' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
       </tr></thead>
       <tbody>${rows || empty}</tbody>
     </table>
@@ -2733,7 +2810,7 @@ function openRankModal() {
       /* 모달에서 고른 기준은 첫 화면 순위표와 **따로 둔다** — 모달에서
          거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면 무엇을 눌러
          그렇게 됐는지 알 수 없다 (2026-09-22). */
-      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'rise') loadRise(); if (id === 'ov') loadOv(); if (id === 'vi') loadVi(); if (id === 'bb') loadBb(); if (id === 'ssts') loadSsts(); loadVolRatio(); },
+      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'rise') loadRise(); if (id === 'ov') loadOv(); if (id === 'vi') loadVi(); if (id === 'bb') loadBb(); if (id === 'ssts') loadSsts(); if (id === 'ev') loadEv(); loadVolRatio(); },
     },
     onClose() { rankModal = null; if (volWatch) { volWatch.stop(); volWatch = null; } },
   });
@@ -2760,7 +2837,7 @@ function paintRankModalNote() {
   if (!rankModal) return;
   const fresh = freshNote();
   /* 「매수」 탭은 갱신 주기만 짧게 — 길면 탭 글자가 세로로 눌렸다(11-05 8772) */
-  const base = rankModalMarket === 'THEME' ? RANK_TABS_NOTE : rankModalSort === 'buy' ? jointNote(true) : rankModalSort === 'pre' ? preNote() : rankModalSort === 'rise' ? riseNote() : rankModalSort === 'ov' ? ovNote() : rankModalSort === 'vi' ? viNote() : rankModalSort === 'bb' ? bbNote() : rankModalSort === 'ssts' ? sstsNote() : RANK_TABS_NOTE;
+  const base = rankModalMarket === 'THEME' ? RANK_TABS_NOTE : rankModalSort === 'buy' ? jointNote(true) : rankModalSort === 'pre' ? preNote() : rankModalSort === 'rise' ? riseNote() : rankModalSort === 'ov' ? ovNote() : rankModalSort === 'vi' ? viNote() : rankModalSort === 'bb' ? bbNote() : rankModalSort === 'ssts' ? sstsNote() : rankModalSort === 'ev' ? evNote() : RANK_TABS_NOTE;
   rankModal.head.setTabsNote(fresh ? `${base} · ${fresh.text}` : base);
 }
 
@@ -2789,6 +2866,7 @@ watch({ url: () => (sortBy === 'pre' || sortBy === 'ov' ? '/api/kis/pre-flow' : 
 watch({ url: () => (sortBy === 'rise' || sortBy === 'ov' || (rankModal && rankModalSort === 'rise') ? '/api/kis/open-rise' : null), onChange: loadRise, key: 'open_rise.CACHE_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => (sortBy === 'vi' || sortBy === 'ov' || (rankModal && rankModalSort === 'vi') ? '/api/alerts/today' : null), onChange: loadVi, key: null, fallbackMs: VI_FALLBACK_MS });
 watch({ url: () => (sortBy === 'bb' || (rankModal && rankModalSort === 'bb') ? '/api/signals/today' : null), onChange: loadBb, key: null, fallbackMs: BB_FALLBACK_MS });
+watch({ url: () => (sortBy === 'ev' || (rankModal && rankModalSort === 'ev') ? `/api/good-news?days=${EV_DAYS}` : null), onChange: loadEv, key: 'dart.POLL_INTERVAL', fallbackMs: EV_FALLBACK_MS });
 sstsWatch = watch({ url: () => (sortBy === 'ssts' || (rankModal && rankModalSort === 'ssts') ? sstsUrl() : null), onChange: loadSsts, key: null, fallbackMs: SSTS_FALLBACK_MS });
 watch({ url: () => (SEC_CHIPS.has(sortBy) && market !== 'THEME' ? '/api/naver/groups?kind=industry&all=1' : null), onChange: loadIndustryAll, key: 'naver.TTL', fallbackMs: SECTOR_FALLBACK_MS });
 watch({ url: () => '/api/kis/stock-sectors', onChange: loadSectors, key: 'company_profile.SECTOR_LIST_TTL', fallbackMs: SECTOR_FALLBACK_MS });
