@@ -427,6 +427,9 @@ Cloudflare 는 origin 의 `Cache-Control` 이 그 설정보다 **짧으면 덮�
     git log --oneline staging..main | wc -l                                staging 이 main 을 다 받았나(머지 전 `git merge --ff-only main`)
     git show <해시> -- '*.js' | grep '^+' | grep -cE 'handleScroll|handleScale|kineticScroll'   그래프 조작 옵션 글자가 더해졌나 —
         0 이 아닌데 그 커밋에 CLAUDE.md 가 없으면 검수 요청에 「그래프 움직이기 표(①~⑩) 고쳤나」 한 줄(2026-11-11 룰 5번 · 막지 않는다)
+    git show --name-only --format= <그 카드 앞 커밋들> | sort -u   ↔   git show --name-only --format= <해시>   같은 카드의 다음 커밋이면 폴더 · 구역이 갈리나 —
+        갈리면(새 폴더 · 다른 구역 · 새 기능 파일) 검수 요청에 「범위 넓어짐 — 봐야 할 자리」 한 줄(2026-11-12 「커밋 지시는 그 카드의 일이 끝날 때까지 산다」 1번 · 막지 않는다 · 판정은 검수 둘 · 재권님)
+    세션 메시지의 「이 카드 마지막 커밋」 · 「더 옴」 — 「더 옴」 이면 합치고 8767 까지만 하고 검수 요청은 마지막 커밋이 온 뒤 묶어 한 번(같은 룰 2번 · 급함 표시가 있으면 바로)
 
 하나라도 어긋나면 합치지 않고 그 세션에 돌려보낸다(검수가 아니라 문턱이다 — 무엇이 어긋났는지 한 줄).
 
