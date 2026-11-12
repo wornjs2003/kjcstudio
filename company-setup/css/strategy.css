@@ -235,3 +235,4 @@
 .dt-colmenu button:disabled { color: var(--kh-text-muted); cursor: default; }
 .dt-colmenu button small { color: var(--kh-text-muted); margin-left: 4px; }
 .dt-colmenu .dt-cmh { font-size: 11.5px; color: var(--kh-text-muted); padding: 4px 10px; }
+.dt .dt-cols .dt-ovm { display: block; font-size: 10.5px; font-weight: 500; color: var(--kh-text-muted); }   /* 겹침 옆 — 그날 못 받아 0 으로 센 칩 수(개념정의 검수 11-12) */
