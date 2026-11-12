@@ -453,7 +453,7 @@ def track(proxy, cfg, b, hhmm, late):
 #   관심 · 수급  그날 09:01 직전 관심 목록 문서(보드 문서 저장 기록 · watch_at)로 오늘 판과 같게 센다 — meta.watchSrc 「기록」
 #              (재권님 「투자 전략 단타안에 관심도 넣어주고 룰도 넣어줘」 11-12 → 안 「응」) · 시가총액은 지금 값
 #              기록이 없는 날(2026-10-26 전)은 관심 「못 받음」 · 수급은 앞 거래일 auto_watch_day 값에 **지금** 수급 룰을 댄 어림 — meta.watchSrc 「없음」
-#   프리장     그날 08:00~08:50 5분봉 거래대금(종가 × 거래량)과 마지막 봉 종가 ÷ 앞 거래일 종가 등락률로 pre_flow.pick(오른 것 중 거래대금 큰 순) — 어림
+#   프리장     그날 pre_flow.PRE_OPEN~PRE_CLOSE 5분봉(끝 봉 빼고) 거래대금(종가 × 거래량)과 마지막 봉 종가 ÷ 앞 거래일 종가 등락률로 pre_flow.pick(오른 것 중 거래대금 큰 순) — 어림
 #   VI·급등    급등 — 09:00 · 09:05 봉 고가가 앞 거래일 종가보다 intraday_alerts.SURGE_PCT % 이상 · VI — KIS 「VI 현황」(날짜 · 종목) 에서 09:00~09:06 발동
 #              (VI_PROBE_PCT % 넘게 오른 종목만 묻는다 · QUIET 밖에서만 돈다)
 #   매수       앞 거래일 확정치(investor_daily) 외국인 · 기관 둘 다 순매수인 종목 중 합 상위 JOINT_TOP — 장중 가집계가 없어 어림 · 하위 칸 없음
@@ -531,11 +531,12 @@ def rebuild(proxy, day, prev, cfg=None):
         pass
     except Exception:
         missing.append("수급")
-    amt = {c: sum((b[2] or 0) * (b[3] or 0) for hm, b in d.items() if "0800" <= hm <= "0850") for c, d in bars.items()}
+    p0, p1 = "%02d%02d" % pre_flow.PRE_OPEN, "%02d%02d" % pre_flow.PRE_CLOSE     # 프리장 창 — 서버 값 한 곳 · 끝 봉(08:50~)은 프리장 밖(day_top_fill 과 같게)
+    amt = {c: sum((b[2] or 0) * (b[3] or 0) for hm, b in d.items() if p0 <= hm < p1) for c, d in bars.items()}
     items = []
     for c, a in amt.items():                               # 프리장 — 서버 셈 한 곳(pre_flow.pick · 오른 것 중 거래대금 큰 순 TOP_N · 재권님 11-12)
         if a > 0 and not small(c):
-            last = [bars[c][hm][2] for hm in sorted(bars[c]) if "0800" <= hm <= "0850" and bars[c][hm][2]]
+            last = [bars[c][hm][2] for hm in sorted(bars[c]) if p0 <= hm < p1 and bars[c][hm][2]]
             base = (pv.get(c) or (None, None, None))[2]
             items.append({"code": c, "amt": a, "pct": (last[-1] / base - 1) * 100 if last and base else None})
     for c in pre_flow.pick(items):
