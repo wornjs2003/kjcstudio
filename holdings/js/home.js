@@ -1386,7 +1386,7 @@ async function loadUniverse() {
 
 /* 시가총액은 목록(dart_universe)이 갖고 있다. 네이버 시총 순위에서 온 값이고
    단위는 억원이라 fmtMoneyKr 이 그대로 받는다. */
-const RANK_MIN_CAP_EOK = 3000;     // 실시간 순위 VI · 볼린저 · 관심 · 장외 · 매수 · 프리장 줄은 시가총액 이 값(억원 · 3천억) 이상만 — 재권님 11-10(VI 「가」 · 볼린저 「1조 이상만」 →
+const RANK_MIN_CAP_EOK = 5000;     // 실시간 순위 VI · 볼린저 · 관심 · 장외 · 매수 · 프리장 줄은 시가총액 이 값(억원 · 5천억) 이상만 — 3천억 → 5천억 재권님 「응」(11-12) · 재권님 11-10(VI 「가」 · 볼린저 「1조 이상만」 →
                                     // 「1조를 3천억 으로 바꿔줘」 · 「가 고 관심이랑 장외랑 매수랑 포함이야」 · 「프리장도」). 한 곳. 시총을 못 받은 종목 · 미국 종목은 남긴다(못 잰 것을 「작다」 로 치지 않는다)
 const capBelowMin = (code) => { if (isUsCode(code)) return false; const c = capOf(code); return c != null && c < RANK_MIN_CAP_EOK; };
 const CAP_MIN_TXT = `시가총액 ${fmtMoneyKr(RANK_MIN_CAP_EOK)} 이상만`;   // 칩 풍선 글 — 값은 위 상수 하나
