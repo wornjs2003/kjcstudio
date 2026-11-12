@@ -32,8 +32,10 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
+import dart            # 시가총액 문턱(UNIVERSE_MIN_CAP_EOK) 한 곳 — 모듈을 읽을 때 쓴다
+
 KST = timezone(timedelta(hours=9))
-MIN_CAP_EOK = 5000            # 시가총액 문턱(억원) — 재권님 「시가통액 5천억이상」 → 「3천억으로 통일해」 → 「오전에 3천억이라고 한거 5천억으로 바꿔」(11-12)
+MIN_CAP_EOK = dart.UNIVERSE_MIN_CAP_EOK   # 시가총액 문턱(억원) — 대상 목록 문턱 그대로(한 곳 · 개념정의 검수 11-12) · 재권님 「시가통액 5천억이상」 → 「3천억으로 통일해」 → 「오전에 3천억이라고 한거 5천억으로 바꿔」(11-12)
 TOP_N = 40                    # 주소가 기본으로 내는 줄 수
 VOL_PREV_X = 2.0              # 「거래량 전날 2배」 시험 기준
 SAVE_AT = (16, 10)            # flow_rank 확정치 쌓기(15:45) · 「매수」 판 굳기를 기다린 뒤
