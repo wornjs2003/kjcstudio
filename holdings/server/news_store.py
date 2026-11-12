@@ -303,7 +303,8 @@ def groups(hours=24, limit=80):
 # 안 「뉴스 이슈 만들기」 에 「응 올려놔」(11-12 16:3x). 같은 사건 묶음(group_id · 위 「묶기」)을 「이슈」 하나로 올린다.
 #   뜨거운 정도   기사 수 · 다룬 언론사 수 · 다룬 나라 수 · 늘어나는 속도(최근 ISSUE_RISE_H 시간 기사 수와 그 앞 같은 시간) — 숫자 그대로 · 합친 점수 없음
 #   줄 세우기     언론사 수 → 나라 수 → 기사 수 → 마지막 보도 · 「막 뜨는 이슈」 는 rising 으로 따로(늘어난 수 → 최근 수)
-#   나라          받는 곳 목록(news-topics.json feeds)의 「나라」 칸 — 목록이 한 나라뿐이면 나라 수는 None(「못 잼」) · 칸이 없는 받는 곳은 「모름」
+#   나라          둘을 가른다(개념정의 덧 11-12) — where 는 사건이 난 나라 · 지역(룰 「어디」) · 아직 가를 길이 없어 None(「모름」) ·
+#                 pressNations · nations 는 다룬 언론사의 나라 — 받는 곳 목록(news-topics.json feeds)의 「나라」 칸 · 목록이 한 나라뿐이면 nations 는 None(「못 잼」) · 칸이 없는 받는 곳은 nationsUnknown
 #   확인 정도     받는 곳 갈래 (가) 1차 출처 기사가 묶음에 있으면 「1차 출처」 · 없으면 「기사만」
 #   종목 · 업종 대입 · 좋다 나쁘다는 안 한다 — 산업 분석 몫
 ISSUE_WINDOW_H = 48         # 이슈를 볼 시간 창(시간)
@@ -358,7 +359,8 @@ def issues(now=None):
             "id": gid,
             "name": lead["title"],
             "kind": max(labels, key=lambda k: labels[k]) if labels else None,
-            "where": sorted(nat) if nat else None,
+            "where": None,                                   # 사건 나라 — 아직 못 가름(「모름」 · meta.where)
+            "pressNations": sorted(nat) if nat else None,
             "first": arts[0]["at"], "last": arts[-1]["at"],
             "articles": len(arts),
             "presses": len(presses),
@@ -375,6 +377,7 @@ def issues(now=None):
     meta = {"windowH": ISSUE_WINDOW_H, "riseH": ISSUE_RISE_H, "minArticles": ISSUE_MIN_ARTICLES, "found": len(out),
             "nations": "셈" if can_count else ("못 잼 — 받는 곳 목록이 한 나라뿐" if fd is not None else "못 잼 — 받는 곳 목록 못 읽음"),
             "feedNations": sorted(nations),
+            "where": "모름 — 사건 난 나라를 가르는 셈이 아직 없음(pressNations 는 언론사 나라)",
             "note": "뜨거운 정도는 숫자 그대로(합친 점수 없음) · 줄 세우기 언론사 수 → 나라 수 → 기사 수 → 마지막 보도 · "
                     "rising 은 최근 riseH 시간 기사 수(recent)가 그 앞 같은 시간(before)보다 많은 이슈 · 종목 대입은 산업 분석 몫"}
     return {"issues": out[:ISSUE_LIMIT], "rising": [x["id"] for x in rising], "meta": meta}
