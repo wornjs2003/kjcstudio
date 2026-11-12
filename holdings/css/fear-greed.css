@@ -13,8 +13,9 @@
 .fg-empty { padding: 40px 0; color: var(--kh-text-muted); }
 .fg-top { font-size: 0.78rem; }
 .fg-big { display: flex; align-items: baseline; gap: 10px; margin: 10px 0 8px; }
-.fg-big b { font-size: 2.4rem; line-height: 1; }
+.fg-big b { font-size: 2.4rem; line-height: 1; white-space: nowrap; }   /* 「셈 중」 이 두 줄로 꺾이지 않게(11-12) */
 .fg-big span { font-size: 1.1rem; font-weight: 700; }
+.fg-big .fg-cnt { white-space: nowrap; }   /* 셈 중 줄도 한 줄 — 큰 칸 높이가 점수 꼴과 같게(qa 11-12) */
 .fg-gauge { position: relative; height: 10px; border-radius: 5px; margin: 18px 0 4px; background: var(--kh-bg-surface); }   /* 바탕 짙기는 fear-greed.js 가 tone.js 로 칠한다 */
 .fg-gauge i { position: absolute; display: block; transform: translateX(-50%); }
 .fg-gauge .fg-now { top: -4px; width: 18px; height: 18px; border-radius: 50%; background: var(--kh-bg-card);
