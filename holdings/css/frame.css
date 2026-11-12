@@ -52,10 +52,22 @@ body {
   object-fit: cover;
 }
 
+/* ── 칸 크기 — 이름 붙인 값 한 곳 (2026-11-12 재권님 「임의값은 안쓰고 정해진 값을 호출해서 쓰는 큰 틀안에서」 → 「응 그래」) ──
+   홀딩스 · Insight 가 함께 거는 frame.css · home.css 가 이 이름을 부른다 — 숫자를 두 파일에 다시 적지 않는다(「같은 값은 한 곳에만 둔다」).
+   여러 구역 공용 바탕값(틀 폭 --grid-max · 안쪽 --grid-inset)은 theme.css 다. 창에 맞춰 키우는 배율(--kh-s)은 부르는 쪽이 곱한다 */
+:root {
+  --kh-side-w: 368px;     /* 홈 · Insight 오른쪽 칸(실시간 순위) — 관심 목록 316 + 세로 바 52 를 합친 폭(2026-09-17) */
+  --kh-list-w: 316px;     /* 다른 화면 관심 사이드바 */
+  --kh-vbar-w: 52px;      /* 세로 아이콘 바 */
+  --kh-panel-w: 340px;    /* 홈 큰 차트 옆 패널(투자자 정보 · AI 분석 · 종목 뉴스) = 아래 줄 넷째 칸 — 세로선이 이어진다 */
+  --kh-big-base: 550px;   /* 홈 큰 차트 높이(배율 1) */
+  --kh-row-base: 255px;   /* 홈 아래 줄 카드 높이(배율 1) */
+}
+
 /* ── 전체 틀 ─────────────────────────────── */
 .kh-app {
   display: grid;
-  grid-template-columns: 1fr 316px 52px;
+  grid-template-columns: 1fr var(--kh-list-w) var(--kh-vbar-w);
   max-width: var(--grid-max);      /* theme.css 한 곳 — 메뉴 기준선(nav.css --nav-gutter)과 같은 값 */
   margin: 0 auto;
 }
@@ -75,7 +87,7 @@ body {
    본문이 32px 라 **글자가 한 자씩 세로로 쓰였다** (2026-09-22 실측).
    「가로로 넘친다」 로 보이지만 원인은 **어디서부터 좁아지나** 쪽이다 —
    넘치는 칸 131개는 전부 결과였다. */
-.kh-app-wide { grid-template-columns: 1fr 368px; }
+.kh-app-wide { grid-template-columns: 1fr var(--kh-side-w); }
 .kh-main { padding: 14px var(--grid-inset); min-width: 0; }   /* 좌우는 theme.css --grid-inset */
 
 /* ── 탭 (홈·종목 공용) ─────────────────────── */
@@ -212,7 +224,7 @@ body {
 
 /* ── 좁은 화면 ──────────────────────────── */
 @media (max-width: 1280px) {
-  .kh-app { grid-template-columns: 1fr 52px; }
+  .kh-app { grid-template-columns: 1fr var(--kh-vbar-w); }
   .kh-side { display: none; }
 }
 @media (max-width: 900px) {
