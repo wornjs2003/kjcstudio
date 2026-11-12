@@ -20,7 +20,7 @@ day_top 은 11-11 부터 날마다 그날 판을 남긴다. 그 앞 FILL_DAYS �
       볼린저       signal_sent(kind low) 그날 줄 중 그날 판을 남기는 때(day_top.SAVE_AT) 앞 — 그 봉 시각
       매수①~④     kis_proxy.joint_tier — 후보는 외국인 · 기관 순매수 금액 상위 JOINT_LIST 중 한쪽에라도 든 종목(목록 밖 쪽은 모름 — 그날 판과 같다).
                    외국인 · 기관 · 연기금은 investor_daily 확정치(연기금 = instDetail.fund), 프로그램은 KIS 프로그램 일별(J · 한 번에 30거래일 · 둘 다 살 때만).
-                   그날 판은 시장 전체 순위 목록(가집계)이고 여기는 대상(5천억 이상) 안 확정치라 다를 수 있고 처음 잡힌 시각이 없다 · meta.approx
+                   그날 판은 시장 전체 순위 목록(가집계)이고 여기는 대상(MIN_CAP_EOK 이상) 안 확정치라 다를 수 있고 처음 잡힌 시각이 없다 · meta.approx
       수급         지금 룰(auto_watch.rules · volsurge 의 prevPct · volMult) — 그날 등락률 · 거래량 ÷ 앞 20거래일 평균(auto_watch_day)
       거래량전날2배 auto_watch_day 그날 ÷ 앞 날 ≥ day_top.VOL_PREV_X
       단타         day_top.OV_FROM 중 둘 이상(관심 없이)
