@@ -26,6 +26,8 @@
 하락 뺌    전일 종가 대비 등락률(pct)이 DROP_BELOW_PCT 아래인 종목은 판에 안 넣는다 — 재권님 「단타에 하락인 종목은 필요없어」 →
                「거래량 많은 종목중에 하락인건 제외한다는 룰 넣어봐」(11-12) · 09:35 굳히기 전까지 1분마다 다시 셀 때 그때 값으로 넣고 뺀다 ·
                굳힌 뒤 내려간 종목은 그대로 둔다(이미 산 값) · 등락률을 모르면 안 뺀다(못 잼은 하락이 아니다) · 뺀 수는 meta.dropDown
+               판에 들었다가 하락으로 빠진 종목은 그날 다시 안 넣는다(meta.out) · 없다가 조건이 맞게 된 종목은 넣는다 —
+               재권님 「처음 들었다가 빠지면 제외하고 없다가 값이 적용되는 목록은 넣는다」(11-12 11:3x)
 
 못 받은 칩은 meta.missing 에 이름으로 남긴다(「0 종목」 과 「못 받음」 을 가른다).
 """
@@ -194,18 +196,20 @@ def early_buy(proxy, cfg, codes, put):
     return n
 
 
-def build(proxy, cfg, day):
-    """09:06 판 — {day, buyAt, times, rows, meta}."""
+def build(proxy, cfg, day, skip=()):
+    """09:06 판 — {day, buyAt, times, rows, meta}. skip — 그날 판에서 하락으로 빠진 종목(다시 안 넣음)."""
     import company_profile
     hit, missing, cap, mkt = chips_now(proxy, cfg)
     ov = {c: g for c, g in hit.items() if g["chips"] & set(OV_CHIPS)}     # 칩 하나라도(18:5x — 화면이 칩을 끄고 켜며 그 안에서 다시 셈)
     prices, _ = proxy.fetch_quotes_multi(cfg, list(ov)) if ov else ({}, {})    # 30종목씩 묶어 부른다 — 한 종목씩이면 수백 건이 몰려 KIS 가 거절했다(18:5x 시험)
     sec = company_profile.sectors()
-    rows, down = [], 0
+    rows, down = [], []
     for code, g in ov.items():
+        if code in skip:
+            continue                                   # 들었다가 하락으로 빠진 종목 — 그날 다시 안 넣음(재권님 11-12 11:3x)
         p = prices.get(code) or {}
         if p.get("pct") is not None and p["pct"] < DROP_BELOW_PCT:
-            down += 1                                  # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
+            down.append(code)                          # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
             continue
         chips = set(g["chips"])
         if p.get("open") and p.get("price") and (p["price"] / p["open"] - 1) * 100 >= NOW_RISE_PCT:
@@ -219,7 +223,7 @@ def build(proxy, cfg, day):
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(), "rows": rows, "closed": False,
-            "meta": {"rebuilt": False, "missing": [c for c in missing if c != "매수어림"], "candidates": len(ov), "dropDown": down, "dropBelowPct": DROP_BELOW_PCT,
+            "meta": {"rebuilt": False, "missing": [c for c in missing if c != "매수어림"], "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT,
                      "early": ["매수"] if "매수어림" in missing else [], "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
                      "order": "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순",
                      "note": "buy 는 굳힌 때(buyAt) 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
@@ -327,8 +331,10 @@ RESCAN_SEC = 60               # BUY_AT ~ BUY_LATE 동안 판을 다시 세는 �
 
 def refresh(proxy, cfg, b):
     """그날 판을 지금 들어온 값으로 다시 세운다(종목 · 칩 · 순위). 바뀐 줄 수."""
-    nb = build(proxy, cfg, b["day"])
+    out = set(b["meta"].get("out") or [])
+    nb = build(proxy, cfg, b["day"], skip=out)
     old = {r["code"]: r for r in b["rows"]}
+    out |= set(old) & set(nb["meta"].get("downCodes") or [])     # 판에 있다가 이번에 하락으로 빠진 종목 — 그날 다시 안 넣음
     hm = _now().strftime("%H:%M")
     changed = 0
     for r in nb["rows"]:
@@ -344,7 +350,7 @@ def refresh(proxy, cfg, b):
     changed += len(set(old) - {r["code"] for r in nb["rows"]})
     b["rows"] = nb["rows"]
     late = b["meta"].get("late") or {}
-    b["meta"] = dict(nb["meta"], late=late, rescanAt=hm)
+    b["meta"] = dict(nb["meta"], late=late, rescanAt=hm, out=sorted(out))
     return changed
 
 
