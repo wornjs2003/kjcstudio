@@ -23,6 +23,10 @@
     저장      market.db dt30(날 · 판 JSON) — 쓰기 되는 서버(8765)만 · 한 번 굳힌 날은 다시 안 굳힌다 · DAYS_KEEP 거래일 넘으면 지운다
     주소      GET /api/kis/dt30?day=YYYYMMDD — day 를 빼면 마지막 날 · meta.days 는 남긴 날(최근 먼저)
 
+하락 뺌    전일 종가 대비 등락률(pct)이 DROP_BELOW_PCT 아래인 종목은 판에 안 넣는다 — 재권님 「단타에 하락인 종목은 필요없어」 →
+               「거래량 많은 종목중에 하락인건 제외한다는 룰 넣어봐」(11-12) · 09:35 굳히기 전까지 1분마다 다시 셀 때 그때 값으로 넣고 뺀다 ·
+               굳힌 뒤 내려간 종목은 그대로 둔다(이미 산 값) · 등락률을 모르면 안 뺀다(못 잼은 하락이 아니다) · 뺀 수는 meta.dropDown
+
 못 받은 칩은 meta.missing 에 이름으로 남긴다(「0 종목」 과 「못 받음」 을 가른다).
 """
 import json
@@ -41,6 +45,7 @@ BUY_LATE = (9, 35)           # 굳히는 시각 — 재권님 「9시 35분에 �
 DAYS_KEEP = 30               # 「30일 추적」
 CAP_MIN_EOK = 3000           # 시가총액 문턱(억원) — 화면 RANK_MIN_CAP_EOK 와 같은 값(두 곳 · 위 「화면과 이 파일」)
 NOW_RISE_PCT = 3.0           # 「현재상승」 — 시가 대비 %(화면 NOW_RISE_PCT 와 같은 값 · 칩 이름 적기에만 씀)
+DROP_BELOW_PCT = 0.0         # 하락 뺌 — 전일 종가 대비 이 % 아래는 판에 안 넣는다(0 이면 보합은 남긴다 · 재권님 11-12)
 TICK = 20
 OV_CHIPS = ("관심", "프리장", "VI·급등", "장외", "매수", "초반상승", "수급")   # 단타 셈에 드는 칩 — 화면 OV_CHIPS 차례
 
@@ -196,9 +201,12 @@ def build(proxy, cfg, day):
     ov = {c: g for c, g in hit.items() if g["chips"] & set(OV_CHIPS)}     # 칩 하나라도(18:5x — 화면이 칩을 끄고 켜며 그 안에서 다시 셈)
     prices, _ = proxy.fetch_quotes_multi(cfg, list(ov)) if ov else ({}, {})    # 30종목씩 묶어 부른다 — 한 종목씩이면 수백 건이 몰려 KIS 가 거절했다(18:5x 시험)
     sec = company_profile.sectors()
-    rows = []
+    rows, down = [], 0
     for code, g in ov.items():
         p = prices.get(code) or {}
+        if p.get("pct") is not None and p["pct"] < DROP_BELOW_PCT:
+            down += 1                                  # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
+            continue
         chips = set(g["chips"])
         if p.get("open") and p.get("price") and (p["price"] / p["open"] - 1) * 100 >= NOW_RISE_PCT:
             chips.add("현재상승")
@@ -211,7 +219,7 @@ def build(proxy, cfg, day):
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(), "rows": rows, "closed": False,
-            "meta": {"rebuilt": False, "missing": [c for c in missing if c != "매수어림"], "candidates": len(ov),
+            "meta": {"rebuilt": False, "missing": [c for c in missing if c != "매수어림"], "candidates": len(ov), "dropDown": down, "dropBelowPct": DROP_BELOW_PCT,
                      "early": ["매수"] if "매수어림" in missing else [], "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
                      "order": "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순",
                      "note": "buy 는 굳힌 때(buyAt) 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
@@ -523,13 +531,16 @@ def rebuild(proxy, day, prev, cfg=None):
         if c in hit:
             hit[c]["chips"].add("볼린저")
     sec = company_profile.sectors()
-    rows = []
+    rows, down = [], 0
     for code, g in hit.items():
         if not g["chips"] & set(OV_CHIPS):
             continue
         d = bars.get(code) or {}
         buy = (d.get("0905") or (None,))[0]
         base = (pv.get(code) or (None, None, None))[2]
+        if buy and base and (buy / base - 1) * 100 < DROP_BELOW_PCT:
+            down += 1                                  # 하락 뺌 — 09:05 봉 시가가 앞 거래일 종가 아래
+            continue
         o9 = (d.get("0900") or (None,))[0]
         chips = set(g["chips"])
         if buy and o9 and (buy / o9 - 1) * 100 >= NOW_RISE_PCT:
@@ -549,7 +560,7 @@ def rebuild(proxy, day, prev, cfg=None):
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(), "rows": rows, "closed": True,
-            "meta": {"rebuilt": True, "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N,
+            "meta": {"rebuilt": True, "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": DROP_BELOW_PCT,
                      "capMinEok": CAP_MIN_EOK, "order": "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순",
                      "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 뺌 · 수급 · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
                              "buy 는 09:05 봉 시가 · 시가총액 · 섹터 · 시장은 지금 값"}}
