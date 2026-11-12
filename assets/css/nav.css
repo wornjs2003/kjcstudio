@@ -37,7 +37,7 @@
                          + var(--grid-inset) * var(--kh-z, 1)));
   /* **기준은 홀딩스 첫 화면 본문이다 (2026-11-03 재권님 「본문에 맞춰」).** 그 화면은 큰 창에서 틀을 `--kh-s` 배만큼 키우고
      작은 창에서 통째로 `--kh-z` 배 줄이며(holdings/js/home.js fitScale) 오른쪽에 Claude 줄 · 창 폭 `--kh-rail-w` 를 비운다
-     (holdings/js/components/claude-rail.js). 셋 다 그 화면이 `html` 에 줄 때만 있고, **없으면 기본값(1 · 1 · 0px)이라
+     (assets/js/claude-rail.js — 11-12 공용이 돼 Insight · 보드도 줄 폭을 준다). 셋 다 그 화면이 `html` 에 줄 때만 있고, **없으면 기본값(1 · 1 · 0px)이라
      다른 구역은 위 식 그대로다** — 구역별 예외를 두지 않는 채로 맞춘다. 오른쪽 여백에는 줄 폭을 더한다(아래 .site-nav). */
 
   /* 메뉴 로고와 푸터가 쓰는 글꼴. base.css 와 같은 값이다. */
