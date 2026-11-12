@@ -36,6 +36,35 @@ const RULES = {
     rows: () => [['고르는 조건', `아래 칩 중 ${v(null)}개 이상에 든 종목 ${HOLD}<br>세는 칩 — 관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 · 수급 <span class="rl-sug">장외는 장 뒤에만 셈</span>`],
       ['시가총액', '세는 칩마다의 문턱을 따름'], ['줄 세우기', '겹친 칩 수 많은 순 → 같으면 시가총액 순']],
   },
+  // 관심 (11-12 재권님 「단타안에 관심도 넣어주고 룰도 넣어줘. 관심에 미분류는 없애주고」 → 「응」) — 종목은 단타 판(/api/kis/dt30) 의 「관심」 칩 든 줄 그대로(서버가 셈 · 시가총액 문턱도 서버)
+  //   룰 값은 서버 meta.rules.관심(개발2) · 묶음은 rows[].subs.관심(든 묶음 이름) · 묶음에 안 든 종목은 묶음 칸을 비움(「미분류」 를 두지 않음)
+  fav: {
+    name: '관심', url: '/api/kis/dt30',
+    // 관심 룰 = 자동(전일 거래량 급등 룰에 걸려 홀딩스 관심 「자동」 묶음에 든 종목 · 단타 칩으로는 「수급」) (11-12 재권님 「홀딩스에서 누르는거 말고 하나더 생긴게 있는데 그거룰로 넣어주고 적용해」)
+    // 고르는 조건은 자동 하나(11-12 재권님 「고르는 조건 1은 없애줘」) · 숫자는 서버 /api/auto-watch(수급 룰 문서 값 · 대상) 그대로 ·
+    // 조건마다 출처를 붙임(재권님 「출처를 룰 문서에 넣어줘 내가 바로인지가 되도록」) — 「룰 문서」 = 이 화면 수급 칩에서 고치는 값 · 「서버 코드」 = 고치려면 서버를 고쳐야 함
+    extra: '/api/auto-watch',
+    rows: (m, e) => {
+      const r = (e && e.data && e.data.rule) || {}, em = (e && e.meta) || {}, u = em.universe || {};
+      const src = (t) => `<span class="rl-src">${t}</span>`, DOC = src('룰 문서 · 수급 칩에서 고침'), SRV = src('서버 코드');
+      const pc = (x) => (x == null ? null : `${num(x, Number.isInteger(+x) ? 0 : 1)}%`);
+      return [
+        ['대상', `코스피 · 코스닥 시가총액 상위 ${v(u.rows == null ? null : num(u.rows))}종목 중 주권(오늘 ${v(u.stocks == null ? null : num(u.stocks))}종목 · ETF 뺌) ${SRV}`],
+        ['고르는 조건', `앞 거래일 정규장 등락률 ${v(pc(r.prevPct))} 이상 ${DOC}`],   // 거래량 20일 평균 배수 줄은 뺌(11-12 재권님 「거래량이 20일 평균 그룰은 없애」 · 룰 문서 volMult 는 이미 빈칸 — 셈에 안 듦)
+        ['신고가 부근', `52주 최고 종가 위아래 ${v(pc(r.nearHighPct))} 안이면 맨 위(조건 밖이면 목록에만 · 관심에는 안 넣음) ${DOC}`],
+        ['줄 세우기', `${r.sortBy === 'pct' ? '등락률 큰 순' : r.sortBy === 'mult' ? '거래량 배수 큰 순' : v(null)} ${DOC}`],
+        ['관심에 넣기', `줄 세운 상위 ${v(em.addTop)}종목 · ${v(em.addAt)} ${SRV} <span class="rl-sug">숫자는 서버가 아직 화면에 안 내줌</span>`],
+        ['안 세는 것', `${(em.notCounted || []).map((x) => esc(String(x).replace(/^sectorPct\b/, '미국장 같은 섹터 상승').replace(/^exclude\b/, '빼는 종목'))).join('<br>') || v(null)} ${SRV}`],
+      ];
+    },
+    list: (j) => {
+      const d = j.data || {}, rows = (Array.isArray(d.rows) ? d.rows : []).filter((r) => (r.chips || []).includes('수급'));
+      rows.sort((a, b) => (Number(b.cap) || 0) - (Number(a.cap) || 0));
+      const day = String(d.day || '');
+      return { cap: `${day.length === 8 ? `${day.slice(4, 6)}-${day.slice(6)}` : '—'} · ${num(rows.length)}종목 · 단타 판 후보 중 · 같은 셈`,
+        html: rows.length ? tb(['종목', '시가총액', '섹터'], rows.map((x) => `<tr>${nm(x)}<td>${x.cap == null ? '—' : x.cap >= 10000 ? `${num(x.cap / 10000, 1)}조` : `${num(x.cap)}억`}</td><td>${esc(x.sector || '—')}</td></tr>`)) : null };
+    },
+  },
   pre: {
     name: '프리장', url: '/api/kis/pre-flow',
     rows: (m) => [['고르는 조건', `넥스트레이드 프리마켓 거래대금 상위 ${v(m.topN)}위 안 · 프로그램 순매수인 종목`],
@@ -107,14 +136,14 @@ async function show(id, again = false) {
   const R = RULES[id], my = ++seq;
   panes.forEach((p) => { p.hidden = p !== crPane; });
   title.textContent = `룰 — ${R.name}`;
-  tb2.innerHTML = R.rows({}).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
+  tb2.innerHTML = R.rows({}, null).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
   if (!R.url) { $('cr-cap').textContent = `「${R.name}」 종목`; $('cr').innerHTML = '<div class="st-err">— 서버에 이 칩의 종목 목록 주소가 없음(홀딩스 화면이 순위 목록에서 셈)</div>'; return; }
   if (!again) { $('cr-cap').textContent = '값을 받는 중…'; $('cr').innerHTML = '<div class="st-err">—</div>'; }
-  const { st, j } = await getJson(R.url);
+  const [{ st, j }, ex] = await Promise.all([getJson(R.url), R.extra ? getJson(R.extra) : Promise.resolve({ j: null })]);
   if (my !== seq) return;
   if (!j || j.ok === false) { $('cr-cap').textContent = `「${R.name}」 종목`; $('cr').innerHTML = `<div class="st-err">— 서버 값을 못 받음(${esc((j && j.error) || st || '연결 안 됨')})</div>`; return; }
-  const m = j.meta || (j.data && j.data.meta) || {};
-  tb2.innerHTML = R.rows(m).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
+  const m = (R.metaOf ? R.metaOf(j) : null) || j.meta || (j.data && j.data.meta) || {};
+  tb2.innerHTML = R.rows(m, ex.j).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
   const L = R.list(j);
   $('cr-cap').textContent = L.cap.replace(/<[^>]+>/g, '');
   $('cr').innerHTML = L.html || '<div class="st-err">— 이 룰에 걸린 종목 없음</div>';
@@ -123,5 +152,5 @@ chips.forEach((c) => c.addEventListener('click', () => show(c.dataset.rule)));
 // 오늘 것은 계속 다시 받는다(11-12 재권님 「오늘자는 계속 값을 갱신하고 있어야해」) — 보고 있는 칩 하나만 · 주기는 서버 값(홀딩스 home.js 와 같은 열쇠)
 //   서버 롱폴이 켜져 있으면 바뀔 때 · 아니면 그 열쇠의 주기로 · 열쇠가 없으면(VI·급등 · 볼린저) 아래 FALLBACK 은 홀딩스와 같은 값 — 서버가 롱폴을 못 줄 때만
 const VI_FALLBACK_MS = 30000, BB_FALLBACK_MS = 60000, CHIP_FALLBACK_MS = 300000;
-const LIVE = { pre: ['pre_flow.FLOW_TTL', CHIP_FALLBACK_MS], rise: ['open_rise.CACHE_TTL', CHIP_FALLBACK_MS], vi: [null, VI_FALLBACK_MS], bb: [null, BB_FALLBACK_MS] };
+const LIVE = { fav: [null, CHIP_FALLBACK_MS], pre: ['pre_flow.FLOW_TTL', CHIP_FALLBACK_MS], rise: ['open_rise.CACHE_TTL', CHIP_FALLBACK_MS], vi: [null, VI_FALLBACK_MS], bb: [null, BB_FALLBACK_MS] };
 Object.entries(LIVE).forEach(([id, [key, fallbackMs]]) => { if (RULES[id] && RULES[id].url) watch({ url: () => (cur === id ? RULES[id].url : null), onChange: () => show(id, true), key, fallbackMs }); });
