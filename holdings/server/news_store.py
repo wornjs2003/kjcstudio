@@ -298,6 +298,88 @@ def groups(hours=24, limit=80):
     return rows[:limit]
 
 
+# ---------------------------------------------------------------- 이슈 (2026-11-12)
+# 재권님 룰 「뉴스 분석은 모으는 자리다 — 기사를 모으고 세계 주요 이슈를 뽑는다」(CLAUDE.md) · 상세는 company-setup/README.md 「이슈 뽑기」 →
+# 안 「뉴스 이슈 만들기」 에 「응 올려놔」(11-12 16:3x). 같은 사건 묶음(group_id · 위 「묶기」)을 「이슈」 하나로 올린다.
+#   뜨거운 정도   기사 수 · 다룬 언론사 수 · 다룬 나라 수 · 늘어나는 속도(최근 ISSUE_RISE_H 시간 기사 수와 그 앞 같은 시간) — 숫자 그대로 · 합친 점수 없음
+#   줄 세우기     언론사 수 → 나라 수 → 기사 수 → 마지막 보도 · 「막 뜨는 이슈」 는 rising 으로 따로(늘어난 수 → 최근 수)
+#   나라          받는 곳 목록(news-topics.json feeds)의 「나라」 칸 — 목록이 한 나라뿐이면 나라 수는 None(「못 잼」) · 칸이 없는 받는 곳은 「모름」
+#   확인 정도     받는 곳 갈래 (가) 1차 출처 기사가 묶음에 있으면 「1차 출처」 · 없으면 「기사만」
+#   종목 · 업종 대입 · 좋다 나쁘다는 안 한다 — 산업 분석 몫
+ISSUE_WINDOW_H = 48         # 이슈를 볼 시간 창(시간)
+ISSUE_RISE_H = 3            # 늘어나는 속도 — 최근 이 시간과 그 앞 같은 시간의 기사 수
+ISSUE_MIN_ARTICLES = 2      # 이슈로 올리는 묶음의 최소 기사 수(한 건짜리는 사건이 아니라 기사)
+ISSUE_LIMIT = 50            # 내주는 이슈 수
+ISSUE_RISING_TOP = 10       # 「막 뜨는 이슈」 칸 수
+ISSUE_ARTICLES_MAX = 30     # 이슈 하나에 싣는 기사 목록 상한(기사 수는 전부 센다)
+
+
+def _feeds():
+    """받는 곳 목록 — {이름: {나라, 갈래}}. 기사의 source 는 받는 곳 이름(label)이다."""
+    try:
+        with open(os.path.join(HOLDINGS_DIR, "data", "news-topics.json"), encoding="utf-8") as f:
+            feeds = json.load(f).get("feeds") or []
+    except Exception:
+        return None
+    return {(x.get("label") or x.get("id") or ""): {"nation": x.get("나라"), "kind": x.get("갈래") or ""}
+            for x in feeds if isinstance(x, dict)}
+
+
+def issues(now=None):
+    """이슈 판 — {issues, rising, meta}. 서버 주소 /api/news/hot 이 그대로 낸다."""
+    now = int(now or time.time())
+    since = now - ISSUE_WINDOW_H * 3600
+    fd = _feeds()
+    nations = {v["nation"] for v in (fd or {}).values() if v["nation"]}
+    can_count = fd is not None and len(nations) > 1
+    by = {}
+    with _conn() as c:
+        for r in c.execute("SELECT title, link, source, topic, topic_label, at, at_ts, group_id, is_lead "
+                           "FROM news_items WHERE at_ts >= ? ORDER BY at_ts", (since,)):
+            by.setdefault(r["group_id"], []).append(r)
+    rise0, rise1 = now - ISSUE_RISE_H * 3600, now - 2 * ISSUE_RISE_H * 3600
+    out = []
+    for gid, arts in by.items():
+        if len(arts) < ISSUE_MIN_ARTICLES:
+            continue
+        lead = next((a for a in arts if a["is_lead"]), arts[0])
+        presses = {a["source"] or "" for a in arts} - {""}
+        info = [(fd or {}).get(a["source"] or "") for a in arts]
+        nat = {i["nation"] for i in info if i and i["nation"]}
+        unknown = sum(1 for i in info if not i or not i["nation"])
+        labels = {}
+        for a in arts:
+            if a["topic_label"]:
+                labels[a["topic_label"]] = labels.get(a["topic_label"], 0) + 1
+        recent = sum(1 for a in arts if a["at_ts"] >= rise0)
+        before = sum(1 for a in arts if rise1 <= a["at_ts"] < rise0)
+        primary = any(i and str(i["kind"]).startswith("(가)") for i in info)
+        out.append({
+            "id": gid,
+            "name": lead["title"],
+            "kind": max(labels, key=lambda k: labels[k]) if labels else None,
+            "where": sorted(nat) if nat else None,
+            "first": arts[0]["at"], "last": arts[-1]["at"],
+            "articles": len(arts),
+            "presses": len(presses),
+            "nations": len(nat) if can_count else None,
+            "nationsUnknown": unknown,
+            "recent": recent, "before": before,
+            "confirm": "1차 출처" if primary else "기사만",
+            "items": [{"title": a["title"], "source": a["source"], "at": a["at"], "link": a["link"]}
+                      for a in reversed(arts)][:ISSUE_ARTICLES_MAX],
+        })
+    out.sort(key=lambda x: (x["presses"], x["nations"] if x["nations"] is not None else -1, x["articles"], x["last"] or ""), reverse=True)
+    rising = sorted([x for x in out if x["recent"] > x["before"]],
+                    key=lambda x: (x["recent"] - x["before"], x["recent"]), reverse=True)[:ISSUE_RISING_TOP]
+    meta = {"windowH": ISSUE_WINDOW_H, "riseH": ISSUE_RISE_H, "minArticles": ISSUE_MIN_ARTICLES, "found": len(out),
+            "nations": "셈" if can_count else ("못 잼 — 받는 곳 목록이 한 나라뿐" if fd is not None else "못 잼 — 받는 곳 목록 못 읽음"),
+            "feedNations": sorted(nations),
+            "note": "뜨거운 정도는 숫자 그대로(합친 점수 없음) · 줄 세우기 언론사 수 → 나라 수 → 기사 수 → 마지막 보도 · "
+                    "rising 은 최근 riseH 시간 기사 수(recent)가 그 앞 같은 시간(before)보다 많은 이슈 · 종목 대입은 산업 분석 몫"}
+    return {"issues": out[:ISSUE_LIMIT], "rising": [x["id"] for x in rising], "meta": meta}
+
+
 def counts(hours=24):
     """주제별 개수. 화면이 칸을 나눌 때 쓴다."""
     since = int(time.time()) - hours * 3600
