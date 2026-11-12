@@ -179,6 +179,8 @@ def early_buy(proxy, cfg, codes, put):
             got = list(ex.map(one, codes))
     except Exception:
         return None
+    if codes and all(fn is None and pg is None for _, fn, pg in got):
+        return None                                    # 하나도 못 받았다 — 「어림」 으로 두지 않고 못 받은 칩으로 남긴다(qa 11-12 · KIS 몰림 때)
     n = 0
     for c, fn, pg in got:
         if fn is not None and fn > 0 and pg is not None and pg > 0:
@@ -264,26 +266,20 @@ def patch_late(proxy, cfg, b):
             got["매수어림"] = {}
     if not got:
         return []
-    hit, _, cap, mkt = chips_now(proxy, cfg, early=False)   # early=False — 매수 어림(외국계 창구 · 프로그램)을 다시 묻지 않는다
+    # 굳힌 판에 있는 종목에만 칩을 붙인다 — 다시 셀 재료(chips_now)가 필요 없다
     if "매수" in got:                                  # 09:05 어림(하위 「어림」)을 걷고 판 값으로 바꾼다
         for r in b["rows"]:
             if r["subs"].get("매수") == ["어림"]:
                 r["subs"].pop("매수", None)
                 r["chips"] = [c for c in r["chips"] if c != "매수"]
         b["meta"]["early"] = [c for c in b["meta"].get("early") or [] if c != "매수"]
-    small = lambda c: cap.get(c) is not None and cap[c] < CAP_MIN_EOK
     rows = {r["code"]: r for r in b["rows"]}
+    small = lambda c: rows[c].get("cap") is not None and rows[c]["cap"] < CAP_MIN_EOK
     for chip, m in got.items():
         for code, (name, sub, rise) in m.items():
-            if chip == "매수" and small(code):
-                continue
             r = rows.get(code)
-            if r is None:                              # 새로 든 종목 — 다른 칩은 지금 다시 센 값(초반상승 · 매수는 아래에서 넣는다)
-                g = hit.get(code) or {"name": name, "chips": set(), "subs": {}}
-                o = [c for c in g["chips"] if c in OV_CHIPS and c not in LATE_CHIPS]
-                r = rows[code] = {"code": code, "name": g["name"] or name or "", "market": mkt.get(code), "cap": cap.get(code),
-                                  "sector": None, "chips": o, "subs": {k: v for k, v in g["subs"].items() if k in o},
-                                  "n": 0, "buy": None, "pct": None, "rise": None, "px": {}, "pxSrc": {}, "late": True}
+            if r is None or (chip == "매수" and small(code)):                              # 굳힌 판에는 새 종목을 안 넣는다 — 뒤늦게 안 신호로 앞 가격에 산 셈이 되므로(개념정의 덧 11-12)
+                continue
             if chip not in r["chips"]:
                 r["chips"].append(chip)
             if sub:
@@ -292,15 +288,6 @@ def patch_late(proxy, cfg, b):
                     r["subs"][chip].append(sub)
             if rise is not None:
                 r["rise"] = rise
-    new = [c for c, r in rows.items() if r.get("late") and r["buy"] is None]
-    if new:
-        import company_profile
-        sec = company_profile.sectors()
-        with proxy._db_lock, proxy.db_conn() as conn:
-            for c in new:
-                x = conn.execute("SELECT open FROM candles WHERE period = '5m' AND code = ? AND ts = ?", (c, b["day"] + "0905")).fetchone()
-                rows[c]["buy"] = x[0] if x else None
-                rows[c]["sector"] = sec.get(c)
     order = OV_CHIPS + ("현재상승", "볼린저")
     for r in rows.values():
         r["chips"] = [c for c in order if c in r["chips"]]
