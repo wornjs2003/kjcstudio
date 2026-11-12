@@ -36,6 +36,7 @@ const RULES = {
     rows: () => [['고르는 조건', `아래 칩 중 ${v(null)}개 이상에 든 종목 ${HOLD}<br>세는 칩 — 관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 · 수급 <span class="rl-sug">장외는 장 뒤에만 셈</span>`],
       ['시가총액', '세는 칩마다의 문턱을 따름'], ['줄 세우기', '겹친 칩 수 많은 순 → 같으면 시가총액 순']],
   },
+  // 관심 탭은 뺐다(11-12 재권님 「관심을 없애고 수급으로 대처한다」) — 같은 종목 · 같은 룰이 「수급(전일 거래량 급등)」 칩에 있다
   pre: {
     name: '프리장', url: '/api/kis/pre-flow',
     rows: (m) => [['고르는 조건', `넥스트레이드 프리마켓 거래대금 상위 ${v(m.topN)}위 안 · 프로그램 순매수인 종목`],
@@ -107,15 +108,15 @@ async function show(id, again = false) {
   const R = RULES[id], my = ++seq;
   panes.forEach((p) => { p.hidden = p !== crPane; });
   title.textContent = `룰 — ${R.name}`;
-  tb2.innerHTML = R.rows({}).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
+  tb2.innerHTML = R.rows({}, null).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
   if (!R.url) { $('cr-cap').textContent = `「${R.name}」 종목`; $('cr').innerHTML = '<div class="st-err">— 서버에 이 칩의 종목 목록 주소가 없음(홀딩스 화면이 순위 목록에서 셈)</div>'; return; }
   if (!again) { $('cr-cap').textContent = '값을 받는 중…'; $('cr').innerHTML = '<div class="st-err">—</div>'; }
-  const { st, j } = await getJson(R.url);
+  const [{ st, j }, ex] = await Promise.all([getJson(R.url), R.extra ? getJson(R.extra) : Promise.resolve({ j: null })]);
   if (my !== seq) return;
   if (!j || j.ok === false) { $('cr-cap').textContent = `「${R.name}」 종목`; $('cr').innerHTML = `<div class="st-err">— 서버 값을 못 받음(${esc((j && j.error) || st || '연결 안 됨')})</div>`; return; }
-  const m = j.meta || (j.data && j.data.meta) || {};
-  tb2.innerHTML = R.rows(m).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
-  const L = R.list(j);
+  const m = (R.metaOf ? R.metaOf(j) : null) || j.meta || (j.data && j.data.meta) || {};
+  tb2.innerHTML = R.rows(m, ex.j).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
+  const L = R.list(j, ex.j);
   $('cr-cap').textContent = L.cap.replace(/<[^>]+>/g, '');
   $('cr').innerHTML = L.html || '<div class="st-err">— 이 룰에 걸린 종목 없음</div>';
 }

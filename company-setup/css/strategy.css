@@ -216,3 +216,4 @@
 .dt .dt-evc.is-off { opacity: .4; text-decoration: line-through; }
 .dt .dt-evc.is-miss { background: var(--kh-bg-card); color: var(--kh-text-muted); opacity: .6; }   /* 그날 판에 못 받은 칩 — 종목마다 이름만 회색(11-12 재권님 「각 종목에도 넣어줘」) */
 .dt .dt-evc small { margin-left: 3px; font-weight: 500; }
+

@@ -42,6 +42,38 @@ SECTORS = (
 )
 SECTOR_NAME = dict(SECTORS)
 
+#: 한국 업종(네이버 WICS 이름 · company_profile.sectors) → 미국 섹터 ETF — 국제 표준 분류(GICS) 큰 갈래 그대로 · 반도체 업종만 XSD.
+#: 자동 관심 룰 「미국장 같은 섹터 % 이상」(auto_watch · strategy-rules volsurge.sectorPct)이 이 표 하나를 읽는다(2026-11-12 재권님
+#: 「안 세는 것 — 이건 미국장이 끝나면 토스나 네이버에서 받아올수 있지않나?」 → 덧 조건(또는)). 표에 없는 업종은 「못 셈」(빼지 않는다)
+KR_SECTOR_ETF = {
+    "반도체와반도체장비": "XSD",
+    "디스플레이장비및부품": "XLK", "디스플레이패널": "XLK", "전자장비와기기": "XLK", "통신장비": "XLK", "IT서비스": "XLK",
+    "소프트웨어": "XLK", "핸드셋": "XLK",
+    "제약": "XLV", "생물공학": "XLV", "건강관리장비와용품": "XLV", "생명과학도구및서비스": "XLV", "건강관리업체및서비스": "XLV",
+    "건강관리기술": "XLV",
+    "기계": "XLI", "전기제품": "XLI", "전기장비": "XLI", "우주항공과국방": "XLI", "복합기업": "XLI", "조선": "XLI", "건설": "XLI",
+    "상업서비스와공급품": "XLI", "건축자재": "XLI", "항공사": "XLI", "항공화물운송과물류": "XLI", "무역회사와판매업체": "XLI",
+    "운송인프라": "XLI", "도로와철도운송": "XLI", "해운사": "XLI",
+    "화학": "XLB", "철강": "XLB", "비철금속": "XLB", "포장재": "XLB",
+    "은행": "XLF", "증권": "XLF", "손해보험": "XLF", "생명보험": "XLF", "카드": "XLF", "창업투자": "XLF",
+    "화장품": "XLP", "식품": "XLP", "담배": "XLP", "가정용기기와용품": "XLP",
+    "자동차부품": "XLY", "자동차": "XLY", "백화점과일반상점": "XLY", "섬유,의류,신발,호화품": "XLY", "호텔,레스토랑,레저": "XLY",
+    "인터넷과카탈로그소매": "XLY", "전자제품": "XLY",
+    "게임엔터테인먼트": "XLC", "방송과엔터테인먼트": "XLC", "양방향미디어와서비스": "XLC", "무선통신서비스": "XLC",
+    "다각화된통신서비스": "XLC", "광고": "XLC",
+    "석유와가스": "XLE", "에너지장비및서비스": "XLE", "전기유틸리티": "XLU", "가스유틸리티": "XLU",
+}
+
+
+def last_changes(conn):
+    """섹터 ETF 마다 가장 최근에 끝난 미국장 하루 등락률 {etf: (미국 날짜, %)} — 봉 표(candles)의 일봉 마지막 둘. 없으면 빠진다."""
+    out = {}
+    for etf, _ in SECTORS:
+        r = conn.execute("SELECT ts, close FROM candles WHERE period = 'D' AND code = ? ORDER BY ts DESC LIMIT 2", (etf,)).fetchall()
+        if len(r) == 2 and r[0][1] and r[1][1]:
+            out[etf] = (str(r[0][0])[:8], round((r[0][1] / r[1][1] - 1) * 100, 2))
+    return out
+
 #: 기간 → 몇 봉 앞과 견주나
 SPAN_BACK = {"d": 1, "w": 5, "m": 20}
 

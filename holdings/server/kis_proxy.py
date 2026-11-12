@@ -10222,8 +10222,12 @@ class Handler(SimpleHTTPRequestHandler):
                     data, errors = f_all.result()
                     futures = f_fut.result()
                     futures_night = f_night.result()
+                try:
+                    opt_exp = market_hours.opt_expiry(sys.modules[__name__])   # 옵션 만기 칩(야간 옆 · 2026-11-12)
+                except Exception:
+                    opt_exp = None                                             # 못 셈 — 칩을 안 그린다(0 · 빈 날로 안 냄)
                 self._send_json({"ok": bool(data), "data": data,
-                                 "futures": futures, "futuresNight": futures_night,
+                                 "futures": futures, "futuresNight": futures_night, "optExpiry": opt_exp,
                                  "errors": errors or None})
                 return
 
