@@ -2878,11 +2878,17 @@ watch({ url: () => (SEC_CHIPS.has(sortBy) && market !== 'THEME' ? '/api/naver/gr
 watch({ url: () => '/api/kis/stock-sectors', onChange: loadSectors, key: 'company_profile.SECTOR_LIST_TTL', fallbackMs: SECTOR_FALLBACK_MS });
 loadSectors();
 
+/* 실시간 순위 줄 수 — 「단타」 는 위에서 OV_SHOW_MAX · 나머지 칩은 RANK_SHOW_MAX 까지만 그린다(재권님 「단타에 보여지는건 20개 각 종목별 소팅은 70개」 →
+   「응 맞아」 11-12). 셈(rowList)은 그대로 다 하고 그리기만 자른다 — 단타 셈(ovList)이 읽는 장외 목록 · 모달(자세히)은 안 자른다 */
+const OV_SHOW_MAX = 20;
+const RANK_SHOW_MAX = 70;
+const shownRows = () => rowList().slice(0, sortBy === 'ov' && market !== 'THEME' ? OV_SHOW_MAX : RANK_SHOW_MAX);
+
 function paintRows(priceMap) {
   /* 칩 · 시장을 바꾸면 띠도 그 목록으로 — 전에는 안내 줄을 다시 쓸 때만 그려 앞 칩의 띠가 남았다(qa 11-11 돌려보냄) */
   paintPreSectors();
   paintChipSectors();
-  const list = rowList();
+  const list = shownRows();
   /* 고른 시장의 목록이 비었다 — 서버가 아직 그 시장을 안 준다. 빈 표로 두면 고장처럼 보인다 */
   if (!list.length && universe) {
     $('kh-rows').innerHTML = `<tr><td colspan="5" class="kh-mut">${SORTS[sortBy]?.empty ? SORTS[sortBy].empty() : SORTS[sortBy]?.only ? afterEmpty()
@@ -2942,11 +2948,13 @@ function paintRows(priceMap) {
 function paintRowFoot() {
   const host = $('kh-more');
   if (!host) return;
-  const total = rowList().length;
+  const all = rowList().length;
+  const total = shownRows().length;
   const got = Object.keys(rowPrices).length;
+  const cut = all > total ? ` · 전체 ${all} 중 위 ${total}` : '';
   host.innerHTML = got >= total
-    ? `<span class="kh-mut">${total}종목</span>`
-    : `<span class="kh-mut">${total}종목 · 보이는 것부터 채웁니다 (${got})</span>`;
+    ? `<span class="kh-mut">${total}종목${cut}</span>`
+    : `<span class="kh-mut">${total}종목${cut} · 보이는 것부터 채웁니다 (${got})</span>`;
 }
 
 /* 지금 상자 안에 보이는 줄을 직접 잰다.
@@ -3309,7 +3317,7 @@ function resortRowsIfMoved() {
   if (!SORTS[sortBy]?.key && sortBy !== 'ov') return;   // 총액 · 관심은 시세로 순서가 안 바뀐다 · 「단타」(ov) 는 「장외」 가 시세로 바뀌어 든 종목이 바뀐다(11-11 「겹침도 자주로」)
   const body = $('kh-rows');
   if (!body) return;
-  const list = rowList();
+  const list = shownRows();
   const now = [...body.children].map(tr => tr.dataset.code);
   if (list.length !== now.length || list.every((s, i) => s.code === now[i])) return;
   const byCode = {};

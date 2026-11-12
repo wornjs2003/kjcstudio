@@ -157,6 +157,14 @@
 .dt .dt-tb td.dt-pl small { display: block; font-size: 10.5px; font-weight: 500; color: var(--kh-text-muted); }
 .dt .dt-fee { display: block; margin-top: 6px; font-size: 13px; }
 .dt .dt-fee input { font: inherit; width: 5em; padding: 1px 6px; border: 1px solid var(--kh-border-strong); border-radius: var(--kh-radius-sm); background: var(--kh-bg-card); color: var(--kh-text-primary); text-align: right; }
+.dt .dt-days { flex-direction: column; align-items: stretch; gap: 6px; overflow: visible; }   /* 달 줄 위 · 그 달 날짜 줄 아래(11-12 재권님 「달이 있어야 되고 해당달하위로 날짜가」) */
+.dt .dt-mons, .dt .dt-dlist { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.dt .dt-mons::-webkit-scrollbar, .dt .dt-dlist::-webkit-scrollbar { display: none; }
+.dt .dt-mons > *, .dt .dt-dlist > * { flex: none; white-space: nowrap; }
+.dt .dt-mon { font: inherit; font-size: 14px; font-weight: 700; padding: 4px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--kh-text-muted); cursor: pointer; }
+.dt .dt-mon.is-on { background: var(--kh-bg-card); color: var(--kh-text-primary); }
+.dt .dt-mon small { margin-left: 6px; font-weight: 500; }
+.dt .dt-dlist { padding-left: 12px; border-left: 2px solid var(--kh-border); }
 .dt .dt-fee input:placeholder-shown { background: var(--kh-danger-faint); border-color: transparent; color: var(--kh-danger); }   /* 빈칸이면 빨간 바탕 — 재권님이 넣으실 값(「아직 안 정해진 자리는 빨간 바탕으로」) */
 .dt .dt-tb .dt-tx { font-size: 12px; color: var(--kh-text-secondary); white-space: nowrap; }
 /* 단타 30 좁은 폭 — 종목 칸 안에 시가총액 · 섹터 · 이벤트를 접음(js 가 700 이하에서 그 차례로 그림) */
