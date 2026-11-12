@@ -32,12 +32,12 @@ from datetime import datetime, timedelta, timezone
 
 KST = timezone(timedelta(hours=9))
 TOP_N = 100                  # 재권님 18:5x 「상위 30개면 소팅에 걸리는게 적을수 있으니 지금 100개까지 늘려놔」
-BUY_AT = (9, 6)              # 굳히는 시각 — 재권님 「9시 6분에 배수」
+BUY_AT = (9, 1)              # 굳히는 시각 — 재권님 「9시 6분에 배수」 → 「9시 5분에 무조건 갱신」(11-12 09:1x) → 「9시 1분에 바로 단타 리스트 뜨도록 … 못가져온 값은 못가져온대로 … 무슨값인지만 인지되도록」(09:2x · 작업우선순위 경유) · 빠진 칩은 meta.missing · 들어오면 patch_late 가 채움
 TRACK_FROM = (9, 30)         # 값 적는 첫 시각
 TRACK_TO = (14, 0)           # 값 적는 끝 시각 — 「2시까지」
 TRACK_STEP = 30              # 분 — 「30분 단위로」
 BAR_MIN = 5                  # 5분봉 길이(분)
-BUY_LATE = (9, 30)           # 서버가 늦게 떠 이 시각이 지나면 그날은 안 굳힌다(09:06 판이 아니게 되므로)
+BUY_LATE = (9, 35)           # 굳히는 시각 — 재권님 「9시 35분에 굳히는걸로」(11-12 09:2x) · BUY_AT 부터 이때까지 판을 다시 세고 이 뒤로는 줄을 안 바꾼다 · 서버가 이 뒤에 뜨면 그날 판은 안 짓는다
 DAYS_KEEP = 30               # 「30일 추적」
 CAP_MIN_EOK = 3000           # 시가총액 문턱(억원) — 화면 RANK_MIN_CAP_EOK 와 같은 값(두 곳 · 위 「화면과 이 파일」)
 NOW_RISE_PCT = 3.0           # 「현재상승」 — 시가 대비 %(화면 NOW_RISE_PCT 와 같은 값 · 칩 이름 적기에만 씀)
@@ -66,7 +66,7 @@ def _six(code):
     return code if code.isdigit() and len(code) == 6 else None
 
 
-def chips_now(proxy, cfg):
+def chips_now(proxy, cfg, early=True):
     """지금 걸린 칩 — ({코드: {이름, 칩 집합}}, 못 받은 칩 이름 목록, 시가총액 {코드: 억원})."""
     import dart, docstore, intraday_alerts, open_rise, pre_flow, signal_watch
     uni = dart.universe_rows(None)
@@ -126,13 +126,16 @@ def chips_now(proxy, cfg):
         missing.append("VI·급등")
     try:
         jd, _ = proxy.fetch_joint_buy(cfg)
-        if jd is None:
+        if jd is None or not jd.get("rows"):
             missing.append("매수")
         for r in (jd or {}).get("rows") or []:
             if not small(r.get("code")):
                 put(r.get("code"), r.get("name"), "매수", "①②③④"[r["tier"] - 1] if r.get("tier") in (1, 2, 3, 4) else None)
     except Exception:
         missing.append("매수")
+    if "매수" in missing and early and early_buy(proxy, cfg, [c for c in hit if not small(c)], put) is not None:
+        missing.remove("매수")
+        missing.append("매수어림")                     # build 가 meta.early 로 옮긴다 — 못 받은 칩이 아니다
     try:
         b, _ = open_rise.fetch(proxy)
         if b.get("phase") in ("pending", "nodata"):
@@ -151,6 +154,37 @@ def chips_now(proxy, cfg):
     except Exception:
         pass
     return hit, missing, cap, mkt
+
+
+EARLY_WORKERS = 6
+
+
+def early_buy(proxy, cfg, codes, put):
+    """「매수」 판이 아직 없을 때(외 · 기 장중 가집계가 09:30 · 10:00 에 처음 나온다) 후보 종목의 외국계 창구 순매수 · 종목 프로그램 순매수가
+    둘 다 양수면 「매수」 어림(하위 「어림」)으로 넣는다 — 재권님 「프로그램은 받을수 있지않나? 외국계창구랑」 · 「차트에서 읽고 있잖아」(11-12 09:1x).
+    값은 큰 차트 바닥 줄이 읽는 것과 같은 함수(fetch_investor_member 의 foreignFirms.net · _program_net_today) — 새 받는 길을 만들지 않는다.
+    매수 판이 서면 patch_late 가 이 어림을 걷고 그 판으로 바꾼다. 넣은 종목 수(못 받으면 None)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(c):
+        try:
+            m = proxy.fetch_investor_member(cfg, c) or {}
+            fn = (m.get("foreignFirms") or {}).get("net")
+            pg = proxy._program_net_today(cfg, c)
+        except Exception:
+            return c, None, None
+        return c, fn, pg
+    try:
+        with ThreadPoolExecutor(EARLY_WORKERS) as ex:
+            got = list(ex.map(one, codes))
+    except Exception:
+        return None
+    n = 0
+    for c, fn, pg in got:
+        if fn is not None and fn > 0 and pg is not None and pg > 0:
+            put(c, None, "매수", "어림")
+            n += 1
+    return n
 
 
 def build(proxy, cfg, day):
@@ -175,10 +209,148 @@ def build(proxy, cfg, day):
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(), "rows": rows, "closed": False,
-            "meta": {"rebuilt": False, "missing": missing, "candidates": len(ov), "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
+            "meta": {"rebuilt": False, "missing": [c for c in missing if c != "매수어림"], "candidates": len(ov),
+                     "early": ["매수"] if "매수어림" in missing else [], "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
                      "order": "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순",
-                     "note": "buy 는 09:06 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
+                     "note": "buy 는 굳힌 때(buyAt) 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
                              "market KOSPI · KOSDAQ(순위 목록 · 없으면 KIS 종목 마스터 · 둘 다 없으면 null) · cap 억원 · 장외는 09:06 에 비어 안 셈 · 볼린저 · 현재상승은 칩 이름만(셈에 안 듦)"}}
+
+
+LATE_CHIPS = ("초반상승", "매수")   # 09:06 에 값이 아직 없을 수 있는 칩 — 초반상승은 첫 5분봉이 덜 들어옴 · 매수는 외 · 기 장중 가집계가 09:30 에 처음 나옴
+# 재권님 「지금하라고해」(11-12 09:1x · 오늘 판에 두 칩이 빠져 굳음) — 그날 판이 그 칩 없이 굳었으면 값이 나오는 대로 채워 넣고 다시 줄 세운다.
+# 초반상승은 09:00 봉이라 09:06 과 같은 값이다. 매수는 채운 시각의 판이라 meta.approx 에 넣고 meta.late 에 시각을 적는다.
+# 새로 들어온 종목의 buy 는 09:05 봉 시가(되채우기와 같음 · 없으면 null) · 다른 칩은 채울 때 다시 센 값이다.
+
+
+def patch_late(proxy, cfg, b):
+    """그날 판의 meta.missing 중 LATE_CHIPS 를 값이 나왔으면 채운다. 채운 칩 이름 목록(없으면 빈 목록)."""
+    import open_rise
+    want = [c for c in LATE_CHIPS if c in (b["meta"].get("missing") or []) + (b["meta"].get("early") or [])]
+    if not want:
+        return []
+    got = {}                                           # 칩 → {코드: (이름, 하위, 초반상승 %)}
+    if "초반상승" in want:
+        try:
+            o, _ = open_rise.fetch(proxy)
+            late = _now().hour * 60 + _now().minute >= BUY_LATE[0] * 60 + BUY_LATE[1]
+            if o.get("phase") == "done" or (late and o.get("phase") == "pending"):   # 09:30 이 지나도 덜 받았으면 받은 데까지로
+                got["초반상승"] = {r["code"]: (r.get("name"), None, r.get("pct")) for r in o.get("rows") or [] if _six(r.get("code"))}
+        except Exception:
+            pass
+    if "매수" in want:
+        try:
+            jd, _ = proxy.fetch_joint_buy(cfg)
+            if jd is not None and jd.get("rows"):
+                got["매수"] = {r["code"]: (r.get("name"), "①②③④"[r["tier"] - 1] if r.get("tier") in (1, 2, 3, 4) else None, None)
+                              for r in jd["rows"] if _six(r.get("code"))}
+        except Exception:
+            pass
+    if "매수" in want and "매수" not in got and "매수" in (b["meta"].get("missing") or []):
+        # 굳힐 때 어림도 못 했던 판(11-12 오늘 판 · 서버가 어림 전 코드였다) — 판 안 종목에 어림을 지금 넣는다
+        rows0 = {r["code"]: r for r in b["rows"]}
+
+        def put0(code, name, chip, sub=None):
+            r = rows0.get(code)
+            if r is not None and chip not in r["chips"]:
+                r["chips"].append(chip)
+                r["subs"][chip] = [sub] if sub else []
+        if early_buy(proxy, cfg, [r["code"] for r in b["rows"] if not (r.get("cap") is not None and r["cap"] < CAP_MIN_EOK)], put0) is not None:
+            b["meta"]["missing"] = [c for c in b["meta"]["missing"] if c != "매수"]
+            b["meta"]["early"] = sorted(set(b["meta"].get("early") or []) | {"매수"})
+            ap = b["meta"].setdefault("approx", [])
+            if "매수" not in ap:
+                ap.append("매수")
+            b["meta"].setdefault("late", {})["매수어림"] = _now().strftime("%H:%M")
+            got["매수어림"] = {}
+    if not got:
+        return []
+    hit, _, cap, mkt = chips_now(proxy, cfg, early=False)   # early=False — 매수 어림(외국계 창구 · 프로그램)을 다시 묻지 않는다
+    if "매수" in got:                                  # 09:05 어림(하위 「어림」)을 걷고 판 값으로 바꾼다
+        for r in b["rows"]:
+            if r["subs"].get("매수") == ["어림"]:
+                r["subs"].pop("매수", None)
+                r["chips"] = [c for c in r["chips"] if c != "매수"]
+        b["meta"]["early"] = [c for c in b["meta"].get("early") or [] if c != "매수"]
+    small = lambda c: cap.get(c) is not None and cap[c] < CAP_MIN_EOK
+    rows = {r["code"]: r for r in b["rows"]}
+    for chip, m in got.items():
+        for code, (name, sub, rise) in m.items():
+            if chip == "매수" and small(code):
+                continue
+            r = rows.get(code)
+            if r is None:                              # 새로 든 종목 — 다른 칩은 지금 다시 센 값(초반상승 · 매수는 아래에서 넣는다)
+                g = hit.get(code) or {"name": name, "chips": set(), "subs": {}}
+                o = [c for c in g["chips"] if c in OV_CHIPS and c not in LATE_CHIPS]
+                r = rows[code] = {"code": code, "name": g["name"] or name or "", "market": mkt.get(code), "cap": cap.get(code),
+                                  "sector": None, "chips": o, "subs": {k: v for k, v in g["subs"].items() if k in o},
+                                  "n": 0, "buy": None, "pct": None, "rise": None, "px": {}, "pxSrc": {}, "late": True}
+            if chip not in r["chips"]:
+                r["chips"].append(chip)
+            if sub:
+                r["subs"].setdefault(chip, [])
+                if sub not in r["subs"][chip]:
+                    r["subs"][chip].append(sub)
+            if rise is not None:
+                r["rise"] = rise
+    new = [c for c, r in rows.items() if r.get("late") and r["buy"] is None]
+    if new:
+        import company_profile
+        sec = company_profile.sectors()
+        with proxy._db_lock, proxy.db_conn() as conn:
+            for c in new:
+                x = conn.execute("SELECT open FROM candles WHERE period = '5m' AND code = ? AND ts = ?", (c, b["day"] + "0905")).fetchone()
+                rows[c]["buy"] = x[0] if x else None
+                rows[c]["sector"] = sec.get(c)
+    order = OV_CHIPS + ("현재상승", "볼린저")
+    for r in rows.values():
+        r["chips"] = [c for c in order if c in r["chips"]]
+        r["n"] = len(set(r["chips"]) & set(OV_CHIPS))
+    out = sorted(rows.values(), key=lambda r: (-r["n"], -(r["rise"] if r["rise"] is not None else -1e9), -(r["cap"] if r["cap"] is not None else -1)))
+    b["rows"] = out[:TOP_N]
+    for i, r in enumerate(b["rows"]):
+        r["rank"] = i + 1
+    b["meta"]["missing"] = [c for c in b["meta"]["missing"] if c not in got]
+    late = b["meta"].setdefault("late", {})
+    for chip in got:
+        if chip == "매수어림":
+            continue
+        late[chip] = _now().strftime("%H:%M")
+        if chip == "매수":
+            ap = b["meta"].setdefault("approx", [])
+            if chip not in ap:
+                ap.append(chip)
+    b["meta"]["candidates"] = max(b["meta"].get("candidates") or 0, len(rows))
+    return list(got)
+
+
+RESCAN_SEC = 60               # BUY_AT ~ BUY_LATE 동안 판을 다시 세는 간격(초) — 칩 재료(프리장 · 수급 · VI · 매수 어림 …) 캐시 둘레
+# 재권님 「궅히지말고 정보가 들어오는대로 개선되게 해줘」 → 「9시 35분에 굳히는걸로」(11-12 09:2x) — 굳히는 시각(BUY_LATE) 전까지는 판을 굳히지 않고
+# RESCAN_SEC 마다 칩을 다시 세어 줄을 다시 세운다. 이미 든 종목의 buy 는 처음 든 때 값 그대로 · 새로 든 종목은 든 때 현재가(rows[].buyAt).
+# BUY_LATE 뒤로는 줄을 바꾸지 않고 늦게 나온 칩(patch_late)만 채운다 — 30분 값을 적는 동안 종목이 바뀌면 그 칸을 견줄 수 없다.
+# 09:30 칸은 굳히기 전에 오므로 그 뒤에 든 종목은 그 칸을 09:30 에 끝난 5분봉 종가로 채운다(track).
+
+
+def refresh(proxy, cfg, b):
+    """그날 판을 지금 들어온 값으로 다시 세운다(종목 · 칩 · 순위). 바뀐 줄 수."""
+    nb = build(proxy, cfg, b["day"])
+    old = {r["code"]: r for r in b["rows"]}
+    hm = _now().strftime("%H:%M")
+    changed = 0
+    for r in nb["rows"]:
+        o = old.get(r["code"])
+        if o is not None:
+            r["buy"], r["pct"], r["px"], r["pxSrc"] = o["buy"], o["pct"], o["px"], o["pxSrc"]
+            r["buyAt"] = o.get("buyAt") or b.get("buyAt")
+            if o.get("rank") != r["rank"] or o.get("chips") != r["chips"]:
+                changed += 1
+        else:
+            r["buyAt"] = hm
+            changed += 1
+    changed += len(set(old) - {r["code"] for r in nb["rows"]})
+    b["rows"] = nb["rows"]
+    late = b["meta"].get("late") or {}
+    b["meta"] = dict(nb["meta"], late=late, rescanAt=hm)
+    return changed
 
 
 def _bar_close(proxy, day, code, hhmm):
@@ -260,7 +432,7 @@ VI_PROBE_PCT = 3.0            # 지난 날 VI 를 KIS 에 물을 종목 — 09:0
 QUIET = ((7, 30), (20, 10))   # 되채우기(VI 를 KIS 에 묻는다)를 안 하는 때 — 장 전 · 장중 · 넥장(20:00)까지 KIS 몫을 안 쓴다
 VI_WORKERS = 6                # VI 를 겹쳐 묻는 수
 # 서버가 뜨면 QUIET 와 상관없이 이번 주(월요일부터 어제까지) 거래일을 먼저 채운다 — 재권님 「어제랑 어그제라도 먼저 넣어노라고해」 → 「이번주꺼만 넣어줘」(11-12 08:4x) · 하루 VI 묻기 150번 남짓 · 사본 DB 로 두 날 65초
-RECENT_SKIP = ((9, 0), (9, 10))  # 그래도 이때는 미룬다 — 09:06 굳힘이 밀리지 않게
+RECENT_SKIP = ((8, 59), (9, 3))  # 그래도 이때는 미룬다 — BUY_AT 굳힘이 밀리지 않게
 
 
 def _trade_days(proxy, before, n):
@@ -482,13 +654,23 @@ def start(proxy):
                         b = build(proxy, proxy.load_secrets(), day)
                         _store(proxy, b)
                         _status.update(frozen=day, error=None)
-                        print("  [단타 30] %s 09:06 판 %d종목 굳힘%s" % (day, len(b["rows"]),
+                        print("  [단타 30] %s %02d:%02d 판 %d종목 굳힘%s" % (day, BUY_AT[0], BUY_AT[1], len(b["rows"]),
                               " · 못 받은 칩 " + " · ".join(b["meta"]["missing"]) if b["meta"]["missing"] else ""), flush=True)
                     elif got is not None:
                         b = got[0]
                         was = bool(b.get("closed"))
                         due = [t for t in b["times"] if int(t[:2]) * 60 + int(t[2:]) + 1 <= hm
                                and any(t not in r["px"] for r in b["rows"])]
+                        filled_late = []
+                        if not b.get("closed") and hm < BUY_LATE[0] * 60 + BUY_LATE[1]:
+                            if time.time() - _status.get("rescan", 0) >= RESCAN_SEC:
+                                _status["rescan"] = time.time()
+                                if refresh(proxy, proxy.load_secrets(), b):
+                                    filled_late = ["다시 셈"]
+                        elif not b.get("closed"):
+                            filled_late = patch_late(proxy, proxy.load_secrets(), b)
+                        if filled_late and filled_late != ["다시 셈"]:
+                            print("  [단타 30] %s 판에 늦게 나온 칩 채움 — %s" % (day, " · ".join(filled_late)), flush=True)
                         if due:
                             for t in due:
                                 track(proxy, proxy.load_secrets(), b, t, hm - int(t[:2]) * 60 - int(t[2:]))
@@ -496,7 +678,7 @@ def start(proxy):
                             b["closed"] = True             # 14:00 마지막 칸까지 적었다 — 그날 판을 굳힌다(그 뒤 now 안 붙음)
                             for r in b["rows"]:
                                 r.pop("now", None)
-                        if due or b.get("closed") and not was:
+                        if due or filled_late or b.get("closed") and not was:
                             _store(proxy, b)
             except Exception as e:
                 _status["error"] = type(e).__name__
