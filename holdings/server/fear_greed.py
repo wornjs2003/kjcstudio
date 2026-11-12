@@ -6,7 +6,7 @@
 
     셈       요소 일곱을 각자 원래 값으로 셈 → 지난 1년(WINDOW 거래일) 그 요소 값들 가운데 오늘이 몇 % 자리인가로 0~100
              (변동성 · VIX 는 클수록 공포라 뒤집음) → 셈된 요소들의 평균(같은 무게 · 못 잰 요소는 빼고 평균)
-    코스피    모멘텀 코스피 125일선 대비 · 주가 강도 52주 신고가 − 신저가(1년 일봉이 다 있는 종목 수 대비) ·
+    코스피    모멘텀 코스피 125일선 대비 · 주가 강도 52주 신고가 − 신저가(코스피 시가총액 상위 200 · 우선주 포함 중 1년 일봉이 다 있는 종목 수 대비) ·
              시장 폭 20일 오른 종목의 거래대금 비중 · 변동성 20일 · 외국인 20일 누적(시장) · 투자심리선 10일 · 간밤 VIX ÷ 50일 평균
     종목      시장에만 있는 둘을 그 종목 것으로 바꾼다 — 주가 강도 52주 범위 안 자리 · 시장 폭 → 20일 중 오른 날의 거래대금 비중 ·
              외국인 20일 누적은 그 종목(쌓인 날이 짧으면 쌓인 만큼 안에서 자리 · 모자라면 뺌)
@@ -14,8 +14,8 @@
              VIX(us_outlook 의 Cboe 1년). 바깥에 새로 묻지 않는다
     25 돌파   점수가 FEAR_LINE 아래에서 그 위로 올라선 날 = 「풀림」. 앞 풀림 뒤 REGROUP 거래일 안의 것은 「다시 넘음」 으로 묶는다(사진의 규칙).
              보내는 서버(8765)가 평일 ALERT_AT 뒤 한 번 그날 마감 값으로 보고 「풀림 첫날」 이면 알린다 — **SEND 가 False 면 안 보내고 기록만**
-    장중      그날 일봉(지수 · 그 종목)이 들어와 있으면 그것으로 셈 — 마감 전이면 「장중」 이라 적는다. 종목 400여 개가 쓰는 두 요소는 그날 일봉이
-             다 쌓이기 전이라 빠질 수 있다(빠진 요소는 응답에 null)
+    장중      그날 일봉(지수 · 그 종목)이 들어와 있으면 그것으로 셈 — 마감 전이면 「장중」 이라 적는다. 코스피는 그날 종목 일봉이
+             앞 거래일의 COUNT_RATIO 아래면 점수를 안 내고 「셈 중」(counting) · 25 풀림 판정도 차거나 JUDGE_UNTIL 까지 미룬다(2026-11-12)
 """
 import json
 import urllib.request
@@ -35,7 +35,9 @@ HIST = 120              # 화면 그래프 기간
 FEAR_LINE = 25          # 이 아래가 「극도의 공포」 · 이것을 아래에서 위로 넘으면 「풀림」
 REGROUP = 20            # 앞 풀림 뒤 이 거래일 안에 다시 넘으면 같은 일로 묶는다
 MIN_HIST = 40           # 요소 값이 이만큼은 쌓여야 자리를 매긴다(종목 외국인처럼 짧은 것)
-MIN_STOCKS = 200        # 시장 두 요소(신고가 · 폭)를 그날 셈하려면 그날 일봉이 있는 종목이 이만큼
+MIN_STOCKS = 100        # 시장 두 요소(신고가 · 폭)를 그날 셈하려면 1년 일봉이 다 있는 종목이 이만큼(코스피 상위 200 중 · 11-12 잰 148)
+COUNT_RATIO = 0.9       # 그날 일봉이 든 종목이 앞 거래일의 이 비율 아래면 「셈 중」 — 점수를 안 내고 풀림 판정도 미룬다
+JUDGE_UNTIL = (23, 30)  # 「셈 중」 이면 ALERT_AT 뒤 TICK 마다 다시 본다 — 이 시각까지 안 차면 그날은 판정 안 함으로 남긴다(종목 일봉은 20:10 부터 한 바퀴가 채운다 — 두 시간 남짓 · kis_proxy DWMY_AT_MIN)
 CACHE_SEC = 300
 ZONES = ((25, "극도의 공포"), (45, "공포"), (55, "중립"), (75, "탐욕"), (101, "극도의 탐욕"))
 SEND = False            # 25 풀림 알림 — 만들었고 꺼 둠(켜기는 재권님 지시 · 몇 통 갈지는 응답 alerts 로 센다)
@@ -69,13 +71,22 @@ def _daily(proxy, code):
 
 
 def _stocks(proxy, since):
-    px = {}
+    """코스피 시가총액 상위(dart 감시 목록 · 매일 07시) 종목의 일봉 — 우선주 포함 (2026-11-12 qa 검수 · 재권님 「우선주도 넣어」).
+    전에는 일봉이 있는 6자리 전부를 세어 코스닥 · ETF 가 섞였다."""
+    codes = {r["stock_code"] for r in dart.universe_rows("KOSPI")}
+    px = {c: {} for c in codes}
+    if not codes:
+        return px
     with proxy._db_lock, proxy.db_conn() as conn:
         for code, ts, cl, vol in conn.execute(
                 "SELECT code, ts, close, volume FROM candles WHERE period = 'D' AND close > 0 AND ts >= ? "
-                "AND code GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]'", (since,)):
-            px.setdefault(code, {})[ts] = (cl, vol or 0)
+                "AND code IN (%s)" % ",".join("?" * len(codes)), (since, *codes)):
+            px[code][ts] = (cl, vol or 0)
     return px
+
+
+def _day_count(mkt, day):
+    return sum(1 for m in mkt.values() if day in m)
 
 
 def _vix_ratio(proxy):
@@ -216,12 +227,22 @@ def _compute(proxy, key):
     F = {}
     for i in range(start, len(days)):
         F[i] = _factors(days, cl, vol, i, mkt, fr, vx)
+    def short(i):                             # 그날 종목 일봉이 앞 거래일의 COUNT_RATIO 아래인가 — 지난 날도 같은 선(그래프에 빈칸)
+        return mkt is not None and i >= 1 and _day_count(mkt, days[i]) < int(_day_count(mkt, days[i - 1]) * COUNT_RATIO + 0.999)
     hist = []
     for i in range(len(days) - HIST, len(days)):
         s, _ = _score(F, days, i)
-        hist.append([days[i], s])
+        hist.append([days[i], None if short(i) else s])
     i = len(days) - 1
     s, parts = _score(F, days, i)
+    count = None
+    if mkt is not None and i >= 1:
+        # **그날 일봉이 덜 쌓였으면 「셈 중」** — 11-11 은 그날 일봉이 앞날의 몇 분의 1이라 두 요소가 빠진 채 다섯으로 셈됐다(qa 검수)
+        n0, n1 = _day_count(mkt, days[i]), _day_count(mkt, days[i - 1])
+        count = {"day": n0, "prev": n1, "need": int(n1 * COUNT_RATIO + 0.999)}
+        if n0 < count["need"]:
+            s, parts = None, {k: None for k in parts}
+            hist[-1][1] = None
     raw = {k: F[i][k] for k, _ in KEYS}
     vols = [F[j]["vol"] for j in range(max(start, i - WINDOW + 1), i + 1) if F[j]["vol"] is not None]
     now = _now()
@@ -235,9 +256,10 @@ def _compute(proxy, key):
         return hist[-1 - n][1] if len(hist) > n and hist[-1][1] is not None and hist[-1 - n][1] is not None else None
     cr = crossings(hist)
     return {
-        "key": key, "name": t[2], "ready": s is not None, "day": days[i],
+        "key": key, "name": t[2], "ready": s is not None or (count is not None and count["day"] < count["need"]), "day": days[i],
         "live": days[i] == today and now.weekday() < 5 and (now.hour, now.minute) < (15, 30),
-        "score": s, "zone": zone(s), "parts": parts, "raw": raw, "hlN": F[i].get("hlN"),
+        "score": s, "zone": zone(s) if s is not None else None, "parts": parts,
+        "counting": count is not None and s is None, "count": count, "raw": raw, "hlN": F[i].get("hlN"),
         "volRatio": (raw["vol"] / st.mean(vols)) if raw["vol"] is not None and vols else None,
         "d5": None if ago(5) is None else s - ago(5), "d20": None if ago(20) is None else s - ago(20),
         "below": run, "hist": hist,
@@ -274,8 +296,20 @@ def status():
 
 
 def _alert_once(proxy, day):
-    """그날 마감 값으로 셋을 보고 「풀림 첫날」 이 그날인 것을 알린다 — 같은 날 다시 안 본다(_status.alertDay)."""
+    """그날 마감 값으로 셋을 보고 「풀림 첫날」 이 그날인 것을 알린다 — 같은 날 다시 안 본다(_status.alertDay).
+    판정했으면 True · 코스피가 「셈 중」 이라 미뤘으면 False(loop 가 다음 TICK 에 다시 부른다 · JUDGE_UNTIL 뒤에는 True)."""
     hits = []
+    now = _now()
+    with _lock:
+        _cache.pop("KOSPI", None)                       # 마감 값으로 다시 셈
+    k = get(proxy, "KOSPI")
+    if k.get("counting"):
+        # **그날 일봉이 덜 쌓였으면 판정을 미룬다** — TICK 뒤 다시(loop 가 alertDay 를 비운다) · JUDGE_UNTIL 까지
+        late = (now.hour, now.minute) >= JUDGE_UNTIL
+        _status["alertLast"] = {"day": day, "at": now.isoformat(timespec="seconds"), "hits": [], "text": None,
+                                "sent": "판정 안 함 — 셈 중(그날 일봉 %d/%d)" % (k["count"]["day"], k["count"]["prev"])
+                                        + ("" if late else " · 다시 봄")}
+        return late
     for t in TARGETS:
         with _lock:
             _cache.pop(t[0], None)                      # 마감 값으로 다시 셈
@@ -290,12 +324,13 @@ def _alert_once(proxy, day):
     if msg and SEND:
         with proxy._db_lock, proxy.db_conn() as conn:          # 재시작해도 같은 날 두 번 안 보낸다
             if conn.execute("SELECT 1 FROM fear_greed_alert WHERE day = ?", (day,)).fetchone():
-                return
+                return True
             conn.execute("INSERT INTO fear_greed_alert VALUES (?, ?, ?)", (day, _now().isoformat(timespec="seconds"), msg))
         ok, why = dart.telegram_send(msg)
         sent = ok if ok else why
     _status["alertLast"] = {"day": day, "at": _now().isoformat(timespec="seconds"),
                             "hits": [h["name"] for h in hits], "text": msg, "sent": sent if SEND else "꺼짐(SEND=False)"}
+    return True
 
 
 def start(proxy):
@@ -310,7 +345,8 @@ def start(proxy):
                 day = now.strftime("%Y%m%d")
                 if now.weekday() < 5 and (now.hour, now.minute) >= ALERT_AT and _status["alertDay"] != day:
                     _status["alertDay"] = day
-                    _alert_once(proxy, day)
+                    if not _alert_once(proxy, day):
+                        _status["alertDay"] = None      # 셈 중 — 다음 TICK 에 다시
             except Exception as e:
                 _status["error"] = safe_message(e, 160)
             time.sleep(TICK)

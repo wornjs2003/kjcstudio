@@ -86,13 +86,23 @@ function render(box, j) {
   if (!d || !d.ready) { box.innerHTML = `<div class="fg-empty">불러오지 못함 — ${(d && d.why) || (j && j.error) || '서버 응답 없음'}</div>`; return; }
   const line = j.line, z = ZN.indexOf(d.zone);
   const lf = d.lastFirst ? `마지막 풀림 첫날 ${md(d.lastFirst)}` : '지난 120거래일에 풀림 없음';
-  const runBox = d.below > 0
+  /* **「셈 중」** — 그날 일봉이 앞 거래일의 COUNT_RATIO 아래면 서버가 점수를 안 낸다(server/fear_greed.py · 2026-11-12 qa 검수 · 재권님 「응 고쳐」).
+     두 요소가 빠진 채 다섯으로 셈한 점수를 내지 않고, 25 풀림 판정도 서버가 미룬다 */
+  const cnt = d.counting ? d.count : null;
+  /* 셈 중이어도 원 · 추세는 남긴다 — 마지막으로 셈한 날 점수 자리에 · 추세는 그날과 그 5거래일 앞을 견줌(재권님 「원과 추세 방향은 어디갔어?」 11-12) */
+  const hv = (d.hist || []).filter(p => p[1] != null);
+  const lastS = cnt && hv.length ? hv[hv.length - 1] : null;
+  const lastD5 = lastS && hv.length > 5 ? lastS[1] - hv[hv.length - 6][1] : null;
+  const runBox = cnt
+    ? `<b>오늘 점수 셈 중</b> — 종목 일봉이 다 쌓이면 셈하고 ${line} 풀림도 그때 봅니다. ${lf}.`
+    : d.below > 0
     ? `<b>${line} 아래 ${d.below}일째</b> — ${lf}. ${line} 위로 올라서는 날 그래프에 빨간 점이 찍힙니다.`
     : `<b>${line} 위</b> — ${lf}.`;
   box.innerHTML = `
     <div class="fg-top"><span class="kh-mut">${d.live ? '오늘 장중(마감 전)' : md(d.day) + ' 장 마감'} 기준 · 0~100 낮을수록 공포</span></div>
-    <div class="fg-big"><b class="${tone(d.score)}">${d.score}</b><span class="${tone(d.score)}">${d.zone}</span></div>
-    <div class="fg-gauge" style="background:${gaugeBg()}"><i class="fg-25" style="left:${line}%"><em>${line}</em></i><i class="fg-now" style="left:${d.score}%">${trend(d.d5)}</i></div>
+    <div class="fg-big">${cnt ? `<b class="kh-mut">셈 중</b><span class="kh-mut">그날 종목 일봉 ${cnt.day} / 앞 거래일 ${cnt.prev} — ${cnt.need}종목이 되면 셈${lastS ? ` · 마지막 셈 ${md(lastS[0])} ${lastS[1]}` : ''}</span>`
+                              : `<b class="${tone(d.score)}">${d.score}</b><span class="${tone(d.score)}">${d.zone}</span>`}</div>
+    <div class="fg-gauge" style="background:${gaugeBg()}"><i class="fg-25" style="left:${line}%"><em>${line}</em></i>${cnt ? (lastS ? `<i class="fg-now" style="left:${lastS[1]}%">${trend(lastD5)}</i>` : '') : `<i class="fg-now" style="left:${d.score}%">${trend(d.d5)}</i>`}</div>
     <div class="fg-zones">${ZN.map((t, i) => `<span class="${i === z ? 'on' : ''}">${t}</span>`).join('')}</div>
     <div class="fg-chg">5일 전 대비 ${delta(d.d5)} · 20일 전 대비 ${delta(d.d20)}</div>
     <div class="fg-box">${runBox}</div>
