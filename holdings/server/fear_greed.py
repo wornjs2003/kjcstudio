@@ -18,6 +18,7 @@
              앞 거래일의 COUNT_RATIO 아래면 점수를 안 내고 「셈 중」(counting) · 25 풀림 판정도 차거나 JUDGE_UNTIL 까지 미룬다(2026-11-12)
 """
 import json
+import sqlite3
 import urllib.request
 import statistics as st
 import threading
@@ -74,14 +75,33 @@ def _stocks(proxy, since):
     """코스피 시가총액 상위(dart 감시 목록 · 매일 07시) 종목의 일봉 — 우선주 포함 (2026-11-12 qa 검수 · 재권님 「우선주도 넣어」).
     전에는 일봉이 있는 6자리 전부를 세어 코스닥 · ETF 가 섞였다."""
     codes = {r["stock_code"] for r in dart.universe_top_rows("KOSPI")}   # 상위 200 — 대상 표가 5천억 이상으로 넓어져도(11-12) 그대로
-    px = {c: {} for c in codes}
-    if not codes:
-        return px
     with proxy._db_lock, proxy.db_conn() as conn:
+        # 셈 대상은 자동 관심종목이 날마다 받는 주식 종목(ETF 뺌 · auto_watch.py 가 KIS 종목 마스터로 거름)과 겹치는 것 —
+        # 차트를 연 ETF 일봉이 어떤 날만 섞여 날마다 종목 수가 흔들렸다(11-10 186 ↔ 11-11 156 · 11-12 잼). 그 표가 없으면 그대로
+        try:
+            seen = {r[0] for r in conn.execute(
+                "SELECT DISTINCT code FROM auto_watch_day WHERE day >= ? AND code IN (%s)" % ",".join("?" * len(codes)), (since, *codes))} if codes else set()
+            if seen:
+                codes = codes & seen
+        except sqlite3.OperationalError:
+            pass
+        px = {c: {} for c in codes}
+        if not codes:
+            return px
         for code, ts, cl, vol in conn.execute(
                 "SELECT code, ts, close, volume FROM candles WHERE period = 'D' AND close > 0 AND ts >= ? "
                 "AND code IN (%s)" % ",".join("?" * len(codes)), (since, *codes)):
             px[code][ts] = (cl, vol or 0)
+        # 빈 날은 자동 관심종목이 매일 15:41~ 받아 두는 종가 · 거래량(auto_watch_day · 정규장 J)으로 채운다 — 일봉은 차트를 연 종목만 쌓여
+        # 날마다 줄었다(11-02 193 → 11-11 144 → 11-12 장중 4 · 개발 DB 잼) · KIS 를 더 안 부른다 (2026-11-12 재권님 「공포 탐욕지수가 안나오는데」 → 「커밋해」).
+        # 일봉(통합 UN 종가)이 있으면 그것을 쓰고 없을 때만 채운다
+        try:
+            for code, day, cl, vol in conn.execute(
+                    "SELECT code, day, close, vol FROM auto_watch_day WHERE close > 0 AND day >= ? "
+                    "AND code IN (%s)" % ",".join("?" * len(codes)), (since, *codes)):
+                px[code].setdefault(day, (cl, vol or 0))
+        except sqlite3.OperationalError:
+            pass                              # 그 표가 없는 DB(옛 사본) — 일봉만으로 센다
     return px
 
 
