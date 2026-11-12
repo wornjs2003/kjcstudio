@@ -7,6 +7,7 @@
 //     (그 값을 룰 문서로 옮기는 것은 개발1 카드 「서버 칩 룰이 룰 문서 값을 읽게」)
 //   · 종목은 홀딩스와 같은 서버 주소 — 목록 주소가 없는 칩(단타 · 현재상승 · 장외 — 홀딩스 화면이 순위 목록에서 셈)은 —
 import { signClass, NUM } from '/assets/js/sign.js';
+import { watch } from '/holdings/js/store/longpoll.js';   // 오늘 칩 목록 다시 받기 — 홀딩스 첫 화면과 같은 길(서버 롱폴 · 서버 주기)
 
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -90,9 +91,9 @@ const chips = [...document.querySelectorAll('#rl-chips [data-rule]')];
 const tb1 = $('rl-tb'), tb2 = $('rl-tb2'), title = $('rl-title'), go = $('rl-go');
 const awH = document.querySelector('h3.aw-tabs[role="tablist"]'), crH = $('cr-h'), how = $('aw-how');
 const panes = [...document.querySelectorAll('.aw-pane')], crPane = document.querySelector('.aw-pane[data-pane="chip"]');
-let seq = 0;
+let seq = 0, cur = '';
 
-async function show(id) {
+async function show(id, again = false) {
   chips.forEach((c) => { const on = c.dataset.rule === id; c.classList.toggle('is-active', on); c.setAttribute('aria-selected', on ? 'true' : 'false'); });
   const vol = id === 'volsurge';
   tb1.hidden = !vol; tb2.hidden = vol; go.hidden = !vol; awH.hidden = !vol; crH.hidden = vol;
@@ -102,12 +103,13 @@ async function show(id) {
     (document.querySelector('.aw-tab.is-on') || document.querySelector('.aw-tab'))?.click();   // 현재 · 어제 판을 고르던 그대로 되살림
     return;
   }
+  cur = id;
   const R = RULES[id], my = ++seq;
   panes.forEach((p) => { p.hidden = p !== crPane; });
   title.textContent = `룰 — ${R.name}`;
   tb2.innerHTML = R.rows({}).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
   if (!R.url) { $('cr-cap').textContent = `「${R.name}」 종목`; $('cr').innerHTML = '<div class="st-err">— 서버에 이 칩의 종목 목록 주소가 없음(홀딩스 화면이 순위 목록에서 셈)</div>'; return; }
-  $('cr-cap').textContent = '값을 받는 중…'; $('cr').innerHTML = '<div class="st-err">—</div>';
+  if (!again) { $('cr-cap').textContent = '값을 받는 중…'; $('cr').innerHTML = '<div class="st-err">—</div>'; }
   const { st, j } = await getJson(R.url);
   if (my !== seq) return;
   if (!j || j.ok === false) { $('cr-cap').textContent = `「${R.name}」 종목`; $('cr').innerHTML = `<div class="st-err">— 서버 값을 못 받음(${esc((j && j.error) || st || '연결 안 됨')})</div>`; return; }
@@ -118,3 +120,8 @@ async function show(id) {
   $('cr').innerHTML = L.html || '<div class="st-err">— 이 룰에 걸린 종목 없음</div>';
 }
 chips.forEach((c) => c.addEventListener('click', () => show(c.dataset.rule)));
+// 오늘 것은 계속 다시 받는다(11-12 재권님 「오늘자는 계속 값을 갱신하고 있어야해」) — 보고 있는 칩 하나만 · 주기는 서버 값(홀딩스 home.js 와 같은 열쇠)
+//   서버 롱폴이 켜져 있으면 바뀔 때 · 아니면 그 열쇠의 주기로 · 열쇠가 없으면(VI·급등 · 볼린저) 아래 FALLBACK 은 홀딩스와 같은 값 — 서버가 롱폴을 못 줄 때만
+const VI_FALLBACK_MS = 30000, BB_FALLBACK_MS = 60000, CHIP_FALLBACK_MS = 300000;
+const LIVE = { pre: ['pre_flow.FLOW_TTL', CHIP_FALLBACK_MS], rise: ['open_rise.CACHE_TTL', CHIP_FALLBACK_MS], vi: [null, VI_FALLBACK_MS], bb: [null, BB_FALLBACK_MS] };
+Object.entries(LIVE).forEach(([id, [key, fallbackMs]]) => { if (RULES[id] && RULES[id].url) watch({ url: () => (cur === id ? RULES[id].url : null), onChange: () => show(id, true), key, fallbackMs }); });
