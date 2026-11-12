@@ -16,7 +16,9 @@
               sortBy(줄 세우기 'mult' 배수 순 · 'pct' 등락률 순 · 빈칸이면 배수 순) · autoMax(몇 종목까지 · 빈칸이면 다)
               **부를 때마다 문서를 다시 읽어 거르고 줄을 세운다** — 화면에서 칸을 고치면 KIS 를 다시 안 부르고 바로 바뀐다.
               거르는 셈은 여기 한 곳이다(화면은 받은 대로 그린다 · 「같은 값은 한 곳에만 둔다」)
-    안 세는 것  sectorPct(미국장 같은 섹터) — 종목 ↔ 미국 섹터 표가 없다(「아직」 이지 「영영」 이 아니다) · exclude(빼는 것) — 글 칸이라 못 셈.
+    섹터      sectorPct — 종목 업종(WICS) → 미국 섹터 ETF(us_sectors.KR_SECTOR_ETF) 의 가장 최근 미국장 하루 등락률이 이 % 이상이면 든다 —
+              등락률 조건과 **또는**(둘 중 하나만 맞아도 · 2026-11-12 재권님 「덧조건으로 해」). 업종 · ETF 값을 모르면 섹터로는 안 든다(빼지도 않는다)
+    안 세는 것  exclude(빼는 것) — 글 칸이라 못 셈.
               응답 meta.notCounted 에 적는다
     저장      market.db 의 `auto_watch_day`(날 · 종목 · 지수 · 이름 · 종가 · 등락률 · 거래량 · 어디서)
     주소      GET /api/auto-watch — 모양은 compute() 주석 · 「없음」 은 null(0 아님)
@@ -57,7 +59,9 @@ from datetime import datetime, timedelta, timezone
 
 import dart
 import docstore
+import company_profile
 import nxt_pre
+import us_sectors
 from secrets_guard import safe_message
 
 KST = timezone(timedelta(hours=9))
@@ -606,13 +610,14 @@ def compute(proxy, live=None):
     sort_by = rule.get("sortBy") if rule.get("sortBy") in SORTS else "mult"
     auto_max = _num_or_none(rule.get("autoMax"))
     near_pct = _num_or_none(rule.get("nearHighPct"))
+    sector_pct = _num_or_none(rule.get("sectorPct"))
     if near_pct is not None and near_pct < 0:
         near_pct = None
     mem = members(proxy)
     out = {"day": None, "rule": {"prevPct": prev_pct, "volMult": vol_mult, "sortBy": sort_by,
                                  "autoMax": int(auto_max) if auto_max else None, "nearHighPct": near_pct, "from": src},
            # volMult 는 빈칸이면 거래량 조건을 안 본다(2026-11-11 재권님 「20일 평균 거래량 2배는 룰 없애주고」 → 「가」 — 등락률만 · 등락률 큰 순)
-           "ready": prev_pct is not None,
+           "ready": prev_pct is not None or sector_pct is not None,
            "picked": [], "pool": len(mem), "measured": None, "noToday": None, "short": None, "hitAll": None}
     with proxy._db_lock, proxy.db_conn() as conn:
         try:
@@ -637,10 +642,12 @@ def compute(proxy, live=None):
             lst = hist.setdefault(code, [])
             if len(lst) < AVG_DAYS:
                 lst.append(vol)
+        us = us_sectors.last_changes(conn) if sector_pct is not None else {}
         hi = {r[0]: r[1] for r in conn.execute(
             "SELECT code, MAX(close) FROM auto_watch_day WHERE day < ? AND day >= ? AND close IS NOT NULL GROUP BY code",
             (day, (datetime.strptime(day, "%Y%m%d") - timedelta(days=YEAR_DAYS)).strftime("%Y%m%d")))}
     rows, short, no_today = [], 0, 0
+    wics = company_profile.sectors() if sector_pct is not None else {}
     for code, idx, name in mem:
         t = today.get(code)
         h = [v for v in hist.get(code, []) if v is not None]
@@ -659,11 +666,20 @@ def compute(proxy, live=None):
         rows.append({"code": code, "name": name or t[2], "idx": idx, "close": t[3], "pct": t[4], "vol": t[5],
                      "avg20": round(avg) if avg else None, "mult": mult, "high52": h, "highGapPct": gap,
                      "nearHigh": near_pct is not None and gap is not None and abs(gap) <= near_pct, "nearHighOnly": False})
+        etf = us_sectors.KR_SECTOR_ETF.get(wics.get(code))
+        rows[-1].update(sectorEtf=etf, sectorUsDay=(us.get(etf) or (None, None))[0], sectorPct=(us.get(etf) or (None, None))[1])
     out["measured"], out["noToday"], out["short"] = len(rows), no_today, short
     if not out["ready"]:
         return out
-    hit = [r for r in rows if r["pct"] is not None and r["pct"] >= prev_pct
-           and (vol_mult is None or (r["mult"] is not None and r["mult"] >= vol_mult))]
+    for r in rows:                   # 어느 조건에 걸렸나 — 등락(앞 거래일 등락률 · 거래량) · 섹터(미국장 같은 섹터) · 둘 중 하나면 든다(11-12 「덧조건으로 해」)
+        why = []
+        if prev_pct is not None and r["pct"] is not None and r["pct"] >= prev_pct \
+                and (vol_mult is None or (r["mult"] is not None and r["mult"] >= vol_mult)):
+            why.append("pct")
+        if sector_pct is not None and r["sectorPct"] is not None and r["sectorPct"] >= sector_pct:
+            why.append("sector")
+        r["why"] = why
+    hit = [r for r in rows if r["why"]]
     out["hitAll"] = len(hit)
     ids = {r["code"] for r in hit}
     for r in rows:                   # 조건 밖인데 신고가 부근 — 더 넣는다(재권님 「둘다해」)
@@ -745,7 +761,10 @@ def status(proxy=None):
                 s.update(runDay=r[0], runAt=r[1], saved=r[2], runFrom="DB")
         except Exception:
             pass
-    s["notCounted"] = ["sectorPct — 종목 ↔ 미국 섹터 표가 아직 없음", "exclude — 글 칸이라 못 셈(ETF 는 주권 거르기로 빠짐)"]
+    s["notCounted"] = ["exclude — 글 칸이라 못 셈(ETF 는 주권 거르기로 빠짐)"]
+    s["sectorMap"] = "업종(WICS) → 미국 섹터 ETF 표(us_sectors.KR_SECTOR_ETF · GICS 큰 갈래 · 반도체만 XSD) · 가장 최근 미국장 하루 등락률 · 등락률 조건과 또는"
+    s["addTop"] = ADD_TOP
+    s["addAt"] = "평일 %02d:%02d 뒤 한 번(그날 값을 쌓은 뒤) · 장중 %02d:%02d~%02d:%02d %d분마다" % (RUN_AT + LIVE_FROM + SESSION[1] + (LIVE_SEC // 60,))
     s["add"] = "꺼짐 — 정규장 뒤 관심 목록 넣기는 만들어 두고 꺼 둠" if not ADD else \
         "켜짐 — 그날 값을 쌓은 바로 뒤(또는 그 뒤 서버가 뜰 때 한 번) 관심 목록 · 「자동」 묶음에 넣음 · 부근만 · 하트 끈 종목은 안 넣음"
     s["runWindow"] = "평일 %02d:%02d~%02d:%02d" % (RUN_AT + RUN_UNTIL)
