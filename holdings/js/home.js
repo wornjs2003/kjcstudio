@@ -39,7 +39,7 @@ import { mountStockPanel } from './components/stock-panel.js';
 import { mountStockDetail } from './components/stock-detail.js';
 import { mountMobileFold } from './components/mobile-fold.js';
 import { mountCompanyTip } from './components/company-tip.js';
-import { mountClaudeRail } from './components/claude-rail.js';
+import { mountClaudeRail } from '../../assets/js/claude-rail.js';
 import { paintFlowFoot } from './components/flow-foot.js';
 /* fetchIndexMinutes · fetchIndexCandles 는 여기서 안 쓴다 (2026-09-17).
    큰 차트가 지수에서 종목으로 바뀌면서 종목 캔들(chart.js 의 fetchCandles)로
@@ -3930,7 +3930,7 @@ mountMobileFold();
 /* 종목 이름에 섹터 · 주요 매출원 풍선 (2026-10-26 · components/company-tip.js) — 이름 글자의 data-co 를 본다 */
 mountCompanyTip();
 
-/* 오른쪽 Claude 줄 · 창 (2026-11-03 · components/claude-rail.js) — 창 맞춤보다 먼저 붙여 그 폭을 빼고 배율을 푼다 */
+/* 오른쪽 Claude 줄 · 창 (2026-11-03 · 공용 assets/js/claude-rail.js · 11-12 옮김) — 창 맞춤보다 먼저 붙여 그 폭을 빼고 배율을 푼다 */
 mountClaudeRail();
 
 /* 칸 배율 · 줄임 배율 (2026-11-03 재권님 「비율은 그대로」 · 「안에 폰트는 그대로 유지해줘」 · 「세로로 줄이면 잘리면 안되고 … 가로도 같이」 ·
@@ -3955,7 +3955,7 @@ function fitScale() {
   const grid = parseFloat(css.getPropertyValue('--grid-max'));
   if (!grow || !grid) return;
   const gap = parseFloat(css.getPropertyValue('--kh-fit-gap')) || 0;   // 창 가장자리 여백 — 아래 · 좌우 (home.css)
-  const rail = parseFloat(css.getPropertyValue('--kh-rail-w')) || 0;     // 오른쪽 Claude 줄 · 창이 민 폭 (components/claude-rail.js)
+  const rail = parseFloat(css.getPropertyValue('--kh-rail-w')) || 0;     // 오른쪽 Claude 줄 · 창이 민 폭 (assets/js/claude-rail.js)
   /* 바탕값을 남긴다 — Insight 가 자기 창 크기로 같은 식을 다시 푼다 (2026-11-07 재권님 「홀딩스 기준으로 다 맞춰」 → (가) · 시황분석 fit.js).
      fixed · grow 는 s=1 · z=1 로 되돌린 px, rail 은 Claude 줄 폭. 간단모드에서는 칸이 달라 안 남긴다 */
   if (!document.body.classList.contains('kh-simple')) {
