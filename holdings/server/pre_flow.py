@@ -14,7 +14,10 @@
     업종        같은 업종(네이버 WICS · company_profile.sectors)끼리 프리장 등락률을 묶는다 — 거래가 있는 종목이 SECTOR_MIN 이상인 업종만 ·
                 평균 등락률 크기(절댓값) 큰 순 SECTOR_TOP 개 · 오른 수 · 내린 수 · 가장 많이 움직인 종목 둘
                 (11-05 재권님 「프리장에 동일업종들이 등락이 많은것도 표기가 되면 좋을거같은데」)
-    차례        프로그램 순매수 큰 순 · 못 받은 것은 맨 뒤
+    고르기      전일 정규장 종가보다 오른(RISE_MIN_PCT 초과) 종목 중 프리장 거래대금 상위 TOP_N · 거래대금 큰 순 — pick() 한 곳
+                (2026-11-12 재권님 「프리장 룰 이건데 개선하자. 거래대금이 많은데 상승인 종목 70개」 → (가) 「응 맞아」 ·
+                 「실시간으로 거래대금 재면서 최종으로 8시 50분에 궅힌다」. 그 전에는 거래대금 상위 40 · 프로그램 순매수 큰 순이었다 —
+                 프로그램은 거르기에서 빠지고 칸으로만 남는다)
     언제        평일 08:00~08:50 은 TTL 마다 뒤에서 다시 짓는다 · 08:50~09:00 에 한 번 더 지어 그날 판으로 굳힌다(phase closed) —
                 09:00 이 지나면 넥스트레이드 메인장이 섞여 다시 안 짓는다 · 다음 평일 08:00 까지 그 판이 남는다
     없음        못 받은 값은 None(0 아님) · 넥스트레이드 거래량 합이 0 이면 휴장 · 장 전으로 보고 판을 비운다(nxt_pre 와 같은 셈)
@@ -39,7 +42,8 @@ KST = timezone(timedelta(hours=9))
 PRE_OPEN = (8, 0)        # 넥스트레이드 프리마켓
 PRE_CLOSE = (8, 50)
 MAIN_OPEN = (9, 0)       # 이 뒤에는 NX 값에 메인장이 섞인다 — 안 짓는다
-TOP_N = 40               # 프로그램을 따로 받는 종목 수(프리장 거래대금 순)
+TOP_N = 70               # 프리장 판 줄 수 — 오른 종목 중 거래대금 상위(재권님 「상승인 종목 70개」 11-12 · 전에는 40)
+RISE_MIN_PCT = 0.0       # 「상승」 — 전일 정규장 종가 대비 이 % 를 넘어야 든다(보합은 안 든다 · 재권님 (가) 11-12)
 FLOW_TTL = 180           # 프리장 동안 다시 짓는 간격(초) — 화면이 다시 묻는 주기도 이 값(서버 값)
 FIRST_WAIT = 15          # 첫 판을 기다리는 최대 시간(초)
 MIN_PREV = nxt_pre.MIN_PREV   # 거래량 배율 — 앞 날 장 전 거래량 문턱(주)
@@ -136,6 +140,13 @@ def _sectors(nx):
     return out[:SECTOR_TOP]
 
 
+def pick(items):
+    """프리장 판 고르기 한 곳 — items 는 {code, amt, pct} · 오른(pct > RISE_MIN_PCT) 것 중 거래대금 큰 순 TOP_N 의 code.
+    등락률을 모르면 안 든다(오른 것을 고르는 판이라). 되채우기(day_top_fill · dt30)도 이것을 부른다."""
+    up = [x for x in items if (x.get("amt") or 0) > 0 and x.get("pct") is not None and x["pct"] > RISE_MIN_PCT]
+    return [x["code"] for x in sorted(up, key=lambda x: -x["amt"])[:TOP_N]]
+
+
 def _make(proxy, cfg):
     now = _now()
     day = now.strftime("%Y%m%d")
@@ -144,7 +155,8 @@ def _make(proxy, cfg):
         return {"rows": [], "noTrade": True, "day": day, "hm": now.strftime("%H:%M")}
     prev = _prev_pre_vol(proxy, day)
     amt = lambda r: (r.get("price") or 0) * (r.get("vol") or 0)
-    cand = sorted([c for c, r in nx.items() if (r.get("vol") or 0) > 0], key=lambda c: -amt(nx[c]))[:TOP_N]
+    pct = lambda r: (r["price"] / r["prev_close"] - 1) * 100 if r.get("price") and r.get("prev_close") else None
+    cand = pick([{"code": c, "amt": amt(r), "pct": pct(r)} for c, r in nx.items() if (r.get("vol") or 0) > 0])
     disc = _disclosures(proxy, cand, now)
     rows, missing = [], 0
     for c in cand:
@@ -159,7 +171,6 @@ def _make(proxy, cfg):
                      "amt": amt(r) or None, "vol": r.get("vol"),
                      "ratio": round(r["vol"] / pv, 1) if pv and pv >= MIN_PREV else None,
                      "program": pg, "disc": disc.get(c) or []})
-    rows.sort(key=lambda x: (x["program"] is None, -(x["program"] or 0)))
     return {"rows": rows, "sectors": _sectors(nx), "noTrade": False, "programMissing": missing, "candidates": len(cand),
             "day": day, "hm": now.strftime("%H:%M")}
 

@@ -95,9 +95,8 @@ def build(proxy, day):
     try:
         pf, _, _ = pre_flow.fetch(proxy, proxy.load_secrets())
         if pf and pf.get("day") == day:
-            for r in pf.get("rows") or []:
-                if (r.get("program") or 0) > 0:
-                    put(r["code"], "프리장", pf.get("hm") or "")
+            for r in pf.get("rows") or []:          # 판이 곧 칩 — 오른 종목 중 거래대금 상위(pre_flow.pick · 11-12 · 전에는 프로그램 > 0 을 여기서 걸렀다)
+                put(r["code"], "프리장", pf.get("hm") or "")
     except Exception:
         pass
     try:
