@@ -72,4 +72,5 @@
 </div>
 <!-- three.js 는 vendor/ 에서 (2026-10-06 로딩 개선 · 전에는 jsdelivr CDN) -->
 <script type="importmap">{"imports":{"three":"./vendor/three/three.module.min.js","three/addons/":"./vendor/three/addons/"}}</script>
-<script type="module" src="js/hbm3d.js"></script></body></html>
+<script type="module" src="js/hbm3d.js"></script><script type="module">import { mountClaudeRail } from '/assets/js/claude-rail.js'; if (self === top) mountClaudeRail(); /* 틀(iframe) 안에 들어간 화면에는 안 붙인다 */</script>
+</body></html>
