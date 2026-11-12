@@ -133,7 +133,7 @@
  * 있었다 — 여기에 `.kh-sec-card` 까지 더하면 **같은 값이 세 곳**이 된다.
  *
  * **이 값을 고치면 둘이 함께 움직인다.** 한쪽만 고칠 길이 없다. */
-.kh-rank, .kh-side-wrap { --kh-row-h: calc(255px * var(--kh-s, 1)); }   /* --kh-s — 아래 「칸을 창에 맞춰 키운다」(2026-11-03) */
+.kh-rank, .kh-side-wrap { --kh-row-h: calc(var(--kh-row-base) * var(--kh-s, 1)); }   /* --kh-s — 아래 「칸을 창에 맞춰 키운다」(2026-11-03) */
 
 .kh-rank {
   margin-top: 14px; display: grid;
@@ -160,7 +160,7 @@
          아랫줄  [ 지금 뜨는 산업  817 ][ 데일리 340 ]
 
      그래서 「지금 뜨는 산업」 은 `span 3`, 「데일리분석」 은 네 번째 칸이다. */
-  grid-template-columns: 1fr 1fr 1fr 340px; gap: 14px;
+  grid-template-columns: 1fr 1fr 1fr var(--kh-panel-w); gap: 14px;
 }
 
 /* 첫 카드가 앞 세 칸을 쓴다. 나머지 카드는 차례로 네 번째 칸에 간다 */
@@ -984,7 +984,7 @@
 /* 오른쪽 패널(투자자 정보 · AI 분석 · 종목 뉴스)은 배율을 안 곱한다 — 아래 줄 데일리분석 칸(.kh-rank 의 340px)과 세로선이 이어져야 한다
    (위 .kh-rank 주석 「세로선이 이어진다」). 6145156 창 맞춤에서 여기만 --kh-s 를 곱해 큰 창에서 위가 49px 넓어져 어긋났다 —
    재권님 「창 세로칸이 안맞는데. 투자자 정보를 데일리분석에 맞추고 거기에 맞게 차트 가로로 늘려줘」(11-03 18:57) · 차트(1fr)가 그만큼 넓어진다 */
-.kh-idx { display: grid; grid-template-columns: 1fr 340px; gap: 14px; }
+.kh-idx { display: grid; grid-template-columns: 1fr var(--kh-panel-w); gap: 14px; }
 .kh-idx > * { min-width: 0; }
 .kh-idx-main { padding: 18px 20px 14px; display: flex; flex-direction: column; }
 .kh-idx-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
@@ -1005,7 +1005,7 @@
    모양은 .kh-heart(frame.css) 그대로 */
 .kh-idx-head .kh-big-fav { margin-left: auto; flex-shrink: 0; }
 .kh-idx-head .kh-big-fav + .kh-fold { margin-left: 0; }
-.kh-idx-chart { --kh-big-h: 550px; flex: none; height: calc(var(--kh-big-h) * var(--kh-s, 1)); }   /* --kh-s — 아래 「칸을 창에 맞춰 키운다」 */
+.kh-idx-chart { --kh-big-h: var(--kh-big-base); flex: none; height: calc(var(--kh-big-h) * var(--kh-s, 1)); }   /* --kh-s — 아래 「칸을 창에 맞춰 키운다」 */
 
 /* 오른쪽 패널 — 왼쪽 차트의 그 종목 이야기다 */
 /* 세부사항 줄(.kh-dt)과 패널 셋(.kh-p3)의 모양은 `css/frame.css` 에 있다.
@@ -1025,7 +1025,7 @@
    이 값도 같이 봐야 한다. */
 .kh-idxp {
   padding: 16px 18px; display: flex; flex-direction: column; gap: 2px;
-  max-height: calc(550px * var(--kh-s, 1) + 140px); overflow-y: auto; min-height: 0;   /* 차트 높이 + 140 — 차트가 창에 맞춰 커지면 같이 (2026-11-03) */
+  max-height: calc(var(--kh-big-base) * var(--kh-s, 1) + 140px); overflow-y: auto; min-height: 0;   /* 차트 높이 + 140 — 차트가 창에 맞춰 커지면 같이 (2026-11-03) */
 }
 .kh-idxp-s { padding: 13px 0; border-bottom: 1px solid var(--kh-border); }
 .kh-idxp-s:last-child { border-bottom: 0; }
@@ -1084,7 +1084,7 @@
    frame.css 의 1280 규칙(순위 칸 숨김 · 1fr 52px)은 Insight 도 걸어 두고 홈 첫 화면에서만 되살린다.
    이 폭은 창 맞춤 줄임(--kh-z)이 안 돈다(home.js fitScale — 1281 아래는 안 줌) — 글자는 그대로 · 아래로 스크롤 */
 @media (min-width: 901px) and (max-width: 1280px) {
-  body[data-nav="holdings"] .kh-app-wide { grid-template-columns: 1fr 368px; }
+  body[data-nav="holdings"] .kh-app-wide { grid-template-columns: 1fr var(--kh-side-w); }
   body[data-nav="holdings"] .kh-app-wide .kh-side { display: block; }
   body[data-nav="holdings"] .kh-app-wide .kh-idx { grid-template-columns: 1fr; }
   /* 본문이 순위 칸만큼 좁아져 — 아래 줄은 산업 · 데일리분석을 위아래로(넷 칸이면 산업 칸 글자가 세로로 꺾였다) */
@@ -1801,7 +1801,7 @@
   body.kh-simple .kh-idx > .kh-idxp,
   body.kh-simple .kh-rank,
   body.kh-simple .kh-nwdc-card { display: none; }
-  body.kh-simple .kh-idx-chart { --kh-big-h: 819px; }   /* 550 + 아래 줄 255 + 사이 14 */
+  body.kh-simple .kh-idx-chart { --kh-big-h: calc(var(--kh-big-base) + var(--kh-row-base) + 14px); }   /* 큰 차트 + 아래 줄 + 사이 14 */
 }
 
 /* ── 칸을 창에 맞춰 키운다 · 글자는 그대로 (2026-11-03 재권님 「창 크기에 맞게 조절되게」 · 「처음 화면이 안보이는것 없이
@@ -1819,7 +1819,7 @@
   body[data-nav="holdings"] > .kh-app-wide,
   body[data-nav="company-setup"] > .kh-app-wide {
     max-width: calc(var(--grid-max) * var(--kh-s, 1));
-    grid-template-columns: 1fr calc(368px * var(--kh-s, 1));
+    grid-template-columns: 1fr calc(var(--kh-side-w) * var(--kh-s, 1));
     zoom: var(--kh-z, 1);
     padding-top: calc(var(--nav-height) / var(--kh-z, 1));   /* 줄여도 메뉴(안 줄임) 아래에 딱 붙게 */
   }
