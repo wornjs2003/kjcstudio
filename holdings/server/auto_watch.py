@@ -16,6 +16,9 @@
               sortBy(줄 세우기 'mult' 배수 순 · 'pct' 등락률 순 · 빈칸이면 배수 순) · autoMax(몇 종목까지 · 빈칸이면 다)
               **부를 때마다 문서를 다시 읽어 거르고 줄을 세운다** — 화면에서 칸을 고치면 KIS 를 다시 안 부르고 바로 바뀐다.
               거르는 셈은 여기 한 곳이다(화면은 받은 대로 그린다 · 「같은 값은 한 곳에만 둔다」)
+    5일선     maDays 일선을 그날 종가가 아래에서 위로 넘고(앞 날 종가는 앞 날 그 선 이하) maUpCandle 이면 양봉(종가 > 시가) — 등락률 · 섹터와 또는
+              (2026-11-12 재권님 「관심 룰에 5일선 위로 추세선이 바뀌면서 양봉인 종목도 추가해줘」 → 「둘중에 하나만 걸려도 들어간다」 → 「응 커밋해」) ·
+              시가는 auto_watch_day.open(11-12 더함) · 옛 줄은 그날 일봉 시가 · 둘 다 없거나 앞 종가가 모자라면 못 셈(None)
     섹터      sectorPct — 종목 업종(WICS) → 미국 섹터 ETF(us_sectors.KR_SECTOR_ETF) 의 가장 최근 미국장 하루 등락률이 이 % 이상이면 든다 —
               등락률 조건과 **또는**(둘 중 하나만 맞아도 · 2026-11-12 재권님 「덧조건으로 해」). 업종 · ETF 값을 모르면 섹터로는 안 든다(빼지도 않는다)
     안 세는 것  exclude(빼는 것) — 글 칸이라 못 셈.
@@ -123,6 +126,10 @@ def _init(proxy):
     with proxy._db_lock, proxy.db_conn() as conn:
         for q in _SCHEMA:
             conn.execute(q)
+        try:                         # 시가 칸 — 5일선 돌파 + 양봉(11-12)에 쓴다. 옛 표에 없으면 더한다 · 옛 줄은 None(「못 셈」)
+            conn.execute("ALTER TABLE auto_watch_day ADD COLUMN open INTEGER")
+        except Exception:
+            pass
 
 
 _master = {"day": None, "codes": None}
@@ -169,6 +176,7 @@ def _multi_j(proxy, cfg, codes):
             code = (r.get("inter_shrn_iscd") or "").strip()
             if code:
                 out[code] = {"close": proxy._num(r.get("inter2_prpr"), int), "pct": proxy._num(r.get("prdy_ctrt")),
+                             "open": proxy._num(r.get("inter2_oprc"), int),
                              "vol": proxy._num(r.get("acml_vol"), int), "name": (r.get("inter_kor_isnm") or "").strip()}
         time.sleep(GAP_SEC)
     return out
@@ -210,11 +218,11 @@ def save_today(proxy, day, codes=None):
         _status.update(error="종가 · 거래량이 %s 와 같음 — 휴장으로 보고 저장 안 함" % last)
         return 0
     stamp = _now().isoformat(timespec="seconds")
-    rows = [(day, c, idx, name or got[c]["name"], got[c]["close"], got[c]["pct"], got[c]["vol"], "multi", stamp)
+    rows = [(day, c, idx, name or got[c]["name"], got[c]["close"], got[c]["pct"], got[c]["vol"], "multi", stamp, got[c].get("open"))
             for c, idx, name in mem if c in got and got[c]["close"]]
     with proxy._db_lock, proxy.db_conn() as conn:
-        conn.executemany("INSERT OR REPLACE INTO auto_watch_day (day, code, idx, name, close, pct, vol, src, saved_at) "
-                         "VALUES (?,?,?,?,?,?,?,?,?)", rows)
+        conn.executemany("INSERT OR REPLACE INTO auto_watch_day (day, code, idx, name, close, pct, vol, src, saved_at, open) "
+                         "VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
     return len(rows)
 
 
@@ -250,12 +258,12 @@ def backfill(proxy, until, codes=None):
         for i, b in enumerate(bars):
             prev = bars[i - 1]["close"] if i else None
             pct = round((b["close"] - prev) / prev * 100, 2) if prev else None
-            rows.append((b["ts"], code, idx, name, b["close"], pct, b.get("volume"), "daily", stamp))
+            rows.append((b["ts"], code, idx, name, b["close"], pct, b.get("volume"), "daily", stamp, b.get("open")))
         if rows:
             with proxy._db_lock, proxy.db_conn() as conn:
                 # 멀티로 저장한 날은 덮지 않는다 — 그날 KRX 값이 원천이다
-                conn.executemany("INSERT OR IGNORE INTO auto_watch_day (day, code, idx, name, close, pct, vol, src, saved_at) "
-                                 "VALUES (?,?,?,?,?,?,?,?,?)", rows)
+                conn.executemany("INSERT OR IGNORE INTO auto_watch_day (day, code, idx, name, close, pct, vol, src, saved_at, open) "
+                                 "VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
             done += 1
         time.sleep(GAP_SEC)
     _status.update(backfillAt=_now().isoformat(timespec="seconds"), backfillCodes=done)
@@ -292,10 +300,10 @@ def backfill_year(proxy, until):
         stamp = _now().isoformat(timespec="seconds")
         rows = [(b["ts"], code, idx, name, b["close"],
                  round((b["close"] - bars[i - 1]["close"]) / bars[i - 1]["close"] * 100, 2) if i and bars[i - 1]["close"] else None,
-                 b.get("volume"), "daily", stamp) for i, b in enumerate(bars)]
+                 b.get("volume"), "daily", stamp, b.get("open")) for i, b in enumerate(bars)]
         with proxy._db_lock, proxy.db_conn() as conn:
-            conn.executemany("INSERT OR IGNORE INTO auto_watch_day (day, code, idx, name, close, pct, vol, src, saved_at) "
-                             "VALUES (?,?,?,?,?,?,?,?,?)", rows)
+            conn.executemany("INSERT OR IGNORE INTO auto_watch_day (day, code, idx, name, close, pct, vol, src, saved_at, open) "
+                             "VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
             conn.execute("INSERT OR REPLACE INTO auto_watch_yearfill VALUES (?, ?)", (code, stamp))
         done += 1
     _status.update(yearfillAt=_now().isoformat(timespec="seconds"), yearfillCodes=done, yearfillNeed=len(need))
@@ -611,13 +619,17 @@ def compute(proxy, live=None):
     auto_max = _num_or_none(rule.get("autoMax"))
     near_pct = _num_or_none(rule.get("nearHighPct"))
     sector_pct = _num_or_none(rule.get("sectorPct"))
+    ma_days = _num_or_none(rule.get("maDays"))           # 5일선 돌파 — 룰 칸 maDays(빈칸 · 없으면 이 조건 안 봄) · maUpCandle(양봉도 볼지 · 없으면 봄)
+    ma_days = int(ma_days) if ma_days and ma_days >= 2 else None
+    ma_up = rule.get("maUpCandle") is not False
     if near_pct is not None and near_pct < 0:
         near_pct = None
     mem = members(proxy)
     out = {"day": None, "rule": {"prevPct": prev_pct, "volMult": vol_mult, "sortBy": sort_by,
-                                 "autoMax": int(auto_max) if auto_max else None, "nearHighPct": near_pct, "sectorPct": sector_pct, "from": src},
+                                 "autoMax": int(auto_max) if auto_max else None, "nearHighPct": near_pct, "sectorPct": sector_pct,
+                                 "maDays": ma_days, "maUpCandle": ma_up if ma_days else None, "from": src},
            # volMult 는 빈칸이면 거래량 조건을 안 본다(2026-11-11 재권님 「20일 평균 거래량 2배는 룰 없애주고」 → 「가」 — 등락률만 · 등락률 큰 순)
-           "ready": prev_pct is not None or sector_pct is not None,
+           "ready": prev_pct is not None or sector_pct is not None or ma_days is not None,
            "picked": [], "pool": len(mem), "measured": None, "noToday": None, "short": None, "hitAll": None}
     with proxy._db_lock, proxy.db_conn() as conn:
         try:
@@ -631,10 +643,24 @@ def compute(proxy, live=None):
         if live:                     # 장중 — 오늘 값은 쌓지 않은 시세 · 앞 20거래일은 오늘 앞 쌓인 날
             day = out["day"] = live["day"]
             out.update(mode="live", frac=round(live["frac"], 3), at=live["at"])
-            today = {c: (c, None, v["name"], v["close"], v["pct"], v["vol"]) for c, v in live["got"].items() if v.get("close")}
+            today = {c: (c, None, v["name"], v["close"], v["pct"], v["vol"], v.get("open")) for c, v in live["got"].items() if v.get("close")}
         else:
-            today = {r[0]: r for r in conn.execute(
-                "SELECT code, idx, name, close, pct, vol FROM auto_watch_day WHERE day = ?", (day,))}
+            has_open = any(c[1] == "open" for c in conn.execute("PRAGMA table_info(auto_watch_day)"))   # 읽기 전용 서버가 8765 보다 먼저 뜨면 칸이 아직 없다
+            today = {r[0]: tuple(r) + (() if has_open else (None,)) for r in conn.execute(
+                "SELECT code, idx, name, close, pct, vol%s FROM auto_watch_day WHERE day = ?" % (", open" if has_open else ""), (day,))}
+        closes = {}                  # 5일선 — 그날 앞 종가(최근 먼저) ma_days 개
+        if ma_days:
+            for code, cl in conn.execute(
+                    "SELECT code, close FROM auto_watch_day WHERE day < ? AND day >= ? AND close IS NOT NULL ORDER BY code, day DESC",
+                    (day, (datetime.strptime(day, "%Y%m%d") - timedelta(days=BACK_CAL_DAYS)).strftime("%Y%m%d"))):
+                lst = closes.setdefault(code, [])
+                if len(lst) < ma_days:
+                    lst.append(cl)
+            if not live:             # 옛 줄은 시가 칸이 비어 있다 — 그날 일봉 시가로 채운다(없으면 「못 셈」)
+                for code, o in conn.execute("SELECT code, open FROM candles WHERE period = 'D' AND substr(ts, 1, 8) = ?", (day,)):
+                    t = today.get(code)
+                    if t and t[6] is None and o:
+                        today[code] = tuple(t[:6]) + (o,)
         hist = {}
         for code, vol in conn.execute(
                 "SELECT code, vol FROM auto_watch_day WHERE day < ? AND day >= ? ORDER BY code, day DESC",
@@ -666,6 +692,14 @@ def compute(proxy, live=None):
         rows.append({"code": code, "name": name or t[2], "idx": idx, "close": t[3], "pct": t[4], "vol": t[5],
                      "avg20": round(avg) if avg else None, "mult": mult, "high52": h, "highGapPct": gap,
                      "nearHigh": near_pct is not None and gap is not None and abs(gap) <= near_pct, "nearHighOnly": False})
+        cross = None                 # 5일선 아래 → 위(+ 양봉) — 모르면 None(「못 셈」)
+        pc = closes.get(code) or []
+        if ma_days and len(pc) >= ma_days and t[3]:
+            ma_now = (t[3] + sum(pc[:ma_days - 1])) / ma_days
+            ma_prev = sum(pc[:ma_days]) / ma_days
+            up = None if not ma_up else (None if not t[6] else t[3] > t[6])
+            cross = t[3] > ma_now and pc[0] <= ma_prev and (up if ma_up else True)
+        rows[-1].update(maCross=cross, open=t[6])
         etf = us_sectors.KR_SECTOR_ETF.get(wics.get(code))
         rows[-1].update(sectorEtf=etf, sectorUsDay=(us.get(etf) or (None, None))[0], sectorPct=(us.get(etf) or (None, None))[1])
     out["measured"], out["noToday"], out["short"] = len(rows), no_today, short
@@ -678,6 +712,8 @@ def compute(proxy, live=None):
             why.append("pct")
         if sector_pct is not None and r["sectorPct"] is not None and r["sectorPct"] >= sector_pct:
             why.append("sector")
+        if r["maCross"]:
+            why.append("ma")
         r["why"] = why
     hit = [r for r in rows if r["why"]]
     out["hitAll"] = len(hit)
@@ -762,6 +798,7 @@ def status(proxy=None):
         except Exception:
             pass
     s["notCounted"] = ["exclude — 글 칸이라 못 셈(ETF 는 주권 거르기로 빠짐)"]
+    s["maRule"] = "maDays 일선을 그날 종가가 아래에서 위로 넘음(그 앞 날 종가는 그 앞 날 maDays 일선 이하) · maUpCandle 이면 그날 종가 > 시가 · 등락률 · 섹터 조건과 또는 · 시가 · 앞 종가가 모자라면 못 셈"
     s["sectorMap"] = "업종(WICS) → 미국 섹터 ETF 표(us_sectors.KR_SECTOR_ETF · GICS 큰 갈래 · 반도체만 XSD) · 가장 최근 미국장 하루 등락률 · 등락률 조건과 또는"
     s["addTop"] = ADD_TOP
     s["addAt"] = "평일 %02d:%02d 뒤 한 번(그날 값을 쌓은 뒤) · 장중 %02d:%02d~%02d:%02d %d분마다" % (RUN_AT + LIVE_FROM + SESSION[1] + (LIVE_SEC // 60,))
