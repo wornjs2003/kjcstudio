@@ -34,7 +34,7 @@ KST = timezone(timedelta(hours=9))
 
 BAR_MIN = 5              # 5분봉 한 봉의 길이(분)
 RISE_PCT = 2.0           # 첫 봉 시가 대비 종가 상승률 문턱(%)
-MIN_CAP_EOK = 3000       # 시가총액 문턱(억원 · 3천억 — 재권님 「3천억으로 통일」 에 「응 넣어」 11-12 · 처음은 5천억) — dart_universe.market_cap 단위가 억원
+MIN_CAP_EOK = 5000       # 시가총액 문턱(억원 · 5천억 — 재권님 「3천억으로 통일」 → 「오전에 3천억이라고 한거 5천억으로 바꿔」 11-12) — dart_universe.market_cap 단위가 억원
 CACHE_TTL = 60           # 같은 판을 다시 세지 않는 시간(초) — 화면이 다시 묻는 주기도 이 값(서버 값)
 FIRST_GRACE_SEC = 3      # 첫 봉이 끝난 뒤 이만큼 기다렸다 받는다 — KIS 가 그 분을 닫을 틈
 FIRST_UNTIL_MIN = 10     # 첫 봉 끝에서 이 분이 지나면 먼저 받기를 그만둔다(남은 것은 미리받기 몫)

@@ -332,7 +332,8 @@ def watch_codes(proxy):
 
 
 def low_codes(proxy):
-    """바닥 신호(low) 대상 — 순위 목록 전부(코스피 200 · 코스닥 150 · `dart.UNIVERSE_SIZES`).
+    """바닥 신호(low) 대상 — 「상위 목록」(코스피 200 · 코스닥 150 · `dart.universe_top_rows`).
+    2026-11-12 대상 표가 시가총액 5천억 이상으로 넓어져도 이 판정은 재권님이 정하신 개수 그대로다.
 
     2026-11-09 재권님 — 「판정 조건은 코스피 200 코스닥 150」 · 「이 룰에 맞게 수정되는걸 볼린져랑 텔레그램에 보내줘」.
     **바닥 신호만 넓힌다** — 고점 신호(high)와 신호 넷(`check_extra`)은 `watch_codes`(코스피 상위 50) 그대로다.
@@ -340,7 +341,7 @@ def low_codes(proxy):
     표를 못 읽으면 `watch_codes` 로 물러선다.
     """
     try:
-        rows = [r["stock_code"] for r in dart.universe_rows(None)]
+        rows = [r["stock_code"] for r in dart.universe_top_rows(None)]
         if rows:
             return rows
     except Exception:

@@ -4,7 +4,7 @@
 
 무엇을 하는가
   1. 기업 대응표를 하루 한 번 받아 둔다 (corp_code ↔ 종목코드 ↔ 회사명)
-  2. 시가총액 상위 목록(코스피 200 · 코스닥 150 · UNIVERSE_SIZES)을 하루 한 번 정해 둔다
+  2. 감시 대상 목록(시가총액 UNIVERSE_MIN_CAP_EOK 이상 전부 · 코스피 · 코스닥)을 하루 한 번 정해 둔다
      — 공시를 거르는 데는 안 쓴다(아래 3)
   3. 5분마다 "오늘 올라온 공시"를 통째로 받아 **종목코드가 있는 것을 전부** 저장한다
      (2026-09-15 지시 · save_disclosures 를 only_codes 없이 부른다 — 처음엔 감시 대상만 남겼다)
@@ -67,7 +67,12 @@ VIEWER = "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=%s"
 # 감시 대상 — 시장마다 시가총액 상위 몇 종목까지 볼 것인가.
 # 코스닥 150 은 2026-10-06 에 더했다 (재권님 「코스피 200 종목 불러오는데 코스닥 150 도」 · 「가」 =
 # 지수 구성종목이 아니라 코스피 쪽과 같은 **시가총액 상위**). 순위는 시장마다 1부터 센다.
-UNIVERSE_SIZES = (("KOSPI", 200), ("KOSDAQ", 150))
+# 2026-11-12 개수에서 문턱으로 바꿨다 — 재권님 「대상은 5천억이상 전부로」 · 「받으면 정보를 다 가져오는건데」(가) ·
+# 그날 11:29 네이버 시총 순위로 코스피 429 · 코스닥 154 = 583(전에는 350). 목록을 읽는 자리 전부가 함께 넓어진다.
+UNIVERSE_MIN_CAP_EOK = 5000  # 감시 대상 시가총액 문턱(억원) — 이 값 이상 전부
+UNIVERSE_SIZES = (("KOSPI", 200), ("KOSDAQ", 150))   # 「상위 목록」 — 문턱 아래여도 이 순위까지는 늘 든다 ·
+                             # 개수로 정해 둔 자리(바닥 신호 「코스피 200 코스닥 150」 11-09 · 공포·탐욕 「코스피 상위 200」 11-12)는 universe_top_rows 로 읽는다
+UNIVERSE_PAGES = 10          # 네이버 순위를 받는 쪽수 상한(쪽당 100) — 문턱에 닿기 전에 끝나면 거기까지
 UNIVERSE_SIZE = 200          # 코스피 쪽 — 옛 이름이라 남긴다
 
 # 어느 시장의 공시를 받을 것인가 (2026-09-15 지시로 넓혔다).
@@ -538,7 +543,7 @@ def fetch_kospi_top(size=UNIVERSE_SIZE):
     return fetch_market_top("KOSPI", size)
 
 
-def fetch_market_top(market, size):
+def fetch_market_top(market, size, min_cap=None):
     """시장(KOSPI · KOSDAQ)의 시가총액 순위를 네이버에서 받는다 (100건씩).
 
     공식 API 가 아니다. 한국투자증권 순위 API 는 30건까지만 주기 때문에
@@ -550,7 +555,7 @@ def fetch_market_top(market, size):
     """
     out = []
     page = 1
-    while len(out) < size and page <= 10:
+    while page <= UNIVERSE_PAGES and (len(out) < size or (min_cap is not None and out and (out[-1]["cap"] or 0) >= min_cap)):
         url = ("https://m.stock.naver.com/api/stocks/marketValue/%s"
                "?page=%d&pageSize=100" % (market, page))
         req = urllib.request.Request(url, headers={
@@ -572,7 +577,10 @@ def fetch_market_top(market, size):
                 "cap": _to_int(it.get("marketValue")),
             })
         page += 1
-    return out[:size]
+    if min_cap is None:
+        return out[:size]
+    # 순위는 시가총액 순 — 상위 size 는 늘 두고, 그 뒤는 문턱 이상만
+    return out[:size] + [it for it in out[size:] if (it["cap"] or 0) >= min_cap]
 
 
 def refresh_universe():
@@ -581,7 +589,7 @@ def refresh_universe():
     got, errs = {}, []
     for market, size in UNIVERSE_SIZES:
         try:
-            items = fetch_market_top(market, size)
+            items = fetch_market_top(market, size, UNIVERSE_MIN_CAP_EOK)
         except Exception as e:
             errs.append("%s 시가총액 순위를 받지 못했습니다: %s" % (market, safe_message(e, 80)))
             continue
@@ -644,6 +652,13 @@ def universe_rows(market="KOSPI", limit=None):
         return conn.execute(sql, args).fetchall()
 
 
+def universe_top_rows(market=None):
+    """「상위 목록」 — 시장마다 UNIVERSE_SIZES 순위까지만(문턱으로 넓힌 대상 안에서). 개수로 정해 둔 자리가 읽는다.
+    market=None 이면 코스피 · 코스닥 둘 다(코스피 먼저)."""
+    top = dict(UNIVERSE_SIZES)
+    return [r for r in universe_rows(market) if r["rank"] is not None and r["rank"] <= top.get(r["market"], 0)]
+
+
 def cap_rank(code, market="KOSPI"):
     """시가총액 순위 — 그 시장 안의 순위. 목록 밖이면 None."""
     for r in universe_rows(market):
@@ -656,7 +671,7 @@ def search(q, limit=10):
     """종목 찾기 — 이름 일부나 코드로 (2026-10-06 지시 — 「내기록 이걸 검색창으로 해주고 종목 검색 가능하도록」).
 
     **새로 받는 것이 없다.** 이미 있는 표 둘을 읽는다.
-        순위 목록(dart_universe)   코스피 200 · 코스닥 150 — ETF 도 든다 · 시장이 있다
+        순위 목록(dart_universe)   시가총액 UNIVERSE_MIN_CAP_EOK 이상(코스피 · 코스닥) — ETF 도 든다 · 시장이 있다
         기업 대응표(dart_corps)    OpenDART 상장사 전체 — ETF 는 없다 · 시장이 없다
     그래서 ETF 는 순위 안의 것만 찾는다. 대응표에는 **상장폐지된 회사도 종목코드를 단 채 남아 있을 수 있다** —
     지금은 가려낼 값이 표에 없다(받는 쪽 xml 에 상장 여부가 없다). 순위 목록에 든 것을 먼저 낸다.
@@ -967,7 +982,7 @@ def parse_ir(body):
 
 
 def ir_codes():
-    """본문을 읽을 종목 — 코스피 200 · 코스닥 150(대상 표) · 지수 구성 · 관심. 표를 박지 않고 그날 표에서 센다."""
+    """본문을 읽을 종목 — 대상 표(시가총액 문턱 이상) · 지수 구성 · 관심. 표를 박지 않고 그날 표에서 센다."""
     codes = set(watchlist())
     try:
         codes.update(r["stock_code"] for r in universe_rows(None))
