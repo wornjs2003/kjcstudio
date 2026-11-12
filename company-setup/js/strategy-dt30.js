@@ -19,7 +19,8 @@ const hmTxt = (t) => (/^\d{4}$/.test(String(t)) ? `${String(t).slice(0, 2)}:${St
 
 // 이벤트 칸 — 그 종목이 걸린 홀딩스 「관심」 아래 룰(칩) 이름을 홀딩스 칩 줄 차례로 · 이름은 서버 rows[].chips 그대로(재권님 11-11 「종목과 매수가 사이에 이벤트를 추가하고 이벤트가 뭐뭐 걸렸는지 넣어줘 vi 초반급등 긍 관심하위의 룰들」)
 const EV_ORDER = ['관심', '프리장', '초반상승', '현재상승', 'VI·급등', '볼린저', '장외', '매수', '수급'];
-const evHtml = (c, r) => { const a = Array.isArray(c) ? [...c] : []; if (!a.length) return '<span class="st-err">—</span>'; a.sort((x, y) => (EV_ORDER.indexOf(x) + 99) % 99 - (EV_ORDER.indexOf(y) + 99) % 99); return a.map((x) => { const sb = r ? subsOf(r, x) : []; const dim = r && DT_CHIPS.includes(x) && !liveChip(r, x); return `<span class="dt-evc${dim ? ' is-off' : ''}">${esc(x)}${sb.length ? `<small>${esc(sb.join('·'))}</small>` : ''}</span>`; }).join(''); };
+const evHtml = (c, r) => evChips(c, r, r ? [...st.miss].filter((x) => !(c || []).includes(x)) : []);   // 못 받은 칩은 종목마다 이름만 회색으로 붙임 · 「못 받음」 글씨 없음 · 늦게 채워 이미 붙은 칩은 뺌(11-12 재권님 「못받음 이라는 글씨만 빼주고 비활성화 된거같이 회색으로」 → 「각 종목에도 넣어줘」)
+const evChips = (c, r, miss = []) => { const a = [...(Array.isArray(c) ? c : []), ...miss]; if (!a.length) return '<span class="st-err">—</span>'; a.sort((x, y) => (EV_ORDER.indexOf(x) + 99) % 99 - (EV_ORDER.indexOf(y) + 99) % 99); return a.map((x) => { const sb = r ? subsOf(r, x) : []; const dim = r && DT_CHIPS.includes(x) && !liveChip(r, x); if (miss.includes(x)) return `<span class="dt-evc is-miss" data-tip="${esc(`그날 판에 ${x} 값을 ${missWord()} — 이 종목이 걸렸는지 모름`)}">${esc(x)}</span>`; return `<span class="dt-evc${dim ? ' is-off' : ''}">${esc(x)}${sb.length ? `<small>${esc(sb.join('·'))}</small>` : ''}</span>`; }).join(''); };
 
 const DOC = '/api/board/doc/strategy-rules';   // 수수료 % 를 두는 곳 — 투자 전략 룰 값과 같은 문서(rules.dt30.feePct)
 const WIDE = matchMedia('(min-width: 701px)');   // 701 — strategy.css 가 쓰는 넓힘 폭(홀딩스 · Insight 700 경계) · 그보다 좁으면 좁은 폭 차례
@@ -62,7 +63,13 @@ const TIP = {
   '매수|②': '② 외국인 · 기관 · 프로그램이 함께 산 종목',
   '매수|③': '③ 기관 · 연기금이 함께 산 종목',
   '매수|④': '④ 외국인만 산 종목',
+  '매수|어림': '어림 — 외국인 · 기관 집계가 나오기 전이라 외국계 창구 순매수 · 종목 프로그램 순매수가 둘 다 + 인 종목으로 넣음 · 집계가 나오면 ①~④ 로 바뀜(서버 data.meta.early)',
 };
+// 그날 판에 서버가 못 받은 칩(data.meta.missing) — 재권님 11-12 「못가져온 값은 못가져온대로 하면될거같고 무슨값인지만 인지되도록」 · 이름은 서버가 준 그대로(목록이든 {칩: 까닭} 이든)
+const names = (a) => (Array.isArray(a) ? a : a && typeof a === 'object' ? Object.keys(a) : []).map(String);
+const missWord = () => (st.rebuilt ? '못 셈' : '못 받음');
+// 굳힌 시각 — 서버 buyAt("09:01" · 「HHMM」 둘 다) 그대로 머리 · 설명 줄에(11-12 09:06 → 09:01 · 재권님 「9시 1분에 바로 단타 리스트 뜨도록」)
+const atText = (v) => { const m = String(v || '').match(/^(\d{2}):?(\d{2})$/); if (m) document.querySelectorAll('.dt-at').forEach((e) => { e.textContent = `${m[1]}:${m[2]}`; }); };
 const tipAt = (k) => (TIP[k] ? ` data-tip="${esc(TIP[k])}"` : '');
 function chipPanel(all) {
   return DT_CHIPS.map((c, i) => {
@@ -70,7 +77,8 @@ function chipPanel(all) {
     const subs = subOrder(c, [...new Set(all.flatMap((r) => subsOf(r, c)))]);
     const on = !st.off.has(c);
     // data-i — 칩마다 색(strategy.css 의 .dt-cg[data-i] · theme.css 변수) · 하위 칩은 상위 칩 색을 물려받음
-    return `<span class="dt-cg${on ? '' : ' is-off'}" data-i="${i}"><button type="button" class="dt-mc${on ? ' is-on' : ''}" data-chip="${esc(c)}"${tipAt(c)} aria-pressed="${on}">${esc(c)}<b>${n}</b></button>${
+    const ms = st.miss.has(c), tip = ms ? ` data-tip="${esc(`그날 판에 ${c} 값을 ${missWord()} — 걸린 종목이 있어도 0 으로 셈됨${TIP[c] ? `\n${TIP[c]}` : ''}`)}"` : tipAt(c);
+    return `<span class="dt-cg${on ? '' : ' is-off'}${ms ? ' is-miss' : ''}" data-i="${i}"><button type="button" class="dt-mc${on ? ' is-on' : ''}" data-chip="${esc(c)}"${tip} aria-pressed="${on}">${esc(c)}${ms ? '' : `<b>${n}</b>`}</button>${
       subs.length ? `<span class="dt-subs">${subs.map((x) => { const k = `${c}|${x}`, son = on && !st.subOff.has(k); return `<button type="button" class="dt-sub-chip${son ? ' is-on' : ''}" data-sub="${esc(k)}"${tipAt(k)} aria-pressed="${son}"${on ? '' : ' disabled'}>${esc(x)}<b>${all.filter((r) => subsOf(r, c).includes(x)).length}</b></button>`; }).join('')}</span>` : ''}</span>`;
   }).join('');
 }
@@ -105,6 +113,8 @@ const mean = (v) => (v.length ? v.reduce((a, b) => a + b, 0) / v.length : null);
 const sgn = (x) => (x == null ? '—' : `${x > 0 ? '+' : ''}${num(x, 2)}%`);
 
 function paint(d) {
+  atText(d.buyAt);
+  st.miss = new Set(names(d.meta && d.meta.missing)); st.rebuilt = !!(d.meta && d.meta.rebuilt === true);
   const times = Array.isArray(d.times) ? d.times : [];
   const all = Array.isArray(d.rows) ? d.rows : [];
   const live = all.filter((r) => nLive(r) > 0).sort(byLive);   // 켜진 칩으로 다시 셈한 단타 차례
@@ -138,8 +148,8 @@ function paint(d) {
   const noMkt = top.filter((x) => x.pnl.net == null).length;   // 시장을 모르는 종목 — 세금을 못 셈
   const P = top.length ? { n: top.length, buy: sum('buyAmt'), sell: sum('sellAmt'), gross: sum('gross'), tx: sum('tx'), rural: sum('rural'), fee: st.fee == null ? null : sum('fee'), net: sum('net') } : null;
   st.last[d.day] = resAvg;
-  const bm = d.meta || {}, nm = (a) => (Array.isArray(a) ? a : a && typeof a === 'object' ? Object.keys(a) : []).map(String).join(' · ');   // 되채운 날 — 칩 이름은 서버가 준 그대로(목록이든 {칩: 까닭} 이든)
-  const rebuilt = bm.rebuilt === true ? ` · 되채운 날${nm(bm.missing) ? ` · ${nm(bm.missing)} 못 셈` : ''}${nm(bm.approx) ? ` · ${nm(bm.approx)} 어림` : ''}` : '';
+  const bm = d.meta || {}, nm = (a) => names(a).join(' · ');   // 되채운 날 · 못 받은 칩 — 칩 이름은 서버가 준 그대로
+  const rebuilt = bm.rebuilt === true ? ` · 되채운 날${nm(bm.missing) ? ` · ${nm(bm.missing)} 못 셈` : ''}${nm(bm.approx) ? ` · ${nm(bm.approx)} 어림` : ''}` : `${nm(bm.missing) ? ` · 못 받은 칩 ${nm(bm.missing)}` : ''}${nm(bm.early) ? ` · ${nm(bm.early)} 어림(집계 전)` : ''}${bm.late && typeof bm.late === 'object' && Object.keys(bm.late).length ? ` · 늦게 채움 ${Object.entries(bm.late).map(([k, v]) => `${k} ${v}`).join(' · ')}` : ''}`;
   $('dt-meta').textContent = `${dayTxt(d.day)}${rebuilt}${LIVE ? ` · 장중 실시간(${esc(String(d.nowAt || '—'))} 값 · 14:00 뒤 굳혀 저장)` : d.closed === true ? ' · 14:00 뒤 굳힌 값' : ''} · 후보 ${num(all.length)} 중 켜진 칩에 걸린 ${num(live.length)} · 보이는 ${num(rows.length)} · ${d.buyAt ? `${hmTxt(d.buyAt)} 매수` : '매수 시각 —'} · 판 것 ${sold.length}(손절 ${sold.filter((x) => x.s.why === '손절').length} · 꺾임 ${sold.filter((x) => x.s.why === '꺾임').length}) · 끝까지 들고 감 ${R.length - sold.length} · 결과 평균 ${sgn(resAvg)} · 이긴 것 ${res.filter((v) => v > 0).length} · 진 것 ${res.filter((v) => v < 0).length}`;
   $('dt-pnl-sum').innerHTML = P ? `<b>상위 ${P.n}종목 × ${(PNL_WON / 10000).toLocaleString('ko-KR')}만원</b> · 산 ${wonPlain(P.buy)} · 판 ${wonPlain(P.sell)} · 빼기 전 ${won(P.gross)}`
     + ` · 거래세 ${wonPlain(P.tx)} · 농특세 ${wonPlain(P.rural)} · 수수료 ${P.fee == null ? '빈칸 — 안 셈' : wonPlain(P.fee)}`
@@ -199,11 +209,20 @@ async function load(day, quiet) {
   if (!r || !r.ok || !j || j.ok === false || !j.data) {
     // 쌓인 날이 없으면 서버가 200 · ok false · meta.days [] 로 답함(개발2 0a3d5eb) — 「못 받음」 이 아니라 「아직 없음」(qa 11-11)
     const none = r && r.ok && j && j.ok === false && Array.isArray(j.meta && j.meta.days) && !j.meta.days.length;
-    const why = !r ? '연결 안 됨' : none ? '아직 쌓인 날 없음 — 첫 판은 평일 09:06' : r.status === 404 ? '서버가 아직 단타 30 을 쌓지 않음' : (j && j.error) || `서버 ${r.status}`;
+    atText(j && j.meta && j.meta.buyAt);
+    const at0 = (document.querySelector('.dt-at') || {}).textContent || '—';
+    const why = !r ? '연결 안 됨' : none ? `아직 쌓인 날 없음 — 첫 판은 평일 ${at0}` : r.status === 404 ? '서버가 아직 단타 30 을 쌓지 않음' : (j && j.error) || `서버 ${r.status}`;
     $('dt-meta').textContent = none ? `— 단타 30: ${why}` : `— 단타 30 값을 못 받음: ${why}`;
     $('dt-box').innerHTML = none
-      ? '<div class="dt-empty"><b>아직 쌓인 날 없음</b><span>오늘 09:06 첫 판이 나오고, 지난 30일은 서버 되채움이 들어간 날 밤에 채워집니다</span></div>'
+      ? `<div class="dt-empty"><b>아직 쌓인 날 없음</b><span>오늘 ${esc(at0)} 첫 판이 나오고, 지난 30일은 서버 되채움이 들어간 날 밤에 채워집니다</span></div>`
       : `<div class="st-err">— ${esc(why)}</div>`;
+    // 아침에 열어 둔 빈 화면 — 서버가 준 매수 시각(meta.buyAt)의 다음 분에 한 번 다시 받는다(주기로 묻지 않음 · 그 판이 생기면 그 뒤는 refreshMs)
+    const bm2 = String((j && j.meta && j.meta.buyAt) || '').match(/^(\d{2}):(\d{2})$/);
+    if (none && bm2) {
+      const at = new Date(); at.setHours(+bm2[1], +bm2[2] + 1, 0, 0);
+      const wait = at - Date.now();
+      if (wait > 0) again = setTimeout(() => load(), wait);
+    }
     return;
   }
   const d = j.data, m = j.meta || {};
@@ -211,7 +230,7 @@ async function load(day, quiet) {
   st.day = d.day; st.data = d;
   paint(d);
   chips();
-  const ms = Number(m.refreshMs); st.ms = ms > 0 ? ms : 0;
+  const ms = Number(m.refreshMs ?? (d.meta && d.meta.refreshMs)); st.ms = ms > 0 ? ms : 0;   // 서버는 판 안 meta(data.meta)에 둔다(개발2 2단계 · 11-12 09:07 잼) — 바깥 meta 도 읽음
   if (d.closed !== true && (d.rows || []).some((r) => r.now != null) && ms > 0 && d.day === st.days[0]) again = setTimeout(() => { if (st.day === d.day) load(d.day, true); }, ms);
 }
 

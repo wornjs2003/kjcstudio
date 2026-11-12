@@ -2,4 +2,5 @@
 <html lang="ko"><head><meta charset="utf-8" /><title>AI 생태계 · Insight</title>
 <!-- 2026-10-03 — AI 생태계 지도는 지도 엔진(flowmap.html?map=ai)으로 옮겼다. 옛 주소로 들어오면 그리로 넘긴다(쿼리 그대로) -->
 <script>location.replace('flowmap.html?map=ai' + (location.search ? '&' + location.search.slice(1) : ''));</script>
-</head><body></body></html>
+</head><body><script type="module">import { mountClaudeRail } from '/assets/js/claude-rail.js'; if (self === top) mountClaudeRail(); /* 틀(iframe) 안에 들어간 화면에는 안 붙인다 */</script>
+</body></html>

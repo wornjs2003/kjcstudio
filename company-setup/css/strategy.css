@@ -186,6 +186,7 @@
 .dt .dt-mc b, .dt .dt-sub-chip b { font-weight: 500; font-size: .9em; opacity: .75; }
 .dt .dt-mc { font-size: 13px; font-weight: 700; padding: 3px 10px; border: 0; background: var(--kh-bg-card); color: var(--kh-text-muted); text-decoration: line-through; }
 .dt .dt-mc.is-on { background: var(--cd); color: var(--c); text-decoration: none; }
+.dt .dt-cg.is-miss .dt-mc, .dt .dt-cg.is-miss .dt-mc.is-on { background: var(--kh-bg-card); color: var(--kh-text-muted); text-decoration: none; opacity: .5; }   /* 그날 판에 못 받은 칩 — 글씨 없이 꺼진 듯 회색 · 이름은 남김(11-12 재권님 「못받음 이라는 글씨만 빼주고 비활성화 된거같이 회색으로」) · 까닭은 풍선 */
 .dt .dt-subs { position: relative; display: flex; flex-wrap: wrap; gap: 3px; padding-left: 10px; }
 .dt .dt-subs::before { content: ""; position: absolute; left: 3px; top: -4px; width: 5px; height: 12px; border-left: 1px solid var(--kh-border-strong); border-bottom: 1px solid var(--kh-border-strong); border-bottom-left-radius: 4px; }   /* 상위 칩에서 내려오는 꺾은 선 */
 .dt .dt-sub-chip { font-size: 11.5px; padding: 1px 8px; border: 1px solid var(--kh-border-strong); background: var(--kh-bg-card); color: var(--kh-text-muted); text-decoration: line-through; }
@@ -202,4 +203,5 @@
   .dt .dt-hd { padding-top: 6px; }
 }
 .dt .dt-evc.is-off { opacity: .4; text-decoration: line-through; }
+.dt .dt-evc.is-miss { background: var(--kh-bg-card); color: var(--kh-text-muted); opacity: .6; }   /* 그날 판에 못 받은 칩 — 종목마다 이름만 회색(11-12 재권님 「각 종목에도 넣어줘」) */
 .dt .dt-evc small { margin-left: 3px; font-weight: 500; }
