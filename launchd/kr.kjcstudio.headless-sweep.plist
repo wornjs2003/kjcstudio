@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kr.kjcstudio.headless-sweep</string>
+  <!-- 주인 없이 남은 헤드리스 크롬을 매일 새벽 닫는다 (2026-11-12 재권님 「가」 → 「만들어」).
+       `tools/headless-sweep.py` — 크롬 본체 · --headless · 부모 끊김 · SWEEP_HOURS 넘은 것만. 재권님 크롬 · 8765 · 8764 는 안 걸린다.
+       11-12 11:42 에 하루 넘은 것 113 프로세스 · 2.8GB 가 쌓여 스왑이 거의 찼다.
+       04:30 — 장 전 · 다른 예약과 안 겹침. 결과는 logs/headless-sweep.log 한 줄.
+       설치는 손으로 한다(「켜기」 · 재권님 지시).
+           cp launchd/kr.kjcstudio.headless-sweep.plist ~/Library/LaunchAgents/
+           launchctl load ~/Library/LaunchAgents/kr.kjcstudio.headless-sweep.plist -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>-u</string>
+    <string>tools/headless-sweep.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/kjc/work/KJCStudio</string>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>4</integer><key>Minute</key><integer>30</integer></dict>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/headless-sweep.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/kjc/work/KJCStudio/logs/headless-sweep.log</string>
+</dict>
+</plist>
