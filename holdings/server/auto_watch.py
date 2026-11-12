@@ -615,7 +615,7 @@ def compute(proxy, live=None):
         near_pct = None
     mem = members(proxy)
     out = {"day": None, "rule": {"prevPct": prev_pct, "volMult": vol_mult, "sortBy": sort_by,
-                                 "autoMax": int(auto_max) if auto_max else None, "nearHighPct": near_pct, "from": src},
+                                 "autoMax": int(auto_max) if auto_max else None, "nearHighPct": near_pct, "sectorPct": sector_pct, "from": src},
            # volMult 는 빈칸이면 거래량 조건을 안 본다(2026-11-11 재권님 「20일 평균 거래량 2배는 룰 없애주고」 → 「가」 — 등락률만 · 등락률 큰 순)
            "ready": prev_pct is not None or sector_pct is not None,
            "picked": [], "pool": len(mem), "measured": None, "noToday": None, "short": None, "hitAll": None}
