@@ -654,6 +654,10 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
             b = rebuild(proxy, today, ds[0], cfg)
             if b and b["rows"]:
                 b["meta"]["redoneFromLive"] = True
+                old = got[0]                           # 덮이는 장중 기록을 한 벌 남긴다 — 되살릴 수 있게(개념정의 덧 11-12)
+                b["meta"]["liveBefore"] = {"savedAt": got[1], "buyAt": old.get("buyAt"), "meta": old.get("meta"),
+                                           "rows": [{k: r.get(k) for k in ("code", "name", "rank", "chips", "subs", "n", "buy", "buyAt", "pct", "rise", "px", "pxSrc")}
+                                                    for r in old.get("rows") or []]}
                 _store(proxy, b)
                 n += 1
     return n
