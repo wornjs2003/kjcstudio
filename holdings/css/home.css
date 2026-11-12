@@ -1796,6 +1796,7 @@
    body.kh-simple 일 때 큰 차트와 실시간 순위만 남긴다. 숨김: 오른쪽 칸(투자자 정보 · 호가 · AI 분석 · 종목 뉴스) · 아래 줄 ·
    뉴스 공시 칸. 큰 차트는 오른쪽 칸 자리까지 가로로, 아래 줄(255 × 배율 + 사이 14) 자리까지 세로로 늘린다 — 문서 높이가 그대로라
    창 맞춤(fitScale)이 흔들리지 않는다. 보조 칸은 chart.js 의 ownOff 가 뺀다(설정은 그대로). 1281px 이상에서만 — 그 아래는 틀이 다르다 */
+/* 넓은 창 전용 덧칠 — 뒤집으면 frame.css 의 칸 · 숨긴 칸 display 값을 다시 적는 복제라 min-width 로 둔다(개념정의 11-12 · 「모바일 퍼스트」 2번) */
 @media (min-width: 1281px) {
   body.kh-simple .kh-idx { grid-template-columns: 1fr; }
   body.kh-simple .kh-idx > .kh-idxp,
@@ -1814,6 +1815,7 @@
    그때는 --kh-s 가 1 이고 --kh-z(zoom)가 1 아래다. 글자를 그대로 두고 칸만 줄이면 0.4배 가까이 줄어 글자가 세로로 꺾였다(높이 900 창 실측) */
 /* 창 가장자리와 틀 사이에 남기는 여백 — 아래와 좌우 각각(재권님 「너무 딱 맞아서 답답해 여백을 넣어줘」 2026-11-03). home.js fitScale 이 읽는다 */
 :root { --kh-fit-gap: 32px; }
+/* 넓은 창 전용 덧칠 — 뒤집으면 frame.css 의 칸 · 숨긴 칸 display 값을 다시 적는 복제라 min-width 로 둔다(개념정의 11-12 · 「모바일 퍼스트」 2번) */
 @media (min-width: 1281px) {
   /* Insight 도 같은 틀 — 배율은 그 화면 fit.js 가 홀딩스가 남긴 바탕값(kh-fit-base)으로 푼다(2026-11-07 재권님 「홀딩스 기준으로 다 맞춰」 → (가)) */
   body[data-nav="holdings"] > .kh-app-wide,
