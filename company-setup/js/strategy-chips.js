@@ -50,19 +50,21 @@ const RULES = {
       const pc = (x) => (x == null ? null : `${num(x, Number.isInteger(+x) ? 0 : 1)}%`);
       return [
         ['대상', `코스피 · 코스닥 시가총액 상위 ${v(u.rows == null ? null : num(u.rows))}종목 중 주권(오늘 ${v(u.stocks == null ? null : num(u.stocks))}종목 · ETF 뺌) ${SRV}`],
-        ['고르는 조건', `앞 거래일 정규장 등락률 ${v(pc(r.prevPct))} 이상 ${DOC}`],   // 거래량 20일 평균 배수 줄은 뺌(11-12 재권님 「거래량이 20일 평균 그룰은 없애」 · 룰 문서 volMult 는 이미 빈칸 — 셈에 안 듦)
+        ['고르는 조건', `앞 거래일 정규장 등락률 ${v(pc(r.prevPct))} 이상 ${DOC}<br>또는 전날 밤 미국장 같은 섹터(섹터 ETF)가 ${v(pc(r.sectorPct))} 이상 ${DOC} ${em.sectorMap ? src('종목 ↔ 미국 섹터 연결 · 서버 코드') : `<span class="rl-sug">서버가 아직 안 셈</span>`}`],   // 11-12 재권님 「덧조건으로 해」 — 둘 중 하나 · 개발1 auto_watch why · sectorEtf   // 거래량 20일 평균 배수 줄은 뺌(11-12 재권님 「거래량이 20일 평균 그룰은 없애」 · 룰 문서 volMult 는 이미 빈칸 — 셈에 안 듦)
         ['신고가 부근', `52주 최고 종가 위아래 ${v(pc(r.nearHighPct))} 안이면 맨 위(조건 밖이면 목록에만 · 관심에는 안 넣음) ${DOC}`],
         ['줄 세우기', `${r.sortBy === 'pct' ? '등락률 큰 순' : r.sortBy === 'mult' ? '거래량 배수 큰 순' : v(null)} ${DOC}`],
         ['관심에 넣기', `줄 세운 상위 ${v(em.addTop)}종목 · ${v(em.addAt)} ${SRV} <span class="rl-sug">숫자는 서버가 아직 화면에 안 내줌</span>`],
         ['안 세는 것', `${(em.notCounted || []).map((x) => esc(String(x).replace(/^sectorPct\b/, '미국장 같은 섹터 상승').replace(/^exclude\b/, '빼는 종목'))).join('<br>') || v(null)} ${SRV}`],
       ];
     },
-    list: (j) => {
+    list: (j, e) => {
       const d = j.data || {}, rows = (Array.isArray(d.rows) ? d.rows : []).filter((r) => (r.chips || []).includes('수급'));
+      const pk = {}; ((e && e.data && e.data.picked) || []).forEach((p) => { pk[p.code] = p; });   // 걸린 까닭 — 서버 picked[].why(pct · sector) · 섹터 ETF · 그 등락
+      const why = (c) => { const p = pk[c]; if (!p || !Array.isArray(p.why)) return '—'; return p.why.map((w) => (w === 'pct' ? `등락 ${p.pct == null ? '—' : `${num(p.pct, 1)}%`}` : w === 'sector' ? `미국 ${esc(p.sectorEtf || '섹터')} ${p.sectorPct == null ? '—' : `${num(p.sectorPct, 1)}%`}` : esc(w))).join(' · '); };
       rows.sort((a, b) => (Number(b.cap) || 0) - (Number(a.cap) || 0));
       const day = String(d.day || '');
       return { cap: `${day.length === 8 ? `${day.slice(4, 6)}-${day.slice(6)}` : '—'} · ${num(rows.length)}종목 · 단타 판 후보 중 · 같은 셈`,
-        html: rows.length ? tb(['종목', '시가총액', '섹터'], rows.map((x) => `<tr>${nm(x)}<td>${x.cap == null ? '—' : x.cap >= 10000 ? `${num(x.cap / 10000, 1)}조` : `${num(x.cap)}억`}</td><td>${esc(x.sector || '—')}</td></tr>`)) : null };
+        html: rows.length ? tb(['종목', '걸린 까닭', '시가총액', '섹터'], rows.map((x) => `<tr>${nm(x)}<td>${why(x.code)}</td><td>${x.cap == null ? '—' : x.cap >= 10000 ? `${num(x.cap / 10000, 1)}조` : `${num(x.cap)}억`}</td><td>${esc(x.sector || '—')}</td></tr>`)) : null };
     },
   },
   pre: {
@@ -144,7 +146,7 @@ async function show(id, again = false) {
   if (!j || j.ok === false) { $('cr-cap').textContent = `「${R.name}」 종목`; $('cr').innerHTML = `<div class="st-err">— 서버 값을 못 받음(${esc((j && j.error) || st || '연결 안 됨')})</div>`; return; }
   const m = (R.metaOf ? R.metaOf(j) : null) || j.meta || (j.data && j.data.meta) || {};
   tb2.innerHTML = R.rows(m, ex.j).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
-  const L = R.list(j);
+  const L = R.list(j, ex.j);
   $('cr-cap').textContent = L.cap.replace(/<[^>]+>/g, '');
   $('cr').innerHTML = L.html || '<div class="st-err">— 이 룰에 걸린 종목 없음</div>';
 }
