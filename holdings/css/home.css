@@ -1079,6 +1079,20 @@
   .kh-idx { grid-template-columns: 1fr; }
   .kh-idx-chart { min-height: 220px; }
 }
+/* 창 901~1280 — 실시간 순위 칸은 오른쪽 그대로 · 고른 종목 칸(투자자 정보 · AI 분석 · 종목 뉴스)은 차트 아래로
+   (2026-11-12 재권님 「투자자 정보가 밑으로 가게 하자」 → 시안 (다) 「응 그래」).
+   frame.css 의 1280 규칙(순위 칸 숨김 · 1fr 52px)은 Insight 도 걸어 두고 홈 첫 화면에서만 되살린다.
+   이 폭은 창 맞춤 줄임(--kh-z)이 안 돈다(home.js fitScale — 1281 아래는 안 줌) — 글자는 그대로 · 아래로 스크롤 */
+@media (min-width: 901px) and (max-width: 1280px) {
+  body[data-nav="holdings"] .kh-app-wide { grid-template-columns: 1fr 368px; }
+  body[data-nav="holdings"] .kh-app-wide .kh-side { display: block; }
+  body[data-nav="holdings"] .kh-app-wide .kh-idx { grid-template-columns: 1fr; }
+  /* 본문이 순위 칸만큼 좁아져 — 아래 줄은 산업 · 데일리분석을 위아래로(넷 칸이면 산업 칸 글자가 세로로 꺾였다) */
+  body[data-nav="holdings"] .kh-app-wide .kh-rank { grid-template-columns: 1fr; }
+  body[data-nav="holdings"] .kh-app-wide .kh-rank > .kh-sc-card { grid-column: auto; }
+  /* 52주 꼬리말(「지금 ○원 · 최저에서 ○% 자리」)이 카드 밖으로 넘쳤다 — 줄여 보이고 전체는 1초 풍선(home.js data-tip) */
+  body[data-nav="holdings"] .kh-app-wide .kh-head-yr .kh-head-yr-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+}
 @media (max-width: 700px) {
   .kh-cat { gap: 18px; overflow-x: auto; scrollbar-width: none; }
   .kh-cat::-webkit-scrollbar { display: none; }
