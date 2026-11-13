@@ -44,6 +44,7 @@ ET = ZoneInfo("America/New_York")
 TIMEOUT = 20
 UA = "Mozilla/5.0"     # 야후는 긴 브라우저 이름이면 429 로 막는다 — 짧은 이름은 200(market_index.py · 10-15 실측)
 
+FUTURES_DELAY_MIN = 10          # 야후 선물 값이 늦는 분 — 화면 「n분 지연」 글이 이 값을 받는다(2026-11-13 개념정의 덧 · 화면에 숫자를 박지 않게)
 TTL = {"futures": 5 * 60, "options": 30 * 60, "econ": 60 * 60, "fomc": 60 * 60, "vix": 24 * 3600}
 OPTIONS_WINDOW = ((17, 0), (5, 30))      # 한국 시각 — 이 사이에만 옵션을 다시 받는다 (밤을 넘긴다)
 WAIT = 40                                # 묶음 받기를 기다리는 한도(초) — 넘으면 있는 값으로 낸다
@@ -310,7 +311,7 @@ def futures_row(sym):
         rows = (s["data"] or {}).get("rows") or []
         src = (s["data"] or {}).get("source")
     r = next((x for x in rows if x.get("sym") == sym and x.get("v") is not None), None)
-    return dict(r, source=src) if r else None
+    return dict(r, source=src, delayMin=FUTURES_DELAY_MIN) if r else None
 
 
 def outlook():
