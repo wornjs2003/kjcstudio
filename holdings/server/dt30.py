@@ -233,7 +233,7 @@ def early_buy(proxy, cfg, codes, put):
 
 
 def build(proxy, cfg, day, skip=()):
-    """09:06 판 — {day, buyAt, times, rows, meta}. skip — 그날 판에서 하락으로 빠진 종목(다시 안 넣음)."""
+    """09:06 판 — {day, buyAt, times, rows, meta}. skip — 그날 판에 들었다가 빠진 종목(다시 안 넣음 · 까닭 무관)."""
     import company_profile
     hit, missing, cap, mkt = chips_now(proxy, cfg)
     ov = {c: g for c, g in hit.items() if g["chips"] & set(OV_CHIPS)}     # 칩 하나라도(18:5x — 화면이 칩을 끄고 켜며 그 안에서 다시 셈)
@@ -242,7 +242,7 @@ def build(proxy, cfg, day, skip=()):
     rows, down = [], []
     for code, g in ov.items():
         if code in skip:
-            continue                                   # 들었다가 하락으로 빠진 종목 — 그날 다시 안 넣음(재권님 11-12 11:3x)
+            continue                                   # 들었다가 빠진 종목 — 그날 다시 안 넣음(재권님 11-12 11:3x · 11-13 「밀린건 넣지 않는다」)
         p = prices.get(code) or {}
         if p.get("pct") is not None and p["pct"] < DROP_BELOW_PCT:
             down.append(code)                          # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
