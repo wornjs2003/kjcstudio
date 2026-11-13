@@ -7,7 +7,9 @@
 import { signClass, NUM } from '/assets/js/sign.js';
 
 const API = '/api/kis/dt30';   // 서버 주소 — 개발2(11-11 18:2x 정함 · 아직 커밋 전)
-const $ = (id) => document.getElementById(id);
+let root = null;   // 판을 그린 그릇(mountDt30) — 칸은 이 안에서만 찾는다
+const BIND = [];   // 그릇에 붙일 누르기 처리 — mountDt30 이 그릴 때마다 새 칸에 붙인다
+const $ = (id) => (root ? root.querySelector(`#${id}`) : null);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const num = (x, d = 0) => (x == null || !Number.isFinite(Number(x)) ? '—' : Number(x).toLocaleString('ko-KR', { minimumFractionDigits: d, maximumFractionDigits: d }));
 const pct = (x) => { if (x == null || !Number.isFinite(x)) return '—'; const c = signClass(x, NUM); const t = `${x > 0 ? '+' : ''}${num(x, 2)}%`; return c ? `<span class="${c}">${t}</span>` : t; };
@@ -79,7 +81,7 @@ const TIP = {
 const names = (a) => (Array.isArray(a) ? a : a && typeof a === 'object' ? Object.keys(a) : []).map(String);
 const missWord = () => (st.rebuilt ? '못 셈' : '못 받음');
 // 굳힌 시각 — 서버 buyAt("09:01" · 「HHMM」 둘 다) 그대로 머리 · 설명 줄에(11-12 09:06 → 09:01 · 재권님 「9시 1분에 바로 단타 리스트 뜨도록」)
-const atText = (v) => { const m = String(v || '').match(/^(\d{2}):?(\d{2})$/); if (m) document.querySelectorAll('.dt-at').forEach((e) => { e.textContent = `${m[1]}:${m[2]}`; }); };
+const atText = (v) => { const m = String(v || '').match(/^(\d{2}):?(\d{2})$/); if (m && root) root.querySelectorAll('.dt-at').forEach((e) => { e.textContent = `${m[1]}:${m[2]}`; }); };
 const tipAt = (k) => (TIP[k] ? ` data-tip="${esc(TIP[k])}"` : '');
 function chipPanel(all) {
   return colsOf().map((c) => { const i = colorOf(c);
@@ -239,11 +241,11 @@ function chips() {
   $('dt-days').innerHTML = `<div class="dt-mons" role="tablist" aria-label="달">${mons.map((m) => `<button type="button" class="dt-mon${m === st.mon ? ' is-on' : ''}" role="tab" aria-selected="${m === st.mon}" data-mon="${m}">${monTxt(m)}<small>${cnt(m)}일</small></button>`).join('')}</div>`
     + `<div class="dt-dlist" role="tablist" aria-label="날짜">${st.days.filter((d) => monOf(d) === st.mon).map(dayBtn).join('')}</div>`;
 }
-$('dt-days').addEventListener('click', (e) => {
+BIND.push(() => $('dt-days').addEventListener('click', (e) => {
   const mb = e.target.closest('[data-mon]');
   if (mb) { if (mb.dataset.mon !== st.mon) { st.mon = mb.dataset.mon; chips(); } return; }   // 달만 바꿈 — 날짜는 그 달 줄에서 고름(판은 그대로)
   const b = e.target.closest('[data-day]'); if (b && b.dataset.day !== st.day) { st.mon = monOf(b.dataset.day); load(b.dataset.day); }
-});
+}));
 
 // 장중이면 서버가 정한 주기(meta.refreshMs)로 같은 날을 다시 받는다 — 주기 숫자를 화면에 두지 않는다(「캐시·주기·한도 값을 화면에 박지 않는다」) · 서버가 안 주면 다시 안 받음
 let again = null;
@@ -265,7 +267,7 @@ async function load(day, quiet) {
     // 쌓인 날이 없으면 서버가 200 · ok false · meta.days [] 로 답함(개발2 0a3d5eb) — 「못 받음」 이 아니라 「아직 없음」(qa 11-11)
     const none = r && r.ok && j && j.ok === false && Array.isArray(j.meta && j.meta.days) && !j.meta.days.length;
     atText(j && j.meta && j.meta.buyAt);
-    const at0 = (document.querySelector('.dt-at') || {}).textContent || '—';
+    const at0 = ((root && root.querySelector('.dt-at')) || {}).textContent || '—';
     const why = !r ? '연결 안 됨' : none ? `아직 쌓인 날 없음 — 첫 판은 평일 ${at0}` : r.status === 404 ? '서버가 아직 단타 30 을 쌓지 않음' : (j && j.error) || `서버 ${r.status}`;
     $('dt-meta').textContent = none ? `— 단타 30: ${why}` : `— 단타 30 값을 못 받음: ${why}`;
     $('dt-box').innerHTML = none
@@ -313,7 +315,7 @@ document.addEventListener('click', (e) => {
   else if (m.dataset.act === 'rule') { menuClose(); const rb = document.querySelector(`#rl-chips [data-rule="${RULE_OF[c]}"]`); if (rb) { rb.click(); rb.scrollIntoView({ block: 'center' }); } return; }
   st.cols = cs; redraw();
 });
-$('dt-box').addEventListener('click', (e) => {   // 칩 줄은 표와 함께 다시 그려져 표 칸(dt-box)에서 받음
+BIND.push(() => $('dt-box').addEventListener('click', (e) => {   // 칩 줄은 표와 함께 다시 그려져 표 칸(dt-box)에서 받음
   const col = e.target.closest('[data-col]');
   if (col) { const c = col.dataset.col, on = !st.off.has(c), cs = colsOf(), i = cs.indexOf(c);
     menuOpen(col, `<button type="button" data-act="tg" data-c="${esc(c)}">${on ? '끄기 — 셈에서 뺌' : '켜기 — 셈에 넣음'}</button>`
@@ -329,9 +331,9 @@ $('dt-box').addEventListener('click', (e) => {   // 칩 줄은 표와 함께 다
   if (b.dataset.chip) { const c = b.dataset.chip; st.off.has(c) ? st.off.delete(c) : st.off.add(c); }
   else { const k = b.dataset.sub; st.subOff.has(k) ? st.subOff.delete(k) : st.subOff.add(k); }
   colsSave(); if (st.data) { paint(st.data); chips(); }
-});
-$('dt-order').addEventListener('click', (e) => { const b = e.target.closest('[data-order]'); if (!b || b.dataset.order === st.order) return; st.order = b.dataset.order; if (st.data) { paint(st.data); chips(); } });
-$('dt-only').addEventListener('click', (e) => { const b = e.target.closest('[data-only]'); if (!b || b.dataset.only === st.only) return; st.only = b.dataset.only; if (st.data) { paint(st.data); chips(); } });
+}));
+BIND.push(() => $('dt-order').addEventListener('click', (e) => { const b = e.target.closest('[data-order]'); if (!b || b.dataset.order === st.order) return; st.order = b.dataset.order; if (st.data) { paint(st.data); chips(); } }));
+BIND.push(() => $('dt-only').addEventListener('click', (e) => { const b = e.target.closest('[data-only]'); if (!b || b.dataset.only === st.only) return; st.only = b.dataset.only; if (st.data) { paint(st.data); chips(); } }));
 
 async function loadFee() {
   try { const r = await fetch(DOC, { cache: 'no-store' }); const j = r.ok ? await r.json() : null; const v = j && j.data && j.data.rules && j.data.rules.dt30 ? j.data.rules.dt30.feePct : null; st.fee = v == null || v === '' ? null : Number(v); }
@@ -361,7 +363,41 @@ async function saveFee() {
   }
   $('dt-fee-msg').textContent = '저장 못 함 — 다른 곳에서 계속 고치는 중';
 }
-$('dt-fee').addEventListener('change', saveFee);
-WIDE.addEventListener('change', () => { if (st.data) paint(st.data); });   // 창 폭이 700 을 넘나들면 칸 차례만 다시
+BIND.push(() => $('dt-fee').addEventListener('change', saveFee));
+WIDE.addEventListener('change', () => { if (root && st.data) paint(st.data); });   // 창 폭이 700 을 넘나들면 칸 차례만 다시
 
-loadFee().then(load);
+
+// 그릇에 그리기 (11-13 재권님 「단타 창 모달로 띄울수있게 자세히 버튼 넣어줘」 · 개발1 과 맞춤) — 투자 전략 화면(#dt-host)과 홈 모달이 이 한 벌을 쓴다
+//   mountDt30(host)  host 안에 판 칸을 만들고 그림 · 칸은 host 안에서만 찾는다 · 모양은 company-setup/css/strategy.css 의 .dt 묶음(거는 쪽이 그 파일을 건다)
+//   unmountDt30()    다시 받기 타이머 · 열린 칸 메뉴를 거둠 — 모달을 닫을 때 부른다(안 부르면 장중 주기로 계속 받는다)
+//   host 에 class 「st dt」 가 없으면 붙인다(.dt 아래 모양이 듣게)
+const TPL = `
+      <div class="st-meta" id="dt-meta">값을 받는 중…</div>
+      <h2 class="st-sec">단타 — <span class="dt-at">—</span> 매수 → 30분마다 14:00 까지</h2>
+      <div class="st-tg dt-days" id="dt-days" role="tablist" aria-label="날짜"></div>
+      <div class="st-card">
+        <div class="st-cap dt-cap" id="dt-cap">단타 목록(<span class="dt-at">—</span> 에 연 후보 100 · 아래 칩을 켜고 끄면 겹친 수로 다시 줄 세움)을 그 시각 값에 산 것으로 보고, 매수가 대비 몇 % 인지 30분마다 · 날마다 쌓음 · 30거래일</div>
+        <!-- 칩 영역 두 줄 (11-11 재권님 「여기 계층구조에 맞게 인지가 잘되고 보기 편하게 색도 넣어서 해줘」) — ① 단타 칩: 표 안 종목 머리 줄과 평균 줄 사이(js 가 그림) · 상위 칩마다 색 · 하위 칩은 같은 색 작은 칩으로 붙임 ② 보기: 거르기 · 줄 세우기는 회색 나눔 단추 -->
+        <div class="dt-ctl">
+          <div class="dt-row"><span class="dt-hd">보기</span><div class="dt-bar"><span class="dt-lb">거르기</span><div class="dt-seg" id="dt-only" role="tablist" aria-label="이벤트 거르기"></div><span class="dt-lb">줄 세우기</span><div class="dt-seg" id="dt-order" role="tablist" aria-label="줄 세우기"></div></div></div>
+        </div>
+        <div class="dt-pnl" id="dt-pnl"><div id="dt-pnl-sum">—</div>
+          <label class="dt-fee">증권수수료 <input id="dt-fee" class="rl-in rl-num" inputmode="decimal" aria-label="증권수수료(%) — 살 때 · 팔 때 각각" placeholder="( )">% <span class="rl-sug">살 때 · 팔 때 각각 · 넣으면 저장되고 바로 다시 셈</span> <span id="dt-fee-msg" class="rl-sug"></span></label></div>
+        <div class="dt-box st-scroll" id="dt-box"><div class="st-err">—</div></div>
+        <div class="st-cap dt-foot">각 시각 = 그 시각에 끝난 5분봉 종가 · 평균 = 그 시각 값이 있는 종목만 · 단타 목록은 <span class="dt-at">—</span> 에 그날 판을 열고, 서버가 굳히기 전까지는 다시 세어 줄이 바뀜(늦게 든 칩 · 빠진 종목) · 굳힌 뒤에는 늦게 나온 칩만 채움</div>
+      </div>`;
+export function mountDt30(host) {
+  if (!host) return;
+  unmountDt30();
+  host.classList.add('st', 'dt');
+  host.innerHTML = TPL;
+  root = host;
+  BIND.forEach((f) => f());
+  loadFee().then(() => { if (root === host) load(); });
+}
+export function unmountDt30() {
+  clearTimeout(again); again = null; st.seq++;   // 받는 중이던 값은 버린다(load 가 seq 로 가름)
+  menuClose(); root = null;
+}
+const host0 = document.getElementById('dt-host');
+if (host0) mountDt30(host0);
