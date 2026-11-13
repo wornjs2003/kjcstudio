@@ -17,11 +17,14 @@ let doc = { rules: {} }, at = null;
 let lastWarn = '';   // 마지막으로 칸을 되돌리거나 저장하지 못한 까닭 — 검색 단추가 덮지 않게 이어 쓴다 · 저장이 되면 비운다
 const hm = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
+// 칸 열쇠에 점이 있으면 한 겹 안(scoreW.pct → rules.volsurge.scoreW.pct · 11-13 점수 비율) — 서버가 읽는 모양 그대로
+const getK = (r, k) => k.split('.').reduce((o, x) => (o && typeof o === 'object' ? o[x] : undefined), r);
+function setK(r, k, v) { const ks = k.split('.'), last = ks.pop(); let o = r; ks.forEach((x) => { o[x] = o[x] && typeof o[x] === 'object' ? { ...o[x] } : {}; o = o[x]; }); o[last] = v; return r; }
 function fill() {
   const r = (doc.rules || {})[RULE] || {};
   ins.forEach((el) => {
-    const v = r[el.dataset.k];
-    if (el.tagName === 'SELECT') { el.value = v || el.options[0].value; el.dataset.v = el.value; return; }   // 고르는 칸은 빈칸이 없다 — 안 고르면 첫 것(배수 순)
+    const v = getK(r, el.dataset.k);
+    if (el.tagName === 'SELECT') { el.value = v == null || v === '' ? el.options[0].value : String(v); el.dataset.v = el.value; return; }   // 고르는 칸은 빈칸이 없다 — 안 고르면 첫 것(배수 순)
     el.value = v == null ? '' : String(v); el.dataset.v = el.value; el.placeholder = '( )';
   });
   const n = ins.filter((el) => el.value === '').length;
@@ -53,7 +56,8 @@ async function save(el) {
     v = x;
   }
   doc.rules = doc.rules || {};
-  doc.rules[RULE] = { ...(doc.rules[RULE] || {}), [k]: v };
+  if ('bool' in el.dataset) v = v === 'true';   // 예 · 아니오 고르는 칸은 참 · 거짓으로 둔다(서버가 false 만 「끔」 으로 읽음)
+  doc.rules[RULE] = setK({ ...(doc.rules[RULE] || {}) }, k, v);
   meta.textContent = '저장하는 중…';
   try {
     const r = await fetch(DOC, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: doc, ...(at ? { updatedAt: at } : {}) }) });
@@ -81,6 +85,8 @@ const mmdd = (d) => { const m = String(d || '').match(/(\d{4})-?(\d{2})-?(\d{2})
 
 // 신고가 부근 표시 (11-05 「가랑 나랑 구분만 되면」) — 서버가 붙여 주는 nearHigh(부근인가) · nearHighOnly(위 조건 밖인데 부근이라 더 넣음) 그대로 · 맨 위로 올리는 것도 서버 순서
 const nhTag = (p) => (!p.nearHigh ? '' : `<span class="aw-nh${p.nearHighOnly ? ' only' : ''}"${p.high52 != null ? ` data-tip="52주 최고 종가 ${num(p.high52)} · ${p.highGapPct == null ? '—' : `${p.highGapPct > 0 ? '+' : ''}${num(p.highGapPct, 2)}%`}"` : ''}>${p.nearHighOnly ? '신고가 부근만' : '신고가 부근'}</span>`);
+// 5일선 돌파 표시 (11-12 재권님 「5일선 위로 … 양봉 추가」) — 서버가 붙여 주는 maCross 그대로 · 며칠선인지는 서버가 쓴 rule.maDays
+const maTag = (p, rule) => (!p.maCross ? '' : `<span class="aw-nh">${num(rule.maDays)}일선 돌파${rule.maUpCandle ? ' · 양봉' : ''}</span>`);
 // 장중 상위 (11-06 재권님 「관심종목에 실시간으로」 · 「장중 값으로 갱신」 · 「상위 20개만」) — 서버 meta.live 그대로(순서 · 개수도 서버) ·
 // 그날 확정 판(d.day)이 같은 날로 나오면 장중 표는 내린다 — 못 받았으면 서버 글(liveError)을 그대로
 const liveHm = (at) => (String(at || '').match(/T(\d{2}:\d{2})/) || [])[1] || '—';
@@ -105,7 +111,9 @@ async function loadAw() {
   awPicked = d.day ? picked : []; awDay = d.day || '';
   if (ahD) renderAh();
   if (why.code && !awPicked.some((p) => p.code === why.code)) { why.code = ''; whyBox.innerHTML = '<div class="st-err">— 종목을 누르면 여기 나옵니다</div>'; }   // 다시 고른 목록에 없으면 비움
-  const by = rule.sortBy === 'pct' ? '등락률 순' : '배수 순';
+  const sw = rule.scoreW || null;   // 점수 순일 때만 서버가 준다(11-13) — 비율 칸이 비면 서버가 등락률 순으로 바꾸고 sortBy 에 그대로 적는다
+  const by = rule.sortBy === 'score' ? `점수 순(등락률 ${num(sw && sw.pct)} · 거래량 ${num(sw && sw.vol)})` : rule.sortBy === 'pct' ? '등락률 순' : '배수 순';
+  const scOn = rule.sortBy === 'score';
   const unset = d.day && d.ready === false;   // 기준 칸(등락률 · 배수)이 비면 서버가 거르지 않는다 — 「없음」 이 아니라 「안 거름」(개념정의 검수 11-05)
   awCap.textContent = unset ? `${mmdd(d.day)} 기준 · 아직 안 거름`
     : d.day
@@ -114,8 +122,8 @@ async function loadAw() {
   if (!d.day) awBox.innerHTML = `${liveHtml(m, d)}<div class="st-err">— 아직 셈이 없음${m.runWindow ? `(${esc(m.runWindow)} 에 셈)` : ''}</div>`;
   else if (unset) awBox.innerHTML = '<div class="st-err">— 기준(등락률 · 배수) 칸이 비어 아직 안 거름 — 왼쪽 칸을 채우고 검색을 누르십시오</div>';
   else if (!picked.length) awBox.innerHTML = `${liveHtml(m, d)}<div class="st-err">— 이 룰에 걸린 종목 없음</div>`;
-  else awBox.innerHTML = `${liveHtml(m, d)}<div class="st-scroll"><table class="aw-tb"><tr><th>종목</th><th>시장</th><th>종가</th><th>등락률</th><th>거래량</th><th>20일 평균</th><th>배수</th></tr>${picked.map((p) =>
-    `<tr data-code="${esc(p.code || '')}"${p.code && p.code === why.code ? ' class="is-on"' : ''}><td class="st-name"><b>${esc(p.name || '—')}</b> <small>${esc(p.code || '')}</small>${nhTag(p)}</td><td>${esc(IDX[p.idx] || p.idx || '—')}</td><td>${num(p.close)}</td><td>${pctTxt(p.pct)}</td><td>${num(p.vol)}</td><td>${num(p.avg20)}</td><td><b>${p.mult == null ? '—' : `${num(p.mult, 2)}배`}</b></td></tr>`).join('')}</table></div>`;
+  else awBox.innerHTML = `${liveHtml(m, d)}<div class="st-scroll"><table class="aw-tb"><tr><th>종목</th><th>시장</th><th>종가</th><th>등락률</th><th>거래량</th><th>20일 평균</th><th>배수</th>${scOn ? '<th>점수</th>' : ''}</tr>${picked.map((p) =>
+    `<tr data-code="${esc(p.code || '')}"${p.code && p.code === why.code ? ' class="is-on"' : ''}><td class="st-name"><b>${esc(p.name || '—')}</b> <small>${esc(p.code || '')}</small>${nhTag(p)}${maTag(p, rule)}</td><td>${esc(IDX[p.idx] || p.idx || '—')}</td><td>${num(p.close)}</td><td>${pctTxt(p.pct)}</td><td>${num(p.vol)}</td><td>${num(p.avg20)}</td><td><b>${p.mult == null ? '—' : `${num(p.mult, 2)}배`}</b></td>${scOn ? `<td>${p.score == null ? '—' : `<b>${num(p.score, 1)}</b>`}</td>` : ''}</tr>`).join('')}</table></div>`;
   // 이 룰은 이렇게 셈합니다 — 재권님 11-05 「이거를 투자전략에다가 넣어줘」(개발 그림 dev-autowatch) · 수 · 시각 · 빠진 칸은 응답 그대로(화면에 박지 않는다)
   const u = m.universe || {};
   const KNAME = { sectorPct: '재료(미국장 섹터) 칸', exclude: '빼는 것 칸' };   // 서버가 칸 열쇠로 적어 보낸다 — 화면에는 칸 이름으로
