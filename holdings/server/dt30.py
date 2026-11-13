@@ -480,7 +480,7 @@ def _trade_days(proxy, before, n):
 
 def rebuild(proxy, day, prev, cfg=None):
     """day 의 09:06 판을 쌓인 값으로 다시 센다(prev = 앞 거래일). 5분봉이 없으면 None. cfg 를 주면 VI 를 KIS 에서 받는다."""
-    import auto_watch, company_profile, dart, intraday_alerts, open_rise, pre_flow
+    import auto_watch, company_profile, dart, intraday_alerts, market_hours, open_rise, pre_flow
     uni = dart.universe_rows(None)
     cap = {r["stock_code"]: r["market_cap"] for r in uni}
     mkt = {r["stock_code"]: r["market"] for r in uni}
@@ -494,15 +494,17 @@ def rebuild(proxy, day, prev, cfg=None):
         if not any("0900" in b for b in bars.values()):
             return None
         pv = {r[0]: r for r in conn.execute("SELECT code, name, close, pct, vol FROM auto_watch_day WHERE day = ?", (prev,))}
-        pbar = {}                                          # 앞 거래일 종가를 auto_watch_day 에 없는 종목(대상 밖 작은 종목 · VI 가 잦다)은 앞 날 15:30 까지 끝난 마지막 5분봉 종가로
+        pbar = {}                                          # 앞 거래일 종가를 auto_watch_day 에 없는 종목(대상 밖 작은 종목 · VI 가 잦다)은 앞 날 정규장 끝(market_hours.REG_CLOSE)까지 끝난 마지막 5분봉 종가로
+        rc = int(market_hours.REG_CLOSE[:2]) * 60 + int(market_hours.REG_CLOSE[2:])
         for code, ts, c in conn.execute("SELECT code, ts, close FROM candles WHERE period = '5m' AND ts >= ? AND ts < ? ORDER BY ts",
-                                        (prev + "1500", prev + "1530")):
+                                        (prev + "%02d%02d" % divmod(rc - 30, 60), prev + market_hours.REG_CLOSE)):
             if c:
                 pbar[code] = c
         inv = conn.execute("SELECT code, row FROM investor_daily WHERE date = ?", (prev,)).fetchall()
         bb = [r[0] for r in conn.execute("SELECT DISTINCT code FROM signal_sent WHERE day = ? AND ts <= ?",
                                          (day, int(day + "0906")))]
-    base_of = lambda c: (pv.get(c) or (None, None, None))[2] or pbar.get(c)    # 앞 거래일 종가 — 없으면 앞 날 마지막 정규장 5분봉 종가(어림)
+    base_of = lambda c: (pv.get(c) or (None, None, None))[2] or pbar.get(c)
+    approx_base = {"급등": 0, "VI": 0}    # 앞 거래일 종가 — 없으면 앞 날 마지막 정규장 5분봉 종가(어림)
     names = {c: (r[1] or "") for c, r in pv.items()}
     names.update({r["stock_code"]: r["name"] for r in uni})
     hit, missing, approx = {}, [] if cfg else ["VI"], ["프리장", "매수"]
@@ -554,6 +556,8 @@ def rebuild(proxy, day, prev, cfg=None):
         hi = max([d[hm][1] for hm in vi_bars if hm in d and d[hm][1]] or [0])
         if base and hi and (hi / base - 1) * 100 >= intraday_alerts.SURGE_PCT:
             put(c, "VI·급등", "급등")
+            if c not in pv:
+                approx_base["급등"] += 1                   # 어림 종가(앞 날 5분봉)로 센 급등
     if cfg:                                                # VI — KIS 「VI 현황」 에 날짜 · 종목을 넣으면 그 종목의 그날 VI(최근 것부터 30건)가 온다(19:4x 잼)
         vt = "%02d%02d00" % BUY_LATE
         probe = []
@@ -580,6 +584,8 @@ def rebuild(proxy, day, prev, cfg=None):
                     continue
                 if any(r.get("bsop_date") == day and "090000" <= str(r.get("cntg_vi_hour") or "") <= vt for r in out):
                     put(c, "VI·급등", "VI")
+                    if c not in pv:
+                        approx_base["VI"] += 1             # 어림 종가로 골라 물은 종목에서 나온 VI
     jb = []
     for c, row in inv:                                     # 매수 어림
         try:
@@ -632,7 +638,7 @@ def rebuild(proxy, day, prev, cfg=None):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(), "rows": rows, "closed": True,
             "meta": {"rebuilt": True, "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": DROP_BELOW_PCT,
-                     "watchSrc": watch_src, "rules": chip_rules(proxy), "viUntil": "%02d:%02d" % BUY_LATE,
+                     "watchSrc": watch_src, "rules": chip_rules(proxy), "viUntil": "%02d:%02d" % BUY_LATE, "approxBase": approx_base,
                      "capMinEok": CAP_MIN_EOK, "order": "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순",
                      "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 · 수급은 그날 09:01 직전 관심 목록(watchSrc 기록 · 없으면 관심 못 받음 · 수급 어림) · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
                              "buy 는 09:05 봉 시가 · 시가총액 · 섹터 · 시장은 지금 값"}}
