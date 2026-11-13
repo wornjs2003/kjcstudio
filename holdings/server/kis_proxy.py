@@ -4467,7 +4467,29 @@ MEMBER_RECENT_SEC = 300
 _member_snaps = {}                          # code → (그날 날짜, [(시각초, 매수 누적, 매도 누적), …])
 
 
+_member_change = {}     # 코드 → (매수, 매도, 바뀐 시각 "HH:MM") — 바닥 줄 시각을 「마지막으로 바뀐 때」 로(2026-11-13)
+
+
+def flow_live(now=None):
+    """외국계 창구 · 외국인/기관 값이 움직이는 때인가 — 그날 장이 열리고 프리장 시작(PRE_OPEN) ~ 넥스트레이드 끝(AFTER_CLOSE).
+    밖이면 마지막 값으로 멈추고 KIS 를 다시 안 부른다(재권님 「응 해」 11-13 11:52 — 장 뒤 · 주말에도 60초마다 부르고 시각이 계속 바뀌어
+    살아 있는 값처럼 보이던 것). 그날 열리는지 못 쟀으면 평일은 연 것으로 본다(market_hours.in_regular 와 같게)."""
+    now = now or datetime.now(KST)
+    try:
+        if market_hours.today(sys.modules[__name__], now=now)["open"] is False:
+            return False
+    except Exception:
+        if now.weekday() >= 5:
+            return False
+    hm = now.strftime("%H%M")
+    return market_hours.PRE_OPEN <= hm < market_hours.AFTER_CLOSE
+
+
 def fetch_investor_member(cfg, code):
+    live = flow_live()
+    hit = _investor_member_cache.get(code)
+    if hit is not None and not live:
+        return dict(hit[1], frozen=True)             # 장 밖 — 마지막 값 그대로(시각은 마지막으로 바뀐 때)
     cached = _ttl_get(_investor_member_cache, code, INVESTOR_MEMBER_TTL)
     if cached is not None:
         return cached
@@ -4510,9 +4532,18 @@ def fetch_investor_member(cfg, code):
             "windowSec": MEMBER_RECENT_SEC,     # 「최근」 창 길이 — 바닥 줄 원이 프로그램 · 창구 둘 다 이 값으로 센다(2026-11-10 개념정의 검수)
         },
         "volume": _num(o.get("acml_vol"), int),
-        "at": datetime.now(KST).strftime("%H:%M"),     # KIS 에서 받은 시각 — 큰 차트 바닥 줄이 「정보가 들어온 시각」 으로 쓴다(2026-11-03)
+        "at": None,                                   # 외국계 창구 누적이 마지막으로 바뀐 시각(아래) — 전에는 받은 시각이라 장 뒤에도 계속 바뀌었다(11-13)
+        "fetchedAt": datetime.now(KST).strftime("%H:%M"),
+        "frozen": not live,
     }
     ff = out["foreignFirms"]
+    prev = _member_change.get(code)
+    if prev and (prev[0], prev[1]) == (ff["buy"], ff["sell"]):
+        out["at"] = prev[2]
+    elif live or prev:
+        out["at"] = out["fetchedAt"]                  # 장중에 바뀌었다 — 받은 시각이 곧 바뀐 시각
+        _member_change[code] = (ff["buy"], ff["sell"], out["at"])
+    # 장 밖에 처음 받은 값(서버를 장 뒤에 띄움)은 언제 바뀌었는지 모른다 — at 은 None(「모름」)으로 둔다
     now = time.time()
     day = datetime.now(KST).strftime("%Y-%m-%d")
     d, snaps = _member_snaps.get(code) or (day, [])
@@ -5013,6 +5044,7 @@ def fetch_finance_multi(cfg, codes, nq, ny):
 # 입력 시각(외국인 09:30·11:20·13:20·14:30 / 기관 10:00·11:20·13:20·14:30,
 # ±10분)으로 미룰 뿐이다. gb=1 에 기관이 0 인 것이 그 짐작과 맞는다.
 # **회차와 시각의 대응은 아직 못 박지 않았다** — 화면에 시각을 적지 않는다.
+_est_frozen = {}            # 장 밖 — 외국인 · 기관 응답을 코드마다 한 벌 들고 다시 안 부른다(flow_live · 11-13)
 INVESTOR_EST_TTL = 60      # 하루 네 번만 바뀐다. 자주 부를 이유가 없다
 _investor_est_cache = {}
 
@@ -10650,6 +10682,11 @@ class Handler(SimpleHTTPRequestHandler):
                 if not (code.isdigit() and len(code) == 6):
                     self._send_json({"ok": False, "error": "code 는 6자리 숫자여야 합니다."}, 400)
                     return
+                live = flow_live()
+                held = _est_frozen.get(code)
+                if not live and held is not None:            # 장 밖 — 마지막 응답 그대로 · KIS 를 다시 안 부름(11-13)
+                    self._send_json(held)
+                    return
                 data = fetch_investor_estimate(cfg, code)
                 # amount — 화면이 금액(원)으로 그리는 값 하나(11-05 재권님 「금액으로 다 맞춰줘」). 마감 뒤 확정치가 있으면 그것(basis
                 # confirmed) · 없으면 최신 회차 수량 × 현재가(approx · 증권사 가집계는 수량만 준다) · 못 셈은 None
@@ -10665,10 +10702,10 @@ class Handler(SimpleHTTPRequestHandler):
                     amount = {"basis": "estimate", "seq": lt.get("seq"), "approx": True,
                               **{k: (lt.get(k) * p0 if lt.get(k) is not None and p0 else None) for k in ("foreign", "inst")}}
                 data = dict(data or {}, amount=amount)
-                self._send_json({
+                resp = {
                     "ok": bool(data.get("latest") or conf), "data": data,
                     "meta": {
-                        "code": code, "qtyUnit": "주", "amtUnit": "원",
+                        "code": code, "qtyUnit": "주", "amtUnit": "원", "frozen": not live,
                         # **확정치가 아니다. 화면에 그대로 적어야 한다**
                         "provisional": True,
                         "person": False,     # 개인은 이 응답에 없다
@@ -10677,7 +10714,12 @@ class Handler(SimpleHTTPRequestHandler):
                                 "기관 10:00·11:20·13:20·14:30 (±10분)",
                         "cacheTtl": INVESTOR_EST_TTL,
                     },
-                })
+                }
+                if live:
+                    _est_frozen.pop(code, None)
+                elif resp["ok"]:
+                    _est_frozen[code] = resp                  # 장 밖 첫 응답을 들고 그날 밤 · 주말 내내 그대로 낸다
+                self._send_json(resp)
                 return
 
             # 전날 정규장 5분봉 거래량 — 차트 위 「전날 같은 시각 대비 거래량 %」(2026-11-10 · vol_prev_day)
