@@ -14,7 +14,7 @@
     업종        같은 업종(네이버 WICS · company_profile.sectors)끼리 프리장 등락률을 묶는다 — 거래가 있는 종목이 SECTOR_MIN 이상인 업종만 ·
                 평균 등락률 크기(절댓값) 큰 순 SECTOR_TOP 개 · 오른 수 · 내린 수 · 가장 많이 움직인 종목 둘
                 (11-05 재권님 「프리장에 동일업종들이 등락이 많은것도 표기가 되면 좋을거같은데」)
-    고르기      전일 정규장 종가보다 오른(RISE_MIN_PCT 초과) 종목 중 프리장 거래대금 상위 TOP_N · 거래대금 큰 순 — pick() 한 곳
+    고르기      전일 정규장 종가보다 오른(RISE_MIN_PCT 초과) 종목 중 프리장 거래대금 상위 TOP_N — pick() 한 곳 · 보이는 차례는 등락률 큰 순(11-13)
                 (2026-11-12 재권님 「프리장 룰 이건데 개선하자. 거래대금이 많은데 상승인 종목 70개」 → (가) 「응 맞아」 ·
                  「실시간으로 거래대금 재면서 최종으로 8시 50분에 궅힌다」. 그 전에는 거래대금 상위 40 · 프로그램 순매수 큰 순이었다 —
                  프로그램은 거르기에서 빠지고 칸으로만 남는다)
@@ -171,6 +171,8 @@ def _make(proxy, cfg):
                      "amt": amt(r) or None, "vol": r.get("vol"),
                      "ratio": round(r["vol"] / pv, 1) if pv and pv >= MIN_PREV else None,
                      "program": pg, "disc": disc.get(c) or []})
+    rows.sort(key=lambda x: -(x["pct"] if x["pct"] is not None else -999))   # 보이는 차례는 등락률 큰 순 — 고르기(pick)는 거래대금 순 그대로
+    #   (2026-11-13 재권님 「프리장에 순위는 등락이 높은거 순으로 정열해줘」)
     return {"rows": rows, "sectors": _sectors(nx), "noTrade": False, "programMissing": missing, "candidates": len(cand),
             "day": day, "hm": now.strftime("%H:%M")}
 
@@ -223,6 +225,18 @@ def _rebuild(proxy, cfg):
 
 
 def fetch(proxy, cfg):
+    """(판, 지은 시각, phase) — 그날 판은 넥장이 끝나는 market_hours.AFTER_CLOSE(20:00)까지만 내고, 그 뒤부터 다음 프리장(08:00)까지는
+    빈 판(rows [] · reset True · phase before)을 낸다(2026-11-13 재권님 「프리장 초반상승은 리셋되야해」 · 「저녁 8시에 리셋」).
+    짓고 남기는 것은 그대로다 — 남긴 판은 DB 에 있고, 단타 판 · 등락 상위 판은 그날 낮에 읽는다."""
+    import market_hours
+    data, at, ph = _fetch(proxy, cfg)
+    now = _now()
+    if data and ph != "live" and (data.get("day") != now.strftime("%Y%m%d") or now.strftime("%H%M") >= market_hours.AFTER_CLOSE):
+        return {"rows": [], "sectors": [], "noTrade": False, "reset": True, "day": data.get("day"), "hm": data.get("hm")}, at, "before"
+    return data, at, ph
+
+
+def _fetch(proxy, cfg):
     """(판, 지은 시각, phase). 쓰는 서버(start 를 부른 8765)는 프리장 동안 낡으면 뒤에서 다시 짓고 08:50~09:00 에 한 번 굳힌다 ·
     읽는 서버는 DB 에 남은 판만 읽는다."""
     now = _now()
