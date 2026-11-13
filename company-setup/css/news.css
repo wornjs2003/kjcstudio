@@ -40,18 +40,45 @@
 
 /* 맨 위 — 오늘의 주요 이슈 정리 · 지금 세계 주요 이슈 (2026-11-13 · js/news-issues.js) */
 .mk .mute { color: var(--kh-text-muted); font-size: 12px; }
-.mk .ni-b { padding: 8px 0; border-bottom: 1px solid var(--kh-border); }
-.mk .ni-b:last-child { border-bottom: 0; }
-.mk .ni-b .h { display: flex; gap: 8px; align-items: baseline; }
-.mk .ni-b .k { color: var(--kh-text-muted); font-size: 12px; }
-.mk .ni-b .h { display: block; }
-.mk .ni-b .h .k { margin-right: 6px; }
-.mk .ni-b .tm { display: block; padding-left: 18px; color: var(--kh-text-muted); font-size: 12px; font-weight: 400; }
-@media (min-width: 900px) { .mk .ni-b .h { display: flex; flex-wrap: wrap; } .mk .ni-b .tm { padding-left: 0; } }
-.mk .ni-b p { margin: 4px 0 4px 18px; font-size: 13.5px; line-height: 1.6; }
-.mk .ni-b details { margin-left: 18px; font-size: 12.5px; }
-.mk .ni-b .a { display: flex; gap: 8px; padding: 2px 0; }
+/* 맨 위 신문 꼴 — 제호 · 머리기사 · 두 단 · 속보(재권님 「글이 잘읽힐수 있게 · 고급신문처럼」 → 「폰트는 바꾸지 말고」 11-13 · 시안 temp/시황분석-paper) · 좁은 폭 먼저 */
+.mk .ni-paper { background: var(--kh-bg-card); border-radius: var(--kh-radius-lg); padding: 18px 16px 16px; margin: 4px 0 12px; min-width: 0; }   /* 주요 뉴스 · 속보 흰 칸 따로(재권님 「흰 네모칸을 나누라고」 11-13) */
+.mk .ni-mast { border-bottom: 3px double var(--kh-text-primary); padding-bottom: 10px; margin-bottom: 14px; }
+.mk .ni-mast h2 { font-weight: 900; font-size: 24px; letter-spacing: -0.5px; margin: 0; }
+.mk .ni-mast .d { font-size: 12px; color: var(--kh-text-secondary); line-height: 1.6; margin-top: 4px; }
+.mk .ni-cols { display: grid; grid-template-columns: 1fr; gap: 0 12px; align-items: start; margin-bottom: 6px; }
+.mk .ni-brief { display: block; }
+.mk .ni-b { border-bottom: 1px solid var(--kh-border); padding: 16px 0 18px; }
+.mk .ni-b:first-child { padding-top: 4px; }
+.mk .ni-b .h b { display: block; font-weight: 700; font-size: 19px; line-height: 1.45; letter-spacing: -0.3px; word-break: keep-all; }
+.mk .ni-b:first-child .h b { font-size: 24px; line-height: 1.35; font-weight: 900; }
+.mk .ni-b .tm { display: block; padding-top: 6px; color: var(--kh-text-muted); font-size: 12px; }
+.mk .ni-b p { margin: 10px 0 8px; font-size: 15.5px; line-height: 1.85; max-width: 46em; word-break: keep-all; }
+.mk .ni-b:first-child p { font-size: 17px; max-width: 52em; }
+.mk .ni-b details { font-size: 12.5px; color: var(--kh-text-secondary); }
+.mk .ni-b details summary { cursor: pointer; }
+.mk .ni-b .a { display: flex; gap: 8px; padding: 4px 0; border-top: 1px dotted var(--kh-border); }
 .mk .ni-b .a small { color: var(--kh-text-muted); white-space: nowrap; }
+.mk .ni-flash-box h3 { font-weight: 900; font-size: 19px; margin: 0 0 6px; padding-bottom: 8px; border-bottom: 2px solid var(--kh-text-primary); }
+.mk .ni-flash .fs { grid-column: 1 / -1; margin: 4px 0 0; font-size: 14px; line-height: 1.75; color: var(--kh-text-primary); word-break: keep-all; }
+.mk .ni-flash .fs.mute { color: var(--kh-text-muted); font-size: 12px; }
+.mk .ni-sub { font-size: 12px; color: var(--kh-text-muted); }
+.mk .ni-flash .pr { grid-template-columns: 1fr auto; padding: 10px 0; font-size: 15px; }
+.mk .ni-flash .pr > span:first-child, .mk .ni-flash .pr > a { grid-column: 1 / -1; }
+.mk .ni-flash .pr > span:first-child { font-variant-numeric: tabular-nums; color: var(--kh-text-muted); font-weight: 600; font-size: 12.5px; }
+.mk .ni-flash .pr > span.today { color: var(--kh-up); }        /* 오늘 — 빨강 */
+.mk .ni-flash .pr > span.yday { color: var(--kh-accent); }     /* 어제 — 파랑 · 그 앞은 흐림 */
+.mk .ni-flash .pr > a { font-weight: 700; line-height: 1.5; word-break: keep-all; }
+@media (min-width: 900px) {
+  .mk .ni-paper { padding: 28px 32px 24px; }
+  .mk .ni-flash-box { padding: 28px 24px 24px; }
+  .mk .ni-flash-box h3 { font-size: 22px; }
+  .mk .ni-mast { display: flex; justify-content: space-between; align-items: baseline; }
+  .mk .ni-mast h2 { font-size: 30px; }
+  .mk .ni-mast .d { text-align: right; margin-top: 0; }
+  .mk .ni-cols { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }   /* 왼쪽 주요 뉴스 · 오른쪽 속보(재권님 11-13) */
+  .mk .ni-b:first-child .h b { font-size: 30px; }
+
+}
 .mk .ni-src { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; }
 .mk .ni-src b { margin-right: 4px; }
 .mk .ni-src > span#ni-src { display: contents; }
@@ -72,3 +99,8 @@
 .mk .ni-rise b { display: block; }
 .mk .pr { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--kh-border); font-size: 13px; }
 .mk .pr details { grid-column: 2 / 4; font-size: 12px; color: var(--kh-text-secondary); }
+.mk .ni-flash .new { color: var(--kh-up); font-weight: 600; }
+.mk .pr a, .mk .ni-b .a a { color: inherit; text-decoration: none; }
+.mk .pr a:hover, .mk .ni-b .a a:hover { text-decoration: underline; }
+.mk .ni-iss tr.an td { border-bottom: 1px solid var(--kh-border); padding-top: 0; }
+.mk .ni-iss tr.an p { margin: 0 0 4px; font-size: 13.5px; line-height: 1.75; word-break: keep-all; max-width: 60em; }
