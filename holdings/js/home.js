@@ -201,7 +201,7 @@ function paintMkt() {
         <span class="kh-mut">나스닥선물</span>
         <b class="kh-num ${dirClass(nq.pct)}">${fmtNum(nq.v, 2)}</b>
         <span class="kh-num ${dirClass(nq.pct)}">${fmtPct(nq.pct)}</span>
-        <span class="kh-mut">10분 지연</span>
+        ${nq.delayMin ? `<span class="kh-mut">${nq.delayMin}분 지연</span>` : '<span class="kh-mut">지연</span>'}
       </span>`
     : '';
   const xp = (lastIndices || {}).optExpiry;
