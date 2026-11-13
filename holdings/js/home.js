@@ -3196,7 +3196,8 @@ function applyPrices(map) {
        432 → 553ms 로 **28% 늘었다.** 장이 닫힌 시간대여서 **그 전부가 헛일**
        이었다 — 값이 하나도 안 움직이는데 계속 다시 쓴 것이다. */
     if (live) {
-      const stamp = `${live.price}|${live.pct}|${live.volume}|${live.value}`;
+      /* 예상가도 넣는다 — 동시호가 동안은 현재가 · 거래량이 안 움직이고 예상가만 바뀌어, 빼면 모달 머리줄이 처음 예상가에 멈췄다(2026-11-13 재권님 「차트의 예상가격과 실시간순위의 예상가격 안맞는거」) */
+      const stamp = `${live.price}|${live.pct}|${live.volume}|${live.value}|${live.expect ? live.expect.price : ''}`;
       if (stamp !== lastModalStamp) {
         lastModalStamp = stamp;
         stockModal.view.paint(live);
