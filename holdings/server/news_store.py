@@ -288,7 +288,7 @@ def groups(hours=24, limit=80):
                 "group": r["group_id"], "title": r["title"], "link": r["link"],
                 "at": r["at"], "source": r["source"], "topic": r["topic"],
                 "topicLabel": r["topic_label"], "alert": r["alert"],
-                "titleOrig": r["title_orig"],
+                "titleOrig": _orig(r),
                 "more": 0, "others": [],
             })
             if g["link"] == r["link"]:
@@ -296,7 +296,7 @@ def groups(hours=24, limit=80):
             g["more"] += 1
             if len(g["others"]) < 4:
                 g["others"].append({"title": r["title"], "link": r["link"],
-                                    "source": r["source"], "at": r["at"], "titleOrig": r["title_orig"]})
+                                    "source": r["source"], "at": r["at"], "titleOrig": _orig(r)})
             # 묶음 안에 중요한 것이 있으면 묶음도 중요로 친다
             if r["alert"] and not g["alert"]:
                 g["alert"] = r["alert"]
@@ -341,8 +341,7 @@ def issues(now=None):
     can_count = fd is not None and len(nations) > 1
     by = {}
     with _conn() as c:
-        for r in c.execute("SELECT title, link, source, topic, topic_label, at, at_ts, group_id, is_lead, title_orig "
-                           "FROM news_items WHERE at_ts >= ? ORDER BY at_ts", (since,)):
+        for r in c.execute("SELECT * FROM news_items WHERE at_ts >= ? ORDER BY at_ts", (since,)):
             by.setdefault(r["group_id"], []).append(r)
     rise0, rise1 = now - ISSUE_RISE_H * 3600, now - 2 * ISSUE_RISE_H * 3600
     out = []
@@ -374,7 +373,7 @@ def issues(now=None):
             "nationsUnknown": unknown,
             "recent": recent, "before": before,
             "confirm": "1차 출처" if primary else "기사만",
-            "items": [{"title": a["title"], "source": a["source"], "at": a["at"], "link": a["link"], "titleOrig": a["title_orig"]}
+            "items": [{"title": a["title"], "source": a["source"], "at": a["at"], "link": a["link"], "titleOrig": _orig(a)}
                       for a in reversed(arts)][:ISSUE_ARTICLES_MAX],
         })
     out.sort(key=lambda x: (x["presses"], x["nations"] if x["nations"] is not None else -1, x["articles"], x["last"] or ""), reverse=True)
@@ -387,6 +386,11 @@ def issues(now=None):
             "note": "뜨거운 정도는 숫자 그대로(합친 점수 없음) · 줄 세우기 언론사 수 → 나라 수 → 기사 수 → 마지막 보도 · "
                     "rising 은 최근 riseH 시간 기사 수(recent)가 그 앞 같은 시간(before)보다 많은 이슈 · 종목 대입은 산업 분석 몫"}
     return {"issues": out[:ISSUE_LIMIT], "rising": [x["id"] for x in rising], "meta": meta}
+
+
+def _orig(r):
+    """옮긴 제목의 원문 칸 — 칸을 더하기 전 DB(읽기 전용 서버가 8765 보다 먼저 뜬 때)에서도 안 깨지게 없으면 None."""
+    return r["title_orig"] if "title_orig" in r.keys() else None
 
 
 def tr_get(origs):
