@@ -196,13 +196,12 @@ def _kst(pubdate):
 
 
 def fetch_feed(feed, topics, drop):
-    """한 출처를 받아 주제어에 걸리는 것만 돌려준다 — 받는 곳 갈래 (가) 1차 출처는 전부(2026-11-13).
+    """한 출처를 받아 주제어에 걸리는 것만 돌려준다.
 
     주제가 없는 기사는 버린다. 경제지라도 절반 넘게는 주가와 상관없는
     일반 기사다 (2026-09-15 실측: 100건 중 20건만 걸렸다).
     """
     out = []
-    primary = str(feed.get("갈래") or "").startswith("(가)")    # 1차 출처(정부 · 중앙은행 · 거래소) — 주제어 거르기 없이 받음
     for block in _ITEM.findall(_get(feed["url"]))[:PER_FEED]:
         def pick(name):
             m = _TAG[name].search(block)
@@ -212,16 +211,16 @@ def fetch_feed(feed, topics, drop):
         if not title or _dropped(title, drop):
             continue
         topic = pick_topic(title, topics)
-        if not topic and not primary:
-            continue                                   # (가) 1차 출처는 주제어 없이 받는다 — 영어 제목이라 주제어에 거의 안 걸린다(2026-11-13)
+        if not topic:
+            continue
 
         out.append({
             "title": title,
             "link": pick("link"),
             "at": _kst(pick("date")),
             "source": feed.get("label") or feed.get("id") or "",
-            "topic": topic.get("id") if topic else None,
-            "topicLabel": topic.get("label") if topic else None,
+            "topic": topic.get("id"),
+            "topicLabel": topic.get("label"),
         })
     return out
 
