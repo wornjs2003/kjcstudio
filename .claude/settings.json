@@ -152,6 +152,11 @@
             "type": "command",
             "command": "KJC_CONFIRM_HOOK=block sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-confirm-box.py\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "KJC_READABLE_HOOK=look sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-readable.py\"",
+            "timeout": 10
           }
         ]
       }
