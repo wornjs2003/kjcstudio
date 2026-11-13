@@ -129,7 +129,12 @@ def init():
         CREATE INDEX IF NOT EXISTS ix_news_at   ON news_items(at_ts DESC);
         CREATE INDEX IF NOT EXISTS ix_news_grp  ON news_items(group_id);
         CREATE INDEX IF NOT EXISTS ix_news_sent ON news_items(digest_at);
+        CREATE TABLE IF NOT EXISTS news_tr (     -- 해외 1차 출처 제목 옮김(2026-11-13) — 원문 → 한국어 · 한 번 옮긴 것은 다시 안 부른다
+          orig TEXT PRIMARY KEY, ko TEXT NOT NULL, at INTEGER);
         """)
+        cols = {r[1] for r in c.execute("PRAGMA table_info(news_items)")}
+        if "title_orig" not in cols:
+            c.execute("ALTER TABLE news_items ADD COLUMN title_orig TEXT")   # 옮긴 제목의 원문(영어 등) — 없으면 제목이 원문
 
 
 # ---------------------------------------------------------------- 묶기
@@ -247,10 +252,10 @@ def store(rows):
 
             c.execute("""INSERT INTO news_items
                 (link, title, source, topic, topic_label, at, at_ts,
-                 group_id, is_lead, alert, seen_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                 group_id, is_lead, alert, seen_at, title_orig)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                       (link, title, row.get("source"), row.get("topic"),
-                       row.get("topicLabel"), at, at_ts, gid, is_lead, alert, now))
+                       row.get("topicLabel"), at, at_ts, gid, is_lead, alert, now, row.get("titleOrig")))
             added.append({"link": link, "title": title, "at": at,
                           "source": row.get("source"), "topic": row.get("topic"),
                           "topicLabel": row.get("topicLabel"),
@@ -283,6 +288,7 @@ def groups(hours=24, limit=80):
                 "group": r["group_id"], "title": r["title"], "link": r["link"],
                 "at": r["at"], "source": r["source"], "topic": r["topic"],
                 "topicLabel": r["topic_label"], "alert": r["alert"],
+                "titleOrig": r["title_orig"],
                 "more": 0, "others": [],
             })
             if g["link"] == r["link"]:
@@ -290,7 +296,7 @@ def groups(hours=24, limit=80):
             g["more"] += 1
             if len(g["others"]) < 4:
                 g["others"].append({"title": r["title"], "link": r["link"],
-                                    "source": r["source"], "at": r["at"]})
+                                    "source": r["source"], "at": r["at"], "titleOrig": r["title_orig"]})
             # 묶음 안에 중요한 것이 있으면 묶음도 중요로 친다
             if r["alert"] and not g["alert"]:
                 g["alert"] = r["alert"]
@@ -335,7 +341,7 @@ def issues(now=None):
     can_count = fd is not None and len(nations) > 1
     by = {}
     with _conn() as c:
-        for r in c.execute("SELECT title, link, source, topic, topic_label, at, at_ts, group_id, is_lead "
+        for r in c.execute("SELECT title, link, source, topic, topic_label, at, at_ts, group_id, is_lead, title_orig "
                            "FROM news_items WHERE at_ts >= ? ORDER BY at_ts", (since,)):
             by.setdefault(r["group_id"], []).append(r)
     rise0, rise1 = now - ISSUE_RISE_H * 3600, now - 2 * ISSUE_RISE_H * 3600
@@ -368,7 +374,7 @@ def issues(now=None):
             "nationsUnknown": unknown,
             "recent": recent, "before": before,
             "confirm": "1차 출처" if primary else "기사만",
-            "items": [{"title": a["title"], "source": a["source"], "at": a["at"], "link": a["link"]}
+            "items": [{"title": a["title"], "source": a["source"], "at": a["at"], "link": a["link"], "titleOrig": a["title_orig"]}
                       for a in reversed(arts)][:ISSUE_ARTICLES_MAX],
         })
     out.sort(key=lambda x: (x["presses"], x["nations"] if x["nations"] is not None else -1, x["articles"], x["last"] or ""), reverse=True)
@@ -381,6 +387,29 @@ def issues(now=None):
             "note": "뜨거운 정도는 숫자 그대로(합친 점수 없음) · 줄 세우기 언론사 수 → 나라 수 → 기사 수 → 마지막 보도 · "
                     "rising 은 최근 riseH 시간 기사 수(recent)가 그 앞 같은 시간(before)보다 많은 이슈 · 종목 대입은 산업 분석 몫"}
     return {"issues": out[:ISSUE_LIMIT], "rising": [x["id"] for x in rising], "meta": meta}
+
+
+def tr_get(origs):
+    """옮겨 둔 제목 {원문: 한국어}. 못 읽으면 빈 dict(옮김 없음으로 — 원문을 화면에 내지 않는 쪽으로 간다)."""
+    origs = [o for o in set(origs) if o]
+    if not origs:
+        return {}
+    try:
+        with _conn() as c:
+            q = "SELECT orig, ko FROM news_tr WHERE orig IN (%s)" % ",".join("?" * len(origs))
+            return {o: k for o, k in c.execute(q, origs)}
+    except sqlite3.Error:
+        return {}
+
+
+def tr_put(pairs):
+    """옮긴 제목을 남긴다 — 쓰기 되는 서버(8765)만. 남긴 수."""
+    if not pairs or not marketdb.writable():
+        return 0
+    now = int(time.time())
+    with _lock, _conn() as c:
+        c.executemany("INSERT OR REPLACE INTO news_tr VALUES (?,?,?)", [(o, k, now) for o, k in pairs.items()])
+    return len(pairs)
 
 
 def counts(hours=24):
