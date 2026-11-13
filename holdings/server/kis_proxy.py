@@ -9695,7 +9695,7 @@ class Handler(SimpleHTTPRequestHandler):
                 an = news_brief.analyses([x["id"] for x in r["issues"]])
                 for x in r["issues"]:
                     x["analysis"], x["analyzedAt"] = an.get(x["id"], (None, None))
-                r["meta"]["analysis"] = {"top": news_brief.ANALYZE_TOP, "failed": news_brief._st["anFail"], "by": news_brief.BY}
+                r["meta"]["analysis"] = {"top": news_brief.ANALYZE_TOP, "on": news_brief.ON, "failed": news_brief._st["anFail"], "by": news_brief.BY}
                 self._send_json({"ok": True, "data": {"issues": r["issues"], "rising": r["rising"]}, "meta": r["meta"]})
                 return
 
@@ -11117,8 +11117,11 @@ def main():
                  (" · ".join("%02d:%02d" % t for t in news_store.DIGEST_SLOTS)
                   if _news_send else "쌓기만 — 메인(%d)에서만 보냅니다" % MAIN_PORT)))
         import news_brief
-        if news_brief.start():           # 아침 정리(07:00) · 속보 정리 — 쓰는 서버만 · 알림 없음(2026-11-13)
-            print("  뉴스 정리 : 사용 (아침 %02d:%02d · 속보 %d초마다 · 알림 없음)" % (*news_brief.BRIEF_AT, news_brief.FLASH_TICK))
+        if news_brief.start():           # 아침 정리(07:00) · 속보 정리 · 이슈 분석 — 쓰는 서버 · KJC_NEWS_AI=1 일 때만 · 알림 없음(2026-11-13)
+            print("  뉴스 정리 : 사용 (아침 %02d:%02d · 속보 %d초마다 · 이슈 분석 %d분마다 · 알림 없음)"
+                  % (*news_brief.BRIEF_AT, news_brief.FLASH_TICK, news_brief.ANALYZE_TICK // 60))
+        else:
+            print("  뉴스 정리 : 꺼짐 (KJC_NEWS_AI=1 이 아님 — Claude 를 부르는 켜기 자리)")
 
     # **공시 발송도 포트로 가린다** (2026-09-30 지시 — 워커를 걷어냈다).
     #
