@@ -9708,6 +9708,18 @@ class Handler(SimpleHTTPRequestHandler):
 
             # 이슈 판 — 같은 사건 묶음을 「이슈」 로 올려 뜨거운 정도를 숫자로 (2026-11-12 재권님 「뉴스 이슈 만들기」 → 「응 올려놔」)
             # 셈 · 기준 상수는 news_store.issues 한 곳 · `issues` 주소는 「지금 RSS 받기」 라 이름을 따로 둔다
+            # 뉴스 정리 글 — 아침 정리 · 속보 정리 (2026-11-13 재권님 「응 커밋해」 · 짓는 셈과 시각은 news_brief 한 곳)
+            if route == "brief":
+                import news_brief
+                r = news_brief.brief()
+                self._send_json({"ok": r["data"] is not None, "data": r["data"], "meta": r["meta"]})
+                return
+            if route == "flash":
+                import news_brief
+                r = news_brief.flash()
+                self._send_json({"ok": True, "data": r["items"], "meta": r["meta"]})
+                return
+
             if route == "hot":
                 r = news_store.issues()
                 self._send_json({"ok": True, "data": {"issues": r["issues"], "rising": r["rising"]}, "meta": r["meta"]})
@@ -11134,6 +11146,9 @@ def main():
               % (news_store.COLLECT_INTERVAL // 60,
                  (" · ".join("%02d:%02d" % t for t in news_store.DIGEST_SLOTS)
                   if _news_send else "쌓기만 — 메인(%d)에서만 보냅니다" % MAIN_PORT)))
+        import news_brief
+        if news_brief.start():           # 아침 정리(07:00) · 속보 정리 — 쓰는 서버만 · 알림 없음(2026-11-13)
+            print("  뉴스 정리 : 사용 (아침 %02d:%02d · 속보 %d초마다 · 알림 없음)" % (*news_brief.BRIEF_AT, news_brief.FLASH_TICK))
 
     # **공시 발송도 포트로 가린다** (2026-09-30 지시 — 워커를 걷어냈다).
     #
