@@ -62,7 +62,8 @@ export async function fetchLiveIndices() {
        생겨 버리므로, 목록에 표시만 달아 둔다. */
     j.data.futures = j.futures || null;
     j.data.futuresNight = j.futuresNight || null;   // KRX 야간선물 (2026-10-26)
-    j.data.optExpiry = j.optExpiry || null;         // 옵션 만기(야간 옆 칩 · 서버 market_hours.opt_expiry · 2026-11-12)
+    j.data.optExpiry = j.optExpiry || null;
+    j.data.nqFutures = j.nqFutures || null;         // 나스닥 100 선물(야후 · 10분쯤 늦음 · 2026-11-13)         // 옵션 만기(야간 옆 칩 · 서버 market_hours.opt_expiry · 2026-11-12)
     return j.data;
   } catch {
     return null;
