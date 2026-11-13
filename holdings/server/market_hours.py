@@ -198,12 +198,22 @@ def _expiry_of(proxy, y, m, now):
     d += timedelta(days=(OPT_EXPIRY_WEEKDAY - d.weekday()) % 7 + 7 * (OPT_EXPIRY_WEEK - 1))
     sure = True
     for _ in range(10):
-        t = today(proxy, day=d.strftime("%Y%m%d"), now=now)
+        day = d.strftime("%Y%m%d")
+        t = today(proxy, day=day, now=now)
         if t["open"] is not False:
-            sure = sure and t["open"] is True
+            # 휴장일 표는 앞날 며칠만 있다 — 지난 날은 코스피 일봉(0001)이 있으면 열린 날로 확인한다(투자 전략 지난 달 만기 · 11-13)
+            sure = sure and (t["open"] is True or _index_bar(proxy, day))
             break
         d -= timedelta(days=1)
     return d, sure
+
+
+def _index_bar(proxy, day):
+    try:
+        with proxy.db_conn() as conn:
+            return conn.execute("SELECT 1 FROM candles WHERE code = '0001' AND period = 'D' AND substr(ts, 1, 8) = ?", (day,)).fetchone() is not None
+    except Exception:
+        return False
 
 
 def _prev_trading(proxy, d, now):
@@ -212,6 +222,16 @@ def _prev_trading(proxy, d, now):
         if today(proxy, day=d.strftime("%Y%m%d"), now=now)["open"] is not False:
             return d
     return d
+
+
+def opt_expiry_year(proxy, year, now=None):
+    """그 해 열두 달 옵션 만기 — [{"month", "day": YYYYMMDD, "witch", "sure"}] · 셈은 _expiry_of 한 곳(홈 칩과 같다)"""
+    now = now or _now()
+    out = []
+    for m in range(1, 13):
+        d, sure = _expiry_of(proxy, year, m, now)
+        out.append({"month": m, "day": d.strftime("%Y%m%d"), "witch": m in WITCH_MONTHS, "sure": sure})
+    return out
 
 
 def opt_expiry(proxy, now=None):
