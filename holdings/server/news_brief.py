@@ -10,6 +10,10 @@
                 서버가 07:00 뒤에 떴고 그날 글이 없으면 뜰 때 한 번 짓는다.
     속보 정리   제목에 「속보」 가 든 기사가 새로 쌓이면(FLASH_TICK 마다 봄) 그 기사 · 같은 묶음 기사 제목으로 한두 문장(무슨 일 · 왜 중요한가)을 붙인다.
                 주소는 지난 FLASH_HOURS 시간 속보 — 새것부터 · 정리 전이면 summary null.
+    이슈 분석   뜨거운 이슈 위 ANALYZE_TOP 개마다 묶인 기사 본문을 claude 가 WebFetch 로 읽고(ANALYZE_LINKS 건까지) 한두 문단 분석
+                (무슨 일 · 왜 중요한가 · 시장에 무엇) — /api/news/hot 의 issues[].analysis · analyzedAt. **본문은 우리 쪽에 저장하지 않는다**(언론사 약관 자리 ·
+                재권님 「나」 11-13 12:1x — 본문까지 읽되 저장 안 함). 처음 · 기사가 ANALYZE_REGROW 건 넘게 늘었을 때만 다시 · ANALYZE_TICK 마다 한 건.
+                잰 값(12:1x 한 건) — 30초 · 0.12달러(여쭐 때 어림 0.03 의 네 배) → 한도로 하루 약 10~15번 · 약 1.5달러
     공통        쓰기 되는 서버(8765)만 짓는다 — 메인 · 세션 서버는 DB 에 남은 것을 읽는다. 알림은 없다.
                 못 지으면 지난 글을 그대로 두고 meta.failed 에 「못 지음(시각 · 까닭)」 · 실패 뒤 RETRY_SEC 쉰다.
                 글은 기사 제목 안의 말로만 쓰게 시킨다 · 응답 by 칸에 「Claude 가 지음」.
@@ -32,6 +36,10 @@ BRIEF_IN = 15                 # 넣는 이슈 수(news_store.issues 줄 세운 �
 BRIEF_TITLES = 8              # 이슈마다 넣는 기사 제목 수
 BRIEF_PICK = 5                # 골라 쓰는 이슈 수
 BRIEF_ARTICLES = 8            # 이슈마다 붙여 내는 기사 수
+ANALYZE_TOP = 10              # 분석하는 이슈 수(줄 세운 위에서부터)
+ANALYZE_REGROW = 3            # 기사가 이만큼 늘면 다시 분석
+ANALYZE_TICK = 600            # 분석 한 건 간격(초) — 몰아 부르지 않게
+ANALYZE_LINKS = 3             # 이슈마다 읽는 기사 본문 수
 FLASH_WORD = "속보"
 FLASH_HOURS = 24              # 속보 주소가 내는 기간
 FLASH_TICK = 60               # 새 속보를 보는 간격(초)
@@ -41,10 +49,12 @@ TIMEOUT = 180
 BUDGET_USD = "1"              # 한 번 부를 때 비용 상한(달러)
 BY = "Claude(Opus)가 서버에 쌓인 기사 제목으로 지음"
 
-_st = {"briefFail": None, "briefFailAt": 0.0, "flashFail": None, "flashFailAt": 0.0, "calls": 0}
+_st = {"briefFail": None, "briefFailAt": 0.0, "flashFail": None, "flashFailAt": 0.0, "calls": 0,
+       "anFail": None, "anAt": 0.0}
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS news_brief (day TEXT PRIMARY KEY, data TEXT NOT NULL, at TEXT);
 CREATE TABLE IF NOT EXISTS news_flash (link TEXT PRIMARY KEY, summary TEXT NOT NULL, at TEXT);
+CREATE TABLE IF NOT EXISTS news_analysis (issue TEXT PRIMARY KEY, articles INTEGER, analysis TEXT NOT NULL, at TEXT);
 """
 
 
@@ -56,10 +66,11 @@ def _conn():
     return marketdb.connect(timeout=10)
 
 
-def _claude(prompt):
-    """맥미니 claude 를 한 번 — 결과 글. 도구 없음 · 기록 안 남김(claude_chat 과 같은 길)."""
+def _claude(prompt, tools=""):
+    """맥미니 claude 를 한 번 — 결과 글. 도구는 tools 만(기본 없음 · 분석은 WebFetch) · 기록 안 남김(claude_chat 과 같은 길)."""
     import claude_chat
-    r = subprocess.run([claude_chat._claude(), "-p", "--model", MODEL, "--tools", "", "--no-session-persistence",
+    extra = ["--allowedTools", tools] if tools else []
+    r = subprocess.run([claude_chat._claude(), "-p", "--model", MODEL, "--tools", tools, *extra, "--no-session-persistence",
                         "--settings", claude_chat.SETTINGS, "--output-format", "json", "--max-budget-usd", BUDGET_USD],
                        input=prompt, capture_output=True, text=True, timeout=TIMEOUT, cwd="/tmp")
     _st["calls"] += 1
@@ -176,6 +187,41 @@ def flash_once():
     return n
 
 
+# ---------------------------------------------------------------- 이슈 분석
+def analyses(ids):
+    """{이슈 id: (분석, 시각)} — 표가 없으면 빈 값."""
+    ids = [i for i in ids if i]
+    if not ids:
+        return {}
+    try:
+        with _conn() as c:
+            q = "SELECT issue, analysis, at FROM news_analysis WHERE issue IN (%s)" % ",".join("?" * len(ids))
+            return {i: (a, t) for i, a, t in c.execute(q, ids)}
+    except Exception:
+        return {}
+
+
+def analyze_once():
+    """분석이 없거나 기사가 늘어난 이슈 하나를 분석해 남긴다 → 이슈 id 또는 None."""
+    iss = news_store.issues()["issues"][:ANALYZE_TOP]
+    with _conn() as c:
+        c.executescript(_SCHEMA)
+        have = {i: n for i, n in c.execute("SELECT issue, articles FROM news_analysis")}
+    x = next((x for x in iss if x["id"] not in have or x["articles"] - (have[x["id"]] or 0) >= ANALYZE_REGROW), None)
+    if x is None:
+        return None
+    arts = [{"title": a["title"], "source": a["source"], "at": a["at"], "link": a["link"]} for a in x["items"][:ANALYZE_LINKS]]
+    prompt = ("아래는 같은 사건을 다룬 기사들이다. 링크의 기사 본문을 WebFetch 로 읽고 한국어 한두 문단으로 분석하라 — 무슨 일인지 · 왜 중요한지 · "
+              "시장(주식 · 섹터)에 무엇을 뜻하는지. 기사에 없는 사실 · 숫자는 쓰지 말고, 추측은 「~로 보인다」 로 갈라 써라. "
+              "기사 본문을 그대로 옮겨 적지 마라. 분석 글만 내라.\n이슈: %s\n기사: %s" % (x["name"], json.dumps(arts, ensure_ascii=False)))
+    text = _claude(prompt, tools="WebFetch")
+    if not text:
+        raise RuntimeError("빈 분석")
+    with _conn() as c:
+        c.execute("INSERT OR REPLACE INTO news_analysis VALUES (?,?,?,?)", (x["id"], x["articles"], text, _now().strftime("%Y-%m-%d %H:%M")))
+    return x["id"]
+
+
 # ---------------------------------------------------------------- 돌리기
 def start():
     """쓰는 서버(8765)가 뜰 때 한 번 — 아침 정리 · 속보 정리 바퀴."""
@@ -199,6 +245,13 @@ def start():
                     except Exception as e:
                         _st["briefFailAt"] = time.time()
                         _st["briefFail"] = "못 지음(%s · %s)" % (now.strftime("%H:%M"), safe_message(e, 100))
+            if time.time() - _st["anAt"] >= ANALYZE_TICK:
+                _st["anAt"] = time.time()                   # 성공 · 실패 모두 다음 한 건까지 ANALYZE_TICK 쉰다
+                try:
+                    if analyze_once():
+                        _st["anFail"] = None
+                except Exception as e:
+                    _st["anFail"] = "못 지음(%s · %s)" % (now.strftime("%H:%M"), safe_message(e, 100))
             if time.time() - _st["flashFailAt"] >= RETRY_SEC:
                 try:
                     n = flash_once()
