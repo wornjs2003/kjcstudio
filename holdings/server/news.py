@@ -237,8 +237,9 @@ def fetch_feed(feed, topics, drop):
 TR_MODEL = "claude-haiku-5-5"     # 제목 옮기기 — 세 건 4.7초 · 0.0009달러(11-13 잼)
 TR_BATCH = 40                     # 한 번에 옮기는 제목 수
 TR_TIMEOUT = 120
+TR_RETRY_SEC = 1800               # 옮기기가 실패하면 이만큼 쉬고 다시 부른다 — 받을 때마다 되풀이해 부르지 않게(qa 덧 11-13)
 TR_BUDGET_USD = "0.5"             # 한 번 부를 때 비용 상한(달러) — 넘으면 claude 가 스스로 멈춘다(claude_chat.BUDGET_USD 와 같은 꼴)
-_tr = {"running": False, "error": None, "last": None, "calls": 0}
+_tr = {"running": False, "error": None, "last": None, "calls": 0, "failAt": 0.0}
 _tr_lock = threading.Lock()
 
 
@@ -263,7 +264,7 @@ def _tr_kick(titles):
     if not marketdb.writable():
         return
     with _tr_lock:
-        if _tr["running"]:
+        if _tr["running"] or time.time() - _tr["failAt"] < TR_RETRY_SEC:
             return
         _tr["running"] = True
     threading.Thread(target=_tr_run, args=(list(dict.fromkeys(titles)),), daemon=True, name="news-tr").start()
@@ -289,6 +290,7 @@ def _tr_run(titles):
         _tr.update(error=None, last=time.strftime("%H:%M:%S"))
     except Exception as e:
         _tr["error"] = safe_message(e, 120)
+        _tr["failAt"] = time.time()                     # TR_RETRY_SEC 동안 다시 안 부른다
     finally:
         _tr["running"] = False
 
