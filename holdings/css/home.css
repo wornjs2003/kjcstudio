@@ -1172,10 +1172,11 @@
 .kh-mkt-fut {
   display: inline-flex; align-items: center; gap: 6px;
   padding-left: 14px; border-left: 1px solid var(--kh-border-strong);
+  flex-wrap: wrap; row-gap: 4px; min-width: 0;   /* 좁은 창에서는 칸째로 다음 줄 — 칸 안 글자가 한 자씩 세로로 꺾였다(11-13 창 1100~1281 · 나스닥 선물을 더하며 잼) */
 }
 .kh-mkt-fut b { font-weight: 700; }
 .kh-mkt-fut .kh-mut { font-size: var(--kh-fs-md); }
-.kh-fut-1 { display: inline-flex; align-items: center; gap: 5px; margin-right: 12px; }
+.kh-fut-1 { display: inline-flex; align-items: center; gap: 5px; margin-right: 12px; white-space: nowrap; }
 .kh-fut-1:last-child { margin-right: 0; }
 /* 옵션 만기 칩 — 야간 옆 (2026-11-12 · home.js xpChip). 평소 회색 · 만기 앞 거래일~당일 빨강 채움 깜박임 · 세마녀의 날은 두 겹 테 + 더 빠르게 */
 .kh-xp { display: inline-flex; align-items: center; gap: 5px; margin: -2px 0 -2px 12px; padding: 2px 9px;   /* 위아래 -2 — 칩 여백이 줄 높이를 안 늘리게(check-layout 13 → 16 이었다) */
