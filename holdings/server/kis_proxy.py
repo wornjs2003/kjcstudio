@@ -9691,6 +9691,11 @@ class Handler(SimpleHTTPRequestHandler):
 
             if route == "hot":
                 r = news_store.issues()
+                import news_brief                             # 이슈 분석(본문까지 읽되 저장 안 함 · 11-13) — 없으면 analysis null
+                an = news_brief.analyses([x["id"] for x in r["issues"]])
+                for x in r["issues"]:
+                    x["analysis"], x["analyzedAt"] = an.get(x["id"], (None, None))
+                r["meta"]["analysis"] = {"top": news_brief.ANALYZE_TOP, "failed": news_brief._st["anFail"], "by": news_brief.BY}
                 self._send_json({"ok": True, "data": {"issues": r["issues"], "rising": r["rising"]}, "meta": r["meta"]})
                 return
 
