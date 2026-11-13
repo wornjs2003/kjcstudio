@@ -28,7 +28,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 MODE = os.environ.get("KJC_READABLE_HOOK", "look")
-READ_BOX_MAX = 140        # ▶ 줄 글자 수 — 짧은 꼴(「앞서 HH:MM 에 여쭌 것 그대로입니다 — <물음 한 줄>」)이 들어가는 폭 · qa 재생으로 다듬는다
+READ_BOX_MAX = 160        # ▶ 줄 글자 수 — 짧은 꼴(「앞서 HH:MM 에 여쭌 것 그대로입니다 — <물음 한 줄>」)이 들어가는 폭 · qa 재생으로 다듬는다
 READ_DOTS_MAX = 3         # 한 줄 가운뎃점 — 현황 표 「하는 일」 칸 꼴(둘)이 안 걸리게(창구 검토)
 READ_CODE_MAX = 3         # 본문 코드 이름 수
 READ_PARA_MAX = 400       # 한 문단 글자 수
