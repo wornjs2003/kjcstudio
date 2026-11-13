@@ -2392,7 +2392,10 @@ function setupSorts() {
     if (sortBy === 'ev') loadEv();
   };
   host.addEventListener('click', onSort);
-  $('kh-sort-note')?.addEventListener('click', (e) => { if (e.target.closest('[data-rescan]')) rescanNow(); });   // 「지금검색」 — 고른 칩은 그대로 두고 목록만 다시
+  $('kh-sort-note')?.addEventListener('click', (e) => {
+    if (e.target.closest('[data-rescan]')) rescanNow();
+    if (e.target.closest('[data-ov-more]')) { e.preventDefault(); openRankModal(); }   // 「단타」 를 고른 채로 — 실시간 순위 모달이 그 칩으로 열린다
+  });   // 「지금검색」 — 고른 칩은 그대로 두고 목록만 다시
   $('kh-sorts-fav')?.addEventListener('click', onSort);   // 「관심」 아래 줄 — 같은 칩이라 같은 길
 }
 
@@ -2521,11 +2524,16 @@ function paintSortNote() {
     ? `<button type="button" data-rescan${rescanBusy ? ' disabled' : ''} data-tip="${escT(rescanTip())}" data-tip-h="지금검색"
         style="flex:none;margin-left:8px;background:none;border:0;padding:0;font:inherit;font-weight:600;color:var(--kh-accent);cursor:pointer">${rescanBusy ? '찾는 중…' : '지금검색'}</button>`
     : '';
+  /* 「단타」 줄 「자세히 ›」 — 단타 줄을 실시간 순위 모달에 「단타」 칩으로 바로 연다(2026-11-13 재권님 「단타 창 모달로 띄울수있게 자세히 버튼 넣어줘」 →
+     「홈 모달말고 단타 창에서 모달로 바로 띄워져야 하는데」). <a> 는 그대로 두고 누르기만 가로챈다(모달 룰) */
+  const dtMore = sortBy === 'ov'
+    ? `<a href="/holdings/" data-ov-more style="flex:none;margin-left:8px;font-weight:600;color:var(--kh-accent);text-decoration:none">자세히 ›</a>`
+    : '';
   const text = bits.join(' <span class="kh-mut">·</span> ');
   /* 단추가 붙으면 안내 글은 한 줄 — 넘치면 「…」 로 줄이고 전체는 1초 풍선(qa 11-11 · 단추 때문에 칩에 따라 26 → 44 두 줄이 됐다) */
   el.innerHTML = rescanBtn
     ? `<div style="display:flex;align-items:baseline"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-        data-tip="${escT(text.replace(/<[^>]+>/g, ''))}">${text}</span>${rescanBtn}</div>`
+        data-tip="${escT(text.replace(/<[^>]+>/g, ''))}">${text}</span>${dtMore}${rescanBtn}</div>`
     : text;
   noteAt = Date.now();
   paintPreSectors();
