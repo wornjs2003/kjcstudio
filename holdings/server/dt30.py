@@ -454,7 +454,7 @@ def track(proxy, cfg, b, hhmm, late):
 #              (재권님 「투자 전략 단타안에 관심도 넣어주고 룰도 넣어줘」 11-12 → 안 「응」) · 시가총액은 지금 값
 #              기록이 없는 날(2026-10-26 전)은 관심 「못 받음」 · 수급은 앞 거래일 auto_watch_day 값에 **지금** 수급 룰을 댄 어림 — meta.watchSrc 「없음」
 #   프리장     그날 pre_flow.PRE_OPEN~PRE_CLOSE 5분봉(끝 봉 빼고) 거래대금(종가 × 거래량)과 마지막 봉 종가 ÷ 앞 거래일 종가 등락률로 pre_flow.pick(오른 것 중 거래대금 큰 순) — 어림
-#   VI·급등    급등 — 09:00 · 09:05 봉 고가가 앞 거래일 종가보다 intraday_alerts.SURGE_PCT % 이상 · VI — KIS 「VI 현황」(날짜 · 종목) 에서 09:00~09:06 발동
+#   VI·급등    급등 — 09:00 ~ BUY_LATE(09:35) 봉 고가가 앞 거래일 종가보다 intraday_alerts.SURGE_PCT % 이상 · VI — KIS 「VI 현황」(날짜 · 종목) 에서 09:00~BUY_LATE 발동
 #              (VI_PROBE_PCT % 넘게 오른 종목만 묻는다 · QUIET 밖에서만 돈다)
 #   매수       앞 거래일 확정치(investor_daily) 외국인 · 기관 둘 다 순매수인 종목 중 합 상위 JOINT_TOP — 장중 가집계가 없어 어림 · 하위 칸 없음
 #   초반상승   09:00 봉 (종가 − 시가) ÷ 시가 ≥ open_rise.RISE_PCT · 시가총액 open_rise.MIN_CAP_EOK 이상(라이브와 같은 셈)
@@ -494,9 +494,15 @@ def rebuild(proxy, day, prev, cfg=None):
         if not any("0900" in b for b in bars.values()):
             return None
         pv = {r[0]: r for r in conn.execute("SELECT code, name, close, pct, vol FROM auto_watch_day WHERE day = ?", (prev,))}
+        pbar = {}                                          # 앞 거래일 종가를 auto_watch_day 에 없는 종목(대상 밖 작은 종목 · VI 가 잦다)은 앞 날 15:30 까지 끝난 마지막 5분봉 종가로
+        for code, ts, c in conn.execute("SELECT code, ts, close FROM candles WHERE period = '5m' AND ts >= ? AND ts < ? ORDER BY ts",
+                                        (prev + "1500", prev + "1530")):
+            if c:
+                pbar[code] = c
         inv = conn.execute("SELECT code, row FROM investor_daily WHERE date = ?", (prev,)).fetchall()
         bb = [r[0] for r in conn.execute("SELECT DISTINCT code FROM signal_sent WHERE day = ? AND ts <= ?",
                                          (day, int(day + "0906")))]
+    base_of = lambda c: (pv.get(c) or (None, None, None))[2] or pbar.get(c)    # 앞 거래일 종가 — 없으면 앞 날 마지막 정규장 5분봉 종가(어림)
     names = {c: (r[1] or "") for c, r in pv.items()}
     names.update({r["stock_code"]: r["name"] for r in uni})
     hit, missing, approx = {}, [] if cfg else ["VI"], ["프리장", "매수"]
@@ -537,23 +543,25 @@ def rebuild(proxy, day, prev, cfg=None):
     for c, a in amt.items():                               # 프리장 — 서버 셈 한 곳(pre_flow.pick · 오른 것 중 거래대금 큰 순 TOP_N · 재권님 11-12)
         if a > 0 and not small(c):
             last = [bars[c][hm][2] for hm in sorted(bars[c]) if p0 <= hm < p1 and bars[c][hm][2]]
-            base = (pv.get(c) or (None, None, None))[2]
+            base = base_of(c)
             items.append({"code": c, "amt": a, "pct": (last[-1] / base - 1) * 100 if last and base else None})
     for c in pre_flow.pick(items):
         put(c, "프리장")
+    late = BUY_LATE[0] * 60 + BUY_LATE[1] - BAR_MIN       # VI · 급등은 굳히는 때(BUY_LATE)까지 본다 — 그날 판이 09:35 까지 다시 세며 넣는 것과 같게
+    vi_bars = ["%02d%02d" % divmod(m, 60) for m in range(9 * 60, late + 1, BAR_MIN)]   # (재권님 「vi가 왜 안나오지?」 11-12 → 「응」 11-13 · 전에는 09:00 · 09:05 봉 · 09:01 까지라 28 → 1)
     for c, d in bars.items():                              # 급등
-        base = (pv.get(c) or (None, None, None))[2]
-        hi = max([d[hm][1] for hm in ("0900", "0905") if hm in d and d[hm][1]] or [0])
+        base = base_of(c)
+        hi = max([d[hm][1] for hm in vi_bars if hm in d and d[hm][1]] or [0])
         if base and hi and (hi / base - 1) * 100 >= intraday_alerts.SURGE_PCT:
             put(c, "VI·급등", "급등")
     if cfg:                                                # VI — KIS 「VI 현황」 에 날짜 · 종목을 넣으면 그 종목의 그날 VI(최근 것부터 30건)가 온다(19:4x 잼)
-        vt = "%02d%02d00" % BUY_AT
+        vt = "%02d%02d00" % BUY_LATE
         probe = []
         for c, d in bars.items():
-            base = (pv.get(c) or (None, None, None))[2]
-            hi = max([d[hm][1] for hm in ("0900", "0905") if hm in d and d[hm][1]] or [0])
+            base = base_of(c)
+            hi = max([d[hm][1] for hm in vi_bars if hm in d and d[hm][1]] or [0])
             if base and hi and (hi / base - 1) * 100 >= VI_PROBE_PCT:
-                probe.append(c)                        # 09:06 까지 VI_PROBE_PCT % 도 안 오른 종목은 묻지 않는다(상승 VI 문턱 아래)
+                probe.append(c)                        # BUY_LATE 까지 VI_PROBE_PCT % 도 안 오른 종목은 묻지 않는다(상승 VI 문턱 아래)
 
         def ask(c):
             return c, proxy.kis_get(cfg, intraday_alerts.VI_PATH,
@@ -600,7 +608,7 @@ def rebuild(proxy, day, prev, cfg=None):
             continue
         d = bars.get(code) or {}
         buy = (d.get("0905") or (None,))[0]
-        base = (pv.get(code) or (None, None, None))[2]
+        base = base_of(code)
         if buy and base and (buy / base - 1) * 100 < DROP_BELOW_PCT:
             down += 1                                  # 하락 뺌 — 09:05 봉 시가가 앞 거래일 종가 아래
             continue
@@ -624,7 +632,7 @@ def rebuild(proxy, day, prev, cfg=None):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(), "rows": rows, "closed": True,
             "meta": {"rebuilt": True, "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": DROP_BELOW_PCT,
-                     "watchSrc": watch_src, "rules": chip_rules(proxy),
+                     "watchSrc": watch_src, "rules": chip_rules(proxy), "viUntil": "%02d:%02d" % BUY_LATE,
                      "capMinEok": CAP_MIN_EOK, "order": "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순",
                      "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 · 수급은 그날 09:01 직전 관심 목록(watchSrc 기록 · 없으면 관심 못 받음 · 수급 어림) · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
                              "buy 는 09:05 봉 시가 · 시가총액 · 섹터 · 시장은 지금 값"}}
@@ -633,12 +641,14 @@ def rebuild(proxy, day, prev, cfg=None):
 def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
     """today 앞 limit 거래일 중 판이 없는 날을 다시 세어 남긴다(라이브로 굳힌 날은 안 건드린다). 남긴 날 수."""
     ds = _trade_days(proxy, today, limit)
-    have = set()
+    have, keep_live = set(), {}
     for d in days(proxy):                              # 관심 없이 세어 둔 되채운 날(watchSrc 칸 전)은 한 번 다시 센다(11-12 「응」)
         got = _load(proxy, d)
         m = (got[0].get("meta") or {}) if got else {}
-        if not (m.get("rebuilt") and "watchSrc" not in m):
-            have.add(d)
+        if not (m.get("rebuilt") and ("watchSrc" not in m or m.get("viUntil") != "%02d:%02d" % BUY_LATE)):
+            have.add(d)                                # VI 창이 다른 되채운 날(11-13 전)도 한 번 다시 센다
+        elif m.get("liveBefore"):
+            keep_live[d] = m["liveBefore"]
     n = 0
     cfg = proxy.load_secrets()
     for i, d in enumerate(ds[:limit]):
@@ -646,6 +656,8 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
             continue
         b = rebuild(proxy, d, ds[i + 1], cfg)
         if b and b["rows"]:
+            if d in keep_live:                         # 장중에 고른 기록은 다시 세도 이어 남긴다
+                b["meta"]["liveBefore"], b["meta"]["redoneFromLive"] = keep_live[d], True
             _store(proxy, b)
             n += 1
     if today_too and ds:                               # 오늘 판 — 14:00 칸까지 닫혔는데 오늘 바뀐 룰(meta.rules 칸) 전에 센 판이면 쌓인 값으로 한 번 다시 센다
