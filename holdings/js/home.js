@@ -1937,13 +1937,19 @@ function ovRows() {
   return Object.values(by).filter((g) => g.chips.length >= 2 && !ovDown(g.code))
     .sort((a, b) => b.chips.length - a.chips.length || (capOf(b.code) ?? -1) - (capOf(a.code) ?? -1));
 }
+/* 칩마다 색 — 어느 칩에 들었는지 글자만으로는 한눈에 안 갈렸다(2026-11-13 재권님 「칩별로 색을 다르게 해줘 인지가 잘 안되네」).
+   색은 theme.css 의 기존 범주색만 쓴다(새 변수 없음) · 옅은 바탕 + 같은 색 진한 글씨(「색 바탕 위의 글씨」) · 오름 빨강 · 내림 파랑과 겹치지 않게 고름.
+   VI·급등은 맨 앞(맨 왼쪽)에 둔다(같은 날 재권님 「vi급등을 가장 왼쪽으로」) */
+const OV_TONE = { fav: 'cat-slate', pre: 'cat-amber', vi: 'cat-rose', after: 'tag-news', buy: 'cat-teal', rise: 'cat-indigo', auto: 'cat-violet' };
+const ovTag = (id) => { const t = OV_TONE[id] || 'cat-slate';
+  return `<span style="white-space:nowrap;padding:0 3px;border-radius:3px;background:var(--kh-${t}-dim);color:var(--kh-${t})">${ovLabel(id)}</span>`; };
 const OV_CHIP_W = 96;     // 단타 칸 칩 목록 폭(px) — 이보다 길면 줄을 바꾼다
 function ovCell(code) {
   const g = ovBy[code];
   if (!g) return '—';
   return `<div style="white-space:nowrap;font-size:12px;line-height:1.3"><b>${g.chips.length}</b><span class="kh-mut">개</span></div>` +
     /* 칩 목록은 칸 안에서 줄을 바꾼다 — 한 줄로 두면 칸이 넓어져 종목 이름 · 섹터가 「에코…」 처럼 잘렸다(11-11 재권님 「종목이름이랑 섹터가 다 보이게」) */
-    `<div style="white-space:normal;max-width:${OV_CHIP_W}px;margin-left:auto;font-size:11px;line-height:1.3" class="kh-mut">${g.chips.map((id) => `<span style="white-space:nowrap">${ovLabel(id)}</span>`).join(' · ')}</div>`;   // 칩 이름 한가운데서는 안 끊는다
+    `<div style="white-space:normal;max-width:${OV_CHIP_W}px;margin-left:auto;font-size:11px;line-height:1.3">${[...g.chips].sort((a, b) => (b === 'vi') - (a === 'vi')).map((id) => ovTag(id)).join(' ')}</div>`;   // 칩 이름 한가운데서는 안 끊는다
 }
 function ovNote() {
   const w = ovWaiting();
