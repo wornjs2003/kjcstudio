@@ -237,7 +237,9 @@ def fetch_feed(feed, topics, drop):
 TR_MODEL = "claude-haiku-5-5"     # 제목 옮기기 — 세 건 4.7초 · 0.0009달러(11-13 잼)
 TR_BATCH = 40                     # 한 번에 옮기는 제목 수
 TR_TIMEOUT = 120
-_tr = {"running": False, "error": None, "last": None, "calls": 0}
+TR_RETRY_SEC = 1800               # 옮기기가 실패하면 이만큼 쉬고 다시 부른다 — 받을 때마다 되풀이해 부르지 않게(qa 덧 11-13)
+TR_BUDGET_USD = "0.5"             # 한 번 부를 때 비용 상한(달러) — 넘으면 claude 가 스스로 멈춘다(claude_chat.BUDGET_USD 와 같은 꼴)
+_tr = {"running": False, "error": None, "last": None, "calls": 0, "failAt": 0.0}
 _tr_lock = threading.Lock()
 
 
@@ -262,7 +264,7 @@ def _tr_kick(titles):
     if not marketdb.writable():
         return
     with _tr_lock:
-        if _tr["running"]:
+        if _tr["running"] or time.time() - _tr["failAt"] < TR_RETRY_SEC:
             return
         _tr["running"] = True
     threading.Thread(target=_tr_run, args=(list(dict.fromkeys(titles)),), daemon=True, name="news-tr").start()
@@ -276,7 +278,7 @@ def _tr_run(titles):
             prompt = ("다음은 해외 중앙은행 발표 제목이다. 자연스러운 한국어 제목으로 옮겨라. 고유명사는 한국어로 쓰되 기관 약칭(ECB 등)은 둬도 된다. "
                       "같은 순서 · 같은 개수의 JSON 문자열 배열 하나만 내라. 설명 없이.\n" + json.dumps(part, ensure_ascii=False))
             r = subprocess.run([claude_chat._claude(), "-p", "--model", TR_MODEL, "--tools", "", "--no-session-persistence",
-                                "--settings", claude_chat.SETTINGS, "--output-format", "json", "--max-budget-usd", "0.5"],
+                                "--settings", claude_chat.SETTINGS, "--output-format", "json", "--max-budget-usd", TR_BUDGET_USD],
                                input=prompt, capture_output=True, text=True, timeout=TR_TIMEOUT, cwd="/tmp")
             _tr["calls"] += 1
             res = (json.loads(r.stdout).get("result") or "").strip()
@@ -288,6 +290,7 @@ def _tr_run(titles):
         _tr.update(error=None, last=time.strftime("%H:%M:%S"))
     except Exception as e:
         _tr["error"] = safe_message(e, 120)
+        _tr["failAt"] = time.time()                     # TR_RETRY_SEC 동안 다시 안 부른다
     finally:
         _tr["running"] = False
 
