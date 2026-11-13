@@ -385,6 +385,15 @@ def today_lows(proxy):
     day = time.strftime("%Y%m%d")
     names = code_names(proxy)
     items = []
+    import market_hours
+    if time.strftime("%H%M") < market_hours.CHIP_RESET:      # 07:30 앞 — 앞 날 바닥 신호를 그대로(11-13 재권님 「다른 칩은 아침 7시반에」)
+        try:
+            _init(proxy)
+            with proxy._db_lock, proxy.db_conn() as conn:
+                last = conn.execute("SELECT MAX(day) FROM signal_sent WHERE kind = 'low' AND day <= ?", (day,)).fetchone()[0]
+            day = last or day
+        except Exception:
+            pass
     try:
         _init(proxy)
         with proxy._db_lock, proxy.db_conn() as conn:

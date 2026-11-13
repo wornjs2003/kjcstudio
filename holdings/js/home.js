@@ -1521,7 +1521,9 @@ const SORTS = {
   nowup:{ label: '현재상승', key: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), only: (v) => v >= NOW_RISE_PCT, capMin: true,
           head: '시가', show: (code, p) => (p && p.open ? fmtPriceOf(code, p.open) : '—'),
           pct: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), note: `시가 대비 +${NOW_RISE_PCT}% 이상`,
-          empty: () => `시가보다 +${NOW_RISE_PCT}% 이상 오른 종목이 없습니다(시세를 받는 중이면 잠시 뒤 채워짐)` },
+          blank: () => chipBlank(),     // 07:30~09:00 은 앞 날 시가 · 현재가라 비운다(11-13 재권님 「다른 칩은 아침 7시반에」)
+          empty: () => (chipBlank() ? `정규장 칩은 아침 ${serverData('chipReset').from}에 비우고 ${serverData('chipReset').until} 정규장부터 다시 셉니다`
+            : `시가보다 +${NOW_RISE_PCT}% 이상 오른 종목이 없습니다(시세를 받는 중이면 잠시 뒤 채워짐)`) },
   /* 매수 — 외국인 · 기관 · 프로그램이 **셋 다** 순매수인 종목, 셋 합이 큰 순 (2026-11-05 재권님 「프로그램 기관 외국인이 동시에
      사고있는 종목들 볼수있는 방법좀 마련해봐」 → 「실시간 순위에 버튼 하나 만들고 거기에 넣어줘 · 매수 라는 버튼」).
      고르는 것은 서버다(kis_proxy.py `fetch_joint_buy` · 외국인 · 기관은 가집계) — 화면은 받은 차례 그대로 그린다.
@@ -2127,6 +2129,17 @@ const pctOf = (p, sortId = sortBy) => {
 /* 장외 칩에 줄이 하나도 없을 때 적는 글 — 평일 아침 그 시각부터 정규장이 끝날 때까지는 서버가 장외 값을 비워 둔다(kis_proxy.py `after_cleared` ·
    2026-11-05 재권님 「아침 7시에 리셋되게 해줘」 → (가)). 그때는 줄이 없는 까닭을 적는다.
    **시각은 서버가 준다**(/api/kis/stats 의 afterClear · 「같은 값은 한 곳에만 둔다」) — 못 받았으면 까닭 글을 안 짓는다 */
+/* 정규장 칩이 비는 때인가 — 평일 서버 chipReset(market_hours.CHIP_RESET ~ REG_OPEN) 안. 못 받았으면 false(안 비움) */
+function chipBlank() {
+  const cr = serverData('chipReset');
+  const min = (s) => { const m = /^(\d\d):(\d\d)$/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
+  const from = min(cr && cr.from), until = min(cr && cr.until);
+  const kst = new Date(Date.now() + 9 * 3600 * 1000);
+  const hm = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  const wd = kst.getUTCDay() >= 1 && kst.getUTCDay() <= 5;
+  return from != null && until != null && wd && hm >= from && hm < until;
+}
+
 function afterEmpty() {
   const ac = serverData('afterClear');
   const min = (s) => { const m = /^(\d\d):(\d\d)$/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
@@ -2224,6 +2237,7 @@ function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
     }));
   }
 
+  if (sort && sort.blank && sort.blank()) return [];   // 현재상승 — 07:30~09:00 「시작 전」
   if (!sort || !sort.key) return base;      // 시가총액은 목록 순서 그대로
 
   /* 값이 아직 안 온 종목은 뒤로 보낸다. 0 으로 치면 「거래량 0위」 가 된다 */
