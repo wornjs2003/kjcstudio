@@ -3118,9 +3118,16 @@ def fetch_fo_snapshot(cfg, codes):
     return out, ttl
 
 
+def _index_daily_start(now=None):
+    """지수 일봉을 내주는 첫날 — INDEX_DAILY_MONTHS 달 전과 올해 1월 1일 중 이른 쪽(2026-11-13 재권님 「응 만들어」 ·
+    투자 전략 「옵션 만기일」 칸이 올해 1월부터 필요). 종목 일봉(fetch_stock_daily)은 그대로 INDEX_DAILY_MONTHS"""
+    now = now or datetime.now(KST)
+    return min((now - timedelta(days=INDEX_DAILY_MONTHS * 31)).strftime("%Y%m%d"), now.strftime("%Y") + "0101")
+
+
 def fetch_index_daily(cfg, names):
     """{이름: {name, unit, market, bars:[{date, open, high, low, close}] | None, error?}} — 못 받은 지수는 bars None(0 이 아니다)."""
-    start = (datetime.now(KST) - timedelta(days=INDEX_DAILY_MONTHS * 31)).strftime("%Y%m%d")
+    start = _index_daily_start()
     dom = {n: c for c, n in INDEX_DEFS}
     ovs = {d[0]: d for d in OVERSEAS_DEFS}
     nvx = {d[0]: d for d in NAVER_INDEX_DEFS}
@@ -10104,12 +10111,28 @@ class Handler(SimpleHTTPRequestHandler):
                 })
                 return
 
+            # 그 해 옵션 만기일 열둘 — 투자 전략 「옵션 만기일」 칸(2026-11-13 재권님 「응 만들어」) · 셈은 market_hours 한 곳(홈 칩과 같음)
+            if route == "opt-expiry":
+                try:
+                    y = int((qs.get("year") or [datetime.now(KST).strftime("%Y")])[0])
+                except ValueError:
+                    y = None
+                if y is None or not 2000 <= y <= 2100:
+                    self._send_json({"ok": False, "error": "year 는 2000~2100 네 자리 숫자입니다"}, status=400)
+                    return
+                rows = market_hours.opt_expiry_year(sys.modules[__name__], y)
+                self._send_json({"ok": True, "data": rows,
+                                 "meta": {"year": y, "close": market_hours.OPT_EXPIRY_CLOSE,
+                                          "note": "결제월 둘째 목요일 · 휴장이면 앞 거래일 · witch = 선물 동시(3·6·9·12월) · "
+                                                  "sure false = 휴장일 표에 그날이 아직 없어 평일로 셈"}})
+                return
+
             # 지수 일봉 몇 달 — 국내 · 미국을 한 번에(위 fetch_index_daily)
             if route == "index-daily":
                 names = [x.strip().upper() for x in (qs.get("codes") or ["KOSPI,SPX,NASDAQ,SOX"])[0].split(",") if x.strip()][:12]
                 data = fetch_index_daily(cfg, names)
                 self._send_json({"ok": any(v.get("bars") for v in data.values()), "data": data,
-                                 "meta": {"months": INDEX_DAILY_MONTHS, "cacheTtl": INDEX_DAILY_TTL,
+                                 "meta": {"months": INDEX_DAILY_MONTHS, "from": _index_daily_start(), "cacheTtl": INDEX_DAILY_TTL,
                                           "names": [n for _, n in INDEX_DEFS] + [d[0] for d in OVERSEAS_DEFS]
                                                    + [d[0] for d in NAVER_INDEX_DEFS],
                                           "note": "date 는 그 시장의 거래일(미국은 현지 날짜) · 국내 오늘 봉은 장중이면 아직 안 끝난 값 · "
