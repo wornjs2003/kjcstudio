@@ -20,6 +20,7 @@
     비용        잰 값(11-13 12:0x · 이슈 15개 · 제목 8개씩) — Opus 13초 0.07달러 · 속보 한 건은 어림 0.03달러 안팎
 """
 import json
+import os
 import subprocess
 import threading
 import time
@@ -48,6 +49,8 @@ RETRY_SEC = 600               # 못 지으면 이만큼 쉬고 다시
 TIMEOUT = 180
 BUDGET_USD = "1"              # 한 번 부를 때 비용 상한(달러)
 BY = "Claude(Opus)가 서버에 쌓인 기사 제목으로 지음"
+ON = (os.environ.get("KJC_NEWS_AI") or "").strip() == "1"   # 켜기 — 기본 꺼짐. 쓰는 서버(8765) 등록 파일에 KJC_NEWS_AI=1 을 넣어야 짓는다
+                                                            # (Claude 를 부르는 「켜기」 자리 · 재권님 지시로 · 개념정의 검수 보류 11-13 12:2x)
 
 _st = {"briefFail": None, "briefFailAt": 0.0, "flashFail": None, "flashFailAt": 0.0, "calls": 0,
        "anFail": None, "anAt": 0.0}
@@ -133,7 +136,7 @@ def brief():
             day, data = r[0], json.loads(r[1])
     except Exception:
         pass                                    # 표가 아직 없다(8765 가 처음 짓기 전) — 글 없음
-    return {"data": data, "meta": {"day": day, "at": "%02d:%02d" % BRIEF_AT, "by": BY,
+    return {"data": data, "meta": {"day": day, "at": "%02d:%02d" % BRIEF_AT, "by": BY, "on": ON,
                                    "failed": _st["briefFail"], "today": day == _now().strftime("%Y%m%d")}}
 
 
@@ -160,7 +163,7 @@ def flash():
     items = [{"title": r["title"], "source": r["source"], "at": r["at"], "link": r["link"],
               "summary": (sums.get(r["link"]) or (None, None))[0], "summarizedAt": (sums.get(r["link"]) or (None, None))[1]}
              for r in rows]
-    return {"items": items, "meta": {"hours": FLASH_HOURS, "word": FLASH_WORD, "by": BY, "failed": _st["flashFail"]}}
+    return {"items": items, "meta": {"hours": FLASH_HOURS, "word": FLASH_WORD, "by": BY, "on": ON, "failed": _st["flashFail"]}}
 
 
 def flash_once():
@@ -224,8 +227,8 @@ def analyze_once():
 
 # ---------------------------------------------------------------- 돌리기
 def start():
-    """쓰는 서버(8765)가 뜰 때 한 번 — 아침 정리 · 속보 정리 바퀴."""
-    if not marketdb.writable():
+    """쓰는 서버(8765)가 뜰 때 한 번 — 아침 정리 · 속보 정리 · 이슈 분석 바퀴. 켜기(ON)가 아니면 안 돈다."""
+    if not marketdb.writable() or not ON:
         return False
     with _conn() as c:
         c.executescript(_SCHEMA)
