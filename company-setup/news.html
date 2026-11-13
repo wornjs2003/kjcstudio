@@ -41,6 +41,17 @@
     <section class="mk">
       <div class="mk-body" style="margin-right:0">
       <div class="mk-meta" id="nd-meta">값을 받는 중…</div>
+      <!-- 맨 위 — 오늘의 주요 이슈 정리 · 지금 세계 주요 이슈 (2026-11-13 재권님 「응 만들어 … 모아놓은 기사를 읽고 정리해서 맨위에」 · js/news-issues.js) -->
+      <h2 class="mk-sec">오늘의 주요 이슈 정리<span class="mk-sec-s" id="ni-brief-meta">—</span></h2>
+      <div class="mk-card ni-brief" id="ni-brief">—</div>
+      <h2 class="mk-sec">지금 세계 주요 이슈<span class="mk-sec-s">같은 사건끼리 묶어 줄 세움 · 언론사 수 → 나라 수 · 합친 점수 없음 · 종목 대입은 산업 분석</span></h2>
+      <div class="mk-card"><h2>받는 곳</h2><div class="ni-src"><span id="ni-src">—</span><span class="ni-hold">해외 언론 보류 — 블룸버그 · 사우스차이나모닝포스트 약관 걸림 · CNBC 모호 · 파이낸셜타임스 · 마켓워치 · 닛케이 약관 못 읽음(11-13)</span></div></div>
+      <div class="ni-two">
+        <div class="mk-card"><h2>주요 이슈</h2><table class="ni-iss" id="ni-issues"><tr><td>—</td></tr></table><div class="mute ni-note" id="ni-issues-note"></div></div>
+        <div class="mk-card ni-rise"><h2>막 뜨는 이슈</h2><div class="mute">최근 몇 시간 기사가 그 앞 같은 시간보다 많은 것</div><div id="ni-rise">—</div></div>
+      </div>
+      <div class="mk-card"><h2>1차 출처 새 소식</h2><div class="mute">중앙은행 발표 — 기사와 같은 이슈로 묶이면 그 이슈의 「확인」 이 「1차 출처」 로 바뀐다 · 혼자서는 이슈가 안 된다</div><div id="ni-prim">—</div></div>
+
 
       <h2 class="mk-sec">구축 현황</h2>
       <div class="mk-card"><h2>오늘의 구축 상태</h2><p class="one" id="nd-one">—</p></div>
@@ -80,6 +91,7 @@
 
 <script src="../assets/js/main.js"></script>
 <script type="module" src="js/news-data.js"></script>
+<script type="module" src="js/news-issues.js"></script>
 <script type="module" src="/assets/js/glossary.js"></script>   <!-- 설명 풍선 — 마우스를 1초 올려 두면 뜨는 공용 풍선(data-tip) · 「설명 풍선은 … 1초 올려 두면 뜬다」(2026-11-07) -->
 <script type="module" src="js/fit.js"></script>   <!-- 틀을 홀딩스 첫 화면과 같은 넓이로 (2026-11-07) -->
 <script type="module">import { mountClaudeRail } from '/assets/js/claude-rail.js'; if (self === top) mountClaudeRail(); /* 틀(iframe) 안에 들어간 화면에는 안 붙인다 */</script>
