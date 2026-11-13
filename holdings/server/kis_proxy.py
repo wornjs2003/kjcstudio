@@ -1174,6 +1174,9 @@ def usage_stats():
         "timing": timing_values(),
         # 「장외」 칩을 비워 두는 시각(평일) — 화면이 빈 칸 까닭 글을 이 값으로 짓는다. 시각은 아래 AFTER_CLEAR_AT · AFTER_CLEAR_UNTIL 한 곳
         "afterClear": {"from": "%02d:%02d" % AFTER_CLEAR_AT, "until": "%02d:%02d" % AFTER_CLEAR_UNTIL},
+        # 정규장 칩(현재상승 · VI·급등 · 볼린저 · 매수)이 비는 때(평일) — market_hours.CHIP_RESET ~ REG_OPEN 한 곳 · 화면 「현재상승」 이 읽는다
+        "chipReset": {"from": "%s:%s" % (market_hours.CHIP_RESET[:2], market_hours.CHIP_RESET[2:]),
+                      "until": "%s:%s" % (market_hours.REG_OPEN[:2], market_hours.REG_OPEN[2:])},
     }
 
 
@@ -3939,7 +3942,7 @@ def start_after_snap(cfg):
 # 밤사이(00:00~07:00) 값은 그대로 어제 20:00 마감 값이다(overnight_quotes · take_after_snap 이 쥔 것).
 # 07:00~08:00(프리장 전)은 국내 종목을 어제 정규장 종가 · 등락률 0 으로 낸다 — 새 회차 기준가가 그 종가다
 # (2026-11-06 재권님 「아침 7시 되면 … 국내종목은 등락률이 0이 되어야」 → (가) 「값도 어제 정규장 종가로 · 0%」)
-AFTER_CLEAR_AT = (7, 0)
+AFTER_CLEAR_AT = (int(market_hours.CHIP_RESET[:2]), int(market_hours.CHIP_RESET[2:]))   # 07:00 → 07:30 — 다른 칩과 한 시각(11-13 재권님 「장외도 7시반」)
 AFTER_CLEAR_UNTIL = (15, 30)
 
 
@@ -10388,6 +10391,9 @@ class Handler(SimpleHTTPRequestHandler):
 
             if route == "joint-buy":
                 data, at = fetch_joint_buy(cfg)
+                _now = datetime.now(KST)
+                if _now.weekday() < 5 and market_hours.CHIP_RESET <= _now.strftime("%H%M") < market_hours.REG_OPEN:
+                    data = dict(data or {}, rows=[], flipped=[], phase="before", reset=True)   # 07:30~09:00 「시작 전」(11-13 재권님 「다른 칩은 아침 7시반에」)
                 d = data or {}
                 self._send_json({
                     "ok": data is not None, "data": d.get("rows") or [], "flipped": d.get("flipped") or [],
@@ -10396,7 +10402,7 @@ class Handler(SimpleHTTPRequestHandler):
                              "candidates": d.get("candidates"), "programMissing": d.get("programMissing"),
                              "listFail": bool(d.get("listFail")), "errors": d.get("errors"),
                              "amtUnit": "원", "confirmed": d.get("confirmed"), "estimated": d.get("estimated"),
-                             "phase": d.get("phase"), "regClose": "%02d:%02d" % KRX_CLOSE,
+                             "phase": d.get("phase"), "reset": bool(d.get("reset")), "regClose": "%02d:%02d" % KRX_CLOSE,
                              # 가집계(추정)가 한 줄이라도 섞였나 — 장중은 전부 · 마감 뒤는 estimated 가 1 이상일 때
                              "provisional": d.get("confirmed") is None or bool(d.get("estimated")),
                              "note": "외국인 · 기관은 장중 증권사 가집계(하루 네 번) · 15:40 뒤 그날 확정치(줄마다 basis · 수는 confirmed · estimated) · 프로그램은 그날 누적 · "

@@ -309,6 +309,10 @@ def today():
     except (ValueError, TypeError):
         got = {}
     same = got.get("day") == day
+    # 07:30(market_hours.CHIP_RESET) 앞이면 앞 날 남긴 것을 그대로 — 실시간 순위 칩은 그 시각에 내려놓는다(11-13 재권님 「다른 칩은 아침 7시반에」)
+    import market_hours
+    if not same and got.get("day") and got["day"] < day and datetime.now(KST).strftime("%H%M") < market_hours.CHIP_RESET:
+        same, day = True, got["day"]
     items = list(reversed(got.get("items") or [])) if same else []
     return {"day": day, "items": items,
             "meta": {"saved": same, "savedAt": got.get("savedAt") if same else None, "surgePct": SURGE_PCT,
