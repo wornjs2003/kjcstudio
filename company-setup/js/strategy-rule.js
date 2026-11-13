@@ -148,7 +148,8 @@ async function showWhy(code) {
   awBox.querySelectorAll('tr[data-code]').forEach((tr) => tr.classList.toggle('is-on', tr.dataset.code === code));
   const head = `<div class="aw-why-h">${esc(p.name || code)} <small>${esc(code)} · ${mmdd(awDay)} ${pctTxt(p.pct)} · 거래량 ${p.mult == null ? '—' : `${num(p.mult, 2)}배`}</small></div>`;
   whyBox.innerHTML = `${head}<div class="st-err">— 받는 중…</div>`;
-  const [ds, nw] = await Promise.all([getJson(`/api/dart/disclosures?code=${encodeURIComponent(code)}&limit=40`), getJson(`/api/naver/news?code=${encodeURIComponent(code)}`)]);
+  // 종목 설명 (11-13 재권님 「여기 종목 클릭하면 종목의 설명이 있어야해」 → 「오른까닭 아래로 종목 설명」) — 홀딩스 회사 풍선(company-tip.js)과 같은 서버 주소 /api/dart/profile 하나 · 화면은 받은 것을 그대로
+  const [ds, nw, pf] = await Promise.all([getJson(`/api/dart/disclosures?code=${encodeURIComponent(code)}&limit=40`), getJson(`/api/naver/news?code=${encodeURIComponent(code)}`), getJson(`/api/dart/profile?code=${encodeURIComponent(code)}`)]);
   if (seq !== why.seq) return;   // 그사이 다른 종목을 눌렀다
   const lo = fromDay(awDay), hi = ymd(awDay);
   const inWin = (d) => { const x = ymd(d); return x && x >= lo && x <= hi; };
@@ -159,7 +160,17 @@ async function showWhy(code) {
   whyBox.innerHTML = head
     + `<div class="st-cap">${mmdd(lo)} ~ ${mmdd(hi)} 에 나온 것</div>`
     + sec('공시', ds, dis, (x) => `<li>${link(x.url, x.title || '—')}<small>${mmdd(x.date)}${x.filer && x.filer !== p.name ? ` · ${esc(x.filer)}` : ''}</small></li>`)
-    + sec('뉴스', nw, nws, (x) => `<li>${link(x.url, x.title || '—')}<small>${hmTxt(x.at)} · ${esc(x.office || '—')}</small>${x.listed === false ? '<span class="aw-out">목록 밖</span>' : ''}</li>`);
+    + sec('뉴스', nw, nws, (x) => `<li>${link(x.url, x.title || '—')}<small>${hmTxt(x.at)} · ${esc(x.office || '—')}</small>${x.listed === false ? '<span class="aw-out">목록 밖</span>' : ''}</li>`)
+    + profTxt(pf);
+}
+function profTxt(res) {
+  const d = res.j && res.j.ok ? res.j.data : null;
+  if (!d) return `<div class="aw-why-s">종목 설명</div><div class="st-err">— 서버 값을 못 받음(${res.st || '연결 안 됨'})</div>`;
+  const sc = [d.sector && d.sector.wics, d.sector && d.sector.krx].filter(Boolean);
+  const sm = d.summary || [];
+  if (!sc.length && !sm.length) return '<div class="aw-why-s">종목 설명</div><div class="st-err">— 설명 없음</div>';
+  return `<div class="aw-why-s">종목 설명</div>${sc.length ? `<div class="st-cap">섹터 ${esc(sc.join(' · '))}</div>` : ''}${sm.length ? `<ul>${sm.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}`
+    + `<div class="st-cap">출처 네이버 · FnGuide 기업개요${d.summaryFrom ? ` · <a href="${esc(d.summaryFrom)}" target="_blank" rel="noopener">원문</a>` : ''}</div>`;
 }
 awBox.addEventListener('click', (e) => { const tr = e.target.closest('tr[data-code]'); if (tr) showWhy(tr.dataset.code); });
 
