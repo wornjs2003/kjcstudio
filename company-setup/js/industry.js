@@ -56,8 +56,12 @@ function readItem(it, src) {
       out.v = out.vs[0]; out.mv = round2(out.mvs.reduce((a, b) => a + b, 0) / out.mvs.length); out.note = '시가→종가';
     }
   } else if (it.src === 'trade') {
-    const t = src.trade && src.trade.items && src.trade.items[0];
-    const x = t && t.items && (t.items[it.side] || []).find((y) => y.name === it.item);
+    // 맨 위 발표가 원문을 못 읽어 품목이 비면 품목 값이 있는 가장 최근 발표로 (2026-11-13 재권님 「응」 — 11-11 발표 PDF 시간 초과로 칸이 비었다)
+    let t = null, x = null;
+    for (const r of (src.trade && src.trade.items) || []) {
+      x = r.items && (r.items[it.side] || []).find((y) => y.name === it.item);
+      if (x) { t = r; break; }
+    }
     if (x) { out.v = x.amt; out.mv = round2(x.yoy); out.note = (t.period || '') + ' · 전년 대비'; }
   } else if (it.src === 'gpr') {
     const g = src.gpr && src.gpr.gpr;
