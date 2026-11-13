@@ -193,20 +193,32 @@ function paintMkt() {
   /* 옵션 만기 칩 — 야간 옆 (2026-11-12 재권님 「야간선물옆에 이번달에 대한걸 적어주고 당일 -1 일부터 당일까지 깜박이게」 · 「세마녀의날은 특히 더」 →
      시안 「노랑도 빨강으로 하고 더 진하게 · 세마녀의날도 진하게 · 깜박여야해」 → 「응 커밋해」). 날짜 · 세마녀 · 깜박일 때는 서버(market_hours.opt_expiry)가 준다 —
      화면은 받은 대로 글만 짓는다. 못 받으면 칩을 안 그린다 */
+  /* 나스닥 100 선물 — 야간 옆 (2026-11-13 재권님 「나스닥 선물을 홈에 넣는 길 (가) 지금 받는 10분 지연 값을 「10분 지연」 표시로」).
+     값은 서버가 이미 받는 야후 값(us_outlook) 그대로 · 공식 API 가 아니라 출처를 풍선에 적는다. 못 받으면 칸을 안 그린다 */
+  const nq = (lastIndices || {}).nqFutures;
+  const nqCell = nq && nq.v != null
+    ? `<span class="kh-fut-1" data-tip="나스닥 100 선물 · ${nq.source || '야후 파이낸스'} · 공식 API 가 아니다(약관 확인 못 함)${nq.at ? ' · 값 시각 ' + nq.at.slice(11, 16) : ''}${nq.stale ? ' · 이번에 못 받아 앞 값' : ''}">
+        <span class="kh-mut">나스닥선물</span>
+        <b class="kh-num ${dirClass(nq.pct)}">${fmtNum(nq.v, 2)}</b>
+        <span class="kh-num ${dirClass(nq.pct)}">${fmtPct(nq.pct)}</span>
+        <span class="kh-mut">10분 지연</span>
+      </span>`
+    : '';
   const xp = (lastIndices || {}).optExpiry;
   const xpChip = (() => {
     if (!xp || !xp.day) return '';
     const d = new Date(+xp.day.slice(0, 4), +xp.day.slice(4, 6) - 1, +xp.day.slice(6, 8));
     const md = `${xp.day.slice(4, 6)}-${xp.day.slice(6, 8)}(${'일월화수목금토'[d.getDay()]})`;
     const when = xp.dday === 0 ? '오늘 ' : xp.dday === 1 ? '내일 ' : '';
-    const name = xp.witch ? '세마녀의 날' : '옵션 만기';
+    /* 평소(깜박이기 전)에는 짧게 — 장 상태 줄이 한 줄을 넘쳐 두 줄로 꺾였다(11-13 나스닥 선물을 더하며 check-layout kh-mkt 15 → 41) */
+    const name = xp.witch ? (xp.near ? '세마녀의 날' : '세마녀') : (xp.near ? '옵션 만기' : '만기');
     const tail = xp.near
       ? (xp.witch ? '선물 · 옵션 동시 만기' : `${xp.close.slice(0, 2)}:${xp.close.slice(2)} 마감`)
       : `D-${xp.dday}`;
     const tip = `코스피200 옵션${xp.witch ? ' · 선물 동시' : ''} 만기일 — 그 달 둘째 목요일 · 휴장이면 앞 거래일 · 만기일 정규장은 ${xp.close.slice(0, 2)}:${xp.close.slice(2)} 에 끝납니다`
       + (xp.near ? '\n만기 앞 거래일부터 당일까지 깜박입니다' : '') + (xp.sure ? '' : '\n휴장일 표에 아직 그날이 없어 평일로 셌습니다');
     const cls = 'kh-xp' + (xp.near ? (xp.witch ? ' is-witch' : ' is-near') : '');
-    return `<span class="${cls}" data-tip="${tip}">${name} <b>${when}${md}</b> · ${tail}</span>`;
+    return `<span class="${cls}" data-tip="${tip}">${name} <b>${when}${xp.near ? md : md.slice(0, 5)}</b> ${xp.near ? '· ' : ''}${tail}</span>`;
   })();
 
   const futures = `
@@ -214,6 +226,7 @@ function paintMkt() {
       ${one('현물', spot ? spot.value : null, spot && spot.changePct)}
       ${one('선물', f ? f.price : null, f && f.changePct, null, f ? f.name : '')}
       ${one('야간', n ? n.price : null, n && n.changePct, null, nightNote)}
+      ${nqCell}
       ${xpChip}
     </span>`;
 
