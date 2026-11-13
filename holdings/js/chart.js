@@ -2638,6 +2638,14 @@ export function createStockChart(container, candles, opts = {}) {
           return;
         }
       }
+      /* **끝난 칸에는 얹지 않는다** (2026-11-13 재권님 「50분 55분봉 이상한거 고쳐」 — 하이닉스 5분봉 08:55 칸이 전일 종가 1,254,000 까지
+         내려간 긴 파랑 봉). 09:00 에 시세 기준이 통합(UN) → 정규장(J)으로 바뀌는 순간, 정규장 첫 체결 전 J 현재가는 전일 종가라
+         거래량이 안 는(addVol 0) 그 값이 서버가 아직 09:00 봉을 안 낸 08:55 봉에 얹혔다(DB 의 08:50 · 08:55 봉은 거래 0 · 1,278,000 한 값).
+         지금 시각 칸이 끝 봉 칸보다 뒤면 그 시세는 끝 봉 것이 아니다 — 체결이면 위에서 새 봉을 세웠고, 아니면 그리지 않는다 */
+      if (String(last.ts).length >= 12) {
+        const slot = nowSlot(period);
+        if (slot && slot > String(last.ts)) return;
+      }
       if (last.close === px && !addVol) return;   // 안 움직였으면 그릴 것이 없다
       const next = {
         ...last,

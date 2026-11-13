@@ -213,7 +213,10 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
     const us = isUsCode(stock.code);
     const big = (v) => (v == null ? '—' : (us ? fmtUsdBig(v) : fmtMoneyKr(v)));
     /* 동시호가(장 전 · 마감) 동안은 예상 체결가를 「예상」 과 함께(2026-11-10 재권님 「나」 · 「종가도 해줘」) — 서버가 그때만 준다(kis_proxy._preopen_expect) */
-    const ex = detailApi && detailApi.expect ? detailApi.expect() : null;
+    /* 묶음 시세 줄(실시간 순위 · 홈 머리줄과 같은 값)이 있으면 그 줄의 예상가를 쓴다 — 세부사항 칸이 호가와 함께 따로 받은 값은
+       받은 시각이 달라 동시호가 동안 몇 초 사이에도 갈렸다(2026-11-13 08:56 재권님 「차트의 예상가격과 실시간순위의 예상가격 안맞는거 안고쳤어?」 ·
+       11-12 홈 머리줄은 이미 이렇게 고침). 묶음 시세에 없는 종목(주소로 연 모달 · 처음 불러오는 중)만 세부사항 칸 값 */
+    const ex = lastLiveRaw ? (lastLiveRaw.expect || null) : (detailApi && detailApi.expect ? detailApi.expect() : null);
     if (ex) {
       const ec = dirClass(ex.pct);
       price.className = 'kh-price kh-num ' + ec;
