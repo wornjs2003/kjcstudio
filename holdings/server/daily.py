@@ -98,7 +98,9 @@ SECTOR_TOP = 3
 # 지수 대비 강한 종목 (2026-10-22 재권님 — 「코스피랑 코스닥 지수 대비 더 강한 종목들 10개 정도씩 … 아침에 텔레그램 올 때
 # 같이」 · 「전일 대비, 일주일 대비, 한 달 대비로 묶어서」 · 안에 「응」). 대상은 지수 구성 종목이라 ETF · 우선주가 저절로 빠진다.
 STRONG_TOP = 10
-STRONG_SPANS = [("전일", 1), ("일주일", 5), ("한 달", 20)]      # (이름, 거래일 수)
+STRONG_SPANS = [("전일", 1), ("일주일", 5), ("한 달", 20)]      # (이름, 거래일 수) — 하루 칸 이름은 build_strong 이 끝 봉 날짜로 고른다
+STRONG_TODAY = "오늘"   # 하루 칸 — 끝 봉이 오늘 봉이면(16:00 데일리 · 마감 뒤) 이 이름. 전날 봉이면 STRONG_SPANS 이름 「전일」 그대로
+#   2026-11-12 재권님 「오늘보내는건데 어제라고 나오는것들 있어」 — 데일리가 07:30 → 16:00 으로 옮겨 오늘 봉을 세는데 이름만 「전일」 로 남아 있었다
 # 발송 문안에 넣는다 — 「켜기」 재권님 승인(2026-10-22 18:0x 「응 해줘」 · 70줄쯤 늘고 07:30 글이 23~32초 늦음). 저장본에는 늘 담는다.
 STRONG_SEND = True
 
@@ -256,16 +258,18 @@ def strong_rank(index_bars, stocks, n, top=STRONG_TOP):
     return out[:top]
 
 
-def build_strong(markets):
+def build_strong(markets, now=None):
     """[{label, index:[(날짜,종가)], stocks:[…]}] → 저장본에 담을 모양. 시장마다 기간 셋."""
     res = []
+    today = (now or datetime.now()).strftime("%Y%m%d")
     for mk in markets or []:
         idx = mk.get("index") or []
+        name1 = lambda nm, n: STRONG_TODAY if n == 1 and idx and str(idx[-1][0])[:8] == today else nm
         res.append({
             "label": mk.get("label"),
             "asOf": idx[-1][0] if idx else None,
             "count": len(mk.get("stocks") or []),
-            "spans": [{"name": nm, "days": n, "rows": strong_rank(idx, mk.get("stocks"), n)}
+            "spans": [{"name": name1(nm, n), "days": n, "rows": strong_rank(idx, mk.get("stocks"), n)}
                       for nm, n in STRONG_SPANS],
         })
     return res
