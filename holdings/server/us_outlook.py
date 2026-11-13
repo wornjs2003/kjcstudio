@@ -300,6 +300,19 @@ def _refresh(k):
         _busy[k].release()
 
 
+def futures_row(sym):
+    """선물 한 줄 — 받아 둔 묶음에서 바로 낸다(기다리지 않음 · 홈 머리 띠 나스닥 선물 · 2026-11-13 재권님 「가」).
+    묶음이 수명(TTL)을 넘었으면 뒤에서 다시 받게만 하고 지금은 들고 있던 값을 낸다. 못 받았으면 None"""
+    if _stale("futures", time.time()):
+        threading.Thread(target=_refresh, args=("futures",), daemon=True).start()
+    with _lock:
+        s = _state["futures"]
+        rows = (s["data"] or {}).get("rows") or []
+        src = (s["data"] or {}).get("source")
+    r = next((x for x in rows if x.get("sym") == sym and x.get("v") is not None), None)
+    return dict(r, source=src) if r else None
+
+
 def outlook():
     now = time.time()
     todo = [k for k in TTL if _stale(k, now)]
