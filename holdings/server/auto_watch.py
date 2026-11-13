@@ -75,7 +75,7 @@ BACK_CAL_DAYS = 45              # 일봉 채우기에 묻는 달력 날 — 20�
 MULTI_MAX = 30
 GAP_SEC = 0.15                  # 묶음 사이 쉼 — 예산은 kis_get 이 지키지만 다른 받기에 비켜선다
 RULE_DOC, RULE_KEY = "strategy-rules", "volsurge"
-SORTS = ("mult", "pct")
+SORTS = ("mult", "pct", "score")   # score — 등락 · 거래량 배수를 그날 대상 안 백분위(0~100)로 바꿔 룰 칸 scoreW {pct, vol} 비율로 더함(11-13)
 ADD = True                      # 정규장 뒤 관심 목록 넣기 — 2026-11-06 켬(머리 주석 「넣기」 · 재권님 「응 해줘」)
 WATCH_DOC = "watchlist"
 AUTO_GROUP = {"id": dart.AUTO_GROUP_ID, "name": "자동"}
@@ -616,6 +616,10 @@ def compute(proxy, live=None):
     rule, src = rules(proxy)
     prev_pct, vol_mult = _num_or_none(rule.get("prevPct")), _num_or_none(rule.get("volMult"))
     sort_by = rule.get("sortBy") if rule.get("sortBy") in SORTS else "mult"
+    sw = rule.get("scoreW") if isinstance(rule.get("scoreW"), dict) else {}
+    score_w = {k: _num_or_none(sw.get(k)) for k in ("pct", "vol")}
+    if sort_by == "score" and (score_w["pct"] is None or score_w["vol"] is None or not (score_w["pct"] + score_w["vol"])):
+        sort_by = "pct"              # 비율 칸이 비면 점수를 못 셈 — 등락률 순으로(rule.sortBy 에 그렇게 적힌다)
     auto_max = _num_or_none(rule.get("autoMax"))
     near_pct = _num_or_none(rule.get("nearHighPct"))
     sector_pct = _num_or_none(rule.get("sectorPct"))
@@ -627,7 +631,7 @@ def compute(proxy, live=None):
     mem = members(proxy)
     out = {"day": None, "rule": {"prevPct": prev_pct, "volMult": vol_mult, "sortBy": sort_by,
                                  "autoMax": int(auto_max) if auto_max else None, "nearHighPct": near_pct, "sectorPct": sector_pct,
-                                 "maDays": ma_days, "maUpCandle": ma_up if ma_days else None, "from": src},
+                                 "scoreW": score_w if sort_by == "score" else None, "maDays": ma_days, "maUpCandle": ma_up if ma_days else None, "from": src},
            # volMult 는 빈칸이면 거래량 조건을 안 본다(2026-11-11 재권님 「20일 평균 거래량 2배는 룰 없애주고」 → 「가」 — 등락률만 · 등락률 큰 순)
            "ready": prev_pct is not None or sector_pct is not None or ma_days is not None,
            "picked": [], "pool": len(mem), "measured": None, "noToday": None, "short": None, "hitAll": None}
@@ -722,6 +726,23 @@ def compute(proxy, live=None):
         if r["nearHigh"] and r["code"] not in ids:
             r["nearHighOnly"] = True
             hit.append(r)
+    if sort_by == "score":           # 점수 — 그날 잰 줄 전체(rows) 안 백분위 · 칸을 모르면 그 줄 점수 None(맨 뒤)
+        #   (2026-11-13 재권님 「점수로 넣어줘 두점수의 합산이야 등락 60 거래량40 으로 해서 높은점수로」 → 안에 「응 해」)
+        def pctile(key):
+            vals = sorted(r[key] for r in rows if r[key] is not None)
+            n = len(vals)
+            def f(v):
+                if v is None or not n:
+                    return None
+                lo = sum(1 for x in vals if x < v)
+                eq = sum(1 for x in vals if x == v)
+                return 100.0 * (lo + (eq - 1) / 2) / (n - 1) if n > 1 else 100.0
+            return f
+        fp, fv = pctile("pct"), pctile("mult")
+        tot = score_w["pct"] + score_w["vol"]
+        for r in rows:
+            a, b = fp(r["pct"]), fv(r["mult"])
+            r["score"] = round((a * score_w["pct"] + b * score_w["vol"]) / tot, 1) if a is not None and b is not None else None
     other = "mult" if sort_by == "pct" else "pct"
     low = float("-inf")
     hit.sort(key=lambda r: (r[sort_by] if r[sort_by] is not None else low, r[other] if r[other] is not None else low), reverse=True)
