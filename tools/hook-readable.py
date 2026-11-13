@@ -35,14 +35,16 @@ READ_PARA_MAX = 400       # 한 문단 글자 수
 # 재권님이 쓰시는 영어 약어 · 이름 — 이 밖의 영어 낱말이 ▶ 줄에 있으면 센다(대소문자 그대로 견줌)
 READ_EN_OK = {"PER", "PBR", "ROE", "EPS", "RSI", "MACD", "MA", "VWAP", "ETF", "KIS", "DART", "KRX", "WICS", "VI", "IR", "CPI", "PCE",
               "FOMC", "AI", "API", "CSS", "PNG", "VS", "Code", "Claude", "Insight", "Holdings", "Projects", "Debugging", "NXT", "qa",
-              "OK", "UN", "J", "US", "KR", "EU", "JP", "SK", "LG", "Haiku", "Chrome", "Herdr"}
+              "OK", "UN", "J", "US", "KR", "EU", "JP", "SK", "LG", "Haiku", "Chrome", "Herdr",
+              # qa 재생 11-13 에 잘못 걸린 낱말 — 지수 · 거래소 · 약어
+              "STOXX", "CME", "HBM", "DB", "CNBC", "OpenDART", "SENSEX", "DAX", "KODEX", "KIND", "Opus", "Esc", "clear", "D", "S", "P"}
 
 FENCE = re.compile(r"```.*?(?:```|\Z)", re.S)
 QUOTE = re.compile(r"「[^「」\n]*」")
 URL = re.compile(r"https?://\S+")
 TICK = re.compile(r"`([^`\n]+)`")
 FILE = re.compile(r"\b[\w./-]+\.(?:py|js|css|html|json|md|sh|plist|command|db|txt)\b")
-EN = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z][A-Za-z0-9_-]+")
+EN = re.compile(r"(?<![A-Za-z0-9_&/])[A-Za-z][A-Za-z0-9_-]+")   # & · / 뒤는 앞 낱말의 일부(S&P500 · /clear)
 LOG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs", "readable.log")
 
 
@@ -86,8 +88,9 @@ def check(text):
             plain = URL.sub("", TICK.sub(lambda m: "" if URL.match(m.group(1).strip()) else m.group(1), s))
             if len(plain) > READ_BOX_MAX:
                 hits.append("① ▶ 줄 %d자(%d 넘음)" % (len(plain), READ_BOX_MAX))
-            names = codes(s) + FILE.findall(URL.sub("", s))
-            en = [w for w in EN.findall(URL.sub("", TICK.sub("", s))) if w not in READ_EN_OK]
+            names = list(dict.fromkeys(codes(s) + FILE.findall(URL.sub("", TICK.sub("", s)))))   # 백틱 안 파일은 codes 가 셈
+            rest = FILE.sub("", URL.sub("", TICK.sub("", s)))                      # 파일 이름은 위에서 셌다 — 두 번 안 셈
+            en = [w for w in EN.findall(rest) if w not in READ_EN_OK and re.sub(r"[-_]?\d+$", "", w) not in READ_EN_OK]   # MA20 · STOXX50 · D-1
             if names or en:
                 hits.append("② ▶ 줄에 코드 · 파일 · 영어 — " + " · ".join((names + en)[:4]))
             continue
@@ -95,8 +98,9 @@ def check(text):
             body.append("")
             continue
         body.append(s)
-        if s.count("·") > READ_DOTS_MAX:
-            hits.append("③ 한 줄 가운뎃점 %d개 — 「%s…」" % (s.count("·"), s[:24]))
+        dots = s.count(" · ")       # 띄어 쓴 것만 — 붙여 쓴 이름(「VI·급등」)은 한 낱말(qa 재생 11-13)
+        if dots > READ_DOTS_MAX:
+            hits.append("③ 한 줄 가운뎃점 %d개 — 「%s…」" % (dots, s[:24]))
     n = sum(len(codes(x)) for x in body)
     if n > READ_CODE_MAX:
         hits.append("④ 본문 코드 이름 %d개(%d 넘음)" % (n, READ_CODE_MAX))
