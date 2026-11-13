@@ -236,27 +236,3 @@
 .dt-colmenu button small { color: var(--kh-text-muted); margin-left: 4px; }
 .dt-colmenu .dt-cmh { font-size: 11.5px; color: var(--kh-text-muted); padding: 4px 10px; }
 .dt .dt-cols .dt-ovm { display: block; font-size: 10.5px; font-weight: 500; color: var(--kh-text-muted); }   /* 겹침 옆 — 그날 못 받아 0 으로 센 칩 수(개념정의 검수 11-12) */
-
-/* 옵션 만기일 (11-13 재권님 「응 해」) — 좁은 폭은 표 · 그래프가 위아래 · 넓은 폭(1181~)은 나란히 · 표는 칸 안에서 가로로 밂 */
-.mx .mx-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
-.mx .mx-tw { overflow-x: auto; }
-.mx .mx-tb { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-.mx .mx-tb th { font-weight: 500; color: var(--kh-text-secondary); padding: 6px 8px; text-align: right; white-space: nowrap; }
-.mx .mx-tb td { padding: 6px 8px; text-align: right; border-top: 1px solid var(--kh-border); white-space: nowrap; color: var(--kh-text-primary); }
-.mx .mx-tb td:nth-child(-n+2), .mx .mx-tb th:nth-child(-n+2) { text-align: left; }
-.mx .mx-tb .mx-grp th { text-align: center; color: var(--kh-text-primary); }
-.mx .mx-sep { border-left: 1px solid var(--kh-border); }
-.mx .mx-w { font-size: 11px; padding: 1px 6px; border-radius: var(--kh-radius-sm); background: var(--kh-bg); color: var(--kh-text-secondary); }
-.mx .mx-mut { color: var(--kh-text-secondary); }
-.mx .mx-g { display: block; width: 100%; height: 320px; }
-.mx .mx-g text { font-size: 11px; fill: var(--kh-text-secondary); }
-.mx .mx-gl { stroke: var(--kh-border); }
-.mx .mx-ex { stroke: var(--kh-text-secondary); stroke-opacity: .35; }
-.mx .mx-ex.w { stroke-opacity: .9; stroke-width: 2; }
-.mx .mx-ln { fill: none; stroke: var(--kh-text-primary); stroke-width: 1.5; }
-.mx .mx-pt { fill: var(--kh-text-secondary); }
-.mx .mx-pt.num-up { fill: var(--kh-up); }
-.mx .mx-pt.num-dn { fill: var(--kh-down); }
-@media (min-width: 1181px) {
-  .mx .mx-body { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
-}

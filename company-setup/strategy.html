@@ -109,13 +109,6 @@
     <!-- 칸은 js/strategy-dt30.js 의 mountDt30 이 만든다(11-13 — 홈 모달과 한 벌) -->
     <section class="st dt" id="dt-host"></section>
 
-    <!-- 옵션 만기일 (11-12 배분 → 시안 temp/시황분석1-expiry-1142 에 재권님 「응 해」 11-13) — 올해 만기일과 다음 거래일 코스피 · 값은 서버 둘(/api/kis/opt-expiry · index-daily) · 그리기는 js/strategy-expiry.js -->
-    <section class="st mx" id="mx">
-      <div class="st-meta">값을 받는 중…</div>
-      <h2 class="st-sec">옵션 만기일 — 그날과 다음 거래일 코스피</h2>
-      <div class="st-card mx-body"><div class="st-err">—</div></div>
-    </section>
-
     <section class="st">
       <div class="st-meta" id="st-meta">값을 받는 중…</div>
       <h2 class="st-sec">장외 · 야간선물 · 프리장 — 날마다 쌓기</h2>
@@ -153,7 +146,6 @@
 <script type="module" src="js/strategy-dt30.js"></script>
 <script type="module" src="js/strategy-log.js"></script>
 <script type="module" src="/assets/js/glossary.js"></script>   <!-- 설명 풍선 — 마우스를 1초 올려 두면 뜨는 공용 풍선(data-tip) · 「설명 풍선은 … 1초 올려 두면 뜬다」(2026-11-07) -->
-<script type="module" src="js/strategy-expiry.js"></script>
 <script type="module" src="js/fit.js"></script>   <!-- 틀을 홀딩스 첫 화면과 같은 넓이로 (2026-11-07) -->
 <script type="module">import { mountClaudeRail } from '/assets/js/claude-rail.js'; if (self === top) mountClaudeRail(); /* 틀(iframe) 안에 들어간 화면에는 안 붙인다 */</script>
 </body>
