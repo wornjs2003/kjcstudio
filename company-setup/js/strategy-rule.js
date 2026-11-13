@@ -168,8 +168,9 @@ function profTxt(res) {
   if (!d) return `<div class="aw-why-s">종목 설명</div><div class="st-err">— 서버 값을 못 받음(${res.st || '연결 안 됨'})</div>`;
   const sc = [d.sector && d.sector.wics, d.sector && d.sector.krx].filter(Boolean);
   const sm = d.summary || [];
-  if (!sc.length && !sm.length) return '<div class="aw-why-s">종목 설명</div><div class="st-err">— 설명 없음</div>';
-  return `<div class="aw-why-s">종목 설명</div>${sc.length ? `<div class="st-cap">섹터 ${esc(sc.join(' · '))}</div>` : ''}${sm.length ? `<ul>${sm.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}`
+  const miss = sm.length ? '' : `<div class="st-err">— ${esc(d.summaryError || '설명 없음')}</div>`;   // 못 받음(「네이버 못 받음: …」)을 「없음」 으로 바꾸지 않는다 — 서버 말 그대로 (qa 11-13)
+  if (!sc.length && !sm.length) return `<div class="aw-why-s">종목 설명</div>${miss}`;
+  return `<div class="aw-why-s">종목 설명</div>${sc.length ? `<div class="st-cap">섹터 ${esc(sc.join(' · '))}</div>` : ''}${sm.length ? `<ul>${sm.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : miss}`
     + `<div class="st-cap">출처 네이버 · FnGuide 기업개요${d.summaryFrom ? ` · <a href="${esc(d.summaryFrom)}" target="_blank" rel="noopener">원문</a>` : ''}</div>`;
 }
 awBox.addEventListener('click', (e) => { const tr = e.target.closest('tr[data-code]'); if (tr) showWhy(tr.dataset.code); });
