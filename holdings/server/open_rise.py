@@ -77,6 +77,10 @@ def build(proxy, now=None):
         return dict(empty, phase="closed")
     if live_today and now.hour * 60 + now.minute < bar_end:
         return dict(empty, phase="before")
+    # 리셋 — 그날 판은 넥장이 끝나는 market_hours.AFTER_CLOSE(20:00)까지만 · 그 뒤부터 다음 날 첫 봉까지 「시작 전」
+    # (2026-11-13 재권님 「관심안에 초반상승은 아직 시작전이니 전날 장이 마감되면 리셋되게 해줘」 · 「저녁 8시에 리셋」)
+    if not live_today or now.strftime("%H%M") >= market_hours.AFTER_CLOSE:
+        return dict(empty, phase="before", reset=True)
     uni, etf = _universe(proxy)
     cap_missing = sum(1 for u in uni if u["cap"] is None)
     cand = [u for u in uni if u["cap"] is not None and u["cap"] >= MIN_CAP_EOK]
