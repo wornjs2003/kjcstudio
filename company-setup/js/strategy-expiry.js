@@ -45,7 +45,7 @@ async function load() {
   const unsure = list.filter((e) => e.sure === false).length;
   meta.textContent = `${year}년 · 만기일 ${list.length}번 · 코스피 일봉 ${bars.length}개(${bars.length ? `${dd(bars[0].date)} ~ ${dd(today)}` : '못 받음'})${unsure ? ` · 휴장일 표에 아직 없어 평일로 셈 ${unsure}` : ''} · 만기일 = 그 달 둘째 목요일(휴장이면 앞 거래일) · 3 · 6 · 9 · 12월은 선물도 함께 만기(세마녀)`;
   const tr = rows.map(({ e, b, p, n }) => `<tr>
-    <td>${e.month}월</td><td><b>${dd(e.day)}</b>${e.witch ? ' <span class="mx-w">세마녀</span>' : ''}${e.sure === false ? ' <span class="mx-mut" data-tip="휴장일 표에 아직 없어 평일로 셈">?</span>' : ''}</td>
+    <td>${e.month}월</td><td><b${e.sure === false ? ' data-tip="휴장일 표에 아직 그날이 없어 평일로 셈"' : ''}>${dd(e.day)}</b>${e.witch ? ' <span class="mx-w">세마녀</span>' : ''}${e.sure === false ? ' <span class="mx-mut">평일로 셈</span>' : ''}</td>
     <td>${b ? f2(b.open) : '—'}</td><td>${b ? f2(b.close) : '—'}</td><td>${pc(b && p ? pct(b.close, p.close) : null)}</td><td>${pc(b ? pct(b.close, b.open) : null)}</td>
     <td class="mx-sep">${n ? dd(n.date) : `<span class="mx-mut">${b ? '아직' : e.day > today ? '아직 안 옴' : '—'}</span>`}</td>
     <td>${n ? f2(n.open) : '—'}</td><td>${n ? f2(n.close) : '—'}</td><td>${pc(n && b ? pct(n.open, b.close) : null)}</td><td>${pc(n && b ? pct(n.close, b.close) : null)}</td><td>${pc(n ? pct(n.close, n.open) : null)}</td></tr>`).join('');
