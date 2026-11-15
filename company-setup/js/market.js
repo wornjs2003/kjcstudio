@@ -467,12 +467,23 @@ function apply() {
   });
   document.querySelectorAll('#ctl button[data-k]').forEach(b => b.classList.toggle('on', on.has(b.dataset.k)));
 }
+// 나라 칸 접기 — 좁은 폭(폰)에서 떠 있는 칸이 글자를 가려 처음엔 접어 둔다 · 접고 편 상태는 그 기기에 기억(2026-11-16 재권님 「숨기기버튼 만들어줘」 · 「폰에서 글자가 가려서 불편해」 → 안에 「커밋해」). 넓은 폭은 CSS 가 단추를 숨기고 늘 펼친다
+const CTL_KEY = 'mk-ctl-open';
 function controls() {
   const box = document.getElementById('ctl');
-  box.innerHTML = K.map(k => `<button data-k="${k}" class="on"><i style="background:${COL[k]}"></i>${NAME[k]}</button>`).join('')
+  let open = false;
+  try { open = localStorage.getItem(CTL_KEY) === '1'; } catch (e) { /* 저장이 막힌 창 — 접힌 채로 뜬다 */ }
+  box.classList.toggle('shut', !open);
+  box.innerHTML = '<button class="fold" data-fold="1" aria-label="나라 칸 접기 · 펼치기" data-tip="나라 칸 접기 · 펼치기"><span>나라</span><b aria-hidden="true">▴</b></button>'
+    + K.map(k => `<button data-k="${k}" class="on"><i style="background:${COL[k]}"></i>${NAME[k]}</button>`).join('')
     + '<button class="all" data-all="1">전부</button><button class="all" data-only="KR">한국만</button>';
   box.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.fold) {
+      open = !open; box.classList.toggle('shut', !open);
+      try { localStorage.setItem(CTL_KEY, open ? '1' : '0'); } catch (e) { /* 저장이 막힌 창 — 이번 화면에서만 */ }
+      return;
+    }
     if (b.dataset.k) { on.has(b.dataset.k) ? on.delete(b.dataset.k) : on.add(b.dataset.k); }
     if (b.dataset.all) K.forEach(k => on.add(k));
     if (b.dataset.only) { on.clear(); on.add(b.dataset.only); }
