@@ -395,7 +395,7 @@ function paintHeatmap() {
 let mkKey = null;                       // 큰 차트에 띄운 지표 — null 이면 종목 차트
 let mkWant = null;                      // 마지막으로 누른 지표(받는 사이 다른 것을 누르면 옛 응답을 버린다)
 let mkDrop = null;                      // 지표 차트 지우기
-const MK_HIDE = ['kh-big-ic', 'kh-big-fav', 'kh-big-link', 'kh-dt'];          // 지표에는 없는 칸 — 자리는 두고 가린다
+const MK_HIDE = ['kh-big-ic', 'kh-big-fav', 'kh-big-vp', 'kh-big-link', 'kh-dt'];          // 지표에는 없는 칸 — 자리는 두고 가린다
 const MK_HIDE_SEL = ['.kh-idx-ai', '.kh-ind-menu'];
 const MK_LOCK = ['.kh-idx-head', '#kh-big-foot'];
 
@@ -3749,7 +3749,7 @@ document.addEventListener('click', (e) => {
 const panel3 = mountStockPanel($('kh-panel3'), { code: selectedCode, depth: true });   // 호가 10단 작은 막대는 홈만(2026-11-06)
 
 /* 세부사항 — 차트 머리줄의 보조지표 옆 */
-const detail = mountStockDetail($('kh-dt'), { view: 'direct', onOne: takeOne,
+const detail = mountStockDetail($('kh-dt'), { view: 'direct', onOne: takeOne, vpHost: $('kh-big-vp'),
   onExpect: (c, ex) => { if (ex) _expect.set(c, ex); else _expect.delete(c); bigShown = null; paintBigPrice(); } });   // 첫 화면에서 크게 보는 종목
 if (selectedCode) detail.setCode(selectedCode);
 
