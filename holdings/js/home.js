@@ -3280,7 +3280,9 @@ function updateRowCells(map) {
   const changed = [];
   for (const [code, live] of Object.entries(map)) {
     if (!live) continue;
-    const stamp = `${live.price}|${live.pct}|${live.volume}|${live.value}`;
+    /* 예상가도 넣는다 — 동시호가 동안 현재가 · 거래량은 안 움직이고 예상가만 바뀌어, 빼면 순위 줄 예상가가 45~75초 한 값에 멈췄다
+       (2026-11-16 qa 메인 08:53~08:59 하이닉스 잼 · 차트 창은 3~5초마다 바뀜 — 재권님 「차트의 예상가격과 실시간순위의 예상가격 안맞는거」) */
+    const stamp = `${live.price}|${live.pct}|${live.volume}|${live.value}|${live.expect ? live.expect.price : ''}`;
     if (lastShown[code] === stamp) continue;
     lastShown[code] = stamp;
     changed.push([code, live]);
