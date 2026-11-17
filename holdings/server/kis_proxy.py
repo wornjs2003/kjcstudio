@@ -8163,20 +8163,13 @@ def _kr_days_to_fill(code, n, first, last, today):
 # 날마다 하는 일은 뒤 작업과 같다(`_kr_past_day` · `_fill_mark`) — 하루 7번 안팎 · 종목당 1~2분.
 # 하루에 한 종목 한 번만 시작한다 — 화면은 5분봉을 30초마다 다시 부른다. 일봉이 없으면 그 일봉부터 받는다(거래일을 그것으로 센다).
 # 쓰는 서버(8765)에서만 돈다 — 세션 서버 · 서비스방은 DB 를 읽기만 한다(`marketdb.READONLY`).
+# **2026-11-18 부터 지수 안 종목도 든다** — 뒤 작업이 화면을 보는 동안 쉬어 밤새 안 돈 날이 있었다(`kick_kr_open_fill` 안 주석).
 _kr_open_fill = {}                    # code -> 시작한 날(YYYYMMDD)
 _kr_open_lock = threading.Lock()
-_dwmy_set_cache = [0.0, frozenset()]  # [잰 시각, 지수 구성종목] — 한 시간 들고 있는다(5분봉 요청마다 DB 를 안 읽게)
-
-
-def _in_dwmy(code):
-    if time.time() - _dwmy_set_cache[0] > 3600:
-        _dwmy_set_cache[1] = frozenset(_dwmy_codes())
-        _dwmy_set_cache[0] = time.time()
-    return code in _dwmy_set_cache[1]
 
 
 def kick_kr_open_fill(cfg, code):
-    """지수 밖 국내 종목의 5분봉을 열었으면 지난 거래일 채우기를 뒤에서 한 번 시작한다."""
+    """국내 종목의 5분봉을 열었으면 덜 찬 지난 거래일 채우기를 뒤에서 한 번 시작한다(11-18 부터 지수 안 종목도)."""
     if not marketdb.writable() or not re.fullmatch(r"\d{6}", code or ""):
         return
     today = datetime.now(KST).strftime("%Y%m%d")
@@ -8184,8 +8177,10 @@ def kick_kr_open_fill(cfg, code):
         if _kr_open_fill.get(code) == today:
             return
         _kr_open_fill[code] = today
-    if _in_dwmy(code):
-        return
+    # **지수 안 종목도 메운다** (2026-11-18 재권님 「응 커밋해」). 전에는 지수 안 종목을 뒤 작업(봉 채우기)에 맡기고 건너뛰었는데,
+    # 그 작업은 화면을 보는 동안 쉬어(`_bar_fill_wait_reason`) 화면이 늘 켜진 날 밤에 한 번도 안 돌았다 — 가온칩스(399720)
+    # 17일 5분봉이 08:00~11:30 만 남아 18일 아침 차트가 11:30 에서 바로 다음 날로 넘어갔다(그날 17일 메운 표시 0 · 16일 41).
+    # 덜 찬 날만 받으므로(`_kr_days_to_fill`) 미리받기로 다 찬 종목은 KIS 를 안 부른다.
 
     def run():
         try:
@@ -10105,7 +10100,7 @@ class Handler(SimpleHTTPRequestHandler):
                 else:
                     rows, fetched, source = get_chart(cfg, code, period, limit)
                 if period == "5m":
-                    kick_kr_open_fill(cfg, code)        # 지수 밖 종목이면 지난 거래일을 뒤에서 한 번 (2026-10-16)
+                    kick_kr_open_fill(cfg, code)        # 빈 지난 거래일을 뒤에서 한 번 (2026-10-16 · 11-18 지수 안 종목도)
                 head_ts = None
                 if PERIODS[period]["kis"] is None and _is_kr_code(code) and rows:
                     # **VWAP 는 그날 첫 봉부터 센다 — 받은 봉 수에서 잘린 날의 앞을 채워 셈하고 셈 뒤에 뗀다** (2026-11-11 재권님
