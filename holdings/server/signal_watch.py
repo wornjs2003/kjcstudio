@@ -790,11 +790,11 @@ def format_bb(code, name, ev):
     when = "%s:%s" % (t[8:10], t[10:12]) if len(t) >= 12 else ""
     return ("⬇ 볼린저 하단 · %s%s · %s\n"
             "저가 %s원 · 하단 %s원 · 현재가 %s원\n"
-            "RSI %s → %s (30 위로)\n"
+            "RSI %s → %s (%s 위로)\n"
             "오늘 %d번째 · 5분봉 · 정규장 기준 · 참고용입니다"
             % (who, " (%s)" % code if who != code else "", when,
                format(ev["low"], ","), format(ev["band"], ","), format(ev["close"], ","),
-               ev.get("rsiPrev"), ev.get("rsi"), ev["n"]))
+               ev.get("rsiPrev"), ev.get("rsi"), RSI_LOW, ev["n"]))
 
 
 def check_bb(proxy, names=None):
