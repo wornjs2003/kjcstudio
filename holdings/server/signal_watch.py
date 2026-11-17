@@ -86,6 +86,14 @@ MACD_FAST, MACD_SLOW, MACD_SIG = 12, 26, 9
 SAME_BAR = True
 WINDOW = 5
 
+# **바닥(low) 신호만 둘을 풀었다** (2026-11-17 재권님 — SK텔레콤 10:30 · 10:35 가 한 봉씩 엇갈려 안 걸림 →
+#   「2번은 볼린저 룰에서만 제외해도 돼 그 룰로 재봐」 → 「응 그렇게 해줘」). 고점(high)은 그대로다.
+#     LOW_NEED_BULL   ① 하단을 건드린 봉이 양봉이어야 하나 — False(안 본다)
+#     LOW_RSI_BARS    ③ RSI 가 30 아래에서 오르기 시작한 봉을 이번 봉 포함 몇 봉 안에서 찾나 — 2(이번 · 바로 앞)
+#   잰 것 — 메인 DB 5분봉 11-04~11-17 · 대상 350 · 다 끝난 봉으로 다시 셈: 지금 대비 3할쯤 늘어남(양봉만 빼면 5%쯤 · SK텔레콤은 안 걸림)
+LOW_NEED_BULL = False
+LOW_RSI_BARS = 2
+
 # **하루 횟수를 안 막는다** (2026-09-23 지시 — 「횟수는 제한을 두지 않는다」).
 # 전에는 한 종목에 하루 3번까지였다.
 #
@@ -192,9 +200,10 @@ def judge(rows):
 
     **둘은 대칭이다** (2026-09-23 지시 — 「이 두가지 경우에 다 메세지가 와야해」).
 
-        바닥(low)   ① 볼린저 **하단**을 **저가**가 건드리고 그 봉이 **양봉**
+        바닥(low)   ① 볼린저 **하단**을 **저가**가 건드림(양봉은 LOW_NEED_BULL — 2026-11-17 부터 안 봄)
                     ② MACD 히스토그램이 **음수인데 직전보다 큼** (매도세가 약해진다)
                     ③ RSI 가 직전 < 30 이고 이번이 직전보다 큼 (**30 아래에서 오르기 시작** · 2026-11-09 — 그 전은 30 을 넘은 봉)
+                       · 이번 봉 포함 LOW_RSI_BARS 봉 안에서(2026-11-17 · 바로 앞 봉까지)
 
         고점(high)  ① 볼린저 **상단**을 **고가**가 건드리고 그 봉이 **음봉**
                     ② MACD 히스토그램이 **양수인데 작아짐** (매수세가 약해진다)
@@ -222,7 +231,7 @@ def judge(rows):
         """① 띠를 건드리고 봉 방향이 맞는가."""
         r = rows[i]
         if kind == "low":
-            return bb_lo[i] is not None and r["low"] <= bb_lo[i] and r["close"] > r["open"]
+            return bb_lo[i] is not None and r["low"] <= bb_lo[i] and (r["close"] > r["open"] or not LOW_NEED_BULL)
         return bb_up[i] is not None and r["high"] >= bb_up[i] and r["close"] < r["open"]
 
     def hist_turn(i, kind):
@@ -248,7 +257,9 @@ def judge(rows):
         if not band(last, kind):
             continue
         if SAME_BAR:
-            ok2, ok3 = hist_turn(last, kind), rsi_cross(last, kind)
+            ok2 = hist_turn(last, kind)
+            n3 = LOW_RSI_BARS if kind == "low" else 1     # 바닥은 RSI 를 바로 앞 봉까지 본다(위 LOW_RSI_BARS)
+            ok3 = any(rsi_cross(i, kind) for i in range(max(0, last - n3 + 1), last + 1))
         else:
             lo_i = max(0, last - WINDOW + 1)
             ok2 = any(hist_turn(i, kind) for i in range(lo_i, last + 1))
