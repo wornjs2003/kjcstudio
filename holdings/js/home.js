@@ -395,7 +395,7 @@ function paintHeatmap() {
 let mkKey = null;                       // 큰 차트에 띄운 지표 — null 이면 종목 차트
 let mkWant = null;                      // 마지막으로 누른 지표(받는 사이 다른 것을 누르면 옛 응답을 버린다)
 let mkDrop = null;                      // 지표 차트 지우기
-const MK_HIDE = ['kh-big-ic', 'kh-big-fav', 'kh-big-link', 'kh-dt'];          // 지표에는 없는 칸 — 자리는 두고 가린다
+const MK_HIDE = ['kh-big-ic', 'kh-big-fav', 'kh-big-vp', 'kh-big-link', 'kh-dt'];          // 지표에는 없는 칸 — 자리는 두고 가린다
 const MK_HIDE_SEL = ['.kh-idx-ai', '.kh-ind-menu'];
 const MK_LOCK = ['.kh-idx-head', '#kh-big-foot'];
 
@@ -1098,7 +1098,7 @@ async function paintYearRange() {
       <span class="kh-num kh-up">${fmtPriceOf(code, r.hi)}</span>
     </div>
     <div class="kh-head-yr-note kh-mut" data-tip="지금 ${fmtPriceOf(code, cur)} · 52주(장중) 최저에서 ${(at * 100).toFixed(0)}% 자리">
-      지금 <b>${fmtPriceOf(code, cur)}</b> · 52주(장중) 최저에서 <b>${(at * 100).toFixed(0)}%</b> 자리</div>`;   /* 좁은 창에서 줄여 보일 때 전체는 1초 풍선(11-12) */
+      최저에서 <b>${(at * 100).toFixed(0)}%</b></div>`;   /* 줄인 글 — 전체(지금 값 · 52주 장중)는 1초 풍선(11-12) · 거래량 칸 자리를 내려고 줄임(11-17 재권님 「나」) */
 }
 
 /* 세부사항(거래대금 · 시가총액 · 매수매도)은 차트 머리줄로 갔다 (2026-09-21 지시).
@@ -3272,7 +3272,9 @@ function updateRowCells(map) {
   const changed = [];
   for (const [code, live] of Object.entries(map)) {
     if (!live) continue;
-    const stamp = `${live.price}|${live.pct}|${live.volume}|${live.value}`;
+    /* 예상가도 넣는다 — 동시호가 동안 현재가 · 거래량은 안 움직이고 예상가만 바뀌어, 빼면 순위 줄 예상가가 45~75초 한 값에 멈췄다
+       (2026-11-16 qa 메인 08:53~08:59 하이닉스 잼 · 차트 창은 3~5초마다 바뀜 — 재권님 「차트의 예상가격과 실시간순위의 예상가격 안맞는거」) */
+    const stamp = `${live.price}|${live.pct}|${live.volume}|${live.value}|${live.expect ? live.expect.price : ''}`;
     if (lastShown[code] === stamp) continue;
     lastShown[code] = stamp;
     changed.push([code, live]);
@@ -3747,7 +3749,7 @@ document.addEventListener('click', (e) => {
 const panel3 = mountStockPanel($('kh-panel3'), { code: selectedCode, depth: true });   // 호가 10단 작은 막대는 홈만(2026-11-06)
 
 /* 세부사항 — 차트 머리줄의 보조지표 옆 */
-const detail = mountStockDetail($('kh-dt'), { view: 'direct', onOne: takeOne,
+const detail = mountStockDetail($('kh-dt'), { view: 'direct', onOne: takeOne, vpHost: $('kh-big-vp'),
   onExpect: (c, ex) => { if (ex) _expect.set(c, ex); else _expect.delete(c); bigShown = null; paintBigPrice(); } });   // 첫 화면에서 크게 보는 종목
 if (selectedCode) detail.setCode(selectedCode);
 

@@ -15,6 +15,14 @@
 .mk .ctl button.on i { opacity: 1; }
 .mk .ctl .all { background: var(--kh-accent-dim); color: var(--kh-accent); justify-content: center; }
 .mk .ctl .all:first-of-type { margin-top: 4px; }
+/* 접기 단추 — 좁은 폭만. 접히면 「나라 ▾」 단추 하나만 남아 글자를 거의 안 가린다(2026-11-16 재권님 「폰에서 글자가 가려서 불편해」) */
+.mk .ctl .fold { color: var(--kh-text-secondary); font-weight: 700; justify-content: space-between; }
+.mk .ctl .fold b { font-size: 9px; }
+.mk { position: relative; }   /* 좁은 폭 — 접힌 단추가 이 칸 위끝에 붙는다 */
+.mk #meta { padding-right: 64px; }   /* 좁은 폭 · 시황분석 첫 줄만(news · 다른 메타 줄은 안 건드림) — 첫 글 줄 오른쪽에 접힌 「나라」 단추 자리를 비운다 */
+.mk .ctl.shut { padding: 3px; position: absolute; top: 0; }   /* 접히면 갈래 줄 아래 첫 글 줄 오른쪽에 붙어 아무것도 안 가린다 — 스크롤하면 안 따라온다(2026-11-16 재권님 「나」) · 펼치면 전처럼 떠서 따라다닌다 */
+.mk .ctl.shut > button:not(.fold) { display: none; }
+.mk .ctl.shut .fold b { transform: rotate(180deg); }
 .mk .one { font-size: 15px; font-weight: 700; line-height: 1.6; margin: 0; }
 .mk .para { margin: 0 0 4px; }
 .mk details.ev { margin: 0 0 12px; font-size: 12.5px; color: var(--kh-text-secondary); }
@@ -90,6 +98,10 @@
   .mk .mk-body { grid-column: 1; grid-row: 1; min-width: 0; }
   .mk .ctl { position: sticky; grid-column: 2; grid-row: 1; top: calc(var(--nav-height) + 12px); right: auto; gap: 4px; padding: 10px 8px; box-shadow: none; }   /* 넓은 폭 — 오른쪽 세로 줄로 따라다닌다 · 메뉴 줄 아래에서 멈춘다 */
   .mk .ctl button { font-size: 12px; padding: 5px 10px; }
+  .mk #meta { padding-right: 0; }
+  .mk .ctl .fold { display: none; }   /* 넓은 폭은 오른쪽 세로 줄이라 글자를 안 가린다 — 접기 없이 늘 펼침(이번 지시는 폰) */
+  .mk .ctl.shut { padding: 10px 8px; position: sticky; top: calc(var(--nav-height) + 12px); }
+  .mk .ctl.shut > button:not(.fold) { display: inline-flex; }
   .mk .mk-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .mk .chart { height: 300px; }
   .mk .mk-wide { grid-column: 1 / -1; }

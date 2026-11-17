@@ -179,14 +179,18 @@ def main():
     except (OSError, ValueError):
         store = {"items": []}
     have = {x["num"]: x for x in store["items"]}
-    new, failed = 0, 0
+    # 원문을 못 읽었던 발표는 다음 바퀴에 다시 받는다 (2026-11-13 재권님 「응」 — 11-11 발표가 시간 초과 뒤 영영 비어 있었다)
+    unread = lambda x: any(str(w).startswith("원문을 못 읽음") for w in (x.get("why") or []))
+    new, failed, fixed = 0, 0, 0
     for n, title, date in rows[:KEEP]:
-        if n in have and not redo:
+        retry = n in have and unread(have[n])
+        if n in have and not redo and not retry:
             continue
         rec = {"num": n, "title": title, "date": date, "kind": kind_of(title), "url": "%s/policy/materialView.do?num=%d" % (BASE, n)}
         if rec["kind"] in ("1-10", "1-20", "month"):
             try:
                 rec.update(parse(pdf_text(n)))
+                fixed += 1 if retry else 0
             except Exception as e:
                 rec["why"] = ["원문을 못 읽음: %s" % e]
                 failed += 1
@@ -212,7 +216,9 @@ def main():
     print("최신 %s · %s · 수출 %s" % (top["date"], top["title"], (top.get("export") or {}).get("amt", "—")))
     if failed:
         print("원문을 못 읽은 것 %d건 — why 칸에 이유" % failed)
-    if new == 0:
+    if fixed:
+        print("못 읽었던 발표를 다시 받음 %d건" % fixed)
+    if new == 0 and not fixed:
         print("새 발표 없음")
         return 3
     print("새로 받음 %d건" % new)

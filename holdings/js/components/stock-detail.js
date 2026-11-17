@@ -55,7 +55,9 @@ const VOL_PREV_FALLBACK_MS = 60_000;     // 전날 같은 시각 대비 거래�
 /* `onOne(code, 단건)` — 단건을 받을 때마다 알린다 (2026-10-06 지시 — 「로딩 순서 체크해 봐」 → 「응」).
    첫 화면의 52주 칸과 큰 차트 머리 현재가가 **같은 단건을 따로 또 부르거나**(같은 주소 두 번)
    **1초 넘는 묶음 시세를 기다리던** 것을 이 응답 하나로 칠한다. 증권사 호출이 한 건 준다. */
-export function mountStockDetail(host, { view, onOne, onExpect } = {}) {
+/* vpHost — 「전날 같은 시각 대비 거래량」 칸을 이 줄 대신 따로 그릴 자리(2026-11-17 재권님 「응」 — 큰 차트 첫 줄 「자세히 ›」 바로 왼쪽 · 모달은 차트 창 첫 줄 끝).
+   주면 그 칸만 거기 그리고, 안 주면(종목 화면) 전처럼 이 줄 안이다 */
+export function mountStockDetail(host, { view, onOne, onExpect, vpHost = null } = {}) {
   if (!host) return { setCode() {}, update() {}, destroy() {}, full() { return null; }, missing() { return false; } };
 
   let code = null;
@@ -180,11 +182,12 @@ export function mountStockDetail(host, { view, onOne, onExpect } = {}) {
     const vpCls = vpPct == null ? 'kh-mut' : vpT?.side === 'up' ? 'kh-up' : vpT?.side === 'down' ? 'kh-down' : '';
     const vpBg = vpT ? tonePaint('vol_prev_pct', vpPct, 'bg') : '';
     const vpHtml = !vp ? '' : `
-      <span class="kh-dt-i" data-vp data-tip="오늘 정규장 거래량 ÷ 전날(${vp.prevDay.slice(4, 6)}-${vp.prevDay.slice(6)}) 같은 시각까지의 정규장 거래량 · 둘 다 5분봉을 더한 것${vp.upto ? ` · ${vp.upto.slice(0, 2)}:${vp.upto.slice(2)} 봉까지` : ''}">
+      <span class="kh-dt-i" data-vp data-tip="오늘 정규장 거래량 ÷ 전날(${vp.prevDay.slice(4, 6)}-${vp.prevDay.slice(6)}) 같은 시각까지의 정규장 거래량 · 둘 다 5분봉을 더한 것${vp.upto ? ` · ${vp.upto.slice(0, 2)}:${vp.upto.slice(2)} 봉까지` : ''}${vpHost && vpBase != null ? ` · 전날 ${fmtShareCount(Math.round(vpBase))}` : ''}">
         <span class="kh-dt-l">거래량 전날 같은 시각 대비</span><b class="kh-dt-pw ${vpCls}"${vpBg ? ` style="background:${vpBg}"` : ''}>${vpPct == null ? '—' : `${vpPct.toLocaleString('ko-KR')}%`}</b>
-        <span class="kh-dt-l">전날 ${vpBase == null ? '—' : fmtShareCount(Math.round(vpBase))}</span></span>`;
+        ${vpHost ? '' : `<span class="kh-dt-l">전날 ${vpBase == null ? '—' : fmtShareCount(Math.round(vpBase))}</span>`}</span>`;   // 첫 줄 자리에서는 「전날 N주」 를 풍선으로 — 칸이 넓어 현재가가 꺾였다(8766 11-17 · 2560 창에서 260px)
 
-    host.innerHTML = `${stHtml}${pwHtml}${vpHtml}
+    if (vpHost) { vpHost.innerHTML = vpHtml; vpHost.style.display = vpHtml ? '' : 'none'; }
+    host.innerHTML = `${stHtml}${pwHtml}${vpHost ? '' : vpHtml}
       <span class="kh-dt-i" data-tip="${exact ? '서버가 준 실제 거래대금입니다'
         : '현재가 × 거래량으로 어림한 값입니다'}">
         <span class="kh-dt-l">거래대금${exact ? '' : '<i>어림</i>'}</span><b>${amt}</b></span>
@@ -196,11 +199,25 @@ export function mountStockDetail(host, { view, onOne, onExpect } = {}) {
   /* 좁은 창에서 이 줄이 넘치면 거래량 칸만 숨긴다 — 줄이 꺾이면 차트가 그만큼 줄어서다(재권님 「ㄱ」 11-10 · 1600 창에서 check-layout 차트 -12px).
      줄이 꺾였는지는 칸들의 윗자리로 본다 — 값을 박지 않는다. 창 폭이 바뀌면(ResizeObserver) 다시 보고 다시 띄운다 */
   function fitVp() {
+    // 아래 줄로 갔다 = 윗변이 앞 칸의 가운데보다 아래다(칸마다 세로 정렬로 몇 px 어긋나는 것은 꺾임이 아니다)
+    const below = (a, b) => { const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return rb.top > ra.top + ra.height / 2; };
+    if (vpHost) {
+      // 따로 그린 자리 — 그 머리줄이 넘치거나(꺾이지 않는 줄은 넘친다) 꺾이면 숨긴다. 머리줄 높이 · 다른 칸을 밀지 않게
+      if (!vpHost.querySelector('[data-vp]')) return;
+      const row = vpHost.parentElement;
+      if (!row) return;
+      // 머리줄 높이를 칸 없이 · 있게 두 번 잰다 — 칸이 줄을 밀거나 옆 칸(현재가 등)을 눌러 꺾으면 높이가 커진다(qa 11-17 · 1280 창에서 48 → 72px)
+      vpHost.style.display = 'none';
+      const h0 = row.getBoundingClientRect().height;
+      vpHost.style.display = '';
+      const h1 = row.getBoundingClientRect().height;
+      const first = [...row.children].find((k) => k.offsetParent !== null);
+      if (h1 > h0 + 0.5 || row.scrollWidth > row.clientWidth + 1 || (first && first !== vpHost && below(first, vpHost))) vpHost.style.display = 'none';
+      return;
+    }
     const el = host.querySelector('[data-vp]');
     if (!el) return;
     el.style.display = '';
-    // 아래 줄로 갔다 = 윗변이 앞 칸의 가운데보다 아래다(칸마다 세로 정렬로 몇 px 어긋나는 것은 꺾임이 아니다)
-    const below = (a, b) => { const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return rb.top > ra.top + ra.height / 2; };
     const kids = [...host.children].filter((k) => k.offsetParent !== null);
     if (!kids.length) return;
     // 줄 안에서 꺾였거나, 이 줄이 통째로 기간 단추 줄 아래로 밀렸으면(홈 큰 차트의 kh-per-row) 숨긴다
@@ -212,7 +229,12 @@ export function mountStockDetail(host, { view, onOne, onExpect } = {}) {
   let fitW = 0;
   const fitRo = typeof ResizeObserver === 'function'
     ? new ResizeObserver(([e]) => { const w = Math.round(e.contentRect.width); if (w !== fitW) { fitW = w; fitVp(); } }) : null;
-  if (fitRo) fitRo.observe(host);
+  if (fitRo) fitRo.observe(vpHost && vpHost.parentElement ? vpHost.parentElement : host);
+  /* 따로 그린 자리는 그 머리줄 글(현재가 · 52주 · 「불러오는 중」)이 바뀌면 다시 잰다 — 폭만 보면 처음 「불러오는 중」 때 숨긴 채 굳었다(8766 11-17 · 2560 창) */
+  let fitRaf = 0;
+  const fitMo = vpHost && vpHost.parentElement && typeof MutationObserver === 'function'
+    ? new MutationObserver(() => { if (!fitRaf) fitRaf = requestAnimationFrame(() => { fitRaf = 0; fitVp(); }); }) : null;
+  if (fitMo) fitMo.observe(vpHost.parentElement, { childList: true, subtree: true, characterData: true });
 
   async function loadPower() {
     if (!code || isUsCode(code)) return;
@@ -297,6 +319,7 @@ export function mountStockDetail(host, { view, onOne, onExpect } = {}) {
       if (powerTimer) powerTimer.stop();
       if (vpTimer) vpTimer.stop();
       if (fitRo) fitRo.disconnect();
+      if (fitMo) fitMo.disconnect();
     },
   };
 }

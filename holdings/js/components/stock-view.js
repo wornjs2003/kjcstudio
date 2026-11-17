@@ -575,7 +575,18 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
   askTable.setCode(stock.code);
   /* 단건이 오면 머리도 다시 그린다 (2026-10-12). 전에는 머리가 다음 묶음 시세를 기다려 시가총액이
      0.5~2.7초 「—」 였다 — 아래 머리줄은 0.07~0.39초에 이미 같은 값을 들고 있었다(8765 실측) */
-  const detail = mountStockDetail($('#kh-dt'), { view, onOne: () => { if (!dead) paintHead(lastLiveRaw); },
+  /* 거래량 전날 같은 시각 대비 — 모달은 차트 창 첫 줄 끝(홈 큰 차트의 「자세히 ›」 왼쪽과 같은 첫 줄 · 2026-11-17 재권님 「응」 · 「차트 창도 같게」).
+     종목 화면(stock.html)은 빼냄 — 까닭: 그 줄이 꺾여 칸이 커짐 · 재권님 「맞아 커밋해」 11-10(stock-detail.js 가 모달 · 홈만 그린다) */
+  const vpHost = (() => {
+    const head = root.closest('.kh-modal') && $('.kh-w[data-p="chart"] .kh-w-head');
+    if (!head) return null;
+    const el = document.createElement('span');
+    el.className = 'kh-dt';
+    el.style.cssText = 'margin-left:0;display:none;flex-shrink:0;white-space:nowrap;flex-wrap:nowrap;padding:1px 8px;line-height:1.4';   // 한 줄 · 위아래 여백을 줄여 첫 줄 높이 안에 — 꺾이거나 줄을 밀면 칸이 커진다(qa 11-17 · 넘치면 stock-detail 이 숨긴다)
+    head.appendChild(el);
+    return el;
+  })();
+  const detail = mountStockDetail($('#kh-dt'), { view, vpHost, onOne: () => { if (!dead) paintHead(lastLiveRaw); },
                                                  onExpect: () => { if (!dead) paintHead(lastLiveRaw); } });
   detailApi = detail;
   /* 재무 카드 다섯 — 모달 「투자 지표」 칸에만 붙는다 (2026-10-02 지시 · finance-cards.js) */
