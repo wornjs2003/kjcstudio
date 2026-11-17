@@ -1619,7 +1619,7 @@ const SORT_TIPS = {
   down: '오늘 전일 대비 많이 내린 순',
   after: `정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 09:00 ~ 15:40 은 비어 있습니다 · ${CAP_MIN_TXT}`,
   buy: `외국인 · 기관 순매수 금액 상위 30(장중 가집계)에 든 종목을 이 차례로 — ① 외국인 · 기관 · 연기금 · 프로그램 넷 다 ② 외국인 · 기관 · 프로그램 ③ 기관 · 연기금 ④ 외국인만 · 같은 칸 안은 산 금액 합 큰 순\n연기금은 15:45 확정치 뒤에만 있어 장중에는 ② ④ 만 찹니다 · 프로그램은 실시간 · 서버가 판을 다시 지을 때마다 차례가 바뀝니다\n칸에서 빠진 종목은 맨 위에 흐리게 · ${CAP_MIN_TXT}`,
-  pre: `넥스트레이드 프리마켓(08:00 ~ 08:50)에 전일 종가보다 오른 종목 중 거래대금 상위(서버가 정한 줄 수) · 차례는 등락률 큰 순\n프리장 동안 몇 분마다 다시 재고 08:50 에 그날 판으로 굳힙니다 · 줄마다 「프」 는 프로그램 순매수(참고) · ${CAP_MIN_TXT}`,
+  pre: `넥스트레이드 프리마켓(08:00 ~ 08:50)에 전일 종가보다 오른 종목 중 거래대금 상위(서버가 정한 줄 수) · 차례는 등락률 큰 순\n배율 — 전날 같은 시각까지 거래량 대비(08:00~08:05 2초마다 · 그 뒤 20초마다 · 2배 넘으면 빨강)\n프리장 동안 몇 분마다 다시 재고 08:50 에 그날 판으로 굳힙니다 · 줄마다 「프」 는 프로그램 순매수(참고) · ${CAP_MIN_TXT}`,
   nowup: `지금 값이 오늘 시가보다 +${NOW_RISE_PCT}% 이상 높은 종목, 시가 대비 큰 순 · 오른쪽 % 도 시가 대비\n위 코스피 · 코스닥으로 시장을 고릅니다 · ${CAP_MIN_TXT}`,
   vi: `오늘 정규장에 상승 VI 가 걸렸거나(VI 는 ${CAP_MIN_TXT}) 전일 대비 +20% 를 넘은 종목, 최근 것이 위`,
   bb: `바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · ${CAP_MIN_TXT} · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록`,
@@ -1853,6 +1853,9 @@ async function loadBb() {
 
 /* 「프리장」 칩 — 서버가 준 줄 그대로. 못 받았으면 null(빈 목록과 가른다) */
 let preRows = null, preMeta = null, preSectors = [];
+/* 배율 — 전날 같은 시각(같은 분)까지 거래량 대비. 서버 프리장 급증 판(/api/kis/pre-surge · server/pre_surge.py)이 종목마다 준 값 그대로.
+   못 받은 종목은 프리장 판의 「앞 거래일 장 전 전체 대비」(r.ratio)로 물러선다(2026-11-17 재권님 「프리장」 → (나) 「프리장」 칩 표에 배율 칸으로) */
+let preSame = {};
 const preOf = (code) => (preRows || []).find((r) => r.code === code) || null;
 /* 윗줄 프로그램 순매수(억 · 오름 빨강 · 내림 파랑) · 아랫줄 프리장 거래대금(억 · 어림) · 앞 거래일 장 전 거래량 대비 배율 · 공시 표시(제목은 풍선) */
 function preCell(code) {
@@ -1860,7 +1863,10 @@ function preCell(code) {
   if (!r) return '—';
   const pg = `<span class="${r.program == null ? 'kh-mut' : dirClass(r.program)}">프 ${eokSigned(r.program)}${r.program == null ? '' : '억'}</span>`;
   const amt = r.amt == null ? '—' : `≈${Math.round(r.amt / 1e8).toLocaleString()}`;
-  const ratio = r.ratio == null ? '' : ` <span class="${r.ratio >= 2 ? 'kh-up' : 'kh-mut'}">${r.ratio}배</span>`;
+  const same = preSame[code];
+  const rv = same ?? r.ratio;
+  const rtip = same != null ? '전날 같은 시각까지 거래량 대비' : '앞 거래일 장 전 전체 거래량 대비';
+  const ratio = rv == null ? '' : ` <span class="${rv >= 2 ? 'kh-up' : 'kh-mut'}" data-tip="${rtip}">${rv}배</span>`;
   const disc = (r.disc || []).length ? ` <span class="kh-accent" data-tip="${r.disc.map((t) => t.replace(/"/g, '&quot;')).join('\n')}">공시${r.disc.length > 1 ? r.disc.length : ''}</span>` : '';
   /* 두 줄 — 한 줄이면 순위 칸에서 종목 이름이 한 글자로 눌렸다(11-05 8772 · 2560 창) */
   return `<div style="white-space:nowrap;font-size:12px;line-height:1.3">${pg}</div>` +
@@ -1890,6 +1896,16 @@ function paintPreSectors() {
   box.innerHTML = '<span class="kh-mut">업종</span>' + preSectors.map((g) =>
     `<span class="kh-pre-sec-it" data-tip="${g.n}종목 · 오른 ${g.up} · 내린 ${g.down} · 많이 움직인 ${g.top.map((x) => `${x.name} ${pct(x.pct)}`).join(' · ')}">` +
     `${g.name} <b class="${dirClass(g.avg)}">${pct(g.avg)}</b> <span class="kh-mut">${g.up}↑${g.down}↓</span></span>`).join('');
+}
+async function loadPreSame() {
+  try {
+    const r = await apiFetch('/api/kis/pre-surge', { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    if (j && j.ok && j.ratios) preSame = j.ratios;
+    else if (j && j.meta && j.meta.reset) preSame = {};
+  } catch { /* 못 받으면 들고 있던 것 그대로 */ }
+  if (sortBy === 'pre') paintRows(rowPrices);
+  if (rankModal && rankModalSort === 'pre') paintRankModal();
 }
 async function loadPre() {
   try {
@@ -2933,6 +2949,7 @@ async function loadSectors() {
 const JOINT_FALLBACK_MS = 300000;     // 「매수」 칩 — 서버 값마저 못 받았을 때만
 watch({ url: () => (sortBy === 'buy' || sortBy === 'ov' ? '/api/kis/joint-buy' : null), onChange: loadJoint, key: 'kis_proxy.INVESTOR_TOP_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => (sortBy === 'pre' || sortBy === 'ov' ? '/api/kis/pre-flow' : null), onChange: loadPre, key: 'pre_flow.FLOW_TTL', fallbackMs: JOINT_FALLBACK_MS });
+watch({ url: () => (sortBy === 'pre' || (rankModal && rankModalSort === 'pre') ? '/api/kis/pre-surge' : null), onChange: loadPreSame, key: 'pre_surge.BURST_SEC', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => (sortBy === 'rise' || sortBy === 'ov' || (rankModal && rankModalSort === 'rise') ? '/api/kis/open-rise' : null), onChange: loadRise, key: 'open_rise.CACHE_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => (sortBy === 'vi' || sortBy === 'ov' || (rankModal && rankModalSort === 'vi') ? '/api/alerts/today' : null), onChange: loadVi, key: null, fallbackMs: VI_FALLBACK_MS });
 watch({ url: () => (sortBy === 'bb' || (rankModal && rankModalSort === 'bb') ? '/api/signals/today' : null), onChange: loadBb, key: null, fallbackMs: BB_FALLBACK_MS });

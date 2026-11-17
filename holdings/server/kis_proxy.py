@@ -10411,7 +10411,7 @@ class Handler(SimpleHTTPRequestHandler):
                 data, at, ph = pre_surge.fetch(sys.modules[__name__])
                 d = data or {}
                 self._send_json({
-                    "ok": data is not None, "data": d.get("rows") or [],
+                    "ok": data is not None, "data": d.get("rows") or [], "ratios": d.get("ratios") or {},
                     "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S") if at else None,
                              "day": d.get("day"), "builtAt": d.get("hm"), "prevDay": d.get("prevDay"), "phase": ph,
                              "noTrade": bool(d.get("noTrade")), "reset": bool(d.get("reset")),
