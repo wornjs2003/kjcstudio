@@ -2200,7 +2200,10 @@ function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
    * 그것을 쓰면 담고 빼도 이 칩이 그대로여서 「한 곳에만 둔다」 가 깨진다. */
   if (sort && sort.filter) {
     const only = favGroupCodes(grp);
-    const fav = only ? favList().filter((f) => only.has(f.code)) : favList();
+    let fav = only ? favList().filter((f) => only.has(f.code)) : favList();
+    /* 「수급」 칩(자동 묶음)은 오른 종목만 — 등락률 0 · 내림은 뺀다 · 등락률을 모르면 남긴다(못 잼은 하락이 아니다) ·
+       2026-11-17 재권님 「수급은 상승종목만 나오도록 수정해줘」 → 「실시간 순위에만 적용하고 insight는 그대로」 */
+    if (grp === AUTO_FG) fav = fav.filter((f) => { const v = pctOf(rowPrices[f.code], sortId); return v == null || v > 0; });   // 표 등락률 칸과 같은 셈
     const want = new Set(fav.map((f) => f.code));
     const inside = all.filter((s) => want.has(s.code) && !capBelowMin(s.code));   // 시장을 안 가린다 — 위 MARKETS 주석 · 시총 RANK_MIN_CAP_EOK 미만은 뺀다
 
@@ -3359,6 +3362,12 @@ function restChunk() {
 }
 
 function resortRowsIfMoved() {
+  /* 「수급」 칩은 등락률로 든 종목이 바뀐다(오른 종목만 · 11-17) — 시세가 와서 0 이하로 내려가거나 다시 오르면 통째로 다시 그린다 */
+  if (sortBy === 'fav' && favGroup === AUTO_FG && market !== 'THEME') {
+    const body = $('kh-rows');
+    if (body && shownRows().map((s) => s.code).join() !== [...body.children].map((tr) => tr.dataset.code).join()) paintRows(rowPrices);
+    return;
+  }
   if (!SORTS[sortBy]?.key && sortBy !== 'ov') return;   // 총액 · 관심은 시세로 순서가 안 바뀐다 · 「단타」(ov) 는 「장외」 가 시세로 바뀌어 든 종목이 바뀐다(11-11 「겹침도 자주로」)
   const body = $('kh-rows');
   if (!body) return;
