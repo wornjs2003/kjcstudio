@@ -182,9 +182,9 @@ export function mountStockDetail(host, { view, onOne, onExpect, vpHost = null } 
     const vpCls = vpPct == null ? 'kh-mut' : vpT?.side === 'up' ? 'kh-up' : vpT?.side === 'down' ? 'kh-down' : '';
     const vpBg = vpT ? tonePaint('vol_prev_pct', vpPct, 'bg') : '';
     const vpHtml = !vp ? '' : `
-      <span class="kh-dt-i" data-vp data-tip="오늘 정규장 거래량 ÷ 전날(${vp.prevDay.slice(4, 6)}-${vp.prevDay.slice(6)}) 같은 시각까지의 정규장 거래량 · 둘 다 5분봉을 더한 것${vp.upto ? ` · ${vp.upto.slice(0, 2)}:${vp.upto.slice(2)} 봉까지` : ''}">
+      <span class="kh-dt-i" data-vp data-tip="오늘 정규장 거래량 ÷ 전날(${vp.prevDay.slice(4, 6)}-${vp.prevDay.slice(6)}) 같은 시각까지의 정규장 거래량 · 둘 다 5분봉을 더한 것${vp.upto ? ` · ${vp.upto.slice(0, 2)}:${vp.upto.slice(2)} 봉까지` : ''}${vpHost && vpBase != null ? ` · 전날 ${fmtShareCount(Math.round(vpBase))}` : ''}">
         <span class="kh-dt-l">거래량 전날 같은 시각 대비</span><b class="kh-dt-pw ${vpCls}"${vpBg ? ` style="background:${vpBg}"` : ''}>${vpPct == null ? '—' : `${vpPct.toLocaleString('ko-KR')}%`}</b>
-        <span class="kh-dt-l">전날 ${vpBase == null ? '—' : fmtShareCount(Math.round(vpBase))}</span></span>`;
+        ${vpHost ? '' : `<span class="kh-dt-l">전날 ${vpBase == null ? '—' : fmtShareCount(Math.round(vpBase))}</span>`}</span>`;   // 첫 줄 자리에서는 「전날 N주」 를 풍선으로 — 칸이 넓어 현재가가 꺾였다(8766 11-17 · 2560 창에서 260px)
 
     if (vpHost) { vpHost.innerHTML = vpHtml; vpHost.style.display = vpHtml ? '' : 'none'; }
     host.innerHTML = `${stHtml}${pwHtml}${vpHost ? '' : vpHtml}
@@ -204,10 +204,15 @@ export function mountStockDetail(host, { view, onOne, onExpect, vpHost = null } 
     if (vpHost) {
       // 따로 그린 자리 — 그 머리줄이 넘치거나(꺾이지 않는 줄은 넘친다) 꺾이면 숨긴다. 머리줄 높이 · 다른 칸을 밀지 않게
       if (!vpHost.querySelector('[data-vp]')) return;
-      vpHost.style.display = '';
       const row = vpHost.parentElement;
-      const first = row && [...row.children].find((k) => k.offsetParent !== null);
-      if (row && (row.scrollWidth > row.clientWidth + 1 || (first && first !== vpHost && below(first, vpHost)))) vpHost.style.display = 'none';
+      if (!row) return;
+      // 머리줄 높이를 칸 없이 · 있게 두 번 잰다 — 칸이 줄을 밀거나 옆 칸(현재가 등)을 눌러 꺾으면 높이가 커진다(qa 11-17 · 1280 창에서 48 → 72px)
+      vpHost.style.display = 'none';
+      const h0 = row.getBoundingClientRect().height;
+      vpHost.style.display = '';
+      const h1 = row.getBoundingClientRect().height;
+      const first = [...row.children].find((k) => k.offsetParent !== null);
+      if (h1 > h0 + 0.5 || row.scrollWidth > row.clientWidth + 1 || (first && first !== vpHost && below(first, vpHost))) vpHost.style.display = 'none';
       return;
     }
     const el = host.querySelector('[data-vp]');
@@ -225,6 +230,11 @@ export function mountStockDetail(host, { view, onOne, onExpect, vpHost = null } 
   const fitRo = typeof ResizeObserver === 'function'
     ? new ResizeObserver(([e]) => { const w = Math.round(e.contentRect.width); if (w !== fitW) { fitW = w; fitVp(); } }) : null;
   if (fitRo) fitRo.observe(vpHost && vpHost.parentElement ? vpHost.parentElement : host);
+  /* 따로 그린 자리는 그 머리줄 글(현재가 · 52주 · 「불러오는 중」)이 바뀌면 다시 잰다 — 폭만 보면 처음 「불러오는 중」 때 숨긴 채 굳었다(8766 11-17 · 2560 창) */
+  let fitRaf = 0;
+  const fitMo = vpHost && vpHost.parentElement && typeof MutationObserver === 'function'
+    ? new MutationObserver(() => { if (!fitRaf) fitRaf = requestAnimationFrame(() => { fitRaf = 0; fitVp(); }); }) : null;
+  if (fitMo) fitMo.observe(vpHost.parentElement, { childList: true, subtree: true, characterData: true });
 
   async function loadPower() {
     if (!code || isUsCode(code)) return;
@@ -309,6 +319,7 @@ export function mountStockDetail(host, { view, onOne, onExpect, vpHost = null } 
       if (powerTimer) powerTimer.stop();
       if (vpTimer) vpTimer.stop();
       if (fitRo) fitRo.disconnect();
+      if (fitMo) fitMo.disconnect();
     },
   };
 }
