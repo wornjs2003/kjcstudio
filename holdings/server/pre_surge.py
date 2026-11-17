@@ -80,12 +80,24 @@ def _universe():
             if (r["stock_code"] or "").isdigit() and len(r["stock_code"]) == 6]
 
 
-def _base_day(now):
-    """다음(또는 지금) 프리장이 견줄 앞 거래일 — 평일 09:00 뒤면 오늘 · 아니면 앞 평일. 휴장은 nxt_pre 표로 거른다."""
+def _open(proxy, day):
+    """그날 장이 열리나 — market_hours.today 한 곳(KIS 휴장일 표 · 주말 · 표). False 만 휴장 · None(못 쟀다)은 연 것으로 본다."""
+    import market_hours
+    try:
+        return market_hours.today(proxy, day=day)["open"] is not False
+    except Exception:
+        return True
+
+
+def _base_day(proxy, now):
+    """다음(또는 지금) 프리장이 견줄 앞 거래일 — 평일 09:00 뒤면 오늘 · 아니면 그 앞 날부터 휴장(주말 · 평일 휴장일)을 건너뛴다
+    (qa 11-17 — 처음 판은 주말만 건너 12-28 아침에 휴장일 12-25 를 골라 판이 조용히 비었다)."""
     d = now.date()
-    if not (now.weekday() < 5 and (now.hour, now.minute) >= (9, 0)):
+    if not (now.weekday() < 5 and (now.hour, now.minute) >= (9, 0) and _open(proxy, d.strftime("%Y%m%d"))):
         d -= timedelta(days=1)
-    while d.weekday() >= 5:
+    for _ in range(15):
+        if d.weekday() < 5 and _open(proxy, d.strftime("%Y%m%d")):
+            break
         d -= timedelta(days=1)
     return d.strftime("%Y%m%d")
 
@@ -123,7 +135,7 @@ def _load_prev(proxy, day):
 def prepare(proxy, day=None):
     """앞 거래일 분마다 누적을 받아 둔다 — 이미 있으면 읽기만. 받은 종목 수."""
     cfg = proxy.load_secrets()
-    day = day or _base_day(_now())
+    day = day or _base_day(proxy, _now())
     cum = _load_prev(proxy, day)
     if not cum:
         # 받을 종목 — 그 날 장 전에 거래가 있던 것(nxt_pre 08:51 저장)만. 표가 없으면 대상 전부
@@ -264,7 +276,9 @@ def start(proxy):
             try:
                 now = _now()
                 ph = phase(now)
-                base = _base_day(now)
+                base = _base_day(proxy, now)
+                if ph in ("burst", "live") and not _open(proxy, now.strftime("%Y%m%d")):
+                    ph = "closed"                     # 평일 휴장일 — 훑지 않는다(qa 11-17 · 2초마다 헛바퀴)
                 busy = (9, 0) <= (now.hour, now.minute) < PREP_QUIET_UNTIL     # 정규장 첫 30분은 비켜선다
                 if _prev["day"] != base and ph in ("before", "closed") and not busy:
                     n = prepare(proxy, base)
