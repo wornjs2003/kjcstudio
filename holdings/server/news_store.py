@@ -279,11 +279,14 @@ def groups(hours=24, limit=80):
     화면에서 두 칸이 같아 보인다.
     """
     since = int(time.time()) - hours * 3600
+    fs = foreign_sources()
     out = {}
     with _conn() as c:
         for r in c.execute(
                 "SELECT * FROM news_items WHERE at_ts >= ? ORDER BY at_ts DESC",
                 (since,)):
+            if _untranslated(r, fs):
+                continue
             g = out.setdefault(r["group_id"], {
                 "group": r["group_id"], "title": r["title"], "link": r["link"],
                 "at": r["at"], "source": r["source"], "topic": r["topic"],
@@ -341,7 +344,10 @@ def issues(now=None):
     can_count = fd is not None and len(nations) > 1
     by = {}
     with _conn() as c:
+        fs = foreign_sources()
         for r in c.execute("SELECT * FROM news_items WHERE at_ts >= ? ORDER BY at_ts", (since,)):
+            if _untranslated(r, fs):
+                continue
             by.setdefault(r["group_id"], []).append(r)
     rise0, rise1 = now - ISSUE_RISE_H * 3600, now - 2 * ISSUE_RISE_H * 3600
     out = []
@@ -393,6 +399,42 @@ def _orig(r):
     return r["title_orig"] if "title_orig" in r.keys() else None
 
 
+def foreign_sources():
+    """해외 받는 곳 이름 — 목록(news-topics.json)의 「나라」 칸이 KR 이 아닌 것. 목록을 못 읽으면 빈 set."""
+    return {k for k, v in (_feeds() or {}).items() if v["nation"] and v["nation"] != "KR"}
+
+
+def _untranslated(r, fs):
+    """해외 받는 곳 기사인데 한국어로 안 옮긴 줄(원문 칸 없음) — 화면 · 알림에 내지 않는다(재권님 「내가 볼것만 한국어로」 11-17)."""
+    return (r["source"] or "") in fs and not _orig(r)
+
+
+def ko_backfill():
+    """이미 쌓인 해외 기사 중 영어 제목 그대로인 것(옮기기 전에 쌓임)을 옮겨 둔 한국어로 바꾼다 — 쓰기 되는 서버(8765)만.
+    아직 안 옮긴 제목은 뒤에서 옮기기를 걸고 다음 바퀴에 바꾼다. 바꾼 수."""
+    fs = foreign_sources()
+    if not fs or not marketdb.writable():
+        return 0
+    try:
+        with _conn() as c:
+            q = "SELECT link, title FROM news_items WHERE title_orig IS NULL AND source IN (%s)" % ",".join("?" * len(fs))
+            rows = [(r["link"], r["title"]) for r in c.execute(q, sorted(fs))]
+    except sqlite3.Error:
+        return 0
+    if not rows:
+        return 0
+    have = tr_get([t for _, t in rows])
+    upd = [(have[t], t, l) for l, t in rows if have.get(t)]
+    if upd:
+        with _lock, _conn() as c:
+            c.executemany("UPDATE news_items SET title = ?, title_orig = ? WHERE link = ?", upd)
+    miss = [t for _, t in rows if not have.get(t)]
+    if miss:
+        import news
+        news._tr_kick(miss)
+    return len(upd)
+
+
 def tr_get(origs):
     """옮겨 둔 제목 {원문: 한국어}. 못 읽으면 빈 dict(옮김 없음으로 — 원문을 화면에 내지 않는 쪽으로 간다)."""
     origs = [o for o in set(origs) if o]
@@ -435,20 +477,22 @@ def total():
 
 def unsent_digest(limit=200):
     """정기 발송에 아직 안 실린 것. 묶음의 대표만 고른다."""
+    fs = foreign_sources()
     with _conn() as c:
         return [dict(r) for r in c.execute(
             """SELECT * FROM news_items
                WHERE digest_at IS NULL AND is_lead = 1
-               ORDER BY at_ts DESC LIMIT ?""", (limit,))]
+               ORDER BY at_ts DESC LIMIT ?""", (limit,)) if not _untranslated(r, fs)]
 
 
 def unsent_alerts(limit=20):
     """즉시 알림을 아직 안 보낸 「중요」 기사."""
+    fs = foreign_sources()
     with _conn() as c:
         return [dict(r) for r in c.execute(
             """SELECT * FROM news_items
                WHERE alert IS NOT NULL AND alerted_at IS NULL
-               ORDER BY at_ts DESC LIMIT ?""", (limit,))]
+               ORDER BY at_ts DESC LIMIT ?""", (limit,)) if not _untranslated(r, fs)]
 
 
 def mark_sent(links, field):
@@ -719,6 +763,7 @@ def collect_once(send=None):
     got = news.fetch_issues()
     added = store(got.get("rows") or [])
     purge_old()
+    ko_backfill()
     alerted = send_alerts(send)
     digested = send_digest(send=send)
     return {"added": len(added), "alerted": alerted, "digested": digested}
