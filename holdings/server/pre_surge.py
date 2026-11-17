@@ -14,6 +14,7 @@
                 하루 한 번 받아 market.db `pre_minute` 에 분마다 누적으로 둔다(장 전 08:00 앞 · 또는 뜬 뒤 빠졌으면)
                 앞 거래일 같은 분 누적이 MIN_PREV_SAME 주 미만이면 배율은 None(헛배율을 막는다 · 처음 값은 짐작 — qa 재생으로 다듬는다)
     판          배율 RATIO 이상을 배율 큰 순 · 칸 — 종목 · 현재가 · 등락률(전일 정규장 종가 대비) · 오늘 누적 · 전날 같은 분 누적 · 배율 · 거래대금(어림)
+                + 견준 종목 전부의 배율 {code: ratio}(ratios) — 「프리장」 칩 표의 배율 칸이 읽는다(11-17 재권님 「프리장」 → (나) 「프리장」 칩 표에 배율 칸으로)
     없음        못 받은 값은 None(0 아님) · 넥스트레이드 거래량 합이 0 이면 휴장 · 장 전으로 보고 판을 비운다(nxt_pre 와 같은 셈)
     넥스트레이드 밖 종목은 프리장 거래가 없어 「영영」 안 나온다(11-14 잼 — 5천억 이상 주권 435 중 15거래일 한 번도 장 전 거래 없음 92)
 
@@ -175,7 +176,7 @@ def build(today, prev_cum, hm):
     """오늘 NX {code: {vol, price, prev_close, name}} · 앞 날 {code: {hm: cum}} · 지금 분 → (줄들, 셈).
     지금 분이 08:49 를 넘으면 08:49 로 견준다. 셈과 고르기는 이 한 곳."""
     key = min(max(hm, MIN_FROM), MIN_TO)
-    rows, traded, compared = [], 0, 0
+    rows, traded, compared, ratios = [], 0, 0, {}
     for code, t in today.items():
         vol = t.get("vol") or 0
         if vol <= 0:
@@ -186,6 +187,7 @@ def build(today, prev_cum, hm):
         if ratio is None:
             continue
         compared += 1
+        ratios[code] = ratio
         if ratio < RATIO:
             continue
         px, pc = t.get("price"), t.get("prev_close")
@@ -193,7 +195,7 @@ def build(today, prev_cum, hm):
                      "pct": round((px / pc - 1) * 100, 2) if px and pc else None,
                      "vol": vol, "prevSame": p, "ratio": ratio, "amt": (px or 0) * vol or None})
     rows.sort(key=lambda r: -r["ratio"])
-    return rows[:TOP], {"traded": traded, "compared": compared, "hits": len(rows), "at": key}
+    return rows[:TOP], {"traded": traded, "compared": compared, "hits": len(rows), "at": key, "ratios": ratios}
 
 
 def _make(proxy, cfg):
