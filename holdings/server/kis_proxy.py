@@ -89,6 +89,7 @@ import dt30             # 단타 30 판 — 평일 09:06 단타 상위 30 굳힘
 import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
 import session_volume   # 시간대별 거래량 · 전일비 — 프리장 · 정규장 · 애프터 끝에 순위 종목 누적 거래량 저장 · /api/kis/vol-ratio(2026-11-05 · server/session_volume.py)
 import intraday_flow    # 당일 수급 — 장중 1분마다 시장 투자자 · 프로그램 매매를 쌓아 5분 구간으로 · /api/kis/flow-today(2026-10-27 · server/intraday_flow.py)
+import pre_surge       # 프리장 거래량 급증 — 전날 같은 시각 대비 · /api/kis/pre-surge(2026-11-17 · server/pre_surge.py)
 import nxt_pre         # 넥스트레이드 장 전 거래량 2배 목록 — 08:51 한 통(2026-10-26 · server/nxt_pre.py 머리 주석)
 import short_sale  # 공매도 — 감시 대상 종목마다 일별 공매도를 쌓아 「공매도」 칩에 냄(2026-11-06 · server/short_sale.py 머리 주석)
 import intraday_alerts  # 장중 알림 — 상승 VI · +20% 급등(2026-10-26 · server/intraday_alerts.py 머리 주석)
@@ -10405,6 +10406,28 @@ class Handler(SimpleHTTPRequestHandler):
                 # 실시간 순위 「공매도」 칩 — 쌓아 둔 표(short_daily)에서 셈만 한다. KIS 를 부르지 않는다(쌓는 것은 short_sale.start)
                 self._send_json({"ok": True, **short_sale.ranking((qs.get("period") or ["1d"])[0], (qs.get("sort") or ["amt"])[0])})
                 return
+            if route == "pre-surge":
+                # 프리장 거래량 급증 — 넥스트레이드 누적 거래량 ÷ 앞 거래일 같은 분 누적 (2026-11-17 · server/pre_surge.py)
+                data, at, ph = pre_surge.fetch(sys.modules[__name__])
+                d = data or {}
+                self._send_json({
+                    "ok": data is not None, "data": d.get("rows") or [],
+                    "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S") if at else None,
+                             "day": d.get("day"), "builtAt": d.get("hm"), "prevDay": d.get("prevDay"), "phase": ph,
+                             "noTrade": bool(d.get("noTrade")), "reset": bool(d.get("reset")),
+                             "scanned": d.get("scanned"), "traded": d.get("traded"), "compared": d.get("compared"),
+                             "hits": d.get("hits"), "prevCodes": d.get("prevCodes"), "comparedAt": d.get("at"),
+                             "ratio": pre_surge.RATIO, "minPrevSame": pre_surge.MIN_PREV_SAME,
+                             "burst": "%02d:%02d~%02d:%02d" % (pre_surge.BURST_FROM + pre_surge.BURST_UNTIL),
+                             "burstSec": pre_surge.BURST_SEC, "slowSec": pre_surge.SLOW_SEC,
+                             "preClose": "%02d:%02d" % pre_surge.PRE_CLOSE, "status": pre_surge.status(),
+                             "note": "넥스트레이드 프리마켓 · 순위 목록(시가총액 문턱 이상) · ratio = 오늘 누적 거래량 ÷ 앞 거래일 같은 분까지 누적(그 분 봉 포함) · "
+                                     "앞 날 같은 분 누적이 minPrevSame 주 미만이면 안 셈 · ratio 이상만 큰 순 · 등락률은 전일 정규장 종가 대비 · "
+                                     "burst 동안 burstSec 초마다 · 그 뒤 preClose 까지 slowSec 초마다",
+                             "cacheTtl": pre_surge.BURST_SEC},
+                })
+                return
+
             if route == "pre-flow":
                 data, at, ph = pre_flow.fetch(sys.modules[__name__], cfg)
                 d = data or {}
@@ -11339,6 +11362,9 @@ def main():
               % (auto_watch.RUN_AT + ("" if auto_watch.ADD else " · **관심 목록 넣기 없음**",)))
     # 당일 수급(2026-10-27 · server/intraday_flow.py) — 같은 문(보내는 서버만) · 알림 없음.
     # `KJC_FLOW_COLLECT=1` 은 시험 서버(자기 DB)에서 바퀴를 돌려 보는 자리다 — 세션 서버는 메인 DB 를 읽기 전용으로 열어 쓸 수 없다
+    if not SLOW and is_sender(args.port) and pre_surge.start(sys.modules[__name__]):
+        print("  프리장 급증 : 평일 %02d:%02d~%02d:%02d %d초마다 · 그 뒤 %02d:%02d 까지 %d초마다 · 앞 거래일 같은 분 대비(/api/kis/pre-surge)"
+              % (pre_surge.BURST_FROM + pre_surge.BURST_UNTIL + (pre_surge.BURST_SEC,) + pre_surge.PRE_CLOSE + (pre_surge.SLOW_SEC,)))
     if not SLOW and is_sender(args.port) and pre_flow.start(sys.modules[__name__]):
         print("  프리장 판   : 평일 %02d:%02d~%02d:%02d 에 %d초마다 지어 market.db pre_flow_board 에 남김(「프리장」 칩)"
               % (pre_flow.PRE_OPEN + pre_flow.PRE_CLOSE + (pre_flow.FLOW_TTL,)))
