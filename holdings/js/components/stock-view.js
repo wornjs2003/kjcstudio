@@ -582,7 +582,7 @@ export function mountStockView(root, stock, { onBack, view } = {}) {
     if (!head) return null;
     const el = document.createElement('span');
     el.className = 'kh-dt';
-    el.style.cssText = 'margin-left:0;display:none;flex-shrink:0;white-space:nowrap;flex-wrap:nowrap';   // 한 줄 — 꺾이면 머리줄이 커진다(넘치면 stock-detail 이 숨긴다)
+    el.style.cssText = 'margin-left:0;display:none;flex-shrink:0;white-space:nowrap;flex-wrap:nowrap;padding:1px 8px;line-height:1.4';   // 한 줄 · 위아래 여백을 줄여 첫 줄 높이 안에 — 꺾이거나 줄을 밀면 칸이 커진다(qa 11-17 · 넘치면 stock-detail 이 숨긴다)
     head.appendChild(el);
     return el;
   })();
