@@ -117,7 +117,7 @@ async function loadAw() {
   const unset = d.day && d.ready === false;   // 기준 칸(등락률 · 배수)이 비면 서버가 거르지 않는다 — 「없음」 이 아니라 「안 거름」(개념정의 검수 11-05)
   awCap.textContent = unset ? `${mmdd(d.day)} 기준 · 아직 안 거름`
     : d.day
-    ? `${mmdd(d.day)} 기준 · 걸린 ${num(d.hitAll)}종목${rule.autoMax != null ? ` 중 ${num(picked.length)}개 보임` : ''} · 셈한 ${num(d.measured)}(그날 값 없음 ${num(d.noToday)} · 앞 20거래일 모자람 ${num(d.short)}) · ${by}${m.runAt ? ` · 셈 ${esc(String(m.runAt).slice(11, 16) || m.runAt)}` : ''}`
+    ? `${mmdd(d.day)} 기준 · 걸린 ${num(d.hitAll)}종목${rule.upOnly && d.upDropped != null ? `(상승 종목만 — 신고가 부근까지 보합 · 내림 ${num(d.upDropped)} 뺌 · 남은 ${num(d.hitKept)})` : ''}${rule.autoMax != null ? ` 중 ${num(picked.length)}개 보임` : ''} · 셈한 ${num(d.measured)}(그날 값 없음 ${num(d.noToday)} · 앞 20거래일 모자람 ${num(d.short)}) · ${by}${m.runAt ? ` · 셈 ${esc(String(m.runAt).slice(11, 16) || m.runAt)}` : ''}`
     : '서버가 위 룰 값으로 고른 종목';
   if (!d.day) awBox.innerHTML = `${liveHtml(m, d)}<div class="st-err">— 아직 셈이 없음${m.runWindow ? `(${esc(m.runWindow)} 에 셈)` : ''}</div>`;
   else if (unset) awBox.innerHTML = '<div class="st-err">— 기준(등락률 · 배수) 칸이 비어 아직 안 거름 — 왼쪽 칸을 채우고 검색을 누르십시오</div>';
