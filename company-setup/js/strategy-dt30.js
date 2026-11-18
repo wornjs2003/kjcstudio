@@ -80,6 +80,35 @@ const TIP = {
   '매수|④': '④ 외국인만 산 종목',
   '매수|어림': '어림 — 외국인 · 기관 집계가 나오기 전이라 외국계 창구 순매수 · 종목 프로그램 순매수가 둘 다 + 인 종목으로 넣음 · 집계가 나오면 ①~④ 로 바뀜(서버 data.meta.early)',
 };
+// 칩마다 「무엇 · 조건 · 언제 받나 · 얼마마다」 (11-18 재권님 「칩에 마우스 올리면 칩설명과 시간 주기 등등 정보도 넣어줘」)
+//   문턱 값은 서버가 판에 싣는 룰(data.meta.rules) 그대로 읽는다 — 화면에 숫자를 안 둔다 · 못 받으면 그 줄은 「서버 값 못 받음」
+//   받는 시각 · 주기 글은 서버가 아직 안 준다 — 서버가 data.meta.chipInfo{칩: 글} 을 주면 그것만 쓴다(개발2 카드 「단타 판 08:00 부터 짓기 · 굳히기 10:30」 덧). 그때 아래 WHEN 을 지운다
+//   WHEN 의 시각은 11-18 서버 코드(pre_flow · intraday_alerts · kis_proxy 가집계 · open_rise · auto_watch)에서 읽은 그대로
+const WHEN = {
+  관심: '받는 때 — 늘 · 관심 목록이 바뀌면 바로',
+  프리장: '받는 때 — 넥스트레이드 프리마켓 08:00~08:50 동안 몇 분마다 다시 짓고 08:50~09:00 에 한 번 더 지어 그날 판으로 굳힘',
+  'VI·급등': '받는 때 — 정규장 09:00~15:30 · 10초마다 · 단타 판에는 굳히는 시각까지 걸린 것만',
+  장외: '받는 때 — 그날 종가가 정해진 15:40 뒤부터 다음날 07:30 까지 · 시세 주기마다 · 정규장 동안은 비어 있어 단타 판에는 거의 안 듦',
+  매수: '받는 때 — 가집계 입력 시각(외국인 09:30 · 11:20 · 13:20 · 14:30 / 기관 10:00 · 11:20 · 13:20 · 14:30) · 둘 다 있어야 해서 첫 판은 10:00 · 그 전에는 「어림」 · 서버가 2분마다 다시 물음',
+  초반상승: '받는 때 — 첫 5분봉(09:00~09:05)이 끝난 뒤 · 1분마다',
+  자동: '받는 때 — 전날 15:41 판으로 정해짐 · 장중에는 09:30~15:30 5분마다 그때까지 값으로 다시 거름',
+};
+const WHAT = {
+  관심: (R) => `관심 목록(하트)에 든 종목 · 자동 묶음 종목은 「자동」 으로 셈 · 시가총액 ${R && R.capMinEok != null ? `${R.capMinEok.toLocaleString()}억 이상` : '문턱 — 서버 값 못 받음'}`,
+  프리장: () => '넥스트레이드 프리마켓에서 전일 종가보다 오른 종목 중 거래대금이 큰 종목',
+  장외: () => '정규장 종가 뒤(넥스트레이드 애프터 · 다음날 프리) 종가보다 오른 종목',
+  매수: () => '외국인 · 기관 순매수 상위(가집계)에 함께 든 종목 · 차례 ①~④(아래 작은 칩)',
+  초반상승: () => '첫 5분봉이 시가보다 문턱 넘게 오른 종목 · ETF 뺌',
+  자동: (R) => (R ? `전일 거래량 급등 룰 — 등락 +${R.prevPct}% 이상${R.sectorPct != null ? ` · 업종 +${R.sectorPct}% 이상` : ''}${R.nearHighPct != null ? ` · 52주 고가에서 ${R.nearHighPct}% 안` : ''}${R.maDays ? ` · ${R.maDays}일선 위${R.maUpCandle ? ' 양봉' : ''}` : ''}${R.scoreW ? ` · 점수 등락 ${R.scoreW.pct} : 거래량 ${R.scoreW.vol}` : ''}` : '전일 거래량 급등 룰 — 룰 값은 서버 값 못 받음'),
+};
+const tipOf = (k) => {
+  if (k.includes('|')) return TIP[k] || '';
+  const ci = st.chipInfo && st.chipInfo[k];
+  if (typeof ci === 'string' && ci) return ci;
+  const R = st.rules || {};
+  const head = TIP[k] || (WHAT[k] ? WHAT[k](R[k]) : '');
+  return [head, WHEN[k]].filter(Boolean).join('\n');
+};
 // VI · 급등 걸린 시각 (11-18 재권님 「vi급등 방생시기도 단타판에 넣어줘」 → 「vi발동시간도 넣어달라고 했는데」 → 「응 오늘판이라도 해줘」)
 //   단타 판 서버 값(dt30)에는 아직 시각 칸이 없다 — 서버 칸은 개발2 몫(작업우선순위에 올림) · 그때까지 오늘 판만 서버 /api/alerts/today(그날 상승 VI · +20% 급등 목록 · 시각 t)에서 그 종목의 처음 시각을 붙인다
 //   그 주소는 오늘 것만 준다 — 지난 날 판에는 시각을 안 붙인다(지어내지 않음) · 받는 때는 판을 받을 때(load)와 같다(따로 묻는 주기 없음)
@@ -99,14 +128,14 @@ const names = (a) => (Array.isArray(a) ? a : a && typeof a === 'object' ? Object
 const missWord = () => (st.rebuilt ? '못 셈' : '못 받음');
 // 굳힌 시각 — 서버 buyAt("09:01" · 「HHMM」 둘 다) 그대로 머리 · 설명 줄에(11-12 09:06 → 09:01 · 재권님 「9시 1분에 바로 단타 리스트 뜨도록」)
 const atText = (v) => { const m = String(v || '').match(/^(\d{2}):?(\d{2})$/); if (m && root) root.querySelectorAll('.dt-at').forEach((e) => { e.textContent = `${m[1]}:${m[2]}`; }); };
-const tipAt = (k) => (TIP[k] ? ` data-tip="${esc(TIP[k])}"` : '');
+const tipAt = (k) => { const t = tipOf(k); return t ? ` data-tip="${esc(t)}"` : ''; };
 function chipPanel(all) {
   return colsOf().map((c) => { const i = colorOf(c);
     const n = all.filter((r) => (r.chips || []).includes(c)).length;
     const subs = subOrder(c, [...new Set(all.flatMap((r) => subsOf(r, c)))]);
     const on = !st.off.has(c);
     // data-i — 칩마다 색(strategy.css 의 .dt-cg[data-i] · theme.css 변수) · 하위 칩은 상위 칩 색을 물려받음
-    const ms = st.miss.has(c), tip = ms ? ` data-tip="${esc(`그날 판에 ${c} 값을 ${missWord()} — 걸린 종목이 있어도 0 으로 셈됨${TIP[c] ? `\n${TIP[c]}` : ''}`)}"` : tipAt(c);
+    const ms = st.miss.has(c), tip = ms ? ` data-tip="${esc(`그날 판에 ${c} 값을 ${missWord()} — 걸린 종목이 있어도 0 으로 셈됨${tipOf(c) ? `\n${tipOf(c)}` : ''}`)}"` : tipAt(c);
     return `<span class="dt-cg${on ? '' : ' is-off'}${ms ? ' is-miss' : ''}" data-i="${i}"><button type="button" class="dt-mc${on ? ' is-on' : ''}" data-chip="${esc(c)}"${tip} aria-pressed="${on}">${esc(c)}${ms ? '' : `<b>${n}</b>`}</button>${
       subs.length ? `<span class="dt-subs">${subs.map((x) => { const k = `${c}|${x}`, son = on && !st.subOff.has(k); return `<button type="button" class="dt-sub-chip${son ? ' is-on' : ''}" data-sub="${esc(k)}"${tipAt(k)} aria-pressed="${son}"${on ? '' : ' disabled'}>${esc(x)}<b>${all.filter((r) => subsOf(r, c).includes(x)).length}</b></button>`; }).join('')}</span>` : ''}</span>`;
   }).join('');
@@ -206,6 +235,7 @@ function calc(d) {
 
 function paint(d) {
   atText(d.buyAt);
+  st.rules = (d.meta && d.meta.rules) || null; st.chipInfo = (d.meta && d.meta.chipInfo) || null;   // 칩 풍선 — 서버 룰 값 · 받는 때 글(tipOf)
   st.miss = new Set(names(d.meta && d.meta.missing)); st.rebuilt = !!(d.meta && d.meta.rebuilt === true);
   const C = calc(d), { times, all, live, rows, L, LIVE, R, n: topN, per, top, noMkt, P } = C;
   usLoad(d.day);
