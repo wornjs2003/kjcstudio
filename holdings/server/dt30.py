@@ -320,6 +320,8 @@ def early_buy(proxy, cfg, codes, put, pre=False):
     return n
 
 
+MIN_CHIPS = 2                 # 단타 목록 문턱 — 단타 셈 칩 이 수 이상(홈 「단타」 · 투자 전략 단타 칩이 meta.minChips 로 읽음 · 11-11 홈 「둘 이상」 그대로) ·
+                              # 단타 판(build)은 아직 하나 이상(TOP_N 까지) — 판도 이 값으로 맞출지는 재권님께 여쭘(11-18 17:38)
 LIVE_TTL = 60                 # 단타 목록(live) 캐시(초) — 홈 「단타」 · 단타 판이 같은 셈을 이 나이 안이면 함께 쓴다 · 화면은 롱폴 열쇠 dt30.LIVE_TTL
 _live = {"at": 0.0, "pre": None, "data": None}
 _live_lock = threading.Lock()
@@ -358,7 +360,7 @@ def live(proxy, cfg, force=False):
         "wait": (list(PRE_WAIT) + (["매수"] if "매수대기" in missing else [])) if pre else [],
         "early": early, "approx": list(early),
         "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre and early else None,
-        "candidates": len(ov), "chips": list(OV_CHIPS), "dropBelowPct": DROP_BELOW_PCT, "capMinEok": CAP_MIN_EOK, "watchRule": "자동",
+        "candidates": len(ov), "chips": [c for c in OV_CHIPS if c != "수급"], "minChips": MIN_CHIPS,   # 수급은 11-18 관심으로 합쳐짐(지난 판에만) "dropBelowPct": DROP_BELOW_PCT, "capMinEok": CAP_MIN_EOK, "watchRule": "자동",
         "order": "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순", "ttl": LIVE_TTL}}
     with _live_lock:
         _live.update(at=time.time(), pre=pre, data=data)
