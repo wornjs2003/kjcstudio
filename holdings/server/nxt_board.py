@@ -31,6 +31,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
+import closing_bet
 import nxt_pre
 from secrets_guard import safe_message
 
@@ -92,7 +93,10 @@ def _multi(proxy, cfg, codes, div):
             code = (r.get("inter_shrn_iscd") or "").strip()
             if code:
                 out[code] = {"price": proxy._num(r.get("inter2_prpr"), int), "vol": proxy._num(r.get("acml_vol"), int) or 0,
-                             "name": (r.get("inter_kor_isnm") or "").strip()}
+                             "name": (r.get("inter_kor_isnm") or "").strip(),
+                             # 종가배팅 후보(closing_bet)가 15:41 J 값을 그대로 쓴다 — 따로 안 부르게
+                             "high": proxy._num(r.get("inter2_hgpr"), int), "low": proxy._num(r.get("inter2_lwpr"), int),
+                             "value": proxy._num(r.get("acml_tr_pbmn"), int), "pct": proxy._num(r.get("prdy_ctrt"))}
         time.sleep(nxt_pre.GAP_SEC)
     return out
 
@@ -133,6 +137,10 @@ def save_close(proxy, day):
         conn.executemany("INSERT INTO nxt_board (day, code, market, name, close, saved_at) VALUES (?,?,?,?,?,?) "
                          "ON CONFLICT(day, code) DO UPDATE SET close = excluded.close, market = excluded.market, name = excluded.name", rows)
     _status.update(closeDay=day, closeAt=stamp, closeCodes=len(rows), error=None)
+    try:                                         # 종가배팅 판 후보 — 같은 J 값으로(2026-11-18 · server/closing_bet.py)
+        closing_bet.save_candidates(proxy, day, krx)
+    except Exception as e:
+        _status["error"] = "종가배팅 후보: %s" % safe_message(e, 120)
     return len(rows)
 
 
