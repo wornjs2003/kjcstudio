@@ -17,7 +17,8 @@
                홈 「단타」 칩은 칩 수 → 시가총액이다 — 이 판만 초반상승을 둘째로 둔다
     수급       rows[].flow {HHMM: {ff, pg, fr, inst, at} | null} — 30분 칸마다 그때 외국계 창구(주) · 프로그램(원) · 외국인 · 기관 추정가집계(주) 순매수를 적어 굳힘 ·
                rows[].flowNow · meta.flowNowAt — 그날 판(안 끝남)은 09:00 뒤 FLOW_NOW_SEC 마다 지금 값 · 못 받은 칸 · 지난 시각은 null(못 잼) — 묶음 ③
-    칩 시각    rows[].chipAt {칩: "HH:MM"} — 그 칩이 그날 판의 그 줄에 처음 붙은 시각(판을 짓거나 다시 셀 때 · 늦게 나온 칩은 채운 때) · 다시 세어 빠진 칩은 지운다 ·
+    칩 시각    rows[].chipAt {칩: "HH:MM"} — 그 칩이 그날 판의 그 줄에서 처음 보인 시각 — 칩이 생긴 때가 아니라 판이 처음 본 때다(판을 짓는 08:00 ·
+               다시 세는 1분마다 · 늦게 나온 칩은 채운 때 — 08:00 전에 이미 있던 칩은 「08:00」 · 서버가 늦게 뜨면 그 시각) · 다시 세어 빠진 칩은 지운다 ·
                지난 날 다시 센 판은 칸이 없다(그때 언제 붙었는지 기록이 없다) — 묶음 ② 재권님 「응 만들어」(11-18 18:0x)
     처음 시각  rows[].viAt · surgeAt — VI · 급등이 그날 처음 난 시각(HH:MM:SS · 없으면 null) · 오늘 판은 VI · 급등 알림이 본 시각(급등은 이 서버가 처음 본 때) ·
                지난 날 다시 센 판은 VI 는 KIS VI 현황의 발동 시각 · 급등은 5분봉이라 그 봉 시작 「HH:MM~」(surgeApprox true) — 묶음 ① 재권님 「응 만들어」(11-18 18:0x)
@@ -551,6 +552,8 @@ def refresh(proxy, cfg, b):
     changed = 0
     for r in nb["rows"]:
         o = old.get(r["code"])
+        if o is not None:
+            r["chipAt"] = dict(r.get("chipAt") or {}, **{c: t for c, t in (o.get("chipAt") or {}).items() if c in r["chips"]})   # 앞에 붙어 있던 칩은 그 시각 그대로 · 빠진 칩은 지움
         if o is not None and o.get("buyWait") and opened:
             # 09:00 전에 든 종목 — 매수가를 09:00 정규장 시가로(시가를 아직 못 받았으면 지금 값 · 그것도 없으면 다음 바퀴에)
             r["px"], r["pxSrc"] = o["px"], o["pxSrc"]
@@ -561,10 +564,6 @@ def refresh(proxy, cfg, b):
             else:
                 r["buy"], r["buyWait"] = None, True
             changed += o.get("rank") != r["rank"] or o.get("chips") != r["chips"]
-        if o is not None:
-            r["chipAt"] = dict(r.get("chipAt") or {}, **{c: t for c, t in (o.get("chipAt") or {}).items() if c in r["chips"]})   # 앞에 붙어 있던 칩은 그 시각 그대로 · 빠진 칩은 지움
-        if o is not None and o.get("buyWait") and opened:
-            pass
         elif o is not None:
             r["buy"], r["pct"], r["px"], r["pxSrc"] = o["buy"], o["pct"], o["px"], o["pxSrc"]
             r["buyAt"] = o.get("buyAt") or b.get("buyAt")
