@@ -193,6 +193,18 @@ function paintMkt() {
   /* 옵션 만기 칩 — 야간 옆 (2026-11-12 재권님 「야간선물옆에 이번달에 대한걸 적어주고 당일 -1 일부터 당일까지 깜박이게」 · 「세마녀의날은 특히 더」 →
      시안 「노랑도 빨강으로 하고 더 진하게 · 세마녀의날도 진하게 · 깜박여야해」 → 「응 커밋해」). 날짜 · 세마녀 · 깜박일 때는 서버(market_hours.opt_expiry)가 준다 —
      화면은 받은 대로 글만 짓는다. 못 받으면 칩을 안 그린다 */
+  /* 나스닥 100 선물 — 세마녀(옵션 만기) 칩 바로 뒤 (2026-11-13 재권님 「나스닥 선물을 홈에 넣는 길 (가) 지금 받는 10분 지연 값을 「10분 지연」 표시로」 ·
+     11-19 「세마녀 옆으로 하는거 아닌가?」 → 「응」 — 장 상태 줄이 두 줄로 꺾이지 않게 넓은 창에서 한 줄로 묶었다 · home.css .kh-mkt).
+     값은 서버가 이미 받는 야후 값(us_outlook) 그대로 · 공식 API 가 아니라 출처를 풍선에 적는다. 못 받으면 칸을 안 그린다 */
+  const nq = (lastIndices || {}).nqFutures;
+  const nqCell = nq && nq.v != null
+    ? `<span class="kh-fut-1" data-tip="나스닥 100 선물 · ${nq.source || '야후 파이낸스'} · 공식 API 가 아니다(약관 확인 못 함)${nq.at ? ' · 값 시각 ' + nq.at.slice(11, 16) : ''}${nq.stale ? ' · 이번에 못 받아 앞 값' : ''}">
+        <span class="kh-mut">나스닥선물</span>
+        <b class="kh-num ${dirClass(nq.pct)}">${fmtNum(nq.v, 2)}</b>
+        <span class="kh-num ${dirClass(nq.pct)}">${fmtPct(nq.pct)}</span>
+        ${nq.delayMin ? `<span class="kh-mut">${nq.delayMin}분 지연</span>` : '<span class="kh-mut">지연</span>'}
+      </span>`
+    : '';
   const xp = (lastIndices || {}).optExpiry;
   const xpChip = (() => {
     if (!xp || !xp.day) return '';
@@ -216,6 +228,7 @@ function paintMkt() {
       ${one('선물', f ? f.price : null, f && f.changePct, null, f ? f.name : '')}
       ${one('야간', n ? n.price : null, n && n.changePct, null, nightNote)}
       ${xpChip}
+      ${nqCell}
     </span>`;
 
   el.innerHTML = `
@@ -225,22 +238,6 @@ function paintMkt() {
     ${counts}${futures}`;
 }
 
-
-/* 나스닥 100 선물 — 위 지수 띠 맨 끝 (2026-11-13 재권님 「나스닥 선물을 홈에 넣는 길 (가) 지금 받는 10분 지연 값을 「10분 지연」 표시로」 ·
-   11-19 자리를 장 상태 줄에서 여기로 「가」 — 장 상태 줄은 시세 · 시각에 따라 두 줄로 꺾여 큰 차트가 13px 줄었다(qa 11-18 check-layout)).
-   값은 서버가 이미 받는 야후 값(us_outlook) 그대로 · 공식 API 가 아니라 출처를 풍선에 적는다. 못 받으면 칸을 안 그린다 */
-function nqStripCell(nq) {
-  if (!nq || nq.v == null) return '';
-  const cls = dirClass(nq.pct);
-  const tip = `나스닥 100 선물 · ${nq.source || '야후 파이낸스'} · 공식 API 가 아니다(약관 확인 못 함)${nq.at ? ' · 값 시각 ' + nq.at.slice(11, 16) : ''}${nq.stale ? ' · 이번에 못 받아 앞 값' : ''}`;
-  return `<div class="kh-ix kh-nq-ix" data-nq data-tip="${tip}">
-      <div class="kh-ix-h"><span class="kh-ix-n">나스닥선물</span><span class="kh-bd">${nq.delayMin ? nq.delayMin + '분 지연' : '지연'}</span></div>
-      <div class="kh-ix-b"><div>
-        <div class="kh-ix-v kh-num ${cls}">${fmtNum(nq.v, 2)}</div>
-        <div class="kh-ix-c kh-num ${cls}">${fmtPct(nq.pct)}</div>
-      </div></div>
-    </div>`;
-}
 
 function paintStrip(indices) {
   /* 2026-09-22 까지는 여기서 `kh-strip`(「주요 지수」 카드)을 먼저 찾고
@@ -269,7 +266,7 @@ function paintStrip(indices) {
     }
     return;
   }
-  if (top) patchStrip(top, stripHtml(indices, INDEX_CELLS) + leverageCell() + nqStripCell((indices || {}).nqFutures));      // 끝에 신용융자 칸(11-18 「나」) · 그 뒤 나스닥 선물(11-19 「가」) · 달라진 조각만 — 국기를 다시 그리지 않는다(index-strip.js patchStrip)
+  if (top) patchStrip(top, stripHtml(indices, INDEX_CELLS) + leverageCell());      // 끝에 신용융자 칸(11-18 「나」) · 달라진 조각만 — 국기를 다시 그리지 않는다(index-strip.js patchStrip)
   paintIxFilter();
 }
 
@@ -331,7 +328,6 @@ function paintIxFilter() {
   [...host.children].forEach((el, i) => {
     const cell = INDEX_CELLS[i];
     if (!cell && el.matches('[data-lev]')) { el.hidden = !(want == null || want.includes('kr')); return; }   // 신용융자 칸 — 홈 · 국내에서만
-    if (!cell && el.matches('[data-nq]')) { el.hidden = !(want == null || want.includes('us')); return; }    // 나스닥 선물 칸 — 홈 · 미국에서만(11-19)
     /* more 칸(네이버 나라 지수)은 「국외」 에서만 — 홈 띠는 전과 같다(index-strip.js INDEX_CELLS 주석) */
     el.hidden = !cell ? true : (want ? !want.includes(ixGroupOf(cell)) : !!cell.more);
     el.classList.toggle('is-on', !!cell && mkKey === IX_KEY + cell.code);      // 큰 차트에 띄운 지수 — 값이 바뀌어 다시 그려도 남게
