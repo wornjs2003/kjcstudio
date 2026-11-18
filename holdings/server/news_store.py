@@ -548,6 +548,10 @@ FLASH_WAIT_SEC = 300
 # 꺼져 있으면 옛 길 그대로(정기 = 제목 묶음 · 바로 = 「중요」 규칙만). 미리보기(preview)는 꺼져 있어도 새 글을 보여 준다(켤 때 셈 자료).
 TG_NEW = (os.environ.get("KJC_NEWS_TG") or "").strip() == "1"
 
+# 밤(조용한 시간)에 나온 속보는 07:30 정기 글로 넘기지 않고 조용한 시간이 끝나는 07:00 에 바로 알림으로 보낸다
+# (재권님 11-18 「밤속보는 아침 7시로 해줘」). 이 시간(시)보다 오래된 것은 ALERT_MAX_AGE_H 그대로 넘긴다 — 조용한 시간 길이(22~07)를 덮는 값.
+FLASH_NIGHT_MAX_H = 10
+
 
 def _telegram(text, send=None):
     """보낸다. **`send` 가 없으면 보내지 않는다.**
@@ -601,11 +605,13 @@ def send_alerts(send=None):
     import dart
     for r in rows:
         r["_name"] = _alert_name(r)
-    late = [r for r in rows if (r["at_ts"] or 0) < cutoff or dart.in_quiet(r["at_ts"])]
+    night = int(time.time()) - FLASH_NIGHT_MAX_H * 3600
+    morning = [r for r in rows if TG_NEW and FLASH_WORD in (r["title"] or "") and dart.in_quiet(r["at_ts"]) and (r["at_ts"] or 0) >= night]
+    late = [r for r in rows if r not in morning and ((r["at_ts"] or 0) < cutoff or dart.in_quiet(r["at_ts"]))]
     rows = [r for r in rows if r not in late]
     if dart.in_quiet():
         _hold_for_digest(late)
-        return 0                # 지금이 조용한 시간 — 남은 것은 다음 바퀴(07:00 뒤)에
+        return 0                # 지금이 조용한 시간 — 남은 것(밤 속보 morning 포함)은 07:00 뒤 바퀴에
     _hold_for_digest(late)
 
     # **보낼 때 지금 규칙으로 다시 본다** (2026-10-12). 쌓을 때 적어 둔 `alert` 는 그때 규칙이라,
@@ -764,7 +770,7 @@ def preview(days=7):
 
 def alert_counts(days=7):
     """지난 days 날 — 날마다 즉시 알림이 몇 건 갈 셈인가(지금 규칙 · 같은 묶음 한 번 · 조용한 시간은 정기 글로).
-    {날짜: {"send": 바로 갈 수, "held": 조용한 시간이라 정기로, "flash": 그중 속보, "rule": 그중 「중요」 규칙}}."""
+    {날짜: {"send": 바로 갈 수, "morning": 밤 속보라 07:00 에, "held": 밤 「중요」 라 07:30 정기로, "flash": 그중 속보, "rule": 그중 「중요」 규칙}}."""
     import dart
     since = int(time.time()) - days * 86400
     with _conn() as c:
@@ -775,8 +781,8 @@ def alert_counts(days=7):
         if not name or r["group_id"] in seen:
             continue
         seen.add(r["group_id"])
-        d = out.setdefault(datetime.fromtimestamp(r["at_ts"], KST).strftime("%Y-%m-%d"), {"send": 0, "held": 0, "flash": 0, "rule": 0})
-        d["held" if dart.in_quiet(r["at_ts"]) else "send"] += 1
+        d = out.setdefault(datetime.fromtimestamp(r["at_ts"], KST).strftime("%Y-%m-%d"), {"send": 0, "morning": 0, "held": 0, "flash": 0, "rule": 0})
+        d[("morning" if name == FLASH_WORD or FLASH_WORD in (r["title"] or "") else "held") if dart.in_quiet(r["at_ts"]) else "send"] += 1
         d["flash" if name == FLASH_WORD else "rule"] += 1
     return out
 
