@@ -87,7 +87,7 @@ function nxSum(d) {
   const rows = Array.isArray(d.rows) ? d.rows : [];
   const one = (xs, lb) => { const v = xs.map(nxRes).filter((x) => x != null); if (!v.length) return `${lb} —`;
     return `${lb} 평균 ${pct(v.reduce((a, x) => a + x, 0) / v.length)} · 오름 ${v.filter((x) => x > 0).length}/${v.length}`; };
-  return `<div class="st-cap jb-nxsum">다음 날 프리장 08:05 (종가 대비) — ${one(rows, '후보')} · ${one(rows.filter((r) => r.buy), '산 것')}</div>`;
+  return `<div class="st-cap jb-nxsum">다음 날 프리장${d.nxAt ? ` ${esc(String(d.nxAt).replace(/^(\d{2})(\d{2})$/, '$1:$2'))}` : ''} (종가 대비) — ${one(rows, '후보')} · ${one(rows.filter((r) => r.buy), '산 것')}</div>`;
 }
 function tableHtml(d) {
   const rows = Array.isArray(d.rows) ? d.rows : [];
@@ -95,8 +95,8 @@ function tableHtml(d) {
   const pre = d.preDay ? `${dayTxt(d.preDay)} 프리장 첫 값` : '다음 날 프리장 첫 값';
   // 다음 날 프리장 08:05 (11-18 재권님 「룰에 걸린 종목처럼 다음날에 프리장 5분에 종가대비 등락률 적어서 히스토리 남겨줘」) — 단타 판 「다음 날 프리장」 칸과 같은 모양
   //   값은 서버 rows[].nx {px, src} · 날 d.nxDay · 시각 d.nxAt(주식 레인 · 작업우선순위 배분) — 화면은 종가 대비 % 만 셈 · 칸이 없으면 「아직」
-  const nxAt = d.nxAt ? String(d.nxAt).replace(/^(\d{2})(\d{2})$/, '$1:$2') : '08:05';
-  const nxHead = `${d.nxDay ? dayTxt(d.nxDay) : '다음 날'} 프리장 ${esc(nxAt)}`;
+  const nxAt = d.nxAt ? String(d.nxAt).replace(/^(\d{2})(\d{2})$/, '$1:$2') : '';   // 시각은 서버 값만(없으면 안 적음 · 개념정의 11-18 — 화면에 사본을 안 둔다)
+  const nxHead = `${d.nxDay ? dayTxt(d.nxDay) : '다음 날'} 프리장${nxAt ? ` ${esc(nxAt)}` : ''}`;
   const line = (r, i) => {
     const res = r.pre != null && r.close ? (r.pre / r.close - 1) * 100 : null;
     const why = res == null ? (d.preDay ? '프리장 값 없음' : '아직') : `${res > 0 ? '익절' : res < 0 ? '손절' : '본전'}${r.buy ? '' : '(샀다면)'}`;
@@ -110,7 +110,7 @@ function tableHtml(d) {
       <td class="jb-nx">${!r.nx ? '<span class="jb-unk">아직</span>' : r.nx.px == null ? '—<small>거래 없음</small>' : `${pct(nr)}<small>${num(r.nx.px)}${r.nx.src === '1m' ? ' · 1분봉' : ''}</small>`}</td></tr>`;
   };
   return `<table class="jb-tb"><tr><th></th><th class="st-name">종목</th><th>정규장 등락</th><th>종가 위치</th><th>거래대금</th><th>정규장 종가</th><th>17시 뒤 넘은 때</th><th>장 뒤 저가</th><th>20:00 값</th>
-    <th class="jb-c">①</th><th class="jb-c">②</th><th class="jb-c">③</th><th class="jb-c">④</th><th class="jb-c">⑤</th><th class="jb-c">판단</th><th>${pre}</th><th>결과</th><th class="jb-nx" data-tip="다음 거래일 넥스트레이드 프리장 ${esc(nxAt)} 값 · 정규장 종가 대비 등락률 · 값은 서버(종가배팅 판 rows[].nx) · 「아직」 = 그 시각 전 · 「—」 = 거래 없음(0 아님)">${nxHead}</th></tr>${rows.map(line).join('')}</table>`;
+    <th class="jb-c">①</th><th class="jb-c">②</th><th class="jb-c">③</th><th class="jb-c">④</th><th class="jb-c">⑤</th><th class="jb-c">판단</th><th>${pre}</th><th>결과</th><th class="jb-nx" data-tip="다음 거래일 넥스트레이드 프리장${nxAt ? ` ${esc(nxAt)}` : ''} 값 · 정규장 종가 대비 등락률 · 값은 서버(종가배팅 판 rows[].nx) · 「아직」 = 그 시각 전 · 「—」 = 거래 없음(0 아님)">${nxHead}</th></tr>${rows.map(line).join('')}</table>`;
 }
 // 쌓인 날 — 서버가 지우지 않고 다 남긴다(11-18 재권님 「단타처럼 히스토리 계속 남겨야되」) · 날이 MON_FROM 넘게 쌓이면 달 칩 + 그 달 날짜(단타 판과 같은 모양)
 const MON_FROM = 10;
