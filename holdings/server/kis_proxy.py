@@ -7279,6 +7279,17 @@ def flatten_carried(rows):
             i = j + 1
         else:
             i += 1
+    # **프리장이 끝난 뒤 ~ 정규장 전(08:50 ~ 08:59) 칸의 체결은 비운다** (2026-11-18 재권님 「응」 — 「거래가 없는 08:50~09:00 사이에
+    # KIS 가 앞 1분봉을 그대로 복사해 채운 가짜 봉 … 서버에서 버려, 토스처럼 그 칸을 비울까요」). 넥스트레이드 프리장은 08:50 에 끝나고
+    # KRX 는 09:00 까지 시가 단일가라 그 칸에 체결이 날 수 없다. 그런데 5분봉 08:50 칸에 08:49 체결이 한 번 더 실리고 08:55 칸이 그것을
+    # 그대로 되풀이했다(11-18 삼성 08:50 · 08:55 둘 다 50,142주 — 1분봉 08:49~08:59 는 다 0 · 개발 DB 11-02 ~ 11-18 국내 종목 하루 0~3 개).
+    # 두 칸 되풀이라 위 되풀이 셈(다섯 칸 이상 · 15:20)에 안 걸렸다. 시각은 market_hours 한 곳 — 그날 바뀐 시각은 안 본다(평소 시각).
+    for k, r in enumerate(out):
+        hm = r.get("ts", "")[8:12]
+        if market_hours.PRE_CLOSE <= hm < market_hours.REG_OPEN and (r.get("volume") or 0) > 0:
+            p = out[k - 1] if k > 0 and out[k - 1].get("ts", "")[:8] == r.get("ts", "")[:8] else None
+            c = p.get("close") if p and p.get("close") else r.get("close")
+            r.update(open=c, high=c, low=c, close=c, volume=0)
     return out
 
 
