@@ -28,7 +28,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 MODE = os.environ.get("KJC_READABLE_HOOK", "look")
-READ_BOX_MAX = 160        # ▶ 줄 글자 수 — 짧은 꼴(「앞서 HH:MM 에 여쭌 것 그대로입니다 — <물음 한 줄>」)이 들어가는 폭 · qa 재생으로 다듬는다
+READ_BOX_MAX = 200        # ▶ 줄 글자 수(짧은 꼴 머리는 뺌) — 160 은 룰대로 쓴 「한 문장 물음 + 무엇인지」 가 31줄 걸려 200(qa 재생 11-18 · 535줄 중 2 · 둘 다 진짜 긴 것)
 READ_DOTS_MAX = 3         # 한 줄 가운뎃점 — 현황 표 「하는 일」 칸 꼴(둘)이 안 걸리게(창구 검토)
 READ_CODE_MAX = 3         # 본문 코드 이름 수
 READ_PARA_MAX = 400       # 한 문단 글자 수
@@ -47,7 +47,7 @@ URL = re.compile(r"https?://\S+|\b[\w-]+(?:\.[\w-]+)*\.(?:com|co\.kr|kr|net|org|
 TICK = re.compile(r"`([^`\n]+)`")
 FILE = re.compile(r"\b[\w./-]+\.(?:py|js|css|html|json|md|sh|plist|command|db|txt)\b")
 EN = re.compile(r"(?<![A-Za-z0-9_&/])[A-Za-z][A-Za-z0-9_-]+")   # & · / 뒤는 앞 낱말의 일부(S&P500 · /clear)
-SHORT = re.compile(r"^▶\s*앞서 \d{1,2}:\d{2} 에 여쭌 것 그대로입니다\s*—\s*")   # 짧은 꼴 머리 — 룰이 물음 전문을 요구해 길어진다(qa 11-18 · 길이에서 뺌)
+SHORT = re.compile(r"^▶\s*앞서\s*[\d\-: x]+(?:\s*즈음)?\s*에\s*여쭌 것 그대로입니다\s*—\s*")   # 날짜 붙음 · 「19:2x」 · 붙여 씀 · 「즈음」 도(qa 11-18)   # 짧은 꼴 머리 — 룰이 물음 전문을 요구해 길어진다(qa 11-18 · 길이에서 뺌)
 TYPE_ASK = re.compile(r"쳐 주|입력해 주|붙여 넣어 주|돌려 주")   # 재권님이 치실 명령을 드리는 물음 — 백틱 안 명령은 「손으로 하실 것」 예외(qa 11-18)
 LOG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs", "readable.log")
 
