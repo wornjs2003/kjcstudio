@@ -486,13 +486,13 @@ def unsent_digest(limit=200):
 
 
 def unsent_alerts(limit=20):
-    """즉시 알림을 아직 안 보낸 「중요」 기사 · 속보(제목에 FLASH_WORD — 2026-11-18 한 길로 합침)."""
+    """즉시 알림을 아직 안 보낸 「중요」 기사."""
     fs = foreign_sources()
     with _conn() as c:
         return [dict(r) for r in c.execute(
             """SELECT * FROM news_items
-               WHERE (alert IS NOT NULL OR title LIKE ?) AND alerted_at IS NULL
-               ORDER BY at_ts DESC LIMIT ?""", ("%" + FLASH_WORD + "%", limit)) if not _untranslated(r, fs)]
+               WHERE alert IS NOT NULL AND alerted_at IS NULL
+               ORDER BY at_ts DESC LIMIT ?""", (limit,)) if not _untranslated(r, fs)]
 
 
 def mark_sent(links, field):
@@ -536,11 +536,6 @@ ALERT_DAILY_MAX = None
 # 막는 것과 같은 자리다 — 지난 것은 **보내지 않고 보낸 것으로 표시**해
 # 조용히 넘긴다. 정기 발송에는 그대로 들어가므로 사라지지 않는다.
 ALERT_MAX_AGE_H = 3
-
-# 속보도 즉시 알림 길로 간다 (2026-11-18 재권님 「커밋해」 — 속보 정리를 바로 알림 · 낱말 「중요」 알림과 같은 사건은 한 번).
-# 속보 정리(news_brief.flash_once)가 붙기를 이만큼(초) 기다리고, 넘으면 제목만으로 보낸다.
-FLASH_WORD = "속보"
-FLASH_WAIT_SEC = 300
 
 
 def _telegram(text, send=None):
@@ -593,8 +588,6 @@ def send_alerts(send=None):
     # **조용한 시간에 나온 기사도 같은 길이다** (2026-10-12 재권님 「밤 10시~아침 7시까지는 알림을 주지 않는다」).
     # 07:00 에 몰아 보내지 않고 07:30 정기 묶음에 ❗ 로 실린다 — `alert` 를 지금 규칙으로 남겨 두는 까닭이다.
     import dart
-    for r in rows:
-        r["_name"] = _alert_name(r)
     late = [r for r in rows if (r["at_ts"] or 0) < cutoff or dart.in_quiet(r["at_ts"])]
     rows = [r for r in rows if r not in late]
     if dart.in_quiet():
@@ -614,50 +607,29 @@ def send_alerts(send=None):
 
     sent, skip, seen = [], [], set()
     for r in sorted(rows, key=lambda x: x["at_ts"] or 0):       # 이른 기사가 그 묶음 대표로 간다
-        name = r["_name"]
+        name = match_alert(r["title"])
         if not name or r["group_id"] in seen or _group_alerted(r["group_id"], r["link"]):
             skip.append(r["link"])
             continue
         if ALERT_DAILY_MAX is not None and done_today + len(sent) >= ALERT_DAILY_MAX:
             skip.append(r["link"])               # 상한을 넘었다 — 정기 묶음으로 간다
             continue
-        text = alert_text(r, name)
-        if text is None:
-            continue                             # 속보 정리를 기다린다 — 다음 바퀴에
+        text = "[%s] %s\n%s · %s\n%s" % (
+            name, r["title"], r["source"] or "", _hhmm(r["at"]), r["link"])
         ok, _why = _telegram(text, send)
         if not ok:
             # 설정이 없거나 막혔다. 다음 바퀴에 다시 본다 — 오래된 것만 적는다
             return _finish_alerts(sent, [], count_key, done_today)
-        sent.append((r["link"], name))
+        sent.append(r["link"])
         seen.add(r["group_id"])
         time.sleep(0.4)      # 텔레그램 초당 제한
     return _finish_alerts(sent, skip, count_key, done_today)
 
 
-def _alert_name(r):
-    """바로 보낼 까닭 — 「중요」 규칙 이름 · 아니면 속보 · 둘 다 아니면 None."""
-    return match_alert(r["title"]) or (FLASH_WORD if FLASH_WORD in (r["title"] or "") else None)
-
-
-def alert_text(r, name, wait=True):
-    """즉시 알림 글. 속보는 정리(news_brief)가 붙으면 그 글을 넣는다 — 아직이고 FLASH_WAIT_SEC 안이면 None(기다림)."""
-    summary = None
-    if FLASH_WORD in (r["title"] or ""):
-        import news_brief
-        summary = news_brief.flash_summary(r["link"])
-        if summary is None and wait and news_brief.ON and time.time() - (r["at_ts"] or 0) < FLASH_WAIT_SEC:
-            return None
-    return "%s%s\n%s%s · %s\n%s" % (
-        "" if name == FLASH_WORD else "[%s] " % name, r["title"], (summary + "\n") if summary else "", r["source"] or "", _hhmm(r["at"]), r["link"])
-
-
 def _finish_alerts(sent, skip, count_key, done_today):
-    """보낸 것과 건너뛴 것을 표시한다. 보낸 것만 `alert` 를 남긴다 — 「이 묶음은 이미 갔다」 의 근거다.
-    sent 는 (링크, 까닭) — 속보로만 간 것도 `alert` 에 까닭을 적어 같은 묶음이 다시 안 가게 한다."""
+    """보낸 것과 건너뛴 것을 표시한다. 보낸 것만 `alert` 를 남긴다 — 「이 묶음은 이미 갔다」 의 근거다."""
     if sent:
-        mark_sent([l for l, _ in sent], "alerted_at")
-        with _lock, _conn() as c:
-            c.executemany("UPDATE news_items SET alert = ? WHERE link = ?", [(n, l) for l, n in sent])
+        mark_sent(sent, "alerted_at")
         _meta(count_key, str(done_today + len(sent)))
     if skip:
         with _lock, _conn() as c:
@@ -672,7 +644,7 @@ def _hold_for_digest(rows):
         return
     with _lock, _conn() as c:
         c.executemany("UPDATE news_items SET alerted_at = -1, alert = ? WHERE link = ?",
-                      [(_alert_name(r), r["link"]) for r in rows])
+                      [(match_alert(r["title"]), r["link"]) for r in rows])
 
 
 def _group_alerted(gid, link):
@@ -715,62 +687,13 @@ def send_digest(force=False, send=None):
     if not rows:
         _meta("news_digest_slot", slot)
         return 0
-    if send is None:
-        return 0                                  # 보내지 않는 서버 — 정리 글도 안 짓는다(Claude 부르기)
 
-    ok, _why = _telegram(slot_digest_text(rows, slot), send)
+    ok, _why = _telegram(digest_text(rows), send)
     if not ok:
         return 0
     mark_sent([r["link"] for r in rows], "digest_at")
     _meta("news_digest_slot", slot)
     return len(rows)
-
-
-def slot_digest_text(rows, slot, make=True, now=None):
-    """정기 글 (2026-11-18) — 그 시각 이슈 정리(news_brief.slot_brief) · 못 구하면 옛 제목 묶음 + 「정리 못 지음」 한 줄."""
-    now = now or datetime.now(KST)
-    hm = (int(slot[-4:-2]), int(slot[-2:])) if slot and slot[-4:].isdigit() else (now.hour, now.minute)
-    import news_brief
-    data = None
-    try:
-        data = news_brief.slot_brief(hm, now, make=make)
-    except Exception as e:
-        news_brief._st["slotFail"] = "못 지음(%s · %s)" % (now.strftime("%H:%M"), type(e).__name__)
-    if data and data.get("issues"):
-        return news_brief.slot_text(data, hm, now)
-    return digest_text(rows, now) + "\n\n(정리 못 지음 — %s · 제목 묶음으로 보냄)" % (news_brief._st.get("slotFail") or "까닭 모름")
-
-
-def preview(days=7):
-    """보내지 않는 미리보기 (2026-11-18) — 지금 정기 시각 글 셋(새로 짓지 않음) · 즉시 알림 첫 글 몇 · 지난 days 날 하루 몇 건 갈지.
-    아무것도 표시하지 않는다."""
-    now = datetime.now(KST)
-    rows = unsent_digest()
-    slots = {}
-    for h, m in DIGEST_SLOTS:
-        key = "%s-%02d%02d" % (now.strftime("%Y%m%d"), h, m)
-        slots["%02d:%02d" % (h, m)] = slot_digest_text(rows, key, make=False, now=now) if rows else None
-    alerts = [alert_text(r, _alert_name(r), wait=False) for r in unsent_alerts() if _alert_name(r)][:5]
-    return {"digest": slots, "alerts": alerts, "perDay": alert_counts(days)}
-
-
-def alert_counts(days=7):
-    """지난 days 날 — 날마다 즉시 알림이 몇 건 갈 셈인가(지금 규칙 · 같은 묶음 한 번 · 조용한 시간은 정기 글로).
-    {날짜: {"send": 바로 갈 수, "held": 조용한 시간이라 정기로, "flash": 그중 속보, "rule": 그중 「중요」 규칙}}."""
-    import dart
-    since = int(time.time()) - days * 86400
-    with _conn() as c:
-        rs = c.execute("SELECT title, group_id, at_ts FROM news_items WHERE at_ts >= ? ORDER BY at_ts", (since,)).fetchall()
-    out, seen = {}, set()
-    for r in rs:
-        name = _alert_name(r)
-        if not name or r["group_id"] in seen:
-            continue
-        seen.add(r["group_id"])
-        d = out.setdefault(datetime.fromtimestamp(r["at_ts"], KST).strftime("%Y-%m-%d"), {"send": 0, "held": 0, "flash": 0, "rule": 0})
-        d["held" if dart.in_quiet(r["at_ts"]) else "send"] += 1
-        d["flash" if name == FLASH_WORD else "rule"] += 1
-    return out
 
 
 def digest_text(rows, now=None):
