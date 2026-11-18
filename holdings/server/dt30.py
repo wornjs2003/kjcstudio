@@ -15,6 +15,10 @@
     차례       칩 수 많은 순 → 초반상승(첫 5분봉 시가 대비 % · rise) 높은 순 → 시가총액 큰 순 — 상위 TOP_N
                (재권님 19:1x 「칩수가 많은순 초반상승이높은순 시총순 이렇게 해서 올려」 · 초반상승에 안 든 종목은 같은 칩 수 안에서 뒤)
                홈 「단타」 칩은 칩 수 → 시가총액이다 — 이 판만 초반상승을 둘째로 둔다
+    수급       rows[].flow {HHMM: {ff, pg, fr, inst, at} | null} — 30분 칸마다 그때 외국계 창구(주) · 프로그램(원) · 외국인 · 기관 추정가집계(주) 순매수를 적어 굳힘 ·
+               rows[].flowNow · meta.flowNowAt — 그날 판(안 끝남)은 09:00 뒤 FLOW_NOW_SEC 마다 지금 값 · 못 받은 칸 · 지난 시각은 null(못 잼) — 묶음 ③
+    칩 시각    rows[].chipAt {칩: "HH:MM"} — 그 칩이 그날 판의 그 줄에 처음 붙은 시각(판을 짓거나 다시 셀 때 · 늦게 나온 칩은 채운 때) · 다시 세어 빠진 칩은 지운다 ·
+               지난 날 다시 센 판은 칸이 없다(그때 언제 붙었는지 기록이 없다) — 묶음 ② 재권님 「응 만들어」(11-18 18:0x)
     처음 시각  rows[].viAt · surgeAt — VI · 급등이 그날 처음 난 시각(HH:MM:SS · 없으면 null) · 오늘 판은 VI · 급등 알림이 본 시각(급등은 이 서버가 처음 본 때) ·
                지난 날 다시 센 판은 VI 는 KIS VI 현황의 발동 시각 · 급등은 5분봉이라 그 봉 시작 「HH:MM~」(surgeApprox true) — 묶음 ① 재권님 「응 만들어」(11-18 18:0x)
     하위 칩    rows[].subs {칩: [하위]} — VI·급등: VI · 급등 / 매수: ①~④(「매수」 판 tier) / 관심: 든 묶음 이름(자동 묶음 빼고)
@@ -414,7 +418,8 @@ def build(proxy, cfg, day, skip=()):
             down.append(x["code"])                     # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
             continue
         r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "viAt", "surgeAt")}
-        r.update(buy=None if pre else x["price"], px={}, pxSrc={})
+        r.update(buy=None if pre else x["price"], px={}, pxSrc={},
+                 chipAt={c: _now().strftime("%H:%M") for c in x["chips"]})      # 칩마다 판에 처음 붙은 시각(묶음 ② · 다시 세면 앞 시각 그대로)
         if pre:
             r["buyWait"] = True                        # 09:00 전에 든 종목 — 매수가는 09:00 정규장 시가(refresh 가 09:00 뒤 첫 바퀴에 채움 · 그때까지 buy null)
         rows.append(r)
@@ -496,6 +501,7 @@ def patch_late(proxy, cfg, b):
                 continue
             if chip not in r["chips"]:
                 r["chips"].append(chip)
+                r.setdefault("chipAt", {}).setdefault(chip, _now().strftime("%H:%M"))     # 늦게 나온 칩이 붙은 시각(묶음 ②)
             if sub:
                 r["subs"].setdefault(chip, [])
                 if sub not in r["subs"][chip]:
@@ -555,6 +561,10 @@ def refresh(proxy, cfg, b):
             else:
                 r["buy"], r["buyWait"] = None, True
             changed += o.get("rank") != r["rank"] or o.get("chips") != r["chips"]
+        if o is not None:
+            r["chipAt"] = dict(r.get("chipAt") or {}, **{c: t for c, t in (o.get("chipAt") or {}).items() if c in r["chips"]})   # 앞에 붙어 있던 칩은 그 시각 그대로 · 빠진 칩은 지움
+        if o is not None and o.get("buyWait") and opened:
+            pass
         elif o is not None:
             r["buy"], r["pct"], r["px"], r["pxSrc"] = o["buy"], o["pct"], o["px"], o["pxSrc"]
             r["buyAt"] = o.get("buyAt") or b.get("buyAt")
@@ -608,6 +618,37 @@ def _store(proxy, b):
 NOW_OK_MIN = 10              # 5분봉이 없을 때 현재가로 갈음해도 되는 늦음(분) — 넘으면 그 칸은 「없음」(null)
 
 
+FLOW_NOW_SEC = 300            # 그날 판 줄의 수급 「지금 값」 다시 받는 간격(초) — 재권님 안 「지금 값은 5분마다」(묶음 ③ · 11-18 18:0x 「응 만들어」)
+FLOW_WORKERS = 4              # 수급 받기를 겹쳐 묻는 수 — 초당 한도는 kis_get 이 지킨다
+
+
+def flows(proxy, cfg, codes):
+    """종목마다 수급 넷 — {code: {ff, pg, fr, inst, at}} · 못 받은 칸은 null(0 아님).
+    ff 외국계 창구 순매수(주 · 거래소 창구) · pg 프로그램 순매수(원 · 통합) · fr · inst 외국인 · 기관 장중 추정가집계 순매수(주 · 최신 입력).
+    받는 함수는 큰 차트 바닥 줄 · 「매수」 칩이 쓰는 것 그대로(fetch_investor_member · _program_net_today · fetch_investor_estimate) — 새 받는 길 없음."""
+    from concurrent.futures import ThreadPoolExecutor
+    at = _now().strftime("%H:%M")
+
+    def one(c):
+        out = {"ff": None, "pg": None, "fr": None, "inst": None, "at": at}
+        try:
+            out["ff"] = ((proxy.fetch_investor_member(cfg, c) or {}).get("foreignFirms") or {}).get("net")
+        except Exception:
+            pass
+        try:
+            out["pg"] = proxy._program_net_today(cfg, c)
+        except Exception:
+            pass
+        try:
+            lt = (proxy.fetch_investor_estimate(cfg, c) or {}).get("latest") or {}
+            out["fr"], out["inst"] = lt.get("foreign"), lt.get("inst")
+        except Exception:
+            pass
+        return c, out
+    with ThreadPoolExecutor(FLOW_WORKERS) as ex:
+        return dict(ex.map(one, codes))
+
+
 def track(proxy, cfg, b, hhmm, late):
     """그 시각 값을 적는다 — 5분봉 종가가 없으면 그때 현재가(늦음이 NOW_OK_MIN 분 안일 때만 · 넘으면 null)."""
     need = [r["code"] for r in b["rows"] if hhmm not in r["px"]]
@@ -629,6 +670,13 @@ def track(proxy, cfg, b, hhmm, late):
             p = (now_p.get(r["code"]) or {}).get("price")
             if hhmm not in r["px"] and p is not None:
                 r["px"][hhmm], r["pxSrc"][hhmm] = p, "now"
+    # 수급 — 30분 칸마다 그때 값을 적어 굳힌다(묶음 ③). 지난 시각 값은 다시 못 받으므로 늦음이 NOW_OK_MIN 분을 넘으면 null(못 잼)
+    fneed = [r["code"] for r in b["rows"] if hhmm not in (r.get("flow") or {})]
+    if fneed:
+        got = flows(proxy, cfg, fneed) if late <= NOW_OK_MIN else {}
+        for r in b["rows"]:
+            if r["code"] in fneed:
+                r.setdefault("flow", {})[hhmm] = got.get(r["code"])
 
 
 # ---------------------------------------------------------------- 지난 날 되채우기
@@ -767,8 +815,8 @@ def rebuild(proxy, day, prev, cfg=None):
                     if "VI" not in missing:
                         missing.append("VI")
                     continue
-                hs = sorted(str(r.get("cntg_vi_hour") or "").zfill(6) for r in out
-                            if r.get("bsop_date") == day and "090000" <= str(r.get("cntg_vi_hour") or "") <= vt)
+                hs = sorted(h for h in (str(r.get("cntg_vi_hour") or "").strip().zfill(6) for r in out if r.get("bsop_date") == day)
+                            if "090000" <= h <= vt)                      # 앞 0 이 빠진 시각(「93012」)도 맞게 견준다(qa 덧 11-18)
                 if hs:
                     put(c, "VI·급등", "VI", viAt="%s:%s:%s" % (hs[0][0:2], hs[0][2:4], hs[0][4:6]))   # 그날 그 종목 VI 중 가장 이른 것(KIS VI 현황)
                     if c not in pv:
@@ -1044,11 +1092,19 @@ def start(proxy):
                         if due:
                             for t in due:
                                 track(proxy, proxy.load_secrets(), b, t, hm - int(t[:2]) * 60 - int(t[2:]))
+                        flow_now = False
+                        if not b.get("closed") and hm >= OPEN_AT[0] * 60 + OPEN_AT[1] and time.time() - _status.get("flowNow", 0) >= FLOW_NOW_SEC:
+                            _status["flowNow"] = time.time()      # 그날 판 줄의 수급 지금 값 — FLOW_NOW_SEC 마다(묶음 ③ · 09:00 뒤)
+                            got = flows(proxy, proxy.load_secrets(), [r["code"] for r in b["rows"]])
+                            for r in b["rows"]:
+                                r["flowNow"] = got.get(r["code"])
+                            b["meta"]["flowNowAt"] = _now().strftime("%H:%M")
+                            flow_now = True
                         if not b.get("closed") and all(t in r["px"] for t in b["times"] for r in b["rows"]):
                             b["closed"] = True             # 14:00 마지막 칸까지 적었다 — 그날 판을 굳힌다(그 뒤 now 안 붙음)
                             for r in b["rows"]:
                                 r.pop("now", None)
-                        if due or filled_late or b.get("closed") and not was:
+                        if due or filled_late or flow_now or b.get("closed") and not was:
                             _store(proxy, b)
             except Exception as e:
                 _status["error"] = type(e).__name__
