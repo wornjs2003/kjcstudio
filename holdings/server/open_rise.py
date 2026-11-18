@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""초반상승 — 아침 09:00~09:05 5분봉이 시가보다 RISE_PCT % 이상 올라 끝난 종목 · 실시간 순위 「초반상승」 칩 (2026-11-11).
+"""초반상승 — 아침 첫 봉(11-18 부터 09:00~09:01 1분봉 · 그 전 09:00~09:05 5분봉)이 시가보다 RISE_PCT % 이상 올라 끝난 종목 · 실시간 순위 「초반상승」 칩 (2026-11-11).
 
 재권님 — 「아침 9시5분 기준으로 양봉이 2% 이상이 되고 시가총액이 5천억 이상인 종목들 소팅해서 실시간 순위에 초반상승 이라고 만들어서
 넣어줘」(작업우선순위 창 11:25) → 「양봉 2%」 를 (가) 첫 5분봉 시가 대비 종가 · (나) 09:05 가격의 전일 종가 대비 로 여쭈어 「가」(개발1 창 11:41).
@@ -7,13 +7,13 @@
     대상        순위 목록(dart.universe_rows · 시가총액 dart.UNIVERSE_MIN_CAP_EOK 이상) 중 시가총액 MIN_CAP_EOK 억원 이상 · **ETF 는 뺀다**(재권님 「가」 11-11)
                 ETF = 순위 목록에 있는데 OpenDART 기업 대응표(dart_corps)에 없고 코드 끝자리가 0 — 대응표에 없는 것은 ETF 와 우선주뿐이고
                 우선주는 끝자리가 0 이 아니다(11-11 개발 DB: 대응표 밖 42 = ETF 39 + 우선주 3 · 대응표 안에 끝자리 0 아닌 코드 0)
-    셈          그날 09:00~09:05 5분봉(보통 날 여는 시각 — market_hours.today 의 usual reg[0] · 재권님 「아침 9시부터 9시 5분」) — (종가 − 시가) ÷ 시가 ≥ RISE_PCT %
+    셈          그날 첫 봉 — BAR_PERIOD 의 여는 시각 봉(11-18 부터 09:00~09:01 1분봉 · 보통 날 여는 시각 — market_hours.today 의 usual reg[0] · 재권님 「아침 9시부터 9시 5분」) — (종가 − 시가) ÷ 시가 ≥ RISE_PCT %
                 늦게 여는 날(수능 등)은 그 봉이 없어 「못 셈」
                 장 시각 숫자를 이 파일에 두지 않는다(market_hours 머리 · 개념정의 검수 11-11)
     차례        그 상승률 큰 순
     다 찬 봉만   그 봉을 **끝난 뒤에 받았는지**는 kis_proxy `_minutes_fresh_upto`(「지금 칸」 을 받은 분)로 가른다 — 그 봉이 끝나기 전에 받은 덜 찬 봉으로
                 고르지 않는다(거래량 전날 대비 % 와 같은 기록 · 11-11 qa 돌려보냄). 아직이면 그 종목은 `pending` 으로 센다
-    언제        새로 받지 않는다 — DB 에 쌓인 5분봉만 읽는다(미리받기가 순위 목록 5분봉을 받는다). 그 봉이 다 차면 값이 그대로라 그날 판이 굳는다
+    언제        새로 받지 않는다 — DB 에 쌓인 봉만 읽는다(미리받기가 순위 목록 5분봉을 받을 때 1분봉도 함께 저장된다). 그 봉이 다 차면 값이 그대로라 그날 판이 굳는다
     phase       closed(그날 휴장) · before(첫 봉이 아직 안 끝남) · pending(다 받기 기다림) · done(그날 판 고정) ·
                 nodata(대상이 있는데 첫 봉이 하나도 없음 — 「오른 종목 없음」 이 아니라 「못 쟀다」)
     없음        그날 봉이 없는 종목은 `noBar` 로 센다(0 아님)
@@ -21,7 +21,7 @@
 판은 KIS 를 부르지 않는다. 값(2% · 시가총액 문턱)은 이 파일 상수 한 곳 · 장 시각은 market_hours 한 곳 — 화면은 meta 로 받아 글에 쓴다.
 
     첫 봉 먼저   미리받기만 기다리면 화면이 열려 있는 동안 종목 사이를 쉬어 09:10 에 70~80종목뿐이었다(11-12 · 09:06 단타 판에 거의 빠짐).
-                그래서 쓰는 서버는 첫 봉이 끝나는 순간(+FIRST_GRACE_SEC) 대상 중 아직 끝난 뒤 안 받은 종목의 5분봉을 차례로 받는다 —
+                그래서 쓰는 서버는 첫 봉이 끝나는 순간(+FIRST_GRACE_SEC) 대상 중 아직 끝난 뒤 안 받은 종목의 분봉을 차례로 받는다(5분봉 길 · 1분봉 함께 저장) —
                 미리받기와 같은 get_chart(「지금 칸」 · 받은 분 표시) · 대상 수만큼 KIS(약 300종목) · FIRST_UNTIL_MIN 지나면 그만
                 (재권님 「9시부터 9시5분까지 미리 받게 하면 되지않아?」 → 덜 찬 봉이라 09:05 뒤에 받아야 함 → 「응 그렇게 해」 11-12)
 """
@@ -34,8 +34,11 @@ import market_hours
 
 KST = timezone(timedelta(hours=9))
 
-BAR_MIN = 5              # 5분봉 한 봉의 길이(분)
-RISE_PCT = 2.0           # 첫 봉 시가 대비 종가 상승률 문턱(%)
+BAR_MIN = 1              # 첫 봉의 길이(분) — 첫 1분봉(09:00~09:01) · 재권님 「초반상승을 첫 1분봉으로」 → 문턱 「나」 1.5%(11-18 20:0x · 그날 1분봉으로 센 하루 평균 40종목 — 5분봉 2% 셈과 비슷)
+BAR_PERIOD = "1m"        # 그 봉을 읽는 기간 — 5분봉을 받을 때 1분봉도 함께 저장된다(kis_proxy get_chart · 2026-11-11)
+RISE_PCT = 1.5           # 첫 봉 시가 대비 종가 상승률 문턱(%)
+PAST_BAR_MIN = 5         # 지난 날 다시 셈(day_top_fill · dt30 rebuild)은 첫 5분봉 그대로 — 1분봉은 11-12 부터만 쌓여 있어 그 전 날은 셀 수 없다
+PAST_RISE_PCT = 2.0      # 〃 문턱(11-18 전 셈 그대로)
 MIN_CAP_EOK = dart.UNIVERSE_MIN_CAP_EOK   # 시가총액 문턱(억원) — 대상 목록 문턱 그대로(한 곳 · 개념정의 검수 11-12) · 재권님 「3천억으로 통일」 → 「오전에 3천억이라고 한거 5천억으로 바꿔」 11-12 — dart_universe.market_cap 단위가 억원
 CACHE_TTL = 60           # 같은 판을 다시 세지 않는 시간(초) — 화면이 다시 묻는 주기도 이 값(서버 값)
 FIRST_GRACE_SEC = 3      # 첫 봉이 끝난 뒤 이만큼 기다렸다 받는다 — KIS 가 그 분을 닫을 틈
@@ -90,8 +93,8 @@ def build(proxy, now=None):
         with proxy._db_lock, proxy.db_conn() as conn:
             q = ",".join("?" * len(codes))
             for r in conn.execute(
-                    "SELECT code, open, high, low, close, volume FROM candles WHERE period = '5m' AND ts = ? AND code IN (%s)" % q,
-                    [day + bar_hm] + codes):
+                    "SELECT code, open, high, low, close, volume FROM candles WHERE period = ? AND ts = ? AND code IN (%s)" % q,
+                    [BAR_PERIOD, day + bar_hm] + codes):
                 bars[r["code"]] = dict(r)
     rows, pending, no_bar = [], 0, 0
     for u in cand:
