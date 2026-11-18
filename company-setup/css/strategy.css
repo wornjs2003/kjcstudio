@@ -150,6 +150,10 @@
 .dt .dt-tb td.dt-after { color: var(--kh-text-muted); background: var(--kh-bg); }   /* 판 뒤 — 평균에서 뺀 칸 · 흐리게 */
 .dt .dt-tb .dt-res { font-weight: 700; border-left: 1px solid var(--kh-border-strong); }
 .dt .dt-tb td.dt-res small { display: block; font-size: 10.5px; font-weight: 500; color: var(--kh-text-muted); }
+/* 다음 날 프리장 08:05 칸 (11-18) — 결과 옆 · 값 아래 작은 줄에 그 시각 가격 */
+.dt .dt-tb .dt-nx { border-left: 1px solid var(--kh-border-strong); white-space: nowrap; }
+.dt .dt-tb .dt-nx small { display: block; font-size: 10.5px; font-weight: 500; color: var(--kh-text-muted); }
+.dt .dt-tb .dt-nxm { color: var(--kh-text-muted); }
 .dt .dt-tb .st-name small { font-weight: 400; }
 .dt .dt-pnl { margin: 0 0 8px; padding: 8px 12px; border-radius: var(--kh-radius-sm); background: var(--kh-bg); font-size: 13.5px; color: var(--kh-text-secondary); }   /* 손익 합계 — 상위 16 · 1천만원씩 · 거래세 뺌 */
 .dt .dt-pnl b { color: var(--kh-text-primary); }
