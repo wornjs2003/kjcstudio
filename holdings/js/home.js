@@ -2000,7 +2000,7 @@ function ovNote() {
   const w = ovWaiting();
   const k = ovMin();
   const down = k == null ? 0 : Object.values(ovBy).filter((g) => g.chips.length >= k && g.down).length;
-  return `칩 ${OV_CHIPS.length}개 중 ${k == null ? '—' : `${k}개`} 이상${down ? ` · 하락 ${down} 뺌` : ''}${(m.wait || []).length ? ` · ${m.openAt || '09:00'} 뒤 ${m.wait.join(' · ')}` : ''}${w.length ? ` · 못 받은 칩 ${w.join(' · ')}` : ''}`;
+  return `칩 ${OV_CHIPS.length}개 중 ${k == null ? '—' : `${k}개`} 이상${down ? ` · 하락 ${down} 뺌` : ''}${(m.wait || []).length ? ` · ${m.openAt ? `${m.openAt} 뒤` : '정규장 뒤'} ${m.wait.join(' · ')}` : ''}${w.length ? ` · 못 받은 칩 ${w.join(' · ')}` : ''}`;
 }
 async function loadOv() {
   try {
