@@ -536,7 +536,18 @@ ALERT_DAILY_MAX = None
 # 며칠치 「중요」가 한꺼번에 날아간다. dart.py 가 `quiet_first_run` 으로
 # 막는 것과 같은 자리다 — 지난 것은 **보내지 않고 보낸 것으로 표시**해
 # 조용히 넘긴다. 정기 발송에는 그대로 들어가므로 사라지지 않는다.
-ALERT_MAX_AGE_H = 3
+ALERT_MAX_AGE_H = 1            # 3 → 1(2026-11-18 재권님 「응 그래」 — 「1시간 넘게 지난 속보는 낮에 보내지 않음」 · 정기 글에는 그대로 실린다 · 밤 속보 07:00 길은 FLASH_NIGHT_MAX_H 그대로)
+
+# 비슷한 속보는 한 통만 (2026-11-18 재권님 「응 그래」 — 「30분 안에 같은 회사 · 같은 일을 다룬 속보는 첫 한 통만」).
+# 13:05 엔비디아 실적 속보 넷이 언론사 · 제목이 달라 묶음(group_id)이 갈려 네 통 갔다 — 묶음 말고 제목 낱말로 한 번 더 본다.
+# 바로 간 알림 중 SIMILAR_WINDOW_MIN 분 안의 것과 제목 낱말(2글자 이상 · 숫자 · 흔한 시황 낱말 빼고)이 SIMILAR_MIN_SHARED 개 이상 겹치고
+# 짧은 쪽 낱말의 SIMILAR_RATIO 이상이 겹치면 같은 일로 보고 안 보낸다(정기 글에는 그대로). 겹치는 낱말 중 흔한 낱말이 아닌 것(회사 · 품목 이름)이 하나는 있어야 한다.
+# 낱말은 앞이 같으면 같다고 본다(「시간외」 · 「시간외에서」 — 조사).
+SIMILAR_WINDOW_MIN = 30
+SIMILAR_MIN_SHARED = 2
+SIMILAR_RATIO = 0.25          # 0.4 는 엔비디아 넷 중 셋 짝을 놓쳤다(11-18 13:05 제목으로 잼)
+SIMILAR_COMMON = {"속보", "단독", "종합", "상승", "하락", "급등", "급락", "마감", "주가", "시간외", "거래", "거래서", "전망", "발표", "기록",
+                  "코스피", "코스닥", "증시", "개장", "출발", "오전", "오후", "장중", "반등", "약세", "강세", "외국인", "기관", "개인"}
 
 # 속보도 즉시 알림 길로 간다 (2026-11-18 재권님 「커밋해」 — 속보 정리를 바로 알림 · 낱말 「중요」 알림과 같은 사건은 한 번).
 # 속보 정리(news_brief.flash_once)가 붙기를 이만큼(초) 기다리고, 넘으면 제목만으로 보낸다.
@@ -625,9 +636,11 @@ def send_alerts(send=None):
     done_today = int(_meta(count_key) or 0)
 
     sent, skip, seen = [], [], set()
+    recent = _recent_alert_titles()                 # 비슷한 속보 — 30분 안에 간 것(이번 바퀴에 간 것도 더해 간다)
     for r in sorted(rows, key=lambda x: x["at_ts"] or 0):       # 이른 기사가 그 묶음 대표로 간다
         name = r["_name"]
-        if not name or r["group_id"] in seen or _group_alerted(r["group_id"], r["link"]):
+        if not name or r["group_id"] in seen or _group_alerted(r["group_id"], r["link"]) \
+                or any(similar_title(r["title"], t) for t in recent):
             skip.append(r["link"])
             continue
         if ALERT_DAILY_MAX is not None and done_today + len(sent) >= ALERT_DAILY_MAX:
@@ -642,6 +655,7 @@ def send_alerts(send=None):
             return _finish_alerts(sent, [], count_key, done_today)
         sent.append((r["link"], name))
         seen.add(r["group_id"])
+        recent.append(r["title"])
         time.sleep(0.4)      # 텔레그램 초당 제한
     return _finish_alerts(sent, skip, count_key, done_today)
 
@@ -686,6 +700,39 @@ def _hold_for_digest(rows):
     with _lock, _conn() as c:
         c.executemany("UPDATE news_items SET alerted_at = -1, alert = ? WHERE link = ?",
                       [(_alert_name(r), r["link"]) for r in rows])
+
+
+def _title_words(title):
+    """비슷한 속보 가르기용 제목 낱말 — 대괄호 꼬리표 · 따옴표 · 문장부호를 떼고 2글자 이상 · 숫자만 된 것(%, 억 등 붙어도) 뺌."""
+    t = re.sub(r"\[[^\]]*\]", " ", title or "")
+    out = []
+    for w in re.split(r"[^0-9A-Za-z가-힣%]+", t):
+        if len(w) >= 2 and not re.fullmatch(r"[0-9.,%]+[가-힣]{0,2}", w):
+            out.append(w)
+    return out
+
+
+def _same_word(a, b):
+    return a == b or (len(a) >= 2 and len(b) >= 2 and (a.startswith(b) or b.startswith(a)))
+
+
+def similar_title(a, b):
+    """두 제목이 같은 회사 · 같은 일인가(위 SIMILAR_* 셈)."""
+    wa, wb = _title_words(a), _title_words(b)
+    if not wa or not wb:
+        return False
+    shared = [w for w in wa if any(_same_word(w, x) for x in wb)]
+    if len(shared) < SIMILAR_MIN_SHARED or len(shared) < SIMILAR_RATIO * min(len(wa), len(wb)):
+        return False
+    return any(not any(_same_word(w, c) for c in SIMILAR_COMMON) for w in shared)
+
+
+def _recent_alert_titles():
+    """SIMILAR_WINDOW_MIN 분 안에 바로 간 알림 제목들."""
+    with _conn() as c:
+        return [r[0] for r in c.execute(
+            "SELECT title FROM news_items WHERE alert IS NOT NULL AND alerted_at > ?",
+            (int(time.time()) - SIMILAR_WINDOW_MIN * 60,))]
 
 
 def _group_alerted(gid, link):
