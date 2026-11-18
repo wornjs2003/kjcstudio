@@ -21,7 +21,10 @@ let box = null, timer = null, seq = 0, by = 'sector', lastDay = null;
 const BY = [['sector', '업종'], ['theme', '테마']];   // 재권님 「그럼 테마도 만들어줘」 · 「다로 해줘」(11-18) — 업종(네이버 WICS) · 테마(네이버 작은 테마) 탭
 // 칸 바탕 — 색 = 그 칸 동안 업종 값이 오른 쪽(매수 우위 · 빨강) · 내린 쪽(매도 우위 · 파랑) · 짙기 = 거래대금 전날 같은 시각 대비 %(기준 100)
 //   (11-18 재권님 「이미지로 색도 있던데 색도 넣어줘. 매수와 매도에 맞게」) · 셈은 tone.js 한 곳(쪽을 정해 칠하기) · 기준 · 폭은 지표 표 amt_prev_pct — 없으면 색 없이(콘솔에 알림)
-const bg = (t, p, mv) => { if (t == null || !p || mv == null || mv === 0) return ''; const c = tonePaint('amt_prev_pct', t / p * 100, 'bg', mv > 0 ? 'up' : 'down'); return c ? `background:${c}` : ''; };
+// 칸 색 (11-18 재권님 「많을때 글씨만 적용 색은 글씨가 보이게 적당히 조절하면 돼」 → 「응 커밋해 배경색은 옅게 파랑 빨강 으로 해주고」 · 작업우선순위 경유)
+//   바탕 = 그 칸 매수 · 매도 쪽 옅은 색 고정(theme 변수) · 글씨 = 거래대금 전날 같은 시각 대비 짙기(tone.js 'text' · 지표 표 amt_prev_pct) — 빈 글이면 검정
+const bg = (mv) => (mv == null || mv === 0 ? '' : `background:var(${mv > 0 ? '--kh-up-dim' : '--kh-down-dim'})`);
+const fg = (t, p, mv) => { if (t == null || !p || mv == null || mv === 0) return ''; const c = tonePaint('amt_prev_pct', t / p * 100, 'text', mv > 0 ? 'up' : 'down'); return c ? `color:${c}` : ''; };
 const ratioTxt = (x) => { if (x == null) return '—'; const c = signClass(x - 1, NUM); const t = `${num(x, 1)}배`; return c ? `<b class="${c}">${t}</b>` : `<b>${t}</b>`; };
 
 function paint(j) {
@@ -37,7 +40,7 @@ function paint(j) {
   meta.textContent = `${hm(SL[0])} ~ 09:30 · 줄 = ${by === 'theme' ? '테마(네이버 · 한 종목이 여러 테마면 각각 셈)' : '업종(네이버 WICS)'} · 칸 = 그 ${SL.length > 1 ? `${(+SL[1].slice(2) - +SL[0].slice(2) + 60) % 60}분` : '칸'} 동안 거래대금(억) · 칸 색 = 그 칸 동안 그 줄 값이 오름(매수 우위 · 빨강) · 내림(매도 우위 · 파랑) · 글씨도 같은 쪽 색 · 짙을수록 전날 같은 시각보다 거래대금이 많음 · 줄 차례 = 전날 대비 배 큰 순 · 서버 ${esc(m.asof || '—')}`;
   const th = SL.map((k) => `<th class="${k === MAIN_HM ? 'sf-sep' : ''}">${hm(k)}</th>`).join('');
   const nPre = SL.filter((k) => k < MAIN_HM).length, nReg = SL.length - nPre;
-  const tr = rows.map((r, i) => `<tr><td class="sf-i">${i + 1}</td><td class="sf-l">${esc(r.name)}${r.n != null ? ` <small>${num(r.n)}</small>` : ''}</td>${SL.map((k, i) => { const a = (r.amt || {})[k], q = r.pct || {}, b = i ? q[SL[i - 1]] : 0, mv = q[k] == null || b == null ? null : q[k] - b; return `<td class="${k === MAIN_HM ? 'sf-sep' : ''}" style="${bg(a, (r.prev || {})[k], mv)}">${a == null ? '—' : (() => { const c = mv == null ? '' : signClass(mv, NUM); return c ? `<span class="${c}">${num(a)}</span>` : num(a); })()}</td>`; }).join('')}<td class="sf-sep">${won(r.t)}</td><td>${ratioTxt(r.x)}</td><td>${pct(last && r.pct ? r.pct[last] : null)}</td></tr>`).join('');
+  const tr = rows.map((r, i) => `<tr><td class="sf-i">${i + 1}</td><td class="sf-l">${esc(r.name)}${r.n != null ? ` <small>${num(r.n)}</small>` : ''}</td>${SL.map((k, i) => { const a = (r.amt || {})[k], q = r.pct || {}, b = i ? q[SL[i - 1]] : 0, mv = q[k] == null || b == null ? null : q[k] - b; return `<td class="${k === MAIN_HM ? 'sf-sep' : ''}" style="${bg(mv)}">${a == null ? '—' : (() => { const c = fg(a, (r.prev || {})[k], mv); return c ? `<span style="${c}">${num(a)}</span>` : num(a); })()}</td>`; }).join('')}<td class="sf-sep">${won(r.t)}</td><td>${ratioTxt(r.x)}</td><td>${pct(last && r.pct ? r.pct[last] : null)}</td></tr>`).join('');
   body.innerHTML = `<div class="st-cap sf-meta">${esc(meta.textContent)}</div><div class="st-scroll sf-tw"><table class="sf-tb"><thead>
       <tr class="sf-grp"><th></th><th></th>${nPre ? `<th colspan="${nPre}">프리장(넥스트레이드)</th>` : ''}${nReg ? `<th colspan="${nReg}" class="sf-sep">정규장</th>` : ''}<th colspan="3" class="sf-sep">합 · 09:30 까지</th></tr>
       <tr><th></th><th class="sf-l">${by === 'theme' ? '테마' : '업종'}</th>${th}<th class="sf-sep">거래대금</th><th>전날 대비</th><th>등락률</th></tr></thead>
