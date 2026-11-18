@@ -356,6 +356,23 @@ def early_buy(proxy, cfg, codes, put, pre=False):
 
 MIN_CHIPS = 2                 # 단타 목록 문턱 — 단타 셈 칩 이 수 이상 · 홈 「단타」 · 투자 전략 단타 칩 · 단타 판(build) 셋 다 이 값(meta.minChips) —
                               # 재권님 안 「단타 목록을 서버 한 곳에서 셈해 … 문턱은 홈처럼 칩 둘 이상으로」 에 「응 이거 바로 해야할거같아」(11-18 17:4x · 시황분석1 창 · 작업우선순위 경유)
+MIN_CHIPS_LATE = 1            # 장이 늦게 여는 날(수능 · 정규장 10:00 · 넥스트레이드 프리마켓 없음) 문턱 — 08시대 칩이 관심 하나뿐이라 둘 문턱이면 목록 · 판이 다 빔
+                              # 재권님 「암것도 안보이네 나로 해줘」(11-19 08:22 · 작업우선순위 창 · (나) 칩 하나도 보이게)
+
+
+def min_chips(proxy, now=None):
+    """그날 단타 문턱 한 곳 — 보통 MIN_CHIPS · 정규장이 보통 날보다 늦게 여는 날(market_hours 표의 바뀐 시각)은 MIN_CHIPS_LATE.
+    장 시각을 못 읽으면 MIN_CHIPS(보통 날로 본다)."""
+    try:
+        import market_hours
+        t = market_hours.today(proxy, now=now)
+        if t.get("open") is not False and t["reg"][0] > t["usual"]["reg"][0]:
+            return MIN_CHIPS_LATE
+    except Exception:
+        pass
+    return MIN_CHIPS
+
+
 LIVE_TTL = 60                 # 단타 목록(live) 캐시(초) — 홈 「단타」 · 단타 판이 같은 셈을 이 나이 안이면 함께 쓴다 · 화면은 롱폴 열쇠 dt30.LIVE_TTL
 
 # 줄 세우기 — 재권님 「응」(11-18 19:3x · 시황분석1 창 · 작업우선순위 경유): 룰 문서 strategy-rules 의 rules.dt30.score
@@ -531,7 +548,7 @@ def _live_calc(proxy, cfg):
         "wait": (list(PRE_WAIT) + (["매수"] if "매수대기" in missing else [])) if pre else [],
         "early": early, "approx": list(early),
         "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre and early else None,
-        "candidates": len(ov), "chips": [c for c in OV_CHIPS if c != "수급"], "minChips": MIN_CHIPS,   # 수급은 11-18 관심으로 합쳐짐(지난 판에만)
+        "candidates": len(ov), "chips": [c for c in OV_CHIPS if c != "수급"], "minChips": min_chips(proxy),   # 수급은 11-18 관심으로 합쳐짐(지난 판에만)
         "dropBelowPct": DROP_BELOW_PCT, "capMinEok": CAP_MIN_EOK, "watchRule": "자동",
         "order": order, "score": tab, "scoreConflict": score_conflicts(tab), "ttl": LIVE_TTL}}
     with _live_lock:
@@ -545,11 +562,12 @@ def build(proxy, cfg, day, skip=()):
     lm = lv["meta"]
     pre = bool(lm["pre"]) and _now().strftime("%Y%m%d") == day
     rows, down = [], []
+    mc = min_chips(proxy)
     for x in lv["rows"]:
         if x["code"] in skip:
             continue                                   # 들었다가 빠진 종목 — 그날 다시 안 넣음(재권님 11-12 11:3x · 11-13 「밀린건 넣지 않는다」)
-        if x["n"] < MIN_CHIPS:
-            continue                                   # 문턱 — 칩 둘 이상(11-18 · 홈과 같게)
+        if x["n"] < mc:
+            continue                                   # 문턱 — 칩 둘 이상(11-18 · 홈과 같게) · 늦게 여는 날은 하나(min_chips)
         if x["down"]:
             down.append(x["code"])                     # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
             continue
@@ -567,7 +585,7 @@ def build(proxy, cfg, day, skip=()):
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(), "rows": rows, "closed": False,
-            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % OPEN_AT, "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy), "minChips": MIN_CHIPS,
+            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % OPEN_AT, "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy), "minChips": mc,
                      "early": ["매수"] if "매수어림" in missing else [], "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre else None, "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
                      "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "buy 는 굳힌 때(buyAt) 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
