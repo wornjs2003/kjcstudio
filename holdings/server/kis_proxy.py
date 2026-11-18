@@ -73,6 +73,7 @@ import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tgl
 import claude_chat     # 홀딩스 오른쪽 Claude 창 — 맥미니 claude 를 한 번씩 부른다 · POST /api/claude/ask(2026-11-03 · server/claude_chat.py)
 import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 테마 · 수급(넥스트 5분 거래량 2배) (2026-10-27 · server/theme_flow.py)
 import good_news       # 「좋은 뉴스」 판정 — 공시마다 갈래 · 방향 · 크기 · 자사주 목적 · 이미 오름 · /api/good-news(2026-11-05 · server/good_news.py)
+import earnings_beat   # 「실적」 칩 — 잠정 영업이익 > 네이버 예상치 · 실적 전망 > 직전 실적 · /api/earnings-beat(2026-11-18 · server/earnings_beat.py)
 import vwap            # VWAP(거래량 가중 평균가) — 국내 분봉에 장마다(장 전 · 정규장 · 장 후) 누적 값 `vwap` 을 붙인다(2026-11-06 · 11-07 구간 바꿈 · server/vwap.py)
 import fear_greed      # 공포·탐욕 지수 — 코스피 · 삼성전자 · SK하이닉스 · /api/market/fear-greed(2026-11-06 · server/fear_greed.py)
 import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스닥 150 중 전일 거래량 급등 · 투자전략 룰로 거르고 줄 세움 · /api/auto-watch(2026-11-05 · server/auto_watch.py)
@@ -8889,6 +8890,19 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
             return
+        if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/earnings-beat":
+            # 「실적」 칩(server/earnings_beat.py) — 쌓인 공시 본문 · 네이버 재무를 부를 때마다 셈 · 바깥을 안 부른다(받기는 보내는 서버 바퀴)
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            try:
+                days = int((q.get("days") or [earnings_beat.DAYS_DEFAULT])[0])
+            except ValueError:
+                self._send_json({"ok": False, "error": "days 는 1~%d 정수입니다." % earnings_beat.DAYS_MAX}, 400)
+                return
+            try:
+                self._send_json({"ok": True, "data": earnings_beat.compute(sys.modules[__name__], days), "meta": earnings_beat.status()})
+            except Exception as e:
+                self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
+            return
         if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/auto-watch/history":
             # 자동 관심종목 다음날 결과(server/auto_watch.py history) — 걸린 날마다 종목 · 다음 거래일 등락 · 모은 값 · KIS 를 안 부른다
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -11348,6 +11362,9 @@ def main():
     # 「좋은 뉴스」 판정(2026-11-05 · server/good_news.py) — 같은 문(보내는 서버만) · 공급계약 · 자사주 상세를 5분마다 받아 쌓기만 · 알림 없음
     if not SLOW and is_sender(args.port) and good_news.start(sys.modules[__name__]):
         print("  좋은 뉴스 판정 : 사용 (5분마다 공급계약 본문 · 자사주 취득 상세 받기 · /api/good-news)")
+    # 「실적」 칩(2026-11-18 · server/earnings_beat.py) — 같은 문(보내는 서버만) · 잠정실적 · 실적 전망 본문과 네이버 재무를 5분마다 받아 쌓기만 · 알림 없음
+    if not SLOW and is_sender(args.port) and earnings_beat.start(sys.modules[__name__]):
+        print("  실적 칩       : 사용 (5분마다 잠정실적 · 실적 전망 본문 · 네이버 예상치 받기 · /api/earnings-beat)")
     # 공포·탐욕 25 풀림 알림(2026-11-06 · server/fear_greed.py) — 같은 문(보내는 서버만) · 평일 15:45 뒤 한 번 · SEND 가 꺼져 있으면 기록만
     if not SLOW and is_sender(args.port) and fear_greed.start(sys.modules[__name__]):
         print("  공포·탐욕    : 25 풀림 보기 (평일 %02d:%02d 뒤 한 번 · 알림 %s · /api/market/fear-greed)"

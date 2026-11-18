@@ -1604,6 +1604,13 @@ const SORTS = {
           note: () => evNote(),
           empty: () => (!evMeta ? '불러오는 중'
             : evLane ? `최근 ${EV_DAYS}일 「${escT(evLane)}」 공시가 없습니다` : `최근 ${EV_DAYS}일 이벤트 공시가 없습니다`) },
+  /* 실적 — 실적이 예상보다 좋고(잠정 영업이익 > 네이버 그 분기 예상치) 앞으로의 전망도 좋게 낸(실적 전망 공시 > 직전 실적) 종목 (2026-11-18 재권님
+     「실적 잘 나오는 종목만 추려 가지고 보는 것도」 · 기준 「예상보다 좋게 나온 것과 앞으로 성장성도 좋게 발표 된 것 두가지」 · 자리 「가」 · 셈 「응 해줘」).
+     셈은 서버(server/earnings_beat.py · /api/earnings-beat) 한 곳 — Insight 단타 판 칩도 같은 주소를 받는다. 화면은 둘 다 맞은 종목만 받은 차례 그대로 */
+  eb:   { label: '실적', list: () => ebRows,
+          head: '예상 대비 · 전망', show: (code) => ebCell(code), html: true,
+          note: () => ebNote(),
+          empty: () => (!ebMeta ? '불러오는 중' : `최근 ${EB_DAYS}일 두 가지가 다 맞은 종목이 없습니다${ebMeta.pending ? ` · 아직 안 읽은 공시 ${ebMeta.pending}건` : ''}`) },
 };
 
 /* 칩 설명 — 칩 위에 마우스를 1초 올려 두면 뜬다(공용 풍선 data-tip · 2026-11-07 재권님 「급등 매수 장외 등 해당 버튼 위에 마우스 1초이상
@@ -1630,6 +1637,7 @@ const SORT_TIPS = {
     const cap = m.minCapEok != null ? `시가총액 ${fmtMoneyKr(m.minCapEok)} 이상만` : '';
     return `코스피 200 · 코스닥 150 종목(ETF 뺌) 중 정규장 첫 5분봉(${m.barFrom || '09:00'} ~ ${m.barTo || '09:05'})이 시가보다${th} 올라 끝난 종목, 그 상승률이 큰 순\n그 봉을 다 받은 뒤에 고르고 그날 판으로 굳습니다${cap ? ` · ${cap}` : ''}`;
   },
+  eb: '실적이 잘 나온 종목 — 두 가지가 다 맞은 것만\n① 예상보다 좋음: 회사가 낸 잠정실적의 영업이익이 그 분기 시장 예상치(네이버)보다 높음\n② 전망 좋음: 「실적 전망」 공시의 매출 · 영업이익(값이 든 칸만)이 직전 실적보다 큼 — 1년 전망은 앞 해 실적(없으면 최근 네 분기 합), 분기 전망은 한 해 앞 같은 분기\n최근 31일 공시 · 예상치가 없는 종목은 못 가름이라 빠집니다',
   ev: '최근 사흘 회사 공시 중 갈래가 붙은 것(자사주 · 인수합병 · 주주환원 · 실적 · 위험 신호 …) — 종목마다 가장 새 공시 한 줄, 새 것이 위\n아래 띠에서 갈래를 누르면 그 갈래만',
   ssts: '코스피200 · 코스닥150 종목의 공매도 거래대금 · 비율(공매도 대금 ÷ 전체 거래대금) 순\n아래 줄에서 금액 · 비율 · 1일 · 5일 · 한달 · 1년 · 장중 값은 없고 거래소가 장 뒤에 냅니다',
 };
@@ -1679,6 +1687,43 @@ async function loadEv() {
   } catch { /* 못 받으면 들고 있던 것 그대로 */ }
   if (sortBy === 'ev') { paintRows(rowPrices); paintSortNote(); }
   if (rankModal && rankModalSort === 'ev') { paintRankModal(); paintRankModalNote(); }
+}
+/* 「실적」 칩 — /api/earnings-beat 에서 둘 다 맞은 종목(both === true)만. 못 받았으면 null(빈 목록과 가른다) */
+const EB_DAYS = 31;                // 며칠 치를 보나 — 셈 범위이지 다시 묻는 주기가 아니다(서버 최대와 같게)
+const EB_FALLBACK_MS = 60000;      // 서버 값마저 못 받았을 때만
+let ebRows = null, ebMeta = null, ebBy = {};
+const ebPct = (v) => (v == null ? '' : `${v > 0 ? '+' : ''}${v}%`);
+function ebCell(code) {
+  const it = ebBy[code];
+  if (!it) return '—';
+  const b = it.beat || {}, g = it.guide || {};
+  const up = g.base && g.sales != null && g.base.sales ? ` 매출 ${ebPct(Math.round((g.sales / g.base.sales - 1) * 1000) / 10)}`
+    : g.base && g.op != null && g.base.op ? ` 영업익 ${ebPct(Math.round((g.op / g.base.op - 1) * 1000) / 10)}` : '';
+  return `<div style="white-space:nowrap;font-size:12px;line-height:1.3" data-tip="${escT(b.why || '')}">영업익 <span class="${dirClass(b.pct)}">${b.pct != null ? ebPct(b.pct) : '예상 초과'}</span>` +
+    ` <span class="kh-mut">${escT((it.earn?.date || '').slice(4, 6))}-${escT((it.earn?.date || '').slice(6))}</span></div>` +
+    `<div style="white-space:nowrap;font-size:11px;line-height:1.3" class="kh-mut" data-tip="${escT(g.why || '')}">전망${up}</div>`;
+}
+function ebNote() {
+  const n = (ebRows || []).length, c = ebMeta && ebMeta.counts;
+  return `최근 ${EB_DAYS}일 · 두 가지 다 ${n}종목` + (c ? ` · 예상보다 좋음 ${c.beat} · 전망 좋음 ${c.guide}` : '');
+}
+async function loadEb() {
+  try {
+    const r = await apiFetch(`/api/earnings-beat?days=${EB_DAYS}`, { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    const d = j && j.ok ? j.data : null;
+    if (d) {
+      const by = {}, rows = [];
+      for (const it of d.items || []) {
+        if (it.both !== true || !it.code) continue;
+        by[it.code] = it; rows.push({ code: it.code, name: it.name });
+        if (!findStock(it.code)) addExtraStock(it.code, it.name);
+      }
+      ebBy = by; ebRows = rows; ebMeta = { at: Date.now(), counts: d.counts, pending: d.pending };
+    }
+  } catch { /* 못 받으면 들고 있던 것 그대로 */ }
+  if (sortBy === 'eb') { paintRows(rowPrices); paintSortNote(); }
+  if (rankModal && rankModalSort === 'eb') { paintRankModal(); paintRankModalNote(); }
 }
 /* 갈래 띠 — 「프리장」 업종 띠와 같은 자리 · 같은 모양(.kh-pre-sec · 한 줄 · 넘치면 옆으로 민다). 누르면 그 갈래만 · 다시 누르면 전체 */
 function paintEvLanes() {
@@ -2451,6 +2496,7 @@ function setupSorts() {
     if (sortBy === 'bb') loadBb();
     if (sortBy === 'ssts') loadSsts();
     if (sortBy === 'ev') loadEv();
+    if (sortBy === 'eb') loadEb();
   };
   host.addEventListener('click', onSort);
   $('kh-sort-note')?.addEventListener('click', (e) => {
@@ -2811,7 +2857,7 @@ function paintRankModal() {
       <td class="l"><span class="kh-nm">${iconHtml(s)}<b data-co="${s.code}">${escT(s.name)}</b>${th ? themeBadge(s.code) : ''}</span></td>
       <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, sid)) : '···'}</td>
       <td class="kh-num ${p ? dirClass(pctOf(p, sid)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, sid)) : '—'}</td>
-      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'rise' ? riseCell(s.code) : sid === 'ov' ? ovCell(s.code) : sid === 'vi' ? viCell(s.code) : sid === 'bb' ? bbCell(s.code) : sid === 'ssts' ? sstsCell(s.code) : sid === 'ev' ? evCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
+      <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'rise' ? riseCell(s.code) : sid === 'ov' ? ovCell(s.code) : sid === 'vi' ? viCell(s.code) : sid === 'bb' ? bbCell(s.code) : sid === 'ssts' ? sstsCell(s.code) : sid === 'ev' ? evCell(s.code) : sid === 'eb' ? ebCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
       <td class="kh-num">${th && themeBig !== FLOW ? themeCap(s.code) : showCap(s.code)}</td>
       <td class="kh-num">${th && themeBig === FLOW ? themeMetric(s.code) : (p ? fmtShareCount(p.volume) : '···')}</td>
       <td class="kh-num">${volRatioCell(s.code)}</td>
@@ -2842,7 +2888,7 @@ function paintRankModal() {
       </colgroup>
       <thead><tr>
         <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
-        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'rise' ? '첫 5분봉' : sid === 'ov' ? '겹친 칩' : sid === 'vi' ? '때 · 무엇' : sid === 'bb' ? '바닥 봉' : sid === 'ssts' ? '공매도' : sid === 'ev' ? '갈래 · 무엇' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
+        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'rise' ? '첫 5분봉' : sid === 'ov' ? '겹친 칩' : sid === 'vi' ? '때 · 무엇' : sid === 'bb' ? '바닥 봉' : sid === 'ssts' ? '공매도' : sid === 'ev' ? '갈래 · 무엇' : sid === 'eb' ? '예상 대비 · 전망' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
       </tr></thead>
       <tbody>${rows || empty}</tbody>
     </table>
@@ -2901,7 +2947,7 @@ function openRankModal() {
       /* 모달에서 고른 기준은 첫 화면 순위표와 **따로 둔다** — 모달에서
          거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면 무엇을 눌러
          그렇게 됐는지 알 수 없다 (2026-09-22). */
-      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'rise') loadRise(); if (id === 'ov') loadOv(); if (id === 'vi') loadVi(); if (id === 'bb') loadBb(); if (id === 'ssts') loadSsts(); if (id === 'ev') loadEv(); loadVolRatio(); },
+      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'rise') loadRise(); if (id === 'ov') loadOv(); if (id === 'vi') loadVi(); if (id === 'bb') loadBb(); if (id === 'ssts') loadSsts(); if (id === 'ev') loadEv(); if (id === 'eb') loadEb(); loadVolRatio(); },
     },
     onClose() { rankModal = null; if (volWatch) { volWatch.stop(); volWatch = null; } },
   });
@@ -2928,7 +2974,7 @@ function paintRankModalNote() {
   if (!rankModal) return;
   const fresh = freshNote();
   /* 「매수」 탭은 갱신 주기만 짧게 — 길면 탭 글자가 세로로 눌렸다(11-05 8772) */
-  const base = rankModalMarket === 'THEME' ? RANK_TABS_NOTE : rankModalSort === 'buy' ? jointNote(true) : rankModalSort === 'pre' ? preNote() : rankModalSort === 'rise' ? riseNote() : rankModalSort === 'ov' ? ovNote() : rankModalSort === 'vi' ? viNote() : rankModalSort === 'bb' ? bbNote() : rankModalSort === 'ssts' ? sstsNote() : rankModalSort === 'ev' ? evNote() : RANK_TABS_NOTE;
+  const base = rankModalMarket === 'THEME' ? RANK_TABS_NOTE : rankModalSort === 'buy' ? jointNote(true) : rankModalSort === 'pre' ? preNote() : rankModalSort === 'rise' ? riseNote() : rankModalSort === 'ov' ? ovNote() : rankModalSort === 'vi' ? viNote() : rankModalSort === 'bb' ? bbNote() : rankModalSort === 'ssts' ? sstsNote() : rankModalSort === 'ev' ? evNote() : rankModalSort === 'eb' ? ebNote() : RANK_TABS_NOTE;
   rankModal.head.setTabsNote(fresh ? `${base} · ${fresh.text}` : base);
 }
 
@@ -2959,6 +3005,7 @@ watch({ url: () => (sortBy === 'rise' || sortBy === 'ov' || (rankModal && rankMo
 watch({ url: () => (sortBy === 'vi' || sortBy === 'ov' || (rankModal && rankModalSort === 'vi') ? '/api/alerts/today' : null), onChange: loadVi, key: null, fallbackMs: VI_FALLBACK_MS });
 watch({ url: () => (sortBy === 'bb' || (rankModal && rankModalSort === 'bb') ? '/api/signals/today' : null), onChange: loadBb, key: null, fallbackMs: BB_FALLBACK_MS });
 watch({ url: () => (sortBy === 'ev' || (rankModal && rankModalSort === 'ev') ? `/api/good-news?days=${EV_DAYS}` : null), onChange: loadEv, key: 'dart.POLL_INTERVAL', fallbackMs: EV_FALLBACK_MS });
+watch({ url: () => (sortBy === 'eb' || (rankModal && rankModalSort === 'eb') ? `/api/earnings-beat?days=${EB_DAYS}` : null), onChange: loadEb, key: 'dart.POLL_INTERVAL', fallbackMs: EB_FALLBACK_MS });
 sstsWatch = watch({ url: () => (sortBy === 'ssts' || (rankModal && rankModalSort === 'ssts') ? sstsUrl() : null), onChange: loadSsts, key: null, fallbackMs: SSTS_FALLBACK_MS });
 watch({ url: () => (SEC_CHIPS.has(sortBy) && market !== 'THEME' ? '/api/naver/groups?kind=industry&all=1' : null), onChange: loadIndustryAll, key: 'naver.TTL', fallbackMs: SECTOR_FALLBACK_MS });
 watch({ url: () => '/api/kis/stock-sectors', onChange: loadSectors, key: 'company_profile.SECTOR_LIST_TTL', fallbackMs: SECTOR_FALLBACK_MS });
