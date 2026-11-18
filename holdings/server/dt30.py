@@ -378,16 +378,9 @@ MIN_CHIPS_LATE = 1            # 장이 늦게 여는 날(수능 · 정규장 10:
 
 
 def min_chips(proxy, now=None):
-    """그날 단타 문턱 한 곳 — 보통 MIN_CHIPS · 정규장이 보통 날보다 늦게 여는 날(market_hours 표의 바뀐 시각)은 MIN_CHIPS_LATE.
-    장 시각을 못 읽으면 MIN_CHIPS(보통 날로 본다)."""
-    try:
-        import market_hours
-        t = market_hours.today(proxy, now=now)
-        if t.get("open") is not False and t["reg"][0] > t["usual"]["reg"][0]:
-            return MIN_CHIPS_LATE
-    except Exception:
-        pass
-    return MIN_CHIPS
+    """그날 단타 문턱 한 곳 — 보통 MIN_CHIPS · 정규장이 보통 날보다 늦게 여는 날(late_min > 0)은 MIN_CHIPS_LATE.
+    「늦게 여는 날인가」 는 late_min 한 곳(개념정의 덧 11-19) · 못 읽으면 0 이라 MIN_CHIPS."""
+    return MIN_CHIPS_LATE if late_min(proxy, now) > 0 else MIN_CHIPS
 
 
 LIVE_TTL = 60                 # 단타 목록(live) 캐시(초) — 홈 「단타」 · 단타 판이 같은 셈을 이 나이 안이면 함께 쓴다 · 화면은 롱폴 열쇠 dt30.LIVE_TTL
@@ -1159,6 +1152,8 @@ def start(proxy):
                               " · 못 받은 칩 " + " · ".join(b["meta"]["missing"]) if b["meta"]["missing"] else ""), flush=True)
                     elif got is not None:
                         b = got[0]
+                        if b.get("closed") and not b.get("rows") and hm < BUY_LATE[0] * 60 + BUY_LATE[1] + off:
+                            b["closed"] = False            # 줄 0 으로 굳어 버린 판 — 굳히는 때 전이면 다시 연다(11-19 수능 아침 08:00 에 빈 판이 굳어 다시 세기가 멈춤)
                         was = bool(b.get("closed"))
                         due = [t for t in b["times"] if int(t[:2]) * 60 + int(t[2:]) + 1 <= hm
                                and any(t not in r["px"] for r in b["rows"])]
@@ -1183,7 +1178,7 @@ def start(proxy):
                                 r["flowNow"] = got.get(r["code"])
                             b["meta"]["flowNowAt"] = _now().strftime("%H:%M")
                             flow_now = True
-                        if not b.get("closed") and all(t in r["px"] for t in b["times"] for r in b["rows"]):
+                        if not b.get("closed") and b["rows"] and all(t in r["px"] for t in b["times"] for r in b["rows"]):   # 빈 판은 안 굳힌다(all([]) 은 참)
                             b["closed"] = True             # 14:00 마지막 칸까지 적었다 — 그날 판을 굳힌다(그 뒤 now 안 붙음)
                             for r in b["rows"]:
                                 r.pop("now", None)
