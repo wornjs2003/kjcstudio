@@ -26,9 +26,9 @@ const ratioTxt = (x) => { if (x == null) return '—'; const c = signClass(x - 1
 
 function paint(j) {
   if (!box) return;
-  const meta = box.querySelector('.sf-meta'), body = box.querySelector('.sf-body');
+  const body = box.querySelector('.sf-body'), meta = { textContent: '' };   // 설명 줄은 높이를 잡은 칸(.sf-body) 안에 그림 — 탭 · 값 없음마다 길이가 달라도 아래가 안 밀림(qa 11-18 좁은 폭)
   const d = j && j.ok !== false ? j.data : null;
-  if (!d || !Array.isArray(d.rows)) { meta.textContent = j && j._st ? `— 서버 값 없음(${j._st}) · 서버 셈을 붙이면 채워짐(/api/kis/sector-flow)` : '— 서버 값 없음'; body.innerHTML = '<div class="st-err">—</div>'; return; }
+  if (!d || !Array.isArray(d.rows)) { meta.textContent = j && j._st ? `— 서버 값 없음(${j._st}) · 서버 셈을 붙이면 채워짐(/api/kis/sector-flow)` : '— 서버 값 없음'; body.innerHTML = `<div class="st-cap sf-meta">${esc(meta.textContent)}</div><div class="st-err">—</div>`; return; }
   const m = j.meta || {}, SL = Array.isArray(d.slots) ? d.slots : [];
   const sum = (o) => { const v = SL.map((k) => (o || {})[k]).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) : null; };
   const rows = d.rows.map((r) => { const t = sum(r.amt), p = sum(r.prev); return { ...r, t, p, x: t != null && p ? t / p : null }; })
@@ -38,7 +38,7 @@ function paint(j) {
   const th = SL.map((k) => `<th class="${k === MAIN_HM ? 'sf-sep' : ''}">${hm(k)}</th>`).join('');
   const nPre = SL.filter((k) => k < MAIN_HM).length, nReg = SL.length - nPre;
   const tr = rows.map((r, i) => `<tr><td class="sf-i">${i + 1}</td><td class="sf-l">${esc(r.name)}${r.n != null ? ` <small>${num(r.n)}</small>` : ''}</td>${SL.map((k, i) => { const a = (r.amt || {})[k], q = r.pct || {}, b = i ? q[SL[i - 1]] : 0, mv = q[k] == null || b == null ? null : q[k] - b; return `<td class="${k === MAIN_HM ? 'sf-sep' : ''}" style="${bg(a, (r.prev || {})[k], mv)}">${a == null ? '—' : (() => { const c = mv == null ? '' : signClass(mv, NUM); return c ? `<span class="${c}">${num(a)}</span>` : num(a); })()}</td>`; }).join('')}<td class="sf-sep">${won(r.t)}</td><td>${ratioTxt(r.x)}</td><td>${pct(last && r.pct ? r.pct[last] : null)}</td></tr>`).join('');
-  body.innerHTML = `<div class="st-scroll sf-tw"><table class="sf-tb"><thead>
+  body.innerHTML = `<div class="st-cap sf-meta">${esc(meta.textContent)}</div><div class="st-scroll sf-tw"><table class="sf-tb"><thead>
       <tr class="sf-grp"><th></th><th></th>${nPre ? `<th colspan="${nPre}">프리장(넥스트레이드)</th>` : ''}${nReg ? `<th colspan="${nReg}" class="sf-sep">정규장</th>` : ''}<th colspan="3" class="sf-sep">합 · 09:30 까지</th></tr>
       <tr><th></th><th class="sf-l">${by === 'theme' ? '테마' : '업종'}</th>${th}<th class="sf-sep">거래대금</th><th>전날 대비</th><th>등락률</th></tr></thead>
       <tbody>${tr || `<tr><td class="sf-l st-err" colspan="${SL.length + 5}">— 아직 칸이 없음(08:00 전)</td></tr>`}</tbody></table></div>
