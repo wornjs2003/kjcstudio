@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="../holdings/css/home.css" />
 <link rel="stylesheet" href="css/insight.css" />
 <link rel="stylesheet" href="css/strategy.css" />
+<link rel="stylesheet" href="css/strategy-jb.css" />   <!-- 「단타 · 종가배팅」 탭 · 종가배팅 판(2026-11-18) -->
 </head>
 <body data-nav="company-setup" data-site-root="../">
 <div id="site-nav"></div>
@@ -108,6 +109,9 @@
          시안 temp/시황분석1-dt30-1743 → 「응 이대로 만드는데 위에 날짜도 넣어줘 30일 추적가능하도록」) — 그날 판(09:06 단타 상위 30 · 30분마다 값)은 서버가 굳혀 쌓고 화면은 그린다 · 그리기는 js/strategy-dt30.js -->
     <!-- 칸은 js/strategy-dt30.js 의 mountDt30 이 만든다(11-13 — 다른 자리에서 띄울 때도 이 한 벌) -->
     <section class="st dt" id="dt-host"></section>
+    <!-- 종가배팅 (11-18 재권님 「단타 옆에 종가배팅 이라고 만들어서 넣으면 좋을거 같은데 이미지로 먼저 그려봐」 → 시안 temp/시황분석-jb-1205(탭을 판 위에 붙임) → 「응 만들어」) —
+         탭 「단타 · 종가배팅」 은 두 판 카드 위에 붙고 고른 판만 보인다 · 후보는 서버(/api/nxt/closing-bet · 주식 레인) · 그리기는 js/strategy-jb.js -->
+    <section class="st jb" id="jb-host" hidden></section>
 
     <!-- 옵션 만기일 (11-12 배분 → 시안 temp/시황분석1-expiry-1142 에 재권님 「응 해」 11-13) — 올해 만기일과 다음 거래일 코스피 · 값은 서버 둘(/api/kis/opt-expiry · index-daily) · 그리기는 js/strategy-expiry.js -->
     <section class="st mx" id="mx">
@@ -154,6 +158,7 @@
 <script type="module" src="js/strategy-log.js"></script>
 <script type="module" src="/assets/js/glossary.js"></script>   <!-- 설명 풍선 — 마우스를 1초 올려 두면 뜨는 공용 풍선(data-tip) · 「설명 풍선은 … 1초 올려 두면 뜬다」(2026-11-07) -->
 <script type="module" src="js/strategy-expiry.js"></script>
+<script type="module" src="js/strategy-jb.js"></script>
 <script type="module" src="js/fit.js"></script>   <!-- 틀을 홀딩스 첫 화면과 같은 넓이로 (2026-11-07) -->
 <script type="module">import { mountClaudeRail } from '/assets/js/claude-rail.js'; if (self === top) mountClaudeRail(); /* 틀(iframe) 안에 들어간 화면에는 안 붙인다 */</script>
 </body>
