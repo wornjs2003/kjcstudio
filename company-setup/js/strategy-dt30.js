@@ -153,6 +153,17 @@ function chipPanel(all) {
 // 파는 룰 값을 재권님이 넣는 칸으로 (11-18 재권님 「값을 내가 넣으면 거기에 맞게 소팅되야해 … 파는룰도 내가 바꾸면서 볼려고 하는거야」)
 //   · 손절 % (빈칸이면 손절 안 함) · 꺾임 켬/끔 · 고점 대비 −X% (빈칸이면 안 씀 — 11-18 「상승중에 -2%가 되면 매도」 · 매수가보다 오른 뒤 그때까지 가장 높던 값에서 X% 내리면 판다)
 //   · 기본값은 지금 룰 그대로(손절 −1 · 꺾임 켬 · 고점 빈칸) — 값은 아래 DEF_SET 한 곳 · 넣은 값은 룰 문서(rules.dt30) 한 곳에 저장
+// 매수 타이밍 (11-18 재권님 「매수 타이밍을 9시1분 과 vi발동 두개를 고를수 있게 해줘. 그것에 맞춰서 차익도 달라지게」 → (가) 「그뒤 30분이 아니고 시간으로 30분단위로」)
+//   · open = 서버 매수가(09:00 시가) · p1 = rows[].px1(09:01 · 개발2) · vi = rows[].viPx(VI 걸린 때 값 · 개발2) — 값이 없는 종목은 안 산다(몫도 안 나눔 · 0 으로 안 봄)
+//   · 파는 룰은 시계 30분 칸(09:30 · 10:00 …) 중 산 시각 뒤 칸부터 본다 — 산 시각 앞 칸은 비움
+const BUYS = [['open', '09:00 시가'], ['p1', '09:01'], ['vi', 'VI 발동']];
+const hhmm = (t) => String(t || '').replace(/:/g, '').slice(0, 4);
+function buyOf(r) {   // → { px, at(HHMM), src } | null
+  const k = st.set.buy || 'open';
+  if (k === 'p1') { const o = r.px1; return o && Number(o.px) > 0 ? { px: Number(o.px), at: hhmm(o.at || '09:01'), src: o.src === 'now' ? '09:01 그때 현재가' : '09:01' } : null; }
+  if (k === 'vi') { const o = r.viPx; return o && Number(o.px) > 0 && o.at ? { px: Number(o.px), at: hhmm(o.at), src: `VI ${String(o.at).slice(0, 5)}` } : null; }
+  return Number(r.buy) > 0 ? { px: Number(r.buy), at: hhmm(r.buyAt || '0900'), src: r.buySrc || '시가' } : null;
+}
 function sellAt(p) {   // p — 시각마다 매수가 대비 %(null 은 값 없음) → { k: 판 시각 차례 또는 -1, why }
   const S = st.set; let pk = 0;
   for (let k = 0; k < p.length; k++) {
@@ -175,7 +186,7 @@ function sellAt(p) {   // p — 시각마다 매수가 대비 %(null 은 값 없
 const PNL_TOP = 30, PNL_WON = 10_000_000;   // 기본값 — 재권님이 칸에 넣으면 st.set 이 이김
 // 셈 칸 기본값 (11-18) — minChip 칩 N개 이상만(0 = 전체) · top 상위 몇 종목 · 돈은 전체 금액 dayWon 을 그 종목 수로 똑같이 나눔
 //   11-18 재권님 「금액은 전체 금액으로 해주고 종목만큼 나눈다 라는 룰로 해줘 금액을 맨앞으로」 — 종목마다(each) 갈래는 걷음 · 기본 전체 금액 = 지금까지의 기본(상위 30 × 1,000만원)과 같은 3억
-const DEF_SET = { minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, stop: -1, turn: true, turnPct: 0, trail: null, pyr: false };   // pyr — 불타기(손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삼) · 기본 끔
+const DEF_SET = { minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, stop: -1, turn: true, turnPct: 0, trail: null, pyr: false, buy: 'open' };   // buy — 매수 타이밍 open(09:00 시가 · 지금까지 셈) · p1(09:01) · vi(VI 발동)   // pyr — 불타기(손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삼) · 기본 끔
 st.set = { ...DEF_SET };
 const TAX = { KOSPI: { tx: 0.05, rural: 0.15 }, KOSDAQ: { tx: 0.20, rural: 0 } };   // % · 코스피 = 거래세 0.05 + 농특세 0.15 · 코스닥 = 거래세 0.20
 const MKT = { KOSPI: '코스피', KOSDAQ: '코스닥' };
@@ -219,12 +230,12 @@ function calc(d) {
   //   서버(개발2 dt30)가 장중에는 rows[].now · data.nowAt 을 새로 주고, 14:00 뒤 굳혀 저장하면 data.closed = true — 화면은 closed 가 아니고 now 가 있을 때만 「장중」
   const LIVE = d.closed !== true && all.some((r) => r.now != null);
   // 돈 넣는 법(11-18) — each: 상위 N 종목마다 perWon · day: 하루 dayWon 을 상위 N(보이는 종목이 적으면 그 수)으로 똑같이 나눔
-  const n = Math.min(S.top, rows.length), nb = rows.slice(0, n).filter((r) => Number(r.buy) > 0).length;   // 매수가 없는 종목 몫은 나누지 않음(qa 11-18 — 안 쓰는 돈이 생겼음)
+  const n = Math.min(S.top, rows.length), nb = rows.slice(0, n).filter((r) => buyOf(r)).length;   // 매수가 없는 종목 몫은 나누지 않음(qa 11-18 — 안 쓰는 돈이 생겼음)
   const per = S.mode === 'day' ? (nb ? S.dayWon / nb : 0) : S.perWon;
-  const ch = (r, t) => { const b = Number(r.buy), v = Number((r.px || {})[t]); return r.buy == null || (r.px || {})[t] == null || !(b > 0) || !Number.isFinite(v) ? null : (v / b - 1) * 100; };
-  const R = rows.map((r) => { const p = times.map((t) => ch(r, t)); const s = sellAt(p); let last = L; while (last >= 0 && p[last] == null) last--; const nowCh = LIVE && s.k < 0 && Number(r.now) > 0 && Number(r.buy) > 0 ? (Number(r.now) / Number(r.buy) - 1) * 100 : null;   // 장중 · 안 판 종목 — 결과 · 손익은 서버 지금 값(rows[].now)
+  const ch = (r, t) => { const B = buyOf(r), v = Number((r.px || {})[t]); return !B || hhmm(t) <= B.at || (r.px || {})[t] == null || !Number.isFinite(v) ? null : (v / B.px - 1) * 100; };   // 산 시각 앞 칸은 비움
+  const R = rows.map((r) => { const p = times.map((t) => ch(r, t)); const s = sellAt(p); let last = L; while (last >= 0 && p[last] == null) last--; const nowCh = LIVE && s.k < 0 && Number(r.now) > 0 && buyOf(r) ? (Number(r.now) / buyOf(r).px - 1) * 100 : null;   // 장중 · 안 판 종목 — 결과 · 손익은 서버 지금 값(rows[].now)
     const at = s.k >= 0 ? s.k : last, sellPx = nowCh != null ? Number(r.now) : at >= 0 ? Number((r.px || {})[times[at]]) : null;
-    const b = Number(r.buy), qty = b > 0 ? Math.floor(per / b) : 0;
+    const b = buyOf(r) ? buyOf(r).px : 0, qty = b > 0 ? Math.floor(per / b) : 0;
     const T = TAX[String(r.market || '').toUpperCase()] || null;
     const pnl = qty > 0 && Number.isFinite(sellPx) ? (() => {
       const buyAmt = qty * b, sellAmt = qty * sellPx;
@@ -307,7 +318,8 @@ function paint(d) {
   const rk = (r, i) => `<td class="dt-rk">${i + 1}</td>`;
   // 매수가 (11-18 서버 바뀜) — 정규장 전에 든 종목은 buy null + buyWait → 「09:00 시가 기다림」 · 채워지면 buySrc(시가 · 지금 값) · 그 시각
   const NM0 = d.meta || {};
-  const buyTd = (r) => (r.buy == null && r.buyWait ? `<td class="dt-buy"><span class="dt-nxm">${st.openAt ? hmTxt(String(st.openAt).replace(':', '')) : '정규장'} 시가 기다림</span></td>`
+  const buyTd = (r) => ((st.set.buy || 'open') !== 'open' ? (() => { const B = buyOf(r); return B ? `<td class="dt-buy">${num(B.px)}<small>${esc(B.src)}</small></td>` : `<td class="dt-buy"><span class="dt-nxm">${st.set.buy === 'vi' ? 'VI 없음 · 안 삼' : '09:01 값 없음 · 안 삼'}</span></td>`; })()
+    : r.buy == null && r.buyWait ? `<td class="dt-buy"><span class="dt-nxm">${st.openAt ? hmTxt(String(st.openAt).replace(':', '')) : '정규장'} 시가 기다림</span></td>`
     : `<td class="dt-buy">${num(r.buy)}${r.buySrc ? `<small>${r.buyAt ? `${hmTxt(String(r.buyAt).replace(':', ''))} ` : ''}${esc(r.buySrc)}</small>` : ''}</td>`);
   // 09:01 값 (11-18 재권님 「9시 1분 등락도 넣어줘 이쯤 살거니깐」 → 「응 그렇게 해」) — 서버 rows[].px1(개발2 · 첫 1분봉 종가 「1m」 · 없으면 그때 현재가 「now」) · 시각은 meta.px1At
   //   화면은 매수가 대비 % 만 셈 · px1 칸이 없으면 「아직」(서버가 아직 안 줌 · 그날 09:02 전) · px 가 null 이면 「—」 못 잼(0 아님)
@@ -364,7 +376,7 @@ function paint(d) {
   const chBlank = (th) => CS.map(() => `<${th} class="dt-chc"></${th}>`).join('') + `<${th} class="dt-ovn"></${th}><${th} class="dt-addc"></${th}>`;
   const usRow = `<tr class="dt-chiprow"><td colspan="${times.length + nCol + 12}"><div class="dt-chips" id="dt-chips"><span class="dt-us" id="dt-us" data-day="${esc(d.day || '')}">${usHtml(d.day)}</span></div></td></tr>`;
   $('dt-box').innerHTML = `<table class="dt-tb dt-cols">
-    <tr><th class="dt-rk"></th><th class="st-name">종목</th><th>시가총액</th><th class="dt-sec">섹터</th>${CS.map(chHead).join('')}<th class="dt-ovn" data-tip="켜진 칩 중 몇 개에 걸렸나 — 순위가 이 수로 정해짐">겹침</th><th class="dt-addc"><button type="button" class="kh-chip" data-addcol aria-haspopup="menu">+ 칩</button></th><th>매수가 ${st.openAt ? `${hmTxt(String(st.openAt).replace(':', ''))} 시가` : hmTxt(d.buyAt)}</th><th class="dt-nx" data-tip="이쯤 산다면 — 09:01 값의 매수가 대비 %">${p1At}</th><th class="dt-gp" colspan="${times.length}"><span>매수가 대비</span></th><th class="dt-res">결과</th>${nxH1}<th class="dt-tx">세금 %</th><th class="dt-pl">손익 · 종목마다 ${manTxt(per)}</th></tr>
+    <tr><th class="dt-rk"></th><th class="st-name">종목</th><th>시가총액</th><th class="dt-sec">섹터</th>${CS.map(chHead).join('')}<th class="dt-ovn" data-tip="켜진 칩 중 몇 개에 걸렸나 — 순위가 이 수로 정해짐">겹침</th><th class="dt-addc"><button type="button" class="kh-chip" data-addcol aria-haspopup="menu">+ 칩</button></th><th>매수가 ${(st.set.buy || 'open') !== 'open' ? BUYS.find(([k]) => k === st.set.buy)[1] : st.openAt ? `${hmTxt(String(st.openAt).replace(':', ''))} 시가` : hmTxt(d.buyAt)}</th><th class="dt-nx" data-tip="이쯤 산다면 — 09:01 값의 매수가 대비 %">${p1At}</th><th class="dt-gp" colspan="${times.length}"><span>매수가 대비</span></th><th class="dt-res">결과</th>${nxH1}<th class="dt-tx">세금 %</th><th class="dt-pl">손익 · 종목마다 ${manTxt(per)}</th></tr>
     <tr class="dt-t2"><th class="dt-rk"></th><th class="st-name"></th><th></th><th class="dt-sec"></th>${chBlank('th')}<th></th><th class="dt-nx">매수가 대비</th>${times.map((t) => `<th>${hmTxt(t)}</th>`).join('')}<th class="dt-res">판 값 · 시각</th>${nxH2}<th class="dt-tx">거래세 · 농특세</th><th class="dt-pl">세금 · 수수료 뺌 · 상위 ${topN}</th></tr>
     ${usRow}
     <tr class="dt-avg"><td class="dt-rk"></td><td class="st-name">평균 <small>판 종목은 판 값으로</small></td><td></td><td class="dt-sec"></td>${chBlank('td')}<td></td>${p1Avg}${avg.map((x, i) => `<td class="${i === L ? 'dt-last' : ''}">${pct(x)}</td>`).join('')}<td class="dt-res">${pct(resAvg)}</td>${nxAvg}<td class="dt-tx"></td><td class="dt-pl">${P ? won(P.net) : '—'}<small>${P ? `빼기 전 ${won(P.gross)}` : ''}</small></td></tr>
@@ -520,6 +532,7 @@ function setFill() {
   box.querySelectorAll('[data-set]').forEach((el) => { if (document.activeElement !== el) el.value = String(v[el.dataset.set] ?? ''); });
   box.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('is-active', b.dataset.mode === S.mode));
   box.querySelectorAll('[data-turn]').forEach((b) => b.classList.toggle('is-active', (b.dataset.turn === '1') === !!S.turn));
+  box.querySelectorAll('[data-buy]').forEach((b) => b.classList.toggle('is-active', b.dataset.buy === (S.buy || 'open')));
   box.querySelectorAll('[data-pyr]').forEach((b) => b.classList.toggle('is-active', (b.dataset.pyr === '1') === !!S.pyr));
 }
 // 룰 문서에 한 칸 고쳐 쓰기 — 수수료 · 셈 칸이 같은 길(못 읽으면 안 씀 · 409 면 한 번 더)
@@ -565,6 +578,7 @@ BIND.push(() => {
   box.addEventListener('change', (e) => { const el = e.target.closest('[data-set]'); if (!el) return; const S = setRead(el); if (S) setChange(S); });
   box.addEventListener('click', (e) => {
     const m = e.target.closest('[data-mode]'); if (m) { e.preventDefault(); if (m.dataset.mode !== st.set.mode) setChange({ ...st.set, mode: m.dataset.mode }); return; }
+    const bb = e.target.closest('[data-buy]'); if (bb) { e.preventDefault(); if (bb.dataset.buy !== (st.set.buy || 'open')) setChange({ ...st.set, buy: bb.dataset.buy }); return; }
     const y = e.target.closest('[data-pyr]'); if (y) { e.preventDefault(); const on = y.dataset.pyr === '1'; if (on !== !!st.set.pyr) setChange({ ...st.set, pyr: on }); return; }
     const t = e.target.closest('[data-turn]'); if (t) { e.preventDefault(); const on = t.dataset.turn === '1'; if (on !== !!st.set.turn) setChange({ ...st.set, turn: on }); return; }
     if (e.target.closest('[data-reset]')) setChange({ ...DEF_SET });
@@ -605,6 +619,7 @@ const TPL = `
           <div class="dt-set" id="dt-set" aria-label="셈 칸 — 넣으면 저장되고 바로 다시 셈" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:0 18px">
             <label class="dt-fee">칩 <input data-set="minChip" class="rl-in rl-num" inputmode="numeric" aria-label="칩 몇 개 이상만">개 이상 <span class="rl-sug">빈칸 = 전체</span></label>
             <label class="dt-fee">손절 <input data-set="stop" class="rl-in rl-num" inputmode="decimal" aria-label="손절(매수가 대비 %)">% <span class="rl-sug">빈칸 = 안 함</span></label>
+            <label class="dt-fee" data-tip="고른 때 값에 삽니다 · 그 값이 없는 종목은 안 삽니다 · 파는 룰은 산 뒤 30분 칸(09:30 · 10:00 …)부터">매수 <span class="dt-seg">${BUYS.map(([k, t]) => `<button type="button" class="kh-chip" data-buy="${k}">${t}</button>`).join('')}</span></label>
             <label class="dt-fee" data-tip="손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삽니다 · 더 산 몫은 그 종목을 팔 때 함께 팝니다">불타기 <span class="dt-seg"><button type="button" class="kh-chip" data-pyr="1">켬</button><button type="button" class="kh-chip" data-pyr="0">끔</button></span></label>
             <label class="dt-fee">꺾임 <span class="dt-seg"><button type="button" class="kh-chip" data-turn="1">켬</button><button type="button" class="kh-chip" data-turn="0">끔</button></span> 앞 시각보다 <input data-set="turnPct" class="rl-in rl-num" inputmode="decimal" aria-label="꺾임 — 앞 시각보다 몇 % 넘게 내리면 팜">% 넘게 내리면 <span class="rl-sug">그 이하는 무시 · 빈칸 = 0</span></label>
             <label class="dt-fee">고점 대비 − <input data-set="trail" class="rl-in rl-num" inputmode="decimal" aria-label="고점 대비 몇 % 내리면 팜">% 내리면 팜 <span class="rl-sug">빈칸 = 안 씀 · 꺾임을 켜 두면 꺾임이 먼저 걸려 이 칸은 거의 안 듦</span></label>
