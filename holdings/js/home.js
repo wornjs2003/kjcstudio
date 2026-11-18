@@ -1951,7 +1951,7 @@ async function loadPre() {
    칩 정의 · 하락 뺌 · 차례(칩 수 → 초반상승 → 시가총액)는 서버 값 그대로 — 여기 두지 않는다 */
 const OV_CHIPS = ['fav', 'pre', 'vi', 'after', 'buy', 'rise'];   // 그리는 차례 · 칩 이름표(SORTS label) — 서버 칩 이름과는 아래 OV_ID 로 잇는다
 const OV_ID = { '관심': 'fav', '프리장': 'pre', 'VI·급등': 'vi', '장외': 'after', '매수': 'buy', '초반상승': 'rise' };   // 서버 dt30.OV_CHIPS 이름 → 이 화면 칩 id
-const OV_MIN = 2;                 // 홈 「단타」 는 칩 둘 이상(단타 판은 하나 이상 — 문턱은 읽는 쪽 · 하나로 맞출지는 재권님께 여쭘 11-18)
+const ovMin = () => (dtMeta && Number.isFinite(dtMeta.minChips) ? dtMeta.minChips : null);   // 문턱은 서버 값(dt30.MIN_CHIPS · meta.minChips) — 못 받으면 줄을 안 그린다
 const ovLabel = (id) => (SORTS[id] ? SORTS[id].label : id);
 let dtList = null, dtMeta = null;    // 못 받았으면 null(빈 목록과 가른다)
 const ovWaiting = () => (dtList == null ? ['단타 목록'] : [...((dtMeta && dtMeta.missing) || [])]);
@@ -1962,7 +1962,8 @@ function ovRows() {
     by[x.code] = { code: x.code, name: x.name, chips: (x.chips || []).map((c) => OV_ID[c]).filter(Boolean), subs: x.subs || {}, down: !!x.down };
   }
   ovBy = by;
-  return (dtList || []).filter((x) => by[x.code].chips.length >= OV_MIN && !x.down).map((x) => by[x.code]);
+  const k = ovMin();
+  return k == null ? [] : (dtList || []).filter((x) => by[x.code].chips.length >= k && !x.down).map((x) => by[x.code]);
 }
 /* 칩마다 색 — 어느 칩에 들었는지 글자만으로는 한눈에 안 갈렸다(2026-11-13 재권님 「칩별로 색을 다르게 해줘 인지가 잘 안되네」).
    색은 theme.css 의 기존 범주색만 쓴다(새 변수 없음) · 옅은 바탕 + 같은 색 진한 글씨(「색 바탕 위의 글씨」) · 오름 빨강 · 내림 파랑과 겹치지 않게 고름.
@@ -1981,8 +1982,9 @@ function ovCell(code) {
 function ovNote() {
   const m = dtMeta || {};
   const w = ovWaiting();
-  const down = Object.values(ovBy).filter((g) => g.chips.length >= OV_MIN && g.down).length;
-  return `칩 ${OV_CHIPS.length}개 중 둘 이상${down ? ` · 하락 ${down} 뺌` : ''}${(m.wait || []).length ? ` · ${m.openAt || '09:00'} 뒤 ${m.wait.join(' · ')}` : ''}${w.length ? ` · 못 받은 칩 ${w.join(' · ')}` : ''}`;
+  const k = ovMin();
+  const down = k == null ? 0 : Object.values(ovBy).filter((g) => g.chips.length >= k && g.down).length;
+  return `칩 ${OV_CHIPS.length}개 중 ${k == null ? '—' : `${k}개`} 이상${down ? ` · 하락 ${down} 뺌` : ''}${(m.wait || []).length ? ` · ${m.openAt || '09:00'} 뒤 ${m.wait.join(' · ')}` : ''}${w.length ? ` · 못 받은 칩 ${w.join(' · ')}` : ''}`;
 }
 async function loadOv() {
   try {
