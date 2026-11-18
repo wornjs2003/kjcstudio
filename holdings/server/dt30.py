@@ -705,13 +705,38 @@ def _nx_1m(proxy, cfg, code, day, hhmm):
     return (last[1] if last else None), vol
 
 
+def nx_quotes(proxy, cfg, codes, day, hm):
+    """그날(day · 거래일) 넥스트레이드 NX_AT 값 — {code: {day, px, src, vol}} · 08:05 전이면 {} · 지금 못 하면 None(다음 바퀴에 다시).
+    NX_AT ~ NX_NOW_UNTIL 은 멀티 시세 현재가(src 「now」 · 30종목 묶음) · 그 뒤는 그 시각까지 1분봉 마지막 종가(src 「1m」 · 종목마다 · NX_SKIP 동안은 None).
+    거래가 없던 종목 · 못 받은 종목은 px null(0 아님). 단타 판(nx_fill)과 종가배팅 판(closing_bet)이 함께 쓴다 — 셈은 여기 한 곳."""
+    if hm < NX_AT[0] * 60 + NX_AT[1]:
+        return {}
+    hhmm = "%02d%02d" % NX_AT
+    out = {}
+    if hm < NX_NOW_UNTIL[0] * 60 + NX_NOW_UNTIL[1]:
+        import nxt_pre
+        q = nxt_pre.fetch_nx(proxy, cfg, codes, gap=0)
+        if not q:
+            return None                                # 하나도 못 받음 — 다음 바퀴에 다시(NX_NOW_UNTIL 넘으면 1분봉으로)
+        for c in codes:
+            v = q.get(c)
+            out[c] = ({"day": day, "px": None, "src": None, "vol": None} if v is None          # 못 받음(NX 미상장 · 응답 없음)
+                      else {"day": day, "px": v["price"] if v.get("vol") else None, "src": "now", "vol": v.get("vol")})   # 거래 없으면 null
+        return out
+    lo, hi = NX_SKIP
+    if lo[0] * 60 + lo[1] <= hm < hi[0] * 60 + hi[1]:
+        return None
+    for c in codes:
+        px, vol = _nx_1m(proxy, cfg, c, day, hhmm)
+        out[c] = {"day": day, "px": px if vol else None, "src": "1m" if vol is not None else None, "vol": vol}
+    return out
+
+
 def nx_fill(proxy, cfg, day, hm):
     """그날(day · 거래일) NX_AT 에 앞 판 종목의 넥스트레이드 값을 그 판에 적는다 — rows[].nx {day, px, src, vol} · meta.nxAt · nxDay.
-    NX_AT ~ NX_NOW_UNTIL 은 멀티 시세 현재가(src 「now」 · 묶음 넷) · 그 뒤는 08:05 1분봉 종가(src 「1m」 · 종목마다).
-    거래가 없던 종목 · 못 받은 종목은 px null(0 아님). 앞 판만 — 지난 날 되채움은 안 함(지시 밖).
+    값 셈은 nx_quotes 한 곳. 앞 판만 — 지난 날 되채움은 안 함(지시 밖).
     1 적음 · 0 적을 것 없음(앞 판 없음 · 이미 적음 · 08:05 전) · None 지금 못 함(다음 바퀴에 다시)."""
-    at = NX_AT[0] * 60 + NX_AT[1]
-    if hm < at:
+    if hm < NX_AT[0] * 60 + NX_AT[1]:
         return 0
     prev = [d for d in days(proxy) if d < day]
     got = _load(proxy, prev[0]) if prev else None
@@ -720,25 +745,11 @@ def nx_fill(proxy, cfg, day, hm):
     b = got[0]
     if b.get("meta", {}).get("nxDay") == day:
         return 0                                       # 이미 적었다(현재가든 1분봉이든 한 번)
-    hhmm = "%02d%02d" % NX_AT
-    if hm < NX_NOW_UNTIL[0] * 60 + NX_NOW_UNTIL[1]:
-        import nxt_pre
-        q = nxt_pre.fetch_nx(proxy, cfg, [r["code"] for r in b["rows"]], gap=0)
-        if not q:
-            return None                                # 하나도 못 받음 — 다음 바퀴에 다시(NX_NOW_UNTIL 넘으면 1분봉으로)
-        for r in b["rows"]:
-            v = q.get(r["code"])
-            if v is None:
-                r["nx"] = {"day": day, "px": None, "src": None, "vol": None}       # 못 받음(NX 미상장 · 응답 없음)
-            else:
-                r["nx"] = {"day": day, "px": v["price"] if v.get("vol") else None, "src": "now", "vol": v.get("vol")}   # 거래 없으면 null
-    else:
-        lo, hi = NX_SKIP
-        if lo[0] * 60 + lo[1] <= hm < hi[0] * 60 + hi[1]:
-            return None
-        for r in b["rows"]:
-            px, vol = _nx_1m(proxy, cfg, r["code"], day, hhmm)
-            r["nx"] = {"day": day, "px": px if vol else None, "src": "1m" if vol is not None else None, "vol": vol}
+    q = nx_quotes(proxy, cfg, [r["code"] for r in b["rows"]], day, hm)
+    if q is None:
+        return None
+    for r in b["rows"]:
+        r["nx"] = q.get(r["code"]) or {"day": day, "px": None, "src": None, "vol": None}
     b["meta"].update(nxAt="%02d:%02d" % NX_AT, nxDay=day,
                      nxNote="nx — 다음 거래일 넥스트레이드 %02d:%02d 값(src now = 그때 현재가 · 1m = 그날 그 시각까지의 1분봉 마지막 종가) · 거래가 없거나 못 받으면 px null" % NX_AT)
     _store(proxy, b)
