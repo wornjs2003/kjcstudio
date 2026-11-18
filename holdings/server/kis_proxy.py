@@ -10495,6 +10495,13 @@ class Handler(SimpleHTTPRequestHandler):
                                  "meta": dict(dt30.status(), days=dt30.days(sys.modules[__name__]))})
                 return
 
+            if route == "dt-list":
+                # 단타 목록 한 곳(server/dt30.py live · 2026-11-18) — 홈 「단타」 와 단타 판이 같은 셈을 읽는다 · LIVE_TTL 안이면 캐시
+                # 재권님 「홈에 있는 칩을 단타에도 추가해서 동기화하고 한곳에서 받도록 해」(11-18 17:4x)
+                d = dt30.live(sys.modules[__name__], cfg)
+                self._send_json({"ok": True, "data": d["rows"], "meta": d["meta"]})
+                return
+
             if route == "dt30-win":
                 # 단타 판 칩별 승률(server/dt30_win.py · 2026-11-18) — 쌓인 날 손익으로 그때 수수료를 빼 셈 · KIS 안 부름
                 try:
