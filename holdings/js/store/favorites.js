@@ -177,25 +177,14 @@ async function pull() {
   const got = await fetchServer();
   if (got === undefined) return;                       // 못 닿음 — 들고 있는 값 그대로
   const local = read();
-  const touched = flag(TOUCHED);
-  if (got === null) {                                  // 서버에 아직 없다
-    if (touched && (await pushServer(state()))) flag(SYNCED, true);   // 사람이 누른 목록이면 그것으로 만든다
-    return;                                            // 아니면 안 만든다 — 서버는 첫 값(WATCH_CODES)을 쓴다
-  }
+  if (got === null) return;                            // 서버에 아직 없다 — 안 만든다(서버는 첫 값 WATCH_CODES 를 쓴다)
   const srv = got.items;
   /* 묶음 — 서버에 칸이 있으면 그것이 원천이다. 없으면(묶음 전 문서) 이 브라우저 것을 그대로 들고 있다가 다음 쓰기에 실린다 */
   const groups = got.groups || readGroups();
   if (!sameGroups(groups, readGroups())) storeGroups(groups, true);
-  let arr = srv;
-  if (touched && !flag(SYNCED)) {                      // 이 브라우저에서 처음 — 사람이 담은 하트를 더한다
-    const add = local.filter(x => !srv.some(s => s.code === x.code));
-    if (add.length) {
-      arr = srv.concat(add);
-      if (!(await pushServer({ items: arr, groups },
-        f => ({ items: f.items.concat(add.filter(x => !f.items.some(s => s.code === x.code))), groups: f.groups }))))
-        return;
-    }
-  }
+  /* 이 브라우저 하트를 서버에 더하던 첫 맞춤은 2026-11-18 에 뺐다 — 하트가 없어졌고(재권님 「관심 하트는 누르는거 없애고」),
+     옛 하트를 든 브라우저가 처음 열릴 때 비운 종목을 되살리면 안 된다(「가」 · 비움). 서버 문서가 원천이다 */
+  const arr = srv;
   /* 서버와 맞췄다 — 누른 적 없는 브라우저도 세운다. 안 세우면 아래 옛 저장 판정이 다음에 이 목록을 「누른 것」 으로 읽어,
      다른 기기에서 뺀 종목을 다시 더한다 */
   flag(SYNCED, true);
