@@ -210,8 +210,10 @@ function paint(d) {
   const chipRow = (n) => `<tr class="dt-chiprow"><td colspan="${n}"><div class="dt-chips" id="dt-chips" aria-label="단타 칩 — 눌러서 켜고 끄기"><span class="dt-hd">단타 칩</span>${chipPanel(all)}<span class="dt-us" id="dt-us" data-day="${esc(d.day || '')}">${usHtml(d.day)}</span></div></td></tr>`;
   $('dt-only').innerHTML = ONLY.map(([k, t]) => `<button type="button" class="kh-chip${st.only === k ? ' is-active' : ''}" data-only="${k}">${t}${k ? ` ${all.filter((r) => (r.chips || []).includes(k)).length}` : ` ${all.length}`}</button>`).join('');
   $('dt-order').innerHTML = ORDER.map(([k, t]) => `<button type="button" class="kh-chip${st.order === k ? ' is-active' : ''}" data-order="${k}">${t}</button>`).join('');
-  const held = (x, k) => x.s.k < 0 || k < x.s.k;   // 판 시각 칸부터는 평균에서 뺀다
-  const avg = times.map((_, k) => mean(R.filter((x) => held(x, k) && x.p[k] != null).map((x) => x.p[k])));
+  // 평균 (11-18 재권님 「평균값이 뭔가 이상한데」 → (나)) — 판 종목은 판 값으로 고정해 그 뒤 시각에도 넣는다 · 그 시각까지 실제로 번 수익률
+  //   전에는 판 칸부터 뺐는데(11-11) 오후에 끝까지 오른 몇 종목만 남아 평균이 부풀었다(11-17 12:30~ 2종목 +21.79%)
+  const atK = (x, k) => (x.s.k >= 0 && k >= x.s.k ? x.p[x.s.k] : x.p[k]);
+  const avg = times.map((_, k) => mean(R.map((x) => atK(x, k)).filter((v) => v != null)));
   const res = R.map((x) => x.res).filter((v) => v != null), resAvg = mean(res);
   const sold = R.filter((x) => x.s.k >= 0);
   st.last[d.day] = resAvg;
@@ -264,7 +266,7 @@ function paint(d) {
     <tr><th class="dt-rk"></th><th class="st-name">종목</th><th>시가총액</th><th class="dt-sec">섹터</th>${CS.map(chHead).join('')}<th class="dt-ovn" data-tip="켜진 칩 중 몇 개에 걸렸나 — 순위가 이 수로 정해짐">겹침</th><th class="dt-addc"><button type="button" class="kh-chip" data-addcol aria-haspopup="menu">+ 칩</button></th><th>매수가 ${hmTxt(d.buyAt)}</th><th class="dt-gp" colspan="${times.length}"><span>매수가 대비</span></th><th class="dt-res">결과</th><th class="dt-tx">세금 %</th><th class="dt-pl">손익 · ${st.set.mode === 'day' ? `하루 ${manTxt(st.set.dayWon)} 나눔` : manTxt(per)}</th></tr>
     <tr class="dt-t2"><th class="dt-rk"></th><th class="st-name"></th><th></th><th class="dt-sec"></th>${chBlank('th')}<th></th>${times.map((t) => `<th>${hmTxt(t)}</th>`).join('')}<th class="dt-res">판 값 · 시각</th><th class="dt-tx">거래세 · 농특세</th><th class="dt-pl">세금 · 수수료 뺌 · 상위 ${topN}</th></tr>
     ${usRow}
-    <tr class="dt-avg"><td class="dt-rk"></td><td class="st-name">평균 <small>판 칸부터 뺌</small></td><td></td><td class="dt-sec"></td>${chBlank('td')}<td></td>${avg.map((x, i) => `<td class="${i === L ? 'dt-last' : ''}">${pct(x)}</td>`).join('')}<td class="dt-res">${pct(resAvg)}</td><td class="dt-tx"></td><td class="dt-pl">${P ? won(P.net) : '—'}<small>${P ? `빼기 전 ${won(P.gross)}` : ''}</small></td></tr>
+    <tr class="dt-avg"><td class="dt-rk"></td><td class="st-name">평균 <small>판 종목은 판 값으로</small></td><td></td><td class="dt-sec"></td>${chBlank('td')}<td></td>${avg.map((x, i) => `<td class="${i === L ? 'dt-last' : ''}">${pct(x)}</td>`).join('')}<td class="dt-res">${pct(resAvg)}</td><td class="dt-tx"></td><td class="dt-pl">${P ? won(P.net) : '—'}<small>${P ? `빼기 전 ${won(P.gross)}` : ''}</small></td></tr>
     ${R.map((x, i) => { const r = x.r; return `${grp(i, times.length + nCol + 10)}<tr>${rk(r, i)}<td class="st-name" data-co="${esc(r.code || '')}"><b>${esc(r.name || '—')}</b> <small>${esc(r.code || '')}</small></td><td>${capTxt(r.cap)}</td><td class="dt-sec">${esc(r.sector || '—')}</td>${CS.map((c) => chCell(r, c)).join('')}<td class="dt-ovn"><b>${nLive(r)}</b>${(() => { const k = CS.filter((c) => !st.off.has(c) && st.miss.has(c) && !(r.chips || []).includes(c)).length; return k ? `<small class="dt-ovm">못 받은 칩 ${k}</small>` : ''; })()}</td><td class="dt-addc"></td><td class="dt-buy">${num(r.buy)}</td>${times.map((t, k) => cell(x, k)).join('')}${resTd(x)}<td class="dt-tx">${taxTxt(x.r)}</td><td class="dt-pl">${i < topN && x.pnl ? (x.pnl.net == null ? '<span class="st-err">시장 모름</span>' : `<span class="${signClass(x.pnl.net, NUM) || ''}">${won(x.pnl.net)}</span><small>빼기 전 ${won(x.pnl.gross)}</small>`) : '<span class="st-err">—</span>'}</td></tr>`; }).join('')}
   </table>`;
 }
