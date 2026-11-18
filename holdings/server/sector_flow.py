@@ -334,7 +334,7 @@ def build_5m(proxy, day, by):
                     if s0 <= _hm(t) < s1 and cl and vol:
                         tot += cl * vol
             amt[slot] = round(tot / EOK, 2)
-            gotm[slot] = len(cs)
+            gotm[slot] = None                     # 5분봉은 거래가 없으면 봉이 없어 「못 받음」 과 「거래 없음」 을 못 가른다 — 셈한 수를 안 낸다(개념정의 덧)
             start = 9 * 60 if s1 > 9 * 60 else 8 * 60
             ps = []
             for c in cs:

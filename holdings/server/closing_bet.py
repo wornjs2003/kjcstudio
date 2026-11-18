@@ -13,6 +13,9 @@
                 afterLow  = 그 사이 본 값 중 가장 낮은 것(AFTER_EVERY 초마다 본 값이라 참 저가보다 높을 수 있다)
               평일 20:01~20:29 — afterLast = 장외 마지막가(15:2x 메인장 마감 뒤 체결이 없으면 null)
               다음 거래일 08:51~15:00 — pre = 그날 넥장 분봉(08:00~08:49) 중 처음 체결된 봉의 시가(후보마다 1~2번)
+              다음 거래일 08:05~15:00 — nx = 그날 넥스트레이드 08:05 값(dt30.nx_quotes 한 곳 · 단타 판과 같은 셈) · nx.pct = 종가 대비 %
+                재권님 「종가배팅 목록도 쌓을수 있게 해주고 … 룰에 걸린 종목처럼 다음날에 프리장 5분에 종가대비 등락률 적어서 히스토리 남겨줘」
+                → 「응 해줘」 · 「단타처럼 히스토리 계속 남겨야되」(11-18 17:0x · 시황분석 창) · 서버 안 「응」(17:1x · 개발1 창)
     판정      pass.rise    정규장 등락 ≥ RULE.rise(BIG 둘은 RULE.big) 그리고 < RULE.limitUp(상한가 근처는 종가에 못 산다 — 대입에서 뺐다)
               pass.pos     종가 위치 (종가−저가)/(고가−저가) ≥ RULE.pos
               pass.top     rise · pos 를 통과한 종목들 중 거래대금 순위 ≤ RULE.top
@@ -21,6 +24,7 @@
               buy          다섯 다 true · 하나라도 아직 모르면(null) null
     저장      market.db 의 `closing_bet`(날 · 종목) · `closing_mkt`(날 · 시장)
     주소      GET /api/nxt/closing-bet?day=YYYYMMDD(없으면 가장 최근) — 모양은 board() 주석 · 「없음」 은 null(0 아님)
+              쌓은 날은 지우지 않는다 · meta.days 는 쌓인 날 전부(최근 먼저)
 
 8765 만 받는다(kis_proxy 가 is_sender 로 부른다) · 읽기는 어느 서버든 자기 DB 로. 알림은 없다(화면만).
 """
@@ -29,6 +33,8 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
+import dt30
+import market_hours
 import nxt_pre
 from secrets_guard import safe_message
 
@@ -45,7 +51,6 @@ LAST_AT, LAST_UNTIL = (20, 1), (20, 30)
 PRE_AT, PRE_UNTIL = (8, 51), (15, 0)
 INDEX = (("kospi", "0001"), ("kosdaq", "1001"))
 MKT_WINDOWS = 4                 # 지수 일봉 구간(한 번에 50개)을 몇 번까지 — 121거래일을 넉넉히 덮는다
-DAYS_MAX = 60
 TICK = 20
 
 _SCHEMA = (
@@ -60,7 +65,7 @@ _SCHEMA = (
         PRIMARY KEY (day, market))""",
 )
 
-_status = {"candDay": None, "candAt": None, "cands": None, "mktAt": None, "afterAt": None, "afterRounds": 0,
+_status = {"nxDay": None, "nxTry": None, "nxAt": None, "nxGot": None, "candDay": None, "candAt": None, "cands": None, "mktAt": None, "afterAt": None, "afterRounds": 0,
            "lastDay": None, "lastAt": None, "preDay": None, "preAt": None, "preGot": None, "error": None}
 
 
@@ -72,6 +77,10 @@ def _init(proxy):
     with proxy._db_lock, proxy.db_conn() as conn:
         for q in _SCHEMA:
             conn.execute(q)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(closing_bet)")}
+        for c, t in (("nx_px", "INTEGER"), ("nx_src", "TEXT"), ("nx_vol", "INTEGER"), ("nx_day", "TEXT")):
+            if c not in cols:                   # 2026-11-18 저녁에 더한 칸 — 옛 줄은 null
+                conn.execute("ALTER TABLE closing_bet ADD COLUMN %s %s" % (c, t))
 
 
 def is_candidate(code, chg):
@@ -291,6 +300,32 @@ def save_pre(proxy, today):
     return len(got)
 
 
+def save_nx(proxy, today, hm):
+    """앞 거래일 후보의 넥스트레이드 08:05 값 — 적은 수 · 08:05 전 · 적을 것 없음이면 0 · 지금 못 하면 None(다음 바퀴에 다시).
+    셈은 dt30.nx_quotes 한 곳(단타 판과 같은 값) · 거래 없음 · 못 받음은 px null."""
+    _init(proxy)
+    with proxy._db_lock, proxy.db_conn() as conn:
+        r = conn.execute("SELECT MAX(day) FROM closing_bet WHERE day < ?", (today,)).fetchone()
+        prev = r[0] if r else None
+        if not prev:
+            return 0
+        codes = [x[0] for x in conn.execute("SELECT code FROM closing_bet WHERE day = ? AND nx_day IS NULL", (prev,))]
+    if not codes:
+        return 0
+    q = dt30.nx_quotes(proxy, proxy.load_secrets(), codes, today, hm)
+    if q is None:
+        return None
+    if not q:
+        return 0
+    with proxy._db_lock, proxy.db_conn() as conn:
+        conn.executemany("UPDATE closing_bet SET nx_px = ?, nx_src = ?, nx_vol = ?, nx_day = ? WHERE day = ? AND code = ?",
+                         [((q.get(c) or {}).get("px"), (q.get(c) or {}).get("src"), (q.get(c) or {}).get("vol"), today, prev, c)
+                          for c in codes])
+    _status.update(nxDay=today, nxAt=_now().isoformat(timespec="seconds"),
+                   nxGot=sum(1 for c in codes if (q.get(c) or {}).get("px") is not None))
+    return len(codes)
+
+
 def _go(m):
     """시장 「할 때」 — 종가 > 20일 평균 그리고 앞 120거래일 종가 최고 대비 > RULE.fromHigh. 값이 모자라면 null."""
     if not m or m.get("close") is None or m.get("ma20") is None or m.get("high120") is None:
@@ -309,15 +344,17 @@ def board(proxy, day=None):
 
         {day, preDay(다음 거래일 · 아직이면 null),
          mkt: {kospi: {chg, ma20Above, fromHigh, go}, kosdaq: {…}},
+         nxDay(08:05 값을 잰 다음 거래일 · 아직이면 null), nxAt('08:05'),
          rows: [{code, name, market, cap(억원), chg, pos, value(억원), close, rebreakAt('HHMM'), afterLow, afterLast, pre,
+                 nx: {px, src(now | 1m | null), vol, pct(종가 대비 %)} — 다음 거래일 08:05 전이면 키가 없다,
                  pass: {rise, pos, top, rebreak, mkt}, buy}]}  — 거래대금 순
 
     pass.rebreak · afterLast 는 20:01 전이면 null(아직 모름) · pre 는 다음 거래일 08:51 전이면 null.
     """
-    _empty = {"day": None, "preDay": None, "mkt": {"kospi": None, "kosdaq": None}, "rows": []}
+    _empty = {"day": None, "preDay": None, "nxDay": None, "nxAt": "%02d:%02d" % dt30.NX_AT, "mkt": {"kospi": None, "kosdaq": None}, "rows": []}
     with proxy._db_lock, proxy.db_conn() as conn:
         try:
-            days = [r[0] for r in conn.execute("SELECT DISTINCT day FROM closing_bet ORDER BY day DESC LIMIT ?", (DAYS_MAX,))]
+            days = [r[0] for r in conn.execute("SELECT DISTINCT day FROM closing_bet ORDER BY day DESC")]
         except Exception:                        # 표가 아직 없다 — 쌓기 전
             return _empty, []
         if not days:
@@ -341,6 +378,10 @@ def board(proxy, day=None):
         out.append({"code": r["code"], "name": r["name"], "market": r["market"], "cap": r["cap"], "chg": r["chg"], "pos": pos,
                     "value": _r(r["value"] / 1e8, 1) if r["value"] is not None else None, "close": r["close"],
                     "rebreakAt": r["rebreak_at"], "afterLow": r["after_low"], "afterLast": r["after_last"], "pre": r["pre"],
+                    **({"nx": {"px": r.get("nx_px"), "src": r.get("nx_src"), "vol": r.get("nx_vol"),
+                               "pct": _r((r["nx_px"] / r["close"] - 1) * 100, 2) if r.get("nx_px") and r["close"] else None}}
+                       if r.get("nx_day") else {}),
+                    "_nxDay": r.get("nx_day"),
                     "_preDay": r["pre_day"], "_v": r["value"] or 0,
                     "pass": {"rise": rise, "pos": None if pos is None else pos >= RULE["pos"], "top": None,
                              "rebreak": True if r["rebreak_at"] else (False if done_after else None),
@@ -349,7 +390,7 @@ def board(proxy, day=None):
     ok = [x for x in out if x["pass"]["rise"] and x["pass"]["pos"]]   # 거래대금 순위는 rise · pos 통과한 것들 사이(시황분석 대입 그대로)
     for i, x in enumerate(ok):
         x["pass"]["top"] = i < RULE["top"]
-    pre_day = None
+    pre_day = nx_day = None
     for x in out:
         if x["pass"]["top"] is None:
             x["pass"]["top"] = False if (x["pass"]["rise"] is False or x["pass"]["pos"] is False) else None
@@ -357,8 +398,10 @@ def board(proxy, day=None):
         x["buy"] = False if False in ps else (None if None in ps else True)
         pre_day = pre_day or x.pop("_preDay")
         x.pop("_preDay", None)
+        nx_day = nx_day or x.pop("_nxDay")
+        x.pop("_nxDay", None)
         x.pop("_v")
-    return {"day": day, "preDay": pre_day, "mkt": mkt, "rows": out}, days
+    return {"day": day, "preDay": pre_day, "nxDay": nx_day, "nxAt": "%02d:%02d" % dt30.NX_AT, "mkt": mkt, "rows": out}, days
 
 
 def meta(days):
@@ -388,6 +431,17 @@ def start(proxy):
                             save_last(proxy, day)
                         except Exception as e:
                             _status["error"] = "마지막가: %s" % safe_message(e, 120)
+                    nx_at = dt30.NX_AT[0] * 60 + dt30.NX_AT[1]
+                    if nx_at <= now.hour * 60 + now.minute and hm < PRE_UNTIL and _status.get("nxDay") != day \
+                            and _status.get("nxTry") != day and market_hours.today(proxy, day=day, now=now).get("open") is not False:
+                        try:
+                            n = save_nx(proxy, day, now.hour * 60 + now.minute)
+                            if n is not None:
+                                _status["nxTry"] = day   # 적었거나 적을 것 없음 — 그날은 다시 안 봄(None 은 다음 바퀴에 다시)
+                                if n:
+                                    print("  [종가배팅] %s 넥스트 %02d:%02d 값 %s종목" % ((day,) + dt30.NX_AT + (n,)))
+                        except Exception as e:
+                            _status["error"] = "넥스트 08:05: %s" % safe_message(e, 120)
                     if PRE_AT <= hm < PRE_UNTIL and _status["preDay"] != day:
                         _status["preDay"] = day          # 실패해도 그날은 한 번
                         try:
