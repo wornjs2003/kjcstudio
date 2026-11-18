@@ -180,7 +180,8 @@ function calc(d) {
   //   서버(개발2 dt30)가 장중에는 rows[].now · data.nowAt 을 새로 주고, 14:00 뒤 굳혀 저장하면 data.closed = true — 화면은 closed 가 아니고 now 가 있을 때만 「장중」
   const LIVE = d.closed !== true && all.some((r) => r.now != null);
   // 돈 넣는 법(11-18) — each: 상위 N 종목마다 perWon · day: 하루 dayWon 을 상위 N(보이는 종목이 적으면 그 수)으로 똑같이 나눔
-  const n = Math.min(S.top, rows.length), per = S.mode === 'day' ? (n ? S.dayWon / n : 0) : S.perWon;
+  const n = Math.min(S.top, rows.length), nb = rows.slice(0, n).filter((r) => Number(r.buy) > 0).length;   // 매수가 없는 종목 몫은 나누지 않음(qa 11-18 — 안 쓰는 돈이 생겼음)
+  const per = S.mode === 'day' ? (nb ? S.dayWon / nb : 0) : S.perWon;
   const ch = (r, t) => { const b = Number(r.buy), v = Number((r.px || {})[t]); return r.buy == null || (r.px || {})[t] == null || !(b > 0) || !Number.isFinite(v) ? null : (v / b - 1) * 100; };
   const R = rows.map((r) => { const p = times.map((t) => ch(r, t)); const s = sellAt(p); let last = L; while (last >= 0 && p[last] == null) last--; const nowCh = LIVE && s.k < 0 && Number(r.now) > 0 && Number(r.buy) > 0 ? (Number(r.now) / Number(r.buy) - 1) * 100 : null;   // 장중 · 안 판 종목 — 결과 · 손익은 서버 지금 값(rows[].now)
     const at = s.k >= 0 ? s.k : last, sellPx = nowCh != null ? Number(r.now) : at >= 0 ? Number((r.px || {})[times[at]]) : null;
@@ -196,7 +197,7 @@ function calc(d) {
   const top = R.slice(0, n).filter((x) => x.pnl), sum = (k) => top.reduce((a, x) => a + (x.pnl[k] || 0), 0);
   const noMkt = top.filter((x) => x.pnl.net == null).length;   // 시장을 모르는 종목 — 세금을 못 셈
   const P = top.length ? { n: top.length, buy: sum('buyAmt'), sell: sum('sellAmt'), gross: sum('gross'), tx: sum('tx'), rural: sum('rural'), fee: st.fee == null ? null : sum('fee'), net: sum('net'), win: top.filter((x) => x.pnl.net > 0).length } : null;
-  return { times, all, live, rows, L, LIVE, R, n, per, top, noMkt, P };
+  return { times, all, live, rows, L, LIVE, R, n, nb, per, top, noMkt, P };
 }
 
 function paint(d) {
@@ -216,7 +217,7 @@ function paint(d) {
   const bm = d.meta || {}, nm = (a) => names(a).join(' · ');   // 되채운 날 · 못 받은 칩 — 칩 이름은 서버가 준 그대로
   const rebuilt = bm.rebuilt === true ? ` · 되채운 날${nm(bm.missing) ? ` · ${nm(bm.missing)} 못 셈` : ''}${nm(bm.approx) ? ` · ${nm(bm.approx)} 어림` : ''}` : `${nm(bm.missing) ? ` · 못 받은 칩 ${nm(bm.missing)}` : ''}${nm(bm.early) ? ` · ${nm(bm.early)} 어림(집계 전)` : ''}${bm.late && typeof bm.late === 'object' && Object.keys(bm.late).length ? ` · 늦게 채움 ${Object.entries(bm.late).map(([k, v]) => `${k} ${v}`).join(' · ')}` : ''}`;
   $('dt-meta').textContent = `${dayTxt(d.day)}${rebuilt}${LIVE ? ` · 장중 실시간(${esc(String(d.nowAt || '—'))} 값 · 14:00 뒤 굳혀 저장)` : d.closed === true ? ' · 14:00 뒤 굳힌 값' : ''} · 후보 ${num(all.length)} 중 켜진 칩에 걸린 ${num(live.length)} · 보이는 ${num(rows.length)} · ${d.buyAt ? `${hmTxt(d.buyAt)} 매수` : '매수 시각 —'} · 판 것 ${sold.length}(손절 ${sold.filter((x) => x.s.why === '손절').length} · 꺾임 ${sold.filter((x) => x.s.why === '꺾임').length} · 고점 ${sold.filter((x) => x.s.why === '고점').length}) · 끝까지 들고 감 ${R.length - sold.length} · 결과 평균 ${sgn(resAvg)} · 이긴 것 ${res.filter((v) => v > 0).length} · 진 것 ${res.filter((v) => v < 0).length}`;
-  $('dt-pnl-sum').innerHTML = P ? `<b>${st.set.mode === 'day' ? `하루 ${manTxt(st.set.dayWon)}을 ${topN}종목에 나눠(종목마다 ${manTxt(per)})` : `상위 ${P.n}종목 × ${manTxt(per)}`}</b> · 산 ${wonPlain(P.buy)} · 판 ${wonPlain(P.sell)} · 빼기 전 ${won(P.gross)}`
+  $('dt-pnl-sum').innerHTML = P ? `<b>${st.set.mode === 'day' ? `하루 ${manTxt(st.set.dayWon)}을 ${C.nb}종목에 나눠(종목마다 ${manTxt(per)})` : `상위 ${P.n}종목 × ${manTxt(per)}`}</b> · 산 ${wonPlain(P.buy)} · 판 ${wonPlain(P.sell)} · 빼기 전 ${won(P.gross)}`
     + ` · 거래세 ${wonPlain(P.tx)} · 농특세 ${wonPlain(P.rural)} · 수수료 ${P.fee == null ? '빈칸 — 안 셈' : wonPlain(P.fee)}`
     + ` · <b>세후 손익 <span class="${signClass(P.net, NUM) || ''}">${won(P.net)}</span> (${pct(P.net / P.buy * 100)})</b>${noMkt ? ` · 시장 모름 ${noMkt}종목은 세후에서 뺌` : ''}` : '— 손익을 셀 값이 없음';
   if (!rows.length) { $('dt-box').innerHTML = '<div class="st-err">— 이 날 굳힌 단타 종목 없음</div>'; return; }
@@ -496,7 +497,7 @@ const TPL = `
               <input data-set="won" class="rl-in rl-num" inputmode="numeric" aria-label="돈(만원)">만원</label>
             <label class="dt-fee">손절 <input data-set="stop" class="rl-in rl-num" inputmode="decimal" aria-label="손절(매수가 대비 %)">% <span class="rl-sug">빈칸 = 안 함</span></label>
             <label class="dt-fee">꺾임 <span class="dt-seg"><button type="button" class="kh-chip" data-turn="1">켬</button><button type="button" class="kh-chip" data-turn="0">끔</button></span></label>
-            <label class="dt-fee">고점 대비 − <input data-set="trail" class="rl-in rl-num" inputmode="decimal" aria-label="고점 대비 몇 % 내리면 팜">% 내리면 팜 <span class="rl-sug">빈칸 = 안 씀</span></label>
+            <label class="dt-fee">고점 대비 − <input data-set="trail" class="rl-in rl-num" inputmode="decimal" aria-label="고점 대비 몇 % 내리면 팜">% 내리면 팜 <span class="rl-sug">빈칸 = 안 씀 · 꺾임을 켜 두면 꺾임이 먼저 걸려 이 칸은 거의 안 듦</span></label>
             <button type="button" class="kh-chip" data-reset>기본값으로</button> <span id="dt-set-msg" class="rl-sug"></span>
           </div>
           <div class="st-cap" id="dt-month">—</div></div>
