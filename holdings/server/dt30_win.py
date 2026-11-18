@@ -7,7 +7,7 @@
     쌓기      그날 판이 끝나면(closed · 14:00 칸까지 적힘 · 보통 14:01) 하루 한 줄 — market.db dt30_win(날 · 종목 손익 JSON · 그 판의 저장 시각)
               판이 다시 저장되면(되채움 등 · saved_at 이 바뀜) 그날 줄도 다시 · 남은 판(지난 30거래일)은 서버가 뜬 뒤 처음 바퀴에 채운다 — KIS 안 씀
     이김      세후 손익이 0 보다 크다 — 화면(strategy-dt30.js calc)과 같은 셈(개념정의 검수 11-18):
-              세후 % = (판 값 − 산 값 − 판 값 × (거래세 + 농특세) − (산 값 + 판 값) × 수수료) ÷ 산 값 × 100 · 세금은 팔 때만 · 수수료는 살 때 · 팔 때 각각
+              세후 % = (판 값 − 산 값 − 판 값 × (거래세 + 농특세 + 수수료)) ÷ 산 값 × 100 · 세금 · 수수료 둘 다 팔 때만(재권님 「증권수수료는 팔때만」 11-18)
               세율은 아래 TAX(시장마다) — **화면 TAX 와 두 곳이다**(화면이 meta.tax 를 읽으면 한 곳) · 시장을 모르면 세금을 못 셈 → 「못 잼」
               수수료는 룰 문서 strategy-rules 의 rules.dt30.feePct 한 곳(화면 칸 · 재권님이 넣으심)
               빈칸이면 수수료 없이 셈하고 meta.fee 에 null · meta.feeNote 「빈칸 — 수수료 안 셈」(0 으로 보지 않는다)
@@ -112,7 +112,7 @@ def net_pct(r, fee):
     buy, sell, T = r.get("buy"), r.get("sell"), TAX.get(str(r.get("market") or "").upper())
     if not buy or sell is None or T is None:
         return None
-    cost = sell * (T["tx"] + T["rural"]) / 100 + (buy + sell) * (fee or 0) / 100
+    cost = sell * (T["tx"] + T["rural"]) / 100 + sell * (fee or 0) / 100     # 수수료는 팔 때만 — 재권님 「증권수수료는 팔때만」(11-18 · 단타 판 화면 셈과 같게)
     return round((sell - buy - cost) / buy * 100, 3)
 
 
@@ -172,7 +172,7 @@ def summary(proxy, days=DAYS_DEFAULT):
     for kind, g in groups.items():
         out[kind] = sorted(({"key": k, **_stat(v[0], v[1])} for k, v in g.items()), key=lambda x: (-x["n"], x["key"]))
     meta = {"days": len(got), "from": got[-1][0] if got else None, "to": got[0][0] if got else None,
-            "fee": fee, "feeNote": None if fee is not None else "빈칸 — 수수료 안 셈", "feeSides": "살 때 · 팔 때 각각",
+            "fee": fee, "feeNote": None if fee is not None else "빈칸 — 수수료 안 셈", "feeSides": "팔 때만",
             "tax": TAX, "taxNote": "팔 때만 · 판 값 × (거래세 + 농특세) · 시장 모르면 못 잼", "ret": "세후 %",
             "buy": "그날 판 매수가(rows[].buy · 11-18 판부터 09:00 시가 · 그 전 09:01)", "minChips": dt30.MIN_CHIPS, "sell": SELL_AT, "bigPct": BIG_PCT, "topDay": TOP_DAY,
             "filledAt": _status["at"], "error": _status["error"]}
