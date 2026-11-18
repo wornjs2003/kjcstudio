@@ -33,16 +33,18 @@ const nm = (x) => `<td class="st-name"><b>${esc(x.name || '—')}</b> <small>${e
 // 칩마다 — 이름 · 받을 주소(없으면 null) · 룰 줄(meta → [[머리, 글]]) · 목록(응답 → { cap, html })
 const RULES = {
   ov: {
-    // 목록은 서버 단타 판(/api/kis/dt30 · 09:01 굳힌 판 · 칩 하나 이상 든 종목 전부) — 11-18 재권님 「이거 바로 하라고해」(작업우선순위 경유)
-    //   홈 「단타」 줄은 둘 이상(홈 화면 셈)이라 갈린다 — 줄은 다 보이고 「겹친 칩」 칸 · 머리 줄 셈으로 둘 이상을 가른다
-    name: '단타', url: '/api/kis/dt30', metaOf: (j) => ({ ...(j.meta || {}), ...((j.data && j.data.meta) || {}) }),
-    rows: (m) => [['고르는 조건', `아래 칩 중 하나 이상에 든 종목 — 서버 단타 판(${v(m.buyAt)} 부터) · 홈 「단타」 줄은 둘 이상<br>세는 칩 — ${m.watchRule === '자동' ? '관심(자동 관심 룰 · 하트 안 씀) · 프리장 · VI·급등 · 장외 · 매수 · 초반상승' : '관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 · 자동'} <span class="rl-sug">장외는 장 뒤에만 셈${m.wait && m.wait.length ? ` · 정규장 전에는 ${esc(m.wait.join(' · '))} 기다림` : ''}</span>`],
+    // 목록은 서버 단타 목록 한 곳(/api/kis/dt-list · 홈 「단타」 와 같은 주소 · 지금 값) — 11-18 재권님 「둘이 동기화해서 홈이든 단테든 한곳에 있어야 하는 정본데」 → 「응 이거 바로 해야할거같아」
+    //   서버는 칩 하나 이상 줄을 다 주고 문턱은 meta.minChips(서버 한 곳) — 화면은 n ≥ minChips · 하락(down) 아닌 줄만 보임(값을 화면에 안 둠)
+    //   그 주소가 아직 없는 서버(합치기 전)에서는 단타 판(/api/kis/dt30 · 그날 판)으로 — 문턱이 없으면 줄을 다 보임
+    name: '단타', url: '/api/kis/dt-list', alt: '/api/kis/dt30', metaOf: (j) => ({ ...(j.meta || {}), ...((j.data && j.data.meta) || {}) }),
+    rows: (m) => [['고르는 조건', `아래 칩 중 ${v(m.minChips == null ? null : num(m.minChips))}개 이상에 든 종목 · 하락 뺌 — 홈 「단타」 와 같은 서버 목록<br>세는 칩 — ${esc((m.chips || []).map(chipName).join(' · ') || '—')} <span class="rl-sug">장외는 장 뒤에만 셈${m.wait && m.wait.length ? ` · 정규장 전에는 ${esc(m.wait.join(' · '))} 기다림` : ''}</span>`],
       ['시가총액', `${v(m.capMinEok == null ? null : num(m.capMinEok))}억원 이상(관심 · 프리장 · 매수) · 나머지는 칩마다의 문턱`], ['줄 세우기', esc(m.order || '겹친 칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순')]],
     list: (j) => {
-      const D = j.data || {}, d = Array.isArray(D.rows) ? D.rows : [], two = d.filter((x) => x.n >= 2).length;
+      const m = { ...(j.meta || {}), ...((j.data && j.data.meta) || {}) }, all = Array.isArray(j.data) ? j.data : (j.data && Array.isArray(j.data.rows) ? j.data.rows : []);
+      const k = Number(m.minChips), d = all.filter((x) => !x.down && (!(k > 0) || x.n >= k));
       const chipTxt = (x) => (x.chips || []).map(chipName).join(' · ');
-      return { cap: `${esc(D.day ? `${D.day.slice(4, 6)}-${D.day.slice(6)}` : '—')} 단타 판 · ${num(d.length)}종목 · 그중 칩 둘 이상 ${num(two)}(홈 「단타」 줄과 같은 문턱)`,
-        html: d.length ? tb(['종목', '겹친 칩', '칩', '굳힌 때 등락률(전일 종가 대비)', '시가총액'], d.map((x) => `<tr>${nm(x)}<td><b>${num(x.n)}</b></td><td>${esc(chipTxt(x))}</td><td>${pct(x.pct)}</td><td>${capTxt(x.cap)}</td></tr>`)) : null };
+      return { cap: `${Array.isArray(j.data) ? `지금 ${esc(m.at || '—')}` : '그날 단타 판'} · ${num(d.length)}종목${k > 0 ? ` · 칩 ${num(k)}개 이상 · 후보 ${num(all.length)}` : ' · 문턱 없음(서버 단타 목록 전 — 그날 판 전부)'}`,
+        html: d.length ? tb(['종목', '겹친 칩', '칩', '등락률(전일 종가 대비)', '시가총액'], d.map((x) => `<tr>${nm(x)}<td><b>${num(x.n)}</b></td><td>${esc(chipTxt(x))}</td><td>${pct(x.pct)}</td><td>${capTxt(x.cap)}</td></tr>`)) : null };
     },
   },
   // 관심 탭은 뺐다(11-12 재권님 「관심을 없애고 수급으로 대처한다」) — 같은 종목 · 같은 룰이 「자동(전일 거래량 급등)」 칩에 있다(11-18 「수급」 에서 바꿈 · 실시간 순위 이름)
@@ -120,7 +122,8 @@ async function show(id, again = false) {
   tb2.innerHTML = R.rows({}, null).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
   if (!R.url) { $('cr-cap').textContent = `「${R.name}」 종목`; $('cr').innerHTML = '<div class="st-err">— 서버에 이 칩의 종목 목록 주소가 없음(홀딩스 화면이 순위 목록에서 셈)</div>'; return; }
   if (!again) { $('cr-cap').textContent = '값을 받는 중…'; $('cr').innerHTML = '<div class="st-err">—</div>'; }
-  const [{ st, j }, ex] = await Promise.all([getJson(R.url), R.extra ? getJson(R.extra) : Promise.resolve({ j: null })]);
+  let [{ st, j }, ex] = await Promise.all([getJson(R.url), R.extra ? getJson(R.extra) : Promise.resolve({ j: null })]);
+  if ((!j || j.ok === false) && R.alt) ({ st, j } = await getJson(R.alt));   // 그 주소가 아직 없는 서버 — 옛 주소로
   if (my !== seq) return;
   if (!j || j.ok === false) { $('cr-cap').textContent = `「${R.name}」 종목`; $('cr').innerHTML = `<div class="st-err">— 서버 값을 못 받음(${esc((j && j.error) || st || '연결 안 됨')})</div>`; return; }
   const m = (R.metaOf ? R.metaOf(j) : null) || j.meta || (j.data && j.data.meta) || {};
@@ -133,5 +136,5 @@ chips.forEach((c) => c.addEventListener('click', () => show(c.dataset.rule)));
 // 오늘 것은 계속 다시 받는다(11-12 재권님 「오늘자는 계속 값을 갱신하고 있어야해」) — 보고 있는 칩 하나만 · 주기는 서버 값(홀딩스 home.js 와 같은 열쇠)
 //   서버 롱폴이 켜져 있으면 바뀔 때 · 아니면 그 열쇠의 주기로 · 열쇠가 없으면(VI·급등 · 볼린저) 아래 FALLBACK 은 홀딩스와 같은 값 — 서버가 롱폴을 못 줄 때만
 const VI_FALLBACK_MS = 30000, BB_FALLBACK_MS = 60000, CHIP_FALLBACK_MS = 300000;
-const LIVE = { ov: [null, CHIP_FALLBACK_MS], pre: ['pre_flow.FLOW_TTL', CHIP_FALLBACK_MS], rise: ['open_rise.CACHE_TTL', CHIP_FALLBACK_MS], vi: [null, VI_FALLBACK_MS], bb: [null, BB_FALLBACK_MS] };
+const LIVE = { ov: ['dt30.LIVE_TTL', CHIP_FALLBACK_MS], pre: ['pre_flow.FLOW_TTL', CHIP_FALLBACK_MS], rise: ['open_rise.CACHE_TTL', CHIP_FALLBACK_MS], vi: [null, VI_FALLBACK_MS], bb: [null, BB_FALLBACK_MS] };
 Object.entries(LIVE).forEach(([id, [key, fallbackMs]]) => { if (RULES[id] && RULES[id].url) watch({ url: () => (cur === id ? RULES[id].url : null), onChange: () => show(id, true), key, fallbackMs }); });
