@@ -423,9 +423,20 @@ def _chip_time(r, chip):
     return (r.get("chipAt") or {}).get(chip)
 
 
+def score_conflicts(tab):
+    """한 칩에 「칩」 점수와 「칩|HH:MM 전/이후」 점수가 함께 적힌 칩 이름 — 재권님 「함께 있을수 없는 값이야 둘중 하나만 기입하도록 해줘」(11-18 20:2x).
+    입력은 화면이 하나만 받게 막는다 · 서버는 둘 다 있으면 시각 점수만 쓰고(화면 셈과 같게) 이 목록을 meta.scoreConflict 로 낸다."""
+    if not tab:
+        return []
+    plain = {k.strip() for k in tab if "|" not in k}
+    split = {k.partition("|")[0].strip() for k in tab if "|" in k}
+    return sorted(plain & split)
+
+
 def row_score(r, tab):
-    """그 줄의 점수 합 — 칩마다 「칩」 열쇠 + 맞는 「칩|HH:MM 전/이후」 열쇠."""
+    """그 줄의 점수 합 — 칩마다 「칩」 열쇠 또는 맞는 「칩|HH:MM 전/이후」 열쇠(둘 다 적혔으면 시각 열쇠만 · score_conflicts)."""
     total = 0.0
+    bad = set(score_conflicts(tab))
     for c in r.get("chips") or []:
         names = {c, SCORE_ALIAS.get(c, c)}
         for k, v in tab.items():
@@ -433,6 +444,8 @@ def row_score(r, tab):
             if name.strip() not in names:
                 continue
             if not cond:
+                if name.strip() in bad:
+                    continue
                 total += v
                 continue
             m = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*(전|이후)\s*", cond)
@@ -546,7 +559,7 @@ def _live_calc(proxy, cfg):
         "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre and early else None,
         "candidates": len(ov), "chips": [c for c in OV_CHIPS if c != "수급"], "minChips": min_chips(proxy),   # 수급은 11-18 관심으로 합쳐짐(지난 판에만)
         "dropBelowPct": DROP_BELOW_PCT, "capMinEok": CAP_MIN_EOK, "watchRule": "자동",
-        "order": order, "score": tab, "ttl": LIVE_TTL}}
+        "order": order, "score": tab, "scoreConflict": score_conflicts(tab), "ttl": LIVE_TTL}}
     with _live_lock:
         _live.update(at=time.time(), pre=pre, data=data)
     return data
@@ -584,7 +597,7 @@ def build(proxy, cfg, day, skip=()):
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(off), "rows": rows, "closed": False,
             "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "lateMin": off, "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy), "minChips": mc,
                      "early": ["매수"] if "매수어림" in missing else [], "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre else None, "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
-                     "order": order, "score": tab,
+                     "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "buy 는 굳힌 때(buyAt) 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
                              "market KOSPI · KOSDAQ(순위 목록 · 없으면 KIS 종목 마스터 · 둘 다 없으면 null) · cap 억원 · 장외는 09:06 에 비어 안 셈 · 볼린저 · 현재상승은 칩 이름만(셈에 안 듦)"}}
 
@@ -668,6 +681,7 @@ def patch_late(proxy, cfg, b):
     tab = score_table(proxy)
     b["meta"]["order"] = sort_rows(out, tab)
     b["meta"]["score"] = tab
+    b["meta"]["scoreConflict"] = score_conflicts(tab)
     b["rows"] = out[:TOP_N]
     for i, r in enumerate(b["rows"]):
         r["rank"] = i + 1
@@ -1042,7 +1056,7 @@ def rebuild(proxy, day, prev, cfg=None):
     return {"day": day, "buyAt": "%02d:%02d" % PAST_BUY_AT, "times": times(), "rows": rows, "closed": True,
             "meta": {"rebuilt": True, "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": DROP_BELOW_PCT,
                      "watchSrc": watch_src, "rules": chip_rules(proxy, merged=False), "viUntil": "%02d:%02d" % PAST_LATE, "approxBase": approx_base,
-                     "capMinEok": CAP_MIN_EOK, "order": order, "score": tab,
+                     "capMinEok": CAP_MIN_EOK, "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 · 수급은 그날 09:01 직전 관심 목록(watchSrc 기록 · 없으면 관심 못 받음 · 수급 어림) · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
                              "buy 는 09:05 봉 시가 · 시가총액 · 섹터 · 시장은 지금 값"}}
 
