@@ -3950,7 +3950,7 @@ def start_after_snap(cfg):
 # 밤사이(00:00~07:00) 값은 그대로 어제 20:00 마감 값이다(overnight_quotes · take_after_snap 이 쥔 것).
 # 07:00~08:00(프리장 전)은 국내 종목을 어제 정규장 종가 · 등락률 0 으로 낸다 — 새 회차 기준가가 그 종가다
 # (2026-11-06 재권님 「아침 7시 되면 … 국내종목은 등락률이 0이 되어야」 → (가) 「값도 어제 정규장 종가로 · 0%」)
-AFTER_CLEAR_AT = (int(market_hours.CHIP_RESET[:2]), int(market_hours.CHIP_RESET[2:]))   # 07:00 → 07:30 — 다른 칩과 한 시각(11-13 재권님 「장외도 7시반」)
+AFTER_CLEAR_AT = (int(market_hours.CHIP_RESET[:2]), int(market_hours.CHIP_RESET[2:]))   # 07:00 → 07:30 → 07:50 — 다른 칩과 한 시각(11-13 재권님 「장외도 7시반」 · 11-19 「7시 50분」)
 AFTER_CLEAR_UNTIL = (15, 30)
 
 
@@ -10554,7 +10554,7 @@ class Handler(SimpleHTTPRequestHandler):
                 data, at = fetch_joint_buy(cfg)
                 _now = datetime.now(KST)
                 if _now.weekday() < 5 and market_hours.CHIP_RESET <= _now.strftime("%H%M") < market_hours.REG_OPEN:
-                    data = dict(data or {}, rows=[], flipped=[], phase="before", reset=True)   # 07:30~09:00 「시작 전」(11-13 재권님 「다른 칩은 아침 7시반에」)
+                    data = dict(data or {}, rows=[], flipped=[], phase="before", reset=True)   # CHIP_RESET(07:50)~09:00 「시작 전」(11-13 재권님 「다른 칩은 아침 7시반에」 → 11-19 07:50)
                 d = data or {}
                 self._send_json({
                     "ok": data is not None, "data": d.get("rows") or [], "flipped": d.get("flipped") or [],
