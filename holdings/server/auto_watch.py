@@ -38,11 +38,11 @@
     넣기      **그날 값을 쌓은 바로 뒤**(정규장이 끝난 15:41 판) 걸린 종목을 관심 목록(문서 watchlist)과 묶음 「자동」 에 넣는다 — apply_watch()
               (2026-11-05 재권님 「넣는건 정규장이 끝나면 바로 넣는 방향으로 수정해」 · 처음 안은 다음날 08:00 이었다). 쌓아 둔 값을 쓰므로 KIS 0번.
               문서에 `auto: {code: {day, added}}` 를 둔다 — day 넣은 날 · added 이 셈이 하트 목록에 새로 넣었나(원래 하트가 있던 종목은 false).
-              KEEP_DAYS 거래일 뒤 「자동」 묶음에서 빼고, added 인 종목은 하트 목록에서도 뺀다 — 단 재권님이 다른 묶음에 담았으면 그때부터 재권님 것(added 를 내림).
+              KEEP_DAYS 거래일 뒤(11-19 부터 1 — 다음 거래일 값을 쌓을 때) 「자동」 묶음에서 빼고, added 인 종목은 하트 목록에서도 뺀다 — 단 재권님이 다른 묶음에 담았으면 그때부터 재권님 것(added 를 내림).
               하트를 끈 종목은 auto 에서도 지운다. **added 종목은 알림(dart.watchlist)에서 뺀다** — 날마다 십여 개씩 들어와 알림이 쏟아지지 않게.
               **켜기는 ADD 하나다 — 2026-11-06 켰다**(재권님 「자동 넣기를 켜고 어제 걸린 종목도 지금 넣을까요」 → 「응 해줘」).
               넣지 않는 것 둘 — ① 조건 밖인데 신고가 부근이라 더 붙은 종목(nearHighOnly · 화면 목록에만) ② 재권님이 하트를 끈 종목은
-              끈 날부터 KEEP_DAYS 거래일 동안 다시 안 넣는다(auto_watch_off). 그날 넣었는지는 auto_watch_add 에 남긴다 —
+              끈 날부터 OFF_DAYS 거래일 동안 다시 안 넣는다(auto_watch_off). 그날 넣었는지는 auto_watch_add 에 남긴다 —
               화면이 문서를 저장할 때 items · groups · auto 만 다시 쓰므로 표시를 문서에 두면 지워진다.
               서버가 15:41 판 뒤에 떴으면(재시작 · 꺼져 있었음) 뜰 때 마지막 날 것을 한 번 넣는다 — 그날 이미 넣었으면 안 넣는다.
     장중      평일 LIVE_FROM~15:30 LIVE_SEC 마다 멀티 시세(쌓지 않음 · KIS 30종목에 한 번)로 **오늘 지금까지** 등락률 · 누적 거래량을 보고
@@ -83,7 +83,8 @@ YEAR_DAYS = 365                 # 「52주」 를 달력 날로
 YEAR_CHUNKS = 3                 # 1년 일봉을 몇 번에 나눠 묻나 — KIS 일봉은 한 번에 100줄까지
 TOP_PERIODS = {"d5": 5, "d10": 10, "d20": 20}   # 기간 상위의 거래일 수 — 「한 달」 은 20거래일
 TOP_N = 20
-KEEP_DAYS = 5                   # 넣은 날 뒤 이 거래일이 지나면 뺀다(재권님 「5거래일 뒤 자동 것만 빼기」)
+KEEP_DAYS = 1                   # 넣은 날 뒤 이 거래일이 지나면 뺀다 — 그날 것만(11-19 재권님 「수급은 당일로 해야할거같은데」 → 하트 목록에서도 다음 날 빼기 「나」 · 그 전 「5거래일 뒤 자동 것만 빼기」)
+OFF_DAYS = 5                    # 재권님이 하트를 끈 자동 종목을 다시 안 넣는 거래일 — KEEP_DAYS 를 1 로 줄일 때 갈라 그대로 둠
 TICK = 30
 HOLIDAY_SAME = 0.9              # 앞 날과 종가 · 거래량이 똑같은 종목이 이만큼이면 휴장(거래가 있는 날에 우연히 같을 수는 없다)
 RETRY_SEC = 300                 # 그날 값을 못 받았을 때 다시 도는 간격 — 창(15:41~16:00) 안에서만
@@ -106,7 +107,7 @@ _SCHEMA = (
     "CREATE TABLE IF NOT EXISTS auto_watch_yearfill (code TEXT PRIMARY KEY, at TEXT)",
     # 관심 목록에 넣은 날 — 뜰 때 다시 넣지 않게(apply_watch) · added 넣은 코드 · skipped 안 넣은 코드(까닭 붙음)
     "CREATE TABLE IF NOT EXISTS auto_watch_add (day TEXT PRIMARY KEY, at TEXT, added TEXT, removed TEXT, skipped TEXT)",
-    # 재권님이 하트를 끈 자동 종목 — 끈 날(셈이 알아챈 날)부터 KEEP_DAYS 거래일 동안 다시 안 넣는다
+    # 재권님이 하트를 끈 자동 종목 — 끈 날(셈이 알아챈 날)부터 OFF_DAYS 거래일 동안 다시 안 넣는다
     "CREATE TABLE IF NOT EXISTS auto_watch_off (code TEXT PRIMARY KEY, day TEXT)",
 )
 
@@ -477,7 +478,7 @@ def merge_watch(doc, picks, day, days, off=None, replace_day=False):
     added, removed = [], []
     for code in list(auto):
         info = auto[code]
-        if code not in have:         # 재권님이 하트를 껐다 — 자동 표시도 지우고 KEEP_DAYS 거래일 동안 다시 안 넣는다
+        if code not in have:         # 재권님이 하트를 껐다 — 자동 표시도 지우고 OFF_DAYS 거래일 동안 다시 안 넣는다
             del auto[code]
             off[code] = day
             if code in grp["codes"]:
@@ -508,7 +509,7 @@ def merge_watch(doc, picks, day, days, off=None, replace_day=False):
             removed.append(code)
     have = {x["code"] for x in items}
     for code in list(off):           # 다시 하트를 켰거나 기간이 지났으면 푼다
-        if code in have or sum(1 for d in days if off[code] < d <= day) >= KEEP_DAYS:
+        if code in have or sum(1 for d in days if off[code] < d <= day) >= OFF_DAYS:
             del off[code]
     skipped = []
     for p in picks:

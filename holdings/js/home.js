@@ -1515,7 +1515,7 @@ const SORTS = {
   nowup:{ label: '현재상승', key: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), only: (v) => v >= NOW_RISE_PCT, capMin: true,
           head: '시가', show: (code, p) => (p && p.open ? fmtPriceOf(code, p.open) : '—'),
           pct: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), note: `시가 대비 +${NOW_RISE_PCT}% 이상`,
-          blank: () => chipBlank(),     // 07:30~09:00 은 앞 날 시가 · 현재가라 비운다(11-13 재권님 「다른 칩은 아침 7시반에」)
+          blank: () => chipBlank(),     // 서버 chipReset(07:50)~09:00 은 앞 날 시가 · 현재가라 비운다(11-13 재권님 「다른 칩은 아침 7시반에」 → 11-19 07:50)
           empty: () => (chipBlank() ? `정규장 칩은 아침 ${serverData('chipReset').from}에 비우고 ${serverData('chipReset').until} 정규장부터 다시 셉니다`
             : `시가보다 +${NOW_RISE_PCT}% 이상 오른 종목이 없습니다(시세를 받는 중이면 잠시 뒤 채워짐)`) },
   /* 매수 — 외국인 · 기관 · 프로그램이 **셋 다** 순매수인 종목, 셋 합이 큰 순 (2026-11-05 재권님 「프로그램 기관 외국인이 동시에
@@ -2301,7 +2301,7 @@ function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
     }));
   }
 
-  if (sort && sort.blank && sort.blank()) return [];   // 현재상승 — 07:30~09:00 「시작 전」
+  if (sort && sort.blank && sort.blank()) return [];   // 현재상승 — 서버 chipReset(07:50)~09:00 「시작 전」
   if (!sort || !sort.key) return base;      // 시가총액은 목록 순서 그대로
 
   /* 값이 아직 안 온 종목은 뒤로 보낸다. 0 으로 치면 「거래량 0위」 가 된다 */
