@@ -71,44 +71,43 @@ const riseOf = (r) => (r.rise == null || !Number.isFinite(Number(r.rise)) ? -Inf
 const byLive = (a, b) => nLive(b) - nLive(a) || (riseOf(b) - riseOf(a) || 0) || (Number(b.cap) || 0) - (Number(a.cap) || 0);   // 겹친 칩 수 → 초반상승 % → 시가총액(재권님 19:1x 말씀 · 개발2 서버 19:14 와 같은 셈 · rows[].rise)
 // 칩 설명 — 마우스를 1초 올려 두면 뜨는 공용 풍선(data-tip · glossary.js) (11-11 재권님 「vi급등 옆에 vi 랑 급등이 따로 있는데 이건 각각 뭔지 설명을 넣어놔」)
 //   뜻은 서버 holdings/server/intraday_alerts.py 머리 글 그대로 · 급등 기준 % 는 서버 상수(SURGE_PCT) 한 곳이라 여기 숫자를 안 적음
-const TIP = {
-  'VI·급등': '장중 알림 둘(상승 VI · 급등) 중 하나라도 걸린 종목 — 오른쪽 VI 급상승 · VI 급등 두 칩으로 따로 켜고 끔(둘을 더하면 이 숫자)',
-  'VI·급등|VI 급상승': '상승 VI 만 걸리고 급등에는 안 든 종목\n상승 VI — 값이 짧은 사이에 크게 올라 거래소가 잠깐(2분) 단일가 매매로 멈춰 세운 종목 · 정규장만 · 한국투자증권 「VI 현황」 에서 받음',
-  'VI·급등|VI 급등': '급등에 든 종목 — 상승 VI 도 함께 걸린 것 포함(오르는 동안 보통 VI 가 먼저 걸림)\n급등 — 전일 종가보다 서버가 정한 급등 기준 이상 오른 종목(그날 처음 넘을 때 한 번) · 정규장만 · 서버 상승률 순위(전 종목 30위)에서 봄\nVI 급상승 · VI 급등 두 칩은 겹치지 않아 더하면 VI·급등 숫자',
-  // 매수 하위 = 「매수」 판 차례(tier) — 뜻은 서버 kis_proxy.py 의 joint_tier 머리 글 그대로
+const TIP = {   // 칩 풍선 — 쉬운 말로(11-18 재권님 「설명들 직관적이고 이해하기 쉽게 개선해줘」)
+  'VI·급등': '오르는 쪽 VI 가 걸렸거나, 하루 사이 크게 뛴(급등) 종목 — 오른쪽 작은 칩 둘(VI 급상승 · VI 급등)로 따로 켜고 끔 · 둘을 더하면 이 숫자',
+  'VI·급등|VI 급상승': 'VI 만 걸리고 급등 기준까지는 안 오른 종목\nVI — 값이 짧은 사이 크게 움직이면 거래소가 2분 동안 거래를 멈추고 한꺼번에 값을 정하는 것(여기서는 오르는 쪽만)',
+  'VI·급등|VI 급등': '전날 종가보다 급등 기준 넘게 오른 종목(VI 가 함께 걸린 것도 여기)\n급등 기준은 서버가 정한 값 · 그날 처음 넘을 때 한 번 셈',
   '매수|①': '① 외국인 · 기관 · 연기금 · 프로그램 넷 다 산 종목',
   '매수|②': '② 외국인 · 기관 · 프로그램이 함께 산 종목',
   '매수|③': '③ 기관 · 연기금이 함께 산 종목',
   '매수|④': '④ 외국인만 산 종목',
-  '매수|어림': '어림 — 외국인 · 기관 집계가 나오기 전이라 외국계 창구 순매수 · 종목 프로그램 순매수가 둘 다 + 인 종목으로 넣음 · 집계가 나오면 ①~④ 로 바뀜(서버 data.meta.early)',
+  '매수|어림': '어림 — 외국인 · 기관 집계가 나오기 전에 먼저 보는 값\n외국계 증권사 창구와 프로그램이 둘 다 산 종목(장 열기 전에는 프로그램만) · 집계가 나오면 ①~④ 로 바뀜',
 };
 // 칩마다 「무엇 · 조건 · 언제 받나 · 얼마마다」 (11-18 재권님 「칩에 마우스 올리면 칩설명과 시간 주기 등등 정보도 넣어줘」)
 //   문턱 값은 서버가 판에 싣는 룰(data.meta.rules) 그대로 읽는다 — 화면에 숫자를 안 둔다 · 못 받으면 그 줄은 「서버 값 못 받음」
 //   받는 시각 · 주기 글은 서버가 아직 안 준다 — 서버가 data.meta.chipInfo{칩: 글} 을 주면 그것만 쓴다(개발2 카드 「단타 판 08:00 부터 짓기 · 굳히기 10:30」 덧). 그때 아래 WHEN 을 지운다
 //   WHEN 의 시각은 11-18 서버 코드(pre_flow · intraday_alerts · kis_proxy 가집계 · open_rise · auto_watch)에서 읽은 그대로
 const WHEN = {
-  관심: '받는 때 — 늘 · 관심 목록이 바뀌면 바로',
-  프리장: '받는 때 — 넥스트레이드 프리마켓 08:00~08:50 동안 몇 분마다 다시 짓고 08:50~09:00 에 한 번 더 지어 그날 판으로 굳힘',
-  'VI·급등': '받는 때 — 정규장 09:00~15:30 · 10초마다 · 단타 판에는 굳히는 시각까지 걸린 것만',
-  장외: '받는 때 — 그날 종가가 정해진 15:40 뒤부터 다음날 07:30 까지 · 시세 주기마다 · 정규장 동안은 비어 있어 단타 판에는 거의 안 듦',
-  매수: '받는 때 — 가집계 입력 시각(외국인 09:30 · 11:20 · 13:20 · 14:30 / 기관 10:00 · 11:20 · 13:20 · 14:30) · 둘 다 있어야 해서 첫 판은 10:00 · 그 전에는 「어림」 · 서버가 2분마다 다시 물음',
-  초반상승: '받는 때 — 첫 5분봉(09:00~09:05)이 끝난 뒤 · 1분마다',
-  자동: '받는 때 — 전날 15:41 판으로 정해짐 · 장중에는 09:30~15:30 5분마다 그때까지 값으로 다시 거름',
+  관심: '언제 — 전날 장 마감 뒤 정해지고, 장중에는 5분마다 그때 값으로 다시 거름',
+  프리장: '언제 — 장 열기 전 08:00~08:50 몇 분마다 셈 · 08:50~09:00 에 그날 것으로 정함',
+  'VI·급등': '언제 — 08:00 부터 10초마다(장 열기 전은 넥스트레이드 값) · 단타 판에는 판을 굳히기 전까지 걸린 것만',
+  장외: '언제 — 장 끝난 15:40 뒤부터 다음 날 07:30 까지 · 아침 단타 판에는 거의 안 듦',
+  매수: '언제 — 외국인 첫 집계 09:30 · 기관 첫 집계 10:00 · 그 전에는 「어림」 으로 먼저 봄',
+  초반상승: '언제 — 장 시작 첫 봉이 끝난 뒤(09:05 쯤)부터',
+  자동: '언제 — 전날 장 마감 뒤 정해지고, 장중에는 5분마다 그때 값으로 다시 거름',
 };
 const WHAT = {
-  관심: (R) => `관심 목록(하트)에 든 종목 · 자동 묶음 종목은 「자동」 으로 셈 · 시가총액 ${R && R.capMinEok != null ? `${R.capMinEok.toLocaleString()}억 이상` : '문턱 — 서버 값 못 받음'}`,
-  프리장: () => '넥스트레이드 프리마켓에서 전일 종가보다 오른 종목 중 거래대금이 큰 종목',
-  장외: () => '정규장 종가 뒤(넥스트레이드 애프터 · 다음날 프리) 종가보다 오른 종목',
-  매수: () => '외국인 · 기관 순매수 상위(가집계)에 함께 든 종목 · 차례 ①~④(아래 작은 칩)',
-  초반상승: () => '첫 5분봉이 시가보다 문턱 넘게 오른 종목 · ETF 뺌',
-  자동: (R) => (R ? `전일 거래량 급등 룰 — 등락 +${R.prevPct}% 이상${R.sectorPct != null ? ` · 업종 +${R.sectorPct}% 이상` : ''}${R.nearHighPct != null ? ` · 52주 고가에서 ${R.nearHighPct}% 안` : ''}${R.maDays ? ` · ${R.maDays}일선 위${R.maUpCandle ? ' 양봉' : ''}` : ''}${R.scoreW ? ` · 점수 등락 ${R.scoreW.pct} : 거래량 ${R.scoreW.vol}` : ''}` : '전일 거래량 급등 룰 — 룰 값은 서버 값 못 받음'),
+  관심: (R) => `관심 목록에 하트로 담은 종목 · 시가총액 ${R && R.capMinEok != null ? `${R.capMinEok.toLocaleString()}억 이상` : '문턱 — 서버 값 못 받음'}`,
+  프리장: () => '장 열기 전(넥스트레이드 프리마켓) 전날보다 오르면서 거래대금이 큰 종목',
+  장외: () => '장 끝난 뒤(넥스트레이드 애프터마켓 · 다음 날 프리마켓) 그날 종가보다 오른 종목',
+  매수: () => '외국인 · 기관이 많이 산 종목(증권사 집계) · ①~④ 는 누가 함께 샀는지',
+  초반상승: () => '장 시작 첫 봉에서 시가보다 일정 % 넘게 오른 종목 · ETF 는 뺌',
+  자동: (R) => (R ? `전날 거래량이 크게 늘며 오른 종목을 서버가 자동으로 담음 — 전날 +${R.prevPct}% 이상 올랐고${R.sectorPct != null ? ` · 그 업종이 +${R.sectorPct}% 이상` : ''}${R.nearHighPct != null ? ` · 1년 최고가에서 ${R.nearHighPct}% 안` : ''}${R.maDays ? ` · ${R.maDays}일 평균값 위${R.maUpCandle ? '에서 오른 날' : ''}` : ''}${R.scoreW ? ` · 순서는 오른 폭 ${R.scoreW.pct}% · 거래량 ${R.scoreW.vol}% 로 셈` : ''}` : '전날 거래량이 크게 늘며 오른 종목을 서버가 자동으로 담음 — 조건 값은 서버 값 못 받음'),
 };
 const tipOf = (k) => {
   if (k.includes('|')) return TIP[k] || '';
   const ci = st.chipInfo && st.chipInfo[k];
   if (typeof ci === 'string' && ci) return ci;
   const R = st.rules || {};
-  if (k === '관심' && st.watchAuto) return [`자동 관심 룰에 든 종목(하트 안 씀) — ${WHAT.자동(R.관심).replace(/^전일 거래량 급등 룰 — /, '')}`, WHEN.자동].filter(Boolean).join('\n');
+  if (k === '관심' && st.watchAuto) return [`관심 — 하트 대신 서버가 자동으로 담은 종목\n${WHAT.자동(R.관심).replace(/^전날 거래량이 크게 늘며 오른 종목을 서버가 자동으로 담음 — /, '조건 — ')}`, WHEN.자동].filter(Boolean).join('\n');
   const head = TIP[k] || (WHAT[k] ? WHAT[k](R[k]) : '');
   return [head, WHEN[k]].filter(Boolean).join('\n');
 };
@@ -167,12 +166,13 @@ function sellAt(p) {   // p — 시각마다 매수가 대비 %(null 은 값 없
 // 손익 셈 (11-11 재권님 「각 종목별로 천만원씩 샀다고 하고 상위 16종목을 해당룰로 했을때 수익은 얼마지?」 → 「결과 옆에 거래세랑 세금 퍼센트를 넣어줘
 //   세금은 코스피와 코스닥세금 내는거 룰찾아서 넣고 증권수수료는 내가 기입하면 그 숫자에 맞춰서 대입되게 해줘」)
 //   · 상위 PNL_TOP 종목을 한 종목에 PNL_WON 원어치(주 단위 내림) 09:06 매수가에 사서 위 룰대로 판 값에 판다
-//   · 세금은 팔 때만 — 판 금액 × (거래세 + 농어촌특별세) · 시장마다 TAX 표 · 증권수수료는 살 때 · 팔 때 각각 그 금액 × 수수료 %
+//   · 세금은 팔 때만 — 판 금액 × (거래세 + 농어촌특별세) · 시장마다 TAX 표 · 증권수수료는 팔 때만 판 금액 × 수수료 %(11-18 재권님 「증권수수료는 팔때만」 — 그 전에는 살 때 · 팔 때 각각)
 //   · 수수료 % 는 재권님이 칸에 넣으신 값 — 서버 룰 문서(strategy-rules · rules.dt30.feePct) 한 곳 · 빈칸이면 수수료는 안 셈(「빈칸」 이라 적음 · 0 으로 보지 않음)
 //   · 2026 세율(KB증권 「2026년 증권거래세율 변경 안내」 · 머니투데이 2025-12-01 「내년 1월부터 증권거래세 오른다」) — 세율이 바뀌면 TAX 한 곳만 고친다
 const PNL_TOP = 30, PNL_WON = 10_000_000;   // 기본값 — 재권님이 칸에 넣으면 st.set 이 이김
-// 셈 칸 기본값 (11-18) — minChip 칩 N개 이상만(0 = 전체) · top 상위 몇 종목 · mode each = 종목마다 perWon · day = 하루 dayWon 을 그 종목 수로 똑같이 나눔
-const DEF_SET = { minChip: 0, top: PNL_TOP, mode: 'each', perWon: PNL_WON, dayWon: 100_000_000, stop: -1, turn: true, turnPct: 0, trail: null };
+// 셈 칸 기본값 (11-18) — minChip 칩 N개 이상만(0 = 전체) · top 상위 몇 종목 · 돈은 전체 금액 dayWon 을 그 종목 수로 똑같이 나눔
+//   11-18 재권님 「금액은 전체 금액으로 해주고 종목만큼 나눈다 라는 룰로 해줘 금액을 맨앞으로」 — 종목마다(each) 갈래는 걷음 · 기본 전체 금액 = 지금까지의 기본(상위 30 × 1,000만원)과 같은 3억
+const DEF_SET = { minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, stop: -1, turn: true, turnPct: 0, trail: null };
 st.set = { ...DEF_SET };
 const TAX = { KOSPI: { tx: 0.05, rural: 0.15 }, KOSDAQ: { tx: 0.20, rural: 0 } };   // % · 코스피 = 거래세 0.05 + 농특세 0.15 · 코스닥 = 거래세 0.20
 const MKT = { KOSPI: '코스피', KOSDAQ: '코스닥' };
@@ -226,7 +226,7 @@ function calc(d) {
     const pnl = qty > 0 && Number.isFinite(sellPx) ? (() => {
       const buyAmt = qty * b, sellAmt = qty * sellPx;
       const tx = T ? sellAmt * T.tx / 100 : null, rural = T ? sellAmt * T.rural / 100 : null;
-      const fee = st.fee == null ? null : (buyAmt + sellAmt) * st.fee / 100;
+      const fee = st.fee == null ? null : sellAmt * st.fee / 100;   // 팔 때만
       return { buyAmt, sellAmt, gross: sellAmt - buyAmt, tx, rural, fee, net: T ? sellAmt - buyAmt - tx - rural - (fee || 0) : null };
     })() : null;
     return { r, p, s, pnl, now: nowCh != null, res: s.k >= 0 ? p[s.k] : nowCh != null ? nowCh : (last >= 0 ? p[last] : null) }; });
@@ -256,9 +256,13 @@ function paint(d) {
   const bm = d.meta || {}, nm = (a) => names(a).join(' · ');   // 되채운 날 · 못 받은 칩 — 칩 이름은 서버가 준 그대로
   const rebuilt = bm.rebuilt === true ? ` · 되채운 날${nm(bm.missing) ? ` · ${nm(bm.missing)} 못 셈` : ''}${nm(bm.approx) ? ` · ${nm(bm.approx)} 어림` : ''}` : `${nm(bm.missing) ? ` · 못 받은 칩 ${nm(bm.missing)}` : ''}${nm(bm.early) ? ` · ${nm(bm.early)} 어림(집계 전)` : ''}${bm.late && typeof bm.late === 'object' && Object.keys(bm.late).length ? ` · 늦게 채움 ${Object.entries(bm.late).map(([k, v]) => `${k} ${v}`).join(' · ')}` : ''}`;
   $('dt-meta').textContent = `${dayTxt(d.day)}${rebuilt}${LIVE ? ` · 장중 실시간(${esc(String(d.nowAt || '—'))} 값 · 14:00 뒤 굳혀 저장)` : d.closed === true ? ' · 14:00 뒤 굳힌 값' : ''} · 후보 ${num(all.length)} 중 켜진 칩에 걸린 ${num(live.length)} · 보이는 ${num(rows.length)} · ${d.buyAt ? (st.openAt ? `${hmTxt(d.buyAt)} 부터 판 · 매수가 = 정규장 ${hmTxt(String(st.openAt).replace(':', ''))} 시가` : `${hmTxt(d.buyAt)} 매수`) : '매수 시각 —'} · 판 것 ${sold.length}(손절 ${sold.filter((x) => x.s.why === '손절').length} · 꺾임 ${sold.filter((x) => x.s.why === '꺾임').length} · 고점 ${sold.filter((x) => x.s.why === '고점').length}) · 끝까지 들고 감 ${R.length - sold.length} · 결과 평균 ${sgn(resAvg)} · 이긴 것 ${res.filter((v) => v > 0).length} · 진 것 ${res.filter((v) => v < 0).length}`;
-  $('dt-pnl-sum').innerHTML = P ? `<b>${st.set.mode === 'day' ? `하루 ${manTxt(st.set.dayWon)}을 ${C.nb}종목에 나눠(종목마다 ${manTxt(per)})` : `상위 ${P.n}종목 × ${manTxt(per)}`}</b> · 산 ${wonPlain(P.buy)} · 판 ${wonPlain(P.sell)} · 빼기 전 ${won(P.gross)}`
+  // 상위 몇 종목 · 금액은 이 줄에서 바로 넣는다(11-18 재권님 「상위종목 갯수넣을수 있게 금액도 넣을수 있게 … 이거 수정하면 일별로 다 값이 다시 적용되서 그달 총액 다시 정산되게」) — 바꾸면 그날 판 · 달 합계(monthPaint)가 같은 셈으로 다시 셈
+  const IN_TOP = '<input data-set="top" class="rl-in rl-num" inputmode="numeric" aria-label="상위 몇 종목">', IN_WON = '<input data-set="won" class="rl-in rl-num" inputmode="numeric" aria-label="금액(만원)">';
+  const head = `총 ${IN_WON}만원 ÷ 상위 ${IN_TOP}종목`;   // 재권님 「종목에 똑같이 나눠 - 종목마다 3000만원 이것을 종목 으로 바꿔」 → 「앞에 금액은 총금액이고 종목수로 나눠서 사는걸로」 — 총액을 종목 수로 똑같이 나눠 삼(종목마다 몫은 손익 칸 머리에)
+  $('dt-pnl-sum').innerHTML = P ? `<b>${head}</b> · 산 ${wonPlain(P.buy)} · 판 ${wonPlain(P.sell)} · 빼기 전 ${won(P.gross)}`
     + ` · 거래세 ${wonPlain(P.tx)} · 농특세 ${wonPlain(P.rural)} · 수수료 ${P.fee == null ? '빈칸 — 안 셈' : wonPlain(P.fee)}`
-    + ` · <b>세후 손익 <span class="${signClass(P.net, NUM) || ''}">${won(P.net)}</span> (${pct(P.net / P.buy * 100)})</b>${noMkt ? ` · 시장 모름 ${noMkt}종목은 세후에서 뺌` : ''}` : '— 손익을 셀 값이 없음';
+    + ` · <b>세후 손익 <span class="${signClass(P.net, NUM) || ''}">${won(P.net)}</span> (${pct(P.net / P.buy * 100)})</b>${noMkt ? ` · 시장 모름 ${noMkt}종목은 세후에서 뺌` : ''}` : `<b>${head}</b> · — 손익을 셀 값이 없음`;
+  setFill();
   if (!rows.length) { $('dt-box').innerHTML = '<div class="st-err">— 이 날 굳힌 단타 종목 없음</div>'; return; }
   const cell = (x, k) => {
     const v = x.p[k];
@@ -344,7 +348,8 @@ async function monthPaint() {
     if (my !== monSeq || !root) return;
   }
   let tot = 0, won0 = 0, lost = 0, cnt = 0; const miss = [];
-  const parts = ds.map((d) => { const D = get(d); if (!D) { miss.push(dayTxt(d)); return `<span>${dayTxt(d)} <span class="st-err">못 받음</span></span>`; }
+  // 최근 날이 앞(11-18 재권님 「11월 합계는 최근날짜가 앞으로 오게」)
+  const parts = ds.slice().reverse().map((d) => { const D = get(d); if (!D) { miss.push(dayTxt(d)); return `<span>${dayTxt(d)} <span class="st-err">못 받음</span></span>`; }
     const C = calc(D); if (!C.P) return `<span>${dayTxt(d)} 매매 없음</span>`;
     cnt++; tot += C.P.net; if (C.P.net > 0) won0++; else if (C.P.net < 0) lost++;
     return `<span>${dayTxt(d)} <span class="${signClass(C.P.net, NUM) || ''}">${won(C.P.net)}</span>${C.LIVE ? '<small>장중</small>' : ''}</span>`; });
@@ -458,14 +463,15 @@ BIND.push(() => $('dt-only').addEventListener('click', (e) => { const b = e.targ
 
 async function loadFee() {
   try { const r = await fetch(DOC, { cache: 'no-store' }); const j = r.ok ? await r.json() : null; const R0 = j && j.data && j.data.rules && j.data.rules.dt30 ? j.data.rules.dt30 : {}; const v = R0.feePct; st.fee = v == null || v === '' ? null : Number(v);
-    st.set = { ...DEF_SET, ...(R0.set && typeof R0.set === 'object' ? R0.set : {}) }; }
+    st.set = { ...DEF_SET, ...(R0.set && typeof R0.set === 'object' ? R0.set : {}), mode: 'day' };   // 돈은 늘 전체 금액 ÷ 종목 수
+    if (R0.set && R0.set.mode === 'each' && R0.set.perWon) st.set.dayWon = R0.set.perWon * (st.set.top || PNL_TOP); }   // 옛 저장값(종목마다)은 같은 돈이 되게 옮김
   catch (e) { st.fee = null; st.set = { ...DEF_SET }; }
   $('dt-fee').value = st.fee == null ? '' : String(st.fee);
   setFill();
 }
 // 셈 칸에 지금 값 채우기 · 단추 켜짐 표시
 function setFill() {
-  const S = st.set, box = $('dt-set'); if (!box) return;
+  const S = st.set, box = $('dt-pnl'); if (!box) return;
   const v = { minChip: S.minChip || '', top: S.top, won: (S.mode === 'day' ? S.dayWon : S.perWon) / 10000, stop: S.stop == null ? '' : S.stop, trail: S.trail == null ? '' : S.trail, turnPct: S.turnPct || '' };
   box.querySelectorAll('[data-set]').forEach((el) => { if (document.activeElement !== el) el.value = String(v[el.dataset.set] ?? ''); });
   box.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('is-active', b.dataset.mode === S.mode));
@@ -510,7 +516,7 @@ function setRead(el) {
   return S;
 }
 BIND.push(() => {
-  const box = $('dt-set');
+  const box = $('dt-pnl');   // 셈 칸 줄 + 손익 머리 줄(상위 · 금액)
   box.addEventListener('change', (e) => { const el = e.target.closest('[data-set]'); if (!el) return; const S = setRead(el); if (S) setChange(S); });
   box.addEventListener('click', (e) => {
     const m = e.target.closest('[data-mode]'); if (m) { e.preventDefault(); if (m.dataset.mode !== st.set.mode) setChange({ ...st.set, mode: m.dataset.mode }); return; }
@@ -549,12 +555,9 @@ const TPL = `
           <div class="dt-row"><span class="dt-hd">보기</span><div class="dt-bar"><span class="dt-lb">거르기</span><div class="dt-seg" id="dt-only" role="tablist" aria-label="이벤트 거르기"></div><span class="dt-lb">줄 세우기</span><div class="dt-seg" id="dt-order" role="tablist" aria-label="줄 세우기"></div></div></div>
         </div>
         <div class="dt-pnl" id="dt-pnl"><div id="dt-pnl-sum">—</div>
-          <label class="dt-fee">증권수수료 <input id="dt-fee" class="rl-in rl-num" inputmode="decimal" aria-label="증권수수료(%) — 살 때 · 팔 때 각각" placeholder="( )">% <span class="rl-sug">살 때 · 팔 때 각각 · 넣으면 저장되고 바로 다시 셈</span> <span id="dt-fee-msg" class="rl-sug"></span></label>
+          <label class="dt-fee">증권수수료 <input id="dt-fee" class="rl-in rl-num" inputmode="decimal" aria-label="증권수수료(%) — 팔 때만" placeholder="( )">% <span class="rl-sug">팔 때만 · 넣으면 저장되고 바로 다시 셈</span> <span id="dt-fee-msg" class="rl-sug"></span></label>
           <div class="dt-set" id="dt-set" aria-label="셈 칸 — 넣으면 저장되고 바로 다시 셈" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:0 18px">
             <label class="dt-fee">칩 <input data-set="minChip" class="rl-in rl-num" inputmode="numeric" aria-label="칩 몇 개 이상만">개 이상 <span class="rl-sug">빈칸 = 전체</span></label>
-            <label class="dt-fee">상위 <input data-set="top" class="rl-in rl-num" inputmode="numeric" aria-label="상위 몇 종목">종목</label>
-            <label class="dt-fee">돈 <span class="dt-seg" role="tablist" aria-label="돈 넣는 법"><button type="button" class="kh-chip" data-mode="each">종목마다</button><button type="button" class="kh-chip" data-mode="day">하루 나눠</button></span>
-              <input data-set="won" class="rl-in rl-num" inputmode="numeric" aria-label="돈(만원)">만원</label>
             <label class="dt-fee">손절 <input data-set="stop" class="rl-in rl-num" inputmode="decimal" aria-label="손절(매수가 대비 %)">% <span class="rl-sug">빈칸 = 안 함</span></label>
             <label class="dt-fee">꺾임 <span class="dt-seg"><button type="button" class="kh-chip" data-turn="1">켬</button><button type="button" class="kh-chip" data-turn="0">끔</button></span> 앞 시각보다 <input data-set="turnPct" class="rl-in rl-num" inputmode="decimal" aria-label="꺾임 — 앞 시각보다 몇 % 넘게 내리면 팜">% 넘게 내리면 <span class="rl-sug">그 이하는 무시 · 빈칸 = 0</span></label>
             <label class="dt-fee">고점 대비 − <input data-set="trail" class="rl-in rl-num" inputmode="decimal" aria-label="고점 대비 몇 % 내리면 팜">% 내리면 팜 <span class="rl-sug">빈칸 = 안 씀 · 꺾임을 켜 두면 꺾임이 먼저 걸려 이 칸은 거의 안 듦</span></label>
