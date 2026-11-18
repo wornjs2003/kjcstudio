@@ -10545,7 +10545,7 @@ class Handler(SimpleHTTPRequestHandler):
             if route == "vi-stats":
                 # VI · 급등 뒤 얼마나 오르나(server/vi_stats.py · 2026-11-18 · 단타 판 묶음 ④) — 쌓인 사건 · DB 5분봉으로 셈 · KIS 안 부름
                 try:
-                    nd = max(1, min(int((qs.get("days") or [vi_stats.DAYS_DEFAULT])[0]), 120))
+                    nd = max(1, min(int((qs.get("days") or [vi_stats.DAYS_DEFAULT])[0]), vi_stats.DAYS_MAX))
                 except ValueError:
                     self._send_json({"ok": False, "error": "days 는 숫자입니다."}, 400)
                     return
