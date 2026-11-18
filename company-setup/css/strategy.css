@@ -288,4 +288,6 @@
 .dt .sf .sf-body { height: 460px; display: flex; flex-direction: column; }   /* 업종 · 테마 탭(갈아 끼우기)을 오가도 칸 높이 그대로 — 줄은 칸 안 스크롤 */
 .dt .sf .sf-tw { flex: 1; min-height: 0; overflow: auto; }
 .dt .sf-tb thead th { position: sticky; top: 0; background: var(--kh-bg-card); }
-.dt .sf-tb thead tr:nth-child(2) th { top: 27px; }
+.dt .sf-tb thead tr.sf-grp th { height: 30px; box-sizing: border-box; }
+.dt .sf-tb thead tr:nth-child(2) th { top: 30px; }   /* 첫 머리 줄 높이(30)와 같게 — 스크롤 때 안 겹침(qa) */
+.dt .sf .sf-meta { flex: none; margin-bottom: 6px; }
