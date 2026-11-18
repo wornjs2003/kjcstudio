@@ -492,7 +492,7 @@ const TPL = `
       <div class="st-meta" id="dt-meta">값을 받는 중…</div>
       <h2 class="st-sec">단타 — <span class="dt-at">—</span> 매수 → 30분마다 14:00 까지</h2>
       <div class="st-tg dt-days" id="dt-days" role="tablist" aria-label="날짜"></div>
-      <div class="st-card sf" id="dt-sf"><div class="sf-h"><b>섹터수급 — 같은 업종에 돈이 들어오나 · 프리장 08:00 ~ 정규장 09:30</b> <span class="st-cap sf-meta">—</span></div><div class="sf-body"><div class="st-err">—</div></div></div>
+      <div class="st-card sf" id="dt-sf"><div class="sf-h"><b>섹터수급 — 같은 업종 · 테마에 돈이 들어오나 · 프리장 08:00 ~ 정규장 09:30</b> <span class="dt-seg sf-by" role="tablist" aria-label="업종 · 테마"></span> <span class="st-cap sf-meta">—</span></div><div class="sf-body"><div class="st-err">—</div></div></div>
       <div class="st-card">
         <div class="st-cap dt-cap" id="dt-cap">단타 목록(<span class="dt-at">—</span> 에 연 후보 100 · 아래 칩을 켜고 끄면 겹친 수로 다시 줄 세움)을 그 시각 값에 산 것으로 보고, 매수가 대비 몇 % 인지 30분마다 · 날마다 쌓음 · 30거래일</div>
         <!-- 칩 영역 두 줄 (11-11 재권님 「여기 계층구조에 맞게 인지가 잘되고 보기 편하게 색도 넣어서 해줘」) — ① 단타 칩: 표 안 종목 머리 줄과 평균 줄 사이(js 가 그림) · 상위 칩마다 색 · 하위 칩은 같은 색 작은 칩으로 붙임 ② 보기: 거르기 · 줄 세우기는 회색 나눔 단추 -->
