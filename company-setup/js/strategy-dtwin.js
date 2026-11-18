@@ -3,6 +3,7 @@
 //   · 화면은 받은 값을 표로만 그림 — 묶음(칩 하나 · 둘 · 셋 · 칩 개수 · 오른 칩 개수) · 날마다(그날 이익 큰 종목)
 //   · 접기를 열 때 한 번 받음 · 다시 묻는 주기 없음 · 값이 없으면 —
 import { signClass, NUM } from '/assets/js/sign.js';
+import { renameChips } from './strategy-chipname.js';   // 칩 이름을 실시간 순위와 같게(「수급」 → 「자동」 · 11-18)
 
 const API = '/api/kis/dt30-win?days=30';
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -45,7 +46,7 @@ async function load(box) {
   try {
     const r = await fetch(API, { cache: 'no-store' });
     const j = r.ok ? await r.json() : null;
-    data = j && j.ok ? j.data : null; meta = j ? j.meta : null;
+    data = j && j.ok ? renameChips(j.data) : null; meta = j ? j.meta : null;
   } catch (e) { data = null; }
   busy = false; paint(box);
 }
