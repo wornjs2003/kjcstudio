@@ -88,10 +88,39 @@ def _now():
     return datetime.now(KST)
 
 
-def times():
-    """값 적는 시각들 ['0930', '1000', … '1400']."""
-    out, m = [], TRACK_FROM[0] * 60 + TRACK_FROM[1]
-    while m <= TRACK_TO[0] * 60 + TRACK_TO[1]:
+_late = {"day": None, "at": 0.0, "min": 0}
+
+
+def late_min(proxy, now=None):
+    """그날 정규장이 보통 날보다 몇 분 늦게 여나 — 0 보통 · 수능(10:00)이면 60. market_hours 표 한 곳 · 못 읽으면 0(보통 날로 본다) · 5분 둘레로 다시 읽음.
+    늦게 여는 날은 판의 정규장 시각들(OPEN_AT · OUT_FROM · BUY_LATE · 값 적는 시각)을 그만큼 뒤로 민다 —
+    재권님 「가로 해줘」(11-19 08:3x · (가) 1시간 미룸 — 매수가 10:00 시가). BUY_AT(판 짓기 08:00) · 지난 날 다시 세기(PAST_*)는 그대로."""
+    now = now or _now()
+    day = now.strftime("%Y%m%d")
+    if _late["day"] == day and time.time() - _late["at"] < 300:
+        return _late["min"]
+    m = 0
+    try:
+        import market_hours
+        t = market_hours.today(proxy, day=day, now=now)
+        if t.get("open") is not False:
+            a, u = t["reg"][0], t["usual"]["reg"][0]
+            m = max(0, (int(a[:2]) * 60 + int(a[2:])) - (int(u[:2]) * 60 + int(u[2:])))
+    except Exception:
+        m = 0
+    _late.update(day=day, at=time.time(), min=m)
+    return m
+
+
+def _sh(hm, off):
+    """(시, 분) 을 off 분 뒤로 — (시, 분)."""
+    return divmod(hm[0] * 60 + hm[1] + off, 60)
+
+
+def times(off=0):
+    """값 적는 시각들 ['0930', '1000', … '1400'] · off 분 늦게 여는 날은 그만큼 뒤로."""
+    out, m = [], TRACK_FROM[0] * 60 + TRACK_FROM[1] + off
+    while m <= TRACK_TO[0] * 60 + TRACK_TO[1] + off:
         out.append("%02d%02d" % divmod(m, 60))
         m += TRACK_STEP
     return out
@@ -225,7 +254,7 @@ def pre_vi_surge(proxy, cfg, day, put, pre):
         for r in ia._vi_rows(proxy, day):
             h = (r.get("cntg_vi_hour") or "").strip().zfill(6)
             code = _six((r.get("mksc_shrn_iscd") or "").strip())
-            if code and h < "%02d%02d00" % OPEN_AT:
+            if code and h < "%02d%02d00" % _sh(OPEN_AT, late_min(proxy)):
                 v = seen.setdefault(code, [(r.get("hts_kor_isnm") or "").strip(), set(), {}, None])
                 v[1].add("VI")
                 t = "%s:%s:%s" % (h[0:2], h[2:4], h[4:6])
@@ -487,7 +516,7 @@ def live(proxy, cfg, force=False):
     if (ub() if callable(ub) else getattr(proxy, "KIS_UPSTREAM_RAW", "")):
         return _live_calc(proxy, cfg)                  # 넘기는 서버(8764 · 중간 · 세션)는 자기 캐시 없이 상류를 바로 넘긴다 — 낡은 목록을 두 겹으로 쌓지 않게(qa 덧 11-18 · 상류가 이미 바로 답한다)
     now = _now()
-    pre = now.hour * 60 + now.minute < OPEN_AT[0] * 60 + OPEN_AT[1]
+    pre = now.hour * 60 + now.minute < OPEN_AT[0] * 60 + OPEN_AT[1] + late_min(proxy, now)
     with _live_lock:
         if not force and _live["data"] is not None and _live["pre"] == pre:
             if time.time() - _live["at"] >= LIVE_TTL and not _live["busy"]:
@@ -509,7 +538,8 @@ def _live_calc(proxy, cfg):
     rows 는 단타 셈 칩(OV_CHIPS)이 하나 이상 든 종목 전부(하락도 down true 로 남김) · 문턱(둘 이상 · 상위 몇)은 읽는 쪽이 정한다(지금 홈 둘 이상 · 단타 판 하나 이상 · TOP_N)."""
     import company_profile
     now = _now()
-    pre = now.hour * 60 + now.minute < OPEN_AT[0] * 60 + OPEN_AT[1]
+    off = late_min(proxy, now)
+    pre = now.hour * 60 + now.minute < OPEN_AT[0] * 60 + OPEN_AT[1] + off
     ub = getattr(proxy, "upstream_base", None)
     up = ub() if callable(ub) else getattr(proxy, "KIS_UPSTREAM_RAW", "")   # 자기 자신을 가리키는 상류는 거른다(kis_proxy._resolve_upstream · 창구 덧 11-18)
     if up:
@@ -543,7 +573,7 @@ def _live_calc(proxy, cfg):
     order = sort_rows(rows, tab)
     early = ["매수"] if "매수어림" in missing else []
     data = {"rows": rows, "meta": {
-        "at": now.strftime("%H:%M:%S"), "pre": pre, "openAt": "%02d:%02d" % OPEN_AT,
+        "at": now.strftime("%H:%M:%S"), "pre": pre, "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "lateMin": off,
         "missing": [c for c in missing if c not in ("매수어림", "매수대기")],
         "wait": (list(PRE_WAIT) + (["매수"] if "매수대기" in missing else [])) if pre else [],
         "early": early, "approx": list(early),
@@ -584,8 +614,9 @@ def build(proxy, cfg, day, skip=()):
     rows = rows[:TOP_N]
     for i, r in enumerate(rows):
         r["rank"] = i + 1
-    return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(), "rows": rows, "closed": False,
-            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % OPEN_AT, "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy), "minChips": mc,
+    off = late_min(proxy)
+    return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(off), "rows": rows, "closed": False,
+            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "lateMin": off, "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy), "minChips": mc,
                      "early": ["매수"] if "매수어림" in missing else [], "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre else None, "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
                      "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "buy 는 굳힌 때(buyAt) 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
@@ -608,7 +639,7 @@ def patch_late(proxy, cfg, b):
     if "초반상승" in want:
         try:
             o, _ = open_rise.fetch(proxy)
-            late = _now().hour * 60 + _now().minute >= BUY_LATE[0] * 60 + BUY_LATE[1]
+            late = _now().hour * 60 + _now().minute >= BUY_LATE[0] * 60 + BUY_LATE[1] + late_min(proxy)
             if o.get("phase") == "done" or (late and o.get("phase") == "pending"):   # 09:30 이 지나도 덜 받았으면 받은 데까지로
                 got["초반상승"] = {r["code"]: (r.get("name"), None, r.get("pct")) for r in o.get("rows") or [] if _six(r.get("code"))}
         except Exception:
@@ -703,9 +734,10 @@ def refresh(proxy, cfg, b):
     old = {r["code"]: r for r in b["rows"]}
     now = _now()
     nm = now.hour * 60 + now.minute
-    if nm >= OUT_FROM[0] * 60 + OUT_FROM[1]:
+    off = late_min(proxy, now)
+    if nm >= OUT_FROM[0] * 60 + OUT_FROM[1] + off:
         out |= set(old) - {r["code"] for r in nb["rows"]}        # 판에 있다가 이번에 빠진 종목(하락 · 순위 밖 · 칩 빠짐) — 그날 다시 안 넣음(재권님 11-13) · 09:01 부터 셈(11-18)
-    opened = nm >= OPEN_AT[0] * 60 + OPEN_AT[1]
+    opened = nm >= OPEN_AT[0] * 60 + OPEN_AT[1] + off
     hm = now.strftime("%H:%M")
     changed = 0
     for r in nb["rows"]:
@@ -719,7 +751,7 @@ def refresh(proxy, cfg, b):
             # 09:00 전에 든 종목 — 매수가를 09:00 정규장 시가로(시가를 아직 못 받았으면 지금 값 · 그것도 없으면 다음 바퀴에)
             r["px"], r["pxSrc"] = o["px"], o["pxSrc"]
             if r.get("open") or r.get("buy"):
-                r["buy"], r["buyAt"] = r.get("open") or r["buy"], "%02d:%02d" % OPEN_AT
+                r["buy"], r["buyAt"] = r.get("open") or r["buy"], "%02d:%02d" % _sh(OPEN_AT, off)
                 r["buySrc"] = "시가" if r.get("open") else "지금 값"
                 r.pop("buyWait", None)
             else:
@@ -738,6 +770,8 @@ def refresh(proxy, cfg, b):
             changed += 1
     changed += len(set(old) - {r["code"] for r in nb["rows"]})
     b["rows"] = nb["rows"]
+    if b.get("times") != nb["times"] and not any(o.get("px") for o in old.values()):
+        b["times"] = nb["times"]                       # 값 적는 시각 — 아직 한 칸도 안 적었으면 지금 셈(늦게 여는 날 뒤로 민 시각)으로 · 적기 시작했으면 그대로
     late = b["meta"].get("late") or {}
     b["meta"] = dict(nb["meta"], late=late, rescanAt=hm, out=sorted(out))
     return changed
@@ -1313,9 +1347,10 @@ def start(proxy):
                 now = _now()
                 day = now.strftime("%Y%m%d")
                 hm = now.hour * 60 + now.minute
+                off = late_min(proxy, now)                 # 늦게 여는 날(수능) — 정규장 시각들을 그만큼 뒤로(재권님 「가로 해줘」 11-19)
                 if now.weekday() < 5 and market_hours.today(proxy, day=day, now=now).get("open") is not False:
                     got = _load(proxy, day)
-                    if got is None and BUY_AT[0] * 60 + BUY_AT[1] <= hm < BUY_LATE[0] * 60 + BUY_LATE[1] and _status["frozen"] != day:
+                    if got is None and BUY_AT[0] * 60 + BUY_AT[1] <= hm < BUY_LATE[0] * 60 + BUY_LATE[1] + off and _status["frozen"] != day:
                         b = build(proxy, proxy.load_secrets(), day)
                         _store(proxy, b)
                         _status.update(frozen=day, error=None)
@@ -1327,7 +1362,7 @@ def start(proxy):
                         due = [t for t in b["times"] if int(t[:2]) * 60 + int(t[2:]) + 1 <= hm
                                and any(t not in r["px"] for r in b["rows"])]
                         filled_late = []
-                        if not b.get("closed") and hm < BUY_LATE[0] * 60 + BUY_LATE[1]:
+                        if not b.get("closed") and hm < BUY_LATE[0] * 60 + BUY_LATE[1] + off:
                             if time.time() - _status.get("rescan", 0) >= RESCAN_SEC:
                                 _status["rescan"] = time.time()
                                 if refresh(proxy, proxy.load_secrets(), b):
@@ -1343,7 +1378,7 @@ def start(proxy):
                         if hm >= int(PX1_AT[:2]) * 60 + int(PX1_AT[2:]) + 1 and any("px1" not in r for r in b["rows"]):
                             _px1_live(proxy, proxy.load_secrets(), b)      # 09:01 값 — 09:02 뒤 한 번(새로 든 종목은 다음 바퀴에)
                             flow_now = True
-                        if not b.get("closed") and hm >= OPEN_AT[0] * 60 + OPEN_AT[1] and time.time() - _status.get("flowNow", 0) >= FLOW_NOW_SEC:
+                        if not b.get("closed") and hm >= OPEN_AT[0] * 60 + OPEN_AT[1] + off and time.time() - _status.get("flowNow", 0) >= FLOW_NOW_SEC:
                             _status["flowNow"] = time.time()      # 그날 판 줄의 수급 지금 값 — FLOW_NOW_SEC 마다(묶음 ③ · 09:00 뒤)
                             got = flows(proxy, proxy.load_secrets(), [r["code"] for r in b["rows"]])
                             for r in b["rows"]:
