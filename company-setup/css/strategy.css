@@ -260,16 +260,3 @@
 @media (min-width: 1181px) {
   .mx .mx-body { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
 }
-/* 칩별 승률 접기 — 손익 칸 안(strategy-dtwin.js · 11-18) · 닫혀 있으면 한 줄 */
-.dt .dt-win { margin-top: 6px; }
-.dt .dt-win > summary { cursor: pointer; font-size: 13px; color: var(--kh-text-primary); font-weight: 500; }
-.dt .dw-body { margin-top: 6px; display: grid; gap: 6px; }
-.dt .dw-tabs { justify-self: start; }
-.dt .dw-tb { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; background: var(--kh-bg-card); }
-.dt .dw-tb th { font-weight: 500; color: var(--kh-text-secondary); padding: 4px 8px; text-align: right; white-space: nowrap; }
-.dt .dw-tb td { padding: 4px 8px; text-align: right; border-top: 1px solid var(--kh-border); white-space: nowrap; color: var(--kh-text-primary); }
-.dt .dw-tb .dw-l { text-align: left; }
-.dt .dw-tb .dw-top { white-space: normal; min-width: 280px; }
-.dt .dw-tb .dw-mut { color: var(--kh-text-secondary); }
-.dt .dw-tb .dw-all td { font-weight: 700; }
-.dt .dw-tw { max-height: 420px; }
