@@ -9,8 +9,8 @@
 
 .jb .jb-mk { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; background: var(--kh-bg); border-radius: var(--kh-radius-md); padding: 8px 10px; margin: 0 0 8px; }
 .jb .jb-go { font-weight: 700; padding: 1px 9px; border-radius: 999px; }
-.jb .jb-go.is-go { background: var(--kh-up-dim); color: var(--kh-up); }
-.jb .jb-go.is-stop { background: var(--kh-down-dim); color: var(--kh-down); }
+.jb .jb-go.is-go { background: var(--kh-border); color: var(--kh-text-primary); }   /* 판정 알약 — 오르내림 색을 안 쓴다(개념정의 11-18) */
+.jb .jb-go.is-stop { background: var(--kh-border); color: var(--kh-text-muted); }
 .jb .jb-go.is-unk { background: var(--kh-border); color: var(--kh-text-secondary); }
 .jb .jb-rules { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 8px; }
 .jb .jb-lb { margin: 0; }
