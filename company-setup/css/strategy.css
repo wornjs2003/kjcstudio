@@ -154,6 +154,7 @@
 .dt .dt-tb .dt-nx { border-left: 1px solid var(--kh-border-strong); white-space: nowrap; }
 .dt .dt-tb .dt-nx small { display: block; font-size: 10.5px; font-weight: 500; color: var(--kh-text-muted); }
 .dt .dt-tb .dt-nxm { color: var(--kh-text-muted); }
+.dt .dt-tb td.dt-buy small { display: block; font-size: 10.5px; font-weight: 500; color: var(--kh-text-muted); }
 .dt .dt-tb .st-name small { font-weight: 400; }
 .dt .dt-pnl { margin: 0 0 8px; padding: 8px 12px; border-radius: var(--kh-radius-sm); background: var(--kh-bg); font-size: 13.5px; color: var(--kh-text-secondary); }   /* 손익 합계 — 상위 16 · 1천만원씩 · 거래세 뺌 */
 .dt .dt-pnl b { color: var(--kh-text-primary); }

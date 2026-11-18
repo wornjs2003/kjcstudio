@@ -7,8 +7,8 @@
 //     (그 값을 룰 문서로 옮기는 것은 개발1 카드 「서버 칩 룰이 룰 문서 값을 읽게」)
 //   · 종목은 홀딩스와 같은 서버 주소 — 목록 주소가 없는 칩(단타 · 현재상승 · 장외 — 홀딩스 화면이 순위 목록에서 셈)은 —
 import { signClass, NUM } from '/assets/js/sign.js';
-import { watch } from '/holdings/js/store/longpoll.js';
-import { chipName } from './strategy-chipname.js';   // 서버 칩 이름 「수급」 → 화면 「자동」 — 바꾸는 표는 그 파일 한 곳   // 오늘 칩 목록 다시 받기 — 홀딩스 첫 화면과 같은 길(서버 롱폴 · 서버 주기)
+import { watch } from '/holdings/js/store/longpoll.js';   // 오늘 칩 목록 다시 받기 — 홀딩스 첫 화면과 같은 길(서버 롱폴 · 서버 주기)
+import { chipName } from './strategy-chipname.js';   // 서버 칩 이름 「수급」 → 화면 「자동」 — 바꾸는 표는 그 파일 한 곳
 
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -36,7 +36,7 @@ const RULES = {
     // 목록은 서버 단타 판(/api/kis/dt30 · 09:01 굳힌 판 · 칩 하나 이상 든 종목 전부) — 11-18 재권님 「이거 바로 하라고해」(작업우선순위 경유)
     //   홈 「단타」 줄은 둘 이상(홈 화면 셈)이라 갈린다 — 줄은 다 보이고 「겹친 칩」 칸 · 머리 줄 셈으로 둘 이상을 가른다
     name: '단타', url: '/api/kis/dt30', metaOf: (j) => ({ ...(j.meta || {}), ...((j.data && j.data.meta) || {}) }),
-    rows: (m) => [['고르는 조건', `아래 칩 중 하나 이상에 든 종목 — 서버 단타 판(${v(m.buyAt)} 굳힘) · 홈 「단타」 줄은 둘 이상<br>세는 칩 — 관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 · 자동 <span class="rl-sug">장외는 장 뒤에만 셈</span>`],
+    rows: (m) => [['고르는 조건', `아래 칩 중 하나 이상에 든 종목 — 서버 단타 판(${v(m.buyAt)} 부터) · 홈 「단타」 줄은 둘 이상<br>세는 칩 — ${m.watchRule === '자동' ? '관심(자동 관심 룰 · 하트 안 씀) · 프리장 · VI·급등 · 장외 · 매수 · 초반상승' : '관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 · 자동'} <span class="rl-sug">장외는 장 뒤에만 셈${m.wait && m.wait.length ? ` · 정규장 전에는 ${esc(m.wait.join(' · '))} 기다림` : ''}</span>`],
       ['시가총액', `${v(m.capMinEok == null ? null : num(m.capMinEok))}억원 이상(관심 · 프리장 · 매수) · 나머지는 칩마다의 문턱`], ['줄 세우기', esc(m.order || '겹친 칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순')]],
     list: (j) => {
       const D = j.data || {}, d = Array.isArray(D.rows) ? D.rows : [], two = d.filter((x) => x.n >= 2).length;
