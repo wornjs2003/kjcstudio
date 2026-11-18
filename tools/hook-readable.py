@@ -37,7 +37,9 @@ READ_EN_OK = {"PER", "PBR", "ROE", "EPS", "RSI", "MACD", "MA", "VWAP", "ETF", "K
               "FOMC", "AI", "API", "CSS", "PNG", "VS", "Code", "Claude", "Insight", "Holdings", "Projects", "Debugging", "NXT", "qa",
               "OK", "UN", "J", "US", "KR", "EU", "JP", "SK", "LG", "Haiku", "Chrome", "Herdr",
               # qa 재생 11-13 에 잘못 걸린 낱말 — 지수 · 거래소 · 약어
-              "STOXX", "CME", "HBM", "DB", "CNBC", "OpenDART", "SENSEX", "DAX", "KODEX", "KIND", "Opus", "Esc", "clear", "D", "S", "P", "HTML"}
+              "STOXX", "CME", "HBM", "DB", "CNBC", "OpenDART", "SENSEX", "DAX", "KODEX", "KIND", "Opus", "Esc", "clear", "D", "S", "P", "HTML",
+              # qa 재생 11-18 — 키 이름 · 지수
+              "VIX", "Cmd", "Shift", "Ctrl", "R"}
 
 FENCE = re.compile(r"```.*?(?:```|\Z)", re.S)
 QUOTE = re.compile(r"「[^「」\n]*」")
@@ -45,6 +47,8 @@ URL = re.compile(r"https?://\S+|\b[\w-]+(?:\.[\w-]+)*\.(?:com|co\.kr|kr|net|org|
 TICK = re.compile(r"`([^`\n]+)`")
 FILE = re.compile(r"\b[\w./-]+\.(?:py|js|css|html|json|md|sh|plist|command|db|txt)\b")
 EN = re.compile(r"(?<![A-Za-z0-9_&/])[A-Za-z][A-Za-z0-9_-]+")   # & · / 뒤는 앞 낱말의 일부(S&P500 · /clear)
+SHORT = re.compile(r"^▶\s*앞서 \d{1,2}:\d{2} 에 여쭌 것 그대로입니다\s*—\s*")   # 짧은 꼴 머리 — 룰이 물음 전문을 요구해 길어진다(qa 11-18 · 길이에서 뺌)
+TYPE_ASK = re.compile(r"쳐 주|입력해 주|붙여 넣어 주|돌려 주")   # 재권님이 치실 명령을 드리는 물음 — 백틱 안 명령은 「손으로 하실 것」 예외(qa 11-18)
 LOG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs", "readable.log")
 
 
@@ -85,10 +89,10 @@ def check(text):
     for line in t.splitlines():
         s = line.strip()
         if s.startswith("▶"):
-            plain = URL.sub("", TICK.sub(lambda m: "" if URL.match(m.group(1).strip()) else m.group(1), s))
+            plain = URL.sub("", TICK.sub(lambda m: "" if URL.match(m.group(1).strip()) else m.group(1), SHORT.sub("▶ ", s)))
             if len(plain) > READ_BOX_MAX:
                 hits.append("① ▶ 줄 %d자(%d 넘음)" % (len(plain), READ_BOX_MAX))
-            names = list(dict.fromkeys(codes(s) + FILE.findall(URL.sub("", TICK.sub("", s)))))   # 백틱 안 파일은 codes 가 셈
+            names = list(dict.fromkeys(([] if TYPE_ASK.search(s) else codes(s)) + FILE.findall(URL.sub("", TICK.sub("", s)))))   # 백틱 안 파일은 codes 가 셈 · 치실 명령은 뺌
             rest = FILE.sub("", URL.sub("", TICK.sub("", s)))                      # 파일 이름은 위에서 셌다 — 두 번 안 셈
             en = [w for w in EN.findall(rest) if w not in READ_EN_OK and re.sub(r"[-_]?(\d+|n)$", "", w) not in READ_EN_OK]   # MA20 · STOXX50 · D-1
             if names or en:
