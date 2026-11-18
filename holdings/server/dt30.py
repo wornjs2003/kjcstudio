@@ -15,6 +15,8 @@
     차례       칩 수 많은 순 → 초반상승(첫 5분봉 시가 대비 % · rise) 높은 순 → 시가총액 큰 순 — 상위 TOP_N
                (재권님 19:1x 「칩수가 많은순 초반상승이높은순 시총순 이렇게 해서 올려」 · 초반상승에 안 든 종목은 같은 칩 수 안에서 뒤)
                홈 「단타」 칩은 칩 수 → 시가총액이다 — 이 판만 초반상승을 둘째로 둔다
+    처음 시각  rows[].viAt · surgeAt — VI · 급등이 그날 처음 난 시각(HH:MM:SS · 없으면 null) · 오늘 판은 VI · 급등 알림이 본 시각(급등은 이 서버가 처음 본 때) ·
+               지난 날 다시 센 판은 VI 는 KIS VI 현황의 발동 시각 · 급등은 5분봉이라 그 봉 시작 「HH:MM~」(surgeApprox true) — 묶음 ① 재권님 「응 만들어」(11-18 18:0x)
     하위 칩    rows[].subs {칩: [하위]} — VI·급등: VI · 급등 / 매수: ①~④(「매수」 판 tier) / 관심: 든 묶음 이름(자동 묶음 빼고)
     칩 이름    rows[].chips 는 그때 걸린 칩 이름 전부(셈에 안 드는 볼린저 · 현재상승도 적는다 — 시황분석1 「관심 하위의 룰들」)
     매수가     09:06 그때 현재가(buy) — 시세는 fetch_quotes_multi(캐시 먼저 · 30종목씩 묶음)
@@ -106,7 +108,7 @@ def chips_now(proxy, cfg, early=True, pre=False):
     small = lambda c: cap.get(c) is not None and cap[c] < CAP_MIN_EOK
     hit, missing = {}, []
 
-    def put(code, name, chip, sub=None):
+    def put(code, name, chip, sub=None, at=None):
         code = _six(code)
         if code:
             g = hit.setdefault(code, {"name": name or "", "chips": set(), "subs": {}})
@@ -115,6 +117,8 @@ def chips_now(proxy, cfg, early=True, pre=False):
                 g["subs"][chip].append(sub)
             if not g["name"] and name:
                 g["name"] = name
+            if at and chip == "VI·급등" and sub in ("VI", "급등"):
+                _first_at(g, sub, at)
 
     try:
         watch_chips(docstore.read_doc("watchlist"), put, small)
@@ -152,7 +156,7 @@ def chips_now(proxy, cfg, early=True, pre=False):
         return hit, missing, cap, mkt
     try:
         for it in intraday_alerts.today().get("items") or []:
-            put(it.get("code"), it.get("name"), "VI·급등", "VI" if it.get("kind") == "vi" else "급등")
+            put(it.get("code"), it.get("name"), "VI·급등", "VI" if it.get("kind") == "vi" else "급등", at=it.get("t"))
     except Exception:
         missing.append("VI·급등")
     try:
@@ -187,6 +191,13 @@ def chips_now(proxy, cfg, early=True, pre=False):
     return hit, missing, cap, mkt
 
 
+def _first_at(g, sub, at):
+    """VI · 급등 처음 시각을 줄에 — viAt · surgeAt(HH:MM:SS · 가장 이른 것). 단타 판 묶음 ① — 재권님 「응 만들어」(11-18 18:0x)."""
+    k = "viAt" if sub == "VI" else "surgeAt"
+    if not g.get(k) or at < g[k]:
+        g[k] = at
+
+
 _pre_hits = {}        # 날 → {코드: (이름, {하위})} — 장 전(08:00~09:00)에 본 VI · 급등 · 09:00 뒤에도 그날 판 칩으로 남긴다(서버 재시작이면 VI 는 다시 읽고 급등은 잃음)
 
 
@@ -202,17 +213,23 @@ def pre_vi_surge(proxy, cfg, day, put, pre):
             h = (r.get("cntg_vi_hour") or "").strip().zfill(6)
             code = _six((r.get("mksc_shrn_iscd") or "").strip())
             if code and h < "%02d%02d00" % OPEN_AT:
-                seen.setdefault(code, [(r.get("hts_kor_isnm") or "").strip(), set()])[1].add("VI")
+                v = seen.setdefault(code, [(r.get("hts_kor_isnm") or "").strip(), set(), {}])
+                v[1].add("VI")
+                t = "%s:%s:%s" % (h[0:2], h[2:4], h[4:6])
+                if not v[2].get("VI") or t < v[2]["VI"]:
+                    v[2]["VI"] = t
         seen["_vi"] = True
     if pre:
         for r in proxy.fetch_movers(cfg, "up", "all") or []:
             code = _six(r.get("code"))
             if code and r.get("pct") is not None and r["pct"] >= ia.SURGE_PCT:
-                seen.setdefault(code, [r.get("name") or "", set()])[1].add("급등")
+                v = seen.setdefault(code, [r.get("name") or "", set(), {}])
+                v[1].add("급등")
+                v[2].setdefault("급등", _now().strftime("%H:%M:%S"))      # 이 서버가 처음 본 때(넘은 때가 아니다 · 순위 캐시만큼 늦을 수 있다)
     for code, v in seen.items():
         if code != "_vi":
             for sub in sorted(v[1]):
-                put(code, v[0], "VI·급등", sub)
+                put(code, v[0], "VI·급등", sub, at=(v[2] if len(v) > 2 else {}).get(sub))
 
 
 def watch_chips(doc, put, small, merged=True):
@@ -338,7 +355,8 @@ def live(proxy, cfg, force=False):
     with _live_lock:
         if not force and _live["data"] is not None and _live["pre"] == pre and time.time() - _live["at"] < LIVE_TTL:
             return _live["data"]
-    up = getattr(proxy, "KIS_UPSTREAM_RAW", "")
+    ub = getattr(proxy, "upstream_base", None)
+    up = ub() if callable(ub) else getattr(proxy, "KIS_UPSTREAM_RAW", "")   # 자기 자신을 가리키는 상류는 거른다(kis_proxy._resolve_upstream · 창구 덧 11-18)
     if up:
         # 넘기는 서버(메인 8764 · 중간 · 세션)는 셈하지 않고 상류(8765)의 목록을 그대로 받는다 — 셈은 한 곳 ·
         # 관심 문서는 8765 에만 있다(qa 검수 11-18 — 8767 이 자기 폴더 관심 문서를 못 읽어 「관심」 이 빠짐 · 첫 셈 33초)
@@ -363,6 +381,7 @@ def live(proxy, cfg, force=False):
         rows.append({"code": code, "name": g["name"] or p.get("name") or "", "market": mkt.get(code), "cap": cap.get(code), "sector": sec.get(code),
                      "chips": [c for c in OV_CHIPS + ("현재상승", "볼린저") if c in chips], "subs": g["subs"], "n": len(chips & set(OV_CHIPS)),
                      "price": p.get("price"), "open": p.get("open"), "pct": p.get("pct"), "rise": g.get("rise"),
+                     "viAt": g.get("viAt"), "surgeAt": g.get("surgeAt"),
                      "down": p.get("pct") is not None and p["pct"] < DROP_BELOW_PCT})      # 하락 — 모르면 안 뺀다(재권님 11-12)
     rows.sort(key=lambda r: (-r["n"], -(r["rise"] if r["rise"] is not None else -1e9), -(r["cap"] if r["cap"] is not None else -1)))   # 재권님 19:1x
     early = ["매수"] if "매수어림" in missing else []
@@ -394,7 +413,7 @@ def build(proxy, cfg, day, skip=()):
         if x["down"]:
             down.append(x["code"])                     # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
             continue
-        r = {k: x[k] for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open")}
+        r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "viAt", "surgeAt")}
         r.update(buy=None if pre else x["price"], px={}, pxSrc={})
         if pre:
             r["buyWait"] = True                        # 09:00 전에 든 종목 — 매수가는 09:00 정규장 시가(refresh 가 09:00 뒤 첫 바퀴에 채움 · 그때까지 buy null)
@@ -720,7 +739,8 @@ def rebuild(proxy, day, prev, cfg=None):
         base = base_of(c)
         hi = max([d[hm][1] for hm in vi_bars if hm in d and d[hm][1]] or [0])
         if base and hi and (hi / base - 1) * 100 >= intraday_alerts.SURGE_PCT:
-            put(c, "VI·급등", "급등")
+            first = next(hm for hm in vi_bars if hm in d and d[hm][1] and (d[hm][1] / base - 1) * 100 >= intraday_alerts.SURGE_PCT)
+            put(c, "VI·급등", "급등", surgeAt=first[:2] + ":" + first[2:] + "~", surgeApprox=True)   # 5분봉이라 그 봉 시작 시각(5분 단위 어림 · 「~」)
             if c not in pv:
                 approx_base["급등"] += 1                   # 어림 종가(앞 날 5분봉)로 센 급등
     if cfg:                                                # VI — KIS 「VI 현황」 에 날짜 · 종목을 넣으면 그 종목의 그날 VI(최근 것부터 30건)가 온다(19:4x 잼)
@@ -747,8 +767,10 @@ def rebuild(proxy, day, prev, cfg=None):
                     if "VI" not in missing:
                         missing.append("VI")
                     continue
-                if any(r.get("bsop_date") == day and "090000" <= str(r.get("cntg_vi_hour") or "") <= vt for r in out):
-                    put(c, "VI·급등", "VI")
+                hs = sorted(str(r.get("cntg_vi_hour") or "").zfill(6) for r in out
+                            if r.get("bsop_date") == day and "090000" <= str(r.get("cntg_vi_hour") or "") <= vt)
+                if hs:
+                    put(c, "VI·급등", "VI", viAt="%s:%s:%s" % (hs[0][0:2], hs[0][2:4], hs[0][4:6]))   # 그날 그 종목 VI 중 가장 이른 것(KIS VI 현황)
                     if c not in pv:
                         approx_base["VI"] += 1             # 어림 종가로 골라 물은 종목에서 나온 VI
     jb = []
@@ -796,6 +818,7 @@ def rebuild(proxy, day, prev, cfg=None):
                      "chips": [c for c in OV_CHIPS + ("현재상승", "볼린저") if c in chips], "subs": g["subs"],
                      "n": len(chips & set(OV_CHIPS)), "buy": buy,
                      "pct": round((buy / base - 1) * 100, 2) if buy and base else None, "rise": g.get("rise"),
+                     "viAt": g.get("viAt"), "surgeAt": g.get("surgeAt"), "surgeApprox": g.get("surgeApprox"),
                      "px": px, "pxSrc": src})
     rows.sort(key=lambda r: (-r["n"], -(r["rise"] if r["rise"] is not None else -1e9), -(r["cap"] if r["cap"] is not None else -1)))
     rows = rows[:TOP_N]
