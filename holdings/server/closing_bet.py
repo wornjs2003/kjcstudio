@@ -44,7 +44,7 @@ AFTER_EVERY = 120               # 장 뒤 몇 초마다 — 재권님 승인 「
 LAST_AT, LAST_UNTIL = (20, 1), (20, 30)
 PRE_AT, PRE_UNTIL = (8, 51), (15, 0)
 INDEX = (("kospi", "0001"), ("kosdaq", "1001"))
-MKT_WINDOWS = 3                 # 지수 일봉을 100일(달력) 구간씩 몇 번 — 121거래일을 넉넉히 덮는다
+MKT_WINDOWS = 4                 # 지수 일봉 구간(한 번에 50개)을 몇 번까지 — 121거래일을 넉넉히 덮는다
 DAYS_MAX = 60
 TICK = 20
 
@@ -91,15 +91,20 @@ def _cap(proxy, cfg, code):
 
 
 def _index_bars(proxy, cfg, code, today):
-    """지수 일봉 [(날, 종가)] 오래된 것부터 — 100일(달력) 구간씩 MKT_WINDOWS 번."""
+    """지수 일봉 [(날, 종가)] 오래된 것부터 — 120거래일 + 그날이 모일 때까지 뒤로 민다(MKT_WINDOWS 번까지).
+    한 번에 50개까지만 오므로 다음 구간은 받은 것 가운데 가장 옛날 봉 하루 전에서 잇는다 — 달력으로 자르면 사이가 빈다."""
     got = {}
     to = today
     for _ in range(MKT_WINDOWS):
-        frm = to - timedelta(days=99)
-        for b in proxy._index_bars_from_kis(cfg, code, "D", frm, to):
-            got[b["ts"]] = b["close"]
-        to = frm - timedelta(days=1)
+        bars = proxy._index_bars_from_kis(cfg, code, "D", to - timedelta(days=99), to)
         time.sleep(nxt_pre.GAP_SEC)
+        if not bars:
+            break
+        for b in bars:
+            got[b["ts"]] = b["close"]
+        if len(got) >= RULE["highDays"] + 1:
+            break
+        to = datetime.strptime(min(b["ts"] for b in bars), "%Y%m%d") - timedelta(days=1)
     return sorted(got.items())
 
 
