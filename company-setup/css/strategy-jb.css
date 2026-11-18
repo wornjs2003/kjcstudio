@@ -24,6 +24,7 @@
 .jb .jb-foot { margin: 8px 0 0; }
 .jb .jb-nx small { display: block; color: var(--kh-text-muted); font-size: 11px; }
 .jb .jb-nxsum { margin: 0 0 6px; }
+.jb .jb-days { flex-wrap: wrap; row-gap: 6px; }   /* 쌓인 날이 늘면 줄을 바꾼다 — 좁은 폭에서 화면이 옆으로 밀렸다(qa 11-18 · 13날 462 폭에 654) */
 .jb .jb-sep { display: inline-block; width: 1px; height: 16px; background: var(--kh-border); margin: 0 4px; vertical-align: middle; }
 @media (min-width: 701px) {
   .jb-ftabs { margin-top: 6px; }
