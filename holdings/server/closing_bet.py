@@ -13,7 +13,7 @@
                 afterLow  = 그 사이 본 값 중 가장 낮은 것(AFTER_EVERY 초마다 본 값이라 참 저가보다 높을 수 있다)
               평일 20:01~20:29 — afterLast = 장외 마지막가(15:2x 메인장 마감 뒤 체결이 없으면 null)
               다음 거래일 08:51~15:00 — pre = 그날 넥장 분봉(08:00~08:49) 중 처음 체결된 봉의 시가(후보마다 1~2번)
-    판정      pass.rise    정규장 등락 ≥ RULE.rise 그리고 < RULE.limitUp(상한가 근처는 종가에 못 산다 — 대입에서 뺐다)
+    판정      pass.rise    정규장 등락 ≥ RULE.rise(BIG 둘은 RULE.big) 그리고 < RULE.limitUp(상한가 근처는 종가에 못 산다 — 대입에서 뺐다)
               pass.pos     종가 위치 (종가−저가)/(고가−저가) ≥ RULE.pos
               pass.top     rise · pos 를 통과한 종목들 중 거래대금 순위 ≤ RULE.top
               pass.rebreak rebreakAt 이 있음(20:00 까지)
@@ -331,7 +331,8 @@ def board(proxy, day=None):
     for r in rs:
         rng = (r["high"] or 0) - (r["low"] or 0)
         pos = _r((r["close"] - r["low"]) / rng, 3) if r["close"] and r["low"] is not None and rng > 0 else None
-        rise = None if r["chg"] is None else (RULE["rise"] <= r["chg"] < RULE["limitUp"])
+        # 삼성전자 · 하이닉스는 판정 선도 RULE.big(시황분석 2년 대입 — 그 둘은 후보 선 · 판정 선이 모두 +3%)
+        rise = None if r["chg"] is None else ((RULE["big"] if r["code"] in BIG else RULE["rise"]) <= r["chg"] < RULE["limitUp"])
         out.append({"code": r["code"], "name": r["name"], "market": r["market"], "cap": r["cap"], "chg": r["chg"], "pos": pos,
                     "value": _r(r["value"] / 1e8, 1) if r["value"] is not None else None, "close": r["close"],
                     "rebreakAt": r["rebreak_at"], "afterLow": r["after_low"], "afterLast": r["after_last"], "pre": r["pre"],
