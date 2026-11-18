@@ -1204,8 +1204,9 @@ def _vipx_fill(proxy, b):
     if old:                                            # 시각 칸 전 판(11-18 전 · 그날 판 처음 셈) — 그날 쌓인 VI 사건(vi_stats.vi_events)의 첫 발동
         try:
             with proxy.db_conn() as conn:
-                ev = {c: (at, px) for c, at, px in conn.execute(
-                    "SELECT code, at, price FROM vi_events WHERE day = ? AND kind = 'VI'", (b["day"],))}
+                ev = {}
+                for c, at, px in conn.execute("SELECT code, at, price FROM vi_events WHERE day = ? AND kind = 'VI' ORDER BY at", (b["day"],)):
+                    ev.setdefault(c, (at, px))         # 그 종목 그날 첫 발동(이른 시각 먼저 · 개념정의 덧 11-19)
         except Exception:
             ev = {}
         for r in old:
