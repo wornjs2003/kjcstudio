@@ -34,6 +34,7 @@ BAR_MIN = 5
 SPANS = (("r30", 30), ("r60", 60))
 AT_1400 = "1355"             # 14:00 값 = 13:55~14:00 봉 종가
 CLOSE_BAR = "1525"           # 최고를 보는 끝 봉(15:25~15:30)
+FILLED_KEY = "vi_stats_filled"   # sync_meta — 봉 채움을 마친 날
 _SCHEMA = """CREATE TABLE IF NOT EXISTS vi_events (day TEXT, code TEXT, kind TEXT, at TEXT, name TEXT, price REAL,
               PRIMARY KEY (day, code, kind))"""
 _status = {"error": None, "stored": None, "filled": 0, "at": None}
@@ -180,7 +181,8 @@ def start(proxy):
 
     def loop():
         time.sleep(50)
-        filled = None
+        import dart
+        filled = dart._meta_get(FILLED_KEY)           # 그날 채움을 한 날 — DB 에 둔다(재시작마다 다시 받지 않게 · qa 덧)
         while True:
             try:
                 now = _now()
@@ -191,6 +193,7 @@ def start(proxy):
                         _status["stored"] = now.strftime("%H:%M")
                     if filled != day and hm >= FILL_FROM[0] * 60 + FILL_FROM[1]:
                         filled = day                     # 멈춰도 그날은 다시 안 돈다
+                        dart._meta_set(FILLED_KEY, day)
                         n = fill_bars(proxy, day)
                         _status["filled"] += n
                         if n:
