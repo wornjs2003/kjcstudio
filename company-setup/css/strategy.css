@@ -131,7 +131,8 @@
 .dt .dt-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; color: var(--kh-text-secondary); }   /* 쌓인 날 없음 — 빈 칸 가운데 크게 */
 .dt .dt-empty b { font-size: 20px; color: var(--kh-text-primary); }
 .dt table.dt-tb { width: 100%; border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
-.dt .dt-tb th { position: sticky; top: 0; z-index: 1; background: var(--kh-bg-card); font-size: 12px; font-weight: 600; color: var(--kh-text-muted); }
+.dt .dt-tb th { position: sticky; top: 0; z-index: 2; background: var(--kh-bg-card); font-size: 12px; font-weight: 600; color: var(--kh-text-muted); }
+.dt .dt-tb th.st-name { z-index: 3; }   /* 머리 줄이 왼쪽에 붙은 종목 칸(z 1) 위로 — 스크롤하면 종목 이름이 칩 머리를 덮었음(11-18) */
 .dt .dt-tb tr.dt-t2 th { top: 26px; }
 .dt .dt-tb th, .dt .dt-tb td { text-align: right; white-space: nowrap; padding: 6px 8px; }
 .dt .dt-tb td { border-bottom: 1px solid var(--kh-border); }
