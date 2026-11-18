@@ -320,39 +320,76 @@ def early_buy(proxy, cfg, codes, put, pre=False):
     return n
 
 
-def build(proxy, cfg, day, skip=()):
-    """09:06 판 — {day, buyAt, times, rows, meta}. skip — 그날 판에 들었다가 빠진 종목(다시 안 넣음 · 까닭 무관)."""
+LIVE_TTL = 60                 # 단타 목록(live) 캐시(초) — 홈 「단타」 · 단타 판이 같은 셈을 이 나이 안이면 함께 쓴다 · 화면은 롱폴 열쇠 dt30.LIVE_TTL
+_live = {"at": 0.0, "pre": None, "data": None}
+_live_lock = threading.Lock()
+
+
+def live(proxy, cfg, force=False):
+    """단타 목록 한 곳 — 지금 걸린 칩(chips_now) · 시세 · 하락 표시 · 차례. 홈 「단타」 와 단타 판(build)이 같이 쓴다
+    — 재권님 「홈에 있는 칩을 단타에도 추가해서 동기화하고 한곳에서 받도록 해」(11-18 17:4x) · 「둘이 동기화해서 홈이든 단테든 한곳에 있어야 하는 정본」.
+    {"rows": [{code, name, market, cap, sector, chips, subs, n, price, open, pct, rise, down}], "meta": {at, pre, missing, wait, early, approx, earlyNote, candidates, dropBelowPct, capMinEok, order}}
+    rows 는 단타 셈 칩(OV_CHIPS)이 하나 이상 든 종목 전부(하락도 down true 로 남김) · 문턱(둘 이상 · 상위 몇)은 읽는 쪽이 정한다(지금 홈 둘 이상 · 단타 판 하나 이상 · TOP_N)."""
     import company_profile
     now = _now()
-    pre = now.strftime("%Y%m%d") == day and now.hour * 60 + now.minute < OPEN_AT[0] * 60 + OPEN_AT[1]
+    pre = now.hour * 60 + now.minute < OPEN_AT[0] * 60 + OPEN_AT[1]
+    with _live_lock:
+        if not force and _live["data"] is not None and _live["pre"] == pre and time.time() - _live["at"] < LIVE_TTL:
+            return _live["data"]
     hit, missing, cap, mkt = chips_now(proxy, cfg, pre=pre)
-    ov = {c: g for c, g in hit.items() if g["chips"] & set(OV_CHIPS)}     # 칩 하나라도(18:5x — 화면이 칩을 끄고 켜며 그 안에서 다시 셈)
-    prices, _ = proxy.fetch_quotes_multi(cfg, list(ov)) if ov else ({}, {})    # 30종목씩 묶어 부른다 — 한 종목씩이면 수백 건이 몰려 KIS 가 거절했다(18:5x 시험)
+    ov = {c: g for c, g in hit.items() if g["chips"] & set(OV_CHIPS)}
+    prices, _ = proxy.fetch_quotes_multi(cfg, list(ov), max_age=proxy.PRICE_CACHE_TTL) if ov else ({}, {})   # 30종목씩 묶음 · 시세 캐시 함께
     sec = company_profile.sectors()
-    rows, down = [], []
+    rows = []
     for code, g in ov.items():
-        if code in skip:
-            continue                                   # 들었다가 빠진 종목 — 그날 다시 안 넣음(재권님 11-12 11:3x · 11-13 「밀린건 넣지 않는다」)
         p = prices.get(code) or {}
-        if p.get("pct") is not None and p["pct"] < DROP_BELOW_PCT:
-            down.append(code)                          # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
-            continue
         chips = set(g["chips"])
         if p.get("open") and p.get("price") and (p["price"] / p["open"] - 1) * 100 >= NOW_RISE_PCT:
             chips.add("현재상승")
-        n = len(chips & set(OV_CHIPS))
-        rows.append({"code": code, "name": g["name"], "market": mkt.get(code), "cap": cap.get(code), "sector": sec.get(code),
-                     "chips": [c for c in OV_CHIPS + ("현재상승", "볼린저") if c in chips], "subs": g["subs"], "n": n,
-                     "buy": None if pre else p.get("price"), "pct": p.get("pct"), "rise": g.get("rise"), "px": {}, "pxSrc": {}, "open": p.get("open")})
+        rows.append({"code": code, "name": g["name"] or p.get("name") or "", "market": mkt.get(code), "cap": cap.get(code), "sector": sec.get(code),
+                     "chips": [c for c in OV_CHIPS + ("현재상승", "볼린저") if c in chips], "subs": g["subs"], "n": len(chips & set(OV_CHIPS)),
+                     "price": p.get("price"), "open": p.get("open"), "pct": p.get("pct"), "rise": g.get("rise"),
+                     "down": p.get("pct") is not None and p["pct"] < DROP_BELOW_PCT})      # 하락 — 모르면 안 뺀다(재권님 11-12)
+    rows.sort(key=lambda r: (-r["n"], -(r["rise"] if r["rise"] is not None else -1e9), -(r["cap"] if r["cap"] is not None else -1)))   # 재권님 19:1x
+    early = ["매수"] if "매수어림" in missing else []
+    data = {"rows": rows, "meta": {
+        "at": now.strftime("%H:%M:%S"), "pre": pre, "openAt": "%02d:%02d" % OPEN_AT,
+        "missing": [c for c in missing if c not in ("매수어림", "매수대기")],
+        "wait": (list(PRE_WAIT) + (["매수"] if "매수대기" in missing else [])) if pre else [],
+        "early": early, "approx": list(early),
+        "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre and early else None,
+        "candidates": len(ov), "chips": list(OV_CHIPS), "dropBelowPct": DROP_BELOW_PCT, "capMinEok": CAP_MIN_EOK, "watchRule": "자동",
+        "order": "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순", "ttl": LIVE_TTL}}
+    with _live_lock:
+        _live.update(at=time.time(), pre=pre, data=data)
+    return data
+
+
+def build(proxy, cfg, day, skip=()):
+    """09:06 판 — {day, buyAt, times, rows, meta}. skip — 그날 판에 들었다가 빠진 종목(다시 안 넣음 · 까닭 무관)."""
+    lv = live(proxy, cfg, force=True)                  # 단타 목록 한 곳(홈 「단타」 와 같은 셈) — 판은 그 목록에 매수가 · 30분 값 · 손익만 더한다
+    lm = lv["meta"]
+    pre = bool(lm["pre"]) and _now().strftime("%Y%m%d") == day
+    rows, down = [], []
+    for x in lv["rows"]:
+        if x["code"] in skip:
+            continue                                   # 들었다가 빠진 종목 — 그날 다시 안 넣음(재권님 11-12 11:3x · 11-13 「밀린건 넣지 않는다」)
+        if x["down"]:
+            down.append(x["code"])                     # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
+            continue
+        r = {k: x[k] for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open")}
+        r.update(buy=None if pre else x["price"], px={}, pxSrc={})
         if pre:
-            rows[-1]["buyWait"] = True                 # 09:00 전에 든 종목 — 매수가는 09:00 정규장 시가(refresh 가 09:00 뒤 첫 바퀴에 채움 · 그때까지 buy null)
+            r["buyWait"] = True                        # 09:00 전에 든 종목 — 매수가는 09:00 정규장 시가(refresh 가 09:00 뒤 첫 바퀴에 채움 · 그때까지 buy null)
+        rows.append(r)
+    missing = lm["missing"] + (["매수어림"] if lm["early"] else [])
+    ov = lv["rows"]
     rows.sort(key=lambda r: (-r["n"], -(r["rise"] if r["rise"] is not None else -1e9), -(r["cap"] if r["cap"] is not None else -1)))   # 재권님 19:1x
     rows = rows[:TOP_N]
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(), "rows": rows, "closed": False,
-            "meta": {"rebuilt": False, "missing": [c for c in missing if c not in ("매수어림", "매수대기")],
-                     "wait": (list(PRE_WAIT) + (["매수"] if "매수대기" in missing else [])) if pre else [], "openAt": "%02d:%02d" % OPEN_AT, "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy),
+            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % OPEN_AT, "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy),
                      "early": ["매수"] if "매수어림" in missing else [], "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre else None, "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
                      "order": "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순",
                      "note": "buy 는 굳힌 때(buyAt) 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
