@@ -49,7 +49,10 @@ BAR_MIN = 5                  # 5분봉 길이(분)
 BUY_LATE = (10, 30)          # 굳히는 시각 — 재권님 「굳히기는 10시반으로」(11-18 · 안에 「응」 17:0x) · 그 전 「9시 35분에 굳히는걸로」(11-12 09:2x) · BUY_AT 부터 이때까지 판을 다시 세고 이 뒤로는 줄을 안 바꾼다 · 서버가 이 뒤에 뜨면 그날 판은 안 짓는다
 OPEN_AT = (9, 0)             # 정규장 첫 값 — 그 전(BUY_AT ~ 09:00)에 든 종목의 매수가는 이 시각 정규장 시가(rows[].buyWait 가 그 표시 · 09:00 뒤 첫 다시 세기에 채움)
 OUT_FROM = (9, 1)            # 「한 번 빠지면 그날 다시 안 넣음」 을 세기 시작하는 때 — 장 전에는 프리장 값이 오가며 줄이 자주 바뀐다(11-18 안 「응」)
-PRE_WAIT = ("VI·급등", "매수", "초반상승")   # 09:00 전에는 값이 날 수 없는 칩 — 못 받음(missing)이 아니라 기다림(meta.wait) · 매수 어림(외국계 창구 · 프로그램)도 안 부른다
+PRE_WAIT = ("매수", "초반상승")   # 09:00 전에는 값이 날 수 없는 칩 — 못 받음(missing)이 아니라 기다림(meta.wait)
+# VI·급등 은 08:00 부터 — 재권님 「8시부터 받을수 있는 정보는 다 받으면 좋을거같은데. 단타 칩들은 정보가 빠르게 들어올수록 좋아」 →
+# 장 전 VI(KIS VI 현황 08시대 — 넥스트 프리장으로 보임 · 11-19 08시대에 잴 것) · 장 전 급등(통합 등락률 순위 · 전일 종가 대비 SURGE_PCT 이상)에 「응 해줘」
+# (11-18 17:2x · 시황분석1 경유). 텔레그램 알림(intraday_alerts)은 정규장만 그대로 — 단타 판만 pre_vi_surge 로 따로 읽는다 · 매수 어림(외국계 창구 · 프로그램)도 안 부른다
 PAST_BUY_AT = (9, 1)         # 지난 날 다시 세기(rebuild)의 기준 시각 — 11-18 전 판 셈 그대로 둔다(지난 날을 10:30 기준으로 다시 세지 않는다 · 지시 밖)
 PAST_LATE = (9, 35)          # 〃 VI·급등 창 끝
 DAYS_KEEP = 30               # 「30일 추적」
@@ -86,7 +89,7 @@ def _six(code):
 
 def chips_now(proxy, cfg, early=True, pre=False):
     """지금 걸린 칩 — ({코드: {이름, 칩 집합}}, 못 받은 칩 이름 목록, 시가총액 {코드: 억원}).
-    pre — 09:00 전: PRE_WAIT 칩(VI·급등 · 매수 · 초반상승)과 볼린저는 안 부르고 못 받음에도 안 넣는다(build 가 meta.wait 로)."""
+    pre — 09:00 전: PRE_WAIT 칩(매수 · 초반상승)과 볼린저는 안 부르고 못 받음에도 안 넣는다(build 가 meta.wait 로) · VI·급등 은 장 전 것(pre_vi_surge)."""
     import dart, docstore, intraday_alerts, open_rise, pre_flow, signal_watch
     uni = dart.universe_rows(None)
     cap = {r["stock_code"]: r["market_cap"] for r in uni}
@@ -123,6 +126,10 @@ def chips_now(proxy, cfg, early=True, pre=False):
                 put(r.get("code"), r.get("name"), "프리장")
     except Exception:
         missing.append("프리장")
+    try:
+        pre_vi_surge(proxy, cfg, _now().strftime("%Y%m%d"), put, pre)
+    except Exception:
+        missing.append("VI·급등")
     if pre:
         return hit, missing, cap, mkt
     try:
@@ -160,6 +167,34 @@ def chips_now(proxy, cfg, early=True, pre=False):
     except Exception:
         pass
     return hit, missing, cap, mkt
+
+
+_pre_hits = {}        # 날 → {코드: (이름, {하위})} — 장 전(08:00~09:00)에 본 VI · 급등 · 09:00 뒤에도 그날 판 칩으로 남긴다(서버 재시작이면 VI 는 다시 읽고 급등은 잃음)
+
+
+def pre_vi_surge(proxy, cfg, day, put, pre):
+    """장 전 VI · 급등을 「VI·급등」 칩으로 — 정규장 것은 intraday_alerts 몫(chips_now). 그날 처음 부를 때와 장 전 동안은 VI 현황을 다시 읽는다.
+    VI — KIS VI 현황(상승 · 그날 · 최근 30건)에서 발동 시각이 09:00 전인 것 · 급등 — 장 전에만 통합 등락률 순위(전일 종가 대비) SURGE_PCT 이상."""
+    import intraday_alerts as ia
+    seen = _pre_hits.setdefault(day, {})
+    for k in [d for d in _pre_hits if d != day]:
+        _pre_hits.pop(k, None)
+    if pre or "_vi" not in seen:
+        for r in ia._vi_rows(proxy, day):
+            h = (r.get("cntg_vi_hour") or "").strip().zfill(6)
+            code = _six((r.get("mksc_shrn_iscd") or "").strip())
+            if code and h < "%02d%02d00" % OPEN_AT:
+                seen.setdefault(code, [(r.get("hts_kor_isnm") or "").strip(), set()])[1].add("VI")
+        seen["_vi"] = True
+    if pre:
+        for r in proxy.fetch_movers(cfg, "up", "all") or []:
+            code = _six(r.get("code"))
+            if code and r.get("pct") is not None and r["pct"] >= ia.SURGE_PCT:
+                seen.setdefault(code, [r.get("name") or "", set()])[1].add("급등")
+    for code, v in seen.items():
+        if code != "_vi":
+            for sub in sorted(v[1]):
+                put(code, v[0], "VI·급등", sub)
 
 
 def watch_chips(doc, put, small, merged=True):
