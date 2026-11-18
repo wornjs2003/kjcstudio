@@ -12,6 +12,7 @@
               수수료는 룰 문서 strategy-rules 의 rules.dt30.feePct 한 곳(화면 칸 · 재권님이 넣으심)
               빈칸이면 수수료 없이 셈하고 meta.fee 에 null · meta.feeNote 「빈칸 — 수수료 안 셈」(0 으로 보지 않는다)
               승률은 주소가 부를 때 그때 수수료로 셈한다 — 수수료를 바꾸면 지난 날에도 바로 든다(쌓는 것은 손익뿐)
+    칩 이름   11-18 전 판의 「수급」(자동 관심 종목)은 「관심」 으로 이어 세고 하트 「관심」 은 뺀다(하트로만 든 종목은 줄째 뺌) — 재권님 「전 하트 관심은 삭제」(11-18)
     칸        칩마다 · 두 칩 겹침 · 세 칩 겹침(rows[].chips 이름 전부 — 셈에 안 드는 현재상승 · 볼린저도) ·
               칩 수별(rows[].n — 단타 셈에 드는 칩 수) · 칩 수별 중 현재상승이 든 것
               각 칸: n(건수 · 못 잼 뺌) · win · winRate(%) · avg · median · over3(손익 BIG_PCT % 넘음) · unmeasured(못 잼)
@@ -34,7 +35,7 @@ DAYS_DEFAULT = 30
 TICK = 60                    # 끝난 판을 보는 간격(초)
 RISE_CHIP = "현재상승"
 TAX = {"KOSPI": {"tx": 0.05, "rural": 0.15}, "KOSDAQ": {"tx": 0.20, "rural": 0.0}}   # % · 2026 세율 — 화면 strategy-dt30.js TAX 와 같은 값(두 곳)
-VER = "v2"                   # 쌓는 줄 모양이 바뀌면 올린다 — 옛 줄을 다시 쌓는다(v2 · 시장 칸)
+VER = "v3"                   # 쌓는 줄 모양이 바뀌면 올린다 — 옛 줄을 다시 쌓는다(v2 · 시장 칸 · v3 · 11-18 전 판 칩 이름 옮김)
 _SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_win (day TEXT PRIMARY KEY, src_saved TEXT, rows TEXT NOT NULL, at TEXT)"
 _status = {"error": None, "filled": 0, "at": None}
 
@@ -43,13 +44,26 @@ def _now():
     return datetime.now(KST)
 
 
+def _chips_now_rule(b, r):
+    """11-18 전 판(meta.watchRule 이 「자동」 이 아님)의 칩을 지금 이름으로 — 「수급」(자동 관심 종목)은 「관심」 으로 이어 세고
+    하트 「관심」 은 뺀다 — 재권님 「전 하트 관심은 삭제」(11-18 17:1x · 「수급」 을 새 「관심」 과 한 줄로 이어 셀까요 물음에).
+    → (칩 목록, 단타 셈 칩 수). 뺀 뒤 단타 셈 칩이 하나도 없으면(하트로만 든 종목) 칩 수 0 — day_rows 가 그 종목을 뺀다."""
+    chips = list(r.get("chips") or [])
+    if (b.get("meta") or {}).get("watchRule") != "자동":
+        chips = [("관심" if c == "수급" else c) for c in chips if c != "관심"]
+    return chips, len(set(chips) & set(dt30.OV_CHIPS))
+
+
 def day_rows(b):
-    """판(dict) → 종목마다 {code · name · chips · n · buy · sell · ret(% · 못 잼이면 None)}."""
+    """판(dict) → 종목마다 {code · name · chips · n · buy · sell · ret(% · 못 잼이면 None)} · 11-18 전 판은 칩 이름을 지금 룰로(_chips_now_rule)."""
     out = []
     for r in b.get("rows") or []:
+        chips, n = _chips_now_rule(b, r)
+        if n == 0:
+            continue                                   # 하트 관심으로만 든 종목 — 지금 룰로는 판에 없다(재권님 「삭제」)
         buy, sell = r.get("buy"), (r.get("px") or {}).get(SELL_AT)
         ret = round((sell - buy) / buy * 100, 3) if buy and sell is not None else None
-        out.append({"code": r.get("code"), "name": r.get("name"), "market": r.get("market"), "chips": list(r.get("chips") or []), "n": r.get("n"),
+        out.append({"code": r.get("code"), "name": r.get("name"), "market": r.get("market"), "chips": chips, "n": n,
                     "buy": buy, "sell": sell, "ret": ret})
     return out
 
