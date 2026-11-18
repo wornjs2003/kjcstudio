@@ -216,11 +216,12 @@ def build(proxy, day, by):
     codes = sorted({c for s in sn.values() for c in s})
     out = {}
     for name, cs in _groups(proxy, by, codes).items():
-        amt, pct = {}, {}
+        amt, pct, gotm = {}, {}, {}
         for slot in SLOTS:
             fa, ta = SLOT_FROM[slot], SLOT_TO[slot]
             if ta not in sn or (fa is not None and fa not in sn):
                 amt[slot] = None                  # 사진이 빠졌다 — 못 잼
+                gotm[slot] = None
             else:
                 tot, got = 0, 0
                 for c in cs:
@@ -231,12 +232,13 @@ def build(proxy, day, by):
                     tot += b - a
                     got += 1
                 amt[slot] = round(tot / EOK, 2) if got else None
+                gotm[slot] = got                  # 그 칸을 셈한 종목 수 — n 보다 작으면 못 받은 종목이 있다(qa)
             if ta in sn:
                 ps = [p for p in (_pct(ta, sn[ta].get(c), close.get(c)) for c in cs) if p is not None]
                 pct[slot] = round(sum(ps) / len(ps), 2) if ps else None
             else:
                 pct[slot] = None
-        out[name] = {"n": len(cs), "amt": amt, "pct": pct}
+        out[name] = {"n": len(cs), "amt": amt, "got": gotm, "pct": pct}
     return out
 
 
@@ -302,7 +304,7 @@ def _phase(now):
 
 def board(proxy, by="sector", day=None):
     """data {day, prev(앞 거래일 · 없으면 null), by, slots,
-             rows: [{name, n, amt{slot: 억원}, prev{slot: 억원 · 앞날 같은 칸}, pct{slot: % · 칸 끝 묶음 평균 · 전날 정규장 종가 대비}}]}
+             rows: [{name, n, amt{slot: 억원}, got{slot: 그 칸을 셈한 종목 수 · n 보다 작으면 못 받은 종목 있음}, prev{slot: 억원 · 앞날 같은 칸}, pct{slot: % · 칸 끝 묶음 평균 · 전날 정규장 종가 대비}}]}
        meta {asof, phase(pre · open · closed), refreshMs(닫혔으면 null), by, days, status}
 
     줄은 그날이나 앞날에 거래대금이 있는 묶음 전부(자르지 않는다) · 차례는 그날 합 큰 순(화면이 다시 세운다) · 없는 값은 null."""
@@ -323,6 +325,7 @@ def board(proxy, by="sector", day=None):
         if not any(v for v in amt.values()) and not any(v for v in pv.values()):
             continue
         rows.append({"name": name, "n": c.get("n") if c else o.get("n"), "amt": amt, "prev": pv,
+                     "got": {s: (c.get("got") or {}).get(s) for s in SLOTS},
                      "pct": {s: (c.get("pct") or {}).get(s) for s in SLOTS}})
     rows.sort(key=lambda r: -sum(v for v in r["amt"].values() if v))
     ph = _phase(now) if day == today else "closed"
