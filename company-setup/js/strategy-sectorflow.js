@@ -44,7 +44,7 @@ function paint(j) {
   body.innerHTML = `<div class="st-cap sf-meta">${esc(meta.textContent)}</div><div class="st-scroll sf-tw"><table class="sf-tb"><thead>
       <tr class="sf-grp"><th></th><th></th>${nPre ? `<th colspan="${nPre}">프리장(넥스트레이드)</th>` : ''}${nReg ? `<th colspan="${nReg}" class="sf-sep">정규장</th>` : ''}<th colspan="3" class="sf-sep">합 · 09:30 까지</th></tr>
       <tr><th></th><th class="sf-l">${by === 'theme' ? '테마' : '업종'}</th>${th}<th class="sf-sep">거래대금</th><th>전날 대비</th><th>등락률</th></tr></thead>
-      <tbody>${tr || `<tr><td class="sf-l st-err" colspan="${SL.length + 5}">— 아직 칸이 없음(08:00 전)</td></tr>`}</tbody></table></div>
+      <tbody>${tr || `<tr><td class="sf-l st-err" colspan="${SL.length + 5}">${m.phase === 'pre' ? `— 아직 칸이 없음(첫 칸은 ${SL[1] ? hm(SL[1]) : '—'} 사진 뒤)` : '— 이 날 찍힌 값 없음(서버가 그 시간에 값을 안 남김)'}</td></tr>`}</tbody></table></div>
     <div class="st-cap">거래대금 = 그 칸 동안 그 줄 종목들의 5분봉 종가 × 거래량 합 · 08:50~09:00 은 장이 없어 칸을 뺌 · 등락률 = 마지막 칸 시각에 그 줄 종목 평균(전날 정규장 종가 대비) · 전날 대비 = 같은 칸들의 합끼리</div>`;
 }
 
