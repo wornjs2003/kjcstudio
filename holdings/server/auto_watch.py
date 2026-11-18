@@ -661,10 +661,15 @@ def compute(proxy, live=None):
                 if len(lst) < ma_days:
                     lst.append(cl)
             if not live:             # 옛 줄은 시가 칸이 비어 있다 — 그날 일봉 시가로 채운다(없으면 「못 셈」)
-                for code, o in conn.execute("SELECT code, open FROM candles WHERE period = 'D' AND substr(ts, 1, 8) = ?", (day,)):
-                    t = today.get(code)
-                    if t and t[6] is None and o:
-                        today[code] = tuple(t[:6]) + (o,)
+                # 시가가 빈 그날 종목만 · 색인(code · period · ts)을 타게 ts 범위로 — substr(ts) 로 거르면 일봉 전 표를 훑어 6초 넘게 걸렸다(2026-11-18 · 5.77초 → 0.085초)
+                need = [c for c, t in today.items() if t[6] is None]
+                for i in range(0, len(need), 500):
+                    part = need[i:i + 500]
+                    for code, o in conn.execute(
+                            "SELECT code, open FROM candles WHERE code IN (%s) AND period = 'D' AND ts >= ? AND ts < ?" % ",".join("?" * len(part)),
+                            (*part, day, day + "~")):
+                        if o:
+                            today[code] = tuple(today[code][:6]) + (o,)
         hist = {}
         for code, vol in conn.execute(
                 "SELECT code, vol FROM auto_watch_day WHERE day < ? AND day >= ? ORDER BY code, day DESC",
