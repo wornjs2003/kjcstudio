@@ -439,6 +439,9 @@ def _live_bg(proxy, cfg):
 def live(proxy, cfg, force=False):
     """단타 목록 — 캐시가 LIVE_TTL 을 넘었어도 가진 목록을 바로 내주고 뒤에서 한 번만 다시 센다(meta.at 이 그 목록을 센 때).
     가진 목록이 없거나(뜬 직후 · 장 전 ↔ 장중이 바뀜) force 면 셈을 기다린다 — 그 사이 다른 셈이 끝났으면 그것을 쓴다."""
+    ub = getattr(proxy, "upstream_base", None)
+    if (ub() if callable(ub) else getattr(proxy, "KIS_UPSTREAM_RAW", "")):
+        return _live_calc(proxy, cfg)                  # 넘기는 서버(8764 · 중간 · 세션)는 자기 캐시 없이 상류를 바로 넘긴다 — 낡은 목록을 두 겹으로 쌓지 않게(qa 덧 11-18 · 상류가 이미 바로 답한다)
     now = _now()
     pre = now.hour * 60 + now.minute < OPEN_AT[0] * 60 + OPEN_AT[1]
     with _live_lock:
