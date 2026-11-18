@@ -330,10 +330,11 @@ function paint(d) {
     : `<td class="dt-buy">${num(r.buy)}${r.buySrc ? `<small>${r.buyAt ? `${hmTxt(String(r.buyAt).replace(':', ''))} ` : ''}${esc(r.buySrc)}</small>` : ''}</td>`);
   // 09:01 값 (11-18 재권님 「9시 1분 등락도 넣어줘 이쯤 살거니깐」 → 「응 그렇게 해」) — 서버 rows[].px1(개발2 · 첫 1분봉 종가 「1m」 · 없으면 그때 현재가 「now」) · 시각은 meta.px1At
   //   화면은 매수가 대비 % 만 셈 · px1 칸이 없으면 「아직」(서버가 아직 안 줌 · 그날 09:02 전) · px 가 null 이면 「—」 못 잼(0 아님)
-  const p1At = NM0.px1At ? hmTxt(String(NM0.px1At).replace(':', '')) : '09:01';
+  const p1At = NM0.px1At ? hmTxt(String(NM0.px1At).replace(':', '')) : '첫 1분';   // 시각은 서버 meta.px1At 한 곳 — 없으면 시각을 안 적음(개념정의 11-18)
   const p1Ch = (r) => (r.px1 && r.px1.px != null && Number(r.buy) > 0 ? (Number(r.px1.px) / Number(r.buy) - 1) * 100 : null);
   const p1Td = (r) => { const o = r.px1;
-    if (o === undefined) return '<td class="dt-nx"><span class="dt-nxm">아직</span></td>';
+    // 「아직」 은 서버가 09:01 을 세는 판(meta.px1At)이고 아직 안 굳은 날만 — 그 밖은 영영 안 오므로 「—」(개념정의 11-18 · 「못 한다」 와 「아직 안 했다」 를 가른다)
+    if (o === undefined) return NM0.px1At && d.closed !== true ? '<td class="dt-nx"><span class="dt-nxm">아직</span></td>' : '<td class="dt-nx" data-tip="이 날은 서버가 09:01 값을 안 셈">—</td>';
     if (!o || o.px == null) return '<td class="dt-nx">—<small>못 잼</small></td>';
     return `<td class="dt-nx">${pct(p1Ch(r))}<small>${num(o.px)}${o.src === 'now' ? ' · 그때 현재가' : ''}</small></td>`; };
   const p1V = R.map((x) => p1Ch(x.r)).filter((v) => v != null);
