@@ -12,8 +12,8 @@ const WK = ['일', '월', '화', '수', '목', '금', '토'];
 const dayTxt = (d) => { const m = String(d || '').match(/^(\d{4})(\d{2})(\d{2})$/); return m ? `${m[2]}-${m[3]}(${WK[new Date(+m[1], +m[2] - 1, +m[3]).getDay()]})` : '—'; };
 const hm = (t) => (/^\d{4}$/.test(String(t)) ? `${String(t).slice(0, 2)}:${String(t).slice(2)}` : esc(t || '—'));
 
-const TABS = [['chip', '칩 하나'], ['pair', '칩 둘'], ['triple', '칩 셋'], ['count', '칩 개수'], ['countRise', '오른 칩 개수'], ['days', '날마다']];
-const KEY = { chip: '칩', pair: '칩 둘', triple: '칩 셋', count: '칩 개수', countRise: '오른 칩 개수' };
+const TABS = [['chip', '칩 하나'], ['pair', '칩 둘'], ['triple', '칩 셋'], ['count', '칩 개수'], ['countRise', '현재상승 든 종목 · 칩 개수'], ['days', '날마다']];
+const KEY = { chip: '칩', pair: '칩 둘', triple: '칩 셋', count: '칩 개수', countRise: '칩 개수(현재상승 든 종목만)' };
 let data = null, meta = null, tab = 'chip', busy = false;
 
 const head = (k) => `<tr><th class="dw-l">${k}</th><th>종목</th><th>이김</th><th>승률</th><th>평균</th><th>중앙값</th><th>+${num(meta && meta.bigPct, 0)}% 넘음</th><th>못 잼</th></tr>`;
