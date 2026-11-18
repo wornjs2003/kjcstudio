@@ -1213,6 +1213,18 @@ def _vipx_fill(proxy, b):
                 r["viAt"] = ev[r["code"]][0]
                 if ev[r["code"]][1]:
                     r["viPx"] = {"at": ev[r["code"]][0], "px": ev[r["code"]][1], "src": "vi"}
+    olds = [r for r in rows if not r.get("surgeAt") and not r.get("surgeApprox") and "급등" in ((r.get("subs") or {}).get("VI·급등") or [])]
+    if olds:                                           # 〃 급등 — 그날 쌓인 급등 사건의 첫 시각(이 서버가 처음 본 때 · 판 viAt 과 같은 출처) · 저장 안 함
+        try:
+            with proxy.db_conn() as conn:
+                sv = {}
+                for c, at in conn.execute("SELECT code, at FROM vi_events WHERE day = ? AND kind = '급등' ORDER BY at", (b["day"],)):
+                    sv.setdefault(c, at)
+        except Exception:
+            sv = {}
+        for r in olds:
+            if r["code"] in sv:
+                r["surgeAt"] = sv[r["code"]]
     need = [r for r in rows if r.get("viAt") and not r.get("viPx")]
     if not need:
         return 0
