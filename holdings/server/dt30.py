@@ -433,11 +433,14 @@ def score_conflicts(tab):
     return sorted(plain & split)
 
 
-def row_score(r, tab):
-    """그 줄의 점수 합 — 칩마다 「칩」 열쇠 또는 맞는 「칩|HH:MM 전/이후」 열쇠(둘 다 적혔으면 시각 열쇠만 · score_conflicts)."""
-    total = 0.0
+def row_score_by(r, tab):
+    """칩마다의 몫 {칩: 점수} — 칩마다 「칩」 열쇠 또는 맞는 「칩|HH:MM 전/이후」 열쇠(둘 다 적혔으면 시각 열쇠만 · score_conflicts).
+    점수가 안 걸린 칩은 안 넣는다. 화면은 끈 칩 몫만 빼서 차례를 세운다 — 셈은 이 한 곳(시황분석1 과 맞춤 11-18 20:3x)."""
+    by = {}
     bad = set(score_conflicts(tab))
     for c in r.get("chips") or []:
+        total = 0.0
+        hit = False
         names = {c, SCORE_ALIAS.get(c, c)}
         for k, v in tab.items():
             name, _, cond = k.partition("|")
@@ -447,6 +450,7 @@ def row_score(r, tab):
                 if name.strip() in bad:
                     continue
                 total += v
+                hit = True
                 continue
             m = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*(전|이후)\s*", cond)
             t = _chip_time(r, c)
@@ -455,7 +459,15 @@ def row_score(r, tab):
             hm = "%02d:%s" % (int(m.group(1)), m.group(2))
             if (t[:5] < hm) == (m.group(3) == "전"):
                 total += v
-    return round(total, 4)
+                hit = True
+        if hit:
+            by[c] = round(total, 4)
+    return by
+
+
+def row_score(r, tab):
+    """그 줄의 점수 합 — row_score_by 의 합."""
+    return round(sum(row_score_by(r, tab).values()), 4)
 
 
 def sort_rows(rows, tab):
@@ -464,11 +476,13 @@ def sort_rows(rows, tab):
     cap = lambda r: -(r["cap"] if r.get("cap") is not None else -1)
     if tab:
         for r in rows:
-            r["score"] = row_score(r, tab)
+            r["scoreBy"] = row_score_by(r, tab)
+            r["score"] = round(sum(r["scoreBy"].values()), 4)
         rows.sort(key=lambda r: (-r["score"], rise(r), cap(r)))
         return "점수 합 큰 순 → 초반상승 높은 순 → 시가총액 순"
     for r in rows:
         r.pop("score", None)
+        r.pop("scoreBy", None)
     rows.sort(key=lambda r: (-r["n"], rise(r), cap(r)))   # 재권님 19:1x
     return "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순"
 
