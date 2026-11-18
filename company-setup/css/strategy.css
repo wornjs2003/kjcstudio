@@ -273,3 +273,15 @@
 .dt .dw-tb .dw-mut { color: var(--kh-text-secondary); }
 .dt .dw-tb .dw-all td { font-weight: 700; }
 .dt .dw-tw { height: 420px; }   /* 탭(갈아 끼우기)마다 줄 수가 달라도 칸 높이 그대로 — 「보는 것을 바꿔도 자리는 그대로다」 */
+/* 섹터수급 — 단타 판 맨 위(strategy-sectorflow.js · 11-18 재권님 「응 만들어줘」) · 줄 = 업종 · 칸 = 10분 거래대금 · 바탕 짙기는 tone.js */
+.dt .sf { margin-bottom: 12px; }
+.dt .sf .sf-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
+.dt .sf .sf-h b { font-size: 15px; color: var(--kh-text-primary); }
+.dt .sf-tb { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.dt .sf-tb th { font-weight: 500; color: var(--kh-text-secondary); padding: 5px 8px; text-align: right; white-space: nowrap; }
+.dt .sf-tb td { padding: 5px 8px; text-align: right; border-top: 1px solid var(--kh-border); white-space: nowrap; color: var(--kh-text-primary); }
+.dt .sf-tb .sf-l { text-align: left; }
+.dt .sf-tb .sf-l small { color: var(--kh-text-secondary); font-size: 11.5px; }
+.dt .sf-tb .sf-i { color: var(--kh-text-secondary); width: 1%; }
+.dt .sf-tb .sf-sep { border-left: 1px solid var(--kh-border); }
+.dt .sf-tb .sf-grp th { text-align: center; color: var(--kh-text-primary); }
