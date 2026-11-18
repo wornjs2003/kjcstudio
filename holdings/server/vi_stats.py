@@ -19,13 +19,17 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
+import dt30
+import dt30_win
+
 KST = timezone(timedelta(hours=9))
 STORE_AT = (15, 40)          # 그날 VI · 급등을 쌓기 시작하는 때(정규장 끝 뒤) — 그 뒤 바퀴마다 빠진 것만 더한다
-FILL_FROM = (20, 10)         # 봉이 없는 종목의 그날 1분봉을 받는 때 — 넥장(20:00) 뒤(dt30.QUIET 끝과 같은 자리)
+FILL_FROM = dt30.QUIET[1]    # 봉이 없는 종목의 그날 1분봉을 받는 때 — 단타 판 되채우기가 KIS 를 쓰기 시작하는 때(넥장 뒤 · 값은 dt30 한 곳)
 FILL_MAX = 300               # 하루 봉 받는 종목 수 한도
 TICK = 60                    # 바퀴(초)
 DAYS_DEFAULT = 30
-BIG_PCT = 3.0
+DAYS_MAX = 120               # 주소 days 상한 — kis_proxy 가 읽는다
+BIG_PCT = dt30_win.BIG_PCT   # 「3% 넘음」 문턱 — 칩별 승률과 같은 값(사본 안 둠 · 개념정의 검수)
 BAR_MIN = 5
 SPANS = (("r30", 30), ("r60", 60))
 AT_1400 = "1355"             # 14:00 값 = 13:55~14:00 봉 종가
