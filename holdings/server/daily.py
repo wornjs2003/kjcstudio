@@ -668,7 +668,7 @@ def _loop(once, name, label):
     threading.Thread(target=loop, daemon=True, name=name).start()
 
 
-def start_us_daily(get_indices, get_night=None, peek_overnight=None, clear_overnight=None, send=None, keep=KEEP):
+def start_us_daily(get_indices, get_night=None, peek_overnight=None, clear_overnight=None, send=None, keep=KEEP, us_close=None):
     """07:00 미국 데일리 루프 — `kis_proxy` 가 국내 것 옆에 한 줄로 부른다.
 
     `peek_overnight()` 은 events 가 조용한 시간에 쌓은 글을 **읽기만** 하고, 이 글이 **보내진 뒤** `clear_overnight(n)` 으로 비운다 —
@@ -683,6 +683,12 @@ def start_us_daily(get_indices, get_night=None, peek_overnight=None, clear_overn
         if docstore.read_doc(name) is not None:
             return
         indices = get_indices()
+        if us_close:
+            # 다우 · 러셀 2000 · 미국 10년 · 달러인덱스 — 못 받으면 그 줄 값이 null(us_close.py · 2026-11-18)
+            try:
+                indices = us_close.merge_into(indices, us_close.rows_for(now.date(), us_close.series("1mo")))
+            except Exception as e:
+                print("미국 데일리 마감 값 넷 못 셈 — %s: %s" % (type(e).__name__, safe_message(e)), flush=True)
         night = None
         if get_night:
             try:
@@ -706,5 +712,35 @@ def start_us_daily(get_indices, get_night=None, peek_overnight=None, clear_overn
             if data.get("sent") and overnight and clear_overnight:
                 clear_overnight(len(overnight))
 
+    if us_close:
+        threading.Thread(target=_fill_us_close, args=(us_close,), daemon=True, name="usdaily-fill").start()
     _loop(once, "daily-us-0700", "미국 데일리")
     return True
+
+
+def _fill_us_close(us_close):
+    """남아 있는 미국 데일리 저장본에 마감 값 넷을 채운다 — 서버가 뜰 때 한 번 (2026-11-18 시황분석1 「지난 날도 채울 수 있으면」).
+
+    넷이 다 값이 있는 저장본은 건드리지 않는다. 텔레그램 글 · 보낸 기록은 그대로 둔다 — 그날 실제로 간 글이라서다.
+    """
+    time.sleep(30)      # 시장지표 캐시가 먼저 차게
+    try:
+        names = sorted(docstore.list_docs(US_PREFIX))
+        todo = []
+        for name in names:
+            d = docstore.read_doc(name) or {}
+            have = {i.get("code"): i for i in (d.get("indices") or [])}
+            if any(have.get(c) is None or have[c].get("value") is None for c in us_close.CODES):
+                todo.append((name, d))
+        if not todo:
+            return
+        ser = us_close.series("1y")
+        n = 0
+        for name, d in todo:
+            day = datetime.strptime(name[len(US_PREFIX):], "%Y%m%d").date()
+            d["indices"] = us_close.merge_into(d.get("indices"), us_close.rows_for(day, ser))
+            if docstore.write_doc(name, d, history=False):
+                n += 1
+        print("미국 데일리 마감 값 넷 채움 — 저장본 %d장" % n, flush=True)
+    except Exception as e:
+        print("미국 데일리 마감 값 넷 채우기 실패 — %s: %s" % (type(e).__name__, safe_message(e)), flush=True)

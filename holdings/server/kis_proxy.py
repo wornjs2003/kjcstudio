@@ -53,6 +53,7 @@ import re
 import signal_watch
 import heartbeat
 import daily
+import us_close         # 미국 데일리에 다우 · 러셀 2000 · 미국 10년 · 달러인덱스 마감 값(2026-11-18 · server/us_close.py)
 from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -11387,6 +11388,7 @@ def main():
             peek_overnight=(events.peek_overnight if (is_sender(args.port) and not SLOW) else None),
             clear_overnight=(events.clear_overnight if (is_sender(args.port) and not SLOW) else None),
             send=_us_send,
+            us_close=us_close,
         )
         print("  미국 데일리 : 화~토 %02d:%02d 에 저장 (%s)"
               % (daily.US_SEND_AT // 60, daily.US_SEND_AT % 60, _tg))
