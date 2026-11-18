@@ -86,6 +86,14 @@ MACD_FAST, MACD_SLOW, MACD_SIG = 12, 26, 9
 SAME_BAR = True
 WINDOW = 5
 
+# **바닥(low) 신호만 둘을 풀었다** (2026-11-17 재권님 — SK텔레콤 10:30 · 10:35 가 한 봉씩 엇갈려 안 걸림 →
+#   「2번은 볼린저 룰에서만 제외해도 돼 그 룰로 재봐」 → 「응 그렇게 해줘」). 고점(high)은 그대로다.
+#     LOW_NEED_BULL   ① 하단을 건드린 봉이 양봉이어야 하나 — False(안 본다)
+#     LOW_RSI_BARS    ③ RSI 가 30 아래에서 오르기 시작한 봉을 이번 봉 포함 몇 봉 안에서 찾나 — 2(이번 · 바로 앞)
+#   잰 것 — 메인 DB 5분봉 11-04~11-17 · 대상 350 · 다 끝난 봉으로 다시 셈: 지금 대비 3할쯤 늘어남(양봉만 빼면 5%쯤 · SK텔레콤은 안 걸림)
+LOW_NEED_BULL = False
+LOW_RSI_BARS = 2
+
 # **하루 횟수를 안 막는다** (2026-09-23 지시 — 「횟수는 제한을 두지 않는다」).
 # 전에는 한 종목에 하루 3번까지였다.
 #
@@ -192,9 +200,10 @@ def judge(rows):
 
     **둘은 대칭이다** (2026-09-23 지시 — 「이 두가지 경우에 다 메세지가 와야해」).
 
-        바닥(low)   ① 볼린저 **하단**을 **저가**가 건드리고 그 봉이 **양봉**
+        바닥(low)   ① 볼린저 **하단**을 **저가**가 건드림(양봉은 LOW_NEED_BULL — 2026-11-17 부터 안 봄)
                     ② MACD 히스토그램이 **음수인데 직전보다 큼** (매도세가 약해진다)
                     ③ RSI 가 직전 < 30 이고 이번이 직전보다 큼 (**30 아래에서 오르기 시작** · 2026-11-09 — 그 전은 30 을 넘은 봉)
+                       · 이번 봉 포함 LOW_RSI_BARS 봉 안에서(2026-11-17 · 바로 앞 봉까지)
 
         고점(high)  ① 볼린저 **상단**을 **고가**가 건드리고 그 봉이 **음봉**
                     ② MACD 히스토그램이 **양수인데 작아짐** (매수세가 약해진다)
@@ -222,7 +231,7 @@ def judge(rows):
         """① 띠를 건드리고 봉 방향이 맞는가."""
         r = rows[i]
         if kind == "low":
-            return bb_lo[i] is not None and r["low"] <= bb_lo[i] and r["close"] > r["open"]
+            return bb_lo[i] is not None and r["low"] <= bb_lo[i] and (r["close"] > r["open"] or not LOW_NEED_BULL)
         return bb_up[i] is not None and r["high"] >= bb_up[i] and r["close"] < r["open"]
 
     def hist_turn(i, kind):
@@ -248,7 +257,9 @@ def judge(rows):
         if not band(last, kind):
             continue
         if SAME_BAR:
-            ok2, ok3 = hist_turn(last, kind), rsi_cross(last, kind)
+            ok2 = hist_turn(last, kind)
+            n3 = LOW_RSI_BARS if kind == "low" else 1     # 바닥은 RSI 를 바로 앞 봉까지 본다(위 LOW_RSI_BARS)
+            ok3 = any(rsi_cross(i, kind) for i in range(max(0, last - n3 + 1), last + 1))
         else:
             lo_i = max(0, last - WINDOW + 1)
             ok2 = any(hist_turn(i, kind) for i in range(lo_i, last + 1))
@@ -746,6 +757,10 @@ def check_extra(proxy, names=None, codes=None):
 #     띠       위 `bollinger` · `BB_PERIOD` · `BB_MULT` 그대로(chart.js 와 check-indicators.py 가 맞춰 봄) — 새 숫자를 안 박는다.
 #              차트처럼 **모든 5분봉 종가**(장 전 · 장 뒤 봉 포함)로 셈한다 — 화면 띠와 같아야 「화면엔 닿았는데 안 온다」 가 안 된다
 #     닿음     그 봉 **저가 ≤ 하단** · **정규장 봉만**(`REGULAR_FROM` ~ `REGULAR_TO`)
+#     RSI      **같은 봉에서 RSI 가 직전 < RSI_LOW ≤ 이번**(30 아래에서 30 위로 넘은 봉)일 때만 보낸다 — 위 `rsi` · `RSI_LOW` 그대로
+#              (2026-11-17 재권님 「볼린저 하단 텔레그램 메세지 오는것에서 룰이 rsi가 30아래에서 30위로 반등할때의 조건이 없는거 같은데」 → (나) →
+#               「응 바꿔」. 잰 것 — 메인 DB 5분봉 11-04~11-17 10거래일 · 알림 대상 11(하트 중 자동으로 들어온 것 뺌): 닿기만 하루 45.9통 → 이 조건 5.4통).
+#              바닥 신호(judge — 30 아래에서 오르기 시작)는 따로 그대로다
 #     되닿음   닿은 뒤 **저가가 하단 위인 봉이 하나 나오면** 다시 「닿을 수 있음」 — 그 뒤 또 닿으면 또 보낸다.
 #              그날 첫 정규장 봉은 늘 「닿을 수 있음」 에서 시작한다
 #
@@ -753,23 +768,27 @@ def check_extra(proxy, names=None, codes=None):
 #
 # **보내기는 따로 켠다** — `BB_SEND`(2026-10-26 켬). 꺼져 있으면 판정만 하고 로그에 「[신호·안보냄]」. 8765 만 돈다(`kis_proxy` 가 `is_sender` 로 부름).
 # **서버가 낮에 다시 뜨면** 그날 앞서 닿았던 봉들이 한꺼번에 나가지 않게, 마지막 두 봉 밖의 닿음은 보내지 않고 기록만 한다.
-BB_SEND = True              # 2026-10-26 재권님 「켜줘」 — 화면 관심종목(dart.watchlist()) · 하루 약 24통(관심 7 셈)
+BB_SEND = True              # 2026-10-26 재권님 「켜줘」 — 화면 관심종목(dart.watchlist()) · 11-17 RSI 조건 뒤 하루 약 5.4통(알림 대상 11 · 10거래일 셈)
 BB_KIND = "bb_low"
 BB_RECENT = 2               # 이 수만큼 최근 봉의 닿음만 보낸다 — 그 앞은 「이미 지난 것」 으로 기록만
 
 
 def bb_low_touches(rows, day):
     """그날 정규장에서 하단에 닿은 봉들(되닿음 규칙대로) — [{ts, low, close, band, n}] 과거→최신."""
-    _up, lo = bollinger([r["close"] for r in rows])
+    closes = [r["close"] for r in rows]
+    _up, lo = bollinger(closes)
+    rv = rsi(closes)
     out, armed = [], True
     for i, r in enumerate(rows):
         t = str(r["ts"])
         if t[:8] != day or not (REGULAR_FROM <= t[8:12] <= REGULAR_TO) or lo[i] is None:
             continue
         if r["low"] <= lo[i]:
-            if armed:
+            # 같은 봉에서 RSI 가 30 아래에서 30 위로 — 못 셈(None)이면 안 보낸다
+            cross = i > 0 and rv[i] is not None and rv[i - 1] is not None and rv[i - 1] < RSI_LOW <= rv[i]
+            if armed and cross:
                 out.append({"ts": r["ts"], "low": r["low"], "close": r["close"], "band": round(lo[i]),
-                            "n": len(out) + 1})
+                            "rsi": round(rv[i], 1), "rsiPrev": round(rv[i - 1], 1), "n": len(out) + 1})
                 armed = False
         else:
             armed = True
@@ -782,9 +801,11 @@ def format_bb(code, name, ev):
     when = "%s:%s" % (t[8:10], t[10:12]) if len(t) >= 12 else ""
     return ("⬇ 볼린저 하단 · %s%s · %s\n"
             "저가 %s원 · 하단 %s원 · 현재가 %s원\n"
+            "RSI %s → %s (%s 위로)\n"
             "오늘 %d번째 · 5분봉 · 정규장 기준 · 참고용입니다"
             % (who, " (%s)" % code if who != code else "", when,
-               format(ev["low"], ","), format(ev["band"], ","), format(ev["close"], ","), ev["n"]))
+               format(ev["low"], ","), format(ev["band"], ","), format(ev["close"], ","),
+               ev.get("rsiPrev"), ev.get("rsi"), RSI_LOW, ev["n"]))
 
 
 def check_bb(proxy, names=None):

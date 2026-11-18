@@ -100,8 +100,9 @@ def _saved(proxy, day):
         return {r["code"]: dict(r) for r in conn.execute("SELECT * FROM nxt_pre WHERE day = ?", (day,))}
 
 
-def fetch_nx(proxy, cfg, codes):
-    """{code: {vol, price, prev_close, name}} — NX 시장 누적 거래량 · 현재가 · 전일 종가."""
+def fetch_nx(proxy, cfg, codes, gap=GAP_SEC):
+    """{code: {vol, price, prev_close, name}} — NX 시장 누적 거래량 · 현재가 · 전일 종가.
+    gap — 묶음 사이 쉼(초). 프리장 급증(pre_surge)은 08:00~08:05 에 서버 여유를 몰아 쓰므로 0 으로 부른다"""
     out = {}
     codes = list(codes)
     for i in range(0, len(codes), MULTI_MAX):
@@ -118,7 +119,8 @@ def fetch_nx(proxy, cfg, codes):
             num = lambda k: proxy._num(r.get(k), int)
             out[code] = {"vol": num("acml_vol") or 0, "price": num("inter2_prpr"),
                          "prev_close": num("inter2_prdy_clpr"), "name": (r.get("inter_kor_isnm") or "").strip()}
-        time.sleep(GAP_SEC)
+        if gap:
+            time.sleep(gap)
     return out
 
 

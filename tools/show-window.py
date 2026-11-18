@@ -536,6 +536,12 @@ def main():
     if len(sys.argv) < 2:
         print(__doc__)
         return
+    # `--code` — 재권님이 「열어 줘」 하신 글 파일만 VS Code 로 연다(2026-11-13 「응」 · 아래 글 파일 자리)
+    want_code = "--code" in sys.argv[1:]
+    sys.argv = [x for x in sys.argv if x != "--code"]
+    if len(sys.argv) < 2:
+        print(__doc__)
+        return
     arg = sys.argv[1]
     is_url = arg.lower().startswith(("http://", "https://"))
 
@@ -601,11 +607,15 @@ def main():
     #
     # 「찾지 못하는 것은 괜찮고 **엉뚱한 창을 집는 것이 사고다**」 를 따른다.
     # 창이 쌓이는 것은 X 를 눌러 닫으면 되고, 잘못 본 화면은 되돌릴 수 없다.
-    # **맥에서 글 파일은 VS Code 로 연다 (2026-10-07 지시 — 「코드에서 열리게 해줘」).**
-    # TextEdit 로 열면 창 목록으로 찾아 꺼내야 하는데 맥에서 자주 못 꺼냈다(「앞으로 꺼내지는 못했습니다」).
-    # `code -r` 는 같은 파일이면 그 탭으로 가고 VS Code 를 스스로 앞으로 꺼낸다 — 창도 탭도 안 쌓인다.
-    # 룰은 CLAUDE.md 「손으로 고치실 글 파일은 VS Code 로 열어 드린다」. VS Code 가 없으면 아래 옛 길로 간다.
+    # **맥에서 글 파일은 먼저 열지 않는다 (2026-11-13 지시 — 「vs코드창으로 화면을 자꾸 이동시키는데 그거 하지말라고해」 → 룰 고침에 「응」).**
+    # 10-07 에는 `code -r` 로 열었는데 VS Code 가 앞으로 나와 재권님 화면이 옮겨졌다. 이제 경로와 칸 이름만 드리고,
+    # 재권님이 「열어 줘」 하신 때만 `--code` 로 연다(같은 파일이면 그 탭으로 · 창도 탭도 안 쌓임).
+    # 룰은 CLAUDE.md 「손으로 고치실 글 파일은 경로와 칸 이름만 드린다 — VS Code 는 말씀하실 때만 연다」.
     code = shutil.which("code") or next((c for c in ("/opt/homebrew/bin/code", "/usr/local/bin/code") if os.path.exists(c)), None)
+    if IS_MAC and not is_url and path.lower().endswith(TEXT_EXT) and not want_code:
+        print("  글 파일은 열지 않습니다 — 경로와 고치실 칸 이름을 글로 드리십시오: %s" % path)
+        print("  (재권님이 「열어 줘」 하신 때만 --code 를 붙여 다시 부릅니다)")
+        return
     if IS_MAC and not is_url and path.lower().endswith(TEXT_EXT) and code:
         r = subprocess.run([code, "-r", path], capture_output=True, text=True)
         if r.returncode == 0:
