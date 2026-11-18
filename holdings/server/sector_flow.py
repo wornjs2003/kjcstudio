@@ -17,7 +17,10 @@
               한 종목이 여러 테마면 각 테마에 다 센다
     pct       칸 끝 사진의 값으로 그 묶음 평균 등락률(%) — 전날 KRX 정규장 종가(nxt_board 15:41 저장) 대비
               08:50 까지는 넥스트 현재가(그날 넥스트 체결이 있는 종목만) · 09:10 부터는 KRX 현재가(체결이 있는 종목만)
-    굳힘      09:31 뒤 한 번 — 그날 판(업종 · 테마)을 sector_flow_day 에 남긴다. 사진(sector_snap)은 KEEP_SNAP_DAYS 날만
+    굳힘      09:31 뒤 한 번 — 그날 판(업종 · 테마)을 sector_flow_day 에 남긴다(지우지 않는다). 사진(sector_snap)은 KEEP_SNAP_DAYS 날만
+    되채움    사진이 없는 날(이 서버 전 · 내려가 있던 날)은 개발 DB 5분봉으로 셈해 남긴다(src 5m · 봉 있는 종목만) — 서버가 뜰 때
+              5분봉이 있는 지난 평일 전부 · 그날 사진이 없으면 09:31 굳힘 때. 재권님 「지난날들도 다 되채워야돼」(11-18 17:0x)
+              메인(8764)은 개발 DB 를 읽기 전용으로 읽어(launchd 의 KJC_DB_PATH) 따로 옮기지 않아도 같은 판을 본다
     없음      사진이 빠진 칸(서버가 내려가 있었음 · 받기 실패) · 앞날이 없으면 null — 0 으로 꾸미지 않는다.
               첫날(2026-11-19)은 prev 가 다 null 이다
     주소      GET /api/kis/sector-flow?by=sector|theme[&day=YYYYMMDD] — 모양은 board() 주석
@@ -52,7 +55,7 @@ FREEZE_AT = (9, 31)
 REFRESH_MS = 60000                     # 화면이 다시 받을 주기 — 사진은 10분마다라 1분이면 넉넉하다
 EOK = 100000000
 KEEP_SNAP_DAYS = 5
-DAYS_MAX = 250                         # 굳힌 판을 남길 날 수
+FILL_MIN_CODES = 300                   # 5분봉 되채움 — 그날 08:00~09:25 봉이 있는 종목이 이보다 적으면 안 채운다(봉을 덜 받은 날)
 LIVE_TTL = 30
 TICK = 15
 BYS = ("sector", "theme")
@@ -63,7 +66,7 @@ _SCHEMA = (
         nx_val INTEGER, nx_vol INTEGER, nx_price INTEGER, j_val INTEGER, j_vol INTEGER, j_price INTEGER, j_pct REAL,
         PRIMARY KEY (day, at, code))""",
     """CREATE TABLE IF NOT EXISTS sector_flow_day (
-        day TEXT NOT NULL, by TEXT NOT NULL, body TEXT, saved_at TEXT, PRIMARY KEY (day, by))""",
+        day TEXT NOT NULL, by TEXT NOT NULL, body TEXT, saved_at TEXT, src TEXT, codes INTEGER, PRIMARY KEY (day, by))""",
 )
 
 _status = {"lastSnap": None, "lastSnapAt": None, "lastSnapSec": None, "lastCodes": None, "frozenDay": None,
@@ -79,6 +82,10 @@ def _init(proxy):
     with proxy._db_lock, proxy.db_conn() as conn:
         for q in _SCHEMA:
             conn.execute(q)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(sector_flow_day)")}
+        for c, t in (("src", "TEXT"), ("codes", "INTEGER")):
+            if c not in cols:
+                conn.execute("ALTER TABLE sector_flow_day ADD COLUMN %s %s" % (c, t))
 
 
 def _hm(s):
@@ -265,24 +272,107 @@ def _rows_of(proxy, day, by):
     return v
 
 
+def _store(proxy, day, by, v, src, codes):
+    with proxy._db_lock, proxy.db_conn() as conn:
+        conn.execute("INSERT OR REPLACE INTO sector_flow_day (day, by, body, saved_at, src, codes) VALUES (?,?,?,?,?,?)",
+                     (day, by, json.dumps(v, ensure_ascii=False), _now().isoformat(timespec="seconds"), src, codes))
+
+
 def freeze(proxy, day):
-    """그날 판(업종 · 테마)을 남긴다. 남긴 묶음 수 합 — 사진이 없으면 0."""
+    """그날 판(업종 · 테마)을 남긴다 — 사진이 있으면 사진으로(src snap) · 없으면 5분봉으로(src 5m). 남긴 묶음 수 합.
+    굳힌 판은 지우지 않는다(재권님 「서버 내리거나 올린다고 날라가면 안되고 저장되야하는 정보」 11-18)."""
     _init(proxy)
-    stamp = _now().isoformat(timespec="seconds")
     n = 0
+    with proxy._db_lock, proxy.db_conn() as conn:
+        try:
+            codes = conn.execute("SELECT COUNT(DISTINCT code) FROM sector_snap WHERE day = ?", (day,)).fetchone()[0]
+        except Exception:
+            codes = 0
     for by in BYS:
         v = build(proxy, day, by)
         if v is None:
             continue
-        with proxy._db_lock, proxy.db_conn() as conn:
-            conn.execute("INSERT OR REPLACE INTO sector_flow_day (day, by, body, saved_at) VALUES (?,?,?,?)",
-                         (day, by, json.dumps(v, ensure_ascii=False), stamp))
-            days = [r[0] for r in conn.execute("SELECT DISTINCT day FROM sector_flow_day ORDER BY day DESC")]
-            for d in days[DAYS_MAX:]:
-                conn.execute("DELETE FROM sector_flow_day WHERE day = ?", (d,))
+        _store(proxy, day, by, v, "snap", codes)
+        n += len(v)
+    if not n:
+        n = backfill(proxy, day)
+    _cache.clear()
+    return n
+
+
+# ── 5분봉 되채움 — 사진이 없는 날(이 서버가 생기기 전 · 내려가 있던 날) ─────────────
+
+def build_5m(proxy, day, by):
+    """개발 DB 5분봉(candles 5m · 통합)으로 그날 판을 셈 — (판, 봉이 있는 종목 수) · 종목이 FILL_MIN_CODES 보다 적으면 (None, 수).
+    칸 값 = 그 10분 안에 시작한 5분봉 종가 × 거래량 합(어림 · 시황분석1 시안 셈) · 08:50~09:00 봉은 안 씀.
+    pct = 칸 끝 전 마지막 봉 종가 ÷ 전날 정규장 종가 − 1 — 08:50 전 칸은 프리장 봉이 있는 종목 · 09:00 뒤 칸은 09:00 뒤 봉이 있는 종목만."""
+    lo, hi = day + "0800", day + "0925"
+    with proxy._db_lock, proxy.db_conn() as conn:
+        bars = {}
+        for c, ts, cl, vol in conn.execute("SELECT code, ts, close, volume FROM candles WHERE period = '5m' AND ts >= ? AND ts <= ?",
+                                           (lo, hi)):
+            bars.setdefault(c, []).append((ts[8:12], cl, vol))
+        close = _prev_close(conn, day)
+        if len(bars) >= FILL_MIN_CODES:
+            for c in bars:
+                if c in close:
+                    continue
+                r = conn.execute("SELECT close FROM candles WHERE code = ? AND period = 'D' AND ts < ? ORDER BY ts DESC LIMIT 1",
+                                 (c, day)).fetchone()
+                if r and r[0]:
+                    close[c] = r[0]
+    if len(bars) < FILL_MIN_CODES:
+        return None, len(bars)
+    out = {}
+    for name, cs in _groups(proxy, by, sorted(bars)).items():
+        amt, gotm, pct = {}, {}, {}
+        for slot in SLOTS:
+            s0, s1 = _hm(slot), _hm(SLOT_TO[slot])
+            tot = 0
+            for c in cs:
+                for t, cl, vol in bars[c]:
+                    if s0 <= _hm(t) < s1 and cl and vol:
+                        tot += cl * vol
+            amt[slot] = round(tot / EOK, 2)
+            gotm[slot] = len(cs)
+            start = 9 * 60 if s1 > 9 * 60 else 8 * 60
+            ps = []
+            for c in cs:
+                last = [cl for t, cl, vol in sorted(bars[c]) if start <= _hm(t) < s1 and cl]
+                if last and close.get(c):
+                    ps.append((last[-1] / close[c] - 1) * 100)
+            pct[slot] = round(sum(ps) / len(ps), 2) if ps else None
+        out[name] = {"n": len(cs), "amt": amt, "got": gotm, "pct": pct}
+    return out, len(bars)
+
+
+def backfill(proxy, day):
+    """사진도 굳힌 판도 없는 날을 5분봉으로 채워 남긴다(src 5m). 남긴 묶음 수 합 — 봉이 모자라면 0."""
+    _init(proxy)
+    n = 0
+    for by in BYS:
+        v, codes = build_5m(proxy, day, by)
+        if v is None:
+            continue
+        _store(proxy, day, by, v, "5m", codes)
         n += len(v)
     _cache.clear()
     return n
+
+
+def backfill_missing(proxy):
+    """5분봉이 있는 지난 평일 중 굳힌 판이 없는 날을 다 채운다 — [(day, 묶음 수)]. 오늘은 사진 쪽이 굳힌다(09:31)."""
+    _init(proxy)
+    today = _now().strftime("%Y%m%d")
+    with proxy._db_lock, proxy.db_conn() as conn:
+        have = {r[0] for r in conn.execute("SELECT DISTINCT day FROM sector_flow_day")}
+        ds = [r[0] for r in conn.execute("SELECT DISTINCT substr(ts, 1, 8) FROM candles WHERE period = '5m' AND substr(ts, 9, 4) = '0800'")]
+    done = []
+    for d in sorted(ds):
+        if d in have or d >= today or datetime.strptime(d, "%Y%m%d").weekday() >= 5:
+            continue
+        done.append((d, backfill(proxy, d)))
+    return done
 
 
 def _days(conn):
@@ -327,11 +417,21 @@ def board(proxy, by="sector", day=None):
         rows.append({"name": name, "n": c.get("n") if c else o.get("n"), "amt": amt, "prev": pv,
                      "got": {s: (c.get("got") or {}).get(s) for s in SLOTS},
                      "pct": {s: (c.get("pct") or {}).get(s) for s in SLOTS}})
-    rows.sort(key=lambda r: -sum(v for v in r["amt"].values() if v))
+    rows.sort(key=lambda r: (-sum(v for v in r["amt"].values() if v), -sum(v for v in r["prev"].values() if v)))
     ph = _phase(now) if day == today else "closed"
     data = {"day": day, "prev": prev, "by": by, "slots": list(SLOTS), "rows": rows}
+    src = {}
+    with proxy._db_lock, proxy.db_conn() as conn:
+        for d in (day, prev):
+            try:
+                r = conn.execute("SELECT src, codes FROM sector_flow_day WHERE day = ? AND by = ?", (d, by)).fetchone() if d else None
+            except Exception:
+                r = None
+            src[d] = {"src": r[0], "codes": r[1]} if r else ({"src": "snap", "codes": None} if d == day and cur else None)
     meta = {"asof": _status.get("lastSnapAt") if day == today else None, "phase": ph,
-            "refreshMs": REFRESH_MS if ph != "closed" else None, "by": by, "days": days[:30],
+            "refreshMs": REFRESH_MS if ph != "closed" else None, "by": by, "days": days,
+            "src": src.get(day), "prevSrc": src.get(prev) if prev else None,
+            "srcNote": "snap = 10분마다 누적 거래대금 사진(넥스트+KRX · 종목 2천여) · 5m = 개발 DB 5분봉 종가×거래량 되채움(봉이 있는 종목만 · codes) — 두 셈은 값이 다를 수 있다",
             "amtUnit": "억원", "status": dict(_status)}
     return data, meta
 
@@ -344,6 +444,13 @@ def start(proxy):
     """보내는 서버가 뜰 때 한 번 — 평일 SNAPS 사진 · 09:31 굳힘."""
     def loop():
         time.sleep(40)
+        try:
+            got = backfill_missing(proxy)
+            if got:
+                print("  [섹터수급] 5분봉 되채움 %s" % " · ".join("%s(%s)" % g for g in got), flush=True)
+        except Exception as e:
+            _status["error"] = "되채움: " + safe_message(e, 120)
+            print("  [섹터수급] 5분봉 되채움 실패: %s" % type(e).__name__, flush=True)
         done = set()
         while True:
             try:
