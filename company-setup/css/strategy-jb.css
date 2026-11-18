@@ -22,6 +22,9 @@
 .jb .jb-unk { color: var(--kh-text-muted); font-size: 11px; }   /* 서버가 통과 여부를 안 준 칸 — 「안 됨(—)」 과 가른다(qa 11-18) */
 .jb .jb-res { font-weight: 700; }
 .jb .jb-foot { margin: 8px 0 0; }
+.jb .jb-nx small { display: block; color: var(--kh-text-muted); font-size: 11px; }
+.jb .jb-nxsum { margin: 0 0 6px; }
+.jb .jb-sep { display: inline-block; width: 1px; height: 16px; background: var(--kh-border); margin: 0 4px; vertical-align: middle; }
 @media (min-width: 701px) {
   .jb-ftabs { margin-top: 6px; }
   .jb-ft { padding: 9px 20px 8px; font-size: 15px; }
