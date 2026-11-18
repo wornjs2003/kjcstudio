@@ -294,10 +294,17 @@ def joint_track(proxy, day, rows, hm):
     return snap
 
 
-def joint_codes():
-    """그날 한 번이라도 잡힌 종목 — 15:45 쌓기 대상에 넣는다(연기금 · 개인을 받게)."""
+def joint_codes(proxy=None):
+    """그날 한 번이라도 잡힌 종목 — 15:45 쌓기 대상에 넣는다(연기금 · 개인을 받게).
+    메모리에 그날 것이 없으면(서버가 다시 뜬 뒤 아무도 칩을 안 열었음) proxy 가 있을 때 DB 에 남긴 그날 판에서 채운다
+    (2026-11-18 qa 재시작 전수검사 · 재권님 「응 고쳐」 → 안 「응」 — 그 사이 15:45 · 20:05 종목 기록에서 매수 종목이 빠졌다)."""
+    day = _now().date().isoformat()
     with _jt_lock:
-        return list(_jt["acc"]) if _jt["day"] == _now().date().isoformat() else []
+        if _jt["day"] != day and proxy is not None:
+            old = _load(proxy, day.replace("-", ""), JOINT)
+            if old:
+                _jt["day"], _jt["acc"] = day, dict(old.get("acc") or {})
+        return list(_jt["acc"]) if _jt["day"] == day else []
 
 
 def joint_more(proxy, day, codes):
@@ -349,7 +356,7 @@ def _save(proxy, b):
 
 def _targets(proxy, cfg):
     """그날 쌓을 종목 — 외국인 · 기관 순위 판의 종목 + 감시 목록. 순서는 순위 먼저."""
-    codes = joint_codes()            # 「매수」 칩에 그날 잡힌 종목 먼저(연기금 · 개인 칸)
+    codes = joint_codes(proxy)       # 「매수」 칩에 그날 잡힌 종목 먼저(연기금 · 개인 칸)
     for w in WHO:
         codes += [r["code"] for r in (board(proxy, cfg, w) or {}).get("rows") or []]
     try:

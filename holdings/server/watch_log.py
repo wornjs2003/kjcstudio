@@ -78,7 +78,7 @@ def sources(proxy, day):
     try:
         import flow_rank
         if day == _now().strftime("%Y%m%d"):
-            for code in flow_rank.joint_codes():
+            for code in flow_rank.joint_codes(proxy):
                 put(code, (flow_rank._jt["acc"].get(code) or {}).get("name"), "매수")
     except Exception:
         pass
