@@ -5,8 +5,8 @@
 //     다음 날 프리장 첫 값에 판다(높으면 익절 · 낮으면 손절) · 시황(지수 20일선 · 고점 대비)이 나쁘면 안 한다
 //   · 후보 · 통과 여부 · 시황 판정은 서버 한 곳(/api/nxt/closing-bet · 주식 레인 개발1 — 작업우선순위 11-18 배분) — 화면은 그리기만.
 //     화면이 세는 것은 결과 % (프리장 첫 값 ÷ 정규장 종가 − 1) 하나 · 비용은 안 뺌
-//     응답(안 · 개발1 과 맞춤 중): data { day, preDay, mkt{kospi{chg, ma20Above, fromHigh}, kosdaq{…}, go}, rows[{code, name, market, cap, chg, pos, value, close,
-//       rebreakAt, afterLow, afterLast, pre, pass{rise, pos, top, rebreak, mkt}, buy}] } · meta { days[YYYYMMDD …최근 먼저], rule{rise, pos, top} }
+//     응답(개발1 11-18 확정): data { day, preDay, mkt{kospi{chg, ma20Above, fromHigh, go}, kosdaq{…}}, rows[{code, name, market, cap, chg, pos, value, close,
+//       rebreakAt, afterLow, afterLast, pre, pass{rise, pos, top, rebreak, mkt}, buy, nx{px, src}(다음 날 프리장 08:05 · 11-18 덧 · 주식 레인)}], nxDay, nxAt } · meta { days[YYYYMMDD …최근 먼저], rule{rise, limitUp, pos, top, big, cand, ma, highDays, fromHigh}, afterEverySec } · 모르는 판정은 null(모름)
 //   · 값이 없으면 — (0 이 아니다) · 서버를 다시 묻는 주기는 없다(날을 누를 때 · 처음 열 때 한 번)
 //   · 탭은 단타 판(#dt-host · strategy-dt30.js · 시황분석1)과 이 판(#jb-host) 둘 다의 카드 바로 위에 같은 줄로 붙인다 — 단타 판 코드는 안 건드린다
 import { signClass, NUM } from '/assets/js/sign.js';
@@ -39,12 +39,7 @@ function tabsInto(h) {
   card.classList.add('jb-attached');
   paintTabs();
 }
-// 탭을 바꿔도 판 자리는 그대로(「보는 것을 바꿔도 자리는 그대로다」 — 갈아 끼우기) — 지금 보이던 판 높이를 새로 보일 판의 최소 높이로 · qa 11-18 실측 1096 → 303
-function holdHeight(from, to) {
-  if (!from || !to || from.hidden) return;
-  const h = from.getBoundingClientRect().height;
-  if (h > 0) to.style.minHeight = `${Math.max(h, parseFloat(to.style.minHeight) || 0)}px`;
-}
+// 탭을 바꾸면 판 높이도 그 판 내용대로 — 아래 칸이 따라 움직인다(재권님 11-18 「없애고 칸 바뀔때 움직이게」 · 단타 판 높이를 잡아 두니 종가배팅 판 아래가 비었음)
 function paintTabs() {
   document.querySelectorAll('[data-jbtab]').forEach((b) => { const on = b.dataset.jbtab === st.tab; b.classList.toggle('is-on', on); b.setAttribute('aria-selected', String(on)); });
   const dt = document.getElementById('dt-host');
@@ -54,8 +49,6 @@ function paintTabs() {
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-jbtab]');
   if (!b) return;
-  const dt = document.getElementById('dt-host');
-  if (b.dataset.jbtab !== st.tab) holdHeight(st.tab === 'dt' ? dt : host, st.tab === 'dt' ? host : dt);
   st.tab = b.dataset.jbtab;
   try { localStorage.setItem(KEY, st.tab); } catch (err) { /* 저장 못 해도 지금 창은 바뀜 */ }
   paintTabs();
@@ -75,37 +68,60 @@ const TPL = `
   </div>`;
 
 function rulesHtml(r) {
-  const rise = r?.rise != null ? `+${num(r.rise)}%` : '—', pos = r?.pos != null ? num(r.pos, 1) : '—', top = r?.top != null ? num(r.top) : '—';
+  // 기준 값은 서버 meta.rule 한 곳(개발1 · 11-18) — 화면에 숫자를 두지 않는다
+  const v = (k, d = 0) => (r?.[k] != null ? num(r[k], d) : '—');
   return `<span class="st-cap jb-lb">룰</span>
-    <span class="jb-rule">① 정규장 ${rise} ↑ (삼성전자 · 하이닉스 +3%)</span><span class="jb-rule">② 종가가 고가 바로 밑(${pos} ↑)</span><span class="jb-rule">③ 거래대금 상위 ${top}</span>
-    <span class="jb-rule">④ 17시 뒤 종가 다시 넘음</span><span class="jb-rule">⑤ 시황 — 지수 20일선 위 · 고점에서 많이 안 빠짐</span>`;
+    <span class="jb-rule">① 정규장 +${v('rise')}% ↑ (삼성전자 · 하이닉스 +${v('big')}% · +${v('limitUp', 1)}% ↑ 는 종가에 못 사서 뺌)</span><span class="jb-rule">② 종가가 고가 바로 밑(${v('pos', 1)} ↑)</span><span class="jb-rule">③ ①② 통과 중 거래대금 상위 ${v('top')}</span>
+    <span class="jb-rule">④ 17시 뒤 정규장 종가 다시 넘음</span><span class="jb-rule">⑤ 시황 — 그 종목 시장 지수가 ${v('ma')}일선 위 · 앞 ${v('highDays')}거래일 종가 최고 대비 ${v('fromHigh')}% 안</span>`;
 }
 function mkHtml(d) {
   const m = d.mkt || {};
-  const one = (k) => { const x = m[k]; if (!x) return `<span>${MKT[k]} —</span>`; return `<span>${MKT[k]} ${pct(x.chg)} · 20일선 ${x.ma20Above == null ? '—' : x.ma20Above ? '위' : '아래'} · 고점 대비 ${pct(x.fromHigh, 1)}</span>`; };
-  const go = m.go == null ? '<span class="jb-go is-unk">판정 없음</span>' : m.go ? '<span class="jb-go is-go">오늘은 함</span>' : '<span class="jb-go is-stop">오늘은 안 함</span>';
-  return `<b>${dayTxt(d.day)} 시황</b>${one('kospi')}${one('kosdaq')}${go}`;
+  // 시장마다 판정(mkt.kospi.go · mkt.kosdaq.go) — 판정 알약은 오르내림 색을 안 쓴다(개념정의 11-18 · 오르내림 숫자가 아님)
+  const goTxt = (g) => (g == null ? '<span class="jb-go is-unk">판정 없음</span>' : g ? '<span class="jb-go is-go">함</span>' : '<span class="jb-go is-stop">안 함</span>');
+  const one = (k) => { const x = m[k]; if (!x) return `<span>${MKT[k]} —</span>`; return `<span>${MKT[k]} ${pct(x.chg)} · 20일선 ${x.ma20Above == null ? '—' : x.ma20Above ? '위' : '아래'} · 고점 대비 ${pct(x.fromHigh, 1)} ${goTxt(x.go)}</span>`; };
+  return `<b>${dayTxt(d.day)} 시황</b>${one('kospi')}${one('kosdaq')}`;
+}
+const nxRes = (r) => (r.nx && r.nx.px != null && Number(r.close) > 0 ? (Number(r.nx.px) / Number(r.close) - 1) * 100 : null);
+// 다음 날 08:05 한 줄 — 후보 전부 · 산 것(판단 「삼」)만 따로 · 값 있는 종목만 셈(「아직」 · 「—」 는 안 셈)
+function nxSum(d) {
+  const rows = Array.isArray(d.rows) ? d.rows : [];
+  const one = (xs, lb) => { const v = xs.map(nxRes).filter((x) => x != null); if (!v.length) return `${lb} —`;
+    return `${lb} 평균 ${pct(v.reduce((a, x) => a + x, 0) / v.length)} · 오름 ${v.filter((x) => x > 0).length}/${v.length}`; };
+  return `<div class="st-cap jb-nxsum">다음 날 프리장${d.nxAt ? ` ${esc(String(d.nxAt).replace(/^(\d{2})(\d{2})$/, '$1:$2'))}` : ''} (종가 대비) — ${one(rows, '후보')} · ${one(rows.filter((r) => r.buy), '산 것')}</div>`;
 }
 function tableHtml(d) {
   const rows = Array.isArray(d.rows) ? d.rows : [];
   if (!rows.length) return '<div class="st-err">— 이 날 후보 없음</div>';
   const pre = d.preDay ? `${dayTxt(d.preDay)} 프리장 첫 값` : '다음 날 프리장 첫 값';
+  // 다음 날 프리장 08:05 (11-18 재권님 「룰에 걸린 종목처럼 다음날에 프리장 5분에 종가대비 등락률 적어서 히스토리 남겨줘」) — 단타 판 「다음 날 프리장」 칸과 같은 모양
+  //   값은 서버 rows[].nx {px, src} · 날 d.nxDay · 시각 d.nxAt(주식 레인 · 작업우선순위 배분) — 화면은 종가 대비 % 만 셈 · 칸이 없으면 「아직」
+  const nxAt = d.nxAt ? String(d.nxAt).replace(/^(\d{2})(\d{2})$/, '$1:$2') : '';   // 시각은 서버 값만(없으면 안 적음 · 개념정의 11-18 — 화면에 사본을 안 둔다)
+  const nxHead = `${d.nxDay ? dayTxt(d.nxDay) : '다음 날'} 프리장${nxAt ? ` ${esc(nxAt)}` : ''}`;
   const line = (r, i) => {
     const res = r.pre != null && r.close ? (r.pre / r.close - 1) * 100 : null;
-    const why = res == null ? (d.preDay ? '프리장 값 없음' : '아직') : `${res > 0 ? '익절' : '손절'}${r.buy ? '' : '(샀다면)'}`;
+    const why = res == null ? (d.preDay ? '프리장 값 없음' : '아직') : `${res > 0 ? '익절' : res < 0 ? '손절' : '본전'}${r.buy ? '' : '(샀다면)'}`;
     const p = r.pass || {};
+    const nr = nxRes(r);
     return `<tr class="${r.buy ? 'jb-buy' : ''}"><td>${i + 1}</td><td class="st-name" data-co="${esc(r.code)}"><b>${esc(r.name || '—')}</b><small>${esc(r.code || '')} · ${MKT[r.market] || '—'} · ${capTxt(r.cap)}</small></td>
       <td>${pct(r.chg)}</td><td>${num(r.pos, 2)}</td><td>${r.value == null ? '—' : `${num(r.value)}억`}</td><td>${num(r.close)}</td>
       <td>${hmTxt(r.rebreakAt)}</td><td>${num(r.afterLow)}</td><td>${num(r.afterLast)}<small>${r.afterLast != null && r.close ? pct((r.afterLast / r.close - 1) * 100) : ''}</small></td>
       <td class="jb-c">${ok(p.rise)}</td><td class="jb-c">${ok(p.pos)}</td><td class="jb-c">${ok(p.top)}</td><td class="jb-c">${ok(p.rebreak)}</td><td class="jb-c">${ok(p.mkt)}</td>
-      <td class="jb-c"><b>${r.buy == null ? '—' : r.buy ? '삼' : '안 삼'}</b></td><td>${num(r.pre)}</td><td class="jb-res">${pct(res)}<small>${why}</small></td></tr>`;
+      <td class="jb-c"><b>${r.buy == null ? '모름' : r.buy ? '삼' : '안 삼'}</b></td><td>${num(r.pre)}</td><td class="jb-res">${pct(res)}<small>${why}</small></td>
+      <td class="jb-nx">${!r.nx ? '<span class="jb-unk">아직</span>' : r.nx.px == null ? '—<small>거래 없음</small>' : `${pct(nr)}<small>${num(r.nx.px)}${r.nx.src === '1m' ? ' · 1분봉' : ''}</small>`}</td></tr>`;
   };
   return `<table class="jb-tb"><tr><th></th><th class="st-name">종목</th><th>정규장 등락</th><th>종가 위치</th><th>거래대금</th><th>정규장 종가</th><th>17시 뒤 넘은 때</th><th>장 뒤 저가</th><th>20:00 값</th>
-    <th class="jb-c">①</th><th class="jb-c">②</th><th class="jb-c">③</th><th class="jb-c">④</th><th class="jb-c">⑤</th><th class="jb-c">판단</th><th>${pre}</th><th>결과</th></tr>${rows.map(line).join('')}</table>`;
+    <th class="jb-c">①</th><th class="jb-c">②</th><th class="jb-c">③</th><th class="jb-c">④</th><th class="jb-c">⑤</th><th class="jb-c">판단</th><th>${pre}</th><th>결과</th><th class="jb-nx" data-tip="다음 거래일 넥스트레이드 프리장${nxAt ? ` ${esc(nxAt)}` : ''} 값 · 정규장 종가 대비 등락률 · 값은 서버(종가배팅 판 rows[].nx) · 「아직」 = 그 시각 전 · 「—」 = 거래 없음(0 아님)">${nxHead}</th></tr>${rows.map(line).join('')}</table>`;
 }
+// 쌓인 날 — 서버가 지우지 않고 다 남긴다(11-18 재권님 「단타처럼 히스토리 계속 남겨야되」) · 날이 MON_FROM 넘게 쌓이면 달 칩 + 그 달 날짜(단타 판과 같은 모양)
+const MON_FROM = 10;
 function paintDays() {
   const box = host.querySelector('#jb-days');
-  box.innerHTML = st.days.map((d) => `<button type="button" class="kh-chip${d === st.day ? ' is-active' : ''}" role="tab" aria-selected="${d === st.day}" data-jbday="${d}">${dayTxt(d)}</button>`).join('');
+  const dayBtn = (d) => `<button type="button" class="kh-chip${d === st.day ? ' is-active' : ''}" role="tab" aria-selected="${d === st.day}" data-jbday="${d}">${dayTxt(d)}</button>`;
+  if (st.days.length <= MON_FROM) { box.innerHTML = st.days.map(dayBtn).join(''); return; }
+  const mons = [...new Set(st.days.map((d) => d.slice(0, 6)))];
+  if (!st.mon || !mons.includes(st.mon)) st.mon = String(st.day || st.days[0]).slice(0, 6);
+  box.innerHTML = mons.map((m) => `<button type="button" class="kh-chip${m === st.mon ? ' is-active' : ''}" data-jbmon="${m}">${+m.slice(4)}월 <small>${st.days.filter((d) => d.startsWith(m)).length}</small></button>`).join('')
+    + '<span class="jb-sep"></span>' + st.days.filter((d) => d.startsWith(st.mon)).map(dayBtn).join('');
 }
 async function load(day) {
   st.loaded = true;
@@ -135,13 +151,13 @@ export function paint(d, m = {}) {
   paintDays();
   host.querySelector('#jb-mk').innerHTML = mkHtml(d);
   host.querySelector('#jb-rules').innerHTML = rulesHtml(m.rule);
-  host.querySelector('#jb-box').innerHTML = tableHtml(d);
+  host.querySelector('#jb-box').innerHTML = (Array.isArray(d.rows) && d.rows.length ? nxSum(d) : '') + tableHtml(d);
 }
 
 if (host) {
   host.classList.add('st', 'jb');
   host.innerHTML = TPL;
-  host.addEventListener('click', (e) => { const b = e.target.closest('[data-jbday]'); if (b && b.dataset.jbday !== st.day) load(b.dataset.jbday); });
+  host.addEventListener('click', (e) => { const mb = e.target.closest('[data-jbmon]'); if (mb) { if (mb.dataset.jbmon !== st.mon) { st.mon = mb.dataset.jbmon; paintDays(); } return; } const b = e.target.closest('[data-jbday]'); if (b && b.dataset.jbday !== st.day) load(b.dataset.jbday); });
   tabsInto(host);
   const dt = document.getElementById('dt-host');
   tabsInto(dt);

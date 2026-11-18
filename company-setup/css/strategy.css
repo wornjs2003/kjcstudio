@@ -150,6 +150,11 @@
 .dt .dt-tb td.dt-after { color: var(--kh-text-muted); background: var(--kh-bg); }   /* 판 뒤 — 평균에서 뺀 칸 · 흐리게 */
 .dt .dt-tb .dt-res { font-weight: 700; border-left: 1px solid var(--kh-border-strong); }
 .dt .dt-tb td.dt-res small { display: block; font-size: 10.5px; font-weight: 500; color: var(--kh-text-muted); }
+/* 다음 날 프리장 08:05 칸 (11-18) — 결과 옆 · 값 아래 작은 줄에 그 시각 가격 */
+.dt .dt-tb .dt-nx { border-left: 1px solid var(--kh-border-strong); white-space: nowrap; }
+.dt .dt-tb .dt-nx small { display: block; font-size: 10.5px; font-weight: 500; color: var(--kh-text-muted); }
+.dt .dt-tb .dt-nxm { color: var(--kh-text-muted); }
+.dt .dt-tb td.dt-buy small { display: block; font-size: 10.5px; font-weight: 500; color: var(--kh-text-muted); }
 .dt .dt-tb .st-name small { font-weight: 400; }
 .dt .dt-pnl { margin: 0 0 8px; padding: 8px 12px; border-radius: var(--kh-radius-sm); background: var(--kh-bg); font-size: 13.5px; color: var(--kh-text-secondary); }   /* 손익 합계 — 상위 16 · 1천만원씩 · 거래세 뺌 */
 .dt .dt-pnl b { color: var(--kh-text-primary); }
@@ -260,3 +265,34 @@
 @media (min-width: 1181px) {
   .mx .mx-body { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
 }
+/* 칩별 승률 접기 — 손익 칸 안(strategy-dtwin.js · 11-18) · 닫혀 있으면 한 줄 */
+.dt .dt-win { margin-top: 6px; }
+.dt .dt-win > summary { cursor: pointer; font-size: 13px; color: var(--kh-text-primary); font-weight: 500; }
+.dt .dw-body { margin-top: 6px; display: grid; gap: 6px; }
+.dt .dw-tabs { justify-self: start; }
+.dt .dw-tb { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; background: var(--kh-bg-card); }
+.dt .dw-tb th { font-weight: 500; color: var(--kh-text-secondary); padding: 4px 8px; text-align: right; white-space: nowrap; }
+.dt .dw-tb td { padding: 4px 8px; text-align: right; border-top: 1px solid var(--kh-border); white-space: nowrap; color: var(--kh-text-primary); }
+.dt .dw-tb .dw-l { text-align: left; }
+.dt .dw-tb .dw-top { white-space: normal; min-width: 280px; }
+.dt .dw-tb .dw-mut { color: var(--kh-text-secondary); }
+.dt .dw-tb .dw-all td { font-weight: 700; }
+.dt .dw-tw { height: 420px; }   /* 탭(갈아 끼우기)마다 줄 수가 달라도 칸 높이 그대로 — 「보는 것을 바꿔도 자리는 그대로다」 */
+/* 섹터수급 — 단타 판 맨 위(strategy-sectorflow.js · 11-18 재권님 「응 만들어줘」) · 줄 = 업종 · 칸 = 10분 거래대금 · 바탕 짙기는 tone.js */
+.dt .sf { margin-bottom: 12px; }
+.dt .sf .sf-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
+.dt .sf .sf-h b { font-size: 15px; color: var(--kh-text-primary); }
+.dt .sf-tb { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.dt .sf-tb th { font-weight: 500; color: var(--kh-text-secondary); padding: 5px 8px; text-align: right; white-space: nowrap; }
+.dt .sf-tb td { padding: 5px 8px; text-align: right; border-top: 1px solid var(--kh-border); white-space: nowrap; color: var(--kh-text-primary); }
+.dt .sf-tb .sf-l { text-align: left; }
+.dt .sf-tb .sf-l small { color: var(--kh-text-secondary); font-size: 11.5px; }
+.dt .sf-tb .sf-i { color: var(--kh-text-secondary); width: 1%; }
+.dt .sf-tb .sf-sep { border-left: 1px solid var(--kh-border); }
+.dt .sf-tb .sf-grp th { text-align: center; color: var(--kh-text-primary); }
+.dt .sf .sf-body { height: 460px; display: flex; flex-direction: column; }   /* 업종 · 테마 탭(갈아 끼우기)을 오가도 칸 높이 그대로 — 줄은 칸 안 스크롤 */
+.dt .sf .sf-tw { flex: 1; min-height: 0; overflow: auto; }
+.dt .sf-tb thead th { position: sticky; top: 0; background: var(--kh-bg-card); }
+.dt .sf-tb thead tr.sf-grp th { height: 30px; box-sizing: border-box; }
+.dt .sf-tb thead tr:nth-child(2) th { top: 30px; }   /* 첫 머리 줄 높이(30)와 같게 — 스크롤 때 안 겹침(qa) */
+.dt .sf .sf-meta { flex: none; margin-bottom: 6px; }

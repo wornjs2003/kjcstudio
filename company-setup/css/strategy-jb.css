@@ -9,8 +9,8 @@
 
 .jb .jb-mk { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; background: var(--kh-bg); border-radius: var(--kh-radius-md); padding: 8px 10px; margin: 0 0 8px; }
 .jb .jb-go { font-weight: 700; padding: 1px 9px; border-radius: 999px; }
-.jb .jb-go.is-go { background: var(--kh-up-dim); color: var(--kh-up); }
-.jb .jb-go.is-stop { background: var(--kh-down-dim); color: var(--kh-down); }
+.jb .jb-go.is-go { background: var(--kh-border); color: var(--kh-text-primary); }   /* 판정 알약 — 오르내림 색을 안 쓴다(개념정의 11-18) */
+.jb .jb-go.is-stop { background: var(--kh-border); color: var(--kh-text-muted); }
 .jb .jb-go.is-unk { background: var(--kh-border); color: var(--kh-text-secondary); }
 .jb .jb-rules { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 8px; }
 .jb .jb-lb { margin: 0; }
@@ -22,6 +22,10 @@
 .jb .jb-unk { color: var(--kh-text-muted); font-size: 11px; }   /* 서버가 통과 여부를 안 준 칸 — 「안 됨(—)」 과 가른다(qa 11-18) */
 .jb .jb-res { font-weight: 700; }
 .jb .jb-foot { margin: 8px 0 0; }
+.jb .jb-nx small { display: block; color: var(--kh-text-muted); font-size: 11px; }
+.jb .jb-nxsum { margin: 0 0 6px; }
+.jb .jb-days { flex-wrap: wrap; row-gap: 6px; }   /* 쌓인 날이 늘면 줄을 바꾼다 — 좁은 폭에서 화면이 옆으로 밀렸다(qa 11-18 · 13날 462 폭에 654) */
+.jb .jb-sep { display: inline-block; width: 1px; height: 16px; background: var(--kh-border); margin: 0 4px; vertical-align: middle; }
 @media (min-width: 701px) {
   .jb-ftabs { margin-top: 6px; }
   .jb-ft { padding: 9px 20px 8px; font-size: 15px; }

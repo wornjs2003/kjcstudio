@@ -73,9 +73,12 @@ import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tgl
 import claude_chat     # 홀딩스 오른쪽 Claude 창 — 맥미니 claude 를 한 번씩 부른다 · POST /api/claude/ask(2026-11-03 · server/claude_chat.py)
 import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 테마 · 수급(넥스트 5분 거래량 2배) (2026-10-27 · server/theme_flow.py)
 import good_news       # 「좋은 뉴스」 판정 — 공시마다 갈래 · 방향 · 크기 · 자사주 목적 · 이미 오름 · /api/good-news(2026-11-05 · server/good_news.py)
+import earnings_beat   # 「실적」 칩 — 잠정 영업이익 > 네이버 예상치 · 실적 전망 > 직전 실적 · /api/earnings-beat(2026-11-18 · server/earnings_beat.py)
 import vwap            # VWAP(거래량 가중 평균가) — 국내 분봉에 장마다(장 전 · 정규장 · 장 후) 누적 값 `vwap` 을 붙인다(2026-11-06 · 11-07 구간 바꿈 · server/vwap.py)
+import leverage        # 레버리지 지표 — 한국 신용융자 · 미국 개인 빚투 · 헤지펀드 레버리지 · /api/market/leverage(2026-11-17 · server/leverage.py)
 import fear_greed      # 공포·탐욕 지수 — 코스피 · 삼성전자 · SK하이닉스 · /api/market/fear-greed(2026-11-06 · server/fear_greed.py)
 import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스닥 150 중 전일 거래량 급등 · 투자전략 룰로 거르고 줄 세움 · /api/auto-watch(2026-11-05 · server/auto_watch.py)
+import closing_bet     # 종가배팅 판 — 15:41 후보(nxt_board 가 부름) · 17~20시 장 뒤 · 다음 날 프리장 첫 값 · /api/nxt/closing-bet(2026-11-18)
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
 import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 · 색 = 등락률 · /api/kis/heatmap(2026-10-27 · server/heatmap.py)
 import flow_board       # 수급 정리판 — 투자자 갈래별 순매수(오늘 · 날마다 · 상위 종목)를 한 주소로 · /api/kis/flow-board(2026-11-04 · server/flow_board.py)
@@ -85,6 +88,7 @@ import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
 import day_top_fill     # 등락 상위 — 지난 거래일 판을 다시 세어 채움(장 쉬는 때 · 쓰는 서버만 · 2026-11-11 · server/day_top_fill.py)
 import day_top          # 등락 상위와 걸린 필터 — 날마다 장 뒤 한 번 쌓음 · /api/kis/day-top(2026-11-11 · server/day_top.py)
+import sector_flow      # 섹터수급 — 프리장 08:00~정규장 09:30 업종 · 테마별 10분 거래대금 · /api/kis/sector-flow(2026-11-18 · server/sector_flow.py)
 import dt30_win         # 단타 판 칩별 승률 — 끝난 판 손익을 하루 한 줄 · /api/kis/dt30-win(2026-11-18 · server/dt30_win.py)
 import dt30             # 단타 30 판 — 평일 09:06 단타 상위 30 굳힘 · 30분마다 값 · 30거래일 · /api/kis/dt30(2026-11-11 · server/dt30.py)
 import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
@@ -7278,6 +7282,17 @@ def flatten_carried(rows):
             i = j + 1
         else:
             i += 1
+    # **프리장이 끝난 뒤 ~ 정규장 전(08:50 ~ 08:59) 칸의 체결은 비운다** (2026-11-18 재권님 「응」 — 「거래가 없는 08:50~09:00 사이에
+    # KIS 가 앞 1분봉을 그대로 복사해 채운 가짜 봉 … 서버에서 버려, 토스처럼 그 칸을 비울까요」). 넥스트레이드 프리장은 08:50 에 끝나고
+    # KRX 는 09:00 까지 시가 단일가라 그 칸에 체결이 날 수 없다. 그런데 5분봉 08:50 칸에 08:49 체결이 한 번 더 실리고 08:55 칸이 그것을
+    # 그대로 되풀이했다(11-18 삼성 08:50 · 08:55 둘 다 50,142주 — 1분봉 08:49~08:59 는 다 0 · 개발 DB 11-02 ~ 11-18 국내 종목 하루 0~3 개).
+    # 두 칸 되풀이라 위 되풀이 셈(다섯 칸 이상 · 15:20)에 안 걸렸다. 시각은 market_hours 한 곳 — 그날 바뀐 시각은 안 본다(평소 시각).
+    for k, r in enumerate(out):
+        hm = r.get("ts", "")[8:12]
+        if market_hours.PRE_CLOSE <= hm < market_hours.REG_OPEN and (r.get("volume") or 0) > 0:
+            p = out[k - 1] if k > 0 and out[k - 1].get("ts", "")[:8] == r.get("ts", "")[:8] else None
+            c = p.get("close") if p and p.get("close") else r.get("close")
+            r.update(open=c, high=c, low=c, close=c, volume=0)
     return out
 
 
@@ -8890,6 +8905,19 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
             return
+        if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/earnings-beat":
+            # 「실적」 칩(server/earnings_beat.py) — 쌓인 공시 본문 · 네이버 재무를 부를 때마다 셈 · 바깥을 안 부른다(받기는 보내는 서버 바퀴)
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            try:
+                days = int((q.get("days") or [earnings_beat.DAYS_DEFAULT])[0])
+            except ValueError:
+                self._send_json({"ok": False, "error": "days 는 1~%d 정수입니다." % earnings_beat.DAYS_MAX}, 400)
+                return
+            try:
+                self._send_json({"ok": True, "data": earnings_beat.compute(sys.modules[__name__], days), "meta": earnings_beat.status()})
+            except Exception as e:
+                self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
+            return
         if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/auto-watch/history":
             # 자동 관심종목 다음날 결과(server/auto_watch.py history) — 걸린 날마다 종목 · 다음 거래일 등락 · 모은 값 · KIS 를 안 부른다
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -8940,6 +8968,12 @@ class Handler(SimpleHTTPRequestHandler):
                 days = 5
             self._send_json({"ok": True, "data": nxt_board.board(sys.modules[__name__], market, days),
                              "meta": nxt_board.status()})
+            return
+        if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/nxt/closing-bet":
+            # 종가배팅 판(Insight 「투자 전략」 단타 · 종가배팅) — 후보 · 장 뒤 · 프리장 첫 값 · 시장 판정(server/closing_bet.py)
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            data, days = closing_bet.board(sys.modules[__name__], (q.get("day") or [None])[0])
+            self._send_json({"ok": True, "data": data, "meta": closing_bet.meta(days)})
             return
         if (self.path or "").rstrip("/") == "/api/nxt-pre/status":
             # 장 전 거래량 2배 바퀴의 상태 — 마지막으로 돈 날 · 종목 수 · 2배 수 · 꺼져 있으면 보냈을 글(preview)
@@ -9514,8 +9548,8 @@ class Handler(SimpleHTTPRequestHandler):
         재시작 전에 볼 수 있게. 토스처럼 토큰을 끊는 일이 없어 이 폴백은 해가 없다. 응답 `servedBy` 가 어디서 받았나다."""
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/market/"):].strip("/")
-        if route not in ("indicators", "indicator", "materials", "crypto", "us-outlook", "fear-greed"):
-            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= · /api/market/materials · /api/market/crypto · /api/market/us-outlook · /api/market/fear-greed?key= 여섯입니다."}, 404)
+        if route not in ("indicators", "indicator", "materials", "crypto", "us-outlook", "fear-greed", "leverage"):
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= · /api/market/materials · /api/market/crypto · /api/market/us-outlook · /api/market/fear-greed?key= · /api/market/leverage 일곱입니다."}, 404)
             return
         base = upstream_base()
         if base:
@@ -9542,6 +9576,8 @@ class Handler(SimpleHTTPRequestHandler):
             r = crypto.items()
         elif route == "us-outlook":
             r = us_outlook.outlook()
+        elif route == "leverage":             # 레버리지 지표(server/leverage.py) — 바깥 넷을 CACHE_SEC 에 한 번 · 못 받으면 앞 값 + 「못 받음」
+            r = leverage.payload()
         elif route == "fear-greed":           # 공포·탐욕 지수(server/fear_greed.py) — key KOSPI · 005930 · 000660 · 일봉 · 쌓인 수급으로 셈 · KIS 를 새로 안 부른다
             key = (urllib.parse.parse_qs(parsed.query).get("key") or ["KOSPI"])[0].strip().upper()
             r = dict(fear_greed.all_targets(sys.modules[__name__], key), meta=fear_greed.status())
@@ -10469,6 +10505,20 @@ class Handler(SimpleHTTPRequestHandler):
                                  "meta": dict(day_top.status(), days=day_top.days(sys.modules[__name__]), fill=day_top_fill.status())})
                 return
 
+            if route == "sector-flow":
+                # 섹터수급(server/sector_flow.py) — 사진(DB)으로 셈 · 굳힌 날은 남긴 판 · KIS 를 안 부른다
+                by = ((qs.get("by") or ["sector"])[0] or "sector").strip()
+                day = (qs.get("day") or [""])[0].strip()
+                if by not in sector_flow.BYS:
+                    self._send_json({"ok": False, "error": "by 는 sector · theme 둘입니다."}, 400)
+                    return
+                if day and not (day.isdigit() and len(day) == 8):
+                    self._send_json({"ok": False, "error": "day 는 YYYYMMDD 입니다."}, 400)
+                    return
+                data, meta = sector_flow.board(sys.modules[__name__], by, day or None)
+                self._send_json({"ok": True, "data": data, "meta": meta})
+                return
+
             if route == "dt30":
                 # 단타 30 판(server/dt30.py) — 남긴 날 판을 읽는다 · 안 끝난 그날 판만 지금 값(멀티 시세 · 캐시 먼저)을 붙인다
                 day = (qs.get("day") or [""])[0].strip()
@@ -11361,6 +11411,9 @@ def main():
     if not SLOW and is_sender(args.port) and nxt_board.start(sys.modules[__name__]):
         print("  넥장 보드 : 사용 (평일 %02d:%02d 종가 · %02d:%02d 장외 · %02d:%02d 야간선물 저장 · /api/nxt/board)"
               % (nxt_board.CLOSE_AT + nxt_board.AFTER_AT + nxt_board.FUT_AT))
+    if not SLOW and is_sender(args.port) and closing_bet.start(sys.modules[__name__]):
+        print("  종가배팅 판 : 사용 (15:41 후보 · 17~20시 %d초마다 장 뒤 · 20:01 마지막가 · 다음 날 08:51 프리장 첫 값 · /api/nxt/closing-bet)"
+              % closing_bet.AFTER_EVERY)
     # 자동 관심종목(2026-11-05 · server/auto_watch.py) — 같은 문(보내는 서버만) · 값 쌓기만 · 관심 목록 넣기는 아직 없다(auto_watch.ADD)
     # 경제 지표 미리 받기(2026-11-05 · server/macro.py start) — 받는 곳은 8765 하나 · 다른 서버는 넘겨 받는다 · 요청이 바깥 35번을 기다리지 않게
     if not SLOW and is_sender(args.port) and macro.start():
@@ -11368,6 +11421,9 @@ def main():
     # 「좋은 뉴스」 판정(2026-11-05 · server/good_news.py) — 같은 문(보내는 서버만) · 공급계약 · 자사주 상세를 5분마다 받아 쌓기만 · 알림 없음
     if not SLOW and is_sender(args.port) and good_news.start(sys.modules[__name__]):
         print("  좋은 뉴스 판정 : 사용 (5분마다 공급계약 본문 · 자사주 취득 상세 받기 · /api/good-news)")
+    # 「실적」 칩(2026-11-18 · server/earnings_beat.py) — 같은 문(보내는 서버만) · 잠정실적 · 실적 전망 본문과 네이버 재무를 5분마다 받아 쌓기만 · 알림 없음
+    if not SLOW and is_sender(args.port) and earnings_beat.start(sys.modules[__name__]):
+        print("  실적 칩       : 사용 (5분마다 잠정실적 · 실적 전망 본문 · 네이버 예상치 받기 · /api/earnings-beat)")
     # 공포·탐욕 25 풀림 알림(2026-11-06 · server/fear_greed.py) — 같은 문(보내는 서버만) · 평일 15:45 뒤 한 번 · SEND 가 꺼져 있으면 기록만
     if not SLOW and is_sender(args.port) and fear_greed.start(sys.modules[__name__]):
         print("  공포·탐욕    : 25 풀림 보기 (평일 %02d:%02d 뒤 한 번 · 알림 %s · /api/market/fear-greed)"
@@ -11383,6 +11439,10 @@ def main():
     if not SLOW and is_sender(args.port) and pre_flow.start(sys.modules[__name__]):
         print("  프리장 판   : 평일 %02d:%02d~%02d:%02d 에 %d초마다 지어 market.db pre_flow_board 에 남김(「프리장」 칩)"
               % (pre_flow.PRE_OPEN + pre_flow.PRE_CLOSE + (pre_flow.FLOW_TTL,)))
+    # 섹터수급(2026-11-18 · server/sector_flow.py) — 같은 문(보내는 서버만) · 알림은 없다(화면만)
+    if not SLOW and is_sender(args.port) and sector_flow.start(sys.modules[__name__]):
+        print("  섹터수급 : 사용 (평일 %s 사진 · %02d:%02d 굳힘 · /api/kis/sector-flow?by=sector|theme)"
+              % (" · ".join(sector_flow.SNAPS), sector_flow.FREEZE_AT[0], sector_flow.FREEZE_AT[1]))
     if not SLOW and is_sender(args.port) and dt30.start(sys.modules[__name__]):
         print("  단타 30 판 : 평일 %s 단타 상위 %d 굳힘 · %s~%s %d분마다 값 · %d거래일 · /api/kis/dt30"
               % (dt30.status()["buyAt"], dt30.TOP_N, dt30.times()[0], dt30.times()[-1], dt30.TRACK_STEP, dt30.DAYS_KEEP))
