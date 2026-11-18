@@ -53,11 +53,12 @@ ON = (os.environ.get("KJC_NEWS_AI") or "").strip() == "1"   # 켜기 — 기본 
                                                             # (Claude 를 부르는 「켜기」 자리 · 재권님 지시로 · 개념정의 검수 보류 11-13 12:2x)
 
 _st = {"briefFail": None, "briefFailAt": 0.0, "flashFail": None, "flashFailAt": 0.0, "calls": 0,
-       "anFail": None, "anAt": 0.0}
+       "anFail": None, "anAt": 0.0, "slotFail": None}
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS news_brief (day TEXT PRIMARY KEY, data TEXT NOT NULL, at TEXT);
 CREATE TABLE IF NOT EXISTS news_flash (link TEXT PRIMARY KEY, summary TEXT NOT NULL, at TEXT);
 CREATE TABLE IF NOT EXISTS news_analysis (issue TEXT PRIMARY KEY, articles INTEGER, analysis TEXT NOT NULL, at TEXT);
+CREATE TABLE IF NOT EXISTS news_slot_brief (slot TEXT PRIMARY KEY, data TEXT NOT NULL, at TEXT);
 """
 
 
@@ -94,6 +95,16 @@ def _json_part(text, open_ch="[", close_ch="]"):
 def make_brief(now=None):
     """지금 이슈로 아침 정리 하나를 지어 남긴다 → 글(dict). 못 지으면 RuntimeError."""
     now = now or _now()
+    data = _compose(now)
+    with _conn() as c:
+        c.executescript(_SCHEMA)
+        c.execute("INSERT OR REPLACE INTO news_brief VALUES (?,?,?)", (now.strftime("%Y%m%d"), json.dumps(data, ensure_ascii=False),
+                                                                        now.strftime("%H:%M:%S")))
+    return data
+
+
+def _compose(now):
+    """지금 이슈로 정리 글 하나를 짓는다(남기지 않음) → 글(dict). 못 지으면 RuntimeError."""
     hot = news_store.issues()
     iss = hot["issues"][:BRIEF_IN]
     if not iss:
@@ -119,11 +130,66 @@ def make_brief(now=None):
     data = {"writtenAt": now.isoformat(timespec="seconds"),
             "range": "서버가 쌓은 기사 · 지난 %d시간 · 받는 곳 나라 %s" % (hot["meta"]["windowH"], " · ".join(feeds) or "모름"),
             "by": BY, "issues": out}
-    with _conn() as c:
-        c.executescript(_SCHEMA)
-        c.execute("INSERT OR REPLACE INTO news_brief VALUES (?,?,?)", (now.strftime("%Y%m%d"), json.dumps(data, ensure_ascii=False),
-                                                                        now.strftime("%H:%M:%S")))
     return data
+
+
+# ---------------------------------------------------------------- 텔레그램 정기 글 (2026-11-18 재권님 「커밋해」 · 개발2 창 착수 안)
+# 정기 발송(news_store.DIGEST_SLOTS) 글을 「이슈 다섯 정리」 로 — 07:30 은 그날 아침 정리(07:00) 그대로 · 그 밖 시각은 새로 지어
+# news_slot_brief 에 따로 남긴다(아침 정리 news_brief 를 덮지 않는다 — 화면의 아침 정리가 그대로). 못 지으면 None → 옛 제목 묶음.
+SLOT_FROM_MORNING = (7, 30)   # 이 시각 정기 글은 아침 정리를 쓴다
+NEWS_PATH = "/company-setup/news.html"   # 글 끝 링크 — 뉴스 분석 화면(주소 앞은 dart.MAIN_URL 한 곳)
+
+
+def slot_brief(hm, now=None, make=True):
+    """정기 시각 hm(시, 분)의 정리 글 → (글 dict 또는 None, 못 구한 까닭 또는 None). 없으면 make 일 때 짓는다(ON 일 때만)."""
+    now = now or _now()
+    day = now.strftime("%Y%m%d")
+    if tuple(hm) == SLOT_FROM_MORNING:
+        b = brief()
+        if b["data"] and b["meta"]["day"] == day:
+            return b["data"], None
+        return None, "아침 정리 없음"
+    key = "%s-%02d%02d" % (day, hm[0], hm[1])
+    try:
+        with _conn() as c:
+            c.executescript(_SCHEMA)
+            r = c.execute("SELECT data FROM news_slot_brief WHERE slot = ?", (key,)).fetchone()
+        if r:
+            return json.loads(r[0]), None
+    except Exception:
+        pass
+    if not make:
+        return None, "아직 안 지음"
+    if not ON:
+        return None, "짓기 꺼짐"
+    try:
+        data = _compose(now)
+    except Exception as e:
+        return None, "못 지음(%s · %s)" % (now.strftime("%H:%M"), safe_message(e, 100))
+    with _conn() as c:
+        c.execute("INSERT OR REPLACE INTO news_slot_brief VALUES (?,?,?)", (key, json.dumps(data, ensure_ascii=False), now.strftime("%H:%M:%S")))
+    return data, None
+
+
+def slot_text(data, hm, now=None):
+    """정리 글(dict) → 텔레그램 글."""
+    import dart
+    now = now or _now()
+    L = ["📰 뉴스 정리 — 주요 이슈 %d (%s %02d:%02d)" % (len(data["issues"]), now.strftime("%m/%d"), hm[0], hm[1])]
+    for n, x in enumerate(data["issues"], 1):
+        L += ["", "%d. %s" % (n, x["name"]), x["text"]]
+    L += ["", "자세히 › " + dart.MAIN_URL + NEWS_PATH]
+    return "\n".join(L)
+
+
+def flash_summary(link):
+    """속보 정리 글 — 아직 없으면 None."""
+    try:
+        with _conn() as c:
+            r = c.execute("SELECT summary FROM news_flash WHERE link = ?", (link,)).fetchone()
+        return r[0] if r else None
+    except Exception:
+        return None
 
 
 def brief():

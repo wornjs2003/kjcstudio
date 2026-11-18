@@ -73,7 +73,9 @@ import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tgl
 import claude_chat     # 홀딩스 오른쪽 Claude 창 — 맥미니 claude 를 한 번씩 부른다 · POST /api/claude/ask(2026-11-03 · server/claude_chat.py)
 import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 테마 · 수급(넥스트 5분 거래량 2배) (2026-10-27 · server/theme_flow.py)
 import good_news       # 「좋은 뉴스」 판정 — 공시마다 갈래 · 방향 · 크기 · 자사주 목적 · 이미 오름 · /api/good-news(2026-11-05 · server/good_news.py)
+import earnings_beat   # 「실적」 칩 — 잠정 영업이익 > 네이버 예상치 · 실적 전망 > 직전 실적 · /api/earnings-beat(2026-11-18 · server/earnings_beat.py)
 import vwap            # VWAP(거래량 가중 평균가) — 국내 분봉에 장마다(장 전 · 정규장 · 장 후) 누적 값 `vwap` 을 붙인다(2026-11-06 · 11-07 구간 바꿈 · server/vwap.py)
+import leverage        # 레버리지 지표 — 한국 신용융자 · 미국 개인 빚투 · 헤지펀드 레버리지 · /api/market/leverage(2026-11-17 · server/leverage.py)
 import fear_greed      # 공포·탐욕 지수 — 코스피 · 삼성전자 · SK하이닉스 · /api/market/fear-greed(2026-11-06 · server/fear_greed.py)
 import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스닥 150 중 전일 거래량 급등 · 투자전략 룰로 거르고 줄 세움 · /api/auto-watch(2026-11-05 · server/auto_watch.py)
 import closing_bet     # 종가배팅 판 — 15:41 후보(nxt_board 가 부름) · 17~20시 장 뒤 · 다음 날 프리장 첫 값 · /api/nxt/closing-bet(2026-11-18)
@@ -87,6 +89,7 @@ import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매
 import day_top_fill     # 등락 상위 — 지난 거래일 판을 다시 세어 채움(장 쉬는 때 · 쓰는 서버만 · 2026-11-11 · server/day_top_fill.py)
 import day_top          # 등락 상위와 걸린 필터 — 날마다 장 뒤 한 번 쌓음 · /api/kis/day-top(2026-11-11 · server/day_top.py)
 import sector_flow      # 섹터수급 — 프리장 08:00~정규장 09:30 업종 · 테마별 10분 거래대금 · /api/kis/sector-flow(2026-11-18 · server/sector_flow.py)
+import dt30_win         # 단타 판 칩별 승률 — 끝난 판 손익을 하루 한 줄 · /api/kis/dt30-win(2026-11-18 · server/dt30_win.py)
 import dt30             # 단타 30 판 — 평일 09:06 단타 상위 30 굳힘 · 30분마다 값 · 30거래일 · /api/kis/dt30(2026-11-11 · server/dt30.py)
 import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
 import session_volume   # 시간대별 거래량 · 전일비 — 프리장 · 정규장 · 애프터 끝에 순위 종목 누적 거래량 저장 · /api/kis/vol-ratio(2026-11-05 · server/session_volume.py)
@@ -7279,6 +7282,17 @@ def flatten_carried(rows):
             i = j + 1
         else:
             i += 1
+    # **프리장이 끝난 뒤 ~ 정규장 전(08:50 ~ 08:59) 칸의 체결은 비운다** (2026-11-18 재권님 「응」 — 「거래가 없는 08:50~09:00 사이에
+    # KIS 가 앞 1분봉을 그대로 복사해 채운 가짜 봉 … 서버에서 버려, 토스처럼 그 칸을 비울까요」). 넥스트레이드 프리장은 08:50 에 끝나고
+    # KRX 는 09:00 까지 시가 단일가라 그 칸에 체결이 날 수 없다. 그런데 5분봉 08:50 칸에 08:49 체결이 한 번 더 실리고 08:55 칸이 그것을
+    # 그대로 되풀이했다(11-18 삼성 08:50 · 08:55 둘 다 50,142주 — 1분봉 08:49~08:59 는 다 0 · 개발 DB 11-02 ~ 11-18 국내 종목 하루 0~3 개).
+    # 두 칸 되풀이라 위 되풀이 셈(다섯 칸 이상 · 15:20)에 안 걸렸다. 시각은 market_hours 한 곳 — 그날 바뀐 시각은 안 본다(평소 시각).
+    for k, r in enumerate(out):
+        hm = r.get("ts", "")[8:12]
+        if market_hours.PRE_CLOSE <= hm < market_hours.REG_OPEN and (r.get("volume") or 0) > 0:
+            p = out[k - 1] if k > 0 and out[k - 1].get("ts", "")[:8] == r.get("ts", "")[:8] else None
+            c = p.get("close") if p and p.get("close") else r.get("close")
+            r.update(open=c, high=c, low=c, close=c, volume=0)
     return out
 
 
@@ -8891,6 +8905,19 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
             return
+        if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/earnings-beat":
+            # 「실적」 칩(server/earnings_beat.py) — 쌓인 공시 본문 · 네이버 재무를 부를 때마다 셈 · 바깥을 안 부른다(받기는 보내는 서버 바퀴)
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            try:
+                days = int((q.get("days") or [earnings_beat.DAYS_DEFAULT])[0])
+            except ValueError:
+                self._send_json({"ok": False, "error": "days 는 1~%d 정수입니다." % earnings_beat.DAYS_MAX}, 400)
+                return
+            try:
+                self._send_json({"ok": True, "data": earnings_beat.compute(sys.modules[__name__], days), "meta": earnings_beat.status()})
+            except Exception as e:
+                self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
+            return
         if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/auto-watch/history":
             # 자동 관심종목 다음날 결과(server/auto_watch.py history) — 걸린 날마다 종목 · 다음 거래일 등락 · 모은 값 · KIS 를 안 부른다
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -9521,8 +9548,8 @@ class Handler(SimpleHTTPRequestHandler):
         재시작 전에 볼 수 있게. 토스처럼 토큰을 끊는 일이 없어 이 폴백은 해가 없다. 응답 `servedBy` 가 어디서 받았나다."""
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/market/"):].strip("/")
-        if route not in ("indicators", "indicator", "materials", "crypto", "us-outlook", "fear-greed"):
-            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= · /api/market/materials · /api/market/crypto · /api/market/us-outlook · /api/market/fear-greed?key= 여섯입니다."}, 404)
+        if route not in ("indicators", "indicator", "materials", "crypto", "us-outlook", "fear-greed", "leverage"):
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= · /api/market/materials · /api/market/crypto · /api/market/us-outlook · /api/market/fear-greed?key= · /api/market/leverage 일곱입니다."}, 404)
             return
         base = upstream_base()
         if base:
@@ -9549,6 +9576,8 @@ class Handler(SimpleHTTPRequestHandler):
             r = crypto.items()
         elif route == "us-outlook":
             r = us_outlook.outlook()
+        elif route == "leverage":             # 레버리지 지표(server/leverage.py) — 바깥 넷을 CACHE_SEC 에 한 번 · 못 받으면 앞 값 + 「못 받음」
+            r = leverage.payload()
         elif route == "fear-greed":           # 공포·탐욕 지수(server/fear_greed.py) — key KOSPI · 005930 · 000660 · 일봉 · 쌓인 수급으로 셈 · KIS 를 새로 안 부른다
             key = (urllib.parse.parse_qs(parsed.query).get("key") or ["KOSPI"])[0].strip().upper()
             r = dict(fear_greed.all_targets(sys.modules[__name__], key), meta=fear_greed.status())
@@ -9722,6 +9751,14 @@ class Handler(SimpleHTTPRequestHandler):
                 import news_brief
                 r = news_brief.flash()
                 self._send_json({"ok": True, "data": r["items"], "meta": r["meta"]})
+                return
+            # 텔레그램 미리보기 — 보내지도 표시하지도 않는다 · 정기 글은 이미 지은 것만(새로 안 지음) · 하루 몇 건(2026-11-18)
+            if route == "tg-preview":
+                import news_brief
+                r = news_store.preview()
+                self._send_json({"ok": True, "data": r, "meta": {"slots": ["%02d:%02d" % x for x in news_store.DIGEST_SLOTS],
+                                                                  "flashWaitSec": news_store.FLASH_WAIT_SEC, "on": news_brief.ON,
+                                                                  "slotFail": news_brief._st.get("slotFail")}})
                 return
 
             if route == "hot":
@@ -10491,6 +10528,17 @@ class Handler(SimpleHTTPRequestHandler):
                 b = dt30.board(sys.modules[__name__], day or None, cfg)
                 self._send_json({"ok": b is not None, "data": b,
                                  "meta": dict(dt30.status(), days=dt30.days(sys.modules[__name__]))})
+                return
+
+            if route == "dt30-win":
+                # 단타 판 칩별 승률(server/dt30_win.py · 2026-11-18) — 쌓인 날 손익으로 그때 수수료를 빼 셈 · KIS 안 부름
+                try:
+                    nd = max(1, min(int((qs.get("days") or [dt30_win.DAYS_DEFAULT])[0]), dt30.DAYS_KEEP))
+                except ValueError:
+                    self._send_json({"ok": False, "error": "days 는 숫자입니다."}, 400)
+                    return
+                d, m = dt30_win.summary(sys.modules[__name__], nd)
+                self._send_json({"ok": True, "data": d, "meta": m})
                 return
 
             if route == "open-rise":
@@ -11373,6 +11421,9 @@ def main():
     # 「좋은 뉴스」 판정(2026-11-05 · server/good_news.py) — 같은 문(보내는 서버만) · 공급계약 · 자사주 상세를 5분마다 받아 쌓기만 · 알림 없음
     if not SLOW and is_sender(args.port) and good_news.start(sys.modules[__name__]):
         print("  좋은 뉴스 판정 : 사용 (5분마다 공급계약 본문 · 자사주 취득 상세 받기 · /api/good-news)")
+    # 「실적」 칩(2026-11-18 · server/earnings_beat.py) — 같은 문(보내는 서버만) · 잠정실적 · 실적 전망 본문과 네이버 재무를 5분마다 받아 쌓기만 · 알림 없음
+    if not SLOW and is_sender(args.port) and earnings_beat.start(sys.modules[__name__]):
+        print("  실적 칩       : 사용 (5분마다 잠정실적 · 실적 전망 본문 · 네이버 예상치 받기 · /api/earnings-beat)")
     # 공포·탐욕 25 풀림 알림(2026-11-06 · server/fear_greed.py) — 같은 문(보내는 서버만) · 평일 15:45 뒤 한 번 · SEND 가 꺼져 있으면 기록만
     if not SLOW and is_sender(args.port) and fear_greed.start(sys.modules[__name__]):
         print("  공포·탐욕    : 25 풀림 보기 (평일 %02d:%02d 뒤 한 번 · 알림 %s · /api/market/fear-greed)"
@@ -11395,6 +11446,8 @@ def main():
     if not SLOW and is_sender(args.port) and dt30.start(sys.modules[__name__]):
         print("  단타 30 판 : 평일 %s 단타 상위 %d 굳힘 · %s~%s %d분마다 값 · %d거래일 · /api/kis/dt30"
               % (dt30.status()["buyAt"], dt30.TOP_N, dt30.times()[0], dt30.times()[-1], dt30.TRACK_STEP, dt30.DAYS_KEEP))
+    if not SLOW and is_sender(args.port) and dt30_win.start(sys.modules[__name__]):
+        print("  단타 승률  : 끝난 판(%s 칸까지)을 %d초마다 보고 하루 한 줄 · /api/kis/dt30-win?days=%d" % (dt30_win.SELL_AT, dt30_win.TICK, dt30_win.DAYS_DEFAULT))
     if not SLOW and is_sender(args.port) and open_rise.start(sys.modules[__name__]):
         print("  초반상승   : 첫 5분봉이 끝나는 순간(+%d초) 대상 종목 첫 봉을 먼저 받음 · %d분 뒤 그만" % (open_rise.FIRST_GRACE_SEC, open_rise.FIRST_UNTIL_MIN))
     if not SLOW and is_sender(args.port) and day_top_fill.start(sys.modules[__name__]):
