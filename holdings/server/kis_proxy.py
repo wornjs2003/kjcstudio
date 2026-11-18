@@ -86,6 +86,7 @@ import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
 import day_top_fill     # 등락 상위 — 지난 거래일 판을 다시 세어 채움(장 쉬는 때 · 쓰는 서버만 · 2026-11-11 · server/day_top_fill.py)
 import day_top          # 등락 상위와 걸린 필터 — 날마다 장 뒤 한 번 쌓음 · /api/kis/day-top(2026-11-11 · server/day_top.py)
+import dt30_win         # 단타 판 칩별 승률 — 끝난 판 손익을 하루 한 줄 · /api/kis/dt30-win(2026-11-18 · server/dt30_win.py)
 import dt30             # 단타 30 판 — 평일 09:06 단타 상위 30 굳힘 · 30분마다 값 · 30거래일 · /api/kis/dt30(2026-11-11 · server/dt30.py)
 import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
 import session_volume   # 시간대별 거래량 · 전일비 — 프리장 · 정규장 · 애프터 끝에 순위 종목 누적 거래량 저장 · /api/kis/vol-ratio(2026-11-05 · server/session_volume.py)
@@ -10465,6 +10466,17 @@ class Handler(SimpleHTTPRequestHandler):
                                  "meta": dict(dt30.status(), days=dt30.days(sys.modules[__name__]))})
                 return
 
+            if route == "dt30-win":
+                # 단타 판 칩별 승률(server/dt30_win.py · 2026-11-18) — 쌓인 날 손익으로 그때 수수료를 빼 셈 · KIS 안 부름
+                try:
+                    nd = max(1, min(int((qs.get("days") or [dt30_win.DAYS_DEFAULT])[0]), dt30.DAYS_KEEP))
+                except ValueError:
+                    self._send_json({"ok": False, "error": "days 는 숫자입니다."}, 400)
+                    return
+                d, m = dt30_win.summary(sys.modules[__name__], nd)
+                self._send_json({"ok": True, "data": d, "meta": m})
+                return
+
             if route == "open-rise":
                 # 초반상승 — 정규장 첫 5분봉(여는 시각부터 5분 · market_hours)이 시가보다 RISE_PCT % 이상 올라 끝난 종목 (2026-11-11 · server/open_rise.py) · KIS 안 부름
                 d, at = open_rise.fetch(sys.modules[__name__])
@@ -11363,6 +11375,8 @@ def main():
     if not SLOW and is_sender(args.port) and dt30.start(sys.modules[__name__]):
         print("  단타 30 판 : 평일 %s 단타 상위 %d 굳힘 · %s~%s %d분마다 값 · %d거래일 · /api/kis/dt30"
               % (dt30.status()["buyAt"], dt30.TOP_N, dt30.times()[0], dt30.times()[-1], dt30.TRACK_STEP, dt30.DAYS_KEEP))
+    if not SLOW and is_sender(args.port) and dt30_win.start(sys.modules[__name__]):
+        print("  단타 승률  : 끝난 판(%s 칸까지)을 %d초마다 보고 하루 한 줄 · /api/kis/dt30-win?days=%d" % (dt30_win.SELL_AT, dt30_win.TICK, dt30_win.DAYS_DEFAULT))
     if not SLOW and is_sender(args.port) and open_rise.start(sys.modules[__name__]):
         print("  초반상승   : 첫 5분봉이 끝나는 순간(+%d초) 대상 종목 첫 봉을 먼저 받음 · %d분 뒤 그만" % (open_rise.FIRST_GRACE_SEC, open_rise.FIRST_UNTIL_MIN))
     if not SLOW and is_sender(args.port) and day_top_fill.start(sys.modules[__name__]):
