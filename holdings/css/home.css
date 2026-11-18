@@ -1187,6 +1187,17 @@
 .kh-xp.is-near b, .kh-xp.is-witch b { color: var(--kh-text-on-fill); }
 .kh-xp.is-witch { font-weight: 800; padding: 2px 12px; box-shadow: 0 0 0 3px var(--kh-danger-faint), 0 0 0 5px var(--kh-danger); animation-duration: .6s; }
 @keyframes kh-xp-blink { to { opacity: .25; } }
+/* 신용융자 칸 — 지수 띠 끝(11-18 「나」) · 모양은 지수 칸 그대로 · 앞 날 대비 줄의 덧말만 작게 */
+.kh-lev-ix .kh-ix-c span { font-size: var(--kh-fs-sm); font-weight: 400; }
+/* 레버리지 모달 — 탭을 바꿔도 칸 높이 그대로(그래프 칸 높이를 잡아 둔다) */
+.lv-wrap { padding: 6px 24px 20px; }
+.lv-top { min-height: 34px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.lv-top .lv-big { font-size: 1.8rem; line-height: 1; }
+.lv-legend { min-height: 22px; display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.8rem; color: var(--kh-text-secondary); margin: 6px 0; }
+.lv-legend i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.lv-legend b { color: var(--kh-text-primary); }
+.lv-chart { height: 460px; position: relative; }
+.lv-note { margin-top: 10px; font-size: 0.74rem; min-height: 32px; }
 
 /* 큰 차트의 기간 고르기 (2026-09-15 지시) */
 /* 이름 아래 줄에 둔다. 전에는 오른쪽 끝에 붙여 두었다 (2026-09-15 지시) */
