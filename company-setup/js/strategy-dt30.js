@@ -239,7 +239,7 @@ function calc(d) {
 function paint(d) {
   atText(d.buyAt);
   st.rules = (d.meta && d.meta.rules) || null; st.chipInfo = (d.meta && d.meta.chipInfo) || null;   // 칩 풍선 — 서버 룰 값 · 받는 때 글(tipOf)
-  st.miss = new Set(names(d.meta && d.meta.missing)); st.wait = new Set(names(d.meta && d.meta.wait)); st.watchAuto = !!(d.meta && d.meta.watchRule === '자동'); st.openAt = (d.meta && d.meta.openAt) || null; st.rebuilt = !!(d.meta && d.meta.rebuilt === true);
+  st.miss = new Set(names(d.meta && d.meta.missing)); st.wait = new Set(names(d.meta && d.meta.wait)); st.watchAuto = !!(d.meta && d.meta.watchRule === '자동'); st.openAt = (d.meta && d.meta.openAt) || ((d.rows || []).find((r) => r.buySrc && r.buyAt) || {}).buyAt || null;   // 서버 meta.openAt · 없으면(다시 센 판) 줄의 buyAt st.rebuilt = !!(d.meta && d.meta.rebuilt === true);
   const C = calc(d), { times, all, live, rows, L, LIVE, R, n: topN, per, top, noMkt, P } = C;
   usLoad(d.day);
   // 칩 줄은 표 안 「종목」 머리 줄과 「평균」 줄 사이에 (11-11 재권님 「칩위치는 종목과 평균사이에 넣어줘」) · 표가 옆으로 밀려도 칩은 왼쪽에 붙어 있음(strategy.css)
@@ -311,7 +311,7 @@ function paint(d) {
     const vt = has && c === 'VI·급등' ? viTxt(r) : '';
     const v = has ? `<span class="dt-cg" data-i="${colorOf(c)}">${sb.length ? `<i class="dt-chs">${esc(sb.join('·'))}</i>` : '<b class="dt-dot" aria-label="걸림"></b>'}${vt ? `<small>${esc(vt)}</small>` : ''}</span>`
       : st.miss.has(c) ? `<span class="dt-chq" data-tip="${esc(`그날 판에 ${c} 값을 ${missWord()} — 이 종목이 걸렸는지 모름`)}">—</span>`
-      : st.wait.has(c) ? `<span class="dt-chq" data-tip="${esc(`아직 때가 아님 — ${c} 은 정규장(${st.openAt || '09:00'}) 뒤에 셈`)}">·</span>` : '';
+      : st.wait.has(c) ? `<span class="dt-chq" data-tip="${esc(`아직 때가 아님 — ${c} 은 정규장${st.openAt ? `(${st.openAt})` : ''} 뒤에 셈`)}">·</span>` : '';
     return `<td class="dt-chc${on ? '' : ' is-off'}">${v}</td>`; };
   const chBlank = (th) => CS.map(() => `<${th} class="dt-chc"></${th}>`).join('') + `<${th} class="dt-ovn"></${th}><${th} class="dt-addc"></${th}>`;
   const usRow = `<tr class="dt-chiprow"><td colspan="${times.length + nCol + 11}"><div class="dt-chips" id="dt-chips"><span class="dt-us" id="dt-us" data-day="${esc(d.day || '')}">${usHtml(d.day)}</span></div></td></tr>`;
