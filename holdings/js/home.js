@@ -1962,36 +1962,23 @@ async function loadPre() {
   if (rankModal && rankModalSort === 'pre') { paintRankModal(); paintRankModalNote(); }
 }
 
-/* 「겹침」 칩 — 여섯 칩의 목록을 모아 둘 이상에 든 종목. 목록은 각 칩이 받은 것 그대로(못 받은 칩은 「불러오는 중」 에 적는다) */
-const OV_CHIPS = ['fav', 'pre', 'vi', 'after', 'buy', 'rise'];   // 「수급」(auto)은 11-18 「관심」 과 하나가 됐다 — 관심 = 자동 관심 룰 종목(서버 dt30 OV_CHIPS 와 같게 · 개발2)
-const ovLabel = (id) => (id === 'auto' ? '수급' : SORTS[id].label);
-function ovList(id) {
-  if (id === 'fav') return favList().filter((f) => !isUsCode(f.code) && !capBelowMin(f.code));   // 관심 = 자동 관심 룰 종목(11-18)
-  if (id === 'after') return [...rowList('after', 'KOSPI'), ...rowList('after', 'KOSDAQ')];
-  if (id === 'buy') return jointRows;                              // 셋 다 사는 중인 줄만(빠진 줄 jointFlipped 은 안 셈)
-  if (id === 'pre') return preRows && preRows.filter((x) => !capBelowMin(x.code));
-  if (id === 'vi') return viRows;
-  if (id === 'rise') return riseRows;
-  return null;
-}
-const ovWaiting = () => OV_CHIPS.filter((id) => ovList(id) == null);
+/* 「단타」 칩 — 단타 목록은 서버 한 곳(server/dt30.py live · /api/kis/dt-list)이 센다 · 화면은 받은 줄 중 칩 둘 이상 · 하락 아닌 것을 받은 차례 그대로 그린다
+   (재권님 「홈에 있는 칩을 단타에도 추가해서 동기화하고 한곳에서 받도록 해」 11-18 17:4x · 전에는 이 파일이 여섯 칩 목록을 모아 따로 셌다 — 단타 판과 두 벌).
+   칩 정의 · 하락 뺌 · 차례(칩 수 → 초반상승 → 시가총액)는 서버 값 그대로 — 여기 두지 않는다 */
+const OV_CHIPS = ['fav', 'pre', 'vi', 'after', 'buy', 'rise'];   // 그리는 차례 · 칩 이름표(SORTS label) — 서버 칩 이름과는 아래 OV_ID 로 잇는다
+const OV_ID = { '관심': 'fav', '프리장': 'pre', 'VI·급등': 'vi', '장외': 'after', '매수': 'buy', '초반상승': 'rise' };   // 서버 dt30.OV_CHIPS 이름 → 이 화면 칩 id
+const OV_MIN = 2;                 // 홈 「단타」 는 칩 둘 이상(단타 판은 하나 이상 — 문턱은 읽는 쪽 · 하나로 맞출지는 재권님께 여쭘 11-18)
+const ovLabel = (id) => (SORTS[id] ? SORTS[id].label : id);
+let dtList = null, dtMeta = null;    // 못 받았으면 null(빈 목록과 가른다)
+const ovWaiting = () => (dtList == null ? ['단타 목록'] : [...((dtMeta && dtMeta.missing) || [])]);
 let ovBy = {};
-/* 하락 뺌 — 전일 종가 대비 등락률이 이 % 아래인 종목은 단타 줄에 안 넣는다. 등락률을 모르면 안 뺀다(못 잼은 하락이 아니다) ·
-   재권님 「단타에 하락인 종목은 필요없어」 → 「거래량 많은 종목중에 하락인건 제외한다는 룰 넣어봐」 → 홈 단타 줄에도 같게 「응」(11-12).
-   서버 단타 판 dt30.DROP_BELOW_PCT 와 같은 값 · 같은 셈이다 — 두 벌이다(보드 [미배분] 「단타 칩 목록 · 칩 문턱을 서버 한 곳에서」 에 적음) */
-const OV_DROP_BELOW_PCT = 0;
-const ovDown = (code) => { const v = rowPrices[code] && rowPrices[code].pct; return Number.isFinite(v) && v < OV_DROP_BELOW_PCT; };
 function ovRows() {
   const by = {};
-  for (const id of OV_CHIPS) {
-    for (const x of ovList(id) || []) {
-      const g = by[x.code] || (by[x.code] = { code: x.code, name: x.name, chips: [] });
-      if (!g.chips.includes(id)) g.chips.push(id);
-    }
+  for (const x of dtList || []) {
+    by[x.code] = { code: x.code, name: x.name, chips: (x.chips || []).map((c) => OV_ID[c]).filter(Boolean), subs: x.subs || {}, down: !!x.down };
   }
   ovBy = by;
-  return Object.values(by).filter((g) => g.chips.length >= 2 && !ovDown(g.code))
-    .sort((a, b) => b.chips.length - a.chips.length || (capOf(b.code) ?? -1) - (capOf(a.code) ?? -1));
+  return (dtList || []).filter((x) => by[x.code].chips.length >= OV_MIN && !x.down).map((x) => by[x.code]);
 }
 /* 칩마다 색 — 어느 칩에 들었는지 글자만으로는 한눈에 안 갈렸다(2026-11-13 재권님 「칩별로 색을 다르게 해줘 인지가 잘 안되네」).
    색은 theme.css 의 기존 범주색만 쓴다(새 변수 없음) · 옅은 바탕 + 같은 색 진한 글씨(「색 바탕 위의 글씨」) · 오름 빨강 · 내림 파랑과 겹치지 않게 고름.
@@ -2008,11 +1995,21 @@ function ovCell(code) {
     `<div style="white-space:normal;max-width:${OV_CHIP_W}px;margin-left:auto;font-size:11px;line-height:1.3">${[...g.chips].sort((a, b) => (b === 'vi') - (a === 'vi')).map((id) => ovTag(id)).join(' ')}</div>`;   // 칩 이름 한가운데서는 안 끊는다
 }
 function ovNote() {
+  const m = dtMeta || {};
   const w = ovWaiting();
-  const down = Object.values(ovBy).filter((g) => g.chips.length >= 2 && ovDown(g.code)).length;
-  return `칩 ${OV_CHIPS.length}개 중 둘 이상${down ? ` · 하락 ${down} 뺌` : ''}${w.length ? ` · 못 받은 칩 ${w.map(ovLabel).join(' · ')}` : ''}`;
+  const down = Object.values(ovBy).filter((g) => g.chips.length >= OV_MIN && g.down).length;
+  return `칩 ${OV_CHIPS.length}개 중 둘 이상${down ? ` · 하락 ${down} 뺌` : ''}${(m.wait || []).length ? ` · ${m.openAt || '09:00'} 뒤 ${m.wait.join(' · ')}` : ''}${w.length ? ` · 못 받은 칩 ${w.join(' · ')}` : ''}`;
 }
-async function loadOv() { loadPre(); loadVi(); loadJoint(); loadRise(); }
+async function loadOv() {
+  try {
+    const r = await apiFetch('/api/kis/dt-list', { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    if (j && j.meta) dtMeta = j.meta;
+    if (j && j.ok && Array.isArray(j.data)) dtList = j.data;
+  } catch { /* 못 받으면 들고 있던 것 그대로 */ }
+  if (sortBy === 'ov') { paintRows(rowPrices); paintSortNote(); }
+  if (rankModal && rankModalSort === 'ov') { paintRankModal(); paintRankModalNote(); }
+}
 
 /* 섹터 띠 — 칩을 누르면 그 목록 종목들이 든 섹터(WICS)의 오늘 등락 · 그 목록에 몇 종목 (2026-11-11 재권님 「해당버튼 클릭하면 섹터가 오르고
    내리는지도 표기해주고」). 섹터 등락은 서버가 주는 네이버 업종 등락 그대로(/api/naver/groups?all=1) — 화면은 이름으로 찾기만 한다.
@@ -2929,11 +2926,12 @@ async function loadSectors() {
   } catch { /* 못 받으면 빈칸 그대로 */ }
 }
 const JOINT_FALLBACK_MS = 300000;     // 「매수」 칩 — 서버 값마저 못 받았을 때만
-watch({ url: () => (sortBy === 'buy' || sortBy === 'ov' ? '/api/kis/joint-buy' : null), onChange: loadJoint, key: 'kis_proxy.INVESTOR_TOP_TTL', fallbackMs: JOINT_FALLBACK_MS });
-watch({ url: () => (sortBy === 'pre' || sortBy === 'ov' ? '/api/kis/pre-flow' : null), onChange: loadPre, key: 'pre_flow.FLOW_TTL', fallbackMs: JOINT_FALLBACK_MS });
+watch({ url: () => (sortBy === 'ov' || (rankModal && rankModalSort === 'ov') ? '/api/kis/dt-list' : null), onChange: loadOv, key: 'dt30.LIVE_TTL', fallbackMs: JOINT_FALLBACK_MS });   // 단타 목록 한 곳(11-18)
+watch({ url: () => (sortBy === 'buy' ? '/api/kis/joint-buy' : null), onChange: loadJoint, key: 'kis_proxy.INVESTOR_TOP_TTL', fallbackMs: JOINT_FALLBACK_MS });
+watch({ url: () => (sortBy === 'pre' ? '/api/kis/pre-flow' : null), onChange: loadPre, key: 'pre_flow.FLOW_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => (sortBy === 'pre' || (rankModal && rankModalSort === 'pre') ? '/api/kis/pre-surge' : null), onChange: loadPreSame, key: 'pre_surge.BURST_SEC', fallbackMs: JOINT_FALLBACK_MS });
-watch({ url: () => (sortBy === 'rise' || sortBy === 'ov' || (rankModal && rankModalSort === 'rise') ? '/api/kis/open-rise' : null), onChange: loadRise, key: 'open_rise.CACHE_TTL', fallbackMs: JOINT_FALLBACK_MS });
-watch({ url: () => (sortBy === 'vi' || sortBy === 'ov' || (rankModal && rankModalSort === 'vi') ? '/api/alerts/today' : null), onChange: loadVi, key: null, fallbackMs: VI_FALLBACK_MS });
+watch({ url: () => (sortBy === 'rise' || (rankModal && rankModalSort === 'rise') ? '/api/kis/open-rise' : null), onChange: loadRise, key: 'open_rise.CACHE_TTL', fallbackMs: JOINT_FALLBACK_MS });
+watch({ url: () => (sortBy === 'vi' || (rankModal && rankModalSort === 'vi') ? '/api/alerts/today' : null), onChange: loadVi, key: null, fallbackMs: VI_FALLBACK_MS });
 watch({ url: () => (sortBy === 'bb' || (rankModal && rankModalSort === 'bb') ? '/api/signals/today' : null), onChange: loadBb, key: null, fallbackMs: BB_FALLBACK_MS });
 watch({ url: () => (sortBy === 'ev' || (rankModal && rankModalSort === 'ev') ? `/api/good-news?days=${EV_DAYS}` : null), onChange: loadEv, key: 'dart.POLL_INTERVAL', fallbackMs: EV_FALLBACK_MS });
 watch({ url: () => (sortBy === 'eb' || (rankModal && rankModalSort === 'eb') ? '/api/earnings-beat' : null), onChange: loadEb, key: 'dart.POLL_INTERVAL', fallbackMs: EB_FALLBACK_MS });
