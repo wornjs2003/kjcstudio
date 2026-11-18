@@ -46,7 +46,9 @@ const DT_CHIPS = ['관심', '프리장', 'VI·급등', '장외', '매수', '초�
 //   넓은 폭 표는 칩마다 세로 칸 · 칸 이름을 누르면 차림(켜기 · 끄기 · 룰 보기 · 옮기기 · 칸 지우기) · 끝 「+ 칩」 으로 서버가 주는 다른 칩(현재상승 · 볼린저 · 지운 칩)을 칸으로 더함
 //   셈에 드는 칩 = 칸에 있고 켜진 칩(겹친 수 · 순위 · 손익이 그것으로 다시 셈) · 칸 차례 · 꺼진 칩은 보는 사람 브라우저에만(보는 상태 — 저장 못 해도 기본 칸으로 돈다)
 const COLS_KEY = 'dt30-cols-v1';
-const colsOf = () => st.cols || DT_CHIPS;
+// 11-18 서버 바뀜(개발2 · 재권님 「관심 하트는 누르는거 없애고 자동으로 관심으로」 → 「응 맞아」) — meta.watchRule 「자동」 인 날은 관심 = 자동 관심 룰 · 「수급(자동)」 칩이 안 옴
+//   그날은 「자동」 칸을 빼고(빈 칸으로 남기지 않음) · 지난 날 판(옛 셈)은 그대로
+const colsOf = () => (st.cols || DT_CHIPS).filter((c) => !(st.watchAuto && c === '자동'));
 (() => { try { const v = JSON.parse(localStorage.getItem(COLS_KEY) || 'null'); if (v && Array.isArray(v.cols) && v.cols.length) { st.cols = v.cols.map(String).map(chipName); st.off = new Set((v.off || []).map(String).map(chipName)); } } catch (e) { /* 기본 칸 */ } })();
 const colsSave = () => { try { localStorage.setItem(COLS_KEY, JSON.stringify({ cols: colsOf(), off: [...st.off] })); } catch (e) { /* 이 브라우저에 못 남겨도 화면은 돈다 */ } };
 const CHIP_SEEN = [...DT_CHIPS];   // 칩 색 차례 — 단타 일곱 뒤로 처음 본 차례(색 변수는 일곱이라 돌려 씀)
@@ -106,6 +108,7 @@ const tipOf = (k) => {
   const ci = st.chipInfo && st.chipInfo[k];
   if (typeof ci === 'string' && ci) return ci;
   const R = st.rules || {};
+  if (k === '관심' && st.watchAuto) return [`자동 관심 룰에 든 종목(하트 안 씀) — ${WHAT.자동(R.관심).replace(/^전일 거래량 급등 룰 — /, '')}`, WHEN.자동].filter(Boolean).join('\n');
   const head = TIP[k] || (WHAT[k] ? WHAT[k](R[k]) : '');
   return [head, WHEN[k]].filter(Boolean).join('\n');
 };
@@ -236,7 +239,7 @@ function calc(d) {
 function paint(d) {
   atText(d.buyAt);
   st.rules = (d.meta && d.meta.rules) || null; st.chipInfo = (d.meta && d.meta.chipInfo) || null;   // 칩 풍선 — 서버 룰 값 · 받는 때 글(tipOf)
-  st.miss = new Set(names(d.meta && d.meta.missing)); st.rebuilt = !!(d.meta && d.meta.rebuilt === true);
+  st.miss = new Set(names(d.meta && d.meta.missing)); st.wait = new Set(names(d.meta && d.meta.wait)); st.watchAuto = !!(d.meta && d.meta.watchRule === '자동'); st.openAt = (d.meta && d.meta.openAt) || null; st.rebuilt = !!(d.meta && d.meta.rebuilt === true);
   const C = calc(d), { times, all, live, rows, L, LIVE, R, n: topN, per, top, noMkt, P } = C;
   usLoad(d.day);
   // 칩 줄은 표 안 「종목」 머리 줄과 「평균」 줄 사이에 (11-11 재권님 「칩위치는 종목과 평균사이에 넣어줘」) · 표가 옆으로 밀려도 칩은 왼쪽에 붙어 있음(strategy.css)
@@ -252,7 +255,7 @@ function paint(d) {
   st.last[d.day] = resAvg;
   const bm = d.meta || {}, nm = (a) => names(a).join(' · ');   // 되채운 날 · 못 받은 칩 — 칩 이름은 서버가 준 그대로
   const rebuilt = bm.rebuilt === true ? ` · 되채운 날${nm(bm.missing) ? ` · ${nm(bm.missing)} 못 셈` : ''}${nm(bm.approx) ? ` · ${nm(bm.approx)} 어림` : ''}` : `${nm(bm.missing) ? ` · 못 받은 칩 ${nm(bm.missing)}` : ''}${nm(bm.early) ? ` · ${nm(bm.early)} 어림(집계 전)` : ''}${bm.late && typeof bm.late === 'object' && Object.keys(bm.late).length ? ` · 늦게 채움 ${Object.entries(bm.late).map(([k, v]) => `${k} ${v}`).join(' · ')}` : ''}`;
-  $('dt-meta').textContent = `${dayTxt(d.day)}${rebuilt}${LIVE ? ` · 장중 실시간(${esc(String(d.nowAt || '—'))} 값 · 14:00 뒤 굳혀 저장)` : d.closed === true ? ' · 14:00 뒤 굳힌 값' : ''} · 후보 ${num(all.length)} 중 켜진 칩에 걸린 ${num(live.length)} · 보이는 ${num(rows.length)} · ${d.buyAt ? `${hmTxt(d.buyAt)} 매수` : '매수 시각 —'} · 판 것 ${sold.length}(손절 ${sold.filter((x) => x.s.why === '손절').length} · 꺾임 ${sold.filter((x) => x.s.why === '꺾임').length} · 고점 ${sold.filter((x) => x.s.why === '고점').length}) · 끝까지 들고 감 ${R.length - sold.length} · 결과 평균 ${sgn(resAvg)} · 이긴 것 ${res.filter((v) => v > 0).length} · 진 것 ${res.filter((v) => v < 0).length}`;
+  $('dt-meta').textContent = `${dayTxt(d.day)}${rebuilt}${LIVE ? ` · 장중 실시간(${esc(String(d.nowAt || '—'))} 값 · 14:00 뒤 굳혀 저장)` : d.closed === true ? ' · 14:00 뒤 굳힌 값' : ''} · 후보 ${num(all.length)} 중 켜진 칩에 걸린 ${num(live.length)} · 보이는 ${num(rows.length)} · ${d.buyAt ? (st.openAt ? `${hmTxt(d.buyAt)} 부터 판 · 매수가 = 정규장 ${hmTxt(String(st.openAt).replace(':', ''))} 시가` : `${hmTxt(d.buyAt)} 매수`) : '매수 시각 —'} · 판 것 ${sold.length}(손절 ${sold.filter((x) => x.s.why === '손절').length} · 꺾임 ${sold.filter((x) => x.s.why === '꺾임').length} · 고점 ${sold.filter((x) => x.s.why === '고점').length}) · 끝까지 들고 감 ${R.length - sold.length} · 결과 평균 ${sgn(resAvg)} · 이긴 것 ${res.filter((v) => v > 0).length} · 진 것 ${res.filter((v) => v < 0).length}`;
   $('dt-pnl-sum').innerHTML = P ? `<b>${st.set.mode === 'day' ? `하루 ${manTxt(st.set.dayWon)}을 ${C.nb}종목에 나눠(종목마다 ${manTxt(per)})` : `상위 ${P.n}종목 × ${manTxt(per)}`}</b> · 산 ${wonPlain(P.buy)} · 판 ${wonPlain(P.sell)} · 빼기 전 ${won(P.gross)}`
     + ` · 거래세 ${wonPlain(P.tx)} · 농특세 ${wonPlain(P.rural)} · 수수료 ${P.fee == null ? '빈칸 — 안 셈' : wonPlain(P.fee)}`
     + ` · <b>세후 손익 <span class="${signClass(P.net, NUM) || ''}">${won(P.net)}</span> (${pct(P.net / P.buy * 100)})</b>${noMkt ? ` · 시장 모름 ${noMkt}종목은 세후에서 뺌` : ''}` : '— 손익을 셀 값이 없음';
@@ -266,6 +269,9 @@ function paint(d) {
   const plTd = (x, i) => `<td class="dt-pl">${i < topN && x.pnl ? (x.pnl.net == null ? '<span class="st-err">시장 모름</span>' : `<span class="${signClass(x.pnl.net, NUM) || ''}">${won(x.pnl.net)}</span><small>빼기 전 ${won(x.pnl.gross)}</small>`) : '<span class="st-err">—</span>'}</td>`;
   const resTd = (x) => `<td class="dt-res">${pct(x.res)}<small>${x.s.k >= 0 ? `${hmTxt(times[x.s.k])} ${x.s.why}` : x.now ? `지금 ${esc(String(d.nowAt || '').slice(0, 5))}` : '끝까지'}</small></td>`;
   const rk = (r, i) => `<td class="dt-rk">${i + 1}</td>`;
+  // 매수가 (11-18 서버 바뀜) — 정규장 전에 든 종목은 buy null + buyWait → 「09:00 시가 기다림」 · 채워지면 buySrc(시가 · 지금 값) · 그 시각
+  const buyTd = (r) => (r.buy == null && r.buyWait ? `<td class="dt-buy"><span class="dt-nxm">${st.openAt ? hmTxt(String(st.openAt).replace(':', '')) : '정규장'} 시가 기다림</span></td>`
+    : `<td class="dt-buy">${num(r.buy)}${r.buySrc ? `<small>${r.buyAt ? `${hmTxt(String(r.buyAt).replace(':', ''))} ` : ''}${esc(r.buySrc)}</small>` : ''}</td>`);
   // 다음 날 프리장 08:05 (11-18 재권님 「이종목들 내일 프리장에 8시 5분에 얼마인지 체크해서 넣어줘 … 어제에 프리장 8시5분 이라고 칸이 있어야 되고 여기에 값 넣어줘」)
   //   값은 서버 rows[].nx(개발2 · 다음 거래일 넥스트레이드 그 시각 값) · 시각은 meta.nxAt · 화면은 매수가 대비 % 만 셈
   //   nx 칸이 없으면 「아직」(다음 날 그 시각 전) · px 가 null 이면 「—」(넥스트레이드 거래 없음 · 못 받음 — 0 아님)
@@ -290,7 +296,7 @@ function paint(d) {
     <tr><th class="dt-rk"></th><th class="st-name">종목</th><th class="dt-res">결과</th><th class="dt-pl">손익</th><th>매수가</th>${times.map((t) => `<th>${hmTxt(t)}</th>`).join('')}<th class="dt-nx">다음 날 프리장 ${nxAt || ''}</th><th class="dt-tx">세금 %</th></tr>
     ${chipRow(times.length + 7)}
     <tr class="dt-avg"><td class="dt-rk"></td><td class="st-name">평균</td><td class="dt-res">${pct(resAvg)}</td><td class="dt-pl">${P ? won(P.net) : '—'}</td><td></td>${avg.map((x) => `<td>${pct(x)}</td>`).join('')}${nxAvg}<td class="dt-tx"></td></tr>
-    ${R.map((x, i) => { const r = x.r; return `${grp(i, times.length + 7)}<tr>${rk(r, i)}<td class="st-name" data-co="${esc(r.code || '')}"><b>${esc(r.name || '—')}</b><small class="dt-sub">${capTxt(r.cap)} · ${esc(r.sector || '섹터 —')}</small><span class="dt-evs">${evHtml(r.chips, r)}</span></td>${resTd(x)}${plTd(x, i)}<td class="dt-buy">${num(r.buy)}</td>${times.map((t, k) => cell(x, k)).join('')}${nxTd(r)}<td class="dt-tx">${taxTxt(x.r)}</td></tr>`; }).join('')}
+    ${R.map((x, i) => { const r = x.r; return `${grp(i, times.length + 7)}<tr>${rk(r, i)}<td class="st-name" data-co="${esc(r.code || '')}"><b>${esc(r.name || '—')}</b><small class="dt-sub">${capTxt(r.cap)} · ${esc(r.sector || '섹터 —')}</small><span class="dt-evs">${evHtml(r.chips, r)}</span></td>${resTd(x)}${plTd(x, i)}${buyTd(r)}${times.map((t, k) => cell(x, k)).join('')}${nxTd(r)}<td class="dt-tx">${taxTxt(x.r)}</td></tr>`; }).join('')}
   </table>`;
     return;
   }
@@ -300,20 +306,21 @@ function paint(d) {
     const subs = subOrder(c, [...new Set(all.flatMap((r) => subsOf(r, c)))]);
     const tip = ms ? ` data-tip="${esc(`그날 판에 ${c} 값을 ${missWord()} — 걸린 종목이 있어도 0 으로 셈됨`)}"` : tipAt(c);
     return `<th class="dt-chc${on ? '' : ' is-off'}"><span class="dt-cg${on ? '' : ' is-off'}${ms ? ' is-miss' : ''}" data-i="${colorOf(c)}"><button type="button" class="dt-mc${on ? ' is-on' : ''}" data-col="${esc(c)}"${tip} aria-haspopup="menu">${esc(c)}${ms ? '' : `<b>${n}</b>`}</button>${
-      subs.length ? `<span class="dt-subs">${subs.map((x) => { const k = `${c}|${x}`, son = on && !st.subOff.has(k); return `<button type="button" class="dt-sub-chip${son ? ' is-on' : ''}" data-sub="${esc(k)}"${tipAt(k)} aria-pressed="${son}"${on ? '' : ' disabled'}>${esc(x)}<b>${all.filter((r) => subsOf(r, c).includes(x)).length}</b></button>`; }).join('')}</span>` : ''}</span><small>${on ? (ms ? missWord() : '켜짐') : '꺼짐'}</small></th>`; };
+      subs.length ? `<span class="dt-subs">${subs.map((x) => { const k = `${c}|${x}`, son = on && !st.subOff.has(k); return `<button type="button" class="dt-sub-chip${son ? ' is-on' : ''}" data-sub="${esc(k)}"${tipAt(k)} aria-pressed="${son}"${on ? '' : ' disabled'}>${esc(x)}<b>${all.filter((r) => subsOf(r, c).includes(x)).length}</b></button>`; }).join('')}</span>` : ''}</span><small>${on ? (ms ? missWord() : st.wait.has(c) ? `${st.openAt ? hmTxt(String(st.openAt).replace(':', '')) : '정규장'} 뒤` : '켜짐') : '꺼짐'}</small></th>`; };
   const chCell = (r, c) => { const on = !st.off.has(c), has = (r.chips || []).includes(c), sb = has ? subsOf(r, c) : [];
     const vt = has && c === 'VI·급등' ? viTxt(r) : '';
     const v = has ? `<span class="dt-cg" data-i="${colorOf(c)}">${sb.length ? `<i class="dt-chs">${esc(sb.join('·'))}</i>` : '<b class="dt-dot" aria-label="걸림"></b>'}${vt ? `<small>${esc(vt)}</small>` : ''}</span>`
-      : st.miss.has(c) ? `<span class="dt-chq" data-tip="${esc(`그날 판에 ${c} 값을 ${missWord()} — 이 종목이 걸렸는지 모름`)}">—</span>` : '';
+      : st.miss.has(c) ? `<span class="dt-chq" data-tip="${esc(`그날 판에 ${c} 값을 ${missWord()} — 이 종목이 걸렸는지 모름`)}">—</span>`
+      : st.wait.has(c) ? `<span class="dt-chq" data-tip="${esc(`아직 때가 아님 — ${c} 은 정규장(${st.openAt || '09:00'}) 뒤에 셈`)}">·</span>` : '';
     return `<td class="dt-chc${on ? '' : ' is-off'}">${v}</td>`; };
   const chBlank = (th) => CS.map(() => `<${th} class="dt-chc"></${th}>`).join('') + `<${th} class="dt-ovn"></${th}><${th} class="dt-addc"></${th}>`;
   const usRow = `<tr class="dt-chiprow"><td colspan="${times.length + nCol + 11}"><div class="dt-chips" id="dt-chips"><span class="dt-us" id="dt-us" data-day="${esc(d.day || '')}">${usHtml(d.day)}</span></div></td></tr>`;
   $('dt-box').innerHTML = `<table class="dt-tb dt-cols">
-    <tr><th class="dt-rk"></th><th class="st-name">종목</th><th>시가총액</th><th class="dt-sec">섹터</th>${CS.map(chHead).join('')}<th class="dt-ovn" data-tip="켜진 칩 중 몇 개에 걸렸나 — 순위가 이 수로 정해짐">겹침</th><th class="dt-addc"><button type="button" class="kh-chip" data-addcol aria-haspopup="menu">+ 칩</button></th><th>매수가 ${hmTxt(d.buyAt)}</th><th class="dt-gp" colspan="${times.length}"><span>매수가 대비</span></th><th class="dt-res">결과</th>${nxH1}<th class="dt-tx">세금 %</th><th class="dt-pl">손익 · ${st.set.mode === 'day' ? `하루 ${manTxt(st.set.dayWon)} 나눔` : manTxt(per)}</th></tr>
+    <tr><th class="dt-rk"></th><th class="st-name">종목</th><th>시가총액</th><th class="dt-sec">섹터</th>${CS.map(chHead).join('')}<th class="dt-ovn" data-tip="켜진 칩 중 몇 개에 걸렸나 — 순위가 이 수로 정해짐">겹침</th><th class="dt-addc"><button type="button" class="kh-chip" data-addcol aria-haspopup="menu">+ 칩</button></th><th>매수가 ${st.openAt ? `${hmTxt(String(st.openAt).replace(':', ''))} 시가` : hmTxt(d.buyAt)}</th><th class="dt-gp" colspan="${times.length}"><span>매수가 대비</span></th><th class="dt-res">결과</th>${nxH1}<th class="dt-tx">세금 %</th><th class="dt-pl">손익 · ${st.set.mode === 'day' ? `하루 ${manTxt(st.set.dayWon)} 나눔` : manTxt(per)}</th></tr>
     <tr class="dt-t2"><th class="dt-rk"></th><th class="st-name"></th><th></th><th class="dt-sec"></th>${chBlank('th')}<th></th>${times.map((t) => `<th>${hmTxt(t)}</th>`).join('')}<th class="dt-res">판 값 · 시각</th>${nxH2}<th class="dt-tx">거래세 · 농특세</th><th class="dt-pl">세금 · 수수료 뺌 · 상위 ${topN}</th></tr>
     ${usRow}
     <tr class="dt-avg"><td class="dt-rk"></td><td class="st-name">평균 <small>판 종목은 판 값으로</small></td><td></td><td class="dt-sec"></td>${chBlank('td')}<td></td>${avg.map((x, i) => `<td class="${i === L ? 'dt-last' : ''}">${pct(x)}</td>`).join('')}<td class="dt-res">${pct(resAvg)}</td>${nxAvg}<td class="dt-tx"></td><td class="dt-pl">${P ? won(P.net) : '—'}<small>${P ? `빼기 전 ${won(P.gross)}` : ''}</small></td></tr>
-    ${R.map((x, i) => { const r = x.r; return `${grp(i, times.length + nCol + 11)}<tr>${rk(r, i)}<td class="st-name" data-co="${esc(r.code || '')}"><b>${esc(r.name || '—')}</b> <small>${esc(r.code || '')}</small></td><td>${capTxt(r.cap)}</td><td class="dt-sec">${esc(r.sector || '—')}</td>${CS.map((c) => chCell(r, c)).join('')}<td class="dt-ovn"><b>${nLive(r)}</b>${(() => { const k = CS.filter((c) => !st.off.has(c) && st.miss.has(c) && !(r.chips || []).includes(c)).length; return k ? `<small class="dt-ovm">못 받은 칩 ${k}</small>` : ''; })()}</td><td class="dt-addc"></td><td class="dt-buy">${num(r.buy)}</td>${times.map((t, k) => cell(x, k)).join('')}${resTd(x)}${nxTd(r)}<td class="dt-tx">${taxTxt(x.r)}</td><td class="dt-pl">${i < topN && x.pnl ? (x.pnl.net == null ? '<span class="st-err">시장 모름</span>' : `<span class="${signClass(x.pnl.net, NUM) || ''}">${won(x.pnl.net)}</span><small>빼기 전 ${won(x.pnl.gross)}</small>`) : '<span class="st-err">—</span>'}</td></tr>`; }).join('')}
+    ${R.map((x, i) => { const r = x.r; return `${grp(i, times.length + nCol + 11)}<tr>${rk(r, i)}<td class="st-name" data-co="${esc(r.code || '')}"><b>${esc(r.name || '—')}</b> <small>${esc(r.code || '')}</small></td><td>${capTxt(r.cap)}</td><td class="dt-sec">${esc(r.sector || '—')}</td>${CS.map((c) => chCell(r, c)).join('')}<td class="dt-ovn"><b>${nLive(r)}</b>${(() => { const k = CS.filter((c) => !st.off.has(c) && st.miss.has(c) && !(r.chips || []).includes(c)).length; return k ? `<small class="dt-ovm">못 받은 칩 ${k}</small>` : ''; })()}</td><td class="dt-addc"></td>${buyTd(r)}${times.map((t, k) => cell(x, k)).join('')}${resTd(x)}${nxTd(r)}<td class="dt-tx">${taxTxt(x.r)}</td><td class="dt-pl">${i < topN && x.pnl ? (x.pnl.net == null ? '<span class="st-err">시장 모름</span>' : `<span class="${signClass(x.pnl.net, NUM) || ''}">${won(x.pnl.net)}</span><small>빼기 전 ${won(x.pnl.gross)}</small>`) : '<span class="st-err">—</span>'}</td></tr>`; }).join('')}
   </table>`;
 }
 
