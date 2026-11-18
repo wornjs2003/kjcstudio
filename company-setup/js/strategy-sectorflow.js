@@ -37,10 +37,12 @@ function paint(j) {
   if (!d || !Array.isArray(d.rows)) { meta.textContent = j && j._st ? `— 서버 값 없음(${j._st}) · 서버 셈을 붙이면 채워짐(/api/kis/sector-flow)` : '— 서버 값 없음'; body.innerHTML = `<div class="st-cap sf-meta">${esc(meta.textContent)}</div><div class="st-err">—</div>`; return; }
   const m = j.meta || {}, SL = Array.isArray(d.slots) ? d.slots : [];
   const sum = (o) => { const v = SL.map((k) => (o || {})[k]).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) : null; };
-  const rows = d.rows.map((r) => { const t = sum(r.amt), p = sum(r.prev); return { ...r, t, p, x: t != null && p ? t / p : null }; })
-    .sort((a, b) => (b.x ?? -1) - (a.x ?? -1));
+  // 이 날 · 전날 셈이 다르면(사진 ↔ 5분봉 되채움) 전날 대비 배 · 글씨 짙기를 안 낸다 — 5분봉 판은 봉 있는 종목만 세어 작게 나와 배가 부풂(개발1 · qa 11-18) · 줄 차례는 거래대금 순
+  const same = !(m.src && m.prevSrc && m.src.src && m.prevSrc.src && m.src.src !== m.prevSrc.src);
+  const rows = d.rows.map((r) => { const t = sum(r.amt), p = same ? sum(r.prev) : null; return { ...r, prev: same ? r.prev : {}, t, p, x: t != null && p ? t / p : null }; })
+    .sort((a, b) => (same ? (b.x ?? -1) - (a.x ?? -1) : (b.t ?? -1) - (a.t ?? -1)));
   const last = [...SL].reverse().find((k) => rows.some((r) => r.pct && r.pct[k] != null));
-  meta.textContent = `${hm(SL[0])} ~ 09:30 · 줄 = ${by === 'theme' ? '테마(네이버 · 한 종목이 여러 테마면 각각 셈)' : '업종(네이버 WICS)'} · 칸 = 그 ${SL.length > 1 ? `${(+SL[1].slice(2) - +SL[0].slice(2) + 60) % 60}분` : '칸'} 동안 거래대금(억) · 칸 색 = 그 칸 동안 그 줄 값이 오름(매수 우위 · 옅은 빨강) · 내림(매도 우위 · 옅은 파랑) · 글씨는 같은 쪽 색으로 전날 같은 시각보다 거래대금이 많을수록 짙음 · 줄 차례 = 전날 대비 배 큰 순 · 서버 ${m.asof || '—'}${srcTxt(m.src, '이 날')}${srcTxt(m.prevSrc, '전날')}`;
+  meta.textContent = `${hm(SL[0])} ~ 09:30 · 줄 = ${by === 'theme' ? '테마(네이버 · 한 종목이 여러 테마면 각각 셈)' : '업종(네이버 WICS)'} · 칸 = 그 ${SL.length > 1 ? `${(+SL[1].slice(2) - +SL[0].slice(2) + 60) % 60}분` : '칸'} 동안 거래대금(억) · 칸 색 = 그 칸 동안 그 줄 값이 오름(매수 우위 · 옅은 빨강) · 내림(매도 우위 · 옅은 파랑) · 글씨는 같은 쪽 색으로 전날 같은 시각보다 거래대금이 많을수록 짙음 · 줄 차례 = 전날 대비 배 큰 순 · 서버 ${m.asof || '—'}${srcTxt(m.src, '이 날')}${srcTxt(m.prevSrc, '전날')}${same ? '' : ' · 이 날과 전날 셈이 달라(사진 · 5분봉) 전날 대비 · 글씨 짙기를 안 냄 — 줄 차례는 거래대금 순'}`;
   const th = SL.map((k) => `<th class="${k === MAIN_HM ? 'sf-sep' : ''}">${hm(k)}</th>`).join('');
   const nPre = SL.filter((k) => k < MAIN_HM).length, nReg = SL.length - nPre;
   const tr = rows.map((r, i) => `<tr><td class="sf-i">${i + 1}</td><td class="sf-l">${esc(r.name)}${r.n != null ? ` <small>${num(r.n)}</small>` : ''}</td>${SL.map((k, i) => { const a = (r.amt || {})[k], q = r.pct || {}, b = i ? q[SL[i - 1]] : 0, mv = q[k] == null || b == null ? null : q[k] - b; return `<td class="${k === MAIN_HM ? 'sf-sep' : ''}" style="${bg(mv)}">${a == null ? '—' : (() => { const c = fg(a, (r.prev || {})[k], mv); return c ? `<span style="${c}">${num(a)}</span>` : num(a); })()}</td>`; }).join('')}<td class="sf-sep">${won(r.t)}</td><td>${ratioTxt(r.x)}</td><td>${pct(last && r.pct ? r.pct[last] : null)}</td></tr>`).join('');
