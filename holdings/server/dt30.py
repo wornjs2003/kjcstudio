@@ -15,6 +15,8 @@
     차례       칩 수 많은 순 → 초반상승(첫 5분봉 시가 대비 % · rise) 높은 순 → 시가총액 큰 순 — 상위 TOP_N
                (재권님 19:1x 「칩수가 많은순 초반상승이높은순 시총순 이렇게 해서 올려」 · 초반상승에 안 든 종목은 같은 칩 수 안에서 뒤)
                홈 「단타」 칩은 칩 수 → 시가총액이다 — 이 판만 초반상승을 둘째로 둔다
+    칩 시각    rows[].chipAt {칩: "HH:MM"} — 그 칩이 그날 판의 그 줄에 처음 붙은 시각(판을 짓거나 다시 셀 때 · 늦게 나온 칩은 채운 때) · 다시 세어 빠진 칩은 지운다 ·
+               지난 날 다시 센 판은 칸이 없다(그때 언제 붙었는지 기록이 없다) — 묶음 ② 재권님 「응 만들어」(11-18 18:0x)
     처음 시각  rows[].viAt · surgeAt — VI · 급등이 그날 처음 난 시각(HH:MM:SS · 없으면 null) · 오늘 판은 VI · 급등 알림이 본 시각(급등은 이 서버가 처음 본 때) ·
                지난 날 다시 센 판은 VI 는 KIS VI 현황의 발동 시각 · 급등은 5분봉이라 그 봉 시작 「HH:MM~」(surgeApprox true) — 묶음 ① 재권님 「응 만들어」(11-18 18:0x)
     하위 칩    rows[].subs {칩: [하위]} — VI·급등: VI · 급등 / 매수: ①~④(「매수」 판 tier) / 관심: 든 묶음 이름(자동 묶음 빼고)
@@ -414,7 +416,8 @@ def build(proxy, cfg, day, skip=()):
             down.append(x["code"])                     # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
             continue
         r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "viAt", "surgeAt")}
-        r.update(buy=None if pre else x["price"], px={}, pxSrc={})
+        r.update(buy=None if pre else x["price"], px={}, pxSrc={},
+                 chipAt={c: _now().strftime("%H:%M") for c in x["chips"]})      # 칩마다 판에 처음 붙은 시각(묶음 ② · 다시 세면 앞 시각 그대로)
         if pre:
             r["buyWait"] = True                        # 09:00 전에 든 종목 — 매수가는 09:00 정규장 시가(refresh 가 09:00 뒤 첫 바퀴에 채움 · 그때까지 buy null)
         rows.append(r)
@@ -496,6 +499,7 @@ def patch_late(proxy, cfg, b):
                 continue
             if chip not in r["chips"]:
                 r["chips"].append(chip)
+                r.setdefault("chipAt", {}).setdefault(chip, _now().strftime("%H:%M"))     # 늦게 나온 칩이 붙은 시각(묶음 ②)
             if sub:
                 r["subs"].setdefault(chip, [])
                 if sub not in r["subs"][chip]:
@@ -555,6 +559,10 @@ def refresh(proxy, cfg, b):
             else:
                 r["buy"], r["buyWait"] = None, True
             changed += o.get("rank") != r["rank"] or o.get("chips") != r["chips"]
+        if o is not None:
+            r["chipAt"] = dict(r.get("chipAt") or {}, **{c: t for c, t in (o.get("chipAt") or {}).items() if c in r["chips"]})   # 앞에 붙어 있던 칩은 그 시각 그대로 · 빠진 칩은 지움
+        if o is not None and o.get("buyWait") and opened:
+            pass
         elif o is not None:
             r["buy"], r["pct"], r["px"], r["pxSrc"] = o["buy"], o["pct"], o["px"], o["pxSrc"]
             r["buyAt"] = o.get("buyAt") or b.get("buyAt")
