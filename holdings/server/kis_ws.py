@@ -317,7 +317,8 @@ def _on_data(text):
     if not row["code"] or not row["price"]:
         return
     with _cond:
-        _seq[0] += 1
+        # 번호는 앞으로만 — 지금 시각(밀리초)과 견줘 큰 쪽. 서버를 다시 켜도 0 부터 안 가서 열린 화면이 옛 큰 번호를 쥐고 멈추지 않는다(11-18 재권님 「응 고쳐」)
+        _seq[0] = max(_seq[0] + 1, int(time.time() * 1000))
         row["seq"], row["at"] = _seq[0], time.time()
         _ticks[row["code"]] = row
         _stat["ticks"] += 1
