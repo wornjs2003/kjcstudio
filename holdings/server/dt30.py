@@ -338,6 +338,18 @@ def live(proxy, cfg, force=False):
     with _live_lock:
         if not force and _live["data"] is not None and _live["pre"] == pre and time.time() - _live["at"] < LIVE_TTL:
             return _live["data"]
+    up = getattr(proxy, "KIS_UPSTREAM_RAW", "")
+    if up:
+        # 넘기는 서버(메인 8764 · 중간 · 세션)는 셈하지 않고 상류(8765)의 목록을 그대로 받는다 — 셈은 한 곳 ·
+        # 관심 문서는 8765 에만 있다(qa 검수 11-18 — 8767 이 자기 폴더 관심 문서를 못 읽어 「관심」 이 빠짐 · 첫 셈 33초)
+        import urllib.request
+        req = urllib.request.Request(up + "/api/kis/dt-list", headers={"X-KJC-Prio": "low"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            j = json.loads(r.read().decode("utf-8"))
+        data = {"rows": j.get("data") or [], "meta": dict(j.get("meta") or {}, via="상류")}
+        with _live_lock:
+            _live.update(at=time.time(), pre=pre, data=data)
+        return data
     hit, missing, cap, mkt = chips_now(proxy, cfg, pre=pre)
     ov = {c: g for c, g in hit.items() if g["chips"] & set(OV_CHIPS)}
     prices, _ = proxy.fetch_quotes_multi(cfg, list(ov), max_age=proxy.PRICE_CACHE_TTL) if ov else ({}, {})   # 30종목씩 묶음 · 시세 캐시 함께

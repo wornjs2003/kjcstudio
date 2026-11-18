@@ -10533,7 +10533,11 @@ class Handler(SimpleHTTPRequestHandler):
             if route == "dt-list":
                 # 단타 목록 한 곳(server/dt30.py live · 2026-11-18) — 홈 「단타」 와 단타 판이 같은 셈을 읽는다 · LIVE_TTL 안이면 캐시
                 # 재권님 「홈에 있는 칩을 단타에도 추가해서 동기화하고 한곳에서 받도록 해」(11-18 17:4x)
-                d = dt30.live(sys.modules[__name__], cfg)
+                try:
+                    d = dt30.live(sys.modules[__name__], cfg)
+                except Exception as e:                 # 상류(8765)가 이 주소를 아직 모름 · 셈 실패 — 「못 받음」 으로(빈 목록으로 두지 않는다)
+                    self._send_json({"ok": False, "data": None, "error": safe_message(e, 120)}, 502)
+                    return
                 self._send_json({"ok": True, "data": d["rows"], "meta": d["meta"]})
                 return
 
