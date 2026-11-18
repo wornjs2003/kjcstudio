@@ -7,7 +7,8 @@
 //     (그 값을 룰 문서로 옮기는 것은 개발1 카드 「서버 칩 룰이 룰 문서 값을 읽게」)
 //   · 종목은 홀딩스와 같은 서버 주소 — 목록 주소가 없는 칩(단타 · 현재상승 · 장외 — 홀딩스 화면이 순위 목록에서 셈)은 —
 import { signClass, NUM } from '/assets/js/sign.js';
-import { watch } from '/holdings/js/store/longpoll.js';   // 오늘 칩 목록 다시 받기 — 홀딩스 첫 화면과 같은 길(서버 롱폴 · 서버 주기)
+import { watch } from '/holdings/js/store/longpoll.js';
+import { chipName } from './strategy-chipname.js';   // 서버 칩 이름 「수급」 → 화면 「자동」 — 바꾸는 표는 그 파일 한 곳   // 오늘 칩 목록 다시 받기 — 홀딩스 첫 화면과 같은 길(서버 롱폴 · 서버 주기)
 
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -39,7 +40,7 @@ const RULES = {
       ['시가총액', `${v(m.capMinEok == null ? null : num(m.capMinEok))}억원 이상(관심 · 프리장 · 매수) · 나머지는 칩마다의 문턱`], ['줄 세우기', esc(m.order || '겹친 칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순')]],
     list: (j) => {
       const D = j.data || {}, d = Array.isArray(D.rows) ? D.rows : [], two = d.filter((x) => x.n >= 2).length;
-      const chipTxt = (x) => (x.chips || []).map((c) => (c === '수급' ? '자동' : c)).join(' · ');   // 서버 칩 이름 「수급」 = 화면 「자동」(11-18 이름 바꿈)
+      const chipTxt = (x) => (x.chips || []).map(chipName).join(' · ');
       return { cap: `${esc(D.day ? `${D.day.slice(4, 6)}-${D.day.slice(6)}` : '—')} 단타 판 · ${num(d.length)}종목 · 그중 칩 둘 이상 ${num(two)}(홈 「단타」 줄과 같은 문턱)`,
         html: d.length ? tb(['종목', '겹친 칩', '칩', '굳힌 때 등락률(전일 종가 대비)', '시가총액'], d.map((x) => `<tr>${nm(x)}<td><b>${num(x.n)}</b></td><td>${esc(chipTxt(x))}</td><td>${pct(x.pct)}</td><td>${capTxt(x.cap)}</td></tr>`)) : null };
     },
