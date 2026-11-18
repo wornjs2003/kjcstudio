@@ -111,9 +111,8 @@
           <!-- 52주 최저·최고는 옆 패널에 있었는데 머리줄로 올렸다 (2026-09-17 지시).
                칸을 따로 쓰지 않고 그 종목 이름 옆에 붙는다. -->
           <span class="kh-head-yr" id="kh-year-range">불러오는 중</span>
-          <!-- 즐겨찾기 하트 (2026-10-26 지시 — 「차트에 자세히 왼쪽에 즐겨찾기 추가 버튼 만들어줘」 · 「가」).
-               순위표 숫자 · 관심 사이드바와 **같은 목록**(store/favorites.js)이다. 알림 대상은 아니다 -->
-          <button type="button" class="kh-heart kh-big-fav" id="kh-big-fav" data-tip="즐겨찾기에 담기" aria-label="즐겨찾기에 담기">♥</button>
+          <!-- 즐겨찾기 하트는 2026-11-18 에 뺐다(재권님 「관심 하트는 누르는거 없애고」) — 이 빈 칸은 뒤 칸(거래량 · 자세히)을 오른쪽으로 미는 자리만 남긴 것이다(home.css .kh-big-fav) -->
+          <span class="kh-big-fav" aria-hidden="true"></span>
           <!-- 거래량 전날 같은 시각 대비 — 「자세히 ›」 바로 왼쪽 (2026-11-17 재권님 「응」 · 전에는 아래 세부 줄 체결강도 옆). components/stock-detail.js 가 채운다 · 값이 없으면 숨는다 -->
           <span class="kh-dt" id="kh-big-vp" style="margin-left:0;display:none;flex-shrink:0;white-space:nowrap;flex-wrap:nowrap;padding:1px 8px;line-height:1.4"></span>
           <a class="kh-fold" id="kh-big-link" href="./stock.html">자세히 ›</a>

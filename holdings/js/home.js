@@ -14,8 +14,7 @@ import { fetchCandles, fetchCandlesSince, peekCandles, watchCandles, createStock
 import { color } from './theme.js';
 import { fmtNum, fmtWon, fmtPct, fmtMoneyKr, fmtDelta, fmtDeltaAmount, fmtShareCount, expectTip, expectTag,
   dirClass, marketPhase, isUsCode, fmtPriceOf, fmtUsdBig, priceDigitsOf, usSessionLabel } from './utils/format.js';
-import { favList, isFav, toggleFav, onFavChange, favGroups, ungroupedCodes } from './store/favorites.js';
-import { openGroupPicker } from './components/fav-groups.js';
+import { favList, onFavChange, favGroups, ungroupedCodes } from './store/favorites.js';
 /* mountWatchSide · mountVBar 는 첫 화면에서 안 쓴다 (2026-09-17).
    관심 목록은 순위표의 「관심」 칩으로 들어갔고, 세로 아이콘 바는
    그만큼 오른쪽 칸을 넓히려고 감췄다. 다른 화면은 그대로 쓴다. */
@@ -383,7 +382,7 @@ function paintHeatmap() {
 let mkKey = null;                       // 큰 차트에 띄운 지표 — null 이면 종목 차트
 let mkWant = null;                      // 마지막으로 누른 지표(받는 사이 다른 것을 누르면 옛 응답을 버린다)
 let mkDrop = null;                      // 지표 차트 지우기
-const MK_HIDE = ['kh-big-ic', 'kh-big-fav', 'kh-big-vp', 'kh-big-link', 'kh-dt'];          // 지표에는 없는 칸 — 자리는 두고 가린다
+const MK_HIDE = ['kh-big-ic', 'kh-big-vp', 'kh-big-link', 'kh-dt'];          // 지표에는 없는 칸 — 자리는 두고 가린다
 const MK_HIDE_SEL = ['.kh-idx-ai', '.kh-ind-menu'];
 const MK_LOCK = ['.kh-idx-head', '#kh-big-foot'];
 
@@ -749,12 +748,6 @@ function paintBigHead(s2) {
   const nameEl = $('kh-idx-name');
   if (nameEl) { nameEl.textContent = s2.name; nameEl.dataset.co = s2.code; }   // 종목 풍선(company-tip.js)
 
-  const fav = $('kh-big-fav');
-  if (fav) {
-    fav.dataset.fav = s2.code;
-    fav.dataset.favName = s2.name;
-    paintBigFav();
-  }
 
   const link = $('kh-big-link');
   if (link) {
@@ -1603,7 +1596,8 @@ const SORTS = {
 const SORT_TIPS = {
   /* 관심 — 실제 차례를 그대로 적는다(rowList 의 filter 갈래 · 2026-11-11 재권님 「관심 에 종목버튼에 마우스 올리면 어떤 룰로 소팅되는지 설명 넣어줘」):
      순위 목록 차례(코스피 시가총액 순 → 코스닥 시가총액 순)에서 담은 것만 골라내고, 목록 밖에서 담은 종목은 담은 차례로 맨 뒤 */
-  fav: `하트로 담은 관심종목만 골라 봅니다\n차례 — ① 코스피 종목 시가총액 큰 순 ② 그다음 코스닥 종목 시가총액 큰 순 ③ 순위 목록(코스피 200 · 코스닥 150) 밖에서 담은 종목은 담은 차례대로 맨 뒤\n아래 묶음 칩을 고르면 그 묶음만(다시 누르면 전체) · ${CAP_MIN_TXT}\n함께 나오는 칩 줄(단타 · 프리장 · 초반상승 · 현재상승 · VI·급등 · 볼린저 · 장외 · 수급 — 수급만 관심 안 「자동」 묶음)은 관심과 따로 순위 목록 전체에서 고릅니다 — 칩마다 마우스를 올리면 고르는 기준이 뜹니다`,
+  /* 2026-11-18 재권님 「관심 하트는 누르는거 없애고 자동으로 관심으로 들어가게」 → 「응 맞아」 · 기존 하트 종목 「가」(비움) — 관심 = 서버 자동 관심 룰 종목만 */
+  fav: `서버가 자동 관심 룰로 담은 종목만 봅니다(하트로 담기는 없앴습니다)\n차례 — ① 코스피 종목 시가총액 큰 순 ② 그다음 코스닥 종목 시가총액 큰 순 ③ 순위 목록(코스피 200 · 코스닥 150) 밖 종목은 담긴 차례대로 맨 뒤 · ${CAP_MIN_TXT}\n함께 나오는 칩 줄(단타 · 프리장 · 초반상승 · 현재상승 · VI·급등 · 볼린저 · 장외)은 관심과 따로 순위 목록 전체에서 고릅니다 — 칩마다 마우스를 올리면 고르는 기준이 뜹니다`,
   cap: '시가총액이 큰 순 — 위 코스피 · 코스닥으로 시장을 고릅니다',
   value: '오늘 거래대금이 큰 순',
   vol: '오늘 거래량이 큰 순',
@@ -1953,19 +1947,15 @@ async function loadPre() {
 }
 
 /* 「겹침」 칩 — 여섯 칩의 목록을 모아 둘 이상에 든 종목. 목록은 각 칩이 받은 것 그대로(못 받은 칩은 「불러오는 중」 에 적는다) */
-const OV_CHIPS = ['fav', 'pre', 'vi', 'after', 'buy', 'rise', 'auto'];   // auto = 「수급」(관심 안 자동 묶음 · 11-11 재권님 「단타에 수급에 걸리는 종목도 넣어야해」)
+const OV_CHIPS = ['fav', 'pre', 'vi', 'after', 'buy', 'rise'];   // 「수급」(auto)은 11-18 「관심」 과 하나가 됐다 — 관심 = 자동 관심 룰 종목(서버 dt30 OV_CHIPS 와 같게 · 개발2)
 const ovLabel = (id) => (id === 'auto' ? '수급' : SORTS[id].label);
 function ovList(id) {
-  if (id === 'fav') {                // 자동 묶음 종목은 「수급」 으로 센다 — 관심으로도 세면 수급 종목은 늘 둘이 겹쳐 전부 단타가 된다
-    const g = favGroups().find((x) => x.id === AUTO_FG);
-    return favList().filter((f) => !isUsCode(f.code) && !capBelowMin(f.code) && !(g && g.codes.includes(f.code)));
-  }
+  if (id === 'fav') return favList().filter((f) => !isUsCode(f.code) && !capBelowMin(f.code));   // 관심 = 자동 관심 룰 종목(11-18)
   if (id === 'after') return [...rowList('after', 'KOSPI'), ...rowList('after', 'KOSDAQ')];
   if (id === 'buy') return jointRows;                              // 셋 다 사는 중인 줄만(빠진 줄 jointFlipped 은 안 셈)
   if (id === 'pre') return preRows && preRows.filter((x) => !capBelowMin(x.code));
   if (id === 'vi') return viRows;
   if (id === 'rise') return riseRows;
-  if (id === 'auto') { const g = favGroups().find((x) => x.id === AUTO_FG); return g ? favList().filter((f) => g.codes.includes(f.code) && !isUsCode(f.code)) : []; }
   return null;
 }
 const ovWaiting = () => OV_CHIPS.filter((id) => ovList(id) == null);
@@ -2343,7 +2333,7 @@ async function loadAutoInfo() {
   paintSortChips();
 }
 function autoTip() {
-  const head = '관심 종목 중 서버가 자동으로 담은 종목만 봅니다(관심 묶음 「자동」) · 다시 누르면 관심 전체';
+  const head = '자동 관심 룰';
   if (!autoInfo) return head + '\n조건을 아직 못 받았습니다';
   const ru = autoInfo.rule;
   const cond = [ru.prevPct == null ? null : `앞 거래일 등락률 +${ru.prevPct}% 이상`,
@@ -2392,26 +2382,22 @@ function paintSortChips() {
   const th = market === 'THEME';
   host.classList.toggle('kh-theme-strip', th);
   const chip = ([id, x], on) => `<button class="kh-chip${on ? ' is-active' : ''}" type="button"
-      data-sort="${id}"${sortTipAttr(id)}>${x.label}</button>`;
+      data-sort="${id}"${id === 'fav' ? ` data-tip="${escT(SORT_TIPS.fav + '\n' + autoTip())}" data-tip-h="관심"` : sortTipAttr(id)}>${x.label}</button>`;
   const favOpen = !th && (sortBy === 'fav' || FAV_SUB.has(sortBy));
   host.innerHTML = th ? themeBigChipsHtml() : Object.entries(SORTS).filter(([id]) => !FAV_SUB.has(id))
     .map((e) => chip(e, e[0] === sortBy || (e[0] === 'fav' && favOpen))).join('');
   const favRow = $('kh-sorts-fav');
   if (favRow) {
     favRow.hidden = !favOpen;
-    const hasAuto = favGroups().some((g) => g.id === AUTO_FG);
     favRow.innerHTML = favOpen ? FAV_SUB_ORDER.map((id) => [id, SORTS[id]])
-      .map((e) => chip(e, e[0] === sortBy)).join('')
-      + (hasAuto ? `<button class="kh-chip${sortBy === 'fav' && favGroup === AUTO_FG ? ' is-active' : ''}" type="button"
-      data-fg-auto data-tip="${escT(autoTip())}" data-tip-h="수급">수급</button>` : '') : '';
-    if (favOpen && !autoInfo && !autoAsked) loadAutoInfo();
+      .map((e) => chip(e, e[0] === sortBy)).join('') : '';   // 「수급」 칩은 11-18 「관심」 과 하나가 됐다
   }
+  if (!th && !autoInfo && !autoAsked) loadAutoInfo();      // 「관심」 풍선에 자동 관심 조건을 싣는다
   const sub = $('kh-sorts2');
   if (sub) {
-    const fav = !th && sortBy === 'fav';
     const ss = !th && sortBy === 'ssts';
-    sub.hidden = !th && !fav && !ss;
-    sub.innerHTML = th ? themeSubChipsHtml() : fav ? favGroupChipsHtml() : ss ? sstsSubChipsHtml() : '';
+    sub.hidden = !th && !ss;                 // 관심 묶음 칩은 11-18 뺐다 — 관심이 자동 한 묶음뿐이다
+    sub.innerHTML = th ? themeSubChipsHtml() : ss ? sstsSubChipsHtml() : '';
   }
 }
 
@@ -2454,15 +2440,6 @@ function setupSorts() {
 
   const onSort = async (e) => {
     if (market === 'THEME') { await onTheme(e); return; }
-    if (e.target.closest('[data-fg-auto]')) {            // 「수급」 — 관심 중 자동 묶음만 · 다시 누르면 관심 전체
-      favGroup = sortBy === 'fav' && favGroup === AUTO_FG ? 'all' : AUTO_FG;
-      sortBy = 'fav';
-      paintSortChips();
-      const box = $('kh-rank-scroll');
-      if (box) box.scrollTop = 0;
-      paintRows(rowPrices);
-      return;
-    }
     const b = e.target.closest('[data-sort]');
     if (!b) return;
     if (b.dataset.sort === 'fav' && favGroup === AUTO_FG) favGroup = 'all';   // 「관심」 을 누르면 관심 전체로
@@ -2634,57 +2611,11 @@ function paintSortNote() {
   if (upd) { const t = sortBy === 'buy' ? jointUpd() : ''; upd.hidden = !t; upd.innerHTML = t; }
 }
 
-/* ── 즐겨찾기 하트 (2026-09-18 지시) ─────────
- *
- * 재권님 말씀 — "실시간 순위에 나오는 종목에 즐겨찾기 (하트모양) 이 있고
- * 이걸 클릭하면 하트모양안에 색이 노란색으로 채워지고 즐겨찾기 목록에
- * 들어가게 해야할거같아."
- *
- * 담긴 것은 `store/favorites.js` 한 곳에 있다. 관심 사이드바도 같은 것을
- * 보므로 한쪽에서 누르면 다른 쪽이 따라간다.
+/* ── 즐겨찾기 하트는 2026-11-18 에 없앴다 ─────────
+ * 재권님 「관심 하트는 누르는거 없애고 자동으로 관심으로 들어가게 해주고」 → 「응 맞아」 · 하트로 담은 종목은 「가」(비움 · 그 알림도 멈춤).
+ * 관심 = 서버(auto_watch)가 자동 관심 룰로 담는 종목만이다. 순위 숫자 · 큰 차트 머리줄 · 관심 사이드바의 하트를 다 뺐다.
  */
-/* **칸을 늘리지 않는다** (2026-09-18 지시 — "하트대신에 숫자를 클릭하면
-   숫자 색이 바뀌는게 더 좋을거같아 추가 안해도 된깐").
-
-   하트 칸을 따로 두었더니 그만큼 종목명이 좁아졌다. 그래서 왼쪽 순위
-   숫자가 그 일을 한다 — 누르면 담기고, 담긴 종목은 숫자가 노래진다. */
-function paintFavCell(td) {
-  const on = isFav(td.dataset.fav);
-  td.classList.toggle('is-fav', on);
-  td.dataset.tip = on ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기';
-}
-
-/* 그려 둔 순위 숫자에 동작을 건다. 표를 다시 그릴 때마다 부른다 */
-function bindHearts(root) {
-  if (!root) return;
-  root.querySelectorAll('.kh-rk[data-fav]').forEach(td => {
-    td.addEventListener('click', (e) => {
-      e.stopPropagation();          // 줄 고르기로 번지지 않게
-      if (toggleFav(td.dataset.fav, td.dataset.favName)) openGroupPicker(td, td.dataset.fav, td.dataset.favName);
-    });
-  });
-}
-
-/* 목록이 바뀌면 화면의 모든 순위 숫자를 맞춘다 — 한 줄만 고치면 같은
-   종목이 다른 자리에 또 있을 때 어긋난다 */
-/* 큰 차트 머리줄의 하트 (2026-10-26 지시 — 「자세히 왼쪽에 즐겨찾기 추가」 · 「가」). 순위 숫자와 같은 목록을 본다 */
-function paintBigFav() {
-  const btn = $('kh-big-fav');
-  if (!btn || !btn.dataset.fav) return;
-  const on = isFav(btn.dataset.fav);
-  btn.classList.toggle('is-on', on);
-  btn.dataset.tip = on ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기';
-  btn.setAttribute('aria-label', btn.dataset.tip);
-  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-}
-$('kh-big-fav')?.addEventListener('click', (e) => {
-  const btn = e.currentTarget;
-  if (btn.dataset.fav && toggleFav(btn.dataset.fav, btn.dataset.favName)) openGroupPicker(btn, btn.dataset.fav, btn.dataset.favName);
-});
-
 onFavChange(() => {
-  document.querySelectorAll('.kh-rk[data-fav]').forEach(paintFavCell);
-  paintBigFav();
 
   /* 「관심종목」 으로 보고 있으면 **목록 자체가 바뀐다** — 뺀 종목이 표에
      남아 있으면 안 된다. 다른 기준일 때는 줄 세우는 값이 안 바뀌므로
@@ -3025,9 +2956,7 @@ function paintRows(priceMap) {
        칸이 368px 로 좁아져 아홉 열이 안 들어갔고, 그 넷은 고른 종목 것만
        차트 옆 패널에 보여주기로 했다 (지시). */
     return `<tr data-code="${s.code}" class="${s.code === selectedCode ? 'is-active' : ''}"${s.flip ? ' style="opacity:.55"' : ''}>
-      <td class="kh-rk${isFav(s.code) ? ' is-fav' : ''}" data-fav="${s.code}"
-        data-fav-name="${s.name}" data-tip="${isFav(s.code) ? '즐겨찾기에서 빼기' : '즐겨찾기에 담기'}"
-        >${s.rank}</td>
+      <td class="kh-rk">${s.rank}</td>
       <td class="l"><span class="kh-nm">
         ${iconHtml(s)}
         <b data-co="${s.code}">${market === 'THEME' ? escT(s.name) : s.name}</b>${market === 'THEME' ? themeBadge(s.code) : sectorTag(s.code)}</span></td>
@@ -3048,13 +2977,9 @@ function paintRows(priceMap) {
      종목에 닿기 전에 여러 번 바뀌었다. 누를 때만 바꾸면 그 일이 없다. */
   $('kh-rows').querySelectorAll('tr[data-code]').forEach(tr => {
     tr.addEventListener('click', (e) => {
-      /* 순위 숫자는 담는 자리라 줄 고르기와 겹치지 않는다. 담으려다
-         차트까지 바뀌면 무엇을 눌렀는지 알 수 없다. */
-      if (e.target.closest('.kh-rk[data-fav]')) return;
       selectStock(tr.dataset.code);
     });
   });
-  bindHearts($('kh-rows'));
   watchRows();
   paintRowHead();
   paintRankModal();     // 열려 있으면 같은 값으로 같이 갱신된다

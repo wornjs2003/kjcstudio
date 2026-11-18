@@ -6,7 +6,7 @@
    ========================================================================== */
 
 import { WATCHLIST, brandColor } from '../data/market.js';
-import { favList, toggleFav, onFavChange } from '../store/favorites.js';
+import { favList, onFavChange } from '../store/favorites.js';
 import * as lastSeen from '../store/last-seen.js';
 import { fetchLivePrices, fetchLiveIndices, applyLiveToStock } from '../data/live.js';
 import { watch } from '../store/longpoll.js';
@@ -121,7 +121,7 @@ export function mountWatchSide(el, { activeCode } = {}) {
     const favs = favList();
     if (title) title.textContent = `관심 주식 ${favs.length}`;
     if (!favs.length) {
-      list.innerHTML = '<div class="kh-wl-empty kh-mut">담은 종목이 없습니다</div>';
+      list.innerHTML = '<div class="kh-wl-empty kh-mut">자동 관심 종목이 없습니다</div>';
       return;
     }
     list.innerHTML = favs.map(f => {
@@ -135,21 +135,10 @@ export function mountWatchSide(el, { activeCode } = {}) {
         <span class="kh-wl-v kh-num">—</span>
         <span class="kh-wl-c kh-num kh-mut"></span>
       </span>
-      <button type="button" class="kh-wl-heart kh-heart is-on"
-        data-fav="${s.code}" data-fav-name="${s.name}"
-        data-tip="즐겨찾기에서 빼기" aria-label="즐겨찾기에서 빼기">♥</button>
     </a>`;
     }).join('');
 
-    /* 하트를 누르면 목록에서 빠진다. 줄을 누르면 종목 화면으로 가므로
-       여기서 멈춰 세운다. */
-    list.querySelectorAll('.kh-heart[data-fav]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleFav(btn.dataset.fav, btn.dataset.favName);
-      });
-    });
+    /* 하트(빼기)는 2026-11-18 에 뺐다 — 관심은 서버 자동 관심 룰 종목만이다(재권님 「관심 하트는 누르는거 없애고」) */
   }
   drawList();
 
