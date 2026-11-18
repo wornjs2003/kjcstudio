@@ -122,7 +122,8 @@ function sellAt(p) {   // p — 시각마다 매수가 대비 %(null 은 값 없
     if (p[k] == null) continue;
     if (S.stop != null && p[k] <= S.stop) return { k, why: '손절' };
     let a = k - 1; while (a >= 0 && p[a] == null) a--;
-    if (S.turn && a >= 0 && p[a] > 0 && p[k] < p[a]) return { k, why: '꺾임' };
+    // 꺾임 폭(11-18 재권님 「꺽임룰에 1%이하는 무시한다로 룰 잡아」 → 「그거말고 꺽임 에 내가 %를 추가할수있게 해줘」) — 셈 칸에 넣은 turnPct% 넘게 앞 시각보다 내릴 때만 꺾임 · 기본 0(지금 룰 그대로)
+    if (S.turn && a >= 0 && p[a] > 0 && ((100 + p[k]) / (100 + p[a]) - 1) * 100 < -S.turnPct) return { k, why: '꺾임' };
     if (S.trail != null && pk > 0 && ((100 + p[k]) / (100 + pk) - 1) * 100 <= -S.trail) return { k, why: '고점' };
     pk = Math.max(pk, p[k]);
   }
@@ -136,7 +137,7 @@ function sellAt(p) {   // p — 시각마다 매수가 대비 %(null 은 값 없
 //   · 2026 세율(KB증권 「2026년 증권거래세율 변경 안내」 · 머니투데이 2025-12-01 「내년 1월부터 증권거래세 오른다」) — 세율이 바뀌면 TAX 한 곳만 고친다
 const PNL_TOP = 30, PNL_WON = 10_000_000;   // 기본값 — 재권님이 칸에 넣으면 st.set 이 이김
 // 셈 칸 기본값 (11-18) — minChip 칩 N개 이상만(0 = 전체) · top 상위 몇 종목 · mode each = 종목마다 perWon · day = 하루 dayWon 을 그 종목 수로 똑같이 나눔
-const DEF_SET = { minChip: 0, top: PNL_TOP, mode: 'each', perWon: PNL_WON, dayWon: 100_000_000, stop: -1, turn: true, trail: null };
+const DEF_SET = { minChip: 0, top: PNL_TOP, mode: 'each', perWon: PNL_WON, dayWon: 100_000_000, stop: -1, turn: true, turnPct: 0, trail: null };
 st.set = { ...DEF_SET };
 const TAX = { KOSPI: { tx: 0.05, rural: 0.15 }, KOSDAQ: { tx: 0.20, rural: 0 } };   // % · 코스피 = 거래세 0.05 + 농특세 0.15 · 코스닥 = 거래세 0.20
 const MKT = { KOSPI: '코스피', KOSDAQ: '코스닥' };
@@ -409,7 +410,7 @@ async function loadFee() {
 // 셈 칸에 지금 값 채우기 · 단추 켜짐 표시
 function setFill() {
   const S = st.set, box = $('dt-set'); if (!box) return;
-  const v = { minChip: S.minChip || '', top: S.top, won: (S.mode === 'day' ? S.dayWon : S.perWon) / 10000, stop: S.stop == null ? '' : S.stop, trail: S.trail == null ? '' : S.trail };
+  const v = { minChip: S.minChip || '', top: S.top, won: (S.mode === 'day' ? S.dayWon : S.perWon) / 10000, stop: S.stop == null ? '' : S.stop, trail: S.trail == null ? '' : S.trail, turnPct: S.turnPct || '' };
   box.querySelectorAll('[data-set]').forEach((el) => { if (document.activeElement !== el) el.value = String(v[el.dataset.set] ?? ''); });
   box.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('is-active', b.dataset.mode === S.mode));
   box.querySelectorAll('[data-turn]').forEach((b) => b.classList.toggle('is-active', (b.dataset.turn === '1') === !!S.turn));
@@ -448,6 +449,7 @@ function setRead(el) {
   else if (k === 'top') { if (v == null || v < 1 || !Number.isInteger(v)) return bad('1 이상 정수'); S.top = v; }
   else if (k === 'won') { if (v == null || v <= 0) return bad('0 보다 큰 만원'); S[S.mode === 'day' ? 'dayWon' : 'perWon'] = Math.round(v * 10000); }
   else if (k === 'stop') { if (v === 0) return bad('0 은 못 씀 · 빈칸이면 손절 안 함'); S.stop = v == null ? null : -Math.abs(v); }   // 1 · −1 둘 다 「−1%」 로
+  else if (k === 'turnPct') { S.turnPct = v == null ? 0 : Math.abs(v); }
   else if (k === 'trail') { if (v === 0) return bad('0 은 못 씀 · 빈칸이면 안 씀'); S.trail = v == null ? null : Math.abs(v); }
   return S;
 }
@@ -496,7 +498,7 @@ const TPL = `
             <label class="dt-fee">돈 <span class="dt-seg" role="tablist" aria-label="돈 넣는 법"><button type="button" class="kh-chip" data-mode="each">종목마다</button><button type="button" class="kh-chip" data-mode="day">하루 나눠</button></span>
               <input data-set="won" class="rl-in rl-num" inputmode="numeric" aria-label="돈(만원)">만원</label>
             <label class="dt-fee">손절 <input data-set="stop" class="rl-in rl-num" inputmode="decimal" aria-label="손절(매수가 대비 %)">% <span class="rl-sug">빈칸 = 안 함</span></label>
-            <label class="dt-fee">꺾임 <span class="dt-seg"><button type="button" class="kh-chip" data-turn="1">켬</button><button type="button" class="kh-chip" data-turn="0">끔</button></span></label>
+            <label class="dt-fee">꺾임 <span class="dt-seg"><button type="button" class="kh-chip" data-turn="1">켬</button><button type="button" class="kh-chip" data-turn="0">끔</button></span> 앞 시각보다 <input data-set="turnPct" class="rl-in rl-num" inputmode="decimal" aria-label="꺾임 — 앞 시각보다 몇 % 넘게 내리면 팜">% 넘게 내리면 <span class="rl-sug">그 이하는 무시 · 빈칸 = 0</span></label>
             <label class="dt-fee">고점 대비 − <input data-set="trail" class="rl-in rl-num" inputmode="decimal" aria-label="고점 대비 몇 % 내리면 팜">% 내리면 팜 <span class="rl-sug">빈칸 = 안 씀 · 꺾임을 켜 두면 꺾임이 먼저 걸려 이 칸은 거의 안 듦</span></label>
             <button type="button" class="kh-chip" data-reset>기본값으로</button> <span id="dt-set-msg" class="rl-sug"></span>
           </div>
