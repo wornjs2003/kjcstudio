@@ -162,10 +162,12 @@ async function scoreSave(n) {
   try { await setDtScore(n); if (msg) msg.textContent = '저장됨 — 단타 판 다시 셈'; } catch (e) { if (msg) msg.textContent = `저장 못 함(${e.message || '연결 안 됨'})`; }
 }
 function scorePaint() {
-  const b = scoreBox(), ks = Object.keys(score), rest = conds.filter((k) => !ks.includes(k));
+  // 한 칩에 칩 점수와 시각(하위) 점수를 함께 둘 수 없음(11-18 재권님 「함께 있을수 없는 값이야 둘중 하나만 기입하도록 해줘」) — 하나가 표에 있으면 다른 쪽은 고를 수 없게
+  const top = (k) => k.split('|')[0], clash = (k) => ks.some((x) => x !== k && top(x) === top(k) && (x.includes('|') !== k.includes('|')));
+  const b = scoreBox(), ks = Object.keys(score), rest = conds.filter((k) => !ks.includes(k) && !clash(k));
   b.innerHTML = `<div class="rl-sh"><b>조건별 점수</b> <span class="rl-sug">걸린 조건 점수를 더해 큰 순으로 줄 세움 · 비우면 겹친 칩 수 순 · 표에 없는 조건은 0점</span></div>
     ${ks.map((k) => `<label class="dt-fee">${esc(condTxt(k))} <input data-k="${esc(k)}" class="rl-in rl-num" inputmode="decimal" value="${esc(score[k])}" aria-label="${esc(condTxt(k))} 점수">점 <button type="button" class="kh-chip" data-del="${esc(k)}" data-tip="이 조건 빼기" aria-label="${esc(condTxt(k))} 빼기">✕</button></label>`).join('')}
-    ${rest.length ? `<select data-new class="rl-in" aria-label="조건 더하기"><option value="">+ 조건</option>${rest.map((k) => `<option value="${esc(k)}">${esc(condTxt(k))}</option>`).join('')}</select>` : ''} <span id="rl-score-msg" class="rl-sug"></span>`;
+    ${rest.length ? `<select data-new class="rl-in" aria-label="조건 더하기"><option value="">+ 조건</option>${rest.map((k) => `<option value="${esc(k)}">${esc(condTxt(k))}</option>`).join('')}</select>` : ''} <span id="rl-score-msg" class="rl-sug"></span>${(() => { const c = [...new Set(ks.filter((k) => clash(k)).map(top))]; return c.length ? ` <span class="st-err">${esc(c.join(' · '))} — 칩 점수와 시각 점수가 함께 있음 · 시각 점수만 씀 · 하나를 빼 주십시오</span>` : ''; })()}`;
 }
 async function scoreShow(m) {
   const b = scoreBox(); b.hidden = false;
