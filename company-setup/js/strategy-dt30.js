@@ -5,6 +5,7 @@
 //     응답(안 · 서버 레인과 맞춤): data { day, buyAt, times[HHMM], rows[{rank, code, name, cap(억원), sector(WICS), chips[], buy, px{HHMM: 값}}] } · meta { days[YYYYMMDD …최근 먼저] }
 //   · 값이 없으면 — (0 이 아니다) · 서버를 다시 묻는 주기는 없다(날을 누를 때 · 처음 열 때 한 번)
 import { signClass, NUM } from '/assets/js/sign.js';
+import { bindWin } from './strategy-dtwin.js';   // 칩별 승률 접기 — 손익 칸 안
 
 const API = '/api/kis/dt30';   // 서버 주소 — 개발2(11-11 18:2x 정함 · 아직 커밋 전)
 let root = null;   // 판을 그린 그릇(mountDt30) — 칸은 이 안에서만 찾는다
@@ -475,6 +476,7 @@ async function saveFee() {
   if (st.data) { paint(st.data); chips(); }
 }
 BIND.push(() => $('dt-fee').addEventListener('change', saveFee));
+BIND.push(() => bindWin($('dt-win')));
 WIDE.addEventListener('change', () => { if (root && st.data) paint(st.data); });   // 창 폭이 700 을 넘나들면 칸 차례만 다시
 
 
@@ -504,7 +506,8 @@ const TPL = `
             <label class="dt-fee">고점 대비 − <input data-set="trail" class="rl-in rl-num" inputmode="decimal" aria-label="고점 대비 몇 % 내리면 팜">% 내리면 팜 <span class="rl-sug">빈칸 = 안 씀 · 꺾임을 켜 두면 꺾임이 먼저 걸려 이 칸은 거의 안 듦</span></label>
             <button type="button" class="kh-chip" data-reset>기본값으로</button> <span id="dt-set-msg" class="rl-sug"></span>
           </div>
-          <div class="st-cap" id="dt-month">—</div></div>
+          <div class="st-cap" id="dt-month">—</div>
+          <details class="dt-win" id="dt-win"><summary>칩별 승률 — 지난 30거래일 · 세후 · 칩 묶음마다 승률 · 날마다 이익 큰 종목</summary><div class="dw-body"></div></details></div>
         <div class="dt-box st-scroll" id="dt-box"><div class="st-err">—</div></div>
         <div class="st-cap dt-foot">각 시각 = 그 시각에 끝난 5분봉 종가 · 평균 = 그 시각 값이 있는 종목만 · 단타 목록은 <span class="dt-at">—</span> 에 그날 판을 열고, 서버가 굳히기 전까지는 다시 세어 줄이 바뀜(늦게 든 칩 · 빠진 종목) · 굳힌 뒤에는 늦게 나온 칩만 채움</div>
       </div>`;
