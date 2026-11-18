@@ -9,7 +9,7 @@
     단타       아래 OV_CHIPS 중 **하나라도** 든 종목(재권님 18:5x 「100개까지」 — 홈 「단타」 는 둘 이상 · 화면이 칩을 끄고 켜며 다시 셈).
                칩 재료는 홈과 같다(holdings/js/home.js 의 OV_CHIPS · ovList).
                재료는 화면이 받는 서버 값 그대로 — 관심 · 수급(watchlist 문서 · 자동 묶음이 수급) · 프리장(pre_flow) · VI·급등(intraday_alerts) ·
-               매수(「매수」 판 rows 전부) · 초반상승(open_rise). 장외는 평일 09:00~15:40 비어 있어(화면 설명 그대로) 09:06 에는 안 든다.
+               매수(「매수」 판 rows 전부) · 초반상승(open_rise) · 장외(순위 목록 시세의 regPct > 0 · 11-18 더함 — 서버가 평일 07:30~15:30 비워 아침 판에는 보통 안 든다).
                관심 · 프리장 · 매수는 시가총액 CAP_MIN_EOK 억원 아래를 뺀다(화면 capBelowMin · 시가총액을 모르면 안 뺀다)
                **화면과 이 파일 두 곳에 셈이 있다** — 값 한 곳으로 모으는 것은 개발1 카드 「관심 아래 칩 룰 값 한 곳」(화면이 서버를 받는 쪽)
     차례       칩 수 많은 순 → 초반상승(첫 5분봉 시가 대비 % · rise) 높은 순 → 시가총액 큰 순 — 상위 TOP_N
@@ -129,6 +129,17 @@ def chips_now(proxy, cfg, early=True, pre=False):
                 put(r.get("code"), r.get("name"), "프리장")
     except Exception:
         missing.append("프리장")
+    try:                                   # 장외 — 홈 「장외」 칩과 같은 값(순위 목록 시세의 regPct · 정규장 종가 대비) · 오른 것만 · 시가총액 문턱 아래 뺌
+        # 재권님 「한곳에서 받는건데 이미 받은값은 그걸 가져와야 하고」(11-18 17:3x · 시황분석1 경유) — 시세 캐시를 함께 탄다(PRICE_CACHE_TTL)
+        # 서버가 평일 07:30~15:30 장외 값을 비우므로(kis_proxy after_cleared) 08:00 ~ 10:30 판에는 보통 안 든다
+        if not proxy.after_cleared():
+            names = {r["stock_code"]: r["name"] for r in uni if not small(r["stock_code"])}   # 문턱 아래는 처음부터 안 물음(KIS 몫)
+            q, _ = proxy.fetch_quotes_multi(cfg, list(names), max_age=proxy.PRICE_CACHE_TTL)
+            for c, v in q.items():
+                if v.get("regPct") is not None and v["regPct"] > 0 and not small(c):
+                    put(c, names.get(c) or v.get("name"), "장외")
+    except Exception:
+        missing.append("장외")
     try:
         pre_vi_surge(proxy, cfg, _now().strftime("%Y%m%d"), put, pre)
     except Exception:
