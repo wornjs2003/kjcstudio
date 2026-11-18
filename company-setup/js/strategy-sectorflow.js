@@ -6,7 +6,7 @@
 //              meta { asof, phase(pre · open · closed), refreshMs(다시 받을 간격 — 서버가 정함 · closed 면 안 받음) }
 //   · 칸 색 = 그 칸 업종 값 방향(매수 우위 빨강 · 매도 우위 파랑) · 짙기 = 거래대금 전날 같은 시각 대비(tone.js · 지표 표 amt_prev_pct)
 //   · 값이 없으면 — (0 이 아니다) · 서버가 아직 없으면 「서버 값 없음」 으로 냄
-import { signClass, NUM } from '/assets/js/sign.js';
+import { signClass, side, NUM } from '/assets/js/sign.js';
 import { ready as toneReady, paint as tonePaint } from '/assets/js/tone.js';
 
 const API = '/api/kis/sector-flow';   // ?by=sector|theme · ?day=
@@ -23,8 +23,9 @@ const BY = [['sector', '업종'], ['theme', '테마']];   // 재권님 「그럼
 //   (11-18 재권님 「이미지로 색도 있던데 색도 넣어줘. 매수와 매도에 맞게」) · 셈은 tone.js 한 곳(쪽을 정해 칠하기) · 기준 · 폭은 지표 표 amt_prev_pct — 없으면 색 없이(콘솔에 알림)
 // 칸 색 (11-18 재권님 「많을때 글씨만 적용 색은 글씨가 보이게 적당히 조절하면 돼」 → 「응 커밋해 배경색은 옅게 파랑 빨강 으로 해주고」 · 작업우선순위 경유)
 //   바탕 = 그 칸 매수 · 매도 쪽 옅은 색 고정(theme 변수) · 글씨 = 거래대금 전날 같은 시각 대비 짙기(tone.js 'text' · 지표 표 amt_prev_pct) — 빈 글이면 검정
-const bg = (mv) => (mv == null || mv === 0 ? '' : `background:var(${mv > 0 ? '--kh-up-dim' : '--kh-down-dim'})`);
-const fg = (t, p, mv) => { if (t == null || !p || mv == null || mv === 0) return ''; const c = tonePaint('amt_prev_pct', t / p * 100, 'text', mv > 0 ? 'up' : 'down'); return c ? `color:${c}` : ''; };
+const ud = (mv) => { const k = side(mv); return k === 'up' || k === 'down' ? k : null; };   // 쪽은 sign.js 한 셈 — 0 · 없음은 쪽 없음(색 없음)
+const bg = (mv) => { const k = ud(mv); return k ? `background:var(--kh-${k}-dim)` : ''; };
+const fg = (t, p, mv) => { const k = ud(mv); if (t == null || !p || !k) return ''; const c = tonePaint('amt_prev_pct', t / p * 100, 'text', k); return c ? `color:${c}` : ''; };
 const ratioTxt = (x) => { if (x == null) return '—'; const c = signClass(x - 1, NUM); const t = `${num(x, 1)}배`; return c ? `<b class="${c}">${t}</b>` : `<b>${t}</b>`; };
 
 function paint(j) {
