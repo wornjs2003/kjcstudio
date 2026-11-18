@@ -39,12 +39,7 @@ function tabsInto(h) {
   card.classList.add('jb-attached');
   paintTabs();
 }
-// 탭을 바꿔도 판 자리는 그대로(「보는 것을 바꿔도 자리는 그대로다」 — 갈아 끼우기) — 지금 보이던 판 높이를 새로 보일 판의 최소 높이로 · qa 11-18 실측 1096 → 303
-function holdHeight(from, to) {
-  if (!from || !to || from.hidden) return;
-  const h = from.getBoundingClientRect().height;
-  if (h > 0) to.style.minHeight = `${Math.max(h, parseFloat(to.style.minHeight) || 0)}px`;
-}
+// 탭을 바꾸면 판 높이도 그 판 내용대로 — 아래 칸이 따라 움직인다(재권님 11-18 「없애고 칸 바뀔때 움직이게」 · 단타 판 높이를 잡아 두니 종가배팅 판 아래가 비었음)
 function paintTabs() {
   document.querySelectorAll('[data-jbtab]').forEach((b) => { const on = b.dataset.jbtab === st.tab; b.classList.toggle('is-on', on); b.setAttribute('aria-selected', String(on)); });
   const dt = document.getElementById('dt-host');
@@ -54,8 +49,6 @@ function paintTabs() {
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-jbtab]');
   if (!b) return;
-  const dt = document.getElementById('dt-host');
-  if (b.dataset.jbtab !== st.tab) holdHeight(st.tab === 'dt' ? dt : host, st.tab === 'dt' ? host : dt);
   st.tab = b.dataset.jbtab;
   try { localStorage.setItem(KEY, st.tab); } catch (err) { /* 저장 못 해도 지금 창은 바뀜 */ }
   paintTabs();
