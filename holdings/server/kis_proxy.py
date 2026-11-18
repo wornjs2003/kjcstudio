@@ -9725,6 +9725,14 @@ class Handler(SimpleHTTPRequestHandler):
                 r = news_brief.flash()
                 self._send_json({"ok": True, "data": r["items"], "meta": r["meta"]})
                 return
+            # 텔레그램 미리보기 — 보내지도 표시하지도 않는다 · 정기 글은 이미 지은 것만(새로 안 지음) · 하루 몇 건(2026-11-18)
+            if route == "tg-preview":
+                import news_brief
+                r = news_store.preview()
+                self._send_json({"ok": True, "data": r, "meta": {"slots": ["%02d:%02d" % x for x in news_store.DIGEST_SLOTS],
+                                                                  "flashWaitSec": news_store.FLASH_WAIT_SEC, "on": news_brief.ON,
+                                                                  "slotFail": news_brief._st.get("slotFail")}})
+                return
 
             if route == "hot":
                 r = news_store.issues()
