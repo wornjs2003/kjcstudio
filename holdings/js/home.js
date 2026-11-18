@@ -35,6 +35,7 @@ import { mountHeatmap } from './components/heatmap.js';
 import { mountStockSearch } from './components/stock-search.js';
 import { openSectorModal } from './components/sector-modal.js';
 import { mountFearGreed } from './components/fear-greed.js';
+import { mountLeverage, leverageCell } from './components/leverage.js';
 import { mountStockPanel } from './components/stock-panel.js';
 import { mountStockDetail } from './components/stock-detail.js';
 import { mountMobileFold } from './components/mobile-fold.js';
@@ -251,7 +252,7 @@ function paintStrip(indices) {
     }
     return;
   }
-  if (top) patchStrip(top, stripHtml(indices, INDEX_CELLS));      // 달라진 조각만 — 국기를 다시 그리지 않는다(index-strip.js patchStrip)
+  if (top) patchStrip(top, stripHtml(indices, INDEX_CELLS) + leverageCell());      // 끝에 신용융자 칸(11-18 「나」) · 달라진 조각만 — 국기를 다시 그리지 않는다(index-strip.js patchStrip)
   paintIxFilter();
 }
 
@@ -312,6 +313,7 @@ function paintIxFilter() {
   const want = CAT_IX[ixCat];
   [...host.children].forEach((el, i) => {
     const cell = INDEX_CELLS[i];
+    if (!cell && el.matches('[data-lev]')) { el.hidden = !(want == null || want.includes('kr')); return; }   // 신용융자 칸 — 홈 · 국내에서만
     /* more 칸(네이버 나라 지수)은 「국외」 에서만 — 홈 띠는 전과 같다(index-strip.js INDEX_CELLS 주석) */
     el.hidden = !cell ? true : (want ? !want.includes(ixGroupOf(cell)) : !!cell.more);
     el.classList.toggle('is-on', !!cell && mkKey === IX_KEY + cell.code);      // 큰 차트에 띄운 지수 — 값이 바뀌어 다시 그려도 남게
@@ -3685,6 +3687,7 @@ setInterval(() => {
 }, 1000);
 mountIndicatorMenu(document.querySelector('.kh-ind-menu'));
 mountFearGreed(document.getElementById('kh-fg-open'));
+mountLeverage($('kh-top-ix'), () => { if (lastIndices) paintStrip(lastIndices); });     // 지수 띠 끝 「신용융자」 칸 · 누르면 레버리지 모달(11-17 · 11-18 자리 옮김 · components/leverage.js)
 
 /* 「지금 뜨는 산업」 — 업종 이름 단추를 누르면 그 종목이 나온다 (2026-09-18 지시).
    값은 네이버에서 오고 첫 화면을 막지 않는다 — 목록 한 번이 0.03초다. */
