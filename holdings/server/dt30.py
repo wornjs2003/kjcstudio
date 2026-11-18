@@ -345,11 +345,42 @@ def early_buy(proxy, cfg, codes, put, pre=False):
 MIN_CHIPS = 2                 # 단타 목록 문턱 — 단타 셈 칩 이 수 이상 · 홈 「단타」 · 투자 전략 단타 칩 · 단타 판(build) 셋 다 이 값(meta.minChips) —
                               # 재권님 안 「단타 목록을 서버 한 곳에서 셈해 … 문턱은 홈처럼 칩 둘 이상으로」 에 「응 이거 바로 해야할거같아」(11-18 17:4x · 시황분석1 창 · 작업우선순위 경유)
 LIVE_TTL = 60                 # 단타 목록(live) 캐시(초) — 홈 「단타」 · 단타 판이 같은 셈을 이 나이 안이면 함께 쓴다 · 화면은 롱폴 열쇠 dt30.LIVE_TTL
-_live = {"at": 0.0, "pre": None, "data": None}
+_live = {"at": 0.0, "pre": None, "data": None, "busy": False}
 _live_lock = threading.Lock()
+_calc_lock = threading.Lock()   # 셈은 한 번에 하나 — 셈이 수십 초 걸려(11-18 19:5x 8765 49초) 동시에 온 물음마다 따로 세면 서로 늦춰 넘기는 서버(8764)가 시간 한도에 걸렸다(창구 잼)
+
+
+def _live_bg(proxy, cfg):
+    try:
+        with _calc_lock:
+            _live_calc(proxy, cfg)
+    except Exception:
+        pass                                           # 못 셈 — 가진 목록을 그대로 두고 다음 물음 때 다시
+    finally:
+        with _live_lock:
+            _live["busy"] = False
 
 
 def live(proxy, cfg, force=False):
+    """단타 목록 — 캐시가 LIVE_TTL 을 넘었어도 가진 목록을 바로 내주고 뒤에서 한 번만 다시 센다(meta.at 이 그 목록을 센 때).
+    가진 목록이 없거나(뜬 직후 · 장 전 ↔ 장중이 바뀜) force 면 셈을 기다린다 — 그 사이 다른 셈이 끝났으면 그것을 쓴다."""
+    now = _now()
+    pre = now.hour * 60 + now.minute < OPEN_AT[0] * 60 + OPEN_AT[1]
+    with _live_lock:
+        if not force and _live["data"] is not None and _live["pre"] == pre:
+            if time.time() - _live["at"] >= LIVE_TTL and not _live["busy"]:
+                _live["busy"] = True
+                threading.Thread(target=_live_bg, args=(proxy, cfg), daemon=True).start()
+            return _live["data"]
+    t0 = time.time()
+    with _calc_lock:
+        with _live_lock:
+            if _live["data"] is not None and _live["pre"] == pre and _live["at"] >= t0:
+                return _live["data"]                   # 기다리는 사이 다른 셈이 끝남
+        return _live_calc(proxy, cfg)
+
+
+def _live_calc(proxy, cfg):
     """단타 목록 한 곳 — 지금 걸린 칩(chips_now) · 시세 · 하락 표시 · 차례. 홈 「단타」 와 단타 판(build)이 같이 쓴다
     — 재권님 「홈에 있는 칩을 단타에도 추가해서 동기화하고 한곳에서 받도록 해」(11-18 17:4x) · 「둘이 동기화해서 홈이든 단테든 한곳에 있어야 하는 정본」.
     {"rows": [{code, name, market, cap, sector, chips, subs, n, price, open, pct, rise, down}], "meta": {at, pre, missing, wait, early, approx, earlyNote, candidates, dropBelowPct, capMinEok, order}}
@@ -357,9 +388,6 @@ def live(proxy, cfg, force=False):
     import company_profile
     now = _now()
     pre = now.hour * 60 + now.minute < OPEN_AT[0] * 60 + OPEN_AT[1]
-    with _live_lock:
-        if not force and _live["data"] is not None and _live["pre"] == pre and time.time() - _live["at"] < LIVE_TTL:
-            return _live["data"]
     ub = getattr(proxy, "upstream_base", None)
     up = ub() if callable(ub) else getattr(proxy, "KIS_UPSTREAM_RAW", "")   # 자기 자신을 가리키는 상류는 거른다(kis_proxy._resolve_upstream · 창구 덧 11-18)
     if up:
