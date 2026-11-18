@@ -541,7 +541,7 @@ ALERT_MAX_AGE_H = 1            # 3 → 1(2026-11-18 재권님 「응 그래」 �
 # 비슷한 속보는 한 통만 (2026-11-18 재권님 「응 그래」 — 「30분 안에 같은 회사 · 같은 일을 다룬 속보는 첫 한 통만」).
 # 13:05 엔비디아 실적 속보 넷이 언론사 · 제목이 달라 묶음(group_id)이 갈려 네 통 갔다 — 묶음 말고 제목 낱말로 한 번 더 본다.
 # 바로 간 알림 중 SIMILAR_WINDOW_MIN 분 안의 것과 제목 낱말(2글자 이상 · 숫자 · 흔한 시황 낱말 빼고)이 SIMILAR_MIN_SHARED 개 이상 겹치고
-# 짧은 쪽 낱말의 SIMILAR_RATIO 이상이 겹치면 같은 일로 보고 안 보낸다(정기 글에는 그대로). 겹치는 낱말 중 흔한 낱말이 아닌 것(회사 · 품목 이름)이 하나는 있어야 한다.
+# 짧은 쪽 낱말의 SIMILAR_RATIO 이상이 겹치고, 두 제목의 주어(앞쪽 흔하지 않은 낱말 — 회사 · 기관 이름)가 글자 그대로 같으면 같은 일로 보고 안 보낸다(정기 글에는 그대로 · similar_title).
 # 낱말은 앞이 같으면 같다고 본다(「시간외」 · 「시간외에서」 — 조사).
 SIMILAR_WINDOW_MIN = 30
 SIMILAR_MIN_SHARED = 2
@@ -716,15 +716,24 @@ def _same_word(a, b):
     return a == b or (len(a) >= 2 and len(b) >= 2 and (a.startswith(b) or b.startswith(a)))
 
 
+def _subjects(words, n=2):
+    """제목 앞쪽의 흔하지 않은 낱말 n 개 — 그 기사의 주어(회사 · 기관 · 품목) 자리."""
+    return [w for w in words if not any(_same_word(w, c) for c in SIMILAR_COMMON)][:n]
+
+
 def similar_title(a, b):
-    """두 제목이 같은 회사 · 같은 일인가(위 SIMILAR_* 셈)."""
+    """두 제목이 같은 회사 · 같은 일인가(위 SIMILAR_* 셈).
+    같은 회사 — 한쪽 제목의 첫 주어 낱말이 다른 쪽 앞 두 주어 낱말 안에 **글자 그대로** 있어야 한다(「삼성」 ↔ 「삼성전자」 는 다르다) —
+    qa 검수(11-18): 「삼성전자 3분기 실적 발표」 ↔ 「SK하이닉스 3분기 실적 발표」 처럼 다른 회사의 같은 갈래 기사가 일 낱말(실적 · 유상증자 · 관세)만으로 묶였다.
+    같은 일 — 겹치는 낱말이 SIMILAR_MIN_SHARED 개 이상 · 짧은 쪽의 SIMILAR_RATIO 이상(낱말은 앞이 같으면 같다 — 조사)."""
     wa, wb = _title_words(a), _title_words(b)
     if not wa or not wb:
         return False
-    shared = [w for w in wa if any(_same_word(w, x) for x in wb)]
-    if len(shared) < SIMILAR_MIN_SHARED or len(shared) < SIMILAR_RATIO * min(len(wa), len(wb)):
+    sa, sb = _subjects(wa), _subjects(wb)
+    if not (sa and sb and (sa[0] in sb or sb[0] in sa)):
         return False
-    return any(not any(_same_word(w, c) for c in SIMILAR_COMMON) for w in shared)
+    shared = [w for w in wa if any(_same_word(w, x) for x in wb)]
+    return len(shared) >= SIMILAR_MIN_SHARED and len(shared) >= SIMILAR_RATIO * min(len(wa), len(wb))
 
 
 def _recent_alert_titles():
