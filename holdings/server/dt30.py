@@ -49,7 +49,10 @@ BAR_MIN = 5                  # 5분봉 길이(분)
 BUY_LATE = (10, 30)          # 굳히는 시각 — 재권님 「굳히기는 10시반으로」(11-18 · 안에 「응」 17:0x) · 그 전 「9시 35분에 굳히는걸로」(11-12 09:2x) · BUY_AT 부터 이때까지 판을 다시 세고 이 뒤로는 줄을 안 바꾼다 · 서버가 이 뒤에 뜨면 그날 판은 안 짓는다
 OPEN_AT = (9, 0)             # 정규장 첫 값 — 그 전(BUY_AT ~ 09:00)에 든 종목의 매수가는 이 시각 정규장 시가(rows[].buyWait 가 그 표시 · 09:00 뒤 첫 다시 세기에 채움)
 OUT_FROM = (9, 1)            # 「한 번 빠지면 그날 다시 안 넣음」 을 세기 시작하는 때 — 장 전에는 프리장 값이 오가며 줄이 자주 바뀐다(11-18 안 「응」)
-PRE_WAIT = ("매수", "초반상승")   # 09:00 전에는 값이 날 수 없는 칩 — 못 받음(missing)이 아니라 기다림(meta.wait)
+PRE_WAIT = ("초반상승",)   # 09:00 전에는 값이 날 수 없는 칩 — 못 받음(missing)이 아니라 기다림(meta.wait)
+# 「매수」 는 어림을 08:00 부터 — 재권님 「매수 목록중에 초반에 받을수 있는게 있지않나? 프리장에서」 → 「아니 매수는 그전에 받을수 있는 값 받으라고 했는데」
+# (11-18 17:2x · 시황분석1 경유). 장 전은 프로그램만(early_buy pre) — 외국계 창구는 거래소(J) 창구라 장 전 체결이 없어 오늘 값이 없고 어제 값이 올 수 있다.
+# 어림을 하나도 못 받으면 그때만 wait 에 「매수」(못 받음 아님) · 가집계(①~④)는 09:30 첫 입력이라 그대로 기다림(patch_late 가 채움)
 # VI·급등 은 08:00 부터 — 재권님 「8시부터 받을수 있는 정보는 다 받으면 좋을거같은데. 단타 칩들은 정보가 빠르게 들어올수록 좋아」 →
 # 장 전 VI(KIS VI 현황 08시대 — 넥스트 프리장으로 보임 · 11-19 08시대에 잴 것) · 장 전 급등(통합 등락률 순위 · 전일 종가 대비 SURGE_PCT 이상)에 「응 해줘」
 # (11-18 17:2x · 시황분석1 경유). 텔레그램 알림(intraday_alerts)은 정규장만 그대로 — 단타 판만 pre_vi_surge 로 따로 읽는다 · 매수 어림(외국계 창구 · 프로그램)도 안 부른다
@@ -131,6 +134,10 @@ def chips_now(proxy, cfg, early=True, pre=False):
     except Exception:
         missing.append("VI·급등")
     if pre:
+        if early and early_buy(proxy, cfg, [c for c in hit if not small(c)], put, pre=True) is not None:
+            missing.append("매수어림")                 # build 가 meta.early · approx 로
+        else:
+            missing.append("매수대기")                 # 장 전에 어림을 하나도 못 받음 — build 가 wait 로
         return hit, missing, cap, mkt
     try:
         for it in intraday_alerts.today().get("items") or []:
@@ -260,15 +267,24 @@ def chip_rules(proxy, merged=True):
 EARLY_WORKERS = 6
 
 
-def early_buy(proxy, cfg, codes, put):
+def early_buy(proxy, cfg, codes, put, pre=False):
     """「매수」 판이 아직 없을 때(외 · 기 장중 가집계가 09:30 · 10:00 에 처음 나온다) 후보 종목의 외국계 창구 순매수 · 종목 프로그램 순매수가
     둘 다 양수면 「매수」 어림(하위 「어림」)으로 넣는다 — 재권님 「프로그램은 받을수 있지않나? 외국계창구랑」 · 「차트에서 읽고 있잖아」(11-12 09:1x).
     값은 큰 차트 바닥 줄이 읽는 것과 같은 함수(fetch_investor_member 의 foreignFirms.net · _program_net_today) — 새 받는 길을 만들지 않는다.
     매수 판이 서면 patch_late 가 이 어림을 걷고 그 판으로 바꾼다. 넣은 종목 수(못 받으면 None)."""
     from concurrent.futures import ThreadPoolExecutor
 
+    now_hms = _now().strftime("%H:%M:%S")
+
     def one(c):
         try:
+            if pre:
+                # 장 전(09:00 전) — 프로그램만 · 외국계 창구는 거래소 창구라 장 전 오늘 값이 없다(어제 값이 올 수 있어 안 부름) — 재권님 11-18 17:2x
+                pg = proxy._program_net_today(cfg, c)
+                at = (getattr(proxy, "_program_at", {}) or {}).get(c)
+                if pg is not None and (not at or at > now_hms):
+                    pg = None                          # 마지막 체결 줄이 지금보다 늦다 = 어제 줄(체결 줄에 날짜 칸이 없다) — 못 잼
+                return c, None, pg
             m = proxy.fetch_investor_member(cfg, c) or {}
             fn = (m.get("foreignFirms") or {}).get("net")
             pg = proxy._program_net_today(cfg, c)
@@ -284,7 +300,10 @@ def early_buy(proxy, cfg, codes, put):
         return None                                    # 하나도 못 받았다 — 「어림」 으로 두지 않고 못 받은 칩으로 남긴다(qa 11-12 · KIS 몰림 때)
     n = 0
     for c, fn, pg in got:
-        if fn is not None and fn > 0 and pg is not None and pg > 0:
+        if pre and pg is not None and pg > 0:
+            put(c, None, "매수", "어림")               # 장 전 어림 — 프로그램 순매수만(meta.earlyNote)
+            n += 1
+        elif fn is not None and fn > 0 and pg is not None and pg > 0:
             put(c, None, "매수", "어림")
             n += 1
     return n
@@ -321,8 +340,9 @@ def build(proxy, cfg, day, skip=()):
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(), "rows": rows, "closed": False,
-            "meta": {"rebuilt": False, "missing": [c for c in missing if c != "매수어림"], "wait": list(PRE_WAIT) if pre else [], "openAt": "%02d:%02d" % OPEN_AT, "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy),
-                     "early": ["매수"] if "매수어림" in missing else [], "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
+            "meta": {"rebuilt": False, "missing": [c for c in missing if c not in ("매수어림", "매수대기")],
+                     "wait": (list(PRE_WAIT) + (["매수"] if "매수대기" in missing else [])) if pre else [], "openAt": "%02d:%02d" % OPEN_AT, "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy),
+                     "early": ["매수"] if "매수어림" in missing else [], "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre else None, "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
                      "order": "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순",
                      "note": "buy 는 굳힌 때(buyAt) 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
                              "market KOSPI · KOSDAQ(순위 목록 · 없으면 KIS 종목 마스터 · 둘 다 없으면 null) · cap 억원 · 장외는 09:06 에 비어 안 셈 · 볼린저 · 현재상승은 칩 이름만(셈에 안 듦)"}}
