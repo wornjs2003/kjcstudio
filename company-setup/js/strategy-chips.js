@@ -8,7 +8,8 @@
 //   · 종목은 홀딩스와 같은 서버 주소 — 목록 주소가 없는 칩(단타 · 현재상승 · 장외 — 홀딩스 화면이 순위 목록에서 셈)은 —
 import { signClass, NUM } from '/assets/js/sign.js';
 import { watch } from '/holdings/js/store/longpoll.js';   // 오늘 칩 목록 다시 받기 — 홀딩스 첫 화면과 같은 길(서버 롱폴 · 서버 주기)
-import { chipName } from './strategy-chipname.js';   // 서버 칩 이름 「수급」 → 화면 「자동」 — 바꾸는 표는 그 파일 한 곳
+import { chipName } from './strategy-chipname.js';
+import { setDtScore, dtChips } from './strategy-dt30.js';   // 조건별 점수 — 단타 판과 같은 룰 문서 · 같은 저장 길   // 서버 칩 이름 「수급」 → 화면 「자동」 — 바꾸는 표는 그 파일 한 곳
 
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -108,7 +109,7 @@ let seq = 0, cur = '';
 async function show(id, again = false) {
   chips.forEach((c) => { const on = c.dataset.rule === id; c.classList.toggle('is-active', on); c.setAttribute('aria-selected', on ? 'true' : 'false'); });
   const vol = id === 'volsurge';
-  tb1.hidden = !vol; tb2.hidden = vol; go.hidden = !vol; awH.hidden = !vol; crH.hidden = vol;
+  tb1.hidden = !vol; tb2.hidden = vol; if ($('rl-score') && id !== 'ov') $('rl-score').hidden = true; go.hidden = !vol; awH.hidden = !vol; crH.hidden = vol;
   how.style.visibility = vol ? '' : 'hidden';   // 「이 룰은 이렇게 셈합니다」 는 수급 것 — 자리는 남겨 칩을 바꿔도 판 높이 그대로(「보는 것을 바꿔도 자리는 그대로다」)
   if (vol) {
     title.textContent = '룰 — 전일 거래량 급등';
@@ -128,11 +129,50 @@ async function show(id, again = false) {
   if (!j || j.ok === false) { $('cr-cap').textContent = `「${R.name}」 종목`; $('cr').innerHTML = `<div class="st-err">— 서버 값을 못 받음(${esc((j && j.error) || st || '연결 안 됨')})</div>`; return; }
   const m = (R.metaOf ? R.metaOf(j) : null) || j.meta || (j.data && j.data.meta) || {};
   tb2.innerHTML = R.rows(m, ex.j).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
+  if (id === 'ov') scoreShow(m); else if ($('rl-score')) $('rl-score').hidden = true;
   const L = R.list(j, ex.j);
   $('cr-cap').textContent = L.cap.replace(/<[^>]+>/g, '');
   $('cr').innerHTML = L.html || '<div class="st-err">— 이 룰에 걸린 종목 없음</div>';
 }
 chips.forEach((c) => c.addEventListener('click', () => show(c.dataset.rule)));
+
+// 조건별 점수 (11-18 재권님 「여기도 내가 조건들 넣을수 있게 해줘. 있는조건이면 고르면 되고 조건별로 점수를 매겨서 우선순위 정할거야」 → 홈 「단타」 도 같은 차례 「응」)
+//   · 「룰 — 단타」 칸 아래 · 있는 조건(서버 meta.chips + VI·급등 09:25 전 · 이후)을 골라 점수를 넣음 · 표는 룰 문서 rules.dt30.score 한 곳(단타 판 · 서버가 같은 표를 읽음)
+//   · 칸은 한 번 만들고 값만 바꿈(치는 도중 다시 그려 글자가 사라지지 않게) · 표가 비면 줄 세우기는 지금 셈(겹친 칩 수)
+const DOC = '/api/board/doc/strategy-rules';
+const VI_SUB = ['09:25 전', '09:25 이후'];
+let score = {}, conds = [];
+const condTxt = (k) => k.replace('|', ' ');
+async function scoreLoad() { const { j } = await getJson(DOC); const S = j && j.data && j.data.rules && j.data.rules.dt30 && j.data.rules.dt30.score; score = S && typeof S === 'object' ? { ...S } : {}; }
+function scoreBox() {
+  let b = $('rl-score'); if (b) return b;
+  b = document.createElement('div'); b.id = 'rl-score'; b.className = 'rl-score'; tb2.after(b);
+  b.addEventListener('change', async (e) => {
+    const el = e.target; if (!el.matches('[data-k], [data-new]')) return;
+    const n = { ...score };
+    if (el.dataset.new != null) { if (!el.value) return; n[el.value] = 1; }
+    else { const v = el.value.trim() === '' ? null : Number(el.value); if (v != null && !Number.isFinite(v)) { scorePaint(); return; } if (v == null) delete n[el.dataset.k]; else n[el.dataset.k] = v; }
+    await scoreSave(n);
+  });
+  b.addEventListener('click', async (e) => { const x = e.target.closest('[data-del]'); if (!x) return; const n = { ...score }; delete n[x.dataset.del]; await scoreSave(n); });
+  return b;
+}
+async function scoreSave(n) {
+  score = n; scorePaint(); const msg = $('rl-score-msg'); if (msg) msg.textContent = '저장하는 중…';
+  try { await setDtScore(n); if (msg) msg.textContent = '저장됨 — 단타 판 다시 셈'; } catch (e) { if (msg) msg.textContent = `저장 못 함(${e.message || '연결 안 됨'})`; }
+}
+function scorePaint() {
+  const b = scoreBox(), ks = Object.keys(score), rest = conds.filter((k) => !ks.includes(k));
+  b.innerHTML = `<div class="rl-sh"><b>조건별 점수</b> <span class="rl-sug">걸린 조건 점수를 더해 큰 순으로 줄 세움 · 비우면 겹친 칩 수 순 · 표에 없는 조건은 0점</span></div>
+    ${ks.map((k) => `<label class="dt-fee">${esc(condTxt(k))} <input data-k="${esc(k)}" class="rl-in rl-num" inputmode="decimal" value="${esc(score[k])}" aria-label="${esc(condTxt(k))} 점수">점 <button type="button" class="kh-chip" data-del="${esc(k)}" data-tip="이 조건 빼기" aria-label="${esc(condTxt(k))} 빼기">✕</button></label>`).join('')}
+    ${rest.length ? `<select data-new class="rl-in" aria-label="조건 더하기"><option value="">+ 조건</option>${rest.map((k) => `<option value="${esc(k)}">${esc(condTxt(k))}</option>`).join('')}</select>` : ''} <span id="rl-score-msg" class="rl-sug"></span>`;
+}
+async function scoreShow(m) {
+  const b = scoreBox(); b.hidden = false;
+  const cs = (m.chips && m.chips.length ? m.chips : dtChips()).map(chipName); conds = cs.flatMap((c) => (c === 'VI·급등' ? [c, ...VI_SUB.map((x) => `${c}|${x}`)] : [c]));
+  if (b.contains(document.activeElement)) return;   // 치는 중이면 다시 그리지 않음
+  await scoreLoad(); scorePaint();
+}
 // 오늘 것은 계속 다시 받는다(11-12 재권님 「오늘자는 계속 값을 갱신하고 있어야해」) — 보고 있는 칩 하나만 · 주기는 서버 값(홀딩스 home.js 와 같은 열쇠)
 //   서버 롱폴이 켜져 있으면 바뀔 때 · 아니면 그 열쇠의 주기로 · 열쇠가 없으면(VI·급등 · 볼린저) 아래 FALLBACK 은 홀딩스와 같은 값 — 서버가 롱폴을 못 줄 때만
 const VI_FALLBACK_MS = 30000, BB_FALLBACK_MS = 60000, CHIP_FALLBACK_MS = 300000;
