@@ -485,14 +485,15 @@ def unsent_digest(limit=200):
                ORDER BY at_ts DESC LIMIT ?""", (limit,)) if not _untranslated(r, fs)]
 
 
-def unsent_alerts(limit=20):
+def unsent_alerts(limit=20, flash=None):
     """즉시 알림을 아직 안 보낸 「중요」 기사 · 속보(제목에 FLASH_WORD — 2026-11-18 한 길로 합침)."""
+    flash = TG_NEW if flash is None else flash
     fs = foreign_sources()
     with _conn() as c:
         return [dict(r) for r in c.execute(
             """SELECT * FROM news_items
                WHERE (alert IS NOT NULL OR title LIKE ?) AND alerted_at IS NULL
-               ORDER BY at_ts DESC LIMIT ?""", ("%" + FLASH_WORD + "%", limit)) if not _untranslated(r, fs)]
+               ORDER BY at_ts DESC LIMIT ?""", ("%" + FLASH_WORD + "%" if flash else "\x00", limit)) if not _untranslated(r, fs)]
 
 
 def mark_sent(links, field):
@@ -541,6 +542,11 @@ ALERT_MAX_AGE_H = 3
 # 속보 정리(news_brief.flash_once)가 붙기를 이만큼(초) 기다리고, 넘으면 제목만으로 보낸다.
 FLASH_WORD = "속보"
 FLASH_WAIT_SEC = 300
+
+# 켜기 — 새 글(정기 글 이슈 정리 · 속보 바로 알림)은 이 스위치가 켜진 서버만 보낸다. **기본 꺼짐**(개념정의 검수 11-18 —
+# 받는 글이 바뀌는 「켜기」 자리 · 알림으로 나간 것은 못 지운다 · 켤지는 재권님이 정하신다 · 여쭙는 것은 시황분석).
+# 꺼져 있으면 옛 길 그대로(정기 = 제목 묶음 · 바로 = 「중요」 규칙만). 미리보기(preview)는 꺼져 있어도 새 글을 보여 준다(켤 때 셈 자료).
+TG_NEW = (os.environ.get("KJC_NEWS_TG") or "").strip() == "1"
 
 
 def _telegram(text, send=None):
@@ -634,9 +640,10 @@ def send_alerts(send=None):
     return _finish_alerts(sent, skip, count_key, done_today)
 
 
-def _alert_name(r):
-    """바로 보낼 까닭 — 「중요」 규칙 이름 · 아니면 속보 · 둘 다 아니면 None."""
-    return match_alert(r["title"]) or (FLASH_WORD if FLASH_WORD in (r["title"] or "") else None)
+def _alert_name(r, flash=None):
+    """바로 보낼 까닭 — 「중요」 규칙 이름 · 아니면 속보(스위치 TG_NEW 가 켜졌을 때) · 둘 다 아니면 None."""
+    flash = TG_NEW if flash is None else flash
+    return match_alert(r["title"]) or (FLASH_WORD if flash and FLASH_WORD in (r["title"] or "") else None)
 
 
 def alert_text(r, name, wait=True):
@@ -718,7 +725,7 @@ def send_digest(force=False, send=None):
     if send is None:
         return 0                                  # 보내지 않는 서버 — 정리 글도 안 짓는다(Claude 부르기)
 
-    ok, _why = _telegram(slot_digest_text(rows, slot), send)
+    ok, _why = _telegram(slot_digest_text(rows, slot) if TG_NEW else digest_text(rows), send)
     if not ok:
         return 0
     mark_sent([r["link"] for r in rows], "digest_at")
@@ -731,14 +738,15 @@ def slot_digest_text(rows, slot, make=True, now=None):
     now = now or datetime.now(KST)
     hm = (int(slot[-4:-2]), int(slot[-2:])) if slot and slot[-4:].isdigit() else (now.hour, now.minute)
     import news_brief
-    data = None
     try:
-        data = news_brief.slot_brief(hm, now, make=make)
+        data, why = news_brief.slot_brief(hm, now, make=make)
     except Exception as e:
-        news_brief._st["slotFail"] = "못 지음(%s · %s)" % (now.strftime("%H:%M"), type(e).__name__)
+        data, why = None, "못 지음(%s · %s)" % (now.strftime("%H:%M"), type(e).__name__)
+    if make:
+        news_brief._st["slotFail"] = why             # 미리보기(make=False)는 상태를 안 고친다
     if data and data.get("issues"):
         return news_brief.slot_text(data, hm, now)
-    return digest_text(rows, now) + "\n\n(정리 못 지음 — %s · 제목 묶음으로 보냄)" % (news_brief._st.get("slotFail") or "까닭 모름")
+    return digest_text(rows, now) + "\n\n(정리 못 지음 — %s · 제목 묶음으로 보냄)" % (why or "까닭 모름")
 
 
 def preview(days=7):
@@ -750,7 +758,7 @@ def preview(days=7):
     for h, m in DIGEST_SLOTS:
         key = "%s-%02d%02d" % (now.strftime("%Y%m%d"), h, m)
         slots["%02d:%02d" % (h, m)] = slot_digest_text(rows, key, make=False, now=now) if rows else None
-    alerts = [alert_text(r, _alert_name(r), wait=False) for r in unsent_alerts() if _alert_name(r)][:5]
+    alerts = [alert_text(r, _alert_name(r, True), wait=False) for r in unsent_alerts(flash=True) if _alert_name(r, True)][:5]
     return {"digest": slots, "alerts": alerts, "perDay": alert_counts(days)}
 
 
@@ -763,7 +771,7 @@ def alert_counts(days=7):
         rs = c.execute("SELECT title, group_id, at_ts FROM news_items WHERE at_ts >= ? ORDER BY at_ts", (since,)).fetchall()
     out, seen = {}, set()
     for r in rs:
-        name = _alert_name(r)
+        name = _alert_name(r, True)
         if not name or r["group_id"] in seen:
             continue
         seen.add(r["group_id"])

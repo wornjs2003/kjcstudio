@@ -141,37 +141,34 @@ NEWS_PATH = "/company-setup/news.html"   # 글 끝 링크 — 뉴스 분석 화�
 
 
 def slot_brief(hm, now=None, make=True):
-    """정기 시각 hm(시, 분)의 정리 글(dict) — 없으면 make 일 때 짓는다(ON 일 때만). 못 구하면 None · 까닭은 _st["slotFail"]."""
+    """정기 시각 hm(시, 분)의 정리 글 → (글 dict 또는 None, 못 구한 까닭 또는 None). 없으면 make 일 때 짓는다(ON 일 때만)."""
     now = now or _now()
     day = now.strftime("%Y%m%d")
     if tuple(hm) == SLOT_FROM_MORNING:
         b = brief()
         if b["data"] and b["meta"]["day"] == day:
-            return b["data"]
-        _st["slotFail"] = "아침 정리 없음"
-        if not make:
-            return None
+            return b["data"], None
+        return None, "아침 정리 없음"
     key = "%s-%02d%02d" % (day, hm[0], hm[1])
     try:
         with _conn() as c:
             c.executescript(_SCHEMA)
             r = c.execute("SELECT data FROM news_slot_brief WHERE slot = ?", (key,)).fetchone()
         if r:
-            return json.loads(r[0])
+            return json.loads(r[0]), None
     except Exception:
         pass
-    if not make or not ON:
-        _st["slotFail"] = _st.get("slotFail") or "짓기 꺼짐"
-        return None
+    if not make:
+        return None, "아직 안 지음"
+    if not ON:
+        return None, "짓기 꺼짐"
     try:
         data = _compose(now)
     except Exception as e:
-        _st["slotFail"] = "못 지음(%s · %s)" % (now.strftime("%H:%M"), safe_message(e, 100))
-        return None
+        return None, "못 지음(%s · %s)" % (now.strftime("%H:%M"), safe_message(e, 100))
     with _conn() as c:
         c.execute("INSERT OR REPLACE INTO news_slot_brief VALUES (?,?,?)", (key, json.dumps(data, ensure_ascii=False), now.strftime("%H:%M:%S")))
-    _st["slotFail"] = None
-    return data
+    return data, None
 
 
 def slot_text(data, hm, now=None):
