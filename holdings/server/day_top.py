@@ -12,7 +12,7 @@
     값        pct(KRX 종가 등락률) · close · vol · value(종가 × 거래량 · 어림) · cap · sector(WICS · company_profile)
     필터      종목마다 걸린 것과 그 시각(filters: {이름: "HH:MM" 또는 ""})
                 VI · 급등      intraday_alerts 그날 목록 — 처음 본 시각
-                초반상승       open_rise.build 의 rows — 09:05(첫 봉이 끝난 때)
+                초반상승       open_rise.build 의 rows — 첫 봉이 끝난 때(barTo · 11-18 부터 09:01)
                 프리장         pre_flow 그날 판 중 프로그램 순매수 > 0 — 08:50(굳힌 때)
                 볼린저         signal_watch.today_lows — 그 봉 시각
                 매수①~④       kis_proxy 「매수」 판의 tier — 그날 처음 잡힌 시각(first)

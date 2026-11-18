@@ -867,7 +867,7 @@ def rebuild(proxy, day, prev, cfg=None):
         cp = cap.get(c)
         if b and b[0] and b[2] is not None and cp is not None and cp >= open_rise.MIN_CAP_EOK:
             pct = (b[2] - b[0]) / b[0] * 100
-            if pct >= open_rise.RISE_PCT:
+            if pct >= open_rise.PAST_RISE_PCT:             # 지난 날은 첫 5분봉 2% 셈 그대로(1분봉은 11-12 부터만)
                 put(c, "초반상승", rise=round(pct, 2))
     for c in bb:
         if c in hit:

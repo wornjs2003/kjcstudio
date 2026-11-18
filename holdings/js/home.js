@@ -1525,17 +1525,17 @@ const SORTS = {
             : preMeta.phase === 'before' ? `프리장은 ${preMeta.preOpen} 부터 · 지금은 앞 판이 없습니다`
             : preMeta.phase === 'live' ? `아직 오늘 판이 없습니다 — 서버가 ${Math.round((preMeta.cacheTtl || 180) / 60)}분마다 짓습니다`
             : '프리장 판 없음 — 그 시각 짓지 않았거나 못 남겼습니다') },     // 까닭을 단정하지 않는다(qa 덧 11-05 · 「못 쟀으면 못 쟀다」)
-  /* 초반상승 — 정규장 첫 5분봉(09:00~09:05)이 시가보다 일정 % 이상 올라 끝난 종목 · 시가총액 문턱 이상 · 그 상승률 큰 순 (2026-11-11 재권님
+  /* 초반상승 — 정규장 첫 봉(11-18 부터 1분봉 09:00~09:01 · 머리 칸 「첫 1분봉」 은 서버 open_rise.BAR_MIN 의 글 사본 — 바뀌면 같이)이 시가보다 일정 % 이상 올라 끝난 종목 · 시가총액 문턱 이상 · 그 상승률 큰 순 (2026-11-11 재권님
      「아침 9시5분 기준으로 양봉이 2% 이상이 되고 시가총액이 5천억 이상인 종목들 소팅해서 실시간 순위에 초반상승 이라고 만들어서 넣어줘」 → 「가」).
      고르는 것 · 문턱 값은 서버다(server/open_rise.py · /api/kis/open-rise) — 화면은 받은 차례 그대로 그리고 글의 숫자도 meta 에서 읽는다 */
   rise: { label: '초반상승', list: () => riseRows,
-          head: '첫 5분봉', show: (code) => riseCell(code), html: true,
+          head: '첫 1분봉', show: (code) => riseCell(code), html: true,
           note: () => riseNote(),
           empty: () => (!riseMeta ? '불러오는 중'
             : riseMeta.phase === 'closed' ? '오늘은 장이 열리지 않습니다'
-            : riseMeta.phase === 'before' ? `${riseMeta.barTo} 첫 5분봉이 끝나면 고릅니다`
-            : riseMeta.phase === 'nodata' ? `못 셈 — 첫 5분봉(${riseMeta.barFrom}) 봉이 한 종목도 없습니다`
-            : riseMeta.pending ? `첫 5분봉을 다 받기 기다리는 중 — ${riseMeta.pending}종목`
+            : riseMeta.phase === 'before' ? `${riseMeta.barTo} 첫 ${barMinTxt()}봉이 끝나면 고릅니다`
+            : riseMeta.phase === 'nodata' ? `못 셈 — 첫 ${barMinTxt()}봉(${riseMeta.barFrom}) 봉이 한 종목도 없습니다`
+            : riseMeta.pending ? `첫 ${barMinTxt()}봉을 다 받기 기다리는 중 — ${riseMeta.pending}종목`
             : '첫 5분봉이 문턱 넘게 오른 종목이 없습니다') },
   /* 겹침 — 관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 중 **둘 이상**에 든 종목, 겹친 칩 수 많은 순 · 같으면 시가총액 순 (2026-11-11 재권님
      「관심 프리장 vi급등 장외 매수 이목록들(실시간 순위) … 여기에서 겹치는 종목들을 소팅해서 보여주면 좋을거같은데」 → (가) 새 칩).
@@ -1614,7 +1614,7 @@ const SORT_TIPS = {
     const m = riseMeta || {};
     const th = m.risePct != null ? ` ${m.risePct}% 이상` : '';
     const cap = m.minCapEok != null ? `시가총액 ${fmtMoneyKr(m.minCapEok)} 이상만` : '';
-    return `코스피 200 · 코스닥 150 종목(ETF 뺌) 중 정규장 첫 5분봉(${m.barFrom || '09:00'} ~ ${m.barTo || '09:05'})이 시가보다${th} 올라 끝난 종목, 그 상승률이 큰 순\n그 봉을 다 받은 뒤에 고르고 그날 판으로 굳습니다${cap ? ` · ${cap}` : ''}`;
+    return `코스피 200 · 코스닥 150 종목(ETF 뺌) 중 정규장 첫 ${barMinTxt()}봉(${m.barFrom || '—'} ~ ${m.barTo || '—'})이 시가보다${th} 올라 끝난 종목, 그 상승률이 큰 순\n그 봉을 다 받은 뒤에 고르고 그날 판으로 굳습니다${cap ? ` · ${cap}` : ''}`;
   },
   eb: '실적이 잘 나온 종목 — 두 가지가 다 맞은 것만\n① 예상보다 좋음: 회사가 낸 잠정실적의 영업이익이 그 분기 시장 예상치(네이버)보다 높음\n② 전망 좋음: 「실적 전망」 공시의 매출 · 영업이익(값이 든 칸만)이 직전 실적보다 큼 — 1년 전망은 앞 해 실적(없으면 최근 네 분기 합), 분기 전망은 한 해 앞 같은 분기\n최근 공시만(며칠 치인지는 서버가 정해 위 설명 줄에 나옵니다) · 예상치가 없는 종목은 못 가름이라 빠집니다',
   ev: '최근 사흘 회사 공시 중 갈래가 붙은 것(자사주 · 인수합병 · 주주환원 · 실적 · 위험 신호 …) — 종목마다 가장 새 공시 한 줄, 새 것이 위\n아래 띠에서 갈래를 누르면 그 갈래만',
@@ -2036,10 +2036,12 @@ function paintChipSectorsNow() {
     `${escT(sectorShort(x.name))} <b class="${x.g?.pct == null ? 'kh-mut' : dirClass(x.g.pct)}">${pct(x.g?.pct)}</b> <span class="kh-mut">${x.names.length}</span></span>`).join('');
 }
 
+/* 초반상승 첫 봉 길이 글 — 서버 meta.barMin(11-18 부터 1) · 못 받으면 「분」 만(숫자를 짐작하지 않는다) */
+const barMinTxt = () => (riseMeta && riseMeta.barMin != null ? `${riseMeta.barMin}분` : '분');
 /* 「초반상승」 칩 — 서버가 준 줄 그대로. 못 받았으면 null(빈 목록과 가른다) */
 let riseRows = null, riseMeta = null;
 const riseOf = (code) => (riseRows || []).find((r) => r.code === code) || null;
-/* 첫 5분봉 상승률(시가 대비 · 오름 빨강) · 아랫줄 시가 → 09:05 가격 */
+/* 첫 봉 상승률(시가 대비 · 오름 빨강) · 아랫줄 시가 → 그 봉 끝 가격(11-18 부터 1분봉 · 09:01) */
 function riseCell(code) {
   const r = riseOf(code);
   if (!r) return '—';
@@ -2049,7 +2051,7 @@ function riseCell(code) {
 function riseNote() {
   const m = riseMeta || {};
   const bits = [];
-  if (m.day) bits.push(`${m.day.slice(4, 6)}.${m.day.slice(6)} 첫 5분봉`);
+  if (m.day) bits.push(`${m.day.slice(4, 6)}.${m.day.slice(6)} 첫 ${barMinTxt()}봉`);
   if (m.risePct != null) bits.push(`시가 대비 +${m.risePct}% 이상`);
   if (m.pending) bits.push(`다 받기 기다림 ${m.pending}`);
   else if (m.phase === 'done') bits.push('그날 판 고정');
@@ -2802,7 +2804,7 @@ function paintRankModal() {
       </colgroup>
       <thead><tr>
         <th></th><th class="l">종목</th><th>현재가</th><th>등락률</th>
-        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'rise' ? '첫 5분봉' : sid === 'ov' ? '겹친 칩' : sid === 'vi' ? '때 · 무엇' : sid === 'bb' ? '바닥 봉' : sid === 'ssts' ? '공매도' : sid === 'ev' ? '갈래 · 무엇' : sid === 'eb' ? '예상 대비 · 전망' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
+        <th>${sid === 'buy' ? '외·기·프(억)' : sid === 'pre' ? '프리장(억)' : sid === 'rise' ? '첫 1분봉' : sid === 'ov' ? '겹친 칩' : sid === 'vi' ? '때 · 무엇' : sid === 'bb' ? '바닥 봉' : sid === 'ssts' ? '공매도' : sid === 'ev' ? '갈래 · 무엇' : sid === 'eb' ? '예상 대비 · 전망' : '거래대금'}</th><th>시가총액</th><th>${th && themeBig === FLOW ? '수급 배율' : '거래량'}</th><th>${volRatioHead()}</th>
       </tr></thead>
       <tbody>${rows || empty}</tbody>
     </table>

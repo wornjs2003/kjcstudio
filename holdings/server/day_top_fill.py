@@ -14,7 +14,7 @@ day_top 은 11-11 부터 날마다 그날 판을 남긴다. 그 앞 FILL_DAYS �
                    시장 전체로 물으면 그날 마지막 30건만 와서(11-11 19:40 잼) 종목마다 묻는다
       급등         그날 정규장 5분봉 고가 ÷ 앞 날 KRX 종가 − 1 ≥ intraday_alerts.SURGE_PCT — 처음 넘은 봉 시각.
                    정규장 5분봉이 없으면 일봉(D) 고가로 보고 시각은 빈칸
-      초반상승     그날 정규장 첫 5분봉(market_hours 보통 날 여는 시각) 종가 ÷ 시가 − 1 ≥ open_rise.RISE_PCT
+      초반상승     그날 정규장 첫 5분봉(market_hours 보통 날 여는 시각) 종가 ÷ 시가 − 1 ≥ open_rise.PAST_RISE_PCT(지난 날은 5분봉 셈 그대로)
       프리장       pre_flow.pick — 프리마켓(pre_flow.PRE_OPEN~PRE_CLOSE) 5분봉 거래대금(종가 × 거래량 합) · 등락률은 마지막 프리마켓 봉 종가 ÷
                    앞 날 종가 − 1 · 오른 것 중 거래대금 상위 pre_flow.TOP_N(11-12 재권님 「상승인 종목 70개」 · 전에는 프로그램 > 0)
       볼린저       signal_sent(kind low) 그날 줄 중 그날 판을 남기는 때(day_top.SAVE_AT) 앞 — 그 봉 시각
@@ -216,8 +216,8 @@ def build(proxy, day, kis=True):
         first = next((b for b in bs if b[0] == open_hm), None)
         if first is None:
             no_bar += 1
-        elif first[1] and first[3] is not None and (first[3] - first[1]) / first[1] * 100 >= open_rise.RISE_PCT:
-            put(c, "초반상승", "%s:%02d" % (open_hm[:2], int(open_hm[2:]) + open_rise.BAR_MIN))
+        elif first[1] and first[3] is not None and (first[3] - first[1]) / first[1] * 100 >= open_rise.PAST_RISE_PCT:
+            put(c, "초반상승", "%s:%02d" % (open_hm[:2], int(open_hm[2:]) + open_rise.PAST_BAR_MIN))
         prev_close = (hist.get(c, {}).get(pd) or (None,))[0] if pd else None
         if prev_close:
             lim = prev_close * (1 + ia.SURGE_PCT / 100)

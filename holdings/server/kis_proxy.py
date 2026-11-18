@@ -10530,7 +10530,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return
 
             if route == "open-rise":
-                # 초반상승 — 정규장 첫 5분봉(여는 시각부터 5분 · market_hours)이 시가보다 RISE_PCT % 이상 올라 끝난 종목 (2026-11-11 · server/open_rise.py) · KIS 안 부름
+                # 초반상승 — 정규장 첫 봉(open_rise.BAR_MIN 분 · 11-18 부터 1분 · market_hours)이 시가보다 RISE_PCT % 이상 올라 끝난 종목 (2026-11-11 · server/open_rise.py) · KIS 안 부름
                 d, at = open_rise.fetch(sys.modules[__name__])
                 self._send_json({
                     "ok": True, "data": d["rows"],
@@ -10538,8 +10538,8 @@ class Handler(SimpleHTTPRequestHandler):
                              "day": d["day"], "phase": d["phase"], "candidates": d["candidates"], "pending": d["pending"],
                              "noBar": d["noBar"], "capMissing": d["capMissing"], "etfOut": d["etfOut"],
                              "risePct": open_rise.RISE_PCT, "minCapEok": open_rise.MIN_CAP_EOK,
-                             "barFrom": d["barFrom"], "barTo": d["barTo"],
-                             "note": "DB 에 쌓인 5분봉 — 정규장 첫 봉 (종가 − 시가) ÷ 시가 · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
+                             "barFrom": d["barFrom"], "barTo": d["barTo"], "barMin": open_rise.BAR_MIN,
+                             "note": "DB 에 쌓인 분봉 — 정규장 첫 봉(barMin 분) (종가 − 시가) ÷ 시가 · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
                              "cacheTtl": open_rise.CACHE_TTL, "first": open_rise.first_status()},
                 })
                 return
