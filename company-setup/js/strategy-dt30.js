@@ -61,7 +61,7 @@ const BOTH = { 'VI·급등': [['VI', '급등'], ['VI 급상승', 'VI 급등']] }
 // VI·급등 하위를 시각으로 둘 (11-18 재권님 「vi급등을 9시 25분전 그이후 로 버튼 2개로 나눠줘」) — 그날 처음 VI · 급등 시각(서버 viAt · surgeAt, 없으면 오늘 알림 목록)이
 //   VI_SPLIT 앞이면 「09:25 전」 · 그 시각부터는 「09:25 이후」 · 시각을 못 받으면 「시각 모름」(어느 쪽으로도 안 셈) — 앞의 「VI 급상승 · VI 급등」 둘은 이것으로 바뀜
 const VI_SPLIT = '0925';
-const VI_SUBS = ['09:25 전', '09:25 이후', '시각 모름'];
+export const VI_SUBS = ['09:25 전', '09:25 이후', '시각 모름'];   // 점수표 열쇠(「VI·급등|09:25 전」)도 이 이름 — strategy-chips.js 가 가져다 씀
 const viFirst = (r) => {
   const t = [r.viAt, r.surgeAt].filter(Boolean).map(hhmm);
   if (!t.length) { const o = viAt.map && viAt.day === (st.data && st.data.day) ? viAt.map[r.code] : null; if (o) [o.vi, o.surge].filter(Boolean).forEach((x) => t.push(hhmm(x))); }
