@@ -356,6 +356,23 @@ def early_buy(proxy, cfg, codes, put, pre=False):
 
 MIN_CHIPS = 2                 # 단타 목록 문턱 — 단타 셈 칩 이 수 이상 · 홈 「단타」 · 투자 전략 단타 칩 · 단타 판(build) 셋 다 이 값(meta.minChips) —
                               # 재권님 안 「단타 목록을 서버 한 곳에서 셈해 … 문턱은 홈처럼 칩 둘 이상으로」 에 「응 이거 바로 해야할거같아」(11-18 17:4x · 시황분석1 창 · 작업우선순위 경유)
+MIN_CHIPS_LATE = 1            # 장이 늦게 여는 날(수능 · 정규장 10:00 · 넥스트레이드 프리마켓 없음) 문턱 — 08시대 칩이 관심 하나뿐이라 둘 문턱이면 목록 · 판이 다 빔
+                              # 재권님 「암것도 안보이네 나로 해줘」(11-19 08:22 · 작업우선순위 창 · (나) 칩 하나도 보이게)
+
+
+def min_chips(proxy, now=None):
+    """그날 단타 문턱 한 곳 — 보통 MIN_CHIPS · 정규장이 보통 날보다 늦게 여는 날(market_hours 표의 바뀐 시각)은 MIN_CHIPS_LATE.
+    장 시각을 못 읽으면 MIN_CHIPS(보통 날로 본다)."""
+    try:
+        import market_hours
+        t = market_hours.today(proxy, now=now)
+        if t.get("open") is not False and t["reg"][0] > t["usual"]["reg"][0]:
+            return MIN_CHIPS_LATE
+    except Exception:
+        pass
+    return MIN_CHIPS
+
+
 LIVE_TTL = 60                 # 단타 목록(live) 캐시(초) — 홈 「단타」 · 단타 판이 같은 셈을 이 나이 안이면 함께 쓴다 · 화면은 롱폴 열쇠 dt30.LIVE_TTL
 
 # 줄 세우기 — 재권님 「응」(11-18 19:3x · 시황분석1 창 · 작업우선순위 경유): 룰 문서 strategy-rules 의 rules.dt30.score
@@ -384,17 +401,34 @@ def _chip_time(r, chip):
     return (r.get("chipAt") or {}).get(chip)
 
 
-def row_score(r, tab):
-    """그 줄의 점수 합 — 칩마다 「칩」 열쇠 + 맞는 「칩|HH:MM 전/이후」 열쇠."""
-    total = 0.0
+def score_conflicts(tab):
+    """한 칩에 「칩」 점수와 「칩|HH:MM 전/이후」 점수가 함께 적힌 칩 이름 — 재권님 「함께 있을수 없는 값이야 둘중 하나만 기입하도록 해줘」(11-18 20:2x).
+    입력은 화면이 하나만 받게 막는다 · 서버는 둘 다 있으면 시각 점수만 쓰고(화면 셈과 같게) 이 목록을 meta.scoreConflict 로 낸다."""
+    if not tab:
+        return []
+    plain = {k.strip() for k in tab if "|" not in k}
+    split = {k.partition("|")[0].strip() for k in tab if "|" in k}
+    return sorted(plain & split)
+
+
+def row_score_by(r, tab):
+    """칩마다의 몫 {칩: 점수} — 칩마다 「칩」 열쇠 또는 맞는 「칩|HH:MM 전/이후」 열쇠(둘 다 적혔으면 시각 열쇠만 · score_conflicts).
+    점수가 안 걸린 칩은 안 넣는다. 화면은 끈 칩 몫만 빼서 차례를 세운다 — 셈은 이 한 곳(시황분석1 과 맞춤 11-18 20:3x)."""
+    by = {}
+    bad = set(score_conflicts(tab))
     for c in r.get("chips") or []:
+        total = 0.0
+        hit = False
         names = {c, SCORE_ALIAS.get(c, c)}
         for k, v in tab.items():
             name, _, cond = k.partition("|")
             if name.strip() not in names:
                 continue
             if not cond:
+                if name.strip() in bad:
+                    continue
                 total += v
+                hit = True
                 continue
             m = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*(전|이후)\s*", cond)
             t = _chip_time(r, c)
@@ -403,7 +437,15 @@ def row_score(r, tab):
             hm = "%02d:%s" % (int(m.group(1)), m.group(2))
             if (t[:5] < hm) == (m.group(3) == "전"):
                 total += v
-    return round(total, 4)
+                hit = True
+        if hit:
+            by[c] = round(total, 4)
+    return by
+
+
+def row_score(r, tab):
+    """그 줄의 점수 합 — row_score_by 의 합."""
+    return round(sum(row_score_by(r, tab).values()), 4)
 
 
 def sort_rows(rows, tab):
@@ -412,11 +454,13 @@ def sort_rows(rows, tab):
     cap = lambda r: -(r["cap"] if r.get("cap") is not None else -1)
     if tab:
         for r in rows:
-            r["score"] = row_score(r, tab)
+            r["scoreBy"] = row_score_by(r, tab)
+            r["score"] = round(sum(r["scoreBy"].values()), 4)
         rows.sort(key=lambda r: (-r["score"], rise(r), cap(r)))
         return "점수 합 큰 순 → 초반상승 높은 순 → 시가총액 순"
     for r in rows:
         r.pop("score", None)
+        r.pop("scoreBy", None)
     rows.sort(key=lambda r: (-r["n"], rise(r), cap(r)))   # 재권님 19:1x
     return "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순"
 
@@ -504,9 +548,9 @@ def _live_calc(proxy, cfg):
         "wait": (list(PRE_WAIT) + (["매수"] if "매수대기" in missing else [])) if pre else [],
         "early": early, "approx": list(early),
         "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre and early else None,
-        "candidates": len(ov), "chips": [c for c in OV_CHIPS if c != "수급"], "minChips": MIN_CHIPS,   # 수급은 11-18 관심으로 합쳐짐(지난 판에만)
+        "candidates": len(ov), "chips": [c for c in OV_CHIPS if c != "수급"], "minChips": min_chips(proxy),   # 수급은 11-18 관심으로 합쳐짐(지난 판에만)
         "dropBelowPct": DROP_BELOW_PCT, "capMinEok": CAP_MIN_EOK, "watchRule": "자동",
-        "order": order, "score": tab, "ttl": LIVE_TTL}}
+        "order": order, "score": tab, "scoreConflict": score_conflicts(tab), "ttl": LIVE_TTL}}
     with _live_lock:
         _live.update(at=time.time(), pre=pre, data=data)
     return data
@@ -518,11 +562,12 @@ def build(proxy, cfg, day, skip=()):
     lm = lv["meta"]
     pre = bool(lm["pre"]) and _now().strftime("%Y%m%d") == day
     rows, down = [], []
+    mc = min_chips(proxy)
     for x in lv["rows"]:
         if x["code"] in skip:
             continue                                   # 들었다가 빠진 종목 — 그날 다시 안 넣음(재권님 11-12 11:3x · 11-13 「밀린건 넣지 않는다」)
-        if x["n"] < MIN_CHIPS:
-            continue                                   # 문턱 — 칩 둘 이상(11-18 · 홈과 같게)
+        if x["n"] < mc:
+            continue                                   # 문턱 — 칩 둘 이상(11-18 · 홈과 같게) · 늦게 여는 날은 하나(min_chips)
         if x["down"]:
             down.append(x["code"])                     # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
             continue
@@ -540,9 +585,9 @@ def build(proxy, cfg, day, skip=()):
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(), "rows": rows, "closed": False,
-            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % OPEN_AT, "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy), "minChips": MIN_CHIPS,
+            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % OPEN_AT, "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy), "minChips": mc,
                      "early": ["매수"] if "매수어림" in missing else [], "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre else None, "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
-                     "order": order, "score": tab,
+                     "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "buy 는 굳힌 때(buyAt) 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
                              "market KOSPI · KOSDAQ(순위 목록 · 없으면 KIS 종목 마스터 · 둘 다 없으면 null) · cap 억원 · 장외는 09:06 에 비어 안 셈 · 볼린저 · 현재상승은 칩 이름만(셈에 안 듦)"}}
 
@@ -626,6 +671,7 @@ def patch_late(proxy, cfg, b):
     tab = score_table(proxy)
     b["meta"]["order"] = sort_rows(out, tab)
     b["meta"]["score"] = tab
+    b["meta"]["scoreConflict"] = score_conflicts(tab)
     b["rows"] = out[:TOP_N]
     for i, r in enumerate(b["rows"]):
         r["rank"] = i + 1
@@ -997,7 +1043,7 @@ def rebuild(proxy, day, prev, cfg=None):
     return {"day": day, "buyAt": "%02d:%02d" % PAST_BUY_AT, "times": times(), "rows": rows, "closed": True,
             "meta": {"rebuilt": True, "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": DROP_BELOW_PCT,
                      "watchSrc": watch_src, "rules": chip_rules(proxy, merged=False), "viUntil": "%02d:%02d" % PAST_LATE, "approxBase": approx_base,
-                     "capMinEok": CAP_MIN_EOK, "order": order, "score": tab,
+                     "capMinEok": CAP_MIN_EOK, "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 · 수급은 그날 09:01 직전 관심 목록(watchSrc 기록 · 없으면 관심 못 받음 · 수급 어림) · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
                              "buy 는 09:05 봉 시가 · 시가총액 · 섹터 · 시장은 지금 값"}}
 
