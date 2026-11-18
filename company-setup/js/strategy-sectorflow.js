@@ -16,6 +16,13 @@ const pct = (x) => { if (x == null || !Number.isFinite(x)) return '—'; const c
 const hm = (t) => (/^\d{4}$/.test(String(t)) ? `${String(t).slice(0, 2)}:${String(t).slice(2)}` : esc(t || '—'));
 const won = (v) => (v == null ? '—' : v >= 10000 ? `${num(v / 10000, 1)}조` : `${num(v)}억`);
 const MAIN_HM = '0900';   // 정규장 첫 칸 — 칸 사이 구분선 자리만(셈 아님)
+// 보는 칸 묶기 (11-19 재권님 「10시 30분부터 30분 칸으로」) — 서버 10분 칸을 10:30 부터 30분씩 한 칸으로 합쳐 보여 줌(셈 아님 · 거래대금은 합 · 등락률은 그 칸 마지막 값)
+const WIDE_HM = '1030', WIDE_MIN = 30;
+const toM = (k) => +k.slice(0, 2) * 60 + +k.slice(2);
+const toHM = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}${String(m % 60).padStart(2, '0')}`;
+const group = (SL) => SL.reduce((a, k) => { const key = k < WIDE_HM ? k : toHM(toM(WIDE_HM) + Math.floor((toM(k) - toM(WIDE_HM)) / WIDE_MIN) * WIDE_MIN); const c = a[a.length - 1]; if (c && c.k === key) c.ks.push(k); else a.push({ k: key, ks: [k] }); return a; }, []);
+const sumOf = (o, ks) => { const v = ks.map((k) => (o || {})[k]).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) : null; };
+const lastOf = (o, ks) => { for (let i = ks.length - 1; i >= 0; i--) { const v = (o || {})[ks[i]]; if (v != null) return v; } return null; };
 
 let box = null, timer = null, seq = 0, by = 'sector', lastDay = null;
 const BY = [['sector', '업종'], ['theme', '테마']];   // 재권님 「그럼 테마도 만들어줘」 · 「다로 해줘」(11-18) — 업종(네이버 WICS) · 테마(네이버 작은 테마) 탭
@@ -46,15 +53,16 @@ function paint(j) {
   const step = SL.length > 1 ? ((+SL[1].slice(0, 2) * 60 + +SL[1].slice(2)) - (+SL[0].slice(0, 2) * 60 + +SL[0].slice(2))) : 0;
   const endM = SL.length ? (+SL[SL.length - 1].slice(0, 2) * 60 + +SL[SL.length - 1].slice(2) + step) : null;
   const END = endM == null ? '—' : `${String(Math.floor(endM / 60)).padStart(2, '0')}:${String(endM % 60).padStart(2, '0')}`;
+  const C = group(SL);
   const ttl = box.querySelector('.sf-h b'); if (ttl) ttl.textContent = `섹터수급 — 같은 업종 · 테마에 돈이 들어오나 · 프리장 ${SL.length ? hm(SL[0]) : '—'} ~ 정규장 ${END}`;
-  meta.textContent = `${hm(SL[0])} ~ ${END} · 줄 = ${by === 'theme' ? '테마(네이버 · 한 종목이 여러 테마면 각각 셈)' : '업종(네이버 WICS)'} · 칸 = 그 ${SL.length > 1 ? `${(+SL[1].slice(2) - +SL[0].slice(2) + 60) % 60}분` : '칸'} 동안 거래대금(억) · 칸 색 = 그 칸 동안 그 줄 값이 오름(매수 우위 · 옅은 빨강) · 내림(매도 우위 · 옅은 파랑) · 글씨는 같은 쪽 색으로 전날 같은 시각보다 거래대금이 많을수록 짙음 · 줄 차례 = 전날 대비 배 큰 순 · 서버 ${m.asof || '—'}${srcTxt(m.src, '이 날')}${srcTxt(m.prevSrc, '전날')}${same ? '' : ' · 이 날과 전날 셈이 달라(사진 · 5분봉) 전날 대비 · 글씨 짙기를 안 냄 — 줄 차례는 거래대금 순'}`;
-  const th = SL.map((k) => `<th class="${k === MAIN_HM ? 'sf-sep' : ''}">${hm(k)}</th>`).join('');
-  const nPre = SL.filter((k) => k < MAIN_HM).length, nReg = SL.length - nPre;
-  const tr = rows.map((r, i) => `<tr><td class="sf-i">${i + 1}</td><td class="sf-l">${esc(r.name)}${r.n != null ? ` <small>${num(r.n)}</small>` : ''}</td>${SL.map((k, i) => { const a = (r.amt || {})[k], q = r.pct || {}, b = i ? q[SL[i - 1]] : 0, mv = q[k] == null || b == null ? null : q[k] - b; return `<td class="${k === MAIN_HM ? 'sf-sep' : ''}" style="${bg(mv)}">${a == null ? '—' : (() => { const c = fg(a, (r.prev || {})[k], mv); return c ? `<span style="${c}">${num(a)}</span>` : num(a); })()}</td>`; }).join('')}<td class="sf-sep">${won(r.t)}</td><td>${ratioTxt(r.x)}</td><td>${pct(last && r.pct ? r.pct[last] : null)}</td></tr>`).join('');
+  meta.textContent = `${hm(SL[0])} ~ ${END} · 줄 = ${by === 'theme' ? '테마(네이버 · 한 종목이 여러 테마면 각각 셈)' : '업종(네이버 WICS)'} · 칸 = 그 ${SL.length > 1 ? `${step}분` : '칸'}(${hm(WIDE_HM)} 부터 ${WIDE_MIN}분) 동안 거래대금(억) · 칸 색 = 그 칸 동안 그 줄 값이 오름(매수 우위 · 옅은 빨강) · 내림(매도 우위 · 옅은 파랑) · 글씨는 같은 쪽 색으로 전날 같은 시각보다 거래대금이 많을수록 짙음 · 줄 차례 = 전날 대비 배 큰 순 · 서버 ${m.asof || '—'}${srcTxt(m.src, '이 날')}${srcTxt(m.prevSrc, '전날')}${same ? '' : ' · 이 날과 전날 셈이 달라(사진 · 5분봉) 전날 대비 · 글씨 짙기를 안 냄 — 줄 차례는 거래대금 순'}`;
+  const th = C.map((c) => `<th class="${c.k === MAIN_HM ? 'sf-sep' : ''}">${hm(c.k)}</th>`).join('');
+  const nPre = C.filter((c) => c.k < MAIN_HM).length, nReg = C.length - nPre;
+  const tr = rows.map((r, i) => `<tr><td class="sf-i">${i + 1}</td><td class="sf-l">${esc(r.name)}${r.n != null ? ` <small>${num(r.n)}</small>` : ''}</td>${C.map((cl, i) => { const a = sumOf(r.amt, cl.ks), q = r.pct || {}, e = lastOf(q, cl.ks), b = i ? lastOf(q, C[i - 1].ks) : 0, mv = e == null || b == null ? null : e - b; return `<td class="${cl.k === MAIN_HM ? 'sf-sep' : ''}" style="${bg(mv)}">${a == null ? '—' : (() => { const c = fg(a, sumOf(r.prev, cl.ks), mv); return c ? `<span style="${c}">${num(a)}</span>` : num(a); })()}</td>`; }).join('')}<td class="sf-sep">${won(r.t)}</td><td>${ratioTxt(r.x)}</td><td>${pct(last && r.pct ? r.pct[last] : null)}</td></tr>`).join('');
   body.innerHTML = `<div class="st-cap sf-meta">${esc(meta.textContent)}</div><div class="st-scroll sf-tw"><table class="sf-tb"><thead>
       <tr class="sf-grp"><th></th><th></th>${nPre ? `<th colspan="${nPre}">프리장(넥스트레이드)</th>` : ''}${nReg ? `<th colspan="${nReg}" class="sf-sep">정규장</th>` : ''}<th colspan="3" class="sf-sep">합 · ${END} 까지</th></tr>
       <tr><th></th><th class="sf-l">${by === 'theme' ? '테마' : '업종'}</th>${th}<th class="sf-sep">거래대금</th><th>전날 대비</th><th>등락률</th></tr></thead>
-      <tbody>${tr || `<tr><td class="sf-l st-err" colspan="${SL.length + 5}">${m.phase === 'pre' ? `— 아직 칸이 없음(첫 칸은 ${SL[1] ? hm(SL[1]) : '—'} 사진 뒤)` : '— 이 날 찍힌 값 없음(서버가 그 시간에 값을 안 남김)'}</td></tr>`}</tbody></table></div>
+      <tbody>${tr || `<tr><td class="sf-l st-err" colspan="${C.length + 5}">${m.phase === 'pre' ? `— 아직 칸이 없음(첫 칸은 ${SL[1] ? hm(SL[1]) : '—'} 사진 뒤)` : '— 이 날 찍힌 값 없음(서버가 그 시간에 값을 안 남김)'}</td></tr>`}</tbody></table></div>
     <div class="st-cap">거래대금 = 그 칸 동안 그 줄 종목들의 5분봉 종가 × 거래량 합 · 08:50~09:00 은 장이 없어 칸을 뺌 · 등락률 = 마지막 칸 시각에 그 줄 종목 평균(전날 정규장 종가 대비) · 전날 대비 = 같은 칸들의 합끼리</div>`;
 }
 
