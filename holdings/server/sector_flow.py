@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""섹터수급 — 프리장 08:00 부터 정규장 09:30 까지 업종 · 테마별 10분 거래대금 (2026-11-18).
+"""섹터수급 — 프리장 08:00 부터 정규장 14:00 까지 업종 · 테마별 10분 거래대금 (2026-11-18).
+
+처음은 09:30 까지 · 같은 날 저녁 재권님 「2시까지 보여지게 해줘」(18:1x) → 부담 물음 뒤 「없으면 올려」 로 14:00 까지 넓혔다.
 
 재권님 13:03 「섹터수급 이라고 단타창에 칸 추가해줘. 이건 동일업종에 돈이 들어오는거 체크하는거야. 프리장부터 정규장 9시 30분까지
 재야해」 → 시황분석1 그림 → 「응 만들어줘」 · 「그럼 테마도 만들어줘」 · 「다로 해줘」(시황분석1 창 · 13:2x) →
@@ -7,7 +9,7 @@
 
     언제      평일 SNAPS 시각마다 한 번 — 종목마다 그날 **누적 거래대금** 사진(멀티 시세 30종목씩)
                 08:10 ~ 08:50   넥스트(NX) 만 — 프리장(08:00~08:50) · KRX 는 아직 안 열렸다
-                09:10 ~ 09:30   KRX(J) + 넥스트(NX) 둘 다 — 09:00 동시호가 체결은 09:00 칸에 든다
+                09:10 ~ 14:00   KRX(J) + 넥스트(NX) 둘 다 — 09:00 동시호가 체결은 09:00 칸에 든다 · 10분마다 156번쯤(J+NX)
               08:50 사진은 08:51 에 찍는다 — 프리장 마지막 몇 초 체결까지 담으려고
     칸        SLOTS — 칸 이름은 시작 시각 · 칸 값 = 끝 사진 누적 − 시작 사진 누적(08:00 칸은 0 에서). 08:50~09:00 칸은 없다
               (넥스트는 쉬고 KRX 는 동시호가 접수만 — 09:00 칸이 08:50 사진부터 잰다)
@@ -17,9 +19,9 @@
               한 종목이 여러 테마면 각 테마에 다 센다
     pct       칸 끝 사진의 값으로 그 묶음 평균 등락률(%) — 전날 KRX 정규장 종가(nxt_board 15:41 저장) 대비
               08:50 까지는 넥스트 현재가(그날 넥스트 체결이 있는 종목만) · 09:10 부터는 KRX 현재가(체결이 있는 종목만)
-    굳힘      09:31 뒤 한 번 — 그날 판(업종 · 테마)을 sector_flow_day 에 남긴다(지우지 않는다). 사진(sector_snap)은 KEEP_SNAP_DAYS 날만
+    굳힘      14:01 뒤 한 번 — 그날 판(업종 · 테마)을 sector_flow_day 에 남긴다(지우지 않는다). 사진(sector_snap)은 KEEP_SNAP_DAYS 날만
     되채움    사진이 없는 날(이 서버 전 · 내려가 있던 날)은 개발 DB 5분봉으로 셈해 남긴다(src 5m · 봉 있는 종목만) — 서버가 뜰 때
-              5분봉이 있는 지난 평일 전부 · 그날 사진이 없으면 09:31 굳힘 때. 재권님 「지난날들도 다 되채워야돼」(11-18 17:0x)
+              5분봉이 있는 지난 평일 전부 · 그날 사진이 없으면 14:01 굳힘 때 · 칸이 모자란 옛 되채움 판(09:30 까지 판)도 다시 채운다. 재권님 「지난날들도 다 되채워야돼」(11-18 17:0x)
               메인(8764)은 개발 DB 를 읽기 전용으로 읽어(launchd 의 KJC_DB_PATH) 따로 옮기지 않아도 같은 판을 본다
     없음      사진이 빠진 칸(서버가 내려가 있었음 · 받기 실패) · 앞날이 없으면 null — 0 으로 꾸미지 않는다.
               첫날(2026-11-19)은 prev 가 다 null 이다
@@ -42,16 +44,22 @@ from secrets_guard import safe_message
 
 KST = timezone(timedelta(hours=9))
 
-SLOTS = ("0800", "0810", "0820", "0830", "0840", "0900", "0910", "0920")
-SNAPS = ("0810", "0820", "0830", "0840", "0850", "0910", "0920", "0930")   # 사진 이름(찍는 경계)
+END = "1400"                           # 마지막 칸이 끝나는 때(재권님 「2시까지」)
+
+
+def _hhmm(m):
+    return "%02d%02d" % (m // 60, m % 60)
+
+
+_REG = [_hhmm(m) for m in range(9 * 60, int(END[:2]) * 60 + int(END[2:]), 10)]           # 0900 … 1350
+SLOTS = ("0800", "0810", "0820", "0830", "0840") + tuple(_REG)
+SNAPS = ("0810", "0820", "0830", "0840", "0850") + tuple(_REG[1:]) + (END,)            # 사진 이름(찍는 경계)
 SNAP_FIRE = {"0850": "0851"}           # 이름과 찍는 때가 다른 사진
-SLOT_FROM = {"0800": None, "0810": "0810", "0820": "0820", "0830": "0830", "0840": "0840",
-             "0900": "0850", "0910": "0910", "0920": "0920"}
-SLOT_TO = {"0800": "0810", "0810": "0820", "0820": "0830", "0830": "0840", "0840": "0850",
-           "0900": "0910", "0910": "0920", "0920": "0930"}
+SLOT_FROM = {s: (None if s == "0800" else "0850" if s == "0900" else s) for s in SLOTS}
+SLOT_TO = {s: _hhmm(int(s[:2]) * 60 + int(s[2:]) + 10) for s in SLOTS}
 J_FROM = "0910"                        # 이 사진부터 KRX 를 함께 받는다
 SNAP_LATE_MIN = 5                      # 경계에서 몇 분 안이면 늦게라도 찍는다(서버가 막 떴을 때) — 그 뒤는 빈 사진
-FREEZE_AT = (9, 31)
+FREEZE_AT = (int(END[:2]), int(END[2:]) + 1)
 REFRESH_MS = 60000                     # 화면이 다시 받을 주기 — 사진은 10분마다라 1분이면 넉넉하다
 EOK = 100000000
 KEEP_SNAP_DAYS = 5
@@ -306,7 +314,7 @@ def build_5m(proxy, day, by):
     """개발 DB 5분봉(candles 5m · 통합)으로 그날 판을 셈 — (판, 봉이 있는 종목 수) · 종목이 FILL_MIN_CODES 보다 적으면 (None, 수).
     칸 값 = 그 10분 안에 시작한 5분봉 종가 × 거래량 합(어림 · 시황분석1 시안 셈) · 08:50~09:00 봉은 안 씀.
     pct = 칸 끝 전 마지막 봉 종가 ÷ 전날 정규장 종가 − 1 — 08:50 전 칸은 프리장 봉이 있는 종목 · 09:00 뒤 칸은 09:00 뒤 봉이 있는 종목만."""
-    lo, hi = day + "0800", day + "0925"
+    lo, hi = day + "0800", day + _hhmm(int(END[:2]) * 60 + int(END[2:]) - 5)
     with proxy._db_lock, proxy.db_conn() as conn:
         bars = {}
         for c, ts, cl, vol in conn.execute("SELECT code, ts, close, volume FROM candles WHERE period = '5m' AND ts >= ? AND ts <= ?",
@@ -361,11 +369,16 @@ def backfill(proxy, day):
 
 
 def backfill_missing(proxy):
-    """5분봉이 있는 지난 평일 중 굳힌 판이 없는 날을 다 채운다 — [(day, 묶음 수)]. 오늘은 사진 쪽이 굳힌다(09:31)."""
+    """5분봉이 있는 지난 평일 중 굳힌 판이 없는 날을 다 채운다 — [(day, 묶음 수)]. 오늘은 사진 쪽이 굳힌다(FREEZE_AT)."""
     _init(proxy)
     today = _now().strftime("%Y%m%d")
     with proxy._db_lock, proxy.db_conn() as conn:
-        have = {r[0] for r in conn.execute("SELECT DISTINCT day FROM sector_flow_day")}
+        have = set()
+        for d, src, body in conn.execute("SELECT day, src, body FROM sector_flow_day"):
+            # 칸이 모자란 옛 5분봉 판(09:30 까지일 때 채운 것)은 다시 채운다 — 사진 판은 다시 못 만들어 그대로 둔다
+            first = next(iter((json.loads(body) or {}).values()), None) if body else None
+            if src != "5m" or (first and SLOTS[-1] in (first.get("amt") or {})):
+                have.add(d)
         ds = [r[0] for r in conn.execute("SELECT DISTINCT substr(ts, 1, 8) FROM candles WHERE period = '5m' AND substr(ts, 9, 4) = '0800'")]
     done = []
     for d in sorted(ds):
@@ -441,7 +454,7 @@ def status():
 
 
 def start(proxy):
-    """보내는 서버가 뜰 때 한 번 — 평일 SNAPS 사진 · 09:31 굳힘."""
+    """보내는 서버가 뜰 때 한 번 — 평일 SNAPS 사진 · FREEZE_AT 굳힘."""
     def loop():
         time.sleep(40)
         try:
