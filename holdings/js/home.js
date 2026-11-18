@@ -1610,7 +1610,7 @@ const SORTS = {
   eb:   { label: '실적', list: () => ebRows,
           head: '예상 대비 · 전망', show: (code) => ebCell(code), html: true,
           note: () => ebNote(),
-          empty: () => (!ebMeta ? '불러오는 중' : `최근 ${EB_DAYS}일 두 가지가 다 맞은 종목이 없습니다${ebMeta.pending ? ` · 아직 안 읽은 공시 ${ebMeta.pending}건` : ''}`) },
+          empty: () => (!ebMeta ? '불러오는 중' : `최근 ${ebMeta.days ?? '—'}일 두 가지가 다 맞은 종목이 없습니다${ebMeta.pending ? ` · 아직 안 읽은 공시 ${ebMeta.pending}건` : ''}`) },
 };
 
 /* 칩 설명 — 칩 위에 마우스를 1초 올려 두면 뜬다(공용 풍선 data-tip · 2026-11-07 재권님 「급등 매수 장외 등 해당 버튼 위에 마우스 1초이상
@@ -1637,7 +1637,7 @@ const SORT_TIPS = {
     const cap = m.minCapEok != null ? `시가총액 ${fmtMoneyKr(m.minCapEok)} 이상만` : '';
     return `코스피 200 · 코스닥 150 종목(ETF 뺌) 중 정규장 첫 5분봉(${m.barFrom || '09:00'} ~ ${m.barTo || '09:05'})이 시가보다${th} 올라 끝난 종목, 그 상승률이 큰 순\n그 봉을 다 받은 뒤에 고르고 그날 판으로 굳습니다${cap ? ` · ${cap}` : ''}`;
   },
-  eb: '실적이 잘 나온 종목 — 두 가지가 다 맞은 것만\n① 예상보다 좋음: 회사가 낸 잠정실적의 영업이익이 그 분기 시장 예상치(네이버)보다 높음\n② 전망 좋음: 「실적 전망」 공시의 매출 · 영업이익(값이 든 칸만)이 직전 실적보다 큼 — 1년 전망은 앞 해 실적(없으면 최근 네 분기 합), 분기 전망은 한 해 앞 같은 분기\n최근 31일 공시 · 예상치가 없는 종목은 못 가름이라 빠집니다',
+  eb: '실적이 잘 나온 종목 — 두 가지가 다 맞은 것만\n① 예상보다 좋음: 회사가 낸 잠정실적의 영업이익이 그 분기 시장 예상치(네이버)보다 높음\n② 전망 좋음: 「실적 전망」 공시의 매출 · 영업이익(값이 든 칸만)이 직전 실적보다 큼 — 1년 전망은 앞 해 실적(없으면 최근 네 분기 합), 분기 전망은 한 해 앞 같은 분기\n최근 공시만(며칠 치인지는 서버가 정해 위 설명 줄에 나옵니다) · 예상치가 없는 종목은 못 가름이라 빠집니다',
   ev: '최근 사흘 회사 공시 중 갈래가 붙은 것(자사주 · 인수합병 · 주주환원 · 실적 · 위험 신호 …) — 종목마다 가장 새 공시 한 줄, 새 것이 위\n아래 띠에서 갈래를 누르면 그 갈래만',
   ssts: '코스피200 · 코스닥150 종목의 공매도 거래대금 · 비율(공매도 대금 ÷ 전체 거래대금) 순\n아래 줄에서 금액 · 비율 · 1일 · 5일 · 한달 · 1년 · 장중 값은 없고 거래소가 장 뒤에 냅니다',
 };
@@ -1689,7 +1689,6 @@ async function loadEv() {
   if (rankModal && rankModalSort === 'ev') { paintRankModal(); paintRankModalNote(); }
 }
 /* 「실적」 칩 — /api/earnings-beat 에서 둘 다 맞은 종목(both === true)만. 못 받았으면 null(빈 목록과 가른다) */
-const EB_DAYS = 31;                // 며칠 치를 보나 — 셈 범위이지 다시 묻는 주기가 아니다(서버 최대와 같게)
 const EB_FALLBACK_MS = 60000;      // 서버 값마저 못 받았을 때만
 let ebRows = null, ebMeta = null, ebBy = {};
 const ebPct = (v) => (v == null ? '' : `${v > 0 ? '+' : ''}${v}%`);
@@ -1705,11 +1704,11 @@ function ebCell(code) {
 }
 function ebNote() {
   const n = (ebRows || []).length, c = ebMeta && ebMeta.counts;
-  return `최근 ${EB_DAYS}일 · 두 가지 다 ${n}종목` + (c ? ` · 예상보다 좋음 ${c.beat} · 전망 좋음 ${c.guide}` : '');
+  return `최근 ${ebMeta?.days ?? '—'}일 · 두 가지 다 ${n}종목` + (c ? ` · 예상보다 좋음 ${c.beat} · 전망 좋음 ${c.guide}` : '');
 }
 async function loadEb() {
   try {
-    const r = await apiFetch(`/api/earnings-beat?days=${EB_DAYS}`, { cache: 'no-store' });
+    const r = await apiFetch('/api/earnings-beat', { cache: 'no-store' });
     const j = r && r.ok ? await r.json() : null;
     const d = j && j.ok ? j.data : null;
     if (d) {
@@ -1719,7 +1718,7 @@ async function loadEb() {
         by[it.code] = it; rows.push({ code: it.code, name: it.name });
         if (!findStock(it.code)) addExtraStock(it.code, it.name);
       }
-      ebBy = by; ebRows = rows; ebMeta = { at: Date.now(), counts: d.counts, pending: d.pending };
+      ebBy = by; ebRows = rows; ebMeta = { at: Date.now(), days: d.days, counts: d.counts, pending: d.pending };   // 며칠 치는 서버 값(earnings_beat.DAYS_DEFAULT)
     }
   } catch { /* 못 받으면 들고 있던 것 그대로 */ }
   if (sortBy === 'eb') { paintRows(rowPrices); paintSortNote(); }
@@ -3005,7 +3004,7 @@ watch({ url: () => (sortBy === 'rise' || sortBy === 'ov' || (rankModal && rankMo
 watch({ url: () => (sortBy === 'vi' || sortBy === 'ov' || (rankModal && rankModalSort === 'vi') ? '/api/alerts/today' : null), onChange: loadVi, key: null, fallbackMs: VI_FALLBACK_MS });
 watch({ url: () => (sortBy === 'bb' || (rankModal && rankModalSort === 'bb') ? '/api/signals/today' : null), onChange: loadBb, key: null, fallbackMs: BB_FALLBACK_MS });
 watch({ url: () => (sortBy === 'ev' || (rankModal && rankModalSort === 'ev') ? `/api/good-news?days=${EV_DAYS}` : null), onChange: loadEv, key: 'dart.POLL_INTERVAL', fallbackMs: EV_FALLBACK_MS });
-watch({ url: () => (sortBy === 'eb' || (rankModal && rankModalSort === 'eb') ? `/api/earnings-beat?days=${EB_DAYS}` : null), onChange: loadEb, key: 'dart.POLL_INTERVAL', fallbackMs: EB_FALLBACK_MS });
+watch({ url: () => (sortBy === 'eb' || (rankModal && rankModalSort === 'eb') ? '/api/earnings-beat' : null), onChange: loadEb, key: 'dart.POLL_INTERVAL', fallbackMs: EB_FALLBACK_MS });
 sstsWatch = watch({ url: () => (sortBy === 'ssts' || (rankModal && rankModalSort === 'ssts') ? sstsUrl() : null), onChange: loadSsts, key: null, fallbackMs: SSTS_FALLBACK_MS });
 watch({ url: () => (SEC_CHIPS.has(sortBy) && market !== 'THEME' ? '/api/naver/groups?kind=industry&all=1' : null), onChange: loadIndustryAll, key: 'naver.TTL', fallbackMs: SECTOR_FALLBACK_MS });
 watch({ url: () => '/api/kis/stock-sectors', onChange: loadSectors, key: 'company_profile.SECTOR_LIST_TTL', fallbackMs: SECTOR_FALLBACK_MS });
