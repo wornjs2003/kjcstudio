@@ -88,6 +88,7 @@ import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
 import day_top_fill     # 등락 상위 — 지난 거래일 판을 다시 세어 채움(장 쉬는 때 · 쓰는 서버만 · 2026-11-11 · server/day_top_fill.py)
 import day_top          # 등락 상위와 걸린 필터 — 날마다 장 뒤 한 번 쌓음 · /api/kis/day-top(2026-11-11 · server/day_top.py)
+import sector_flow      # 섹터수급 — 프리장 08:00~정규장 09:30 업종 · 테마별 10분 거래대금 · /api/kis/sector-flow(2026-11-18 · server/sector_flow.py)
 import dt30_win         # 단타 판 칩별 승률 — 끝난 판 손익을 하루 한 줄 · /api/kis/dt30-win(2026-11-18 · server/dt30_win.py)
 import dt30             # 단타 30 판 — 평일 09:06 단타 상위 30 굳힘 · 30분마다 값 · 30거래일 · /api/kis/dt30(2026-11-11 · server/dt30.py)
 import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
@@ -10504,6 +10505,20 @@ class Handler(SimpleHTTPRequestHandler):
                                  "meta": dict(day_top.status(), days=day_top.days(sys.modules[__name__]), fill=day_top_fill.status())})
                 return
 
+            if route == "sector-flow":
+                # 섹터수급(server/sector_flow.py) — 사진(DB)으로 셈 · 굳힌 날은 남긴 판 · KIS 를 안 부른다
+                by = ((qs.get("by") or ["sector"])[0] or "sector").strip()
+                day = (qs.get("day") or [""])[0].strip()
+                if by not in sector_flow.BYS:
+                    self._send_json({"ok": False, "error": "by 는 sector · theme 둘입니다."}, 400)
+                    return
+                if day and not (day.isdigit() and len(day) == 8):
+                    self._send_json({"ok": False, "error": "day 는 YYYYMMDD 입니다."}, 400)
+                    return
+                data, meta = sector_flow.board(sys.modules[__name__], by, day or None)
+                self._send_json({"ok": True, "data": data, "meta": meta})
+                return
+
             if route == "dt30":
                 # 단타 30 판(server/dt30.py) — 남긴 날 판을 읽는다 · 안 끝난 그날 판만 지금 값(멀티 시세 · 캐시 먼저)을 붙인다
                 day = (qs.get("day") or [""])[0].strip()
@@ -11424,6 +11439,10 @@ def main():
     if not SLOW and is_sender(args.port) and pre_flow.start(sys.modules[__name__]):
         print("  프리장 판   : 평일 %02d:%02d~%02d:%02d 에 %d초마다 지어 market.db pre_flow_board 에 남김(「프리장」 칩)"
               % (pre_flow.PRE_OPEN + pre_flow.PRE_CLOSE + (pre_flow.FLOW_TTL,)))
+    # 섹터수급(2026-11-18 · server/sector_flow.py) — 같은 문(보내는 서버만) · 알림은 없다(화면만)
+    if not SLOW and is_sender(args.port) and sector_flow.start(sys.modules[__name__]):
+        print("  섹터수급 : 사용 (평일 %s 사진 · %02d:%02d 굳힘 · /api/kis/sector-flow?by=sector|theme)"
+              % (" · ".join(sector_flow.SNAPS), sector_flow.FREEZE_AT[0], sector_flow.FREEZE_AT[1]))
     if not SLOW and is_sender(args.port) and dt30.start(sys.modules[__name__]):
         print("  단타 30 판 : 평일 %s 단타 상위 %d 굳힘 · %s~%s %d분마다 값 · %d거래일 · /api/kis/dt30"
               % (dt30.status()["buyAt"], dt30.TOP_N, dt30.times()[0], dt30.times()[-1], dt30.TRACK_STEP, dt30.DAYS_KEEP))
