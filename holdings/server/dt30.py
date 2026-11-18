@@ -320,8 +320,8 @@ def early_buy(proxy, cfg, codes, put, pre=False):
     return n
 
 
-MIN_CHIPS = 2                 # 단타 목록 문턱 — 단타 셈 칩 이 수 이상(홈 「단타」 · 투자 전략 단타 칩이 meta.minChips 로 읽음 · 11-11 홈 「둘 이상」 그대로) ·
-                              # 단타 판(build)은 아직 하나 이상(TOP_N 까지) — 판도 이 값으로 맞출지는 재권님께 여쭘(11-18 17:38)
+MIN_CHIPS = 2                 # 단타 목록 문턱 — 단타 셈 칩 이 수 이상 · 홈 「단타」 · 투자 전략 단타 칩 · 단타 판(build) 셋 다 이 값(meta.minChips) —
+                              # 재권님 안 「단타 목록을 서버 한 곳에서 셈해 … 문턱은 홈처럼 칩 둘 이상으로」 에 「응 이거 바로 해야할거같아」(11-18 17:4x · 시황분석1 창 · 작업우선순위 경유)
 LIVE_TTL = 60                 # 단타 목록(live) 캐시(초) — 홈 「단타」 · 단타 판이 같은 셈을 이 나이 안이면 함께 쓴다 · 화면은 롱폴 열쇠 dt30.LIVE_TTL
 _live = {"at": 0.0, "pre": None, "data": None}
 _live_lock = threading.Lock()
@@ -360,7 +360,8 @@ def live(proxy, cfg, force=False):
         "wait": (list(PRE_WAIT) + (["매수"] if "매수대기" in missing else [])) if pre else [],
         "early": early, "approx": list(early),
         "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre and early else None,
-        "candidates": len(ov), "chips": [c for c in OV_CHIPS if c != "수급"], "minChips": MIN_CHIPS,   # 수급은 11-18 관심으로 합쳐짐(지난 판에만) "dropBelowPct": DROP_BELOW_PCT, "capMinEok": CAP_MIN_EOK, "watchRule": "자동",
+        "candidates": len(ov), "chips": [c for c in OV_CHIPS if c != "수급"], "minChips": MIN_CHIPS,   # 수급은 11-18 관심으로 합쳐짐(지난 판에만)
+        "dropBelowPct": DROP_BELOW_PCT, "capMinEok": CAP_MIN_EOK, "watchRule": "자동",
         "order": "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순", "ttl": LIVE_TTL}}
     with _live_lock:
         _live.update(at=time.time(), pre=pre, data=data)
@@ -376,6 +377,8 @@ def build(proxy, cfg, day, skip=()):
     for x in lv["rows"]:
         if x["code"] in skip:
             continue                                   # 들었다가 빠진 종목 — 그날 다시 안 넣음(재권님 11-12 11:3x · 11-13 「밀린건 넣지 않는다」)
+        if x["n"] < MIN_CHIPS:
+            continue                                   # 문턱 — 칩 둘 이상(11-18 · 홈과 같게)
         if x["down"]:
             down.append(x["code"])                     # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
             continue
@@ -391,7 +394,7 @@ def build(proxy, cfg, day, skip=()):
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(), "rows": rows, "closed": False,
-            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % OPEN_AT, "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy),
+            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % OPEN_AT, "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy), "minChips": MIN_CHIPS,
                      "early": ["매수"] if "매수어림" in missing else [], "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre else None, "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
                      "order": "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순",
                      "note": "buy 는 굳힌 때(buyAt) 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
