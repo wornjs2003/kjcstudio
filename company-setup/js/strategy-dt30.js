@@ -83,7 +83,12 @@ const riseOf = (r) => (r.rise == null || !Number.isFinite(Number(r.rise)) ? -Inf
 //   · 점수표는 룰 문서 rules.dt30.score 한 곳 — { 칩: 점수 · 'VI·급등|09:25 전': 점수 … } · 「룰 — 단타」 칸(strategy-chips.js)에서 넣음 · 홈 차례는 서버(개발2)가 같은 표로 셈
 //   · 표가 비면 지금 셈(겹친 칩 수) 그대로 · 표에 없는 조건은 0점 · 켜진 칩 · 하위 칩만 셈
 const hasScore = () => Object.keys(st.score || {}).length > 0;
-const scoreOf = (r) => colsOf().reduce((a, c) => { if (!liveChip(r, c)) return a; const sb = subsOf(r, c).filter((x) => !st.subOff.has(`${c}|${x}`)), S = st.score;
+// 서버가 점수(rows[].score)와 칩별 몫(rows[].scoreBy)을 주면 그 값에서 화면에서 꺼진 칩 · 꺼진 하위 칩 몫만 뺌 — 셈은 서버 한 곳(개발2 3e54a3b · 11-18)
+//   서버 값이 없는 판(옛 판 · 서버 고침 전)만 아래 화면 셈
+const scoreOf = (r) => (r.score != null && r.scoreBy && typeof r.scoreBy === 'object'
+  ? Number(r.score) - Object.entries(r.scoreBy).reduce((a, [c, v]) => a + (liveChip(r, c) ? 0 : Number(v) || 0), 0)
+  : scoreLocal(r));
+const scoreLocal = (r) => colsOf().reduce((a, c) => { if (!liveChip(r, c)) return a; const sb = subsOf(r, c).filter((x) => !st.subOff.has(`${c}|${x}`)), S = st.score;
   const k = sb.find((x) => S[`${c}|${x}`] != null); return a + Number(k ? S[`${c}|${k}`] : S[c] ?? 0); }, 0);
 const rankOf = (r) => (hasScore() ? scoreOf(r) : nLive(r));
 const byLive = (a, b) => rankOf(b) - rankOf(a) || (riseOf(b) - riseOf(a) || 0) || (Number(b.cap) || 0) - (Number(a.cap) || 0);   // 겹친 칩 수 → 초반상승 % → 시가총액(재권님 19:1x 말씀 · 개발2 서버 19:14 와 같은 셈 · rows[].rise)
