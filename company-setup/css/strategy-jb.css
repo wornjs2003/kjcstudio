@@ -19,6 +19,7 @@
 .jb .jb-c { text-align: center; }
 .jb .jb-ok { color: var(--kh-accent); }
 .jb .jb-no { color: var(--kh-text-muted); }
+.jb .jb-unk { color: var(--kh-text-muted); font-size: 11px; }   /* 서버가 통과 여부를 안 준 칸 — 「안 됨(—)」 과 가른다(qa 11-18) */
 .jb .jb-res { font-weight: 700; }
 .jb .jb-foot { margin: 8px 0 0; }
 @media (min-width: 701px) {

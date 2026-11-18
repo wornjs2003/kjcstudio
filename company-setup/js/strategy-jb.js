@@ -21,7 +21,7 @@ const WK = ['일', '월', '화', '수', '목', '금', '토'];
 const dayTxt = (d) => { const m = String(d || '').match(/^(\d{4})(\d{2})(\d{2})$/); return m ? `${m[2]}-${m[3]}(${WK[new Date(+m[1], +m[2] - 1, +m[3]).getDay()]})` : '—'; };
 const hmTxt = (t) => (/^\d{4}$/.test(String(t)) ? `${String(t).slice(0, 2)}:${String(t).slice(2)}` : '—');
 const MKT = { kospi: '코스피', kosdaq: '코스닥' };
-const ok = (b) => (b == null ? '<span class="jb-no">—</span>' : b ? '<b class="jb-ok" aria-label="통과">●</b>' : '<span class="jb-no" aria-label="안 됨">—</span>');
+const ok = (b) => (b == null ? '<span class="jb-unk" aria-label="모름">모름</span>' : b ? '<b class="jb-ok" aria-label="통과">●</b>' : '<span class="jb-no" aria-label="안 됨">—</span>');
 
 const host = document.getElementById('jb-host');
 const st = { day: null, days: [], seq: 0, tab: 'dt' };
@@ -39,6 +39,12 @@ function tabsInto(h) {
   card.classList.add('jb-attached');
   paintTabs();
 }
+// 탭을 바꿔도 판 자리는 그대로(「보는 것을 바꿔도 자리는 그대로다」 — 갈아 끼우기) — 지금 보이던 판 높이를 새로 보일 판의 최소 높이로 · qa 11-18 실측 1096 → 303
+function holdHeight(from, to) {
+  if (!from || !to || from.hidden) return;
+  const h = from.getBoundingClientRect().height;
+  if (h > 0) to.style.minHeight = `${Math.max(h, parseFloat(to.style.minHeight) || 0)}px`;
+}
 function paintTabs() {
   document.querySelectorAll('[data-jbtab]').forEach((b) => { const on = b.dataset.jbtab === st.tab; b.classList.toggle('is-on', on); b.setAttribute('aria-selected', String(on)); });
   const dt = document.getElementById('dt-host');
@@ -48,6 +54,8 @@ function paintTabs() {
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-jbtab]');
   if (!b) return;
+  const dt = document.getElementById('dt-host');
+  if (b.dataset.jbtab !== st.tab) holdHeight(st.tab === 'dt' ? dt : host, st.tab === 'dt' ? host : dt);
   st.tab = b.dataset.jbtab;
   try { localStorage.setItem(KEY, st.tab); } catch (err) { /* 저장 못 해도 지금 창은 바뀜 */ }
   paintTabs();
@@ -107,7 +115,7 @@ async function load(day) {
   let j = null, why = '';
   try {
     const res = await fetch(`${API}${day ? `?day=${day}` : ''}`, { cache: 'no-store' });
-    if (res.status === 404) why = '서버 값 기다림 — 후보를 뽑는 서버 칸(주식 레인)이 아직 없음';
+    if (res.status === 404 || res.status === 403) why = '서버 값 기다림 — 후보를 뽑는 서버 칸(주식 레인)이 아직 없음';
     else if (!res.ok) why = `서버 응답 ${res.status}(받지 못함)`;
     else j = await res.json();
   } catch (e) { why = '서버에 닿지 못함'; }
