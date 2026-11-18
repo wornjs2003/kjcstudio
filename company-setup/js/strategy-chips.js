@@ -8,8 +8,8 @@
 //   · 종목은 홀딩스와 같은 서버 주소 — 목록 주소가 없는 칩(단타 · 현재상승 · 장외 — 홀딩스 화면이 순위 목록에서 셈)은 —
 import { signClass, NUM } from '/assets/js/sign.js';
 import { watch } from '/holdings/js/store/longpoll.js';   // 오늘 칩 목록 다시 받기 — 홀딩스 첫 화면과 같은 길(서버 롱폴 · 서버 주기)
-import { chipName } from './strategy-chipname.js';
-import { setDtScore, dtChips } from './strategy-dt30.js';   // 조건별 점수 — 단타 판과 같은 룰 문서 · 같은 저장 길   // 서버 칩 이름 「수급」 → 화면 「자동」 — 바꾸는 표는 그 파일 한 곳
+import { chipName } from './strategy-chipname.js';   // 서버 칩 이름 「수급」 → 화면 「자동」 — 바꾸는 표는 그 파일 한 곳
+import { setDtScore, dtChips, VI_SUBS } from './strategy-dt30.js';   // 조건별 점수 — 단타 판과 같은 룰 문서 · 같은 저장 길 · 하위 이름도 그 파일 한 곳
 
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -140,7 +140,7 @@ chips.forEach((c) => c.addEventListener('click', () => show(c.dataset.rule)));
 //   · 「룰 — 단타」 칸 아래 · 있는 조건(서버 meta.chips + VI·급등 09:25 전 · 이후)을 골라 점수를 넣음 · 표는 룰 문서 rules.dt30.score 한 곳(단타 판 · 서버가 같은 표를 읽음)
 //   · 칸은 한 번 만들고 값만 바꿈(치는 도중 다시 그려 글자가 사라지지 않게) · 표가 비면 줄 세우기는 지금 셈(겹친 칩 수)
 const DOC = '/api/board/doc/strategy-rules';
-const VI_SUB = ['09:25 전', '09:25 이후'];
+const VI_SUB = VI_SUBS.slice(0, 2);   // 「시각 모름」 은 점수 조건이 아님
 let score = {}, conds = [];
 const condTxt = (k) => k.replace('|', ' ');
 async function scoreLoad() { const { j } = await getJson(DOC); const S = j && j.data && j.data.rules && j.data.rules.dt30 && j.data.rules.dt30.score; score = S && typeof S === 'object' ? { ...S } : {}; }
