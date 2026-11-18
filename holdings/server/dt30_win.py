@@ -6,7 +6,10 @@
     셈        종목마다 09:01 매수가(rows[].buy) → 14:00 값(rows[].px['1400']) 손익 % — 둘 중 하나라도 없으면 「못 잼」(ret null · 따로 셈)
     쌓기      그날 판이 끝나면(closed · 14:00 칸까지 적힘 · 보통 14:01) 하루 한 줄 — market.db dt30_win(날 · 종목 손익 JSON · 그 판의 저장 시각)
               판이 다시 저장되면(되채움 등 · saved_at 이 바뀜) 그날 줄도 다시 · 남은 판(지난 30거래일)은 서버가 뜬 뒤 처음 바퀴에 채운다 — KIS 안 씀
-    이김      손익 % − 수수료 % 가 0 보다 크다. 수수료는 룰 문서 strategy-rules 의 rules.dt30.feePct 한 곳(화면 칸 · 재권님이 넣으심)
+    이김      세후 손익이 0 보다 크다 — 화면(strategy-dt30.js calc)과 같은 셈(개념정의 검수 11-18):
+              세후 % = (판 값 − 산 값 − 판 값 × (거래세 + 농특세) − (산 값 + 판 값) × 수수료) ÷ 산 값 × 100 · 세금은 팔 때만 · 수수료는 살 때 · 팔 때 각각
+              세율은 아래 TAX(시장마다) — **화면 TAX 와 두 곳이다**(화면이 meta.tax 를 읽으면 한 곳) · 시장을 모르면 세금을 못 셈 → 「못 잼」
+              수수료는 룰 문서 strategy-rules 의 rules.dt30.feePct 한 곳(화면 칸 · 재권님이 넣으심)
               빈칸이면 수수료 없이 셈하고 meta.fee 에 null · meta.feeNote 「빈칸 — 수수료 안 셈」(0 으로 보지 않는다)
               승률은 주소가 부를 때 그때 수수료로 셈한다 — 수수료를 바꾸면 지난 날에도 바로 든다(쌓는 것은 손익뿐)
     칸        칩마다 · 두 칩 겹침 · 세 칩 겹침(rows[].chips 이름 전부 — 셈에 안 드는 현재상승 · 볼린저도) ·
@@ -30,6 +33,8 @@ TOP_DAY = 5                  # 날마다 이익 큰 종목 수
 DAYS_DEFAULT = 30
 TICK = 60                    # 끝난 판을 보는 간격(초)
 RISE_CHIP = "현재상승"
+TAX = {"KOSPI": {"tx": 0.05, "rural": 0.15}, "KOSDAQ": {"tx": 0.20, "rural": 0.0}}   # % · 2026 세율 — 화면 strategy-dt30.js TAX 와 같은 값(두 곳)
+VER = "v2"                   # 쌓는 줄 모양이 바뀌면 올린다 — 옛 줄을 다시 쌓는다(v2 · 시장 칸)
 _SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_win (day TEXT PRIMARY KEY, src_saved TEXT, rows TEXT NOT NULL, at TEXT)"
 _status = {"error": None, "filled": 0, "at": None}
 
@@ -44,7 +49,7 @@ def day_rows(b):
     for r in b.get("rows") or []:
         buy, sell = r.get("buy"), (r.get("px") or {}).get(SELL_AT)
         ret = round((sell - buy) / buy * 100, 3) if buy and sell is not None else None
-        out.append({"code": r.get("code"), "name": r.get("name"), "chips": list(r.get("chips") or []), "n": r.get("n"),
+        out.append({"code": r.get("code"), "name": r.get("name"), "market": r.get("market"), "chips": list(r.get("chips") or []), "n": r.get("n"),
                     "buy": buy, "sell": sell, "ret": ret})
     return out
 
@@ -58,7 +63,7 @@ def fill(proxy):
         conn.execute(_SCHEMA)
         have = {d: s for d, s in conn.execute("SELECT day, src_saved FROM dt30_win")}
     for day, saved in boards:
-        if have.get(day) == saved:
+        if have.get(day) == "%s|%s" % (saved, VER):
             continue
         got = dt30._load(proxy, day)
         if not got or not got[0].get("closed", True):
@@ -66,7 +71,7 @@ def fill(proxy):
         rows = day_rows(got[0])
         with proxy._db_lock, proxy.db_conn() as conn:
             conn.execute("INSERT OR REPLACE INTO dt30_win VALUES (?,?,?,?)",
-                         (day, got[1], json.dumps(rows, ensure_ascii=False), _now().strftime("%Y-%m-%d %H:%M:%S")))
+                         (day, "%s|%s" % (got[1], VER), json.dumps(rows, ensure_ascii=False), _now().strftime("%Y-%m-%d %H:%M:%S")))
         n += 1
     with proxy._db_lock, proxy.db_conn() as conn:
         keep = set(d for d, _ in boards)
@@ -85,6 +90,15 @@ def fee_pct():
         return None if v is None or v == "" else float(v)
     except Exception:
         return None
+
+
+def net_pct(r, fee):
+    """세후 손익 % — 못 셈(값 없음 · 시장 모름)이면 None."""
+    buy, sell, T = r.get("buy"), r.get("sell"), TAX.get(str(r.get("market") or "").upper())
+    if not buy or sell is None or T is None:
+        return None
+    cost = sell * (T["tx"] + T["rural"]) / 100 + (buy + sell) * (fee or 0) / 100
+    return round((sell - buy - cost) / buy * 100, 3)
 
 
 def _stat(rets, unmeasured):
@@ -120,7 +134,7 @@ def summary(proxy, days=DAYS_DEFAULT):
         rows = json.loads(raw)
         rets, miss, best = [], 0, []
         for r in rows:
-            v = None if r["ret"] is None else round(r["ret"] - (fee or 0), 3)
+            v = net_pct(r, fee)
             chips = sorted(set(r["chips"]))
             for c in chips:
                 add("chip", c, v)
@@ -143,7 +157,8 @@ def summary(proxy, days=DAYS_DEFAULT):
     for kind, g in groups.items():
         out[kind] = sorted(({"key": k, **_stat(v[0], v[1])} for k, v in g.items()), key=lambda x: (-x["n"], x["key"]))
     meta = {"days": len(got), "from": got[-1][0] if got else None, "to": got[0][0] if got else None,
-            "fee": fee, "feeNote": None if fee is not None else "빈칸 — 수수료 안 셈",
+            "fee": fee, "feeNote": None if fee is not None else "빈칸 — 수수료 안 셈", "feeSides": "살 때 · 팔 때 각각",
+            "tax": TAX, "taxNote": "팔 때만 · 판 값 × (거래세 + 농특세) · 시장 모르면 못 잼", "ret": "세후 %",
             "buy": "09:01 매수가(rows[].buy)", "sell": SELL_AT, "bigPct": BIG_PCT, "topDay": TOP_DAY,
             "filledAt": _status["at"], "error": _status["error"]}
     return out, meta
