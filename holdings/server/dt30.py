@@ -52,6 +52,9 @@ CAP_MIN_EOK = dart.UNIVERSE_MIN_CAP_EOK   # 시가총액 문턱(억원) — 대�
 NOW_RISE_PCT = 3.0           # 「현재상승」 — 시가 대비 %(화면 NOW_RISE_PCT 와 같은 값 · 칩 이름 적기에만 씀)
 DROP_BELOW_PCT = 0.0         # 하락 뺌 — 전일 종가 대비 이 % 아래는 판에 안 넣는다(0 이면 보합은 남긴다 · 재권님 11-12)
 TICK = 20
+NX_AT = (8, 5)               # 다음 날 프리장 값 시각 — 재권님 「이종목들 내일 프리장에 8시 5분에 얼마인지 체크해서 넣어줘 … 어제에 프리장 8시5분 이라고 칸이 있어야 되고」(11-18 16:3x · 시황분석1 창 · 작업우선순위 경유)
+NX_NOW_UNTIL = (8, 20)       # 이때까지는 넥스트레이드 현재가(src 「now」) · 넘으면 그날 08:05 1분봉 종가(src 「1m」)
+NX_SKIP = ((8, 55), (9, 40)) # 1분봉 되찾기를 미루는 때 — 판 굳히기 · 다시 세기(BUY_AT ~ BUY_LATE)에 KIS 몫을 비켜선다
 OV_CHIPS = ("관심", "프리장", "VI·급등", "장외", "매수", "초반상승", "수급")   # 단타 셈에 드는 칩 — 화면 OV_CHIPS 차례
 
 _SCHEMA = "CREATE TABLE IF NOT EXISTS dt30 (day TEXT PRIMARY KEY, saved_at TEXT, board TEXT NOT NULL)"
@@ -682,6 +685,66 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
     return n
 
 
+def _nx_1m(proxy, cfg, code, day, hhmm):
+    """그날 넥스트레이드 1분봉 중 hhmm 에 끝난 봉(없으면 그 앞 마지막 프리장 봉)의 종가 · 거래량 합 — 못 받으면 (None, None)."""
+    import nxt_pre
+    data = proxy.kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice",
+                         {"FID_COND_MRKT_DIV_CODE": "NX", "FID_INPUT_ISCD": code, "FID_INPUT_HOUR_1": hhmm + "00",
+                          "FID_INPUT_DATE_1": day, "FID_PW_DATA_INCU_YN": "Y", "FID_FAKE_TICK_INCU_YN": ""},
+                         "FHKST03010230")
+    if data is None:
+        return None, None
+    vol, last = 0, None
+    for r in data.get("output2") or []:
+        t = str(r.get("stck_cntg_hour") or "")[:4]
+        if r.get("stck_bsop_date") != day or not (nxt_pre.PRE_FROM <= t <= hhmm):
+            continue
+        vol += proxy._num(r.get("cntg_vol"), int) or 0
+        if last is None or t > last[0]:
+            last = (t, proxy._num(r.get("stck_prpr"), int))
+    return (last[1] if last else None), vol
+
+
+def nx_fill(proxy, cfg, day, hm):
+    """그날(day · 거래일) NX_AT 에 앞 판 종목의 넥스트레이드 값을 그 판에 적는다 — rows[].nx {day, px, src, vol} · meta.nxAt · nxDay.
+    NX_AT ~ NX_NOW_UNTIL 은 멀티 시세 현재가(src 「now」 · 묶음 넷) · 그 뒤는 08:05 1분봉 종가(src 「1m」 · 종목마다).
+    거래가 없던 종목 · 못 받은 종목은 px null(0 아님). 앞 판만 — 지난 날 되채움은 안 함(지시 밖).
+    1 적음 · 0 적을 것 없음(앞 판 없음 · 이미 적음 · 08:05 전) · None 지금 못 함(다음 바퀴에 다시)."""
+    at = NX_AT[0] * 60 + NX_AT[1]
+    if hm < at:
+        return 0
+    prev = [d for d in days(proxy) if d < day]
+    got = _load(proxy, prev[0]) if prev else None
+    if not got:
+        return 0
+    b = got[0]
+    if b.get("meta", {}).get("nxDay") == day:
+        return 0                                       # 이미 적었다(현재가든 1분봉이든 한 번)
+    hhmm = "%02d%02d" % NX_AT
+    if hm < NX_NOW_UNTIL[0] * 60 + NX_NOW_UNTIL[1]:
+        import nxt_pre
+        q = nxt_pre.fetch_nx(proxy, cfg, [r["code"] for r in b["rows"]], gap=0)
+        if not q:
+            return None                                # 하나도 못 받음 — 다음 바퀴에 다시(NX_NOW_UNTIL 넘으면 1분봉으로)
+        for r in b["rows"]:
+            v = q.get(r["code"])
+            if v is None:
+                r["nx"] = {"day": day, "px": None, "src": None, "vol": None}       # 못 받음(NX 미상장 · 응답 없음)
+            else:
+                r["nx"] = {"day": day, "px": v["price"] if v.get("vol") else None, "src": "now", "vol": v.get("vol")}   # 거래 없으면 null
+    else:
+        lo, hi = NX_SKIP
+        if lo[0] * 60 + lo[1] <= hm < hi[0] * 60 + hi[1]:
+            return None
+        for r in b["rows"]:
+            px, vol = _nx_1m(proxy, cfg, r["code"], day, hhmm)
+            r["nx"] = {"day": day, "px": px if vol else None, "src": "1m" if vol is not None else None, "vol": vol}
+    b["meta"].update(nxAt="%02d:%02d" % NX_AT, nxDay=day,
+                     nxNote="nx — 다음 거래일 넥스트레이드 %02d:%02d 값(src now = 그때 현재가 · 1m = 그날 그 시각까지의 1분봉 마지막 종가) · 거래가 없거나 못 받으면 px null" % NX_AT)
+    _store(proxy, b)
+    return 1
+
+
 def days(proxy):
     try:
         with proxy.db_conn() as conn:
@@ -742,6 +805,20 @@ def start(proxy):
             except Exception as e:
                 _status["error"] = type(e).__name__
                 print("  [단타 30] 되채우기 멈춤 — %s" % proxy.safe_message(e, 120), flush=True)
+            try:
+                now = _now()
+                day = now.strftime("%Y%m%d")
+                hm = now.hour * 60 + now.minute
+                if _status.get("nx") != day and now.weekday() < 5 and market_hours.today(proxy, day=day, now=now).get("open") is not False:
+                    n = nx_fill(proxy, proxy.load_secrets(), day, hm)
+                    if n:
+                        _status["nx"] = day
+                        print("  [단타 30] 앞 판에 %s %02d:%02d 프리장 값 적음" % (day, NX_AT[0], NX_AT[1]), flush=True)
+                    elif n == 0 and hm >= NX_AT[0] * 60 + NX_AT[1]:
+                        _status["nx"] = day          # 적을 앞 판이 없거나 이미 적음 — 그날은 다시 안 봄(None 은 다음 바퀴에 다시)
+            except Exception as e:
+                _status["error"] = type(e).__name__
+                print("  [단타 30] 프리장 값 멈춤 — %s" % proxy.safe_message(e, 120), flush=True)
             try:
                 now = _now()
                 day = now.strftime("%Y%m%d")
