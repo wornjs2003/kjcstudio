@@ -620,7 +620,10 @@ def send_alerts(send=None):
     for r in rows:
         r["_name"] = _alert_name(r)
     night = int(time.time()) - FLASH_NIGHT_MAX_H * 3600
-    morning = [r for r in rows if TG_NEW and FLASH_WORD in (r["title"] or "") and dart.in_quiet(r["at_ts"]) and (r["at_ts"] or 0) >= night]
+    # 밤 속보 07:00 길은 우리가 그 기사를 **밤(조용한 시간)에 처음 본 것**만 — 낮에 새 받는 곳이 밤 속보를 처음 가져오면 그것은 1시간 넘은 속보라
+    # 낮 길(ALERT_MAX_AGE_H)을 따른다(qa 11-19 — 8765 14:09 재시작 첫 바퀴에 06:05 속보가 14:10 에 감 · 「1시간 넘은 속보는 낮에 안 보냄」 과 어긋남)
+    morning = [r for r in rows if TG_NEW and FLASH_WORD in (r["title"] or "") and dart.in_quiet(r["at_ts"]) and (r["at_ts"] or 0) >= night
+               and dart.in_quiet(r.get("seen_at") or r["at_ts"])]
     late = [r for r in rows if r not in morning and ((r["at_ts"] or 0) < cutoff or dart.in_quiet(r["at_ts"]))]
     rows = [r for r in rows if r not in late]
     if dart.in_quiet():
