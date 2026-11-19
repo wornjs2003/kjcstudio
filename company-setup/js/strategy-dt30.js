@@ -155,6 +155,37 @@ async function viLoad(day) {
   catch (e) { viAt.day = day; viAt.map = null; }
   if (root && st.data && st.data.day === day) { paint(st.data); chips(); }
 }
+// 그날 VI 목록 (11-19 재권님 「vi급등 지난것들 정보 받을수 있나? 발등한것과 발등조건 발등시간」 → 「응 해줘」) — 날짜를 고르면 그날 VI 발동 전부
+//   값은 서버 /api/kis/vi-day?day=(개발2 019b957 · 평일 20:10 그날 것 · 지난 120일 되채움) 한 곳 · 화면은 받은 대로 그린다
+//   meta.state 「안 받음」(아직 안 쌓은 날) · 「못 받음」 · 「앞쪽 못 받음」 은 「0건」 과 가른다(0 으로 안 냄) · 지난 날 「전부」 는 한 번 받아 둠(굳은 값)
+const vdCache = {};
+let vdSeq = 0;
+async function vdLoad(day) {
+  const box = root && root.querySelector('#dt-vi'); if (!box || !day) return;
+  const sum = box.querySelector('.dt-vi-sum'), body = box.querySelector('.dw-body');
+  let j = vdCache[day];
+  if (!j) {
+    const my = ++vdSeq; sum.textContent = '받는 중…';
+    try { const r = await fetch(`/api/kis/vi-day?day=${encodeURIComponent(day)}`, { cache: 'no-store' }); j = r.ok ? await r.json() : { http: r.status }; }
+    catch (e) { j = { http: '연결 안 됨' }; }
+    if (my !== vdSeq) return;
+    const M = (j && j.meta) || {}; if (M.state === '전부' && st.days && day !== st.days[0]) vdCache[day] = j;
+  }
+  if (!st.data || st.data.day !== day) return;
+  const M = (j && j.meta) || {}, rows = Array.isArray(j && j.data) ? j.data : null;
+  if (!rows) { sum.textContent = j && j.http === 404 ? '서버 주소 아직 없음(404 · 서버 재시작 뒤 생김)' : `못 받음(${j && j.http != null ? j.http : j && j.error ? String(j.error).slice(0, 60) : '—'})`; body.innerHTML = ''; return; }
+  if (M.state === '안 받음') { sum.textContent = `${dayTxt(day)} — 아직 안 쌓은 날(서버가 차례로 채움)`; body.innerHTML = ''; return; }
+  if (M.state === '못 받음') { sum.textContent = `${dayTxt(day)} — 못 받음${M.error ? `(${M.error})` : ''}`; body.innerHTML = ''; return; }
+  const nIn = rows.filter((x) => x.regular === true).length, nOut = rows.filter((x) => x.regular === false).length;
+  sum.textContent = `${dayTxt(day)} — ${num(rows.length)}건 · 정규장 ${num(nIn)} · 밖 ${num(nOut)}${rows.length - nIn - nOut ? ` · 모름 ${rows.length - nIn - nOut}` : ''}${M.state === '앞쪽 못 받음' ? ' · 이른 시각 일부 빠졌을 수 있음' : ''}`;
+  if (!rows.length) { body.innerHTML = '<div class="st-err">— 이 날 VI 0건</div>'; return; }
+  const gap = (x) => { const g = x.kind === '동적' ? x.dynamicGap : x.kind === '정적' ? x.staticGap : [x.staticGap, x.dynamicGap].filter((v) => v != null).sort((a, b) => Math.abs(b) - Math.abs(a))[0];   // 둘 다면 큰 쪽(서버 알림 줄과 같게)
+    if (g == null || !Number.isFinite(Number(g))) return '—'; const v = Math.abs(Number(g)); return x.up === true ? pct(v) : x.up === false ? pct(-v) : `${num(v, 2)}%`; };   // 부호는 서버 up(오름 · 내림)으로 · 모르면 부호 없이
+  const base = (x) => num(x.kind === '동적' ? x.dynamicBase : x.staticBase != null ? x.staticBase : x.dynamicBase);
+  body.innerHTML = `<table class="dw-tb"><tr><th class="dw-l">발동</th><th class="dw-l">풀림</th><th class="dw-l">종목</th><th class="dw-l">조건</th><th class="dw-l">방향</th><th>발동가</th><th>기준가</th><th>기준가 대비</th><th>그날 몇 번째</th><th class="dw-l">장</th></tr>${rows.map((x) => {
+    const mut = x.regular === false ? ' class="dw-mut"' : '';
+    return `<tr${mut}><td class="dw-l">${esc(x.at || '—')}</td><td class="dw-l">${esc(x.cancel || '—')}</td><td class="dw-l" data-co="${esc(x.code || '')}"><b>${esc(x.name || '—')}</b> <small>${esc(x.code || '')}</small></td><td class="dw-l">${esc(x.kind || '—')}</td><td class="dw-l">${x.up === true ? '오름' : x.up === false ? '내림' : '모름'}</td><td>${num(x.price)}</td><td>${base(x)}</td><td>${gap(x)}</td><td>${x.count != null ? num(x.count) : '—'}</td><td class="dw-l">${x.regular === true ? '정규장' : x.regular === false ? '정규장 밖' : '모름'}</td></tr>`; }).join('')}</table>`;
+}
 // 11-18 서버가 줄마다 viAt · surgeAt(그날 처음 시각 · 지난 날 다시 센 판은 surgeApprox — 5분봉 「HH:MM~」 어림)을 준다 — 그것을 먼저 쓰고, 없을 때만 오늘 알림 목록으로
 const viTxt = (r) => { const hm = (t) => String(t).slice(0, 5);
   if (r.viAt || r.surgeAt) return [r.viAt ? `VI ${hm(r.viAt)}` : '', r.surgeAt ? `급등 ${r.surgeApprox ? String(r.surgeAt) : hm(r.surgeAt)}` : ''].filter(Boolean).join(' · ');
@@ -558,6 +589,7 @@ async function load(day, quiet) {
   st.day = d.day; st.data = d;
   if (st.sfDay !== d.day) { st.sfDay = d.day; loadSector(d.day); }   // 날을 바꿀 때만 — 다시 받는 간격은 섹터수급 쪽이 서버 값으로
   if (d.day === st.days[0]) viLoad(d.day);   // 오늘(맨 앞 날) 판만 — 시각 주소가 오늘 것만 준다
+  if (st.vdDay !== d.day) { st.vdDay = d.day; vdLoad(d.day); }   // 그날 VI 목록 — 날을 바꿀 때만(지난 날은 굳은 값 · 오늘은 판을 다시 열 때)
   paint(d);
   chips();
   const ms = Number(m.refreshMs ?? (d.meta && d.meta.refreshMs)); st.ms = ms > 0 ? ms : 0;   // 서버는 판 안 meta(data.meta)에 둔다(개발2 2단계 · 11-12 09:07 잼) — 바깥 meta 도 읽음
@@ -718,7 +750,8 @@ const TPL = `
             <button type="button" class="kh-chip" data-reset>기본값으로</button> <span id="dt-set-msg" class="rl-sug"></span>
           </div>
           <div class="st-cap" id="dt-month">—</div>
-          <details class="dt-win" id="dt-win"><summary>칩별 승률 — 지난 30거래일 · 세후 · 칩 묶음마다 승률 · 날마다 이익 큰 종목</summary><div class="dw-body"></div></details></div>
+          <details class="dt-win" id="dt-win"><summary>칩별 승률 — 지난 30거래일 · 세후 · 칩 묶음마다 승률 · 날마다 이익 큰 종목</summary><div class="dw-body"></div></details>
+          <details class="dt-win" id="dt-vi"><summary>그날 VI 목록 — 발동 · 풀림 시각 · 정적/동적 · 발동가 · <span class="dt-vi-sum">—</span></summary><div class="dw-body"></div></details></div>
         <div class="dt-box st-scroll" id="dt-box"><div class="st-err">—</div></div>
         <div class="st-cap dt-foot">각 시각 = 그 시각에 끝난 5분봉 종가 · 평균 = 그 시각 값이 있는 종목만 · 단타 목록은 <span class="dt-at">—</span> 에 그날 판을 열고, 서버가 굳히기 전까지는 다시 세어 줄이 바뀜(늦게 든 칩 · 빠진 종목) · 굳힌 뒤에는 늦게 나온 칩만 채움</div>
       </div>
