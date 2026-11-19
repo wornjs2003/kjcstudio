@@ -11383,8 +11383,8 @@ def main():
         # 밤사이 결과는 보내는 서버에서만 꺼내 간다 — events 바퀴도 그 서버에서만 돈다
         _us_send = (dart.telegram_send if (dart.telegram_config() and is_sender(args.port)) else None)
         daily.start_us_daily(
-            get_indices=lambda: fetch_indices_all(load_secrets(), with_chart=False)[0],
-            get_night=lambda: nxt_board.latest_futures(sys.modules[__name__]),
+            get_indices=lambda: fetch_indices_all(load_secrets(), with_chart=False),      # (줄, 오류) — 실패한 것은 daily 가 다시 받고 「못 받음」 줄로 남긴다
+            get_night=lambda: nxt_board.latest_futures_or_fetch(sys.modules[__name__]),
             peek_overnight=(events.peek_overnight if (is_sender(args.port) and not SLOW) else None),
             clear_overnight=(events.clear_overnight if (is_sender(args.port) and not SLOW) else None),
             send=_us_send,
