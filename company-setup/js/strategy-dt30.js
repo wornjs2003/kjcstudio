@@ -166,8 +166,8 @@ const missWord = () => (st.rebuilt ? '못 셈' : '못 받음');
 // 굳힌 시각 — 서버 buyAt("09:01" · 「HHMM」 둘 다) 그대로 머리 · 설명 줄에(11-12 09:06 → 09:01 · 재권님 「9시 1분에 바로 단타 리스트 뜨도록」)
 const atText = (v) => { const m = String(v || '').match(/^(\d{2}):?(\d{2})$/); if (m && root) root.querySelectorAll('.dt-at').forEach((e) => { e.textContent = `${m[1]}:${m[2]}`; }); };
 // 하위 칩 보이는 이름 (11-19 재권님 「단타에 매수에 숫자가 있는데 숫자로 하지말고 사고있는 주체를 간단히 넣는 방향으로 해줘」 → 「응 좋아」) — 열쇠(서버 subs · 점수표 「매수|①」)는 그대로 · 화면 글자만 · 풀어 쓴 설명은 TIP 그대로
-const SUB_NAME = { '매수|①': '외·기·연·프', '매수|②': '외·기·프', '매수|③': '기·연', '매수|④': '외국인만' };
-const subName = (c, x) => SUB_NAME[`${c}|${x}`] || x;
+export const SUB_NAME = { '매수|①': '외·기·연·프', '매수|②': '외·기·프', '매수|③': '기·연', '매수|④': '외국인만' };
+export const subName = (c, x) => SUB_NAME[`${c}|${x}`] || x;
 const subTxt = (c, sb) => sb.map((x) => subName(c, x)).join(sb.some((x) => SUB_NAME[`${c}|${x}`]) ? ' / ' : '·');   // 이름 안에 「·」 가 있어 여럿이면 「 / 」 로 가름
 const tipAt = (k) => { const t = tipOf(k); return t ? ` data-tip="${esc(t)}"` : ''; };
 function chipPanel(all) {
