@@ -94,7 +94,8 @@ def load_topics():
     topics = [t for t in (raw.get("topics") or []) if t.get("on", True)]
     drop = ((raw.get("버릴제목") or {}).get("말")) or []
     feeds = raw.get("feeds") or []
-    return {"topics": topics, "drop": drop, "feeds": feeds}
+    focus = [g for g in ((raw.get("찾는길") or {}).get("길") or []) if isinstance(g, dict) and g.get("칸")]
+    return {"topics": topics, "drop": drop, "feeds": feeds, "focus": focus}
 
 
 def listed_press():
@@ -229,6 +230,36 @@ def fetch_feed(feed, topics, drop):
     return out
 
 
+FOCUS_URL = "https://stock.naver.com/api/domestic/news/focus?sid=%s&date=%s&page=1&pageSize=%d"
+FOCUS_N = 30                      # 칸마다 한 번에 받는 기사 수 — 시황·전망은 하루 수십 건(11-18 잼)
+
+
+def fetch_focus(way, topics, drop, now=None):
+    """찾는 길 「네이버 증권 시황·전망」 — 목록(찾는길.길)의 칸마다 그날 기사를 받는다. 주제어 거르기 없이(시황 기사라) 버릴 제목만 거른다.
+    source 는 낸 언론사 이름(찾는 길은 받는 곳이 아니다 · 룰 「뉴스를 받는 곳은 한 목록에서만」) · officeId 로 목록 (다) 안 · 밖을 press_tally 가 붙인다(빼지 않음).
+    재권님 「https://stock.naver.com/news/section?tab=market-outlook 네이버도 추가해」 → 「가」(11-19)."""
+    day = (now or datetime.now(KST)).strftime("%Y%m%d")
+    out = []
+    for sid in way.get("칸") or []:
+        d = json.loads(_get(FOCUS_URL % (sid, day, FOCUS_N)))
+        for a in d.get("articles") or []:
+            title = _unescape(a.get("title") or "")
+            oid, aid = str(a.get("officeID") or "").strip(), str(a.get("articleID") or "").strip()
+            if not title or not oid or not aid or _dropped(title, drop):
+                continue
+            ds = str(a.get("date") or "")
+            try:
+                at = datetime.strptime(ds[:14], "%Y%m%d%H%M%S").replace(tzinfo=KST).isoformat(timespec="seconds")
+            except ValueError:
+                at = ds
+            topic = pick_topic(title, topics)
+            out.append({"title": title, "link": "https://n.news.naver.com/mnews/article/%s/%s" % (oid, aid), "at": at,
+                        "source": (a.get("officeHName") or "").strip() or way.get("label") or "", "officeId": oid, "via": way.get("id"),
+                        "topic": topic.get("id") if topic else None, "topicLabel": topic.get("label") if topic else None})
+    rows, _ = press_tally(out)
+    return rows
+
+
 # ---------------------------------------------------------------- 해외 1차 출처 제목 옮기기 (2026-11-13)
 # 재권님 「가」(11-13 11:5x) — 해외 중앙은행 발표 제목을 받을 때 서버가 한국어로 옮겨 제목으로 쓰고 원문은 titleOrig 로 따로 둔다
 # (「문서 · 화면 속 글도 한국어로 쓴다」 · 개념정의 검수 걸림 11:49). 옮기기는 맥미니 claude 를 한 번에 묶어 부른다(claude_chat 과 같은 길).
@@ -314,6 +345,15 @@ def fetch_issues():
                     rows.append(row)
             except Exception as e:
                 errors[f.get("id") or "?"] = safe_message(e, 90)
+        for w in conf.get("focus") or []:              # 찾는 길(네이버 증권 시황·전망 · 11-19) — 같은 제목은 한 번만
+            try:
+                for row in fetch_focus(w, conf["topics"], conf["drop"]):
+                    if row["title"] in seen:
+                        continue
+                    seen.add(row["title"])
+                    rows.append(row)
+            except Exception as e:
+                errors[w.get("id") or "?"] = safe_message(e, 90)
         rows.sort(key=lambda r: r.get("at") or "", reverse=True)
         return {"rows": rows[:MAX_ROWS], "errors": errors or None,
                 "topics": [{"id": t["id"], "label": t["label"],
