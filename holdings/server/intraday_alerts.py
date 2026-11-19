@@ -149,6 +149,11 @@ def _vi_in_session(hhmmss):
 
 def _vi_new(proxy, day):
     rows = _vi_rows(proxy, day)
+    try:                                       # 지난 날 VI 기록(vi_days) — 받은 목록을 그대로 쌓는다(장중 · 11-19 「나」) · 실패해도 이 고리는 그대로
+        import vi_days
+        vi_days.absorb(proxy, day, rows)
+    except Exception:
+        pass
     new = []
     for r in rows:
         key = ((r.get("mksc_shrn_iscd") or "").strip(), (r.get("cntg_vi_hour") or "").strip())
