@@ -292,8 +292,32 @@ const usHtml = (day) => {
     return `<span class="dt-usi" data-tip="${esc(tip || `${x.name || k} · 현지 마감 · 07:00 텔레그램과 같은 값`)}">${esc(lb)} <b>${num(val, 2)}</b> ${pct(v == null ? null : Number(v))}</span>`; };
   const ov = Array.isArray(D.overnight) ? D.overnight : [];   // 밤사이 미국 지표 발표 — 저장본 글 그대로(풍선)
   const ovH = ov.length ? `<span class="dt-usi" data-tip="${esc(ov.join('\n\n'))}">밤 지표 발표 <b>${ov.length}</b></span>` : '<span class="dt-usi" data-tip="그 밤 미국 지표 발표 없음(저장본 기준)">밤 지표 발표 <b>0</b></span>';
-  return `<span class="dt-hd">어제 미국장</span>${US_NAMES.map(one).join('')}${ovH}`;
+  return `<span class="dt-hd">어제 미국장</span>${US_NAMES.map(one).join('')}${ovH}${wxHtml(day)}`;
 };
+// 지금 바깥 값 — 바이낸스 한국 종목 무기한선물 · 하이닉스 나스닥(SKHY) · 원/유로 (11-19 재권님 「응 해줘. 이거 단타에도 전날미국장 옆에도 넣어주고」 · 홈 「국외」 끝 칸과 같은 값)
+//   값은 서버 /api/market/world-extra 한 곳 · 지금 값이라 오늘 판(맨 앞 날)에만 붙임(지난 날 판에 지금 값을 붙이지 않음) · 다시 받는 간격은 서버 meta.ttlSec(화면에 숫자 안 둠 · 없으면 다시 안 받음)
+//   홈 holdings/js/components/world-extra.js 는 홈 지수 칸 모양만 내보내 가져다 쓰지 못함 — 이름 · 등락 기준은 그 파일과 같게(바이낸스 24시간 전 대비 · SKHY 전날 종가 대비 · 원/유로 앞 날 대비)
+const wx = { data: null, fail: null, timer: 0 };
+const wxHtml = (day) => {
+  if (!st.days || day !== st.days[0]) return '';
+  const D = wx.data; if (!D) return wx.fail ? `<span class="dt-usi" data-tip="${esc(`지금 바깥 값 못 받음(${wx.fail})`)}">지금 바깥 <span class="st-err">—</span></span>` : '';
+  const it = (lb, val, p, tip, d = 2) => `<span class="dt-usi" data-tip="${esc(tip)}">${esc(lb)} <b>${val == null ? '—' : num(val, d)}</b> ${pct(p == null ? null : Number(p))}</span>`;
+  const S = D.sources || {};
+  const a = (D.binance || []).map((b) => it(`${b.name} 선물`, b.last, b.chgPct24h, `바이낸스 ${b.symbol} 무기한선물(USDT) · 마지막 체결 · 등락은 24시간 전 대비 · 펀딩비 ${b.funding == null ? '—' : `${(b.funding * 100).toFixed(4)}%`}${S.binance ? `\n${S.binance}` : ''}`));
+  if (D.skhy) a.push(it('하이닉스 나스닥', D.skhy.last, D.skhy.chgPct, `${D.skhy.name || 'SKHY'} · 달러 · 등락은 전날 종가 대비${S.skhy ? `\n${S.skhy}` : ''}`));
+  if (D.eurkrw) a.push(it('원/유로', D.eurkrw.value, D.eurkrw.chgPct, `원/유로 · 등락은 앞 날 대비${D.eurkrw.date ? ` · ${D.eurkrw.date}` : ''}${S.eurkrw ? `\n${S.eurkrw}` : ''}`));
+  return a.length ? `<span class="dt-hd">지금 바깥</span>${a.join('')}` : '';
+};
+async function wxLoad() {
+  clearTimeout(wx.timer);
+  let ttl = 0;
+  try { const r = await fetch('/api/market/world-extra', { cache: 'no-store' }); const j = r.ok ? await r.json() : null;
+    if (j && j.data) { wx.data = j.data; wx.fail = null; } else wx.fail = r.ok ? '빈 값' : r.status;
+    ttl = Number(j && j.meta && j.meta.ttlSec) || 0; }
+  catch (e) { wx.fail = '연결 안 됨'; }   // 지난 값은 지우지 않음
+  const el = $('dt-us'); if (el && st.data) el.innerHTML = usHtml(el.dataset.day);
+  if (ttl > 0 && root) wx.timer = setTimeout(wxLoad, ttl * 1000);
+}
 async function usLoad(day) {
   if (!day || usCache[day] !== undefined) return;
   try { const r = await fetch(`/api/board/doc/usdaily-${day}`, { cache: 'no-store' }); const j = r.ok ? await r.json() : null; usCache[day] = (j && j.data && (j.data.indices || j.data.night)) ? j.data : null; }
@@ -591,6 +615,7 @@ async function load(day, quiet) {
   st.day = d.day; st.data = d;
   if (st.sfDay !== d.day) { st.sfDay = d.day; loadSector(d.day); }   // 날을 바꿀 때만 — 다시 받는 간격은 섹터수급 쪽이 서버 값으로
   if (d.day === st.days[0]) viLoad(d.day);   // 오늘(맨 앞 날) 판만 — 시각 주소가 오늘 것만 준다
+  if (d.day === st.days[0] && !wx.data && !wx.timer) wxLoad();   // 지금 바깥 값 — 처음 한 번 · 그 뒤는 서버 ttlSec 대로
   if (st.vdDay !== d.day) { st.vdDay = d.day; vdLoad(d.day); }   // 그날 VI 목록 — 날을 바꿀 때만(지난 날은 굳은 값 · 오늘은 판을 다시 열 때)
   paint(d);
   chips();
