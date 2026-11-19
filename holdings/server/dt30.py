@@ -433,7 +433,16 @@ def score_conflicts(tab):
     return sorted(plain & split)
 
 
-def row_score_by(r, tab):
+VI_SPLIT_AT = (9, 25)        # VI·급등 「09:25 전 · 이후」 나누는 보통 날 시각 — 늦게 여는 날은 late_min 만큼 뒤(meta.viSplit) · 점수표 열쇠 이름은 그대로
+                             # 재권님 「응 만들어」(11-19 · 시황분석1 창 · 늦게 여는 날 VI 나누기 옮기기 — 화면만 밀면 서버 점수와 갈림)
+
+
+def vi_split(off=0):
+    """나누는 시각 「HH:MM」 — 보통 09:25 · off 분 늦게 여는 날은 그만큼 뒤."""
+    return "%02d:%02d" % _sh(VI_SPLIT_AT, off)
+
+
+def row_score_by(r, tab, off=0):
     """칩마다의 몫 {칩: 점수} — 칩마다 「칩」 열쇠 또는 맞는 「칩|HH:MM 전/이후」 열쇠(둘 다 적혔으면 시각 열쇠만 · score_conflicts).
     점수가 안 걸린 칩은 안 넣는다. 화면은 끈 칩 몫만 빼서 차례를 세운다 — 셈은 이 한 곳(시황분석1 과 맞춤 11-18 20:3x)."""
     by = {}
@@ -456,7 +465,7 @@ def row_score_by(r, tab):
             t = _chip_time(r, c)
             if not m or not t:
                 continue
-            hm = "%02d:%s" % (int(m.group(1)), m.group(2))
+            hm = "%02d:%02d" % _sh((int(m.group(1)), int(m.group(2))), off)   # 열쇠 시각을 늦게 연 분만큼 뒤로(열쇠 이름은 그대로)
             if (t[:5] < hm) == (m.group(3) == "전"):
                 total += v
                 hit = True
@@ -465,18 +474,18 @@ def row_score_by(r, tab):
     return by
 
 
-def row_score(r, tab):
+def row_score(r, tab, off=0):
     """그 줄의 점수 합 — row_score_by 의 합."""
-    return round(sum(row_score_by(r, tab).values()), 4)
+    return round(sum(row_score_by(r, tab, off).values()), 4)
 
 
-def sort_rows(rows, tab):
+def sort_rows(rows, tab, off=0):
     """줄 세우기 한 곳 — tab(점수표)이 있으면 점수 합 · 없으면 칩 수. 앞의 것이 같으면 초반상승 → 시가총액. rows 를 제자리에서 세우고 order 글을 낸다."""
     rise = lambda r: -(r["rise"] if r.get("rise") is not None else -1e9)
     cap = lambda r: -(r["cap"] if r.get("cap") is not None else -1)
     if tab:
         for r in rows:
-            r["scoreBy"] = row_score_by(r, tab)
+            r["scoreBy"] = row_score_by(r, tab, off)
             r["score"] = round(sum(r["scoreBy"].values()), 4)
         rows.sort(key=lambda r: (-r["score"], rise(r), cap(r)))
         return "점수 합 큰 순 → 초반상승 높은 순 → 시가총액 순"
@@ -563,10 +572,10 @@ def _live_calc(proxy, cfg):
                      "viPx": {"at": g["viAt"], "px": g.get("viPrice"), "src": "vi"} if g.get("viAt") and g.get("viPrice") else None,
                      "down": p.get("pct") is not None and p["pct"] < DROP_BELOW_PCT})      # 하락 — 모르면 안 뺀다(재권님 11-12)
     tab = score_table(proxy)
-    order = sort_rows(rows, tab)
+    order = sort_rows(rows, tab, off)
     early = ["매수"] if "매수어림" in missing else []
     data = {"rows": rows, "meta": {
-        "at": now.strftime("%H:%M:%S"), "pre": pre, "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "lateMin": off,
+        "at": now.strftime("%H:%M:%S"), "pre": pre, "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "lateMin": off, "viSplit": vi_split(off),
         "missing": [c for c in missing if c not in ("매수어림", "매수대기")],
         "wait": (list(PRE_WAIT) + (["매수"] if "매수대기" in missing else [])) if pre else [],
         "early": early, "approx": list(early),
@@ -603,13 +612,13 @@ def build(proxy, cfg, day, skip=()):
     missing = lm["missing"] + (["매수어림"] if lm["early"] else [])
     ov = lv["rows"]
     tab = score_table(proxy)
-    order = sort_rows(rows, tab)
+    off = late_min(proxy)
+    order = sort_rows(rows, tab, off)
     rows = rows[:TOP_N]
     for i, r in enumerate(rows):
         r["rank"] = i + 1
-    off = late_min(proxy)
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(off), "rows": rows, "closed": False,
-            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "lateMin": off, "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy), "minChips": mc,
+            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "lateMin": off, "viSplit": vi_split(off), "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy), "minChips": mc,
                      "early": ["매수"] if "매수어림" in missing else [], "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre else None, "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
                      "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "buy 는 굳힌 때(buyAt) 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
@@ -693,7 +702,9 @@ def patch_late(proxy, cfg, b):
         r["n"] = len(set(r["chips"]) & set(OV_CHIPS))
     out = list(rows.values())
     tab = score_table(proxy)
-    b["meta"]["order"] = sort_rows(out, tab)
+    off = late_min(proxy)
+    b["meta"]["order"] = sort_rows(out, tab, off)
+    b["meta"]["viSplit"] = vi_split(off)
     b["meta"]["score"] = tab
     b["meta"]["scoreConflict"] = score_conflicts(tab)
     b["rows"] = out[:TOP_N]
