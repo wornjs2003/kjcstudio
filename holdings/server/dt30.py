@@ -1252,9 +1252,13 @@ PX_MIN = (1, 2, 3, 4, 5)     # 「개장 N분 뒤 값」(rows[].pxMin) — 재�
                              # N=1 이 「09:01 값」(px1 · 재권님 「9시 1분 등락도 넣어줘 이쯤 살거니깐」 11-18 19:1x)
 
 
-def _open_min(proxy, day):
-    """그날 정규장 여는 시각(분) — 보통 날 OPEN_AT · 늦게 여는 날(수능 10:00)은 late_min 만큼 뒤(11-19 「응 해줘」)."""
-    return OPEN_AT[0] * 60 + OPEN_AT[1] + late_min(proxy, day=day)
+def _open_min(proxy, day, b=None):
+    """그날 정규장 여는 시각(분) — 보통 날 OPEN_AT · 늦게 여는 날(수능 10:00)은 늦은 분만큼 뒤(11-19 「응 해줘」).
+    판(b)에 저장된 meta.lateMin 을 먼저 쓴다 — 장 시각 표(market-hours 문서)는 개발 폴더에만 있어 메인 · 중간서버가 읽으면 0 이 된다(qa 걸림 11-19 13:58)."""
+    lm = ((b or {}).get("meta") or {}).get("lateMin")
+    if not isinstance(lm, int):
+        lm = late_min(proxy, day=day)
+    return OPEN_AT[0] * 60 + OPEN_AT[1] + lm
 
 
 def _hhmm(m):
@@ -1315,7 +1319,7 @@ def _pxmin_fill(proxy, b):
     meta.pxMinAt · px1At 를 적는다. 그날 판은 고리가 분마다 적고(_pxmin_live) · 지난 판은 1분봉이 남은 날만(11-12 부터) 읽을 때 채운다(저장 안 함)."""
     _vipx_fill(proxy, b)
     rows = b.get("rows") or []
-    o = _open_min(proxy, b["day"])
+    o = _open_min(proxy, b["day"], b)
     at = {str(n): _hhmm(o + n) for n in PX_MIN}
     b["meta"]["pxMinAt"] = at
     b["meta"]["px1At"] = at["1"]
@@ -1346,7 +1350,7 @@ def _pxmin_live(proxy, cfg, b, n):
     _pxmin_fill(proxy, b)
     k = str(n)
     left = [r for r in b["rows"] if not (r.get("pxMin") or {}).get(k)]
-    m = _open_min(proxy, b["day"]) + n
+    m = _open_min(proxy, b["day"], b) + n
     late = _now().hour * 60 + _now().minute - m
     if left and late <= NOW_OK_MIN:
         q, _ = proxy.fetch_quotes_multi(cfg, [r["code"] for r in left])
@@ -1469,7 +1473,7 @@ def start(proxy):
                             for t in due:
                                 track(proxy, proxy.load_secrets(), b, t, hm - int(t[:2]) * 60 - int(t[2:]))
                         flow_now = False
-                        o_min = _open_min(proxy, day)
+                        o_min = _open_min(proxy, day, b)
                         for n in PX_MIN:                   # 여는 시각 + N분 값 — 그 분이 끝난 뒤(+1분) 한 번(새로 든 종목은 다음 바퀴에) · N=1 이 09:01 값
                             if hm >= o_min + n + 1 and any(str(n) not in (r.get("pxMin") or {}) for r in b["rows"]):
                                 _pxmin_live(proxy, proxy.load_secrets(), b, n)
