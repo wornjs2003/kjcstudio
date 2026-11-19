@@ -91,6 +91,7 @@ import day_top_fill     # 등락 상위 — 지난 거래일 판을 다시 세�
 import day_top          # 등락 상위와 걸린 필터 — 날마다 장 뒤 한 번 쌓음 · /api/kis/day-top(2026-11-11 · server/day_top.py)
 import sector_flow      # 섹터수급 — 프리장 08:00~정규장 09:30 업종 · 테마별 10분 거래대금 · /api/kis/sector-flow(2026-11-18 · server/sector_flow.py)
 import dt30_win         # 단타 판 칩별 승률 — 끝난 판 손익을 하루 한 줄 · /api/kis/dt30-win(2026-11-18 · server/dt30_win.py)
+import vi_days          # 지난 날 VI 기록 — KIS VI 현황을 날짜로 그날 전부(연속 조회) 쌓고 /api/kis/vi-day 로 냄(2026-11-19 · server/vi_days.py)
 import vi_stats         # VI · 급등 뒤 얼마나 오르나 — 그날 VI · 급등을 쌓고 30분 · 60분 · 14:00 · 그날 최고 · /api/kis/vi-stats(2026-11-18 · server/vi_stats.py)
 import dt30             # 단타 30 판 — 평일 09:06 단타 상위 30 굳힘 · 30분마다 값 · 30거래일 · /api/kis/dt30(2026-11-11 · server/dt30.py)
 import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
@@ -2015,18 +2016,21 @@ class _UpstreamDown(Exception):
     """상류가 안 떠 있거나 터졌다 — **직접 부르는 쪽으로 내려간다.**"""
 
 
-def _kis_via_upstream(base, path, params, tr_id):
+def _kis_via_upstream(base, path, params, tr_id, tr_cont=None):
     """KIS 를 상류 서버가 대신 부르게 한다.
 
     **`get_token` 도 `_rate_limit` 도 타지 않는다.** 둘 다 상류가 한다 —
     양쪽에서 기다리면 `minIntervalSec`(2026-10-01 실측 **0.1초**)만큼
     **더 느려진다.** 루프백 왕복은 **중앙 1.6ms** 라 그에 비해 무시할 수 있다.
     """
-    url = base + "/api/kis/" + RELAY_ROUTE + "?" + urllib.parse.urlencode({
+    q = {
         "path": path,
         "tr_id": tr_id,
         "params": json.dumps(params or {}, ensure_ascii=False),
-    })
+    }
+    if tr_cont is not None:
+        q["tr_cont"] = tr_cont          # 연속 조회 — 옛 상류는 이 칸을 몰라 첫 장만 주고 data 에 _tr_cont 가 없다(부르는 쪽이 「끝 모름」 으로 센다)
+    url = base + "/api/kis/" + RELAY_ROUTE + "?" + urllib.parse.urlencode(q)
     try:
         req = urllib.request.Request(url)
         if SLOW:
@@ -2095,12 +2099,14 @@ def kis_health():
     return dict(_kis_health, overruns60s=sum(1 for t in list(_over_times) if now - t < OVER_WINDOW))
 
 
-def kis_get(cfg, path, params, tr_id, _retry=1, _over=0):
+def kis_get(cfg, path, params, tr_id, _retry=1, _over=0, tr_cont=None):
+    # tr_cont — 연속 조회(2026-11-19 · 지난 날 VI 기록 · server/vi_days.py): None 이면 지금처럼 · "" 첫 장 · "N" 다음 장.
+    # 주면 응답 머리의 tr_cont(M · F 면 뒤가 더 있음 · D · E 면 끝)를 data["_tr_cont"] 에 담아 돌려준다.
     # ── 상류가 있으면 넘긴다 (2026-10-01) ──
     _base = upstream_base()
     if _base:
         try:
-            data = _kis_via_upstream(_base, path, params, tr_id)
+            data = _kis_via_upstream(_base, path, params, tr_id, tr_cont)
             _up_stat["calls"] += 1
             return data
         except _UpstreamDown as e:
@@ -2152,11 +2158,15 @@ def kis_get(cfg, path, params, tr_id, _retry=1, _over=0):
         "custtype": "P",
         "content-type": "application/json; charset=utf-8",
     })
+    if tr_cont is not None:
+        req.add_header("tr_cont", tr_cont)
+    _resp_cont = None
     try:
         _t_resp0 = time.time()
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 raw = resp.read()
+                _resp_cont = resp.headers.get("tr_cont")
         finally:
             _gate_release()            # 응답이 왔다(또는 실패) — 이때부터 1초 동안 자리를 센다
         # **왕복만 잰다** — JSON 해석은 우리 쪽 일이라 뺀다.
@@ -2176,14 +2186,14 @@ def kis_get(cfg, path, params, tr_id, _retry=1, _over=0):
             note_overrun()                     # ㉡ 세어 두면 간격이 늘어난다
             if _over < KIS_OVER_RETRY:
                 time.sleep(1.0)
-                return kis_get(cfg, path, params, tr_id, _retry, _over + 1)
+                return kis_get(cfg, path, params, tr_id, _retry, _over + 1, tr_cont)
             _over_gave_up()
             _kis_fail("한도 초과를 끝내 못 받음")
         # **거부당한 토큰(EGW00123)은 버리고 한 번만 다시 받는다** (2026-09-22 지시).
         # 이것이 없으면 캐시가 스스로 만료될 때까지 몇십 분이고 계속 실패한다.
         if "EGW00123" in detail and _retry > 0:
             _drop_token_cache(cfg["mode"], _token_path(_kc))
-            return kis_get(cfg, path, params, tr_id, _retry - 1, _over)
+            return kis_get(cfg, path, params, tr_id, _retry - 1, _over, tr_cont)
         if e.code >= 500:
             _kis_fail("HTTP %s" % e.code)
         raise RuntimeError("KIS 호출 실패 (HTTP %s): %s" % (e.code, detail))
@@ -2201,15 +2211,17 @@ def kis_get(cfg, path, params, tr_id, _retry=1, _over=0):
             note_overrun()                     # ㉡
             if _over < KIS_OVER_RETRY:
                 time.sleep(1.0)
-                return kis_get(cfg, path, params, tr_id, _retry, _over + 1)
+                return kis_get(cfg, path, params, tr_id, _retry, _over + 1, tr_cont)
             _over_gave_up()
             _kis_fail("한도 초과를 끝내 못 받음")
         if data.get("msg_cd") == "EGW00123" and _retry > 0:
             _drop_token_cache(cfg["mode"], _token_path(_kc))
-            return kis_get(cfg, path, params, tr_id, _retry - 1, _over)
+            return kis_get(cfg, path, params, tr_id, _retry - 1, _over, tr_cont)
         _kis_ok()                              # KIS 가 응답은 했다 — 업무 오류는 장애가 아니다
         raise RuntimeError("KIS 오류: %s (%s)" % (data.get("msg1", "알 수 없음"), data.get("msg_cd", "")))
     _kis_ok()
+    if tr_cont is not None and isinstance(data, dict):
+        data["_tr_cont"] = (_resp_cont or "").strip()
     return data
 
 
@@ -10088,6 +10100,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if not tr:
                     self._send_json({"ok": False, "error": "tr_id 가 없습니다."}, 400)
                     return
+                relay_cont = (qs.get("tr_cont") or [None])[0]      # 연속 조회(2026-11-19) — 없으면 지금처럼
                 try:
                     relay_params = json.loads((qs.get("params") or ["{}"])[0])
                 except ValueError:
@@ -10102,18 +10115,19 @@ class Handler(SimpleHTTPRequestHandler):
                 # 실패를 TTL 동안 들고 있으면 더 나쁘다.
                 ckey = (kis_path,
                         json.dumps(relay_params, sort_keys=True, ensure_ascii=False),
-                        tr)
+                        tr, relay_cont)
                 now = time.time()
                 hit = _relay_cache.get(ckey)
-                if hit and now - hit[0] < _relay_ttl(kis_path):
+                if hit and relay_cont is None and now - hit[0] < _relay_ttl(kis_path):   # 연속 조회는 캐시 안 탐 — 다음 장("N")은 칸이 같아도 내용이 다르다
                     _relay_stat["hits"] += 1
                     self._send_json({"ok": True, "data": hit[1], "cached": True,
                                      "fill": round(fill_factor(), 3)})
                     return
                 _relay_stat["misses"] += 1
                 _relay_times.append(now)       # `calls1hRelayed` 가 이것을 센다
-                relay_data = kis_get(cfg, kis_path, relay_params, tr)
-                _relay_cache[ckey] = (now, relay_data)
+                relay_data = kis_get(cfg, kis_path, relay_params, tr, tr_cont=relay_cont)
+                if relay_cont is None:
+                    _relay_cache[ckey] = (now, relay_data)
                 if len(_relay_cache) > RELAY_CACHE_MAX:
                     _relay_sweep(now)
                 self._send_json({"ok": True, "data": relay_data,
@@ -10541,6 +10555,29 @@ class Handler(SimpleHTTPRequestHandler):
                     self._send_json({"ok": False, "data": None, "error": safe_message(e, 120)}, 502)
                     return
                 self._send_json({"ok": True, "data": d["rows"], "meta": d["meta"]})
+                return
+
+            if route == "vi-day":
+                # 지난 날 VI 기록(server/vi_days.py · 2026-11-19) — 쌓는 것은 개발 서버(8765) 하나라 넘기는 서버는 상류를 그대로 넘긴다(dt-list 와 같은 꼴)
+                _ub = upstream_base()
+                if _ub:
+                    try:
+                        _rq = urllib.request.Request(_ub + "/api/kis/vi-day?" + urllib.parse.urlencode({k: v[0] for k, v in qs.items()}),
+                                                     headers={PRIO_HEADER: "low"})
+                        with urllib.request.urlopen(_rq, timeout=20) as _r:
+                            self._send_json(json.loads(_r.read().decode("utf-8")))
+                    except Exception as e:
+                        self._send_json({"ok": False, "data": None, "error": "상류 못 받음: " + safe_message(e, 100)}, 502)
+                    return
+                day = (qs.get("day") or [""])[0].strip()
+                if not day:
+                    self._send_json({"ok": True, "data": vi_days.days(sys.modules[__name__]), "meta": {"status": vi_days.status()}})
+                    return
+                if not (day.isdigit() and len(day) == 8):
+                    self._send_json({"ok": False, "error": "day 는 YYYYMMDD 여야 합니다."}, 400)
+                    return
+                d, m = vi_days.day_list(sys.modules[__name__], day)
+                self._send_json({"ok": True, "data": d, "meta": dict(m, status=vi_days.status())})
                 return
 
             if route == "vi-stats":
@@ -11471,6 +11508,8 @@ def main():
     if not SLOW and is_sender(args.port) and dt30.start(sys.modules[__name__]):
         print("  단타 30 판 : 평일 %s 단타 상위 %d 굳힘 · %s~%s %d분마다 값 · %d거래일 · /api/kis/dt30"
               % (dt30.status()["buyAt"], dt30.TOP_N, dt30.times()[0], dt30.times()[-1], dt30.TRACK_STEP, dt30.DAYS_KEEP))
+    if not SLOW and is_sender(args.port) and vi_days.start(sys.modules[__name__]):
+        print("  VI 기록    : 평일 %s 뒤 그날 VI 전부 쌓음 · 그 뒤 지난 %d일 하루씩 되채움 · /api/kis/vi-day" % (vi_days.status()["storeAt"], vi_days.BACKFILL_DAYS))
     if not SLOW and is_sender(args.port) and vi_stats.start(sys.modules[__name__]):
         print("  VI 통계    : 평일 %s 뒤 그날 VI · 급등 쌓음 · %s 뒤 봉 없는 종목 채움 · /api/kis/vi-stats" % (vi_stats.status()["storeAt"], vi_stats.status()["fillFrom"]))
     if not SLOW and is_sender(args.port) and dt30_win.start(sys.modules[__name__]):
