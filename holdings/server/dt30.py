@@ -1406,6 +1406,62 @@ def send_top(proxy, b, head=""):
     return dart.telegram_send(top_text(proxy, b, head=head))
 
 
+SELL_SEND = False            # 켜기 — 아침 상위 TG_TOP 이 꺾이면 「팔 때」 한 통씩(종목마다 한 번) · 켜는 것은 재권님 지시로(하루 약 9통 — 11-12~19 엿새 셈)
+SELL_DROP_PCT = 2.0          # 고점 대비 이만큼 내려오면 — 재권님 「30분단위로 대비했을때 가격이 하락한상황이거나 고점대비 2% 하락시로 해줘」(11-19 14:3x)
+SELL_STEP_MIN = 30           # 「30분 전보다 내림」 을 보는 칸 — 정시 30분마다(09:30 · 10:00 …) 그때 값을 전 칸(첫 칸은 산 값 = 개장 1분 값)과 견줌
+SELL_UNTIL_MIN = 10          # 정규장 끝 이 분 전까지만 본다
+
+
+def sell_watch(proxy, cfg, b, now=None):
+    """아침 상위(meta.tgTop) 종목이 꺾였나 — 고점(산 뒤 본 현재가 중 최고) 대비 SELL_DROP_PCT % 아래 · 또는 30분 칸 값이 전 칸보다 낮음.
+    종목마다 처음 걸린 때 한 번 rows[].sell {at, px, why, hi, ref, buy} 를 적고 → 새로 걸린 줄 목록. 산 값이 없는 종목(개장 1분 값 못 잼)은 안 본다.
+    값은 시세 캐시(PRICE_CACHE_TTL)를 탄다 — 고점은 그 값들 중 최고라 캐시 사이의 순간 고점은 못 본다."""
+    import market_hours
+    now = now or _now()
+    o = _open_min(proxy, b["day"], b)
+    close = int(market_hours.today(proxy, day=b["day"]).get("reg", ["", market_hours.REG_CLOSE])[1] or market_hours.REG_CLOSE)
+    close = close // 100 * 60 + close % 100
+    hm = now.hour * 60 + now.minute
+    top = set((b.get("meta") or {}).get("tgTop") or [])
+    rows = [r for r in b.get("rows") or [] if r["code"] in top and not r.get("sell")
+            and ((r.get("pxMin") or {}).get("1") or {}).get("px")]
+    if not rows or hm < o + 2 or hm >= close - SELL_UNTIL_MIN:
+        return []
+    q, _ = proxy.fetch_quotes_multi(cfg, [r["code"] for r in rows], max_age=proxy.PRICE_CACHE_TTL)
+    new = []
+    for r in rows:
+        p = (q.get(r["code"]) or {}).get("price")
+        if not p:
+            continue
+        buy = r["pxMin"]["1"]["px"]
+        hi = max(v for v in (r.get("sellHi"), buy, p) if v)   # 고점 = 산 값과 그 뒤 본 현재가 중 최고(앞으로 올 값은 안 섞음)
+        r["sellHi"] = hi
+        why, ref = None, None
+        if p <= hi * (1 - SELL_DROP_PCT / 100):
+            why, ref = "고점 대비 -%g%%" % SELL_DROP_PCT, hi
+        chk = r.setdefault("sellChk", {})
+        m = hm // SELL_STEP_MIN * SELL_STEP_MIN             # 정시 칸(09:00 · 09:30 …) — 재권님 「30분단위라 함은 정시로 정해줘. 9시 9시반 이런것처럼」(11-19)
+        if m > o + 1:                                       # 산 뒤(개장 1분 값 뒤)의 칸만
+            key = "%02d%02d" % divmod(m, 60)
+            if key not in chk and hm - m <= NOW_OK_MIN:
+                chk[key] = p                                # 그 칸 값 = 그 칸이 지난 뒤 처음 본 현재가
+                pm = m - SELL_STEP_MIN
+                prev = chk.get("%02d%02d" % divmod(pm, 60)) if pm > o + 1 else buy   # 첫 칸은 산 값과 견줌
+                if why is None and prev and p < prev:
+                    why, ref = "30분 전보다 내림", prev
+        if why:
+            r["sell"] = {"at": now.strftime("%H:%M"), "px": p, "why": why, "hi": hi, "ref": ref, "buy": buy}
+            new.append(r)
+    return new
+
+
+def sell_text(r):
+    s = r["sell"]
+    return "🔻 팔 때 — %s(%s) %s %s원\n%s(기준 %s원 대비 %+.1f%%) · 산 값 %s원 대비 %+.1f%%" % (
+        r.get("name") or "", r["code"], s["at"], format(int(s["px"]), ","), s["why"], format(int(s["ref"]), ","),
+        (s["px"] / s["ref"] - 1) * 100, format(int(s["buy"]), ","), (s["px"] / s["buy"] - 1) * 100)
+
+
 def board(proxy, day=None, cfg=None):
     """주소 /api/kis/dt30 의 data — 남긴 날만(없으면 None). 안 끝난 그날 판이면 rows[].now · nowAt 을 붙인다(cfg 를 줄 때)."""
     ds = days(proxy)
@@ -1520,6 +1576,16 @@ def start(proxy):
                             if hm >= o_min + n + 1 and any(str(n) not in (r.get("pxMin") or {}) for r in b["rows"]):
                                 _pxmin_live(proxy, proxy.load_secrets(), b, n)
                                 flow_now = True
+                        if hm >= o_min + 2 and not b["meta"].get("tgTop") and b["rows"] and not b.get("closed"):
+                            b["meta"]["tgTop"] = [r["code"] for r in sorted(b["rows"], key=lambda r: r.get("rank") or 1e9)[:TG_TOP]]   # 아침 상위 — 「팔 때」 를 보는 종목(보냄과 무관하게 적음)
+                            b["meta"]["tgTopAt"] = _now().strftime("%H:%M")
+                            flow_now = True
+                        if not b.get("closed") and b["meta"].get("tgTop"):
+                            for r in sell_watch(proxy, proxy.load_secrets(), b):
+                                flow_now = True
+                                if SELL_SEND:
+                                    ok, why = dart.telegram_send(sell_text(r))
+                                    print("  [단타 30] 팔 때 %s %s" % (r["code"], "보냄" if ok else "못 보냄 — " + str(why)), flush=True)
                         if TG_SEND and _status.get("tg") != day and o_min + 2 <= hm < o_min + 2 + TG_LATE_MIN and b["rows"]:
                             _status["tg"] = day            # 하루 한 통 — 실패해도 다시 안 보낸다(앞 통이 갔을 수 있다)
                             ok, why = send_top(proxy, b)
