@@ -8,7 +8,8 @@
                 ETF = 순위 목록에 있는데 OpenDART 기업 대응표(dart_corps)에 없고 코드 끝자리가 0 — 대응표에 없는 것은 ETF 와 우선주뿐이고
                 우선주는 끝자리가 0 이 아니다(11-11 개발 DB: 대응표 밖 42 = ETF 39 + 우선주 3 · 대응표 안에 끝자리 0 아닌 코드 0)
     셈          그날 첫 봉 — BAR_PERIOD 의 여는 시각 봉(11-18 부터 09:00~09:01 1분봉 · 보통 날 여는 시각 — market_hours.today 의 usual reg[0] · 재권님 「아침 9시부터 9시 5분」) — (종가 − 시가) ÷ 시가 ≥ RISE_PCT %
-                늦게 여는 날(수능 등)은 그 봉이 없어 「못 셈」
+                늦게 여는 날(수능 등)은 그날 여는 시각의 첫 봉(market_hours.today 의 reg[0] · 11-19 수능 10:00~10:01) — 재권님 「응 해줘」(11-19 · 개발2 창)
+                그 전에는 늘 보통 날 09:00 봉을 읽어 늦게 연 날 하나도 안 잡혔다(11-19 오전 · 초반상승 값 든 줄 0)
                 장 시각 숫자를 이 파일에 두지 않는다(market_hours 머리 · 개념정의 검수 11-11)
     차례        그 상승률 큰 순
     다 찬 봉만   그 봉을 **끝난 뒤에 받았는지**는 kis_proxy `_minutes_fresh_upto`(「지금 칸」 을 받은 분)로 가른다 — 그 봉이 끝나기 전에 받은 덜 찬 봉으로
@@ -43,6 +44,7 @@ MIN_CAP_EOK = dart.UNIVERSE_MIN_CAP_EOK   # 시가총액 문턱(억원) — 대�
 CACHE_TTL = 60           # 같은 판을 다시 세지 않는 시간(초) — 화면이 다시 묻는 주기도 이 값(서버 값)
 FIRST_GRACE_SEC = 3      # 첫 봉이 끝난 뒤 이만큼 기다렸다 받는다 — KIS 가 그 분을 닫을 틈
 FIRST_UNTIL_MIN = 10     # 첫 봉 끝에서 이 분이 지나면 먼저 받기를 그만둔다(남은 것은 미리받기 몫)
+T_RECHECK_SEC = 60       # 먼저 받기 고리가 그날 장 시각(market_hours.today)을 다시 읽는 간격(초) — 늦게 여는 날을 알아보려고
 
 _st = {"at": 0.0, "data": None}
 
@@ -70,9 +72,9 @@ def build(proxy, now=None):
     day = proxy._minutes_trade_day()
     live_today = day == now.strftime("%Y%m%d")
     t = market_hours.today(proxy, day=day, now=now)
-    # 늘 「보통 날」 여는 시각(09:00)의 봉 — 재권님 「그건 아침 9시부터 9시 5분인데」(11-11). 숫자는 market_hours 의 usual 한 곳.
-    # 늦게 여는 날(수능 등)은 그 봉이 없어 nodata(「못 셈」) — 「오른 종목 없음」 으로 내지 않는다(개념정의 검수 11-11)
-    bar_hm = t["usual"]["reg"][0]
+    # 그날 여는 시각의 첫 봉 — 보통 날 09:00(재권님 「그건 아침 9시부터 9시 5분인데」 11-11) · 늦게 여는 날(수능)은 그 시각(11-19 「응 해줘」).
+    # 숫자는 market_hours 한 곳. 그 봉이 없으면 nodata(「못 셈」) — 「오른 종목 없음」 으로 내지 않는다(개념정의 검수 11-11)
+    bar_hm = t["reg"][0]
     bar_end = int(bar_hm[:2]) * 60 + int(bar_hm[2:]) + BAR_MIN
     head = {"day": day, "barFrom": "%s:%s" % (bar_hm[:2], bar_hm[2:]), "barTo": "%02d:%02d" % divmod(bar_end, 60)}
     empty = dict(head, rows=[], candidates=None, pending=None, noBar=None, capMissing=None, etfOut=None)
@@ -126,11 +128,11 @@ def fetch(proxy, now=None):
     return _st["data"], _st["at"]
 
 
-_first = {"day": None, "got": 0, "left": None, "at": None, "error": None, "tday": None, "t": None}
+_first = {"day": None, "got": 0, "left": None, "at": None, "error": None, "tday": None, "tat": None, "t": None}
 
 
 def first_status():
-    return {k: v for k, v in _first.items() if k not in ("tday", "t")}
+    return {k: v for k, v in _first.items() if k not in ("tday", "tat", "t")}
 
 
 def _first_once(proxy, now):
@@ -138,16 +140,20 @@ def _first_once(proxy, now):
     day = proxy._minutes_trade_day()
     if day != now.strftime("%Y%m%d"):
         return None
-    bar_hm = market_hours.REG_OPEN                 # 보통 날 여는 시각 — today() 의 usual 과 같은 값(한 곳)
-    bar_end = int(bar_hm[:2]) * 60 + int(bar_hm[2:]) + BAR_MIN
+    import time
     sec = now.hour * 3600 + now.minute * 60 + now.second
-    if sec < bar_end * 60 + FIRST_GRACE_SEC or now.hour * 60 + now.minute >= bar_end + FIRST_UNTIL_MIN:
-        return None                                # 창 밖에서는 장 시각을 묻지 않는다 — 고리가 1초마다 돈다(qa 덧 11-12)
-    if _first.get("tday") != day:                  # 창 안에서 그날 처음 한 번만 묻는다 — 자정에 붙잡으면 그 뒤 고친 장 시각을 못 본다(qa 덧 11-12)
-        _first.update(tday=day, t=market_hours.today(proxy, day=day, now=now))
+    if sec < (int(market_hours.REG_OPEN[:2]) * 60 + int(market_hours.REG_OPEN[2:]) + BAR_MIN) * 60 + FIRST_GRACE_SEC:
+        return None                                # 보통 날 첫 봉 끝 전 — 늦게 여는 날은 그보다 늦으니 장 시각도 안 묻는다(고리가 1초마다 돈다 · qa 덧 11-12)
+    if _first.get("tday") != day or time.time() - (_first.get("tat") or 0) >= T_RECHECK_SEC:
+        # 그날 장 시각 — 자정에 한 번만 붙잡으면 그 뒤 고친 장 시각(수능 공지)을 못 본다(qa 덧 11-12) · T_RECHECK_SEC 마다 다시 읽음
+        _first.update(tday=day, tat=time.time(), t=market_hours.today(proxy, day=day, now=now))
     t = _first["t"]
-    if t["open"] is False or t["reg"][0] != bar_hm:
-        return None                                # 휴장 · 늦게 여는 날(수능 등)은 그 봉이 없다 — 헛호출 안 함(qa 덧 11-12)
+    if t["open"] is False:
+        return None                                # 휴장 — 헛호출 안 함
+    bar_hm = t["reg"][0]                           # 그날 여는 시각 — 늦게 여는 날(수능 10:00)은 그 시각의 첫 봉(11-19 「응 해줘」)
+    bar_end = int(bar_hm[:2]) * 60 + int(bar_hm[2:]) + BAR_MIN
+    if sec < bar_end * 60 + FIRST_GRACE_SEC or now.hour * 60 + now.minute >= bar_end + FIRST_UNTIL_MIN:
+        return None
     uni, _ = _universe(proxy)
     codes = [u["code"] for u in uni if u["cap"] is not None and u["cap"] >= MIN_CAP_EOK]
     todo = [c for c in codes if (proxy._minutes_fresh_upto(c) or 0) < bar_end]

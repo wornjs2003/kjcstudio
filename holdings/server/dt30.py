@@ -17,8 +17,11 @@
                홈 「단타」 칩은 칩 수 → 시가총액이다 — 이 판만 초반상승을 둘째로 둔다
     VI 값     rows[].viPx {at, px, src 「vi」(VI 발동가) | 「1m」(그 분 1분봉 시가)} | null — VI 없음 · 못 잼 · 매수 시점 「VI 발동」 고르기용
                (재권님 「매수 타이밍을 9시1분 과 vi발동 두개를 고를수 있게 해줘. 그것에 맞춰서 차익도 달라지게」 11-18 19:2x · 차익 셈은 화면)
-    09:01 값   rows[].px1 {at "09:01", px, src 「1m」 | 「now」} | null — 첫 1분봉(09:00~09:01) 종가 · 1분봉이 없으면 그때 현재가 · 그것도 없으면 null ·
-               지난 판은 1분봉이 남은 날(11-12 부터)만 읽을 때 채움 — 재권님 「9시 1분 등락도 넣어줘 이쯤 살거니깐」(11-18 19:1x)
+    09:01 값   rows[].px1 {at, px, src 「1m」 | 「now」} | null — 첫 1분봉(여는 시각 ~ +1분) 종가 · 1분봉이 없으면 그때 현재가 · 그것도 없으면 null ·
+               지난 판은 1분봉이 남은 날(11-12 부터)만 읽을 때 채움 — 재권님 「9시 1분 등락도 넣어줘 이쯤 살거니깐」(11-18 19:1x) · meta.px1At
+    N분 뒤 값  rows[].pxMin {"1"~"5": {at, px, src} | null} · meta.pxMinAt {"1": "HH:MM" …} — 정규장 여는 시각 + N분의 값(그 분 1분봉 종가 ·
+               없으면 그때 현재가 src 「now」 · 못 재면 null) · px1 은 pxMin "1" 과 같은 값 — 재권님 「사는 시간도 쓸수있게 해줘 9시 1분~ 5분 사이에 살거야」(11-19 12:2x)
+               늦게 여는 날(수능 10:00)은 여는 시각 + N분(10:01~10:05) — 11-19 「응 해줘」
     수급       rows[].flow {HHMM: {ff, pg, fr, inst, at} | null} — 30분 칸마다 그때 외국계 창구(주) · 프로그램(원) · 외국인 · 기관 추정가집계(주) 순매수를 적어 굳힘 ·
                rows[].flowNow · meta.flowNowAt — 그날 판(안 끝남)은 09:00 뒤 FLOW_NOW_SEC 마다 지금 값 · 못 받은 칸 · 지난 시각은 null(못 잼) — 묶음 ③
     칩 시각    rows[].chipAt {칩: "HH:MM"} — 그 칩이 그날 판의 그 줄에서 처음 보인 시각 — 칩이 생긴 때가 아니라 판이 처음 본 때다(판을 짓는 08:00 ·
@@ -498,6 +501,41 @@ def sort_rows(rows, tab, off=0):
     return "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순"
 
 _live = {"at": 0.0, "pre": None, "data": None, "busy": False}
+LIVE_STALE_SEC = 300         # 가진 목록이 이만큼 넘게 묵었으면 바로 내주지 않고 새로 셀 때까지 기다렸다 답한다(초) — 물음이 한동안 없다가 오면
+                             # 몇십 분 전 목록이 나갔다(11-19 11:29~12:09 물음 0 → 12:10 에 40분 묵은 목록 · 재권님 「응 해줘」 11-19)
+                             # 셈이 수십 초라(11-18 49초) 넘기는 서버의 시간 한도(60초) 안이다
+
+_ext = {"cap": {}, "q": [], "busy": False}   # 순위 목록 밖 종목 시가총액(억원) — {코드: (날, 값 | None)} · 그날 한 번 단건 시세(hts_avls)
+EXT_CAP_GAP_SEC = 0.5        # 한 종목 받고 다음까지 — KIS 예산을 몰아 쓰지 않게
+
+
+def _ext_cap_want(proxy, cfg, codes):
+    """순위 목록 밖 종목의 시가총액 {코드: 억원 | None} — 쥔 것만 바로 내고, 그날 아직 안 받은 것은 뒤에서 받는다(다음 셈부터 보임).
+    못 받으면 그날은 None(「못 잼」 · 0 아님)."""
+    day = _now().strftime("%Y%m%d")
+    got = {c: _ext["cap"][c][1] for c in codes if (_ext["cap"].get(c) or (None,))[0] == day}
+    need = [c for c in codes if c not in got and c not in _ext["q"]]
+    if need:
+        _ext["q"].extend(need)
+        if not _ext["busy"]:
+            _ext["busy"] = True
+
+            def run():
+                try:
+                    while _ext["q"]:
+                        c = _ext["q"].pop(0)
+                        try:
+                            v = (proxy.fetch_price(cfg, c) or {}).get("marketCap")
+                        except Exception:
+                            v = None
+                        _ext["cap"][c] = (_now().strftime("%Y%m%d"), v)
+                        time.sleep(EXT_CAP_GAP_SEC)
+                finally:
+                    _ext["busy"] = False
+
+            threading.Thread(target=run, daemon=True, name="dt-ext-cap").start()
+    return got
+
 _live_lock = threading.Lock()
 _calc_lock = threading.Lock()   # 셈은 한 번에 하나 — 셈이 수십 초 걸려(11-18 19:5x 8765 49초) 동시에 온 물음마다 따로 세면 서로 늦춰 넘기는 서버(8764)가 시간 한도에 걸렸다(창구 잼)
 
@@ -515,14 +553,14 @@ def _live_bg(proxy, cfg):
 
 def live(proxy, cfg, force=False):
     """단타 목록 — 캐시가 LIVE_TTL 을 넘었어도 가진 목록을 바로 내주고 뒤에서 한 번만 다시 센다(meta.at 이 그 목록을 센 때).
-    가진 목록이 없거나(뜬 직후 · 장 전 ↔ 장중이 바뀜) force 면 셈을 기다린다 — 그 사이 다른 셈이 끝났으면 그것을 쓴다."""
+    가진 목록이 없거나(뜬 직후 · 장 전 ↔ 장중이 바뀜) LIVE_STALE_SEC 넘게 묵었거나 force 면 셈을 기다린다 — 그 사이 다른 셈이 끝났으면 그것을 쓴다."""
     ub = getattr(proxy, "upstream_base", None)
     if (ub() if callable(ub) else getattr(proxy, "KIS_UPSTREAM_RAW", "")):
         return _live_calc(proxy, cfg)                  # 넘기는 서버(8764 · 중간 · 세션)는 자기 캐시 없이 상류를 바로 넘긴다 — 낡은 목록을 두 겹으로 쌓지 않게(qa 덧 11-18 · 상류가 이미 바로 답한다)
     now = _now()
     pre = now.hour * 60 + now.minute < OPEN_AT[0] * 60 + OPEN_AT[1] + late_min(proxy, now)
     with _live_lock:
-        if not force and _live["data"] is not None and _live["pre"] == pre:
+        if not force and _live["data"] is not None and _live["pre"] == pre and time.time() - _live["at"] < LIVE_STALE_SEC:
             if time.time() - _live["at"] >= LIVE_TTL and not _live["busy"]:
                 _live["busy"] = True
                 threading.Thread(target=_live_bg, args=(proxy, cfg), daemon=True).start()
@@ -561,6 +599,11 @@ def _live_calc(proxy, cfg):
     ov = {c: g for c, g in hit.items() if g["chips"] & set(OV_CHIPS)}
     prices, _ = proxy.fetch_quotes_multi(cfg, list(ov), max_age=proxy.PRICE_CACHE_TTL) if ov else ({}, {})   # 30종목씩 묶음 · 시세 캐시 함께
     sec = company_profile.sectors()
+    out = [c for c in ov if cap.get(c) is None]            # 순위 목록 밖 — 시가총액은 단건 시세(그날 한 번) · 업종은 회사 정보 채우기에 맡긴다(11-19 「응 해줘」)
+    if out:
+        ext = _ext_cap_want(proxy, cfg, out)
+        cap = dict(cap, **{c: v for c, v in ext.items() if v is not None})
+        company_profile.want_sectors([c for c in out if not sec.get(c)])
     rows = []
     for code, g in ov.items():
         p = prices.get(code) or {}
@@ -1205,7 +1248,17 @@ def days(proxy):
         return []
 
 
-PX1_AT = "0901"              # 「09:01 값」 — 첫 1분봉(09:00~09:01) 종가 · 재권님 「9시 1분 등락도 넣어줘 이쯤 살거니깐」(11-18 19:1x · 시황분석1 창 · 작업우선순위 경유)
+PX_MIN = (1, 2, 3, 4, 5)     # 「개장 N분 뒤 값」(rows[].pxMin) — 재권님 「사는 시간도 쓸수있게 해줘 9시 1분~ 5분 사이에 살거야」(11-19 12:2x) ·
+                             # N=1 이 「09:01 값」(px1 · 재권님 「9시 1분 등락도 넣어줘 이쯤 살거니깐」 11-18 19:1x)
+
+
+def _open_min(proxy, day):
+    """그날 정규장 여는 시각(분) — 보통 날 OPEN_AT · 늦게 여는 날(수능 10:00)은 late_min 만큼 뒤(11-19 「응 해줘」)."""
+    return OPEN_AT[0] * 60 + OPEN_AT[1] + late_min(proxy, day=day)
+
+
+def _hhmm(m):
+    return "%02d:%02d" % divmod(m, 60)
 
 
 def _vipx_fill(proxy, b):
@@ -1256,40 +1309,55 @@ def _vipx_fill(proxy, b):
     return len(got)
 
 
-def _px1_fill(proxy, b):
-    """줄마다 rows[].px1 {at, px, src} — 그날 첫 1분봉 종가(DB candles 1m · src 「1m」). 이미 있으면 그대로 · 없으면 null(0 아님 · 못 잼).
-    그날 판은 고리가 09:02 뒤 한 번 적고(_px1_live) · 지난 판은 1분봉이 남은 날만(11-12 부터) 읽을 때 채운다(저장 안 함)."""
+def _pxmin_fill(proxy, b):
+    """줄마다 rows[].pxMin {"N": {at, px, src 「1m」}} — 여는 시각 + N분의 값 = 그 앞 1분봉(여는 시각 + N − 1 분 봉) 종가(DB candles 1m).
+    이미 있는 칸은 그대로 · 1분봉이 없는 칸은 비워 둔다(null 은 _pxmin_live · board 가 채움). px1 = pxMin "1"(옛 판에 px1 이 있으면 그대로).
+    meta.pxMinAt · px1At 를 적는다. 그날 판은 고리가 분마다 적고(_pxmin_live) · 지난 판은 1분봉이 남은 날만(11-12 부터) 읽을 때 채운다(저장 안 함)."""
     _vipx_fill(proxy, b)
-    need = [r for r in b.get("rows") or [] if not r.get("px1")]
-    if not need:
-        return 0
-    ts = b["day"] + "0900"
+    rows = b.get("rows") or []
+    o = _open_min(proxy, b["day"])
+    at = {str(n): _hhmm(o + n) for n in PX_MIN}
+    b["meta"]["pxMinAt"] = at
+    b["meta"]["px1At"] = at["1"]
+    n_got = 0
     with proxy.db_conn() as conn:
-        q = "SELECT code, close FROM candles WHERE period = '1m' AND ts = ? AND code IN (%s)" % ",".join("?" * len(need))
-        got = dict(conn.execute(q, [ts] + [r["code"] for r in need]).fetchall())
-    at = PX1_AT[:2] + ":" + PX1_AT[2:]
-    n = 0
-    for r in need:
-        v = got.get(r["code"])
-        r["px1"] = {"at": at, "px": v, "src": "1m"} if v else None
-        n += bool(v)
-    return n
+        for n in PX_MIN:
+            k = str(n)
+            need = [r for r in rows if not (r.get("pxMin") or {}).get(k)]
+            if not need:
+                continue
+            ts = b["day"] + _hhmm(o + n - 1).replace(":", "")
+            q = "SELECT code, close FROM candles WHERE period = '1m' AND ts = ? AND code IN (%s)" % ",".join("?" * len(need))
+            got = dict(conn.execute(q, [ts] + [r["code"] for r in need]).fetchall())
+            for r in need:
+                v = got.get(r["code"])
+                if v:
+                    r.setdefault("pxMin", {})[k] = {"at": at[k], "px": v, "src": "1m"}
+                    n_got += 1
+    for r in rows:
+        if not r.get("px1") and (r.get("pxMin") or {}).get("1"):
+            r["px1"] = r["pxMin"]["1"]
+    return n_got
 
 
-def _px1_live(proxy, cfg, b):
-    """그날 판 — 09:02 뒤 첫 1분봉 종가를 적는다 · 1분봉이 없는 종목은 그때 현재가(src 「now」 · 늦음이 NOW_OK_MIN 분 안일 때만)."""
-    _px1_fill(proxy, b)
-    left = [r for r in b["rows"] if not r.get("px1")]
-    m1 = int(PX1_AT[:2]) * 60 + int(PX1_AT[2:])
-    late = _now().hour * 60 + _now().minute - m1
+def _pxmin_live(proxy, cfg, b, n):
+    """그날 판 — 여는 시각 + N분이 지난 뒤 한 번: 1분봉 종가를 적고 · 1분봉이 없는 종목은 그때 현재가(src 「now」 · 늦음이 NOW_OK_MIN 분 안일 때만) ·
+    그것도 없으면 null(못 잼). 그 칸이 적힌 줄(null 포함)은 다시 안 본다 — 새로 든 종목은 다음 바퀴에."""
+    _pxmin_fill(proxy, b)
+    k = str(n)
+    left = [r for r in b["rows"] if not (r.get("pxMin") or {}).get(k)]
+    m = _open_min(proxy, b["day"]) + n
+    late = _now().hour * 60 + _now().minute - m
     if left and late <= NOW_OK_MIN:
         q, _ = proxy.fetch_quotes_multi(cfg, [r["code"] for r in left])
         for r in left:
             p = (q.get(r["code"]) or {}).get("price")
-            r["px1"] = {"at": PX1_AT[:2] + ":" + PX1_AT[2:], "px": p, "src": "now"} if p else None
+            if p:
+                r.setdefault("pxMin", {})[k] = {"at": _hhmm(m), "px": p, "src": "now"}
     for r in b["rows"]:
-        r.setdefault("px1", None)
-    b["meta"]["px1At"] = PX1_AT[:2] + ":" + PX1_AT[2:]
+        r.setdefault("pxMin", {}).setdefault(k, None)
+        if n == 1 and not r.get("px1"):
+            r["px1"] = r["pxMin"]["1"]
 
 
 def board(proxy, day=None, cfg=None):
@@ -1302,8 +1370,12 @@ def board(proxy, day=None, cfg=None):
     b, saved = got
     b["meta"]["savedAt"] = saved
     try:
-        _px1_fill(proxy, b)                            # 09:01 값 — 적힌 것이 없으면 쌓인 1분봉에서(지난 판 · 그날 판 둘 다 · 저장 안 함)
-        b["meta"]["px1At"] = PX1_AT[:2] + ":" + PX1_AT[2:]
+        _pxmin_fill(proxy, b)                          # 여는 시각 + N분 값 · 09:01 값 — 적힌 것이 없으면 쌓인 1분봉에서(지난 판 · 그날 판 둘 다 · 저장 안 함)
+        for r in b.get("rows") or []:
+            r.setdefault("px1", None)
+            pm = r.setdefault("pxMin", {})
+            for n in PX_MIN:
+                pm.setdefault(str(n), None)                # 못 잼 — 0 아님
     except Exception:
         pass
     b.setdefault("closed", True)                       # 옛 판(closed 칸 전) · 되채운 날은 끝난 판
@@ -1397,9 +1469,11 @@ def start(proxy):
                             for t in due:
                                 track(proxy, proxy.load_secrets(), b, t, hm - int(t[:2]) * 60 - int(t[2:]))
                         flow_now = False
-                        if hm >= int(PX1_AT[:2]) * 60 + int(PX1_AT[2:]) + 1 and any("px1" not in r for r in b["rows"]):
-                            _px1_live(proxy, proxy.load_secrets(), b)      # 09:01 값 — 09:02 뒤 한 번(새로 든 종목은 다음 바퀴에)
-                            flow_now = True
+                        o_min = _open_min(proxy, day)
+                        for n in PX_MIN:                   # 여는 시각 + N분 값 — 그 분이 끝난 뒤(+1분) 한 번(새로 든 종목은 다음 바퀴에) · N=1 이 09:01 값
+                            if hm >= o_min + n + 1 and any(str(n) not in (r.get("pxMin") or {}) for r in b["rows"]):
+                                _pxmin_live(proxy, proxy.load_secrets(), b, n)
+                                flow_now = True
                         if not b.get("closed") and hm >= OPEN_AT[0] * 60 + OPEN_AT[1] + off and time.time() - _status.get("flowNow", 0) >= FLOW_NOW_SEC:
                             _status["flowNow"] = time.time()      # 그날 판 줄의 수급 지금 값 — FLOW_NOW_SEC 마다(묶음 ③ · 09:00 뒤)
                             got = flows(proxy, proxy.load_secrets(), [r["code"] for r in b["rows"]])
