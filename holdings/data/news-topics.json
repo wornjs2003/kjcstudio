@@ -185,7 +185,7 @@
     {
       "id": "hani",
       "label": "한겨레",
-      "url": "https://www.hani.co.kr/rss/economy/",
+      "url": "https://www.hani.co.kr/rss/economy",
       "갈래": "(다) 언론",
       "언론사": "028",
       "근거": "네이버 콘텐츠 제휴로 읽힘 — 우리 데이터에 n.news.naver.com/mnews/article/028 기사가 있음(세션 판단 · 네이버 공식 목록 원문은 못 찾음)",
