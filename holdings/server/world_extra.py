@@ -18,13 +18,15 @@ import json
 import threading
 import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import market_index
 from secrets_guard import safe_message
 
 KST = timezone(timedelta(hours=9))
-TIMEOUT = 10
+TIMEOUT = 4                   # 바깥 한 번 부를 때 기다리는 한도(초) — 바이낸스는 여덟 번을 함께 부른다
+WAIT_SEC = 5                  # 부름 하나가 받는 일을 기다리는 한도(초) — 넘으면 앞 값을 낸다
 UA = "Mozilla/5.0 (KJC Holdings)"
 
 #: 받는 간격(초) — 바이낸스는 24시간 실시간이라 짧게 · SKHY 는 해외 지수와 같게(kis_proxy OVERSEAS_TTL) · 유로는 시장지표와 같게
@@ -47,7 +49,8 @@ SOURCES = {
     "eurkrw": "네이버 시장지표(하나은행 고시) · 날마다",
 }
 
-_lock = threading.Lock()
+_lock = threading.Lock()      # _cache · _busy 를 고칠 때만 쥔다 — 받는 동안은 안 쥔다
+_busy = set()                 # 지금 받는 중인 이름
 _cache = {}                   # 이름 → {"at": 받은 시각(초), "data": …, "err": 못 받은 까닭}
 
 
@@ -66,10 +69,12 @@ def _bget(path):
 
 
 def _binance():
+    paths = [q + sym for sym, _ in BINANCE_SYMBOLS for q in ("premiumIndex?symbol=", "ticker/24hr?symbol=")]
+    with ThreadPoolExecutor(len(paths)) as ex:            # 여덟을 함께 — 하나가 막혀도 TIMEOUT 한 번이면 끝난다
+        got = list(ex.map(_bget, paths))
     out = []
-    for sym, name in BINANCE_SYMBOLS:
-        p = _bget("premiumIndex?symbol=" + sym)
-        t = _bget("ticker/24hr?symbol=" + sym)
+    for k, (sym, name) in enumerate(BINANCE_SYMBOLS):
+        p, t = got[2 * k], got[2 * k + 1]
         out.append({"symbol": sym, "name": name, "mark": _num(p.get("markPrice")), "index": _num(p.get("indexPrice")),
                     "last": _num(t.get("lastPrice")), "open24h": _num(t.get("openPrice")),
                     "chgPct24h": _num(t.get("priceChangePercent")), "funding": _num(p.get("lastFundingRate")),
@@ -101,24 +106,40 @@ def _eurkrw():
 _FETCH = {"binance": lambda kp: _binance(), "skhy": _skhy, "eurkrw": lambda kp: _eurkrw()}
 
 
-def _one(name, kp):
-    c = _cache.get(name)
-    if c and time.time() - c["at"] < TTL[name]:
-        return c
+def _fetch(name, kp):
+    """잠금 밖에서 받는다 — 받는 동안 다른 부름은 앞 값을 바로 가져간다(11-19 개념정의 검수 덧 · 잠금 안에서 받으면 바이낸스가 막힐 때 80초 넘게 줄이 섰다)."""
+    prev = _cache.get(name) or {}
     try:
         c = {"at": time.time(), "data": _FETCH[name](kp), "err": None}
     except Exception as e:                      # 못 받으면 앞 값을 두고 까닭만 붙인다
-        prev = c or {}
         c = {"at": time.time(), "data": prev.get("data"), "err": safe_message(e, 120)}
         print(f"[바깥 값] {name} 못 받음 — {c['err']}", flush=True)
-    _cache[name] = c
-    return c
+    with _lock:
+        _cache[name] = c
+        _busy.discard(name)
 
 
 def payload(kp):
-    """kp — 서버 본체 모듈(kis_proxy) · KIS 를 그 길(kis_get · 8765 경유)로 부른다."""
+    """kp — 서버 본체 모듈(kis_proxy) · KIS 를 그 길(kis_get · 8765 경유)로 부른다.
+
+    낡은 것만 받는데, 받는 일은 따로 돌리고 WAIT_SEC 까지만 기다린다 — 그 안에 못 끝나면 앞 값(없으면 빈 값)을 내고
+    받는 일은 뒤에서 마저 끝나 다음 부름에 나온다. 같은 이름을 둘이 함께 받지 않는다(_busy)."""
+    now = time.time()
+    run = []
     with _lock:
-        got = {n: _one(n, kp) for n in _FETCH}
+        for n in _FETCH:
+            c = _cache.get(n)
+            if (not c or now - c["at"] >= TTL[n]) and n not in _busy:
+                _busy.add(n)
+                t = threading.Thread(target=_fetch, args=(n, kp), daemon=True)
+                run.append(t)
+    for t in run:
+        t.start()
+    end = time.time() + WAIT_SEC
+    for t in run:
+        t.join(max(0, end - time.time()))
+    with _lock:
+        got = {n: _cache.get(n) or {"at": now, "data": None, "err": "받는 중"} for n in _FETCH}
     data = {n: got[n]["data"] for n in got}
     data.update(sources=SOURCES,
                 fail={n: got[n]["err"] for n in got if got[n]["err"]},
