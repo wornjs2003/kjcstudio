@@ -75,6 +75,7 @@ import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 
 import good_news       # 「좋은 뉴스」 판정 — 공시마다 갈래 · 방향 · 크기 · 자사주 목적 · 이미 오름 · /api/good-news(2026-11-05 · server/good_news.py)
 import earnings_beat   # 「실적」 칩 — 잠정 영업이익 > 네이버 예상치 · 실적 전망 > 직전 실적 · /api/earnings-beat(2026-11-18 · server/earnings_beat.py)
 import vwap            # VWAP(거래량 가중 평균가) — 국내 분봉에 장마다(장 전 · 정규장 · 장 후) 누적 값 `vwap` 을 붙인다(2026-11-06 · 11-07 구간 바꿈 · server/vwap.py)
+import world_extra     # 우리가 안 받던 바깥 값 셋 — 바이낸스 한국 종목 선물 · 하이닉스 미국 상장분 · 원/유로 · /api/market/world-extra(2026-11-19 · server/world_extra.py)
 import leverage        # 레버리지 지표 — 한국 신용융자 · 미국 개인 빚투 · 헤지펀드 레버리지 · /api/market/leverage(2026-11-17 · server/leverage.py)
 import fear_greed      # 공포·탐욕 지수 — 코스피 · 삼성전자 · SK하이닉스 · /api/market/fear-greed(2026-11-06 · server/fear_greed.py)
 import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스닥 150 중 전일 거래량 급등 · 투자전략 룰로 거르고 줄 세움 · /api/auto-watch(2026-11-05 · server/auto_watch.py)
@@ -9531,8 +9532,8 @@ class Handler(SimpleHTTPRequestHandler):
         재시작 전에 볼 수 있게. 토스처럼 토큰을 끊는 일이 없어 이 폴백은 해가 없다. 응답 `servedBy` 가 어디서 받았나다."""
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/market/"):].strip("/")
-        if route not in ("indicators", "indicator", "materials", "crypto", "us-outlook", "fear-greed", "leverage"):
-            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= · /api/market/materials · /api/market/crypto · /api/market/us-outlook · /api/market/fear-greed?key= · /api/market/leverage 일곱입니다."}, 404)
+        if route not in ("indicators", "indicator", "materials", "crypto", "us-outlook", "fear-greed", "leverage", "world-extra"):
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= · /api/market/materials · /api/market/crypto · /api/market/us-outlook · /api/market/fear-greed?key= · /api/market/leverage · /api/market/world-extra 여덟입니다."}, 404)
             return
         base = upstream_base()
         if base:
@@ -9559,6 +9560,8 @@ class Handler(SimpleHTTPRequestHandler):
             r = crypto.items()
         elif route == "us-outlook":
             r = us_outlook.outlook()
+        elif route == "world-extra":          # 바깥 값 셋(server/world_extra.py) — 셋을 따로 TTL 마다 · 못 받으면 앞 값 + 「못 받음」 · 화면 자리는 아직 없음
+            r = world_extra.payload(sys.modules[__name__])
         elif route == "leverage":             # 레버리지 지표(server/leverage.py) — 바깥 넷을 CACHE_SEC 에 한 번 · 못 받으면 앞 값 + 「못 받음」
             r = leverage.payload()
         elif route == "fear-greed":           # 공포·탐욕 지수(server/fear_greed.py) — key KOSPI · 005930 · 000660 · 일봉 · 쌓인 수급으로 셈 · KIS 를 새로 안 부른다
