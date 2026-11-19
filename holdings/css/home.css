@@ -1121,6 +1121,8 @@
 /* 네이버로 받는 나라 지수(「국외」 갈래 · 2026-11-10) — 나라 색 변수를 새로 두지 않고 한 색으로 */
 .kh-ix-badge.jp, .kh-ix-badge.cn, .kh-ix-badge.tw, .kh-ix-badge.in, .kh-ix-badge.de {
   background: var(--kh-text-secondary); letter-spacing: -0.06em; }
+/* 바이낸스 한국 종목 선물(「국외」 갈래 끝 · 2026-11-19 · components/world-extra.js) — 나라 배지와 같은 한 색 */
+.kh-ix-badge.bn { background: var(--kh-text-secondary); }
 
 /* ── 순위표 더 보기 ── */
 .kh-more {
