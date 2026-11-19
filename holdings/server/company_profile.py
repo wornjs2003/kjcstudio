@@ -312,3 +312,41 @@ def start_sector_fill(get_codes, slow=False):
 
     threading.Thread(target=loop, daemon=True, name="sector-fill").start()
     return True
+
+
+_want = {"q": [], "busy": False}
+
+
+def want_sectors(codes):
+    """순위 목록 밖 종목의 섹터를 뒤에서 받는다(단타 목록에 든 VI · 급등 종목 등 — 위 채우기는 순위 목록만 본다 · 11-19 「응 해줘」).
+    네이버 몫이 낡은 것만 · SECTOR_FILL_SEC 간격 · 부르는 쪽은 기다리지 않는다(다음 sectors() 부터 보임)."""
+    with _lock:
+        st = _load()
+        new = [c for c in codes if re.fullmatch(r"\d{6}", c or "") and c not in _want["q"]
+               and _naver_stale((st.get(c) or {}).get("naver"))]
+    if not new:
+        return 0
+    _want["q"].extend(new)
+    if _want["busy"]:
+        return len(new)
+    _want["busy"] = True
+
+    def run():
+        try:
+            while _want["q"]:
+                c = _want["q"].pop(0)
+                with _lock:
+                    lk = _busy.setdefault(c, threading.Lock())
+                with lk:
+                    with _lock:
+                        rec = dict(_load().get(c) or {})
+                    if _refresh_naver(c, rec):
+                        with _lock:
+                            _load()[c] = rec
+                            _save()
+                time.sleep(SECTOR_FILL_SEC)
+        finally:
+            _want["busy"] = False
+
+    threading.Thread(target=run, daemon=True, name="sector-want").start()
+    return len(new)
