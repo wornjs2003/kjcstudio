@@ -313,7 +313,7 @@ async function wxLoad() {
   let ttl = 0;
   try { const r = await fetch('/api/market/world-extra', { cache: 'no-store' }); const j = r.ok ? await r.json() : null;
     if (j && j.data) { wx.data = j.data; wx.fail = null; } else wx.fail = r.ok ? '빈 값' : r.status;
-    ttl = Number(j && j.meta && j.meta.ttlSec) || 0; }
+    const T = j && j.meta && j.meta.ttlSec; const xs = (T && typeof T === 'object' ? Object.values(T) : [T]).map(Number).filter((x) => x > 0); ttl = xs.length ? Math.min(...xs) : 0; }   // ttlSec 는 이름별 묶음 {binance · skhy · eurkrw} — 가장 짧은 것(홈 world-extra.js 와 같은 셈 · 개념정의 e43ddfd 검수)
   catch (e) { wx.fail = '연결 안 됨'; }   // 지난 값은 지우지 않음
   const el = $('dt-us'); if (el && st.data) el.innerHTML = usHtml(el.dataset.day);
   if (ttl > 0 && root) wx.timer = setTimeout(wxLoad, ttl * 1000);
