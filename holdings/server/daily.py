@@ -460,7 +460,7 @@ from secrets_guard import safe_message
 
 import docstore
 
-KEEP = 10                    # 몇 장까지 쌓나 (2026-09-22 지시 — 「30개는 많고 10개만」)
+KEEP = 20                    # 몇 장까지 쌓나 — 국내 · 미국 데일리 같은 값 (2026-11-19 재권님 「국내랑 미국이랑 20일로 해줘」 · 그 전 09-22 「30개는 많고 10개만」)
 SEND_AT = 16 * 60            # 국내 16:00 (분) — 정규장 15:30 마감 뒤 · 2026-11-07 전에는 07:30
 KR_WEEKDAYS = (0, 1, 2, 3, 4)          # 국내는 평일만(월~금) — 주말에 만들면 금요일 마감을 또 적는다 · 공휴일은 못 가린다
 US_SEND_AT = 7 * 60          # 미국 07:00 (분) — 조용한 시간(22:00~07:00)이 끝나는 때 · 미국 장은 한국 05:00~06:00 에 마감
@@ -519,7 +519,7 @@ def save_today(indices, sectors, issues, schedule=None, now=None, strong=None, n
     보고 싶어도 못 본다 — 이 API 들은 **날짜를 지정해 부를 수 없어**
     그날을 다시 만들 수 없다 (2026-09-22 실측: 날짜 인자 0곳).
 
-    10개면 원본 그대로도 **448KB** 라 추릴 값이 없다 (`market.db` 가 5.2MB).
+    10개면 원본 그대로도 **448KB** 라 추릴 값이 없다 (`market.db` 가 5.2MB · 2026-09-22 잼 — 20개로 늘린 11-19 에는 다시 안 잼).
     """
     name = doc_name(now)
     if docstore.read_doc(name) is not None:
