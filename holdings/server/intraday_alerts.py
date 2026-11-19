@@ -48,7 +48,7 @@ from secrets_guard import safe_message
 
 KST = timezone(timedelta(hours=9))
 
-SEND = {"vi": False, "surge": True}    # VI 끔 — 재권님 「VI 이건 안해도 될거같아」(10-27 · 첫날 10:36 까지 103통). 급등은 켬 — 「둘다 켜」(10-26)
+SEND = {"vi": False, "surge": False}   # VI 끔 — 재권님 「VI 이건 안해도 될거같아」(10-27 · 첫날 10:36 까지 103통). 급등도 끔 — 「볼린저 하단과 금등종목 텔레그램으로 보내는거 꺼줄래?」(11-19 14:4x · 홈 「오늘 VI · 급등」 목록은 그대로) · 그 전 「둘다 켜」(10-26)
 TICK = 10                    # 초. 하루 정규장 2,340바퀴쯤 · VI 는 KIS 초당 0.1 · 급등은 순위 캐시를 탄다
 SESSION_FROM = 9 * 60        # 09:00
 SESSION_TO = 15 * 60 + 30    # 15:30 — 정규장만(재권님 「정규장만」 10-26)
