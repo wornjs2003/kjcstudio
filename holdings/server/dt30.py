@@ -1410,6 +1410,7 @@ SELL_SEND = True             # 켜기 — 아침 상위 TG_TOP 이 꺾이면 「
 SELL_DROP_PCT = 2.0          # 고점 대비 이만큼 내려오면 — 재권님 「30분단위로 대비했을때 가격이 하락한상황이거나 고점대비 2% 하락시로 해줘」(11-19 14:3x)
 SELL_STEP_MIN = 30           # 「30분 전보다 내림」 을 보는 칸 — 정시 30분마다(09:30 · 10:00 …) 그때 값을 전 칸(첫 칸은 산 값 = 개장 1분 값)과 견줌
 SELL_UNTIL_MIN = 10          # 정규장 끝 이 분 전까지만 본다
+_sell = {"day": None, "hi": {}, "chk": {}}   # 「팔 때」 고점 · 30분 칸 값 — 고리가 20초마다 판을 새로 읽어서 판에 두면 저장한 때 값만 남는다(개념정의 걸림 11-19) · 메모리에 두고 새로 걸린 때만 판에 적음
 
 
 def sell_watch(proxy, cfg, b, now=None):
@@ -1428,18 +1429,20 @@ def sell_watch(proxy, cfg, b, now=None):
     if not rows or hm < o + 2 or hm >= close - SELL_UNTIL_MIN:
         return []
     q, _ = proxy.fetch_quotes_multi(cfg, [r["code"] for r in rows], max_age=proxy.PRICE_CACHE_TTL)
+    if _sell["day"] != b["day"]:
+        _sell.update(day=b["day"], hi={}, chk={})
     new = []
     for r in rows:
         p = (q.get(r["code"]) or {}).get("price")
         if not p:
             continue
         buy = r["pxMin"]["1"]["px"]
-        hi = max(v for v in (r.get("sellHi"), buy, p) if v)   # 고점 = 산 값과 그 뒤 본 현재가 중 최고(앞으로 올 값은 안 섞음)
-        r["sellHi"] = hi
+        hi = max(v for v in (_sell["hi"].get(r["code"]), r.get("sellHi"), buy, p) if v)   # 고점 = 산 값과 그 뒤 본 현재가 중 최고(앞으로 올 값은 안 섞음 · 서버가 다시 뜨면 판에 적힌 것부터)
+        _sell["hi"][r["code"]] = hi
         why, ref = None, None
         if p <= hi * (1 - SELL_DROP_PCT / 100):
             why, ref = "고점 대비 -%g%%" % SELL_DROP_PCT, hi
-        chk = r.setdefault("sellChk", {})
+        chk = _sell["chk"].setdefault(r["code"], dict(r.get("sellChk") or {}))
         m = hm // SELL_STEP_MIN * SELL_STEP_MIN             # 정시 칸(09:00 · 09:30 …) — 재권님 「30분단위라 함은 정시로 정해줘. 9시 9시반 이런것처럼」(11-19)
         if m > o + 1:                                       # 산 뒤(개장 1분 값 뒤)의 칸만
             key = "%02d%02d" % divmod(m, 60)
@@ -1451,6 +1454,7 @@ def sell_watch(proxy, cfg, b, now=None):
                     why, ref = "30분 전보다 내림", prev
         if why:
             r["sell"] = {"at": now.strftime("%H:%M"), "px": p, "why": why, "hi": hi, "ref": ref, "buy": buy}
+            r["sellHi"], r["sellChk"] = hi, dict(chk)       # 판에는 걸린 때 한 번 적는다
             new.append(r)
     return new
 
@@ -1581,7 +1585,7 @@ def start(proxy):
                             b["meta"]["tgTop"] = [r["code"] for r in sorted(b["rows"], key=lambda r: r.get("rank") or 1e9)[:TG_TOP]]   # 아침 상위 — 「팔 때」 를 보는 종목(보냄과 무관하게 적음)
                             b["meta"]["tgTopAt"] = _now().strftime("%H:%M")
                             flow_now = True
-                        if not b.get("closed") and b["meta"].get("tgTop"):
+                        if b["meta"].get("tgTop"):           # 판이 굳은 뒤(14:00)에도 정규장 끝 SELL_UNTIL_MIN 분 전까지 본다(sell_watch 가 시각을 가름 · 개념정의 걸림 11-19)
                             for r in sell_watch(proxy, proxy.load_secrets(), b):
                                 flow_now = True
                                 if SELL_SEND:
