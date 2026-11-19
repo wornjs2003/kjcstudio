@@ -1530,7 +1530,7 @@ const SORTS = {
           note: () => jointNote(),
           empty: () => (!jointMeta || jointMeta.pending ? '불러오는 중'
             : jointMeta.listFail ? '못 받음 — 외국인 · 기관 순매수 순위'
-            : '네 칸(①~④)에 드는 종목이 아직 없습니다') },
+            : '네 칸(외·기·연·프 · 외·기·프 · 기·연 · 외국인만)에 드는 종목이 아직 없습니다') },
   /* 프리장 — 넥스트레이드 프리마켓(08:00~08:50)에 프로그램이 몰리는 종목 (2026-11-05 재권님 「프리장에 프로그램 몰리는것 만들어줘.
      이걸 참고해서 매매를 할수있게 다른것들도 같이 챙겨서」 → 안 「응 만들어」). 고르는 것 · 차례 · 굳히는 때는 서버다(server/pre_flow.py)
      — 순위 목록 중 전일 종가보다 오른 종목의 프리장 거래대금 상위(서버 pre_flow.pick · 11-12 재권님 「상승인 종목 70개」) · 보이는 차례는 등락률 큰 순(11-13) · 08:50 에 그날 판으로 굳힘. 화면은 받은 차례 그대로 그린다 */
@@ -1621,7 +1621,7 @@ const SORT_TIPS = {
   up: '오늘 전일 대비 많이 오른 순',
   down: '오늘 전일 대비 많이 내린 순',
   after: `정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 09:00 ~ 15:40 은 비어 있습니다 · ${CAP_MIN_TXT}`,
-  buy: `외국인 · 기관 순매수 금액 상위 30(장중 가집계)에 든 종목을 이 차례로 — ① 외국인 · 기관 · 연기금 · 프로그램 넷 다 ② 외국인 · 기관 · 프로그램 ③ 기관 · 연기금 ④ 외국인만 · 같은 칸 안은 산 금액 합 큰 순\n연기금은 15:45 확정치 뒤에만 있어 장중에는 ② ④ 만 찹니다 · 프로그램은 실시간 · 서버가 판을 다시 지을 때마다 차례가 바뀝니다\n칸에서 빠진 종목은 맨 위에 흐리게 · ${CAP_MIN_TXT}`,
+  buy: `외국인 · 기관 순매수 금액 상위 30(장중 가집계)에 든 종목을 이 차례로 — 외·기·연·프(외국인 · 기관 · 연기금 · 프로그램 넷 다) → 외·기·프(외국인 · 기관 · 프로그램) → 기·연(기관 · 연기금) → 외국인만 · 같은 칸 안은 산 금액 합 큰 순\n연기금은 15:45 확정치 뒤에만 있어 장중에는 외·기·프 · 외국인만 두 칸만 찹니다 · 프로그램은 실시간 · 서버가 판을 다시 지을 때마다 차례가 바뀝니다\n칸에서 빠진 종목은 맨 위에 흐리게 · ${CAP_MIN_TXT}`,
   pre: `넥스트레이드 프리마켓(08:00 ~ 08:50)에 전일 종가보다 오른 종목 중 거래대금 상위(서버가 정한 줄 수) · 차례는 등락률 큰 순\n배율 — 전날 같은 시각까지 거래량 대비(다시 재는 주기 · 빨강 기준은 서버 값 — 배율 위 풍선에)\n프리장 동안 몇 분마다 다시 재고 08:50 에 그날 판으로 굳힙니다 · 줄마다 「프」 는 프로그램 순매수(참고) · ${CAP_MIN_TXT}`,
   nowup: `지금 값이 오늘 시가보다 +${NOW_RISE_PCT}% 이상 높은 종목, 시가 대비 큰 순 · 오른쪽 % 도 시가 대비\n위 코스피 · 코스닥으로 시장을 고릅니다 · ${CAP_MIN_TXT}`,
   vi: `오늘 정규장에 상승 VI 가 걸렸거나(VI 는 ${CAP_MIN_TXT}) 전일 대비 +20% 를 넘은 종목, 최근 것이 위`,
@@ -2094,8 +2094,10 @@ const eokSigned = (won) => { if (won == null) return '—'; const v = Math.round
 /* 한 칸 — 셋의 순매수(억 · 오름 빨강 · 내림 파랑)를 한 줄에(11-05 재권님 「외 기 프 한줄로 해줘」). 13:19 에 표가 순위 칸 밖으로
    밀린 것은 폭이 아니라 시세 갱신이 이 칸을 글자로 넣던 탓이었다(paintOneRow · html). 빠진 종목만 아랫줄 「무엇이 매도로 바뀜 시각」.
    ≈ 는 상위 30 밖이라 그 종목 가집계 수량 × 현재가로 어림한 값(서버 approx) */
-const JOINT_TIER = { 1: ['①', '외국인 · 기관 · 연기금 · 프로그램 넷 다 순매수'], 2: ['②', '외국인 · 기관 · 프로그램 순매수'],
-  3: ['③', '기관 · 연기금 순매수'], 4: ['④', '외국인만 순매수'] };
+/* 보이는 이름은 사는 쪽 줄임(11-19 재권님 「응」 — 단타 판과 같게 · 글자는 Insight strategy-dt30.js SUB_NAME 그대로 옮김 · 그쪽이 안 내보내 한 곳으로 못 합침 — 보드 카드) · 열쇠(서버 tier 1~4)는 그대로 */
+const jointTierTag = (code) => { const t = JOINT_TIER[jointOf(code)?.tier]; return t ? `<b data-tip="${escT(t[1])}">${t[0]}</b> ` : ''; };
+const JOINT_TIER = { 1: ['외·기·연·프', '외국인 · 기관 · 연기금 · 프로그램 넷 다 순매수'], 2: ['외·기·프', '외국인 · 기관 · 프로그램 순매수'],
+  3: ['기·연', '기관 · 연기금 순매수'], 4: ['외국인만', '외국인만 순매수'] };
 function jointCell(code, narrow = false) {
   const r = jointOf(code);
   if (!r) return '—';
@@ -2110,7 +2112,8 @@ function jointCell(code, narrow = false) {
   /* 연 — 연기금 그날 확정치(15:45 뒤 쌓기 · 그 전 「—」 · 언제 채우는지는 표 위 갱신 줄) · 줄마다 시각은 안 넣는다
      (11-06 재권님 「2 안 넣어도 돼 · 갱신시간은 해당 실시간 목록 위에 써주고 종목에는 외 기 프 연 이렇게」) */
   /* 차례 ①~④ — 서버 joint_tier(11-11 재권님 「셋다사는게 가장좋고 그다음이 외국인 기관 그다음이 기관 연기금 그다음이 외국인」) */
-  const tier = JOINT_TIER[r.tier] ? `<b data-tip="${escT(JOINT_TIER[r.tier][1])}">${JOINT_TIER[r.tier][0]}</b> ` : '';
+  /* 홈 순위 줄은 이름표를 첫 줄 가격 왼쪽에 둔다(jointTierTag · 11-19 재권님 「가」 — 둘째 줄에 두면 길어져 종목 이름이 잘렸다) · 순위 모달 칸(narrow)은 여기 그대로 */
+  const tier = narrow ? jointTierTag(code) : '';
   const body = line(`${tier}${[...JOINT_SIDES, ['fund', '연']].map(one).join(' ')}<span class="kh-mut">억</span>`);
   if (!r.flip) return body;
   const why = [(r.sold || []).length ? `${names(r.sold)} 매도로 바뀜` : '', (r.unknown || []).length ? `${names(r.unknown)} 값 모름` : '']
@@ -2979,7 +2982,7 @@ function paintRows(priceMap) {
       <td class="l"><span class="kh-nm">
         ${iconHtml(s)}
         <b data-co="${s.code}">${market === 'THEME' ? escT(s.name) : s.name}</b>${market === 'THEME' ? themeBadge(s.code) : sectorTag(s.code)}</span></td>
-      <td class="kh-num"><span${expectOf(live, sid) ? ` class="${dirClass(live.expect.pct)}" data-tip="${expectTip(live.expect)}"` : ''}
+      <td class="kh-num">${sid === 'buy' ? jointTierTag(s.code) : ''}<span${expectOf(live, sid) ? ` class="${dirClass(live.expect.pct)}" data-tip="${expectTip(live.expect)}"` : ''}
         >${live ? (expectOf(live, sid) ? expectTag(live.expect) : '') + fmtPriceOf(s.code, priceOf(live, sid)) : '···'}</span></td>
       <td class="kh-num kh-metric">${sortCell(s.code, live)}</td>
       <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(pctOf(live, sid)) : '—'}</td>
@@ -3299,7 +3302,7 @@ function paintOneRow(code, live) {
     if (!tr || !live) return;
     const cls = dirClass(pctOf(live));
     const ex = expectOf(live);
-    tr.children[2].innerHTML =
+    tr.children[2].innerHTML = (market !== 'THEME' && sortBy === 'buy' ? jointTierTag(code) : '') +
       `<span${ex ? ` class="${dirClass(ex.pct)}" data-tip="${expectTip(ex)}"` : ''}>${ex ? expectTag(ex) : ''}${fmtPriceOf(code, priceOf(live))}</span>`;   // 예상가는 오르내림 색
     /* 「전일대비」 자리에는 지금 줄 세운 기준값이 온다. 오르내림이 아니라
        크기라서 등락 색을 입히지 않는다. */
