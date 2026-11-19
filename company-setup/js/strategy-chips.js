@@ -9,7 +9,7 @@
 import { signClass, NUM } from '/assets/js/sign.js';
 import { watch } from '/holdings/js/store/longpoll.js';   // 오늘 칩 목록 다시 받기 — 홀딩스 첫 화면과 같은 길(서버 롱폴 · 서버 주기)
 import { chipName } from './strategy-chipname.js';   // 서버 칩 이름 「수급」 → 화면 「자동」 — 바꾸는 표는 그 파일 한 곳
-import { setDtScore, dtChips, VI_SUBS } from './strategy-dt30.js';   // 조건별 점수 — 단타 판과 같은 룰 문서 · 같은 저장 길 · 하위 이름도 그 파일 한 곳
+import { setDtScore, dtChips, VI_SUBS, subName } from './strategy-dt30.js';   // 조건별 점수 — 단타 판과 같은 룰 문서 · 같은 저장 길 · 하위 이름 · 보이는 이름(매수 ①~④ → 사는 쪽)도 그 파일 한 곳
 
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -142,7 +142,7 @@ chips.forEach((c) => c.addEventListener('click', () => show(c.dataset.rule)));
 const DOC = '/api/board/doc/strategy-rules';
 const VI_SUB = VI_SUBS.slice(0, 2);   // 「시각 모름」 은 점수 조건이 아님
 let score = {}, conds = [];
-const condTxt = (k) => k.replace('|', ' ');
+const condTxt = (k) => { const [c, x] = k.split('|'); return x == null ? k : `${c} ${subName(c, x)}`; };   // 열쇠는 그대로 · 글자만(11-19 개념정의 덧)
 async function scoreLoad() { const { j } = await getJson(DOC); const S = j && j.data && j.data.rules && j.data.rules.dt30 && j.data.rules.dt30.score; score = S && typeof S === 'object' ? { ...S } : {}; }
 function scoreBox() {
   let b = $('rl-score'); if (b) return b;
