@@ -162,11 +162,11 @@ def _get(url, timeout=15):
         return body.decode(enc, "replace")
 
 
-_ITEM = re.compile(r"<item>(.*?)</item>", re.S)
+_ITEM = re.compile(r"<item[\s>](.*?)</item>", re.S)     # RSS 1.0(<item rdf:about=…> · 닛케이 · DW)도 — <items> 는 안 걸린다(11-19)
 _TAG = {
     "title": re.compile(r"<title>(.*?)</title>", re.S),
     "link": re.compile(r"<link>(.*?)</link>", re.S),
-    "date": re.compile(r"<pubDate>(.*?)</pubDate>", re.S),
+    "date": re.compile(r"<(?:pubDate|dc:date)>(.*?)</(?:pubDate|dc:date)>", re.S),   # dc:date — 경향 · DW(11-19) · 한겨레 · 닛케이는 시각 칸이 없다
 }
 
 
@@ -193,6 +193,10 @@ def _kst(pubdate):
     try:
         return parsedate_to_datetime(pubdate).astimezone(KST).isoformat(timespec="seconds")
     except Exception:
+        pass
+    try:
+        return datetime.fromisoformat(pubdate.strip().replace("Z", "+00:00")).astimezone(KST).isoformat(timespec="seconds")   # dc:date 는 ISO 꼴
+    except Exception:
         return pubdate
 
 
@@ -214,8 +218,9 @@ def fetch_feed(feed, topics, drop):
         if not title or _dropped(title, drop):
             continue
         topic = pick_topic(title, topics)
-        if not topic and not primary:
+        if not topic and not primary and not foreign:
             continue                                   # (가) 1차 출처는 주제어 없이 받는다 — 영어 제목이라 주제어에 거의 안 걸린다(2026-11-13)
+                                                       # 해외 언론은 옮긴 한국어 제목으로 아래에서 거른다(2026-11-19)
 
         out.append({
             "title": title,
@@ -226,7 +231,21 @@ def fetch_feed(feed, topics, drop):
             "topicLabel": topic.get("label") if topic else None,
         })
     if foreign:
-        out = _korean_titles(out)
+        out = _rescope(_korean_titles(out), topics, drop, primary)
+    return out
+
+
+def _rescope(rows, topics, drop, primary):
+    """해외 줄 — 옮긴 한국어 제목으로 주제 · 버릴 제목을 다시 가른다. 해외 언론((다))은 주제가 없으면 뺀다 · (가) 1차 출처는 남긴다.
+    재권님 「응」(11-19 13:5x) — 해외 언론 열둘은 제목을 다 옮긴 뒤 주제어로 거른다(영어 제목은 주제어에 거의 안 걸려서)."""
+    out = []
+    for r in rows:
+        if _dropped(r["title"], drop):
+            continue
+        t = pick_topic(r["title"], topics)
+        if not t and not primary:
+            continue
+        out.append(dict(r, topic=t.get("id") if t else None, topicLabel=t.get("label") if t else None))
     return out
 
 
@@ -270,7 +289,7 @@ TR_BATCH = 40                     # 한 번에 옮기는 제목 수
 TR_TIMEOUT = 120
 TR_RETRY_SEC = 1800               # 옮기기가 실패하면 이만큼 쉬고 다시 부른다 — 받을 때마다 되풀이해 부르지 않게(qa 덧 11-13)
 TR_BUDGET_USD = "0.5"             # 한 번 부를 때 비용 상한(달러) — 넘으면 claude 가 스스로 멈춘다(claude_chat.BUDGET_USD 와 같은 꼴)
-_tr = {"running": False, "error": None, "last": None, "calls": 0, "failAt": 0.0}
+_tr = {"running": False, "error": None, "last": None, "calls": 0, "failAt": 0.0, "queue": [], "cost": 0.0}
 _tr_lock = threading.Lock()
 
 
@@ -295,24 +314,33 @@ def _tr_kick(titles):
     if not marketdb.writable():
         return
     with _tr_lock:
-        if _tr["running"] or time.time() - _tr["failAt"] < TR_RETRY_SEC:
+        if time.time() - _tr["failAt"] < TR_RETRY_SEC:
+            return
+        have = set(_tr["queue"])                       # 받는 곳마다 따로 불러도 한 줄에 모아 차례로 옮긴다(받는 곳이 열둘로 늘어 · 11-19)
+        _tr["queue"].extend(t for t in dict.fromkeys(titles) if t not in have)
+        if _tr["running"]:
             return
         _tr["running"] = True
-    threading.Thread(target=_tr_run, args=(list(dict.fromkeys(titles)),), daemon=True, name="news-tr").start()
+    threading.Thread(target=_tr_run, daemon=True, name="news-tr").start()
 
 
-def _tr_run(titles):
+def _tr_run():
     import subprocess, claude_chat, news_store
     try:
-        for i in range(0, len(titles), TR_BATCH):
-            part = titles[i:i + TR_BATCH]
-            prompt = ("다음은 해외 중앙은행 발표 제목이다. 자연스러운 한국어 제목으로 옮겨라. 고유명사는 한국어로 쓰되 기관 약칭(ECB 등)은 둬도 된다. "
+        while True:
+            with _tr_lock:
+                part, _tr["queue"] = _tr["queue"][:TR_BATCH], _tr["queue"][TR_BATCH:]
+            if not part:
+                break
+            prompt = ("다음은 해외 중앙은행 발표와 해외 언론 기사의 제목이다. 자연스러운 한국어 제목으로 옮겨라. 고유명사는 한국어로 쓰되 기관 약칭(ECB 등)은 둬도 된다. 한자 · 일본어 글자를 쓰지 말고 한글로만 써라. "
                       "같은 순서 · 같은 개수의 JSON 문자열 배열 하나만 내라. 설명 없이.\n" + json.dumps(part, ensure_ascii=False))
             r = subprocess.run([claude_chat._claude(), "-p", "--model", TR_MODEL, "--tools", "", "--no-session-persistence",
                                 "--settings", claude_chat.SETTINGS, "--output-format", "json", "--max-budget-usd", TR_BUDGET_USD],
                                input=prompt, capture_output=True, text=True, timeout=TR_TIMEOUT, cwd="/tmp")
             _tr["calls"] += 1
-            res = (json.loads(r.stdout).get("result") or "").strip()
+            out = json.loads(r.stdout)
+            _tr["cost"] += float(out.get("total_cost_usd") or 0)     # 지금까지 쓴 돈(서버가 뜬 뒤) — 하루 얼마인지 재는 자리
+            res = (out.get("result") or "").strip()
             res = res[res.find("["): res.rfind("]") + 1]
             ko = json.loads(res)
             if not isinstance(ko, list) or len(ko) != len(part):
@@ -322,6 +350,8 @@ def _tr_run(titles):
     except Exception as e:
         _tr["error"] = safe_message(e, 120)
         _tr["failAt"] = time.time()                     # TR_RETRY_SEC 동안 다시 안 부른다
+        with _tr_lock:
+            _tr["queue"] = []                           # 쉬는 동안 쌓아 두지 않는다 — 다음 받기 때 안 옮긴 것을 다시 모은다
     finally:
         _tr["running"] = False
 
@@ -355,7 +385,9 @@ def fetch_issues():
             except Exception as e:
                 errors[w.get("id") or "?"] = safe_message(e, 90)
         rows.sort(key=lambda r: r.get("at") or "", reverse=True)
-        return {"rows": rows[:MAX_ROWS], "errors": errors or None,
+        # all — 쌓기(news_store.collect_once)용 전부. 화면 rows 는 MAX_ROWS 까지라, 받는 곳이 서른 넘게 늘자(11-19) 자르면 덜 쌓이고
+        # 시각 칸이 없는 곳(한겨레 · 닛케이 — at 이 빈 줄이라 맨 뒤로 감)은 영영 못 쌓인다
+        return {"rows": rows[:MAX_ROWS], "all": rows, "errors": errors or None,
                 "topics": [{"id": t["id"], "label": t["label"],
                             "color": t.get("color")} for t in conf["topics"]]}
 
