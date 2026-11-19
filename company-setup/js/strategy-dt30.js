@@ -177,8 +177,9 @@ async function vdLoad(day) {
   if (!rows) { sum.textContent = j && j.http === 404 ? '서버 주소 아직 없음(404 · 서버 재시작 뒤 생김)' : `못 받음(${j && j.http != null ? j.http : j && j.error ? String(j.error).slice(0, 60) : '—'})`; body.innerHTML = ''; return; }
   if (M.state === '안 받음') { sum.textContent = `${dayTxt(day)} — 아직 안 쌓은 날(서버가 차례로 채움)`; body.innerHTML = ''; return; }
   if (M.state === '못 받음') { sum.textContent = `${dayTxt(day)} — 못 받음${M.error ? `(${M.error})` : ''}`; body.innerHTML = ''; return; }
+  const storeAt = String((M.status && M.status.storeAt) || M.storeAt || '').slice(0, 5);   // 쌓는 시각은 서버 한 곳(meta.status.storeAt · 개념정의 6b02b9e 덧)
   const nIn = rows.filter((x) => x.regular === true).length, nOut = rows.filter((x) => x.regular === false).length;
-  sum.textContent = `${dayTxt(day)} — ${num(rows.length)}건 · 정규장 ${num(nIn)} · 밖 ${num(nOut)}${rows.length - nIn - nOut ? ` · 모름 ${rows.length - nIn - nOut}` : ''}${M.state === '장중 쌓는 중' ? ' · 장중 쌓는 중(20:10 에 그날 것 채움)' : M.state === '종목 채움' ? ' · 전 종목이 아니라 단타 판 종목 · 장중 본 오르는 VI · 끝 30건' : ''}`;
+  sum.textContent = `${dayTxt(day)} — ${num(rows.length)}건 · 정규장 ${num(nIn)} · 밖 ${num(nOut)}${rows.length - nIn - nOut ? ` · 모름 ${rows.length - nIn - nOut}` : ''}${M.state === '장중 쌓는 중' ? ` · 장중 쌓는 중(${storeAt ? `${storeAt} 에 ` : '저녁에 '}그날 것 채움)` : M.state === '종목 채움' ? ` · 전 종목이 아니라 서버가 물은 종목${Number(M.codes) > 0 ? ` ${num(M.codes)}` : ''}(시가총액 순위 · 단타 판 종목) · 장중 본 오르는 VI · 끝 30건` : M.state === '앞쪽 못 받음' ? ' · 하루 끝 30건만 받음 — 이른 시각이 빠졌을 수 있음' : ''}`;
   if (!rows.length) { body.innerHTML = '<div class="st-err">— 이 날 VI 0건</div>'; return; }
   const gap = (x) => { const g = x.kind === '동적' ? x.dynamicGap : x.kind === '정적' ? x.staticGap : [x.staticGap, x.dynamicGap].filter((v) => v != null).sort((a, b) => Math.abs(b) - Math.abs(a))[0];   // 둘 다면 큰 쪽(서버 알림 줄과 같게)
     if (g == null || !Number.isFinite(Number(g))) return '—'; const v = Math.abs(Number(g)); return x.up === true ? pct(v) : x.up === false ? pct(-v) : `${num(v, 2)}%`; };   // 부호는 서버 up(오름 · 내림)으로 · 모르면 부호 없이
