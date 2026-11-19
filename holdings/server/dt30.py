@@ -1406,7 +1406,7 @@ def send_top(proxy, b, head=""):
     return dart.telegram_send(top_text(proxy, b, head=head))
 
 
-SELL_SEND = False            # 켜기 — 아침 상위 TG_TOP 이 꺾이면 「팔 때」 한 통씩(종목마다 한 번) · 켜는 것은 재권님 지시로(하루 약 9통 — 11-12~19 엿새 셈)
+SELL_SEND = True             # 켜기 — 아침 상위 TG_TOP 이 꺾이면 「팔 때」 한 통씩(종목마다 한 번 · 하루 9~10통 — 11-12~19 엿새 셈) · 재권님 「응 해줘」(11-19 14:4x · 시험 한 통 보신 뒤) · 보내는 서버(8765)만
 SELL_DROP_PCT = 2.0          # 고점 대비 이만큼 내려오면 — 재권님 「30분단위로 대비했을때 가격이 하락한상황이거나 고점대비 2% 하락시로 해줘」(11-19 14:3x)
 SELL_STEP_MIN = 30           # 「30분 전보다 내림」 을 보는 칸 — 정시 30분마다(09:30 · 10:00 …) 그때 값을 전 칸(첫 칸은 산 값 = 개장 1분 값)과 견줌
 SELL_UNTIL_MIN = 10          # 정규장 끝 이 분 전까지만 본다
@@ -1576,7 +1576,8 @@ def start(proxy):
                             if hm >= o_min + n + 1 and any(str(n) not in (r.get("pxMin") or {}) for r in b["rows"]):
                                 _pxmin_live(proxy, proxy.load_secrets(), b, n)
                                 flow_now = True
-                        if hm >= o_min + 2 and not b["meta"].get("tgTop") and b["rows"] and not b.get("closed"):
+                        if o_min + 2 <= hm < o_min + 2 + TG_LATE_MIN and not b["meta"].get("tgTop") and b["rows"] and not b.get("closed"):
+                            # 아침 상위는 개장 직후 창 안에서만 정한다 — 서버가 낮에 뜨면 그때 상위로 「팔 때」 를 보내지 않게(그날은 안 봄)
                             b["meta"]["tgTop"] = [r["code"] for r in sorted(b["rows"], key=lambda r: r.get("rank") or 1e9)[:TG_TOP]]   # 아침 상위 — 「팔 때」 를 보는 종목(보냄과 무관하게 적음)
                             b["meta"]["tgTopAt"] = _now().strftime("%H:%M")
                             flow_now = True
