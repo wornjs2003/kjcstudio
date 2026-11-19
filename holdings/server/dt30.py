@@ -1576,7 +1576,8 @@ def start(proxy):
                             if hm >= o_min + n + 1 and any(str(n) not in (r.get("pxMin") or {}) for r in b["rows"]):
                                 _pxmin_live(proxy, proxy.load_secrets(), b, n)
                                 flow_now = True
-                        if hm >= o_min + 2 and not b["meta"].get("tgTop") and b["rows"] and not b.get("closed"):
+                        if o_min + 2 <= hm < o_min + 2 + TG_LATE_MIN and not b["meta"].get("tgTop") and b["rows"] and not b.get("closed"):
+                            # 아침 상위는 개장 직후 창 안에서만 정한다 — 서버가 낮에 뜨면 그때 상위로 「팔 때」 를 보내지 않게(그날은 안 봄)
                             b["meta"]["tgTop"] = [r["code"] for r in sorted(b["rows"], key=lambda r: r.get("rank") or 1e9)[:TG_TOP]]   # 아침 상위 — 「팔 때」 를 보는 종목(보냄과 무관하게 적음)
                             b["meta"]["tgTopAt"] = _now().strftime("%H:%M")
                             flow_now = True
