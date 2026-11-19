@@ -35,6 +35,7 @@ import { mountStockSearch } from './components/stock-search.js';
 import { openSectorModal } from './components/sector-modal.js';
 import { mountFearGreed } from './components/fear-greed.js';
 import { mountLeverage, leverageCell } from './components/leverage.js';
+import { worldExtraCells, loadWorldExtra, stopWorldExtra } from './components/world-extra.js';   // 「국외」 갈래 끝 칸 — 바이낸스 한국 종목 선물 · 하이닉스 나스닥 · 원/유로(11-19 「가」)
 import { mountStockPanel } from './components/stock-panel.js';
 import { mountStockDetail } from './components/stock-detail.js';
 import { mountMobileFold } from './components/mobile-fold.js';
@@ -266,7 +267,7 @@ function paintStrip(indices) {
     }
     return;
   }
-  if (top) patchStrip(top, stripHtml(indices, INDEX_CELLS) + leverageCell());      // 끝에 신용융자 칸(11-18 「나」) · 달라진 조각만 — 국기를 다시 그리지 않는다(index-strip.js patchStrip)
+  if (top) patchStrip(top, stripHtml(indices, INDEX_CELLS) + leverageCell() + worldExtraCells());      // 끝에 신용융자 칸(11-18 「나」) · 그 뒤 「국외」 끝 칸(11-19 「가」) · 달라진 조각만 — 국기를 다시 그리지 않는다(index-strip.js patchStrip)
   paintIxFilter();
 }
 
@@ -328,6 +329,7 @@ function paintIxFilter() {
   [...host.children].forEach((el, i) => {
     const cell = INDEX_CELLS[i];
     if (!cell && el.matches('[data-lev]')) { el.hidden = !(want == null || want.includes('kr')); return; }   // 신용융자 칸 — 홈 · 국내에서만
+    if (!cell && el.matches('[data-wx]')) { el.hidden = ixCat !== OV_CAT; return; }   // 바깥 값 칸 — 「국외」 에서만(11-19 「가」 · 홈 띠는 그대로)
     /* more 칸(네이버 나라 지수)은 「국외」 에서만 — 홈 띠는 전과 같다(index-strip.js INDEX_CELLS 주석) */
     el.hidden = !cell ? true : (want ? !want.includes(ixGroupOf(cell)) : !!cell.more);
     el.classList.toggle('is-on', !!cell && mkKey === IX_KEY + cell.code);      // 큰 차트에 띄운 지수 — 값이 바뀌어 다시 그려도 남게
@@ -352,16 +354,20 @@ function setupCatFilter() {
       leaveMkSide();
       leaveMarket();                                        // 다른 갈래로 — 큰 차트는 종목으로 돌아간다
       const top = $('kh-top-ix');
-      if (top && lastIndices) top.innerHTML = stripHtml(lastIndices, INDEX_CELLS);
+      if (top && lastIndices) top.innerHTML = stripHtml(lastIndices, INDEX_CELLS) + leverageCell() + worldExtraCells();
     }
     /* 「국외」 · 「시장 흐름」 을 누르면 큰 차트가 그 갈래 첫 칸으로 — 국외는 첫 지수 · 시장 흐름은 첫 칩
        (2026-11-10 재권님 「국외랑 시장흐름 클릭했을때 해당 관련 종목이 차트에 보여지게」 → 안에 「응 그렇게 해줘」).
        다른 갈래로 나가면 종목 차트로 돌아간다(시장 흐름과 같은 길) */
     if (was === OV_CAT && ixCat !== OV_CAT && ixCat !== MK_CAT) leaveMarket();
+    if (was === OV_CAT && ixCat !== OV_CAT) stopWorldExtra();
     paintIxFilter();
     paintHeatmap();
     syncMarketGroup();
     if (ixCat === OV_CAT && was !== OV_CAT) {
+      /* 바깥 값 칸은 「국외」 를 보는 동안만 받는다 — 받으면 띠를 다시 그린다(components/world-extra.js) */
+      loadWorldExtra(() => { const t = $('kh-top-ix'); if (t && lastIndices && ixCat === OV_CAT) { patchStrip(t, stripHtml(lastIndices, INDEX_CELLS) + leverageCell() + worldExtraCells()); paintIxFilter(); } },
+        () => ixCat === OV_CAT);
       const first = INDEX_CELLS.find((c) => ixGroupOf(c) === 'ov');
       if (first) showMarket(IX_KEY + first.code);
     }
