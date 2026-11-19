@@ -44,6 +44,7 @@ FUT_AT, FUT_UNTIL = (6, 1), (6, 30)
 TOP_N = 20                      # 날마다 오름 · 내림 각 몇 종목 — 시황분석 시안 「장외 오름 · 내림 각 20」
 DAYS_MAX = 20
 FUTS = (("kospi200", "10100000"), ("kosdaq150", "10600000"))
+FUT_RETRY_SEC = 120             # 06:01~06:29 야간선물 받기가 하나라도 실패하면 이만큼 뒤 다시 — 창 안에서 많아야 열네 번 · 한 번에 KIS 2건
 TICK = 30
 
 _SCHEMA = (
@@ -190,11 +191,25 @@ def save_futures(proxy, day):
                          proxy._num(o.get("futs_prpr")), proxy._num(o.get("futs_prdy_ctrt")), stamp))
         except Exception as e:
             _status["error"] = "야간선물 %s: %s" % (which, safe_message(e, 100))
+            print("  [넥장 보드] %s" % _status["error"], flush=True)      # 상태값만 두면 재시작에 사라진다(2026-11-19)
     if rows:
         with proxy._db_lock, proxy.db_conn() as conn:
             conn.executemany("INSERT OR REPLACE INTO nxt_fut (day, which, name, last, pct, saved_at) VALUES (?,?,?,?,?,?)", rows)
-    _status.update(futDay=day, futAt=stamp)
+    _status.update(futAt=stamp)         # futDay 는 바퀴가 둘 다 받았을 때만 적는다 — 여기서 적으면 실패해도 그날이 끝난다
     return len(rows)
+
+
+def latest_futures_or_fetch(proxy):
+    """07:00 미국 데일리용 — 오늘 06:01 저장분이 없으면 한 번 더 받아 저장하고 읽는다 (2026-11-19 — 06:01 이 KIS 오류로 둘 다
+    실패해 저장본에 야간선물이 빠졌다). 정규장 전이라 KIS 야간선물 시세는 아직 지난밤 마감값이다."""
+    got = latest_futures(proxy)
+    if got and len(got.get("rows") or {}) >= len(FUTS):
+        return got
+    try:
+        save_futures(proxy, _prev_weekday(_now()).strftime("%Y%m%d"))
+    except Exception as e:
+        print("  [넥장 보드] 야간선물 07:00 다시 받기 실패: %s" % type(e).__name__, flush=True)
+    return latest_futures(proxy) or got
 
 
 def latest_futures(proxy):
@@ -339,11 +354,15 @@ def start(proxy):
                         _status["error"] = safe_message(e, 160)
                         print("  [넥장 보드] 장외 저장 실패: %s" % type(e).__name__)
                 fday = _prev_weekday(now).strftime("%Y%m%d")
-                if 1 <= now.weekday() <= 5 and FUT_AT <= hm < FUT_UNTIL and _status["futDay"] != fday:
-                    _status["futDay"] = fday             # 화~토 아침 = 월~금 밤 야간장
+                if (1 <= now.weekday() <= 5 and FUT_AT <= hm < FUT_UNTIL and _status["futDay"] != fday
+                        and time.time() >= _status.get("futRetryAt", 0)):
                     try:
-                        save_futures(proxy, fday)
+                        if save_futures(proxy, fday) >= len(FUTS):
+                            _status["futDay"] = fday     # 화~토 아침 = 월~금 밤 야간장 · 둘 다 받았을 때만 그날 끝(2026-11-19 — 실패하면 FUT_RETRY_SEC 뒤 다시)
+                        else:
+                            _status["futRetryAt"] = time.time() + FUT_RETRY_SEC
                     except Exception as e:
+                        _status["futRetryAt"] = time.time() + FUT_RETRY_SEC
                         _status["error"] = safe_message(e, 160)
                         print("  [넥장 보드] 야간선물 저장 실패: %s" % type(e).__name__)
             except Exception as e:

@@ -158,8 +158,10 @@ def _pick(code, pat, indices):
 
 def _index_line(code, label, pat, indices):
     x = _pick(code, pat, indices)
-    if not x or x.get("value") is None:
+    if not x:
         return None
+    if x.get("value") is None:      # 받으려다 못 받은 줄(start_us_daily 가 error 로 남김 · 2026-11-19) — 빼지 않고 적는다
+        return f"{label} 못 받음"
     ch = x.get("change")
     try:
         c = float(ch) if ch is not None else 0.0
@@ -668,6 +670,33 @@ def _loop(once, name, label):
     threading.Thread(target=loop, daemon=True, name=name).start()
 
 
+US_INDEX_RETRY = 3          # 07:00 지수 받기에서 실패한 것을 몇 번 더 받나 — 받은 것은 서버 캐시에 남아 실패한 것만 다시 나간다
+US_INDEX_RETRY_SEC = 20     # 다시 받기 사이(초)
+
+
+def _us_indices(get_indices):
+    """07:00 지수 — `get_indices()` 가 (줄, {code: 오류}) 를 준다. 실패가 있으면 몇 번 더 받고, 끝내 못 받은 것은
+    줄을 지우지 않고 {code, name, value: None, error} 로 남긴다 (2026-11-19 — 반도체 · VIX · 유로STOXX · 코스닥150 이
+    통째로 빠져 화면 「어제 미국장」 이 빈칸이었다 · 재권님 「응」). 옛 모양(줄 목록만)도 받는다."""
+    got = get_indices()
+    rows, errs = got if isinstance(got, tuple) else (got, {})
+    for _ in range(US_INDEX_RETRY):
+        if not errs:
+            break
+        print("미국 데일리 지수 못 받음 %d개(%s) — %d초 뒤 다시" % (len(errs), ", ".join(sorted(errs)), US_INDEX_RETRY_SEC), flush=True)
+        time.sleep(US_INDEX_RETRY_SEC)
+        got = get_indices()
+        rows, errs = got if isinstance(got, tuple) else (got, {})
+    rows = list(rows or [])
+    names = {c: label for c, label, _pat in INDEX_ROWS}
+    have = {r.get("code") for r in rows}
+    for code, err in sorted((errs or {}).items()):
+        if code not in have:
+            rows.append({"code": code, "name": names.get(code, code), "value": None, "change": None, "changePct": None,
+                         "error": safe_message(err, 160) if err else "못 받음"})
+    return rows
+
+
 def start_us_daily(get_indices, get_night=None, peek_overnight=None, clear_overnight=None, send=None, keep=KEEP, us_close=None):
     """07:00 미국 데일리 루프 — `kis_proxy` 가 국내 것 옆에 한 줄로 부른다.
 
@@ -682,7 +711,7 @@ def start_us_daily(get_indices, get_night=None, peek_overnight=None, clear_overn
         name = us_doc_name(now)
         if docstore.read_doc(name) is not None:
             return
-        indices = get_indices()
+        indices = _us_indices(get_indices)
         if us_close:
             # 다우 · 러셀 2000 · 미국 10년 · 달러인덱스 — 못 받으면 그 줄 값이 null(us_close.py · 2026-11-18)
             try:
@@ -695,6 +724,8 @@ def start_us_daily(get_indices, get_night=None, peek_overnight=None, clear_overn
                 night = get_night()
             except Exception as e:
                 print("미국 데일리 야간선물 못 읽음 — %s: %s" % (type(e).__name__, safe_message(e)), flush=True)
+            if not night:       # 06:01 저장도 07:00 다시 받기도 못 함 — 칸을 비우지 않고 까닭을 남긴다(화면 · 글이 「못 받음」)
+                night = {"day": None, "rows": {}, "error": "야간선물 못 받음(06:01 저장 · 07:00 다시 받기 둘 다)"}
         overnight = peek_overnight() if peek_overnight else None
         data = {
             "date": now.strftime("%Y-%m-%d"),
