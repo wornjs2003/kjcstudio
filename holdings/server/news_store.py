@@ -913,7 +913,7 @@ def collect_once(send=None):
     """
     import news
     got = news.fetch_issues()
-    added = store(got.get("rows") or [])
+    added = store(got.get("all") or got.get("rows") or [])   # all — 화면 몫으로 자르기 전 전부(11-19 · news.fetch_issues)
     purge_old()
     ko_backfill()
     alerted = send_alerts(send)
