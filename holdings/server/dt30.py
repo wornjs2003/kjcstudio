@@ -91,13 +91,14 @@ def _now():
 _late = {"day": None, "at": 0.0, "min": 0}
 
 
-def late_min(proxy, now=None):
+def late_min(proxy, now=None, day=None):
     """그날 정규장이 보통 날보다 몇 분 늦게 여나 — 0 보통 · 수능(10:00)이면 60. market_hours 표 한 곳 · 못 읽으면 0(보통 날로 본다) · 5분 둘레로 다시 읽음.
     늦게 여는 날은 판의 정규장 시각들(OPEN_AT · OUT_FROM · BUY_LATE · 값 적는 시각)을 그만큼 뒤로 민다 —
     재권님 「가로 해줘」(11-19 08:3x · (가) 1시간 미룸 — 매수가 10:00 시가). BUY_AT(판 짓기 08:00) · 지난 날 다시 세기(PAST_*)는 그대로."""
     now = now or _now()
-    day = now.strftime("%Y%m%d")
-    if _late["day"] == day and time.time() - _late["at"] < 300:
+    other = day is not None and day != now.strftime("%Y%m%d")     # 지난 날(다시 세기) — 그날 표를 읽고 캐시는 안 씀
+    day = day or now.strftime("%Y%m%d")
+    if not other and _late["day"] == day and time.time() - _late["at"] < 300:
         return _late["min"]
     m = 0
     try:
@@ -108,7 +109,8 @@ def late_min(proxy, now=None):
             m = max(0, (int(a[:2]) * 60 + int(a[2:])) - (int(u[:2]) * 60 + int(u[2:])))
     except Exception:
         m = 0
-    _late.update(day=day, at=time.time(), min=m)
+    if not other:
+        _late.update(day=day, at=time.time(), min=m)
     return m
 
 
@@ -1074,12 +1076,13 @@ def rebuild(proxy, day, prev, cfg=None):
                      "viAt": g.get("viAt"), "surgeAt": g.get("surgeAt"), "surgeApprox": g.get("surgeApprox"), "viPx": g.get("viPx"),
                      "px": px, "pxSrc": src})
     tab = score_table(proxy)
-    order = sort_rows(rows, tab)
+    off = late_min(proxy, day=day)                     # 그날 늦게 열었으면 VI·급등 나누는 시각도 그만큼 뒤(개념정의 덧 11-19 — 그날 판과 같게)
+    order = sort_rows(rows, tab, off)
     rows = rows[:TOP_N]
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % PAST_BUY_AT, "times": times(), "rows": rows, "closed": True,
-            "meta": {"rebuilt": True, "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": DROP_BELOW_PCT,
+            "meta": {"rebuilt": True, "viSplit": vi_split(off), "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": DROP_BELOW_PCT,
                      "watchSrc": watch_src, "rules": chip_rules(proxy, merged=False), "viUntil": "%02d:%02d" % PAST_LATE, "approxBase": approx_base,
                      "capMinEok": CAP_MIN_EOK, "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 · 수급은 그날 09:01 직전 관심 목록(watchSrc 기록 · 없으면 관심 못 받음 · 수급 어림) · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
