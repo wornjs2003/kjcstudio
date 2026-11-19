@@ -135,6 +135,8 @@ def init():
         cols = {r[1] for r in c.execute("PRAGMA table_info(news_items)")}
         if "title_orig" not in cols:
             c.execute("ALTER TABLE news_items ADD COLUMN title_orig TEXT")   # 옮긴 제목의 원문(영어 등) — 없으면 제목이 원문
+        if "office_id" not in cols:
+            c.execute("ALTER TABLE news_items ADD COLUMN office_id TEXT")    # 찾는 길(네이버)로 온 기사의 네이버 언론사 번호 — 목록 (다) 안 · 밖은 이것으로 그때 셈(news.press_tally · 11-19 개념정의 덧)
 
 
 # ---------------------------------------------------------------- 묶기
@@ -252,10 +254,10 @@ def store(rows):
 
             c.execute("""INSERT INTO news_items
                 (link, title, source, topic, topic_label, at, at_ts,
-                 group_id, is_lead, alert, seen_at, title_orig)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                 group_id, is_lead, alert, seen_at, title_orig, office_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                       (link, title, row.get("source"), row.get("topic"),
-                       row.get("topicLabel"), at, at_ts, gid, is_lead, alert, now, row.get("titleOrig")))
+                       row.get("topicLabel"), at, at_ts, gid, is_lead, alert, now, row.get("titleOrig"), row.get("officeId")))
             added.append({"link": link, "title": title, "at": at,
                           "source": row.get("source"), "topic": row.get("topic"),
                           "topicLabel": row.get("topicLabel"),
