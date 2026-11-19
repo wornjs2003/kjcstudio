@@ -157,7 +157,8 @@ async function viLoad(day) {
 }
 // 그날 VI 목록 (11-19 재권님 「vi급등 지난것들 정보 받을수 있나? 발등한것과 발등조건 발등시간」 → 「응 해줘」) — 날짜를 고르면 그날 VI 발동 전부
 //   값은 서버 /api/kis/vi-day?day=(개발2 019b957 · 평일 20:10 그날 것 · 지난 120일 되채움) 한 곳 · 화면은 받은 대로 그린다
-//   meta.state 「안 받음」(아직 안 쌓은 날) · 「못 받음」 · 「앞쪽 못 받음」 은 「0건」 과 가른다(0 으로 안 냄) · 지난 날 「전부」 는 한 번 받아 둠(굳은 값)
+//   meta.state 「안 받음」(아직 안 쌓은 날) · 「못 받음」 은 「0건」 과 가른다(0 으로 안 냄) · 「장중 쌓는 중」(오늘 20:10 전) · 「종목 채움」(지난 날 굳은 값 — 한 번 받아 둠)
+//   KIS 가 전 시장은 하루 끝 30건만 줘서 서버가 셋(장중 본 오르는 VI · 그날 단타 판 종목 · 끝 30건)으로 모음(개발2 32e4358) — 전 종목 다는 아님을 머리 줄에 적음
 const vdCache = {};
 let vdSeq = 0;
 async function vdLoad(day) {
@@ -169,7 +170,7 @@ async function vdLoad(day) {
     try { const r = await fetch(`/api/kis/vi-day?day=${encodeURIComponent(day)}`, { cache: 'no-store' }); j = r.ok ? await r.json() : { http: r.status }; }
     catch (e) { j = { http: '연결 안 됨' }; }
     if (my !== vdSeq) return;
-    const M = (j && j.meta) || {}; if (M.state === '전부' && st.days && day !== st.days[0]) vdCache[day] = j;
+    const M = (j && j.meta) || {}; if (M.state === '종목 채움' && st.days && day !== st.days[0]) vdCache[day] = j;
   }
   if (!st.data || st.data.day !== day) return;
   const M = (j && j.meta) || {}, rows = Array.isArray(j && j.data) ? j.data : null;
@@ -177,7 +178,7 @@ async function vdLoad(day) {
   if (M.state === '안 받음') { sum.textContent = `${dayTxt(day)} — 아직 안 쌓은 날(서버가 차례로 채움)`; body.innerHTML = ''; return; }
   if (M.state === '못 받음') { sum.textContent = `${dayTxt(day)} — 못 받음${M.error ? `(${M.error})` : ''}`; body.innerHTML = ''; return; }
   const nIn = rows.filter((x) => x.regular === true).length, nOut = rows.filter((x) => x.regular === false).length;
-  sum.textContent = `${dayTxt(day)} — ${num(rows.length)}건 · 정규장 ${num(nIn)} · 밖 ${num(nOut)}${rows.length - nIn - nOut ? ` · 모름 ${rows.length - nIn - nOut}` : ''}${M.state === '앞쪽 못 받음' ? ' · 이른 시각 일부 빠졌을 수 있음' : ''}`;
+  sum.textContent = `${dayTxt(day)} — ${num(rows.length)}건 · 정규장 ${num(nIn)} · 밖 ${num(nOut)}${rows.length - nIn - nOut ? ` · 모름 ${rows.length - nIn - nOut}` : ''}${M.state === '장중 쌓는 중' ? ' · 장중 쌓는 중(20:10 에 그날 것 채움)' : M.state === '종목 채움' ? ' · 전 종목이 아니라 단타 판 종목 · 장중 본 오르는 VI · 끝 30건' : ''}`;
   if (!rows.length) { body.innerHTML = '<div class="st-err">— 이 날 VI 0건</div>'; return; }
   const gap = (x) => { const g = x.kind === '동적' ? x.dynamicGap : x.kind === '정적' ? x.staticGap : [x.staticGap, x.dynamicGap].filter((v) => v != null).sort((a, b) => Math.abs(b) - Math.abs(a))[0];   // 둘 다면 큰 쪽(서버 알림 줄과 같게)
     if (g == null || !Number.isFinite(Number(g))) return '—'; const v = Math.abs(Number(g)); return x.up === true ? pct(v) : x.up === false ? pct(-v) : `${num(v, 2)}%`; };   // 부호는 서버 up(오름 · 내림)으로 · 모르면 부호 없이
