@@ -1364,6 +1364,48 @@ def _pxmin_live(proxy, cfg, b, n):
             r["px1"] = r["pxMin"]["1"]
 
 
+TG_TOP = 10                  # 텔레그램으로 보내는 상위 종목 수 — 재권님 「단타 목록 상위 10개가 최초로 볼수있는 시간이 어떻게 되지? 그걸 바로 텔레그램으로 보내고 싶은데」 → 「나」(개장 1분 뒤 · 11-19 13:5x)
+TG_SEND = False              # 켜기 — 그날 판 상위 TG_TOP 을 개장 1분 값이 적힌 뒤 하루 한 통 · 켜는 것은 재권님 지시로(11-19 시험 한 통만 보냄)
+TG_LATE_MIN = 10             # 개장 1분 값 뒤 이 분 안에서만 보낸다 — 서버가 늦게 뜬 날 묵은 차례를 보내지 않게
+TG_PAGE = "/company-setup/strategy.html"   # 단타 판 화면 — 링크는 dart.MAIN_URL + 이 경로(「알림 글의 링크는 메인 주소 한 곳에서」)
+
+
+def top_text(proxy, b, n=TG_TOP, head=""):
+    """그날 판 상위 n 줄을 텔레그램 글로 — 머리(날짜 · 개장 1분 시각 · 못 받은 칩) · 종목마다 한 줄(차례 · 이름 · 점수 · 칩 · 시가 대비) · 끝에 단타 판 링크.
+    차례는 판의 rank(점수 합 큰 순) 그대로 · 점수는 지금 점수표로 셈(없으면 칩 수) · 시가 대비는 개장 1분 값(pxMin "1") ÷ 여는 시각 1분봉 시가 − 1(없으면 「—」 · 0 아님)."""
+    _pxmin_fill(proxy, b)
+    rows = sorted(b.get("rows") or [], key=lambda r: r.get("rank") or 1e9)[:n]
+    tab = score_table(proxy)
+    off = (b.get("meta") or {}).get("lateMin")
+    off = off if isinstance(off, int) else late_min(proxy, day=b["day"])
+    at = (b.get("meta") or {}).get("px1At") or ""
+    lines = ["%s📈 단타 상위 %d · %s-%s %s" % (head, len(rows), b["day"][4:6], b["day"][6:8], at)]
+    miss = [c for c in (b.get("meta") or {}).get("missing") or [] if c != "매수어림"]
+    if miss:
+        lines.append("아직 못 받은 칩: " + " · ".join(miss))
+    ts = b["day"] + _hhmm(_open_min(proxy, b["day"], b)).replace(":", "")
+    with proxy.db_conn() as conn:                      # 정규장 시가 = 여는 시각 1분봉 시가(시세의 시가는 장 전 값이 섞일 수 있다 · 11-19 CJ ENM 47,000 ↔ 10:00 봉 42,150)
+        q = "SELECT code, open FROM candles WHERE period = '1m' AND ts = ? AND code IN (%s)" % ",".join("?" * len(rows))
+        o1 = dict(conn.execute(q, [ts] + [r["code"] for r in rows]).fetchall()) if rows else {}
+    for i, r in enumerate(rows):
+        p1 = ((r.get("pxMin") or {}).get("1") or {}).get("px")
+        o = o1.get(r["code"])
+        pct = "%+.1f%%" % ((p1 / o - 1) * 100) if p1 and o else "—"
+        sc = row_score(r, tab, off) if tab else None
+        lines.append("%d. %s(%s) %s · %s · 시가 대비 %s" % (
+            i + 1, r.get("name") or "", r.get("code"), ("%g점" % sc) if sc is not None else "%d칩" % (r.get("n") or 0),
+            " ".join(r.get("chips") or []) or "칩 없음", pct))
+    if not rows:
+        lines.append("든 종목 없음")
+    lines.append("단타 판 › %s%s" % (dart.MAIN_URL, TG_PAGE))
+    return "\n".join(lines)
+
+
+def send_top(proxy, b, head=""):
+    """top_text 를 보낸다 → (보냄?, 까닭). 보내는 자리는 dart.telegram_send 하나(보내는 서버만 · 조용한 시간 · 기록)."""
+    return dart.telegram_send(top_text(proxy, b, head=head))
+
+
 def board(proxy, day=None, cfg=None):
     """주소 /api/kis/dt30 의 data — 남긴 날만(없으면 None). 안 끝난 그날 판이면 rows[].now · nowAt 을 붙인다(cfg 를 줄 때)."""
     ds = days(proxy)
@@ -1478,6 +1520,10 @@ def start(proxy):
                             if hm >= o_min + n + 1 and any(str(n) not in (r.get("pxMin") or {}) for r in b["rows"]):
                                 _pxmin_live(proxy, proxy.load_secrets(), b, n)
                                 flow_now = True
+                        if TG_SEND and _status.get("tg") != day and o_min + 2 <= hm < o_min + 2 + TG_LATE_MIN and b["rows"]:
+                            _status["tg"] = day            # 하루 한 통 — 실패해도 다시 안 보낸다(앞 통이 갔을 수 있다)
+                            ok, why = send_top(proxy, b)
+                            print("  [단타 30] 상위 %d 텔레그램 %s" % (TG_TOP, "보냄" if ok else "못 보냄 — " + str(why)), flush=True)
                         if not b.get("closed") and hm >= OPEN_AT[0] * 60 + OPEN_AT[1] + off and time.time() - _status.get("flowNow", 0) >= FLOW_NOW_SEC:
                             _status["flowNow"] = time.time()      # 그날 판 줄의 수급 지금 값 — FLOW_NOW_SEC 마다(묶음 ③ · 09:00 뒤)
                             got = flows(proxy, proxy.load_secrets(), [r["code"] for r in b["rows"]])
