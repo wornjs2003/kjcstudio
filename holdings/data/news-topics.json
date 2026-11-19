@@ -145,6 +145,18 @@
         "들인날": "2026-10-01(9beb6f2)",
         "근거": "네이버 증권 뉴스 화면이 부르는 주소 · 기사마다 언론사 번호(officeId)가 온다 — 가리는 것은 시황분석 몫(그 도구)",
         "지시한날": "2026-11-03 「가」 · 「나」 · 처음 들인 것은 2026-10-01 「네이버에 있는거 가져와서 그냥 채워만 놓으면 됨」"
+      },
+      {
+        "id": "naver-focus",
+        "label": "네이버 증권 시황·전망",
+        "갈래": "찾는 길",
+        "url": "https://stock.naver.com/api/domestic/news/focus?sid=<칸>&date=<YYYYMMDD>&page=1&pageSize=<수> (화면 https://stock.naver.com/news/section?tab=market-outlook)",
+        "칸": ["401"],
+        "칸뜻": "401 시황·전망 · 같은 틀 402 기업·종목분석 · 403 해외증시 · 404 채권·선물 · 406 공시·메모 · 429 환율(안 받음 — 더하려면 칸에 넣는다)",
+        "쓰는곳": "holdings/server/news.py 의 fetch_focus → fetch_issues(서버가 다른 뉴스와 함께 쌓음 · 뉴스 분석 원천) · 기사 source 는 낸 언론사 이름",
+        "들인날": "2026-11-19",
+        "근거": "네이버 증권 뉴스 포커스 화면이 부르는 주소 · 기사마다 언론사 번호(officeID)가 온다 — 2026-11-19 09:2x 11-18 기사로 잼 · 주제어 거르기 없이 받음(시황 기사라)",
+        "지시한날": "2026-11-19 재권님 「https://stock.naver.com/news/section?tab=market-outlook 네이버도 추가해」 → 「가」(서버가 받아 쌓기)"
       }
     ]
   },
