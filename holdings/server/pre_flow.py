@@ -316,7 +316,8 @@ def sector_board(proxy, cfg):
     except Exception as e:
         sec, out["sectorError"] = None, "섹터 표 못 읽음: %s" % type(e).__name__
     if not sec:                                   # 표를 못 읽음 · 비었음 — 전부 「모름」 한 줄로 보내지 않고 「못 쟀다」 로 따로(창구 검수 덧 11-20)
-        out.setdefault("sectorError", "섹터 표가 비었음")
+        if not out["sectorError"]:
+            out["sectorError"] = "섹터 표가 비었음"     # out 에 sectorError 칸이 처음부터 None 으로 있어 setdefault 는 안 든다(개념정의 검수 11-20)
         return out
     groups = {}
     for r in rows:
