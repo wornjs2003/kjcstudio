@@ -36,7 +36,7 @@ DAYS_DEFAULT = 30
 TICK = 60                    # 끝난 판을 보는 간격(초)
 RISE_CHIP = "현재상승"
 TAX = {"KOSPI": {"tx": 0.05, "rural": 0.15}, "KOSDAQ": {"tx": 0.20, "rural": 0.0}}   # % · 2026 세율(KB증권 「2026년 증권거래세율 변경 안내」) · 한 곳 — 단타 판 화면은 dt30 판 meta.tax 로 받음 · 단타 판에서 못 바꿈(재권님 11-20 14:09)
-VER = "v6"                   # 쌓는 줄 모양이 바뀌면 올린다 — 옛 줄을 다시 쌓는다(v2 · 시장 칸 · v3 · 11-18 전 판 칩 이름 옮김 · v4 · 칩 둘 이상만 · v5 · 칩 붙은 시각 chipAt · subAt · buyAt · lockAt 11-20 · v6 · buyTs · lockTs 실제 시각 11-20)
+VER = "v7"                   # 쌓는 줄 모양이 바뀌면 올린다 — 옛 줄을 다시 쌓는다(v2 · 시장 칸 · v3 · 11-18 전 판 칩 이름 옮김 · v4 · 칩 둘 이상만 · v5 · 칩 붙은 시각 chipAt · subAt · buyAt · lockAt 11-20 · v6 · buyTs · lockTs 실제 시각 11-20 · v7 · 시각 칸 값 px — 매도 시각을 부를 때 셈 11-20)
 _SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_win (day TEXT PRIMARY KEY, src_saved TEXT, rows TEXT NOT NULL, at TEXT)"
 _status = {"error": None, "filled": 0, "at": None}
 
@@ -65,7 +65,7 @@ def day_rows(b):
         buy, sell = r.get("buy"), (r.get("px") or {}).get(SELL_AT)
         ret = round((sell - buy) / buy * 100, 3) if buy and sell is not None else None
         out.append({"code": r.get("code"), "name": r.get("name"), "market": r.get("market"), "chips": chips, "n": n,
-                    "buy": buy, "sell": sell, "ret": ret,
+                    "buy": buy, "sell": sell, "ret": ret, "px": r.get("px") or {},   # 시각 칸 값 — 매도 시각(end_at)으로 부를 때 판 값을 고른다
                     # 칩 · 하위가 판에 붙은 시각과 든 시각 — 굳힌 뒤(10:30 뒤) 늦게 붙은 칩도 승률에 넣되 시간대로 가를 수 있게
                     # (재권님 「시간대가 추가되면 넣어놓는게 좋을거같아」 11-20 · 옛 판은 없음 → null)
                     "chipAt": r.get("chipAt"), "subAt": r.get("subAt"), "buyAt": r.get("buyAt"), "buyTs": r.get("buyTs"), "lockAt": r.get("lockAt"), "lockTs": r.get("lockTs")})
@@ -110,6 +110,28 @@ def fee_pct():
         return None
 
 
+def end_at():
+    """매도 시각 「HHMM」 — 단타 판 셈 칸(룰 문서 strategy-rules rules.dt30.set.endAt · 화면과 같은 칸 한 곳) · 빈칸 · 못 읽음 · 틀린 꼴이면 None(판 끝 SELL_AT).
+    재권님 「응 해」(11-20 15:3x · 시황분석 창) — 승률 표도 단타 판 매도 시각을 따르게(14:00 고정 대신)."""
+    try:
+        import docstore
+        d = docstore.read_doc("strategy-rules") or {}
+        d = d.get("data", d) if isinstance(d, dict) else {}
+        v = str((((d.get("rules") or {}).get("dt30") or {}).get("set") or {}).get("endAt") or "").replace(":", "").strip()
+    except Exception:
+        return None
+    return v if len(v) == 4 and v.isdigit() and int(v[:2]) < 24 and int(v[2:]) < 60 else None
+
+
+def sell_of(r, end):
+    """그 줄을 파는 값 — 시각 칸 중 end(HHMM) 이하 마지막 값 있는 칸(화면 sellAt 의 「남은 종목」 과 같은 셈) · 칸이 없는 옛 줄은 쌓은 sell."""
+    px = r.get("px")
+    if not px:
+        return r.get("sell")
+    ks = [k for k in sorted(px) if k <= end and px[k] is not None]
+    return px[ks[-1]] if ks else None
+
+
 def net_pct(r, fee):
     """세후 손익 % — 못 셈(값 없음 · 시장 모름)이면 None."""
     buy, sell, T = r.get("buy"), r.get("sell"), TAX.get(str(r.get("market") or "").upper())
@@ -133,6 +155,7 @@ def _stat(rets, unmeasured):
 def summary(proxy, days=DAYS_DEFAULT):
     """주소 /api/kis/dt30-win 의 data · meta."""
     fee = fee_pct()
+    end = end_at() or SELL_AT
     with proxy.db_conn() as conn:
         try:
             got = conn.execute("SELECT day, rows FROM dt30_win ORDER BY day DESC LIMIT ?", (days,)).fetchall()
@@ -152,6 +175,7 @@ def summary(proxy, days=DAYS_DEFAULT):
         rows = json.loads(raw)
         rets, miss, best = [], 0, []
         for r in rows:
+            r["sell"] = sell_of(r, end)                # 매도 시각 — 부를 때 셈(바꾸면 지난 날에도 바로 든다 · 수수료와 같은 길)
             v = net_pct(r, fee)
             chips = sorted(set(r["chips"]))
             for c in chips:
@@ -177,7 +201,7 @@ def summary(proxy, days=DAYS_DEFAULT):
     meta = {"days": len(got), "from": got[-1][0] if got else None, "to": got[0][0] if got else None,
             "fee": fee, "feeNote": None if fee is not None else "빈칸 — 수수료 안 셈", "feeSides": "팔 때만",
             "tax": TAX, "taxNote": "팔 때만 · 판 값 × (거래세 + 농특세) · 시장 모르면 못 잼", "ret": "세후 %",
-            "buy": "그날 판 매수가(rows[].buy · 11-20 판부터 판에 든 때 값 — 09:01 전에 있던 종목은 9시 1분 값 · 뒤에 든 종목은 든 순간 값 · 11-18~19 09:00 시가 · 그 전 09:01)", "minChips": dt30.MIN_CHIPS, "sell": SELL_AT, "bigPct": BIG_PCT, "topDay": TOP_DAY,
+            "buy": "그날 판 매수가(rows[].buy · 11-20 판부터 판에 든 때 값 — 09:01 전에 있던 종목은 9시 1분 값 · 뒤에 든 종목은 든 순간 값 · 11-18~19 09:00 시가 · 그 전 09:01)", "minChips": dt30.MIN_CHIPS, "sell": end, "sellDef": SELL_AT, "sellNote": "매도 시각 — 단타 판 셈 칸 rules.dt30.set.endAt(빈칸이면 판 끝 sellDef) · 그 시각 이하 마지막 값 있는 칸에 팖 · 손절 · 꺾임은 이 표에 안 듦", "bigPct": BIG_PCT, "topDay": TOP_DAY,
             "filledAt": _status["at"], "error": _status["error"]}
     return out, meta
 
