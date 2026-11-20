@@ -774,7 +774,7 @@ BIND.push(() => $('dt-box').addEventListener('click', (e) => {   // 칩 줄은 �
   colsSave(); if (st.data) { paint(st.data); chips(); }
 }));
 BIND.push(() => $('dt-order').addEventListener('click', (e) => { const b = e.target.closest('[data-order]'); if (!b || b.dataset.order === st.order) return; st.order = b.dataset.order; if (st.data) { paint(st.data); chips(); } }));
-BIND.push(() => $('dt-box').addEventListener('click', (e) => { if (!e.target.closest('[data-allon]')) return; st.off.clear(); st.subOff.clear(); const cs = colsOf(), add = [...new Set(((st.data && st.data.rows) || []).flatMap((r) => r.chips || []))].filter((c) => !cs.includes(c)); if (add.length) st.cols = [...cs, ...add]; colsSave(); if (st.data) { paint(st.data); chips(); } }));   // 빈 판의 「꺼 둔 칩 다 켜기」
+BIND.push(() => $('dt-box').addEventListener('click', (e) => { if (!e.target.closest('[data-allon]')) return; st.off.clear(); st.subOff.clear(); const cs = colsOf(), add = [...new Set(((st.data && st.data.rows) || []).flatMap((r) => r.chips || []))].filter((c) => !cs.includes(c) && !(st.watchAuto && c === '자동')); if (add.length) st.cols = [...cs, ...add]; colsSave(); if (st.data) { paint(st.data); chips(); } }));   // 빈 판의 「꺼 둔 칩 다 켜기」
 BIND.push(() => $('dt-box').addEventListener('click', (e) => { const b = e.target.closest('[data-lock]'); if (!b || b.disabled) return; st.lockSel = Number(b.dataset.lock); if (st.data) paint(st.data); }));   // 굳힘 시각 단추
 BIND.push(() => $('dt-only').addEventListener('click', (e) => { const b = e.target.closest('[data-only]'); if (!b || b.dataset.only === st.only) return; st.only = b.dataset.only; if (st.data) { paint(st.data); chips(); } }));
 
