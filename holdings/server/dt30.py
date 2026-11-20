@@ -800,8 +800,10 @@ def _sub_keep(r, o, ts):
         m = at.setdefault(chip, {})
         if "어림" not in merged:
             m.pop("어림", None)
+        first = ((o or {}).get("chipAt") or {}).get(chip) if not m else None   # 시각 기록이 아직 없는 칩(새 코드 전에 붙음) — 첫 하위는 칩이 붙은 시각(HH:MM)으로
         for x in merged:
-            m.setdefault(x, ts)
+            m.setdefault(x, first or ts)
+            first = None
     r["subAt"] = {c: v for c, v in at.items() if c in (r.get("chips") or []) and v}
 
 
@@ -860,6 +862,51 @@ def _lock_due(b, nm):
         b["meta"]["lockN"] = LOCK_N
         _lock_order(b)
     return did
+
+
+def _close_min(proxy, now=None):
+    """그날 정규장 끝(분) — 장 시각 표(market_hours) · 못 읽으면 REG_CLOSE."""
+    import market_hours
+    now = now or _now()
+    try:
+        c = (market_hours.today(proxy, day=now.strftime("%Y%m%d"), now=now).get("reg") or ["", ""])[1] or market_hours.REG_CLOSE
+    except Exception:
+        c = market_hours.REG_CLOSE
+    return int(c[:2]) * 60 + int(c[2:4])
+
+
+def sub_track(proxy, cfg, b):
+    """굳힌 뒤에도(BUY_LATE 뒤 · 다시 셈 없음) 「매수」 하위 ①~④ 를 판 줄에 이어 쌓는다 — 매수 판(fetch_joint_buy · 캐시)만 읽음.
+    판 안 종목만 · 새 하위는 subs 끝에 · subAt 에 그 시각 · 매수 칩이 없던 줄은 칩을 더하고 chipAt. 바뀐 줄 수.
+    재권님 「이거 된거맞아? 중간에 바뀐거같은데 바뀐값이 없네?」(11-20 10:54) — 10:30 굳힌 뒤 다시 셈이 멈춰 하위가 안 쌓이던 것."""
+    try:
+        jd, _ = proxy.fetch_joint_buy(cfg)
+    except Exception:
+        return 0
+    if not jd or not jd.get("rows"):
+        return 0
+    tier = {r["code"]: "①②③④"[r["tier"] - 1] for r in jd["rows"] if r.get("tier") in (1, 2, 3, 4)}
+    now = _now()
+    ts, hm = now.strftime("%H:%M:%S"), now.strftime("%H:%M")
+    n = 0
+    for r in b.get("rows") or []:
+        t = tier.get(r["code"])
+        if not t or (r.get("cap") is not None and r["cap"] < CAP_MIN_EOK):
+            continue
+        if "매수" not in r["chips"]:
+            r["chips"].append("매수")
+            r.setdefault("chipAt", {}).setdefault("매수", hm)
+            order = OV_CHIPS + ("현재상승", "볼린저")
+            r["chips"] = [c for c in order if c in r["chips"]]
+            r["n"] = len(set(r["chips"]) & set(OV_CHIPS))
+        subs = [x for x in (r.setdefault("subs", {}).get("매수") or []) if x != "어림"]
+        if t not in subs:
+            subs.append(t)
+            r.setdefault("subAt", {}).setdefault("매수", {})[t] = ts
+            n += 1
+        r["subs"]["매수"] = subs
+        (r.get("subAt") or {}).get("매수", {}).pop("어림", None)
+    return n
 
 
 def _gone(old_rows, new_rows, at):
@@ -1772,6 +1819,8 @@ def start(proxy):
                             filled_late = patch_late(proxy, proxy.load_secrets(), b)
                             if _lock_due(b, hm):                   # 굳히는 때(10:30)가 지난 뒤 — 남은 차례(마지막 10개)를 굳힌다(다시 셈은 안 함)
                                 filled_late = list(filled_late) + ["굳힘"]
+                            if hm < _close_min(proxy, now) and sub_track(proxy, proxy.load_secrets(), b):   # 굳힌 뒤에도 매수 하위(①~④)를 이어 쌓는다 — 정규장 끝까지
+                                filled_late = list(filled_late) + ["매수 하위"]
                             if _buy_open_fill(proxy, b):           # 굳힌 뒤에도 시가를 기다리는 줄 — 1분봉이 늦게 들어오면 채움(DB 만 읽음)
                                 filled_late = list(filled_late) + ["시가"]
                         if filled_late and filled_late != ["다시 셈"]:
