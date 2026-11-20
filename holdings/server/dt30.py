@@ -1528,6 +1528,64 @@ def nx_fill(proxy, cfg, day, hm):
     return 1
 
 
+PRE_END = (8, 50)            # 오늘 판 rows[].pre — 넥스트레이드 프리장(08:00~08:50)이 닫힌 뒤 마지막 체결 값을 판에 굳힌다(작업우선순위 · 시황분석1 화면 11-20 · 재권님 그림에 「응 맞아」 10:53)
+PRE_HOURS = ("084900", "081900")   # 1분봉 끝 시각 — 30줄씩 · 뒤 칸에 체결이 없을 때만 앞 칸을 부른다
+
+
+def _pre_last(proxy, cfg, code, day):
+    """그날 넥스트레이드 1분봉 08:00~08:49 중 마지막 체결 봉 → (종가, "HH:MM") · 체결 없음 ("none", None) · 못 받음 (None, None)."""
+    for hour in PRE_HOURS:
+        data = proxy.kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
+                             {"FID_ETC_CLS_CODE": "", "FID_COND_MRKT_DIV_CODE": "NX", "FID_INPUT_ISCD": code,
+                              "FID_INPUT_HOUR_1": hour, "FID_PW_DATA_INCU_YN": "Y"}, "FHKST03010200")
+        if data is None or str(data.get("rt_cd", "0")) != "0":
+            return None, None
+        best = None
+        for r in data.get("output2") or []:
+            t = str(r.get("stck_cntg_hour") or "")[:4]
+            if r.get("stck_bsop_date") != day or not ("0800" <= t <= "0849") or not proxy._num(r.get("cntg_vol"), int):
+                continue
+            if best is None or t > best[0]:
+                best = (t, proxy._num(r.get("stck_prpr"), int))
+        if best:
+            m = int(best[0][:2]) * 60 + int(best[0][2:]) + 1      # 1분봉 시각은 그 분의 시작 — 끝난 때로 적는다(08:49 봉 → 08:50)
+            return best[1], "%02d:%02d" % divmod(m, 60)
+    return "none", None
+
+
+def pre_fill(proxy, cfg, b, hm):
+    """오늘 판(b) 줄 중 rows[].pre 가 없는 줄에 프리장 끝 값을 적는다 — {pct, at, px, prev} · 체결이 없었으면 null(0 아님).
+    pct 는 넥스트 전일 종가(멀티 시세 inter2_prdy_clpr) 대비 — 홀딩스 /api/kis/prices pct 와 같은 기준. 1분봉 NX 는 오늘 것만 주므로 지난 판은 못 채운다.
+    PRE_END 전 · NX_SKIP 동안은 안 함 · 못 받은 줄은 키를 안 만들어 다음 바퀴에 다시. 적은 줄 수."""
+    if hm < PRE_END[0] * 60 + PRE_END[1] or b.get("day") != _now().strftime("%Y%m%d"):
+        return 0
+    lo, hi = NX_SKIP
+    if lo[0] * 60 + lo[1] <= hm < hi[0] * 60 + hi[1]:
+        return 0
+    todo = [r for r in b.get("rows") or [] if "pre" not in r]
+    if not todo:
+        return 0
+    import nxt_pre
+    q = nxt_pre.fetch_nx(proxy, cfg, [r["code"] for r in todo], gap=0)
+    n = 0
+    for r in todo:
+        px, at = _pre_last(proxy, cfg, r["code"], b["day"])
+        if px is None:
+            continue
+        prev = (q.get(r["code"]) or {}).get("prev_close") or None
+        if px == "none":
+            r["pre"] = None
+        elif not prev:
+            continue                                   # 전일 종가를 못 받음 — 다음 바퀴에 다시
+        else:
+            r["pre"] = {"pct": round((px - prev) / prev * 100, 2), "at": at, "px": px, "prev": prev}
+        n += 1
+    if n:
+        b["meta"]["preNote"] = ("pre — 오늘 넥스트레이드 프리장 마지막 체결(%02d:%02d 전) 값 · pct 는 넥스트 전일 종가 대비 · at 그 봉이 끝난 때 · "
+                                "체결이 없었으면 null · 키가 없으면 아직 못 받음" % PRE_END)
+    return n
+
+
 def days(proxy):
     try:
         with proxy.db_conn() as conn:
@@ -1885,6 +1943,8 @@ def start(proxy):
                             # 아침 상위는 개장 직후 창 안에서만 정한다 — 서버가 낮에 뜨면 그때 상위로 「팔 때」 를 보내지 않게(그날은 안 봄)
                             b["meta"]["tgTop"] = [r["code"] for r in sorted(b["rows"], key=lambda r: r.get("rank") or 1e9)[:TG_TOP]]   # 아침 상위 — 「팔 때」 를 보는 종목(보냄과 무관하게 적음)
                             b["meta"]["tgTopAt"] = _now().strftime("%H:%M")
+                            flow_now = True
+                        if pre_fill(proxy, proxy.load_secrets(), b, hm):   # 오늘 프리장 끝 값 — 08:50 뒤 · 새로 든 줄은 다음 바퀴에
                             flow_now = True
                         if (b.get("closed") or hm >= BUY_LATE[0] * 60 + BUY_LATE[1]) and b.get("rows") and hm < _close_min(proxy, now) \
                                 and sub_track(proxy, proxy.load_secrets(), b):   # 굳힌 뒤(10:30) · 14:00 칸을 적어 판이 닫힌 뒤에도 정규장 끝까지 매수 하위(①~④)를 이어 쌓는다
