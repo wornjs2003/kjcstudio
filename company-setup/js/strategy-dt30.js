@@ -240,7 +240,7 @@ function buyOf(r) {   // → { px, at(HHMM), src } | null
   const k = st.set.buy || 'open';
   const n = pmOf(k);
   // 판에 들어오기 전 시각의 값으로는 사지 않음 — 그 시각이 들어온 때(buyAt)보다 앞이면 들어온 때 가격(r.buy)으로(11-20 재권님 「단타 목록에 들어온 시점부터 등락률 계산되게 되야해」)
-  const inAt = hhmm(r.buyAt), late = (at) => /^\d{4}$/.test(inAt) && /^\d{4}$/.test(at) && at < inAt && Number(r.buy) > 0;
+  const inAt = hhmm(r.buyAt), late = (at) => newBuyOf(st.data) && /^\d{4}$/.test(inAt) && /^\d{4}$/.test(at) && at < inAt && Number(r.buy) > 0;
   const inB = () => ({ px: Number(r.buy), at: inAt, src: `들어온 때 ${hmS(inAt)}` });
   if (n) { const o = minVal(r, n), t = hmS(minHM(n)); if (late(hhmm((o && o.at) || minHM(n)))) return inB(); return o && Number(o.px) > 0 ? { px: Number(o.px), at: hhmm(o.at || minHM(n)), src: o.src === 'now' ? `${t} 그때 현재가` : t } : null; }
   if (k === 'vi') { const o = r.viPx; if (o && o.at && late(hhmm(o.at))) return inB(); return o && Number(o.px) > 0 && o.at ? { px: Number(o.px), at: hhmm(o.at), src: `VI ${String(o.at).slice(0, 5)}` } : null; }
@@ -445,7 +445,7 @@ function paint(d) {
   // 09:01 값 (11-18 재권님 「9시 1분 등락도 넣어줘 이쯤 살거니깐」 → 「응 그렇게 해」) — 서버 rows[].px1(개발2 · 첫 1분봉 종가 「1m」 · 없으면 그때 현재가 「now」) · 시각은 meta.px1At
   //   화면은 매수가 대비 % 만 셈 · px1 칸이 없으면 「아직」(서버가 아직 안 줌 · 그날 09:02 전) · px 가 null 이면 「—」 못 잼(0 아님)
   const p1At = NM0.px1At ? hmTxt(String(NM0.px1At).replace(':', '')) : '첫 1분';   // 시각은 서버 meta.px1At 한 곳 — 없으면 시각을 안 적음(개념정의 11-18)
-  const lateIn = (r) => { const a = hhmm(r.buyAt); return !!r.buyTs || (/^\d{4}$/.test(a) && a > minHM(1)); };   // 9시 1분 뒤 판에 든 종목 — 등락률은 들어온 가격 대비(매수가 = 들어온 가격)라 9시 1분 칸은 셈 밖(11-20 재권님 「든가격에 정보있는건 그가격대비로 등락률 계산되게 해줘」)
+  const lateIn = (r) => { const a = hhmm(r.buyAt); return newBuyOf(d) && (!!r.buyTs || (/^\d{4}$/.test(a) && a > minHM(1))); };   // 새 규칙 판만 — 옛 판(11-19 까지)은 buyAt 이 여는 시각이라 안 가름(개념정의 검수 덧 · 머리 글과 기준 하나)   // 9시 1분 뒤 판에 든 종목 — 등락률은 들어온 가격 대비(매수가 = 들어온 가격)라 9시 1분 칸은 셈 밖(11-20 재권님 「든가격에 정보있는건 그가격대비로 등락률 계산되게 해줘」)
   const p1Ch = (r) => (!lateIn(r) && r.px1 && r.px1.px != null && Number(r.buy) > 0 ? (Number(r.px1.px) / Number(r.buy) - 1) * 100 : null);
   const p1Td = (r) => { const o = r.px1;
     // 「아직」 은 서버가 09:01 을 세는 판(meta.px1At)이고 아직 안 굳은 날만 — 그 밖은 영영 안 오므로 「—」(개념정의 11-18 · 「못 한다」 와 「아직 안 했다」 를 가른다)
@@ -457,7 +457,7 @@ function paint(d) {
   //   값은 서버 rows[].buyAt(든 시각) · buy(든 순간 가격) — buyAt 이 시작 1분 뒤(minHM(1))보다 늦은 줄만 「9시 1분 뒤 들어온」 종목 · 초는 서버가 주면 buyTs(개발2 · 11-20)
   //   그 밖(9시 1분 전부터 판에 있던 줄)은 「—」 — 매수가가 9시 1분 값이라 따로 적을 것이 없음
   const inTd = (r) => { const at = hhmm(r.buyAt);
-    if (!(Number(r.buy) > 0) || !(r.buyTs || (/^\d{4}$/.test(at) && at > minHM(1)))) return '<td class="dt-in" data-tip="9시 1분 전부터 판에 있던 종목 — 매수가가 9시 1분 값">—</td>';
+    if (!(Number(r.buy) > 0) || !lateIn(r)) return '<td class="dt-in" data-tip="9시 1분 전부터 판에 있던 종목 — 매수가가 9시 1분 값">—</td>';
     return `<td class="dt-buy dt-in">${num(r.buy)}<small>${esc(String(r.buyTs || hmS(at)))}${r.buySrc ? ` · ${esc(r.buySrc)}` : ''}</small></td>`; };
   const p1V = R.map((x) => p1Ch(x.r)).filter((v) => v != null);
   const p1Avg = `<td class="dt-nx">${p1V.length ? pct(mean(p1V)) : '—'}</td>`;
