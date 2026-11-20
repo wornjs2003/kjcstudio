@@ -854,6 +854,7 @@ def _lock_due(b, nm):
         pick = [r for r in b["rows"] if not r.get("lock")][:LOCK_N]
         for k, r in enumerate(pick, 1):
             r["lock"], r["lockAt"], r["lockRank"] = i, _hhmm(t), k
+            r["lockTs"] = _now().strftime("%H:%M:%S")      # 실제로 굳힌 때 — 서버가 늦게 떠 정한 시각(lockAt)보다 뒤에 굳힌 줄을 가르게(qa 덧 11-20)
         done.append(i)
         did.append(i)
     if did:
