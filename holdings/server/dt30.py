@@ -792,6 +792,68 @@ def _gone(old_rows, new_rows, at):
     return out
 
 
+def _px1_of(proxy, day, codes, om):
+    """그날 「9시 1분 값」 — 여는 시각(om · 분) 1분봉 종가(= 여는 시각 + 1분의 값 · pxMin "1" 과 같은 셈) · {code: 값} · 없으면 빠짐."""
+    if not codes:
+        return {}
+    ts = day + "%02d%02d" % divmod(om, 60)
+    with proxy.db_conn() as conn:
+        q = "SELECT code, close FROM candles WHERE period = '1m' AND ts = ? AND code IN (%s)" % ",".join("?" * len(codes))
+        return {c: v for c, v in conn.execute(q, [ts] + list(codes)) if v}
+
+
+def _buy_now(proxy, cfg, rows):
+    """판에 막 든 줄(여는 시각 + 1분 뒤) — 매수가를 든 그 순간 현재가로 다시 받는다(시세 묶음 · 가장 짧은 캐시) · buyTs 에 초까지.
+    전에는 단타 목록 셈에 실린 값(시세 캐시 PRICE_CACHE_TTL 25초 + 칩 셈 수십 초 앞)이 그대로 매수가가 됐다 —
+    재권님 「판에 들어갈때 그때의 가격이 정확히 들어와야해」 · 「판에 들어있으면 9시 1분가격으로 적고 판에 들어오면 들어올때 가격으로」(11-20 09:2x · 작업우선순위 경유).
+    못 받은 줄은 셈에 실린 값 그대로 두고 buySrc 「목록 값」."""
+    if not rows:
+        return 0
+    try:
+        q, _ = proxy.fetch_quotes_multi(cfg, [r["code"] for r in rows])
+    except Exception:
+        q = {}
+    ts = _now().strftime("%H:%M:%S")
+    n = 0
+    for r in rows:
+        v = (q.get(r["code"]) or {}).get("price")
+        r["buyTs"] = ts
+        if v:
+            r["buy"], r["buySrc"] = v, "현재가"
+            n += 1
+        else:
+            r["buySrc"] = "목록 값"
+    return n
+
+
+def _buy_wait_cut(proxy, now=None):
+    """이 분(여는 시각 + 1) 전에 판에 든 줄은 「9시 1분 값」 을 기다린다(buyWait) · 그 뒤에 든 줄은 든 순간 현재가."""
+    return OPEN_AT[0] * 60 + OPEN_AT[1] + late_min(proxy, now) + 1
+
+
+def _buy_open_fill(proxy, b):
+    """「9시 1분 값」 을 기다리는 줄(buyWait) — 여는 시각 1분봉 종가가 들어왔으면 매수가로 · 1분봉이 없는 종목은 적어 둔 개장 1분 값(px1 · 그때 현재가)으로.
+    둘 다 없으면 비워 두고 기다린다 — 지금 값으로 대신 굳히지 않는다(11-20 스튜디오드래곤 · 시세의 시가 칸이 비어 09:03 값 30,800 이 굳은 일). 적은 줄 수."""
+    wait = [r for r in b.get("rows") or [] if r.get("buyWait")]
+    if not wait:
+        return 0
+    om = _open_min(proxy, b["day"], b)
+    if _now().hour * 60 + _now().minute < om + 1:
+        return 0
+    got = _px1_of(proxy, b["day"], [r["code"] for r in wait], om)
+    n = 0
+    for r in wait:
+        v, src = got.get(r["code"]), "1m"
+        if not v:
+            p1 = r.get("px1") or (r.get("pxMin") or {}).get("1") or {}
+            v, src = p1.get("px"), p1.get("src")
+        if v:
+            r["buy"], r["buyAt"], r["buySrc"] = v, _hhmm(om + 1), "9시 1분 값" + ("" if src == "1m" else "(그때 현재가)")
+            r.pop("buyWait", None)
+            n += 1
+    return n
+
+
 def refresh(proxy, cfg, b):
     """그날 판을 지금 들어온 값으로 다시 세운다(종목 · 칩 · 순위). 바뀐 줄 수."""
     out = set(b["meta"].get("out") or [])
@@ -815,14 +877,11 @@ def refresh(proxy, cfg, b):
                 if k in o:
                     r[k] = o[k]                        # 다시 세도 적어 둔 09:01 값 · 수급은 그대로
         if o is not None and o.get("buyWait") and opened:
-            # 09:00 전에 든 종목 — 매수가를 09:00 정규장 시가로(시가를 아직 못 받았으면 지금 값 · 그것도 없으면 다음 바퀴에)
+            # 9시 1분 전에 든 종목 — 매수가는 「9시 1분 값」(_buy_open_fill · 여는 시각 1분봉 종가) · 못 받았으면 비우고 기다림(다음 바퀴 · 굳힌 뒤에도)
+            # 전에는 시세의 시가 → 없으면 「지금 값」 으로 굳혔다 — 11-20 스튜디오드래곤 시가 칸이 비어 09:03 값 30,800 이 매수가로 굳음 · 재권님 「판에 들어있으면 9시 1분가격으로」
             r["px"], r["pxSrc"] = o["px"], o["pxSrc"]
-            if r.get("open") or r.get("buy"):
-                r["buy"], r["buyAt"] = r.get("open") or r["buy"], "%02d:%02d" % _sh(OPEN_AT, off)
-                r["buySrc"] = "시가" if r.get("open") else "지금 값"
-                r.pop("buyWait", None)
-            else:
-                r["buy"], r["buyWait"] = None, True
+            r["buy"], r["buyWait"] = None, True
+            r.pop("buySrc", None)
             changed += o.get("rank") != r["rank"] or o.get("chips") != r["chips"]
         elif o is not None:
             r["buy"], r["pct"], r["px"], r["pxSrc"] = o["buy"], o["pct"], o["px"], o["pxSrc"]
@@ -835,7 +894,16 @@ def refresh(proxy, cfg, b):
         else:
             r["buyAt"] = hm
             changed += 1
+    if opened:
+        fresh = [r for r in nb["rows"] if r["code"] not in old and not r.get("buyWait")]
+        if nm < _buy_wait_cut(proxy, now):
+            for r in fresh:                            # 여는 시각 그 분에 든 줄 — 9시 1분 값을 기다린다
+                r["buy"], r["buyWait"] = None, True
+        else:
+            _buy_now(proxy, cfg, fresh)
     changed += len(set(old) - {r["code"] for r in nb["rows"]})
+    if opened:
+        _buy_open_fill(proxy, nb)
     gone = list(b["meta"].get("gone") or []) + _gone(b["rows"], nb["rows"], hm)   # 빠진 칩 · 종목을 그 시각과 함께 쌓는다(meta.gone)
     b["rows"] = nb["rows"]
     if b.get("times") != nb["times"] and not any(o.get("px") for o in old.values()):
@@ -1588,6 +1656,11 @@ def start(proxy):
                     got = _load(proxy, day)
                     if got is None and BUY_AT[0] * 60 + BUY_AT[1] <= hm < BUY_LATE[0] * 60 + BUY_LATE[1] + off and _status["frozen"] != day:
                         b = build(proxy, proxy.load_secrets(), day)
+                        if hm < _buy_wait_cut(proxy, now):
+                            for r in b["rows"]:
+                                r["buy"], r["buyWait"] = None, True          # 여는 시각 + 1분 전에 지은 판 — 9시 1분 값을 기다린다
+                        else:
+                            _buy_now(proxy, proxy.load_secrets(), [r for r in b["rows"] if not r.get("buyWait")])   # 장중에 처음 짓는 판(서버가 늦게 뜸) — 든 순간 현재가
                         _store(proxy, b)
                         _status.update(frozen=day, error=None)
                         print("  [단타 30] %s %02d:%02d 판 %d종목 굳힘%s" % (day, BUY_AT[0], BUY_AT[1], len(b["rows"]),
@@ -1607,6 +1680,8 @@ def start(proxy):
                                     filled_late = ["다시 셈"]
                         elif not b.get("closed"):
                             filled_late = patch_late(proxy, proxy.load_secrets(), b)
+                            if _buy_open_fill(proxy, b):           # 굳힌 뒤에도 시가를 기다리는 줄 — 1분봉이 늦게 들어오면 채움(DB 만 읽음)
+                                filled_late = list(filled_late) + ["시가"]
                         if filled_late and filled_late != ["다시 셈"]:
                             print("  [단타 30] %s 판에 늦게 나온 칩 채움 — %s" % (day, " · ".join(filled_late)), flush=True)
                         if due:
