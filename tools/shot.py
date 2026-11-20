@@ -38,7 +38,7 @@
 종료 — 0 찍음 · 2 못 찍음(기준 크기를 아직 안 쟀다 · 크롬 없음 · 서버 없음). **2 를 「찍었다」 로 읽지 않는다.**
 스크롤바는 숨기지 않는다 — 재권님 화면과 조건이 가깝다(check-layout 과 같은 이유).
 
-**`--at "<선택자>"` — 그 칸이 창 맨 위에 오게 내려가 찍는다 (2026-11-20 재권님 「단타 창이 보이게 그리라고 몇번 말한거같은데 왜이러지?
+**`--at "<선택자>"` — 그 칸이 창 맨 위(고정 메뉴 줄 바로 밑)에 오게 내려가 찍는다 (2026-11-20 재권님 「단타 창이 보이게 그리라고 몇번 말한거같은데 왜이러지?
 재발 방지안되게 개념정의한테 룰 만들어 달라고 해」 → 「커밋해」).** 그 전에는 주소 맨 위부터만 찍어 긴 화면(투자전략)에서 단타 판이 아래로 잘렸다.
 스크롤만 하고 창 크기는 안 바꾼다 — 칸이 창보다 크면 칸 머리부터 창 한 장(칸 전체가 꼭 필요하면 `--tall` 을 함께). `--full` 과는 함께 안 쓴다.
 **칸을 못 찾으면 종료 2** — 맨 위로 대신 찍지 않는다. 찍은 칸은 보기 페이지 `<meta name="kjc-shot-at">` 에 남긴다(CLAUDE.md 「그림은 부르신 자리가 다 보이게 찍는다」).
@@ -273,8 +273,14 @@ def main(argv):
         time.sleep(wait)
         if at:
             # 그 칸이 창 맨 위에 오게 — 못 찾으면 맨 위로 대신 찍지 않는다(종료 2)
-            got = js("(()=>{const e=document.querySelector(%s);if(!e)return null;e.scrollIntoView({block:'start'});"
-                     "return Math.round(e.getBoundingClientRect().height)})()" % json.dumps(at))
+            # 맨 위에 붙은 고정 · 끈끈한 줄(메뉴 등 · 그 칸 바깥)만큼 더 올린다 — 안 그러면 칸 머리가 그 밑에 가린다(qa 11-20 시뮬 · 메뉴 이름을 박지 않고 센다)
+            got = js("(()=>{let e;try{e=document.querySelector(%s)}catch(x){return 'bad'}if(!e)return null;e.scrollIntoView({block:'start'});"
+                     "let h=0;for(const n of document.querySelectorAll('body *')){if(e.contains(n)||n.contains(e))continue;const p=getComputedStyle(n).position;"
+                     "if(p!=='fixed'&&p!=='sticky')continue;const r=n.getBoundingClientRect();if(r.top<=1&&r.bottom>0&&r.height<innerHeight/2)h=Math.max(h,r.bottom)}"
+                     "if(h)scrollBy(0,-h);return Math.round(e.getBoundingClientRect().height)})()" % json.dumps(at))
+            if got == "bad":
+                print("✗ 못 찍음 — 선택자 꼴이 틀렸다(--at %s) · 맨 위로 대신 찍지 않는다" % at)
+                return 2
             if got is None:
                 print("✗ 못 찍음 — 칸을 못 찾았다(--at %s) · 맨 위로 대신 찍지 않는다" % at)
                 return 2
