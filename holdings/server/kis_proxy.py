@@ -8999,6 +8999,23 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
             return
+        if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/nxt/pre-open":
+            # 프리장(넥스트레이드 08:00) 시작가 날마다 — 미국 3지수 표(Insight · 시황분석)의 서버 몫(server/nxt_board.pre_open · 2026-11-20)
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            codes = [c for c in (q.get("codes") or ["005930,000660"])[0].split(",") if re.fullmatch(r"\d{6}", c)][:nxt_board.PRE_OPEN_MAX_CODES]
+            try:
+                months = max(1, min(12, int((q.get("months") or ["6"])[0])))
+            except ValueError:
+                months = 6
+            if not codes:
+                self._send_json({"ok": False, "error": "codes 는 6자리 종목코드를 쉼표로 — 예 005930,000660"}, 400)
+                return
+            got = nxt_board.pre_open(sys.modules[__name__], load_secrets(), codes, months)
+            got["meta"].update(months=months, cacheTtl=nxt_board.PRE_OPEN_TTL,
+                               note="open = 넥스트레이드 일봉 시가(그날 08:00 프리장 첫 체결) · preKnownFrom 부터는 그날 프리장 기록(08:51 저장 · 08:00 분봉)이 있어야 값 · "
+                                    "없으면 null + why(수능처럼 안 열린 날) · 그보다 앞 날은 approx true(열렸는지 가를 기록 없음) · 최신 날이 앞")
+            self._send_json({"ok": True, **got})
+            return
         if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/nxt/board":
             # 넥장 보드(Insight 「투자 전략」) — 날마다 종가 · 장외 · 프리장 · 야간선물 · 장외 오름 · 내림 상위(server/nxt_board.py)
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
