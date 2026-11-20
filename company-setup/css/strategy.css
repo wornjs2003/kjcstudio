@@ -127,7 +127,7 @@
 .dt .dt-days small { margin-left: 4px; font-weight: 600; }
 .dt .dt-cap { margin: 0 0 8px; }
 .dt .dt-foot { margin: 8px 0 0; }
-.dt .dt-box { height: 1240px; overflow: auto; }   /* 종목 10개가 스크롤 없이 보이게(11-20 재권님 「단타칸 10종목이 보이게 세로로 늘려줘」) — 한 종목 두 줄이 된 뒤(같은 날) 「응 높여」로 880 → 1240 · 잰 값(헤드리스 재권님 창) 첫 종목 위까지 253 · 한 종목 80(칩 점만) ~ 94(칩 이름 + 시각) · 10 × 94 + 평균 · 진행 중 줄 + 가로 막대 자리 */
+.dt .dt-box { height: 1320px; overflow: auto; }   /* 종목 10개가 스크롤 없이 보이게(11-20 재권님 「단타칸 10종목이 보이게 세로로 늘려줘」) — 한 종목 두 줄이 된 뒤(같은 날) 「응 높여」로 880 → 1240 · 시각 칸 % 아래 수급 한 줄(시황분석1 525d3fd · 한 종목 81 → 99 · qa 잼)로 「가」(15:1x)에 1240 → 1320 · 잰 값(헤드리스 재권님 창) 첫 종목 위까지 253 · 한 종목 80(칩 점만) ~ 94(칩 이름 + 시각) · 10 × 94(수급 줄 뒤 99) + 평균 · 진행 중 줄 + 가로 막대 자리 */
 .dt .dt-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; color: var(--kh-text-secondary); }   /* 쌓인 날 없음 — 빈 칸 가운데 크게 */
 .dt .dt-empty b { font-size: 20px; color: var(--kh-text-primary); }
 .dt table.dt-tb { width: 100%; border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
