@@ -401,7 +401,7 @@ def sys_tick(proxy, port, now=None):
         _ensure_day(proxy, now.strftime("%Y%m%d"))
     t = market_hours.today(proxy, now=now)
     hm = now.strftime("%H%M")
-    if t["open"] is False or not (t["pre"][0] <= hm < t["after"][1]):
+    if t["open"] is False or not ((t["pre"] or t["reg"])[0] <= hm < t["after"][1]):   # 프리마켓 없는 날(pre null · 11-19 수능)은 정규장 여는 때부터 — 개념정의 검수 걸림(11-20)
         bads = {k: False for k in SYS_TEXT}            # 장 밖 — 걸린 것이 있으면 끝을 적는다
     else:
         h = proxy.kis_health()
