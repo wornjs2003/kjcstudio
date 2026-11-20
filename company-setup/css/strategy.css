@@ -298,3 +298,39 @@
 .dt .sf-tb thead tr.sf-grp th { height: 30px; box-sizing: border-box; }
 .dt .sf-tb thead tr:nth-child(2) th { top: 30px; }   /* 첫 머리 줄 높이(30)와 같게 — 스크롤 때 안 겹침(qa) */
 .dt .sf .sf-meta { flex: none; margin-bottom: 6px; }
+
+/* 한 종목 두 줄(11-20 재권님 「한진칼에 대한 칩들이 다 있고 그아래줄을 추가해서 매수에 대한 오른쪽 줄이 다 있는걸」 → 그림에 「응 맞아」) — 넓은 폭 표만 · 자리 맞춤은 strategy-dt30.js fit2row
+   윗줄 = 시가총액 ~ 칩 상자(칸마다 같은 폭) · 아랫줄 = 매수가 ~ 손익 · 종목마다 바탕 번갈아 · 종목 사이 굵은 선 · 두 줄 사이 점선 */
+.dt .dt-2row .dt-tw { padding: 0; text-align: left; }
+.dt .dt-2row .dt-fx { position: sticky; left: var(--dt-fx-l, 0px); display: flex; align-items: center; width: max-content; }
+.dt .dt-2row .dt-bx { flex: none; box-sizing: border-box; padding: 4px 6px; text-align: center; white-space: nowrap; font-size: 12px; }
+.dt .dt-2row th .dt-bx { font-weight: 600; color: var(--kh-text-muted); }
+.dt .dt-2row td .dt-bx:first-child { text-align: right; }
+.dt .dt-2row .dt-bx.dt-sec { text-align: left; color: var(--kh-text-secondary); }
+.dt .dt-2row th.dt-chc, .dt .dt-2row .dt-bx.dt-chc { padding: 4px 6px; }
+.dt .dt-2row .dt-bx.dt-chc .dt-cg { display: inline-flex; flex-direction: row; align-items: flex-start; gap: 8px; }
+.dt .dt-2row th .dt-bx.dt-chc .dt-cg { flex-direction: column; align-items: center; gap: 3px; }
+.dt .dt-2row th .dt-bx.dt-chc .dt-mc { font-size: 12px; padding: 2px 8px; }
+.dt .dt-2row th .dt-bx.dt-chc .dt-subs { display: flex; gap: 3px; }
+.dt .dt-2row th .dt-bx.dt-chc small { display: block; font-size: 10.5px; font-weight: 500; margin-top: 2px; }
+.dt .dt-2row .dt-bx.dt-chc.is-off { opacity: .38; }
+.dt .dt-2row .dt-chg { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; }   /* 칩 이름 알약 · 그 아래 들어온 시각(「옆으로 시간쓰지말고 아래로」) */
+.dt .dt-2row .dt-chg .dt-chs { border: 1px solid var(--c); background: var(--cd); border-radius: 999px; padding: 1px 7px; }
+.dt .dt-2row .dt-chg small, .dt .dt-2row .dt-vt { display: block; font-size: 11px; font-weight: 500; color: var(--kh-text-secondary); }
+.dt .dt-2row tr.dt-up > td.dt-tw { padding: 6px 0 2px; border-bottom: 1px dashed var(--kh-border); }
+.dt .dt-2row tr.dt-up > td { border-top: 2px solid var(--kh-border); }
+.dt .dt-2row tr.dt-dn > td { padding-top: 4px; padding-bottom: 6px; }
+.dt .dt-2row tr.dt-up > td.dt-rk, .dt .dt-2row tr.dt-up > td.st-name { vertical-align: middle; }
+.dt .dt-2row .st-name { max-width: none; }
+.dt .dt-2row td.st-name .dt-code { display: block; font-size: 11px; color: var(--kh-text-muted); }
+.dt .dt-2row .dt-ovm { display: block; font-size: 10.5px; font-weight: 500; color: var(--kh-text-muted); }
+/* 겹침 배지 — 수마다 색(재권님 「5개 빨강 4개 보라 3개 노랑」 · 그 밖 회색) */
+.dt .dt-ovb { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; vertical-align: 1px; color: var(--kh-text-secondary); background: var(--kh-bg); border: 1px solid var(--kh-border-strong); }
+.dt .dt-ovb[data-n="5"] { color: var(--kh-danger); background: var(--kh-danger-faint); border-color: var(--kh-danger); }
+.dt .dt-ovb[data-n="4"] { color: var(--kh-cat-violet); background: var(--kh-cat-violet-dim); border-color: var(--kh-cat-violet); }
+.dt .dt-ovb[data-n="3"] { color: var(--kh-cat-amber); background: var(--kh-cat-amber-dim); border-color: var(--kh-cat-amber); }
+/* 옆으로 밀 때 붙는 칸 — 순번 ~ 들어온 가격 · 결과 ~ 손익(「든시각 옆에서 2시까지가 가로로 스크롤」) · 자리는 fit2row 가 잼 */
+.dt .dt-2row .dt-sl, .dt .dt-2row .dt-sr { position: sticky; z-index: 1; background: var(--kh-bg-card); }
+.dt .dt-2row th.dt-sl, .dt .dt-2row th.dt-sr { z-index: 4; }
+.dt .dt-2row tr.dt-z > td:not(.dt-sold):not(.dt-after) { background: var(--kh-bg); }
+.dt .dt-2row tr.dt-avg > td { background: var(--kh-bg); }
