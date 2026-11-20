@@ -10548,7 +10548,7 @@ class Handler(SimpleHTTPRequestHandler):
             if route == "day-top/filters":
                 # 쌓인 날 전부 모은 필터별 셈 · 날별 셈(server/day_top.filters) — 투자 전략 「필터」 탭 · KIS 안 부름 (2026-11-11 재권님)
                 self._send_json({"ok": True, "data": day_top.filters(sys.modules[__name__]),
-                                 "meta": {"minCapEok": day_top.MIN_CAP_EOK, "topN": day_top.TOP_N, "saveAt": "%02d:%02d" % day_top.SAVE_AT,
+                                 "meta": {"minCapEok": day_top.min_cap_eok(), "topN": day_top.TOP_N, "saveAt": "%02d:%02d" % day_top.SAVE_AT,
                                           "note": "상위 = 그날 등락률 상위 topN · 전체 = 시가총액 minCapEok 억 이상 주식 · lift = 상위 중 몫 ÷ 전체 중 몫 · "
                                                   "hit = 걸린 것 중 상위에 든 몫 · next = 걸린 종목 다음 거래일 종가 등락률(다음 날이 온 종목만) · % 단위"}})
                 return
@@ -11567,7 +11567,7 @@ def main():
         print("  등락 상위 되채움: 지난 %d거래일 · %s" % (day_top_fill.FILL_DAYS, day_top_fill.status()["window"]))
     if not SLOW and is_sender(args.port) and day_top.start(sys.modules[__name__]):
         print("  등락 상위 : 평일 %02d:%02d 뒤(「매수」 판이 굳으면 · 늦어도 %02d:%02d) 시가총액 %d억 이상 등락률 판과 걸린 필터를 market.db day_top 에 남김 · /api/kis/day-top"
-              % (day_top.SAVE_AT + day_top.SAVE_LATE + (day_top.MIN_CAP_EOK,)))
+              % (day_top.SAVE_AT + day_top.SAVE_LATE + (day_top.min_cap_eok(),)))
     if not SLOW and is_sender(args.port) and watch_log.start(sys.modules[__name__]):
         print("  종목 기록   : 평일 %02d:%02d 에 관심 · 자동 · VI · 급등 · 매수 종목 줄을 market.db watch_log 에 남김 · /api/watch-log" % watch_log.SAVE_AT)
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and flow_rank.start(sys.modules[__name__]):
