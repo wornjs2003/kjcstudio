@@ -170,7 +170,7 @@ def sell_of(r, end, S=None):
         vs = [k for k in ks if px[k] is not None]
         return (px[vs[-1]] if vs else None), "매도 시각"
     stop, turnby, trail = S.get("stop"), S.get("turnBy") or "both", S.get("trail")
-    cut_hm = _cut_time(b_at, S.get("cutMin")) if S.get("cut") else ""
+    cut_hm = _cut_time(b_at, S.get("cutMin")) if S.get("cut") and S.get("cutPct") is not None else ""   # % 가 비면 안 셈(qa 덧 11-20 — 그 전 float(None) 으로 죽음)
     flat_hm = _cut_time(b_at, S.get("flatMin")) if S.get("flat") and S.get("flatMin") is not None and S.get("flatPct") is not None else ""
     cut_done = flat_done = False
     pk, prev, last = 0.0, None, None
