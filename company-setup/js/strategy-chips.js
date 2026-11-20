@@ -61,7 +61,7 @@ const RULES = {
   },
   rise: {
     name: '초반상승', url: '/api/kis/open-rise',
-    rows: (m) => [['고르는 조건', `${v(m.barFrom)} ~ ${v(m.barTo)} 첫 ${v(m.barMin)}분봉이 시가 대비 ${v(m.risePct)}% 이상 오름 · ETF 뺌`],
+    rows: (m) => [['고르는 조건', `장 시작 ${v(m.barMin)}분 뒤 — ${v(m.barFrom)} ~ ${v(m.barTo)} 첫 ${v(m.barMin)}분봉이 시가 대비 ${v(m.risePct)}% 이상 오름 · ETF 뺌 · 늦게 여는 날은 여는 시각부터`],   // 「장 시작 몇 분 뒤」 — 11-20 재권님 「단타에 초반상승이 장시작 몇분후인지 설명에 넣어줘」 · 값은 서버 meta.barMin 그대로
       ['시가총액', `${v(m.minCapEok == null ? null : num(m.minCapEok))}억원 이상`], ['줄 세우기', '첫 봉 상승률 큰 순 · 그날 판으로 굳힘']],
     list: (j) => {
       const d = Array.isArray(j.data) ? j.data : [], m = j.meta || {};

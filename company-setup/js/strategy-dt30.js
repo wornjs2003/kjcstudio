@@ -116,6 +116,8 @@ const TIP = {   // 칩 풍선 — 쉬운 말로(11-18 재권님 「설명들 직
 //   문턱 값은 서버가 판에 싣는 룰(data.meta.rules) 그대로 읽는다 — 화면에 숫자를 안 둔다 · 못 받으면 그 줄은 「서버 값 못 받음」
 //   받는 시각 · 주기 글은 서버가 아직 안 준다 — 서버가 data.meta.chipInfo{칩: 글} 을 주면 그것만 쓴다(개발2 카드 「단타 판 08:00 부터 짓기 · 굳히기 10:30」 덧). 그때 아래 WHEN 을 지운다
 //   WHEN 의 시각은 11-18 서버 코드(pre_flow · intraday_alerts · kis_proxy 가집계 · open_rise · auto_watch)에서 읽은 그대로
+let riseMeta = null;   // 초반상승 봉 길이 · 시각 — 서버 /api/kis/open-rise meta(룰 칸과 같은 주소) · 풍선에 씀
+(async () => { try { const r = await fetch('/api/kis/open-rise', { cache: 'no-store' }); const j = r.ok ? await r.json() : null; riseMeta = (j && j.meta) || null; } catch (e) { riseMeta = null; } })();
 loadTiming();   // 한 번 받아 둠 — 풍선은 마우스를 올릴 때 읽으므로 그때는 와 있음 · 못 받으면 「서버 값 못 받음」
 const WHEN = {
   관심: '언제 — 전날 장 마감 뒤 정해지고, 장중에는 5분마다 그때 값으로 다시 거름',
@@ -123,7 +125,7 @@ const WHEN = {
   'VI·급등': '언제 — 08:00 부터 10초마다(장 열기 전은 넥스트레이드 값) · 단타 판에는 판을 굳히기 전까지 걸린 것만',
   get 장외() { const c = serverData('afterClear') || serverData('chipReset'); return `언제 — 장 끝난 15:40 뒤부터 다음 날 ${c && c.from ? c.from : '아침(비우는 시각 — 서버 값 못 받음)'} 까지 · 아침 단타 판에는 거의 안 듦`; },   // 비우는 시각은 서버 /api/kis/stats afterClear(= market_hours.CHIP_RESET 한 곳 · 11-19 07:30 → 07:50 개발1)
   매수: '언제 — 외국인 첫 집계 09:30 · 기관 첫 집계 10:00 · 그 전에는 「어림」 으로 먼저 봄',
-  초반상승: '언제 — 장 시작 첫 봉이 끝난 뒤부터',   // 봉 길이는 서버 open-rise meta.barMin(11-18 첫 1분봉으로 바뀜 · 시각을 글에 안 박음)
+  get 초반상승() { const m = riseMeta; return m && m.barMin != null ? `언제 — 장 시작 ${m.barMin}분 뒤(${m.barFrom || '—'} ~ ${m.barTo || '—'} 첫 ${m.barMin}분봉이 끝난 뒤) · 늦게 여는 날은 여는 시각부터` : '언제 — 장 시작 첫 봉이 끝난 뒤부터(몇 분 뒤인지 — 서버 값 못 받음)'; },   // 「장 시작 몇 분 뒤」 — 11-20 재권님 「단타에 초반상승이 장시작 몇분후인지 설명에 넣어줘」 · 값은 서버 open-rise meta.barMin · barFrom · barTo 그대로
   자동: '언제 — 전날 장 마감 뒤 정해지고, 장중에는 5분마다 그때 값으로 다시 거름',
 };
 const WHAT = {
@@ -131,7 +133,7 @@ const WHAT = {
   프리장: () => '장 열기 전(넥스트레이드 프리마켓) 전날보다 오르면서 거래대금이 큰 종목',
   장외: () => '장 끝난 뒤(넥스트레이드 애프터마켓 · 다음 날 프리마켓) 그날 종가보다 오른 종목',
   매수: () => '외국인 · 기관이 많이 산 종목(증권사 집계) · ①~④ 는 누가 함께 샀는지',
-  초반상승: () => '장 시작 첫 봉에서 시가보다 일정 % 넘게 오른 종목 · ETF 는 뺌',
+  초반상승: () => `장 시작 첫 봉에서 시가보다 ${riseMeta && riseMeta.risePct != null ? `${riseMeta.risePct}%` : '(문턱 — 서버 값 못 받음)'} 이상 오른 종목 · 시가총액 ${riseMeta && riseMeta.minCapEok != null ? `${Number(riseMeta.minCapEok).toLocaleString()}억 이상` : '(서버 값 못 받음)'} · ETF 는 뺌`,   // 정해진 값은 값으로(11-20 재권님 「서버 코드에 있는데 왜 이걸 설명에 안넣는거지?」) · 값은 서버 open-rise meta.risePct · minCapEok
   자동: (R) => (R ? `전날 거래량이 크게 늘며 오른 종목을 서버가 자동으로 담음 — 전날 +${R.prevPct}% 이상 올랐고${R.sectorPct != null ? ` · 그 업종이 +${R.sectorPct}% 이상` : ''}${R.nearHighPct != null ? ` · 1년 최고가에서 ${R.nearHighPct}% 안` : ''}${R.maDays ? ` · ${R.maDays}일 평균값 위${R.maUpCandle ? '에서 오른 날' : ''}` : ''}${R.scoreW ? ` · 순서는 오른 폭 ${R.scoreW.pct}% · 거래량 ${R.scoreW.vol}% 로 셈` : ''}` : '전날 거래량이 크게 늘며 오른 종목을 서버가 자동으로 담음 — 조건 값은 서버 값 못 받음'),
 };
 const tipOf = (k) => {
