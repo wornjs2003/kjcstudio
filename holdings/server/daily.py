@@ -158,8 +158,10 @@ def _pick(code, pat, indices):
 
 def _index_line(code, label, pat, indices):
     x = _pick(code, pat, indices)
-    if not x or x.get("value") is None:
+    if not x:
         return None
+    if x.get("value") is None:      # 받으려다 못 받은 줄(start_us_daily 가 error 로 남김 · 2026-11-19) — 빼지 않고 적는다
+        return f"{label} 못 받음"
     ch = x.get("change")
     try:
         c = float(ch) if ch is not None else 0.0
@@ -458,7 +460,7 @@ from secrets_guard import safe_message
 
 import docstore
 
-KEEP = 10                    # 몇 장까지 쌓나 (2026-09-22 지시 — 「30개는 많고 10개만」)
+KEEP = 20                    # 몇 장까지 쌓나 — 국내 · 미국 데일리 같은 값 (2026-11-19 재권님 「국내랑 미국이랑 20일로 해줘」 · 그 전 09-22 「30개는 많고 10개만」)
 SEND_AT = 16 * 60            # 국내 16:00 (분) — 정규장 15:30 마감 뒤 · 2026-11-07 전에는 07:30
 KR_WEEKDAYS = (0, 1, 2, 3, 4)          # 국내는 평일만(월~금) — 주말에 만들면 금요일 마감을 또 적는다 · 공휴일은 못 가린다
 US_SEND_AT = 7 * 60          # 미국 07:00 (분) — 조용한 시간(22:00~07:00)이 끝나는 때 · 미국 장은 한국 05:00~06:00 에 마감
@@ -517,7 +519,7 @@ def save_today(indices, sectors, issues, schedule=None, now=None, strong=None, n
     보고 싶어도 못 본다 — 이 API 들은 **날짜를 지정해 부를 수 없어**
     그날을 다시 만들 수 없다 (2026-09-22 실측: 날짜 인자 0곳).
 
-    10개면 원본 그대로도 **448KB** 라 추릴 값이 없다 (`market.db` 가 5.2MB).
+    10개면 원본 그대로도 **448KB** 라 추릴 값이 없다 (`market.db` 가 5.2MB · 2026-09-22 잼 — 20개로 늘린 11-19 에는 다시 안 잼).
     """
     name = doc_name(now)
     if docstore.read_doc(name) is not None:
@@ -668,7 +670,34 @@ def _loop(once, name, label):
     threading.Thread(target=loop, daemon=True, name=name).start()
 
 
-def start_us_daily(get_indices, get_night=None, peek_overnight=None, clear_overnight=None, send=None, keep=KEEP):
+US_INDEX_RETRY = 3          # 07:00 지수 받기에서 실패한 것을 몇 번 더 받나 — 받은 것은 서버 캐시에 남아 실패한 것만 다시 나간다
+US_INDEX_RETRY_SEC = 20     # 다시 받기 사이(초)
+
+
+def _us_indices(get_indices):
+    """07:00 지수 — `get_indices()` 가 (줄, {code: 오류}) 를 준다. 실패가 있으면 몇 번 더 받고, 끝내 못 받은 것은
+    줄을 지우지 않고 {code, name, value: None, error} 로 남긴다 (2026-11-19 — 반도체 · VIX · 유로STOXX · 코스닥150 이
+    통째로 빠져 화면 「어제 미국장」 이 빈칸이었다 · 재권님 「응」). 옛 모양(줄 목록만)도 받는다."""
+    got = get_indices()
+    rows, errs = got if isinstance(got, tuple) else (got, {})
+    for _ in range(US_INDEX_RETRY):
+        if not errs:
+            break
+        print("미국 데일리 지수 못 받음 %d개(%s) — %d초 뒤 다시" % (len(errs), ", ".join(sorted(errs)), US_INDEX_RETRY_SEC), flush=True)
+        time.sleep(US_INDEX_RETRY_SEC)
+        got = get_indices()
+        rows, errs = got if isinstance(got, tuple) else (got, {})
+    rows = list(rows or [])
+    names = {c: label for c, label, _pat in INDEX_ROWS}
+    have = {r.get("code") for r in rows}
+    for code, err in sorted((errs or {}).items()):
+        if code not in have:
+            rows.append({"code": code, "name": names.get(code, code), "value": None, "change": None, "changePct": None,
+                         "error": safe_message(err, 160) if err else "못 받음"})
+    return rows
+
+
+def start_us_daily(get_indices, get_night=None, peek_overnight=None, clear_overnight=None, send=None, keep=KEEP, us_close=None):
     """07:00 미국 데일리 루프 — `kis_proxy` 가 국내 것 옆에 한 줄로 부른다.
 
     `peek_overnight()` 은 events 가 조용한 시간에 쌓은 글을 **읽기만** 하고, 이 글이 **보내진 뒤** `clear_overnight(n)` 으로 비운다 —
@@ -682,13 +711,21 @@ def start_us_daily(get_indices, get_night=None, peek_overnight=None, clear_overn
         name = us_doc_name(now)
         if docstore.read_doc(name) is not None:
             return
-        indices = get_indices()
+        indices = _us_indices(get_indices)
+        if us_close:
+            # 다우 · 러셀 2000 · 미국 10년 · 달러인덱스 — 못 받으면 그 줄 값이 null(us_close.py · 2026-11-18)
+            try:
+                indices = us_close.merge_into(indices, us_close.rows_for(now.date(), us_close.series("1mo")))
+            except Exception as e:
+                print("미국 데일리 마감 값 넷 못 셈 — %s: %s" % (type(e).__name__, safe_message(e)), flush=True)
         night = None
         if get_night:
             try:
                 night = get_night()
             except Exception as e:
                 print("미국 데일리 야간선물 못 읽음 — %s: %s" % (type(e).__name__, safe_message(e)), flush=True)
+            if not night:       # 06:01 저장도 07:00 다시 받기도 못 함 — 칸을 비우지 않고 까닭을 남긴다(화면 · 글이 「못 받음」)
+                night = {"day": None, "rows": {}, "error": "야간선물 못 받음(06:01 저장 · 07:00 다시 받기 둘 다)"}
         overnight = peek_overnight() if peek_overnight else None
         data = {
             "date": now.strftime("%Y-%m-%d"),
@@ -706,5 +743,35 @@ def start_us_daily(get_indices, get_night=None, peek_overnight=None, clear_overn
             if data.get("sent") and overnight and clear_overnight:
                 clear_overnight(len(overnight))
 
+    if us_close:
+        threading.Thread(target=_fill_us_close, args=(us_close,), daemon=True, name="usdaily-fill").start()
     _loop(once, "daily-us-0700", "미국 데일리")
     return True
+
+
+def _fill_us_close(us_close):
+    """남아 있는 미국 데일리 저장본에 마감 값 넷을 채운다 — 서버가 뜰 때 한 번 (2026-11-18 시황분석1 「지난 날도 채울 수 있으면」).
+
+    넷이 다 값이 있는 저장본은 건드리지 않는다. 텔레그램 글 · 보낸 기록은 그대로 둔다 — 그날 실제로 간 글이라서다.
+    """
+    time.sleep(30)      # 시장지표 캐시가 먼저 차게
+    try:
+        names = sorted(docstore.list_docs(US_PREFIX))
+        todo = []
+        for name in names:
+            d = docstore.read_doc(name) or {}
+            have = {i.get("code"): i for i in (d.get("indices") or [])}
+            if any(have.get(c) is None or have[c].get("value") is None for c in us_close.CODES):
+                todo.append((name, d))
+        if not todo:
+            return
+        ser = us_close.series("1y")
+        n = 0
+        for name, d in todo:
+            day = datetime.strptime(name[len(US_PREFIX):], "%Y%m%d").date()
+            d["indices"] = us_close.merge_into(d.get("indices"), us_close.rows_for(day, ser))
+            if docstore.write_doc(name, d, history=False):
+                n += 1
+        print("미국 데일리 마감 값 넷 채움 — 저장본 %d장" % n, flush=True)
+    except Exception as e:
+        print("미국 데일리 마감 값 넷 채우기 실패 — %s: %s" % (type(e).__name__, safe_message(e)), flush=True)

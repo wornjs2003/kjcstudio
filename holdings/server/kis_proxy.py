@@ -53,6 +53,7 @@ import re
 import signal_watch
 import heartbeat
 import daily
+import us_close         # 미국 데일리에 다우 · 러셀 2000 · 미국 10년 · 달러인덱스 마감 값(2026-11-18 · server/us_close.py)
 from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -75,6 +76,7 @@ import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 
 import good_news       # 「좋은 뉴스」 판정 — 공시마다 갈래 · 방향 · 크기 · 자사주 목적 · 이미 오름 · /api/good-news(2026-11-05 · server/good_news.py)
 import earnings_beat   # 「실적」 칩 — 잠정 영업이익 > 네이버 예상치 · 실적 전망 > 직전 실적 · /api/earnings-beat(2026-11-18 · server/earnings_beat.py)
 import vwap            # VWAP(거래량 가중 평균가) — 국내 분봉에 장마다(장 전 · 정규장 · 장 후) 누적 값 `vwap` 을 붙인다(2026-11-06 · 11-07 구간 바꿈 · server/vwap.py)
+import world_extra     # 우리가 안 받던 바깥 값 셋 — 바이낸스 한국 종목 선물 · 하이닉스 미국 상장분 · 원/유로 · /api/market/world-extra(2026-11-19 · server/world_extra.py)
 import leverage        # 레버리지 지표 — 한국 신용융자 · 미국 개인 빚투 · 헤지펀드 레버리지 · /api/market/leverage(2026-11-17 · server/leverage.py)
 import fear_greed      # 공포·탐욕 지수 — 코스피 · 삼성전자 · SK하이닉스 · /api/market/fear-greed(2026-11-06 · server/fear_greed.py)
 import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스닥 150 중 전일 거래량 급등 · 투자전략 룰로 거르고 줄 세움 · /api/auto-watch(2026-11-05 · server/auto_watch.py)
@@ -376,13 +378,13 @@ def _cache_put(code, data):
 # ── 호출 예산 ────────────────────────────────────────────────────────────
 # KIS 는 초당 호출 건수를 제한한다(초과 시 EGW00201).
 #
-# 실전 계좌 기본 한도는 초당 20건이다. 조건을 채우면 40~100건까지 늘려 준다
-# (2026-08-31 한국투자증권 오픈API 활성화 캠페인 보도자료 기준, 2026-12-31 까지).
-# 공식 개발자 포털과 GitHub 저장소에는 숫자가 적혀 있지 않아 보도자료를 근거로 삼았다.
-# 모의 계좌 한도는 자료마다 달라 확인하지 못했다.
+# 실전 계좌 한도는 **계좌(앱키)마다 초당 18건**이다(기존 20건) — KIS 개발자센터 공지
+# 「API 호출 유량 안내 (REST, 웹소켓) (2026.04.20 기준)」 · 2026-11-19 원문 확인. 모의는 초당 1건.
+# 늘리는 공식 길은 다른 계좌를 API 신청해 앱키를 더 받는 것뿐이다(같은 공지 · 과금 · 유량 확대 계획 없음).
+# 2026-08-31 보도자료의 「기본 20 · 캠페인 40~100」 은 공지보다 높아 기준으로 안 쓴다(캠페인 신청은 10-30 마감).
 #
-# 아래 기준값은 실제 한도(20)보다 낮게 잡아 두었다. 여유를 더 두려는 것이고,
-# 지금 쓰는 양은 실제 한도의 25% 수준이다. 자세한 내용은 docs/data-sources.md 참고.
+# 아래 기준값은 공지 한도(18)와 같다(2026-11-20 부터). 2026-09 에는 그때 보도자료 한도(20)보다 낮게
+# 잡아 두었고 쓰는 양은 그 25% 수준이었다. 자세한 내용은 docs/data-sources.md 참고.
 #
 #   KIS_LIMIT_PER_SEC : 계정에 허용된다고 보는 한도 (기준값)
 #   BUDGET_RATIO      : 그중 실제로 쓸 비율. 0.5 = 한도의 50%
@@ -395,7 +397,7 @@ def _cache_put(code, data):
 # **두 번째는 같은 날 되돌렸다** (재권님 지시 — 「속도는 우선 되돌리고
 # 정확히 확인한후에 정리한다」). **값이 나쁜 것이 아니라 아직 안 쟀다.**
 #
-#     실제 한도                **20 TPS**
+#     그때 알던 한도           **20 TPS**   (2026-09-23 · 지금 공지는 18)
 #     서버 하나가 초당 10건이면
 #     `--slow` 아닌 서버 **셋**이 동시에 첫 화면을 열면   **30건** → **넘는다**
 #
@@ -414,12 +416,16 @@ def _cache_put(code, data):
 # 시작**했다. 마지막 API 가 끝난 것이 **11.5초**였다. **KIS 가 느린 것이
 # 아니라 우리가 줄을 세운 것**이다.
 #
-# 기준값 10 은 그대로다 — **실제 한도(20)의 절반**이라 아직 여유가 있다.
+# 그때(2026-09-23) 기준값 10 은 그대로 뒀다 — 그때 보도자료 한도(20)의 절반이라 여유가 있었다.
 #
 # **2026-10-15 에 20 으로 올렸다** (재권님 「키 하나당 20건으로 늘려」 · 「kis 만 늘려야해」 ·
 # 안 「응 해줘」). KIS 공식 한도와 같은 값이라 여유가 0 이다 — 넘으면 아래 ㉡ 이 간격을
 # 늘렸다가 60초 뒤 돌아오고, `stats` 의 `overruns60s` · `overrunsTotal` 이 센다. 넘는 일이
 # 잦으면 이 값을 내린다. 그 전 장중 사용은 한도(키당 10)의 10~14% 였다(10-15 작업우선순위 실측).
+#
+# **2026-11-20 에 18 로 내렸다** (재권님 「응 낮춰」). 20 은 공지 한도 18 보다 높아, 몰리는 시간대
+# (08~09시 · 15:40 · 17:45 · 20:06)에 EGW00201 거절이 났다(11-17~19 로그 셈). 몰릴 때 조금 느려지는 대신
+# 거절이 줄 것으로 본다 — `stats` 의 `overruns60s` · `overrunsTotal` 로 잰다.
 #
 # (2026-10-06 에 배포본 워커를 지웠다 — 그 전에는 워커가 따로 초당 5건을
 # 써서 「여기 10 + 워커 5」 였다. 이제 KIS 를 부르는 것은 8765 하나다.)
@@ -444,16 +450,16 @@ def _cache_put(code, data):
 # **제목이 안 말한 것은 아무도 안 본다.**
 #
 # 이 두 값만 바꾸면 호출량 전체가 조절된다.
-KIS_LIMIT_PER_SEC = 20.0
+KIS_LIMIT_PER_SEC = 18.0
 BUDGET_RATIO = 1.0                                  # 기준값을 다 쓴다
 # ⚠️ **이 값은 서버 하나가 아니라 여섯이 합쳐서 쓰는 몫이다** (2026-09-23).
 # 아래 공유 줄이 여섯을 한 줄에 세우므로, 고정으로 나눌 때처럼
 # 「각자 N건 × 여섯」 이 되지 않는다.
 #
 # **앱키 하나당 값이다** (2026-10-06 · 아래 「앱키 둘」). `kis2` 가 있으면
-# 키마다 이만큼이라 **합은 키 수 × 이 값**(둘이면 20)이다.
-KIS_CALLS_PER_SEC = KIS_LIMIT_PER_SEC * BUDGET_RATIO   # = 앱키 하나당 초당 20건
-KIS_MIN_INTERVAL = 1.0 / KIS_CALLS_PER_SEC             # = 0.05초 간격
+# 키마다 이만큼이라 **합은 키 수 × 이 값**(둘이면 36)이다.
+KIS_CALLS_PER_SEC = KIS_LIMIT_PER_SEC * BUDGET_RATIO   # = 앱키 하나당 초당 18건
+KIS_MIN_INTERVAL = 1.0 / KIS_CALLS_PER_SEC             # = 약 0.056초 간격
 
 # 동시에 진행할 호출 수. 초당 건수와는 별개다 — 간격은 _rate_limit() 이 지키고,
 # 이 값은 응답을 기다리는 시간을 몇 개까지 겹칠지를 정한다.
@@ -2228,7 +2234,7 @@ def fetch_prices(cfg, codes):
     """여러 종목을 한 번에 조회한다.
 
     KIS 현재가 API 는 한 번에 한 종목만 받으므로 서버가 나눠 호출한다.
-    호출 제한(실전 20건/초)에 걸리지 않도록 동시 실행 수를 제한한다.
+    호출 제한(실전 18건/초)에 걸리지 않도록 동시 실행 수를 제한한다.
     """
 
     out, errors = {}, {}
@@ -3962,7 +3968,7 @@ def start_after_snap(cfg):
 # 밤사이(00:00~07:00) 값은 그대로 어제 20:00 마감 값이다(overnight_quotes · take_after_snap 이 쥔 것).
 # 07:00~08:00(프리장 전)은 국내 종목을 어제 정규장 종가 · 등락률 0 으로 낸다 — 새 회차 기준가가 그 종가다
 # (2026-11-06 재권님 「아침 7시 되면 … 국내종목은 등락률이 0이 되어야」 → (가) 「값도 어제 정규장 종가로 · 0%」)
-AFTER_CLEAR_AT = (int(market_hours.CHIP_RESET[:2]), int(market_hours.CHIP_RESET[2:]))   # 07:00 → 07:30 — 다른 칩과 한 시각(11-13 재권님 「장외도 7시반」)
+AFTER_CLEAR_AT = (int(market_hours.CHIP_RESET[:2]), int(market_hours.CHIP_RESET[2:]))   # 07:00 → 07:30 → 07:50 — 다른 칩과 한 시각(11-13 재권님 「장외도 7시반」 · 11-19 「7시 50분」)
 AFTER_CLEAR_UNTIL = (15, 30)
 
 
@@ -9561,8 +9567,8 @@ class Handler(SimpleHTTPRequestHandler):
         재시작 전에 볼 수 있게. 토스처럼 토큰을 끊는 일이 없어 이 폴백은 해가 없다. 응답 `servedBy` 가 어디서 받았나다."""
         parsed = urllib.parse.urlparse(self.path)
         route = parsed.path[len("/api/market/"):].strip("/")
-        if route not in ("indicators", "indicator", "materials", "crypto", "us-outlook", "fear-greed", "leverage"):
-            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= · /api/market/materials · /api/market/crypto · /api/market/us-outlook · /api/market/fear-greed?key= · /api/market/leverage 일곱입니다."}, 404)
+        if route not in ("indicators", "indicator", "materials", "crypto", "us-outlook", "fear-greed", "leverage", "world-extra"):
+            self._send_json({"ok": False, "error": "없는 주소입니다 — /api/market/indicators · /api/market/indicator?key= · /api/market/materials · /api/market/crypto · /api/market/us-outlook · /api/market/fear-greed?key= · /api/market/leverage · /api/market/world-extra 여덟입니다."}, 404)
             return
         base = upstream_base()
         if base:
@@ -9589,6 +9595,8 @@ class Handler(SimpleHTTPRequestHandler):
             r = crypto.items()
         elif route == "us-outlook":
             r = us_outlook.outlook()
+        elif route == "world-extra":          # 바깥 값 셋(server/world_extra.py) — 셋을 따로 TTL 마다 · 못 받으면 앞 값 + 「못 받음」 · 화면 자리는 아직 없음
+            r = world_extra.payload(sys.modules[__name__])
         elif route == "leverage":             # 레버리지 지표(server/leverage.py) — 바깥 넷을 CACHE_SEC 에 한 번 · 못 받으면 앞 값 + 「못 받음」
             r = leverage.payload()
         elif route == "fear-greed":           # 공포·탐욕 지수(server/fear_greed.py) — key KOSPI · 005930 · 000660 · 일봉 · 쌓인 수급으로 셈 · KIS 를 새로 안 부른다
@@ -10625,7 +10633,7 @@ class Handler(SimpleHTTPRequestHandler):
                 data, at = fetch_joint_buy(cfg)
                 _now = datetime.now(KST)
                 if _now.weekday() < 5 and market_hours.CHIP_RESET <= _now.strftime("%H%M") < market_hours.REG_OPEN:
-                    data = dict(data or {}, rows=[], flipped=[], phase="before", reset=True)   # 07:30~09:00 「시작 전」(11-13 재권님 「다른 칩은 아침 7시반에」)
+                    data = dict(data or {}, rows=[], flipped=[], phase="before", reset=True)   # CHIP_RESET(07:50)~09:00 「시작 전」(11-13 재권님 「다른 칩은 아침 7시반에」 → 11-19 07:50)
                 d = data or {}
                 self._send_json({
                     "ok": data is not None, "data": d.get("rows") or [], "flipped": d.get("flipped") or [],
@@ -11419,11 +11427,12 @@ def main():
         # 밤사이 결과는 보내는 서버에서만 꺼내 간다 — events 바퀴도 그 서버에서만 돈다
         _us_send = (dart.telegram_send if (dart.telegram_config() and is_sender(args.port)) else None)
         daily.start_us_daily(
-            get_indices=lambda: fetch_indices_all(load_secrets(), with_chart=False)[0],
-            get_night=lambda: nxt_board.latest_futures(sys.modules[__name__]),
+            get_indices=lambda: fetch_indices_all(load_secrets(), with_chart=False),      # (줄, 오류) — 실패한 것은 daily 가 다시 받고 「못 받음」 줄로 남긴다
+            get_night=lambda: nxt_board.latest_futures_or_fetch(sys.modules[__name__]),
             peek_overnight=(events.peek_overnight if (is_sender(args.port) and not SLOW) else None),
             clear_overnight=(events.clear_overnight if (is_sender(args.port) and not SLOW) else None),
             send=_us_send,
+            us_close=us_close,
         )
         print("  미국 데일리 : 화~토 %02d:%02d 에 저장 (%s)"
               % (daily.US_SEND_AT // 60, daily.US_SEND_AT % 60, _tg))

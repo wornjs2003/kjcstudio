@@ -36,9 +36,9 @@ function paint(box) {
   if (!data) { body.innerHTML = `<div class="st-err">— ${busy ? '받는 중' : '칩별 승률을 못 받음'}</div>`; return; }
   const m = meta || {};
   const fee = m.fee == null ? '수수료 안 셈' : `수수료 ${num(m.fee, 3)}%(${esc(m.feeSides || '')})`;
-  body.innerHTML = `<div class="st-cap">${dayTxt(m.from)} ~ ${dayTxt(m.to)} · ${num(m.days)}거래일 · 세후 %(팔 때 거래세 + 농특세) · ${fee} · 09:01 매수가 → ${hm(m.sell)} 값에 팜 · 이김 = 세후 0 보다 큼 · 못 잼 = 그 시각 값이 없음(승률 셈에서 뺌) · 서버가 ${esc(m.filledAt || '—')} 에 셈</div>
+  body.innerHTML = `<div class="st-cap">${dayTxt(m.from)} ~ ${dayTxt(m.to)} · ${num(m.days)}거래일 · 세후 %(팔 때 거래세 + 농특세) · ${fee} · ${m.minChips ? `칩 ${num(m.minChips)}개 이상 든 종목만 · ` : ''}그날 판 매수가(11-18 판부터 09:00 시가 · 그 전 09:01) → ${hm(m.sell)} 값에 팜 · 이김 = 세후 0 보다 큼 · 못 잼 = 그 시각 값이 없음(승률 셈에서 뺌) · 서버가 ${esc(m.filledAt || '—')} 에 셈</div>
     <div class="dt-seg dw-tabs" role="tablist" aria-label="칩별 승률 묶음">${TABS.map(([k, t]) => `<button type="button" class="kh-chip${k === tab ? ' is-active' : ''}" data-dw="${k}">${t}</button>`).join('')}</div>
-    <div class="st-scroll dw-tw">${table()}</div>`;
+    <div class="st-scroll dw-tw wheel-stop">${table()}</div>`;
 }
 
 async function load(box) {

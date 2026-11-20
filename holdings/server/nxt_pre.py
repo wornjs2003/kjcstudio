@@ -95,6 +95,17 @@ def _prev_day(proxy, day):
     return r["d"] if r else None
 
 
+def _ran_today(proxy, day):
+    """그날 장 전 값이 이미 저장돼 있나 — 「보냈다」 표시가 메모리뿐이라 08:51~09:00 에 다시 뜨면 두 번 가던 것을 막는다
+    (2026-11-18 qa 재시작 전수검사 · 재권님 「응 고쳐」 → 안 「응」). run_once 는 보내기 전에 저장하고, 1분봉 채우기는
+    08:00~09:00 밖에서만 앞 거래일 것을 쓰므로 08:51~09:00 에 그날 줄이 있으면 그날 바퀴가 돈 것이다. 못 읽으면 False(전처럼 돈다)."""
+    try:
+        with proxy.db_conn() as conn:
+            return conn.execute("SELECT 1 FROM nxt_pre WHERE day = ? LIMIT 1", (day,)).fetchone() is not None
+    except Exception:
+        return False
+
+
 def _saved(proxy, day):
     with proxy._db_lock, proxy.db_conn() as conn:
         return {r["code"]: dict(r) for r in conn.execute("SELECT * FROM nxt_pre WHERE day = ?", (day,))}
@@ -287,6 +298,9 @@ def start(proxy):
                 now = _now()
                 hm = (now.hour, now.minute)
                 day = now.strftime("%Y%m%d")
+                if now.weekday() < 5 and RUN_AT <= hm < RUN_UNTIL and _status["lastRunDay"] != day and _ran_today(proxy, day):
+                    _status["lastRunDay"] = day          # 이 서버가 뜨기 전에 그날 이미 돌았다(저장이 있다) — 다시 보내지 않는다
+                    print("  [장 전 거래량] %s 이미 돈 날(저장 있음) — 다시 안 보냄" % day)
                 if now.weekday() < 5 and RUN_AT <= hm < RUN_UNTIL and _status["lastRunDay"] != day:
                     _status["lastRunDay"] = day          # 실패해도 그날은 한 번만 — 09:00 넘어 다시 받으면 본장이 섞인다
                     try:

@@ -1121,6 +1121,8 @@
 /* 네이버로 받는 나라 지수(「국외」 갈래 · 2026-11-10) — 나라 색 변수를 새로 두지 않고 한 색으로 */
 .kh-ix-badge.jp, .kh-ix-badge.cn, .kh-ix-badge.tw, .kh-ix-badge.in, .kh-ix-badge.de {
   background: var(--kh-text-secondary); letter-spacing: -0.06em; }
+/* 바이낸스 한국 종목 선물(「국외」 갈래 끝 · 2026-11-19 · components/world-extra.js) — 나라 배지와 같은 한 색 */
+.kh-ix-badge.bn { background: var(--kh-text-secondary); }
 
 /* ── 순위표 더 보기 ── */
 .kh-more {
@@ -1846,3 +1848,11 @@
 }
 
 /* 큰 차트 바닥 줄(외국계 창구 · 프로그램 매수세 / 매도세)의 모양은 css/flow-foot.css 로 옮겼다 — 종목 화면 · 모달 차트도 같은 줄을 단다(2026-11-05) */
+
+/* 장 상태 줄은 넓은 창에서 한 줄 — 나스닥 선물을 세마녀 칩 뒤에 두자 시세 · 시각에 따라 두 줄로 꺾여 큰 차트가 13px 줄었다(qa 11-18 check-layout).
+   꺾이는 대신 창보다 길면 줄 끝(나스닥 쪽)이 잘린다 — 재권님 「응」(11-19). 1280 아래는 전처럼 꺾인다(좁은 창 칸째 줄바꿈 · 11-13 주석) */
+@media (min-width: 1281px) {
+  #kh-mkt { flex-wrap: nowrap; overflow-x: clip; }     /* id 로 좁힌다 — Insight 첫 화면도 .kh-mkt 를 쓴다(매크로 칩 줄 · 그쪽 넘침은 그쪽 몫) */
+  #kh-mkt > * { flex-shrink: 0; }
+  #kh-mkt .kh-mkt-fut { flex-wrap: nowrap; }
+}

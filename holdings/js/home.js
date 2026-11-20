@@ -35,6 +35,7 @@ import { mountStockSearch } from './components/stock-search.js';
 import { openSectorModal } from './components/sector-modal.js';
 import { mountFearGreed } from './components/fear-greed.js';
 import { mountLeverage, leverageCell } from './components/leverage.js';
+import { worldExtraCells, loadWorldExtra, stopWorldExtra } from './components/world-extra.js';   // 「국외」 갈래 끝 칸 — 바이낸스 한국 종목 선물 · 하이닉스 나스닥 · 원/유로(11-19 「가」)
 import { mountStockPanel } from './components/stock-panel.js';
 import { mountStockDetail } from './components/stock-detail.js';
 import { mountMobileFold } from './components/mobile-fold.js';
@@ -193,7 +194,8 @@ function paintMkt() {
   /* 옵션 만기 칩 — 야간 옆 (2026-11-12 재권님 「야간선물옆에 이번달에 대한걸 적어주고 당일 -1 일부터 당일까지 깜박이게」 · 「세마녀의날은 특히 더」 →
      시안 「노랑도 빨강으로 하고 더 진하게 · 세마녀의날도 진하게 · 깜박여야해」 → 「응 커밋해」). 날짜 · 세마녀 · 깜박일 때는 서버(market_hours.opt_expiry)가 준다 —
      화면은 받은 대로 글만 짓는다. 못 받으면 칩을 안 그린다 */
-  /* 나스닥 100 선물 — 야간 옆 (2026-11-13 재권님 「나스닥 선물을 홈에 넣는 길 (가) 지금 받는 10분 지연 값을 「10분 지연」 표시로」).
+  /* 나스닥 100 선물 — 세마녀(옵션 만기) 칩 바로 뒤 (2026-11-13 재권님 「나스닥 선물을 홈에 넣는 길 (가) 지금 받는 10분 지연 값을 「10분 지연」 표시로」 ·
+     11-19 「세마녀 옆으로 하는거 아닌가?」 → 「응」 — 장 상태 줄이 두 줄로 꺾이지 않게 넓은 창에서 한 줄로 묶었다 · home.css .kh-mkt).
      값은 서버가 이미 받는 야후 값(us_outlook) 그대로 · 공식 API 가 아니라 출처를 풍선에 적는다. 못 받으면 칸을 안 그린다 */
   const nq = (lastIndices || {}).nqFutures;
   const nqCell = nq && nq.v != null
@@ -226,8 +228,8 @@ function paintMkt() {
       ${one('현물', spot ? spot.value : null, spot && spot.changePct)}
       ${one('선물', f ? f.price : null, f && f.changePct, null, f ? f.name : '')}
       ${one('야간', n ? n.price : null, n && n.changePct, null, nightNote)}
-      ${nqCell}
       ${xpChip}
+      ${nqCell}
     </span>`;
 
   el.innerHTML = `
@@ -265,7 +267,7 @@ function paintStrip(indices) {
     }
     return;
   }
-  if (top) patchStrip(top, stripHtml(indices, INDEX_CELLS) + leverageCell());      // 끝에 신용융자 칸(11-18 「나」) · 달라진 조각만 — 국기를 다시 그리지 않는다(index-strip.js patchStrip)
+  if (top) patchStrip(top, stripHtml(indices, INDEX_CELLS) + leverageCell() + worldExtraCells());      // 끝에 신용융자 칸(11-18 「나」) · 그 뒤 「국외」 끝 칸(11-19 「가」) · 달라진 조각만 — 국기를 다시 그리지 않는다(index-strip.js patchStrip)
   paintIxFilter();
 }
 
@@ -327,6 +329,7 @@ function paintIxFilter() {
   [...host.children].forEach((el, i) => {
     const cell = INDEX_CELLS[i];
     if (!cell && el.matches('[data-lev]')) { el.hidden = !(want == null || want.includes('kr')); return; }   // 신용융자 칸 — 홈 · 국내에서만
+    if (!cell && el.matches('[data-wx]')) { el.hidden = ixCat !== OV_CAT; return; }   // 바깥 값 칸 — 「국외」 에서만(11-19 「가」 · 홈 띠는 그대로)
     /* more 칸(네이버 나라 지수)은 「국외」 에서만 — 홈 띠는 전과 같다(index-strip.js INDEX_CELLS 주석) */
     el.hidden = !cell ? true : (want ? !want.includes(ixGroupOf(cell)) : !!cell.more);
     el.classList.toggle('is-on', !!cell && mkKey === IX_KEY + cell.code);      // 큰 차트에 띄운 지수 — 값이 바뀌어 다시 그려도 남게
@@ -351,16 +354,20 @@ function setupCatFilter() {
       leaveMkSide();
       leaveMarket();                                        // 다른 갈래로 — 큰 차트는 종목으로 돌아간다
       const top = $('kh-top-ix');
-      if (top && lastIndices) top.innerHTML = stripHtml(lastIndices, INDEX_CELLS);
+      if (top && lastIndices) top.innerHTML = stripHtml(lastIndices, INDEX_CELLS) + leverageCell() + worldExtraCells();
     }
     /* 「국외」 · 「시장 흐름」 을 누르면 큰 차트가 그 갈래 첫 칸으로 — 국외는 첫 지수 · 시장 흐름은 첫 칩
        (2026-11-10 재권님 「국외랑 시장흐름 클릭했을때 해당 관련 종목이 차트에 보여지게」 → 안에 「응 그렇게 해줘」).
        다른 갈래로 나가면 종목 차트로 돌아간다(시장 흐름과 같은 길) */
     if (was === OV_CAT && ixCat !== OV_CAT && ixCat !== MK_CAT) leaveMarket();
+    if (was === OV_CAT && ixCat !== OV_CAT) stopWorldExtra();
     paintIxFilter();
     paintHeatmap();
     syncMarketGroup();
     if (ixCat === OV_CAT && was !== OV_CAT) {
+      /* 바깥 값 칸은 「국외」 를 보는 동안만 받는다 — 받으면 띠를 다시 그린다(components/world-extra.js) */
+      loadWorldExtra(() => { const t = $('kh-top-ix'); if (t && lastIndices && ixCat === OV_CAT) { patchStrip(t, stripHtml(lastIndices, INDEX_CELLS) + leverageCell() + worldExtraCells()); paintIxFilter(); } },
+        () => ixCat === OV_CAT);
       const first = INDEX_CELLS.find((c) => ixGroupOf(c) === 'ov');
       if (first) showMarket(IX_KEY + first.code);
     }
@@ -1516,7 +1523,7 @@ const SORTS = {
   nowup:{ label: '현재상승', key: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), only: (v) => v >= NOW_RISE_PCT, capMin: true,
           head: '시가', show: (code, p) => (p && p.open ? fmtPriceOf(code, p.open) : '—'),
           pct: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), note: `시가 대비 +${NOW_RISE_PCT}% 이상`,
-          blank: () => chipBlank(),     // 07:30~09:00 은 앞 날 시가 · 현재가라 비운다(11-13 재권님 「다른 칩은 아침 7시반에」)
+          blank: () => chipBlank(),     // 서버 chipReset(07:50)~09:00 은 앞 날 시가 · 현재가라 비운다(11-13 재권님 「다른 칩은 아침 7시반에」 → 11-19 07:50)
           empty: () => (chipBlank() ? `정규장 칩은 아침 ${serverData('chipReset').from}에 비우고 ${serverData('chipReset').until} 정규장부터 다시 셉니다`
             : `시가보다 +${NOW_RISE_PCT}% 이상 오른 종목이 없습니다(시세를 받는 중이면 잠시 뒤 채워짐)`) },
   /* 매수 — 외국인 · 기관 · 프로그램이 **셋 다** 순매수인 종목, 셋 합이 큰 순 (2026-11-05 재권님 「프로그램 기관 외국인이 동시에
@@ -1530,7 +1537,7 @@ const SORTS = {
           note: () => jointNote(),
           empty: () => (!jointMeta || jointMeta.pending ? '불러오는 중'
             : jointMeta.listFail ? '못 받음 — 외국인 · 기관 순매수 순위'
-            : '네 칸(①~④)에 드는 종목이 아직 없습니다') },
+            : '네 칸(외·기·연·프 · 외·기·프 · 기·연 · 외국인만)에 드는 종목이 아직 없습니다') },
   /* 프리장 — 넥스트레이드 프리마켓(08:00~08:50)에 프로그램이 몰리는 종목 (2026-11-05 재권님 「프리장에 프로그램 몰리는것 만들어줘.
      이걸 참고해서 매매를 할수있게 다른것들도 같이 챙겨서」 → 안 「응 만들어」). 고르는 것 · 차례 · 굳히는 때는 서버다(server/pre_flow.py)
      — 순위 목록 중 전일 종가보다 오른 종목의 프리장 거래대금 상위(서버 pre_flow.pick · 11-12 재권님 「상승인 종목 70개」) · 보이는 차례는 등락률 큰 순(11-13) · 08:50 에 그날 판으로 굳힘. 화면은 받은 차례 그대로 그린다 */
@@ -1621,7 +1628,7 @@ const SORT_TIPS = {
   up: '오늘 전일 대비 많이 오른 순',
   down: '오늘 전일 대비 많이 내린 순',
   get after() { return `정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 09:00 ~ 15:40 은 비어 있습니다 · ${capMinTxt()}`; },
-  get buy() { return `외국인 · 기관 순매수 금액 상위 30(장중 가집계)에 든 종목을 이 차례로 — ① 외국인 · 기관 · 연기금 · 프로그램 넷 다 ② 외국인 · 기관 · 프로그램 ③ 기관 · 연기금 ④ 외국인만 · 같은 칸 안은 산 금액 합 큰 순\n연기금은 15:45 확정치 뒤에만 있어 장중에는 ② ④ 만 찹니다 · 프로그램은 실시간 · 서버가 판을 다시 지을 때마다 차례가 바뀝니다\n칸에서 빠진 종목은 맨 위에 흐리게 · ${capMinTxt()}`; },
+  get buy() { return `외국인 · 기관 순매수 금액 상위 30(장중 가집계)에 든 종목을 이 차례로 — 외·기·연·프(외국인 · 기관 · 연기금 · 프로그램 넷 다) → 외·기·프(외국인 · 기관 · 프로그램) → 기·연(기관 · 연기금) → 외국인만 · 같은 칸 안은 산 금액 합 큰 순\n연기금은 15:45 확정치 뒤에만 있어 장중에는 외·기·프 · 외국인만 두 칸만 찹니다 · 프로그램은 실시간 · 서버가 판을 다시 지을 때마다 차례가 바뀝니다\n칸에서 빠진 종목은 맨 위에 흐리게 · ${capMinTxt()}`; },
   get pre() { return `넥스트레이드 프리마켓(08:00 ~ 08:50)에 전일 종가보다 오른 종목 중 거래대금 상위(서버가 정한 줄 수) · 차례는 등락률 큰 순\n배율 — 전날 같은 시각까지 거래량 대비(다시 재는 주기 · 빨강 기준은 서버 값 — 배율 위 풍선에)\n프리장 동안 몇 분마다 다시 재고 08:50 에 그날 판으로 굳힙니다 · 줄마다 「프」 는 프로그램 순매수(참고) · ${capMinTxt()}`; },
   get nowup() { return `지금 값이 오늘 시가보다 +${NOW_RISE_PCT}% 이상 높은 종목, 시가 대비 큰 순 · 오른쪽 % 도 시가 대비\n위 코스피 · 코스닥으로 시장을 고릅니다 · ${capMinTxt()}`; },
   get vi() { return `오늘 정규장에 상승 VI 가 걸렸거나(VI 는 ${capMinTxt()}) 전일 대비 +20% 를 넘은 종목, 최근 것이 위`; },
@@ -2094,8 +2101,10 @@ const eokSigned = (won) => { if (won == null) return '—'; const v = Math.round
 /* 한 칸 — 셋의 순매수(억 · 오름 빨강 · 내림 파랑)를 한 줄에(11-05 재권님 「외 기 프 한줄로 해줘」). 13:19 에 표가 순위 칸 밖으로
    밀린 것은 폭이 아니라 시세 갱신이 이 칸을 글자로 넣던 탓이었다(paintOneRow · html). 빠진 종목만 아랫줄 「무엇이 매도로 바뀜 시각」.
    ≈ 는 상위 30 밖이라 그 종목 가집계 수량 × 현재가로 어림한 값(서버 approx) */
-const JOINT_TIER = { 1: ['①', '외국인 · 기관 · 연기금 · 프로그램 넷 다 순매수'], 2: ['②', '외국인 · 기관 · 프로그램 순매수'],
-  3: ['③', '기관 · 연기금 순매수'], 4: ['④', '외국인만 순매수'] };
+/* 보이는 이름은 사는 쪽 줄임(11-19 재권님 「응」 — 단타 판과 같게 · 글자는 Insight strategy-dt30.js SUB_NAME 그대로 옮김 · 그쪽이 안 내보내 한 곳으로 못 합침 — 보드 카드) · 열쇠(서버 tier 1~4)는 그대로 */
+const jointTierTag = (code) => { const t = JOINT_TIER[jointOf(code)?.tier]; return t ? `<b data-tip="${escT(t[1])}">${t[0]}</b> ` : ''; };
+const JOINT_TIER = { 1: ['외·기·연·프', '외국인 · 기관 · 연기금 · 프로그램 넷 다 순매수'], 2: ['외·기·프', '외국인 · 기관 · 프로그램 순매수'],
+  3: ['기·연', '기관 · 연기금 순매수'], 4: ['외국인만', '외국인만 순매수'] };
 function jointCell(code, narrow = false) {
   const r = jointOf(code);
   if (!r) return '—';
@@ -2110,7 +2119,8 @@ function jointCell(code, narrow = false) {
   /* 연 — 연기금 그날 확정치(15:45 뒤 쌓기 · 그 전 「—」 · 언제 채우는지는 표 위 갱신 줄) · 줄마다 시각은 안 넣는다
      (11-06 재권님 「2 안 넣어도 돼 · 갱신시간은 해당 실시간 목록 위에 써주고 종목에는 외 기 프 연 이렇게」) */
   /* 차례 ①~④ — 서버 joint_tier(11-11 재권님 「셋다사는게 가장좋고 그다음이 외국인 기관 그다음이 기관 연기금 그다음이 외국인」) */
-  const tier = JOINT_TIER[r.tier] ? `<b data-tip="${escT(JOINT_TIER[r.tier][1])}">${JOINT_TIER[r.tier][0]}</b> ` : '';
+  /* 홈 순위 줄은 이름표를 첫 줄 가격 왼쪽에 둔다(jointTierTag · 11-19 재권님 「가」 — 둘째 줄에 두면 길어져 종목 이름이 잘렸다) · 순위 모달 칸(narrow)은 여기 그대로 */
+  const tier = narrow ? jointTierTag(code) : '';
   const body = line(`${tier}${[...JOINT_SIDES, ['fund', '연']].map(one).join(' ')}<span class="kh-mut">억</span>`);
   if (!r.flip) return body;
   const why = [(r.sold || []).length ? `${names(r.sold)} 매도로 바뀜` : '', (r.unknown || []).length ? `${names(r.unknown)} 값 모름` : '']
@@ -2304,7 +2314,7 @@ function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
     }));
   }
 
-  if (sort && sort.blank && sort.blank()) return [];   // 현재상승 — 07:30~09:00 「시작 전」
+  if (sort && sort.blank && sort.blank()) return [];   // 현재상승 — 서버 chipReset(07:50)~09:00 「시작 전」
   if (!sort || !sort.key) return base;      // 시가총액은 목록 순서 그대로
 
   /* 값이 아직 안 온 종목은 뒤로 보낸다. 0 으로 치면 「거래량 0위」 가 된다 */
@@ -2979,7 +2989,7 @@ function paintRows(priceMap) {
       <td class="l"><span class="kh-nm">
         ${iconHtml(s)}
         <b data-co="${s.code}">${market === 'THEME' ? escT(s.name) : s.name}</b>${market === 'THEME' ? themeBadge(s.code) : sectorTag(s.code)}</span></td>
-      <td class="kh-num"><span${expectOf(live, sid) ? ` class="${dirClass(live.expect.pct)}" data-tip="${expectTip(live.expect)}"` : ''}
+      <td class="kh-num">${sid === 'buy' ? jointTierTag(s.code) : ''}<span${expectOf(live, sid) ? ` class="${dirClass(live.expect.pct)}" data-tip="${expectTip(live.expect)}"` : ''}
         >${live ? (expectOf(live, sid) ? expectTag(live.expect) : '') + fmtPriceOf(s.code, priceOf(live, sid)) : '···'}</span></td>
       <td class="kh-num kh-metric">${sortCell(s.code, live)}</td>
       <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(pctOf(live, sid)) : '—'}</td>
@@ -3299,7 +3309,7 @@ function paintOneRow(code, live) {
     if (!tr || !live) return;
     const cls = dirClass(pctOf(live));
     const ex = expectOf(live);
-    tr.children[2].innerHTML =
+    tr.children[2].innerHTML = (market !== 'THEME' && sortBy === 'buy' ? jointTierTag(code) : '') +
       `<span${ex ? ` class="${dirClass(ex.pct)}" data-tip="${expectTip(ex)}"` : ''}>${ex ? expectTag(ex) : ''}${fmtPriceOf(code, priceOf(live))}</span>`;   // 예상가는 오르내림 색
     /* 「전일대비」 자리에는 지금 줄 세운 기준값이 온다. 오르내림이 아니라
        크기라서 등락 색을 입히지 않는다. */

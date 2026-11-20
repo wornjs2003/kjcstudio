@@ -1,15 +1,26 @@
 # -*- coding: utf-8 -*-
-"""섹터수급 — 프리장 08:00 부터 정규장 09:30 까지 업종 · 테마별 10분 거래대금 (2026-11-18).
+"""섹터수급 — 프리장 08:00 부터 정규장 14:00 까지 업종 · 테마별 5분 거래대금 · 정규장 칸은 매수 · 매도 체결 금액 (2026-11-18 · 11-19).
+
+11-19 재권님 「현시간까지 매수 매도 총합도 필요해」(시황분석1 창) → 「섹터 수급은 프리장부터 5분봉으로 묶어서 보는건 무리가 있나? 5분에 한번씩
+받는걸로 하면?」 → 안 「프리장부터 5분 칸 · 매수 · 매도는 정규장 칸만 거래대금 상위 300 종목 체결강도로」 에 「응 그렇게 해」(개발1 창 · 08:3x).
+10분 칸이던 지난 판은 5분봉으로 다시 채운다(되채움 · 봉이 모자란 날은 10분 판 그대로).
+
+처음은 09:30 까지 · 같은 날 저녁 재권님 「2시까지 보여지게 해줘」(18:1x) → 부담 물음 뒤 「없으면 올려」 로 14:00 까지 넓혔다.
 
 재권님 13:03 「섹터수급 이라고 단타창에 칸 추가해줘. 이건 동일업종에 돈이 들어오는거 체크하는거야. 프리장부터 정규장 9시 30분까지
 재야해」 → 시황분석1 그림 → 「응 만들어줘」 · 「그럼 테마도 만들어줘」 · 「다로 해줘」(시황분석1 창 · 13:2x) →
 서버 안 「커밋해」(16:50 · 개발1 창). 화면은 시황분석1 이 만든다.
 
-    언제      평일 SNAPS 시각마다 한 번 — 종목마다 그날 **누적 거래대금** 사진(멀티 시세 30종목씩)
-                08:10 ~ 08:50   넥스트(NX) 만 — 프리장(08:00~08:50) · KRX 는 아직 안 열렸다
-                09:10 ~ 09:30   KRX(J) + 넥스트(NX) 둘 다 — 09:00 동시호가 체결은 09:00 칸에 든다
+    언제      평일 SNAPS 시각마다 한 번(STEP 분마다) — 종목마다 그날 **누적 거래대금** 사진(멀티 시세 30종목씩)
+                08:05 ~ 08:50   넥스트(NX) 만 — 프리장(08:00~08:50) · KRX 는 아직 안 열렸다
+                09:05 ~ 14:00   KRX(J) + 넥스트(NX) 둘 다 — 09:00 동시호가 체결은 09:00 칸에 든다 · 사진마다 156번쯤(J+NX)
+    매수·매도  J_FROM 사진부터 그 사진의 KRX 누적 거래대금 상위 BS_TOP 종목만 체결(inquire-ccnl)의 당일 체결강도 P 를 받아
+              누적 매수 ≈ KRX 누적 거래대금 × P/(100+P) · 누적 매도 ≈ × 100/(100+P) 로 나눈다(산 값 · 판 값의 평균가가 같다는 어림).
+              칸 값 = 끝 사진 − 시작 사진(시작이 J_FROM 앞이면 0 에서) — 양 끝에 P 가 있는 종목만 · 그 수가 bsN.
+              **KRX 만이다** — 넥스트 체결은 안 나눈다(amt 에는 든다). 프리장 칸은 null — 프리장에 체결강도가 안 온다(11-19 08:31 통합 체결 0줄 · 잼).
+              사진마다 BS_TOP 번 더 — 5분마다 300 이면 초당 1번쯤(11-19 08:31 KIS 9.4/20 초당 쓰는 중)
               08:50 사진은 08:51 에 찍는다 — 프리장 마지막 몇 초 체결까지 담으려고
-    칸        SLOTS — 칸 이름은 시작 시각 · 칸 값 = 끝 사진 누적 − 시작 사진 누적(08:00 칸은 0 에서). 08:50~09:00 칸은 없다
+    칸        SLOTS(STEP 분) — 칸 이름은 시작 시각 · 칸 값 = 끝 사진 누적 − 시작 사진 누적(08:00 칸은 0 에서). 08:50~09:00 칸은 없다
               (넥스트는 쉬고 KRX 는 동시호가 접수만 — 09:00 칸이 08:50 사진부터 잰다)
     범위      코스피 · 코스닥 주권(nxt_pre 마스터) 중 업종(WICS · company_profile.sectors) 이나 테마(theme_flow 의 theme_member)가 있는 종목
               2026-11-18 잼: 2,4xx 종목 · 사진 한 장에 NX 80번쯤(09:10 부터는 J 까지 두 배) — 하루 900번쯤
@@ -17,9 +28,9 @@
               한 종목이 여러 테마면 각 테마에 다 센다
     pct       칸 끝 사진의 값으로 그 묶음 평균 등락률(%) — 전날 KRX 정규장 종가(nxt_board 15:41 저장) 대비
               08:50 까지는 넥스트 현재가(그날 넥스트 체결이 있는 종목만) · 09:10 부터는 KRX 현재가(체결이 있는 종목만)
-    굳힘      09:31 뒤 한 번 — 그날 판(업종 · 테마)을 sector_flow_day 에 남긴다(지우지 않는다). 사진(sector_snap)은 KEEP_SNAP_DAYS 날만
+    굳힘      14:01 뒤 한 번 — 그날 판(업종 · 테마)을 sector_flow_day 에 남긴다(지우지 않는다). 사진(sector_snap)은 KEEP_SNAP_DAYS 날만
     되채움    사진이 없는 날(이 서버 전 · 내려가 있던 날)은 개발 DB 5분봉으로 셈해 남긴다(src 5m · 봉 있는 종목만) — 서버가 뜰 때
-              5분봉이 있는 지난 평일 전부 · 그날 사진이 없으면 09:31 굳힘 때. 재권님 「지난날들도 다 되채워야돼」(11-18 17:0x)
+              5분봉이 있는 지난 평일 전부 · 그날 사진이 없으면 14:01 굳힘 때 · 칸이 모자란 옛 되채움 판(09:30 까지 판)도 다시 채운다. 재권님 「지난날들도 다 되채워야돼」(11-18 17:0x)
               메인(8764)은 개발 DB 를 읽기 전용으로 읽어(launchd 의 KJC_DB_PATH) 따로 옮기지 않아도 같은 판을 본다
     없음      사진이 빠진 칸(서버가 내려가 있었음 · 받기 실패) · 앞날이 없으면 null — 0 으로 꾸미지 않는다.
               첫날(2026-11-19)은 prev 가 다 null 이다
@@ -42,17 +53,26 @@ from secrets_guard import safe_message
 
 KST = timezone(timedelta(hours=9))
 
-SLOTS = ("0800", "0810", "0820", "0830", "0840", "0900", "0910", "0920")
-SNAPS = ("0810", "0820", "0830", "0840", "0850", "0910", "0920", "0930")   # 사진 이름(찍는 경계)
+END = "1400"                           # 마지막 칸이 끝나는 때(재권님 「2시까지」)
+STEP = 5                               # 칸 길이(분) — 11-19 재권님 「5분에 한번씩」(그 전 10)
+BS_TOP = 300                           # 매수 · 매도로 나눌 종목 — 사진마다 KRX 누적 거래대금 상위 이만큼(체결 한 번씩)
+
+
+def _hhmm(m):
+    return "%02d%02d" % (m // 60, m % 60)
+
+
+_PRE = [_hhmm(m) for m in range(8 * 60, 8 * 60 + 50, STEP)]                               # 0800 … 0845
+_REG = [_hhmm(m) for m in range(9 * 60, int(END[:2]) * 60 + int(END[2:]), STEP)]         # 0900 … 1355
+SLOTS = tuple(_PRE) + tuple(_REG)
+SNAPS = tuple(_PRE[1:]) + ("0850",) + tuple(_REG[1:]) + (END,)                             # 사진 이름(찍는 경계)
 SNAP_FIRE = {"0850": "0851"}           # 이름과 찍는 때가 다른 사진
-SLOT_FROM = {"0800": None, "0810": "0810", "0820": "0820", "0830": "0830", "0840": "0840",
-             "0900": "0850", "0910": "0910", "0920": "0920"}
-SLOT_TO = {"0800": "0810", "0810": "0820", "0820": "0830", "0830": "0840", "0840": "0850",
-           "0900": "0910", "0910": "0920", "0920": "0930"}
-J_FROM = "0910"                        # 이 사진부터 KRX 를 함께 받는다
+SLOT_FROM = {s: (None if s == "0800" else "0850" if s == "0900" else s) for s in SLOTS}
+SLOT_TO = {s: _hhmm(int(s[:2]) * 60 + int(s[2:]) + STEP) for s in SLOTS}
+J_FROM = _REG[1]                       # 이 사진부터 KRX 를 함께 받는다(0905)
 SNAP_LATE_MIN = 5                      # 경계에서 몇 분 안이면 늦게라도 찍는다(서버가 막 떴을 때) — 그 뒤는 빈 사진
-FREEZE_AT = (9, 31)
-REFRESH_MS = 60000                     # 화면이 다시 받을 주기 — 사진은 10분마다라 1분이면 넉넉하다
+FREEZE_AT = (int(END[:2]), int(END[2:]) + 1)
+REFRESH_MS = 60000                     # 화면이 다시 받을 주기 — 사진은 STEP 분마다라 1분이면 넉넉하다
 EOK = 100000000
 KEEP_SNAP_DAYS = 5
 FILL_MIN_CODES = 300                   # 5분봉 되채움 — 그날 08:00~09:25 봉이 있는 종목이 이보다 적으면 안 채운다(봉을 덜 받은 날)
@@ -82,6 +102,8 @@ def _init(proxy):
     with proxy._db_lock, proxy.db_conn() as conn:
         for q in _SCHEMA:
             conn.execute(q)
+        if "j_power" not in {r[1] for r in conn.execute("PRAGMA table_info(sector_snap)")}:
+            conn.execute("ALTER TABLE sector_snap ADD COLUMN j_power REAL")      # 당일 체결강도(KRX) — 매수 · 매도 나누기(11-19)
         cols = {r[1] for r in conn.execute("PRAGMA table_info(sector_flow_day)")}
         for c, t in (("src", "TEXT"), ("codes", "INTEGER")):
             if c not in cols:
@@ -130,6 +152,7 @@ def snap(proxy, day, at):
         _status.update(lastSnap=at, lastSnapAt=_now().isoformat(timespec="seconds"), lastCodes=0,
                        error="거래대금 합이 0 — 휴장이거나 아직 거래 전")
         return 0
+    power = _powers(proxy, cfg, jx) if jx else {}
     rows = []
     for c in codes:
         n, j = nx.get(c), jx.get(c)
@@ -137,25 +160,51 @@ def snap(proxy, day, at):
             continue
         rows.append((day, at, c,
                      (n or {}).get("value"), (n or {}).get("vol"), (n or {}).get("price"),
-                     (j or {}).get("value"), (j or {}).get("vol"), (j or {}).get("price"), (j or {}).get("pct")))
+                     (j or {}).get("value"), (j or {}).get("vol"), (j or {}).get("price"), (j or {}).get("pct"), power.get(c)))
     with proxy._db_lock, proxy.db_conn() as conn:
-        conn.executemany("INSERT OR REPLACE INTO sector_snap (day, at, code, nx_val, nx_vol, nx_price, j_val, j_vol, j_price, j_pct) "
-                         "VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
+        conn.executemany("INSERT OR REPLACE INTO sector_snap (day, at, code, nx_val, nx_vol, nx_price, j_val, j_vol, j_price, j_pct, j_power) "
+                         "VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows)
         days = [r[0] for r in conn.execute("SELECT DISTINCT day FROM sector_snap ORDER BY day DESC")]
         for d in days[KEEP_SNAP_DAYS:]:
             conn.execute("DELETE FROM sector_snap WHERE day = ?", (d,))
     _status.update(lastSnap=at, lastSnapAt=_now().isoformat(timespec="seconds"), lastSnapSec=round(time.time() - t0, 1),
-                   lastCodes=len(rows), error=None)
+                   lastCodes=len(rows), lastPowers=len(power), error=None)
     _cache.clear()
     return len(rows)
 
 
+def _powers(proxy, cfg, jx):
+    """KRX 누적 거래대금 상위 BS_TOP 종목의 당일 체결강도 — {code: P}. 체결이 아직 없거나 못 받은 종목은 빠진다."""
+    top = sorted((c for c, r in jx.items() if (r.get("value") or 0) > 0), key=lambda c: -(jx[c].get("value") or 0))[:BS_TOP]
+    out = {}
+    for c in top:
+        try:
+            r = proxy.kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-ccnl",
+                              {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": c}, "FHKST01010300")
+            p = proxy._num(((r or {}).get("output") or [{}])[0].get("tday_rltv"))
+        except Exception:
+            continue
+        if p is not None and p >= 0:
+            out[c] = p
+    return out
+
+
 def _snaps(conn, day):
     out = {}
-    for r in conn.execute("SELECT at, code, nx_val, nx_vol, nx_price, j_val, j_vol, j_price, j_pct FROM sector_snap WHERE day = ?", (day,)):
+    for r in conn.execute("SELECT at, code, nx_val, nx_vol, nx_price, j_val, j_vol, j_price, j_pct, j_power FROM sector_snap WHERE day = ?", (day,)):
         out.setdefault(r[0], {})[r[1]] = {"nxVal": r[2], "nxVol": r[3], "nxPrice": r[4], "jVal": r[5], "jVol": r[6],
-                                          "jPrice": r[7], "jPct": r[8]}
+                                          "jPrice": r[7], "jPct": r[8], "jPower": r[9]}
     return out
+
+
+def _bs(at, r):
+    """그 사진의 그 종목 KRX 누적 (매수, 매도) 어림(원) — J_FROM 앞 사진은 (0, 0) · 체결강도가 없으면 None."""
+    if at < J_FROM:
+        return 0, 0
+    if r is None or r.get("jPower") is None or r.get("jVal") is None:
+        return None
+    p, v = r["jPower"], r["jVal"]
+    return v * p / (100 + p), v * 100 / (100 + p)
 
 
 def _total(at, r):
@@ -211,7 +260,7 @@ def _groups(proxy, by, codes):
 
 
 def build(proxy, day, by):
-    """그날 사진으로 묶음별 칸 값을 셈 — {name: {n, amt{slot}, pct{slot}}} · 사진이 하나도 없으면 None."""
+    """그날 사진으로 묶음별 칸 값을 셈 — {name: {n, amt{slot}, got, pct{slot}, buy{slot}, sell{slot}, bsN{slot}}} · 사진이 하나도 없으면 None."""
     with proxy._db_lock, proxy.db_conn() as conn:
         try:
             sn = _snaps(conn, day)
@@ -223,9 +272,10 @@ def build(proxy, day, by):
     codes = sorted({c for s in sn.values() for c in s})
     out = {}
     for name, cs in _groups(proxy, by, codes).items():
-        amt, pct, gotm = {}, {}, {}
+        amt, pct, gotm, buy, sell, bsn = {}, {}, {}, {}, {}, {}
         for slot in SLOTS:
             fa, ta = SLOT_FROM[slot], SLOT_TO[slot]
+            buy[slot] = sell[slot] = bsn[slot] = None
             if ta not in sn or (fa is not None and fa not in sn):
                 amt[slot] = None                  # 사진이 빠졌다 — 못 잼
                 gotm[slot] = None
@@ -240,12 +290,26 @@ def build(proxy, day, by):
                     got += 1
                 amt[slot] = round(tot / EOK, 2) if got else None
                 gotm[slot] = got                  # 그 칸을 셈한 종목 수 — n 보다 작으면 못 받은 종목이 있다(qa)
+                if ta >= J_FROM:                  # 매수 · 매도 — 정규장 칸만 · 양 끝에 체결강도가 있는 종목만
+                    tb = ts = 0.0
+                    k = 0
+                    for c in cs:
+                        b = _bs(ta, sn[ta].get(c))
+                        a = (0, 0) if fa is None else _bs(fa, sn[fa].get(c))
+                        if b is None or a is None or b[0] < a[0] or b[1] < a[1]:
+                            continue
+                        tb += b[0] - a[0]
+                        ts += b[1] - a[1]
+                        k += 1
+                    buy[slot] = round(tb / EOK, 2) if k else None
+                    sell[slot] = round(ts / EOK, 2) if k else None
+                    bsn[slot] = k
             if ta in sn:
                 ps = [p for p in (_pct(ta, sn[ta].get(c), close.get(c)) for c in cs) if p is not None]
                 pct[slot] = round(sum(ps) / len(ps), 2) if ps else None
             else:
                 pct[slot] = None
-        out[name] = {"n": len(cs), "amt": amt, "got": gotm, "pct": pct}
+        out[name] = {"n": len(cs), "amt": amt, "got": gotm, "pct": pct, "buy": buy, "sell": sell, "bsN": bsn}
     return out
 
 
@@ -304,9 +368,9 @@ def freeze(proxy, day):
 
 def build_5m(proxy, day, by):
     """개발 DB 5분봉(candles 5m · 통합)으로 그날 판을 셈 — (판, 봉이 있는 종목 수) · 종목이 FILL_MIN_CODES 보다 적으면 (None, 수).
-    칸 값 = 그 10분 안에 시작한 5분봉 종가 × 거래량 합(어림 · 시황분석1 시안 셈) · 08:50~09:00 봉은 안 씀.
+    칸 값 = 그 칸(STEP 분) 안에 시작한 5분봉 종가 × 거래량 합(어림 · 시황분석1 시안 셈) · 08:50~09:00 봉은 안 씀 · 매수 · 매도는 null(봉에 없다).
     pct = 칸 끝 전 마지막 봉 종가 ÷ 전날 정규장 종가 − 1 — 08:50 전 칸은 프리장 봉이 있는 종목 · 09:00 뒤 칸은 09:00 뒤 봉이 있는 종목만."""
-    lo, hi = day + "0800", day + "0925"
+    lo, hi = day + "0800", day + _hhmm(int(END[:2]) * 60 + int(END[2:]) - 5)
     with proxy._db_lock, proxy.db_conn() as conn:
         bars = {}
         for c, ts, cl, vol in conn.execute("SELECT code, ts, close, volume FROM candles WHERE period = '5m' AND ts >= ? AND ts <= ?",
@@ -361,11 +425,18 @@ def backfill(proxy, day):
 
 
 def backfill_missing(proxy):
-    """5분봉이 있는 지난 평일 중 굳힌 판이 없는 날을 다 채운다 — [(day, 묶음 수)]. 오늘은 사진 쪽이 굳힌다(09:31)."""
+    """5분봉이 있는 지난 평일 중 굳힌 판이 없는 날을 다 채운다 — [(day, 묶음 수)]. 오늘은 사진 쪽이 굳힌다(FREEZE_AT)."""
     _init(proxy)
     today = _now().strftime("%Y%m%d")
     with proxy._db_lock, proxy.db_conn() as conn:
-        have = {r[0] for r in conn.execute("SELECT DISTINCT day FROM sector_flow_day")}
+        have = set()
+        for d, src, body in conn.execute("SELECT day, src, body FROM sector_flow_day"):
+            # 칸이 모자란 옛 판(09:30 까지 · 10분 칸)은 5분봉으로 다시 채운다 — 사진 판도(10분 사진으로는 5분 칸을 못 만든다 · 11-19).
+            # 봉이 모자라 못 채우면 옛 판 그대로 남는다(backfill 이 안 덮는다)
+            first = next(iter((json.loads(body) or {}).values()), None) if body else None
+            amt0 = (first or {}).get("amt") or {}
+            if first and SLOTS[-1] in amt0 and SLOTS[1] in amt0:
+                have.add(d)
         ds = [r[0] for r in conn.execute("SELECT DISTINCT substr(ts, 1, 8) FROM candles WHERE period = '5m' AND substr(ts, 9, 4) = '0800'")]
     done = []
     for d in sorted(ds):
@@ -394,7 +465,9 @@ def _phase(now):
 
 def board(proxy, by="sector", day=None):
     """data {day, prev(앞 거래일 · 없으면 null), by, slots,
-             rows: [{name, n, amt{slot: 억원}, got{slot: 그 칸을 셈한 종목 수 · n 보다 작으면 못 받은 종목 있음}, prev{slot: 억원 · 앞날 같은 칸}, pct{slot: % · 칸 끝 묶음 평균 · 전날 정규장 종가 대비}}]}
+             rows: [{name, n, amt{slot: 억원}, got{slot: 그 칸을 셈한 종목 수 · n 보다 작으면 못 받은 종목 있음}, prev{slot: 억원 · 앞날 같은 칸}, pct{slot: % · 칸 끝 묶음 평균 · 전날 정규장 종가 대비},
+                     buy{slot} · sell{slot}: 억원 · KRX 체결 매수 · 매도 어림(정규장 칸 · 체결강도를 받은 종목만 · 프리장 · 5분봉 판은 null),
+                     bsN{slot}: 나눈 종목 수, prevBuy · prevSell: 앞날 같은 칸}]}
        meta {asof, phase(pre · open · closed), refreshMs(닫혔으면 null), by, days, status}
 
     줄은 그날이나 앞날에 거래대금이 있는 묶음 전부(자르지 않는다) · 차례는 그날 합 큰 순(화면이 다시 세운다) · 없는 값은 null."""
@@ -416,7 +489,12 @@ def board(proxy, by="sector", day=None):
             continue
         rows.append({"name": name, "n": c.get("n") if c else o.get("n"), "amt": amt, "prev": pv,
                      "got": {s: (c.get("got") or {}).get(s) for s in SLOTS},
-                     "pct": {s: (c.get("pct") or {}).get(s) for s in SLOTS}})
+                     "pct": {s: (c.get("pct") or {}).get(s) for s in SLOTS},
+                     "buy": {s: (c.get("buy") or {}).get(s) for s in SLOTS},
+                     "sell": {s: (c.get("sell") or {}).get(s) for s in SLOTS},
+                     "bsN": {s: (c.get("bsN") or {}).get(s) for s in SLOTS},
+                     "prevBuy": {s: (o.get("buy") or {}).get(s) for s in SLOTS},
+                     "prevSell": {s: (o.get("sell") or {}).get(s) for s in SLOTS}})
     rows.sort(key=lambda r: (-sum(v for v in r["amt"].values() if v), -sum(v for v in r["prev"].values() if v)))
     ph = _phase(now) if day == today else "closed"
     data = {"day": day, "prev": prev, "by": by, "slots": list(SLOTS), "rows": rows}
@@ -431,7 +509,8 @@ def board(proxy, by="sector", day=None):
     meta = {"asof": _status.get("lastSnapAt") if day == today else None, "phase": ph,
             "refreshMs": REFRESH_MS if ph != "closed" else None, "by": by, "days": days,
             "src": src.get(day), "prevSrc": src.get(prev) if prev else None,
-            "srcNote": "snap = 10분마다 누적 거래대금 사진(넥스트+KRX · 종목 2천여) · 5m = 개발 DB 5분봉 종가×거래량 되채움(봉이 있는 종목만 · codes) — 두 셈은 값이 다를 수 있다",
+            "srcNote": "snap = %d분마다 누적 거래대금 사진(넥스트+KRX · 종목 2천여) · 5m = 개발 DB 5분봉 종가×거래량 되채움(봉이 있는 종목만 · codes) — 두 셈은 값이 다를 수 있다" % STEP,
+            "bsNote": "buy · sell = KRX 누적 거래대금 × 체결강도 P/(100+P) · 100/(100+P) 의 칸 차(어림) — 정규장 칸만 · 사진마다 KRX 거래대금 상위 %d 종목만(bsN) · 넥스트 체결은 안 나눔" % BS_TOP,
             "amtUnit": "억원", "status": dict(_status)}
     return data, meta
 
@@ -441,7 +520,7 @@ def status():
 
 
 def start(proxy):
-    """보내는 서버가 뜰 때 한 번 — 평일 SNAPS 사진 · 09:31 굳힘."""
+    """보내는 서버가 뜰 때 한 번 — 평일 SNAPS 사진 · FREEZE_AT 굳힘."""
     def loop():
         time.sleep(40)
         try:

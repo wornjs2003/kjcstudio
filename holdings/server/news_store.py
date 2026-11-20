@@ -217,6 +217,15 @@ def match_alert(title, key="즉시알림"):
 
 # ---------------------------------------------------------------- 쌓기
 
+def _no_time(at):
+    """받는 곳이 시각을 안 준 기사인가 — at 이 비었거나 못 읽는다. at_ts 는 그때 「지금」(처음 본 때)이라 실제 나온 시각이 아니다."""
+    try:
+        datetime.fromisoformat(at)
+        return False
+    except Exception:
+        return True
+
+
 def _ts(at):
     """'2026-09-21T09:01:00+09:00' → 초. 못 읽으면 지금."""
     try:
@@ -622,9 +631,13 @@ def send_alerts(send=None):
     night = int(time.time()) - FLASH_NIGHT_MAX_H * 3600
     # 밤 속보 07:00 길은 우리가 그 기사를 **밤(조용한 시간)에 처음 본 것**만 — 낮에 새 받는 곳이 밤 속보를 처음 가져오면 그것은 1시간 넘은 속보라
     # 낮 길(ALERT_MAX_AGE_H)을 따른다(qa 11-19 — 8765 14:09 재시작 첫 바퀴에 06:05 속보가 14:10 에 감 · 「1시간 넘은 속보는 낮에 안 보냄」 과 어긋남)
+    # 시각을 안 주는 받는 곳(닛케이 · 한겨레)은 바로 보내지 않고 정기 묶음에만 — at_ts 가 처음 본 때라 오래된 기사도 갓 나온 것으로 셈해
+    # 「1시간 넘은 것은 안 보냄」 을 지나간다(qa 11-19 14:15 닛케이 1통 · 재권님 「응」 14:3x)
+    notime = [r for r in rows if _no_time(r.get("at") or "")]
+    rows = [r for r in rows if r not in notime]
     morning = [r for r in rows if TG_NEW and FLASH_WORD in (r["title"] or "") and dart.in_quiet(r["at_ts"]) and (r["at_ts"] or 0) >= night
                and dart.in_quiet(r.get("seen_at") or r["at_ts"])]
-    late = [r for r in rows if r not in morning and ((r["at_ts"] or 0) < cutoff or dart.in_quiet(r["at_ts"]))]
+    late = notime + [r for r in rows if r not in morning and ((r["at_ts"] or 0) < cutoff or dart.in_quiet(r["at_ts"]))]
     rows = [r for r in rows if r not in late]
     if dart.in_quiet():
         _hold_for_digest(late)
@@ -916,7 +929,7 @@ def collect_once(send=None):
     """
     import news
     got = news.fetch_issues()
-    added = store(got.get("rows") or [])
+    added = store(got.get("all") or got.get("rows") or [])   # all — 화면 몫으로 자르기 전 전부(11-19 · news.fetch_issues)
     purge_old()
     ko_backfill()
     alerted = send_alerts(send)
