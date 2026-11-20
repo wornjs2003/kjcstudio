@@ -40,7 +40,7 @@
 하락 뺌    전일 종가 대비 등락률(pct)이 DROP_BELOW_PCT 아래인 종목은 판에 안 넣는다 — 재권님 「단타에 하락인 종목은 필요없어」 →
                「거래량 많은 종목중에 하락인건 제외한다는 룰 넣어봐」(11-12) · 09:35 굳히기 전까지 1분마다 다시 셀 때 그때 값으로 넣고 뺀다 ·
                굳힌 뒤 내려간 종목은 그대로 둔다(이미 산 값) · 등락률을 모르면 안 뺀다(못 잼은 하락이 아니다) · 뺀 수는 meta.dropDown
-               판에 들었다가 빠진 종목은 까닭(하락 · 100위 밖으로 밀림 · 칩이 빠짐)과 무관하게 그날 다시 안 넣는다(meta.out) ·
+               판에 들었다가 빠진 종목도 굳히기 전 다시 셀 때 다시 들 수 있다(「다시 안 넣음」 meta.out 은 11-20 없앰 · 빠짐은 meta.gone) ·
                없다가 조건이 맞게 된 종목은 넣는다 — 재권님 「처음 들었다가 빠지면 제외하고 없다가 값이 적용되는 목록은 넣는다」(11-12 11:3x) →
                「밀린건 넣지 않는다로 룰 만들자」(11-13 · qa 가 09:07↔09:32 판에서 다시 든 18 종목 매수가가 바뀐 것을 찾음)
 
@@ -63,7 +63,9 @@ TRACK_STEP = 30              # 분 — 「30분 단위로」
 BAR_MIN = 5                  # 5분봉 길이(분)
 BUY_LATE = (10, 30)          # 굳히는 시각 — 재권님 「굳히기는 10시반으로」(11-18 · 안에 「응」 17:0x) · 그 전 「9시 35분에 굳히는걸로」(11-12 09:2x) · BUY_AT 부터 이때까지 판을 다시 세고 이 뒤로는 줄을 안 바꾼다 · 서버가 이 뒤에 뜨면 그날 판은 안 짓는다 · 늦게 여는 날(수능)에도 10:30 그대로 — 재권님 「가」(11-20 09:0x · 11-19 에 11:30 까지 밀려 판이 바뀐 일)
 OPEN_AT = (9, 0)             # 정규장 첫 값 — 그 전(BUY_AT ~ 09:00)에 든 종목의 매수가는 이 시각 정규장 시가(rows[].buyWait 가 그 표시 · 09:00 뒤 첫 다시 세기에 채움)
-OUT_FROM = (9, 1)            # 「한 번 빠지면 그날 다시 안 넣음」 을 세기 시작하는 때 — 장 전에는 프리장 값이 오가며 줄이 자주 바뀐다(11-18 안 「응」)
+# 「한 번 빠지면 그날 다시 안 넣음」(OUT_FROM 09:01 · meta.out)은 없앴다 — 재권님 「9시 1분 뒤 한 번 빠진 종목은 다시 넣지 않는다 - 이룰없애」
+# (11-20 10:2x · 한미약품이 09:23 하락뺌으로 빠진 뒤 +5% 인데 판에 못 듦). 굳히기 전 다시 셀 때 빠진 종목도 다시 들 수 있다 · 다시 들면 새로 든 줄(매수가는 다시 든 순간 값) ·
+# 빠짐은 meta.gone 에 그대로 쌓인다 · 굳힌 줄(세 번 굳히기)은 그대로 안 빠진다. 옛 판의 meta.out 은 읽지 않는다.
 PRE_WAIT = ("초반상승",)   # 09:00 전에는 값이 날 수 없는 칩 — 못 받음(missing)이 아니라 기다림(meta.wait)
 # 「매수」 는 어림을 08:00 부터 — 재권님 「매수 목록중에 초반에 받을수 있는게 있지않나? 프리장에서」 → 「아니 매수는 그전에 받을수 있는 값 받으라고 했는데」
 # (11-18 17:2x · 시황분석1 경유). 장 전은 프로그램만(early_buy pre) — 외국계 창구는 거래소(J) 창구라 장 전 체결이 없어 오늘 값이 없고 어제 값이 올 수 있다.
@@ -96,7 +98,7 @@ _late = {"day": None, "at": 0.0, "min": 0}
 
 def late_min(proxy, now=None, day=None):
     """그날 정규장이 보통 날보다 몇 분 늦게 여나 — 0 보통 · 수능(10:00)이면 60. market_hours 표 한 곳 · 못 읽으면 0(보통 날로 본다) · 5분 둘레로 다시 읽음.
-    늦게 여는 날은 판의 정규장 시각들(OPEN_AT · OUT_FROM · 값 적는 시각)을 그만큼 뒤로 민다 — 굳히는 시각(BUY_LATE)은 안 민다(재권님 「가」 11-20 09:0x · 10:30 그대로) —
+    늦게 여는 날은 판의 정규장 시각들(OPEN_AT · 값 적는 시각)을 그만큼 뒤로 민다 — 굳히는 시각(BUY_LATE)은 안 민다(재권님 「가」 11-20 09:0x · 10:30 그대로) —
     재권님 「가로 해줘」(11-19 08:3x · (가) 1시간 미룸 — 매수가 10:00 시가). BUY_AT(판 짓기 08:00) · 지난 날 다시 세기(PAST_*)는 그대로."""
     now = now or _now()
     other = day is not None and day != now.strftime("%Y%m%d")     # 지난 날(다시 세기) — 그날 표를 읽고 캐시는 안 씀
@@ -940,15 +942,12 @@ def _buy_open_fill(proxy, b):
 
 def refresh(proxy, cfg, b):
     """그날 판을 지금 들어온 값으로 다시 세운다(종목 · 칩 · 순위). 바뀐 줄 수."""
-    out = set(b["meta"].get("out") or [])
-    nb = build(proxy, cfg, b["day"], skip=out)
+    nb = build(proxy, cfg, b["day"])                   # 빠졌던 종목도 다시 셈에 든다(「한 번 빠지면 다시 안 넣음」 없앰 · 11-20)
     _lock_keep(b["rows"], nb["rows"])                  # 굳힌 줄은 새 셈에서 빠져도 그대로(세 번 굳히기)
     old = {r["code"]: r for r in b["rows"]}
     now = _now()
     nm = now.hour * 60 + now.minute
     off = late_min(proxy, now)
-    if nm >= OUT_FROM[0] * 60 + OUT_FROM[1] + off:
-        out |= set(old) - {r["code"] for r in nb["rows"]}        # 판에 있다가 이번에 빠진 종목(하락 · 순위 밖 · 칩 빠짐) — 그날 다시 안 넣음(재권님 11-13) · 09:01 부터 셈(11-18)
     opened = nm >= OPEN_AT[0] * 60 + OPEN_AT[1] + off
     hm = now.strftime("%H:%M")
     hms = now.strftime("%H:%M:%S")
@@ -997,9 +996,10 @@ def refresh(proxy, cfg, b):
         b["times"] = nb["times"]                       # 값 적는 시각 — 아직 한 칸도 안 적었으면 지금 셈(늦게 여는 날 뒤로 민 시각)으로 · 적기 시작했으면 그대로
     late = b["meta"].get("late") or {}
     keep = {k: v for k, v in (b.get("meta") or {}).items() if k not in nb["meta"]}   # 판에 적어 둔 칸(tgTop · tgTopAt · sellHi · sellChk · px1At · nx…)은 다시 세어도 그대로
-    b["meta"] = dict(nb["meta"], late=late, rescanAt=hm, out=sorted(out), gone=gone)
+    b["meta"] = dict(nb["meta"], late=late, rescanAt=hm, gone=gone)
     for k, v in keep.items():
         b["meta"].setdefault(k, v)
+    b["meta"].pop("out", None)                         # 옛 「다시 안 넣음」 목록은 안 옮긴다(규칙 없앰 11-20)
     _lock_order(b)
     return changed + len(_lock_due(b, nm))            # 굳힌 바퀴는 바뀐 것으로 센다 — 안 세면 저장 안 돼 다음 바퀴에 다시 고름(개념정의 덧 11-20)
 
