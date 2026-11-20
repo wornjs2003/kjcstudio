@@ -1819,8 +1819,6 @@ def start(proxy):
                             filled_late = patch_late(proxy, proxy.load_secrets(), b)
                             if _lock_due(b, hm):                   # 굳히는 때(10:30)가 지난 뒤 — 남은 차례(마지막 10개)를 굳힌다(다시 셈은 안 함)
                                 filled_late = list(filled_late) + ["굳힘"]
-                            if hm < _close_min(proxy, now) and sub_track(proxy, proxy.load_secrets(), b):   # 굳힌 뒤에도 매수 하위(①~④)를 이어 쌓는다 — 정규장 끝까지
-                                filled_late = list(filled_late) + ["매수 하위"]
                             if _buy_open_fill(proxy, b):           # 굳힌 뒤에도 시가를 기다리는 줄 — 1분봉이 늦게 들어오면 채움(DB 만 읽음)
                                 filled_late = list(filled_late) + ["시가"]
                         if filled_late and filled_late != ["다시 셈"]:
@@ -1838,6 +1836,9 @@ def start(proxy):
                             # 아침 상위는 개장 직후 창 안에서만 정한다 — 서버가 낮에 뜨면 그때 상위로 「팔 때」 를 보내지 않게(그날은 안 봄)
                             b["meta"]["tgTop"] = [r["code"] for r in sorted(b["rows"], key=lambda r: r.get("rank") or 1e9)[:TG_TOP]]   # 아침 상위 — 「팔 때」 를 보는 종목(보냄과 무관하게 적음)
                             b["meta"]["tgTopAt"] = _now().strftime("%H:%M")
+                            flow_now = True
+                        if (b.get("closed") or hm >= BUY_LATE[0] * 60 + BUY_LATE[1]) and b.get("rows") and hm < _close_min(proxy, now) \
+                                and sub_track(proxy, proxy.load_secrets(), b):   # 굳힌 뒤(10:30) · 14:00 칸을 적어 판이 닫힌 뒤에도 정규장 끝까지 매수 하위(①~④)를 이어 쌓는다
                             flow_now = True
                         if b["meta"].get("tgTop"):           # 판이 굳은 뒤(14:00)에도 정규장 끝 SELL_UNTIL_MIN 분 전까지 본다(sell_watch 가 시각을 가름 · 개념정의 걸림 11-19)
                             for r in sell_watch(proxy, proxy.load_secrets(), b):
