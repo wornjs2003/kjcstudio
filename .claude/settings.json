@@ -83,6 +83,11 @@
             "type": "command",
             "command": "sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-sendmessage-addr.py\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "KJC_ASSIGN_HOOK=look sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-assign-ask.py\"",
+            "timeout": 10
           }
         ]
       },
@@ -112,6 +117,11 @@
           {
             "type": "command",
             "command": "sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-rule-sync.py\""
+          },
+          {
+            "type": "command",
+            "command": "KJC_IDLE_HOOK=look sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-idle-notify.py\"",
+            "timeout": 10
           }
         ]
       }
@@ -157,6 +167,16 @@
             "type": "command",
             "command": "KJC_READABLE_HOOK=block sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-readable.py\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "KJC_CARRY_HOOK=look sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-carry-check.py\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "KJC_IDLE_HOOK=look sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-idle-notify.py\"",
+            "timeout": 10
           }
         ]
       }
@@ -167,6 +187,11 @@
           {
             "type": "command",
             "command": "sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-rule-sync.py\""
+          },
+          {
+            "type": "command",
+            "command": "KJC_IDLE_HOOK=look sh \"$(git rev-parse --show-toplevel)/.claude/run-py.sh\" \"$(git rev-parse --show-toplevel)/tools/hook-idle-notify.py\"",
+            "timeout": 10
           }
         ]
       }
