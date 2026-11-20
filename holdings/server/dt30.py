@@ -776,6 +776,22 @@ RESCAN_SEC = 60               # BUY_AT ~ BUY_LATE 동안 판을 다시 세는 �
 # 09:30 칸은 굳히기 전에 오므로 그 뒤에 든 종목은 그 칸을 09:30 에 끝난 5분봉 종가로 채운다(track).
 
 
+def _gone(old_rows, new_rows, at):
+    """다시 셀 때 빠진 것 — 판에서 빠진 종목(what 「종목」 · 그때 칩) · 줄은 남고 빠진 칩(what 「칩」 · 빠진 칩만). 빠진 순서대로 목록.
+    재권님 「응 고쳐」(11-20 08:59 · 작업우선순위 경유) — 11-19 칩 넷 종목 · 11-02 한진칼이 덮어 저장이라 언제 빠졌는지 못 가린 일."""
+    new = {r["code"]: r for r in new_rows}
+    out = []
+    for o in old_rows:
+        n = new.get(o["code"])
+        if n is None:
+            out.append({"at": at, "code": o["code"], "name": o.get("name"), "what": "종목", "chips": list(o.get("chips") or [])})
+        else:
+            lost = [c for c in o.get("chips") or [] if c not in (n.get("chips") or [])]
+            if lost:
+                out.append({"at": at, "code": o["code"], "name": o.get("name"), "what": "칩", "chips": lost})
+    return out
+
+
 def refresh(proxy, cfg, b):
     """그날 판을 지금 들어온 값으로 다시 세운다(종목 · 칩 · 순위). 바뀐 줄 수."""
     out = set(b["meta"].get("out") or [])
@@ -818,11 +834,12 @@ def refresh(proxy, cfg, b):
             r["buyAt"] = hm
             changed += 1
     changed += len(set(old) - {r["code"] for r in nb["rows"]})
+    gone = list(b["meta"].get("gone") or []) + _gone(b["rows"], nb["rows"], hm)   # 빠진 칩 · 종목을 그 시각과 함께 쌓는다(meta.gone)
     b["rows"] = nb["rows"]
     if b.get("times") != nb["times"] and not any(o.get("px") for o in old.values()):
         b["times"] = nb["times"]                       # 값 적는 시각 — 아직 한 칸도 안 적었으면 지금 셈(늦게 여는 날 뒤로 민 시각)으로 · 적기 시작했으면 그대로
     late = b["meta"].get("late") or {}
-    b["meta"] = dict(nb["meta"], late=late, rescanAt=hm, out=sorted(out))
+    b["meta"] = dict(nb["meta"], late=late, rescanAt=hm, out=sorted(out), gone=gone)
     return changed
 
 
@@ -1132,6 +1149,20 @@ def rebuild(proxy, day, prev, cfg=None):
                              "buy 는 09:05 봉 시가 · 시가총액 · 섹터 · 시장은 지금 값"}}
 
 
+def _redo_gone(proxy, day, b):
+    """지난 날을 다시 셀 때 덮이는 옛 판과 갈린 것 — meta.redoGone [{at 「MM-DD HH:MM」 · gone(_gone 꼴) · came(새로 든 코드)}] · 다시 셀 때마다 이어 쌓는다."""
+    got = _load(proxy, day)
+    if not got:
+        return
+    old = got[0]
+    at = _now().strftime("%m-%d %H:%M")
+    oc = {r["code"] for r in old.get("rows") or []}
+    hist = list((old.get("meta") or {}).get("redoGone") or [])
+    hist.append({"at": at, "gone": _gone(old.get("rows") or [], b["rows"], at),
+                 "came": [r["code"] for r in b["rows"] if r["code"] not in oc]})
+    b["meta"]["redoGone"] = hist
+
+
 def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
     """today 앞 limit 거래일 중 판이 없는 날을 다시 세어 남긴다(라이브로 굳힌 날은 안 건드린다). 남긴 날 수."""
     ds = _trade_days(proxy, today, limit)
@@ -1152,6 +1183,7 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
         if b and b["rows"]:
             if d in keep_live:                         # 장중에 고른 기록은 다시 세도 이어 남긴다
                 b["meta"]["liveBefore"], b["meta"]["redoneFromLive"] = keep_live[d], True
+            _redo_gone(proxy, d, b)
             _store(proxy, b)
             n += 1
     if today_too and ds:                               # 오늘 판 — 14:00 칸까지 닫혔는데 오늘 바뀐 룰(meta.rules 칸) 전에 센 판이면 쌓인 값으로 한 번 다시 센다
@@ -1164,6 +1196,7 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
                 b["meta"]["liveBefore"] = {"savedAt": got[1], "buyAt": old.get("buyAt"), "meta": old.get("meta"),
                                            "rows": [{k: r.get(k) for k in ("code", "name", "rank", "chips", "subs", "n", "buy", "buyAt", "pct", "rise", "px", "pxSrc")}
                                                     for r in old.get("rows") or []]}
+                _redo_gone(proxy, today, b)
                 _store(proxy, b)
                 n += 1
     return n
