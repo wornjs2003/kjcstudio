@@ -10541,6 +10541,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "ok": d.get("ready", False), "data": d.get("sectors") or [], "unknown": d.get("unknown"),
                     "meta": {"day": d.get("day"), "builtAt": d.get("builtAt"), "phase": d.get("phase"), "src": d.get("src"),
                              "nowAt": d.get("nowAt"), "total": d.get("total"), "reset": d.get("reset"), "noTrade": d.get("noTrade"),
+                             "sectorError": d.get("sectorError"),
                              "amtUnit": "원", "topN": pre_flow.TOP_N,
                              "note": "대상 = 그날 프리장 판 종목(전일 종가보다 오른 종목 중 프리장 거래대금 상위 topN) · 섹터 = 네이버 WICS · "
                                      "src pre = 프리장 판 값(넥스트레이드 · 거래대금 어림) · src now = 09:00 뒤 지금 시세(전일 대비 · 누적 거래대금) · "
