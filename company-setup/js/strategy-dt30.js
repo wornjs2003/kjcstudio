@@ -255,8 +255,9 @@ function sellAt(p) {   // p — 시각마다 매수가 대비 %(null 은 값 없
     if (S.stop != null && p[k] <= S.stop) return { k, why: '손절' };
     let a = k - 1; while (a >= 0 && p[a] == null) a--;
     // 꺾임 폭(11-18 재권님 「꺽임룰에 1%이하는 무시한다로 룰 잡아」 → 「그거말고 꺽임 에 내가 %를 추가할수있게 해줘」) — 셈 칸에 넣은 turnPct% 넘게 앞 시각보다 내릴 때만 꺾임 · 기본 0(지금 룰 그대로)
-    if (S.turn && a >= 0 && p[a] > 0 && ((100 + p[k]) / (100 + p[a]) - 1) * 100 < -S.turnPct) return { k, why: '꺾임' };
-    if (S.trail != null && pk > 0 && ((100 + p[k]) / (100 + pk) - 1) * 100 <= -S.trail) return { k, why: '고점' };
+    // 꺾임 기준 두 단추(11-20 재권님 「앞시각이랑 고점대비 2개 버튼으로 선택할수 있게 해줘」) — turnBy prev(앞 시각 대비 · turnPct) · peak(고점 대비 · trail) 중 하나만 · % 는 기준마다 따로 남김
+    if (S.turn && (S.turnBy || 'prev') === 'prev' && a >= 0 && p[a] > 0 && ((100 + p[k]) / (100 + p[a]) - 1) * 100 < -S.turnPct) return { k, why: '꺾임' };
+    if (S.turn && S.turnBy === 'peak' && S.trail != null && pk > 0 && ((100 + p[k]) / (100 + pk) - 1) * 100 <= -S.trail) return { k, why: '고점' };
     pk = Math.max(pk, p[k]);
   }
   return { k: -1, why: '' };
@@ -270,7 +271,7 @@ function sellAt(p) {   // p — 시각마다 매수가 대비 %(null 은 값 없
 const PNL_TOP = 30, PNL_WON = 10_000_000;   // 기본값 — 재권님이 칸에 넣으면 st.set 이 이김
 // 셈 칸 기본값 (11-18) — minChip 칩 N개 이상만(0 = 전체) · top 상위 몇 종목 · 돈은 전체 금액 dayWon 을 그 종목 수로 똑같이 나눔
 //   11-18 재권님 「금액은 전체 금액으로 해주고 종목만큼 나눈다 라는 룰로 해줘 금액을 맨앞으로」 — 종목마다(each) 갈래는 걷음 · 기본 전체 금액 = 지금까지의 기본(상위 30 × 1,000만원)과 같은 3억
-const DEF_SET = { minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, stop: -1, turn: true, turnPct: 0, trail: null, pyr: false, buy: 'open' };   // buy — 매수 타이밍 open(09:00 시가 · 지금까지 셈) · p1(09:01) · vi(VI 발동)   // pyr — 불타기(손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삼) · 기본 끔
+const DEF_SET = { minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, stop: -1, turn: true, turnBy: 'prev', turnPct: 0, trail: null, pyr: false, buy: 'open' };   // buy — 매수 타이밍 open(09:00 시가 · 지금까지 셈) · p1(09:01) · vi(VI 발동)   // pyr — 불타기(손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삼) · 기본 끔
 st.set = { ...DEF_SET };
 const TAX = { KOSPI: { tx: 0.05, rural: 0.15 }, KOSDAQ: { tx: 0.20, rural: 0 } };   // % · 코스피 = 거래세 0.05 + 농특세 0.15 · 코스닥 = 거래세 0.20
 const MKT = { KOSPI: '코스피', KOSDAQ: '코스닥' };
@@ -431,10 +432,13 @@ function paint(d) {
   }
   const cell = (x, k) => {
     const v = x.p[k];
-    if (x.s.k >= 0 && k === x.s.k) return `<td class="dt-sold">${pct(v)}<em>${x.s.why}</em>${x.pyrTo ? `<small class="dt-pyr"> → ${esc(x.pyrTo.name || '—')} 불타기</small>` : ''}</td>`;
-    { const ad = x.pnl && (x.pnl.adds || []).filter((o) => o.k === k); if (ad && ad.length) return `<td class="${k === L ? 'dt-last' : ''}">${pct(v)}<small class="dt-pyr"> ← ${ad.map((o) => esc(o.from || '—')).join(' · ')} 손절 돈 불타기</small></td>`; }
+    // 그 시각 가격을 % 위에 · 글씨는 검정(색은 아래 % 만) — 11-20 재권님 「등락률 위에 가격도 같이 보이게 해줘」 → 색을 넣어 보시고 「글씨는 그냥 검정으로 하자 보기 힘드네」
+    const px = Number((x.r.px || {})[times[k]]);
+    const pxT = v == null || !Number.isFinite(px) ? '' : `${num(px)}<br>`;
+    if (x.s.k >= 0 && k === x.s.k) return `<td class="dt-sold">${pxT}${pct(v)}<em>${x.s.why}</em>${x.pyrTo ? `<small class="dt-pyr"> → ${esc(x.pyrTo.name || '—')} 불타기</small>` : ''}</td>`;
+    { const ad = x.pnl && (x.pnl.adds || []).filter((o) => o.k === k); if (ad && ad.length) return `<td class="${k === L ? 'dt-last' : ''}">${pxT}${pct(v)}<small class="dt-pyr"> ← ${ad.map((o) => esc(o.from || '—')).join(' · ')} 손절 돈 불타기</small></td>`; }
     if (x.s.k >= 0 && k > x.s.k) return `<td class="dt-after">${v == null ? '—' : sgn(v)}</td>`;
-    return `<td class="${k === L ? 'dt-last' : ''}">${pct(v)}</td>`;
+    return `<td class="${k === L ? 'dt-last' : ''}">${pxT}${pct(v)}</td>`;
   };
   const plTd = (x, i) => `<td class="dt-pl">${i < topN && x.pnl ? (x.pnl.net == null ? '<span class="st-err">시장 모름</span>' : `<span class="${signClass(x.pnl.net, NUM) || ''}">${won(x.pnl.net)}</span><small>빼기 전 ${won(x.pnl.gross)}${x.pnl.adds && x.pnl.adds.length ? ` · 불타기 ${won(x.pnl.pyr)}` : ''}</small>`) : '<span class="st-err">—</span>'}</td>`;
   const resTd = (x) => `<td class="dt-res">${pct(x.res)}<small>${x.s.k >= 0 ? `${hmTxt(times[x.s.k])} ${x.s.why}` : x.now ? `지금 ${esc(String(d.nowAt || '').slice(0, 5))}` : '끝까지'}</small></td>`;
@@ -454,7 +458,8 @@ function paint(d) {
     if (o === undefined) return NM0.px1At && d.closed !== true ? '<td class="dt-nx"><span class="dt-nxm">아직</span></td>' : '<td class="dt-nx" data-tip="이 날은 서버가 시작 1분 뒤 값을 안 셈">—</td>';
     if (!o || o.px == null) return '<td class="dt-nx">—<small>못 잼</small></td>';
     if (lateIn(r)) return `<td class="dt-nx" data-tip="9시 1분 뒤 판에 든 종목 — 등락률은 들어온 가격 대비">—<small>${num(o.px)} · 들기 전</small></td>`;
-    return `<td class="dt-nx">${pct(p1Ch(r))}<small>${num(o.px)}${o.src === 'now' ? ' · 그때 현재가' : ''}</small></td>`; };
+    // 9시 1분에 판에 있던 종목 — 좌우 칸(매수가 · 들어온 가격)과 같은 꼴: 큰 굵은 가격 + 작은 둘째 줄(%) · 11-20 재권님 「9시 1분에 들어있는 종목들은 좌우에 맞게 글씨 크기랑 폰트 맞춰줘」
+    return `<td class="dt-nx dt-buy">${num(o.px)}<small>${pct(p1Ch(r))}${o.src === 'now' ? ' · 그때 현재가' : ''}</small></td>`; };
   // 들어온 가격 (11-20 재권님 「그칸 왼쪽에다가 들어온 가격 이라고 만들어서 넣어놔」 · 「9시 이후에 들어온거는 들어온 시간도 작성해주고 들어온 시간 가격을 써줘야해」)
   //   값은 서버 rows[].buyAt(든 시각) · buy(든 순간 가격) — buyAt 이 시작 1분 뒤(minHM(1))보다 늦은 줄만 「9시 1분 뒤 들어온」 종목 · 초는 서버가 주면 buyTs(개발2 · 11-20)
   //   그 밖(9시 1분 전부터 판에 있던 줄)은 「—」 — 매수가가 9시 1분 값이라 따로 적을 것이 없음
@@ -734,6 +739,8 @@ function setFill() {
   box.querySelectorAll('[data-set]').forEach((el) => { if (document.activeElement !== el) el.value = String(v[el.dataset.set] ?? ''); });
   box.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('is-active', b.dataset.mode === S.mode));
   box.querySelectorAll('[data-turn]').forEach((b) => b.classList.toggle('is-active', (b.dataset.turn === '1') === !!S.turn));
+  box.querySelectorAll('[data-turnby]').forEach((b) => b.classList.toggle('is-active', b.dataset.turnby === (S.turnBy || 'prev')));
+  box.querySelectorAll('[data-turnfor]').forEach((el) => { el.hidden = el.dataset.turnfor !== (S.turnBy || 'prev'); });
   box.querySelectorAll('[data-buy]').forEach((b) => { b.classList.toggle('is-active', b.dataset.buy === (S.buy || 'open')); const B = BUYS.find(([k]) => k === b.dataset.buy); if (B) b.textContent = buyName(...B); });   // 이름 시각은 그 판 서버 값(늦게 여는 날)
   box.querySelectorAll('[data-pyr]').forEach((b) => b.classList.toggle('is-active', (b.dataset.pyr === '1') === !!S.pyr));
 }
@@ -782,6 +789,7 @@ BIND.push(() => {
     const m = e.target.closest('[data-mode]'); if (m) { e.preventDefault(); if (m.dataset.mode !== st.set.mode) setChange({ ...st.set, mode: m.dataset.mode }); return; }
     const bb = e.target.closest('[data-buy]'); if (bb) { e.preventDefault(); if (bb.dataset.buy !== (st.set.buy || 'open')) setChange({ ...st.set, buy: bb.dataset.buy }); return; }
     const y = e.target.closest('[data-pyr]'); if (y) { e.preventDefault(); const on = y.dataset.pyr === '1'; if (on !== !!st.set.pyr) setChange({ ...st.set, pyr: on }); return; }
+    const tb = e.target.closest('[data-turnby]'); if (tb) { e.preventDefault(); if (tb.dataset.turnby !== (st.set.turnBy || 'prev')) setChange({ ...st.set, turnBy: tb.dataset.turnby }); return; }
     const t = e.target.closest('[data-turn]'); if (t) { e.preventDefault(); const on = t.dataset.turn === '1'; if (on !== !!st.set.turn) setChange({ ...st.set, turn: on }); return; }
     if (e.target.closest('[data-reset]')) setChange({ ...DEF_SET });
   });
@@ -823,8 +831,7 @@ const TPL = `
             <label class="dt-fee">손절 <input data-set="stop" class="rl-in rl-num" inputmode="decimal" aria-label="손절(매수가 대비 %)">% <span class="rl-sug">빈칸 = 안 함</span></label>
             <label class="dt-fee" data-tip="고른 때 값에 삽니다 · 그 값이 없는 종목은 안 삽니다 · 파는 룰은 산 뒤 30분 칸(09:30 · 10:00 …)부터">매수 <span class="dt-seg">${BUYS.map(([k, t]) => `<button type="button" class="kh-chip" data-buy="${k}">${t}</button>`).join('')}</span></label>
             <label class="dt-fee" data-tip="손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삽니다 · 더 산 몫은 그 종목을 팔 때 함께 팝니다">불타기 <span class="dt-seg"><button type="button" class="kh-chip" data-pyr="1">켬</button><button type="button" class="kh-chip" data-pyr="0">끔</button></span></label>
-            <label class="dt-fee">꺾임 <span class="dt-seg"><button type="button" class="kh-chip" data-turn="1">켬</button><button type="button" class="kh-chip" data-turn="0">끔</button></span> 앞 시각보다 <input data-set="turnPct" class="rl-in rl-num" inputmode="decimal" aria-label="꺾임 — 앞 시각보다 몇 % 넘게 내리면 팜">% 넘게 내리면 <span class="rl-sug">그 이하는 무시 · 빈칸 = 0</span></label>
-            <label class="dt-fee">고점 대비 − <input data-set="trail" class="rl-in rl-num" inputmode="decimal" aria-label="고점 대비 몇 % 내리면 팜">% 내리면 팜 <span class="rl-sug">빈칸 = 안 씀 · 꺾임을 켜 두면 꺾임이 먼저 걸려 이 칸은 거의 안 듦</span></label>
+            <label class="dt-fee">꺾임 <span class="dt-seg"><button type="button" class="kh-chip" data-turn="1">켬</button><button type="button" class="kh-chip" data-turn="0">끔</button></span> <span class="dt-seg"><button type="button" class="kh-chip" data-turnby="prev">앞 시각 대비</button><button type="button" class="kh-chip" data-turnby="peak">고점 대비</button></span> <span data-turnfor="prev">앞 시각보다 <input data-set="turnPct" class="rl-in rl-num" inputmode="decimal" aria-label="꺾임 — 앞 시각보다 몇 % 넘게 내리면 팜">% 넘게 내리면 팜 <span class="rl-sug">그 이하는 무시 · 빈칸 = 0</span></span><span data-turnfor="peak" hidden>오른 뒤 가장 높던 값보다 <input data-set="trail" class="rl-in rl-num" inputmode="decimal" aria-label="꺾임 — 고점 대비 몇 % 내리면 팜">% 내리면 팜 <span class="rl-sug">빈칸 = 안 씀</span></span></label>
             <button type="button" class="kh-chip" data-reset>기본값으로</button> <span id="dt-set-msg" class="rl-sug"></span>
           </div>
           <div class="st-cap" id="dt-month">—</div>
