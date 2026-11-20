@@ -122,8 +122,8 @@ def _set():
         return {}
 
 
-# 셈 칸이 비었을 때 값 — 화면 strategy-dt30.js 의 DEF_SET 과 같아야 한다(손절 −1 · 꺾임 켬 · 둘 다 · 0 · 고점 빈칸 · 시각 미달 끔 90분 2% · 횡보 끔)
-#   합칠 수 없는 복제다(화면이 저장 안 한 칸은 문서에 없다) — 화면이 이 값을 서버에서 받게 하면 없어진다(그때 지운다)
+# 셈 칸이 비었을 때 값 — 한 곳(손절 −1 · 꺾임 켬 · 둘 다 · 0 · 고점 빈칸 · 시각 미달 끔 90분 2% · 횡보 끔) ·
+#   /api/kis/chip-rules meta.sellDef 로 내주고 화면 단타 판은 받기만(11-20 재권님 「가」 · 두 벌 합치기 — 화면 DEF_SET 의 같은 칸은 시황분석이 지움)
 SET_DEF = {"stop": -1, "turn": True, "turnBy": "both", "turnPct": 0, "trail": None,
            "cut": False, "cutMin": 90, "cutPct": 2, "flat": False, "flatMin": None, "flatPct": None}
 

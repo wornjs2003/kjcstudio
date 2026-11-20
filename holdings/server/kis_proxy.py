@@ -10557,7 +10557,10 @@ class Handler(SimpleHTTPRequestHandler):
                 # 관심 아래 칩 룰 값 — 한 곳(server/chip_rules.py · 2026-11-20 재권님 「응」) · 값은 룰 문서 rules.chips 가 있으면 그것 · 화면 룰 표 · 다른 서버가 받는다
                 self._send_json({"ok": True, "data": chip_rules.table(),
                                  "meta": {"doc": "strategy-rules", "readTtl": chip_rules.READ_TTL,
-                                          "note": "칩마다 칸 — value 지금 값 · default 기본값 · source doc(룰 문서 값) | default · bad 범위 밖이라 안 쓴 문서 값 · docPath 문서 자리"}})
+                                          "note": "칩마다 칸 — value 지금 값 · default 기본값 · source doc(룰 문서 값) | default · bad 범위 밖이라 안 쓴 문서 값 · docPath 문서 자리",
+                                          # 단타 매도 셈 칸이 비었을 때 기본값 — 한 곳 dt30_win.SET_DEF(승률 표가 쓰는 값) · 화면 단타 판은 이 값을 받기만(11-20 재권님 「가」 16:05 · 두 벌 합치기)
+                                          "sellDef": dt30_win.SET_DEF,
+                                          "sellDefNote": "stop 손절 % · turn 꺾임 켬 · turnBy prev|peak|both · turnPct 앞 시각 대비 % · trail 고점 대비 %(null 안 씀) · cut 시각 미달 켬 · cutMin 분 · cutPct % · flat 횡보 켬 · flatMin 분 · flatPct %(null 안 셈)"}})
                 return
 
             if route == "pre-sector":
