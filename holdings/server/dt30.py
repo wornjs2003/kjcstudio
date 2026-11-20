@@ -808,7 +808,8 @@ LOCK_N = 10
 # 재권님 「단타 목록 9시 5분에 굳히고 상위 10개만 보인다. 그이후로 추가된건 그아래로 추가되고 9시 30분에 10개 굳힌다. 그이후로 추가된건 그아래로
 # 추가되고 10시 30분에 10개 굳힌다」(11-20 08:44) → 새로 다는 10개는 「(가) 그때까지 굳지 않은 종목 전체에서 순위대로」(11-20 10:1x).
 # 굳힌 줄은 그날 빠지지 않고(다시 셀 때 빠져도 되살림 · 빠짐 셈 밖) 차례도 그대로 · 마지막(10:30)은 BUY_LATE 와 같아 그 뒤 판이 안 바뀐다.
-# 늦게 여는 날도 같은 시각(재권님 「가」 11-20 — 굳히기 10:30 그대로와 같은 뜻으로 읽음). 칸: rows[].lock(1~3) · lockAt · lockRank · meta.lockDone · lockAt · lockN.
+# 늦게 여는 날은 여는 시각만큼 밀되 BUY_LATE(10:30)를 넘지 않는다 — 수능(10:00)이면 10:05 · 10:30 · 10:30(둘째 · 셋째가 한 바퀴에 차례로)
+# (재권님 「나로 해줘」 11-20 10:2x — 「여는 시각만큼 밀어 10:05 · 10:30」 · 마지막은 「가」 굳히기 10:30 그대로). 칸: rows[].lock(1~3) · lockAt · lockRank · meta.lockDone · lockAt · lockN.
 
 
 def _lock_keep(old_rows, nb_rows):
@@ -829,22 +830,31 @@ def _lock_order(b):
         r["rank"] = i
 
 
+def _lock_times(b):
+    """그날 굳히는 시각들(분) — LOCK_AT + 그 판의 lateMin · BUY_LATE 를 넘지 않음."""
+    lm = (b.get("meta") or {}).get("lateMin")
+    lm = lm if isinstance(lm, int) else 0
+    cap = BUY_LATE[0] * 60 + BUY_LATE[1]
+    return [min(h * 60 + m + lm, cap) for h, m in LOCK_AT]
+
+
 def _lock_due(b, nm):
     """굳힐 때가 지난 차례를 굳힌다 — 굳지 않은 줄 중 순위 위 LOCK_N 개. 굳힌 차례 목록(이번에 한 것)."""
     done = list(b["meta"].get("lockDone") or [])
     did = []
-    for i, (h, m) in enumerate(LOCK_AT, 1):
-        if i in done or nm < h * 60 + m:
+    at = _lock_times(b)
+    for i, t in enumerate(at, 1):
+        if i in done or nm < t:
             continue
         _lock_order(b)
         pick = [r for r in b["rows"] if not r.get("lock")][:LOCK_N]
         for k, r in enumerate(pick, 1):
-            r["lock"], r["lockAt"], r["lockRank"] = i, "%02d:%02d" % (h, m), k
+            r["lock"], r["lockAt"], r["lockRank"] = i, _hhmm(t), k
         done.append(i)
         did.append(i)
     if did:
         b["meta"]["lockDone"] = done
-        b["meta"]["lockAt"] = ["%02d:%02d" % t for t in LOCK_AT]
+        b["meta"]["lockAt"] = [_hhmm(t) for t in at]
         b["meta"]["lockN"] = LOCK_N
         _lock_order(b)
     return did
