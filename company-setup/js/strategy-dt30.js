@@ -818,7 +818,7 @@ const TPL = `
           <details class="dt-win" id="dt-win"><summary>칩별 승률 — 지난 30거래일 · 세후 · 칩 묶음마다 승률 · 날마다 이익 큰 종목</summary><div class="dw-body"></div></details>
           <details class="dt-win" id="dt-vi"><summary>그날 VI 목록 — 발동 · 풀림 시각 · 정적/동적 · 발동가 · <span class="dt-vi-sum">—</span></summary><div class="dw-body"></div></details></div>
         <div class="dt-box st-scroll wheel-stop" id="dt-box"><div class="st-err">—</div></div>
-        <div class="st-cap dt-foot">각 시각 = 그 시각에 끝난 5분봉 종가 · 평균 = 그 시각 값이 있는 종목만 · 단타 목록은 <span class="dt-at">—</span> 에 그날 판을 열고, 서버가 굳히기 전까지는 다시 세어 줄이 바뀜(늦게 든 칩 · 빠진 종목) · 굳힌 뒤에는 늦게 나온 칩만 채움</div>
+        <div class="st-cap dt-foot">각 시각 = 그 시각에 끝난 5분봉 종가 · 평균 = 그 시각 값이 있는 종목만 · 단타 목록은 <span class="dt-at">—</span> 에 그날 판을 열고, 굳히기 전까지는 다시 세어 줄이 바뀜(늦게 든 칩 · 빠진 종목 · 빠졌다 다시 든 종목은 다시 든 때 가격) · 굳힘 시각마다 그때 차례 위 종목을 굳히고 굳힌 종목은 그날 안 빠짐 · 굳힌 뒤에는 늦게 나온 칩만 채움</div>
       </div>
       <div class="st-card sf" id="dt-sf"><div class="sf-h"><b>섹터수급 — 같은 업종 · 테마에 돈이 들어오나 · 프리장 08:00 ~ 정규장 09:30</b> <span class="dt-seg sf-by" role="tablist" aria-label="업종 · 테마"></span></div><div class="sf-body"><div class="st-err">—</div></div></div>`;
 // 「룰 — 단타」 칸이 점수표를 바꿀 때 — 바로 다시 셈하고 룰 문서에 저장(같은 문서 · 같은 저장 길)
