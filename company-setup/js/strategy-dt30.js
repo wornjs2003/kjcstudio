@@ -392,11 +392,20 @@ function paint(d) {
   setFill();
   // 0종목일 때 까닭 (11-19 재권님 「응」 — 거르기 칸 때문에 다 가려진 것을 「판이 없다」 로 읽지 않게) — 판이 빔 · 켜진 칩에 0 · 「든 것만」 거르기 · 「칩 N개 이상」 칸을 갈라 적음
   if (!rows.length) {
+    // 꺼 둔 칩 · 칸에서 뺀 칩 · 꺼 둔 하위 칩 이름과 그날 판에서 그 칩이 든 종목 수(11-20 재권님 「가하라고 해」 — 11-19 「vi가 왜 안나오지?」 때 VI·급등 칩이 꺼져 있었는데 까닭 글에 이름이 없었다)
+    const cnt = (c) => all.filter((r) => (r.chips || []).includes(c)).length, cols = colsOf();
+    const offTxt = [...new Set(all.flatMap((r) => r.chips || []))].map((c) => (st.off.has(c) ? `${c} 꺼 둠(${num(cnt(c))})` : !cols.includes(c) ? `${c} 칸에 없음(${num(cnt(c))})` : ''))
+      .concat([...st.subOff].map((k) => { const [c, x] = k.split('|'), n = all.filter((r) => subsOf(r, c).includes(x)).length; return n ? `${c} 〉 ${x} 꺼 둠(${num(n)})` : ''; })).filter(Boolean).join(' · ');
+    const onlyOff = st.only && (st.off.has(st.only) || !cols.includes(st.only));
     const why = !all.length ? '이 날 굳힌 단타 종목 없음'
-      : !live.length ? `켜진 칩에 걸린 종목 0 · 그날 판은 ${num(all.length)}종목 — 꺼 둔 칩을 켜면 보입니다`
-      : !rows1.length ? `「${st.only} 든 것만」 거르기에 0종목 · 켜진 칩에 걸린 ${num(live.length)}종목 — 거르기를 「전체」 로 하면 보입니다`
-      : `칩 ${st.set.minChip}개 이상인 종목 0 · 켜진 칩에 걸린 ${num(rows1.length)}종목 — 칩 칸을 비우면 다 보입니다`;
-    $('dt-box').innerHTML = `<div class="st-err">— ${esc(why)}</div>`; return;
+      : !live.length ? `켜진 칩에 걸린 종목 0 · 그날 판은 ${num(all.length)}종목 — ${offTxt || '꺼 둔 칩'}${offTxt ? ' — 켜면 보입니다' : '을 켜면 보입니다'}`
+      : !rows1.length && onlyOff ? `「${st.only} 든 것만」 거르기인데 ${st.only} 칩이 ${st.off.has(st.only) ? '꺼져' : '칸에 없어'} 0종목 · 그 칩이 든 종목 ${num(cnt(st.only))} — 칩을 켜거나 거르기를 「전체」 로`
+      : !rows1.length ? `「${st.only} 든 것만」 거르기에 0종목 · 켜진 칩에 걸린 ${num(live.length)}종목${offTxt ? ` · ${offTxt}` : ''} — 거르기를 「전체」 로 하거나 꺼 둔 칩을 켜면 보입니다`
+      : `칩 ${st.set.minChip}개 이상인 종목 0 · 켜진 칩에 걸린 ${num(rows1.length)}종목${offTxt ? ` · ${offTxt}` : ''} — 칩 칸을 비우거나 꺼 둔 칩을 켜면 보입니다`;
+    // 판이 비면 칩 칸(표 머리)도 같이 사라져 다시 켤 자리가 없다 — 꺼 둔 칩이 있으면 여기서 한 번에 켬
+    const allOn = st.off.size || st.subOff.size ? '<div style="margin-top:12px"><button type="button" class="kh-chip" data-allon style="font-size:14px;padding:6px 16px">꺼 둔 칩 다 켜기</button></div>' : '';
+    // 빈 판 까닭은 가운데 크게(11-20 재권님 「가운데에 좀더 크게」)
+    $('dt-box').innerHTML = `<div class="st-err" style="text-align:center;font-size:16px;line-height:1.7;padding:48px 16px;color:var(--kh-text-secondary)">${esc(why)}${allOn}</div>`; return;
   }
   const cell = (x, k) => {
     const v = x.p[k];
@@ -709,6 +718,7 @@ BIND.push(() => $('dt-box').addEventListener('click', (e) => {   // 칩 줄은 �
   colsSave(); if (st.data) { paint(st.data); chips(); }
 }));
 BIND.push(() => $('dt-order').addEventListener('click', (e) => { const b = e.target.closest('[data-order]'); if (!b || b.dataset.order === st.order) return; st.order = b.dataset.order; if (st.data) { paint(st.data); chips(); } }));
+BIND.push(() => $('dt-box').addEventListener('click', (e) => { if (!e.target.closest('[data-allon]')) return; st.off.clear(); st.subOff.clear(); colsSave(); if (st.data) { paint(st.data); chips(); } }));   // 빈 판의 「꺼 둔 칩 다 켜기」
 BIND.push(() => $('dt-box').addEventListener('click', (e) => { const b = e.target.closest('[data-lock]'); if (!b || b.disabled) return; st.lockSel = Number(b.dataset.lock); if (st.data) paint(st.data); }));   // 굳힘 시각 단추
 BIND.push(() => $('dt-only').addEventListener('click', (e) => { const b = e.target.closest('[data-only]'); if (!b || b.dataset.only === st.only) return; st.only = b.dataset.only; if (st.data) { paint(st.data); chips(); } }));
 
