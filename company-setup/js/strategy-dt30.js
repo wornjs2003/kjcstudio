@@ -403,7 +403,9 @@ function paint(d) {
       : !rows1.length ? `「${st.only} 든 것만」 거르기에 0종목 · 켜진 칩에 걸린 ${num(live.length)}종목${offTxt ? ` · ${offTxt}` : ''} — 거르기를 「전체」 로 하거나 꺼 둔 칩을 켜면 보입니다`
       : `칩 ${st.set.minChip}개 이상인 종목 0 · 켜진 칩에 걸린 ${num(rows1.length)}종목${offTxt ? ` · ${offTxt}` : ''} — 칩 칸을 비우거나 꺼 둔 칩을 켜면 보입니다`;
     // 판이 비면 칩 칸(표 머리)도 같이 사라져 다시 켤 자리가 없다 — 꺼 둔 칩이 있으면 여기서 한 번에 켬
-    const allOn = st.off.size || st.subOff.size ? '<div style="margin-top:12px"><button type="button" class="kh-chip" data-allon style="font-size:14px;padding:6px 16px">꺼 둔 칩 다 켜기</button></div>' : '';
+    // 칸에 없는 칩도 「+ 칩」 단추가 표 머리에 있어 같이 사라진다 — 이 단추가 칸에 다시 넣고 켬(qa 11-20 덧 「칸에 없음 뿐이면 단추가 안 뜸」)
+    const miss = [...new Set(all.flatMap((r) => r.chips || []))].filter((c) => !cols.includes(c) && !(st.watchAuto && c === '자동'));
+    const allOn = st.off.size || st.subOff.size || miss.length ? `<div style="margin-top:12px"><button type="button" class="kh-chip" data-allon style="font-size:14px;padding:6px 16px">${miss.length ? '꺼 둔 칩 · 칸에 없는 칩 다 켜기' : '꺼 둔 칩 다 켜기'}</button></div>` : '';
     // 빈 판 까닭은 가운데 크게(11-20 재권님 「가운데에 좀더 크게」)
     $('dt-box').innerHTML = `<div class="st-err" style="text-align:center;font-size:16px;line-height:1.7;padding:48px 16px;color:var(--kh-text-secondary)">${esc(why)}${allOn}</div>`; return;
   }
@@ -723,7 +725,7 @@ BIND.push(() => $('dt-box').addEventListener('click', (e) => {   // 칩 줄은 �
   colsSave(); if (st.data) { paint(st.data); chips(); }
 }));
 BIND.push(() => $('dt-order').addEventListener('click', (e) => { const b = e.target.closest('[data-order]'); if (!b || b.dataset.order === st.order) return; st.order = b.dataset.order; if (st.data) { paint(st.data); chips(); } }));
-BIND.push(() => $('dt-box').addEventListener('click', (e) => { if (!e.target.closest('[data-allon]')) return; st.off.clear(); st.subOff.clear(); colsSave(); if (st.data) { paint(st.data); chips(); } }));   // 빈 판의 「꺼 둔 칩 다 켜기」
+BIND.push(() => $('dt-box').addEventListener('click', (e) => { if (!e.target.closest('[data-allon]')) return; st.off.clear(); st.subOff.clear(); const cs = colsOf(), add = [...new Set(((st.data && st.data.rows) || []).flatMap((r) => r.chips || []))].filter((c) => !cs.includes(c)); if (add.length) st.cols = [...cs, ...add]; colsSave(); if (st.data) { paint(st.data); chips(); } }));   // 빈 판의 「꺼 둔 칩 다 켜기」
 BIND.push(() => $('dt-box').addEventListener('click', (e) => { const b = e.target.closest('[data-lock]'); if (!b || b.disabled) return; st.lockSel = Number(b.dataset.lock); if (st.data) paint(st.data); }));   // 굳힘 시각 단추
 BIND.push(() => $('dt-only').addEventListener('click', (e) => { const b = e.target.closest('[data-only]'); if (!b || b.dataset.only === st.only) return; st.only = b.dataset.only; if (st.data) { paint(st.data); chips(); } }));
 
