@@ -413,14 +413,16 @@ def _nx_daily_open(proxy, cfg, code, start):
 
 
 def pre_open(proxy, cfg, codes, months=6):
-    """{data: {code: [{date, open, approx, why}] 최신이 앞}, meta: {from, preKnownFrom, errors}} — 「없음」 은 null(0 아님)."""
+    """{data: {code: [{date, open, approx, why}] 최신이 앞}, meta: {from, preKnownFrom, errors, preError}} — 「없음」 은 null(0 아님).
+    프리장 기록 표(nxt_pre)를 못 읽으면 approx null(모름) · why · meta.preError — 「어림」(옛 날)과 가른다."""
     now = _now()
     start = (now - timedelta(days=int(31 * months))).strftime("%Y%m%d")
     with proxy.db_conn() as conn:
+        pre_err = None
         try:
             pre_days = {r[0] for r in conn.execute("SELECT DISTINCT day FROM nxt_pre WHERE vol > 0")}
-        except Exception:
-            pre_days = set()
+        except Exception as e:                    # 못 읽음 — 「어림」 으로 보내지 않고 따로(창구 검수 덧 11-20)
+            pre_days, pre_err = set(), "프리장 기록 표 못 읽음: %s" % type(e).__name__
         bar_days = {}
         for c in codes:
             bar_days[c] = {r[0][:8] for r in conn.execute(
@@ -443,14 +445,16 @@ def pre_open(proxy, cfg, codes, months=6):
         for day in sorted(opens, reverse=True):
             if day < start:
                 continue
-            if known_from and day >= known_from:
+            if pre_err:
+                rows.append({"date": day, "open": opens[day], "approx": None, "why": "프리장 기록 표를 못 읽어 그날 프리장이 열렸는지 못 가름"})
+            elif known_from and day >= known_from:
                 ok = day in pre_days or day in bar_days.get(c, set())
                 rows.append({"date": day, "open": opens[day] if ok else None, "approx": False,
                              "why": None if ok else "프리장 기록 없음 — 그날 프리장이 안 열렸거나(수능 등) 08:51 기록을 못 쌓음"})
             else:
                 rows.append({"date": day, "open": opens[day], "approx": True, "why": None})
         data[c] = rows
-    return {"data": data, "meta": {"from": start, "preKnownFrom": known_from, "errors": errors or None}}
+    return {"data": data, "meta": {"from": start, "preKnownFrom": known_from, "errors": errors or None, "preError": pre_err}}
 
 
 def status():
