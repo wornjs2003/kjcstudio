@@ -68,8 +68,11 @@ def last_order(path):
             if r.get("type") == "user" and c and not c.startswith("<"):   # 도구 결과 · 다른 세션 메시지 · 시스템 알림 · 명령은 건너뜀
                 order = c
             continue
-        if r.get("type") == "assistant" and c:
-            return order, c                     # 그 말씀 바로 앞에 세션이 쓴 답
+        if r.get("type") == "user" and c and not c.startswith("<"):
+            return order, ""                    # ▶ 를 찾기 전에 재권님 말씀이 또 나옴 — 그 앞 답은 이 말씀의 물음이 아니다
+        if r.get("type") == "assistant" and c and any(l.strip().startswith("▶") for l in c.splitlines()):
+            return order, c                     # 그 말씀 앞에 세션이 쓴 답 중 ▶ 가 있는 가장 가까운 것 —
+                                                # 바로 앞 답이 /clear 안내 · 「지금 답하실 것은 없습니다」 처럼 ▶ 가 없으면 더 거슬러 본다(작업우선순위 11-20 16:05)
     return (order or ""), ""
 
 
