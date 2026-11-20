@@ -48,7 +48,7 @@ async function loadDtChips() {
   try {
     const r = await fetch('/api/kis/chip-rules', { cache: 'no-store' }); const j = r.ok ? await r.json() : null;
     const v = j && j.ok && Array.isArray(j.data) ? (j.data.find((x) => x.chip === '단타' && x.key === 'ovChips') || {}).value : null;
-    if (Array.isArray(v) && v.length) { DT_CHIPS.splice(0, DT_CHIPS.length, ...v.map(chipName)); if (!CHIP_SEEN.length) CHIP_SEEN.push(...DT_CHIPS); }
+    if (Array.isArray(v) && v.length) { DT_CHIPS.splice(0, DT_CHIPS.length, ...v.map(chipName)); if (!CHIP_SEEN.length) CHIP_SEEN.push(...DT_CHIPS); st.chipFail = false; }
   } catch (e) { /* 못 받음 — 빈 목록 그대로 · 다음 판 받기 때 다시 */ }
 }
 // 칩 칸 (11-12 재권님 「칩을 추가해도 칩을 활성화 비활성화되도록 우리꺼에 맞게 그려봐」 → 시안 temp/시황분석1-cols-1800 → 「오 좋아 이런거야 이대로 먼저 개선해서 올려줘」)
@@ -683,7 +683,7 @@ let again = null;
 async function load(day, quiet) {
   const my = ++st.seq;
   clearTimeout(again); again = null;
-  if (!DT_CHIPS.length) await loadDtChips();   // 칩 목록 — 서버 칩 룰 표(처음 한 번 · 못 받았으면 다음 받기 때 다시)
+  if (!DT_CHIPS.length || st.chipFail) await loadDtChips();   // 칩 목록 — 서버 칩 룰 표(처음 한 번 · 못 받았으면 다음 받기 때 다시)
   if (!quiet) $('dt-meta').textContent = '값을 받는 중…';
   let r = null, j = null;
   try { r = await fetch(day ? `${API}?day=${day}` : API, { cache: 'no-store' }); j = await r.json().catch(() => null); } catch (e) { r = null; }
@@ -717,6 +717,10 @@ async function load(day, quiet) {
   const d = renameChips(j.data), m = renameChips(j.meta || {});
   st.days = Array.isArray(m.days) ? m.days : [d.day];   // 몇 날을 두는지는 서버(daysKeep) 한 곳 — 화면은 자르지 않음(11-12 재권님 「룰이 확립되면 많이 늘릴거야」)
   st.day = d.day; st.data = d;
+  if (!DT_CHIPS.length || st.chipFail) {   // 칩 룰 표를 못 받음(옛 서버 404 · 끊김) — 판을 비우지 않고 이 판 줄에 실린 칩(처음 본 차례)으로 칸을 세움 · 머리 글에 「서버 값 못 받음」(11-20 개발 서버에서 판이 빈 것)
+    const seen = []; (d.rows || []).forEach((r) => (r.chips || []).forEach((c) => { if (!seen.includes(c)) seen.push(c); }));
+    DT_CHIPS.splice(0, DT_CHIPS.length, ...seen); if (!CHIP_SEEN.length) CHIP_SEEN.push(...seen); st.chipFail = true;
+  }
   { const T = (d.meta || {}).tax, f = (x) => `${num(x, 2)}%`, el = $('dt-tax');   // 세율 글 — 서버 고정값 그대로(설명 글 룰 1번 · 괄호는 재권님이 넣는 값 자리라 안 씀)
     if (el) el.innerHTML = T && T.KOSPI && T.KOSDAQ ? `거래세 · 농특세 <span class="rl-sug">코스피 거래세 ${f(T.KOSPI.tx)} · 농특세 ${f(T.KOSPI.rural)} · 코스닥 거래세 ${f(T.KOSDAQ.tx)} · 농특세 ${f(T.KOSDAQ.rural)} · 팔 때만 · 서버 고정값</span>` : '거래세 · 농특세 <span class="rl-sug">서버 값 못 받음</span>'; }
   if (st.sfDay !== d.day) { st.sfDay = d.day; loadSector(d.day); }   // 날을 바꿀 때만 — 다시 받는 간격은 섹터수급 쪽이 서버 값으로
@@ -725,6 +729,7 @@ async function load(day, quiet) {
   if (st.vdDay !== d.day) { st.vdDay = d.day; vdLoad(d.day); }   // 그날 VI 목록 — 날을 바꿀 때만(지난 날은 굳은 값 · 오늘은 판을 다시 열 때)
   paint(d);
   chips();
+  if (st.chipFail) $('dt-meta').textContent += ' · 칩 목록 — 서버 값 못 받음(이 판에 실린 칩으로 셈)';
   const ms = Number(m.refreshMs ?? (d.meta && d.meta.refreshMs)); st.ms = ms > 0 ? ms : 0;   // 서버는 판 안 meta(data.meta)에 둔다(개발2 2단계 · 11-12 09:07 잼) — 바깥 meta 도 읽음
   // 오늘 판이면 굳기(closed) 전까지 서버 주기로 다시 받음 — 장 전(08:00~09:00) 줄에 now 가 없어도 칩이 바뀌므로 now 로 가르지 않음(11-20 재권님 「8시되면 갱신되야 되는거지? 실시간으로?」 → 「응 고쳐」)
   const t0 = new Date(), today = `${t0.getFullYear()}${String(t0.getMonth() + 1).padStart(2, '0')}${String(t0.getDate()).padStart(2, '0')}`;
