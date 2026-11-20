@@ -1411,6 +1411,7 @@ async function loadUniverse() {
     const j = await r.json();
     if (j && j.ok && Array.isArray(j.data) && j.data.length) {
       universe = j.data;
+      if (j.meta && Number.isFinite(j.meta.rankMinCapEok)) RANK_MIN_CAP_EOK = j.meta.rankMinCapEok;   // 순위 칩 시가총액 문턱 — 서버 한 곳
       lastSeen.save('universe', j.data, { slow: true });
       return;
     }
@@ -1420,10 +1421,10 @@ async function loadUniverse() {
 
 /* 시가총액은 목록(dart_universe)이 갖고 있다. 네이버 시총 순위에서 온 값이고
    단위는 억원이라 fmtMoneyKr 이 그대로 받는다. */
-const RANK_MIN_CAP_EOK = 5000;     // 실시간 순위 VI · 볼린저 · 관심 · 장외 · 매수 · 프리장 줄은 시가총액 이 값(억원 · 5천억) 이상만 — 3천억 → 5천억 재권님 「응」(11-12) · 재권님 11-10(VI 「가」 · 볼린저 「1조 이상만」 →
+let RANK_MIN_CAP_EOK = null;      // 실시간 순위 VI · 볼린저 · 관심 · 장외 · 매수 · 프리장 줄의 시가총액 문턱(억원) — 서버 한 곳(/api/dart/universe meta.rankMinCapEok · dart.RANK_MIN_CAP_EOK)에서 받는다 · 받기 전 · 못 받으면 null — 거르지 않고 풍선은 「서버 값 못 받음」(11-20 「3000으로 통일」 → 「나」 · 개념정의 검수 「설명 글에는 정해진 값을 적는다」) · 재권님 11-10(VI 「가」 · 볼린저 「1조 이상만」 →
                                     // 「1조를 3천억 으로 바꿔줘」 · 「가 고 관심이랑 장외랑 매수랑 포함이야」 · 「프리장도」). 한 곳. 시총을 못 받은 종목 · 미국 종목은 남긴다(못 잰 것을 「작다」 로 치지 않는다)
-const capBelowMin = (code) => { if (isUsCode(code)) return false; const c = capOf(code); return c != null && c < RANK_MIN_CAP_EOK; };
-const CAP_MIN_TXT = `시가총액 ${fmtMoneyKr(RANK_MIN_CAP_EOK)} 이상만`;   // 칩 풍선 글 — 값은 위 상수 하나
+const capBelowMin = (code) => { if (RANK_MIN_CAP_EOK == null || isUsCode(code)) return false; const c = capOf(code); return c != null && c < RANK_MIN_CAP_EOK; };
+const capMinTxt = () => (RANK_MIN_CAP_EOK == null ? '시가총액 문턱 — 서버 값 못 받음' : `시가총액 ${fmtMoneyKr(RANK_MIN_CAP_EOK)} 이상만`);   // 칩 풍선 글 — 값은 위 한 곳(서버에서 받은 값)
 function capOf(code) {
   if (isUsCode(code)) {
     for (const id of Object.keys(usRows)) {
@@ -1620,18 +1621,18 @@ const SORT_TIPS = {
   /* 관심 — 실제 차례를 그대로 적는다(rowList 의 filter 갈래 · 2026-11-11 재권님 「관심 에 종목버튼에 마우스 올리면 어떤 룰로 소팅되는지 설명 넣어줘」):
      순위 목록 차례(코스피 시가총액 순 → 코스닥 시가총액 순)에서 담은 것만 골라내고, 목록 밖에서 담은 종목은 담은 차례로 맨 뒤 */
   /* 2026-11-18 재권님 「관심 하트는 누르는거 없애고 자동으로 관심으로 들어가게」 → 「응 맞아」 · 기존 하트 종목 「가」(비움) — 관심 = 서버 자동 관심 룰 종목만 */
-  fav: `서버가 자동 관심 룰로 담은 종목만 봅니다(하트로 담기는 없앴습니다)\n차례 — ① 코스피 종목 시가총액 큰 순 ② 그다음 코스닥 종목 시가총액 큰 순 ③ 순위 목록(코스피 200 · 코스닥 150) 밖 종목은 담긴 차례대로 맨 뒤 · ${CAP_MIN_TXT}\n함께 나오는 칩 줄(단타 · 프리장 · 초반상승 · 현재상승 · VI·급등 · 볼린저 · 장외)은 관심과 따로 순위 목록 전체에서 고릅니다 — 칩마다 마우스를 올리면 고르는 기준이 뜹니다`,
+  get fav() { return `서버가 자동 관심 룰로 담은 종목만 봅니다(하트로 담기는 없앴습니다)\n차례 — ① 코스피 종목 시가총액 큰 순 ② 그다음 코스닥 종목 시가총액 큰 순 ③ 순위 목록(코스피 200 · 코스닥 150) 밖 종목은 담긴 차례대로 맨 뒤 · ${capMinTxt()}\n함께 나오는 칩 줄(단타 · 프리장 · 초반상승 · 현재상승 · VI·급등 · 볼린저 · 장외)은 관심과 따로 순위 목록 전체에서 고릅니다 — 칩마다 마우스를 올리면 고르는 기준이 뜹니다`; },
   cap: '시가총액이 큰 순 — 위 코스피 · 코스닥으로 시장을 고릅니다',
   value: '오늘 거래대금이 큰 순',
   vol: '오늘 거래량이 큰 순',
   up: '오늘 전일 대비 많이 오른 순',
   down: '오늘 전일 대비 많이 내린 순',
-  after: `정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 09:00 ~ 15:40 은 비어 있습니다 · ${CAP_MIN_TXT}`,
-  buy: `외국인 · 기관 순매수 금액 상위 30(장중 가집계)에 든 종목을 이 차례로 — 외·기·연·프(외국인 · 기관 · 연기금 · 프로그램 넷 다) → 외·기·프(외국인 · 기관 · 프로그램) → 기·연(기관 · 연기금) → 외국인만 · 같은 칸 안은 산 금액 합 큰 순\n연기금은 15:45 확정치 뒤에만 있어 장중에는 외·기·프 · 외국인만 두 칸만 찹니다 · 프로그램은 실시간 · 서버가 판을 다시 지을 때마다 차례가 바뀝니다\n칸에서 빠진 종목은 맨 위에 흐리게 · ${CAP_MIN_TXT}`,
-  pre: `넥스트레이드 프리마켓(08:00 ~ 08:50)에 전일 종가보다 오른 종목 중 거래대금 상위(서버가 정한 줄 수) · 차례는 등락률 큰 순\n배율 — 전날 같은 시각까지 거래량 대비(다시 재는 주기 · 빨강 기준은 서버 값 — 배율 위 풍선에)\n프리장 동안 몇 분마다 다시 재고 08:50 에 그날 판으로 굳힙니다 · 줄마다 「프」 는 프로그램 순매수(참고) · ${CAP_MIN_TXT}`,
-  nowup: `지금 값이 오늘 시가보다 +${NOW_RISE_PCT}% 이상 높은 종목, 시가 대비 큰 순 · 오른쪽 % 도 시가 대비\n위 코스피 · 코스닥으로 시장을 고릅니다 · ${CAP_MIN_TXT}`,
-  vi: `오늘 정규장에 상승 VI 가 걸렸거나(VI 는 ${CAP_MIN_TXT}) 전일 대비 +20% 를 넘은 종목, 최근 것이 위`,
-  bb: `바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · ${CAP_MIN_TXT} · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록`,
+  get after() { return `정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 09:00 ~ 15:40 은 비어 있습니다 · ${capMinTxt()}`; },
+  get buy() { return `외국인 · 기관 순매수 금액 상위 30(장중 가집계)에 든 종목을 이 차례로 — 외·기·연·프(외국인 · 기관 · 연기금 · 프로그램 넷 다) → 외·기·프(외국인 · 기관 · 프로그램) → 기·연(기관 · 연기금) → 외국인만 · 같은 칸 안은 산 금액 합 큰 순\n연기금은 15:45 확정치 뒤에만 있어 장중에는 외·기·프 · 외국인만 두 칸만 찹니다 · 프로그램은 실시간 · 서버가 판을 다시 지을 때마다 차례가 바뀝니다\n칸에서 빠진 종목은 맨 위에 흐리게 · ${capMinTxt()}`; },
+  get pre() { return `넥스트레이드 프리마켓(08:00 ~ 08:50)에 전일 종가보다 오른 종목 중 거래대금 상위(서버가 정한 줄 수) · 차례는 등락률 큰 순\n배율 — 전날 같은 시각까지 거래량 대비(다시 재는 주기 · 빨강 기준은 서버 값 — 배율 위 풍선에)\n프리장 동안 몇 분마다 다시 재고 08:50 에 그날 판으로 굳힙니다 · 줄마다 「프」 는 프로그램 순매수(참고) · ${capMinTxt()}`; },
+  get nowup() { return `지금 값이 오늘 시가보다 +${NOW_RISE_PCT}% 이상 높은 종목, 시가 대비 큰 순 · 오른쪽 % 도 시가 대비\n위 코스피 · 코스닥으로 시장을 고릅니다 · ${capMinTxt()}`; },
+  get vi() { return `오늘 정규장에 상승 VI 가 걸렸거나(VI 는 ${capMinTxt()}) 전일 대비 +20% 를 넘은 종목, 최근 것이 위`; },
+  get bb() { return `바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · ${capMinTxt()} · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록`; },
   ov: '관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 · 수급 가운데 둘 이상의 칩에 함께 든 종목, 겹친 칩 수가 많은 순(같으면 시가총액 순)\n전일 종가 대비 내린 종목은 뺍니다(등락률을 모르면 남김)\n줄마다 어느 칩에 들었는지 적습니다 · 각 칩의 거르기(시가총액 · ETF)는 그 칩 그대로',
   get rise() {      // 문턱 숫자는 서버 meta — 받기 전에는 숫자 없이
     const m = riseMeta || {};
@@ -1839,7 +1840,7 @@ async function loadVi() {
         // VI 는 시총 RANK_MIN_CAP_EOK 이상만 — 재권님 「vi종목은 시총1조가 넘지않는건 안보여도 돼」 → 「가」 → 「1조를 3천억 으로」(11-10). 급등 줄은 그대로.
         // 시총을 아직 못 받은 줄은 남긴다 — 못 잰 것을 「작다」 로 치지 않는다(서버가 다음 바퀴에 채운다)
         const capEok = it.cap ?? capOf(it.code);
-        if (it.kind === 'vi' && capEok != null && capEok < RANK_MIN_CAP_EOK) continue;
+        if (it.kind === 'vi' && capEok != null && RANK_MIN_CAP_EOK != null && capEok < RANK_MIN_CAP_EOK) continue;
         let g = by[it.code];
         if (!g) { g = by[it.code] = { last: it, vi: 0, surge: false }; rows.push({ code: it.code, name: it.name }); }
         if (it.kind === 'vi') g.vi += 1; else g.surge = true;
@@ -1884,7 +1885,7 @@ async function loadBb() {
         if (!it.code) continue;
         // 시총 RANK_MIN_CAP_EOK 이상만 — 재권님 「볼린져에도 시가총액 넣어주고 1조 이상만」 → 「1조를 3천억 으로」(11-10). 못 받은 줄은 남긴다(VI 와 같은 까닭)
         const capEok = it.cap ?? capOf(it.code);
-        if (capEok != null && capEok < RANK_MIN_CAP_EOK) continue;
+        if (capEok != null && RANK_MIN_CAP_EOK != null && capEok < RANK_MIN_CAP_EOK) continue;
         let g = by[it.code];
         if (!g) { g = by[it.code] = { last: it, n: 0 }; rows.push({ code: it.code, name: it.name }); }
         g.n += 1;
