@@ -288,12 +288,13 @@ def sector_board(proxy, cfg):
                  top(등락률 큰 종목 둘) · missing(값 못 받은 수) — 못 받은 값은 None(0 아님)
         차례     n 큰 순 · 같으면 avg 큰 순
         비움     프리장 판과 같이 — 저녁 8시(fetch 의 reset) 뒤 빈 판
+        못 잼    섹터 표를 못 읽거나 비었으면 sectors [] · unknown null · sectorError 에 까닭 — 「모름」 한 줄과 가른다
     """
     data, at, ph = fetch(proxy, cfg)
     d = data or {}
     rows = d.get("rows") or []
     out = {"day": d.get("day"), "builtAt": d.get("hm"), "phase": ph, "reset": bool(d.get("reset")), "noTrade": bool(d.get("noTrade")),
-           "src": None, "nowAt": None, "total": len(rows), "sectors": [], "unknown": None, "ready": data is not None}
+           "src": None, "nowAt": None, "total": len(rows), "sectors": [], "unknown": None, "sectorError": None, "ready": data is not None}
     if not rows:
         return out
     now = _now()
@@ -312,8 +313,11 @@ def sector_board(proxy, cfg):
     try:
         import company_profile
         sec = company_profile.sectors()
-    except Exception:
-        sec = {}
+    except Exception as e:
+        sec, out["sectorError"] = None, "섹터 표 못 읽음: %s" % type(e).__name__
+    if not sec:                                   # 표를 못 읽음 · 비었음 — 전부 「모름」 한 줄로 보내지 않고 「못 쟀다」 로 따로(창구 검수 덧 11-20)
+        out.setdefault("sectorError", "섹터 표가 비었음")
+        return out
     groups = {}
     for r in rows:
         pct, amt = vals.get(r["code"], (None, None))
