@@ -665,7 +665,7 @@ def build(proxy, cfg, day, skip=()):
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(off), "rows": rows, "closed": False,
-            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "lateMin": off, "viSplit": vi_split(off), "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy), "minChips": mc,
+            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "lateMin": off, "lockUntil": "%02d:%02d" % BUY_LATE, "lockDef": ["%02d:%02d" % t for t in LOCK_AT], "viSplit": vi_split(off), "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy), "minChips": mc,
                      "early": ["매수"] if "매수어림" in missing else [], "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre else None, "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
                      "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "buy 는 굳힌 때(buyAt) 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
@@ -809,7 +809,7 @@ def _sub_keep(r, o, ts):
     r["subNow"] = {c: v for c, v in (r.get("subNow") or {}).items() if c in (r.get("chips") or [])}
 
 
-LOCK_AT = ((9, 5), (9, 30), (10, 30))   # 세 번 굳히기 — 이 시각마다 굳지 않은 줄 중 순위 위 LOCK_N 개를 굳힌다(lock 1 · 2 · 3)
+LOCK_AT = ((9, 5), (9, 30), (10, 0))   # 기본 굳힘 시각(셈 칸 rules.dt30.set.lockAt 이 빈 차례 · lock_at() · 재권님 「값이 없으면 9시 5분 9시 30분 10시로 고정되게 하고 값이 있으면 그 값을 오버라이드」 11-20 14:0x) — 세 번 굳히기 — 이 시각마다 굳지 않은 줄 중 순위 위 LOCK_N 개를 굳힌다(lock 1 · 2 · 3)
 LOCK_N = 10
 # 재권님 「단타 목록 9시 5분에 굳히고 상위 10개만 보인다. 그이후로 추가된건 그아래로 추가되고 9시 30분에 10개 굳힌다. 그이후로 추가된건 그아래로
 # 추가되고 10시 30분에 10개 굳힌다」(11-20 08:44) → 새로 다는 10개는 「(가) 그때까지 굳지 않은 종목 전체에서 순위대로」(11-20 10:1x).
@@ -836,17 +836,35 @@ def _lock_order(b):
         r["rank"] = i
 
 
+def lock_at():
+    """굳히는 시각 셋 — 룰 문서 strategy-rules 의 셈 칸 rules.dt30.set.lockAt(["HH:MM" 또는 null] 셋 · 재권님이 단타 판 매수 칸 「굳힘 시각」 셋에서 정함(화면 시황분석1) ·
+    11-20 「굳힘 시간은 내가 지정하면 바꿀수 있게」 → 「굳힘 시간 3개 넣어야대」). 빈 칸 · 틀린 꼴 · 못 읽음은 그 차례의 LOCK_AT 값. 이른 차례로."""
+    try:
+        import docstore
+        v = ((((docstore.read_doc("strategy-rules") or {}).get("rules") or {}).get("dt30") or {}).get("set") or {}).get("lockAt")
+    except Exception:
+        v = None
+    v = v if isinstance(v, list) else []
+    out = []
+    for i, d in enumerate(LOCK_AT):
+        x = v[i] if i < len(v) else None
+        ok = isinstance(x, str) and re.fullmatch(r"\d\d:\d\d", x) and int(x[:2]) < 24 and int(x[3:5]) < 60
+        out.append((int(x[:2]), int(x[3:5])) if ok else d)
+    return tuple(sorted(out))
+
+
 def _lock_times(b):
-    """그날 굳히는 시각들(분) — LOCK_AT + 그 판의 lateMin · BUY_LATE 를 넘지 않음."""
+    """그날 굳히는 시각들(분) — lock_at() + 그 판의 lateMin · BUY_LATE 를 넘지 않음."""
     lm = (b.get("meta") or {}).get("lateMin")
     lm = lm if isinstance(lm, int) else 0
     cap = BUY_LATE[0] * 60 + BUY_LATE[1]
-    return [min(h * 60 + m + lm, cap) for h, m in LOCK_AT]
+    return [min(h * 60 + m + lm, cap) for h, m in lock_at()]
 
 
 def _lock_due(b, nm):
     """굳힐 때가 지난 차례를 굳힌다 — 굳지 않은 줄 중 순위 위 LOCK_N 개. 굳힌 차례 목록(이번에 한 것)."""
     done = list(b["meta"].get("lockDone") or [])
+    old_at = list(b["meta"].get("lockAt") or [])         # 이미 굳힌 차례의 시각은 그대로 — 그날 중간에 시각을 바꿔도 지난 묶음 이름이 안 바뀜
     did = []
     at = _lock_times(b)
     for i, t in enumerate(at, 1):
@@ -861,7 +879,7 @@ def _lock_due(b, nm):
         did.append(i)
     if did:
         b["meta"]["lockDone"] = done
-        b["meta"]["lockAt"] = [_hhmm(t) for t in at]
+        b["meta"]["lockAt"] = [old_at[i - 1] if i in done and i not in did and i - 1 < len(old_at) else _hhmm(t) for i, t in enumerate(at, 1)]
         b["meta"]["lockN"] = LOCK_N
         _lock_order(b)
     return did
