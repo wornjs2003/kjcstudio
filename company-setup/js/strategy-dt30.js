@@ -654,6 +654,7 @@ async function load(day, quiet) {
   const bm = String(m.buyAt || d.buyAt || '').match(/^(\d{2}):?(\d{2})$/);
   if (!again && bm && d.day === st.days[0] && d.day <= today) {
     const at = new Date(t0); at.setHours(+bm[1], +bm[2] + 1, 0, 0);
+    if (at <= t0) at.setDate(at.getDate() + 1);   // 이미 지났으면 다음 날 그 시각 — 밤에 연 채 자정을 넘긴 화면도 넘어감(qa b1e0cd3 검수 덧)
     const wait = at - t0;
     if (wait > 0) again = setTimeout(() => { if (st.day === d.day) load(); }, wait);
   }
