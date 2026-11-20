@@ -20,13 +20,14 @@ market_event · watch_log 것을 여기로 옮긴다.** 다른 곳에 장 시각
     바뀐 시각   KIS 에 없다(11-19 수능날도 「개장 Y」 만 · 11-07 잼). 거래소가 미리 발표하는 날(수능 · 새해 첫날)은 보드 문서
                DOC(`/api/board/doc/market-hours`)의 days 에 {"YYYYMMDD": {"open": "1000", "close": "1630", "why": "수능"}} 로 적는다 —
                적는 것은 사람(재권님 · 세션)이다. 정규장만 옮긴다 — 넥스트레이드 쪽 바뀐 시각은 그 날 칸에 pre · after 로 따로 적으면 쓴다
+               (pre ["HHMM", "HHMM"] · 프리마켓 없는 날은 "pre": false → today() pre null · after ["여는", "닫는"] — 여는 때를 안 적으면 정규장 닫는 때)
     알림       거래소 공시(KIND 오늘의공시 RSS)에 HOURS_WORDS 가 든 글이 오면 notices 에 모은다 — 표에 적을지는 사람이 본다
                (평일 NOTICE_FROM~NOTICE_TO 에 NOTICE_SEC 마다 · 정확한 제목은 못 쟀다)
     못 하는 것  갑자기 생긴 장 지연(전산 고장)은 미리 알 길이 없다 — 공시가 오면 알리는 데까지
 
 ── 내는 것 ──
 
-    today()   {"day", "open"(True · False · None=못 쟀다), "reg": [여는, 닫는], "pre", "after", "why", "src"} — 서버 다른 일이 부른다
+    today()   {"day", "open"(True · False · None=못 쟀다), "reg": [여는, 닫는], "pre"(없는 날 null), "after", "why", "src"} — 서버 다른 일이 부른다
     board()   주소 /api/alerts/market-hours 의 data — today + 앞날 몇 · notices · 홈 맨 위 띠(market-event.js)가 쓴다
 """
 import json
@@ -104,9 +105,13 @@ def today(proxy, day=None, now=None):
     if ch.get("closed"):
         open_, src = False, "표"
     reg = [_hhmm(ch.get("open")) or REG_OPEN, _hhmm(ch.get("close")) or REG_CLOSE]
-    pre = [_hhmm((ch.get("pre") or [None, None])[0]) or PRE_OPEN, _hhmm((ch.get("pre") or [None, None])[1]) or PRE_CLOSE]
-    after = [reg[1], _hhmm((ch.get("after") or [None, None])[1]) or AFTER_CLOSE]
-    changed = bool(ch) and (reg != [REG_OPEN, REG_CLOSE] or ch.get("closed"))
+    if "pre" in ch and not ch["pre"]:                  # 그날 프리마켓 없음 — 문서에 "pre": false(11-19 수능 · 넥스트레이드 프리마켓 안 엶)
+        pre = None
+    else:
+        pre = [_hhmm((ch.get("pre") or [None, None])[0]) or PRE_OPEN, _hhmm((ch.get("pre") or [None, None])[1]) or PRE_CLOSE]
+    a = ch.get("after") or [None, None]
+    after = [_hhmm(a[0]) or reg[1], _hhmm(a[1]) or AFTER_CLOSE]   # 애프터 여는 때 — 문서 칸이 있으면 그것(11-19 수능 17:00) · 없으면 정규장 닫는 때
+    changed = bool(ch) and (reg != [REG_OPEN, REG_CLOSE] or bool(ch.get("closed")) or "pre" in ch or "after" in ch)
     why = ch.get("why") or (None if open_ is not False else ("주말" if wd >= 5 else "휴장일"))
     return {"day": day, "open": open_, "reg": reg, "pre": pre, "after": after, "changed": changed, "why": why, "src": src,
             "usual": {"reg": [REG_OPEN, REG_CLOSE], "pre": [PRE_OPEN, PRE_CLOSE], "afterClose": AFTER_CLOSE}}
