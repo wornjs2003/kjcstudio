@@ -15,6 +15,11 @@
               15:41 을 놓친 날(서버가 그때 내려가 있었음)은 종가가 null — 장외 등락률도 null 이다(시간외 값을 종가로 쓰지 않는다)
               ⚠️ 「20:00 뒤 NX 현재가 = 장외 마지막가」 는 **아직 실측 전**(2026-10-26 20:01 에 잰다)
     프리장    다음 거래일 08:51 에 nxt_pre 가 저장하는 장외가(nxt_pre.price) 를 그대로 읽는다 — 따로 안 부른다
+    다음 날 시가  다음 거래일의 정규장 시가(open) — 15:41 종가와 같은 J 멀티 시세 응답의 시가(inter2_oprc)를 그날 줄에 함께 쓴다(KIS 더 안 부름 ·
+              2026-11-20 재권님 「응 그래」 · 넥장 표에 다음날 시초가 칸). 그 전에 쌓인 날 · 15:41 을 놓친 날은 fill_open 이 보드에 오른
+              종목만 J 일봉으로 채운다(서버 뜰 때 · 종가 저장 뒤)
+    「다음 날」  그 날보다 뒤에 종가가 쌓인 첫 거래일 — 없으면(아직 그날 15:41 전) 프리장(nxt_pre)이 쌓인 첫 날. 전에는 프리장 날로만 잡아
+              2026-11-19(수능 · 프리장 기록 없음)을 건너뛰고 11-18 줄의 다음 날이 11-20 으로 나왔다
     야간선물  코스피200 · 코스닥150 최근월물(FHMIF10000000 · 시장 CM · 10100000 · 10600000) — 2번
               (2026-10-26 17:2x 둘 다 응답 정상 · 그때는 야간장 전이라 값이 주간과 같았다 — 06:00 값이 야간 종가인지는 아직 못 잼)
     장외 체결  NX 누적 거래량은 **하루 전체** 라 20:01 값만으로는 장외 체결이 있었는지 못 가른다 — 체결이 없어도 현재가에
@@ -44,6 +49,7 @@ FUT_AT, FUT_UNTIL = (6, 1), (6, 30)
 TOP_N = 20                      # 날마다 오름 · 내림 각 몇 종목 — 시황분석 시안 「장외 오름 · 내림 각 20」
 DAYS_MAX = 20
 FUTS = (("kospi200", "10100000"), ("kosdaq150", "10600000"))
+AFTER_RETRY_SEC = 180          # 20:01~20:29 장외 저장이 실패하면 이만큼 뒤 다시 — 전에는 하루 한 번이라 2026-11-18 20:01 한 번 실패로 그날 장외가 통째로 비었다
 FUT_RETRY_SEC = 120             # 06:01~06:29 야간선물 받기가 하나라도 실패하면 이만큼 뒤 다시 — 창 안에서 많아야 열네 번 · 한 번에 KIS 2건
 TICK = 30
 
@@ -71,6 +77,8 @@ def _init(proxy):
         cols = {r[1] for r in conn.execute("PRAGMA table_info(nxt_board)")}
         if "main_vol" not in cols:              # 2026-11-05 전에 만든 표 — 칸만 더한다(옛 날은 null)
             conn.execute("ALTER TABLE nxt_board ADD COLUMN main_vol INTEGER")
+        if "open" not in cols:                  # 그날 정규장 시가(2026-11-20) — 옛 날은 null · fill_open 이 보드 종목만 채움
+            conn.execute("ALTER TABLE nxt_board ADD COLUMN open INTEGER")
 
 
 def _prev_weekday(d):
@@ -94,6 +102,7 @@ def _multi(proxy, cfg, codes, div):
             code = (r.get("inter_shrn_iscd") or "").strip()
             if code:
                 out[code] = {"price": proxy._num(r.get("inter2_prpr"), int), "vol": proxy._num(r.get("acml_vol"), int) or 0,
+                             "open": proxy._num(r.get("inter2_oprc"), int),   # 그날 시가 — 15:41 J 값이면 정규장 시가(넥장 보드 「다음 날 시가」)
                              "name": (r.get("inter_kor_isnm") or "").strip(),
                              # 종가배팅 후보(closing_bet)가 15:41 J 값을 그대로 쓴다 — 따로 안 부르게
                              "high": proxy._num(r.get("inter2_hgpr"), int), "low": proxy._num(r.get("inter2_lwpr"), int),
@@ -133,10 +142,11 @@ def save_close(proxy, day):
         return 0
     stamp = _now().isoformat(timespec="seconds")
     rows = [(day, code, nxt_pre.MARKET_OF.get(code), name or (krx.get(code) or {}).get("name"),
-             (krx.get(code) or {}).get("price") or None, stamp) for code, name in names.items()]
+             (krx.get(code) or {}).get("price") or None, (krx.get(code) or {}).get("open") or None, stamp) for code, name in names.items()]
     with proxy._db_lock, proxy.db_conn() as conn:
-        conn.executemany("INSERT INTO nxt_board (day, code, market, name, close, saved_at) VALUES (?,?,?,?,?,?) "
-                         "ON CONFLICT(day, code) DO UPDATE SET close = excluded.close, market = excluded.market, name = excluded.name", rows)
+        conn.executemany("INSERT INTO nxt_board (day, code, market, name, close, open, saved_at) VALUES (?,?,?,?,?,?,?) "
+                         "ON CONFLICT(day, code) DO UPDATE SET close = excluded.close, open = COALESCE(excluded.open, nxt_board.open), "
+                         "market = excluded.market, name = excluded.name", rows)
     _status.update(closeDay=day, closeAt=stamp, closeCodes=len(rows), error=None)
     try:                                         # 종가배팅 판 후보 — 같은 J 값으로(2026-11-18 · server/closing_bet.py)
         closing_bet.save_candidates(proxy, day, krx)
@@ -246,12 +256,14 @@ def board(proxy, market, days=5):
     """화면 한 장 —
 
         {market, days: [{day, preDay, fut: {kospi200: {name, last, pct} | null, kosdaq150: …}}] (최신이 앞),
-         rows: [{code, name, side: "up" | "down", rank, cells: {<day>: {close, after, afterPct, afterVol, pre, prePct}}}]}
+         rows: [{code, name, side: "up" | "down", rank, cells: {<day>: {close, after, afterPct, afterVol, pre, prePct, open, openPct, openVsAfter}}}]}
 
     after 가 null 이면 장외 체결이 없었다(또는 못 받음). afterVol 은 장외(15:30~20:00) 거래량 — 그날 15:2x 를 못 잰 날은 null.
 
     rows 는 날마다 장외 등락률(afterPct · 종가 대비) 오름 · 내림 상위 TOP_N 의 합집합. side · rank 는 그 종목이 든 가장 최근 날 것.
     pre 는 다음 거래일 08:51 장 전 가격(nxt_pre) · prePct 는 그날 종가 대비. 값이 없으면 null.
+    open 은 다음 거래일 정규장 시가 · openPct 는 그날 종가 대비 · openVsAfter 는 그날 장외가 대비(장외가 없으면 null).
+    preDay 는 「다음 거래일」 — 그 날 뒤 종가가 쌓인 첫 날, 없으면 프리장이 쌓인 첫 날(머리말 「다음 날」).
     """
     days = max(1, min(DAYS_MAX, int(days or 5)))
     with proxy._db_lock, proxy.db_conn() as conn:
@@ -266,12 +278,23 @@ def board(proxy, market, days=5):
         q = ",".join("?" * len(ds))
         # 저장 바퀴가 안 도는 서버(8764 · 세션)는 칸을 안 더한 옛 표일 수 있다 — 읽기 길에서는 표를 안 바꾸고 null 로 읽는다(qa 검수 11-05)
         has_mv = "main_vol" in {r[1] for r in conn.execute("PRAGMA table_info(nxt_board)")}
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(nxt_board)")}
         board_rows = [dict(r) for r in conn.execute(
             "SELECT day, code, name, close, after, after_vol, " + ("main_vol" if has_mv else "NULL AS main_vol") + " FROM nxt_board WHERE market = ? AND day IN (%s)" % q, [market] + ds)]
-        pre_days, pre = {d: None for d in ds}, {}
+        pre_days, pre, opens = {d: None for d in ds}, {}, {}
+        for d in ds:                            # 다음 거래일 — 종가가 쌓인 첫 날(수능처럼 프리장이 없던 날도 거래일이다)
+            r = conn.execute("SELECT MIN(day) FROM nxt_board WHERE market = ? AND day > ? AND close IS NOT NULL", (market, d)).fetchone()
+            pre_days[d] = r[0] if r else None
+        nds = [x for x in set(pre_days.values()) if x]
+        if nds and "open" in cols:
+            q3 = ",".join("?" * len(nds))
+            for r in conn.execute("SELECT day, code, open FROM nxt_board WHERE market = ? AND day IN (%s) AND open IS NOT NULL" % q3, [market] + nds):
+                opens[(r["day"], r["code"])] = r["open"]
         try:                                    # nxt_pre 표가 없는 서버(한 번도 안 돈 자리)면 프리장은 전부 null
             for d in ds:
-                r = conn.execute("SELECT MIN(day) FROM nxt_pre WHERE day > ?", (d,)).fetchone()
+                if pre_days[d]:
+                    continue
+                r = conn.execute("SELECT MIN(day) FROM nxt_pre WHERE day > ?", (d,)).fetchone()   # 다음 날 종가가 아직 없음(그날 15:41 전) — 프리장 날
                 pre_days[d] = r[0] if r else None
             pd_list = [x for x in set(pre_days.values()) if x]
             if pd_list:
@@ -304,16 +327,60 @@ def board(proxy, market, days=5):
             continue
         names[r["code"]] = r["name"]
         p = pre.get((pre_days.get(r["day"]), r["code"]))
+        o = opens.get((pre_days.get(r["day"]), r["code"]))
         cells_of.setdefault(r["code"], {})[r["day"]] = {
             "close": r["close"], "after": r["after"], "afterPct": _pct(r["after"], r["close"]),
             "afterVol": _after_vol(r["after_vol"], r["main_vol"]),
-            "pre": p, "prePct": _pct(p, r["close"])}
+            "pre": p, "prePct": _pct(p, r["close"]),
+            "open": o, "openPct": _pct(o, r["close"]), "openVsAfter": _pct(o, r["after"])}
     rows = [{"code": c, "name": names.get(c), "side": s, "rank": k, "cells": cells_of.get(c, {})}
             for c, (s, k, _d) in picked.items()]
     rows.sort(key=lambda x: (x["side"] != "up", x["rank"]))
     return {"market": market,
             "days": [{"day": d, "preDay": pre_days.get(d), "fut": {w: futs.get(d, {}).get(w) for w, _c in FUTS}} for d in ds],
             "rows": rows}
+
+
+def fill_open(proxy):
+    """보드에 오른 종목의 「다음 거래일 시가」 가 빈 칸만 J 일봉으로 채운다 — 시가를 함께 쓰기 전(2026-11-20 전)에 쌓인 날 · 15:41 을 놓친 날.
+    오늘 시가는 그날 15:41 종가 저장이 쓰므로 오늘보다 앞 날만 본다. 종목마다 일봉 한 번(KIS 1건). 채운 칸 수."""
+    _init(proxy)
+    today = _now().strftime("%Y%m%d")
+    need = {}                                     # code -> {다음 날, …}
+    for m in ("kospi", "kosdaq"):
+        b = board(proxy, m, DAYS_MAX)
+        nd_of = {x["day"]: x.get("preDay") for x in b.get("days") or []}
+        for r in b.get("rows") or []:
+            for d, c in (r.get("cells") or {}).items():
+                nd = nd_of.get(d)
+                if nd and nd < today and c.get("open") is None and c.get("close"):
+                    need.setdefault(r["code"], set()).add(nd)
+    if not need:
+        return 0
+    cfg = proxy.load_secrets()
+    n = 0
+    for code, nds in need.items():
+        try:
+            bars = {b["date"]: b.get("open") for b in proxy._stock_daily_j(cfg, code, min(nds))}
+        except Exception as e:
+            _status["error"] = "다음 날 시가 채우기 %s: %s" % (code, safe_message(e, 120))
+            continue
+        ups = [(bars[d], d, code) for d in nds if bars.get(d)]
+        if ups:
+            with proxy._db_lock, proxy.db_conn() as conn:
+                conn.executemany("UPDATE nxt_board SET open = ? WHERE day = ? AND code = ? AND open IS NULL", ups)
+            n += len(ups)
+    return n
+
+
+def _fill_open_log(proxy):
+    try:
+        n = fill_open(proxy)
+        if n:
+            print("  [넥장 보드] 다음 날 시가 %s칸 일봉으로 채움" % n)
+    except Exception as e:
+        _status["error"] = "다음 날 시가 채우기: %s" % safe_message(e, 120)
+        print("  [넥장 보드] 다음 날 시가 채우기 실패: %s" % safe_message(e, 120))
 
 
 def status():
@@ -324,6 +391,7 @@ def start(proxy):
     """보내는 서버가 뜰 때 한 번 — 15:21 메인장 NX 거래량 · 15:41 종가 · 20:01 장외 · 06:01 야간선물 바퀴."""
     def loop():
         time.sleep(45)
+        _fill_open_log(proxy)                    # 뜰 때 한 번 — 빈 칸만이라 다 채운 뒤에는 KIS 를 안 부른다
         while True:
             try:
                 now = _now()
@@ -342,17 +410,20 @@ def start(proxy):
                     try:
                         n = save_close(proxy, day)
                         print("  [넥장 보드] %s 종가 %s종목 저장" % (day, n))
+                        if n:
+                            _fill_open_log(proxy)
                     except Exception as e:
                         _status["error"] = safe_message(e, 160)
                         print("  [넥장 보드] 종가 저장 실패: %s" % type(e).__name__)
-                if now.weekday() < 5 and AFTER_AT <= hm < AFTER_UNTIL and _status["afterDay"] != day:
-                    _status["afterDay"] = day            # 실패해도 그날은 한 번
-                    try:
+                if (now.weekday() < 5 and AFTER_AT <= hm < AFTER_UNTIL and _status["afterDay"] != day
+                        and time.time() >= _status.get("afterRetryAt", 0)):
+                    try:                                 # 받으면 save_after 가 afterDay 를 그날로 · 실패하면 AFTER_RETRY_SEC 뒤 창 안에서 다시(2026-11-20)
                         n = save_after(proxy, day)
                         print("  [넥장 보드] %s 장외 %s종목 저장(거래 %s)" % (day, n, _status.get("afterTraded")))
                     except Exception as e:
+                        _status["afterRetryAt"] = time.time() + AFTER_RETRY_SEC
                         _status["error"] = safe_message(e, 160)
-                        print("  [넥장 보드] 장외 저장 실패: %s" % type(e).__name__)
+                        print("  [넥장 보드] 장외 저장 실패(%s초 뒤 다시): %s" % (AFTER_RETRY_SEC, safe_message(e, 160)))
                 fday = _prev_weekday(now).strftime("%Y%m%d")
                 if (1 <= now.weekday() <= 5 and FUT_AT <= hm < FUT_UNTIL and _status["futDay"] != fday
                         and time.time() >= _status.get("futRetryAt", 0)):
