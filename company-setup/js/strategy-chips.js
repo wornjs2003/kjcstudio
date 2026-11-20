@@ -53,7 +53,7 @@ const RULES = {
   pre: {
     name: '프리장', url: '/api/kis/pre-flow',
     rows: (m) => [['고르는 조건', COND.프리장(m, v)],
-      ['시간', `${v(m.preOpen)} ~ ${v(m.preClose)} · 그 뒤 09:00 전까지 그날 판으로 굳힘`], CAPROW, ['줄 세우기', '프로그램 순매수 큰 순']],
+      ['시간', `${v(m.preOpen)} ~ ${v(m.preClose)} · 그 뒤 09:00 전까지 그날 판으로 굳힘`], CAPROW, ['줄 세우기', '등락률 큰 순(고르기는 거래대금 순)']],
     list: (j) => {
       const d = Array.isArray(j.data) ? j.data : [], m = j.meta || {};
       return { cap: `${esc(m.day ? `${m.day.slice(4, 6)}-${m.day.slice(6)}` : '—')} 프리장 · ${num(d.length)}종목${m.builtAt ? ` · ${esc(m.builtAt)} 굳힘` : ''}`,
