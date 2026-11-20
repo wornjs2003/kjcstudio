@@ -52,7 +52,7 @@ def _chips_now_rule(b, r):
     chips = list(r.get("chips") or [])
     if (b.get("meta") or {}).get("watchRule") != "자동":
         chips = [("관심" if c == "수급" else c) for c in chips if c != "관심"]
-    return chips, len(set(chips) & set(dt30.OV_CHIPS))
+    return chips, len(set(chips) & set(dt30.ov_chips()))
 
 
 def day_rows(b):

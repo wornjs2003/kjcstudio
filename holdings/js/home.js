@@ -1474,7 +1474,16 @@ const showCap = (code) => {
   return isUsCode(code) ? fmtUsdBig(c) : fmtMoneyKr(c);
 };
 
-const NOW_RISE_PCT = 3;           // 「현재상승」 문턱 — 시가 대비 %(재권님 11-11 「시가보다 3%이상」)
+let NOW_RISE_PCT = null;          // 「현재상승」 문턱 — 시가 대비 %(재권님 11-11 「시가보다 3%이상」) · 서버 칩 룰 표 한 곳(/api/kis/chip-rules 현재상승.nowRisePct · 11-20) · 못 받으면 null — 거르지 않고 글은 「서버 값 못 받음」
+async function loadChipRules() {
+  try {
+    const r = await apiFetch('/api/kis/chip-rules', { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    const v = j && j.ok && Array.isArray(j.data) ? (j.data.find((x) => x.chip === '현재상승' && x.key === 'nowRisePct') || {}).value : null;
+    if (Number.isFinite(v)) NOW_RISE_PCT = v;
+  } catch { /* 못 받으면 null 그대로 */ }
+}
+const riseTxt = () => (NOW_RISE_PCT == null ? '(서버 값 못 받음)' : `+${NOW_RISE_PCT}%`);
 const SORTS = {
   /* 관심종목 — **다른 다섯과 성격이 다르다.**
    *
@@ -1520,12 +1529,12 @@ const SORTS = {
           pct: (p) => p.regPct, note: '종가 대비 오른 종목' },
   /* 현재상승 — 지금 값이 그날 시가보다 NOW_RISE_PCT % 이상 높은 종목 · 시가 대비 큰 순(2026-11-11 재권님 「현재상승 이라는 버튼추가하고
      여기는 시가보다 3%이상 올라있는 목록」). 시가 · 현재가는 통합 시세 그대로 — 셈은 시가 대비 % 하나 */
-  nowup:{ label: '현재상승', key: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), only: (v) => v >= NOW_RISE_PCT, capMin: true,
+  nowup:{ label: '현재상승', key: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), only: (v) => NOW_RISE_PCT != null && v >= NOW_RISE_PCT, capMin: true,
           head: '시가', show: (code, p) => (p && p.open ? fmtPriceOf(code, p.open) : '—'),
-          pct: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), note: `시가 대비 +${NOW_RISE_PCT}% 이상`,
+          pct: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), get note() { return `시가 대비 ${riseTxt()} 이상`; },
           blank: () => chipBlank(),     // 서버 chipReset(07:50)~09:00 은 앞 날 시가 · 현재가라 비운다(11-13 재권님 「다른 칩은 아침 7시반에」 → 11-19 07:50)
           empty: () => (chipBlank() ? `정규장 칩은 아침 ${serverData('chipReset').from}에 비우고 ${serverData('chipReset').until} 정규장부터 다시 셉니다`
-            : `시가보다 +${NOW_RISE_PCT}% 이상 오른 종목이 없습니다(시세를 받는 중이면 잠시 뒤 채워짐)`) },
+            : `시가보다 ${riseTxt()} 이상 오른 종목이 없습니다(시세를 받는 중이면 잠시 뒤 채워짐)`) },
   /* 매수 — 외국인 · 기관 · 프로그램이 **셋 다** 순매수인 종목, 셋 합이 큰 순 (2026-11-05 재권님 「프로그램 기관 외국인이 동시에
      사고있는 종목들 볼수있는 방법좀 마련해봐」 → 「실시간 순위에 버튼 하나 만들고 거기에 넣어줘 · 매수 라는 버튼」).
      고르는 것은 서버다(kis_proxy.py `fetch_joint_buy` · 외국인 · 기관은 가집계) — 화면은 받은 차례 그대로 그린다.
@@ -1630,7 +1639,7 @@ const SORT_TIPS = {
   get after() { return `정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 09:00 ~ 15:40 은 비어 있습니다 · ${capMinTxt()}`; },
   get buy() { return `외국인 · 기관 순매수 금액 상위 30(장중 가집계)에 든 종목을 이 차례로 — 외·기·연·프(외국인 · 기관 · 연기금 · 프로그램 넷 다) → 외·기·프(외국인 · 기관 · 프로그램) → 기·연(기관 · 연기금) → 외국인만 · 같은 칸 안은 산 금액 합 큰 순\n연기금은 15:45 확정치 뒤에만 있어 장중에는 외·기·프 · 외국인만 두 칸만 찹니다 · 프로그램은 실시간 · 서버가 판을 다시 지을 때마다 차례가 바뀝니다\n칸에서 빠진 종목은 맨 위에 흐리게 · ${capMinTxt()}`; },
   get pre() { return `넥스트레이드 프리마켓(08:00 ~ 08:50)에 전일 종가보다 오른 종목 중 거래대금 상위(서버가 정한 줄 수) · 차례는 등락률 큰 순\n배율 — 전날 같은 시각까지 거래량 대비(다시 재는 주기 · 빨강 기준은 서버 값 — 배율 위 풍선에)\n프리장 동안 몇 분마다 다시 재고 08:50 에 그날 판으로 굳힙니다 · 줄마다 「프」 는 프로그램 순매수(참고) · ${capMinTxt()}`; },
-  get nowup() { return `지금 값이 오늘 시가보다 +${NOW_RISE_PCT}% 이상 높은 종목, 시가 대비 큰 순 · 오른쪽 % 도 시가 대비\n위 코스피 · 코스닥으로 시장을 고릅니다 · ${capMinTxt()}`; },
+  get nowup() { return `지금 값이 오늘 시가보다 ${riseTxt()} 이상 높은 종목, 시가 대비 큰 순 · 오른쪽 % 도 시가 대비\n위 코스피 · 코스닥으로 시장을 고릅니다 · ${capMinTxt()}`; },
   get vi() { return `오늘 정규장에 상승 VI 가 걸렸거나(VI 는 ${capMinTxt()}) 전일 대비 +20% 를 넘은 종목, 최근 것이 위`; },
   get bb() { return `바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · ${capMinTxt()} · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록`; },
   ov: '관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 · 수급 가운데 둘 이상의 칩에 함께 든 종목, 겹친 칩 수가 많은 순(같으면 시가총액 순)\n전일 종가 대비 내린 종목은 뺍니다(등락률을 모르면 남김)\n줄마다 어느 칩에 들었는지 적습니다 · 각 칩의 거르기(시가총액 · ETF)는 그 칩 그대로',
@@ -1973,8 +1982,7 @@ async function loadPre() {
 /* 「단타」 칩 — 단타 목록은 서버 한 곳(server/dt30.py live · /api/kis/dt-list)이 센다 · 화면은 받은 줄 중 칩 둘 이상 · 하락 아닌 것을 받은 차례 그대로 그린다
    (재권님 「홈에 있는 칩을 단타에도 추가해서 동기화하고 한곳에서 받도록 해」 11-18 17:4x · 전에는 이 파일이 여섯 칩 목록을 모아 따로 셌다 — 단타 판과 두 벌).
    칩 정의 · 하락 뺌 · 차례(칩 수 → 초반상승 → 시가총액)는 서버 값 그대로 — 여기 두지 않는다 */
-const OV_CHIPS = ['fav', 'pre', 'vi', 'after', 'buy', 'rise'];   // 그리는 차례 · 칩 이름표(SORTS label) — 서버 칩 이름과는 아래 OV_ID 로 잇는다
-const OV_ID = { '관심': 'fav', '프리장': 'pre', 'VI·급등': 'vi', '장외': 'after', '매수': 'buy', '초반상승': 'rise' };   // 서버 dt30.OV_CHIPS 이름 → 이 화면 칩 id
+const OV_ID = { '관심': 'fav', '프리장': 'pre', 'VI·급등': 'vi', '장외': 'after', '매수': 'buy', '초반상승': 'rise' };   // 서버 칩 이름(칩 룰 표 단타.ovChips · 판 meta.chips) → 이 화면 칩 id
 const ovMin = () => (dtMeta && Number.isFinite(dtMeta.minChips) ? dtMeta.minChips : null);   // 문턱은 서버 값(dt30.MIN_CHIPS · meta.minChips) — 못 받으면 줄을 안 그린다
 const ovLabel = (id) => (SORTS[id] ? SORTS[id].label : id);
 let dtList = null, dtMeta = null;    // 못 받았으면 null(빈 목록과 가른다)
@@ -2008,7 +2016,7 @@ function ovNote() {
   const w = ovWaiting();
   const k = ovMin();
   const down = k == null ? 0 : Object.values(ovBy).filter((g) => g.chips.length >= k && g.down).length;
-  return `칩 ${OV_CHIPS.length}개 중 ${k == null ? '—' : `${k}개`} 이상${down ? ` · 하락 ${down} 뺌` : ''}${(m.wait || []).length ? ` · ${m.openAt ? `${m.openAt} 뒤` : '정규장 뒤'} ${m.wait.join(' · ')}` : ''}${w.length ? ` · 못 받은 칩 ${w.join(' · ')}` : ''}`;
+  return `칩 ${Array.isArray(m.chips) ? m.chips.length : '—'}개 중 ${k == null ? '—' : `${k}개`} 이상${down ? ` · 하락 ${down} 뺌` : ''}${(m.wait || []).length ? ` · ${m.openAt ? `${m.openAt} 뒤` : '정규장 뒤'} ${m.wait.join(' · ')}` : ''}${w.length ? ` · 못 받은 칩 ${w.join(' · ')}` : ''}`;
 }
 async function loadOv() {
   try {
@@ -3798,6 +3806,7 @@ if (keptPrices) paintBigPrice();
 
 /* 순위표 목록을 받아 200줄을 깐다. 시세는 보이는 줄부터 채워진다.
    목록을 못 받으면 관심종목으로 물러선다 (rowList 안에서 처리). */
+loadChipRules();   // 칩 문턱(현재상승) — 서버 표 한 곳 · 못 받으면 「서버 값 못 받음」
 loadUniverse().then(() => {
   /* 기억해 둔 종목이 지금 목록에 없으면(상장폐지·순위 밖) 맨 위로 물러선다.
      처음 켠 것도 같은 길로 간다 — keptStock 이 null 이면 findStock 도 null 이다. */
