@@ -2061,7 +2061,7 @@ function paintChipSectorsNow() {
 }
 
 /* 초반상승 첫 봉 길이 글 — 서버 meta.barMin(11-18 부터 1) · 못 받으면 「분」 만(숫자를 짐작하지 않는다) */
-const barMinTxt = () => (riseMeta && riseMeta.barMin != null ? `${riseMeta.barMin}분` : '분');
+const barMinTxt = () => (riseMeta && riseMeta.barMin != null ? `${riseMeta.barMin}분` : '(서버 값 못 받음)분');   // 못 받으면 「첫 분봉」 으로 흐리지 않는다(11-20 개념정의 덧)
 /* 「초반상승」 칩 — 서버가 준 줄 그대로. 못 받았으면 null(빈 목록과 가른다) */
 let riseRows = null, riseMeta = null;
 const riseOf = (code) => (riseRows || []).find((r) => r.code === code) || null;
