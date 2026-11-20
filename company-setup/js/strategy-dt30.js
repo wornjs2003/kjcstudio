@@ -44,12 +44,15 @@ const ORDER_FN = { vi: (a, b) => has(b, 'VI·급등') - has(a, 'VI·급등') || 
 //   · 켜진 칩 · 하위 칩에 걸린 수(n)로 다시 줄 세움: n 많은 순 → 초반상승 % → 시가총액 — 서버 차례와 같은 셈 · n 0 인 종목은 뺌 · 상위 PNL_TOP · 손익 · 평균이 그 차례로 다시 셈
 // 칩 목록은 서버 칩 룰 표 한 곳(/api/kis/chip-rules 단타.ovChips · 11-20 개발1 표 · 개발2 받기로) — 이름은 chipName 으로(수급 → 자동) · 판을 처음 받기 전에 한 번 받는다 · 못 받으면 빈 목록(칸은 st.cols 저장값 · 판에 온 칩으로)
 const DT_CHIPS = [];
+// 매도 셈 기본값(손절 · 꺾임 · 고점 · 시각 미달 · 횡보 열한 칸)도 같은 주소 meta.sellDef 한 곳(11-20 재권님 「가」 · 개발2 3523082 — 칩별 승률 표 서버 셈과 한 벌) · 못 받으면 비워 두고 「서버 값 못 받음」 · 짐작 안 함
+const SELL_DEF = {};
 async function loadDtChips() {
   try {
     const r = await fetch('/api/kis/chip-rules', { cache: 'no-store' }); const j = r.ok ? await r.json() : null;
     const v = j && j.ok && Array.isArray(j.data) ? (j.data.find((x) => x.chip === '단타' && x.key === 'ovChips') || {}).value : null;
+    const sd = j && j.meta && j.meta.sellDef; if (sd && typeof sd === 'object') { Object.assign(SELL_DEF, sd); st.sellFail = false; } else st.sellFail = true;
     if (Array.isArray(v) && v.length) { DT_CHIPS.splice(0, DT_CHIPS.length, ...v.map(chipName)); if (!CHIP_SEEN.length) CHIP_SEEN.push(...DT_CHIPS); st.chipFail = false; }
-  } catch (e) { /* 못 받음 — 빈 목록 그대로 · 다음 판 받기 때 다시 */ }
+  } catch (e) { st.sellFail = true; /* 못 받음 — 빈 목록 그대로 · 다음 판 받기 때 다시 */ }
 }
 // 칩 칸 (11-12 재권님 「칩을 추가해도 칩을 활성화 비활성화되도록 우리꺼에 맞게 그려봐」 → 시안 temp/시황분석1-cols-1800 → 「오 좋아 이런거야 이대로 먼저 개선해서 올려줘」)
 //   넓은 폭 표는 칩마다 세로 칸 · 칸 이름을 누르면 차림(켜기 · 끄기 · 룰 보기 · 옮기기 · 칸 지우기) · 끝 「+ 칩」 으로 서버가 주는 다른 칩(현재상승 · 볼린저 · 지운 칩)을 칸으로 더함
@@ -189,7 +192,7 @@ function chipPanel(all) {
 //   · ② 「꺾임」 = 앞 시각보다 낮아지면(재권님 11-11 「낮아지면으로 해」) · 숫자는 룰 문서로 옮길 때까지 이 한 곳
 // 파는 룰 값을 재권님이 넣는 칸으로 (11-18 재권님 「값을 내가 넣으면 거기에 맞게 소팅되야해 … 파는룰도 내가 바꾸면서 볼려고 하는거야」)
 //   · 손절 % (빈칸이면 손절 안 함) · 꺾임 켬/끔 · 고점 대비 −X% (빈칸이면 안 씀 — 11-18 「상승중에 -2%가 되면 매도」 · 매수가보다 오른 뒤 그때까지 가장 높던 값에서 X% 내리면 판다)
-//   · 기본값은 지금 룰 그대로(손절 −1 · 꺾임 켬 · 고점 빈칸) — 값은 아래 DEF_SET 한 곳 · 넣은 값은 룰 문서(rules.dt30) 한 곳에 저장
+//   · 기본값은 지금 룰 그대로(손절 −1 · 꺾임 켬 · 고점 빈칸) — 값은 서버 /api/kis/chip-rules meta.sellDef 한 곳(SELL_DEF · 11-20 「가」) · 넣은 값은 룰 문서(rules.dt30) 한 곳에 저장
 // 매수 타이밍 (11-18 재권님 「매수 타이밍을 9시1분 과 vi발동 두개를 고를수 있게 해줘. 그것에 맞춰서 차익도 달라지게」 → (가) 「그뒤 30분이 아니고 시간으로 30분단위로」)
 //   · open = 서버 매수가(09:00 시가) · p1 = rows[].px1(09:01 · 개발2) · vi = rows[].viPx(VI 걸린 때 값 · 개발2) — 값이 없는 종목은 안 산다(몫도 안 나눔 · 0 으로 안 봄)
 //   · 파는 룰은 시계 30분 칸(09:30 · 10:00 …) 중 산 시각 뒤 칸부터 본다 — 산 시각 앞 칸은 비움
@@ -257,8 +260,8 @@ function sellAt(p, times = [], inAt = '') {   // p — 시각마다 매수가 �
 const PNL_TOP = 30, PNL_WON = 10_000_000;   // 기본값 — 재권님이 칸에 넣으면 st.set 이 이김
 // 셈 칸 기본값 (11-18) — minChip 칩 N개 이상만(0 = 전체) · top 상위 몇 종목 · 돈은 전체 금액 dayWon 을 그 종목 수로 똑같이 나눔
 //   11-18 재권님 「금액은 전체 금액으로 해주고 종목만큼 나눈다 라는 룰로 해줘 금액을 맨앞으로」 — 종목마다(each) 갈래는 걷음 · 기본 전체 금액 = 지금까지의 기본(상위 30 × 1,000만원)과 같은 3억
-const DEF_SET = { minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, stop: -1, turn: true, turnBy: 'both', turnPct: 0, trail: null, pyr: false, buy: 'open' };   // buy — 매수 타이밍 open(09:00 시가 · 지금까지 셈) · p1(09:01) · vi(VI 발동)   // pyr — 불타기(손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삼) · 기본 끔
-Object.assign(DEF_SET, { cut: false, cutMin: 90, cutPct: 2, endAt: '', flat: false, flatMin: null, flatPct: null });   // flat — 횡보 매도(11-20 · 분 · % 는 재권님이 넣는 값 · 비면 셈 안 함)   // endAt — 매도 시각(HHMM · 빈칸이면 판 끝 칸까지 · 11-20)   // 시각 미달 매도(11-20) — 기본 끔 · 산 시각(30분 반올림)부터 몇 분 · % 는 셈 칸에서 고침 · 90분 = 09:00 에 산 종목은 10:30
+const DEF_SET = { minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, pyr: false, buy: 'open' };   // 매도 셈 열한 칸은 서버 SELL_DEF   // buy — 매수 타이밍 open(09:00 시가 · 지금까지 셈) · p1(09:01) · vi(VI 발동)   // pyr — 불타기(손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삼) · 기본 끔
+Object.assign(DEF_SET, { endAt: '' });   // flat — 횡보 매도(11-20 · 분 · % 는 재권님이 넣는 값 · 비면 셈 안 함)   // endAt — 매도 시각(HHMM · 빈칸이면 판 끝 칸까지 · 11-20)   // 시각 미달 매도(11-20) — 기본 끔 · 산 시각(30분 반올림)부터 몇 분 · % 는 셈 칸에서 고침 · 90분 = 09:00 에 산 종목은 10:30
 st.set = { ...DEF_SET };
 // 거래세 · 농특세(%) — 서버 한 곳(dt30_win.TAX)이 판 meta.tax 로 준다 · 화면은 보이기만 · 바꾸는 것은 증권수수료 칸 하나(11-20 재권님 「증권사 세율만 조절되도록 남기면되, 단타에 표기는 해놓고」) · 못 받으면 세금 못 셈(「—」)
 const taxOf = (m) => ((st.data && st.data.meta && st.data.meta.tax) || {})[String(m || '').toUpperCase()] || null;
@@ -813,11 +816,13 @@ BIND.push(() => $('dt-box').addEventListener('click', (e) => { const b = e.targe
 BIND.push(() => $('dt-only').addEventListener('click', (e) => { const b = e.target.closest('[data-only]'); if (!b || b.dataset.only === st.only) return; st.only = b.dataset.only; if (st.data) { paint(st.data); chips(); } }));
 
 async function loadFee() {
+  if (!DT_CHIPS.length || st.chipFail || st.sellFail !== false) await loadDtChips();   // 매도 기본값(SELL_DEF)이 셈 칸보다 먼저
   try { const r = await fetch(DOC, { cache: 'no-store' }); const j = r.ok ? await r.json() : null; const R0 = j && j.data && j.data.rules && j.data.rules.dt30 ? j.data.rules.dt30 : {}; const v = R0.feePct; st.fee = v == null || v === '' ? null : Number(v);
-    st.set = { ...DEF_SET, ...(R0.set && typeof R0.set === 'object' ? R0.set : {}), mode: 'day' };
+    st.set = { ...DEF_SET, ...SELL_DEF, ...(R0.set && typeof R0.set === 'object' ? R0.set : {}), mode: 'day' };
     st.score = R0.score && typeof R0.score === 'object' ? R0.score : {};   // 돈은 늘 전체 금액 ÷ 종목 수
     if (R0.set && R0.set.mode === 'each' && R0.set.perWon) st.set.dayWon = R0.set.perWon * (st.set.top || PNL_TOP); }   // 옛 저장값(종목마다)은 같은 돈이 되게 옮김
-  catch (e) { st.fee = null; st.set = { ...DEF_SET }; }
+  catch (e) { st.fee = null; st.set = { ...DEF_SET, ...SELL_DEF }; }
+  if (st.sellFail) $('dt-set-msg').textContent = '매도 기본값 — 서버 값 못 받음(넣지 않은 매도 칸은 셈 안 함)';
   $('dt-fee').value = st.fee == null ? '' : String(st.fee);
   setFill();
 }
@@ -898,7 +903,7 @@ BIND.push(() => {
     const cu = e.target.closest('[data-cut]'); if (cu) { e.preventDefault(); const on = cu.dataset.cut === '1'; if (on !== !!st.set.cut) setChange({ ...st.set, cut: on }); return; }
     const tb = e.target.closest('[data-turnby]'); if (tb) { e.preventDefault(); if (tb.dataset.turnby !== (st.set.turnBy || 'both')) setChange({ ...st.set, turnBy: tb.dataset.turnby }); return; }
     const t = e.target.closest('[data-turn]'); if (t) { e.preventDefault(); const on = t.dataset.turn === '1'; if (on !== !!st.set.turn) setChange({ ...st.set, turn: on }); return; }
-    if (e.target.closest('[data-reset]')) setChange({ ...DEF_SET });
+    if (e.target.closest('[data-reset]')) setChange({ ...DEF_SET, ...SELL_DEF });
   });
 });
 async function saveFee() {
