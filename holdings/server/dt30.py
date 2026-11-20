@@ -961,14 +961,36 @@ def _gone(old_rows, new_rows, at):
     return out
 
 
+FAKE_LOOK_MIN = 10           # 거래량 0 1분봉(체결 없이 앞 값으로 채운 봉)을 건너뛰고 첫 체결 봉을 찾는 폭(분) — 넘으면 못 잼(null)
+
+
+def _m1_px(conn, day, codes, ts, field):
+    """그 분(ts · YYYYMMDDHHMM) 1분봉 값 {code: 값} — field 「close」 · 「open」. 그 봉이 거래량 0 이면(채움 봉 · 옛 값) 건너뛰고
+    FAKE_LOOK_MIN 분 안 첫 체결 봉의 시가를 쓴다(첫 체결가). 거래량을 모르는(None) 옛 봉은 그대로 믿는다.
+    qa 11-20 찾음 — 11-19(10:00 개장) 여섯 종목 10:00 · 10:01 봉이 거래량 0 · 옛 값(스튜디오드래곤 23,700 ↔ 첫 체결 30,750)이라 매수가가 틀렸다."""
+    if not codes:
+        return {}
+    hi = day + _hhmm(int(ts[8:10]) * 60 + int(ts[10:12]) + FAKE_LOOK_MIN).replace(":", "")
+    q = ("SELECT code, ts, open, close, volume FROM candles WHERE period = '1m' AND ts BETWEEN ? AND ? AND code IN (%s) ORDER BY ts"
+         % ",".join("?" * len(codes)))
+    out, first = {}, {}
+    for c, t, o, cl, v in conn.execute(q, [ts, hi] + list(codes)):
+        if c in out:
+            continue
+        if t == ts and v != 0:
+            out[c] = cl if field == "close" else o
+        elif v != 0 and t > ts:
+            out[c] = o                                  # 그 분이 채움 봉이었다 — 첫 체결 봉 시가
+    return {c: v for c, v in out.items() if v}
+
+
 def _px1_of(proxy, day, codes, om):
     """그날 「9시 1분 값」 — 여는 시각(om · 분) 1분봉 종가(= 여는 시각 + 1분의 값 · pxMin "1" 과 같은 셈) · {code: 값} · 없으면 빠짐."""
     if not codes:
         return {}
     ts = day + "%02d%02d" % divmod(om, 60)
     with proxy.db_conn() as conn:
-        q = "SELECT code, close FROM candles WHERE period = '1m' AND ts = ? AND code IN (%s)" % ",".join("?" * len(codes))
-        return {c: v for c, v in conn.execute(q, [ts] + list(codes)) if v}
+        return _m1_px(conn, day, list(codes), ts, "close")      # 거래량 0 채움 봉은 건너뜀(_m1_px)
 
 
 def _buy_now(proxy, cfg, rows):
@@ -1666,8 +1688,7 @@ def _pxmin_fill(proxy, b):
             if not need:
                 continue
             ts = b["day"] + _hhmm(o + n - 1).replace(":", "")
-            q = "SELECT code, close FROM candles WHERE period = '1m' AND ts = ? AND code IN (%s)" % ",".join("?" * len(need))
-            got = dict(conn.execute(q, [ts] + [r["code"] for r in need]).fetchall())
+            got = _m1_px(conn, b["day"], [r["code"] for r in need], ts, "close")   # 거래량 0 채움 봉은 건너뜀
             for r in need:
                 v = got.get(r["code"])
                 if v:
@@ -1719,9 +1740,8 @@ def top_text(proxy, b, n=TG_TOP, head=""):
     if miss:
         lines.append("아직 못 받은 칩: " + " · ".join(miss))
     ts = b["day"] + _hhmm(_open_min(proxy, b["day"], b)).replace(":", "")
-    with proxy.db_conn() as conn:                      # 정규장 시가 = 여는 시각 1분봉 시가(시세의 시가는 장 전 값이 섞일 수 있다 · 11-19 CJ ENM 47,000 ↔ 10:00 봉 42,150)
-        q = "SELECT code, open FROM candles WHERE period = '1m' AND ts = ? AND code IN (%s)" % ",".join("?" * len(rows))
-        o1 = dict(conn.execute(q, [ts] + [r["code"] for r in rows]).fetchall()) if rows else {}
+    with proxy.db_conn() as conn:                      # 정규장 시가 = 여는 시각 1분봉 시가(시세의 시가는 장 전 값이 섞일 수 있다) · 그 봉이 거래량 0 채움 봉이면 첫 체결 봉 시가(11-19 CJ ENM 10:00 봉 42,150 은 채움 봉 · 첫 체결 47,000 — qa 11-20)
+        o1 = _m1_px(conn, b["day"], [r["code"] for r in rows], ts, "open")
     for i, r in enumerate(rows):
         p1 = ((r.get("pxMin") or {}).get("1") or {}).get("px")
         o = o1.get(r["code"])
