@@ -61,7 +61,7 @@ TRACK_FROM = (9, 30)         # 값 적는 첫 시각
 TRACK_TO = (14, 0)           # 값 적는 끝 시각 — 「2시까지」
 TRACK_STEP = 30              # 분 — 「30분 단위로」
 BAR_MIN = 5                  # 5분봉 길이(분)
-BUY_LATE = (10, 30)          # 굳히는 시각 — 재권님 「굳히기는 10시반으로」(11-18 · 안에 「응」 17:0x) · 그 전 「9시 35분에 굳히는걸로」(11-12 09:2x) · BUY_AT 부터 이때까지 판을 다시 세고 이 뒤로는 줄을 안 바꾼다 · 서버가 이 뒤에 뜨면 그날 판은 안 짓는다
+BUY_LATE = (10, 30)          # 굳히는 시각 — 재권님 「굳히기는 10시반으로」(11-18 · 안에 「응」 17:0x) · 그 전 「9시 35분에 굳히는걸로」(11-12 09:2x) · BUY_AT 부터 이때까지 판을 다시 세고 이 뒤로는 줄을 안 바꾼다 · 서버가 이 뒤에 뜨면 그날 판은 안 짓는다 · 늦게 여는 날(수능)에도 10:30 그대로 — 재권님 「가」(11-20 09:0x · 11-19 에 11:30 까지 밀려 판이 바뀐 일)
 OPEN_AT = (9, 0)             # 정규장 첫 값 — 그 전(BUY_AT ~ 09:00)에 든 종목의 매수가는 이 시각 정규장 시가(rows[].buyWait 가 그 표시 · 09:00 뒤 첫 다시 세기에 채움)
 OUT_FROM = (9, 1)            # 「한 번 빠지면 그날 다시 안 넣음」 을 세기 시작하는 때 — 장 전에는 프리장 값이 오가며 줄이 자주 바뀐다(11-18 안 「응」)
 PRE_WAIT = ("초반상승",)   # 09:00 전에는 값이 날 수 없는 칩 — 못 받음(missing)이 아니라 기다림(meta.wait)
@@ -96,7 +96,7 @@ _late = {"day": None, "at": 0.0, "min": 0}
 
 def late_min(proxy, now=None, day=None):
     """그날 정규장이 보통 날보다 몇 분 늦게 여나 — 0 보통 · 수능(10:00)이면 60. market_hours 표 한 곳 · 못 읽으면 0(보통 날로 본다) · 5분 둘레로 다시 읽음.
-    늦게 여는 날은 판의 정규장 시각들(OPEN_AT · OUT_FROM · BUY_LATE · 값 적는 시각)을 그만큼 뒤로 민다 —
+    늦게 여는 날은 판의 정규장 시각들(OPEN_AT · OUT_FROM · 값 적는 시각)을 그만큼 뒤로 민다 — 굳히는 시각(BUY_LATE)은 안 민다(재권님 「가」 11-20 09:0x · 10:30 그대로) —
     재권님 「가로 해줘」(11-19 08:3x · (가) 1시간 미룸 — 매수가 10:00 시가). BUY_AT(판 짓기 08:00) · 지난 날 다시 세기(PAST_*)는 그대로."""
     now = now or _now()
     other = day is not None and day != now.strftime("%Y%m%d")     # 지난 날(다시 세기) — 그날 표를 읽고 캐시는 안 씀
@@ -1654,7 +1654,7 @@ def start(proxy):
                 off = late_min(proxy, now)                 # 늦게 여는 날(수능) — 정규장 시각들을 그만큼 뒤로(재권님 「가로 해줘」 11-19)
                 if now.weekday() < 5 and market_hours.today(proxy, day=day, now=now).get("open") is not False:
                     got = _load(proxy, day)
-                    if got is None and BUY_AT[0] * 60 + BUY_AT[1] <= hm < BUY_LATE[0] * 60 + BUY_LATE[1] + off and _status["frozen"] != day:
+                    if got is None and BUY_AT[0] * 60 + BUY_AT[1] <= hm < BUY_LATE[0] * 60 + BUY_LATE[1] and _status["frozen"] != day:
                         b = build(proxy, proxy.load_secrets(), day)
                         if hm < _buy_wait_cut(proxy, now):
                             for r in b["rows"]:
@@ -1667,13 +1667,13 @@ def start(proxy):
                               " · 못 받은 칩 " + " · ".join(b["meta"]["missing"]) if b["meta"]["missing"] else ""), flush=True)
                     elif got is not None:
                         b = got[0]
-                        if b.get("closed") and not b.get("rows") and hm < BUY_LATE[0] * 60 + BUY_LATE[1] + off:
+                        if b.get("closed") and not b.get("rows") and hm < BUY_LATE[0] * 60 + BUY_LATE[1]:
                             b["closed"] = False            # 줄 0 으로 굳어 버린 판 — 굳히는 때 전이면 다시 연다(11-19 수능 아침 08:00 에 빈 판이 굳어 다시 세기가 멈춤)
                         was = bool(b.get("closed"))
                         due = [t for t in b["times"] if int(t[:2]) * 60 + int(t[2:]) + 1 <= hm
                                and any(t not in r["px"] for r in b["rows"])]
                         filled_late = []
-                        if not b.get("closed") and hm < BUY_LATE[0] * 60 + BUY_LATE[1] + off:
+                        if not b.get("closed") and hm < BUY_LATE[0] * 60 + BUY_LATE[1]:
                             if time.time() - _status.get("rescan", 0) >= RESCAN_SEC:
                                 _status["rescan"] = time.time()
                                 if refresh(proxy, proxy.load_secrets(), b):
