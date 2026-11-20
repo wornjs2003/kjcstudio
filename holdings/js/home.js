@@ -1421,10 +1421,10 @@ async function loadUniverse() {
 
 /* 시가총액은 목록(dart_universe)이 갖고 있다. 네이버 시총 순위에서 온 값이고
    단위는 억원이라 fmtMoneyKr 이 그대로 받는다. */
-let RANK_MIN_CAP_EOK = 3000;       // 서버 값(/api/dart/universe meta.rankMinCapEok · dart.RANK_MIN_CAP_EOK)을 받으면 그것으로 — 이 숫자는 받기 전 자리 값(11-20 「3000으로 통일」 → 「나」) · 실시간 순위 VI · 볼린저 · 관심 · 장외 · 매수 · 프리장 줄은 시가총액 이 값(억원 · 5천억) 이상만 — 3천억 → 5천억 재권님 「응」(11-12) · 재권님 11-10(VI 「가」 · 볼린저 「1조 이상만」 →
+let RANK_MIN_CAP_EOK = null;      // 실시간 순위 VI · 볼린저 · 관심 · 장외 · 매수 · 프리장 줄의 시가총액 문턱(억원) — 서버 한 곳(/api/dart/universe meta.rankMinCapEok · dart.RANK_MIN_CAP_EOK)에서 받는다 · 받기 전 · 못 받으면 null — 거르지 않고 풍선은 「서버 값 못 받음」(11-20 「3000으로 통일」 → 「나」 · 개념정의 검수 「설명 글에는 정해진 값을 적는다」) · 재권님 11-10(VI 「가」 · 볼린저 「1조 이상만」 →
                                     // 「1조를 3천억 으로 바꿔줘」 · 「가 고 관심이랑 장외랑 매수랑 포함이야」 · 「프리장도」). 한 곳. 시총을 못 받은 종목 · 미국 종목은 남긴다(못 잰 것을 「작다」 로 치지 않는다)
-const capBelowMin = (code) => { if (isUsCode(code)) return false; const c = capOf(code); return c != null && c < RANK_MIN_CAP_EOK; };
-const capMinTxt = () => `시가총액 ${fmtMoneyKr(RANK_MIN_CAP_EOK)} 이상만`;   // 칩 풍선 글 — 값은 위 한 곳(서버에서 받은 값)
+const capBelowMin = (code) => { if (RANK_MIN_CAP_EOK == null || isUsCode(code)) return false; const c = capOf(code); return c != null && c < RANK_MIN_CAP_EOK; };
+const capMinTxt = () => (RANK_MIN_CAP_EOK == null ? '시가총액 문턱 — 서버 값 못 받음' : `시가총액 ${fmtMoneyKr(RANK_MIN_CAP_EOK)} 이상만`);   // 칩 풍선 글 — 값은 위 한 곳(서버에서 받은 값)
 function capOf(code) {
   if (isUsCode(code)) {
     for (const id of Object.keys(usRows)) {
@@ -1840,7 +1840,7 @@ async function loadVi() {
         // VI 는 시총 RANK_MIN_CAP_EOK 이상만 — 재권님 「vi종목은 시총1조가 넘지않는건 안보여도 돼」 → 「가」 → 「1조를 3천억 으로」(11-10). 급등 줄은 그대로.
         // 시총을 아직 못 받은 줄은 남긴다 — 못 잰 것을 「작다」 로 치지 않는다(서버가 다음 바퀴에 채운다)
         const capEok = it.cap ?? capOf(it.code);
-        if (it.kind === 'vi' && capEok != null && capEok < RANK_MIN_CAP_EOK) continue;
+        if (it.kind === 'vi' && capEok != null && RANK_MIN_CAP_EOK != null && capEok < RANK_MIN_CAP_EOK) continue;
         let g = by[it.code];
         if (!g) { g = by[it.code] = { last: it, vi: 0, surge: false }; rows.push({ code: it.code, name: it.name }); }
         if (it.kind === 'vi') g.vi += 1; else g.surge = true;
@@ -1885,7 +1885,7 @@ async function loadBb() {
         if (!it.code) continue;
         // 시총 RANK_MIN_CAP_EOK 이상만 — 재권님 「볼린져에도 시가총액 넣어주고 1조 이상만」 → 「1조를 3천억 으로」(11-10). 못 받은 줄은 남긴다(VI 와 같은 까닭)
         const capEok = it.cap ?? capOf(it.code);
-        if (capEok != null && capEok < RANK_MIN_CAP_EOK) continue;
+        if (capEok != null && RANK_MIN_CAP_EOK != null && capEok < RANK_MIN_CAP_EOK) continue;
         let g = by[it.code];
         if (!g) { g = by[it.code] = { last: it, n: 0 }; rows.push({ code: it.code, name: it.name }); }
         g.n += 1;
