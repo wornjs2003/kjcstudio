@@ -17,6 +17,7 @@
     python3 tools/shot.py <주소> <저장할 png> --tall 2400           재권님 창 폭 그대로 · 창 높이만 늘려서
     python3 tools/shot.py <주소> <저장할 png> --webgl               3D · 지구본처럼 WebGL 로 그리는 화면
     python3 tools/shot.py <주소> <저장할 png> --wait 8              다 그려지기를 더 기다린다(초 · 기본 3)
+    python3 tools/shot.py <주소> <저장할 png> --at "#dt-box"        그 칸으로 내려가 찍는다(창 크기는 그대로 · 못 찾으면 종료 2)
     python3 tools/shot.py --size                                    지금 기준 크기만 보기
 
 **찍으면 그림 옆에 `<이름>-보기.html` 을 함께 만든다** — 재권님께는 그 주소를 드린다(그림 그대로는 배율만큼 크게 보인다 ·
@@ -36,6 +37,11 @@
 
 종료 — 0 찍음 · 2 못 찍음(기준 크기를 아직 안 쟀다 · 크롬 없음 · 서버 없음). **2 를 「찍었다」 로 읽지 않는다.**
 스크롤바는 숨기지 않는다 — 재권님 화면과 조건이 가깝다(check-layout 과 같은 이유).
+
+**`--at "<선택자>"` — 그 칸이 창 맨 위에 오게 내려가 찍는다 (2026-11-20 재권님 「단타 창이 보이게 그리라고 몇번 말한거같은데 왜이러지?
+재발 방지안되게 개념정의한테 룰 만들어 달라고 해」 → 「커밋해」).** 그 전에는 주소 맨 위부터만 찍어 긴 화면(투자전략)에서 단타 판이 아래로 잘렸다.
+스크롤만 하고 창 크기는 안 바꾼다 — 칸이 창보다 크면 칸 머리부터 창 한 장(칸 전체가 꼭 필요하면 `--tall` 을 함께). `--full` 과는 함께 안 쓴다.
+**칸을 못 찾으면 종료 2** — 맨 위로 대신 찍지 않는다. 찍은 칸은 보기 페이지 `<meta name="kjc-shot-at">` 에 남긴다(CLAUDE.md 「그림은 부르신 자리가 다 보이게 찍는다」).
 """
 import base64
 import importlib.util
@@ -95,7 +101,7 @@ def phone_dpr():
     return float(max(1, math.ceil(size[1] * view_dpr() / PHONE[1])))
 
 
-def viewer(out, tall, phone=False, url=""):
+def viewer(out, tall, phone=False, url="", at=""):
     """찍은 그림 옆에 「창에 맞춰 보기」 페이지를 만든다 (2026-10-14 재권님 「화면보다 크게 해서 보여주는 이유가 뭐야?」 ·
     「한눈에 안들어오잖아」 → 룰 「찍은 그림은 창에 맞춰 한눈에 보이게 드린다」).
 
@@ -117,9 +123,10 @@ def viewer(out, tall, phone=False, url=""):
             "종목 화면 그림 — 홈 첫 화면이 기준(칸 배치가 홈과 달라 차트가 다른 크기로 보입니다)</div>"
             "<link rel=\"stylesheet\" href=\"/assets/css/theme.css\">") if stock else ""
     html = ("<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>%s</title>"
-            "<meta name=\"kjc-shot-url\" content=\"%s\">"
+            "<meta name=\"kjc-shot-url\" content=\"%s\"><meta name=\"kjc-shot-at\" content=\"%%s\">"
             "<style>html,body{margin:0}body{display:flex;justify-content:center}img{display:block;%s}</style>"
             "%s<img src=\"%s?t=%d\" alt=\"%s\">\n") % (stem, html_attr(url), fit, note, name, int(time.time()), stem)
+    html = html.replace('<meta name="kjc-shot-at" content="%s">', '<meta name="kjc-shot-at" content="%s">' % html_attr(at))
     open(page, "w", encoding="utf-8").write(html)
     if stock:
         print("알림: 종목 화면(holdings/stock.html)을 찍었습니다 — 홀딩스 일은 홈 큰 차트(/holdings/) · 모달(/holdings/?code=<종목>) 그림으로 드립니다. "
@@ -187,12 +194,16 @@ def main(argv):
         print("기준 창 크기:", ("%d × %d · 배율 %s (%s)" % (size[0], size[1], view_dpr(), SIZE_FILE)) if size else "**아직 안 쟀다**")
         return 0 if size else 2
     if len(argv) < 2:
-        print("쓰는 법: python3 tools/shot.py <주소> <저장할 png> [--phone] [--full] [--tall 높이] [--webgl] [--wait 초]")
+        print("쓰는 법: python3 tools/shot.py <주소> <저장할 png> [--phone] [--full] [--tall 높이] [--webgl] [--wait 초] [--at 선택자]")
         return 2
     url, out = argv[0], os.path.abspath(argv[1])
     phone = "--phone" in argv
     dpr = phone_dpr() if phone else view_dpr()
     full = "--full" in argv
+    at = arg(argv, "--at", "") if "--at" in argv else ""
+    if at and full:
+        print("✗ 못 찍음 — --at 과 --full 은 함께 안 쓴다(--at 은 그 칸으로 내려가 창 한 장 · 칸 전체가 필요하면 --tall)")
+        return 2
     if phone:
         size = (PHONE[0], int(arg(argv, "--tall", PHONE[1])))
     if not size:
@@ -260,6 +271,16 @@ def main(argv):
                 still = 0
             last = st
         time.sleep(wait)
+        if at:
+            # 그 칸이 창 맨 위에 오게 — 못 찾으면 맨 위로 대신 찍지 않는다(종료 2)
+            got = js("(()=>{const e=document.querySelector(%s);if(!e)return null;e.scrollIntoView({block:'start'});"
+                     "return Math.round(e.getBoundingClientRect().height)})()" % json.dumps(at))
+            if got is None:
+                print("✗ 못 찍음 — 칸을 못 찾았다(--at %s) · 맨 위로 대신 찍지 않는다" % at)
+                return 2
+            time.sleep(0.5)
+            if got > size[1]:
+                print("알림: 칸(%dpx)이 창(%dpx)보다 커서 칸 머리부터 창 한 장만 찍었다 — 칸 전체가 필요하면 --tall" % (got, size[1]))
         shot = {"format": "png"}
         h = size[1]
         if full:
@@ -281,7 +302,7 @@ def main(argv):
             print("⚠ 앞 그림과 폭이 다릅니다 — %s 는 %d × %d 였고 이번은 %d × %d (픽셀)."
                   % (os.path.basename(before[0]), before[1][0], before[1][1], now[0], now[1]))
             print("  폭을 바꿨으면 재권님께 먼저 말씀드립니다. 긴 페이지는 --full 이 폭을 안 바꿉니다(「찍는 창 크기도 창 크기다」).")
-        viewer(out, "--tall" in argv or full, phone, url)
+        viewer(out, "--tall" in argv or full, phone, url, at)
         return 0
     except urllib.error.URLError:
         print("✗ 못 찍음 — 서버가 없다")
