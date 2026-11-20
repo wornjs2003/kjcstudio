@@ -1797,6 +1797,8 @@ def board(proxy, day=None, cfg=None):
         pass
     b["meta"]["subNames"] = {"매수|" + "①②③④"[k - 1]: v[0] for k, v in proxy.JOINT_TIER_NAME.items()}   # 하위 이름표 — 서버 한 곳(kis_proxy.JOINT_TIER_NAME · 11-20)
     b["meta"]["subTips"] = {"매수|" + "①②③④"[k - 1]: v[1] for k, v in proxy.JOINT_TIER_NAME.items()}
+    import dt30_win
+    b["meta"]["tax"] = dt30_win.TAX                    # 거래세 · 농특세(%) — 서버 한 곳(dt30_win.TAX) · 화면은 보이기만 · 바꾸는 것은 증권수수료 칸 하나(재권님 11-20 14:09)
     b.setdefault("closed", True)                       # 옛 판(closed 칸 전) · 되채운 날은 끝난 판
     b["meta"]["refreshMs"] = None if b["closed"] else proxy.PRICE_CACHE_TTL * 1000
     if not b["closed"] and cfg is not None:
