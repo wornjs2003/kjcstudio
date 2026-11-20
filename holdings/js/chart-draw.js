@@ -18,7 +18,10 @@
           빈칸의 점은 「그때 마지막 봉 시각 + 몇 봉 뒤」 로 적는다 — 봉 칸 수라 **찍은 주기에서만** 그린다(다른 주기에서는 그 자리를 모른다).
           그래서 추세선 · 첫 점 · 미리 보기는 라이브러리 선이 아니라 칸 위 덧그림 캔버스에 긋는다(일목 구름과 같은 길 ·
           logicalToCoordinate) — 라이브러리 선에 미래 시각을 넣으면 시간축이 늘어 봉 자리가 움직인다. 세로 범위는 안 건드린다
-   기억   종목마다 브라우저에 둔다(localStorage · 「값을 들고 있는 것」). 주기를 바꿔도 같은 선이 보인다 —
+   기억   종목마다 브라우저에 두고(localStorage · 「값을 들고 있는 것」) 서버 보관함 문서 하나(DRAW_DOC)에도 둔다 —
+          기기 사이 같은 선(2026-11-20 차트 보완 ② · 재권님 「가」). 차트 기억(chart.js MEM_DOC)과 같은 길이다 — 쓰는 곳은 기준 화면
+          (chart.js MEM_WRITER · thekjc.co.kr) 하나 · 다른 곳은 읽어 그리기만(거기서 그은 선은 그 브라우저에만 남는다).
+          처음 붙을 때 한 번 받아 브라우저 값을 덮고 보이는 칸을 다시 그린다 · 못 받으면 브라우저 값으로 그린다. 주기를 바꿔도 같은 선이 보인다 —
           점은 봉 시각(서버 ts)으로 적어 두고 그릴 때 지금 주기의 그 시각 봉에 붙인다.
           지금 받아 둔 봉 밖에 있는 점이 있으면 그 추세선은 그리지 않는다(지어낸 자리에 긋지 않는다)
 
@@ -28,6 +31,7 @@
    ========================================================================== */
 
 import { color } from './theme.js';
+import { apiFetch } from './data/api.js';
 
 const KEY = (code) => `kh.chartDraw.${code}`;
 const DOT_R = 2;          // 점 반지름(px) — 재권님 18:2x 「점은 지금보다 작게」(라이브러리 기본은 선 굵기에 따라 더 컸다)
@@ -72,6 +76,69 @@ function save(code, v) {
     if (!v.h.length && !v.t.length) localStorage.removeItem(KEY(code));
     else localStorage.setItem(KEY(code), JSON.stringify(v));
   } catch { /* 저장이 막힌 창(사생활 모드 등) — 이번 화면에서만 보인다 */ }
+  srvPush(code, v);
+}
+
+/* ── 서버 보관함 — 종목마다 { h, t } 를 한 문서에 (2026-11-20 차트 보완 ② 「가」) ── */
+const DRAW_DOC = '/api/board/doc/chart-draw';
+const DRAW_PUSH_MS = 800;         // 잇따라 긋는 것을 모아 한 번 보낸다(그리기 쪽 지연 — 서버를 다시 묻는 주기가 아니다 · chart.js MEM_PUSH_MS 와 같은 뜻)
+let srvWriter = false;            // 기준 화면인가 — chart.js 가 mountDraw 로 넘긴다(쓰는 곳을 한 곳에서 정함)
+let srvLoaded = false, srvLoading = null;
+const srvWant = new Map(), srvTimer = { id: null };
+const srvSync = new Set();        // 받은 값으로 바뀌면 붙어 있는 칸을 다시 그린다
+
+function srvLoad() {
+  if (srvLoading) return srvLoading;
+  srvLoading = (async () => {
+    try {
+      const r = await apiFetch(DRAW_DOC, { cache: 'no-store' });
+      const j = r && r.ok ? await r.json() : null;
+      if (!j || !j.ok) return;
+      const d = j.data && typeof j.data === 'object' ? j.data : null;
+      if (d) {
+        Object.entries(d).forEach(([code, v]) => {
+          if (!v || !Array.isArray(v.h) || !Array.isArray(v.t)) return;
+          try {
+            if (!v.h.length && !v.t.length) localStorage.removeItem(KEY(code));
+            else localStorage.setItem(KEY(code), JSON.stringify(v));
+          } catch { /* 저장 못 씀 — 이번 화면만 */ }
+        });
+        srvSync.forEach((fn) => fn());
+      }
+      srvLoaded = true;
+      if (!d && srvWriter) {                     // 보관함이 비었으면 기준 화면 브라우저에 있던 선을 올린다(처음 한 번)
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith(KEY(''))) srvPush(k.slice(KEY('').length), load(k.slice(KEY('').length)));
+          }
+        } catch { /* 못 읽음 */ }
+      }
+    } catch { /* 못 읽음 — 브라우저 값으로 그린다 */ }
+  })();
+  return srvLoading;
+}
+/* 바뀐 종목만 그 문서에 고쳐 쓴다 — 다른 기기가 그은 다른 종목 선을 덮지 않게 읽고 · 고치고 · 쓴다(409 면 한 번 더) */
+function srvPush(code, v) {
+  if (!srvWriter || !srvLoaded) return;          // 읽기 전에 쓰면 다른 기기 값을 옛 값으로 덮는다
+  srvWant.set(code, v);
+  clearTimeout(srvTimer.id);
+  srvTimer.id = setTimeout(async () => {
+    const want = new Map(srvWant); srvWant.clear();
+    for (let n = 0; n < 2; n++) {
+      try {
+        const g = await apiFetch(DRAW_DOC, { cache: 'no-store' });
+        const j = g && g.ok ? await g.json() : null;
+        if (!j || !j.ok) return;
+        const doc = j.data && typeof j.data === 'object' ? { ...j.data } : {};
+        want.forEach((w, c) => { if (!w.h.length && !w.t.length) delete doc[c]; else doc[c] = w; });
+        const r = await apiFetch(DRAW_DOC, { method: 'PUT', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ data: doc, ...(j.updatedAt ? { updatedAt: j.updatedAt } : {}) }) });
+        if (r && r.status === 409) continue;
+        return;
+      } catch { return; }
+    }
+  }, DRAW_PUSH_MS);
 }
 
 /* 봉 시각(서버 ts) 끼리 견주려고 12자리로 맞춘다 — 일봉 '20261015' · 5분봉 '202610150905' */
@@ -91,9 +158,11 @@ function snap(candles, ts) {
   return lo;
 }
 
-export function mountDraw({ pane, chart, series, code, period, candles, timeOf, idxOfTime, axisW, LC }) {
+export function mountDraw({ pane, chart, series, code, period, candles, timeOf, idxOfTime, axisW, LC, writer }) {
   if (!pane || !chart || !series || !code) return { destroy() {} };
   ensureCss();
+  srvWriter = !!writer;
+  srvLoad();
   if (modeCode !== code) { mode = null; pend = null; modeCode = code; }
 
   const ink = color('accent');           // 고른 단추 · 첫 점
@@ -239,6 +308,16 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
   }
 
   data.h.forEach(addH);
+  /* 서버 보관함 값이 늦게 오면 — 수평선을 다시 얹고 추세선을 다시 긋는다 */
+  const onSrv = () => {
+    if (pend || mode) return;                    // 긋는 중이면 덮지 않는다 — 다음에 열 때 받은 값
+    drawn.h.forEach((l) => { if (l) { try { series.removePriceLine(l); } catch { /* 이미 사라짐 */ } } });
+    drawn.h = [];
+    data = load(code);
+    data.h.forEach(addH);
+    paint();
+  };
+  srvSync.add(onSrv);
   if (mode === 'trend' && pend && idxOf(pend) < 0) pend = null;   // 칸이 다시 만들어졌다 — 찍어 둔 첫 점은 덧그림이 다시 보인다
 
   /* 누르기는 차트 라이브러리의 클릭이 아니라 칸에서 직접 받는다 (재권님 18:3x 「선끼리 크로스 시키면 안그려지는데」).
@@ -406,6 +485,7 @@ export function mountDraw({ pane, chart, series, code, period, candles, timeOf, 
       document.removeEventListener('keydown', onKey);
       bar.remove();
       pane.classList.remove('kh-drawing', 'kh-erasing');
+      srvSync.delete(onSrv);
     },
   };
 }
