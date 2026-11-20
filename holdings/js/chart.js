@@ -3021,7 +3021,8 @@ function mountLegend(container, chart, { candles, period, maSeries, showVolume, 
     const cur = candles.length ? candles[candles.length - 1].close : null;
     const pct = cur ? (price - cur) / cur * 100 : null;
     pin.innerHTML = `<b>${fmtPrice(price, dec)}</b>`
-      + ` <span class="${pct == null ? '' : updn(pct)}">${pct == null ? '—' : `${sign(pct)}${pct.toFixed(2)}%`}</span> <i>현재가 대비</i>`;
+      + ` <span class="${pct == null ? '' : updn(pct)}">${pct == null ? '—' : `${sign(pct)}${pct.toFixed(2)}%`}</span> <i>현재가 대비</i>`
+      + ` <i>· ${fmtWhen(candles[i] && candles[i].ts)}</i>`;   // 그 봉의 날짜 · 시각(2026-11-20 차트 보완 ③ · 토스처럼) — 마우스 표 시각과 같은 글자(fmtWhen) · 분봉 「월-일 시:분」 · 일봉 이상 「연-월-일」
     pin.hidden = false;
     /* 칸 왼끝 · 오른끝에서 칸 밖으로 넘치지 않게 안으로 당긴다 */
     const half = pin.offsetWidth / 2;
