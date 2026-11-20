@@ -175,6 +175,8 @@ def summary(proxy, days=DAYS_DEFAULT):
         rows = json.loads(raw)
         rets, miss, best = [], 0, []
         for r in rows:
+            if str(r.get("buyAt") or "").replace(":", "")[:4] >= end:
+                continue                               # 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것 — 화면 셈과 같게(재권님 「가」 11-20 · 시황분석 화면)
             r["sell"] = sell_of(r, end)                # 매도 시각 — 부를 때 셈(바꾸면 지난 날에도 바로 든다 · 수수료와 같은 길)
             v = net_pct(r, fee)
             chips = sorted(set(r["chips"]))
@@ -201,7 +203,7 @@ def summary(proxy, days=DAYS_DEFAULT):
     meta = {"days": len(got), "from": got[-1][0] if got else None, "to": got[0][0] if got else None,
             "fee": fee, "feeNote": None if fee is not None else "빈칸 — 수수료 안 셈", "feeSides": "팔 때만",
             "tax": TAX, "taxNote": "팔 때만 · 판 값 × (거래세 + 농특세) · 시장 모르면 못 잼", "ret": "세후 %",
-            "buy": "그날 판 매수가(rows[].buy · 11-20 판부터 판에 든 때 값 — 09:01 전에 있던 종목은 9시 1분 값 · 뒤에 든 종목은 든 순간 값 · 11-18~19 09:00 시가 · 그 전 09:01)", "minChips": dt30.MIN_CHIPS, "sell": end, "sellDef": SELL_AT, "sellNote": "매도 시각 — 단타 판 셈 칸 rules.dt30.set.endAt(빈칸이면 판 끝 sellDef) · 그 시각 이하 마지막 값 있는 칸에 팖 · 손절 · 꺾임은 이 표에 안 듦", "bigPct": BIG_PCT, "topDay": TOP_DAY,
+            "buy": "그날 판 매수가(rows[].buy · 11-20 판부터 판에 든 때 값 — 09:01 전에 있던 종목은 9시 1분 값 · 뒤에 든 종목은 든 순간 값 · 11-18~19 09:00 시가 · 그 전 09:01)", "minChips": dt30.MIN_CHIPS, "sell": end, "sellDef": SELL_AT, "sellNote": "매도 시각 — 단타 판 셈 칸 rules.dt30.set.endAt(빈칸이면 판 끝 sellDef) · 그 시각 이하 마지막 값 있는 칸에 팖 · 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것(셈에서 뺌) · 손절 · 꺾임은 이 표에 안 듦", "bigPct": BIG_PCT, "topDay": TOP_DAY,
             "filledAt": _status["at"], "error": _status["error"]}
     return out, meta
 
