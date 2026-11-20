@@ -1189,7 +1189,8 @@ def usage_stats():
         # 나오므로 갈리지 않는다.** 화면을 옮기면 위 줄을 지운다.
         "timing": timing_values(),
         # 「장외」 칩을 비워 두는 시각(평일) — 화면이 빈 칸 까닭 글을 이 값으로 짓는다. 시각은 아래 AFTER_CLEAR_AT · AFTER_CLEAR_UNTIL 한 곳
-        "afterClear": {"from": "%02d:%02d" % AFTER_CLEAR_AT, "until": "%02d:%02d" % AFTER_CLEAR_UNTIL},
+        # ready — 장외 값이 실제로 들어오는 때(REG_CLOSE_READY · 그날 종가가 일봉에 든 뒤) · until~ready 동안은 비움이 끝났어도 값이 아직 없다(qa 덧 11-05)
+        "afterClear": {"from": "%02d:%02d" % AFTER_CLEAR_AT, "until": "%02d:%02d" % AFTER_CLEAR_UNTIL, "ready": "%02d:%02d" % REG_CLOSE_READY},
         # 정규장 칩(현재상승 · VI·급등 · 볼린저 · 매수)이 비는 때(평일) — market_hours.CHIP_RESET ~ REG_OPEN 한 곳 · 화면 「현재상승」 이 읽는다
         "chipReset": {"from": "%s:%s" % (market_hours.CHIP_RESET[:2], market_hours.CHIP_RESET[2:]),
                       "until": "%s:%s" % (market_hours.REG_OPEN[:2], market_hours.REG_OPEN[2:])},

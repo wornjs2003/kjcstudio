@@ -2223,12 +2223,13 @@ function chipBlank() {
 function afterEmpty() {
   const ac = serverData('afterClear');
   const min = (s) => { const m = /^(\d\d):(\d\d)$/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
-  const from = min(ac && ac.from), until = min(ac && ac.until);
+  /* 값이 실제로 들어오는 때는 ready(서버 REG_CLOSE_READY · 종가가 일봉에 든 뒤) — until~ready 에도 같은 까닭 글(qa 덧 11-05 · 그 사이 「아직 없습니다」 로 보이던 것) · ready 를 못 받았으면 until */
+  const from = min(ac && ac.from), until = min(ac && (ac.ready || ac.until)), at = ac && (ac.ready || ac.until);
   const kst = new Date(Date.now() + 9 * 3600 * 1000);
   const hm = kst.getUTCHours() * 60 + kst.getUTCMinutes();
   const wd = kst.getUTCDay() >= 1 && kst.getUTCDay() <= 5;
   return from != null && until != null && wd && hm >= from && hm < until
-    ? `장외 값은 ${ac.until} 애프터부터 · 아침 ${ac.from}에 비웁니다`
+    ? `장외 값은 ${at} 애프터부터 · 아침 ${ac.from}에 비웁니다`
     : '종가보다 오른 종목이 아직 없습니다';
 }
 
