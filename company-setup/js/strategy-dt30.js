@@ -409,15 +409,20 @@ function paint(d) {
     // 빈 판 까닭은 가운데 크게(11-20 재권님 「가운데에 좀더 크게」)
     $('dt-box').innerHTML = `<div class="st-err" style="text-align:center;font-size:16px;line-height:1.7;padding:48px 16px;color:var(--kh-text-secondary)">${esc(why)}${allOn}</div>`; return;
   }
+  const shr = (a) => (a >= 1e4 ? `${(a / 1e4).toFixed(a >= 1e5 ? 0 : 1).replace(/\.0$/, '')}만` : a >= 1e3 ? `${Math.round(a / 1e3)}천` : String(a));   // 주
+  const wonS = (a) => (a >= 1e8 ? `${(a / 1e8).toFixed(a >= 1e9 ? 0 : 1).replace(/\.0$/, '')}억` : a >= 1e4 ? `${Math.round(a / 1e4)}만` : String(a));   // 원
   const cell = (x, k) => {
     const v = x.p[k];
     // 그 시각 가격을 % 위에 · 글씨는 검정(색은 아래 % 만) — 11-20 재권님 「등락률 위에 가격도 같이 보이게 해줘」 → 색을 넣어 보시고 「글씨는 그냥 검정으로 하자 보기 힘드네」
     const px = Number((x.r.px || {})[times[k]]);
-    const pxT = v == null || !Number.isFinite(px) ? '' : `<span style="display: block; line-height: 1.25;">${num(px)}</span>`;   // 줄 높이를 좌우 두 줄 칸(51px)에 맞춤 — 그대로 두 줄이면 56px 라 10번째 줄이 잘림(qa 11-20) · strategy.css 는 남의 미커밋이 있어 여기 둠
-    if (x.s.k >= 0 && k === x.s.k) return `<td class="dt-sold">${pxT}${pct(v)}<em>${x.s.why}</em>${x.pyrTo ? `<small class="dt-pyr"> → ${esc(x.pyrTo.name || '—')} 불타기</small>` : ''}</td>`;
-    { const ad = x.pnl && (x.pnl.adds || []).filter((o) => o.k === k); if (ad && ad.length) return `<td class="${k === L ? 'dt-last' : ''}">${pxT}${pct(v)}<small class="dt-pyr"> ← ${ad.map((o) => esc(o.from || '—')).join(' · ')} 손절 돈 불타기</small></td>`; }
+    const pxT = v == null || !Number.isFinite(px) ? '' : `<span style="display: block; line-height: 1.25;">${num(px)}</span>`;
+    // 그 시각까지 쌓인 수급 한 줄(11-18 재권님 「시간별로 % 아래에서 … 시간이 지나면 그값이 고정」 → 11-20 그림 (나) 「이방향으로」) — 서버 rows[].flow{시각: {fr 외국인 · inst 기관 · pg 프로그램(원) · ff 외국계 창구}}(개발2 · 장 시작부터의 합) · 못 받은 칸은 줄 없음
+    const fl = (x.r.flow || {})[times[k]];
+    const flT = !fl ? '' : `<small style="display: block; font-size: 10px; line-height: 1.3; white-space: nowrap; font-weight: 400;">${[['외', fl.fr, shr], ['기', fl.inst, shr], ['프', fl.pg, wonS], ['창', fl.ff, shr]].map(([t, n, f]) => { const c = n == null ? '' : signClass(n, NUM); return `${t}${n == null ? '—' : `<span class="${c || ''}">${n > 0 ? '+' : n < 0 ? '−' : ''}${f(Math.abs(n))}</span>`}`; }).join(' ')}</small>`;   // 줄 높이를 좌우 두 줄 칸(51px)에 맞춤 — 그대로 두 줄이면 56px 라 10번째 줄이 잘림(qa 11-20) · strategy.css 는 남의 미커밋이 있어 여기 둠
+    if (x.s.k >= 0 && k === x.s.k) return `<td class="dt-sold">${pxT}${pct(v)}<em>${x.s.why}</em>${flT}${x.pyrTo ? `<small class="dt-pyr"> → ${esc(x.pyrTo.name || '—')} 불타기</small>` : ''}</td>`;
+    { const ad = x.pnl && (x.pnl.adds || []).filter((o) => o.k === k); if (ad && ad.length) return `<td class="${k === L ? 'dt-last' : ''}">${pxT}${pct(v)}${flT}<small class="dt-pyr"> ← ${ad.map((o) => esc(o.from || '—')).join(' · ')} 손절 돈 불타기</small></td>`; }
     if (x.s.k >= 0 && k > x.s.k) return `<td class="dt-after">${v == null ? '—' : sgn(v)}</td>`;
-    return `<td class="${k === L ? 'dt-last' : ''}">${pxT}${pct(v)}</td>`;
+    return `<td class="${k === L ? 'dt-last' : ''}">${pxT}${pct(v)}${flT}</td>`;
   };
   const plTd = (x, i) => `<td class="dt-pl">${i < topN && x.pnl ? (x.pnl.net == null ? '<span class="st-err">시장 모름</span>' : `<span class="${signClass(x.pnl.net, NUM) || ''}">${won(x.pnl.net)}</span><small>빼기 전 ${won(x.pnl.gross)}${x.pnl.adds && x.pnl.adds.length ? ` · 불타기 ${won(x.pnl.pyr)}` : ''}</small>`) : '<span class="st-err">—</span>'}</td>`;
   const resTd = (x) => `<td class="dt-res">${pct(x.res)}<small>${x.s.k >= 0 ? `${hmTxt(times[x.s.k])} ${x.s.why}` : x.now ? `지금 ${esc(String(d.nowAt || '').slice(0, 5))}` : '끝까지'}</small></td>`;
