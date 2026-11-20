@@ -110,26 +110,92 @@ def fee_pct():
         return None
 
 
-def end_at():
-    """매도 시각 「HHMM」 — 단타 판 셈 칸(룰 문서 strategy-rules rules.dt30.set.endAt · 화면과 같은 칸 한 곳) · 빈칸 · 못 읽음 · 틀린 꼴이면 None(판 끝 SELL_AT).
-    재권님 「응 해」(11-20 15:3x · 시황분석 창) — 승률 표도 단타 판 매도 시각을 따르게(14:00 고정 대신)."""
+def _set():
+    """단타 판 셈 칸 — 룰 문서 strategy-rules rules.dt30.set(화면과 같은 칸 한 곳) · 비거나 못 읽으면 {}."""
     try:
         import docstore
         d = docstore.read_doc("strategy-rules") or {}
         d = d.get("data", d) if isinstance(d, dict) else {}
-        v = str((((d.get("rules") or {}).get("dt30") or {}).get("set") or {}).get("endAt") or "").replace(":", "").strip()
+        v = ((d.get("rules") or {}).get("dt30") or {}).get("set")
+        return v if isinstance(v, dict) else {}
     except Exception:
-        return None
-    return v if len(v) == 4 and v.isdigit() and int(v[:2]) < 24 and int(v[2:]) < 60 else None
+        return {}
 
 
-def sell_of(r, end):
-    """그 줄을 파는 값 — 시각 칸 중 end(HHMM) 이하 마지막 값 있는 칸(화면 sellAt 의 「남은 종목」 과 같은 셈) · 칸이 없는 옛 줄은 쌓은 sell."""
+# 셈 칸이 비었을 때 값 — 화면 strategy-dt30.js 의 DEF_SET 과 같아야 한다(손절 −1 · 꺾임 켬 · 둘 다 · 0 · 고점 빈칸 · 시각 미달 끔 90분 2% · 횡보 끔)
+#   합칠 수 없는 복제다(화면이 저장 안 한 칸은 문서에 없다) — 화면이 이 값을 서버에서 받게 하면 없어진다(그때 지운다)
+SET_DEF = {"stop": -1, "turn": True, "turnBy": "both", "turnPct": 0, "trail": None,
+           "cut": False, "cutMin": 90, "cutPct": 2, "flat": False, "flatMin": None, "flatPct": None}
+
+
+def sell_rule():
+    """매도 셈 칸 — 셈 칸 값이 없으면 SET_DEF · endAt 은 「HHMM」 또는 None."""
+    S = dict(SET_DEF)
+    S.update({k: v for k, v in _set().items() if k in SET_DEF or k == "endAt"})
+    v = str(S.get("endAt") or "").replace(":", "").strip()
+    S["endAt"] = v if len(v) == 4 and v.isdigit() and int(v[:2]) < 24 and int(v[2:]) < 60 else None
+    return S
+
+
+def end_at():
+    """매도 시각 「HHMM」 — 셈 칸 endAt · 빈칸 · 못 읽음 · 틀린 꼴이면 None(판 끝 SELL_AT).
+    재권님 「응 해」(11-20 15:3x · 시황분석 창) — 승률 표도 단타 판 매도 시각을 따르게(14:00 고정 대신)."""
+    return sell_rule()["endAt"]
+
+
+def _hm(t):
+    return str(t or "").replace(":", "")[:4]
+
+
+def _cut_time(at, mins):
+    """산 시각 → 판정 시각(HHMM) — 30분 단위 반올림(분 15 이상이면 다음 30분) 뒤 mins 분 · 화면 cutTime 과 같은 셈."""
+    t = _hm(at)
+    if len(t) != 4 or not t.isdigit():
+        return ""
+    r = (int(t[:2]) * 60 + int(t[2:]) + 15) // 30 * 30 + int(mins or 0)
+    return "%02d%02d" % (r // 60, r % 60)
+
+
+def sell_of(r, end, S=None):
+    """그 줄을 파는 값과 까닭 → (값, 까닭) — 화면 sellAt 과 같은 셈(손절 · 꺾임 · 고점 · 시각 미달 · 횡보 · 매도 시각).
+    재권님 「각각의 룰에 걸리면 매도야」(11-20 15:5x) — 그 전에는 매도 시각만 따랐다.
+    시각 칸(30분)마다 매수가 대비 % 로 보고 처음 걸린 칸 값에 판다 · 하나도 안 걸리면 end 이하 마지막 값 있는 칸 · 칸이 없는 옛 줄은 쌓은 sell."""
     px = r.get("px")
     if not px:
-        return r.get("sell")
-    ks = [k for k in sorted(px) if k <= end and px[k] is not None]
-    return px[ks[-1]] if ks else None
+        return r.get("sell"), "옛 줄"
+    S = S or sell_rule()
+    buy, b_at = r.get("buy"), _hm(r.get("buyAt"))
+    ks = [k for k in sorted(px, key=_hm) if _hm(k) <= end]
+    if not buy:
+        vs = [k for k in ks if px[k] is not None]
+        return (px[vs[-1]] if vs else None), "매도 시각"
+    stop, turnby, trail = S.get("stop"), S.get("turnBy") or "both", S.get("trail")
+    cut_hm = _cut_time(b_at, S.get("cutMin")) if S.get("cut") else ""
+    flat_hm = _cut_time(b_at, S.get("flatMin")) if S.get("flat") and S.get("flatMin") is not None and S.get("flatPct") is not None else ""
+    cut_done = flat_done = False
+    pk, prev, last = 0.0, None, None
+    for k in ks:
+        v = px[k]
+        if v is None or (b_at and _hm(k) <= b_at):
+            continue                                   # 산 시각 앞 칸은 안 봄(화면과 같게)
+        p = (v / buy - 1) * 100
+        last = k
+        if stop is not None and p <= stop:
+            return v, "손절"
+        if S.get("turn") and turnby != "peak" and prev is not None and prev > 0 and ((100 + p) / (100 + prev) - 1) * 100 < -float(S.get("turnPct") or 0):
+            return v, "꺾임"
+        if S.get("turn") and turnby != "prev" and trail is not None and pk > 0 and ((100 + p) / (100 + pk) - 1) * 100 <= -float(trail):
+            return v, "고점"
+        if cut_hm and not cut_done and _hm(k) >= cut_hm:
+            cut_done = True
+            if p <= float(S.get("cutPct")):
+                return v, "미달"
+        if flat_hm and not flat_done and _hm(k) >= flat_hm:
+            flat_done = True
+            if abs(p) <= float(S.get("flatPct")):
+                return v, "횡보"
+        pk, prev = max(pk, p), p
+    return (px[last] if last else None), "매도 시각"
 
 
 def net_pct(r, fee):
@@ -155,7 +221,8 @@ def _stat(rets, unmeasured):
 def summary(proxy, days=DAYS_DEFAULT):
     """주소 /api/kis/dt30-win 의 data · meta."""
     fee = fee_pct()
-    end = end_at() or SELL_AT
+    rule = sell_rule()
+    end = rule["endAt"] or SELL_AT
     with proxy.db_conn() as conn:
         try:
             got = conn.execute("SELECT day, rows FROM dt30_win ORDER BY day DESC LIMIT ?", (days,)).fetchall()
@@ -170,14 +237,15 @@ def summary(proxy, days=DAYS_DEFAULT):
         else:
             g[0].append(v)
 
-    daily, every = [], []
+    daily, every, whys = [], [], {}
     for day, raw in got:
         rows = json.loads(raw)
         rets, miss, best = [], 0, []
         for r in rows:
             if str(r.get("buyAt") or "").replace(":", "")[:4] >= end:
                 continue                               # 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것 — 화면 셈과 같게(재권님 「가」 11-20 · 시황분석 화면)
-            r["sell"] = sell_of(r, end)                # 매도 시각 — 부를 때 셈(바꾸면 지난 날에도 바로 든다 · 수수료와 같은 길)
+            r["sell"], why = sell_of(r, end, rule)     # 매도 룰 — 부를 때 셈(셈 칸을 바꾸면 지난 날에도 바로 든다 · 수수료와 같은 길)
+            whys[why] = whys.get(why, 0) + 1
             v = net_pct(r, fee)
             chips = sorted(set(r["chips"]))
             for c in chips:
@@ -203,7 +271,7 @@ def summary(proxy, days=DAYS_DEFAULT):
     meta = {"days": len(got), "from": got[-1][0] if got else None, "to": got[0][0] if got else None,
             "fee": fee, "feeNote": None if fee is not None else "빈칸 — 수수료 안 셈", "feeSides": "팔 때만",
             "tax": TAX, "taxNote": "팔 때만 · 판 값 × (거래세 + 농특세) · 시장 모르면 못 잼", "ret": "세후 %",
-            "buy": "그날 판 매수가(rows[].buy · 11-20 판부터 판에 든 때 값 — 09:01 전에 있던 종목은 9시 1분 값 · 뒤에 든 종목은 든 순간 값 · 11-18~19 09:00 시가 · 그 전 09:01)", "minChips": dt30.MIN_CHIPS, "sell": end, "sellDef": SELL_AT, "sellNote": "매도 시각 — 단타 판 셈 칸 rules.dt30.set.endAt(빈칸이면 판 끝 sellDef) · 그 시각 이하 마지막 값 있는 칸에 팖 · 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것(셈에서 뺌) · 손절 · 꺾임은 이 표에 안 듦", "bigPct": BIG_PCT, "topDay": TOP_DAY,
+            "buy": "그날 판 매수가(rows[].buy · 11-20 판부터 판에 든 때 값 — 09:01 전에 있던 종목은 9시 1분 값 · 뒤에 든 종목은 든 순간 값 · 11-18~19 09:00 시가 · 그 전 09:01)", "minChips": dt30.MIN_CHIPS, "sell": end, "sellDef": SELL_AT, "sellNote": "매도 룰 — 단타 판 셈 칸 rules.dt30.set(화면과 같은 칸 · 빈 칸은 sellRule 의 기본) · 30분 칸마다 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 중 처음 걸린 칸 값에 팖 · 안 걸리면 매도 시각(endAt · 빈칸이면 판 끝 sellDef) 이하 마지막 값 있는 칸 · 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것(셈에서 뺌) · 불타기는 안 듦", "sellRule": rule, "sellWhy": whys, "bigPct": BIG_PCT, "topDay": TOP_DAY,
             "filledAt": _status["at"], "error": _status["error"]}
     return out, meta
 
