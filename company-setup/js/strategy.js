@@ -5,7 +5,9 @@
 //   · 장외 · 프리장 · 야간선물은 % 로 — 장외 · 프리장은 정규장 종가 대비, 야간선물은 서버가 준 전일비
 //   · 없는 값은 null 로 오고 「—」 로 낸다(0 이 아니다 · 「못 쟀으면 0 이 아니라 못 쟀다」)
 // 서버 응답 모양(개발1 · 2026-10-26 17:4x 알림): data.days[{day:YYYYMMDD, preDay, fut{kospi200|kosdaq150: {name, last, pct}|null}}](최신이 앞) ·
-//   rows[{code, name, side:up|down, rank, cells{<day>:{close, after, afterPct, pre, prePct}}}] — rank 는 그 종목이 든 가장 최근 날 것 · 없음은 null
+//   rows[{code, name, side:up|down, rank, cells{<day>:{close, after, afterPct, pre, prePct, open, openPct, openVsAfter}}}] — rank 는 그 종목이 든 가장 최근 날 것 · 없음은 null
+//   · 시초가 칸(11-20 재권님 「응 그래」 · 처음 말씀 10-26 「다음날 시초가와 얼마나 차이가 나는지」) — open = preDay 정규장 시가 · openPct = 종가 대비 · openVsAfter = 장외 대비(서버 몫 · 개발1)
+//     맨 위 요약 줄 = 장외에서 오른 종목(afterPct > 0) 중 시초가가 장외가 이상인 수 / 그 수 · 장외 대비 평균 — 서버 값을 세기만 한다 · 서버가 아직 open 을 안 주면 칸은 「—」
 import { signClass, NUM } from '../../assets/js/sign.js';
 
 const DAYS = 20;   // 몇 날을 받나 — 가로로 이만큼 쌓아 보이고 그보다 오래된 것은 서버에 남는다
@@ -15,7 +17,7 @@ const ymd = s => (s && /^\d{8}$/.test(s) ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${
 const dlabel = v => { const s = ymd(v); if (!s) return '—'; const x = new Date(s + 'T00:00:00Z'); return `${s.slice(5)}(${KDAY[x.getUTCDay()]})`; };
 const won = n => (n == null ? '—' : Number(n).toLocaleString('ko-KR'));
 const pct = n => (n == null ? '—' : `<span class="${signClass(n, NUM)}">${n > 0 ? '+' : ''}${Number(n).toFixed(2)}%</span>`);
-const SUB = ['종가', '장외', '야간선물', '프리장'];
+const SUB = ['종가', '장외', '야간선물', '프리장', '시초가'];
 const FUT = { kospi: 'kospi200', kosdaq: 'kosdaq150' };   // 시장 → 그 시장 야간선물 열쇠
 const both = (v, p) => (v == null && p == null ? '—' : `${won(v)} ${pct(p)}`);   // 값 · % 가 다 없으면 「—」 하나
 
@@ -37,16 +39,19 @@ async function load() {
   const rows = d.rows || [];
   const rank = r => r.rank || 999;
   const group = s => rows.filter(r => r.side === s).sort((a, b) => rank(a) - rank(b));
-  const head = `<tr><th rowspan="2" class="st-name">종목</th>${days.map(x => `<th colspan="4" class="st-day">${dlabel(x.day)} 종가 → ${dlabel(x.preDay)} 프리장</th>`).join('')}</tr>
+  const head = `<tr><th rowspan="2" class="st-name">종목</th>${days.map(x => `<th colspan="5" class="st-day">${dlabel(x.day)} 종가 → ${dlabel(x.preDay)} 프리장 · 시초가</th>`).join('')}</tr>
     <tr>${days.map(() => SUB.map((s, i) => `<th class="${i ? '' : 'st-first'}">${s}</th>`).join('')).join('')}</tr>`;
   const futOf = x => (x.fut && x.fut[FUT[market]]) || {};
   const fut = days.map(futOf).find(f => f.name) || {};
   const futRow = `<tr class="st-fut"><td class="st-name">${esc(fut.name || (market === 'kospi' ? '코스피200 야간선물' : '코스닥150 야간선물'))}</td>${days.map(x => { const f = futOf(x);
-    return `<td class="st-first"></td><td></td><td>${f.last == null && f.pct == null ? '—' : `${f.last == null ? '—' : esc(f.last)} ${pct(f.pct)}`}</td><td></td>`; }).join('')}</tr>`;
+    return `<td class="st-first"></td><td></td><td>${f.last == null && f.pct == null ? '—' : `${f.last == null ? '—' : esc(f.last)} ${pct(f.pct)}`}</td><td></td><td></td>`; }).join('')}</tr>`;
+  const keep = x => { const ups = rows.map(r => (r.cells || {})[x.day]).filter(c => c && c.afterPct > 0 && c.openVsAfter != null);   // 장외에서 오른 종목이 시초가에서 장외가를 지켰나
+    return ups.length ? `${ups.filter(c => c.openVsAfter >= 0).length}/${ups.length} 지킴<br>${pct(ups.reduce((a, c) => a + c.openVsAfter, 0) / ups.length)}` : '—'; };
+  const keepRow = `<tr class="st-fut"><td class="st-name">장외 오른 종목 → 시초가<br><small>장외가를 지킨 수 · 장외 대비 평균</small></td>${days.map(x => `<td class="st-first"></td><td></td><td></td><td></td><td>${keep(x)}</td>`).join('')}</tr>`;
   const line = r => `<tr><td class="st-name">${esc(r.name)} <small>${esc(r.code)}</small></td>${days.map(x => { const c = (r.cells || {})[x.day] || {};
-    return `<td class="st-first">${won(c.close)}</td><td>${both(c.after, c.afterPct)}</td><td class="st-dot">·</td><td>${both(c.pre, c.prePct)}</td>`; }).join('')}</tr>`;
-  const sep = t => `<tr class="st-grp"><td class="st-name">${t}</td><td colspan="${days.length * 4}"></td></tr>`;
-  box.innerHTML = `<div class="st-scroll"><table>${head}${futRow}${sep('장외 오름')}${group('up').map(line).join('')}${sep('장외 내림')}${group('down').map(line).join('')}</table></div>`;
+    return `<td class="st-first">${won(c.close)}</td><td>${both(c.after, c.afterPct)}</td><td class="st-dot">·</td><td>${both(c.pre, c.prePct)}</td><td>${both(c.open, c.openPct)}${c.open == null ? '' : `<br><small>장외 대비 ${pct(c.openVsAfter)}</small>`}</td>`; }).join('')}</tr>`;
+  const sep = t => `<tr class="st-grp"><td class="st-name">${t}</td><td colspan="${days.length * 5}"></td></tr>`;
+  box.innerHTML = `<div class="st-scroll"><table>${head}${futRow}${keepRow}${sep('장외 오름')}${group('up').map(line).join('')}${sep('장외 내림')}${group('down').map(line).join('')}</table></div>`;
   const sc = box.querySelector('.st-scroll'); sc.scrollLeft = sc.scrollWidth;   // 새 날(오른쪽)이 먼저 보이게
   meta.textContent = `서버 /api/nxt/board · ${days.length}날(${dlabel(days[0].day)} ~ ${dlabel(days[days.length - 1].day)}) · 종목 ${rows.length}`;
 }
