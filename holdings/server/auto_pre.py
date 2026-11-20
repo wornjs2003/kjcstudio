@@ -99,12 +99,16 @@ def _bars(mins):
 
 
 def run_once(proxy, day):
-    """그날 한 번 — 쌓은 종목 수 · 0 쌓을 것 없음(목록 없음 · 이미 쌓음 · 휴장) · None 지금 못 함(다시)."""
+    """그날 한 번 — 쌓은 종목 수 · 0 쌓을 것 없음(목록 없음 · 다 쌓음 · 휴장) · None 지금 못 함 · 못 받은(fail) 종목이 남음(RETRY_SEC 뒤 다시).
+    이미 쌓은 날이면 fail 종목만 다시 받는다(창구 덧 11-20 — 한 종목이라도 쌓이면 그날 끝이라 실패 종목이 영영 비던 것)."""
     _init(proxy)
     with proxy.db_conn() as conn:
-        if conn.execute("SELECT 1 FROM auto_watch_pre WHERE day = ? LIMIT 1", (day,)).fetchone():
-            return 0
+        have = {c: st for c, st in conn.execute("SELECT code, state FROM auto_watch_pre WHERE day = ?", (day,))}
     pick_day, picks = _picks(proxy, day)
+    if have:
+        picks = [p for p in picks if have.get(p[0]) == "fail"]
+        if not picks:
+            return 0
     if not picks:
         _status["last"] = {"day": day, "note": "앞 거래일 자동 목록 없음"}
         return 0
@@ -127,7 +131,7 @@ def run_once(proxy, day):
         else:
             rows.append((code, rank, name, close, nxp(code), "none" if code in nx else "nonx", 0 if code in nx else None, None, []))
     ok = sum(1 for r in rows if r[5] == "ok")
-    if not ok:
+    if not ok and not have:
         _status["last"] = {"day": day, "pickDay": pick_day, "codes": len(rows), "fail": fail,
                            "note": "체결 있는 종목 0 — 휴장이거나 못 받음 · 안 씀"}
         return None if fail == len(rows) else 0
@@ -135,8 +139,8 @@ def run_once(proxy, day):
     with proxy._db_lock, proxy.db_conn() as conn:
         conn.executemany("INSERT OR REPLACE INTO auto_watch_pre VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                          [(day, c, pick_day, rk, n, cl, np, st, v, last, json.dumps(b), at) for c, rk, n, cl, np, st, v, last, b in rows])
-    _status["last"] = {"day": day, "pickDay": pick_day, "codes": len(rows), "ok": ok, "fail": fail, "at": at}
-    return len(rows)
+    _status["last"] = {"day": day, "pickDay": pick_day, "codes": len(rows), "ok": ok, "fail": fail, "at": at, "retry": bool(have)}
+    return None if fail else len(rows)
 
 
 def _pct(px, base):
