@@ -15,7 +15,7 @@ loadTiming();
 
 // 고르는 조건 — 두 자리 공용(m = 그 칩 서버 meta · val = 값 칸 꼴)
 export const COND = {
-  프리장: (m, val) => `넥스트레이드 프리마켓 거래대금 상위 ${val(m.topN)}위 안 · 프로그램 순매수인 종목`,
+  프리장: (m, val) => `전날 정규장 종가보다 ${val(m.riseMinPct)}% 넘게 오른 종목 중 넥스트레이드 프리마켓 거래대금 상위 ${val(m.topN)}위 안`,   // 서버 pre_flow.py 셈 그대로(RISE_MIN_PCT · topN) — 프로그램 순매수는 칸만이지 조건이 아님(qa 11-20)
   초반상승: (m, val) => `장 시작 ${val(m.barMin)}분 뒤 — ${val(m.barFrom)} ~ ${val(m.barTo)} 첫 ${val(m.barMin)}분봉이 시가 대비 ${val(m.risePct)}% 이상 오름 · ETF 뺌 · 늦게 여는 날은 여는 시각부터`,   // 「장 시작 몇 분 뒤」 — 11-20 재권님 「단타에 초반상승이 장시작 몇분후인지 설명에 넣어줘」 · 값은 서버 meta.barMin 그대로
   장외: () => '정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목 · 문턱 없음',
 };
