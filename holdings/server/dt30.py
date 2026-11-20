@@ -808,6 +808,8 @@ def refresh(proxy, cfg, b):
     for r in nb["rows"]:
         o = old.get(r["code"])
         if o is not None:
+            for k, v in o.items():                     # 다시 세어도 그 줄에 적어 둔 것(팔 때 sell · N분 값 pxMin · 프리장 nx 등)은 옮긴다 — 새 셈이 내는 칸만 새 값
+                r.setdefault(k, v)                     # (qa 걸림 11-20 — sell 이 지워져 같은 종목 「팔 때」 가 여러 통 · tgTop 이 빈칸)
             r["chipAt"] = dict(r.get("chipAt") or {}, **{c: t for c, t in (o.get("chipAt") or {}).items() if c in r["chips"]})   # 앞에 붙어 있던 칩은 그 시각 그대로 · 빠진 칩은 지움
             for k in ("px1", "flow", "flowNow"):
                 if k in o:
@@ -839,7 +841,10 @@ def refresh(proxy, cfg, b):
     if b.get("times") != nb["times"] and not any(o.get("px") for o in old.values()):
         b["times"] = nb["times"]                       # 값 적는 시각 — 아직 한 칸도 안 적었으면 지금 셈(늦게 여는 날 뒤로 민 시각)으로 · 적기 시작했으면 그대로
     late = b["meta"].get("late") or {}
+    keep = {k: v for k, v in (b.get("meta") or {}).items() if k not in nb["meta"]}   # 판에 적어 둔 칸(tgTop · tgTopAt · sellHi · sellChk · px1At · nx…)은 다시 세어도 그대로
     b["meta"] = dict(nb["meta"], late=late, rescanAt=hm, out=sorted(out), gone=gone)
+    for k, v in keep.items():
+        b["meta"].setdefault(k, v)
     return changed
 
 
