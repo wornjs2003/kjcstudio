@@ -1795,6 +1795,8 @@ def board(proxy, day=None, cfg=None):
                 pm.setdefault(str(n), None)                # 못 잼 — 0 아님
     except Exception:
         pass
+    b["meta"]["subNames"] = {"매수|" + "①②③④"[k - 1]: v[0] for k, v in proxy.JOINT_TIER_NAME.items()}   # 하위 이름표 — 서버 한 곳(kis_proxy.JOINT_TIER_NAME · 11-20)
+    b["meta"]["subTips"] = {"매수|" + "①②③④"[k - 1]: v[1] for k, v in proxy.JOINT_TIER_NAME.items()}
     b.setdefault("closed", True)                       # 옛 판(closed 칸 전) · 되채운 날은 끝난 판
     b["meta"]["refreshMs"] = None if b["closed"] else proxy.PRICE_CACHE_TTL * 1000
     if not b["closed"] and cfg is not None:
