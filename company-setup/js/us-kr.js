@@ -70,6 +70,18 @@ async function main() {
     const j = await json('/api/kis/stock-daily?codes=' + KR.map((k) => k[0]).join(','));
     for (const [c] of KR) stocks[c] = (j.data[c] && j.data[c].bars) || null;
   } catch (e) { console.warn('[미국→국내] 정규장 일봉 못 받음', e); }
+  // 프리장(넥스트레이드 08:00) 시작가 — /api/nxt/pre-open(개발1 258a646 · 11-20) · approx 는 그날 프리장이 열렸는지 가를 기록이 없는 날(어림) · open null 은 why 를 풍선으로
+  const pre = {};
+  try {
+    const j = await json('/api/nxt/pre-open?codes=' + KR.map((k) => k[0]).join(','));
+    for (const [c] of KR) pre[c] = Object.fromEntries(((j.data || {})[c] || []).map((x) => [x.date, x]));
+  } catch (e) { console.warn('[미국→국내] 프리장 시작가 못 받음', e); }
+  const preCell = (x, pv) => {
+    if (!x) return '<td class="na g">못 받음</td>';
+    if (x.open == null) return `<td class="na g"${x.why ? ` data-tip="${String(x.why).replace(/"/g, '&quot;')}"` : ''}>—</td>`;
+    const p = pct(x.open, pv);
+    return `<td class="g"${x.approx ? ' data-tip="어림 — 그날 프리장이 열렸는지 가를 기록이 없는 날(넥스트레이드 일봉 시가)"' : ''}>${fmt(x.open, 0)}<i class="${signClass(p)}">${pctTxt(p)}${x.approx ? ' · 어림' : ''}</i></td>`;
+  };
   const usBars = Object.fromEntries(US.map(([k]) => [k, (idx.data[k] && idx.data[k].bars) || null]));
   const usPrev = Object.fromEntries(US.map(([k]) => [k, prevMap(usBars[k])]));
   const kPrev = prevMap(kospi);
@@ -99,7 +111,7 @@ async function main() {
     tr += isLive ? '<td class="na">마감 전</td>' : relCell(usP.SPX != null ? pct(k.close, kPrev[k.date]) - usP.SPX : null, 'S&P');
     KR.forEach(([c]) => {
       const b = sMap[c][k.date], pv = sPrev[c][k.date];
-      tr += '<td class="na g">못 받음</td>';          // 프리장(넥스트레이드 08:00) 시작가 — 서버 값이 오면 채운다(개발1 배분 · 11-10)
+      tr += preCell((pre[c] || {})[k.date], pv);          // 프리장(넥스트레이드 08:00) 시작가 — 전날 정규장 종가 대비
       tr += b ? cell(b.open, pv) + cell(b.high, pv) + (isLive ? liveCell(b.close, pv) : cell(b.close, pv)) : '<td class="na">못 받음</td>'.repeat(3);
       // 필라델피아 반도체 대비 — 그날 정규장 종가 등락률 − 전날 밤 필반 등락률(2026-11-10 재권님 「필라델파아 반도체지수대비 등락」) · 둘 중 하나라도 없으면 못 받음
       tr += isLive ? '<td class="na">마감 전</td>' : relCell((b && usP.SOX != null) ? pct(b.close, pv) - usP.SOX : null, '필반');
@@ -110,7 +122,7 @@ async function main() {
   const now = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
   $('uk-sub').textContent = `${day(first)} ~ ${day(kospi[kospi.length - 1].date)} · 국내 거래일 ${kospi.length}일 · 기간은 서버 값(${idx.meta.months}개월) · ${now} 에 받음`;
   $('uk-foot').innerHTML = '출처 — 지수: 서버 /api/kis/index-daily(KIS) · 종목: 서버 /api/kis/stock-daily(KIS 정규장 일봉 · 09:00~15:30 · 등락률은 전날 정규장 종가 대비) · 미국 날짜는 현지 날짜 · '
-    + '프리장 시작가는 서버에 아직 없어 「못 받음」(받는 길은 개발1 이 재는 중 — 「아직」 이지 「영영」 이 아님) · 오늘 줄은 장이 끝나기 전이면 종가를 「마감 전」 으로 두고 지금 값만 흐리게 · 그 줄의 시가 · 최고가도 장중 값'
+    + '프리장 시작가: 서버 /api/nxt/pre-open(넥스트레이드 08:00 첫 체결 · 전날 정규장 종가 대비 · 「어림」 은 그날 프리장이 열렸는지 기록이 없는 날 · 「—」 는 프리장 기록 없음) · 오늘 줄은 장이 끝나기 전이면 종가를 「마감 전」 으로 두고 지금 값만 흐리게 · 그 줄의 시가 · 최고가도 장중 값'
     + ' · 열어 둔 채여도 장이 끝나면 한 번 다시 받아 오늘 줄을 종가로 바꿈';
   // 장중에 열어 둔 화면 — 장 마감(서버가 준 reg 끝) 뒤 서버가 일봉을 다시 받을 때까지(서버 meta.cacheTtl) 기다렸다가 한 번만 다시 받는다
   // (11-10 재권님 「날마다 갱신되도록 해줘」 → 「응 해줘」) · 몇 초마다 묻는 주기가 아니다 — 시각도 기다림도 서버 값(「캐시·주기·한도 값을 화면에 박지 않는다」)
