@@ -635,7 +635,16 @@ async function load(day, quiet) {
   paint(d);
   chips();
   const ms = Number(m.refreshMs ?? (d.meta && d.meta.refreshMs)); st.ms = ms > 0 ? ms : 0;   // 서버는 판 안 meta(data.meta)에 둔다(개발2 2단계 · 11-12 09:07 잼) — 바깥 meta 도 읽음
-  if (d.closed !== true && (d.rows || []).some((r) => r.now != null) && ms > 0 && d.day === st.days[0]) again = setTimeout(() => { if (st.day === d.day) load(d.day, true); }, ms);
+  // 오늘 판이면 굳기(closed) 전까지 서버 주기로 다시 받음 — 장 전(08:00~09:00) 줄에 now 가 없어도 칩이 바뀌므로 now 로 가르지 않음(11-20 재권님 「8시되면 갱신되야 되는거지? 실시간으로?」 → 「응 고쳐」)
+  const t0 = new Date(), today = `${t0.getFullYear()}${String(t0.getMonth() + 1).padStart(2, '0')}${String(t0.getDate()).padStart(2, '0')}`;
+  if (d.closed !== true && ms > 0 && d.day === st.days[0] && d.day === today) again = setTimeout(() => { if (st.day === d.day) load(d.day, true); }, ms);
+  // 어제 판을 보는 채로 열어 둔 화면 — 오늘 판이 생기는 서버 매수 시각(meta.buyAt)의 다음 분에 한 번 맨 앞 날을 다시 받음(주기로 묻지 않음 · 빈 화면 때와 같은 셈)
+  const bm = String(m.buyAt || d.buyAt || '').match(/^(\d{2}):?(\d{2})$/);
+  if (!again && bm && d.day === st.days[0] && d.day < today) {
+    const at = new Date(t0); at.setHours(+bm[1], +bm[2] + 1, 0, 0);
+    const wait = at - t0;
+    if (wait > 0) again = setTimeout(() => { if (st.day === d.day) load(); }, wait);
+  }
 }
 
 // 칩 칸 차림 — 칸 이름(data-col) · 「+ 칩」(data-addcol)을 누르면 그 아래에 뜸 · 바깥을 누르거나 Esc 면 닫힘
