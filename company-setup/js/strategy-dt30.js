@@ -470,7 +470,7 @@ function paint(d) {
     if (!(Number(r.buy) > 0) || !lateIn(r)) return '<td class="dt-in" data-tip="9시 1분 전부터 판에 있던 종목 — 매수가가 9시 1분 값">—</td>';
     return `<td class="dt-buy dt-in">${num(r.buy)}<small>${esc(String(r.buyTs || hmS(at)))}${r.buySrc ? ` · ${esc(r.buySrc)}` : ''}</small></td>`; };
   const p1V = R.map((x) => p1Ch(x.r)).filter((v) => v != null);
-  const p1Avg = `<td class="dt-nx">${p1V.length ? pct(mean(p1V)) : '—'}</td>`;
+  const p1Avg = `<td class="dt-nx">${p1V.length && !newBuyOf(d) ? pct(mean(p1V)) : '—'}</td>`;   // 새 판은 「—」 — 매수가가 9시 1분 값이라 거의 늘 0(11-20 재권님 「응」 · 옛 판은 그대로)
   // 다음 날 프리장 08:05 (11-18 재권님 「이종목들 내일 프리장에 8시 5분에 얼마인지 체크해서 넣어줘 … 어제에 프리장 8시5분 이라고 칸이 있어야 되고 여기에 값 넣어줘」)
   //   값은 서버 rows[].nx(개발2 · 다음 거래일 넥스트레이드 그 시각 값) · 시각은 meta.nxAt · 화면은 매수가 대비 % 만 셈
   //   nx 칸이 없으면 「아직」(다음 날 그 시각 전) · px 가 null 이면 「—」(넥스트레이드 거래 없음 · 못 받음 — 0 아님)
