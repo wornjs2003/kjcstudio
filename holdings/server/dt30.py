@@ -792,8 +792,12 @@ def _sub_keep(r, o, ts):
         old = list(((o or {}).get("subs") or {}).get(chip) or []) if o and chip in (o.get("chips") or []) else []
         new = list((r.get("subs") or {}).get(chip) or [])
         merged = old + [x for x in new if x not in old]
+        if any(x != "어림" for x in merged):
+            merged = [x for x in merged if x != "어림"]      # 장 전 자리표 「어림」 은 진짜 하위(①~④)가 오면 걷는다(qa 걸림 11-20)
         r.setdefault("subs", {})[chip] = merged
         m = at.setdefault(chip, {})
+        if "어림" not in merged:
+            m.pop("어림", None)
         for x in merged:
             m.setdefault(x, ts)
     r["subAt"] = {c: v for c, v in at.items() if c in (r.get("chips") or []) and v}
