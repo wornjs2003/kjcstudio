@@ -873,6 +873,12 @@ def _lock_due(b, nm):
         for k, r in enumerate(pick, 1):
             r["lock"], r["lockAt"], r["lockRank"] = i, _hhmm(t), k
             r["lockTs"] = _now().strftime("%H:%M:%S")      # 실제로 굳힌 때 — 서버가 늦게 떠 정한 시각(lockAt)보다 뒤에 굳힌 줄을 가르게(qa 덧 11-20)
+        m = b["meta"]
+        m.setdefault("lockMiss", {})[str(i)] = {                    # 굳힌 그 순간 못 받은 값 — meta.missing 은 값이 오면 지워져 굳힘 때 무엇이 빠졌는지 못 가린다
+            "at": _now().strftime("%H:%M:%S"),                       # 재권님 「못가져온 값은 못가져온대로 … 무슨값인지만 인지되도록」(09:18) → 「9시 5분에 굳히는걸로」(14:19)
+            "missing": [c for c in m.get("missing") or [] if c != "매수어림"],   # 못 받은 칩 — 뒤에 오면 그 줄에 채워짐(굳힌 줄은 안 빠짐)
+            "approx": list(m.get("approx") or []),                   # 어림 값으로 든 칩(매수 — 장 전 값)
+            "wait": list(m.get("wait") or [])}                       # 시각이 안 와 기다리는 칩(초반상승 — 여는 시각 전)
         done.append(i)
         did.append(i)
     if did:
