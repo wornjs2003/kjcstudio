@@ -803,6 +803,53 @@ def _sub_keep(r, o, ts):
     r["subAt"] = {c: v for c, v in at.items() if c in (r.get("chips") or []) and v}
 
 
+LOCK_AT = ((9, 5), (9, 30), (10, 30))   # 세 번 굳히기 — 이 시각마다 굳지 않은 줄 중 순위 위 LOCK_N 개를 굳힌다(lock 1 · 2 · 3)
+LOCK_N = 10
+# 재권님 「단타 목록 9시 5분에 굳히고 상위 10개만 보인다. 그이후로 추가된건 그아래로 추가되고 9시 30분에 10개 굳힌다. 그이후로 추가된건 그아래로
+# 추가되고 10시 30분에 10개 굳힌다」(11-20 08:44) → 새로 다는 10개는 「(가) 그때까지 굳지 않은 종목 전체에서 순위대로」(11-20 10:1x).
+# 굳힌 줄은 그날 빠지지 않고(다시 셀 때 빠져도 되살림 · 빠짐 셈 밖) 차례도 그대로 · 마지막(10:30)은 BUY_LATE 와 같아 그 뒤 판이 안 바뀐다.
+# 늦게 여는 날도 같은 시각(재권님 「가」 11-20 — 굳히기 10:30 그대로와 같은 뜻으로 읽음). 칸: rows[].lock(1~3) · lockAt · lockRank · meta.lockDone · lockAt · lockN.
+
+
+def _lock_keep(old_rows, nb_rows):
+    """다시 셀 때 — 굳힌 줄이 새 셈에서 빠졌으면 옛 줄 그대로 되살린다. 되살린 수."""
+    have = {r["code"] for r in nb_rows}
+    back = [dict(o) for o in old_rows if o.get("lock") and o["code"] not in have]
+    nb_rows.extend(back)
+    return len(back)
+
+
+def _lock_order(b):
+    """굳힌 줄(lock · lockRank 차례)을 위에 · 나머지는 지금 순위대로 아래 · rank 를 1부터 다시 매긴다."""
+    rows = b.get("rows") or []
+    lk = sorted([r for r in rows if r.get("lock")], key=lambda r: (r["lock"], r.get("lockRank") or 1e9))
+    rest = sorted([r for r in rows if not r.get("lock")], key=lambda r: r.get("rank") or 1e9)
+    b["rows"] = lk + rest
+    for i, r in enumerate(b["rows"], 1):
+        r["rank"] = i
+
+
+def _lock_due(b, nm):
+    """굳힐 때가 지난 차례를 굳힌다 — 굳지 않은 줄 중 순위 위 LOCK_N 개. 굳힌 차례 목록(이번에 한 것)."""
+    done = list(b["meta"].get("lockDone") or [])
+    did = []
+    for i, (h, m) in enumerate(LOCK_AT, 1):
+        if i in done or nm < h * 60 + m:
+            continue
+        _lock_order(b)
+        pick = [r for r in b["rows"] if not r.get("lock")][:LOCK_N]
+        for k, r in enumerate(pick, 1):
+            r["lock"], r["lockAt"], r["lockRank"] = i, "%02d:%02d" % (h, m), k
+        done.append(i)
+        did.append(i)
+    if did:
+        b["meta"]["lockDone"] = done
+        b["meta"]["lockAt"] = ["%02d:%02d" % t for t in LOCK_AT]
+        b["meta"]["lockN"] = LOCK_N
+        _lock_order(b)
+    return did
+
+
 def _gone(old_rows, new_rows, at):
     """다시 셀 때 빠진 것 — 판에서 빠진 종목(what 「종목」 · 그때 칩) · 줄은 남고 빠진 칩(what 「칩」 · 빠진 칩만). 빠진 순서대로 목록.
     재권님 「응 고쳐」(11-20 08:59 · 작업우선순위 경유) — 11-19 칩 넷 종목 · 11-02 한진칼이 덮어 저장이라 언제 빠졌는지 못 가린 일."""
@@ -885,6 +932,7 @@ def refresh(proxy, cfg, b):
     """그날 판을 지금 들어온 값으로 다시 세운다(종목 · 칩 · 순위). 바뀐 줄 수."""
     out = set(b["meta"].get("out") or [])
     nb = build(proxy, cfg, b["day"], skip=out)
+    _lock_keep(b["rows"], nb["rows"])                  # 굳힌 줄은 새 셈에서 빠져도 그대로(세 번 굳히기)
     old = {r["code"]: r for r in b["rows"]}
     now = _now()
     nm = now.hour * 60 + now.minute
@@ -942,6 +990,8 @@ def refresh(proxy, cfg, b):
     b["meta"] = dict(nb["meta"], late=late, rescanAt=hm, out=sorted(out), gone=gone)
     for k, v in keep.items():
         b["meta"].setdefault(k, v)
+    _lock_order(b)
+    _lock_due(b, nm)
     return changed
 
 
@@ -1711,6 +1761,8 @@ def start(proxy):
                                     filled_late = ["다시 셈"]
                         elif not b.get("closed"):
                             filled_late = patch_late(proxy, proxy.load_secrets(), b)
+                            if _lock_due(b, hm):                   # 굳히는 때(10:30)가 지난 뒤 — 남은 차례(마지막 10개)를 굳힌다(다시 셈은 안 함)
+                                filled_late = list(filled_late) + ["굳힘"]
                             if _buy_open_fill(proxy, b):           # 굳힌 뒤에도 시가를 기다리는 줄 — 1분봉이 늦게 들어오면 채움(DB 만 읽음)
                                 filled_late = list(filled_late) + ["시가"]
                         if filled_late and filled_late != ["다시 셈"]:
