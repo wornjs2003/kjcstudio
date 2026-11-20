@@ -991,8 +991,7 @@ def refresh(proxy, cfg, b):
     for k, v in keep.items():
         b["meta"].setdefault(k, v)
     _lock_order(b)
-    _lock_due(b, nm)
-    return changed
+    return changed + len(_lock_due(b, nm))            # 굳힌 바퀴는 바뀐 것으로 센다 — 안 세면 저장 안 돼 다음 바퀴에 다시 고름(개념정의 덧 11-20)
 
 
 def _bar_close(proxy, day, code, hhmm):
