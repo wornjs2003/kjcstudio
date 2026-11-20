@@ -739,6 +739,8 @@ def patch_late(proxy, cfg, b):
                 r["subs"].setdefault(chip, [])
                 if sub not in r["subs"][chip]:
                     r["subs"][chip].append(sub)
+                if chip in SUB_KEEP:
+                    r.setdefault("subAt", {}).setdefault(chip, {}).setdefault(sub, _now().strftime("%H:%M:%S"))
             if rise is not None:
                 r["rise"] = rise
     order = OV_CHIPS + ("현재상승", "볼린저")
@@ -774,6 +776,27 @@ RESCAN_SEC = 60               # BUY_AT ~ BUY_LATE 동안 판을 다시 세는 �
 # RESCAN_SEC 마다 칩을 다시 세어 줄을 다시 세운다. 이미 든 종목의 buy 는 처음 든 때 값 그대로 · 새로 든 종목은 든 때 현재가(rows[].buyAt).
 # BUY_LATE 뒤로는 줄을 바꾸지 않고 늦게 나온 칩(patch_late)만 채운다 — 30분 값을 적는 동안 종목이 바뀌면 그 칸을 견줄 수 없다.
 # 09:30 칸은 굳히기 전에 오므로 그 뒤에 든 종목은 그 칸을 09:30 에 끝난 5분봉 종가로 채운다(track).
+
+
+SUB_KEEP = ("매수", "수급")      # 하위가 바뀌어도 앞 하위를 지우지 않는 칩 — 「매수」 ①~④(외국인 · 기관 갈래) · 옛 판 「수급」
+# 재권님 「단타판에 수급칩이 외국인이였다나 외국인 기관으로 바뀌면 둘다 있어야해 수급칩은 각각 다 보이게 해주고 추가된 칩은 추가된 시간도 보여지게 해줘」
+# (11-20 10:0x · 작업우선순위 경유) — rows[].subs[칩] 은 붙은 차례대로 쌓고 · rows[].subAt {칩: {하위: HH:MM:SS}} 에 처음 붙은 시각(칩 자체가 빠지면 하위도 함께 빠짐 · meta.gone)
+
+
+def _sub_keep(r, o, ts):
+    """다시 셀 때 — r(새 셈 줄)의 SUB_KEEP 하위에 o(옛 줄) 하위를 앞에 이어 붙이고 · 새로 붙은 하위에 시각을 적는다."""
+    at = {c: dict(v) for c, v in ((o or {}).get("subAt") or {}).items()}
+    for chip in SUB_KEEP:
+        if chip not in (r.get("chips") or []):
+            continue
+        old = list(((o or {}).get("subs") or {}).get(chip) or []) if o and chip in (o.get("chips") or []) else []
+        new = list((r.get("subs") or {}).get(chip) or [])
+        merged = old + [x for x in new if x not in old]
+        r.setdefault("subs", {})[chip] = merged
+        m = at.setdefault(chip, {})
+        for x in merged:
+            m.setdefault(x, ts)
+    r["subAt"] = {c: v for c, v in at.items() if c in (r.get("chips") or []) and v}
 
 
 def _gone(old_rows, new_rows, at):
@@ -866,9 +889,11 @@ def refresh(proxy, cfg, b):
         out |= set(old) - {r["code"] for r in nb["rows"]}        # 판에 있다가 이번에 빠진 종목(하락 · 순위 밖 · 칩 빠짐) — 그날 다시 안 넣음(재권님 11-13) · 09:01 부터 셈(11-18)
     opened = nm >= OPEN_AT[0] * 60 + OPEN_AT[1] + off
     hm = now.strftime("%H:%M")
+    hms = now.strftime("%H:%M:%S")
     changed = 0
     for r in nb["rows"]:
         o = old.get(r["code"])
+        _sub_keep(r, o, hms)                           # 하위(매수 ①~④)는 바뀌어도 앞 것을 남기고 붙은 시각을 적는다
         if o is not None:
             for k, v in o.items():                     # 다시 세어도 그 줄에 적어 둔 것(팔 때 sell · N분 값 pxMin · 프리장 nx 등)은 옮긴다 — 새 셈이 내는 칸만 새 값
                 r.setdefault(k, v)                     # (qa 걸림 11-20 — sell 이 지워져 같은 종목 「팔 때」 가 여러 통 · tgTop 이 빈칸)
@@ -1656,6 +1681,8 @@ def start(proxy):
                     got = _load(proxy, day)
                     if got is None and BUY_AT[0] * 60 + BUY_AT[1] <= hm < BUY_LATE[0] * 60 + BUY_LATE[1] and _status["frozen"] != day:
                         b = build(proxy, proxy.load_secrets(), day)
+                        for r in b["rows"]:
+                            _sub_keep(r, None, now.strftime("%H:%M:%S"))   # 처음 지은 판 — 하위가 붙은 시각
                         if hm < _buy_wait_cut(proxy, now):
                             for r in b["rows"]:
                                 r["buy"], r["buyWait"] = None, True          # 여는 시각 + 1분 전에 지은 판 — 9시 1분 값을 기다린다
