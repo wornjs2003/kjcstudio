@@ -114,6 +114,7 @@ export const INDICATORS = [
 
 /* 같은 화면의 차트들이 함께 맞춘다. 한 곳에서 켜면 나머지도 따라간다 */
 const _indSync = new Set();
+const _hideSync = new Set();      // 숨긴 칸이 바뀌면 붙어 있는 차트들이 칸 안만 다시 칠한다(칸을 다시 짓지 않음)
 
 const IND_ON_KEY = 'kh.chart.ind-on';
 /* 사용자가 이미 본 적 있는 지표. 나중에 붙인 것을 한 번 켜 주는 데 쓴다 */
@@ -151,6 +152,24 @@ function saveIndOn() {
   try { localStorage.setItem(IND_ON_KEY, JSON.stringify([..._indOn])); } catch { /* 저장 못 씀 */ }
   memPush();
 }
+
+/* 잠깐 숨긴 아래 칸 지표 (2026-11-20 차트 보완 ④ · 토스처럼 숨기기(눈) · 지움(✕) 둘) — 숨기면 그 칸 선 · 막대 · 값을 감추고 이름 줄만 남게 접는다(빈 만큼 가격 칸이 커짐 · 재권님 「칸 자리도 좁아지면」)
+   (누른 사람이 시킨 접기 · 「보는 것을 바꿔도 자리는 그대로다」 의 펼치기 · 접기). 지움(✕)은 지금처럼 칸째 뺀다. 차트 기억 보관함에 함께 둔다(MEM_KEYS) */
+const IND_HIDE_KEY = 'kh.chart.ind-hide';
+let _indHide = null;
+function indHide() {
+  if (_indHide) return _indHide;
+  try { const v = JSON.parse(localStorage.getItem(IND_HIDE_KEY) || '[]'); _indHide = new Set(Array.isArray(v) ? v : []); }
+  catch { _indHide = new Set(); }
+  return _indHide;
+}
+function saveIndHide() {
+  try { localStorage.setItem(IND_HIDE_KEY, JSON.stringify([...indHide()])); } catch { /* 저장 못 씀 */ }
+  memPush();
+}
+const EYE_ON = '<svg width="13" height="13" viewBox="0 0 18 18" aria-hidden="true"><path d="M1.5 9s2.8-5 7.5-5 7.5 5 7.5 5-2.8 5-7.5 5S1.5 9 1.5 9z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="9" cy="9" r="2.2" fill="currentColor"/></svg>';
+const EYE_OFF = '<svg width="13" height="13" viewBox="0 0 18 18" aria-hidden="true"><path d="M1.5 9s2.8-5 7.5-5 7.5 5 7.5 5-2.8 5-7.5 5S1.5 9 1.5 9z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3 15L15 3" stroke="currentColor" stroke-width="1.5"/></svg>';
+const EYE_TIP = { on: '숨기기 — 이름 줄만 남기고 칸을 접습니다', off: '다시 보이기' };
 
 /* 아래 칸 하나가 먹는 높이 비율. 셋이 다 켜지면 가격이 절반 아래로 내려간다 */
 const PANE_H = 0.18;
@@ -894,6 +913,9 @@ function volumeProfile(candles, period, kr) {
 const PANE_MIN = 60, PRICE_MIN = 120;
 /* 칸이 모자라 줄일 때만 쓰는 둘(build 의 fitH) — 시간축 높이는 폰 390 · 005930 5분봉 모달에서 잰 값(2026-10-08 · 약 28px) */
 const TIME_AXIS_H = 28, FIT_MIN = 40;
+/* 숨긴 칸(눈)의 높이 — 이름 줄(.kh-pane-tag)만 남는다 · 빈 만큼 가격 칸이 커진다(2026-11-20 재권님 「칸 자리도 좁아지면 좋을거같아」 →
+   처음 26px 그림에 「지금높이의 70%로 해서 올려」 → 18) · 이름 줄은 stock.css 의 .kh-pane.is-hid 가 위로 붙인다 */
+const HID_H = 18;
 /* **가격 칸은 차트 칸 높이의 이 비율 밑으로 안 내려간다** (2026-11-10 재권님 「응」 — 칸이 낮으면 보조 칸도 같은 비율로 줄여 가격 칸을
    절반 넘게 지키기). 그날 재권님 크롬이 localhost 를 167% 확대해 홈이 0.62배로 줄었는데, 보조 칸은 저장한 px(60 · 60 · 110) 그대로
    남고 가격 칸만 121px 로 눌려 가격 눈금 숫자가 사라졌다. 넓은 화면(가격 칸이 이미 절반 넘는 곳)은 그대로다 */
@@ -2079,19 +2101,23 @@ export function createStockChart(container, candles, opts = {}) {
     /* **칸 높이에 다 안 들어가면 보조 칸을 비율대로 줄인다**(최소 PANE_MIN · 2026-10-08 재권님 — 「칸을 줄여」).
        좁은 폭 홈 큰 차트는 367px(home.css 2/3 지시)인데 가격 120 + 보조 110×3 = 453 이라 86px 이 칸 밖으로
        넘쳐 RSI 가 잘렸다. 줄인 값은 저장하지 않는다 — 넓은 화면(들어가는 곳)은 지금 높이 그대로다. */
-    const want = own.reduce((a, x) => a + paneH()[x.key], 0);
+    const lastKey = own.length ? own[own.length - 1].key : null;
+    const hidH = (x) => HID_H + (x.key === lastKey ? TIME_AXIS_H : 0);   // 숨긴 칸 — 이름 줄 (+ 맨 아래면 시간축)
+    const vis = own.filter((x) => !indHide().has(x.key));
+    const hidSum = own.filter((x) => indHide().has(x.key)).reduce((a, x) => a + hidH(x), 0);
+    const want = vis.reduce((a, x) => a + paneH()[x.key], 0);
     const priceFloor = Math.max(PRICE_MIN, Math.round(container.clientHeight * PRICE_SHARE));
-    const room = container.clientHeight - priceFloor - own.length;   // 칸 사이 경계선 1px 씩(stock.css .kh-pane + .kh-pane)
+    const room = container.clientHeight - priceFloor - own.length - hidSum;   // 칸 사이 경계선 1px 씩(stock.css .kh-pane + .kh-pane) · 숨긴 칸 몫을 먼저 뺀다
     const shrink = want > room && room > 0;
     /* **줄일 때는 시간축 자리를 먼저 떼어 맨 아래 칸에 얹는다** (2026-10-08 재권님 — 「RSI 값이 밑이 잘리는데 … 칸 조절좀 해봐」).
        시간축은 맨 아래 칸 안에 그려져 약 TIME_AXIS_H 를 먹는다 — 칸을 똑같이 60 씩 주면 맨 아래 칸(대개 RSI)만
        그림 자리가 32px 남짓이라 값 배지가 칸 밑으로 밀려 잘렸다. 그래서 보조 칸 **그림 자리**를 같게 나누고,
        바닥은 FIT_MIN 이다(끌개의 PANE_MIN 60 보다 낮다 — 좁은 폭 303px 에 지표 셋이 들어가야 해서) */
-    const lastKey = own.length ? own[own.length - 1].key : null;
-    const share = shrink ? room - TIME_AXIS_H : 0;
+    const visLast = vis.length && vis[vis.length - 1].key === lastKey;   // 시간축을 먹는 맨 아래 칸이 보이는 칸인가
+    const share = shrink ? room - (visLast ? TIME_AXIS_H : 0) : 0;
     const fitH = {};
     own.forEach((x) => {
-      fitH[x.key] = shrink
+      fitH[x.key] = indHide().has(x.key) ? hidH(x) : shrink
         ? Math.max(FIT_MIN, Math.floor(paneH()[x.key] * share / want)) + (x.key === lastKey ? TIME_AXIS_H : 0)
         : paneH()[x.key];
     });
@@ -2146,10 +2172,12 @@ export function createStockChart(container, candles, opts = {}) {
         const tag = document.createElement('div');
         tag.className = 'kh-pane-tag';
         tag.innerHTML =
-          '<span class="x" data-pane-close="' + p.key + '" data-tip="닫기" aria-label="닫기">✕</span>' +
+          '<span class="eye" data-pane-hide="' + p.key + '"></span>' +
+          '<span class="x" data-pane-close="' + p.key + '" data-tip="지우기 — 칸째 뺍니다" aria-label="지우기">✕</span>' +
           '<span class="nm" data-doc="' + p.key + '" data-tip-ref="#kh-ind-doc-' + p.key + '">' + def.label + ' (' + def.par + ')</span>' +
           '<span class="v" data-pane-v="' + p.key + '"></span>';
         el.appendChild(tag);
+        paintHide(item);
 
         const grip = document.createElement('div');
         grip.className = 'kh-grip';
@@ -2387,8 +2415,27 @@ export function createStockChart(container, candles, opts = {}) {
     if (p.key !== 'price') paneH()[p.key] = h;
   }
 
-  /* 닫기 단추 */
+  /* 숨긴 칸 — 그 칸 차트의 선 · 막대를 감추고(시리즈 visible) 값 글자와 눈 모양을 맞춘다 · 칸 크기는 그대로 */
+  function paintHide(item) {
+    const hid = indHide().has(item.key);
+    (item.chart.__khSeries || []).forEach((sr) => { try { sr.applyOptions({ visible: !hid }); } catch { /* 이미 정리됨 */ } });
+    item.el.classList.toggle('is-hid', hid);
+    const eye = item.el.querySelector('[data-pane-hide]');
+    if (eye) { eye.innerHTML = hid ? EYE_OFF : EYE_ON; eye.dataset.tip = hid ? EYE_TIP.off : EYE_TIP.on; eye.setAttribute('aria-label', eye.dataset.tip); }
+  }
+  const syncHide = () => build();   // 숨긴 칸은 높이가 바뀌어(이름 줄만) 칸을 다시 짓는다 — 누른 사람이 시킨 일(「보는 것을 바꿔도 자리는 그대로다」 의 접기)
+  _hideSync.add(syncHide);
+
+  /* 지우기(✕) · 숨기기(눈) 단추 */
   container.addEventListener('click', (e) => {
+    const h = e.target.closest('[data-pane-hide]');
+    if (h) {
+      const k = h.dataset.paneHide, s = indHide();
+      if (s.has(k)) s.delete(k); else s.add(k);
+      saveIndHide();
+      _hideSync.forEach((fn) => fn());           // 같은 화면의 다른 차트(홈 큰 차트 · 모달)도 함께
+      return;
+    }
     const x = e.target.closest('[data-pane-close]');
     if (!x) return;
     toggleInd(x.dataset.paneClose);
@@ -2733,6 +2780,7 @@ export function createStockChart(container, candles, opts = {}) {
     destroy() {
       _indSync.delete(syncInd);
       _memSync.delete(build);
+      _hideSync.delete(syncHide);
       if (sizeRo) sizeRo.disconnect();
       clearTimeout(fitTimer);
       clearTimeout(sizeTimer);
@@ -2812,7 +2860,7 @@ function saveMaOff() {
    보관함을 못 읽으면 브라우저에 남은 값으로 그린다. 기준 화면도 처음에 읽는다 — 맥북 · 맥미니가 같은 값을 보게 */
 const MEM_DOC = '/api/board/doc/chart-view';
 const MEM_WRITER = ['thekjc.co.kr'];
-const MEM_KEYS = [IND_ON_KEY, IND_SEEN_KEY, MA_OFF_KEY, PANE_H_KEY, V_SPAN_KEY, BARS_KEY];
+const MEM_KEYS = [IND_ON_KEY, IND_SEEN_KEY, MA_OFF_KEY, PANE_H_KEY, V_SPAN_KEY, BARS_KEY, IND_HIDE_KEY];
 const MEM_PUSH_MS = 800;          // 끌기 · 누르기를 모아 한 번 보낸다(그리기 쪽 지연 — 서버를 다시 묻는 주기가 아니다)
 const _memSync = new Set();       // 보관함 값으로 바뀌면 차트를 다시 짓는다
 const memWriter = (() => { try { return MEM_WRITER.includes(location.hostname); } catch { return false; } })();
@@ -2845,7 +2893,7 @@ function memApply(data) {
       else localStorage.setItem(k, JSON.stringify(data[k]));
     } catch { /* 저장 못 씀 — 이번 화면만 */ }
   });
-  _indOn = null; _paneH = null; _vSpan = null; _maOff = null; _bars = null;
+  _indOn = null; _paneH = null; _vSpan = null; _maOff = null; _bars = null; _indHide = null;
   _memSync.forEach((fn) => fn());
   _indSync.forEach((fn) => fn());
   _legendSync.forEach((fn) => fn());
