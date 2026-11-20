@@ -93,11 +93,11 @@ function srvLoad() {
     try {
       const r = await apiFetch(DRAW_DOC, { cache: 'no-store' });
       const j = r && r.ok ? await r.json() : null;
-      if (!j || !j.ok) return;
+      if (!j || !j.ok) { srvLoading = null; return; }   // 못 받음 — 다음에 붙을 때 · 다음에 그을 때 다시 묻는다
       const d = j.data && typeof j.data === 'object' ? j.data : null;
       if (d) {
         Object.entries(d).forEach(([code, v]) => {
-          if (!v || !Array.isArray(v.h) || !Array.isArray(v.t)) return;
+          if (!v || !Array.isArray(v.h) || !Array.isArray(v.t) || srvWant.has(code)) return;   // 받기 전에 그은 종목은 그 선을 남긴다
           try {
             if (!v.h.length && !v.t.length) localStorage.removeItem(KEY(code));
             else localStorage.setItem(KEY(code), JSON.stringify(v));
@@ -114,14 +114,19 @@ function srvLoad() {
           }
         } catch { /* 못 읽음 */ }
       }
-    } catch { /* 못 읽음 — 브라우저 값으로 그린다 */ }
+      if (srvWant.size) srvFlush();              // 받기 전에 그은 선(qa · 개념정의 덧 11-20 — 못 받은 동안 그은 선이 안 올라가던 것)
+    } catch { srvLoading = null; /* 못 읽음 — 브라우저 값으로 그린다 · 다음에 다시 묻는다 */ }
   })();
   return srvLoading;
 }
 /* 바뀐 종목만 그 문서에 고쳐 쓴다 — 다른 기기가 그은 다른 종목 선을 덮지 않게 읽고 · 고치고 · 쓴다(409 면 한 번 더) */
 function srvPush(code, v) {
-  if (!srvWriter || !srvLoaded) return;          // 읽기 전에 쓰면 다른 기기 값을 옛 값으로 덮는다
+  if (!srvWriter) return;
   srvWant.set(code, v);
+  if (!srvLoaded) { srvLoad(); return; }         // 읽기 전에는 모아만 둔다 — 받은 뒤 보낸다(읽기 전에 쓰면 다른 기기 값을 옛 값으로 덮는다)
+  srvFlush();
+}
+function srvFlush() {
   clearTimeout(srvTimer.id);
   srvTimer.id = setTimeout(async () => {
     const want = new Map(srvWant); srvWant.clear();
