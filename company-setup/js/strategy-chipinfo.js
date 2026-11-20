@@ -25,10 +25,6 @@ const TIP = {
   'VI·급등': '오르는 쪽 VI 가 걸렸거나, 하루 사이 크게 뛴(급등) 종목 — 오른쪽 작은 칩 둘(VI 급상승 · VI 급등)로 따로 켜고 끔 · 둘을 더하면 이 숫자',
   'VI·급등|VI 급상승': 'VI 만 걸리고 급등 기준까지는 안 오른 종목\nVI — 값이 짧은 사이 크게 움직이면 거래소가 2분 동안 거래를 멈추고 한꺼번에 값을 정하는 것(여기서는 오르는 쪽만)',
   'VI·급등|VI 급등': '전날 종가보다 급등 기준 넘게 오른 종목(VI 가 함께 걸린 것도 여기)\n급등 기준은 서버가 정한 값 · 그날 처음 넘을 때 한 번 셈',
-  '매수|①': '① 외국인 · 기관 · 연기금 · 프로그램 넷 다 산 종목',
-  '매수|②': '② 외국인 · 기관 · 프로그램이 함께 산 종목',
-  '매수|③': '③ 기관 · 연기금이 함께 산 종목',
-  '매수|④': '④ 외국인만 산 종목',
   '매수|어림': '어림 — 외국인 · 기관 집계가 나오기 전에 먼저 보는 값\n외국계 증권사 창구와 프로그램이 둘 다 산 종목(장 열기 전에는 프로그램만) · 집계가 나오면 ①~④ 로 바뀜',
 };
 // 언제 받나 · 얼마마다(11-18 재권님 「칩에 마우스 올리면 칩설명과 시간 주기 등등 정보도 넣어줘」) — 서버가 data.meta.chipInfo{칩: 글} 을 주면 그것만 쓴다(그때 지운다) · 시각은 11-18 서버 코드에서 읽은 그대로
@@ -50,9 +46,9 @@ const WHAT = {
   초반상승: () => { const m = metaCache.초반상승 || {}; return `${COND.초반상승(m, plain)} · 시가총액 ${m.minCapEok != null ? `${Number(m.minCapEok).toLocaleString()}억 이상` : '(서버 값 못 받음)'}`; },
   자동: autoTxt,
 };
-// 풍선 글 — ctx: rules(서버 data.meta.rules) · chipInfo(서버 칩 글 · 있으면 그것만) · watchAuto(관심이 서버 자동 목록인 판)
+// 풍선 글 — ctx: subTips(서버 판 meta.subTips · 하위 칩 뜻) · rules(서버 data.meta.rules) · chipInfo(서버 칩 글 · 있으면 그것만) · watchAuto(관심이 서버 자동 목록인 판)
 export function chipTip(k, ctx = {}) {
-  if (k.includes('|')) return TIP[k] || '';
+  if (k.includes('|')) { const st = ctx.subTips && ctx.subTips[k]; return st || TIP[k] || (/^매수\|[①-④]$/.test(k) ? '서버 값 못 받음' : ''); }   // 매수 ①~④ 뜻은 서버 판 meta.subTips(한 곳 · 개발2) · 어림은 서버가 안 줘 여기 둠
   const ci = ctx.chipInfo && ctx.chipInfo[k];
   if (typeof ci === 'string' && ci) return ci;
   const R = ctx.rules || {};
