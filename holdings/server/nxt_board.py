@@ -383,6 +383,76 @@ def _fill_open_log(proxy):
         print("  [넥장 보드] 다음 날 시가 채우기 실패: %s" % safe_message(e, 120))
 
 
+# ── 프리장 시작가 날마다 (2026-11-20 · 시황분석 「미국 3지수 표」 서버 몫 ← 재권님 「나」 → 안에 「응」 · 개발1 창) ──
+# 넥스트레이드(NX) 일봉의 시가 = 그날 08:00 프리장 첫 체결 — 11-17 · 11-18 · 11-20 삼성전자 · SK하이닉스 넷이 08:00 첫 5분봉 시가와 같았다(15:0x 잼 ·
+# 통합 UN 일봉 시가도 같음). 프리장이 안 열린 날(2026-11-19 수능)은 NX 시가가 정규장 시가와 같아 그대로 쓰면 틀린다 — 그래서 날마다 「열렸나」 를 가른다:
+#     프리장 기록이 있는 날부터(nxt_pre 첫 날 · 2026-10-26)  nxt_pre 그날 줄 또는 그 종목 08:00 분봉이 있으면 값 · 없으면 null(why)
+#     그보다 앞 날                                       값을 내되 approx true — 열렸는지 가를 기록이 영영 없다
+PRE_OPEN_TTL = 600              # 일봉 다시 받는 간격(초) — 지난 날은 안 바뀌고 오늘 칸만 바뀐다 · 종목 하나에 KIS 2건
+PRE_OPEN_MAX_CODES = 10
+_pre_open_cache = {}            # code -> (받은 때, {날: 시가})
+
+
+def _nx_daily_open(proxy, cfg, code, start):
+    """{날: 시가} — NX 일봉 start(YYYYMMDD)부터 오늘까지. 한 번에 100줄이라 앞으로 물어 간다(6개월이면 두 번)."""
+    got_all, end = {}, _now().strftime("%Y%m%d")
+    for _ in range(4):
+        d = proxy.kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+                          {"FID_COND_MRKT_DIV_CODE": "NX", "FID_INPUT_ISCD": code, "FID_INPUT_DATE_1": start,
+                           "FID_INPUT_DATE_2": end, "FID_PERIOD_DIV_CODE": "D", "FID_ORG_ADJ_PRC": "0"}, "FHKST03010100")
+        got = [r for r in proxy.out_rows(d, "output2") if r.get("stck_bsop_date")]
+        for r in got:
+            o = proxy._num(r.get("stck_oprc"), int)
+            if o:
+                got_all[r["stck_bsop_date"]] = o
+        first = min((r["stck_bsop_date"] for r in got), default=None)
+        if len(got) < 100 or not first or first <= start:
+            break
+        end = (datetime.strptime(first, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
+    return {k: v for k, v in got_all.items() if k >= start}
+
+
+def pre_open(proxy, cfg, codes, months=6):
+    """{data: {code: [{date, open, approx, why}] 최신이 앞}, meta: {from, preKnownFrom, errors}} — 「없음」 은 null(0 아님)."""
+    now = _now()
+    start = (now - timedelta(days=int(31 * months))).strftime("%Y%m%d")
+    with proxy.db_conn() as conn:
+        try:
+            pre_days = {r[0] for r in conn.execute("SELECT DISTINCT day FROM nxt_pre WHERE vol > 0")}
+        except Exception:
+            pre_days = set()
+        bar_days = {}
+        for c in codes:
+            bar_days[c] = {r[0][:8] for r in conn.execute(
+                "SELECT ts FROM candles WHERE code = ? AND period IN ('1m', '5m') AND ts >= ? AND substr(ts, 9, 4) BETWEEN '0800' AND '0849'",
+                (c, start + "0000"))}
+    known_from = min(pre_days) if pre_days else None
+    data, errors = {}, {}
+    for c in codes:
+        hit = _pre_open_cache.get(c)
+        if hit and time.time() - hit[0] < PRE_OPEN_TTL and min(hit[1] or {"0": 0}) <= start:
+            opens = hit[1]
+        else:
+            try:
+                opens = _nx_daily_open(proxy, cfg, c, start)
+                _pre_open_cache[c] = (time.time(), opens)
+            except Exception as e:
+                errors[c] = safe_message(e, 120)
+                opens = (hit or (0, {}))[1]
+        rows = []
+        for day in sorted(opens, reverse=True):
+            if day < start:
+                continue
+            if known_from and day >= known_from:
+                ok = day in pre_days or day in bar_days.get(c, set())
+                rows.append({"date": day, "open": opens[day] if ok else None, "approx": False,
+                             "why": None if ok else "프리장 기록 없음 — 그날 프리장이 안 열렸거나(수능 등) 08:51 기록을 못 쌓음"})
+            else:
+                rows.append({"date": day, "open": opens[day], "approx": True, "why": None})
+        data[c] = rows
+    return {"data": data, "meta": {"from": start, "preKnownFrom": known_from, "errors": errors or None}}
+
+
 def status():
     return dict(_status)
 
