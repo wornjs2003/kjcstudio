@@ -2098,10 +2098,16 @@ const eokSigned = (won) => { if (won == null) return '—'; const v = Math.round
 /* 한 칸 — 셋의 순매수(억 · 오름 빨강 · 내림 파랑)를 한 줄에(11-05 재권님 「외 기 프 한줄로 해줘」). 13:19 에 표가 순위 칸 밖으로
    밀린 것은 폭이 아니라 시세 갱신이 이 칸을 글자로 넣던 탓이었다(paintOneRow · html). 빠진 종목만 아랫줄 「무엇이 매도로 바뀜 시각」.
    ≈ 는 상위 30 밖이라 그 종목 가집계 수량 × 현재가로 어림한 값(서버 approx) */
-/* 보이는 이름은 사는 쪽 줄임(11-19 재권님 「응」 — 단타 판과 같게 · 글자는 Insight strategy-dt30.js SUB_NAME 그대로 옮김 · 그쪽이 안 내보내 한 곳으로 못 합침 — 보드 카드) · 열쇠(서버 tier 1~4)는 그대로 */
-const jointTierTag = (code) => { const t = JOINT_TIER[jointOf(code)?.tier]; return t ? `<b data-tip="${escT(t[1])}">${t[0]}</b> ` : ''; };
-const JOINT_TIER = { 1: ['외·기·연·프', '외국인 · 기관 · 연기금 · 프로그램 넷 다 순매수'], 2: ['외·기·프', '외국인 · 기관 · 프로그램 순매수'],
-  3: ['기·연', '기관 · 연기금 순매수'], 4: ['외국인만', '외국인만 순매수'] };
+/* 보이는 이름은 사는 쪽 줄임(11-19 재권님 「응」 — 단타 판과 같게) · 열쇠(서버 tier 1~4)는 그대로.
+   이름표는 서버 한 곳(kis_proxy.JOINT_TIER_NAME)이 매수 판 응답 meta.tierNames 로 준다 — Insight 단타 판도 같은 표를 받는다(11-20 「고치면 될거같아」).
+   못 받았으면 차례 표시(①~④)와 「이름표 — 서버 값 못 받음」 풍선 */
+let JOINT_TIER = null;
+const jointTierTag = (code) => {
+  const n = jointOf(code)?.tier;
+  if (!n) return '';
+  const t = JOINT_TIER && JOINT_TIER[n];
+  return t ? `<b data-tip="${escT(t[1])}">${t[0]}</b> ` : `<b data-tip="이름표 — 서버 값 못 받음">${'①②③④'[n - 1] || n}</b> `;
+};
 function jointCell(code, narrow = false) {
   const r = jointOf(code);
   if (!r) return '—';
@@ -2173,7 +2179,7 @@ async function loadJoint() {
   try {
     const r = await apiFetch('/api/kis/joint-buy', { cache: 'no-store' });
     const j = r && r.ok ? await r.json() : null;
-    if (j && j.meta) jointMeta = j.meta;
+    if (j && j.meta) { jointMeta = j.meta; if (j.meta.tierNames) JOINT_TIER = j.meta.tierNames; }
     /* 빠진 종목에는 받을 때 flip 을 붙인다 — 목록에 넣을 때만 붙이면 jointOf 가 찾은 항목에 없어 까닭 줄이 안 나왔다(11-05 qa) */
     if (j && j.ok && Array.isArray(j.data)) { jointRows = j.data; jointFlipped = Array.isArray(j.flipped) ? j.flipped.map((x) => ({ ...x, flip: true })) : []; }
   } catch { /* 못 받으면 들고 있던 것 그대로 */ }

@@ -5543,6 +5543,12 @@ def joint_tier(fa, ia, pg, fund):
     return None
 
 
+# 「매수」 칩 차례(tier 1~4)의 이름표 — [보이는 이름, 풀어 쓴 뜻] · 한 곳(11-20 재권님 「이해했어 고치면 될거같아」 — 홈 JOINT_TIER 와 Insight SUB_NAME 두 벌을 합침).
+# 매수 판 응답 meta.tierNames · 단타 판 응답 meta.subNames 로 내주고 화면 둘이 받는다. 셈(joint_tier)을 바꾸면 이 글도 함께.
+JOINT_TIER_NAME = {1: ("외·기·연·프", "외국인 · 기관 · 연기금 · 프로그램 넷 다 순매수"), 2: ("외·기·프", "외국인 · 기관 · 프로그램 순매수"),
+                   3: ("기·연", "기관 · 연기금 순매수"), 4: ("외국인만", "외국인만 순매수")}
+
+
 def _joint_buy_make(cfg):
     """판을 새로 짓는다. 금액 단위는 원 · 값이 없으면 None."""
     now = datetime.now(KST)
@@ -10617,6 +10623,7 @@ class Handler(SimpleHTTPRequestHandler):
                              "note": "외국인 · 기관은 장중 증권사 가집계(하루 네 번) · 15:40 뒤 그날 확정치(줄마다 basis · 수는 confirmed · estimated) · 프로그램은 그날 누적 · "
                                      "셋 다 순매수 양수 · flipped 는 오늘 셋 다 샀다가 빠진 종목",
                              "estSlots": INVESTOR_EST_SLOTS,
+                             "tierNames": {str(k): list(v) for k, v in JOINT_TIER_NAME.items()},   # 줄 tier → [이름, 뜻] · 한 곳(JOINT_TIER_NAME)
                              # 쌓기(11-06) — 줄마다 first(처음 셋 다 산 시각) · hits(그날 판에 잡힌 횟수) · pgAt(프로그램 값의 시각) ·
                              # fund · person(연기금 · 개인 그날 확정치 원 · 15:45 뒤 쌓기 전에는 null) · fundIn 은 연기금 값이 든 줄 수
                              "fundIn": d.get("fundIn"), "fundAt": "%02d:%02d" % flow_rank.COLLECT_AT,
