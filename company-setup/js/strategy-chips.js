@@ -8,8 +8,7 @@
 //   · 종목은 홀딩스와 같은 서버 주소 — 목록 주소가 없는 칩(단타 · 현재상승 · 장외 — 홀딩스 화면이 순위 목록에서 셈)은 —
 import { signClass, NUM } from '/assets/js/sign.js';
 import { watch } from '/holdings/js/store/longpoll.js';   // 오늘 칩 목록 다시 받기 — 홀딩스 첫 화면과 같은 길(서버 롱폴 · 서버 주기)
-import { chipName } from './strategy-chipname.js';
-import { COND } from './strategy-chipinfo.js';   // 칩 고르는 조건 글 한 곳 — 단타 판 칩 풍선과 같은 글(11-20 재권님 「응」)   // 서버 칩 이름 「수급」 → 화면 「자동」 — 바꾸는 표는 그 파일 한 곳
+import { chipName } from './strategy-chipname.js';   // 서버 칩 이름 「수급」 → 화면 「자동」 — 바꾸는 표는 그 파일 한 곳
 import { setDtScore, dtChips, VI_SUBS, subName } from './strategy-dt30.js';   // 조건별 점수 — 단타 판과 같은 룰 문서 · 같은 저장 길 · 하위 이름 · 보이는 이름(매수 ①~④ → 사는 쪽)도 그 파일 한 곳
 
 const $ = (id) => document.getElementById(id);
@@ -52,7 +51,7 @@ const RULES = {
   // 관심 탭은 뺐다(11-12 재권님 「관심을 없애고 수급으로 대처한다」) — 같은 종목 · 같은 룰이 「자동(전일 거래량 급등)」 칩에 있다(11-18 「수급」 에서 바꿈 · 실시간 순위 이름)
   pre: {
     name: '프리장', url: '/api/kis/pre-flow',
-    rows: (m) => [['고르는 조건', COND.프리장(m, v)],
+    rows: (m) => [['고르는 조건', `넥스트레이드 프리마켓 거래대금 상위 ${v(m.topN)}위 안 · 프로그램 순매수인 종목`],
       ['시간', `${v(m.preOpen)} ~ ${v(m.preClose)} · 그 뒤 09:00 전까지 그날 판으로 굳힘`], CAPROW, ['줄 세우기', '프로그램 순매수 큰 순']],
     list: (j) => {
       const d = Array.isArray(j.data) ? j.data : [], m = j.meta || {};
@@ -62,7 +61,7 @@ const RULES = {
   },
   rise: {
     name: '초반상승', url: '/api/kis/open-rise',
-    rows: (m) => [['고르는 조건', COND.초반상승(m, v)],   // 「장 시작 몇 분 뒤」 — 11-20 재권님 「단타에 초반상승이 장시작 몇분후인지 설명에 넣어줘」 · 값은 서버 meta.barMin 그대로
+    rows: (m) => [['고르는 조건', `장 시작 ${v(m.barMin)}분 뒤 — ${v(m.barFrom)} ~ ${v(m.barTo)} 첫 ${v(m.barMin)}분봉이 시가 대비 ${v(m.risePct)}% 이상 오름 · ETF 뺌 · 늦게 여는 날은 여는 시각부터`],   // 「장 시작 몇 분 뒤」 — 11-20 재권님 「단타에 초반상승이 장시작 몇분후인지 설명에 넣어줘」 · 값은 서버 meta.barMin 그대로
       ['시가총액', `${v(m.minCapEok == null ? null : num(m.minCapEok))}억원 이상`], ['줄 세우기', '첫 봉 상승률 큰 순 · 그날 판으로 굳힘']],
     list: (j) => {
       const d = Array.isArray(j.data) ? j.data : [], m = j.meta || {};
@@ -96,7 +95,7 @@ const RULES = {
   },
   after: {
     name: '장외', url: null,
-    rows: () => [['고르는 조건', `${COND.장외()}<br><span class="rl-sug">평일 09:00 ~ 15:40 은 비어 있음</span>`], CAPROW, ['줄 세우기', '종가 대비 등락률 순']],
+    rows: () => [['고르는 조건', '정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목 · 문턱 없음<br><span class="rl-sug">평일 09:00 ~ 15:40 은 비어 있음</span>'], CAPROW, ['줄 세우기', '종가 대비 등락률 순']],
   },
 };
 
