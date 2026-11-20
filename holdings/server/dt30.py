@@ -800,8 +800,10 @@ def _sub_keep(r, o, ts):
         m = at.setdefault(chip, {})
         if "어림" not in merged:
             m.pop("어림", None)
+        first = ((o or {}).get("chipAt") or {}).get(chip) if not m else None   # 시각 기록이 아직 없는 칩(새 코드 전에 붙음) — 첫 하위는 칩이 붙은 시각(HH:MM)으로
         for x in merged:
-            m.setdefault(x, ts)
+            m.setdefault(x, first or ts)
+            first = None
     r["subAt"] = {c: v for c, v in at.items() if c in (r.get("chips") or []) and v}
 
 
@@ -852,6 +854,7 @@ def _lock_due(b, nm):
         pick = [r for r in b["rows"] if not r.get("lock")][:LOCK_N]
         for k, r in enumerate(pick, 1):
             r["lock"], r["lockAt"], r["lockRank"] = i, _hhmm(t), k
+            r["lockTs"] = _now().strftime("%H:%M:%S")      # 실제로 굳힌 때 — 서버가 늦게 떠 정한 시각(lockAt)보다 뒤에 굳힌 줄을 가르게(qa 덧 11-20)
         done.append(i)
         did.append(i)
     if did:
@@ -860,6 +863,51 @@ def _lock_due(b, nm):
         b["meta"]["lockN"] = LOCK_N
         _lock_order(b)
     return did
+
+
+def _close_min(proxy, now=None):
+    """그날 정규장 끝(분) — 장 시각 표(market_hours) · 못 읽으면 REG_CLOSE."""
+    import market_hours
+    now = now or _now()
+    try:
+        c = (market_hours.today(proxy, day=now.strftime("%Y%m%d"), now=now).get("reg") or ["", ""])[1] or market_hours.REG_CLOSE
+    except Exception:
+        c = market_hours.REG_CLOSE
+    return int(c[:2]) * 60 + int(c[2:4])
+
+
+def sub_track(proxy, cfg, b):
+    """굳힌 뒤에도(BUY_LATE 뒤 · 다시 셈 없음) 「매수」 하위 ①~④ 를 판 줄에 이어 쌓는다 — 매수 판(fetch_joint_buy · 캐시)만 읽음.
+    판 안 종목만 · 새 하위는 subs 끝에 · subAt 에 그 시각 · 매수 칩이 없던 줄은 칩을 더하고 chipAt. 바뀐 줄 수.
+    재권님 「이거 된거맞아? 중간에 바뀐거같은데 바뀐값이 없네?」(11-20 10:54) — 10:30 굳힌 뒤 다시 셈이 멈춰 하위가 안 쌓이던 것."""
+    try:
+        jd, _ = proxy.fetch_joint_buy(cfg)
+    except Exception:
+        return 0
+    if not jd or not jd.get("rows"):
+        return 0
+    tier = {r["code"]: "①②③④"[r["tier"] - 1] for r in jd["rows"] if r.get("tier") in (1, 2, 3, 4)}
+    now = _now()
+    ts, hm = now.strftime("%H:%M:%S"), now.strftime("%H:%M")
+    n = 0
+    for r in b.get("rows") or []:
+        t = tier.get(r["code"])
+        if not t or (r.get("cap") is not None and r["cap"] < CAP_MIN_EOK):
+            continue
+        if "매수" not in r["chips"]:
+            r["chips"].append("매수")
+            r.setdefault("chipAt", {}).setdefault("매수", hm)
+            order = OV_CHIPS + ("현재상승", "볼린저")
+            r["chips"] = [c for c in order if c in r["chips"]]
+            r["n"] = len(set(r["chips"]) & set(OV_CHIPS))
+        subs = [x for x in (r.setdefault("subs", {}).get("매수") or []) if x != "어림"]
+        if t not in subs:
+            subs.append(t)
+            r.setdefault("subAt", {}).setdefault("매수", {})[t] = ts
+            n += 1
+        r["subs"]["매수"] = subs
+        (r.get("subAt") or {}).get("매수", {}).pop("어림", None)
+    return n
 
 
 def _gone(old_rows, new_rows, at):
@@ -1789,6 +1837,9 @@ def start(proxy):
                             # 아침 상위는 개장 직후 창 안에서만 정한다 — 서버가 낮에 뜨면 그때 상위로 「팔 때」 를 보내지 않게(그날은 안 봄)
                             b["meta"]["tgTop"] = [r["code"] for r in sorted(b["rows"], key=lambda r: r.get("rank") or 1e9)[:TG_TOP]]   # 아침 상위 — 「팔 때」 를 보는 종목(보냄과 무관하게 적음)
                             b["meta"]["tgTopAt"] = _now().strftime("%H:%M")
+                            flow_now = True
+                        if (b.get("closed") or hm >= BUY_LATE[0] * 60 + BUY_LATE[1]) and b.get("rows") and hm < _close_min(proxy, now) \
+                                and sub_track(proxy, proxy.load_secrets(), b):   # 굳힌 뒤(10:30) · 14:00 칸을 적어 판이 닫힌 뒤에도 정규장 끝까지 매수 하위(①~④)를 이어 쌓는다
                             flow_now = True
                         if b["meta"].get("tgTop"):           # 판이 굳은 뒤(14:00)에도 정규장 끝 SELL_UNTIL_MIN 분 전까지 본다(sell_watch 가 시각을 가름 · 개념정의 걸림 11-19)
                             for r in sell_watch(proxy, proxy.load_secrets(), b):
