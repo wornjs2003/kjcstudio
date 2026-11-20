@@ -79,6 +79,7 @@ import vwap            # VWAP(거래량 가중 평균가) — 국내 분봉에 �
 import world_extra     # 우리가 안 받던 바깥 값 셋 — 바이낸스 한국 종목 선물 · 하이닉스 미국 상장분 · 원/유로 · /api/market/world-extra(2026-11-19 · server/world_extra.py)
 import leverage        # 레버리지 지표 — 한국 신용융자 · 미국 개인 빚투 · 헤지펀드 레버리지 · /api/market/leverage(2026-11-17 · server/leverage.py)
 import fear_greed      # 공포·탐욕 지수 — 코스피 · 삼성전자 · SK하이닉스 · /api/market/fear-greed(2026-11-06 · server/fear_greed.py)
+import auto_pre        # 자동 관심종목의 다음 날 프리장 5분봉 쌓기 · /api/auto-watch/pre(2026-11-20 · server/auto_pre.py)
 import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스닥 150 중 전일 거래량 급등 · 투자전략 룰로 거르고 줄 세움 · /api/auto-watch(2026-11-05 · server/auto_watch.py)
 import closing_bet     # 종가배팅 판 — 15:41 후보(nxt_board 가 부름) · 17~20시 장 뒤 · 다음 날 프리장 첫 값 · /api/nxt/closing-bet(2026-11-18)
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
@@ -8937,6 +8938,24 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
             return
+        if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/auto-watch/pre":
+            # 자동 관심종목의 다음 날 프리장 5분봉(server/auto_pre.py) — 쌓인 날 최근 days 날 · 전날 종가 대비 % · KIS 를 안 부른다
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            try:
+                days = int((q.get("days") or ["5"])[0])
+                if not 1 <= days <= 60:
+                    raise ValueError
+            except ValueError:
+                self._send_json({"ok": False, "error": "days 는 1~60 정수입니다."}, 400)
+                return
+            try:
+                self._send_json({"ok": True, "data": auto_pre.board(sys.modules[__name__], days),
+                                 "meta": dict(auto_pre.status(), unit="%",
+                                              note="전날 자동 목록 종목의 다음 거래일 넥스트레이드 08:00~08:50 5분봉 · pct 전날 정규장 종가(prevClose) 대비 · pctNx 넥스트 전일 종가(nxPrev) 대비 · "
+                                                   "state ok 체결 있음 · none 장 전 체결 없음 · nonx 넥스트 시세 못 받음 · fail 1분봉 못 받음 · 체결 없는 칸은 bars 에 없음")})
+            except Exception as e:
+                self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
+            return
         if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/auto-watch/history":
             # 자동 관심종목 다음날 결과(server/auto_watch.py history) — 걸린 날마다 종목 · 다음 거래일 등락 · 모은 값 · KIS 를 안 부른다
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -11497,6 +11516,9 @@ def main():
     if not SLOW and is_sender(args.port) and fear_greed.start(sys.modules[__name__]):
         print("  공포·탐욕    : 25 풀림 보기 (평일 %02d:%02d 뒤 한 번 · 알림 %s · /api/market/fear-greed)"
               % (fear_greed.ALERT_AT + ("켜짐" if fear_greed.SEND else "꺼짐",)))
+    # 자동 관심종목의 다음 날 프리장 5분봉(2026-11-20 · server/auto_pre.py) — 같은 문(보내는 서버만) · 평일 08:51 뒤 한 번 · 알림 없음
+    if not SLOW and is_sender(args.port) and auto_pre.start(sys.modules[__name__]):
+        print("  자동 프리장   : 사용 (평일 %02d:%02d 뒤 전날 자동 목록 종목의 넥스트 장 전 5분봉 쌓기 · /api/auto-watch/pre)" % auto_pre.RUN_AT)
     if not SLOW and is_sender(args.port) and auto_watch.start(sys.modules[__name__]):
         print("  자동 관심종목 : 사용 (평일 %02d:%02d 코스피 시총 200 · 코스닥 150 값 쌓기 · /api/auto-watch%s)"
               % (auto_watch.RUN_AT + ("" if auto_watch.ADD else " · **관심 목록 넣기 없음**",)))
