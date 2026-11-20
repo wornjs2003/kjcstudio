@@ -757,6 +757,7 @@ async function setChange(next) {
 function setRead(el) {
   const k = el.dataset.set, raw = el.value.trim().replace(/,/g, ''), S = { ...st.set };
   const bad = (t) => { $('dt-set-msg').textContent = `${t} — 되돌렸습니다`; setFill(); return null; };
+  if (k === 'cutAt') { const m = /^(\d{1,2}):?(\d{2})$/.exec(raw); if (!m || +m[1] > 15 || +m[2] > 59) return bad('시각은 10:30 꼴'); S.cutAt = m[1].padStart(2, '0') + m[2]; return S; }   // 「10:30」 꼴이라 숫자 검사 앞에서 가른다(qa 11-20)
   const v = raw === '' ? null : Number(raw);
   if (v != null && !Number.isFinite(v)) return bad('숫자만');
   if (k === 'minChip') { if (v != null && (v < 0 || !Number.isInteger(v))) return bad('0 이상 정수'); S.minChip = v || 0; }
@@ -764,7 +765,6 @@ function setRead(el) {
   else if (k === 'won') { if (v == null || v <= 0) return bad('0 보다 큰 만원'); S[S.mode === 'day' ? 'dayWon' : 'perWon'] = Math.round(v * 10000); }
   else if (k === 'stop') { if (v === 0) return bad('0 은 못 씀 · 빈칸이면 손절 안 함'); S.stop = v == null ? null : -Math.abs(v); }   // 1 · −1 둘 다 「−1%」 로
   else if (k === 'turnPct') { S.turnPct = v == null ? 0 : Math.abs(v); }
-  else if (k === 'cutAt') { const m = /^(\d{1,2}):?(\d{2})$/.exec(raw); if (!m || +m[1] > 15 || +m[2] > 59) return bad('시각은 10:30 꼴'); S.cutAt = m[1].padStart(2, '0') + m[2]; }
   else if (k === 'cutPct') { if (v == null) return bad('빈칸은 못 씀'); S.cutPct = v; }
   else if (k === 'trail') { if (v === 0) return bad('0 은 못 씀 · 빈칸이면 안 씀'); S.trail = v == null ? null : Math.abs(v); }
   return S;
