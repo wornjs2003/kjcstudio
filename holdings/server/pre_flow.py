@@ -35,6 +35,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
+import chip_rules      # 칩 룰 값 한 곳(2026-11-20) — 줄 수 · 상승 문턱
 import nxt_pre
 
 KST = timezone(timedelta(hours=9))
@@ -42,8 +43,8 @@ KST = timezone(timedelta(hours=9))
 PRE_OPEN = (8, 0)        # 넥스트레이드 프리마켓
 PRE_CLOSE = (8, 50)
 MAIN_OPEN = (9, 0)       # 이 뒤에는 NX 값에 메인장이 섞인다 — 안 짓는다
-TOP_N = 70               # 프리장 판 줄 수 — 오른 종목 중 거래대금 상위(재권님 「상승인 종목 70개」 11-12 · 전에는 40)
-RISE_MIN_PCT = 0.0       # 「상승」 — 전일 정규장 종가 대비 이 % 를 넘어야 든다(보합은 안 든다 · 재권님 (가) 11-12)
+TOP_N = chip_rules.RULES["프리장"]["topN"][0]   # 기본값(70) — 프리장 판 줄 수 · 지금 값은 top_n()(chip_rules 표 · 룰 문서 rules.chips.프리장 · 2026-11-20) · 재권님 「상승인 종목 70개」 11-12
+RISE_MIN_PCT = chip_rules.RULES["프리장"]["riseMinPct"][0]   # 기본값(0) — 전일 정규장 종가 대비 이 % 를 넘어야 든다 · 지금 값은 rise_min_pct()
 FLOW_TTL = 180           # 프리장 동안 다시 짓는 간격(초) — 화면이 다시 묻는 주기도 이 값(서버 값)
 FIRST_WAIT = 15          # 첫 판을 기다리는 최대 시간(초)
 MIN_PREV = nxt_pre.MIN_PREV   # 거래량 배율 — 앞 날 장 전 거래량 문턱(주)
@@ -143,8 +144,19 @@ def _sectors(nx):
 def pick(items):
     """프리장 판 고르기 한 곳 — items 는 {code, amt, pct} · 오른(pct > RISE_MIN_PCT) 것 중 거래대금 큰 순 TOP_N 의 code.
     등락률을 모르면 안 든다(오른 것을 고르는 판이라). 되채우기(day_top_fill · dt30)도 이것을 부른다."""
-    up = [x for x in items if (x.get("amt") or 0) > 0 and x.get("pct") is not None and x["pct"] > RISE_MIN_PCT]
-    return [x["code"] for x in sorted(up, key=lambda x: -x["amt"])[:TOP_N]]
+    rmin, n = rise_min_pct(), top_n()
+    up = [x for x in items if (x.get("amt") or 0) > 0 and x.get("pct") is not None and x["pct"] > rmin]
+    return [x["code"] for x in sorted(up, key=lambda x: -x["amt"])[:n]]
+
+
+def top_n():
+    """프리장 판 줄 수 지금 값 — chip_rules 표(룰 문서 rules.chips.프리장.topN 이 있으면 그것)."""
+    return chip_rules.get("프리장", "topN")
+
+
+def rise_min_pct():
+    """프리장 상승 문턱(%) 지금 값 — chip_rules 표."""
+    return chip_rules.get("프리장", "riseMinPct")
 
 
 def _make(proxy, cfg):
