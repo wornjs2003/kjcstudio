@@ -80,7 +80,10 @@ async function main() {
     if (!x) return '<td class="na g">못 받음</td>';
     if (x.open == null) return `<td class="na g"${x.why ? ` data-tip="${String(x.why).replace(/"/g, '&quot;')}"` : ''}>—</td>`;
     const p = pct(x.open, pv);
-    return `<td class="g"${x.approx ? ' data-tip="어림 — 그날 프리장이 열렸는지 가를 기록이 없는 날(넥스트레이드 일봉 시가)"' : ''}>${fmt(x.open, 0)}<i class="${signClass(p)}">${pctTxt(p)}${x.approx ? ' · 어림' : ''}</i></td>`;
+    // approx null = 서버가 프리장 기록 표를 못 읽어 열렸는지 못 가름(개발1 덧 11-20 · meta.preError) — 「어림」 과 가른다
+    const tag = x.approx === true ? '어림' : x.approx == null ? '못 가름' : '';
+    const tip = x.approx === true ? '어림 — 그날 프리장이 열렸는지 가를 기록이 없는 날(넥스트레이드 일봉 시가)' : x.approx == null ? `못 가름 — 서버가 프리장 기록을 못 읽어 그날 프리장이 열렸는지 모름${x.why ? ' · ' + x.why : ''}` : '';
+    return `<td class="g"${tip ? ` data-tip="${tip.replace(/"/g, '&quot;')}"` : ''}>${fmt(x.open, 0)}<i class="${signClass(p)}">${pctTxt(p)}${tag ? ' · ' + tag : ''}</i></td>`;
   };
   const usBars = Object.fromEntries(US.map(([k]) => [k, (idx.data[k] && idx.data[k].bars) || null]));
   const usPrev = Object.fromEntries(US.map(([k]) => [k, prevMap(usBars[k])]));
