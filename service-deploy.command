@@ -51,7 +51,7 @@ if [ "$(git -C "$SERVICE" rev-parse HEAD)" = "$(git -C "$WORK" rev-parse main)" 
 fi
 
 echo "  옮길 커밋:"
-git -C "$WORK" log --oneline "$before..main" | sed 's/^/      /'
+git -C "$WORK" log --oneline "$before..$main" | sed 's/^/      /'
 echo ""
 
 # **미커밋이 있으면 멈춘다.** 커밋 안 된 것은 옮기지 않는다 —
@@ -67,14 +67,16 @@ fi
 # **검수 문턱 (2026-10-15 재권님 「응 해줘」)** — 서비스에 닿는 커밋마다 보드에 「검수 통과」 줄이 있어야 옮긴다.
 # 그날 두 번 검수 전 커밋이 main 통째 옮기기에 딸려 갔다. 못 보면(보드 · git) 멈춘다 — 옮기기는 되돌릴 수 없는 쪽이다.
 # 재권님이 그래도 옮기라 하시면 KJC_DEPLOY_FORCE=1 (logs/deploy-force.log 에 남는다). 셈은 tools/deploy-gate.py 머리 주석
-if ! sh "$WORK/.claude/run-py.sh" "$WORK/tools/deploy-gate.py" "$before..main"; then
+# **문턱과 합치기가 같은 main 을 본다 (2026-11-20).** 문턱이 1분 넘게 도는 사이 main 에 커밋이 들어오면 「main」 이라는 이름은
+# 그 새 커밋을 가리켜 검수 전 것이 딸려 갔다(09:23 473c5ad). 위에서 한 번 정한 $main 해시를 둘 다에 넘긴다.
+if ! sh "$WORK/.claude/run-py.sh" "$WORK/tools/deploy-gate.py" "$before..$main"; then
   echo ""
   echo "  옮기지 않았습니다 — 위 커밋의 검수가 끝나면 다시 돌립니다"
   echo ""
   exit 1
 fi
 echo ""
-git -C "$SERVICE" merge --ff-only main
+git -C "$SERVICE" merge --ff-only "$main"
 after=$(git -C "$SERVICE" rev-parse --short HEAD)
 
 echo ""
