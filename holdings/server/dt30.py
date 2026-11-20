@@ -797,6 +797,7 @@ def _sub_keep(r, o, ts):
         if any(x != "어림" for x in merged):
             merged = [x for x in merged if x != "어림"]      # 장 전 자리표 「어림」 은 진짜 하위(①~④)가 오면 걷는다(qa 걸림 11-20)
         r.setdefault("subs", {})[chip] = merged
+        r.setdefault("subNow", {})[chip] = new[-1] if new else None   # 지금 셈의 하위 — subs 는 붙은 차례로 쌓여 끝이 지금 등급이 아니다(qa 덧 11-20 · 현대글로비스 ② → ④)
         m = at.setdefault(chip, {})
         if "어림" not in merged:
             m.pop("어림", None)
@@ -805,6 +806,7 @@ def _sub_keep(r, o, ts):
             m.setdefault(x, first or ts)
             first = None
     r["subAt"] = {c: v for c, v in at.items() if c in (r.get("chips") or []) and v}
+    r["subNow"] = {c: v for c, v in (r.get("subNow") or {}).items() if c in (r.get("chips") or [])}
 
 
 LOCK_AT = ((9, 5), (9, 30), (10, 30))   # 세 번 굳히기 — 이 시각마다 굳지 않은 줄 중 순위 위 LOCK_N 개를 굳힌다(lock 1 · 2 · 3)
@@ -878,7 +880,8 @@ def _close_min(proxy, now=None):
 
 def sub_track(proxy, cfg, b):
     """굳힌 뒤에도(BUY_LATE 뒤 · 다시 셈 없음) 「매수」 하위 ①~④ 를 판 줄에 이어 쌓는다 — 매수 판(fetch_joint_buy · 캐시)만 읽음.
-    판 안 종목만 · 새 하위는 subs 끝에 · subAt 에 그 시각 · 매수 칩이 없던 줄은 칩을 더하고 chipAt. 바뀐 줄 수.
+    판 안 종목만 · 새 하위는 subs 끝에 · subAt 에 그 시각 · 매수 칩이 없던 줄은 칩을 더하고 chipAt ·
+    subNow 에 지금 하위(매수 판에서 빠졌으면 null — 칩 · subs 는 그대로). 바뀐 수.
     재권님 「이거 된거맞아? 중간에 바뀐거같은데 바뀐값이 없네?」(11-20 10:54) — 10:30 굳힌 뒤 다시 셈이 멈춰 하위가 안 쌓이던 것."""
     try:
         jd, _ = proxy.fetch_joint_buy(cfg)
@@ -892,8 +895,16 @@ def sub_track(proxy, cfg, b):
     n = 0
     for r in b.get("rows") or []:
         t = tier.get(r["code"])
-        if not t or (r.get("cap") is not None and r["cap"] < CAP_MIN_EOK):
+        if r.get("cap") is not None and r["cap"] < CAP_MIN_EOK:
             continue
+        if not t:
+            if "매수" in (r.get("chips") or []) and (r.get("subNow") or {}).get("매수") is not None:
+                r["subNow"]["매수"] = None                    # 지금 매수 판에 없음 — 칩 · 쌓인 하위는 그대로 둔다
+                n += 1
+            continue
+        if (r.get("subNow") or {}).get("매수") != t:
+            r.setdefault("subNow", {})["매수"] = t
+            n += 1
         if "매수" not in r["chips"]:
             r["chips"].append("매수")
             r.setdefault("chipAt", {}).setdefault("매수", hm)
