@@ -29,6 +29,7 @@
 
 from datetime import datetime, timedelta, timezone
 
+import chip_rules      # 칩 룰 값 한 곳(2026-11-20) — 상승 문턱
 import dart            # 시가총액 문턱(UNIVERSE_MIN_CAP_EOK) 한 곳 — 모듈을 읽을 때 쓴다
 
 import market_hours
@@ -37,7 +38,7 @@ KST = timezone(timedelta(hours=9))
 
 BAR_MIN = 1              # 첫 봉의 길이(분) — 첫 1분봉(09:00~09:01) · 재권님 「초반상승을 첫 1분봉으로」 → 문턱 「나」 1.5%(11-18 20:0x · 그날 1분봉으로 센 하루 평균 40종목 — 5분봉 2% 셈과 비슷)
 BAR_PERIOD = "1m"        # 그 봉을 읽는 기간 — 5분봉을 받을 때 1분봉도 함께 저장된다(kis_proxy get_chart · 2026-11-11)
-RISE_PCT = 1.5           # 첫 봉 시가 대비 종가 상승률 문턱(%)
+RISE_PCT = chip_rules.RULES["초반상승"]["risePct"][0]   # 기본값(1.5%) — 첫 봉 시가 대비 종가 상승률 문턱 · 지금 값은 chip_rules.get(「초반상승」, risePct) · 룰 문서로 고침(2026-11-20)
 PAST_BAR_MIN = 5         # 지난 날 다시 셈(day_top_fill · dt30 rebuild)은 첫 5분봉 그대로 — 1분봉은 11-12 부터만 쌓여 있어 그 전 날은 셀 수 없다
 PAST_RISE_PCT = 2.0      # 〃 문턱(11-18 전 셈 그대로)
 MIN_CAP_EOK = dart.RANK_MIN_CAP_EOK   # 시가총액 문턱(억원) — 단타 · 순위 문턱 한 곳(dart.RANK_MIN_CAP_EOK · 3천억 · 재권님 「3000으로 통일」 → 「나」 11-20 · 그 전 5천억 11-12) · 단위 억원
@@ -88,7 +89,8 @@ def build(proxy, now=None):
         return dict(empty, phase="before", reset=True)
     uni, etf = _universe(proxy)
     cap_missing = sum(1 for u in uni if u["cap"] is None)
-    cand = [u for u in uni if u["cap"] is not None and u["cap"] >= MIN_CAP_EOK]
+    cap_min = dart.rank_min_cap_eok()
+    cand = [u for u in uni if u["cap"] is not None and u["cap"] >= cap_min]
     codes = [u["code"] for u in cand]
     bars = {}
     if codes:
@@ -99,6 +101,7 @@ def build(proxy, now=None):
                     [BAR_PERIOD, day + bar_hm] + codes):
                 bars[r["code"]] = dict(r)
     rows, pending, no_bar = [], 0, 0
+    rise_pct = chip_rules.get("초반상승", "risePct")
     for u in cand:
         b = bars.get(u["code"])
         if not b or not b["open"] or b["close"] is None:
@@ -110,7 +113,7 @@ def build(proxy, now=None):
                 pending += 1                 # 그 봉을 끝난 뒤에 아직 안 받았다 — 덜 찬 값일 수 있다
                 continue
         pct = (b["close"] - b["open"]) / b["open"] * 100
-        if pct >= RISE_PCT:
+        if pct >= rise_pct:
             rows.append({"code": u["code"], "name": u["name"], "market": u["market"], "cap": u["cap"],
                          "open": b["open"], "close": b["close"], "high": b["high"], "volume": b["volume"],
                          "pct": round(pct, 2)})
@@ -155,7 +158,8 @@ def _first_once(proxy, now):
     if sec < bar_end * 60 + FIRST_GRACE_SEC or now.hour * 60 + now.minute >= bar_end + FIRST_UNTIL_MIN:
         return None
     uni, _ = _universe(proxy)
-    codes = [u["code"] for u in uni if u["cap"] is not None and u["cap"] >= MIN_CAP_EOK]
+    cap_min = dart.rank_min_cap_eok()
+    codes = [u["code"] for u in uni if u["cap"] is not None and u["cap"] >= cap_min]
     todo = [c for c in codes if (proxy._minutes_fresh_upto(c) or 0) < bar_end]
     _first.update(day=day, got=0, error=None, left=len(todo), at=now.strftime("%H:%M:%S"))   # 그날 셈 — 날이 바뀌면 0 부터(개념정의 덧 11-12)
     cfg = proxy.load_secrets()

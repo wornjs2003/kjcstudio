@@ -20,6 +20,7 @@
 """
 
 import html
+import chip_rules      # 칩 룰 값 한 곳(2026-11-20) — 시가총액 문턱
 import io
 import json
 import os
@@ -70,7 +71,13 @@ VIEWER = "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=%s"
 # 2026-11-12 개수에서 문턱으로 바꿨다 — 재권님 「대상은 5천억이상 전부로」 · 「받으면 정보를 다 가져오는건데」(가) ·
 # 그날 11:29 네이버 시총 순위로 코스피 429 · 코스닥 154 = 583(전에는 350). 목록을 읽는 자리 전부가 함께 넓어진다.
 UNIVERSE_MIN_CAP_EOK = 5000  # 감시 대상 시가총액 문턱(억원) — 이 값 이상 전부(공시 감시 · 순위 목록)
-RANK_MIN_CAP_EOK = 3000      # 단타 판 · 홈 순위 칩 시가총액 문턱(억원) — 공시 감시 목록 문턱과 따로 · 한 곳(dt30 · open_rise · day_top 이 빌려 쓰고 홈은 /api/dart/universe meta 로 받음)
+RANK_MIN_CAP_EOK = chip_rules.RULES["순위"]["capMinEok"][0]   # 기본값 — 값 한 곳은 chip_rules 표(2026-11-20) · 그 문서 값까지 보려면 rank_min_cap_eok()
+# 단타 판 · 홈 순위 칩 시가총액 문턱(억원) — 공시 감시 목록 문턱과 따로 · 한 곳(dt30 · open_rise · day_top 이 빌려 쓰고 홈은 /api/dart/universe meta 로 받음)
+
+
+def rank_min_cap_eok():
+    """단타 · 순위 시가총액 문턱(억원) 지금 값 — chip_rules 표(룰 문서 rules.chips.순위.capMinEok 가 있으면 그것)."""
+    return chip_rules.get("순위", "capMinEok")
                              # 재권님 「3000으로 통일하고싶은데」 → 「가」(단타 판 · 홈 순위만 · 공시 감시는 5천억) → 「나」(목록은 그대로 · 문턱 숫자만) 11-20 ·
                              # 순위 목록이 5천억부터라 그 목록에서 고르는 칩은 실제로 거의 안 바뀐다(목록 밖 종목 시가총액은 단건 시세로 따로 받는 것만 듦)
 UNIVERSE_SIZES = (("KOSPI", 200), ("KOSDAQ", 150))   # 「상위 목록」 — 문턱 아래여도 이 순위까지는 늘 든다 ·

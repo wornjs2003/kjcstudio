@@ -86,6 +86,7 @@ import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 
 import flow_board       # 수급 정리판 — 투자자 갈래별 순매수(오늘 · 날마다 · 상위 종목)를 한 주소로 · /api/kis/flow-board(2026-11-04 · server/flow_board.py)
 import open_rise        # 초반상승 — 정규장 첫 5분봉이 시가보다 오른 종목 · 실시간 순위 「초반상승」 칩 · /api/kis/open-rise(2026-11-11 · server/open_rise.py)
 import rescan           # 지금검색 — 관심 아래 칩 룰을 누를 때 다시 셈 · /api/kis/rescan(2026-11-11 · server/rescan.py)
+import chip_rules       # 관심 아래 칩 룰 값 한 곳 · /api/kis/chip-rules(2026-11-20 · server/chip_rules.py)
 import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 · /api/kis/pre-flow(2026-11-05 · server/pre_flow.py)
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
 import day_top_fill     # 등락 상위 — 지난 거래일 판을 다시 세어 채움(장 쉬는 때 · 쓰는 서버만 · 2026-11-11 · server/day_top_fill.py)
@@ -9970,7 +9971,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": True, "data": [
                     {"rank": r["rank"], "code": r["stock_code"], "name": r["name"],
                      "cap": r["market_cap"], "market": r["market"]} for r in rows
-                ], "meta": {"rankMinCapEok": dart.RANK_MIN_CAP_EOK}})   # 홈 순위 칩 시가총액 문턱 — 서버 한 곳(11-20)
+                ], "meta": {"rankMinCapEok": dart.rank_min_cap_eok()}})   # 홈 순위 칩 시가총액 문턱 — 서버 한 곳(11-20)
                 return
 
             self._send_json({"ok": False, "error": "알 수 없는 경로입니다: %s" % route}, 404)
@@ -10511,14 +10512,21 @@ class Handler(SimpleHTTPRequestHandler):
                     "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S") if at else None,
                              "day": d.get("day"), "builtAt": d.get("hm"), "phase": ph, "noTrade": bool(d.get("noTrade")),
                              "candidates": d.get("candidates"), "programMissing": d.get("programMissing"),
-                             "amtUnit": "원", "topN": pre_flow.TOP_N,
+                             "amtUnit": "원", "topN": pre_flow.top_n(),
                              "preOpen": "%02d:%02d" % pre_flow.PRE_OPEN, "preClose": "%02d:%02d" % pre_flow.PRE_CLOSE,
-                             "riseMinPct": pre_flow.RISE_MIN_PCT,
+                             "riseMinPct": pre_flow.rise_min_pct(),
                              "note": "넥스트레이드 프리마켓 · 순위 목록 중 전일 정규장 종가보다 오른 종목의 프리장 거래대금(현재가 × 거래량 · 어림) 상위 topN · 차례는 등락률 큰 순 · program 은 그날 누적(칸만) · "
                                      "등락률은 전일 정규장 종가 대비 · ratio 는 앞 거래일 장 전 거래량 대비 · disc 는 앞 평일 15:30 뒤 공시 · "
                                      "08:50~09:00 에 그날 판으로 굳힘",
                              "cacheTtl": pre_flow.FLOW_TTL},
                 })
+                return
+
+            if route == "chip-rules":
+                # 관심 아래 칩 룰 값 — 한 곳(server/chip_rules.py · 2026-11-20 재권님 「응」) · 값은 룰 문서 rules.chips 가 있으면 그것 · 화면 룰 표 · 다른 서버가 받는다
+                self._send_json({"ok": True, "data": chip_rules.table(),
+                                 "meta": {"doc": "strategy-rules", "readTtl": chip_rules.READ_TTL,
+                                          "note": "칩마다 칸 — value 지금 값 · default 기본값 · source doc(룰 문서 값) | default · bad 범위 밖이라 안 쓴 문서 값 · docPath 문서 자리"}})
                 return
 
             if route == "pre-sector":
@@ -10529,7 +10537,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "meta": {"day": d.get("day"), "builtAt": d.get("builtAt"), "phase": d.get("phase"), "src": d.get("src"),
                              "nowAt": d.get("nowAt"), "total": d.get("total"), "reset": d.get("reset"), "noTrade": d.get("noTrade"),
                              "sectorError": d.get("sectorError"),
-                             "amtUnit": "원", "topN": pre_flow.TOP_N,
+                             "amtUnit": "원", "topN": pre_flow.top_n(),
                              "note": "대상 = 그날 프리장 판 종목(전일 종가보다 오른 종목 중 프리장 거래대금 상위 topN) · 섹터 = 네이버 WICS · "
                                      "src pre = 프리장 판 값(넥스트레이드 · 거래대금 어림) · src now = 09:00 뒤 지금 시세(전일 대비 · 누적 거래대금) · "
                                      "n 든 수 · up 지금도 오름 수 · avg 등락률 평균 · amt 거래대금 합 · missing 값 못 받은 수 · 차례 n 큰 순 → avg 큰 순 · 저녁 8시 비움",
@@ -10645,7 +10653,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S"),
                              "day": d["day"], "phase": d["phase"], "candidates": d["candidates"], "pending": d["pending"],
                              "noBar": d["noBar"], "capMissing": d["capMissing"], "etfOut": d["etfOut"],
-                             "risePct": open_rise.RISE_PCT, "minCapEok": open_rise.MIN_CAP_EOK,
+                             "risePct": chip_rules.get("초반상승", "risePct"), "minCapEok": dart.rank_min_cap_eok(),
                              "barFrom": d["barFrom"], "barTo": d["barTo"], "barMin": open_rise.BAR_MIN,
                              "note": "DB 에 쌓인 분봉 — 정규장 첫 봉(barMin 분) (종가 − 시가) ÷ 시가 · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
                              "cacheTtl": open_rise.CACHE_TTL, "first": open_rise.first_status()},
