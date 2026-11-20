@@ -652,7 +652,7 @@ async function load(day, quiet) {
   if (d.closed !== true && ms > 0 && d.day === st.days[0] && d.day === today) again = setTimeout(() => { if (st.day === d.day) load(d.day, true); }, ms);
   // 어제 판을 보는 채로 열어 둔 화면 — 오늘 판이 생기는 서버 매수 시각(meta.buyAt)의 다음 분에 한 번 맨 앞 날을 다시 받음(주기로 묻지 않음 · 빈 화면 때와 같은 셈)
   const bm = String(m.buyAt || d.buyAt || '').match(/^(\d{2}):?(\d{2})$/);
-  if (!again && bm && d.day === st.days[0] && d.day < today) {
+  if (!again && bm && d.day === st.days[0] && d.day <= today) {
     const at = new Date(t0); at.setHours(+bm[1], +bm[2] + 1, 0, 0);
     const wait = at - t0;
     if (wait > 0) again = setTimeout(() => { if (st.day === d.day) load(); }, wait);
