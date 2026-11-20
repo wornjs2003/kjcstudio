@@ -240,12 +240,13 @@ const PNL_TOP = 30, PNL_WON = 10_000_000;   // 기본값 — 재권님이 칸에
 const DEF_SET = { minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, stop: -1, turn: true, turnBy: 'both', turnPct: 0, trail: null, pyr: false, buy: 'open' };   // buy — 매수 타이밍 open(09:00 시가 · 지금까지 셈) · p1(09:01) · vi(VI 발동)   // pyr — 불타기(손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삼) · 기본 끔
 Object.assign(DEF_SET, { cut: false, cutMin: 90, cutPct: 2 });   // 시각 미달 매도(11-20) — 기본 끔 · 산 시각(30분 반올림)부터 몇 분 · % 는 셈 칸에서 고침 · 90분 = 09:00 에 산 종목은 10:30
 st.set = { ...DEF_SET };
-const TAX = { KOSPI: { tx: 0.05, rural: 0.15 }, KOSDAQ: { tx: 0.20, rural: 0 } };   // % · 코스피 = 거래세 0.05 + 농특세 0.15 · 코스닥 = 거래세 0.20
+// 거래세 · 농특세(%) — 서버 한 곳(dt30_win.TAX)이 판 meta.tax 로 준다 · 화면은 보이기만 · 바꾸는 것은 증권수수료 칸 하나(11-20 재권님 「증권사 세율만 조절되도록 남기면되, 단타에 표기는 해놓고」) · 못 받으면 세금 못 셈(「—」)
+const taxOf = (m) => ((st.data && st.data.meta && st.data.meta.tax) || {})[String(m || '').toUpperCase()] || null;
 const MKT = { KOSPI: '코스피', KOSDAQ: '코스닥' };
 const manTxt = (w) => { const m = Number(w) / 10000; return !Number.isFinite(m) ? '—' : m >= 10000 && m % 10000 === 0 ? `${num(m / 10000)}억원` : `${num(m)}만원`; };   // 원 → 만원 · 1억 단위면 억원
 const won = (x) => (x == null || !Number.isFinite(x) ? '—' : `${x < 0 ? '-' : x > 0 ? '+' : ''}${Math.abs(Math.round(x)).toLocaleString('ko-KR')}원`);
 const wonPlain = (x) => (x == null || !Number.isFinite(x) ? '—' : `${Math.round(x).toLocaleString('ko-KR')}원`);
-const taxTxt = (r) => { const m = String(r.market || '').toUpperCase(), T = TAX[m]; return T ? `${MKT[m]} ${num(T.tx, 2)}${T.rural ? ` + ${num(T.rural, 2)}` : ''}%` : '<span class="st-err">—</span>'; };
+const taxTxt = (r) => { const m = String(r.market || '').toUpperCase(), T = taxOf(m); return T ? `${MKT[m]} ${num(T.tx, 2)}${T.rural ? ` + ${num(T.rural, 2)}` : ''}%` : '<span class="st-err">—</span>'; };
 const mean = (v) => (v.length ? v.reduce((a, b) => a + b, 0) / v.length : null);
 const sgn = (x) => (x == null ? '—' : `${x > 0 ? '+' : ''}${num(x, 2)}%`);
 
@@ -326,7 +327,7 @@ function calc(d) {
   const R = rows.map((r) => { const p = times.map((t) => ch(r, t)); const s = sellAt(p, times, (buyOf(r) || {}).at); let last = L; while (last >= 0 && p[last] == null) last--; const nowCh = LIVE && s.k < 0 && Number(r.now) > 0 && buyOf(r) ? (Number(r.now) / buyOf(r).px - 1) * 100 : null;   // 장중 · 안 판 종목 — 결과 · 손익은 서버 지금 값(rows[].now)
     const at = s.k >= 0 ? s.k : last, sellPx = nowCh != null ? Number(r.now) : at >= 0 ? Number((r.px || {})[times[at]]) : null;
     const b = buyOf(r) ? buyOf(r).px : 0, qty = b > 0 ? Math.floor(perOf(r) / b) : 0;
-    const T = TAX[String(r.market || '').toUpperCase()] || null;
+    const T = taxOf(r.market);
     const pnl = qty > 0 && Number.isFinite(sellPx) ? (() => {
       const buyAmt = qty * b, sellAmt = qty * sellPx;
       const tx = T ? sellAmt * T.tx / 100 : null, rural = T ? sellAmt * T.rural / 100 : null;
@@ -674,6 +675,8 @@ async function load(day, quiet) {
   const d = renameChips(j.data), m = renameChips(j.meta || {});
   st.days = Array.isArray(m.days) ? m.days : [d.day];   // 몇 날을 두는지는 서버(daysKeep) 한 곳 — 화면은 자르지 않음(11-12 재권님 「룰이 확립되면 많이 늘릴거야」)
   st.day = d.day; st.data = d;
+  { const T = (d.meta || {}).tax, f = (x) => `${num(x, 2)}%`, el = $('dt-tax');   // 세율 글 — 서버 고정값 그대로(설명 글 룰 1번 · 괄호는 재권님이 넣는 값 자리라 안 씀)
+    if (el) el.innerHTML = T && T.KOSPI && T.KOSDAQ ? `거래세 · 농특세 <span class="rl-sug">코스피 거래세 ${f(T.KOSPI.tx)} · 농특세 ${f(T.KOSPI.rural)} · 코스닥 거래세 ${f(T.KOSDAQ.tx)} · 농특세 ${f(T.KOSDAQ.rural)} · 팔 때만 · 서버 고정값</span>` : '거래세 · 농특세 <span class="rl-sug">서버 값 못 받음</span>'; }
   if (st.sfDay !== d.day) { st.sfDay = d.day; loadSector(d.day); }   // 날을 바꿀 때만 — 다시 받는 간격은 섹터수급 쪽이 서버 값으로
   if (d.day === st.days[0]) viLoad(d.day);   // 오늘(맨 앞 날) 판만 — 시각 주소가 오늘 것만 준다
   if (d.day === st.days[0] && !wx.data && !wx.timer) wxLoad();   // 지금 바깥 값 — 처음 한 번 · 그 뒤는 서버 ttlSec 대로
@@ -885,6 +888,7 @@ const TPL = `
                 <div style="display:flex;flex-wrap:wrap;gap:4px 14px"><label class="dt-fee">손절 <input data-set="stop" class="rl-in rl-num" inputmode="decimal" aria-label="손절(매수가 대비 %)">% <span class="rl-sug">빈칸 = 안 함</span></label> <label class="dt-fee" data-tip="산 시각을 30분 단위로 반올림합니다(09:14 → 09:00 · 09:16 → 09:30) · 거기서 넣은 분이 지난 칸 값으로 봅니다 · 손절 · 꺾임으로 안 팔린 종목이 매수가 대비 그 % 를 넘지 못했으면 그 값에 팝니다 · 그 칸 값이 없으면 그 뒤 첫 칸">시각 미달 <span class="dt-seg"><button type="button" class="kh-chip" data-cut="1">켬</button><button type="button" class="kh-chip" data-cut="0">끔</button></span> 산 시각(30분 반올림)부터 <input data-set="cutMin" class="rl-in rl-num" inputmode="numeric" aria-label="시각 미달 — 산 시각부터 몇 분">분에 <input data-set="cutPct" class="rl-in rl-num" inputmode="decimal" aria-label="시각 미달 — 매수가 대비 몇 %">% 넘지 못하면 팜</label></div>
                 <label class="dt-fee">꺾임 <span class="dt-seg"><button type="button" class="kh-chip" data-turn="1">켬</button><button type="button" class="kh-chip" data-turn="0">끔</button></span> <span class="dt-seg"><button type="button" class="kh-chip" data-turnby="prev">앞 시각 대비</button><button type="button" class="kh-chip" data-turnby="peak">고점 대비</button><button type="button" class="kh-chip" data-turnby="both">둘 다</button></span> <span data-turnfor="prev">앞 시각보다 <input data-set="turnPct" class="rl-in rl-num" inputmode="decimal" aria-label="꺾임 — 앞 시각보다 몇 % 넘게 내리면 팜">% 넘게 내리면 팜 <span class="rl-sug">그 이하는 무시 · 빈칸 = 0</span></span><span data-turnsep hidden> · </span><span data-turnfor="peak" hidden>오른 뒤 가장 높던 값보다 <input data-set="trail" class="rl-in rl-num" inputmode="decimal" aria-label="꺾임 — 고점 대비 몇 % 내리면 팜">% 내리면 팜 <span class="rl-sug">빈칸 = 안 씀</span></span></label>
                 <label class="dt-fee">증권수수료 <input id="dt-fee" class="rl-in rl-num" inputmode="decimal" aria-label="증권수수료(%) — 팔 때만" placeholder="( )">% <span class="rl-sug">팔 때만 · 넣으면 저장되고 바로 다시 셈</span> <span id="dt-fee-msg" class="rl-sug"></span></label>
+                <span class="dt-fee" id="dt-tax">거래세 · 농특세 <span class="rl-sug">서버 값 못 받음</span></span>
               </div>
                 <label class="dt-fee" data-tip="이 시각마다 그때 차례 위 종목을 굳힘 · 빈칸이면 서버 기본 시각 · 고치면 다음 판부터">굳힘 시각 <input data-set="lock0" class="rl-in rl-num" style="width: 4.2em;" aria-label="첫째 굳힘 시각"> <input data-set="lock1" class="rl-in rl-num" style="width: 4.2em;" aria-label="둘째 굳힘 시각"> <input data-set="lock2" class="rl-in rl-num" style="width: 4.2em;" aria-label="셋째 굳힘 시각"> <span class="rl-sug">빈칸 = 서버 기본 · 다음 판부터</span></label>
             </div>

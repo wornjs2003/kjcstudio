@@ -8,7 +8,7 @@
               판이 다시 저장되면(되채움 등 · saved_at 이 바뀜) 그날 줄도 다시 · 남은 판(지난 30거래일)은 서버가 뜬 뒤 처음 바퀴에 채운다 — KIS 안 씀
     이김      세후 손익이 0 보다 크다 — 화면(strategy-dt30.js calc)과 같은 셈(개념정의 검수 11-18):
               세후 % = (판 값 − 산 값 − 판 값 × (거래세 + 농특세 + 수수료)) ÷ 산 값 × 100 · 세금 · 수수료 둘 다 팔 때만(재권님 「증권수수료는 팔때만」 11-18)
-              세율은 아래 TAX(시장마다) — **화면 TAX 와 두 곳이다**(화면이 meta.tax 를 읽으면 한 곳) · 시장을 모르면 세금을 못 셈 → 「못 잼」
+              세율은 아래 TAX(시장마다) 한 곳 — 단타 판 응답 meta.tax 로 화면이 받는다(11-20 재권님 「증권사 세율만 조절되도록 남기면되, 단타에 표기는 해놓고」) · 시장을 모르면 세금을 못 셈 → 「못 잼」
               수수료는 룰 문서 strategy-rules 의 rules.dt30.feePct 한 곳(화면 칸 · 재권님이 넣으심)
               빈칸이면 수수료 없이 셈하고 meta.fee 에 null · meta.feeNote 「빈칸 — 수수료 안 셈」(0 으로 보지 않는다)
               승률은 주소가 부를 때 그때 수수료로 셈한다 — 수수료를 바꾸면 지난 날에도 바로 든다(쌓는 것은 손익뿐)
@@ -35,7 +35,7 @@ TOP_DAY = 5                  # 날마다 이익 큰 종목 수
 DAYS_DEFAULT = 30
 TICK = 60                    # 끝난 판을 보는 간격(초)
 RISE_CHIP = "현재상승"
-TAX = {"KOSPI": {"tx": 0.05, "rural": 0.15}, "KOSDAQ": {"tx": 0.20, "rural": 0.0}}   # % · 2026 세율 — 화면 strategy-dt30.js TAX 와 같은 값(두 곳)
+TAX = {"KOSPI": {"tx": 0.05, "rural": 0.15}, "KOSDAQ": {"tx": 0.20, "rural": 0.0}}   # % · 2026 세율(KB증권 「2026년 증권거래세율 변경 안내」) · 한 곳 — 단타 판 화면은 dt30 판 meta.tax 로 받음 · 단타 판에서 못 바꿈(재권님 11-20 14:09)
 VER = "v6"                   # 쌓는 줄 모양이 바뀌면 올린다 — 옛 줄을 다시 쌓는다(v2 · 시장 칸 · v3 · 11-18 전 판 칩 이름 옮김 · v4 · 칩 둘 이상만 · v5 · 칩 붙은 시각 chipAt · subAt · buyAt · lockAt 11-20 · v6 · buyTs · lockTs 실제 시각 11-20)
 _SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_win (day TEXT PRIMARY KEY, src_saved TEXT, rows TEXT NOT NULL, at TEXT)"
 _status = {"error": None, "filled": 0, "at": None}
