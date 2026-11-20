@@ -9958,7 +9958,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": True, "data": [
                     {"rank": r["rank"], "code": r["stock_code"], "name": r["name"],
                      "cap": r["market_cap"], "market": r["market"]} for r in rows
-                ]})
+                ], "meta": {"rankMinCapEok": dart.RANK_MIN_CAP_EOK}})   # 홈 순위 칩 시가총액 문턱 — 서버 한 곳(11-20)
                 return
 
             self._send_json({"ok": False, "error": "알 수 없는 경로입니다: %s" % route}, 404)
