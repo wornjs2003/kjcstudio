@@ -205,8 +205,11 @@ function buyOf(r) {   // → { px, at(HHMM), src } | null
   if (k === 'vi') { const o = r.viPx; if (o && o.at && late(hhmm(o.at))) return inB(); return o && Number(o.px) > 0 && o.at ? { px: Number(o.px), at: hhmm(o.at), src: `VI ${String(o.at).slice(0, 5)}` } : null; }
   return Number(r.buy) > 0 ? { px: Number(r.buy), at: hhmm(r.buyAt || openHM()), src: r.buySrc || '시가' } : null;
 }
-function sellAt(p, times = []) {   // p — 시각마다 매수가 대비 %(null 은 값 없음) · times — 그 칸 시각 → { k: 판 시각 차례 또는 -1, why }
+// 산 시각 → 판정 시각(HHMM) — 30분 단위 반올림(분 15 이상이면 다음 30분) 뒤 min 분 · 값을 모르면 ''
+const cutTime = (at, min) => { const t = hhmm(at); if (!/^\d{4}$/.test(t)) return ''; const m0 = +t.slice(0, 2) * 60 + +t.slice(2), r = Math.floor((m0 + 15) / 30) * 30 + (Number(min) || 0); return String(Math.floor(r / 60)).padStart(2, '0') + String(r % 60).padStart(2, '0'); };
+function sellAt(p, times = [], inAt = '') {   // p — 시각마다 매수가 대비 %(null 은 값 없음) · times — 그 칸 시각 · inAt — 산 시각(HHMM) → { k: 판 시각 차례 또는 -1, why }
   const S = st.set; let pk = 0, cutDone = false;
+  const cutHM = S.cut ? cutTime(inAt, S.cutMin) : '';
   for (let k = 0; k < p.length; k++) {
     if (p[k] == null) continue;
     if (S.stop != null && p[k] <= S.stop) return { k, why: '손절' };
@@ -217,8 +220,9 @@ function sellAt(p, times = []) {   // p — 시각마다 매수가 대비 %(null
     if (S.turn && (S.turnBy || 'both') !== 'peak' && a >= 0 && p[a] > 0 && ((100 + p[k]) / (100 + p[a]) - 1) * 100 < -S.turnPct) return { k, why: '꺾임' };
     if (S.turn && (S.turnBy || 'both') !== 'prev' && S.trail != null && pk > 0 && ((100 + p[k]) / (100 + pk) - 1) * 100 <= -S.trail) return { k, why: '고점' };
     // 시각 미달 매도(11-20 재권님 「10시 30분까지 2%초과되지 않는 종목은 매도한다. 버튼 켰다 끄게 해줘」 → (가) 그 시각 값) — 손절 · 꺾임을 먼저 보고 안 팔린 종목만
-    //   cutAt 시각(그 칸 값이 없으면 그 뒤 첫 값 있는 칸) 한 번만 본다 · 매수가 대비 cutPct% 를 넘지 못했으면(같아도) 그 칸 값에 판다
-    if (S.cut && !cutDone && hhmm(times[k]) >= S.cutAt) { cutDone = true; if (p[k] <= S.cutPct) return { k, why: '미달' }; }
+    //   11-20 재권님 「들어온 시간대를 보고 30분의 반올림 값으로 16분이면 30분으로 적용하고 14분이면 정시로 … 그시각 부터 몇분 은 내가 조절할수있게」
+    //   산 시각을 30분 단위로 반올림(15분부터 올림)한 때 + cutMin 분 칸(그 칸 값이 없으면 그 뒤 첫 값 있는 칸) 한 번만 본다 · 매수가 대비 cutPct% 를 넘지 못했으면(같아도) 그 칸 값에 판다
+    if (S.cut && !cutDone && cutHM && hhmm(times[k]) >= cutHM) { cutDone = true; if (p[k] <= S.cutPct) return { k, why: '미달' }; }
     pk = Math.max(pk, p[k]);
   }
   return { k: -1, why: '' };
@@ -233,7 +237,7 @@ const PNL_TOP = 30, PNL_WON = 10_000_000;   // 기본값 — 재권님이 칸에
 // 셈 칸 기본값 (11-18) — minChip 칩 N개 이상만(0 = 전체) · top 상위 몇 종목 · 돈은 전체 금액 dayWon 을 그 종목 수로 똑같이 나눔
 //   11-18 재권님 「금액은 전체 금액으로 해주고 종목만큼 나눈다 라는 룰로 해줘 금액을 맨앞으로」 — 종목마다(each) 갈래는 걷음 · 기본 전체 금액 = 지금까지의 기본(상위 30 × 1,000만원)과 같은 3억
 const DEF_SET = { minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, stop: -1, turn: true, turnBy: 'both', turnPct: 0, trail: null, pyr: false, buy: 'open' };   // buy — 매수 타이밍 open(09:00 시가 · 지금까지 셈) · p1(09:01) · vi(VI 발동)   // pyr — 불타기(손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삼) · 기본 끔
-Object.assign(DEF_SET, { cut: false, cutAt: '1030', cutPct: 2 });   // 시각 미달 매도(11-20) — 기본 끔 · 시각 · % 는 셈 칸에서 고침
+Object.assign(DEF_SET, { cut: false, cutMin: 90, cutPct: 2 });   // 시각 미달 매도(11-20) — 기본 끔 · 산 시각(30분 반올림)부터 몇 분 · % 는 셈 칸에서 고침 · 90분 = 09:00 에 산 종목은 10:30
 st.set = { ...DEF_SET };
 const TAX = { KOSPI: { tx: 0.05, rural: 0.15 }, KOSDAQ: { tx: 0.20, rural: 0 } };   // % · 코스피 = 거래세 0.05 + 농특세 0.15 · 코스닥 = 거래세 0.20
 const MKT = { KOSPI: '코스피', KOSDAQ: '코스닥' };
@@ -312,7 +316,7 @@ function calc(d) {
   const n = Math.min(S.top, rows.length), nb = rows.slice(0, n).filter((r) => buyOf(r)).length;   // 매수가 없는 종목 몫은 나누지 않음(qa 11-18 — 안 쓰는 돈이 생겼음)
   const per = S.mode === 'day' ? (nb ? S.dayWon / nb : 0) : S.perWon;
   const ch = (r, t) => { const B = buyOf(r), v = Number((r.px || {})[t]); return !B || hhmm(t) <= B.at || (r.px || {})[t] == null || !Number.isFinite(v) ? null : (v / B.px - 1) * 100; };   // 산 시각 앞 칸은 비움
-  const R = rows.map((r) => { const p = times.map((t) => ch(r, t)); const s = sellAt(p, times); let last = L; while (last >= 0 && p[last] == null) last--; const nowCh = LIVE && s.k < 0 && Number(r.now) > 0 && buyOf(r) ? (Number(r.now) / buyOf(r).px - 1) * 100 : null;   // 장중 · 안 판 종목 — 결과 · 손익은 서버 지금 값(rows[].now)
+  const R = rows.map((r) => { const p = times.map((t) => ch(r, t)); const s = sellAt(p, times, (buyOf(r) || {}).at); let last = L; while (last >= 0 && p[last] == null) last--; const nowCh = LIVE && s.k < 0 && Number(r.now) > 0 && buyOf(r) ? (Number(r.now) / buyOf(r).px - 1) * 100 : null;   // 장중 · 안 판 종목 — 결과 · 손익은 서버 지금 값(rows[].now)
     const at = s.k >= 0 ? s.k : last, sellPx = nowCh != null ? Number(r.now) : at >= 0 ? Number((r.px || {})[times[at]]) : null;
     const b = buyOf(r) ? buyOf(r).px : 0, qty = b > 0 ? Math.floor(per / b) : 0;
     const T = TAX[String(r.market || '').toUpperCase()] || null;
@@ -374,7 +378,7 @@ function paint(d) {
   st.last[d.day] = resAvg;
   const bm = d.meta || {}, nm = (a) => names(a).join(' · ');   // 되채운 날 · 못 받은 칩 — 칩 이름은 서버가 준 그대로
   const rebuilt = bm.rebuilt === true ? ` · 되채운 날${nm(bm.missing) ? ` · ${nm(bm.missing)} 못 셈` : ''}${nm(bm.approx) ? ` · ${nm(bm.approx)} 어림` : ''}` : `${nm(bm.missing) ? ` · 못 받은 칩 ${nm(bm.missing)}` : ''}${nm(bm.early) ? ` · ${nm(bm.early)} 어림(집계 전)` : ''}${bm.late && typeof bm.late === 'object' && Object.keys(bm.late).length ? ` · 늦게 채움 ${Object.entries(bm.late).map(([k, v]) => `${k} ${v}`).join(' · ')}` : ''}`;
-  $('dt-meta').textContent = `${dayTxt(d.day)}${rebuilt}${LIVE ? ` · 장중 실시간(${esc(String(d.nowAt || '—'))} 값 · 14:00 뒤 굳혀 저장)` : d.closed === true ? ' · 14:00 뒤 굳힌 값' : ''} · 후보 ${num(all.length)} 중 켜진 칩에 걸린 ${num(live.length)} · 보이는 ${num(rows.length)} · ${d.buyAt ? (st.openAt ? `${hmTxt(d.buyAt)} 부터 판 · 매수가 = 정규장 ${hmTxt(String(st.openAt).replace(':', ''))} 시가` : `${hmTxt(d.buyAt)} 매수`) : '매수 시각 —'} · 판 것 ${sold.length}(손절 ${sold.filter((x) => x.s.why === '손절').length} · 꺾임 ${sold.filter((x) => x.s.why === '꺾임').length} · 고점 ${sold.filter((x) => x.s.why === '고점').length} · ${hmTxt(st.set.cutAt)} 미달 ${sold.filter((x) => x.s.why === '미달').length}) · 끝까지 들고 감 ${R.length - sold.length} · 결과 평균 ${sgn(resAvg)} · 이긴 것 ${res.filter((v) => v > 0).length} · 진 것 ${res.filter((v) => v < 0).length}`;
+  $('dt-meta').textContent = `${dayTxt(d.day)}${rebuilt}${LIVE ? ` · 장중 실시간(${esc(String(d.nowAt || '—'))} 값 · 14:00 뒤 굳혀 저장)` : d.closed === true ? ' · 14:00 뒤 굳힌 값' : ''} · 후보 ${num(all.length)} 중 켜진 칩에 걸린 ${num(live.length)} · 보이는 ${num(rows.length)} · ${d.buyAt ? (st.openAt ? `${hmTxt(d.buyAt)} 부터 판 · 매수가 = 정규장 ${hmTxt(String(st.openAt).replace(':', ''))} 시가` : `${hmTxt(d.buyAt)} 매수`) : '매수 시각 —'} · 판 것 ${sold.length}(손절 ${sold.filter((x) => x.s.why === '손절').length} · 꺾임 ${sold.filter((x) => x.s.why === '꺾임').length} · 고점 ${sold.filter((x) => x.s.why === '고점').length} · 산 뒤 ${st.set.cutMin}분 미달 ${sold.filter((x) => x.s.why === '미달').length}) · 끝까지 들고 감 ${R.length - sold.length} · 결과 평균 ${sgn(resAvg)} · 이긴 것 ${res.filter((v) => v > 0).length} · 진 것 ${res.filter((v) => v < 0).length}`;
   // 상위 몇 종목 · 금액은 이 줄에서 바로 넣는다(11-18 재권님 「상위종목 갯수넣을수 있게 금액도 넣을수 있게 … 이거 수정하면 일별로 다 값이 다시 적용되서 그달 총액 다시 정산되게」) — 바꾸면 그날 판 · 달 합계(monthPaint)가 같은 셈으로 다시 셈
   const IN_TOP = '<input data-set="top" class="rl-in rl-num" inputmode="numeric" aria-label="상위 몇 종목">', IN_WON = '<input data-set="won" class="rl-in rl-num" inputmode="numeric" aria-label="금액(만원)">';
   const head = `총 ${IN_WON}만원 ÷ 상위 ${IN_TOP}종목`;   // 재권님 「종목에 똑같이 나눠 - 종목마다 3000만원 이것을 종목 으로 바꿔」 → 「앞에 금액은 총금액이고 종목수로 나눠서 사는걸로」 — 총액을 종목 수로 똑같이 나눠 삼(종목마다 몫은 손익 칸 머리에)
@@ -477,6 +481,15 @@ function paint(d) {
   const CS = colsOf(), nCol = CS.length;
   // 매수가 규칙(11-20 재권님 「판에 들어있으면 9시 1분가격으로 적고 판에 들어오면 들어올때 가격으로」 · 서버 개발2) — 그 규칙으로 지은 판(줄에 buyTs · buySrc 「9시 1분 값」)만 머리 글을 바꿈 · 옛 판은 「시가」 그대로
   const newBuy = newBuyOf(d);
+  // 한 종목 두 줄(11-20 재권님 「한진칼에 대한 칩들이 다 있고 그아래줄을 추가해서 매수에 대한 오른쪽 줄이 다 있는걸」 → 그림 다듬기 넷 → 「응 맞아」)
+  //   윗줄 = 시가총액 · 섹터 · 오늘 프리장 · 칩 칸(칸마다 같은 폭으로 왼쪽부터 · 그리고 나서 폭을 맞춤 fitTop) / 아랫줄 = 매수가 ~ 손익 · 순번 · 종목 칸은 두 줄을 걸침
+  //   칩 이름은 알약 · 들어온 시각은 이름 아래(「옆으로 시간쓰지말고 아래로」) · 초반상승은 프리장 뒤(「프리장과 vi급등 사이로」) · 겹침은 종목 이름 옆 배지(「5개 빨강 4개 보라 3개 노랑」)
+  //   좁은 창에선 순번 ~ 들어온 가격 · 결과 ~ 손익은 붙고 시각 칸만 옆으로 밀림(「해상도가 낮아지면 든시각 옆에서 2시까지가 가로로 스크롤」 · fitSticky)
+  const DS = (() => { const a = CS.filter((c) => c !== '초반상승'), p = a.indexOf('프리장'); if (a.length < CS.length) a.splice(p >= 0 ? p + 1 : a.length, 0, '초반상승'); return a; })();   // 보이는 차례만 바꿈 — 칸 목록(colsOf) 차례는 그대로
+  const NB = times.length + 7;   // 아랫줄 칸 수 — 매수가 · 9시1분 · 들어온 가격 · 시각들 · 결과 · 다음 날 프리장 · 세금 · 손익
+  const addC = (h, k) => h.replace(/^<(td|th)(?: class="([^"]*)")?/, (m, t, c) => `<${t} class="${k}${c ? ` ${c}` : ''}"`);   // 칸 글 맨 앞 태그에 클래스 더하기
+  const box = (h) => addC(h, 'dt-bx').replace(/^<t[dh]/, '<div').replace(/<\/t[dh]>$/, '</div>');   // 칸(td · th) 글을 윗줄 상자(div)로
+  const SL = (h) => addC(h, 'dt-sl'), SR = (h) => addC(h, 'dt-sr');   // 옆으로 밀 때 왼쪽 · 오른쪽에 붙는 칸
   const chHead = (c) => { const on = !st.off.has(c), ms = st.miss.has(c), n = all.filter((r) => (r.chips || []).includes(c)).length;
     const subs = subOrder(c, [...new Set(all.flatMap((r) => subsOf(r, c)))]);
     const tip = ms ? ` data-tip="${esc(`그날 판에 ${c} 값을 ${missWord()} — 걸린 종목이 있어도 0 으로 셈됨`)}"` : tipAt(c);
@@ -484,31 +497,56 @@ function paint(d) {
       subs.length ? `<span class="dt-subs">${subs.map((x) => { const k = `${c}|${x}`, son = on && !st.subOff.has(k); return `<button type="button" class="dt-sub-chip${son ? ' is-on' : ''}" data-sub="${esc(k)}"${tipAt(k)} aria-pressed="${son}"${on ? '' : ' disabled'}>${esc(subName(c, x))}<b>${all.filter((r) => subsOf(r, c).includes(x)).length}</b></button>`; }).join('')}</span>` : ''}</span><small>${on ? (ms ? missWord() : st.wait.has(c) ? `${st.openAt ? hmTxt(String(st.openAt).replace(':', '')) : '정규장'} 뒤` : '켜짐') : '꺼짐'}</small></th>`; };
   const chCell = (r, c) => { const on = !st.off.has(c), has = (r.chips || []).includes(c), sb = has ? subsOf(r, c) : [];
     const vt = has && c === 'VI·급등' ? viTxt(r) : '';
-    // 하위 칩을 붙은 차례대로 각각 · 그 옆에 처음 붙은 시각(11-20 재권님 「외국인 기관으로 바뀌면 둘다 있어야해 수급칩은 각각 다 보이게 해주고 추가된 칩은 추가된 시간도」) — 서버 rows[].subAt{칩:{하위:HH:MM:SS}}(개발2) 이 있을 때만 · 없으면 옛 모양
+    // 하위 칩을 붙은 차례대로 각각 · 그 아래 처음 붙은 시각(11-20 재권님 「외국인 기관으로 바뀌면 둘다 있어야해 수급칩은 각각 다 보이게 해주고 추가된 칩은 추가된 시간도」) — 서버 rows[].subAt{칩:{하위:HH:MM:SS}}(개발2) 이 있을 때만 · 없으면 옛 모양
     const at = has && r.subAt && r.subAt[c], raw = at ? subsRaw(r, c) : [];
-    const each = raw.length ? raw.map((x) => `<i class="dt-chs">${esc(subName(c, x))}</i>${at[x] ? `<small>${esc(String(at[x]))}</small>` : ''}`).join('') : '';
-    const v = has ? `<span class="dt-cg" data-i="${colorOf(c)}">${each || (sb.length ? `<i class="dt-chs">${esc(subTxt(c, sb))}</i>` : '<b class="dt-dot" aria-label="걸림"></b>')}${vt ? `<small>${esc(vt)}</small>` : ''}</span>`
+    const g = (nm, t) => `<span class="dt-chg"><i class="dt-chs">${nm}</i>${t ? `<small>${t}</small>` : ''}</span>`;   // 칩 이름 알약 + 그 아래 시각 한 묶음
+    const each = raw.length ? raw.map((x) => g(esc(subName(c, x)), at[x] ? esc(String(at[x])) : '')).join('') : '';
+    const v = has ? `<span class="dt-cg" data-i="${colorOf(c)}">${each ? `${each}${vt ? `<small class="dt-vt">${esc(vt)}</small>` : ''}` : sb.length ? g(esc(subTxt(c, sb)), vt ? esc(vt) : '') : `<b class="dt-dot" aria-label="걸림"></b>${vt ? `<small class="dt-vt">${esc(vt)}</small>` : ''}`}</span>`
       : st.miss.has(c) ? `<span class="dt-chq" data-tip="${esc(`그날 판에 ${c} 값을 ${missWord()} — 이 종목이 걸렸는지 모름`)}">—</span>`
       : st.wait.has(c) ? `<span class="dt-chq" data-tip="${esc(`아직 때가 아님 — ${c} 은 정규장${st.openAt ? `(${st.openAt})` : ''} 뒤에 셈`)}">·</span>` : '';
     return `<td class="dt-chc${on ? '' : ' is-off'}">${v}</td>`; };
-  const chBlank = (th) => CS.map(() => `<${th} class="dt-chc"></${th}>`).join('') + `<${th} class="dt-ovn"></${th}><${th} class="dt-addc"></${th}>`;
-  // 어제 미국장 — 시각 눈금 줄(둘째 머리줄)의 왼쪽 빈칸(종목 ~ 매수가 아래)에 넣음 · 머리줄과 함께 위에 붙음(11-19 재권님 「단타에 어제미국장 목록을 시간나오는곳 라인으로 맞춰서 거기에 있도록 해줘」) — 전에는 머리줄 아래 따로 한 줄
-  const usTh = `<th class="dt-ust" colspan="${CS.length + 8}" style="text-align: left; white-space: normal; font-weight: 400;"><span class="dt-us" id="dt-us" data-day="${esc(d.day || '')}">${usHtml(d.day)}</span></th>`;   // 줄바꿈 · 왼쪽 맞춤은 이 칸만(머리 칸 기본은 한 줄 · 오른쪽)
+  // 겹침 배지 — 수마다 색(5 이상 빨강 · 4 보라 · 3 노랑 · 그 밖 회색) · 점수표가 있으면 점수 · 못 받은 칩 수는 그 아래
+  const ovB = (r) => { const n = nLive(r), k = CS.filter((c) => !st.off.has(c) && st.miss.has(c) && !(r.chips || []).includes(c)).length;
+    return `<span class="dt-ovb" data-n="${n >= 5 ? 5 : n >= 3 ? n : 0}" data-tip="켜진 칩 중 몇 개에 걸렸나 — 순위가 이 수로 정해짐">겹침 ${n}</span>${hasScore() ? `<small class="dt-ovm">점수 ${num(scoreOf(r), 1)}</small>` : ''}${k ? `<small class="dt-ovm">못 받은 칩 ${k}</small>` : ''}`; };
+  // 어제 미국장 — 머리 둘째 줄 한 줄 통째(11-19 재권님 「단타에 어제미국장 목록을 시간나오는곳 라인으로 맞춰서」 — 두 줄 모양에선 칩 머리 아래 · 매수 머리 위)
+  const usTh = `<th class="dt-ust" colspan="${NB + 2}" style="text-align: left; white-space: normal; font-weight: 400;"><span class="dt-us" id="dt-us" data-day="${esc(d.day || '')}">${usHtml(d.day)}</span></th>`;   // 줄바꿈 · 왼쪽 맞춤은 이 칸만(머리 칸 기본은 한 줄 · 오른쪽)
   // 굳힘 목록(11-20 재권님 「평균 바로 위에 굳힘목록 만들어줘 굳힘시간() 넣어서」 → 「굳힌 종목은 시간대별로 버튼 누르면 볼수있게 해줘」 → 그림에 「응 올려」)
   //   서버(개발2) rows[].lock(몇 번째 굳힘) · lockAt · lockRank · meta.lockAt · lockN — 굳힌 줄은 평균 위에 누른 시각 묶음만 · 안 굳은 줄은 평균 아래 「진행 중」 · 굳힘 없으면(09:05 전 · 옛 판) 지금 모양
-  const rowOf = (x, i) => { const r = x.r; return `${grp(i, times.length + nCol + 14)}<tr>${rk(r, i)}<td class="st-name" data-co="${esc(r.code || '')}"><b>${esc(r.name || '—')}</b> <small>${esc(r.code || '')}</small></td><td>${capTxt(r.cap)}</td><td class="dt-sec">${esc(r.sector || '—')}</td>${preTd(r)}${CS.map((c) => chCell(r, c)).join('')}<td class="dt-ovn"><b>${nLive(r)}</b>${hasScore() ? `<small>· 점수 ${num(scoreOf(r), 1)}</small>` : ''}${(() => { const k = CS.filter((c) => !st.off.has(c) && st.miss.has(c) && !(r.chips || []).includes(c)).length; return k ? `<small class="dt-ovm">못 받은 칩 ${k}</small>` : ''; })()}</td><td class="dt-addc"></td>${buyTd(r)}${p1Td(r)}${inTd(r)}${times.map((t, k) => cell(x, k)).join('')}${resTd(x)}${nxTd(r)}<td class="dt-tx">${taxTxt(x.r)}</td>${plTd(x, i)}</tr>`; };
-  const lkSpan = times.length + nCol + 14;
+  const rowOf = (x, i) => { const r = x.r, z = i % 2 ? ' dt-z' : '';
+    return `${grp(i, NB + 2)}<tr class="dt-up${z}"><td class="dt-rk dt-sl" rowspan="2">${i + 1}</td><td class="st-name dt-sl" rowspan="2" data-co="${esc(r.code || '')}"><b>${esc(r.name || '—')}</b>${ovB(r)}<small class="dt-code">${esc(r.code || '')}</small></td><td class="dt-tw" colspan="${NB}"><div class="dt-fx"><div class="dt-bx">${capTxt(r.cap)}</div><div class="dt-bx dt-sec">${esc(r.sector || '—')}</div>${box(preTd(r))}${DS.map((c) => box(chCell(r, c))).join('')}<div class="dt-bx dt-addc"></div></div></td></tr>`
+      + `<tr class="dt-dn${z}">${SL(buyTd(r))}${SL(p1Td(r))}${SL(inTd(r))}${times.map((t, k) => cell(x, k)).join('')}${SR(resTd(x))}${SR(nxTd(r))}<td class="dt-tx dt-sr">${taxTxt(x.r)}</td>${SR(plTd(x, i))}</tr>`; };
+  const lkSpan = NB + 2;
   const lkTop = !lkHas ? '' : `<tr class="dt-chiprow dt-lock"><td colspan="${lkSpan}"><span class="st-cap"><b>굳힘</b> ${lkGroups.map((g) => `<button type="button" class="kh-chip${g.n === st.lockSel ? ' is-active' : ''}" data-lock="${g.n}"${g.idx.length ? '' : ' disabled'}>${esc(String(g.at))} · ${g.idx.length ? num(g.idx.length) : '아직'}</button>`).join(' ')} — 누른 시각에 굳힌 종목${lkN ? `(그때까지 든 종목 중 차례 위 ${num(lkN)}개)` : ''} · 이 뒤로 안 바뀜</span></td></tr>${lkAct ? lkAct.idx.map((i) => rowOf(R[i], i).replace(/^<tr class="dt-chiprow">[\s\S]*?<\/tr>/, '')).join('') : ''}`;
   const lkLive = !lkHas ? '' : `<tr class="dt-chiprow"><td colspan="${lkSpan}"><span class="st-cap"><b>진행 중</b> · ${num(lkRest.length)}종목 — 아직 안 굳음 · 다음 굳힘 때 그 시각 단추로 옮겨 감</span></td></tr>`;
   const lkBody = !lkHas ? R.map(rowOf).join('') : lkRest.map((i) => rowOf(R[i], i).replace(/^<tr class="dt-chiprow">[\s\S]*?<\/tr>/, '')).join('');
-  $('dt-box').innerHTML = `<table class="dt-tb dt-cols">
-    <tr><th class="dt-rk"></th><th class="st-name">종목</th><th>시가총액</th><th class="dt-sec">섹터</th><th class="dt-pre" data-tip="전날 종가 대비 넥스트레이드 프리장 등락 — 홀딩스 시세와 같은 값">오늘 프리장${st.pre && st.pre.day === d.day && !(d.rows || []).some((r) => r.pre) ? `<small style="display: block; font-weight: 400;">${esc(st.pre.at)} 값</small>` : ''}</th>${CS.map(chHead).join('')}<th class="dt-ovn" data-tip="켜진 칩 중 몇 개에 걸렸나 — 순위가 이 수로 정해짐">겹침</th><th class="dt-addc"><button type="button" class="kh-chip" data-addcol aria-haspopup="menu">+ 칩</button></th><th>매수가 ${(st.set.buy || 'open') !== 'open' ? buyName(...(BUYS.find(([k]) => k === st.set.buy) || BUYS[0])) : newBuy ? '<small>9시 1분 값 · 뒤에 든 종목은 든 때 값</small>' : st.openAt ? `${hmTxt(String(st.openAt).replace(':', ''))} 시가` : hmTxt(d.buyAt)}</th><th class="dt-nx" data-tip="이쯤 산다면 — 09:01 값의 09:00 시가 대비 % (매수 타이밍을 바꿔도 이 칸은 시가 대비)">${p1At}</th><th class="dt-in" data-tip="9시 1분 뒤 판에 든 종목 — 든 순간 가격 · 그 아래 든 시각">들어온 가격</th><th class="dt-gp" colspan="${times.length}"><span>매수가 대비</span></th><th class="dt-res">결과</th>${nxH1}<th class="dt-tx">세금 %</th><th class="dt-pl">손익 · 종목마다 ${manTxt(per)}</th></tr>
-    <tr class="dt-t2">${usTh}<th class="dt-nx">9시1분</th><th class="dt-in">든 시각</th>${times.map((t) => `<th>${hmTxt(t)}</th>`).join('')}<th class="dt-res">판 값 · 시각</th>${nxH2}<th class="dt-tx">거래세 · 농특세</th><th class="dt-pl">세금 · 수수료 뺌 · 상위 ${topN}</th></tr>
-    ${lkTop}<tr class="dt-avg"><td class="dt-rk"></td><td class="st-name">평균 <small>판 종목은 판 값으로</small></td><td></td><td class="dt-sec"></td><td class="dt-pre"></td>${chBlank('td')}<td></td>${p1Avg}<td class="dt-in"></td>${avg.map((x, i) => `<td class="${i === L ? 'dt-last' : ''}">${pct(x)}</td>`).join('')}<td class="dt-res">${pct(resAvg)}</td>${nxAvg}<td class="dt-tx"></td><td class="dt-pl">${P ? won(P.net) : '—'}<small>${P ? `빼기 전 ${won(P.gross)}` : ''}</small></td></tr>
+  const preH = `<div class="dt-bx dt-pre" data-tip="전날 종가 대비 넥스트레이드 프리장 등락 — 홀딩스 시세와 같은 값">오늘 프리장${st.pre && st.pre.day === d.day && !(d.rows || []).some((r) => r.pre) ? `<small style="display: block; font-weight: 400;">${esc(st.pre.at)} 값</small>` : ''}</div>`;
+  const buyH = `매수가 ${(st.set.buy || 'open') !== 'open' ? buyName(...(BUYS.find(([k]) => k === st.set.buy) || BUYS[0])) : newBuy ? '<small>9시 1분 값 · 뒤에 든 종목은 든 때 값</small>' : st.openAt ? `${hmTxt(String(st.openAt).replace(':', ''))} 시가` : hmTxt(d.buyAt)}`;
+  $('dt-box').innerHTML = `<table class="dt-tb dt-cols dt-2row">
+    <tr class="dt-h"><th class="dt-rk dt-sl"></th><th class="st-name dt-sl">종목</th><th class="dt-tw" colspan="${NB}"><div class="dt-fx"><div class="dt-bx">시가총액</div><div class="dt-bx dt-sec">섹터</div>${preH}${DS.map((c) => box(chHead(c))).join('')}<div class="dt-bx dt-addc"><button type="button" class="kh-chip" data-addcol aria-haspopup="menu">+ 칩</button></div></div></th></tr>
+    <tr class="dt-h">${usTh}</tr>
+    <tr class="dt-h"><th class="dt-rk dt-sl"></th><th class="st-name dt-sl"></th><th class="dt-sl">${buyH}</th><th class="dt-nx dt-sl" data-tip="이쯤 산다면 — 09:01 값의 09:00 시가 대비 % (매수 타이밍을 바꿔도 이 칸은 시가 대비)">${p1At}</th><th class="dt-in dt-sl" data-tip="9시 1분 뒤 판에 든 종목 — 든 순간 가격 · 그 아래 든 시각">들어온 가격</th><th class="dt-gp" colspan="${times.length}"><span>매수가 대비</span></th><th class="dt-res dt-sr">결과</th>${SR(nxH1)}<th class="dt-tx dt-sr">세금 %</th><th class="dt-pl dt-sr">손익 · 종목마다 ${manTxt(per)}</th></tr>
+    <tr class="dt-h dt-t2"><th class="dt-rk dt-sl"></th><th class="st-name dt-sl"></th><th class="dt-sl"></th><th class="dt-nx dt-sl">9시1분</th><th class="dt-in dt-sl">든 시각</th>${times.map((t) => `<th>${hmTxt(t)}</th>`).join('')}<th class="dt-res dt-sr">판 값 · 시각</th>${SR(nxH2)}<th class="dt-tx dt-sr">거래세 · 농특세</th><th class="dt-pl dt-sr">세금 · 수수료 뺌 · 상위 ${topN}</th></tr>
+    ${lkTop}<tr class="dt-avg"><td class="dt-rk dt-sl"></td><td class="st-name dt-sl">평균 <small>판 종목은 판 값으로</small></td><td class="dt-sl"></td>${SL(p1Avg)}<td class="dt-in dt-sl"></td>${avg.map((x, i) => `<td class="${i === L ? 'dt-last' : ''}">${pct(x)}</td>`).join('')}<td class="dt-res dt-sr">${pct(resAvg)}</td>${SR(nxAvg)}<td class="dt-tx dt-sr"></td><td class="dt-pl dt-sr">${P ? won(P.net) : '—'}<small>${P ? `빼기 전 ${won(P.gross)}` : ''}</small></td></tr>
     ${lkLive}${lkBody}
   </table>`;
-  // 둘째 머리 줄(시각)은 첫 머리 줄(칩) 높이만큼 내려 붙임 — 둘 다 top 0 이라 스크롤하면 시각 줄이 칩 줄을 덮었음(11-18 재권님 「단타 목록 스크롤하면 칩들이 안보이는 현상이 있는데 이거 고쳐줘」)
-  { const tb = $('dt-box').querySelector('.dt-cols'), h1 = tb && tb.rows[0] ? tb.rows[0].getBoundingClientRect().height : 0; if (tb) tb.querySelectorAll('.dt-t2 th').forEach((th) => { th.style.top = `${h1}px`; }); }
+  fit2row($('dt-box').querySelector('.dt-2row'));
+}
+
+// 두 줄 표 다 그린 뒤 맞춤(11-20) — ① 윗줄 상자 폭을 칸마다 가장 넓은 것에 맞춰 종목마다 세로가 맞게 ② 옆으로 밀 때 붙는 칸(dt-sl · dt-sr)의 자리
+//   ③ 머리 네 줄이 위에 차례로 붙게(전에는 둘째 줄 top 을 첫 줄 높이로 — 11-18 재권님 「단타 목록 스크롤하면 칩들이 안보이는 현상」)
+function fit2row(tb) {
+  if (!tb) return;
+  // 잰 값은 화면 배율(작은 창에서 통째로 줄이는 zoom)을 되돌려 CSS 값으로 — getBoundingClientRect 는 줄어든 값을 줌(11-20 좁은 창에서 붙는 칸이 3/4 자리에 섰음)
+  const k = tb.offsetWidth / (tb.getBoundingClientRect().width || 1), W = (el) => el.getBoundingClientRect().width * k;
+  const fx = [...tb.querySelectorAll('.dt-fx')], n = Math.max(0, ...fx.map((f) => f.children.length));
+  for (let i = 0; i < n; i++) { let w = 0; fx.forEach((f) => { const b = f.children[i]; if (b) w = Math.max(w, Math.ceil(W(b))); }); fx.forEach((f) => { const b = f.children[i]; if (b) b.style.width = `${w}px`; }); }
+  const sc = tb.closest('.dt-box'), sx = sc ? sc.scrollLeft : 0; if (sc) sc.scrollLeft = 0;   // 옆으로 민 채 다시 그려지면 붙은 칸이 밀린 자리로 재짐 — 0 으로 두고 잰 뒤 되돌림
+  const T = tb.getBoundingClientRect();
+  tb.querySelectorAll('.dt-sl').forEach((c) => { c.style.left = `${(c.getBoundingClientRect().left - T.left) * k}px`; });
+  tb.querySelectorAll('.dt-sr').forEach((c) => { c.style.right = `${(T.right - c.getBoundingClientRect().right) * k}px`; });
+  const nm = tb.querySelector('th.st-name'); if (nm) tb.style.setProperty('--dt-fx-l', `${(nm.getBoundingClientRect().right - T.left) * k}px`);   // 윗줄 상자 묶음은 종목 칸 오른쪽에 붙음
+  if (sc) sc.scrollLeft = sx;
+  let top = 0; tb.querySelectorAll('tr.dt-h').forEach((tr) => { tr.querySelectorAll('th').forEach((th) => { th.style.top = `${top}px`; }); top += tr.offsetHeight; });
 }
 
 // 날짜 — 달 줄 위 · 고른 달의 날짜 줄 아래(11-12 재권님 「달이 있어야 되고 해당달하위로 날짜가 있도록 해줘 이정보는 많이 쌓아가야 할거같아. 현재 30개이지만 룰이 확립되면 많이 늘릴거야」)
@@ -718,7 +756,7 @@ async function loadFee() {
 // 셈 칸에 지금 값 채우기 · 단추 켜짐 표시
 function setFill() {
   const S = st.set, box = $('dt-pnl'); if (!box) return;
-  const v = { minChip: S.minChip || '', top: S.top, won: (S.mode === 'day' ? S.dayWon : S.perWon) / 10000, stop: S.stop == null ? '' : S.stop, trail: S.trail == null ? '' : S.trail, turnPct: S.turnPct || '', cutAt: hmTxt(S.cutAt), cutPct: S.cutPct ?? '' };
+  const v = { minChip: S.minChip || '', top: S.top, won: (S.mode === 'day' ? S.dayWon : S.perWon) / 10000, stop: S.stop == null ? '' : S.stop, trail: S.trail == null ? '' : S.trail, turnPct: S.turnPct || '', cutMin: S.cutMin ?? '', cutPct: S.cutPct ?? '', lock0: (S.lockAt || [])[0] || '', lock1: (S.lockAt || [])[1] || '', lock2: (S.lockAt || [])[2] || '' };
   box.querySelectorAll('[data-set]').forEach((el) => { if (document.activeElement !== el) el.value = String(v[el.dataset.set] ?? ''); });
   box.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('is-active', b.dataset.mode === S.mode));
   box.querySelectorAll('[data-turn]').forEach((b) => b.classList.toggle('is-active', (b.dataset.turn === '1') === !!S.turn));
@@ -726,6 +764,7 @@ function setFill() {
   box.querySelectorAll('[data-turnfor]').forEach((el) => { const tb = S.turnBy || 'both'; el.hidden = tb !== 'both' && el.dataset.turnfor !== tb; });
   box.querySelectorAll('[data-turnsep]').forEach((el) => { el.hidden = (S.turnBy || 'both') !== 'both'; });   // 둘 다일 때 두 설명 사이 · (qa 11-20 좁은 폭에서 붙어 보임)
   box.querySelectorAll('[data-buy]').forEach((b) => { b.classList.toggle('is-active', b.dataset.buy === (S.buy || 'open')); const B = BUYS.find(([k]) => k === b.dataset.buy); if (B) b.textContent = buyName(...B); });   // 이름 시각은 그 판 서버 값(늦게 여는 날)
+  { const D = (st.data && st.data.meta && (st.data.meta.lockDef || st.data.meta.lockAt)) || []; box.querySelectorAll('[data-set^="lock"]').forEach((el, i) => { el.placeholder = D[i] || '( )'; }); }   // 빈칸에 보이는 기본 시각은 서버 값(meta.lockDef · 없으면 지금 굳힘 시각 meta.lockAt) — 화면에 시각을 안 박음
   box.querySelectorAll('[data-pyr]').forEach((b) => b.classList.toggle('is-active', (b.dataset.pyr === '1') === !!S.pyr));
   box.querySelectorAll('[data-cut]').forEach((b) => b.classList.toggle('is-active', (b.dataset.cut === '1') === !!S.cut));
 }
@@ -757,7 +796,11 @@ async function setChange(next) {
 function setRead(el) {
   const k = el.dataset.set, raw = el.value.trim().replace(/,/g, ''), S = { ...st.set };
   const bad = (t) => { $('dt-set-msg').textContent = `${t} — 되돌렸습니다`; setFill(); return null; };
-  if (k === 'cutAt') { const m = /^(\d{1,2}):?(\d{2})$/.exec(raw); if (!m || +m[1] > 15 || +m[2] > 59) return bad('시각은 10:30 꼴'); S.cutAt = m[1].padStart(2, '0') + m[2]; return S; }   // 「10:30」 꼴이라 숫자 검사 앞에서 가른다(qa 11-20)
+  if (/^lock[0-2]$/.test(k)) {   // 굳힘 시각(11-20 재권님 「값이 없으면 9시 5분 9시 30분 10시로 고정되게 하고 값이 있으면 그 값을 오버라이드」) — 빈칸 = 서버 기본 · HH:MM 또는 HHMM
+    const m = raw.match(/^(\d{1,2}):?(\d{2})$/), L = [...(S.lockAt || [null, null, null])];
+    if (raw && (!m || +m[1] > 23 || +m[2] > 59)) return bad('시각은 09:05 꼴');
+    L[+k.slice(4)] = raw ? `${m[1].padStart(2, '0')}:${m[2]}` : null; S.lockAt = L; return S;
+  }
   const v = raw === '' ? null : Number(raw);
   if (v != null && !Number.isFinite(v)) return bad('숫자만');
   if (k === 'minChip') { if (v != null && (v < 0 || !Number.isInteger(v))) return bad('0 이상 정수'); S.minChip = v || 0; }
@@ -765,6 +808,7 @@ function setRead(el) {
   else if (k === 'won') { if (v == null || v <= 0) return bad('0 보다 큰 만원'); S[S.mode === 'day' ? 'dayWon' : 'perWon'] = Math.round(v * 10000); }
   else if (k === 'stop') { if (v === 0) return bad('0 은 못 씀 · 빈칸이면 손절 안 함'); S.stop = v == null ? null : -Math.abs(v); }   // 1 · −1 둘 다 「−1%」 로
   else if (k === 'turnPct') { S.turnPct = v == null ? 0 : Math.abs(v); }
+  else if (k === 'cutMin') { if (v == null || v < 0 || !Number.isInteger(v)) return bad('0 이상 정수(분)'); S.cutMin = v; }
   else if (k === 'cutPct') { if (v == null) return bad('빈칸은 못 씀'); S.cutPct = v; }
   else if (k === 'trail') { if (v === 0) return bad('0 은 못 씀 · 빈칸이면 안 씀'); S.trail = v == null ? null : Math.abs(v); }
   return S;
@@ -823,10 +867,11 @@ const TPL = `
                 <label class="dt-fee" data-tip="손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삽니다 · 더 산 몫은 그 종목을 팔 때 함께 팝니다">불타기 <span class="dt-seg"><button type="button" class="kh-chip" data-pyr="1">켬</button><button type="button" class="kh-chip" data-pyr="0">끔</button></span></label>
               </div>
               <div class="dt-set-sell" style="flex:1 1 360px;min-width:0;word-break:keep-all;display:flex;flex-direction:column;gap:4px;padding:8px 12px;border-radius:var(--kh-radius-sm);background:var(--kh-bg-card)"><b style="font-size:12px">매도</b>
-                <div style="display:flex;flex-wrap:wrap;gap:4px 14px"><label class="dt-fee">손절 <input data-set="stop" class="rl-in rl-num" inputmode="decimal" aria-label="손절(매수가 대비 %)">% <span class="rl-sug">빈칸 = 안 함</span></label> <label class="dt-fee" data-tip="손절 · 꺾임으로 안 팔린 종목을 그 시각 값으로 봅니다 · 매수가 대비 그 % 를 넘지 못했으면 그 시각 값에 팝니다 · 그 칸 값이 없으면 그 뒤 첫 칸">시각 미달 <span class="dt-seg"><button type="button" class="kh-chip" data-cut="1">켬</button><button type="button" class="kh-chip" data-cut="0">끔</button></span> <input data-set="cutAt" class="rl-in rl-num" inputmode="numeric" aria-label="시각 미달 — 몇 시까지">까지 <input data-set="cutPct" class="rl-in rl-num" inputmode="decimal" aria-label="시각 미달 — 매수가 대비 몇 %">% 넘지 못하면 팜</label></div>
+                <div style="display:flex;flex-wrap:wrap;gap:4px 14px"><label class="dt-fee">손절 <input data-set="stop" class="rl-in rl-num" inputmode="decimal" aria-label="손절(매수가 대비 %)">% <span class="rl-sug">빈칸 = 안 함</span></label> <label class="dt-fee" data-tip="산 시각을 30분 단위로 반올림합니다(09:14 → 09:00 · 09:16 → 09:30) · 거기서 넣은 분이 지난 칸 값으로 봅니다 · 손절 · 꺾임으로 안 팔린 종목이 매수가 대비 그 % 를 넘지 못했으면 그 값에 팝니다 · 그 칸 값이 없으면 그 뒤 첫 칸">시각 미달 <span class="dt-seg"><button type="button" class="kh-chip" data-cut="1">켬</button><button type="button" class="kh-chip" data-cut="0">끔</button></span> 산 시각(30분 반올림)부터 <input data-set="cutMin" class="rl-in rl-num" inputmode="numeric" aria-label="시각 미달 — 산 시각부터 몇 분">분에 <input data-set="cutPct" class="rl-in rl-num" inputmode="decimal" aria-label="시각 미달 — 매수가 대비 몇 %">% 넘지 못하면 팜</label></div>
                 <label class="dt-fee">꺾임 <span class="dt-seg"><button type="button" class="kh-chip" data-turn="1">켬</button><button type="button" class="kh-chip" data-turn="0">끔</button></span> <span class="dt-seg"><button type="button" class="kh-chip" data-turnby="prev">앞 시각 대비</button><button type="button" class="kh-chip" data-turnby="peak">고점 대비</button><button type="button" class="kh-chip" data-turnby="both">둘 다</button></span> <span data-turnfor="prev">앞 시각보다 <input data-set="turnPct" class="rl-in rl-num" inputmode="decimal" aria-label="꺾임 — 앞 시각보다 몇 % 넘게 내리면 팜">% 넘게 내리면 팜 <span class="rl-sug">그 이하는 무시 · 빈칸 = 0</span></span><span data-turnsep hidden> · </span><span data-turnfor="peak" hidden>오른 뒤 가장 높던 값보다 <input data-set="trail" class="rl-in rl-num" inputmode="decimal" aria-label="꺾임 — 고점 대비 몇 % 내리면 팜">% 내리면 팜 <span class="rl-sug">빈칸 = 안 씀</span></span></label>
                 <label class="dt-fee">증권수수료 <input id="dt-fee" class="rl-in rl-num" inputmode="decimal" aria-label="증권수수료(%) — 팔 때만" placeholder="( )">% <span class="rl-sug">팔 때만 · 넣으면 저장되고 바로 다시 셈</span> <span id="dt-fee-msg" class="rl-sug"></span></label>
               </div>
+                <label class="dt-fee" data-tip="이 시각마다 그때 차례 위 종목을 굳힘 · 빈칸이면 서버 기본 시각 · 고치면 다음 판부터">굳힘 시각 <input data-set="lock0" class="rl-in rl-num" style="width: 4.2em;" aria-label="첫째 굳힘 시각"> <input data-set="lock1" class="rl-in rl-num" style="width: 4.2em;" aria-label="둘째 굳힘 시각"> <input data-set="lock2" class="rl-in rl-num" style="width: 4.2em;" aria-label="셋째 굳힘 시각"> <span class="rl-sug">빈칸 = 서버 기본 · 다음 판부터</span></label>
             </div>
           </div>
           <div class="st-cap" id="dt-month">—</div>
