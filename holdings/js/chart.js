@@ -2196,6 +2196,7 @@ export function createStockChart(container, candles, opts = {}) {
     draw = mountDraw({
       pane: panes[0].el, chart: panes[0].chart, series: candleSeries, code: drawnCode, period, candles, LC,
       timeOf: (i) => toChartTime(candles[i].ts, period), idxOfTime: (t) => byTime.get(timeKey(t)), axisW: AXIS_W,
+      writer: memWriter,   // 그은 선을 서버 보관함에 쓰는 곳 — 차트 기억과 같은 기준 화면 하나(2026-11-20)
     });
     curOwn = ownKeys();
     paintPaneTags(candles.length - 1);
