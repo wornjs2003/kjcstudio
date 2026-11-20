@@ -807,7 +807,7 @@ def _sub_keep(r, o, ts):
     r["subAt"] = {c: v for c, v in at.items() if c in (r.get("chips") or []) and v}
 
 
-LOCK_AT = ((9, 5), (9, 30), (10, 30))   # 기본 굳힘 시각(룰 문서 rules.dt30.lockAt 이 비었을 때 · lock_at()) — 세 번 굳히기 — 이 시각마다 굳지 않은 줄 중 순위 위 LOCK_N 개를 굳힌다(lock 1 · 2 · 3)
+LOCK_AT = ((9, 5), (9, 30), (10, 0))   # 기본 굳힘 시각(셈 칸 rules.dt30.set.lockAt 이 빈 차례 · lock_at() · 재권님 「값이 없으면 9시 5분 9시 30분 10시로 고정되게 하고 값이 있으면 그 값을 오버라이드」 11-20 14:0x) — 세 번 굳히기 — 이 시각마다 굳지 않은 줄 중 순위 위 LOCK_N 개를 굳힌다(lock 1 · 2 · 3)
 LOCK_N = 10
 # 재권님 「단타 목록 9시 5분에 굳히고 상위 10개만 보인다. 그이후로 추가된건 그아래로 추가되고 9시 30분에 10개 굳힌다. 그이후로 추가된건 그아래로
 # 추가되고 10시 30분에 10개 굳힌다」(11-20 08:44) → 새로 다는 10개는 「(가) 그때까지 굳지 않은 종목 전체에서 순위대로」(11-20 10:1x).
@@ -835,11 +835,11 @@ def _lock_order(b):
 
 
 def lock_at():
-    """굳히는 시각 셋 — 룰 문서 strategy-rules 의 rules.dt30.lockAt(["HH:MM" 또는 null] 셋 · 재권님이 단타 판 셈 칸 셋에서 정함 ·
+    """굳히는 시각 셋 — 룰 문서 strategy-rules 의 셈 칸 rules.dt30.set.lockAt(["HH:MM" 또는 null] 셋 · 재권님이 단타 판 매수 칸 「굳힘 시각」 셋에서 정함(화면 시황분석1) ·
     11-20 「굳힘 시간은 내가 지정하면 바꿀수 있게」 → 「굳힘 시간 3개 넣어야대」). 빈 칸 · 틀린 꼴 · 못 읽음은 그 차례의 LOCK_AT 값. 이른 차례로."""
     try:
         import docstore
-        v = (((docstore.read_doc("strategy-rules") or {}).get("rules") or {}).get("dt30") or {}).get("lockAt")
+        v = ((((docstore.read_doc("strategy-rules") or {}).get("rules") or {}).get("dt30") or {}).get("set") or {}).get("lockAt")
     except Exception:
         v = None
     v = v if isinstance(v, list) else []
