@@ -41,7 +41,7 @@ OPEN, CLOSE = (8, 0), (20, 0)       # 넥스트 프리 08:00 ~ 애프터 20:00
 SLOT_MIN = 5
 RATIO = 2.0                          # 「2배 이상」
 MIN_PREV = nxt_pre.MIN_PREV          # 어제 그 구간 거래량 문턱(주) — 장 전 알림과 같은 값을 불러 쓴다(이슈 ⑥ 안 「응」 · 개념정의 덧말)
-KEEP_DAYS = 4
+KEEP_DAYS = None                     # 보관 거래일 — 단타 자료 1년(dt30.DAYS_KEEP 한 곳을 지울 때 읽음 · 11-23 재권님 「전부다 1년을 쌓는다로 해줘」 · 그 전 4)
 TICK = 10
 FLOW_TTL = 30                        # 읽기 캐시(초) — 롱폴이 같은 값을 거듭 읽을 때 DB 를 덜 연다
 
@@ -183,7 +183,8 @@ def sweep(proxy, day, slot):
             rows.append((day, slot, c, v, vol if (vol is None or vol >= 0) else None))
         conn.executemany("INSERT OR REPLACE INTO nx_slot (day, slot, code, cum, vol) VALUES (?,?,?,?,?)", rows)
         days = [r[0] for r in conn.execute("SELECT DISTINCT day FROM nx_slot ORDER BY day DESC")]
-        for d in days[KEEP_DAYS:]:
+        import dt30
+        for d in days[KEEP_DAYS or dt30.DAYS_KEEP:]:
             conn.execute("DELETE FROM nx_slot WHERE day = ?", (d,))
     _status.update(lastSlot=slot, lastSweepAt=_now().isoformat(timespec="seconds"), lastSweepSec=round(time.time() - t0, 1),
                    lastCodes=len(rows), error=None)
