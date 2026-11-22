@@ -280,11 +280,15 @@ def sectors():
 
 
 def floats():
-    """{code: 풀린 주식수(주)} — 발행주식수 × 유동비율 · 쥔 것만(받지 않는다) · 둘 중 하나라도 못 읽은 종목은 안 넣는다(화면은 「못 잼」)."""
+    """{code: 풀린 주식수(주)} — 발행주식수 × 유동비율 · 쥔 것만(받지 않는다) · 둘 중 하나라도 못 읽은 종목은 안 넣는다(화면은 「못 잼」).
+    우선주(코드 끝자리가 0 이 아님)는 안 넣는다 — 네이버 그 칸이 보통주 값이라(005935 가 005930 과 같은 5,846,278,608주 · 74.96% · qa 검수 11-23 08:33)
+    넣으면 풀린 시총이 보통주 크기로 부푼다. 우선주 유동주식수 출처는 아직 없다(「아직」 이지 「영영」 이 아님)."""
     with _lock:
         st = _load()
         out = {}
         for c, r in st.items():
+            if not c.endswith("0"):
+                continue
             nv = r.get("naver") or {}
             if nv.get("shares") and nv.get("floatPct") is not None:
                 out[c] = int(nv["shares"] * nv["floatPct"] / 100)
