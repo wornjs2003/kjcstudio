@@ -11591,7 +11591,7 @@ def main():
         print("  단타 30 판 : 평일 %s 단타 상위 %d 굳힘 · %s~%s %d분마다 값 · %d거래일 · /api/kis/dt30"
               % (dt30.status()["buyAt"], dt30.TOP_N, dt30.times()[0], dt30.times()[-1], dt30.TRACK_STEP, dt30.DAYS_KEEP))
     if not SLOW and is_sender(args.port) and turnover.start(sys.modules[__name__]):
-        print("  거래 비율  : 평일 정규장 %d초마다 감시 목록 전부 거래대금 쌓음 · 단타 판 floatCap · turn" % turnover.TURN_SEC)
+        print("  거래 비율  : 평일 정규장 %d초마다 감시 목록 전부 거래대금 쌓음 · 단타 판 floatCap · turn" % turnover.TURN_INTERVAL)
     if not SLOW and is_sender(args.port) and vi_days.start(sys.modules[__name__]):
         print("  VI 기록    : 평일 %s 뒤 그날 VI 전부 쌓음 · 그 뒤 지난 %d일 하루씩 되채움 · /api/kis/vi-day" % (vi_days.status()["storeAt"], vi_days.BACKFILL_DAYS))
     if not SLOW and is_sender(args.port) and vi_stats.start(sys.modules[__name__]):

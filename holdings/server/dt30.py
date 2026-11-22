@@ -637,8 +637,8 @@ def _live_calc(proxy, cfg):
     try:
         import turnover
         turnover.fill(rows, prices)                     # 풀린 시총 · 거래 비율 — 받은 현재가 · 누적 거래대금 그대로(실시간 · 11-23 재권님)
-    except Exception:
-        pass                                           # 못 셈 — 칸은 안 붙음(화면은 「못 잼」)
+    except Exception as e:
+        print("  [거래 비율] 단타 목록 칸 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)   # 칸은 안 붙음(화면은 「못 잼」)
     tab = score_table(proxy)
     order = sort_rows(rows, tab, off)
     early = ["매수"] if "매수어림" in missing else []
@@ -1883,8 +1883,8 @@ def board(proxy, day=None, cfg=None):
             turnover.fill(b["rows"], q)                 # 그날 판 — 지금 값(실시간)
         else:
             turnover.fill_day(proxy, b["day"], b["rows"])   # 굳힌 판 — 그날 쌓인 마지막 값 · 쌓기 전 날은 None
-    except Exception:
-        pass
+    except Exception as e:
+        print("  [거래 비율] 판 칸 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
     b["meta"]["turnNote"] = TURN_NOTE
     return b
 
