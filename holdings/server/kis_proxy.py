@@ -98,6 +98,7 @@ import vi_days          # 지난 날 VI 기록 — KIS VI 현황을 날짜로 �
 import vi_stats         # VI · 급등 뒤 얼마나 오르나 — 그날 VI · 급등을 쌓고 30분 · 60분 · 14:00 · 그날 최고 · /api/kis/vi-stats(2026-11-18 · server/vi_stats.py)
 import dt30             # 단타 30 판 — 평일 09:06 단타 상위 30 굳힘 · 30분마다 값 · 30거래일 · /api/kis/dt30(2026-11-11 · server/dt30.py)
 import turnover         # 풀린 시총 · 거래 비율 — 장중 1분마다 감시 목록 전부 거래대금 쌓기 · 단타 판 칸 둘(2026-11-23 · server/turnover.py)
+import chip_live        # 단타 칩 종목 1분봉 실시간 — 장중 1분마다 칩 걸린 종목 1분봉 받기(2026-11-23 · server/chip_live.py)
 import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
 import session_volume   # 시간대별 거래량 · 전일비 — 프리장 · 정규장 · 애프터 끝에 순위 종목 누적 거래량 저장 · /api/kis/vol-ratio(2026-11-05 · server/session_volume.py)
 import intraday_flow    # 당일 수급 — 장중 1분마다 시장 투자자 · 프로그램 매매를 쌓아 5분 구간으로 · /api/kis/flow-today(2026-10-27 · server/intraday_flow.py)
@@ -11590,6 +11591,8 @@ def main():
     if not SLOW and is_sender(args.port) and dt30.start(sys.modules[__name__]):
         print("  단타 30 판 : 평일 %s 단타 상위 %d 굳힘 · %s~%s %d분마다 값 · %d거래일 · /api/kis/dt30"
               % (dt30.status()["buyAt"], dt30.TOP_N, dt30.times()[0], dt30.times()[-1], dt30.TRACK_STEP, dt30.DAYS_KEEP))
+    if not SLOW and is_sender(args.port) and chip_live.start(sys.modules[__name__]):
+        print("  칩 1분봉   : 평일 정규장 %d초마다 단타 칩 걸린 종목 1분봉 받음" % chip_live.CHIP_M1_INTERVAL)
     if not SLOW and is_sender(args.port) and turnover.start(sys.modules[__name__]):
         print("  거래 비율  : 평일 정규장 %d초마다 감시 목록 전부 거래대금 쌓음 · 단타 판 floatCap · turn" % turnover.TURN_INTERVAL)
     if not SLOW and is_sender(args.port) and vi_days.start(sys.modules[__name__]):
