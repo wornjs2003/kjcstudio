@@ -634,6 +634,11 @@ def _live_calc(proxy, cfg):
                      "viAt": g.get("viAt"), "surgeAt": g.get("surgeAt"),
                      "viPx": {"at": g["viAt"], "px": g.get("viPrice"), "src": "vi"} if g.get("viAt") and g.get("viPrice") else None,
                      "down": p.get("pct") is not None and p["pct"] < drop_below_pct()})      # 하락 — 모르면 안 뺀다(재권님 11-12)
+    try:
+        import turnover
+        turnover.fill(rows, prices)                     # 풀린 시총 · 거래 비율 — 받은 현재가 · 누적 거래대금 그대로(실시간 · 11-23 재권님)
+    except Exception:
+        pass                                           # 못 셈 — 칸은 안 붙음(화면은 「못 잼」)
     tab = score_table(proxy)
     order = sort_rows(rows, tab, off)
     early = ["매수"] if "매수어림" in missing else []
@@ -645,7 +650,7 @@ def _live_calc(proxy, cfg):
         "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre and early else None,
         "candidates": len(ov), "chips": [c for c in ov_chips() if c != "수급"], "minChips": min_chips(proxy),   # 수급은 11-18 관심으로 합쳐짐(지난 판에만)
         "dropBelowPct": drop_below_pct(), "capMinEok": cap_min_eok(), "watchRule": "자동",
-        "order": order, "score": tab, "scoreConflict": score_conflicts(tab), "ttl": LIVE_TTL}}
+        "order": order, "score": tab, "scoreConflict": score_conflicts(tab), "ttl": LIVE_TTL, "turnNote": TURN_NOTE}}
     with _live_lock:
         _live.update(at=time.time(), pre=pre, data=data)
     return data
@@ -1837,6 +1842,10 @@ def sell_text(r):
         (s["px"] / s["ref"] - 1) * 100, format(int(s["buy"]), ","), (s["px"] / s["buy"] - 1) * 100)
 
 
+TURN_NOTE = ("floatCap 풀린 시총(억원) = 발행주식수 × 유동비율(네이버 기업현황) × 현재가 · turn 거래 비율(%) = 그날 누적 거래대금 ÷ 풀린 시총 × 100 · "
+             "그날 판은 지금 값 · 굳힌 판은 그날 쌓인 마지막 값(turnover_day) · 못 잰 칸은 null")
+
+
 def board(proxy, day=None, cfg=None):
     """주소 /api/kis/dt30 의 data — 남긴 날만(없으면 None). 안 끝난 그날 판이면 rows[].now · nowAt 을 붙인다(cfg 를 줄 때)."""
     ds = days(proxy)
@@ -1868,6 +1877,15 @@ def board(proxy, day=None, cfg=None):
         for r in b["rows"]:
             r["now"] = (q.get(r["code"]) or {}).get("price")
         b["nowAt"] = _now().strftime("%H:%M:%S")
+    try:
+        import turnover
+        if not b["closed"] and cfg is not None:
+            turnover.fill(b["rows"], q)                 # 그날 판 — 지금 값(실시간)
+        else:
+            turnover.fill_day(proxy, b["day"], b["rows"])   # 굳힌 판 — 그날 쌓인 마지막 값 · 쌓기 전 날은 None
+    except Exception:
+        pass
+    b["meta"]["turnNote"] = TURN_NOTE
     return b
 
 
