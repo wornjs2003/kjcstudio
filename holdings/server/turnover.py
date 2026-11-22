@@ -112,6 +112,7 @@ def start(proxy):
     import market_hours
 
     def loop():
+        proxy._prio.low = True                         # 여유분으로 — 화면 · 칩 종목(chip_live)이 막 불렀으면 비켜선다(kis_proxy._rate_limit · 재권님 「서버에 여유가 생길때」)
         time.sleep(60)                                 # 뜬 직후 다른 일과 겹치지 않게
         last = 0.0
         closed = None
