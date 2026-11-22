@@ -26,8 +26,8 @@ AFTER_MIN = 5                 # 정규장 끝 뒤 이 분 안에 한 바퀴 더 
 _SCHEMA = ("CREATE TABLE IF NOT EXISTS turnover_day (day TEXT NOT NULL, code TEXT NOT NULL, value INTEGER, price INTEGER, "
            "float_shares INTEGER, at TEXT, PRIMARY KEY (day, code))")
 
-SLOT_MIN = 5                  # 「같은 시각」 칸(분) — 바퀴마다 그 칸 값을 덮어 칸 끝 무렵 값이 남는다 · 견줄 때 오차는 이 칸 안
-SLOT_KEEP_DAYS = 3            # 시각 칸 표는 며칠만 — 전날과 견주는 데만 쓴다(그날 마지막 값은 turnover_day 가 1년)
+SLOT_MIN = 1                  # 「같은 시각」 칸(분) — 바퀴(TURN_INTERVAL 1분)마다 한 칸 · 5분이던 것을 줄임(qa 덧 11-23 — 칸 끝 무렵 값과 견줘 장 초반 전날 대비가 낮게 나옴)
+SLOT_KEEP_DAYS = 2            # 시각 칸 표는 오늘 · 전날만 — 전날과 견주는 데만 쓴다(그날 마지막 값은 turnover_day 가 1년) · 785종목 × 390칸 하루 30만 줄 남짓
 _SLOT_SCHEMA = ("CREATE TABLE IF NOT EXISTS turnover_slot (day TEXT NOT NULL, slot TEXT NOT NULL, code TEXT NOT NULL, value INTEGER, price INTEGER, "
                 "PRIMARY KEY (day, slot, code))")
 
