@@ -2323,7 +2323,9 @@ def m1_fill(proxy, cfg, limit=BACKFILL_DAYS):
                 proxy.save_candles(c, "1m", proxy.aggregate_minutes(mine, 1))
             proxy._meta_set(mk, today)
             n += 1
-        if _pxmin_fill(proxy, b):                      # 쌓인 1분봉(방금 받은 것 · 이미 있던 것)으로 판 줄을 채워 저장 — 1분봉이 지워져도 남게
+        vi0 = [bool(r.get("viPx")) for r in b["rows"]]
+        got_px = _pxmin_fill(proxy, b)                 # 쌓인 1분봉(방금 받은 것 · 이미 있던 것)으로 판 줄을 채워 저장 — 1분봉이 지워져도 남게
+        if got_px or [bool(r.get("viPx")) for r in b["rows"]] != vi0:   # VI 값만 새로 찬 날도 남김(개념정의 덧 11-23)
             _store(proxy, b)
     return n
 
