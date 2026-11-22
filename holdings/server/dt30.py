@@ -1450,6 +1450,40 @@ def _redo_gone(proxy, day, b):
     b["meta"]["redoGone"] = hist
 
 
+M1_FILL_SPAN = 40             # 지난 판 1분봉 되받기 — 여는 시각 + 이 분까지(120줄 한 번이면 그 앞 두 시간) · 여는 값(PX_MIN) · 지난 날 VI 창(PAST_LATE)을 덮음
+
+
+def m1_fill(proxy, cfg, limit=BACKFILL_DAYS):
+    """지난 판(오늘 앞 limit 날) 줄 중 여는 시각 1분봉이 없는 종목 — KIS 지난 날 분봉을 한 번씩 받아 1분봉으로 저장 → 받은 (종목 · 날) 수.
+    1분봉은 11-11 10:46 부터 쌓여 그 전 판은 「개장 N분 뒤 값」 · VI 값이 비었다 — 셈 칸 매수가 09:01 이면 그 날들이 「매매 없음」(11-23 재권님 「응 그렇게해」).
+    받으면 판을 읽을 때 _pxmin_fill · _vipx_fill 이 채운다(판은 안 고침). 받아 봤는데 빈 종목(정지 등)은 표를 남겨 다시 안 묻는다."""
+    today = _now().strftime("%Y%m%d")
+    n = 0
+    for day in [d for d in days(proxy) if d < today][:limit]:
+        got = _load(proxy, day)
+        if not got or not got[0].get("rows"):
+            continue
+        b = got[0]
+        o = _open_min(proxy, day, b)
+        codes = [r["code"] for r in b["rows"]]
+        lo, hi = day + _hhmm(o).replace(":", ""), day + _hhmm(o + max(PX_MIN)).replace(":", "")
+        with proxy.db_conn() as conn:
+            have = {c for (c,) in conn.execute("SELECT DISTINCT code FROM candles WHERE period = '1m' AND ts BETWEEN ? AND ? AND code IN (%s)"
+                                                % ",".join("?" * len(codes)), [lo, hi] + codes)}
+        for c in codes:
+            mk = "m1fill:%s:%s" % (c, day)
+            if c in have or proxy._meta_get(mk):
+                continue
+            raw = proxy._kr_past_chunk(cfg, c, day, _hhmm(o + M1_FILL_SPAN).replace(":", "") + "00")
+            time.sleep(proxy.BAR_FILL_CALL_GAP)
+            mine = [x for x in raw if x["ts"][:8] == day and int(x["ts"][8:10]) * 60 + int(x["ts"][10:12]) >= proxy.MINUTE_DAY_START]
+            if mine:
+                proxy.save_candles(c, "1m", proxy.aggregate_minutes(mine, 1))
+            proxy._meta_set(mk, today)
+            n += 1
+    return n
+
+
 def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
     """today 앞 limit 거래일 중 판이 없는 날을 다시 세어 남긴다(라이브로 굳힌 날은 안 건드린다). 남긴 날 수."""
     ds = _trade_days(proxy, today, limit)
@@ -1917,6 +1951,9 @@ def start(proxy):
                     n = backfill(proxy, day)
                     if n:
                         print("  [단타 30] 지난 날 %d일 다시 세어 남김" % n, flush=True)
+                    n = m1_fill(proxy, proxy.load_secrets())   # 장 끝난 뒤(QUIET 밖) — 지난 판 여는 시각 1분봉 빈 것 되받기
+                    if n:
+                        print("  [단타 30] 지난 판 1분봉 %d개(종목 · 날) 되받음" % n, flush=True)
             except Exception as e:
                 _status["error"] = type(e).__name__
                 print("  [단타 30] 되채우기 멈춤 — %s" % proxy.safe_message(e, 120), flush=True)
