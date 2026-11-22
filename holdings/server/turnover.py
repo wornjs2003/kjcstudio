@@ -12,7 +12,9 @@
     판에 보이는 종목(칩 걸림)   단타 목록 · 판이 받는 현재가에 누적 거래대금이 함께 온다 — 그 자리에서 셈(실시간)
     그 밖 감시 목록 전부        장중 TURN_INTERVAL 마다 한 바퀴(dart 감시 목록 · 30종목 묶음 시세) — 그날 마지막 값을 turnover_day 에 쌓는다
                                묶음 시세 캐시를 함께 써서 투자자 판(INVESTOR_BOARD_REFRESH_INTERVAL)이 막 받은 종목은 다시 안 묻는다
-못 잰 칸은 None(「못 잼」 · 0 아님) — 유동비율을 아직 못 읽은 종목 · 거래대금이 안 온 종목.
+    전날 대비(turnPrevPct · %)   오늘 지금까지 거래 비율 ÷ 전날 같은 시각까지 거래 비율 × 100 — 재권님 「거래 비율은 전날 동시간 대비로 해줘」(11-23 08:5x ·
+                               색 기준은 지표 표 data/metrics.json turn_prev_pct) · 같은 시각 값은 turnover_slot(SLOT_MIN 분 칸 · SLOT_KEEP_DAYS 날만)
+못 잰 칸은 None(「못 잼」 · 0 아님) — 유동비율을 아직 못 읽은 종목 · 거래대금이 안 온 종목 · 전날 그 칸이 없는 종목.
 """
 import threading
 import time
@@ -23,6 +25,11 @@ TURN_INTERVAL = 60            # 장중 전 종목 한 바퀴 간격(초) — 재
 AFTER_MIN = 5                 # 정규장 끝 뒤 이 분 안에 한 바퀴 더 — 그날 마지막 거래대금을 쌓는다
 _SCHEMA = ("CREATE TABLE IF NOT EXISTS turnover_day (day TEXT NOT NULL, code TEXT NOT NULL, value INTEGER, price INTEGER, "
            "float_shares INTEGER, at TEXT, PRIMARY KEY (day, code))")
+
+SLOT_MIN = 5                  # 「같은 시각」 칸(분) — 바퀴마다 그 칸 값을 덮어 칸 끝 무렵 값이 남는다 · 견줄 때 오차는 이 칸 안
+SLOT_KEEP_DAYS = 3            # 시각 칸 표는 며칠만 — 전날과 견주는 데만 쓴다(그날 마지막 값은 turnover_day 가 1년)
+_SLOT_SCHEMA = ("CREATE TABLE IF NOT EXISTS turnover_slot (day TEXT NOT NULL, slot TEXT NOT NULL, code TEXT NOT NULL, value INTEGER, price INTEGER, "
+                "PRIMARY KEY (day, slot, code))")
 
 _status = {"at": None, "codes": 0, "got": 0, "error": None, "rounds": 0}
 
@@ -41,15 +48,48 @@ def calc(price, value, fl):
     return cap, turn
 
 
-def fill(rows, prices=None):
-    """rows[] 에 floatCap · turn 을 붙인다 — prices {code: {price, value}} 가 있으면 그 값(실시간) · 없으면 줄의 price 와 쌓인 그날 값."""
+def _slot(hm):
+    return "%02d%02d" % divmod(hm // SLOT_MIN * SLOT_MIN, 60)
+
+
+def prev_slot(proxy, codes, day, slot):
+    """오늘 앞 마지막 날의 그 칸(없으면 그 앞 가장 가까운 칸) 값 {code: (value, price)} — 표가 없거나 못 읽으면 {}."""
+    if not codes:
+        return {}
+    q = ",".join("?" * len(codes))
+    try:
+        with proxy.db_conn() as conn:
+            pd = conn.execute("SELECT MAX(day) FROM turnover_slot WHERE day < ?", (day,)).fetchone()[0]
+            if not pd:
+                return {}
+            got = conn.execute("SELECT code, value, price, slot FROM turnover_slot WHERE day = ? AND slot <= ? AND code IN (%s) ORDER BY slot"
+                               % q, [pd, slot] + list(codes)).fetchall()
+    except Exception:
+        return {}
+    return {c: (v, p) for c, v, p, _ in got}            # 칸 순으로 덮어 가장 늦은 칸이 남음
+
+
+def _prev_pct(turn, pv, fl):
+    if turn is None or not pv:
+        return None
+    _, t0 = calc(pv[1], pv[0], fl)
+    return round(turn / t0 * 100, 1) if t0 else None
+
+
+def fill(rows, prices=None, proxy=None):
+    """rows[] 에 floatCap · turn · turnPrevPct 를 붙인다 — prices {code: {price, value}} 가 있으면 그 값(실시간) · 없으면 줄의 price 와 쌓인 그날 값.
+    proxy 를 주면 전날 같은 시각 칸과 견준다(없으면 turnPrevPct null)."""
     import company_profile
     fl = company_profile.floats()
+    now = _now()
+    prev = prev_slot(proxy, [r["code"] for r in rows], now.strftime("%Y%m%d"), _slot(now.hour * 60 + now.minute)) if proxy is not None else {}
     for r in rows:
         p = (prices or {}).get(r["code"]) or {}
         price = p.get("price") if p else r.get("price")
         value = p.get("value") if p else r.get("value")
-        r["floatCap"], r["turn"] = calc(price, value, fl.get(r["code"]))
+        f = fl.get(r["code"])
+        r["floatCap"], r["turn"] = calc(price, value, f)
+        r["turnPrevPct"] = _prev_pct(r["turn"], prev.get(r["code"]), f)
 
 
 def day_rows(proxy, day, codes):
@@ -68,10 +108,20 @@ def day_rows(proxy, day, codes):
 
 def fill_day(proxy, day, rows):
     """지난 판(굳힌 날) 줄에 그날 쌓인 마지막 값으로 floatCap · turn — 쌓기 전 날은 None."""
-    got = day_rows(proxy, day, [r["code"] for r in rows])
+    codes = [r["code"] for r in rows]
+    got = day_rows(proxy, day, codes)
+    pd = None
+    try:
+        with proxy.db_conn() as conn:
+            pd = conn.execute("SELECT MAX(day) FROM turnover_day WHERE day < ?", (day,)).fetchone()[0]
+    except Exception:
+        pass
+    prev = day_rows(proxy, pd, codes) if pd else {}
     for r in rows:
         g = got.get(r["code"]) or {}
         r["floatCap"], r["turn"] = calc(g.get("price"), g.get("value"), g.get("floatShares"))
+        pg = prev.get(r["code"]) or {}
+        r["turnPrevPct"] = _prev_pct(r["turn"], (pg.get("value"), pg.get("price")) if pg else None, g.get("floatShares"))   # 굳힌 판 — 그날 끝 ÷ 전날 끝
 
 
 def _store(proxy, day, quotes, fl):
@@ -86,6 +136,14 @@ def _store(proxy, day, quotes, fl):
         keep = [d for (d,) in conn.execute("SELECT DISTINCT day FROM turnover_day ORDER BY day DESC LIMIT ?", (dt30.DAYS_KEEP,))]
         if keep:
             conn.execute("DELETE FROM turnover_day WHERE day < ?", (keep[-1],))   # 보관은 단타 판과 같은 거래일 수(dt30.DAYS_KEEP)
+        now = _now()
+        slot = _slot(min(now.hour * 60 + now.minute, dt30._close_min(proxy, now)))   # 끝난 뒤 바퀴는 끝 칸에
+        conn.execute(_SLOT_SCHEMA)
+        conn.executemany("INSERT OR REPLACE INTO turnover_slot (day, slot, code, value, price) VALUES (?,?,?,?,?)",
+                         [(d, slot, c, v, p) for d, c, v, p, _, _ in rows])
+        ks = [d for (d,) in conn.execute("SELECT DISTINCT day FROM turnover_slot ORDER BY day DESC LIMIT ?", (SLOT_KEEP_DAYS,))]
+        if ks:
+            conn.execute("DELETE FROM turnover_slot WHERE day < ?", (ks[-1],))
     return len(rows)
 
 
