@@ -1456,7 +1456,9 @@ M1_FILL_SPAN = 40             # 지난 판 1분봉 되받기 — 여는 시각 +
 def m1_fill(proxy, cfg, limit=BACKFILL_DAYS):
     """지난 판(오늘 앞 limit 날) 줄 중 여는 시각 1분봉이 없는 종목 — KIS 지난 날 분봉을 한 번씩 받아 1분봉으로 저장 → 받은 (종목 · 날) 수.
     1분봉은 11-11 10:46 부터 쌓여 그 전 판은 「개장 N분 뒤 값」 · VI 값이 비었다 — 셈 칸 매수가 09:01 이면 그 날들이 「매매 없음」(11-23 재권님 「응 그렇게해」).
-    받으면 판을 읽을 때 _pxmin_fill · _vipx_fill 이 채운다(판은 안 고침). 받아 봤는데 빈 종목(정지 등)은 표를 남겨 다시 안 묻는다."""
+    받은 뒤 그 판에 여는 값(pxMin · px1) · VI 값(viPx)을 채워 **판에 저장한다** — 1분봉은 5거래일만 남아(holdings/CLAUDE.md 「봉은 기간마다 정한
+    길이만 남긴다」) 지워지면 다시 비기 때문이다(개념정의 검수 11-23 · 길 (ㄱ)). 판에 여는 값이 이미 있는 줄은 안 묻는다.
+    받아 봤는데 빈 종목(정지 등)은 표를 남겨 다시 안 묻는다."""
     today = _now().strftime("%Y%m%d")
     n = 0
     for day in [d for d in days(proxy) if d < today][:limit]:
@@ -1465,7 +1467,9 @@ def m1_fill(proxy, cfg, limit=BACKFILL_DAYS):
             continue
         b = got[0]
         o = _open_min(proxy, day, b)
-        codes = [r["code"] for r in b["rows"]]
+        codes = [r["code"] for r in b["rows"] if not all((r.get("pxMin") or {}).get(str(k)) for k in PX_MIN)]
+        if not codes:
+            continue
         lo, hi = day + _hhmm(o).replace(":", ""), day + _hhmm(o + max(PX_MIN)).replace(":", "")
         with proxy.db_conn() as conn:
             have = {c for (c,) in conn.execute("SELECT DISTINCT code FROM candles WHERE period = '1m' AND ts BETWEEN ? AND ? AND code IN (%s)"
@@ -1481,6 +1485,8 @@ def m1_fill(proxy, cfg, limit=BACKFILL_DAYS):
                 proxy.save_candles(c, "1m", proxy.aggregate_minutes(mine, 1))
             proxy._meta_set(mk, today)
             n += 1
+        if _pxmin_fill(proxy, b):                      # 쌓인 1분봉(방금 받은 것 · 이미 있던 것)으로 판 줄을 채워 저장 — 1분봉이 지워져도 남게
+            _store(proxy, b)
     return n
 
 
