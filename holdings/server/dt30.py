@@ -636,7 +636,7 @@ def _live_calc(proxy, cfg):
                      "down": p.get("pct") is not None and p["pct"] < drop_below_pct()})      # 하락 — 모르면 안 뺀다(재권님 11-12)
     try:
         import turnover
-        turnover.fill(rows, prices)                     # 풀린 시총 · 거래 비율 — 받은 현재가 · 누적 거래대금 그대로(실시간 · 11-23 재권님)
+        turnover.fill(rows, prices, proxy)                     # 풀린 시총 · 거래 비율 — 받은 현재가 · 누적 거래대금 그대로(실시간 · 11-23 재권님)
     except Exception as e:
         print("  [거래 비율] 단타 목록 칸 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)   # 칸은 안 붙음(화면은 「못 잼」)
     tab = score_table(proxy)
@@ -1883,6 +1883,7 @@ def sell_text(r):
 
 
 TURN_NOTE = ("floatCap 풀린 시총(억원) = 발행주식수 × 유동비율(네이버 기업현황) × 현재가 · turn 거래 비율(%) = 그날 누적 거래대금 ÷ 풀린 시총 × 100 · "
+             "turnPrevPct 전날 대비(%) = 거래 비율 ÷ 전날 같은 시각(5분 칸)까지 거래 비율 × 100(굳힌 판은 그날 끝 ÷ 전날 끝) · 색 기준 data/metrics.json turn_prev_pct · "
              "그날 판은 지금 값 · 굳힌 판은 그날 쌓인 마지막 값(turnover_day) · 못 잰 칸은 null · 우선주는 유동비율 출처가 없어 null")
 
 
@@ -1920,7 +1921,7 @@ def board(proxy, day=None, cfg=None):
     try:
         import turnover
         if not b["closed"] and cfg is not None:
-            turnover.fill(b["rows"], q)                 # 그날 판 — 지금 값(실시간)
+            turnover.fill(b["rows"], q, proxy)                 # 그날 판 — 지금 값(실시간)
         else:
             turnover.fill_day(proxy, b["day"], b["rows"])   # 굳힌 판 — 그날 쌓인 마지막 값 · 쌓기 전 날은 None
     except Exception as e:
