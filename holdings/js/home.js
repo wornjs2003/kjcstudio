@@ -22,7 +22,7 @@ import { startLiveLoop } from './components/frame.js';
 import { solveFit } from '../../assets/js/fit-solve.js';
 import { iconHtml, paintIcon } from './components/stock-icon.js';
 import { openModal, closeModal } from './components/modal.js';
-import { loadStockMain, mountStockView } from './components/stock-view.js';
+import { openStockModal as openStockModalPart, currentStockModal } from './components/stock-modal.js';
 import { mountDisclosures } from './components/disclosures.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
 import { mountSchedule } from './components/schedule.js';
@@ -3251,6 +3251,7 @@ function applyPrices(map) {
 
      ⚠️ `frame.js` 에도 `applyPrices` 라는 함수가 따로 있다. **다른 함수다** —
      그쪽이 `onPrices` 를 부르고, 그 `onPrices` 가 이 함수를 부른다. */
+  const stockModal = currentStockModal();
   if (stockModal) {
     const live = rowPrices[stockModal.code];
     /* **값이 안 바뀌었으면 건너뛴다.** `updateRowCells` 의 `lastShown` 과 같은
@@ -3481,20 +3482,13 @@ function anyListed(code) {
    누르기로 되돌렸기 때문이다. 위 「줄을 누르면」 주석에 경위가 있다. */
 
 /* ── 종목 모달 ───────────────────────────
-   목록에서 종목을 눌렀을 때 페이지를 옮기지 않고 그 자리에 띄운다
-   (2026-09-16 지시). 담기는 것은 stock.html 의 본문 그대로다 —
-   마크업도 그리는 코드도 한 곳에만 둔다.
+   목록에서 종목을 눌렀을 때 페이지를 옮기지 않고 그 자리에 띄운다 (2026-09-16 지시).
+   띄우는 몫(서랍 · 닫기 · 모달 안 검색)은 공용 부품 `components/stock-modal.js` 다 — 홈 밖에서도 부른다(2026-11-23).
+   여기는 홈 몫만 — 주소(?code=) · 닫은 뒤 큰 차트 · 모달 검색으로 고른 종목을 큰 차트에.
 
    시세 루프를 새로 돌리지 않는다. 이 화면이 이미 돌고 있으므로 그 값을
-   넘겨준다. 같은 화면에서 루프가 둘이 되면 KIS 를 겹쳐 부르게 되고,
+   넘겨준다(applyModalPrices 쪽). 같은 화면에서 루프가 둘이 되면 KIS 를 겹쳐 부르게 되고,
    2026-09-16 에 그것으로 서버가 터졌다. */
-let stockModal = null;
-
-/* 다른 종목으로 갈아타는 중인가.
-   새 모달을 열면 openModal 이 옛 모달부터 닫는데, 그때 옛 모달의 onClose 가
-   주소까지 되돌리면 방금 밀어 넣은 새 종목을 도로 뱉는다. 갈아타는 동안에는
-   주소를 새 모달에 맡긴다. */
-let switchingStock = false;
 
 /* 브라우저가 히스토리를 이미 옮겼나 (뒤로가기·앞으로가기).
    그 경우 닫으면서 back() 을 또 부르면 **한 칸 더 나가 페이지를 떠난다.**
@@ -3511,21 +3505,13 @@ function dropCodeFromUrl() {
 
 async function openStockModal(code, { push = true, pushed } = {}) {
   const stock = findStock(code);
-  if (!stock || (stockModal && stockModal.code === code)) return;
+  const open = currentStockModal();
+  if (!stock || (open && open.code === code)) return;
 
   /* **카드에서 보던 자리를 넘겨준다** (2026-09-29 지시 — 「모달열면 모달에
      동기화 되야해」). 기간을 바꿀 때만 적으면 **끌어 놓고 바로 연 것**이 빠진다. */
   if (bigChart) {
     try { setChartView(bigPeriod, bigChart.getView()); } catch { /* 아직 없다 */ }
-  }
-
-  let main;
-  try {
-    main = await loadStockMain();
-  } catch (e) {
-    /* 본문을 못 받으면 예전처럼 페이지를 옮긴다. 아무 일도 안 일어나는 것보다 낫다 */
-    location.href = `./stock.html?code=${code}`;
-    return;
   }
 
   /* 이 모달이 히스토리에 항목을 **밀어 넣었나**. 닫을 때 뒤로 갈지,
@@ -3534,55 +3520,29 @@ async function openStockModal(code, { push = true, pushed } = {}) {
   /* 모달 검색으로 갈아탈 때는 앞 모달의 것을 이어받는다(`pushed`) — 주소는 갈아 끼웠으므로
      닫으면 한 번에 홈으로 돌아간다 (2026-10-14 · 모달 종목 검색) */
   const pushedHere = pushed ?? push;
-  if (push) history.pushState({ stock: code }, '', `?code=${code}`);
 
-  switchingStock = true;
-  const { body } = openModal({
-    label: `${stock.name} 종목 정보`,
-    closeButton: false,   // 닫기는 머리(.kh-head)에 제 것이 있다
-    /* 양옆 서랍. 처음에는 접혀 있고, 한 번 펼치면 기억한다 (2026-09-16 지시).
-       key 는 펼친 상태를 적어 두는 이름이라 화면 글자와 따로 둔다 —
-       이름을 바꿔도 펼쳐둔 것이 풀리지 않는다. */
-    /* **이름만 바꾼다. `key` 는 그대로 둔다** — 펼쳐둔 것을 적어 두는
-       이름이라, 바꾸면 재권님이 펼쳐 두신 것이 접힌 채로 돌아온다.
-       서랍에 무엇이 드는지는 `css/modal.css` 의 자리 이름이 정한다
-       (2026-09-22 지시로 양쪽 내용이 바뀌었다). */
-    drawers: {
-      left:  { key: 'stock-memo', label: '투자 지표 · 체결' },
-      right: { key: 'stock-news', label: '투자자 정보 · AI 분석 · 종목 뉴스' },
+  await openStockModalPart(code, {
+    stock,
+    price: rowPrices[code] || null,
+    beforeShow() {
+      if (push) history.pushState({ stock: code }, '', `?code=${code}`);
     },
-    onToggle() {
-      /* 모달 폭이 바뀌었으니 차트도 다시 재야 한다. 캔버스는 CSS 로 늘어나지
-         않아서, 이 줄이 없으면 차트만 옛 폭으로 남는다. */
-      if (stockModal) stockModal.view.resize();
-    },
-    onClose() {
-      if (stockModal && stockModal.code === code) {
-        if (stockModal.search) stockModal.search.destroy();   // 후보 목록은 body 에 붙어 있다
-        stockModal.view.destroy();
-        stockModal = null;
-      }
-
-      /* 갈아타는 중이면 주소는 새 모달이 들고 있다. 여기서 건드리면 안 된다 */
-      if (switchingStock) return;
+    onClose({ switching }) {
+      /* 갈아타는 중이면 주소는 새 모달이 들고 있다. 여기서 건드리면 안 된다 —
+         곧 그 모달이 닫히면서 한 번 더 온다 */
+      if (switching) return;
 
       /* **모달에서 기간이나 자리를 바꿨으면 카드가 따라간다** (2026-09-29 지시 —
          「캔들갯수등도 조절하면 모델에 그대로 적용되야해」). 값은 `chart.js`
          한 곳에 있으므로 **다시 그리기만 하면 된다.**
 
-         떠 있는 모달이 새로 열리는 중(`switchingStock`)이면 건너뛴다 —
-         곧 그 모달이 닫히면서 한 번 더 온다.
-
          ⚠️ **기간을 먼저 읽는다.** `paintBigPeriods()` 가 `bigPeriod` 를 보고
          단추를 그리는데, `paintBigChart()` 안에서 갱신되므로 순서를 바꾸면
-         **단추만 옛 기간으로 남는다** (2026-09-29 실측 — 모달에서 일봉으로
-         바꾸고 닫았는데 카드 단추가 월봉이었다). */
+         **단추만 옛 기간으로 남는다** (2026-09-29 실측). */
       bigPeriod = loadPeriodId(bigPeriod);
       paintBigPeriods();
       /* **캐시를 건너뛰고 즉시 한 번 받는다** (2026-09-30 지시 — 「5번」).
-         모달을 보는 동안 카드 차트는 안 그려지는데, 그냥 부르면 캔들 캐시
-         (60초)에 걸려 **최대 1분 옛 그림**이 남는다. 닫는 순간 한 번이라
-         총량은 거의 안 는다. */
+         그냥 부르면 캔들 캐시(60초)에 걸려 **최대 1분 옛 그림**이 남는다. */
       paintBigChart({ fresh: true });
 
       /* 뒤로가기로 닫힌 것이면 히스토리도 주소도 이미 제자리다 */
@@ -3592,49 +3552,13 @@ async function openStockModal(code, { push = true, pushed } = {}) {
         /* 목록에서 연 것이다. 되돌아갈 자리가 있다 */
         history.back();
       } else {
-        /* 주소로 바로 들어왔거나 뒤로가기로 열린 것이다. 되돌아갈 자리가
-           없으므로 back() 하면 **모달이 아니라 페이지를 떠난다.**
+        /* 주소로 바로 들어왔거나 뒤로가기로 열린 것이다. back() 하면 **페이지를 떠난다.**
            주소에서 ?code= 만 턴다 — 안 그러면 새로고침 때 또 열린다. */
         dropCodeFromUrl();
       }
     },
-  });
-  switchingStock = false;
-
-  body.appendChild(main);
-  addModalActions(main, code);
-  const search = addModalSearch(main, code, pushedHere);
-
-  const view = mountStockView(main, stock, { onBack: closeModal, view: 'modal' });
-  stockModal = { code, view, search };
-  view.paint(rowPrices[code] || null);
-}
-
-/* 머리 오른쪽에 「전체 화면」과 닫기를 붙인다. stock.html 에는 없는 것이라
-   — 그 화면은 이미 전체 화면이다 — 모달에서만 더한다. */
-function addModalActions(main, code) {
-  const top = main.querySelector('.kh-head-top');
-  if (!top || top.querySelector('.kh-head-act')) return;
-  const act = document.createElement('div');
-  act.className = 'kh-head-act';
-  act.innerHTML = `
-    <button class="kh-modal-x" data-tip="닫기 (Esc)" aria-label="닫기">✕</button>`;
-  act.querySelector('.kh-modal-x').addEventListener('click', closeModal);
-  top.appendChild(act);
-}
-
-/* 머리 왼쪽 종목 이름 옆에 종목 검색 (2026-10-14 지시 — 「차트 모달창에서 종목검색 넣어주고 검색된 종목 모달로
-   이동되도록 해줘」 · 「넓은폭은 삼성전자 이름 옆으로 가까우면 좋을거 같아 오른쪽보다는 왼쪽으로」).
-   부품 · 목록 · API 는 갈래 줄 검색과 같다. 고르면 **갈래 줄과 같은 길**(큰 차트 · 패널이 그 종목)을 가고
-   모달도 그 종목으로 갈아탄다. 주소는 쌓지 않고 갈아 끼운다 — 쌓으면 닫을 때 popstate 가 앞 종목 모달을
-   다시 연다. 좁은 폭은 돋보기만 ✕ 옆에 둔다(css/modal.css). */
-function addModalSearch(main, code, pushedHere) {
-  const top = main.querySelector('.kh-head-top');
-  const act = top && top.querySelector('.kh-head-act');
-  if (!act) return null;
-  const slot = document.createElement('span');
-  top.insertBefore(slot, act);
-  const search = mountStockSearch(slot, {
+    /* 모달 안 검색으로 고르면 **갈래 줄과 같은 길**(큰 차트 · 패널이 그 종목)을 가고 모달도 그 종목으로 갈아탄다.
+       주소는 쌓지 않고 갈아 끼운다 — 쌓으면 닫을 때 popstate 가 앞 종목 모달을 다시 연다 (2026-10-14) */
     onPick(next, name) {
       if (!findStock(next)) addExtraStock(next, name || next);
       selectStock(next);
@@ -3644,9 +3568,6 @@ function addModalSearch(main, code, pushedHere) {
       openStockModal(next, { push: false, pushed: pushedHere });
     },
   });
-  /* 칸 안의 Esc 는 목록만 닫는다 — 문서까지 가면 모달이 통째로 닫힌다(components/modal.js) */
-  if (search) search.input.addEventListener('keydown', (e) => { if (e.key === 'Escape') e.stopPropagation(); });
-  return search;
 }
 
 /* 뒤로가기로도 닫힌다. 주소를 복사해 두면 그 종목이 열린 채로 뜬다. */
@@ -3823,7 +3744,7 @@ loadUniverse().then(() => {
   /* 큰 차트로 보고 있는 종목은 **체결마다** 머리 가격 · 끝 봉을 움직인다 (2026-11-05 재권님 「내가 보고있는 차트와 차트모달은 캔들 움직임이
      빠르게」 → (나) 실시간 체결). 지도가 차트를 덮고 있거나 모달이 열려 있으면 쉰다 — 모달은 자기 종목을 따로 지켜본다(stock-view.js).
      서버에 실시간이 없으면(꺼짐) watchLive 가 아무것도 안 한다 — 아래 묶음 시세가 전처럼 2초마다 움직인다 */
-  watchLive(() => ((heatmapView && heatmapView.market) || stockModal ? null : selectedCode), () => {
+  watchLive(() => ((heatmapView && heatmapView.market) || currentStockModal() ? null : selectedCode), () => {
     if (!selectedCode) return;
     rowPrices = { ...rowPrices, [selectedCode]: withLive(selectedCode, rowPrices[selectedCode]) };
     paintBigPrice();
