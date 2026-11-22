@@ -2023,7 +2023,7 @@ def sell_text(r):
 
 
 TURN_NOTE = ("floatCap 풀린 시총(억원) = 발행주식수 × 유동비율(네이버 기업현황) × 현재가 · turn 거래 비율(%) = 그날 누적 거래대금 ÷ 풀린 시총 × 100 · "
-             "turnPrevPct 전날 대비(%) = 거래 비율 ÷ 전날 같은 시각(5분 칸)까지 거래 비율 × 100(굳힌 판은 그날 끝 ÷ 전날 끝) · 색 기준 data/metrics.json turn_prev_pct · "
+             "turnPrevPct 전날 대비(%) = 거래 비율 ÷ 전날 같은 시각(1분 칸)까지 거래 비율 × 100(굳힌 판은 그날 끝 ÷ 전날 끝) · 색 기준 data/metrics.json turn_prev_pct · "
              "그날 판은 지금 값 · 굳힌 판은 그날 쌓인 마지막 값(turnover_day) · 못 잰 칸은 null · 우선주는 유동비율 출처가 없어 null")
 
 
