@@ -8173,6 +8173,8 @@ def _kr_past_day(cfg, code, day):
             break                                   # 빈 날(휴장 · 정지)이거나 그날 앞까지 닿았다
         t = min(int(b["ts"][8:10]) * 60 + int(b["ts"][10:12]) for b in mine) - 1
     bars = aggregate_minutes(list(raw.values()), 5)
+    if raw:   # 받은 것이 1분 원본이라 1분도 함께 저장 — 호출은 안 는다(11-23 재권님 「전부다 1년을 쌓는다」 · ㄴ 감시 목록 모든 종목 1분 · 5분)
+        save_candles(code, "1m", aggregate_minutes(list(raw.values()), 1))
     return save_candles(code, "5m", bars)
 
 
@@ -11592,7 +11594,7 @@ def main():
         print("  단타 30 판 : 평일 %s 단타 상위 %d 굳힘 · %s~%s %d분마다 값 · %d거래일 · /api/kis/dt30"
               % (dt30.status()["buyAt"], dt30.TOP_N, dt30.times()[0], dt30.times()[-1], dt30.TRACK_STEP, dt30.DAYS_KEEP))
     if not SLOW and is_sender(args.port) and chip_live.start(sys.modules[__name__]):
-        print("  칩 1분봉   : 평일 정규장 %d초마다 단타 칩 걸린 종목 1분봉 받음" % chip_live.CHIP_M1_INTERVAL)
+        print("  칩 1분봉   : 평일 정규장 %d초마다 단타 칩 걸린 종목 1분봉 받음 · %02d:%02d 뒤 감시 목록 전 종목 그날 1 · 5분봉 쌓음" % ((chip_live.CHIP_M1_INTERVAL,) + chip_live.DAY_FILL_AT))
     if not SLOW and is_sender(args.port) and turnover.start(sys.modules[__name__]):
         print("  거래 비율  : 평일 정규장 %d초마다 감시 목록 전부 거래대금 쌓음 · 단타 판 floatCap · turn" % turnover.TURN_INTERVAL)
     if not SLOW and is_sender(args.port) and vi_days.start(sys.modules[__name__]):
