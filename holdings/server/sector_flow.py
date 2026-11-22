@@ -74,7 +74,7 @@ SNAP_LATE_MIN = 5                      # 경계에서 몇 분 안이면 늦게�
 FREEZE_AT = (int(END[:2]), int(END[2:]) + 1)
 REFRESH_MS = 60000                     # 화면이 다시 받을 주기 — 사진은 STEP 분마다라 1분이면 넉넉하다
 EOK = 100000000
-KEEP_SNAP_DAYS = 5
+KEEP_SNAP_DAYS = None                  # 사진 보관 거래일 — 단타 자료 1년(dt30.DAYS_KEEP 한 곳을 지울 때 읽음 · 11-23 재권님 「전부다 1년을 쌓는다로 해줘」 · 그 전 5)
 FILL_MIN_CODES = 300                   # 5분봉 되채움 — 그날 08:00~09:25 봉이 있는 종목이 이보다 적으면 안 채운다(봉을 덜 받은 날)
 LIVE_TTL = 30
 TICK = 15
@@ -165,7 +165,8 @@ def snap(proxy, day, at):
         conn.executemany("INSERT OR REPLACE INTO sector_snap (day, at, code, nx_val, nx_vol, nx_price, j_val, j_vol, j_price, j_pct, j_power) "
                          "VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows)
         days = [r[0] for r in conn.execute("SELECT DISTINCT day FROM sector_snap ORDER BY day DESC")]
-        for d in days[KEEP_SNAP_DAYS:]:
+        import dt30
+        for d in days[KEEP_SNAP_DAYS or dt30.DAYS_KEEP:]:
             conn.execute("DELETE FROM sector_snap WHERE day = ?", (d,))
     _status.update(lastSnap=at, lastSnapAt=_now().isoformat(timespec="seconds"), lastSnapSec=round(time.time() - t0, 1),
                    lastCodes=len(rows), lastPowers=len(power), error=None)
