@@ -10,7 +10,7 @@
 
 받는 길
     판에 보이는 종목(칩 걸림)   단타 목록 · 판이 받는 현재가에 누적 거래대금이 함께 온다 — 그 자리에서 셈(실시간)
-    그 밖 감시 목록 전부        장중 TURN_SEC 마다 한 바퀴(dart 감시 목록 · 30종목 묶음 시세) — 그날 마지막 값을 turnover_day 에 쌓는다
+    그 밖 감시 목록 전부        장중 TURN_INTERVAL 마다 한 바퀴(dart 감시 목록 · 30종목 묶음 시세) — 그날 마지막 값을 turnover_day 에 쌓는다
                                묶음 시세 캐시를 함께 써서 투자자 판(INVESTOR_BOARD_REFRESH_INTERVAL)이 막 받은 종목은 다시 안 묻는다
 못 잰 칸은 None(「못 잼」 · 0 아님) — 유동비율을 아직 못 읽은 종목 · 거래대금이 안 온 종목.
 """
@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 KST = timezone(timedelta(hours=9))
-TURN_SEC = 60                 # 장중 전 종목 한 바퀴 간격(초) — 재권님 「가」(11-23 · 장중 1분마다) · 785종목이면 묶음 27건(KIS 초당 0.45건쯤)
+TURN_INTERVAL = 60            # 장중 전 종목 한 바퀴 간격(초) — 재권님 「가」(11-23 · 장중 1분마다) · 785종목이면 묶음 27건(KIS 초당 0.45건쯤)
 AFTER_MIN = 5                 # 정규장 끝 뒤 이 분 안에 한 바퀴 더 — 그날 마지막 거래대금을 쌓는다
 _SCHEMA = ("CREATE TABLE IF NOT EXISTS turnover_day (day TEXT NOT NULL, code TEXT NOT NULL, value INTEGER, price INTEGER, "
            "float_shares INTEGER, at TEXT, PRIMARY KEY (day, code))")
@@ -94,18 +94,18 @@ def round_once(proxy, cfg, day):
     import company_profile
     import dart
     codes = [r["stock_code"] for r in dart.universe_rows(None) if (r["stock_code"] or "").isdigit() and len(r["stock_code"]) == 6]
-    quotes, _ = proxy.fetch_quotes_multi(cfg, codes, max_age=TURN_SEC // 2)
+    quotes, _ = proxy.fetch_quotes_multi(cfg, codes, max_age=TURN_INTERVAL // 2)
     n = _store(proxy, day, quotes, company_profile.floats())
     _status.update(at=_now().strftime("%H:%M:%S"), codes=len(codes), got=n, error=None, rounds=_status["rounds"] + 1)
     return n
 
 
 def status():
-    return dict(_status, turnSec=TURN_SEC)
+    return dict(_status, turnSec=TURN_INTERVAL)
 
 
 def start(proxy):
-    """쓰는 서버가 뜰 때 한 번 — 평일 정규장 동안 TURN_SEC 마다 · 끝난 뒤 AFTER_MIN 안 한 번."""
+    """쓰는 서버가 뜰 때 한 번 — 평일 정규장 동안 TURN_INTERVAL 마다 · 끝난 뒤 AFTER_MIN 안 한 번."""
     if not proxy.marketdb.writable():
         return False
     import dt30
@@ -123,7 +123,7 @@ def start(proxy):
                 if now.weekday() < 5 and market_hours.today(proxy, day=day, now=now).get("open") is not False:
                     o = dt30.OPEN_AT[0] * 60 + dt30.OPEN_AT[1] + dt30.late_min(proxy, now)
                     c = dt30._close_min(proxy, now)
-                    if o <= hm < c and time.time() - last >= TURN_SEC:
+                    if o <= hm < c and time.time() - last >= TURN_INTERVAL:
                         last = time.time()
                         round_once(proxy, proxy.load_secrets(), day)
                     elif c <= hm < c + AFTER_MIN + 1 and closed != day and hm >= c + 1:
