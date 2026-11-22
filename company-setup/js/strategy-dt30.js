@@ -371,6 +371,13 @@ function calc(d) {
   return { times, all, live, rows1, rows, L, LIVE, R, n, nb, per, top, noMkt, P, lkMode, lkWon, lkCnt, G };
 }
 
+// 날별 합계에서 손익이 없는 날의 까닭 (11-23 재권님 「응」) — 매수가가 분 칸(09:01 ~ 09:05)인데 돈 넣을 줄 전부 그 분 값이 없으면(1분봉을 11-12 부터 쌓아 그 앞 날은 비어 있음)
+//   「09:01 값 없음」 · 그 밖은 「매매 없음」 그대로
+function noTradeWhy(C) {
+  const n = pmOf(st.set.buy || 'open'), xs = C.lkMode ? C.R.filter((x) => Number(x.r.lock) > 0) : C.R.slice(0, C.n);
+  return n && xs.length && xs.every((x) => { const o = minVal(x.r, n); return !(o && Number(o.px) > 0); }) ? `${hmS(minHM(n))} 값 없음` : '매매 없음';
+}
+
 // 불타기 (11-18 재권님 「손절한 종목을 상승한 종목에 불타기 하는것도 추가해줘」 → (가) 「가로 해줘. 이걸 할지말지를 넣을수 있게」)
 //   · 상위 종목 중 손절로 판 종목이 있으면, 그 판 돈(세금 · 수수료 뺀 것)을 그 30분 시각에 아직 들고 있는 종목 중 매수가 대비 가장 많이 오른 한 종목에 그 시각 값으로 더 산다
 //   · 더 산 몫은 그 종목이 파는 때 · 값에 함께 판다(세금 · 수수료 같은 셈) · 번 돈은 그 종목 손익(net)에 더해 합계 · 칩 묶음 · 달 합계가 함께 따라감
@@ -664,7 +671,7 @@ async function monthPaint() {
   let tot = 0, won0 = 0, lost = 0, cnt = 0; const miss = [];
   // 최근 날이 앞(11-18 재권님 「11월 합계는 최근날짜가 앞으로 오게」)
   const parts = ds.slice().reverse().map((d) => { const D = get(d); if (!D) { miss.push(dayTxt(d)); return `<span>${dayTxt(d)} <span class="st-err">못 받음</span></span>`; }
-    const C = calc(D); if (!C.P) return `<span>${dayTxt(d)} 매매 없음</span>`;
+    const C = calc(D); if (!C.P) return `<span>${dayTxt(d)} ${noTradeWhy(C)}</span>`;
     cnt++; tot += C.P.net; if (C.P.net > 0) won0++; else if (C.P.net < 0) lost++;
     return `<span>${dayTxt(d)} <span class="${signClass(C.P.net, NUM) || ''}">${won(C.P.net)}</span>${C.LIVE ? '<small>장중</small>' : ''}</span>`; });
   el.innerHTML = `<b>${ttl} 합계 — 지금 칸 · 칩대로 · 세후 <span class="${signClass(tot, NUM) || ''}">${won(tot)}</span></b> · 매매한 날 ${cnt} · 번 날 ${won0} · 잃은 날 ${lost}${miss.length ? ` · 못 받은 날 ${miss.length}(합계에서 뺌)` : ''}<br>${parts.join(' · ')}`;
