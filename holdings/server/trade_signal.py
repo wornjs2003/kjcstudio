@@ -61,7 +61,6 @@ READ_SEC = 5                  # 슬랙 채널 읽는 간격(초) — 재권님 �
 READ_FROM, READ_TO = (8, 0), (21, 0)   # 평일 이 사이에만 읽는다 — 매도 결과는 장중 · 넥스트레이드 끝(20:00) 뒤 조금까지
 SET_DOC = "trade-set"
 MAX_PAGES = 10                # 한 바퀴에 읽는 쪽 수(쪽마다 200)
-SELL_BEFORE_CLOSE_MIN = 10   # 매도 시각이 정규장 끝 뒤로 적혔을 때 대신 쓰는 시각 — 정규장 끝 이 분 전
 SELL_RETRY_SEC = 60          # 슬랙이 매도 신호를 거절했을 때 다시 보내기까지(초)
 _sell_hold = {"until": 0.0}
 SEND_CHECK_SEC = 10          # 첫 굳힘이 났나 판을 보는 간격(초)
@@ -217,9 +216,10 @@ def sell_check(proxy, day):
     close = dt30._close_min(proxy, now)
     if now.hour * 60 + now.minute >= close:
         return 0                                       # 정규장이 끝난 뒤에는 안 보낸다 — 서버가 늦게 떠도 장 뒤에 「매도 시각」 이 나가지 않게(개념정의 덧 11-23 · 판은 정규장 종목)
-    last = "%02d%02d" % divmod(close - SELL_BEFORE_CLOSE_MIN, 60)
+    last = dt30.times(dt30.late_min(proxy, now))[-1]
     if end > last:
-        end = last                                     # 매도 시각 칸이 정규장 끝 뒤로 적혔으면 끝 SELL_BEFORE_CLOSE_MIN 분 전에 판다 — 안 그러면 「매도 시각」 이 영영 안 나감(개념정의 덧 11-23)
+        end = last                                     # 매도 시각 칸이 판 마지막 값 칸(dt30.times 끝) 뒤로 적혔으면 그 칸에 판다 — 승률 표(sell_of 는 end 이하 마지막 값 칸)와 같은 때 ·
+                                                       # 안 그러면 「매도 시각」 이 영영 안 나감(개념정의 덧 11-23 · 처음엔 끝 10분 전이었다가 승률 표와 갈려 고침)
     out = []
     for jid, code, name in todo:
         r = rows.get(code)
