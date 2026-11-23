@@ -203,6 +203,21 @@
   --kh-cat-rose-dim:   rgb(214 51 108 / 10%);    /* #d6336c 의 10% */
   --kh-cat-slate:      #4e5968;                  /* --kh-text-secondary 와 같은 값, 뜻은 다름 */
   --kh-cat-slate-dim:  rgb(78 89 104 / 10%);     /* #4e5968 의 10% */
+  /* 단타 판 칩 색이 안 겹치게 더한 일곱(11-23 재권님 「겹치는 색 없게」 · 시황분석1) — 칩 · 하위 단추 열셋을 다 다른 색으로 */
+  --kh-cat-cyan:       #1098ad;
+  --kh-cat-cyan-dim:   rgb(16 152 173 / 10%);    /* #1098ad 의 10% */
+  --kh-cat-lime:       #74b816;
+  --kh-cat-lime-dim:   rgb(116 184 22 / 10%);    /* #74b816 의 10% */
+  --kh-cat-grape:      #ae3ec9;
+  --kh-cat-grape-dim:  rgb(174 62 201 / 10%);    /* #ae3ec9 의 10% */
+  --kh-cat-orange:     #f76707;
+  --kh-cat-orange-dim: rgb(247 103 7 / 10%);     /* #f76707 의 10% */
+  --kh-cat-navy:       #1b2a6b;
+  --kh-cat-navy-dim:   rgb(27 42 107 / 10%);     /* #1b2a6b 의 10% */
+  --kh-cat-green:      #2b8a3e;
+  --kh-cat-green-dim:  rgb(43 138 62 / 10%);     /* #2b8a3e 의 10% */
+  --kh-cat-brown:      #8c5a3c;
+  --kh-cat-brown-dim:  rgb(140 90 60 / 10%);     /* #8c5a3c 의 10% */
 
   /* ── 그림자 ──
      토스는 그림자를 거의 쓰지 않습니다. 회색 바탕 + 흰 카드로 대비를 냅니다. */
