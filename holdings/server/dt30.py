@@ -934,6 +934,87 @@ LOCK_N = 10
 # (재권님 「나로 해줘」 11-20 10:2x — 「여는 시각만큼 밀어 10:05 · 10:30」 · 마지막은 「가」 굳히기 10:30 그대로). 칸: rows[].lock(1~3) · lockAt · lockRank · meta.lockDone · lockAt · lockN.
 
 
+WIN_ENDS = ((9, 10), (9, 30), (10, 0), (10, 30), (11, 0))   # 시간 창 끝 — 재권님 「굳힘이 아니고 이걸 필터로 만들어야 할거같은데 9시~30분까지 목록 9시 31~10 00시 10시 31분~11 00시 장중」
+                                                            # → 「09시 09시 10분도 추가해주고 그렇게 나누고 해당시간에 필터가 들어온 애들만 적용되게 나누면 돼」 → 안에 「응 해」(11-23 17:2x)
+                                                            # 창은 09:00~09:10 · 09:11~09:30 · 09:31~10:00 · 10:01~10:30 · 10:31~11:00 · 그 뒤 「장중」 · 늦게 여는 날은 lateMin 만큼 뒤
+
+
+def win_bounds(b):
+    """그 판의 시간 창 [(번호, 이름, 시작 분, 끝 분 | None)] — 마지막은 「장중」(끝 없음)."""
+    lm = (b.get("meta") or {}).get("lateMin")
+    lm = lm if isinstance(lm, int) else 0
+    out, start = [], OPEN_AT[0] * 60 + OPEN_AT[1] + lm
+    for i, (h, m) in enumerate(WIN_ENDS, 1):
+        end = h * 60 + m + lm
+        out.append((i, "%s~%s" % (_hhmm(start), _hhmm(end)), start, end))
+        start = end + 1
+    out.append((len(WIN_ENDS) + 1, INTRA_NAME, start, None))
+    return out
+
+
+def _qual_at(r, n, ov):
+    """그 줄이 필터(단타 셈 칩 n 개 이상)에 처음 든 시각 「HH:MM」 — 칩 시각(chipAt) 중 n 번째로 이른 것. 칩 시각이 없는 옛 줄은 든 때(_in_hms) · 그래도 없으면 None."""
+    ts = sorted(t for c, t in (r.get("chipAt") or {}).items() if c in ov and isinstance(t, str) and re.fullmatch(r"\d\d:\d\d", t))
+    if len(ts) >= n:
+        return ts[n - 1]
+    if not r.get("chipAt") and (r.get("n") or 0) >= n:
+        t = _in_hms(r)
+        return t[:5] if t else None
+    return None
+
+
+def apply_windows(proxy, b):
+    """굳힘 대신 시간 창으로 나눈다 — 줄마다 필터에 처음 든 시각(_qual_at)이 든 창 하나에만(lock = 창 번호 · lockAt = 창 이름 · lockRank = 창 안 차례 · lockTs = 든 시각).
+    칩이 늦게 와도 칩 시각으로 다시 나눈다(읽을 때마다 · 같은 판이면 같은 결과) · 아직 문턱 밑인 줄은 묶음 없음(진행 중).
+    필터에 든 분이 판에 든 분과 다르면(늦게 온 칩 — 거래비율 등 · 칩이 빠졌다 다시 듦) 산 값을 그 분 1분봉 종가로 — 재권님 안 「산 값은 그 시각 1분봉 값」(17:2x) · 여는 시각 전이면 그대로(9시 1분 값) · 1분봉이 없으면 그대로.
+    옮긴 줄 수."""
+    rows = b.get("rows") or []
+    if not rows:
+        return 0
+    m = b.setdefault("meta", {})
+    n = m.get("minChips") if isinstance(m.get("minChips"), int) else MIN_CHIPS
+    ov = set(ov_chips())
+    wins = win_bounds(b)
+    open_m = OPEN_AT[0] * 60 + OPEN_AT[1] + ((m.get("lateMin") if isinstance(m.get("lateMin"), int) else 0))
+    fix = []
+    for r in rows:
+        q = _qual_at(r, n, ov)
+        old = (r.get("lock"), r.get("lockAt"))
+        if not q:
+            for k in ("lock", "lockAt", "lockRank", "lockTs"):
+                r.pop(k, None)
+            r.pop("winAt", None)
+        else:
+            qm = int(q[:2]) * 60 + int(q[3:])
+            w = next((x for x in wins if x[3] is None or qm <= x[3]), wins[-1])
+            r["lock"], r["lockAt"], r["winAt"] = w[0], w[1], q
+            r["lockTs"] = q + ":00"
+            ent = _in_hms(r)
+            if ent and qm > open_m and q != ent[:5]:        # 필터에 든 분이 판에 든 분과 다르면(늦게 온 칩으로 앞 · 칩이 빠졌다 다시 들어 뒤) 그 분 값 · 같은 분이면 그대로
+                fix.append((r, q))
+        r["_moved"] = old != (r.get("lock"), r.get("lockAt"))
+    if fix:                                            # 필터에 든 분 ≠ 판에 든 분 — 그 분 1분봉 값
+        try:
+            with proxy.db_conn() as conn:
+                for r, q in fix:
+                    px = _m1_px(conn, b["day"], [r["code"]], b["day"] + q.replace(":", ""), "close").get(r["code"])
+                    if px:
+                        r["buy"], r["buyAt"], r["buyTs"], r["buySrc"] = px, q, q + ":00", "창 1분봉"
+        except Exception:
+            pass
+    for i, _name, _s, _e in wins:
+        grp = sorted([r for r in rows if r.get("lock") == i], key=lambda r: r.get("rank") or 1e9)
+        for k, r in enumerate(grp, 1):
+            r["lockRank"] = k
+    moved = sum(1 for r in rows if r.pop("_moved", False))
+    m["lockAt"] = [w[1] for w in wins]
+    m["windows"] = [{"lock": w[0], "name": w[1], "from": _hhmm(w[2]), "to": _hhmm(w[3]) if w[3] is not None else None} for w in wins]
+    m["lockN"] = None                                  # 창에는 종목 수 한도가 없다(필터에 든 것 전부)
+    m["lockMode"] = "window"                           # 굳힘(lockDone · 그 시각 스냅숏) 대신 시간 창 — 11-23 17:2x
+    _lock_order(b)
+    return moved
+
+
 def _lock_keep(old_rows, nb_rows):
     """다시 셀 때 — 굳힌 줄이 새 셈에서 빠졌으면 옛 줄 그대로 되살린다. 되살린 수."""
     have = {r["code"] for r in nb_rows}
@@ -977,7 +1058,7 @@ def _lock_times(b):
     return [min(h * 60 + m + lm, cap) for h, m in lock_at()]
 
 
-INTRA_LOCK = len(LOCK_AT) + 1  # 「장중」 묶음 — 마지막 굳힘(BUY_LATE) 뒤 칩에 걸린 종목을 매도 시각까지 판에 더함 · 든 때 가격에 산 것
+INTRA_LOCK = len(WIN_ENDS) + 1  # 「장중」 묶음(시간 창 마지막 · 11-23 17:2x 부터 창 번호) — 원래는 — 마지막 굳힘(BUY_LATE) 뒤 칩에 걸린 종목을 매도 시각까지 판에 더함 · 든 때 가격에 산 것
 INTRA_NAME = "장중"            # 재권님 「10시 30분 이후에 걸리는 종목은 10시 30분 옆에 장중 이라고 칸 만들어서 거기에 걸리게 해줘」(11-23 10:3x) → 안에 「응」
 
 
@@ -1054,9 +1135,11 @@ def _in_hms(r):
 
 
 def lock_fix(b):
-    """굳힘 시각보다 뒤에 든 줄이 그 굳힘에 묶여 있으면 다음 굳힘으로 옮긴다 — 다음 굳힘이 이미 지났으면 그 묶음 끝으로 · 마지막 묶음이면 풂(진행 중).
+    """**11-23 17:2x 부터 안 씀** — 굳힘을 시간 창(apply_windows)으로 바꿈. 0 을 낸다.
+    굳힘 시각보다 뒤에 든 줄이 그 굳힘에 묶여 있으면 다음 굳힘으로 옮긴다 — 다음 굳힘이 이미 지났으면 그 묶음 끝으로 · 마지막 묶음이면 풂(진행 중).
     11-23 오늘 판 — 09:05 굳힘이 09:05:55 에 돌아 그 바퀴에 든 이수페타시스가 · 09:30 굳힘이 09:30:37 에 돌아 그 바퀴에 든 일곱이 묶였다(재권님 「그 이후에 든 종목은 9시 30분 굳힘 으로 이동되어야지」 → 「응」).
     옮긴 줄 수 · 여러 번 불러도 같다."""
+    return 0                                           # 시간 창(apply_windows)이 대신 — 재권님 「굳힘이 아니고 필터로」(11-23 17:2x)
     m = b.get("meta") or {}
     ats, done = list(m.get("lockAt") or []), set(m.get("lockDone") or [])
     n = 0
@@ -1100,6 +1183,7 @@ def lock_fix(b):
 
 def _lock_due(b, nm):
     """굳힐 때가 지난 차례를 굳힌다 — 굳지 않은 줄 중 순위 위 LOCK_N 개. 굳힌 차례 목록(이번에 한 것)."""
+    return []                                          # 시간 창(apply_windows)이 대신 — 재권님 「굳힘이 아니고 필터로」(11-23 17:2x)
     done = list(b["meta"].get("lockDone") or [])
     old_at = list(b["meta"].get("lockAt") or [])         # 이미 굳힌 차례의 시각은 그대로 — 그날 중간에 시각을 바꿔도 지난 묶음 이름이 안 바뀜
     did = []
@@ -1384,7 +1468,14 @@ def _load(proxy, day):
             got = conn.execute("SELECT board, saved_at FROM dt30 WHERE day = ?", (day,)).fetchone()
     except Exception:
         return None
-    return (json.loads(got[0]), got[1]) if got else None
+    if not got:
+        return None
+    b = json.loads(got[0])
+    try:
+        apply_windows(proxy, b)                        # 읽을 때마다 시간 창으로 — 판 · 승률 · 매매일지가 같은 묶음을 본다(11-23 17:2x)
+    except Exception as e:
+        print("  [단타 30] 시간 창 못 나눔 — %s" % proxy.safe_message(e, 120), flush=True)
+    return b, got[1]
 
 
 def _store(proxy, b):

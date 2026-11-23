@@ -36,7 +36,7 @@ DAYS_DEFAULT = 30
 TICK = 60                    # 끝난 판을 보는 간격(초)
 RISE_CHIP = "현재상승"
 TAX = {"KOSPI": {"tx": 0.05, "rural": 0.15}, "KOSDAQ": {"tx": 0.20, "rural": 0.0}}   # % · 2026 세율(KB증권 「2026년 증권거래세율 변경 안내」) · 한 곳 — 단타 판 화면은 dt30 판 meta.tax 로 받음 · 단타 판에서 못 바꿈(재권님 11-20 14:09)
-VER = "v9"                   # 쌓는 줄 모양이 바뀌면 올린다 — 옛 줄을 다시 쌓는다(v2 · 시장 칸 · v3 · 11-18 전 판 칩 이름 옮김 · v4 · 칩 둘 이상만 · v5 · 칩 붙은 시각 chipAt · subAt · buyAt · lockAt 11-20 · v6 · buyTs · lockTs 실제 시각 11-20 · v7 · 시각 칸 값 px — 매도 시각을 부를 때 셈 11-20 · v8 · 굳힘 차례 lock — 「사지 않음」 묶음 가름 11-23 · v9 · 굳힌 뒤 붙은 칩 거래비율 · 거래비율급증을 다시 쌓음(개념정의 덧 ② 11-23))
+VER = "v10"                  # 쌓는 줄 모양이 바뀌면 올린다 — 옛 줄을 다시 쌓는다(v2 · 시장 칸 · v3 · 11-18 전 판 칩 이름 옮김 · v4 · 칩 둘 이상만 · v5 · 칩 붙은 시각 chipAt · subAt · buyAt · lockAt 11-20 · v6 · buyTs · lockTs 실제 시각 11-20 · v7 · 시각 칸 값 px — 매도 시각을 부를 때 셈 11-20 · v8 · 굳힘 차례 lock — 「사지 않음」 묶음 가름 11-23 · v9 · 굳힌 뒤 붙은 칩 거래비율 · 거래비율급증을 다시 쌓음(개념정의 덧 ② 11-23) · v10 · 굳힘 → 시간 창(lock 이 창 번호 1~6 · 11-23 17:2x))
 _SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_win (day TEXT PRIMARY KEY, src_saved TEXT, rows TEXT NOT NULL, at TEXT)"
 _status = {"error": None, "filled": 0, "at": None}
 
@@ -69,7 +69,7 @@ def day_rows(b):
                     # 칩 · 하위가 판에 붙은 시각과 든 시각 — 굳힌 뒤(10:30 뒤) 늦게 붙은 칩도 승률에 넣되 시간대로 가를 수 있게
                     # (재권님 「시간대가 추가되면 넣어놓는게 좋을거같아」 11-20 · 옛 판은 없음 → null)
                     "chipAt": r.get("chipAt"), "subAt": r.get("subAt"), "buyAt": r.get("buyAt"), "buyTs": r.get("buyTs"), "lockAt": r.get("lockAt"), "lockTs": r.get("lockTs"),
-                    "lock": r.get("lock")})                       # 굳힘 차례(1 · 2 · 3 · 장중 dt30.INTRA_LOCK · 안 굳음 None) — 「사지 않음」 묶음 가름(no_buy_locks)
+                    "lock": r.get("lock")})                       # 시간 창 번호(1~5 · 장중 dt30.INTRA_LOCK · 문턱 밑 None · 11-23 17:2x 전에는 굳힘 차례) — 「사지 않음」 묶음 가름(no_buy_locks)
     return out
 
 
@@ -269,7 +269,7 @@ def summary(proxy, days=DAYS_DEFAULT):
             got = conn.execute("SELECT day, rows FROM dt30_win ORDER BY day DESC LIMIT ?", (days,)).fetchall()
         except Exception:
             got = []
-    groups = {"chip": {}, "pair": {}, "triple": {}, "count": {}, "countRise": {}, "chipLate": {}}
+    groups = {"chip": {}, "pair": {}, "triple": {}, "count": {}, "countRise": {}, "chipLate": {}, "win": {}}
 
     def add(kind, key, v):
         g = groups[kind].setdefault(key, [[], 0])
@@ -305,6 +305,7 @@ def summary(proxy, days=DAYS_DEFAULT):
             whys[why] = whys.get(why, 0) + 1
             v = net_pct(r, fee)
             chips = sorted(set(r["chips"]))
+            add("win", r.get("lockAt") or "진행 중", v)       # 시간 창마다(09:00~09:10 · … · 장중) — 재권님 안 「승률은 창마다」(11-23 17:2x)
             for c in chips:
                 add("chip", c, v)
                 if late_chip(r, c):
