@@ -2146,6 +2146,9 @@ def m1_fill(proxy, cfg, limit=BACKFILL_DAYS):
     return n
 
 
+ALL_ROWS_SINCE = "20261124"   # 이 날 앞 판 중 줄을 자르던 것만 한 번 다시 짓는다 — 「3천억 이상 칩 든 종목 전부」 가 들어온 날(11-23 재권님 · 되채움 카드 ⑨)
+
+
 def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
     """today 앞 limit 거래일 중 판이 없는 날을 다시 세어 남긴다(라이브로 굳힌 날은 안 건드린다). 남긴 날 수."""
     ds = _trade_days(proxy, today, limit)
@@ -2153,7 +2156,8 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
     for d in days(proxy):                              # 관심 없이 세어 둔 되채운 날(watchSrc 칸 전)은 한 번 다시 센다(11-12 「응」)
         got = _load(proxy, d)
         m = (got[0].get("meta") or {}) if got else {}
-        stale = got and (m.get("capMinEok") != cap_min_eok() or not m.get("allRows"))   # 문턱이 바뀐 판 · 줄을 자르던 판(라이브로 굳힌 날 포함)도 한 번 다시 센다
+        stale = got and (m.get("capMinEok") != cap_min_eok() or (not m.get("allRows") and d < ALL_ROWS_SINCE))   # 문턱이 바뀐 판 · 줄을 자르던 옛 판(라이브로 굳힌 날 포함)은 한 번 다시 센다
+                                                       # — 그 뒤 라이브 판(allRows 없음)은 날마다 다시 짓지 않는다(개념정의 덧 11-23 · 장중 기록을 어림 판으로 덮지 않게)
         if not stale and not (m.get("rebuilt") and ("watchSrc" not in m or m.get("viUntil") != "%02d:%02d" % PAST_LATE)):   # (재권님 「기준 3000억 이상이라고 몇번을 말했는데」 11-23 19:0x)
             have.add(d)                                # VI 창이 다른 되채운 날(11-13 전)도 한 번 다시 센다
         elif m.get("liveBefore"):
