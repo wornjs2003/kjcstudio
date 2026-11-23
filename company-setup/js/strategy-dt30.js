@@ -38,7 +38,7 @@ const dayTxt = (d) => { const m = String(d || '').match(/^(\d{4})(\d{2})(\d{2})$
 const hmTxt = (t) => (/^\d{4}$/.test(String(t)) ? `${String(t).slice(0, 2)}:${String(t).slice(2)}` : esc(t || '—'));
 
 // 이벤트 칸 — 그 종목이 걸린 홀딩스 「관심」 아래 룰(칩) 이름을 홀딩스 칩 줄 차례로 · 이름은 서버 rows[].chips 그대로(재권님 11-11 「종목과 매수가 사이에 이벤트를 추가하고 이벤트가 뭐뭐 걸렸는지 넣어줘 vi 초반급등 긍 관심하위의 룰들」)
-const EV_ORDER = ['관심', '거래량급증', '프리장', '초반상승', '현재상승', 'VI·급등', '볼린저', '장외', '매수', '자동'];
+const EV_ORDER = ['관심', '거래비율', '거래비율급증', '프리장', '초반상승', '현재상승', 'VI·급등', '볼린저', '장외', '매수', '자동'];
 const evHtml = (c, r) => evChips(c, r, r ? [...st.miss].filter((x) => !(c || []).includes(x)) : []);   // 못 받은 칩은 종목마다 이름만 회색으로 붙임 · 「못 받음」 글씨 없음 · 늦게 채워 이미 붙은 칩은 뺌(11-12 재권님 「못받음 이라는 글씨만 빼주고 비활성화 된거같이 회색으로」 → 「각 종목에도 넣어줘」)
 const evChips = (c, r, miss = []) => { const a = [...(Array.isArray(c) ? c : []), ...miss]; if (!a.length) return '<span class="st-err">—</span>'; a.sort((x, y) => (EV_ORDER.indexOf(x) + 99) % 99 - (EV_ORDER.indexOf(y) + 99) % 99); return a.map((x) => { const sb = r ? subsOf(r, x) : []; const dim = r && colsOf().includes(x) && !liveChip(r, x); if (miss.includes(x)) return `<span class="dt-evc is-miss" data-tip="${esc(`그날 판에 ${x} 값을 ${missWord()} — 이 종목이 걸렸는지 모름`)}">${esc(x)}</span>`; const vt = r && x === 'VI·급등' ? viTxt(r) : ''; return `<span class="dt-evc${dim ? ' is-off' : ''}">${esc(x)}${sb.length ? `<small>${esc(subTxt(x, sb))}</small>` : ''}${vt ? `<small>${esc(vt)}</small>` : ''}</span>`; }).join(''); };
 
@@ -72,17 +72,19 @@ async function loadDtChips() {
 //   넓은 폭 표는 칩마다 세로 칸 · 칸 이름을 누르면 차림(켜기 · 끄기 · 룰 보기 · 옮기기 · 칸 지우기) · 끝 「+ 칩」 으로 서버가 주는 다른 칩(현재상승 · 볼린저 · 지운 칩)을 칸으로 더함
 //   셈에 드는 칩 = 칸에 있고 켜진 칩(겹친 수 · 순위 · 손익이 그것으로 다시 셈) · 칸 차례 · 꺼진 칩은 보는 사람 브라우저에만(보는 상태 — 저장 못 해도 기본 칸으로 돈다)
 const COLS_KEY = 'dt30-cols-v1';
-// 거래량급증 칸은 관심 바로 뒤(11-23 재권님 「거래량 급증은 프리장 과 관심 사이로 이동」) — 기본 칸과 이 브라우저에 저장된 칸에 한 번 적용(COLS_MOVED) · 그 뒤 손으로 옮긴 차례는 그대로
-const volNext = (a) => { const i = a.indexOf('거래량급증'), w = a.indexOf('관심'); if (i < 0 || w < 0) return a; const b = a.filter((x) => x !== '거래량급증'); b.splice(b.indexOf('관심') + 1, 0, '거래량급증'); return b; };
-const COLS_MOVED = 'dt30-cols-vol-1123';
+// 거래 칩 둘(거래비율 · 거래비율급증)은 관심 바로 뒤(11-23 재권님 「거래량 급증은 프리장 과 관심 사이로 이동」 · 개발2 fece17c 가 옛 「거래량급증」(하위 비율 · 전일)을 칩 둘로 나눔 — 재권님 「두개야 / 전일대비 현시점거래비율 이랑 유통주식대비 현시점 거래비율」)
+//   기본 칸과 이 브라우저에 저장된 칸에 한 번 적용(COLS_MOVED) · 저장된 칸의 옛 「거래량급증」 은 둘로 바꿈 · 그 뒤 손으로 옮긴 차례는 그대로
+const VOL_CHIPS = ['거래비율', '거래비율급증'];
+const volNext = (a) => { const v = VOL_CHIPS.filter((x) => a.includes(x) || a.includes('거래량급증')); if (!v.length || !a.includes('관심')) return a; const b = a.filter((x) => x !== '거래량급증' && !VOL_CHIPS.includes(x)); b.splice(b.indexOf('관심') + 1, 0, ...v); return b; };
+const COLS_MOVED = 'dt30-cols-vol2-1123';
 // 11-18 서버 바뀜(개발2 · 재권님 「관심 하트는 누르는거 없애고 자동으로 관심으로」 → 「응 맞아」) — meta.watchRule 「자동」 인 날은 관심 = 자동 관심 룰 · 「수급(자동)」 칩이 안 옴
 //   그날은 「자동」 칸을 빼고(빈 칸으로 남기지 않음) · 지난 날 판(옛 셈)은 그대로
 const colsOf = () => (st.cols || DT_CHIPS).filter((c) => !(st.watchAuto && c === '자동'));
-(() => { try { const v = JSON.parse(localStorage.getItem(COLS_KEY) || 'null'); if (v && Array.isArray(v.cols) && v.cols.length) { st.cols = v.cols.map(String).map(chipName); if (!localStorage.getItem(COLS_MOVED) && st.cols.includes('거래량급증')) { st.cols = volNext(st.cols); localStorage.setItem(COLS_MOVED, '1'); localStorage.setItem(COLS_KEY, JSON.stringify({ ...v, cols: st.cols })); } st.off = new Set((v.off || []).map(String).map(chipName)); } } catch (e) { /* 기본 칸 */ } })();
+(() => { try { const v = JSON.parse(localStorage.getItem(COLS_KEY) || 'null'); if (v && Array.isArray(v.cols) && v.cols.length) { st.cols = v.cols.map(String).map(chipName); if (!localStorage.getItem(COLS_MOVED) && (st.cols.includes('거래량급증') || VOL_CHIPS.some((x) => st.cols.includes(x)))) { if (st.off.has('거래량급증')) VOL_CHIPS.forEach((x) => st.off.add(x)); st.off.delete('거래량급증'); st.cols = volNext(st.cols); localStorage.setItem(COLS_MOVED, '1'); localStorage.setItem(COLS_KEY, JSON.stringify({ ...v, cols: st.cols, off: [...st.off] })); } st.off = new Set((v.off || []).map(String).map(chipName)); } } catch (e) { /* 기본 칸 */ } })();
 const colsSave = () => { try { localStorage.setItem(COLS_KEY, JSON.stringify({ cols: colsOf(), off: [...st.off] })); } catch (e) { /* 이 브라우저에 못 남겨도 화면은 돈다 */ } };
 const CHIP_SEEN = [];   // 칩 색 차례 — 서버 단타 칩 차례(loadDtChips 가 채움) 뒤로 처음 본 차례(색 변수는 일곱이라 돌려 씀)
-const HOT = { 거래량급증: 'vol', 'VI·급등': 'vi', 매수: 'buy' };   // 튀는 색 칩 — 진한 바탕 · 하위 단추마다 다른 색(strategy.css · 11-23 재권님 「색은 완전히 튀는 색으로 해주고 각각 버튼 색 다르게」 → 「vi 랑 매수도 이렇게 각각 색이랑 튀도록 해줘」)
-const colorOf = (c) => { if (HOT[c]) return HOT[c];   /* 거래량급증은 따로 튀는 색(strategy.css data-i="vol" · 11-23 재권님 「색은 완전히 튀는 색으로 해주고 각각 버튼 색 다르게」) */ if (!CHIP_SEEN.includes(c)) CHIP_SEEN.push(c); return CHIP_SEEN.indexOf(c) % 7; };
+const HOT = { 거래비율: 'vol', 거래비율급증: 'vol2', 'VI·급등': 'vi', 매수: 'buy' };   // 튀는 색 칩 — 진한 바탕 · 하위 단추마다 다른 색(strategy.css · 11-23 재권님 「색은 완전히 튀는 색으로 해주고 각각 버튼 색 다르게」 → 「vi 랑 매수도 이렇게 각각 색이랑 튀도록 해줘」)
+const colorOf = (c) => { if (HOT[c]) return HOT[c];   /* 거래 칩 · VI · 매수는 서로 안 겹치는 따로 색(strategy.css data-i) */ if (!CHIP_SEEN.includes(c)) CHIP_SEEN.push(c); return CHIP_SEEN.indexOf(c) % 7; };
 const RULE_OF = { 프리장: 'pre', 초반상승: 'rise', 현재상승: 'nowup', 'VI·급등': 'vi', 볼린저: 'bb', 장외: 'after', 자동: 'volsurge' };   // 「종목 고르는 룰」 칩(data-rule) — 없는 칩은 룰 칸 없음
 const subsRaw = (r, c) => { const v = r.subs && r.subs[c]; return Array.isArray(v) ? v : (v ? [v] : []); };
 // VI·급등 하위는 겹치지 않게 둘로 (11-11 재권님 「그중 6개는 따로 분류가 가능하게 해줘」 → 「vi급등칩에 하위에 칩이 2개 있게 해줘」 — VI 43 · 급등 6 이 겹쳐 헷갈림)
@@ -108,18 +110,14 @@ const viFirst = (r) => {
   if (!t.length) { const o = viAt.map && viAt.day === (st.data && st.data.day) ? viAt.map[r.code] : null; if (o) [o.vi, o.surge].filter(Boolean).forEach((x) => t.push(hm4(x))); }
   return t.length ? t.sort()[0] : null;
 };
-// 거래량급증 하위 둘 (11-23 재권님 「거래량 급증은 프리장 과 관심 사이로 이동하고 이거 버튼 2가지로 나누기로 한걸로 나눠줘」) — 서버 subs 「비율」(풀린 시총 대비 거래 비율) · 「전일」(전날 같은 시각 대비) · 「둘 다」 는 두 하위에 다 듦
-//   칩을 따로 나누는 서버 일(개발2 카드 「거래량급증 칩을 둘로」)이 오면 그 칩 이름으로 바꿈 · 걸린 종목이 없는 날도 두 단추는 늘 보임
-const VOL_SUBS = ['비율', '전일'], VOL_SUB_NAME = { '거래량급증|비율': '거래 비율', '거래량급증|전일': '전날 대비' };
 const subsOf = (r, c) => {
-  if (c === '거래량급증') { if (!(r.chips || []).includes(c)) return []; const a = subsRaw(r, c); return [...new Set(a.flatMap((v) => (v === '둘 다' ? VOL_SUBS : [v])))]; }
   if (c === 'VI·급등') { if (!(r.chips || []).includes(c)) return []; const t = viFirst(r), rest = subsRaw(r, c).filter((v) => v !== 'VI' && v !== '급등'); return [t == null ? VI_SUBS[2] : t < viSplit() ? VI_SUBS[0] : VI_SUBS[1], ...rest]; }
   const a = subsRaw(r, c), b = BOTH[c]; if (!b) return a;
   const [[x, y], [onlyX, withY]] = b, hx = a.includes(x), hy = a.includes(y);
   const rest = a.filter((v) => v !== x && v !== y);
   return hy ? [withY, ...rest] : hx ? [onlyX, ...rest] : rest;
 };
-const subOrder = (c, xs) => { if (c === '거래량급증') xs = [...new Set([...VOL_SUBS, ...xs])]; const o = c === 'VI·급등' ? VI_SUBS : c === '거래량급증' ? VOL_SUBS : BOTH[c] ? BOTH[c][1] : []; return xs.sort((p, q) => ((o.indexOf(p) + 99) % 99) - ((o.indexOf(q) + 99) % 99) || p.localeCompare(q)); };
+const subOrder = (c, xs) => { const o = c === 'VI·급등' ? VI_SUBS : BOTH[c] ? BOTH[c][1] : []; return xs.sort((p, q) => ((o.indexOf(p) + 99) % 99) - ((o.indexOf(q) + 99) % 99) || p.localeCompare(q)); };
 const liveChip = (r, c) => { if (st.off.has(c) || !(r.chips || []).includes(c)) return false; const sb = subsOf(r, c); return !sb.length || sb.some((x) => !st.subOff.has(`${c}|${x}`)); };
 const nLive = (r) => colsOf().reduce((a, c) => a + (liveChip(r, c) ? 1 : 0), 0);   // 칸에 있고 켜진 칩만
 const riseOf = (r) => (r.rise == null || !Number.isFinite(Number(r.rise)) ? -Infinity : Number(r.rise));   // 초반상승 % — 안 든 종목은 null → 맨 뒤
@@ -202,7 +200,7 @@ const atText = (v) => { const m = String(v || '').match(/^(\d{2}):?(\d{2})$/); i
 // 하위 칩 보이는 이름 (11-19 재권님 「단타에 매수에 숫자가 있는데 숫자로 하지말고 사고있는 주체를 간단히 넣는 방향으로 해줘」 → 「응 좋아」) — 열쇠(서버 subs · 점수표 「매수|①」)는 그대로 · 화면 글자만 · 풀어 쓴 설명은 TIP 그대로
 //   이름 · 풀어 쓴 뜻은 서버 한 곳(kis_proxy.JOINT_TIER_NAME → 판 meta.subNames · meta.subTips · 개발2 · 11-20 재권님 「고치면 될거같아」) — 받은 판의 값을 둠(서버 고침 전 지은 지난 판도 같은 이름으로) · 한 번도 못 받으면 열쇠(①~④) 그대로
 export const SUB_NAME = {}, SUB_TIP = {};
-export const subName = (c, x) => SUB_NAME[`${c}|${x}`] || VOL_SUB_NAME[`${c}|${x}`] || x;   // 거래량급증 하위는 서버 이름이 오기 전 화면 이름
+export const subName = (c, x) => SUB_NAME[`${c}|${x}`] || x;
 const subTxt = (c, sb) => sb.map((x) => subName(c, x)).join(sb.some((x) => SUB_NAME[`${c}|${x}`]) ? ' / ' : '·');   // 이름 안에 「·」 가 있어 여럿이면 「 / 」 로 가름
 const tipAt = (k) => { const t = tipOf(k); return t ? ` data-tip="${esc(t)}"` : ''; };
 function chipPanel(all) {
