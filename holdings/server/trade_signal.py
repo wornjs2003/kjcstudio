@@ -9,7 +9,7 @@
 
 하는 일
     매도     보낸 종목을 판 매도 룰(dt30_win.sell_of)로 SEND_CHECK_SEC 마다 보고 걸리면 SELL 을 한 번 보낸다
-    보내기   그날 단타 판 첫 굳힘(lock 1 · 09:05 · dt30.lock_at 첫 칸) 줄 중 굳힘 차례(lockRank) 위 PICK_N 종목 + 종목마다 매수금액을 슬랙 채널에 한 번(수신 웹훅) — 개발 서버(is_sender)에서만
+    보내기   그날 단타 판 줄 중 사는 셈(dt30.buy_point · 칩이 09:30 까지 N개 찬 순서) 위 PICK_N 종목 + 종목마다 매수금액을 슬랙 채널에 한 번(수신 웹훅) — 개발 서버(is_sender)에서만
     받기     슬랙 채널을 READ_SEC 마다 읽어(conversations.history · 공개 주소 없음) 「RESULT」 줄을 매매일지에 적는다
     매매일지  market.db trade_journal — 줄을 지우지 않는다(돈이 드는 기록) · /api/kis/trade-journal
              줄의 status 는 서버 쪽(보냄 · 안 보냄 …)이고 매매 결과는 rows[].results(컴퓨터마다) — 화면은 결과를 results 에서 읽는다(qa 덧 11-23)
@@ -136,7 +136,7 @@ def day_times(proxy, now=None):
     import dt30
     now = now or _now()
     off = dt30.late_min(proxy, now)
-    fl = dt30.WIN_ENDS[0]                              # 첫 시간 창 끝(09:10) — 그 창 위 PICK_N 을 이때 보낸다(재권님 안 「응 해」 11-23 17:2x · 전에는 첫 굳힘 09:05)
+    fl = dt30.CHIP_UNTIL                               # 칩 셈 끝(09:30) — 위 PICK_N 이 그 전에 다 차면 그때 · 아니면 이때 찬 만큼 보낸다(11-23 19:0x · 전에는 첫 시간 창 09:10)
     m = fl[0] * 60 + fl[1] + off
     clean = dt30._close_min(proxy, now) - AUCTION_MIN
     close = dt30._close_min(proxy, now)
@@ -255,13 +255,17 @@ def send_today(proxy, day):
     b = dt30.board(proxy, day)
     if not b or b.get("day") != day:
         return "판 아직 없음"
+    # 사는 셈 한 곳(dt30.buy_point · rows[].buy930) — 칩이 09:30 까지 N개 찬 순서대로 위 PICK_N(같은 때면 판 차례) · 시간 창은 걷음(11-23 19:0x 「응 그래」)
+    #   위 PICK_N 이 다 차면 그때 · 덜 차도 칩 셈 끝(dt30.CHIP_UNTIL)이 지나면 찬 만큼 보낸다
     fl = day_times(proxy)["firstLock"]
-    if _now().strftime("%H:%M") < fl and day == _now().strftime("%Y%m%d"):
-        return "첫 창 끝(%s) 전" % fl                  # 첫 시간 창(09:00~09:10)이 끝나야 그 창 줄이 다 든다 — 다음 바퀴에 다시
-    rows = sorted([r for r in b.get("rows") or [] if r.get("lock") == 1], key=lambda r: (r.get("lockRank") or 1e9, r.get("rank") or 1e9))[:PICK_N]
+    rows = sorted([r for r in b.get("rows") or [] if r.get("buy930")], key=lambda r: (r["buy930"]["chipAt"], r.get("rank") or 1e9))[:PICK_N]
+    if day == _now().strftime("%Y%m%d") and len(rows) < PICK_N and _now().strftime("%H:%M") < fl:
+        return "칩 %d개 찬 종목 %d — %s 까지 기다림" % (dt30.buy_need(), len(rows), fl)
+    for r in rows:
+        r["buy"] = r["buy930"]["px"]                   # 보내는 가격 = 사는 셈의 값(주문 컴퓨터 상한 기준)
     amt = amount_won(len(rows))
     if not rows:
-        return "첫 창 빔"                               # 첫 시간 창(lock 1)에 든 줄이 없음 — 다음 바퀴에 다시 본다
+        return "칩 찬 종목 없음"
     st = settings()
     now = _now()
     if not SEND:
@@ -270,12 +274,7 @@ def send_today(proxy, day):
     if have:
         return "이미 만듦"
     sk = _slack(proxy)
-    try:
-        import dt30_win
-        nob = 1 in dt30_win.no_buy_locks()             # 첫 굳힘에 「사지 않음」 을 켜셨으면 보내지 않는다(승률 표와 같은 셈)
-    except Exception:
-        nob = False
-    why = ("첫 굳힘 사지 않음" if nob else "룰 칸 빔(%s)" % ", ".join(RULES[k][0] for k in st["missing"]) if st["missing"]
+    why = ("룰 칸 빔(%s)" % ", ".join(RULES[k][0] for k in st["missing"]) if st["missing"]
            else "단타 판 매수금액 못 셈" if amt is None
            else "보내기 주소 없음" if not sk["webhook_url"] else "주문 컴퓨터 열쇠 없음" if not sk["pcs"] else None)
     made = now.strftime("%Y%m%d%H%M%S")
@@ -342,6 +341,8 @@ def sell_check(proxy, day):
     out = []
     for jid, code, name in todo:
         r = rows.get(code)
+        if r and r.get("buy930"):
+            r = dict(r, buy=r["buy930"]["px"], buyAt=r["buy930"]["at"])   # 매도도 사는 셈의 값 · 시각으로(승률 표와 같게 · 11-23 19:0x)
         why = dt30_win.sell_of(r, end, S)[1] if r else "판에 없음"
         if why in ("매도 시각", "옛 줄", "판에 없음"):
             if hm < end:
