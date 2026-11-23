@@ -236,7 +236,7 @@ def _one_line(t):
     """창 입력 칸에 넣을 한 줄 — 줄바꿈(\r\n · \n · \r)은 「 / 」, 그 밖 제어 글자(탭 · ESC · 지우기 등)는 빈칸.
     주소로 직접 보내면 제어 글자가 창 입력 칸에서 보내기 · 지우기로 읽힐 수 있다(2026-11-23 qa 덧)."""
     import unicodedata
-    t = t.replace("\r\n", "\n").replace("\r", "\n").replace("\n", " / ")
+    t = t.replace("\r\n", "\n").replace("\r", "\n").replace("\u2028", "\n").replace("\u2029", "\n").replace("\n", " / ")   # 줄 · 문단 나눔 글자도 줄바꿈(qa 덧)
     return "".join(" " if unicodedata.category(c) in ("Cc", "Cf") else c for c in t).strip()
 
 
