@@ -931,7 +931,7 @@ def buy930_fill(proxy, b):
         cf = chip_first_get(proxy, b["day"], [r["code"] for r in rows])
     except Exception:
         cf = {}
-    ct, need, o = chip_times(b, cf), buy_need(), _open_min(proxy, b["day"], b)
+    ct, need, o = chip_times(dict(b, rows=rows), cf), buy_need(), _open_min(proxy, b["day"], b)   # 빠진 줄(outRows)의 칩 시각도(개념정의 걸림)
     for r in rows:
         c = ct.get(r["code"]) or {}
         r["chipTime"] = {k: "%s:%s" % (v[:2], v[2:]) for k, v in c.items()}
