@@ -204,13 +204,21 @@ def _thread(job):
     _log(job)
 
 
+def _one_line(t):
+    """창 입력 칸에 넣을 한 줄 — 줄바꿈(\r\n · \n · \r)은 「 / 」, 그 밖 제어 글자(탭 · ESC · 지우기 등)는 빈칸.
+    주소로 직접 보내면 제어 글자가 창 입력 칸에서 보내기 · 지우기로 읽힐 수 있다(2026-11-23 qa 덧)."""
+    import unicodedata
+    t = t.replace("\r\n", "\n").replace("\r", "\n").replace("\n", " / ")
+    return "".join(" " if unicodedata.category(c) in ("Cc", "Cf") else c for c in t).strip()
+
+
 def submit(text, origin, port):
     """지시 하나를 받아 뒤에서 보낸다 → 상태 묶음. 빈 글 · 긴 글 ValueError · 돌고 있으면 Busy · 이 자리가 아니면 NotHere."""
     if port not in ORDER_PORTS:
         raise NotHere("이 서버(%s)는 업무지시를 보내지 않습니다 — 개발 서버 · 메인 화면에서 보내 주십시오" % port)
     if text is not None and not isinstance(text, str):
         raise ValueError("지시는 글자여야 합니다")
-    text = (text or "").strip()
+    text = _one_line(text or "")
     if not text:
         raise ValueError("지시가 비었습니다")
     if len(text) > MAX_TEXT:
