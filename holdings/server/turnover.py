@@ -31,6 +31,13 @@ SLOT_KEEP_DAYS = 2            # 시각 칸 표는 오늘 · 전날만 — 전날
 _SLOT_SCHEMA = ("CREATE TABLE IF NOT EXISTS turnover_slot (day TEXT NOT NULL, slot TEXT NOT NULL, code TEXT NOT NULL, value INTEGER, price INTEGER, "
                 "PRIMARY KEY (day, slot, code))")
 
+def _migrate(conn):
+    """거래량 칸(vol · 주) — 단타 칩 「거래량」 의 「전일 동시간 누적」(2026-11-23 · vol_chip.py) · 옛 표에는 칸을 더한다(옛 줄은 NULL — 못 잼)."""
+    for t in ("turnover_day", "turnover_slot"):
+        if "vol" not in {r[1] for r in conn.execute("PRAGMA table_info(%s)" % t)}:
+            conn.execute("ALTER TABLE %s ADD COLUMN vol INTEGER" % t)
+
+
 _status = {"at": None, "codes": 0, "got": 0, "error": None, "rounds": 0}
 
 
@@ -67,6 +74,24 @@ def prev_slot(proxy, codes, day, slot):
     except Exception:
         return {}
     return {c: (v, p) for c, v, p, _ in got}            # 칸 순으로 덮어 가장 늦은 칸이 남음
+
+
+def prev_slot_vol(proxy, codes, day, slot):
+    """전날 같은 시각까지 누적 거래량 {code: 주} — 오늘 앞 마지막 날의 slot 이하 가장 늦은 칸 중 vol 이 있는 것(전일 동시간 누적 · 2026-11-23).
+    거래량 칸이 생기기 전 날 · 표가 없으면 {} — 부르는 쪽이 「못 잼」 으로."""
+    if not codes:
+        return {}
+    q = ",".join("?" * len(codes))
+    try:
+        with proxy.db_conn() as conn:
+            pd = conn.execute("SELECT MAX(day) FROM turnover_slot WHERE day < ?", (day,)).fetchone()[0]
+            if not pd:
+                return {}
+            got = conn.execute("SELECT code, vol FROM turnover_slot WHERE day = ? AND slot <= ? AND vol IS NOT NULL AND code IN (%s) ORDER BY slot"
+                               % q, [pd, slot] + list(codes)).fetchall()
+    except Exception:
+        return {}
+    return {c: v for c, v in got}
 
 
 def _prev_pct(turn, pv, fl):
@@ -127,20 +152,21 @@ def fill_day(proxy, day, rows):
 def _store(proxy, day, quotes, fl):
     import dt30
     at = _now().strftime("%H:%M:%S")
-    rows = [(day, c, q.get("value"), q.get("price"), fl.get(c), at) for c, q in quotes.items() if q.get("price")]
+    rows = [(day, c, q.get("value"), q.get("price"), fl.get(c), at, q.get("volume")) for c, q in quotes.items() if q.get("price")]
     if not rows:
         return 0
     with proxy._db_lock, proxy.db_conn() as conn:
         conn.execute(_SCHEMA)
-        conn.executemany("INSERT OR REPLACE INTO turnover_day (day, code, value, price, float_shares, at) VALUES (?,?,?,?,?,?)", rows)
+        conn.execute(_SLOT_SCHEMA)
+        _migrate(conn)
+        conn.executemany("INSERT OR REPLACE INTO turnover_day (day, code, value, price, float_shares, at, vol) VALUES (?,?,?,?,?,?,?)", rows)
         keep = [d for (d,) in conn.execute("SELECT DISTINCT day FROM turnover_day ORDER BY day DESC LIMIT ?", (dt30.DAYS_KEEP,))]
         if keep:
             conn.execute("DELETE FROM turnover_day WHERE day < ?", (keep[-1],))   # 보관은 단타 판과 같은 거래일 수(dt30.DAYS_KEEP)
         now = _now()
         slot = _slot(min(now.hour * 60 + now.minute, dt30._close_min(proxy, now)))   # 끝난 뒤 바퀴는 끝 칸에
-        conn.execute(_SLOT_SCHEMA)
-        conn.executemany("INSERT OR REPLACE INTO turnover_slot (day, slot, code, value, price) VALUES (?,?,?,?,?)",
-                         [(d, slot, c, v, p) for d, c, v, p, _, _ in rows])
+        conn.executemany("INSERT OR REPLACE INTO turnover_slot (day, slot, code, value, price, vol) VALUES (?,?,?,?,?,?)",
+                         [(d, slot, c, v, p, vo) for d, c, v, p, _, _, vo in rows])
         ks = [d for (d,) in conn.execute("SELECT DISTINCT day FROM turnover_slot ORDER BY day DESC LIMIT ?", (SLOT_KEEP_DAYS,))]
         if ks:
             conn.execute("DELETE FROM turnover_slot WHERE day < ?", (ks[-1],))
