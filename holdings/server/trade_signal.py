@@ -12,6 +12,7 @@
     보내기   그날 단타 판 첫 굳힘(lock 1 · 09:05 · dt30.lock_at 첫 칸) 줄 중 굳힘 차례(lockRank) 위 PICK_N 종목 + 종목마다 매수금액을 슬랙 채널에 한 번(수신 웹훅) — 개발 서버(is_sender)에서만
     받기     슬랙 채널을 READ_SEC 마다 읽어(conversations.history · 공개 주소 없음) 「RESULT」 줄을 매매일지에 적는다
     매매일지  market.db trade_journal — 줄을 지우지 않는다(돈이 드는 기록) · /api/kis/trade-journal
+             줄의 status 는 서버 쪽(보냄 · 안 보냄 …)이고 매매 결과는 rows[].results(컴퓨터마다) — 화면은 결과를 results 에서 읽는다(qa 덧 11-23)
 
 메시지 꼴(서버 ↔ 주문 컴퓨터가 함께 읽는 한 곳 — 바꾸면 주문 컴퓨터 프로그램도 같이 바꾼다)
     서버 → 주문 컴퓨터   첫 줄 「[KJC 매수 목록] YYYY-MM-DD HH:MM:SS」 · 종목마다 한 줄
@@ -45,6 +46,10 @@
                    stop 은 새 매수만 막고 산 종목의 매도 신호는 계속 보낸다(산 것이 안 팔리지 않게 · qa 덧 11-23 · 재권님께 여쭈는 중)
     비밀           비밀 파일(secrets_guard.secrets_path() 한 벌 — 지금 ~/.kjc 의 것 · 서버가 load_secrets 로 읽음)의 「slack」 칸 — webhook_url(보내기) · bot_token(읽기 · channels:history) · channel_id(읽을 채널) ·
                    pcs({컴퓨터 이름: 서명 열쇠} — 그 컴퓨터와 같은 값 · 슬랙 · 메시지 · 저장소에 안 둔다 · 이름은 영문 · 숫자 · - · _) · pcs 가 비면 보내지도 받지도 않는다
+                   열쇠는 무작위 32바이트 16진 64자만 받는다 — 만드는 명령: python3 -c "import secrets; print(secrets.token_hex(32))" (꼴이 틀린 열쇠의 컴퓨터는 없는 것으로 봄)
+                   서명 묶음에 컴퓨터 이름이 채널에 보인다(열쇠는 아님) — 이름에 사람 · 장소를 드러내는 말을 쓰지 않는다
+    열쇠 바꾸기     ① 새 열쇠를 만든다 ② 장이 닫힌 때 그 컴퓨터 프로그램을 멈춘다 ③ 비밀 파일 pcs 의 그 이름 값과 그 컴퓨터 설정을 같은 새 값으로 바꾼다
+                   ④ 서버를 다시 띄우지 않아도 다음 바퀴부터 새 열쇠를 읽는다 ⑤ 프로그램을 다시 켠다 — 털렸다고 보면 ② 전에 그 이름을 pcs 에서 먼저 뺀다
                    하나라도 비면 그쪽 일을 안 한다(「못 함」 으로 status 에)
 """
 import hashlib
@@ -77,6 +82,7 @@ _ADD_COLS = (("sell_sent_at", "TEXT"), ("sell_why", "TEXT"))   # 매도 신호 �
 _RESULT = ("CREATE TABLE IF NOT EXISTS trade_result (journal_id INTEGER NOT NULL, pc TEXT NOT NULL, buy_px REAL, sell_px REAL, qty INTEGER, "
            "profit_won REAL, tax_won REAL, sell_at TEXT, result_at TEXT, raw TEXT, PRIMARY KEY (journal_id, pc))")   # 컴퓨터마다 결과 한 줄 — 지우지 않음
 _PC = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+_KEY = re.compile(r"^[0-9a-f]{64}$")
 _STATE = ("CREATE TABLE IF NOT EXISTS trade_journal_state (k TEXT PRIMARY KEY, v TEXT)")
 _status = {"sentDay": None, "sendAt": None, "sendNote": None, "readAt": None, "readNote": None, "got": 0, "error": None}
 _lock = threading.Lock()
@@ -103,7 +109,16 @@ def _slack(proxy):
     s = (proxy.load_secrets() or {}).get("slack") or {}
     out = {k: (s.get(k) or "").strip() for k in ("webhook_url", "bot_token", "channel_id")}
     pcs = s.get("pcs") if isinstance(s.get("pcs"), dict) else {}
-    out["pcs"] = {k: v.strip() for k, v in pcs.items() if _PC.match(str(k)) and isinstance(v, str) and len(v.strip()) >= 16}   # 짧은 열쇠는 안 씀
+    out["pcs"], drop = {}, []
+    for k, v in pcs.items():
+        v = v.strip().lower() if isinstance(v, str) else ""
+        if not _PC.match(str(k)):
+            drop.append({"name": str(k)[:32], "why": "이름 꼴 틀림(영문 · 숫자 · - · _ 만)"})
+        elif not _KEY.match(v):
+            drop.append({"name": k, "why": "열쇠 꼴 틀림(무작위 16진 64자만)"})   # 사람이 지은 글은 안 받음(개념정의 덧 11-23)
+        else:
+            out["pcs"][k] = v
+    _status["pcs"], _status["pcsDropped"] = sorted(out["pcs"]), drop   # 말없이 빼지 않는다 — 켤 때 「왜 그 컴퓨터만 안 되지」 가 안 되게(qa 덧 11-23)
     return out
 
 
