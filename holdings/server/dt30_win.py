@@ -275,8 +275,10 @@ def summary(proxy, days=DAYS_DEFAULT):
             if str(r.get("buyAt") or "").replace(":", "")[:4] >= end:
                 continue                               # 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것 — 화면 셈과 같게(재권님 「가」 11-20 · 시황분석 화면)
             e = _in_ts(r)
-            if cut and e and e > cut:
+            if cut and e and e > cut and not (r.get("lockAt") or r.get("lockTs")):
                 continue                               # 든 때 가격으로 사는 끝(inUntil 분 59초) 뒤 든 종목은 안 삼 — 화면 단타 판 셈과 같게(11-23 재권님 「9시 1분부터 5분까지는 들어올때 산다」)
+                                                       # 다만 굳힘(09:30 · 10:00 …)에 든 종목은 판에 처음 든 때 가격(buy)으로 산 것 — 재권님 「9시 30분과 10시에 굳힘 목록에 들어온 종목들도
+                                                       # 들어올때를 시점으로 샀다라고 하고 계산해」 → 「처음 들어온 때」(11-23 09:3x)
             r["sell"], why = sell_of(r, end, rule)     # 매도 룰 — 부를 때 셈(셈 칸을 바꾸면 지난 날에도 바로 든다 · 수수료와 같은 길)
             whys[why] = whys.get(why, 0) + 1
             v = net_pct(r, fee)
