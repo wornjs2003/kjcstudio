@@ -308,7 +308,7 @@ def open_measure(memo):
 
 
 def measures(doc, ports=None):
-    """열린 측정 [(담당, 카드 제목, 포트들, 끝 시각 | None)] — done 열 · 오늘 안 고친 카드 · 끝 시각이 지난 것은 뺀다
+    """열린 측정 [(재는 세션 — 줄에 없으면 카드 담당, 카드 제목, 포트들, 끝 시각 | None)] — done 열 · 오늘 안 고친 카드 · 끝 시각이 지난 것은 뺀다
     (끝 줄을 잊은 카드가 영영 걸리지 않게 · 메모 줄 시각에 날짜가 없어 카드 updatedAt 의 날로 오늘 것만 센다)."""
     today = time.strftime("%Y-%m-%d")
     hm = time.strftime("%H:%M")
@@ -329,7 +329,8 @@ def measures(doc, ports=None):
         end = "%02d:%s" % (int(m.group(1)), m.group(2)) if m else None
         if end and end <= hm:
             continue
-        out.append((t.get("who") or "?", t.get("text") or "", ps, end))
+        w = re.search(r"재는 세션 (\S+)", txt)
+        out.append((w.group(1) if w else (t.get("who") or "?"), t.get("text") or "", ps, end))
     return out
 
 
@@ -724,6 +725,8 @@ def main(argv):
             if line:
                 sys.exit("--ask · --answer · --after · --measuring 은 한 번에 하나만, 메모 줄과도 따로 적으십시오")
             line = head + v
+            if flag == "--measuring":       # 재는 세션 이름을 줄에 — 남의 카드에 적어도 알릴 곳이 갈린다(qa 11-23)
+                line += " · 재는 세션 %s" % (label_of(session_name()) or "모름")
     if line and re.search(r"(묻는 중|답):", line) and not ASK_HEAD.match(line):
         # 줄 가운데의 표기는 현황판이 못 본다(2026-10-14 셈: 줄 앞 7 · 가운데 35) — 막지 않고 알린다
         print("알림: 메모 줄 가운데의 「묻는 중:」 · 「답:」 은 현황판이 못 봅니다 — --ask \"<물음>\" · --answer \"<답>\" 로 따로 적으십시오",
