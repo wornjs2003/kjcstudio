@@ -258,7 +258,8 @@ def send_today(proxy, day):
     # 사는 셈 한 곳(dt30.buy_point · rows[].buy930) — 칩이 09:30 까지 N개 찬 순서대로 위 PICK_N(같은 때면 판 차례) · 시간 창은 걷음(11-23 19:0x 「응 그래」)
     #   위 PICK_N 이 다 차면 그때 · 덜 차도 칩 셈 끝(dt30.CHIP_UNTIL)이 지나면 찬 만큼 보낸다
     fl = day_times(proxy)["firstLock"]
-    rows = sorted([r for r in b.get("rows") or [] if r.get("buy930")], key=lambda r: r["buy930"]["rank"])[:PICK_N]   # 산 차례는 서버 한 곳(dt30.buy930_fill)
+    rows = sorted([r for r in (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or []) if r.get("buy930")],
+                  key=lambda r: r["buy930"]["rank"])[:PICK_N]  # 판에서 빠진 종목도 그 차례로(승률 표와 같게 · qa 덧 11-23)   # 산 차례는 서버 한 곳(dt30.buy930_fill)
     if day == _now().strftime("%Y%m%d") and len(rows) < PICK_N and _now().strftime("%H:%M") < fl:
         return "기다림 — 칩 %d개 찬 종목 %d · %s 까지" % (dt30.buy_need(), len(rows), fl)
     for r in rows:
@@ -326,7 +327,7 @@ def sell_check(proxy, day):
     b = dt30.board(proxy, day)
     if not b or b.get("day") != day:
         return 0
-    rows = {r["code"]: r for r in b.get("rows") or []}
+    rows = {r["code"]: r for r in ((b.get("meta") or {}).get("outRows") or []) + (b.get("rows") or [])}   # 빠진 종목도 매도를 본다
     S = dt30_win.sell_rule()
     end = S["endAt"] or dt30_win.SELL_AT
     now = _now()
