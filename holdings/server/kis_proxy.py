@@ -1646,7 +1646,10 @@ RELAY_TTL_NAMES = {
     "domestic-stock/financial-ratio": "FINANCE_TTL",
     "domestic-stock/profit-ratio": "FINANCE_TTL",
     "domestic-stock/growth-ratio": "FINANCE_TTL",
+    # 단타 칩 「거래비율」 · 「거래비율급증」 셈 — 화면 탭이 다시 받는 주기를 이것으로(개념정의 덧 11-23 · 값은 vol_chip.CACHE_TTL 한 곳)
+    "vol-chip": "VOL_CHIP_TTL",
 }
+VOL_CHIP_TTL = vol_chip.CACHE_TTL
 
 
 def _relay_ttl(path):
