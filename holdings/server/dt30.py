@@ -932,18 +932,25 @@ def lock_fix(b):
     n = 0
     for _ in range(len(ats)):
         moved = 0
-        for r in b.get("rows") or []:
+        for r in sorted(b.get("rows") or [], key=lambda x: -(x.get("lock") or 0)):   # 늦은 묶음부터 — 뒤 묶음 자리를 먼저 비워야 앞 묶음 줄이 들어감
             i = r.get("lock")
             if not i or i > len(ats) or not ats[i - 1] or _in_hms(r) < ats[i - 1] + ":00":
                 continue
             j = i + 1
-            if j <= len(ats) and j in done:
+            grp = [x for x in b["rows"] if x.get("lock") == j and x is not r]
+            if j <= len(ats) and j in done and len(grp) < LOCK_N:   # 다음 묶음이 이미 굳었고 자리가 있으면 그 끝으로 — 묶음은 LOCK_N 을 안 넘김(개념정의 덧 11-23)
                 r["lock"], r["lockAt"] = j, ats[j - 1]
-                r["lockRank"] = max([x.get("lockRank") or 0 for x in b["rows"] if x.get("lock") == j and x is not r] + [0]) + 1
+                r["lockRank"] = max([x.get("lockRank") or 0 for x in grp] + [0]) + 1
+                ts = [x.get("lockTs") for x in grp if x.get("lockTs")]
+                if ts:
+                    r["lockTs"] = min(ts)                  # 그 묶음이 실제로 굳힌 때 — 옛 묶음 시각이 남지 않게(개념정의 덧)
+                else:
+                    r.pop("lockTs", None)
+                r["lockMoved"] = "%s → %s" % (ats[i - 1], ats[j - 1])
             else:
                 for k in ("lock", "lockAt", "lockRank", "lockTs"):
                     r.pop(k, None)
-            r["lockMoved"] = "%s → %s" % (ats[i - 1], ats[j - 1] if j <= len(ats) and j in done else "진행 중")
+                r["lockMoved"] = "%s → 진행 중" % ats[i - 1]   # 다음 굳힘이 아직이거나 자리가 없음 — 다음 굳힘이 든 때 순서로 다시 묶음
             moved += 1
         n += moved
         if not moved:
