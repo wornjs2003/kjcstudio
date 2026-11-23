@@ -8,6 +8,7 @@
     매수가격 매도가격 시세차익 세금 정보를 메세지로 보낸다 / 해당 메세지를 서버에서 받으면 매매일지에 기록한다」 → 안에 「응 그래」(14:4x).
 
 하는 일
+    매도     보낸 종목을 판 매도 룰(dt30_win.sell_of)로 SEND_CHECK_SEC 마다 보고 걸리면 SELL 을 한 번 보낸다
     보내기   그날 단타 판 첫 굳힘(lock 1 · 09:05 · dt30.lock_at 첫 칸) 줄 중 굳힘 차례(lockRank) 위 PICK_N 종목 + 종목마다 매수금액을 슬랙 채널에 한 번(수신 웹훅) — 개발 서버(is_sender)에서만
     받기     슬랙 채널을 READ_SEC 마다 읽어(conversations.history · 공개 주소 없음) 「RESULT」 줄을 매매일지에 적는다
     매매일지  market.db trade_journal — 줄을 지우지 않는다(돈이 드는 기록) · /api/kis/trade-journal
@@ -15,6 +16,11 @@
 메시지 꼴(서버 ↔ 주문 컴퓨터가 함께 읽는 한 곳 — 바꾸면 주문 컴퓨터 프로그램도 같이 바꾼다)
     서버 → 주문 컴퓨터   첫 줄 「[KJC 매수 목록] YYYY-MM-DD HH:MM:SS」 · 종목마다 한 줄
                         BUY|<일지 번호>|<종목 코드>|<종목 이름>|<매수금액 원>|<보낸 시각 YYYYMMDDHHMMSS>|<서명>
+    서버 → 주문 컴퓨터   (매도) 판 매도 룰에 걸리면 종목마다 한 번 — 첫 줄 「[KJC 매도] YYYY-MM-DD HH:MM:SS」
+                        SELL|<일지 번호>|<종목 코드>|<종목 이름>|<까닭>|<보낸 시각 YYYYMMDDHHMMSS>|<서명>
+                        까닭 — 손절 · 꺾임 · 고점 · 미달 · 횡보 · 매도 시각(dt30_win.sell_of — 승률 표 · 단타 판 화면과 같은 셈 · 매수가는 판 매수가)
+                        재권님 「가」(11-23 14:5x — 단타 판 매도 룰에 걸리면 서버가 슬랙으로 「팔아라」)
+                        판 값은 30분 칸(dt30 times)마다 붙어 걸림도 그 칸에 안다 · 주문 컴퓨터는 가진 수량을 전부 판다
     주문 컴퓨터 → 서버   매도가 끝난 종목마다 한 줄(여러 줄 한 메시지도 됨)
                         RESULT|<일지 번호>|<종목 코드>|<매수가>|<매도가>|<수량>|<시세차익 원>|<세금 원>|<매도 시각 YYYYMMDDHHMMSS>|<서명>
                         못 산 종목은 RESULT|<번호>|<코드>|-|-|0|0|0|<시각>|<서명> (수량 0 = 안 삼)
@@ -58,6 +64,7 @@ SLACK_HISTORY = "https://slack.com/api/conversations.history"
 _SCHEMA = ("CREATE TABLE IF NOT EXISTS trade_journal (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, rank INTEGER, code TEXT, name TEXT, "
            "amount_won INTEGER, made_at TEXT, sent_at TEXT, status TEXT, note TEXT, buy_px REAL, sell_px REAL, qty INTEGER, profit_won REAL, "
            "tax_won REAL, sell_at TEXT, result_at TEXT, result_raw TEXT)")
+_ADD_COLS = (("sell_sent_at", "TEXT"), ("sell_why", "TEXT"))   # 매도 신호 칸(11-23 · 옛 표에는 더한다)
 _STATE = ("CREATE TABLE IF NOT EXISTS trade_journal_state (k TEXT PRIMARY KEY, v TEXT)")
 _status = {"sentDay": None, "sendAt": None, "sendNote": None, "readAt": None, "readNote": None, "got": 0, "error": None}
 _lock = threading.Lock()
@@ -99,6 +106,10 @@ def _db(proxy, fn):
     with proxy._db_lock, proxy.db_conn() as conn:
         conn.execute(_SCHEMA)
         conn.execute(_STATE)
+        have = {r[1] for r in conn.execute("PRAGMA table_info(trade_journal)")}
+        for c, t in _ADD_COLS:
+            if c not in have:
+                conn.execute("ALTER TABLE trade_journal ADD COLUMN %s %s" % (c, t))
         return fn(conn)
 
 
@@ -176,6 +187,54 @@ def send_today(proxy, day):
     sent = _now().strftime("%Y%m%d%H%M%S")
     _db(proxy, lambda c: c.executemany("UPDATE trade_journal SET status = '보냄', sent_at = ? WHERE id = ?", [(sent, i) for i in ids]))
     return "보냄 %d종목" % len(ids)
+
+
+def sell_check(proxy, day):
+    """보낸 매수 줄 중 아직 매도 신호를 안 보낸 것을 판 매도 룰로 본다 — 걸린 것만 SELL 을 보낸다 → 보낸 수."""
+    import dt30
+    import dt30_win
+    todo = _db(proxy, lambda c: c.execute("SELECT id, code, name FROM trade_journal WHERE day = ? AND sent_at IS NOT NULL AND sell_sent_at IS NULL "
+                                          "AND result_at IS NULL", (day,)).fetchall())
+    if not todo:
+        return 0
+    sk = _slack(proxy)
+    if not SEND or settings()["stop"] or not sk["webhook_url"] or not sk["sign_key"]:
+        return 0
+    b = dt30.board(proxy, day)
+    if not b or b.get("day") != day:
+        return 0
+    rows = {r["code"]: r for r in b.get("rows") or []}
+    S = dt30_win.sell_rule()
+    end = S["endAt"] or dt30_win.SELL_AT
+    now = _now()
+    hm = now.strftime("%H%M")
+    out = []
+    for jid, code, name in todo:
+        r = rows.get(code)
+        if not r:
+            continue
+        v, why = dt30_win.sell_of(r, end, S)
+        if why == "매도 시각" and hm < end:
+            continue                                   # 아직 어느 룰에도 안 걸렸고 매도 시각 전
+        if why == "옛 줄":
+            continue
+        out.append((jid, code, name, why))
+    if not out:
+        return 0
+    made = now.strftime("%Y%m%d%H%M%S")
+    body = ["SELL|%d|%s|%s|%s|%s" % (j, c, (n or "").replace("|", " ").replace("\n", " "), w, made) for j, c, n, w in out]
+    text = "\n".join(["[KJC 매도] %s" % now.strftime("%Y-%m-%d %H:%M:%S")] + ["%s|%s" % (x, sign(sk["sign_key"], x)) for x in body])
+    try:
+        _post_webhook(sk["webhook_url"], text)
+        st = "SELL 보냄"
+    except urllib.error.HTTPError as e:
+        print("  [매매일지] 매도 신호 못 보냄 — %s" % proxy.safe_message(e, 120), flush=True)
+        return 0                                       # 안 갔다 — 다음 바퀴에 다시
+    except Exception as e:
+        st = "SELL 보냈는지 모름 — %s" % proxy.safe_message(e, 80)   # 갔을 수 있다 — 다시 안 보냄
+    _db(proxy, lambda c: c.executemany("UPDATE trade_journal SET sell_sent_at = ?, sell_why = ?, note = ? WHERE id = ?",
+                                       [(made, w, st, j) for j, _, _, w in out]))
+    return len(out)
 
 
 _NUM = re.compile(r"^-?\d+(\.\d+)?$")
@@ -272,7 +331,7 @@ def start(proxy):
 
     def loop():
         time.sleep(45)
-        last_read = last_send = 0.0
+        last_read = last_send = last_sell = 0.0
         while True:
             try:
                 now = _now()
@@ -288,6 +347,11 @@ def start(proxy):
                         if note not in ("판 아직 없음", "첫 굳힘 전"):
                             _status["sentDay"] = day
                             print("  [매매일지] %s 매수 목록 — %s" % (day, note), flush=True)
+                    if SEND and time.time() - last_sell >= SEND_CHECK_SEC and dt30.OPEN_AT[0] * 60 + dt30.OPEN_AT[1] <= hm:
+                        last_sell = time.time()
+                        n = sell_check(proxy, day)
+                        if n:
+                            print("  [매매일지] 매도 신호 %d종목" % n, flush=True)
                     if READ_FROM[0] * 60 + READ_FROM[1] <= hm < READ_TO[0] * 60 + READ_TO[1] and time.time() - last_read >= READ_SEC:
                         last_read = time.time()
                         n = read_once(proxy)
