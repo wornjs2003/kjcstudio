@@ -1681,7 +1681,7 @@ const SORT_TIPS = {
   get rise() {      // 문턱 숫자는 서버 meta — 받기 전에는 숫자 없이
     const m = riseMeta || {};
     const cap = m.minCapEok != null ? `시가총액 ${fmtMoneyKr(m.minCapEok)} 이상만` : '';
-    return `코스피 200 · 코스닥 150 종목(ETF 뺌) 중 정규장 첫 ${barMinTxt()}봉(${m.barFrom || '—'} ~ ${m.barTo || '—'})이 ${riseCondTxt(m)} 올라 끝난 종목, 첫 봉 상승률이 큰 순\n프리장(넥스트레이드) 체결이 없던 종목은 시가 대비만 봅니다\n그 봉을 다 받은 뒤에 고르고 그날 판으로 굳습니다${cap ? ` · ${cap}` : ''}`;
+    return `코스피 200 · 코스닥 150 종목(ETF 뺌) 중 정규장 첫 ${barMinTxt()}봉(${m.barFrom || '—'} ~ ${m.barTo || '—'})이 ${riseCondTxt(m)} 올라 끝난 종목, 첫 봉 상승률이 큰 순\n${riseMinTxt(m)}\n프리장(넥스트레이드) 체결이 없던 종목은 시가 대비만 봅니다\n그 봉을 다 받은 뒤에 고르고 그날 판으로 굳습니다${cap ? ` · ${cap}` : ''}`;
   },
   eb: '실적이 잘 나온 종목 — 두 가지가 다 맞은 것만\n① 예상보다 좋음: 회사가 낸 잠정실적의 영업이익이 그 분기 시장 예상치(네이버)보다 높음\n② 전망 좋음: 「실적 전망」 공시의 매출 · 영업이익(값이 든 칸만)이 직전 실적보다 큼 — 1년 전망은 앞 해 실적(없으면 최근 네 분기 합), 분기 전망은 한 해 앞 같은 분기\n최근 공시만(며칠 치인지는 서버가 정해 위 설명 줄에 나옵니다) · 예상치가 없는 종목은 못 가름이라 빠집니다',
   ev: '최근 사흘 회사 공시 중 갈래가 붙은 것(자사주 · 인수합병 · 주주환원 · 실적 · 위험 신호 …) — 종목마다 가장 새 공시 한 줄, 새 것이 위\n아래 띠에서 갈래를 누르면 그 갈래만',
@@ -2118,6 +2118,11 @@ function riseCell(code) {
 function riseCondTxt(m) {
   const v = (x) => (x != null ? x : '서버 값 못 받음');
   return `시가보다 (${v(m.risePct)})% 또는 프리장 마지막 값보다 (${v(m.preRisePct)})% 이상`;
+}
+/* 분별 셈 글 — 시가부터 2분 · 3분 끝 값 문턱은 서버 meta(rise2Pct · rise3Pct · 11-23 재권님 「가 해줘 3분까지만 하자」) */
+function riseMinTxt(m) {
+  const v = (x) => (x != null ? x : '서버 값 못 받음');
+  return `또는 시가부터 2분 끝 값이 (${v(m.rise2Pct)})%, 3분 끝 값이 (${v(m.rise3Pct)})% 이상 오른 종목도 듭니다`;
 }
 function riseNote() {
   const m = riseMeta || {};
