@@ -20,14 +20,17 @@
                         못 산 종목은 RESULT|<번호>|<코드>|-|-|0|0|0|<시각>|<서명> (수량 0 = 안 삼)
     서명            마지막 「|」 앞까지 글(앞뒤 빈칸 뺌)을 sign_key 로 HMAC-SHA256 한 16진 64자 — 재권님 「보완도 엄청 중요한데」(11-23 14:4x)
                    슬랙 채널에 누가 같은 꼴의 줄을 써도 열쇠가 없으면 주문 · 일지가 안 움직인다. 주문 컴퓨터도 BUY 줄의 서명을 같은 셈으로 본다
-                   서명이 틀리거나 없는 줄은 일지에 「서명 틀림」 만 남기고 값은 안 적는다 · 이미 결과가 적힌 번호에 다시 온 결과는 안 덮는다(되풀이 막기)
+                   서명이 틀리거나 없는 줄은 일지에 아무것도 안 적는다(남의 줄 메모도 안 바꿈 · 서버 로그 · status 에만 · 개념정의 덧 11-23) · 이미 결과가 적힌 번호에 다시 온 결과는 안 덮는다(되풀이 막기)
+    주문 컴퓨터가 지킬 것(BUY 되풀이 막기 — 서버는 못 막는다 · 옛 BUY 메시지를 누가 채널에 다시 올리면 또 살 수 있다 · 개념정의 · qa 덧 11-23)
+                   서명이 맞는 BUY 줄만 · 보낸 시각이 주문 컴퓨터 설정의 「늦은 메시지 버림 초」 를 넘으면 버림 · 같은 일지 번호는 한 번만 주문(받은 번호를 그 컴퓨터에 남김) ·
+                   그 컴퓨터 설정의 한 번 · 하루 한도와 멈춤 스위치를 서버 매수금액보다 먼저 본다
     숫자는 쉼표 없이 · 금액은 원 · 칸이 모자라거나 숫자가 아니면 그 줄은 「못 읽음」 으로 일지에 남기고 값은 안 적는다
 
 켜기 · 지킴
     SEND           슬랙으로 보내는 스위치 — False 면 줄만 만들고 「안 보냄(꺼짐)」 · 켜기는 재권님 지시(되돌릴 수 없는 발송)
     설정 문서       docstore 「trade-set」 {amountWon: 종목마다 매수금액(원) | null, stop: 전체 멈춤 true/false} — 화면이 고친다
                    amountWon 이 비었거나 0 이하 · stop 이 true 면 보내지 않는다(그 까닭을 일지 상태에 적음)
-    비밀           holdings/secrets.json 「slack」 칸 — webhook_url(보내기) · bot_token(읽기 · channels:history) · channel_id(읽을 채널) ·
+    비밀           비밀 파일(secrets_guard.secrets_path() 한 벌 — 지금 ~/.kjc 의 것 · 서버가 load_secrets 로 읽음)의 「slack」 칸 — webhook_url(보내기) · bot_token(읽기 · channels:history) · channel_id(읽을 채널) ·
                    sign_key(서명 열쇠 — 주문 컴퓨터와 같은 값 · 슬랙 · 메시지 · 저장소에 안 둔다) · sign_key 가 비면 보내지도 받지도 않는다
                    하나라도 비면 그쪽 일을 안 한다(「못 함」 으로 status 에)
 """
@@ -181,9 +184,8 @@ def _apply_result(conn, line, key):
     """RESULT 한 줄(서명 포함) → 일지에 적음 · (적음 True/False, 글)."""
     body = _signed(key, line)
     if body is None:
-        m = re.match(r"RESULT\|(\d+)\|", line)
-        if m:
-            conn.execute("UPDATE trade_journal SET note = ? WHERE id = ? AND result_at IS NULL", ("결과 서명 틀림(안 적음)", int(m.group(1))))
+        _status["badSig"] = _status.get("badSig", 0) + 1     # 일지는 안 건드린다 — 열쇠 없는 줄이 남의 줄 메모를 바꾸지 못하게(개념정의 덧 11-23)
+        print("  [매매일지] 서명 틀린 결과 줄 — 안 적음 · %s" % line[:40], flush=True)
         return False, "서명 틀림"
     p = [x.strip() for x in body.split("|")]
     if len(p) < 9:
