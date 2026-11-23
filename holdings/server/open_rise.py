@@ -15,6 +15,9 @@
                 줄의 by 에 걸린 셈(open · pre) · 프리장 체결 없던 종목은 시가 대비만 · 표를 못 읽으면 preMissing — 재권님 「초반상승은 경우의 수를 둬야 할거같은데
                 지금룰에 걸리거나/ 프리장보다 2%이상 오를때 로 해줘」(11-23 · 작업우선순위 창) → 안(견주는 값은 첫 1분봉 끝 값)에 「응 커밋해」(개발1 창)
                 지난 날 다시 셈(day_top_fill · dt30 rebuild — 첫 5분봉 PAST_RISE_PCT)에는 안 넣었다
+                **또는** 시가부터 2분(여는 시각 +1분 봉 종가) · 3분(+2분 봉 종가)이 그날 시가(첫 봉 시가)보다 칩 룰 rise2Pct · rise3Pct % 이상 — by 의 m2 · m3 ·
+                재권님 「1분봉은 1.5% 이고 분별로 룰이 추가되야 할거같아」 → 시황분석1 잰 값(11-23 598종목 · 2분 2% 55 · 3분 3% 30) → 「가 해줘 3분까지만 하자」(11-23) ·
+                그 봉이 끝나야 세므로 판이 09:01 · 09:02 · 09:03 에 늘어난다 · 끝난 뒤 아직 안 받은 종목은 pendingLater · 지난 날 다시 셈에는 안 넣었다
     차례        그 상승률 큰 순
     다 찬 봉만   그 봉을 **끝난 뒤에 받았는지**는 kis_proxy `_minutes_fresh_upto`(「지금 칸」 을 받은 분)로 가른다 — 그 봉이 끝나기 전에 받은 덜 찬 봉으로
                 고르지 않는다(거래량 전날 대비 % 와 같은 기록 · 11-11 qa 돌려보냄). 아직이면 그 종목은 `pending` 으로 센다
@@ -44,6 +47,7 @@ BAR_MIN = 1              # 첫 봉의 길이(분) — 첫 1분봉(09:00~09:01) �
 BAR_PERIOD = "1m"        # 그 봉을 읽는 기간 — 5분봉을 받을 때 1분봉도 함께 저장된다(kis_proxy get_chart · 2026-11-11)
 PRE_RISE_PCT = chip_rules.RULES["초반상승"]["preRisePct"][0]   # 기본값(2%) — 「또는」 셈: 첫 봉 종가가 프리장 마지막 값(nxt_pre 08:51 저장 표 price)보다 이만큼 높음 · 지금 값은 chip_rules.get · 재권님 「지금룰에 걸리거나/ 프리장보다 2%이상 오를때」(11-23) → 안에 「응 커밋해」
 RISE_PCT = chip_rules.RULES["초반상승"]["risePct"][0]   # 기본값(1.5%) — 첫 봉 시가 대비 종가 상승률 문턱 · 지금 값은 chip_rules.get(「초반상승」, risePct) · 룰 문서로 고침(2026-11-20)
+LAST_MIN = 3             # 분별 셈을 시가부터 몇 분까지 하나 — 재권님 「3분까지만 하자」(11-23) · 첫 1분봉(1분) 뒤 2분 · 3분 봉 끝 값 · 첫 봉 먼저 받기도 이 분까지 돈다
 PAST_BAR_MIN = 5         # 지난 날 다시 셈(day_top_fill · dt30 rebuild)은 첫 5분봉 그대로 — 1분봉은 11-12 부터만 쌓여 있어 그 전 날은 셀 수 없다
 PAST_RISE_PCT = 2.0      # 〃 문턱(11-18 전 셈 그대로)
 MIN_CAP_EOK = dart.RANK_MIN_CAP_EOK   # 시가총액 문턱(억원) — 단타 · 순위 문턱 한 곳(dart.RANK_MIN_CAP_EOK · 3천억 · 재권님 「3000으로 통일」 → 「나」 11-20 · 그 전 5천억 11-12) · 단위 억원
@@ -97,17 +101,25 @@ def build(proxy, now=None):
     cap_min = dart.rank_min_cap_eok()
     cand = [u for u in uni if u["cap"] is not None and u["cap"] >= cap_min]
     codes = [u["code"] for u in cand]
-    bars = {}
+    open_min = int(bar_hm[:2]) * 60 + int(bar_hm[2:])
+    hms = ["%02d%02d" % divmod(open_min + k, 60) for k in range(LAST_MIN)]   # 시가부터 1 · 2 · 3분 봉의 여는 시각
+    bars, later = {}, {}                   # later[code][k] — 시가부터 k+1 분 봉(k = 1 · 2)
     if codes:
         with proxy._db_lock, proxy.db_conn() as conn:
             q = ",".join("?" * len(codes))
             for r in conn.execute(
-                    "SELECT code, open, high, low, close, volume FROM candles WHERE period = ? AND ts = ? AND code IN (%s)" % q,
-                    [BAR_PERIOD, day + bar_hm] + codes):
-                bars[r["code"]] = dict(r)
-    rows, pending, no_bar = [], 0, 0
+                    "SELECT code, ts, open, high, low, close, volume FROM candles WHERE period = ? AND ts IN (%s) AND code IN (%s)" % (",".join("?" * len(hms)), q),
+                    [BAR_PERIOD] + [day + h for h in hms] + codes):
+                k = hms.index(r["ts"][8:12])
+                if k == 0:
+                    bars[r["code"]] = dict(r)
+                else:
+                    later.setdefault(r["code"], {})[k] = r["close"]
+    rows, pending, no_bar, pending_later = [], 0, 0, 0
     rise_pct = chip_rules.get("초반상승", "risePct")
     pre_rise_pct = chip_rules.get("초반상승", "preRisePct")
+    m_pcts = {1: chip_rules.get("초반상승", "rise2Pct"), 2: chip_rules.get("초반상승", "rise3Pct")}   # 시가부터 2분 · 3분 문턱
+    now_min = now.hour * 60 + now.minute
     import nxt_pre
     try:                                   # 그날 프리장 마지막 값 — 08:51 저장 표 · 거래량 0 은 체결 없음이라 「프리장 대비」 를 안 센다
         pre, _d, _src = nxt_pre.last_prices(proxy, day)   # 자기 표가 비면 8765 것(메인 · 세션 서버는 이 표를 안 채운다)
@@ -118,23 +130,37 @@ def build(proxy, now=None):
         if not b or not b["open"] or b["close"] is None:
             no_bar += 1
             continue
+        fresh = proxy._minutes_fresh_upto(u["code"]) if live_today else None
         if live_today:
-            fresh = proxy._minutes_fresh_upto(u["code"])
             if fresh is None or fresh < bar_end:
                 pending += 1                 # 그 봉을 끝난 뒤에 아직 안 받았다 — 덜 찬 값일 수 있다
                 continue
         pct = (b["close"] - b["open"]) / b["open"] * 100
         pp = (pre or {}).get(u["code"])
         pre_pct = (b["close"] - pp) / pp * 100 if pp else None
-        by = [k for k, ok in (("open", pct >= rise_pct), ("pre", pre_pct is not None and pre_pct >= pre_rise_pct)) if ok]
-        if by:                             # 둘 중 하나면 든다 · by = 걸린 셈(open 시가 대비 · pre 프리장 대비 · 둘 다)
+        mp = {}                              # 시가부터 2분 · 3분 끝 값의 시가 대비 % — 그 봉이 끝나고 끝난 뒤 받은 것만(덜 찬 봉으로 안 고름)
+        for k in (1, 2):
+            if live_today and now_min < bar_end + k:
+                continue                     # 그 봉이 아직 안 끝났다
+            c = (later.get(u["code"]) or {}).get(k)
+            if live_today and (fresh is None or fresh < bar_end + k):
+                pending_later += 1           # 끝났는데 아직 안 받았다 — 먼저 받기가 곧 채운다
+                continue
+            if c is not None:
+                mp[k] = (c - b["open"]) / b["open"] * 100
+        by = [k for k, ok in (("open", pct >= rise_pct), ("pre", pre_pct is not None and pre_pct >= pre_rise_pct),
+                              ("m2", 1 in mp and mp[1] >= m_pcts[1]), ("m3", 2 in mp and mp[2] >= m_pcts[2])) if ok]
+        if by:                             # 하나라도 걸리면 든다 · by = 걸린 셈(open 시가 대비 · pre 프리장 대비 · m2 2분 · m3 3분)
             rows.append({"code": u["code"], "name": u["name"], "market": u["market"], "cap": u["cap"],
                          "open": b["open"], "close": b["close"], "high": b["high"], "volume": b["volume"],
-                         "pct": round(pct, 2), "pre": pp, "prePct": round(pre_pct, 2) if pre_pct is not None else None, "by": by})
+                         "pct": round(pct, 2), "pre": pp, "prePct": round(pre_pct, 2) if pre_pct is not None else None,
+                         "m2Pct": round(mp[1], 2) if 1 in mp else None, "m3Pct": round(mp[2], 2) if 2 in mp else None, "by": by})
     rows.sort(key=lambda x: -x["pct"])
     phase = "pending" if pending else "nodata" if cand and no_bar == len(cand) else "done"
     return dict(head, phase=phase, rows=rows, candidates=len(cand), pending=pending, noBar=no_bar, capMissing=cap_missing, etfOut=etf,
-                risePct=rise_pct, preRisePct=pre_rise_pct, preMissing=pre is None, preCount=len(pre) if pre is not None else None)
+                risePct=rise_pct, preRisePct=pre_rise_pct, preMissing=pre is None, preCount=len(pre) if pre is not None else None,
+                rise2Pct=m_pcts[1], rise3Pct=m_pcts[2], lastMin=LAST_MIN, pendingLater=pending_later,
+                lastTo="%02d:%02d" % divmod(open_min + LAST_MIN, 60))
 
 
 def fetch(proxy, now=None):
@@ -146,11 +172,11 @@ def fetch(proxy, now=None):
     return _st["data"], _st["at"]
 
 
-_first = {"day": None, "got": 0, "left": None, "at": None, "error": None, "tday": None, "tat": None, "t": None}
+_first = {"day": None, "got": 0, "left": None, "at": None, "error": None, "upto": None, "tday": None, "tat": None, "t": None, "doneDay": None, "doneTo": None}
 
 
 def first_status():
-    return {k: v for k, v in _first.items() if k not in ("tday", "tat", "t")}
+    return {k: v for k, v in _first.items() if k not in ("tday", "tat", "t", "doneDay", "doneTo")}
 
 
 def _first_once(proxy, now):
@@ -169,13 +195,18 @@ def _first_once(proxy, now):
     if t["open"] is False:
         return None                                # 휴장 — 헛호출 안 함
     bar_hm = t["reg"][0]                           # 그날 여는 시각 — 늦게 여는 날(수능 10:00)은 그 시각의 첫 봉(11-19 「응 해줘」)
-    bar_end = int(bar_hm[:2]) * 60 + int(bar_hm[2:]) + BAR_MIN
+    open_min = int(bar_hm[:2]) * 60 + int(bar_hm[2:])
+    bar_end = open_min + BAR_MIN
     if sec < bar_end * 60 + FIRST_GRACE_SEC or now.hour * 60 + now.minute >= bar_end + FIRST_UNTIL_MIN:
         return None
+    # 이번에 채울 끝 — 막 끝난 분(GRACE 지난) · 시가부터 LAST_MIN 분까지(분별 셈 2분 · 3분 · 11-23 「3분까지만」)
+    target = min((sec - FIRST_GRACE_SEC) // 60, open_min + LAST_MIN)
+    if _first.get("doneDay") == day and target <= (_first.get("doneTo") or 0):
+        return None                                # 그 끝까지는 이미 받았다
     uni, _ = _universe(proxy)
     cap_min = dart.rank_min_cap_eok()
     codes = [u["code"] for u in uni if u["cap"] is not None and u["cap"] >= cap_min]
-    todo = [c for c in codes if (proxy._minutes_fresh_upto(c) or 0) < bar_end]
+    todo = [c for c in codes if (proxy._minutes_fresh_upto(c) or 0) < target]
     _first.update(day=day, got=0, error=None, left=len(todo), at=now.strftime("%H:%M:%S"))   # 그날 셈 — 날이 바뀌면 0 부터(개념정의 덧 11-12)
     cfg = proxy.load_secrets()
     for c in todo:
@@ -188,6 +219,7 @@ def _first_once(proxy, now):
             _first["error"] = type(e).__name__
         _first["left"] -= 1
     _st["at"] = 0.0                              # 판을 바로 다시 센다
+    _first.update(doneDay=day, doneTo=target, upto="%02d:%02d" % divmod(target, 60))
     return _first["left"]
 
 
@@ -199,15 +231,12 @@ def start(proxy):
         return False
 
     def loop():
-        done = None
         while True:
             now = datetime.now(KST)
             try:
-                if done != now.strftime("%Y%m%d"):
-                    left = _first_once(proxy, now)
-                    if left is not None:
-                        done = now.strftime("%Y%m%d")
-                        print("  [초반상승] %s 첫 봉 먼저 받기 — %d종목 받음 · 남음 %d" % (now.strftime("%H:%M:%S"), _first["got"], left), flush=True)
+                left = _first_once(proxy, now)           # 시가부터 LAST_MIN 분까지 분마다 한 번 — 이미 받은 끝이면 None
+                if left is not None:
+                    print("  [초반상승] %s 첫 봉 먼저 받기(%s 끝까지) — %d종목 받음 · 남음 %d" % (now.strftime("%H:%M:%S"), _first["upto"], _first["got"], left), flush=True)
             except Exception as e:
                 _first["error"] = type(e).__name__
             time.sleep(1)

@@ -10741,8 +10741,10 @@ class Handler(SimpleHTTPRequestHandler):
                              "risePct": d.get("risePct", chip_rules.get("초반상승", "risePct")), "minCapEok": dart.rank_min_cap_eok(),
                              "preRisePct": d.get("preRisePct", chip_rules.get("초반상승", "preRisePct")),
                              "preMissing": d.get("preMissing"), "preCount": d.get("preCount"),
+                             "rise2Pct": d.get("rise2Pct", chip_rules.get("초반상승", "rise2Pct")), "rise3Pct": d.get("rise3Pct", chip_rules.get("초반상승", "rise3Pct")),
+                             "lastMin": open_rise.LAST_MIN, "lastTo": d.get("lastTo"), "pendingLater": d.get("pendingLater"),
                              "barFrom": d["barFrom"], "barTo": d["barTo"], "barMin": open_rise.BAR_MIN,
-                             "note": "DB 에 쌓인 분봉 — 정규장 첫 봉(barMin 분) (종가 − 시가) ÷ 시가 ≥ risePct 또는 (종가 − 프리장 마지막 값) ÷ 프리장 마지막 값 ≥ preRisePct(프리장 체결 있던 종목만 · preCount 종목) · 줄의 by 가 걸린 셈(open · pre) · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
+                             "note": "DB 에 쌓인 분봉 — 정규장 첫 봉(barMin 분) (종가 − 시가) ÷ 시가 ≥ risePct 또는 (종가 − 프리장 마지막 값) ÷ 프리장 마지막 값 ≥ preRisePct(프리장 체결 있던 종목만 · preCount 종목) 또는 시가부터 2분 · 3분 봉 종가가 첫 봉 시가보다 rise2Pct · rise3Pct 이상(lastMin 분까지 · 그 봉이 끝나야 셈 · 끝났는데 아직 안 받은 종목 수 pendingLater) · 줄의 by 가 걸린 셈(open · pre · m2 · m3) · m2Pct · m3Pct 는 못 셌으면 null · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
                              "cacheTtl": open_rise.CACHE_TTL, "first": open_rise.first_status()},
                 })
                 return
