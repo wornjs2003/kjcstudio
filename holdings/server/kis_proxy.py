@@ -10674,7 +10674,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return
 
             if route == "vol-chip":
-                # 단타 칩 「거래량」 — 풀린 주식수 대비 거래량 ≥ floatPct 또는 어제 같은 시각 대비 ≥ prevSamePct (server/vol_chip.py · 2026-11-23)
+                # 단타 칩 「거래량」 — 거래 비율(turn) ≥ turnPct 또는 전일 동시간 누적 대비 ≥ prevSamePct (server/vol_chip.py · 2026-11-23)
                 # 1분 칸(turnover_slot)은 8765 만 쌓는다 — 상류가 있는 서버(메인 8764 · 세션)는 8765 것을 그대로 넘긴다(dt-list 와 같은 꼴)
                 base = upstream_base()
                 if base:
