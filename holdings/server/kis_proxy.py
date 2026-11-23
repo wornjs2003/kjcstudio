@@ -10713,9 +10713,11 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({
                     "ok": d is not None, "data": d or {},
                     "meta": {"day": day, "count": len(d) if d is not None else None, "source": src,
+                             # 견줄 날(평일 09:00 부터는 그날 · 그 앞은 앞 평일 — 휴장일은 못 가림)과 다르면 stale — 8765 가 그날 08:51 저장을 놓쳤다(창구 덧 11-23)
+                             "expectDay": nxt_pre._last_trading_day(datetime.now(KST)), "stale": bool(day) and day != nxt_pre._last_trading_day(datetime.now(KST)),
                              "preUpPct": chip_rules.get("프리장대비", "preUpPct"),
                              "note": "data = {종목: 프리장 마지막 체결가} · day 는 저장된 가장 최근 날(오늘 08:51 앞이면 앞 거래일) · 체결 없던 종목은 빠짐 · "
-                                     "source local(이 서버 표) · upstream(8765 것) · none(못 받음 — count null)"},
+                                     "source local(이 서버 표) · upstream(8765 것) · none(못 받음 — count null) · stale 이면 화면은 견주지 않는다"},
                 })
                 return
 
