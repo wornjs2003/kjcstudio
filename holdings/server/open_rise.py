@@ -110,7 +110,7 @@ def build(proxy, now=None):
     pre_rise_pct = chip_rules.get("초반상승", "preRisePct")
     import nxt_pre
     try:                                   # 그날 프리장 마지막 값 — 08:51 저장 표 · 거래량 0 은 체결 없음이라 「프리장 대비」 를 안 센다
-        pre = {c: r["price"] for c, r in nxt_pre._saved(proxy, day).items() if r.get("price") and (r.get("vol") or 0) > 0}
+        pre, _d, _src = nxt_pre.last_prices(proxy, day)   # 자기 표가 비면 8765 것(메인 · 세션 서버는 이 표를 안 채운다)
     except Exception:
         pre = None                         # 못 읽음 — 「시가 대비」 만 센다 · 응답 preMissing 으로 알린다
     for u in cand:
