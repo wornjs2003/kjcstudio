@@ -86,6 +86,7 @@ import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 
 import flow_board       # 수급 정리판 — 투자자 갈래별 순매수(오늘 · 날마다 · 상위 종목)를 한 주소로 · /api/kis/flow-board(2026-11-04 · server/flow_board.py)
 import open_rise        # 초반상승 — 정규장 첫 5분봉이 시가보다 오른 종목 · 실시간 순위 「초반상승」 칩 · /api/kis/open-rise(2026-11-11 · server/open_rise.py)
 import rescan           # 지금검색 — 관심 아래 칩 룰을 누를 때 다시 셈 · /api/kis/rescan(2026-11-11 · server/rescan.py)
+import vol_chip         # 단타 칩 「거래량」 — 풀린 주식수 대비 · 어제 같은 시각 대비 · /api/kis/vol-chip(2026-11-23 · server/vol_chip.py)
 import chip_rules       # 관심 아래 칩 룰 값 한 곳 · /api/kis/chip-rules(2026-11-20 · server/chip_rules.py)
 import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 · /api/kis/pre-flow(2026-11-05 · server/pre_flow.py)
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
@@ -10670,6 +10671,17 @@ class Handler(SimpleHTTPRequestHandler):
                              "note": "DB 에 쌓인 분봉 — 정규장 첫 봉(barMin 분) (종가 − 시가) ÷ 시가 ≥ risePct 또는 (종가 − 프리장 마지막 값) ÷ 프리장 마지막 값 ≥ preRisePct(프리장 체결 있던 종목만 · preCount 종목) · 줄의 by 가 걸린 셈(open · pre) · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
                              "cacheTtl": open_rise.CACHE_TTL, "first": open_rise.first_status()},
                 })
+                return
+
+            if route == "vol-chip":
+                # 단타 칩 「거래량」 — 풀린 주식수 대비 거래량 ≥ floatPct 또는 어제 같은 시각 대비 ≥ prevSamePct (server/vol_chip.py · 2026-11-23)
+                d, at = vol_chip.hits(sys.modules[__name__], cfg)
+                self._send_json({"ok": True, "data": d["rows"],
+                                 "meta": {k: d[k] for k in ("candidates", "quoted", "etfOut", "floatKnown", "slot", "prev1m", "floatPct", "prevSamePct", "capMinEok", "at")}
+                                 | {"cacheTtl": vol_chip.CACHE_TTL, "unit": "vol 주 · floatPct · prevSamePct %",
+                                    "note": "줄은 등락률 큰 순 · by 가 걸린 셈(float 풀린 주식수 대비 · prev 어제 같은 시각 대비) · 못 잰 칸 null · "
+                                            "floatPct 는 통합 누적 거래량 ÷ 풀린 주식수 · prevSamePct 는 전일 동시간 누적 대비 — 지금 누적 ÷ 어제 같은 분(slot)까지 누적(prevSrc 1m · 1분 바퀴 기록) · "
+                                            "그 기록이 아직 없는 날만 정규장 5분봉 끝난 봉(upto)까지 오늘 ÷ 어제(prevSrc 5m) · prev1m 은 어제 1분 기록이 있는 종목 수"}})
                 return
 
             if route == "pre-last":

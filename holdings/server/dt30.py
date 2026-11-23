@@ -248,6 +248,13 @@ def chips_now(proxy, cfg, early=True, pre=False):
                 hit[r["code"]]["rise"] = r["pct"]          # 첫 5분봉 시가 대비 % — 줄 세우기 둘째 열쇠
     except Exception:
         missing.append("초반상승")
+    try:                                   # 거래량 — 풀린 주식수 대비 · 어제 같은 시각 대비 (server/vol_chip.py · 재권님 11-23 「단타엡에 추가해줘」)
+        import vol_chip
+        vb, _ = vol_chip.hits(proxy, cfg)
+        for r in vb.get("rows") or []:
+            put(r.get("code"), r.get("name"), "거래량", "풀린" if r["by"] == ["float"] else "전일" if r["by"] == ["prev"] else "둘 다")
+    except Exception:
+        missing.append("거래량")
     try:
         day = _now().strftime("%Y%m%d")
         for it in signal_watch.today_lows(proxy).get("items") or []:
