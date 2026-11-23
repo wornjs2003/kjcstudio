@@ -10684,7 +10684,7 @@ class Handler(SimpleHTTPRequestHandler):
                 except ValueError:
                     self._send_json({"ok": False, "error": "days 는 숫자입니다."}, 400)
                     return
-                self._send_json({"ok": True, "data": trade_signal.journal(sys.modules[__name__], nd), "meta": trade_signal.status()})
+                self._send_json({"ok": True, "data": trade_signal.journal(sys.modules[__name__], nd), "meta": trade_signal.status(sys.modules[__name__])})
                 return
 
             if route == "dt30-win":
