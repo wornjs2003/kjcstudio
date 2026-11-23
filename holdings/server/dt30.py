@@ -1707,6 +1707,8 @@ def refresh(proxy, cfg, b):
         if o is not None:
             for k, v in o.items():                     # 다시 세어도 그 줄에 적어 둔 것(팔 때 sell · N분 값 pxMin · 프리장 nx 등)은 옮긴다 — 새 셈이 내는 칸만 새 값
                 r.setdefault(k, v)                     # (qa 걸림 11-20 — sell 이 지워져 같은 종목 「팔 때」 가 여러 통 · tgTop 이 빈칸)
+            r.pop("out", None)                         # 빠졌다 다시 든 줄
+            r.pop("outAt", None)
             r["chipAt"] = dict(r.get("chipAt") or {}, **{c: t for c, t in (o.get("chipAt") or {}).items() if c in r["chips"]})   # 앞에 붙어 있던 칩은 그 시각 그대로 · 빠진 칩은 지움
             for k in ("px1", "flow", "flowNow"):
                 if k in o:
@@ -1739,8 +1741,16 @@ def refresh(proxy, cfg, b):
     changed += len(set(old) - {r["code"] for r in nb["rows"]})
     if opened:
         _buy_open_fill(proxy, nb)
-    gone = list(b["meta"].get("gone") or []) + _gone(b["rows"], nb["rows"], hm)   # 빠진 칩 · 종목을 그 시각과 함께 쌓는다(meta.gone)
-    b["rows"] = nb["rows"]
+    gone = list(b["meta"].get("gone") or []) + _gone([o for o in b["rows"] if not o.get("out")], nb["rows"], hm)   # 빠진 칩 · 종목을 그 시각과 함께 쌓는다(meta.gone)
+    have = {r["code"] for r in nb["rows"]}
+    kept = []
+    for o in b["rows"]:                                # 판에서 빠진 종목도 줄을 남긴다 — 칩 시각 · 산 차례가 그대로 남게(out true · 빠진 때 outAt · 값 칸은 계속 적음)
+        if o["code"] not in have:                      # 재권님 「칩이 들어오는 순서를 기억하고 칩의 개수를 조절하면 순위가 소팅되어야함」(11-23 19:3x · 개념정의 덧 ⑥)
+            o.setdefault("out", True)
+            o.setdefault("outAt", hm)
+            o["rank"] = None
+            kept.append(o)
+    b["rows"] = nb["rows"] + kept
     if b.get("times") != nb["times"] and not any(o.get("px") for o in old.values()):
         b["times"] = nb["times"]                       # 값 적는 시각 — 아직 한 칸도 안 적었으면 지금 셈(늦게 여는 날 뒤로 민 시각)으로 · 적기 시작했으면 그대로
     late = b["meta"].get("late") or {}
