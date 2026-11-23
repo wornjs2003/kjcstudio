@@ -915,10 +915,12 @@ def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL):
     hm = lambda x: "%s:%s" % (x[:2], x[2:])
     out = lambda px, a, src: {"px": px, "at": hm(a), "chipAt": hm(T), "need": need, "src": src}
     p1 = mh(1)
-    if T <= p1:
-        v = mv(1)
-        return out(v, p1, "9시 1분 값") if v else None
-    for k in PX_MIN:
+    v1 = mv(1) if T <= p1 else None
+    if v1:
+        return out(v1, p1, "9시 1분 값")
+    for k in PX_MIN:                                   # 9시 1분 값이 없는 날(1분봉 11-12 전)은 아래로 흘림 — 든 때 → 다음 30분 칸(화면 0a9603c 와 같게 · 재권님 「응」 20:2x)
+        if k == 1 and T <= p1:
+            break
         if T <= mh(k):
             v = mv(k)
             if v:
@@ -1859,11 +1861,7 @@ def _load(proxy, day):
     if not got:
         return None
     b = json.loads(got[0])
-    try:
-        apply_windows(proxy, b)                        # 읽을 때마다 시간 창으로 — 판 · 승률 · 매매일지가 같은 묶음을 본다(11-23 17:2x)
-    except Exception as e:
-        print("  [단타 30] 시간 창 못 나눔 — %s" % proxy.safe_message(e, 120), flush=True)
-    return b, got[1]
+    return b, got[1]                                   # 시간 창(apply_windows)은 걷음 — 읽을 때 바꾼 산 값 · 든 시각이 _store 로 굳지 않게(qa 덧 11-23 · 사는 셈은 buy930_fill 한 곳)
 
 
 def _store(proxy, b):
