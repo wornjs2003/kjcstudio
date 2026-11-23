@@ -197,6 +197,48 @@ td.owner { background: var(--pj-done-faint); }
 .foot { margin-top: 26px; font-size: 13px; color: var(--pj-text-muted); }
 .foot code { font-size: 12px; background: var(--pj-bg-surface); padding: 2px 6px; border-radius: 5px; }
 
+/* ── 자동 매매(2026-11-23 · 개발2 · 재권님 「가」) — 룰 칸 · 흐름 · 매매일지 ───────── */
+.tr-card { background: var(--pj-bg-card); border-radius: var(--pj-radius-lg); padding: 18px 20px; margin-bottom: 14px; }
+.tr-state { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.tr-chip { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: var(--pj-radius-pill); background: var(--pj-bg-elevated); color: var(--pj-text-secondary); }
+.tr-chip.warn { background: var(--pj-warn-faint); color: var(--pj-warn); }
+.tr-chip.ok { background: var(--pj-done-faint); color: var(--pj-done); }
+.tr-rules { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.tr-rule { display: grid; grid-template-columns: 1fr; gap: 4px; padding: 10px 0; border-bottom: 1px solid var(--pj-border); }
+.tr-rule:last-child { border-bottom: none; }
+.tr-rule-name { font-size: 14px; font-weight: 700; }
+.tr-rule-in { display: flex; align-items: center; gap: 6px; }
+.tr-rule-in input {
+  width: 150px; font: inherit; font-size: 14px; font-weight: 600; padding: 7px 10px;
+  border: 1px solid var(--pj-border-strong); border-radius: 8px; background: var(--pj-bg-card); color: var(--pj-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.tr-rule-in input.bad { border-color: var(--pj-danger); background: var(--pj-danger-faint); }
+.tr-rule-unit { font-size: 13px; color: var(--pj-text-secondary); white-space: nowrap; }
+.tr-rule-desc { font-size: 12.5px; color: var(--pj-text-muted); }
+.tr-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.tr-btn { font: inherit; font-size: 13px; font-weight: 700; padding: 8px 16px; border: none; border-radius: var(--pj-radius-pill); cursor: pointer;
+  background: var(--pj-accent); color: var(--pj-text-on-fill); }
+.tr-btn:disabled { opacity: 0.45; cursor: default; }
+.tr-btn.sub { background: var(--pj-bg-elevated); color: var(--pj-text-secondary); }
+.tr-msg { font-size: 12.5px; color: var(--pj-text-muted); }
+.tr-flow h3 { font-size: 14px; font-weight: 700; margin: 12px 0 6px; }
+.tr-flow h3:first-child { margin-top: 0; }
+.tr-flow ol, .tr-flow ul { padding-left: 20px; font-size: 13px; color: var(--pj-text-strong); }
+.tr-flow li { margin: 3px 0; }
+.tr-flow .v { font-weight: 700; color: var(--pj-text-primary); font-variant-numeric: tabular-nums; }
+.tr-flow .v.empty { color: var(--pj-danger); }
+.tr-log { overflow-x: auto; }
+.tr-log table { min-width: 900px; }
+.tr-log td { padding: 9px 10px; font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: center; }
+.tr-log td.l { text-align: left; }
+.tr-empty { font-size: 13px; color: var(--pj-text-muted); padding: 16px 4px; }
+details.old > summary { cursor: pointer; font-size: 15px; font-weight: 700; padding: 14px 0; list-style: revert; }
+details.old[open] > summary { margin-bottom: 8px; }
+@media (min-width: 900px) {
+  .tr-rule { grid-template-columns: 200px 300px 1fr; align-items: center; gap: 14px; }
+}
+
 @media print { .saved, .legend { display: none; } .wrap { padding: 0; } }
 @media (max-width: 900px) { .stats, .sources { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 640px) {
@@ -222,6 +264,30 @@ td.owner { background: var(--pj-done-faint); }
       <span class="stamp" id="stampTag"></span>
     </div>
   </div>
+
+  <!-- 자동 매매 — 룰 칸 · 흐름 · 매매일지(서버 holdings/server/trade_signal.py · /api/kis/trade-journal · 룰 문서 trade-set) -->
+  <div class="sec">
+    <h2>자동 매매 — 룰</h2>
+    <p>단타 판 첫 굳힘 위 종목을 슬랙으로 주문 컴퓨터에 보내 시장가로 사고팝니다 · 룰 값은 여기 한 곳에서 정하고 주문 컴퓨터는 서명된 룰만 따릅니다</p>
+  </div>
+  <div class="tr-card">
+    <div class="tr-state" id="trState"></div>
+    <div class="tr-rules" id="trRules"></div>
+    <div class="tr-actions">
+      <button class="tr-btn" id="trSave" disabled>룰 저장</button>
+      <button class="tr-btn sub" id="trReload">다시 읽기</button>
+      <span class="tr-msg" id="trMsg"></span>
+    </div>
+  </div>
+
+  <div class="sec"><h2>자동 매매 — 흐름</h2><p>괄호 안은 위 칸의 지금 값 · 빈 칸은 빨간 ( ) — 빈 칸이 있으면 그날 매수 목록이 안 나갑니다</p></div>
+  <div class="tr-card tr-flow" id="trFlow"></div>
+
+  <div class="sec"><h2>자동 매매 — 매매일지</h2><p>보낸 신호 한 줄마다 · 주문 컴퓨터마다 결과 · 지우지 않습니다</p></div>
+  <div class="tr-card tr-log" id="trLog"></div>
+
+  <details class="old">
+  <summary>데이터 출처 · 받는 곳(접어 둠)</summary>
 
   <div class="stats" id="stats"></div>
 
@@ -249,6 +315,7 @@ td.owner { background: var(--pj-done-faint); }
     체크는 눌러서 바꿀 수 있고 서버에 저장되어 다른 기기에서도 같게 보입니다 ·
     항목 정의 <code>api-board/data/sources.js</code>
   </div>
+  </details>
 
 </div>
 
@@ -548,6 +615,7 @@ drawStats();
 store.load();
 </script>
 
+<script src="js/trade.js"></script>
 <script src="../assets/js/main.js"></script>
 
 <!-- 오른쪽 Claude 줄 — 공용(assets/js/claude-rail.js · 2026-11-12 재권님 「응 해」 · 모양 파일은 그 코드가 건다) -->
