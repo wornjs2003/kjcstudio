@@ -1038,6 +1038,7 @@ def bars_fill(proxy, b):
     return n
 
 
+TRADE_VER = "t1"              # 지난 판 거래 값 셈(_past_trade)이 바뀌면 올린다 — 남은 되채운 판마다 한 번 다시 채운다(meta.tradeVer)
 CF_VER = "f1"                 # 칩 시각 공식(chip_first_backfill)이 바뀌면 올린다 — 남은 판마다 한 번 다시 채운다(meta.cfVer)
 
 
@@ -2330,7 +2331,7 @@ def rebuild(proxy, day, prev, cfg=None):
     return {"day": day, "buyAt": "%02d:%02d" % PAST_BUY_AT, "times": times(), "rows": rows, "closed": True,
             "meta": {"rebuilt": True, "viSplit": vi_split(off), "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": drop_below_pct(),
                      "watchSrc": watch_src, "rules": rules_meta(proxy, merged=False), "viUntil": "%02d:%02d" % PAST_LATE, "volUntil": "%02d:%02d" % PAST_VOL_UNTIL, "approxBase": approx_base,
-                     "capMinEok": cap_min_eok(), "allRows": True, "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
+                     "capMinEok": cap_min_eok(), "allRows": True, "tradeVer": TRADE_VER, "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 · 수급은 그날 09:01 직전 관심 목록(watchSrc 기록 · 없으면 관심 못 받음 · 수급 어림) · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
                              "buy 는 09:05 봉 시가 · 시가총액 · 섹터 · 시장은 지금 값"}}
 
@@ -2338,7 +2339,7 @@ def rebuild(proxy, day, prev, cfg=None):
 def _past_trade(proxy, day, prev, rows):
     """지난 판 줄의 거래 값 칸(TRADE_KEYS) — 정규장(market_hours.REG_OPEN ~ REG_CLOSE) 5분봉으로 어림해 채운다 · 그날 끝 ÷ 앞 거래일 끝.
     accValue · prevDayValue 는 5분봉 종가 × 거래량 합(억원 · 어림) · prevSameSrc 「5m」 · 봉이 하나도 없는 종목 · 앞 날 봉이 없는 칸은 null(0 아님).
-    풀린 시총 · 거래 비율(floatCap · turn · turnPrevPct)은 그날 유통주식 기록이 없어 안 채운다(되채움 카드 ⑩ · 재권님 「거래대금이나 유통주식 이것도 다 계산해서」 11-23 18:5x).
+    풀린 시총 · 거래 비율(floatCap · turn · turnPrevPct)은 지금 풀린 주식수 × 그날 종가로 어림(turnApprox true · 재권님 「응」 11-23 20:2x) — 그날 유통주식 기록이 없어서.
     → 셈을 했나(봉을 못 읽으면 False)."""
     import market_hours
     codes = [r["code"] for r in rows]
@@ -2349,20 +2350,33 @@ def _past_trade(proxy, day, prev, rows):
         with proxy.db_conn() as conn:
             for d in (day, prev):
                 for code, c, v in conn.execute(
-                        "SELECT code, close, volume FROM candles WHERE period = '5m' AND ts >= ? AND ts < ? AND code IN (%s)" % ",".join("?" * len(codes)),
+                        "SELECT code, close, volume FROM candles WHERE period = '5m' AND ts >= ? AND ts < ? AND code IN (%s) ORDER BY ts" % ",".join("?" * len(codes)),
                         [d + market_hours.REG_OPEN, d + market_hours.REG_CLOSE] + codes):
-                    t = tot.setdefault((d, code), [0, 0.0])
+                    t = tot.setdefault((d, code), [0, 0.0, None])
                     t[0] += v or 0
                     t[1] += (c or 0) * (v or 0)
+                    if c:
+                        t[2] = c                       # 그날 마지막 5분봉 종가
     except Exception:
         return False
     pct = lambda a, b: round(a / b * 100, 1) if a is not None and b else None
+    try:
+        import company_profile, turnover
+        fl = company_profile.floats()                  # 풀린 주식수 — 지금 값(그날 값은 안 쌓였다 · 어림 · 재권님 「응」 11-23 20:2x)
+    except Exception:
+        fl, turnover = {}, None
     for r in rows:
         a, p = tot.get((day, r["code"])), tot.get((prev, r["code"]))
         av, aa = (a[0], round(a[1] / 1e8, 1)) if a else (None, None)
         pv, pa = (p[0], round(p[1] / 1e8, 1)) if p else (None, None)
         r.update(accVol=av, accValue=aa, prevDayVol=pv, prevDayValue=pa, prevSameVol=pv, prevSameSrc="5m" if p else None,
                  volPrevPct=pct(av, pv), valuePrevPct=pct(a[1], p[1]) if a and p else None)   # 대금 비는 반올림 전 값으로
+        f = fl.get(r["code"])
+        if turnover and f and a and a[2]:              # 풀린 시총 = 지금 풀린 주식수 × 그날 종가 · 거래 비율 = 그날 거래대금 ÷ 풀린 시총 · 전날 대비 = 두 날 거래 비율 비(어림)
+            r["floatCap"], r["turn"] = turnover.calc(a[2], a[1], f)
+            pt = turnover.calc(p[2], p[1], f)[1] if p and p[2] else None
+            r["turnPrevPct"], r["turnPrevSrc"] = (round(r["turn"] / pt * 100, 1), "5m") if r["turn"] is not None and pt else (None, None)
+            r["turnApprox"] = True
     return True
 
 
@@ -2457,6 +2471,14 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
             n += 1
     for d in days(proxy)[:limit]:                      # 칩 시각 공식(CF_VER)을 남은 판마다 한 번 — 기록이 없던 칩도 시각을 갖게(11-23 19:0x 「공식도 있어야해」)
         got = _load(proxy, d)
+        m = (got[0].get("meta") or {}) if got else {}
+        if got and d < today and m.get("prevDay") and m.get("tradeVer") != TRADE_VER:   # 거래 값 · 풀린 시총 어림을 남은 되채운 판마다 한 번(다시 짓지 않고 · 11-23 20:2x 「응」)
+            try:
+                _past_trade(proxy, d, m["prevDay"], got[0].get("rows") or [])
+                got[0]["meta"]["tradeVer"] = TRADE_VER
+                _store(proxy, got[0])
+            except Exception as e:
+                print("  [단타 30] %s 거래 값 못 채움 — %s" % (d, proxy.safe_message(e, 120)), flush=True)
         if got and got[0].get("closed", True) and (got[0].get("meta") or {}).get("cfVer") != CF_VER:
             try:
                 chip_first_backfill(proxy, d, got[0])
