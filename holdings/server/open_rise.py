@@ -53,6 +53,7 @@ PAST_RISE_PCT = 2.0      # 〃 문턱(11-18 전 셈 그대로)
 MIN_CAP_EOK = dart.RANK_MIN_CAP_EOK   # 시가총액 문턱(억원) — 단타 · 순위 문턱 한 곳(dart.RANK_MIN_CAP_EOK · 3천억 · 재권님 「3000으로 통일」 → 「나」 11-20 · 그 전 5천억 11-12) · 단위 억원
 CACHE_TTL = 60           # 같은 판을 다시 세지 않는 시간(초) — 화면이 다시 묻는 주기도 이 값(서버 값)
 FIRST_GRACE_SEC = 3      # 첫 봉이 끝난 뒤 이만큼 기다렸다 받는다 — KIS 가 그 분을 닫을 틈
+FIRST_RETRY_SEC = 10     # 먼저 받기에서 못 받은 종목이 있으면 이만큼 뒤 다시 받는다(받기 창 FIRST_UNTIL_MIN 안에서만)
 FIRST_UNTIL_MIN = 10     # 첫 봉 끝에서 이 분이 지나면 먼저 받기를 그만둔다(남은 것은 미리받기 몫)
 T_RECHECK_SEC = 60       # 먼저 받기 고리가 그날 장 시각(market_hours.today)을 다시 읽는 간격(초) — 늦게 여는 날을 알아보려고
 
@@ -138,16 +139,17 @@ def build(proxy, now=None):
         pct = (b["close"] - b["open"]) / b["open"] * 100
         pp = (pre or {}).get(u["code"])
         pre_pct = (b["close"] - pp) / pp * 100 if pp else None
-        mp = {}                              # 시가부터 2분 · 3분 끝 값의 시가 대비 % — 그 봉이 끝나고 끝난 뒤 받은 것만(덜 찬 봉으로 안 고름)
+        mp, late = {}, False                 # 시가부터 2분 · 3분 끝 값의 시가 대비 % — 그 봉이 끝나고 끝난 뒤 받은 것만(덜 찬 봉으로 안 고름)
         for k in (1, 2):
             if live_today and now_min < bar_end + k:
                 continue                     # 그 봉이 아직 안 끝났다
             c = (later.get(u["code"]) or {}).get(k)
             if live_today and (fresh is None or fresh < bar_end + k):
-                pending_later += 1           # 끝났는데 아직 안 받았다 — 먼저 받기가 곧 채운다
+                late = True                  # 끝났는데 아직 안 받았다 — 먼저 받기가 곧 채운다
                 continue
             if c is not None:
                 mp[k] = (c - b["open"]) / b["open"] * 100
+        pending_later += late                # 종목 수로 센다(분마다 따로 세지 않는다 · 개념정의 검수 11-23)
         by = [k for k, ok in (("open", pct >= rise_pct), ("pre", pre_pct is not None and pre_pct >= pre_rise_pct),
                               ("m2", 1 in mp and mp[1] >= m_pcts[1]), ("m3", 2 in mp and mp[2] >= m_pcts[2])) if ok]
         if by:                             # 하나라도 걸리면 든다 · by = 걸린 셈(open 시가 대비 · pre 프리장 대비 · m2 2분 · m3 3분)
@@ -172,11 +174,11 @@ def fetch(proxy, now=None):
     return _st["data"], _st["at"]
 
 
-_first = {"day": None, "got": 0, "left": None, "at": None, "error": None, "upto": None, "tday": None, "tat": None, "t": None, "doneDay": None, "doneTo": None}
+_first = {"day": None, "got": 0, "left": None, "at": None, "error": None, "upto": None, "tday": None, "tat": None, "t": None, "doneDay": None, "doneTo": None, "retryAt": None}
 
 
 def first_status():
-    return {k: v for k, v in _first.items() if k not in ("tday", "tat", "t", "doneDay", "doneTo")}
+    return {k: v for k, v in _first.items() if k not in ("tday", "tat", "t", "doneDay", "doneTo", "retryAt")}
 
 
 def _first_once(proxy, now):
@@ -202,7 +204,9 @@ def _first_once(proxy, now):
     # 이번에 채울 끝 — 막 끝난 분(GRACE 지난) · 시가부터 LAST_MIN 분까지(분별 셈 2분 · 3분 · 11-23 「3분까지만」)
     target = min((sec - FIRST_GRACE_SEC) // 60, open_min + LAST_MIN)
     if _first.get("doneDay") == day and target <= (_first.get("doneTo") or 0):
-        return None                                # 그 끝까지는 이미 받았다
+        return None                                # 그 끝까지는 이미 다 받았다
+    if time.time() < (_first.get("retryAt") or 0):
+        return None                                # 앞 바퀴에 못 받은 종목이 있다 — FIRST_RETRY_SEC 뒤 다시(1초마다 KIS 를 두드리지 않게)
     uni, _ = _universe(proxy)
     cap_min = dart.rank_min_cap_eok()
     codes = [u["code"] for u in uni if u["cap"] is not None and u["cap"] >= cap_min]
@@ -219,7 +223,11 @@ def _first_once(proxy, now):
             _first["error"] = type(e).__name__
         _first["left"] -= 1
     _st["at"] = 0.0                              # 판을 바로 다시 센다
-    _first.update(doneDay=day, doneTo=target, upto="%02d:%02d" % divmod(target, 60))
+    _first["upto"] = "%02d:%02d" % divmod(target, 60)
+    if _first["left"] == 0 and _first["error"] is None:
+        _first.update(doneDay=day, doneTo=target, retryAt=None)   # 다 받았을 때만 그 끝을 닫는다 — 실패한 종목을 그날 다시 안 받는 일이 없게(개념정의 검수 11-23)
+    else:
+        _first["retryAt"] = time.time() + FIRST_RETRY_SEC
     return _first["left"]
 
 
