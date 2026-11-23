@@ -82,12 +82,13 @@ def _in_ts(r):
 
 
 def _in_until(proxy, day, rule):
-    """그날 든 때 가격으로 사는 끝 HHMMSS — 셈 칸 inUntil(없으면 SET_DEF) 분 59초 · 늦게 여는 날은 늦은 분만큼 뒤(여는 시각 + 1분 기준 · 개념정의 덧 11-23) · 못 읽으면 ''(안 뺌)."""
+    """그날 든 때 가격으로 사는 끝 HHMMSS — 셈 칸 inUntil(없으면 SET_DEF) 분 59초 · 늦게 여는 날은 늦은 분만큼 뒤(여는 시각 + 1분 기준 · 개념정의 덧 11-23).
+    못 읽으면 여는 시각 분 59초 — 9시 1분 뒤 든 종목은 안 삼(화면 단타 판 셈 caf0a62 과 같게 · 개념정의 8315a24 덧)."""
     v = str(rule.get("inUntil") or "").replace(":", "").strip()
     if len(v) == 3 and v.isdigit():
         v = "0" + v                                    # 「9:05」 · 「905」 처럼 앞 0 없이 넣은 값(qa 덧 11-23)
     if len(v) != 4 or not v.isdigit():
-        return ""
+        v = "%02d%02d" % dt30.OPEN_AT                  # 끝을 모르면 든 때 가격으로는 안 삼 — 여는 시각 분 안(09:00:59)까지만
     m = int(v[:2]) * 60 + int(v[2:]) + dt30.late_min(proxy, day=day)
     return "%02d%02d59" % divmod(m, 60)
 
