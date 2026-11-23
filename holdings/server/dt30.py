@@ -563,9 +563,13 @@ def _ord_total(rows, ws):
     점수가 높은게 순위가 높게 해줘」 → (가)(11-23 09:20 · 시황분석1 창) · 판 안 = 지금 세우는 줄들끼리."""
     tot = {id(r): 0.0 for r in rows}
     for k, w in ws.items():
-        have = sorted([r for r in rows if _ord_val(r, k) is not None], key=lambda r: -_ord_val(r, k))
-        m = len(have)
-        for i, r in enumerate(have):
+        vals = [_ord_val(r, k) for r in rows if _ord_val(r, k) is not None]
+        m = len(vals)
+        for r in rows:
+            v = _ord_val(r, k)
+            if v is None:
+                continue
+            i = sum(1 for x in vals if x > v)          # 자기보다 큰 값의 수 — 같은 값끼리는 같은 순위(qa 덧 11-23 · 들어온 차례로 앞이 이기던 것)
             tot[id(r)] += w * (1.0 if m == 1 else 1 - i / (m - 1))
     return tot
 
