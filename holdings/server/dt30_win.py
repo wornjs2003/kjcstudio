@@ -291,7 +291,7 @@ def sell_of(r, end, S=None):
     sb = S.get("sellBar") if S.get("sellBar") in ("1m", "5m", "30m") else sell_bar()
     per = r.get("_barPer") or r.get("barSrc")
     if sb != "30m" and r.get("bars") and r.get("buy") and per:
-        out = _sell_bars(r, end, S, per, 1 if sb == "1m" else 5)   # 봉으로 — 1분봉이 없는 날 「1m」 이면 5분봉 그대로
+        out = _sell_bars(r, end, S, per, 1 if sb == "1m" and per == "1m" else dt30.BAR_MIN)   # 봉으로 — 1분봉이 없는 날(5m)은 「1m」 이어도 5분봉 폭으로(개념정의 덧 · 화면도 5분봉으로 맞춤)
         if out[0] is not None:
             return out
     buy, b_at = r.get("buy"), _hm(r.get("buyAt"))
