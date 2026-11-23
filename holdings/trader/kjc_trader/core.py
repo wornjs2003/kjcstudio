@@ -387,7 +387,8 @@ class Engine:
             open_day = False
         else:
             open_day = now.weekday() < 5
-        if hm >= (R.get("closeAt") or CLOSE_AT) or (later and (hm < R["reopenAt"] or not open_day)):   # 장 뒤 · 다음 날 장 전 · 휴장일 — 넣지 않는다(qa 11-23 ③)
+        close = R.get("closeAt") if R.get("gotDay") == now.date().isoformat() else None   # 그날 받은 장 끝만 — 수능 날 값을 이튿날 쓰지 않게(qa 덧 11-23)
+        if hm >= (close or CLOSE_AT) or (later and (hm < R["reopenAt"] or not open_day)):   # 장 뒤 · 다음 날 장 전 · 휴장일 — 넣지 않는다(qa 11-23 ③)
             if s.get("waitDay") != now.date().isoformat():
                 s["waitDay"] = now.date().isoformat()
                 self.log.put("매도", "장 밖 — 다음 거래일 %s 에 남은 것을 팖" % R["reopenAt"], jid, j["code"])
