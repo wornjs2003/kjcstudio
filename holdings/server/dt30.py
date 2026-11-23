@@ -12,7 +12,7 @@
                매수(「매수」 판 rows 전부) · 초반상승(open_rise) · 장외(순위 목록 시세의 regPct > 0 · 11-18 더함 — 서버가 평일 07:30~15:30 비워 아침 판에는 보통 안 든다).
                관심 · 프리장 · 매수는 시가총액 cap_min_eok() 억원 아래를 뺀다(화면 capBelowMin · 시가총액을 모르면 안 뺀다)
                **화면과 이 파일 두 곳에 셈이 있다** — 값 한 곳으로 모으는 것은 개발1 카드 「관심 아래 칩 룰 값 한 곳」(화면이 서버를 받는 쪽)
-    차례       칩 수 많은 순 → 초반상승(첫 5분봉 시가 대비 % · rise) 높은 순 → 시가총액 큰 순 — 상위 TOP_N
+    차례       시가 대비 등락률(openRise) 높은 순 → 칩 수(점수표면 점수 합) 많은 순 → 시가총액 큰 순 — 상위 TOP_N(11-23 재권님 · sort_rows)
                (재권님 19:1x 「칩수가 많은순 초반상승이높은순 시총순 이렇게 해서 올려」 · 초반상승에 안 든 종목은 같은 칩 수 안에서 뒤)
                홈 「단타」 칩은 칩 수 → 시가총액이다 — 이 판만 초반상승을 둘째로 둔다
     VI 값     rows[].viPx {at, px, src 「vi」(VI 발동가) | 「1m」(그 분 1분봉 시가)} | null — VI 없음 · 못 잼 · 매수 시점 「VI 발동」 고르기용
@@ -457,7 +457,7 @@ def min_chips(proxy, now=None):
 LIVE_TTL = 60                 # 단타 목록(live) 캐시(초) — 홈 「단타」 · 단타 판이 같은 셈을 이 나이 안이면 함께 쓴다 · 화면은 롱폴 열쇠 dt30.LIVE_TTL
 
 # 줄 세우기 — 재권님 「응」(11-18 19:3x · 시황분석1 창 · 작업우선순위 경유): 룰 문서 strategy-rules 의 rules.dt30.score
-# {칩 이름: 점수, "칩|HH:MM 전": 점수, "칩|HH:MM 이후": 점수} 를 읽어 「점수 합 큰 순 → 초반상승 높은 순 → 시가총액 순」.
+# {칩 이름: 점수, "칩|HH:MM 전": 점수, "칩|HH:MM 이후": 점수} 를 읽어 「시가 대비 등락률 높은 순 → 점수 합 큰 순 → 시가총액 순」(sort_rows).
 # 표가 비었거나 못 읽으면 지금 셈(칩 수 많은 순). 칩 이름은 화면 chipName 과 같게 — 서버 「수급」 은 화면 「자동」 이라 둘 다 받는다.
 # 시각 조건은 그 칩이 처음 붙은 때로 가른다 — VI·급등 은 viAt · surgeAt 중 이른 것, 그 밖은 rows[].chipAt. 시각을 모르면 그 조건은 안 셈.
 SCORE_ALIAS = {"수급": "자동"}
@@ -582,21 +582,23 @@ def _ord_total(rows, ws):
 
 
 def sort_rows(rows, tab, off=0):
-    """줄 세우기 한 곳 — tab(점수표)이 있으면 점수 합 · 없으면 칩 수. 앞의 것이 같으면 초반상승 → 시가총액. rows 를 제자리에서 세우고 order 글을 낸다.
+    """줄 세우기 한 곳 — 시가 대비 등락률(openRise) 높은 순 → 칩 수(tab 점수표가 있으면 점수 합) 많은 순 → 시가총액 큰 순.
+    재권님 「단타 목록 나오는 순서 다시 정의」 → 등락률은 「시가대비」 · 「가로해서 높은 순으로 하고 칩에따라 소팅되면 됨」 → 목록 · 판 굳힘 둘 다 「응」(11-23 13:5x).
+    openRise 가 없는 줄(못 잼)은 맨 뒤. rows 를 제자리에서 세우고 order 글을 낸다.
     룰 문서에 차례 점수(ord_score)가 있으면 그 합이 큰 순이 맨 앞 열쇠 · 같으면 위 차례(ordTotal 을 줄에 적음)."""
-    rise = lambda r: -(r["rise"] if r.get("rise") is not None else -1e9)
+    orise = lambda r: -(r["openRise"] if r.get("openRise") is not None else -1e9)
     cap = lambda r: -(r["cap"] if r.get("cap") is not None else -1)
     ws = ord_score()
     if tab:
         for r in rows:
             r["scoreBy"] = row_score_by(r, tab, off)
             r["score"] = round(sum(r["scoreBy"].values()), 4)
-        base, text = (lambda r: (-r["score"], rise(r), cap(r))), "점수 합 큰 순 → 초반상승 높은 순 → 시가총액 순"
+        base, text = (lambda r: (orise(r), -r["score"], cap(r))), "시가 대비 등락률 높은 순 → 점수 합 큰 순 → 시가총액 순"
     else:
         for r in rows:
             r.pop("score", None)
             r.pop("scoreBy", None)
-        base, text = (lambda r: (-r["n"], rise(r), cap(r))), "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순"   # 재권님 19:1x
+        base, text = (lambda r: (orise(r), -r["n"], cap(r))), "시가 대비 등락률 높은 순 → 칩 수 많은 순 → 시가총액 순"   # 재권님 11-23 13:5x
     if ws:
         tot = _ord_total(rows, ws)
         for r in rows:
@@ -721,6 +723,7 @@ def _live_calc(proxy, cfg):
         rows.append({"code": code, "name": g["name"] or p.get("name") or "", "market": mkt.get(code), "cap": cap.get(code), "sector": sec.get(code),
                      "chips": [c for c in ov_chips() + ("현재상승", "볼린저") if c in chips], "subs": g["subs"], "n": len(chips & set(ov_chips())),
                      "price": p.get("price"), "open": p.get("open"), "pct": p.get("pct"), "rise": g.get("rise"),
+                     "openRise": round((p["price"] / p["open"] - 1) * 100, 2) if p.get("open") and p.get("price") else None,   # 시가 대비 등락률 — 차례 맨 앞 열쇠(sort_rows)
                      "viAt": g.get("viAt"), "surgeAt": g.get("surgeAt"),
                      "viPx": {"at": g["viAt"], "px": g.get("viPrice"), "src": "vi"} if g.get("viAt") and g.get("viPrice") else None,
                      "down": p.get("pct") is not None and p["pct"] < drop_below_pct()})      # 하락 — 모르면 안 뺀다(재권님 11-12)
@@ -761,7 +764,7 @@ def build(proxy, cfg, day, skip=()):
         if x["down"]:
             down.append(x["code"])                     # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
             continue
-        r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "viAt", "surgeAt", "viPx",
+        r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "openRise", "viAt", "surgeAt", "viPx",
                                    "floatCap", "turn", "turnPrevPct") + TRADE_KEYS}
         r.update(buy=None if pre else x["price"], px={}, pxSrc={},
                  chipAt={c: _now().strftime("%H:%M") for c in x["chips"]})      # 칩마다 판에 처음 붙은 시각(묶음 ② · 다시 세면 앞 시각 그대로)
@@ -998,7 +1001,7 @@ def intraday_add(proxy, cfg, b, hm):
             break
         if x["code"] in have or x["down"] or x["n"] < floor:
             continue
-        r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "viAt", "surgeAt", "viPx",
+        r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "openRise", "viAt", "surgeAt", "viPx",
                                    "floatCap", "turn", "turnPrevPct") + TRADE_KEYS}
         r.update(buy=None, px={}, pxSrc={}, chipAt={c: _now().strftime("%H:%M") for c in x["chips"]})
         new.append(r)
@@ -1718,6 +1721,7 @@ def rebuild(proxy, day, prev, cfg=None):
                      "chips": [c for c in ov_chips() + ("현재상승", "볼린저") if c in chips], "subs": g["subs"],
                      "n": len(chips & set(ov_chips())), "buy": buy,
                      "pct": round((buy / base - 1) * 100, 2) if buy and base else None, "rise": g.get("rise"),
+                     "openRise": round((buy / o9 - 1) * 100, 2) if buy and o9 else None,   # 시가 대비 등락률 — 09:05 봉 시가 ÷ 09:00 봉 시가(되채움 · 차례 열쇠)
                      "viAt": g.get("viAt"), "surgeAt": g.get("surgeAt"), "volAt": g.get("volAt"), "surgeApprox": g.get("surgeApprox"), "viPx": g.get("viPx"),
                      "px": px, "pxSrc": src})
     tab = score_table(proxy)
