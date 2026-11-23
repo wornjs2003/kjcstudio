@@ -733,6 +733,7 @@ def _live_calc(proxy, cfg):
         turnover.fill(rows, prices, proxy)                     # 풀린 시총 · 거래 비율 — 받은 현재가 · 누적 거래대금 그대로(실시간 · 11-23 재권님)
     except Exception as e:
         print("  [거래 비율] 단타 목록 칸 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)   # 칸은 안 붙음(화면은 「못 잼」)
+    _cf_live(proxy, now, rows, off)                    # 칩 처음 본 때 — 판 밖 종목까지 날마다(11-23 「응」)
     tab = score_table(proxy)
     order = sort_rows(rows, tab, off)
     early = ["매수"] if "매수어림" in missing else []
@@ -748,6 +749,120 @@ def _live_calc(proxy, cfg):
     with _live_lock:
         _live.update(at=time.time(), pre=pre, data=data)
     return data
+
+
+# ── 칩이 처음 붙은 시각 — 날마다 · 판 밖 목록 종목까지 (2026-11-23) ─────────────────────
+# 재권님 「응 전부다 해놔야해」(18:1x · 시황분석1 창) → 안에 「응」(18:4x · 개발2 창). 판 줄 chipAt 은 「판이 처음 본 때」 라 판 밖 종목 · 판에 늦게 든 종목은
+# 칩 시각이 없거나 늦었다(지난 판 32일 초반상승 1012 중 19 등 · 시황분석1 잼). 그래서 단타 목록(_live_calc)이 셀 때마다 칩마다 처음 본 때를 표에 남긴다.
+#     at   칩 출처의 실제 시각이 있으면 그것(VI · 급등 viAt · surgeAt · 초반상승 첫 봉 끝) · 없으면 서버가 처음 본 때 — src 로 가름
+#     수급 「외국계 순매수」 · 「프로그램 순매수」 — 판 줄을 FLOW_NOW_SEC 마다 확인해 처음 순매수(> 0)로 돈 때(src 「1분 확인」)
+#     외국인 · 기관 장중 가집계는 KIS 가 하루 네 번만 내 그보다 잘게는 못 셈(영영 · 그 출처로는)
+# 지난 판은 셀 수 있는 것만 — VI(vi_day · 정규장 첫 발동) · 초반상승(첫 봉 끝) · 거래비율 · 거래비율급증(5분봉 · vol_past_attach) / 못 채운 칸은 비움(짐작 안 넣음).
+_CF_SCHEMA = ("CREATE TABLE IF NOT EXISTS chip_first (day TEXT NOT NULL, code TEXT NOT NULL, chip TEXT NOT NULL, at TEXT NOT NULL, src TEXT, "
+              "PRIMARY KEY (day, code, chip))")
+
+
+def chip_first_put(proxy, day, items):
+    """[(code, chip, 「HH:MM:SS」, src)] 를 처음 것만 남긴다(이미 있으면 더 이른 것으로) — 쓰는 서버만 · 남긴 수."""
+    if not items or not proxy.marketdb.writable():
+        return 0
+    with proxy._db_lock, proxy.db_conn() as conn:
+        conn.execute(_CF_SCHEMA)
+        n0 = conn.total_changes
+        conn.executemany("INSERT INTO chip_first (day, code, chip, at, src) VALUES (?,?,?,?,?) "
+                         "ON CONFLICT(day, code, chip) DO UPDATE SET at = excluded.at, src = excluded.src WHERE excluded.at < chip_first.at",
+                         [(day, c, ch, at, src) for c, ch, at, src in items if c and ch and at])
+        return conn.total_changes - n0
+
+
+def chip_first_get(proxy, day, codes=None):
+    """{code: {chip: 「HH:MM:SS」}} — 표가 없거나 못 읽으면 {}."""
+    try:
+        with proxy.db_conn() as conn:
+            q, a = "SELECT code, chip, at FROM chip_first WHERE day = ?", [day]
+            if codes:
+                q += " AND code IN (%s)" % ",".join("?" * len(codes))
+                a += list(codes)
+            got = conn.execute(q, a).fetchall()
+    except Exception:
+        return {}
+    out = {}
+    for c, ch, at in got:
+        out.setdefault(c, {})[ch] = at
+    return out
+
+
+def _hms(t):
+    t = str(t or "").replace(":", "").replace("~", "")
+    return "%s:%s:%s" % (t[:2], t[2:4], t[4:6] or "00") if len(t) >= 4 and t[:4].isdigit() else None
+
+
+def _cf_live(proxy, now, rows, off):
+    """단타 목록 한 바퀴에서 칩 처음 본 때를 남긴다."""
+    import open_rise
+    hms = now.strftime("%H:%M:%S")
+    o_end = _hhmm(OPEN_AT[0] * 60 + OPEN_AT[1] + off + open_rise.BAR_MIN) + ":00"   # 초반상승은 첫 봉이 끝난 때 생긴다
+    items = []
+    for r in rows:
+        for ch in r.get("chips") or []:
+            if ch == "VI·급등":
+                at = min([x for x in (_hms(r.get("viAt")), _hms(r.get("surgeAt"))) if x] or [hms])
+                src = "VI 기록" if r.get("viAt") or r.get("surgeAt") else "서버"
+            elif ch == "초반상승":
+                at, src = (o_end, "첫 봉 끝") if o_end <= hms else (hms, "서버")
+            else:
+                at, src = hms, "서버"
+            items.append((r["code"], ch, at, src))
+    try:
+        chip_first_put(proxy, now.strftime("%Y%m%d"), items)
+    except Exception as e:
+        print("  [단타 30] 칩 처음 시각 못 남김 — %s" % proxy.safe_message(e, 120), flush=True)
+
+
+def _cf_flow(proxy, day, rows, at):
+    """판 줄 수급 지금 값 — 외국계 창구(ff) · 프로그램(pg) 순매수가 처음 > 0 이 된 때."""
+    items = []
+    for r in rows:
+        f = r.get("flowNow") or {}
+        if (f.get("ff") or 0) > 0:
+            items.append((r["code"], "외국계 순매수", at, "1분 확인"))
+        if (f.get("pg") or 0) > 0:
+            items.append((r["code"], "프로그램 순매수", at, "1분 확인"))
+    try:
+        chip_first_put(proxy, day, items)
+    except Exception:
+        pass
+
+
+def chip_first_backfill(proxy, day, b):
+    """지난 판 줄 — 셀 수 있는 칩 처음 시각을 표에 · VI 는 vi_day(정규장 · 가장 이른 발동) · 초반상승은 첫 봉 끝(1분봉이 있는 날 1분 · 아니면 5분). 남긴 수."""
+    import open_rise
+    rows = b.get("rows") or []
+    codes = [r["code"] for r in rows]
+    if not codes:
+        return 0
+    lm = (b.get("meta") or {}).get("lateMin")
+    lm = lm if isinstance(lm, int) else 0
+    items = []
+    try:
+        with proxy.db_conn() as conn:
+            vi = dict(conn.execute("SELECT code, MIN(at) FROM vi_day WHERE day = ? AND regular = 1 AND code IN (%s) GROUP BY code"
+                                   % ",".join("?" * len(codes)), [day] + codes).fetchall())
+            has1m = conn.execute("SELECT 1 FROM candles WHERE period = '1m' AND ts LIKE ? LIMIT 1", (day + "09%",)).fetchone() is not None
+    except Exception:
+        vi, has1m = {}, False
+    o_end = _hhmm(OPEN_AT[0] * 60 + OPEN_AT[1] + lm + (open_rise.BAR_MIN if has1m else open_rise.PAST_BAR_MIN)) + ":00"
+    for r in rows:
+        ch = r.get("chips") or []
+        if "VI·급등" in ch and vi.get(r["code"]):
+            items.append((r["code"], "VI·급등", _hms(vi[r["code"]]), "VI 기록"))
+        if "초반상승" in ch:
+            items.append((r["code"], "초반상승", o_end, "첫 봉 끝"))
+        for c in ("거래비율", "거래비율급증"):
+            t = (r.get("chipAt") or {}).get(c)
+            if c in ch and t and (r.get("volAt") or b["meta"].get(VOL_MARK)):
+                items.append((r["code"], c, t + ":00", "5분봉"))
+    return chip_first_put(proxy, day, items)
 
 
 def build(proxy, cfg, day, skip=()):
@@ -975,6 +1090,16 @@ def apply_windows(proxy, b):
     n = m.get("minChips") if isinstance(m.get("minChips"), int) else MIN_CHIPS
     ov = set(ov_chips())
     wins = win_bounds(b)
+    try:                                               # 칩 처음 시각 표(chip_first)가 판이 처음 본 때보다 이르면 그것으로 — 판 밖에서 먼저 붙은 칩(11-23 「응」)
+        cf = chip_first_get(proxy, b["day"], [r["code"] for r in rows])
+    except Exception:
+        cf = {}
+    for r in rows:
+        for ch, at in (cf.get(r["code"]) or {}).items():
+            if ch in (r.get("chips") or []) and at:
+                old = (r.get("chipAt") or {}).get(ch)
+                if not old or at[:5] < old:
+                    r.setdefault("chipAt", {})[ch] = at[:5]
     open_m = OPEN_AT[0] * 60 + OPEN_AT[1] + ((m.get("lateMin") if isinstance(m.get("lateMin"), int) else 0))
     fix = []
     for r in rows:
@@ -1491,7 +1616,7 @@ def _store(proxy, b):
 NOW_OK_MIN = 10              # 5분봉이 없을 때 현재가로 갈음해도 되는 늦음(분) — 넘으면 그 칸은 「없음」(null)
 
 
-FLOW_NOW_SEC = 300            # 그날 판 줄의 수급 「지금 값」 다시 받는 간격(초) — 재권님 안 「지금 값은 5분마다」(묶음 ③ · 11-18 18:0x 「응 만들어」)
+FLOW_NOW_SEC = 60             # 그날 판 줄의 수급 「지금 값」 다시 받는 간격(초) — 처음 5분(묶음 ③ · 11-18) → 1분(재권님 안 「외국계 · 프로그램 처음 순매수 시각을 1분마다」 「응」 11-23 18:4x · 어림 초당 1건 남짓)
 FLOW_WORKERS = 4              # 수급 받기를 겹쳐 묻는 수 — 초당 한도는 kis_get 이 지킨다
 
 
@@ -1651,6 +1776,7 @@ def past_vol_chip(proxy, day, prev, bars, cap, small, put):
 
 VOL_CHIPS = ("거래비율", "거래비율급증")
 VOL_MARK = "volChips2"         # 판 meta 표시 — 두 칩을 붙여 본 판(같은 판을 두 번 안 셈)
+CF_MARK = "chipFirst1"         # 판 meta 표시 — 지난 판 칩 처음 시각을 표(chip_first)에 채워 본 판
 
 
 def _vol_put(b, code, chip, at):
@@ -1728,10 +1854,18 @@ def vol_past_sweep(proxy, today):
         if d > today:
             continue
         got = _load(proxy, d)
-        if not got or VOL_MARK in (got[0].get("meta") or {}) or (d == today and not got[0].get("closed")):
+        if not got or (d == today and not got[0].get("closed")):
             continue                                   # 오늘 판은 닫힌 뒤(14:00 칸) 한 번 — 10:30 까지 쌓인 봉으로 칩 시각을 채우고, 그 뒤는 vol_live_attach 가 나오는 대로
         b = got[0]
-        if vol_past_attach(proxy, d, b) is not None:
+        m = b.get("meta") or {}
+        did = False
+        if VOL_MARK not in m and vol_past_attach(proxy, d, b) is not None:
+            did = True
+        if CF_MARK not in m and d < today:             # 지난 판 칩 처음 시각(셀 수 있는 것만 · 11-23 「응」) — 표에 남기고 판에 표시
+            chip_first_backfill(proxy, d, b)
+            b.setdefault("meta", {})[CF_MARK] = _now().strftime("%Y-%m-%d %H:%M")
+            did = True
+        if did:
             _store(proxy, b)
             k += 1
     return k
@@ -2534,6 +2668,7 @@ def start(proxy):
                             for r in b["rows"]:
                                 r["flowNow"] = got.get(r["code"])
                             b["meta"]["flowNowAt"] = _now().strftime("%H:%M")
+                            _cf_flow(proxy, day, b["rows"], _now().strftime("%H:%M:%S"))   # 외국계 · 프로그램 처음 순매수 된 때(11-23 「응」)
                             flow_now = True
                         if not b.get("closed") and b["rows"] and all(t in r["px"] for t in b["times"] for r in b["rows"]):   # 빈 판은 안 굳힌다(all([]) 은 참)
                             b["closed"] = True             # 14:00 마지막 칸까지 적었다 — 그날 판을 굳힌다(그 뒤 now 안 붙음)
