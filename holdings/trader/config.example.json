@@ -1,0 +1,20 @@
+{
+  "_읽는법": "이 파일을 config.json 으로 복사해 채운다 · config.json 은 저장소에 안 올라간다(.gitignore) · 열쇠 · 계좌를 메시지 · 슬랙에 붙이지 않는다",
+  "name": "",
+  "_name": "이 컴퓨터 이름 — 서버 비밀 파일 slack.pcs 의 이름과 같게 · 영문 · 숫자 · - · _ · 사람 · 장소를 드러내지 않는 이름",
+  "sign_key": "",
+  "_sign_key": "서버 slack.pcs 의 이 이름 열쇠와 같은 값 — 만드는 명령 python3 -c \"import secrets; print(secrets.token_hex(32))\"",
+  "late_sec": null,
+  "_late_sec": "매수 신호가 보낸 뒤 이 초를 넘겨 도착하면 버림(슬랙 서버 시각 기준) · 매도 신호는 늦어도 팖",
+  "max_order_won": null,
+  "max_day_won": null,
+  "_limits": "이 컴퓨터 한 번 · 하루 매수 금액 한도(원) — 서버가 보낸 금액보다 먼저 봄 · 비면 안 삼",
+  "sell_tax_pct": null,
+  "_sell_tax_pct": "결과 줄의 세금 셈(매도 금액 × %) — 비면 세금 칸을 「-」 로 보냄",
+  "real_ok": false,
+  "_real_ok": "실전 계좌(kis.env real)는 이 칸이 true 여야 켜짐 — 재권님 지시 뒤에만",
+  "kis": {"env": "demo", "app_key": "", "app_secret": "", "account8": "", "account2": "01",
+          "_읽는법": "한국투자 앱키는 컴퓨터마다 따로 · env demo(모의투자) | real(실전)"},
+  "slack": {"bot_token": "", "channel_id": "",
+            "_읽는법": "이 컴퓨터 전용 슬랙 앱의 봇 토큰(channels:history · groups:history · chat:write) · 거래 채널 번호"}
+}
