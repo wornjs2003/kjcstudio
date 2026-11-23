@@ -59,6 +59,10 @@ def day_rows(b, proxy=None):
     """판(dict) → 종목마다 {code · name · chips · n · buy · sell · ret(% · 못 잼이면 None) · chipAt · subAt · buyAt · lockAt(붙은 · 든 · 굳힌 시각)} · 11-18 전 판은 칩 이름을 지금 룰로(_chips_now_rule)."""
     out = []
     cf, om = {}, None
+    try:
+        dt30.live_merge(b)                             # 다시 지은 라이브 판 — 장중 값으로(판과 같게)
+    except Exception:
+        pass
     if proxy is not None:
         try:
             dt30._pxmin_fill(proxy, b)                 # 여는 시각 + N분 값 — 사는 값 재료(쌓인 1분봉 · DB 만)
