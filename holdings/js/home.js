@@ -1493,7 +1493,7 @@ async function loadPreLast() {
   try {
     const r = await apiFetch('/api/kis/pre-last', { cache: 'no-store' });
     const j = r && r.ok ? await r.json() : null;
-    if (j && j.ok && j.data) { preLast = j.data; preLastMeta = j.meta || {}; }
+    if (j && j.ok && j.data) { preLastMeta = j.meta || {}; preLast = preLastMeta.stale ? null : j.data; }   // stale — 견줄 날(meta.expectDay)이 아닌 날 값 · 어제 값과 견주지 않는다
     else { preLast = null; preLastMeta = { failed: true }; }
   } catch { preLast = null; preLastMeta = { failed: true }; }
   if (sortBy === 'preup') { paintRows(rowPrices); paintSortNote(); }
@@ -1563,6 +1563,7 @@ const SORTS = {
           empty: () => (chipBlank() ? `정규장 칩은 아침 ${serverData('chipReset').from}에 비우고 ${serverData('chipReset').until} 정규장부터 다시 셉니다`
             : !preLastMeta ? '불러오는 중'
             : preLastMeta.failed ? '못 받음 — 프리장 마지막 값(/api/kis/pre-last)'
+            : preLastMeta.stale ? `오늘(${preLastMeta.expectDay}) 프리장 마지막 값이 저장되지 않았습니다 — 저장된 것은 ${preLastMeta.day} 것뿐이라 견주지 않습니다`
             : !preLastMeta.count ? '프리장 마지막 값이 없습니다(넥스트레이드 08:51 저장 전 · 또는 그날 체결 없음)'
             : `프리장 마지막 값보다 ${preUpTxt()} 이상 오른 종목이 없습니다(시세를 받는 중이면 잠시 뒤 채워짐)`) },
   /* 매수 — 외국인 · 기관 · 프로그램이 **셋 다** 순매수인 종목, 셋 합이 큰 순 (2026-11-05 재권님 「프로그램 기관 외국인이 동시에
