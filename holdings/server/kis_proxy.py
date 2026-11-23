@@ -9424,7 +9424,8 @@ class Handler(SimpleHTTPRequestHandler):
     def _handle_claude_order(self):
         """「업무지시」 — 글을 받아 작업우선순위 창에 넣는다(뒤에서) → 번호를 바로 돌려준다. 답은 GET /api/claude/order?id=… 로.
         본문 종류 검사는 _handle_claude_ask 와 같은 까닭(다른 웹페이지가 미리 묻기 없이 보내지 못하게).
-        내부 · 외부접속은 Cloudflare 가 붙이는 Cf-Connecting-Ip 머리로 가른다 — 터널을 거친 것만 그 머리가 있다.
+        내부 · 외부접속은 앞에서 넘겨준 표시 머리로 가른다 — Cloudflare 터널은 Cf-Connecting-Ip, 가비아 앞문(Caddy)은 X-Forwarded-For 를 붙인다.
+        맥미니 브라우저가 바로 부르면 둘 다 없다(2026-11-23 폰 시험이 앞문을 거쳐 「내부」 로 찍혀 고침). 기록 표시일 뿐 허락에는 안 쓴다.
         Host 머리가 우리 이름이 아니면 403 — DNS 다시 묶기로 남의 페이지가 같은 출처가 되는 길(claude_order.host_ok)."""
         if not claude_order.host_ok(self.headers.get("Host"), RUN_PORT):
             try:
@@ -9450,7 +9451,7 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as e:
             self._send_json({"ok": False, "error": safe_message(e, 120)}, 400)
             return
-        origin = "외부접속" if self.headers.get("Cf-Connecting-Ip") else "내부"
+        origin = "외부접속" if (self.headers.get("Cf-Connecting-Ip") or self.headers.get("X-Forwarded-For")) else "내부"
         try:
             data = claude_order.submit(body.get("text"), origin, RUN_PORT)
         except ValueError as e:
