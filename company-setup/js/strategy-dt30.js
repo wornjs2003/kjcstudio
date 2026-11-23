@@ -82,7 +82,10 @@ const BOTH = { 'VI·급등': [['VI', '급등'], ['VI 급상승', 'VI 급등']] }
 //   VI_SPLIT 앞이면 「09:25 전」 · 그 시각부터는 「09:25 이후」 · 시각을 못 받으면 「시각 모름」(어느 쪽으로도 안 셈) — 앞의 「VI 급상승 · VI 급등」 둘은 이것으로 바뀜
 const VI_SPLIT = '0925';   // 서버 값이 없을 때 · 늦게 여는 날 옮기는 셈은 서버가 meta.viSplit 으로 내줌(11-19 재권님 「응 만들어」 · 화면이 따로 밀면 서버 점수와 갈림) · 하위 이름(점수표 열쇠)은 그대로
 // 장 시작 시각 — 서버 판 meta.openAt(「HH:MM」 · 개발2 56f58cb) · lateMin(늦게 여는 분) · 없는 옛 판은 보통 날(09:00 · 0)
-const DM = () => (st.data && st.data.meta) || {};
+// 셈하는 판 — 여러 날 합계는 calc(그날 판)을 부르므로 그동안은 그날 판의 meta(여는 시각 · 9시 1분 시각)로 셈(qa 11-23 — 11-19 수능 10:00 연 날이 오늘 판 09:00 으로 셈돼 「매매 없음」)
+let calcD = null;
+const curD = () => calcD || st.data;
+const DM = () => (curD() && curD().meta) || {};
 const addHM = (t, m) => { const x = +t.slice(0, 2) * 60 + +t.slice(2) + (m || 0); return `${String(Math.floor(x / 60)).padStart(2, '0')}${String(x % 60).padStart(2, '0')}`; };
 const openHM = () => { const o = String(DM().openAt || '').replace(':', ''); return /^\d{4}$/.test(o) ? o : '0900'; };
 const viSplit = () => { const v = String(DM().viSplit || '').replace(':', ''); return /^\d{4}$/.test(v) ? v : VI_SPLIT; };   // 나누는 시각은 서버 한 곳 — 판 meta.viSplit(점수 셈과 같은 값 · 개발2 배분 중)이 오면 그 값 · 없으면 09:25(서버 점수와 같게 · 개념정의 267a17d 검수)
@@ -214,7 +217,7 @@ const BUYS = [['p1', '9시1분~5분사이 들어온 종목'], ['open', '들어�
 const buyKey = () => { const k = st.set.buy || 'open'; return BUYS.some(([x]) => x === k) ? k : 'p1'; };
 // inUntil — 9시 1분 몫의 끝 분(HHMM) · 셈 칸 값 우선 · 없으면 서버 /api/kis/chip-rules meta.sellDef.inUntil(개발2) · 못 받으면 ''(그때는 9시 1분 뒤 든 종목은 안 삼 — 짐작 안 함)
 //   늦게 여는 날(수능 등)은 여는 시각이 늦은 분만큼 뒤로 밂 — 「9시 1분」 은 여는 시각 + 1분(개념정의 덧 · 승률 표 서버 셈 개발2 1ec832e 와 같게)
-const inUntil = () => { const v = String(st.set.inUntil || SELL_DEF.inUntil || '').replace(/:/g, ''); if (!/^\d{4}$/.test(v)) return '';
+const inUntil = () => { let v = String(st.set.inUntil || SELL_DEF.inUntil || '').replace(/:/g, ''); if (/^\d{3}$/.test(v)) v = `0${v}`; if (!/^\d{4}$/.test(v)) return '';   // 「9:05」 · 「905」 는 앞 0 을 채워 읽음(서버 8315a24 와 같게 · 개념정의 덧)
   const o = openHM(), late = (+o.slice(0, 2) * 60 + +o.slice(2)) - 540; return late > 0 ? addHM(v, late) : v; };
 const pmOf = (k) => (/^p[1-5]$/.test(k || '') ? +k.slice(1) : 0);
 const minHM = (n) => { const o = String((DM().pxMinAt || {})[n] || '').replace(':', ''); return /^\d{4}$/.test(o) ? o : n === 1 ? p1HM() : addHM(openHM(), n); };
@@ -227,7 +230,7 @@ const hhmm = (t) => String(t || '').replace(/:/g, '').slice(0, 4);
 const inTs = (r) => { const t = String(r.buyTs || '').replace(/:/g, ''), a = hhmm(r.buyAt); return /^\d{6}$/.test(t) ? t : /^\d{4}$/.test(a) ? `${a}00` : ''; };
 // 고른 매수 시각 at(HH:MM · HH:MM:SS) 에 판에 아직 없었나 → 들어온 시각 글 | ''
 //   9시 1분 몫이면 at 대신 inUntil 59초까지를 「아직 안 듦」 경계로(그 사이 든 종목은 든 때 가격에 삼)
-const notYetIn = (r, at) => { if (pmOf(buyKey()) === 1 && inUntil()) at = `${inUntil()}59`; const e = inTs(r), a = String(at || '').replace(/:/g, '').padEnd(6, '0').slice(0, 6); return newBuyOf(st.data) && e && /^\d{6}$/.test(a) && a < e ? (r.buyTs ? String(r.buyTs) : hmS(hhmm(r.buyAt))) : ''; };
+const notYetIn = (r, at) => { if (pmOf(buyKey()) === 1 && inUntil()) at = `${inUntil()}59`; const e = inTs(r), a = String(at || '').replace(/:/g, '').padEnd(6, '0').slice(0, 6); return newBuyOf(curD()) && e && /^\d{6}$/.test(a) && a < e ? (r.buyTs ? String(r.buyTs) : hmS(hhmm(r.buyAt))) : ''; };
 function buyOf(r) {   // → { px, at(HHMM), src } | null
   const k = buyKey();
   const n = pmOf(k);
@@ -345,7 +348,8 @@ async function usLoad(day) {
 }
 
 // 한 날 판의 셈 — 화면 그리기(paint)와 이달 합계(monthPaint)가 같은 셈을 쓴다 · 값은 서버 판 그대로 · 칩 켜고 끔 · 셈 칸(st.set)을 따름
-function calc(d) {
+function calc(d) { const p = calcD; calcD = d; try { return calcDay(d); } finally { calcD = p; } }
+function calcDay(d) {
   const S = st.set;
   // 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것으로 — 셈 · 돈 나누기에서 뺌(11-20 qa 덧 → 재권님 「가」)
   const boughtOf = (r) => { const B = buyOf(r); return B && S.endAt && B.at >= S.endAt ? null : B; };
