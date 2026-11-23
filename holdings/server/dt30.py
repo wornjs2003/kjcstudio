@@ -1611,6 +1611,11 @@ def vol_past_attach(proxy, day, b):
     if not bars:
         return None
     n = [0]
+    for r in b.get("rows") or []:                     # 옛 이름 「거래량급증」(11-23 낮 몇 시간) — 두 칩으로 갈음하므로 걷는다(개념정의 덧 ③)
+        if "거래량급증" in (r.get("chips") or []):
+            r["chips"] = [c for c in r["chips"] if c != "거래량급증"]
+            (r.get("subs") or {}).pop("거래량급증", None)
+            (r.get("chipAt") or {}).pop("거래량급증", None)
 
     def put(code, chip, sub=None, volAt=None, **kw):
         n[0] += _vol_put(b, code, chip, volAt)
