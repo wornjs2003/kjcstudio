@@ -10564,7 +10564,7 @@ class Handler(SimpleHTTPRequestHandler):
                                           "note": "칩마다 칸 — value 지금 값 · default 기본값 · source doc(룰 문서 값) | default · bad 범위 밖이라 안 쓴 문서 값 · docPath 문서 자리",
                                           # 단타 매도 셈 칸이 비었을 때 기본값 — 한 곳 dt30_win.SET_DEF(승률 표가 쓰는 값) · 화면 단타 판은 이 값을 받기만(11-20 재권님 「가」 16:05 · 두 벌 합치기)
                                           "sellDef": dt30_win.SET_DEF,
-                                          "sellDefNote": "stop 손절 % · turn 꺾임 켬 · turnBy prev|peak|both · turnPct 앞 시각 대비 % · trail 고점 대비 %(null 안 씀) · cut 시각 미달 켬 · cutMin 분 · cutPct % · flat 횡보 켬 · flatMin 분 · flatPct %(null 안 셈)"}})
+                                          "sellDefNote": "stop 손절 % · turn 꺾임 켬 · turnBy prev|peak|both · turnPct 앞 시각 대비 % · trail 고점 대비 %(null 안 씀) · cut 시각 미달 켬 · cutMin 분 · cutPct % · flat 횡보 켬 · flatMin 분 · flatPct %(null 안 셈) · inUntil 매수 「9시 1분 값」 일 때 9시 1분 뒤 든 줄을 든 때 가격으로 사는 끝 시각 HHMM(그 분 59초까지 · 그 뒤 든 줄은 안 삼)"}})
                 return
 
             if route == "pre-sector":

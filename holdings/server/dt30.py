@@ -1029,10 +1029,25 @@ def _buy_now(proxy, cfg, rows):
     ts = _now().strftime("%H:%M:%S")
     n = 0
     for r in rows:
-        v = (q.get(r["code"]) or {}).get("price")
+        x = q.get(r["code"]) or {}
+        v, src = x.get("price"), "현재가"
+        if v and x.get("prev") and v == x["prev"] and x.get("open") and x["open"] != x["prev"]:
+            # 묶음 시세 현재가가 전일 종가로 옴 · 시가는 다름 — VI 단일가 중 그렇게 왔다(11-23 큐로셀 09:01:12 21,200 · 실제 27,550 상한가 · qa 찾음)
+            # 단건 시세로 한 번 더 · 그것도 같으면 쌓인 1분봉 마지막 종가 · 둘 다 없으면 목록 값
+            try:
+                w = (proxy.fetch_price(cfg, r["code"]) or {}).get("price")
+            except Exception:
+                w = None
+            if w and w != x["prev"]:
+                v, src = w, "현재가(단건)"
+            else:
+                with proxy.db_conn() as conn:
+                    m = conn.execute("SELECT close FROM candles WHERE code = ? AND period = '1m' AND ts LIKE ? AND volume > 0 ORDER BY ts DESC LIMIT 1",
+                                     (r["code"], _now().strftime("%Y%m%d") + "%")).fetchone()
+                v, src = (m[0], "1분봉 종가(시세가 전일 종가로 옴)") if m and m[0] else (None, None)
         r["buyTs"] = ts
         if v:
-            r["buy"], r["buySrc"] = v, "현재가"
+            r["buy"], r["buySrc"] = v, src
             n += 1
         else:
             r["buySrc"] = "목록 값"
