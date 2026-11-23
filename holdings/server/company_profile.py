@@ -40,6 +40,7 @@ UA = "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/120 Safari/537.36"
 TBL_ROWS, TBL_CELL = 12, 60    # 표는 줄 · 칸 그대로 옮기되 길이만 자른다(해석하지 않는다)
 SUMMARY_MAX = 3
 DART_VER = 2                   # 쥔 DART 값의 모양 — 바뀌면 다시 받는다(2: 합친 칸 spans · qa 검수 10-26)
+NAVER_VER = 2                  # 쥔 네이버 값의 모양 — 바뀌면 다시 받는다(2: 발행주식수 · 유동비율 shares · floatPct · 11-23 단타 풀린 시총)
 
 _store = None
 _lock = threading.Lock()
@@ -92,7 +93,11 @@ def fetch_naver(code):
     krx = next((x.split(":", 1)[1].strip() for x in lines if re.match(r"(KOSPI|KOSDAQ|KONEX)\s*:", x)), None)
     wics = next((x.split(":", 1)[1].strip() for x in lines if x.startswith("WICS")), None)
     summary = [_clean(x) for x in re.findall(r'class="dot_cmp"[^>]*>(.*?)</li>', html, re.S)][:SUMMARY_MAX]
-    out = {"at": _now(), "krx": krx or None, "wics": wics or None, "summary": [s for s in summary if s],
+    # 발행주식수 · 유동비율(보통주) — 단타 판 풀린 시총(재권님 11-23 「전종목의 거래되는 총 시가」) · 못 읽으면 None(0 아님)
+    flat = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html))
+    m = re.search(r"발행주식수/유동비율\s*([\d,]+)\s*주\s*/\s*([\d.]+)\s*%", flat)
+    out = {"at": _now(), "v": NAVER_VER, "krx": krx or None, "wics": wics or None, "summary": [s for s in summary if s],
+           "shares": int(m.group(1).replace(",", "")) if m else None, "floatPct": float(m.group(2)) if m else None,
            "from": "https://finance.naver.com/item/coinfo.naver?code=%s" % code}
     if not (out["krx"] or out["wics"] or out["summary"]):
         out["error"] = "개요 없음(ETF · 리츠 등)"
@@ -187,6 +192,8 @@ def fetch_dart(code, key, prev=None):
 # ---------------------------------------------------------------- 묶기
 
 def _naver_stale(nv):
+    if nv and not nv.get("error") and nv.get("v") != NAVER_VER:
+        return True                                # 옛 모양(유동비율 칸 전) — 다시 받는다 · 실패 기록은 아래 FAIL_TTL 그대로
     return _age(nv) > (FAIL_TTL if (not nv or nv.get("error") and not nv.get("summary")) else PROFILE_TTL)
 
 
@@ -270,6 +277,22 @@ def sectors():
         st = _load()
         return {c: (r.get("naver") or {}).get("wics") for c, r in st.items()
                 if (r.get("naver") or {}).get("wics")}
+
+
+def floats():
+    """{code: 풀린 주식수(주)} — 발행주식수 × 유동비율 · 쥔 것만(받지 않는다) · 둘 중 하나라도 못 읽은 종목은 안 넣는다(화면은 「못 잼」).
+    우선주(코드 끝자리가 0 이 아님)는 안 넣는다 — 네이버 그 칸이 보통주 값이라(005935 가 005930 과 같은 5,846,278,608주 · 74.96% · qa 검수 11-23 08:33)
+    넣으면 풀린 시총이 보통주 크기로 부푼다. 우선주 유동주식수 출처는 아직 없다(「아직」 이지 「영영」 이 아님)."""
+    with _lock:
+        st = _load()
+        out = {}
+        for c, r in st.items():
+            if not c.endswith("0"):
+                continue
+            nv = r.get("naver") or {}
+            if nv.get("shares") and nv.get("floatPct") is not None:
+                out[c] = int(nv["shares"] * nv["floatPct"] / 100)
+        return out
 
 
 def fill_status():

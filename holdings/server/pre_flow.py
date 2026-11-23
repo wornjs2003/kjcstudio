@@ -35,6 +35,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
+import chip_rules      # 칩 룰 값 한 곳(2026-11-20) — 줄 수 · 상승 문턱
 import nxt_pre
 
 KST = timezone(timedelta(hours=9))
@@ -42,8 +43,8 @@ KST = timezone(timedelta(hours=9))
 PRE_OPEN = (8, 0)        # 넥스트레이드 프리마켓
 PRE_CLOSE = (8, 50)
 MAIN_OPEN = (9, 0)       # 이 뒤에는 NX 값에 메인장이 섞인다 — 안 짓는다
-TOP_N = 70               # 프리장 판 줄 수 — 오른 종목 중 거래대금 상위(재권님 「상승인 종목 70개」 11-12 · 전에는 40)
-RISE_MIN_PCT = 0.0       # 「상승」 — 전일 정규장 종가 대비 이 % 를 넘어야 든다(보합은 안 든다 · 재권님 (가) 11-12)
+TOP_N = chip_rules.RULES["프리장"]["topN"][0]   # 기본값(70) — 프리장 판 줄 수 · 지금 값은 top_n()(chip_rules 표 · 룰 문서 rules.chips.프리장 · 2026-11-20) · 재권님 「상승인 종목 70개」 11-12
+RISE_MIN_PCT = chip_rules.RULES["프리장"]["riseMinPct"][0]   # 기본값(0) — 전일 정규장 종가 대비 이 % 를 넘어야 든다 · 지금 값은 rise_min_pct()
 FLOW_TTL = 180           # 프리장 동안 다시 짓는 간격(초) — 화면이 다시 묻는 주기도 이 값(서버 값)
 FIRST_WAIT = 15          # 첫 판을 기다리는 최대 시간(초)
 MIN_PREV = nxt_pre.MIN_PREV   # 거래량 배율 — 앞 날 장 전 거래량 문턱(주)
@@ -143,8 +144,19 @@ def _sectors(nx):
 def pick(items):
     """프리장 판 고르기 한 곳 — items 는 {code, amt, pct} · 오른(pct > RISE_MIN_PCT) 것 중 거래대금 큰 순 TOP_N 의 code.
     등락률을 모르면 안 든다(오른 것을 고르는 판이라). 되채우기(day_top_fill · dt30)도 이것을 부른다."""
-    up = [x for x in items if (x.get("amt") or 0) > 0 and x.get("pct") is not None and x["pct"] > RISE_MIN_PCT]
-    return [x["code"] for x in sorted(up, key=lambda x: -x["amt"])[:TOP_N]]
+    rmin, n = rise_min_pct(), top_n()
+    up = [x for x in items if (x.get("amt") or 0) > 0 and x.get("pct") is not None and x["pct"] > rmin]
+    return [x["code"] for x in sorted(up, key=lambda x: -x["amt"])[:n]]
+
+
+def top_n():
+    """프리장 판 줄 수 지금 값 — chip_rules 표(룰 문서 rules.chips.프리장.topN 이 있으면 그것)."""
+    return chip_rules.get("프리장", "topN")
+
+
+def rise_min_pct():
+    """프리장 상승 문턱(%) 지금 값 — chip_rules 표."""
+    return chip_rules.get("프리장", "riseMinPct")
 
 
 def _make(proxy, cfg):
@@ -273,6 +285,70 @@ def _fetch(proxy, cfg):
             with _lock:
                 data, at = _st["data"], _st["at"]
     return data, at, ph
+
+
+def sector_board(proxy, cfg):
+    """프리장에서 오른 종목이 많이 속한 섹터 — 실시간 (2026-11-20 재권님 「프리장부터 오르는 종목들을 찾고 그 종목들이 많이 속한 섹터를
+    알려주는 방향으로 해서 실시간으로 보여지게 해줘」 → 안에 「응」 · 개발1 창). 주소 /api/kis/pre-sector · 화면은 시황분석1(단타 판).
+
+        대상     그날 프리장 판(fetch · pick 이 고른 TOP_N) 종목 — 따로 고르지 않는다
+        섹터     company_profile.sectors()(네이버 WICS) 한 곳 · 모르는 종목은 unknown 한 줄
+        값       09:00 전(프리장 · 08:50 굳힌 판)은 판 줄 값 그대로(src "pre" · 등락률 = 넥스트레이드 전일 종가 대비 · 거래대금 어림) ·
+                 09:00 뒤는 그 종목들의 지금 시세(fetch_quotes_multi · 다른 판이 받아 둔 값 공유 · 나이 PRICE_CACHE_TTL · src "now" ·
+                 등락률 전일 대비 · 거래대금 누적)
+        칸       섹터마다 n(프리장 판에 든 수) · up(지금도 오름 수) · avg(등락률 평균 · 값 있는 것만) · amt(거래대금 합 · 원) ·
+                 top(등락률 큰 종목 둘) · missing(값 못 받은 수) — 못 받은 값은 None(0 아님)
+        차례     n 큰 순 · 같으면 avg 큰 순
+        비움     프리장 판과 같이 — 저녁 8시(fetch 의 reset) 뒤 빈 판
+        못 잼    섹터 표를 못 읽거나 비었으면 sectors [] · unknown null · sectorError 에 까닭 — 「모름」 한 줄과 가른다
+    """
+    data, at, ph = fetch(proxy, cfg)
+    d = data or {}
+    rows = d.get("rows") or []
+    out = {"day": d.get("day"), "builtAt": d.get("hm"), "phase": ph, "reset": bool(d.get("reset")), "noTrade": bool(d.get("noTrade")),
+           "src": None, "nowAt": None, "total": len(rows), "sectors": [], "unknown": None, "sectorError": None, "ready": data is not None}
+    if not rows:
+        return out
+    now = _now()
+    live_now = d.get("day") == now.strftime("%Y%m%d") and (now.hour, now.minute) >= MAIN_OPEN
+    vals = {}
+    if live_now:
+        q, _err = proxy.fetch_quotes_multi(cfg, [r["code"] for r in rows], max_age=proxy.PRICE_CACHE_TTL)
+        for r in rows:
+            x = q.get(r["code"]) or {}
+            vals[r["code"]] = (x.get("pct"), x.get("value"))
+        out.update(src="now", nowAt=now.strftime("%H:%M:%S"))
+    else:
+        for r in rows:
+            vals[r["code"]] = (r.get("pct"), r.get("amt"))
+        out["src"] = "pre"
+    try:
+        import company_profile
+        sec = company_profile.sectors()
+    except Exception as e:
+        sec, out["sectorError"] = None, "섹터 표 못 읽음: %s" % type(e).__name__
+    if not sec:                                   # 표를 못 읽음 · 비었음 — 전부 「모름」 한 줄로 보내지 않고 「못 쟀다」 로 따로(창구 검수 덧 11-20)
+        if not out["sectorError"]:
+            out["sectorError"] = "섹터 표가 비었음"     # out 에 sectorError 칸이 처음부터 None 으로 있어 setdefault 는 안 든다(개념정의 검수 11-20)
+        return out
+    groups = {}
+    for r in rows:
+        pct, amt = vals.get(r["code"], (None, None))
+        groups.setdefault(sec.get(r["code"]), []).append({"code": r["code"], "name": r.get("name"), "pct": pct, "amt": amt})
+
+    def one(name, xs):
+        ps = [x["pct"] for x in xs if x["pct"] is not None]
+        am = [x["amt"] for x in xs if x["amt"] is not None]
+        return {"name": name, "n": len(xs), "up": sum(1 for v in ps if v > 0),
+                "avg": round(sum(ps) / len(ps), 2) if ps else None, "amt": sum(am) if am else None,
+                "missing": len(xs) - len(ps),
+                "top": [{"code": x["code"], "name": x["name"], "pct": x["pct"]}
+                        for x in sorted((x for x in xs if x["pct"] is not None), key=lambda x: -x["pct"])[:2]]}
+    out["sectors"] = sorted((one(k, v) for k, v in groups.items() if k),
+                            key=lambda g: (-g["n"], -(g["avg"] if g["avg"] is not None else -999)))
+    if groups.get(None):
+        out["unknown"] = one(None, groups[None])
+    return out
 
 
 def start(proxy):

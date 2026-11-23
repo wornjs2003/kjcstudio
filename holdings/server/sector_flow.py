@@ -45,6 +45,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import company_profile
+import market_hours
 import naver
 import nxt_board
 import nxt_pre
@@ -74,7 +75,7 @@ SNAP_LATE_MIN = 5                      # 경계에서 몇 분 안이면 늦게�
 FREEZE_AT = (int(END[:2]), int(END[2:]) + 1)
 REFRESH_MS = 60000                     # 화면이 다시 받을 주기 — 사진은 STEP 분마다라 1분이면 넉넉하다
 EOK = 100000000
-KEEP_SNAP_DAYS = 5
+KEEP_SNAP_DAYS = market_hours.KEEP_TRADE_DAYS   # 사진 보관 거래일 — 1년(11-23 재권님 「전부다 1년을 쌓는다로 해줘」 · 그 전 5) · 값은 market_hours 한 곳
 FILL_MIN_CODES = 300                   # 5분봉 되채움 — 그날 08:00~09:25 봉이 있는 종목이 이보다 적으면 안 채운다(봉을 덜 받은 날)
 LIVE_TTL = 30
 TICK = 15

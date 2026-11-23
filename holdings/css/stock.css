@@ -375,6 +375,13 @@
   font-size: 0.85rem; line-height: 1; padding: 0 1px;
 }
 .kh-pane-tag .x:hover { color: var(--kh-text-primary); }
+/* 숨기기(눈) — 지우기(✕) 옆 · 숨긴 칸은 값 글자를 감추고 이름을 흐리게(칸 크기 그대로 · 2026-11-20 차트 보완 ④) */
+.kh-pane-tag .eye { cursor: pointer; color: var(--kh-text-muted); display: inline-flex; line-height: 1; }
+.kh-pane-tag .eye:hover { color: var(--kh-text-primary); }
+.kh-pane.is-hid .kh-pane-tag .nm { color: var(--kh-text-dim); }
+.kh-pane.is-hid .kh-pane-tag { top: 0; padding-top: 1px; padding-bottom: 1px; }   /* 접힌 칸(chart.js HID_H)에 이름 줄이 들어가게 */
+.kh-pane.is-hid .kh-pane-tag .v,
+.kh-pane.is-hid .kh-sub-badges { visibility: hidden; }   /* 오른쪽 값 표(chart.js drawBadges)도 함께 */
 .kh-pane-tag .v { font-weight: 700; font-variant-numeric: tabular-nums; }
 /* 이름에 마우스를 올리면 설명이 뜬다 (data/indicators.json) */
 .kh-pane-tag .nm { cursor: help; border-bottom: 1px dotted var(--kh-text-dim); }

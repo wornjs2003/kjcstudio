@@ -80,6 +80,7 @@ import vwap            # VWAP(거래량 가중 평균가) — 국내 분봉에 �
 import world_extra     # 우리가 안 받던 바깥 값 셋 — 바이낸스 한국 종목 선물 · 하이닉스 미국 상장분 · 원/유로 · /api/market/world-extra(2026-11-19 · server/world_extra.py)
 import leverage        # 레버리지 지표 — 한국 신용융자 · 미국 개인 빚투 · 헤지펀드 레버리지 · /api/market/leverage(2026-11-17 · server/leverage.py)
 import fear_greed      # 공포·탐욕 지수 — 코스피 · 삼성전자 · SK하이닉스 · /api/market/fear-greed(2026-11-06 · server/fear_greed.py)
+import auto_pre        # 자동 관심종목의 다음 날 프리장 5분봉 쌓기 · /api/auto-watch/pre(2026-11-20 · server/auto_pre.py)
 import auto_watch      # 자동 관심종목 — 코스피 시총 200 · 코스닥 150 중 전일 거래량 급등 · 투자전략 룰로 거르고 줄 세움 · /api/auto-watch(2026-11-05 · server/auto_watch.py)
 import closing_bet     # 종가배팅 판 — 15:41 후보(nxt_board 가 부름) · 17~20시 장 뒤 · 다음 날 프리장 첫 값 · /api/nxt/closing-bet(2026-11-18)
 import nxt_board       # 넥스트레이드 장외 보드 — 15:41 종가 · 20:01 장외 · 06:01 야간선물 저장 · /api/nxt/board(2026-10-26 · server/nxt_board.py)
@@ -87,6 +88,8 @@ import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 
 import flow_board       # 수급 정리판 — 투자자 갈래별 순매수(오늘 · 날마다 · 상위 종목)를 한 주소로 · /api/kis/flow-board(2026-11-04 · server/flow_board.py)
 import open_rise        # 초반상승 — 정규장 첫 5분봉이 시가보다 오른 종목 · 실시간 순위 「초반상승」 칩 · /api/kis/open-rise(2026-11-11 · server/open_rise.py)
 import rescan           # 지금검색 — 관심 아래 칩 룰을 누를 때 다시 셈 · /api/kis/rescan(2026-11-11 · server/rescan.py)
+import vol_chip         # 단타 칩 「거래량급증」 — 거래 비율 · 전일 동시간 누적 대비 · /api/kis/vol-chip(2026-11-23 · server/vol_chip.py)
+import chip_rules       # 관심 아래 칩 룰 값 한 곳 · /api/kis/chip-rules(2026-11-20 · server/chip_rules.py)
 import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 · /api/kis/pre-flow(2026-11-05 · server/pre_flow.py)
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
 import day_top_fill     # 등락 상위 — 지난 거래일 판을 다시 세어 채움(장 쉬는 때 · 쓰는 서버만 · 2026-11-11 · server/day_top_fill.py)
@@ -96,6 +99,8 @@ import dt30_win         # 단타 판 칩별 승률 — 끝난 판 손익을 하�
 import vi_days          # 지난 날 VI 기록 — KIS VI 현황을 날짜로 그날 전부(연속 조회) 쌓고 /api/kis/vi-day 로 냄(2026-11-19 · server/vi_days.py)
 import vi_stats         # VI · 급등 뒤 얼마나 오르나 — 그날 VI · 급등을 쌓고 30분 · 60분 · 14:00 · 그날 최고 · /api/kis/vi-stats(2026-11-18 · server/vi_stats.py)
 import dt30             # 단타 30 판 — 평일 09:06 단타 상위 30 굳힘 · 30분마다 값 · 30거래일 · /api/kis/dt30(2026-11-11 · server/dt30.py)
+import turnover         # 풀린 시총 · 거래 비율 — 장중 1분마다 감시 목록 전부 거래대금 쌓기 · 단타 판 칸 둘(2026-11-23 · server/turnover.py)
+import chip_live        # 단타 칩 종목 1분봉 실시간 — 장중 1분마다 칩 걸린 종목 1분봉 받기(2026-11-23 · server/chip_live.py)
 import watch_log        # 종목 기록 — 관심 · 자동 · VI · 급등 · 매수 종목을 날마다 쌓음 · /api/watch-log(2026-11-06 · server/watch_log.py)
 import session_volume   # 시간대별 거래량 · 전일비 — 프리장 · 정규장 · 애프터 끝에 순위 종목 누적 거래량 저장 · /api/kis/vol-ratio(2026-11-05 · server/session_volume.py)
 import intraday_flow    # 당일 수급 — 장중 1분마다 시장 투자자 · 프로그램 매매를 쌓아 5분 구간으로 · /api/kis/flow-today(2026-10-27 · server/intraday_flow.py)
@@ -379,13 +384,13 @@ def _cache_put(code, data):
 # ── 호출 예산 ────────────────────────────────────────────────────────────
 # KIS 는 초당 호출 건수를 제한한다(초과 시 EGW00201).
 #
-# 실전 계좌 기본 한도는 초당 20건이다. 조건을 채우면 40~100건까지 늘려 준다
-# (2026-08-31 한국투자증권 오픈API 활성화 캠페인 보도자료 기준, 2026-12-31 까지).
-# 공식 개발자 포털과 GitHub 저장소에는 숫자가 적혀 있지 않아 보도자료를 근거로 삼았다.
-# 모의 계좌 한도는 자료마다 달라 확인하지 못했다.
+# 실전 계좌 한도는 **계좌(앱키)마다 초당 18건**이다(기존 20건) — KIS 개발자센터 공지
+# 「API 호출 유량 안내 (REST, 웹소켓) (2026.04.20 기준)」 · 2026-11-19 원문 확인. 모의는 초당 1건.
+# 늘리는 공식 길은 다른 계좌를 API 신청해 앱키를 더 받는 것뿐이다(같은 공지 · 과금 · 유량 확대 계획 없음).
+# 2026-08-31 보도자료의 「기본 20 · 캠페인 40~100」 은 공지보다 높아 기준으로 안 쓴다(캠페인 신청은 10-30 마감).
 #
-# 아래 기준값은 실제 한도(20)보다 낮게 잡아 두었다. 여유를 더 두려는 것이고,
-# 지금 쓰는 양은 실제 한도의 25% 수준이다. 자세한 내용은 docs/data-sources.md 참고.
+# 아래 기준값은 공지 한도(18)와 같다(2026-11-20 부터). 2026-09 에는 그때 보도자료 한도(20)보다 낮게
+# 잡아 두었고 쓰는 양은 그 25% 수준이었다. 자세한 내용은 docs/data-sources.md 참고.
 #
 #   KIS_LIMIT_PER_SEC : 계정에 허용된다고 보는 한도 (기준값)
 #   BUDGET_RATIO      : 그중 실제로 쓸 비율. 0.5 = 한도의 50%
@@ -398,7 +403,7 @@ def _cache_put(code, data):
 # **두 번째는 같은 날 되돌렸다** (재권님 지시 — 「속도는 우선 되돌리고
 # 정확히 확인한후에 정리한다」). **값이 나쁜 것이 아니라 아직 안 쟀다.**
 #
-#     실제 한도                **20 TPS**
+#     그때 알던 한도           **20 TPS**   (2026-09-23 · 지금 공지는 18)
 #     서버 하나가 초당 10건이면
 #     `--slow` 아닌 서버 **셋**이 동시에 첫 화면을 열면   **30건** → **넘는다**
 #
@@ -417,12 +422,16 @@ def _cache_put(code, data):
 # 시작**했다. 마지막 API 가 끝난 것이 **11.5초**였다. **KIS 가 느린 것이
 # 아니라 우리가 줄을 세운 것**이다.
 #
-# 기준값 10 은 그대로다 — **실제 한도(20)의 절반**이라 아직 여유가 있다.
+# 그때(2026-09-23) 기준값 10 은 그대로 뒀다 — 그때 보도자료 한도(20)의 절반이라 여유가 있었다.
 #
 # **2026-10-15 에 20 으로 올렸다** (재권님 「키 하나당 20건으로 늘려」 · 「kis 만 늘려야해」 ·
 # 안 「응 해줘」). KIS 공식 한도와 같은 값이라 여유가 0 이다 — 넘으면 아래 ㉡ 이 간격을
 # 늘렸다가 60초 뒤 돌아오고, `stats` 의 `overruns60s` · `overrunsTotal` 이 센다. 넘는 일이
 # 잦으면 이 값을 내린다. 그 전 장중 사용은 한도(키당 10)의 10~14% 였다(10-15 작업우선순위 실측).
+#
+# **2026-11-20 에 18 로 내렸다** (재권님 「응 낮춰」). 20 은 공지 한도 18 보다 높아, 몰리는 시간대
+# (08~09시 · 15:40 · 17:45 · 20:06)에 EGW00201 거절이 났다(11-17~19 로그 셈). 몰릴 때 조금 느려지는 대신
+# 거절이 줄 것으로 본다 — `stats` 의 `overruns60s` · `overrunsTotal` 로 잰다.
 #
 # (2026-10-06 에 배포본 워커를 지웠다 — 그 전에는 워커가 따로 초당 5건을
 # 써서 「여기 10 + 워커 5」 였다. 이제 KIS 를 부르는 것은 8765 하나다.)
@@ -447,16 +456,16 @@ def _cache_put(code, data):
 # **제목이 안 말한 것은 아무도 안 본다.**
 #
 # 이 두 값만 바꾸면 호출량 전체가 조절된다.
-KIS_LIMIT_PER_SEC = 20.0
+KIS_LIMIT_PER_SEC = 18.0
 BUDGET_RATIO = 1.0                                  # 기준값을 다 쓴다
 # ⚠️ **이 값은 서버 하나가 아니라 여섯이 합쳐서 쓰는 몫이다** (2026-09-23).
 # 아래 공유 줄이 여섯을 한 줄에 세우므로, 고정으로 나눌 때처럼
 # 「각자 N건 × 여섯」 이 되지 않는다.
 #
 # **앱키 하나당 값이다** (2026-10-06 · 아래 「앱키 둘」). `kis2` 가 있으면
-# 키마다 이만큼이라 **합은 키 수 × 이 값**(둘이면 20)이다.
-KIS_CALLS_PER_SEC = KIS_LIMIT_PER_SEC * BUDGET_RATIO   # = 앱키 하나당 초당 20건
-KIS_MIN_INTERVAL = 1.0 / KIS_CALLS_PER_SEC             # = 0.05초 간격
+# 키마다 이만큼이라 **합은 키 수 × 이 값**(둘이면 36)이다.
+KIS_CALLS_PER_SEC = KIS_LIMIT_PER_SEC * BUDGET_RATIO   # = 앱키 하나당 초당 18건
+KIS_MIN_INTERVAL = 1.0 / KIS_CALLS_PER_SEC             # = 약 0.056초 간격
 
 # 동시에 진행할 호출 수. 초당 건수와는 별개다 — 간격은 _rate_limit() 이 지키고,
 # 이 값은 응답을 기다리는 시간을 몇 개까지 겹칠지를 정한다.
@@ -1185,10 +1194,14 @@ def usage_stats():
         # 나오므로 갈리지 않는다.** 화면을 옮기면 위 줄을 지운다.
         "timing": timing_values(),
         # 「장외」 칩을 비워 두는 시각(평일) — 화면이 빈 칸 까닭 글을 이 값으로 짓는다. 시각은 아래 AFTER_CLEAR_AT · AFTER_CLEAR_UNTIL 한 곳
-        "afterClear": {"from": "%02d:%02d" % AFTER_CLEAR_AT, "until": "%02d:%02d" % AFTER_CLEAR_UNTIL},
+        # ready — 장외 값이 실제로 들어오는 때(REG_CLOSE_READY · 그날 종가가 일봉에 든 뒤) · until~ready 동안은 비움이 끝났어도 값이 아직 없다(qa 덧 11-05)
+        "afterClear": {"from": "%02d:%02d" % AFTER_CLEAR_AT, "until": "%02d:%02d" % AFTER_CLEAR_UNTIL, "ready": "%02d:%02d" % REG_CLOSE_READY},
         # 정규장 칩(현재상승 · VI·급등 · 볼린저 · 매수)이 비는 때(평일) — market_hours.CHIP_RESET ~ REG_OPEN 한 곳 · 화면 「현재상승」 이 읽는다
         "chipReset": {"from": "%s:%s" % (market_hours.CHIP_RESET[:2], market_hours.CHIP_RESET[2:]),
                       "until": "%s:%s" % (market_hours.REG_OPEN[:2], market_hours.REG_OPEN[2:])},
+        # 칩 종목 1분봉 바퀴 · 감시 목록 하루치 쌓기 · 거래대금 쌓기 — 바퀴 시각 · 종목 수 · 걸린 초(qa 덧 11-23 「잴 상태 주소가 없다」)
+        "chipLive": chip_live.status(),
+        "turnover": turnover.status(),
     }
 
 
@@ -2231,7 +2244,7 @@ def fetch_prices(cfg, codes):
     """여러 종목을 한 번에 조회한다.
 
     KIS 현재가 API 는 한 번에 한 종목만 받으므로 서버가 나눠 호출한다.
-    호출 제한(실전 20건/초)에 걸리지 않도록 동시 실행 수를 제한한다.
+    호출 제한(실전 18건/초)에 걸리지 않도록 동시 실행 수를 제한한다.
     """
 
     out, errors = {}, {}
@@ -5541,6 +5554,12 @@ def joint_tier(fa, ia, pg, fund):
     return None
 
 
+# 「매수」 칩 차례(tier 1~4)의 이름표 — [보이는 이름, 풀어 쓴 뜻] · 한 곳(11-20 재권님 「이해했어 고치면 될거같아」 — 홈 JOINT_TIER 와 Insight SUB_NAME 두 벌을 합침).
+# 매수 판 응답 meta.tierNames · 단타 판 응답 meta.subNames 로 내주고 화면 둘이 받는다. 셈(joint_tier)을 바꾸면 이 글도 함께.
+JOINT_TIER_NAME = {1: ("외·기·연·프", "외국인 · 기관 · 연기금 · 프로그램 넷 다 순매수"), 2: ("외·기·프", "외국인 · 기관 · 프로그램 순매수"),
+                   3: ("기·연", "기관 · 연기금 순매수"), 4: ("외국인만", "외국인만 순매수")}
+
+
 def _joint_buy_make(cfg):
     """판을 새로 짓는다. 금액 단위는 원 · 값이 없으면 None."""
     now = datetime.now(KST)
@@ -8159,6 +8178,8 @@ def _kr_past_day(cfg, code, day):
             break                                   # 빈 날(휴장 · 정지)이거나 그날 앞까지 닿았다
         t = min(int(b["ts"][8:10]) * 60 + int(b["ts"][10:12]) for b in mine) - 1
     bars = aggregate_minutes(list(raw.values()), 5)
+    if raw:   # 받은 것이 1분 원본이라 1분도 함께 저장 — 호출은 안 는다(11-23 재권님 「전부다 1년을 쌓는다」 · ㄴ 감시 목록 모든 종목 1분 · 5분)
+        save_candles(code, "1m", aggregate_minutes(list(raw.values()), 1))
     return save_candles(code, "5m", bars)
 
 
@@ -8943,6 +8964,24 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
             return
+        if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/auto-watch/pre":
+            # 자동 관심종목의 다음 날 프리장 5분봉(server/auto_pre.py) — 쌓인 날 최근 days 날 · 전날 종가 대비 % · KIS 를 안 부른다
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            try:
+                days = int((q.get("days") or ["5"])[0])
+                if not 1 <= days <= 60:
+                    raise ValueError
+            except ValueError:
+                self._send_json({"ok": False, "error": "days 는 1~60 정수입니다."}, 400)
+                return
+            try:
+                self._send_json({"ok": True, "data": auto_pre.board(sys.modules[__name__], days),
+                                 "meta": dict(auto_pre.status(), unit="%",
+                                              note="전날 자동 목록 종목의 다음 거래일 넥스트레이드 08:00~08:50 5분봉 · pct 전날 정규장 종가(prevClose) 대비 · pctNx 넥스트 전일 종가(nxPrev) 대비 · "
+                                                   "state ok 체결 있음 · none 장 전 체결 없음 · nonx 넥스트 시세 못 받음 · fail 1분봉 못 받음 · 체결 없는 칸은 bars 에 없음")})
+            except Exception as e:
+                self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
+            return
         if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/auto-watch/history":
             # 자동 관심종목 다음날 결과(server/auto_watch.py history) — 걸린 날마다 종목 · 다음 거래일 등락 · 모은 값 · KIS 를 안 부른다
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -8979,6 +9018,23 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": True, "data": auto_watch.compute(sys.modules[__name__]), "meta": auto_watch.status(sys.modules[__name__])})
             except Exception as e:
                 self._send_json({"ok": False, "error": safe_message(e, 160)}, 502)
+            return
+        if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/nxt/pre-open":
+            # 프리장(넥스트레이드 08:00) 시작가 날마다 — 미국 3지수 표(Insight · 시황분석)의 서버 몫(server/nxt_board.pre_open · 2026-11-20)
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            codes = [c for c in (q.get("codes") or ["005930,000660"])[0].split(",") if re.fullmatch(r"\d{6}", c)][:nxt_board.PRE_OPEN_MAX_CODES]
+            try:
+                months = max(1, min(12, int((q.get("months") or ["6"])[0])))
+            except ValueError:
+                months = 6
+            if not codes:
+                self._send_json({"ok": False, "error": "codes 는 6자리 종목코드를 쉼표로 — 예 005930,000660"}, 400)
+                return
+            got = nxt_board.pre_open(sys.modules[__name__], load_secrets(), codes, months)
+            got["meta"].update(months=months, cacheTtl=nxt_board.PRE_OPEN_TTL,
+                               note="open = 넥스트레이드 일봉 시가(그날 08:00 프리장 첫 체결) · preKnownFrom 부터는 그날 프리장 기록(08:51 저장 · 08:00 분봉)이 있어야 값 · "
+                                    "없으면 null + why(수능처럼 안 열린 날) · 그보다 앞 날은 approx true(열렸는지 가를 기록 없음) · 최신 날이 앞")
+            self._send_json({"ok": True, **got})
             return
         if urllib.parse.urlparse(self.path).path.rstrip("/") == "/api/nxt/board":
             # 넥장 보드(Insight 「투자 전략」) — 날마다 종가 · 장외 · 프리장 · 야간선물 · 장외 오름 · 내림 상위(server/nxt_board.py)
@@ -10002,7 +10058,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": True, "data": [
                     {"rank": r["rank"], "code": r["stock_code"], "name": r["name"],
                      "cap": r["market_cap"], "market": r["market"]} for r in rows
-                ]})
+                ], "meta": {"rankMinCapEok": dart.rank_min_cap_eok()}})   # 홈 순위 칩 시가총액 문턱 — 서버 한 곳(11-20)
                 return
 
             self._send_json({"ok": False, "error": "알 수 없는 경로입니다: %s" % route}, 404)
@@ -10543,9 +10599,9 @@ class Handler(SimpleHTTPRequestHandler):
                     "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S") if at else None,
                              "day": d.get("day"), "builtAt": d.get("hm"), "phase": ph, "noTrade": bool(d.get("noTrade")),
                              "candidates": d.get("candidates"), "programMissing": d.get("programMissing"),
-                             "amtUnit": "원", "topN": pre_flow.TOP_N,
+                             "amtUnit": "원", "topN": pre_flow.top_n(),
                              "preOpen": "%02d:%02d" % pre_flow.PRE_OPEN, "preClose": "%02d:%02d" % pre_flow.PRE_CLOSE,
-                             "riseMinPct": pre_flow.RISE_MIN_PCT,
+                             "riseMinPct": pre_flow.rise_min_pct(),
                              "note": "넥스트레이드 프리마켓 · 순위 목록 중 전일 정규장 종가보다 오른 종목의 프리장 거래대금(현재가 × 거래량 · 어림) 상위 topN · 차례는 등락률 큰 순 · program 은 그날 누적(칸만) · "
                                      "등락률은 전일 정규장 종가 대비 · ratio 는 앞 거래일 장 전 거래량 대비 · disc 는 앞 평일 15:30 뒤 공시 · "
                                      "08:50~09:00 에 그날 판으로 굳힘",
@@ -10553,10 +10609,36 @@ class Handler(SimpleHTTPRequestHandler):
                 })
                 return
 
+            if route == "chip-rules":
+                # 관심 아래 칩 룰 값 — 한 곳(server/chip_rules.py · 2026-11-20 재권님 「응」) · 값은 룰 문서 rules.chips 가 있으면 그것 · 화면 룰 표 · 다른 서버가 받는다
+                self._send_json({"ok": True, "data": chip_rules.table(),
+                                 "meta": {"doc": "strategy-rules", "readTtl": chip_rules.READ_TTL,
+                                          "note": "칩마다 칸 — value 지금 값 · default 기본값 · source doc(룰 문서 값) | default · bad 범위 밖이라 안 쓴 문서 값 · docPath 문서 자리",
+                                          # 단타 매도 셈 칸이 비었을 때 기본값 — 한 곳 dt30_win.SET_DEF(승률 표가 쓰는 값) · 화면 단타 판은 이 값을 받기만(11-20 재권님 「가」 16:05 · 두 벌 합치기)
+                                          "sellDef": dt30_win.SET_DEF,
+                                          "sellDefNote": "stop 손절 % · turn 꺾임 켬 · turnBy prev|peak|both · turnPct 앞 시각 대비 % · trail 고점 대비 %(null 안 씀) · cut 시각 미달 켬 · cutMin 분 · cutPct % · flat 횡보 켬 · flatMin 분 · flatPct %(null 안 셈) · inUntil 매수 「9시 1분 값」 일 때 9시 1분 뒤 든 줄을 든 때 가격으로 사는 끝 시각 HHMM(그 분 59초까지 · 그 뒤 든 줄은 안 삼)"}})
+                return
+
+            if route == "pre-sector":
+                # 프리장에서 오른 종목이 많이 속한 섹터 — 실시간(server/pre_flow.sector_board · 2026-11-20 재권님 「응」) · 화면은 단타 판(시황분석1)
+                d = pre_flow.sector_board(sys.modules[__name__], cfg)
+                self._send_json({
+                    "ok": d.get("ready", False), "data": d.get("sectors") or [], "unknown": d.get("unknown"),
+                    "meta": {"day": d.get("day"), "builtAt": d.get("builtAt"), "phase": d.get("phase"), "src": d.get("src"),
+                             "nowAt": d.get("nowAt"), "total": d.get("total"), "reset": d.get("reset"), "noTrade": d.get("noTrade"),
+                             "sectorError": d.get("sectorError"),
+                             "amtUnit": "원", "topN": pre_flow.top_n(),
+                             "note": "대상 = 그날 프리장 판 종목(전일 종가보다 오른 종목 중 프리장 거래대금 상위 topN) · 섹터 = 네이버 WICS · "
+                                     "src pre = 프리장 판 값(넥스트레이드 · 거래대금 어림) · src now = 09:00 뒤 지금 시세(전일 대비 · 누적 거래대금) · "
+                                     "n 든 수 · up 지금도 오름 수 · avg 등락률 평균 · amt 거래대금 합 · missing 값 못 받은 수 · 차례 n 큰 순 → avg 큰 순 · 저녁 8시 비움",
+                             "cacheTtl": PRICE_CACHE_TTL if d.get("src") == "now" else pre_flow.FLOW_TTL},
+                })
+                return
+
             if route == "day-top/filters":
                 # 쌓인 날 전부 모은 필터별 셈 · 날별 셈(server/day_top.filters) — 투자 전략 「필터」 탭 · KIS 안 부름 (2026-11-11 재권님)
                 self._send_json({"ok": True, "data": day_top.filters(sys.modules[__name__]),
-                                 "meta": {"minCapEok": day_top.MIN_CAP_EOK, "topN": day_top.TOP_N, "saveAt": "%02d:%02d" % day_top.SAVE_AT,
+                                 "meta": {"minCapEok": day_top.min_cap_eok(), "topN": day_top.TOP_N, "saveAt": "%02d:%02d" % day_top.SAVE_AT,
                                           "note": "상위 = 그날 등락률 상위 topN · 전체 = 시가총액 minCapEok 억 이상 주식 · lift = 상위 중 몫 ÷ 전체 중 몫 · "
                                                   "hit = 걸린 것 중 상위에 든 몫 · next = 걸린 종목 다음 거래일 종가 등락률(다음 날이 온 종목만) · % 단위"}})
                 return
@@ -10661,10 +10743,55 @@ class Handler(SimpleHTTPRequestHandler):
                     "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S"),
                              "day": d["day"], "phase": d["phase"], "candidates": d["candidates"], "pending": d["pending"],
                              "noBar": d["noBar"], "capMissing": d["capMissing"], "etfOut": d["etfOut"],
-                             "risePct": open_rise.RISE_PCT, "minCapEok": open_rise.MIN_CAP_EOK,
+                             "risePct": d.get("risePct", chip_rules.get("초반상승", "risePct")), "minCapEok": dart.rank_min_cap_eok(),
+                             "preRisePct": d.get("preRisePct", chip_rules.get("초반상승", "preRisePct")),
+                             "preMissing": d.get("preMissing"), "preCount": d.get("preCount"),
                              "barFrom": d["barFrom"], "barTo": d["barTo"], "barMin": open_rise.BAR_MIN,
-                             "note": "DB 에 쌓인 분봉 — 정규장 첫 봉(barMin 분) (종가 − 시가) ÷ 시가 · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
+                             "note": "DB 에 쌓인 분봉 — 정규장 첫 봉(barMin 분) (종가 − 시가) ÷ 시가 ≥ risePct 또는 (종가 − 프리장 마지막 값) ÷ 프리장 마지막 값 ≥ preRisePct(프리장 체결 있던 종목만 · preCount 종목) · 줄의 by 가 걸린 셈(open · pre) · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
                              "cacheTtl": open_rise.CACHE_TTL, "first": open_rise.first_status()},
+                })
+                return
+
+            if route == "vol-chip":
+                # 단타 칩 「거래량급증」 — 거래 비율(turn) ≥ turnPct 또는 전일 동시간 누적 대비 ≥ prevSamePct (server/vol_chip.py · 2026-11-23)
+                # 1분 칸(turnover_slot)은 8765 만 쌓는다 — 상류가 있는 서버(메인 8764 · 세션)는 8765 것을 그대로 넘긴다(dt-list 와 같은 꼴)
+                base = upstream_base()
+                if base:
+                    try:
+                        with urllib.request.urlopen(base + self.path, timeout=UPSTREAM_TIMEOUT) as resp:
+                            self._send_body(resp.status, resp.read(), "application/json; charset=utf-8")
+                        return
+                    except urllib.error.HTTPError as e:
+                        if e.code != 404:              # 404 — 상류가 아직 이 주소를 모름(옛 코드) · 아래에서 자기가 센다
+                            self._send_body(e.code, e.read(), "application/json; charset=utf-8")
+                            return
+                    except (urllib.error.URLError, OSError):
+                        self._send_json({"ok": False, "data": None, "error": "상류(8765)에 못 닿음 — 거래량 칩은 8765 의 1분 기록으로 셉니다"}, 502)
+                        return
+                d, at = vol_chip.hits(sys.modules[__name__], cfg)
+                self._send_json({"ok": True, "data": d["rows"],
+                                 "meta": {k: d[k] for k in ("candidates", "quoted", "etfOut", "floatKnown", "slot", "prev1m", "turnPct", "prevSamePct", "capMinEok", "at")}
+                                 | {"cacheTtl": vol_chip.CACHE_TTL, "unit": "vol 주 · turn · prevSamePct % · floatCap 억원",
+                                    "note": "줄은 등락률 큰 순 · by 가 걸린 셈(turn 거래 비율 · prev 어제 같은 시각 대비) · 못 잰 칸 null · "
+                                            "turn 은 거래 비율(누적 거래대금 ÷ 풀린 시가총액 · 단타 판 칸과 같은 셈) · prevSamePct 는 전일 동시간 누적 대비 — 지금 누적 ÷ 어제 같은 분(slot)까지 누적(prevSrc 1m · 1분 바퀴 기록) · "
+                                            "그 기록이 아직 없는 날만 정규장 5분봉 끝난 봉(upto)까지 오늘 ÷ 어제(prevSrc 5m) · prev1m 은 어제 1분 기록이 있는 종목 수"}})
+                return
+
+            if route == "pre-last":
+                # 프리장 마지막 값 — 넥스트레이드 08:50 끝 체결가(nxt_pre 08:51 저장 표 · 체결 있던 종목만) · 「프리장대비」 칩 재료(2026-11-23) · KIS 안 부름
+                qday = (qs.get("day") or [None])[0]
+                if qday is not None and not (len(qday) == 8 and qday.isdigit()):
+                    self._send_json({"ok": False, "error": "day 는 YYYYMMDD 입니다."}, 400)
+                    return
+                d, day, src = nxt_pre.last_prices(sys.modules[__name__], qday)
+                self._send_json({
+                    "ok": d is not None, "data": d or {},
+                    "meta": {"day": day, "count": len(d) if d is not None else None, "source": src,
+                             # 견줄 날(평일 09:00 부터는 그날 · 그 앞은 앞 평일 — 휴장일은 못 가림)과 다르면 stale — 8765 가 그날 08:51 저장을 놓쳤다(창구 덧 11-23)
+                             "expectDay": nxt_pre._last_trading_day(datetime.now(KST)), "stale": bool(day) and day != nxt_pre._last_trading_day(datetime.now(KST)),
+                             "preUpPct": chip_rules.get("프리장대비", "preUpPct"),
+                             "note": "data = {종목: 프리장 마지막 체결가} · day 는 저장된 가장 최근 날(오늘 08:51 앞이면 앞 거래일) · 체결 없던 종목은 빠짐 · "
+                                     "source local(이 서버 표) · upstream(8765 것) · none(못 받음 — count null) · stale 이면 화면은 견주지 않는다"},
                 })
                 return
 
@@ -10692,6 +10819,7 @@ class Handler(SimpleHTTPRequestHandler):
                              "note": "외국인 · 기관은 장중 증권사 가집계(하루 네 번) · 15:40 뒤 그날 확정치(줄마다 basis · 수는 confirmed · estimated) · 프로그램은 그날 누적 · "
                                      "셋 다 순매수 양수 · flipped 는 오늘 셋 다 샀다가 빠진 종목",
                              "estSlots": INVESTOR_EST_SLOTS,
+                             "tierNames": {str(k): list(v) for k, v in JOINT_TIER_NAME.items()},   # 줄 tier → [이름, 뜻] · 한 곳(JOINT_TIER_NAME)
                              # 쌓기(11-06) — 줄마다 first(처음 셋 다 산 시각) · hits(그날 판에 잡힌 횟수) · pgAt(프로그램 값의 시각) ·
                              # fund · person(연기금 · 개인 그날 확정치 원 · 15:45 뒤 쌓기 전에는 null) · fundIn 은 연기금 값이 든 줄 수
                              "fundIn": d.get("fundIn"), "fundAt": "%02d:%02d" % flow_rank.COLLECT_AT,
@@ -11541,6 +11669,9 @@ def main():
     if not SLOW and is_sender(args.port) and fear_greed.start(sys.modules[__name__]):
         print("  공포·탐욕    : 25 풀림 보기 (평일 %02d:%02d 뒤 한 번 · 알림 %s · /api/market/fear-greed)"
               % (fear_greed.ALERT_AT + ("켜짐" if fear_greed.SEND else "꺼짐",)))
+    # 자동 관심종목의 다음 날 프리장 5분봉(2026-11-20 · server/auto_pre.py) — 같은 문(보내는 서버만) · 평일 08:51 뒤 한 번 · 알림 없음
+    if not SLOW and is_sender(args.port) and auto_pre.start(sys.modules[__name__]):
+        print("  자동 프리장   : 사용 (평일 %02d:%02d 뒤 전날 자동 목록 종목의 넥스트 장 전 5분봉 쌓기 · /api/auto-watch/pre)" % auto_pre.RUN_AT)
     if not SLOW and is_sender(args.port) and auto_watch.start(sys.modules[__name__]):
         print("  자동 관심종목 : 사용 (평일 %02d:%02d 코스피 시총 200 · 코스닥 150 값 쌓기 · /api/auto-watch%s)"
               % (auto_watch.RUN_AT + ("" if auto_watch.ADD else " · **관심 목록 넣기 없음**",)))
@@ -11559,6 +11690,10 @@ def main():
     if not SLOW and is_sender(args.port) and dt30.start(sys.modules[__name__]):
         print("  단타 30 판 : 평일 %s 단타 상위 %d 굳힘 · %s~%s %d분마다 값 · %d거래일 · /api/kis/dt30"
               % (dt30.status()["buyAt"], dt30.TOP_N, dt30.times()[0], dt30.times()[-1], dt30.TRACK_STEP, dt30.DAYS_KEEP))
+    if not SLOW and is_sender(args.port) and chip_live.start(sys.modules[__name__]):
+        print("  칩 1분봉   : 평일 정규장 %d초마다 단타 칩 걸린 종목 1분봉 받음 · %02d:%02d 뒤 감시 목록 전 종목 그날 1 · 5분봉 쌓음" % ((chip_live.CHIP_M1_INTERVAL,) + chip_live.DAY_FILL_AT))
+    if not SLOW and is_sender(args.port) and turnover.start(sys.modules[__name__]):
+        print("  거래 비율  : 평일 정규장 %d초마다 감시 목록 전부 거래대금 쌓음 · 단타 판 floatCap · turn" % turnover.TURN_INTERVAL)
     if not SLOW and is_sender(args.port) and vi_days.start(sys.modules[__name__]):
         print("  VI 기록    : 평일 %s 뒤 그날 VI 전부 쌓음 · 그 뒤 지난 %d일 하루씩 되채움 · /api/kis/vi-day" % (vi_days.status()["storeAt"], vi_days.BACKFILL_DAYS))
     if not SLOW and is_sender(args.port) and vi_stats.start(sys.modules[__name__]):
@@ -11571,7 +11706,7 @@ def main():
         print("  등락 상위 되채움: 지난 %d거래일 · %s" % (day_top_fill.FILL_DAYS, day_top_fill.status()["window"]))
     if not SLOW and is_sender(args.port) and day_top.start(sys.modules[__name__]):
         print("  등락 상위 : 평일 %02d:%02d 뒤(「매수」 판이 굳으면 · 늦어도 %02d:%02d) 시가총액 %d억 이상 등락률 판과 걸린 필터를 market.db day_top 에 남김 · /api/kis/day-top"
-              % (day_top.SAVE_AT + day_top.SAVE_LATE + (day_top.MIN_CAP_EOK,)))
+              % (day_top.SAVE_AT + day_top.SAVE_LATE + (day_top.min_cap_eok(),)))
     if not SLOW and is_sender(args.port) and watch_log.start(sys.modules[__name__]):
         print("  종목 기록   : 평일 %02d:%02d 에 관심 · 자동 · VI · 급등 · 매수 종목 줄을 market.db watch_log 에 남김 · /api/watch-log" % watch_log.SAVE_AT)
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and flow_rank.start(sys.modules[__name__]):

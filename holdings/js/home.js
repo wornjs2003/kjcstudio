@@ -22,7 +22,7 @@ import { startLiveLoop } from './components/frame.js';
 import { solveFit } from '../../assets/js/fit-solve.js';
 import { iconHtml, paintIcon } from './components/stock-icon.js';
 import { openModal, closeModal } from './components/modal.js';
-import { loadStockMain, mountStockView } from './components/stock-view.js';
+import { openStockModal as openStockModalPart, currentStockModal } from './components/stock-modal.js';
 import { mountDisclosures } from './components/disclosures.js';
 import { mountIndicatorMenu } from './components/indicator-menu.js';
 import { mountSchedule } from './components/schedule.js';
@@ -1411,6 +1411,7 @@ async function loadUniverse() {
     const j = await r.json();
     if (j && j.ok && Array.isArray(j.data) && j.data.length) {
       universe = j.data;
+      if (j.meta && Number.isFinite(j.meta.rankMinCapEok)) RANK_MIN_CAP_EOK = j.meta.rankMinCapEok;   // 순위 칩 시가총액 문턱 — 서버 한 곳
       lastSeen.save('universe', j.data, { slow: true });
       return;
     }
@@ -1420,10 +1421,10 @@ async function loadUniverse() {
 
 /* 시가총액은 목록(dart_universe)이 갖고 있다. 네이버 시총 순위에서 온 값이고
    단위는 억원이라 fmtMoneyKr 이 그대로 받는다. */
-const RANK_MIN_CAP_EOK = 5000;     // 실시간 순위 VI · 볼린저 · 관심 · 장외 · 매수 · 프리장 줄은 시가총액 이 값(억원 · 5천억) 이상만 — 3천억 → 5천억 재권님 「응」(11-12) · 재권님 11-10(VI 「가」 · 볼린저 「1조 이상만」 →
+let RANK_MIN_CAP_EOK = null;      // 실시간 순위 VI · 볼린저 · 관심 · 장외 · 매수 · 프리장 줄의 시가총액 문턱(억원) — 서버 한 곳(/api/dart/universe meta.rankMinCapEok · dart.RANK_MIN_CAP_EOK)에서 받는다 · 받기 전 · 못 받으면 null — 거르지 않고 풍선은 「서버 값 못 받음」(11-20 「3000으로 통일」 → 「나」 · 개념정의 검수 「설명 글에는 정해진 값을 적는다」) · 재권님 11-10(VI 「가」 · 볼린저 「1조 이상만」 →
                                     // 「1조를 3천억 으로 바꿔줘」 · 「가 고 관심이랑 장외랑 매수랑 포함이야」 · 「프리장도」). 한 곳. 시총을 못 받은 종목 · 미국 종목은 남긴다(못 잰 것을 「작다」 로 치지 않는다)
-const capBelowMin = (code) => { if (isUsCode(code)) return false; const c = capOf(code); return c != null && c < RANK_MIN_CAP_EOK; };
-const CAP_MIN_TXT = `시가총액 ${fmtMoneyKr(RANK_MIN_CAP_EOK)} 이상만`;   // 칩 풍선 글 — 값은 위 상수 하나
+const capBelowMin = (code) => { if (RANK_MIN_CAP_EOK == null || isUsCode(code)) return false; const c = capOf(code); return c != null && c < RANK_MIN_CAP_EOK; };
+const capMinTxt = () => (RANK_MIN_CAP_EOK == null ? '시가총액 문턱 — 서버 값 못 받음' : `시가총액 ${fmtMoneyKr(RANK_MIN_CAP_EOK)} 이상만`);   // 칩 풍선 글 — 값은 위 한 곳(서버에서 받은 값)
 function capOf(code) {
   if (isUsCode(code)) {
     for (const id of Object.keys(usRows)) {
@@ -1473,7 +1474,39 @@ const showCap = (code) => {
   return isUsCode(code) ? fmtUsdBig(c) : fmtMoneyKr(c);
 };
 
-const NOW_RISE_PCT = 3;           // 「현재상승」 문턱 — 시가 대비 %(재권님 11-11 「시가보다 3%이상」)
+let NOW_RISE_PCT = null;          // 「현재상승」 문턱 — 시가 대비 %(재권님 11-11 「시가보다 3%이상」) · 서버 칩 룰 표 한 곳(/api/kis/chip-rules 현재상승.nowRisePct · 11-20) · 못 받으면 null — 거르지 않고 글은 「서버 값 못 받음」
+async function loadChipRules() {
+  try {
+    const r = await apiFetch('/api/kis/chip-rules', { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    const v = j && j.ok && Array.isArray(j.data) ? (j.data.find((x) => x.chip === '현재상승' && x.key === 'nowRisePct') || {}).value : null;
+    if (Number.isFinite(v)) NOW_RISE_PCT = v;
+    const u = j && j.ok && Array.isArray(j.data) ? (j.data.find((x) => x.chip === '프리장대비' && x.key === 'preUpPct') || {}).value : null;
+    if (Number.isFinite(u)) PRE_UP_PCT = u;
+  } catch { /* 못 받으면 null 그대로 */ }
+}
+const riseTxt = () => (NOW_RISE_PCT == null ? '(서버 값 못 받음)' : `+${NOW_RISE_PCT}%`);
+
+/* 「프리장대비」 — 지금 값이 넥스트레이드 프리장 마지막 값(08:50 끝)보다 PRE_UP_PCT % 이상 높은 종목 · 장중 내내 다시 셈(2026-11-23 재권님
+   「프리장보다 3%이상 오른종목 칩 있나? 프리장 50분기준」 → 안에 「응」). 프리장 값은 서버 /api/kis/pre-last(nxt_pre 08:51 저장 표 · 체결 있던 종목만) ·
+   문턱은 칩 룰 표(프리장대비.preUpPct) — 화면은 지금 값과 견주기만. 초반상승(09:01 한 번)과 따로 · 단타 셈에 안 듦 */
+let PRE_UP_PCT = null;            // 못 받으면 null — 거르지 않고 글은 「서버 값 못 받음」
+let preLast = null, preLastMeta = null;   // { 종목: 프리장 마지막 값 } · meta { day, count, source } — 못 받으면 null
+async function loadPreLast() {
+  try {
+    const r = await apiFetch('/api/kis/pre-last', { cache: 'no-store' });
+    const j = r && r.ok ? await r.json() : null;
+    if (j && j.ok && j.data) { preLastMeta = j.meta || {}; preLast = preLastMeta.stale ? null : j.data; }   // stale — 견줄 날(meta.expectDay)이 아닌 날 값 · 어제 값과 견주지 않는다
+    else { preLast = null; preLastMeta = { failed: true }; }
+  } catch { preLast = null; preLastMeta = { failed: true }; }
+  if (sortBy === 'preup') { paintRows(rowPrices); paintSortNote(); }
+  if (rankModal && rankModalSort === 'preup') { paintRankModal(); paintRankModalNote(); }
+}
+const preUpTxt = () => (PRE_UP_PCT == null ? '(서버 값 못 받음)' : `+${PRE_UP_PCT}%`);
+const preUpOf = (code, p) => {
+  const b = preLast && preLast[code];
+  return b && p && p.price ? (p.price / b - 1) * 100 : null;
+};
 const SORTS = {
   /* 관심종목 — **다른 다섯과 성격이 다르다.**
    *
@@ -1519,12 +1552,23 @@ const SORTS = {
           pct: (p) => p.regPct, note: '종가 대비 오른 종목' },
   /* 현재상승 — 지금 값이 그날 시가보다 NOW_RISE_PCT % 이상 높은 종목 · 시가 대비 큰 순(2026-11-11 재권님 「현재상승 이라는 버튼추가하고
      여기는 시가보다 3%이상 올라있는 목록」). 시가 · 현재가는 통합 시세 그대로 — 셈은 시가 대비 % 하나 */
-  nowup:{ label: '현재상승', key: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), only: (v) => v >= NOW_RISE_PCT, capMin: true,
+  nowup:{ label: '현재상승', key: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), only: (v) => NOW_RISE_PCT != null && v >= NOW_RISE_PCT, capMin: true,
           head: '시가', show: (code, p) => (p && p.open ? fmtPriceOf(code, p.open) : '—'),
-          pct: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), note: `시가 대비 +${NOW_RISE_PCT}% 이상`,
+          pct: (p) => (p.open && p.price ? (p.price / p.open - 1) * 100 : null), get note() { return `시가 대비 ${riseTxt()} 이상`; },
           blank: () => chipBlank(),     // 서버 chipReset(07:50)~09:00 은 앞 날 시가 · 현재가라 비운다(11-13 재권님 「다른 칩은 아침 7시반에」 → 11-19 07:50)
           empty: () => (chipBlank() ? `정규장 칩은 아침 ${serverData('chipReset').from}에 비우고 ${serverData('chipReset').until} 정규장부터 다시 셉니다`
-            : `시가보다 +${NOW_RISE_PCT}% 이상 오른 종목이 없습니다(시세를 받는 중이면 잠시 뒤 채워짐)`) },
+            : `시가보다 ${riseTxt()} 이상 오른 종목이 없습니다(시세를 받는 중이면 잠시 뒤 채워짐)`) },
+  /* 프리장대비 — 위 loadPreLast 머리 주석. key 가 종목 코드를 몰라 값은 cKey 로(줄 세우기가 code 를 넘긴다) */
+  preup:{ label: '프리장대비', cKey: (code, p) => preUpOf(code, p), only: (v) => PRE_UP_PCT != null && v >= PRE_UP_PCT, capMin: true,
+          head: '프리장 마지막', show: (code, p) => (preLast && preLast[code] ? fmtPriceOf(code, preLast[code]) : '—'),
+          pct: (p, code) => preUpOf(code, p), get note() { return `프리장 마지막 값 대비 ${preUpTxt()} 이상`; },
+          blank: () => chipBlank(),     // 07:50~09:00 은 앞 날 현재가라 비운다(현재상승과 같음)
+          empty: () => (chipBlank() ? `정규장 칩은 아침 ${serverData('chipReset').from}에 비우고 ${serverData('chipReset').until} 정규장부터 다시 셉니다`
+            : !preLastMeta ? '불러오는 중'
+            : preLastMeta.failed ? '못 받음 — 프리장 마지막 값(/api/kis/pre-last)'
+            : preLastMeta.stale ? `오늘(${preLastMeta.expectDay}) 프리장 마지막 값이 저장되지 않았습니다 — 저장된 것은 ${preLastMeta.day} 것뿐이라 견주지 않습니다`
+            : !preLastMeta.count ? '프리장 마지막 값이 없습니다(넥스트레이드 08:51 저장 전 · 또는 그날 체결 없음)'
+            : `프리장 마지막 값보다 ${preUpTxt()} 이상 오른 종목이 없습니다(시세를 받는 중이면 잠시 뒤 채워짐)`) },
   /* 매수 — 외국인 · 기관 · 프로그램이 **셋 다** 순매수인 종목, 셋 합이 큰 순 (2026-11-05 재권님 「프로그램 기관 외국인이 동시에
      사고있는 종목들 볼수있는 방법좀 마련해봐」 → 「실시간 순위에 버튼 하나 만들고 거기에 넣어줘 · 매수 라는 버튼」).
      고르는 것은 서버다(kis_proxy.py `fetch_joint_buy` · 외국인 · 기관은 가집계) — 화면은 받은 차례 그대로 그린다.
@@ -1559,7 +1603,7 @@ const SORTS = {
             : riseMeta.phase === 'before' ? `${riseMeta.barTo} 첫 ${barMinTxt()}봉이 끝나면 고릅니다`
             : riseMeta.phase === 'nodata' ? `못 셈 — 첫 ${barMinTxt()}봉(${riseMeta.barFrom}) 봉이 한 종목도 없습니다`
             : riseMeta.pending ? `첫 ${barMinTxt()}봉을 다 받기 기다리는 중 — ${riseMeta.pending}종목`
-            : `첫 ${barMinTxt()}봉이 시가 대비 ${riseMeta.risePct != null ? '+' + riseMeta.risePct + '%' : '(서버 값 못 받음)'} 넘게 오른 종목이 없습니다`) },   // 정해진 값은 서버 meta 에서(11-20 「설명 글에는 정해진 값을 적는다」)
+            : `첫 ${barMinTxt()}봉이 ${riseCondTxt(riseMeta)} 오른 종목이 없습니다`) },   // 정해진 값은 서버 meta 에서(11-20 「설명 글에는 정해진 값을 적는다」)
   /* 겹침 — 관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 중 **둘 이상**에 든 종목, 겹친 칩 수 많은 순 · 같으면 시가총액 순 (2026-11-11 재권님
      「관심 프리장 vi급등 장외 매수 이목록들(실시간 순위) … 여기에서 겹치는 종목들을 소팅해서 보여주면 좋을거같은데」 → (가) 새 칩).
      각 칩이 서버에서 받은 목록을 그대로 모아 센다(새로 고르는 셈이 아니다) — 칩마다 거르는 것(시총 · ETF)도 그 칩 그대로 */
@@ -1620,24 +1664,24 @@ const SORT_TIPS = {
   /* 관심 — 실제 차례를 그대로 적는다(rowList 의 filter 갈래 · 2026-11-11 재권님 「관심 에 종목버튼에 마우스 올리면 어떤 룰로 소팅되는지 설명 넣어줘」):
      순위 목록 차례(코스피 시가총액 순 → 코스닥 시가총액 순)에서 담은 것만 골라내고, 목록 밖에서 담은 종목은 담은 차례로 맨 뒤 */
   /* 2026-11-18 재권님 「관심 하트는 누르는거 없애고 자동으로 관심으로 들어가게」 → 「응 맞아」 · 기존 하트 종목 「가」(비움) — 관심 = 서버 자동 관심 룰 종목만 */
-  fav: `서버가 자동 관심 룰로 담은 종목만 봅니다(하트로 담기는 없앴습니다)\n차례 — ① 코스피 종목 시가총액 큰 순 ② 그다음 코스닥 종목 시가총액 큰 순 ③ 순위 목록(코스피 200 · 코스닥 150) 밖 종목은 담긴 차례대로 맨 뒤 · ${CAP_MIN_TXT}\n함께 나오는 칩 줄(단타 · 프리장 · 초반상승 · 현재상승 · VI·급등 · 볼린저 · 장외)은 관심과 따로 순위 목록 전체에서 고릅니다 — 칩마다 마우스를 올리면 고르는 기준이 뜹니다`,
+  get fav() { return `서버가 자동 관심 룰로 담은 종목만 봅니다(하트로 담기는 없앴습니다)\n차례 — ① 코스피 종목 시가총액 큰 순 ② 그다음 코스닥 종목 시가총액 큰 순 ③ 순위 목록(코스피 200 · 코스닥 150) 밖 종목은 담긴 차례대로 맨 뒤 · ${capMinTxt()}\n함께 나오는 칩 줄(단타 · 프리장 · 초반상승 · 현재상승 · VI·급등 · 볼린저 · 장외)은 관심과 따로 순위 목록 전체에서 고릅니다 — 칩마다 마우스를 올리면 고르는 기준이 뜹니다`; },
   cap: '시가총액이 큰 순 — 위 코스피 · 코스닥으로 시장을 고릅니다',
   value: '오늘 거래대금이 큰 순',
   vol: '오늘 거래량이 큰 순',
   up: '오늘 전일 대비 많이 오른 순',
   down: '오늘 전일 대비 많이 내린 순',
-  after: `정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 09:00 ~ 15:40 은 비어 있습니다 · ${CAP_MIN_TXT}`,
-  buy: `외국인 · 기관 순매수 금액 상위 30(장중 가집계)에 든 종목을 이 차례로 — 외·기·연·프(외국인 · 기관 · 연기금 · 프로그램 넷 다) → 외·기·프(외국인 · 기관 · 프로그램) → 기·연(기관 · 연기금) → 외국인만 · 같은 칸 안은 산 금액 합 큰 순\n연기금은 15:45 확정치 뒤에만 있어 장중에는 외·기·프 · 외국인만 두 칸만 찹니다 · 프로그램은 실시간 · 서버가 판을 다시 지을 때마다 차례가 바뀝니다\n칸에서 빠진 종목은 맨 위에 흐리게 · ${CAP_MIN_TXT}`,
-  pre: `넥스트레이드 프리마켓(08:00 ~ 08:50)에 전일 종가보다 오른 종목 중 거래대금 상위(서버가 정한 줄 수) · 차례는 등락률 큰 순\n배율 — 전날 같은 시각까지 거래량 대비(다시 재는 주기 · 빨강 기준은 서버 값 — 배율 위 풍선에)\n프리장 동안 몇 분마다 다시 재고 08:50 에 그날 판으로 굳힙니다 · 줄마다 「프」 는 프로그램 순매수(참고) · ${CAP_MIN_TXT}`,
-  nowup: `지금 값이 오늘 시가보다 +${NOW_RISE_PCT}% 이상 높은 종목, 시가 대비 큰 순 · 오른쪽 % 도 시가 대비\n위 코스피 · 코스닥으로 시장을 고릅니다 · ${CAP_MIN_TXT}`,
-  vi: `오늘 정규장에 상승 VI 가 걸렸거나(VI 는 ${CAP_MIN_TXT}) 전일 대비 +20% 를 넘은 종목, 최근 것이 위`,
-  bb: `바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · ${CAP_MIN_TXT} · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록`,
+  get after() { return `정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목만, 종가 대비 등락률 순\n평일 09:00 ~ 15:40 은 비어 있습니다 · ${capMinTxt()}`; },
+  get buy() { return `외국인 · 기관 순매수 금액 상위 30(장중 가집계)에 든 종목을 이 차례로 — 외·기·연·프(외국인 · 기관 · 연기금 · 프로그램 넷 다) → 외·기·프(외국인 · 기관 · 프로그램) → 기·연(기관 · 연기금) → 외국인만 · 같은 칸 안은 산 금액 합 큰 순\n연기금은 15:45 확정치 뒤에만 있어 장중에는 외·기·프 · 외국인만 두 칸만 찹니다 · 프로그램은 실시간 · 서버가 판을 다시 지을 때마다 차례가 바뀝니다\n칸에서 빠진 종목은 맨 위에 흐리게 · ${capMinTxt()}`; },
+  get pre() { return `넥스트레이드 프리마켓(08:00 ~ 08:50)에 전일 종가보다 오른 종목 중 거래대금 상위(서버가 정한 줄 수) · 차례는 등락률 큰 순\n배율 — 전날 같은 시각까지 거래량 대비(다시 재는 주기 · 빨강 기준은 서버 값 — 배율 위 풍선에)\n프리장 동안 몇 분마다 다시 재고 08:50 에 그날 판으로 굳힙니다 · 줄마다 「프」 는 프로그램 순매수(참고) · ${capMinTxt()}`; },
+  get preup() { return `지금 값이 넥스트레이드 프리장 마지막 값(08:50 끝)보다 ${preUpTxt()} 이상 높은 종목, 프리장 대비 큰 순 · 오른쪽 % 도 프리장 대비\n장중 내내 다시 셉니다 · 프리장 체결이 없던 종목은 안 듭니다 · 초반상승(9시 첫 1분봉 한 번)과 따로라 둘 다 걸릴 수 있습니다\n위 코스피 · 코스닥으로 시장을 고릅니다 · ${capMinTxt()}`; },
+  get nowup() { return `지금 값이 오늘 시가보다 ${riseTxt()} 이상 높은 종목, 시가 대비 큰 순 · 오른쪽 % 도 시가 대비\n위 코스피 · 코스닥으로 시장을 고릅니다 · ${capMinTxt()}`; },
+  get vi() { return `오늘 정규장에 상승 VI 가 걸렸거나(VI 는 ${capMinTxt()}) 전일 대비 +20% 를 넘은 종목, 최근 것이 위`; },
+  get bb() { return `바닥 신호 — 세 가지가 같은 5분봉에서 함께 난 종목만 고릅니다\n① 저가가 볼린저 밴드 하단(20봉 · 2σ)에 닿고 그 봉이 양봉\n② MACD 히스토그램이 음수인데 직전 봉보다 커짐(매도세가 줄어듦)\n③ RSI 가 30 아래에서 오르기 시작(직전 봉 30 아래 · 이번 봉이 직전보다 높음)\n대상 코스피 200 · 코스닥 150 · ${capMinTxt()} · 오늘 것만 · 최근 것이 위 · 텔레그램 「바닥 신호」 와 같은 기록`; },
   ov: '관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 · 수급 가운데 둘 이상의 칩에 함께 든 종목, 겹친 칩 수가 많은 순(같으면 시가총액 순)\n전일 종가 대비 내린 종목은 뺍니다(등락률을 모르면 남김)\n줄마다 어느 칩에 들었는지 적습니다 · 각 칩의 거르기(시가총액 · ETF)는 그 칩 그대로',
   get rise() {      // 문턱 숫자는 서버 meta — 받기 전에는 숫자 없이
     const m = riseMeta || {};
-    const th = m.risePct != null ? ` ${m.risePct}% 이상` : '';
     const cap = m.minCapEok != null ? `시가총액 ${fmtMoneyKr(m.minCapEok)} 이상만` : '';
-    return `코스피 200 · 코스닥 150 종목(ETF 뺌) 중 정규장 첫 ${barMinTxt()}봉(${m.barFrom || '—'} ~ ${m.barTo || '—'})이 시가보다${th} 올라 끝난 종목, 그 상승률이 큰 순\n그 봉을 다 받은 뒤에 고르고 그날 판으로 굳습니다${cap ? ` · ${cap}` : ''}`;
+    return `코스피 200 · 코스닥 150 종목(ETF 뺌) 중 정규장 첫 ${barMinTxt()}봉(${m.barFrom || '—'} ~ ${m.barTo || '—'})이 ${riseCondTxt(m)} 올라 끝난 종목, 첫 봉 상승률이 큰 순\n프리장(넥스트레이드) 체결이 없던 종목은 시가 대비만 봅니다\n그 봉을 다 받은 뒤에 고르고 그날 판으로 굳습니다${cap ? ` · ${cap}` : ''}`;
   },
   eb: '실적이 잘 나온 종목 — 두 가지가 다 맞은 것만\n① 예상보다 좋음: 회사가 낸 잠정실적의 영업이익이 그 분기 시장 예상치(네이버)보다 높음\n② 전망 좋음: 「실적 전망」 공시의 매출 · 영업이익(값이 든 칸만)이 직전 실적보다 큼 — 1년 전망은 앞 해 실적(없으면 최근 네 분기 합), 분기 전망은 한 해 앞 같은 분기\n최근 공시만(며칠 치인지는 서버가 정해 위 설명 줄에 나옵니다) · 예상치가 없는 종목은 못 가름이라 빠집니다',
   ev: '최근 사흘 회사 공시 중 갈래가 붙은 것(자사주 · 인수합병 · 주주환원 · 실적 · 위험 신호 …) — 종목마다 가장 새 공시 한 줄, 새 것이 위\n아래 띠에서 갈래를 누르면 그 갈래만',
@@ -1839,7 +1883,7 @@ async function loadVi() {
         // VI 는 시총 RANK_MIN_CAP_EOK 이상만 — 재권님 「vi종목은 시총1조가 넘지않는건 안보여도 돼」 → 「가」 → 「1조를 3천억 으로」(11-10). 급등 줄은 그대로.
         // 시총을 아직 못 받은 줄은 남긴다 — 못 잰 것을 「작다」 로 치지 않는다(서버가 다음 바퀴에 채운다)
         const capEok = it.cap ?? capOf(it.code);
-        if (it.kind === 'vi' && capEok != null && capEok < RANK_MIN_CAP_EOK) continue;
+        if (it.kind === 'vi' && capEok != null && RANK_MIN_CAP_EOK != null && capEok < RANK_MIN_CAP_EOK) continue;
         let g = by[it.code];
         if (!g) { g = by[it.code] = { last: it, vi: 0, surge: false }; rows.push({ code: it.code, name: it.name }); }
         if (it.kind === 'vi') g.vi += 1; else g.surge = true;
@@ -1884,7 +1928,7 @@ async function loadBb() {
         if (!it.code) continue;
         // 시총 RANK_MIN_CAP_EOK 이상만 — 재권님 「볼린져에도 시가총액 넣어주고 1조 이상만」 → 「1조를 3천억 으로」(11-10). 못 받은 줄은 남긴다(VI 와 같은 까닭)
         const capEok = it.cap ?? capOf(it.code);
-        if (capEok != null && capEok < RANK_MIN_CAP_EOK) continue;
+        if (capEok != null && RANK_MIN_CAP_EOK != null && capEok < RANK_MIN_CAP_EOK) continue;
         let g = by[it.code];
         if (!g) { g = by[it.code] = { last: it, n: 0 }; rows.push({ code: it.code, name: it.name }); }
         g.n += 1;
@@ -1972,8 +2016,7 @@ async function loadPre() {
 /* 「단타」 칩 — 단타 목록은 서버 한 곳(server/dt30.py live · /api/kis/dt-list)이 센다 · 화면은 받은 줄 중 칩 둘 이상 · 하락 아닌 것을 받은 차례 그대로 그린다
    (재권님 「홈에 있는 칩을 단타에도 추가해서 동기화하고 한곳에서 받도록 해」 11-18 17:4x · 전에는 이 파일이 여섯 칩 목록을 모아 따로 셌다 — 단타 판과 두 벌).
    칩 정의 · 하락 뺌 · 차례(칩 수 → 초반상승 → 시가총액)는 서버 값 그대로 — 여기 두지 않는다 */
-const OV_CHIPS = ['fav', 'pre', 'vi', 'after', 'buy', 'rise'];   // 그리는 차례 · 칩 이름표(SORTS label) — 서버 칩 이름과는 아래 OV_ID 로 잇는다
-const OV_ID = { '관심': 'fav', '프리장': 'pre', 'VI·급등': 'vi', '장외': 'after', '매수': 'buy', '초반상승': 'rise' };   // 서버 dt30.OV_CHIPS 이름 → 이 화면 칩 id
+const OV_ID = { '관심': 'fav', '프리장': 'pre', 'VI·급등': 'vi', '장외': 'after', '매수': 'buy', '초반상승': 'rise' };   // 서버 칩 이름(칩 룰 표 단타.ovChips · 판 meta.chips) → 이 화면 칩 id
 const ovMin = () => (dtMeta && Number.isFinite(dtMeta.minChips) ? dtMeta.minChips : null);   // 문턱은 서버 값(dt30.MIN_CHIPS · meta.minChips) — 못 받으면 줄을 안 그린다
 const ovLabel = (id) => (SORTS[id] ? SORTS[id].label : id);
 let dtList = null, dtMeta = null;    // 못 받았으면 null(빈 목록과 가른다)
@@ -2007,7 +2050,7 @@ function ovNote() {
   const w = ovWaiting();
   const k = ovMin();
   const down = k == null ? 0 : Object.values(ovBy).filter((g) => g.chips.length >= k && g.down).length;
-  return `칩 ${OV_CHIPS.length}개 중 ${k == null ? '—' : `${k}개`} 이상${down ? ` · 하락 ${down} 뺌` : ''}${(m.wait || []).length ? ` · ${m.openAt ? `${m.openAt} 뒤` : '정규장 뒤'} ${m.wait.join(' · ')}` : ''}${w.length ? ` · 못 받은 칩 ${w.join(' · ')}` : ''}`;
+  return `칩 ${Array.isArray(m.chips) ? m.chips.length : '—'}개 중 ${k == null ? '—' : `${k}개`} 이상${down ? ` · 하락 ${down} 뺌` : ''}${(m.wait || []).length ? ` · ${m.openAt ? `${m.openAt} 뒤` : '정규장 뒤'} ${m.wait.join(' · ')}` : ''}${w.length ? ` · 못 받은 칩 ${w.join(' · ')}` : ''}`;
 }
 async function loadOv() {
   try {
@@ -2068,14 +2111,19 @@ const riseOf = (code) => (riseRows || []).find((r) => r.code === code) || null;
 function riseCell(code) {
   const r = riseOf(code);
   if (!r) return '—';
-  return `<div style="white-space:nowrap;font-size:12px;line-height:1.3"><span class="${dirClass(r.pct)}">+${r.pct.toFixed(2)}%</span></div>` +
+  return `<div style="white-space:nowrap;font-size:12px;line-height:1.3"><span class="${dirClass(r.pct)}">${r.pct > 0 ? '+' : ''}${r.pct.toFixed(2)}%</span></div>` +
     `<div style="white-space:nowrap;font-size:11px;line-height:1.3" class="kh-mut">${fmtPriceOf(code, r.open)} → ${fmtPriceOf(code, r.close)}</div>`;
+}
+/* 초반상승 조건 글 — 문턱 둘은 서버 meta(risePct · preRisePct) · 못 받으면 그 자리에 「서버 값 못 받음」(숫자를 박지 않는다 · 11-23 재권님 「지금룰에 걸리거나/ 프리장보다 2%이상 오를때」) */
+function riseCondTxt(m) {
+  const v = (x) => (x != null ? x : '서버 값 못 받음');
+  return `시가보다 (${v(m.risePct)})% 또는 프리장 마지막 값보다 (${v(m.preRisePct)})% 이상`;
 }
 function riseNote() {
   const m = riseMeta || {};
   const bits = [];
   if (m.day) bits.push(`${m.day.slice(4, 6)}.${m.day.slice(6)} 첫 ${barMinTxt()}봉`);
-  if (m.risePct != null) bits.push(`시가 대비 +${m.risePct}% 이상`);
+  bits.push(riseCondTxt(m));
   if (m.pending) bits.push(`다 받기 기다림 ${m.pending}`);
   else if (m.phase === 'done') bits.push('그날 판 고정');
   return bits.join(' · ');
@@ -2100,10 +2148,16 @@ const eokSigned = (won) => { if (won == null) return '—'; const v = Math.round
 /* 한 칸 — 셋의 순매수(억 · 오름 빨강 · 내림 파랑)를 한 줄에(11-05 재권님 「외 기 프 한줄로 해줘」). 13:19 에 표가 순위 칸 밖으로
    밀린 것은 폭이 아니라 시세 갱신이 이 칸을 글자로 넣던 탓이었다(paintOneRow · html). 빠진 종목만 아랫줄 「무엇이 매도로 바뀜 시각」.
    ≈ 는 상위 30 밖이라 그 종목 가집계 수량 × 현재가로 어림한 값(서버 approx) */
-/* 보이는 이름은 사는 쪽 줄임(11-19 재권님 「응」 — 단타 판과 같게 · 글자는 Insight strategy-dt30.js SUB_NAME 그대로 옮김 · 그쪽이 안 내보내 한 곳으로 못 합침 — 보드 카드) · 열쇠(서버 tier 1~4)는 그대로 */
-const jointTierTag = (code) => { const t = JOINT_TIER[jointOf(code)?.tier]; return t ? `<b data-tip="${escT(t[1])}">${t[0]}</b> ` : ''; };
-const JOINT_TIER = { 1: ['외·기·연·프', '외국인 · 기관 · 연기금 · 프로그램 넷 다 순매수'], 2: ['외·기·프', '외국인 · 기관 · 프로그램 순매수'],
-  3: ['기·연', '기관 · 연기금 순매수'], 4: ['외국인만', '외국인만 순매수'] };
+/* 보이는 이름은 사는 쪽 줄임(11-19 재권님 「응」 — 단타 판과 같게) · 열쇠(서버 tier 1~4)는 그대로.
+   이름표는 서버 한 곳(kis_proxy.JOINT_TIER_NAME)이 매수 판 응답 meta.tierNames 로 준다 — Insight 단타 판도 같은 표를 받는다(11-20 「고치면 될거같아」).
+   못 받았으면 차례 표시(①~④)와 「이름표 — 서버 값 못 받음」 풍선 */
+let JOINT_TIER = null;
+const jointTierTag = (code) => {
+  const n = jointOf(code)?.tier;
+  if (!n) return '';
+  const t = JOINT_TIER && JOINT_TIER[n];
+  return t ? `<b data-tip="${escT(t[1])}">${t[0]}</b> ` : `<b data-tip="이름표 — 서버 값 못 받음">${'①②③④'[n - 1] || n}</b> `;
+};
 function jointCell(code, narrow = false) {
   const r = jointOf(code);
   if (!r) return '—';
@@ -2175,7 +2229,7 @@ async function loadJoint() {
   try {
     const r = await apiFetch('/api/kis/joint-buy', { cache: 'no-store' });
     const j = r && r.ok ? await r.json() : null;
-    if (j && j.meta) jointMeta = j.meta;
+    if (j && j.meta) { jointMeta = j.meta; if (j.meta.tierNames) JOINT_TIER = j.meta.tierNames; }
     /* 빠진 종목에는 받을 때 flip 을 붙인다 — 목록에 넣을 때만 붙이면 jointOf 가 찾은 항목에 없어 까닭 줄이 안 나왔다(11-05 qa) */
     if (j && j.ok && Array.isArray(j.data)) { jointRows = j.data; jointFlipped = Array.isArray(j.flipped) ? j.flipped.map((x) => ({ ...x, flip: true })) : []; }
   } catch { /* 못 받으면 들고 있던 것 그대로 */ }
@@ -2192,10 +2246,10 @@ const priceOf = (p, sortId = sortBy) => {
 const expectOf = (p, sortId = sortBy) => (p && p.expect && !(SORTS[sortId] && (SORTS[sortId].price || SORTS[sortId].pct)) ? p.expect : null);
 
 /* 맨 오른쪽 등락률 칸의 값 — 칩이 정한다(장외는 종가 대비 · 나머지는 전일 대비). 값이 없으면 null(0 으로 두지 않는다) */
-const pctOf = (p, sortId = sortBy) => {
+const pctOf = (p, sortId = sortBy, code = null) => {
   if (!p) return null;
   const f = SORTS[sortId] && SORTS[sortId].pct;
-  const v = f ? f(p) : (p.expect ? p.expect.pct : p.pct);
+  const v = f ? f(p, code) : (p.expect ? p.expect.pct : p.pct);   // code — 프리장대비처럼 종목마다 따로 받은 값으로 셈하는 칩
   return Number.isFinite(v) ? v : null;
 };
 
@@ -2216,12 +2270,13 @@ function chipBlank() {
 function afterEmpty() {
   const ac = serverData('afterClear');
   const min = (s) => { const m = /^(\d\d):(\d\d)$/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
-  const from = min(ac && ac.from), until = min(ac && ac.until);
+  /* 값이 실제로 들어오는 때는 ready(서버 REG_CLOSE_READY · 종가가 일봉에 든 뒤) — until~ready 에도 같은 까닭 글(qa 덧 11-05 · 그 사이 「아직 없습니다」 로 보이던 것) · ready 를 못 받았으면 until */
+  const from = min(ac && ac.from), until = min(ac && (ac.ready || ac.until)), at = ac && (ac.ready || ac.until);
   const kst = new Date(Date.now() + 9 * 3600 * 1000);
   const hm = kst.getUTCHours() * 60 + kst.getUTCMinutes();
   const wd = kst.getUTCDay() >= 1 && kst.getUTCDay() <= 5;
   return from != null && until != null && wd && hm >= from && hm < until
-    ? `장외 값은 ${ac.until} 애프터부터 · 아침 ${ac.from}에 비웁니다`
+    ? `장외 값은 ${at} 애프터부터 · 아침 ${ac.from}에 비웁니다`
     : '종가보다 오른 종목이 아직 없습니다';
 }
 
@@ -2314,13 +2369,13 @@ function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
   }
 
   if (sort && sort.blank && sort.blank()) return [];   // 현재상승 — 서버 chipReset(07:50)~09:00 「시작 전」
-  if (!sort || !sort.key) return base;      // 시가총액은 목록 순서 그대로
+  if (!sort || !(sort.key || sort.cKey)) return base;      // 시가총액은 목록 순서 그대로
 
   /* 값이 아직 안 온 종목은 뒤로 보낸다. 0 으로 치면 「거래량 0위」 가 된다 */
   const val = (s) => {
     const p = rowPrices && rowPrices[s.code];
     if (!p) return null;
-    const n = sort.key(p);
+    const n = sort.cKey ? sort.cKey(s.code, p) : sort.key(p);
     return Number.isFinite(n) ? n : null;
   };
 
@@ -2341,7 +2396,7 @@ function rowList(sortId = sortBy, mkt = market, grp = favGroup) {
 /* 「관심」 아래 줄(#kh-sorts-fav)로 가는 칩 — 위 줄에서는 빠지고, 「관심」 이나 이 칩을 볼 때만 나온다.
    거르는 것은 그대로 전 종목이다(관심 안에서 거르지 않는다 · 2026-11-11 재권님 「나」). 칩이 늘어 위 줄이 세 줄로 꺾이던 것도 이것으로 풀렸다 */
 /* 「단타」(ov · 옛 「겹침」 · 「오늘의종목」)는 이 줄 맨 왼쪽(2026-11-11 재권님 「겹침 -> 오늘의종목 으로 이름 바꾸고 가장 왼쪽에」 → 「관심종목 하위 버튼에서 가장왼쪽이야」) */
-const FAV_SUB_ORDER = ['ov', 'pre', 'rise', 'nowup', 'vi', 'bb', 'after'];   // 현재상승은 초반상승 옆(11-11)   // 장외도 이 줄로 · 매수 · 공매도는 위 줄(11-11 재권님 「장외랑 매수도 관심 하위로」 → 「매수 공매도는 위로」)
+const FAV_SUB_ORDER = ['ov', 'pre', 'rise', 'nowup', 'preup', 'vi', 'bb', 'after'];   // 현재상승은 초반상승 옆(11-11)   // 장외도 이 줄로 · 매수 · 공매도는 위 줄(11-11 재권님 「장외랑 매수도 관심 하위로」 → 「매수 공매도는 위로」)
 const FAV_SUB = new Set(FAV_SUB_ORDER);
 
 /* 「수급」 칩 — 서버(auto_watch)가 관심에 자동으로 담는 묶음 「자동」(id auto)을 「관심」 아래 줄 공매도 옆에 둔다.
@@ -2478,6 +2533,7 @@ function setupSorts() {
     if (sortBy === 'buy') loadJoint();
     if (sortBy === 'pre') loadPre();
     if (sortBy === 'rise') loadRise();
+    if (sortBy === 'preup') loadPreLast();
     if (sortBy === 'ov') loadOv();
     if (SEC_CHIPS.has(sortBy) && !industryAll) loadIndustryAll();
     if (sortBy === 'vi') loadVi();
@@ -2798,7 +2854,7 @@ function paintRankModal() {
       <td class="kh-rkm-rk">${s.rank}</td>
       <td class="l"><span class="kh-nm">${iconHtml(s)}<b data-co="${s.code}">${escT(s.name)}</b>${th ? themeBadge(s.code) : ''}</span></td>
       <td class="kh-num">${p ? fmtPriceOf(s.code, priceOf(p, sid)) : '···'}</td>
-      <td class="kh-num ${p ? dirClass(pctOf(p, sid)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, sid)) : '—'}</td>
+      <td class="kh-num ${p ? dirClass(pctOf(p, sid, s.code)) : 'kh-mut'}">${p ? fmtPct(pctOf(p, sid, s.code)) : '—'}</td>
       <td class="kh-num">${sid === 'buy' ? jointCell(s.code, true) : sid === 'pre' ? preCell(s.code) : sid === 'rise' ? riseCell(s.code) : sid === 'ov' ? ovCell(s.code) : sid === 'vi' ? viCell(s.code) : sid === 'bb' ? bbCell(s.code) : sid === 'ssts' ? sstsCell(s.code) : sid === 'ev' ? evCell(s.code) : sid === 'eb' ? ebCell(s.code) : p ? showValue(s.code, p) : '···'}</td>
       <td class="kh-num">${th && themeBig !== FLOW ? themeCap(s.code) : showCap(s.code)}</td>
       <td class="kh-num">${th && themeBig === FLOW ? themeMetric(s.code) : (p ? fmtShareCount(p.volume) : '···')}</td>
@@ -2889,7 +2945,7 @@ function openRankModal() {
       /* 모달에서 고른 기준은 첫 화면 순위표와 **따로 둔다** — 모달에서
          거래대금을 보다 닫았을 때 목록 기준이 바뀌어 있으면 무엇을 눌러
          그렇게 됐는지 알 수 없다 (2026-09-22). */
-      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'rise') loadRise(); if (id === 'ov') loadOv(); if (id === 'vi') loadVi(); if (id === 'bb') loadBb(); if (id === 'ssts') loadSsts(); if (id === 'ev') loadEv(); if (id === 'eb') loadEb(); loadVolRatio(); },
+      onTab(id) { rankModalSort = id; paintRankModal(); paintRankModalNote(); if (id === 'buy') loadJoint(); if (id === 'pre') loadPre(); if (id === 'rise') loadRise(); if (id === 'preup') loadPreLast(); if (id === 'ov') loadOv(); if (id === 'vi') loadVi(); if (id === 'bb') loadBb(); if (id === 'ssts') loadSsts(); if (id === 'ev') loadEv(); if (id === 'eb') loadEb(); loadVolRatio(); },
     },
     onClose() { rankModal = null; if (volWatch) { volWatch.stop(); volWatch = null; } },
   });
@@ -2944,6 +3000,7 @@ watch({ url: () => (sortBy === 'ov' || (rankModal && rankModalSort === 'ov') ? '
 watch({ url: () => (sortBy === 'buy' ? '/api/kis/joint-buy' : null), onChange: loadJoint, key: 'kis_proxy.INVESTOR_TOP_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => (sortBy === 'pre' ? '/api/kis/pre-flow' : null), onChange: loadPre, key: 'pre_flow.FLOW_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => (sortBy === 'pre' || (rankModal && rankModalSort === 'pre') ? '/api/kis/pre-surge' : null), onChange: loadPreSame, key: 'pre_surge.BURST_SEC', fallbackMs: JOINT_FALLBACK_MS });
+watch({ url: () => (sortBy === 'preup' || (rankModal && rankModalSort === 'preup') ? '/api/kis/pre-last' : null), onChange: loadPreLast, key: 'nxt_pre.UP_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => (sortBy === 'rise' || (rankModal && rankModalSort === 'rise') ? '/api/kis/open-rise' : null), onChange: loadRise, key: 'open_rise.CACHE_TTL', fallbackMs: JOINT_FALLBACK_MS });
 watch({ url: () => (sortBy === 'vi' || (rankModal && rankModalSort === 'vi') ? '/api/alerts/today' : null), onChange: loadVi, key: null, fallbackMs: VI_FALLBACK_MS });
 watch({ url: () => (sortBy === 'bb' || (rankModal && rankModalSort === 'bb') ? '/api/signals/today' : null), onChange: loadBb, key: null, fallbackMs: BB_FALLBACK_MS });
@@ -2979,7 +3036,7 @@ function paintRows(priceMap) {
   $('kh-rows').closest('.kh-rank-card')?.setAttribute('data-sort', sid);   // 좁은 폭에서 「매수」 는 값 칸을 남긴다(css/home.css)
   $('kh-rows').innerHTML = list.map(s => {
     const live = priceMap && priceMap[s.code];
-    const cls = live ? dirClass(pctOf(live, sid)) : 'kh-mut';
+    const cls = live ? dirClass(pctOf(live, sid, s.code)) : 'kh-mut';
     /* 거래대금 · 시가총액 · 매수매도 비율 · 산업은 2026-09-17 에 뺐다.
        칸이 368px 로 좁아져 아홉 열이 안 들어갔고, 그 넷은 고른 종목 것만
        차트 옆 패널에 보여주기로 했다 (지시). */
@@ -2991,7 +3048,7 @@ function paintRows(priceMap) {
       <td class="kh-num">${sid === 'buy' ? jointTierTag(s.code) : ''}<span${expectOf(live, sid) ? ` class="${dirClass(live.expect.pct)}" data-tip="${expectTip(live.expect)}"` : ''}
         >${live ? (expectOf(live, sid) ? expectTag(live.expect) : '') + fmtPriceOf(s.code, priceOf(live, sid)) : '···'}</span></td>
       <td class="kh-num kh-metric">${sortCell(s.code, live)}</td>
-      <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(pctOf(live, sid)) : '—'}</td>
+      <td class="kh-num ${cls}" style="font-weight:500">${live ? fmtPct(pctOf(live, sid, s.code)) : '—'}</td>
     </tr>`;
   }).join('');
 
@@ -3235,6 +3292,7 @@ function applyPrices(map) {
 
      ⚠️ `frame.js` 에도 `applyPrices` 라는 함수가 따로 있다. **다른 함수다** —
      그쪽이 `onPrices` 를 부르고, 그 `onPrices` 가 이 함수를 부른다. */
+  const stockModal = currentStockModal();
   if (stockModal) {
     const live = rowPrices[stockModal.code];
     /* **값이 안 바뀌었으면 건너뛴다.** `updateRowCells` 의 `lastShown` 과 같은
@@ -3306,7 +3364,7 @@ function paintOneRow(code, live) {
   {
     const tr = $('kh-rows').querySelector(`tr[data-code="${code}"]`);
     if (!tr || !live) return;
-    const cls = dirClass(pctOf(live));
+    const cls = dirClass(pctOf(live, sortBy, code));
     const ex = expectOf(live);
     tr.children[2].innerHTML = (market !== 'THEME' && sortBy === 'buy' ? jointTierTag(code) : '') +
       `<span${ex ? ` class="${dirClass(ex.pct)}" data-tip="${expectTip(ex)}"` : ''}>${ex ? expectTag(ex) : ''}${fmtPriceOf(code, priceOf(live))}</span>`;   // 예상가는 오르내림 색
@@ -3318,7 +3376,7 @@ function paintOneRow(code, live) {
     else tr.children[3].textContent = sortCell(code, live);
     tr.children[4].className = 'kh-num ' + cls;
     tr.children[4].style.fontWeight = '500';
-    tr.children[4].textContent = fmtPct(pctOf(live));
+    tr.children[4].textContent = fmtPct(pctOf(live, sortBy, code));
   }
 }
 
@@ -3393,7 +3451,7 @@ function resortRowsIfMoved() {
     if (body && shownRows().map((s) => s.code).join() !== [...body.children].map((tr) => tr.dataset.code).join()) paintRows(rowPrices);
     return;
   }
-  if (!SORTS[sortBy]?.key && sortBy !== 'ov') return;   // 총액 · 관심은 시세로 순서가 안 바뀐다 · 「단타」(ov) 는 「장외」 가 시세로 바뀌어 든 종목이 바뀐다(11-11 「겹침도 자주로」)
+  if (!SORTS[sortBy]?.key && !SORTS[sortBy]?.cKey && sortBy !== 'ov') return;   // 총액 · 관심은 시세로 순서가 안 바뀐다 · 「단타」(ov) 는 「장외」 가 시세로 바뀌어 든 종목이 바뀐다(11-11 「겹침도 자주로」)
   const body = $('kh-rows');
   if (!body) return;
   const list = shownRows();
@@ -3465,20 +3523,13 @@ function anyListed(code) {
    누르기로 되돌렸기 때문이다. 위 「줄을 누르면」 주석에 경위가 있다. */
 
 /* ── 종목 모달 ───────────────────────────
-   목록에서 종목을 눌렀을 때 페이지를 옮기지 않고 그 자리에 띄운다
-   (2026-09-16 지시). 담기는 것은 stock.html 의 본문 그대로다 —
-   마크업도 그리는 코드도 한 곳에만 둔다.
+   목록에서 종목을 눌렀을 때 페이지를 옮기지 않고 그 자리에 띄운다 (2026-09-16 지시).
+   띄우는 몫(서랍 · 닫기 · 모달 안 검색)은 공용 부품 `components/stock-modal.js` 다 — 홈 밖에서도 부른다(2026-11-23).
+   여기는 홈 몫만 — 주소(?code=) · 닫은 뒤 큰 차트 · 모달 검색으로 고른 종목을 큰 차트에.
 
    시세 루프를 새로 돌리지 않는다. 이 화면이 이미 돌고 있으므로 그 값을
-   넘겨준다. 같은 화면에서 루프가 둘이 되면 KIS 를 겹쳐 부르게 되고,
+   넘겨준다(applyModalPrices 쪽). 같은 화면에서 루프가 둘이 되면 KIS 를 겹쳐 부르게 되고,
    2026-09-16 에 그것으로 서버가 터졌다. */
-let stockModal = null;
-
-/* 다른 종목으로 갈아타는 중인가.
-   새 모달을 열면 openModal 이 옛 모달부터 닫는데, 그때 옛 모달의 onClose 가
-   주소까지 되돌리면 방금 밀어 넣은 새 종목을 도로 뱉는다. 갈아타는 동안에는
-   주소를 새 모달에 맡긴다. */
-let switchingStock = false;
 
 /* 브라우저가 히스토리를 이미 옮겼나 (뒤로가기·앞으로가기).
    그 경우 닫으면서 back() 을 또 부르면 **한 칸 더 나가 페이지를 떠난다.**
@@ -3495,21 +3546,13 @@ function dropCodeFromUrl() {
 
 async function openStockModal(code, { push = true, pushed } = {}) {
   const stock = findStock(code);
-  if (!stock || (stockModal && stockModal.code === code)) return;
+  const open = currentStockModal();
+  if (!stock || (open && open.code === code)) return;
 
   /* **카드에서 보던 자리를 넘겨준다** (2026-09-29 지시 — 「모달열면 모달에
      동기화 되야해」). 기간을 바꿀 때만 적으면 **끌어 놓고 바로 연 것**이 빠진다. */
   if (bigChart) {
     try { setChartView(bigPeriod, bigChart.getView()); } catch { /* 아직 없다 */ }
-  }
-
-  let main;
-  try {
-    main = await loadStockMain();
-  } catch (e) {
-    /* 본문을 못 받으면 예전처럼 페이지를 옮긴다. 아무 일도 안 일어나는 것보다 낫다 */
-    location.href = `./stock.html?code=${code}`;
-    return;
   }
 
   /* 이 모달이 히스토리에 항목을 **밀어 넣었나**. 닫을 때 뒤로 갈지,
@@ -3518,55 +3561,29 @@ async function openStockModal(code, { push = true, pushed } = {}) {
   /* 모달 검색으로 갈아탈 때는 앞 모달의 것을 이어받는다(`pushed`) — 주소는 갈아 끼웠으므로
      닫으면 한 번에 홈으로 돌아간다 (2026-10-14 · 모달 종목 검색) */
   const pushedHere = pushed ?? push;
-  if (push) history.pushState({ stock: code }, '', `?code=${code}`);
 
-  switchingStock = true;
-  const { body } = openModal({
-    label: `${stock.name} 종목 정보`,
-    closeButton: false,   // 닫기는 머리(.kh-head)에 제 것이 있다
-    /* 양옆 서랍. 처음에는 접혀 있고, 한 번 펼치면 기억한다 (2026-09-16 지시).
-       key 는 펼친 상태를 적어 두는 이름이라 화면 글자와 따로 둔다 —
-       이름을 바꿔도 펼쳐둔 것이 풀리지 않는다. */
-    /* **이름만 바꾼다. `key` 는 그대로 둔다** — 펼쳐둔 것을 적어 두는
-       이름이라, 바꾸면 재권님이 펼쳐 두신 것이 접힌 채로 돌아온다.
-       서랍에 무엇이 드는지는 `css/modal.css` 의 자리 이름이 정한다
-       (2026-09-22 지시로 양쪽 내용이 바뀌었다). */
-    drawers: {
-      left:  { key: 'stock-memo', label: '투자 지표 · 체결' },
-      right: { key: 'stock-news', label: '투자자 정보 · AI 분석 · 종목 뉴스' },
+  await openStockModalPart(code, {
+    stock,
+    price: rowPrices[code] || null,
+    beforeShow() {
+      if (push) history.pushState({ stock: code }, '', `?code=${code}`);
     },
-    onToggle() {
-      /* 모달 폭이 바뀌었으니 차트도 다시 재야 한다. 캔버스는 CSS 로 늘어나지
-         않아서, 이 줄이 없으면 차트만 옛 폭으로 남는다. */
-      if (stockModal) stockModal.view.resize();
-    },
-    onClose() {
-      if (stockModal && stockModal.code === code) {
-        if (stockModal.search) stockModal.search.destroy();   // 후보 목록은 body 에 붙어 있다
-        stockModal.view.destroy();
-        stockModal = null;
-      }
-
-      /* 갈아타는 중이면 주소는 새 모달이 들고 있다. 여기서 건드리면 안 된다 */
-      if (switchingStock) return;
+    onClose({ switching }) {
+      /* 갈아타는 중이면 주소는 새 모달이 들고 있다. 여기서 건드리면 안 된다 —
+         곧 그 모달이 닫히면서 한 번 더 온다 */
+      if (switching) return;
 
       /* **모달에서 기간이나 자리를 바꿨으면 카드가 따라간다** (2026-09-29 지시 —
          「캔들갯수등도 조절하면 모델에 그대로 적용되야해」). 값은 `chart.js`
          한 곳에 있으므로 **다시 그리기만 하면 된다.**
 
-         떠 있는 모달이 새로 열리는 중(`switchingStock`)이면 건너뛴다 —
-         곧 그 모달이 닫히면서 한 번 더 온다.
-
          ⚠️ **기간을 먼저 읽는다.** `paintBigPeriods()` 가 `bigPeriod` 를 보고
          단추를 그리는데, `paintBigChart()` 안에서 갱신되므로 순서를 바꾸면
-         **단추만 옛 기간으로 남는다** (2026-09-29 실측 — 모달에서 일봉으로
-         바꾸고 닫았는데 카드 단추가 월봉이었다). */
+         **단추만 옛 기간으로 남는다** (2026-09-29 실측). */
       bigPeriod = loadPeriodId(bigPeriod);
       paintBigPeriods();
       /* **캐시를 건너뛰고 즉시 한 번 받는다** (2026-09-30 지시 — 「5번」).
-         모달을 보는 동안 카드 차트는 안 그려지는데, 그냥 부르면 캔들 캐시
-         (60초)에 걸려 **최대 1분 옛 그림**이 남는다. 닫는 순간 한 번이라
-         총량은 거의 안 는다. */
+         그냥 부르면 캔들 캐시(60초)에 걸려 **최대 1분 옛 그림**이 남는다. */
       paintBigChart({ fresh: true });
 
       /* 뒤로가기로 닫힌 것이면 히스토리도 주소도 이미 제자리다 */
@@ -3576,49 +3593,13 @@ async function openStockModal(code, { push = true, pushed } = {}) {
         /* 목록에서 연 것이다. 되돌아갈 자리가 있다 */
         history.back();
       } else {
-        /* 주소로 바로 들어왔거나 뒤로가기로 열린 것이다. 되돌아갈 자리가
-           없으므로 back() 하면 **모달이 아니라 페이지를 떠난다.**
+        /* 주소로 바로 들어왔거나 뒤로가기로 열린 것이다. back() 하면 **페이지를 떠난다.**
            주소에서 ?code= 만 턴다 — 안 그러면 새로고침 때 또 열린다. */
         dropCodeFromUrl();
       }
     },
-  });
-  switchingStock = false;
-
-  body.appendChild(main);
-  addModalActions(main, code);
-  const search = addModalSearch(main, code, pushedHere);
-
-  const view = mountStockView(main, stock, { onBack: closeModal, view: 'modal' });
-  stockModal = { code, view, search };
-  view.paint(rowPrices[code] || null);
-}
-
-/* 머리 오른쪽에 「전체 화면」과 닫기를 붙인다. stock.html 에는 없는 것이라
-   — 그 화면은 이미 전체 화면이다 — 모달에서만 더한다. */
-function addModalActions(main, code) {
-  const top = main.querySelector('.kh-head-top');
-  if (!top || top.querySelector('.kh-head-act')) return;
-  const act = document.createElement('div');
-  act.className = 'kh-head-act';
-  act.innerHTML = `
-    <button class="kh-modal-x" data-tip="닫기 (Esc)" aria-label="닫기">✕</button>`;
-  act.querySelector('.kh-modal-x').addEventListener('click', closeModal);
-  top.appendChild(act);
-}
-
-/* 머리 왼쪽 종목 이름 옆에 종목 검색 (2026-10-14 지시 — 「차트 모달창에서 종목검색 넣어주고 검색된 종목 모달로
-   이동되도록 해줘」 · 「넓은폭은 삼성전자 이름 옆으로 가까우면 좋을거 같아 오른쪽보다는 왼쪽으로」).
-   부품 · 목록 · API 는 갈래 줄 검색과 같다. 고르면 **갈래 줄과 같은 길**(큰 차트 · 패널이 그 종목)을 가고
-   모달도 그 종목으로 갈아탄다. 주소는 쌓지 않고 갈아 끼운다 — 쌓으면 닫을 때 popstate 가 앞 종목 모달을
-   다시 연다. 좁은 폭은 돋보기만 ✕ 옆에 둔다(css/modal.css). */
-function addModalSearch(main, code, pushedHere) {
-  const top = main.querySelector('.kh-head-top');
-  const act = top && top.querySelector('.kh-head-act');
-  if (!act) return null;
-  const slot = document.createElement('span');
-  top.insertBefore(slot, act);
-  const search = mountStockSearch(slot, {
+    /* 모달 안 검색으로 고르면 **갈래 줄과 같은 길**(큰 차트 · 패널이 그 종목)을 가고 모달도 그 종목으로 갈아탄다.
+       주소는 쌓지 않고 갈아 끼운다 — 쌓으면 닫을 때 popstate 가 앞 종목 모달을 다시 연다 (2026-10-14) */
     onPick(next, name) {
       if (!findStock(next)) addExtraStock(next, name || next);
       selectStock(next);
@@ -3628,9 +3609,6 @@ function addModalSearch(main, code, pushedHere) {
       openStockModal(next, { push: false, pushed: pushedHere });
     },
   });
-  /* 칸 안의 Esc 는 목록만 닫는다 — 문서까지 가면 모달이 통째로 닫힌다(components/modal.js) */
-  if (search) search.input.addEventListener('keydown', (e) => { if (e.key === 'Escape') e.stopPropagation(); });
-  return search;
 }
 
 /* 뒤로가기로도 닫힌다. 주소를 복사해 두면 그 종목이 열린 채로 뜬다. */
@@ -3790,6 +3768,7 @@ if (keptPrices) paintBigPrice();
 
 /* 순위표 목록을 받아 200줄을 깐다. 시세는 보이는 줄부터 채워진다.
    목록을 못 받으면 관심종목으로 물러선다 (rowList 안에서 처리). */
+loadChipRules();   // 칩 문턱(현재상승) — 서버 표 한 곳 · 못 받으면 「서버 값 못 받음」
 loadUniverse().then(() => {
   /* 기억해 둔 종목이 지금 목록에 없으면(상장폐지·순위 밖) 맨 위로 물러선다.
      처음 켠 것도 같은 길로 간다 — keptStock 이 null 이면 findStock 도 null 이다. */
@@ -3806,7 +3785,7 @@ loadUniverse().then(() => {
   /* 큰 차트로 보고 있는 종목은 **체결마다** 머리 가격 · 끝 봉을 움직인다 (2026-11-05 재권님 「내가 보고있는 차트와 차트모달은 캔들 움직임이
      빠르게」 → (나) 실시간 체결). 지도가 차트를 덮고 있거나 모달이 열려 있으면 쉰다 — 모달은 자기 종목을 따로 지켜본다(stock-view.js).
      서버에 실시간이 없으면(꺼짐) watchLive 가 아무것도 안 한다 — 아래 묶음 시세가 전처럼 2초마다 움직인다 */
-  watchLive(() => ((heatmapView && heatmapView.market) || stockModal ? null : selectedCode), () => {
+  watchLive(() => ((heatmapView && heatmapView.market) || currentStockModal() ? null : selectedCode), () => {
     if (!selectedCode) return;
     rowPrices = { ...rowPrices, [selectedCode]: withLive(selectedCode, rowPrices[selectedCode]) };
     paintBigPrice();

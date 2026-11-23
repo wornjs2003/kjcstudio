@@ -79,8 +79,8 @@ function table(J) {
   const rows = [
     ['<a href="#c-yes-trend">추세</a>', `12개월 수익률 <b>${pct(J.r12)}</b>`, fin(J.r12) ? (J.r12 > 0 ? pill('ok', '좋다') : pill('half', '나쁘다')) : '—', '12개월 수익률이 플러스면 좋다 · 마이너스면 나쁘다(Moskowitz 외 2012)'],
     ['<a href="#c-yes-ma">이동평균</a>', `종가 ${n0(J.last.c)}원 · 200일선 ${n0(J.m200)}원 <b>${pct((J.last.c / J.m200 - 1) * 100)}</b>`, fin(J.m200) ? (J.last.c > J.m200 ? pill('ok', '좋다') : pill('half', '나쁘다')) : '—', '종가가 200일선 위면 좋다 · 아래면 나쁘다(Brock 외 1992)'],
-    ['<a href="#c-yes-high">52주 고점</a>', `고점 대비 <b>${pct(J.toHi)}</b>`, UNDECIDED, '고점에 가까울수록 더 갔다(George · Hwang 2004) — 몇 % 안을 「가깝다」 로 볼지 기준이 없다'],
-    ['<a href="#c-yes-vol">거래량</a>', `최근 5일 평균 ÷ 20일 평균 <b>${fin(J.vr) ? J.vr.toFixed(2) + '배' : '—'}</b> · 5일 등락 ${pct(J.r5)}`, UNDECIDED, '돌파에 거래량이 붙었나 본다 · 거래량 몰린 상승은 되돌림이 빠르다(Lee · Swaminathan 2000) — 몇 배를 「붙었다」 로 볼지 기준이 없다'],
+    ['<a href="#c-yes-high">52주 고점</a>', `고점 대비 <b>${pct(J.toHi)}</b>`, UNDECIDED, '고점에 가까울수록 더 갔다(George · Hwang 2004) — 「가깝다」 로 볼 % 는 아직 안 정함'],
+    ['<a href="#c-yes-vol">거래량</a>', `최근 5일 평균 ÷ 20일 평균 <b>${fin(J.vr) ? J.vr.toFixed(2) + '배' : '—'}</b> · 5일 등락 ${pct(J.r5)}`, UNDECIDED, '돌파에 거래량이 붙었나 본다 · 거래량 몰린 상승은 되돌림이 빠르다(Lee · Swaminathan 2000) — 「붙었다」 로 볼 배수는 아직 안 정함'],
   ];
   return `<tr><th>근거</th><th>이 종목 값</th><th>판정</th><th>기준 · 논문</th></tr>` + rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('');
 }

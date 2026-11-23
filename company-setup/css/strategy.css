@@ -127,8 +127,8 @@
 .dt .dt-days small { margin-left: 4px; font-weight: 600; }
 .dt .dt-cap { margin: 0 0 8px; }
 .dt .dt-foot { margin: 8px 0 0; }
-.dt .dt-box { height: 640px; overflow: auto; }
-.dt .dt-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; color: var(--kh-text-secondary); }   /* 쌓인 날 없음 — 빈 칸 가운데 크게 */
+.dt .dt-box { max-height: min(1320px, calc((100dvh - var(--nav-height, 0px)) / var(--kh-z, 1))); overflow: auto; }   /* 창에 다 들어가게 — 메뉴 줄 아래 보이는 높이를 넘지 않아 아래 가로 스크롤 막대까지 한 화면에 보임 · 넘치면 칸 안에서 세로 · 가로 스크롤(11-20 16:1x 재권님 「해상도에 단타창이 다 들어가게끔 해서 세로든 가로든 스크롤도 있어야 할거같아」 · 1920×1080 창에서 1320 칸이 창보다 길어 가로 막대가 화면 밖이었음) · 창 맞춤 줄임(--kh-z)이 돌면 그만큼 되돌려 셈 · 높이는 종목 10개까지 — 적으면 종목 수만큼 줄고 넘으면 이 높이에서 스크롤(11-20 15:59 재권님 「단타 창이 최대 10개가 소팅되고 그 이하면 거기에 맞게 세로 높이가 조절되게 해줘」 · 거르기 꼴이라 줄어드는 것이 맞다 · 아래 섹터수급 칸이 따라 올라옴) · 1320 = 종목 10개가 스크롤 없이 보이게(11-20 재권님 「단타칸 10종목이 보이게 세로로 늘려줘」) — 한 종목 두 줄이 된 뒤(같은 날) 「응 높여」로 880 → 1240 · 시각 칸 % 아래 수급 한 줄(시황분석1 525d3fd · 한 종목 81 → 99 · qa 잼)로 「가」(15:1x)에 1240 → 1320 · 잰 값(헤드리스 재권님 창) 첫 종목 위까지 253 · 한 종목 80(칩 점만) ~ 94(칩 이름 + 시각) · 10 × 94(수급 줄 뒤 99) + 평균 · 진행 중 줄 + 가로 막대 자리 */
+.dt .dt-empty { min-height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; color: var(--kh-text-secondary); }   /* 쌓인 날 없음 — 빈 칸 가운데 크게 · 칸 높이가 내용만큼이 된 뒤(11-20) 빈 칸 자리는 이 높이 */
 .dt .dt-empty b { font-size: 20px; color: var(--kh-text-primary); }
 .dt table.dt-tb { width: 100%; border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
 .dt .dt-tb th { position: sticky; top: 0; z-index: 2; background: var(--kh-bg-card); font-size: 12px; font-weight: 600; color: var(--kh-text-muted); }
@@ -298,3 +298,44 @@
 .dt .sf-tb thead tr.sf-grp th { height: 30px; box-sizing: border-box; }
 .dt .sf-tb thead tr:nth-child(2) th { top: 30px; }   /* 첫 머리 줄 높이(30)와 같게 — 스크롤 때 안 겹침(qa) */
 .dt .sf .sf-meta { flex: none; margin-bottom: 6px; }
+
+/* 한 종목 두 줄(11-20 재권님 「한진칼에 대한 칩들이 다 있고 그아래줄을 추가해서 매수에 대한 오른쪽 줄이 다 있는걸」 → 그림에 「응 맞아」) — 넓은 폭 표만 · 자리 맞춤은 strategy-dt30.js fit2row
+   윗줄 = 시가총액 ~ 칩 상자(칸마다 같은 폭) · 아랫줄 = 매수가 ~ 손익 · 종목마다 바탕 번갈아 · 종목 사이 굵은 선 · 두 줄 사이 점선 */
+.dt .dt-2row .dt-tw { padding: 0; text-align: left; }
+.dt .dt-2row .dt-fx { position: sticky; left: var(--dt-fx-l, 0px); display: flex; align-items: center; width: max-content; }
+.dt .dt-2row .dt-bx { flex: none; box-sizing: border-box; padding: 2px 6px; text-align: center; white-space: nowrap; font-size: 12px; }
+.dt .dt-2row th .dt-bx { font-weight: 600; color: var(--kh-text-muted); }
+.dt .dt-2row td .dt-bx:first-child { text-align: right; }
+.dt .dt-2row .dt-bx.dt-sec { text-align: left; color: var(--kh-text-secondary); }
+.dt .dt-2row th.dt-chc, .dt .dt-2row .dt-bx.dt-chc { padding: 4px 6px; }
+.dt .dt-2row .dt-bx.dt-chc .dt-cg { display: inline-flex; flex-direction: row; align-items: flex-start; gap: 8px; }
+.dt .dt-2row th .dt-bx.dt-chc .dt-cg { flex-direction: column; align-items: center; gap: 3px; }
+.dt .dt-2row th .dt-bx.dt-chc .dt-mc { font-size: 12px; padding: 2px 8px; }
+.dt .dt-2row th .dt-bx.dt-chc .dt-subs { display: flex; gap: 3px; }
+.dt .dt-2row th .dt-bx.dt-chc small { display: block; font-size: 10.5px; font-weight: 500; margin-top: 2px; }
+.dt .dt-2row .dt-bx.dt-chc.is-off { opacity: .38; }
+.dt .dt-2row .dt-chg { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; }   /* 칩 이름 알약 · 그 아래 들어온 시각(「옆으로 시간쓰지말고 아래로」) */
+.dt .dt-2row .dt-chg .dt-chs { border: 1px solid var(--c); background: var(--cd); border-radius: 999px; padding: 0 7px; line-height: 1.5; }
+.dt .dt-2row .dt-chg small, .dt .dt-2row .dt-vt { display: block; font-size: 10.5px; font-weight: 500; line-height: 1.2; color: var(--kh-text-secondary); }
+.dt .dt-2row tr.dt-up > td.dt-tw { padding: 3px 0 1px; border-bottom: 1px dashed var(--kh-border); }
+.dt .dt-2row tr.dt-up > td { border-top: 2px solid var(--kh-border); }
+.dt .dt-2row tr.dt-dn > td { padding-top: 3px; padding-bottom: 4px; }
+.dt .dt-2row tr.dt-up > td.dt-rk, .dt .dt-2row tr.dt-up > td.st-name { vertical-align: middle; }
+.dt .dt-2row .st-name { max-width: none; }
+.dt .dt-2row td.st-name .dt-code { display: block; font-size: 11px; color: var(--kh-text-muted); }
+.dt .dt-2row .dt-ovm { display: block; font-size: 10.5px; font-weight: 500; color: var(--kh-text-muted); }
+/* 겹침 배지 — 수마다 색(재권님 「5개 빨강 4개 보라 3개 노랑」 · 그 밖 회색) */
+.dt .dt-ovb { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; vertical-align: 1px; color: var(--kh-text-secondary); background: var(--kh-bg); border: 1px solid var(--kh-border-strong); }
+.dt .dt-ovb[data-n="5"] { color: var(--kh-danger); background: var(--kh-danger-faint); border-color: var(--kh-danger); }
+.dt .dt-ovb[data-n="4"] { color: var(--kh-cat-violet); background: var(--kh-cat-violet-dim); border-color: var(--kh-cat-violet); }
+.dt .dt-ovb[data-n="3"] { color: var(--kh-cat-amber); background: var(--kh-cat-amber-dim); border-color: var(--kh-cat-amber); }
+/* 옆으로 밀 때 붙는 칸 — 순번 ~ 들어온 가격 · 결과 ~ 손익(「든시각 옆에서 2시까지가 가로로 스크롤」) · 자리는 fit2row 가 잼 */
+.dt .dt-2row .dt-sl, .dt .dt-2row .dt-sr { --dt-cb: var(--kh-bg-card); position: sticky; z-index: 1; background: var(--dt-cb); }
+.dt .dt-2row th.dt-sl, .dt .dt-2row th.dt-sr { z-index: 4; }
+.dt .dt-2row tr.dt-z > td:not(.dt-sold):not(.dt-after) { --dt-cb: var(--kh-bg); background: var(--dt-cb); }
+.dt .dt-2row tr.dt-avg > td { --dt-cb: var(--kh-bg); background: var(--dt-cb); }
+/* 붙은 칸 사이 틈 메우기(11-20 15:59 재권님 「해상도를 낮춰서 스크롤이 생겼을때 … 왼쪽이랑 2시이후칸에 아래로 숫자가 스크롤되서 보이는 현상」) —
+   붙는 자리를 잰 값이 소수점이라(작은 창은 통째로 줄임) 칸 사이에 1px 안팎 틈이 나 밀린 시각 칸 숫자가 비쳤다 · 제 바탕색 그림자로 바깥쪽 2px 을 덮음 */
+.dt .dt-2row .dt-sl { box-shadow: 2px 0 0 0 var(--dt-cb); }
+.dt .dt-2row .dt-sr { box-shadow: -2px 0 0 0 var(--dt-cb); }
+.dt .dt-2row td.dt-sold, .dt .dt-2row td.dt-after { --dt-cb: var(--kh-bg); }   /* 판 시각 · 판 뒤 칸은 회색 바탕 — 그림자도 같은 색 */

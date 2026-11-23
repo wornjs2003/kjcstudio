@@ -77,6 +77,7 @@ async function save(el) {
 
 // ── 오늘 이 룰에 걸린 종목 ──
 const awBox = document.getElementById('aw'), awCap = document.getElementById('aw-cap'), awHow = document.getElementById('aw-how');
+if (awBox) awBox.classList.add('wheel-stop');   // 칸 끝에서 휠이 화면으로 안 넘어감 — 값은 common.css 한 곳(「휠은 마우스가 올라간 칸이 받는다」 4번 · 11-20 재권님 「가」) · strategy.html 은 같은 폴더 다른 일 미커밋이라 여기서 담
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const num = (x, d = 0) => (x == null || !Number.isFinite(Number(x)) ? '—' : Number(x).toLocaleString('ko-KR', { minimumFractionDigits: d, maximumFractionDigits: d }));
 const pctTxt = (x) => { if (x == null || !Number.isFinite(Number(x))) return '—'; const c = signClass(Number(x), NUM); const t = `${x > 0 ? '+' : ''}${num(x, 2)}%`; return c ? `<span class="${c}">${t}</span>` : t; };

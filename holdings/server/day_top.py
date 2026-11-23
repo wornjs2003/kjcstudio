@@ -7,7 +7,7 @@
 중요한지 데이터가 필요해」(작업우선순위 경유) → 안 「응」(개발1 창 16:2x). 화면은 Insight 종목 기록(시황분석1)이 읽는다.
 
     대상      auto_watch_day 의 그날 판(15:41 · KRX 종가 · 코스피 시총 상위 200 · 코스닥 150 중 주권만 — ETF 는 이미 빠짐) 중
-              시가총액 MIN_CAP_EOK 억원 이상 — 시가총액은 감시 목록(dart.universe_rows)의 market_cap(억원)
+              시가총액 min_cap_eok() 억원 이상 — 시가총액은 감시 목록(dart.universe_rows)의 market_cap(억원)
               **전부 남긴다**(상위만이 아니다) — 「좋은 종목 찾기」 는 걸린 것 · 안 걸린 것을 함께 봐야 해서다. 등락률 차례는 rank
     값        pct(KRX 종가 등락률) · close · vol · value(종가 × 거래량 · 어림) · cap · sector(WICS · company_profile)
     필터      종목마다 걸린 것과 그 시각(filters: {이름: "HH:MM" 또는 ""})
@@ -35,14 +35,23 @@ from datetime import datetime, timedelta, timezone
 import dart            # 시가총액 문턱(UNIVERSE_MIN_CAP_EOK) 한 곳 — 모듈을 읽을 때 쓴다
 
 KST = timezone(timedelta(hours=9))
-MIN_CAP_EOK = dart.UNIVERSE_MIN_CAP_EOK   # 시가총액 문턱(억원) — 대상 목록 문턱 그대로(한 곳 · 개념정의 검수 11-12) · 재권님 「시가통액 5천억이상」 → 「3천억으로 통일해」 → 「오전에 3천억이라고 한거 5천억으로 바꿔」(11-12)
+def min_cap_eok():
+    """시가총액 문턱(억원) — dart.rank_min_cap_eok() 한 곳(11-20 칩 룰 표)."""
+    return dart.rank_min_cap_eok()
+
+
 TOP_N = 40                    # 주소가 기본으로 내는 줄 수
 VOL_PREV_X = 2.0              # 「거래량 전날 2배」 시험 기준
 SAVE_AT = (16, 10)            # flow_rank 확정치 쌓기(15:45) · 「매수」 판 굳기를 기다린 뒤
 SAVE_LATE = (17, 30)          # 「매수」 판이 안 굳어도 이 시각엔 남긴다(그때 meta.jointFrozen false)
 TICK = 60
 DAYS_MAX = 120
-OV_FROM = ("관심", "프리장", "VI·급등", "매수", "초반상승", "수급")   # 단타 셈 — 화면 home.js OV_CHIPS 와 같은 뜻(장외 빼고)
+def ov_from():
+    """단타 셈 칩 — 칩 룰 표(chip_rules 단타.ovChips)에서 「장외」 뺀 것(11-20)."""
+    import chip_rules
+    return tuple(c for c in chip_rules.get("단타", "ovChips") if c != "장외")
+
+
 
 PICK_AT = "15:41"               # 수급 · 거래량전날2배 시각 — auto_watch_day 그날 판이 굳는 때(SAVE_AT 과 다르다)
 _SCHEMA = "CREATE TABLE IF NOT EXISTS day_top (day TEXT PRIMARY KEY, saved_at TEXT, board TEXT NOT NULL)"
@@ -131,10 +140,10 @@ def build(proxy, day):
     rows = []
     for code, (c, name, idx, close, pct, vol) in today.items():
         cp = cap.get(code)
-        if pct is None or cp is None or cp < MIN_CAP_EOK:
+        if pct is None or cp is None or cp < min_cap_eok():
             continue
         f = dict(hit.get(code) or {})
-        ov = [k for k in OV_FROM if k in f or (k == "VI·급등" and ("VI" in f or "급등" in f))
+        ov = [k for k in ov_from() if k in f or (k == "VI·급등" and ("VI" in f or "급등" in f))
               or (k == "매수" and any(x.startswith("매수") for x in f))]
         if len(ov) >= 2:
             f["단타"] = ""
@@ -148,7 +157,7 @@ def build(proxy, day):
     stats = [{"name": n, "top": sum(1 for r in top if n in r["filters"]), "all": sum(1 for r in rows if n in r["filters"])} for n in names]
     stats.sort(key=lambda s: (-s["top"], -s["all"]))
     return {"day": day, "rows": rows, "filterStats": stats,
-            "meta": {"universe": len(rows), "topN": TOP_N, "minCapEok": MIN_CAP_EOK, "prevDay": pd, "volPrevX": VOL_PREV_X,
+            "meta": {"universe": len(rows), "topN": TOP_N, "minCapEok": min_cap_eok(), "prevDay": pd, "volPrevX": VOL_PREV_X,
                      "jointFrozen": bool(proxy._joint_buy.get("frozen")), "rise": rise_meta,
                      "note": "pct KRX 종가 등락률 · cap 억원 · value 종가 × 거래량(어림 · 원) · filters 값은 처음 걸린 시각(없으면 빈칸) · "
                              "장외는 안 셈 · next 는 다음 거래일 종가 등락률(부를 때 붙임)"}}

@@ -1,7 +1,7 @@
 ---
 name: chart-work
 description: 차트 화면 코드를 고칠 때 반드시 읽는다. holdings/js/chart.js 와 그것을 거는 파일(지표 · 기간 · 매물대 · 세로 범위 · 칸 나눔)을 손대는 일, 연기 검사(check-chart.py)가 띠나 칸 수 변화를 냈을 때 그것이 설계인지 고장인지 가르는 절차가 여기 있다.
-when_to_use: 차트 · chart.js · 지표 · 이동평균 · 볼린저 · RSI · MACD · 매물대 · vp · 세로 범위 · 세로가 움직임 · kh-scale-warn · kh-align-warn · checkScale · lockPriceRange · check-chart · 5분봉 · 일봉 · 봉 높이 가 나올 때 — **화면(chart.js 와 그것을 거는 파일)을 고칠 때만이다.** 5분봉 · 일봉을 받는 서버 일(holdings/server/)은 해당이 아니다. 차트 색만 바꾸는 일은 check-theme-sync 도 함께 본다. 검수하는 쪽은 개념정의의 검수 스킬을 본다 — 판정 질문은 같다.
+when_to_use: 차트 · chart.js · 지표 · 이동평균 · 볼린저 · RSI · MACD · 매물대 · vp · 세로 범위 · 세로가 움직임 · kh-scale-warn · kh-align-warn · checkScale · lockPriceRange · check-chart · 5분봉 · 일봉 · 봉 높이 가 나올 때 — **화면(chart.js 와 그것을 거는 파일)을 고칠 때만이다.** 5분봉 · 일봉을 받는 서버 일(holdings/server/)은 해당이 아니다. 차트 색만 바꾸는 일은 check-theme-sync 도 함께 본다. 검수하는 쪽은 chart-review 를 본다 — 판정 질문은 같다.
 ---
 
 # 차트 작업 절차 (2026-10-03 · 재권님 「응 해줘」)

@@ -6,11 +6,11 @@
 개발2 에 배분(18:15) → 안에 「시가총액순이 아니고 칩이 많이 걸린순으로 해줘」 · 「칩이 많이 걸리고 등락이 높고 시총이 높은순」(18:1x) → 「단타칩에 걸리는 우선순위 소팅하는룰 체크해서 그룰대로 하면되」 → 「칩수가 많은순 초반상승이높은순 시총순 이렇게 해서 올려」(19:1x).
 화면은 Insight 「종목 고르는 룰」(company-setup/js/strategy-dt30.js · 시황분석1)이 읽는다.
 
-    단타       아래 OV_CHIPS 중 **하나라도** 든 종목(재권님 18:5x 「100개까지」 — 홈 「단타」 는 둘 이상 · 화면이 칩을 끄고 켜며 다시 셈).
-               칩 재료는 홈과 같다(holdings/js/home.js 의 OV_CHIPS · ovList).
+    단타       아래 ov_chips() 중 **하나라도** 든 종목(재권님 18:5x 「100개까지」 — 홈 「단타」 는 둘 이상 · 화면이 칩을 끄고 켜며 다시 셈).
+               칩 재료는 홈과 같다(holdings/js/home.js 의 OV_CHIPS · ovList — 칩 목록은 둘 다 칩 룰 표 한 곳).
                재료는 화면이 받는 서버 값 그대로 — 관심 · 수급(watchlist 문서 · 자동 묶음이 수급) · 프리장(pre_flow) · VI·급등(intraday_alerts) ·
                매수(「매수」 판 rows 전부) · 초반상승(open_rise) · 장외(순위 목록 시세의 regPct > 0 · 11-18 더함 — 서버가 평일 07:30~15:30 비워 아침 판에는 보통 안 든다).
-               관심 · 프리장 · 매수는 시가총액 CAP_MIN_EOK 억원 아래를 뺀다(화면 capBelowMin · 시가총액을 모르면 안 뺀다)
+               관심 · 프리장 · 매수는 시가총액 cap_min_eok() 억원 아래를 뺀다(화면 capBelowMin · 시가총액을 모르면 안 뺀다)
                **화면과 이 파일 두 곳에 셈이 있다** — 값 한 곳으로 모으는 것은 개발1 카드 「관심 아래 칩 룰 값 한 곳」(화면이 서버를 받는 쪽)
     차례       칩 수 많은 순 → 초반상승(첫 5분봉 시가 대비 % · rise) 높은 순 → 시가총액 큰 순 — 상위 TOP_N
                (재권님 19:1x 「칩수가 많은순 초반상승이높은순 시총순 이렇게 해서 올려」 · 초반상승에 안 든 종목은 같은 칩 수 안에서 뒤)
@@ -37,10 +37,10 @@
     저장      market.db dt30(날 · 판 JSON) — 쓰기 되는 서버(8765)만 · 한 번 굳힌 날은 다시 안 굳힌다 · DAYS_KEEP 거래일 넘으면 지운다
     주소      GET /api/kis/dt30?day=YYYYMMDD — day 를 빼면 마지막 날 · meta.days 는 남긴 날(최근 먼저)
 
-하락 뺌    전일 종가 대비 등락률(pct)이 DROP_BELOW_PCT 아래인 종목은 판에 안 넣는다 — 재권님 「단타에 하락인 종목은 필요없어」 →
+하락 뺌    전일 종가 대비 등락률(pct)이 drop_below_pct() 아래인 종목은 판에 안 넣는다 — 재권님 「단타에 하락인 종목은 필요없어」 →
                「거래량 많은 종목중에 하락인건 제외한다는 룰 넣어봐」(11-12) · 09:35 굳히기 전까지 1분마다 다시 셀 때 그때 값으로 넣고 뺀다 ·
                굳힌 뒤 내려간 종목은 그대로 둔다(이미 산 값) · 등락률을 모르면 안 뺀다(못 잼은 하락이 아니다) · 뺀 수는 meta.dropDown
-               판에 들었다가 빠진 종목은 까닭(하락 · 100위 밖으로 밀림 · 칩이 빠짐)과 무관하게 그날 다시 안 넣는다(meta.out) ·
+               판에 들었다가 빠진 종목도 굳히기 전 다시 셀 때 다시 들 수 있다(「다시 안 넣음」 meta.out 은 11-20 없앰 · 빠짐은 meta.gone) ·
                없다가 조건이 맞게 된 종목은 넣는다 — 재권님 「처음 들었다가 빠지면 제외하고 없다가 값이 적용되는 목록은 넣는다」(11-12 11:3x) →
                「밀린건 넣지 않는다로 룰 만들자」(11-13 · qa 가 09:07↔09:32 판에서 다시 든 18 종목 매수가가 바뀐 것을 찾음)
 
@@ -52,6 +52,8 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
+import chip_rules      # 칩 목록 · 문턱 한 곳(11-20)
+import market_hours    # 휴장 셈 · 보관 거래일(KEEP_TRADE_DAYS) 한 곳
 import dart            # 시가총액 문턱(UNIVERSE_MIN_CAP_EOK) 한 곳 — 모듈을 읽을 때 쓴다(dart 는 이 파일을 안 부른다)
 
 KST = timezone(timedelta(hours=9))
@@ -61,9 +63,11 @@ TRACK_FROM = (9, 30)         # 값 적는 첫 시각
 TRACK_TO = (14, 0)           # 값 적는 끝 시각 — 「2시까지」
 TRACK_STEP = 30              # 분 — 「30분 단위로」
 BAR_MIN = 5                  # 5분봉 길이(분)
-BUY_LATE = (10, 30)          # 굳히는 시각 — 재권님 「굳히기는 10시반으로」(11-18 · 안에 「응」 17:0x) · 그 전 「9시 35분에 굳히는걸로」(11-12 09:2x) · BUY_AT 부터 이때까지 판을 다시 세고 이 뒤로는 줄을 안 바꾼다 · 서버가 이 뒤에 뜨면 그날 판은 안 짓는다
+BUY_LATE = (10, 30)          # 굳히는 시각 — 재권님 「굳히기는 10시반으로」(11-18 · 안에 「응」 17:0x) · 그 전 「9시 35분에 굳히는걸로」(11-12 09:2x) · BUY_AT 부터 이때까지 판을 다시 세고 이 뒤로는 줄을 안 바꾼다 · 서버가 이 뒤에 뜨면 그날 판은 안 짓는다 · 늦게 여는 날(수능)에도 10:30 그대로 — 재권님 「가」(11-20 09:0x · 11-19 에 11:30 까지 밀려 판이 바뀐 일)
 OPEN_AT = (9, 0)             # 정규장 첫 값 — 그 전(BUY_AT ~ 09:00)에 든 종목의 매수가는 이 시각 정규장 시가(rows[].buyWait 가 그 표시 · 09:00 뒤 첫 다시 세기에 채움)
-OUT_FROM = (9, 1)            # 「한 번 빠지면 그날 다시 안 넣음」 을 세기 시작하는 때 — 장 전에는 프리장 값이 오가며 줄이 자주 바뀐다(11-18 안 「응」)
+# 「한 번 빠지면 그날 다시 안 넣음」(OUT_FROM 09:01 · meta.out)은 없앴다 — 재권님 「9시 1분 뒤 한 번 빠진 종목은 다시 넣지 않는다 - 이룰없애」
+# (11-20 10:2x · 한미약품이 09:23 하락뺌으로 빠진 뒤 +5% 인데 판에 못 듦). 굳히기 전 다시 셀 때 빠진 종목도 다시 들 수 있다 · 다시 들면 새로 든 줄(매수가는 다시 든 순간 값) ·
+# 빠짐은 meta.gone 에 그대로 쌓인다 · 굳힌 줄(세 번 굳히기)은 그대로 안 빠진다. 옛 판의 meta.out 은 읽지 않는다.
 PRE_WAIT = ("초반상승",)   # 09:00 전에는 값이 날 수 없는 칩 — 못 받음(missing)이 아니라 기다림(meta.wait)
 # 「매수」 는 어림을 08:00 부터 — 재권님 「매수 목록중에 초반에 받을수 있는게 있지않나? 프리장에서」 → 「아니 매수는 그전에 받을수 있는 값 받으라고 했는데」
 # (11-18 17:2x · 시황분석1 경유). 장 전은 프로그램만(early_buy pre) — 외국계 창구는 거래소(J) 창구라 장 전 체결이 없어 오늘 값이 없고 어제 값이 올 수 있다.
@@ -73,15 +77,30 @@ PRE_WAIT = ("초반상승",)   # 09:00 전에는 값이 날 수 없는 칩 — �
 # (11-18 17:2x · 시황분석1 경유). 텔레그램 알림(intraday_alerts)은 정규장만 그대로 — 단타 판만 pre_vi_surge 로 따로 읽는다 · 매수 어림(외국계 창구 · 프로그램)도 안 부른다
 PAST_BUY_AT = (9, 1)         # 지난 날 다시 세기(rebuild)의 기준 시각 — 11-18 전 판 셈 그대로 둔다(지난 날을 10:30 기준으로 다시 세지 않는다 · 지시 밖)
 PAST_LATE = (9, 35)          # 〃 VI·급등 창 끝
-DAYS_KEEP = 30               # 「30일 추적」
-CAP_MIN_EOK = dart.UNIVERSE_MIN_CAP_EOK   # 시가총액 문턱(억원) — 대상 목록 문턱 그대로(한 곳 · 개념정의 검수 11-12) · 화면 RANK_MIN_CAP_EOK 와 같은 값(두 곳 · 위 「화면과 이 파일」) · 3천억 → 5천억 재권님 「응」(11-12)
-NOW_RISE_PCT = 3.0           # 「현재상승」 — 시가 대비 %(화면 NOW_RISE_PCT 와 같은 값 · 칩 이름 적기에만 씀)
-DROP_BELOW_PCT = 0.0         # 하락 뺌 — 전일 종가 대비 이 % 아래는 판에 안 넣는다(0 이면 보합은 남긴다 · 재권님 11-12)
+DAYS_KEEP = market_hours.KEEP_TRADE_DAYS   # 판을 들고 있는 거래일 — 1년(11-20 재권님 「한달로 지정됬지만 1년으로 넓히고 점점 늘려갈수 있다」 · 그 전 30) · 값은 market_hours 한 곳
+# 칩 목록 · 문턱 — 서버 표 한 곳(chip_rules · 룰 문서 rules.chips 가 있으면 그것 · 11-20 개발1 표 · 개발2 받기로) · 부를 때마다 지금 값
+def cap_min_eok():
+    """시가총액 문턱(억원) — dart.rank_min_cap_eok() 한 곳(재권님 「3000으로 통일」 11-20)."""
+    return dart.rank_min_cap_eok()
+
+
+def now_rise_pct():
+    """「현재상승」 — 시가 대비 %(화면도 /api/kis/chip-rules 로 같은 값)."""
+    return chip_rules.get("현재상승", "nowRisePct")
+
+
+def drop_below_pct():
+    """하락 뺌 — 전일 종가 대비 이 % 아래는 판에 안 넣는다(0 이면 보합은 남긴다 · 재권님 11-12)."""
+    return chip_rules.get("단타", "dropBelowPct")
+
+
+def ov_chips():
+    """단타 셈에 드는 칩과 차례(tuple) — 11-18 뒤 판은 「수급」 이 「관심」 으로 합쳐져 안 나온다(지난 날 판에는 남는다)."""
+    return tuple(chip_rules.get("단타", "ovChips"))
 TICK = 20
 NX_AT = (8, 5)               # 다음 날 프리장 값 시각 — 재권님 「이종목들 내일 프리장에 8시 5분에 얼마인지 체크해서 넣어줘 … 어제에 프리장 8시5분 이라고 칸이 있어야 되고」(11-18 16:3x · 시황분석1 창 · 작업우선순위 경유)
 NX_NOW_UNTIL = (8, 20)       # 이때까지는 넥스트레이드 현재가(src 「now」) · 넘으면 그날 08:05 1분봉 종가(src 「1m」)
 NX_SKIP = ((8, 55), (9, 40)) # 1분봉 되찾기를 미루는 때 — 판 굳히기 · 다시 세기(BUY_AT ~ BUY_LATE)에 KIS 몫을 비켜선다
-OV_CHIPS = ("관심", "프리장", "VI·급등", "장외", "매수", "초반상승", "수급")   # 단타 셈에 드는 칩 — 화면 OV_CHIPS 차례 · 11-18 뒤 판은 「수급」 이 「관심」 으로 합쳐져 안 나온다(지난 날 판에는 남는다)
 
 _SCHEMA = "CREATE TABLE IF NOT EXISTS dt30 (day TEXT PRIMARY KEY, saved_at TEXT, board TEXT NOT NULL)"
 _status = {"frozen": None, "error": None}
@@ -96,7 +115,7 @@ _late = {"day": None, "at": 0.0, "min": 0}
 
 def late_min(proxy, now=None, day=None):
     """그날 정규장이 보통 날보다 몇 분 늦게 여나 — 0 보통 · 수능(10:00)이면 60. market_hours 표 한 곳 · 못 읽으면 0(보통 날로 본다) · 5분 둘레로 다시 읽음.
-    늦게 여는 날은 판의 정규장 시각들(OPEN_AT · OUT_FROM · BUY_LATE · 값 적는 시각)을 그만큼 뒤로 민다 —
+    늦게 여는 날은 판의 정규장 시각들(OPEN_AT · 값 적는 시각)을 그만큼 뒤로 민다 — 굳히는 시각(BUY_LATE)은 안 민다(재권님 「가」 11-20 09:0x · 10:30 그대로) —
     재권님 「가로 해줘」(11-19 08:3x · (가) 1시간 미룸 — 매수가 10:00 시가). BUY_AT(판 짓기 08:00) · 지난 날 다시 세기(PAST_*)는 그대로."""
     now = now or _now()
     other = day is not None and day != now.strftime("%Y%m%d")     # 지난 날(다시 세기) — 그날 표를 읽고 캐시는 안 씀
@@ -149,7 +168,11 @@ def chips_now(proxy, cfg, early=True, pre=False):
             mkt.setdefault(c, str(m).upper())
     except Exception:
         pass
-    small = lambda c: cap.get(c) is not None and cap[c] < CAP_MIN_EOK
+    # 시가총액 문턱 — 감시 목록(dart · 3천억 이상 전부)에 없거나 문턱 아래면 칩 종류와 관계없이 뺀다(아래 return 둘 · _cap_keep).
+    # 전에는 「감시 목록에 시총이 있고 문턱 아래」 만 걸러 목록 밖(사실상 3천억 아래) VI·급등 · 매수 어림 종목이 판에 들었다
+    # (11-23 09:13 판 16줄 중 12줄 · 재권님 「단타칩에 3천억 미만인 종목들이 많이 걸려있는데 이거 필터링 안되고 있는건가?」 → 「빼고 굳힌거에도 빠져야돼」)
+    # 감시 목록을 못 읽었으면(빈 표) 거르지 않는다 — 다 빼면 판이 빈다
+    small = lambda c: bool(cap) and (cap.get(c) is None or cap[c] < cap_min_eok())
     hit, missing = {}, []
 
     def put(code, name, chip, sub=None, at=None, px=None):
@@ -197,7 +220,7 @@ def chips_now(proxy, cfg, early=True, pre=False):
             missing.append("매수어림")                 # build 가 meta.early · approx 로
         else:
             missing.append("매수대기")                 # 장 전에 어림을 하나도 못 받음 — build 가 wait 로
-        return hit, missing, cap, mkt
+        return _cap_keep(hit, small), missing, cap, mkt
     try:
         for it in intraday_alerts.today().get("items") or []:
             put(it.get("code"), it.get("name"), "VI·급등", "VI" if it.get("kind") == "vi" else "급등", at=it.get("t"), px=it.get("price"))
@@ -225,6 +248,13 @@ def chips_now(proxy, cfg, early=True, pre=False):
                 hit[r["code"]]["rise"] = r["pct"]          # 첫 5분봉 시가 대비 % — 줄 세우기 둘째 열쇠
     except Exception:
         missing.append("초반상승")
+    try:                                   # 거래량 — 풀린 주식수 대비 · 어제 같은 시각 대비 (server/vol_chip.py · 재권님 11-23 「단타엡에 추가해줘」)
+        import vol_chip
+        vb, _ = vol_chip.hits(proxy, cfg)
+        for r in vb.get("rows") or []:
+            put(r.get("code"), r.get("name"), "거래량급증", "비율" if r["by"] == ["turn"] else "전일" if r["by"] == ["prev"] else "둘 다")
+    except Exception:
+        missing.append("거래량급증")
     try:
         day = _now().strftime("%Y%m%d")
         for it in signal_watch.today_lows(proxy).get("items") or []:
@@ -232,7 +262,31 @@ def chips_now(proxy, cfg, early=True, pre=False):
                 hit[it["code"]]["chips"].add("볼린저")      # 셈에 안 듦 — 이름만 적는다
     except Exception:
         pass
-    return hit, missing, cap, mkt
+    return _cap_keep(hit, small), missing, cap, mkt
+
+
+def _cap_keep(hit, small):
+    return {c: g for c, g in hit.items() if not small(c)}
+
+
+def drop_small(proxy, b):
+    """그날 판(굳힌 줄 포함)에서 시가총액 문턱 밖 종목을 뺀다 — 감시 목록에 없거나 문턱 아래 · 감시 목록을 못 읽으면 안 뺌.
+    뺀 줄은 meta.capDrop [{code, name, at}] 에 남기고 남은 줄 rank 를 다시 1부터 → 뺀 수(재권님 「빼고 굳힌거에도 빠져야돼」 11-23)."""
+    import dart
+    cap = {r["stock_code"]: r["market_cap"] for r in dart.universe_rows(None)}
+    if not cap:
+        return 0
+    lo = cap_min_eok()
+    out = [r for r in b.get("rows") or [] if cap.get(r["code"]) is None or cap[r["code"]] < lo]
+    if not out:
+        return 0
+    at = _now().strftime("%H:%M:%S")
+    b["meta"].setdefault("capDrop", []).extend({"code": r["code"], "name": r.get("name"), "cap": cap.get(r["code"], r.get("cap")), "at": at} for r in out)   # 목록 밖이면 줄의 시총(qa 덧)
+    gone = {r["code"] for r in out}
+    b["rows"] = [r for r in b["rows"] if r["code"] not in gone]
+    for i, r in enumerate(sorted(b["rows"], key=lambda r: r.get("rank") or 1e9)):
+        r["rank"] = i + 1
+    return len(out)
 
 
 def _first_at(g, sub, at, px=None):
@@ -287,7 +341,7 @@ def watch_chips(doc, put, small, merged=True):
     """관심 목록 문서 → 칩.
     merged(오늘 판 · 11-18 뒤) — 자동 관심 룰에 든 종목만 「관심」(하트 종목은 안 씀 · 하위 없음 · 시가총액 문턱은 자동 룰 그대로) —
         재권님 「관심 하트 없애고 자동으로 관심」 · 「응 맞아」(11-18 16:4x · 작업우선순위 경유 · 안에 「응」 17:0x)
-    merged=False(지난 날 다시 세기 · 11-18 전 셈) — 하트 종목은 「관심」(하위 = 든 묶음 이름 · 시가총액 CAP_MIN_EOK 아래 뺌) · 자동 묶음은 「수급」."""
+    merged=False(지난 날 다시 세기 · 11-18 전 셈) — 하트 종목은 「관심」(하위 = 든 묶음 이름 · 시가총액 cap_min_eok() 아래 뺌) · 자동 묶음은 「수급」."""
     if not isinstance(doc, dict):
         raise ValueError("관심 문서 없음")              # 못 읽음을 0 종목으로 두지 않는다(qa 11-11)
     auto = set((doc.get("auto") or {}).keys()) if isinstance(doc.get("auto"), dict) else set()
@@ -327,12 +381,12 @@ def watch_at(day):
     return d.get("data") if isinstance(d, dict) and isinstance(d.get("data"), dict) and "items" not in d else d
 
 
-def chip_rules(proxy, merged=True):
+def rules_meta(proxy, merged=True):   # 이름 — 칩 룰 표 모듈 chip_rules 를 가리지 않게(11-20)
     """화면 룰 표에 내줄 칩 룰 값 — 자동 관심 룰은 auto_watch 룰 문서 한 곳에서 읽는다.
     merged(11-18 뒤 판) — 「관심」 = 자동 관심 룰 · merged=False(지난 날) — 관심은 이 파일 문턱 · 수급 = 자동 관심 룰."""
-    out = {"하락뺌": {"dropBelowPct": DROP_BELOW_PCT}}
+    out = {"하락뺌": {"dropBelowPct": drop_below_pct()}}
     if not merged:
-        out["관심"] = {"capMinEok": CAP_MIN_EOK, "what": "하트 누른 종목 · 하위는 든 묶음 이름 · 자동 묶음은 수급"}
+        out["관심"] = {"capMinEok": cap_min_eok(), "what": "하트 누른 종목 · 하위는 든 묶음 이름 · 자동 묶음은 수급"}
     key = "관심" if merged else "수급"
     try:
         import auto_watch
@@ -484,21 +538,75 @@ def row_score(r, tab, off=0):
     return round(sum(row_score_by(r, tab, off).values()), 4)
 
 
+ORD_KEYS = {                  # 차례 점수 기준 — 룰 문서 rules.dt30.set.ordScore {열쇠: 점수} · 열쇠 이름은 화면(시황분석1 f526d19)과 같게
+    "chips": "칩 수(점수표가 있으면 점수 합)", "rise": "초반상승 %", "cap": "시가총액", "floatCap": "풀린 시총",
+    "turn": "거래 비율", "turnPrev": "거래 비율 전날 같은 시각 대비", "pre": "오늘 프리장 %"}
+
+
+def ord_score():
+    """룰 문서의 차례 점수 {열쇠: 점수} — 0 이 아닌 숫자만 · 비었거나 못 읽으면 None(지금 차례 그대로)."""
+    try:
+        import docstore
+        d = docstore.read_doc("strategy-rules") or {}
+        t = (((d.get("rules") or {}).get("dt30") or {}).get("set") or {}).get("ordScore") or {}
+    except Exception:
+        return None
+    t = {k: float(v) for k, v in t.items() if k in ORD_KEYS and isinstance(v, (int, float)) and not isinstance(v, bool) and v}
+    return t or None
+
+
+def _ord_val(r, k):
+    if k == "chips":
+        return r["score"] if r.get("score") is not None else r.get("n")
+    if k == "turnPrev":
+        return r.get("turnPrevPct")
+    if k == "pre":
+        return (r.get("pre") or {}).get("pct") if isinstance(r.get("pre"), dict) else None
+    return r.get(k)
+
+
+def _ord_total(rows, ws):
+    """종목마다 Σ 점수 × 그 기준의 판 안 순위 0~1(1등 1 · 꼴찌 0 · 값 없음 0 · 값 있는 종목이 하나면 1) — 재권님 「이거를 옆에 점수로 넣을수 있게하고
+    점수가 높은게 순위가 높게 해줘」 → (가)(11-23 09:20 · 시황분석1 창) · 판 안 = 지금 세우는 줄들끼리."""
+    tot = {id(r): 0.0 for r in rows}
+    for k, w in ws.items():
+        vals = [_ord_val(r, k) for r in rows if _ord_val(r, k) is not None]
+        m = len(vals)
+        for r in rows:
+            v = _ord_val(r, k)
+            if v is None:
+                continue
+            i = sum(1 for x in vals if x > v)          # 자기보다 큰 값의 수 — 같은 값끼리는 같은 순위(qa 덧 11-23 · 들어온 차례로 앞이 이기던 것)
+            tot[id(r)] += w * (1.0 if m == 1 else 1 - i / (m - 1))
+    return tot
+
+
 def sort_rows(rows, tab, off=0):
-    """줄 세우기 한 곳 — tab(점수표)이 있으면 점수 합 · 없으면 칩 수. 앞의 것이 같으면 초반상승 → 시가총액. rows 를 제자리에서 세우고 order 글을 낸다."""
+    """줄 세우기 한 곳 — tab(점수표)이 있으면 점수 합 · 없으면 칩 수. 앞의 것이 같으면 초반상승 → 시가총액. rows 를 제자리에서 세우고 order 글을 낸다.
+    룰 문서에 차례 점수(ord_score)가 있으면 그 합이 큰 순이 맨 앞 열쇠 · 같으면 위 차례(ordTotal 을 줄에 적음)."""
     rise = lambda r: -(r["rise"] if r.get("rise") is not None else -1e9)
     cap = lambda r: -(r["cap"] if r.get("cap") is not None else -1)
+    ws = ord_score()
     if tab:
         for r in rows:
             r["scoreBy"] = row_score_by(r, tab, off)
             r["score"] = round(sum(r["scoreBy"].values()), 4)
-        rows.sort(key=lambda r: (-r["score"], rise(r), cap(r)))
-        return "점수 합 큰 순 → 초반상승 높은 순 → 시가총액 순"
+        base, text = (lambda r: (-r["score"], rise(r), cap(r))), "점수 합 큰 순 → 초반상승 높은 순 → 시가총액 순"
+    else:
+        for r in rows:
+            r.pop("score", None)
+            r.pop("scoreBy", None)
+        base, text = (lambda r: (-r["n"], rise(r), cap(r))), "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순"   # 재권님 19:1x
+    if ws:
+        tot = _ord_total(rows, ws)
+        for r in rows:
+            r["ordTotal"] = round(tot[id(r)], 4)
+        rows.sort(key=lambda r: (-r["ordTotal"],) + base(r))
+        return "차례 점수 합 큰 순(%s) → %s" % (" · ".join("%s %g" % (ORD_KEYS[k], w) for k, w in ws.items()), text)
     for r in rows:
-        r.pop("score", None)
-        r.pop("scoreBy", None)
-    rows.sort(key=lambda r: (-r["n"], rise(r), cap(r)))   # 재권님 19:1x
-    return "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순"
+        r.pop("ordTotal", None)
+    rows.sort(key=base)
+    return text
 
 _live = {"at": 0.0, "pre": None, "data": None, "busy": False}
 LIVE_STALE_SEC = 300         # 가진 목록이 이만큼 넘게 묵었으면 바로 내주지 않고 새로 셀 때까지 기다렸다 답한다(초) — 물음이 한동안 없다가 오면
@@ -577,7 +685,7 @@ def _live_calc(proxy, cfg):
     """단타 목록 한 곳 — 지금 걸린 칩(chips_now) · 시세 · 하락 표시 · 차례. 홈 「단타」 와 단타 판(build)이 같이 쓴다
     — 재권님 「홈에 있는 칩을 단타에도 추가해서 동기화하고 한곳에서 받도록 해」(11-18 17:4x) · 「둘이 동기화해서 홈이든 단테든 한곳에 있어야 하는 정본」.
     {"rows": [{code, name, market, cap, sector, chips, subs, n, price, open, pct, rise, down}], "meta": {at, pre, missing, wait, early, approx, earlyNote, candidates, dropBelowPct, capMinEok, order}}
-    rows 는 단타 셈 칩(OV_CHIPS)이 하나 이상 든 종목 전부(하락도 down true 로 남김) · 문턱(둘 이상 · 상위 몇)은 읽는 쪽이 정한다(지금 홈 둘 이상 · 단타 판 하나 이상 · TOP_N)."""
+    rows 는 단타 셈 칩(ov_chips())이 하나 이상 든 종목 전부(하락도 down true 로 남김) · 문턱(둘 이상 · 상위 몇)은 읽는 쪽이 정한다(지금 홈 둘 이상 · 단타 판 하나 이상 · TOP_N)."""
     import company_profile
     now = _now()
     off = late_min(proxy, now)
@@ -596,7 +704,7 @@ def _live_calc(proxy, cfg):
             _live.update(at=time.time(), pre=pre, data=data)
         return data
     hit, missing, cap, mkt = chips_now(proxy, cfg, pre=pre)
-    ov = {c: g for c, g in hit.items() if g["chips"] & set(OV_CHIPS)}
+    ov = {c: g for c, g in hit.items() if g["chips"] & set(ov_chips())}
     prices, _ = proxy.fetch_quotes_multi(cfg, list(ov), max_age=proxy.PRICE_CACHE_TTL) if ov else ({}, {})   # 30종목씩 묶음 · 시세 캐시 함께
     sec = company_profile.sectors()
     out = [c for c in ov if cap.get(c) is None]            # 순위 목록 밖 — 시가총액은 단건 시세(그날 한 번) · 업종은 회사 정보 채우기에 맡긴다(11-19 「응 해줘」)
@@ -608,14 +716,19 @@ def _live_calc(proxy, cfg):
     for code, g in ov.items():
         p = prices.get(code) or {}
         chips = set(g["chips"])
-        if p.get("open") and p.get("price") and (p["price"] / p["open"] - 1) * 100 >= NOW_RISE_PCT:
+        if p.get("open") and p.get("price") and (p["price"] / p["open"] - 1) * 100 >= now_rise_pct():
             chips.add("현재상승")
         rows.append({"code": code, "name": g["name"] or p.get("name") or "", "market": mkt.get(code), "cap": cap.get(code), "sector": sec.get(code),
-                     "chips": [c for c in OV_CHIPS + ("현재상승", "볼린저") if c in chips], "subs": g["subs"], "n": len(chips & set(OV_CHIPS)),
+                     "chips": [c for c in ov_chips() + ("현재상승", "볼린저") if c in chips], "subs": g["subs"], "n": len(chips & set(ov_chips())),
                      "price": p.get("price"), "open": p.get("open"), "pct": p.get("pct"), "rise": g.get("rise"),
                      "viAt": g.get("viAt"), "surgeAt": g.get("surgeAt"),
                      "viPx": {"at": g["viAt"], "px": g.get("viPrice"), "src": "vi"} if g.get("viAt") and g.get("viPrice") else None,
-                     "down": p.get("pct") is not None and p["pct"] < DROP_BELOW_PCT})      # 하락 — 모르면 안 뺀다(재권님 11-12)
+                     "down": p.get("pct") is not None and p["pct"] < drop_below_pct()})      # 하락 — 모르면 안 뺀다(재권님 11-12)
+    try:
+        import turnover
+        turnover.fill(rows, prices, proxy)                     # 풀린 시총 · 거래 비율 — 받은 현재가 · 누적 거래대금 그대로(실시간 · 11-23 재권님)
+    except Exception as e:
+        print("  [거래 비율] 단타 목록 칸 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)   # 칸은 안 붙음(화면은 「못 잼」)
     tab = score_table(proxy)
     order = sort_rows(rows, tab, off)
     early = ["매수"] if "매수어림" in missing else []
@@ -625,9 +738,9 @@ def _live_calc(proxy, cfg):
         "wait": (list(PRE_WAIT) + (["매수"] if "매수대기" in missing else [])) if pre else [],
         "early": early, "approx": list(early),
         "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre and early else None,
-        "candidates": len(ov), "chips": [c for c in OV_CHIPS if c != "수급"], "minChips": min_chips(proxy),   # 수급은 11-18 관심으로 합쳐짐(지난 판에만)
-        "dropBelowPct": DROP_BELOW_PCT, "capMinEok": CAP_MIN_EOK, "watchRule": "자동",
-        "order": order, "score": tab, "scoreConflict": score_conflicts(tab), "ttl": LIVE_TTL}}
+        "candidates": len(ov), "chips": [c for c in ov_chips() if c != "수급"], "minChips": min_chips(proxy),   # 수급은 11-18 관심으로 합쳐짐(지난 판에만)
+        "dropBelowPct": drop_below_pct(), "capMinEok": cap_min_eok(), "watchRule": "자동",
+        "order": order, "score": tab, "scoreConflict": score_conflicts(tab), "ttl": LIVE_TTL, "turnNote": TURN_NOTE}}
     with _live_lock:
         _live.update(at=time.time(), pre=pre, data=data)
     return data
@@ -648,7 +761,8 @@ def build(proxy, cfg, day, skip=()):
         if x["down"]:
             down.append(x["code"])                     # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
             continue
-        r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "viAt", "surgeAt", "viPx")}
+        r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "viAt", "surgeAt", "viPx",
+                                   "floatCap", "turn", "turnPrevPct")}
         r.update(buy=None if pre else x["price"], px={}, pxSrc={},
                  chipAt={c: _now().strftime("%H:%M") for c in x["chips"]})      # 칩마다 판에 처음 붙은 시각(묶음 ② · 다시 세면 앞 시각 그대로)
         if pre:
@@ -663,8 +777,8 @@ def build(proxy, cfg, day, skip=()):
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(off), "rows": rows, "closed": False,
-            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "lateMin": off, "viSplit": vi_split(off), "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": DROP_BELOW_PCT, "rules": chip_rules(proxy), "minChips": mc,
-                     "early": ["매수"] if "매수어림" in missing else [], "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre else None, "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": CAP_MIN_EOK,
+            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "lateMin": off, "lockUntil": "%02d:%02d" % BUY_LATE, "lockDef": ["%02d:%02d" % t for t in LOCK_AT], "viSplit": vi_split(off), "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": drop_below_pct(), "rules": rules_meta(proxy), "minChips": mc,
+                     "early": ["매수"] if "매수어림" in missing else [], "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre else None, "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": cap_min_eok(),
                      "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "buy 는 굳힌 때(buyAt) 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
                              "market KOSPI · KOSDAQ(순위 목록 · 없으면 KIS 종목 마스터 · 둘 다 없으면 null) · cap 억원 · 장외는 09:06 에 비어 안 셈 · 볼린저 · 현재상승은 칩 이름만(셈에 안 듦)"}}
@@ -708,7 +822,7 @@ def patch_late(proxy, cfg, b):
             if r is not None and chip not in r["chips"]:
                 r["chips"].append(chip)
                 r["subs"][chip] = [sub] if sub else []
-        if early_buy(proxy, cfg, [r["code"] for r in b["rows"] if not (r.get("cap") is not None and r["cap"] < CAP_MIN_EOK)], put0) is not None:
+        if early_buy(proxy, cfg, [r["code"] for r in b["rows"] if not (r.get("cap") is not None and r["cap"] < cap_min_eok())], put0) is not None:
             b["meta"]["missing"] = [c for c in b["meta"]["missing"] if c != "매수"]
             b["meta"]["early"] = sorted(set(b["meta"].get("early") or []) | {"매수"})
             ap = b["meta"].setdefault("approx", [])
@@ -726,7 +840,7 @@ def patch_late(proxy, cfg, b):
                 r["chips"] = [c for c in r["chips"] if c != "매수"]
         b["meta"]["early"] = [c for c in b["meta"].get("early") or [] if c != "매수"]
     rows = {r["code"]: r for r in b["rows"]}
-    small = lambda c: rows[c].get("cap") is not None and rows[c]["cap"] < CAP_MIN_EOK
+    small = lambda c: rows[c].get("cap") is not None and rows[c]["cap"] < cap_min_eok()
     for chip, m in got.items():
         for code, (name, sub, rise) in m.items():
             r = rows.get(code)
@@ -739,12 +853,14 @@ def patch_late(proxy, cfg, b):
                 r["subs"].setdefault(chip, [])
                 if sub not in r["subs"][chip]:
                     r["subs"][chip].append(sub)
+                if chip in SUB_KEEP:
+                    r.setdefault("subAt", {}).setdefault(chip, {}).setdefault(sub, _now().strftime("%H:%M:%S"))
             if rise is not None:
                 r["rise"] = rise
-    order = OV_CHIPS + ("현재상승", "볼린저")
+    order = ov_chips() + ("현재상승", "볼린저")
     for r in rows.values():
         r["chips"] = [c for c in order if c in r["chips"]]
-        r["n"] = len(set(r["chips"]) & set(OV_CHIPS))
+        r["n"] = len(set(r["chips"]) & set(ov_chips()))
     out = list(rows.values())
     tab = score_table(proxy)
     off = late_min(proxy)
@@ -776,35 +892,439 @@ RESCAN_SEC = 60               # BUY_AT ~ BUY_LATE 동안 판을 다시 세는 �
 # 09:30 칸은 굳히기 전에 오므로 그 뒤에 든 종목은 그 칸을 09:30 에 끝난 5분봉 종가로 채운다(track).
 
 
+SUB_KEEP = ("매수", "수급")      # 하위가 바뀌어도 앞 하위를 지우지 않는 칩 — 「매수」 ①~④(외국인 · 기관 갈래) · 옛 판 「수급」
+# 재권님 「단타판에 수급칩이 외국인이였다나 외국인 기관으로 바뀌면 둘다 있어야해 수급칩은 각각 다 보이게 해주고 추가된 칩은 추가된 시간도 보여지게 해줘」
+# (11-20 10:0x · 작업우선순위 경유) — rows[].subs[칩] 은 붙은 차례대로 쌓고 · rows[].subAt {칩: {하위: HH:MM:SS}} 에 처음 붙은 시각(칩 자체가 빠지면 하위도 함께 빠짐 · meta.gone)
+
+
+def _sub_keep(r, o, ts):
+    """다시 셀 때 — r(새 셈 줄)의 SUB_KEEP 하위에 o(옛 줄) 하위를 앞에 이어 붙이고 · 새로 붙은 하위에 시각을 적는다."""
+    at = {c: dict(v) for c, v in ((o or {}).get("subAt") or {}).items()}
+    for chip in SUB_KEEP:
+        if chip not in (r.get("chips") or []):
+            continue
+        old = list(((o or {}).get("subs") or {}).get(chip) or []) if o and chip in (o.get("chips") or []) else []
+        new = list((r.get("subs") or {}).get(chip) or [])
+        merged = old + [x for x in new if x not in old]
+        if any(x != "어림" for x in merged):
+            merged = [x for x in merged if x != "어림"]      # 장 전 자리표 「어림」 은 진짜 하위(①~④)가 오면 걷는다(qa 걸림 11-20)
+        r.setdefault("subs", {})[chip] = merged
+        r.setdefault("subNow", {})[chip] = new[-1] if new else None   # 지금 셈의 하위 — subs 는 붙은 차례로 쌓여 끝이 지금 등급이 아니다(qa 덧 11-20 · 현대글로비스 ② → ④)
+        m = at.setdefault(chip, {})
+        if "어림" not in merged:
+            m.pop("어림", None)
+        first = ((o or {}).get("chipAt") or {}).get(chip) if not m else None   # 시각 기록이 아직 없는 칩(새 코드 전에 붙음) — 첫 하위는 칩이 붙은 시각(HH:MM)으로
+        for x in merged:
+            m.setdefault(x, first or ts)
+            first = None
+    r["subAt"] = {c: v for c, v in at.items() if c in (r.get("chips") or []) and v}
+    r["subNow"] = {c: v for c, v in (r.get("subNow") or {}).items() if c in (r.get("chips") or [])}
+
+
+LOCK_AT = ((9, 5), (9, 30), (10, 0))   # 기본 굳힘 시각(셈 칸 rules.dt30.set.lockAt 이 빈 차례 · lock_at() · 재권님 「값이 없으면 9시 5분 9시 30분 10시로 고정되게 하고 값이 있으면 그 값을 오버라이드」 11-20 14:0x) — 세 번 굳히기 — 이 시각마다 굳지 않은 줄 중 순위 위 LOCK_N 개를 굳힌다(lock 1 · 2 · 3)
+LOCK_N = 10
+# 재권님 「단타 목록 9시 5분에 굳히고 상위 10개만 보인다. 그이후로 추가된건 그아래로 추가되고 9시 30분에 10개 굳힌다. 그이후로 추가된건 그아래로
+# 추가되고 10시 30분에 10개 굳힌다」(11-20 08:44) → 새로 다는 10개는 「(가) 그때까지 굳지 않은 종목 전체에서 순위대로」(11-20 10:1x).
+# 굳힌 줄은 그날 빠지지 않고(다시 셀 때 빠져도 되살림 · 빠짐 셈 밖) 차례도 그대로 · 마지막(10:30)은 BUY_LATE 와 같아 그 뒤 판이 안 바뀐다.
+# 늦게 여는 날은 여는 시각만큼 밀되 BUY_LATE(10:30)를 넘지 않는다 — 수능(10:00)이면 10:05 · 10:30 · 10:30(둘째 · 셋째가 한 바퀴에 차례로)
+# (재권님 「나로 해줘」 11-20 10:2x — 「여는 시각만큼 밀어 10:05 · 10:30」 · 마지막은 「가」 굳히기 10:30 그대로). 칸: rows[].lock(1~3) · lockAt · lockRank · meta.lockDone · lockAt · lockN.
+
+
+def _lock_keep(old_rows, nb_rows):
+    """다시 셀 때 — 굳힌 줄이 새 셈에서 빠졌으면 옛 줄 그대로 되살린다. 되살린 수."""
+    have = {r["code"] for r in nb_rows}
+    back = [dict(o) for o in old_rows if o.get("lock") and o["code"] not in have]
+    nb_rows.extend(back)
+    return len(back)
+
+
+def _lock_order(b):
+    """굳힌 줄(lock · lockRank 차례)을 위에 · 나머지는 지금 순위대로 아래 · rank 를 1부터 다시 매긴다."""
+    rows = b.get("rows") or []
+    lk = sorted([r for r in rows if r.get("lock")], key=lambda r: (r["lock"], r.get("lockRank") or 1e9))
+    rest = sorted([r for r in rows if not r.get("lock")], key=lambda r: r.get("rank") or 1e9)
+    b["rows"] = lk + rest
+    for i, r in enumerate(b["rows"], 1):
+        r["rank"] = i
+
+
+def lock_at():
+    """굳히는 시각 셋 — 룰 문서 strategy-rules 의 셈 칸 rules.dt30.set.lockAt(["HH:MM" 또는 null] 셋 · 재권님이 단타 판 매수 칸 「굳힘 시각」 셋에서 정함(화면 시황분석1) ·
+    11-20 「굳힘 시간은 내가 지정하면 바꿀수 있게」 → 「굳힘 시간 3개 넣어야대」). 빈 칸 · 틀린 꼴 · 못 읽음은 그 차례의 LOCK_AT 값. 이른 차례로."""
+    try:
+        import docstore
+        v = ((((docstore.read_doc("strategy-rules") or {}).get("rules") or {}).get("dt30") or {}).get("set") or {}).get("lockAt")
+    except Exception:
+        v = None
+    v = v if isinstance(v, list) else []
+    out = []
+    for i, d in enumerate(LOCK_AT):
+        x = v[i] if i < len(v) else None
+        ok = isinstance(x, str) and re.fullmatch(r"\d\d:\d\d", x) and int(x[:2]) < 24 and int(x[3:5]) < 60
+        out.append((int(x[:2]), int(x[3:5])) if ok else d)
+    return tuple(sorted(out))
+
+
+def _lock_times(b):
+    """그날 굳히는 시각들(분) — lock_at() + 그 판의 lateMin · BUY_LATE 를 넘지 않음."""
+    lm = (b.get("meta") or {}).get("lateMin")
+    lm = lm if isinstance(lm, int) else 0
+    cap = BUY_LATE[0] * 60 + BUY_LATE[1]
+    return [min(h * 60 + m + lm, cap) for h, m in lock_at()]
+
+
+INTRA_LOCK = len(LOCK_AT) + 1  # 「장중」 묶음 — 마지막 굳힘(BUY_LATE) 뒤 칩에 걸린 종목을 매도 시각까지 판에 더함 · 든 때 가격에 산 것
+INTRA_NAME = "장중"            # 재권님 「10시 30분 이후에 걸리는 종목은 10시 30분 옆에 장중 이라고 칸 만들어서 거기에 걸리게 해줘」(11-23 10:3x) → 안에 「응」
+
+
+def intraday_add(proxy, cfg, b, hm):
+    """굳힌 뒤(BUY_LATE 뒤) — 단타 목록(live)에 새로 걸린 종목을 판에 더해 「장중」 묶음으로 → 더한 수.
+    문턱은 그날 판 문턱(min_chips)과 장중 칸 칩 조건(lock_cfg 넷째) 중 큰 쪽 · 하락 뺌 · 장중 칸 수(lock_cfg 넷째)까지 · 매도 시각(dt30_win.end_at · 없으면 SELL_AT) 전까지 ·
+    매수가는 든 그 순간 현재가(_buy_now) · lockTs · buyAt 은 든 때. RESCAN_SEC 마다 한 번."""
+    import dt30_win
+    end = dt30_win.end_at() or dt30_win.SELL_AT
+    if hm >= int(end[:2]) * 60 + int(end[2:]) or time.time() - _status.get("intra", 0) < RESCAN_SEC:
+        return 0
+    _status["intra"] = time.time()
+    cap_n, min_c = (lock_cfg() + [(LOCK_N, 0)] * (INTRA_LOCK))[INTRA_LOCK - 1]
+    have = {r["code"] for r in b.get("rows") or []}
+    room = cap_n - sum(1 for r in b.get("rows") or [] if r.get("lock") == INTRA_LOCK)
+    if room <= 0:
+        return 0
+    floor = max(min_chips(proxy), min_c)
+    new = []
+    for x in live(proxy, cfg)["rows"]:
+        if len(new) >= room:
+            break
+        if x["code"] in have or x["down"] or x["n"] < floor:
+            continue
+        r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "viAt", "surgeAt", "viPx",
+                                   "floatCap", "turn", "turnPrevPct")}
+        r.update(buy=None, px={}, pxSrc={}, chipAt={c: _now().strftime("%H:%M") for c in x["chips"]})
+        new.append(r)
+    if not new:
+        return 0
+    _buy_now(proxy, cfg, new)
+    k0 = max([r.get("lockRank") or 0 for r in b["rows"] if r.get("lock") == INTRA_LOCK] + [0])
+    for k, r in enumerate(new, k0 + 1):
+        ts = r.get("buyTs") or _now().strftime("%H:%M:%S")
+        r.update(lock=INTRA_LOCK, lockAt=INTRA_NAME, lockRank=k, lockTs=ts, buyAt=ts[:5])
+        _sub_keep(r, None, ts)
+    b["rows"].extend(new)
+    b["meta"]["intra"] = {"lock": INTRA_LOCK, "name": INTRA_NAME, "from": "%02d:%02d" % BUY_LATE, "until": "%s:%s" % (end[:2], end[2:]),
+                          "n": cap_n, "minChip": floor}
+    _lock_order(b)
+    return len(new)
+
+
+def lock_cfg():
+    """굳힘마다 (굳힐 종목 수, 칩 몇 개 이상) — 룰 문서 셈 칸 rules.dt30.set.lockNs · lockMinChip(굳힘 차례마다 [첫째, 둘째, 셋째] · null 은 기본).
+    재권님 「각 굳힘 칸별로 사는 금액과 종목 조건 다르게 셋팅할수 잇게 해줘」 → 종목 조건 「다」(굳힐 종목 수 · 칩 몇 개 이상 둘 다 · 11-23 10:34 · 시황분석1 창 · 열쇠는 화면 셈 칸과 같게).
+    기본 — 수는 LOCK_N · 칩 조건 없음(0). 못 읽으면 기본."""
+    try:
+        import docstore
+        S = ((((docstore.read_doc("strategy-rules") or {}).get("rules") or {}).get("dt30") or {}).get("set") or {})
+    except Exception:
+        S = {}
+    num = lambda v, lo: int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= lo else None
+    ns, mc = S.get("lockNs"), S.get("lockMinChip")
+    ns, mc = (ns if isinstance(ns, list) else []), (mc if isinstance(mc, list) else [])
+    out = []
+    for i in range(len(LOCK_AT) + 1):                  # 굳힘 셋 + 「장중」 칸(INTRA_LOCK)
+        n = num(ns[i], 1) if i < len(ns) else None
+        c = num(mc[i], 0) if i < len(mc) else None
+        out.append((n or LOCK_N, c or 0))
+    return out
+
+
+def _in_hms(r):
+    """판에 든 때 「HH:MM:SS」 — buyTs · 없으면 buyAt · 없으면 칩이 처음 붙은 때 · 다 없으면 ''(가장 이름 — 굳힘에서 안 밀림)."""
+    t = str(r.get("buyTs") or "")
+    if re.fullmatch(r"\d\d:\d\d:\d\d", t):
+        return t
+    a = str(r.get("buyAt") or "")
+    if re.fullmatch(r"\d\d:\d\d", a):
+        return a + ":00"
+    c = sorted(v for v in (r.get("chipAt") or {}).values() if isinstance(v, str) and re.fullmatch(r"\d\d:\d\d", v))
+    return c[0] + ":00" if c else ""
+
+
+def lock_fix(b):
+    """굳힘 시각보다 뒤에 든 줄이 그 굳힘에 묶여 있으면 다음 굳힘으로 옮긴다 — 다음 굳힘이 이미 지났으면 그 묶음 끝으로 · 마지막 묶음이면 풂(진행 중).
+    11-23 오늘 판 — 09:05 굳힘이 09:05:55 에 돌아 그 바퀴에 든 이수페타시스가 · 09:30 굳힘이 09:30:37 에 돌아 그 바퀴에 든 일곱이 묶였다(재권님 「그 이후에 든 종목은 9시 30분 굳힘 으로 이동되어야지」 → 「응」).
+    옮긴 줄 수 · 여러 번 불러도 같다."""
+    m = b.get("meta") or {}
+    ats, done = list(m.get("lockAt") or []), set(m.get("lockDone") or [])
+    n = 0
+    for _ in range(len(ats)):
+        moved = 0
+        for r in sorted(b.get("rows") or [], key=lambda x: -(x.get("lock") or 0)):   # 늦은 묶음부터 — 뒤 묶음 자리를 먼저 비워야 앞 묶음 줄이 들어감
+            i = r.get("lock")
+            if not i or i > len(ats) or not ats[i - 1] or _in_hms(r) < ats[i - 1] + ":00":
+                continue
+            j = i + 1
+            grp = [x for x in b["rows"] if x.get("lock") == j and x is not r]
+            cap_n, min_c = (lock_cfg() + [(LOCK_N, 0)] * 3)[j - 1] if j <= len(ats) else (LOCK_N, 0)
+            if j <= len(ats) and j in done and len(grp) < cap_n and (r.get("n") or 0) >= min_c:   # 다음 묶음이 이미 굳었고 자리가 있으면 그 끝으로 — 묶음은 LOCK_N 을 안 넘김(개념정의 덧 11-23)
+                r["lock"], r["lockAt"] = j, ats[j - 1]
+                r["lockRank"] = max([x.get("lockRank") or 0 for x in grp] + [0]) + 1
+                ts = [x.get("lockTs") for x in grp if x.get("lockTs")]
+                if ts:
+                    r["lockTs"] = min(ts)                  # 그 묶음이 실제로 굳힌 때 — 옛 묶음 시각이 남지 않게(개념정의 덧)
+                else:
+                    r.pop("lockTs", None)
+                r["lockMoved"] = "%s → %s" % (ats[i - 1], ats[j - 1])
+            else:
+                for k in ("lock", "lockAt", "lockRank", "lockTs"):
+                    r.pop(k, None)
+                r["lockMoved"] = "%s → 진행 중" % ats[i - 1]   # 다음 굳힘이 아직이거나 자리가 없음 — 다음 굳힘이 든 때 순서로 다시 묶음
+            moved += 1
+        n += moved
+        if not moved:
+            break
+    for r in b.get("rows") or []:                      # 옮겨진 줄의 lockTs 가 그 묶음 시각보다 앞이면(adff9e2 가 옮긴 판 · qa 11-23 09:49) 그 묶음이 실제로 굳힌 때로
+        i = r.get("lock")
+        if i and i <= len(ats) and ats[i - 1] and str(r.get("lockTs") or "") < ats[i - 1] + ":00":
+            ts = [x.get("lockTs") for x in b["rows"] if x.get("lock") == i and str(x.get("lockTs") or "") >= ats[i - 1] + ":00"]
+            if ts:
+                r["lockTs"] = min(ts)
+                n += 1
+    if n:
+        _lock_order(b)
+    return n
+
+
+def _lock_due(b, nm):
+    """굳힐 때가 지난 차례를 굳힌다 — 굳지 않은 줄 중 순위 위 LOCK_N 개. 굳힌 차례 목록(이번에 한 것)."""
+    done = list(b["meta"].get("lockDone") or [])
+    old_at = list(b["meta"].get("lockAt") or [])         # 이미 굳힌 차례의 시각은 그대로 — 그날 중간에 시각을 바꿔도 지난 묶음 이름이 안 바뀜
+    did = []
+    at = _lock_times(b)
+    for i, t in enumerate(at, 1):
+        if i in done or nm < t:
+            continue
+        _lock_order(b)
+        cut = _hhmm(t) + ":00"
+        cfg_n, cfg_c = (lock_cfg() + [(LOCK_N, 0)] * 3)[i - 1]
+        pick = [r for r in b["rows"] if not r.get("lock") and _in_hms(r) < cut     # 그 굳힘 시각 전에 든 줄만 — 뒤 든 줄은 다음 굳힘(재권님 「응」 11-23 09:4x)
+                and (r.get("n") or 0) >= cfg_c][:cfg_n]                            # 굳힘마다 칩 몇 개 이상 · 종목 수(lock_cfg · 11-23 10:34)
+        for k, r in enumerate(pick, 1):
+            r["lock"], r["lockAt"], r["lockRank"] = i, _hhmm(t), k
+            r["lockTs"] = _now().strftime("%H:%M:%S")      # 실제로 굳힌 때 — 서버가 늦게 떠 정한 시각(lockAt)보다 뒤에 굳힌 줄을 가르게(qa 덧 11-20)
+        m = b["meta"]
+        m.setdefault("lockMiss", {})[str(i)] = {                    # 굳힌 그 순간 못 받은 값 — meta.missing 은 값이 오면 지워져 굳힘 때 무엇이 빠졌는지 못 가린다
+            "at": _now().strftime("%H:%M:%S"),                       # 재권님 「못가져온 값은 못가져온대로 … 무슨값인지만 인지되도록」(09:18) → 「9시 5분에 굳히는걸로」(14:19)
+            "missing": [c for c in m.get("missing") or [] if c != "매수어림"],   # 못 받은 칩 — 뒤에 오면 그 줄에 채워짐(굳힌 줄은 안 빠짐)
+            "approx": list(m.get("approx") or []),                   # 어림 값으로 든 칩(매수 — 장 전 값)
+            "wait": list(m.get("wait") or [])}                       # 시각이 안 와 기다리는 칩(초반상승 — 여는 시각 전)
+        done.append(i)
+        did.append(i)
+    if did:
+        b["meta"]["lockDone"] = done
+        b["meta"]["lockAt"] = [old_at[i - 1] if i in done and i not in did and i - 1 < len(old_at) else _hhmm(t) for i, t in enumerate(at, 1)]
+        b["meta"]["lockN"] = LOCK_N
+        b["meta"]["lockCfg"] = [{"n": n, "minChip": c} for n, c in lock_cfg()]   # 굳힘마다 쓴 수 · 칩 조건(그때 값)
+        _lock_order(b)
+    return did
+
+
+def _close_min(proxy, now=None):
+    """그날 정규장 끝(분) — 장 시각 표(market_hours) · 못 읽으면 REG_CLOSE."""
+    import market_hours
+    now = now or _now()
+    try:
+        c = (market_hours.today(proxy, day=now.strftime("%Y%m%d"), now=now).get("reg") or ["", ""])[1] or market_hours.REG_CLOSE
+    except Exception:
+        c = market_hours.REG_CLOSE
+    return int(c[:2]) * 60 + int(c[2:4])
+
+
+def sub_track(proxy, cfg, b):
+    """굳힌 뒤에도(BUY_LATE 뒤 · 다시 셈 없음) 「매수」 하위 ①~④ 를 판 줄에 이어 쌓는다 — 매수 판(fetch_joint_buy · 캐시)만 읽음.
+    판 안 종목만 · 새 하위는 subs 끝에 · subAt 에 그 시각 · 매수 칩이 없던 줄은 칩을 더하고 chipAt ·
+    subNow 에 지금 하위(매수 판에서 빠졌으면 null — 칩 · subs 는 그대로). 바뀐 수.
+    재권님 「이거 된거맞아? 중간에 바뀐거같은데 바뀐값이 없네?」(11-20 10:54) — 10:30 굳힌 뒤 다시 셈이 멈춰 하위가 안 쌓이던 것."""
+    try:
+        jd, _ = proxy.fetch_joint_buy(cfg)
+    except Exception:
+        return 0
+    if not jd or not jd.get("rows"):
+        return 0
+    tier = {r["code"]: "①②③④"[r["tier"] - 1] for r in jd["rows"] if r.get("tier") in (1, 2, 3, 4)}
+    now = _now()
+    ts, hm = now.strftime("%H:%M:%S"), now.strftime("%H:%M")
+    n = 0
+    for r in b.get("rows") or []:
+        t = tier.get(r["code"])
+        if r.get("cap") is not None and r["cap"] < cap_min_eok():
+            continue
+        if not t:
+            if "매수" in (r.get("chips") or []) and (r.get("subNow") or {}).get("매수") is not None:
+                r["subNow"]["매수"] = None                    # 지금 매수 판에 없음 — 칩 · 쌓인 하위는 그대로 둔다
+                n += 1
+            continue
+        if (r.get("subNow") or {}).get("매수") != t:
+            r.setdefault("subNow", {})["매수"] = t
+            n += 1
+        if "매수" not in r["chips"]:
+            r["chips"].append("매수")
+            r.setdefault("chipAt", {}).setdefault("매수", hm)
+            order = ov_chips() + ("현재상승", "볼린저")
+            r["chips"] = [c for c in order if c in r["chips"]]
+            r["n"] = len(set(r["chips"]) & set(ov_chips()))
+        subs = [x for x in (r.setdefault("subs", {}).get("매수") or []) if x != "어림"]
+        if t not in subs:
+            subs.append(t)
+            r.setdefault("subAt", {}).setdefault("매수", {})[t] = ts
+            n += 1
+        r["subs"]["매수"] = subs
+        (r.get("subAt") or {}).get("매수", {}).pop("어림", None)
+    return n
+
+
+def _gone(old_rows, new_rows, at):
+    """다시 셀 때 빠진 것 — 판에서 빠진 종목(what 「종목」 · 그때 칩) · 줄은 남고 빠진 칩(what 「칩」 · 빠진 칩만). 빠진 순서대로 목록.
+    재권님 「응 고쳐」(11-20 08:59 · 작업우선순위 경유) — 11-19 칩 넷 종목 · 11-02 한진칼이 덮어 저장이라 언제 빠졌는지 못 가린 일."""
+    new = {r["code"]: r for r in new_rows}
+    out = []
+    for o in old_rows:
+        n = new.get(o["code"])
+        if n is None:
+            out.append({"at": at, "code": o["code"], "name": o.get("name"), "what": "종목", "chips": list(o.get("chips") or [])})
+        else:
+            lost = [c for c in o.get("chips") or [] if c not in (n.get("chips") or [])]
+            if lost:
+                out.append({"at": at, "code": o["code"], "name": o.get("name"), "what": "칩", "chips": lost})
+    return out
+
+
+FAKE_LOOK_MIN = 10           # 거래량 0 1분봉(체결 없이 앞 값으로 채운 봉)을 건너뛰고 첫 체결 봉을 찾는 폭(분) — 넘으면 못 잼(null)
+
+
+def _m1_px(conn, day, codes, ts, field):
+    """그 분(ts · YYYYMMDDHHMM) 1분봉 값 {code: 값} — field 「close」 · 「open」. 그 봉이 거래량 0 이면(채움 봉 · 옛 값) 건너뛰고
+    FAKE_LOOK_MIN 분 안 첫 체결 봉의 시가를 쓴다(첫 체결가). 거래량을 모르는(None) 옛 봉은 그대로 믿는다.
+    qa 11-20 찾음 — 11-19(10:00 개장) 여섯 종목 10:00 · 10:01 봉이 거래량 0 · 옛 값(스튜디오드래곤 23,700 ↔ 첫 체결 30,750)이라 매수가가 틀렸다."""
+    if not codes:
+        return {}
+    hi = day + _hhmm(int(ts[8:10]) * 60 + int(ts[10:12]) + FAKE_LOOK_MIN).replace(":", "")
+    q = ("SELECT code, ts, open, close, volume FROM candles WHERE period = '1m' AND ts BETWEEN ? AND ? AND code IN (%s) ORDER BY ts"
+         % ",".join("?" * len(codes)))
+    out, first = {}, {}
+    for c, t, o, cl, v in conn.execute(q, [ts, hi] + list(codes)):
+        if c in out:
+            continue
+        if t == ts and v != 0:
+            out[c] = cl if field == "close" else o
+        elif v != 0 and t > ts:
+            out[c] = o                                  # 그 분이 채움 봉이었다 — 첫 체결 봉 시가
+    return {c: v for c, v in out.items() if v}
+
+
+def _px1_of(proxy, day, codes, om):
+    """그날 「9시 1분 값」 — 여는 시각(om · 분) 1분봉 종가(= 여는 시각 + 1분의 값 · pxMin "1" 과 같은 셈) · {code: 값} · 없으면 빠짐."""
+    if not codes:
+        return {}
+    ts = day + "%02d%02d" % divmod(om, 60)
+    with proxy.db_conn() as conn:
+        return _m1_px(conn, day, list(codes), ts, "close")      # 거래량 0 채움 봉은 건너뜀(_m1_px)
+
+
+def _buy_now(proxy, cfg, rows):
+    """판에 막 든 줄(여는 시각 + 1분 뒤) — 매수가를 든 그 순간 현재가로 다시 받는다(시세 묶음 · 가장 짧은 캐시) · buyTs 에 초까지.
+    전에는 단타 목록 셈에 실린 값(시세 캐시 PRICE_CACHE_TTL 25초 + 칩 셈 수십 초 앞)이 그대로 매수가가 됐다 —
+    재권님 「판에 들어갈때 그때의 가격이 정확히 들어와야해」 · 「판에 들어있으면 9시 1분가격으로 적고 판에 들어오면 들어올때 가격으로」(11-20 09:2x · 작업우선순위 경유).
+    못 받은 줄은 셈에 실린 값 그대로 두고 buySrc 「목록 값」."""
+    if not rows:
+        return 0
+    try:
+        q, _ = proxy.fetch_quotes_multi(cfg, [r["code"] for r in rows])
+    except Exception:
+        q = {}
+    ts = _now().strftime("%H:%M:%S")
+    n = 0
+    for r in rows:
+        x = q.get(r["code"]) or {}
+        v, src = x.get("price"), "현재가"
+        if v and x.get("prev") and v == x["prev"] and x.get("open") and x["open"] != x["prev"]:
+            # 묶음 시세 현재가가 전일 종가로 옴 · 시가는 다름 — VI 단일가 중 그렇게 왔다(11-23 큐로셀 09:01:12 21,200 · 실제 27,550 상한가 · qa 찾음)
+            # 단건 시세로 한 번 더 · 그것도 같으면 쌓인 1분봉 마지막 종가 · 둘 다 없으면 목록 값
+            try:
+                w = (proxy.fetch_price(cfg, r["code"]) or {}).get("price")
+            except Exception:
+                w = None
+            if w and w != x["prev"]:
+                v, src = w, "현재가(단건)"
+            else:
+                with proxy.db_conn() as conn:
+                    m = conn.execute("SELECT close FROM candles WHERE code = ? AND period = '1m' AND ts LIKE ? AND volume > 0 ORDER BY ts DESC LIMIT 1",
+                                     (r["code"], _now().strftime("%Y%m%d") + "%")).fetchone()
+                v, src = (m[0], "1분봉 종가(시세가 전일 종가로 옴)") if m and m[0] else (None, None)
+        r["buyTs"] = ts
+        if v:
+            r["buy"], r["buySrc"] = v, src
+            n += 1
+        else:
+            r["buySrc"] = "목록 값"
+    return n
+
+
+def _buy_wait_cut(proxy, now=None):
+    """이 분(여는 시각 + 1) 전에 판에 든 줄은 「9시 1분 값」 을 기다린다(buyWait) · 그 뒤에 든 줄은 든 순간 현재가."""
+    return OPEN_AT[0] * 60 + OPEN_AT[1] + late_min(proxy, now) + 1
+
+
+def _buy_open_fill(proxy, b):
+    """「9시 1분 값」 을 기다리는 줄(buyWait) — 여는 시각 1분봉 종가가 들어왔으면 매수가로 · 1분봉이 없는 종목은 적어 둔 개장 1분 값(px1 · 그때 현재가)으로.
+    둘 다 없으면 비워 두고 기다린다 — 지금 값으로 대신 굳히지 않는다(11-20 스튜디오드래곤 · 시세의 시가 칸이 비어 09:03 값 30,800 이 굳은 일). 적은 줄 수."""
+    wait = [r for r in b.get("rows") or [] if r.get("buyWait")]
+    if not wait:
+        return 0
+    om = _open_min(proxy, b["day"], b)
+    if _now().hour * 60 + _now().minute < om + 1:
+        return 0
+    got = _px1_of(proxy, b["day"], [r["code"] for r in wait], om)
+    n = 0
+    for r in wait:
+        v, src = got.get(r["code"]), "1m"
+        if not v:
+            p1 = r.get("px1") or (r.get("pxMin") or {}).get("1") or {}
+            v, src = p1.get("px"), p1.get("src")
+        if v:
+            r["buy"], r["buyAt"], r["buySrc"] = v, _hhmm(om + 1), "9시 1분 값" + ("" if src == "1m" else "(그때 현재가)")
+            r.pop("buyWait", None)
+            n += 1
+    return n
+
+
 def refresh(proxy, cfg, b):
     """그날 판을 지금 들어온 값으로 다시 세운다(종목 · 칩 · 순위). 바뀐 줄 수."""
-    out = set(b["meta"].get("out") or [])
-    nb = build(proxy, cfg, b["day"], skip=out)
+    nb = build(proxy, cfg, b["day"])                   # 빠졌던 종목도 다시 셈에 든다(「한 번 빠지면 다시 안 넣음」 없앰 · 11-20)
+    _lock_keep(b["rows"], nb["rows"])                  # 굳힌 줄은 새 셈에서 빠져도 그대로(세 번 굳히기)
     old = {r["code"]: r for r in b["rows"]}
     now = _now()
     nm = now.hour * 60 + now.minute
     off = late_min(proxy, now)
-    if nm >= OUT_FROM[0] * 60 + OUT_FROM[1] + off:
-        out |= set(old) - {r["code"] for r in nb["rows"]}        # 판에 있다가 이번에 빠진 종목(하락 · 순위 밖 · 칩 빠짐) — 그날 다시 안 넣음(재권님 11-13) · 09:01 부터 셈(11-18)
     opened = nm >= OPEN_AT[0] * 60 + OPEN_AT[1] + off
     hm = now.strftime("%H:%M")
+    hms = now.strftime("%H:%M:%S")
     changed = 0
     for r in nb["rows"]:
         o = old.get(r["code"])
+        _sub_keep(r, o, hms)                           # 하위(매수 ①~④)는 바뀌어도 앞 것을 남기고 붙은 시각을 적는다
         if o is not None:
+            for k, v in o.items():                     # 다시 세어도 그 줄에 적어 둔 것(팔 때 sell · N분 값 pxMin · 프리장 nx 등)은 옮긴다 — 새 셈이 내는 칸만 새 값
+                r.setdefault(k, v)                     # (qa 걸림 11-20 — sell 이 지워져 같은 종목 「팔 때」 가 여러 통 · tgTop 이 빈칸)
             r["chipAt"] = dict(r.get("chipAt") or {}, **{c: t for c, t in (o.get("chipAt") or {}).items() if c in r["chips"]})   # 앞에 붙어 있던 칩은 그 시각 그대로 · 빠진 칩은 지움
             for k in ("px1", "flow", "flowNow"):
                 if k in o:
                     r[k] = o[k]                        # 다시 세도 적어 둔 09:01 값 · 수급은 그대로
         if o is not None and o.get("buyWait") and opened:
-            # 09:00 전에 든 종목 — 매수가를 09:00 정규장 시가로(시가를 아직 못 받았으면 지금 값 · 그것도 없으면 다음 바퀴에)
+            # 9시 1분 전에 든 종목 — 매수가는 「9시 1분 값」(_buy_open_fill · 여는 시각 1분봉 종가) · 못 받았으면 비우고 기다림(다음 바퀴 · 굳힌 뒤에도)
+            # 전에는 시세의 시가 → 없으면 「지금 값」 으로 굳혔다 — 11-20 스튜디오드래곤 시가 칸이 비어 09:03 값 30,800 이 매수가로 굳음 · 재권님 「판에 들어있으면 9시 1분가격으로」
             r["px"], r["pxSrc"] = o["px"], o["pxSrc"]
-            if r.get("open") or r.get("buy"):
-                r["buy"], r["buyAt"] = r.get("open") or r["buy"], "%02d:%02d" % _sh(OPEN_AT, off)
-                r["buySrc"] = "시가" if r.get("open") else "지금 값"
-                r.pop("buyWait", None)
-            else:
-                r["buy"], r["buyWait"] = None, True
+            r["buy"], r["buyWait"] = None, True
+            r.pop("buySrc", None)
             changed += o.get("rank") != r["rank"] or o.get("chips") != r["chips"]
         elif o is not None:
             r["buy"], r["pct"], r["px"], r["pxSrc"] = o["buy"], o["pct"], o["px"], o["pxSrc"]
@@ -817,13 +1337,28 @@ def refresh(proxy, cfg, b):
         else:
             r["buyAt"] = hm
             changed += 1
+    if opened:
+        fresh = [r for r in nb["rows"] if r["code"] not in old and not r.get("buyWait")]
+        if nm < _buy_wait_cut(proxy, now):
+            for r in fresh:                            # 여는 시각 그 분에 든 줄 — 9시 1분 값을 기다린다
+                r["buy"], r["buyWait"] = None, True
+        else:
+            _buy_now(proxy, cfg, fresh)
     changed += len(set(old) - {r["code"] for r in nb["rows"]})
+    if opened:
+        _buy_open_fill(proxy, nb)
+    gone = list(b["meta"].get("gone") or []) + _gone(b["rows"], nb["rows"], hm)   # 빠진 칩 · 종목을 그 시각과 함께 쌓는다(meta.gone)
     b["rows"] = nb["rows"]
     if b.get("times") != nb["times"] and not any(o.get("px") for o in old.values()):
         b["times"] = nb["times"]                       # 값 적는 시각 — 아직 한 칸도 안 적었으면 지금 셈(늦게 여는 날 뒤로 민 시각)으로 · 적기 시작했으면 그대로
     late = b["meta"].get("late") or {}
-    b["meta"] = dict(nb["meta"], late=late, rescanAt=hm, out=sorted(out))
-    return changed
+    keep = {k: v for k, v in (b.get("meta") or {}).items() if k not in nb["meta"]}   # 판에 적어 둔 칸(tgTop · tgTopAt · sellHi · sellChk · px1At · nx…)은 다시 세어도 그대로
+    b["meta"] = dict(nb["meta"], late=late, rescanAt=hm, gone=gone)
+    for k, v in keep.items():
+        b["meta"].setdefault(k, v)
+    b["meta"].pop("out", None)                         # 옛 「다시 안 넣음」 목록은 안 옮긴다(규칙 없앰 11-20)
+    _lock_order(b)
+    return changed + len(_lock_due(b, nm))            # 굳힌 바퀴는 바뀐 것으로 센다 — 안 세면 저장 안 돼 다음 바퀴에 다시 고름(개념정의 덧 11-20)
 
 
 def _bar_close(proxy, day, code, hhmm):
@@ -932,13 +1467,13 @@ def track(proxy, cfg, b, hhmm, late):
 #   VI·급등    급등 — 09:00 ~ BUY_LATE(09:35) 봉 고가가 앞 거래일 종가보다 intraday_alerts.SURGE_PCT % 이상 · VI — KIS 「VI 현황」(날짜 · 종목) 에서 09:00~BUY_LATE 발동
 #              (VI_PROBE_PCT % 넘게 오른 종목만 묻는다 · QUIET 밖에서만 돈다)
 #   매수       앞 거래일 확정치(investor_daily) 외국인 · 기관 둘 다 순매수인 종목 중 합 상위 JOINT_TOP — 장중 가집계가 없어 어림 · 하위 칸 없음
-#   초반상승   09:00 봉 (종가 − 시가) ÷ 시가 ≥ open_rise.RISE_PCT · 시가총액 open_rise.MIN_CAP_EOK 이상(라이브와 같은 셈)
+#   초반상승   09:00 봉 (종가 − 시가) ÷ 시가 ≥ open_rise.RISE_PCT · 시가총액 cap_min_eok() 이상(라이브와 같은 셈)
 #   장외       09:06 에는 비어 있다(라이브와 같다)
 #   볼린저     그날 09:06 전에 보낸 바닥 신호(signal_sent) — 칩 이름만
-#   매수가     09:05 봉 시가(09:06 값에 가장 가까운 쌓인 값) · pct 는 앞 거래일 종가 대비 · 현재상승은 그 값이 09:00 시가보다 NOW_RISE_PCT 이상
+#   매수가     09:05 봉 시가(09:06 값에 가장 가까운 쌓인 값) · pct 는 앞 거래일 종가 대비 · 현재상승은 그 값이 09:00 시가보다 now_rise_pct() 이상
 #   시가총액 · 섹터 · 시장은 지금 값이다(그날 값 기록이 없다)
 # 5분봉이 쌓인 종목은 순위 목록(코스피 200 · 코스닥 150) 둘레뿐이다 — 그 밖 종목은 칩에 못 든다
-BACKFILL_DAYS = DAYS_KEEP     # 되채울 거래일 수 — 「지난 30일」
+BACKFILL_DAYS = 30            # 되채울 거래일 수 — 「지난 30일」 · 보관(DAYS_KEEP)과 갈랐다(11-20 — 보관을 1년으로 늘려도 지난 날 되채움이 한꺼번에 250일로 늘어 KIS 를 몰아 쓰지 않게)
 JOINT_TOP = 30                # 「매수」 어림 — 외 · 기 순매수 합 상위 몇
 VI_PROBE_PCT = 3.0            # 지난 날 VI 를 KIS 에 물을 종목 — 09:00 · 09:05 봉 고가가 앞 거래일 종가보다 이 % 이상(동적 VI 가장 낮은 문턱 · 코스피200 3%)
 QUIET = ((7, 30), (20, 10))   # 되채우기(VI 를 KIS 에 묻는다)를 안 하는 때 — 장 전 · 장중 · 넥장(20:00)까지 KIS 몫을 안 쓴다
@@ -953,13 +1488,75 @@ def _trade_days(proxy, before, n):
             "SELECT DISTINCT day FROM auto_watch_day WHERE day < ? ORDER BY day DESC LIMIT ?", (before, n + 1))]
 
 
+PAST_VOL_UNTIL = (10, 30)    # 지난 날 거래량급증 칩을 보는 창 끝 — 재권님 「응 만들어 10시 반까지 만들어」(11-23 12:1x) · 지금 판이 다시 세는 끝(BUY_LATE)과 같다
+
+
+def past_vol_chip(proxy, day, prev, bars, cap, small, put):
+    """지난 날 「거래량급증」 칩 — 09:00 부터 PAST_VOL_UNTIL 까지 5분봉 끝마다 누적으로 센다 · 처음 넘은 봉 끝 시각을 volAt 에.
+        전일   그날 누적 거래량 ÷ 앞 거래일 같은 시각까지 누적 × 100 ≥ 칩 룰 거래량급증.prevSamePct(앞 날 5분봉이 없거나 그 시각까지 한 칸이라도 빠졌으면 그 칸 못 잼 — 0 아님)
+        비율   그날 누적 거래대금(5분봉 종가 × 거래량 어림) ÷ (풀린 주식수 × 그 봉 종가) × 100 ≥ 칩 룰 거래량급증.turnPct(turnover.calc 셈)
+               풀린 주식수는 **지금** 값(company_profile.floats · 그날 값은 안 쌓였다) — 어림 · 없으면 그 칸 못 잼
+        대상   감시 목록(시가총액 있음 · 문턱 이상) — 라이브(vol_chip)와 같은 가름
+    재권님 「거래량 급증은 지난데이터들을 기반으로 뽑아낼수 있지않나?」 → 안에 「응 만들어 10시 반까지 만들어」(11-23 12:1x).
+    → {code: 「HH:MM」} · 문턱을 못 읽으면 None(못 셈)."""
+    import chip_rules, company_profile, turnover
+    try:
+        t_pct, p_pct = float(chip_rules.get("거래량급증", "turnPct")), float(chip_rules.get("거래량급증", "prevSamePct"))
+    except Exception:
+        return None
+    end = PAST_VOL_UNTIL[0] * 60 + PAST_VOL_UNTIL[1] - BAR_MIN
+    o_d = OPEN_AT[0] * 60 + OPEN_AT[1] + late_min(proxy, day=day)
+    o_p = OPEN_AT[0] * 60 + OPEN_AT[1] + late_min(proxy, day=prev)    # 「같은 시각」 은 연 뒤 같은 분 — 늦게 연 날(수능)과 견줄 때 어긋나지 않게(11-20 이 앞 날 11-19 10:00 개장과 견주어 528종목이 한꺼번에 걸렸다)
+    hm = lambda m: "%02d%02d" % divmod(m, 60)
+    slots = [(hm(m), hm(m - o_d + o_p)) for m in range(o_d, end + 1, BAR_MIN)]   # (그날 봉, 앞 날 같은 분 봉)
+    if not slots:
+        return {}
+    pvol = {}
+    with proxy.db_conn() as conn:
+        for code, ts, v in conn.execute("SELECT code, ts, volume FROM candles WHERE period = '5m' AND ts >= ? AND ts <= ?",
+                                        (prev + slots[0][1], prev + slots[-1][1])):
+            pvol.setdefault(code, {})[ts[8:12]] = v or 0
+    try:
+        fl = company_profile.floats()
+    except Exception:
+        fl = {}
+    out = {}
+    for code, d in bars.items():
+        if cap.get(code) is None or small(code):
+            continue
+        vc = val = pc = 0
+        pd = pvol.get(code)
+        pgap = False                                   # 앞 날 같은 분 봉이 하나라도 빠졌으면 그 뒤 「전일」 은 못 잼 — 빠진 칸을 0주로 더하면 분모가 작아져 헐겁게 걸린다(개념정의 검수 덧 11-23)
+        for hm, phm in slots:
+            b = d.get(hm)
+            if b:
+                vc += b[3] or 0
+                val += (b[2] or 0) * (b[3] or 0)
+            if pd:
+                if phm in pd:
+                    pc += pd[phm]
+                else:
+                    pgap = True
+            by = []
+            if pd and not pgap and pc > 0 and vc / pc * 100 >= p_pct:
+                by.append("전일")
+            _c, turn = turnover.calc(b[2] if b else None, val, fl.get(code))
+            if turn is not None and turn >= t_pct:
+                by.append("비율")
+            if by:
+                out[code] = "%02d:%02d" % divmod(int(hm[:2]) * 60 + int(hm[2:]) + BAR_MIN, 60)
+                put(code, "거래량급증", "둘 다" if len(by) == 2 else by[0], volAt=out[code])
+                break
+    return out
+
+
 def rebuild(proxy, day, prev, cfg=None):
     """day 의 09:06 판을 쌓인 값으로 다시 센다(prev = 앞 거래일). 5분봉이 없으면 None. cfg 를 주면 VI 를 KIS 에서 받는다."""
     import auto_watch, company_profile, dart, intraday_alerts, market_hours, open_rise, pre_flow
     uni = dart.universe_rows(None)
     cap = {r["stock_code"]: r["market_cap"] for r in uni}
     mkt = {r["stock_code"]: r["market"] for r in uni}
-    small = lambda c: cap.get(c) is not None and cap[c] < CAP_MIN_EOK
+    small = lambda c: cap.get(c) is not None and cap[c] < cap_min_eok()
     with proxy.db_conn() as conn:
         bars = {}
         for code, ts, o, h, c, v in conn.execute(
@@ -1085,27 +1682,32 @@ def rebuild(proxy, day, prev, cfg=None):
     for c, d in bars.items():                              # 초반상승
         b = d.get("0900")
         cp = cap.get(c)
-        if b and b[0] and b[2] is not None and cp is not None and cp >= open_rise.MIN_CAP_EOK:
+        if b and b[0] and b[2] is not None and cp is not None and cp >= cap_min_eok():
             pct = (b[2] - b[0]) / b[0] * 100
             if pct >= open_rise.PAST_RISE_PCT:             # 지난 날은 첫 5분봉 2% 셈 그대로(1분봉은 11-12 부터만)
                 put(c, "초반상승", rise=round(pct, 2))
+    vol_at = past_vol_chip(proxy, day, prev, bars, cap, small, put)   # 거래량급증 — 09:00~PAST_VOL_UNTIL 같은 시각 대비 · 거래 비율(어림)
+    if vol_at is None:
+        missing.append("거래량급증")
+    else:
+        approx.append("거래량급증")                        # 풀린 주식수는 지금 값 · 거래대금은 5분봉 종가 × 거래량 어림
     for c in bb:
         if c in hit:
             hit[c]["chips"].add("볼린저")
     sec = company_profile.sectors()
     rows, down = [], 0
     for code, g in hit.items():
-        if not g["chips"] & set(OV_CHIPS):
+        if not g["chips"] & set(ov_chips()):
             continue
         d = bars.get(code) or {}
         buy = (d.get("0905") or (None,))[0]
         base = base_of(code)
-        if buy and base and (buy / base - 1) * 100 < DROP_BELOW_PCT:
+        if buy and base and (buy / base - 1) * 100 < drop_below_pct():
             down += 1                                  # 하락 뺌 — 09:05 봉 시가가 앞 거래일 종가 아래
             continue
         o9 = (d.get("0900") or (None,))[0]
         chips = set(g["chips"])
-        if buy and o9 and (buy / o9 - 1) * 100 >= NOW_RISE_PCT:
+        if buy and o9 and (buy / o9 - 1) * 100 >= now_rise_pct():
             chips.add("현재상승")
         px, src = {}, {}
         for t in times():
@@ -1113,10 +1715,10 @@ def rebuild(proxy, day, prev, cfg=None):
             b = d.get("%02d%02d" % divmod(m, 60))
             px[t], src[t] = (b[2], "5m") if b and b[2] is not None else (None, "none")
         rows.append({"code": code, "name": g["name"], "market": mkt.get(code), "cap": cap.get(code), "sector": sec.get(code),
-                     "chips": [c for c in OV_CHIPS + ("현재상승", "볼린저") if c in chips], "subs": g["subs"],
-                     "n": len(chips & set(OV_CHIPS)), "buy": buy,
+                     "chips": [c for c in ov_chips() + ("현재상승", "볼린저") if c in chips], "subs": g["subs"],
+                     "n": len(chips & set(ov_chips())), "buy": buy,
                      "pct": round((buy / base - 1) * 100, 2) if buy and base else None, "rise": g.get("rise"),
-                     "viAt": g.get("viAt"), "surgeAt": g.get("surgeAt"), "surgeApprox": g.get("surgeApprox"), "viPx": g.get("viPx"),
+                     "viAt": g.get("viAt"), "surgeAt": g.get("surgeAt"), "volAt": g.get("volAt"), "surgeApprox": g.get("surgeApprox"), "viPx": g.get("viPx"),
                      "px": px, "pxSrc": src})
     tab = score_table(proxy)
     off = late_min(proxy, day=day)                     # 그날 늦게 열었으면 VI·급등 나누는 시각도 그만큼 뒤(개념정의 덧 11-19 — 그날 판과 같게)
@@ -1125,11 +1727,67 @@ def rebuild(proxy, day, prev, cfg=None):
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % PAST_BUY_AT, "times": times(), "rows": rows, "closed": True,
-            "meta": {"rebuilt": True, "viSplit": vi_split(off), "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": DROP_BELOW_PCT,
-                     "watchSrc": watch_src, "rules": chip_rules(proxy, merged=False), "viUntil": "%02d:%02d" % PAST_LATE, "approxBase": approx_base,
-                     "capMinEok": CAP_MIN_EOK, "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
+            "meta": {"rebuilt": True, "viSplit": vi_split(off), "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": drop_below_pct(),
+                     "watchSrc": watch_src, "rules": rules_meta(proxy, merged=False), "viUntil": "%02d:%02d" % PAST_LATE, "volUntil": "%02d:%02d" % PAST_VOL_UNTIL, "approxBase": approx_base,
+                     "capMinEok": cap_min_eok(), "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 · 수급은 그날 09:01 직전 관심 목록(watchSrc 기록 · 없으면 관심 못 받음 · 수급 어림) · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
                              "buy 는 09:05 봉 시가 · 시가총액 · 섹터 · 시장은 지금 값"}}
+
+
+def _redo_gone(proxy, day, b):
+    """지난 날을 다시 셀 때 덮이는 옛 판과 갈린 것 — meta.redoGone [{at 「MM-DD HH:MM」 · gone(_gone 꼴) · came(새로 든 코드)}] · 다시 셀 때마다 이어 쌓는다."""
+    got = _load(proxy, day)
+    if not got:
+        return
+    old = got[0]
+    at = _now().strftime("%m-%d %H:%M")
+    oc = {r["code"] for r in old.get("rows") or []}
+    hist = list((old.get("meta") or {}).get("redoGone") or [])
+    hist.append({"at": at, "gone": _gone(old.get("rows") or [], b["rows"], at),
+                 "came": [r["code"] for r in b["rows"] if r["code"] not in oc]})
+    b["meta"]["redoGone"] = hist
+
+
+M1_FILL_SPAN = 40             # 지난 판 1분봉 되받기 — 여는 시각 + 이 분까지(120줄 한 번이면 그 앞 두 시간) · 여는 값(PX_MIN) · 지난 날 VI 창(PAST_LATE)을 덮음
+
+
+def m1_fill(proxy, cfg, limit=BACKFILL_DAYS):
+    """지난 판(오늘 앞 limit 날) 줄 중 여는 시각 1분봉이 없는 종목 — KIS 지난 날 분봉을 한 번씩 받아 1분봉으로 저장 → 받은 (종목 · 날) 수.
+    1분봉은 11-11 10:46 부터 쌓여 그 전 판은 「개장 N분 뒤 값」 · VI 값이 비었다 — 셈 칸 매수가 09:01 이면 그 날들이 「매매 없음」(11-23 재권님 「응 그렇게해」).
+    받은 뒤 그 판에 여는 값(pxMin · px1) · VI 값(viPx)을 채워 **판에 저장한다** — 1분봉은 5거래일만 남아(holdings/CLAUDE.md 「봉은 기간마다 정한
+    길이만 남긴다」) 지워지면 다시 비기 때문이다(개념정의 검수 11-23 · 길 (ㄱ)). 판에 여는 값이 이미 있는 줄은 안 묻는다.
+    받아 봤는데 빈 종목(정지 등)은 표를 남겨 다시 안 묻는다."""
+    today = _now().strftime("%Y%m%d")
+    n = 0
+    for day in [d for d in days(proxy) if d < today][:limit]:
+        got = _load(proxy, day)
+        if not got or not got[0].get("rows"):
+            continue
+        b = got[0]
+        o = _open_min(proxy, day, b)
+        codes = [r["code"] for r in b["rows"] if not all((r.get("pxMin") or {}).get(str(k)) for k in PX_MIN)]
+        if not codes:
+            continue
+        lo, hi = day + _hhmm(o).replace(":", ""), day + _hhmm(o + max(PX_MIN)).replace(":", "")
+        with proxy.db_conn() as conn:
+            have = {c for (c,) in conn.execute("SELECT DISTINCT code FROM candles WHERE period = '1m' AND ts BETWEEN ? AND ? AND code IN (%s)"
+                                                % ",".join("?" * len(codes)), [lo, hi] + codes)}
+        for c in codes:
+            mk = "m1fill:%s:%s" % (c, day)
+            if c in have or proxy._meta_get(mk):
+                continue
+            raw = proxy._kr_past_chunk(cfg, c, day, _hhmm(o + M1_FILL_SPAN).replace(":", "") + "00")
+            time.sleep(proxy.BAR_FILL_CALL_GAP)
+            mine = [x for x in raw if x["ts"][:8] == day and int(x["ts"][8:10]) * 60 + int(x["ts"][10:12]) >= proxy.MINUTE_DAY_START]
+            if mine:
+                proxy.save_candles(c, "1m", proxy.aggregate_minutes(mine, 1))
+            proxy._meta_set(mk, today)
+            n += 1
+        vi0 = [bool(r.get("viPx")) for r in b["rows"]]
+        got_px = _pxmin_fill(proxy, b)                 # 쌓인 1분봉(방금 받은 것 · 이미 있던 것)으로 판 줄을 채워 저장 — 1분봉이 지워져도 남게
+        if got_px or [bool(r.get("viPx")) for r in b["rows"]] != vi0:   # VI 값만 새로 찬 날도 남김(개념정의 덧 11-23)
+            _store(proxy, b)
+    return n
 
 
 def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
@@ -1152,6 +1810,7 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
         if b and b["rows"]:
             if d in keep_live:                         # 장중에 고른 기록은 다시 세도 이어 남긴다
                 b["meta"]["liveBefore"], b["meta"]["redoneFromLive"] = keep_live[d], True
+            _redo_gone(proxy, d, b)
             _store(proxy, b)
             n += 1
     if today_too and ds:                               # 오늘 판 — 14:00 칸까지 닫혔는데 오늘 바뀐 룰(meta.rules 칸) 전에 센 판이면 쌓인 값으로 한 번 다시 센다
@@ -1164,6 +1823,7 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
                 b["meta"]["liveBefore"] = {"savedAt": got[1], "buyAt": old.get("buyAt"), "meta": old.get("meta"),
                                            "rows": [{k: r.get(k) for k in ("code", "name", "rank", "chips", "subs", "n", "buy", "buyAt", "pct", "rise", "px", "pxSrc")}
                                                     for r in old.get("rows") or []]}
+                _redo_gone(proxy, today, b)
                 _store(proxy, b)
                 n += 1
     return n
@@ -1238,6 +1898,64 @@ def nx_fill(proxy, cfg, day, hm):
                      nxNote="nx — 다음 거래일 넥스트레이드 %02d:%02d 값(src now = 그때 현재가 · 1m = 그날 그 시각까지의 1분봉 마지막 종가) · 거래가 없거나 못 받으면 px null" % NX_AT)
     _store(proxy, b)
     return 1
+
+
+PRE_END = (8, 50)            # 오늘 판 rows[].pre — 넥스트레이드 프리장(08:00~08:50)이 닫힌 뒤 마지막 체결 값을 판에 굳힌다(작업우선순위 · 시황분석1 화면 11-20 · 재권님 그림에 「응 맞아」 10:53)
+PRE_HOURS = ("084900", "081900")   # 1분봉 끝 시각 — 30줄씩 · 뒤 칸에 체결이 없을 때만 앞 칸을 부른다
+
+
+def _pre_last(proxy, cfg, code, day):
+    """그날 넥스트레이드 1분봉 08:00~08:49 중 마지막 체결 봉 → (종가, "HH:MM") · 체결 없음 ("none", None) · 못 받음 (None, None)."""
+    for hour in PRE_HOURS:
+        data = proxy.kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
+                             {"FID_ETC_CLS_CODE": "", "FID_COND_MRKT_DIV_CODE": "NX", "FID_INPUT_ISCD": code,
+                              "FID_INPUT_HOUR_1": hour, "FID_PW_DATA_INCU_YN": "Y"}, "FHKST03010200")
+        if data is None or str(data.get("rt_cd", "0")) != "0":
+            return None, None
+        best = None
+        for r in data.get("output2") or []:
+            t = str(r.get("stck_cntg_hour") or "")[:4]
+            if r.get("stck_bsop_date") != day or not ("0800" <= t <= "0849") or not proxy._num(r.get("cntg_vol"), int):
+                continue
+            if best is None or t > best[0]:
+                best = (t, proxy._num(r.get("stck_prpr"), int))
+        if best:
+            m = int(best[0][:2]) * 60 + int(best[0][2:]) + 1      # 1분봉 시각은 그 분의 시작 — 끝난 때로 적는다(08:49 봉 → 08:50)
+            return best[1], "%02d:%02d" % divmod(m, 60)
+    return "none", None
+
+
+def pre_fill(proxy, cfg, b, hm):
+    """오늘 판(b) 줄 중 rows[].pre 가 없는 줄에 프리장 끝 값을 적는다 — {pct, at, px, prev} · 체결이 없었으면 null(0 아님).
+    pct 는 넥스트 전일 종가(멀티 시세 inter2_prdy_clpr) 대비 — 홀딩스 /api/kis/prices pct 와 같은 기준. 1분봉 NX 는 오늘 것만 주므로 지난 판은 못 채운다.
+    PRE_END 전 · NX_SKIP 동안은 안 함 · 못 받은 줄은 키를 안 만들어 다음 바퀴에 다시. 적은 줄 수."""
+    if hm < PRE_END[0] * 60 + PRE_END[1] or b.get("day") != _now().strftime("%Y%m%d"):
+        return 0
+    lo, hi = NX_SKIP
+    if lo[0] * 60 + lo[1] <= hm < hi[0] * 60 + hi[1]:
+        return 0
+    todo = [r for r in b.get("rows") or [] if "pre" not in r]
+    if not todo:
+        return 0
+    import nxt_pre
+    q = nxt_pre.fetch_nx(proxy, cfg, [r["code"] for r in todo], gap=0)
+    n = 0
+    for r in todo:
+        px, at = _pre_last(proxy, cfg, r["code"], b["day"])
+        if px is None:
+            continue
+        prev = (q.get(r["code"]) or {}).get("prev_close") or None
+        if px == "none":
+            r["pre"] = None
+        elif not prev:
+            continue                                   # 전일 종가를 못 받음 — 다음 바퀴에 다시
+        else:
+            r["pre"] = {"pct": round((px - prev) / prev * 100, 2), "at": at, "px": px, "prev": prev}
+        n += 1
+    if n:
+        b["meta"]["preNote"] = ("pre — 오늘 넥스트레이드 프리장 마지막 체결(%02d:%02d 전) 값 · pct 는 넥스트 전일 종가 대비 · at 그 봉이 끝난 때 · "
+                                "체결이 없었으면 null · 키가 없으면 아직 못 받음" % PRE_END)
+    return n
 
 
 def days(proxy):
@@ -1331,8 +2049,7 @@ def _pxmin_fill(proxy, b):
             if not need:
                 continue
             ts = b["day"] + _hhmm(o + n - 1).replace(":", "")
-            q = "SELECT code, close FROM candles WHERE period = '1m' AND ts = ? AND code IN (%s)" % ",".join("?" * len(need))
-            got = dict(conn.execute(q, [ts] + [r["code"] for r in need]).fetchall())
+            got = _m1_px(conn, b["day"], [r["code"] for r in need], ts, "close")   # 거래량 0 채움 봉은 건너뜀
             for r in need:
                 v = got.get(r["code"])
                 if v:
@@ -1384,9 +2101,8 @@ def top_text(proxy, b, n=TG_TOP, head=""):
     if miss:
         lines.append("아직 못 받은 칩: " + " · ".join(miss))
     ts = b["day"] + _hhmm(_open_min(proxy, b["day"], b)).replace(":", "")
-    with proxy.db_conn() as conn:                      # 정규장 시가 = 여는 시각 1분봉 시가(시세의 시가는 장 전 값이 섞일 수 있다 · 11-19 CJ ENM 47,000 ↔ 10:00 봉 42,150)
-        q = "SELECT code, open FROM candles WHERE period = '1m' AND ts = ? AND code IN (%s)" % ",".join("?" * len(rows))
-        o1 = dict(conn.execute(q, [ts] + [r["code"] for r in rows]).fetchall()) if rows else {}
+    with proxy.db_conn() as conn:                      # 정규장 시가 = 여는 시각 1분봉 시가(시세의 시가는 장 전 값이 섞일 수 있다) · 그 봉이 거래량 0 채움 봉이면 첫 체결 봉 시가(11-19 CJ ENM 10:00 봉 42,150 은 채움 봉 · 첫 체결 47,000 — qa 11-20)
+        o1 = _m1_px(conn, b["day"], [r["code"] for r in rows], ts, "open")
     for i, r in enumerate(rows):
         p1 = ((r.get("pxMin") or {}).get("1") or {}).get("px")
         o = o1.get(r["code"])
@@ -1466,6 +2182,11 @@ def sell_text(r):
         (s["px"] / s["ref"] - 1) * 100, format(int(s["buy"]), ","), (s["px"] / s["buy"] - 1) * 100)
 
 
+TURN_NOTE = ("floatCap 풀린 시총(억원) = 발행주식수 × 유동비율(네이버 기업현황) × 현재가 · turn 거래 비율(%) = 그날 누적 거래대금 ÷ 풀린 시총 × 100 · "
+             "turnPrevPct 전날 대비(%) = 거래 비율 ÷ 전날 같은 시각(1분 칸)까지 거래 비율 × 100(굳힌 판은 그날 끝 ÷ 전날 끝) · 색 기준 data/metrics.json turn_prev_pct · "
+             "그날 판은 지금 값 · 굳힌 판은 그날 쌓인 마지막 값(turnover_day) · 못 잰 칸은 null · 우선주는 유동비율 출처가 없어 null")
+
+
 def board(proxy, day=None, cfg=None):
     """주소 /api/kis/dt30 의 data — 남긴 날만(없으면 None). 안 끝난 그날 판이면 rows[].now · nowAt 을 붙인다(cfg 를 줄 때)."""
     ds = days(proxy)
@@ -1476,6 +2197,10 @@ def board(proxy, day=None, cfg=None):
     b, saved = got
     b["meta"]["savedAt"] = saved
     try:
+        drop_small(proxy, b)                           # 그날 판 · 지난 판 모두 읽을 때 문턱 밖은 뺌(저장 안 함 · 지금 감시 목록 시총으로) — 재권님 「3천억 아래종목은 아예 고려대상이 아니야」 → 지난 판도 「응 빼 지금룰에 맞춰서 다 적용해」(11-23 09:3x)
+    except Exception as e:
+        print("  [단타 30] 문턱 거르기 못 함 — %s" % proxy.safe_message(e, 120), flush=True)
+    try:
         _pxmin_fill(proxy, b)                          # 여는 시각 + N분 값 · 09:01 값 — 적힌 것이 없으면 쌓인 1분봉에서(지난 판 · 그날 판 둘 다 · 저장 안 함)
         for r in b.get("rows") or []:
             r.setdefault("px1", None)
@@ -1484,6 +2209,10 @@ def board(proxy, day=None, cfg=None):
                 pm.setdefault(str(n), None)                # 못 잼 — 0 아님
     except Exception:
         pass
+    b["meta"]["subNames"] = {"매수|" + "①②③④"[k - 1]: v[0] for k, v in proxy.JOINT_TIER_NAME.items()}   # 하위 이름표 — 서버 한 곳(kis_proxy.JOINT_TIER_NAME · 11-20)
+    b["meta"]["subTips"] = {"매수|" + "①②③④"[k - 1]: v[1] for k, v in proxy.JOINT_TIER_NAME.items()}
+    import dt30_win
+    b["meta"]["tax"] = dt30_win.TAX                    # 거래세 · 농특세(%) — 서버 한 곳(dt30_win.TAX) · 화면은 보이기만 · 바꾸는 것은 증권수수료 칸 하나(재권님 11-20 14:09)
     b.setdefault("closed", True)                       # 옛 판(closed 칸 전) · 되채운 날은 끝난 판
     b["meta"]["refreshMs"] = None if b["closed"] else proxy.PRICE_CACHE_TTL * 1000
     if not b["closed"] and cfg is not None:
@@ -1493,6 +2222,15 @@ def board(proxy, day=None, cfg=None):
         for r in b["rows"]:
             r["now"] = (q.get(r["code"]) or {}).get("price")
         b["nowAt"] = _now().strftime("%H:%M:%S")
+    try:
+        import turnover
+        if not b["closed"] and cfg is not None:
+            turnover.fill(b["rows"], q, proxy)                 # 그날 판 — 지금 값(실시간)
+        else:
+            turnover.fill_day(proxy, b["day"], b["rows"])   # 굳힌 판 — 그날 쌓인 마지막 값 · 쌓기 전 날은 None
+    except Exception as e:
+        print("  [거래 비율] 판 칸 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
+    b["meta"]["turnNote"] = TURN_NOTE
     return b
 
 
@@ -1524,6 +2262,9 @@ def start(proxy):
                     n = backfill(proxy, day)
                     if n:
                         print("  [단타 30] 지난 날 %d일 다시 세어 남김" % n, flush=True)
+                    n = m1_fill(proxy, proxy.load_secrets())   # 장 끝난 뒤(QUIET 밖) — 지난 판 여는 시각 1분봉 빈 것 되받기
+                    if n:
+                        print("  [단타 30] 지난 판 1분봉 %d개(종목 · 날) 되받음" % n, flush=True)
             except Exception as e:
                 _status["error"] = type(e).__name__
                 print("  [단타 30] 되채우기 멈춤 — %s" % proxy.safe_message(e, 120), flush=True)
@@ -1548,27 +2289,47 @@ def start(proxy):
                 off = late_min(proxy, now)                 # 늦게 여는 날(수능) — 정규장 시각들을 그만큼 뒤로(재권님 「가로 해줘」 11-19)
                 if now.weekday() < 5 and market_hours.today(proxy, day=day, now=now).get("open") is not False:
                     got = _load(proxy, day)
-                    if got is None and BUY_AT[0] * 60 + BUY_AT[1] <= hm < BUY_LATE[0] * 60 + BUY_LATE[1] + off and _status["frozen"] != day:
+                    if got is None and BUY_AT[0] * 60 + BUY_AT[1] <= hm < BUY_LATE[0] * 60 + BUY_LATE[1] and _status["frozen"] != day:
                         b = build(proxy, proxy.load_secrets(), day)
+                        for r in b["rows"]:
+                            _sub_keep(r, None, now.strftime("%H:%M:%S"))   # 처음 지은 판 — 하위가 붙은 시각
+                        if hm < _buy_wait_cut(proxy, now):
+                            for r in b["rows"]:
+                                r["buy"], r["buyWait"] = None, True          # 여는 시각 + 1분 전에 지은 판 — 9시 1분 값을 기다린다
+                        else:
+                            _buy_now(proxy, proxy.load_secrets(), [r for r in b["rows"] if not r.get("buyWait")])   # 장중에 처음 짓는 판(서버가 늦게 뜸) — 든 순간 현재가
                         _store(proxy, b)
                         _status.update(frozen=day, error=None)
                         print("  [단타 30] %s %02d:%02d 판 %d종목 굳힘%s" % (day, BUY_AT[0], BUY_AT[1], len(b["rows"]),
                               " · 못 받은 칩 " + " · ".join(b["meta"]["missing"]) if b["meta"]["missing"] else ""), flush=True)
                     elif got is not None:
                         b = got[0]
-                        if b.get("closed") and not b.get("rows") and hm < BUY_LATE[0] * 60 + BUY_LATE[1] + off:
+                        if not b.get("closed") and lock_fix(b):
+                            _store(proxy, b)               # 굳힘 시각 뒤 든 줄이 그 묶음에 있으면 다음 굳힘으로(11-23)
+                            print("  [단타 30] %s 판 굳힘 묶음 고침 — 굳힘 시각 뒤 든 줄을 다음 굳힘으로" % day, flush=True)
+                        if not b.get("closed") and drop_small(proxy, b):
+                            _store(proxy, b)               # 문턱 밖 종목 — 굳힌 줄도 뺀다(그날 판만 · 끝난 판은 안 건드림)
+                            print("  [단타 30] %s 판에서 시가총액 문턱 밖 종목 뺌 — %s" % (day, " · ".join(x["name"] or x["code"] for x in b["meta"]["capDrop"][-20:])), flush=True)
+                        if b.get("closed") and not b.get("rows") and hm < BUY_LATE[0] * 60 + BUY_LATE[1]:
                             b["closed"] = False            # 줄 0 으로 굳어 버린 판 — 굳히는 때 전이면 다시 연다(11-19 수능 아침 08:00 에 빈 판이 굳어 다시 세기가 멈춤)
                         was = bool(b.get("closed"))
                         due = [t for t in b["times"] if int(t[:2]) * 60 + int(t[2:]) + 1 <= hm
                                and any(t not in r["px"] for r in b["rows"])]
                         filled_late = []
-                        if not b.get("closed") and hm < BUY_LATE[0] * 60 + BUY_LATE[1] + off:
+                        if not b.get("closed") and hm < BUY_LATE[0] * 60 + BUY_LATE[1]:
                             if time.time() - _status.get("rescan", 0) >= RESCAN_SEC:
                                 _status["rescan"] = time.time()
                                 if refresh(proxy, proxy.load_secrets(), b):
                                     filled_late = ["다시 셈"]
                         elif not b.get("closed"):
                             filled_late = patch_late(proxy, proxy.load_secrets(), b)
+                            if _lock_due(b, hm):                   # 굳히는 때(10:30)가 지난 뒤 — 남은 차례(마지막 10개)를 굳힌다(다시 셈은 안 함)
+                                filled_late = list(filled_late) + ["굳힘"]
+                            if _buy_open_fill(proxy, b):           # 굳힌 뒤에도 시가를 기다리는 줄 — 1분봉이 늦게 들어오면 채움(DB 만 읽음)
+                                filled_late = list(filled_late) + ["시가"]
+                            n_in = intraday_add(proxy, proxy.load_secrets(), b, hm)   # 굳힌 뒤 새로 걸린 종목 — 「장중」 묶음(11-23)
+                            if n_in:
+                                filled_late = list(filled_late) + ["장중 %d" % n_in]
                         if filled_late and filled_late != ["다시 셈"]:
                             print("  [단타 30] %s 판에 늦게 나온 칩 채움 — %s" % (day, " · ".join(filled_late)), flush=True)
                         if due:
@@ -1584,6 +2345,11 @@ def start(proxy):
                             # 아침 상위는 개장 직후 창 안에서만 정한다 — 서버가 낮에 뜨면 그때 상위로 「팔 때」 를 보내지 않게(그날은 안 봄)
                             b["meta"]["tgTop"] = [r["code"] for r in sorted(b["rows"], key=lambda r: r.get("rank") or 1e9)[:TG_TOP]]   # 아침 상위 — 「팔 때」 를 보는 종목(보냄과 무관하게 적음)
                             b["meta"]["tgTopAt"] = _now().strftime("%H:%M")
+                            flow_now = True
+                        if pre_fill(proxy, proxy.load_secrets(), b, hm):   # 오늘 프리장 끝 값 — 08:50 뒤 · 새로 든 줄은 다음 바퀴에
+                            flow_now = True
+                        if (b.get("closed") or hm >= BUY_LATE[0] * 60 + BUY_LATE[1]) and b.get("rows") and hm < _close_min(proxy, now) \
+                                and sub_track(proxy, proxy.load_secrets(), b):   # 굳힌 뒤(10:30) · 14:00 칸을 적어 판이 닫힌 뒤에도 정규장 끝까지 매수 하위(①~④)를 이어 쌓는다
                             flow_now = True
                         if b["meta"].get("tgTop"):           # 판이 굳은 뒤(14:00)에도 정규장 끝 SELL_UNTIL_MIN 분 전까지 본다(sell_watch 가 시각을 가름 · 개념정의 걸림 11-19)
                             for r in sell_watch(proxy, proxy.load_secrets(), b):

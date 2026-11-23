@@ -18,6 +18,10 @@
                                                                            줄 앞의 그 표기만 센다. 열린 물음이 없으면 --answer 는 막는다
     python3 tools/board-card.py "<카드 제목 일부>" --after "<무엇>"                 이 할 일이 기다리는 것 — 「HH:MM 뒤에 진행: …」 줄.
                                                                            현황판이 쉬는 세션을 「진행 예정 — <무엇> 뒤」 로 보인다
+    python3 tools/board-card.py "<카드 제목 일부>" --measuring "<포트> ~<끝 시각>"      재는 중 — 「HH:MM 측정 중: 8765 · 8764 ~15:20」 (2026-11-23)
+    python3 tools/board-card.py "<카드 제목 일부>" --measured                       재기 끝 — 「HH:MM 측정 끝」
+    python3 tools/board-card.py --measuring-list [<포트> …]                         열린 측정 (0 없음 · 1 있음 · 2 못 봄) — 8765 · 8764 재시작 전에 센다
+                                                                           (CLAUDE.md 「8765 · 8764 를 재시작하기 전에 보드의 「측정 중」 카드를 센다」)
     어느 명령이든 --label <담당>                                            세션 이름을 못 얻을 때 손으로 (= KJC_BOARD_LABEL)
 
 **메모 줄은 홑따옴표로 넘긴다.** 큰따옴표 안의 백틱(`…`)은 셸이 명령으로 실행해 **그 부분이 조용히 사라진다**
@@ -288,6 +292,61 @@ COLUMNS = ("todo", "doing", "review", "done")
 
 
 ASK_HEAD = re.compile(r"^\s*(?:\d{1,2}:\d{2}\s+)?(묻는 중|답):\s*(.*)$")
+
+
+MEAS_HEAD = re.compile(r"^\s*(?:\d{1,2}:\d{2}\s+)?(측정 중|측정 끝)\s*:?\s*(.*)$")
+
+
+def open_measure(memo):
+    """끝 줄이 안 붙은 마지막 「측정 중:」 글 — 없으면 None. 꼴은 --measuring 이 만든 「측정 중: <포트> ~<끝 시각>」."""
+    left = None
+    for ln in memo.split("\n"):
+        m = MEAS_HEAD.match(ln)
+        if m:
+            left = m.group(2).strip() if m.group(1) == "측정 중" else None
+    return left
+
+
+def measures(doc, ports=None):
+    """열린 측정 [(재는 세션 — 줄에 없으면 카드 담당, 카드 제목, 포트들, 끝 시각 | None)] — done 열 · 오늘 안 고친 카드 · 끝 시각이 지난 것은 뺀다
+    (끝 줄을 잊은 카드가 영영 걸리지 않게 · 메모 줄 시각에 날짜가 없어 카드 updatedAt 의 날로 오늘 것만 센다)."""
+    today = time.strftime("%Y-%m-%d")
+    hm = time.strftime("%H:%M")
+    out = []
+    for t in tasks(doc):
+        if t.get("column") == "done":
+            continue
+        txt = open_measure(t.get("memo") or "")
+        if txt is None:
+            continue
+        up = t.get("updatedAt") or t.get("createdAt") or 0
+        if time.strftime("%Y-%m-%d", time.localtime(up / 1000)) != today:
+            continue
+        ps = re.findall(r"\b(8\d{3})\b", txt)
+        if ports and not set(ps) & set(ports):
+            continue
+        m = re.search(r"~\s*(\d{1,2}):(\d{2})", txt)
+        end = "%02d:%s" % (int(m.group(1)), m.group(2)) if m else None
+        if end and end <= hm:
+            continue
+        w = re.search(r"재는 세션 (\S+)", txt)
+        out.append((w.group(1) if w else (t.get("who") or "?"), t.get("text") or "", ps, end))
+    return out
+
+
+def cmd_measuring_list(ports):
+    try:
+        doc, _ = read()
+    except Unseen as e:
+        print("보드를 못 봤다(%s) — 열린 측정 못 셈" % e)
+        return 2
+    got = measures(doc, ports)
+    if not got:
+        print("열린 측정 없음%s" % ((" — 포트 " + " · ".join(ports)) if ports else ""))
+        return 0
+    for who, text, ps, end in got:
+        print("  측정 중 · %s · 포트 %s · 끝 %s · %s" % (who, " · ".join(ps) or "모름", end or "모름", text[:60]))
+    return 1
 
 
 def open_question(memo):
@@ -638,6 +697,8 @@ def main(argv):
         return cmd_mine()
     if argv[0] == "--gate":
         return cmd_mine(gate=argv[1] if len(argv) > 1 else "edit")
+    if argv[0] == "--measuring-list":
+        return cmd_measuring_list([p for p in argv[1:] if p.isdigit()])
     if argv[0] == "--commit":
         return cmd_commit("--dry" in argv)
     if argv[0] == "--merged":
@@ -649,7 +710,12 @@ def main(argv):
     key = argv[0]
     line = argv[1] if len(argv) > 1 and not argv[1].startswith("--") else ""
     sub = done = column = assign = title = rank = tag = None
-    for flag, head in (("--ask", "묻는 중: "), ("--answer", "답: "), ("--after", "뒤에 진행: ")):
+    if "--measured" in argv:
+        argv = [a for a in argv if a != "--measured"]
+        if line:
+            sys.exit("--measured 는 메모 줄과 따로 적으십시오")
+        line = "측정 끝"
+    for flag, head in (("--ask", "묻는 중: "), ("--answer", "답: "), ("--after", "뒤에 진행: "), ("--measuring", "측정 중: ")):
         if flag in argv:
             i = argv.index(flag)
             v = (argv[i + 1] if i + 1 < len(argv) else "").strip()
@@ -657,8 +723,10 @@ def main(argv):
                 sys.exit("%s 에 글을 주십시오" % flag)
             argv = argv[:i] + argv[i + 2:]
             if line:
-                sys.exit("--ask · --answer · --after 는 한 번에 하나만, 메모 줄과도 따로 적으십시오")
+                sys.exit("--ask · --answer · --after · --measuring 은 한 번에 하나만, 메모 줄과도 따로 적으십시오")
             line = head + v
+            if flag == "--measuring":       # 재는 세션 이름을 줄에 — 남의 카드에 적어도 알릴 곳이 갈린다(qa 11-23)
+                line += " · 재는 세션 %s" % (label_of(session_name()) or "모름")
     if line and re.search(r"(묻는 중|답):", line) and not ASK_HEAD.match(line):
         # 줄 가운데의 표기는 현황판이 못 본다(2026-10-14 셈: 줄 앞 7 · 가운데 35) — 막지 않고 알린다
         print("알림: 메모 줄 가운데의 「묻는 중:」 · 「답:」 은 현황판이 못 봅니다 — --ask \"<물음>\" · --answer \"<답>\" 로 따로 적으십시오",

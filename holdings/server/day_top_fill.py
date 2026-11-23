@@ -23,7 +23,7 @@ day_top 은 11-11 부터 날마다 그날 판을 남긴다. 그 앞 FILL_DAYS �
                    그날 판은 시장 전체 순위 목록(가집계)이고 여기는 대상(MIN_CAP_EOK 이상) 안 확정치라 다를 수 있고 처음 잡힌 시각이 없다 · meta.approx
       수급         지금 룰(auto_watch.rules · volsurge 의 prevPct · volMult) — 그날 등락률 · 거래량 ÷ 앞 20거래일 평균(auto_watch_day)
       거래량전날2배 auto_watch_day 그날 ÷ 앞 날 ≥ day_top.VOL_PREV_X
-      단타         day_top.OV_FROM 중 둘 이상(관심 없이)
+      단타         day_top.ov_from() 중 둘 이상(관심 없이)
     못 셈        관심 — 그날 하트 목록이 남아 있지 않다(증권사에도 없다) → meta.missing
     빠진 5분봉   프리마켓 · 첫 봉 자리에 5분봉이 없는 종목은 KIS 지난 날 분봉(FHKST03010230)을 09:05 에서 한 번(120분 · 07:06~09:05)
                 받아 5분봉으로 저장한다(kis_proxy.save_candles · 그 범위 안 다섯 분이 다 든 칸만)
@@ -172,7 +172,7 @@ def build(proxy, day, kis=True):
                 pass
     cap = {r["stock_code"]: r["market_cap"] for r in dart.universe_rows(None)}
     sec = company_profile.sectors()
-    uni = [c for c, r in today.items() if r[4] is not None and cap.get(c) is not None and cap[c] >= day_top.MIN_CAP_EOK]
+    uni = [c for c, r in today.items() if r[4] is not None and cap.get(c) is not None and cap[c] >= day_top.min_cap_eok()]
 
     t = market_hours.today(proxy, day=day)
     open_hm = t["usual"]["reg"][0]
@@ -279,7 +279,7 @@ def build(proxy, day, kis=True):
     for c in uni:
         code, name, idx, close, pct, vol = today[c]
         f = dict(hit.get(c) or {})
-        ov = [k for k in day_top.OV_FROM if k in f or (k == "VI·급등" and ("VI" in f or "급등" in f))
+        ov = [k for k in day_top.ov_from() if k in f or (k == "VI·급등" and ("VI" in f or "급등" in f))
               or (k == "매수" and any(x.startswith("매수") for x in f))]
         if len(ov) >= 2:
             f["단타"] = ""
@@ -293,7 +293,7 @@ def build(proxy, day, kis=True):
     stats = [{"name": n, "top": sum(1 for r in top if n in r["filters"]), "all": sum(1 for r in rows if n in r["filters"])} for n in names]
     stats.sort(key=lambda s: (-s["top"], -s["all"]))
     return {"day": day, "rows": rows, "filterStats": stats,
-            "meta": {"universe": len(rows), "topN": day_top.TOP_N, "minCapEok": day_top.MIN_CAP_EOK, "prevDay": pd, "volPrevX": day_top.VOL_PREV_X,
+            "meta": {"universe": len(rows), "topN": day_top.TOP_N, "minCapEok": day_top.min_cap_eok(), "prevDay": pd, "volPrevX": day_top.VOL_PREV_X,
                      "rebuilt": True, "missing": ["관심"], "capNow": True, "calls": calls[0], "filled5m": filled, "noBar": no_bar,
                      "viFail": vi_fail if kis else None, "programFail": prog_fail if kis else None, "kis": kis,
                      "approx": {"프리장": "프리마켓 5분봉 거래대금 · 등락률은 마지막 프리마켓 봉 종가 ÷ 앞 날 종가(그날 판은 넥스트레이드 시세)",

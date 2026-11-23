@@ -30,6 +30,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
+import market_hours
 import naver
 import nxt_board
 import nxt_pre
@@ -41,7 +42,7 @@ OPEN, CLOSE = (8, 0), (20, 0)       # 넥스트 프리 08:00 ~ 애프터 20:00
 SLOT_MIN = 5
 RATIO = 2.0                          # 「2배 이상」
 MIN_PREV = nxt_pre.MIN_PREV          # 어제 그 구간 거래량 문턱(주) — 장 전 알림과 같은 값을 불러 쓴다(이슈 ⑥ 안 「응」 · 개념정의 덧말)
-KEEP_DAYS = 4
+KEEP_DAYS = market_hours.KEEP_TRADE_DAYS   # 보관 거래일 — 1년(11-23 재권님 「전부다 1년을 쌓는다로 해줘」 · 그 전 4) · 값은 market_hours 한 곳
 TICK = 10
 FLOW_TTL = 30                        # 읽기 캐시(초) — 롱폴이 같은 값을 거듭 읽을 때 DB 를 덜 연다
 
