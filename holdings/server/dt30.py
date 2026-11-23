@@ -1876,6 +1876,8 @@ def rebuild(proxy, day, prev, cfg=None):
     import auto_watch, company_profile, dart, intraday_alerts, market_hours, open_rise, pre_flow
     uni = dart.universe_rows(None)
     cap = {r["stock_code"]: r["market_cap"] for r in uni}
+    if not cap:
+        return None                                    # 감시 목록을 못 읽으면 다시 짓지 않는다 — 다 「시총 모름」 으로 빠진 빈 판이 allRows 로 굳지 않게(개념정의 덧 11-23)
     mkt = {r["stock_code"]: r["market"] for r in uni}
     small = lambda c: cap.get(c) is not None and cap[c] < cap_min_eok()
     with proxy.db_conn() as conn:
