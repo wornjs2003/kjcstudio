@@ -874,6 +874,16 @@ def buy_need():
         return 1
 
 
+def buy_until():
+    """칩을 세는 끝 — 셈 칸 rules.dt30.set.buyLate930 이 참이면 장 끝까지(09:30 뒤에 찬 종목도 삼) · 없거나 거짓 · 못 읽음이면 CHIP_UNTIL.
+    재권님 「살지말지 내가 정할수 있어야해」(11-23 · 시황분석1 화면 bb01c41 과 같은 열쇠)."""
+    try:
+        import dt30_win
+        return (23, 59) if dt30_win._set().get("buyLate930") is True else CHIP_UNTIL
+    except ImportError:
+        return CHIP_UNTIL
+
+
 def _in4(r):
     t = str(r.get("buyTs") or "").replace(":", "")
     return t[:4] if len(t) >= 4 and t[:4].isdigit() else _hm4(r.get("buyAt"))
@@ -933,16 +943,16 @@ def buy930_fill(proxy, b):
         cf = chip_first_get(proxy, b["day"], [r["code"] for r in rows])
     except Exception:
         cf = {}
-    ct, need, o = chip_times(dict(b, rows=rows), cf), buy_need(), _open_min(proxy, b["day"], b)   # 빠진 줄(outRows)의 칩 시각도(개념정의 걸림)
+    ct, need, o, until = chip_times(dict(b, rows=rows), cf), buy_need(), _open_min(proxy, b["day"], b), buy_until()   # 빠진 줄(outRows)의 칩 시각도(개념정의 걸림)
     for r in rows:
         c = ct.get(r["code"]) or {}
         r["chipTime"] = {k: "%s:%s" % (v[:2], v[2:]) for k, v in c.items()}
-        r["chips930"] = chips930(r, c)
-        r["buy930"] = buy_point(b, r, c, need, o)
+        r["chips930"] = chips930(r, c, until)
+        r["buy930"] = buy_point(b, r, c, need, o, until)
     got = sorted((r for r in rows if r["buy930"]), key=lambda r: (r["buy930"]["chipAt"], r.get("rank") or 1e9))
     for i, r in enumerate(got, 1):
         r["buy930"]["rank"] = i                        # 산 차례 — 칩 N개 먼저 찬 순(같은 분이면 판 차례) · 한 번 차면 고정 · 뒤에 찬 종목은 아래로(재권님 19:2x 「칩이 먼저찬 순서대로 순위」)
-    b["meta"]["buy930"] = {"until": "%02d:%02d" % CHIP_UNTIL, "need": need,
+    b["meta"]["buy930"] = {"until": "%02d:%02d" % CHIP_UNTIL, "late": until != CHIP_UNTIL, "need": need,
                            "note": "칩은 %02d:%02d 까지 붙은 것만(한 번 붙었다 없어진 칩도 그 시각) · 칩 시각(chipTime)을 세워 %d번째가 붙은 순간에 삼 · 산 차례(buy930.rank) = 칩 먼저 찬 순 — 차면 고정 · 뒤에 찬 종목은 아래로 · 몇 종목 살지는 화면 · 그 순간이 9시 1분 이하면 9시 1분 값 · 여는 시각 + 1~5분 안이면 그 분 값 · "
                                    "그 뒤 판에 든 때면 든 때 값 · 아니면 다음 30분 칸 값 · 칩 시각 모르면 판에 든 때(그것도 모르면 장 전) · 화면이 끈 칩은 서버 셈에 안 듦(브라우저마다)" % (CHIP_UNTIL + (need,))}
     return b
@@ -961,6 +971,53 @@ def _out_px(proxy, b, outs):
                 if got and got[0]:
                     px[t], src[t] = got[0], "5m"
             r["px"], r["pxSrc"] = px, src
+
+
+def bars_get(proxy, day, codes, lo, end):
+    """{code: (「1m」 | 「5m」, [[「HH:MM」 봉 시작, 시가, 고가, 저가, 종가], …])} — lo(HHMM) 부터 end(HHMM) 앞까지 · 1분봉이 있으면 1분봉(거래량 0 채움 봉은 뺌) ·
+    없으면 5분봉 · 둘 다 없으면 칸 없음 · 값이 빈 봉은 뺀다(0 아님). 봉 줄 · 승률 표 매도 셈이 함께 쓴다."""
+    got = {}
+    if not codes:
+        return got
+    with proxy.db_conn() as conn:
+        for per in ("1m", "5m"):
+            need = [c for c in codes if c not in got]
+            if not need:
+                break
+            a = lo if per == "1m" else "%02d%02d" % divmod((int(lo[:2]) * 60 + int(lo[2:])) // BAR_MIN * BAR_MIN, 60)
+            for c, ts, o, h, l, cl, v in conn.execute(
+                    "SELECT code, ts, open, high, low, close, volume FROM candles WHERE period = ? AND ts >= ? AND ts < ? AND code IN (%s) ORDER BY ts" % ",".join("?" * len(need)),
+                    [per, day + a, day + end] + need):
+                if per == "1m" and not v:
+                    continue                           # 체결 없이 앞 값으로 채운 봉
+                if o and h and l and cl:
+                    got.setdefault(c, (per, []))[1].append([ts[8:10] + ":" + ts[10:12], o, h, l, cl])
+    return got
+
+
+def bars_after(per, bs, at):
+    """산 시각 at(「HH:MM」)부터의 봉 — 5분봉이면 산 분이 든 봉부터."""
+    if per == "5m":
+        at = "%02d:%02d" % divmod((int(at[:2]) * 60 + int(at[3:])) // BAR_MIN * BAR_MIN, 60)
+    return [x for x in bs if x[0] >= at]
+
+
+def bars_fill(proxy, b):
+    """산 줄(buy930)마다 rows[].bars [[「HH:MM」, 시가, 고가, 저가, 종가], …] · barSrc 「1m」 · 「5m」 · null — 산 분부터 판 끝(times 마지막) 앞까지(bars_get).
+    매도 타점을 30분 칸이 아니라 봉으로 — 재권님 「매도에서 해당룰이 적용안되는거 같은데. 3%나 4%를 맞으면 안되는데 이거 왜이래? 매도타점 정확히 계산해」(11-23 19:1x) ·
+    「손절이 2%가 넘는건 이유가 뭐지?」(19:4x). 읽을 때만(저장 안 함)."""
+    rows = [r for r in (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or []) if r.get("buy930")]
+    if not rows:
+        return 0
+    lo = min(r["buy930"]["at"].replace(":", "") for r in rows)
+    got = bars_get(proxy, b["day"], [r["code"] for r in rows], lo, (b.get("times") or ["1400"])[-1])
+    n = 0
+    for r in rows:
+        per, bs = got.get(r["code"], (None, []))
+        r["bars"] = bars_after(per, bs, r["buy930"]["at"])
+        r["barSrc"] = per if r["bars"] else None
+        n += bool(r["bars"])
+    return n
 
 
 CF_VER = "f1"                 # 칩 시각 공식(chip_first_backfill)이 바뀌면 올린다 — 남은 판마다 한 번 다시 채운다(meta.cfVer)
@@ -2793,9 +2850,10 @@ def board(proxy, day=None, cfg=None):
     except Exception:
         pass
     try:
-        buy930_fill(proxy, b)                          # 사는 셈 한 곳 — 칩 시각 · 09:30 까지 칩 · N번째 칩 찬 때 값(rows[].buy930 · 화면은 받기만)
+        buy930_fill(proxy, b)                          # 사는 셈 한 곳 — 칩 시각 · 09:30 까지 칩 · N번째 칩 찬 때 값(rows[].buy930 · 화면은 받기만) · 아래 봉 줄은 이 값을 씀
+        bars_fill(proxy, b)                            # 산 때~판 끝 봉 줄(매도 타점 재료 · 화면 · 승률 표 같은 봉)
     except Exception as e:
-        print("  [단타 30] 사는 셈 못 함 — %s" % proxy.safe_message(e, 120), flush=True)
+        print("  [단타 30] 봉 줄 못 붙임 — %s" % proxy.safe_message(e, 120), flush=True)
     b["meta"]["subNames"] = {"매수|" + "①②③④"[k - 1]: v[0] for k, v in proxy.JOINT_TIER_NAME.items()}   # 하위 이름표 — 서버 한 곳(kis_proxy.JOINT_TIER_NAME · 11-20)
     b["meta"]["subTips"] = {"매수|" + "①②③④"[k - 1]: v[1] for k, v in proxy.JOINT_TIER_NAME.items()}
     import dt30_win
