@@ -263,7 +263,7 @@ const inTs = (r) => { const t = String(r.buyTs || '').replace(/:/g, ''), a = hhm
 const notYetIn = (r, at) => { if (pmOf(buyKey()) === 1 && Number(r.lock) > 0) return '';   // 굳힌 줄은 든 때 산 것(11-23)
   if (pmOf(buyKey()) === 1 && inUntil()) at = `${inUntil()}59`; const e = inTs(r), a = String(at || '').replace(/:/g, '').padEnd(6, '0').slice(0, 6); return newBuyOf(curD()) && e && /^\d{6}$/.test(a) && a < e ? (r.buyTs ? String(r.buyTs) : hmS(hhmm(r.buyAt))) : ''; };
 const chipNeed = () => Math.max(1, Number(st.set.minChip) || 1);
-// 켜진 칩이 붙은 시각을 세워 N번째(칩 수 기준) — HHMM · 시각 모르는 칩은 그 줄이 판에 처음 든 때로 봄(칩은 든 때보다 앞설 수 없음 · 든 때도 모르면 장 시작 전) · 칩이 모자라면 null
+// 켜진 칩이 붙은 시각을 세워 N번째(칩 수 기준) — HHMM · 시각을 아는 칩만 셈 · 모자라면 null
 // 칩 시각은 서버 rows[].chipTime(칩마다 처음 붙은 시각 · 한 번 붙었다 빠져도 남음 · 개발2 a3ea7ff)이 있으면 그것 먼저
 // 칩 N개 찬 시각 — 시각을 아는 칩만 셈(11-24 재권님 「그렇게 해」 — 시각 모르는 칩을 「판에 든 때 · 00:00」 으로 짐작해 다시 지은 판에서 위로 올라가던 것 · 서버 buy_point 도 같게 개발2)
 const nthChipAt = (r) => { const at = { ...(r.chipAt || {}), ...(r.chipTime || {}) }; const ts = colsOf().filter((c) => liveChip(r, c)).map((c) => String(at[c] || (c === 'VI·급등' ? r.viAt || '' : '')).replace(/:/g, '').slice(0, 4)).filter((t) => /^\d{4}$/.test(t)).sort(); const N = chipNeed(); return ts.length >= N ? ts[N - 1] : null; };
