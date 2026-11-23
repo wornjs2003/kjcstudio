@@ -1058,9 +1058,9 @@ def live_merge(b):
             b["rows"].append(r)
             rows[o["code"]] = r
         else:
-            for k in ("buy", "buyAt", "pct", "rise"):
+            for k in ("buy", "buyAt", "buyTs", "buySrc", "pct", "rise", "subAt", "viAt", "surgeAt", "viPx", "pxMin", "px1"):
                 if o.get(k) is not None:
-                    r[k] = o[k]
+                    r[k] = o[k]                        # 장중에 적은 값 — 든 시각 초(buyTs) · 산 값 출처 · 하위 붙은 시각 · VI 시각까지(개념정의 덧 11-24)
             ca = dict(r.get("chipAt") or {})
             for c, t in (o.get("chipAt") or {}).items():
                 if t and (not ca.get(c) or t < ca[c]):
@@ -2494,7 +2494,7 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
         elif stale and not m.get("rebuilt"):           # 라이브로 굳힌 날 — 덮이는 장중 기록을 한 벌 남긴다(today_too 와 같은 꼴)
             old = got[0]
             keep_live[d] = {"savedAt": got[1], "buyAt": old.get("buyAt"), "meta": old.get("meta"),
-                            "rows": [{k: r.get(k) for k in ("code", "name", "rank", "chips", "subs", "n", "buy", "buyAt", "pct", "rise", "px", "pxSrc", "lock", "lockAt", "chipAt")}
+                            "rows": [{k: r.get(k) for k in ("code", "name", "rank", "chips", "subs", "n", "buy", "buyAt", "buyTs", "buySrc", "pct", "rise", "px", "pxSrc", "lock", "lockAt", "chipAt", "subAt", "viAt", "surgeAt", "viPx", "pxMin", "px1")}
                                      for r in old.get("rows") or []]}
     n = 0
     cfg = proxy.load_secrets()
