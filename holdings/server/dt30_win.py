@@ -72,6 +72,24 @@ def day_rows(b):
     return out
 
 
+def _in_ts(r):
+    """판에 든 때 HHMMSS — buyTs(초까지) · 없으면 buyAt + 「00」 · 둘 다 없으면 ''(옛 판 · 못 가름 → 안 뺌)."""
+    t = str(r.get("buyTs") or "").replace(":", "")
+    if len(t) >= 6 and t[:6].isdigit():
+        return t[:6]
+    a = str(r.get("buyAt") or "").replace(":", "")[:4]
+    return a + "00" if len(a) == 4 and a.isdigit() else ""
+
+
+def _in_until(proxy, day, rule):
+    """그날 든 때 가격으로 사는 끝 HHMMSS — 셈 칸 inUntil(없으면 SET_DEF) 분 59초 · 늦게 여는 날은 늦은 분만큼 뒤(여는 시각 + 1분 기준 · 개념정의 덧 11-23) · 못 읽으면 ''(안 뺌)."""
+    v = str(rule.get("inUntil") or "").replace(":", "").strip()
+    if len(v) != 4 or not v.isdigit():
+        return ""
+    m = int(v[:2]) * 60 + int(v[2:]) + dt30.late_min(proxy, day=day)
+    return "%02d%02d59" % divmod(m, 60)
+
+
 def fill(proxy):
     """끝난 판 중 아직 안 쌓았거나 다시 저장된 날을 쌓는다 → 쌓은 날 수."""
     n = 0
@@ -244,9 +262,13 @@ def summary(proxy, days=DAYS_DEFAULT):
     for day, raw in got:
         rows = json.loads(raw)
         rets, miss, best = [], 0, []
+        cut = _in_until(proxy, day, rule)
         for r in rows:
             if str(r.get("buyAt") or "").replace(":", "")[:4] >= end:
                 continue                               # 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것 — 화면 셈과 같게(재권님 「가」 11-20 · 시황분석 화면)
+            e = _in_ts(r)
+            if cut and e and e > cut:
+                continue                               # 든 때 가격으로 사는 끝(inUntil 분 59초) 뒤 든 종목은 안 삼 — 화면 단타 판 셈과 같게(11-23 재권님 「9시 1분부터 5분까지는 들어올때 산다」)
             r["sell"], why = sell_of(r, end, rule)     # 매도 룰 — 부를 때 셈(셈 칸을 바꾸면 지난 날에도 바로 든다 · 수수료와 같은 길)
             whys[why] = whys.get(why, 0) + 1
             v = net_pct(r, fee)
