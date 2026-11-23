@@ -65,7 +65,7 @@ async function loadDtChips() {
     const r = await fetch('/api/kis/chip-rules', { cache: 'no-store' }); const j = r.ok ? await r.json() : null;
     const v = j && j.ok && Array.isArray(j.data) ? (j.data.find((x) => x.chip === '단타' && x.key === 'ovChips') || {}).value : null;
     const sd = j && j.meta && j.meta.sellDef; if (sd && typeof sd === 'object') { Object.assign(SELL_DEF, sd); st.sellFail = false; } else st.sellFail = true;
-    if (Array.isArray(v) && v.length) { DT_CHIPS.splice(0, DT_CHIPS.length, ...volNext(v.map(chipName))); if (!CHIP_SEEN.length) CHIP_SEEN.push(...v.map(chipName));   /* 칩 색은 서버 목록 차례 그대로 — 칸을 옮겨도 색이 안 바뀜 */ st.chipFail = false; }
+    if (Array.isArray(v) && v.length) { DT_CHIPS.splice(0, DT_CHIPS.length, ...volNext(v.map(chipName))); if (!CHIP_SEEN.length) CHIP_SEEN.push(...v.map(chipName));   /* 칩 색은 서버 목록 차례 그대로 — 칸을 옮겨도 색이 안 바뀜 */ st.chipFail = false; addNewChips(v.map(chipName)); }
   } catch (e) { st.sellFail = true; /* 못 받음 — 빈 목록 그대로 · 다음 판 받기 때 다시 */ }
 }
 // 칩 칸 (11-12 재권님 「칩을 추가해도 칩을 활성화 비활성화되도록 우리꺼에 맞게 그려봐」 → 시안 temp/시황분석1-cols-1800 → 「오 좋아 이런거야 이대로 먼저 개선해서 올려줘」)
@@ -82,6 +82,18 @@ const COLS_MOVED = 'dt30-cols-vol2-1123';
 const colsOf = () => (st.cols || DT_CHIPS).filter((c) => !(st.watchAuto && c === '자동'));
 (() => { try { const v = JSON.parse(localStorage.getItem(COLS_KEY) || 'null'); if (v && Array.isArray(v.cols) && v.cols.length) { st.cols = v.cols.map(String).map(chipName); st.off = new Set((v.off || []).map(String).map(chipName)); if (!localStorage.getItem(COLS_MOVED) && (st.cols.includes('거래량급증') || VOL_CHIPS.some((x) => st.cols.includes(x)))) { if (st.off.has('거래량급증')) VOL_CHIPS.forEach((x) => st.off.add(x)); st.off.delete('거래량급증'); st.cols = volNext(st.cols); localStorage.setItem(COLS_MOVED, '1'); localStorage.setItem(COLS_KEY, JSON.stringify({ ...v, cols: st.cols, off: [...st.off] })); } } } catch (e) { /* 기본 칸 */ } })();   // 꺼 둔 칩(off)을 먼저 읽고 옛 이름을 바꾼 뒤 저장 — 빈 목록으로 덮지 않음(개념정의 검수 11-23)
 const colsSave = () => { try { localStorage.setItem(COLS_KEY, JSON.stringify({ cols: colsOf(), off: [...st.off] })); } catch (e) { /* 이 브라우저에 못 남겨도 화면은 돈다 */ } };
+// 서버가 새로 보낸 칩은 저장된 칸에 저절로 넣는다(11-23 재권님 「넣어」 — 메인 브라우저에 두 거래 칩 생기기 전 칸이 저장돼 있어 그 칩 칸이 영영 안 생김)
+//   이 브라우저가 본 서버 칩(KNOWN_KEY)에 없던 칩만 넣는다 — 손으로 지운 칩은 이미 본 칩이라 다시 안 넣음 · 거래 칩은 volNext 로 관심 뒤 · 그 밖은 끝
+//   처음 도는 브라우저는 거래 칩 둘만 새 칩으로 본다(그 전에 지운 칩까지 되살리지 않게)
+const KNOWN_KEY = 'dt30-chips-known-v1';
+function addNewChips(list) {
+  try {
+    const raw = localStorage.getItem(KNOWN_KEY), known = raw ? JSON.parse(raw) : list.filter((c) => !VOL_CHIPS.includes(c));
+    const fresh = list.filter((c) => !known.includes(c));
+    if (st.cols && fresh.length) { const add = fresh.filter((c) => !st.cols.includes(c)); if (add.length) { st.cols = volNext([...st.cols, ...add]); colsSave(); } }
+    localStorage.setItem(KNOWN_KEY, JSON.stringify([...new Set([...known, ...list])]));
+  } catch (e) { /* 이 브라우저에 못 남겨도 화면은 돈다 — 칸은 「+ 칩」 으로 */ }
+}
 const CHIP_SEEN = [];   // 칩 색 차례 — 서버 단타 칩 차례(loadDtChips 가 채움) 뒤로 처음 본 차례(색 변수는 일곱이라 돌려 씀)
 const HOT = { '현시간 유통회전': 'vol', '전일 현시간 대비 급증': 'vol2', 'VI·급등': 'vi', 매수: 'buy' };   // 튀는 색 칩 — 진한 바탕 · 하위 단추마다 다른 색(strategy.css · 11-23 재권님 「색은 완전히 튀는 색으로 해주고 각각 버튼 색 다르게」 → 「vi 랑 매수도 이렇게 각각 색이랑 튀도록 해줘」)
 const colorOf = (c) => { if (HOT[c]) return HOT[c];   /* 거래 칩 · VI · 매수는 서로 안 겹치는 따로 색(strategy.css data-i) */ if (!CHIP_SEEN.includes(c)) CHIP_SEEN.push(c); return CHIP_SEEN.indexOf(c) % 7; };
