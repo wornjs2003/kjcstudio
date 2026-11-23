@@ -603,6 +603,8 @@ function paint0(d) {
     // 그 시각까지 쌓인 수급 한 줄(11-18 재권님 「시간별로 % 아래에서 … 시간이 지나면 그값이 고정」 → 11-20 그림 (나) 「이방향으로」) — 서버 rows[].flow{시각: {fr 외국인 · inst 기관 · pg 프로그램(원) · ff 외국계 창구}}(개발2 · 장 시작부터의 합) · 못 받은 칸은 줄 없음
     const fl = (x.r.flow || {})[times[k]];
     const flT = !fl ? '' : `<small style="display: block; font-size: 10px; line-height: 1.3; white-space: nowrap; font-weight: 400;">${[['외', fl.fr, shr], ['기', fl.inst, shr], ['프', fl.pg, wonS], ['창', fl.ff, shr]].map(([t, n, f]) => { const c = n == null ? '' : signClass(n, NUM); return `${t}${n == null ? '—' : `<span class="${c || ''}">${n > 0 ? '+' : n < 0 ? '−' : ''}${f(Math.abs(n))}</span>`}`; }).join(' ')}</small>`;   // 줄 높이를 좌우 두 줄 칸(51px)에 맞춤 — 그대로 두 줄이면 56px 라 10번째 줄이 잘림(qa 11-20) · strategy.css 는 남의 미커밋이 있어 여기 둠
+    // 봉으로 판 줄(x.s.px · x.s.at)은 그 칸 시각 값이 아니라 판 값 · 판 시각을 보임(11-23 — 칸 시각 값을 두면 % 와 안 맞아 보임)
+    if (x.s.k >= 0 && k === x.s.k && x.s.px != null) return `<td class="dt-sold"><span style="display: block; line-height: 1.25;">${num(x.s.px)}</span>${pct(v)}<em>${hmTxt(x.s.at)} ${x.s.why}</em>${flT}${x.pyrTo ? `<small class="dt-pyr"> → ${esc(x.pyrTo.name || '—')} 불타기</small>` : ''}</td>`;
     if (x.s.k >= 0 && k === x.s.k) return `<td class="dt-sold">${pxT}${pct(v)}<em>${x.s.why}</em>${flT}${x.pyrTo ? `<small class="dt-pyr"> → ${esc(x.pyrTo.name || '—')} 불타기</small>` : ''}</td>`;
     { const ad = x.pnl && (x.pnl.adds || []).filter((o) => o.k === k); if (ad && ad.length) return `<td class="${k === L ? 'dt-last' : ''}">${pxT}${pct(v)}${flT}<small class="dt-pyr"> ← ${ad.map((o) => esc(o.from || '—')).join(' · ')} 손절 돈 불타기</small></td>`; }
     if (x.s.k >= 0 && k > x.s.k) return `<td class="dt-after">${v == null ? '—' : sgn(v)}</td>`;
