@@ -2020,6 +2020,8 @@ def rebuild(proxy, day, prev, cfg=None):
     for code, g in hit.items():
         if not g["chips"] & set(ov_chips()):
             continue
+        if small(code):
+            continue                                   # 시가총액 문턱(cap_min_eok · 3천억) 아래 — 칩이 붙어도 판 밖(VI·급등 · 수급은 small 을 안 거름)
         d = bars.get(code) or {}
         buy = (d.get("0905") or (None,))[0]
         base = base_of(code)
@@ -2045,15 +2047,47 @@ def rebuild(proxy, day, prev, cfg=None):
     tab = score_table(proxy)
     off = late_min(proxy, day=day)                     # 그날 늦게 열었으면 VI·급등 나누는 시각도 그만큼 뒤(개념정의 덧 11-19 — 그날 판과 같게)
     order = sort_rows(rows, tab, off)
-    rows = rows[:TOP_N]
-    for i, r in enumerate(rows):
-        r["rank"] = i + 1
+    for i, r in enumerate(rows):                       # 지난 판은 자르지 않는다 — 문턱 이상 · 칩 하나라도 든 종목 전부(굳힘 문턱 밑은 lock 없이 · 화면이 칩 · 룰을 바꿔 다시 셀 수 있게)
+        r["rank"] = i + 1                              # (재권님 「3000억 이상 모든종목 넣으라고 했는데」 11-23 18:5x · 되채움 카드 ⑨)
+    trade_ok = _past_trade(proxy, day, prev, rows)
+    approx.append("거래값") if trade_ok else missing.append("거래값")
     return {"day": day, "buyAt": "%02d:%02d" % PAST_BUY_AT, "times": times(), "rows": rows, "closed": True,
             "meta": {"rebuilt": True, "viSplit": vi_split(off), "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": drop_below_pct(),
                      "watchSrc": watch_src, "rules": rules_meta(proxy, merged=False), "viUntil": "%02d:%02d" % PAST_LATE, "volUntil": "%02d:%02d" % PAST_VOL_UNTIL, "approxBase": approx_base,
-                     "capMinEok": cap_min_eok(), "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
+                     "capMinEok": cap_min_eok(), "allRows": True, "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 · 수급은 그날 09:01 직전 관심 목록(watchSrc 기록 · 없으면 관심 못 받음 · 수급 어림) · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
                              "buy 는 09:05 봉 시가 · 시가총액 · 섹터 · 시장은 지금 값"}}
+
+
+def _past_trade(proxy, day, prev, rows):
+    """지난 판 줄의 거래 값 칸(TRADE_KEYS) — 정규장(market_hours.REG_OPEN ~ REG_CLOSE) 5분봉으로 어림해 채운다 · 그날 끝 ÷ 앞 거래일 끝.
+    accValue · prevDayValue 는 5분봉 종가 × 거래량 합(억원 · 어림) · prevSameSrc 「5m」 · 봉이 하나도 없는 종목 · 앞 날 봉이 없는 칸은 null(0 아님).
+    풀린 시총 · 거래 비율(floatCap · turn · turnPrevPct)은 그날 유통주식 기록이 없어 안 채운다(되채움 카드 ⑩ · 재권님 「거래대금이나 유통주식 이것도 다 계산해서」 11-23 18:5x).
+    → 셈을 했나(봉을 못 읽으면 False)."""
+    import market_hours
+    codes = [r["code"] for r in rows]
+    if not codes:
+        return True
+    tot = {}
+    try:
+        with proxy.db_conn() as conn:
+            for d in (day, prev):
+                for code, c, v in conn.execute(
+                        "SELECT code, close, volume FROM candles WHERE period = '5m' AND ts >= ? AND ts < ? AND code IN (%s)" % ",".join("?" * len(codes)),
+                        [d + market_hours.REG_OPEN, d + market_hours.REG_CLOSE] + codes):
+                    t = tot.setdefault((d, code), [0, 0.0])
+                    t[0] += v or 0
+                    t[1] += (c or 0) * (v or 0)
+    except Exception:
+        return False
+    pct = lambda a, b: round(a / b * 100, 1) if a is not None and b else None
+    for r in rows:
+        a, p = tot.get((day, r["code"])), tot.get((prev, r["code"]))
+        av, aa = (a[0], round(a[1] / 1e8, 1)) if a else (None, None)
+        pv, pa = (p[0], round(p[1] / 1e8, 1)) if p else (None, None)
+        r.update(accVol=av, accValue=aa, prevDayVol=pv, prevDayValue=pa, prevSameVol=pv, prevSameSrc="5m" if p else None,
+                 volPrevPct=pct(av, pv), valuePrevPct=pct(a[1], p[1]) if a and p else None)   # 대금 비는 반올림 전 값으로
+    return True
 
 
 def _redo_gone(proxy, day, b):
@@ -2077,10 +2111,16 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
     for d in days(proxy):                              # 관심 없이 세어 둔 되채운 날(watchSrc 칸 전)은 한 번 다시 센다(11-12 「응」)
         got = _load(proxy, d)
         m = (got[0].get("meta") or {}) if got else {}
-        if not (m.get("rebuilt") and ("watchSrc" not in m or m.get("viUntil") != "%02d:%02d" % PAST_LATE)):
+        stale = got and (m.get("capMinEok") != cap_min_eok() or not m.get("allRows"))   # 문턱이 바뀐 판 · 줄을 자르던 판(라이브로 굳힌 날 포함)도 한 번 다시 센다
+        if not stale and not (m.get("rebuilt") and ("watchSrc" not in m or m.get("viUntil") != "%02d:%02d" % PAST_LATE)):   # (재권님 「기준 3000억 이상이라고 몇번을 말했는데」 11-23 19:0x)
             have.add(d)                                # VI 창이 다른 되채운 날(11-13 전)도 한 번 다시 센다
         elif m.get("liveBefore"):
             keep_live[d] = m["liveBefore"]
+        elif stale and not m.get("rebuilt"):           # 라이브로 굳힌 날 — 덮이는 장중 기록을 한 벌 남긴다(today_too 와 같은 꼴)
+            old = got[0]
+            keep_live[d] = {"savedAt": got[1], "buyAt": old.get("buyAt"), "meta": old.get("meta"),
+                            "rows": [{k: r.get(k) for k in ("code", "name", "rank", "chips", "subs", "n", "buy", "buyAt", "pct", "rise", "px", "pxSrc", "lock", "lockAt", "chipAt")}
+                                     for r in old.get("rows") or []]}
     n = 0
     cfg = proxy.load_secrets()
     for i, d in enumerate(ds[:limit]):
