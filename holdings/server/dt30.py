@@ -2894,9 +2894,12 @@ def board(proxy, day=None, cfg=None):
     except Exception as e:
         print("  [단타 30] 사는 셈 못 함 — %s" % proxy.safe_message(e, 120), flush=True)
     else:
-        try:
-            if b["meta"].get("outRows"):
+        if b["meta"].get("outRows"):
+            try:
                 _out_px(proxy, b, b["meta"]["outRows"])   # 빠진 줄의 빠진 뒤 시각 칸을 5분봉으로(승률 표와 같게 · 30분 칸 매도 셈도 걸리게 · qa 덧 · 읽을 때만)
+            except Exception as e:
+                print("  [단타 30] 빠진 줄 값 못 채움 — %s" % proxy.safe_message(e, 120), flush=True)   # 봉 줄은 따로 계속(qa 덧)
+        try:
             bars_fill(proxy, b)                        # 산 때~판 끝 봉 줄(매도 타점 재료 · 화면 · 승률 표 같은 봉)
         except Exception as e:
             print("  [단타 30] 봉 줄 못 붙임 — %s" % proxy.safe_message(e, 120), flush=True)
