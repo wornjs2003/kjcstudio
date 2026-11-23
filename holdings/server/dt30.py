@@ -976,6 +976,50 @@ def _lock_times(b):
     return [min(h * 60 + m + lm, cap) for h, m in lock_at()]
 
 
+INTRA_LOCK = len(LOCK_AT) + 1  # 「장중」 묶음 — 마지막 굳힘(BUY_LATE) 뒤 칩에 걸린 종목을 매도 시각까지 판에 더함 · 든 때 가격에 산 것
+INTRA_NAME = "장중"            # 재권님 「10시 30분 이후에 걸리는 종목은 10시 30분 옆에 장중 이라고 칸 만들어서 거기에 걸리게 해줘」(11-23 10:3x) → 안에 「응」
+
+
+def intraday_add(proxy, cfg, b, hm):
+    """굳힌 뒤(BUY_LATE 뒤) — 단타 목록(live)에 새로 걸린 종목을 판에 더해 「장중」 묶음으로 → 더한 수.
+    문턱은 그날 판 문턱(min_chips)과 장중 칸 칩 조건(lock_cfg 넷째) 중 큰 쪽 · 하락 뺌 · 장중 칸 수(lock_cfg 넷째)까지 · 매도 시각(dt30_win.end_at · 없으면 SELL_AT) 전까지 ·
+    매수가는 든 그 순간 현재가(_buy_now) · lockTs · buyAt 은 든 때. RESCAN_SEC 마다 한 번."""
+    import dt30_win
+    end = dt30_win.end_at() or dt30_win.SELL_AT
+    if hm >= int(end[:2]) * 60 + int(end[2:]) or time.time() - _status.get("intra", 0) < RESCAN_SEC:
+        return 0
+    _status["intra"] = time.time()
+    cap_n, min_c = (lock_cfg() + [(LOCK_N, 0)] * (INTRA_LOCK))[INTRA_LOCK - 1]
+    have = {r["code"] for r in b.get("rows") or []}
+    room = cap_n - sum(1 for r in b.get("rows") or [] if r.get("lock") == INTRA_LOCK)
+    if room <= 0:
+        return 0
+    floor = max(min_chips(proxy), min_c)
+    new = []
+    for x in live(proxy, cfg)["rows"]:
+        if len(new) >= room:
+            break
+        if x["code"] in have or x["down"] or x["n"] < floor:
+            continue
+        r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "viAt", "surgeAt", "viPx",
+                                   "floatCap", "turn", "turnPrevPct")}
+        r.update(buy=None, px={}, pxSrc={}, chipAt={c: _now().strftime("%H:%M") for c in x["chips"]})
+        new.append(r)
+    if not new:
+        return 0
+    _buy_now(proxy, cfg, new)
+    k0 = max([r.get("lockRank") or 0 for r in b["rows"] if r.get("lock") == INTRA_LOCK] + [0])
+    for k, r in enumerate(new, k0 + 1):
+        ts = r.get("buyTs") or _now().strftime("%H:%M:%S")
+        r.update(lock=INTRA_LOCK, lockAt=INTRA_NAME, lockRank=k, lockTs=ts, buyAt=ts[:5])
+        _sub_keep(r, None, ts)
+    b["rows"].extend(new)
+    b["meta"]["intra"] = {"lock": INTRA_LOCK, "name": INTRA_NAME, "from": "%02d:%02d" % BUY_LATE, "until": "%s:%s" % (end[:2], end[2:]),
+                          "n": cap_n, "minChip": floor}
+    _lock_order(b)
+    return len(new)
+
+
 def lock_cfg():
     """굳힘마다 (굳힐 종목 수, 칩 몇 개 이상) — 룰 문서 셈 칸 rules.dt30.set.lockNs · lockMinChip(굳힘 차례마다 [첫째, 둘째, 셋째] · null 은 기본).
     재권님 「각 굳힘 칸별로 사는 금액과 종목 조건 다르게 셋팅할수 잇게 해줘」 → 종목 조건 「다」(굳힐 종목 수 · 칩 몇 개 이상 둘 다 · 11-23 10:34 · 시황분석1 창 · 열쇠는 화면 셈 칸과 같게).
@@ -989,7 +1033,7 @@ def lock_cfg():
     ns, mc = S.get("lockNs"), S.get("lockMinChip")
     ns, mc = (ns if isinstance(ns, list) else []), (mc if isinstance(mc, list) else [])
     out = []
-    for i in range(len(LOCK_AT)):
+    for i in range(len(LOCK_AT) + 1):                  # 굳힘 셋 + 「장중」 칸(INTRA_LOCK)
         n = num(ns[i], 1) if i < len(ns) else None
         c = num(mc[i], 0) if i < len(mc) else None
         out.append((n or LOCK_N, c or 0))
@@ -2249,6 +2293,9 @@ def start(proxy):
                                 filled_late = list(filled_late) + ["굳힘"]
                             if _buy_open_fill(proxy, b):           # 굳힌 뒤에도 시가를 기다리는 줄 — 1분봉이 늦게 들어오면 채움(DB 만 읽음)
                                 filled_late = list(filled_late) + ["시가"]
+                            n_in = intraday_add(proxy, proxy.load_secrets(), b, hm)   # 굳힌 뒤 새로 걸린 종목 — 「장중」 묶음(11-23)
+                            if n_in:
+                                filled_late = list(filled_late) + ["장중 %d" % n_in]
                         if filled_late and filled_late != ["다시 셈"]:
                             print("  [단타 30] %s 판에 늦게 나온 칩 채움 — %s" % (day, " · ".join(filled_late)), flush=True)
                         if due:
