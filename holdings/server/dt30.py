@@ -252,7 +252,7 @@ def chips_now(proxy, cfg, early=True, pre=False):
         import vol_chip
         vb, _ = vol_chip.hits(proxy, cfg)
         for r in vb.get("rows") or []:
-            put(r.get("code"), r.get("name"), "거래량", "풀린" if r["by"] == ["float"] else "전일" if r["by"] == ["prev"] else "둘 다")
+            put(r.get("code"), r.get("name"), "거래량", "비율" if r["by"] == ["turn"] else "전일" if r["by"] == ["prev"] else "둘 다")
     except Exception:
         missing.append("거래량")
     try:
