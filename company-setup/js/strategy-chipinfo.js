@@ -16,7 +16,7 @@ loadTiming();
 // 고르는 조건 — 두 자리 공용(m = 그 칩 서버 meta · val = 값 칸 꼴)
 export const COND = {
   프리장: (m, val) => `전날 정규장 종가보다 ${val(m.riseMinPct)}% 넘게 오른 종목 중 넥스트레이드 프리마켓 거래대금 상위 ${val(m.topN)}위 안`,   // 서버 pre_flow.py 셈 그대로(RISE_MIN_PCT · topN) — 프로그램 순매수는 칸만이지 조건이 아님(qa 11-20)
-  초반상승: (m, val) => `장 시작 ${val(m.barMin)}분 뒤 — ${val(m.barFrom)} ~ ${val(m.barTo)} 첫 ${val(m.barMin)}분봉이 시가 대비 ${val(m.risePct)}% 이상 오름 · ETF 뺌 · 늦게 여는 날은 여는 시각부터`,   // 「장 시작 몇 분 뒤」 — 11-20 재권님 「단타에 초반상승이 장시작 몇분후인지 설명에 넣어줘」 · 값은 서버 meta.barMin 그대로
+  초반상승: (m, val) => `장 시작 ${val(m.barMin)}분 뒤 — ${val(m.barFrom)} ~ ${val(m.barTo)} 첫 ${val(m.barMin)}분봉이 시가 대비 ${val(m.risePct)}% 이상 오름 · 또는 그 끝 값이 프리장 마지막 값보다 ${val(m.preRisePct)}% 이상(프리장 체결 있던 종목만)${m.rise2Pct != null || m.rise3Pct != null ? ` · 또는 시가부터 2분 끝 값이 ${val(m.rise2Pct)}% · 3분 끝 값이 ${val(m.rise3Pct)}% 이상(${val(m.lastTo)} 까지)` : ''} · ETF 뺌 · 늦게 여는 날은 여는 시각부터`,   // 「장 시작 몇 분 뒤」 — 11-20 재권님 「단타에 초반상승이 장시작 몇분후인지 설명에 넣어줘」 · 프리장 대비(11-23 「프리장보다 2%이상 오를때」) · 2분 · 3분(11-23 「가 해줘 3분까지만」 · 개발1 f8dd43e meta.rise2Pct · rise3Pct · lastTo — 서버가 아직 안 주면 그 갈래를 안 씀) · 값은 서버 meta 그대로
   장외: () => '정규장 종가 뒤(넥스트레이드 애프터 · 다음 날 프리마켓)에 종가보다 오른 종목 · 문턱 없음',
 };
 
@@ -34,7 +34,7 @@ const WHEN = {
   'VI·급등': '언제 — 08:00 부터 10초마다(장 열기 전은 넥스트레이드 값) · 단타 판에는 판을 굳히기 전까지 걸린 것만',
   get 장외() { const c = serverData('afterClear') || serverData('chipReset'); return `언제 — 장 끝난 15:40 뒤부터 다음 날 ${c && c.from ? c.from : '아침(비우는 시각 — 서버 값 못 받음)'} 까지 · 아침 단타 판에는 거의 안 듦`; },   // 비우는 시각은 서버 /api/kis/stats afterClear(= market_hours.CHIP_RESET 한 곳)
   매수: '언제 — 외국인 첫 집계 09:30 · 기관 첫 집계 10:00 · 그 전에는 「어림」 으로 먼저 봄',
-  get 초반상승() { const m = metaCache.초반상승; return m && m.barMin != null ? `언제 — 장 시작 ${m.barMin}분 뒤(${m.barFrom || '—'} ~ ${m.barTo || '—'} 첫 ${m.barMin}분봉이 끝난 뒤) · 늦게 여는 날은 여는 시각부터` : '언제 — 장 시작 첫 봉이 끝난 뒤부터(몇 분 뒤인지 — 서버 값 못 받음)'; },
+  get 초반상승() { const m = metaCache.초반상승; return m && m.barMin != null ? `언제 — 장 시작 ${m.barMin}분 뒤(${m.barFrom || '—'} ~ ${m.barTo || '—'} 첫 ${m.barMin}분봉이 끝난 뒤)${m.lastTo ? ` · 2분 · 3분 갈래로 ${m.lastTo} 까지 늘어남` : ''} · 늦게 여는 날은 여는 시각부터` : '언제 — 장 시작 첫 봉이 끝난 뒤부터(몇 분 뒤인지 — 서버 값 못 받음)'; },
   자동: '언제 — 전날 장 마감 뒤 정해지고, 장중에는 5분마다 그때 값으로 다시 거름',
 };
 const autoTxt = (R) => (R ? `전날 거래량이 크게 늘며 오른 종목을 서버가 자동으로 담음 — 전날 +${R.prevPct}% 이상 올랐고${R.sectorPct != null ? ` · 그 업종이 +${R.sectorPct}% 이상` : ''}${R.nearHighPct != null ? ` · 1년 최고가에서 ${R.nearHighPct}% 안` : ''}${R.maDays ? ` · ${R.maDays}일 평균값 위${R.maUpCandle ? '에서 오른 날' : ''}` : ''}${R.scoreW ? ` · 순서는 오른 폭 ${R.scoreW.pct}% · 거래량 ${R.scoreW.vol}% 로 셈` : ''}` : '전날 거래량이 크게 늘며 오른 종목을 서버가 자동으로 담음 — 조건 값은 서버 값 못 받음');
