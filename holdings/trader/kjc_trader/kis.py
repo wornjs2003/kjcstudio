@@ -30,6 +30,11 @@ class KisError(Exception):
     pass
 
 
+class KisUnsure(Exception):
+    """증권사가 받았는지 모르는 실패 — 응답 시간 초과 · 연결 끊김 · HTTP 오류. 주문에서는 실패로 보지 않고 「확인 필요」 로 멈춘다(qa 11-23 ②).
+    KisError 는 증권사가 rt_cd 로 거절했다고 답한 것 — 그때만 다음 바퀴에 다시 넣는다."""
+
+
 class Kis:
     def __init__(self, c, token_path):
         self.env = c["env"]                       # demo | real — real 은 재권님 「켜기」 지시 뒤에만
@@ -78,7 +83,7 @@ class Kis:
             with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=h, method=method), timeout=15) as r:
                 j = json.loads(r.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
-            raise KisError("HTTP %s" % e.code)
+            raise KisUnsure("HTTP %s" % e.code)          # 받았는지 모름 — 주문이면 두 번 안 넣게 멈춤(qa 11-23 ②)
         if str(j.get("rt_cd")) != "0":
             raise KisError("%s %s" % (j.get("msg_cd"), j.get("msg1")))
         return j
