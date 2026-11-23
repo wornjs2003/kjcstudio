@@ -245,7 +245,9 @@ function buyOf(r) {   // → { px, at(HHMM), src } | null
   if (n === 1) { const e = inTs(r), p1 = `${minHM(1)}00`, u = inUntil();
     // 굳힘마다 산 값이 다름(11-23 재권님 「각 굳힘별로 산 가격은 다르게 해줘야해 9시 5분 굳힘은 현재 만들어놓은 룰이고. 그이후에 굳힘 종목은 들어올때로 만들어줘」)
     //   첫 굳힘(09:05 · lock 1)은 아래 룰 그대로 · 둘째 굳힘부터(lock 2 · 3)는 판에 처음 든 때 가격(r.buy) · 산 시각 든 때
-    if (Number(r.lock) >= 2) return Number(r.buy) > 0 ? { px: Number(r.buy), at: (e || `${minHM(1)}00`).slice(0, 4), src: e ? `${e.slice(0, 2)}:${e.slice(2, 4)}:${e.slice(4, 6)} 든 때` : '든 때' } : null;
+    // 대기 줄(굳힌 판에서 아직 안 굳은 종목)도 처음 든 때 가격에 산 것으로 셈(11-23 재권님 「단타판에 보이는 종목들은 다 셈해」)
+    const lkd = ((curD() && curD().rows) || []).some((x) => Number(x.lock) > 0);
+    if (Number(r.lock) >= 2 || (lkd && !(Number(r.lock) > 0))) return Number(r.buy) > 0 ? { px: Number(r.buy), at: (e || `${minHM(1)}00`).slice(0, 4), src: e ? `${e.slice(0, 2)}:${e.slice(2, 4)}:${e.slice(4, 6)} 든 때` : '든 때' } : null;
     // 굳힌 줄(rows[].lock > 0)은 inUntil 뒤 들었어도 처음 든 때 가격에 산 것(09:30 · 10:00 굳힘 · 재권님 「9시 30분과 10시에 굳힘 목록에 들어온 종목들도 들어올때를 시점으로 샀다라고 하고 계산해」 11-23 · 승률 표 서버 4f2aa0e 와 같게)
     if (e && e >= p1) { if (!(Number(r.lock) > 0) && (!u || e > `${u}59`) || !(Number(r.buy) > 0)) return null; return { px: Number(r.buy), at: e.slice(0, 4), src: `${e.slice(0, 2)}:${e.slice(2, 4)}:${e.slice(4, 6)} 든 때` }; } }
   // 고른 시각에 판에 아직 없던 종목은 사지 않음 — 그 시각이 들어온 때보다 앞이면 안 삼(11-20 15:26 재권님 「매수에서 든시간 말고 지정된 시간을 누르면 그시간이후에 들어온건 안사지는걸로 계산되도록 해줘」)
@@ -381,8 +383,8 @@ function calcDay(d) {
   //   상위 N 은 안 씀 · 아직 안 굳은 「진행 중」 은 돈 안 넣음 · 굳힘 없는 판(09:05 전 · 지난 날)은 위 셈 그대로 · grpWon 이 비면 dayWon 과 같게
   //   이름이 lock 으로 시작하지 않게(grpWon) — 셈 칸의 굳힘 시각 칸을 data-set^="lock" 으로 고름
   const lkMode = all.some((r) => Number(r.lock) > 0), lkWon = S.grpWon > 0 ? S.grpWon : S.dayWon;
-  const lkCnt = {}; if (lkMode) rows.forEach((r) => { const j = Number(r.lock); if (j > 0 && boughtOf(r)) lkCnt[j] = (lkCnt[j] || 0) + 1;   /* 매도 시각보다 늦게 든 종목은 몫을 안 받음(nb 와 같은 셈 · qa 11-20) */ });
-  const perOf = (r) => { if (!lkMode) return per; const j = Number(r.lock); return j > 0 && lkCnt[j] ? lkWon / lkCnt[j] : 0; };
+  const lkCnt = {}; if (lkMode) rows.forEach((r) => { const j = Number(r.lock); if (boughtOf(r)) { const g = j > 0 ? j : 0; lkCnt[g] = (lkCnt[g] || 0) + 1; }   /* 매도 시각보다 늦게 든 종목은 몫을 안 받음(nb 와 같은 셈 · qa 11-20) */ });
+  const perOf = (r) => { if (!lkMode) return per; const j = Number(r.lock); const g = j > 0 ? j : 0; return lkCnt[g] ? lkWon / lkCnt[g] : 0; };   // 대기 묶음(0)도 굳힘 금액을 그 수로 나눠 산 것으로(11-23) · 합계(P)는 굳은 줄만
   const ch = (r, t) => { const B = boughtOf(r), v = Number((r.px || {})[t]); return !B || hhmm(t) <= B.at || (r.px || {})[t] == null || !Number.isFinite(v) ? null : (v / B.px - 1) * 100; };   // 산 시각 앞 칸은 비움
   const R = rows.map((r) => { const p = times.map((t) => ch(r, t)); const s = sellAt(p, times, (boughtOf(r) || {}).at); let last = L; while (last >= 0 && p[last] == null) last--; const nowCh = LIVE && s.k < 0 && Number(r.now) > 0 && boughtOf(r) ? (Number(r.now) / boughtOf(r).px - 1) * 100 : null;   // 장중 · 안 판 종목 — 결과 · 손익은 서버 지금 값(rows[].now)
     const at = s.k >= 0 ? s.k : last, sellPx = nowCh != null ? Number(r.now) : at >= 0 ? Number((r.px || {})[times[at]]) : null;
@@ -512,7 +514,7 @@ function paint(d) {
   const NM0 = d.meta || {};
   // 대기 줄(아직 안 굳은 종목) — 「안 삼」 대신 굳으면 살 값(처음 든 때 가격)을 흐리게(qa 11-23 — 10:00 에 살 줄이 「안 삼」 으로 읽힘)
   const waitTd = (r) => { if (!(pmOf(buyKey()) === 1 && !(Number(r.lock) > 0) && (d.rows || []).some((x) => Number(x.lock) > 0) && Number(r.buy) > 0)) return ''; const e = inTs(r);
-    return `<td class="dt-buy"><span class="dt-nxm">${num(Number(r.buy))}</span><small>대기 · 굳으면 이 값에 삼${e ? ` · ${e.slice(0, 2)}:${e.slice(2, 4)}:${e.slice(4, 6)} 든 때` : ''}</small></td>`; };
+    return `<td class="dt-buy">${num(Number(r.buy))}<small>대기${e ? ` · ${e.slice(0, 2)}:${e.slice(2, 4)}:${e.slice(4, 6)} 든 때` : ''}</small></td>`; };   // 11-23 「보이는 종목들은 다 셈해」 — 대기 줄도 이 값에 산 것으로 셈
   const buyTd = (r) => (buyKey() !== 'open' ? (() => { const B = buyOf(r); if (waitTd(r)) return waitTd(r); return B ? `<td class="dt-buy">${num(B.px)}<small>${esc(B.src)}</small></td>` : `<td class="dt-buy"><span class="dt-nxm">${notYetIn(r, buyKey() === 'vi' ? (r.viPx || {}).at : ((minVal(r, pmOf(buyKey())) || {}).at || minHM(pmOf(buyKey())))) ? `안 삼 · ${esc(notYetIn(r, buyKey() === 'vi' ? (r.viPx || {}).at : ((minVal(r, pmOf(buyKey())) || {}).at || minHM(pmOf(buyKey())))))} 뒤 듦` : buyKey() === 'vi' ? (r.viAt ? 'VI 값 못 받음 · 안 삼' : 'VI 없음 · 안 삼') : minVal(r, pmOf(buyKey())) === undefined ? '서버 값 아직 · 안 삼' : `${hmS(minHM(pmOf(buyKey())))} 값 없음 · 안 삼`}</span></td>`; })()
     : r.buy == null && r.buyWait ? `<td class="dt-buy"><span class="dt-nxm">${st.openAt ? hmTxt(String(st.openAt).replace(':', '')) : '정규장'} 시가 기다림</span></td>`
     : `<td class="dt-buy">${num(r.buy)}${r.buySrc ? `<small>${r.buyAt ? `${hmTxt(String(r.buyAt).replace(':', ''))} ` : ''}${esc(r.buySrc)}</small>` : ''}</td>`);
@@ -574,6 +576,13 @@ function paint(d) {
     if (nm(M.missing)) p.push(`못 받음 ${nm(M.missing)}`); if (nm(M.approx)) p.push(`어림 값으로 셈 ${nm(M.approx)}`); if (nm(M.wait)) p.push(`아직 시각 전 ${nm(M.wait)}`);
     return ` · 그때 빠진 칩 — ${p.length ? esc(p.join(' · ')) : '없음'}`; })();
   const lkRest = R.map((x, i) => i).filter((i) => !(Number(R[i].r.lock) > 0));
+  // 평균 줄 · 손익은 지금 보이는 종목만(11-23 재권님 「단타판에 보이는 종목들은 다 셈해」) — 굳힌 판이면 고른 굳힘 묶음(대기 단추면 대기 줄) · 굳힘 없는 판은 지금처럼 전부
+  //   손익 합계(머리 글 · 달 합계)는 굳은 줄 전부 그대로(calc 의 P)
+  const shownI = !lkHas ? null : lkAct && lkAct === lkNext ? lkRest0 : lkAct ? lkAct.idx : lkRest0;
+  const SR0 = shownI ? shownI.map((i) => R[i]) : R;
+  const avgS = shownI ? times.map((_, k) => mean(SR0.map((x) => atK(x, k)).filter((v) => v != null))) : avg;
+  const resAvgS = shownI ? mean(SR0.map((x) => x.res).filter((v) => v != null)) : resAvg;
+  const PS = !shownI ? P : (() => { const t = SR0.filter((x) => x.pnl); if (!t.length) return null; const sm = (k) => t.reduce((a, x) => a + (x.pnl[k] || 0), 0); return { net: sm('net'), gross: sm('gross') }; })();
   const lkMoney = (j) => { const g = G[j]; if (!lkCnt[j]) return ''; return ` · 넣은 ${manTxt(lkWon)}${g ? ` · 세후 <span class="${signClass(g.net, NUM) || ''}">${won(g.net)}</span>${g.noMkt ? ` · 시장 모름 ${g.noMkt}` : ''}` : ' · 손익 셀 값 없음'}`; };   // 굳힘 묶음마다 넣은 돈 · 세후 손익(11-20)
   if (!WIDE.matches) {
     // 좁은 폭(모바일 퍼스트 · 재권님 「모바일 퍼스트 적용시킨 화면도」) — 종목 칸 안에 시가총액 · 섹터 · 이벤트를 접어 넣고, 결과 · 손익을 종목 바로 옆에 · 시각 칸은 그 뒤로 밀어 봄
@@ -586,7 +595,7 @@ function paint(d) {
     $('dt-box').innerHTML = `<table class="dt-tb dt-narrow">
     <tr><th class="dt-rk"></th><th class="st-name">종목</th><th class="dt-res">결과</th><th class="dt-pl">손익</th><th>매수가</th><th class="dt-nx">${p1At}<small>9시1분</small></th><th class="dt-in">들어온 가격</th>${times.map((t) => `<th>${hmTxt(t)}</th>`).join('')}<th class="dt-nx">다음 날 프리장 ${nxAt || ''}</th><th class="dt-tx">세금 %</th></tr>
     ${chipRow(times.length + 9)}
-    ${lkN2}<tr class="dt-avg"><td class="dt-rk"></td><td class="st-name">평균</td><td class="dt-res">${pct(resAvg)}</td><td class="dt-pl">${P ? won(P.net) : '—'}</td><td></td>${p1Avg}<td class="dt-in"></td>${avg.map((x) => `<td>${pct(x)}</td>`).join('')}${nxAvg}<td class="dt-tx"></td></tr>
+    ${lkN2}<tr class="dt-avg"><td class="dt-rk"></td><td class="st-name">평균</td><td class="dt-res">${pct(resAvgS)}</td><td class="dt-pl">${PS ? won(PS.net) : '—'}</td><td></td>${p1Avg}<td class="dt-in"></td>${avgS.map((x) => `<td>${pct(x)}</td>`).join('')}${nxAvg}<td class="dt-tx"></td></tr>
     ${lkLive2}${lkBody2}
   </table>`;
     return;
@@ -640,7 +649,7 @@ function paint(d) {
     <tr class="dt-h">${usTh}</tr>
     <tr class="dt-h"><th class="dt-rk dt-sl"></th><th class="st-name dt-sl"></th><th class="dt-sl">${buyH}</th><th class="dt-nx dt-sl" data-tip="이쯤 산다면 — 09:01 값의 09:00 시가 대비 % (매수 타이밍을 바꿔도 이 칸은 시가 대비)">${p1At}</th><th class="dt-in dt-sl" data-tip="9시 1분 뒤 판에 든 종목 — 든 순간 가격 · 그 아래 든 시각">들어온 가격</th><th class="dt-gp" colspan="${times.length}"><span>매수가 대비</span></th><th class="dt-res dt-sr">결과</th>${SR(nxH1)}<th class="dt-tx dt-sr">세금 %</th><th class="dt-pl dt-sr">${lkMode ? `손익 · 굳힘마다 ${manTxt(lkWon)} ÷ 묶음 종목` : `손익 · 종목마다 ${manTxt(per)}`}</th></tr>
     <tr class="dt-h dt-t2"><th class="dt-rk dt-sl"></th><th class="st-name dt-sl"></th><th class="dt-sl"></th><th class="dt-nx dt-sl">9시1분</th><th class="dt-in dt-sl">든 시각</th>${times.map((t) => `<th>${hmTxt(t)}</th>`).join('')}<th class="dt-res dt-sr">판 값 · 시각</th>${SR(nxH2)}<th class="dt-tx dt-sr">거래세 · 농특세</th><th class="dt-pl dt-sr">세금 · 수수료 뺌 · ${lkMode ? '굳힌 종목' : `상위 ${topN}`}</th></tr>
-    ${lkTop}<tr class="dt-avg"><td class="dt-rk dt-sl"></td><td class="st-name dt-sl">평균 <small>판 종목은 판 값으로</small></td><td class="dt-sl"></td>${SL(p1Avg)}<td class="dt-in dt-sl"></td>${avg.map((x, i) => `<td class="${i === L ? 'dt-last' : ''}">${pct(x)}</td>`).join('')}<td class="dt-res dt-sr">${pct(resAvg)}</td>${SR(nxAvg)}<td class="dt-tx dt-sr"></td><td class="dt-pl dt-sr">${P ? won(P.net) : '—'}<small>${P ? `빼기 전 ${won(P.gross)}` : ''}</small></td></tr>
+    ${lkTop}<tr class="dt-avg"><td class="dt-rk dt-sl"></td><td class="st-name dt-sl">평균 <small>판 종목은 판 값으로</small></td><td class="dt-sl"></td>${SL(p1Avg)}<td class="dt-in dt-sl"></td>${avgS.map((x, i) => `<td class="${i === L ? 'dt-last' : ''}">${pct(x)}</td>`).join('')}<td class="dt-res dt-sr">${pct(resAvgS)}</td>${SR(nxAvg)}<td class="dt-tx dt-sr"></td><td class="dt-pl dt-sr">${PS ? won(PS.net) : '—'}<small>${PS ? `빼기 전 ${won(PS.gross)}` : ''}</small></td></tr>
     ${lkLive}${lkBody}
   </table>`;
   fit2row($('dt-box').querySelector('.dt-2row'));
@@ -892,7 +901,7 @@ function setFill() {
   { const D = (st.data && st.data.meta && (st.data.meta.lockDef || st.data.meta.lockAt)) || []; box.querySelectorAll('[data-set^="lock"]').forEach((el, i) => { el.placeholder = D[i] || '( )'; }); }   // 빈칸에 보이는 기본 시각은 서버 값(meta.lockDef · 없으면 지금 굳힘 시각 meta.lockAt) — 화면에 시각을 안 박음
   // 판 아래 설명 — 「9시1분~5분사이 들어온 종목」 매수의 셈(11-23) · 끝 분은 서버 값(inUntil)을 끼움 · 못 받으면 「서버 값 못 받음」(「설명 글에는 정해진 값을 적는다」)
   { const el = root && root.querySelector('.dt-buyrule'); if (el) { const u = inUntil();
-    el.textContent = buyKey() === 'p1' ? ` · 매수(9시1분~5분사이 들어온 종목) — 첫 굳힘 종목은 9시 1분 전에 든 것 9시 1분 값 · 9시 1분 ~ ${u ? `${hmS(u)}:59` : '(서버 값 못 받음)'} 에 든 것 든 때 값 · 둘째 굳힘부터는 처음 든 때 값 · 안 굳은 종목은 안 삼(다음 굳힘 단추 「대기」)` : ''; } }
+    el.textContent = buyKey() === 'p1' ? ` · 매수(9시1분~5분사이 들어온 종목) — 첫 굳힘 종목은 9시 1분 전에 든 것 9시 1분 값 · 9시 1분 ~ ${u ? `${hmS(u)}:59` : '(서버 값 못 받음)'} 에 든 것 든 때 값 · 둘째 굳힘부터와 아직 안 굳은 종목(다음 굳힘 단추 「대기」)은 처음 든 때 값 · 평균 줄 · 손익은 고른 굳힘 단추의 종목만` : ''; } }
   box.querySelectorAll('[data-pyr]').forEach((b) => b.classList.toggle('is-active', (b.dataset.pyr === '1') === !!S.pyr));
   { const T = (st.data && st.data.times) || [], end = T.length ? hmTxt(hhmm(T[T.length - 1])) : '( )'; box.querySelectorAll('[data-set="endAt"]').forEach((el) => { el.placeholder = end; }); box.querySelectorAll('[data-endsug]').forEach((el) => { el.textContent = `빈칸 = ${end}(판 끝 칸 · 서버 값)`; }); }
   box.querySelectorAll('[data-flat]').forEach((b) => b.classList.toggle('is-active', (b.dataset.flat === '1') === !!S.flat));
