@@ -36,7 +36,7 @@ DAYS_DEFAULT = 30
 TICK = 60                    # 끝난 판을 보는 간격(초)
 RISE_CHIP = "현재상승"
 TAX = {"KOSPI": {"tx": 0.05, "rural": 0.15}, "KOSDAQ": {"tx": 0.20, "rural": 0.0}}   # % · 2026 세율(KB증권 「2026년 증권거래세율 변경 안내」) · 한 곳 — 단타 판 화면은 dt30 판 meta.tax 로 받음 · 단타 판에서 못 바꿈(재권님 11-20 14:09)
-VER = "v8"                   # 쌓는 줄 모양이 바뀌면 올린다 — 옛 줄을 다시 쌓는다(v2 · 시장 칸 · v3 · 11-18 전 판 칩 이름 옮김 · v4 · 칩 둘 이상만 · v5 · 칩 붙은 시각 chipAt · subAt · buyAt · lockAt 11-20 · v6 · buyTs · lockTs 실제 시각 11-20 · v7 · 시각 칸 값 px — 매도 시각을 부를 때 셈 11-20 · v8 · 굳힘 차례 lock — 「사지 않음」 묶음 가름 11-23)
+VER = "v9"                   # 쌓는 줄 모양이 바뀌면 올린다 — 옛 줄을 다시 쌓는다(v2 · 시장 칸 · v3 · 11-18 전 판 칩 이름 옮김 · v4 · 칩 둘 이상만 · v5 · 칩 붙은 시각 chipAt · subAt · buyAt · lockAt 11-20 · v6 · buyTs · lockTs 실제 시각 11-20 · v7 · 시각 칸 값 px — 매도 시각을 부를 때 셈 11-20 · v8 · 굳힘 차례 lock — 「사지 않음」 묶음 가름 11-23 · v9 · 굳힌 뒤 붙은 칩 거래비율 · 거래비율급증을 다시 쌓음(개념정의 덧 ② 11-23))
 _SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_win (day TEXT PRIMARY KEY, src_saved TEXT, rows TEXT NOT NULL, at TEXT)"
 _status = {"error": None, "filled": 0, "at": None}
 
@@ -80,6 +80,14 @@ def _in_ts(r):
         return t[:6]
     a = str(r.get("buyAt") or "").replace(":", "")[:4]
     return a + "00" if len(a) == 4 and a.isdigit() else ""
+
+
+def late_chip(r, chip):
+    """그 칩이 산 뒤(판에 든 때 · _in_ts)에 붙었나 — chipAt 「HH:MM」 이 든 때 HHMMSS 보다 늦으면 True · 시각을 모르면 False(못 가름 → 안 가름).
+    재권님 「나로 하고 나중에 검색할때 칩갯수옆에 시간외제외 버튼 만들면 될거같아」(11-23 16:5x) — 승률은 다 세고 이 칸으로 따로 보인다."""
+    at = str((r.get("chipAt") or {}).get(chip) or "").replace(":", "")[:4]
+    t = _in_ts(r)
+    return len(at) == 4 and at.isdigit() and bool(t) and at + "00" > t
 
 
 def _in_until(proxy, day, rule):
@@ -261,7 +269,7 @@ def summary(proxy, days=DAYS_DEFAULT):
             got = conn.execute("SELECT day, rows FROM dt30_win ORDER BY day DESC LIMIT ?", (days,)).fetchall()
         except Exception:
             got = []
-    groups = {"chip": {}, "pair": {}, "triple": {}, "count": {}, "countRise": {}}
+    groups = {"chip": {}, "pair": {}, "triple": {}, "count": {}, "countRise": {}, "chipLate": {}}
 
     def add(kind, key, v):
         g = groups[kind].setdefault(key, [[], 0])
@@ -299,6 +307,8 @@ def summary(proxy, days=DAYS_DEFAULT):
             chips = sorted(set(r["chips"]))
             for c in chips:
                 add("chip", c, v)
+                if late_chip(r, c):
+                    add("chipLate", c, v)              # 산 뒤에 붙은 칩 — 다 세되 따로 보인다(재권님 「나」 11-23 16:5x · 산 때 몰랐던 칩 · 개념정의 덧)
             for k, kind in ((2, "pair"), (3, "triple")):
                 for combo in combinations(chips, k):
                     add(kind, " + ".join(combo), v)
@@ -320,7 +330,7 @@ def summary(proxy, days=DAYS_DEFAULT):
     meta = {"days": len(got), "from": got[-1][0] if got else None, "to": got[0][0] if got else None,
             "fee": fee, "feeNote": None if fee is not None else "빈칸 — 수수료 안 셈", "feeSides": "팔 때만",
             "tax": TAX, "taxNote": "팔 때만 · 판 값 × (거래세 + 농특세) · 시장 모르면 못 잼", "ret": "세후 %",
-            "buy": "그날 판 매수가(rows[].buy · 11-20 판부터 판에 든 때 값 — 09:01 전에 있던 종목은 9시 1분 값 · 뒤에 든 종목은 든 순간 값 · 11-18~19 09:00 시가 · 그 전 09:01)", "minChips": dt30.MIN_CHIPS, "sell": end, "sellDef": SELL_AT, "sellNote": "매도 룰 — 단타 판 셈 칸 rules.dt30.set(화면과 같은 칸 · 빈 칸은 sellRule 의 기본) · 30분 칸마다 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 중 처음 걸린 칸 값에 팖 · 안 걸리면 매도 시각(endAt · 빈칸이면 판 끝 sellDef) 이하 마지막 값 있는 칸 · 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것(셈에서 뺌) · 불타기는 안 듦", "sellRule": rule, "sellWhy": whys, "noBuyLocks": sorted(no_buy), "noBuySkipped": skipped, "bigPct": BIG_PCT, "topDay": TOP_DAY,
+            "buy": "그날 판 매수가(rows[].buy · 11-20 판부터 판에 든 때 값 — 09:01 전에 있던 종목은 9시 1분 값 · 뒤에 든 종목은 든 순간 값 · 11-18~19 09:00 시가 · 그 전 09:01)", "minChips": dt30.MIN_CHIPS, "sell": end, "sellDef": SELL_AT, "sellNote": "매도 룰 — 단타 판 셈 칸 rules.dt30.set(화면과 같은 칸 · 빈 칸은 sellRule 의 기본) · 30분 칸마다 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 중 처음 걸린 칸 값에 팖 · 안 걸리면 매도 시각(endAt · 빈칸이면 판 끝 sellDef) 이하 마지막 값 있는 칸 · 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것(셈에서 뺌) · 불타기는 안 듦", "sellRule": rule, "sellWhy": whys, "noBuyLocks": sorted(no_buy), "chipLateNote": "chipLate — 칩마다 산 뒤(판에 든 때 뒤)에 붙은 줄만 따로 셈 · chip 칸은 다 셈(재권님 「나」 11-23) · 칩 시각 chipAt 을 모르는 옛 판은 안 듦", "noBuySkipped": skipped, "bigPct": BIG_PCT, "topDay": TOP_DAY,
             "filledAt": _status["at"], "error": _status["error"]}
     return out, meta
 
