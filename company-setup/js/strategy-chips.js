@@ -124,14 +124,14 @@ function volList(j, chip, old) {
 //   · 문턱은 서버 칩 룰 한 곳(/api/kis/chip-rules — 값 · 기본 · 범위 · 룰 문서 자리 docPath) · 넣은 값은 그 자리(rules.chips.<칩>.<열쇠>)에 저장 → 서버가 다음 셈부터 씀
 //   · 빈칸으로 두면 넣은 값을 지워 서버 기본으로 · 범위 밖은 되돌림 · 칸은 이 칩들만(지시 온 자리)
 const EDIT = { rise: ['초반상승'], turn: ['현시간 유통회전'], turnup: ['전일 현시간 대비 급증'] };   // 화면 이름(chipName 을 거쳐 견줌)
-let crCache = null;
+let crCache = null, crMsg = '';   // crMsg — 저장 알림 글 · 칸을 다시 그려도 남게(qa 11-23)
 async function crLoad() { const { j } = await getJson('/api/kis/chip-rules'); crCache = j && j.ok && Array.isArray(j.data) ? j.data : null; return crCache; }
 const crRow = (id) => {
   const cs = EDIT[id]; if (!cs) return null;
   if (!crCache) return ['고치는 값', '<span class="st-err">— 서버 칩 룰을 못 받음</span>'];
   const xs = crCache.filter((x) => cs.includes(chipName(x.chip)) && x.docPath && x.unit !== '목록');
   if (!xs.length) return ['고치는 값', '<span class="st-err">— 서버 칩 룰에 이 칩 칸이 없음(서버를 합치기 전)</span>'];
-  return ['고치는 값', `<span class="rl-cr">${xs.map((x) => `<label class="dt-fee">${esc(x.name)} <input data-cr="${esc(x.docPath)}" data-lo="${esc((x.range || [])[0] ?? '')}" data-hi="${esc((x.range || [])[1] ?? '')}" class="rl-in rl-num" inputmode="decimal" placeholder="( )" value="${x.source === 'default' ? '' : esc(x.value)}" aria-label="${esc(x.name)}">${esc(x.unit || '')} <span class="rl-sug">${x.source === 'default' ? `빈칸 = 서버 기본 ${esc(num(x.default, 2).replace(/\.?0+$/, ''))}${esc(x.unit || '')}` : `기본 ${esc(num(x.default, 2).replace(/\.?0+$/, ''))}${esc(x.unit || '')}`}</span></label>`).join(' ')} <span id="rl-cr-msg" class="rl-sug"></span></span>`];
+  return ['고치는 값', `<span class="rl-cr">${xs.map((x) => `<label class="dt-fee">${esc(x.name)} <input data-cr="${esc(x.docPath)}" data-lo="${esc((x.range || [])[0] ?? '')}" data-hi="${esc((x.range || [])[1] ?? '')}" class="rl-in rl-num" inputmode="decimal" placeholder="( )" value="${x.source === 'default' ? '' : esc(x.value)}" aria-label="${esc(x.name)}">${esc(x.unit || '')} <span class="rl-sug">${x.source === 'default' ? `빈칸 = 서버 기본 ${esc(num(x.default, 2).replace(/\.?0+$/, ''))}${esc(x.unit || '')}` : `기본 ${esc(num(x.default, 2).replace(/\.?0+$/, ''))}${esc(x.unit || '')}`}</span></label>`).join(' ')} <span id="rl-cr-msg" class="rl-sug">${esc(crMsg)}</span></span>`];
 };
 async function crSave(path, val) {
   const keys = path.split('.');
@@ -175,7 +175,7 @@ async function show(id, again = false) {
   if (EDIT[id] && !crCache) await crLoad();
   if (my !== seq) return;
   const rowsOf = (m, ex) => [...R.rows(m, ex), ...(crRow(id) ? [crRow(id)] : [])];
-  tb2.innerHTML = rowsOf({}, null).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
+  if (!again) tb2.innerHTML = rowsOf({}, null).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');   // 다시 받을 때(again)는 빈 값으로 먼저 그리지 않음 — 조건 줄이 「—」 로 깜빡이고 저장 알림 글이 지워졌음(qa 11-23)
   if (!R.url) { $('cr-cap').textContent = `「${R.name}」 종목`; $('cr').innerHTML = '<div class="st-err">— 서버에 이 칩의 종목 목록 주소가 없음(홀딩스 화면이 순위 목록에서 셈)</div>'; return; }
   if (!again) { $('cr-cap').textContent = '값을 받는 중…'; $('cr').innerHTML = '<div class="st-err">—</div>'; }
   let [{ st, j }, ex] = await Promise.all([getJson(R.url), R.extra ? getJson(R.extra) : Promise.resolve({ j: null })]);
@@ -189,14 +189,15 @@ async function show(id, again = false) {
   $('cr-cap').textContent = L.cap.replace(/<[^>]+>/g, '');
   $('cr').innerHTML = L.html || '<div class="st-err">— 이 룰에 걸린 종목 없음</div>';
 }
-chips.forEach((c) => c.addEventListener('click', () => show(c.dataset.rule)));
+chips.forEach((c) => c.addEventListener('click', () => { crMsg = ''; show(c.dataset.rule); }));   // 다른 탭으로 가면 알림 글을 비움
 tb2.addEventListener('change', async (e) => {
   const el = e.target.closest('[data-cr]'); if (!el) return;
-  const msg = $('rl-cr-msg'), raw = el.value.trim(), val = raw === '' ? null : Number(raw), lo = Number(el.dataset.lo), hi = Number(el.dataset.hi);
-  if (val != null && (!Number.isFinite(val) || (el.dataset.lo !== '' && val < lo) || (el.dataset.hi !== '' && val > hi))) { if (msg) msg.textContent = `${el.dataset.lo} ~ ${el.dataset.hi} 사이 숫자 · 빈칸 = 서버 기본 — 되돌렸습니다`; crLoad().then(() => show(cur, true)); return; }
-  if (msg) msg.textContent = '저장하는 중…';
-  try { await crSave(el.dataset.cr, val); await crLoad(); if (msg) msg.textContent = '저장됨 — 서버가 다음 셈부터 씀'; el.blur(); show(cur, true); }
-  catch (err) { if (msg) msg.textContent = `저장 못 함(${err.message || '연결 안 됨'})`; }
+  const say = (t) => { crMsg = t; const m = $('rl-cr-msg'); if (m) m.textContent = t; };
+  const raw = el.value.trim(), val = raw === '' ? null : Number(raw), lo = Number(el.dataset.lo), hi = Number(el.dataset.hi);
+  if (val != null && (!Number.isFinite(val) || (el.dataset.lo !== '' && val < lo) || (el.dataset.hi !== '' && val > hi))) { say(`${el.dataset.lo} ~ ${el.dataset.hi} 사이 숫자 · 빈칸 = 서버 기본 — 되돌렸습니다`); crLoad().then(() => show(cur, true)); return; }
+  say('저장하는 중…');
+  try { await crSave(el.dataset.cr, val); await crLoad(); say('저장됨 — 서버가 다음 셈부터 씀'); el.blur(); show(cur, true); }
+  catch (err) { say(`저장 못 함(${err.message || '연결 안 됨'})`); }
 });
 
 // 조건별 점수 (11-18 재권님 「여기도 내가 조건들 넣을수 있게 해줘. 있는조건이면 고르면 되고 조건별로 점수를 매겨서 우선순위 정할거야」 → 홈 「단타」 도 같은 차례 「응」)
