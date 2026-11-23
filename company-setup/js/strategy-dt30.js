@@ -331,10 +331,10 @@ function sellAt(p, times = [], inAt = '') {   // p — 시각마다 매수가 �
 //   셈 규칙은 서버 dt30_win._sell_bars(개발2 1f95235 · 승률 표)와 같다 — 봉이 없는 줄은 아래 sellAt(30분 칸) 그대로
 //   → { k: 결과를 그릴 30분 칸 차례(봉 매도면 그 봉이 끝나는 칸), why, px: 판 값, at: 판 때 HHMM }
 const hmAdd = (t, m) => { const x = +t.slice(0, 2) * 60 + +t.slice(2) + m; return String(Math.floor(x / 60)).padStart(2, '0') + String(x % 60).padStart(2, '0'); };
-// 매도 봉 고르기(11-23 재권님 「매도타이밍은 5분봉으로 하자」 → 「1분봉과 5분봉을 선택할수 있게 해줘 30분봉도」 · 「그래서 최적의 값을 찾아가야 할거같아」) — 셈 칸 set.sellBar 1m · 5m · 30m(기본 · 30분 칸 셈 sellAt 그대로)
+// 매도 봉 고르기(11-23 재권님 「매도타이밍은 5분봉으로 하자」 → 「1분봉과 5분봉을 선택할수 있게 해줘 30분봉도」 · 「그래서 최적의 값을 찾아가야 할거같아」) — 셈 칸 set.sellBar 1m · 5m(기본) · 30m(30분 칸 셈 sellAt 그대로)
 //   5분봉 = 서버 rows[].bars5 · 없으면 1분봉(rows[].bars · barSrc 1m)을 5분씩 묶음(시가 첫 · 고가 최대 · 저가 최소 · 종가 끝) · 1분봉이 없고 barSrc 5m 이면 그것
 const barsOf = (r, m) => { const b1 = Array.isArray(r.bars) ? r.bars : [];
-  if (m === '1m') return r.barSrc === '5m' ? null : b1.length ? b1 : null;
+  if (m === '1m') return b1.length ? b1 : null;   // 1분봉이 없는 날(barSrc 5m)은 5분봉으로 셈 — 서버 a4c6d00 과 같게(개념정의 덧)
   if (Array.isArray(r.bars5) && r.bars5.length) return r.bars5;
   if (r.barSrc === '5m') return b1.length ? b1 : null;
   const g = []; b1.forEach(([t0, o, h, l, c]) => { const t = String(t0).replace(/:/g, '').slice(0, 4), m0 = +t.slice(0, 2) * 60 + +t.slice(2), k = m0 - (m0 % 5), st0 = String(Math.floor(k / 60)).padStart(2, '0') + String(k % 60).padStart(2, '0'), z = g[g.length - 1];
@@ -491,7 +491,7 @@ function calcDay(d) {
   const lkCnt = {}; if (lkMode) rows.forEach((r) => { const j = Number(r.lock); if (boughtOf(r) && !noBuyOf(j)) { const g = j > 0 ? j : 0; lkCnt[g] = (lkCnt[g] || 0) + 1; }   /* 매도 시각보다 늦게 든 종목은 몫을 안 받음(nb 와 같은 셈 · qa 11-20) */ });
   const perOf = (r) => { if (!lkMode) return per; const j = Number(r.lock); const g = j > 0 ? j : 0, gw = g > 0 ? Number((S.grpWons || [])[g - 1]) : 0; return lkCnt[g] ? (gw > 0 ? gw : lkWon) / lkCnt[g] : 0; };   // 굳힘 칸마다 금액(11-23 · 셈 칸 grpWons) · 빈칸이면 「굳힘마다 금액」   // 대기 묶음(0)도 굳힘 금액을 그 수로 나눠 산 것으로(11-23) · 합계(P)는 굳은 줄만
   const ch = (r, t) => { const B = boughtOf(r), v = Number((r.px || {})[t]); return !B || hhmm(t) <= B.at || (r.px || {})[t] == null || !Number.isFinite(v) ? null : (v / B.px - 1) * 100; };   // 산 시각 앞 칸은 비움
-  const R = rows.map((r) => { const p = times.map((t) => ch(r, t)); const B0 = boughtOf(r), sb = S.sellBar === '1m' || S.sellBar === '5m' ? S.sellBar : '', bs = sb && B0 && !LIVE ? barsOf(r, sb) : null, s = bs ? sellBars(r, B0, times, bs, sb === '1m' ? 1 : 5) : sellAt(p, times, (B0 || {}).at);   // 매도 봉 1분 · 5분이면 봉으로 · 30분(기본)이거나 봉이 없는 줄 · 장중은 30분 칸   // 봉 줄이 있으면 봉으로 판 때 · 값(11-23 · 장중은 30분 칸 그대로)
+  const R = rows.map((r) => { const p = times.map((t) => ch(r, t)); const B0 = boughtOf(r), sb = S.sellBar === '1m' || S.sellBar === '5m' ? S.sellBar : '', bs = sb && B0 && !LIVE ? barsOf(r, sb) : null, s = bs ? sellBars(r, B0, times, bs, sb === '1m' && r.barSrc !== '5m' ? 1 : 5) : sellAt(p, times, (B0 || {}).at);   // 매도 봉 1분 · 5분(기본)이면 봉으로 · 30분이거나 봉이 없는 줄 · 장중은 30분 칸   // 봉 줄이 있으면 봉으로 판 때 · 값(11-23 · 장중은 30분 칸 그대로)
     if (s.px != null && s.k >= 0) p[s.k] = (s.px / B0.px - 1) * 100;   // 판 칸에는 판 값의 % (봉 매도면 칸 시각 값이 아니라 판 값)
     let last = L; while (last >= 0 && p[last] == null) last--; const nowCh = LIVE && s.k < 0 && Number(r.now) > 0 && boughtOf(r) ? (Number(r.now) / boughtOf(r).px - 1) * 100 : null;   // 장중 · 안 판 종목 — 결과 · 손익은 서버 지금 값(rows[].now)
     const at = s.k >= 0 ? s.k : last, sellPx = s.px != null ? s.px : nowCh != null ? Number(r.now) : at >= 0 ? Number((r.px || {})[times[at]]) : null;
