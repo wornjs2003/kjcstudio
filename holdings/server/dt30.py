@@ -2474,9 +2474,9 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
         m = (got[0].get("meta") or {}) if got else {}
         if got and d < today and m.get("prevDay") and m.get("tradeVer") != TRADE_VER:   # 거래 값 · 풀린 시총 어림을 남은 되채운 판마다 한 번(다시 짓지 않고 · 11-23 20:2x 「응」)
             try:
-                _past_trade(proxy, d, m["prevDay"], got[0].get("rows") or [])
-                got[0]["meta"]["tradeVer"] = TRADE_VER
-                _store(proxy, got[0])
+                if _past_trade(proxy, d, m["prevDay"], got[0].get("rows") or []):   # 봉을 못 읽은 날은 표시를 안 찍어 다음 바퀴에 다시(개념정의 덧 ②)
+                    got[0]["meta"]["tradeVer"] = TRADE_VER
+                    _store(proxy, got[0])
             except Exception as e:
                 print("  [단타 30] %s 거래 값 못 채움 — %s" % (d, proxy.safe_message(e, 120)), flush=True)
         if got and got[0].get("closed", True) and (got[0].get("meta") or {}).get("cfVer") != CF_VER:
