@@ -1488,6 +1488,64 @@ def _trade_days(proxy, before, n):
             "SELECT DISTINCT day FROM auto_watch_day WHERE day < ? ORDER BY day DESC LIMIT ?", (before, n + 1))]
 
 
+PAST_VOL_UNTIL = (10, 30)    # 지난 날 거래량급증 칩을 보는 창 끝 — 재권님 「응 만들어 10시 반까지 만들어」(11-23 12:1x) · 지금 판이 다시 세는 끝(BUY_LATE)과 같다
+
+
+def past_vol_chip(proxy, day, prev, bars, cap, small, put):
+    """지난 날 「거래량급증」 칩 — 09:00 부터 PAST_VOL_UNTIL 까지 5분봉 끝마다 누적으로 센다 · 처음 넘은 봉 끝 시각을 volAt 에.
+        전일   그날 누적 거래량 ÷ 앞 거래일 같은 시각까지 누적 × 100 ≥ 칩 룰 거래량급증.prevSamePct(앞 날 5분봉이 없으면 그 칸 못 잼 — 0 아님)
+        비율   그날 누적 거래대금(5분봉 종가 × 거래량 어림) ÷ (풀린 주식수 × 그 봉 종가) × 100 ≥ 칩 룰 거래량급증.turnPct(turnover.calc 셈)
+               풀린 주식수는 **지금** 값(company_profile.floats · 그날 값은 안 쌓였다) — 어림 · 없으면 그 칸 못 잼
+        대상   감시 목록(시가총액 있음 · 문턱 이상) — 라이브(vol_chip)와 같은 가름
+    재권님 「거래량 급증은 지난데이터들을 기반으로 뽑아낼수 있지않나?」 → 안에 「응 만들어 10시 반까지 만들어」(11-23 12:1x).
+    → {code: 「HH:MM」} · 문턱을 못 읽으면 None(못 셈)."""
+    import chip_rules, company_profile, turnover
+    try:
+        t_pct, p_pct = float(chip_rules.get("거래량급증", "turnPct")), float(chip_rules.get("거래량급증", "prevSamePct"))
+    except Exception:
+        return None
+    end = PAST_VOL_UNTIL[0] * 60 + PAST_VOL_UNTIL[1] - BAR_MIN
+    o_d = OPEN_AT[0] * 60 + OPEN_AT[1] + late_min(proxy, day=day)
+    o_p = OPEN_AT[0] * 60 + OPEN_AT[1] + late_min(proxy, day=prev)    # 「같은 시각」 은 연 뒤 같은 분 — 늦게 연 날(수능)과 견줄 때 어긋나지 않게(11-20 이 앞 날 11-19 10:00 개장과 견주어 528종목이 한꺼번에 걸렸다)
+    hm = lambda m: "%02d%02d" % divmod(m, 60)
+    slots = [(hm(m), hm(m - o_d + o_p)) for m in range(o_d, end + 1, BAR_MIN)]   # (그날 봉, 앞 날 같은 분 봉)
+    if not slots:
+        return {}
+    pvol = {}
+    with proxy.db_conn() as conn:
+        for code, ts, v in conn.execute("SELECT code, ts, volume FROM candles WHERE period = '5m' AND ts >= ? AND ts <= ?",
+                                        (prev + slots[0][1], prev + slots[-1][1])):
+            pvol.setdefault(code, {})[ts[8:12]] = v or 0
+    try:
+        fl = company_profile.floats()
+    except Exception:
+        fl = {}
+    out = {}
+    for code, d in bars.items():
+        if cap.get(code) is None or small(code):
+            continue
+        vc = val = pc = 0
+        pd = pvol.get(code)
+        for hm, phm in slots:
+            b = d.get(hm)
+            if b:
+                vc += b[3] or 0
+                val += (b[2] or 0) * (b[3] or 0)
+            if pd:
+                pc += pd.get(phm, 0)
+            by = []
+            if pd and pc > 0 and vc / pc * 100 >= p_pct:
+                by.append("전일")
+            _c, turn = turnover.calc(b[2] if b else None, val, fl.get(code))
+            if turn is not None and turn >= t_pct:
+                by.append("비율")
+            if by:
+                out[code] = "%02d:%02d" % divmod(int(hm[:2]) * 60 + int(hm[2:]) + BAR_MIN, 60)
+                put(code, "거래량급증", "둘 다" if len(by) == 2 else by[0], volAt=out[code])
+                break
+    return out
+
+
 def rebuild(proxy, day, prev, cfg=None):
     """day 의 09:06 판을 쌓인 값으로 다시 센다(prev = 앞 거래일). 5분봉이 없으면 None. cfg 를 주면 VI 를 KIS 에서 받는다."""
     import auto_watch, company_profile, dart, intraday_alerts, market_hours, open_rise, pre_flow
@@ -1624,6 +1682,11 @@ def rebuild(proxy, day, prev, cfg=None):
             pct = (b[2] - b[0]) / b[0] * 100
             if pct >= open_rise.PAST_RISE_PCT:             # 지난 날은 첫 5분봉 2% 셈 그대로(1분봉은 11-12 부터만)
                 put(c, "초반상승", rise=round(pct, 2))
+    vol_at = past_vol_chip(proxy, day, prev, bars, cap, small, put)   # 거래량급증 — 09:00~PAST_VOL_UNTIL 같은 시각 대비 · 거래 비율(어림)
+    if vol_at is None:
+        missing.append("거래량급증")
+    else:
+        approx.append("거래량급증")                        # 풀린 주식수는 지금 값 · 거래대금은 5분봉 종가 × 거래량 어림
     for c in bb:
         if c in hit:
             hit[c]["chips"].add("볼린저")
@@ -1651,7 +1714,7 @@ def rebuild(proxy, day, prev, cfg=None):
                      "chips": [c for c in ov_chips() + ("현재상승", "볼린저") if c in chips], "subs": g["subs"],
                      "n": len(chips & set(ov_chips())), "buy": buy,
                      "pct": round((buy / base - 1) * 100, 2) if buy and base else None, "rise": g.get("rise"),
-                     "viAt": g.get("viAt"), "surgeAt": g.get("surgeAt"), "surgeApprox": g.get("surgeApprox"), "viPx": g.get("viPx"),
+                     "viAt": g.get("viAt"), "surgeAt": g.get("surgeAt"), "volAt": g.get("volAt"), "surgeApprox": g.get("surgeApprox"), "viPx": g.get("viPx"),
                      "px": px, "pxSrc": src})
     tab = score_table(proxy)
     off = late_min(proxy, day=day)                     # 그날 늦게 열었으면 VI·급등 나누는 시각도 그만큼 뒤(개념정의 덧 11-19 — 그날 판과 같게)
@@ -1661,7 +1724,7 @@ def rebuild(proxy, day, prev, cfg=None):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % PAST_BUY_AT, "times": times(), "rows": rows, "closed": True,
             "meta": {"rebuilt": True, "viSplit": vi_split(off), "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": drop_below_pct(),
-                     "watchSrc": watch_src, "rules": rules_meta(proxy, merged=False), "viUntil": "%02d:%02d" % PAST_LATE, "approxBase": approx_base,
+                     "watchSrc": watch_src, "rules": rules_meta(proxy, merged=False), "viUntil": "%02d:%02d" % PAST_LATE, "volUntil": "%02d:%02d" % PAST_VOL_UNTIL, "approxBase": approx_base,
                      "capMinEok": cap_min_eok(), "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 · 수급은 그날 09:01 직전 관심 목록(watchSrc 기록 · 없으면 관심 못 받음 · 수급 어림) · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
                              "buy 는 09:05 봉 시가 · 시가총액 · 섹터 · 시장은 지금 값"}}
