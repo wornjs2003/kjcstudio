@@ -10675,6 +10675,20 @@ class Handler(SimpleHTTPRequestHandler):
 
             if route == "vol-chip":
                 # 단타 칩 「거래량」 — 풀린 주식수 대비 거래량 ≥ floatPct 또는 어제 같은 시각 대비 ≥ prevSamePct (server/vol_chip.py · 2026-11-23)
+                # 1분 칸(turnover_slot)은 8765 만 쌓는다 — 상류가 있는 서버(메인 8764 · 세션)는 8765 것을 그대로 넘긴다(dt-list 와 같은 꼴)
+                base = upstream_base()
+                if base:
+                    try:
+                        with urllib.request.urlopen(base + self.path, timeout=UPSTREAM_TIMEOUT) as resp:
+                            self._send_body(resp.status, resp.read(), "application/json; charset=utf-8")
+                        return
+                    except urllib.error.HTTPError as e:
+                        if e.code != 404:              # 404 — 상류가 아직 이 주소를 모름(옛 코드) · 아래에서 자기가 센다
+                            self._send_body(e.code, e.read(), "application/json; charset=utf-8")
+                            return
+                    except (urllib.error.URLError, OSError):
+                        self._send_json({"ok": False, "data": None, "error": "상류(8765)에 못 닿음 — 거래량 칩은 8765 의 1분 기록으로 셉니다"}, 502)
+                        return
                 d, at = vol_chip.hits(sys.modules[__name__], cfg)
                 self._send_json({"ok": True, "data": d["rows"],
                                  "meta": {k: d[k] for k in ("candidates", "quoted", "etfOut", "floatKnown", "slot", "prev1m", "floatPct", "prevSamePct", "capMinEok", "at")}
