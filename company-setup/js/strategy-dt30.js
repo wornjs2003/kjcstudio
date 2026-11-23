@@ -84,11 +84,11 @@ const colsOf = () => (st.cols || DT_CHIPS).filter((c) => !(st.watchAuto && c ===
 const colsSave = () => { try { localStorage.setItem(COLS_KEY, JSON.stringify({ cols: colsOf(), off: [...st.off] })); } catch (e) { /* 이 브라우저에 못 남겨도 화면은 돈다 */ } };
 // 서버가 새로 보낸 칩은 저장된 칸에 저절로 넣는다(11-23 재권님 「넣어」 — 메인 브라우저에 두 거래 칩 생기기 전 칸이 저장돼 있어 그 칩 칸이 영영 안 생김)
 //   이 브라우저가 본 서버 칩(KNOWN_KEY)에 없던 칩만 넣는다 — 손으로 지운 칩은 이미 본 칩이라 다시 안 넣음 · 거래 칩은 volNext 로 관심 뒤 · 그 밖은 끝
-//   처음 도는 브라우저는 거래 칩 둘만 새 칩으로 본다(그 전에 지운 칩까지 되살리지 않게)
+//   처음 도는 브라우저는 거래 칩 둘만 새 칩으로 본다(그 전에 지운 칩까지 되살리지 않게) · 거래 칩을 이미 받은 브라우저는 그것도 안 넣음
 const KNOWN_KEY = 'dt30-chips-known-v1';
 function addNewChips(list) {
   try {
-    const raw = localStorage.getItem(KNOWN_KEY), known = raw ? JSON.parse(raw) : list.filter((c) => !VOL_CHIPS.includes(c));
+    const raw = localStorage.getItem(KNOWN_KEY), known = raw ? JSON.parse(raw) : localStorage.getItem(COLS_MOVED) ? list : list.filter((c) => !VOL_CHIPS.includes(c));   // 거래 칩을 이미 옮겨 받은 브라우저(COLS_MOVED)는 그 뒤 손으로 지웠을 수 있어 새 칩으로 안 봄(창구 검수 11-23)
     const fresh = list.filter((c) => !known.includes(c));
     if (st.cols && fresh.length) { const add = fresh.filter((c) => !st.cols.includes(c)); if (add.length) { st.cols = volNext([...st.cols, ...add]); colsSave(); } }
     localStorage.setItem(KNOWN_KEY, JSON.stringify([...new Set([...known, ...list])]));
