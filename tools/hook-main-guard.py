@@ -46,6 +46,7 @@ kill · pkill · killall · xargs kill · launchctl · install.command · servic
 `install.command $p`(변수 포트) · `bash < 스크립트`(표준 입력으로 먹인 것).
 막히면 종료 0 에 `permissionDecision: deny` 를 낸다 — 세션이 그 이유를 보고 재권님께 여쭙는다.
 """
+import importlib.util
 import json
 import os
 import re
@@ -464,6 +465,32 @@ def check_edit(path):
     return "메인 데이터 파일(%s)을 직접 고치는 것입니다." % p if p else ""
 
 
+RESTART_HINT = ("install.command", "service-deploy", "launchctl", "프로세스를 죽이는", "killall")
+
+
+def measuring_note(cmd, cwd):
+    """허락받은(KJC_MAIN_OK=1) 8765 · 8764 재시작 · 옮기기면 보드의 열린 측정을 세어 한 줄 — 알리기만 (2026-11-23 재권님 「응」 ·
+    CLAUDE.md 「8765 · 8764 를 재시작하기 전에 보드의 「측정 중」 카드를 센다」). 재시작이 아니면 · 보드를 못 보면 빈 글자."""
+    if "KJC_MAIN_OK=1" not in cmd:
+        return ""
+    r = check_bash(re.sub(r"(?:export\s+)?KJC_MAIN_OK=1\s*;?", " ", cmd), cwd, True)
+    if not r or not any(k in r for k in RESTART_HINT):
+        return ""
+    try:
+        spec = importlib.util.spec_from_file_location("board_card", os.path.join(os.path.dirname(os.path.abspath(__file__)), "board-card.py"))
+        bc = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bc)
+        doc, _ = bc.read()
+        got = bc.measures(doc, list(GUARD_PORTS))
+    except Exception as e:
+        return "열린 측정 못 셈(%s) — 재시작 전에 python3 tools/board-card.py --measuring-list 를 손으로 보십시오." % (" ".join(str(x) for x in e.args) or type(e).__name__)
+    if not got:
+        return ""
+    rows = " / ".join("%s · 포트 %s · 끝 %s" % (w, " · ".join(p) or "모름", e or "모름") for w, _, p, e in got)
+    return ("8765 · 8764 를 재는 세션이 있습니다 — %s. 그 세션에 먼저 알리고, 기다리거나 재시작 시각을 그 카드에 메모 한 줄로 적으십시오"
+            "(CLAUDE.md 「8765 · 8764 를 재시작하기 전에 보드의 「측정 중」 카드를 센다」 · 막지 않음)." % rows)
+
+
 def main():
     try:
         data = json.load(sys.stdin)
@@ -484,6 +511,10 @@ def main():
         reason = ""
     if reason:
         _deny(reason)
+    elif tool == "Bash" and not replay:
+        note = measuring_note(inp.get("command") or "", cwd)
+        if note:
+            print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": note}}, ensure_ascii=False))
     return 0
 
 
