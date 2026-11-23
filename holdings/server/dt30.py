@@ -2930,7 +2930,7 @@ def board(proxy, day=None, cfg=None):
         miss = [r for r in b.get("rows") or [] if r.get("cap") is None or not r.get("market") or not r.get("sector")]
         if miss:
             import company_profile
-            uni = {u["stock_code"]: u for u in dart.universe_rows(None)}
+            uni = {u["stock_code"]: dict(u) for u in dart.universe_rows(None)}   # sqlite3.Row — get 이 없어 dict 로(qa 걸림)
             sec = company_profile.sectors()
             for r in miss:
                 u = uni.get(r["code"]) or {}
