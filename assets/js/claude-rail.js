@@ -18,6 +18,11 @@
    연동(2026-11-03 재권님 「가로 해줘」) — 보내면 POST /api/claude/ask · 서버(holdings/server/claude_chat.py)가 맥미니 claude 를 한 번 부른다.
    답은 한 번에 온다(수십 초) · 그동안 「생각 중」. 한 번에 하나 — 돌고 있으면 서버가 429 로 돌려준다.
    보내는 것: 물음 · 보고 있는 것(화면 이름 · 홀딩스면 종목 이름 · 코드 · 시장 지도) · 앞 대화. 시세 숫자는 서버가 붙인다.
+
+   업무지시(2026-11-23 재권님 「응 해줘봐」) — 입력 칸 왼쪽 「업무지시」 단추를 켜고 보낸 글만 POST /api/claude/order 로 간다.
+   서버(holdings/server/claude_order.py)가 작업우선순위 창에 「[홈페이지 지시]」 를 붙여 넣고 그 창의 답을 돌려준다.
+   답이 몇 분 걸릴 수 있어 번호를 받고 GET 으로 상태를 묻는다 — 묻는 간격은 서버가 낸 pollMs. 단추는 기억하지 않는다(늘 꺼진 채 열린다 ·
+   잘못 켜 둔 채 물음이 지시로 가지 않게). 개발 서버 · 메인 화면에서만 보낸다 — 세션 서버는 403.
    ========================================================================== */
 
 const CSS = new URL('../css/claude-rail.css', import.meta.url);
@@ -28,6 +33,9 @@ const QUICK = ['이 종목 요약', '오늘 시장 왜 빠졌나', '지금 뜨�
 const HIST_KEY = 'kh-claude-chat';
 const HIST_MAX = 40;
 const ASK_URL = '/api/claude/ask';
+const ORDER_URL = '/api/claude/order';
+const ORDER_POLL_FALLBACK_MS = 3000;   // 응답에 pollMs 가 없을 때만(옛 서버) — 없으면 setTimeout 이 0 이 되어 끝없이 바로 다시 묻는다
+const ORDER_STATE = { 'waiting-idle': '작업우선순위 창이 하던 일을 마치길 기다리는 중…', sent: '작업우선순위 창이 답하는 중…' };
 
 function load() { try { return localStorage.getItem(KEY) === '1'; } catch { return false; } }
 function save(v) { try { localStorage.setItem(KEY, v ? '1' : '0'); } catch { /* 저장 못 해도 화면은 그대로 */ } }
@@ -91,7 +99,7 @@ export function mountClaudeRail() {
     <div class="kh-rail-ctx">보고 있는 것 — <b class="kh-rail-now"></b><br>보내면 이 화면과 서버가 받은 시세를 함께 보냅니다</div>
     <div class="kh-rail-body" aria-live="polite"></div>
     <div class="kh-rail-quick">${QUICK.map((q) => `<button type="button">${q}</button>`).join('')}</div>
-    <div class="kh-rail-in"><input type="text" placeholder="Claude 에게 물어보기…" maxlength="2000"><button type="button">보내기</button></div>`;
+    <div class="kh-rail-in"><button type="button" class="kh-rail-ord" aria-pressed="false" data-tip="켜고 보낸 글은 작업우선순위 창에 「[홈페이지 지시]」 로 들어가고, 그 창의 답이 여기 옵니다">업무지시</button><input type="text" placeholder="Claude 에게 물어보기…" maxlength="2000"><button type="button" class="kh-rail-send">보내기</button></div>`;
 
   document.body.append(panel, bar, fab);
   document.body.classList.add('has-kh-rail');
@@ -113,7 +121,9 @@ export function mountClaudeRail() {
   const body = panel.querySelector('.kh-rail-body');
   const st = panel.querySelector('.kh-rail-st');
   const input = panel.querySelector('.kh-rail-in input');
-  const sendBtn = panel.querySelector('.kh-rail-in button');
+  const sendBtn = panel.querySelector('.kh-rail-send');
+  const ordBtn = panel.querySelector('.kh-rail-ord');
+  let ordOn = false;
   const quickBtns = [...panel.querySelectorAll('.kh-rail-quick button')];
   let hist = loadHist();
   let busy = false;
@@ -121,7 +131,7 @@ export function mountClaudeRail() {
   function bubble(m) {
     const d = document.createElement('div');
     d.className = 'kh-rail-msg is-' + m.who;
-    if (m.who === 'ai') d.innerHTML = rich(m.text); else d.textContent = m.text;
+    if (m.who === 'ai') d.innerHTML = rich(m.text); else d.textContent = (m.ord ? '[업무지시] ' : '') + m.text;
     if (m.who === 'ai' && m.secs != null) {
       const s = document.createElement('small');
       s.textContent = `${m.secs}초`;
@@ -143,7 +153,7 @@ export function mountClaudeRail() {
     busy = v;
     st.textContent = v ? '생각 중…' : '준비';
     st.classList.toggle('is-busy', v);
-    [input, sendBtn, ...quickBtns].forEach((el) => { el.disabled = v; });
+    [input, sendBtn, ordBtn, ...quickBtns].forEach((el) => { el.disabled = v; });
   }
   async function ask(q) {
     q = (q || '').trim();
@@ -173,8 +183,48 @@ export function mountClaudeRail() {
     paint();
     input.focus();
   }
-  sendBtn.addEventListener('click', () => ask(input.value));
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) ask(input.value); });
+  /* 업무지시 — 작업우선순위 창에 넣고 답이 올 때까지 서버가 낸 간격으로 상태를 묻는다 */
+  async function order(q) {
+    q = (q || '').trim();
+    if (!q || busy) return;
+    hist.push({ who: 'me', text: q, ord: true });
+    saveHist(hist);
+    input.value = '';
+    setBusy(true);
+    paint({ who: 'wait', text: '작업우선순위 창에 보내는 중…' });
+    try {
+      const r = await fetch(ORDER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: q }) });
+      let j = await r.json().catch(() => null);
+      if (!r.ok || !j?.ok) throw new Error(j?.error || `서버가 ${r.status} 를 냈습니다`);
+      let d = j.data;
+      while (d.state !== 'done' && d.state !== 'fail') {
+        paint({ who: 'wait', text: ORDER_STATE[d.state] || '작업우선순위 창에 보내는 중…' });
+        await new Promise((ok) => setTimeout(ok, d.pollMs || ORDER_POLL_FALLBACK_MS));
+        const g = await fetch(`${ORDER_URL}?id=${encodeURIComponent(d.id)}`, { cache: 'no-store' });
+        j = await g.json().catch(() => null);
+        if (!g.ok || !j?.ok) throw new Error(j?.error || `서버가 ${g.status} 를 냈습니다`);
+        d = j.data;
+      }
+      if (d.state === 'fail') throw new Error(d.error || '못 보냈습니다');
+      hist.push({ who: 'ai', text: '작업우선순위 — ' + d.answer + (d.blocked ? '\n\n(그 창이 지금 재권님 확인을 기다립니다)' : ''), secs: d.secs });
+    } catch (e) {
+      hist.push({ who: 'err', text: '업무지시를 못 마쳤습니다 — ' + (e?.message || e) });
+    }
+    saveHist(hist);
+    setBusy(false);
+    paint();
+    input.focus();
+  }
+  function setOrd(v) {
+    ordOn = v;
+    ordBtn.classList.toggle('is-on', v);
+    ordBtn.setAttribute('aria-pressed', String(v));
+    input.placeholder = v ? '작업우선순위 창에 보낼 지시…' : 'Claude 에게 물어보기…';
+  }
+  const send = () => (ordOn ? order(input.value) : ask(input.value));
+  ordBtn.addEventListener('click', () => { setOrd(!ordOn); input.focus(); });
+  sendBtn.addEventListener('click', send);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) send(); });
   quickBtns.forEach((b) => b.addEventListener('click', () => ask(b.textContent)));
   panel.querySelector('.kh-rail-clr').addEventListener('click', () => { if (busy) return; hist = []; saveHist(hist); paint(); });
   paint();
