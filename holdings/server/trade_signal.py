@@ -27,7 +27,7 @@
     숫자는 쉼표 없이 · 금액은 원 · 칸이 모자라거나 숫자가 아니면 그 줄은 「못 읽음」 으로 일지에 남기고 값은 안 적는다
 
 켜기 · 지킴
-    SEND           슬랙으로 보내는 스위치 — False 면 줄만 만들고 「안 보냄(꺼짐)」 · 켜기는 재권님 지시(되돌릴 수 없는 발송)
+    SEND           슬랙으로 보내는 스위치 — False 면 판도 안 읽고 일지 줄도 안 만든다 · 켜기는 재권님 지시(되돌릴 수 없는 발송)
     설정 문서       docstore 「trade-set」 {amountWon: 종목마다 매수금액(원) | null, stop: 전체 멈춤 true/false} — 화면이 고친다
                    amountWon 이 비었거나 0 이하 · stop 이 true 면 보내지 않는다(그 까닭을 일지 상태에 적음)
     비밀           비밀 파일(secrets_guard.secrets_path() 한 벌 — 지금 ~/.kjc 의 것 · 서버가 load_secrets 로 읽음)의 「slack」 칸 — webhook_url(보내기) · bot_token(읽기 · channels:history) · channel_id(읽을 채널) ·
@@ -52,6 +52,7 @@ READ_SEC = 5                  # 슬랙 채널 읽는 간격(초) — 재권님 �
 READ_FROM, READ_TO = (8, 0), (21, 0)   # 평일 이 사이에만 읽는다 — 매도 결과는 장중 · 넥스트레이드 끝(20:00) 뒤 조금까지
 SET_DOC = "trade-set"
 MAX_PAGES = 10                # 한 바퀴에 읽는 쪽 수(쪽마다 200)
+SEND_CHECK_SEC = 10          # 첫 굳힘이 났나 판을 보는 간격(초)
 TICK = 1                      # 도는 틀 간격(초) — READ_SEC 이 실제 읽는 간격이 되게 그보다 잘게(qa 덧 11-23 — 틀이 10초라 5초가 10초였음)
 SLACK_HISTORY = "https://slack.com/api/conversations.history"
 _SCHEMA = ("CREATE TABLE IF NOT EXISTS trade_journal (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, rank INTEGER, code TEXT, name TEXT, "
@@ -219,8 +220,12 @@ def read_once(proxy):
     if not sk["bot_token"] or not sk["channel_id"] or not sk["sign_key"]:
         _status["readNote"] = "못 함 — 읽기 열쇠 · 채널 · 서명 열쇠 중 빈 것"
         return 0
-    oldest = _db(proxy, lambda c: (c.execute("SELECT v FROM trade_journal_state WHERE k = 'oldest'").fetchone() or ["0"])[0])
-    msgs, cursor, full = [], None, True
+    oldest = _db(proxy, lambda c: (c.execute("SELECT v FROM trade_journal_state WHERE k = 'oldest'").fetchone() or [None])[0])
+    if oldest is None:                                 # 처음 읽음 — 채널의 옛 글은 안 읽고 지금부터(qa 덧 11-23 · 0 부터면 쓰던 채널에서 끝없이 밀림)
+        oldest = "%.6f" % time.time()
+        _db(proxy, lambda c: c.execute("INSERT OR REPLACE INTO trade_journal_state (k, v) VALUES ('oldest', ?)", (oldest,)))
+        return 0
+    msgs, cursor = [], None
     for _ in range(MAX_PAGES):                         # 한 번에 200 넘게 밀렸으면 다음 쪽까지 — 앞을 건너뛰지 않는다(qa 덧 11-23)
         q = {"channel": sk["channel_id"], "oldest": oldest, "limit": 200}
         if cursor:
@@ -235,8 +240,9 @@ def read_once(proxy):
         if not j.get("has_more") or not cursor:
             break
     else:
-        full = False                                   # 다 못 읽음 — 읽은 자리를 안 옮긴다(앞을 건너뛰지 않게 · 되풀이 결과는 안 덮으니 다시 읽어도 됨)
-        _status["readNote"] = "밀린 메시지가 %d쪽 넘음 — 읽은 자리를 안 옮김" % MAX_PAGES
+        # 다 못 읽음 — 슬랙은 새 것부터 주어 다시 읽어도 앞쪽에 못 닿는다(qa 덧 11-23) · 자리는 옮기고 건너뛴 것을 크게 알린다
+        _status["readNote"] = "밀린 메시지가 %d쪽 넘어 그 앞을 건너뜀 — 매매일지와 주문 컴퓨터 기록을 맞춰 보십시오" % MAX_PAGES
+        print("  [매매일지] %s" % _status["readNote"], flush=True)
     msgs = sorted(msgs, key=lambda m: float(m.get("ts") or 0))
     if not msgs:
         return 0
@@ -249,8 +255,7 @@ def read_once(proxy):
                 if line.strip().startswith("RESULT|"):
                     ok, _ = _apply_result(conn, line.strip(), sk["sign_key"])
                     got += 1 if ok else 0
-        if full:
-            conn.execute("INSERT OR REPLACE INTO trade_journal_state (k, v) VALUES ('oldest', ?)", (msgs[-1]["ts"],))
+        conn.execute("INSERT OR REPLACE INTO trade_journal_state (k, v) VALUES ('oldest', ?)", (msgs[-1]["ts"],))
     _db(proxy, put)
     return got
 
@@ -267,7 +272,7 @@ def start(proxy):
 
     def loop():
         time.sleep(45)
-        last_read = 0.0
+        last_read = last_send = 0.0
         while True:
             try:
                 now = _now()
@@ -275,7 +280,9 @@ def start(proxy):
                 hm = now.hour * 60 + now.minute
                 if now.weekday() < 5:
                     end = dt30.BUY_LATE[0] * 60 + dt30.BUY_LATE[1]
-                    if _status["sentDay"] != day and dt30.OPEN_AT[0] * 60 + dt30.OPEN_AT[1] <= hm <= end:
+                    if (SEND and _status["sentDay"] != day and dt30.OPEN_AT[0] * 60 + dt30.OPEN_AT[1] <= hm <= end
+                            and time.time() - last_send >= SEND_CHECK_SEC):   # 꺼져 있으면 판을 안 읽는다 · 켜져도 SEND_CHECK_SEC 마다(개념정의 덧 11-23)
+                        last_send = time.time()
                         note = send_today(proxy, day)
                         _status.update(sendAt=now.strftime("%H:%M:%S"), sendNote=note)
                         if note not in ("판 아직 없음", "첫 굳힘 전"):
