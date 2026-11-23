@@ -2923,6 +2923,10 @@ def board(proxy, day=None, cfg=None):
     b, saved = got
     b["meta"]["savedAt"] = saved
     try:
+        live_merge(b)                                  # 다시 지은 라이브 판 — 장중 값을 읽을 때도 되돌림(저장은 장 뒤 되채우기 고리 · 장중에도 화면이 바로 맞게)
+    except Exception as e:
+        print("  [단타 30] 장중 값 못 되돌림 — %s" % proxy.safe_message(e, 120), flush=True)
+    try:
         drop_small(proxy, b)                           # 그날 판 · 지난 판 모두 읽을 때 문턱 밖은 뺌(저장 안 함 · 지금 감시 목록 시총으로) — 재권님 「3천억 아래종목은 아예 고려대상이 아니야」 → 지난 판도 「응 빼 지금룰에 맞춰서 다 적용해」(11-23 09:3x)
     except Exception as e:
         print("  [단타 30] 문턱 거르기 못 함 — %s" % proxy.safe_message(e, 120), flush=True)
@@ -2935,10 +2939,6 @@ def board(proxy, day=None, cfg=None):
                 pm.setdefault(str(n), None)                # 못 잼 — 0 아님
     except Exception:
         pass
-    try:
-        live_merge(b)                                  # 다시 지은 라이브 판 — 장중 값을 읽을 때도 되돌림(저장은 장 뒤 되채우기 고리 · 장중에도 화면이 바로 맞게)
-    except Exception as e:
-        print("  [단타 30] 장중 값 못 되돌림 — %s" % proxy.safe_message(e, 120), flush=True)
     try:
         buy930_fill(proxy, b)                          # 사는 셈 한 곳 — 칩 시각 · 09:30 까지 칩 · N번째 칩 찬 때 값(rows[].buy930 · 화면은 받기만) · 아래 봉 줄은 이 값을 씀
     except Exception as e:
