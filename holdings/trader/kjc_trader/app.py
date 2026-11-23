@@ -21,8 +21,13 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 def home():
-    """실행 파일이면 그 옆 · 아니면 holdings/trader."""
-    return os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    """실행 파일이면 그 옆(맥은 .app 묶음 옆) · 아니면 holdings/trader."""
+    if not getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    d = os.path.dirname(sys.executable)
+    if d.endswith(".app/Contents/MacOS"):                           # 맥 묶음 안쪽이 아니라 묶음 옆에 config.json 을 둔다
+        d = os.path.dirname(os.path.dirname(os.path.dirname(d)))
+    return d
 
 
 REQUIRED = ("name", "sign_key", "late_sec", "max_order_won", "max_day_won")
