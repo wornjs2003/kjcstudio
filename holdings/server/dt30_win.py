@@ -64,8 +64,8 @@ def day_rows(b, proxy=None):
             dt30._pxmin_fill(proxy, b)                 # 여는 시각 + N분 값 — 사는 값 재료(쌓인 1분봉 · DB 만)
             cf = dt30.chip_first_get(proxy, b["day"], [r["code"] for r in b.get("rows") or []])
             om = dt30._open_min(proxy, b["day"], b)
-        except Exception:
-            pass
+        except Exception as e:
+            print("  [단타 승률] %s 칩 시각 · 여는 시각 못 읽음 — 공식 · 장 전으로 셈 · %s" % (b.get("day"), proxy.safe_message(e, 120)), flush=True)   # 개념정의 덧 ③
     ct = dt30.chip_times(b, cf)
     for r in b.get("rows") or []:
         chips, n = _chips_now_rule(b, r)
@@ -142,8 +142,7 @@ def fill(proxy):
 def fee_pct():
     """수수료 % — 룰 문서 한 곳. 빈칸 · 못 읽음이면 None."""
     try:
-        import docstore
-        d = docstore.read_doc("strategy-rules") or {}
+        d = dt30.chip_rules.rules_doc() or {}           # 상류(8765) 문서 한 곳 — 넘기는 서버도 같은 셈 칸(개념정의 덧 ① 11-23)
         d = d.get("data", d) if isinstance(d, dict) else {}
         v = ((d.get("rules") or {}).get("dt30") or {}).get("feePct")
         return None if v is None or v == "" else float(v)
@@ -154,8 +153,7 @@ def fee_pct():
 def _set():
     """단타 판 셈 칸 — 룰 문서 strategy-rules rules.dt30.set(화면과 같은 칸 한 곳) · 비거나 못 읽으면 {}."""
     try:
-        import docstore
-        d = docstore.read_doc("strategy-rules") or {}
+        d = dt30.chip_rules.rules_doc() or {}           # 상류(8765) 문서 한 곳 — 넘기는 서버도 같은 셈 칸(개념정의 덧 ① 11-23)
         d = d.get("data", d) if isinstance(d, dict) else {}
         v = ((d.get("rules") or {}).get("dt30") or {}).get("set")
         return v if isinstance(v, dict) else {}
@@ -342,7 +340,7 @@ def summary(proxy, days=DAYS_DEFAULT):
             "fee": fee, "feeNote": None if fee is not None else "빈칸 — 수수료 안 셈", "feeSides": "팔 때만",
             "tax": TAX, "taxNote": "팔 때만 · 판 값 × (거래세 + 농특세) · 시장 모르면 못 잼", "ret": "세후 %",
             "buy": "사는 셈 한 곳(dt30.buy_point) — 칩은 %02d:%02d 까지 · 칩 %d개 찬 순간 · 9시 1분 이하면 9시 1분 값 · 1~5분 안이면 그 분 값 · 그 뒤 든 때 값 · 아니면 다음 30분 칸 값" % (dt30.CHIP_UNTIL + (need,)),
-            "minChips": need, "chipUntil": "%02d:%02d" % dt30.CHIP_UNTIL, "notBought": skipped, "sell": end, "sellDef": SELL_AT, "sellNote": "매도 룰 — 단타 판 셈 칸 rules.dt30.set(화면과 같은 칸 · 빈 칸은 sellRule 의 기본) · 30분 칸마다 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 중 처음 걸린 칸 값에 팖 · 안 걸리면 매도 시각(endAt · 빈칸이면 판 끝 sellDef) 이하 마지막 값 있는 칸 · 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것(셈에서 뺌) · 불타기는 안 듦", "sellRule": rule, "sellWhy": whys, "chipLateNote": "chipLate — 칩마다 산 뒤(판에 든 때 뒤)에 붙은 줄만 따로 셈 · chip 칸은 다 셈(재권님 「나」 11-23) · 칩 시각 chipAt 을 모르는 옛 판은 안 듦", "noBuySkipped": skipped, "bigPct": BIG_PCT, "topDay": TOP_DAY,
+            "minChips": need, "chipUntil": "%02d:%02d" % dt30.CHIP_UNTIL, "notBought": skipped, "sell": end, "sellDef": SELL_AT, "sellNote": "매도 룰 — 단타 판 셈 칸 rules.dt30.set(화면과 같은 칸 · 빈 칸은 sellRule 의 기본) · 30분 칸마다 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 중 처음 걸린 칸 값에 팖 · 안 걸리면 매도 시각(endAt · 빈칸이면 판 끝 sellDef) 이하 마지막 값 있는 칸 · 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것(셈에서 뺌) · 불타기는 안 듦", "sellRule": rule, "sellWhy": whys, "chipLateNote": "chipLate — 칩마다 산 뒤(판에 든 때 뒤)에 붙은 줄만 따로 셈 · chip 칸은 다 셈(재권님 「나」 11-23) · 칩 시각 chipAt 을 모르는 옛 판은 안 듦", "bigPct": BIG_PCT, "topDay": TOP_DAY,
             "filledAt": _status["at"], "error": _status["error"]}
     return out, meta
 
