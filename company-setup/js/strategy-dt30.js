@@ -330,27 +330,41 @@ function sellAt(p, times = [], inAt = '') {   // p — 시각마다 매수가 �
 //   손절 · 고점은 봉에서 처음 닿은 때 값 · 꺾임 · 시각 미달 · 횡보 · 매도 시각은 30분 칸 그대로(그 시각 봉이 시작될 때 먼저 봄) · 한 봉에 손절 · 고점이 둘 다면 손절 먼저
 //   셈 규칙은 서버 dt30_win._sell_bars(개발2 1f95235 · 승률 표)와 같다 — 봉이 없는 줄은 아래 sellAt(30분 칸) 그대로
 //   → { k: 결과를 그릴 30분 칸 차례(봉 매도면 그 봉이 끝나는 칸), why, px: 판 값, at: 판 때 HHMM }
-function sellBars(r, B, times) {
+const hmAdd = (t, m) => { const x = +t.slice(0, 2) * 60 + +t.slice(2) + m; return String(Math.floor(x / 60)).padStart(2, '0') + String(x % 60).padStart(2, '0'); };
+// 매도 봉 고르기(11-23 재권님 「매도타이밍은 5분봉으로 하자」 → 「1분봉과 5분봉을 선택할수 있게 해줘 30분봉도」 · 「그래서 최적의 값을 찾아가야 할거같아」) — 셈 칸 set.sellBar 1m · 5m · 30m(기본 · 30분 칸 셈 sellAt 그대로)
+//   5분봉 = 서버 rows[].bars5 · 없으면 1분봉(rows[].bars · barSrc 1m)을 5분씩 묶음(시가 첫 · 고가 최대 · 저가 최소 · 종가 끝) · 1분봉이 없고 barSrc 5m 이면 그것
+const barsOf = (r, m) => { const b1 = Array.isArray(r.bars) ? r.bars : [];
+  if (m === '1m') return r.barSrc === '5m' ? null : b1.length ? b1 : null;
+  if (Array.isArray(r.bars5) && r.bars5.length) return r.bars5;
+  if (r.barSrc === '5m') return b1.length ? b1 : null;
+  const g = []; b1.forEach(([t0, o, h, l, c]) => { const t = String(t0).replace(/:/g, '').slice(0, 4), m0 = +t.slice(0, 2) * 60 + +t.slice(2), k = m0 - (m0 % 5), st0 = String(Math.floor(k / 60)).padStart(2, '0') + String(k % 60).padStart(2, '0'), z = g[g.length - 1];
+    if (z && z[0] === st0) { z[2] = Math.max(z[2], h); z[3] = Math.min(z[3], l); z[4] = c; } else g.push([st0, o, h, l, c]); });
+  return g.length ? g : null; };
+// 봉으로 매도 타점 — 고른 봉(1분 · 5분)마다 차례로 본다 · 산 시각이 든 봉은 뺌(그 봉 값은 사기 전 움직임이 섞임 · 11-23 재권님 「계산이 어떻게 된건데?」 짚음)
+//   손절  봉 저가 ≤ 매수가 × (1 + 손절%) → 손절가(봉 시가가 이미 밑이면 시가)
+//   고점  앞 봉들 고가 중 최고(매수가보다 높을 때) × (1 − 고점%) 에 저가가 닿으면 그 값(시가가 이미 밑이면 시가)
+//   꺾임  봉 종가가 앞 봉 종가보다 꺾임% 넘게 내리면(앞 봉이 매수가보다 위일 때) 그 종가
+//   시각 미달 · 횡보  정한 시각(산 시각 30분 반올림 + 분)이 끝나는 봉의 종가로 판정 · 그 값에 팖
+//   매도 시각  그 시각에 시작하는 봉의 시가 · 한 봉에 여럿이면 손절 → 고점 → 꺾임 → 미달 → 횡보
+//   서버 승률 표(dt30_win)도 같은 셈 · 같은 열쇠를 읽게 개발2 에 넘김 → { k: 결과를 그릴 30분 칸, why, px, at }
+function sellBars(r, B, times, bars, step) {
   const S = st.set, buy = B.px, bAt = B.at, last = times.length ? hhmm(times[times.length - 1]) : '';
   const end = S.endAt || last; const stopPx = S.stop != null ? buy * (1 + Number(S.stop) / 100) : null;
-  const tby = S.turnBy || 'both', tr = S.turn && tby !== 'prev' && S.trail != null ? Number(S.trail) : null;
+  const tby = S.turnBy || 'both', tr = S.turn && tby !== 'prev' && S.trail != null ? Number(S.trail) : null, tp = S.turn && tby !== 'peak' ? (Number(S.turnPct) || 0) : null;
   const cutHM = S.cut && S.cutPct != null ? cutTime(bAt, S.cutMin) : '', flatHM = S.flat && S.flatMin != null && S.flatPct != null ? cutTime(bAt, S.flatMin) : '';
-  const px = r.px || {}, slots = times.map((t, i) => [hhmm(t), i]).filter(([h, i]) => h > bAt && h <= end && px[times[i]] != null && Number.isFinite(Number(px[times[i]])));
-  let prev = null, cutDone = false, flatDone = false;
-  const slot = ([h, i]) => { const v = Number(px[times[i]]), q = (v / buy - 1) * 100;
-    if (S.turn && tby !== 'peak' && prev != null && prev > 0 && ((100 + q) / (100 + prev) - 1) * 100 < -(Number(S.turnPct) || 0)) return { k: i, why: '꺾임', px: v, at: h };
-    if (cutHM && !cutDone && h >= cutHM) { cutDone = true; if (q <= Number(S.cutPct)) return { k: i, why: '미달', px: v, at: h }; }
-    if (flatHM && !flatDone && h >= flatHM) { flatDone = true; if (Math.abs(q) <= Number(S.flatPct)) return { k: i, why: '횡보', px: v, at: h }; }
-    prev = q; return null; };
-  const kOf = (t) => { const j = times.findIndex((x) => hhmm(x) > t); return j >= 0 ? j : times.length - 1; };
-  let si = 0, peak = null;
-  for (const [t0, o, h, l] of r.bars) { const t = String(t0).replace(/:/g, '').slice(0, 4); if (t < bAt) continue; if (t >= end) break;
-    while (si < slots.length && slots[si][0] <= t) { const g = slot(slots[si++]); if (g) return g; }
-    if (stopPx != null && l <= stopPx) return { k: kOf(t), why: '손절', px: o < stopPx ? o : stopPx, at: t };
-    if (tr != null && peak != null && peak > buy) { const line = peak * (1 - tr / 100); if (l <= line) return { k: kOf(t), why: '고점', px: o < line ? o : line, at: t }; }
-    peak = peak == null ? h : Math.max(peak, h); }
-  while (si < slots.length) { const g = slot(slots[si++]); if (g) return g; }
-  const z = slots[slots.length - 1]; return z ? { k: z[1], why: '매도 시각', px: Number(px[times[z[1]]]), at: z[0] } : { k: -1, why: '' };
+  const kOf = (t) => { const j = times.findIndex((x) => hhmm(x) >= t); return j >= 0 ? j : times.length - 1; };
+  let peak = null, prevC = null, cutDone = false, flatDone = false, lastC = null, lastT = '';
+  for (const [t0, o, h, l, c] of bars) { const t = String(t0).replace(/:/g, '').slice(0, 4), te = hmAdd(t, step);
+    if (te <= bAt || (t <= bAt && bAt < te)) continue;   // 산 시각이 든 봉 · 그 앞 봉은 안 봄
+    if (t >= end) return { k: kOf(t), why: '매도 시각', px: o, at: t };
+    if (stopPx != null && l <= stopPx) return { k: kOf(te), why: '손절', px: o < stopPx ? o : stopPx, at: t };
+    if (tr != null && peak != null && peak > buy) { const line = peak * (1 - tr / 100); if (l <= line) return { k: kOf(te), why: '고점', px: o < line ? o : line, at: t }; }
+    if (tp != null && prevC != null && prevC > buy && (c / prevC - 1) * 100 < -tp) return { k: kOf(te), why: '꺾임', px: c, at: te };
+    const q = (c / buy - 1) * 100;
+    if (cutHM && !cutDone && te >= cutHM) { cutDone = true; if (q <= Number(S.cutPct)) return { k: kOf(te), why: '미달', px: c, at: te }; }
+    if (flatHM && !flatDone && te >= flatHM) { flatDone = true; if (Math.abs(q) <= Number(S.flatPct)) return { k: kOf(te), why: '횡보', px: c, at: te }; }
+    peak = peak == null ? h : Math.max(peak, h); prevC = c; lastC = c; lastT = te; }
+  return lastC != null ? { k: kOf(lastT), why: '매도 시각', px: lastC, at: lastT } : { k: -1, why: '' };
 }
 // 손익 셈 (11-11 재권님 「각 종목별로 천만원씩 샀다고 하고 상위 16종목을 해당룰로 했을때 수익은 얼마지?」 → 「결과 옆에 거래세랑 세금 퍼센트를 넣어줘
 //   세금은 코스피와 코스닥세금 내는거 룰찾아서 넣고 증권수수료는 내가 기입하면 그 숫자에 맞춰서 대입되게 해줘」)
@@ -362,7 +376,7 @@ const PNL_TOP = 30, PNL_WON = 10_000_000;   // 기본값 — 재권님이 칸에
 // 셈 칸 기본값 (11-18) — minChip 칩 N개 이상만(0 = 전체) · top 상위 몇 종목 · 돈은 전체 금액 dayWon 을 그 종목 수로 똑같이 나눔
 //   11-18 재권님 「금액은 전체 금액으로 해주고 종목만큼 나눈다 라는 룰로 해줘 금액을 맨앞으로」 — 종목마다(each) 갈래는 걷음 · 기본 전체 금액 = 지금까지의 기본(상위 30 × 1,000만원)과 같은 3억
 const DEF_SET = { minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, pyr: false, buy: 'open' };   // 매도 셈 열한 칸은 서버 SELL_DEF   // buy — 매수 타이밍 open(09:00 시가 · 지금까지 셈) · p1(09:01) · vi(VI 발동)   // pyr — 불타기(손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삼) · 기본 끔
-Object.assign(DEF_SET, { endAt: '' });   // endAt — 매도 시각(HHMM · 빈칸이면 판 끝 칸까지 · 11-20) · 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 기본값은 서버 SELL_DEF
+Object.assign(DEF_SET, { endAt: '', sellBar: '5m' });   // sellBar — 매도 봉 1m · 5m · 30m(11-23 재권님 「매도타이밍은 5분봉으로 하자」 → 고르기 · 기본 5분)   // endAt — 매도 시각(HHMM · 빈칸이면 판 끝 칸까지 · 11-20) · 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 기본값은 서버 SELL_DEF
 st.set = { ...DEF_SET };
 const fltIn = () => `<label class="dt-flt" data-tip="풀린 시가총액이 이 금액 이하인 종목만 보임 · 못 잰 종목은 남김 · 빈칸 = 전체 · 넣으면 저장">유통 <input data-set="floatMax" class="rl-in rl-num" inputmode="numeric" placeholder="( )" value="${st.set.floatMax > 0 ? st.set.floatMax : ''}" aria-label="유통 시총 몇 억 이하만">억 이하</label>`;   // 종목 머리 칸 — 유통 시총 거르기(11-23)
 const WIN_KEY = 'dt30-windows';   // 마지막으로 받은 창 이름표 — 창이 없는 옛 날 판을 볼 때도 셈 칸은 지금 창으로(보는 상태 · 이 브라우저에만)
@@ -477,7 +491,7 @@ function calcDay(d) {
   const lkCnt = {}; if (lkMode) rows.forEach((r) => { const j = Number(r.lock); if (boughtOf(r) && !noBuyOf(j)) { const g = j > 0 ? j : 0; lkCnt[g] = (lkCnt[g] || 0) + 1; }   /* 매도 시각보다 늦게 든 종목은 몫을 안 받음(nb 와 같은 셈 · qa 11-20) */ });
   const perOf = (r) => { if (!lkMode) return per; const j = Number(r.lock); const g = j > 0 ? j : 0, gw = g > 0 ? Number((S.grpWons || [])[g - 1]) : 0; return lkCnt[g] ? (gw > 0 ? gw : lkWon) / lkCnt[g] : 0; };   // 굳힘 칸마다 금액(11-23 · 셈 칸 grpWons) · 빈칸이면 「굳힘마다 금액」   // 대기 묶음(0)도 굳힘 금액을 그 수로 나눠 산 것으로(11-23) · 합계(P)는 굳은 줄만
   const ch = (r, t) => { const B = boughtOf(r), v = Number((r.px || {})[t]); return !B || hhmm(t) <= B.at || (r.px || {})[t] == null || !Number.isFinite(v) ? null : (v / B.px - 1) * 100; };   // 산 시각 앞 칸은 비움
-  const R = rows.map((r) => { const p = times.map((t) => ch(r, t)); const B0 = boughtOf(r), s = B0 && Array.isArray(r.bars) && r.bars.length && !LIVE ? sellBars(r, B0, times) : sellAt(p, times, (B0 || {}).at);   // 봉 줄이 있으면 봉으로 판 때 · 값(11-23 · 장중은 30분 칸 그대로)
+  const R = rows.map((r) => { const p = times.map((t) => ch(r, t)); const B0 = boughtOf(r), sb = S.sellBar === '1m' || S.sellBar === '5m' ? S.sellBar : '', bs = sb && B0 && !LIVE ? barsOf(r, sb) : null, s = bs ? sellBars(r, B0, times, bs, sb === '1m' ? 1 : 5) : sellAt(p, times, (B0 || {}).at);   // 매도 봉 1분 · 5분이면 봉으로 · 30분(기본)이거나 봉이 없는 줄 · 장중은 30분 칸   // 봉 줄이 있으면 봉으로 판 때 · 값(11-23 · 장중은 30분 칸 그대로)
     if (s.px != null && s.k >= 0) p[s.k] = (s.px / B0.px - 1) * 100;   // 판 칸에는 판 값의 % (봉 매도면 칸 시각 값이 아니라 판 값)
     let last = L; while (last >= 0 && p[last] == null) last--; const nowCh = LIVE && s.k < 0 && Number(r.now) > 0 && boughtOf(r) ? (Number(r.now) / boughtOf(r).px - 1) * 100 : null;   // 장중 · 안 판 종목 — 결과 · 손익은 서버 지금 값(rows[].now)
     const at = s.k >= 0 ? s.k : last, sellPx = s.px != null ? s.px : nowCh != null ? Number(r.now) : at >= 0 ? Number((r.px || {})[times[at]]) : null;
@@ -1020,6 +1034,7 @@ function setFill() {
   box.querySelectorAll('[data-pyr]').forEach((b) => b.classList.toggle('is-active', (b.dataset.pyr === '1') === !!S.pyr));
   { const T = (st.data && st.data.times) || [], end = T.length ? hmTxt(hhmm(T[T.length - 1])) : '( )'; box.querySelectorAll('[data-set="endAt"]').forEach((el) => { el.placeholder = end; }); box.querySelectorAll('[data-endsug]').forEach((el) => { el.textContent = `빈칸 = ${end}(판 끝 칸 · 서버 값)`; }); }
   box.querySelectorAll('[data-flat]').forEach((b) => b.classList.toggle('is-active', (b.dataset.flat === '1') === !!S.flat));
+  box.querySelectorAll('[data-sbar]').forEach((b) => b.classList.toggle('is-active', b.dataset.sbar === (S.sellBar === '1m' || S.sellBar === '5m' ? S.sellBar : '30m')));
   box.querySelectorAll('[data-late]').forEach((b) => b.classList.toggle('is-active', (b.dataset.late === '1') === !!S.buyLate930));
   box.querySelectorAll('[data-cut]').forEach((b) => b.classList.toggle('is-active', (b.dataset.cut === '1') === !!S.cut));
 }
@@ -1104,6 +1119,7 @@ BIND.push(() => {
     const y = e.target.closest('[data-pyr]'); if (y) { e.preventDefault(); const on = y.dataset.pyr === '1'; if (on !== !!st.set.pyr) setChange({ ...st.set, pyr: on }); return; }
     const nb = e.target.closest('[data-nobuy]'); if (nb) { e.preventDefault(); const A = [...(st.set.lockNoBuy || [])], i = +nb.dataset.nobuy; while (A.length <= i) A.push(null); A[i] = A[i] ? null : true; setChange({ ...st.set, lockNoBuy: A }); return; }
     if (e.target.closest('[data-setsave]')) { e.preventDefault(); setSave(); return; }   // 셈 칸 저장(11-23)
+    const sbb = e.target.closest('[data-sbar]'); if (sbb) { e.preventDefault(); const v = sbb.dataset.sbar; if (v !== st.set.sellBar) setChange({ ...st.set, sellBar: v }); return; }
     const lt = e.target.closest('[data-late]'); if (lt) { e.preventDefault(); const on = lt.dataset.late === '1'; if (on !== !!st.set.buyLate930) setChange({ ...st.set, buyLate930: on }); return; }
     const fl = e.target.closest('[data-flat]'); if (fl) { e.preventDefault(); const on = fl.dataset.flat === '1'; if (on !== !!st.set.flat) setChange({ ...st.set, flat: on }); return; }
     const cu = e.target.closest('[data-cut]'); if (cu) { e.preventDefault(); const on = cu.dataset.cut === '1'; if (on !== !!st.set.cut) setChange({ ...st.set, cut: on }); return; }
@@ -1162,7 +1178,7 @@ const TPL = `
                 <label class="dt-fee" data-tip="손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삽니다 · 더 산 몫은 그 종목을 팔 때 함께 팝니다">불타기 <span class="dt-seg"><button type="button" class="kh-chip" data-pyr="1">켬</button><button type="button" class="kh-chip" data-pyr="0">끔</button></span></label>
               </div>
               <div class="dt-set-sell" style="flex:2 1 360px;min-width:0;word-break:keep-all;display:flex;flex-direction:column;gap:4px;padding:8px 12px;border-radius:var(--kh-radius-sm);background:var(--kh-bg-card)"><div style="display:flex;align-items:center;gap:8px"><b style="font-size:12px">매도</b><button type="button" class="kh-chip" data-setsave>저장</button></div>
-                <div style="display:flex;flex-wrap:wrap;gap:4px 14px"><label class="dt-fee">손절 <input data-set="stop" class="rl-in rl-num" inputmode="decimal" aria-label="손절(매수가 대비 %)">% <span class="rl-sug">빈칸 = 안 함</span></label> <label class="dt-fee" data-tip="산 시각을 30분 단위로 반올림합니다(09:14 → 09:00 · 09:16 → 09:30) · 거기서 넣은 분이 지난 칸 값으로 봅니다 · 손절 · 꺾임으로 안 팔린 종목이 매수가 대비 그 % 를 넘지 못했으면 그 값에 팝니다 · 그 칸 값이 없으면 그 뒤 첫 칸">시각 미달 <span class="dt-seg"><button type="button" class="kh-chip" data-cut="1">켬</button><button type="button" class="kh-chip" data-cut="0">끔</button></span> 산 시각(30분 반올림)부터 <input data-set="cutMin" class="rl-in rl-num" inputmode="numeric" aria-label="시각 미달 — 산 시각부터 몇 분">분에 <input data-set="cutPct" class="rl-in rl-num" inputmode="decimal" aria-label="시각 미달 — 매수가 대비 몇 %">% 넘지 못하면 팜</label> <label class="dt-fee" data-tip="산 시각을 30분 단위로 반올림한 때부터 넣은 분이 지난 칸 값으로 봅니다 · 그때 매수가 대비 ±(%) 이내면(별로 안 움직였으면) 그 값에 팝니다 · 분 · % 둘 다 넣어야 셈 · 손절 · 꺾임 · 시각 미달이 먼저 걸리면 그것">횡보 <span class="dt-seg"><button type="button" class="kh-chip" data-flat="1">켬</button><button type="button" class="kh-chip" data-flat="0">끔</button></span> 매수 후 <input data-set="flatMin" class="rl-in rl-num" inputmode="numeric" placeholder="( )" aria-label="횡보 — 산 시각부터 몇 분">분에 ±<input data-set="flatPct" class="rl-in rl-num" inputmode="decimal" placeholder="( )" aria-label="횡보 — 매수가 대비 ± 몇 %">% 이내면 팜</label></div>
+                <div style="display:flex;flex-wrap:wrap;gap:4px 14px"><label class="dt-fee" data-tip="손절 · 고점 · 꺾임 · 시각 미달 · 횡보 · 매도 시각을 어느 봉으로 볼지 · 산 시각이 든 봉은 빼고 다음 봉부터 · 봉이 없는 줄은 30분 칸 · 저장 단추로 남김">매도 봉 <span class="dt-seg"><button type="button" class="kh-chip" data-sbar="1m">1분</button><button type="button" class="kh-chip" data-sbar="5m">5분</button><button type="button" class="kh-chip" data-sbar="30m">30분</button></span></label> <label class="dt-fee">손절 <input data-set="stop" class="rl-in rl-num" inputmode="decimal" aria-label="손절(매수가 대비 %)">% <span class="rl-sug">빈칸 = 안 함</span></label> <label class="dt-fee" data-tip="산 시각을 30분 단위로 반올림합니다(09:14 → 09:00 · 09:16 → 09:30) · 거기서 넣은 분이 지난 칸 값으로 봅니다 · 손절 · 꺾임으로 안 팔린 종목이 매수가 대비 그 % 를 넘지 못했으면 그 값에 팝니다 · 그 칸 값이 없으면 그 뒤 첫 칸">시각 미달 <span class="dt-seg"><button type="button" class="kh-chip" data-cut="1">켬</button><button type="button" class="kh-chip" data-cut="0">끔</button></span> 산 시각(30분 반올림)부터 <input data-set="cutMin" class="rl-in rl-num" inputmode="numeric" aria-label="시각 미달 — 산 시각부터 몇 분">분에 <input data-set="cutPct" class="rl-in rl-num" inputmode="decimal" aria-label="시각 미달 — 매수가 대비 몇 %">% 넘지 못하면 팜</label> <label class="dt-fee" data-tip="산 시각을 30분 단위로 반올림한 때부터 넣은 분이 지난 칸 값으로 봅니다 · 그때 매수가 대비 ±(%) 이내면(별로 안 움직였으면) 그 값에 팝니다 · 분 · % 둘 다 넣어야 셈 · 손절 · 꺾임 · 시각 미달이 먼저 걸리면 그것">횡보 <span class="dt-seg"><button type="button" class="kh-chip" data-flat="1">켬</button><button type="button" class="kh-chip" data-flat="0">끔</button></span> 매수 후 <input data-set="flatMin" class="rl-in rl-num" inputmode="numeric" placeholder="( )" aria-label="횡보 — 산 시각부터 몇 분">분에 ±<input data-set="flatPct" class="rl-in rl-num" inputmode="decimal" placeholder="( )" aria-label="횡보 — 매수가 대비 ± 몇 %">% 이내면 팜</label></div>
                 <label class="dt-fee">꺾임 <span class="dt-seg"><button type="button" class="kh-chip" data-turn="1">켬</button><button type="button" class="kh-chip" data-turn="0">끔</button></span> <span class="dt-seg"><button type="button" class="kh-chip" data-turnby="prev">앞 시각 대비</button><button type="button" class="kh-chip" data-turnby="peak">고점 대비</button><button type="button" class="kh-chip" data-turnby="both">둘 다</button></span> <span data-turnfor="prev">앞 시각보다 <input data-set="turnPct" class="rl-in rl-num" inputmode="decimal" aria-label="꺾임 — 앞 시각보다 몇 % 넘게 내리면 팜">% 넘게 내리면 팜 <span class="rl-sug">그 이하는 무시 · 빈칸 = 0</span></span><span data-turnsep hidden> · </span><span data-turnfor="peak" hidden>오른 뒤 가장 높던 값보다 <input data-set="trail" class="rl-in rl-num" inputmode="decimal" aria-label="꺾임 — 고점 대비 몇 % 내리면 팜">% 내리면 팜 <span class="rl-sug">빈칸 = 안 씀</span></span></label>
                 <label class="dt-fee">증권수수료 <input id="dt-fee" class="rl-in rl-num" inputmode="decimal" aria-label="증권수수료(%) — 팔 때만" placeholder="( )">% <span class="rl-sug">팔 때만 · 넣으면 저장되고 바로 다시 셈</span> <span id="dt-fee-msg" class="rl-sug"></span></label>
                 <span class="dt-fee" id="dt-tax">거래세 · 농특세 <span class="rl-sug">서버 값 못 받음</span></span>
