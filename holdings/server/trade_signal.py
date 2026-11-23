@@ -15,18 +15,22 @@
 
 메시지 꼴(서버 ↔ 주문 컴퓨터가 함께 읽는 한 곳 — 바꾸면 주문 컴퓨터 프로그램도 같이 바꾼다)
     서버 → 주문 컴퓨터   첫 줄 「[KJC 매수 목록] YYYY-MM-DD HH:MM:SS」 · 종목마다 한 줄
-                        BUY|<일지 번호>|<종목 코드>|<종목 이름>|<매수금액 원>|<보낸 시각 YYYYMMDDHHMMSS>|<서명>
+                        BUY|<일지 번호>|<종목 코드>|<종목 이름>|<매수금액 원>|<보낸 시각 YYYYMMDDHHMMSS>|<서명 묶음>
     서버 → 주문 컴퓨터   (매도) 판 매도 룰에 걸리면 종목마다 한 번 — 첫 줄 「[KJC 매도] YYYY-MM-DD HH:MM:SS」
-                        SELL|<일지 번호>|<종목 코드>|<종목 이름>|<까닭>|<보낸 시각 YYYYMMDDHHMMSS>|<서명>
+                        SELL|<일지 번호>|<종목 코드>|<종목 이름>|<까닭>|<보낸 시각 YYYYMMDDHHMMSS>|<서명 묶음>
                         까닭 — 손절 · 꺾임 · 고점 · 미달 · 횡보 · 매도 시각(dt30_win.sell_of — 승률 표 · 단타 판 화면과 같은 셈 · 매수가는 판 매수가)
                         재권님 「가」(11-23 14:5x — 단타 판 매도 룰에 걸리면 서버가 슬랙으로 「팔아라」)
                         판 값은 30분 칸(dt30 times)마다 붙어 걸림도 그 칸에 안다 · 주문 컴퓨터는 가진 수량을 전부 판다
     주문 컴퓨터 → 서버   매도가 끝난 종목마다 한 줄(여러 줄 한 메시지도 됨)
-                        RESULT|<일지 번호>|<종목 코드>|<매수가>|<매도가>|<수량>|<시세차익 원>|<세금 원>|<매도 시각 YYYYMMDDHHMMSS>|<서명>
-                        못 산 종목은 RESULT|<번호>|<코드>|-|-|0|0|0|<시각>|<서명> (수량 0 = 안 삼)
-    서명            마지막 「|」 앞까지 글(앞뒤 빈칸 뺌)을 sign_key 로 HMAC-SHA256 한 16진 64자 — 재권님 「보완도 엄청 중요한데」(11-23 14:4x)
-                   슬랙 채널에 누가 같은 꼴의 줄을 써도 열쇠가 없으면 주문 · 일지가 안 움직인다. 주문 컴퓨터도 BUY 줄의 서명을 같은 셈으로 본다
-                   서명이 틀리거나 없는 줄은 일지에 아무것도 안 적는다(남의 줄 메모도 안 바꿈 · 서버 로그 · status 에만 · 개념정의 덧 11-23) · 이미 결과가 적힌 번호에 다시 온 결과는 안 덮는다(되풀이 막기)
+                        RESULT|<컴퓨터 이름>|<일지 번호>|<종목 코드>|<매수가>|<매도가>|<수량>|<시세차익 원>|<세금 원>|<매도 시각 YYYYMMDDHHMMSS>|<서명>
+                        못 산 종목은 RESULT|<이름>|<번호>|<코드>|-|-|0|0|0|<시각>|<서명> (수량 0 = 안 삼)
+    주문 컴퓨터 여럿     재권님 「주문 컴퓨터가 처음에는 하나지만 앞으로 많아질수 있다는 전제로 해야해」(11-23 15:0x)
+                        같은 BUY · SELL 을 모든 컴퓨터가 함께 받고 각자 자기 계좌로 산다 · 결과는 (일지 번호, 컴퓨터 이름) 마다 한 줄(trade_result)
+    서명            마지막 「|」 앞까지 글(앞뒤 빈칸 뺌)을 HMAC-SHA256 한 16진 64자 — 재권님 「보완도 엄청 중요한데」(11-23 14:4x)
+                   열쇠는 컴퓨터마다 따로(비밀 파일 slack.pcs {이름: 열쇠}) — 한 대가 털리면 그 이름만 빼면 된다
+                   BUY · SELL 의 서명 묶음은 「이름=서명;이름=서명」 — 각 컴퓨터는 자기 이름 칸만 자기 열쇠로 본다
+                   RESULT 는 그 컴퓨터 열쇠로 서명 · 목록에 없는 이름 · 서명이 틀린 줄은 일지에 아무것도 안 적는다(서버 로그 · status 에만 · 개념정의 덧 11-23) ·
+                   같은 (번호, 이름) 에 다시 온 결과는 안 덮는다(되풀이 막기)
     주문 컴퓨터가 지킬 것(BUY 되풀이 막기 — 서버는 못 막는다 · 옛 BUY 메시지를 누가 채널에 다시 올리면 또 살 수 있다 · 개념정의 · qa 덧 11-23)
                    서명이 맞는 BUY · SELL 줄만 · 보낸 시각이 주문 컴퓨터 설정의 「늦은 메시지 버림 초」 를 넘으면 버림 ·
                    같은 일지 번호의 BUY 는 한 번만 주문 · SELL 도 한 번만(받은 번호를 그 컴퓨터에 남김 · 옛 SELL 줄을 다시 올려도 두 번 안 팖) ·
@@ -40,7 +44,7 @@
                    amountWon 이 비었거나 0 이하 · stop 이 true 면 매수 목록을 보내지 않는다(그 까닭을 일지 상태에 적음) ·
                    stop 은 새 매수만 막고 산 종목의 매도 신호는 계속 보낸다(산 것이 안 팔리지 않게 · qa 덧 11-23 · 재권님께 여쭈는 중)
     비밀           비밀 파일(secrets_guard.secrets_path() 한 벌 — 지금 ~/.kjc 의 것 · 서버가 load_secrets 로 읽음)의 「slack」 칸 — webhook_url(보내기) · bot_token(읽기 · channels:history) · channel_id(읽을 채널) ·
-                   sign_key(서명 열쇠 — 주문 컴퓨터와 같은 값 · 슬랙 · 메시지 · 저장소에 안 둔다) · sign_key 가 비면 보내지도 받지도 않는다
+                   pcs({컴퓨터 이름: 서명 열쇠} — 그 컴퓨터와 같은 값 · 슬랙 · 메시지 · 저장소에 안 둔다 · 이름은 영문 · 숫자 · - · _) · pcs 가 비면 보내지도 받지도 않는다
                    하나라도 비면 그쪽 일을 안 한다(「못 함」 으로 status 에)
 """
 import hashlib
@@ -70,6 +74,9 @@ _SCHEMA = ("CREATE TABLE IF NOT EXISTS trade_journal (id INTEGER PRIMARY KEY AUT
            "amount_won INTEGER, made_at TEXT, sent_at TEXT, status TEXT, note TEXT, buy_px REAL, sell_px REAL, qty INTEGER, profit_won REAL, "
            "tax_won REAL, sell_at TEXT, result_at TEXT, result_raw TEXT)")
 _ADD_COLS = (("sell_sent_at", "TEXT"), ("sell_why", "TEXT"))   # 매도 신호 칸(11-23 · 옛 표에는 더한다)
+_RESULT = ("CREATE TABLE IF NOT EXISTS trade_result (journal_id INTEGER NOT NULL, pc TEXT NOT NULL, buy_px REAL, sell_px REAL, qty INTEGER, "
+           "profit_won REAL, tax_won REAL, sell_at TEXT, result_at TEXT, raw TEXT, PRIMARY KEY (journal_id, pc))")   # 컴퓨터마다 결과 한 줄 — 지우지 않음
+_PC = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 _STATE = ("CREATE TABLE IF NOT EXISTS trade_journal_state (k TEXT PRIMARY KEY, v TEXT)")
 _status = {"sentDay": None, "sendAt": None, "sendNote": None, "readAt": None, "readNote": None, "got": 0, "error": None}
 _lock = threading.Lock()
@@ -94,11 +101,19 @@ def settings():
 
 def _slack(proxy):
     s = (proxy.load_secrets() or {}).get("slack") or {}
-    return {k: (s.get(k) or "").strip() for k in ("webhook_url", "bot_token", "channel_id", "sign_key")}
+    out = {k: (s.get(k) or "").strip() for k in ("webhook_url", "bot_token", "channel_id")}
+    pcs = s.get("pcs") if isinstance(s.get("pcs"), dict) else {}
+    out["pcs"] = {k: v.strip() for k, v in pcs.items() if _PC.match(str(k)) and isinstance(v, str) and len(v.strip()) >= 16}   # 짧은 열쇠는 안 씀
+    return out
 
 
 def sign(key, body):
     return hmac.new(key.encode("utf-8"), body.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _sig_set(pcs, body):
+    """BUY · SELL 서명 묶음 — 「이름=서명;이름=서명」."""
+    return ";".join("%s=%s" % (n, sign(k, body)) for n, k in sorted(pcs.items()))
 
 
 def _signed(key, line):
@@ -111,6 +126,7 @@ def _db(proxy, fn):
     with proxy._db_lock, proxy.db_conn() as conn:
         conn.execute(_SCHEMA)
         conn.execute(_STATE)
+        conn.execute(_RESULT)
         have = {r[1] for r in conn.execute("PRAGMA table_info(trade_journal)")}
         for c, t in _ADD_COLS:
             if c not in have:
@@ -126,7 +142,22 @@ def journal(proxy, days=30):
             conn.row_factory = None
             cur = conn.execute("SELECT * FROM trade_journal WHERE day >= ? ORDER BY day DESC, rank ASC, id ASC", (since,))
             cols = [c[0] for c in cur.description]
-            return [dict(zip(cols, r)) for r in cur.fetchall()]
+            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+            for r in rows:                             # 옛 한 줄 결과 칸(buy_px 등)은 컴퓨터 여럿 전 꼴 — 이제 results 를 읽는다
+                for k in ("buy_px", "sell_px", "qty", "profit_won", "tax_won", "sell_at", "result_at", "result_raw"):
+                    r.pop(k, None)
+            if rows:
+                ids = [r["id"] for r in rows]
+                cur = conn.execute("SELECT * FROM trade_result WHERE journal_id IN (%s) ORDER BY pc" % ",".join("?" * len(ids)), ids)
+                rc = [c[0] for c in cur.description]
+                by = {}
+                for x in cur.fetchall():
+                    d = dict(zip(rc, x))
+                    d.pop("raw", None)
+                    by.setdefault(d["journal_id"], []).append(d)
+                for r in rows:
+                    r["results"] = by.get(r["id"], [])
+            return rows
         return _db(proxy, q)
     except Exception:
         return []
@@ -163,7 +194,7 @@ def send_today(proxy, day):
     except Exception:
         nob = False
     why = ("첫 굳힘 사지 않음" if nob else "전체 멈춤" if st["stop"] else "매수금액 빔" if st["amountWon"] is None
-           else "보내기 주소 없음" if not sk["webhook_url"] else "서명 열쇠 없음" if not sk["sign_key"] else None)
+           else "보내기 주소 없음" if not sk["webhook_url"] else "주문 컴퓨터 열쇠 없음" if not sk["pcs"] else None)
     made = now.strftime("%Y%m%d%H%M%S")
 
     def ins(conn):
@@ -178,7 +209,7 @@ def send_today(proxy, day):
         return "안 보냄 — %s" % why
     lines = ["[KJC 매수 목록] %s" % now.strftime("%Y-%m-%d %H:%M:%S")]
     body = ["BUY|%d|%s|%s|%d|%s" % (i, r["code"], (r.get("name") or "").replace("|", " ").replace("\n", " "), st["amountWon"], made) for i, r in zip(ids, rows)]
-    lines += ["%s|%s" % (b, sign(sk["sign_key"], b)) for b in body]
+    lines += ["%s|%s" % (b, _sig_set(sk["pcs"], b)) for b in body]
     try:
         _post_webhook(sk["webhook_url"], "\n".join(lines))
     except urllib.error.HTTPError as e:                # 슬랙이 받고 거절했다 — 안 갔다
@@ -198,12 +229,12 @@ def sell_check(proxy, day):
     """보낸 매수 줄 중 아직 매도 신호를 안 보낸 것을 판 매도 룰로 본다 — 걸린 것만 SELL 을 보낸다 → 보낸 수."""
     import dt30
     import dt30_win
-    todo = _db(proxy, lambda c: c.execute("SELECT id, code, name FROM trade_journal WHERE day = ? AND sent_at IS NOT NULL AND sell_sent_at IS NULL "
-                                          "AND result_at IS NULL", (day,)).fetchall())
+    todo = _db(proxy, lambda c: c.execute("SELECT id, code, name FROM trade_journal WHERE day = ? AND sent_at IS NOT NULL AND sell_sent_at IS NULL",
+                                          (day,)).fetchall())   # 결과가 온 컴퓨터가 있어도 다른 컴퓨터를 위해 SELL 은 보낸다(산 수량 없는 컴퓨터는 무시)
     if not todo:
         return 0
     sk = _slack(proxy)
-    if not SEND or not sk["webhook_url"] or not sk["sign_key"] or time.time() < _sell_hold["until"]:
+    if not SEND or not sk["webhook_url"] or not sk["pcs"] or time.time() < _sell_hold["until"]:
         return 0                                       # 전체 멈춤은 새 매수만 막는다 — 산 종목은 계속 판다(qa 덧 11-23 · 재권님께 여쭈는 중)
     b = dt30.board(proxy, day)
     if not b or b.get("day") != day:
@@ -233,7 +264,7 @@ def sell_check(proxy, day):
         return 0
     made = now.strftime("%Y%m%d%H%M%S")
     body = ["SELL|%d|%s|%s|%s|%s" % (j, c, (n or "").replace("|", " ").replace("\n", " "), w, made) for j, c, n, w in out]
-    text = "\n".join(["[KJC 매도] %s" % now.strftime("%Y-%m-%d %H:%M:%S")] + ["%s|%s" % (x, sign(sk["sign_key"], x)) for x in body])
+    text = "\n".join(["[KJC 매도] %s" % now.strftime("%Y-%m-%d %H:%M:%S")] + ["%s|%s" % (x, _sig_set(sk["pcs"], x)) for x in body])
     try:
         _post_webhook(sk["webhook_url"], text)
         st = "SELL 보냄"
@@ -251,44 +282,46 @@ def sell_check(proxy, day):
 _NUM = re.compile(r"^-?\d+(\.\d+)?$")
 
 
-def _apply_result(conn, line, key):
-    """RESULT 한 줄(서명 포함) → 일지에 적음 · (적음 True/False, 글)."""
-    body = _signed(key, line)
+def _apply_result(conn, line, pcs):
+    """RESULT 한 줄(서명 포함) → 그 컴퓨터 결과 줄에 적음 · (적음 True/False, 글)."""
+    parts = line.split("|")
+    pc = parts[1].strip() if len(parts) > 1 else ""
+    body = _signed(pcs.get(pc), line) if pc in pcs else None
     if body is None:
         _status["badSig"] = _status.get("badSig", 0) + 1     # 일지는 안 건드린다 — 열쇠 없는 줄이 남의 줄 메모를 바꾸지 못하게(개념정의 덧 11-23)
         print("  [매매일지] 서명 틀린 결과 줄 — 안 적음 · %s" % line[:40], flush=True)
         return False, "서명 틀림"
     p = [x.strip() for x in body.split("|")]
-    if len(p) < 9:
+    if len(p) < 10:
         return False, "칸 모자람"
-    _, jid, code, bpx, spx, qty, profit, tax, sell_at = p[:9]
+    _, pc, jid, code, bpx, spx, qty, profit, tax, sell_at = p[:10]
     if not jid.isdigit():
         return False, "일지 번호가 숫자 아님"
-    row = conn.execute("SELECT code, result_at FROM trade_journal WHERE id = ?", (int(jid),)).fetchone()
+    row = conn.execute("SELECT j.code, r.result_at FROM trade_journal j LEFT JOIN trade_result r ON r.journal_id = j.id AND r.pc = ? WHERE j.id = ?",
+                       (pc, int(jid))).fetchone()
     now = _now().strftime("%Y%m%d%H%M%S")
     if not row:
         return False, "없는 일지 번호 %s" % jid
     if row[0] != code:
         return False, "번호 %s 의 종목이 다름(%s ↔ %s)" % (jid, row[0], code)
     if row[1]:
-        return False, "번호 %s 는 이미 결과가 있음(안 덮음)" % jid
+        return False, "번호 %s · %s 는 이미 결과가 있음(안 덮음)" % (jid, pc)
     nums = [bpx, spx, qty, profit, tax]
     if not all(_NUM.match(x) or x == "-" for x in nums):
-        conn.execute("UPDATE trade_journal SET note = ?, result_raw = ? WHERE id = ?", ("결과 못 읽음(숫자 아님)", line[:300], int(jid)))
+        conn.execute("INSERT OR IGNORE INTO trade_result (journal_id, pc, raw) VALUES (?,?,?)", (int(jid), pc, "결과 못 읽음(숫자 아님) · " + line[:280]))
         return False, "숫자 아님"
     f = lambda x: None if x == "-" else float(x)
     q = int(float(qty)) if _NUM.match(qty) else None
-    conn.execute("UPDATE trade_journal SET status = ?, buy_px = ?, sell_px = ?, qty = ?, profit_won = ?, tax_won = ?, sell_at = ?, result_at = ?, "
-                 "result_raw = ? WHERE id = ?",
-                 ("안 삼" if q == 0 else "매도 끝", f(bpx), f(spx), q, f(profit), f(tax), sell_at, now, line[:300], int(jid)))
+    conn.execute("INSERT OR REPLACE INTO trade_result (journal_id, pc, buy_px, sell_px, qty, profit_won, tax_won, sell_at, result_at, raw) "
+                 "VALUES (?,?,?,?,?,?,?,?,?,?)", (int(jid), pc, f(bpx), f(spx), q, f(profit), f(tax), sell_at, now, line[:300]))
     return True, "적음"
 
 
 def read_once(proxy):
     """슬랙 채널에서 마지막으로 읽은 뒤 온 메시지를 읽어 RESULT 줄을 일지에 적는다 → 적은 줄 수."""
     sk = _slack(proxy)
-    if not sk["bot_token"] or not sk["channel_id"] or not sk["sign_key"]:
-        _status["readNote"] = "못 함 — 읽기 열쇠 · 채널 · 서명 열쇠 중 빈 것"
+    if not sk["bot_token"] or not sk["channel_id"] or not sk["pcs"]:
+        _status["readNote"] = "못 함 — 읽기 열쇠 · 채널 · 주문 컴퓨터 열쇠 중 빈 것"
         return 0
     oldest = _db(proxy, lambda c: (c.execute("SELECT v FROM trade_journal_state WHERE k = 'oldest'").fetchone() or [None])[0])
     if oldest is None:                                 # 처음 읽음 — 채널의 옛 글은 안 읽고 지금부터(qa 덧 11-23 · 0 부터면 쓰던 채널에서 끝없이 밀림)
@@ -323,7 +356,7 @@ def read_once(proxy):
         for m in msgs:
             for line in (m.get("text") or "").splitlines():
                 if line.strip().startswith("RESULT|"):
-                    ok, _ = _apply_result(conn, line.strip(), sk["sign_key"])
+                    ok, _ = _apply_result(conn, line.strip(), sk["pcs"])
                     got += 1 if ok else 0
         conn.execute("INSERT OR REPLACE INTO trade_journal_state (k, v) VALUES ('oldest', ?)", (msgs[-1]["ts"],))
     _db(proxy, put)
