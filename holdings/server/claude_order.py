@@ -52,18 +52,46 @@ _jobs = {}            # id → 상태 묶음
 _order = []           # 들어온 차례(오래된 것을 지우려고)
 
 
+FRONT_CONF = os.path.join(REPO, "tools", "thekjc-front", "server", "Caddyfile")   # 앞문(가비아)이 받는 이름의 한 곳
+
+
+def front_hosts():
+    """앞문 설정(Caddyfile)의 사이트 주소 줄에서 받는 이름을 모은다 + 메인 호스트(dart.MAIN_URL) — 이름을 여기 박지 않는다.
+    앞문이 「thekjc.co.kr, thekjcstudio.com」 둘을 받아 Host 를 그대로 8764 로 넘긴다(2026-11-23 qa — MAIN_URL 하나만 읽으면 둘째 이름이 403).
+    못 읽으면 메인 호스트만 — 그때는 콘솔에 알린다."""
+    import urllib.parse
+    import dart
+    out = set()
+    main = (urllib.parse.urlparse(dart.MAIN_URL).hostname or "").lower()
+    if main:
+        out.add(main)
+    try:
+        with open(FRONT_CONF, encoding="utf-8") as f:
+            for ln in f:
+                if not ln[:1].strip() or ln.startswith(("#", "{", "(")) or not ln.rstrip().endswith("{"):
+                    continue          # 들여쓴 줄 · 주석 · 전역 블록 · 조각 블록은 사이트 주소가 아니다
+                for a in ln.rstrip()[:-1].split(","):
+                    h = urllib.parse.urlparse("//" + a.strip().split("://")[-1]).hostname
+                    if h:
+                        out.add(h.lower())
+    except OSError as e:
+        print("[업무지시] 앞문 설정을 못 읽음 — 메인 호스트만 받습니다 · %s" % safe_message(e, 80), flush=True)
+    return out
+
+
 def host_ok(host, port):
-    """받는 Host 머리가 우리 이름인가 — localhost · 127.0.0.1 (그 포트) · 메인 호스트(dart.MAIN_URL 에서 읽음 · 값 안 박음).
+    """받는 Host 머리가 우리 이름인가 — localhost · 127.0.0.1 (그 포트) · 앞문이 받는 이름(포트가 붙어도 · front_hosts).
     DNS 다시 묶기(rebinding)로 남의 웹페이지가 localhost 와 같은 출처가 되어 JSON 을 보내는 길을 막는다(2026-11-23 개념정의 검수 보류).
     본문 종류 검사 · OPTIONS 없음은 「남의 출처」 만 막고, 같은 출처가 된 남의 페이지는 Host 가 그 남의 이름이라 여기서 갈린다."""
     import urllib.parse
-    import dart
     h = (host or "").strip().lower()
-    ok = {"localhost:%s" % port, "127.0.0.1:%s" % port}
-    main = (urllib.parse.urlparse(dart.MAIN_URL).hostname or "").lower()
-    if main:
-        ok.add(main)                      # 터널을 거쳐 오면 포트 없는 메인 호스트다
-    return h in ok
+    if h in ("localhost:%s" % port, "127.0.0.1:%s" % port):
+        return True
+    try:
+        name = urllib.parse.urlparse("//" + h).hostname
+    except ValueError:
+        return False
+    return bool(name) and name in front_hosts()
 
 
 class Busy(Exception):
