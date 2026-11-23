@@ -139,7 +139,9 @@ def day_times(proxy, now=None):
     fl = dt30.lock_at()[0]
     m = min(fl[0] * 60 + fl[1] + off, dt30.BUY_LATE[0] * 60 + dt30.BUY_LATE[1])
     clean = dt30._close_min(proxy, now) - AUCTION_MIN
-    return {"firstLock": "%02d:%02d" % divmod(m, 60), "cleanAt": "%02d:%02d" % divmod(clean, 60), "reopenAt": "%02d:%02d" % dt30.OPEN_AT}
+    close = dt30._close_min(proxy, now)
+    return {"firstLock": "%02d:%02d" % divmod(m, 60), "cleanAt": "%02d:%02d" % divmod(clean, 60), "reopenAt": "%02d:%02d" % dt30.OPEN_AT,
+            "closeAt": "%02d:%02d" % divmod(close, 60)}
 
 
 def amount_won(n):
@@ -372,7 +374,11 @@ def rules_check(proxy, day):
         return None
     made = now.strftime("%Y%m%d%H%M%S")
     tm = day_times(proxy, now)
-    kv = ";".join(["%s=%s" % (k, st[k]) for k in RULES] + ["cleanAt=%s" % tm["cleanAt"].replace(":", ""), "reopenAt=%s" % tm["reopenAt"].replace(":", "")])
+    import market_hours
+    opened = market_hours.today(proxy, day=day, now=now).get("open")
+    # closeAt 그날 정규장 끝(수능 날 밀림) · openDay 그날이 거래일이면 그 날짜(아니면 「-」 · 못 재면 「?」) — 주문 컴퓨터가 장 밖 · 휴장일에 매도를 안 넣게(개념정의 덧 11-23 ②③)
+    kv = ";".join(["%s=%s" % (k, st[k]) for k in RULES] + ["cleanAt=%s" % tm["cleanAt"].replace(":", ""), "reopenAt=%s" % tm["reopenAt"].replace(":", ""),
+                                                           "closeAt=%s" % tm["closeAt"].replace(":", ""), "openDay=%s" % (day if opened else "-" if opened is False else "?")])
     b = "RULES|%s|%s|%s" % (st["ver"], kv, made)
     try:
         _post_webhook(sk["webhook_url"], "[KJC 룰] %s\n%s|%s" % (now.strftime("%Y-%m-%d %H:%M:%S"), b, _sig_set(sk["pcs"], b)))
