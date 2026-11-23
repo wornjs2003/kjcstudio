@@ -464,6 +464,8 @@ Cloudflare 는 origin 의 `Cache-Control` 이 그 설정보다 **짧으면 덮�
     (KJCStudio) git merge -q --ff-only staging ; git push -q origin main
     (KJCStudio) KJC_MAIN_OK=1 ./service-deploy.command                    옮기기 · 서버 코드면 8764 재시작까지
     서버 코드면 8765 도 함께 바로 — 그 전에 「재시작은 커밋 안 된 코드도 로드한다」 의 둘: git status --porcelain holdings/server/ 가 비었나 · py_compile
+    재시작 · 옮기기 전에 python3 tools/board-card.py --measuring-list — 8765 · 8764 열린 측정이 있으면 그 세션에 먼저 알리고 기다리거나 재시작 시각을 그 카드에 메모 한 줄
+      (「8765 · 8764 를 재시작하기 전에 보드의 「측정 중」 카드를 센다」 · 8767 측정도 보임 — 합칠 때 8767 재시작 전에도 본다 · 막지 않음)
     python3 tools/board-card.py "<카드>" "10-14 미리 받은 지시 · 검수 통과(개념정의 · qa) <해시> → 서비스 옮김 · 재시작 <시각>"
 
 **옮길 때마다 「아직 메인에 안 간 고침」 을 센다 (2026-11-18 · 「업무 흐름」 3번 ③).** 그날 순위 줄 예상가 고침이 `staging` 에만 이틀 있었는데
@@ -487,6 +489,7 @@ qa 검수가 아직이면 — `service-deploy` 는 main 통째라 **그것까지
     그 세션       「서비스에 올라갔다」
 
 **이 흐름 밖의 8765 · 8764 재시작 · 켜기(plist · 알림 발송 · 스위치)는 그대로 묻는다.**
+재시작을 재권님께 여쭐 때(맥 창에서 직접 치시는 때 포함)는 물음 위 본문에 「열린 측정 <포트 · 세션 · 끝 시각>」 · 없으면 「열린 측정 없음」 한 줄 — `--measuring-list` 로 잰 것(그 룰 4번 · 재권님 손 재시작은 훅 밖이라 이 줄이 대신한다).
 
 ### 옛 보고 틀 — qa 가 쓴다
 
