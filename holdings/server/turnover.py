@@ -258,6 +258,8 @@ def fill_day(proxy, day, rows):
     stt = same_time(proxy, [c for c in codes if c not in prev], {})[0] if today else {}
     for r in rows:
         g = got.get(r["code"]) or {}
+        if not g and not today and r.get("accVol") is not None:
+            continue                                   # 거래 값 표를 쌓기 전 날 — 판에 저장해 둔 5분봉 어림 값(dt30._past_trade)을 None 으로 덮지 않는다(재권님 20:1x 「—」 · 시황분석1 셈 0줄)
         r["floatCap"], r["turn"] = calc(g.get("price"), g.get("value"), g.get("floatShares"))
         pg = prev.get(r["code"]) or {}
         r["turnPrevPct"], r["turnPrevSrc"] = turn_prev(r["turn"], (pg.get("value"), pg.get("price")) if pg else None, g.get("floatShares"), stt.get(r["code"]))   # 굳힌 판 — 그날 끝 ÷ 전날 끝
