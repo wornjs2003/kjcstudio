@@ -71,6 +71,7 @@ import note_alert      # 시황 글 알림 — 자동 시황 글이 새로 써�
 import events          # 실적 · FOMC · 미국 지표 결과 알림(2026-10-25 · server/events.py 머리 주석)
 import tglog           # 오늘 보낸 텔레그램 글(2026-10-26 · server/tglog.py) — /api/telegram/today
 import claude_chat     # 홀딩스 오른쪽 Claude 창 — 맥미니 claude 를 한 번씩 부른다 · POST /api/claude/ask(2026-11-03 · server/claude_chat.py)
+import claude_order    # 그 창의 「업무지시」 — 작업우선순위 창에 넣고 답을 돌려준다 · POST · GET /api/claude/order(2026-11-23 · server/claude_order.py)
 import theme_flow      # 실시간 순위 「테마」 — 큰 테마 · 작은 테마 · 수급(넥스트 5분 거래량 2배) (2026-10-27 · server/theme_flow.py)
 import good_news       # 「좋은 뉴스」 판정 — 공시마다 갈래 · 방향 · 크기 · 자사주 목적 · 이미 오름 · /api/good-news(2026-11-05 · server/good_news.py)
 import earnings_beat   # 「실적」 칩 — 잠정 영업이익 > 네이버 예상치 · 실적 전망 > 직전 실적 · /api/earnings-beat(2026-11-18 · server/earnings_beat.py)
@@ -8902,6 +8903,15 @@ class Handler(SimpleHTTPRequestHandler):
         if (self.path or "").startswith("/api/macro/"):
             self._handle_macro()
             return
+        if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/claude/order":
+            # 「업무지시」 하나의 지금 상태 — 화면이 서버가 낸 pollMs 마다 묻는다(server/claude_order.py)
+            jid = (urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("id") or [""])[0]
+            j = claude_order.get(jid)
+            if j is None:
+                self._send_json({"ok": False, "error": "그 번호의 지시가 없습니다 — 서버가 다시 떴을 수 있습니다"}, 404)
+            else:
+                self._send_json({"ok": True, "data": j})
+            return
         if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/telegram/today":
             # 그날 텔레그램 글 — 보냄 · 꺼짐 · 조용한 시간 · 실패를 보낸 순서로(데일리분석 모달의 「데일리분석」 칸)
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -9368,11 +9378,49 @@ class Handler(SimpleHTTPRequestHandler):
         if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/claude/ask":
             self._handle_claude_ask()
             return
+        if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/claude/order":
+            self._handle_claude_order()
+            return
         try:
             self.rfile.read(int(self.headers.get("Content-Length") or 0))   # 딸려 온 본문을 먼저 비운다(아래 do_PUT 주석)
         except Exception:
             pass
-        self._send_json({"ok": False, "error": "POST 는 /api/claude/ask 에만 됩니다."}, 405)
+        self._send_json({"ok": False, "error": "POST 는 /api/claude/ask · /api/claude/order 에만 됩니다."}, 405)
+
+    def _handle_claude_order(self):
+        """「업무지시」 — 글을 받아 작업우선순위 창에 넣는다(뒤에서) → 번호를 바로 돌려준다. 답은 GET /api/claude/order?id=… 로.
+        본문 종류 검사는 _handle_claude_ask 와 같은 까닭(다른 웹페이지가 미리 묻기 없이 보내지 못하게).
+        내부 · 외부접속은 Cloudflare 가 붙이는 Cf-Connecting-Ip 머리로 가른다 — 터널을 거친 것만 그 머리가 있다."""
+        if (self.headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
+            try:
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            except Exception:
+                pass
+            self._send_json({"ok": False, "error": "본문은 application/json 이어야 합니다."}, 415)
+            return
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > 16 * 1024:
+                raise ValueError("본문이 너무 큽니다")
+            body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
+            if not isinstance(body, dict):
+                raise ValueError("본문은 JSON 한 덩어리여야 합니다")
+        except Exception as e:
+            self._send_json({"ok": False, "error": safe_message(e, 120)}, 400)
+            return
+        origin = "외부접속" if self.headers.get("Cf-Connecting-Ip") else "내부"
+        try:
+            data = claude_order.submit(body.get("text"), origin, RUN_PORT)
+        except ValueError as e:
+            self._send_json({"ok": False, "error": safe_message(e, 120)}, 400)
+            return
+        except claude_order.NotHere as e:
+            self._send_json({"ok": False, "error": str(e)}, 403)
+            return
+        except claude_order.Busy as e:
+            self._send_json({"ok": False, "error": str(e)}, 429)
+            return
+        self._send_json({"ok": True, "data": data})
 
     def _handle_claude_ask(self):
         """화면이 보낸 물음 · 보는 것 · 앞 대화에 **서버 자료**(페이지별 표 CLAUDE_SOURCES)를 붙여 claude 에 묻는다.
