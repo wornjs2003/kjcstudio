@@ -136,8 +136,8 @@ def day_times(proxy, now=None):
     import dt30
     now = now or _now()
     off = dt30.late_min(proxy, now)
-    fl = dt30.lock_at()[0]
-    m = min(fl[0] * 60 + fl[1] + off, dt30.BUY_LATE[0] * 60 + dt30.BUY_LATE[1])
+    fl = dt30.WIN_ENDS[0]                              # 첫 시간 창 끝(09:10) — 그 창 위 PICK_N 을 이때 보낸다(재권님 안 「응 해」 11-23 17:2x · 전에는 첫 굳힘 09:05)
+    m = fl[0] * 60 + fl[1] + off
     clean = dt30._close_min(proxy, now) - AUCTION_MIN
     close = dt30._close_min(proxy, now)
     return {"firstLock": "%02d:%02d" % divmod(m, 60), "cleanAt": "%02d:%02d" % divmod(clean, 60), "reopenAt": "%02d:%02d" % dt30.OPEN_AT,
@@ -252,10 +252,13 @@ def send_today(proxy, day):
     b = dt30.board(proxy, day)
     if not b or b.get("day") != day:
         return "판 아직 없음"
+    fl = day_times(proxy)["firstLock"]
+    if _now().strftime("%H:%M") < fl and day == _now().strftime("%Y%m%d"):
+        return "첫 창 끝(%s) 전" % fl                  # 첫 시간 창(09:00~09:10)이 끝나야 그 창 줄이 다 든다 — 다음 바퀴에 다시
     rows = sorted([r for r in b.get("rows") or [] if r.get("lock") == 1], key=lambda r: (r.get("lockRank") or 1e9, r.get("rank") or 1e9))[:PICK_N]
     amt = amount_won(len(rows))
     if not rows:
-        return "첫 굳힘 전"                             # 첫 굳힘(09:05 · dt30.lock_at 첫 칸) 줄이 아직 없음 — 다음 바퀴에 다시 본다
+        return "첫 창 빔"                               # 첫 시간 창(lock 1)에 든 줄이 없음 — 다음 바퀴에 다시 본다
     st = settings()
     now = _now()
     if not SEND:
