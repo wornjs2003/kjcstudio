@@ -10663,9 +10663,11 @@ class Handler(SimpleHTTPRequestHandler):
                     "meta": {"asof": datetime.fromtimestamp(at, KST).strftime("%Y-%m-%d %H:%M:%S"),
                              "day": d["day"], "phase": d["phase"], "candidates": d["candidates"], "pending": d["pending"],
                              "noBar": d["noBar"], "capMissing": d["capMissing"], "etfOut": d["etfOut"],
-                             "risePct": chip_rules.get("초반상승", "risePct"), "minCapEok": dart.rank_min_cap_eok(),
+                             "risePct": d.get("risePct", chip_rules.get("초반상승", "risePct")), "minCapEok": dart.rank_min_cap_eok(),
+                             "preRisePct": d.get("preRisePct", chip_rules.get("초반상승", "preRisePct")),
+                             "preMissing": d.get("preMissing"), "preCount": d.get("preCount"),
                              "barFrom": d["barFrom"], "barTo": d["barTo"], "barMin": open_rise.BAR_MIN,
-                             "note": "DB 에 쌓인 분봉 — 정규장 첫 봉(barMin 분) (종가 − 시가) ÷ 시가 · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
+                             "note": "DB 에 쌓인 분봉 — 정규장 첫 봉(barMin 분) (종가 − 시가) ÷ 시가 ≥ risePct 또는 (종가 − 프리장 마지막 값) ÷ 프리장 마지막 값 ≥ preRisePct(프리장 체결 있던 종목만 · preCount 종목) · 줄의 by 가 걸린 셈(open · pre) · 그 봉을 끝난 뒤 받은 종목만(pending 은 아직) · 시가총액 단위 억원",
                              "cacheTtl": open_rise.CACHE_TTL, "first": open_rise.first_status()},
                 })
                 return
