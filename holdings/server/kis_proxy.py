@@ -1196,6 +1196,9 @@ def usage_stats():
         # 정규장 칩(현재상승 · VI·급등 · 볼린저 · 매수)이 비는 때(평일) — market_hours.CHIP_RESET ~ REG_OPEN 한 곳 · 화면 「현재상승」 이 읽는다
         "chipReset": {"from": "%s:%s" % (market_hours.CHIP_RESET[:2], market_hours.CHIP_RESET[2:]),
                       "until": "%s:%s" % (market_hours.REG_OPEN[:2], market_hours.REG_OPEN[2:])},
+        # 칩 종목 1분봉 바퀴 · 감시 목록 하루치 쌓기 · 거래대금 쌓기 — 바퀴 시각 · 종목 수 · 걸린 초(qa 덧 11-23 「잴 상태 주소가 없다」)
+        "chipLive": chip_live.status(),
+        "turnover": turnover.status(),
     }
 
 
