@@ -2936,6 +2936,10 @@ def board(proxy, day=None, cfg=None):
     except Exception:
         pass
     try:
+        live_merge(b)                                  # 다시 지은 라이브 판 — 장중 값을 읽을 때도 되돌림(저장은 장 뒤 되채우기 고리 · 장중에도 화면이 바로 맞게)
+    except Exception as e:
+        print("  [단타 30] 장중 값 못 되돌림 — %s" % proxy.safe_message(e, 120), flush=True)
+    try:
         buy930_fill(proxy, b)                          # 사는 셈 한 곳 — 칩 시각 · 09:30 까지 칩 · N번째 칩 찬 때 값(rows[].buy930 · 화면은 받기만) · 아래 봉 줄은 이 값을 씀
     except Exception as e:
         print("  [단타 30] 사는 셈 못 함 — %s" % proxy.safe_message(e, 120), flush=True)
