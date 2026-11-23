@@ -240,5 +240,27 @@ class T(unittest.TestCase):
         self.clock.t = self.clock.t.replace(hour=9, minute=0, second=5); self.go(2)
         self.assertEqual(self.kis.calls[-1], ("order", "sell", 1000))
 
+    def test_weekend_and_holiday_no_sell(self):     # 개념정의 덧 ③ — 토요일 · 휴장일(openDay=-)에는 안 넣음
+        self.rules(clean="1520", reopen="0900"); self.buy(); self.go(2)
+        self.kis.fail_order = True
+        self.clock.t = self.clock.t.replace(hour=15, minute=21); self.go(2)   # 2026-11-24 화
+        n = len(self.kis.calls)
+        self.kis.fail_order = False
+        self.clock.t = datetime(2026, 11, 28, 9, 5, tzinfo=core.KST); self.go(3)   # 토요일
+        self.assertEqual(len(self.kis.calls), n)
+        self.clock.t = datetime(2026, 11, 30, 9, 1, tzinfo=core.KST)               # 월요일인데 서버가 휴장(-)이라 보냄
+        self.e.on_message(line("RULES", "v1|buyRetrySec=3;buyMaxUpPct=2;buyMaxMin=5;sellRetrySec=3;cleanAt=1520;reopenAt=0900;closeAt=1530;openDay=-|" + self.sent()), self.ts())
+        self.go(3)
+        self.assertEqual(len(self.kis.calls), n)
+        self.clock.t = datetime(2026, 12, 1, 9, 1, tzinfo=core.KST)
+        self.e.on_message(line("RULES", "v1|buyRetrySec=3;buyMaxUpPct=2;buyMaxMin=5;sellRetrySec=3;cleanAt=1520;reopenAt=0900;closeAt=1530;openDay=20261201|" + self.sent()), self.ts())
+        self.go(2)
+        self.assertEqual(self.kis.calls[-1], ("order", "sell", 1000))
+
+    def test_price_unsure_does_not_break_tick(self):   # 개념정의 덧 ① — kis.price 가 KisUnsure 를 삼킴
+        k = kis.Kis.__new__(kis.Kis)
+        k._call = lambda *a, **kw: (_ for _ in ()).throw(kis.KisUnsure("HTTP 500"))
+        self.assertIsNone(k.price("005930"))
+
 if __name__ == "__main__":
     unittest.main()

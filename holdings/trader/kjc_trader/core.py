@@ -28,7 +28,7 @@ from .kis import KisError
 
 KST = timezone(timedelta(hours=9))
 RULE_KEYS = ("buyRetrySec", "buyMaxUpPct", "buyMaxMin", "sellRetrySec", "cleanAt", "reopenAt")
-CLOSE_AT = "15:30"             # 정규장 끝(한국거래소) — 이 뒤로는 시장가 주문을 안 넣는다(장 뒤 실패 되풀이 · qa 11-23 ③) · 다음 거래일 reopenAt 에 다시
+CLOSE_AT = "15:30"             # 정규장 끝 — 서버 룰 줄에 closeAt 이 없을 때만(옛 서버) · 이 뒤로는 시장가 주문을 안 넣는다(qa 11-23 ③) · 다음 거래일 reopenAt 에 다시
 
 
 def hhmm(v):
@@ -183,6 +183,10 @@ class Engine:
             k, _, v = x.partition("=")
             if k in RULE_KEYS:
                 vals[k] = hhmm(v) if k in ("cleanAt", "reopenAt") else float(v)
+            elif k == "closeAt":                                     # 고를 칸 — 그날 정규장 끝(수능 날 밀림) · 없으면 CLOSE_AT
+                vals[k] = hhmm(v)
+            elif k == "openDay":                                     # 고를 칸 — 그날이 거래일이면 그 날짜(「-」 휴장 · 「?」 못 잼)
+                vals[k] = v
         cur = self.st.get("rules") or {}
         if cur.get("ver") and ver < cur["ver"]:
             self.log.put("룰", "옛 룰 판 %s — 지금 %s 그대로" % (ver, cur["ver"]))
@@ -191,7 +195,7 @@ class Engine:
             self.log.put("룰", "룰 칸이 모자람 — 안 씀 · %s" % kv, level="warn")
             return
         with self._lock:
-            self.st["rules"] = {"ver": ver, **vals}
+            self.st["rules"] = {"ver": ver, "gotDay": self.clock().date().isoformat(), **vals}
             self.save()
         self.log.put("룰", "룰 판 %s 받음 · %s" % (ver, kv))
 
@@ -375,7 +379,15 @@ class Engine:
         t = now.timestamp()                                            # 시계는 갈아 끼울 수 있게(시험)
         hm = now.strftime("%H:%M")
         later = j["got"][:10] < now.date().isoformat()
-        if hm >= CLOSE_AT or (later and hm < R["reopenAt"]):           # 장 뒤 · 다음 날 장 전 — 넣지 않고 reopenAt 을 기다린다(qa 11-23 ③)
+        # 그날이 거래일인가 — 서버가 그날 보낸 룰 줄의 openDay(휴장일 표) · 없거나 옛 날짜면 주말만 가른다(개념정의 덧 ③)
+        od = R.get("openDay")
+        if od and od not in ("?",) and len(od) == 8 and od == now.strftime("%Y%m%d"):
+            open_day = True
+        elif od == "-" and R.get("gotDay") == now.date().isoformat():
+            open_day = False
+        else:
+            open_day = now.weekday() < 5
+        if hm >= (R.get("closeAt") or CLOSE_AT) or (later and (hm < R["reopenAt"] or not open_day)):   # 장 뒤 · 다음 날 장 전 · 휴장일 — 넣지 않는다(qa 11-23 ③)
             if s.get("waitDay") != now.date().isoformat():
                 s["waitDay"] = now.date().isoformat()
                 self.log.put("매도", "장 밖 — 다음 거래일 %s 에 남은 것을 팖" % R["reopenAt"], jid, j["code"])

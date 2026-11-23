@@ -93,7 +93,7 @@ class Kis:
             j = self._call("GET", "/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100",
                            {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code})
             return float(j["output"]["stck_prpr"])
-        except (KisError, KeyError, ValueError, urllib.error.URLError):
+        except (KisError, KisUnsure, KeyError, ValueError, OSError):   # 현재가 5xx · 시간 초과 한 번에 그 바퀴 전체가 끊기지 않게(개념정의 덧 ①)
             return None
 
     def order_market(self, code, qty, side):
