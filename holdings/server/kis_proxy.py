@@ -10700,6 +10700,22 @@ class Handler(SimpleHTTPRequestHandler):
                 })
                 return
 
+            if route == "pre-last":
+                # 프리장 마지막 값 — 넥스트레이드 08:50 끝 체결가(nxt_pre 08:51 저장 표 · 체결 있던 종목만) · 「프리장대비」 칩 재료(2026-11-23) · KIS 안 부름
+                qday = (qs.get("day") or [None])[0]
+                if qday is not None and not (len(qday) == 8 and qday.isdigit()):
+                    self._send_json({"ok": False, "error": "day 는 YYYYMMDD 입니다."}, 400)
+                    return
+                d, day, src = nxt_pre.last_prices(sys.modules[__name__], qday)
+                self._send_json({
+                    "ok": d is not None, "data": d or {},
+                    "meta": {"day": day, "count": len(d) if d is not None else None, "source": src,
+                             "preUpPct": chip_rules.get("프리장대비", "preUpPct"),
+                             "note": "data = {종목: 프리장 마지막 체결가} · day 는 저장된 가장 최근 날(오늘 08:51 앞이면 앞 거래일) · 체결 없던 종목은 빠짐 · "
+                                     "source local(이 서버 표) · upstream(8765 것) · none(못 받음 — count null)"},
+                })
+                return
+
             if route == "rescan":
                 # 「지금검색」 — 매수 · 수급 · 프리장을 그 자리에서 다시 셈(문턱 rescan.MIN_SEC) · 나머지 칩은 화면이 다시 받기만 (2026-11-11 재권님 「나」)
                 self._send_json({"ok": True, "data": rescan.run(sys.modules[__name__], cfg, pre_flow._writer["on"])})

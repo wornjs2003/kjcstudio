@@ -111,6 +111,48 @@ def _saved(proxy, day):
         return {r["code"]: dict(r) for r in conn.execute("SELECT * FROM nxt_pre WHERE day = ?", (day,))}
 
 
+UP_TTL = 60                     # 상류(8765)에서 받은 프리장 마지막 값을 들고 있는 초 — 저장은 하루 한 번(08:51)이라 넉넉하다
+_up = {"key": None, "at": 0.0, "val": None}
+
+
+def last_prices(proxy, day=None):
+    """프리장(넥스트레이드 08:00~08:50) 마지막 체결가 — {종목: 값} · 체결(거래량) 있던 종목만 · (값, 날, 어디서).
+
+    day 를 안 주면 저장된 날 중 가장 최근(오늘 08:51 앞이면 앞 거래일). 이 표는 8765(보내는 서버)만 채우므로 자기 표가 비고
+    상류가 있는 서버(메인 8764 · 세션)는 8765 의 /api/kis/pre-last 를 받는다 — 못 받으면 (None, day, "none"): 「없음」 과 「못 받음」 을 가른다
+    (2026-11-23 「프리장 대비 상승」 칩 · 초반상승 「또는」 셈이 함께 쓴다)."""
+    try:
+        with proxy._db_lock, proxy.db_conn() as conn:
+            conn.execute(_SCHEMA)
+            if day is None:
+                r = conn.execute("SELECT MAX(day) d FROM nxt_pre WHERE day <= ?", (_now().strftime("%Y%m%d"),)).fetchone()
+                day = r["d"] if r else None
+            rows = conn.execute("SELECT code, price, vol FROM nxt_pre WHERE day = ?", (day,)).fetchall() if day else []
+        local = {r["code"]: r["price"] for r in rows if r["price"] and (r["vol"] or 0) > 0}
+    except Exception:
+        local = None
+    if local:
+        return local, day, "local"
+    base = proxy.upstream_base() if hasattr(proxy, "upstream_base") else None
+    if not base:
+        return local, day, "local" if local is not None else "none"
+    key = (base, day)
+    now = time.time()
+    if _up["key"] == key and now - _up["at"] < UP_TTL:
+        return _up["val"]
+    out = (None, day, "none")
+    try:
+        import json
+        with urllib.request.urlopen(base + "/api/kis/pre-last" + ("?day=%s" % day if day else ""), timeout=10) as resp:
+            j = json.loads(resp.read().decode("utf-8"))
+        if j.get("ok") and isinstance(j.get("data"), dict):
+            out = ({c: v for c, v in j["data"].items() if v}, (j.get("meta") or {}).get("day") or day, "upstream")
+    except Exception:
+        pass
+    _up.update(key=key, at=now, val=out)
+    return out
+
+
 def fetch_nx(proxy, cfg, codes, gap=GAP_SEC):
     """{code: {vol, price, prev_close, name}} — NX 시장 누적 거래량 · 현재가 · 전일 종가.
     gap — 묶음 사이 쉼(초). 프리장 급증(pre_surge)은 08:00~08:05 에 서버 여유를 몰아 쓰므로 0 으로 부른다"""
