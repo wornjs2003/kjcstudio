@@ -8907,6 +8907,9 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if urllib.parse.urlparse(self.path or "").path.rstrip("/") == "/api/claude/order":
             # 「업무지시」 하나의 지금 상태 — 화면이 서버가 낸 pollMs 마다 묻는다(server/claude_order.py)
+            if not claude_order.host_ok(self.headers.get("Host"), RUN_PORT):   # 답 글도 같은 까닭으로 남의 이름에는 안 낸다
+                self._send_json({"ok": False, "error": "이 주소로는 업무지시를 받지 않습니다."}, 403)
+                return
             jid = (urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("id") or [""])[0]
             j = claude_order.get(jid)
             if j is None:
@@ -9421,7 +9424,15 @@ class Handler(SimpleHTTPRequestHandler):
     def _handle_claude_order(self):
         """「업무지시」 — 글을 받아 작업우선순위 창에 넣는다(뒤에서) → 번호를 바로 돌려준다. 답은 GET /api/claude/order?id=… 로.
         본문 종류 검사는 _handle_claude_ask 와 같은 까닭(다른 웹페이지가 미리 묻기 없이 보내지 못하게).
-        내부 · 외부접속은 Cloudflare 가 붙이는 Cf-Connecting-Ip 머리로 가른다 — 터널을 거친 것만 그 머리가 있다."""
+        내부 · 외부접속은 Cloudflare 가 붙이는 Cf-Connecting-Ip 머리로 가른다 — 터널을 거친 것만 그 머리가 있다.
+        Host 머리가 우리 이름이 아니면 403 — DNS 다시 묶기로 남의 페이지가 같은 출처가 되는 길(claude_order.host_ok)."""
+        if not claude_order.host_ok(self.headers.get("Host"), RUN_PORT):
+            try:
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            except Exception:
+                pass
+            self._send_json({"ok": False, "error": "이 주소로는 업무지시를 받지 않습니다."}, 403)
+            return
         if (self.headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
             try:
                 self.rfile.read(int(self.headers.get("Content-Length") or 0))

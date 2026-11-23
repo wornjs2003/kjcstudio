@@ -52,6 +52,20 @@ _jobs = {}            # id → 상태 묶음
 _order = []           # 들어온 차례(오래된 것을 지우려고)
 
 
+def host_ok(host, port):
+    """받는 Host 머리가 우리 이름인가 — localhost · 127.0.0.1 (그 포트) · 메인 호스트(dart.MAIN_URL 에서 읽음 · 값 안 박음).
+    DNS 다시 묶기(rebinding)로 남의 웹페이지가 localhost 와 같은 출처가 되어 JSON 을 보내는 길을 막는다(2026-11-23 개념정의 검수 보류).
+    본문 종류 검사 · OPTIONS 없음은 「남의 출처」 만 막고, 같은 출처가 된 남의 페이지는 Host 가 그 남의 이름이라 여기서 갈린다."""
+    import urllib.parse
+    import dart
+    h = (host or "").strip().lower()
+    ok = {"localhost:%s" % port, "127.0.0.1:%s" % port}
+    main = (urllib.parse.urlparse(dart.MAIN_URL).hostname or "").lower()
+    if main:
+        ok.add(main)                      # 터널을 거쳐 오면 포트 없는 메인 호스트다
+    return h in ok
+
+
 class Busy(Exception):
     """앞 지시가 아직 돌고 있다."""
 
