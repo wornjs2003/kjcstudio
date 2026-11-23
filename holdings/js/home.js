@@ -1566,7 +1566,7 @@ const SORTS = {
             : riseMeta.phase === 'before' ? `${riseMeta.barTo} 첫 ${barMinTxt()}봉이 끝나면 고릅니다`
             : riseMeta.phase === 'nodata' ? `못 셈 — 첫 ${barMinTxt()}봉(${riseMeta.barFrom}) 봉이 한 종목도 없습니다`
             : riseMeta.pending ? `첫 ${barMinTxt()}봉을 다 받기 기다리는 중 — ${riseMeta.pending}종목`
-            : `첫 ${barMinTxt()}봉이 시가 대비 ${riseMeta.risePct != null ? '+' + riseMeta.risePct + '%' : '(서버 값 못 받음)'} 넘게 오른 종목이 없습니다`) },   // 정해진 값은 서버 meta 에서(11-20 「설명 글에는 정해진 값을 적는다」)
+            : `첫 ${barMinTxt()}봉이 ${riseCondTxt(riseMeta)} 오른 종목이 없습니다`) },   // 정해진 값은 서버 meta 에서(11-20 「설명 글에는 정해진 값을 적는다」)
   /* 겹침 — 관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 중 **둘 이상**에 든 종목, 겹친 칩 수 많은 순 · 같으면 시가총액 순 (2026-11-11 재권님
      「관심 프리장 vi급등 장외 매수 이목록들(실시간 순위) … 여기에서 겹치는 종목들을 소팅해서 보여주면 좋을거같은데」 → (가) 새 칩).
      각 칩이 서버에서 받은 목록을 그대로 모아 센다(새로 고르는 셈이 아니다) — 칩마다 거르는 것(시총 · ETF)도 그 칩 그대로 */
@@ -1642,9 +1642,8 @@ const SORT_TIPS = {
   ov: '관심 · 프리장 · VI·급등 · 장외 · 매수 · 초반상승 · 수급 가운데 둘 이상의 칩에 함께 든 종목, 겹친 칩 수가 많은 순(같으면 시가총액 순)\n전일 종가 대비 내린 종목은 뺍니다(등락률을 모르면 남김)\n줄마다 어느 칩에 들었는지 적습니다 · 각 칩의 거르기(시가총액 · ETF)는 그 칩 그대로',
   get rise() {      // 문턱 숫자는 서버 meta — 받기 전에는 숫자 없이
     const m = riseMeta || {};
-    const th = m.risePct != null ? ` ${m.risePct}% 이상` : '';
     const cap = m.minCapEok != null ? `시가총액 ${fmtMoneyKr(m.minCapEok)} 이상만` : '';
-    return `코스피 200 · 코스닥 150 종목(ETF 뺌) 중 정규장 첫 ${barMinTxt()}봉(${m.barFrom || '—'} ~ ${m.barTo || '—'})이 시가보다${th} 올라 끝난 종목, 그 상승률이 큰 순\n그 봉을 다 받은 뒤에 고르고 그날 판으로 굳습니다${cap ? ` · ${cap}` : ''}`;
+    return `코스피 200 · 코스닥 150 종목(ETF 뺌) 중 정규장 첫 ${barMinTxt()}봉(${m.barFrom || '—'} ~ ${m.barTo || '—'})이 ${riseCondTxt(m)} 올라 끝난 종목, 첫 봉 상승률이 큰 순\n프리장(넥스트레이드) 체결이 없던 종목은 시가 대비만 봅니다\n그 봉을 다 받은 뒤에 고르고 그날 판으로 굳습니다${cap ? ` · ${cap}` : ''}`;
   },
   eb: '실적이 잘 나온 종목 — 두 가지가 다 맞은 것만\n① 예상보다 좋음: 회사가 낸 잠정실적의 영업이익이 그 분기 시장 예상치(네이버)보다 높음\n② 전망 좋음: 「실적 전망」 공시의 매출 · 영업이익(값이 든 칸만)이 직전 실적보다 큼 — 1년 전망은 앞 해 실적(없으면 최근 네 분기 합), 분기 전망은 한 해 앞 같은 분기\n최근 공시만(며칠 치인지는 서버가 정해 위 설명 줄에 나옵니다) · 예상치가 없는 종목은 못 가름이라 빠집니다',
   ev: '최근 사흘 회사 공시 중 갈래가 붙은 것(자사주 · 인수합병 · 주주환원 · 실적 · 위험 신호 …) — 종목마다 가장 새 공시 한 줄, 새 것이 위\n아래 띠에서 갈래를 누르면 그 갈래만',
@@ -2074,14 +2073,19 @@ const riseOf = (code) => (riseRows || []).find((r) => r.code === code) || null;
 function riseCell(code) {
   const r = riseOf(code);
   if (!r) return '—';
-  return `<div style="white-space:nowrap;font-size:12px;line-height:1.3"><span class="${dirClass(r.pct)}">+${r.pct.toFixed(2)}%</span></div>` +
+  return `<div style="white-space:nowrap;font-size:12px;line-height:1.3"><span class="${dirClass(r.pct)}">${r.pct > 0 ? '+' : ''}${r.pct.toFixed(2)}%</span></div>` +
     `<div style="white-space:nowrap;font-size:11px;line-height:1.3" class="kh-mut">${fmtPriceOf(code, r.open)} → ${fmtPriceOf(code, r.close)}</div>`;
+}
+/* 초반상승 조건 글 — 문턱 둘은 서버 meta(risePct · preRisePct) · 못 받으면 그 자리에 「서버 값 못 받음」(숫자를 박지 않는다 · 11-23 재권님 「지금룰에 걸리거나/ 프리장보다 2%이상 오를때」) */
+function riseCondTxt(m) {
+  const v = (x) => (x != null ? x : '서버 값 못 받음');
+  return `시가보다 (${v(m.risePct)})% 또는 프리장 마지막 값보다 (${v(m.preRisePct)})% 이상`;
 }
 function riseNote() {
   const m = riseMeta || {};
   const bits = [];
   if (m.day) bits.push(`${m.day.slice(4, 6)}.${m.day.slice(6)} 첫 ${barMinTxt()}봉`);
-  if (m.risePct != null) bits.push(`시가 대비 +${m.risePct}% 이상`);
+  bits.push(riseCondTxt(m));
   if (m.pending) bits.push(`다 받기 기다림 ${m.pending}`);
   else if (m.phase === 'done') bits.push('그날 판 고정');
   return bits.join(' · ');
