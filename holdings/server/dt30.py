@@ -2020,8 +2020,8 @@ def rebuild(proxy, day, prev, cfg=None):
     for code, g in hit.items():
         if not g["chips"] & set(ov_chips()):
             continue
-        if small(code):
-            continue                                   # 시가총액 문턱(cap_min_eok · 3천억) 아래 — 칩이 붙어도 판 밖(VI·급등 · 수급은 small 을 안 거름)
+        if cap.get(code) is None or cap[code] < cap_min_eok():
+            continue                                   # 시가총액 문턱(cap_min_eok · 3천억) 아래 · 감시 목록 밖(ETF · 작은 종목) — 칩이 붙어도 판 밖(drop_small 과 같은 가름 · qa 덧 11-23)
         d = bars.get(code) or {}
         buy = (d.get("0905") or (None,))[0]
         base = base_of(code)
