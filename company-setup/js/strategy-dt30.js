@@ -326,6 +326,32 @@ function sellAt(p, times = [], inAt = '') {   // p — 시각마다 매수가 �
   if (cut && lastK >= 0) return { k: lastK, why: '매도 시각' };
   return { k: -1, why: '' };
 }
+// 봉으로 매도 타점 (11-23 재권님 「매도타점 정확히 계산해」 → 「30분 칸 말고 분봉으로」) — 서버 rows[].bars [[HH:MM 봉 시작, 시가, 고가, 저가, 종가]] · barSrc 1m|5m 가 있으면
+//   손절 · 고점은 봉에서 처음 닿은 때 값 · 꺾임 · 시각 미달 · 횡보 · 매도 시각은 30분 칸 그대로(그 시각 봉이 시작될 때 먼저 봄) · 한 봉에 손절 · 고점이 둘 다면 손절 먼저
+//   셈 규칙은 서버 dt30_win._sell_bars(개발2 1f95235 · 승률 표)와 같다 — 봉이 없는 줄은 아래 sellAt(30분 칸) 그대로
+//   → { k: 결과를 그릴 30분 칸 차례(봉 매도면 그 봉이 끝나는 칸), why, px: 판 값, at: 판 때 HHMM }
+function sellBars(r, B, times) {
+  const S = st.set, buy = B.px, bAt = B.at, last = times.length ? hhmm(times[times.length - 1]) : '';
+  const end = S.endAt || last; const stopPx = S.stop != null ? buy * (1 + Number(S.stop) / 100) : null;
+  const tby = S.turnBy || 'both', tr = S.turn && tby !== 'prev' && S.trail != null ? Number(S.trail) : null;
+  const cutHM = S.cut && S.cutPct != null ? cutTime(bAt, S.cutMin) : '', flatHM = S.flat && S.flatMin != null && S.flatPct != null ? cutTime(bAt, S.flatMin) : '';
+  const px = r.px || {}, slots = times.map((t, i) => [hhmm(t), i]).filter(([h, i]) => h > bAt && h <= end && px[times[i]] != null && Number.isFinite(Number(px[times[i]])));
+  let prev = null, cutDone = false, flatDone = false;
+  const slot = ([h, i]) => { const v = Number(px[times[i]]), q = (v / buy - 1) * 100;
+    if (S.turn && tby !== 'peak' && prev != null && prev > 0 && ((100 + q) / (100 + prev) - 1) * 100 < -(Number(S.turnPct) || 0)) return { k: i, why: '꺾임', px: v, at: h };
+    if (cutHM && !cutDone && h >= cutHM) { cutDone = true; if (q <= Number(S.cutPct)) return { k: i, why: '미달', px: v, at: h }; }
+    if (flatHM && !flatDone && h >= flatHM) { flatDone = true; if (Math.abs(q) <= Number(S.flatPct)) return { k: i, why: '횡보', px: v, at: h }; }
+    prev = q; return null; };
+  const kOf = (t) => { const j = times.findIndex((x) => hhmm(x) > t); return j >= 0 ? j : times.length - 1; };
+  let si = 0, peak = null;
+  for (const [t0, o, h, l] of r.bars) { const t = String(t0).replace(/:/g, '').slice(0, 4); if (t < bAt) continue; if (t >= end) break;
+    while (si < slots.length && slots[si][0] <= t) { const g = slot(slots[si++]); if (g) return g; }
+    if (stopPx != null && l <= stopPx) return { k: kOf(t), why: '손절', px: o < stopPx ? o : stopPx, at: t };
+    if (tr != null && peak != null && peak > buy) { const line = peak * (1 - tr / 100); if (l <= line) return { k: kOf(t), why: '고점', px: o < line ? o : line, at: t }; }
+    peak = peak == null ? h : Math.max(peak, h); }
+  while (si < slots.length) { const g = slot(slots[si++]); if (g) return g; }
+  const z = slots[slots.length - 1]; return z ? { k: z[1], why: '매도 시각', px: Number(px[times[z[1]]]), at: z[0] } : { k: -1, why: '' };
+}
 // 손익 셈 (11-11 재권님 「각 종목별로 천만원씩 샀다고 하고 상위 16종목을 해당룰로 했을때 수익은 얼마지?」 → 「결과 옆에 거래세랑 세금 퍼센트를 넣어줘
 //   세금은 코스피와 코스닥세금 내는거 룰찾아서 넣고 증권수수료는 내가 기입하면 그 숫자에 맞춰서 대입되게 해줘」)
 //   · 상위 PNL_TOP 종목을 한 종목에 PNL_WON 원어치(주 단위 내림) 09:06 매수가에 사서 위 룰대로 판 값에 판다
@@ -451,8 +477,9 @@ function calcDay(d) {
   const lkCnt = {}; if (lkMode) rows.forEach((r) => { const j = Number(r.lock); if (boughtOf(r) && !noBuyOf(j)) { const g = j > 0 ? j : 0; lkCnt[g] = (lkCnt[g] || 0) + 1; }   /* 매도 시각보다 늦게 든 종목은 몫을 안 받음(nb 와 같은 셈 · qa 11-20) */ });
   const perOf = (r) => { if (!lkMode) return per; const j = Number(r.lock); const g = j > 0 ? j : 0, gw = g > 0 ? Number((S.grpWons || [])[g - 1]) : 0; return lkCnt[g] ? (gw > 0 ? gw : lkWon) / lkCnt[g] : 0; };   // 굳힘 칸마다 금액(11-23 · 셈 칸 grpWons) · 빈칸이면 「굳힘마다 금액」   // 대기 묶음(0)도 굳힘 금액을 그 수로 나눠 산 것으로(11-23) · 합계(P)는 굳은 줄만
   const ch = (r, t) => { const B = boughtOf(r), v = Number((r.px || {})[t]); return !B || hhmm(t) <= B.at || (r.px || {})[t] == null || !Number.isFinite(v) ? null : (v / B.px - 1) * 100; };   // 산 시각 앞 칸은 비움
-  const R = rows.map((r) => { const p = times.map((t) => ch(r, t)); const s = sellAt(p, times, (boughtOf(r) || {}).at); let last = L; while (last >= 0 && p[last] == null) last--; const nowCh = LIVE && s.k < 0 && Number(r.now) > 0 && boughtOf(r) ? (Number(r.now) / boughtOf(r).px - 1) * 100 : null;   // 장중 · 안 판 종목 — 결과 · 손익은 서버 지금 값(rows[].now)
-    const at = s.k >= 0 ? s.k : last, sellPx = nowCh != null ? Number(r.now) : at >= 0 ? Number((r.px || {})[times[at]]) : null;
+  const R = rows.map((r) => { const p = times.map((t) => ch(r, t)); const B0 = boughtOf(r), s = B0 && Array.isArray(r.bars) && r.bars.length && !LIVE ? sellBars(r, B0, times) : sellAt(p, times, (B0 || {}).at);   // 봉 줄이 있으면 봉으로 판 때 · 값(11-23 · 장중은 30분 칸 그대로)
+    if (s.px != null && s.k >= 0) p[s.k] = (s.px / B0.px - 1) * 100;   // 판 칸에는 판 값의 % (봉 매도면 칸 시각 값이 아니라 판 값) let last = L; while (last >= 0 && p[last] == null) last--; const nowCh = LIVE && s.k < 0 && Number(r.now) > 0 && boughtOf(r) ? (Number(r.now) / boughtOf(r).px - 1) * 100 : null;   // 장중 · 안 판 종목 — 결과 · 손익은 서버 지금 값(rows[].now)
+    const at = s.k >= 0 ? s.k : last, sellPx = s.px != null ? s.px : nowCh != null ? Number(r.now) : at >= 0 ? Number((r.px || {})[times[at]]) : null;
     const b = boughtOf(r) ? boughtOf(r).px : 0, qty = b > 0 ? Math.floor(perOf(r) / b) : 0;
     const T = taxOf(r.market);
     const pnl = qty > 0 && Number.isFinite(sellPx) ? (() => {
@@ -583,7 +610,7 @@ function paint0(d) {
   const plTd = (x, i) => `<td class="dt-pl">${x.inv && x.pnl ? (x.pnl.net == null ? '<span class="st-err">시장 모름</span>' : `<span class="${signClass(x.pnl.net, NUM) || ''}">${won(x.pnl.net)}</span><small>빼기 전 ${won(x.pnl.gross)}${x.pnl.adds && x.pnl.adds.length ? ` · 불타기 ${won(x.pnl.pyr)}` : ''}</small>`) : '<span class="st-err">—</span>'}</td>`;
   // 결과 칸에 지금 가격(11-23 재권님 「결과에 지금가격도 보여지고 갱신되도록해」) — 서버 rows[].now · data.nowAt(장중 · 굳기 전) · 갱신은 판을 다시 받는 서버 주기(meta.refreshMs) 그대로 · 칸을 통째로 다시 그려 거르는 표 없음
   const nowTxt = (r) => (LIVE && Number(r.now) > 0 ? `지금 ${num(Number(r.now))}` : '');
-  const resTd = (x) => { const nt = nowTxt(x.r); return `<td class="dt-res">${pct(x.res)}<small>${x.s.k >= 0 ? `${hmTxt(times[x.s.k])} ${x.s.why}${nt ? ` · ${nt}` : ''}` : x.now ? `${nt || '지금'} · ${esc(String(d.nowAt || '').slice(0, 5))}` : '끝까지'}</small></td>`; };
+  const resTd = (x) => { const nt = nowTxt(x.r); return `<td class="dt-res">${pct(x.res)}<small>${x.s.k >= 0 ? `${hmTxt(x.s.at || times[x.s.k])} ${x.s.why}${nt ? ` · ${nt}` : ''}` : x.now ? `${nt || '지금'} · ${esc(String(d.nowAt || '').slice(0, 5))}` : '끝까지'}</small></td>`; };
   const rk = (r, i) => `<td class="dt-rk">${i + 1}</td>`;
   // 매수가 (11-18 서버 바뀜) — 정규장 전에 든 종목은 buy null + buyWait → 「09:00 시가 기다림」 · 채워지면 buySrc(시가 · 지금 값) · 그 시각
   const NM0 = d.meta || {};
