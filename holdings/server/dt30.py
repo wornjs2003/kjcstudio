@@ -890,10 +890,10 @@ def _in4(r):
 
 
 def chips930(r, ct, until=CHIP_UNTIL):
-    """그 줄의 단타 셈 칩 중 until 까지 붙은 것 — 시각 모르는 칩은 판에 든 때로 보고(그것도 모르면 남김) 든 때가 until 뒤면 뺀다(개념정의 덧 ② 11-23)."""
-    lim, e = "%02d%02d" % until, _in4(r)
+    """그 줄의 단타 셈 칩 중 until 까지 붙은 것 — 시각을 아는 칩만(모르는 칩은 짐작하지 않음 · 사는 셈 buy_point 와 같은 가름 · 11-24 「그렇게 해」 · 개념정의 덧)."""
+    lim = "%02d%02d" % until
     cs = list(dict.fromkeys(list(r.get("chips") or []) + list(ct or {})))    # 판 칩 + 시각이 남은 칩(붙었다 없어진 것)
-    return [c for c in cs if c in ov_chips() and not (((ct or {}).get(c) or e or "") > lim)]
+    return [c for c in cs if c in ov_chips() and (ct or {}).get(c) and ct[c] <= lim]
 
 
 def buy_mode():
@@ -908,7 +908,7 @@ def buy_mode():
 def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
     """→ {px, at 「HH:MM」, chipAt 「HH:MM」(N번째 칩 시각), need, src} | None — 위 「사는 셈」 한 곳."""
     e = _in4(r)
-    ts = sorted((ct or {})[c] for c in chips930(r, ct, until) if (ct or {}).get(c))   # 시각을 아는 칩만 — 모르는 칩을 든 때 · 장 전으로 짐작하지 않음(재권님 「그렇게 해」 11-24 08:2x · 화면 97d982b)
+    ts = sorted(ct[c] for c in chips930(r, ct, until))   # 시각을 아는 칩만 — 모르는 칩을 든 때 · 장 전으로 짐작하지 않음(재권님 「그렇게 해」 11-24 08:2x · 화면 97d982b)
     if len(ts) < need:
         return None
     T = ts[need - 1]
