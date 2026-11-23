@@ -11,6 +11,10 @@
                 늦게 여는 날(수능 등)은 그날 여는 시각의 첫 봉(market_hours.today 의 reg[0] · 11-19 수능 10:00~10:01) — 재권님 「응 해줘」(11-19 · 개발2 창)
                 그 전에는 늘 보통 날 09:00 봉을 읽어 늦게 연 날 하나도 안 잡혔다(11-19 오전 · 초반상승 값 든 줄 0)
                 장 시각 숫자를 이 파일에 두지 않는다(market_hours 머리 · 개념정의 검수 11-11)
+                **또는** 첫 봉 종가가 프리장 마지막 값(nxt_pre 08:51 저장 표 · 체결 있던 종목만)보다 PRE_RISE_PCT % 이상 높음 — 둘 중 하나면 든다 ·
+                줄의 by 에 걸린 셈(open · pre) · 프리장 체결 없던 종목은 시가 대비만 · 표를 못 읽으면 preMissing — 재권님 「초반상승은 경우의 수를 둬야 할거같은데
+                지금룰에 걸리거나/ 프리장보다 2%이상 오를때 로 해줘」(11-23 · 작업우선순위 창) → 안(견주는 값은 첫 1분봉 끝 값)에 「응 커밋해」(개발1 창)
+                지난 날 다시 셈(day_top_fill · dt30 rebuild — 첫 5분봉 PAST_RISE_PCT)에는 안 넣었다
     차례        그 상승률 큰 순
     다 찬 봉만   그 봉을 **끝난 뒤에 받았는지**는 kis_proxy `_minutes_fresh_upto`(「지금 칸」 을 받은 분)로 가른다 — 그 봉이 끝나기 전에 받은 덜 찬 봉으로
                 고르지 않는다(거래량 전날 대비 % 와 같은 기록 · 11-11 qa 돌려보냄). 아직이면 그 종목은 `pending` 으로 센다
@@ -38,6 +42,7 @@ KST = timezone(timedelta(hours=9))
 
 BAR_MIN = 1              # 첫 봉의 길이(분) — 첫 1분봉(09:00~09:01) · 재권님 「초반상승을 첫 1분봉으로」 → 문턱 「나」 1.5%(11-18 20:0x · 그날 1분봉으로 센 하루 평균 40종목 — 5분봉 2% 셈과 비슷)
 BAR_PERIOD = "1m"        # 그 봉을 읽는 기간 — 5분봉을 받을 때 1분봉도 함께 저장된다(kis_proxy get_chart · 2026-11-11)
+PRE_RISE_PCT = chip_rules.RULES["초반상승"]["preRisePct"][0]   # 기본값(2%) — 「또는」 셈: 첫 봉 종가가 프리장 마지막 값(nxt_pre 08:51 저장 표 price)보다 이만큼 높음 · 지금 값은 chip_rules.get · 재권님 「지금룰에 걸리거나/ 프리장보다 2%이상 오를때」(11-23) → 안에 「응 커밋해」
 RISE_PCT = chip_rules.RULES["초반상승"]["risePct"][0]   # 기본값(1.5%) — 첫 봉 시가 대비 종가 상승률 문턱 · 지금 값은 chip_rules.get(「초반상승」, risePct) · 룰 문서로 고침(2026-11-20)
 PAST_BAR_MIN = 5         # 지난 날 다시 셈(day_top_fill · dt30 rebuild)은 첫 5분봉 그대로 — 1분봉은 11-12 부터만 쌓여 있어 그 전 날은 셀 수 없다
 PAST_RISE_PCT = 2.0      # 〃 문턱(11-18 전 셈 그대로)
@@ -102,6 +107,12 @@ def build(proxy, now=None):
                 bars[r["code"]] = dict(r)
     rows, pending, no_bar = [], 0, 0
     rise_pct = chip_rules.get("초반상승", "risePct")
+    pre_rise_pct = chip_rules.get("초반상승", "preRisePct")
+    import nxt_pre
+    try:                                   # 그날 프리장 마지막 값 — 08:51 저장 표 · 거래량 0 은 체결 없음이라 「프리장 대비」 를 안 센다
+        pre = {c: r["price"] for c, r in nxt_pre._saved(proxy, day).items() if r.get("price") and (r.get("vol") or 0) > 0}
+    except Exception:
+        pre = None                         # 못 읽음 — 「시가 대비」 만 센다 · 응답 preMissing 으로 알린다
     for u in cand:
         b = bars.get(u["code"])
         if not b or not b["open"] or b["close"] is None:
@@ -113,13 +124,17 @@ def build(proxy, now=None):
                 pending += 1                 # 그 봉을 끝난 뒤에 아직 안 받았다 — 덜 찬 값일 수 있다
                 continue
         pct = (b["close"] - b["open"]) / b["open"] * 100
-        if pct >= rise_pct:
+        pp = (pre or {}).get(u["code"])
+        pre_pct = (b["close"] - pp) / pp * 100 if pp else None
+        by = [k for k, ok in (("open", pct >= rise_pct), ("pre", pre_pct is not None and pre_pct >= pre_rise_pct)) if ok]
+        if by:                             # 둘 중 하나면 든다 · by = 걸린 셈(open 시가 대비 · pre 프리장 대비 · 둘 다)
             rows.append({"code": u["code"], "name": u["name"], "market": u["market"], "cap": u["cap"],
                          "open": b["open"], "close": b["close"], "high": b["high"], "volume": b["volume"],
-                         "pct": round(pct, 2)})
+                         "pct": round(pct, 2), "pre": pp, "prePct": round(pre_pct, 2) if pre_pct is not None else None, "by": by})
     rows.sort(key=lambda x: -x["pct"])
     phase = "pending" if pending else "nodata" if cand and no_bar == len(cand) else "done"
-    return dict(head, phase=phase, rows=rows, candidates=len(cand), pending=pending, noBar=no_bar, capMissing=cap_missing, etfOut=etf)
+    return dict(head, phase=phase, rows=rows, candidates=len(cand), pending=pending, noBar=no_bar, capMissing=cap_missing, etfOut=etf,
+                risePct=rise_pct, preRisePct=pre_rise_pct, preMissing=pre is None, preCount=len(pre) if pre is not None else None)
 
 
 def fetch(proxy, now=None):
