@@ -958,7 +958,7 @@ BIND.push(() => $('dt-only').addEventListener('click', (e) => { const b = e.targ
 async function loadFee() {
   if (!DT_CHIPS.length || st.chipFail || st.sellFail !== false) await loadDtChips();   // 매도 기본값(SELL_DEF)이 셈 칸보다 먼저
   try { const r = await fetch(DOC, { cache: 'no-store' }); const j = r.ok ? await r.json() : null; const R0 = j && j.data && j.data.rules && j.data.rules.dt30 ? j.data.rules.dt30 : {}; const v = R0.feePct; st.fee = v == null || v === '' ? null : Number(v);
-    st.set = { ...DEF_SET, ...SELL_DEF, ...(R0.set && typeof R0.set === 'object' ? R0.set : {}), mode: 'day' };
+    st.set = { ...DEF_SET, ...SELL_DEF, ...(R0.set && typeof R0.set === 'object' ? R0.set : {}), mode: 'day' }; st.setSaved = { ...st.set }; st.setDirty = false;   // 저장된 값 — 차례 점수만 바로 저장할 때 안 누른 고침을 섞지 않으려고(개념정의 덧 11-23)
     st.score = R0.score && typeof R0.score === 'object' ? R0.score : {};   // 돈은 늘 전체 금액 ÷ 종목 수
     if (R0.set && R0.set.mode === 'each' && R0.set.perWon) st.set.dayWon = R0.set.perWon * (st.set.top || PNL_TOP); }   // 옛 저장값(종목마다)은 같은 돈이 되게 옮김
   catch (e) { st.fee = null; st.set = { ...DEF_SET, ...SELL_DEF }; }
@@ -1014,13 +1014,18 @@ async function setChange(next) {
   if (st.data) { paint(st.data); chips(); }
   // 저장은 「저장」 단추로(11-23 재권님 「매도 내가 수정하고 저장하게 저장버튼 만들어줘」) — 고치면 화면만 다시 셈 · 차례 점수만은 서버가 셈하므로 바로 저장
   if (JSON.stringify(prevOrd) === JSON.stringify(next.ordScore || {})) { st.setDirty = true; setDirtyMark(); return; }
-  await setSave();
+  // 차례 점수만 바로 저장 — 저장 안 누른 다른 칸 고침은 섞지 않음(저장된 값 + 차례 점수 · 개념정의 덧 11-23)
+  msg.textContent = '차례 점수 저장하는 중…';
+  try { const base = { ...(st.setSaved || st.set), ordScore: next.ordScore }; await saveDt({ set: base }); st.setSaved = base; setDirtyMark(); if (!st.setDirty) msg.textContent = '차례 점수 저장됨'; }
+  catch (e) { msg.textContent = `차례 점수 저장 못 함(${e.message || '연결 안 됨'})`; }
   load(st.day, true);   // 차례 점수는 서버가 셈 — 저장 뒤 판을 다시 받아 새 차례(11-23)
 }
 const setDirtyMark = () => { const msg = $('dt-set-msg'); if (msg) msg.textContent = st.setDirty ? '고침 — 화면만 다시 셈 · 「저장」 을 눌러야 남음' : ''; document.querySelectorAll('[data-setsave]').forEach((b) => b.classList.toggle('is-active', !!st.setDirty)); };
+// 저장 안 하고 떠나면 브라우저가 묻게(개념정의 덧 11-23)
+window.addEventListener('beforeunload', (e) => { if (st.setDirty) { e.preventDefault(); e.returnValue = ''; } });
 async function setSave() {
   const msg = $('dt-set-msg'); msg.textContent = '저장하는 중…';
-  try { await saveDt({ set: st.set }); st.setDirty = false; setDirtyMark(); msg.textContent = '저장됨'; }
+  try { await saveDt({ set: st.set }); st.setSaved = { ...st.set }; st.setDirty = false; setDirtyMark(); msg.textContent = '저장됨'; }
   catch (e) { msg.textContent = `저장 못 함(${e.message || '연결 안 됨'}) — 화면은 고친 값으로 셈 · 다시 「저장」`; }
 }
 function setRead(el) {
@@ -1108,7 +1113,7 @@ const TPL = `
         </div>
         <div class="dt-pnl" id="dt-pnl"><div id="dt-pnl-sum">—</div>
           <!-- 셈 칸 — 매수 · 매도 좌우 두 칸(11-20 재권님 「매수 매도를 나눠서 좌우로 칸 나눠줄래?」 → 그림에 「응 맞아」) · 스타일은 이 칸에만 인라인(strategy.css 에 남의 미커밋이 있음) -->
-          <div class="dt-set" id="dt-set" aria-label="셈 칸 — 넣으면 저장되고 바로 다시 셈">
+          <div class="dt-set" id="dt-set" aria-label="셈 칸 — 고치면 화면만 다시 셈 · 「저장」 을 눌러야 남음">
             <div style="display:flex;justify-content:flex-end;align-items:baseline;gap:8px"><span id="dt-set-msg" class="rl-sug"></span> <button type="button" class="kh-chip" data-setsave>저장</button> <button type="button" class="kh-chip" data-reset>기본값으로</button></div>
             <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:stretch;margin:4px 0">
               <!-- 종목 차례 칸 — 매수 왼쪽(11-23 재권님 「단타 창의 매수 왼쪽에 그 룰을 적어주고 내가 수정하면 거기에 맞게 종목순위 바뀌게 해야할거같아」 → 「이거를 옆에 점수로 넣을수 있게하고 점수가 높은게 순위가 높게 해줘」 → (가))
