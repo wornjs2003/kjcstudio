@@ -87,7 +87,7 @@ import heatmap         # 첫 화면 시장 지도 — 칸 넓이 = 시가총액 
 import flow_board       # 수급 정리판 — 투자자 갈래별 순매수(오늘 · 날마다 · 상위 종목)를 한 주소로 · /api/kis/flow-board(2026-11-04 · server/flow_board.py)
 import open_rise        # 초반상승 — 정규장 첫 5분봉이 시가보다 오른 종목 · 실시간 순위 「초반상승」 칩 · /api/kis/open-rise(2026-11-11 · server/open_rise.py)
 import rescan           # 지금검색 — 관심 아래 칩 룰을 누를 때 다시 셈 · /api/kis/rescan(2026-11-11 · server/rescan.py)
-import vol_chip         # 단타 칩 「거래량급증」 — 거래 비율 · 전일 동시간 누적 대비 · /api/kis/vol-chip(2026-11-23 · server/vol_chip.py)
+import vol_chip         # 단타 칩 「거래비율」 · 「거래비율급증」 — 거래 비율 · 그 전날 같은 시각 대비 · /api/kis/vol-chip(2026-11-23 · server/vol_chip.py)
 import chip_rules       # 관심 아래 칩 룰 값 한 곳 · /api/kis/chip-rules(2026-11-20 · server/chip_rules.py)
 import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 순위 「프리장」 칩 · /api/kis/pre-flow(2026-11-05 · server/pre_flow.py)
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
@@ -10745,7 +10745,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return
 
             if route == "vol-chip":
-                # 단타 칩 「거래량급증」 — 거래 비율(turn) ≥ turnPct 또는 전일 동시간 누적 대비 ≥ prevSamePct (server/vol_chip.py · 2026-11-23)
+                # 단타 칩 「거래비율」(turn ≥ turnPct) · 「거래비율급증」(turnPrevPct ≥ turnPrevPct) — 따로 붙는다 (server/vol_chip.py · 2026-11-23)
                 # 1분 칸(turnover_slot)은 8765 만 쌓는다 — 상류가 있는 서버(메인 8764 · 세션)는 8765 것을 그대로 넘긴다(dt-list 와 같은 꼴)
                 base = upstream_base()
                 if base:
@@ -10762,11 +10762,11 @@ class Handler(SimpleHTTPRequestHandler):
                         return
                 d, at = vol_chip.hits(sys.modules[__name__], cfg)
                 self._send_json({"ok": True, "data": d["rows"],
-                                 "meta": {k: d[k] for k in ("candidates", "quoted", "etfOut", "floatKnown", "slot", "prev1m", "turnPct", "prevSamePct", "capMinEok", "at")}
-                                 | {"cacheTtl": vol_chip.CACHE_TTL, "unit": "vol 주 · turn · prevSamePct % · floatCap 억원",
-                                    "note": "줄은 등락률 큰 순 · by 가 걸린 셈(turn 거래 비율 · prev 어제 같은 시각 대비) · 못 잰 칸 null · "
-                                            "turn 은 거래 비율(누적 거래대금 ÷ 풀린 시가총액 · 단타 판 칸과 같은 셈) · prevSamePct 는 전일 동시간 누적 대비 — 지금 누적 ÷ 어제 같은 분(slot)까지 누적(prevSrc 1m · 1분 바퀴 기록) · "
-                                            "그 기록이 아직 없는 날만 정규장 5분봉 끝난 봉(upto)까지 오늘 ÷ 어제(prevSrc 5m) · prev1m 은 어제 1분 기록이 있는 종목 수"}})
+                                 "meta": {k: d[k] for k in ("candidates", "quoted", "etfOut", "floatKnown", "slot", "prev1m", "turnPct", "turnPrevPct", "capMinEok", "at")}
+                                 | {"cacheTtl": vol_chip.CACHE_TTL, "chips": list(vol_chip.CHIPS), "unit": "vol 주 · turn · turnPrevPct % · floatCap 억원",
+                                    "note": "줄은 등락률 큰 순 · chips 가 걸린 칩(거래비율 · 거래비율급증 — 따로) · 못 잰 칸 null · "
+                                            "turn 은 거래 비율(누적 거래대금 ÷ 풀린 시가총액 · 단타 판 칸과 같은 셈) · turnPrevPct 는 거래 비율 전날 대비 — 지금 거래 비율 ÷ 전날 같은 1분 칸(slot)까지 거래 비율(turnPrevSrc 1m) · "
+                                            "그 칸이 없는 날은 정규장 5분봉 끝난 봉(upto)까지 거래량 비로 어림(turnPrevSrc 5m) · prev1m 은 전날 1분 거래량 기록이 있는 종목 수"}})
                 return
 
             if route == "pre-last":
