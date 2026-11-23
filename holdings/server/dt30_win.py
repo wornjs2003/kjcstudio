@@ -213,62 +213,71 @@ def _cut_time(at, mins):
     return "%02d%02d" % (r // 60, r % 60)
 
 
-def _sell_bars(r, end, S):
-    """봉 줄(rows[].bars)로 파는 값과 까닭 — 손절 · 고점은 봉에서 처음 닿은 때 · 꺾임 · 시각 미달 · 횡보 · 매도 시각은 30분 칸 그대로(시황분석1 화면과 같은 셈 · 11-23 19:4x 합의).
-        손절   봉 저가 ≤ 매수가 × (1 + 손절%) → 손절가(봉 시가가 이미 밑이면 시가)
-        고점   그 앞 봉들의 고가 중 가장 높은 값(매수가보다 높을 때) × (1 − 고점%) 에 저가가 닿으면 그 값(시가가 이미 밑이면 시가)
-        한 봉에서 둘 다 닿으면 손절 먼저(나쁜 쪽) · 30분 칸은 그 시각 봉이 시작될 때 먼저 본다
-    재권님 「매도타점 정확히 계산해」(11-23 19:1x) · 「손절이 2%가 넘는건 이유가 뭐지?」(19:4x)."""
-    px, buy, b_at = r.get("px") or {}, r.get("buy"), _hm(r.get("buyAt"))
+def sell_bar():
+    """매도 셈 봉 길이 — 셈 칸 rules.dt30.set.sellBar 「1m」 · 「5m」 · 「30m」(없거나 틀리면 「5m」) · 화면과 같은 칸 한 곳.
+    재권님 「꺽임 시가미달 횡보 매도시각도 1분봉으로」 → 「매도타이밍은 5분봉으로 하자」 → 「1분봉과 5분봉을 선택할수 있게 해줘 30분봉도」(11-23 20:1x · 시황분석1 창 a66a940)."""
+    v = _set().get("sellBar")
+    return v if v in ("1m", "5m", "30m") else "5m"
+
+
+def _bars_step(per, bs, step):
+    """봉을 step 분 봉으로 — 1분봉을 5분씩 묶음(시가 첫 · 고가 최대 · 저가 최소 · 종가 끝 · 봉 시작 = 분을 step 으로 내림) · 이미 그 길이 이상이면 그대로."""
+    have = 1 if per == "1m" else dt30.BAR_MIN
+    if step <= have:
+        return bs
+    out = {}
+    for t, o, h, l, c in bs:
+        m = int(t[:2]) * 60 + int(t[3:])
+        k = "%02d:%02d" % divmod(m // step * step, 60)
+        g = out.get(k)
+        out[k] = [k, o, h, l, c] if g is None else [k, g[1], max(g[2], h), min(g[3], l), c]
+    return [out[k] for k in sorted(out)]
+
+
+def _sell_bars(r, end, S, per, step):
+    """봉으로 파는 값과 까닭 — 화면 sellBars 와 같은 셈(시황분석1 a66a940 · 11-23 20:1x):
+        ① 산 시각(HHMM)이 든 봉과 그 앞 봉은 뺀다 — 매수가가 그 봉 종가라 그 봉 저가는 사기 전 값
+        ② 봉마다 차례로 — 봉 시작 ≥ 매도 시각 → 그 봉 시가 「매도 시각」 · 손절(저가 ≤ 매수가 × (1 + 손절%) → 시가가 밑이면 시가 아니면 손절가) ·
+           고점(앞 봉 고가 최고 > 매수가 · 저가 ≤ 최고 × (1 − 고점%) → 같은 꼴) · 꺾임(turnBy ≠ peak · 앞 봉 종가 > 매수가 · 종가 ÷ 앞 종가 − 1 < −꺾임% → 종가) ·
+           미달(산 시각 + cutMin 반올림 시각 ≤ 봉 끝 인 첫 봉 · 종가 % ≤ cutPct → 종가) · 횡보(같은 꼴 flatMin · |%| ≤ flatPct)
+        ③ 끝까지 안 걸리면 마지막 봉 종가 「매도 시각」"""
+    buy, b_at = r.get("buy"), _hm(r.get("buyAt"))
     stop, turnby, trail = S.get("stop"), S.get("turnBy") or "both", S.get("trail")
     stop_px = buy * (1 + float(stop) / 100) if stop is not None else None
     tr = float(trail) if S.get("turn") and turnby != "prev" and trail is not None else None
+    tp = -float(S.get("turnPct") or 0) if S.get("turn") and turnby != "peak" else None
     cut_hm = _cut_time(b_at, S.get("cutMin")) if S.get("cut") and S.get("cutPct") is not None else ""
     flat_hm = _cut_time(b_at, S.get("flatMin")) if S.get("flat") and S.get("flatMin") is not None and S.get("flatPct") is not None else ""
-    slots = [k for k in sorted(px, key=_hm) if b_at < _hm(k) <= end and px[k] is not None]
-    st = {"prev": None, "cut": False, "flat": False}
-
-    def slot(k):
-        v = px[k]
-        p = (v / buy - 1) * 100
-        if S.get("turn") and turnby != "peak" and st["prev"] is not None and st["prev"] > 0 and ((100 + p) / (100 + st["prev"]) - 1) * 100 < -float(S.get("turnPct") or 0):
-            return v, "꺾임"
-        if cut_hm and not st["cut"] and _hm(k) >= cut_hm:
-            st["cut"] = True
-            if p <= float(S.get("cutPct")):
-                return v, "미달"
-        if flat_hm and not st["flat"] and _hm(k) >= flat_hm:
-            st["flat"] = True
-            if abs(p) <= float(S.get("flatPct")):
-                return v, "횡보"
-        st["prev"] = p
-        return None
-
-    si, peak = 0, None
-    for t, o, h, l, c in r.get("bars") or []:
-        t = t.replace(":", "")
-        if t >= end:
-            break
-        if b_at and t < b_at:
-            continue                                   # 산 분 앞 봉은 안 봄(화면 sellBars 와 같게 · 줄의 봉이 다른 산 시각으로 붙었어도 · 시황분석1 11-23)
-        while si < len(slots) and _hm(slots[si]) <= t:
-            got = slot(slots[si])
-            si += 1
-            if got:
-                return got
+    cut_done = flat_done = False
+    peak = prev_c = last = None
+    for t, o, h, l, c in _bars_step(per, r.get("bars") or [], step):
+        hm = t.replace(":", "")
+        m = int(hm[:2]) * 60 + int(hm[2:])
+        if b_at and hm <= b_at < "%02d%02d" % divmod(m + step, 60) or (b_at and hm < b_at):
+            continue                                   # ① 산 시각이 든 봉 · 그 앞 봉
+        if hm >= end:
+            return o, "매도 시각"
         if stop_px is not None and l <= stop_px:
             return (o if o < stop_px else round(stop_px, 2)), "손절"
         if tr is not None and peak is not None and peak > buy:
             line = peak * (1 - tr / 100)
             if l <= line:
                 return (o if o < line else round(line, 2)), "고점"
+        if tp is not None and prev_c is not None and prev_c > buy and (c / prev_c - 1) * 100 < tp:
+            return c, "꺾임"
+        e = "%02d%02d" % divmod(m + step, 60)          # 봉 끝
+        p = (c / buy - 1) * 100
+        if cut_hm and not cut_done and cut_hm <= e:
+            cut_done = True
+            if p <= float(S.get("cutPct")):
+                return c, "미달"
+        if flat_hm and not flat_done and flat_hm <= e:
+            flat_done = True
+            if abs(p) <= float(S.get("flatPct")):
+                return c, "횡보"
         peak = h if peak is None else max(peak, h)
-    while si < len(slots):
-        got = slot(slots[si])
-        si += 1
-        if got:
-            return got
-    return (px[slots[-1]] if slots else None), "매도 시각"
+        prev_c, last = c, c
+    return last, "매도 시각"
 
 
 def sell_of(r, end, S=None):
@@ -279,8 +288,12 @@ def sell_of(r, end, S=None):
     if not px:
         return r.get("sell"), "옛 줄"
     S = S or sell_rule()
-    if r.get("bars") and r.get("buy"):
-        return _sell_bars(r, end, S)                   # 봉 줄이 있으면 봉으로(손절 · 고점) — 없으면 아래 30분 칸 셈
+    sb = S.get("sellBar") if S.get("sellBar") in ("1m", "5m", "30m") else sell_bar()
+    per = r.get("_barPer") or r.get("barSrc")
+    if sb != "30m" and r.get("bars") and r.get("buy") and per:
+        out = _sell_bars(r, end, S, per, 1 if sb == "1m" else 5)   # 봉으로 — 1분봉이 없는 날 「1m」 이면 5분봉 그대로
+        if out[0] is not None:
+            return out
     buy, b_at = r.get("buy"), _hm(r.get("buyAt"))
     ks = [k for k in sorted(px, key=_hm) if _hm(k) <= end]
     if not buy:
@@ -380,8 +393,7 @@ def summary(proxy, days=DAYS_DEFAULT):
             if bp["at"].replace(":", "") >= end:
                 continue                               # 매도 시각보다 늦게(같은 때 포함) 산 것은 안 산 것 — 화면 셈과 같게(재권님 「가」 11-20)
             r["buy"], r["buyAt"], r["chips"] = bp["px"], bp["at"], dt30.chips930(r, r["chipTime"], until)
-            per, bs = bars.get(r["code"], (None, []))
-            r["bars"] = dt30.bars_after(per, bs, bp["at"])
+            r["_barPer"], r["bars"] = bars.get(r["code"], (None, []))   # 그날 봉 그대로 — 산 봉 · 앞 봉 빼기는 _sell_bars 가(화면과 같게)
             r["n"] = len(set(r["chips"]) & set(dt30.ov_chips()))
             r["sell"], why = sell_of(r, end, rule)     # 매도 룰 — 부를 때 셈(셈 칸을 바꾸면 지난 날에도 바로 든다 · 수수료와 같은 길)
             whys[why] = whys.get(why, 0) + 1
@@ -414,7 +426,7 @@ def summary(proxy, days=DAYS_DEFAULT):
             "fee": fee, "feeNote": None if fee is not None else "빈칸 — 수수료 안 셈", "feeSides": "팔 때만",
             "tax": TAX, "taxNote": "팔 때만 · 판 값 × (거래세 + 농특세) · 시장 모르면 못 잼", "ret": "세후 %",
             "buy": "사는 셈 한 곳(dt30.buy_point) — 칩은 %02d:%02d 까지 · 칩 %d개 찬 순간 · 9시 1분 이하면 9시 1분 값 · 1~5분 안이면 그 분 값 · 그 뒤 든 때 값 · 아니면 다음 30분 칸 값" % (dt30.CHIP_UNTIL + (need,)),
-            "minChips": need, "chipUntil": "%02d:%02d" % dt30.CHIP_UNTIL, "buyLate930": until != dt30.CHIP_UNTIL, "notBought": skipped, "sell": end, "sellDef": SELL_AT, "sellNote": "매도 룰 — 단타 판 셈 칸 rules.dt30.set(화면과 같은 칸 · 빈 칸은 sellRule 의 기본) · 30분 칸마다 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 중 처음 걸린 칸 값에 팖 · 안 걸리면 매도 시각(endAt · 빈칸이면 판 끝 sellDef) 이하 마지막 값 있는 칸 · 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것(셈에서 뺌) · 불타기는 안 듦", "sellRule": rule, "sellWhy": whys, "chipLateNote": "chipLate — 칩마다 산 뒤(판에 든 때 뒤)에 붙은 줄만 따로 셈 · chip 칸은 다 셈(재권님 「나」 11-23) · 칩 시각 chipAt 을 모르는 옛 판은 안 듦", "bigPct": BIG_PCT, "topDay": TOP_DAY,
+            "minChips": need, "chipUntil": "%02d:%02d" % dt30.CHIP_UNTIL, "buyLate930": until != dt30.CHIP_UNTIL, "sellBar": sell_bar(), "notBought": skipped, "sell": end, "sellDef": SELL_AT, "sellNote": "매도 룰 — 단타 판 셈 칸 rules.dt30.set(화면과 같은 칸 · 빈 칸은 sellRule 의 기본) · 30분 칸마다 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 중 처음 걸린 칸 값에 팖 · 안 걸리면 매도 시각(endAt · 빈칸이면 판 끝 sellDef) 이하 마지막 값 있는 칸 · 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것(셈에서 뺌) · 불타기는 안 듦", "sellRule": rule, "sellWhy": whys, "chipLateNote": "chipLate — 칩마다 산 뒤(판에 든 때 뒤)에 붙은 줄만 따로 셈 · chip 칸은 다 셈(재권님 「나」 11-23) · 칩 시각 chipAt 을 모르는 옛 판은 안 듦", "bigPct": BIG_PCT, "topDay": TOP_DAY,
             "filledAt": _status["at"], "error": _status["error"]}
     return out, meta
 
