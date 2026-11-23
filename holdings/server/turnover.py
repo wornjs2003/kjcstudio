@@ -95,17 +95,17 @@ def prev_slot_vol(proxy, codes, day, slot):
 
 
 def day_slot_vol(proxy, codes, day, slot):
-    """그날 slot 이하 가장 늦은 칸의 누적 거래량 {code: 주} — 정규장이 끝난 뒤 「오늘」 쪽을 마감 칸에 묶을 때(vol_chip · qa 11-23 — 장 뒤 통합 거래량이 분자에만 쌓이던 것)."""
+    """그날 slot 이하 가장 늦은 칸 {code: (누적 거래량 주, 누적 거래대금, 가격)} — 정규장이 끝난 뒤 「오늘」 쪽을 마감 칸에 묶을 때(vol_chip · qa 11-23 — 장 뒤 통합 거래가 분자에만 쌓이던 것)."""
     if not codes:
         return {}
     q = ",".join("?" * len(codes))
     try:
         with proxy.db_conn() as conn:
-            got = conn.execute("SELECT code, vol FROM turnover_slot WHERE day = ? AND slot <= ? AND vol IS NOT NULL AND code IN (%s) ORDER BY slot"
+            got = conn.execute("SELECT code, vol, value, price FROM turnover_slot WHERE day = ? AND slot <= ? AND vol IS NOT NULL AND code IN (%s) ORDER BY slot"
                                % q, [day, slot] + list(codes)).fetchall()
     except Exception:
         return {}
-    return {c: v for c, v in got}
+    return {c: (v, va, p) for c, v, va, p in got}
 
 
 def _prev_pct(turn, pv, fl):

@@ -10691,10 +10691,10 @@ class Handler(SimpleHTTPRequestHandler):
                         return
                 d, at = vol_chip.hits(sys.modules[__name__], cfg)
                 self._send_json({"ok": True, "data": d["rows"],
-                                 "meta": {k: d[k] for k in ("candidates", "quoted", "etfOut", "floatKnown", "slot", "prev1m", "floatPct", "prevSamePct", "capMinEok", "at")}
-                                 | {"cacheTtl": vol_chip.CACHE_TTL, "unit": "vol 주 · floatPct · prevSamePct %",
-                                    "note": "줄은 등락률 큰 순 · by 가 걸린 셈(float 풀린 주식수 대비 · prev 어제 같은 시각 대비) · 못 잰 칸 null · "
-                                            "floatPct 는 통합 누적 거래량 ÷ 풀린 주식수 · prevSamePct 는 전일 동시간 누적 대비 — 지금 누적 ÷ 어제 같은 분(slot)까지 누적(prevSrc 1m · 1분 바퀴 기록) · "
+                                 "meta": {k: d[k] for k in ("candidates", "quoted", "etfOut", "floatKnown", "slot", "prev1m", "turnPct", "prevSamePct", "capMinEok", "at")}
+                                 | {"cacheTtl": vol_chip.CACHE_TTL, "unit": "vol 주 · turn · prevSamePct % · floatCap 억원",
+                                    "note": "줄은 등락률 큰 순 · by 가 걸린 셈(turn 거래 비율 · prev 어제 같은 시각 대비) · 못 잰 칸 null · "
+                                            "turn 은 거래 비율(누적 거래대금 ÷ 풀린 시가총액 · 단타 판 칸과 같은 셈) · prevSamePct 는 전일 동시간 누적 대비 — 지금 누적 ÷ 어제 같은 분(slot)까지 누적(prevSrc 1m · 1분 바퀴 기록) · "
                                             "그 기록이 아직 없는 날만 정규장 5분봉 끝난 봉(upto)까지 오늘 ÷ 어제(prevSrc 5m) · prev1m 은 어제 1분 기록이 있는 종목 수"}})
                 return
 

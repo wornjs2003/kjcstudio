@@ -7,8 +7,8 @@
 
     대상     순위 목록(감시 종목) 중 시가총액 칩 룰 순위.capMinEok 이상 · ETF 뺌(open_rise._universe 와 같은 가름)
     값       vol        지금 누적 거래량(주) — 묶음 시세(fetch_quotes_multi) 캐시를 함께 탄다(풀린 시총 한 바퀴 · 장외 칩이 이미 받은 값)
-             floatShares 풀린 주식수 — company_profile.floats()(발행 × 유동비율 · 우선주 없음)
-             floatPct   vol ÷ floatShares × 100
+             turn       「거래 비율」(%) = 누적 거래대금 ÷ 풀린 시가총액 × 100 — 단타 판 칸과 같은 셈 한 곳(turnover.calc) · 재권님 「나 로 해」(11-23 11:4x ·
+                        개념정의 창 11:2x 「풀린 주식수 대비 거래량을 새로 두지 않고 거래 비율 하나로」 와 맞춤 — 처음 판은 거래량 ÷ 풀린 주식수를 따로 셌다)
              prevSamePct 전일 동시간 누적 대비(%) = 지금 누적 거래량 ÷ 어제 같은 분까지 누적 거래량 × 100 — 재권님 「대비와 거래량 기준은 전일 동시간 누적이야」
                         · 「9시1분이면 그시간대에 대한 값이여야 하고 9시 30분이면 그시간대여야해」(11-23 11:3x). 어제 값은 1분 바퀴가 쌓은
                         turnover_slot.vol(그 분의 통합 누적 · 오늘과 같은 시세 · 같은 자리) — prevSrc 「1m」
@@ -16,7 +16,7 @@
     장 뒤    정규장 마감(dt30._close_min) 뒤에는 오늘 쪽도 마감 칸 누적에 묶는다 — 지금 시세에는 장 뒤 거래가 더해져 분자만 커진다(qa 11-23)
     장 전    단타 판은 09:00 전(chips_now pre)에 이 칩을 안 부른다 — 그 앞에서 돌아간다
     어디서   1분 칸은 8765 만 쌓는다 — 다른 서버의 /api/kis/vol-chip 은 8765 것을 넘긴다 · 단타 목록도 8765 것(dt30.live)
-    걸림     floatPct ≥ 칩 룰 거래량.floatPct  **또는**  prevSamePct ≥ 칩 룰 거래량.prevSamePct
+    걸림     turn ≥ 칩 룰 거래량.turnPct  **또는**  prevSamePct ≥ 칩 룰 거래량.prevSamePct
     못 잼    풀린 주식수 · 어제 5분봉 · 오늘 끝난 5분봉이 없으면 그 칸은 None(0 아님) — 다른 칸으로만 가린다
     들고 있기 CACHE_TTL 초 — 단타 판 · 주소가 함께 쓴다. 감시 종목 전부를 다시 센다(「실시간으로 들고 있어야」)
 """
@@ -37,7 +37,7 @@ def build(proxy, cfg):
     import company_profile
     import open_rise
     cap_min = chip_rules.get("순위", "capMinEok")
-    f_pct = chip_rules.get("거래량", "floatPct")
+    t_pct = chip_rules.get("거래량", "turnPct")
     p_pct = chip_rules.get("거래량", "prevSamePct")
     uni, etf = open_rise._universe(proxy)
     cand = [u for u in uni if u["cap"] is not None and u["cap"] >= cap_min]
@@ -55,12 +55,14 @@ def build(proxy, cfg):
     rows, seen = [], 0
     for u in cand:
         q = quotes.get(u["code"]) or {}
-        vol = shut.get(u["code"]) if hm >= close else q.get("volume")   # 장 뒤 — 마감 칸 값(없으면 못 잼 · 지금 시세로 대신하지 않는다)
+        if hm >= close:                                  # 장 뒤 — 마감 칸 값(없으면 못 잼 · 지금 시세로 대신하지 않는다)
+            vol, value, price = shut.get(u["code"]) or (None, None, None)
+        else:
+            vol, value, price = q.get("volume"), q.get("value"), q.get("price")
         if vol is None:
             continue
         seen += 1
-        fs = fl.get(u["code"])
-        fp = round(vol / fs * 100, 2) if fs else None
+        fcap, turn = turnover.calc(price, value, fl.get(u["code"]))
         st, src = None, None
         pv = prev1.get(u["code"])
         if pv:
@@ -72,14 +74,14 @@ def build(proxy, cfg):
                 st = None
             sp = round(st["today"] / st["prev"] * 100) if st and st.get("today") is not None and st.get("prev") else None
             src = "5m" if sp is not None else None
-        by = [k for k, ok in (("float", fp is not None and fp >= f_pct), ("prev", sp is not None and sp >= p_pct)) if ok]
+        by = [k for k, ok in (("turn", turn is not None and turn >= t_pct), ("prev", sp is not None and sp >= p_pct)) if ok]
         if by:
             rows.append({"code": u["code"], "name": u["name"], "market": u["market"], "cap": u["cap"],
-                         "price": q.get("price"), "pct": q.get("pct"), "vol": vol, "floatShares": fs,
-                         "floatPct": fp, "prevSamePct": sp, "prevVol": pv, "prevSrc": src, "upto": slot if src == "1m" else (st.get("upto") if st else None), "by": by})
+                         "price": q.get("price"), "pct": q.get("pct"), "vol": vol, "floatCap": fcap,
+                         "turn": turn, "prevSamePct": sp, "prevVol": pv, "prevSrc": src, "upto": slot if src == "1m" else (st.get("upto") if st else None), "by": by})
     rows.sort(key=lambda r: (-(r["pct"] if r["pct"] is not None else -999), -(r["cap"] or 0)))
     return {"rows": rows, "candidates": len(cand), "quoted": seen, "etfOut": etf, "floatKnown": sum(1 for u in cand if fl.get(u["code"])),
-            "slot": slot, "prev1m": len(prev1), "floatPct": f_pct, "prevSamePct": p_pct, "capMinEok": cap_min,
+            "slot": slot, "prev1m": len(prev1), "turnPct": t_pct, "prevSamePct": p_pct, "capMinEok": cap_min,
             "at": datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")}
 
 
