@@ -37,6 +37,9 @@ import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+KEEP_TRADE_DAYS = 250        # 쌓는 자료의 보관 거래일(1년) 한 곳 — 단타 판(dt30.DAYS_KEEP) · 봉 1분 · 5분 · 테마 구간 · 섹터 사진이 가져다 씀
+                             # (holdings/CLAUDE.md 「봉은 기간마다 정한 길이만 남긴다」 · 11-23 재권님 「전부다 1년을 쌓는다」 · 늘릴 때 이 값만)
+
 KST = timezone(timedelta(hours=9))
 PRE_OPEN, PRE_CLOSE = "0800", "0850"
 REG_OPEN, REG_CLOSE = "0900", "1530"

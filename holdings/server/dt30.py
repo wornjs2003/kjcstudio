@@ -53,6 +53,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import chip_rules      # 칩 목록 · 문턱 한 곳(11-20)
+import market_hours    # 휴장 셈 · 보관 거래일(KEEP_TRADE_DAYS) 한 곳
 import dart            # 시가총액 문턱(UNIVERSE_MIN_CAP_EOK) 한 곳 — 모듈을 읽을 때 쓴다(dart 는 이 파일을 안 부른다)
 
 KST = timezone(timedelta(hours=9))
@@ -76,7 +77,7 @@ PRE_WAIT = ("초반상승",)   # 09:00 전에는 값이 날 수 없는 칩 — �
 # (11-18 17:2x · 시황분석1 경유). 텔레그램 알림(intraday_alerts)은 정규장만 그대로 — 단타 판만 pre_vi_surge 로 따로 읽는다 · 매수 어림(외국계 창구 · 프로그램)도 안 부른다
 PAST_BUY_AT = (9, 1)         # 지난 날 다시 세기(rebuild)의 기준 시각 — 11-18 전 판 셈 그대로 둔다(지난 날을 10:30 기준으로 다시 세지 않는다 · 지시 밖)
 PAST_LATE = (9, 35)          # 〃 VI·급등 창 끝
-DAYS_KEEP = 250              # 판을 들고 있는 거래일 — 1년(11-20 재권님 「한달로 지정됬지만 1년으로 넓히고 점점 늘려갈수 있다」 · 그 전 30 「30일 추적」) · 늘릴 때 이 값만
+DAYS_KEEP = market_hours.KEEP_TRADE_DAYS   # 판을 들고 있는 거래일 — 1년(11-20 재권님 「한달로 지정됬지만 1년으로 넓히고 점점 늘려갈수 있다」 · 그 전 30) · 값은 market_hours 한 곳
 # 칩 목록 · 문턱 — 서버 표 한 곳(chip_rules · 룰 문서 rules.chips 가 있으면 그것 · 11-20 개발1 표 · 개발2 받기로) · 부를 때마다 지금 값
 def cap_min_eok():
     """시가총액 문턱(억원) — dart.rank_min_cap_eok() 한 곳(재권님 「3000으로 통일」 11-20)."""
