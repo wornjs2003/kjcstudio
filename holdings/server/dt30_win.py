@@ -261,12 +261,17 @@ def summary(proxy, days=DAYS_DEFAULT):
         else:
             g[0].append(v)
 
+    import dart
+    caps = {r["stock_code"]: r["market_cap"] for r in dart.universe_rows(None)}
+    small = lambda c: bool(caps) and (caps.get(c) is None or caps[c] < dt30.cap_min_eok())   # 감시 목록을 못 읽으면 안 거름
     daily, every, whys = [], [], {}
     for day, raw in got:
         rows = json.loads(raw)
         rets, miss, best = [], 0, []
         cut = _in_until(proxy, day, rule)
         for r in rows:
+            if small(r.get("code")):
+                continue                               # 시가총액 문턱 밖(감시 목록에 없거나 문턱 아래) — 재권님 「3천억 아래종목은 아예 고려대상이 아니야」(11-23) · 판 셈(dt30.drop_small)과 같게
             if str(r.get("buyAt") or "").replace(":", "")[:4] >= end:
                 continue                               # 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것 — 화면 셈과 같게(재권님 「가」 11-20 · 시황분석 화면)
             e = _in_ts(r)
