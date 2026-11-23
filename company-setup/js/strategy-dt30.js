@@ -542,8 +542,10 @@ function paint0(d) {
   }
   const shr = (a) => (a >= 1e4 ? `${(a / 1e4).toFixed(a >= 1e5 ? 0 : 1).replace(/\.0$/, '')}만` : a >= 1e3 ? `${Math.round(a / 1e3)}천` : String(a));   // 주
   const wonS = (a) => (a >= 1e8 ? `${(a / 1e8).toFixed(a >= 1e9 ? 0 : 1).replace(/\.0$/, '')}억` : a >= 1e4 ? `${Math.round(a / 1e4)}만` : String(a));   // 원
+  // 진행 중(창 문턱 밑 · 안 산 줄)도 그 시각 가격 · 처음 든 때 값 대비 % 를 보임(11-23 재권님 「다 보이게 해줘. 칩이랑 룰 체크해서 하면 다시 되야되는 종목들이야」) — 보기만 · 손익 · 평균 · 합계 셈(x.p)에는 안 듦
+  const pvOf = (r, t) => { if (buyOf(r) || !(Number(r.buy) > 0)) return null; const e = String(r.buyAt || '').replace(/:/g, '').slice(0, 4), v = Number((r.px || {})[t]); return (r.px || {})[t] == null || !Number.isFinite(v) || (e && hhmm(t) <= e) ? null : (v / Number(r.buy) - 1) * 100; };
   const cell = (x, k) => {
-    const v = x.p[k];
+    const v = x.p[k] != null ? x.p[k] : pvOf(x.r, times[k]);
     // 그 시각 가격을 % 위에 · 글씨는 검정(색은 아래 % 만) — 11-20 재권님 「등락률 위에 가격도 같이 보이게 해줘」 → 색을 넣어 보시고 「글씨는 그냥 검정으로 하자 보기 힘드네」
     const px = Number((x.r.px || {})[times[k]]);
     const pxT = v == null || !Number.isFinite(px) ? '' : `<span style="display: block; line-height: 1.25;">${num(px)}</span>`;
