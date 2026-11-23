@@ -94,6 +94,41 @@ VIEW_W, VIEW_H = 1600, 1000
 
 # 어디를 재나. 경로만 적고 **무엇을 잴지는 안 적는다**
 PAGES = ["index.html", "stock.html", "daily.html", "news.html"]
+
+
+def shared_pages():
+    """「거는 쪽이 둘 이상」 인 파일을 거는 화면 — `python3 tools/check-rules.py --shared` 가 그날 낸 목록에서 만든다(목록을 박지 않는다).
+
+    CLAUDE.md 「구역 밖에서 거는 파일은 「거는 쪽이 둘 이상인 파일」 이다」 의 셋째 검사(2026-11-23 재권님 「응」).
+    거는 쪽이 html 이면 그 화면 · js 면 그 js 를 (곧바로 · 한 다리 건너) 부르는 같은 구역 html. 저장소 맨 위 기준 경로를 낸다."""
+    out = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "check-rules.py"), "--shared"],
+                         capture_output=True, text=True, cwd=ROOT).stdout
+    users = sorted({ln.split("\t")[1].strip() for ln in out.splitlines() if "\t" in ln})
+    pages = set()
+    for u in users:
+        if u.endswith(".html"):
+            pages.add(u)
+            continue
+        zone = u.split("/")[0]
+        names = {os.path.basename(u)}
+        for _ in range(2):                         # 한 다리 건너 부르는 js 까지
+            more = set()
+            for dp, _, fs in os.walk(os.path.join(ROOT, zone)):
+                if "vendor" in dp:
+                    continue
+                for fn in fs:
+                    if not fn.endswith((".html", ".js")):
+                        continue
+                    p = os.path.join(dp, fn)
+                    try:
+                        txt = open(p, encoding="utf-8").read()
+                    except Exception:
+                        continue
+                    if any(n in txt for n in names):
+                        rel = os.path.relpath(p, ROOT).replace(os.sep, "/")
+                        (pages.add(rel) if fn.endswith(".html") else more.add(fn))
+            names |= more
+    return sorted(p for p in pages if not p.startswith("holdings/"))
 # 어느 서버를 재나. `--port` 로 바꾼다 — 세션마다 자기 포트가 있어서,
 # 8765 로 박아 두면 **세션 폴더 화면을 못 잰다** (2026-09-21 · 주식페이지_개발1).
 PORT_DEFAULT = 8765
@@ -540,6 +575,8 @@ def main():
     ap.add_argument("--save", action="store_true", help="지금 화면을 기준으로 삼는다")
     ap.add_argument("--port", type=int, default=PORT_DEFAULT,
                     help="어느 서버를 잴지 (기본 %d)" % PORT_DEFAULT)
+    ap.add_argument("--shared", action="store_true",
+                    help="홀딩스 네 화면 대신 「다른 구역 파일을 같이 쓰는 화면」 을 잰다 — 목록은 check-rules --shared 로 그날 만든다 · 기준 파일도 따로")
     ap.add_argument("--against", type=int, metavar="PORT",
                     help="기준 파일 대신 **다른 서버와 견준다** "
                          "(세션 폴더는 이쪽이 맞는 물음이다)")
@@ -547,7 +584,15 @@ def main():
 
     # **기준은 포트마다 따로 둔다.** 세션 폴더 화면과 메인 화면은 다른 것이라
     # 한 파일에 섞으면 서로를 어긋남으로 읽는다.
-    global BASE, BASELINE
+    global BASE, BASELINE, BASE_FMT, PAGES
+    if args.shared:
+        PAGES = shared_pages()
+        if not PAGES:
+            print("같이 쓰는 파일을 거는 화면이 없습니다(check-rules --shared 가 빈 목록) — 못 쟀다")
+            return 2
+        BASE_FMT = "http://localhost:%d/"
+        BASELINE = BASELINE.replace(".json", "-shared.json")
+        print("재는 화면 %d장 — %s" % (len(PAGES), " · ".join(PAGES)))
     BASE = BASE_FMT % args.port
     if args.port != PORT_DEFAULT:
         BASELINE = BASELINE.replace(".json", "-%d.json" % args.port)
