@@ -16,15 +16,18 @@
 
 메시지 꼴(서버 ↔ 주문 컴퓨터가 함께 읽는 한 곳 — 바꾸면 주문 컴퓨터 프로그램도 같이 바꾼다)
     서버 → 주문 컴퓨터   첫 줄 「[KJC 매수 목록] YYYY-MM-DD HH:MM:SS」 · 종목마다 한 줄
-                        BUY|<일지 번호>|<종목 코드>|<종목 이름>|<매수금액 원>|<보낸 시각 YYYYMMDDHHMMSS>|<서명 묶음>
+                        BUY|<일지 번호>|<종목 코드>|<종목 이름>|<매수금액 원>|<굳힘 가격 원>|<룰 판>|<보낸 시각 YYYYMMDDHHMMSS>|<서명 묶음>
+                        굳힘 가격 — 판 매수가(rows[].buy) · 주문 컴퓨터는 받은 순간 현재가가 이보다 룰 buyMaxUpPct % 넘게 높으면 안 삼(개념정의 크로스체크 ①)
+    서버 → 주문 컴퓨터   (룰) 룰 칸이 바뀔 때마다 · 매일 RULES_AT 에 한 번 — 첫 줄 「[KJC 룰] YYYY-MM-DD HH:MM:SS」
+                        RULES|<룰 판>|<열쇠=값;열쇠=값 …>|<보낸 시각>|<서명 묶음> — 주문 컴퓨터는 서명이 맞는 가장 최근 룰 판만 따른다(컴퓨터에서 룰 값을 따로 안 고침)
     서버 → 주문 컴퓨터   (매도) 판 매도 룰에 걸리면 종목마다 한 번 — 첫 줄 「[KJC 매도] YYYY-MM-DD HH:MM:SS」
                         SELL|<일지 번호>|<종목 코드>|<종목 이름>|<까닭>|<보낸 시각 YYYYMMDDHHMMSS>|<서명 묶음>
                         까닭 — 손절 · 꺾임 · 고점 · 미달 · 횡보 · 매도 시각(dt30_win.sell_of — 승률 표 · 단타 판 화면과 같은 셈 · 매수가는 판 매수가)
                         재권님 「가」(11-23 14:5x — 단타 판 매도 룰에 걸리면 서버가 슬랙으로 「팔아라」)
                         판 값은 30분 칸(dt30 times)마다 붙어 걸림도 그 칸에 안다 · 주문 컴퓨터는 가진 수량을 전부 판다
     주문 컴퓨터 → 서버   매도가 끝난 종목마다 한 줄(여러 줄 한 메시지도 됨)
-                        RESULT|<컴퓨터 이름>|<일지 번호>|<종목 코드>|<매수가>|<매도가>|<수량>|<시세차익 원>|<세금 원>|<매도 시각 YYYYMMDDHHMMSS>|<서명>
-                        못 산 종목은 RESULT|<이름>|<번호>|<코드>|-|-|0|0|0|<시각>|<서명> (수량 0 = 안 삼)
+                        RESULT|<컴퓨터 이름>|<일지 번호>|<종목 코드>|<매수가>|<매도가>|<수량>|<시세차익 원>|<세금 원>|<매도 시각 YYYYMMDDHHMMSS>|<까닭>|<서명>
+                        까닭 — 「매도 끝」 · 「못 삼: …」 · 「못 팖: 남은 N주 …」 처럼 한 줄(| · 줄바꿈 없음) · 못 산 종목은 매수가 · 매도가 - · 수량 0
     주문 컴퓨터 여럿     재권님 「주문 컴퓨터가 처음에는 하나지만 앞으로 많아질수 있다는 전제로 해야해」(11-23 15:0x)
                         같은 BUY · SELL 을 모든 컴퓨터가 함께 받고 각자 자기 계좌로 산다 · 결과는 (일지 번호, 컴퓨터 이름) 마다 한 줄(trade_result)
     서명            마지막 「|」 앞까지 글(앞뒤 빈칸 뺌)을 HMAC-SHA256 한 16진 64자 — 재권님 「보완도 엄청 중요한데」(11-23 14:4x)
@@ -40,10 +43,11 @@
     숫자는 쉼표 없이 · 금액은 원 · 칸이 모자라거나 숫자가 아니면 그 줄은 「못 읽음」 으로 일지에 남기고 값은 안 적는다
 
 켜기 · 지킴
-    SEND           슬랙으로 보내는 스위치 — False 면 판도 안 읽고 일지 줄도 안 만든다 · 켜기는 재권님 지시(되돌릴 수 없는 발송)
-    설정 문서       docstore 「trade-set」 {amountWon: 종목마다 매수금액(원) | null, stop: 전체 멈춤 true/false} — 화면이 고친다
-                   amountWon 이 비었거나 0 이하 · stop 이 true 면 매수 목록을 보내지 않는다(그 까닭을 일지 상태에 적음) ·
-                   stop 은 새 매수만 막고 산 종목의 매도 신호는 계속 보낸다(산 것이 안 팔리지 않게 · qa 덧 11-23 · 재권님께 여쭈는 중)
+    SEND           슬랙으로 보내는 스위치 — False 면 판도 안 읽고 일지 줄도 안 만든다 · 룰 줄도 안 보냄 · 켜기는 재권님 지시(되돌릴 수 없는 발송)
+    룰 칸           docstore 「trade-set」 — 열쇠 · 뜻 · 단위 · 범위는 RULES 한 곳 · 「API」 화면 맨 위 ( ) 칸이 고친다 ·
+                   재권님 「미수 매도 이거의 룰은 계속 개선할 수 있으니 api에 룰 개선 가능하도록 () 만들어놔. 거기에 먼저 정리되어야해」(11-23 15:1x)
+                   룰 판 = 그 문서의 updatedAt — 매매 로그 · 일지에 남겨 룰을 고친 앞뒤를 견준다 · 칸이 하나라도 비거나 범위 밖이면 매수 목록을 안 보낸다
+                   전체 멈춤 칸은 없앴다 — 재권님 「매수와 매도를 종목별로 한번씩만 걸거니 멈춤은 없어도 돼」(15:1x)
     비밀           비밀 파일(secrets_guard.secrets_path() 한 벌 — 지금 ~/.kjc 의 것 · 서버가 load_secrets 로 읽음)의 「slack」 칸 — webhook_url(보내기) · bot_token(읽기 · channels:history) · channel_id(읽을 채널) ·
                    pcs({컴퓨터 이름: 서명 열쇠} — 그 컴퓨터와 같은 값 · 슬랙 · 메시지 · 저장소에 안 둔다 · 이름은 영문 · 숫자 · - · _) · pcs 가 비면 보내지도 받지도 않는다
                    열쇠는 무작위 32바이트 16진 64자만 받는다 — 만드는 명령: python3 -c "import secrets; print(secrets.token_hex(32))" (꼴이 틀린 열쇠의 컴퓨터는 없는 것으로 봄)
@@ -69,6 +73,15 @@ PICK_N = 3                    # 보낼 종목 수 — 재권님 「지금은 단
 READ_SEC = 5                  # 슬랙 채널 읽는 간격(초) — 재권님 「메세지가 가면 바로 읽을수 있으면」(11-23 14:4x) · conversations.history 는 분당 50회 넘게 되는 등급(Tier 3 · 슬랙 문서) · 12회/분
 READ_FROM, READ_TO = (8, 0), (21, 0)   # 평일 이 사이에만 읽는다 — 매도 결과는 장중 · 넥스트레이드 끝(20:00) 뒤 조금까지
 SET_DOC = "trade-set"
+RULES_AT = (8, 50)            # 매일 룰 줄을 한 번 보내는 시각 — 그날 처음 켠 주문 컴퓨터도 장 전에 룰을 받게
+# 룰 칸 — 열쇠: (이름, 단위, 꼴, 아래, 위, 설명). 화면은 이것을 받아 칸을 그린다(trade-journal meta.rules) · 칸을 더하면 여기 한 줄
+RULES = {
+    "amountWon":    ("종목마다 매수금액", "원", "int", 10000, 1000000000, "이 금액 ÷ 현재가 = 살 수량(소수 버림) · 0주면 못 삼"),
+    "buyRetrySec":  ("매수 다시 넣는 간격", "초", "int", 1, 600, "시장가로 다 안 사졌으면 남은 수량을 이 간격마다 다시 시장가로"),
+    "buyMaxUpPct":  ("매수 그만두는 오름", "%", "num", 0, 30, "현재가가 굳힘 가격보다 이만큼 넘게 높으면 새로 안 넣음(산 만큼만) · 처음 받을 때도 같은 선"),
+    "buyMaxMin":    ("매수 그만두는 시간", "분", "int", 1, 390, "첫 매수 주문 뒤 이만큼 지나면 남은 것은 안 삼(산 만큼만)"),
+    "sellRetrySec": ("매도 다시 넣는 간격", "초", "int", 1, 600, "안 팔린 수량을 이 간격마다 다시 시장가로 · 15:20 뒤엔 장 끝 동시호가 · 그래도 남으면 다음 거래일 09:00"),
+}
 MAX_PAGES = 10                # 한 바퀴에 읽는 쪽 수(쪽마다 200)
 SELL_RETRY_SEC = 60          # 슬랙이 매도 신호를 거절했을 때 다시 보내기까지(초)
 _sell_hold = {"until": 0.0}
@@ -78,7 +91,8 @@ SLACK_HISTORY = "https://slack.com/api/conversations.history"
 _SCHEMA = ("CREATE TABLE IF NOT EXISTS trade_journal (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, rank INTEGER, code TEXT, name TEXT, "
            "amount_won INTEGER, made_at TEXT, sent_at TEXT, status TEXT, note TEXT, buy_px REAL, sell_px REAL, qty INTEGER, profit_won REAL, "
            "tax_won REAL, sell_at TEXT, result_at TEXT, result_raw TEXT)")
-_ADD_COLS = (("sell_sent_at", "TEXT"), ("sell_why", "TEXT"))   # 매도 신호 칸(11-23 · 옛 표에는 더한다)
+_ADD_COLS = (("sell_sent_at", "TEXT"), ("sell_why", "TEXT"), ("lock_px", "REAL"), ("rule_ver", "TEXT"))   # 매도 신호 · 굳힘 가격 · 룰 판 칸(11-23 · 옛 표에는 더한다)
+_ADD_RESULT_COLS = (("why", "TEXT"),)
 _RESULT = ("CREATE TABLE IF NOT EXISTS trade_result (journal_id INTEGER NOT NULL, pc TEXT NOT NULL, buy_px REAL, sell_px REAL, qty INTEGER, "
            "profit_won REAL, tax_won REAL, sell_at TEXT, result_at TEXT, raw TEXT, PRIMARY KEY (journal_id, pc))")   # 컴퓨터마다 결과 한 줄 — 지우지 않음
 _PC = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
@@ -92,17 +106,32 @@ def _now():
     return datetime.now(KST)
 
 
+def _rule_val(k, v):
+    _, _, kind, lo, hi, _ = RULES[k]
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    v = int(v) if kind == "int" and float(v).is_integer() else (float(v) if kind == "num" else None)
+    return v if v is not None and lo <= v <= hi else None
+
+
 def settings():
-    """{amountWon: int | None, stop: bool} — 문서가 없거나 못 읽으면 amountWon None(보내지 않음)."""
+    """룰 칸 값 {열쇠: 값 | None} + ver(룰 판 = 문서 updatedAt) · missing(빈 · 범위 밖 칸) — 못 읽으면 다 None(보내지 않음)."""
     try:
         import docstore
         d = docstore.read_doc(SET_DOC) or {}
         d = d.get("data", d) if isinstance(d, dict) else {}
+        ver = docstore.doc_updated_at(SET_DOC)
     except Exception:
-        d = {}
-    a = d.get("amountWon")
-    a = int(a) if isinstance(a, (int, float)) and not isinstance(a, bool) and a > 0 else None
-    return {"amountWon": a, "stop": d.get("stop") is True}
+        d, ver = {}, None
+    out = {k: _rule_val(k, d.get(k)) for k in RULES}
+    out["ver"] = str(ver) if ver else None
+    out["missing"] = [k for k in RULES if out[k] is None]
+    return out
+
+
+def rules_meta():
+    """화면이 칸을 그릴 재료 — [{key, name, unit, kind, min, max, desc}]."""
+    return [{"key": k, "name": n, "unit": u, "kind": t, "min": lo, "max": hi, "desc": de} for k, (n, u, t, lo, hi, de) in RULES.items()]
 
 
 def _slack(proxy):
@@ -146,6 +175,10 @@ def _db(proxy, fn):
         for c, t in _ADD_COLS:
             if c not in have:
                 conn.execute("ALTER TABLE trade_journal ADD COLUMN %s %s" % (c, t))
+        have = {r[1] for r in conn.execute("PRAGMA table_info(trade_result)")}
+        for c, t in _ADD_RESULT_COLS:
+            if c not in have:
+                conn.execute("ALTER TABLE trade_result ADD COLUMN %s %s" % (c, t))
         return fn(conn)
 
 
@@ -208,22 +241,27 @@ def send_today(proxy, day):
         nob = 1 in dt30_win.no_buy_locks()             # 첫 굳힘에 「사지 않음」 을 켜셨으면 보내지 않는다(승률 표와 같은 셈)
     except Exception:
         nob = False
-    why = ("첫 굳힘 사지 않음" if nob else "전체 멈춤" if st["stop"] else "매수금액 빔" if st["amountWon"] is None
+    why = ("첫 굳힘 사지 않음" if nob else "룰 칸 빔(%s)" % ", ".join(RULES[k][0] for k in st["missing"]) if st["missing"]
            else "보내기 주소 없음" if not sk["webhook_url"] else "주문 컴퓨터 열쇠 없음" if not sk["pcs"] else None)
     made = now.strftime("%Y%m%d%H%M%S")
 
     def ins(conn):
         ids = []
         for r in rows:
-            cur = conn.execute("INSERT INTO trade_journal (day, rank, code, name, amount_won, made_at, status, note) VALUES (?,?,?,?,?,?,?,?)",
-                               (day, r["rank"], r["code"], r.get("name"), st["amountWon"], made, "보낼 차례" if why is None else "안 보냄", why))
+            cur = conn.execute("INSERT INTO trade_journal (day, rank, code, name, amount_won, made_at, status, note, lock_px, rule_ver) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                               (day, r["rank"], r["code"], r.get("name"), st["amountWon"], made, "보낼 차례" if why is None else "안 보냄", why,
+                                r.get("buy"), st["ver"]))
             ids.append(cur.lastrowid)
         return ids
     ids = _db(proxy, ins)
     if why is not None:
         return "안 보냄 — %s" % why
     lines = ["[KJC 매수 목록] %s" % now.strftime("%Y-%m-%d %H:%M:%S")]
-    body = ["BUY|%d|%s|%s|%d|%s" % (i, r["code"], (r.get("name") or "").replace("|", " ").replace("\n", " "), st["amountWon"], made) for i, r in zip(ids, rows)]
+    if any(not r.get("buy") for r in rows):
+        _db(proxy, lambda c: c.executemany("UPDATE trade_journal SET status = '안 보냄', note = '굳힘 가격 없음' WHERE id = ?", [(i,) for i in ids]))
+        return "안 보냄 — 굳힘 가격 없음"                 # 상한 기준이 없으면 주문 컴퓨터가 못 거른다 — 안 보냄
+    body = ["BUY|%d|%s|%s|%d|%d|%s|%s" % (i, r["code"], (r.get("name") or "").replace("|", " ").replace("\n", " "), st["amountWon"], int(r["buy"]),
+                                         st["ver"], made) for i, r in zip(ids, rows)]
     lines += ["%s|%s" % (b, _sig_set(sk["pcs"], b)) for b in body]
     try:
         _post_webhook(sk["webhook_url"], "\n".join(lines))
@@ -250,7 +288,7 @@ def sell_check(proxy, day):
         return 0
     sk = _slack(proxy)
     if not SEND or not sk["webhook_url"] or not sk["pcs"] or time.time() < _sell_hold["until"]:
-        return 0                                       # 전체 멈춤은 새 매수만 막는다 — 산 종목은 계속 판다(qa 덧 11-23 · 재권님께 여쭈는 중)
+        return 0
     b = dt30.board(proxy, day)
     if not b or b.get("day") != day:
         return 0
@@ -294,6 +332,28 @@ def sell_check(proxy, day):
     return len(out)
 
 
+def rules_check(proxy, day):
+    """룰 칸이 바뀌었거나 그날 RULES_AT 뒤 아직 안 보냈으면 서명한 RULES 줄을 보낸다 → 상태 글 | None."""
+    st = settings()
+    sk = _slack(proxy)
+    if not SEND or st["missing"] or not st["ver"] or not sk["webhook_url"] or not sk["pcs"]:
+        return None
+    now = _now()
+    sent = _db(proxy, lambda c: dict(c.execute("SELECT k, v FROM trade_journal_state WHERE k IN ('rulesVer', 'rulesDay')").fetchall()))
+    due = now.hour * 60 + now.minute >= RULES_AT[0] * 60 + RULES_AT[1] and sent.get("rulesDay") != day
+    if sent.get("rulesVer") == st["ver"] and not due:
+        return None
+    made = now.strftime("%Y%m%d%H%M%S")
+    kv = ";".join("%s=%s" % (k, st[k]) for k in RULES)
+    b = "RULES|%s|%s|%s" % (st["ver"], kv, made)
+    try:
+        _post_webhook(sk["webhook_url"], "[KJC 룰] %s\n%s|%s" % (now.strftime("%Y-%m-%d %H:%M:%S"), b, _sig_set(sk["pcs"], b)))
+    except Exception as e:
+        return "룰 못 보냄 — %s" % proxy.safe_message(e, 80)   # 다음 바퀴에 다시
+    _db(proxy, lambda c: c.executemany("INSERT OR REPLACE INTO trade_journal_state (k, v) VALUES (?, ?)", [("rulesVer", st["ver"]), ("rulesDay", day)]))
+    return "룰 보냄 %s" % st["ver"]
+
+
 _NUM = re.compile(r"^-?\d+(\.\d+)?$")
 
 
@@ -307,9 +367,9 @@ def _apply_result(conn, line, pcs):
         print("  [매매일지] 서명 틀린 결과 줄 — 안 적음 · %s" % line[:40], flush=True)
         return False, "서명 틀림"
     p = [x.strip() for x in body.split("|")]
-    if len(p) < 10:
+    if len(p) < 11:
         return False, "칸 모자람"
-    _, pc, jid, code, bpx, spx, qty, profit, tax, sell_at = p[:10]
+    _, pc, jid, code, bpx, spx, qty, profit, tax, sell_at, why = p[:11]
     if not jid.isdigit():
         return False, "일지 번호가 숫자 아님"
     row = conn.execute("SELECT j.code, r.result_at FROM trade_journal j LEFT JOIN trade_result r ON r.journal_id = j.id AND r.pc = ? WHERE j.id = ?",
@@ -327,8 +387,8 @@ def _apply_result(conn, line, pcs):
         return False, "숫자 아님"
     f = lambda x: None if x == "-" else float(x)
     q = int(float(qty)) if _NUM.match(qty) else None
-    conn.execute("INSERT OR REPLACE INTO trade_result (journal_id, pc, buy_px, sell_px, qty, profit_won, tax_won, sell_at, result_at, raw) "
-                 "VALUES (?,?,?,?,?,?,?,?,?,?)", (int(jid), pc, f(bpx), f(spx), q, f(profit), f(tax), sell_at, now, line[:300]))
+    conn.execute("INSERT OR REPLACE INTO trade_result (journal_id, pc, buy_px, sell_px, qty, profit_won, tax_won, sell_at, result_at, raw, why) "
+                 "VALUES (?,?,?,?,?,?,?,?,?,?,?)", (int(jid), pc, f(bpx), f(spx), q, f(profit), f(tax), sell_at, now, line[:300], why[:120]))
     return True, "적음"
 
 
@@ -378,8 +438,13 @@ def read_once(proxy):
     return got
 
 
-def status():
-    return dict(_status, send=SEND, pickN=PICK_N, readSec=READ_SEC, settings=settings())
+def status(proxy=None):
+    if proxy is not None:
+        try:
+            _slack(proxy)                              # 주문 컴퓨터 이름 · 빠진 것을 채운다(열쇠 값은 안 냄)
+        except Exception:
+            pass
+    return dict(_status, send=SEND, pickN=PICK_N, readSec=READ_SEC, settings=settings(), rules=rules_meta(), rulesAt="%02d:%02d" % RULES_AT)
 
 
 def start(proxy):
@@ -390,7 +455,7 @@ def start(proxy):
 
     def loop():
         time.sleep(45)
-        last_read = last_send = last_sell = 0.0
+        last_read = last_send = last_sell = last_rules = 0.0
         while True:
             try:
                 now = _now()
@@ -406,6 +471,12 @@ def start(proxy):
                         if note not in ("판 아직 없음", "첫 굳힘 전"):
                             _status["sentDay"] = day
                             print("  [매매일지] %s 매수 목록 — %s" % (day, note), flush=True)
+                    if SEND and time.time() - last_rules >= SEND_CHECK_SEC:
+                        last_rules = time.time()
+                        note = rules_check(proxy, day)
+                        if note:
+                            _status["rulesNote"] = note
+                            print("  [매매일지] %s" % note, flush=True)
                     if SEND and time.time() - last_sell >= SEND_CHECK_SEC and dt30.OPEN_AT[0] * 60 + dt30.OPEN_AT[1] <= hm:
                         last_sell = time.time()
                         n = sell_check(proxy, day)
