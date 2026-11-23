@@ -854,7 +854,7 @@ def chip_times(b, cf=None):
     out = {}
     for r in b.get("rows") or []:
         m, f = {}, (cf or {}).get(r["code"]) or {}
-        for ch in r.get("chips") or []:
+        for ch in list(dict.fromkeys(list(r.get("chips") or []) + [k for k in f if k in ov_chips()])):   # 한 번 붙었다 없어진 칩도 그 시각 그대로(재권님 「조건이 달성되면 그 종목은 순위가 고정」 19:2x)
             c = [_hm4((r.get("chipAt") or {}).get(ch)), _hm4(f.get(ch))]
             if ch == "VI·급등":
                 c += [_hm4(r.get("viAt")), _hm4(r.get("surgeAt"))]
@@ -882,7 +882,8 @@ def _in4(r):
 def chips930(r, ct, until=CHIP_UNTIL):
     """그 줄의 단타 셈 칩 중 until 까지 붙은 것 — 시각 모르는 칩은 판에 든 때로 보고(그것도 모르면 남김) 든 때가 until 뒤면 뺀다(개념정의 덧 ② 11-23)."""
     lim, e = "%02d%02d" % until, _in4(r)
-    return [c for c in r.get("chips") or [] if c in ov_chips() and not (((ct or {}).get(c) or e or "") > lim)]
+    cs = list(dict.fromkeys(list(r.get("chips") or []) + list(ct or {})))    # 판 칩 + 시각이 남은 칩(붙었다 없어진 것)
+    return [c for c in cs if c in ov_chips() and not (((ct or {}).get(c) or e or "") > lim)]
 
 
 def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL):
@@ -935,8 +936,11 @@ def buy930_fill(proxy, b):
         r["chipTime"] = {k: "%s:%s" % (v[:2], v[2:]) for k, v in c.items()}
         r["chips930"] = chips930(r, c)
         r["buy930"] = buy_point(b, r, c, need, o)
+    got = sorted((r for r in rows if r["buy930"]), key=lambda r: (r["buy930"]["chipAt"], r.get("rank") or 1e9))
+    for i, r in enumerate(got, 1):
+        r["buy930"]["rank"] = i                        # 산 차례 — 칩 N개 먼저 찬 순(같은 분이면 판 차례) · 한 번 차면 고정 · 뒤에 찬 종목은 아래로(재권님 19:2x 「칩이 먼저찬 순서대로 순위」)
     b["meta"]["buy930"] = {"until": "%02d:%02d" % CHIP_UNTIL, "need": need,
-                           "note": "칩은 %02d:%02d 까지 붙은 것만 · 칩 시각(chipTime)을 세워 %d번째가 붙은 순간에 삼 · 그 순간이 9시 1분 이하면 9시 1분 값 · 여는 시각 + 1~5분 안이면 그 분 값 · "
+                           "note": "칩은 %02d:%02d 까지 붙은 것만(한 번 붙었다 없어진 칩도 그 시각) · 칩 시각(chipTime)을 세워 %d번째가 붙은 순간에 삼 · 산 차례(buy930.rank) = 칩 먼저 찬 순 — 차면 고정 · 뒤에 찬 종목은 아래로 · 몇 종목 살지는 화면 · 그 순간이 9시 1분 이하면 9시 1분 값 · 여는 시각 + 1~5분 안이면 그 분 값 · "
                                    "그 뒤 판에 든 때면 든 때 값 · 아니면 다음 30분 칸 값 · 칩 시각 모르면 판에 든 때(그것도 모르면 장 전) · 화면이 끈 칩은 서버 셈에 안 듦(브라우저마다)" % (CHIP_UNTIL + (need,))}
     return b
 
