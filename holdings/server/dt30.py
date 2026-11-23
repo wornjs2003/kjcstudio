@@ -274,7 +274,7 @@ def drop_small(proxy, b):
     if not out:
         return 0
     at = _now().strftime("%H:%M:%S")
-    b["meta"].setdefault("capDrop", []).extend({"code": r["code"], "name": r.get("name"), "cap": cap.get(r["code"]), "at": at} for r in out)
+    b["meta"].setdefault("capDrop", []).extend({"code": r["code"], "name": r.get("name"), "cap": cap.get(r["code"], r.get("cap")), "at": at} for r in out)   # 목록 밖이면 줄의 시총(qa 덧)
     gone = {r["code"] for r in out}
     b["rows"] = [r for r in b["rows"] if r["code"] not in gone]
     for i, r in enumerate(sorted(b["rows"], key=lambda r: r.get("rank") or 1e9)):
@@ -1900,7 +1900,8 @@ def board(proxy, day=None, cfg=None):
     b, saved = got
     b["meta"]["savedAt"] = saved
     try:
-        drop_small(proxy, b)                           # 지난 판 · 그날 판 모두 읽을 때도 문턱 밖은 뺌(저장 안 함) — 재권님 「3천억 아래종목은 아예 고려대상이 아니야」(11-23)
+        if day == _now().strftime("%Y%m%d"):
+            drop_small(proxy, b)                       # 그날 판 — 읽을 때도 문턱 밖은 뺌(고리가 저장하기 전에도) · 지난 판은 재권님께 여쭘 중이라 안 건드림(개념정의 검수 11-23)
     except Exception as e:
         print("  [단타 30] 문턱 거르기 못 함 — %s" % proxy.safe_message(e, 120), flush=True)
     try:
