@@ -834,6 +834,116 @@ def _cf_flow(proxy, day, rows, at):
         pass
 
 
+# ── 사는 셈 — 서버 한 곳 (2026-11-23) ─────────────────────────────────────────────
+# 재권님 「9시 30분까지 칩이 적용된것들이야 9시 30분에 사는게 아니고」 · 「내가 칩 갯수 바꿀때마다 사는게 바뀌게 되야돼」(시황분석1 창 · 화면 822778f)
+# → 셈을 서버 한 곳에(개발2 안 「응 그래」 19:0x). 판 · 승률 표(dt30_win) · 매수 목록(trade_signal)이 이것을 받고 화면은 rows[].buy930 을 받는다.
+#     칩        단타 셈 칩(ov_chips) 중 CHIP_UNTIL 까지 붙은 것 — 칩 시각은 chip_times(모르면 판에 든 때 · 그것도 모르면 장 전으로 봄 · 짐작해 빼지 않음)
+#     사는 순간  칩 시각을 세워 N번째(N = 셈 칸 rules.dt30.set.minChip · 빈칸 · 0 이면 1) — 모자라면 안 삼(None)
+#     사는 값    그 순간이 9시 1분(pxMinAt["1"]) 이하면 9시 1분 값 · 여는 시각 + 1~5분 안이면 그 분 값 · 그 뒤 판에 든 때(그 순간 이후)면 든 때 값(buy) · 아니면 다음 30분 칸 값
+#     화면이 끈 칩(브라우저마다)은 서버가 못 본다 — 서버 셈은 칩을 다 켠 것으로 센다
+CHIP_UNTIL = (9, 30)
+
+
+def _hm4(t):
+    t = str(t or "").replace(":", "").replace("~", "").strip()
+    return t[:4] if len(t) >= 4 and t[:4].isdigit() else ""
+
+
+def chip_times(b, cf=None):
+    """{code: {chip: 「HHMM」}} — 칩이 붙은 가장 이른 시각: 판 줄 chipAt · VI·급등은 viAt · surgeAt · 칩 처음 시각 표(cf = chip_first_get) 중 가장 이른 것 · 모르면 칸 없음."""
+    out = {}
+    for r in b.get("rows") or []:
+        m, f = {}, (cf or {}).get(r["code"]) or {}
+        for ch in r.get("chips") or []:
+            c = [_hm4((r.get("chipAt") or {}).get(ch)), _hm4(f.get(ch))]
+            if ch == "VI·급등":
+                c += [_hm4(r.get("viAt")), _hm4(r.get("surgeAt"))]
+            c = [x for x in c if x]
+            if c:
+                m[ch] = min(c)
+        out[r["code"]] = m
+    return out
+
+
+def buy_need():
+    """사는 순간의 칩 수 N — 셈 칸 rules.dt30.set.minChip(화면과 같은 칸 한 곳) · 빈칸 · 0 · 못 읽음이면 1."""
+    try:
+        import dt30_win
+        return max(1, int(dt30_win._set().get("minChip") or 0))
+    except (TypeError, ValueError, ImportError):
+        return 1
+
+
+def _in4(r):
+    t = str(r.get("buyTs") or "").replace(":", "")
+    return t[:4] if len(t) >= 4 and t[:4].isdigit() else _hm4(r.get("buyAt"))
+
+
+def chips930(r, ct, until=CHIP_UNTIL):
+    """그 줄의 단타 셈 칩 중 until 까지 붙은 것 — 시각 모르는 칩은 남김."""
+    lim = "%02d%02d" % until
+    return [c for c in r.get("chips") or [] if c in ov_chips() and not ((ct or {}).get(c, "") > lim)]
+
+
+def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL):
+    """→ {px, at 「HH:MM」, chipAt 「HH:MM」(N번째 칩 시각), need, src} | None — 위 「사는 셈」 한 곳."""
+    e = _in4(r)
+    ts = sorted((ct or {}).get(c) or e or "0000" for c in chips930(r, ct, until))
+    if len(ts) < need:
+        return None
+    T = ts[need - 1]
+    at = (b.get("meta") or {}).get("pxMinAt") or {}
+    o = open_min if open_min is not None else OPEN_AT[0] * 60 + OPEN_AT[1]
+    mh = lambda k: _hm4(at.get(str(k))) or _hhmm(o + k).replace(":", "")
+
+    def mv(k):
+        v = (r.get("pxMin") or {}).get(str(k)) or (r.get("px1") if k == 1 else None)
+        v = v.get("px") if isinstance(v, dict) else v
+        return v if isinstance(v, (int, float)) and v > 0 else None
+
+    hm = lambda x: "%s:%s" % (x[:2], x[2:])
+    out = lambda px, a, src: {"px": px, "at": hm(a), "chipAt": hm(T), "need": need, "src": src}
+    p1 = mh(1)
+    if T <= p1:
+        v = mv(1)
+        return out(v, p1, "9시 1분 값") if v else None
+    for k in PX_MIN:
+        if T <= mh(k):
+            v = mv(k)
+            if v:
+                return out(v, mh(k), "%d분 값" % k)
+            break
+    if e and e >= T and isinstance(r.get("buy"), (int, float)) and r["buy"] > 0:
+        return out(r["buy"], e, "든 때 값")
+    for t in b.get("times") or []:
+        v = (r.get("px") or {}).get(t)
+        if t >= T and isinstance(v, (int, float)) and v > 0:
+            return out(v, t, "%s 칸 값" % hm(t))
+    return None
+
+
+def buy930_fill(proxy, b):
+    """판 줄마다 rows[].chipTime {칩: 「HH:MM」} · chips930 · buy930(buy_point) · meta.buy930 — 읽을 때마다(저장 안 함)."""
+    rows = b.get("rows") or []
+    try:
+        cf = chip_first_get(proxy, b["day"], [r["code"] for r in rows])
+    except Exception:
+        cf = {}
+    ct, need, o = chip_times(b, cf), buy_need(), _open_min(proxy, b["day"], b)
+    for r in rows:
+        c = ct.get(r["code"]) or {}
+        r["chipTime"] = {k: "%s:%s" % (v[:2], v[2:]) for k, v in c.items()}
+        r["chips930"] = chips930(r, c)
+        r["buy930"] = buy_point(b, r, c, need, o)
+    b["meta"]["buy930"] = {"until": "%02d:%02d" % CHIP_UNTIL, "need": need,
+                           "note": "칩은 %02d:%02d 까지 붙은 것만 · 칩 시각(chipTime)을 세워 %d번째가 붙은 순간에 삼 · 그 순간이 9시 1분 이하면 9시 1분 값 · 여는 시각 + 1~5분 안이면 그 분 값 · "
+                                   "그 뒤 판에 든 때면 든 때 값 · 아니면 다음 30분 칸 값 · 칩 시각 모르면 판에 든 때(그것도 모르면 장 전) · 화면이 끈 칩은 서버 셈에 안 듦(브라우저마다)" % (CHIP_UNTIL + (need,))}
+    return b
+
+
+CF_VER = "f1"                 # 칩 시각 공식(chip_first_backfill)이 바뀌면 올린다 — 남은 판마다 한 번 다시 채운다(meta.cfVer)
+
+
 def chip_first_backfill(proxy, day, b):
     """지난 판 줄 — 셀 수 있는 칩 처음 시각을 표에 · VI 는 vi_day(정규장 · 가장 이른 발동) · 초반상승은 첫 봉 끝(1분봉이 있는 날 1분 · 아니면 5분). 남긴 수."""
     import open_rise
@@ -862,7 +972,72 @@ def chip_first_backfill(proxy, day, b):
             t = (r.get("chipAt") or {}).get(c)
             if c in ch and t and (r.get("volAt") or b["meta"].get(VOL_MARK)):
                 items.append((r["code"], c, t + ":00", "5분봉"))
+    items += _cf_formula(proxy, day, b, lm)
     return chip_first_put(proxy, day, items)
+
+
+def _cf_formula(proxy, day, b, lm=0):
+    """기록이 없을 때 칩 시각을 셀 공식 — 재권님 「9시 30분 이후에 붙는 칩들도 다 기록되어야해. 기록이 안되면 계산할 수 있는 공식도 있어야해」(11-23 19:0x).
+        프리장    룰 시각 — 프리장 끝(pre_flow.PRE_CLOSE · 08:50) 값으로 고른다
+        관심      룰 시각 — 09:01 직전 목록(여는 시각 + 1분 앞 59초)
+        매수      그날 칩 판 쌓기(flow_rank joint · first) · 없으면 앞 거래일 확정치로 고른 것이라 장 전(여는 시각 앞 1초)
+        볼린저    신호 보낸 때(signal_sent · sent_at 가장 이른 것)
+        급등      5분봉 고가가 앞 거래일 종가 대비 SURGE_PCT 를 처음 넘은 봉의 끝(어림 · 5분 단위)
+        현재상승  5분봉 종가가 그날 시가 대비 now_rise_pct 를 처음 넘은 봉의 끝(어림)
+    표에 더 이른 기록이 있으면 그것이 남는다(chip_first_put 은 이른 것만) · 못 셈 칸은 안 넣는다(짐작 안 함). → [(code, chip, 「HH:MM:SS」, src)]"""
+    import intraday_alerts, pre_flow
+    rows = b.get("rows") or []
+    codes = [r["code"] for r in rows]
+    if not codes:
+        return []
+    o = OPEN_AT[0] * 60 + OPEN_AT[1] + (lm or 0)
+    pre_at = "%02d:%02d:00" % pre_flow.PRE_CLOSE
+    watch_at = _hhmm(o) + ":59"
+    early_at = _hhmm(o - 1) + ":59"
+    q = ",".join("?" * len(codes))
+    bb, joint, bars, base = {}, {}, {}, {}
+    try:
+        with proxy.db_conn() as conn:
+            for c, t in conn.execute("SELECT code, MIN(sent_at) FROM signal_sent WHERE day = ? AND code IN (%s) GROUP BY code" % q, [day] + codes):
+                if t:
+                    bb[c] = datetime.fromtimestamp(t, KST).strftime("%H:%M:%S")
+            got = conn.execute("SELECT board FROM flow_rank WHERE day = ? AND who = 'joint'", (day,)).fetchone()
+            if got:
+                for c, v in (json.loads(got[0]).get("acc") or {}).items():
+                    h = _hm4((v or {}).get("first"))
+                    if h:
+                        joint[c] = "%s:%s:00" % (h[:2], h[2:])
+            for c, ts, h, cl in conn.execute("SELECT code, ts, high, close FROM candles WHERE period = '5m' AND ts >= ? AND ts < ? AND code IN (%s) ORDER BY ts" % q,
+                                             [day + "0900", day + "1530"] + codes):
+                bars.setdefault(c, []).append((ts[8:12], h, cl))
+            prev = (b.get("meta") or {}).get("prevDay")
+            if prev:
+                base = {c: v for c, v in conn.execute("SELECT code, close FROM auto_watch_day WHERE day = ? AND code IN (%s)" % q, [prev] + codes)}
+    except Exception:
+        pass
+    end5 = lambda t: _hhmm(int(t[:2]) * 60 + int(t[2:]) + BAR_MIN) + ":00"
+    items = []
+    for r in rows:
+        c, ch = r["code"], r.get("chips") or []
+        if "프리장" in ch:
+            items.append((c, "프리장", pre_at, "룰"))
+        if "관심" in ch:
+            items.append((c, "관심", watch_at, "룰"))
+        if "매수" in ch:
+            items.append((c, "매수", joint.get(c) or early_at, "칩 판 쌓기" if c in joint else "룰"))
+        if "볼린저" in ch and c in bb:
+            items.append((c, "볼린저", bb[c], "신호 보낸 때"))
+        bs = bars.get(c) or []
+        if "VI·급등" in ch and base.get(c) and not r.get("viAt"):
+            hit = next((t for t, h, _ in bs if h and (h / base[c] - 1) * 100 >= intraday_alerts.SURGE_PCT), None)
+            if hit:
+                items.append((c, "VI·급등", end5(hit), "5분봉 공식"))
+        if "현재상승" in ch and bs:
+            op = (r.get("open") or (bs[0][2] if bs else None))
+            hit = next((t for t, _, cl in bs if op and cl and (cl / op - 1) * 100 >= now_rise_pct()), None) if op else None
+            if hit:
+                items.append((c, "현재상승", end5(hit), "5분봉 공식"))
+    return items
 
 
 def build(proxy, cfg, day, skip=()):
@@ -2181,6 +2356,15 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
             _redo_gone(proxy, d, b)
             _store(proxy, b)
             n += 1
+    for d in days(proxy)[:limit]:                      # 칩 시각 공식(CF_VER)을 남은 판마다 한 번 — 기록이 없던 칩도 시각을 갖게(11-23 19:0x 「공식도 있어야해」)
+        got = _load(proxy, d)
+        if got and got[0].get("closed", True) and (got[0].get("meta") or {}).get("cfVer") != CF_VER:
+            try:
+                chip_first_backfill(proxy, d, got[0])
+                got[0]["meta"]["cfVer"] = CF_VER
+                _store(proxy, got[0])
+            except Exception as e:
+                print("  [단타 30] %s 칩 시각 공식 못 채움 — %s" % (d, proxy.safe_message(e, 120)), flush=True)
     if today_too and ds:                               # 오늘 판 — 14:00 칸까지 닫혔는데 오늘 바뀐 룰(meta.rules 칸) 전에 센 판이면 쌓인 값으로 한 번 다시 센다
         got = _load(proxy, today)                      # (재권님 「오늘 마뀐걸로 새로 해서 해줘」 11-12 15:2x · 그때 고른 기록은 덮인다)
         if got and got[0].get("closed") and "rules" not in (got[0].get("meta") or {}):
@@ -2584,6 +2768,10 @@ def board(proxy, day=None, cfg=None):
                 pm.setdefault(str(n), None)                # 못 잼 — 0 아님
     except Exception:
         pass
+    try:
+        buy930_fill(proxy, b)                          # 사는 셈 한 곳 — 칩 시각 · 09:30 까지 칩 · N번째 칩 찬 때 값(rows[].buy930 · 화면은 받기만)
+    except Exception as e:
+        print("  [단타 30] 사는 셈 못 함 — %s" % proxy.safe_message(e, 120), flush=True)
     b["meta"]["subNames"] = {"매수|" + "①②③④"[k - 1]: v[0] for k, v in proxy.JOINT_TIER_NAME.items()}   # 하위 이름표 — 서버 한 곳(kis_proxy.JOINT_TIER_NAME · 11-20)
     b["meta"]["subTips"] = {"매수|" + "①②③④"[k - 1]: v[1] for k, v in proxy.JOINT_TIER_NAME.items()}
     import dt30_win
@@ -2753,6 +2941,12 @@ def start(proxy):
                             _status["tg"] = day            # 하루 한 통 — 실패해도 다시 안 보낸다(앞 통이 갔을 수 있다)
                             ok, why = send_top(proxy, b)
                             print("  [단타 30] 상위 %d 텔레그램 %s" % (TG_TOP, "보냄" if ok else "못 보냄 — " + str(why)), flush=True)
+                        if OPEN_AT[0] * 60 + OPEN_AT[1] + off <= hm < _close_min(proxy, now) and time.time() - _status.get("cfLive", 0) >= LIVE_TTL:
+                            _status["cfLive"] = time.time()       # 정규장 끝까지 단타 목록을 세어 칩 처음 시각을 남긴다 — 09:30 · 굳힘 뒤 붙는 칩도(재권님 「9시 30분 이후에 붙는 칩들도 다 기록되어야해」 11-23 19:0x)
+                            try:                                  # 화면이 안 열려 있어도 돈다 · 캐시(LIVE_TTL) 안이면 셈을 다시 안 함
+                                live(proxy, proxy.load_secrets())
+                            except Exception as e:
+                                print("  [단타 30] 칩 시각 쌓기 못 함 — %s" % proxy.safe_message(e, 120), flush=True)
                         if not b.get("closed") and hm >= OPEN_AT[0] * 60 + OPEN_AT[1] + off and time.time() - _status.get("flowNow", 0) >= FLOW_NOW_SEC:
                             _status["flowNow"] = time.time()      # 그날 판 줄의 수급 지금 값 — FLOW_NOW_SEC 마다(묶음 ③ · 09:00 뒤)
                             got = flows(proxy, proxy.load_secrets(), [r["code"] for r in b["rows"]])
