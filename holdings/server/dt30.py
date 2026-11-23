@@ -248,13 +248,14 @@ def chips_now(proxy, cfg, early=True, pre=False):
                 hit[r["code"]]["rise"] = r["pct"]          # 첫 5분봉 시가 대비 % — 줄 세우기 둘째 열쇠
     except Exception:
         missing.append("초반상승")
-    try:                                   # 거래량 — 풀린 주식수 대비 · 어제 같은 시각 대비 (server/vol_chip.py · 재권님 11-23 「단타엡에 추가해줘」)
+    try:                                   # 「거래비율」 · 「거래비율급증」 — 따로 붙는다 (server/vol_chip.py · 재권님 11-23 「각각 칩으로」 · 「두개야」 16:3x)
         import vol_chip
         vb, _ = vol_chip.hits(proxy, cfg)
         for r in vb.get("rows") or []:
-            put(r.get("code"), r.get("name"), "거래량급증", "비율" if r["by"] == ["turn"] else "전일" if r["by"] == ["prev"] else "둘 다")
+            for c in r.get("chips") or []:
+                put(r.get("code"), r.get("name"), c)
     except Exception:
-        missing.append("거래량급증")
+        missing.extend(["거래비율", "거래비율급증"])
     try:
         day = _now().strftime("%Y%m%d")
         for it in signal_watch.today_lows(proxy).get("items") or []:
@@ -765,7 +766,7 @@ def build(proxy, cfg, day, skip=()):
             down.append(x["code"])                     # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
             continue
         r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "openRise", "viAt", "surgeAt", "viPx",
-                                   "floatCap", "turn", "turnPrevPct") + TRADE_KEYS}
+                                   "floatCap", "turn", "turnPrevPct", "turnPrevSrc") + TRADE_KEYS}
         r.update(buy=None if pre else x["price"], px={}, pxSrc={},
                  chipAt={c: _now().strftime("%H:%M") for c in x["chips"]})      # 칩마다 판에 처음 붙은 시각(묶음 ② · 다시 세면 앞 시각 그대로)
         if pre:
@@ -1002,7 +1003,7 @@ def intraday_add(proxy, cfg, b, hm):
         if x["code"] in have or x["down"] or x["n"] < floor:
             continue
         r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "openRise", "viAt", "surgeAt", "viPx",
-                                   "floatCap", "turn", "turnPrevPct") + TRADE_KEYS}
+                                   "floatCap", "turn", "turnPrevPct", "turnPrevSrc") + TRADE_KEYS}
         r.update(buy=None, px={}, pxSrc={}, chipAt={c: _now().strftime("%H:%M") for c in x["chips"]})
         new.append(r)
     if not new:
@@ -1491,20 +1492,21 @@ def _trade_days(proxy, before, n):
             "SELECT DISTINCT day FROM auto_watch_day WHERE day < ? ORDER BY day DESC LIMIT ?", (before, n + 1))]
 
 
-PAST_VOL_UNTIL = (10, 30)    # 지난 날 거래량급증 칩을 보는 창 끝 — 재권님 「응 만들어 10시 반까지 만들어」(11-23 12:1x) · 지금 판이 다시 세는 끝(BUY_LATE)과 같다
+PAST_VOL_UNTIL = (10, 30)    # 지난 날 거래비율 · 거래비율급증 칩을 보는 창 끝 — 재권님 「응 만들어 10시 반까지 만들어」(11-23 12:1x) · 지금 판이 다시 세는 끝(BUY_LATE)과 같다
 
 
 def past_vol_chip(proxy, day, prev, bars, cap, small, put):
-    """지난 날 「거래량급증」 칩 — 09:00 부터 PAST_VOL_UNTIL 까지 5분봉 끝마다 누적으로 센다 · 처음 넘은 봉 끝 시각을 volAt 에.
-        전일   그날 누적 거래량 ÷ 앞 거래일 같은 시각까지 누적 × 100 ≥ 칩 룰 거래량급증.prevSamePct(앞 날 5분봉이 없거나 그 시각까지 한 칸이라도 빠졌으면 그 칸 못 잼 — 0 아님)
-        비율   그날 누적 거래대금(5분봉 종가 × 거래량 어림) ÷ (풀린 주식수 × 그 봉 종가) × 100 ≥ 칩 룰 거래량급증.turnPct(turnover.calc 셈)
+    """지난 날 「거래비율」 · 「거래비율급증」 칩 — 09:00 부터 PAST_VOL_UNTIL 까지 5분봉 끝마다 누적으로 센다 · 칩마다 따로 · 처음 넘은 봉 끝 시각을 volAt 에(둘 중 이른 것).
+        거래비율급증  그날 누적 거래량 ÷ 앞 거래일 같은 시각까지 누적 × 100 ≥ 칩 룰 거래비율급증.turnPrevPct — 거래 비율 비를 거래량 비로 어림(라이브 5m 셈과 같은 어림)
+                     (앞 날 5분봉이 없거나 그 시각까지 한 칸이라도 빠졌으면 그 칸 못 잼 — 0 아님)
+        거래비율      그날 누적 거래대금(5분봉 종가 × 거래량 어림) ÷ (풀린 주식수 × 그 봉 종가) × 100 ≥ 칩 룰 거래비율.turnPct(turnover.calc 셈)
                풀린 주식수는 **지금** 값(company_profile.floats · 그날 값은 안 쌓였다) — 어림 · 없으면 그 칸 못 잼
         대상   감시 목록(시가총액 있음 · 문턱 이상) — 라이브(vol_chip)와 같은 가름
     재권님 「거래량 급증은 지난데이터들을 기반으로 뽑아낼수 있지않나?」 → 안에 「응 만들어 10시 반까지 만들어」(11-23 12:1x).
     → {code: 「HH:MM」} · 문턱을 못 읽으면 None(못 셈)."""
     import chip_rules, company_profile, turnover
     try:
-        t_pct, p_pct = float(chip_rules.get("거래량급증", "turnPct")), float(chip_rules.get("거래량급증", "prevSamePct"))
+        t_pct, p_pct = float(chip_rules.get("거래비율", "turnPct")), float(chip_rules.get("거래비율급증", "turnPrevPct"))
     except Exception:
         return None
     end = PAST_VOL_UNTIL[0] * 60 + PAST_VOL_UNTIL[1] - BAR_MIN
@@ -1528,6 +1530,7 @@ def past_vol_chip(proxy, day, prev, bars, cap, small, put):
         if cap.get(code) is None or small(code):
             continue
         vc = val = pc = 0
+        got = set()
         pd = pvol.get(code)
         pgap = False                                   # 앞 날 같은 분 봉이 하나라도 빠졌으면 그 뒤 「전일」 은 못 잼 — 빠진 칸을 0주로 더하면 분모가 작아져 헐겁게 걸린다(개념정의 검수 덧 11-23)
         for hm, phm in slots:
@@ -1540,17 +1543,102 @@ def past_vol_chip(proxy, day, prev, bars, cap, small, put):
                     pc += pd[phm]
                 else:
                     pgap = True
-            by = []
-            if pd and not pgap and pc > 0 and vc / pc * 100 >= p_pct:
-                by.append("전일")
+            at = "%02d:%02d" % divmod(int(hm[:2]) * 60 + int(hm[2:]) + BAR_MIN, 60)
+            if "거래비율급증" not in got and pd and not pgap and pc > 0 and vc / pc * 100 >= p_pct:
+                got.add("거래비율급증")
+                out.setdefault(code, at)
+                put(code, "거래비율급증", volAt=out[code])
             _c, turn = turnover.calc(b[2] if b else None, val, fl.get(code))
-            if turn is not None and turn >= t_pct:
-                by.append("비율")
-            if by:
-                out[code] = "%02d:%02d" % divmod(int(hm[:2]) * 60 + int(hm[2:]) + BAR_MIN, 60)
-                put(code, "거래량급증", "둘 다" if len(by) == 2 else by[0], volAt=out[code])
+            if "거래비율" not in got and turn is not None and turn >= t_pct:
+                got.add("거래비율")
+                out.setdefault(code, at)
+                put(code, "거래비율", volAt=out[code])
+            if len(got) == 2:
                 break
     return out
+
+
+VOL_CHIPS = ("거래비율", "거래비율급증")
+VOL_MARK = "volChips2"         # 판 meta 표시 — 두 칩을 붙여 본 판(같은 판을 두 번 안 셈)
+
+
+def _vol_put(b, code, chip, at):
+    """굳힌 판의 그 줄에만 칩을 붙인다 — 새 종목 · 차례 · 매수가는 안 건드린다(재권님 「굳히기 개념을 다시 정의했으니 적용해도 상관없지 않아?」 11-23 16:4x ·
+    굳힘은 종목 · 매수가 · 차례를 고정하고 칩 · 거래 값은 뒤에 붙는 정보). 붙였으면 True."""
+    for r in b.get("rows") or []:
+        if r.get("code") == code:
+            if chip in r.get("chips") or []:
+                return False
+            r.setdefault("chips", []).append(chip)
+            r.setdefault("chipAt", {}).setdefault(chip, at)
+            return True
+    return False
+
+
+def vol_live_attach(proxy, cfg, b):
+    """그날 판 줄에 「거래비율」 · 「거래비율급증」 을 값이 나오는 대로 붙인다(굳힌 뒤 · 닫힌 뒤도 그날 안이면) — 재권님 「데이터 받는대로 단타에 적용이 되어야 할거같은데」(11-23 16:4x).
+    시각은 판이 처음 본 때(chipAt). 붙인 수."""
+    import vol_chip
+    try:
+        vb, _ = vol_chip.hits(proxy, cfg)
+    except Exception:
+        return 0
+    at = _now().strftime("%H:%M")
+    n = sum(_vol_put(b, r.get("code"), c, at) for r in vb.get("rows") or [] for c in r.get("chips") or [])
+    if n:
+        b["meta"]["missing"] = [c for c in b["meta"].get("missing") or [] if c not in VOL_CHIPS]
+    return n
+
+
+def vol_past_attach(proxy, day, b):
+    """지난 판(라이브로 굳혀 두 칩이 없던 날) 줄에 쌓인 5분봉으로 두 칩을 붙인다 — PAST_VOL_UNTIL 까지 · past_vol_chip 과 같은 셈 · 판 순서 그대로.
+    앞 거래일이 없으면 None(못 셈 · 표시 안 남김) · 붙인 수."""
+    import dart
+    prev = (_trade_days(proxy, day, 1) or [None])[0]
+    if not prev:
+        return None
+    cap = {r["stock_code"]: r["market_cap"] for r in dart.universe_rows(None)}
+    for r in b.get("rows") or []:
+        cap.setdefault(r.get("code"), r.get("cap"))   # 감시 목록에서 빠진 종목도 판 줄에 적힌 시가총액으로(판 줄만 보므로 문턱은 안 다시 봄)
+    codes = {r.get("code") for r in b.get("rows") or []}
+    with proxy.db_conn() as conn:
+        bars = {}
+        for code, ts, o, h, c, v in conn.execute(
+                "SELECT code, ts, open, high, close, volume FROM candles WHERE period = '5m' AND ts >= ? AND ts <= ?",
+                (day + "0800", day + "1400")):
+            if code in codes:
+                bars.setdefault(code, {})[ts[8:12]] = (o, h, c, v)
+    if not bars:
+        return None
+    n = [0]
+
+    def put(code, chip, sub=None, volAt=None, **kw):
+        n[0] += _vol_put(b, code, chip, volAt)
+
+    if past_vol_chip(proxy, day, prev, bars, cap, lambda c: False, put) is None:
+        return None
+    b["meta"][VOL_MARK] = _now().strftime("%Y-%m-%d %H:%M")
+    ap = b["meta"].setdefault("approx", [])
+    for c in VOL_CHIPS:
+        if c not in ap:
+            ap.append(c)                               # 풀린 주식수는 지금 값 · 거래대금은 5분봉 종가 × 거래량 어림 · 전날 대비는 거래량 비
+    return n[0]
+
+
+def vol_past_sweep(proxy, today):
+    """남긴 판(지난 판 · 닫힌 오늘 판) 중 두 칩을 안 붙여 본 날을 한 번씩 — 붙인 날 수."""
+    k = 0
+    for d in days(proxy):
+        if d > today:
+            continue
+        got = _load(proxy, d)
+        if not got or VOL_MARK in (got[0].get("meta") or {}) or (d == today and not got[0].get("closed")):
+            continue                                   # 오늘 판은 닫힌 뒤(14:00 칸) 한 번 — 10:30 까지 쌓인 봉으로 칩 시각을 채우고, 그 뒤는 vol_live_attach 가 나오는 대로
+        b = got[0]
+        if vol_past_attach(proxy, d, b) is not None:
+            _store(proxy, b)
+            k += 1
+    return k
 
 
 def rebuild(proxy, day, prev, cfg=None):
@@ -1689,11 +1777,11 @@ def rebuild(proxy, day, prev, cfg=None):
             pct = (b[2] - b[0]) / b[0] * 100
             if pct >= open_rise.PAST_RISE_PCT:             # 지난 날은 첫 5분봉 2% 셈 그대로(1분봉은 11-12 부터만)
                 put(c, "초반상승", rise=round(pct, 2))
-    vol_at = past_vol_chip(proxy, day, prev, bars, cap, small, put)   # 거래량급증 — 09:00~PAST_VOL_UNTIL 같은 시각 대비 · 거래 비율(어림)
+    vol_at = past_vol_chip(proxy, day, prev, bars, cap, small, put)   # 거래비율 · 거래비율급증 — 09:00~PAST_VOL_UNTIL 거래 비율 · 같은 시각 대비(어림)
     if vol_at is None:
-        missing.append("거래량급증")
+        missing.extend(["거래비율", "거래비율급증"])
     else:
-        approx.append("거래량급증")                        # 풀린 주식수는 지금 값 · 거래대금은 5분봉 종가 × 거래량 어림
+        approx.extend(["거래비율", "거래비율급증"])        # 풀린 주식수는 지금 값 · 거래대금은 5분봉 종가 × 거래량 어림 · 전날 대비는 거래량 비
     for c in bb:
         if c in hit:
             hit[c]["chips"].add("볼린저")
@@ -2188,11 +2276,11 @@ def sell_text(r):
 
 TRADE_KEYS = ("accVol", "accValue", "prevSameVol", "prevSameSrc", "volPrevPct", "valuePrevPct", "prevDayVol", "prevDayValue")   # 거래 값 칸 — 셈은 turnover._trade 한 곳
 TURN_NOTE = ("floatCap 풀린 시총(억원) = 발행주식수 × 유동비율(네이버 기업현황) × 현재가 · turn 거래 비율(%) = 그날 누적 거래대금 ÷ 풀린 시총 × 100 · "
-             "turnPrevPct 전날 대비(%) = 거래 비율 ÷ 전날 같은 시각(1분 칸)까지 거래 비율 × 100(굳힌 판은 그날 끝 ÷ 전날 끝) · 색 기준 data/metrics.json turn_prev_pct · "
+             "turnPrevPct 전날 대비(%) = 거래 비율 ÷ 전날 같은 시각(1분 칸)까지 거래 비율 × 100(굳힌 판은 그날 끝 ÷ 전날 끝) · turnPrevSrc 1m · day(전날 끝) · 5m(전날 칸이 없어 정규장 5분봉 거래량 비로 어림 · 칩 「거래비율급증」 과 같은 셈) · 색 기준 data/metrics.json turn_prev_pct · "
              "accVol 오늘 누적 거래량(주) · accValue 오늘 누적 거래대금(억원) · prevSameVol 전날 같은 시각까지 거래량(주) · "
              "volPrevPct · valuePrevPct 거래량 · 거래대금 전날 같은 시각 대비(%) · 색 기준 data/metrics.json vol_prev_pct · amt_prev_pct · "
              "prevDayVol · prevDayValue 전날 하루 거래량(주) · 거래대금(억원) · 굳힌 판은 「같은 시각」 이 전날 끝 · "
-             "그날 판의 prevSameVol · volPrevPct 는 거래량급증 칩과 같은 셈(turnover.same_time) — prevSameSrc 1m 전날 같은 1분 칸 · 5m 정규장 5분봉 끝난 봉끼리 · "
+             "그날 판의 prevSameVol · volPrevPct 는 같은 셈(turnover.same_time · 거래비율급증 칩의 5분봉 어림도 이것) — prevSameSrc 1m 전날 같은 1분 칸 · 5m 정규장 5분봉 끝난 봉끼리 · "
              "5m 이면 prevSameVol 은 정규장 5분봉 합이라 accVol(시세 · 한국거래소)과 바로 견주지 않는다 · 굳힌 판은 slot 그날 끝 칸 · "
              "전날 값은 거래 값 표(시세)로만 — 봉으로 채우지 않는다(넥스트레이드 합친 값이라 기준이 다름 · 쌓기 첫날 11-23 은 전날 칸 null) · "
              "그날 판은 지금 값 · 굳힌 판은 그날 쌓인 마지막 값(turnover_day) · 못 잰 칸은 null · 우선주는 유동비율 출처가 없어 null")
@@ -2283,6 +2371,18 @@ def start(proxy):
                 now = _now()
                 day = now.strftime("%Y%m%d")
                 hm = now.hour * 60 + now.minute
+                if _status.get("volSweep") != (day, hm >= 14 * 60 + 5) and not (RECENT_SKIP[0][0] * 60 + RECENT_SKIP[0][1] <= hm < RECENT_SKIP[1][0] * 60 + RECENT_SKIP[1][1]):
+                    _status["volSweep"] = (day, hm >= 14 * 60 + 5)   # 하루 두 번(아침 · 14:05 뒤 오늘 판이 닫힌 뒤) — DB 만 읽는다(KIS 안 씀)라 장중에도 돈다
+                    n = vol_past_sweep(proxy, day)   # 지난 판에 「거래비율」 · 「거래비율급증」(11-23 「데이터 받는대로」)
+                    if n:
+                        print("  [단타 30] 지난 판 %d일에 거래비율 칩 붙임" % n, flush=True)
+            except Exception as e:
+                _status["error"] = type(e).__name__
+                print("  [단타 30] 지난 판 거래비율 칩 멈춤 — %s" % proxy.safe_message(e, 120), flush=True)
+            try:
+                now = _now()
+                day = now.strftime("%Y%m%d")
+                hm = now.hour * 60 + now.minute
                 if _status.get("nx") != day and now.weekday() < 5 and market_hours.today(proxy, day=day, now=now).get("open") is not False:
                     n = nx_fill(proxy, proxy.load_secrets(), day, hm)
                     if n:
@@ -2341,6 +2441,11 @@ def start(proxy):
                             n_in = intraday_add(proxy, proxy.load_secrets(), b, hm)   # 굳힌 뒤 새로 걸린 종목 — 「장중」 묶음(11-23)
                             if n_in:
                                 filled_late = list(filled_late) + ["장중 %d" % n_in]
+                        if hm >= BUY_LATE[0] * 60 + BUY_LATE[1] + off and b.get("rows") and time.time() - _status.get("volAt", 0) >= RESCAN_SEC:
+                            _status["volAt"] = time.time()      # 굳힌 뒤 · 닫힌 뒤도 그날 안 — 두 칩을 값이 나오는 대로(11-23 16:4x)
+                            nv = vol_live_attach(proxy, proxy.load_secrets(), b)
+                            if nv:
+                                filled_late = list(filled_late) + ["거래비율 칩 %d" % nv]
                         if filled_late and filled_late != ["다시 셈"]:
                             print("  [단타 30] %s 판에 늦게 나온 칩 채움 — %s" % (day, " · ".join(filled_late)), flush=True)
                         if due:
