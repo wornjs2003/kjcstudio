@@ -8,7 +8,7 @@ command -v uv > /dev/null || { echo "uv 가 없습니다 — brew install uv 뒤
 PY="$(uv python find 3.12)" || { echo "파이썬 3.12 가 없습니다 — uv python install 3.12"; exit 2; }
 V="${TMPDIR:-/tmp}/kjc-trader-build"     # 가상 환경 · 중간 파일은 저장소 밖에(룰 검사가 저장소 안 파일을 센다)
 "$PY" -m venv "$V/venv" || exit 1
-"$V/venv/bin/pip" install -q --upgrade pip pyinstaller || exit 1
+"$V/venv/bin/pip" install -q --upgrade pip "pyinstaller==6.22.3" || exit 1
 "$V/venv/bin/python" -m unittest discover -s tests -q || exit 1
 "$V/venv/bin/python" -m PyInstaller --noconfirm --windowed --name KJC주문 --distpath dist --workpath "$V/work" --specpath "$V" run.py || exit 1
 cp -f config.example.json dist/config.example.json
