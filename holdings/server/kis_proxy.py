@@ -94,6 +94,7 @@ import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매
 import day_top_fill     # 등락 상위 — 지난 거래일 판을 다시 세어 채움(장 쉬는 때 · 쓰는 서버만 · 2026-11-11 · server/day_top_fill.py)
 import day_top          # 등락 상위와 걸린 필터 — 날마다 장 뒤 한 번 쌓음 · /api/kis/day-top(2026-11-11 · server/day_top.py)
 import sector_flow      # 섹터수급 — 프리장 08:00~정규장 09:30 업종 · 테마별 10분 거래대금 · /api/kis/sector-flow(2026-11-18 · server/sector_flow.py)
+import trade_signal     # 매수 목록 슬랙 보내기 · 매매일지 — 단타 판 첫 굳힘 위 종목 · 매도 결과 받아 적음 · /api/kis/trade-journal(2026-11-23 · server/trade_signal.py)
 import dt30_win         # 단타 판 칩별 승률 — 끝난 판 손익을 하루 한 줄 · /api/kis/dt30-win(2026-11-18 · server/dt30_win.py)
 import vi_days          # 지난 날 VI 기록 — KIS VI 현황을 날짜로 그날 전부(연속 조회) 쌓고 /api/kis/vi-day 로 냄(2026-11-19 · server/vi_days.py)
 import vi_stats         # VI · 급등 뒤 얼마나 오르나 — 그날 VI · 급등을 쌓고 30분 · 60분 · 14:00 · 그날 최고 · /api/kis/vi-stats(2026-11-18 · server/vi_stats.py)
@@ -10704,6 +10705,16 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": True, "data": d, "meta": dict(m, status=vi_stats.status())})
                 return
 
+            if route == "trade-journal":
+                # 매매일지(server/trade_signal.py · 2026-11-23) — 보낸 매수 목록 · 받은 매도 결과 · 줄을 지우지 않음 · KIS 안 부름
+                try:
+                    nd = max(1, min(int((qs.get("days") or ["30"])[0]), 365))
+                except ValueError:
+                    self._send_json({"ok": False, "error": "days 는 숫자입니다."}, 400)
+                    return
+                self._send_json({"ok": True, "data": trade_signal.journal(sys.modules[__name__], nd), "meta": trade_signal.status()})
+                return
+
             if route == "dt30-win":
                 # 단타 판 칩별 승률(server/dt30_win.py · 2026-11-18) — 쌓인 날 손익으로 그때 수수료를 빼 셈 · KIS 안 부름
                 try:
@@ -11678,6 +11689,9 @@ def main():
         print("  VI 기록    : 평일 %s 뒤 그날 VI 전부 쌓음 · 그 뒤 지난 %d일 하루씩 되채움 · /api/kis/vi-day" % (vi_days.status()["storeAt"], vi_days.BACKFILL_DAYS))
     if not SLOW and is_sender(args.port) and vi_stats.start(sys.modules[__name__]):
         print("  VI 통계    : 평일 %s 뒤 그날 VI · 급등 쌓음 · %s 뒤 봉 없는 종목 채움 · /api/kis/vi-stats" % (vi_stats.status()["storeAt"], vi_stats.status()["fillFrom"]))
+    if not SLOW and is_sender(args.port) and trade_signal.start(sys.modules[__name__]):
+        print("  매매일지   : 평일 단타 판 첫 굳힘 위 %d종목을 슬랙에 한 번(보내기 %s) · 슬랙을 %d초마다 읽어 매도 결과 적음 · /api/kis/trade-journal"
+              % (trade_signal.PICK_N, "켜짐" if trade_signal.SEND else "꺼짐", trade_signal.READ_SEC))
     if not SLOW and is_sender(args.port) and dt30_win.start(sys.modules[__name__]):
         print("  단타 승률  : 끝난 판(%s 칸까지)을 %d초마다 보고 하루 한 줄 · /api/kis/dt30-win?days=%d" % (dt30_win.SELL_AT, dt30_win.TICK, dt30_win.DAYS_DEFAULT))
     if not SLOW and is_sender(args.port) and open_rise.start(sys.modules[__name__]):
