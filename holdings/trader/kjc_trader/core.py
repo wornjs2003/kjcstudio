@@ -24,8 +24,17 @@ import time
 import zipfile
 from datetime import datetime, timedelta, timezone
 
+from .kis import KisError
+
 KST = timezone(timedelta(hours=9))
 RULE_KEYS = ("buyRetrySec", "buyMaxUpPct", "buyMaxMin", "sellRetrySec", "cleanAt", "reopenAt")
+CLOSE_AT = "15:30"             # 정규장 끝(한국거래소) — 이 뒤로는 시장가 주문을 안 넣는다(장 뒤 실패 되풀이 · qa 11-23 ③) · 다음 거래일 reopenAt 에 다시
+
+
+def hhmm(v):
+    """시각 「HHMM」(서버 룰 줄 · cleanAt=1520) · 「HH:MM」 둘 다 「HH:MM」 으로 — 글자로 견주므로 꼴이 갈리면 15:00 부터 걸린다(qa 11-23 ①)."""
+    v = str(v).strip()
+    return v if ":" in v else "%s:%s" % (v[:2], v[2:4])
 _NUM = re.compile(r"^-?\d+(\.\d+)?$")
 _MASK = re.compile(r"(appkey|appsecret|app_key|app_secret|token|authorization|bot_token|sign_key|CANO|cano)(\W{1,4})([^\s\"',}]{4,})", re.I)
 
@@ -173,7 +182,7 @@ class Engine:
         for x in kv.split(";"):
             k, _, v = x.partition("=")
             if k in RULE_KEYS:
-                vals[k] = v if k in ("cleanAt", "reopenAt") else float(v)
+                vals[k] = hhmm(v) if k in ("cleanAt", "reopenAt") else float(v)
         cur = self.st.get("rules") or {}
         if cur.get("ver") and ver < cur["ver"]:
             self.log.put("룰", "옛 룰 판 %s — 지금 %s 그대로" % (ver, cur["ver"]))
@@ -228,10 +237,17 @@ class Engine:
         self.save()
         try:
             r = self.kis.order_market(j["code"], qty, side)
-        except Exception as e:
+        except KisError as e:                                          # 증권사가 거절했다고 답함 — 안 들어감 · 다음 바퀴에 다시
             s["placing"] = False
             self.save()
-            self.log.put("주문", "%s 시장가 %d주 — 증권사 오류 %s" % ("매수" if side == "buy" else "매도", qty, e), jid, j["code"], "error")
+            self.log.put("주문", "%s 시장가 %d주 — 증권사 거절 %s" % ("매수" if side == "buy" else "매도", qty, e), jid, j["code"], "error")
+            return None
+        except Exception as e:                                         # 시간 초과 · 연결 끊김 — 들어갔는지 모름 · 두 번 안 넣게 멈춤(qa 11-23 ②)
+            s["placing"] = False
+            s["hold"] = "확인 필요 — %s 시장가 %d주 주문의 응답을 못 받음(%s) · 증권사 앱에서 주문 · 체결을 보고 정리" % (
+                "매수" if side == "buy" else "매도", qty, type(e).__name__)
+            self.save()
+            self.log.put("주문", s["hold"], jid, j["code"], "error", side=side)
             return None
         s["placing"] = False
         s["orders"].append({"odno": r["odno"], "orgno": r.get("orgno"), "qty": qty, "filled": 0, "amt": 0.0, "open": True})
@@ -357,6 +373,13 @@ class Engine:
     def _sell_step(self, jid, j, R, now):
         s, b = j["sell"], j["buy"]
         t = now.timestamp()                                            # 시계는 갈아 끼울 수 있게(시험)
+        hm = now.strftime("%H:%M")
+        later = j["got"][:10] < now.date().isoformat()
+        if hm >= CLOSE_AT or (later and hm < R["reopenAt"]):           # 장 뒤 · 다음 날 장 전 — 넣지 않고 reopenAt 을 기다린다(qa 11-23 ③)
+            if s.get("waitDay") != now.date().isoformat():
+                s["waitDay"] = now.date().isoformat()
+                self.log.put("매도", "장 밖 — 다음 거래일 %s 에 남은 것을 팖" % R["reopenAt"], jid, j["code"])
+            return
         if s["orders"] and t < s["next"]:
             return
         if s["orders"]:
