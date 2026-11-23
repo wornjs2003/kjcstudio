@@ -249,6 +249,8 @@ def _sell_bars(r, end, S):
         t = t.replace(":", "")
         if t >= end:
             break
+        if b_at and t < b_at:
+            continue                                   # 산 분 앞 봉은 안 봄(화면 sellBars 와 같게 · 줄의 봉이 다른 산 시각으로 붙었어도 · 시황분석1 11-23)
         while si < len(slots) and _hm(slots[si]) <= t:
             got = slot(slots[si])
             si += 1
