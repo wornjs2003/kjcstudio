@@ -13,6 +13,9 @@
                         · 「9시1분이면 그시간대에 대한 값이여야 하고 9시 30분이면 그시간대여야해」(11-23 11:3x). 어제 값은 1분 바퀴가 쌓은
                         turnover_slot.vol(그 분의 통합 누적 · 오늘과 같은 시세 · 같은 자리) — prevSrc 「1m」
                         그 칸이 아직 없는 날(거래량 칸을 처음 쌓은 11-23 의 다음 거래일 전)만 홈 큰 차트 셈(kis_proxy.vol_same_time · 정규장 5분봉 끝난 봉까지) — prevSrc 「5m」 · upto
+    장 뒤    정규장 마감(dt30._close_min) 뒤에는 오늘 쪽도 마감 칸 누적에 묶는다 — 지금 시세에는 장 뒤 거래가 더해져 분자만 커진다(qa 11-23)
+    장 전    단타 판은 09:00 전(chips_now pre)에 이 칩을 안 부른다 — 그 앞에서 돌아간다
+    어디서   1분 칸은 8765 만 쌓는다 — 다른 서버의 /api/kis/vol-chip 은 8765 것을 넘긴다 · 단타 목록도 8765 것(dt30.live)
     걸림     floatPct ≥ 칩 룰 거래량.floatPct  **또는**  prevSamePct ≥ 칩 룰 거래량.prevSamePct
     못 잼    풀린 주식수 · 어제 5분봉 · 오늘 끝난 5분봉이 없으면 그 칸은 None(0 아님) — 다른 칸으로만 가린다
     들고 있기 CACHE_TTL 초 — 단타 판 · 주소가 함께 쓴다. 감시 종목 전부를 다시 센다(「실시간으로 들고 있어야」)
@@ -43,12 +46,16 @@ def build(proxy, cfg):
     import turnover
     now = datetime.now(KST)
     import dt30
-    slot = turnover._slot(min(now.hour * 60 + now.minute, dt30._close_min(proxy, now)))
-    prev1 = turnover.prev_slot_vol(proxy, [u["code"] for u in cand], now.strftime("%Y%m%d"), slot)
+    hm, close = now.hour * 60 + now.minute, dt30._close_min(proxy, now)
+    slot = turnover._slot(min(hm, close))
+    day = now.strftime("%Y%m%d")
+    prev1 = turnover.prev_slot_vol(proxy, [u["code"] for u in cand], day, slot)
+    # 정규장이 끝난 뒤에는 오늘 쪽도 마감 칸 값에 묶는다 — 지금 시세는 장 뒤(넥스트레이드 애프터) 거래가 더해져 분자에만 쌓인다(qa 11-23 · 11-10 「79%→122%」 꼴)
+    shut = turnover.day_slot_vol(proxy, [u["code"] for u in cand], day, slot) if hm >= close else {}
     rows, seen = [], 0
     for u in cand:
         q = quotes.get(u["code"]) or {}
-        vol = q.get("volume")
+        vol = shut.get(u["code"]) if hm >= close else q.get("volume")   # 장 뒤 — 마감 칸 값(없으면 못 잼 · 지금 시세로 대신하지 않는다)
         if vol is None:
             continue
         seen += 1
