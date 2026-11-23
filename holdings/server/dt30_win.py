@@ -84,6 +84,8 @@ def _in_ts(r):
 def _in_until(proxy, day, rule):
     """그날 든 때 가격으로 사는 끝 HHMMSS — 셈 칸 inUntil(없으면 SET_DEF) 분 59초 · 늦게 여는 날은 늦은 분만큼 뒤(여는 시각 + 1분 기준 · 개념정의 덧 11-23) · 못 읽으면 ''(안 뺌)."""
     v = str(rule.get("inUntil") or "").replace(":", "").strip()
+    if len(v) == 3 and v.isdigit():
+        v = "0" + v                                    # 「9:05」 · 「905」 처럼 앞 0 없이 넣은 값(qa 덧 11-23)
     if len(v) != 4 or not v.isdigit():
         return ""
     m = int(v[:2]) * 60 + int(v[2:]) + dt30.late_min(proxy, day=day)
