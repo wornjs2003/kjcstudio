@@ -49,6 +49,17 @@ const RULES = {
         html: d.length ? tb(['종목', '겹친 칩', '칩', '등락률(전일 종가 대비)', '시가총액'], d.map((x) => `<tr>${nm(x)}<td><b>${num(x.n)}</b></td><td>${esc(chipTxt(x))}</td><td>${pct(x.pct)}</td><td>${capTxt(x.cap)}</td></tr>`)) : null };
     },
   },
+  // 거래 칩 둘(11-23 개발2 fece17c · 재권님 「두개야 / 전일대비 현시점거래비율 이랑 유통주식대비 현시점 거래비율」) — 목록은 서버 /api/kis/vol-chip 한 곳(단타 판 칩과 같은 셈) · 문턱은 아래 「고치는 값」 칸
+  turn: {
+    name: '현시간 유통회전', url: '/api/kis/vol-chip',
+    rows: (m) => [['고르는 조건', `거래 비율(오늘 누적 거래대금 ÷ 풀린 시가총액 × 100)이 ${v(m.turnPct)}% 이상인 종목 · ETF 뺌`], ['시가총액', `${v(m.capMinEok == null ? null : num(m.capMinEok))}억원 이상`], ['줄 세우기', '등락률 큰 순']],
+    list: (j) => volList(j, '현시간 유통회전', (x) => x.turn != null && Number(x.turn) >= Number((j.meta || {}).turnPct)),
+  },
+  turnup: {
+    name: '전일 현시간 대비 급증', url: '/api/kis/vol-chip',
+    rows: (m) => [['고르는 조건', `거래 비율이 전날 같은 시각보다 ${v(m.turnPrevPct ?? m.prevSamePct)}% 이상인 종목(전날 같은 시각 거래 비율 = 100%) · ETF 뺌`], ['시가총액', `${v(m.capMinEok == null ? null : num(m.capMinEok))}억원 이상`], ['줄 세우기', '등락률 큰 순']],
+    list: (j) => volList(j, '전일 현시간 대비 급증', (x) => (x.by || []).includes('prev')),
+  },
   // 관심 탭은 뺐다(11-12 재권님 「관심을 없애고 수급으로 대처한다」) — 같은 종목 · 같은 룰이 「자동(전일 거래량 급등)」 칩에 있다(11-18 「수급」 에서 바꿈 · 실시간 순위 이름)
   pre: {
     name: '프리장', url: '/api/kis/pre-flow',
@@ -100,6 +111,46 @@ const RULES = {
   },
 };
 
+// 거래 칩 목록 — 서버 rows[].chips 에 그 칩 이름이 있으면 그것으로 · 칩 이름이 없는 옛 서버 응답은 by 로(서버를 합치는 사이 · 열쇠 셈은 서버 한 곳)
+function volList(j, chip, old) {
+  const all = Array.isArray(j.data) ? j.data : [], m = j.meta || {};
+  const d = all.filter((x) => (Array.isArray(x.chips) ? x.chips.map(chipName).includes(chip) : old(x)));
+  const prevOf = (x) => x.turnPrevPct ?? x.prevSamePct;
+  return { cap: `지금 ${esc(m.at || '—')} · ${num(d.length)}종목 · 살핀 ${num(m.candidates)}(ETF 뺌 ${num(m.etfOut)})`,
+    html: d.length ? tb(['종목', '거래 비율', '전날 같은 시각 대비', '등락률(전일 종가 대비)', '풀린 시총'], d.map((x) => `<tr>${nm(x)}<td><b>${x.turn == null ? '—' : `${num(x.turn, 2)}%`}</b></td><td>${prevOf(x) == null ? '—' : `${num(prevOf(x))}%`}</td><td>${pct(x.pct)}</td><td>${capTxt(x.floatCap)}</td></tr>`)) : null };
+}
+
+// 고치는 값 (11-23 재권님 「초반급상승에 들어간 2가지 룰 수정할수있는 ()%는 아직 안만들었나?」 · 「유통주식대비 현재거래대금 비교와 전날대비 현시간 거래대금 비교 룰이 어디에 들어가지?」)
+//   · 문턱은 서버 칩 룰 한 곳(/api/kis/chip-rules — 값 · 기본 · 범위 · 룰 문서 자리 docPath) · 넣은 값은 그 자리(rules.chips.<칩>.<열쇠>)에 저장 → 서버가 다음 셈부터 씀
+//   · 빈칸으로 두면 넣은 값을 지워 서버 기본으로 · 범위 밖은 되돌림 · 칸은 이 칩들만(지시 온 자리)
+const EDIT = { rise: ['초반상승'], turn: ['현시간 유통회전'], turnup: ['전일 현시간 대비 급증'] };   // 화면 이름(chipName 을 거쳐 견줌)
+let crCache = null;
+async function crLoad() { const { j } = await getJson('/api/kis/chip-rules'); crCache = j && j.ok && Array.isArray(j.data) ? j.data : null; return crCache; }
+const crRow = (id) => {
+  const cs = EDIT[id]; if (!cs) return null;
+  if (!crCache) return ['고치는 값', '<span class="st-err">— 서버 칩 룰을 못 받음</span>'];
+  const xs = crCache.filter((x) => cs.includes(chipName(x.chip)) && x.docPath && x.unit !== '목록');
+  if (!xs.length) return ['고치는 값', '<span class="st-err">— 서버 칩 룰에 이 칩 칸이 없음(서버를 합치기 전)</span>'];
+  return ['고치는 값', `<span class="rl-cr">${xs.map((x) => `<label class="dt-fee">${esc(x.name)} <input data-cr="${esc(x.docPath)}" data-lo="${esc((x.range || [])[0] ?? '')}" data-hi="${esc((x.range || [])[1] ?? '')}" class="rl-in rl-num" inputmode="decimal" placeholder="( )" value="${x.source === 'default' ? '' : esc(x.value)}" aria-label="${esc(x.name)}">${esc(x.unit || '')} <span class="rl-sug">${x.source === 'default' ? `빈칸 = 서버 기본 ${esc(num(x.default, 2).replace(/\.?0+$/, ''))}${esc(x.unit || '')}` : `기본 ${esc(num(x.default, 2).replace(/\.?0+$/, ''))}${esc(x.unit || '')}`}</span></label>`).join(' ')} <span id="rl-cr-msg" class="rl-sug"></span></span>`];
+};
+async function crSave(path, val) {
+  const keys = path.split('.');
+  for (let n = 0; n < 2; n++) {
+    const g = await fetch(DOC, { cache: 'no-store' });
+    if (!g.ok && g.status !== 404) throw new Error(`문서를 못 읽어 저장 안 함 · ${g.status}`);   // 못 읽으면 쓰지 않는다 — 빈 문서로 덮으면 다른 룰 값이 사라짐(qa 11-11)
+    const j = g.ok ? await g.json().catch(() => null) : null;
+    if (g.ok && !(j && j.data && typeof j.data === 'object')) throw new Error('문서를 못 읽어 저장 안 함');
+    const doc = g.ok ? j.data : {}, at = g.ok ? (j.updatedAt ?? j.data.updatedAt ?? null) : null;
+    let o = doc; keys.slice(0, -1).forEach((k) => { o[k] = o[k] && typeof o[k] === 'object' ? o[k] : {}; o = o[k]; });
+    if (val == null) delete o[keys[keys.length - 1]]; else o[keys[keys.length - 1]] = val;
+    const r = await fetch(DOC, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: doc, ...(at ? { updatedAt: at } : {}) }) });
+    if (r.status === 409) continue;
+    if (!r.ok) throw new Error(String(r.status));
+    return;
+  }
+  throw new Error('다른 곳에서 계속 고치는 중');
+}
+
 // ── 칩 바꾸기 — 수급(volsurge)은 strategy-rule.js 의 칸 그대로 · 나머지는 같은 자리에 갈아 끼운다(칸 높이는 CSS 가 같게 잡는다)
 const chips = [...document.querySelectorAll('#rl-chips [data-rule]')];
 const tb1 = $('rl-tb'), tb2 = $('rl-tb2'), title = $('rl-title'), go = $('rl-go');
@@ -121,7 +172,10 @@ async function show(id, again = false) {
   const R = RULES[id], my = ++seq;
   panes.forEach((p) => { p.hidden = p !== crPane; });
   title.textContent = `룰 — ${R.name}`;
-  tb2.innerHTML = R.rows({}, null).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
+  if (EDIT[id] && !crCache) await crLoad();
+  if (my !== seq) return;
+  const rowsOf = (m, ex) => [...R.rows(m, ex), ...(crRow(id) ? [crRow(id)] : [])];
+  tb2.innerHTML = rowsOf({}, null).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
   if (!R.url) { $('cr-cap').textContent = `「${R.name}」 종목`; $('cr').innerHTML = '<div class="st-err">— 서버에 이 칩의 종목 목록 주소가 없음(홀딩스 화면이 순위 목록에서 셈)</div>'; return; }
   if (!again) { $('cr-cap').textContent = '값을 받는 중…'; $('cr').innerHTML = '<div class="st-err">—</div>'; }
   let [{ st, j }, ex] = await Promise.all([getJson(R.url), R.extra ? getJson(R.extra) : Promise.resolve({ j: null })]);
@@ -129,13 +183,21 @@ async function show(id, again = false) {
   if (my !== seq) return;
   if (!j || j.ok === false) { $('cr-cap').textContent = `「${R.name}」 종목`; $('cr').innerHTML = `<div class="st-err">— 서버 값을 못 받음(${esc((j && j.error) || st || '연결 안 됨')})</div>`; return; }
   const m = (R.metaOf ? R.metaOf(j) : null) || j.meta || (j.data && j.data.meta) || {};
-  tb2.innerHTML = R.rows(m, ex.j).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');
+  if (!tb2.contains(document.activeElement)) tb2.innerHTML = rowsOf(m, ex.j).map(([h, t]) => `<tr><th>${h}</th><td>${t}</td></tr>`).join('');   // 치는 중이면 다시 그리지 않음
   if (id === 'ov') scoreShow(m); else if ($('rl-score')) $('rl-score').hidden = true;
   const L = R.list(j, ex.j);
   $('cr-cap').textContent = L.cap.replace(/<[^>]+>/g, '');
   $('cr').innerHTML = L.html || '<div class="st-err">— 이 룰에 걸린 종목 없음</div>';
 }
 chips.forEach((c) => c.addEventListener('click', () => show(c.dataset.rule)));
+tb2.addEventListener('change', async (e) => {
+  const el = e.target.closest('[data-cr]'); if (!el) return;
+  const msg = $('rl-cr-msg'), raw = el.value.trim(), val = raw === '' ? null : Number(raw), lo = Number(el.dataset.lo), hi = Number(el.dataset.hi);
+  if (val != null && (!Number.isFinite(val) || (el.dataset.lo !== '' && val < lo) || (el.dataset.hi !== '' && val > hi))) { if (msg) msg.textContent = `${el.dataset.lo} ~ ${el.dataset.hi} 사이 숫자 · 빈칸 = 서버 기본 — 되돌렸습니다`; crLoad().then(() => show(cur, true)); return; }
+  if (msg) msg.textContent = '저장하는 중…';
+  try { await crSave(el.dataset.cr, val); await crLoad(); if (msg) msg.textContent = '저장됨 — 서버가 다음 셈부터 씀'; el.blur(); show(cur, true); }
+  catch (err) { if (msg) msg.textContent = `저장 못 함(${err.message || '연결 안 됨'})`; }
+});
 
 // 조건별 점수 (11-18 재권님 「여기도 내가 조건들 넣을수 있게 해줘. 있는조건이면 고르면 되고 조건별로 점수를 매겨서 우선순위 정할거야」 → 홈 「단타」 도 같은 차례 「응」)
 //   · 「룰 — 단타」 칸 아래 · 있는 조건(서버 meta.chips + VI·급등 09:25 전 · 이후)을 골라 점수를 넣음 · 표는 룰 문서 rules.dt30.score 한 곳(단타 판 · 서버가 같은 표를 읽음)
@@ -179,5 +241,5 @@ async function scoreShow(m) {
 // 오늘 것은 계속 다시 받는다(11-12 재권님 「오늘자는 계속 값을 갱신하고 있어야해」) — 보고 있는 칩 하나만 · 주기는 서버 값(홀딩스 home.js 와 같은 열쇠)
 //   서버 롱폴이 켜져 있으면 바뀔 때 · 아니면 그 열쇠의 주기로 · 열쇠가 없으면(VI·급등 · 볼린저) 아래 FALLBACK 은 홀딩스와 같은 값 — 서버가 롱폴을 못 줄 때만
 const VI_FALLBACK_MS = 30000, BB_FALLBACK_MS = 60000, CHIP_FALLBACK_MS = 300000;
-const LIVE = { ov: ['dt30.LIVE_TTL', CHIP_FALLBACK_MS], pre: ['pre_flow.FLOW_TTL', CHIP_FALLBACK_MS], rise: ['open_rise.CACHE_TTL', CHIP_FALLBACK_MS], vi: [null, VI_FALLBACK_MS], bb: [null, BB_FALLBACK_MS] };
+const LIVE = { turn: [null, CHIP_FALLBACK_MS], turnup: [null, CHIP_FALLBACK_MS], ov: ['dt30.LIVE_TTL', CHIP_FALLBACK_MS], pre: ['pre_flow.FLOW_TTL', CHIP_FALLBACK_MS], rise: ['open_rise.CACHE_TTL', CHIP_FALLBACK_MS], vi: [null, VI_FALLBACK_MS], bb: [null, BB_FALLBACK_MS] };
 Object.entries(LIVE).forEach(([id, [key, fallbackMs]]) => { if (RULES[id] && RULES[id].url) watch({ url: () => (cur === id ? RULES[id].url : null), onChange: () => show(id, true), key, fallbackMs }); });

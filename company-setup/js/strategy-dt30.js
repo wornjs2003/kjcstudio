@@ -38,7 +38,7 @@ const dayTxt = (d) => { const m = String(d || '').match(/^(\d{4})(\d{2})(\d{2})$
 const hmTxt = (t) => (/^\d{4}$/.test(String(t)) ? `${String(t).slice(0, 2)}:${String(t).slice(2)}` : esc(t || '—'));
 
 // 이벤트 칸 — 그 종목이 걸린 홀딩스 「관심」 아래 룰(칩) 이름을 홀딩스 칩 줄 차례로 · 이름은 서버 rows[].chips 그대로(재권님 11-11 「종목과 매수가 사이에 이벤트를 추가하고 이벤트가 뭐뭐 걸렸는지 넣어줘 vi 초반급등 긍 관심하위의 룰들」)
-const EV_ORDER = ['관심', '거래비율', '거래비율급증', '프리장', '초반상승', '현재상승', 'VI·급등', '볼린저', '장외', '매수', '자동'];
+const EV_ORDER = ['관심', '현시간 유통회전', '전일 현시간 대비 급증', '프리장', '초반상승', '현재상승', 'VI·급등', '볼린저', '장외', '매수', '자동'];
 const evHtml = (c, r) => evChips(c, r, r ? [...st.miss].filter((x) => !(c || []).includes(x)) : []);   // 못 받은 칩은 종목마다 이름만 회색으로 붙임 · 「못 받음」 글씨 없음 · 늦게 채워 이미 붙은 칩은 뺌(11-12 재권님 「못받음 이라는 글씨만 빼주고 비활성화 된거같이 회색으로」 → 「각 종목에도 넣어줘」)
 const evChips = (c, r, miss = []) => { const a = [...(Array.isArray(c) ? c : []), ...miss]; if (!a.length) return '<span class="st-err">—</span>'; a.sort((x, y) => (EV_ORDER.indexOf(x) + 99) % 99 - (EV_ORDER.indexOf(y) + 99) % 99); return a.map((x) => { const sb = r ? subsOf(r, x) : []; const dim = r && colsOf().includes(x) && !liveChip(r, x); if (miss.includes(x)) return `<span class="dt-evc is-miss" data-tip="${esc(`그날 판에 ${x} 값을 ${missWord()} — 이 종목이 걸렸는지 모름`)}">${esc(x)}</span>`; const vt = r && x === 'VI·급등' ? viTxt(r) : ''; return `<span class="dt-evc${dim ? ' is-off' : ''}">${esc(x)}${sb.length ? `<small>${esc(subTxt(x, sb))}</small>` : ''}${vt ? `<small>${esc(vt)}</small>` : ''}</span>`; }).join(''); };
 
@@ -74,7 +74,7 @@ async function loadDtChips() {
 const COLS_KEY = 'dt30-cols-v1';
 // 거래 칩 둘(거래비율 · 거래비율급증)은 관심 바로 뒤(11-23 재권님 「거래량 급증은 프리장 과 관심 사이로 이동」 · 개발2 fece17c 가 옛 「거래량급증」(하위 비율 · 전일)을 칩 둘로 나눔 — 재권님 「두개야 / 전일대비 현시점거래비율 이랑 유통주식대비 현시점 거래비율」)
 //   기본 칸과 이 브라우저에 저장된 칸에 한 번 적용(COLS_MOVED) · 저장된 칸의 옛 「거래량급증」 은 둘로 바꿈 · 그 뒤 손으로 옮긴 차례는 그대로
-const VOL_CHIPS = ['거래비율', '거래비율급증'];
+const VOL_CHIPS = ['현시간 유통회전', '전일 현시간 대비 급증'];   // 화면 이름(strategy-chipname.js 가 서버 「거래비율」 · 「거래비율급증」 을 바꿈 · 11-23 재권님 「다」)
 const volNext = (a) => { const v = VOL_CHIPS.filter((x) => a.includes(x) || a.includes('거래량급증')); if (!v.length || !a.includes('관심')) return a; const b = a.filter((x) => x !== '거래량급증' && !VOL_CHIPS.includes(x)); b.splice(b.indexOf('관심') + 1, 0, ...v); return b; };
 const COLS_MOVED = 'dt30-cols-vol2-1123';
 // 11-18 서버 바뀜(개발2 · 재권님 「관심 하트는 누르는거 없애고 자동으로 관심으로」 → 「응 맞아」) — meta.watchRule 「자동」 인 날은 관심 = 자동 관심 룰 · 「수급(자동)」 칩이 안 옴
@@ -83,7 +83,7 @@ const colsOf = () => (st.cols || DT_CHIPS).filter((c) => !(st.watchAuto && c ===
 (() => { try { const v = JSON.parse(localStorage.getItem(COLS_KEY) || 'null'); if (v && Array.isArray(v.cols) && v.cols.length) { st.cols = v.cols.map(String).map(chipName); st.off = new Set((v.off || []).map(String).map(chipName)); if (!localStorage.getItem(COLS_MOVED) && (st.cols.includes('거래량급증') || VOL_CHIPS.some((x) => st.cols.includes(x)))) { if (st.off.has('거래량급증')) VOL_CHIPS.forEach((x) => st.off.add(x)); st.off.delete('거래량급증'); st.cols = volNext(st.cols); localStorage.setItem(COLS_MOVED, '1'); localStorage.setItem(COLS_KEY, JSON.stringify({ ...v, cols: st.cols, off: [...st.off] })); } } } catch (e) { /* 기본 칸 */ } })();   // 꺼 둔 칩(off)을 먼저 읽고 옛 이름을 바꾼 뒤 저장 — 빈 목록으로 덮지 않음(개념정의 검수 11-23)
 const colsSave = () => { try { localStorage.setItem(COLS_KEY, JSON.stringify({ cols: colsOf(), off: [...st.off] })); } catch (e) { /* 이 브라우저에 못 남겨도 화면은 돈다 */ } };
 const CHIP_SEEN = [];   // 칩 색 차례 — 서버 단타 칩 차례(loadDtChips 가 채움) 뒤로 처음 본 차례(색 변수는 일곱이라 돌려 씀)
-const HOT = { 거래비율: 'vol', 거래비율급증: 'vol2', 'VI·급등': 'vi', 매수: 'buy' };   // 튀는 색 칩 — 진한 바탕 · 하위 단추마다 다른 색(strategy.css · 11-23 재권님 「색은 완전히 튀는 색으로 해주고 각각 버튼 색 다르게」 → 「vi 랑 매수도 이렇게 각각 색이랑 튀도록 해줘」)
+const HOT = { '현시간 유통회전': 'vol', '전일 현시간 대비 급증': 'vol2', 'VI·급등': 'vi', 매수: 'buy' };   // 튀는 색 칩 — 진한 바탕 · 하위 단추마다 다른 색(strategy.css · 11-23 재권님 「색은 완전히 튀는 색으로 해주고 각각 버튼 색 다르게」 → 「vi 랑 매수도 이렇게 각각 색이랑 튀도록 해줘」)
 const colorOf = (c) => { if (HOT[c]) return HOT[c];   /* 거래 칩 · VI · 매수는 서로 안 겹치는 따로 색(strategy.css data-i) */ if (!CHIP_SEEN.includes(c)) CHIP_SEEN.push(c); return CHIP_SEEN.indexOf(c) % 7; };
 const RULE_OF = { 프리장: 'pre', 초반상승: 'rise', 현재상승: 'nowup', 'VI·급등': 'vi', 볼린저: 'bb', 장외: 'after', 자동: 'volsurge' };   // 「종목 고르는 룰」 칩(data-rule) — 없는 칩은 룰 칸 없음
 const subsRaw = (r, c) => { const v = r.subs && r.subs[c]; return Array.isArray(v) ? v : (v ? [v] : []); };
