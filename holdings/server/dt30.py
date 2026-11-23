@@ -962,6 +962,48 @@ def _lock_times(b):
     return [min(h * 60 + m + lm, cap) for h, m in lock_at()]
 
 
+def _in_hms(r):
+    """판에 든 때 「HH:MM:SS」 — buyTs · 없으면 buyAt · 없으면 칩이 처음 붙은 때 · 다 없으면 ''(가장 이름 — 굳힘에서 안 밀림)."""
+    t = str(r.get("buyTs") or "")
+    if re.fullmatch(r"\d\d:\d\d:\d\d", t):
+        return t
+    a = str(r.get("buyAt") or "")
+    if re.fullmatch(r"\d\d:\d\d", a):
+        return a + ":00"
+    c = sorted(v for v in (r.get("chipAt") or {}).values() if isinstance(v, str) and re.fullmatch(r"\d\d:\d\d", v))
+    return c[0] + ":00" if c else ""
+
+
+def lock_fix(b):
+    """굳힘 시각보다 뒤에 든 줄이 그 굳힘에 묶여 있으면 다음 굳힘으로 옮긴다 — 다음 굳힘이 이미 지났으면 그 묶음 끝으로 · 마지막 묶음이면 풂(진행 중).
+    11-23 오늘 판 — 09:05 굳힘이 09:05:55 에 돌아 그 바퀴에 든 이수페타시스가 · 09:30 굳힘이 09:30:37 에 돌아 그 바퀴에 든 일곱이 묶였다(재권님 「그 이후에 든 종목은 9시 30분 굳힘 으로 이동되어야지」 → 「응」).
+    옮긴 줄 수 · 여러 번 불러도 같다."""
+    m = b.get("meta") or {}
+    ats, done = list(m.get("lockAt") or []), set(m.get("lockDone") or [])
+    n = 0
+    for _ in range(len(ats)):
+        moved = 0
+        for r in b.get("rows") or []:
+            i = r.get("lock")
+            if not i or i > len(ats) or not ats[i - 1] or _in_hms(r) < ats[i - 1] + ":00":
+                continue
+            j = i + 1
+            if j <= len(ats) and j in done:
+                r["lock"], r["lockAt"] = j, ats[j - 1]
+                r["lockRank"] = max([x.get("lockRank") or 0 for x in b["rows"] if x.get("lock") == j and x is not r] + [0]) + 1
+            else:
+                for k in ("lock", "lockAt", "lockRank", "lockTs"):
+                    r.pop(k, None)
+            r["lockMoved"] = "%s → %s" % (ats[i - 1], ats[j - 1] if j <= len(ats) and j in done else "진행 중")
+            moved += 1
+        n += moved
+        if not moved:
+            break
+    if n:
+        _lock_order(b)
+    return n
+
+
 def _lock_due(b, nm):
     """굳힐 때가 지난 차례를 굳힌다 — 굳지 않은 줄 중 순위 위 LOCK_N 개. 굳힌 차례 목록(이번에 한 것)."""
     done = list(b["meta"].get("lockDone") or [])
@@ -972,7 +1014,8 @@ def _lock_due(b, nm):
         if i in done or nm < t:
             continue
         _lock_order(b)
-        pick = [r for r in b["rows"] if not r.get("lock")][:LOCK_N]
+        cut = _hhmm(t) + ":00"
+        pick = [r for r in b["rows"] if not r.get("lock") and _in_hms(r) < cut][:LOCK_N]   # 그 굳힘 시각 전에 든 줄만 — 뒤 든 줄은 다음 굳힘(재권님 「응」 11-23 09:4x)
         for k, r in enumerate(pick, 1):
             r["lock"], r["lockAt"], r["lockRank"] = i, _hhmm(t), k
             r["lockTs"] = _now().strftime("%H:%M:%S")      # 실제로 굳힌 때 — 서버가 늦게 떠 정한 시각(lockAt)보다 뒤에 굳힌 줄을 가르게(qa 덧 11-20)
@@ -2101,6 +2144,9 @@ def start(proxy):
                               " · 못 받은 칩 " + " · ".join(b["meta"]["missing"]) if b["meta"]["missing"] else ""), flush=True)
                     elif got is not None:
                         b = got[0]
+                        if not b.get("closed") and lock_fix(b):
+                            _store(proxy, b)               # 굳힘 시각 뒤 든 줄이 그 묶음에 있으면 다음 굳힘으로(11-23)
+                            print("  [단타 30] %s 판 굳힘 묶음 고침 — 굳힘 시각 뒤 든 줄을 다음 굳힘으로" % day, flush=True)
                         if not b.get("closed") and drop_small(proxy, b):
                             _store(proxy, b)               # 문턱 밖 종목 — 굳힌 줄도 뺀다(그날 판만 · 끝난 판은 안 건드림)
                             print("  [단타 30] %s 판에서 시가총액 문턱 밖 종목 뺌 — %s" % (day, " · ".join(x["name"] or x["code"] for x in b["meta"]["capDrop"][-20:])), flush=True)
