@@ -252,9 +252,9 @@ def chips_now(proxy, cfg, early=True, pre=False):
         import vol_chip
         vb, _ = vol_chip.hits(proxy, cfg)
         for r in vb.get("rows") or []:
-            put(r.get("code"), r.get("name"), "거래량", "비율" if r["by"] == ["turn"] else "전일" if r["by"] == ["prev"] else "둘 다")
+            put(r.get("code"), r.get("name"), "거래량급증", "비율" if r["by"] == ["turn"] else "전일" if r["by"] == ["prev"] else "둘 다")
     except Exception:
-        missing.append("거래량")
+        missing.append("거래량급증")
     try:
         day = _now().strftime("%Y%m%d")
         for it in signal_watch.today_lows(proxy).get("items") or []:
