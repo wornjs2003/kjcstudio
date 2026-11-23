@@ -294,6 +294,8 @@ function buyOf(r) {   // → { px, at(HHMM), src } | null
   //   손익 · 평균 · 합계 · 승률에서 빠지고(몫도 안 나눔) 매수가 칸에 「안 삼 · HH:MM 뒤 듦」 — 그 전(같은 날 낮)에는 들어온 때 가격으로 샀다
   if (n) { const o = minVal(r, n), t = hmS(minHM(n)); if (notYetIn(r, (o && o.at) || minHM(n))) return null; return o && Number(o.px) > 0 ? { px: Number(o.px), at: hhmm(o.at || minHM(n)), src: o.src === 'now' ? `${t} 그때 현재가` : t } : null; }
   if (k === 'vi') { const o = r.viPx; if (o && o.at && notYetIn(r, o.at)) return null; return o && Number(o.px) > 0 && o.at ? { px: Number(o.px), at: hhmm(o.at), src: `VI ${String(o.at).slice(0, 5)}` } : null; }
+  // 「들어온 때」 도 칩 N개가 09:30(서버 meta.buy930.until) 뒤에 찬 줄은 「09:30 뒤에 찬 종목」 단추를 따름 — 서버 c35818f 와 같게(개념정의 덧 11-23)
+  if (curD() && curD().flat930 && !st.set.buyLate930) { const T = nthChipAt(r); if (T && T > chipUntil().replace(':', '')) return null; }
   return Number(r.buy) > 0 ? { px: Number(r.buy), at: hhmm(r.buyAt || openHM()), src: r.buySrc || '시가' } : null;
 }
 // 산 시각 → 판정 시각(HHMM) — 30분 단위 반올림(분 15 이상이면 다음 30분) 뒤 min 분 · 값을 모르면 ''
