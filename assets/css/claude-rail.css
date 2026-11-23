@@ -70,6 +70,9 @@
   border: 0; border-radius: 10px; padding: 0 16px; font: inherit; font-weight: 700; font-size: 0.85rem;
   background: var(--kh-accent); color: var(--kh-text-on-fill); cursor: pointer;
 }
+/* 업무지시 단추(2026-11-23) — 꺼짐은 옅게 · 켜짐은 옅은 파랑 바탕에 진한 파랑 글씨(「색 바탕 위의 글씨」) · 입력 줄 높이는 그대로 */
+.kh-rail-in .kh-rail-ord { padding: 0 10px; font-weight: 500; background: var(--kh-bg); color: var(--kh-text-secondary); }
+.kh-rail-in .kh-rail-ord.is-on { font-weight: 700; background: var(--kh-accent-dim); color: var(--kh-accent); }
 .kh-rail-quick button:disabled, .kh-rail-in :disabled { cursor: default; opacity: 0.6; }
 
 @media (min-width: 768px) {
