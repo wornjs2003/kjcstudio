@@ -16,7 +16,7 @@
 
 메시지 꼴(서버 ↔ 주문 컴퓨터가 함께 읽는 한 곳 — 바꾸면 주문 컴퓨터 프로그램도 같이 바꾼다)
     서버 → 주문 컴퓨터   첫 줄 「[KJC 매수 목록] YYYY-MM-DD HH:MM:SS」 · 종목마다 한 줄
-                        매수금액 — 단타 판 셈 칸(첫 굳힘 금액 ÷ 그 묶음 종목 수 · amount_won) · 재권님 「종목 매수금액은 단타에서 보내주는걸로」
+                        매수금액 — 단타 판 셈 칸 첫 굳힘 금액 ÷ 보내는 종목 수(amount_won) · 재권님 「종목 매수금액은 단타에서 보내주는걸로」
                         BUY|<일지 번호>|<종목 코드>|<종목 이름>|<매수금액 원>|<굳힘 가격 원>|<룰 판>|<보낸 시각 YYYYMMDDHHMMSS>|<서명 묶음>
                         굳힘 가격 — 판 매수가(rows[].buy) · 주문 컴퓨터는 받은 순간 현재가가 이보다 룰 buyMaxUpPct % 넘게 높으면 안 삼(개념정의 크로스체크 ①)
     서버 → 주문 컴퓨터   (룰) 룰 칸이 바뀔 때마다 · 매일 RULES_AT 에 한 번 — 첫 줄 「[KJC 룰] YYYY-MM-DD HH:MM:SS」
@@ -142,15 +142,15 @@ def day_times(proxy, now=None):
     return {"firstLock": "%02d:%02d" % divmod(m, 60), "cleanAt": "%02d:%02d" % divmod(clean, 60), "reopenAt": "%02d:%02d" % dt30.OPEN_AT}
 
 
-def amount_won(rows_all):
-    """종목마다 매수금액(원) — 단타 판 셈 칸 그대로: 첫 굳힘 금액(grpWons[0] · 빈칸이면 grpWon · 그것도 비면 dayWon) ÷ 첫 굳힘 묶음 종목 수(판의 lock 1 · 매수가 있는 줄).
-    재권님 「종목 매수금액은 단타에서 보내주는걸로」(11-23 15:2x) — 화면 단타 판 perOf 와 같은 셈(company-setup/js/strategy-dt30.js) · 못 셈이면 None(안 보냄)."""
+def amount_won(n):
+    """종목마다 매수금액(원) — 단타 판 셈 칸의 첫 굳힘 금액(grpWons[0] · 빈칸이면 grpWon · 그것도 비면 dayWon) ÷ 보내는 종목 수 n.
+    재권님 「종목 매수금액은 단타에서 보내주는걸로」(11-23 15:2x) → 나누는 수는 「나 — 보내는 종목에 똑같이」(15:2x · 묶음 전체 수로 나누면 3/10 만 쓰임 · 개념정의 · qa 덧) ·
+    판 묶음 수에 안 기대니 화면이 칩으로 줄을 걸러도 갈리지 않는다 · 못 셈이면 None(안 보냄)."""
     import dt30_win
     S = dt30_win._set()
     pick = lambda v: v if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else None
     g = S.get("grpWons") if isinstance(S.get("grpWons"), list) else []
     total = pick(g[0] if g else None) or pick(S.get("grpWon")) or pick(S.get("dayWon"))
-    n = sum(1 for r in rows_all if r.get("lock") == 1 and r.get("buy"))
     return int(total // n) if total and n else None
 
 
@@ -251,7 +251,7 @@ def send_today(proxy, day):
     if not b or b.get("day") != day:
         return "판 아직 없음"
     rows = sorted([r for r in b.get("rows") or [] if r.get("lock") == 1], key=lambda r: (r.get("lockRank") or 1e9, r.get("rank") or 1e9))[:PICK_N]
-    amt = amount_won(b.get("rows") or [])
+    amt = amount_won(len(rows))
     if not rows:
         return "첫 굳힘 전"                             # 첫 굳힘(09:05 · dt30.lock_at 첫 칸) 줄이 아직 없음 — 다음 바퀴에 다시 본다
     st = settings()
