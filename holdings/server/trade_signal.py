@@ -37,6 +37,7 @@ import json
 import re
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -47,6 +48,8 @@ PICK_N = 3                    # 보낼 종목 수 — 재권님 「지금은 단
 READ_SEC = 5                  # 슬랙 채널 읽는 간격(초) — 재권님 「메세지가 가면 바로 읽을수 있으면」(11-23 14:4x) · conversations.history 는 분당 50회 넘게 되는 등급(Tier 3 · 슬랙 문서) · 12회/분
 READ_FROM, READ_TO = (8, 0), (21, 0)   # 평일 이 사이에만 읽는다 — 매도 결과는 장중 · 넥스트레이드 끝(20:00) 뒤 조금까지
 SET_DOC = "trade-set"
+MAX_PAGES = 10                # 한 바퀴에 읽는 쪽 수(쪽마다 200)
+TICK = 1                      # 도는 틀 간격(초) — READ_SEC 이 실제 읽는 간격이 되게 그보다 잘게(qa 덧 11-23 — 틀이 10초라 5초가 10초였음)
 SLACK_HISTORY = "https://slack.com/api/conversations.history"
 _SCHEMA = ("CREATE TABLE IF NOT EXISTS trade_journal (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, rank INTEGER, code TEXT, name TEXT, "
            "amount_won INTEGER, made_at TEXT, sent_at TEXT, status TEXT, note TEXT, buy_px REAL, sell_px REAL, qty INTEGER, profit_won REAL, "
@@ -128,6 +131,8 @@ def send_today(proxy, day):
         return "첫 굳힘 전"                             # 첫 굳힘(09:05 · dt30.lock_at 첫 칸) 줄이 아직 없음 — 다음 바퀴에 다시 본다
     st = settings()
     now = _now()
+    if not SEND:
+        return "안 보냄 — 꺼짐(SEND) · 일지에 안 적음"      # 꺼진 동안은 줄을 안 쌓는다 — 일지는 실제로 돈이 움직일 수 있었던 날만(qa 덧 11-23)
     have = _db(proxy, lambda c: c.execute("SELECT COUNT(*) FROM trade_journal WHERE day = ?", (day,)).fetchone()[0])
     if have:
         return "이미 만듦"
@@ -137,7 +142,7 @@ def send_today(proxy, day):
         nob = 1 in dt30_win.no_buy_locks()             # 첫 굳힘에 「사지 않음」 을 켜셨으면 보내지 않는다(승률 표와 같은 셈)
     except Exception:
         nob = False
-    why = ("꺼짐(SEND)" if not SEND else "첫 굳힘 사지 않음" if nob else "전체 멈춤" if st["stop"] else "매수금액 빔" if st["amountWon"] is None
+    why = ("첫 굳힘 사지 않음" if nob else "전체 멈춤" if st["stop"] else "매수금액 빔" if st["amountWon"] is None
            else "보내기 주소 없음" if not sk["webhook_url"] else "서명 열쇠 없음" if not sk["sign_key"] else None)
     made = now.strftime("%Y%m%d%H%M%S")
 
@@ -156,10 +161,14 @@ def send_today(proxy, day):
     lines += ["%s|%s" % (b, sign(sk["sign_key"], b)) for b in body]
     try:
         _post_webhook(sk["webhook_url"], "\n".join(lines))
-    except Exception as e:
+    except urllib.error.HTTPError as e:                # 슬랙이 받고 거절했다 — 안 갔다
         msg = proxy.safe_message(e, 120)
         _db(proxy, lambda c: c.executemany("UPDATE trade_journal SET status = '못 보냄', note = ? WHERE id = ?", [(msg, i) for i in ids]))
         return "못 보냄 — %s" % msg
+    except Exception as e:                             # 시간 초과 · 끊김 — 슬랙에는 갔을 수 있다(qa 덧 11-23) · 다시 보내지 않고 「모름」 으로
+        msg = proxy.safe_message(e, 120)
+        _db(proxy, lambda c: c.executemany("UPDATE trade_journal SET status = '보냈는지 모름', note = ? WHERE id = ?", [(msg, i) for i in ids]))
+        return "보냈는지 모름 — %s" % msg
     sent = _now().strftime("%Y%m%d%H%M%S")
     _db(proxy, lambda c: c.executemany("UPDATE trade_journal SET status = '보냄', sent_at = ? WHERE id = ?", [(sent, i) for i in ids]))
     return "보냄 %d종목" % len(ids)
@@ -209,13 +218,24 @@ def read_once(proxy):
         _status["readNote"] = "못 함 — 읽기 열쇠 · 채널 · 서명 열쇠 중 빈 것"
         return 0
     oldest = _db(proxy, lambda c: (c.execute("SELECT v FROM trade_journal_state WHERE k = 'oldest'").fetchone() or ["0"])[0])
-    qs = urllib.parse.urlencode({"channel": sk["channel_id"], "oldest": oldest, "limit": 200})
-    req = urllib.request.Request(SLACK_HISTORY + "?" + qs, headers={"Authorization": "Bearer " + sk["bot_token"]})
-    with urllib.request.urlopen(req, timeout=15) as r:
-        j = json.loads(r.read().decode("utf-8"))
-    if not j.get("ok"):
-        raise RuntimeError("슬랙 읽기 실패 — %s" % str(j.get("error"))[:60])
-    msgs = sorted(j.get("messages") or [], key=lambda m: float(m.get("ts") or 0))
+    msgs, cursor, full = [], None, True
+    for _ in range(MAX_PAGES):                         # 한 번에 200 넘게 밀렸으면 다음 쪽까지 — 앞을 건너뛰지 않는다(qa 덧 11-23)
+        q = {"channel": sk["channel_id"], "oldest": oldest, "limit": 200}
+        if cursor:
+            q["cursor"] = cursor
+        req = urllib.request.Request(SLACK_HISTORY + "?" + urllib.parse.urlencode(q), headers={"Authorization": "Bearer " + sk["bot_token"]})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            j = json.loads(r.read().decode("utf-8"))
+        if not j.get("ok"):
+            raise RuntimeError("슬랙 읽기 실패 — %s" % str(j.get("error"))[:60])
+        msgs += j.get("messages") or []
+        cursor = (j.get("response_metadata") or {}).get("next_cursor")
+        if not j.get("has_more") or not cursor:
+            break
+    else:
+        full = False                                   # 다 못 읽음 — 읽은 자리를 안 옮긴다(앞을 건너뛰지 않게 · 되풀이 결과는 안 덮으니 다시 읽어도 됨)
+        _status["readNote"] = "밀린 메시지가 %d쪽 넘음 — 읽은 자리를 안 옮김" % MAX_PAGES
+    msgs = sorted(msgs, key=lambda m: float(m.get("ts") or 0))
     if not msgs:
         return 0
     got = 0
@@ -227,7 +247,8 @@ def read_once(proxy):
                 if line.strip().startswith("RESULT|"):
                     ok, _ = _apply_result(conn, line.strip(), sk["sign_key"])
                     got += 1 if ok else 0
-        conn.execute("INSERT OR REPLACE INTO trade_journal_state (k, v) VALUES ('oldest', ?)", (msgs[-1]["ts"],))
+        if full:
+            conn.execute("INSERT OR REPLACE INTO trade_journal_state (k, v) VALUES ('oldest', ?)", (msgs[-1]["ts"],))
     _db(proxy, put)
     return got
 
@@ -267,7 +288,7 @@ def start(proxy):
             except Exception as e:
                 _status["error"] = proxy.safe_message(e, 120)
                 print("  [매매일지] 멈춤 — %s" % _status["error"], flush=True)
-            time.sleep(10)
+            time.sleep(TICK)
 
     threading.Thread(target=loop, daemon=True, name="trade_signal").start()
     return True
