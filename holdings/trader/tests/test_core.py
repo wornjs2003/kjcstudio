@@ -11,7 +11,7 @@ import unittest
 from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from kjc_trader import core  # noqa: E402
+from kjc_trader import core, kis  # noqa: E402
 
 KEY = "a" * 64
 
@@ -43,7 +43,7 @@ class FakeKis:
     def order_market(self, code, qty, side):
         self.calls.append(("order", side, qty))
         if self.fail_order:
-            raise RuntimeError("거절")
+            raise kis.KisError("거절")
         self.n += 1
         f = self.fill[side].pop(0) if self.fill[side] else qty
         od = "%05d" % self.n
@@ -90,8 +90,8 @@ class T(unittest.TestCase):
     def sent(self):
         return self.clock.t.strftime("%Y%m%d%H%M%S")
 
-    def rules(self):
-        self.e.on_message(line("RULES", "v1|buyRetrySec=3;buyMaxUpPct=2;buyMaxMin=5;sellRetrySec=3;cleanAt=15:20;reopenAt=09:00|" + self.sent()), self.ts())
+    def rules(self, clean="15:20", reopen="09:00"):
+        self.e.on_message(line("RULES", "v1|buyRetrySec=3;buyMaxUpPct=2;buyMaxMin=5;sellRetrySec=3;cleanAt=%s;reopenAt=%s|%s" % (clean, reopen, self.sent())), self.ts())
 
     def buy(self, jid="1", amount=1000000, lock=1000, dsec=1):
         self.e.on_message(line("BUY", "%s|005930|삼성|%d|%d|v1|%s" % (jid, amount, lock, self.sent())), self.ts(dsec))
@@ -207,6 +207,38 @@ class T(unittest.TestCase):
         rows = self.log.read(self.clock.t.strftime("%Y%m%d") if False else datetime.now(core.KST).strftime("%Y%m%d"), jid="5")
         self.assertTrue(rows and "ABCDEFGH" not in rows[-1]["text"] and "1234" in rows[-1]["text"])
 
+
+    # ── qa 11-23 걸림 셋 ──
+    def test_clean_time_server_form(self):          # ① 서버 꼴 cleanAt=1520 — 15:00 에 정리하면 안 됨
+        self.rules(clean="1520", reopen="0900"); self.buy(); self.go(2)
+        self.clock.t = self.clock.t.replace(hour=15, minute=1); self.go(2)
+        self.assertNotIn(("order", "sell", 1000), self.kis.calls)
+        self.clock.t = self.clock.t.replace(hour=15, minute=21); self.go(2)
+        self.assertIn(("order", "sell", 1000), self.kis.calls)
+
+    def test_timeout_holds_not_double(self):       # ② 응답 시간 초과 — 두 번 안 사고 「확인 필요」
+        self.rules(); real = self.kis.order_market
+
+        def slow(code, qty, side):
+            real(code, qty, side)
+            raise TimeoutError("timed out")
+        self.kis.order_market = slow
+        self.buy(); self.go(5)
+        self.assertEqual([c for c in self.kis.calls if c[0] == "order"], [("order", "buy", 1000)])
+        self.assertIn("확인 필요", self.e.st["jobs"]["1"]["buy"]["hold"])
+
+    def test_no_sell_after_close_until_reopen(self):  # ③ 장 뒤 안 넣고 · 다음 날 장 전 안 넣고 · reopenAt 에 팖
+        self.rules(clean="1520", reopen="0900"); self.buy(); self.go(2)
+        self.kis.fail_order = True
+        self.clock.t = self.clock.t.replace(hour=15, minute=21); self.go(2)
+        n = len(self.kis.calls)
+        self.clock.t = self.clock.t.replace(hour=15, minute=35); self.go(5)
+        self.assertEqual(len(self.kis.calls), n)
+        self.kis.fail_order = False
+        self.clock.t = (self.clock.t + timedelta(days=1)).replace(hour=8, minute=40); self.go(3)
+        self.assertEqual(len(self.kis.calls), n)
+        self.clock.t = self.clock.t.replace(hour=9, minute=0, second=5); self.go(2)
+        self.assertEqual(self.kis.calls[-1], ("order", "sell", 1000))
 
 if __name__ == "__main__":
     unittest.main()
