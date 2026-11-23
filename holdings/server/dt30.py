@@ -1001,8 +1001,8 @@ def intraday_add(proxy, cfg, b, hm):
             break
         if x["code"] in have or x["down"] or x["n"] < floor:
             continue
-        r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "viAt", "surgeAt", "viPx",
-                                   "floatCap", "turn", "turnPrevPct")}
+        r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "openRise", "viAt", "surgeAt", "viPx",
+                                   "floatCap", "turn", "turnPrevPct") + TRADE_KEYS}
         r.update(buy=None, px={}, pxSrc={}, chipAt={c: _now().strftime("%H:%M") for c in x["chips"]})
         new.append(r)
     if not new:
