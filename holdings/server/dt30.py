@@ -896,13 +896,26 @@ def chips930(r, ct, until=CHIP_UNTIL):
     return [c for c in cs if c in ov_chips() and not (((ct or {}).get(c) or e or "") > lim)]
 
 
-def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL):
+def buy_mode():
+    """매수 단추 — 셈 칸 rules.dt30.set.buy 「open」(들어온 때 — 판에 든 때 값) · 그 밖 · 빈칸은 칩 N개 찬 때(p1 셈) · 화면 단추와 같은 칸 한 곳(시황분석1 · qa 11-23)."""
+    try:
+        import dt30_win
+        return "open" if dt30_win._set().get("buy") == "open" else "p1"
+    except ImportError:
+        return "p1"
+
+
+def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
     """→ {px, at 「HH:MM」, chipAt 「HH:MM」(N번째 칩 시각), need, src} | None — 위 「사는 셈」 한 곳."""
     e = _in4(r)
     ts = sorted((ct or {}).get(c) or e or "0000" for c in chips930(r, ct, until))
     if len(ts) < need:
         return None
     T = ts[need - 1]
+    if mode == "open":                                 # 「들어온 때」 — 판에 든 때 값 · 시각(r.buy · buyAt) · 칩 N개 문턱 · 차례는 그대로
+        if e and isinstance(r.get("buy"), (int, float)) and r["buy"] > 0:
+            return {"px": r["buy"], "at": "%s:%s" % (e[:2], e[2:]), "chipAt": "%s:%s" % (T[:2], T[2:]), "need": need, "src": "들어온 때 값"}
+        return None
     at = (b.get("meta") or {}).get("pxMinAt") or {}
     o = open_min if open_min is not None else OPEN_AT[0] * 60 + OPEN_AT[1]
     mh = lambda k: _hm4(at.get(str(k))) or _hhmm(o + k).replace(":", "")
@@ -943,16 +956,16 @@ def buy930_fill(proxy, b):
         cf = chip_first_get(proxy, b["day"], [r["code"] for r in rows])
     except Exception:
         cf = {}
-    ct, need, o, until = chip_times(dict(b, rows=rows), cf), buy_need(), _open_min(proxy, b["day"], b), buy_until()   # 빠진 줄(outRows)의 칩 시각도(개념정의 걸림)
+    ct, need, o, until, mode = chip_times(dict(b, rows=rows), cf), buy_need(), _open_min(proxy, b["day"], b), buy_until(), buy_mode()   # 빠진 줄(outRows)의 칩 시각도(개념정의 걸림)
     for r in rows:
         c = ct.get(r["code"]) or {}
         r["chipTime"] = {k: "%s:%s" % (v[:2], v[2:]) for k, v in c.items()}
         r["chips930"] = chips930(r, c, until)
-        r["buy930"] = buy_point(b, r, c, need, o, until)
+        r["buy930"] = buy_point(b, r, c, need, o, until, mode)
     got = sorted((r for r in rows if r["buy930"]), key=lambda r: (r["buy930"]["chipAt"], r.get("rank") or 1e9))
     for i, r in enumerate(got, 1):
         r["buy930"]["rank"] = i                        # 산 차례 — 칩 N개 먼저 찬 순(같은 분이면 판 차례) · 한 번 차면 고정 · 뒤에 찬 종목은 아래로(재권님 19:2x 「칩이 먼저찬 순서대로 순위」)
-    b["meta"]["buy930"] = {"until": "%02d:%02d" % CHIP_UNTIL, "late": until != CHIP_UNTIL, "need": need,
+    b["meta"]["buy930"] = {"until": "%02d:%02d" % CHIP_UNTIL, "late": until != CHIP_UNTIL, "need": need, "mode": mode,
                            "note": "칩은 %02d:%02d 까지 붙은 것만(한 번 붙었다 없어진 칩도 그 시각) · 칩 시각(chipTime)을 세워 %d번째가 붙은 순간에 삼 · 산 차례(buy930.rank) = 칩 먼저 찬 순 — 차면 고정 · 뒤에 찬 종목은 아래로 · 몇 종목 살지는 화면 · 그 순간이 9시 1분 이하면 9시 1분 값 · 여는 시각 + 1~5분 안이면 그 분 값 · "
                                    "그 뒤 판에 든 때면 든 때 값 · 아니면 다음 30분 칸 값 · 칩 시각 모르면 판에 든 때(그것도 모르면 장 전) · 화면이 끈 칩은 서버 셈에 안 듦(브라우저마다)" % (CHIP_UNTIL + (need,))}
     return b
