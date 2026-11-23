@@ -2926,6 +2926,19 @@ def board(proxy, day=None, cfg=None):
         live_merge(b)                                  # 다시 지은 라이브 판 — 장중 값을 읽을 때도 되돌림(저장은 장 뒤 되채우기 고리 · 장중에도 화면이 바로 맞게)
     except Exception as e:
         print("  [단타 30] 장중 값 못 되돌림 — %s" % proxy.safe_message(e, 120), flush=True)
+    try:                                               # 되살린 장중 줄(liveBefore 에 시총 · 시장 · 업종 칸이 없음)은 감시 목록 · 회사 정보로 채움(qa 덧 11-24)
+        miss = [r for r in b.get("rows") or [] if r.get("cap") is None or not r.get("market") or not r.get("sector")]
+        if miss:
+            import company_profile
+            uni = {u["stock_code"]: u for u in dart.universe_rows(None)}
+            sec = company_profile.sectors()
+            for r in miss:
+                u = uni.get(r["code"]) or {}
+                r["cap"] = r.get("cap") if r.get("cap") is not None else u.get("market_cap")
+                r["market"] = r.get("market") or u.get("market")
+                r["sector"] = r.get("sector") or sec.get(r["code"])
+    except Exception as e:
+        print("  [단타 30] 빈 시총 · 업종 칸 못 채움 — %s" % proxy.safe_message(e, 120), flush=True)
     try:
         drop_small(proxy, b)                           # 그날 판 · 지난 판 모두 읽을 때 문턱 밖은 뺌(저장 안 함 · 지금 감시 목록 시총으로) — 재권님 「3천억 아래종목은 아예 고려대상이 아니야」 → 지난 판도 「응 빼 지금룰에 맞춰서 다 적용해」(11-23 09:3x)
     except Exception as e:
