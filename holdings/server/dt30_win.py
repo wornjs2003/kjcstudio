@@ -370,7 +370,7 @@ def summary(proxy, days=DAYS_DEFAULT):
     import dart
     caps = {r["stock_code"]: r["market_cap"] for r in dart.universe_rows(None)}
     small = lambda c: bool(caps) and (caps.get(c) is None or caps[c] < dt30.cap_min_eok())   # 감시 목록을 못 읽으면 안 거름
-    need, until = dt30.buy_need(), dt30.buy_until()
+    need, until, mode = dt30.buy_need(), dt30.buy_until(), dt30.buy_mode()
     skipped = 0
     daily, every, whys = [], [], {}
     for day, raw in got:
@@ -386,7 +386,7 @@ def summary(proxy, days=DAYS_DEFAULT):
                 continue                               # 시가총액 문턱 밖(감시 목록에 없거나 문턱 아래 · 지금 목록으로) — 재권님 「응 빼 지금룰에 맞춰서 다 적용해」(11-23) · 판 셈(dt30.drop_small)과 같게
             if "chipTime" not in r:
                 continue                               # v11 전 줄(쌓기 전) — 다음 바퀴에 다시 쌓임
-            bp = dt30.buy_point({"meta": {"pxMinAt": r.get("_pxMinAt") or {}}, "times": r.get("_times") or []}, r, r["chipTime"], need, r.get("_open"), until)
+            bp = dt30.buy_point({"meta": {"pxMinAt": r.get("_pxMinAt") or {}}, "times": r.get("_times") or []}, r, r["chipTime"], need, r.get("_open"), until, mode)
             if not bp:
                 skipped += 1
                 continue                               # 칩이 09:30 까지 N개 안 참 · 사는 값 못 잼 — 안 산 것(사는 셈 한 곳 dt30.buy_point · 화면과 같게 · 11-23 19:0x)
@@ -426,7 +426,7 @@ def summary(proxy, days=DAYS_DEFAULT):
             "fee": fee, "feeNote": None if fee is not None else "빈칸 — 수수료 안 셈", "feeSides": "팔 때만",
             "tax": TAX, "taxNote": "팔 때만 · 판 값 × (거래세 + 농특세) · 시장 모르면 못 잼", "ret": "세후 %",
             "buy": "사는 셈 한 곳(dt30.buy_point) — 칩은 %02d:%02d 까지 · 칩 %d개 찬 순간 · 9시 1분 이하면 9시 1분 값 · 1~5분 안이면 그 분 값 · 그 뒤 든 때 값 · 아니면 다음 30분 칸 값" % (dt30.CHIP_UNTIL + (need,)),
-            "minChips": need, "chipUntil": "%02d:%02d" % dt30.CHIP_UNTIL, "buyLate930": until != dt30.CHIP_UNTIL, "sellBar": sell_bar(), "notBought": skipped, "sell": end, "sellDef": SELL_AT, "sellNote": "매도 룰 — 단타 판 셈 칸 rules.dt30.set(화면과 같은 칸 · 빈 칸은 sellRule 의 기본) · 30분 칸마다 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 중 처음 걸린 칸 값에 팖 · 안 걸리면 매도 시각(endAt · 빈칸이면 판 끝 sellDef) 이하 마지막 값 있는 칸 · 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것(셈에서 뺌) · 불타기는 안 듦", "sellRule": rule, "sellWhy": whys, "chipLateNote": "chipLate — 칩마다 산 뒤(판에 든 때 뒤)에 붙은 줄만 따로 셈 · chip 칸은 다 셈(재권님 「나」 11-23) · 칩 시각 chipAt 을 모르는 옛 판은 안 듦", "bigPct": BIG_PCT, "topDay": TOP_DAY,
+            "minChips": need, "chipUntil": "%02d:%02d" % dt30.CHIP_UNTIL, "buyLate930": until != dt30.CHIP_UNTIL, "sellBar": sell_bar(), "buyMode": mode, "notBought": skipped, "sell": end, "sellDef": SELL_AT, "sellNote": "매도 룰 — 단타 판 셈 칸 rules.dt30.set(화면과 같은 칸 · 빈 칸은 sellRule 의 기본) · 30분 칸마다 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 중 처음 걸린 칸 값에 팖 · 안 걸리면 매도 시각(endAt · 빈칸이면 판 끝 sellDef) 이하 마지막 값 있는 칸 · 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것(셈에서 뺌) · 불타기는 안 듦", "sellRule": rule, "sellWhy": whys, "chipLateNote": "chipLate — 칩마다 산 뒤(판에 든 때 뒤)에 붙은 줄만 따로 셈 · chip 칸은 다 셈(재권님 「나」 11-23) · 칩 시각 chipAt 을 모르는 옛 판은 안 듦", "bigPct": BIG_PCT, "topDay": TOP_DAY,
             "filledAt": _status["at"], "error": _status["error"]}
     return out, meta
 
