@@ -1006,6 +1006,13 @@ def lock_fix(b):
         n += moved
         if not moved:
             break
+    for r in b.get("rows") or []:                      # 옮겨진 줄의 lockTs 가 그 묶음 시각보다 앞이면(adff9e2 가 옮긴 판 · qa 11-23 09:49) 그 묶음이 실제로 굳힌 때로
+        i = r.get("lock")
+        if i and i <= len(ats) and ats[i - 1] and str(r.get("lockTs") or "") < ats[i - 1] + ":00":
+            ts = [x.get("lockTs") for x in b["rows"] if x.get("lock") == i and str(x.get("lockTs") or "") >= ats[i - 1] + ":00"]
+            if ts:
+                r["lockTs"] = min(ts)
+                n += 1
     if n:
         _lock_order(b)
     return n
