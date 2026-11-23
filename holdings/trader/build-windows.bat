@@ -17,7 +17,7 @@ rem venv and work files stay outside the repo
 python -m venv "%V%\venv"
 if errorlevel 1 goto fail
 call "%V%\venv\Scripts\activate.bat"
-python -m pip install --upgrade pip pyinstaller
+python -m pip install --upgrade pip "pyinstaller==6.22.3"
 if errorlevel 1 goto fail
 python -m unittest discover -s tests -q
 if errorlevel 1 goto fail
