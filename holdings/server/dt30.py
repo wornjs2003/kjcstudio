@@ -1493,7 +1493,7 @@ PAST_VOL_UNTIL = (10, 30)    # 지난 날 거래량급증 칩을 보는 창 끝 
 
 def past_vol_chip(proxy, day, prev, bars, cap, small, put):
     """지난 날 「거래량급증」 칩 — 09:00 부터 PAST_VOL_UNTIL 까지 5분봉 끝마다 누적으로 센다 · 처음 넘은 봉 끝 시각을 volAt 에.
-        전일   그날 누적 거래량 ÷ 앞 거래일 같은 시각까지 누적 × 100 ≥ 칩 룰 거래량급증.prevSamePct(앞 날 5분봉이 없으면 그 칸 못 잼 — 0 아님)
+        전일   그날 누적 거래량 ÷ 앞 거래일 같은 시각까지 누적 × 100 ≥ 칩 룰 거래량급증.prevSamePct(앞 날 5분봉이 없거나 그 시각까지 한 칸이라도 빠졌으면 그 칸 못 잼 — 0 아님)
         비율   그날 누적 거래대금(5분봉 종가 × 거래량 어림) ÷ (풀린 주식수 × 그 봉 종가) × 100 ≥ 칩 룰 거래량급증.turnPct(turnover.calc 셈)
                풀린 주식수는 **지금** 값(company_profile.floats · 그날 값은 안 쌓였다) — 어림 · 없으면 그 칸 못 잼
         대상   감시 목록(시가총액 있음 · 문턱 이상) — 라이브(vol_chip)와 같은 가름
@@ -1526,15 +1526,19 @@ def past_vol_chip(proxy, day, prev, bars, cap, small, put):
             continue
         vc = val = pc = 0
         pd = pvol.get(code)
+        pgap = False                                   # 앞 날 같은 분 봉이 하나라도 빠졌으면 그 뒤 「전일」 은 못 잼 — 빠진 칸을 0주로 더하면 분모가 작아져 헐겁게 걸린다(개념정의 검수 덧 11-23)
         for hm, phm in slots:
             b = d.get(hm)
             if b:
                 vc += b[3] or 0
                 val += (b[2] or 0) * (b[3] or 0)
             if pd:
-                pc += pd.get(phm, 0)
+                if phm in pd:
+                    pc += pd[phm]
+                else:
+                    pgap = True
             by = []
-            if pd and pc > 0 and vc / pc * 100 >= p_pct:
+            if pd and not pgap and pc > 0 and vc / pc * 100 >= p_pct:
                 by.append("전일")
             _c, turn = turnover.calc(b[2] if b else None, val, fl.get(code))
             if turn is not None and turn >= t_pct:
