@@ -67,3 +67,12 @@ market.db-journal
 # **디렉토리째 무시하지 않는다** — 안쪽을 되살릴 수 없다 (.gitignore:67 과 같은 이유).
 data/docs/*
 !data/docs/README.md
+
+# 주문 컴퓨터(trader) — 열쇠 · 계좌 · 상태 · 로그는 그 컴퓨터에만(2026-11-23 · 공개 저장소)
+trader/config.json
+trader/state.json*
+trader/logs/
+trader/.kis-token.json
+trader/로그-*.zip
+trader/build/
+trader/dist/
