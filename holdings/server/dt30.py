@@ -468,7 +468,7 @@ def score_table(proxy=None):
     """룰 문서의 점수표 — 숫자 값만 남긴 dict · 비었거나 못 읽으면 None."""
     try:
         import docstore
-        d = docstore.read_doc("strategy-rules") or {}
+        d = chip_rules.rules_doc() or {}
         t = ((d.get("rules") or {}).get("dt30") or {}).get("score") or {}
     except Exception:
         return None
@@ -548,7 +548,7 @@ def ord_score():
     """룰 문서의 차례 점수 {열쇠: 점수} — 0 이 아닌 숫자만 · 비었거나 못 읽으면 None(지금 차례 그대로)."""
     try:
         import docstore
-        d = docstore.read_doc("strategy-rules") or {}
+        d = chip_rules.rules_doc() or {}
         t = (((d.get("rules") or {}).get("dt30") or {}).get("set") or {}).get("ordScore") or {}
     except Exception:
         return None
@@ -880,9 +880,9 @@ def _in4(r):
 
 
 def chips930(r, ct, until=CHIP_UNTIL):
-    """그 줄의 단타 셈 칩 중 until 까지 붙은 것 — 시각 모르는 칩은 남김."""
-    lim = "%02d%02d" % until
-    return [c for c in r.get("chips") or [] if c in ov_chips() and not ((ct or {}).get(c, "") > lim)]
+    """그 줄의 단타 셈 칩 중 until 까지 붙은 것 — 시각 모르는 칩은 판에 든 때로 보고(그것도 모르면 남김) 든 때가 until 뒤면 뺀다(개념정의 덧 ② 11-23)."""
+    lim, e = "%02d%02d" % until, _in4(r)
+    return [c for c in r.get("chips") or [] if c in ov_chips() and not (((ct or {}).get(c) or e or "") > lim)]
 
 
 def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL):
@@ -1338,7 +1338,7 @@ def lock_at():
     11-20 「굳힘 시간은 내가 지정하면 바꿀수 있게」 → 「굳힘 시간 3개 넣어야대」). 빈 칸 · 틀린 꼴 · 못 읽음은 그 차례의 LOCK_AT 값. 이른 차례로."""
     try:
         import docstore
-        v = ((((docstore.read_doc("strategy-rules") or {}).get("rules") or {}).get("dt30") or {}).get("set") or {}).get("lockAt")
+        v = ((((chip_rules.rules_doc() or {}).get("rules") or {}).get("dt30") or {}).get("set") or {}).get("lockAt")
     except Exception:
         v = None
     v = v if isinstance(v, list) else []
@@ -1408,7 +1408,7 @@ def lock_cfg():
     기본 — 수는 LOCK_N · 칩 조건 없음(0). 못 읽으면 기본."""
     try:
         import docstore
-        S = ((((docstore.read_doc("strategy-rules") or {}).get("rules") or {}).get("dt30") or {}).get("set") or {})
+        S = ((((chip_rules.rules_doc() or {}).get("rules") or {}).get("dt30") or {}).get("set") or {})
     except Exception:
         S = {}
     num = lambda v, lo: int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= lo else None

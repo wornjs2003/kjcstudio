@@ -79,8 +79,7 @@ def _doc():
         if _cache["doc"] is not None and now - _cache["at"] < READ_TTL:
             return _cache["doc"]
     try:
-        import docstore
-        d = ((docstore.read_doc("strategy-rules") or {}).get("rules") or {}).get("chips") or {}
+        d = (rules_doc().get("rules") or {}).get("chips") or {}
     except Exception:
         d = {}
     with _lock:
@@ -121,3 +120,36 @@ def table():
                         "bad": raw if bad else None, "range": list(rng) if rng else None,
                         "docPath": "rules.chips.%s.%s" % (chip, key)})
     return out
+
+
+# ── 룰 문서 읽기 한 곳 (2026-11-23) ────────────────────────────────────────────────
+# 보드를 넘기는 서버(KJC_BOARD_UPSTREAM — 메인 8764 · 중간 · 세션)는 자기 폴더에 룰 문서가 없다 — 그 파일을 읽으면 {} 라
+# 칩 문턱 · 점수 · 셈 칸이 기본값으로 셈됐다(개념정의 검수 11-23 19:2x — 개발 3 · staging · service 빈 값). 그래서 상류(8765)의 문서를 받는다
+# (「두 구역이 같은 값을 쓰면 — 받는 곳은 서버 하나」 · dt-list 를 상류에서 받는 것과 같은 길). 8765 는 자기 파일.
+RULES_DOC = "strategy-rules"
+RULES_DOC_TTL = 30            # 상류에서 받은 룰 문서를 들고 있는 초 — 셈마다 묻지 않게
+_rd = {"at": 0.0, "doc": None}
+
+
+def rules_doc():
+    """룰 문서 strategy-rules 의 내용({"rules": …}) — 상류가 있으면 상류 · 없으면 자기 파일 · 못 읽으면 {}(그때 셈은 기본값 · 로그 한 줄)."""
+    import json, os, time, urllib.request
+    up = (os.environ.get("KJC_BOARD_UPSTREAM") or "").strip().rstrip("/")
+    if not up:
+        try:
+            import docstore
+            return docstore.read_doc(RULES_DOC) or {}
+        except Exception:
+            return {}
+    now = time.time()
+    if _rd["doc"] is not None and now - _rd["at"] < RULES_DOC_TTL:
+        return _rd["doc"]
+    try:
+        req = urllib.request.Request(up + "/api/board/doc/" + RULES_DOC, headers={"X-KJC-Prio": "low"})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            d = json.loads(r.read().decode("utf-8")).get("data") or {}
+    except Exception as e:
+        print("  [룰 문서] 상류에서 못 받음 — %s · 지난 값%s" % (type(e).__name__, "" if _rd["doc"] is not None else " 없음(기본값으로 셈)"), flush=True)
+        return _rd["doc"] if _rd["doc"] is not None else {}
+    _rd.update(at=now, doc=d if isinstance(d, dict) else {})
+    return _rd["doc"]
