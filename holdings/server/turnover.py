@@ -108,6 +108,45 @@ def day_slot_vol(proxy, codes, day, slot):
     return {c: (v, va, p) for c, v, va, p in got}
 
 
+def same_time(proxy, codes, quotes, now=None):
+    """「전날 같은 시각까지 거래량 대비」 한 곳 — 거래량급증 칩(vol_chip)과 단타 판 거래량 칸(volPrevPct)이 함께 쓴다(개념정의 덧 11-23 · 개발1 「가」).
+    vol_chip.build 에 있던 셈을 글자 그대로 옮겼다.
+        오늘 쪽   장중은 지금 시세(volume · value · price) · 정규장 끝 뒤는 마감 칸 값(day_slot_vol) — 없으면 그 종목은 뺀다(지금 시세로 대신하지 않는다 · qa 11-23)
+        전날 쪽   전날 같은 1분 칸 누적(prev_slot_vol · src 1m) · 없으면 정규장 5분봉 끝난 봉끼리(proxy.vol_same_time · src 5m)
+    → ({code: {vol, value, price, pct, prevVol, src, upto}}, {"slot", "prev1m"}) · pct 는 못 재면 None."""
+    import dt30
+    now = now or _now()
+    hm, close = now.hour * 60 + now.minute, dt30._close_min(proxy, now)
+    slot = _slot(min(hm, close))
+    day = now.strftime("%Y%m%d")
+    prev1 = prev_slot_vol(proxy, codes, day, slot)
+    # 정규장이 끝난 뒤에는 오늘 쪽도 마감 칸 값에 묶는다 — 지금 시세는 장 뒤(넥스트레이드 애프터) 거래가 더해져 분자에만 쌓인다(qa 11-23 · 11-10 「79%→122%」 꼴)
+    shut = day_slot_vol(proxy, codes, day, slot) if hm >= close else {}
+    out = {}
+    for code in codes:
+        q = quotes.get(code) or {}
+        if hm >= close:                                  # 장 뒤 — 마감 칸 값(없으면 못 잼 · 지금 시세로 대신하지 않는다)
+            vol, value, price = shut.get(code) or (None, None, None)
+        else:
+            vol, value, price = q.get("volume"), q.get("value"), q.get("price")
+        if vol is None:
+            continue
+        st, src = None, None
+        pv = prev1.get(code)
+        if pv:
+            sp, src = round(vol / pv * 100), "1m"
+        else:
+            try:
+                st = proxy.vol_same_time(code)
+            except Exception:
+                st = None
+            sp = round(st["today"] / st["prev"] * 100) if st and st.get("today") is not None and st.get("prev") else None
+            src = "5m" if sp is not None else None
+        out[code] = {"vol": vol, "value": value, "price": price, "pct": sp, "prevVol": pv, "src": src,
+                     "upto": slot if src == "1m" else (st.get("upto") if st else None), "prevSame": pv if src == "1m" else (st.get("prev") if st else None)}
+    return out, {"slot": slot, "prev1m": len(prev1)}
+
+
 def _prev_pct(turn, pv, fl):
     if turn is None or not pv:
         return None
@@ -123,59 +162,27 @@ def _pct(a, b):
     return round(a / b * 100, 1) if a is not None and b else None
 
 
-def _trade(r, vol, value, same, day_end, bars=None):
+def _trade(r, vol, value, same, day_end, st=None):
     """빠진 거래 값 — 재권님 「단타에 지금 있는 종목들 거래총량이랑 전일대비 거래 이런거 누락된거 다 넣어줘」(11-23 13:14 · 작업우선순위 창).
         accVol 오늘 누적 거래량(주) · accValue 오늘 누적 거래대금(억원)
         prevSameVol 전날 같은 시각까지 거래량(주) · volPrevPct 거래량 전날 같은 시각 대비(%) · valuePrevPct 거래대금 전날 같은 시각 대비(%)
         prevDayVol · prevDayValue 전날 하루 거래량(주) · 거래대금(억원)
     same (value, price, vol) · day_end {value, vol} — 없으면 그 칸 None(못 잼 · 0 아님).
-    bars — prev_candles 한 종목 값 · 거래 값 표에 전날 거래량이 없을 때만 쓴다 · 어디서 왔는지는 prevSrc(slot 거래 값 표 · 1m · 5m 봉 · D 일봉)."""
+    봉(일봉 · 1분봉)으로 전날을 채우지 않는다 — 봉은 넥스트레이드를 합친 값이고 시세 누적 거래량은 한국거래소 값이라 기준이 다르다(qa 11-23 · 스튜디오드래곤 33%).
+    거래 값 표에 전날이 없으면 그 칸은 None(못 잼).
+    st — same_time 한 종목 값(그날 판) · 있으면 전날 같은 시각 거래량 · 대비 % 는 그것(거래량급증 칩과 같은 셈) · 출처 prevSameSrc 1m · 5m."""
     same = same or (None, None, None)
     day_end = day_end or {}
-    bars = bars or {}
     sv, src = same[2], "slot" if same[2] is not None else None
-    if sv is None and bars.get("sameVol"):
-        sv, src = bars["sameVol"], bars["src"]
+    pct = _pct(vol, sv)
+    if st is not None:
+        sv, src, pct = st.get("prevSame"), st.get("src"), st.get("pct")
     dv = day_end.get("vol")
-    if dv is None and bars.get("dayVol"):
-        dv = bars["dayVol"]
     r["accVol"], r["accValue"] = vol, _eok(value)
     r["prevSameVol"], r["prevSameSrc"] = sv, src
-    r["volPrevPct"] = _pct(vol, sv)
+    r["volPrevPct"] = pct
     r["valuePrevPct"] = _pct(value, same[0])
     r["prevDayVol"], r["prevDayValue"] = dv, _eok(day_end.get("value"))
-
-
-def prev_candles(proxy, codes, day, hm=None):
-    """거래 값 표(turnover_*)에 전날 줄이 없을 때 쓰는 봉 셈 — 쌓기 시작한 첫날(11-23)에 「전날」 칸이 다 비지 않게.
-        전날        candles 일봉(D)의 오늘 앞 마지막 날
-        하루        그날 일봉 거래량(주)
-        같은 시각   hm(분)이 있으면 그날 1분봉 중 hm 분 전에 시작한 봉의 합 · 1분봉이 없는 종목은 hm-5 분까지 시작한 5분봉의 합(어림 · 끝난 봉만)
-    → {code: {"dayVol", "sameVol", "src"}} · 못 읽으면 {}. 거래대금은 봉에 없어 안 채운다(그 칸은 못 잼)."""
-    if not codes:
-        return {}
-    q = ",".join("?" * len(codes))
-    out = {}
-    try:
-        with proxy.db_conn() as conn:
-            pd = conn.execute("SELECT MAX(ts) FROM candles WHERE period = 'D' AND ts < ?", (day,)).fetchone()[0]
-            if not pd:
-                return {}
-            for c, v in conn.execute("SELECT code, volume FROM candles WHERE period = 'D' AND ts = ? AND code IN (%s)" % q, [pd] + list(codes)):
-                out.setdefault(c, {})["dayVol"] = v
-            if hm is not None:
-                for per, last in (("1m", hm - 1), ("5m", hm - 5)):
-                    if last < 0:
-                        continue
-                    end = pd + "%02d%02d" % divmod(last, 60)
-                    for c, v in conn.execute("SELECT code, SUM(volume) FROM candles WHERE period = ? AND ts >= ? AND ts <= ? AND code IN (%s) GROUP BY code"
-                                             % q, [per, pd + "0000", end] + list(codes)):
-                        d = out.setdefault(c, {})
-                        if "sameVol" not in d and v:
-                            d.update(sameVol=v, src=per)
-    except Exception:
-        return {}
-    return out
 
 
 def _prev_day(proxy, day):
@@ -197,8 +204,7 @@ def fill(rows, prices=None, proxy=None):
     prev = prev_slot(proxy, codes, day, _slot(now.hour * 60 + now.minute)) if proxy is not None else {}
     pd = _prev_day(proxy, day) if proxy is not None else None
     pend = day_rows(proxy, pd, codes) if pd else {}
-    need = [c for c in codes if (prev.get(c) or (None, None, None))[2] is None or (pend.get(c) or {}).get("vol") is None]
-    pc = prev_candles(proxy, need, day, now.hour * 60 + now.minute) if proxy is not None and need else {}
+    stt = same_time(proxy, codes, prices or {}, now)[0] if proxy is not None and prices is not None else {}
     for r in rows:
         p = (prices or {}).get(r["code"]) or {}
         price = p.get("price") if p else r.get("price")
@@ -206,7 +212,8 @@ def fill(rows, prices=None, proxy=None):
         f = fl.get(r["code"])
         r["floatCap"], r["turn"] = calc(price, value, f)
         r["turnPrevPct"] = _prev_pct(r["turn"], prev.get(r["code"]), f)
-        _trade(r, p.get("volume") if p else None, value, prev.get(r["code"]), pend.get(r["code"]), pc.get(r["code"]))
+        _trade(r, p.get("volume") if p else None, value, prev.get(r["code"]), pend.get(r["code"]),
+               stt.get(r["code"], {}) if prices is not None else None)
 
 
 def day_rows(proxy, day, codes):
@@ -230,17 +237,12 @@ def fill_day(proxy, day, rows):
     got = day_rows(proxy, day, codes)
     pd = _prev_day(proxy, day)
     prev = day_rows(proxy, pd, codes) if pd else {}
-    need = [c for c in codes if (prev.get(c) or {}).get("vol") is None]
-    pc = prev_candles(proxy, need, day) if need else {}
-    for c, d in pc.items():
-        if d.get("dayVol"):
-            d.update(sameVol=d["dayVol"], src="D")   # 굳힌 판 — 「같은 시각」 은 전날 끝(일봉)
     for r in rows:
         g = got.get(r["code"]) or {}
         r["floatCap"], r["turn"] = calc(g.get("price"), g.get("value"), g.get("floatShares"))
         pg = prev.get(r["code"]) or {}
         r["turnPrevPct"] = _prev_pct(r["turn"], (pg.get("value"), pg.get("price")) if pg else None, g.get("floatShares"))   # 굳힌 판 — 그날 끝 ÷ 전날 끝
-        _trade(r, g.get("vol"), g.get("value"), (pg.get("value"), pg.get("price"), pg.get("vol")) if pg else None, pg, pc.get(r["code"]))   # 굳힌 판 — 「같은 시각」 은 전날 끝
+        _trade(r, g.get("vol"), g.get("value"), (pg.get("value"), pg.get("price"), pg.get("vol")) if pg else None, pg)   # 굳힌 판 — 「같은 시각」 은 전날 끝
 
 
 def _store(proxy, day, quotes, fl):
