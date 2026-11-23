@@ -837,7 +837,7 @@ def _cf_flow(proxy, day, rows, at):
 # ── 사는 셈 — 서버 한 곳 (2026-11-23) ─────────────────────────────────────────────
 # 재권님 「9시 30분까지 칩이 적용된것들이야 9시 30분에 사는게 아니고」 · 「내가 칩 갯수 바꿀때마다 사는게 바뀌게 되야돼」(시황분석1 창 · 화면 822778f)
 # → 셈을 서버 한 곳에(개발2 안 「응 그래」 19:0x). 판 · 승률 표(dt30_win) · 매수 목록(trade_signal)이 이것을 받고 화면은 rows[].buy930 을 받는다.
-#     칩        단타 셈 칩(ov_chips) 중 CHIP_UNTIL 까지 붙은 것 — 칩 시각은 chip_times(모르면 판에 든 때 · 그것도 모르면 장 전으로 봄 · 짐작해 빼지 않음)
+#     칩        단타 셈 칩(ov_chips) 중 CHIP_UNTIL 까지 붙은 것 — 칩 시각은 chip_times · 시각을 모르는 칩은 N개 셈에 안 넣음(11-24 「그렇게 해」)
 #     사는 순간  칩 시각을 세워 N번째(N = 셈 칸 rules.dt30.set.minChip · 빈칸 · 0 이면 1) — 모자라면 안 삼(None)
 #     사는 값    그 순간이 9시 1분(pxMinAt["1"]) 이하면 9시 1분 값 · 여는 시각 + 1~5분 안이면 그 분 값 · 그 뒤 판에 든 때(그 순간 이후)면 든 때 값(buy) · 아니면 다음 30분 칸 값
 #     화면이 끈 칩(브라우저마다)은 서버가 못 본다 — 서버 셈은 칩을 다 켠 것으로 센다
@@ -908,7 +908,7 @@ def buy_mode():
 def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
     """→ {px, at 「HH:MM」, chipAt 「HH:MM」(N번째 칩 시각), need, src} | None — 위 「사는 셈」 한 곳."""
     e = _in4(r)
-    ts = sorted((ct or {}).get(c) or e or "0000" for c in chips930(r, ct, until))
+    ts = sorted((ct or {})[c] for c in chips930(r, ct, until) if (ct or {}).get(c))   # 시각을 아는 칩만 — 모르는 칩을 든 때 · 장 전으로 짐작하지 않음(재권님 「그렇게 해」 11-24 08:2x · 화면 97d982b)
     if len(ts) < need:
         return None
     T = ts[need - 1]
@@ -967,7 +967,7 @@ def buy930_fill(proxy, b):
         r["buy930"]["rank"] = i                        # 산 차례 — 칩 N개 먼저 찬 순(같은 분이면 판 차례) · 한 번 차면 고정 · 뒤에 찬 종목은 아래로(재권님 19:2x 「칩이 먼저찬 순서대로 순위」)
     b["meta"]["buy930"] = {"until": "%02d:%02d" % CHIP_UNTIL, "late": until != CHIP_UNTIL, "need": need, "mode": mode,
                            "note": "칩은 %02d:%02d 까지 붙은 것만(한 번 붙었다 없어진 칩도 그 시각) · 칩 시각(chipTime)을 세워 %d번째가 붙은 순간에 삼 · 산 차례(buy930.rank) = 칩 먼저 찬 순 — 차면 고정 · 뒤에 찬 종목은 아래로 · 몇 종목 살지는 화면 · 그 순간이 9시 1분 이하면 9시 1분 값 · 여는 시각 + 1~5분 안이면 그 분 값 · "
-                                   "그 뒤 판에 든 때면 든 때 값 · 아니면 다음 30분 칸 값 · 칩 시각 모르면 판에 든 때(그것도 모르면 장 전) · 화면이 끈 칩은 서버 셈에 안 듦(브라우저마다)" % (CHIP_UNTIL + (need,))}
+                                   "그 뒤 판에 든 때면 든 때 값 · 아니면 다음 30분 칸 값 · 칩 시각을 모르는 칩은 세지 않음 · 화면이 끈 칩은 서버 셈에 안 듦(브라우저마다)" % (CHIP_UNTIL + (need,))}
     return b
 
 
