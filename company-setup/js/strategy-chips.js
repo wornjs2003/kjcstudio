@@ -241,5 +241,5 @@ async function scoreShow(m) {
 // 오늘 것은 계속 다시 받는다(11-12 재권님 「오늘자는 계속 값을 갱신하고 있어야해」) — 보고 있는 칩 하나만 · 주기는 서버 값(홀딩스 home.js 와 같은 열쇠)
 //   서버 롱폴이 켜져 있으면 바뀔 때 · 아니면 그 열쇠의 주기로 · 열쇠가 없으면(VI·급등 · 볼린저) 아래 FALLBACK 은 홀딩스와 같은 값 — 서버가 롱폴을 못 줄 때만
 const VI_FALLBACK_MS = 30000, BB_FALLBACK_MS = 60000, CHIP_FALLBACK_MS = 300000;
-const LIVE = { turn: [null, CHIP_FALLBACK_MS], turnup: [null, CHIP_FALLBACK_MS], ov: ['dt30.LIVE_TTL', CHIP_FALLBACK_MS], pre: ['pre_flow.FLOW_TTL', CHIP_FALLBACK_MS], rise: ['open_rise.CACHE_TTL', CHIP_FALLBACK_MS], vi: [null, VI_FALLBACK_MS], bb: [null, BB_FALLBACK_MS] };
+const LIVE = { turn: ['vol_chip.CACHE_TTL', CHIP_FALLBACK_MS], turnup: ['vol_chip.CACHE_TTL', CHIP_FALLBACK_MS],   /* 거래 칩 둘 — 서버 칩 셈 주기(/api/kis/stats timing · 개념정의 덧 11-23) */ ov: ['dt30.LIVE_TTL', CHIP_FALLBACK_MS], pre: ['pre_flow.FLOW_TTL', CHIP_FALLBACK_MS], rise: ['open_rise.CACHE_TTL', CHIP_FALLBACK_MS], vi: [null, VI_FALLBACK_MS], bb: [null, BB_FALLBACK_MS] };
 Object.entries(LIVE).forEach(([id, [key, fallbackMs]]) => { if (RULES[id] && RULES[id].url) watch({ url: () => (cur === id ? RULES[id].url : null), onChange: () => show(id, true), key, fallbackMs }); });
