@@ -246,6 +246,9 @@ def _post_webhook(url, text):
         raise RuntimeError("슬랙 응답이 ok 가 아님 — %s" % body[:60])
 
 
+AGAIN = ("판 아직 없음", "첫 창 끝", "첫 창 빔")     # send_today 가 이 글로 시작하는 답을 내면 다음 바퀴에 다시 본다 — 글을 바꾸면 여기도(한 곳)
+
+
 def send_today(proxy, day):
     """그날 판이 굳었으면 위 PICK_N 줄을 일지에 만들고(한 번) 조건이 맞으면 슬랙에 보낸다 → 상태 글."""
     import dt30
@@ -511,7 +514,7 @@ def start(proxy):
                         last_send = time.time()
                         note = send_today(proxy, day)
                         _status.update(sendAt=now.strftime("%H:%M:%S"), sendNote=note)
-                        if note not in ("판 아직 없음", "첫 굳힘 전"):
+                        if not note.startswith(AGAIN):            # 다시 볼 글(판 없음 · 첫 창 끝 전 · 첫 창 빔)이 아니면 그날은 끝(개념정의 걸림 11-23)
                             _status["sentDay"] = day
                             print("  [매매일지] %s 매수 목록 — %s" % (day, note), flush=True)
                     if SEND and time.time() - last_rules >= SEND_CHECK_SEC:
