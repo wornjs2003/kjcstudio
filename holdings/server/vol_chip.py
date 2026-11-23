@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""단타 칩 「거래량」 — 풀린 주식수 대비 거래량 · 어제 같은 시각까지 대비 거래량 (2026-11-23).
+"""단타 칩 「거래량급증」 — 거래 비율 · 전일 동시간 누적 대비 거래량 (2026-11-23).
+
+이름 「거래량급증」 — 용어집 「거래량」(주식 수)과 겹쳐 재권님 「겹치는 이름이 있으면 거래량급증 으로 바꿔」(11-23 11:48 · 작업우선순위 창)
 
 재권님 — 「거래량 검색식을 만들어야 되는데. 풀린주식수 대비 거래량을 알아야 하고 어제대비 거래량도 알아야해. 3천억이상 종목중에
 상승이 많이 있는 종목들 찾아서 …」(작업우선순위 창 11:2x) → 시안 그림 → 「지수는 빼고 이정보를 실시간으로 들고 있어야 하고 단타엡에 추가해줘
@@ -16,7 +18,7 @@
     장 뒤    정규장 마감(dt30._close_min) 뒤에는 오늘 쪽도 마감 칸 누적에 묶는다 — 지금 시세에는 장 뒤 거래가 더해져 분자만 커진다(qa 11-23)
     장 전    단타 판은 09:00 전(chips_now pre)에 이 칩을 안 부른다 — 그 앞에서 돌아간다
     어디서   1분 칸은 8765 만 쌓는다 — 다른 서버의 /api/kis/vol-chip 은 8765 것을 넘긴다 · 단타 목록도 8765 것(dt30.live)
-    걸림     turn ≥ 칩 룰 거래량.turnPct  **또는**  prevSamePct ≥ 칩 룰 거래량.prevSamePct
+    걸림     turn ≥ 칩 룰 거래량급증.turnPct  **또는**  prevSamePct ≥ 칩 룰 거래량급증.prevSamePct
     못 잼    풀린 주식수 · 어제 5분봉 · 오늘 끝난 5분봉이 없으면 그 칸은 None(0 아님) — 다른 칸으로만 가린다
     들고 있기 CACHE_TTL 초 — 단타 판 · 주소가 함께 쓴다. 감시 종목 전부를 다시 센다(「실시간으로 들고 있어야」)
 """
@@ -37,8 +39,8 @@ def build(proxy, cfg):
     import company_profile
     import open_rise
     cap_min = chip_rules.get("순위", "capMinEok")
-    t_pct = chip_rules.get("거래량", "turnPct")
-    p_pct = chip_rules.get("거래량", "prevSamePct")
+    t_pct = chip_rules.get("거래량급증", "turnPct")
+    p_pct = chip_rules.get("거래량급증", "prevSamePct")
     uni, etf = open_rise._universe(proxy)
     cand = [u for u in uni if u["cap"] is not None and u["cap"] >= cap_min]
     quotes, _ = proxy.fetch_quotes_multi(cfg, [u["code"] for u in cand], max_age=proxy.PRICE_CACHE_TTL)

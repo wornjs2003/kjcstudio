@@ -32,7 +32,7 @@ _SLOT_SCHEMA = ("CREATE TABLE IF NOT EXISTS turnover_slot (day TEXT NOT NULL, sl
                 "PRIMARY KEY (day, slot, code))")
 
 def _migrate(conn):
-    """거래량 칸(vol · 주) — 단타 칩 「거래량」 의 「전일 동시간 누적」(2026-11-23 · vol_chip.py) · 옛 표에는 칸을 더한다(옛 줄은 NULL — 못 잼)."""
+    """거래량 칸(vol · 주) — 단타 칩 「거래량급증」 의 「전일 동시간 누적」(2026-11-23 · vol_chip.py) · 옛 표에는 칸을 더한다(옛 줄은 NULL — 못 잼)."""
     for t in ("turnover_day", "turnover_slot"):
         if "vol" not in {r[1] for r in conn.execute("PRAGMA table_info(%s)" % t)}:
             conn.execute("ALTER TABLE %s ADD COLUMN vol INTEGER" % t)
