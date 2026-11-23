@@ -168,7 +168,11 @@ def chips_now(proxy, cfg, early=True, pre=False):
             mkt.setdefault(c, str(m).upper())
     except Exception:
         pass
-    small = lambda c: cap.get(c) is not None and cap[c] < cap_min_eok()
+    # 시가총액 문턱 — 감시 목록(dart · 3천억 이상 전부)에 없거나 문턱 아래면 칩 종류와 관계없이 뺀다(아래 return 둘 · _cap_keep).
+    # 전에는 「감시 목록에 시총이 있고 문턱 아래」 만 걸러 목록 밖(사실상 3천억 아래) VI·급등 · 매수 어림 종목이 판에 들었다
+    # (11-23 09:13 판 16줄 중 12줄 · 재권님 「단타칩에 3천억 미만인 종목들이 많이 걸려있는데 이거 필터링 안되고 있는건가?」 → 「빼고 굳힌거에도 빠져야돼」)
+    # 감시 목록을 못 읽었으면(빈 표) 거르지 않는다 — 다 빼면 판이 빈다
+    small = lambda c: bool(cap) and (cap.get(c) is None or cap[c] < cap_min_eok())
     hit, missing = {}, []
 
     def put(code, name, chip, sub=None, at=None, px=None):
@@ -216,7 +220,7 @@ def chips_now(proxy, cfg, early=True, pre=False):
             missing.append("매수어림")                 # build 가 meta.early · approx 로
         else:
             missing.append("매수대기")                 # 장 전에 어림을 하나도 못 받음 — build 가 wait 로
-        return hit, missing, cap, mkt
+        return _cap_keep(hit, small), missing, cap, mkt
     try:
         for it in intraday_alerts.today().get("items") or []:
             put(it.get("code"), it.get("name"), "VI·급등", "VI" if it.get("kind") == "vi" else "급등", at=it.get("t"), px=it.get("price"))
@@ -251,7 +255,31 @@ def chips_now(proxy, cfg, early=True, pre=False):
                 hit[it["code"]]["chips"].add("볼린저")      # 셈에 안 듦 — 이름만 적는다
     except Exception:
         pass
-    return hit, missing, cap, mkt
+    return _cap_keep(hit, small), missing, cap, mkt
+
+
+def _cap_keep(hit, small):
+    return {c: g for c, g in hit.items() if not small(c)}
+
+
+def drop_small(proxy, b):
+    """그날 판(굳힌 줄 포함)에서 시가총액 문턱 밖 종목을 뺀다 — 감시 목록에 없거나 문턱 아래 · 감시 목록을 못 읽으면 안 뺌.
+    뺀 줄은 meta.capDrop [{code, name, at}] 에 남기고 남은 줄 rank 를 다시 1부터 → 뺀 수(재권님 「빼고 굳힌거에도 빠져야돼」 11-23)."""
+    import dart
+    cap = {r["stock_code"]: r["market_cap"] for r in dart.universe_rows(None)}
+    if not cap:
+        return 0
+    lo = cap_min_eok()
+    out = [r for r in b.get("rows") or [] if cap.get(r["code"]) is None or cap[r["code"]] < lo]
+    if not out:
+        return 0
+    at = _now().strftime("%H:%M:%S")
+    b["meta"].setdefault("capDrop", []).extend({"code": r["code"], "name": r.get("name"), "cap": cap.get(r["code"]), "at": at} for r in out)
+    gone = {r["code"] for r in out}
+    b["rows"] = [r for r in b["rows"] if r["code"] not in gone]
+    for i, r in enumerate(sorted(b["rows"], key=lambda r: r.get("rank") or 1e9)):
+        r["rank"] = i + 1
+    return len(out)
 
 
 def _first_at(g, sub, at, px=None):
@@ -1872,6 +1900,10 @@ def board(proxy, day=None, cfg=None):
     b, saved = got
     b["meta"]["savedAt"] = saved
     try:
+        drop_small(proxy, b)                           # 지난 판 · 그날 판 모두 읽을 때도 문턱 밖은 뺌(저장 안 함) — 재권님 「3천억 아래종목은 아예 고려대상이 아니야」(11-23)
+    except Exception as e:
+        print("  [단타 30] 문턱 거르기 못 함 — %s" % proxy.safe_message(e, 120), flush=True)
+    try:
         _pxmin_fill(proxy, b)                          # 여는 시각 + N분 값 · 09:01 값 — 적힌 것이 없으면 쌓인 1분봉에서(지난 판 · 그날 판 둘 다 · 저장 안 함)
         for r in b.get("rows") or []:
             r.setdefault("px1", None)
@@ -1972,6 +2004,9 @@ def start(proxy):
                               " · 못 받은 칩 " + " · ".join(b["meta"]["missing"]) if b["meta"]["missing"] else ""), flush=True)
                     elif got is not None:
                         b = got[0]
+                        if not b.get("closed") and drop_small(proxy, b):
+                            _store(proxy, b)               # 문턱 밖 종목 — 굳힌 줄도 뺀다(그날 판만 · 끝난 판은 안 건드림)
+                            print("  [단타 30] %s 판에서 시가총액 문턱 밖 종목 뺌 — %s" % (day, " · ".join(x["name"] or x["code"] for x in b["meta"]["capDrop"][-20:])), flush=True)
                         if b.get("closed") and not b.get("rows") and hm < BUY_LATE[0] * 60 + BUY_LATE[1]:
                             b["closed"] = False            # 줄 0 으로 굳어 버린 판 — 굳히는 때 전이면 다시 연다(11-19 수능 아침 08:00 에 빈 판이 굳어 다시 세기가 멈춤)
                         was = bool(b.get("closed"))
