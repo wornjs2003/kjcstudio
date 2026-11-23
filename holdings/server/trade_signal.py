@@ -28,14 +28,17 @@
                    슬랙 채널에 누가 같은 꼴의 줄을 써도 열쇠가 없으면 주문 · 일지가 안 움직인다. 주문 컴퓨터도 BUY 줄의 서명을 같은 셈으로 본다
                    서명이 틀리거나 없는 줄은 일지에 아무것도 안 적는다(남의 줄 메모도 안 바꿈 · 서버 로그 · status 에만 · 개념정의 덧 11-23) · 이미 결과가 적힌 번호에 다시 온 결과는 안 덮는다(되풀이 막기)
     주문 컴퓨터가 지킬 것(BUY 되풀이 막기 — 서버는 못 막는다 · 옛 BUY 메시지를 누가 채널에 다시 올리면 또 살 수 있다 · 개념정의 · qa 덧 11-23)
-                   서명이 맞는 BUY 줄만 · 보낸 시각이 주문 컴퓨터 설정의 「늦은 메시지 버림 초」 를 넘으면 버림 · 같은 일지 번호는 한 번만 주문(받은 번호를 그 컴퓨터에 남김) ·
+                   서명이 맞는 BUY · SELL 줄만 · 보낸 시각이 주문 컴퓨터 설정의 「늦은 메시지 버림 초」 를 넘으면 버림 ·
+                   같은 일지 번호의 BUY 는 한 번만 주문 · SELL 도 한 번만(받은 번호를 그 컴퓨터에 남김 · 옛 SELL 줄을 다시 올려도 두 번 안 팖) ·
+                   SELL 은 그 번호로 실제로 산 수량이 있을 때만 판다 ·
                    그 컴퓨터 설정의 한 번 · 하루 한도와 멈춤 스위치를 서버 매수금액보다 먼저 본다
     숫자는 쉼표 없이 · 금액은 원 · 칸이 모자라거나 숫자가 아니면 그 줄은 「못 읽음」 으로 일지에 남기고 값은 안 적는다
 
 켜기 · 지킴
     SEND           슬랙으로 보내는 스위치 — False 면 판도 안 읽고 일지 줄도 안 만든다 · 켜기는 재권님 지시(되돌릴 수 없는 발송)
     설정 문서       docstore 「trade-set」 {amountWon: 종목마다 매수금액(원) | null, stop: 전체 멈춤 true/false} — 화면이 고친다
-                   amountWon 이 비었거나 0 이하 · stop 이 true 면 보내지 않는다(그 까닭을 일지 상태에 적음)
+                   amountWon 이 비었거나 0 이하 · stop 이 true 면 매수 목록을 보내지 않는다(그 까닭을 일지 상태에 적음) ·
+                   stop 은 새 매수만 막고 산 종목의 매도 신호는 계속 보낸다(산 것이 안 팔리지 않게 · qa 덧 11-23 · 재권님께 여쭈는 중)
     비밀           비밀 파일(secrets_guard.secrets_path() 한 벌 — 지금 ~/.kjc 의 것 · 서버가 load_secrets 로 읽음)의 「slack」 칸 — webhook_url(보내기) · bot_token(읽기 · channels:history) · channel_id(읽을 채널) ·
                    sign_key(서명 열쇠 — 주문 컴퓨터와 같은 값 · 슬랙 · 메시지 · 저장소에 안 둔다) · sign_key 가 비면 보내지도 받지도 않는다
                    하나라도 비면 그쪽 일을 안 한다(「못 함」 으로 status 에)
@@ -58,6 +61,8 @@ READ_SEC = 5                  # 슬랙 채널 읽는 간격(초) — 재권님 �
 READ_FROM, READ_TO = (8, 0), (21, 0)   # 평일 이 사이에만 읽는다 — 매도 결과는 장중 · 넥스트레이드 끝(20:00) 뒤 조금까지
 SET_DOC = "trade-set"
 MAX_PAGES = 10                # 한 바퀴에 읽는 쪽 수(쪽마다 200)
+SELL_RETRY_SEC = 60          # 슬랙이 매도 신호를 거절했을 때 다시 보내기까지(초)
+_sell_hold = {"until": 0.0}
 SEND_CHECK_SEC = 10          # 첫 굳힘이 났나 판을 보는 간격(초)
 TICK = 1                      # 도는 틀 간격(초) — READ_SEC 이 실제 읽는 간격이 되게 그보다 잘게(qa 덧 11-23 — 틀이 10초라 5초가 10초였음)
 SLACK_HISTORY = "https://slack.com/api/conversations.history"
@@ -198,8 +203,8 @@ def sell_check(proxy, day):
     if not todo:
         return 0
     sk = _slack(proxy)
-    if not SEND or settings()["stop"] or not sk["webhook_url"] or not sk["sign_key"]:
-        return 0
+    if not SEND or not sk["webhook_url"] or not sk["sign_key"] or time.time() < _sell_hold["until"]:
+        return 0                                       # 전체 멈춤은 새 매수만 막는다 — 산 종목은 계속 판다(qa 덧 11-23 · 재권님께 여쭈는 중)
     b = dt30.board(proxy, day)
     if not b or b.get("day") != day:
         return 0
@@ -208,16 +213,16 @@ def sell_check(proxy, day):
     end = S["endAt"] or dt30_win.SELL_AT
     now = _now()
     hm = now.strftime("%H%M")
+    if now.hour * 60 + now.minute >= dt30._close_min(proxy, now):
+        return 0                                       # 정규장이 끝난 뒤에는 안 보낸다 — 서버가 늦게 떠도 장 뒤에 「매도 시각」 이 나가지 않게(개념정의 덧 11-23 · 판은 정규장 종목)
     out = []
     for jid, code, name in todo:
         r = rows.get(code)
-        if not r:
-            continue
-        v, why = dt30_win.sell_of(r, end, S)
-        if why == "매도 시각" and hm < end:
-            continue                                   # 아직 어느 룰에도 안 걸렸고 매도 시각 전
-        if why == "옛 줄":
-            continue
+        why = dt30_win.sell_of(r, end, S)[1] if r else "판에 없음"
+        if why in ("매도 시각", "옛 줄", "판에 없음"):
+            if hm < end:
+                continue                               # 아직 어느 룰에도 안 걸렸고 매도 시각 전 · 판 값을 못 셈
+            why = "매도 시각"                          # 매도 시각 뒤에는 판 값과 상관없이 아직 안 보낸 줄 전부(qa 덧 11-23 — 판 값이 비거나 판에서 빠진 종목이 영영 안 팔리던 것)
         out.append((jid, code, name, why))
     if not out:
         return 0
@@ -228,12 +233,13 @@ def sell_check(proxy, day):
         _post_webhook(sk["webhook_url"], text)
         st = "SELL 보냄"
     except urllib.error.HTTPError as e:
-        print("  [매매일지] 매도 신호 못 보냄 — %s" % proxy.safe_message(e, 120), flush=True)
-        return 0                                       # 안 갔다 — 다음 바퀴에 다시
+        _sell_hold["until"] = time.time() + SELL_RETRY_SEC   # 안 갔다 — SELL_RETRY_SEC 뒤에 다시(10초마다 두드리지 않게 · qa 덧 11-23)
+        print("  [매매일지] 매도 신호 못 보냄 — %s · %d초 뒤 다시" % (proxy.safe_message(e, 120), SELL_RETRY_SEC), flush=True)
+        return 0
     except Exception as e:
         st = "SELL 보냈는지 모름 — %s" % proxy.safe_message(e, 80)   # 갔을 수 있다 — 다시 안 보냄
-    _db(proxy, lambda c: c.executemany("UPDATE trade_journal SET sell_sent_at = ?, sell_why = ?, note = ? WHERE id = ?",
-                                       [(made, w, st, j) for j, _, _, w in out]))
+    _db(proxy, lambda c: c.executemany("UPDATE trade_journal SET sell_sent_at = ?, sell_why = ?, note = COALESCE(note || ' · ', '') || ? WHERE id = ?",
+                                       [(made, w, st, j) for j, _, _, w in out]))   # 앞 메모를 덮지 않고 뒤에 붙인다(개념정의 덧 11-23)
     return len(out)
 
 
