@@ -62,10 +62,17 @@ def day_rows(b, proxy=None):
     if proxy is not None:
         try:
             dt30._pxmin_fill(proxy, b)                 # 여는 시각 + N분 값 — 사는 값 재료(쌓인 1분봉 · DB 만)
-            cf = dt30.chip_first_get(proxy, b["day"], [r["code"] for r in b.get("rows") or []])
+            cf = dt30.chip_first_get(proxy, b["day"], [r["code"] for r in (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or [])])
             om = dt30._open_min(proxy, b["day"], b)
         except Exception as e:
             print("  [단타 승률] %s 칩 시각 · 여는 시각 못 읽음 — 공식 · 장 전으로 셈 · %s" % (b.get("day"), proxy.safe_message(e, 120)), flush=True)   # 개념정의 덧 ③
+    outs = [dict(o) for o in (b.get("meta") or {}).get("outRows") or []]   # 판에서 빠진 종목 — 빠진 뒤 값 칸은 5분봉으로 채움(dt30._out_px)
+    if outs and proxy is not None:
+        try:
+            dt30._out_px(proxy, b, outs)
+        except Exception as e:
+            print("  [단타 승률] %s 빠진 종목 값 못 채움 — %s" % (b.get("day"), proxy.safe_message(e, 120)), flush=True)
+    b = dict(b, rows=(b.get("rows") or []) + outs)
     ct = dt30.chip_times(b, cf)
     for r in b.get("rows") or []:
         chips, n = _chips_now_rule(b, r)
