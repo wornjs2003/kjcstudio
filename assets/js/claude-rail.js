@@ -34,6 +34,7 @@ const HIST_KEY = 'kh-claude-chat';
 const HIST_MAX = 40;
 const ASK_URL = '/api/claude/ask';
 const ORDER_URL = '/api/claude/order';
+const ORDER_POLL_FALLBACK_MS = 3000;   // 응답에 pollMs 가 없을 때만(옛 서버) — 없으면 setTimeout 이 0 이 되어 끝없이 바로 다시 묻는다
 const ORDER_STATE = { 'waiting-idle': '작업우선순위 창이 하던 일을 마치길 기다리는 중…', sent: '작업우선순위 창이 답하는 중…' };
 
 function load() { try { return localStorage.getItem(KEY) === '1'; } catch { return false; } }
@@ -198,7 +199,7 @@ export function mountClaudeRail() {
       let d = j.data;
       while (d.state !== 'done' && d.state !== 'fail') {
         paint({ who: 'wait', text: ORDER_STATE[d.state] || '작업우선순위 창에 보내는 중…' });
-        await new Promise((ok) => setTimeout(ok, d.pollMs));
+        await new Promise((ok) => setTimeout(ok, d.pollMs || ORDER_POLL_FALLBACK_MS));
         const g = await fetch(`${ORDER_URL}?id=${encodeURIComponent(d.id)}`, { cache: 'no-store' });
         j = await g.json().catch(() => null);
         if (!g.ok || !j?.ok) throw new Error(j?.error || `서버가 ${g.status} 를 냈습니다`);
