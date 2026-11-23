@@ -122,20 +122,12 @@ const scoreLocal = (r) => colsOf().reduce((a, c) => { if (!liveChip(r, c)) retur
   const k = sb.find((x) => S[`${c}|${x}`] != null); return a + Number(k ? S[`${c}|${k}`] : S[c] ?? 0); }, 0);
 const rankOf = (r) => (hasScore() ? scoreOf(r) : nLive(r));
 const byLive = (a, b) => rankOf(b) - rankOf(a) || (riseOf(b) - riseOf(a) || 0) || (Number(b.cap) || 0) - (Number(a.cap) || 0);   // 겹친 칩 수 → 초반상승 % → 시가총액(재권님 19:1x 말씀 · 개발2 서버 19:14 와 같은 셈 · rows[].rise)
-// 종목 차례 점수(11-23 재권님 「점수가 높은게 순위가 높게」 → (가)) — 셈 칸 set.ordScore{기준: 점수} · 기준마다 판(칩 걸린 줄) 안 순위를 0~1(1등 1 · 꼴찌 0 · 값 없음 0)로 바꿔 점수를 곱해 더함
-//   합이 높은 줄이 위 · 같으면 지금 차례(byLive) · 점수가 다 비면 지금 차례 그대로
-//   ⚠️ 줄 세우기는 서버(개발2) 한 곳이 할 몫 — 서버가 같은 셈으로 차례를 내면 이 셈은 걷는다(같은 꼴을 개발2 에 보냄 11-23 09:20). 그때까지 화면이 셈
-const ORD_VAL = { chips: (r) => rankOf(r), rise: (r) => (r.rise == null ? null : Number(r.rise)), cap: (r) => r.cap, floatCap: (r) => r.floatCap, turn: (r) => r.turn, turnPrev: (r) => r.turnPrevPct, pre: (r) => { const o = preOf(r); return o ? o.v : null; } };
-function ordSort(rows) {
-  const W = Object.entries((st.set && st.set.ordScore) || {}).filter(([k, w]) => ORD_VAL[k] && Number(w) > 0);
-  if (!W.length || rows.length < 2) return rows.sort(byLive);
-  const sc = new Map(rows.map((r) => [r, 0]));
-  W.forEach(([k, w]) => {
-    const xs = rows.map((r) => { const v = Number(ORD_VAL[k](r)); return [r, ORD_VAL[k](r) == null || !Number.isFinite(v) ? null : v]; }).filter(([, v]) => v != null).sort((a, b) => a[1] - b[1]);
-    const n = xs.length; xs.forEach(([r, v], i) => { let j = i; while (j > 0 && xs[j - 1][1] === v) j--; sc.set(r, sc.get(r) + Number(w) * (n > 1 ? j / (n - 1) : 1)); });   // 같은 값은 같은 순위(낮은 쪽)
-  });
-  return rows.sort((a, b) => sc.get(b) - sc.get(a) || byLive(a, b));
-}
+// 종목 차례 점수(11-23 재권님 「점수가 높은게 순위가 높게」 → (가)) — 셈은 서버(개발2 dt30.sort_rows · 328d256) 한 곳 · 셈 칸 set.ordScore{기준: 점수}를 서버가 읽어
+//   줄마다 rows[].ordTotal(기준마다 판 안 순위 0~1 × 점수 합)을 주고 그 합이 큰 순 · 같으면 지금 차례 — 화면은 ordTotal 로 세우기만(판정은 서버 · 개념정의 11-23)
+//   ordTotal 이 없으면(점수가 다 빈칸 · 옛 판 · 서버 고침 전) 지금 차례(byLive) · 켜고 끈 칩은 지금처럼 화면 byLive 의 칩 수에만 듦
+const ordSort = (rows) => (rows.some((r) => r.ordTotal != null)
+  ? rows.sort((a, b) => (Number(b.ordTotal) || 0) - (Number(a.ordTotal) || 0) || byLive(a, b))
+  : rows.sort(byLive));
 // 칩 설명 — 마우스를 1초 올려 두면 뜨는 공용 풍선(data-tip · glossary.js) · 글은 strategy-chipinfo.js 한 곳(「종목 고르는 룰」 칸과 같은 글 · 11-20 재권님 「응」)
 const tipOf = (k) => chipTip(k, { rules: st.rules, chipInfo: st.chipInfo, watchAuto: st.watchAuto, subTips: SUB_TIP });
 // VI · 급등 걸린 시각 (11-18 재권님 「vi급등 방생시기도 단타판에 넣어줘」 → 「vi발동시간도 넣어달라고 했는데」 → 「응 오늘판이라도 해줘」)
@@ -875,7 +867,7 @@ async function loadFee() {
 function setFill() {
   const S = st.set, box = $('dt-pnl'); if (!box) return;
   const v = { minChip: S.minChip || '', top: S.top, won: (S.mode === 'day' ? S.dayWon : S.perWon) / 10000, grpWon: (S.grpWon > 0 ? S.grpWon : S.dayWon) / 10000, stop: S.stop == null ? '' : S.stop, trail: S.trail == null ? '' : S.trail, turnPct: S.turnPct || '', cutMin: S.cutMin ?? '', flatMin: S.flatMin ?? '', flatPct: S.flatPct ?? '', endAt: S.endAt ? hmTxt(S.endAt) : '', cutPct: S.cutPct ?? '', lock0: (S.lockAt || [])[0] || '', lock1: (S.lockAt || [])[1] || '', lock2: (S.lockAt || [])[2] || '' };
-  Object.keys(ORD_VAL).forEach((k) => { v[`ord:${k}`] = (S.ordScore || {})[k] ?? ''; });   // 종목 차례 점수(11-23)
+  ORD_KEYS.forEach(([k]) => { v[`ord:${k}`] = (S.ordScore || {})[k] ?? ''; });   // 종목 차례 점수(11-23)
   box.querySelectorAll('[data-set]').forEach((el) => { if (document.activeElement !== el) el.value = String(v[el.dataset.set] ?? ''); });
   box.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('is-active', b.dataset.mode === S.mode));
   box.querySelectorAll('[data-turn]').forEach((b) => b.classList.toggle('is-active', (b.dataset.turn === '1') === !!S.turn));
@@ -907,11 +899,13 @@ async function saveDt(patch) {
 }
 // 셈 칸 고침 — 값을 읽어 맞으면 바로 다시 셈하고 저장 · 틀리면 되돌림
 async function setChange(next) {
-  const msg = $('dt-set-msg');
+  const msg = $('dt-set-msg'), prevOrd = (st.set && st.set.ordScore) || {};
   st.set = next; setFill();
   if (st.data) { paint(st.data); chips(); }
   msg.textContent = '저장하는 중…';
-  try { await saveDt({ set: next }); msg.textContent = '저장됨 — 다시 셈'; }
+  try { await saveDt({ set: next }); msg.textContent = '저장됨 — 다시 셈';
+    if (JSON.stringify(prevOrd) !== JSON.stringify(next.ordScore || {})) load(st.day, true);   // 차례 점수는 서버가 셈 — 저장 뒤 판을 다시 받아 새 차례(11-23)
+  }
   catch (e) { msg.textContent = `화면은 다시 셈 · 저장 못 함(${e.message || '연결 안 됨'})`; }
 }
 function setRead(el) {
