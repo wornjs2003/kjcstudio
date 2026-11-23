@@ -5,9 +5,10 @@ rem Keys and account go only in config.json on that PC. They are never built int
 chcp 65001 > nul
 cd /d "%~dp0"
 
-where python > nul 2>&1
+rem "where python" also finds the Windows Store placeholder - so run it and check the version (3.12+)
+python -c "import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)" > nul 2>&1
 if errorlevel 1 (
-  echo Python is not installed. Install Python 3.12 from python.org with "Add to PATH" checked, then run this again.
+  echo Python 3.12 or newer was not found. Install Python 3.12 from python.org with "Add to PATH" checked, then run this again.
   pause
   exit /b 2
 )
