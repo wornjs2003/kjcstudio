@@ -2188,7 +2188,9 @@ TURN_NOTE = ("floatCap 풀린 시총(억원) = 발행주식수 × 유동비율(�
              "accVol 오늘 누적 거래량(주) · accValue 오늘 누적 거래대금(억원) · prevSameVol 전날 같은 시각까지 거래량(주) · "
              "volPrevPct · valuePrevPct 거래량 · 거래대금 전날 같은 시각 대비(%) · 색 기준 data/metrics.json vol_prev_pct · amt_prev_pct · "
              "prevDayVol · prevDayValue 전날 하루 거래량(주) · 거래대금(억원) · 굳힌 판은 「같은 시각」 이 전날 끝 · "
-             "prevSameSrc 전날 거래량 출처 — slot 1분 칸 · 1m 1분봉 합 · 5m 끝난 5분봉 합(어림) · D 일봉(굳힌 판) — 거래 값 표에 전날이 없을 때 봉으로 채움(거래대금 칸은 그때 null) · "
+             "그날 판의 prevSameVol · volPrevPct 는 거래량급증 칩과 같은 셈(turnover.same_time) — prevSameSrc 1m 전날 같은 1분 칸 · 5m 정규장 5분봉 끝난 봉끼리 · "
+             "5m 이면 prevSameVol 은 정규장 5분봉 합이라 accVol(시세 · 한국거래소)과 바로 견주지 않는다 · 굳힌 판은 slot 그날 끝 칸 · "
+             "전날 값은 거래 값 표(시세)로만 — 봉으로 채우지 않는다(넥스트레이드 합친 값이라 기준이 다름 · 쌓기 첫날 11-23 은 전날 칸 null) · "
              "그날 판은 지금 값 · 굳힌 판은 그날 쌓인 마지막 값(turnover_day) · 못 잰 칸은 null · 우선주는 유동비율 출처가 없어 null")
 
 

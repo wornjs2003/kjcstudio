@@ -46,44 +46,26 @@ def build(proxy, cfg):
     quotes, _ = proxy.fetch_quotes_multi(cfg, [u["code"] for u in cand], max_age=proxy.PRICE_CACHE_TTL)
     fl = company_profile.floats()
     import turnover
-    now = datetime.now(KST)
-    import dt30
-    hm, close = now.hour * 60 + now.minute, dt30._close_min(proxy, now)
-    slot = turnover._slot(min(hm, close))
-    day = now.strftime("%Y%m%d")
-    prev1 = turnover.prev_slot_vol(proxy, [u["code"] for u in cand], day, slot)
-    # 정규장이 끝난 뒤에는 오늘 쪽도 마감 칸 값에 묶는다 — 지금 시세는 장 뒤(넥스트레이드 애프터) 거래가 더해져 분자에만 쌓인다(qa 11-23 · 11-10 「79%→122%」 꼴)
-    shut = turnover.day_slot_vol(proxy, [u["code"] for u in cand], day, slot) if hm >= close else {}
+    # 「전날 같은 시각까지 거래량 대비」 는 turnover.same_time 한 곳 — 단타 판 거래량 칸(volPrevPct)과 같은 셈(개념정의 덧 11-23 · 개발1 「가」)
+    same, info = turnover.same_time(proxy, [u["code"] for u in cand], quotes)
+    slot, prev1n = info["slot"], info["prev1m"]
     rows, seen = [], 0
     for u in cand:
         q = quotes.get(u["code"]) or {}
-        if hm >= close:                                  # 장 뒤 — 마감 칸 값(없으면 못 잼 · 지금 시세로 대신하지 않는다)
-            vol, value, price = shut.get(u["code"]) or (None, None, None)
-        else:
-            vol, value, price = q.get("volume"), q.get("value"), q.get("price")
-        if vol is None:
+        s = same.get(u["code"])
+        if s is None:
             continue
+        vol, value, price, sp, pv, src = s["vol"], s["value"], s["price"], s["pct"], s["prevVol"], s["src"]
         seen += 1
         fcap, turn = turnover.calc(price, value, fl.get(u["code"]))
-        st, src = None, None
-        pv = prev1.get(u["code"])
-        if pv:
-            sp, src = round(vol / pv * 100), "1m"
-        else:
-            try:
-                st = proxy.vol_same_time(u["code"])
-            except Exception:
-                st = None
-            sp = round(st["today"] / st["prev"] * 100) if st and st.get("today") is not None and st.get("prev") else None
-            src = "5m" if sp is not None else None
         by = [k for k, ok in (("turn", turn is not None and turn >= t_pct), ("prev", sp is not None and sp >= p_pct)) if ok]
         if by:
             rows.append({"code": u["code"], "name": u["name"], "market": u["market"], "cap": u["cap"],
                          "price": q.get("price"), "pct": q.get("pct"), "vol": vol, "floatCap": fcap,
-                         "turn": turn, "prevSamePct": sp, "prevVol": pv, "prevSrc": src, "upto": slot if src == "1m" else (st.get("upto") if st else None), "by": by})
+                         "turn": turn, "prevSamePct": sp, "prevVol": pv, "prevSrc": src, "upto": s["upto"], "by": by})
     rows.sort(key=lambda r: (-(r["pct"] if r["pct"] is not None else -999), -(r["cap"] or 0)))
     return {"rows": rows, "candidates": len(cand), "quoted": seen, "etfOut": etf, "floatKnown": sum(1 for u in cand if fl.get(u["code"])),
-            "slot": slot, "prev1m": len(prev1), "turnPct": t_pct, "prevSamePct": p_pct, "capMinEok": cap_min,
+            "slot": slot, "prev1m": prev1n, "turnPct": t_pct, "prevSamePct": p_pct, "capMinEok": cap_min,
             "at": datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")}
 
 
