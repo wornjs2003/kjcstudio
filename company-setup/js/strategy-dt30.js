@@ -508,7 +508,9 @@ function paint(d) {
     return `<td class="${k === L ? 'dt-last' : ''}">${pxT}${pct(v)}${flT}</td>`;
   };
   const plTd = (x, i) => `<td class="dt-pl">${x.inv && x.pnl ? (x.pnl.net == null ? '<span class="st-err">시장 모름</span>' : `<span class="${signClass(x.pnl.net, NUM) || ''}">${won(x.pnl.net)}</span><small>빼기 전 ${won(x.pnl.gross)}${x.pnl.adds && x.pnl.adds.length ? ` · 불타기 ${won(x.pnl.pyr)}` : ''}</small>`) : '<span class="st-err">—</span>'}</td>`;
-  const resTd = (x) => `<td class="dt-res">${pct(x.res)}<small>${x.s.k >= 0 ? `${hmTxt(times[x.s.k])} ${x.s.why}` : x.now ? `지금 ${esc(String(d.nowAt || '').slice(0, 5))}` : '끝까지'}</small></td>`;
+  // 결과 칸에 지금 가격(11-23 재권님 「결과에 지금가격도 보여지고 갱신되도록해」) — 서버 rows[].now · data.nowAt(장중 · 굳기 전) · 갱신은 판을 다시 받는 서버 주기(meta.refreshMs) 그대로 · 칸을 통째로 다시 그려 거르는 표 없음
+  const nowTxt = (r) => (LIVE && Number(r.now) > 0 ? `지금 ${num(Number(r.now))}` : '');
+  const resTd = (x) => { const nt = nowTxt(x.r); return `<td class="dt-res">${pct(x.res)}<small>${x.s.k >= 0 ? `${hmTxt(times[x.s.k])} ${x.s.why}${nt ? ` · ${nt}` : ''}` : x.now ? `${nt || '지금'} · ${esc(String(d.nowAt || '').slice(0, 5))}` : '끝까지'}</small></td>`; };
   const rk = (r, i) => `<td class="dt-rk">${i + 1}</td>`;
   // 매수가 (11-18 서버 바뀜) — 정규장 전에 든 종목은 buy null + buyWait → 「09:00 시가 기다림」 · 채워지면 buySrc(시가 · 지금 값) · 그 시각
   const NM0 = d.meta || {};
