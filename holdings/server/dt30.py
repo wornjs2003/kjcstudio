@@ -994,10 +994,15 @@ def bars_get(proxy, day, codes, lo, end):
 
 
 def bars_after(per, bs, at):
-    """산 시각 at(「HH:MM」)부터의 봉 — 5분봉이면 산 분이 든 봉부터."""
-    if per == "5m":
-        at = "%02d:%02d" % divmod((int(at[:2]) * 60 + int(at[3:])) // BAR_MIN * BAR_MIN, 60)
-    return [x for x in bs if x[0] >= at]
+    """산 시각 at(「HH:MM」)부터의 봉 — 5분봉이면 산 분이 든 봉부터 · 그 첫 봉이 산 분보다 앞에서 시작하면 종가 하나로 줄인다
+    (산 앞의 고가 · 저가로 손절 · 고점이 걸리지 않게 · 개념정의 덧 ① 11-23)."""
+    if per != "5m":
+        return [x for x in bs if x[0] >= at]
+    a5 = "%02d:%02d" % divmod((int(at[:2]) * 60 + int(at[3:])) // BAR_MIN * BAR_MIN, 60)
+    out = [x for x in bs if x[0] >= a5]
+    if out and out[0][0] < at:
+        out[0] = [out[0][0], out[0][4], out[0][4], out[0][4], out[0][4]]
+    return out
 
 
 def bars_fill(proxy, b):
@@ -2853,9 +2858,13 @@ def board(proxy, day=None, cfg=None):
         pass
     try:
         buy930_fill(proxy, b)                          # 사는 셈 한 곳 — 칩 시각 · 09:30 까지 칩 · N번째 칩 찬 때 값(rows[].buy930 · 화면은 받기만) · 아래 봉 줄은 이 값을 씀
-        bars_fill(proxy, b)                            # 산 때~판 끝 봉 줄(매도 타점 재료 · 화면 · 승률 표 같은 봉)
     except Exception as e:
-        print("  [단타 30] 봉 줄 못 붙임 — %s" % proxy.safe_message(e, 120), flush=True)
+        print("  [단타 30] 사는 셈 못 함 — %s" % proxy.safe_message(e, 120), flush=True)
+    else:
+        try:
+            bars_fill(proxy, b)                        # 산 때~판 끝 봉 줄(매도 타점 재료 · 화면 · 승률 표 같은 봉)
+        except Exception as e:
+            print("  [단타 30] 봉 줄 못 붙임 — %s" % proxy.safe_message(e, 120), flush=True)
     b["meta"]["subNames"] = {"매수|" + "①②③④"[k - 1]: v[0] for k, v in proxy.JOINT_TIER_NAME.items()}   # 하위 이름표 — 서버 한 곳(kis_proxy.JOINT_TIER_NAME · 11-20)
     b["meta"]["subTips"] = {"매수|" + "①②③④"[k - 1]: v[1] for k, v in proxy.JOINT_TIER_NAME.items()}
     import dt30_win
