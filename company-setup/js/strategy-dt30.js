@@ -262,12 +262,23 @@ const inTs = (r) => { const t = String(r.buyTs || '').replace(/:/g, ''), a = hhm
 //   9시 1분 몫이면 at 대신 inUntil 59초까지를 「아직 안 듦」 경계로(그 사이 든 종목은 든 때 가격에 삼)
 const notYetIn = (r, at) => { if (pmOf(buyKey()) === 1 && Number(r.lock) > 0) return '';   // 굳힌 줄은 든 때 산 것(11-23)
   if (pmOf(buyKey()) === 1 && inUntil()) at = `${inUntil()}59`; const e = inTs(r), a = String(at || '').replace(/:/g, '').padEnd(6, '0').slice(0, 6); return newBuyOf(curD()) && e && /^\d{6}$/.test(a) && a < e ? (r.buyTs ? String(r.buyTs) : hmS(hhmm(r.buyAt))) : ''; };
+const chipNeed = () => Math.max(1, Number(st.set.minChip) || 1);
+// 켜진 칩이 붙은 시각을 세워 N번째(칩 수 기준) — HHMM · 시각 모르는 칩은 그 줄이 판에 처음 든 때로 봄(칩은 든 때보다 앞설 수 없음 · 든 때도 모르면 장 시작 전) · 칩이 모자라면 null
+const nthChipAt = (r) => { const at = r.chipAt || {}; const ts = colsOf().filter((c) => liveChip(r, c)).map((c) => String(at[c] || (c === 'VI·급등' ? r.viAt || '' : '')).replace(/:/g, '').slice(0, 4) || inTs(r).slice(0, 4) || '0000').sort(); const N = chipNeed(); return ts.length >= N ? ts[N - 1] : null; };
 function buyOf(r) {   // → { px, at(HHMM), src } | null
   const k = buyKey();
   const n = pmOf(k);
   // 9시 1분 몫 — 여는 시각+1분 ~ inUntil 59초 사이에 든 종목은 든 때 가격(서버 r.buy)
   // 창(11-23 서버 253689d) — 창에 든 줄은 필터에 든 분 1분봉 값(서버 r.buy · winAt) · 문턱 밑 줄(lock 없음)은 안 삼
   if (n === 1 && winMode()) { if (!(Number(r.lock) > 0) || !(Number(r.buy) > 0)) return null; const w = String(r.winAt || r.buyAt || '').replace(/:/g, ''); return { px: Number(r.buy), at: w.slice(0, 4), src: w.length >= 4 ? `${w.slice(0, 2)}:${w.slice(2, 4)} 창 1분봉` : '창 1분봉' }; }
+  // 굳힘 없앤 판(flat930 · 11-23) — 칩 수 기준(셈 칸 「칩 N개 이상」 · 빈칸 = 1)을 넘은 순간에 삼(재권님 「내가 칩 갯수 바꿀때마다 사는게 바뀌게 되야돼」)
+  //   그 순간 = 켜진 칩을 붙은 시각(chipAt · VI 는 viAt · 시각 모름 = 장 시작 전)으로 세운 N번째 · 09:01 전이면 9시 1분 값 · 09:01~09:05 는 그 분 값(pxMin)
+  //   그 뒤는 판에 든 때가 그 순간 이후면 든 때 값(r.buy) · 아니면 그 순간 뒤 첫 30분 칸 값(그 분 값을 서버가 안 줌 — 짐작 안 함 · 칸 이름에 적음)
+  if (n === 1 && curD() && curD().flat930) { const T = nthChipAt(r); if (T == null) return null;
+    const p1 = minHM(1); if (T <= p1) { const o = minVal(r, 1); return o && Number(o.px) > 0 ? { px: Number(o.px), at: p1, src: `${hmS(p1)} 값 · 칩 ${chipNeed()}개 찬 때 ${hmS(T)}` } : null; }
+    for (const k of PMIN) { const h = minHM(k); if (T <= h) { const o = minVal(r, k); if (o && Number(o.px) > 0) return { px: Number(o.px), at: h, src: `${hmS(h)} 값 · 칩 ${chipNeed()}개 찬 때` }; break; } }
+    const e = inTs(r).slice(0, 4); if (e && e >= T && Number(r.buy) > 0) return { px: Number(r.buy), at: e, src: `${hmS(e)} 든 때 · 칩 ${chipNeed()}개 찬 때` };
+    const t = ((curD().times) || []).find((x) => hhmm(x) >= T), v = t && Number((r.px || {})[t]); return v > 0 ? { px: v, at: hhmm(t), src: `${hmS(hhmm(t))} 칸 값 · 칩 ${chipNeed()}개 찬 때 ${hmS(T)}` } : null; }
   if (n === 1) { const e = inTs(r), p1 = `${minHM(1)}00`, u = inUntil();
     // 굳힘마다 산 값이 다름(11-23 재권님 「각 굳힘별로 산 가격은 다르게 해줘야해 9시 5분 굳힘은 현재 만들어놓은 룰이고. 그이후에 굳힘 종목은 들어올때로 만들어줘」)
     //   첫 굳힘(09:05 · lock 1)은 아래 룰 그대로 · 둘째 굳힘부터(lock 2 · 3)는 판에 처음 든 때 가격(r.buy) · 산 시각 든 때
@@ -400,7 +411,15 @@ async function usLoad(day) {
 }
 
 // 한 날 판의 셈 — 화면 그리기(paint)와 이달 합계(monthPaint)가 같은 셈을 쓴다 · 값은 서버 판 그대로 · 칩 켜고 끔 · 셈 칸(st.set)을 따름
-function calc(d) { const p = calcD; calcD = d; try { return calcDay(d); } finally { calcD = p; } }
+// 굳힘(창) 없앰 · 칩은 09:30 까지 붙은 것만(11-23 재권님 「추가된 칩이랑 시간들 받아서 매매계산 … 9시 30분기준으로 해서 계산되도록 굳힘 없애줘」 → 「9시 30분까지 칩이 적용된것들이야 9시 30분에 사는게 아니고」)
+//   서버 rows[].lock · meta.lockMode · windows · lockAt 을 받는 자리에서 지움 → 창 단추 · 창 셈 칸 · 진행 중 묶음이 안 생김 · 사는 때는 매수 칸 룰 그대로
+//   칩 시각 = rows[].chipAt(VI 는 viAt 도) — 09:30 뒤에 붙은 칩은 그 줄에서 뺌(겹친 수 · 순위 · 셈에서 빠짐) · 시각을 모르는 칩은 남김(짐작해 빼지 않음)
+const CHIP_UNTIL = '09:30';
+const flat930 = (d) => { if (!d || d.flat930) return d; const m = { ...(d.meta || {}) }; ['lockMode', 'windows', 'lockAt', 'lockN'].forEach((k) => delete m[k]);
+  const rows = (Array.isArray(d.rows) ? d.rows : []).map((r) => { const at = r.chipAt || {}; const tOf = (c) => String(at[c] || (c === 'VI·급등' ? r.viAt || '' : '')).slice(0, 5);
+    return { ...r, lock: null, lockAt: null, chips: (r.chips || []).filter((c) => { const t = tOf(c); return !t || t <= CHIP_UNTIL; }) }; });
+  return { ...d, meta: m, rows, flat930: true }; };
+function calc(d) { const p = calcD; calcD = flat930(d); try { return calcDay(calcD); } finally { calcD = p; } }
 function calcDay(d) {
   const S = st.set;
   // 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것으로 — 셈 · 돈 나누기에서 뺌(11-20 qa 덧 → 재권님 「가」)
@@ -838,9 +857,9 @@ async function load(day, quiet) {
     }
     return;
   }
-  const d = renameChips(j.data), m = renameChips(j.meta || {});
+  let d = renameChips(j.data); const m = renameChips(j.meta || {});
   st.days = Array.isArray(m.days) ? m.days : [d.day];   // 몇 날을 두는지는 서버(daysKeep) 한 곳 — 화면은 자르지 않음(11-12 재권님 「룰이 확립되면 많이 늘릴거야」)
-  st.day = d.day; st.data = d;
+  d = flat930(d); st.day = d.day; st.data = d;   // 굳힘 없앰 · 09:30 까지 칩(위 flat930) — 아래 그리기도 이 판으로
   if (!DT_CHIPS.length || st.chipFail) {   // 칩 룰 표를 못 받음(옛 서버 404 · 끊김) — 판을 비우지 않고 이 판 줄에 실린 칩(처음 본 차례)으로 칸을 세움 · 머리 글에 「서버 값 못 받음」(11-20 개발 서버에서 판이 빈 것)
     const seen = []; (d.rows || []).forEach((r) => (r.chips || []).forEach((c) => { if (!seen.includes(c)) seen.push(c); }));
     DT_CHIPS.splice(0, DT_CHIPS.length, ...seen); if (!CHIP_SEEN.length) CHIP_SEEN.push(...seen); st.chipFail = true;
@@ -946,7 +965,7 @@ async function loadFee() {
 // 셈 칸에 지금 값 채우기 · 단추 켜짐 표시
 function setFill() {
   const S = st.set, box = $('dt-pnl'); if (!box) return;
-  { const g = $('dt-lkgrid'), W = winsOf(), sig = JSON.stringify(W); if (g && g.dataset.sig !== sig && !g.contains(document.activeElement)) { g.innerHTML = lkGridHtml(W); g.dataset.sig = sig; g.style.gridTemplateColumns = W ? 'auto auto auto' : 'auto auto auto auto auto auto'; } }   // 창 여섯 · 옛 판은 굳힘 넷
+  { const g = $('dt-lkgrid'), W = winsOf(), sig = JSON.stringify(W); if (g && g.dataset.sig !== sig && !g.contains(document.activeElement)) { g.innerHTML = ''; g.dataset.sig = sig;   /* 굳힘 없앰(11-23) — 굳힘 · 창 설정 표를 안 그림 · lkGridHtml 은 되돌릴 때 쓰려고 남김 */ g.style.gridTemplateColumns = W ? 'auto auto auto' : 'auto auto auto auto auto auto'; } }   // 창 여섯 · 옛 판은 굳힘 넷
   const v = { minChip: S.minChip || '', top: S.top, won: (S.mode === 'day' ? S.dayWon : S.perWon) / 10000, grpWon: (S.grpWon > 0 ? S.grpWon : S.dayWon) / 10000, stop: S.stop == null ? '' : S.stop, trail: S.trail == null ? '' : S.trail, turnPct: S.turnPct || '', cutMin: S.cutMin ?? '', flatMin: S.flatMin ?? '', flatPct: S.flatPct ?? '', endAt: S.endAt ? hmTxt(S.endAt) : '', cutPct: S.cutPct ?? '', lock0: (S.lockAt || [])[0] || '', lock1: (S.lockAt || [])[1] || '', lock2: (S.lockAt || [])[2] || '' };
   ORD_KEYS.forEach(([k]) => { v[`ord:${k}`] = (S.ordScore || {})[k] ?? ''; });
   [0, 1, 2, 3, 4, 5].forEach((i) => { const gw = (S.grpWons || [])[i]; v[`gw${i}`] = gw > 0 ? gw / 10000 : ''; v[`gn${i}`] = (S.lockNs || [])[i] ?? ''; v[`gc${i}`] = (S.lockMinChip || [])[i] ?? ''; });   // 굳힘 칸마다(11-23)   // 종목 차례 점수(11-23)
