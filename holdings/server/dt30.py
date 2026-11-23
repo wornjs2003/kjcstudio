@@ -531,21 +531,71 @@ def row_score(r, tab, off=0):
     return round(sum(row_score_by(r, tab, off).values()), 4)
 
 
+ORD_KEYS = {                  # 차례 점수 기준 — 룰 문서 rules.dt30.set.ordScore {열쇠: 점수} · 열쇠 이름은 화면(시황분석1 f526d19)과 같게
+    "chips": "칩 수(점수표가 있으면 점수 합)", "rise": "초반상승 %", "cap": "시가총액", "floatCap": "풀린 시총",
+    "turn": "거래 비율", "turnPrev": "거래 비율 전날 같은 시각 대비", "pre": "오늘 프리장 %"}
+
+
+def ord_score():
+    """룰 문서의 차례 점수 {열쇠: 점수} — 0 이 아닌 숫자만 · 비었거나 못 읽으면 None(지금 차례 그대로)."""
+    try:
+        import docstore
+        d = docstore.read_doc("strategy-rules") or {}
+        t = (((d.get("rules") or {}).get("dt30") or {}).get("set") or {}).get("ordScore") or {}
+    except Exception:
+        return None
+    t = {k: float(v) for k, v in t.items() if k in ORD_KEYS and isinstance(v, (int, float)) and not isinstance(v, bool) and v}
+    return t or None
+
+
+def _ord_val(r, k):
+    if k == "chips":
+        return r["score"] if r.get("score") is not None else r.get("n")
+    if k == "turnPrev":
+        return r.get("turnPrevPct")
+    if k == "pre":
+        return (r.get("pre") or {}).get("pct") if isinstance(r.get("pre"), dict) else None
+    return r.get(k)
+
+
+def _ord_total(rows, ws):
+    """종목마다 Σ 점수 × 그 기준의 판 안 순위 0~1(1등 1 · 꼴찌 0 · 값 없음 0 · 값 있는 종목이 하나면 1) — 재권님 「이거를 옆에 점수로 넣을수 있게하고
+    점수가 높은게 순위가 높게 해줘」 → (가)(11-23 09:20 · 시황분석1 창) · 판 안 = 지금 세우는 줄들끼리."""
+    tot = {id(r): 0.0 for r in rows}
+    for k, w in ws.items():
+        have = sorted([r for r in rows if _ord_val(r, k) is not None], key=lambda r: -_ord_val(r, k))
+        m = len(have)
+        for i, r in enumerate(have):
+            tot[id(r)] += w * (1.0 if m == 1 else 1 - i / (m - 1))
+    return tot
+
+
 def sort_rows(rows, tab, off=0):
-    """줄 세우기 한 곳 — tab(점수표)이 있으면 점수 합 · 없으면 칩 수. 앞의 것이 같으면 초반상승 → 시가총액. rows 를 제자리에서 세우고 order 글을 낸다."""
+    """줄 세우기 한 곳 — tab(점수표)이 있으면 점수 합 · 없으면 칩 수. 앞의 것이 같으면 초반상승 → 시가총액. rows 를 제자리에서 세우고 order 글을 낸다.
+    룰 문서에 차례 점수(ord_score)가 있으면 그 합이 큰 순이 맨 앞 열쇠 · 같으면 위 차례(ordTotal 을 줄에 적음)."""
     rise = lambda r: -(r["rise"] if r.get("rise") is not None else -1e9)
     cap = lambda r: -(r["cap"] if r.get("cap") is not None else -1)
+    ws = ord_score()
     if tab:
         for r in rows:
             r["scoreBy"] = row_score_by(r, tab, off)
             r["score"] = round(sum(r["scoreBy"].values()), 4)
-        rows.sort(key=lambda r: (-r["score"], rise(r), cap(r)))
-        return "점수 합 큰 순 → 초반상승 높은 순 → 시가총액 순"
+        base, text = (lambda r: (-r["score"], rise(r), cap(r))), "점수 합 큰 순 → 초반상승 높은 순 → 시가총액 순"
+    else:
+        for r in rows:
+            r.pop("score", None)
+            r.pop("scoreBy", None)
+        base, text = (lambda r: (-r["n"], rise(r), cap(r))), "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순"   # 재권님 19:1x
+    if ws:
+        tot = _ord_total(rows, ws)
+        for r in rows:
+            r["ordTotal"] = round(tot[id(r)], 4)
+        rows.sort(key=lambda r: (-r["ordTotal"],) + base(r))
+        return "차례 점수 합 큰 순(%s) → %s" % (" · ".join("%s %g" % (ORD_KEYS[k], w) for k, w in ws.items()), text)
     for r in rows:
-        r.pop("score", None)
-        r.pop("scoreBy", None)
-    rows.sort(key=lambda r: (-r["n"], rise(r), cap(r)))   # 재권님 19:1x
-    return "칩 수 많은 순 → 초반상승 높은 순 → 시가총액 순"
+        r.pop("ordTotal", None)
+    rows.sort(key=base)
+    return text
 
 _live = {"at": 0.0, "pre": None, "data": None, "busy": False}
 LIVE_STALE_SEC = 300         # 가진 목록이 이만큼 넘게 묵었으면 바로 내주지 않고 새로 셀 때까지 기다렸다 답한다(초) — 물음이 한동안 없다가 오면
@@ -700,7 +750,8 @@ def build(proxy, cfg, day, skip=()):
         if x["down"]:
             down.append(x["code"])                     # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
             continue
-        r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "viAt", "surgeAt", "viPx")}
+        r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "viAt", "surgeAt", "viPx",
+                                   "floatCap", "turn", "turnPrevPct")}
         r.update(buy=None if pre else x["price"], px={}, pxSrc={},
                  chipAt={c: _now().strftime("%H:%M") for c in x["chips"]})      # 칩마다 판에 처음 붙은 시각(묶음 ② · 다시 세면 앞 시각 그대로)
         if pre:
