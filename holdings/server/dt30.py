@@ -1038,6 +1038,45 @@ def bars_fill(proxy, b):
     return n
 
 
+def live_merge(b):
+    """라이브로 굳힌 날을 다시 지은 판(meta.liveBefore 가 있는 판)에 장중에 실제로 적은 값을 되돌린다 — 다시 지은 셈(5분봉 어림)이 덮은 것.
+    줄마다(코드로) 매수가 · 든 시각 · 시각 칸 값 · 칩 붙은 시각(앞 것 · 이른 쪽)을 장중 기록으로 · 장중에만 있던 종목은 줄째 되살림 ·
+    다시 지어 새로 든 종목(3천억 이상 · 칩 하나라도)은 그대로. meta.liveMerged 를 찍는다 → 되돌린 줄 수.
+    재권님 「목록 왜 또 바뀐거지?」(11-24 08:0x) — 0시에 11-23 라이브 판이 다시 지어져 장중 값이 어림으로 바뀌었다."""
+    m = b.get("meta") or {}
+    lb = m.get("liveBefore") or {}
+    if m.get("liveMerged") or not lb.get("rows"):
+        return 0
+    rows = {r["code"]: r for r in b.get("rows") or []}
+    n = 0
+    for o in lb["rows"]:
+        r = rows.get(o["code"])
+        if r is None:
+            r = dict(o)                                # 장중에만 있던 종목 — 그 줄 그대로
+            r.setdefault("px", {})
+            r.setdefault("pxSrc", {})
+            b["rows"].append(r)
+            rows[o["code"]] = r
+        else:
+            for k in ("buy", "buyAt", "pct", "rise"):
+                if o.get(k) is not None:
+                    r[k] = o[k]
+            ca = dict(r.get("chipAt") or {})
+            for c, t in (o.get("chipAt") or {}).items():
+                if t and (not ca.get(c) or t < ca[c]):
+                    ca[c] = t
+            r["chipAt"] = ca
+            for t, v in (o.get("px") or {}).items():
+                if v is not None:
+                    r.setdefault("px", {})[t] = v
+                    r.setdefault("pxSrc", {})[t] = (o.get("pxSrc") or {}).get(t) or "live"
+            r["chips"] = list(dict.fromkeys(list(r.get("chips") or []) + list(o.get("chips") or [])))
+        r["live"] = True                               # 장중 판에 있던 줄
+        n += 1
+    m["liveMerged"] = True
+    return n
+
+
 TRADE_VER = "t1"              # 지난 판 거래 값 셈(_past_trade)이 바뀌면 올린다 — 남은 되채운 판마다 한 번 다시 채운다(meta.tradeVer)
 CF_VER = "f1"                 # 칩 시각 공식(chip_first_backfill)이 바뀌면 올린다 — 남은 판마다 한 번 다시 채운다(meta.cfVer)
 
@@ -2464,14 +2503,21 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
             continue
         b = rebuild(proxy, d, ds[i + 1], cfg)
         if b and b["rows"]:
-            if d in keep_live:                         # 장중에 고른 기록은 다시 세도 이어 남긴다
+            if d in keep_live:                         # 장중에 고른 기록은 다시 세도 이어 남기고 그 값을 되돌린다(live_merge)
                 b["meta"]["liveBefore"], b["meta"]["redoneFromLive"] = keep_live[d], True
+                live_merge(b)
             _redo_gone(proxy, d, b)
             _store(proxy, b)
             n += 1
     for d in days(proxy)[:limit]:                      # 칩 시각 공식(CF_VER)을 남은 판마다 한 번 — 기록이 없던 칩도 시각을 갖게(11-23 19:0x 「공식도 있어야해」)
         got = _load(proxy, d)
         m = (got[0].get("meta") or {}) if got else {}
+        if got and m.get("liveBefore") and not m.get("liveMerged"):
+            try:                                       # 라이브로 굳힌 날을 다시 지은 판 — 장중에 적은 값을 되돌림(재권님 「목록 왜 또 바뀐거지?」 11-24)
+                if live_merge(got[0]):
+                    _store(proxy, got[0])
+            except Exception as e:
+                print("  [단타 30] %s 장중 값 못 되돌림 — %s" % (d, proxy.safe_message(e, 120)), flush=True)
         if got and d < today and m.get("prevDay") and m.get("tradeVer") != TRADE_VER:   # 거래 값 · 풀린 시총 어림을 남은 되채운 판마다 한 번(다시 짓지 않고 · 11-23 20:2x 「응」)
             try:
                 if _past_trade(proxy, d, m["prevDay"], got[0].get("rows") or []):   # 봉을 못 읽은 날은 표시를 안 찍어 다음 바퀴에 다시(개념정의 덧 ②)
