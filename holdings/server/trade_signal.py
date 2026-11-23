@@ -246,7 +246,7 @@ def _post_webhook(url, text):
         raise RuntimeError("슬랙 응답이 ok 가 아님 — %s" % body[:60])
 
 
-AGAIN = ("판 아직 없음", "첫 창 끝", "첫 창 빔")     # send_today 가 이 글로 시작하는 답을 내면 다음 바퀴에 다시 본다 — 글을 바꾸면 여기도(한 곳)
+AGAIN = ("판 아직 없음", "기다림")     # send_today 가 이 글로 시작하는 답을 내면 다음 바퀴에 다시 본다 — 글을 바꾸면 여기도(한 곳)
 
 
 def send_today(proxy, day):
@@ -260,7 +260,7 @@ def send_today(proxy, day):
     fl = day_times(proxy)["firstLock"]
     rows = sorted([r for r in b.get("rows") or [] if r.get("buy930")], key=lambda r: (r["buy930"]["chipAt"], r.get("rank") or 1e9))[:PICK_N]
     if day == _now().strftime("%Y%m%d") and len(rows) < PICK_N and _now().strftime("%H:%M") < fl:
-        return "칩 %d개 찬 종목 %d — %s 까지 기다림" % (dt30.buy_need(), len(rows), fl)
+        return "기다림 — 칩 %d개 찬 종목 %d · %s 까지" % (dt30.buy_need(), len(rows), fl)
     for r in rows:
         r["buy"] = r["buy930"]["px"]                   # 보내는 가격 = 사는 셈의 값(주문 컴퓨터 상한 기준)
     amt = amount_won(len(rows))
@@ -515,7 +515,7 @@ def start(proxy):
                         last_send = time.time()
                         note = send_today(proxy, day)
                         _status.update(sendAt=now.strftime("%H:%M:%S"), sendNote=note)
-                        if not note.startswith(AGAIN):            # 다시 볼 글(판 없음 · 첫 창 끝 전 · 첫 창 빔)이 아니면 그날은 끝(개념정의 걸림 11-23)
+                        if not note.startswith(AGAIN):            # 다시 볼 글(판 없음 · 09:30 전 기다림)이 아니면 그날은 끝(개념정의 걸림 11-23)
                             _status["sentDay"] = day
                             print("  [매매일지] %s 매수 목록 — %s" % (day, note), flush=True)
                     if SEND and time.time() - last_rules >= SEND_CHECK_SEC:
