@@ -16,10 +16,12 @@
 
 메시지 꼴(서버 ↔ 주문 컴퓨터가 함께 읽는 한 곳 — 바꾸면 주문 컴퓨터 프로그램도 같이 바꾼다)
     서버 → 주문 컴퓨터   첫 줄 「[KJC 매수 목록] YYYY-MM-DD HH:MM:SS」 · 종목마다 한 줄
+                        매수금액 — 단타 판 셈 칸(첫 굳힘 금액 ÷ 그 묶음 종목 수 · amount_won) · 재권님 「종목 매수금액은 단타에서 보내주는걸로」
                         BUY|<일지 번호>|<종목 코드>|<종목 이름>|<매수금액 원>|<굳힘 가격 원>|<룰 판>|<보낸 시각 YYYYMMDDHHMMSS>|<서명 묶음>
                         굳힘 가격 — 판 매수가(rows[].buy) · 주문 컴퓨터는 받은 순간 현재가가 이보다 룰 buyMaxUpPct % 넘게 높으면 안 삼(개념정의 크로스체크 ①)
     서버 → 주문 컴퓨터   (룰) 룰 칸이 바뀔 때마다 · 매일 RULES_AT 에 한 번 — 첫 줄 「[KJC 룰] YYYY-MM-DD HH:MM:SS」
                         RULES|<룰 판>|<열쇠=값;열쇠=값 …>|<보낸 시각>|<서명 묶음> — 주문 컴퓨터는 서명이 맞는 가장 최근 룰 판만 따른다(컴퓨터에서 룰 값을 따로 안 고침)
+                        룰 칸 다섯 + 그날 시각 cleanAt(HHMM · 스스로 정리 · 동시호가로 넘김) · reopenAt(HHMM · 다음 거래일 다시 파는 시각) — day_times 한 곳
     서버 → 주문 컴퓨터   (매도) 판 매도 룰에 걸리면 종목마다 한 번 — 첫 줄 「[KJC 매도] YYYY-MM-DD HH:MM:SS」
                         SELL|<일지 번호>|<종목 코드>|<종목 이름>|<까닭>|<보낸 시각 YYYYMMDDHHMMSS>|<서명 묶음>
                         까닭 — 손절 · 꺾임 · 고점 · 미달 · 횡보 · 매도 시각(dt30_win.sell_of — 승률 표 · 단타 판 화면과 같은 셈 · 매수가는 판 매수가)
@@ -73,14 +75,14 @@ PICK_N = 3                    # 보낼 종목 수 — 재권님 「지금은 단
 READ_SEC = 5                  # 슬랙 채널 읽는 간격(초) — 재권님 「메세지가 가면 바로 읽을수 있으면」(11-23 14:4x) · conversations.history 는 분당 50회 넘게 되는 등급(Tier 3 · 슬랙 문서) · 12회/분
 READ_FROM, READ_TO = (8, 0), (21, 0)   # 평일 이 사이에만 읽는다 — 매도 결과는 장중 · 넥스트레이드 끝(20:00) 뒤 조금까지
 SET_DOC = "trade-set"
+AUCTION_MIN = 10             # 장 끝 동시호가 길이(분) — 정규장 끝(dt30._close_min · 장 시각 표 · 수능 날 밀림) 이만큼 전이 주문 컴퓨터 「스스로 정리 · 동시호가로 넘김」 시각
 RULES_AT = (8, 50)            # 매일 룰 줄을 한 번 보내는 시각 — 그날 처음 켠 주문 컴퓨터도 장 전에 룰을 받게
 # 룰 칸 — 열쇠: (이름, 단위, 꼴, 아래, 위, 설명). 화면은 이것을 받아 칸을 그린다(trade-journal meta.rules) · 칸을 더하면 여기 한 줄
 RULES = {
-    "amountWon":    ("종목마다 매수금액", "원", "int", 10000, 1000000000, "이 금액 ÷ 현재가 = 살 수량(소수 버림) · 0주면 못 삼"),
     "buyRetrySec":  ("매수 다시 넣는 간격", "초", "int", 1, 600, "시장가로 다 안 사졌으면 남은 수량을 이 간격마다 다시 시장가로"),
     "buyMaxUpPct":  ("매수 그만두는 오름", "%", "num", 0, 30, "현재가가 굳힘 가격보다 이만큼 넘게 높으면 새로 안 넣음(산 만큼만) · 처음 받을 때도 같은 선"),
     "buyMaxMin":    ("매수 그만두는 시간", "분", "int", 1, 390, "첫 매수 주문 뒤 이만큼 지나면 남은 것은 안 삼(산 만큼만)"),
-    "sellRetrySec": ("매도 다시 넣는 간격", "초", "int", 1, 600, "안 팔린 수량을 이 간격마다 다시 시장가로 · 15:20 뒤엔 장 끝 동시호가 · 그래도 남으면 다음 거래일 09:00"),
+    "sellRetrySec": ("매도 다시 넣는 간격", "초", "int", 1, 600, "안 팔린 수량을 이 간격마다 다시 시장가로 · 장 끝 동시호가 · 다음 거래일 시각은 흐름 글(서버 meta)"),
 }
 MAX_PAGES = 10                # 한 바퀴에 읽는 쪽 수(쪽마다 200)
 SELL_RETRY_SEC = 60          # 슬랙이 매도 신호를 거절했을 때 다시 보내기까지(초)
@@ -127,6 +129,29 @@ def settings():
     out["ver"] = str(ver) if ver else None
     out["missing"] = [k for k in RULES if out[k] is None]
     return out
+
+
+def day_times(proxy, now=None):
+    """그날 시각 — 첫 굳힘 · 스스로 정리(장 끝 동시호가 시작) · 다음 거래일 다시 파는 시각(정규장 첫 값) — 흐름 글 · RULES 줄이 숫자를 박지 않게(개념정의 검수 11-23)."""
+    import dt30
+    now = now or _now()
+    off = dt30.late_min(proxy, now)
+    fl = dt30.lock_at()[0]
+    m = min(fl[0] * 60 + fl[1] + off, dt30.BUY_LATE[0] * 60 + dt30.BUY_LATE[1])
+    clean = dt30._close_min(proxy, now) - AUCTION_MIN
+    return {"firstLock": "%02d:%02d" % divmod(m, 60), "cleanAt": "%02d:%02d" % divmod(clean, 60), "reopenAt": "%02d:%02d" % dt30.OPEN_AT}
+
+
+def amount_won(rows_all):
+    """종목마다 매수금액(원) — 단타 판 셈 칸 그대로: 첫 굳힘 금액(grpWons[0] · 빈칸이면 grpWon · 그것도 비면 dayWon) ÷ 첫 굳힘 묶음 종목 수(판의 lock 1 · 매수가 있는 줄).
+    재권님 「종목 매수금액은 단타에서 보내주는걸로」(11-23 15:2x) — 화면 단타 판 perOf 와 같은 셈(company-setup/js/strategy-dt30.js) · 못 셈이면 None(안 보냄)."""
+    import dt30_win
+    S = dt30_win._set()
+    pick = lambda v: v if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else None
+    g = S.get("grpWons") if isinstance(S.get("grpWons"), list) else []
+    total = pick(g[0] if g else None) or pick(S.get("grpWon")) or pick(S.get("dayWon"))
+    n = sum(1 for r in rows_all if r.get("lock") == 1 and r.get("buy"))
+    return int(total // n) if total and n else None
 
 
 def rules_meta():
@@ -226,6 +251,7 @@ def send_today(proxy, day):
     if not b or b.get("day") != day:
         return "판 아직 없음"
     rows = sorted([r for r in b.get("rows") or [] if r.get("lock") == 1], key=lambda r: (r.get("lockRank") or 1e9, r.get("rank") or 1e9))[:PICK_N]
+    amt = amount_won(b.get("rows") or [])
     if not rows:
         return "첫 굳힘 전"                             # 첫 굳힘(09:05 · dt30.lock_at 첫 칸) 줄이 아직 없음 — 다음 바퀴에 다시 본다
     st = settings()
@@ -242,6 +268,7 @@ def send_today(proxy, day):
     except Exception:
         nob = False
     why = ("첫 굳힘 사지 않음" if nob else "룰 칸 빔(%s)" % ", ".join(RULES[k][0] for k in st["missing"]) if st["missing"]
+           else "단타 판 매수금액 못 셈" if amt is None
            else "보내기 주소 없음" if not sk["webhook_url"] else "주문 컴퓨터 열쇠 없음" if not sk["pcs"] else None)
     made = now.strftime("%Y%m%d%H%M%S")
 
@@ -249,7 +276,7 @@ def send_today(proxy, day):
         ids = []
         for r in rows:
             cur = conn.execute("INSERT INTO trade_journal (day, rank, code, name, amount_won, made_at, status, note, lock_px, rule_ver) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                               (day, r["rank"], r["code"], r.get("name"), st["amountWon"], made, "보낼 차례" if why is None else "안 보냄", why,
+                               (day, r["rank"], r["code"], r.get("name"), amt, made, "보낼 차례" if why is None else "안 보냄", why,
                                 r.get("buy"), st["ver"]))
             ids.append(cur.lastrowid)
         return ids
@@ -260,7 +287,7 @@ def send_today(proxy, day):
     if any(not r.get("buy") for r in rows):
         _db(proxy, lambda c: c.executemany("UPDATE trade_journal SET status = '안 보냄', note = '굳힘 가격 없음' WHERE id = ?", [(i,) for i in ids]))
         return "안 보냄 — 굳힘 가격 없음"                 # 상한 기준이 없으면 주문 컴퓨터가 못 거른다 — 안 보냄
-    body = ["BUY|%d|%s|%s|%d|%d|%s|%s" % (i, r["code"], (r.get("name") or "").replace("|", " ").replace("\n", " "), st["amountWon"], int(r["buy"]),
+    body = ["BUY|%d|%s|%s|%d|%d|%s|%s" % (i, r["code"], (r.get("name") or "").replace("|", " ").replace("\n", " "), amt, int(r["buy"]),
                                          st["ver"], made) for i, r in zip(ids, rows)]
     lines += ["%s|%s" % (b, _sig_set(sk["pcs"], b)) for b in body]
     try:
@@ -344,7 +371,8 @@ def rules_check(proxy, day):
     if sent.get("rulesVer") == st["ver"] and not due:
         return None
     made = now.strftime("%Y%m%d%H%M%S")
-    kv = ";".join("%s=%s" % (k, st[k]) for k in RULES)
+    tm = day_times(proxy, now)
+    kv = ";".join(["%s=%s" % (k, st[k]) for k in RULES] + ["cleanAt=%s" % tm["cleanAt"].replace(":", ""), "reopenAt=%s" % tm["reopenAt"].replace(":", "")])
     b = "RULES|%s|%s|%s" % (st["ver"], kv, made)
     try:
         _post_webhook(sk["webhook_url"], "[KJC 룰] %s\n%s|%s" % (now.strftime("%Y-%m-%d %H:%M:%S"), b, _sig_set(sk["pcs"], b)))
@@ -444,7 +472,13 @@ def status(proxy=None):
             _slack(proxy)                              # 주문 컴퓨터 이름 · 빠진 것을 채운다(열쇠 값은 안 냄)
         except Exception:
             pass
-    return dict(_status, send=SEND, pickN=PICK_N, readSec=READ_SEC, settings=settings(), rules=rules_meta(), rulesAt="%02d:%02d" % RULES_AT)
+    tm = {}
+    if proxy is not None:
+        try:
+            tm = day_times(proxy)
+        except Exception:
+            tm = {}
+    return dict(_status, send=SEND, pickN=PICK_N, readSec=READ_SEC, settings=settings(), rules=rules_meta(), rulesAt="%02d:%02d" % RULES_AT, times=tm)
 
 
 def start(proxy):
