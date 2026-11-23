@@ -1900,8 +1900,7 @@ def board(proxy, day=None, cfg=None):
     b, saved = got
     b["meta"]["savedAt"] = saved
     try:
-        if day == _now().strftime("%Y%m%d"):
-            drop_small(proxy, b)                       # 그날 판 — 읽을 때도 문턱 밖은 뺌(고리가 저장하기 전에도) · 지난 판은 재권님께 여쭘 중이라 안 건드림(개념정의 검수 11-23)
+        drop_small(proxy, b)                           # 그날 판 · 지난 판 모두 읽을 때 문턱 밖은 뺌(저장 안 함 · 지금 감시 목록 시총으로) — 재권님 「3천억 아래종목은 아예 고려대상이 아니야」 → 지난 판도 「응 빼 지금룰에 맞춰서 다 적용해」(11-23 09:3x)
     except Exception as e:
         print("  [단타 30] 문턱 거르기 못 함 — %s" % proxy.safe_message(e, 120), flush=True)
     try:
