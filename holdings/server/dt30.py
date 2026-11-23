@@ -762,7 +762,7 @@ def build(proxy, cfg, day, skip=()):
             down.append(x["code"])                     # 하락 뺌(재권님 11-12) — 모르면 안 뺀다
             continue
         r = {k: x.get(k) for k in ("code", "name", "market", "cap", "sector", "chips", "subs", "n", "pct", "rise", "open", "viAt", "surgeAt", "viPx",
-                                   "floatCap", "turn", "turnPrevPct")}
+                                   "floatCap", "turn", "turnPrevPct") + TRADE_KEYS}
         r.update(buy=None if pre else x["price"], px={}, pxSrc={},
                  chipAt={c: _now().strftime("%H:%M") for c in x["chips"]})      # 칩마다 판에 처음 붙은 시각(묶음 ② · 다시 세면 앞 시각 그대로)
         if pre:
@@ -2096,8 +2096,13 @@ def sell_text(r):
         (s["px"] / s["ref"] - 1) * 100, format(int(s["buy"]), ","), (s["px"] / s["buy"] - 1) * 100)
 
 
+TRADE_KEYS = ("accVol", "accValue", "prevSameVol", "prevSameSrc", "volPrevPct", "valuePrevPct", "prevDayVol", "prevDayValue")   # 거래 값 칸 — 셈은 turnover._trade 한 곳
 TURN_NOTE = ("floatCap 풀린 시총(억원) = 발행주식수 × 유동비율(네이버 기업현황) × 현재가 · turn 거래 비율(%) = 그날 누적 거래대금 ÷ 풀린 시총 × 100 · "
              "turnPrevPct 전날 대비(%) = 거래 비율 ÷ 전날 같은 시각(1분 칸)까지 거래 비율 × 100(굳힌 판은 그날 끝 ÷ 전날 끝) · 색 기준 data/metrics.json turn_prev_pct · "
+             "accVol 오늘 누적 거래량(주) · accValue 오늘 누적 거래대금(억원) · prevSameVol 전날 같은 시각까지 거래량(주) · "
+             "volPrevPct · valuePrevPct 거래량 · 거래대금 전날 같은 시각 대비(%) · 색 기준 data/metrics.json vol_prev_pct · amt_prev_pct · "
+             "prevDayVol · prevDayValue 전날 하루 거래량(주) · 거래대금(억원) · 굳힌 판은 「같은 시각」 이 전날 끝 · "
+             "prevSameSrc 전날 거래량 출처 — slot 1분 칸 · 1m 1분봉 합 · 5m 끝난 5분봉 합(어림) · D 일봉(굳힌 판) — 거래 값 표에 전날이 없을 때 봉으로 채움(거래대금 칸은 그때 null) · "
              "그날 판은 지금 값 · 굳힌 판은 그날 쌓인 마지막 값(turnover_day) · 못 잰 칸은 null · 우선주는 유동비율 출처가 없어 null")
 
 

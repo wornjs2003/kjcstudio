@@ -60,7 +60,7 @@ def _slot(hm):
 
 
 def prev_slot(proxy, codes, day, slot):
-    """오늘 앞 마지막 날의 그 칸(없으면 그 앞 가장 가까운 칸) 값 {code: (value, price)} — 표가 없거나 못 읽으면 {}."""
+    """오늘 앞 마지막 날의 그 칸(없으면 그 앞 가장 가까운 칸) 값 {code: (value, price, vol)} — 표가 없거나 못 읽으면 {} · vol 은 칸이 생기기 전 줄이면 None."""
     if not codes:
         return {}
     q = ",".join("?" * len(codes))
@@ -69,11 +69,11 @@ def prev_slot(proxy, codes, day, slot):
             pd = conn.execute("SELECT MAX(day) FROM turnover_slot WHERE day < ?", (day,)).fetchone()[0]
             if not pd:
                 return {}
-            got = conn.execute("SELECT code, value, price, slot FROM turnover_slot WHERE day = ? AND slot <= ? AND code IN (%s) ORDER BY slot"
+            got = conn.execute("SELECT code, value, price, vol, slot FROM turnover_slot WHERE day = ? AND slot <= ? AND code IN (%s) ORDER BY slot"
                                % q, [pd, slot] + list(codes)).fetchall()
     except Exception:
         return {}
-    return {c: (v, p) for c, v, p, _ in got}            # 칸 순으로 덮어 가장 늦은 칸이 남음
+    return {c: (v, p, vo) for c, v, p, vo, _ in got}    # 칸 순으로 덮어 가장 늦은 칸이 남음
 
 
 def prev_slot_vol(proxy, codes, day, slot):
@@ -115,13 +115,90 @@ def _prev_pct(turn, pv, fl):
     return round(turn / t0 * 100, 1) if t0 else None
 
 
+def _eok(won):
+    return round(won / 1e8, 1) if won is not None else None
+
+
+def _pct(a, b):
+    return round(a / b * 100, 1) if a is not None and b else None
+
+
+def _trade(r, vol, value, same, day_end, bars=None):
+    """빠진 거래 값 — 재권님 「단타에 지금 있는 종목들 거래총량이랑 전일대비 거래 이런거 누락된거 다 넣어줘」(11-23 13:14 · 작업우선순위 창).
+        accVol 오늘 누적 거래량(주) · accValue 오늘 누적 거래대금(억원)
+        prevSameVol 전날 같은 시각까지 거래량(주) · volPrevPct 거래량 전날 같은 시각 대비(%) · valuePrevPct 거래대금 전날 같은 시각 대비(%)
+        prevDayVol · prevDayValue 전날 하루 거래량(주) · 거래대금(억원)
+    same (value, price, vol) · day_end {value, vol} — 없으면 그 칸 None(못 잼 · 0 아님).
+    bars — prev_candles 한 종목 값 · 거래 값 표에 전날 거래량이 없을 때만 쓴다 · 어디서 왔는지는 prevSrc(slot 거래 값 표 · 1m · 5m 봉 · D 일봉)."""
+    same = same or (None, None, None)
+    day_end = day_end or {}
+    bars = bars or {}
+    sv, src = same[2], "slot" if same[2] is not None else None
+    if sv is None and bars.get("sameVol"):
+        sv, src = bars["sameVol"], bars["src"]
+    dv = day_end.get("vol")
+    if dv is None and bars.get("dayVol"):
+        dv = bars["dayVol"]
+    r["accVol"], r["accValue"] = vol, _eok(value)
+    r["prevSameVol"], r["prevSameSrc"] = sv, src
+    r["volPrevPct"] = _pct(vol, sv)
+    r["valuePrevPct"] = _pct(value, same[0])
+    r["prevDayVol"], r["prevDayValue"] = dv, _eok(day_end.get("value"))
+
+
+def prev_candles(proxy, codes, day, hm=None):
+    """거래 값 표(turnover_*)에 전날 줄이 없을 때 쓰는 봉 셈 — 쌓기 시작한 첫날(11-23)에 「전날」 칸이 다 비지 않게.
+        전날        candles 일봉(D)의 오늘 앞 마지막 날
+        하루        그날 일봉 거래량(주)
+        같은 시각   hm(분)이 있으면 그날 1분봉 중 hm 분 전에 시작한 봉의 합 · 1분봉이 없는 종목은 hm-5 분까지 시작한 5분봉의 합(어림 · 끝난 봉만)
+    → {code: {"dayVol", "sameVol", "src"}} · 못 읽으면 {}. 거래대금은 봉에 없어 안 채운다(그 칸은 못 잼)."""
+    if not codes:
+        return {}
+    q = ",".join("?" * len(codes))
+    out = {}
+    try:
+        with proxy.db_conn() as conn:
+            pd = conn.execute("SELECT MAX(ts) FROM candles WHERE period = 'D' AND ts < ?", (day,)).fetchone()[0]
+            if not pd:
+                return {}
+            for c, v in conn.execute("SELECT code, volume FROM candles WHERE period = 'D' AND ts = ? AND code IN (%s)" % q, [pd] + list(codes)):
+                out.setdefault(c, {})["dayVol"] = v
+            if hm is not None:
+                for per, last in (("1m", hm - 1), ("5m", hm - 5)):
+                    if last < 0:
+                        continue
+                    end = pd + "%02d%02d" % divmod(last, 60)
+                    for c, v in conn.execute("SELECT code, SUM(volume) FROM candles WHERE period = ? AND ts >= ? AND ts <= ? AND code IN (%s) GROUP BY code"
+                                             % q, [per, pd + "0000", end] + list(codes)):
+                        d = out.setdefault(c, {})
+                        if "sameVol" not in d and v:
+                            d.update(sameVol=v, src=per)
+    except Exception:
+        return {}
+    return out
+
+
+def _prev_day(proxy, day):
+    try:
+        with proxy.db_conn() as conn:
+            return conn.execute("SELECT MAX(day) FROM turnover_day WHERE day < ?", (day,)).fetchone()[0]
+    except Exception:
+        return None                                    # 표가 아직 없음 — 못 잼
+
+
 def fill(rows, prices=None, proxy=None):
-    """rows[] 에 floatCap · turn · turnPrevPct 를 붙인다 — prices {code: {price, value}} 가 있으면 그 값(실시간) · 없으면 줄의 price 와 쌓인 그날 값.
-    proxy 를 주면 전날 같은 시각 칸과 견준다(없으면 turnPrevPct null)."""
+    """rows[] 에 floatCap · turn · turnPrevPct 와 거래 값(_trade)을 붙인다 — prices {code: {price, value, volume}} 가 있으면 그 값(실시간) · 없으면 줄의 price 와 쌓인 그날 값.
+    proxy 를 주면 전날 같은 시각 칸 · 전날 하루 값과 견준다(없으면 그 칸 null)."""
     import company_profile
     fl = company_profile.floats()
     now = _now()
-    prev = prev_slot(proxy, [r["code"] for r in rows], now.strftime("%Y%m%d"), _slot(now.hour * 60 + now.minute)) if proxy is not None else {}
+    day = now.strftime("%Y%m%d")
+    codes = [r["code"] for r in rows]
+    prev = prev_slot(proxy, codes, day, _slot(now.hour * 60 + now.minute)) if proxy is not None else {}
+    pd = _prev_day(proxy, day) if proxy is not None else None
+    pend = day_rows(proxy, pd, codes) if pd else {}
+    need = [c for c in codes if (prev.get(c) or (None, None, None))[2] is None or (pend.get(c) or {}).get("vol") is None]
+    pc = prev_candles(proxy, need, day, now.hour * 60 + now.minute) if proxy is not None and need else {}
     for r in rows:
         p = (prices or {}).get(r["code"]) or {}
         price = p.get("price") if p else r.get("price")
@@ -129,6 +206,7 @@ def fill(rows, prices=None, proxy=None):
         f = fl.get(r["code"])
         r["floatCap"], r["turn"] = calc(price, value, f)
         r["turnPrevPct"] = _prev_pct(r["turn"], prev.get(r["code"]), f)
+        _trade(r, p.get("volume") if p else None, value, prev.get(r["code"]), pend.get(r["code"]), pc.get(r["code"]))
 
 
 def day_rows(proxy, day, codes):
@@ -138,29 +216,31 @@ def day_rows(proxy, day, codes):
     q = ",".join("?" * len(codes))
     try:
         with proxy.db_conn() as conn:
-            got = conn.execute("SELECT code, value, price, float_shares, at FROM turnover_day WHERE day = ? AND code IN (%s)" % q,
-                               [day] + list(codes)).fetchall()
+            has_vol = "vol" in {r[1] for r in conn.execute("PRAGMA table_info(turnover_day)")}
+            got = conn.execute("SELECT code, value, price, float_shares, at, %s FROM turnover_day WHERE day = ? AND code IN (%s)"
+                               % ("vol" if has_vol else "NULL", q), [day] + list(codes)).fetchall()
     except Exception:
         return {}                                      # 표가 아직 없음 — 못 잼
-    return {c: {"value": v, "price": p, "floatShares": f, "at": a} for c, v, p, f, a in got}
+    return {c: {"value": v, "price": p, "floatShares": f, "at": a, "vol": vo} for c, v, p, f, a, vo in got}
 
 
 def fill_day(proxy, day, rows):
     """지난 판(굳힌 날) 줄에 그날 쌓인 마지막 값으로 floatCap · turn — 쌓기 전 날은 None."""
     codes = [r["code"] for r in rows]
     got = day_rows(proxy, day, codes)
-    pd = None
-    try:
-        with proxy.db_conn() as conn:
-            pd = conn.execute("SELECT MAX(day) FROM turnover_day WHERE day < ?", (day,)).fetchone()[0]
-    except Exception:
-        pass
+    pd = _prev_day(proxy, day)
     prev = day_rows(proxy, pd, codes) if pd else {}
+    need = [c for c in codes if (prev.get(c) or {}).get("vol") is None]
+    pc = prev_candles(proxy, need, day) if need else {}
+    for c, d in pc.items():
+        if d.get("dayVol"):
+            d.update(sameVol=d["dayVol"], src="D")   # 굳힌 판 — 「같은 시각」 은 전날 끝(일봉)
     for r in rows:
         g = got.get(r["code"]) or {}
         r["floatCap"], r["turn"] = calc(g.get("price"), g.get("value"), g.get("floatShares"))
         pg = prev.get(r["code"]) or {}
         r["turnPrevPct"] = _prev_pct(r["turn"], (pg.get("value"), pg.get("price")) if pg else None, g.get("floatShares"))   # 굳힌 판 — 그날 끝 ÷ 전날 끝
+        _trade(r, g.get("vol"), g.get("value"), (pg.get("value"), pg.get("price"), pg.get("vol")) if pg else None, pg, pc.get(r["code"]))   # 굳힌 판 — 「같은 시각」 은 전날 끝
 
 
 def _store(proxy, day, quotes, fl):
