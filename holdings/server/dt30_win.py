@@ -36,7 +36,7 @@ DAYS_DEFAULT = 30
 TICK = 60                    # 끝난 판을 보는 간격(초)
 RISE_CHIP = "현재상승"
 TAX = {"KOSPI": {"tx": 0.05, "rural": 0.15}, "KOSDAQ": {"tx": 0.20, "rural": 0.0}}   # % · 2026 세율(KB증권 「2026년 증권거래세율 변경 안내」) · 한 곳 — 단타 판 화면은 dt30 판 meta.tax 로 받음 · 단타 판에서 못 바꿈(재권님 11-20 14:09)
-VER = "v7"                   # 쌓는 줄 모양이 바뀌면 올린다 — 옛 줄을 다시 쌓는다(v2 · 시장 칸 · v3 · 11-18 전 판 칩 이름 옮김 · v4 · 칩 둘 이상만 · v5 · 칩 붙은 시각 chipAt · subAt · buyAt · lockAt 11-20 · v6 · buyTs · lockTs 실제 시각 11-20 · v7 · 시각 칸 값 px — 매도 시각을 부를 때 셈 11-20)
+VER = "v8"                   # 쌓는 줄 모양이 바뀌면 올린다 — 옛 줄을 다시 쌓는다(v2 · 시장 칸 · v3 · 11-18 전 판 칩 이름 옮김 · v4 · 칩 둘 이상만 · v5 · 칩 붙은 시각 chipAt · subAt · buyAt · lockAt 11-20 · v6 · buyTs · lockTs 실제 시각 11-20 · v7 · 시각 칸 값 px — 매도 시각을 부를 때 셈 11-20 · v8 · 굳힘 차례 lock — 「사지 않음」 묶음 가름 11-23)
 _SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_win (day TEXT PRIMARY KEY, src_saved TEXT, rows TEXT NOT NULL, at TEXT)"
 _status = {"error": None, "filled": 0, "at": None}
 
@@ -68,7 +68,8 @@ def day_rows(b):
                     "buy": buy, "sell": sell, "ret": ret, "px": r.get("px") or {},   # 시각 칸 값 — 매도 시각(end_at)으로 부를 때 판 값을 고른다
                     # 칩 · 하위가 판에 붙은 시각과 든 시각 — 굳힌 뒤(10:30 뒤) 늦게 붙은 칩도 승률에 넣되 시간대로 가를 수 있게
                     # (재권님 「시간대가 추가되면 넣어놓는게 좋을거같아」 11-20 · 옛 판은 없음 → null)
-                    "chipAt": r.get("chipAt"), "subAt": r.get("subAt"), "buyAt": r.get("buyAt"), "buyTs": r.get("buyTs"), "lockAt": r.get("lockAt"), "lockTs": r.get("lockTs")})
+                    "chipAt": r.get("chipAt"), "subAt": r.get("subAt"), "buyAt": r.get("buyAt"), "buyTs": r.get("buyTs"), "lockAt": r.get("lockAt"), "lockTs": r.get("lockTs"),
+                    "lock": r.get("lock")})                       # 굳힘 차례(1 · 2 · 3 · 장중 dt30.INTRA_LOCK · 안 굳음 None) — 「사지 않음」 묶음 가름(no_buy_locks)
     return out
 
 
@@ -150,6 +151,14 @@ SET_DEF = {"stop": -1, "turn": True, "turnBy": "both", "turnPct": 0, "trail": No
            "inUntil": "0905"}
 # inUntil — 매수 「9시 1분 값」 일 때 여는 시각 + 1분 뒤 판에 든 줄을 든 때 가격으로 사는 끝 시각(그 분 59초까지 · HHMM) · 그 뒤 든 줄은 안 삼 —
 #   재권님 「매수 시각을 9시 5분까지로 수정해」(11-23 09:11) → 「나」 → 「9시 1분부터 5분까지는 들어올때 산다 라는룰로」(09:1x) · 셈은 화면(단타 판 buyOf)
+
+
+def no_buy_locks():
+    """「사지 않음」 굳힘 차례 집합 — 룰 문서 셈 칸 rules.dt30.set.lockNoBuy([첫째, 둘째, 셋째, 장중] 참/거짓 · null 은 산다).
+    재권님 「굳힘에 사지않는다 라는 버튼도 하나 만들어줘」(11-23 11:43) → 안에 「응」 · 열쇠는 시황분석1 화면과 같게.
+    참인 차례에 굳은 줄은 승률 · 손익 셈에서 안 산 것으로 뺀다 · 판(rows)에는 그대로 남는다. 못 읽으면 빈 집합(전처럼 다 산 것)."""
+    v = _set().get("lockNoBuy")
+    return {i for i, x in enumerate(v, 1) if x is True} if isinstance(v, list) else set()
 
 
 def sell_rule():
@@ -264,6 +273,8 @@ def summary(proxy, days=DAYS_DEFAULT):
     import dart
     caps = {r["stock_code"]: r["market_cap"] for r in dart.universe_rows(None)}
     small = lambda c: bool(caps) and (caps.get(c) is None or caps[c] < dt30.cap_min_eok())   # 감시 목록을 못 읽으면 안 거름
+    no_buy = no_buy_locks()
+    skipped = 0
     daily, every, whys = [], [], {}
     for day, raw in got:
         rows = json.loads(raw)
@@ -274,6 +285,9 @@ def summary(proxy, days=DAYS_DEFAULT):
                 continue                               # 시가총액 문턱 밖(감시 목록에 없거나 문턱 아래 · 지금 목록으로) — 재권님 「응 빼 지금룰에 맞춰서 다 적용해」(11-23) · 판 셈(dt30.drop_small)과 같게
             if str(r.get("buyAt") or "").replace(":", "")[:4] >= end:
                 continue                               # 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것 — 화면 셈과 같게(재권님 「가」 11-20 · 시황분석 화면)
+            if r.get("lock") in no_buy:
+                skipped += 1
+                continue                               # 「사지 않음」 굳힘 묶음 — 안 산 것(no_buy_locks · 재권님 11-23 11:43 「굳힘에 사지않는다」)
             e = _in_ts(r)
             if cut and e and e > cut and not (r.get("lockAt") or r.get("lockTs")):
                 continue                               # 든 때 가격으로 사는 끝(inUntil 분 59초) 뒤 든 종목은 안 삼 — 화면 단타 판 셈과 같게(11-23 재권님 「9시 1분부터 5분까지는 들어올때 산다」)
@@ -306,7 +320,7 @@ def summary(proxy, days=DAYS_DEFAULT):
     meta = {"days": len(got), "from": got[-1][0] if got else None, "to": got[0][0] if got else None,
             "fee": fee, "feeNote": None if fee is not None else "빈칸 — 수수료 안 셈", "feeSides": "팔 때만",
             "tax": TAX, "taxNote": "팔 때만 · 판 값 × (거래세 + 농특세) · 시장 모르면 못 잼", "ret": "세후 %",
-            "buy": "그날 판 매수가(rows[].buy · 11-20 판부터 판에 든 때 값 — 09:01 전에 있던 종목은 9시 1분 값 · 뒤에 든 종목은 든 순간 값 · 11-18~19 09:00 시가 · 그 전 09:01)", "minChips": dt30.MIN_CHIPS, "sell": end, "sellDef": SELL_AT, "sellNote": "매도 룰 — 단타 판 셈 칸 rules.dt30.set(화면과 같은 칸 · 빈 칸은 sellRule 의 기본) · 30분 칸마다 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 중 처음 걸린 칸 값에 팖 · 안 걸리면 매도 시각(endAt · 빈칸이면 판 끝 sellDef) 이하 마지막 값 있는 칸 · 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것(셈에서 뺌) · 불타기는 안 듦", "sellRule": rule, "sellWhy": whys, "bigPct": BIG_PCT, "topDay": TOP_DAY,
+            "buy": "그날 판 매수가(rows[].buy · 11-20 판부터 판에 든 때 값 — 09:01 전에 있던 종목은 9시 1분 값 · 뒤에 든 종목은 든 순간 값 · 11-18~19 09:00 시가 · 그 전 09:01)", "minChips": dt30.MIN_CHIPS, "sell": end, "sellDef": SELL_AT, "sellNote": "매도 룰 — 단타 판 셈 칸 rules.dt30.set(화면과 같은 칸 · 빈 칸은 sellRule 의 기본) · 30분 칸마다 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 중 처음 걸린 칸 값에 팖 · 안 걸리면 매도 시각(endAt · 빈칸이면 판 끝 sellDef) 이하 마지막 값 있는 칸 · 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것(셈에서 뺌) · 불타기는 안 듦", "sellRule": rule, "sellWhy": whys, "noBuyLocks": sorted(no_buy), "noBuySkipped": skipped, "bigPct": BIG_PCT, "topDay": TOP_DAY,
             "filledAt": _status["at"], "error": _status["error"]}
     return out, meta
 
