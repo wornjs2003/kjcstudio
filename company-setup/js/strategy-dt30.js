@@ -9,7 +9,6 @@ import { ready as toneReady, has as toneHas, paint as tonePaint } from '/assets/
 import { bindWin } from './strategy-dtwin.js';
 import { renameChips, chipName } from './strategy-chipname.js';   // 칩 이름을 실시간 순위와 같게(「수급」 → 「자동」 · 11-18) — 서버 값을 받는 자리에서
 import { chipTip } from './strategy-chipinfo.js';   // 칩 설명 한 곳 — 룰 칸과 같은 글(11-20)
-import { openStockModal } from '/holdings/js/components/stock-modal.js';   // 종목 이름을 누르면 홀딩스 홈과 같은 종목 모달(11-24 재권님 「가」)
 import { mountSector, loadSector } from './strategy-sectorflow.js';   // 섹터수급 칸 — 단타 판 맨 위(11-18)   // 칩별 승률 접기 — 손익 칸 안
 
 const API = '/api/kis/dt30';   // 서버 주소 — 개발2(11-11 18:2x 정함 · 아직 커밋 전)
@@ -1020,13 +1019,6 @@ BIND.push(() => $('dt-box').addEventListener('click', (e) => {   // 칩 줄은 �
   else { const k = b.dataset.sub; st.subOff.has(k) ? st.subOff.delete(k) : st.subOff.add(k); }
   colsSave(); if (st.data) { paint(st.data); chips(); }
 }));
-/* 종목 이름을 누르면 홀딩스 홈과 같은 종목 모달 — 단타 판 표 · VI 목록 둘 다(11-24 재권님 「가」 · 공용 부품 openStockModal)
-   칩 · 단추 · 풀이 글을 누른 것은 그쪽 일을 한다. 길게 누르기(회사 풍선)는 company-tip 이 따로 받는다 */
-const openCo = (e) => {
-  if (e.target.closest('button, a, input, [data-chip], [data-sub], [data-col], .dt-evs, [data-tip]')) return;
-  const c = e.target.closest('[data-co]'), code = c && c.dataset.co; if (code) openStockModal(code);   // 이름 · 색은 부품이 서버에서 찾는다(brand 까지)
-};
-BIND.push(() => ['dt-box', 'dt-vi'].forEach((id) => { const el = $(id); if (el) el.addEventListener('click', openCo); }));
 BIND.push(() => $('dt-order').addEventListener('click', (e) => { const b = e.target.closest('[data-order]'); if (!b || b.dataset.order === st.order) return; st.order = b.dataset.order; if (st.data) { paint(st.data); chips(); } }));
 BIND.push(() => $('dt-box').addEventListener('click', (e) => { if (!e.target.closest('[data-allon]')) return; st.off.clear(); st.subOff.clear(); const cs = colsOf(), add = [...new Set(((st.data && st.data.rows) || []).flatMap((r) => r.chips || []))].filter((c) => !cs.includes(c) && !(st.watchAuto && c === '자동')); if (add.length) st.cols = [...cs, ...add]; colsSave(); if (st.data) { paint(st.data); chips(); } }));   // 빈 판의 「꺼 둔 칩 다 켜기」
 BIND.push(() => $('dt-box').addEventListener('click', (e) => { const b = e.target.closest('[data-lock]'); if (!b || b.disabled) return; st.lockSel = Number(b.dataset.lock); if (st.data) paint(st.data); }));   // 굳힘 시각 단추
