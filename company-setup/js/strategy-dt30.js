@@ -889,11 +889,12 @@ async function monthPaint() {
   }
   let tot = 0, won0 = 0, lost = 0, cnt = 0; const miss = [];
   // 최근 날이 앞(11-18 재권님 「11월 합계는 최근날짜가 앞으로 오게」)
-  const parts = ds.slice().reverse().map((d) => { const D = get(d); if (!D) { miss.push(dayTxt(d)); return `<span>${dayTxt(d)} <span class="st-err">못 받음</span></span>`; }
-    const C = calc(D); if (!C.P) return `<span>${dayTxt(d)} ${noTradeWhy(C)}</span>`; const fbT = C.fb905 ? '<small data-tip="그날 룰로는 매매가 없어 여는 시각 + 5분(9시 5분 · 늦게 연 날은 그만큼 뒤)에 산 것으로 셈"> · 9:05 대체</small>' : '';
+  const dB = (d, inner) => `<button type="button" class="kh-chip dt-dayb${d === st.day ? ' is-active' : ''}" role="tab" aria-selected="${d === st.day}" data-day="${d}" style="margin:2px 2px">${inner}</button>`;   // 날짜를 누르면 그날 판(11-24)
+  const parts = ds.slice().reverse().map((d) => { const D = get(d); if (!D) { miss.push(dayTxt(d)); return dB(d, `${dayTxt(d)} <span class="st-err">못 받음</span>`); }
+    const C = calc(D); if (!C.P) return dB(d, `${dayTxt(d)} ${noTradeWhy(C)}`); const fbT = C.fb905 ? '<small data-tip="그날 룰로는 매매가 없어 여는 시각 + 5분(9시 5분 · 늦게 연 날은 그만큼 뒤)에 산 것으로 셈"> · 9:05 대체</small>' : '';
     cnt++; tot += C.P.net; if (C.P.net > 0) won0++; else if (C.P.net < 0) lost++;
-    return `<span>${dayTxt(d)} <span class="${signClass(C.P.net, NUM) || ''}">${won(C.P.net)}</span>${C.LIVE ? '<small>장중</small>' : ''}${fbT}</span>`; });
-  el.innerHTML = `<b>${ttl} 합계 — 지금 칸 · 칩대로 · 세후 <span class="${signClass(tot, NUM) || ''}">${won(tot)}</span></b> · 매매한 날 ${cnt} · 번 날 ${won0} · 잃은 날 ${lost}${miss.length ? ` · 못 받은 날 ${miss.length}(합계에서 뺌)` : ''}<br>${parts.join(' · ')}`;
+    return dB(d, `${dayTxt(d)} <span class="${signClass(C.P.net, NUM) || ''}">${won(C.P.net)}</span>${C.LIVE ? '<small>장중</small>' : ''}${fbT}`); });
+  el.innerHTML = `<b>${ttl} 합계 — 지금 칸 · 칩대로 · 세후 <span class="${signClass(tot, NUM) || ''}">${won(tot)}</span></b> · 매매한 날 ${cnt} · 번 날 ${won0} · 잃은 날 ${lost}${miss.length ? ` · 못 받은 날 ${miss.length}(합계에서 뺌)` : ''}<br>${st.monsH || ''}<span role="tablist" aria-label="날짜 — 누르면 그날 판">${parts.join('')}</span>`;
 }
 function chips() {
   if (!st.days.length) { $('dt-days').innerHTML = ''; monthPaint(); return; }
@@ -901,15 +902,18 @@ function chips() {
   if (!mons.includes(st.mon)) st.mon = monOf(st.day) || mons[0];
   const cnt = (m) => st.days.filter((d) => monOf(d) === m).length;
   const dayBtn = (d) => { const a = st.last[d]; return `<button type="button" class="kh-chip${d === st.day ? ' is-active' : ''}" role="tab" aria-selected="${d === st.day}" data-day="${d}">${dayTxt(d)}${a == null ? '' : `<small class="${signClass(a, NUM) || ''}">${a > 0 ? '+' : ''}${num(a, 1)}%</small>`}</button>`; };
-  $('dt-days').innerHTML = `<div class="dt-mons" role="tablist" aria-label="달">${mons.map((m) => `<button type="button" class="dt-mon${m === st.mon ? ' is-on' : ''}" role="tab" aria-selected="${m === st.mon}" data-mon="${m}">${monTxt(m)}<small>${cnt(m)}일</small></button>`).join('')}</div>`
-    + `<div class="dt-dlist" role="tablist" aria-label="날짜">${st.days.filter((d) => monOf(d) === st.mon).map(dayBtn).join('')}</div>`;
+  // 날짜 줄은 아래 기간 줄 하나로 합침(11-24 재권님 「믿에로 하나로 합쳐줄래? 믿에 날짜와 차익같이 보이고 날짜 누르면 그날그날 종목 보이게」) — 달 단추도 그 줄 머리로
+  st.monsH = `<span class="dt-mons" role="tablist" aria-label="달" style="display:inline-flex;gap:4px;margin-right:8px">${mons.map((m) => `<button type="button" class="dt-mon${m === st.mon ? ' is-on' : ''}" role="tab" aria-selected="${m === st.mon}" data-mon="${m}">${monTxt(m)}<small>${cnt(m)}일</small></button>`).join('')}</span>`;
+  $('dt-days').innerHTML = ''; void dayBtn;
   monthPaint();   // 달이 정해진 뒤 — 고른 달 합계
 }
-BIND.push(() => $('dt-days').addEventListener('click', (e) => {
+BIND.push(() => { const f = $('dt-setf'); if (!f) return; try { if (localStorage.getItem('dt-setf') === '0') f.open = false; } catch (e) { /* 못 읽어도 펼침 */ }   // 셈 칸 접기 — 이 브라우저에 남김(보는 상태 · 11-24)
+  f.addEventListener('toggle', () => { try { localStorage.setItem('dt-setf', f.open ? '1' : '0'); } catch (e) { /* 못 남겨도 됨 */ } }); });
+BIND.push(() => ['dt-days', 'dt-month'].forEach((id) => $(id) && $(id).addEventListener('click', (e) => {
   const mb = e.target.closest('[data-mon]');
   if (mb) { if (mb.dataset.mon !== st.mon) { st.mon = mb.dataset.mon; chips(); } return; }   // 달만 바꿈 — 날짜는 그 달 줄에서 고름(판은 그대로)
   const b = e.target.closest('[data-day]'); if (b && b.dataset.day !== st.day) { st.mon = monOf(b.dataset.day); load(b.dataset.day); }
-}));
+})));
 
 // 장중이면 서버가 정한 주기(meta.refreshMs)로 같은 날을 다시 받는다 — 주기 숫자를 화면에 두지 않는다(「캐시·주기·한도 값을 화면에 박지 않는다」) · 서버가 안 주면 다시 안 받음
 let again = null;
@@ -1216,6 +1220,7 @@ const TPL = `
         </div>
         <div class="dt-pnl" id="dt-pnl"><div id="dt-pnl-sum">—</div>
           <!-- 셈 칸 — 매수 · 매도 좌우 두 칸(11-20 재권님 「매수 매도를 나눠서 좌우로 칸 나눠줄래?」 → 그림에 「응 맞아」) · 스타일은 이 칸에만 인라인(strategy.css 에 남의 미커밋이 있음) -->
+          <details class="dt-setf" id="dt-setf" open><summary class="dt-cap" style="cursor:pointer;margin:6px 0">셈 칸 — 종목 차례 점수 · 매수 · 매도 <small>(누르면 접기 · 펴기)</small></summary>
           <div class="dt-set" id="dt-set" aria-label="셈 칸 — 고치면 화면만 다시 셈 · 「저장」 을 눌러야 남음">
             <div style="display:flex;justify-content:flex-end;align-items:baseline;gap:8px"><span id="dt-set-msg" class="rl-sug"></span> <button type="button" class="kh-chip" data-setsave>저장</button> <button type="button" class="kh-chip" data-reset>기본값으로</button></div>
             <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:stretch;margin:4px 0">
@@ -1243,7 +1248,7 @@ const TPL = `
                 <!-- 창마다 금액 · 사지 않음(11-23 재권님 「굳힘이 아니고 이걸 필터로 만들어야 할거같은데 9시~30분까지 목록 …」 → 「응 해」 · 서버 개발2 253689d meta.windows) — 줄은 setFill 이 그날 판의 창 이름으로 그림(lkGridHtml) · 창 이름을 못 받은 판(옛 판)은 옛 굳힘 표 -->
                 <div class="dt-fee dt-lkgrid" id="dt-lkgrid" style="display:grid;grid-template-columns:auto auto auto auto auto auto;gap:2px 8px;align-items:center"></div>
             </div>
-          </div>
+          </div></details>
           <div class="st-cap" id="dt-month">—</div>
           <details class="dt-win" id="dt-win"><summary>칩별 승률 — 지난 30거래일 · 세후 · 칩 묶음마다 승률 · 날마다 이익 큰 종목</summary><div class="dw-body"></div></details>
           <details class="dt-win" id="dt-vi"><summary>그날 VI 목록 — 발동 · 풀림 시각 · 정적/동적 · 발동가 · <span class="dt-vi-sum">—</span></summary><div class="dw-body"></div></details></div>
