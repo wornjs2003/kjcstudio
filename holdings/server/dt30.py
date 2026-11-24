@@ -957,6 +957,10 @@ def buy930_fill(proxy, b):
     except Exception:
         cf = {}
     ct, need, o, until, mode = chip_times(dict(b, rows=rows), cf), buy_need(), _open_min(proxy, b["day"], b), buy_until(), buy_mode()   # 빠진 줄(outRows)의 칩 시각도(개념정의 걸림)
+    lm = o - (OPEN_AT[0] * 60 + OPEN_AT[1])
+    late = until != CHIP_UNTIL
+    if not late and lm > 0:
+        until = _sh(CHIP_UNTIL, lm)                    # 늦게 연 날(수능 10:00)은 09:30 마감도 그만큼 뒤(10:30) — 화면 27fe7f9 와 같게 · 시황분석1 덧 11-24
     for r in rows:
         c = ct.get(r["code"]) or {}
         r["chipTime"] = {k: "%s:%s" % (v[:2], v[2:]) for k, v in c.items()}
@@ -965,9 +969,9 @@ def buy930_fill(proxy, b):
     got = sorted((r for r in rows if r["buy930"]), key=lambda r: (r["buy930"]["chipAt"], r.get("rank") or 1e9))
     for i, r in enumerate(got, 1):
         r["buy930"]["rank"] = i                        # 산 차례 — 칩 N개 먼저 찬 순(같은 분이면 판 차례) · 한 번 차면 고정 · 뒤에 찬 종목은 아래로(재권님 19:2x 「칩이 먼저찬 순서대로 순위」)
-    b["meta"]["buy930"] = {"until": "%02d:%02d" % CHIP_UNTIL, "late": until != CHIP_UNTIL, "need": need, "mode": mode,
+    b["meta"]["buy930"] = {"until": "%02d:%02d" % (CHIP_UNTIL if late else until), "late": late, "lateMin": lm, "need": need, "mode": mode,
                            "note": "칩은 %02d:%02d 까지 붙은 것만(한 번 붙었다 없어진 칩도 그 시각) · 칩 시각(chipTime)을 세워 %d번째가 붙은 순간에 삼 · 산 차례(buy930.rank) = 칩 먼저 찬 순 — 차면 고정 · 뒤에 찬 종목은 아래로 · 몇 종목 살지는 화면 · 그 순간이 9시 1분 이하면 9시 1분 값 · 여는 시각 + 1~5분 안이면 그 분 값 · "
-                                   "그 뒤 판에 든 때면 든 때 값 · 아니면 다음 30분 칸 값 · 칩 시각 모르면 판에 든 때(그것도 모르면 장 전) · 화면이 끈 칩은 서버 셈에 안 듦(브라우저마다)" % (CHIP_UNTIL + (need,))}
+                                   "그 뒤 판에 든 때면 든 때 값 · 아니면 다음 30분 칸 값 · 칩 시각 모르면 판에 든 때(그것도 모르면 장 전) · 화면이 끈 칩은 서버 셈에 안 듦(브라우저마다)" % (tuple(CHIP_UNTIL if late else until) + (need,))}
     return b
 
 
@@ -2194,13 +2198,15 @@ def rebuild(proxy, day, prev, cfg=None):
         return None                                    # 감시 목록을 못 읽으면 다시 짓지 않는다 — 다 「시총 모름」 으로 빠진 빈 판이 allRows 로 굳지 않게(개념정의 덧 11-23)
     mkt = {r["stock_code"]: r["market"] for r in uni}
     small = lambda c: cap.get(c) is not None and cap[c] < cap_min_eok()
+    off = late_min(proxy, day=day)                     # 그날 늦게 열었으면(수능 10:00) 봉 시각 · 시각 칸 · VI 창을 그만큼 뒤로 — 장중 판과 같게
+    S = lambda hm: "%02d%02d" % _sh((int(hm[:2]), int(hm[2:])), off)   # (재권님 「이건 값을 왜 못가져오는데?」 11-19 판 → 「응 그렇게 해」 11-24 09:5x)
     with proxy.db_conn() as conn:
         bars = {}
         for code, ts, o, h, c, v in conn.execute(
                 "SELECT code, ts, open, high, close, volume FROM candles WHERE period = '5m' AND ts >= ? AND ts <= ?",
-                (day + "0800", day + "1400")):
+                (day + "0800", day + S("1400"))):
             bars.setdefault(code, {})[ts[8:12]] = (o, h, c, v)
-        if not any("0900" in b for b in bars.values()):
+        if not any(S("0900") in b for b in bars.values()):
             return None
         pv = {r[0]: r for r in conn.execute("SELECT code, name, close, pct, vol FROM auto_watch_day WHERE day = ?", (prev,))}
         pbar = {}                                          # 앞 거래일 종가를 auto_watch_day 에 없는 종목(대상 밖 작은 종목 · VI 가 잦다)은 앞 날 정규장 끝(market_hours.REG_CLOSE)까지 끝난 마지막 5분봉 종가로
@@ -2211,7 +2217,7 @@ def rebuild(proxy, day, prev, cfg=None):
                 pbar[code] = c
         inv = conn.execute("SELECT code, row FROM investor_daily WHERE date = ?", (prev,)).fetchall()
         bb = [r[0] for r in conn.execute("SELECT DISTINCT code FROM signal_sent WHERE day = ? AND ts <= ?",
-                                         (day, int(day + "0906")))]
+                                         (day, int(day + S("0906"))))]
     base_of = lambda c: (pv.get(c) or (None, None, None))[2] or pbar.get(c)
     approx_base = {"급등": 0, "VI": 0}    # 앞 거래일 종가 — 없으면 앞 날 마지막 정규장 5분봉 종가(어림)
     names = {c: (r[1] or "") for c, r in pv.items()}
@@ -2258,8 +2264,8 @@ def rebuild(proxy, day, prev, cfg=None):
             items.append({"code": c, "amt": a, "pct": (last[-1] / base - 1) * 100 if last and base else None})
     for c in pre_flow.pick(items):
         put(c, "프리장")
-    late = PAST_LATE[0] * 60 + PAST_LATE[1] - BAR_MIN       # VI · 급등은 굳히는 때(BUY_LATE)까지 본다 — 그날 판이 09:35 까지 다시 세며 넣는 것과 같게
-    vi_bars = ["%02d%02d" % divmod(m, 60) for m in range(9 * 60, late + 1, BAR_MIN)]   # (재권님 「vi가 왜 안나오지?」 11-12 → 「응」 11-13 · 전에는 09:00 · 09:05 봉 · 09:01 까지라 28 → 1)
+    late = PAST_LATE[0] * 60 + PAST_LATE[1] + off - BAR_MIN       # VI · 급등은 굳히는 때(BUY_LATE)까지 본다 — 그날 판이 09:35 까지 다시 세며 넣는 것과 같게
+    vi_bars = ["%02d%02d" % divmod(m, 60) for m in range(9 * 60 + off, late + 1, BAR_MIN)]   # (재권님 「vi가 왜 안나오지?」 11-12 → 「응」 11-13 · 전에는 09:00 · 09:05 봉 · 09:01 까지라 28 → 1)
     for c, d in bars.items():                              # 급등
         base = base_of(c)
         hi = max([d[hm][1] for hm in vi_bars if hm in d and d[hm][1]] or [0])
@@ -2269,7 +2275,7 @@ def rebuild(proxy, day, prev, cfg=None):
             if c not in pv:
                 approx_base["급등"] += 1                   # 어림 종가(앞 날 5분봉)로 센 급등
     if cfg:                                                # VI — KIS 「VI 현황」 에 날짜 · 종목을 넣으면 그 종목의 그날 VI(최근 것부터 30건)가 온다(19:4x 잼)
-        vt = "%02d%02d00" % PAST_LATE
+        vt = "%02d%02d00" % _sh(PAST_LATE, off)
         probe = []
         for c, d in bars.items():
             base = base_of(c)
@@ -2293,7 +2299,7 @@ def rebuild(proxy, day, prev, cfg=None):
                         missing.append("VI")
                     continue
                 hs = sorted(((h, r) for h, r in ((str(r.get("cntg_vi_hour") or "").strip().zfill(6), r) for r in out if r.get("bsop_date") == day)
-                             if "090000" <= h <= vt), key=lambda x: x[0])   # 앞 0 이 빠진 시각(「93012」)도 맞게 견준다(qa 덧 11-18)
+                             if S("0900") + "00" <= h <= vt), key=lambda x: x[0])   # 앞 0 이 빠진 시각(「93012」)도 맞게 견준다(qa 덧 11-18)
                 if hs:
                     h0, r0 = hs[0]
                     at0 = "%s:%s:%s" % (h0[0:2], h0[2:4], h0[4:6])
@@ -2317,7 +2323,7 @@ def rebuild(proxy, day, prev, cfg=None):
     for _, c in sorted(jb, reverse=True)[:JOINT_TOP]:
         put(c, "매수")
     for c, d in bars.items():                              # 초반상승
-        b = d.get("0900")
+        b = d.get(S("0900"))
         cp = cap.get(c)
         if b and b[0] and b[2] is not None and cp is not None and cp >= cap_min_eok():
             pct = (b[2] - b[0]) / b[0] * 100
@@ -2339,17 +2345,17 @@ def rebuild(proxy, day, prev, cfg=None):
         if cap.get(code) is None or cap[code] < cap_min_eok():
             continue                                   # 시가총액 문턱(cap_min_eok · 3천억) 아래 · 감시 목록 밖(ETF · 작은 종목) — 칩이 붙어도 판 밖(drop_small 과 같은 가름 · qa 덧 11-23)
         d = bars.get(code) or {}
-        buy = (d.get("0905") or (None,))[0]
+        buy = (d.get(S("0905")) or (None,))[0]
         base = base_of(code)
         if buy and base and (buy / base - 1) * 100 < drop_below_pct():
             down += 1                                  # 하락 뺌 — 09:05 봉 시가가 앞 거래일 종가 아래
             continue
-        o9 = (d.get("0900") or (None,))[0]
+        o9 = (d.get(S("0900")) or (None,))[0]
         chips = set(g["chips"])
         if buy and o9 and (buy / o9 - 1) * 100 >= now_rise_pct():
             chips.add("현재상승")
         px, src = {}, {}
-        for t in times():
+        for t in times(off):
             m = int(t[:2]) * 60 + int(t[2:]) - BAR_MIN
             b = d.get("%02d%02d" % divmod(m, 60))
             px[t], src[t] = (b[2], "5m") if b and b[2] is not None else (None, "none")
@@ -2361,18 +2367,17 @@ def rebuild(proxy, day, prev, cfg=None):
                      "viAt": g.get("viAt"), "surgeAt": g.get("surgeAt"), "volAt": g.get("volAt"), "surgeApprox": g.get("surgeApprox"), "viPx": g.get("viPx"),
                      "px": px, "pxSrc": src})
     tab = score_table(proxy)
-    off = late_min(proxy, day=day)                     # 그날 늦게 열었으면 VI·급등 나누는 시각도 그만큼 뒤(개념정의 덧 11-19 — 그날 판과 같게)
-    order = sort_rows(rows, tab, off)
+    order = sort_rows(rows, tab, off)                  # off — 그날 늦게 열었으면 VI·급등 나누는 시각도 그만큼 뒤(개념정의 덧 11-19 — 그날 판과 같게)
     for i, r in enumerate(rows):                       # 지난 판은 자르지 않는다 — 문턱 이상 · 칩 하나라도 든 종목 전부(굳힘 문턱 밑은 lock 없이 · 화면이 칩 · 룰을 바꿔 다시 셀 수 있게)
         r["rank"] = i + 1                              # (재권님 「3000억 이상 모든종목 넣으라고 했는데」 11-23 18:5x · 되채움 카드 ⑨)
     trade_ok = _past_trade(proxy, day, prev, rows)
     approx.append("거래값") if trade_ok else missing.append("거래값")
-    return {"day": day, "buyAt": "%02d:%02d" % PAST_BUY_AT, "times": times(), "rows": rows, "closed": True,
-            "meta": {"rebuilt": True, "viSplit": vi_split(off), "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": drop_below_pct(),
-                     "watchSrc": watch_src, "rules": rules_meta(proxy, merged=False), "viUntil": "%02d:%02d" % PAST_LATE, "volUntil": "%02d:%02d" % PAST_VOL_UNTIL, "approxBase": approx_base,
+    return {"day": day, "buyAt": "%02d:%02d" % _sh(PAST_BUY_AT, off), "times": times(off), "rows": rows, "closed": True,
+            "meta": {"rebuilt": True, "lateMin": off, "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "viSplit": vi_split(off), "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": drop_below_pct(),
+                     "watchSrc": watch_src, "rules": rules_meta(proxy, merged=False), "viUntil": "%02d:%02d" % _sh(PAST_LATE, off), "volUntil": "%02d:%02d" % PAST_VOL_UNTIL, "approxBase": approx_base,
                      "capMinEok": cap_min_eok(), "allRows": True, "tradeVer": TRADE_VER, "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 · 수급은 그날 09:01 직전 관심 목록(watchSrc 기록 · 없으면 관심 못 받음 · 수급 어림) · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
-                             "buy 는 09:05 봉 시가 · 시가총액 · 섹터 · 시장은 지금 값"}}
+                             "buy 는 09:05 봉 시가(늦게 연 날은 그만큼 뒤 · meta.lateMin) · 시가총액 · 섹터 · 시장은 지금 값"}}
 
 
 def _past_trade(proxy, day, prev, rows):
@@ -2487,7 +2492,9 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
         m = (got[0].get("meta") or {}) if got else {}
         stale = got and (m.get("capMinEok") != cap_min_eok() or (not m.get("allRows") and d < ALL_ROWS_SINCE))   # 문턱이 바뀐 판 · 줄을 자르던 옛 판(라이브로 굳힌 날 포함)은 한 번 다시 센다
                                                        # — 그 뒤 라이브 판(allRows 없음)은 날마다 다시 짓지 않는다(개념정의 덧 11-23 · 장중 기록을 어림 판으로 덮지 않게)
-        if not stale and not (m.get("rebuilt") and ("watchSrc" not in m or m.get("viUntil") != "%02d:%02d" % PAST_LATE)):   # (재권님 「기준 3000억 이상이라고 몇번을 말했는데」 11-23 19:0x)
+        lm = m.get("lateMin") if isinstance(m.get("lateMin"), int) else 0
+        late_old = m.get("rebuilt") and "lateMin" not in m and late_min(proxy, day=d) > 0   # 늦게 연 날을 09:00 기준으로 다시 지은 판(11-24 전) — 한 번 다시 센다
+        if not stale and not late_old and not (m.get("rebuilt") and ("watchSrc" not in m or m.get("viUntil") != "%02d:%02d" % _sh(PAST_LATE, lm))):   # (재권님 「기준 3000억 이상이라고 몇번을 말했는데」 11-23 19:0x)
             have.add(d)                                # VI 창이 다른 되채운 날(11-13 전)도 한 번 다시 센다
         elif m.get("liveBefore"):
             keep_live[d] = m["liveBefore"]
