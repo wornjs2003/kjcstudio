@@ -14,7 +14,8 @@
 KIS 상장주식수(시세 응답 lstn_stcn · note_listed)가 받아 둔 발행주식수와 LISTED_GAP_PCT 넘게 다르면 다음 밤에.
 
 내주기(floats_info) — 한 곳 · 차례: ① dart(위 셈) ② naver(발행 × 유동비율 · 받아 둔 종목) ③ dart-유통(최대주주 보유를 모름 — 어림)
-④ kis(상장주식 전체 — 어림). src 로 어느 것인지 함께 낸다. 우선주는 안 넣는다(company_profile.floats 와 같은 까닭).
+④ kis(상장주식 전체 — 어림). src 로 어느 것인지 함께 낸다. 어림도 매수 룰 유통 대비 거래 거르기에 잰 값으로 쓴다(재권님 「가」 11-24 18:5x) —
+어림은 밤마다 고친다: ③ 은 지배구조가 최대주주 현황을 받으면 다시 셈(_recompute) · ④ 는 시세를 본 종목을 받을 차례에 넣음(todo). 우선주는 안 넣는다(company_profile.floats 와 같은 까닭).
 **켜기는 FETCH 다** — 쌓는 것은 공시를 받는 쓰기 서버(8765) 하나 · 읽기 전용 서버는 같은 표를 읽기만 한다.
 """
 
@@ -162,9 +163,35 @@ def _mark_stale(now=None):
     return len(marks)
 
 
+def _recompute():
+    """어림을 고침 — 유통주식수는 받았는데 최대주주 보유를 몰랐던 줄(dart-유통 어림)이나 지배구조가 새 해 최대주주 현황을 받은 줄을
+    DART 를 다시 부르지 않고 지배구조 표(dart_gov)로 다시 셈 → 고친 수(재권님 「어림값들은 다 받아서 수정되도록」 11-24 18:5x)."""
+    gov = {r["stock_code"]: r for r in dart_gov._rows("SELECT stock_code, year, major FROM dart_gov WHERE status = 'ok'")}
+    ups = []
+    for r in _rows("SELECT stock_code, distb, float_sh, major_year FROM float_shares WHERE status = 'ok' AND distb IS NOT NULL"):
+        g = gov.get(r["stock_code"])
+        if not g or (r["float_sh"] is not None and r["major_year"] == g["year"]):
+            continue
+        mj = major_common(g["major"])
+        if mj is None or not 0 <= mj < r["distb"]:
+            continue
+        ups.append((mj, g["year"], r["distb"] - mj, r["stock_code"]))
+    if ups:
+        with dart.db_conn() as conn:
+            conn.executemany("UPDATE float_shares SET major = ?, major_year = ?, float_sh = ? WHERE stock_code = ?", ups)
+        _cache["at"] = 0.0
+    return len(ups)
+
+
 def todo():
     """받을 차례 — [(code, corp_code)]. 지배구조가 코스피 · 코스닥으로 본 회사 중 안 받았거나 stale · 시가총액 큰 회사부터."""
     corps = {r["stock_code"]: r["corp_code"] for r in dart_gov._rows("SELECT stock_code, corp_code FROM dart_gov WHERE corp_cls IN ('Y', 'K')")}
+    if _listed:                                        # kis 어림으로만 있던 종목 — 지배구조가 아직 안 본 회사여도 받는다(11-24 「어림값들은 다 받아서」)
+        q = [c for c in _listed if c not in corps and c.endswith("0")]
+        for i in range(0, len(q), 500):
+            ch = q[i:i + 500]
+            for r in dart_gov._rows("SELECT stock_code, corp_code FROM dart_corps WHERE stock_code IN (%s)" % ",".join("?" * len(ch)), ch):
+                corps.setdefault(r["stock_code"], r["corp_code"])
     have = {r["stock_code"]: r["status"] for r in _rows("SELECT stock_code, status FROM float_shares")}
     try:
         first = [r["stock_code"] for r in dart.universe_rows(None)]
@@ -180,6 +207,7 @@ def fill(key, limit=None):
     init()
     with _lock:
         _mark_stale()
+        _recompute()
         jobs = todo()
         done, why = 0, None
         for code, corp_code in jobs:
