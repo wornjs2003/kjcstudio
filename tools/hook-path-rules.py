@@ -9,8 +9,9 @@
     PreToolUse  Read · Edit · Write · MultiEdit · NotebookEdit · Bash 의 읽기(cat · head · tail · grep · rg · sed -n · wc)
                 → 그 룰 파일은 「저절로 들어옴」 으로 적기만
                 Bash 의 쓰기(sed -i · 리다이렉트 · tee · 파이썬 · node · mv · cp · perl -i · git apply)
-                → 그 세션이 그 룰 파일을 아직 못 받았으면 「먼저 cat 으로 읽으십시오」 + 절 제목을 한 번 넣는다
-                  (본문을 넣지 않는다 — 훅 글이 1만 자 남짓을 넘으면 문맥에 안 들어가고 미리보기 2KB 만 간다 · qa 11-24 잼)
+                → 그 세션이 그 룰 파일을 아직 못 받았으면 **한 번 멈추고** 「그 파일을 읽기 도구로 먼저 여십시오」 + 절 제목
+                  (다시 돌리면 지나간다 · 재권님 「응 해」 11-24 19:2x — 알림만으로는 명령이 돈 뒤에 읽혔다 · 본문은 1만 자 한도로 못 넣고
+                  룰 파일 cat 은 출력이 잘려 그 범위 파일을 열게 한다 · qa 11-24)
                   경로는 cd 뒤 자리 · 같은 저장소 다른 워크트리 절대경로 · 파이썬 코드 안 따옴표 경로(변수 포함)로 풀고,
                   heredoc 본문 · 따옴표 안 글(커밋 메시지 · 카드 메모) · git 명령은 뺀다
     SessionStart(시작 · /clear · 압축)  → 적어 둔 것을 지운다(압축 뒤에는 경로 룰이 바로 안 돌아온다 — 공식 문서)
@@ -173,7 +174,7 @@ def main():
                 continue
             for name, pats, body in rs:
                 if name not in [h[0] for h in hit] and any(x.match(r) for x in pats):
-                    hit.append((name, body, r))
+                    hit.append((name, body, r, os.path.normpath(os.path.join(cwd, os.path.expanduser(p)))))
         if not hit:
             return 0
         try:
@@ -181,21 +182,29 @@ def main():
         except Exception:
             st = {}
         give = []
-        for name, body, r in hit:
-            if st.get(name):
+        for name, body, r, ab in hit:
+            if st.get(name) in ("seen", "given"):
                 continue
-            st[name] = "seen" if kind == "read" else "given"
-            if kind == "write":
+            if kind == "read":
+                st[name] = "seen"
+            elif st.get(name) == "asked":
+                st[name] = "given"            # 한 번 멈춘 뒤 다시 돌린 것 — 지나간다(계속 막지 않는다)
+            else:
+                st[name] = "asked"
                 heads = [re.sub(r"^#+ ", "", l) for l in body.splitlines() if re.match(r"#{2,4} ", l)]
-                give.append("── `%s` — 이 명령이 고치는 %s 가 그 범위 · 먼저 `cat %s` 로 읽으십시오 ──\n절: %s" % (name, r, name, " / ".join(heads)))
+                tgt = ab if os.path.isfile(ab) else "그 폴더의 다른 파일(%s 는 아직 없음)" % r
+                give.append("── `%s` — 이 명령이 고치는 %s 가 그 범위 ──\n먼저 읽기 도구(Read)로 `%s` 를 여십시오 — 한 줄(limit 1)만 열어도 그 룰이 저절로 들어옵니다.\n절: %s"
+                            % (name, r, tgt, " / ".join(heads)))
         tmp = sp + ".%d" % os.getpid()
         json.dump(st, open(tmp, "w", encoding="utf-8"), ensure_ascii=False)
         os.replace(tmp, sp)
         if give:
-            log(top, "넣음 %s %s" % (sid, ", ".join(h[0] for h in hit)))
-            text = ("[경로 룰] 명령줄로 바로 고치면 경로 조건 룰이 저절로 안 들어옵니다 — 이 명령을 돌리기 전에 아래 룰 파일을 cat 으로 읽으십시오"
-                    "(cat 으로 읽으면 Claude Code 가 그 룰을 문맥에 넣습니다 · CLAUDE.md 「이 문서 밖에 있는 룰」 · 이 세션에 한 번만 알림).\n\n" + "\n\n".join(give))[:NOTE_MAX]
-            print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": text}}, ensure_ascii=False))
+            log(top, "멈춤 %s %s" % (sid, ", ".join(h[0] for h in hit)))
+            # 한 번 멈춘다(재권님 「응 해」 11-24 19:2x) — 알림만 주면 그 명령이 돈 뒤에 읽혀 첫 고침 전에 룰을 못 봤다(qa 실제 세션 두 판).
+            # 룰 파일을 cat 하라고 하면 출력이 잘려(4.5만 자) 그 범위 파일을 읽기 도구로 열게 한다 — 그러면 Claude Code 가 룰을 통째로 넣는다
+            text = ("[경로 룰 · 한 번 멈춤] 명령줄로 바로 고치면 경로 조건 룰이 저절로 안 들어옵니다. 고치기 전에 아래대로 연 뒤 같은 명령을 다시 돌리면 지나갑니다"
+                    "(이 세션에 룰 파일마다 한 번 · CLAUDE.md 「이 문서 밖에 있는 룰」).\n\n" + "\n\n".join(give))[:NOTE_MAX]
+            print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": text}}, ensure_ascii=False))
     except Exception as e:
         log(top, "못 잼 (%s)" % type(e).__name__)
     return 0
