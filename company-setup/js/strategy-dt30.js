@@ -32,7 +32,9 @@ const turnTxt = (x, prev) => { const v = Number(x); if (x == null || !Number.isF
 const volTxt = (x) => { const v = Number(x); if (x == null || !Number.isFinite(v)) return '—'; return v >= 1e8 ? `${num(v / 1e8, 1)}억주` : v >= 1e4 ? `${num(v / 1e4, v >= 1e6 ? 0 : 1)}만주` : `${num(v)}주`; };
 const amtTxt = (e) => { const v = Number(e); if (e == null || !Number.isFinite(v)) return '—'; return v >= 10000 ? `${num(v / 10000, 2)}조` : `${num(v, v < 10 ? 1 : 0)}억`; };
 const prevPctTxt = (p, key) => { const v = Number(p); if (p == null || !Number.isFinite(v)) return '—'; const c = toneHas(key) ? tonePaint(key, v, 'text') : ''; return `<span${c ? ` style="color: ${c}"` : ''}>${num(v, 0)}%</span>`; };
-const accTxt = (r) => `<span data-tip="오늘 누적 · 괄호는 전날 같은 시각 대비">량 ${volTxt(r.accVol)}(${prevPctTxt(r.volPrevPct, 'vol_prev_pct')}) · 대금 ${amtTxt(r.accValue)}(${prevPctTxt(r.valuePrevPct, 'amt_prev_pct')})</span>`;
+// 전일 하루 거래량 대비 지금 거래량(%) — 서버 accVol(오늘 누적 · 한국거래소라 프리장 빠짐) ÷ prevDayVol(전날 하루) × 100 · 못 잰 종목은 null(11-24 재권님 「프리장 미포함으로 하고 전일대비 거래량 … 종목에는 전일대비 현재거래량인데 지금 하고자 하는 방향으로 바꾸자」)
+const dayVolPct = (r) => { const a = Number(r.accVol), b = Number(r.prevDayVol); return r.accVol != null && r.prevDayVol != null && Number.isFinite(a) && b > 0 ? a / b * 100 : null; };
+const accTxt = (r) => `<span data-tip="오늘 누적 · 량 괄호는 전날 하루 거래량 대비(프리장 빠짐) · 대금 괄호는 전날 같은 시각 대비">량 ${volTxt(r.accVol)}(${prevPctTxt(dayVolPct(r), 'vol_prev_pct')}) · 대금 ${amtTxt(r.accValue)}(${prevPctTxt(r.valuePrevPct, 'amt_prev_pct')})</span>`;
 const WK = ['일', '월', '화', '수', '목', '금', '토'];
 const dayTxt = (d) => { const m = String(d || '').match(/^(\d{4})(\d{2})(\d{2})$/); return m ? `${m[2]}-${m[3]}(${WK[new Date(+m[1], +m[2] - 1, +m[3]).getDay()]})` : '—'; };
 const hmTxt = (t) => (/^\d{4}$/.test(String(t)) ? `${String(t).slice(0, 2)}:${String(t).slice(2)}` : esc(t || '—'));
@@ -439,7 +441,7 @@ Object.assign(DEF_SET, { endAt: '', sellBar: '5m', mk: {}, riseRank: true });   
 st.set = { ...DEF_SET };
 // 「· 어림」 — 서버 rows[].turnApprox(개발2 abf96b9) · 재권님 「응」 11-23 · 풍선은 어림 방법만(코드 이름은 이 주석에)
 const fltChk = (k, t, f, tip) => `<label class="dt-flt" data-tip="${tip} · 체크를 끄면 안 거름(값은 남김) · 넣으면 저장"><input type="checkbox" data-fltchk="${k}"${st.set[`${k}On`] ? ' checked' : ''} aria-label="${t} 거르기 켜기">${t} <input data-set="${f}" class="rl-in rl-num" inputmode="decimal" placeholder="( )" value="${st.set[f] > 0 ? st.set[f] : ''}" aria-label="${t} 몇 % 이상">% 이상</label>`;
-const fltIn = () => `${fltChk('turn', '유통 대비 거래', 'turnMin', '풀린 주식 대비 오늘 거래(서버 거래 비율 · 누적 거래대금 ÷ 풀린 시총)가 이 % 이상인 종목만 · 못 잰 종목은 남김')}${fltChk('vol', '전일 같은 시각 대비 거래량', 'volMin', '전날 같은 시각까지 거래량 대비 오늘 거래량(서버 volPrevPct)이 이 % 이상인 종목만 · 못 잰 종목은 남김')}`;   // 종목 머리 칸 — 유통 시총 거르기(11-23) · 유통 ( )억 이하 칸은 뺌(11-24 재권님 「유통 ()이하 이건 없애」) · 거르기 둘(11-24 재권님 「체크박스가 2개 … 유통주식대비 현재 거래되는 거래량 ()%이상 전일 동시간대비 거래량()%이상」)
+const fltIn = () => `${fltChk('turn', '유통 대비 거래', 'turnMin', '풀린 주식 대비 오늘 거래(서버 거래 비율 · 누적 거래대금 ÷ 풀린 시총)가 이 % 이상인 종목만 · 못 잰 종목은 남김')}${fltChk('vol', '전일 거래량 대비 지금 거래량', 'volMin', '전날 하루 거래량 대비 오늘 지금까지 거래량(프리장 빠짐)이 이 % 이상인 종목만 · 못 잰 종목은 남김')}`;   // 종목 머리 칸 — 유통 시총 거르기(11-23) · 유통 ( )억 이하 칸은 뺌(11-24 재권님 「유통 ()이하 이건 없애」) · 거르기 둘(11-24 재권님 「체크박스가 2개 … 유통주식대비 현재 거래되는 거래량 ()%이상 전일 동시간대비 거래량()%이상」)
 const WIN_KEY = 'dt30-windows';   // 마지막으로 받은 창 이름표 — 창이 없는 옛 날 판을 볼 때도 셈 칸은 지금 창으로(보는 상태 · 이 브라우저에만)
 const winsOf = () => { const m = (curD() && curD().meta) || {}; if (Array.isArray(m.windows) && m.windows.length) { try { localStorage.setItem(WIN_KEY, JSON.stringify(m.windows)); } catch (e) { /* 못 남겨도 됨 */ } return m.windows; } try { const v = JSON.parse(localStorage.getItem(WIN_KEY) || 'null'); return Array.isArray(v) && v.length ? v : null; } catch (e) { return null; } };
 const LKW = () => (winMode() ? '창' : '굳힘');   // 화면 낱말 — 창 판은 「창」(11-23 개발2 253689d · 「굳힘 낱말을 창으로」)
@@ -552,7 +554,7 @@ const live = d.flat930 ? live0.map((r, i) => [r, nthChipAt(r) || '9999', i]).sor
   const rows0 = S.minChip > 0 ? rows1.filter((r) => nEver(r) >= S.minChip) : rows1;   // 칩 N개 이상만(11-18) — 켜진 칩으로 센 수 · 한 번 붙었다 빠진 칩도 셈(nEver · 11-24)
   // 유통 시총 거르기(11-23 재권님 「종목 옆에 유통주식 필터 넣어줘 ()억 이라고 해서 해당금액 하위로 필터링되게」) — 풀린 시총(서버 rows[].floatCap · 억원)이 넣은 값 이하인 종목만 · 못 잰 종목(우선주 등 null)은 가를 수 없어 남김 · 빈칸 = 전체
   const atLeast = (x, m) => x == null || !Number.isFinite(Number(x)) || Number(x) >= m;   // 못 잰 종목은 남김(유통 거르기와 같음)
-  const fOk = (r) => (!(S.turnOn && S.turnMin > 0) || atLeast(r.turn, S.turnMin)) && (!(S.volOn && S.volMin > 0) || atLeast(r.volPrevPct, S.volMin));   // 유통 대비 거래 · 전일 같은 시각 대비 거래량(11-24)
+  const fOk = (r) => (!(S.turnOn && S.turnMin > 0) || atLeast(r.turn, S.turnMin)) && (!(S.volOn && S.volMin > 0) || atLeast(dayVolPct(r), S.volMin));   // 유통 대비 거래 · 전일 하루 거래량 대비 지금 거래량(11-24 · 프리장 빠짐)
   let rowsF = rows0.filter(fOk); FILL = new WeakSet(); let fillAdd = 0;
   // 칩 N개 종목이 모자라면 N−1개로 채움(11-24 재권님 「칩이 n개인데 5개가 안되면 n-1개로 가는것도 있으면 좋을거같은데」 → 「채움 채우지않음 선택되게해줘」)
   //   칩 N개 종목을 먼저 · 모자란 만큼 칩 N−1개 종목을 N−1번째 칩이 찬 시각별로 뒤에 붙임 · N−2 로는 안 내려감 · 채운 줄은 사는 순간도 N−1번째 칩이 찬 때
@@ -1324,7 +1326,7 @@ function winRules(days) {   // days — 승률 표가 셈한 날(코스피 값 �
     ['칩', [['켜진 칩', onC.join(' · ') || '없음'], ['꺼 둔 칩', [...offC, ...subOff].join(' · ') || '없음']]],
     ['종목 차례', [['점수', ord || '빈칸(칩 수 → 초반상승 → 시가총액)']]],
     ['매수', [['칩 개수', S.minChip ? `${S.minChip}개 이상` : '전체'], ['칩 모자라면', !(S.fill && S.minChip > 1) ? '채우지 않음' : S.fillN ? `채움(${S.fillN}종목이 안 되면 칩 ${S.minChip - 1}개 종목으로)` : '안 채움(종목 수 빔)'], ['상승률 순위', S.riseRank !== false ? '켬(09:05 까지 1분 값 높은 순)' : '끔(단타 순)'], ['09:30 뒤에 찬 종목', S.buyLate930 ? '삼' : '안 삼'],
-    ['유통 대비 거래', S.turnOn && S.turnMin > 0 ? `${S.turnMin}% 이상` : S.turnOn ? '안 거름(% 빔)' : '끔'], ['전일 같은 시각 대비 거래량', S.volOn && S.volMin > 0 ? `${S.volMin}% 이상` : S.volOn ? '안 거름(% 빔)' : '끔'],
+    ['유통 대비 거래', S.turnOn && S.turnMin > 0 ? `${S.turnMin}% 이상` : S.turnOn ? '안 거름(% 빔)' : '끔'], ['전일 거래량 대비 지금 거래량(프리장 빠짐)', S.volOn && S.volMin > 0 ? `${S.volMin}% 이상` : S.volOn ? '안 거름(% 빔)' : '끔'],
     ['매수', (() => { const B = BUYS.find(([k]) => k === buyKey()); return B ? buyName(B[0], B[1]) : '( )'; })()], ['불타기', on(S.pyr)]]],
     ['매도', [['매도 봉', S.sellBar === '1m' ? '1분' : S.sellBar === '5m' ? '5분' : '30분'], ['손절', S.stop == null || S.stop === '' ? '안 함' : `${S.stop}%`],
     ['꺾임', turn], ['시각 미달', S.cut ? `산 뒤 ${v(S.cutMin, '분')} · ${v(S.cutPct, '%')} 못 넘으면 팜` : '끔'],
