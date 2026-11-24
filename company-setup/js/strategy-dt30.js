@@ -724,7 +724,8 @@ function paint0(d) {
     const miss = [...new Set(all.flatMap((r) => r.chips || []))].filter((c) => !cols.includes(c) && !(st.watchAuto && c === '자동'));
     const allOn = st.off.size || st.subOff.size || miss.length ? `<div style="margin-top:12px"><button type="button" class="kh-chip" data-allon style="font-size:14px;padding:6px 16px">${miss.length ? '꺼 둔 칩 · 칸에 없는 칩 다 켜기' : '꺼 둔 칩 다 켜기'}</button></div>` : '';
     // 빈 판 까닭은 가운데 크게(11-20 재권님 「가운데에 좀더 크게」)
-    $('dt-box').innerHTML = `<div class="st-err" style="text-align:center;font-size:16px;line-height:1.7;padding:48px 16px;color:var(--kh-text-secondary)">${esc(why)}${allOn}</div>`; return;
+    // 어제 미국장 · 지금 바깥 줄은 판이 비어도 위에 남김(11-25 재권님 「필라델피아 반도체지수 선물 등등 … 없어졌어」 → 「응 그렇게 해줘」 — 표 머리 안에 있어 표와 함께 사라졌음) · id 같아 usLoad 가 받은 뒤 채움
+    $('dt-box').innerHTML = `<div style="padding:8px 0 0"><span class="dt-us" id="dt-us" data-day="${esc(d.day || '')}" style="border-left:0;padding-left:0">${usHtml(d.day)}</span></div><div class="st-err" style="text-align:center;font-size:16px;line-height:1.7;padding:48px 16px;color:var(--kh-text-secondary)">${esc(why)}${allOn}</div>`; return;
   }
   const shr = (a) => (a >= 1e4 ? `${(a / 1e4).toFixed(a >= 1e5 ? 0 : 1).replace(/\.0$/, '')}만` : a >= 1e3 ? `${Math.round(a / 1e3)}천` : String(a));   // 주
   const wonS = (a) => (a >= 1e8 ? `${(a / 1e8).toFixed(a >= 1e9 ? 0 : 1).replace(/\.0$/, '')}억` : a >= 1e4 ? `${Math.round(a / 1e4)}만` : String(a));   // 원
