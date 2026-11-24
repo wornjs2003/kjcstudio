@@ -325,9 +325,7 @@
 .dt .dt-mkon input { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--accent); }
 .dt .dt-mkrow.is-off > :not(.dt-mkon) { opacity: .45; }
 .dt .dt-mkrest { display: flex; flex-wrap: wrap; gap: 4px 14px; }
-/* 매수 메시지 보내기(11-24 · 매수 칸 아래) */
-.dt .dt-send { margin-top: 6px; padding: 8px 10px; border-radius: var(--kh-radius-sm); background: var(--kh-bg); display: flex; flex-direction: column; gap: 4px; }
-.dt .dt-send-h { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+/* .dt-send-in — 매수 룰 정의 칸의 작은 입력(11-24 · 매수 메시지 칸은 걷음) */
 .dt .dt-send-in { width: 3em; }
 .dt .dw-tb .dw-mut { color: var(--kh-text-secondary); }
 .dt .dw-tb .dw-all td { font-weight: 700; }
