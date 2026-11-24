@@ -10750,6 +10750,21 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": True, "data": trade_signal.journal(sys.modules[__name__], nd), "meta": trade_signal.status(sys.modules[__name__])})
                 return
 
+            if route == "dt30-chiplog":
+                # 단타 칩 붙음 · 빠짐 기록(dt30.chip_log_put · 2026-11-24) — 셈은 화면 · ?day=YYYYMMDD(없으면 오늘) · &codes=코드,코드(없으면 전부) · KIS 안 부름
+                day = (qs.get("day") or [datetime.now(KST).strftime("%Y%m%d")])[0]
+                if not (len(day) == 8 and day.isdigit()):
+                    self._send_json({"ok": False, "error": "day 는 YYYYMMDD 입니다."}, 400)
+                    return
+                codes = [c for c in ((qs.get("codes") or [""])[0]).split(",") if len(c) == 6 and c.isdigit()]
+                d, err = dt30.chip_log_get(sys.modules[__name__], day, codes or None)
+                if err:
+                    self._send_json({"ok": False, "error": "칩 기록을 못 읽음(%s)" % err, "data": None}, 500)
+                    return
+                self._send_json({"ok": True, "data": d, "meta": {"day": day, "codes": len(d),
+                                 "note": "kind on 붙음 · off 빠짐 · n 그 뒤 단타 셈 칩 수 · px 그 바퀴 시세(장 전은 프리장 값) · at 은 단타 목록 셈 바퀴 시각(실제보다 늦을 수 있음 · 바퀴 사이 붙었다 빠진 칩은 없음) · 못 받은 칩은 빠짐으로 안 적음 · 11-24 전 날은 기록 없음(처음 시각은 chip_first)"}})
+                return
+
             if route == "dt30-pre":
                 # 단타 프리장 칩 정보 기록(dt30.pre_log_put · 08:00~08:50 분마다 · 2026-11-24) — 표기는 단타 판이 정함 · KIS 안 부름
                 day = (qs.get("day") or [datetime.now(KST).strftime("%Y%m%d")])[0]
