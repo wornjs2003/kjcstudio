@@ -73,13 +73,43 @@ def _hhmm(t):
     return t if t is None else str(t).replace(":", "")[:4]
 
 
+DOC_TTL = 30                         # 상류에서 받은 장 시각 문서를 들고 있는 초 — 셈마다 묻지 않게(chip_rules.RULES_DOC_TTL 과 같은 꼴)
+_md = {"at": 0.0, "doc": None, "ok": None}
+
+
 def _doc_days():
+    """장 시각 문서의 days — 상류(KJC_BOARD_UPSTREAM · 개발 서버)가 있으면 상류 · 없으면 자기 파일. 문서는 개발 폴더에만 있어
+    메인 · 중간서버가 자기 파일을 읽으면 늦게 연 날이 0 으로 보였다(개념정의 검수 11-24 · 8767 11-19 판). 못 받으면 지난 값 · 그것도 없으면 {}
+    — 그때는 doc_ok() 가 False(「못 잼」 · 0 이 아님)."""
+    import json, os, time, urllib.request
+    up = (os.environ.get("KJC_BOARD_UPSTREAM") or "").strip().rstrip("/")
+    if not up:
+        try:
+            import docstore
+            doc = docstore.read_doc(DOC) or {}
+            _md["ok"] = True
+            return doc.get("days") or {}
+        except Exception:
+            _md["ok"] = False
+            return {}
+    now = time.time()
+    if _md["doc"] is not None and now - _md["at"] < DOC_TTL:
+        return _md["doc"].get("days") or {}
     try:
-        import docstore
-        doc = docstore.read_doc(DOC) or {}
-        return doc.get("days") or {}
-    except Exception:
-        return {}
+        req = urllib.request.Request(up + "/api/board/doc/" + DOC, headers={"X-KJC-Prio": "low"})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            d = json.loads(r.read().decode("utf-8")).get("data") or {}
+    except Exception as e:
+        print("  [장 시각] 상류에서 못 받음 — %s · 지난 값%s" % (type(e).__name__, "" if _md["doc"] is not None else " 없음(못 잼)"), flush=True)
+        _md["ok"] = _md["doc"] is not None
+        return (_md["doc"] or {}).get("days") or {}
+    _md.update(at=now, doc=d if isinstance(d, dict) else {}, ok=True)
+    return _md["doc"].get("days") or {}
+
+
+def doc_ok():
+    """마지막으로 장 시각 문서를 읽었나 — True 읽음 · False 못 읽음(늦게 연 날을 0 으로 짐작한 셈) · None 아직 안 읽음."""
+    return _md["ok"]
 
 
 def _kis_day(proxy, day):
