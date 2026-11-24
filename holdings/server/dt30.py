@@ -3110,7 +3110,8 @@ def send_top(proxy, b, head=""):
 #  1 기준 시각 R = 여는 시각 + ruleMin 분(셈 칸 rules.dt30.set.ruleMin · 5~30 · 빈칸 5) — 늦게 연 날은 여는 시각이 밀려 저절로 뒤
 #  2 R 전에 칩 N개(셈 칸 minChip · buy_need)가 찬 종목 — 찬 순간(N번째 칩 시각 T) 그 분 유통 대비 거래(rows[].turnMin · T 직전에 끝난 1분 값)가
 #    turnMin % 이상이면 「○○ 매수하세요」 · 못 잰 종목은 안 삼(재권님 「유통대비 거래에 안걸리면 목록에 안나와야해」 → 「가」)
-#  3 R 에 — 2번 종목이 사는 종목 수(fillN)에 모자라면 칩이 하나 모자란(N−1) 종목 중(채움 켬 · N > 1 · fillN 이 있을 때)
+#  3 R 에 — 2번 종목이 상위 ( )종목(top)에 모자라면 모자란 만큼 칩이 하나 모자란(N−1) 종목 중(채움 켬 · N > 1)
+#    (재권님 「가 상위종목에 지정된 숫자에서 부족한 숫자만큼」 18:2x · 창구 경유 — fillN 칸은 걷음)
 #    R 의 유통 대비 거래 조건을 넘은 것 → 상승률(시가 대비 R 1분 값) 높은 순 → 칩 많은 순 → 판 차례로 모자란 만큼
 #    (재권님 「상승률이 우선이고 유통대비거래는 조건이야」)
 #  4 R 뒤에 칩이 찬 종목 — 안 보냄
@@ -3146,11 +3147,6 @@ def _set_val(key):
 def rule_min():
     """기준 시각 — 여는 시각 + 이 분(셈 칸 ruleMin · 5~30) · 없으면 RULE_MIN_DEF."""
     return _set_int("ruleMin", RULE_MIN_DEF, RULE_MIN_LO, RULE_MIN_HI)
-
-
-def fill_n():
-    """사는 종목 수 — 셈 칸 fillN(1 이상 · 판 · 텔레그램이 같이 씀 · 재권님 「가」 18:0x) · 빈칸이면 None(안 채움)."""
-    return _set_int("fillN", None, 1, 999)
 
 
 def buy_top():
@@ -3189,7 +3185,7 @@ def buy_order(proxy, b, hm=None, inplace=False):
     now_m = hm if hm is not None else 24 * 60
     need = buy_need()
     on, tmin = turn_rule()
-    fn = fill_n()
+    fn = buy_top()                                     # 채움 목표 = 상위 ( )종목(재권님 「가」 18:2x)
     rows = (bb.get("rows") or []) + ((bb.get("meta") or {}).get("outRows") or [])
     ct_of = lambda r: {k: str(v).replace(":", "") for k, v in (r.get("chipTime") or {}).items()}
 
@@ -3217,7 +3213,7 @@ def buy_order(proxy, b, hm=None, inplace=False):
         got.append((tm_, r.get("rank") or 1e9, r, {"kind": "찬", "at": _hhmm(max(dec - 1, tm_)), "chipAt": _hhmm(tm_), "turn": tv, "rise": None, "px": px}))
     got.sort(key=lambda x: (x[0], x[1]))
     out = [(x[2], x[3]) for x in got]
-    if fn and need > 1 and _set_val("fill") is True and len(out) < fn and now_m >= R + 1:
+    if need > 1 and _set_val("fill") is True and len(out) < fn and now_m >= R + 1:
         have = {r["code"] for r, _ in out}
         cand, wait = [], False
         for r in rows:
@@ -3265,7 +3261,7 @@ def buy_rule_meta(proxy, b):
     hm = now.hour * 60 + now.minute if b.get("day") == now.strftime("%Y%m%d") else None
     rows, R = buy_order(proxy, b, hm, inplace=True)
     on, tmin = turn_rule()
-    b["meta"]["buyRule"] = {"ruleAt": _hhmm(R), "ruleMin": rule_min(), "need": buy_need(), "top": buy_top(), "fillN": fill_n(), "fill": _set_val("fill") is True,
+    b["meta"]["buyRule"] = {"ruleAt": _hhmm(R), "ruleMin": rule_min(), "need": buy_need(), "top": buy_top(), "fill": _set_val("fill") is True,
                             "turnOn": on, "turnMin": tmin, "def": {"ruleMin": RULE_MIN_DEF, "turnOn": TURN_ON_DEF, "turnMin": TURN_MIN_DEF, "top": TOP_DEF},
                             "order": [{"code": r["code"], "name": r.get("name"), **r["buyRule"]} for r in rows],
                             "sent": (b["meta"].get("tgBuy") or {}),

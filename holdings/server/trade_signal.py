@@ -495,7 +495,7 @@ def status(proxy=None):
         except Exception:
             tm = {}
     import dt30
-    return dict(_status, send=SEND, top=dt30.buy_top(), fillN=dt30.fill_n(), readSec=READ_SEC, settings=settings(), rules=rules_meta(), rulesAt="%02d:%02d" % RULES_AT, times=tm)
+    return dict(_status, send=SEND, top=dt30.buy_top(), readSec=READ_SEC, settings=settings(), rules=rules_meta(), rulesAt="%02d:%02d" % RULES_AT, times=tm)
 
 
 def start(proxy):
