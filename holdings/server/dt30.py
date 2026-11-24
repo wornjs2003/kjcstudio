@@ -3046,7 +3046,7 @@ def _trade_min_fill(proxy, b, now=None):
             got = [(t, cl, v) for t, cl, v in bs if t <= end and v is not None]
             f = fl.get(c)
             last = got[-1][1] if got else None
-            if not got or not f or not last:
+            if not got or not f or not last or any(cl is None for _, cl, _ in got):   # 종가 없는 봉이 하나라도 섞이면 대금이 작게 셈 — 못 잼(개념정의 덧 11-24)
                 tm[k] = None                           # 못 잼(1분봉 · 풀린 주식수 없음) — 0 아님
                 continue
             val = sum((cl or 0) * v for _, cl, v in got)
@@ -3055,7 +3055,7 @@ def _trade_min_fill(proxy, b, now=None):
                 continue
             tm[k] = {"at": _hhmm(o + n), "turn": round(val / (f * last) * 100, 2), "src": "1m"}
             n_got += 1
-        if "volDay" not in r and hm >= o + VOL_DAY_MIN:
+        if r.get("volDay") is None and hm >= o + VOL_DAY_MIN:   # 못 잰(None) 칸은 다시 셈 — 그 시각 칸이 늦게 적힌 날(개념정의 덧 11-24 · 고리는 VOL_SLOT_LOOK 분까지만 다시 봄)
             a, p = upto.get(c), prev.get(c)
             r["volDay"] = {"at": a[1], "pct": round(a[0] / p * 100, 1), "vol": a[0], "prevVol": p, "src": "krx"} if a and p else None
             n_got += 1 if r["volDay"] else 0
@@ -3497,7 +3497,7 @@ def start(proxy):
                             if hm >= o_min + n + 1 and any(str(n) not in (r.get("pxMin") or {}) for r in b["rows"]):
                                 _pxmin_live(proxy, proxy.load_secrets(), b, n)
                                 flow_now = True
-                        if hm >= o_min + VOL_DAY_MIN + 1 and any("volDay" not in r for r in b["rows"]):   # 전일대비 거래량 — 여는 시각 + 25분이 끝난 뒤 한 번(11-24)
+                        if hm >= o_min + VOL_DAY_MIN + 1 and any("volDay" not in r or (r["volDay"] is None and hm <= o_min + VOL_DAY_MIN + 1 + VOL_SLOT_LOOK) for r in b["rows"]):   # 전일대비 거래량 — 여는 시각 + 25분이 끝난 뒤 · 못 잰 줄은 VOL_SLOT_LOOK 분 더 다시(11-24)
                             _trade_min_fill(proxy, b)
                             flow_now = True
                         if b["rows"] and not b.get("closed") and buy_send(proxy, b, hm):   # 매수 — 칩 N개 찬 시각별로 · 여는 시각 + 3분부터 · 찰 때마다 한 종목씩(11-24) · 「팔 때」 대상도 이것
