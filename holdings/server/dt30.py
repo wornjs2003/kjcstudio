@@ -2972,10 +2972,8 @@ def sell_watch(proxy, cfg, b, now=None):
 
 
 def sell_text(r):
-    s = r["sell"]
-    return "🔻 팔 때 — %s(%s) %s %s원\n%s(기준 %s원 대비 %+.1f%%) · 산 값 %s원 대비 %+.1f%%" % (
-        r.get("name") or "", r["code"], s["at"], format(int(s["px"]), ","), s["why"], format(int(s["ref"]), ","),
-        (s["px"] / s["ref"] - 1) * 100, format(int(s["buy"]), ","), (s["px"] / s["buy"] - 1) * 100)
+    """「팔 때」 텔레그램 글 — 「종목명 매도하세요」 한 줄(재권님 「가로해줘」 11-24 14:2x). 시각 · 가격 · 까닭은 판 rows[].sell 에 그대로 남는다."""
+    return "%s 매도하세요" % (r.get("name") or r["code"])
 
 
 TRADE_KEYS = ("accVol", "accValue", "prevSameVol", "prevSameSrc", "volPrevPct", "valuePrevPct", "prevDayVol", "prevDayValue")   # 거래 값 칸 — 셈은 turnover._trade 한 곳
