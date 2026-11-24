@@ -329,8 +329,9 @@ async function kxLoad() {
   KX.busy = false; if (st.data && root) { paint(st.data); chips(); }
 }
 // 그 날 코스피 봉 — 장이 열린 첫 봉부터 있는 날만(qa 11-24 — 서버가 반나절만 쥔 날은 13:35 봉을 「시가」 로 견줬음) · 여는 시각은 그 날 판 meta.openAt(늦게 연 날) · 없으면 09:00
+const REG_OPEN_DEF = '0900';   // 보통 날 정규장 여는 시각 — 서버 판 meta.openAt 이 없는 판에서만(CLAUDE.md 「장 시각으로 셈하는 코드는 늦게 여는 날 그만큼 옮긴다」 3번)
 const kxDay = (day) => { const B = KX.bars && KX.bars[day]; if (!B || !B.length || !KX.step) return null;
-  const D = (calcD && calcD.day === day && calcD) || (st.data && st.data.day === day && st.data) || dayData[day] || null, op = hhmm((D && D.meta && D.meta.openAt) || '') || '0900';
+  const D = (calcD && calcD.day === day && calcD) || (st.data && st.data.day === day && st.data) || dayData[day] || null, op = hhmm((D && D.meta && D.meta.openAt) || '') || REG_OPEN_DEF;   // 서버가 주면 안 씀 — 판 meta.openAt(늦게 연 날 포함) 먼저
   return B[0][0] <= op ? B : null; };
 function mkLine(day) {   // 그 날 고른 줄 → { at, side 'up' | 'dn', line } 또는 null(맨 윗줄)
   const M = (st.set && st.set.mk) || {}, B = kxDay(day); if (!B) return null;   // 첫 봉부터 없거나 봉 길이를 서버가 안 주면 — 맨 윗줄
