@@ -317,7 +317,9 @@
 .dt .dt-mkrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 4px 6px; border-radius: var(--kh-radius-sm); background: var(--kh-bg); }
 .dt .dt-mkh { min-width: 0; font-size: 12px; font-weight: 600; }
 .dt .dt-mknote { margin: 0 0 2px; }
-.dt .dt-mkat { width: 4.2em; }
+.dt .dt-mkon { display: inline-flex; align-items: center; cursor: pointer; }
+.dt .dt-mkon input { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--accent); }
+.dt .dt-mkrow.is-off > :not(.dt-mkon) { opacity: .45; }
 .dt .dt-mkrest { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 /* 매수 메시지 보내기(11-24 · 매수 칸 아래) */
 .dt .dt-send { margin-top: 6px; padding: 8px 10px; border-radius: var(--kh-radius-sm); background: var(--kh-bg); display: flex; flex-direction: column; gap: 4px; }
