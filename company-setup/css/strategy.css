@@ -311,6 +311,8 @@
 .dt .dt-mkrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 4px 6px; border-radius: var(--kh-radius-sm); background: var(--kh-bg); }
 .dt .dt-mkh { min-width: 0; font-size: 12px; font-weight: 600; }
 .dt .dt-mknote { margin: 0 0 2px; }
+.dt .dt-mkat { width: 4.2em; }
+.dt .dt-mkrest { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .dt .dw-tb .dw-mut { color: var(--kh-text-secondary); }
 .dt .dw-tb .dw-all td { font-weight: 700; }
 .dt .dw-tw { height: 420px; }   /* 탭(갈아 끼우기)마다 줄 수가 달라도 칸 높이 그대로 — 「보는 것을 바꿔도 자리는 그대로다」 */
