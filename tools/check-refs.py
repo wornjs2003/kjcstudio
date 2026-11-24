@@ -25,7 +25,9 @@ if hasattr(sys.stdout, "reconfigure"):
 # `.claude/skills/*/SKILL.md` 도 룰 문서가 되어 같은 일이 또 날 자리였다.
 # 「검사 도구에 대상 값을 박지 않는다」 를 이 도구가 어기고 있었다.
 PATTERNS = ["CLAUDE.md", "*/CLAUDE.md", "*/*/CLAUDE.md",
-            ".claude/skills/*/SKILL.md"]
+            ".claude/skills/*/SKILL.md",
+            # 2026-11-24 루트에서 옮긴 절 — 경로 조건 룰 파일 · 기록 문서(그쪽 절을 가리켜도 실재로 센다)
+            ".claude/rules/*.md", ".claude/rule-history.md"]
 # 워크트리는 같은 파일의 사본이라 두 번 세어진다.
 SKIP = (".claude/worktrees", "node_modules", "kjcEngine/vendor")
 
