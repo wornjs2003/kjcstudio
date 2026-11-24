@@ -1167,7 +1167,7 @@ function setFill() {
   ORD_KEYS.forEach(([k]) => { v[`ord:${k}`] = (S.ordScore || {})[k] ?? ''; });
   v.ruleMin = S.ruleMin ?? ''; v.turnMin = S.turnMin || '';   // 매수 룰 정의(11-24)
   box.querySelectorAll('.dt-fill-n').forEach((e) => { e.textContent = S.minChip > 0 ? String(S.minChip) : ' '; }); box.querySelectorAll('.dt-fill-m').forEach((e) => { e.textContent = S.minChip > 1 ? String(S.minChip - 1) : ' '; }); box.querySelectorAll('[data-fill]').forEach((b) => b.classList.toggle('is-active', (b.dataset.fill === '1') === !!S.fill));   // 칩 모자라면 채움(11-24)   // 매수 메시지 보내기(11-24)
-  box.querySelectorAll('.dt-send-n').forEach((e) => { e.textContent = S.minChip > 0 ? String(S.minChip) : ' '; }); box.querySelectorAll('.dt-top-n').forEach((e) => { e.textContent = S.top > 0 ? String(S.top) : ' '; });   // 채움 목표 = 상위 N(11-24) box.querySelectorAll('.dt-send-u').forEach((e) => { e.textContent = chipUntil(); });
+  box.querySelectorAll('.dt-send-n').forEach((e) => { e.textContent = S.minChip > 0 ? String(S.minChip) : ' '; }); box.querySelectorAll('.dt-top-n').forEach((e) => { e.textContent = S.top > 0 ? String(S.top) : ' '; });   // 칩 수 · 채움 목표 = 상위 N(11-24) — 옛 「매수 메시지 보내기」 칸의 .dt-send-u 갱신은 칸과 함께 걷음(개념정의 덧)
   ['up', 'dn'].forEach((sd) => { const L = (S.mk || {})[sd] || {}; v[`mk:${sd}:pct`] = L.pct ?? ''; v[`mk:${sd}:stop`] = L.stop ?? ''; });   // 코스피 조건 줄(11-24)
   [0, 1, 2, 3, 4, 5].forEach((i) => { const gw = (S.grpWons || [])[i]; v[`gw${i}`] = gw > 0 ? gw / 10000 : ''; v[`gn${i}`] = (S.lockNs || [])[i] ?? ''; v[`gc${i}`] = (S.lockMinChip || [])[i] ?? ''; });   // 굳힘 칸마다(11-23)   // 종목 차례 점수(11-23)
   box.querySelectorAll('[data-set]').forEach((el) => { if (document.activeElement !== el) el.value = String(v[el.dataset.set] ?? ''); });
