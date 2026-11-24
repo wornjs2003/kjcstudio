@@ -3084,7 +3084,7 @@ def board(proxy, day=None, cfg=None):
 def open_rise_now(proxy, cfg, b):
     """그날 판 줄(rows · 빠진 줄 outRows)의 시가 대비 등락률(openRise)을 읽을 때마다 지금 값으로 — 지금 값 ÷ 오늘 시가 · 시세 캐시 나이 안이면 캐시.
     재권님 「시가대비 등락률인데 등락이 바뀔때마다 값이 여기에 적용되어야해」(11-24 11:3x) — 전에는 판 다시 세기가 멈추는 10:30 값에 굳어 있었다.
-    시가는 시세의 오늘 시가 · 없으면 줄에 적힌 시가 · 둘 다 없거나 지금 값이 없으면 null(못 잼 · 0 아님) · 저장 안 함(읽을 때만)."""
+    시가는 시세의 오늘 시가 · 없거나 지금 값이 없으면 null(못 잼 · 0 아님) · 저장 안 함(읽을 때만)."""
     rows = (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or [])
     if not rows:
         return 0
@@ -3092,7 +3092,7 @@ def open_rise_now(proxy, cfg, b):
     n = 0
     for r in rows:
         v = q.get(r["code"]) or {}
-        o, p = v.get("open") or r.get("open"), v.get("price")
+        o, p = v.get("open"), v.get("price")             # 시가는 시세의 오늘 정규장 시가만 — 줄 open 칸은 08:00 프리장 첫 값인 줄이 있어 대신 쓰지 않음(qa 덧 · 33줄)
         r["openRise"] = round((p / o - 1) * 100, 2) if o and p else None
         n += r["openRise"] is not None
     b["meta"]["openRiseAt"] = _now().strftime("%H:%M:%S")
