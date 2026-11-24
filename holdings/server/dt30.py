@@ -1238,7 +1238,7 @@ def live_merge(b):
             b["rows"].append(r)
             rows[o["code"]] = r
         else:
-            for k in ("buy", "buyAt", "buyTs", "buySrc", "pct", "rise", "subAt", "viAt", "surgeAt", "viPx", "pxMin", "px1"):
+            for k in ("buy", "buyAt", "buyTs", "buySrc", "pct", "rise", "subAt", "viAt", "surgeAt", "viPx", "pxMin", "px1", "turnMin", "volDay"):
                 if o.get(k) is not None:
                     r[k] = o[k]                        # 장중에 적은 값 — 든 시각 초(buyTs) · 산 값 출처 · 하위 붙은 시각 · VI 시각까지(개념정의 덧 11-24)
             ca = dict(r.get("chipAt") or {})
@@ -2679,7 +2679,7 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
         elif stale and not m.get("rebuilt"):           # 라이브로 굳힌 날 — 덮이는 장중 기록을 한 벌 남긴다(today_too 와 같은 꼴)
             old = got[0]
             keep_live[d] = {"savedAt": got[1], "buyAt": old.get("buyAt"), "meta": old.get("meta"),
-                            "rows": [{k: r.get(k) for k in ("code", "name", "rank", "chips", "subs", "n", "buy", "buyAt", "buyTs", "buySrc", "pct", "rise", "px", "pxSrc", "lock", "lockAt", "chipAt", "subAt", "viAt", "surgeAt", "viPx", "pxMin", "px1")}
+                            "rows": [{k: r.get(k) for k in ("code", "name", "rank", "chips", "subs", "n", "buy", "buyAt", "buyTs", "buySrc", "pct", "rise", "px", "pxSrc", "lock", "lockAt", "chipAt", "subAt", "viAt", "surgeAt", "viPx", "pxMin", "px1", "turnMin", "volDay")}
                                      for r in old.get("rows") or []]}
     n = 0
     cfg = proxy.load_secrets()
@@ -2962,6 +2962,7 @@ def _pxmin_fill(proxy, b):
     for r in rows:
         if not r.get("px1") and (r.get("pxMin") or {}).get("1"):
             r["px1"] = r["pxMin"]["1"]
+    _trade_min_fill(proxy, b)                          # 사는 때 거래 값 둘(turnMin · volDay) — 같은 1분봉 · 같은 때(11-24)
     return n_got
 
 
@@ -2983,6 +2984,82 @@ def _pxmin_live(proxy, cfg, b, n):
         r.setdefault("pxMin", {}).setdefault(k, None)
         if n == 1 and not r.get("px1"):
             r["px1"] = r["pxMin"]["1"]
+
+
+# ── 사는 때 거래 값 둘 (2026-11-24 재권님 「응 해줘」 16:5x · 시황분석1 과 논의 — 「전날 같은 시각 대비」 는 빼고 「전일대비 거래량」 은 9시 25분에)
+#    rows[].turnMin {"1"~"5": {at, turn, src} | null} — 여는 시각 + N분까지의 「유통 대비 거래 %」(pxMin 과 같은 칸) ·
+#        1분봉(여는 시각 봉 ~ 여는 시각 + N − 1 봉)의 Σ(종가 × 거래량) ÷ (풀린 주식수 × 그 끝 봉 종가) × 100 — 대금은 1분봉 어림(src 「1m」)
+#    rows[].volDay {at, pct, vol, prevVol, src} | null — 여는 시각 + VOL_DAY_MIN 분까지 정규장 누적 거래량(한국거래소 · 프리장 뺌 · 거래 값 시각 칸 turnover_slot) ÷
+#        전날 하루 거래량(한국거래소 · turnover_day · 화면 prevDayVol 과 같은 기준) × 100 — 재권님 「프리장 미포함으로 하고 전일대비 거래량」(11-24 16:5x · 시황분석1 경유) ·
+#        시각 칸은 VOL_SLOT_LOOK 분 안 마지막 칸(at 에 그 칸 시각) · 칸은 오늘 · 전날만 남아(turnover.SLOT_KEEP_DAYS) 지난 판은 장중에 적어 저장한 날만
+#    meta.turnMinAt · volDayAt — 그 시각(늦게 연 날은 그만큼 뒤). 그날 판은 그 분이 끝난 뒤에만 적는다(덜 찬 봉으로 안 셈) ·
+#    풀린 주식수 · 1분봉 · 전날 일봉이 없으면 null(못 잼 · 0 아님). 지난 판은 1분봉이 남은 날만(11-11 부터) 읽을 때 채운다(저장 안 함).
+VOL_DAY_MIN = 25             # 전일대비 거래량을 재는 때 — 여는 시각 + 이 분(보통 09:25 · 재권님 「9시 25분에 보이는걸로」 11-24)
+VOL_SLOT_LOOK = 5            # 그 시각 칸이 없으면 이 분 안 앞 칸까지(거래 값 받기가 1분마다라 칸이 1~2분 띄엄)
+
+
+def _trade_min_fill(proxy, b, now=None):
+    """위 「사는 때 거래 값 둘」 한 곳 — 줄에 turnMin · volDay 를 채운다(이미 있는 값은 그대로) · 새로 적은 칸 수."""
+    import company_profile
+    rows = b.get("rows") or []
+    if not rows:
+        return 0
+    now = now or _now()
+    day = b["day"]
+    o = _open_min(proxy, day, b)
+    hm = now.hour * 60 + now.minute - 1 if day == now.strftime("%Y%m%d") else 24 * 60   # 그날 판은 1분 늦게 — 끝난 봉을 1분봉 받기(1분마다)가 가져온 뒤(pxMin 고리 +1 과 같게)
+    if day > now.strftime("%Y%m%d"):
+        return 0
+    b["meta"]["turnMinAt"] = {str(n): _hhmm(o + n) for n in PX_MIN}
+    b["meta"]["volDayAt"] = _hhmm(o + VOL_DAY_MIN)
+    fl = company_profile.floats()
+    codes = [r["code"] for r in rows]
+    q = ",".join("?" * len(codes))
+    lo, hi = day + _hhmm(o).replace(":", ""), day + _hhmm(o + max(PX_MIN) - 1).replace(":", "")
+    bars, upto, prev = {}, {}, {}
+    import turnover
+    try:
+        with proxy.db_conn() as conn:
+            for c, t, cl, v in conn.execute("SELECT code, ts, close, volume FROM candles WHERE period = '1m' AND ts BETWEEN ? AND ? AND code IN (%s) ORDER BY ts" % q,
+                                            [lo, hi] + codes):
+                bars.setdefault(c, []).append((t, cl, v))
+            if hm >= o + VOL_DAY_MIN:
+                s_hi, s_lo = _hhmm(o + VOL_DAY_MIN).replace(":", ""), _hhmm(o + VOL_DAY_MIN - VOL_SLOT_LOOK).replace(":", "")
+                for c, sl, sv in conn.execute("SELECT code, slot, vol FROM turnover_slot WHERE day = ? AND slot BETWEEN ? AND ? AND vol IS NOT NULL AND code IN (%s) ORDER BY slot" % q,
+                                              [day, s_lo, s_hi] + codes):
+                    upto[c] = (sv, "%s:%s" % (sl[:2], sl[2:]))   # 마지막(가장 늦은) 칸이 남는다
+        if hm >= o + VOL_DAY_MIN:
+            pdy = turnover._prev_day(proxy, day)
+            prev = {c: g.get("vol") for c, g in (turnover.day_rows(proxy, pdy, codes) if pdy else {}).items()}
+    except Exception as e:
+        print("  [단타 30] 사는 때 거래 값 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
+        return 0
+    n_got = 0
+    for r in rows:
+        c, tm = r["code"], r.setdefault("turnMin", {})
+        bs = bars.get(c) or []
+        for n in PX_MIN:
+            k = str(n)
+            if tm.get(k) or hm < o + n:                # 그 분이 안 끝났으면(그날 판은 1분 더 기다림) 안 적음 · 적힌 값은 그대로
+                continue
+            end = day + _hhmm(o + n - 1).replace(":", "")
+            got = [(t, cl, v) for t, cl, v in bs if t <= end and v is not None]
+            f = fl.get(c)
+            last = got[-1][1] if got else None
+            if not got or not f or not last:
+                tm[k] = None                           # 못 잼(1분봉 · 풀린 주식수 없음) — 0 아님
+                continue
+            val = sum((cl or 0) * v for _, cl, v in got)
+            if val <= 0:                               # 거래량 0 봉뿐 — 채움 봉(옛 값 · qa 11-20 11-19 10:00 봉)일 수 있어 0 이 아니라 못 잼
+                tm[k] = None
+                continue
+            tm[k] = {"at": _hhmm(o + n), "turn": round(val / (f * last) * 100, 2), "src": "1m"}
+            n_got += 1
+        if "volDay" not in r and hm >= o + VOL_DAY_MIN:
+            a, p = upto.get(c), prev.get(c)
+            r["volDay"] = {"at": a[1], "pct": round(a[0] / p * 100, 1), "vol": a[0], "prevVol": p, "src": "krx"} if a and p else None
+            n_got += 1 if r["volDay"] else 0
+    return n_got
 
 
 TG_TOP = 10                  # 텔레그램으로 보내는 상위 종목 수 — 재권님 「단타 목록 상위 10개가 최초로 볼수있는 시간이 어떻게 되지? 그걸 바로 텔레그램으로 보내고 싶은데」 → 「나」(개장 1분 뒤 · 11-19 13:5x)
@@ -3420,6 +3497,9 @@ def start(proxy):
                             if hm >= o_min + n + 1 and any(str(n) not in (r.get("pxMin") or {}) for r in b["rows"]):
                                 _pxmin_live(proxy, proxy.load_secrets(), b, n)
                                 flow_now = True
+                        if hm >= o_min + VOL_DAY_MIN + 1 and any("volDay" not in r for r in b["rows"]):   # 전일대비 거래량 — 여는 시각 + 25분이 끝난 뒤 한 번(11-24)
+                            _trade_min_fill(proxy, b)
+                            flow_now = True
                         if b["rows"] and not b.get("closed") and buy_send(proxy, b, hm):   # 매수 — 칩 N개 찬 시각별로 · 여는 시각 + 3분부터 · 찰 때마다 한 종목씩(11-24) · 「팔 때」 대상도 이것
                             flow_now = True
                         if pre_fill(proxy, proxy.load_secrets(), b, hm):   # 오늘 프리장 끝 값 — 08:50 뒤 · 새로 든 줄은 다음 바퀴에
