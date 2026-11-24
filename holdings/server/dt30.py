@@ -3231,7 +3231,8 @@ def buy_order(proxy, b, hm=None, inplace=False):
                 with proxy.db_conn() as conn:
                     pr = _m1_px(conn, day, codes, day + _hhmm(R - 1).replace(":", ""), "close")   # R 의 값 = 그 앞 1분봉 종가(pxMin 과 같은 셈)
                     op = _m1_px(conn, day, codes, day + _hhmm(o).replace(":", ""), "open")        # 줄에 시가가 없는 지난 판 — 여는 시각 첫 봉 시가
-            except Exception:
+            except Exception as e:
+                print("  [단타 30] 매수 룰 채움 — 기준 시각 1분 값 못 읽음 · %s" % proxy.safe_message(e, 120), flush=True)   # 상승률이 다 빔 → 칩 수 · 판 차례로만(개념정의 덧 11-24)
                 pr, op = {}, {}
             pick = []
             for r, tv, nc, last in cand:
