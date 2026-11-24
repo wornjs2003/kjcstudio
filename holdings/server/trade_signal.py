@@ -9,7 +9,7 @@
 
 하는 일
     매도     보낸 종목을 판 매도 룰(dt30_win.sell_of)로 SEND_CHECK_SEC 마다 보고 걸리면 SELL 을 한 번 보낸다
-    보내기   그날 단타 판 줄 중 사는 셈(dt30.buy_point · 칩이 09:30 까지 N개 찬 순서) 위 PICK_N 종목 + 종목마다 매수금액을 슬랙 채널에 한 번(수신 웹훅) — 개발 서버(is_sender)에서만
+    보내기   그날 단타 판 매수 룰(dt30.buy_order — 기준 시각 전 칩 N개 찬 순 · 기준 시각에 모자라면 채움)로 정해진 종목 + 종목마다 매수금액을 슬랙 채널에 정해질 때마다(수신 웹훅) — 개발 서버(is_sender)에서만
     받기     슬랙 채널을 READ_SEC 마다 읽어(conversations.history · 공개 주소 없음) 「RESULT」 줄을 매매일지에 적는다
     매매일지  market.db trade_journal — 줄을 지우지 않는다(돈이 드는 기록) · /api/kis/trade-journal
              줄의 status 는 서버 쪽(보냄 · 안 보냄 …)이고 매매 결과는 rows[].results(컴퓨터마다) — 화면은 결과를 results 에서 읽는다(qa 덧 11-23)
@@ -71,7 +71,6 @@ from datetime import datetime, timedelta, timezone
 
 KST = timezone(timedelta(hours=9))
 SEND = False                  # 슬랙으로 매수 목록 보내기 — 켜기는 재권님 지시 때만(되돌릴 수 없는 발송 · CLAUDE.md 「켜기」)
-PICK_N = 5                    # 보낼 종목 수 — 셈은 dt30.buy_order 한 곳(dt30.buy_pick_n() 과 한 값 · 머리에 숫자로 두는 것은 시작 줄 · status 글용) — 재권님 「상위 5개」(11-24)
 READ_SEC = 5                  # 슬랙 채널 읽는 간격(초) — 재권님 「메세지가 가면 바로 읽을수 있으면」(11-23 14:4x) · conversations.history 는 분당 50회 넘게 되는 등급(Tier 3 · 슬랙 문서) · 12회/분
 READ_FROM, READ_TO = (8, 0), (21, 0)   # 평일 이 사이에만 읽는다 — 매도 결과는 장중 · 넥스트레이드 끝(20:00) 뒤 조금까지
 SET_DOC = "trade-set"
@@ -136,12 +135,13 @@ def day_times(proxy, now=None):
     import dt30
     now = now or _now()
     off = dt30.late_min(proxy, now)
-    fl = dt30.CHIP_UNTIL                               # 칩 셈 끝(09:30) — 위 PICK_N 이 그 전에 다 차면 그때 · 아니면 이때 찬 만큼 보낸다(11-23 19:0x · 전에는 첫 시간 창 09:10)
-    m = fl[0] * 60 + fl[1] + off
+    o = dt30.OPEN_AT[0] * 60 + dt30.OPEN_AT[1] + off
+    ra = o + dt30.rule_min()                           # 매수 룰 기준 시각(여는 시각 + ruleMin · 11-24) — 그 전엔 칩 찬 때마다 · 그때 모자라면 채움
+    m = ra + dt30.BUY_SEND_LATE                        # 이때까지 정해지는 종목을 받는다(dt30.buy_send 와 같은 끝)
     clean = dt30._close_min(proxy, now) - AUCTION_MIN
     close = dt30._close_min(proxy, now)
-    sf = dt30.OPEN_AT[0] * 60 + dt30.OPEN_AT[1] + off + dt30.buy_send_from()
-    return {"sendFrom": "%02d:%02d" % divmod(sf, 60), "firstLock": "%02d:%02d" % divmod(m, 60), "cleanAt": "%02d:%02d" % divmod(clean, 60), "reopenAt": "%02d:%02d" % dt30.OPEN_AT,
+    sf = o + 1                                         # 칩 찬 종목은 여는 시각부터 그 분 거래 값이 적히는 대로(dt30.buy_order)
+    return {"sendFrom": "%02d:%02d" % divmod(sf, 60), "ruleAt": "%02d:%02d" % divmod(ra, 60), "firstLock": "%02d:%02d" % divmod(m, 60), "cleanAt": "%02d:%02d" % divmod(clean, 60), "reopenAt": "%02d:%02d" % dt30.OPEN_AT,
             "closeAt": "%02d:%02d" % divmod(close, 60)}
 
 
@@ -251,35 +251,35 @@ AGAIN = ("판 아직 없음", "기다림")     # send_today 가 이 글로 시�
 
 
 def send_today(proxy, day):
-    """그날 판이 굳었으면 위 PICK_N 줄을 일지에 만들고(한 번) 조건이 맞으면 슬랙에 보낸다 → 상태 글."""
+    """매수 룰(dt30.buy_order)로 새로 정해진 줄을 일지에 만들고 조건이 맞으면 슬랙에 보낸다 → 상태 글."""
     import dt30
     b = dt30.board(proxy, day)
     if not b or b.get("day") != day:
         return "판 아직 없음"
-    # 사는 셈 한 곳(dt30.buy_point · rows[].buy930) — 칩이 09:30 까지 N개 찬 순서대로 위 PICK_N(같은 때면 판 차례) · 시간 창은 걷음(11-23 19:0x 「응 그래」)
-    #   위 PICK_N 이 다 차면 그때 · 덜 차도 칩 셈 끝(dt30.CHIP_UNTIL)이 지나면 찬 만큼 보낸다
+    # 매수 룰 한 곳(dt30.buy_order · 11-24) — 텔레그램 매수 · 「팔 때」 대상과 같은 한 목록 · 그날은 지금까지 정해진 것만
     tm = day_times(proxy)
-    rows, _ = dt30.buy_order(proxy, b)                 # 텔레그램 매수 · 「팔 때」 대상과 같은 한 목록(dt30.buy_order · 11-24 「순차적으로 매수 하라고 메세지」)
     today = day == _now().strftime("%Y%m%d")
     hm = _now().strftime("%H:%M")
+    rows, _ = dt30.buy_order(proxy, b, int(hm[:2]) * 60 + int(hm[3:]) if today else None)
     if today and hm < tm["sendFrom"]:
         return "기다림 — %s 부터" % tm["sendFrom"]
     have = set(_db(proxy, lambda c: [x[0] for x in c.execute("SELECT code FROM trade_journal WHERE day = ?", (day,)).fetchall()]))
     rows = [r for r in rows if r["code"] not in have]
     if not rows:
-        if today and hm <= tm["firstLock"] and len(have) < dt30.buy_pick_n():
+        if today and hm <= tm["firstLock"]:
             return "기다림 — 칩 %d개 찬 종목 더 · %s 까지" % (dt30.buy_need(), tm["firstLock"])
         return "이미 만듦" if have else "칩 찬 종목 없음"
     for r in rows:
-        r["buy"] = r["buy930"]["px"]                   # 보내는 가격 = 사는 셈의 값(주문 컴퓨터 상한 기준)
-    amt = amount_won(dt30.buy_pick_n())                  # 첫 금액 ÷ 보내는 종목 수(5) — 순차로 가도 종목마다 같은 금액(11-24)
+        r["buy"] = r["buyRule"]["px"]                  # 보내는 가격 = 매수 룰이 정한 때 값(찬 줄은 사는 셈 buy930 · 채운 줄은 기준 시각 1분 값 · 주문 컴퓨터 상한 기준)
+    fn = dt30.fill_n()
+    amt = amount_won(fn) if fn else None                 # 첫 금액 ÷ 사는 종목 수(셈 칸 fillN · 판 · 텔레그램과 같은 칸 · 재권님 「가」 11-24) — 빈칸이면 못 셈(안 보냄)
     st = settings()
     now = _now()
     if not SEND:
         return "안 보냄 — 꺼짐(SEND) · 일지에 안 적음"      # 꺼진 동안은 줄을 안 쌓는다 — 일지는 실제로 돈이 움직일 수 있었던 날만(qa 덧 11-23)
     sk = _slack(proxy)
     why = ("룰 칸 빔(%s)" % ", ".join(RULES[k][0] for k in st["missing"]) if st["missing"]
-           else "단타 판 매수금액 못 셈" if amt is None
+           else "사는 종목 수 빔(fillN)" if not fn else "단타 판 매수금액 못 셈" if amt is None
            else "보내기 주소 없음" if not sk["webhook_url"] else "주문 컴퓨터 열쇠 없음" if not sk["pcs"] else None)
     made = now.strftime("%Y%m%d%H%M%S")
 
@@ -287,7 +287,7 @@ def send_today(proxy, day):
         ids = []
         for r in rows:
             cur = conn.execute("INSERT INTO trade_journal (day, rank, code, name, amount_won, made_at, status, note, lock_px, rule_ver) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                               (day, r["buy930"]["rank"], r["code"], r.get("name"), amt, made, "보낼 차례" if why is None else "안 보냄", why,
+                               (day, r["buyRule"]["order"], r["code"], r.get("name"), amt, made, "보낼 차례" if why is None else "안 보냄", why,
                                 r.get("buy"), st["ver"]))
             ids.append(cur.lastrowid)
         return ids
@@ -496,7 +496,7 @@ def status(proxy=None):
         except Exception:
             tm = {}
     import dt30
-    return dict(_status, send=SEND, pickN=dt30.buy_pick_n(), readSec=READ_SEC, settings=settings(), rules=rules_meta(), rulesAt="%02d:%02d" % RULES_AT, times=tm)
+    return dict(_status, send=SEND, fillN=dt30.fill_n(), readSec=READ_SEC, settings=settings(), rules=rules_meta(), rulesAt="%02d:%02d" % RULES_AT, times=tm)
 
 
 def start(proxy):

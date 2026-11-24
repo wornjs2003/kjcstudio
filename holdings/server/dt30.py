@@ -2995,6 +2995,7 @@ def _pxmin_live(proxy, cfg, b, n):
 #    meta.turnMinAt · volDayAt — 그 시각(늦게 연 날은 그만큼 뒤). 그날 판은 그 분이 끝난 뒤에만 적는다(덜 찬 봉으로 안 셈) ·
 #    풀린 주식수 · 1분봉 · 전날 일봉이 없으면 null(못 잼 · 0 아님). 지난 판은 1분봉이 남은 날만(11-11 부터) 읽을 때 채운다(저장 안 함).
 VOL_DAY_MIN = 25             # 전일대비 거래량을 재는 때 — 여는 시각 + 이 분(보통 09:25 · 재권님 「9시 25분에 보이는걸로」 11-24)
+TURN_MIN_UPTO = 30           # 유통 대비 거래를 분마다 적는 끝 — 여는 시각 + 이 분(매수 룰 기준 시각 끝 RULE_MIN_HI 와 같게 · 칩 찬 분 값으로 거르려고 · 11-24)
 VOL_SLOT_LOOK = 5            # 그 시각 칸이 없으면 이 분 안 앞 칸까지(거래 값 받기가 1분마다라 칸이 1~2분 띄엄)
 
 
@@ -3011,12 +3012,12 @@ def _trade_min_fill(proxy, b, now=None):
     hm = now.hour * 60 + now.minute - 1 if today else 24 * 60   # 그날 판은 1분 늦게 — 끝난 봉을 1분봉 받기(1분마다)가 가져온 뒤(pxMin 고리 +1 과 같게)
     if day > now.strftime("%Y%m%d"):
         return 0
-    b["meta"]["turnMinAt"] = {str(n): _hhmm(o + n) for n in PX_MIN}
+    b["meta"]["turnMinAt"] = {str(n): _hhmm(o + n) for n in range(1, TURN_MIN_UPTO + 1)}
     b["meta"]["volDayAt"] = _hhmm(o + VOL_DAY_MIN)
     fl = company_profile.floats()
     codes = [r["code"] for r in rows]
     q = ",".join("?" * len(codes))
-    lo, hi = day + _hhmm(o).replace(":", ""), day + _hhmm(o + max(PX_MIN) - 1).replace(":", "")
+    lo, hi = day + _hhmm(o).replace(":", ""), day + _hhmm(o + TURN_MIN_UPTO - 1).replace(":", "")
     bars, upto, prev = {}, {}, {}
     import turnover
     try:
@@ -3040,7 +3041,7 @@ def _trade_min_fill(proxy, b, now=None):
     for r in rows:
         c, tm = r["code"], r.setdefault("turnMin", {})
         bs = bars.get(c) or []
-        for n in PX_MIN:
+        for n in range(1, TURN_MIN_UPTO + 1):
             k = str(n)
             if tm.get(k) or hm < o + n:                # 그 분이 안 끝났으면(그날 판은 1분 더 기다림) 안 적음 · 적힌 값은 그대로
                 continue
@@ -3105,46 +3106,161 @@ def send_top(proxy, b, head=""):
     return dart.telegram_send(top_text(proxy, b, head=head))
 
 
-# ── 매수 보내기 — 칩이 찬 시각별로 (2026-11-24 재권님 「칩이 9시 2분안부터 30분사이에 찬 종목중 상위 5개 로 해줘」 → 「텔레그램으로 보내는것도 여기에 맞춰서」 →
-#    「9시 02분전에 찬 종목은 빠지는게 아니고 들어가야 · 9시 30분까지 순차적으로 칩이 n개가 차면 순차적으로 매수 하라고 메세지가 가야지」 →
-#    「첫메세지는 9시 7분이 아니고 3분부터 찬종목들 순차로 보내준다」) ──
-# 사는 셈(buy930 · 칩 N개 찬 시각 · 찬 차례) 그대로 · 칩 셈 끝(CHIP_UNTIL · 늦게 연 날은 그만큼 뒤)까지 찬 종목만 · 위 BUY_PICK_N 종목.
-# 여는 시각 + BUY_SEND_FROM_MIN 분부터 — 그때까지 찬 종목은 찬 시각별로 · 그 뒤는 찰 때마다 한 종목씩(종목마다 한 통) · 합쳐 BUY_PICK_N 이면 끝.
-# 텔레그램(TG_SEND) · 슬랙 매수 목록(trade_signal.send_today · SEND) · 「팔 때」 대상(meta.tgTop)이 이 한 목록을 쓴다.
-BUY_PICK_N = 5                # 기본값 — 셈 칸 rules.dt30.set.sendN 이 있으면 그것(buy_pick_n · 재권님 「내가 중간중간 바꿀수 있게 ()로」 11-24)
-BUY_SEND_FROM_MIN = 3         # 기본값(여는 시각 + 분) — 셈 칸 rules.dt30.set.sendFrom 이 있으면 그것(buy_send_from)
+# ── 매수 룰 — 서버 한 곳 (2026-11-24 재권님 · 시황분석1 「매수 룰 정의」 1f47da7 「응 이게 맞아 이대로 만들어줘」 17:5x · 개발2 안 「응」 18:1x) ──
+#  1 기준 시각 R = 여는 시각 + ruleMin 분(셈 칸 rules.dt30.set.ruleMin · 5~30 · 빈칸 5) — 늦게 연 날은 여는 시각이 밀려 저절로 뒤
+#  2 R 전에 칩 N개(셈 칸 minChip · buy_need)가 찬 종목 — 찬 순간(N번째 칩 시각 T) 그 분 유통 대비 거래(rows[].turnMin · T 직전에 끝난 1분 값)가
+#    turnMin % 이상이면 「○○ 매수하세요」 · 못 잰 종목은 안 삼(재권님 「유통대비 거래에 안걸리면 목록에 안나와야해」 → 「가」) · 개수 상한 없음(정의 글)
+#  3 R 에 — 2번 종목이 사는 종목 수(fillN)에 모자라면 칩이 하나 모자란(N−1) 종목 중(채움 켬 · N > 1 · fillN 이 있을 때)
+#    R 의 유통 대비 거래 조건을 넘은 것 → 상승률(시가 대비 R 1분 값) 높은 순 → 칩 많은 순 → 판 차례로 모자란 만큼
+#    (재권님 「상승률이 우선이고 유통대비거래는 조건이야」)
+#  4 R 뒤에 칩이 찬 종목 — 안 보냄
+#  화면에서 끈 칩은 서버가 못 본다(브라우저마다) — 칩은 다 켠 것으로 셈. 그 분 거래 값이 아직 안 적혔으면 BUY_WAIT_MIN 분까지 기다렸다 셈.
+#  텔레그램(TG_SEND) · 슬랙 매수 목록(trade_signal) · 「팔 때」 대상(meta.tgTop)이 이 한 목록(buy_order)을 쓴다 — 전 「9시 3분부터 · 5종목」(sendFrom · sendN)은 걷음(재권님 「가」 18:0x)
+RULE_MIN_DEF, RULE_MIN_LO, RULE_MIN_HI = 5, 5, 30   # 화면 strategy-dt30.js RULE_MIN_* 와 같은 값(두 벌 — 판 meta.buyRule.def 로 내 화면이 받게 할 자리)
+TURN_ON_DEF, TURN_MIN_DEF = True, 1.0   # 저장값에 칸이 없을 때 — 화면 DEF_SET turnOn · turnMin(시황분석1 0d0e60f · 재권님 「유통거래대비 1%가 기본」)과 같은 값 · 〃
+BUY_WAIT_MIN = 3             # 그 분 유통 대비 거래 값이 아직 없으면 이 분까지 기다렸다 셈(1분봉 받기가 1분마다) · 그 뒤에도 없으면 못 잼 → 안 삼
+BUY_SEND_LATE = 5            # R + 이 분이 지나면 더 안 보냄(서버가 늦게 뜬 날 묵은 종목을 보내지 않게)
 
 
 def _set_int(key, dflt, lo, hi):
     """셈 칸(rules.dt30.set) 정수 — 빈칸 · 틀린 꼴 · 범위 밖 · 못 읽음이면 기본값."""
+    v = _set_val(key)
     try:
-        import dt30_win
-        v = dt30_win._set().get(key)
         v = int(v) if v is not None and v != "" and not isinstance(v, bool) else None
-    except Exception:
+    except (TypeError, ValueError):
         v = None
     return v if v is not None and lo <= v <= hi else dflt
 
 
-def buy_pick_n():
-    """보낼 종목 수 — 셈 칸 sendN(1~20) · 없으면 BUY_PICK_N."""
-    return _set_int("sendN", BUY_PICK_N, 1, 20)
+def _set_val(key):
+    try:
+        import dt30_win
+        return dt30_win._set().get(key)
+    except Exception:
+        return None
 
 
-def buy_send_from():
-    """보내기 시작 — 여는 시각 + 이 분(셈 칸 sendFrom · 0~29) · 없으면 BUY_SEND_FROM_MIN."""
-    return _set_int("sendFrom", BUY_SEND_FROM_MIN, 0, 29)
+def rule_min():
+    """기준 시각 — 여는 시각 + 이 분(셈 칸 ruleMin · 5~30) · 없으면 RULE_MIN_DEF."""
+    return _set_int("ruleMin", RULE_MIN_DEF, RULE_MIN_LO, RULE_MIN_HI)
 
 
-def buy_order(proxy, b):
-    """→ (줄들 · 칩 셈 끝 분) — 그날 판(rows · 빠진 줄 outRows)을 사는 셈으로 세어(판은 안 바꿈) 칩 셈 끝까지 찬 줄을 찬 시각별로 위 BUY_PICK_N."""
+def fill_n():
+    """사는 종목 수 — 셈 칸 fillN(1 이상 · 판 · 텔레그램이 같이 씀 · 재권님 「가」 18:0x) · 빈칸이면 None(안 채움)."""
+    return _set_int("fillN", None, 1, 999)
+
+
+def turn_rule():
+    """(거르나, 몇 %) — 셈 칸 turnOn · turnMin · 칸이 없으면 TURN_*_DEF."""
+    on, mn = _set_val("turnOn"), _set_val("turnMin")
+    on = TURN_ON_DEF if on is None else on is True
+    try:
+        mn = TURN_MIN_DEF if mn is None or mn == "" else float(mn)
+    except (TypeError, ValueError):
+        mn = TURN_MIN_DEF
+    return bool(on and mn > 0), mn
+
+
+def _turn_at(r, n):
+    """여는 시각 + n분까지의 유통 대비 거래 %(rows[].turnMin) · 없으면 None."""
+    v = (r.get("turnMin") or {}).get(str(max(1, min(n, TURN_MIN_UPTO))))
+    return v.get("turn") if isinstance(v, dict) else None
+
+
+def buy_order(proxy, b, hm=None, inplace=False):
+    """→ (줄들 · 기준 시각 분) — 위 「매수 룰」 한 곳. hm(분)을 주면 그때까지 정해진 것만(그날 판 · 고리) · 없으면 그날 끝까지(지난 판 · 읽기).
+    줄마다 r["buyRule"] {order, kind 「찬」·「채움」, at 정한 시각, chipAt, turn, rise, px} · 판(b)은 안 바꿈(inplace 면 그 판 줄에 적음 — 읽기 길)."""
     import copy
-    bb = copy.deepcopy(b)
-    buy930_fill(proxy, bb)
-    until = _open_min(proxy, bb["day"], bb) - (OPEN_AT[0] * 60 + OPEN_AT[1]) + CHIP_UNTIL[0] * 60 + CHIP_UNTIL[1]
-    rows = [r for r in (bb.get("rows") or []) + ((bb.get("meta") or {}).get("outRows") or [])
-            if r.get("buy930") and int(r["buy930"]["chipAt"][:2]) * 60 + int(r["buy930"]["chipAt"][3:5]) <= until]
-    return sorted(rows, key=lambda r: r["buy930"]["rank"])[:buy_pick_n()], until
+    bb = b if inplace else copy.deepcopy(b)
+    if not inplace:                                    # 읽기 길은 앞에서 이미 둘 다 셈(_pxmin_fill · buy930_fill)
+        buy930_fill(proxy, bb)
+        _trade_min_fill(proxy, bb)
+    day = bb["day"]
+    o = _open_min(proxy, day, bb)
+    R = o + rule_min()
+    now_m = hm if hm is not None else 24 * 60
+    need = buy_need()
+    on, tmin = turn_rule()
+    fn = fill_n()
+    rows = (bb.get("rows") or []) + ((bb.get("meta") or {}).get("outRows") or [])
+    ct_of = lambda r: {k: str(v).replace(":", "") for k, v in (r.get("chipTime") or {}).items()}
+
+    def nth(r, lim):
+        e = _in4(r)
+        ts = sorted((ct_of(r).get(c) or e or "0000") for c in chips930(r, ct_of(r), lim))
+        return ts, (ts[need - 1] if len(ts) >= need else None)
+
+    got = []
+    for r in rows:
+        _, T = nth(r, divmod(R - 1, 60))               # R 전(그 분 포함 안 함)에 N번째 칩
+        if not T:
+            continue
+        tm_ = int(T[:2]) * 60 + int(T[2:])
+        n = tm_ - o                                    # 찬 순간 직전에 끝난 1분 — 여는 시각 + n분 값
+        dec = o + max(1, n) + 1                        # 그 값이 적히는 때(그날 판은 1분 늦게 · _trade_min_fill)
+        if now_m < dec:
+            continue
+        tv = _turn_at(r, n)
+        if on and tv is None and now_m < dec + BUY_WAIT_MIN:
+            continue                                   # 아직 안 적힘 — 다음 바퀴
+        if on and (tv is None or tv < tmin):
+            continue                                   # 조건 못 넘음 · 못 잼 → 안 삼
+        px = (r.get("buy930") or {}).get("px")
+        got.append((tm_, r.get("rank") or 1e9, r, {"kind": "찬", "at": _hhmm(max(dec - 1, tm_)), "chipAt": _hhmm(tm_), "turn": tv, "rise": None, "px": px}))
+    got.sort(key=lambda x: (x[0], x[1]))
+    out = [(x[2], x[3]) for x in got]
+    if fn and need > 1 and _set_val("fill") is True and len(out) < fn and now_m >= R + 1:
+        have = {r["code"] for r, _ in out}
+        cand, wait = [], False
+        for r in rows:
+            if r["code"] in have:
+                continue
+            ts, _ = nth(r, divmod(R - 1, 60))
+            if len(ts) != need - 1:
+                continue
+            tv = _turn_at(r, R - o)
+            if on and tv is None and now_m < R + 1 + BUY_WAIT_MIN:
+                wait = True
+                continue
+            if on and (tv is None or tv < tmin):
+                continue
+            cand.append((r, tv, len(ts), ts[-1] if ts else None))
+        if not wait and cand:
+            codes = [x[0]["code"] for x in cand]
+            try:
+                with proxy.db_conn() as conn:
+                    pr = _m1_px(conn, day, codes, day + _hhmm(R - 1).replace(":", ""), "close")   # R 의 값 = 그 앞 1분봉 종가(pxMin 과 같은 셈)
+                    op = _m1_px(conn, day, codes, day + _hhmm(o).replace(":", ""), "open")        # 줄에 시가가 없는 지난 판 — 여는 시각 첫 봉 시가
+            except Exception:
+                pr, op = {}, {}
+            pick = []
+            for r, tv, nc, last in cand:
+                p, o0 = pr.get(r["code"]), (r.get("open") if isinstance(r.get("open"), (int, float)) and r.get("open") > 0 else op.get(r["code"]))
+                rise = round((p / o0 - 1) * 100, 2) if p and o0 else None
+                pick.append((-(rise if rise is not None else -1e9), -nc, r.get("rank") or 1e9, r,
+                             {"kind": "채움", "at": _hhmm(R), "chipAt": "%s:%s" % (last[:2], last[2:]) if last else None,   # 채운 줄은 N−1번째 칩 시각
+                              "turn": tv, "rise": rise, "px": p}))
+            pick.sort(key=lambda x: x[:3])
+            out += [(x[3], x[4]) for x in pick[:fn - len(out)]]
+    res = []
+    for i, (r, info) in enumerate(out, 1):
+        info["order"] = i
+        r["buyRule"] = info
+        res.append(r)
+    return res, R
+
+
+def buy_rule_meta(proxy, b):
+    """읽기 길 — 판 meta.buyRule(룰 값 · 기본 · 서버 차례)과 줄마다 rows[].buyRule. 그날 판은 지금까지 정해진 것만."""
+    now = _now()
+    hm = now.hour * 60 + now.minute if b.get("day") == now.strftime("%Y%m%d") else None
+    rows, R = buy_order(proxy, b, hm, inplace=True)
+    on, tmin = turn_rule()
+    b["meta"]["buyRule"] = {"ruleAt": _hhmm(R), "ruleMin": rule_min(), "need": buy_need(), "fillN": fill_n(), "fill": _set_val("fill") is True,
+                            "turnOn": on, "turnMin": tmin, "def": {"ruleMin": RULE_MIN_DEF, "turnOn": TURN_ON_DEF, "turnMin": TURN_MIN_DEF},
+                            "order": [{"code": r["code"], "name": r.get("name"), **r["buyRule"]} for r in rows],
+                            "sent": (b["meta"].get("tgBuy") or {}),
+                            "note": "서버가 보내는 차례(order) — 기준 시각 전 칩 N개 찬 순(그 분 유통 대비 거래 조건) · 기준 시각에 모자라면 칩 N−1 종목 상승률 순 · 화면에서 끈 칩은 모름 · sent 는 실제로 보낸 것"}
 
 
 def buy_text(r):
@@ -3153,31 +3269,27 @@ def buy_text(r):
 
 
 def buy_send(proxy, b, hm):
-    """여는 시각 + BUY_SEND_FROM_MIN 분부터 칩 셈 끝 + 1분까지 — 새로 찬 종목을 찬 시각별로 meta.tgTop 에 더하고(종목마다 산 값 · 시각 meta.tgBuy) 텔레그램 한 통씩 → 더한 수."""
+    """여는 시각부터 기준 시각 + BUY_SEND_LATE 분까지 — 매수 룰(buy_order)로 새로 정해진 종목을 meta.tgTop 에 더하고(meta.tgBuy 에 차례 · 시각 · 찬/채움) 텔레그램 한 통씩 → 더한 수."""
     o = _open_min(proxy, b["day"], b)
-    if hm < o + buy_send_from():
+    if hm < o + 1 or hm > o + rule_min() + BUY_SEND_LATE:
         return 0
     m = b.setdefault("meta", {})
     top = m.setdefault("tgTop", [])
-    pick = buy_pick_n()
-    if len(top) >= pick:
-        return 0
-    rows, until = buy_order(proxy, b)
-    if hm > until + 1:
-        return 0
+    rows, _ = buy_order(proxy, b, hm)
     n = 0
     for r in rows:
-        if r["code"] in top or len(top) >= pick:
+        if r["code"] in top:
             continue
         top.append(r["code"])
-        m.setdefault("tgBuy", {})[r["code"]] = {"px": r["buy930"]["px"], "at": r["buy930"]["at"], "chipAt": r["buy930"]["chipAt"], "sentAt": _now().strftime("%H:%M:%S")}
+        info = r["buyRule"]
+        m.setdefault("tgBuy", {})[r["code"]] = {"px": info.get("px"), "at": info.get("at"), "chipAt": info.get("chipAt"), "sentAt": _now().strftime("%H:%M:%S"),
+                                                "kind": info["kind"], "order": len(top), "turn": info.get("turn"), "rise": info.get("rise")}
         m["tgTopAt"] = _now().strftime("%H:%M")
         n += 1
         if TG_SEND:
             ok, why = dart.telegram_send(buy_text(r))
-            print("  [단타 30] 매수 %s %s" % (r["code"], "보냄" if ok else "못 보냄 — " + str(why)), flush=True)
+            print("  [단타 30] 매수 %s %s(%s) %s" % (r["code"], info["kind"], info.get("chipAt"), "보냄" if ok else "못 보냄 — " + str(why)), flush=True)
     return n
-
 
 SELL_SEND = True             # 켜기 — 아침 상위 TG_TOP 이 꺾이면 「팔 때」 한 통씩(종목마다 한 번 · 하루 9~10통 — 11-12~19 엿새 셈) · 재권님 「응 해줘」(11-19 14:4x · 시험 한 통 보신 뒤) · 보내는 서버(8765)만
 SELL_DROP_PCT = 2.0          # 고점 대비 이만큼 내려오면 — 재권님 「30분단위로 대비했을때 가격이 하락한상황이거나 고점대비 2% 하락시로 해줘」(11-19 14:3x)
@@ -3291,6 +3403,10 @@ def board(proxy, day=None, cfg=None):
         pass
     try:
         buy930_fill(proxy, b)                          # 사는 셈 한 곳 — 칩 시각 · 09:30 까지 칩 · N번째 칩 찬 때 값(rows[].buy930 · 화면은 받기만) · 아래 봉 줄은 이 값을 씀
+        try:
+            buy_rule_meta(proxy, b)                    # 매수 룰 — 서버가 보내는 차례(meta.buyRule · rows[].buyRule · 11-24)
+        except Exception as e:
+            print("  [단타 30] 매수 룰 차례 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
     except Exception as e:
         print("  [단타 30] 사는 셈 못 함 — %s" % proxy.safe_message(e, 120), flush=True)
     else:
