@@ -132,6 +132,11 @@ const subsOf = (r, c) => {
 const subOrder = (c, xs) => { const o = c === 'VI·급등' ? VI_SUBS : BOTH[c] ? BOTH[c][1] : []; return xs.sort((p, q) => ((o.indexOf(p) + 99) % 99) - ((o.indexOf(q) + 99) % 99) || p.localeCompare(q)); };
 const liveChip = (r, c) => { if (st.off.has(c) || !(r.chips || []).includes(c)) return false; const sb = subsOf(r, c); return !sb.length || sb.some((x) => !st.subOff.has(`${c}|${x}`)); };
 const nLive = (r) => colsOf().reduce((a, c) => a + (liveChip(r, c) ? 1 : 0), 0);   // 칸에 있고 켜진 칩만
+// 한 번 붙었다 빠진 칩도 센다 — 서버 rows[].chipTime(칩마다 처음 붙은 시각 · 빠져도 남음)에 있으면 붙었던 것(11-24 재권님 「서버는 정보만 있고 셈은 화면에서 한다」 → 「응 차레대로 해」 ·
+//   이수스페셜티케미컬(프리장 칩) · 하이젠알앤엠(매수 칩)이 빠지자 칩 5개에 못 미쳐 판에서 사라지던 것 · 09:30 전에 산 종목은 굳음)
+//   빠진 칩의 하위 칩(외 · 기 · 프 · 어림)은 기록에 없어 하위 끄기를 못 가름 — 칩이 켜져 있으면 셈 · 다시 붙은 칩의 「나중 시각」 은 서버 칩 쌓임 기록(개발2)이 오면
+const everChip = (r, c) => { if (st.off.has(c)) return false; if ((r.chips || []).includes(c)) return liveChip(r, c); return !!((r.chipTime || {})[c]); };
+const nEver = (r) => colsOf().reduce((a, c) => a + (everChip(r, c) ? 1 : 0), 0);
 const riseOf = (r) => (r.rise == null || !Number.isFinite(Number(r.rise)) ? -Infinity : Number(r.rise));   // 초반상승 % — 안 든 종목은 null → 맨 뒤
 // 조건별 점수 (11-18 재권님 「여기도 내가 조건들 넣을수 있게 해줘. 있는조건이면 고르면 되고 조건별로 점수를 매겨서 우선순위 정할거야」 → 홈 「단타」 도 같은 차례로 「응」)
 //   · 점수표는 룰 문서 rules.dt30.score 한 곳 — { 칩: 점수 · 'VI·급등|09:25 전': 점수 … } · 「룰 — 단타」 칸(strategy-chips.js)에서 넣음 · 홈 차례는 서버(개발2)가 같은 표로 셈
@@ -265,12 +270,7 @@ const notYetIn = (r, at) => { if (pmOf(buyKey()) === 1 && Number(r.lock) > 0) re
 const chipNeed = () => Math.max(1, Number(st.set.minChip) || 1);
 // 켜진 칩이 붙은 시각을 세워 N번째(칩 수 기준) — HHMM · 시각 모르는 칩은 그 줄이 판에 처음 든 때로 봄(칩은 든 때보다 앞설 수 없음 · 든 때도 모르면 장 시작 전) · 칩이 모자라면 null
 // 칩 시각은 서버 rows[].chipTime(칩마다 처음 붙은 시각 · 한 번 붙었다 빠져도 남음 · 개발2 a3ea7ff)이 있으면 그것 먼저
-// 서버가 산 줄을 정해 주는 판이면 그 차례 그대로 — rows[].buy930.chipAt(칩 N개 찬 시각 · 한 번 붙었다 빠진 칩도 처음 시각으로 셈)가 있으면 그것 · 없으면 아직 안 참(11-24 재권님 「응 그래」 —
-//   하이젠알앤엠 거래비율급증이 09:06 에 붙었다 빠지고 09:52 다시 붙자 화면만 그때 묶음에 뛰어들던 것 · 화면 셈은 지금 붙은 칩만 세서 서버와 갈렸다)
-//   셈 칸을 고치고 저장 전이거나 늦게 연 날을 서버가 안 옮긴 판은 아래 화면 셈(buyOf 의 서버 거름과 같은 조건)
-const srvOrd = () => !!(curD() && curD().flat930 && DM() && DM().buy930 && !st.setDirty && !lateOf());
-const nthChipAt = (r) => { if (srvOrd()) { const c = r.buy930 && String(r.buy930.chipAt || '').replace(/:/g, '').slice(0, 4); return c && /^\d{4}$/.test(c) ? c : null; } return nthChipAt0(r); };
-const nthChipAt0 = (r) => { const at = { ...(r.chipAt || {}), ...(r.chipTime || {}) }; const ts = colsOf().filter((c) => liveChip(r, c)).map((c) => String(at[c] || (c === 'VI·급등' ? r.viAt || '' : '')).replace(/:/g, '').slice(0, 4) || inTs(r).slice(0, 4) || '0000').sort(); const N = chipNeed(); return ts.length >= N ? ts[N - 1] : null; };
+const nthChipAt = (r) => { const at = { ...(r.chipAt || {}), ...(r.chipTime || {}) }; const ts = colsOf().filter((c) => everChip(r, c)).map((c) => String(at[c] || (c === 'VI·급등' ? r.viAt || '' : '')).replace(/:/g, '').slice(0, 4) || inTs(r).slice(0, 4) || '0000').sort(); const N = chipNeed(); return ts.length >= N ? ts[N - 1] : null; };
 // 보기만 줄의 가정 매수 — 판에 들어올 때 값(서버 r.buy)으로 샀다고 치고 셈만 보임(11-24 재권님 「들어올때 샀다는 전제로 셈을 하도록 하고 진짜 산건 아닌거처럼 해줘」) · 합계 · 평균 · 상위 N 에는 안 듦
 let HYPO = new WeakMap();   // calcDay 를 돌 때마다 새로 — 판 줄 객체가 다시 그릴 때 그대로 쓰여, 셈 칸을 바꿔 본 표로 든 줄에 가정 값이 남지 않게(개념정의 검수 11-24)
 function buyOf(r) {   // → { px, at(HHMM), src } | null
@@ -497,13 +497,13 @@ function calcDay(d) {
   const boughtOf = (r) => { const B = buyOf(r); return B && S.endAt && B.at >= S.endAt ? null : B; };
   const times = Array.isArray(d.times) ? d.times : [];
   const all = Array.isArray(d.rows) ? d.rows : [];
-  const live0 = ordSort(all.filter((r) => nLive(r) > 0));
+  const live0 = ordSort(all.filter((r) => nEver(r) > 0));
   // 굳힘 없앤 판 — 켠 칩으로 N번째 칩이 먼저 찬 순(같으면 지금 차례) · 칩 수 · 켠 칩을 바꾸면 다시 세움(19:3x 재권님 「칩이 들어오는 순서를 기억하고 칩의 개수를 조절하면 순위가 소팅되어야함」) · 못 찬 줄은 뒤
-const live = d.flat930 ? live0.map((r, i) => [r, nthChipAt(r) || '9999', srvOrd() && r.buy930 && Number(r.buy930.rank) > 0 ? Number(r.buy930.rank) : 1e6 + i]).sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[2] - b[2])).map((x) => x[0]) : live0;   // 켜진 칩으로 다시 셈한 단타 차례 · 차례 점수를 넣었으면 그 합으로(11-23)
+const live = d.flat930 ? live0.map((r, i) => [r, nthChipAt(r) || '9999', i]).sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[2] - b[2])).map((x) => x[0]) : live0;   // 켜진 칩으로 다시 셈한 단타 차례 · 차례 점수를 넣었으면 그 합으로(11-23)
   // 장중 줄 먼저 · 다시 지으며 더한 줄은 아래(11-24 재권님 「나」 — 장중 종목은 장중 값 · 3천억 이상 칩 하나라도 든 종목은 아래에 더함) — 서버 rows[].live 가 있는 판만 · 각 묶음 안 차례는 그대로
   const liveP = all.some((r) => r.live) ? [...live.filter((r) => r.live), ...live.filter((r) => !r.live)] : live;
   const rows1 = st.only ? liveP.filter((r) => liveChip(r, st.only)) : liveP;   // 거르고 나서 순번 · 상위 N · 평균을 다시 셈
-  const rows0 = S.minChip > 0 ? rows1.filter((r) => (srvOrd() ? !!r.buy930 : nLive(r) >= S.minChip)) : rows1;   // 칩 N개 이상만(11-18) — 켜진 칩으로 센 겹침 수 · 서버가 산 줄을 정해 주는 판은 서버 셈(rows[].buy930 · 빠졌던 칩도 셈 · 11-24 재권님 「응 그래」)
+  const rows0 = S.minChip > 0 ? rows1.filter((r) => nEver(r) >= S.minChip) : rows1;   // 칩 N개 이상만(11-18) — 켜진 칩으로 센 수 · 한 번 붙었다 빠진 칩도 셈(nEver · 11-24)
   // 유통 시총 거르기(11-23 재권님 「종목 옆에 유통주식 필터 넣어줘 ()억 이라고 해서 해당금액 하위로 필터링되게」) — 풀린 시총(서버 rows[].floatCap · 억원)이 넣은 값 이하인 종목만 · 못 잰 종목(우선주 등 null)은 가를 수 없어 남김 · 빈칸 = 전체
   const rowsF = S.floatMax > 0 ? rows0.filter((r) => r.floatCap == null || !Number.isFinite(Number(r.floatCap)) || Number(r.floatCap) <= S.floatMax) : rows0;
   const rows = st.order && ORDER_FN[st.order] ? [...rowsF].sort(ORDER_FN[st.order]) : rowsF;   // 줄 세우기를 바꾸면 순번 · 상위 N 을 그 차례로
