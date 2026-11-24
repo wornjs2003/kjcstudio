@@ -121,7 +121,7 @@ let calcD = null;
 const curD = () => calcD || st.data;
 const DM = () => (curD() && curD().meta) || {};
 const addHM = (t, m) => { const x = +t.slice(0, 2) * 60 + +t.slice(2) + (m || 0); return `${String(Math.floor(x / 60)).padStart(2, '0')}${String(x % 60).padStart(2, '0')}`; };
-const BUY_AT_DEF = '0905', BUY_AT_MIN = '0905', BUY_AT_MAX = '0930';   // 매수 룰 기준 시각(set.ruleAt — 판 · 줄 · 서버의 buyAt(든 시각 · 판 여는 시각)과 다른 것이라 이름을 달리함 · 개념정의 덧 ②) — 보통 날 시각 · 쓰는 자리에서 늦은 분(lateOf · 서버 openAt)을 더함 · 서버 판 meta 가 기준 시각을 주면 그것을 씀(아직 안 줌 · 개발2 배분 대기) · 재권님 값(11-24 「9시 5분 이라고 고정해놓고 … 변수로 빼서」 · 「09:05분~30분이 최종」)
+const BUY_AT_DEF = '0905', BUY_AT_MIN = '0905', BUY_AT_MAX = '0930';   // 매수 룰 기준 시각(set.ruleAt — 판 · 줄 · 서버의 buyAt(든 시각 · 판 여는 시각)과 다른 것이라 이름을 달리함 · 개념정의 덧 ②) — 보통 날 시각 · 쓰는 자리에서 openHM() + (ruleAt − REG_OPEN_DEF)분 + lateOf() 로 밈(lateOf 는 서버 openAt 이 있으면 0 이라 그것만 더하면 안 밀림 · 개념정의 주의 17:5x) · 서버 판 meta 가 기준 시각을 주면 그것을 씀(아직 안 줌 · 개발2 배분 대기) · 재권님 값(11-24 「9시 5분 이라고 고정해놓고 … 변수로 빼서」 · 「09:05분~30분이 최종」)
 const REG_OPEN_DEF = '0900';   // 보통 날 정규장 여는 시각 — 서버 판 meta.openAt 이 없는 판에서만(CLAUDE.md 「장 시각으로 셈하는 코드는 늦게 여는 날 그만큼 옮긴다」 3번)
 const openHM = () => { const o = String(DM().openAt || '').replace(':', ''); return /^\d{4}$/.test(o) ? o : REG_OPEN_DEF; };   // 서버가 주면 안 씀
 const viSplit = () => { const v = String(DM().viSplit || '').replace(':', ''); return /^\d{4}$/.test(v) ? v : VI_SPLIT; };   // 나누는 시각은 서버 한 곳 — 판 meta.viSplit(점수 셈과 같은 값 · 개발2 배분 중)이 오면 그 값 · 없으면 09:25(서버 점수와 같게 · 개념정의 267a17d 검수)
