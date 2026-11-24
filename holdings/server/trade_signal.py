@@ -71,7 +71,7 @@ from datetime import datetime, timedelta, timezone
 
 KST = timezone(timedelta(hours=9))
 SEND = False                  # 슬랙으로 매수 목록 보내기 — 켜기는 재권님 지시 때만(되돌릴 수 없는 발송 · CLAUDE.md 「켜기」)
-PICK_N = 3                    # 보낼 종목 수 — 재권님 「지금은 단타 9시5분 굳힘 목록에 들어가는 상위 3개로만」(11-23 · 고르는 조건은 나중에 다듬음)
+PICK_N = 5                    # 보낼 종목 수 — 셈은 dt30.buy_order 한 곳(dt30.buy_pick_n() 과 한 값 · 머리에 숫자로 두는 것은 시작 줄 · status 글용) — 재권님 「상위 5개」(11-24)
 READ_SEC = 5                  # 슬랙 채널 읽는 간격(초) — 재권님 「메세지가 가면 바로 읽을수 있으면」(11-23 14:4x) · conversations.history 는 분당 50회 넘게 되는 등급(Tier 3 · 슬랙 문서) · 12회/분
 READ_FROM, READ_TO = (8, 0), (21, 0)   # 평일 이 사이에만 읽는다 — 매도 결과는 장중 · 넥스트레이드 끝(20:00) 뒤 조금까지
 SET_DOC = "trade-set"
@@ -140,7 +140,8 @@ def day_times(proxy, now=None):
     m = fl[0] * 60 + fl[1] + off
     clean = dt30._close_min(proxy, now) - AUCTION_MIN
     close = dt30._close_min(proxy, now)
-    return {"firstLock": "%02d:%02d" % divmod(m, 60), "cleanAt": "%02d:%02d" % divmod(clean, 60), "reopenAt": "%02d:%02d" % dt30.OPEN_AT,
+    sf = dt30.OPEN_AT[0] * 60 + dt30.OPEN_AT[1] + off + dt30.buy_send_from()
+    return {"sendFrom": "%02d:%02d" % divmod(sf, 60), "firstLock": "%02d:%02d" % divmod(m, 60), "cleanAt": "%02d:%02d" % divmod(clean, 60), "reopenAt": "%02d:%02d" % dt30.OPEN_AT,
             "closeAt": "%02d:%02d" % divmod(close, 60)}
 
 
@@ -257,23 +258,25 @@ def send_today(proxy, day):
         return "판 아직 없음"
     # 사는 셈 한 곳(dt30.buy_point · rows[].buy930) — 칩이 09:30 까지 N개 찬 순서대로 위 PICK_N(같은 때면 판 차례) · 시간 창은 걷음(11-23 19:0x 「응 그래」)
     #   위 PICK_N 이 다 차면 그때 · 덜 차도 칩 셈 끝(dt30.CHIP_UNTIL)이 지나면 찬 만큼 보낸다
-    fl = day_times(proxy)["firstLock"]
-    rows = sorted([r for r in (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or []) if r.get("buy930")],
-                  key=lambda r: r["buy930"]["rank"])[:PICK_N]  # 판에서 빠진 종목도 그 차례로(승률 표와 같게 · qa 덧 11-23)   # 산 차례는 서버 한 곳(dt30.buy930_fill)
-    if day == _now().strftime("%Y%m%d") and len(rows) < PICK_N and _now().strftime("%H:%M") < fl:
-        return "기다림 — 칩 %d개 찬 종목 %d · %s 까지" % (dt30.buy_need(), len(rows), fl)
+    tm = day_times(proxy)
+    rows, _ = dt30.buy_order(proxy, b)                 # 텔레그램 매수 · 「팔 때」 대상과 같은 한 목록(dt30.buy_order · 11-24 「순차적으로 매수 하라고 메세지」)
+    today = day == _now().strftime("%Y%m%d")
+    hm = _now().strftime("%H:%M")
+    if today and hm < tm["sendFrom"]:
+        return "기다림 — %s 부터" % tm["sendFrom"]
+    have = set(_db(proxy, lambda c: [x[0] for x in c.execute("SELECT code FROM trade_journal WHERE day = ?", (day,)).fetchall()]))
+    rows = [r for r in rows if r["code"] not in have]
+    if not rows:
+        if today and hm <= tm["firstLock"] and len(have) < dt30.buy_pick_n():
+            return "기다림 — 칩 %d개 찬 종목 더 · %s 까지" % (dt30.buy_need(), tm["firstLock"])
+        return "이미 만듦" if have else "칩 찬 종목 없음"
     for r in rows:
         r["buy"] = r["buy930"]["px"]                   # 보내는 가격 = 사는 셈의 값(주문 컴퓨터 상한 기준)
-    amt = amount_won(len(rows))
-    if not rows:
-        return "칩 찬 종목 없음"
+    amt = amount_won(dt30.buy_pick_n())                  # 첫 금액 ÷ 보내는 종목 수(5) — 순차로 가도 종목마다 같은 금액(11-24)
     st = settings()
     now = _now()
     if not SEND:
         return "안 보냄 — 꺼짐(SEND) · 일지에 안 적음"      # 꺼진 동안은 줄을 안 쌓는다 — 일지는 실제로 돈이 움직일 수 있었던 날만(qa 덧 11-23)
-    have = _db(proxy, lambda c: c.execute("SELECT COUNT(*) FROM trade_journal WHERE day = ?", (day,)).fetchone()[0])
-    if have:
-        return "이미 만듦"
     sk = _slack(proxy)
     why = ("룰 칸 빔(%s)" % ", ".join(RULES[k][0] for k in st["missing"]) if st["missing"]
            else "단타 판 매수금액 못 셈" if amt is None
@@ -492,7 +495,8 @@ def status(proxy=None):
             tm = day_times(proxy)
         except Exception:
             tm = {}
-    return dict(_status, send=SEND, pickN=PICK_N, readSec=READ_SEC, settings=settings(), rules=rules_meta(), rulesAt="%02d:%02d" % RULES_AT, times=tm)
+    import dt30
+    return dict(_status, send=SEND, pickN=dt30.buy_pick_n(), readSec=READ_SEC, settings=settings(), rules=rules_meta(), rulesAt="%02d:%02d" % RULES_AT, times=tm)
 
 
 def start(proxy):
