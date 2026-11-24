@@ -2374,7 +2374,8 @@ def rebuild(proxy, day, prev, cfg=None):
     approx.append("거래값") if trade_ok else missing.append("거래값")
     return {"day": day, "buyAt": "%02d:%02d" % _sh(PAST_BUY_AT, off), "times": times(off), "rows": rows, "closed": True,
             "meta": {"rebuilt": True, "lateMin": off if market_hours.doc_ok() is not False else None,
-                     "openAt": "%02d:%02d" % _sh(OPEN_AT, off) if market_hours.doc_ok() is not False else None,   # 장 시각 못 잼이면 여는 시각도 null(보통 날 09:00 으로 둔갑시키지 않음 · qa 덧 11-24) "viSplit": vi_split(off), "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": drop_below_pct(),
+                     # openAt — 장 시각 못 잼이면 여는 시각도 null(보통 날 09:00 으로 둔갑시키지 않음 · qa 덧 11-24)
+                     "openAt": "%02d:%02d" % _sh(OPEN_AT, off) if market_hours.doc_ok() is not False else None, "viSplit": vi_split(off), "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": drop_below_pct(),
                      "watchSrc": watch_src, "rules": rules_meta(proxy, merged=False), "viUntil": "%02d:%02d" % _sh(PAST_LATE, off), "volUntil": "%02d:%02d" % PAST_VOL_UNTIL, "approxBase": approx_base,
                      "capMinEok": cap_min_eok(), "allRows": True, "tradeVer": TRADE_VER, "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 · 수급은 그날 09:01 직전 관심 목록(watchSrc 기록 · 없으면 관심 못 받음 · 수급 어림) · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
