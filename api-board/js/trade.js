@@ -17,6 +17,9 @@
   const PREP_AT = "2026-11-24";                  // 손으로 적은 줄을 적은 날 — 주문 컴퓨터 쪽 사정이 바뀌면 이 날과 함께 고친다
   const $ = (id) => document.getElementById(id);
   let meta = null, doc = {}, docAt = null, dirty = false;
+  let rule = null;                               // 단타 판 매수 룰 값 — 서버 /api/kis/dt30 의 그날 판 data.meta.buyRule(서버가 실제로 쓰는 값) · 못 받으면 null
+  /* 종목 고르기 룰 글은 여기 적지 않는다 — 단타 판 「매수 룰 정의」 칸 한 곳(재권님 「나」 11-24 18:2x) · 여기는 그 칸 링크와 서버 값만 */
+  const RULE_LINK = "/company-setup/strategy.html#dt-buydef";
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -46,6 +49,15 @@
     return v ? '<span class="v">' + esc(v) + "</span>" : "(서버 값 못 받음)";
   }
   function sv(v) { return v === undefined || v === null || v === "" ? "(서버 값 못 받음)" : '<span class="v">' + esc(v) + "</span>"; }
+  function rv(k, unit) {                         // 단타 판 매수 룰 값 하나 — 못 받으면 「(서버 값 못 받음)」
+    const v = rule ? rule[k] : undefined;
+    return v === undefined || v === null || v === "" ? "(서버 값 못 받음)" : '<span class="v">' + esc(v) + (unit || "") + "</span>";
+  }
+  function ruleLink(t) { return '<a href="' + RULE_LINK + '">' + (t || "단타 판 「매수 룰 정의」") + "</a>"; }
+  function ruleVals() {                          // 서버가 쓰는 매수 룰 값 한 줄
+    const turn = rule && rule.turnOn === false ? "끔" : rv("turnMin", "%");
+    return "기준 시각 " + rv("ruleAt") + " · 칩 " + rv("need") + "개 · 상위 " + rv("top") + "종목 · 채움 " + (rule ? '<span class="v">' + (rule.fill ? "켬" : "끔") + "</span>" : "(서버 값 못 받음)") + " · 유통 대비 거래 " + turn;
+  }
   function topN() {                              // 상위 종목 수 — 단타 판 「총 ( )만원 ÷ 상위 ( )종목」 칸 · 서버 meta.top(빈칸이면 서버 기본값)
     if (!meta || !("top" in meta) || meta.top === null) return "(서버 값 못 받음)";
     return '<span class="v">(' + esc(meta.top) + ")</span>";
@@ -101,7 +113,7 @@
   function drawFlow() {
     const st = meta || {};
     const steps = [
-      ["단타 판", "종목 고르기", "기준 시각 " + tm("ruleAt") + " 전에 칩이 찬 차례 · 상위 " + topN() + "종목에 모자란 만큼 채움 · 위에서 그 수까지만"],
+      ["단타 판", "종목 고르기", "단타 판 「매수 룰 정의」 그대로 · 상위 " + topN() + "종목까지"],
       ["서버", "서명한 신호", "사라 · 팔아라 · 룰 줄에 컴퓨터마다 다른 열쇠로 서명"],
       ["슬랙", "거래 채널", "서버가 올리고 주문 컴퓨터가 읽음"],
       ["주문 컴퓨터", "검사 · 수량 셈", "서명 · 늦은 메시지 · 같은 번호 · 한도를 본 뒤"],
@@ -112,7 +124,7 @@
       '<div class="tr-step"><div class="tr-step-who">' + s[0] + '</div><div class="tr-step-name">' + s[1] + '</div><div class="tr-step-what">' + s[2] + "</div></div>").join("");
     $("trSend").innerHTML =
       "<h3>서버가 보내는 것</h3><ol>" +
-      "<li>평일 단타 판 매수 룰로 종목이 정해질 때마다 슬랙에 한 줄씩(" + tm("sendFrom") + " 부터 " + tm("firstLock") + " 까지 · 위에서 상위 " + topN() + "종목까지만) — 종목 코드 · 이름 · 매수금액(단타 판 셈 칸의 첫 금액 ÷ 상위 " + topN() + "종목) · 정해진 때 가격(판 매수가) · 룰 판</li>" +
+      "<li>평일 " + ruleLink() + " 로 종목이 정해질 때마다 슬랙에 한 줄씩(" + tm("sendFrom") + " 부터 " + tm("firstLock") + " 까지 · 위에서 상위 " + topN() + "종목까지만) — 종목 코드 · 이름 · 매수금액(단타 판 셈 칸의 첫 금액 ÷ 상위 " + topN() + "종목) · 정해진 때 가격(판 매수가) · 룰 판</li>" +
       "<li>판 매도 룰(손절 · 꺾임 · 고점 · 미달 · 횡보 · 매도 시각 — 단타 판 셈 칸 그대로)에 걸리면 그 종목 「팔아라」 한 번</li>" +
       "<li>룰 칸이 바뀔 때마다 · 매일 " + sv(st.rulesAt) + " 에 서명한 룰 줄 한 번</li></ol>";
   }
@@ -182,9 +194,8 @@
         "주문 컴퓨터는 서명이 맞는 룰 줄만 받아 들고 있다가, 그날 사고팔 때 이 값을 씁니다. 룰 칸이 하나라도 비어 있으면 서버가 그날 매수 목록을 보내지 않습니다.",
       ]) +
       part("② 종목 고르기 — 단타 판 매수 룰", [
-        "평일 장이 열면 단타 판이 칩을 셉니다. 기준 시각 " + tm("ruleAt") + " 전에 칩이 정한 개수만큼 찬 종목은, 찬 순간 유통 주식 대비 거래가 정한 % 이상이면 그 차례대로 바로 고릅니다. 칩 개수 · % 는 단타 판 셈 칸 값입니다.",
-        "기준 시각에 고른 종목이 「총 ( )만원 ÷ 상위 ( )종목」 칸의 종목 수 " + topN() + " 에 모자라면(채움을 켠 때), 모자란 수만큼 칩이 하나 모자란 종목 중 유통 대비 거래 조건을 넘은 것을 상승률 높은 순으로 더해 채웁니다. 기준 시각 뒤에 찬 종목은 고르지 않습니다.",
-        "이렇게 정해진 차례에서 위부터 「총 ( )만원 ÷ 상위 ( )종목」 칸의 종목 수 " + topN() + " 까지만 보냅니다. 이미 보낸 종목으로 그 수가 찼으면, 나중에 정해진 종목이 앞 차례여도 더 보내지 않습니다.",
+        "종목 고르기 룰은 단타 판에 적힌 것을 따릅니다 — " + ruleLink("단타 판 「매수 룰 정의」 보기") + ". 이 화면에는 룰 글을 따로 적지 않습니다.",
+        "서버가 지금 쓰는 값 — " + ruleVals() + ".",
         "서버는 " + tm("sendFrom") + " 부터 " + tm("firstLock") + " 까지 종목이 정해질 때마다 종목 코드 · 이름 · 매수금액 · 판 매수가 · 룰 판을 한 줄씩 서명해 슬랙에 올립니다. 매수금액은 단타 판 셈 칸의 첫 금액을 상위 종목 수 " + topN() + " 로 나눈 값이고, 판 매수가는 그 종목이 정해진 때의 값입니다.",
       ]) +
       part("③ 주문 컴퓨터가 받는다 — 검사", [
@@ -265,7 +276,9 @@
     Promise.all([
       fetch(J, { headers: { accept: "application/json" } }).then((r) => r.json()),
       fetch(DOC, { headers: { accept: "application/json" } }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-    ]).then(([j, d]) => {
+      fetch("/api/kis/dt30", { headers: { accept: "application/json" } }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]).then(([j, d, dt]) => {
+      rule = (dt && dt.data && dt.data.meta && dt.data.meta.buyRule) || null;   // 그날 판 meta.buyRule
       meta = j.meta || {};
       doc = Object.assign({}, (d && d.data) || {});
       docAt = (d && d.updatedAt) || null;
