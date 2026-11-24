@@ -6,7 +6,7 @@ when_to_use: 모달 · 모델(모달의 오기) · 팝업 · 자세히 · 더보
 
 # 모달 룰 (holdings)
 
-**먼저 화면 룰을 읽는다(2026-11-24)** — 화면 · 색 · 칸 크기 룰은 루트 `CLAUDE.md` 에서 `.claude/rules/screen.md` 로 옮겼다. 화면 파일을 안 열었으면 저절로 안 들어오니 `cat .claude/rules/screen.md` 로 먼저 읽는다(CLAUDE.md 「이 문서 밖에 있는 룰」).
+**먼저 화면 룰을 읽는다(2026-11-24)** — 화면 · 색 · 칸 크기 룰은 루트 `CLAUDE.md` 에서 `.claude/rules/screen.md` 로 옮겼다. 화면 파일을 안 열었으면 저절로 안 들어오니 읽기 도구(Read)로 `.claude/rules/screen.md` 를 나눠 읽는다(cat 은 출력이 잘린다)(CLAUDE.md 「이 문서 밖에 있는 룰」).
 
 **이 파일이 모달 룰의 원본이다.** `holdings/CLAUDE.md` 에는 이곳을 가리키는 줄만 있다.
 
