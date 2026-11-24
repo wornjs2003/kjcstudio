@@ -121,7 +121,7 @@ let calcD = null;
 const curD = () => calcD || st.data;
 const DM = () => (curD() && curD().meta) || {};
 const addHM = (t, m) => { const x = +t.slice(0, 2) * 60 + +t.slice(2) + (m || 0); return `${String(Math.floor(x / 60)).padStart(2, '0')}${String(x % 60).padStart(2, '0')}`; };
-const BUY_AT_DEF = '0905', BUY_AT_MIN = '0905', BUY_AT_MAX = '0930';   // 매수 룰 기준 시각(set.ruleAt — 판 · 줄 · 서버의 buyAt(든 시각 · 판 여는 시각)과 다른 것이라 이름을 달리함 · 개념정의 덧 ②) — 보통 날 시각 · 쓰는 자리에서 openHM() + (ruleAt − REG_OPEN_DEF)분 + lateOf() 로 밈(lateOf 는 서버 openAt 이 있으면 0 이라 그것만 더하면 안 밀림 · 개념정의 주의 17:5x) · 서버 판 meta 가 기준 시각을 주면 그것을 씀(아직 안 줌 · 개발2 배분 대기) · 재권님 값(11-24 「9시 5분 이라고 고정해놓고 … 변수로 빼서」 · 「09:05분~30분이 최종」)
+const RULE_MIN_DEF = 5, RULE_MIN_LO = 5, RULE_MIN_HI = 30;   // 매수 룰 기준 시각 = 여는 시각 + (set.ruleMin)분(11-24 재권님 「여는 시각 +()분으로 해주고 지정한 시간에 되도록 해줘」 · 「09:05분~30분이 최종」) — 여는 시각은 openHM()(서버 meta.openAt · 없으면 09:00) 이라 늦게 연 날 저절로 밀림 · 쓰는 자리에서 addHM(openHM(), 분 + lateOf()) · 열쇠는 판 · 줄 · 서버 buyAt(든 시각)과 겹치지 않게 ruleMin
 const REG_OPEN_DEF = '0900';   // 보통 날 정규장 여는 시각 — 서버 판 meta.openAt 이 없는 판에서만(CLAUDE.md 「장 시각으로 셈하는 코드는 늦게 여는 날 그만큼 옮긴다」 3번)
 const openHM = () => { const o = String(DM().openAt || '').replace(':', ''); return /^\d{4}$/.test(o) ? o : REG_OPEN_DEF; };   // 서버가 주면 안 씀
 const viSplit = () => { const v = String(DM().viSplit || '').replace(':', ''); return /^\d{4}$/.test(v) ? v : VI_SPLIT; };   // 나누는 시각은 서버 한 곳 — 판 meta.viSplit(점수 셈과 같은 값 · 개발2 배분 중)이 오면 그 값 · 없으면 09:25(서버 점수와 같게 · 개념정의 267a17d 검수)
@@ -1162,7 +1162,7 @@ function setFill() {
   { const g = $('dt-lkgrid'), W = winsOf(), sig = JSON.stringify(W); if (g && g.dataset.sig !== sig && !g.contains(document.activeElement)) { g.innerHTML = ''; g.dataset.sig = sig;   /* 굳힘 없앰(11-23) — 굳힘 · 창 설정 표를 안 그림 · lkGridHtml 은 되돌릴 때 쓰려고 남김 */ g.style.gridTemplateColumns = W ? 'auto auto auto' : 'auto auto auto auto auto auto'; } }   // 창 여섯 · 옛 판은 굳힘 넷
   const v = { minChip: S.minChip || '', top: S.top, won: (S.mode === 'day' ? S.dayWon : S.perWon) / 10000, grpWon: (S.grpWon > 0 ? S.grpWon : S.dayWon) / 10000, stop: S.stop == null ? '' : S.stop, trail: S.trail == null ? '' : S.trail, turnPct: S.turnPct || '', cutMin: S.cutMin ?? '', flatMin: S.flatMin ?? '', flatPct: S.flatPct ?? '', endAt: S.endAt ? hmTxt(S.endAt) : '', cutPct: S.cutPct ?? '', lock0: (S.lockAt || [])[0] || '', lock1: (S.lockAt || [])[1] || '', lock2: (S.lockAt || [])[2] || '' };
   ORD_KEYS.forEach(([k]) => { v[`ord:${k}`] = (S.ordScore || {})[k] ?? ''; });
-  v.sendFrom = S.sendFrom ?? ''; v.sendN = S.sendN ?? ''; v.fillN = S.fillN ?? ''; v.ruleAt = S.ruleAt ? hmTxt(S.ruleAt) : ''; v.turnMin = S.turnMin || '';   // 매수 룰 정의(11-24)
+  v.sendFrom = S.sendFrom ?? ''; v.sendN = S.sendN ?? ''; v.fillN = S.fillN ?? ''; v.ruleMin = S.ruleMin ?? ''; v.turnMin = S.turnMin || '';   // 매수 룰 정의(11-24)
   box.querySelectorAll('.dt-fill-n').forEach((e) => { e.textContent = S.minChip > 0 ? String(S.minChip) : ' '; }); box.querySelectorAll('.dt-fill-m').forEach((e) => { e.textContent = S.minChip > 1 ? String(S.minChip - 1) : ' '; }); box.querySelectorAll('[data-fill]').forEach((b) => b.classList.toggle('is-active', (b.dataset.fill === '1') === !!S.fill));   // 칩 모자라면 채움(11-24)   // 매수 메시지 보내기(11-24)
   box.querySelectorAll('.dt-send-n').forEach((e) => { e.textContent = S.minChip > 0 ? String(S.minChip) : ' '; }); box.querySelectorAll('.dt-send-u').forEach((e) => { e.textContent = chipUntil(); });
   ['up', 'dn'].forEach((sd) => { const L = (S.mk || {})[sd] || {}; v[`mk:${sd}:pct`] = L.pct ?? ''; v[`mk:${sd}:stop`] = L.stop ?? ''; });   // 코스피 조건 줄(11-24)
@@ -1253,10 +1253,10 @@ function setRead(el) {
       else { if (x === 0) return bad('0 은 못 씀 · 빈칸이면 손절 안 함'); L.stop = x == null ? null : -Math.abs(x); } }
     M[sd] = L; S.mk = M; return S;
   }
-  if (k === 'ruleAt') { if (raw === '') { S.ruleAt = ''; return S; } const m = /^(\d{1,2}):?(\d{2})$/.exec(raw); const t = m ? m[1].padStart(2, '0') + m[2] : ''; if (!m || t < BUY_AT_MIN || t > BUY_AT_MAX) return bad(`${hmTxt(BUY_AT_MIN)}~${hmTxt(BUY_AT_MAX)} · 09:10 꼴 · 빈칸 = ${hmTxt(BUY_AT_DEF)}`); S.ruleAt = t; return S; }   // 매수 룰 정의 기준 시각(11-24 · 아직 셈에 안 씀)
   if (k === 'endAt') { if (raw === '') { S.endAt = ''; return S; } const m = /^(\d{1,2}):?(\d{2})$/.exec(raw); if (!m || +m[1] > 15 || +m[2] > 59) return bad('시각은 13:30 꼴 · 빈칸이면 판 끝'); S.endAt = m[1].padStart(2, '0') + m[2]; return S; }   // 「13:30」 꼴이라 숫자 검사 앞에서
   const v = raw === '' ? null : Number(raw);
   if (v != null && !Number.isFinite(v)) return bad('숫자만');
+  if (k === 'ruleMin') { if (v != null && (!Number.isInteger(v) || v < RULE_MIN_LO || v > RULE_MIN_HI)) return bad(`${RULE_MIN_LO}~${RULE_MIN_HI} 정수(분) · 빈칸 = ${RULE_MIN_DEF}분`); S.ruleMin = v; return S; }   // 매수 룰 기준 시각(11-24)
   if (k === 'fillN') { if (v != null && (!Number.isInteger(v) || v < 1)) return bad('1 이상 정수 · 빈칸 = 안 채움'); S.fillN = v; return S; }   // 11-24
   if (k === 'sendFrom') { if (v != null && (!Number.isInteger(v) || v < 0 || v > 29)) return bad('0~29 정수(분) · 빈칸 = 서버 기본'); S.sendFrom = v; return S; }   // 매수 메시지 보내기(11-24)
   if (k === 'sendN') { if (v != null && (!Number.isInteger(v) || v < 1 || v > 20)) return bad('1~20 정수 · 빈칸 = 서버 기본'); S.sendN = v; return S; }
@@ -1438,9 +1438,9 @@ const TPL = `
                 <div class="dt-send"><div class="dt-send-h"><b>매수 메시지 보내기</b><button type="button" class="kh-chip" data-setsave>저장</button></div>
                   <div class="dt-fee">여는 시각 + <input data-set="sendFrom" class="rl-in rl-num dt-send-in" inputmode="numeric" placeholder="( )" aria-label="보내기 시작 — 여는 시각 몇 분 뒤">분부터, 칩 (<span class="dt-send-n">—</span>)개가 <span class="dt-send-u">—</span> 까지 찬 종목을 찬 시각별로 <input data-set="sendN" class="rl-in rl-num dt-send-in" inputmode="numeric" placeholder="( )" aria-label="보낼 종목 수">종목까지 보냄</div>
                   <div class="rl-sug">그 시각까지 찬 종목은 찬 시각별로 한꺼번에 · 그 뒤는 찰 때마다 한 종목씩 「종목명 매수하세요」 텔레그램 · 칩 개수는 위 「칩 ( )개 이상」 그대로 · 같은 목록이 「팔 때」 알림 대상 · 빈칸 = 서버 기본 · 분 0~29 · 종목 1~20</div></div>
-                <!-- 매수 룰 정의(11-24 재권님 「이거 추가해서 다 정리하고 정리한거 단타에다가 매수룰정의에 넣어줘 접기로해서」 → 「매수룰을 여기안에 접기로 넣어줄래? 언제든 수정가능하도록 대비해놓」) — 정한 룰 글 · 칩 수는 위 칸 값(minChip)을 글로만 · ( ) 칸은 셈 칸 값과 같은 열쇠(fillN · turnMin)라 어디서 바꿔도 같음 · 기준 시각(set.ruleAt)만 새 열쇠 · 판 셈 · 서버는 아직 이 룰대로 안 돎 · 3번 다음 상위 — 재권님 「상승률이 우선이고 유통대비거래는 조건이야」 -->
+                <!-- 매수 룰 정의(11-24 재권님 「이거 추가해서 다 정리하고 정리한거 단타에다가 매수룰정의에 넣어줘 접기로해서」 → 「매수룰을 여기안에 접기로 넣어줄래? 언제든 수정가능하도록 대비해놓」) — 정한 룰 글 · 칩 수는 위 칸 값(minChip)을 글로만 · ( ) 칸은 셈 칸 값과 같은 열쇠(fillN · turnMin)라 어디서 바꿔도 같음 · 기준 시각(set.ruleMin · 여는 시각 + 분)만 새 열쇠 · 판 셈 · 서버는 아직 이 룰대로 안 돎 · 3번 다음 상위 — 재권님 「상승률이 우선이고 유통대비거래는 조건이야」 -->
                 <details class="dt-win dt-buydef" id="dt-buydef"><summary>매수 룰 정의 (11-24 정함)</summary><div class="dw-body dt-rdef"><ol>
-                  <li><b>기준 시각</b> — <input data-set="ruleAt" class="rl-in rl-num dt-send-in" inputmode="text" placeholder="( )" aria-label="기준 시각 09:05~09:30"> · ${hmTxt(BUY_AT_MIN)}~${hmTxt(BUY_AT_MAX)} 안 · 빈칸 = ${hmTxt(BUY_AT_DEF)} · 보통 날 시각이고 늦게 연 날은 그만큼 뒤</li>
+                  <li><b>기준 시각</b> — 여는 시각 + <input data-set="ruleMin" class="rl-in rl-num dt-send-in" inputmode="numeric" placeholder="( )" aria-label="기준 시각 — 여는 시각 몇 분 뒤">분 · ${RULE_MIN_LO}~${RULE_MIN_HI}분 · 빈칸 = ${RULE_MIN_DEF}분(보통 날 09:05) · 늦게 연 날은 여는 시각부터 세어 저절로 밀림</li>
                   <li><b>기준 시각 전</b> — 칩 (<span class="dt-send-n">—</span>)개가 찬 순간 삼 <span class="rl-sug">위 「칩 ( )개 이상」 값</span> · 서버에 알리고 텔레그램 「○○ 매수하세요」 가 바로 감 · 판에는 찬 순서대로 위에서부터</li>
                   <li><b>기준 시각에</b> — 찬 종목이 <input data-set="fillN" class="rl-in rl-num dt-send-in" inputmode="numeric" placeholder="( )" aria-label="사는 종목 수">종목에 모자라면 칩이 하나 모자란 종목 중 다음 상위로 채워 그 시각에 삼 · 텔레그램 · 2번 종목 바로 아래<br>다음 상위 — 유통 대비 거래 <input data-set="turnMin" class="rl-in rl-num dt-send-in" inputmode="decimal" placeholder="( )" aria-label="유통 대비 거래 몇 %">% 이상은 조건(넘은 종목만) · 그 안에서 상승률 높은 순 · 같으면 칩 개수 많은 순</li>
                   <li><b>기준 시각 뒤에 찬 종목</b> — 사지 않음 · 텔레그램 안 감</li>
