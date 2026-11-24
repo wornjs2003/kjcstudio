@@ -3117,7 +3117,7 @@ def send_top(proxy, b, head=""):
 #  4 R 뒤에 칩이 찬 종목 — 안 보냄
 #  5 위 차례대로 「총 ( )만원 ÷ 상위 ( )종목」 칸(셈 칸 top · buy_top)의 종목 수까지만 — 화면이 위에서부터 그 수만 사는 것과 같게
 #    (재권님 「위에서 순서대로 지정된 숫자만 인데? 총금액과 종목을 정하는 칸이 있는데」 11-24 18:2x — 처음 판은 상한 없음으로 짰음)
-#  화면에서 끈 칩은 서버가 못 본다(브라우저마다) — 칩은 다 켠 것으로 셈. 그 분 거래 값이 아직 안 적혔으면 BUY_WAIT_MIN 분까지 기다렸다 셈.
+#  화면에서 끈 칩 · 칩 칸은 셈 칸 chipOff · subOff · chipCols 로 받아 화면과 같게 셈(chip_filter · 11-24 · 칸이 없으면 다 켠 것). 그 분 거래 값이 아직 안 적혔으면 BUY_WAIT_MIN 분까지 기다렸다 셈.
 #  텔레그램(TG_SEND) · 슬랙 매수 목록(trade_signal) · 「팔 때」 대상(meta.tgTop)이 이 한 목록(buy_order)을 쓴다 — 전 「9시 3분부터 · 5종목」(sendFrom · sendN)은 걷음(재권님 「가」 18:0x)
 RULE_MIN_DEF, RULE_MIN_LO, RULE_MIN_HI = 5, 5, 30   # 화면 strategy-dt30.js RULE_MIN_* 와 같은 값(두 벌 — 판 meta.buyRule.def 로 내 화면이 받게 할 자리)
 TOP_DEF = 30                 # 「상위 ( )종목」 칸이 비었을 때 — 화면 DEF_SET top(PNL_TOP)과 같은 값 · 〃
@@ -3165,6 +3165,38 @@ def turn_rule():
     return bool(on and mn > 0), mn
 
 
+def chip_filter():
+    """화면에서 끈 칩 · 칩 칸 — 셈 칸 chipOff [칩] · subOff [「칩|하위」] · chipCols [칩] (화면 「저장」 · 여는 시각 + 4분 자동 저장이 넣음 · 11-24 재권님 「카드에 있것들 해」).
+    칸이 없으면 다 켠 것 · 칸 목록이 없으면 단타 셈 칩 전부(전과 같음)."""
+    lst = lambda k: [str(x) for x in _set_val(k)] if isinstance(_set_val(k), list) else None
+    return set(lst("chipOff") or []), set(lst("subOff") or []), (set(lst("chipCols")) if lst("chipCols") else None)
+
+
+def _subs_of(r, c, split):
+    """줄의 그 칩 하위 이름들 — 화면 strategy-dt30.js subsOf 와 같은 셈(VI·급등은 처음 VI · 급등 시각이 split 전 · 이후 · 모름 + 나머지)."""
+    raw = (r.get("subs") or {}).get(c)
+    raw = raw if isinstance(raw, list) else ([raw] if raw else [])
+    if c != "VI·급등":
+        return raw
+    if c not in (r.get("chips") or []):
+        return []
+    ts = [_hm4(x) for x in (r.get("viAt"), r.get("surgeAt")) if _hm4(x)]
+    t = min(ts) if ts else None
+    head = "시각 모름" if t is None else ("09:25 전" if t < split else "09:25 이후")   # 화면 VI_SUBS 와 같은 이름(나누는 시각은 판 meta.viSplit)
+    return [head] + [x for x in raw if x not in ("VI", "급등")]
+
+
+def _chip_on(r, c, cf, split):
+    """화면 everChip 과 같게 — 끈 칩 · 칸 밖 칩은 안 셈 · 지금 붙은 칩은 하위가 하나라도 켜져 있어야 · 붙었다 빠진 칩은 시각이 있으면 셈."""
+    off, sub_off, cols = cf
+    if c in off or (cols is not None and c not in cols):
+        return False
+    if c in (r.get("chips") or []):
+        sb = _subs_of(r, c, split)
+        return not sb or any("%s|%s" % (c, x) not in sub_off for x in sb)
+    return bool((r.get("chipTime") or {}).get(c))
+
+
 def _turn_at(r, n):
     """여는 시각 + n분까지의 유통 대비 거래 %(rows[].turnMin) · 없으면 None."""
     v = (r.get("turnMin") or {}).get(str(max(1, min(n, TURN_MIN_UPTO))))
@@ -3189,9 +3221,11 @@ def buy_order(proxy, b, hm=None, inplace=False):
     rows = (bb.get("rows") or []) + ((bb.get("meta") or {}).get("outRows") or [])
     ct_of = lambda r: {k: str(v).replace(":", "") for k, v in (r.get("chipTime") or {}).items()}
 
+    cf, split = chip_filter(), ((bb.get("meta") or {}).get("viSplit") or vi_split(o - OPEN_AT[0] * 60 - OPEN_AT[1])).replace(":", "")
+
     def nth(r, lim):
         e = _in4(r)
-        ts = sorted((ct_of(r).get(c) or e or "0000") for c in chips930(r, ct_of(r), lim))
+        ts = sorted((ct_of(r).get(c) or e or "0000") for c in chips930(r, ct_of(r), lim) if _chip_on(r, c, cf, split))   # 화면에서 끈 칩은 안 셈(11-24)
         return ts, (ts[need - 1] if len(ts) >= need else None)
 
     got = []
@@ -3261,11 +3295,12 @@ def buy_rule_meta(proxy, b):
     hm = now.hour * 60 + now.minute if b.get("day") == now.strftime("%Y%m%d") else None
     rows, R = buy_order(proxy, b, hm, inplace=True)
     on, tmin = turn_rule()
+    cf = chip_filter()
     b["meta"]["buyRule"] = {"ruleAt": _hhmm(R), "ruleMin": rule_min(), "need": buy_need(), "top": buy_top(), "fill": _set_val("fill") is True,
-                            "turnOn": on, "turnMin": tmin, "def": {"ruleMin": RULE_MIN_DEF, "turnOn": TURN_ON_DEF, "turnMin": TURN_MIN_DEF, "top": TOP_DEF},
+                            "turnOn": on, "turnMin": tmin, "chipOff": sorted(cf[0]), "subOff": sorted(cf[1]), "chipCols": sorted(cf[2]) if cf[2] is not None else None, "def": {"ruleMin": RULE_MIN_DEF, "turnOn": TURN_ON_DEF, "turnMin": TURN_MIN_DEF, "top": TOP_DEF},
                             "order": [{"code": r["code"], "name": r.get("name"), **r["buyRule"]} for r in rows],
                             "sent": (b["meta"].get("tgBuy") or {}),
-                            "note": "서버가 보내는 차례(order) — 기준 시각 전 칩 N개 찬 순(그 분 유통 대비 거래 조건) · 기준 시각에 모자라면 칩 N−1 종목 상승률 순 · 위에서 상위 top 종목까지만 · 화면에서 끈 칩은 모름 · sent 는 실제로 보낸 것"}
+                            "note": "서버가 보내는 차례(order) — 기준 시각 전 칩 N개 찬 순(그 분 유통 대비 거래 조건) · 기준 시각에 모자라면 칩 N−1 종목 상승률 순 · 위에서 상위 top 종목까지만 · 끈 칩은 셈 칸 chipOff · subOff · chipCols 대로 · sent 는 실제로 보낸 것"}
 
 
 def buy_text(r):
