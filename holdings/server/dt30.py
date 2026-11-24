@@ -415,7 +415,14 @@ PRE_LOG_FROM, PRE_LOG_TO = (8, 0), (8, 50)
 _PL_SCHEMA = ("CREATE TABLE IF NOT EXISTS dt30_pre_log (day TEXT NOT NULL, hm TEXT NOT NULL, code TEXT NOT NULL, data TEXT NOT NULL, "
               "PRIMARY KEY (day, hm, code))")
 PF_KEYS = ("price", "pct", "amt", "vol", "ratio", "program")
-PRE_LOG_KEEP_DAYS = 366       # 프리장 기록을 남기는 날 수(달력) — 그보다 앞 날은 그날 처음 적을 때 지운다 · 재권님 「전부다 1년을 쌓는다」(11-23) · 개념정의 덧 11-24
+# 남기는 날 수는 쌓는 자료 보관 거래일 한 곳(market_hours.KEEP_TRADE_DAYS · 1년) — 그 표에 남은 날 중 최근 그만큼만 두고 앞 날은 그날 처음 적을 때 지운다
+# (재권님 「전부다 1년을 쌓는다」 11-23 · 개념정의 덧 11-24 — 달력 366 을 따로 두지 않음)
+
+
+def _log_prune(conn, table):
+    import market_hours
+    conn.execute("DELETE FROM %s WHERE day < (SELECT day FROM (SELECT DISTINCT day FROM %s ORDER BY day DESC LIMIT 1 OFFSET ?))" % (table, table),
+                 (market_hours.KEEP_TRADE_DAYS - 1,))
 _pl_pruned = {"day": None}
 
 
@@ -444,8 +451,7 @@ def pre_log_put(proxy, hit, pf_rows, now=None):
         conn.execute(_PL_SCHEMA)
         conn.executemany("INSERT OR REPLACE INTO dt30_pre_log (day, hm, code, data) VALUES (?,?,?,?)", out)
         if _pl_pruned["day"] != day:                   # 하루 한 번 — 남기는 날 수를 넘은 앞 날 지움
-            cut = (now - timedelta(days=PRE_LOG_KEEP_DAYS)).strftime("%Y%m%d")
-            conn.execute("DELETE FROM dt30_pre_log WHERE day < ?", (cut,))
+            _log_prune(conn, "dt30_pre_log")
             _pl_pruned["day"] = day
     return len(out)
 
@@ -899,8 +905,8 @@ def _cf_live(proxy, now, rows, off):
 # 바퀴 사이(LIVE_TTL 둘레) 안에 붙었다 빠진 칩은 못 본다 · 시각은 그 바퀴 시각이라 실제보다 늦을 수 있다. 읽기 /api/kis/dt30-chiplog?day=
 _CL_SCHEMA = ("CREATE TABLE IF NOT EXISTS dt30_chip_log (day TEXT NOT NULL, at TEXT NOT NULL, code TEXT NOT NULL, chip TEXT NOT NULL, sub TEXT NOT NULL DEFAULT '', "
               "kind TEXT NOT NULL, n INTEGER, px REAL, PRIMARY KEY (day, at, code, chip, sub, kind))")
-CHIP_LOG_KEEP_DAYS = 366      # 남기는 날 수(달력) — 그보다 앞 날은 그날 처음 적을 때 지운다(프리장 기록 PRE_LOG_KEEP_DAYS 와 같은 값)
 _cl = {"day": None, "state": {}}
+PX_CHIPS = ("현재상승",)      # 단타 목록 셈이 그 바퀴 시세로 붙이는 칩 — 시세를 못 받은 바퀴엔 빠짐을 안 적음
 
 
 def _cl_keys(r):
@@ -931,7 +937,8 @@ def chip_log_put(proxy, now, rows, missing=()):
     out = []
     for code in sorted(set(prev) | set(cur)):
         a, b = prev.get(code, set()), cur.get(code, set())
-        on, off = b - a, {k for k in a - b if k[0] not in miss}
+        no_px = code in cur and px.get(code) is None       # 그 바퀴 시세를 못 받음 — 시세로 붙이는 칩(현재상승)의 빠짐은 못 잼(qa 덧 · 헛 off → on)
+        on, off = b - a, {k for k in a - b if k[0] not in miss and not (no_px and k[0] in PX_CHIPS)}
         if not on and not off:
             continue
         keep = (a & b) | on | (a - b - off)            # 못 받은 칩은 그대로 붙은 것으로 둔다
@@ -949,7 +956,7 @@ def chip_log_put(proxy, now, rows, missing=()):
     with proxy._db_lock, proxy.db_conn() as conn:
         conn.execute(_CL_SCHEMA)
         if not _cl.get("pruned") == day:
-            conn.execute("DELETE FROM dt30_chip_log WHERE day < ?", ((now - timedelta(days=CHIP_LOG_KEEP_DAYS)).strftime("%Y%m%d"),))
+            _log_prune(conn, "dt30_chip_log")
             _cl["pruned"] = day
         conn.executemany("INSERT OR IGNORE INTO dt30_chip_log (day, at, code, chip, sub, kind, n, px) VALUES (?,?,?,?,?,?,?,?)", out)
     return len(out)
@@ -964,8 +971,8 @@ def _cl_replay(proxy, day):
                 return st
             for code, ch, sb, kind in conn.execute("SELECT code, chip, sub, kind FROM dt30_chip_log WHERE day = ? ORDER BY at", (day,)):
                 (st.setdefault(code, set()).add if kind == "on" else st.setdefault(code, set()).discard)((ch, sb))
-    except Exception:
-        pass
+    except Exception as e:
+        print("  [단타 칩 기록] 그날 앞 상태를 못 되짚음 — 이 바퀴 칩이 「붙음」 으로 한 번 더 적힐 수 있음 · %s" % proxy.safe_message(e, 120), flush=True)
     return {c: s for c, s in st.items() if s}
 
 
