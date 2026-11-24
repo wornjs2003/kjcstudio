@@ -2373,7 +2373,7 @@ def rebuild(proxy, day, prev, cfg=None):
     trade_ok = _past_trade(proxy, day, prev, rows)
     approx.append("거래값") if trade_ok else missing.append("거래값")
     return {"day": day, "buyAt": "%02d:%02d" % _sh(PAST_BUY_AT, off), "times": times(off), "rows": rows, "closed": True,
-            "meta": {"rebuilt": True, "lateMin": off, "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "viSplit": vi_split(off), "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": drop_below_pct(),
+            "meta": {"rebuilt": True, "lateMin": off if market_hours.doc_ok() is not False else None, "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "viSplit": vi_split(off), "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": drop_below_pct(),
                      "watchSrc": watch_src, "rules": rules_meta(proxy, merged=False), "viUntil": "%02d:%02d" % _sh(PAST_LATE, off), "volUntil": "%02d:%02d" % PAST_VOL_UNTIL, "approxBase": approx_base,
                      "capMinEok": cap_min_eok(), "allRows": True, "tradeVer": TRADE_VER, "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 · 수급은 그날 09:01 직전 관심 목록(watchSrc 기록 · 없으면 관심 못 받음 · 수급 어림) · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
@@ -2493,7 +2493,7 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
         stale = got and (m.get("capMinEok") != cap_min_eok() or (not m.get("allRows") and d < ALL_ROWS_SINCE))   # 문턱이 바뀐 판 · 줄을 자르던 옛 판(라이브로 굳힌 날 포함)은 한 번 다시 센다
                                                        # — 그 뒤 라이브 판(allRows 없음)은 날마다 다시 짓지 않는다(개념정의 덧 11-23 · 장중 기록을 어림 판으로 덮지 않게)
         lm = m.get("lateMin") if isinstance(m.get("lateMin"), int) else 0
-        late_old = m.get("rebuilt") and "lateMin" not in m and late_min(proxy, day=d) > 0   # 늦게 연 날을 09:00 기준으로 다시 지은 판(11-24 전) — 한 번 다시 센다
+        late_old = m.get("rebuilt") and not isinstance(m.get("lateMin"), int) and late_min(proxy, day=d) > 0   # 늦게 연 날을 09:00 기준으로 다시 지은 판(11-24 전) — 한 번 다시 센다
         if not stale and not late_old and not (m.get("rebuilt") and ("watchSrc" not in m or m.get("viUntil") != "%02d:%02d" % _sh(PAST_LATE, lm))):   # (재권님 「기준 3000억 이상이라고 몇번을 말했는데」 11-23 19:0x)
             have.add(d)                                # VI 창이 다른 되채운 날(11-13 전)도 한 번 다시 센다
         elif m.get("liveBefore"):
