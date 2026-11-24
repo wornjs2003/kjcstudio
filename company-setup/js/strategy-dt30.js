@@ -79,7 +79,9 @@ const volNext = (a) => { const v = VOL_CHIPS.filter((x) => a.includes(x) || a.in
 const COLS_MOVED = 'dt30-cols-vol2-1123';
 // 11-18 서버 바뀜(개발2 · 재권님 「관심 하트는 누르는거 없애고 자동으로 관심으로」 → 「응 맞아」) — meta.watchRule 「자동」 인 날은 관심 = 자동 관심 룰 · 「수급(자동)」 칩이 안 옴
 //   그날은 「자동」 칸을 빼고(빈 칸으로 남기지 않음) · 지난 날 판(옛 셈)은 그대로
-const colsOf = () => (st.cols || DT_CHIPS).filter((c) => !(st.watchAuto && c === '자동'));
+// 관심 칩을 「자동」 으로 셈하는 날인지는 그 날 판의 meta.watchRule — 셈하는 판(calcD)이 있으면 그 판 것 · 없으면 고른 날 것(11-24 qa · 기간 줄의 다른 날 차익이 고른 날 meta 로 셈돼 날을 누르면 값이 바뀌던 것)
+const wAuto = () => { const m = (calcD && calcD.meta) || null; return m ? m.watchRule === '자동' : st.watchAuto; };
+const colsOf = () => (st.cols || DT_CHIPS).filter((c) => !(wAuto() && c === '자동'));
 (() => { try { const v = JSON.parse(localStorage.getItem(COLS_KEY) || 'null'); if (v && Array.isArray(v.cols) && v.cols.length) { st.cols = v.cols.map(String).map(chipName); st.off = new Set((v.off || []).map(String).map(chipName)); if (!localStorage.getItem(COLS_MOVED) && (st.cols.includes('거래량급증') || VOL_CHIPS.some((x) => st.cols.includes(x)))) { if (st.off.has('거래량급증')) VOL_CHIPS.forEach((x) => st.off.add(x)); st.off.delete('거래량급증'); st.cols = volNext(st.cols); localStorage.setItem(COLS_MOVED, '1'); localStorage.setItem(COLS_KEY, JSON.stringify({ ...v, cols: st.cols, off: [...st.off] })); } } } catch (e) { /* 기본 칸 */ } })();   // 꺼 둔 칩(off)을 먼저 읽고 옛 이름을 바꾼 뒤 저장 — 빈 목록으로 덮지 않음(개념정의 검수 11-23)
 const colsSave = () => { try { localStorage.setItem(COLS_KEY, JSON.stringify({ cols: colsOf(), off: [...st.off] })); } catch (e) { /* 이 브라우저에 못 남겨도 화면은 돈다 */ } };
 // 서버가 새로 보낸 칩은 저장된 칸에 저절로 넣는다(11-23 재권님 「넣어」 — 메인 브라우저에 두 거래 칩 생기기 전 칸이 저장돼 있어 그 칩 칸이 영영 안 생김)
@@ -278,7 +280,7 @@ function buyOf(r) {   // → { px, at(HHMM), src } | null
   if (curD() && (curD().fb905 || fbDays.has(curD().day))) return fb905Of(r);
   // 서버가 산 줄을 정해 주는 판(meta.buy930 이 있는 판)에서 rows[].buy930 이 없는 줄은 안 삼 — 서버 셈으로 칩 N개가 안 찬 종목(개발2 11-24 · 화면이 30분 칸으로 파는 셈을 따로 하지 않게)
   //   셈 칸을 고치고 아직 저장 전이면(st.setDirty) 서버 buy930 은 저장된 값으로 센 것이라 이 거름을 쓰지 않음 — 화면 셈만(개념정의 덧 11-24)
-  if (curD() && curD().flat930 && DM().buy930 && !r.buy930 && !st.setDirty && !lateOf()) return null;   // 늦게 연 날을 서버가 안 옮긴 판은 서버 buy930 이 09:30 으로 잘려 있어 쓰지 않음
+  // 서버 buy930 이 안 산 줄을 안 사던 거름은 걷음 — 11-24 재권님 「서버는 정보만 있고 셈은 화면에서 한다」 · 사는지는 아래 화면 셈(칩 N개 찬 때)이 정함
   const k = buyKey();
   const n = pmOf(k);
   // 9시 1분 몫 — 여는 시각+1분 ~ inUntil 59초 사이에 든 종목은 든 때 가격(서버 r.buy)
@@ -408,7 +410,7 @@ function lkGridHtml(W) {
 const NOBUY = (i) => `<span class="dt-seg" data-tip="켜면 이 묶음은 판에는 남기고 돈은 안 넣음 · 승률 표에서도 뺌"><button type="button" class="kh-chip" data-nobuy="${i}" aria-label="사지 않음">안 삼</button></span>`;   // 굳힘 칸마다 「사지 않음」 단추(i 0~3 · 넷째 = 장중)
 const noBuyOf = (j) => j > 0 && !!(st.set.lockNoBuy || [])[j - 1];   // 굳힘 차례 j(1~4)가 「사지 않음」 인가
 // 거래세 · 농특세(%) — 서버 한 곳(dt30_win.TAX)이 판 meta.tax 로 준다 · 화면은 보이기만 · 바꾸는 것은 증권수수료 칸 하나(11-20 재권님 「증권사 세율만 조절되도록 남기면되, 단타에 표기는 해놓고」) · 못 받으면 세금 못 셈(「—」)
-const taxOf = (m) => ((st.data && st.data.meta && st.data.meta.tax) || {})[String(m || '').toUpperCase()] || null;
+const taxOf = (m) => (((curD() && curD().meta && curD().meta.tax) || (st.data && st.data.meta && st.data.meta.tax)) || {})[String(m || '').toUpperCase()] || null;   // 그 날 판의 세율(셈하는 판 먼저 · 11-24)
 const MKT = { KOSPI: '코스피', KOSDAQ: '코스닥' };
 const manTxt = (w) => { const m = Number(w) / 10000; return !Number.isFinite(m) ? '—' : m >= 10000 && m % 10000 === 0 ? `${num(m / 10000)}억원` : `${num(m)}만원`; };   // 원 → 만원 · 1억 단위면 억원
 const won = (x) => (x == null || !Number.isFinite(x) ? '—' : `${x < 0 ? '-' : x > 0 ? '+' : ''}${Math.abs(Math.round(x)).toLocaleString('ko-KR')}원`);
@@ -1194,7 +1196,47 @@ async function saveFee() {
   if (st.data) { paint(st.data); chips(); }
 }
 BIND.push(() => $('dt-fee').addEventListener('change', saveFee));
-BIND.push(() => bindWin($('dt-win')));
+// 칩별 승률 — 화면 셈(11-24 재권님 「칩별 승률표도 서버정보를 바탕으로 내가 바꿔가면서 알고싶을때 알수있게 홈페이지에서 되야할거같은데」 · 「서버는 정보만 있고 셈은 화면에서 한다」)
+//   지금 셈 칸 · 켜진 칩 · 매수 · 매도 룰 그대로 — 날마다 판(서버 정보)을 받아 calc 로 종목마다 세후 % → 칩마다 · 둘 · 셋 · 칩 개수로 묶음
+//   종목은 판에 드는 줄(칩 N개 · 유통 거르기 · 매수가 있음)만 · 세후 % = 세후 손익 ÷ 산 돈 · 못 잼 = 매수가나 판 값이 없음 · 저장 안 해도 고친 그대로 셈
+const WIN_DAYS = 30, WIN_BIG = 3, WIN_TOP = 5;   // 볼 거래일 · 「크게 이김」 % · 날마다 위 몇 종목 — 서버 표(dt30_win)와 같은 값
+async function winLocal(onStep) {
+  const ds = st.days.slice().sort().reverse().slice(0, WIN_DAYS);
+  const get = (d) => (st.data && st.data.day === d && st.data.closed !== true ? st.data : dayData[d]);
+  const need = ds.filter((d) => get(d) === undefined); let k = 0;
+  await Promise.all(need.map(async (d) => { try { const r = await fetch(`${API}?day=${d}`, { cache: 'no-store' }); const j = r.ok ? await r.json() : null; dayData[d] = j && j.data && j.data.day === d ? renameChips(j.data) : null; } catch (e) { dayData[d] = null; } if (onStep) onStep(++k, need.length); }));
+  const all = [];
+  ds.forEach((d) => { const D = get(d); if (!D) return; const C = calc(D), keep = calcD; calcD = flat930(D);
+    try { C.R.forEach((x) => { const r = x.r, cs = colsOf().filter((c) => everChip(r, c)), ret = x.pnl && x.pnl.net != null && x.pnl.buyAmt > 0 ? x.pnl.net / x.pnl.buyAmt * 100 : null;
+      all.push({ day: d, name: r.name, chips: cs, n: cs.length, rise: (r.chips || []).includes('현재상승'), ret }); }); } finally { calcD = keep; } });
+  const stat = (v) => { const m = v.filter((x) => x.ret != null).map((x) => x.ret).sort((a, b) => a - b), w = m.filter((x) => x > 0).length;
+    return { n: m.length, win: w, winRate: m.length ? w / m.length * 100 : null, avg: mean(m), median: m.length ? (m.length % 2 ? m[(m.length - 1) / 2] : (m[m.length / 2 - 1] + m[m.length / 2]) / 2) : null, over3: m.filter((x) => x > WIN_BIG).length, unmeasured: v.length - m.length }; };
+  const grp = (keyOf, src = all) => { const G = new Map(); src.forEach((x) => keyOf(x).forEach((k) => { if (!G.has(k)) G.set(k, []); G.get(k).push(x); }));
+    return [...G].map(([key, v]) => ({ key, ...stat(v) })).sort((a, b) => b.n - a.n || String(a.key).localeCompare(String(b.key))); };
+  const combo = (cs, m) => { const out = []; const go = (i, pick) => { if (pick.length === m) { out.push(pick.join(' + ')); return; } for (let j = i; j < cs.length; j++) go(j + 1, [...pick, cs[j]]); }; go(0, []); return out; };
+  const S = st.set, days = ds.filter((d) => get(d)).map((d) => { const v = all.filter((x) => x.day === d); return { day: d, ...stat(v), top: v.filter((x) => x.ret != null).sort((a, b) => b.ret - a.ret).slice(0, WIN_TOP).map((x) => ({ name: x.name, ret: x.ret })) }; });
+  return { data: { all: stat(all), chip: grp((x) => x.chips), pair: grp((x) => combo(x.chips, 2)), triple: grp((x) => combo(x.chips, 3)), count: grp((x) => [x.n]), countRise: grp((x) => [x.n], all.filter((x) => x.rise)), days },
+    meta: { local: true, from: ds[ds.length - 1], to: ds[0], days: days.length, miss: ds.length - days.length, bigPct: WIN_BIG, topDay: WIN_TOP, fee: st.fee, minChips: Number(S.minChip) || 0, sell: S.endAt ? String(S.endAt).replace(':', '') : '1400', rules: winRules() } };
+}
+// 승률 표 머리에 적는 「셈한 룰」(11-24 재권님 「셈을 한 룰을 승률표에서 확인할수 있도록 해줘」) — 셈 칸 · 칩 켜고 끄기 값을 그대로 [묶음, [[이름, 값] …]] 으로 · 값은 st.set 한 곳에서 읽기만(따로 두지 않음)
+function winRules() {
+  const S = st.set || {}, v = (x, u = '') => (x == null || x === '' ? '( )' : `${x}${u}`), on = (b) => (b ? '켬' : '끔');
+  const cs = colsOf(), onC = cs.filter((c) => !st.off.has(c)), offC = cs.filter((c) => st.off.has(c)), subOff = [...st.subOff].map((k) => k.replace('|', ' 〉 '));
+  const tb = S.turnBy || 'both', turn = !S.turn ? '끔' : [tb !== 'peak' ? `앞 시각보다 ${v(S.turnPct || 0, '%')} 넘게 내리면` : '', tb !== 'prev' ? `고점보다 ${v(S.trail, '%')} 내리면` : ''].filter(Boolean).join(' · ');
+  const ord = ORD_KEYS.filter(([k]) => (S.ordScore || {})[k]).map(([k, t]) => `${t} ${S.ordScore[k]}점`).join(' · ');
+  return [
+    ['칩', [['켜진 칩', onC.join(' · ') || '없음'], ['꺼 둔 칩', [...offC, ...subOff].join(' · ') || '없음']]],
+    ['종목 차례', [['점수', ord || '빈칸(칩 수 → 초반상승 → 시가총액)']]],
+    ['매수', [['칩 개수', S.minChip ? `${S.minChip}개 이상` : '전체'], ['09:30 뒤에 찬 종목', S.buyLate930 ? '삼' : '안 삼'],
+    ['유통 시총', S.floatMax > 0 ? `${num(S.floatMax)}억 이하` : '전체'],
+    ['매수', (() => { const B = BUYS.find(([k]) => k === buyKey()); return B ? buyName(B[0], B[1]) : '( )'; })()], ['불타기', on(S.pyr)]]],
+    ['매도', [['매도 봉', S.sellBar === '1m' ? '1분' : S.sellBar === '5m' ? '5분' : '30분'], ['손절', S.stop == null || S.stop === '' ? '안 함' : `${S.stop}%`],
+    ['꺾임', turn], ['시각 미달', S.cut ? `산 뒤 ${v(S.cutMin, '분')} · ${v(S.cutPct, '%')} 못 넘으면 팜` : '끔'],
+    ['횡보', S.flat ? `산 뒤 ${v(S.flatMin, '분')} · ${v(S.flatPct, '%')} 안쪽이면 팜` : '끔'], ['매도 시각', S.endAt ? hmTxt(S.endAt) : '판 끝 칸'],
+    ['증권수수료', st.fee == null ? '안 셈' : `${st.fee}%`]]],
+  ];
+}
+BIND.push(() => bindWin($('dt-win'), winLocal));
 BIND.push(() => mountSector($('dt-sf')));
 WIDE.addEventListener('change', () => { if (root && st.data) paint(st.data); });   // 창 폭이 700 을 넘나들면 칸 차례만 다시
 
