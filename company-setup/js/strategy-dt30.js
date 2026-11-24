@@ -39,7 +39,9 @@ const VOL_FROM_MIN = 25;   // 여는 시각부터 몇 분 뒤부터 — 재권�
 const volFrom = () => { const v = hhmm(DM().volDayAt); return /^\d{4}$/.test(v) ? v : addHM(openHM(), VOL_FROM_MIN + lateOf()); };   // 서버 판 meta.volDayAt(늦게 연 날 서버가 밀어 줌 · 개발2 fb15d94)이 오면 그 값 · 서버가 주면 위 25분 셈은 안 씀
 const volOpen = () => { const d = curD(); if (!d || d.closed === true) return true; const t0 = new Date(), today = `${t0.getFullYear()}${String(t0.getMonth() + 1).padStart(2, '0')}${String(t0.getDate()).padStart(2, '0')}`; if (d.day && String(d.day) !== today) return true; const n = hhmm(d.nowAt) || t0.toTimeString().slice(0, 5).replace(':', ''); return n >= volFrom(); };
 const dayVolPct = (r) => { if (!volOpen()) return null; const a = Number(r.accVol), b = Number(r.prevDayVol); return r.accVol != null && r.prevDayVol != null && Number.isFinite(a) && b > 0 ? a / b * 100 : null; };
-const accTxt = (r) => `<span data-tip="오늘 누적 · 량 괄호는 전날 하루 거래량 대비(프리장 빠짐 · 장 시작 25분 뒤부터) · 대금 괄호는 전날 같은 시각 대비">량 ${volTxt(r.accVol)}(${prevPctTxt(dayVolPct(r), null)}) · 대금 ${amtTxt(r.accValue)}(${prevPctTxt(r.valuePrevPct, 'amt_prev_pct')})</span>`;
+// 괄호 색 — 거르기 칸 「전일 거래량 대비 ( )% 이상」 에 넣은 값(set.volMin) 이상인 종목만 빨강(--kh-up) · 빈칸 · 못 잼 · 25분 전은 색 없음 · 짙기 없음 · 사용자 값이라 지표 표 · tone.js 안 씀(11-24 재권님 「() 에 변수값을 넣으면 그걸 넘어가는것만 빨간색으로」 · 개념정의 전달)
+const dayVolTxt = (r) => { const x = dayVolPct(r), m = Number(st.set.volMin) || 0; if (x == null) return '—'; const t = `${num(x, 0)}%`; return m > 0 && x >= m ? `<span style="color: var(--kh-up)">${t}</span>` : t; };
+const accTxt = (r) => `<span data-tip="오늘 누적 · 량 괄호는 전날 하루 거래량 대비(프리장 빠짐 · 장 시작 25분 뒤부터) · 대금 괄호는 전날 같은 시각 대비">량 ${volTxt(r.accVol)}(${dayVolTxt(r)}) · 대금 ${amtTxt(r.accValue)}(${prevPctTxt(r.valuePrevPct, 'amt_prev_pct')})</span>`;
 const WK = ['일', '월', '화', '수', '목', '금', '토'];
 const dayTxt = (d) => { const m = String(d || '').match(/^(\d{4})(\d{2})(\d{2})$/); return m ? `${m[2]}-${m[3]}(${WK[new Date(+m[1], +m[2] - 1, +m[3]).getDay()]})` : '—'; };
 const hmTxt = (t) => (/^\d{4}$/.test(String(t)) ? `${String(t).slice(0, 2)}:${String(t).slice(2)}` : esc(t || '—'));
