@@ -3007,7 +3007,8 @@ def _trade_min_fill(proxy, b, now=None):
     now = now or _now()
     day = b["day"]
     o = _open_min(proxy, day, b)
-    hm = now.hour * 60 + now.minute - 1 if day == now.strftime("%Y%m%d") else 24 * 60   # 그날 판은 1분 늦게 — 끝난 봉을 1분봉 받기(1분마다)가 가져온 뒤(pxMin 고리 +1 과 같게)
+    today = day == now.strftime("%Y%m%d")
+    hm = now.hour * 60 + now.minute - 1 if today else 24 * 60   # 그날 판은 1분 늦게 — 끝난 봉을 1분봉 받기(1분마다)가 가져온 뒤(pxMin 고리 +1 과 같게)
     if day > now.strftime("%Y%m%d"):
         return 0
     b["meta"]["turnMinAt"] = {str(n): _hhmm(o + n) for n in PX_MIN}
@@ -3023,12 +3024,13 @@ def _trade_min_fill(proxy, b, now=None):
             for c, t, cl, v in conn.execute("SELECT code, ts, close, volume FROM candles WHERE period = '1m' AND ts BETWEEN ? AND ? AND code IN (%s) ORDER BY ts" % q,
                                             [lo, hi] + codes):
                 bars.setdefault(c, []).append((t, cl, v))
-            if hm >= o + VOL_DAY_MIN:
+            if hm >= o + VOL_DAY_MIN and any("volDay" not in r or (r["volDay"] is None and today) for r in rows) \
+                    and (today or conn.execute("SELECT 1 FROM turnover_slot WHERE day = ? LIMIT 1", (day,)).fetchone()):   # 지난 판은 시각 칸이 남은 날만 묻는다(이틀만 남음 · 읽을 때마다 종목 수만큼 묻지 않게 · qa 덧 11-24)
                 s_hi, s_lo = _hhmm(o + VOL_DAY_MIN).replace(":", ""), _hhmm(o + VOL_DAY_MIN - VOL_SLOT_LOOK).replace(":", "")
                 for c, sl, sv in conn.execute("SELECT code, slot, vol FROM turnover_slot WHERE day = ? AND slot BETWEEN ? AND ? AND vol IS NOT NULL AND code IN (%s) ORDER BY slot" % q,
                                               [day, s_lo, s_hi] + codes):
                     upto[c] = (sv, "%s:%s" % (sl[:2], sl[2:]))   # 마지막(가장 늦은) 칸이 남는다
-        if hm >= o + VOL_DAY_MIN:
+        if upto:
             pdy = turnover._prev_day(proxy, day)
             prev = {c: g.get("vol") for c, g in (turnover.day_rows(proxy, pdy, codes) if pdy else {}).items()}
     except Exception as e:
@@ -3055,7 +3057,7 @@ def _trade_min_fill(proxy, b, now=None):
                 continue
             tm[k] = {"at": _hhmm(o + n), "turn": round(val / (f * last) * 100, 2), "src": "1m"}
             n_got += 1
-        if r.get("volDay") is None and hm >= o + VOL_DAY_MIN:   # 못 잰(None) 칸은 다시 셈 — 그 시각 칸이 늦게 적힌 날(개념정의 덧 11-24 · 고리는 VOL_SLOT_LOOK 분까지만 다시 봄)
+        if ("volDay" not in r or (r["volDay"] is None and today)) and hm >= o + VOL_DAY_MIN:   # 못 잰(None) 칸은 다시 셈 — 그 시각 칸이 늦게 적힌 날(개념정의 덧 11-24 · 고리는 VOL_SLOT_LOOK 분까지만 다시 봄)
             a, p = upto.get(c), prev.get(c)
             r["volDay"] = {"at": a[1], "pct": round(a[0] / p * 100, 1), "vol": a[0], "prevVol": p, "src": "krx"} if a and p else None
             n_got += 1 if r["volDay"] else 0
