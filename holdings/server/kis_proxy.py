@@ -11756,8 +11756,8 @@ def main():
     if not SLOW and is_sender(args.port) and vi_stats.start(sys.modules[__name__]):
         print("  VI 통계    : 평일 %s 뒤 그날 VI · 급등 쌓음 · %s 뒤 봉 없는 종목 채움 · /api/kis/vi-stats" % (vi_stats.status()["storeAt"], vi_stats.status()["fillFrom"]))
     if not SLOW and is_sender(args.port) and trade_signal.start(sys.modules[__name__]):
-        print("  매매일지   : 평일 단타 판 첫 굳힘 위 %d종목을 슬랙에 한 번(보내기 %s) · 슬랙을 %d초마다 읽어 매도 결과 적음 · /api/kis/trade-journal"
-              % (trade_signal.PICK_N, "켜짐" if trade_signal.SEND else "꺼짐", trade_signal.READ_SEC))
+        print("  매매일지   : 평일 단타 판 매수 룰(기준 시각 전 칩 찬 순 · 모자라면 채움)로 정해진 종목을 슬랙에(보내기 %s) · 슬랙을 %d초마다 읽어 매도 결과 적음 · /api/kis/trade-journal"
+              % ("켜짐" if trade_signal.SEND else "꺼짐", trade_signal.READ_SEC))
     if not SLOW and is_sender(args.port) and dt30_win.start(sys.modules[__name__]):
         print("  단타 승률  : 끝난 판(%s 칸까지)을 %d초마다 보고 하루 한 줄 · /api/kis/dt30-win?days=%d" % (dt30_win.SELL_AT, dt30_win.TICK, dt30_win.DAYS_DEFAULT))
     if not SLOW and is_sender(args.port) and open_rise.start(sys.modules[__name__]):
