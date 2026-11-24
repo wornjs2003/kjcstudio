@@ -313,6 +313,10 @@
 .dt .dt-mknote { margin: 0 0 2px; }
 .dt .dt-mkat { width: 4.2em; }
 .dt .dt-mkrest { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+/* 매수 메시지 보내기(11-24 · 매수 칸 아래) */
+.dt .dt-send { margin-top: 6px; padding: 8px 10px; border-radius: var(--kh-radius-sm); background: var(--kh-bg); display: flex; flex-direction: column; gap: 4px; }
+.dt .dt-send-h { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.dt .dt-send-in { width: 3em; }
 .dt .dw-tb .dw-mut { color: var(--kh-text-secondary); }
 .dt .dw-tb .dw-all td { font-weight: 700; }
 .dt .dw-tw { height: 420px; }   /* 탭(갈아 끼우기)마다 줄 수가 달라도 칸 높이 그대로 — 「보는 것을 바꿔도 자리는 그대로다」 */
