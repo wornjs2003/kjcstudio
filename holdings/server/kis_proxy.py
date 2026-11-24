@@ -10725,7 +10725,10 @@ class Handler(SimpleHTTPRequestHandler):
                 if not (len(day) == 8 and day.isdigit()):
                     self._send_json({"ok": False, "error": "day 는 YYYYMMDD 입니다."}, 400)
                     return
-                d = dt30.pre_log_get(sys.modules[__name__], day)
+                d, err = dt30.pre_log_get(sys.modules[__name__], day)
+                if err:
+                    self._send_json({"ok": False, "error": "프리장 기록을 못 읽음(%s)" % err, "data": None}, 500)   # 못 잼 — 빈 {} 로 내지 않는다
+                    return
                 self._send_json({"ok": True, "data": d, "meta": {"day": day, "codes": len(d), "from": "%02d:%02d" % dt30.PRE_LOG_FROM,
                                                                   "to": "%02d:%02d" % dt30.PRE_LOG_TO}})
                 return

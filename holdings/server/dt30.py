@@ -445,16 +445,19 @@ def pre_log_put(proxy, hit, pf_rows, now=None):
 
 
 def pre_log_get(proxy, day):
-    """{code: [{hm, …}]} — 그날 프리장 기록 · 분 순. 표가 없으면 {}."""
+    """→ ({code: [{hm, …}]}, 못 읽은 까닭 | None) — 그날 프리장 기록 · 분 순. 표가 아직 없으면(한 번도 안 적힘) ({}, None) ·
+    읽다 터지면 ({}, 까닭) — 「없음」 과 「못 잼」 을 가른다(qa 덧 11-24)."""
     try:
         with proxy.db_conn() as conn:
+            if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dt30_pre_log'").fetchone():
+                return {}, None
             rows = conn.execute("SELECT hm, code, data FROM dt30_pre_log WHERE day = ? ORDER BY hm", (day,)).fetchall()
-    except Exception:
-        return {}
+    except Exception as e:
+        return {}, type(e).__name__
     out = {}
     for hm, code, data in rows:
         out.setdefault(code, []).append(dict(json.loads(data), hm="%s:%s" % (hm[:2], hm[2:])))
-    return out
+    return out, None
 
 
 def early_buy(proxy, cfg, codes, put, pre=False):
