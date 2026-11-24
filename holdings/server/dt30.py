@@ -3091,6 +3091,8 @@ def open_rise_now(proxy, cfg, b):
     rows = (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or [])
     if not rows:
         return 0
+    for d in [d for d in _or_last if d != b["day"]]:
+        del _or_last[d]                                # 오늘 아닌 날은 지움 — 날마다 늘지 않게(개념정의 덧)
     last = _or_last.setdefault(b["day"], {})
     if proxy.quote_market_div() != "J":            # 정규장 밖 — 시세가 통합(UN)으로 넘어가 시가가 08:00 프리장 첫 값이 됨 → 정규장 중 마지막 셈 값(없으면 저장값)
         for r in rows:
