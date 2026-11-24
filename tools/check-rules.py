@@ -747,7 +747,7 @@ def c_old_place_names():
         name = os.path.basename(p)
         if p == me:
             continue
-        if not (name == "CLAUDE.md" or p.startswith(".claude/skills/") or (p.startswith("tools/") and p.endswith(".py"))):
+        if not (name == "CLAUDE.md" or p.startswith(".claude/skills/") or p.startswith(".claude/rules/") or (p.startswith("tools/") and p.endswith(".py"))):
             continue
         n += 1
         for i, line in enumerate(rd(os.path.join(ROOT, p)).split("\n"), 1):

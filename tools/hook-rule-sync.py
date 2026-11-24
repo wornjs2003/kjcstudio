@@ -37,6 +37,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 MAX_CHARS = 12000          # 넣는 본문의 한도 — 넘으면 절 제목 목록 + 읽는 명령만
 NAMES = ("CLAUDE.md", "SKILL.md")
+RULE_DIRS = (":(glob).claude/rules/**/*.md",)   # 경로 조건 룰 파일(2026-11-24 루트에서 옮김) — 이름이 아니라 자리로 센다
 SELF = "tools/hook-rule-sync.py"
 STATE_DIR = os.path.join(tempfile.gettempdir(), "claude-rule-sync")
 HEAD_RE = re.compile(r"^(#{1,4}) +(.+?) *$")
@@ -102,7 +103,7 @@ def log(cwd, msg):
 def build(cwd, sid, event):
     # git 한 번으로 HEAD ↔ main 에서 다른 룰 문서만 — 도구 호출마다 돌아서 값싼 길이 먼저다(개발 폴더는 늘 빈 값)
     base = git(cwd, "merge-base", "HEAD", "main").strip()
-    out = git(cwd, "diff", "--name-only", base, "main", "--", *[":(glob)**/" + n for n in NAMES])
+    out = git(cwd, "diff", "--name-only", base, "main", "--", *[":(glob)**/" + n for n in NAMES], *RULE_DIRS)
     pend = [(p, blob(cwd, "main", p)) for p in out.splitlines() if p]
     pend = [(p, mb) for p, mb in pend if mb]   # main 에서 지워진 문서는 넣지 않는다
     sf = state_file(sid)
