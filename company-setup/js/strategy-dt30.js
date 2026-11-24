@@ -37,7 +37,7 @@ const prevPctTxt = (p, key) => { const v = Number(p); if (p == null || !Number.i
 //   색 없음 — 뜻이 vol_prev_pct(전날 같은 시각 대비)와 달라 그 이름을 안 씀 · 지표 표에 새 항목(기준 · 폭은 재권님 값 · 개념정의가 여쭘)이 들어오면 그 id 로 칠함(개념정의 검수 16:56)
 //   09:25(여는 시각 + 25분 · 늦게 연 날은 그만큼 뒤) 전에는 안 보이고 거르기에도 안 씀 — 값이 있든 없든(11-24 재권님 「전일 거래량 대비는 9시 25분부터 보여진다로 해놓고 그전에 값이 있던없던 소팅에 적용이 안되게」) · 지금 시각은 판 nowAt(서버) · 없으면 이 기계 시계 · 끝난 판(closed)은 늘 보임
 const VOL_FROM_MIN = 25;   // 여는 시각부터 몇 분 뒤부터 — 재권님 값
-const volFrom = () => addHM(openHM(), VOL_FROM_MIN + lateOf());
+const volFrom = () => { const v = hhmm(DM().volDayAt); return /^\d{4}$/.test(v) ? v : addHM(openHM(), VOL_FROM_MIN + lateOf()); };   // 서버 판 meta.volDayAt(늦게 연 날 서버가 밀어 줌 · 개발2 fb15d94)이 오면 그 값 · 서버가 주면 위 25분 셈은 안 씀
 const volOpen = () => { const d = curD(); if (!d || d.closed === true) return true; const t0 = new Date(), today = `${t0.getFullYear()}${String(t0.getMonth() + 1).padStart(2, '0')}${String(t0.getDate()).padStart(2, '0')}`; if (d.day && String(d.day) !== today) return true; const n = hhmm(d.nowAt) || t0.toTimeString().slice(0, 5).replace(':', ''); return n >= volFrom(); };
 const dayVolPct = (r) => { if (!volOpen()) return null; const a = Number(r.accVol), b = Number(r.prevDayVol); return r.accVol != null && r.prevDayVol != null && Number.isFinite(a) && b > 0 ? a / b * 100 : null; };
 const accTxt = (r) => `<span data-tip="오늘 누적 · 량 괄호는 전날 하루 거래량 대비(프리장 빠짐 · 장 시작 25분 뒤부터) · 대금 괄호는 전날 같은 시각 대비">량 ${volTxt(r.accVol)}(${prevPctTxt(dayVolPct(r), null)}) · 대금 ${amtTxt(r.accValue)}(${prevPctTxt(r.valuePrevPct, 'amt_prev_pct')})</span>`;
