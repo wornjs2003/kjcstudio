@@ -328,8 +328,12 @@ async function kxLoad() {
     Object.values(D).forEach((v) => v.sort((a, b) => (a[0] < b[0] ? -1 : 1))); KX.bars = D; KX.at = Date.now(); const sec = Number(j && j.meta && j.meta.stepSec); KX.step = sec > 0 ? sec / 60 : null; } catch (e) { /* 못 받으면 맨 윗줄 그대로 */ }
   KX.busy = false; if (st.data && root) { paint(st.data); chips(); }
 }
+// 그 날 코스피 봉 — 장이 열린 첫 봉부터 있는 날만(qa 11-24 — 서버가 반나절만 쥔 날은 13:35 봉을 「시가」 로 견줬음) · 여는 시각은 그 날 판 meta.openAt(늦게 연 날) · 없으면 09:00
+const kxDay = (day) => { const B = KX.bars && KX.bars[day]; if (!B || !B.length || !KX.step) return null;
+  const D = (calcD && calcD.day === day && calcD) || (st.data && st.data.day === day && st.data) || dayData[day] || null, op = hhmm((D && D.meta && D.meta.openAt) || '') || '0900';
+  return B[0][0] <= op ? B : null; };
 function mkLine(day) {   // 그 날 고른 줄 → { at, side 'up' | 'dn', line } 또는 null(맨 윗줄)
-  const M = (st.set && st.set.mk) || {}, B = KX.bars && KX.bars[day]; if (!B || !B.length || !KX.step) return null;   // 봉 길이를 서버가 안 주면 「그 시각까지」 를 못 가름 — 맨 윗줄
+  const M = (st.set && st.set.mk) || {}, B = kxDay(day); if (!B) return null;   // 첫 봉부터 없거나 봉 길이를 서버가 안 주면 — 맨 윗줄
   for (const side of ['up', 'dn']) { const L = M[side]; if (!L || !/^\d{4}$/.test(String(L.at || '')) || L.pct == null || L.pct === '') continue;
     const upto = B.filter((b) => hmAdd(b[0], KX.step) <= L.at); if (!upto.length) continue;
     const ref = L.ref === 'high' ? Math.max(...upto.map((b) => b[2])) : L.ref === 'low' ? Math.min(...upto.map((b) => b[3])) : B[0][1], now = upto[upto.length - 1][4];
@@ -337,7 +341,7 @@ function mkLine(day) {   // 그 날 고른 줄 → { at, side 'up' | 'dn', line 
     if (side === 'up' ? q >= Number(L.pct) : q <= Number(L.pct)) return { at: L.at, side, line: L, q }; }
   return null;
 }
-const mkHas = (day) => { const M = (st.set && st.set.mk) || {}, B = KX.bars && KX.bars[day]; if (!B || !B.length || !KX.step) return false;   // 그 날 조건 시각까지 끝난 코스피 봉이 있나 — 없으면 조건 줄을 못 봐 맨 윗줄로 셈
+const mkHas = (day) => { const M = (st.set && st.set.mk) || {}, B = kxDay(day); if (!B) return false;   // 그 날 조건 시각까지 끝난 코스피 봉이 있나 — 없으면 조건 줄을 못 봐 맨 윗줄로 셈
   return ['up', 'dn'].every((sd) => { const L = M[sd]; return !L || !/^\d{4}$/.test(String(L.at || '')) || B.some((b) => hmAdd(b[0], KX.step) <= L.at); }); };
 const mkOn = () => { const M = (st.set && st.set.mk) || {}; return ['up', 'dn'].some((k) => M[k] && /^\d{4}$/.test(String(M[k].at || '')) && M[k].pct != null && M[k].pct !== ''); };
 function sellAt(p, times = [], inAt = '', o = {}) {   // p — 시각마다 매수가 대비 %(null 은 값 없음) · times — 그 칸 시각 · inAt — 산 시각(HHMM) → { k: 판 시각 차례 또는 -1, why } · o — 코스피 조건 줄(mkSell) {S 셈 칸 · from 이 시각부터 봄 · until 이 시각 전까지만 봄}
