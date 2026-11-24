@@ -233,6 +233,53 @@ td.owner { background: var(--pj-done-faint); }
 .tr-log td { padding: 9px 10px; font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: center; }
 .tr-log td.l { text-align: left; }
 .tr-empty { font-size: 13px; color: var(--pj-text-muted); padding: 16px 4px; }
+/* 다섯 갈래(2026-11-24 · 개발3) */
+.tr-intro h2 { font-size: 22px; font-weight: 700; margin: 8px 0 4px; }
+.tr-intro p { font-size: 14px; color: var(--pj-text-secondary); margin: 0 0 10px; }
+.tr-toc { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.tr-toc a { font-size: 13px; font-weight: 600; padding: 5px 12px; border-radius: var(--pj-radius-pill); background: var(--pj-bg-card); color: var(--pj-text-strong); text-decoration: none; }
+.tr-switches { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 14px; }
+.tr-sw { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--pj-bg-surface); }
+.tr-sw-name { font-size: 13.5px; font-weight: 700; }
+.tr-sw-where { font-size: 12px; color: var(--pj-text-muted); }
+.tr-sw .tr-chip { margin-left: auto; white-space: nowrap; }
+.tr-glance { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.tr-col h4 { font-size: 13px; font-weight: 700; margin: 0 0 6px; padding: 4px 10px; border-radius: 8px; display: inline-block; }
+.tr-col.ok h4 { background: var(--pj-done-faint); color: var(--pj-done); }
+.tr-col.no h4 { background: var(--pj-warn-faint); color: var(--pj-warn); }
+.tr-col.me h4 { background: var(--pj-accent-faint); color: var(--pj-accent); }
+.tr-col ul { margin: 0; padding-left: 18px; font-size: 13px; color: var(--pj-text-strong); }
+.tr-col li { margin: 3px 0; }
+.tr-col .none { font-size: 13px; color: var(--pj-text-muted); }
+.tr-steps { display: grid; grid-template-columns: 1fr; gap: 22px; margin-bottom: 16px; }
+.tr-step { position: relative; padding: 12px 14px; border-radius: 10px; background: var(--pj-bg-surface); }
+.tr-step::after { content: "↓"; position: absolute; left: 50%; bottom: -20px; transform: translateX(-50%); font-size: 15px; color: var(--pj-text-muted); }
+.tr-step:last-child::after { content: none; }
+.tr-step-who { font-size: 11.5px; font-weight: 700; color: var(--pj-text-muted); }
+.tr-step-name { font-size: 14px; font-weight: 700; margin: 2px 0 4px; }
+.tr-step-what { font-size: 12.5px; color: var(--pj-text-secondary); }
+.tr-step .v { font-weight: 700; color: var(--pj-text-primary); }
+.tr-two { display: grid; grid-template-columns: 1fr; gap: 0 14px; }
+.tr-h { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+.tr-two .tr-rules { margin-bottom: 8px; }
+.tr-two .tr-rule { grid-template-columns: 1fr; }
+.tr-save { margin: 0 0 14px; }
+.tr-safe ul, .tr-prep table { font-size: 13px; }
+.tr-safe li { margin: 6px 0; }
+.tr-safe b { font-weight: 700; }
+.tr-safe .where { font-size: 12px; color: var(--pj-text-muted); }
+.tr-prep { overflow-x: auto; }
+.tr-prep table { width: 100%; min-width: 560px; }
+.tr-prep td { padding: 8px 10px; vertical-align: top; }
+.tr-prep td.st { white-space: nowrap; }
+.tr-prep .note { font-size: 12px; color: var(--pj-text-muted); margin-top: 8px; }
+@media (min-width: 900px) {
+  .tr-switches { grid-template-columns: 1fr 1fr; }
+  .tr-glance { grid-template-columns: repeat(3, 1fr); }
+  .tr-steps { grid-template-columns: repeat(6, 1fr); gap: 22px; }
+  .tr-step::after { content: "→"; left: auto; right: -17px; bottom: auto; top: 50%; transform: translateY(-50%); }
+  .tr-two { grid-template-columns: 1fr 1fr; }
+}
 details.old > summary { cursor: pointer; font-size: 15px; font-weight: 700; padding: 14px 0; list-style: revert; }
 details.old[open] > summary { margin-bottom: 8px; }
 @media (min-width: 900px) {
@@ -266,24 +313,54 @@ details.old[open] > summary { margin-bottom: 8px; }
   </div>
 
   <!-- 자동 매매 — 룰 칸 · 흐름 · 매매일지(서버 holdings/server/trade_signal.py · /api/kis/trade-journal · 룰 문서 trade-set) -->
-  <div class="sec">
-    <h2>자동 매매 — 룰</h2>
-    <p>단타 판 첫 굳힘 위 종목을 슬랙으로 주문 컴퓨터에 보내 시장가로 사고팝니다 · 룰 값은 여기 한 곳에서 정하고 주문 컴퓨터는 서명된 룰만 따릅니다</p>
+  <!-- 2026-11-24 다섯 갈래로 다시 짬 — 재권님 「카테고리별로 해서 이해하기 쉽게 보기도 쉽게」 → 「안부터 만들어」 (개발3) -->
+  <div class="tr-intro">
+    <h2>자동 매매</h2>
+    <p>단타 판에서 고른 종목을 서버가 슬랙으로 주문 컴퓨터에 보내고, 주문 컴퓨터가 한국투자에 시장가로 사고팝니다.</p>
+    <nav class="tr-toc">
+      <a href="#tr1">1 한눈에 보기</a><a href="#tr2">2 흐름</a><a href="#tr3">3 룰</a><a href="#tr4">4 안전장치</a><a href="#tr5">5 준비할 것</a><a href="#tr6">매매일지</a>
+    </nav>
   </div>
+
+  <div class="sec" id="tr1"><h2>1 한눈에 보기</h2><p>지금 되는 것 · 안 되는 것 · 재권님 손이 필요한 것</p></div>
   <div class="tr-card">
-    <div class="tr-state" id="trState"></div>
-    <div class="tr-rules" id="trRules"></div>
-    <div class="tr-actions">
-      <button class="tr-btn" id="trSave" disabled>룰 저장</button>
-      <button class="tr-btn sub" id="trReload">다시 읽기</button>
-      <span class="tr-msg" id="trMsg"></span>
+    <div class="tr-switches" id="trSwitch"></div>
+    <div class="tr-glance" id="trGlance"></div>
+  </div>
+
+  <div class="sec" id="tr2"><h2>2 흐름</h2><p>하루에 한 번 이 차례로 갑니다 · 시각은 서버가 알려 준 값입니다</p></div>
+  <div class="tr-card">
+    <div class="tr-steps" id="trSteps"></div>
+    <div class="tr-flow" id="trSend"></div>
+  </div>
+
+  <div class="sec" id="tr3"><h2>3 룰</h2><p>값은 이 칸에서 한 번 정하면 주문 컴퓨터에 서명해 보냅니다 · 글 속 ( ) 는 칸의 지금 값 · 빈 칸은 빨간 ( ) — 빈 칸이 있으면 그날 매수 목록이 안 나갑니다</p></div>
+  <div class="tr-two">
+    <div class="tr-card">
+      <h3 class="tr-h">매수</h3>
+      <div class="tr-rules" id="trRulesBuy"></div>
+      <div class="tr-flow" id="trBuy"></div>
+    </div>
+    <div class="tr-card">
+      <h3 class="tr-h">매도</h3>
+      <div class="tr-rules" id="trRulesSell"></div>
+      <div class="tr-flow" id="trSell"></div>
     </div>
   </div>
+  <div class="tr-card tr-flow" id="trFail"></div>
+  <div class="tr-actions tr-save">
+    <button class="tr-btn" id="trSave" disabled>룰 저장</button>
+    <button class="tr-btn sub" id="trReload">다시 읽기</button>
+    <span class="tr-msg" id="trMsg"></span>
+  </div>
 
-  <div class="sec"><h2>자동 매매 — 흐름</h2><p>괄호 안은 위 칸의 지금 값 · 빈 칸은 빨간 ( ) — 빈 칸이 있으면 그날 매수 목록이 안 나갑니다</p></div>
-  <div class="tr-card tr-flow" id="trFlow"></div>
+  <div class="sec" id="tr4"><h2>4 안전장치</h2><p>잘못된 주문이 나가지 않게 막는 것들 · 어디서 막는지 함께 적었습니다</p></div>
+  <div class="tr-card tr-safe" id="trSafe"></div>
 
-  <div class="sec"><h2>자동 매매 — 매매일지</h2><p>보낸 신호 한 줄마다 · 주문 컴퓨터마다 결과 · 지우지 않습니다</p></div>
+  <div class="sec" id="tr5"><h2>5 준비할 것</h2><p>모의투자로 첫 매매를 하기까지 · 서버가 아는 것은 지금 값, 주문 컴퓨터에만 있는 것은 적은 날 기준입니다</p></div>
+  <div class="tr-card tr-prep" id="trPrep"></div>
+
+  <div class="sec" id="tr6"><h2>매매일지</h2><p>보낸 신호 한 줄마다 · 주문 컴퓨터마다 결과 · 지우지 않습니다</p></div>
   <div class="tr-card tr-log" id="trLog"></div>
 
   <details class="old">
