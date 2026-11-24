@@ -876,7 +876,7 @@ function paint0(d) {
     const g = (nm, t) => `<span class="dt-chg"><i class="dt-chs">${nm}</i>${t ? `<small>${t}</small>` : ''}</span>`;   // 칩 이름 알약 + 그 아래 시각 한 묶음
     const each = raw.length ? raw.map((x) => g(esc(subName(c, x)), at[x] ? esc(String(at[x])) : '')).join('') : '';
     const v = has ? `<span class="dt-cg" data-i="${colorOf(c)}">${each ? `${each}${vt ? `<small class="dt-vt">${esc(vt)}</small>` : ''}` : sb.length ? g(esc(subTxt(c, sb)), vt ? esc(vt) : '') : `<b class="dt-dot" aria-label="걸림"></b>${vt ? `<small class="dt-vt">${esc(vt)}</small>` : ct ? `<small class="dt-vt">${esc(ct)}</small>` : ''}`}</span>`
-      : (r.chipTime || {})[c] && everChip(r, c) ? `<span class="dt-cg dt-gone" data-i="${colorOf(c)}" data-tip="붙었다 빠진 칩 — 처음 붙은 시각 · 겹침 셈(칩 N개 거르기 · 산 때)에 듦 · 빠진 시각은 서버 기록이 아직 없음"><b class="dt-dot" aria-label="붙었다 빠짐"></b><small class="dt-vt">${esc(String(r.chipTime[c]).slice(0, 5))} 빠짐</small></span>`   // 11-25 재권님 「나로 해」 — 거르기가 세는 칩이 칸에 안 보여 「안 걸린 것을 산 것처럼」 보였음
+      : (r.chipTime || {})[c] && everChip(r, c) ? `<span class="dt-cg dt-gone" data-i="${colorOf(c)}" data-tip="붙었다 빠진 칩 — 적힌 시각은 처음 붙은 때(빠진 때 아님) · 겹침 셈(칩 N개 거르기 · 산 때)에 듦 · 빠진 시각은 서버 기록이 아직 없음"><b class="dt-dot" aria-label="붙었다 빠짐"></b><small class="dt-vt">${esc(String(r.chipTime[c]).slice(0, 5))} 붙음 · 빠짐</small></span>`   // 11-25 재권님 「나로 해」 — 거르기가 세는 칩이 칸에 안 보여 「안 걸린 것을 산 것처럼」 보였음
       : st.miss.has(c) ? `<span class="dt-chq" data-tip="${esc(`그날 판에 ${c} 값을 ${missWord()} — 이 종목이 걸렸는지 모름`)}">—</span>`
       : st.wait.has(c) ? `<span class="dt-chq" data-tip="${esc(`아직 때가 아님 — ${c} 은 정규장${st.openAt ? `(${st.openAt})` : ''} 뒤에 셈`)}">·</span>` : '';
     return `<td class="dt-chc${on ? '' : ' is-off'}">${v}</td>`; };
