@@ -1310,7 +1310,7 @@ function winRules(days) {   // days — 승률 표가 셈한 날(코스피 값 �
   return [
     ['칩', [['켜진 칩', onC.join(' · ') || '없음'], ['꺼 둔 칩', [...offC, ...subOff].join(' · ') || '없음']]],
     ['종목 차례', [['점수', ord || '빈칸(칩 수 → 초반상승 → 시가총액)']]],
-    ['매수', [['칩 개수', S.minChip ? `${S.minChip}개 이상` : '전체'], ['09:30 뒤에 찬 종목', S.buyLate930 ? '삼' : '안 삼'],
+    ['매수', [['칩 개수', S.minChip ? `${S.minChip}개 이상` : '전체'], ['칩 모자라면', S.fill && S.minChip > 1 ? `채움(${v(S.fillN, '종목')}이 안 되면 칩 ${S.minChip - 1}개 종목으로)` : '채우지 않음'], ['09:30 뒤에 찬 종목', S.buyLate930 ? '삼' : '안 삼'],
     ['유통 시총', S.floatMax > 0 ? `${num(S.floatMax)}억 이하` : '전체'],
     ['매수', (() => { const B = BUYS.find(([k]) => k === buyKey()); return B ? buyName(B[0], B[1]) : '( )'; })()], ['불타기', on(S.pyr)]]],
     ['매도', [['매도 봉', S.sellBar === '1m' ? '1분' : S.sellBar === '5m' ? '5분' : '30분'], ['손절', S.stop == null || S.stop === '' ? '안 함' : `${S.stop}%`],
