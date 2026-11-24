@@ -271,15 +271,14 @@ def send_today(proxy, day):
         return "이미 만듦" if have else "칩 찬 종목 없음"
     for r in rows:
         r["buy"] = r["buyRule"]["px"]                  # 보내는 가격 = 매수 룰이 정한 때 값(찬 줄은 사는 셈 buy930 · 채운 줄은 기준 시각 1분 값 · 주문 컴퓨터 상한 기준)
-    fn = dt30.fill_n()
-    amt = amount_won(fn) if fn else None                 # 첫 금액 ÷ 사는 종목 수(셈 칸 fillN · 판 · 텔레그램과 같은 칸 · 재권님 「가」 11-24) — 빈칸이면 못 셈(안 보냄)
+    amt = amount_won(dt30.buy_top())                     # 첫 금액 ÷ 상위 ( )종목(셈 칸 top · 「총 ( )만원 ÷ 상위 ( )종목」 · 텔레그램도 이 수까지만 · 재권님 11-24 18:2x)
     st = settings()
     now = _now()
     if not SEND:
         return "안 보냄 — 꺼짐(SEND) · 일지에 안 적음"      # 꺼진 동안은 줄을 안 쌓는다 — 일지는 실제로 돈이 움직일 수 있었던 날만(qa 덧 11-23)
     sk = _slack(proxy)
     why = ("룰 칸 빔(%s)" % ", ".join(RULES[k][0] for k in st["missing"]) if st["missing"]
-           else "사는 종목 수 빔(fillN)" if not fn else "단타 판 매수금액 못 셈" if amt is None
+           else "단타 판 매수금액 못 셈" if amt is None
            else "보내기 주소 없음" if not sk["webhook_url"] else "주문 컴퓨터 열쇠 없음" if not sk["pcs"] else None)
     made = now.strftime("%Y%m%d%H%M%S")
 
@@ -496,7 +495,7 @@ def status(proxy=None):
         except Exception:
             tm = {}
     import dt30
-    return dict(_status, send=SEND, fillN=dt30.fill_n(), readSec=READ_SEC, settings=settings(), rules=rules_meta(), rulesAt="%02d:%02d" % RULES_AT, times=tm)
+    return dict(_status, send=SEND, top=dt30.buy_top(), fillN=dt30.fill_n(), readSec=READ_SEC, settings=settings(), rules=rules_meta(), rulesAt="%02d:%02d" % RULES_AT, times=tm)
 
 
 def start(proxy):

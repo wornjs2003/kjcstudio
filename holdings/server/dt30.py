@@ -3109,14 +3109,17 @@ def send_top(proxy, b, head=""):
 # ── 매수 룰 — 서버 한 곳 (2026-11-24 재권님 · 시황분석1 「매수 룰 정의」 1f47da7 「응 이게 맞아 이대로 만들어줘」 17:5x · 개발2 안 「응」 18:1x) ──
 #  1 기준 시각 R = 여는 시각 + ruleMin 분(셈 칸 rules.dt30.set.ruleMin · 5~30 · 빈칸 5) — 늦게 연 날은 여는 시각이 밀려 저절로 뒤
 #  2 R 전에 칩 N개(셈 칸 minChip · buy_need)가 찬 종목 — 찬 순간(N번째 칩 시각 T) 그 분 유통 대비 거래(rows[].turnMin · T 직전에 끝난 1분 값)가
-#    turnMin % 이상이면 「○○ 매수하세요」 · 못 잰 종목은 안 삼(재권님 「유통대비 거래에 안걸리면 목록에 안나와야해」 → 「가」) · 개수 상한 없음(정의 글)
+#    turnMin % 이상이면 「○○ 매수하세요」 · 못 잰 종목은 안 삼(재권님 「유통대비 거래에 안걸리면 목록에 안나와야해」 → 「가」)
 #  3 R 에 — 2번 종목이 사는 종목 수(fillN)에 모자라면 칩이 하나 모자란(N−1) 종목 중(채움 켬 · N > 1 · fillN 이 있을 때)
 #    R 의 유통 대비 거래 조건을 넘은 것 → 상승률(시가 대비 R 1분 값) 높은 순 → 칩 많은 순 → 판 차례로 모자란 만큼
 #    (재권님 「상승률이 우선이고 유통대비거래는 조건이야」)
 #  4 R 뒤에 칩이 찬 종목 — 안 보냄
+#  5 위 차례대로 「총 ( )만원 ÷ 상위 ( )종목」 칸(셈 칸 top · buy_top)의 종목 수까지만 — 화면이 위에서부터 그 수만 사는 것과 같게
+#    (재권님 「위에서 순서대로 지정된 숫자만 인데? 총금액과 종목을 정하는 칸이 있는데」 11-24 18:2x — 처음 판은 상한 없음으로 짰음)
 #  화면에서 끈 칩은 서버가 못 본다(브라우저마다) — 칩은 다 켠 것으로 셈. 그 분 거래 값이 아직 안 적혔으면 BUY_WAIT_MIN 분까지 기다렸다 셈.
 #  텔레그램(TG_SEND) · 슬랙 매수 목록(trade_signal) · 「팔 때」 대상(meta.tgTop)이 이 한 목록(buy_order)을 쓴다 — 전 「9시 3분부터 · 5종목」(sendFrom · sendN)은 걷음(재권님 「가」 18:0x)
 RULE_MIN_DEF, RULE_MIN_LO, RULE_MIN_HI = 5, 5, 30   # 화면 strategy-dt30.js RULE_MIN_* 와 같은 값(두 벌 — 판 meta.buyRule.def 로 내 화면이 받게 할 자리)
+TOP_DEF = 30                 # 「상위 ( )종목」 칸이 비었을 때 — 화면 DEF_SET top(PNL_TOP)과 같은 값 · 〃
 TURN_ON_DEF, TURN_MIN_DEF = True, 1.0   # 저장값에 칸이 없을 때 — 화면 DEF_SET turnOn · turnMin(시황분석1 0d0e60f · 재권님 「유통거래대비 1%가 기본」)과 같은 값 · 〃
 BUY_WAIT_MIN = 3             # 그 분 유통 대비 거래 값이 아직 없으면 이 분까지 기다렸다 셈(1분봉 받기가 1분마다) · 그 뒤에도 없으면 못 잼 → 안 삼
 BUY_SEND_LATE = 5            # R + 이 분이 지나면 더 안 보냄(서버가 늦게 뜬 날 묵은 종목을 보내지 않게)
@@ -3148,6 +3151,11 @@ def rule_min():
 def fill_n():
     """사는 종목 수 — 셈 칸 fillN(1 이상 · 판 · 텔레그램이 같이 씀 · 재권님 「가」 18:0x) · 빈칸이면 None(안 채움)."""
     return _set_int("fillN", None, 1, 999)
+
+
+def buy_top():
+    """사는 종목 수 상한 — 「총 ( )만원 ÷ 상위 ( )종목」 칸(셈 칸 top · 1 이상) · 없으면 TOP_DEF. 매수 룰 차례대로 이 수까지만 보내고 금액도 이 수로 나눔."""
+    return _set_int("top", TOP_DEF, 1, 999)
 
 
 def turn_rule():
@@ -3244,7 +3252,7 @@ def buy_order(proxy, b, hm=None, inplace=False):
             pick.sort(key=lambda x: x[:3])
             out += [(x[3], x[4]) for x in pick[:fn - len(out)]]
     res = []
-    for i, (r, info) in enumerate(out, 1):
+    for i, (r, info) in enumerate(out[:buy_top()], 1):   # 차례대로 상위 ( )종목까지만(5번)
         info["order"] = i
         r["buyRule"] = info
         res.append(r)
@@ -3257,11 +3265,11 @@ def buy_rule_meta(proxy, b):
     hm = now.hour * 60 + now.minute if b.get("day") == now.strftime("%Y%m%d") else None
     rows, R = buy_order(proxy, b, hm, inplace=True)
     on, tmin = turn_rule()
-    b["meta"]["buyRule"] = {"ruleAt": _hhmm(R), "ruleMin": rule_min(), "need": buy_need(), "fillN": fill_n(), "fill": _set_val("fill") is True,
-                            "turnOn": on, "turnMin": tmin, "def": {"ruleMin": RULE_MIN_DEF, "turnOn": TURN_ON_DEF, "turnMin": TURN_MIN_DEF},
+    b["meta"]["buyRule"] = {"ruleAt": _hhmm(R), "ruleMin": rule_min(), "need": buy_need(), "top": buy_top(), "fillN": fill_n(), "fill": _set_val("fill") is True,
+                            "turnOn": on, "turnMin": tmin, "def": {"ruleMin": RULE_MIN_DEF, "turnOn": TURN_ON_DEF, "turnMin": TURN_MIN_DEF, "top": TOP_DEF},
                             "order": [{"code": r["code"], "name": r.get("name"), **r["buyRule"]} for r in rows],
                             "sent": (b["meta"].get("tgBuy") or {}),
-                            "note": "서버가 보내는 차례(order) — 기준 시각 전 칩 N개 찬 순(그 분 유통 대비 거래 조건) · 기준 시각에 모자라면 칩 N−1 종목 상승률 순 · 화면에서 끈 칩은 모름 · sent 는 실제로 보낸 것"}
+                            "note": "서버가 보내는 차례(order) — 기준 시각 전 칩 N개 찬 순(그 분 유통 대비 거래 조건) · 기준 시각에 모자라면 칩 N−1 종목 상승률 순 · 위에서 상위 top 종목까지만 · 화면에서 끈 칩은 모름 · sent 는 실제로 보낸 것"}
 
 
 def buy_text(r):
@@ -3278,9 +3286,12 @@ def buy_send(proxy, b, hm):
     top = m.setdefault("tgTop", [])
     rows, _ = buy_order(proxy, b, hm)
     n = 0
+    cap = buy_top()
     for r in rows:
         if r["code"] in top:
             continue
+        if len(top) >= cap:                            # 이미 보낸 것으로 상위 ( )종목이 찼음 — 늦게 정해진(거래 값을 기다린) 종목이 앞 차례여도 더 안 보냄(보낸 것은 못 거둠)
+            break
         top.append(r["code"])
         info = r["buyRule"]
         m.setdefault("tgBuy", {})[r["code"]] = {"px": info.get("px"), "at": info.get("at"), "chipAt": info.get("chipAt"), "sentAt": _now().strftime("%H:%M:%S"),
