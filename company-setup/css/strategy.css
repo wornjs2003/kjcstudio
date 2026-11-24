@@ -365,3 +365,6 @@
 .dt .dt-2row .dt-sr { box-shadow: -2px 0 0 0 var(--dt-cb); }
 .dt .dt-2row td.dt-sold, .dt .dt-2row td.dt-after { --dt-cb: var(--kh-bg); }   /* 판 시각 · 판 뒤 칸은 회색 바탕 — 그림자도 같은 색 */
 .dt .dt-hypo { opacity: .6; font-style: italic; }   /* 보기만 줄의 가정 손익 — 산 것이 아님을 흐리게(11-24) */
+.dt .dt-dayb { margin: 2px; }   /* 기간 줄 날짜 단추 — 그날 차익 · 누르면 그날 판(11-24) */
+.dt .dt-mons-in { display: inline-flex; gap: 4px; margin-right: 8px; }   /* 기간 줄 머리의 달 단추 */
+.dt .dt-setf > summary { cursor: pointer; margin: 6px 0; }   /* 셈 칸 접기 · 펴기 */
