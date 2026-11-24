@@ -268,7 +268,7 @@ const chipNeed = () => Math.max(1, Number(st.set.minChip) || 1);
 // 칩 시각은 서버 rows[].chipTime(칩마다 처음 붙은 시각 · 한 번 붙었다 빠져도 남음 · 개발2 a3ea7ff)이 있으면 그것 먼저
 const nthChipAt = (r) => { const at = { ...(r.chipAt || {}), ...(r.chipTime || {}) }; const ts = colsOf().filter((c) => liveChip(r, c)).map((c) => String(at[c] || (c === 'VI·급등' ? r.viAt || '' : '')).replace(/:/g, '').slice(0, 4) || inTs(r).slice(0, 4) || '0000').sort(); const N = chipNeed(); return ts.length >= N ? ts[N - 1] : null; };
 // 보기만 줄의 가정 매수 — 판에 들어올 때 값(서버 r.buy)으로 샀다고 치고 셈만 보임(11-24 재권님 「들어올때 샀다는 전제로 셈을 하도록 하고 진짜 산건 아닌거처럼 해줘」) · 합계 · 평균 · 상위 N 에는 안 듦
-const HYPO = new WeakMap();
+let HYPO = new WeakMap();   // calcDay 를 돌 때마다 새로 — 판 줄 객체가 다시 그릴 때 그대로 쓰여, 셈 칸을 바꿔 본 표로 든 줄에 가정 값이 남지 않게(개념정의 검수 11-24)
 function buyOf(r) {   // → { px, at(HHMM), src } | null
   if (HYPO.has(r)) return HYPO.get(r);
   if (curD() && (curD().fb905 || fbDays.has(curD().day))) return fb905Of(r);
@@ -487,6 +487,7 @@ const fb905Of = (r) => { const o = r.pxMin && r.pxMin['5']; if (o && Number(o.px
   const h = addHM(openHM(), 5 + lateOf()), t = ((curD() || {}).times || []).find((x) => hhmm(x) >= h && Number((r.px || {})[x]) > 0);
   return t ? { px: Number(r.px[t]), at: hhmm(t), src: `${hmS(h)} 값 없음 · ${hmS(hhmm(t))} 칸 값으로 대체` } : null; };
 function calcDay(d) {
+  HYPO = new WeakMap();   // 보기만 줄 가정 매수는 이번 셈에서만
   const S = st.set;
   // 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것으로 — 셈 · 돈 나누기에서 뺌(11-20 qa 덧 → 재권님 「가」)
   const boughtOf = (r) => { const B = buyOf(r); return B && S.endAt && B.at >= S.endAt ? null : B; };
