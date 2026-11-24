@@ -3081,6 +3081,9 @@ def board(proxy, day=None, cfg=None):
     return b
 
 
+_or_last = {}                 # {날: {code: (상승률, 셈한 시각)}} — 정규장 중 마지막으로 센 상승률(장 뒤 · 시세가 통합으로 넘어간 뒤 읽을 때 씀 · 서버 메모리)
+
+
 def open_rise_now(proxy, cfg, b):
     """그날 판 줄(rows · 빠진 줄 outRows)의 시가 대비 등락률(openRise)을 읽을 때마다 지금 값으로 — 지금 값 ÷ 오늘 시가 · 시세 캐시 나이 안이면 캐시.
     재권님 「시가대비 등락률인데 등락이 바뀔때마다 값이 여기에 적용되어야해」(11-24 11:3x) — 전에는 판 다시 세기가 멈추는 10:30 값에 굳어 있었다.
@@ -3088,15 +3091,25 @@ def open_rise_now(proxy, cfg, b):
     rows = (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or [])
     if not rows:
         return 0
+    last = _or_last.setdefault(b["day"], {})
+    if proxy.quote_market_div() != "J":            # 정규장 밖 — 시세가 통합(UN)으로 넘어가 시가가 08:00 프리장 첫 값이 됨 → 정규장 중 마지막 셈 값(없으면 저장값)
+        for r in rows:
+            if r["code"] in last:
+                r["openRise"] = last[r["code"]][0]
+        at = max((v[1] for v in last.values()), default=None)
+        b["meta"]["openRiseAt"] = at
+        return 0
     q, _ = proxy.fetch_quotes_multi(cfg, [r["code"] for r in rows], max_age=proxy.PRICE_CACHE_TTL)
-    n = 0
+    n, now_s = 0, _now().strftime("%H:%M:%S")
     for r in rows:
         v = q.get(r["code"]) or {}
-        o, p = v.get("open"), v.get("price")             # 시가는 시세의 오늘 정규장 시가만 — 줄 open 칸은 08:00 프리장 첫 값인 줄이 있어 대신 쓰지 않음(qa 덧 · 33줄)
+        o, p = v.get("open"), v.get("price")             # 시가는 시세의 오늘 정규장(KRX · quote_market_div J) 시가만 — 줄 open 칸은 08:00 프리장 첫 값인 줄이 있어 대신 쓰지 않음(qa 덧 · 33줄)
         r["openRise"] = round((p / o - 1) * 100, 2) if o and p else None
-        n += r["openRise"] is not None
-    b["meta"]["openRiseAt"] = _now().strftime("%H:%M:%S")
-    b["meta"]["openRiseNote"] = "시가 대비 등락률 = 지금 값 ÷ 오늘 시가 — 그날 판은 읽을 때마다 새로(시세 캐시 나이 안) · 지난 판은 저장된 값(09:05 봉 시가 ÷ 09:00 봉 시가)"
+        if r["openRise"] is not None:
+            last[r["code"]] = (r["openRise"], now_s)
+            n += 1
+    b["meta"]["openRiseAt"] = now_s
+    b["meta"]["openRiseNote"] = "시가 대비 등락률 = 지금 값 ÷ 오늘 정규장 시가(KRX · 남들이 보는 시세 값) — 그날 판은 정규장 중 읽을 때마다 새로(시세 캐시 나이 안) · 정규장 뒤는 마지막 셈 값 · 지난 판은 저장된 값(09:05 봉 시가 ÷ 09:00 봉 시가) · 차트 1분봉은 통합(UN) 값이라 테스처럼 갈릴 수 있음"
     return n
 
 
