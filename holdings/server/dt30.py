@@ -415,6 +415,8 @@ PRE_LOG_FROM, PRE_LOG_TO = (8, 0), (8, 50)
 _PL_SCHEMA = ("CREATE TABLE IF NOT EXISTS dt30_pre_log (day TEXT NOT NULL, hm TEXT NOT NULL, code TEXT NOT NULL, data TEXT NOT NULL, "
               "PRIMARY KEY (day, hm, code))")
 PF_KEYS = ("price", "pct", "amt", "vol", "ratio", "program")
+PRE_LOG_KEEP_DAYS = 366       # 프리장 기록을 남기는 날 수(달력) — 그보다 앞 날은 그날 처음 적을 때 지운다 · 재권님 「전부다 1년을 쌓는다」(11-23) · 개념정의 덧 11-24
+_pl_pruned = {"day": None}
 
 
 def pre_log_put(proxy, hit, pf_rows, now=None):
@@ -441,6 +443,10 @@ def pre_log_put(proxy, hit, pf_rows, now=None):
     with proxy._db_lock, proxy.db_conn() as conn:
         conn.execute(_PL_SCHEMA)
         conn.executemany("INSERT OR REPLACE INTO dt30_pre_log (day, hm, code, data) VALUES (?,?,?,?)", out)
+        if _pl_pruned["day"] != day:                   # 하루 한 번 — 남기는 날 수를 넘은 앞 날 지움
+            cut = (now - timedelta(days=PRE_LOG_KEEP_DAYS)).strftime("%Y%m%d")
+            conn.execute("DELETE FROM dt30_pre_log WHERE day < ?", (cut,))
+            _pl_pruned["day"] = day
     return len(out)
 
 
