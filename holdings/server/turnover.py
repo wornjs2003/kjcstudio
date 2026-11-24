@@ -214,6 +214,7 @@ def fill(rows, prices=None, proxy=None):
     proxy 를 주면 전날 같은 시각 칸 · 전날 하루 값과 견준다(없으면 그 칸 null)."""
     import company_profile
     fl = company_profile.floats()
+    fsrc = company_profile.floats_src()                # 풀린 주식수가 어디서 왔나(dart · naver · 어림 둘 · 11-24)
     now = _now()
     day = now.strftime("%Y%m%d")
     codes = [r["code"] for r in rows]
@@ -227,6 +228,7 @@ def fill(rows, prices=None, proxy=None):
         value = p.get("value") if p else r.get("value")
         f = fl.get(r["code"])
         r["floatCap"], r["turn"] = calc(price, value, f)
+        r["floatSrc"] = fsrc.get(r["code"])
         r["turnPrevPct"], r["turnPrevSrc"] = turn_prev(r["turn"], prev.get(r["code"]), f, stt.get(r["code"]))
         _trade(r, p.get("volume") if p else None, value, prev.get(r["code"]), pend.get(r["code"]),
                stt.get(r["code"], {}) if prices is not None else stt.get(r["code"]))
