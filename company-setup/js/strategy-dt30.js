@@ -566,9 +566,10 @@ const live = d.flat930 ? live0.map((r, i) => [r, nthChipAt(r) || '9999', i]).sor
   let rowsF = rows0.filter(fOk); FILL = new WeakSet(); let fillAdd = 0;
   // 칩 N개 종목이 모자라면 N−1개로 채움(11-24 재권님 「칩이 n개인데 5개가 안되면 n-1개로 가는것도 있으면 좋을거같은데」 → 「채움 채우지않음 선택되게해줘」)
   //   칩 N개 종목을 먼저 · 모자란 만큼 칩 N−1개 종목을 N−1번째 칩이 찬 시각별로 뒤에 붙임 · N−2 로는 안 내려감 · 채운 줄은 사는 순간도 N−1번째 칩이 찬 때
-  if (S.fill && S.minChip > 1 && Number(S.fillN) > 0 && rowsF.length < Number(S.fillN)) {
+  // 채움 목표 = 「총 ( )만원 ÷ 상위 ( )종목」 칸(top) — 상위 N 에서 모자란 만큼(11-24 재권님 「가 상위종목에 지정된 숫자에서 부족한 숫자만큼」 · 채움 칸 종목 수 fillN 은 걷음)
+  if (S.fill && S.minChip > 1 && Number(S.top) > 0 && rowsF.length < Number(S.top)) {
     const add = rows1.filter((r) => nEver(r) === S.minChip - 1 && fOk(r)); add.forEach((r) => FILL.add(r));
-    const pick = add.map((r, i) => [r, nthChipAt(r) || '9999', i]).sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[2] - b[2])).map((x) => x[0]).slice(0, Number(S.fillN) - rowsF.length);
+    const pick = add.map((r, i) => [r, nthChipAt(r) || '9999', i]).sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[2] - b[2])).map((x) => x[0]).slice(0, Number(S.top) - rowsF.length);
     add.forEach((r) => { if (!pick.includes(r)) FILL.delete(r); }); fillAdd = pick.length; rowsF = rowsF.concat(pick); }
   const rowsG = st.grp && grpOn ? rowsF.filter((r) => grpHas(r, st.grp)) : rowsF;   // 섹터 · 테마 칸에서 누른 묶음만(11-24 · 칸 셈은 거르기 전 rowsF) · 본 표 그릴 때만(grpOn) — 칩별 승률 · 기간 줄 날마다 차익에는 안 듦(개념정의 덧 14:32)
   // 묶음(09:30 까지 찬 / 뒤에 찬 · 더한 줄)은 그대로 두고 그 안에서 높은 순 — 묶음 차례는 본디 차례에서 처음 나온 순(재권님 「09:30 뒤에 찬 종목」 은 그 뒤에 사는 묶음이라)
@@ -685,7 +686,7 @@ function paint0(d) {
   const bm = d.meta || {}, nm = (a) => names(a).join(' · ');   // 되채운 날 · 못 받은 칩 — 칩 이름은 서버가 준 그대로
   const rebuilt = bm.rebuilt === true ? ` · 되채운 날${nm(bm.missing) ? ` · ${nm(bm.missing)} 못 셈` : ''}${nm(bm.approx) ? ` · ${nm(bm.approx)} 어림` : ''}` : `${nm(bm.missing) ? ` · 못 받은 칩 ${nm(bm.missing)}` : ''}${nm(bm.early) ? ` · ${nm(bm.early)} 어림(집계 전)` : ''}${bm.late && typeof bm.late === 'object' && Object.keys(bm.late).length ? ` · 늦게 채움 ${Object.entries(bm.late).map(([k, v]) => `${k} ${v}`).join(' · ')}` : ''}`;
   $('dt-meta').textContent = `${dayTxt(d.day)}${rebuilt}${C.fb905 ? ' · 그날 룰로는 매매가 없어 여는 시각 + 5분(9:05 · 늦게 연 날은 그만큼 뒤)에 산 것으로 셈' : ''}${LIVE ? ` · 장중 실시간(${esc(String(d.nowAt || '—'))} 값 · 14:00 뒤 굳혀 저장)` : d.closed === true ? ' · 14:00 뒤 굳힌 값' : ''} · 후보 ${num(all.length)} 중 켜진 칩에 걸린 ${num(live.length)} · 보이는 ${num(rows.length)} · ${d.flat930 && buyKey() === 'p1' ? `줄 = 켠 칩 ${chipNeed()}개 먼저 찬 순(${chipUntil()} 앞 · 뒤로 가름) · 매수가 = 찬 때 값(줄마다 매수가 칸 아래)` : d.buyAt ? (st.openAt ? `${hmTxt(d.buyAt)} 부터 판 · 매수가 = 정규장 ${hmTxt(String(st.openAt).replace(':', ''))} 시가` : `${hmTxt(d.buyAt)} 매수`) : '매수 시각 —'} · 판 것 ${sold.length}(손절 ${sold.filter((x) => x.s.why === '손절').length} · 꺾임 ${sold.filter((x) => x.s.why === '꺾임').length} · 고점 ${sold.filter((x) => x.s.why === '고점').length} · 산 뒤 ${st.set.cutMin}분 미달 ${sold.filter((x) => x.s.why === '미달').length}${st.set.flat ? ` · 횡보 ${sold.filter((x) => x.s.why === '횡보').length}` : ''}${st.set.endAt ? ` · ${hmTxt(st.set.endAt)} 매도 시각 ${sold.filter((x) => x.s.why === '매도 시각').length}` : ''}) · 끝까지 들고 감 ${R.length - sold.length} · 결과 평균 ${sgn(resAvg)} · 이긴 것 ${res.filter((v) => v > 0).length} · 진 것 ${res.filter((v) => v < 0).length}`;
-  if (C.fillAdd) $('dt-meta').textContent += ` · 칩 ${st.set.minChip}개 종목이 ${st.set.fillN}종목이 안 돼 칩 ${st.set.minChip - 1}개 종목 ${C.fillAdd}개로 채움`;   // 11-24
+  if (C.fillAdd) $('dt-meta').textContent += ` · 칩 ${st.set.minChip}개 종목이 상위 ${st.set.top}종목이 안 돼 칩 ${st.set.minChip - 1}개 종목 ${C.fillAdd}개로 채움`;   // 11-24
   if (mkOn() && KX.bars && !mkHas(d.day)) $('dt-meta').textContent += ' · 이 날 코스피 값 없음 — 코스피 조건 매도 줄 안 씀(맨 윗줄로 셈)';   // 11-24 개념정의 덧
   // 상위 몇 종목 · 금액은 이 줄에서 바로 넣는다(11-18 재권님 「상위종목 갯수넣을수 있게 금액도 넣을수 있게 … 이거 수정하면 일별로 다 값이 다시 적용되서 그달 총액 다시 정산되게」) — 바꾸면 그날 판 · 달 합계(monthPaint)가 같은 셈으로 다시 셈
   { const nob = rows.filter((r) => { const B = buyOf(r); return !B || (st.set.endAt && B.at >= st.set.endAt); }).length   /* 매도 시각보다 늦게 든 종목도 안 삼(calc 의 boughtOf 와 같은 셈) */; if (nob) $('dt-meta').textContent = $('dt-meta').textContent.replace(/끝까지 들고 감 (\d+)/, (m, k) => `끝까지 들고 감 ${+k - nob} · 안 삼 ${nob}`); }   // 안 산 종목(고른 시각 뒤에 듦 · 값 없음)은 들고 간 것이 아님 — 따로 셈(11-20)
@@ -1156,9 +1157,9 @@ function setFill() {
   { const g = $('dt-lkgrid'), W = winsOf(), sig = JSON.stringify(W); if (g && g.dataset.sig !== sig && !g.contains(document.activeElement)) { g.innerHTML = ''; g.dataset.sig = sig;   /* 굳힘 없앰(11-23) — 굳힘 · 창 설정 표를 안 그림 · lkGridHtml 은 되돌릴 때 쓰려고 남김 */ g.style.gridTemplateColumns = W ? 'auto auto auto' : 'auto auto auto auto auto auto'; } }   // 창 여섯 · 옛 판은 굳힘 넷
   const v = { minChip: S.minChip || '', top: S.top, won: (S.mode === 'day' ? S.dayWon : S.perWon) / 10000, grpWon: (S.grpWon > 0 ? S.grpWon : S.dayWon) / 10000, stop: S.stop == null ? '' : S.stop, trail: S.trail == null ? '' : S.trail, turnPct: S.turnPct || '', cutMin: S.cutMin ?? '', flatMin: S.flatMin ?? '', flatPct: S.flatPct ?? '', endAt: S.endAt ? hmTxt(S.endAt) : '', cutPct: S.cutPct ?? '', lock0: (S.lockAt || [])[0] || '', lock1: (S.lockAt || [])[1] || '', lock2: (S.lockAt || [])[2] || '' };
   ORD_KEYS.forEach(([k]) => { v[`ord:${k}`] = (S.ordScore || {})[k] ?? ''; });
-  v.fillN = S.fillN ?? ''; v.ruleMin = S.ruleMin ?? ''; v.turnMin = S.turnMin || '';   // 매수 룰 정의(11-24)
+  v.ruleMin = S.ruleMin ?? ''; v.turnMin = S.turnMin || '';   // 매수 룰 정의(11-24)
   box.querySelectorAll('.dt-fill-n').forEach((e) => { e.textContent = S.minChip > 0 ? String(S.minChip) : ' '; }); box.querySelectorAll('.dt-fill-m').forEach((e) => { e.textContent = S.minChip > 1 ? String(S.minChip - 1) : ' '; }); box.querySelectorAll('[data-fill]').forEach((b) => b.classList.toggle('is-active', (b.dataset.fill === '1') === !!S.fill));   // 칩 모자라면 채움(11-24)   // 매수 메시지 보내기(11-24)
-  box.querySelectorAll('.dt-send-n').forEach((e) => { e.textContent = S.minChip > 0 ? String(S.minChip) : ' '; }); box.querySelectorAll('.dt-send-u').forEach((e) => { e.textContent = chipUntil(); });
+  box.querySelectorAll('.dt-send-n').forEach((e) => { e.textContent = S.minChip > 0 ? String(S.minChip) : ' '; }); box.querySelectorAll('.dt-top-n').forEach((e) => { e.textContent = S.top > 0 ? String(S.top) : ' '; });   // 채움 목표 = 상위 N(11-24) box.querySelectorAll('.dt-send-u').forEach((e) => { e.textContent = chipUntil(); });
   ['up', 'dn'].forEach((sd) => { const L = (S.mk || {})[sd] || {}; v[`mk:${sd}:pct`] = L.pct ?? ''; v[`mk:${sd}:stop`] = L.stop ?? ''; });   // 코스피 조건 줄(11-24)
   [0, 1, 2, 3, 4, 5].forEach((i) => { const gw = (S.grpWons || [])[i]; v[`gw${i}`] = gw > 0 ? gw / 10000 : ''; v[`gn${i}`] = (S.lockNs || [])[i] ?? ''; v[`gc${i}`] = (S.lockMinChip || [])[i] ?? ''; });   // 굳힘 칸마다(11-23)   // 종목 차례 점수(11-23)
   box.querySelectorAll('[data-set]').forEach((el) => { if (document.activeElement !== el) el.value = String(v[el.dataset.set] ?? ''); });
@@ -1251,7 +1252,6 @@ function setRead(el) {
   const v = raw === '' ? null : Number(raw);
   if (v != null && !Number.isFinite(v)) return bad('숫자만');
   if (k === 'ruleMin') { if (v != null && (!Number.isInteger(v) || v < RULE_MIN_LO || v > RULE_MIN_HI)) return bad(`${RULE_MIN_LO}~${RULE_MIN_HI} 정수(분) · 빈칸 = ${RULE_MIN_DEF}분`); S.ruleMin = v; return S; }   // 매수 룰 기준 시각(11-24)
-  if (k === 'fillN') { if (v != null && (!Number.isInteger(v) || v < 1)) return bad('1 이상 정수 · 빈칸 = 안 채움'); S.fillN = v; return S; }   // 11-24
   if (k === 'turnMin' || k === 'volMin') { if (v != null && v < 0) return bad('0 이상 % · 빈칸 = 안 거름'); S[k] = v || 0; return S; }   // 11-24
   if (k === 'floatMax') { if (v != null && v < 0) return bad('0 이상 억 · 빈칸 = 전체'); S.floatMax = v || 0; return S; }
   if (k === 'minChip') { if (v != null && (v < 0 || !Number.isInteger(v))) return bad('0 이상 정수'); S.minChip = v || 0; }
@@ -1332,7 +1332,7 @@ function winRules(days) {   // days — 승률 표가 셈한 날(코스피 값 �
   return [
     ['칩', [['켜진 칩', onC.join(' · ') || '없음'], ['꺼 둔 칩', [...offC, ...subOff].join(' · ') || '없음']]],
     ['종목 차례', [['점수', ord || '빈칸(칩 수 → 초반상승 → 시가총액)']]],
-    ['매수', [['칩 개수', S.minChip ? `${S.minChip}개 이상` : '전체'], ['칩 모자라면', !(S.fill && S.minChip > 1) ? '채우지 않음' : S.fillN ? `채움(${S.fillN}종목이 안 되면 칩 ${S.minChip - 1}개 종목으로)` : '안 채움(종목 수 빔)'], ['상승률 순위', S.riseRank !== false ? '켬(09:05 까지 1분 값 높은 순)' : '끔(단타 순)'], ['09:30 뒤에 찬 종목', S.buyLate930 ? '삼' : '안 삼'],
+    ['매수', [['칩 개수', S.minChip ? `${S.minChip}개 이상` : '전체'], ['칩 모자라면', !(S.fill && S.minChip > 1) ? '채우지 않음' : S.top ? `채움(상위 ${S.top}종목이 안 되면 칩 ${S.minChip - 1}개 종목으로)` : '안 채움(상위 종목 수 빔)'], ['상승률 순위', S.riseRank !== false ? '켬(09:05 까지 1분 값 높은 순)' : '끔(단타 순)'], ['09:30 뒤에 찬 종목', S.buyLate930 ? '삼' : '안 삼'],
     ['유통 대비 거래', S.turnOn && S.turnMin > 0 ? `${S.turnMin}% 이상` : S.turnOn ? '안 거름(% 빔)' : '끔'], ['전일 거래량 대비 지금 거래량(프리장 빠짐)', S.volOn && S.volMin > 0 ? `${S.volMin}% 이상 · ${hmTxt(volFrom())} 부터` : S.volOn ? '안 거름(% 빔)' : '끔'],
     ['매수', (() => { const B = BUYS.find(([k]) => k === buyKey()); return B ? buyName(B[0], B[1]) : '( )'; })()], ['불타기', on(S.pyr)]]],
     ['매도', [['매도 봉', S.sellBar === '1m' ? '1분' : S.sellBar === '5m' ? '5분' : '30분'], ['손절', S.stop == null || S.stop === '' ? '안 함' : `${S.stop}%`],
@@ -1422,19 +1422,19 @@ const TPL = `
               </div>
               <div class="dt-set-buy" style="flex:1 1 360px;min-width:0;word-break:keep-all;display:flex;flex-direction:column;gap:4px;padding:8px 12px;border-radius:var(--kh-radius-sm);background:var(--kh-bg-card)"><b style="font-size:12px">매수</b>
                 <label class="dt-fee">칩 <input data-set="minChip" class="rl-in rl-num" inputmode="numeric" aria-label="칩 몇 개 이상만">개 이상 <span class="rl-sug">빈칸 = 전체</span></label>
-                <label class="dt-fee" data-tip="칩 N개 종목을 먼저 사고, 모자란 만큼 칩 하나 적은 종목을 그 칩이 찬 시각별로 더합니다 · 그래도 모자라면 거기까지(두 개 적은 것으로는 안 내려감) · 채우지 않음이면 칩 N개 종목만 · 저장 단추로 남김">칩 (<span class="dt-fill-n">—</span>)개 찬 종목이 <input data-set="fillN" class="rl-in rl-num" inputmode="numeric" placeholder="( )" aria-label="몇 종목이 안 되면 채움">종목이 안 되면 칩 (<span class="dt-fill-m">—</span>)개 종목으로 <span class="dt-seg"><button type="button" class="kh-chip" data-fill="1">채움</button><button type="button" class="kh-chip" data-fill="0">채우지 않음</button></span></label>
+                <label class="dt-fee" data-tip="칩 N개 종목을 먼저 사고, 모자란 만큼 칩 하나 적은 종목을 그 칩이 찬 시각별로 더합니다 · 그래도 모자라면 거기까지(두 개 적은 것으로는 안 내려감) · 채우지 않음이면 칩 N개 종목만 · 저장 단추로 남김">칩 (<span class="dt-fill-n">—</span>)개 찬 종목이 상위 (<span class="dt-top-n">—</span>)종목이 안 되면 칩 (<span class="dt-fill-m">—</span>)개 종목으로 <span class="dt-seg"><button type="button" class="kh-chip" data-fill="1">채움</button><button type="button" class="kh-chip" data-fill="0">채우지 않음</button></span></label>
                 <label class="dt-fee" data-tip="칩 수가 09:30 뒤에 찬 종목(판 아래 「09:30 뒤에 찬 종목」 묶음)을 살지 정합니다 · 안 삼이면 그 줄은 판에 남고 손익 셈에서 빠집니다 · 저장 단추로 남김">09:30 뒤에 찬 종목 <span class="dt-seg"><button type="button" class="kh-chip" data-late="1">삼</button><button type="button" class="kh-chip" data-late="0">안 삼</button></span></label>
                 <label class="dt-fee" data-tip="고른 때 값에 삽니다 · 그 값이 없는 종목은 안 삽니다 · 파는 룰은 산 뒤 30분 칸(09:30 · 10:00 …)부터">매수 <span class="dt-seg">${BUYS.map(([k, t]) => `<button type="button" class="kh-chip" data-buy="${k}">${t}</button>`).join('')}</span></label>
                 <label class="dt-fee" data-tip="손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삽니다 · 더 산 몫은 그 종목을 팔 때 함께 팝니다">불타기 <span class="dt-seg"><button type="button" class="kh-chip" data-pyr="1">켬</button><button type="button" class="kh-chip" data-pyr="0">끔</button></span></label>
                 <!-- 매수 메시지 보내기 칸(sendFrom · sendN)은 11-24 걷음 — 재권님 「가」(새 매수 룰이 돌면 없애고 사는 종목 수는 「칩 모자라면 채움」 칸 하나) · 서버 e07cd5e 가 더는 안 읽음 -->
-                <!-- 매수 룰 정의(11-24 재권님 「이거 추가해서 다 정리하고 정리한거 단타에다가 매수룰정의에 넣어줘 접기로해서」 → 「매수룰을 여기안에 접기로 넣어줄래? 언제든 수정가능하도록 대비해놓」) — 정한 룰 글 · 칩 수는 위 칸 값(minChip)을 글로만 · ( ) 칸은 셈 칸 값과 같은 열쇠(fillN · turnMin)라 어디서 바꿔도 같음 · 기준 시각(set.ruleMin · 여는 시각 + 분)만 새 열쇠 · 판 셈 · 서버는 아직 이 룰대로 안 돎 · 3번 다음 상위 — 재권님 「상승률이 우선이고 유통대비거래는 조건이야」 -->
+                <!-- 매수 룰 정의(11-24 재권님 「이거 추가해서 다 정리하고 정리한거 단타에다가 매수룰정의에 넣어줘 접기로해서」 → 「매수룰을 여기안에 접기로 넣어줄래? 언제든 수정가능하도록 대비해놓」) — 정한 룰 글 · 칩 수는 위 칸 값(minChip)을 글로만 · 사는 종목 수는 상위 ( )종목 칸(top)을 글로만 · ( ) 칸은 셈 칸 값과 같은 열쇠(turnMin)라 어디서 바꿔도 같음 · 기준 시각(set.ruleMin · 여는 시각 + 분)만 새 열쇠 · 판 셈 · 서버는 아직 이 룰대로 안 돎 · 3번 다음 상위 — 재권님 「상승률이 우선이고 유통대비거래는 조건이야」 -->
                 <details class="dt-win dt-buydef" id="dt-buydef"><summary>매수 룰 정의 (11-24 정함)</summary><div class="dw-body dt-rdef"><ol>
                   <li><b>기준 시각</b> — 여는 시각 + <input data-set="ruleMin" class="rl-in rl-num dt-send-in" inputmode="numeric" placeholder="( )" aria-label="기준 시각 — 여는 시각 몇 분 뒤">분 · ${RULE_MIN_LO}~${RULE_MIN_HI}분 · 빈칸 = ${RULE_MIN_DEF}분(보통 날 09:05) · 늦게 연 날은 여는 시각부터 세어 저절로 밀림</li>
                   <li><b>기준 시각 전</b> — 칩 (<span class="dt-send-n">—</span>)개가 찬 순간 삼 <span class="rl-sug">위 「칩 ( )개 이상」 값</span> · 서버에 알리고 텔레그램 「○○ 매수하세요」 가 바로 감 · 판에는 찬 순서대로 위에서부터</li>
-                  <li><b>기준 시각에</b> — 찬 종목이 <input data-set="fillN" class="rl-in rl-num dt-send-in" inputmode="numeric" placeholder="( )" aria-label="사는 종목 수">종목에 모자라면 칩이 하나 모자란 종목 중 다음 상위로 채워 그 시각에 삼 · 텔레그램 · 2번 종목 바로 아래<br>다음 상위 — 유통 대비 거래 <input data-set="turnMin" class="rl-in rl-num dt-send-in" inputmode="decimal" placeholder="( )" aria-label="유통 대비 거래 몇 %">% 이상은 조건(넘은 종목만) · 그 안에서 상승률 높은 순 · 같으면 칩 개수 많은 순</li>
+                  <li><b>기준 시각에</b> — 찬 종목이 상위 (<span class="dt-top-n">—</span>)종목에 모자라면 칩이 하나 모자란 종목 중 다음 상위로 채워 그 시각에 삼 · 텔레그램 · 2번 종목 바로 아래<br>다음 상위 — 유통 대비 거래 <input data-set="turnMin" class="rl-in rl-num dt-send-in" inputmode="decimal" placeholder="( )" aria-label="유통 대비 거래 몇 %">% 이상은 조건(넘은 종목만) · 그 안에서 상승률 높은 순 · 같으면 칩 개수 많은 순</li>
                   <li><b>기준 시각 뒤에 찬 종목</b> — 사지 않음 · 텔레그램 안 감</li>
                   <li><b>산 뒤</b> — 순위는 그대로 · 더 붙은 칩은 배지에 「+n」 으로 따로</li>
-                  <li><b>서버에 보내는 룰</b> — 기준 시각 · 칩 개수 · 사는 종목 수 · 유통 대비 거래 % · 사는 종목 수는 3번 칸 하나 — 「매수 메시지 보내기」 칸은 없앰(11-24 재권님 「가」) · 텔레그램은 위에서 차례대로 「총 ( )만원 ÷ 상위 ( )종목」 칸의 상위 N 까지만 감(11-24 재권님 「위에서 순서대로 지정된 숫자만」 · 서버 60258ff)</li>
+                  <li><b>서버에 보내는 룰</b> — 기준 시각 · 칩 개수 · 사는 종목 수 · 유통 대비 거래 % · 사는 종목 수는 「총 ( )만원 ÷ 상위 ( )종목」 칸 하나 — 채움도 텔레그램도 그 상위 N 까지(채움 칸 종목 수는 걷음 · 11-24 재권님 「가 상위종목에 지정된 숫자에서 부족한 숫자만큼」) · 「매수 메시지 보내기」 칸은 없앰(11-24 재권님 「가」) · 텔레그램은 위에서 차례대로 상위 N 까지만 감(11-24 재권님 「위에서 순서대로 지정된 숫자만」 · 서버 60258ff)</li>
                   <li><b>전일 거래량 대비</b> — 화면 보기에만 · 서버에 안 보냄 · 장 시작 25분 뒤(보통 09:25)부터 걸려, 기준 시각이 그 앞이면 매수에는 안 걸림</li>
                   <li><b>보기 둘</b> — 서버 순위(실제로 보낸 차례 · 화면 체크로 안 바뀜) / 내 화면 체크(지금 켠 칩 · 거르기로 다시 셈)</li>
                 </ol><div class="rl-sug">칩 수는 위 「칩 ( )개 이상」 을 가져다 씀 · 종목 수 · 유통 대비 거래 칸은 위 셈 칸 · 종목 머리 칸과 같은 값 — 어디서 바꿔도 함께 바뀜 · 저장 단추로 남김 · 지금 상태 — 정의만 적었음 · 서버 텔레그램은 이 룰대로 보냄(개발2 · 8765 재시작 뒤) · 판 셈은 아직 이 룰대로 돌지 않음(화면 시황분석1 만드는 중)</div></div></details>
