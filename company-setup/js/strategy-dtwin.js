@@ -15,7 +15,7 @@ const hm = (t) => (/^\d{4}$/.test(String(t)) ? `${String(t).slice(0, 2)}:${Strin
 
 const TABS = [['chip', '칩 하나'], ['pair', '칩 둘'], ['triple', '칩 셋'], ['count', '칩 개수'], ['countRise', '현재상승 든 종목 · 칩 개수'], ['days', '날마다']];
 const KEY = { chip: '칩', pair: '칩 둘', triple: '칩 셋', count: '칩 개수', countRise: '칩 개수(현재상승 든 종목만)' };
-let data = null, meta = null, tab = 'chip', busy = false;
+let data = null, meta = null, tab = 'chip', busy = false, local = null, step = '';   // local — 단타 판이 넘긴 화면 셈(11-24 · 있으면 서버 표 대신)
 
 const head = (k) => `<tr><th class="dw-l">${k}</th><th>종목</th><th>이김</th><th>승률</th><th>평균</th><th>중앙값</th><th>+${num(meta && meta.bigPct, 0)}% 넘음</th><th>못 잼</th></tr>`;
 const cells = (g) => `<td>${num(g.n)}</td><td>${num(g.win)}</td><td><b>${g.winRate == null ? '—' : `${num(g.winRate, 1)}%`}</b></td><td>${pct(g.avg)}</td><td>${pct(g.median)}</td><td>${num(g.over3)}</td><td class="dw-mut">${num(g.unmeasured)}</td>`;
@@ -33,8 +33,15 @@ function table() {
 
 function paint(box) {
   const body = box.querySelector('.dw-body');
-  if (!data) { body.innerHTML = `<div class="st-err">— ${busy ? '받는 중' : '칩별 승률을 못 받음'}</div>`; return; }
+  if (!data) { body.innerHTML = `<div class="st-err">— ${busy ? `받는 중${step}` : '칩별 승률을 못 받음'}</div>`; return; }
   const m = meta || {};
+  if (m.local) {   // 화면 셈 — 지금 셈 칸 그대로(11-24)
+    body.innerHTML = `<div class="st-cap">${dayTxt(m.from)} ~ ${dayTxt(m.to)} · ${num(m.days)}거래일${m.miss ? ` · 판 못 받은 날 ${num(m.miss)}` : ''} · <b>지금 셈 칸 · 켜진 칩 · 매수 · 매도 룰 그대로 화면이 셈</b>(저장 안 해도 고친 대로 · 접었다 펴면 다시 셈) · 세후 %(팔 때 거래세 · 농특세 · 수수료 ${m.fee == null ? '안 셈' : `${num(m.fee, 3)}%`}) · ${m.minChips ? `칩 ${num(m.minChips)}개 이상 · ` : ''}판에 드는 종목만 · 이김 = 세후 0 보다 큼 · 지난 날은 칩이 처음 붙은 때만 남아 빠졌다 다시 붙은 칩은 못 가름</div>
+    ${Array.isArray(m.rules) && m.rules.length ? `<div class="st-cap"><b>셈한 룰</b>${m.rules.map(([g, xs]) => `<br>${esc(g)} — ${(xs || []).map(([k, t]) => `${esc(k)} <b>${esc(t)}</b>`).join(' · ')}`).join('')}</div>` : ''}
+    <div class="dt-seg dw-tabs" role="tablist" aria-label="칩별 승률 묶음">${TABS.map(([k, t]) => `<button type="button" class="kh-chip${k === tab ? ' is-active' : ''}" data-dw="${k}">${t}</button>`).join('')}</div>
+    <div class="st-scroll dw-tw wheel-stop">${table()}</div>`;
+    return;
+  }
   const fee = m.fee == null ? '수수료 안 셈' : `수수료 ${num(m.fee, 3)}%(${esc(m.feeSides || '')})`;
   body.innerHTML = `<div class="st-cap">${dayTxt(m.from)} ~ ${dayTxt(m.to)} · ${num(m.days)}거래일 · 세후 %(팔 때 거래세 + 농특세) · ${fee} · ${m.minChips ? `칩 ${num(m.minChips)}개 이상 든 종목만 · ` : ''}그날 판 매수가(11-18 판부터 09:00 시가 · 그 전 09:01) → ${hm(m.sell)} 값에 팜 · 이김 = 세후 0 보다 큼 · 못 잼 = 그 시각 값이 없음(승률 셈에서 뺌) · 서버가 ${esc(m.filledAt || '—')} 에 셈</div>
     <div class="dt-seg dw-tabs" role="tablist" aria-label="칩별 승률 묶음">${TABS.map(([k, t]) => `<button type="button" class="kh-chip${k === tab ? ' is-active' : ''}" data-dw="${k}">${t}</button>`).join('')}</div>
@@ -42,7 +49,8 @@ function paint(box) {
 }
 
 async function load(box) {
-  busy = true; paint(box);
+  busy = true; step = ''; paint(box);
+  if (local) { try { const o = await local((k, n) => { step = ` · 날마다 판 ${k}/${n}`; paint(box); }); data = o.data; meta = o.meta; } catch (e) { data = null; } busy = false; paint(box); return; }
   try {
     const r = await fetch(API, { cache: 'no-store' });
     const j = r.ok ? await r.json() : null;
@@ -52,8 +60,9 @@ async function load(box) {
 }
 
 // 단타 판이 그릴 때마다 새 칸에 붙임 — 처음 열 때만 받음
-export function bindWin(box) {
+export function bindWin(box, calcLocal) {
   if (!box) return;
-  box.addEventListener('toggle', () => { if (box.open && !data && !busy) load(box); else if (box.open) paint(box); });
+  local = calcLocal || null;
+  box.addEventListener('toggle', () => { if (box.open && !busy && (local || !data)) load(box); else if (box.open) paint(box); });   // 화면 셈이면 펼 때마다 지금 셈 칸으로 다시 셈
   box.addEventListener('click', (e) => { const b = e.target.closest('[data-dw]'); if (!b || b.dataset.dw === tab) return; tab = b.dataset.dw; paint(box); });
 }
