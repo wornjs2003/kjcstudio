@@ -36,7 +36,7 @@ function paint(box) {
   if (!data) { body.innerHTML = `<div class="st-err">— ${busy ? `받는 중${step}` : '칩별 승률을 못 받음'}</div>`; return; }
   const m = meta || {};
   if (m.local) {   // 화면 셈 — 지금 셈 칸 그대로(11-24)
-    body.innerHTML = `<div class="st-cap">${dayTxt(m.from)} ~ ${dayTxt(m.to)} · ${num(m.days)}거래일${m.miss ? ` · 판 못 받은 날 ${num(m.miss)}` : ''} · <b>지금 셈 칸 · 켜진 칩 · 매수 · 매도 룰 그대로 화면이 셈</b>(저장 안 해도 고친 대로 · 접었다 펴면 다시 셈) · 세후 %(팔 때 거래세 · 농특세 · 수수료 ${m.fee == null ? '안 셈' : `${num(m.fee, 3)}%`}) · ${m.minChips ? `칩 ${num(m.minChips)}개 이상 · ` : ''}판에 드는 종목만 · 이김 = 세후 0 보다 큼 · 지난 날은 칩이 처음 붙은 때만 남아 빠졌다 다시 붙은 칩은 못 가름</div>
+    body.innerHTML = `<div class="st-cap">${dayTxt(m.from)} ~ ${dayTxt(m.to)} · ${num(m.days)}거래일${m.miss ? ` · 판 못 받은 날 ${num(m.miss)}` : ''}${m.openDay ? ` · <b>${dayTxt(m.openDay)} 은 장중 값</b>(판이 안 닫혀 지금까지 값으로 셈 · 닫히면 바뀜)` : ''} · <b>지금 셈 칸 · 켜진 칩 · 매수 · 매도 룰 그대로 화면이 셈</b>(저장 안 해도 고친 대로 · 접었다 펴면 다시 셈) · 세후 %(팔 때 거래세 · 농특세 · 수수료 ${m.fee == null ? '안 셈' : `${num(m.fee, 3)}%`}) · ${m.minChips ? `칩 ${num(m.minChips)}개 이상 · ` : ''}판에 드는 종목만 · 이김 = 세후 0 보다 큼 · 지난 날은 칩이 처음 붙은 때만 남아 빠졌다 다시 붙은 칩은 못 가름</div>
     ${Array.isArray(m.rules) && m.rules.length ? `<div class="st-cap"><b>셈한 룰</b>${m.rules.map(([g, xs]) => `<br>${esc(g)} — ${(xs || []).map(([k, t]) => `${esc(k)} <b>${esc(t)}</b>`).join(' · ')}`).join('')}</div>` : ''}
     <div class="dt-seg dw-tabs" role="tablist" aria-label="칩별 승률 묶음">${TABS.map(([k, t]) => `<button type="button" class="kh-chip${k === tab ? ' is-active' : ''}" data-dw="${k}">${t}</button>`).join('')}</div>
     <div class="st-scroll dw-tw wheel-stop">${table()}</div>`;
