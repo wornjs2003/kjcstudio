@@ -1216,13 +1216,13 @@ async function winLocal(onStep) {
   const combo = (cs, m) => { const out = []; const go = (i, pick) => { if (pick.length === m) { out.push(pick.join(' + ')); return; } for (let j = i; j < cs.length; j++) go(j + 1, [...pick, cs[j]]); }; go(0, []); return out; };
   const S = st.set, days = ds.filter((d) => get(d)).map((d) => { const v = all.filter((x) => x.day === d); return { day: d, ...stat(v), top: v.filter((x) => x.ret != null).sort((a, b) => b.ret - a.ret).slice(0, WIN_TOP).map((x) => ({ name: x.name, ret: x.ret })) }; });
   return { data: { all: stat(all), chip: grp((x) => x.chips), pair: grp((x) => combo(x.chips, 2)), triple: grp((x) => combo(x.chips, 3)), count: grp((x) => [x.n]), countRise: grp((x) => [x.n], all.filter((x) => x.rise)), days },
-    meta: { local: true, from: ds[ds.length - 1], to: ds[0], days: days.length, miss: ds.length - days.length, bigPct: WIN_BIG, topDay: WIN_TOP, fee: st.fee, minChips: Number(S.minChip) || 0, sell: S.endAt ? String(S.endAt).replace(':', '') : '1400', rules: winRules() } };
+    meta: { local: true, from: ds[ds.length - 1], to: ds[0], days: days.length, openDay: ds.find((d) => { const D = get(d); return D && D.closed === false; }) || null, miss: ds.length - days.length, bigPct: WIN_BIG, topDay: WIN_TOP, fee: st.fee, minChips: Number(S.minChip) || 0, sell: S.endAt ? String(S.endAt).replace(':', '') : '1400', rules: winRules() } };
 }
 // 승률 표 머리에 적는 「셈한 룰」(11-24 재권님 「셈을 한 룰을 승률표에서 확인할수 있도록 해줘」) — 셈 칸 · 칩 켜고 끄기 값을 그대로 [묶음, [[이름, 값] …]] 으로 · 값은 st.set 한 곳에서 읽기만(따로 두지 않음)
 function winRules() {
   const S = st.set || {}, v = (x, u = '') => (x == null || x === '' ? '( )' : `${x}${u}`), on = (b) => (b ? '켬' : '끔');
   const cs = colsOf(), onC = cs.filter((c) => !st.off.has(c)), offC = cs.filter((c) => st.off.has(c)), subOff = [...st.subOff].map((k) => k.replace('|', ' 〉 '));
-  const tb = S.turnBy || 'both', turn = !S.turn ? '끔' : [tb !== 'peak' ? `앞 시각보다 ${v(S.turnPct || 0, '%')} 넘게 내리면` : '', tb !== 'prev' ? `고점보다 ${v(S.trail, '%')} 내리면` : ''].filter(Boolean).join(' · ');
+  const tb = S.turnBy || 'both', turn = !S.turn ? '끔' : [tb !== 'peak' ? `앞 시각보다 ${v(S.turnPct, '%')} 넘게 내리면` : '', tb !== 'prev' ? `고점보다 ${v(S.trail, '%')} 내리면` : ''].filter(Boolean).join(' · ');
   const ord = ORD_KEYS.filter(([k]) => (S.ordScore || {})[k]).map(([k, t]) => `${t} ${S.ordScore[k]}점`).join(' · ');
   return [
     ['칩', [['켜진 칩', onC.join(' · ') || '없음'], ['꺼 둔 칩', [...offC, ...subOff].join(' · ') || '없음']]],
