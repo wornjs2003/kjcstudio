@@ -114,7 +114,8 @@ let calcD = null;
 const curD = () => calcD || st.data;
 const DM = () => (curD() && curD().meta) || {};
 const addHM = (t, m) => { const x = +t.slice(0, 2) * 60 + +t.slice(2) + (m || 0); return `${String(Math.floor(x / 60)).padStart(2, '0')}${String(x % 60).padStart(2, '0')}`; };
-const openHM = () => { const o = String(DM().openAt || '').replace(':', ''); return /^\d{4}$/.test(o) ? o : '0900'; };
+const REG_OPEN_DEF = '0900';   // 보통 날 정규장 여는 시각 — 서버 판 meta.openAt 이 없는 판에서만(CLAUDE.md 「장 시각으로 셈하는 코드는 늦게 여는 날 그만큼 옮긴다」 3번)
+const openHM = () => { const o = String(DM().openAt || '').replace(':', ''); return /^\d{4}$/.test(o) ? o : REG_OPEN_DEF; };   // 서버가 주면 안 씀
 const viSplit = () => { const v = String(DM().viSplit || '').replace(':', ''); return /^\d{4}$/.test(v) ? v : VI_SPLIT; };   // 나누는 시각은 서버 한 곳 — 판 meta.viSplit(점수 셈과 같은 값 · 개발2 배분 중)이 오면 그 값 · 없으면 09:25(서버 점수와 같게 · 개념정의 267a17d 검수)
 const hmS = (t) => `${t.slice(0, 2)}:${t.slice(2)}`;
 const p1HM = () => { const o = String(DM().px1At || '').replace(':', ''); return /^\d{4}$/.test(o) && o > openHM() ? o : addHM(openHM(), 1); };   // 여는 시각보다 앞이면(늦게 연 날 옛 서버가 09:01 을 줌) 여는 시각 + 1분
@@ -330,7 +331,6 @@ async function kxLoad() {
   KX.busy = false; if (st.data && root) { paint(st.data); chips(); }
 }
 // 그 날 코스피 봉 — 장이 열린 첫 봉부터 있는 날만(qa 11-24 — 서버가 반나절만 쥔 날은 13:35 봉을 「시가」 로 견줬음) · 여는 시각은 그 날 판 meta.openAt(늦게 연 날) · 없으면 09:00
-const REG_OPEN_DEF = '0900';   // 보통 날 정규장 여는 시각 — 서버 판 meta.openAt 이 없는 판에서만(CLAUDE.md 「장 시각으로 셈하는 코드는 늦게 여는 날 그만큼 옮긴다」 3번)
 const kxDay = (day) => { const B = KX.bars && KX.bars[day]; if (!B || !B.length || !KX.step) return null;
   const D = (calcD && calcD.day === day && calcD) || (st.data && st.data.day === day && st.data) || dayData[day] || null, op = hhmm((D && D.meta && D.meta.openAt) || '') || REG_OPEN_DEF;   // 서버가 주면 안 씀 — 판 meta.openAt(늦게 연 날 포함) 먼저
   return B[0][0] <= op ? B : null; };
@@ -1036,7 +1036,7 @@ async function load(day, quiet) {
 //   값 · 서버 rows[].pre.pct(프리장 끝 값 — 개발2 에 부탁 · 오기 전에는 없음)가 있으면 그것 · 없으면 오늘 판을 정규장(st.openAt) 전에 받을 때마다
 //   홀딩스 시세 /api/kis/prices 의 pct 를 받아 둠(판과 함께 · 따로 주기 없음) · 정규장 뒤에는 새로 안 받고 마지막 받은 값과 그 시각을 둠 · 못 받았으면 「—」(0 아님)
 async function preLoad(d) {
-  const hm = new Date().toTimeString().slice(0, 5), open = String(st.openAt || '09:00').slice(0, 5);
+  const hm = new Date().toTimeString().slice(0, 5), open = String(st.openAt || hmTxt(REG_OPEN_DEF)).slice(0, 5);   // 서버가 주면 안 씀
   if (hm >= open || (d.rows || []).some((r) => r.pre)) return;
   const codes = [...new Set((d.rows || []).map((r) => r.code).filter(Boolean))]; if (!codes.length) return;
   let j = null; try { const r = await fetch(`/api/kis/prices?codes=${codes.join(',')}`, { cache: 'no-store' }); j = r.ok ? await r.json() : null; } catch (e) { j = null; }
