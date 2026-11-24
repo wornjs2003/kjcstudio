@@ -3048,7 +3048,15 @@ def board(proxy, day=None, cfg=None):
     import dt30_win
     b["meta"]["tax"] = dt30_win.TAX                    # 거래세 · 농특세(%) — 서버 한 곳(dt30_win.TAX) · 화면은 보이기만 · 바꾸는 것은 증권수수료 칸 하나(재권님 11-20 14:09)
     b.setdefault("closed", True)                       # 옛 판(closed 칸 전) · 되채운 날은 끝난 판
-    b["meta"]["refreshMs"] = None if b["closed"] else proxy.PRICE_CACHE_TTL * 1000
+    open_today = False
+    if b["day"] == _now().strftime("%Y%m%d"):
+        try:
+            import market_hours
+            rc = ((market_hours.today(proxy, day=b["day"]).get("reg") or [None, None])[1] or market_hours.REG_CLOSE).replace(":", "")[:4]   # 늦게 연 날은 닫는 시각도 그날 값
+            open_today = _now().strftime("%H%M") < rc        # 판이 2시에 닫혀도 정규장 끝까지는 상승률(지금 값 ÷ 시가)이 바뀐다 — 재권님 (가) 11-24 11:4x
+        except Exception:
+            open_today = False
+    b["meta"]["refreshMs"] = None if b["closed"] and not open_today else proxy.PRICE_CACHE_TTL * 1000
     if not b["closed"] and cfg is not None:
         # 그날 판은 14:00 마지막 칸 전까지 지금 값을 붙인다 — 재권님 「그날은 변동에 맞춰서 실시간으로 적용되야 하고 그날 2시가 지나면 값이 저장되도록」(19:3x)
         # 다시 받을 주기는 서버 값(refreshMs · 시세 캐시와 같은 PRICE_CACHE_TTL) — 화면은 그 값으로 돈다 · 시세는 그 나이 안이면 캐시
@@ -3056,6 +3064,11 @@ def board(proxy, day=None, cfg=None):
         for r in b["rows"]:
             r["now"] = (q.get(r["code"]) or {}).get("price")
         b["nowAt"] = _now().strftime("%H:%M:%S")
+    if b["day"] == _now().strftime("%Y%m%d") and cfg is not None:
+        try:
+            open_rise_now(proxy, cfg, b)
+        except Exception as e:
+            print("  [단타 30] 시가 대비 등락률 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
     try:
         import turnover
         if not b["closed"] and cfg is not None:
@@ -3066,6 +3079,25 @@ def board(proxy, day=None, cfg=None):
         print("  [거래 비율] 판 칸 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
     b["meta"]["turnNote"] = TURN_NOTE
     return b
+
+
+def open_rise_now(proxy, cfg, b):
+    """그날 판 줄(rows · 빠진 줄 outRows)의 시가 대비 등락률(openRise)을 읽을 때마다 지금 값으로 — 지금 값 ÷ 오늘 시가 · 시세 캐시 나이 안이면 캐시.
+    재권님 「시가대비 등락률인데 등락이 바뀔때마다 값이 여기에 적용되어야해」(11-24 11:3x) — 전에는 판 다시 세기가 멈추는 10:30 값에 굳어 있었다.
+    시가는 시세의 오늘 시가 · 없으면 줄에 적힌 시가 · 둘 다 없거나 지금 값이 없으면 null(못 잼 · 0 아님) · 저장 안 함(읽을 때만)."""
+    rows = (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or [])
+    if not rows:
+        return 0
+    q, _ = proxy.fetch_quotes_multi(cfg, [r["code"] for r in rows], max_age=proxy.PRICE_CACHE_TTL)
+    n = 0
+    for r in rows:
+        v = q.get(r["code"]) or {}
+        o, p = v.get("open") or r.get("open"), v.get("price")
+        r["openRise"] = round((p / o - 1) * 100, 2) if o and p else None
+        n += r["openRise"] is not None
+    b["meta"]["openRiseAt"] = _now().strftime("%H:%M:%S")
+    b["meta"]["openRiseNote"] = "시가 대비 등락률 = 지금 값 ÷ 오늘 시가 — 그날 판은 읽을 때마다 새로(시세 캐시 나이 안) · 지난 판은 저장된 값(09:05 봉 시가 ÷ 09:00 봉 시가)"
+    return n
 
 
 def status():
