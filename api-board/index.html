@@ -280,6 +280,9 @@ td.owner { background: var(--pj-done-faint); }
   .tr-step::after { content: "→"; left: auto; right: -17px; bottom: auto; top: 50%; transform: translateY(-50%); }
   .tr-two { grid-template-columns: 1fr 1fr; }
 }
+.tr-story h4 { font-size: 14px; font-weight: 700; margin: 16px 0 4px; }
+.tr-story h4:first-child { margin-top: 0; }
+.tr-story p { font-size: 13px; color: var(--pj-text-strong); margin: 0 0 6px; line-height: 1.65; }
 details.old > summary { cursor: pointer; font-size: 15px; font-weight: 700; padding: 14px 0; list-style: revert; }
 details.old[open] > summary { margin-bottom: 8px; }
 @media (min-width: 900px) {
@@ -318,7 +321,7 @@ details.old[open] > summary { margin-bottom: 8px; }
     <h2>자동 매매</h2>
     <p>단타 판에서 고른 종목을 서버가 슬랙으로 주문 컴퓨터에 보내고, 주문 컴퓨터가 한국투자에 시장가로 사고팝니다.</p>
     <nav class="tr-toc">
-      <a href="#tr1">1 한눈에 보기</a><a href="#tr2">2 흐름</a><a href="#tr3">3 룰</a><a href="#tr4">4 안전장치</a><a href="#tr5">5 준비할 것</a><a href="#tr6">매매일지</a>
+      <a href="#tr1">1 한눈에 보기</a><a href="#tr2">2 흐름</a><a href="#tr2b">하루 절차</a><a href="#tr3">3 룰</a><a href="#tr4">4 안전장치</a><a href="#tr5">5 준비할 것</a><a href="#tr6">매매일지</a>
     </nav>
   </div>
 
@@ -333,6 +336,8 @@ details.old[open] > summary { margin-bottom: 8px; }
     <div class="tr-steps" id="trSteps"></div>
     <div class="tr-flow" id="trSend"></div>
   </div>
+  <div class="sec" id="tr2b"><h3 class="tr-h">하루 절차 — 처음부터 끝까지 글로</h3><p>위 그림을 차례대로 풀어 쓴 것입니다 · ( ) 는 「3 룰」 칸의 지금 값 · 굵은 시각은 서버 값</p></div>
+  <div class="tr-card tr-flow tr-story" id="trStory"></div>
 
   <div class="sec" id="tr3"><h2>3 룰</h2><p>값은 이 칸에서 한 번 정하면 주문 컴퓨터에 서명해 보냅니다 · 글 속 ( ) 는 칸의 지금 값 · 빈 칸은 빨간 ( ) — 빈 칸이 있으면 그날 매수 목록이 안 나갑니다</p></div>
   <div class="tr-two">
