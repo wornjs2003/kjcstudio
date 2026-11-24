@@ -10750,6 +10750,17 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": True, "data": trade_signal.journal(sys.modules[__name__], nd), "meta": trade_signal.status(sys.modules[__name__])})
                 return
 
+            if route == "dt30-pre":
+                # 단타 프리장 칩 정보 기록(dt30.pre_log_put · 08:00~08:50 분마다 · 2026-11-24) — 표기는 단타 판이 정함 · KIS 안 부름
+                day = (qs.get("day") or [datetime.now(KST).strftime("%Y%m%d")])[0]
+                if not (len(day) == 8 and day.isdigit()):
+                    self._send_json({"ok": False, "error": "day 는 YYYYMMDD 입니다."}, 400)
+                    return
+                d = dt30.pre_log_get(sys.modules[__name__], day)
+                self._send_json({"ok": True, "data": d, "meta": {"day": day, "codes": len(d), "from": "%02d:%02d" % dt30.PRE_LOG_FROM,
+                                                                  "to": "%02d:%02d" % dt30.PRE_LOG_TO}})
+                return
+
             if route == "dt30-win":
                 # 단타 판 칩별 승률(server/dt30_win.py · 2026-11-18) — 쌓인 날 손익으로 그때 수수료를 빼 셈 · KIS 안 부름
                 try:

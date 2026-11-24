@@ -191,6 +191,7 @@ def chips_now(proxy, cfg, early=True, pre=False):
         watch_chips(docstore.read_doc("watchlist"), put, small)
     except Exception:
         missing.append("관심")
+    pf = None
     try:
         pf, _, _ = pre_flow.fetch(proxy, cfg)
         if pf is None:
@@ -220,6 +221,10 @@ def chips_now(proxy, cfg, early=True, pre=False):
             missing.append("매수어림")                 # build 가 meta.early · approx 로
         else:
             missing.append("매수대기")                 # 장 전에 어림을 하나도 못 받음 — build 가 wait 로
+        try:
+            pre_log_put(proxy, hit, (pf or {}).get("rows") or [])
+        except Exception as e:
+            print("  [단타 프리장 기록] 못 씀 — %s" % type(e).__name__, flush=True)
         return _cap_keep(hit, small), missing, cap, mkt
     try:
         for it in intraday_alerts.today().get("items") or []:
@@ -399,6 +404,57 @@ def rules_meta(proxy, merged=True):   # 이름 — 칩 룰 표 모듈 chip_rules
 
 
 EARLY_WORKERS = 6
+_early_seen = {}              # code → (외국계 창구 순매수, 프로그램 순매수, 프로그램 값 시각) — 가장 최근 early_buy 가 받은 값(프리장 기록 pre_log_put 이 읽음)
+
+# ── 프리장 칩 정보 기록 (2026-11-24 재권님 「프리장에 정보는 필요해 8시부터 8시 50분까지 단타칩에 필요한 정보들은 다 저장해둬야해
+#    다만 표기할지 말지만 단타판에서 정의하면 되니 너는 정보를 저장할수있게 코딩해줘」) ──
+# 단타 목록 셈(chips_now)이 장 전에 돌 때마다(LIVE_TTL 둘레) 그 분의 값을 종목마다 한 줄 — 칩 · 하위 · 프리장 줄 값(가격 · 등락률 · 거래대금 ·
+# 거래량 · 앞 날 대비 · 프로그램 순매수) · 매수 어림이 받은 프로그램 값과 그 시각. 한 번 적은 분은 다시 셈하지 않는다(그 분 마지막 셈이 남음).
+# 어떤 칩을 판에 보일지는 단타 판(화면 · 셈 칸)이 정한다 — 여기는 값만 남긴다. 읽기 /api/kis/dt30-pre?day=YYYYMMDD
+PRE_LOG_FROM, PRE_LOG_TO = (8, 0), (8, 50)
+_PL_SCHEMA = ("CREATE TABLE IF NOT EXISTS dt30_pre_log (day TEXT NOT NULL, hm TEXT NOT NULL, code TEXT NOT NULL, data TEXT NOT NULL, "
+              "PRIMARY KEY (day, hm, code))")
+PF_KEYS = ("price", "pct", "amt", "vol", "ratio", "program")
+
+
+def pre_log_put(proxy, hit, pf_rows, now=None):
+    """그 분의 프리장 칩 정보를 dt30_pre_log 에 — 쓰는 서버만 · PRE_LOG_FROM~TO 안만 · 적은 줄 수."""
+    now = now or _now()
+    m = now.hour * 60 + now.minute
+    if not (PRE_LOG_FROM[0] * 60 + PRE_LOG_FROM[1] <= m <= PRE_LOG_TO[0] * 60 + PRE_LOG_TO[1]) or not proxy.marketdb.writable():
+        return 0
+    day, hm = now.strftime("%Y%m%d"), now.strftime("%H%M")
+    pf = {_six(r.get("code")): r for r in pf_rows if _six(r.get("code"))}
+    out = []
+    for code in sorted(set(hit) | set(pf)):
+        g, r = hit.get(code) or {}, pf.get(code)
+        d = {"at": now.strftime("%H:%M:%S"), "name": g.get("name") or (r or {}).get("name"),
+             "chips": sorted(g.get("chips") or []), "subs": g.get("subs") or {}}
+        if r:
+            d["pf"] = {k: r.get(k) for k in PF_KEYS}
+        e = _early_seen.get(code)
+        if e:
+            d["early"] = {"foreign": e[0], "program": e[1], "programAt": e[2]}
+        out.append((day, hm, code, json.dumps(d, ensure_ascii=False)))
+    if not out:
+        return 0
+    with proxy._db_lock, proxy.db_conn() as conn:
+        conn.execute(_PL_SCHEMA)
+        conn.executemany("INSERT OR REPLACE INTO dt30_pre_log (day, hm, code, data) VALUES (?,?,?,?)", out)
+    return len(out)
+
+
+def pre_log_get(proxy, day):
+    """{code: [{hm, …}]} — 그날 프리장 기록 · 분 순. 표가 없으면 {}."""
+    try:
+        with proxy.db_conn() as conn:
+            rows = conn.execute("SELECT hm, code, data FROM dt30_pre_log WHERE day = ? ORDER BY hm", (day,)).fetchall()
+    except Exception:
+        return {}
+    out = {}
+    for hm, code, data in rows:
+        out.setdefault(code, []).append(dict(json.loads(data), hm="%s:%s" % (hm[:2], hm[2:])))
+    return out
 
 
 def early_buy(proxy, cfg, codes, put, pre=False):
@@ -433,6 +489,9 @@ def early_buy(proxy, cfg, codes, put, pre=False):
     if codes and all(fn is None and pg is None for _, fn, pg in got):
         return None                                    # 하나도 못 받았다 — 「어림」 으로 두지 않고 못 받은 칩으로 남긴다(qa 11-12 · KIS 몰림 때)
     n = 0
+    pga = getattr(proxy, "_program_at", {}) or {}
+    for c, fn, pg in got:
+        _early_seen[c] = (fn, pg, pga.get(c) if pg is not None else None)
     for c, fn, pg in got:
         if pre and pg is not None and pg > 0:
             put(c, None, "매수", "어림")               # 장 전 어림 — 프로그램 순매수만(meta.earlyNote)
