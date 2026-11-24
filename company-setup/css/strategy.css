@@ -310,6 +310,7 @@
 .dt .dw-tb .dw-l { text-align: left; }
 .dt .dw-tb .dw-top { white-space: normal; min-width: 280px; }
 /* 매수 룰 정의(11-24 · strategy-dt30.js #dt-buydef) — 정한 룰 글 */
+.dt .dt-buydef { scroll-margin-top: calc(var(--nav-height) + 14px); }   /* 주소 #dt-buydef 로 들어올 때 고정 메뉴에 머리가 안 가리게(insight.css 의 메뉴 아래 여백과 같은 셈) */
 .dt .dt-rdef { background: var(--kh-bg-card); padding: 8px 4px; font-size: 12.5px; line-height: 1.7; color: var(--kh-text-primary); }
 .dt .dt-rdef ol { margin: 0; padding-left: 20px; }
 /* 섹터 · 테마 — 판 종목 묶기(11-24 · strategy-dt30.js stPaint) — 줄을 누르면 본 표가 그 묶음만 */
