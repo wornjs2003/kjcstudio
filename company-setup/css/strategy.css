@@ -225,6 +225,7 @@
 }
 .dt .dt-flt { display: block; margin-top: 2px; font-weight: 400; font-size: 11px; color: var(--kh-text-muted); white-space: nowrap; }
 .dt .dt-flt input { width: 4.5em; }
+.dt .dt-flt input[type="checkbox"] { width: 13px; height: 13px; margin: 0 4px 0 0; vertical-align: -2px; accent-color: var(--accent); cursor: pointer; }   /* 종목 칸 거르기 둘 켜고 끄기(11-24) */
 .dt .dt-mc, .dt .dt-sub-chip { font: inherit; display: inline-flex; align-items: baseline; gap: 4px; border-radius: 99px; cursor: pointer; white-space: nowrap; }
 .dt .dt-mc b, .dt .dt-sub-chip b { font-weight: 500; font-size: .9em; opacity: .75; }
 .dt .dt-mc { font-size: 13px; font-weight: 700; padding: 3px 10px; border: 0; background: var(--kh-bg-card); color: var(--kh-text-muted); text-decoration: line-through; }

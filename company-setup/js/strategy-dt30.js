@@ -438,7 +438,8 @@ const DEF_SET = { minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon
 Object.assign(DEF_SET, { endAt: '', sellBar: '5m', mk: {}, riseRank: true });   // riseRank — 상승률 순위(11-24 · 끄면 단타 순)   // mk — 코스피 조건 줄 둘(11-24 · mkLine)   // sellBar — 매도 봉 1m · 5m · 30m(11-23 재권님 「매도타이밍은 5분봉으로 하자」 → 고르기 · 기본 5분)   // endAt — 매도 시각(HHMM · 빈칸이면 판 끝 칸까지 · 11-20) · 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 기본값은 서버 SELL_DEF
 st.set = { ...DEF_SET };
 // 「· 어림」 — 서버 rows[].turnApprox(개발2 abf96b9) · 재권님 「응」 11-23 · 풍선은 어림 방법만(코드 이름은 이 주석에)
-const fltIn = () => `<label class="dt-flt" data-tip="풀린 시가총액이 이 금액 이하인 종목만 보임 · 못 잰 종목은 남김 · 빈칸 = 전체 · 넣으면 저장">유통 <input data-set="floatMax" class="rl-in rl-num" inputmode="numeric" placeholder="( )" value="${st.set.floatMax > 0 ? st.set.floatMax : ''}" aria-label="유통 시총 몇 억 이하만">억 이하</label>`;   // 종목 머리 칸 — 유통 시총 거르기(11-23)
+const fltChk = (k, t, f, tip) => `<label class="dt-flt" data-tip="${tip} · 체크를 끄면 안 거름(값은 남김) · 넣으면 저장"><input type="checkbox" data-fltchk="${k}"${st.set[`${k}On`] ? ' checked' : ''} aria-label="${t} 거르기 켜기">${t} <input data-set="${f}" class="rl-in rl-num" inputmode="decimal" placeholder="( )" value="${st.set[f] > 0 ? st.set[f] : ''}" aria-label="${t} 몇 % 이상">% 이상</label>`;
+const fltIn = () => `${fltChk('turn', '유통 대비 거래', 'turnMin', '풀린 주식 대비 오늘 거래(서버 거래 비율 · 누적 거래대금 ÷ 풀린 시총)가 이 % 이상인 종목만 · 못 잰 종목은 남김')}${fltChk('vol', '전일 같은 시각 대비 거래량', 'volMin', '전날 같은 시각까지 거래량 대비 오늘 거래량(서버 volPrevPct)이 이 % 이상인 종목만 · 못 잰 종목은 남김')}`;   // 종목 머리 칸 — 유통 시총 거르기(11-23) · 유통 ( )억 이하 칸은 뺌(11-24 재권님 「유통 ()이하 이건 없애」) · 거르기 둘(11-24 재권님 「체크박스가 2개 … 유통주식대비 현재 거래되는 거래량 ()%이상 전일 동시간대비 거래량()%이상」)
 const WIN_KEY = 'dt30-windows';   // 마지막으로 받은 창 이름표 — 창이 없는 옛 날 판을 볼 때도 셈 칸은 지금 창으로(보는 상태 · 이 브라우저에만)
 const winsOf = () => { const m = (curD() && curD().meta) || {}; if (Array.isArray(m.windows) && m.windows.length) { try { localStorage.setItem(WIN_KEY, JSON.stringify(m.windows)); } catch (e) { /* 못 남겨도 됨 */ } return m.windows; } try { const v = JSON.parse(localStorage.getItem(WIN_KEY) || 'null'); return Array.isArray(v) && v.length ? v : null; } catch (e) { return null; } };
 const LKW = () => (winMode() ? '창' : '굳힘');   // 화면 낱말 — 창 판은 「창」(11-23 개발2 253689d · 「굳힘 낱말을 창으로」)
@@ -550,7 +551,8 @@ const live = d.flat930 ? live0.map((r, i) => [r, nthChipAt(r) || '9999', i]).sor
   const rows1 = st.only ? liveP.filter((r) => liveChip(r, st.only)) : liveP;   // 거르고 나서 순번 · 상위 N · 평균을 다시 셈
   const rows0 = S.minChip > 0 ? rows1.filter((r) => nEver(r) >= S.minChip) : rows1;   // 칩 N개 이상만(11-18) — 켜진 칩으로 센 수 · 한 번 붙었다 빠진 칩도 셈(nEver · 11-24)
   // 유통 시총 거르기(11-23 재권님 「종목 옆에 유통주식 필터 넣어줘 ()억 이라고 해서 해당금액 하위로 필터링되게」) — 풀린 시총(서버 rows[].floatCap · 억원)이 넣은 값 이하인 종목만 · 못 잰 종목(우선주 등 null)은 가를 수 없어 남김 · 빈칸 = 전체
-  const fOk = (r) => !(S.floatMax > 0) || r.floatCap == null || !Number.isFinite(Number(r.floatCap)) || Number(r.floatCap) <= S.floatMax;
+  const atLeast = (x, m) => x == null || !Number.isFinite(Number(x)) || Number(x) >= m;   // 못 잰 종목은 남김(유통 거르기와 같음)
+  const fOk = (r) => (!(S.turnOn && S.turnMin > 0) || atLeast(r.turn, S.turnMin)) && (!(S.volOn && S.volMin > 0) || atLeast(r.volPrevPct, S.volMin));   // 유통 대비 거래 · 전일 같은 시각 대비 거래량(11-24)
   let rowsF = rows0.filter(fOk); FILL = new WeakSet(); let fillAdd = 0;
   // 칩 N개 종목이 모자라면 N−1개로 채움(11-24 재권님 「칩이 n개인데 5개가 안되면 n-1개로 가는것도 있으면 좋을거같은데」 → 「채움 채우지않음 선택되게해줘」)
   //   칩 N개 종목을 먼저 · 모자란 만큼 칩 N−1개 종목을 N−1번째 칩이 찬 시각별로 뒤에 붙임 · N−2 로는 안 내려감 · 채운 줄은 사는 순간도 N−1번째 칩이 찬 때
@@ -604,7 +606,7 @@ const live = d.flat930 ? live0.map((r, i) => [r, nthChipAt(r) || '9999', i]).sor
   const G = {}; if (lkMode) top.forEach((x) => { const j = Number(x.r.lock), g = G[j] || (G[j] = { n: 0, buy: 0, net: 0, noMkt: 0 }); g.n++; g.buy += x.pnl.buyAmt; if (x.pnl.net == null) g.noMkt++; else g.net += x.pnl.net; });
   // 장중 창에 든 종목 중 칩 수가 셈 칸에 모자라 걸러진 것 — 본 표 아래 같은 모양으로 「보기만」(11-24 재권님 「가」 → 「위에 있는것과 같은 룰로 보여지게」)
   //   같은 셈(mkR)으로 칸 값을 내되 inv 를 안 붙여 상위 N · 손익 · 평균 · 합계에는 안 듦 · 어느 줄인지는 서버 meta.intra.lock 한 곳 · 유통 시총 거르기는 본 표와 같게
-  const IX = (d.meta || {}).intra, fMax = Number(S.floatMax) || 0;
+  const IX = (d.meta || {}).intra, fMax = 0;   // 유통 ( )억 이하 거르기는 뺌(11-24)
   const RV = IX && IX.lock != null ? rows1.filter((r) => Number(r.lock0 != null ? r.lock0 : r.lock) === Number(IX.lock) && !rows.includes(r) && !(fMax > 0 && Number.isFinite(Number(r.floatCap)) && Number(r.floatCap) > fMax))
     .sort((a, b) => String(a.buyTs || a.buyAt || '').localeCompare(String(b.buyTs || b.buyAt || ''))).map((r) => { const t = inTs(r);
       if (Number(r.buy) > 0) HYPO.set(r, { px: Number(r.buy), at: t.slice(0, 4), src: `${t.length >= 6 ? `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}` : '—'} 든 때 · 가정(산 것 아님)` });
@@ -1241,6 +1243,7 @@ function setRead(el) {
   if (k === 'fillN') { if (v != null && (!Number.isInteger(v) || v < 1)) return bad('1 이상 정수 · 빈칸 = 안 채움'); S.fillN = v; return S; }   // 11-24
   if (k === 'sendFrom') { if (v != null && (!Number.isInteger(v) || v < 0 || v > 29)) return bad('0~29 정수(분) · 빈칸 = 서버 기본'); S.sendFrom = v; return S; }   // 매수 메시지 보내기(11-24)
   if (k === 'sendN') { if (v != null && (!Number.isInteger(v) || v < 1 || v > 20)) return bad('1~20 정수 · 빈칸 = 서버 기본'); S.sendN = v; return S; }
+  if (k === 'turnMin' || k === 'volMin') { if (v != null && v < 0) return bad('0 이상 % · 빈칸 = 안 거름'); S[k] = v || 0; return S; }   // 11-24
   if (k === 'floatMax') { if (v != null && v < 0) return bad('0 이상 억 · 빈칸 = 전체'); S.floatMax = v || 0; return S; }
   if (k === 'minChip') { if (v != null && (v < 0 || !Number.isInteger(v))) return bad('0 이상 정수'); S.minChip = v || 0; }
   else if (k === 'top') { if (v == null || v < 1 || !Number.isInteger(v)) return bad('1 이상 정수'); S.top = v; }
@@ -1258,7 +1261,7 @@ function setRead(el) {
 BIND.push(() => {
   const box = $('dt-pnl');   // 셈 칸 줄 + 손익 머리 줄(상위 · 금액)
   box.addEventListener('change', (e) => { const el = e.target.closest('[data-set]'); if (!el) return; const S = setRead(el); if (S) setChange(S); });
-  $('dt-box').addEventListener('change', (e) => { const el = e.target.closest('[data-set="floatMax"]'); if (!el) return; const S = setRead(el); if (S) setChange(S); });   // 종목 머리 칸 유통 거르기(11-23)
+  $('dt-box').addEventListener('change', (e) => { const ck = e.target.closest('[data-fltchk]'); if (ck) { setChange({ ...st.set, [`${ck.dataset.fltchk}On`]: !!ck.checked }); return; } const el = e.target.closest('[data-set="floatMax"], [data-set="turnMin"], [data-set="volMin"]'); if (!el) return; const S = setRead(el); if (S) setChange(S); });   // 거르기 둘 체크 · 칸(11-24)   // 종목 머리 칸 유통 거르기(11-23)
   box.addEventListener('click', (e) => {
     const m = e.target.closest('[data-mode]'); if (m) { e.preventDefault(); if (m.dataset.mode !== st.set.mode) setChange({ ...st.set, mode: m.dataset.mode }); return; }
     const bb = e.target.closest('[data-buy]'); if (bb) { e.preventDefault(); if (bb.dataset.buy !== buyKey()) setChange({ ...st.set, buy: bb.dataset.buy }); return; }
@@ -1321,7 +1324,7 @@ function winRules(days) {   // days — 승률 표가 셈한 날(코스피 값 �
     ['칩', [['켜진 칩', onC.join(' · ') || '없음'], ['꺼 둔 칩', [...offC, ...subOff].join(' · ') || '없음']]],
     ['종목 차례', [['점수', ord || '빈칸(칩 수 → 초반상승 → 시가총액)']]],
     ['매수', [['칩 개수', S.minChip ? `${S.minChip}개 이상` : '전체'], ['칩 모자라면', !(S.fill && S.minChip > 1) ? '채우지 않음' : S.fillN ? `채움(${S.fillN}종목이 안 되면 칩 ${S.minChip - 1}개 종목으로)` : '안 채움(종목 수 빔)'], ['상승률 순위', S.riseRank !== false ? '켬(09:05 까지 1분 값 높은 순)' : '끔(단타 순)'], ['09:30 뒤에 찬 종목', S.buyLate930 ? '삼' : '안 삼'],
-    ['유통 시총', S.floatMax > 0 ? `${num(S.floatMax)}억 이하` : '전체'],
+    ['유통 대비 거래', S.turnOn && S.turnMin > 0 ? `${S.turnMin}% 이상` : S.turnOn ? '안 거름(% 빔)' : '끔'], ['전일 같은 시각 대비 거래량', S.volOn && S.volMin > 0 ? `${S.volMin}% 이상` : S.volOn ? '안 거름(% 빔)' : '끔'],
     ['매수', (() => { const B = BUYS.find(([k]) => k === buyKey()); return B ? buyName(B[0], B[1]) : '( )'; })()], ['불타기', on(S.pyr)]]],
     ['매도', [['매도 봉', S.sellBar === '1m' ? '1분' : S.sellBar === '5m' ? '5분' : '30분'], ['손절', S.stop == null || S.stop === '' ? '안 함' : `${S.stop}%`],
     ['꺾임', turn], ['시각 미달', S.cut ? `산 뒤 ${v(S.cutMin, '분')} · ${v(S.cutPct, '%')} 못 넘으면 팜` : '끔'],
