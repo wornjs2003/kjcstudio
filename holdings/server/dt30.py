@@ -802,6 +802,10 @@ def _live_calc(proxy, cfg):
     except Exception as e:
         print("  [거래 비율] 단타 목록 칸 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)   # 칸은 안 붙음(화면은 「못 잼」)
     _cf_live(proxy, now, rows, off)                    # 칩 처음 본 때 — 판 밖 종목까지 날마다(11-23 「응」)
+    try:
+        chip_log_put(proxy, now, rows, missing)        # 칩 붙음 · 빠짐 기록 — 단타 화면이 불러 셈(11-24 「서버에 적고 단타가 그값을 호출한다」)
+    except Exception as e:
+        print("  [단타 칩 기록] 못 남김 — %s" % proxy.safe_message(e, 120), flush=True)
     tab = score_table(proxy)
     order = sort_rows(rows, tab, off)
     early = ["매수"] if "매수어림" in missing else []
@@ -885,6 +889,103 @@ def _cf_live(proxy, now, rows, off):
         chip_first_put(proxy, now.strftime("%Y%m%d"), items)
     except Exception as e:
         print("  [단타 30] 칩 처음 시각 못 남김 — %s" % proxy.safe_message(e, 120), flush=True)
+
+
+# ── 칩 붙음 · 빠짐 기록 (2026-11-24 재권님 「종목별로 칩이 쌓이는 시간과 칩의 셈이 달라지는 시간을 서버에 저장하도록 해서 그걸 단타창에서 호출해야
+#    값이 안바뀔거같은데」 → 「서버는 정보만 있고 셈은 화면에서 한다」 → 「서버에 적고 단타가 그값을 호출한다」) ──
+# 단타 목록 셈(_live_calc · 쓰는 서버)이 돌 때마다 앞 바퀴와 견주어 종목마다 칩(하위 칩 포함)이 붙거나 빠진 것을 한 건씩 남긴다 —
+# 시각(그 바퀴 시각 · 초) · 칩 · 하위 · 붙음/빠짐 · 그 뒤 칩 수(단타 셈 칩) · 그 순간 값(그 바퀴 시세 · 장 전은 프리장 값). 적은 것은 다시 셈하지 않는다.
+# 그 바퀴에 못 받은 칩(missing)은 「빠짐」 으로 적지 않는다(못 받음 ≠ 빠짐). 서버가 다시 뜨면 그날 기록을 되짚어 앞 상태를 잡는다(헛 「붙음」 없게).
+# 바퀴 사이(LIVE_TTL 둘레) 안에 붙었다 빠진 칩은 못 본다 · 시각은 그 바퀴 시각이라 실제보다 늦을 수 있다. 읽기 /api/kis/dt30-chiplog?day=
+_CL_SCHEMA = ("CREATE TABLE IF NOT EXISTS dt30_chip_log (day TEXT NOT NULL, at TEXT NOT NULL, code TEXT NOT NULL, chip TEXT NOT NULL, sub TEXT NOT NULL DEFAULT '', "
+              "kind TEXT NOT NULL, n INTEGER, px REAL, PRIMARY KEY (day, at, code, chip, sub, kind))")
+CHIP_LOG_KEEP_DAYS = 366      # 남기는 날 수(달력) — 그보다 앞 날은 그날 처음 적을 때 지운다(프리장 기록 PRE_LOG_KEEP_DAYS 와 같은 값)
+_cl = {"day": None, "state": {}}
+
+
+def _cl_keys(r):
+    """줄의 (칩, 하위) 묶음 — 하위가 없으면 하위 ''."""
+    out = set()
+    subs = r.get("subs") or {}
+    for ch in r.get("chips") or []:
+        ss = subs.get(ch) or []
+        out.add((ch, ""))
+        for sb in ss:
+            out.add((ch, str(sb)))
+    return out
+
+
+def chip_log_put(proxy, now, rows, missing=()):
+    """한 바퀴의 칩 붙음 · 빠짐을 dt30_chip_log 에 — 쓰는 서버만 · 적은 건수."""
+    if not proxy.marketdb.writable():
+        return 0
+    day, at = now.strftime("%Y%m%d"), now.strftime("%H:%M:%S")
+    if _cl["day"] != day:
+        _cl.update(day=day, state=_cl_replay(proxy, day))
+    prev, cur, px = _cl["state"], {}, {}
+    for r in rows:
+        cur[r["code"]] = _cl_keys(r)
+        px[r["code"]] = r.get("price")
+    miss = set(missing or ())
+    ovs = set(ov_chips())
+    out = []
+    for code in sorted(set(prev) | set(cur)):
+        a, b = prev.get(code, set()), cur.get(code, set())
+        on, off = b - a, {k for k in a - b if k[0] not in miss}
+        if not on and not off:
+            continue
+        keep = (a & b) | on | (a - b - off)            # 못 받은 칩은 그대로 붙은 것으로 둔다
+        n = len({k[0] for k in keep if k[0] in ovs})
+        for ch, sb in sorted(on):
+            out.append((day, at, code, ch, sb, "on", n, px.get(code)))
+        for ch, sb in sorted(off):
+            out.append((day, at, code, ch, sb, "off", n, px.get(code)))
+        if keep:
+            prev[code] = keep
+        else:
+            prev.pop(code, None)
+    if not out:
+        return 0
+    with proxy._db_lock, proxy.db_conn() as conn:
+        conn.execute(_CL_SCHEMA)
+        if not _cl.get("pruned") == day:
+            conn.execute("DELETE FROM dt30_chip_log WHERE day < ?", ((now - timedelta(days=CHIP_LOG_KEEP_DAYS)).strftime("%Y%m%d"),))
+            _cl["pruned"] = day
+        conn.executemany("INSERT OR IGNORE INTO dt30_chip_log (day, at, code, chip, sub, kind, n, px) VALUES (?,?,?,?,?,?,?,?)", out)
+    return len(out)
+
+
+def _cl_replay(proxy, day):
+    """그날 기록을 차례로 되짚어 지금 붙은 (칩, 하위) 상태 — 서버가 다시 떴을 때 앞 상태(없으면 빈 상태)."""
+    st = {}
+    try:
+        with proxy.db_conn() as conn:
+            if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dt30_chip_log'").fetchone():
+                return st
+            for code, ch, sb, kind in conn.execute("SELECT code, chip, sub, kind FROM dt30_chip_log WHERE day = ? ORDER BY at", (day,)):
+                (st.setdefault(code, set()).add if kind == "on" else st.setdefault(code, set()).discard)((ch, sb))
+    except Exception:
+        pass
+    return {c: s for c, s in st.items() if s}
+
+
+def chip_log_get(proxy, day, codes=None):
+    """→ ({code: [{at, chip, sub, kind, n, px}]}, 못 읽은 까닭 | None) — 시각 순. 표가 아직 없으면 ({}, None) · 지난 날 · 기록 전 날도 그 날 기록만."""
+    try:
+        with proxy.db_conn() as conn:
+            if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dt30_chip_log'").fetchone():
+                return {}, None
+            q, a = "SELECT at, code, chip, sub, kind, n, px FROM dt30_chip_log WHERE day = ?", [day]
+            if codes:
+                q += " AND code IN (%s)" % ",".join("?" * len(codes))
+                a += list(codes)
+            rows = conn.execute(q + " ORDER BY at, code", a).fetchall()
+    except Exception as e:
+        return {}, type(e).__name__
+    out = {}
+    for at, code, ch, sb, kind, n, px in rows:
+        out.setdefault(code, []).append({"at": at, "chip": ch, "sub": sb or None, "kind": kind, "n": n, "px": px})
+    return out, None
 
 
 def _cf_flow(proxy, day, rows, at):
