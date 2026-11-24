@@ -271,10 +271,11 @@ const inTs = (r) => { const t = String(r.buyTs || '').replace(/:/g, ''), a = hhm
 //   9시 1분 몫이면 at 대신 inUntil 59초까지를 「아직 안 듦」 경계로(그 사이 든 종목은 든 때 가격에 삼)
 const notYetIn = (r, at) => { if (pmOf(buyKey()) === 1 && Number(r.lock) > 0) return '';   // 굳힌 줄은 든 때 산 것(11-23)
   if (pmOf(buyKey()) === 1 && inUntil()) at = `${inUntil()}59`; const e = inTs(r), a = String(at || '').replace(/:/g, '').padEnd(6, '0').slice(0, 6); return newBuyOf(curD()) && e && /^\d{6}$/.test(a) && a < e ? (r.buyTs ? String(r.buyTs) : hmS(hhmm(r.buyAt))) : ''; };
-const chipNeed = () => Math.max(1, Number(st.set.minChip) || 1);
+let FILL = new WeakSet();   // 그 날 셈에서 칩 N−1개로 채운 줄(11-24 · calcDay 가 날마다 새로)
+const chipNeed = (r) => Math.max(1, (Number(st.set.minChip) || 1) - (r && FILL.has(r) ? 1 : 0));   // r — 채운 줄이면 N−1(그 줄의 사는 순간 · 찬 시각도 N−1 번째 칩으로)
 // 켜진 칩이 붙은 시각을 세워 N번째(칩 수 기준) — HHMM · 시각 모르는 칩은 그 줄이 판에 처음 든 때로 봄(칩은 든 때보다 앞설 수 없음 · 든 때도 모르면 장 시작 전) · 칩이 모자라면 null
 // 칩 시각은 서버 rows[].chipTime(칩마다 처음 붙은 시각 · 한 번 붙었다 빠져도 남음 · 개발2 a3ea7ff)이 있으면 그것 먼저
-const nthChipAt = (r) => { const at = { ...(r.chipAt || {}), ...(r.chipTime || {}) }; const ts = colsOf().filter((c) => everChip(r, c)).map((c) => String(at[c] || (c === 'VI·급등' ? r.viAt || '' : '')).replace(/:/g, '').slice(0, 4) || inTs(r).slice(0, 4) || '0000').sort(); const N = chipNeed(); return ts.length >= N ? ts[N - 1] : null; };
+const nthChipAt = (r) => { const at = { ...(r.chipAt || {}), ...(r.chipTime || {}) }; const ts = colsOf().filter((c) => everChip(r, c)).map((c) => String(at[c] || (c === 'VI·급등' ? r.viAt || '' : '')).replace(/:/g, '').slice(0, 4) || inTs(r).slice(0, 4) || '0000').sort(); const N = chipNeed(r); return ts.length >= N ? ts[N - 1] : null; };
 // 보기만 줄의 가정 매수 — 판에 들어올 때 값(서버 r.buy)으로 샀다고 치고 셈만 보임(11-24 재권님 「들어올때 샀다는 전제로 셈을 하도록 하고 진짜 산건 아닌거처럼 해줘」) · 합계 · 평균 · 상위 N 에는 안 듦
 let HYPO = new WeakMap();   // calcDay 를 돌 때마다 새로 — 판 줄 객체가 다시 그릴 때 그대로 쓰여, 셈 칸을 바꿔 본 표로 든 줄에 가정 값이 남지 않게(개념정의 검수 11-24)
 function buyOf(r) {   // → { px, at(HHMM), src } | null
@@ -294,10 +295,10 @@ function buyOf(r) {   // → { px, at(HHMM), src } | null
   if (n === 1 && curD() && curD().flat930) { const T = nthChipAt(r); if (T == null) return null;
     if (T > chipUntil().replace(':', '') && !st.set.buyLate930) return null;   // 09:30 뒤에 칩이 찬 종목 — 셈 칸 「삼 / 안 삼」(set.buyLate930 · 기본 안 삼 = 서버 buy930 · 승률 표와 같음) · 재권님 「살지말지 내가 정할수 있어야해」(11-23 19:4x)
     // 9시 1분 · 1~5분 값이 없는 날(1분봉은 11-12 부터 쌓임)은 안 사지 않고 아래 「든 때 → 다음 30분 칸」 으로 — 서버 buy930 과 같은 차례(11-23 재권님 「누락된 이유가 뭐지? 코드가 뭔가 일괄적이지 않은거 같은데」 → 「응」)
-    const p1 = minHM(1); if (T <= p1) { const o = minVal(r, 1); if (o && Number(o.px) > 0) return { px: Number(o.px), at: p1, src: `${hmS(p1)} 값 · 칩 ${chipNeed()}개 찬 때 ${hmS(T)}` }; }
-    for (const k of PMIN) { const h = minHM(k); if (T <= h) { const o = minVal(r, k); if (o && Number(o.px) > 0) return { px: Number(o.px), at: h, src: `${hmS(h)} 값 · 칩 ${chipNeed()}개 찬 때` }; break; } }
-    const e = inTs(r).slice(0, 4); if (e && e >= T && Number(r.buy) > 0) return { px: Number(r.buy), at: e, src: `${hmS(e)} 든 때 · 칩 ${chipNeed()}개 찬 때` };
-    const t = ((curD().times) || []).find((x) => hhmm(x) >= T), v = t && Number((r.px || {})[t]); return v > 0 ? { px: v, at: hhmm(t), src: `${hmS(hhmm(t))} 칸 값 · 칩 ${chipNeed()}개 찬 때 ${hmS(T)}` } : null; }
+    const p1 = minHM(1); if (T <= p1) { const o = minVal(r, 1); if (o && Number(o.px) > 0) return { px: Number(o.px), at: p1, src: `${hmS(p1)} 값 · 칩 ${chipNeed(r)}개 찬 때 ${hmS(T)}` }; }
+    for (const k of PMIN) { const h = minHM(k); if (T <= h) { const o = minVal(r, k); if (o && Number(o.px) > 0) return { px: Number(o.px), at: h, src: `${hmS(h)} 값 · 칩 ${chipNeed(r)}개 찬 때` }; break; } }
+    const e = inTs(r).slice(0, 4); if (e && e >= T && Number(r.buy) > 0) return { px: Number(r.buy), at: e, src: `${hmS(e)} 든 때 · 칩 ${chipNeed(r)}개 찬 때` };
+    const t = ((curD().times) || []).find((x) => hhmm(x) >= T), v = t && Number((r.px || {})[t]); return v > 0 ? { px: v, at: hhmm(t), src: `${hmS(hhmm(t))} 칸 값 · 칩 ${chipNeed(r)}개 찬 때 ${hmS(T)}` } : null; }
   if (n === 1) { const e = inTs(r), p1 = `${minHM(1)}00`, u = inUntil();
     // 굳힘마다 산 값이 다름(11-23 재권님 「각 굳힘별로 산 가격은 다르게 해줘야해 9시 5분 굳힘은 현재 만들어놓은 룰이고. 그이후에 굳힘 종목은 들어올때로 만들어줘」)
     //   첫 굳힘(09:05 · lock 1)은 아래 룰 그대로 · 둘째 굳힘부터(lock 2 · 3)는 판에 처음 든 때 가격(r.buy) · 산 시각 든 때
@@ -550,7 +551,14 @@ const live = d.flat930 ? live0.map((r, i) => [r, nthChipAt(r) || '9999', i]).sor
   const rows1 = st.only ? liveP.filter((r) => liveChip(r, st.only)) : liveP;   // 거르고 나서 순번 · 상위 N · 평균을 다시 셈
   const rows0 = S.minChip > 0 ? rows1.filter((r) => nEver(r) >= S.minChip) : rows1;   // 칩 N개 이상만(11-18) — 켜진 칩으로 센 수 · 한 번 붙었다 빠진 칩도 셈(nEver · 11-24)
   // 유통 시총 거르기(11-23 재권님 「종목 옆에 유통주식 필터 넣어줘 ()억 이라고 해서 해당금액 하위로 필터링되게」) — 풀린 시총(서버 rows[].floatCap · 억원)이 넣은 값 이하인 종목만 · 못 잰 종목(우선주 등 null)은 가를 수 없어 남김 · 빈칸 = 전체
-  const rowsF = S.floatMax > 0 ? rows0.filter((r) => r.floatCap == null || !Number.isFinite(Number(r.floatCap)) || Number(r.floatCap) <= S.floatMax) : rows0;
+  const fOk = (r) => !(S.floatMax > 0) || r.floatCap == null || !Number.isFinite(Number(r.floatCap)) || Number(r.floatCap) <= S.floatMax;
+  let rowsF = rows0.filter(fOk); FILL = new WeakSet(); let fillAdd = 0;
+  // 칩 N개 종목이 모자라면 N−1개로 채움(11-24 재권님 「칩이 n개인데 5개가 안되면 n-1개로 가는것도 있으면 좋을거같은데」 → 「채움 채우지않음 선택되게해줘」)
+  //   칩 N개 종목을 먼저 · 모자란 만큼 칩 N−1개 종목을 N−1번째 칩이 찬 시각별로 뒤에 붙임 · N−2 로는 안 내려감 · 채운 줄은 사는 순간도 N−1번째 칩이 찬 때
+  if (S.fill && S.minChip > 1 && Number(S.fillN) > 0 && rowsF.length < Number(S.fillN)) {
+    const add = rows1.filter((r) => nEver(r) === S.minChip - 1 && fOk(r)); add.forEach((r) => FILL.add(r));
+    const pick = add.map((r, i) => [r, nthChipAt(r) || '9999', i]).sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[2] - b[2])).map((x) => x[0]).slice(0, Number(S.fillN) - rowsF.length);
+    add.forEach((r) => { if (!pick.includes(r)) FILL.delete(r); }); fillAdd = pick.length; rowsF = rowsF.concat(pick); }
   const rowsG = st.grp && grpOn ? rowsF.filter((r) => grpHas(r, st.grp)) : rowsF;   // 섹터 · 테마 칸에서 누른 묶음만(11-24 · 칸 셈은 거르기 전 rowsF) · 본 표 그릴 때만(grpOn) — 칩별 승률 · 기간 줄 날마다 차익에는 안 듦(개념정의 덧 14:32)
   const rows = st.order && ORDER_FN[st.order] ? [...rowsG].sort(ORDER_FN[st.order]) : rowsG;   // 줄 세우기를 바꾸면 순번 · 상위 N 을 그 차례로
   const L = times.length - 1;
@@ -598,7 +606,7 @@ const live = d.flat930 ? live0.map((r, i) => [r, nthChipAt(r) || '9999', i]).sor
     .sort((a, b) => String(a.buyTs || a.buyAt || '').localeCompare(String(b.buyTs || b.buyAt || ''))).map((r) => { const t = inTs(r);
       if (Number(r.buy) > 0) HYPO.set(r, { px: Number(r.buy), at: t.slice(0, 4), src: `${t.length >= 6 ? `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}` : '—'} 든 때 · 가정(산 것 아님)` });
       const x = mkR(r); x.hypo = true; return x; }) : [];
-  return { times, all, live, rows1, rowsF, rows, L, LIVE, R, n, nb, per, top, noMkt, P, lkMode, lkWon, lkCnt, G, RV, IX };
+  return { fillAdd, times, all, live, rows1, rowsF, rows, L, LIVE, R, n, nb, per, top, noMkt, P, lkMode, lkWon, lkCnt, G, RV, IX };
 }
 
 // 날별 합계에서 손익이 없는 날의 까닭 (11-23 재권님 「응」) — 매수가가 분 칸(09:01 ~ 09:05)인데 돈 넣을 줄 전부 그 분 값이 없으면(1분봉을 11-12 부터 쌓아 그 앞 날은 비어 있음)
@@ -662,6 +670,7 @@ function paint0(d) {
   const bm = d.meta || {}, nm = (a) => names(a).join(' · ');   // 되채운 날 · 못 받은 칩 — 칩 이름은 서버가 준 그대로
   const rebuilt = bm.rebuilt === true ? ` · 되채운 날${nm(bm.missing) ? ` · ${nm(bm.missing)} 못 셈` : ''}${nm(bm.approx) ? ` · ${nm(bm.approx)} 어림` : ''}` : `${nm(bm.missing) ? ` · 못 받은 칩 ${nm(bm.missing)}` : ''}${nm(bm.early) ? ` · ${nm(bm.early)} 어림(집계 전)` : ''}${bm.late && typeof bm.late === 'object' && Object.keys(bm.late).length ? ` · 늦게 채움 ${Object.entries(bm.late).map(([k, v]) => `${k} ${v}`).join(' · ')}` : ''}`;
   $('dt-meta').textContent = `${dayTxt(d.day)}${rebuilt}${C.fb905 ? ' · 그날 룰로는 매매가 없어 여는 시각 + 5분(9:05 · 늦게 연 날은 그만큼 뒤)에 산 것으로 셈' : ''}${LIVE ? ` · 장중 실시간(${esc(String(d.nowAt || '—'))} 값 · 14:00 뒤 굳혀 저장)` : d.closed === true ? ' · 14:00 뒤 굳힌 값' : ''} · 후보 ${num(all.length)} 중 켜진 칩에 걸린 ${num(live.length)} · 보이는 ${num(rows.length)} · ${d.flat930 && buyKey() === 'p1' ? `줄 = 켠 칩 ${chipNeed()}개 먼저 찬 순(${chipUntil()} 앞 · 뒤로 가름) · 매수가 = 찬 때 값(줄마다 매수가 칸 아래)` : d.buyAt ? (st.openAt ? `${hmTxt(d.buyAt)} 부터 판 · 매수가 = 정규장 ${hmTxt(String(st.openAt).replace(':', ''))} 시가` : `${hmTxt(d.buyAt)} 매수`) : '매수 시각 —'} · 판 것 ${sold.length}(손절 ${sold.filter((x) => x.s.why === '손절').length} · 꺾임 ${sold.filter((x) => x.s.why === '꺾임').length} · 고점 ${sold.filter((x) => x.s.why === '고점').length} · 산 뒤 ${st.set.cutMin}분 미달 ${sold.filter((x) => x.s.why === '미달').length}${st.set.flat ? ` · 횡보 ${sold.filter((x) => x.s.why === '횡보').length}` : ''}${st.set.endAt ? ` · ${hmTxt(st.set.endAt)} 매도 시각 ${sold.filter((x) => x.s.why === '매도 시각').length}` : ''}) · 끝까지 들고 감 ${R.length - sold.length} · 결과 평균 ${sgn(resAvg)} · 이긴 것 ${res.filter((v) => v > 0).length} · 진 것 ${res.filter((v) => v < 0).length}`;
+  if (C.fillAdd) $('dt-meta').textContent += ` · 칩 ${st.set.minChip}개 종목이 ${st.set.fillN}종목이 안 돼 칩 ${st.set.minChip - 1}개 종목 ${C.fillAdd}개로 채움`;   // 11-24
   if (mkOn() && KX.bars && !mkHas(d.day)) $('dt-meta').textContent += ' · 이 날 코스피 값 없음 — 코스피 조건 매도 줄 안 씀(맨 윗줄로 셈)';   // 11-24 개념정의 덧
   // 상위 몇 종목 · 금액은 이 줄에서 바로 넣는다(11-18 재권님 「상위종목 갯수넣을수 있게 금액도 넣을수 있게 … 이거 수정하면 일별로 다 값이 다시 적용되서 그달 총액 다시 정산되게」) — 바꾸면 그날 판 · 달 합계(monthPaint)가 같은 셈으로 다시 셈
   { const nob = rows.filter((r) => { const B = buyOf(r); return !B || (st.set.endAt && B.at >= st.set.endAt); }).length   /* 매도 시각보다 늦게 든 종목도 안 삼(calc 의 boughtOf 와 같은 셈) */; if (nob) $('dt-meta').textContent = $('dt-meta').textContent.replace(/끝까지 들고 감 (\d+)/, (m, k) => `끝까지 들고 감 ${+k - nob} · 안 삼 ${nob}`); }   // 안 산 종목(고른 시각 뒤에 듦 · 값 없음)은 들고 간 것이 아님 — 따로 셈(11-20)
@@ -911,9 +920,9 @@ function rngBox(el) {
   if (!b) {
     el.innerHTML = '<span class="dt-rng"></span><span class="dt-msum"></span>'; b = el.querySelector('.dt-rng'); o = el.querySelector('.dt-msum');
     b.addEventListener('change', () => { const f = b.querySelector('[data-rng="from"]').value, t = b.querySelector('[data-rng="to"]').value; const lat = st.days.slice().sort().pop(), F = f || (t ? t : ''), T = t || (f ? lat : '');   // 한쪽만 고르면 — 시작만이면 끝은 가장 최근 날 · 끝만이면 그 날 하루
-      st.rng = F && T ? (F <= T ? { from: F, to: T } : { from: T, to: F }) : null; rngSave(); monthPaint(); });
-    b.addEventListener('click', (e) => { if (e.target.closest('[data-rng-off]')) { st.rng = null; rngSave(); monthPaint(); }
-      if (e.target.closest('[data-bymon]')) { st.byMon = !st.byMon; try { localStorage.setItem(RNG_KEY + '-mon', st.byMon ? '1' : '0'); } catch (x) { /* 못 남겨도 됨 */ } monthPaint(); } });
+      st.rng = F && T ? (F <= T ? { from: F, to: T } : { from: T, to: F }) : null; rngSave(); chips();   /* 달 단추 칠함도 다시(11-24) */ });
+    b.addEventListener('click', (e) => { if (e.target.closest('[data-rng-off]')) { st.rng = null; rngSave(); chips();   /* 달 단추 칠함도 다시(11-24) */ }
+      if (e.target.closest('[data-bymon]')) { st.byMon = !st.byMon; try { localStorage.setItem(RNG_KEY + '-mon', st.byMon ? '1' : '0'); } catch (x) { /* 못 남겨도 됨 */ } chips();   /* 달 단추 칠함도 다시(11-24) */ } });
   }
   const all = st.days.slice().sort().reverse(), R = st.rng && all.includes(st.rng.from) && all.includes(st.rng.to) ? st.rng : null;
   const opt = (sel) => all.map((d) => `<option value="${d}"${d === sel ? ' selected' : ''}>${dayTxt(d)}</option>`).join('');
@@ -954,16 +963,19 @@ function chips() {
   if (!st.days.length) { $('dt-days').innerHTML = ''; monthPaint(); return; }
   const mons = [...new Set(st.days.map(monOf))];
   if (!mons.includes(st.mon)) st.mon = monOf(st.day) || mons[0];
-  const cnt = (m) => st.days.filter((d) => monOf(d) === m).length;
-  const dayBtn = (d) => { const a = st.last[d]; return `<button type="button" class="kh-chip${d === st.day ? ' is-active' : ''}" role="tab" aria-selected="${d === st.day}" data-day="${d}">${dayTxt(d)}${a == null ? '' : `<small class="${signClass(a, NUM) || ''}">${a > 0 ? '+' : ''}${num(a, 1)}%</small>`}</button>`; };
+    const dayBtn = (d) => { const a = st.last[d]; return `<button type="button" class="kh-chip${d === st.day ? ' is-active' : ''}" role="tab" aria-selected="${d === st.day}" data-day="${d}">${dayTxt(d)}${a == null ? '' : `<small class="${signClass(a, NUM) || ''}">${a > 0 ? '+' : ''}${num(a, 1)}%</small>`}</button>`; };
   // 날짜 줄은 아래 기간 줄 하나로 합침(11-24 재권님 「믿에로 하나로 합쳐줄래? 믿에 날짜와 차익같이 보이고 날짜 누르면 그날그날 종목 보이게」) — 달 단추도 그 줄 머리로
-  st.monsH = `<span class="dt-mons dt-mons-in" role="tablist" aria-label="달">${mons.map((m) => `<button type="button" class="dt-mon${m === st.mon ? ' is-on' : ''}" role="tab" aria-selected="${m === st.mon}" data-mon="${m}">${monTxt(m)}<small>${cnt(m)}일</small></button>`).join('')}</span>`;
+  // 달 단추(11-24 재권님 「달단추옆에 날은 없애줘 헷갈리네. 그리고 년도도 필요없고 , 년도는 따로 고르게 하면될거같아」) — 달 단추는 「11월」 만 · 해는 앞 해 단추로 따로 · 기간 · 달별로 볼 때는 달 단추를 안 칠함
+  const yrs = [...new Set(mons.map((m) => m.slice(0, 4)))].sort().reverse(); if (!yrs.includes(st.year)) st.year = (st.mon || mons[0] || '').slice(0, 4) || yrs[0];
+  const monOn = (m) => m === st.mon && !st.byMon && !st.rng;
+  st.monsH = `<span class="dt-mons dt-mons-in" role="tablist" aria-label="달"><span class="dt-seg dt-years" role="tablist" aria-label="해">${yrs.map((y) => `<button type="button" class="kh-chip${y === st.year ? ' is-active' : ''}" data-year="${y}">${y}년</button>`).join('')}</span>${mons.filter((m) => m.slice(0, 4) === st.year).map((m) => `<button type="button" class="dt-mon${monOn(m) ? ' is-on' : ''}" role="tab" aria-selected="${monOn(m)}" data-mon="${m}">${+m.slice(4)}월</button>`).join('')}</span>`;
   $('dt-days').innerHTML = ''; void dayBtn;
   monthPaint();   // 달이 정해진 뒤 — 고른 달 합계
 }
 BIND.push(() => { const f = $('dt-setf'); if (!f) return; try { if (localStorage.getItem('dt-setf') === '0') f.open = false; } catch (e) { /* 못 읽어도 펼침 */ }   // 셈 칸 접기 — 이 브라우저에 남김(보는 상태 · 11-24)
   f.addEventListener('toggle', () => { try { localStorage.setItem('dt-setf', f.open ? '1' : '0'); } catch (e) { /* 못 남겨도 됨 */ } }); });
 BIND.push(() => ['dt-days', 'dt-month'].forEach((id) => $(id) && $(id).addEventListener('click', (e) => {
+  const yb = e.target.closest('[data-year]'); if (yb) { if (yb.dataset.year !== st.year) { st.year = yb.dataset.year; const ms = [...new Set(st.days.map(monOf))].filter((m) => m.slice(0, 4) === st.year); if (ms.length && !ms.includes(st.mon)) st.mon = ms[0]; chips(); } return; }   // 해 고르기(11-24)
   const mb = e.target.closest('[data-mon]');
   if (mb) { if (mb.dataset.mon !== st.mon) { st.mon = mb.dataset.mon; chips(); } return; }   // 달만 바꿈 — 날짜는 그 달 줄에서 고름(판은 그대로)
   const b = e.target.closest('[data-day]'); if (b && b.dataset.day !== st.day) { st.mon = monOf(b.dataset.day); load(b.dataset.day); }
@@ -1130,7 +1142,8 @@ function setFill() {
   { const g = $('dt-lkgrid'), W = winsOf(), sig = JSON.stringify(W); if (g && g.dataset.sig !== sig && !g.contains(document.activeElement)) { g.innerHTML = ''; g.dataset.sig = sig;   /* 굳힘 없앰(11-23) — 굳힘 · 창 설정 표를 안 그림 · lkGridHtml 은 되돌릴 때 쓰려고 남김 */ g.style.gridTemplateColumns = W ? 'auto auto auto' : 'auto auto auto auto auto auto'; } }   // 창 여섯 · 옛 판은 굳힘 넷
   const v = { minChip: S.minChip || '', top: S.top, won: (S.mode === 'day' ? S.dayWon : S.perWon) / 10000, grpWon: (S.grpWon > 0 ? S.grpWon : S.dayWon) / 10000, stop: S.stop == null ? '' : S.stop, trail: S.trail == null ? '' : S.trail, turnPct: S.turnPct || '', cutMin: S.cutMin ?? '', flatMin: S.flatMin ?? '', flatPct: S.flatPct ?? '', endAt: S.endAt ? hmTxt(S.endAt) : '', cutPct: S.cutPct ?? '', lock0: (S.lockAt || [])[0] || '', lock1: (S.lockAt || [])[1] || '', lock2: (S.lockAt || [])[2] || '' };
   ORD_KEYS.forEach(([k]) => { v[`ord:${k}`] = (S.ordScore || {})[k] ?? ''; });
-  v.sendFrom = S.sendFrom ?? ''; v.sendN = S.sendN ?? '';   // 매수 메시지 보내기(11-24)
+  v.sendFrom = S.sendFrom ?? ''; v.sendN = S.sendN ?? ''; v.fillN = S.fillN ?? '';
+  box.querySelectorAll('.dt-fill-n').forEach((e) => { e.textContent = S.minChip > 0 ? String(S.minChip) : ' '; }); box.querySelectorAll('.dt-fill-m').forEach((e) => { e.textContent = S.minChip > 1 ? String(S.minChip - 1) : ' '; }); box.querySelectorAll('[data-fill]').forEach((b) => b.classList.toggle('is-active', (b.dataset.fill === '1') === !!S.fill));   // 칩 모자라면 채움(11-24)   // 매수 메시지 보내기(11-24)
   box.querySelectorAll('.dt-send-n').forEach((e) => { e.textContent = S.minChip > 0 ? String(S.minChip) : ' '; }); box.querySelectorAll('.dt-send-u').forEach((e) => { e.textContent = chipUntil(); });
   ['up', 'dn'].forEach((sd) => { const L = (S.mk || {})[sd] || {}; v[`mk:${sd}:pct`] = L.pct ?? ''; v[`mk:${sd}:stop`] = L.stop ?? ''; });   // 코스피 조건 줄(11-24)
   [0, 1, 2, 3, 4, 5].forEach((i) => { const gw = (S.grpWons || [])[i]; v[`gw${i}`] = gw > 0 ? gw / 10000 : ''; v[`gn${i}`] = (S.lockNs || [])[i] ?? ''; v[`gc${i}`] = (S.lockMinChip || [])[i] ?? ''; });   // 굳힘 칸마다(11-23)   // 종목 차례 점수(11-23)
@@ -1223,6 +1236,7 @@ function setRead(el) {
   if (k === 'endAt') { if (raw === '') { S.endAt = ''; return S; } const m = /^(\d{1,2}):?(\d{2})$/.exec(raw); if (!m || +m[1] > 15 || +m[2] > 59) return bad('시각은 13:30 꼴 · 빈칸이면 판 끝'); S.endAt = m[1].padStart(2, '0') + m[2]; return S; }   // 「13:30」 꼴이라 숫자 검사 앞에서
   const v = raw === '' ? null : Number(raw);
   if (v != null && !Number.isFinite(v)) return bad('숫자만');
+  if (k === 'fillN') { if (v != null && (!Number.isInteger(v) || v < 1)) return bad('1 이상 정수 · 빈칸 = 안 채움'); S.fillN = v; return S; }   // 11-24
   if (k === 'sendFrom') { if (v != null && (!Number.isInteger(v) || v < 0 || v > 29)) return bad('0~29 정수(분) · 빈칸 = 서버 기본'); S.sendFrom = v; return S; }   // 매수 메시지 보내기(11-24)
   if (k === 'sendN') { if (v != null && (!Number.isInteger(v) || v < 1 || v > 20)) return bad('1~20 정수 · 빈칸 = 서버 기본'); S.sendN = v; return S; }
   if (k === 'floatMax') { if (v != null && v < 0) return bad('0 이상 억 · 빈칸 = 전체'); S.floatMax = v || 0; return S; }
@@ -1249,6 +1263,7 @@ BIND.push(() => {
     const y = e.target.closest('[data-pyr]'); if (y) { e.preventDefault(); const on = y.dataset.pyr === '1'; if (on !== !!st.set.pyr) setChange({ ...st.set, pyr: on }); return; }
     const nb = e.target.closest('[data-nobuy]'); if (nb) { e.preventDefault(); const A = [...(st.set.lockNoBuy || [])], i = +nb.dataset.nobuy; while (A.length <= i) A.push(null); A[i] = A[i] ? null : true; setChange({ ...st.set, lockNoBuy: A }); return; }
     if (e.target.closest('[data-setsave]')) { e.preventDefault(); setSave(); return; }   // 셈 칸 저장(11-23)
+    const fb = e.target.closest('[data-fill]'); if (fb) { e.preventDefault(); const on = fb.dataset.fill === '1'; if (on !== !!st.set.fill) setChange({ ...st.set, fill: on }); return; }   // 채움 · 채우지 않음(11-24)
     const mo = e.target.closest('[data-mkon]'); if (mo) { const sd = mo.dataset.mkon, M = { ...(st.set.mk || {}) }; M[sd] = { ...(M[sd] || {}), on: !!mo.checked }; setChange({ ...st.set, mk: M }); return; }   // 줄 켜고 끄기(11-24)
     const mr = e.target.closest('[data-mkref]'); if (mr) { e.preventDefault(); const [sd, k] = mr.dataset.mkref.split(':'); const M = { ...(st.set.mk || {}) }; M[sd] = { ...(M[sd] || {}), ref: k }; setChange({ ...st.set, mk: M }); return; }   // 코스피 조건 기준(11-24)
     const ms = e.target.closest('[data-mksbar]'); if (ms) { e.preventDefault(); const [sd, k] = ms.dataset.mksbar.split(':'); const M = { ...(st.set.mk || {}) }; M[sd] = { ...(M[sd] || {}), sellBar: k }; setChange({ ...st.set, mk: M }); return; }
@@ -1392,6 +1407,7 @@ const TPL = `
               </div>
               <div class="dt-set-buy" style="flex:1 1 360px;min-width:0;word-break:keep-all;display:flex;flex-direction:column;gap:4px;padding:8px 12px;border-radius:var(--kh-radius-sm);background:var(--kh-bg-card)"><b style="font-size:12px">매수</b>
                 <label class="dt-fee">칩 <input data-set="minChip" class="rl-in rl-num" inputmode="numeric" aria-label="칩 몇 개 이상만">개 이상 <span class="rl-sug">빈칸 = 전체</span></label>
+                <label class="dt-fee" data-tip="칩 N개 종목을 먼저 사고, 모자란 만큼 칩 하나 적은 종목을 그 칩이 찬 시각별로 더합니다 · 그래도 모자라면 거기까지(두 개 적은 것으로는 안 내려감) · 채우지 않음이면 칩 N개 종목만 · 저장 단추로 남김">칩 (<span class="dt-fill-n">—</span>)개 찬 종목이 <input data-set="fillN" class="rl-in rl-num" inputmode="numeric" placeholder="( )" aria-label="몇 종목이 안 되면 채움">종목이 안 되면 칩 (<span class="dt-fill-m">—</span>)개 종목으로 <span class="dt-seg"><button type="button" class="kh-chip" data-fill="1">채움</button><button type="button" class="kh-chip" data-fill="0">채우지 않음</button></span></label>
                 <label class="dt-fee" data-tip="칩 수가 09:30 뒤에 찬 종목(판 아래 「09:30 뒤에 찬 종목」 묶음)을 살지 정합니다 · 안 삼이면 그 줄은 판에 남고 손익 셈에서 빠집니다 · 저장 단추로 남김">09:30 뒤에 찬 종목 <span class="dt-seg"><button type="button" class="kh-chip" data-late="1">삼</button><button type="button" class="kh-chip" data-late="0">안 삼</button></span></label>
                 <label class="dt-fee" data-tip="고른 때 값에 삽니다 · 그 값이 없는 종목은 안 삽니다 · 파는 룰은 산 뒤 30분 칸(09:30 · 10:00 …)부터">매수 <span class="dt-seg">${BUYS.map(([k, t]) => `<button type="button" class="kh-chip" data-buy="${k}">${t}</button>`).join('')}</span></label>
                 <label class="dt-fee" data-tip="손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삽니다 · 더 산 몫은 그 종목을 팔 때 함께 팝니다">불타기 <span class="dt-seg"><button type="button" class="kh-chip" data-pyr="1">켬</button><button type="button" class="kh-chip" data-pyr="0">끔</button></span></label>
