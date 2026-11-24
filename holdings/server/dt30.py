@@ -2989,10 +2989,13 @@ def _pxmin_live(proxy, cfg, b, n):
 # ── 사는 때 거래 값 둘 (2026-11-24 재권님 「응 해줘」 16:5x · 시황분석1 과 논의 — 「전날 같은 시각 대비」 는 빼고 「전일대비 거래량」 은 9시 25분에)
 #    rows[].turnMin {"1"~"5": {at, turn, src} | null} — 여는 시각 + N분까지의 「유통 대비 거래 %」(pxMin 과 같은 칸) ·
 #        1분봉(여는 시각 봉 ~ 여는 시각 + N − 1 봉)의 Σ(종가 × 거래량) ÷ (풀린 주식수 × 그 끝 봉 종가) × 100 — 대금은 1분봉 어림(src 「1m」)
-#    rows[].volDay {at, pct, vol, prevVol, src} | null — 여는 시각 + VOL_DAY_MIN 분까지 쌓인 거래량(그날 1분봉 전부 · 프리장 포함 통합) ÷ 전날 하루 거래량(일봉 · 통합) × 100
+#    rows[].volDay {at, pct, vol, prevVol, src} | null — 여는 시각 + VOL_DAY_MIN 분까지 정규장 누적 거래량(한국거래소 · 프리장 뺌 · 거래 값 시각 칸 turnover_slot) ÷
+#        전날 하루 거래량(한국거래소 · turnover_day · 화면 prevDayVol 과 같은 기준) × 100 — 재권님 「프리장 미포함으로 하고 전일대비 거래량」(11-24 16:5x · 시황분석1 경유) ·
+#        시각 칸은 VOL_SLOT_LOOK 분 안 마지막 칸(at 에 그 칸 시각) · 칸은 오늘 · 전날만 남아(turnover.SLOT_KEEP_DAYS) 지난 판은 장중에 적어 저장한 날만
 #    meta.turnMinAt · volDayAt — 그 시각(늦게 연 날은 그만큼 뒤). 그날 판은 그 분이 끝난 뒤에만 적는다(덜 찬 봉으로 안 셈) ·
 #    풀린 주식수 · 1분봉 · 전날 일봉이 없으면 null(못 잼 · 0 아님). 지난 판은 1분봉이 남은 날만(11-11 부터) 읽을 때 채운다(저장 안 함).
 VOL_DAY_MIN = 25             # 전일대비 거래량을 재는 때 — 여는 시각 + 이 분(보통 09:25 · 재권님 「9시 25분에 보이는걸로」 11-24)
+VOL_SLOT_LOOK = 5            # 그 시각 칸이 없으면 이 분 안 앞 칸까지(거래 값 받기가 1분마다라 칸이 1~2분 띄엄)
 
 
 def _trade_min_fill(proxy, b, now=None):
@@ -3014,19 +3017,20 @@ def _trade_min_fill(proxy, b, now=None):
     q = ",".join("?" * len(codes))
     lo, hi = day + _hhmm(o).replace(":", ""), day + _hhmm(o + max(PX_MIN) - 1).replace(":", "")
     bars, upto, prev = {}, {}, {}
+    import turnover
     try:
         with proxy.db_conn() as conn:
             for c, t, cl, v in conn.execute("SELECT code, ts, close, volume FROM candles WHERE period = '1m' AND ts BETWEEN ? AND ? AND code IN (%s) ORDER BY ts" % q,
                                             [lo, hi] + codes):
                 bars.setdefault(c, []).append((t, cl, v))
             if hm >= o + VOL_DAY_MIN:
-                t_end = day + _hhmm(o + VOL_DAY_MIN - 1).replace(":", "")
-                for c, n_, sv in conn.execute("SELECT code, COUNT(*), SUM(volume) FROM candles WHERE period = '1m' AND ts BETWEEN ? AND ? AND code IN (%s) GROUP BY code" % q,
-                                              [day + "0000", t_end] + codes):
-                    upto[c] = sv if n_ and sv is not None else None
-                for c in codes:
-                    g = conn.execute("SELECT volume FROM candles WHERE code = ? AND period = 'D' AND ts < ? ORDER BY ts DESC LIMIT 1", (c, day)).fetchone()
-                    prev[c] = g[0] if g else None
+                s_hi, s_lo = _hhmm(o + VOL_DAY_MIN).replace(":", ""), _hhmm(o + VOL_DAY_MIN - VOL_SLOT_LOOK).replace(":", "")
+                for c, sl, sv in conn.execute("SELECT code, slot, vol FROM turnover_slot WHERE day = ? AND slot BETWEEN ? AND ? AND vol IS NOT NULL AND code IN (%s) ORDER BY slot" % q,
+                                              [day, s_lo, s_hi] + codes):
+                    upto[c] = (sv, "%s:%s" % (sl[:2], sl[2:]))   # 마지막(가장 늦은) 칸이 남는다
+        if hm >= o + VOL_DAY_MIN:
+            pdy = turnover._prev_day(proxy, day)
+            prev = {c: g.get("vol") for c, g in (turnover.day_rows(proxy, pdy, codes) if pdy else {}).items()}
     except Exception as e:
         print("  [단타 30] 사는 때 거래 값 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
         return 0
@@ -3053,7 +3057,7 @@ def _trade_min_fill(proxy, b, now=None):
             n_got += 1
         if "volDay" not in r and hm >= o + VOL_DAY_MIN:
             a, p = upto.get(c), prev.get(c)
-            r["volDay"] = {"at": _hhmm(o + VOL_DAY_MIN), "pct": round(a / p * 100, 1), "vol": a, "prevVol": p, "src": "1m÷D"} if a is not None and p else None
+            r["volDay"] = {"at": a[1], "pct": round(a[0] / p * 100, 1), "vol": a[0], "prevVol": p, "src": "krx"} if a and p else None
             n_got += 1 if r["volDay"] else 0
     return n_got
 
