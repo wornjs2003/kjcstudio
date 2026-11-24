@@ -1475,6 +1475,8 @@ export async function setDtScore(score) {
   await saveDt({ score: st.score });
 }
 export const dtChips = () => [...colsOf()];   // 단타 판 칸의 칩 — 서버가 칩 목록을 안 줄 때 점수 칸이 고를 조건
+// 주소 끝 #dt-buydef 로 들어오면 「매수 룰 정의」 칸(과 그것을 싼 셈 칸)을 펴고 그 자리로 — API 화면이 이 칸을 링크로 가리킴(개발3 · 재권님 「나」 11-24 18:2x) · 칸은 이 스크립트가 그린 뒤라 브라우저가 스스로 못 찾음
+const openByHash = (host) => { const id = decodeURIComponent(String(location.hash || '').slice(1)); if (!/^dt-[\w-]+$/.test(id)) return; const el = host.querySelector(`#${id}`); if (!el) return; for (let p = el; p && p !== host; p = p.parentElement) if (p.tagName === 'DETAILS') p.open = true; requestAnimationFrame(() => el.scrollIntoView({ block: 'start' })); };
 export function mountDt30(host) {
   if (!host) return;
   unmountDt30();
@@ -1482,6 +1484,7 @@ export function mountDt30(host) {
   host.innerHTML = TPL;
   root = host;
   BIND.forEach((f) => f());
+  openByHash(host);
   loadFee().then(() => { if (root === host) load(); });
 }
 export function unmountDt30() {
