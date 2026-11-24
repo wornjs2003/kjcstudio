@@ -33,8 +33,9 @@ const volTxt = (x) => { const v = Number(x); if (x == null || !Number.isFinite(v
 const amtTxt = (e) => { const v = Number(e); if (e == null || !Number.isFinite(v)) return '—'; return v >= 10000 ? `${num(v / 10000, 2)}조` : `${num(v, v < 10 ? 1 : 0)}억`; };
 const prevPctTxt = (p, key) => { const v = Number(p); if (p == null || !Number.isFinite(v)) return '—'; const c = toneHas(key) ? tonePaint(key, v, 'text') : ''; return `<span${c ? ` style="color: ${c}"` : ''}>${num(v, 0)}%</span>`; };
 // 전일 하루 거래량 대비 지금 거래량(%) — 서버 accVol(오늘 누적 · 한국거래소라 프리장 빠짐) ÷ prevDayVol(전날 하루) × 100 · 못 잰 종목은 null(11-24 재권님 「프리장 미포함으로 하고 전일대비 거래량 … 종목에는 전일대비 현재거래량인데 지금 하고자 하는 방향으로 바꾸자」)
+//   색 없음 — 뜻이 vol_prev_pct(전날 같은 시각 대비)와 달라 그 이름을 안 씀 · 지표 표에 새 항목(기준 · 폭은 재권님 값 · 개념정의가 여쭘)이 들어오면 그 id 로 칠함(개념정의 검수 16:56)
 const dayVolPct = (r) => { const a = Number(r.accVol), b = Number(r.prevDayVol); return r.accVol != null && r.prevDayVol != null && Number.isFinite(a) && b > 0 ? a / b * 100 : null; };
-const accTxt = (r) => `<span data-tip="오늘 누적 · 량 괄호는 전날 하루 거래량 대비(프리장 빠짐) · 대금 괄호는 전날 같은 시각 대비">량 ${volTxt(r.accVol)}(${prevPctTxt(dayVolPct(r), 'vol_prev_pct')}) · 대금 ${amtTxt(r.accValue)}(${prevPctTxt(r.valuePrevPct, 'amt_prev_pct')})</span>`;
+const accTxt = (r) => `<span data-tip="오늘 누적 · 량 괄호는 전날 하루 거래량 대비(프리장 빠짐) · 대금 괄호는 전날 같은 시각 대비">량 ${volTxt(r.accVol)}(${prevPctTxt(dayVolPct(r), null)}) · 대금 ${amtTxt(r.accValue)}(${prevPctTxt(r.valuePrevPct, 'amt_prev_pct')})</span>`;
 const WK = ['일', '월', '화', '수', '목', '금', '토'];
 const dayTxt = (d) => { const m = String(d || '').match(/^(\d{4})(\d{2})(\d{2})$/); return m ? `${m[2]}-${m[3]}(${WK[new Date(+m[1], +m[2] - 1, +m[3]).getDay()]})` : '—'; };
 const hmTxt = (t) => (/^\d{4}$/.test(String(t)) ? `${String(t).slice(0, 2)}:${String(t).slice(2)}` : esc(t || '—'));
