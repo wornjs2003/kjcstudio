@@ -280,7 +280,21 @@ def sectors():
 
 
 def floats():
-    """{code: 풀린 주식수(주)} — 발행주식수 × 유동비율 · 쥔 것만(받지 않는다) · 둘 중 하나라도 못 읽은 종목은 안 넣는다(화면은 「못 잼」).
+    """{code: 풀린 주식수(주)} — 한 곳은 float_shares.floats_info(DART 셈 → 네이버 → DART 유통 어림 → KIS 상장 어림 · 2026-11-24 재권님 「응 해」).
+    부르는 곳(turnover · 단타 판)은 그대로 이것을 부른다 · 어느 것인지는 floats_src()."""
+    import float_shares
+    return {c: v[0] for c, v in float_shares.floats_info().items()}
+
+
+def floats_src():
+    """{code: 「dart」 · 「naver」 · 「dart-유통」(어림) · 「kis」(어림)} — floats() 의 값이 어디서 왔나."""
+    import float_shares
+    return {c: v[1] for c, v in float_shares.floats_info().items()}
+
+
+def naver_floats():
+    """{code: (풀린 주식수, 「naver」)} — 네이버 발행주식수 × 유동비율 · 쥔 것만(받지 않는다) · 둘 중 하나라도 못 읽은 종목은 안 넣는다(화면은 「못 잼」).
+    float_shares.floats_info 의 ② — DART 셈이 없는 종목의 빈칸 메우기(두 벌이 아니라 차례).
     우선주(코드 끝자리가 0 이 아님)는 안 넣는다 — 네이버 그 칸이 보통주 값이라(005935 가 005930 과 같은 5,846,278,608주 · 74.96% · qa 검수 11-23 08:33)
     넣으면 풀린 시총이 보통주 크기로 부푼다. 우선주 유동주식수 출처는 아직 없다(「아직」 이지 「영영」 이 아님)."""
     with _lock:
@@ -291,7 +305,7 @@ def floats():
                 continue
             nv = r.get("naver") or {}
             if nv.get("shares") and nv.get("floatPct") is not None:
-                out[c] = int(nv["shares"] * nv["floatPct"] / 100)
+                out[c] = (int(nv["shares"] * nv["floatPct"] / 100), "naver")
         return out
 
 
