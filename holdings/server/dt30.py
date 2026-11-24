@@ -3026,6 +3026,80 @@ def send_top(proxy, b, head=""):
     return dart.telegram_send(top_text(proxy, b, head=head))
 
 
+# ── 매수 보내기 — 칩이 찬 시각별로 (2026-11-24 재권님 「칩이 9시 2분안부터 30분사이에 찬 종목중 상위 5개 로 해줘」 → 「텔레그램으로 보내는것도 여기에 맞춰서」 →
+#    「9시 02분전에 찬 종목은 빠지는게 아니고 들어가야 · 9시 30분까지 순차적으로 칩이 n개가 차면 순차적으로 매수 하라고 메세지가 가야지」 →
+#    「첫메세지는 9시 7분이 아니고 3분부터 찬종목들 순차로 보내준다」) ──
+# 사는 셈(buy930 · 칩 N개 찬 시각 · 찬 차례) 그대로 · 칩 셈 끝(CHIP_UNTIL · 늦게 연 날은 그만큼 뒤)까지 찬 종목만 · 위 BUY_PICK_N 종목.
+# 여는 시각 + BUY_SEND_FROM_MIN 분부터 — 그때까지 찬 종목은 찬 시각별로 · 그 뒤는 찰 때마다 한 종목씩(종목마다 한 통) · 합쳐 BUY_PICK_N 이면 끝.
+# 텔레그램(TG_SEND) · 슬랙 매수 목록(trade_signal.send_today · SEND) · 「팔 때」 대상(meta.tgTop)이 이 한 목록을 쓴다.
+BUY_PICK_N = 5                # 기본값 — 셈 칸 rules.dt30.set.sendN 이 있으면 그것(buy_pick_n · 재권님 「내가 중간중간 바꿀수 있게 ()로」 11-24)
+BUY_SEND_FROM_MIN = 3         # 기본값(여는 시각 + 분) — 셈 칸 rules.dt30.set.sendFrom 이 있으면 그것(buy_send_from)
+
+
+def _set_int(key, dflt, lo, hi):
+    """셈 칸(rules.dt30.set) 정수 — 빈칸 · 틀린 꼴 · 범위 밖 · 못 읽음이면 기본값."""
+    try:
+        import dt30_win
+        v = dt30_win._set().get(key)
+        v = int(v) if v is not None and v != "" and not isinstance(v, bool) else None
+    except Exception:
+        v = None
+    return v if v is not None and lo <= v <= hi else dflt
+
+
+def buy_pick_n():
+    """보낼 종목 수 — 셈 칸 sendN(1~20) · 없으면 BUY_PICK_N."""
+    return _set_int("sendN", BUY_PICK_N, 1, 20)
+
+
+def buy_send_from():
+    """보내기 시작 — 여는 시각 + 이 분(셈 칸 sendFrom · 0~29) · 없으면 BUY_SEND_FROM_MIN."""
+    return _set_int("sendFrom", BUY_SEND_FROM_MIN, 0, 29)
+
+
+def buy_order(proxy, b):
+    """→ (줄들 · 칩 셈 끝 분) — 그날 판(rows · 빠진 줄 outRows)을 사는 셈으로 세어(판은 안 바꿈) 칩 셈 끝까지 찬 줄을 찬 시각별로 위 BUY_PICK_N."""
+    import copy
+    bb = copy.deepcopy(b)
+    buy930_fill(proxy, bb)
+    until = _open_min(proxy, bb["day"], bb) - (OPEN_AT[0] * 60 + OPEN_AT[1]) + CHIP_UNTIL[0] * 60 + CHIP_UNTIL[1]
+    rows = [r for r in (bb.get("rows") or []) + ((bb.get("meta") or {}).get("outRows") or [])
+            if r.get("buy930") and int(r["buy930"]["chipAt"][:2]) * 60 + int(r["buy930"]["chipAt"][3:5]) <= until]
+    return sorted(rows, key=lambda r: r["buy930"]["rank"])[:buy_pick_n()], until
+
+
+def buy_text(r):
+    """「매수」 텔레그램 글 — 「종목명 매수하세요」 한 줄(「팔 때」 글과 같은 꼴 · 재권님 「가로해줘」 11-24)."""
+    return "%s 매수하세요" % (r.get("name") or r["code"])
+
+
+def buy_send(proxy, b, hm):
+    """여는 시각 + BUY_SEND_FROM_MIN 분부터 칩 셈 끝 + 1분까지 — 새로 찬 종목을 찬 시각별로 meta.tgTop 에 더하고(종목마다 산 값 · 시각 meta.tgBuy) 텔레그램 한 통씩 → 더한 수."""
+    o = _open_min(proxy, b["day"], b)
+    if hm < o + buy_send_from():
+        return 0
+    m = b.setdefault("meta", {})
+    top = m.setdefault("tgTop", [])
+    pick = buy_pick_n()
+    if len(top) >= pick:
+        return 0
+    rows, until = buy_order(proxy, b)
+    if hm > until + 1:
+        return 0
+    n = 0
+    for r in rows:
+        if r["code"] in top or len(top) >= pick:
+            continue
+        top.append(r["code"])
+        m.setdefault("tgBuy", {})[r["code"]] = {"px": r["buy930"]["px"], "at": r["buy930"]["at"], "chipAt": r["buy930"]["chipAt"], "sentAt": _now().strftime("%H:%M:%S")}
+        m["tgTopAt"] = _now().strftime("%H:%M")
+        n += 1
+        if TG_SEND:
+            ok, why = dart.telegram_send(buy_text(r))
+            print("  [단타 30] 매수 %s %s" % (r["code"], "보냄" if ok else "못 보냄 — " + str(why)), flush=True)
+    return n
+
+
 SELL_SEND = True             # 켜기 — 아침 상위 TG_TOP 이 꺾이면 「팔 때」 한 통씩(종목마다 한 번 · 하루 9~10통 — 11-12~19 엿새 셈) · 재권님 「응 해줘」(11-19 14:4x · 시험 한 통 보신 뒤) · 보내는 서버(8765)만
 SELL_DROP_PCT = 2.0          # 고점 대비 이만큼 내려오면 — 재권님 「30분단위로 대비했을때 가격이 하락한상황이거나 고점대비 2% 하락시로 해줘」(11-19 14:3x)
 SELL_STEP_MIN = 30           # 「30분 전보다 내림」 을 보는 칸 — 정시 30분마다(09:30 · 10:00 …) 그때 값을 전 칸(첫 칸은 산 값 = 개장 1분 값)과 견줌
@@ -3044,8 +3118,9 @@ def sell_watch(proxy, cfg, b, now=None):
     close = close // 100 * 60 + close % 100
     hm = now.hour * 60 + now.minute
     top = set((b.get("meta") or {}).get("tgTop") or [])
-    rows = [r for r in b.get("rows") or [] if r["code"] in top and not r.get("sell")
-            and ((r.get("pxMin") or {}).get("1") or {}).get("px")]
+    tb = (b.get("meta") or {}).get("tgBuy") or {}
+    bpx = lambda r: (tb.get(r["code"]) or {}).get("px") or ((r.get("pxMin") or {}).get("1") or {}).get("px")   # 보낸 매수 값(찬 때) · 옛 판은 개장 1분 값
+    rows = [r for r in (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or []) if r["code"] in top and not r.get("sell") and bpx(r)]
     if not rows or hm < o + 2 or hm >= close - SELL_UNTIL_MIN:
         return []
     q, _ = proxy.fetch_quotes_multi(cfg, [r["code"] for r in rows], max_age=proxy.PRICE_CACHE_TTL)
@@ -3056,7 +3131,7 @@ def sell_watch(proxy, cfg, b, now=None):
         p = (q.get(r["code"]) or {}).get("price")
         if not p:
             continue
-        buy = r["pxMin"]["1"]["px"]
+        buy = bpx(r)
         hi = max(v for v in (_sell["hi"].get(r["code"]), r.get("sellHi"), buy, p) if v)   # 고점 = 산 값과 그 뒤 본 현재가 중 최고(앞으로 올 값은 안 섞음 · 서버가 다시 뜨면 판에 적힌 것부터)
         _sell["hi"][r["code"]] = hi
         why, ref = None, None
@@ -3345,10 +3420,7 @@ def start(proxy):
                             if hm >= o_min + n + 1 and any(str(n) not in (r.get("pxMin") or {}) for r in b["rows"]):
                                 _pxmin_live(proxy, proxy.load_secrets(), b, n)
                                 flow_now = True
-                        if o_min + 2 <= hm < o_min + 2 + TG_LATE_MIN and not b["meta"].get("tgTop") and b["rows"] and not b.get("closed"):
-                            # 아침 상위는 개장 직후 창 안에서만 정한다 — 서버가 낮에 뜨면 그때 상위로 「팔 때」 를 보내지 않게(그날은 안 봄)
-                            b["meta"]["tgTop"] = [r["code"] for r in sorted(b["rows"], key=lambda r: r.get("rank") or 1e9)[:TG_TOP]]   # 아침 상위 — 「팔 때」 를 보는 종목(보냄과 무관하게 적음)
-                            b["meta"]["tgTopAt"] = _now().strftime("%H:%M")
+                        if b["rows"] and not b.get("closed") and buy_send(proxy, b, hm):   # 매수 — 칩 N개 찬 시각별로 · 여는 시각 + 3분부터 · 찰 때마다 한 종목씩(11-24) · 「팔 때」 대상도 이것
                             flow_now = True
                         if pre_fill(proxy, proxy.load_secrets(), b, hm):   # 오늘 프리장 끝 값 — 08:50 뒤 · 새로 든 줄은 다음 바퀴에
                             flow_now = True
@@ -3361,10 +3433,6 @@ def start(proxy):
                                 if SELL_SEND:
                                     ok, why = dart.telegram_send(sell_text(r))
                                     print("  [단타 30] 팔 때 %s %s" % (r["code"], "보냄" if ok else "못 보냄 — " + str(why)), flush=True)
-                        if TG_SEND and _status.get("tg") != day and o_min + 2 <= hm < o_min + 2 + TG_LATE_MIN and b["rows"]:
-                            _status["tg"] = day            # 하루 한 통 — 실패해도 다시 안 보낸다(앞 통이 갔을 수 있다)
-                            ok, why = send_top(proxy, b)
-                            print("  [단타 30] 상위 %d 텔레그램 %s" % (TG_TOP, "보냄" if ok else "못 보냄 — " + str(why)), flush=True)
                         if OPEN_AT[0] * 60 + OPEN_AT[1] + off <= hm < _close_min(proxy, now) and time.time() - _status.get("cfLive", 0) >= LIVE_TTL:
                             _status["cfLive"] = time.time()       # 정규장 끝까지 단타 목록을 세어 칩 처음 시각을 남긴다 — 09:30 · 굳힘 뒤 붙는 칩도(재권님 「9시 30분 이후에 붙는 칩들도 다 기록되어야해」 11-23 19:0x)
                             try:                                  # 화면이 안 열려 있어도 돈다 · 캐시(LIVE_TTL) 안이면 셈을 다시 안 함
