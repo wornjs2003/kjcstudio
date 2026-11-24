@@ -3608,6 +3608,11 @@ def fetch_price(cfg, code):
     if not out["price"] and not out["listed"]:
         _cache_put(ck, {"notFound": True})
         raise NoSuchStock("없는 종목 코드입니다 (%s)" % code)
+    try:
+        import float_shares
+        float_shares.note_listed(code, out["listed"])   # 풀린 주식수 — 상장주식수가 달라진 회사를 다음 밤에 다시 받음 · 어림 재료(11-24)
+    except Exception:
+        pass
     if div == "UN":
         overnight_price(code, out)          # 자정 뒤 08:00 전 — 어제 20:00 넥장 마감 값으로(아래 `overnight_row`)
     _cache_put(ck, out)
@@ -11571,6 +11576,11 @@ def main():
               % (dart.UNIVERSE_SIZE, dart.POLL_INTERVAL // 60))
         print("  지배구조   : %s" % ("밤마다 받음(20:00~07:00)" if dart_gov.start_filler()
                                     else "꺼짐 — dart_gov.GOV_FETCH(켜기는 재권님 지시)"))
+        try:
+            import float_shares
+            print("  풀린 주식수: %s" % ("밤마다 받음(지배구조와 같은 밤 · 같은 몫 · 11-24)" if float_shares.start_filler() else "꺼짐 또는 읽기 전용 — float_shares.FETCH"))
+        except Exception as e:
+            print("  풀린 주식수: 못 띄움 — %s" % safe_message(e, 120))
         # **`NOTIFY_LOCAL` 을 함께 본다** (2026-09-22).
         #
         # 전에는 열쇠(`secrets.json`)만 보고 「텔레그램 켜짐」 으로 찍었다.
