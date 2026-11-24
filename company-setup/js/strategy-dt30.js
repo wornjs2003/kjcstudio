@@ -509,7 +509,7 @@ const live = d.flat930 ? live0.map((r, i) => [r, nthChipAt(r) || '9999', i]).sor
   const rows0 = S.minChip > 0 ? rows1.filter((r) => nEver(r) >= S.minChip) : rows1;   // 칩 N개 이상만(11-18) — 켜진 칩으로 센 수 · 한 번 붙었다 빠진 칩도 셈(nEver · 11-24)
   // 유통 시총 거르기(11-23 재권님 「종목 옆에 유통주식 필터 넣어줘 ()억 이라고 해서 해당금액 하위로 필터링되게」) — 풀린 시총(서버 rows[].floatCap · 억원)이 넣은 값 이하인 종목만 · 못 잰 종목(우선주 등 null)은 가를 수 없어 남김 · 빈칸 = 전체
   const rowsF = S.floatMax > 0 ? rows0.filter((r) => r.floatCap == null || !Number.isFinite(Number(r.floatCap)) || Number(r.floatCap) <= S.floatMax) : rows0;
-  const rowsG = st.grp ? rowsF.filter((r) => grpHas(r, st.grp)) : rowsF;   // 섹터 · 테마 칸에서 누른 묶음만(11-24 · 칸 셈은 거르기 전 rowsF)
+  const rowsG = st.grp && grpOn ? rowsF.filter((r) => grpHas(r, st.grp)) : rowsF;   // 섹터 · 테마 칸에서 누른 묶음만(11-24 · 칸 셈은 거르기 전 rowsF) · 본 표 그릴 때만(grpOn) — 칩별 승률 · 기간 줄 날마다 차익에는 안 듦(개념정의 덧 14:32)
   const rows = st.order && ORDER_FN[st.order] ? [...rowsG].sort(ORDER_FN[st.order]) : rowsG;   // 줄 세우기를 바꾸면 순번 · 상위 N 을 그 차례로
   const L = times.length - 1;
   // 그날 판 실시간 (11-11 재권님 「그날은 변동에 맞춰서 실시간으로 적용되야 하고 그날 2시가 지나면 값이 저장되도록 해줘. 다만 필터나 수수료등을 바꿨을때 값이 바뀌는건 되야되」 → 「응 진행해」)
@@ -601,7 +601,8 @@ function paint0(d) {
   st.rules = (d.meta && d.meta.rules) || null; st.chipInfo = (d.meta && d.meta.chipInfo) || null;   // 칩 풍선 — 서버 룰 값 · 받는 때 글(tipOf)
   st.miss = new Set(names(d.meta && d.meta.missing)); st.wait = new Set(names(d.meta && d.meta.wait)); st.watchAuto = !!(d.meta && d.meta.watchRule === '자동'); st.openAt = (d.meta && d.meta.openAt) || ((d.rows || []).find((r) => r.buySrc && r.buyAt) || {}).buyAt || null; st.rebuilt = !!(d.meta && d.meta.rebuilt === true);   // openAt — 서버 meta.openAt · 없으면(다시 센 판) 줄의 buyAt
   { const k = Number(d.meta && d.meta.minChips); if (root) root.querySelectorAll('.dt-min').forEach((e) => { e.textContent = k > 0 ? `칩 ${k}개 이상 든 종목` : '칩 하나 이상 든 종목(옛 셈 판)'; }); }   // 문턱은 서버 meta.minChips 한 곳(11-18 판부터 둘 이상)
-  const C = calc(d), { RV, IX, times, all, live, rows1, rows, L, LIVE, R, n: topN, per, top, noMkt, P, lkMode, lkWon, lkCnt, G } = C;
+  grpOn = true; let C; try { C = calc(d); } finally { grpOn = false; }
+  const { RV, IX, times, all, live, rows1, rows, L, LIVE, R, n: topN, per, top, noMkt, P, lkMode, lkWon, lkCnt, G } = C;
   stPaint(C.rowsF || []);
   usLoad(d.day);
   // 칩 줄은 표 안 「종목」 머리 줄과 「평균」 줄 사이에 (11-11 재권님 「칩위치는 종목과 평균사이에 넣어줘」) · 표가 옆으로 밀려도 칩은 왼쪽에 붙어 있음(strategy.css)
@@ -1260,6 +1261,7 @@ const ORD_KEYS = [['chips', '칩 수(점수)'], ['rise', '초반상승 %'], ['ca
 // 섹터 · 테마 칸 — 판에 든 종목(셈 칸 · 켜진 칩 · 유통 거르기 뒤)을 섹터 · 테마로 묶음(11-24 재권님 「칩에 걸린 종목들중에 같은 섹터를 구분할수 있나 · 섹터와 테마를 둘다 보고싶네」 → 자리 (가) 「커밋해」)
 //   섹터 = 판 줄 sector(서버 · 네이버 WICS) · 테마 = 판 줄 themes(종목이 든 네이버 테마 번호 — 서버 개발2 몫 · 없으면 「서버 값 못 받음」) · 테마 이름 · 큰 테마 = /api/nxt/themes(실시간 순위 「테마」 와 같은 묶음)
 //   줄을 누르면 본 표가 그 묶음 종목만(st.grp) · 다시 누르면 풂 · 셈은 화면 · 「기타」(밸류업 · 지주사 같은 묶음 테마)는 같은 종류끼리 묶은 것이 아니라 뺌
+let grpOn = false;   // 섹터 · 테마 거름을 걸 셈인가 — 그날 본 표를 그릴 때만 참
 const TH = { map: null, busy: false };   // 테마 번호 → {name, big}
 async function thLoad() {
   if (TH.map || TH.busy) return; TH.busy = true;
@@ -1273,23 +1275,23 @@ function stPaint(rows) {
   const box = root && root.querySelector('#dt-st'); if (!box) return;
   const sum = box.querySelector('.dt-st-sum'), body = box.querySelector('.dw-body');
   const grp = (keyOf) => { const G = new Map(); rows.forEach((r) => keyOf(r).forEach((k) => { if (!G.has(k)) G.set(k, []); G.get(k).push(r); }));
-    const mean = (v) => { const xs = v.map((r) => Number(r.pct)).filter(Number.isFinite); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; };
-    return [...G].map(([k, v]) => ({ k, v: [...v].sort((a, b) => (Number(b.pct) || 0) - (Number(a.pct) || 0)), avg: mean(v) })).sort((a, b) => b.v.length - a.v.length || (b.avg ?? -1e9) - (a.avg ?? -1e9)); };
+    const mean = (v) => { const xs = v.filter((r) => r.pct != null).map((r) => Number(r.pct)).filter(Number.isFinite); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; };
+    return [...G].map(([k, v]) => ({ k, v: [...v].sort((a, b) => { const x = Number(a.pct), y = Number(b.pct), fx = a.pct != null && Number.isFinite(x), fy = b.pct != null && Number.isFinite(y); return fx && fy ? y - x : fx ? -1 : fy ? 1 : 0; }), avg: mean(v) })).sort((a, b) => b.v.length - a.v.length || (b.avg ?? -1e9) - (a.avg ?? -1e9)); };
   const sec = grp((r) => [r.sector || '섹터 모름']);
   const hasTh = rows.some((r) => Array.isArray(r.themes));
   const sm = hasTh && TH.map ? grp((r) => [...new Set(thOf(r).map((t) => t.name))]) : [];
   const big = hasTh && TH.map ? grp((r) => [...new Set(thOf(r).map((t) => t.big))]) : [];
   const bigOf = (name) => { for (const t of (TH.map ? TH.map.values() : [])) if (t.name === name) return t.big; return ''; };
   const on = (k, v) => st.grp && st.grp.k === k && st.grp.v === v;
-  const names = (v) => v.slice(0, 3).map((r) => `${esc(r.name)} ${pct(Number(r.pct))}`).join(' · ') + (v.length > 3 ? ' …' : '');
-  const tr = (k, g, extra = '') => `<tr class="dt-st-row${on(k, g.k) ? ' is-active' : ''}" data-stg="${k}" data-stv="${esc(g.k)}" style="cursor:pointer${on(k, g.k) ? ';background:var(--kh-accent-faint, var(--accent-faint))' : ''}"><td class="dw-l">${esc(g.k)}</td>${extra}<td>${num(g.v.length)}</td><td>${pct(g.avg)}</td><td class="dw-l dw-top">${names(g.v)}</td></tr>`;
+  const names = (v) => v.slice(0, 3).map((r) => `${esc(r.name)} ${pct(r.pct == null ? null : Number(r.pct))}`).join(' · ') + (v.length > 3 ? ' …' : '');
+  const tr = (k, g, extra = '') => `<tr class="dt-st-row${on(k, g.k) ? ' is-active' : ''}" data-stg="${k}" data-stv="${esc(g.k)}"><td class="dw-l">${esc(g.k)}</td>${extra}<td>${num(g.v.length)}</td><td>${pct(g.avg)}</td><td class="dw-l dw-top">${names(g.v)}</td></tr>`;
   const thBox = !hasTh ? '<div class="st-err">종목별 테마 — 서버 값 못 받음(판 줄에 테마 번호가 아직 없음 · 개발2)</div>'
     : !TH.map ? `<div class="st-err">테마 이름 — ${TH.busy ? '받는 중' : '못 받음'}</div>`
-    : `<div class="dt-seg" style="margin:2px 0 6px">${big.map((g) => `<button type="button" class="kh-chip${on('big', g.k) ? ' is-active' : ''}" data-stg="big" data-stv="${esc(g.k)}">${esc(g.k)} ${num(g.v.length)}</button>`).join('')}</div>
+    : `<div class="dt-seg dt-st-big">${big.map((g) => `<button type="button" class="kh-chip${on('big', g.k) ? ' is-active' : ''}" data-stg="big" data-stv="${esc(g.k)}">${esc(g.k)} ${num(g.v.length)}</button>`).join('')}</div>
        <table class="dw-tb"><thead><tr><th class="dw-l">작은 테마</th><th class="dw-l">큰 테마</th><th>종목</th><th>평균 등락</th><th class="dw-l">종목(많이 오른 순)</th></tr></thead><tbody>${(() => { const L = sm.filter((g) => !(st.grp && st.grp.k === 'big') || bigOf(g.k) === st.grp.v), K = 12, sh = L.slice(0, K).concat(st.grp && st.grp.k === 'th' && L.findIndex((g) => g.k === st.grp.v) >= K ? L.filter((g) => g.k === st.grp.v) : []); return sh.map((g) => tr('th', g, `<td class="dw-l">${esc(bigOf(g.k))}</td>`)).join('') + (L.length > K ? `<tr><td class="dw-l rl-sug" colspan="5">… 외 작은 테마 ${num(L.length - K)}개(종목 수 적은 것) — 큰 테마 단추로 좁혀 보기</td></tr>` : ''); })() || '<tr><td class="dw-l st-err" colspan="5">—</td></tr>'}</tbody></table>`;
   if (sum) sum.textContent = `${num(rows.length)}종목 · 섹터 ${num(sec.length)}${hasTh && TH.map ? ` · 큰 테마 ${num(big.length)}` : ''}${st.grp ? ` · 거름: ${st.grp.v}` : ''}`;
   body.innerHTML = `<div class="st-cap">판에 든 종목(셈 칸 · 켜진 칩 · 유통 거르기 뒤)을 섹터 · 테마로 묶음 · 줄을 누르면 아래 본 표가 그 종목만 · 다시 누르면 풂${st.grp ? ` · <button type="button" class="kh-chip" data-stg="" data-stv="">거름 풀기 — ${esc(st.grp.v)}</button>` : ''} · 평균 등락 = 오늘 등락률 · 셈은 화면 · 테마 「기타」(밸류업 · 지주사 같은 묶음 테마)는 뺌</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:12px 16px">
+    <div class="dt-st-grid">
       <div><b>섹터</b> <span class="rl-sug">네이버 WICS · 종목 하나에 섹터 하나</span><table class="dw-tb"><thead><tr><th class="dw-l">섹터</th><th>종목</th><th>평균 등락</th><th class="dw-l">종목(많이 오른 순)</th></tr></thead><tbody>${sec.map((g) => tr('sec', g)).join('') || '<tr><td class="dw-l st-err" colspan="4">—</td></tr>'}</tbody></table></div>
       <div><b>테마</b> <span class="rl-sug">네이버 테마 · 종목 하나가 여러 테마에 듦</span>${thBox}</div>
     </div>`;
