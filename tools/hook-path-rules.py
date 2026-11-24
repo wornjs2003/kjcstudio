@@ -124,9 +124,16 @@ def main():
         if tool == "Bash":
             cmd = ti.get("command") or ""
             run = set(RUN_RE.findall(cmd))
-            paths = [p for p in PATH_RE.findall(cmd) if p not in run]
+            # heredoc 본문은 글이다 — 메모 · 메시지에 경로를 적은 것을 고치는 대상으로 세지 않는다(작업우선순위 11-24 헛걸림)
+            #   파이썬 · node 쓰기는 본문이 코드라 open( · Path( 안의 경로만 고칠 대상으로 본다
+            head = re.split(r"<<-?\s*['\"]?\w+['\"]?", cmd, maxsplit=1)[0]
+            pyw = re.search(r"\b(?:python3?|node)\b[\s\S]*(?:open\(|\.write\(|write_text|writeFileSync|os\.replace|shutil\.)", cmd)
+            if pyw:
+                paths = [p for p in re.findall(r"(?:open|Path|writeFileSync)\(\s*[rbf]?['\"]([^'\"]+)['\"]", cmd) if p not in run]
+            else:
+                paths = [p for p in PATH_RE.findall(head) if p not in run]
             kind = "read" if READ_RE.search(cmd) and not WRITE_RE.search(cmd) else "write" if WRITE_RE.search(cmd) else None
-            if kind == "write" and not WHOLE_RE.search(cmd):
+            if kind == "write" and not pyw and not WHOLE_RE.search(head):
                 # 리다이렉트 · tee · mv · cp 는 쓰는 자리만 — `git show x:a.js > /tmp/b` 의 a.js 는 읽는 쪽이다
                 tg = re.findall(r"(?:>>?|\btee\s+(?:-a\s+)?)\s*([^\s&|;]+)", cmd)
                 tg += [m.split()[-1] for m in re.findall(r"\b(?:mv|cp)\s+[^;&|\n]+", cmd)]
