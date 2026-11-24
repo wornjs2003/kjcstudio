@@ -121,6 +121,7 @@ let calcD = null;
 const curD = () => calcD || st.data;
 const DM = () => (curD() && curD().meta) || {};
 const addHM = (t, m) => { const x = +t.slice(0, 2) * 60 + +t.slice(2) + (m || 0); return `${String(Math.floor(x / 60)).padStart(2, '0')}${String(x % 60).padStart(2, '0')}`; };
+const BUY_AT_DEF = '0905', BUY_AT_MIN = '0905', BUY_AT_MAX = '0930';   // 매수 룰 기준 시각(set.buyAt) — 보통 날 시각 · 쓰는 자리에서 늦은 분(lateOf · 서버 openAt)을 더함 · 서버 판 meta 가 기준 시각을 주면 그것을 씀(아직 안 줌 · 개발2 배분 대기) · 재권님 값(11-24 「9시 5분 이라고 고정해놓고 … 변수로 빼서」 · 「09:05분~30분이 최종」)
 const REG_OPEN_DEF = '0900';   // 보통 날 정규장 여는 시각 — 서버 판 meta.openAt 이 없는 판에서만(CLAUDE.md 「장 시각으로 셈하는 코드는 늦게 여는 날 그만큼 옮긴다」 3번)
 const openHM = () => { const o = String(DM().openAt || '').replace(':', ''); return /^\d{4}$/.test(o) ? o : REG_OPEN_DEF; };   // 서버가 주면 안 씀
 const viSplit = () => { const v = String(DM().viSplit || '').replace(':', ''); return /^\d{4}$/.test(v) ? v : VI_SPLIT; };   // 나누는 시각은 서버 한 곳 — 판 meta.viSplit(점수 셈과 같은 값 · 개발2 배분 중)이 오면 그 값 · 없으면 09:25(서버 점수와 같게 · 개념정의 267a17d 검수)
@@ -1252,7 +1253,7 @@ function setRead(el) {
       else { if (x === 0) return bad('0 은 못 씀 · 빈칸이면 손절 안 함'); L.stop = x == null ? null : -Math.abs(x); } }
     M[sd] = L; S.mk = M; return S;
   }
-  if (k === 'buyAt') { if (raw === '') { S.buyAt = ''; return S; } const m = /^(\d{1,2}):?(\d{2})$/.exec(raw); const t = m ? m[1].padStart(2, '0') + m[2] : ''; if (!m || t < '0905' || t > '0930') return bad('09:05~09:30 · 09:10 꼴 · 빈칸 = 09:05'); S.buyAt = t; return S; }   // 매수 룰 정의 기준 시각(11-24 · 아직 셈에 안 씀)
+  if (k === 'buyAt') { if (raw === '') { S.buyAt = ''; return S; } const m = /^(\d{1,2}):?(\d{2})$/.exec(raw); const t = m ? m[1].padStart(2, '0') + m[2] : ''; if (!m || t < BUY_AT_MIN || t > BUY_AT_MAX) return bad(`${hmTxt(BUY_AT_MIN)}~${hmTxt(BUY_AT_MAX)} · 09:10 꼴 · 빈칸 = ${hmTxt(BUY_AT_DEF)}`); S.buyAt = t; return S; }   // 매수 룰 정의 기준 시각(11-24 · 아직 셈에 안 씀)
   if (k === 'endAt') { if (raw === '') { S.endAt = ''; return S; } const m = /^(\d{1,2}):?(\d{2})$/.exec(raw); if (!m || +m[1] > 15 || +m[2] > 59) return bad('시각은 13:30 꼴 · 빈칸이면 판 끝'); S.endAt = m[1].padStart(2, '0') + m[2]; return S; }   // 「13:30」 꼴이라 숫자 검사 앞에서
   const v = raw === '' ? null : Number(raw);
   if (v != null && !Number.isFinite(v)) return bad('숫자만');
@@ -1439,7 +1440,7 @@ const TPL = `
                   <div class="rl-sug">그 시각까지 찬 종목은 찬 시각별로 한꺼번에 · 그 뒤는 찰 때마다 한 종목씩 「종목명 매수하세요」 텔레그램 · 칩 개수는 위 「칩 ( )개 이상」 그대로 · 같은 목록이 「팔 때」 알림 대상 · 빈칸 = 서버 기본 · 분 0~29 · 종목 1~20</div></div>
                 <!-- 매수 룰 정의(11-24 재권님 「이거 추가해서 다 정리하고 정리한거 단타에다가 매수룰정의에 넣어줘 접기로해서」 → 「매수룰을 여기안에 접기로 넣어줄래? 언제든 수정가능하도록 대비해놓」) — 정한 룰 글 · 칩 수는 위 칸 값(minChip)을 글로만 · ( ) 칸은 셈 칸 값과 같은 열쇠(fillN · turnMin)라 어디서 바꿔도 같음 · 기준 시각(set.buyAt)만 새 열쇠 · 판 셈 · 서버는 아직 이 룰대로 안 돎 · 3번 다음 상위 — 재권님 「상승률이 우선이고 유통대비거래는 조건이야」 -->
                 <details class="dt-win dt-buydef" id="dt-buydef"><summary>매수 룰 정의 (11-24 정함)</summary><div class="dw-body dt-rdef"><ol>
-                  <li><b>기준 시각</b> — <input data-set="buyAt" class="rl-in rl-num dt-send-in" inputmode="text" placeholder="( )" aria-label="기준 시각 09:05~09:30"> · 09:05~09:30 안 · 빈칸 = 09:05 · 늦게 연 날은 그만큼 뒤</li>
+                  <li><b>기준 시각</b> — <input data-set="buyAt" class="rl-in rl-num dt-send-in" inputmode="text" placeholder="( )" aria-label="기준 시각 09:05~09:30"> · ${hmTxt(BUY_AT_MIN)}~${hmTxt(BUY_AT_MAX)} 안 · 빈칸 = ${hmTxt(BUY_AT_DEF)} · 보통 날 시각이고 늦게 연 날은 그만큼 뒤</li>
                   <li><b>기준 시각 전</b> — 칩 (<span class="dt-send-n">—</span>)개가 찬 순간 삼 <span class="rl-sug">위 「칩 ( )개 이상」 값</span> · 서버에 알리고 텔레그램 「○○ 매수하세요」 가 바로 감 · 판에는 찬 순서대로 위에서부터</li>
                   <li><b>기준 시각에</b> — 찬 종목이 <input data-set="fillN" class="rl-in rl-num dt-send-in" inputmode="numeric" placeholder="( )" aria-label="사는 종목 수">종목에 모자라면 칩이 하나 모자란 종목 중 다음 상위로 채워 그 시각에 삼 · 텔레그램 · 2번 종목 바로 아래<br>다음 상위 — 유통 대비 거래 <input data-set="turnMin" class="rl-in rl-num dt-send-in" inputmode="decimal" placeholder="( )" aria-label="유통 대비 거래 몇 %">% 이상은 조건(넘은 종목만) · 그 안에서 상승률 높은 순 · 같으면 칩 개수 많은 순</li>
                   <li><b>기준 시각 뒤에 찬 종목</b> — 사지 않음 · 텔레그램 안 감</li>
