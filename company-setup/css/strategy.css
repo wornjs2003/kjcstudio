@@ -295,6 +295,12 @@
 /* 칩별 승률 접기 — 손익 칸 안(strategy-dtwin.js · 11-18) · 닫혀 있으면 한 줄 */
 .dt .dt-win { margin-top: 6px; }
 .dt .dt-win > summary { cursor: pointer; font-size: 13px; color: var(--kh-text-primary); font-weight: 500; }
+/* 접혀 있다는 느낌(11-24 재권님 「접혀있다는 느낌이 들게」 → 그림 · 「앞에 진한세모는 유지해줘」) — 흰 막대 · 접힌 동안 겹친 종이 선 · 앞 세모(기본 표시) 그대로 · 오른쪽 「펼치기 / 접기」 */
+.dt .dt-win > summary { display: list-item; position: relative; padding: 9px 76px 9px 14px; border-radius: var(--kh-radius-sm); background: var(--kh-bg-card); border: 1px solid var(--kh-border); }
+.dt .dt-win > summary::after { content: '펼치기'; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; font-weight: 500; color: var(--accent); padding: 2px 10px; border-radius: 12px; background: var(--accent-faint); }
+.dt .dt-win[open] > summary::after { content: '접기'; color: var(--kh-text-secondary); background: var(--kh-bg); }
+.dt .dt-win:not([open]) { border-radius: var(--kh-radius-sm); margin-bottom: 8px; box-shadow: 0 3px 0 -1px var(--kh-bg-card), 0 3px 0 0 var(--kh-border), 0 6px 0 -2px var(--kh-bg-card), 0 6px 0 -1px var(--kh-border); }
+.dt .dt-win[open] > summary { border-radius: var(--kh-radius-sm) var(--kh-radius-sm) 0 0; }
 .dt .dw-body { margin-top: 6px; display: grid; gap: 6px; }
 .dt .dw-tabs { justify-self: start; }
 .dt .dw-tb { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; background: var(--kh-bg-card); }
