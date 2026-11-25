@@ -377,6 +377,10 @@
 .dt .dt-2row td.st-name .dt-code { display: block; font-size: 11px; color: var(--kh-text-muted); }
 .dt .dt-2row .dt-ovm { display: block; font-size: 10.5px; font-weight: 500; color: var(--kh-text-muted); }
 /* 겹침 배지 — 수마다 색(재권님 「5개 빨강 4개 보라 3개 노랑」 · 그 밖 회색) */
+/* 묶음 칩(돈몰림 · 미국강세) — 머리 단추는 「종목」 칸 거르기 아래 · 줄마다 종목 이름 옆(11-25 재권님 「종목 위에 · 종목 이름 옆으로」) */
+.dt .dt-grph { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 6px; font-weight: 400; }
+.dt .dt-grpw { display: inline-flex; gap: 6px; margin-left: 6px; vertical-align: top; }
+.dt .dt-grpb.is-off { opacity: .45; }
 .dt .dt-ovb { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; vertical-align: 1px; color: var(--kh-text-secondary); background: var(--kh-bg); border: 1px solid var(--kh-border-strong); }
 .dt .dt-ovb[data-n="5"] { color: var(--kh-danger); background: var(--kh-danger-faint); border-color: var(--kh-danger); }
 .dt .dt-ovb[data-n="4"] { color: var(--kh-cat-violet); background: var(--kh-cat-violet-dim); border-color: var(--kh-cat-violet); }
