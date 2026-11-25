@@ -995,6 +995,69 @@ def chip_log_get(proxy, day, codes=None):
     return out, None
 
 
+def chip_spans_get(proxy, day, codes=None, since=None):
+    """→ ({code: {칩: [[「HH:MM」 붙음 | None, 「HH:MM」 빠짐 | None] …]}}, 못 잰 까닭 | None) — dt30_chip_log 의 칩 단위(하위 '') 붙음 · 빠짐을 구간으로.
+    빠짐 None = 지금도 붙어 있음 · 붙음 None = 기록 전부터 붙어 있던 칩(buy930_fill 이 처음 붙은 시각으로 채움). 그날 기록이 하나도 없으면(11-24 전 판) ({}, 「그날 기록 없음」)."""
+    log, why = chip_log_get(proxy, day, codes)
+    if why:
+        return {}, why
+    if not log:
+        return {}, "그날 기록 없음"
+    first = min(e["at"] for v in log.values() for e in v)[:5]
+    if since and first > since:
+        return {}, "그날 기록이 %s 부터 — 그 앞 붙음 · 빠짐 못 잼" % first   # 칩 기록을 만든 날(11-24 14:33 부터)처럼 장 앞이 빈 날
+    out = {}
+    for code, evs in log.items():
+        m = {}
+        for e in evs:
+            if e["sub"]:
+                continue
+            sp, t = m.setdefault(e["chip"], []), e["at"][:5]
+            if e["kind"] == "on":
+                if not sp or sp[-1][1] is not None:
+                    sp.append([t, None])
+            elif sp and sp[-1][1] is None:
+                sp[-1][1] = t
+            else:
+                sp.append([None, t])
+        out[code] = {k: v for k, v in m.items() if v}
+    return out, None
+
+
+def _spans4(r, ct, cs):
+    """줄의 칩 구간 [(「HHMM」 붙음, 「HHMM」 빠짐 | None)] — cs 칩만. 구간 기록이 없는 칩은 지금 붙어 있으면 처음 붙은 때부터 열림 · 빠졌으면 안 셈(화면 시황분석1 과 같은 셈 · 11-25)."""
+    e, sp, iv = _in4(r), r.get("chipSpans") or {}, []
+    for c in cs:
+        s = sp.get(c)
+        if s:
+            iv += [(a.replace(":", ""), b.replace(":", "") if b else None) for a, b in s]
+        elif c in (r.get("chips") or []):
+            iv.append(((ct or {}).get(c) or e or "0000", None))
+    return iv
+
+
+def _nth_live(r, ct, cs, need, lim=None):
+    """칩 N개가 「동시에」 붙어 있던 첫 순간 「HHMM」 | None — cs 칩만 · lim 「HHMM」 까지.
+    rows[].chipSpans 가 없는 줄(칩 기록 전 판 · 승률 셈)은 예전 셈 — 처음 붙은 시각을 세워 N번째(한 번 붙었던 칩도 셈)."""
+    if r.get("chipSpans") is None:
+        ts = sorted((ct or {}).get(c) or _in4(r) or "0000" for c in cs)
+        return ts[need - 1] if len(ts) >= need else None
+    iv = _spans4(r, ct, cs)
+    for t in sorted({a for a, _ in iv}):
+        if lim and t > lim:
+            break
+        if sum(1 for a, b in iv if a <= t and (b is None or b > t)) >= need:
+            return t
+    return None
+
+
+def _live_at(r, ct, cs, t):
+    """t 「HHMM」 에 붙어 있던 칩들의 붙은 시각(오른차순) — chipSpans 가 없는 줄은 예전 셈(t 까지 한 번이라도 붙은 칩)."""
+    if r.get("chipSpans") is None:
+        return sorted(x for x in ((ct or {}).get(c) or _in4(r) or "0000" for c in cs) if x <= t)
+    return sorted(a for a, b in _spans4(r, ct, cs) if a <= t and (b is None or b > t))
+
+
 def _cf_flow(proxy, day, rows, at):
     """판 줄 수급 지금 값 — 외국계 창구(ff) · 프로그램(pg) 순매수가 처음 > 0 이 된 때."""
     items = []
@@ -1084,10 +1147,9 @@ def buy_mode():
 def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
     """→ {px, at 「HH:MM」, chipAt 「HH:MM」(N번째 칩 시각), need, src} | None — 위 「사는 셈」 한 곳."""
     e = _in4(r)
-    ts = sorted((ct or {}).get(c) or e or "0000" for c in chips930(r, ct, until))
-    if len(ts) < need:
+    T = _nth_live(r, ct, chips930(r, ct, until), need, "%02d%02d" % until)   # 칩 N개가 동시에 붙어 있던 첫 순간(chipSpans 없는 줄은 예전 셈 · 11-25 재권님 「응」)
+    if not T:
         return None
-    T = ts[need - 1]
     if mode == "open":                                 # 「들어온 때」 — 판에 든 때 값 · 시각(r.buy · buyAt) · 칩 N개 문턱 · 차례는 그대로
         if e and isinstance(r.get("buy"), (int, float)) and r["buy"] > 0:
             return {"px": r["buy"], "at": "%s:%s" % (e[:2], e[2:]), "chipAt": "%s:%s" % (T[:2], T[2:]), "need": need, "src": "들어온 때 값"}
@@ -1137,16 +1199,28 @@ def buy930_fill(proxy, b):
     late = until != CHIP_UNTIL
     if not late and lm > 0:
         until = _sh(CHIP_UNTIL, lm)                    # 늦게 연 날(수능 10:00)은 09:30 마감도 그만큼 뒤(10:30) — 화면 27fe7f9 와 같게 · 시황분석1 덧 11-24
+    try:
+        sp, why = chip_spans_get(proxy, b["day"], None, _hhmm(o))   # 그날 전부 — 기록 첫 시각을 가르려고(여는 시각 뒤에 시작한 날은 못 잼)
+    except Exception as e:
+        sp, why = {}, type(e).__name__
+    b["meta"]["chipSpans"] = {"ok": True} if not why else {"ok": False, "why": why}   # 못 잼이면 줄에 chipSpans 를 안 싣고 매수 셈은 예전대로(한 번 붙은 칩)
     for r in rows:
         c = ct.get(r["code"]) or {}
         r["chipTime"] = {k: "%s:%s" % (v[:2], v[2:]) for k, v in c.items()}
+        if not why:
+            s = {k: [list(x) for x in v] for k, v in (sp.get(r["code"]) or {}).items()}
+            for k, v in s.items():
+                t0 = r["chipTime"].get(k)
+                if v[0][0] is None or (t0 and t0 < v[0][0]):
+                    v[0][0] = t0 or v[0][0] or "00:00"   # 기록 전부터 붙어 있었거나 처음 붙은 시각이 기록보다 이름 — 첫 구간을 처음 붙은 시각부터
+            r["chipSpans"] = s                         # {칩: [[붙음, 빠짐 | None] …]} — 칩 빠진 시각(11-25 재권님 「칩 빠진 시각도 넣어줘」)
         r["chips930"] = chips930(r, c, until)
         r["buy930"] = buy_point(b, r, c, need, o, until, mode)
     got = sorted((r for r in rows if r["buy930"]), key=lambda r: (r["buy930"]["chipAt"], r.get("rank") or 1e9))
     for i, r in enumerate(got, 1):
         r["buy930"]["rank"] = i                        # 산 차례 — 칩 N개 먼저 찬 순(같은 분이면 판 차례) · 한 번 차면 고정 · 뒤에 찬 종목은 아래로(재권님 19:2x 「칩이 먼저찬 순서대로 순위」)
     b["meta"]["buy930"] = {"until": "%02d:%02d" % (CHIP_UNTIL if late else until), "late": late, "lateMin": lm, "need": need, "mode": mode,
-                           "note": "칩은 %02d:%02d 까지 붙은 것만(한 번 붙었다 없어진 칩도 그 시각) · 칩 시각(chipTime)을 세워 %d번째가 붙은 순간에 삼 · 산 차례(buy930.rank) = 칩 먼저 찬 순 — 차면 고정 · 뒤에 찬 종목은 아래로 · 몇 종목 살지는 화면 · 그 순간이 9시 1분 이하면 9시 1분 값 · 여는 시각 + 1~5분 안이면 그 분 값 · "
+                           "note": "칩은 %02d:%02d 까지 붙은 것만 · 칩 %d개가 동시에 붙어 있던 첫 순간에 삼(칩 구간 rows[].chipSpans · 그 구간 기록이 없는 판은 한 번 붙은 칩도 셈) · 산 차례(buy930.rank) = 칩 먼저 찬 순 — 차면 고정 · 뒤에 찬 종목은 아래로 · 몇 종목 살지는 화면 · 그 순간이 9시 1분 이하면 9시 1분 값 · 여는 시각 + 1~5분 안이면 그 분 값 · "
                                    "그 뒤 판에 든 때면 든 때 값 · 아니면 다음 30분 칸 값 · 칩 시각 모르면 판에 든 때(그것도 모르면 장 전) · 화면이 끈 칩은 서버 셈에 안 듦(브라우저마다)" % (tuple(CHIP_UNTIL if late else until) + (need,))}
     return b
 
@@ -3224,9 +3298,10 @@ def buy_order(proxy, b, hm=None, inplace=False):
     cf, split = chip_filter(), ((bb.get("meta") or {}).get("viSplit") or vi_split(o - OPEN_AT[0] * 60 - OPEN_AT[1])).replace(":", "")
 
     def nth(r, lim):
-        e = _in4(r)
-        ts = sorted((ct_of(r).get(c) or e or "0000") for c in chips930(r, ct_of(r), lim) if _chip_on(r, c, cf, split))   # 화면에서 끈 칩은 안 셈(11-24)
-        return ts, (ts[need - 1] if len(ts) >= need else None)
+        ct = ct_of(r)
+        cs = [c for c in chips930(r, ct, lim) if _chip_on(r, c, cf, split)]   # 화면에서 끈 칩은 안 셈(11-24)
+        l4 = "%02d%02d" % lim
+        return _live_at(r, ct, cs, l4), _nth_live(r, ct, cs, need, l4)   # 칩 N개가 동시에 붙어 있던 첫 순간 · 기준 시각에 붙어 있던 칩(11-25 칩 빠진 시각)
 
     got = []
     for r in rows:
