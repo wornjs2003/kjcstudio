@@ -1291,15 +1291,18 @@ def buy930_fill(proxy, b):
     return b
 
 
-_cpx = {}                      # (날, 종목, 「HHMM」) → 1분봉 종가 — 지난 분은 안 바뀜
+_cpx = {}                      # (날, 종목, 「HHMM」) → 1분봉 종가 — 끝난 지 M1_SETTLE_MIN 분 지난 봉만 들고 있음(그 뒤로는 안 바뀜)
+M1_SETTLE_MIN = 3              # 1분봉 받기 바퀴(60초) 두 번이 지나도록 — 진행 중 봉 값이 굳지 않게
 
 
 def _chip_px_fill(proxy, day, rows, o):
     """줄마다 rows[].chipPx {「HH:MM」: 원} — chipSpans 의 붙음 · 빠짐 분마다 그 분 1분봉 종가(정규장 · 여는 시각 ~ 마감 · _m1_px 셈 — 거래 없는 채움 봉은 다음 첫 체결 시가).
     1분봉이 없는 분은 열쇠를 뺀다(0 안 넣음) · 재권님 「산값은 정확해야 할거같은데. 서버에 해당종목의 분봉을 읽어서 셈해야해」(11-25 14:3x) → 개발2 창 「응」."""
+    import market_hours
     now = _now()
-    cut = day + now.strftime("%H%M") if day == now.strftime("%Y%m%d") else day + "2359"
-    close = _close_min(proxy, now) if day == now.strftime("%Y%m%d") else 15 * 60 + 30
+    cut = day + (now - timedelta(minutes=M1_SETTLE_MIN)).strftime("%H%M") if day == now.strftime("%Y%m%d") else day + "2359"   # 끝난 지 M1_SETTLE_MIN 분 지난 봉만 — 1분봉 받기(60초 바퀴 · upsert)가 진행 중 봉을 적었다 끝 값으로 다시 쓸 틈(개념정의 덧 11-25)
+    rc = market_hours.today(proxy, day=day)["reg"][1]   # 그날 정규장 끝 — 늦게 여는 날도 그날 표(개념정의 덧 · 「장 시각으로 셈하는 코드는 늦게 여는 날 그만큼 옮긴다」)
+    close = int(rc[:2]) * 60 + int(rc[2:])
     want = {}
     for r in rows:
         for v in (r.get("chipSpans") or {}).values():
