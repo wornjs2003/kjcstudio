@@ -1263,6 +1263,18 @@ def buy930_fill(proxy, b):
         sp, why = chip_spans_get(proxy, b["day"], None, _hhmm(o))   # 그날 전부 — 기록 첫 시각을 가르려고(여는 시각 뒤에 시작한 날은 못 잼)
     except Exception as e:
         sp, why = {}, type(e).__name__
+    m0 = b.get("meta") or {}
+    if not why and m0.get("rebuilt"):                  # 다시 지은 판인데 장중 칩 기록이 있는 날 — 그때 룰과 지금 판 룰이 다른 칩은 기록을 안 씀(옛 룰로 붙은 것 · 11-26)
+        drop = rule_diff(((m0.get("liveBefore") or {}).get("meta") or {}).get("ruleSig"), m0.get("ruleSig"))
+        if "*" in drop:
+            sp, why = {}, "룰이 바뀌어 다시 셈한 판 — 장중 칩 기록은 옛 룰이라 안 씀"
+        elif drop:
+            sp = {c: {k: v for k, v in d.items() if k not in drop} for c, d in sp.items()}
+    ds = data_since(proxy)
+    b["meta"]["dataSince"] = ds                        # 정보마다 쌓기 시작한 날 — 화면은 읽기만(재권님 11-26)
+    b["meta"]["noData"] = [k for k, v in ds.items() if not v["since"] or b["day"] < v["since"]]
+    if why and "칩 붙음·빠짐" not in b["meta"]["noData"]:
+        b["meta"]["noData"].append("칩 붙음·빠짐")       # 그 판에서 못 쓴 까닭은 meta.chipSpans.why
     b["meta"]["chipSpans"] = {"ok": True} if not why else {"ok": False, "why": why}   # 못 잼이면 줄에 chipSpans 를 안 싣고 매수 셈은 예전대로(한 번 붙은 칩)
     for r in rows:
         c = ct.get(r["code"]) or {}
@@ -1277,7 +1289,7 @@ def buy930_fill(proxy, b):
                 t0 = r["chipTime"].get(k)
                 if v[0][0] is None or (t0 and t0 < v[0][0]):
                     v[0][0] = t0 or v[0][0] or "00:00"   # 기록 전부터 붙어 있었거나 처음 붙은 시각이 기록보다 이름 — 첫 구간을 처음 붙은 시각부터
-            r["chipSpans"] = s                         # {칩: [[붙음, 빠짐 | None] …]} — 칩 빠진 시각(11-25 재권님 「칩 빠진 시각도 넣어줘」)
+            r["chipSpans"] = dict(r.get("chipSpans") or {}, **s) if r.get("spanChips") else s   # 다시 지은 구간(돈몰림 · 기록을 안 쓴 칩)은 남기고 기록이 있는 칩만 기록으로 · {칩: [[붙음, 빠짐 | None] …]} — 칩 빠진 시각(11-25 재권님 「칩 빠진 시각도 넣어줘」)
     if True:                                           # 구간이 없는 판(11-25 전)도 칩 처음 붙은 분(chipTime)으로 — 산 값 어림(30분 칸)을 없앰(qa 덧 · 재권님 「산값은 정확해야」)
         try:
             st = _chip_px_fill(proxy, b["day"], rows, o)
@@ -1286,7 +1298,7 @@ def buy930_fill(proxy, b):
                 for r in rows:
                     r.pop("chipPx", None)
             else:
-                b["meta"]["chipPx"] = {"ok": True, "settledTo": st}   # settledTo 「HH:MM」 — 이 분부터는 아직 굳는 중(열쇠 없음) · 지난 날은 null(다 굳음) · 시황분석1 11-25
+                b["meta"]["chipPx"] = {"ok": True, "settledTo": st, "have": sum(1 for r in rows if r.get("chipPx")), "rows": len(rows)}   # settledTo 「HH:MM」 — 이 분부터는 아직 굳는 중(열쇠 없음) · 지난 날은 null(다 굳음) · 시황분석1 11-25
         except Exception as e:
             b["meta"]["chipPx"] = {"ok": False, "why": type(e).__name__}
     for r in rows:
@@ -1414,8 +1426,10 @@ def bars_fill(proxy, b):
     return n
 
 
-def live_merge(b):
-    """라이브로 굳힌 날을 다시 지은 판(meta.liveBefore 가 있는 판)에 장중에 실제로 적은 값을 되돌린다 — 다시 지은 셈(5분봉 어림)이 덮은 것.
+def live_merge(b, data_only=False):
+    """data_only — 칩 룰이 바뀌어 다시 센 판(meta.ruleRedo): 두 판에 다 있는 줄의 값(산 값 · 시각 칸 값 · VI 시각 …)만 되돌리고
+    칩 · 칩 붙은 시각 · 장중에만 있던 줄은 안 되살림(옛 룰로 붙은 칩이라 · 재권님 「지난 날 값이 바뀌는건 정상」 11-26).
+    라이브로 굳힌 날을 다시 지은 판(meta.liveBefore 가 있는 판)에 장중에 실제로 적은 값을 되돌린다 — 다시 지은 셈(5분봉 어림)이 덮은 것.
     줄마다(코드로) 매수가 · 든 시각 · 시각 칸 값 · 칩 붙은 시각(앞 것 · 이른 쪽)을 장중 기록으로 · 장중에만 있던 종목은 줄째 되살림 ·
     다시 지어 새로 든 종목(3천억 이상 · 칩 하나라도)은 그대로. meta.liveMerged 를 찍는다 → 되돌린 줄 수.
     재권님 「목록 왜 또 바뀐거지?」(11-24 08:0x) — 0시에 11-23 라이브 판이 다시 지어져 장중 값이 어림으로 바뀌었다."""
@@ -1427,6 +1441,8 @@ def live_merge(b):
     n = 0
     for o in lb["rows"]:
         r = rows.get(o["code"])
+        if r is None and data_only:
+            continue
         if r is None:
             r = dict(o)                                # 장중에만 있던 종목 — 그 줄 그대로
             r.setdefault("px", {})
@@ -1435,10 +1451,10 @@ def live_merge(b):
             rows[o["code"]] = r
         else:
             for k in ("buy", "buyAt", "buyTs", "buySrc", "pct", "rise", "subAt", "viAt", "surgeAt", "viPx", "pxMin", "px1", "turnMin", "volDay"):
-                if o.get(k) is not None:
+                if o.get(k) is not None and not (data_only and k in ("buyAt", "buyTs", "subAt", "rise")):
                     r[k] = o[k]                        # 장중에 적은 값 — 든 시각 초(buyTs) · 산 값 출처 · 하위 붙은 시각 · VI 시각까지(개념정의 덧 11-24)
             ca = dict(r.get("chipAt") or {})
-            for c, t in (o.get("chipAt") or {}).items():
+            for c, t in (o.get("chipAt") or {}).items() if not data_only else ():
                 if t and (not ca.get(c) or t < ca[c]):
                     ca[c] = t
             r["chipAt"] = ca
@@ -1446,10 +1462,11 @@ def live_merge(b):
                 if v is not None:
                     r.setdefault("px", {})[t] = v
                     r.setdefault("pxSrc", {})[t] = (o.get("pxSrc") or {}).get(t) or "live"
-            r["chips"] = list(dict.fromkeys(list(r.get("chips") or []) + list(o.get("chips") or [])))
+            if not data_only:
+                r["chips"] = list(dict.fromkeys(list(r.get("chips") or []) + list(o.get("chips") or [])))
         r["live"] = True                               # 장중 판에 있던 줄
         n += 1
-    m["liveMerged"] = True
+    m["liveMerged"] = "data" if data_only else True
     return n
 
 
@@ -1584,7 +1601,7 @@ def build(proxy, cfg, day, skip=()):
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return {"day": day, "buyAt": "%02d:%02d" % BUY_AT, "times": times(off), "rows": rows, "closed": False,
-            "meta": {"rebuilt": False, "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "lateMin": off, "lockUntil": "%02d:%02d" % BUY_LATE, "lockDef": ["%02d:%02d" % t for t in LOCK_AT], "viSplit": vi_split(off), "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": drop_below_pct(), "rules": rules_meta(proxy), "minChips": mc,
+            "meta": {"rebuilt": False, "ruleSig": rule_sig(proxy), "missing": list(lm["missing"]), "wait": list(lm["wait"]) if pre else [], "liveAt": lm["at"], "openAt": "%02d:%02d" % _sh(OPEN_AT, off), "lateMin": off, "lockUntil": "%02d:%02d" % BUY_LATE, "lockDef": ["%02d:%02d" % t for t in LOCK_AT], "viSplit": vi_split(off), "watchRule": "자동", "candidates": len(ov), "dropDown": len(down), "downCodes": sorted(down), "dropBelowPct": drop_below_pct(), "rules": rules_meta(proxy), "minChips": mc,
                      "early": ["매수"] if "매수어림" in missing else [], "earlyNote": "매수 어림 — 09:00 전은 프로그램 순매수 > 0 만(외국계 창구 장 전 값 없음) · 09:00 뒤는 외국계 창구 · 프로그램 둘 다 > 0" if pre else None, "approx": ["매수"] if "매수어림" in missing else [], "topN": TOP_N, "capMinEok": cap_min_eok(),
                      "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "buy 는 굳힌 때(buyAt) 현재가 · pct 는 그때 전일 종가 대비 등락률 · rise 는 초반상승 % (안 들면 null) · px 는 그 시각에 끝난 5분봉 종가(pxSrc now 면 그때 현재가) · "
@@ -2858,6 +2875,74 @@ def m1_fill(proxy, cfg, limit=BACKFILL_DAYS):
     return n
 
 
+RULE_GLOBAL = ("순위", "단타")   # 이 칸이 바뀌면 모든 칩이 바뀐 것으로 본다(시가총액 문턱 · 단타가 세는 칩 목록 · 하락 뺌)
+RULE_SETTLE_SEC = 600         # 룰 값이 바뀐 뒤 이만큼 더 안 바뀌면 지난 판을 다시 셈 — 룰 탭에서 값을 이어 고치실 때 판마다 여러 번 다시 짓지 않게(장중 · 넥장은 QUIET 로 미룸)
+
+
+def rule_sig(proxy):
+    """칩 룰 지문 — {칩: 「그 칩 룰 값 글」} · 룰 문서를 못 읽으면 None(그때는 다시 세지도 지문을 찍지도 않는다 — 기본값으로 판을 다 덮지 않게).
+    칩 룰 표(chip_rules) 한 곳 + 관심(자동 관심 룰). 사는 셈 칸(rules.dt30.set)은 판을 읽을 때마다 셈하므로 안 넣는다.
+    재권님 「칩 룰 값이 바뀌면 지난 판도 다시 셈」 → 「나 로 해주고 모든값은 서버에 쌓아놓고 단타판에서 읽기만 … 지난 날 값이 바뀌는건 정상」(11-26 08:4x)."""
+    import chip_rules
+    try:
+        if not chip_rules.rules_doc():
+            return None
+        out = {ch: json.dumps({k: chip_rules.get(ch, k) for k in keys}, sort_keys=True, ensure_ascii=False)
+               for ch, keys in chip_rules.RULES.items()}
+        import auto_watch
+        w, src = auto_watch.rules(proxy)
+        if str(src).startswith("못 읽음"):
+            return None
+        out["관심"] = json.dumps(w, sort_keys=True, ensure_ascii=False)
+        return out
+    except Exception:
+        return None
+
+
+def rule_diff(old, new):
+    """두 지문 사이 바뀐 칩 — 목록 · 모든 칩이면 ["*"] · 같으면 []. 한쪽이 없으면 ["*"](모름 — 다 바뀐 것으로)."""
+    if not old or not new:
+        return ["*"]
+    ch = sorted(k for k in set(old) | set(new) if old.get(k) != new.get(k))
+    return ["*"] if any(k in RULE_GLOBAL for k in ch) else ch
+
+
+# 지난 날에 쌓지 못한 정보 — 정보마다 쌓기 시작한 첫날을 DB 에서 센다(값을 박지 않음 · 판 meta.dataSince · noData)
+# 재권님 「지난날에 쌓지 못한 정보들이 있는데 이건 몇일부턴지 인지되게 해두면 좋아」(11-26 08:4x)
+DATA_SRC = (
+    ("칩 붙음·빠짐", "SELECT MIN(day) FROM (SELECT day, MIN(at) a FROM dt30_chip_log WHERE n IS NOT NULL GROUP BY day) WHERE a <= '09:05'",
+     "칩이 빠진 시각 — 그 전 날(또는 룰이 바뀌어 다시 셈한 칩)은 한 번 붙으면 그날 끝까지 붙은 것으로 셈 · 돈몰림은 섹터 수급 판으로 다시 셈"),
+    ("프리장 분마다", "SELECT MIN(day) FROM dt30_pre_log", "08:00~09:00 분마다 단타 목록 — 그 전 날은 09:01 판만"),
+    ("1분봉", "SELECT MIN(substr(ts, 1, 8)) FROM candles WHERE period = '1m'",
+     "칩 찬 분 산 값 — 받은 종목만(날마다 수가 다름 · meta.chipPx.have) · 없는 종목은 5분봉 어림"),
+    ("섹터 수급 5분 칸", "SELECT MIN(day) FROM sector_flow_day", "돈몰림 칩 — 그 전 날은 돈몰림 없음"),
+    ("VI 기록", "SELECT MIN(day) FROM vi_day", "VI·급등 칩 시각"),
+)
+_ds = {"day": None, "val": None}
+
+
+def data_since(proxy):
+    """{이름: {since 「YYYYMMDD」 | None, what}} — 하루 한 번 셈. 못 읽은 정보는 since None(0 · 빈 날로 꾸미지 않음)."""
+    today = _now().strftime("%Y%m%d")
+    if _ds["day"] == today and _ds["val"] is not None:
+        return _ds["val"]
+    out = {}
+    try:
+        with proxy.db_conn() as conn:
+            for name, q, what in DATA_SRC:
+                try:
+                    d = conn.execute(q).fetchone()[0]
+                except Exception:
+                    d = None
+                if name == "섹터 수급 5분 칸" and d:
+                    d = max(d, MONEY_SINCE)            # 돈몰림은 이날부터 셈(재권님 11-25)
+                out[name] = {"since": d, "what": what}
+    except Exception:
+        return {n: {"since": None, "what": w} for n, _q, w in DATA_SRC}
+    _ds.update(day=today, val=out)
+    return out
+
+
 MONEY_SINCE = "20261102"     # 지난 판 돈몰림을 다시 세는 첫날(재권님 「돈몰림 11월 2일부터 지금까지 적용해줘」 11-25 21:33)
 MONEY_VER = 1                 # 판 meta.moneyVer · moneyFill — 이 값이 아니면 한 번 다시 셈
 ALL_ROWS_SINCE = "20261124"   # 이 날 앞 판 중 줄을 자르던 것만 한 번 다시 짓는다 — 「3천억 이상 칩 든 종목 전부」 가 들어온 날(11-23 재권님 · 되채움 카드 ⑨)
@@ -2917,10 +3002,21 @@ def money_log_fill(proxy, day, b):
     return len(cf)
 
 
+def _cf_clear(proxy, day, chips):
+    """칩 처음 시각 표에서 그날 룰이 바뀐 칩 줄을 지움(["*"] 면 그날 전부) — 옛 룰로 붙은 시각이 「한 번 붙은 칩」 으로 살아나지 않게. 장중 기록은 dt30_chip_log 에 그대로."""
+    with proxy._db_lock, proxy.db_conn() as conn:
+        conn.execute(_CF_SCHEMA)
+        if "*" in chips:
+            conn.execute("DELETE FROM chip_first WHERE day = ?", (day,))
+        elif chips:
+            conn.execute("DELETE FROM chip_first WHERE day = ? AND chip IN (%s)" % ",".join("?" * len(chips)), [day] + list(chips))
+
+
 def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
     """today 앞 limit 거래일 중 판이 없는 날을 다시 세어 남긴다(라이브로 굳힌 날은 안 건드린다). 남긴 날 수."""
     ds = _trade_days(proxy, today, limit)
-    have, keep_live = set(), {}
+    have, keep_live, redo, base = set(), {}, {}, []
+    sig = rule_sig(proxy)                              # 못 읽으면 None — 룰로는 다시 세지 않는다
     for d in days(proxy):                              # 관심 없이 세어 둔 되채운 날(watchSrc 칸 전)은 한 번 다시 센다(11-12 「응」)
         got = _load(proxy, d)
         m = (got[0].get("meta") or {}) if got else {}
@@ -2930,6 +3026,12 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
         late_old = m.get("rebuilt") and not isinstance(m.get("lateMin"), int) and late_min(proxy, day=d) > 0   # 늦게 연 날을 09:00 기준으로 다시 지은 판(11-24 전) — 한 번 다시 센다
         old_watch = m.get("rebuilt") and m.get("watchSrc") != "지금 룰"   # 관심을 하트 · 그날 문서로 센 옛 판(11-25 전) — 한 번 다시 센다(재권님 「관심은 지금룰로만」)
         old_watch = old_watch or (m.get("rebuilt") and d >= MONEY_SINCE and m.get("moneyVer") != MONEY_VER)   # 돈몰림 없이 지은 판 — 한 번 다시(11-25 21:4x 「진행해」)
+        if got and sig and d < today:                  # 칩 룰 값이 판을 지은 때와 다르면 다시 셈 — 장중 판도 장중 기록은 남기고(재권님 「나」 11-26)
+            if not m.get("ruleSig"):
+                base.append(d)                         # 지문이 생기기 전 판 — 지금 룰로 지은 것으로 보고 지문만 찍음(한꺼번에 다 다시 짓지 않게)
+            elif rule_diff(m["ruleSig"], sig):
+                redo[d] = rule_diff(m["ruleSig"], sig)
+                stale = True
         if not stale and not late_old and not old_watch and not (m.get("rebuilt") and ("watchSrc" not in m or m.get("viUntil") != "%02d:%02d" % _sh(PAST_LATE, lm))):   # (재권님 「기준 3000억 이상이라고 몇번을 말했는데」 11-23 19:0x)
             have.add(d)                                # VI 창이 다른 되채운 날(11-13 전)도 한 번 다시 센다
         elif m.get("liveBefore"):
@@ -2948,10 +3050,24 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
         if b and b["rows"]:
             if d in keep_live:                         # 장중에 고른 기록은 다시 세도 이어 남기고 그 값을 되돌린다(live_merge)
                 b["meta"]["liveBefore"], b["meta"]["redoneFromLive"] = keep_live[d], True
-                live_merge(b)
+                live_merge(b, data_only=bool(d in redo or (keep_live[d].get("meta") or {}).get("ruleSig")))   # 룰이 바뀌어 다시 셈 · 지문 있는 장중 판 — 값만 되돌림
+            if sig:
+                b["meta"]["ruleSig"] = sig
+            if d in redo:
+                b["meta"]["ruleRedo"] = {"at": _now().strftime("%Y-%m-%d %H:%M"), "chips": redo[d],
+                                         "note": "칩 룰 값이 판을 지은 때와 달라 지금 룰로 다시 셈 — 장중 기록은 meta.liveBefore · 칩 기록 표에 그대로"}
+                _cf_clear(proxy, d, redo[d])
+                chip_first_backfill(proxy, d, b)
+                b["meta"]["cfVer"] = CF_VER
             _redo_gone(proxy, d, b)
             _store(proxy, b)
             n += 1
+    for d in base:                                     # 지문만 찍기
+        got = _load(proxy, d)
+        if got and not (got[0].get("meta") or {}).get("ruleSig"):
+            got[0].setdefault("meta", {})["ruleSig"] = sig
+            got[0]["meta"]["ruleSigBase"] = True       # 지문이 생긴 날(11-26) 찍음 — 그때 룰로 지었는지는 모름
+            _store(proxy, got[0])
     for d in days(proxy)[:limit]:                      # 칩 시각 공식(CF_VER)을 남은 판마다 한 번 — 기록이 없던 칩도 시각을 갖게(11-23 19:0x 「공식도 있어야해」)
         got = _load(proxy, d)
         m = (got[0].get("meta") or {}) if got else {}
@@ -3838,6 +3954,18 @@ def start(proxy):
                     n = m1_fill(proxy, proxy.load_secrets())   # 장 끝난 뒤(QUIET 밖) — 지난 판 여는 시각 1분봉 빈 것 되받기
                     if n:
                         print("  [단타 30] 지난 판 1분봉 %d개(종목 · 날) 되받음" % n, flush=True)
+                sg = rule_sig(proxy)                 # 칩 룰 값이 바뀌고 RULE_SETTLE_SEC 동안 그대로면 지난 판을 다시 셈(장중 · 넥장은 QUIET 로 미룸 · 재권님 「나」 11-26)
+                if sg is not None:
+                    k = json.dumps(sg, sort_keys=True, ensure_ascii=False)
+                    if _status.get("ruleSeen") != k:
+                        _status["ruleSeen"], _status["ruleSeenAt"] = k, time.time()
+                        if _status.get("ruleRan") is None:
+                            _status["ruleRan"] = k   # 서버가 뜬 때 값 — 그날 되채우기가 이미 이 값으로 셈
+                    elif (filled == day and _status.get("ruleRan") != k and time.time() - _status["ruleSeenAt"] >= RULE_SETTLE_SEC
+                          and not (QUIET[0][0] * 60 + QUIET[0][1] <= hm < QUIET[1][0] * 60 + QUIET[1][1])):
+                        _status["ruleRan"] = k
+                        n = backfill(proxy, day)
+                        print("  [단타 30] 칩 룰 값이 바뀌어 지난 판 %d일 다시 셈" % n, flush=True)
             except Exception as e:
                 _status["error"] = type(e).__name__
                 print("  [단타 30] 되채우기 멈춤 — %s" % proxy.safe_message(e, 120), flush=True)
