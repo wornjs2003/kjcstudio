@@ -1206,6 +1206,8 @@ def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
     o = open_min if open_min is not None else OPEN_AT[0] * 60 + OPEN_AT[1]
     p1_ = _hm4(at.get("1")) or _hhmm(o + 1).replace(":", "")
     cpx = (r.get("chipPx") or {}).get("%s:%s" % (T[:2], T[2:])) if r.get("chipPx") is not None else None
+    if r.get("chipPx") is not None and not cpx and T > p1_ and (b.get("meta") or {}).get("chipPx", {}).get("ok") and (b.get("meta") or {}).get("chipPx", {}).get("settledTo") is None:
+        return None                                    # 다 굳은 판(지난 날)인데 그 분 1분봉이 없음 — 어림으로 안 삼(화면과 같게 · 시황분석1 · 재권님 「산값은 정확해야」) · 장중 굳는 중 3분은 재권님 답 대기라 아직 예전 셈
     if cpx and T > p1_:                                # 칩 N개가 함께 붙은 그 분 1분봉 종가(chipPx) — 어림(30분 칸 · 든 때) 대신(11-25 재권님 「산값은 정확해야」 · 들어온 때 모드도 · 개념정의 덧)
         return {"px": cpx, "at": "%s:%s" % (T[:2], T[2:]), "chipAt": "%s:%s" % (T[:2], T[2:]), "need": need, "src": "칩 찬 분 1분봉 종가"}
     if mode == "open":                                 # 「들어온 때」 — 판에 든 때 값 · 시각(r.buy · buyAt) · 칩 N개 문턱 · 차례는 그대로
@@ -1275,7 +1277,12 @@ def buy930_fill(proxy, b):
     if True:                                           # 구간이 없는 판(11-25 전)도 칩 처음 붙은 분(chipTime)으로 — 산 값 어림(30분 칸)을 없앰(qa 덧 · 재권님 「산값은 정확해야」)
         try:
             st = _chip_px_fill(proxy, b["day"], rows, o)
-            b["meta"]["chipPx"] = {"ok": True, "settledTo": st}   # settledTo 「HH:MM」 — 이 분부터는 아직 굳는 중(열쇠 없음) · 지난 날은 null(다 굳음) · 시황분석1 11-25
+            if st is None and not any(r.get("chipPx") for r in rows):
+                b["meta"]["chipPx"] = {"ok": False, "why": "그날 1분봉 없음"}   # 1분봉이 아예 없는 날 — 줄 칸을 빼고 화면 · 서버 둘 다 옛 어림 셈
+                for r in rows:
+                    r.pop("chipPx", None)
+            else:
+                b["meta"]["chipPx"] = {"ok": True, "settledTo": st}   # settledTo 「HH:MM」 — 이 분부터는 아직 굳는 중(열쇠 없음) · 지난 날은 null(다 굳음) · 시황분석1 11-25
         except Exception as e:
             b["meta"]["chipPx"] = {"ok": False, "why": type(e).__name__}
     for r in rows:
