@@ -2590,7 +2590,7 @@ def rebuild(proxy, day, prev, cfg=None):
     try:                                                   # 그날 장중 실시간 넣기(상위 ADD_TOP)는 쌓지 않아 다시 못 셈 — approx 「관심」 · meta note
         approx.append("관심")
         live = {"day": prev, "frac": 1, "at": "", "got": {c: {"name": r[1], "close": r[2], "pct": r[3], "vol": r[4]} for c, r in pv.items()}}
-        res = auto_watch.compute(proxy, live=live, us_before=prev)   # 미국 섹터 조건도 그 앞 미국장 값으로
+        res = auto_watch.compute(proxy, live=live, us_before=day)    # 미국 섹터 조건은 판 날 아침에 본 미국장(판 날 앞 마지막 미국 일봉) — 섹터 룰 뜻이 「어젯밤 미국」 (qa 11-25)
         if not res.get("ready"):
             raise ValueError("관심 룰 못 읽음")             # 룰을 못 읽으면 「없음」 이 아니라 「못 셈」
         for r in res.get("picked") or []:
