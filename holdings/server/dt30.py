@@ -3271,7 +3271,11 @@ def chip_filter():
     """화면에서 끈 칩 · 칩 칸 — 셈 칸 chipOff [칩] · subOff [「칩|하위」] · chipCols [칩] (화면 「저장」 · 여는 시각 + 4분 자동 저장이 넣음 · 11-24 재권님 「카드에 있것들 해」).
     칸이 없으면 다 켠 것 · 칸 목록이 없으면 단타 셈 칩 전부(전과 같음)."""
     lst = lambda k: [str(x) for x in _set_val(k)] if isinstance(_set_val(k), list) else None
-    return set(lst("chipOff") or []), set(lst("subOff") or []), (set(lst("chipCols")) if lst("chipCols") else None)
+    cols = set(lst("chipCols")) if lst("chipCols") else None
+    known = lst("chipKnown")
+    if cols is not None and known:                     # 저장 뒤 새로 생긴 칩(그때 화면이 몰랐던 칩)은 칸 밖이어도 켬 — 칸 메뉴 「지우기」 로 뺀 칩은 known 안이라 그대로 빠짐(시황분석1 chipKnown · 11-25 재권님 「처음부터 셈이되도록 켜줘」)
+        cols |= {c for c in ov_chips() if c not in set(known)}
+    return set(lst("chipOff") or []), set(lst("subOff") or []), cols
 
 
 def _subs_of(r, c, split):
