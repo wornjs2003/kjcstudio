@@ -392,7 +392,8 @@
 .dt .dt-2row .dt-sr { box-shadow: -2px 0 0 0 var(--dt-cb); }
 .dt .dt-2row td.dt-sold, .dt .dt-2row td.dt-after { --dt-cb: var(--kh-bg); }   /* 판 시각 · 판 뒤 칸은 회색 바탕 — 그림자도 같은 색 */
 .dt [data-co] { cursor: pointer; }   /* 종목 이름을 누르면 종목 모달(11-24) */
-.dt .dt-hypo { opacity: .6; font-style: italic; }   /* 보기만 줄의 가정 손익 — 산 것이 아님을 흐리게(11-24) */
+.dt .dt-hypo { font-style: italic; }   /* 보기만 줄의 가정 손익 — 산 것이 아님을 흐리게(11-24) */
+.dt .dt-hypo > * { opacity: .6; }   /* 흐림은 글자에만 — 칸 통째로 흐리면 옆으로 미는 표의 붙는 칸(dt-sr) 바탕까지 비쳐 뒤 칸 숫자가 겹쳐 보였음(11-25 재권님 「숫자가 겹쳐진거는 ?」) */
 .dt .dt-dayb { margin: 2px; }   /* 기간 줄 날짜 단추 — 그날 차익 · 누르면 그날 판(11-24) */
 .dt .dt-mons-in { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 4px 0 6px; }   /* 기간 줄 머리 — 해 · 달 한 줄 · 날짜는 그 아래 줄(11-24 재권님 「년 옆에 달들이 있고 줄바꿔서 달안의 일들이」) */
 .dt .dt-years { margin-right: 8px; }
