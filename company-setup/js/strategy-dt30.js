@@ -7,7 +7,7 @@
 import { signClass, NUM } from '/assets/js/sign.js';
 import { ready as toneReady, has as toneHas, paint as tonePaint } from '/assets/js/tone.js';   // 거래 비율 글씨 짙기 — 전날 같은 시각 대비(지표 표 turn_prev_pct · 11-23)
 import { bindWin } from './strategy-dtwin.js';
-import { renameChips, chipName } from './strategy-chipname.js';   // 칩 이름을 실시간 순위와 같게(「수급」 → 「자동」 · 11-18) — 서버 값을 받는 자리에서
+import { renameChips, chipName, serverChip } from './strategy-chipname.js';   // 칩 이름을 실시간 순위와 같게(「수급」 → 「자동」 · 11-18) — 서버 값을 받는 자리에서
 import { chipTip } from './strategy-chipinfo.js';   // 칩 설명 한 곳 — 룰 칸과 같은 글(11-20)
 import { openStockModal } from '/holdings/js/components/stock-modal.js';   // 종목 이름을 누르면 홀딩스 홈과 같은 종목 모달(11-24 재권님 「가」)
 import { mountSector, loadSector } from './strategy-sectorflow.js';   // 섹터수급 칸 — 단타 판 맨 위(11-18)   // 칩별 승률 접기 — 손익 칸 안
@@ -150,7 +150,15 @@ const nLive = (r) => colsOf().reduce((a, c) => a + (liveChip(r, c) ? 1 : 0), 0);
 //   이수스페셜티케미컬(프리장 칩) · 하이젠알앤엠(매수 칩)이 빠지자 칩 5개에 못 미쳐 판에서 사라지던 것 · 09:30 전에 산 종목은 굳음)
 //   빠진 칩의 하위 칩(외 · 기 · 프 · 어림)은 기록에 없어 하위 끄기를 못 가름 — 칩이 켜져 있으면 셈 · 다시 붙은 칩의 「나중 시각」 은 서버 칩 쌓임 기록(개발2)이 오면
 const everChip = (r, c) => { if (st.off.has(c)) return false; if ((r.chips || []).includes(c)) return liveChip(r, c); return !!((r.chipTime || {})[c]); };
-const nEver = (r) => colsOf().reduce((a, c) => a + (everChip(r, c) ? 1 : 0), 0);
+// 칩 붙음 · 빠짐 구간(11-25 재권님 「칩 빠진 시각도 넣어줘」 · 서버 개발2 rows[].chipSpans {칩: [[붙음, 빠짐 | null] …]} HH:MM · 끝 null = 지금도 붙음)
+//   있는 줄은 「같은 시각에 함께 붙어 있던 칩」 으로 셈(서버 매수 셈과 같게 — 칩 N개가 동시에 붙어 있던 첫 순간) · 없는 줄(11-24 전 판)은 한 번 붙은 칩(everChip) 그대로
+//   구간 기록이 없는 칩 — 지금 붙어 있으면 처음 붙은 때부터 지금까지 · 빠졌으면 언제까지인지 몰라 안 셈 · 끄기 · 하위 끄기는 everChip 과 같게
+const spanRow = (r) => !!(r && r.chipSpans && typeof r.chipSpans === 'object');
+const spansOf = (r, c) => { const s = r.chipSpans[c]; if (Array.isArray(s) && s.length) return s; if (!(r.chips || []).includes(c)) return []; const t = (r.chipTime || {})[c] || (r.chipAt || {})[c]; return t ? [[t, null]] : []; };
+const chipAtT = (r, c, t) => everChip(r, c) && spansOf(r, c).some(([a, b]) => hm4(a) && hm4(a) <= t && (b == null || t < hm4(b)));
+const nAtT = (r, t) => colsOf().reduce((a, c) => a + (chipAtT(r, c, t) ? 1 : 0), 0);
+const spanTs = (r) => [...new Set(colsOf().filter((c) => everChip(r, c)).flatMap((c) => spansOf(r, c).map((x) => hm4(x[0])).filter(Boolean)))].sort();
+const nEver = (r) => (spanRow(r) ? spanTs(r).reduce((m, t) => Math.max(m, nAtT(r, t)), 0) : colsOf().reduce((a, c) => a + (everChip(r, c) ? 1 : 0), 0));   // 구간이 있으면 가장 많이 함께 붙어 있던 수
 const riseOf = (r) => (r.rise == null || !Number.isFinite(Number(r.rise)) ? -Infinity : Number(r.rise));   // 초반상승 % — 안 든 종목은 null → 맨 뒤
 // 조건별 점수 (11-18 재권님 「여기도 내가 조건들 넣을수 있게 해줘. 있는조건이면 고르면 되고 조건별로 점수를 매겨서 우선순위 정할거야」 → 홈 「단타」 도 같은 차례로 「응」)
 //   · 점수표는 룰 문서 rules.dt30.score 한 곳 — { 칩: 점수 · 'VI·급등|09:25 전': 점수 … } · 「룰 — 단타」 칸(strategy-chips.js)에서 넣음 · 홈 차례는 서버(개발2)가 같은 표로 셈
@@ -273,7 +281,7 @@ const minHM = (n) => { const o = String((DM().pxMinAt || {})[n] || '').replace('
 const minVal = (r, n) => (r.pxMin && typeof r.pxMin === 'object' ? r.pxMin[n] : n === 1 ? r.px1 : undefined);   // undefined = 서버가 이 칸을 아직 안 줌 · null = 못 잼
 // 새 매수가 규칙(11-20 · 서버 개발2)으로 지은 판 — 줄에 buyTs · buySrc 「9시 1분 값」 이 있으면 기본 매수가는 「들어온 때」 가격 · 옛 판(11-19 까지)은 시가
 const newBuyOf = (d) => ((d && d.rows) || []).some((r) => r.buyTs || /9시 1분/.test(String(r.buySrc || '')));
-const buyName = (k, t) => (k === 'open' ? (newBuyOf(st.data) ? '들어온 때' : `${hmS(openHM())} 시가`) : t);   // 「들어온 때」 — 11-20 재권님 「응 그렇게 해」(옛 판만 「09:00 시가」)
+const buyName = (k, t) => (k === 'open' ? (st.data && st.data.flat930 ? `칩 ${num(chipNeed())}개 찬 때` : newBuyOf(st.data) ? '들어온 때' : `${hmS(openHM())} 시가`) : t);   // 「들어온 때」 — 11-20 재권님 「응 그렇게 해」(옛 판만 「09:00 시가」)
 const hhmm = (t) => String(t || '').replace(/:/g, '').slice(0, 4);
 // 들어온 때(초까지 · 서버 buyTs · 없으면 buyAt 의 0초) — 새 매수가 규칙 판만(옛 판 buyAt 은 여는 시각이라 안 가름)
 const inTs = (r) => { const t = String(r.buyTs || '').replace(/:/g, ''), a = hhmm(r.buyAt); return /^\d{6}$/.test(t) ? t : /^\d{4}$/.test(a) ? `${a}00` : ''; };
@@ -285,8 +293,10 @@ let FILL = new WeakSet();   // 그 날 셈에서 칩 N−1개로 채운 줄(11-2
 const chipNeed = (r) => Math.max(1, (Number(st.set.minChip) || 1) - (r && FILL.has(r) ? 1 : 0));   // r — 채운 줄이면 N−1(그 줄의 사는 순간 · 찬 시각도 N−1 번째 칩으로)
 // 켜진 칩이 붙은 시각을 세워 N번째(칩 수 기준) — HHMM · 시각 모르는 칩은 그 줄이 판에 처음 든 때로 봄(칩은 든 때보다 앞설 수 없음 · 든 때도 모르면 장 시작 전) · 칩이 모자라면 null
 // 칩 시각은 서버 rows[].chipTime(칩마다 처음 붙은 시각 · 한 번 붙었다 빠져도 남음 · 개발2 a3ea7ff)이 있으면 그것 먼저
-const nthChipAt = (r) => { const at = { ...(r.chipAt || {}), ...(r.chipTime || {}) }; const ts = colsOf().filter((c) => everChip(r, c)).map((c) => String(at[c] || (c === 'VI·급등' ? r.viAt || '' : '')).replace(/:/g, '').slice(0, 4) || inTs(r).slice(0, 4) || '0000').sort(); const N = chipNeed(r); return ts.length >= N ? ts[N - 1] : null; };
+const nthChipAt = (r) => { if (spanRow(r)) { const N = chipNeed(r); return spanTs(r).find((t) => nAtT(r, t) >= N) || null; }   // 구간이 있으면 칩 N개가 함께 붙어 있던 첫 시각
+  const at = { ...(r.chipAt || {}), ...(r.chipTime || {}) }; const ts = colsOf().filter((c) => everChip(r, c)).map((c) => String(at[c] || (c === 'VI·급등' ? r.viAt || '' : '')).replace(/:/g, '').slice(0, 4) || inTs(r).slice(0, 4) || '0000').sort(); const N = chipNeed(r); return ts.length >= N ? ts[N - 1] : null; };
 // 보기만 줄의 가정 매수 — 판에 들어올 때 값(서버 r.buy)으로 샀다고 치고 셈만 보임(11-24 재권님 「들어올때 샀다는 전제로 셈을 하도록 하고 진짜 산건 아닌거처럼 해줘」) · 합계 · 평균 · 상위 N 에는 안 듦
+let NOPX = new WeakMap();   // 칩 찬 분의 1분봉 값이 서버에 없는 줄 → 그 시각(HH:MM) · 매수가 칸 「산 값 못 잼」 · calcDay 마다 새로
 let HYPO = new WeakMap();   // calcDay 를 돌 때마다 새로 — 판 줄 객체가 다시 그릴 때 그대로 쓰여, 셈 칸을 바꿔 본 표로 든 줄에 가정 값이 남지 않게(개념정의 검수 11-24)
 function buyOf(r) {   // → { px, at(HHMM), src } | null
   if (HYPO.has(r)) return HYPO.get(r);
@@ -302,13 +312,18 @@ function buyOf(r) {   // → { px, at(HHMM), src } | null
   // 굳힘 없앤 판(flat930 · 11-23) — 칩 수 기준(셈 칸 「칩 N개 이상」 · 빈칸 = 1)을 넘은 순간에 삼(재권님 「내가 칩 갯수 바꿀때마다 사는게 바뀌게 되야돼」)
   //   그 순간 = 켜진 칩을 붙은 시각(chipAt · VI 는 viAt · 시각 모름 = 장 시작 전)으로 세운 N번째 · 09:01 전이면 9시 1분 값 · 09:01~09:05 는 그 분 값(pxMin)
   //   그 뒤는 판에 든 때가 그 순간 이후면 든 때 값(r.buy) · 아니면 그 순간 뒤 첫 30분 칸 값(그 분 값을 서버가 안 줌 — 짐작 안 함 · 칸 이름에 적음)
-  if (n === 1 && curD() && curD().flat930) { const T = nthChipAt(r); if (T == null) return null;
+  // 「들어온 때」(open)도 굳힘 없앤 판에서는 칩 N개가 함께 붙은 때 삼(11-25 재권님 「매수에 칩이 ()개 이상 붙었을때 로 하고 붙은시간에 셈하는걸로 개선해줘」 — 판에 든 때 값이 아니라)
+  if ((n === 1 || k === 'open') && curD() && curD().flat930) { const T = nthChipAt(r); if (T == null) return null;
     if (T > chipUntil().replace(':', '') && !st.set.buyLate930) return null;   // 09:30 뒤에 칩이 찬 종목 — 셈 칸 「삼 / 안 삼」(set.buyLate930 · 기본 안 삼 = 서버 buy930 · 승률 표와 같음) · 재권님 「살지말지 내가 정할수 있어야해」(11-23 19:4x)
     // 9시 1분 · 1~5분 값이 없는 날(1분봉은 11-12 부터 쌓임)은 안 사지 않고 아래 「든 때 → 다음 30분 칸」 으로 — 서버 buy930 과 같은 차례(11-23 재권님 「누락된 이유가 뭐지? 코드가 뭔가 일괄적이지 않은거 같은데」 → 「응」)
     const p1 = minHM(1); if (T <= p1) { const o = minVal(r, 1); if (o && Number(o.px) > 0) return { px: Number(o.px), at: p1, src: `${hmS(p1)} 값 · 칩 ${chipNeed(r)}개 찬 때 ${hmS(T)}` }; }
     for (const k of PMIN) { const h = minHM(k); if (T <= h) { const o = minVal(r, k); if (o && Number(o.px) > 0) return { px: Number(o.px), at: h, src: `${hmS(h)} 값 · 칩 ${chipNeed(r)}개 찬 때` }; break; } }
-    const e = inTs(r).slice(0, 4); if (e && e >= T && Number(r.buy) > 0) return { px: Number(r.buy), at: e, src: `${hmS(e)} 든 때 · 칩 ${chipNeed(r)}개 찬 때` };
-    const t = ((curD().times) || []).find((x) => hhmm(x) >= T), v = t && Number((r.px || {})[t]); return v > 0 ? { px: v, at: hhmm(t), src: `${hmS(hhmm(t))} 칸 값 · 칩 ${chipNeed(r)}개 찬 때 ${hmS(T)}` } : null; }
+    // 09:05 뒤 — 칩 N개가 함께 붙은 그 분의 그 종목 1분봉 종가(서버가 분봉에서 읽어 rows[].chipPx {HH:MM: 원} · 붙음 · 빠짐 시각마다 · 개발2)
+    //   (11-25 재권님 「매수에 칩이 ()개 이상 붙었을때 로 하고 붙은시간에 셈하는걸로」 → 「산값은 정확해야 할거같은데. 서버에 해당종목의 분봉을 읽어서 셈해야해」 → 「응 그게 맞아」)
+    //   그 값을 주는 판(meta.chipPx)에서 그 분 값이 없으면 어림하지 않고 「산 값 못 잼」 · 셈 밖 — 그 칸이 없는 옛 판만 아래 어림(든 때 · 다음 30분 칸)에 「어림」 을 붙임
+    if ((curD().meta || {}).chipPx || r.chipPx) { const v = Number((r.chipPx || {})[hmS(T)]); if (v > 0) return { px: v, at: T, src: `${hmS(T)} 1분봉 · 칩 ${chipNeed(r)}개 찬 때` }; NOPX.set(r, hmS(T)); return null; }
+    const e = inTs(r).slice(0, 4); if (e && e >= T && Number(r.buy) > 0) return { px: Number(r.buy), at: e, src: `${hmS(e)} 든 때 · 칩 ${chipNeed(r)}개 찬 때 ${hmS(T)} · 어림` };
+    const t = ((curD().times) || []).find((x) => hhmm(x) >= T), v = t && Number((r.px || {})[t]); return v > 0 ? { px: v, at: hhmm(t), src: `${hmS(hhmm(t))} 칸 값 · 칩 ${chipNeed(r)}개 찬 때 ${hmS(T)} · 어림` } : null; }
   if (n === 1) { const e = inTs(r), p1 = `${minHM(1)}00`, u = inUntil();
     // 굳힘마다 산 값이 다름(11-23 재권님 「각 굳힘별로 산 가격은 다르게 해줘야해 9시 5분 굳힘은 현재 만들어놓은 룰이고. 그이후에 굳힘 종목은 들어올때로 만들어줘」)
     //   첫 굳힘(09:05 · lock 1)은 아래 룰 그대로 · 둘째 굳힘부터(lock 2 · 3)는 판에 처음 든 때 가격(r.buy) · 산 시각 든 때
@@ -549,7 +564,7 @@ const fb905Of = (r) => { const o = r.pxMin && r.pxMin['5']; if (o && Number(o.px
 // 서버가 실제로 보낸 종목의 차례(판 meta.buyRule.sent · 없으면 meta.tgBuy — {code: {order, sentAt, kind}}) · 안 보냈으면 null — 셈 · 그리기 두 곳이 함께 씀(11-24)
 const sentOrdOf = (d, r) => { const m = (d && d.meta) || {}, x = (m.buyRule && m.buyRule.sent) || m.tgBuy, o = x && typeof x === 'object' ? x[r.code] : null; return o && Number.isFinite(Number(o.order)) ? Number(o.order) : null; };
 function calcDay(d) {
-  HYPO = new WeakMap();   // 보기만 줄 가정 매수는 이번 셈에서만
+  HYPO = new WeakMap(); NOPX = new WeakMap();   // 보기만 줄 가정 매수 · 분봉 값 없음 표시는 이번 셈에서만
   const S = st.set;
   // 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것으로 — 셈 · 돈 나누기에서 뺌(11-20 qa 덧 → 재권님 「가」)
   const boughtOf = (r) => { const B = buyOf(r); return B && S.endAt && B.at >= S.endAt ? null : B; };
@@ -613,8 +628,12 @@ const live = d.flat930 ? live0.map((r, i) => [r, nthChipAt(r) || '9999', i]).sor
       return { buyAmt, sellAmt, gross: sellAmt - buyAmt, tx, rural, fee, net: T ? sellAmt - buyAmt - tx - rural - (fee || 0) : null };
     })() : null;
     return { r, p, s, pnl, sellPx, T, now: nowCh != null, res: s.k >= 0 ? p[s.k] : nowCh != null ? nowCh : (last >= 0 ? p[last] : null) }; };
-  const R = rows.map(mkR);
-  const inv = lkMode ? R.filter((x) => Number(x.r.lock) > 0) : R.slice(0, n);   // 돈을 넣은 줄 — 굳힌 판은 굳힌 종목 전부 · 아니면 상위 N
+  // 09:30 뒤에 찬 종목(셈 칸 「안 삼」) — 장중 창 보기만 줄과 같은 룰: 판에 든 때 값으로 샀다고 친 가정 셈 · 매도 룰 그대로 · 상위 N · 손익 · 평균 · 합계에는 안 듦
+  //   (11-25 재권님 「9시 30분 뒤에 찬 종목도 셈은 해야해」 → 「산다라는 룰은 아니고 셈에서만 빠지는거야」 → 「장중 창과 같은룰로 해야지」) · 몫(nb · lkCnt)을 다 센 뒤에 가정 값을 넣어 돈 나누기에 안 섞임
+  const late = new Set(d.flat930 && !S.buyLate930 ? rows.filter((r) => !buyOf(r) && Number(r.buy) > 0 && (nthChipAt(r) || '') > chipUntil().replace(':', '')) : []);
+  late.forEach((r) => { const t = inTs(r); HYPO.set(r, { px: Number(r.buy), at: t.slice(0, 4), src: `${t.length >= 6 ? `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}` : '—'} 든 때 · 가정(산 것 아님)` }); });
+  const R = rows.map((r) => { const x = mkR(r); if (late.has(r)) x.hypo = true; return x; });
+  const inv = (lkMode ? R.filter((x) => Number(x.r.lock) > 0) : R.slice(0, n)).filter((x) => !x.hypo);   // 돈을 넣은 줄 — 굳힌 판은 굳힌 종목 전부 · 아니면 상위 N · 가정 줄은 뺌
   inv.forEach((x) => { x.inv = true; });
   if (S.pyr) pyrCalc(inv, times);
   const top = inv.filter((x) => x.pnl), sum = (k) => top.reduce((a, x) => a + (x.pnl[k] || 0), 0);
@@ -686,9 +705,10 @@ function paint0(d) {
   // 평균 (11-18 재권님 「평균값이 뭔가 이상한데」 → (나)) — 판 종목은 판 값으로 고정해 그 뒤 시각에도 넣는다 · 그 시각까지 실제로 번 수익률
   //   전에는 판 칸부터 뺐는데(11-11) 오후에 끝까지 오른 몇 종목만 남아 평균이 부풀었다(11-17 12:30~ 2종목 +21.79%)
   const atK = (x, k) => (x.s.k >= 0 && k >= x.s.k ? x.p[x.s.k] : x.p[k]);
-  const avg = times.map((_, k) => mean(R.map((x) => atK(x, k)).filter((v) => v != null)));
-  const res = R.map((x) => x.res).filter((v) => v != null), resAvg = mean(res);
-  const sold = R.filter((x) => x.s.k >= 0);
+  const RA = R.filter((x) => !x.hypo);   // 09:30 뒤에 찬 종목(가정 셈)은 평균에 안 듦 — 장중 창 보기만과 같게
+  const avg = times.map((_, k) => mean(RA.map((x) => atK(x, k)).filter((v) => v != null)));
+  const res = RA.map((x) => x.res).filter((v) => v != null), resAvg = mean(res);
+  const sold = RA.filter((x) => x.s.k >= 0);
   st.last[d.day] = resAvg;
   const bm = d.meta || {}, nm = (a) => names(a).join(' · ');   // 되채운 날 · 못 받은 칩 — 칩 이름은 서버가 준 그대로
   const rebuilt = bm.rebuilt === true ? ` · 되채운 날${nm(bm.missing) ? ` · ${nm(bm.missing)} 못 셈` : ''}${nm(bm.approx) ? ` · ${nm(bm.approx)} 어림` : ''}` : `${nm(bm.missing) ? ` · 못 받은 칩 ${nm(bm.missing)}` : ''}${nm(bm.early) ? ` · ${nm(bm.early)} 어림(집계 전)` : ''}${bm.late && typeof bm.late === 'object' && Object.keys(bm.late).length ? ` · 늦게 채움 ${Object.entries(bm.late).map(([k, v]) => `${k} ${v}`).join(' · ')}` : ''}`;
@@ -724,7 +744,8 @@ function paint0(d) {
     const miss = [...new Set(all.flatMap((r) => r.chips || []))].filter((c) => !cols.includes(c) && !(st.watchAuto && c === '자동'));
     const allOn = st.off.size || st.subOff.size || miss.length ? `<div style="margin-top:12px"><button type="button" class="kh-chip" data-allon style="font-size:14px;padding:6px 16px">${miss.length ? '꺼 둔 칩 · 칸에 없는 칩 다 켜기' : '꺼 둔 칩 다 켜기'}</button></div>` : '';
     // 빈 판 까닭은 가운데 크게(11-20 재권님 「가운데에 좀더 크게」)
-    $('dt-box').innerHTML = `<div class="st-err" style="text-align:center;font-size:16px;line-height:1.7;padding:48px 16px;color:var(--kh-text-secondary)">${esc(why)}${allOn}</div>`; return;
+    // 어제 미국장 · 지금 바깥 줄은 판이 비어도 위에 남김(11-25 재권님 「필라델피아 반도체지수 선물 등등 … 없어졌어」 → 「응 그렇게 해줘」 — 표 머리 안에 있어 표와 함께 사라졌음) · id 같아 usLoad 가 받은 뒤 채움
+    $('dt-box').innerHTML = `<div style="padding:8px 0 0"><span class="dt-us" id="dt-us" data-day="${esc(d.day || '')}" style="border-left:0;padding-left:0">${usHtml(d.day)}</span></div><div class="st-err" style="text-align:center;font-size:16px;line-height:1.7;padding:48px 16px;color:var(--kh-text-secondary)">${esc(why)}${allOn}</div>`; return;
   }
   const shr = (a) => (a >= 1e4 ? `${(a / 1e4).toFixed(a >= 1e5 ? 0 : 1).replace(/\.0$/, '')}만` : a >= 1e3 ? `${Math.round(a / 1e3)}천` : String(a));   // 주
   const wonS = (a) => (a >= 1e8 ? `${(a / 1e8).toFixed(a >= 1e9 ? 0 : 1).replace(/\.0$/, '')}억` : a >= 1e4 ? `${Math.round(a / 1e4)}만` : String(a));   // 원
@@ -756,7 +777,7 @@ function paint0(d) {
   // 대기 줄(아직 안 굳은 종목) — 「안 삼」 대신 굳으면 살 값(처음 든 때 가격)을 흐리게(qa 11-23 — 10:00 에 살 줄이 「안 삼」 으로 읽힘)
   const waitTd = (r) => { if (!(pmOf(buyKey()) === 1 && !(Number(r.lock) > 0) && (d.rows || []).some((x) => Number(x.lock) > 0) && Number(r.buy) > 0)) return ''; const e = inTs(r);
     return `<td class="dt-buy">${num(Number(r.buy))}<small>${lkNext && lkNext.live ? '장중' : '대기'}${e ? ` · ${e.slice(0, 2)}:${e.slice(2, 4)}:${e.slice(4, 6)} 든 때` : ''}</small></td>`; };   // 11-23 「보이는 종목들은 다 셈해」 — 대기 줄도 이 값에 산 것으로 셈
-  const buyTd = (r) => (fbDays.has(d.day) ? (() => { const B = buyOf(r); return B ? `<td class="dt-buy">${num(B.px)}<small>${esc(B.src)}</small></td>` : '<td class="dt-buy"><span class="dt-nxm">대체 값도 없음 · 안 삼</span></td>'; })() : buyKey() !== 'open' ? (() => { const B = buyOf(r); if (waitTd(r)) return waitTd(r); return B ? `<td class="dt-buy">${num(B.px)}<small>${esc(B.src)}</small></td>` : `<td class="dt-buy"><span class="dt-nxm">${notYetIn(r, buyKey() === 'vi' ? (r.viPx || {}).at : ((minVal(r, pmOf(buyKey())) || {}).at || minHM(pmOf(buyKey())))) ? `안 삼 · ${esc(notYetIn(r, buyKey() === 'vi' ? (r.viPx || {}).at : ((minVal(r, pmOf(buyKey())) || {}).at || minHM(pmOf(buyKey())))))} 뒤 듦` : buyKey() === 'vi' ? (r.viAt ? 'VI 값 못 받음 · 안 삼' : 'VI 없음 · 안 삼') : minVal(r, pmOf(buyKey())) === undefined ? '서버 값 아직 · 안 삼' : `${hmS(minHM(pmOf(buyKey())))} 값 없음 · 안 삼`}</span></td>`; })()
+  const buyTd = (r) => (fbDays.has(d.day) ? (() => { const B = buyOf(r); return B ? `<td class="dt-buy">${num(B.px)}<small>${esc(B.src)}</small></td>` : '<td class="dt-buy"><span class="dt-nxm">대체 값도 없음 · 안 삼</span></td>'; })() : buyKey() !== 'open' || d.flat930 ? (() => { const B = buyOf(r); if (waitTd(r)) return waitTd(r); return B ? `<td class="dt-buy">${num(B.px)}<small>${esc(B.src)}</small></td>` : NOPX.has(r) ? `<td class="dt-buy"><span class="dt-nxm" data-tip="칩이 찬 분의 1분봉 값이 서버에 없어 산 값을 어림하지 않음 · 손익 셈 밖">산 값 못 잼 · ${esc(NOPX.get(r))} 분봉 없음</span></td>` : `<td class="dt-buy"><span class="dt-nxm">${notYetIn(r, buyKey() === 'vi' ? (r.viPx || {}).at : ((minVal(r, pmOf(buyKey())) || {}).at || minHM(pmOf(buyKey())))) ? `안 삼 · ${esc(notYetIn(r, buyKey() === 'vi' ? (r.viPx || {}).at : ((minVal(r, pmOf(buyKey())) || {}).at || minHM(pmOf(buyKey())))))} 뒤 듦` : buyKey() === 'vi' ? (r.viAt ? 'VI 값 못 받음 · 안 삼' : 'VI 없음 · 안 삼') : minVal(r, pmOf(buyKey())) === undefined ? '서버 값 아직 · 안 삼' : `${hmS(minHM(pmOf(buyKey())))} 값 없음 · 안 삼`}</span></td>`; })()
     : r.buy == null && r.buyWait ? `<td class="dt-buy"><span class="dt-nxm">${st.openAt ? hmTxt(String(st.openAt).replace(':', '')) : '정규장'} 시가 기다림</span></td>`
     : `<td class="dt-buy">${num(r.buy)}${r.buySrc ? `<small>${r.buyAt ? `${hmTxt(String(r.buyAt).replace(':', ''))} ` : ''}${esc(r.buySrc)}</small>` : ''}</td>`);
   // 09:01 값 (11-18 재권님 「9시 1분 등락도 넣어줘 이쯤 살거니깐」 → 「응 그렇게 해」) — 서버 rows[].px1(개발2 · 첫 1분봉 종가 「1m」 · 없으면 그때 현재가 「now」) · 시각은 meta.px1At
@@ -801,7 +822,7 @@ function paint0(d) {
   if (st.order === 'open') { const gi = new Map(); R.forEach((x) => { const g = gk(x); if (!gi.has(g)) gi.set(g, gi.size); }); R.sort((a, b) => gi.get(gk(a)) - gi.get(gk(b)) || (gk(a) === '보냄' ? sentOrdOf(d, a.r) - sentOrdOf(d, b.r) : orV(b.r) - orV(a.r))); }   // 보낸 종목은 보낸 차례 그대로
   const grp = (i, span) => { if ((st.order && st.order !== 'open') || (i > 0 && gk(R[i - 1]) === gk(R[i]))) return ''; const g = gk(R[i]), xs = R.filter((y) => gk(y) === g);
     const tp = xs.filter((y) => y.inv && y.pnl && y.pnl.net != null), net = tp.reduce((a, y) => a + y.pnl.net, 0);
-    return `<tr class="dt-chiprow"><td colspan="${span}"><span class="st-cap"><b>${g === '보냄' ? '보낸 종목 — 서버가 매수 알림을 보낸 차례(맨 위 고정 · 상승률이 바뀌어도 안 움직임)' : ''}${g !== '보냄' && d.flat930 && String(g).includes('채움') ? `칩 ${st.set.minChip}개 종목이 모자라 칩 ${st.set.minChip - 1}개로 채운 종목(N−1번째 칩이 찬 때 삼) — ` : ''}${d.flat930 && String(g).startsWith('더함') ? '다시 지으며 더한 종목(장중 판에 없던 · 3천억 이상 · 칩 하나라도) — ' : ''}${g === '보냄' ? '' : d.flat930 ? (String(g).endsWith('앞') ? `${chipUntil()} 까지 칩 ${String(g).includes('채움') ? chipNeed() - 1 : chipNeed()}개 찬 종목 — ${st.order === 'open' ? '상승률 순(시가 대비)' : st.set.riseRank !== false ? '상승률 높은 순(09:05 까지 1분 값)' : '먼저 찬 순'}` : `${chipUntil()} 뒤에 찬 종목 — ${st.order === 'open' ? '상승률 순(시가 대비)' : st.set.riseRank !== false ? '상승률 높은 순(09:05 까지 1분 값)' : '먼저 찬 순'}`) : hasScore() ? `점수 ${num(g, 1)}` : `칩 ${g}개`}</b> · ${xs.length}종목${tp.length ? ` · 세후 <span class="${signClass(net, NUM) || ''}">${won(net)}</span> · 이긴 것 ${tp.filter((y) => y.pnl.net > 0).length}/${tp.length}` : ` · 손익 셈 밖(${lkMode ? '안 굳음' : '상위 밖'})`}</span></td></tr>`; };
+    return `<tr class="dt-chiprow"><td colspan="${span}"><span class="st-cap"><b>${g === '보냄' ? '보낸 종목 — 서버가 매수 알림을 보낸 차례(맨 위 고정 · 상승률이 바뀌어도 안 움직임)' : ''}${g !== '보냄' && d.flat930 && String(g).includes('채움') ? `칩 ${st.set.minChip}개 종목이 모자라 칩 ${st.set.minChip - 1}개로 채운 종목(N−1번째 칩이 찬 때 삼) — ` : ''}${d.flat930 && String(g).startsWith('더함') ? '다시 지으며 더한 종목(장중 판에 없던 · 3천억 이상 · 칩 하나라도) — ' : ''}${g === '보냄' ? '' : d.flat930 ? (String(g).endsWith('앞') ? `${chipUntil()} 까지 칩 ${String(g).includes('채움') ? chipNeed() - 1 : chipNeed()}개 찬 종목 — ${st.order === 'open' ? '상승률 순(시가 대비)' : st.set.riseRank !== false ? '상승률 높은 순(09:05 까지 1분 값)' : '먼저 찬 순'}` : `${chipUntil()} 뒤에 찬 종목 — ${st.order === 'open' ? '상승률 순(시가 대비)' : st.set.riseRank !== false ? '상승률 높은 순(09:05 까지 1분 값)' : '먼저 찬 순'}`) : hasScore() ? `점수 ${num(g, 1)}` : `칩 ${g}개`}</b> · ${xs.length}종목${xs.every((y) => y.hypo) ? (() => { const t = xs.filter((y) => y.pnl && y.pnl.net != null), v = t.reduce((a, y) => a + y.pnl.net, 0); return ` · 장중 창과 같은 룰 — 들어올 때 샀다고 친 가정 셈 · 세후 가정 합 ${t.length ? `<span class="${signClass(v, NUM) || ''}">${won(v)}</span> · 오른 것 ${t.filter((y) => y.pnl.net > 0).length}/${t.length}` : '—'} · 실제로 산 것 아님 — 위 합계 · 평균에 안 듦`; })() : tp.length ? ` · 세후 <span class="${signClass(net, NUM) || ''}">${won(net)}</span> · 이긴 것 ${tp.filter((y) => y.pnl.net > 0).length}/${tp.length}` : ` · 손익 셈 밖(${lkMode ? '안 굳음' : '상위 밖'})`}</span></td></tr>`; };
   // 굳힘 묶음 셈 — 넓은 · 좁은 표 함께(서버 rows[].lock · lockRank · meta.lockAt · lockN)
   const DMk = d.meta || {}, lkAt = Array.isArray(DMk.lockAt) ? DMk.lockAt : [], lkN = Number(DMk.lockN) || null;
   const lkIdx = R.map((x, i) => i).filter((i) => Number(R[i].r.lock) > 0), lkHas = lkIdx.length > 0;
@@ -875,12 +896,14 @@ function paint0(d) {
     const g = (nm, t) => `<span class="dt-chg"><i class="dt-chs">${nm}</i>${t ? `<small>${t}</small>` : ''}</span>`;   // 칩 이름 알약 + 그 아래 시각 한 묶음
     const each = raw.length ? raw.map((x) => g(esc(subName(c, x)), at[x] ? esc(String(at[x])) : '')).join('') : '';
     const v = has ? `<span class="dt-cg" data-i="${colorOf(c)}">${each ? `${each}${vt ? `<small class="dt-vt">${esc(vt)}</small>` : ''}` : sb.length ? g(esc(subTxt(c, sb)), vt ? esc(vt) : '') : `<b class="dt-dot" aria-label="걸림"></b>${vt ? `<small class="dt-vt">${esc(vt)}</small>` : ct ? `<small class="dt-vt">${esc(ct)}</small>` : ''}`}</span>`
+      : (r.chipTime || {})[c] && everChip(r, c) ? `<span class="dt-cg dt-gone" data-i="${colorOf(c)}" data-tip="${spanRow(r) ? '지금은 빠진 칩 — 적힌 시각은 마지막 구간의 붙은 때 · 빠진 때(「빠짐 모름」 = 서버 기록에 빠진 때가 아직 없어 붙은 것으로 셈) · 겹침 셈은 같은 시각에 함께 붙어 있던 칩만' : '붙었다 빠진 칩 — 적힌 시각은 처음 붙은 때(빠진 때 아님) · 겹침 셈(칩 N개 거르기 · 산 때)에 듦 · 이 날은 빠진 시각 기록이 없음'}"><b class="dt-dot" aria-label="붙었다 빠짐"></b><small class="dt-vt">${(() => { const sp = spanRow(r) && Array.isArray(r.chipSpans[c]) ? r.chipSpans[c] : null, l = sp && sp[sp.length - 1]; return l ? (l[1] ? `${esc(String(l[0]).slice(0, 5))} 붙음 · ${esc(String(l[1]).slice(0, 5))} 빠짐` : `${esc(String(l[0]).slice(0, 5))} 붙음 · 빠짐 모름`) : `${esc(String(r.chipTime[c]).slice(0, 5))} 붙음 · 빠짐`; })()}</small></span>`   // 11-25 재권님 「나로 해」 — 거르기가 세는 칩이 칸에 안 보여 「안 걸린 것을 산 것처럼」 보였음
       : st.miss.has(c) ? `<span class="dt-chq" data-tip="${esc(`그날 판에 ${c} 값을 ${missWord()} — 이 종목이 걸렸는지 모름`)}">—</span>`
       : st.wait.has(c) ? `<span class="dt-chq" data-tip="${esc(`아직 때가 아님 — ${c} 은 정규장${st.openAt ? `(${st.openAt})` : ''} 뒤에 셈`)}">·</span>` : '';
     return `<td class="dt-chc${on ? '' : ' is-off'}">${v}</td>`; };
   // 겹침 배지 — 수마다 색(5 이상 빨강 · 4 보라 · 3 노랑 · 그 밖 회색) · 점수표가 있으면 점수 · 못 받은 칩 수는 그 아래
-  const ovB = (r) => { const n = nLive(r), k = CS.filter((c) => !st.off.has(c) && st.miss.has(c) && !(r.chips || []).includes(c)).length;
-    return `<span class="dt-ovb" data-n="${n >= 5 ? 5 : n >= 3 ? n : 0}" data-tip="켜진 칩 중 몇 개에 걸렸나 — 순위가 이 수로 정해짐">겹침 ${n}</span>${hasScore() ? `<small class="dt-ovm">점수 ${num(scoreOf(r), 1)}</small>` : ''}${k ? `<small class="dt-ovm">못 받은 칩 ${k}</small>` : ''}`; };
+  // 겹침 수는 거르기(칩 N개 이상) · 산 때와 같은 셈(nEver — 붙었다 빠진 칩도) · 지금 붙어 있는 수가 다르면 「지금 M」 을 함께(11-25 재권님 「나로 해」 — 「겹침 3」 인데 칩 4개 거르기로 산 것처럼 보였음)
+  const ovB = (r) => { const n = nEver(r), nl = nLive(r), k = CS.filter((c) => !st.off.has(c) && st.miss.has(c) && !(r.chips || []).includes(c)).length;
+    return `<span class="dt-ovb" data-n="${n >= 5 ? 5 : n >= 3 ? n : 0}" data-tip="켜진 칩 중 몇 개에 걸렸나(붙었다 빠진 칩도 셈 — 칩 N개 거르기 · 산 때와 같은 수) — 순위가 이 수로 정해짐">겹침 ${n}</span>${nl !== n ? `<small class="dt-ovm">지금 ${nl}</small>` : ''}${hasScore() ? `<small class="dt-ovm">점수 ${num(scoreOf(r), 1)}</small>` : ''}${k ? `<small class="dt-ovm">못 받은 칩 ${k}</small>` : ''}`; };
   // 어제 미국장 — 머리 둘째 줄 한 줄 통째(11-19 재권님 「단타에 어제미국장 목록을 시간나오는곳 라인으로 맞춰서」 — 두 줄 모양에선 칩 머리 아래 · 매수 머리 위)
   const usTh = `<th class="dt-ust" colspan="${NB + 2}" style="text-align: left; white-space: normal; font-weight: 400;"><span class="dt-us" id="dt-us" data-day="${esc(d.day || '')}">${usHtml(d.day)}</span></th>`;   // 줄바꿈 · 왼쪽 맞춤은 이 칸만(머리 칸 기본은 한 줄 · 오른쪽)
   // 굳힘 목록(11-20 재권님 「평균 바로 위에 굳힘목록 만들어줘 굳힘시간() 넣어서」 → 「굳힌 종목은 시간대별로 버튼 누르면 볼수있게 해줘」 → 그림에 「응 올려」)
@@ -893,7 +916,7 @@ function paint0(d) {
   const lkLive = !lkHas || lkNext || !lkRest0.length ? '' : `<tr class="dt-chiprow"><td colspan="${lkSpan}"><span class="st-cap"><b>진행 중</b> · ${num(lkRest.length)}종목 — ${winMode() ? '아직 칩 문턱 밑 · 문턱에 들면 그때 창으로' : '아직 안 굳음 · 다음 굳힘 때 그 시각 단추로 옮겨 감'}</span></td></tr>`;
   const lkBody = !lkHas ? R.map(rowOf).join('') : lkNext ? '' : lkRest.map((i) => rowOf(R[i], i).replace(/^<tr class="dt-chiprow">[\s\S]*?<\/tr>/, '')).join('');
   const preH = `<div class="dt-bx dt-pre" data-tip="전날 종가 대비 넥스트레이드 프리장 등락 — 홀딩스 시세와 같은 값">오늘 프리장${st.pre && st.pre.day === d.day && !(d.rows || []).some((r) => r.pre) ? `<small style="display: block; font-weight: 400;">${esc(st.pre.at)} 값</small>` : ''}</div>`;
-  const buyH = `매수가 ${buyKey() !== 'open' ? buyName(...(BUYS.find(([k]) => k === buyKey()) || BUYS[0])) : newBuy ? '<small>9시 1분 값 · 뒤에 든 종목은 든 때 값</small>' : st.openAt ? `${hmTxt(String(st.openAt).replace(':', ''))} 시가` : hmTxt(d.buyAt)}`;
+  const buyH = `매수가 ${d.flat930 ? `<small>칩 ${num(chipNeed())}개 찬 때 그 분 값</small>` : buyKey() !== 'open' ? buyName(...(BUYS.find(([k]) => k === buyKey()) || BUYS[0])) : newBuy ? '<small>9시 1분 값 · 뒤에 든 종목은 든 때 값</small>' : st.openAt ? `${hmTxt(String(st.openAt).replace(':', ''))} 시가` : hmTxt(d.buyAt)}`;
   const viewH = !RV.length ? '' : `<tr class="dt-chiprow"><td colspan="${NB + 2}"><span class="st-cap"><b>${esc(IX.name || '장중')} 창${IX.from ? `(${esc(IX.from)}${IX.until ? `~${esc(IX.until)}` : ' ~'})` : ''}에 든 종목 — 보기만</b> · ${RV.length}종목 · 칩이 셈 칸(${num(chipNeed())}개)에 모자라 셈 밖 · 들어올 때 샀다고 친 가정 셈 · 세후 가정 합 ${(() => { const t = RV.filter((x) => x.pnl && x.pnl.net != null), v = t.reduce((a, x) => a + x.pnl.net, 0); return t.length ? `<span class="${signClass(v, NUM) || ''}">${won(v)}</span> · 오른 것 ${t.filter((x) => x.pnl.net > 0).length}/${t.length}` : '—'; })()} · 실제로 산 것 아님 — 위 합계 · 평균에 안 듦 · 든 시각 순</span></td></tr>`
     + RV.map((x, k) => rowOf(x, R.length + k, true)).join('');
   $('dt-box').innerHTML = `<table class="dt-tb dt-cols dt-2row">
@@ -1158,7 +1181,7 @@ BIND.push(() => $('dt-only').addEventListener('click', (e) => { const b = e.targ
 async function loadFee() {
   if (!DT_CHIPS.length || st.chipFail || st.sellFail !== false) await loadDtChips();   // 매도 기본값(SELL_DEF)이 셈 칸보다 먼저
   try { const r = await fetch(DOC, { cache: 'no-store' }); const j = r.ok ? await r.json() : null; const R0 = j && j.data && j.data.rules && j.data.rules.dt30 ? j.data.rules.dt30 : {}; const v = R0.feePct; st.fee = v == null || v === '' ? null : Number(v);
-    st.set = { ...DEF_SET, ...SELL_DEF, ...(R0.set && typeof R0.set === 'object' ? R0.set : {}), mode: 'day' }; st.setSaved = { ...st.set }; st.setDirty = false; st.chipSig = JSON.stringify({ chipOff: [...st.off], subOff: [...st.subOff], chipCols: (st.cols || DT_CHIPS).filter((c) => c !== '자동') });   // chipSig — 이 화면을 연 때의 끈 칩(자동 저장은 이 화면에서 칩을 바꿨을 때만 · 다른 브라우저가 열려 있다 저장값을 덮지 않게 · 11-24)   // 저장된 값 — 차례 점수만 바로 저장할 때 안 누른 고침을 섞지 않으려고(개념정의 덧 11-23)
+    st.set = { ...DEF_SET, ...SELL_DEF, ...(R0.set && typeof R0.set === 'object' ? R0.set : {}), mode: 'day' }; st.setSaved = { ...st.set }; st.setDirty = false; st.chipSig = chipSig();   // chipSig — 이 화면을 연 때의 끈 칩(자동 저장은 이 화면에서 칩을 바꿨을 때만 · 다른 브라우저가 열려 있다 저장값을 덮지 않게 · 11-24)   // 저장된 값 — 차례 점수만 바로 저장할 때 안 누른 고침을 섞지 않으려고(개념정의 덧 11-23)
     st.score = R0.score && typeof R0.score === 'object' ? R0.score : {};   // 돈은 늘 전체 금액 ÷ 종목 수
     if (R0.set && R0.set.mode === 'each' && R0.set.perWon) st.set.dayWon = R0.set.perWon * (st.set.top || PNL_TOP); }   // 옛 저장값(종목마다)은 같은 돈이 되게 옮김
   catch (e) { st.fee = null; st.set = { ...DEF_SET, ...SELL_DEF }; }
@@ -1244,8 +1267,9 @@ function autoSaveArm(d) {
   autoSave.timer = setTimeout(() => { if (!root) return; if (st.setDirty || (st.chipSig != null && chipSig() !== st.chipSig)) setSave(); }, wait);
 }
 // chipCols 는 「자동」 칸을 늘 뺀다 — 서버 장중 판은 늘 watchRule 「자동」 이라 화면이 그 칸을 안 셈(colsOf · wAuto) · 옛 날 판(자동 아님)을 보다 저장해도 서버가 「자동」 칩을 세지 않게(개념정의 덧 11-24)
-const chipSave = () => ({ chipOff: [...st.off], subOff: [...st.subOff], chipCols: (st.cols || DT_CHIPS).filter((c) => c !== '자동') });
-const chipSig = () => JSON.stringify(chipSave());
+// 저장은 서버 이름으로(11-25 qa — 서버 매수 셈이 「거래비율」 · 「거래비율급증」 으로 읽는데 화면 이름 「현시간 유통회전」 · 「전일 현시간 대비 급증」 이 들어가 칸 밖으로 셌음) · 비교 값(chipSig)도 같은 셈이라 함께 바뀜
+function chipSave() { return { chipOff: [...st.off].map(serverChip), subOff: [...st.subOff].map((k) => { const i = k.indexOf('|'); return i < 0 ? serverChip(k) : `${serverChip(k.slice(0, i))}${k.slice(i)}`; }), chipCols: (st.cols || DT_CHIPS).filter((c) => c !== '자동').map(serverChip) }; }   // 함수 선언 — loadFee 가 이 줄보다 먼저 돌아도 쓰이게
+function chipSig() { return JSON.stringify(chipSave()); }
 async function setSave() {
   const msg = $('dt-set-msg'); msg.textContent = '저장하는 중…';
   // 끈 칩 · 하위 칩 · 칩 칸도 함께(11-24 재권님 「카드에 있것들 해」 · 개발2 — 서버 매수 알림이 화면 everChip · liveChip · subsOf 와 같게 셈) · 열쇠 chipOff · subOff · chipCols
