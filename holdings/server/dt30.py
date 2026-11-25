@@ -2693,7 +2693,7 @@ def rebuild(proxy, day, prev, cfg=None):
         approx.extend(["거래비율", "거래비율급증"])        # 풀린 주식수는 지금 값 · 거래대금은 5분봉 종가 × 거래량 어림 · 전날 대비는 거래량 비
     try:                                                   # 돈몰림 — 그날 섹터 수급 판을 5분 칸마다 장중과 같은 셈(다수결)으로 · 붙음 · 빠짐은 줄 chipSpans 「돈몰림」(money_chip.past_spans)
         import money_chip                                  # (재권님 「지난 섹터 테마를 바탕으로 돈몰림 11월 2일부터 지금까지 적용해줘」 11-25 21:33 → 「진행해」 21:4x)
-        ms, mwhy = money_chip.past_spans(proxy, day, [c for c in cap if not small(c)])
+        ms, mwhy = money_chip.past_spans(proxy, day, [c for c in cap if not small(c)], "%02d:%02d" % _sh(OPEN_AT, off))
         for c, v in ms.items():
             for sb in v["subs"]:
                 put(c, money_chip.CHIP, sb)
@@ -2871,11 +2871,11 @@ def money_log_fill(proxy, day, b):
     cap = {r["stock_code"]: r["market_cap"] for r in dart.universe_rows(None)}
     if not cap:
         return None
-    sp, why = money_chip.past_spans(proxy, day, [c for c, v in cap.items() if v is not None and v >= cap_min_eok()])
-    if why:
-        return None
     o = _hhmm(_open_min(proxy, day, b))
     o = "%s:%s" % (o[:2], o[2:])
+    sp, why = money_chip.past_spans(proxy, day, [c for c, v in cap.items() if v is not None and v >= cap_min_eok()], o)
+    if why:
+        return None
     with proxy._db_lock, proxy.db_conn() as conn:
         conn.execute(_CL_SCHEMA)
         first = conn.execute("SELECT MIN(at) FROM dt30_chip_log WHERE day = ? AND n IS NOT NULL", (day,)).fetchone()[0]

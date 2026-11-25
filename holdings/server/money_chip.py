@@ -118,10 +118,11 @@ def hits(proxy, codes):
     return val
 
 
-def past_spans(proxy, day, codes):
+def past_spans(proxy, day, codes, open_at=None):
     """그날 5분 칸마다 붙음 · 빠짐 — → ({code: {"subs": [「업종 이름」 …], "spans": [[「HH:MM」 붙음, 「HH:MM」 빠짐 | None] …]}}, 못 읽은 까닭 | None).
     칸마다 그 칸까지 값만 보고 hits 와 같은 셈(group_vote · 다수결) · 칸 시각 = 그 칸이 끝나는 때(sector_flow.SLOT_TO — 장중에 그 칸 값을 처음 보는 때).
-    한 종목이 든 묶음 중 하나라도 붙어 있으면 붙음 · 셈 못 한 칸(None)은 앞 상태 그대로."""
+    한 종목이 든 묶음 중 하나라도 붙어 있으면 붙음 · 셈 못 한 칸(None)은 앞 상태 그대로.
+    open_at 「HH:MM」 — 장중 셈은 여는 시각 전엔 돈몰림을 안 셈(dt30.chips_now 의 pre) · 그래서 그 앞 칸 시각은 여는 시각으로 모은다(마지막 프리장 칸 셈이 여는 때 상태 · qa 덧 11-25)."""
     import sector_flow
     w, h, mult = _win(), _hold(), chip_rules.get(CHIP, "mult")
     min_eok, share = chip_rules.get(CHIP, "minEok"), chip_rules.get(CHIP, "buyShare")
@@ -141,7 +142,7 @@ def past_spans(proxy, day, codes):
                 if amt.get(s) is None:
                     continue
                 keep = set(slots[:j + 1])
-                seq.append((tm(s), group_vote(dict(r, amt={x: v for x, v in amt.items() if x in keep}), slots, w, h, mult, min_eok, share)))
+                seq.append((max(tm(s), open_at) if open_at else tm(s), group_vote(dict(r, amt={x: v for x, v in amt.items() if x in keep}), slots, w, h, mult, min_eok, share)))
             if any(v is True for _, v in seq):
                 seqs[r["name"]] = seq
         if not seqs:
