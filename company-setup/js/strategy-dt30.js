@@ -622,8 +622,12 @@ const live = d.flat930 ? live0.map((r, i) => [r, nthChipAt(r) || '9999', i]).sor
       return { buyAmt, sellAmt, gross: sellAmt - buyAmt, tx, rural, fee, net: T ? sellAmt - buyAmt - tx - rural - (fee || 0) : null };
     })() : null;
     return { r, p, s, pnl, sellPx, T, now: nowCh != null, res: s.k >= 0 ? p[s.k] : nowCh != null ? nowCh : (last >= 0 ? p[last] : null) }; };
-  const R = rows.map(mkR);
-  const inv = lkMode ? R.filter((x) => Number(x.r.lock) > 0) : R.slice(0, n);   // 돈을 넣은 줄 — 굳힌 판은 굳힌 종목 전부 · 아니면 상위 N
+  // 09:30 뒤에 찬 종목(셈 칸 「안 삼」) — 장중 창 보기만 줄과 같은 룰: 판에 든 때 값으로 샀다고 친 가정 셈 · 매도 룰 그대로 · 상위 N · 손익 · 평균 · 합계에는 안 듦
+  //   (11-25 재권님 「9시 30분 뒤에 찬 종목도 셈은 해야해」 → 「산다라는 룰은 아니고 셈에서만 빠지는거야」 → 「장중 창과 같은룰로 해야지」) · 몫(nb · lkCnt)을 다 센 뒤에 가정 값을 넣어 돈 나누기에 안 섞임
+  const late = new Set(d.flat930 && !S.buyLate930 ? rows.filter((r) => !buyOf(r) && Number(r.buy) > 0 && (nthChipAt(r) || '') > chipUntil().replace(':', '')) : []);
+  late.forEach((r) => { const t = inTs(r); HYPO.set(r, { px: Number(r.buy), at: t.slice(0, 4), src: `${t.length >= 6 ? `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}` : '—'} 든 때 · 가정(산 것 아님)` }); });
+  const R = rows.map((r) => { const x = mkR(r); if (late.has(r)) x.hypo = true; return x; });
+  const inv = (lkMode ? R.filter((x) => Number(x.r.lock) > 0) : R.slice(0, n)).filter((x) => !x.hypo);   // 돈을 넣은 줄 — 굳힌 판은 굳힌 종목 전부 · 아니면 상위 N · 가정 줄은 뺌
   inv.forEach((x) => { x.inv = true; });
   if (S.pyr) pyrCalc(inv, times);
   const top = inv.filter((x) => x.pnl), sum = (k) => top.reduce((a, x) => a + (x.pnl[k] || 0), 0);
@@ -695,9 +699,10 @@ function paint0(d) {
   // 평균 (11-18 재권님 「평균값이 뭔가 이상한데」 → (나)) — 판 종목은 판 값으로 고정해 그 뒤 시각에도 넣는다 · 그 시각까지 실제로 번 수익률
   //   전에는 판 칸부터 뺐는데(11-11) 오후에 끝까지 오른 몇 종목만 남아 평균이 부풀었다(11-17 12:30~ 2종목 +21.79%)
   const atK = (x, k) => (x.s.k >= 0 && k >= x.s.k ? x.p[x.s.k] : x.p[k]);
-  const avg = times.map((_, k) => mean(R.map((x) => atK(x, k)).filter((v) => v != null)));
-  const res = R.map((x) => x.res).filter((v) => v != null), resAvg = mean(res);
-  const sold = R.filter((x) => x.s.k >= 0);
+  const RA = R.filter((x) => !x.hypo);   // 09:30 뒤에 찬 종목(가정 셈)은 평균에 안 듦 — 장중 창 보기만과 같게
+  const avg = times.map((_, k) => mean(RA.map((x) => atK(x, k)).filter((v) => v != null)));
+  const res = RA.map((x) => x.res).filter((v) => v != null), resAvg = mean(res);
+  const sold = RA.filter((x) => x.s.k >= 0);
   st.last[d.day] = resAvg;
   const bm = d.meta || {}, nm = (a) => names(a).join(' · ');   // 되채운 날 · 못 받은 칩 — 칩 이름은 서버가 준 그대로
   const rebuilt = bm.rebuilt === true ? ` · 되채운 날${nm(bm.missing) ? ` · ${nm(bm.missing)} 못 셈` : ''}${nm(bm.approx) ? ` · ${nm(bm.approx)} 어림` : ''}` : `${nm(bm.missing) ? ` · 못 받은 칩 ${nm(bm.missing)}` : ''}${nm(bm.early) ? ` · ${nm(bm.early)} 어림(집계 전)` : ''}${bm.late && typeof bm.late === 'object' && Object.keys(bm.late).length ? ` · 늦게 채움 ${Object.entries(bm.late).map(([k, v]) => `${k} ${v}`).join(' · ')}` : ''}`;
@@ -811,7 +816,7 @@ function paint0(d) {
   if (st.order === 'open') { const gi = new Map(); R.forEach((x) => { const g = gk(x); if (!gi.has(g)) gi.set(g, gi.size); }); R.sort((a, b) => gi.get(gk(a)) - gi.get(gk(b)) || (gk(a) === '보냄' ? sentOrdOf(d, a.r) - sentOrdOf(d, b.r) : orV(b.r) - orV(a.r))); }   // 보낸 종목은 보낸 차례 그대로
   const grp = (i, span) => { if ((st.order && st.order !== 'open') || (i > 0 && gk(R[i - 1]) === gk(R[i]))) return ''; const g = gk(R[i]), xs = R.filter((y) => gk(y) === g);
     const tp = xs.filter((y) => y.inv && y.pnl && y.pnl.net != null), net = tp.reduce((a, y) => a + y.pnl.net, 0);
-    return `<tr class="dt-chiprow"><td colspan="${span}"><span class="st-cap"><b>${g === '보냄' ? '보낸 종목 — 서버가 매수 알림을 보낸 차례(맨 위 고정 · 상승률이 바뀌어도 안 움직임)' : ''}${g !== '보냄' && d.flat930 && String(g).includes('채움') ? `칩 ${st.set.minChip}개 종목이 모자라 칩 ${st.set.minChip - 1}개로 채운 종목(N−1번째 칩이 찬 때 삼) — ` : ''}${d.flat930 && String(g).startsWith('더함') ? '다시 지으며 더한 종목(장중 판에 없던 · 3천억 이상 · 칩 하나라도) — ' : ''}${g === '보냄' ? '' : d.flat930 ? (String(g).endsWith('앞') ? `${chipUntil()} 까지 칩 ${String(g).includes('채움') ? chipNeed() - 1 : chipNeed()}개 찬 종목 — ${st.order === 'open' ? '상승률 순(시가 대비)' : st.set.riseRank !== false ? '상승률 높은 순(09:05 까지 1분 값)' : '먼저 찬 순'}` : `${chipUntil()} 뒤에 찬 종목 — ${st.order === 'open' ? '상승률 순(시가 대비)' : st.set.riseRank !== false ? '상승률 높은 순(09:05 까지 1분 값)' : '먼저 찬 순'}`) : hasScore() ? `점수 ${num(g, 1)}` : `칩 ${g}개`}</b> · ${xs.length}종목${tp.length ? ` · 세후 <span class="${signClass(net, NUM) || ''}">${won(net)}</span> · 이긴 것 ${tp.filter((y) => y.pnl.net > 0).length}/${tp.length}` : ` · 손익 셈 밖(${lkMode ? '안 굳음' : '상위 밖'})`}</span></td></tr>`; };
+    return `<tr class="dt-chiprow"><td colspan="${span}"><span class="st-cap"><b>${g === '보냄' ? '보낸 종목 — 서버가 매수 알림을 보낸 차례(맨 위 고정 · 상승률이 바뀌어도 안 움직임)' : ''}${g !== '보냄' && d.flat930 && String(g).includes('채움') ? `칩 ${st.set.minChip}개 종목이 모자라 칩 ${st.set.minChip - 1}개로 채운 종목(N−1번째 칩이 찬 때 삼) — ` : ''}${d.flat930 && String(g).startsWith('더함') ? '다시 지으며 더한 종목(장중 판에 없던 · 3천억 이상 · 칩 하나라도) — ' : ''}${g === '보냄' ? '' : d.flat930 ? (String(g).endsWith('앞') ? `${chipUntil()} 까지 칩 ${String(g).includes('채움') ? chipNeed() - 1 : chipNeed()}개 찬 종목 — ${st.order === 'open' ? '상승률 순(시가 대비)' : st.set.riseRank !== false ? '상승률 높은 순(09:05 까지 1분 값)' : '먼저 찬 순'}` : `${chipUntil()} 뒤에 찬 종목 — ${st.order === 'open' ? '상승률 순(시가 대비)' : st.set.riseRank !== false ? '상승률 높은 순(09:05 까지 1분 값)' : '먼저 찬 순'}`) : hasScore() ? `점수 ${num(g, 1)}` : `칩 ${g}개`}</b> · ${xs.length}종목${xs.every((y) => y.hypo) ? (() => { const t = xs.filter((y) => y.pnl && y.pnl.net != null), v = t.reduce((a, y) => a + y.pnl.net, 0); return ` · 장중 창과 같은 룰 — 들어올 때 샀다고 친 가정 셈 · 세후 가정 합 ${t.length ? `<span class="${signClass(v, NUM) || ''}">${won(v)}</span> · 오른 것 ${t.filter((y) => y.pnl.net > 0).length}/${t.length}` : '—'} · 실제로 산 것 아님 — 위 합계 · 평균에 안 듦`; })() : tp.length ? ` · 세후 <span class="${signClass(net, NUM) || ''}">${won(net)}</span> · 이긴 것 ${tp.filter((y) => y.pnl.net > 0).length}/${tp.length}` : ` · 손익 셈 밖(${lkMode ? '안 굳음' : '상위 밖'})`}</span></td></tr>`; };
   // 굳힘 묶음 셈 — 넓은 · 좁은 표 함께(서버 rows[].lock · lockRank · meta.lockAt · lockN)
   const DMk = d.meta || {}, lkAt = Array.isArray(DMk.lockAt) ? DMk.lockAt : [], lkN = Number(DMk.lockN) || null;
   const lkIdx = R.map((x, i) => i).filter((i) => Number(R[i].r.lock) > 0), lkHas = lkIdx.length > 0;
