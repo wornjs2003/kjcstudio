@@ -764,7 +764,7 @@ function paint0(d) {
     if (x.s.k >= 0 && k === x.s.k && x.s.px != null) return `<td class="dt-sold"><span style="display: block; line-height: 1.25;">${num(x.s.px)}</span>${pct(v)}<em>${hmTxt(x.s.at)} ${x.s.why}</em>${flT}${x.pyrTo ? `<small class="dt-pyr"> → ${esc(x.pyrTo.name || '—')} 불타기</small>` : ''}</td>`;
     if (x.s.k >= 0 && k === x.s.k) return `<td class="dt-sold">${pxT}${pct(v)}<em>${x.s.why}</em>${flT}${x.pyrTo ? `<small class="dt-pyr"> → ${esc(x.pyrTo.name || '—')} 불타기</small>` : ''}</td>`;
     { const ad = x.pnl && (x.pnl.adds || []).filter((o) => o.k === k); if (ad && ad.length) return `<td class="${k === L ? 'dt-last' : ''}">${pxT}${pct(v)}${flT}<small class="dt-pyr"> ← ${ad.map((o) => esc(o.from || '—')).join(' · ')} 손절 돈 불타기</small></td>`; }
-    if (x.s.k >= 0 && k > x.s.k) return `<td class="dt-after">${v == null ? '—' : sgn(v)}</td>`;
+    if (x.s.k >= 0 && k > x.s.k) return `<td class="dt-after">${v == null ? '—' : sgn(v)}${flT}</td>`;   // 판 뒤 칸도 외 · 기 · 프 · 창 줄(11-25 재권님 「단타에 칩 걸려서 보여지는 종목들은 외기창 다 나오게 해줘」)
     return `<td class="${k === L ? 'dt-last' : ''}">${pxT}${v == null && pxT ? '' : pct(v)}${flT}</td>`;
   };
   const plTd = (x, i) => (x.hypo ? `<td class="dt-pl dt-hypo" data-tip="들어올 때 값으로 샀다고 치고 셈한 값 — 실제로 산 것이 아니라 합계 · 평균에 안 듦">${x.pnl && x.pnl.net != null ? `<span class="${signClass(x.pnl.net, NUM) || ''}">${won(x.pnl.net)}</span><small>가정 · 산 것 아님</small>` : '<span class="st-err">—</span>'}</td>` : `<td class="dt-pl">${x.inv && x.pnl ? (x.pnl.net == null ? '<span class="st-err">시장 모름</span>' : `<span class="${signClass(x.pnl.net, NUM) || ''}">${won(x.pnl.net)}</span><small>빼기 전 ${won(x.pnl.gross)}${x.pnl.adds && x.pnl.adds.length ? ` · 불타기 ${won(x.pnl.pyr)}` : ''}</small>`) : '<span class="st-err">—</span>'}</td>`);
@@ -1268,7 +1268,7 @@ function autoSaveArm(d) {
 }
 // chipCols 는 「자동」 칸을 늘 뺀다 — 서버 장중 판은 늘 watchRule 「자동」 이라 화면이 그 칸을 안 셈(colsOf · wAuto) · 옛 날 판(자동 아님)을 보다 저장해도 서버가 「자동」 칩을 세지 않게(개념정의 덧 11-24)
 // 저장은 서버 이름으로(11-25 qa — 서버 매수 셈이 「거래비율」 · 「거래비율급증」 으로 읽는데 화면 이름 「현시간 유통회전」 · 「전일 현시간 대비 급증」 이 들어가 칸 밖으로 셌음) · 비교 값(chipSig)도 같은 셈이라 함께 바뀜
-function chipSave() { return { chipOff: [...st.off].map(serverChip), subOff: [...st.subOff].map((k) => { const i = k.indexOf('|'); return i < 0 ? serverChip(k) : `${serverChip(k.slice(0, i))}${k.slice(i)}`; }), chipCols: (st.cols || DT_CHIPS).filter((c) => c !== '자동').map(serverChip), chipKnown: [...new Set([...DT_CHIPS, ...(st.cols || [])])].filter((c) => c !== '자동').map(serverChip) }; }   // chipKnown — 저장할 때 화면이 알던 서버 칩 전부 · 서버는 그 밖 칩(저장 뒤 새로 생긴 칩)을 켬으로 셈(11-25 개발2 · 재권님 「처음부터 셈이되도록 켜줘」) · chipCols 밖이면서 여기 있는 칩은 칸에서 지운 것 = 안 셈   // 함수 선언 — loadFee 가 이 줄보다 먼저 돌아도 쓰이게
+function chipSave() { return { chipOff: [...st.off].map(serverChip), subOff: [...st.subOff].map((k) => { const i = k.indexOf('|'); return i < 0 ? serverChip(k) : `${serverChip(k.slice(0, i))}${k.slice(i)}`; }), chipCols: (st.cols || DT_CHIPS).filter((c) => c !== '자동').map(serverChip), chipKnown: [...new Set([...DT_CHIPS, ...(st.cols || []), '자동'])].map(serverChip) }; }   // chipKnown — 저장할 때 화면이 알던 서버 칩 전부 · 서버는 그 밖 칩(저장 뒤 새로 생긴 칩)을 켬으로 셈(11-25 개발2 · 재권님 「처음부터 셈이되도록 켜줘」) · chipCols 밖이면서 여기 있는 칩은 칸에서 지운 것 = 안 셈 · 「자동」 은 넣는다(chipCols 에서만 뺌 — 빼면 서버가 새 칩으로 읽어 다시 셈 · 개념정의 검수 덧 11-25)   // 함수 선언 — loadFee 가 이 줄보다 먼저 돌아도 쓰이게
 function chipSig() { return JSON.stringify(chipSave()); }
 async function setSave() {
   const msg = $('dt-set-msg'); msg.textContent = '저장하는 중…';
