@@ -599,7 +599,7 @@ def _num_or_none(v):
         return None
 
 
-def compute(proxy, live=None):
+def compute(proxy, live=None, us_before=None):
     """GET /api/auto-watch 의 data — 쌓인 값을 지금 룰로 거르고 줄 세운다. KIS 를 안 부른다.
 
         day         셈한 날(가장 최근에 그날 값이 저장된 날) · 없으면 null
@@ -678,7 +678,7 @@ def compute(proxy, live=None):
             lst = hist.setdefault(code, [])
             if len(lst) < AVG_DAYS:
                 lst.append(vol)
-        us = us_sectors.last_changes(conn) if sector_pct is not None else {}
+        us = us_sectors.last_changes(conn, us_before) if sector_pct is not None else {}   # us_before — 지난 날 다시 셀 때 그 날 앞 미국장만(dt30.rebuild · 11-25)
         hi = {r[0]: r[1] for r in conn.execute(
             "SELECT code, MAX(close) FROM auto_watch_day WHERE day < ? AND day >= ? AND close IS NOT NULL GROUP BY code",
             (day, (datetime.strptime(day, "%Y%m%d") - timedelta(days=YEAR_DAYS)).strftime("%Y%m%d")))}
