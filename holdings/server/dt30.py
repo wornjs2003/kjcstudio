@@ -1267,6 +1267,10 @@ def buy930_fill(proxy, b):
     for r in rows:
         c = ct.get(r["code"]) or {}
         r["chipTime"] = {k: "%s:%s" % (v[:2], v[2:]) for k, v in c.items()}
+        if r.get("spanChips"):                         # 다시 지은 판 — 구간이 돈몰림만 있는 줄은 그 밖 칩을 처음 시각부터 열린 구간으로 채움(서버 _spans4 와 화면 spansOf 가 같은 값을 보게 · qa 덧 11-25)
+            sp_ = r.setdefault("chipSpans", {})
+            for k, v in r["chipTime"].items():
+                sp_.setdefault(k, [[v, None]])
         if not why:
             s = {k: [list(x) for x in v] for k, v in (sp.get(r["code"]) or {}).items()}
             for k, v in s.items():
@@ -2700,7 +2704,7 @@ def rebuild(proxy, day, prev, cfg=None):
             hit[c]["moneySpans"] = v["spans"]
         (missing if mwhy else approx).append(money_chip.CHIP)   # 묶음 종목은 지금 목록(그날 목록은 안 남음)
     except Exception:
-        missing.append("돈몰림")
+        missing.append("돈몰림")                        # money_chip 을 못 불러온 때라 이름을 글자로(그 밖 자리는 money_chip.CHIP)
     for c in bb:
         if c in hit:
             hit[c]["chips"].add("볼린저")
@@ -2734,9 +2738,10 @@ def rebuild(proxy, day, prev, cfg=None):
                      "viAt": g.get("viAt"), "surgeAt": g.get("surgeAt"), "volAt": g.get("volAt"), "surgeApprox": g.get("surgeApprox"), "viPx": g.get("viPx"),
                      "px": px, "pxSrc": src})
         if g.get("moneySpans"):                        # 돈몰림 붙음 · 빠짐(다른 칩은 구간 기록이 없어 처음 붙은 시각 셈 그대로 — _spans4)
-            rows[-1]["chipSpans"] = {"돈몰림": g["moneySpans"]}
-            rows[-1]["spanChips"] = ["돈몰림"]          # 구간 기록이 있는 칩 — 그 밖 칩은 예전 셈(_spans4)
-            rows[-1]["chipAt"] = {"돈몰림": g["moneySpans"][0][0]}
+            import money_chip                          # 칩 이름은 money_chip.CHIP 한 곳(개념정의 덧 11-25)
+            rows[-1]["chipSpans"] = {money_chip.CHIP: g["moneySpans"]}
+            rows[-1]["spanChips"] = [money_chip.CHIP]   # 구간 기록이 있는 칩 — 그 밖 칩은 예전 셈(_spans4 · buy930_fill 이 열린 구간으로 채움)
+            rows[-1]["chipAt"] = {money_chip.CHIP: g["moneySpans"][0][0]}
     tab = score_table(proxy)
     order = sort_rows(rows, tab, off)                  # off — 그날 늦게 열었으면 VI·급등 나누는 시각도 그만큼 뒤(개념정의 덧 11-19 — 그날 판과 같게)
     for i, r in enumerate(rows):                       # 지난 판은 자르지 않는다 — 문턱 이상 · 칩 하나라도 든 종목 전부(굳힘 문턱 밑은 lock 없이 · 화면이 칩 · 룰을 바꿔 다시 셀 수 있게)
