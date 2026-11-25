@@ -1274,8 +1274,8 @@ def buy930_fill(proxy, b):
             r["chipSpans"] = s                         # {칩: [[붙음, 빠짐 | None] …]} — 칩 빠진 시각(11-25 재권님 「칩 빠진 시각도 넣어줘」)
     if not why:
         try:
-            _chip_px_fill(proxy, b["day"], rows, o)
-            b["meta"]["chipPx"] = {"ok": True}
+            st = _chip_px_fill(proxy, b["day"], rows, o)
+            b["meta"]["chipPx"] = {"ok": True, "settledTo": st}   # settledTo 「HH:MM」 — 이 분부터는 아직 굳는 중(열쇠 없음) · 지난 날은 null(다 굳음) · 시황분석1 11-25
         except Exception as e:
             b["meta"]["chipPx"] = {"ok": False, "why": type(e).__name__}
     for r in rows:
@@ -1327,6 +1327,7 @@ def _chip_px_fill(proxy, day, rows, o):
     for r in rows:
         if r.get("chipSpans") is not None:
             r["chipPx"] = got.get(r["code"], {})
+    return None if cut.endswith("2359") else "%s:%s" % (cut[8:10], cut[10:12])   # 굳은 끝 — 이 분보다 앞 봉만 실림(그 뒤는 굳는 중)
 
 
 def _out_px(proxy, b, outs):
@@ -2585,29 +2586,18 @@ def rebuild(proxy, day, prev, cfg=None):
         if sub and sub not in g["subs"].setdefault(chip, []):
             g["subs"][chip].append(sub)
 
-    try:
-        wdoc = watch_at(day)
-    except Exception:
-        wdoc = None
-    watch_src = "기록" if isinstance(wdoc, dict) else "없음"
-    if watch_src == "기록":
-        watch_chips(wdoc, lambda c, n, chip, sub=None: put(_six(c), chip, sub) if _six(c) else None, small, merged=False)
-    else:
-        missing.append("관심")
-    try:                                                   # 수급 — 기록이 없는 날만 앞 거래일 값에 지금 룰(어림)
-        if watch_src == "기록":
-            raise StopIteration
-        approx.append("수급")
+    watch_src = "지금 룰"                                  # 관심 — 하트(손으로 담은 것)는 빼고 앞 거래일 장 마감 값에 지금 자동 관심 룰(11-25 재권님 「1. 관심은 지금룰로만 적용한다」 → 개발2 창 「응 그렇게 해」)
+    try:                                                   # 그날 장중 실시간 넣기(상위 ADD_TOP)는 쌓지 않아 다시 못 셈 — approx 「관심」 · meta note
+        approx.append("관심")
         live = {"day": prev, "frac": 1, "at": "", "got": {c: {"name": r[1], "close": r[2], "pct": r[3], "vol": r[4]} for c, r in pv.items()}}
-        res = auto_watch.compute(proxy, live=live)
+        res = auto_watch.compute(proxy, live=live, us_before=prev)   # 미국 섹터 조건도 그 앞 미국장 값으로
         if not res.get("ready"):
-            raise ValueError("수급 룰 못 읽음")             # 룰을 못 읽으면 「없음」 이 아니라 「못 셈」
+            raise ValueError("관심 룰 못 읽음")             # 룰을 못 읽으면 「없음」 이 아니라 「못 셈」
         for r in res.get("picked") or []:
-            put(r["code"], "수급")
-    except StopIteration:
-        pass
+            if not r.get("nearHighOnly"):                  # 조건 밖인데 신고가 부근이라 더 붙은 종목은 관심 목록에 안 넣는다(auto_watch.apply_watch 와 같게)
+                put(r["code"], "관심")
     except Exception:
-        missing.append("수급")
+        missing.append("관심")
     p0, p1 = "%02d%02d" % pre_flow.PRE_OPEN, "%02d%02d" % pre_flow.PRE_CLOSE     # 프리장 창 — 서버 값 한 곳 · 끝 봉(08:50~)은 프리장 밖(day_top_fill 과 같게)
     amt = {c: sum((b[2] or 0) * (b[3] or 0) for hm, b in d.items() if p0 <= hm < p1) for c, d in bars.items()}
     items = []
@@ -2850,7 +2840,8 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
                                                        # — 그 뒤 라이브 판(allRows 없음)은 날마다 다시 짓지 않는다(개념정의 덧 11-23 · 장중 기록을 어림 판으로 덮지 않게)
         lm = m.get("lateMin") if isinstance(m.get("lateMin"), int) else 0
         late_old = m.get("rebuilt") and not isinstance(m.get("lateMin"), int) and late_min(proxy, day=d) > 0   # 늦게 연 날을 09:00 기준으로 다시 지은 판(11-24 전) — 한 번 다시 센다
-        if not stale and not late_old and not (m.get("rebuilt") and ("watchSrc" not in m or m.get("viUntil") != "%02d:%02d" % _sh(PAST_LATE, lm))):   # (재권님 「기준 3000억 이상이라고 몇번을 말했는데」 11-23 19:0x)
+        old_watch = m.get("rebuilt") and m.get("watchSrc") != "지금 룰"   # 관심을 하트 · 그날 문서로 센 옛 판(11-25 전) — 한 번 다시 센다(재권님 「관심은 지금룰로만」)
+        if not stale and not late_old and not old_watch and not (m.get("rebuilt") and ("watchSrc" not in m or m.get("viUntil") != "%02d:%02d" % _sh(PAST_LATE, lm))):   # (재권님 「기준 3000억 이상이라고 몇번을 말했는데」 11-23 19:0x)
             have.add(d)                                # VI 창이 다른 되채운 날(11-13 전)도 한 번 다시 센다
         elif m.get("liveBefore"):
             keep_live[d] = m["liveBefore"]
