@@ -399,3 +399,44 @@
 .dt .dt-rrk { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
 .dt .dt-rrk input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 .dt .dt-setf > summary { cursor: pointer; margin: 6px 0; }   /* 셈 칸 접기 · 펴기 */
+
+/* 미국 → 다음 날 국내 섹터 · 테마(11-25 · js/strategy-uskr.js) — 짝 색은 오르내림 변수(같은 쪽 빨강 · 반대 쪽 파랑) */
+@keyframes uk-bl { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+.uk .uk-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+.uk .uk-bt { font-size: 12px; color: var(--kh-text-secondary); margin: 0 2px 0 8px; }
+.uk .uk-bt:first-child { margin-left: 0; }
+.uk .uk-key { padding: 0 6px; border-radius: var(--kh-radius-sm); }
+.uk .same { background: rgb(var(--kh-up-rgb) / .14); }
+.uk .diff { background: rgb(var(--kh-down-rgb) / .14); }
+.uk .uk-na { color: var(--kh-text-secondary); opacity: .5; }
+.uk .uk-blink, .uk .uk-lv { animation: uk-bl 1.6s ease-in-out infinite; }
+.uk .uk-lv { display: block; font-size: 10px; color: var(--kh-up); font-weight: 400; }
+.uk .uk-now { outline: 2px dashed var(--kh-text-secondary); outline-offset: -2px; }
+.uk .uk-ttl { font-size: 14px; font-weight: 700; margin: 0 0 6px; }
+.uk .uk-top { overflow-x: auto; margin: 0 0 12px; }
+.uk .uk-top table, .uk .uk-box table { border-collapse: separate; border-spacing: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.uk .uk-top td { vertical-align: top; border-bottom: 1px solid var(--kh-border); min-width: 118px; padding: 5px 8px; }
+.uk .uk-top .uk-dh { text-align: center; font-weight: 600; white-space: nowrap; }
+.uk .uk-top .uk-rk { min-width: 20px; text-align: center; font-weight: 700; color: var(--kh-text-secondary); }
+.uk .uk-nm { display: block; font-weight: 600; line-height: 1.3; }
+.uk .uk-us { display: block; font-size: 17px; font-weight: 700; }
+.uk .uk-kr { display: block; }
+.uk .uk-kr i { font-style: normal; color: var(--kh-text-secondary); margin-right: 3px; }
+.uk .uk-hit { box-shadow: inset 0 0 0 2px var(--kh-up); }
+.uk .uk-hit .uk-us, .uk .uk-hit .uk-blink { animation: uk-bl .9s ease-in-out infinite; }
+.uk .uk-box { overflow: auto; max-height: calc(100vh - 160px); }
+.uk .uk-box td, .uk .uk-box th { padding: 3px 8px; white-space: nowrap; }
+.uk .uk-box th { position: sticky; top: 0; z-index: 2; background: var(--kh-bg-card); color: var(--kh-text-secondary); font-weight: 500; text-align: right; }
+.uk .uk-box th.uk-h2 { top: 22px; border-bottom: 2px solid var(--kh-border); }
+.uk .uk-box .uk-k { position: sticky; left: 0; z-index: 1; background: var(--kh-bg-card); text-align: left; font-weight: 600; min-width: 140px; max-width: 180px; white-space: normal; }
+.uk .uk-box th.uk-k { z-index: 3; }
+.uk .uk-pr { white-space: normal !important; min-width: 220px; max-width: 300px; font-size: 11.5px; color: var(--kh-text-secondary); text-align: left !important; }
+.uk .uk-pr b { color: var(--kh-text-primary); }
+.uk .uk-weak { color: var(--kh-down); }
+.uk .uk-c { text-align: center !important; }
+.uk .uk-c small { display: block; color: var(--kh-text-secondary); }
+.uk .uk-who { font-size: 11px; font-weight: 700; text-align: center !important; width: 34px; }
+.uk .uk-us-r td { border-top: 1px solid var(--kh-border); }
+.uk .uk-us-r .uk-who, .uk .uk-us-r .uk-d { color: var(--kh-text-secondary); }
+.uk .uk-kr-r .uk-d { font-weight: 600; }
+.uk .uk-d { text-align: right; min-width: 52px; }
