@@ -446,6 +446,7 @@ def pre_log_put(proxy, hit, pf_rows, now=None):
             d["early"] = {"foreign": e[0], "program": e[1], "programAt": e[2]}
         out.append((day, hm, code, json.dumps(d, ensure_ascii=False)))
     if not out:
+        _status["preLogHm"] = day + hm                 # 적을 줄이 없어도 이 분은 셈 — 고리가 20초마다 다시 세지 않게(개념정의 덧 11-25)
         return 0
     with proxy._db_lock, proxy.db_conn() as conn:
         conn.execute(_PL_SCHEMA)
