@@ -73,10 +73,10 @@ def _codes():
 
 
 def collect(proxy, cfg, day=None):
-    """한 바퀴 — 감시 목록 전부를 받아 쌓는다. (쌓은 종목 · 못 받은 종목 · 대상) 수."""
+    """한 바퀴 — 감시 목록 전부를 받아 쌓는다. (쌓은 종목 · 못 받은 종목 · 회차 없는 빈 응답 · 대상) 수."""
     day = day or _now().strftime("%Y%m%d")
     codes = _codes()
-    got, fail = 0, 0
+    got, fail, empty = 0, 0, 0
     proxy._prio.low = True             # 여유분으로 — 화면 · 칩 실시간이 막 불렀으면 비켜선다
     try:
         for c in codes:
@@ -95,10 +95,12 @@ def collect(proxy, cfg, day=None):
                         "INSERT INTO inv_est (day, code, seq, frgn, inst, total, first_at, last_at) VALUES (?,?,?,?,?,?,?,?) "
                         "ON CONFLICT(day, code, seq) DO UPDATE SET frgn=excluded.frgn, inst=excluded.inst, "
                         "total=excluded.total, last_at=excluded.last_at", vals)
-            got += 1
+                got += 1
+            else:
+                empty += 1             # 회차가 하나도 없는 응답 — 쌓음으로 안 센다(개념정의 검수 덧 11-25)
     finally:
         proxy._prio.low = False
-    return got, fail, len(codes)
+    return got, fail, empty, len(codes)
 
 
 def board(proxy, day=None, codes=None):
@@ -171,12 +173,12 @@ def tick(proxy, now=None):
     try:
         idx = passed[-1]
         t0 = time.time()
-        got, fail, n = collect(proxy, proxy.load_secrets(), day)
+        got, fail, empty, n = collect(proxy, proxy.load_secrets(), day)
         _status.update(slot=idx, last={"at": _now().strftime("%H:%M:%S"), "slot": "%02d:%02d" % sl[idx],
-                                       "got": got, "fail": fail, "n": n, "sec": round(time.time() - t0, 1),
+                                       "got": got, "fail": fail, "empty": empty, "n": n, "sec": round(time.time() - t0, 1),
                                        "lateMin": late})
-        print("  [장중 가집계] %s %02d:%02d 바퀴 — %d종목 쌓음 · 못 받음 %d · 대상 %d · %.0f초%s"
-              % (day, sl[idx][0], sl[idx][1], got, fail, n, time.time() - t0,
+        print("  [장중 가집계] %s %02d:%02d 바퀴 — %d종목 쌓음 · 빈 응답 %d · 못 받음 %d · 대상 %d · %.0f초%s"
+              % (day, sl[idx][0], sl[idx][1], got, empty, fail, n, time.time() - t0,
                  "" if late is not None else " · 늦은 분 못 읽음(보통 날 시각)"), flush=True)
         return True
     finally:
