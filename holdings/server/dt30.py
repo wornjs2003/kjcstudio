@@ -1083,7 +1083,7 @@ def _spans4(r, ct, cs):
         s = sp.get(c)
         if s:
             iv += [(a.replace(":", ""), b.replace(":", "") if b else None) for a, b in s if a]   # 붙음 모름 구간은 안 셈(죽지 않게)
-        elif c in (r.get("chips") or []):
+        elif c in (r.get("chips") or []) or (r.get("spanChips") and (ct or {}).get(c)):   # 구간이 일부 칩만 있는 줄(다시 지은 판 — spanChips)은 다른 칩을 예전 셈(한 번 붙은 칩도 셈)
             iv.append(((ct or {}).get(c) or e or "0000", None))
     return iv
 
@@ -2735,6 +2735,7 @@ def rebuild(proxy, day, prev, cfg=None):
                      "px": px, "pxSrc": src})
         if g.get("moneySpans"):                        # 돈몰림 붙음 · 빠짐(다른 칩은 구간 기록이 없어 처음 붙은 시각 셈 그대로 — _spans4)
             rows[-1]["chipSpans"] = {"돈몰림": g["moneySpans"]}
+            rows[-1]["spanChips"] = ["돈몰림"]          # 구간 기록이 있는 칩 — 그 밖 칩은 예전 셈(_spans4)
             rows[-1]["chipAt"] = {"돈몰림": g["moneySpans"][0][0]}
     tab = score_table(proxy)
     order = sort_rows(rows, tab, off)                  # off — 그날 늦게 열었으면 VI·급등 나누는 시각도 그만큼 뒤(개념정의 덧 11-19 — 그날 판과 같게)
