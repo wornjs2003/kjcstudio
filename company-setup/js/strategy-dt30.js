@@ -1262,7 +1262,7 @@ function autoSaveArm(d) {
 }
 // chipCols 는 「자동」 칸을 늘 뺀다 — 서버 장중 판은 늘 watchRule 「자동」 이라 화면이 그 칸을 안 셈(colsOf · wAuto) · 옛 날 판(자동 아님)을 보다 저장해도 서버가 「자동」 칩을 세지 않게(개념정의 덧 11-24)
 // 저장은 서버 이름으로(11-25 qa — 서버 매수 셈이 「거래비율」 · 「거래비율급증」 으로 읽는데 화면 이름 「현시간 유통회전」 · 「전일 현시간 대비 급증」 이 들어가 칸 밖으로 셌음) · 비교 값(chipSig)도 같은 셈이라 함께 바뀜
-function chipSave() { return { chipOff: [...st.off].map(serverChip), subOff: [...st.subOff].map((k) => { const i = k.indexOf('|'); return i < 0 ? serverChip(k) : `${serverChip(k.slice(0, i))}${k.slice(i)}`; }), chipCols: (st.cols || DT_CHIPS).filter((c) => c !== '자동').map(serverChip), chipKnown: [...new Set([...DT_CHIPS, ...(st.cols || [])])].filter((c) => c !== '자동').map(serverChip) }; }   // chipKnown — 저장할 때 화면이 알던 서버 칩 전부 · 서버는 그 밖 칩(저장 뒤 새로 생긴 칩)을 켬으로 셈(11-25 개발2 · 재권님 「처음부터 셈이되도록 켜줘」) · chipCols 밖이면서 여기 있는 칩은 칸에서 지운 것 = 안 셈   // 함수 선언 — loadFee 가 이 줄보다 먼저 돌아도 쓰이게
+function chipSave() { return { chipOff: [...st.off].map(serverChip), subOff: [...st.subOff].map((k) => { const i = k.indexOf('|'); return i < 0 ? serverChip(k) : `${serverChip(k.slice(0, i))}${k.slice(i)}`; }), chipCols: (st.cols || DT_CHIPS).filter((c) => c !== '자동').map(serverChip), chipKnown: [...new Set([...DT_CHIPS, ...(st.cols || []), '자동'])].map(serverChip) }; }   // chipKnown — 저장할 때 화면이 알던 서버 칩 전부 · 서버는 그 밖 칩(저장 뒤 새로 생긴 칩)을 켬으로 셈(11-25 개발2 · 재권님 「처음부터 셈이되도록 켜줘」) · chipCols 밖이면서 여기 있는 칩은 칸에서 지운 것 = 안 셈 · 「자동」 은 넣는다(chipCols 에서만 뺌 — 빼면 서버가 새 칩으로 읽어 다시 셈 · 개념정의 검수 덧 11-25)   // 함수 선언 — loadFee 가 이 줄보다 먼저 돌아도 쓰이게
 function chipSig() { return JSON.stringify(chipSave()); }
 async function setSave() {
   const msg = $('dt-set-msg'); msg.textContent = '저장하는 중…';
