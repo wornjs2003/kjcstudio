@@ -1202,6 +1202,12 @@ def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
     T = _nth_live(r, ct, chips930(r, ct, until), need, "%02d%02d" % until)   # 칩 N개가 동시에 붙어 있던 첫 순간(chipSpans 없는 줄은 예전 셈 · 11-25 재권님 「응」)
     if not T:
         return None
+    at = (b.get("meta") or {}).get("pxMinAt") or {}
+    o = open_min if open_min is not None else OPEN_AT[0] * 60 + OPEN_AT[1]
+    p1_ = _hm4(at.get("1")) or _hhmm(o + 1).replace(":", "")
+    cpx = (r.get("chipPx") or {}).get("%s:%s" % (T[:2], T[2:])) if r.get("chipPx") is not None else None
+    if cpx and T > p1_:                                # 칩 N개가 함께 붙은 그 분 1분봉 종가(chipPx) — 어림(30분 칸 · 든 때) 대신(11-25 재권님 「산값은 정확해야」 · 들어온 때 모드도 · 개념정의 덧)
+        return {"px": cpx, "at": "%s:%s" % (T[:2], T[2:]), "chipAt": "%s:%s" % (T[:2], T[2:]), "need": need, "src": "칩 찬 분 1분봉 종가"}
     if mode == "open":                                 # 「들어온 때」 — 판에 든 때 값 · 시각(r.buy · buyAt) · 칩 N개 문턱 · 차례는 그대로
         if e and isinstance(r.get("buy"), (int, float)) and r["buy"] > 0:
             return {"px": r["buy"], "at": "%s:%s" % (e[:2], e[2:]), "chipAt": "%s:%s" % (T[:2], T[2:]), "need": need, "src": "들어온 때 값"}
@@ -1266,6 +1272,14 @@ def buy930_fill(proxy, b):
                 if v[0][0] is None or (t0 and t0 < v[0][0]):
                     v[0][0] = t0 or v[0][0] or "00:00"   # 기록 전부터 붙어 있었거나 처음 붙은 시각이 기록보다 이름 — 첫 구간을 처음 붙은 시각부터
             r["chipSpans"] = s                         # {칩: [[붙음, 빠짐 | None] …]} — 칩 빠진 시각(11-25 재권님 「칩 빠진 시각도 넣어줘」)
+    if not why:
+        try:
+            _chip_px_fill(proxy, b["day"], rows, o)
+            b["meta"]["chipPx"] = {"ok": True}
+        except Exception as e:
+            b["meta"]["chipPx"] = {"ok": False, "why": type(e).__name__}
+    for r in rows:
+        c = ct.get(r["code"]) or {}
         r["chips930"] = chips930(r, c, until)
         r["buy930"] = buy_point(b, r, c, need, o, until, mode)
     got = sorted((r for r in rows if r["buy930"]), key=lambda r: (r["buy930"]["chipAt"], r.get("rank") or 1e9))
@@ -1275,6 +1289,41 @@ def buy930_fill(proxy, b):
                            "note": "칩은 %02d:%02d 까지 붙은 것만 · 칩 %d개가 동시에 붙어 있던 첫 순간에 삼(칩 구간 rows[].chipSpans · 그 구간 기록이 없는 판은 한 번 붙은 칩도 셈) · 산 차례(buy930.rank) = 칩 먼저 찬 순 — 차면 고정 · 뒤에 찬 종목은 아래로 · 몇 종목 살지는 화면 · 그 순간이 9시 1분 이하면 9시 1분 값 · 여는 시각 + 1~5분 안이면 그 분 값 · "
                                    "그 뒤 판에 든 때면 든 때 값 · 아니면 다음 30분 칸 값 · 칩 시각 모르면 판에 든 때(그것도 모르면 장 전) · 화면이 끈 칩은 서버 셈에 안 듦(브라우저마다)" % (tuple(CHIP_UNTIL if late else until) + (need,))}
     return b
+
+
+_cpx = {}                      # (날, 종목, 「HHMM」) → 1분봉 종가 — 지난 분은 안 바뀜
+
+
+def _chip_px_fill(proxy, day, rows, o):
+    """줄마다 rows[].chipPx {「HH:MM」: 원} — chipSpans 의 붙음 · 빠짐 분마다 그 분 1분봉 종가(정규장 · 여는 시각 ~ 마감 · _m1_px 셈 — 거래 없는 채움 봉은 다음 첫 체결 시가).
+    1분봉이 없는 분은 열쇠를 뺀다(0 안 넣음) · 재권님 「산값은 정확해야 할거같은데. 서버에 해당종목의 분봉을 읽어서 셈해야해」(11-25 14:3x) → 개발2 창 「응」."""
+    now = _now()
+    cut = day + now.strftime("%H%M") if day == now.strftime("%Y%m%d") else day + "2359"
+    close = _close_min(proxy, now) if day == now.strftime("%Y%m%d") else 15 * 60 + 30
+    want = {}
+    for r in rows:
+        for v in (r.get("chipSpans") or {}).values():
+            for a, z in v:
+                for t in (a, z):
+                    if t:
+                        m = int(t[:2]) * 60 + int(t[3:5])
+                        if o <= m < close:
+                            want.setdefault("%02d%02d" % divmod(m, 60), set()).add(r["code"])
+    got = {}
+    with proxy.db_conn() as conn:
+        for hm, codes in want.items():
+            need = [c for c in codes if (day, c, hm) not in _cpx]
+            if need and day + hm < cut:            # 아직 안 끝난 분은 안 읽음
+                px = _m1_px(conn, day, need, day + hm, "close")
+                for c, v in px.items():
+                    _cpx[(day, c, hm)] = v
+            for c in codes:
+                v = _cpx.get((day, c, hm))
+                if v:
+                    got.setdefault(c, {})["%s:%s" % (hm[:2], hm[2:])] = v
+    for r in rows:
+        if r.get("chipSpans") is not None:
+            r["chipPx"] = got.get(r["code"], {})
 
 
 def _out_px(proxy, b, outs):
