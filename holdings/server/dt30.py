@@ -3431,6 +3431,8 @@ def buy_order(proxy, b, hm=None, inplace=False):
         if on and (tv is None or tv < tmin):
             continue                                   # 조건 못 넘음 · 못 잼 → 안 삼
         px = (r.get("buy930") or {}).get("px")
+        if px is None and r.get("chipPx") is not None and ((bb.get("meta") or {}).get("chipPx") or {}).get("ok") and tm_ > o + 1:
+            continue                                   # 칩 찬 분 1분봉이 아직 안 굳음(장중) · 그 분 봉이 없음(지난 판) — 정확한 산 값이 생기면 그때 정하고 알림(재권님 「가인데 1분으로 해줘」 · qa 덧 11-25 — 전에는 값 없이 먼저 보내 tgBuy.px 가 비고 「팔 때」 가 개장 1분 값을 기준으로 봄)
         got.append((tm_, r.get("rank") or 1e9, r, {"kind": "찬", "at": _hhmm(max(dec - 1, tm_)), "chipAt": _hhmm(tm_), "turn": tv, "rise": None, "px": px}))
     got.sort(key=lambda x: (x[0], x[1]))
     out = [(x[2], x[3]) for x in got]
