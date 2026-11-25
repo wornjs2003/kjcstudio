@@ -14,7 +14,10 @@
             칸 값이 하나라도 빠졌으면(사진 빠짐 · 전날 없음) 그 묶음은 안 셈 — 0 으로 꾸미지 않는다
     칩      맞은 묶음에 든 종목(감시 목록 · 시가총액 문턱은 부르는 쪽 chips_now 가 거름) · 하위 = 「업종 <이름>」 · 「테마 <이름>」
     값 칸   chip_rules 「돈몰림」(winMin · mult · minEok · buyShare · holdMin) 한 곳
-    한계    섹터 수급 판은 14:00 까지라 그 뒤는 13:55 칸 셈이 그대로 남는다 · 다시 지은 지난 판에는 아직 안 붙는다
+    한계    섹터 수급 판은 14:00 까지라 그 뒤는 13:55 칸 셈이 그대로 남는다
+    지난 판  past_spans — 그날 섹터 수급 판을 5분 칸마다 앞으로 가며 같은 셈(다수결 그대로)으로 붙음 · 빠짐 · 칸 시각은 그 칸이 끝나는 때
+            (재권님 「지난 섹터 테마를 바탕으로 돈몰림 11월 2일부터 지금까지 적용해줘」 11-25 21:33 → 안에 「5분에 끝나면 그시간에 되야」 · 「진행해」 21:4x)
+            묶음에 든 종목은 지금 목록(그날 목록은 안 남음 — 어림)
 """
 import chip_rules
 
@@ -113,3 +116,57 @@ def hits(proxy, codes):
     if not why:
         _memo.update(key=key, val=val)
     return val
+
+
+def past_spans(proxy, day, codes):
+    """그날 5분 칸마다 붙음 · 빠짐 — → ({code: {"subs": [「업종 이름」 …], "spans": [[「HH:MM」 붙음, 「HH:MM」 빠짐 | None] …]}}, 못 읽은 까닭 | None).
+    칸마다 그 칸까지 값만 보고 hits 와 같은 셈(group_vote · 다수결) · 칸 시각 = 그 칸이 끝나는 때(sector_flow.SLOT_TO — 장중에 그 칸 값을 처음 보는 때).
+    한 종목이 든 묶음 중 하나라도 붙어 있으면 붙음 · 셈 못 한 칸(None)은 앞 상태 그대로."""
+    import sector_flow
+    w, h, mult = _win(), _hold(), chip_rules.get(CHIP, "mult")
+    min_eok, share = chip_rules.get(CHIP, "minEok"), chip_rules.get(CHIP, "buyShare")
+    tm = lambda s: "%s:%s" % (sector_flow.SLOT_TO[s][:2], sector_flow.SLOT_TO[s][2:])
+    mem, why = {}, []
+    for by, ko in BYS:
+        try:
+            data, _meta = sector_flow.board(proxy, by, day)
+        except Exception as e:
+            why.append("%s %s" % (ko, type(e).__name__))
+            continue
+        slots = data.get("slots") or []
+        seqs = {}
+        for r in data.get("rows") or []:
+            amt, seq = r.get("amt") or {}, []
+            for j, s in enumerate(slots):
+                if amt.get(s) is None:
+                    continue
+                keep = set(slots[:j + 1])
+                seq.append((tm(s), group_vote(dict(r, amt={x: v for x, v in amt.items() if x in keep}), slots, w, h, mult, min_eok, share)))
+            if any(v is True for _, v in seq):
+                seqs[r["name"]] = seq
+        if not seqs:
+            continue
+        for name, cs in sector_flow._groups(proxy, by, list(codes)).items():
+            if name in seqs:
+                for c in cs:
+                    mem.setdefault(c, []).append(("%s %s" % (ko, name), seqs[name]))
+    out = {}
+    for c, gs in mem.items():
+        st, ev = {}, {}
+        for g, seq in gs:
+            for t, v in seq:
+                ev.setdefault(t, []).append((g, v))
+        spans, on = [], False
+        for t in sorted(ev):
+            for g, v in ev[t]:
+                if v is not None:
+                    st[g] = v
+            now = any(st.values())
+            if now and not on:
+                spans.append([t, None])
+            elif on and not now:
+                spans[-1][1] = t
+            on = now
+        if spans:
+            out[c] = {"subs": [g for g, seq in gs if any(v is True for _t, v in seq)], "spans": spans}
+    return out, ("; ".join(why) if why else None)
