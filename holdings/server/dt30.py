@@ -272,10 +272,8 @@ def chips_now(proxy, cfg, early=True, pre=False):
         try:                               # 「현재상승」 — 감시 목록(3천억 이상) 전부의 시가 대비 % · 다른 칩 없어도 혼자 붙음(11-25 · 위와 같은 말씀)
             import turnover                # 시세는 turnover 장중 바퀴(TURN_INTERVAL)가 받아 둔 묶음 캐시를 그 나이 안에서 그대로 씀 — 새 호출은 캐시에 없는 종목만
             codes = [c for c in cap if c.isdigit() and len(c) == 6 and not small(c)]
-            now = _now()
-            hm = now.hour * 60 + now.minute
-            live_now = OPEN_AT[0] * 60 + OPEN_AT[1] + late_min(proxy, now) <= hm < _close_min(proxy, now) and now.weekday() < 5
-            age = turnover.TURN_INTERVAL if live_now else 24 * 3600   # 장 밖(마감 뒤 · 주말 · 쉬는 날)은 값이 안 바뀜 — 들고 있는 값을 쓰고 없는 종목만 한 번 받음(qa 덧 11-25 · 1분마다 27건 새로 부르던 것)
+            import market_hours
+            age = turnover.TURN_INTERVAL if market_hours.in_regular(proxy) else 24 * 3600   # 정규장 가름은 market_hours 한 곳(쉬는 날 · 늦게 여는 날 · 개념정의 덧 11-25)   # 장 밖(마감 뒤 · 주말 · 쉬는 날)은 값이 안 바뀜 — 들고 있는 값을 쓰고 없는 종목만 한 번 받음(qa 덧 11-25 · 1분마다 27건 새로 부르던 것)
             qs, _ = proxy.fetch_quotes_multi(cfg, codes, max_age=age) if codes else ({}, {})
             for c, q in qs.items():
                 if q.get("open") and q.get("price") and (q["price"] / q["open"] - 1) * 100 >= now_rise_pct():
