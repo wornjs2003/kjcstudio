@@ -656,9 +656,13 @@ const live = d.flat930 ? live0.map((r, i) => [r, nthChipAt(r) || '9999', i]).sor
 
 // 날별 합계에서 손익이 없는 날의 까닭 (11-23 재권님 「응」) — 매수가가 분 칸(09:01 ~ 09:05)인데 돈 넣을 줄 전부 그 분 값이 없으면(1분봉을 11-12 부터 쌓아 그 앞 날은 비어 있음)
 //   「09:01 값 없음」 · 그 밖은 「매매 없음」 그대로
-function noTradeWhy(C) {
-  const n = pmOf(buyKey()), xs = C.lkMode ? C.R.filter((x) => Number(x.r.lock) > 0) : C.R.slice(0, C.n);
-  return n && xs.length && xs.every((x) => { const o = minVal(x.r, n); return !buyOf(x.r) && !(o && Number(o.px) > 0); }) ? `${hmS(minHM(n))} 값 없음` : '매매 없음';
+//   그날 판(D)으로 셈 — 분 칸 시각 · 매수가가 그날 meta(여는 시각 · pxMinAt)를 따르게. 전에는 calc 밖이라 보고 있는 날 시각을 써서 11-19(10시 개장)를 보면 다른 날도 「10:01」 (11-25 재권님 「1 고쳐」)
+function noTradeWhy(C, D) {
+  const keep = calcD; calcD = D ? flat930(D) : calcD;
+  try {
+    const n = pmOf(buyKey()), xs = C.lkMode ? C.R.filter((x) => Number(x.r.lock) > 0) : C.R.slice(0, C.n);
+    return n && xs.length && xs.every((x) => { const o = minVal(x.r, n); return !buyOf(x.r) && !(o && Number(o.px) > 0); }) ? `${hmS(minHM(n))} 값 없음` : '매매 없음';
+  } finally { calcD = keep; }
 }
 
 // 불타기 (11-18 재권님 「손절한 종목을 상승한 종목에 불타기 하는것도 추가해줘」 → (가) 「가로 해줘. 이걸 할지말지를 넣을수 있게」)
@@ -1012,7 +1016,7 @@ async function monthPaint() {
   let tot = 0, won0 = 0, lost = 0, cnt = 0; const miss = [];
   // 최근 날이 앞(11-18 재권님 「11월 합계는 최근날짜가 앞으로 오게」)
   const parts = ds.slice().reverse().map((d) => { const D = get(d); if (!D) { miss.push(dayTxt(d)); return dB(d, `${dayTxt(d)} <span class="st-err">못 받음</span>`); }
-    const C = calc(D); if (!C.P) return dB(d, `${dayTxt(d)} ${noTradeWhy(C)}`); const fbT = C.fb905 ? '<small data-tip="그날 룰로는 매매가 없어 여는 시각 + 5분(9시 5분 · 늦게 연 날은 그만큼 뒤)에 산 것으로 셈"> · 9:05 대체</small>' : '';
+    const C = calc(D); if (!C.P) return dB(d, `${dayTxt(d)} ${noTradeWhy(C, D)}`); const fbT = C.fb905 ? '<small data-tip="그날 룰로는 매매가 없어 여는 시각 + 5분(9시 5분 · 늦게 연 날은 그만큼 뒤)에 산 것으로 셈"> · 9:05 대체</small>' : '';
     cnt++; tot += C.P.net; if (C.P.net > 0) won0++; else if (C.P.net < 0) lost++;
     return dB(d, `${dayTxt(d)} <span class="${signClass(C.P.net, NUM) || ''}">${won(C.P.net)}</span>${C.LIVE ? '<small>장중</small>' : ''}${fbT}`); });
   el.innerHTML = `<b>${ttl} 합계 — 지금 칸 · 칩대로 · 세후 <span class="${signClass(tot, NUM) || ''}">${won(tot)}</span></b> · 매매한 날 ${cnt} · 번 날 ${won0} · 잃은 날 ${lost}${miss.length ? ` · 못 받은 날 ${miss.length}(합계에서 뺌)` : ''}<br>${st.monsH || ''}<span role="tablist" aria-label="날짜 — 누르면 그날 판">${parts.join('')}</span>`;
