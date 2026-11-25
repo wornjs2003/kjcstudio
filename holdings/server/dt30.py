@@ -1018,8 +1018,8 @@ def chip_spans_get(proxy, day, codes=None, since=None):
                     sp.append([t, None])
             elif sp and sp[-1][1] is None:
                 sp[-1][1] = t
-            else:
-                sp.append([None, t])
+            elif not sp:
+                sp.append([None, t])                   # 기록 전부터 붙어 있던 칩의 빠짐 — 빠짐이 두 번 연달아 온 것은 버림(개념정의 덧 11-25)
         out[code] = {k: v for k, v in m.items() if v}
     return out, None
 
@@ -1030,7 +1030,7 @@ def _spans4(r, ct, cs):
     for c in cs:
         s = sp.get(c)
         if s:
-            iv += [(a.replace(":", ""), b.replace(":", "") if b else None) for a, b in s]
+            iv += [(a.replace(":", ""), b.replace(":", "") if b else None) for a, b in s if a]   # 붙음 모름 구간은 안 셈(죽지 않게)
         elif c in (r.get("chips") or []):
             iv.append(((ct or {}).get(c) or e or "0000", None))
     return iv
