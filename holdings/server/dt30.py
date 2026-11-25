@@ -1272,7 +1272,7 @@ def buy930_fill(proxy, b):
                 if v[0][0] is None or (t0 and t0 < v[0][0]):
                     v[0][0] = t0 or v[0][0] or "00:00"   # 기록 전부터 붙어 있었거나 처음 붙은 시각이 기록보다 이름 — 첫 구간을 처음 붙은 시각부터
             r["chipSpans"] = s                         # {칩: [[붙음, 빠짐 | None] …]} — 칩 빠진 시각(11-25 재권님 「칩 빠진 시각도 넣어줘」)
-    if not why:
+    if True:                                           # 구간이 없는 판(11-25 전)도 칩 처음 붙은 분(chipTime)으로 — 산 값 어림(30분 칸)을 없앰(qa 덧 · 재권님 「산값은 정확해야」)
         try:
             st = _chip_px_fill(proxy, b["day"], rows, o)
             b["meta"]["chipPx"] = {"ok": True, "settledTo": st}   # settledTo 「HH:MM」 — 이 분부터는 아직 굳는 중(열쇠 없음) · 지난 날은 null(다 굳음) · 시황분석1 11-25
@@ -1304,10 +1304,12 @@ def _chip_px_fill(proxy, day, rows, o):
     rc = market_hours.today(proxy, day=day)["reg"][1]   # 그날 정규장 끝 — 늦게 여는 날도 그날 표(개념정의 덧 · 「장 시각으로 셈하는 코드는 늦게 여는 날 그만큼 옮긴다」)
     close = int(rc[:2]) * 60 + int(rc[2:])
     want = {}
+    def times_of(r):
+        if r.get("chipSpans") is not None:
+            return [t for v in r["chipSpans"].values() for a, z in v for t in (a, z)]
+        return list((r.get("chipTime") or {}).values())   # 구간 없는 판 — 처음 붙은 시각만
     for r in rows:
-        for v in (r.get("chipSpans") or {}).values():
-            for a, z in v:
-                for t in (a, z):
+        for t in times_of(r):
                     if t:
                         m = int(t[:2]) * 60 + int(t[3:5])
                         if o <= m < close:
@@ -1325,8 +1327,7 @@ def _chip_px_fill(proxy, day, rows, o):
                 if v:
                     got.setdefault(c, {})["%s:%s" % (hm[:2], hm[2:])] = v
     for r in rows:
-        if r.get("chipSpans") is not None:
-            r["chipPx"] = got.get(r["code"], {})
+        r["chipPx"] = got.get(r["code"], {})
     return None if cut.endswith("2359") else "%s:%s" % (cut[8:10], cut[10:12])   # 굳은 끝 — 이 분보다 앞 봉만 실림(그 뒤는 굳는 중)
 
 
@@ -2590,7 +2591,7 @@ def rebuild(proxy, day, prev, cfg=None):
     try:                                                   # 그날 장중 실시간 넣기(상위 ADD_TOP)는 쌓지 않아 다시 못 셈 — approx 「관심」 · meta note
         approx.append("관심")
         live = {"day": prev, "frac": 1, "at": "", "got": {c: {"name": r[1], "close": r[2], "pct": r[3], "vol": r[4]} for c, r in pv.items()}}
-        res = auto_watch.compute(proxy, live=live, us_before=prev)   # 미국 섹터 조건도 그 앞 미국장 값으로
+        res = auto_watch.compute(proxy, live=live, us_before=day)    # 미국 섹터 조건은 판 날 아침에 본 미국장(판 날 앞 마지막 미국 일봉) — 섹터 룰 뜻이 「어젯밤 미국」 (qa 11-25)
         if not res.get("ready"):
             raise ValueError("관심 룰 못 읽음")             # 룰을 못 읽으면 「없음」 이 아니라 「못 셈」
         for r in res.get("picked") or []:
