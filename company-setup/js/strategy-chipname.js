@@ -10,6 +10,9 @@ const one = (s) => RENAME[s] || s;
 const str = (s) => (RENAME[s] ? RENAME[s] : s.includes(' + ') ? s.split(' + ').map(one).join(' + ') : s);
 
 export const chipName = (s) => (typeof s === 'string' ? str(s) : s);
+// 거꾸로 — 화면 이름을 서버 이름으로(11-25 qa — 셈 칸에 저장하는 칩 목록 chipOff · subOff · chipCols 를 서버 매수 셈이 서버 이름으로 읽음 · 이 다리 표가 걷히면 함께 걷힘)
+const BACK = Object.fromEntries(Object.entries(RENAME).map(([k, v]) => [v, k]));
+export const serverChip = (s) => (typeof s === 'string' ? (BACK[s] || s) : s);
 
 export function renameChips(o) {
   if (typeof o === 'string') return str(o);

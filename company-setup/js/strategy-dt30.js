@@ -7,7 +7,7 @@
 import { signClass, NUM } from '/assets/js/sign.js';
 import { ready as toneReady, has as toneHas, paint as tonePaint } from '/assets/js/tone.js';   // 거래 비율 글씨 짙기 — 전날 같은 시각 대비(지표 표 turn_prev_pct · 11-23)
 import { bindWin } from './strategy-dtwin.js';
-import { renameChips, chipName } from './strategy-chipname.js';   // 칩 이름을 실시간 순위와 같게(「수급」 → 「자동」 · 11-18) — 서버 값을 받는 자리에서
+import { renameChips, chipName, serverChip } from './strategy-chipname.js';   // 칩 이름을 실시간 순위와 같게(「수급」 → 「자동」 · 11-18) — 서버 값을 받는 자리에서
 import { chipTip } from './strategy-chipinfo.js';   // 칩 설명 한 곳 — 룰 칸과 같은 글(11-20)
 import { openStockModal } from '/holdings/js/components/stock-modal.js';   // 종목 이름을 누르면 홀딩스 홈과 같은 종목 모달(11-24 재권님 「가」)
 import { mountSector, loadSector } from './strategy-sectorflow.js';   // 섹터수급 칸 — 단타 판 맨 위(11-18)   // 칩별 승률 접기 — 손익 칸 안
@@ -1159,7 +1159,7 @@ BIND.push(() => $('dt-only').addEventListener('click', (e) => { const b = e.targ
 async function loadFee() {
   if (!DT_CHIPS.length || st.chipFail || st.sellFail !== false) await loadDtChips();   // 매도 기본값(SELL_DEF)이 셈 칸보다 먼저
   try { const r = await fetch(DOC, { cache: 'no-store' }); const j = r.ok ? await r.json() : null; const R0 = j && j.data && j.data.rules && j.data.rules.dt30 ? j.data.rules.dt30 : {}; const v = R0.feePct; st.fee = v == null || v === '' ? null : Number(v);
-    st.set = { ...DEF_SET, ...SELL_DEF, ...(R0.set && typeof R0.set === 'object' ? R0.set : {}), mode: 'day' }; st.setSaved = { ...st.set }; st.setDirty = false; st.chipSig = JSON.stringify({ chipOff: [...st.off], subOff: [...st.subOff], chipCols: (st.cols || DT_CHIPS).filter((c) => c !== '자동') });   // chipSig — 이 화면을 연 때의 끈 칩(자동 저장은 이 화면에서 칩을 바꿨을 때만 · 다른 브라우저가 열려 있다 저장값을 덮지 않게 · 11-24)   // 저장된 값 — 차례 점수만 바로 저장할 때 안 누른 고침을 섞지 않으려고(개념정의 덧 11-23)
+    st.set = { ...DEF_SET, ...SELL_DEF, ...(R0.set && typeof R0.set === 'object' ? R0.set : {}), mode: 'day' }; st.setSaved = { ...st.set }; st.setDirty = false; st.chipSig = chipSig();   // chipSig — 이 화면을 연 때의 끈 칩(자동 저장은 이 화면에서 칩을 바꿨을 때만 · 다른 브라우저가 열려 있다 저장값을 덮지 않게 · 11-24)   // 저장된 값 — 차례 점수만 바로 저장할 때 안 누른 고침을 섞지 않으려고(개념정의 덧 11-23)
     st.score = R0.score && typeof R0.score === 'object' ? R0.score : {};   // 돈은 늘 전체 금액 ÷ 종목 수
     if (R0.set && R0.set.mode === 'each' && R0.set.perWon) st.set.dayWon = R0.set.perWon * (st.set.top || PNL_TOP); }   // 옛 저장값(종목마다)은 같은 돈이 되게 옮김
   catch (e) { st.fee = null; st.set = { ...DEF_SET, ...SELL_DEF }; }
@@ -1245,8 +1245,9 @@ function autoSaveArm(d) {
   autoSave.timer = setTimeout(() => { if (!root) return; if (st.setDirty || (st.chipSig != null && chipSig() !== st.chipSig)) setSave(); }, wait);
 }
 // chipCols 는 「자동」 칸을 늘 뺀다 — 서버 장중 판은 늘 watchRule 「자동」 이라 화면이 그 칸을 안 셈(colsOf · wAuto) · 옛 날 판(자동 아님)을 보다 저장해도 서버가 「자동」 칩을 세지 않게(개념정의 덧 11-24)
-const chipSave = () => ({ chipOff: [...st.off], subOff: [...st.subOff], chipCols: (st.cols || DT_CHIPS).filter((c) => c !== '자동') });
-const chipSig = () => JSON.stringify(chipSave());
+// 저장은 서버 이름으로(11-25 qa — 서버 매수 셈이 「거래비율」 · 「거래비율급증」 으로 읽는데 화면 이름 「현시간 유통회전」 · 「전일 현시간 대비 급증」 이 들어가 칸 밖으로 셌음) · 비교 값(chipSig)도 같은 셈이라 함께 바뀜
+function chipSave() { return { chipOff: [...st.off].map(serverChip), subOff: [...st.subOff].map((k) => { const i = k.indexOf('|'); return i < 0 ? serverChip(k) : `${serverChip(k.slice(0, i))}${k.slice(i)}`; }), chipCols: (st.cols || DT_CHIPS).filter((c) => c !== '자동').map(serverChip) }; }   // 함수 선언 — loadFee 가 이 줄보다 먼저 돌아도 쓰이게
+function chipSig() { return JSON.stringify(chipSave()); }
 async function setSave() {
   const msg = $('dt-set-msg'); msg.textContent = '저장하는 중…';
   // 끈 칩 · 하위 칩 · 칩 칸도 함께(11-24 재권님 「카드에 있것들 해」 · 개발2 — 서버 매수 알림이 화면 everChip · liveChip · subsOf 와 같게 셈) · 열쇠 chipOff · subOff · chipCols
