@@ -28,8 +28,9 @@ AT_5M_USUAL = (15, 40)             # 보통 날 시각 — 장 끝 뒤 한 번(9
 UNTIL_USUAL = (23, 0)              # 보통 날 시각 — 이 뒤로는 그날 몫을 새로 안 받는다(다음 날 첫 봉이 섞이지 않게 넉넉히)
 STEP = {"1m": "60", "5m": "300"}
 TICK = 30
+MAX_TRY = 5                        # 한 때를 몇 번까지 다시 받나(TICK 마다) — 넘으면 그 때를 접고 「못 받음」 으로 남긴다(개념정의 검수 덧 11-25)
 
-_status = {"running": False, "day": None, "done1m": -1, "done5m": False, "last": [], "error": None}
+_status = {"running": False, "day": None, "done1m": -1, "done5m": False, "tries": {}, "last": [], "error": None}
 _lock = threading.Lock()
 
 
@@ -70,7 +71,8 @@ def _get(proxy, cfg, period):
     for code, name in CODES:
         try:
             bars = proxy._index_minutes_from_kis(cfg, code, STEP[period])
-        except RuntimeError:
+        except Exception as e:             # KIS 거절 · 연결 · 응답 깨짐 다 — 「못 받음」 으로 돌려 tick 이 다시 받을지 접을지 가른다
+            print("  [지수 날 봉] %s %s 못 받음 (%s)" % (name, period, type(e).__name__), flush=True)
             out.append((name, None))
             continue
         if bars:
@@ -92,7 +94,7 @@ def tick(proxy, now=None):
     if hm >= p["until"]:
         return False
     if _status["day"] != day:
-        _status.update(day=day, done1m=-1, done5m=False, last=[])
+        _status.update(day=day, done1m=-1, done5m=False, tries={}, last=[])
     passed = [i for i, s in enumerate(p["1m"]) if hm >= s]
     want1 = bool(passed) and passed[-1] > _status["done1m"]
     want5 = hm >= p["5m"] and not _status["done5m"]
@@ -104,18 +106,24 @@ def tick(proxy, now=None):
             if not want:
                 continue
             got = _get(proxy, cfg, period)
+            ok = all(n is not None for _, n in got)
+            key = "%s:%s" % (period, passed[-1] if period == "1m" else "")
+            tries = _status["tries"][key] = _status["tries"].get(key, 0) + 1
+            gave_up = not ok and tries >= MAX_TRY          # 다 받았거나 MAX_TRY 번 넘게 못 받았을 때만 그 때를 닫는다 — 못 받으면 다음 TICK 에 다시
+            skipped = []
             if period == "1m":
-                skipped = [i for i in passed[:-1] if i > _status["done1m"]]
-                _status["done1m"] = passed[-1]
-            else:
-                skipped = []
-                _status["done5m"] = all(n is not None for _, n in got)    # 못 받았으면 다음 바퀴에 다시
-            _status["last"].append({"at": _now().strftime("%H:%M:%S"), "period": period, "got": dict(got),
+                if ok or gave_up:
+                    skipped = [i for i in passed[:-1] if i > _status["done1m"]]
+                    _status["done1m"] = passed[-1]
+            elif ok or gave_up:
+                _status["done5m"] = True
+            _status["last"].append({"at": _now().strftime("%H:%M:%S"), "period": period, "got": dict(got), "try": tries, "gaveUp": gave_up,
                                     "skippedSlots": ["%02d:%02d" % p["1m"][i] for i in skipped], "lateMin": p["lateMin"]})
-            print("  [지수 날 봉] %s %s 받음 — %s%s%s" % (
+            print("  [지수 날 봉] %s %s — %s%s%s" % (
                 day, period, " · ".join("%s %s" % (nm, "못 받음" if n is None else "%d봉" % n) for nm, n in got),
                 " · 지난 때 %s 못 받음(서버가 늦게 뜸)" % ", ".join("%02d:%02d" % p["1m"][i] for i in skipped) if skipped else "",
-                " · 늦은 분 못 읽음(보통 날 시각)" if p["lateMin"] is None else ""), flush=True)
+                " · 늦은 분 못 읽음(보통 날 시각)" if p["lateMin"] is None else "")
+                + (" · %d번째 — %s" % (tries, "접음(그 때 빈칸)" if gave_up else "다음에 다시") if not ok else ""), flush=True)
         return True
     finally:
         _lock.release()
