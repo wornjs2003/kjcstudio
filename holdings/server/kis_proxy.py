@@ -96,6 +96,7 @@ import day_top_fill     # 등락 상위 — 지난 거래일 판을 다시 세�
 import day_top          # 등락 상위와 걸린 필터 — 날마다 장 뒤 한 번 쌓음 · /api/kis/day-top(2026-11-11 · server/day_top.py)
 import inv_est          # 종목별 외국인 · 기관 장중 가집계 — 감시 목록 전부를 입력 시각 + 5분마다 쌓음 · /api/kis/inv-est(2026-11-25 · server/inv_est.py)
 import sector_flow      # 섹터수급 — 프리장 08:00~정규장 09:30 업종 · 테마별 10분 거래대금 · /api/kis/sector-flow(2026-11-18 · server/sector_flow.py)
+import us_kr             # 미국이 움직인 다음 날 국내 섹터 · 테마 — /api/kis/us-kr-groups(2026-11-25 · server/us_kr.py)
 import trade_signal     # 매수 목록 슬랙 보내기 · 매매일지 — 단타 판 첫 굳힘 위 종목 · 매도 결과 받아 적음 · /api/kis/trade-journal(2026-11-23 · server/trade_signal.py)
 import dt30_win         # 단타 판 칩별 승률 — 끝난 판 손익을 하루 한 줄 · /api/kis/dt30-win(2026-11-18 · server/dt30_win.py)
 import vi_days          # 지난 날 VI 기록 — KIS VI 현황을 날짜로 그날 전부(연속 조회) 쌓고 /api/kis/vi-day 로 냄(2026-11-19 · server/vi_days.py)
@@ -10689,6 +10690,24 @@ class Handler(SimpleHTTPRequestHandler):
                 b = day_top.board(sys.modules[__name__], day or None, (qs.get("all") or [""])[0] == "1")
                 self._send_json({"ok": b is not None, "data": b,
                                  "meta": dict(day_top.status(), days=day_top.days(sys.modules[__name__]), fill=day_top_fill.status())})
+                return
+
+            if route == "us-kr-groups":
+                # 미국이 움직인 다음 날 국내 섹터 · 테마(server/us_kr.py) — 일봉 · 섹터 수급 굳힌 판을 읽기만 · KIS 를 안 부른다
+                by = ((qs.get("by") or ["sector"])[0] or "sector").strip()
+                month = (qs.get("month") or [""])[0].strip()
+                if by not in us_kr.BYS:
+                    self._send_json({"ok": False, "error": "by 는 sector · theme 둘입니다."}, 400)
+                    return
+                if month and not (month.isdigit() and len(month) == 6):
+                    self._send_json({"ok": False, "error": "month 는 YYYYMM 입니다."}, 400)
+                    return
+                try:
+                    data, meta = us_kr.board(sys.modules[__name__], by, month or None)
+                except Exception as e:
+                    self._send_json({"ok": False, "error": safe_message(e)}, 502)
+                    return
+                self._send_json({"ok": True, "data": data, "meta": meta})
                 return
 
             if route == "sector-flow":
