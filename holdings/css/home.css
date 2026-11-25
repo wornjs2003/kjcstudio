@@ -1142,7 +1142,6 @@
 .kh-rank-scroll {
   max-height: 620px;
   overflow-y: auto;
-  overscroll-behavior: contain;     /* 끝에 닿아도 페이지가 따라 움직이지 않게 */
 }
 /* 머리글은 스크롤해도 붙어 있는다 */
 .kh-rank-card thead th {
