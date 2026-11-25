@@ -264,10 +264,20 @@ def chips_now(proxy, cfg, early=True, pre=False):
     try:
         day = _now().strftime("%Y%m%d")
         for it in signal_watch.today_lows(proxy).get("items") or []:
-            if str(it.get("ts", ""))[:8] == day and _six(it.get("code")) in hit:
-                hit[it["code"]]["chips"].add("볼린저")      # 셈에 안 듦 — 이름만 적는다
+            if str(it.get("ts", ""))[:8] == day and not small(it.get("code")):
+                put(it.get("code"), it.get("name"), "볼린저")   # 셈에 안 듦 · 다른 칩 없어도 혼자 붙음(11-25 재권님 「각 칩은 독자로 적용되어야 하는데」 → 「응 해줘」)
     except Exception:
         pass
+    if not pre:
+        try:                               # 「현재상승」 — 감시 목록(3천억 이상) 전부의 시가 대비 % · 다른 칩 없어도 혼자 붙음(11-25 · 위와 같은 말씀)
+            import turnover                # 시세는 turnover 장중 바퀴(TURN_INTERVAL)가 받아 둔 묶음 캐시를 그 나이 안에서 그대로 씀 — 새 호출은 캐시에 없는 종목만
+            codes = [c for c in cap if c.isdigit() and len(c) == 6 and not small(c)]
+            qs, _ = proxy.fetch_quotes_multi(cfg, codes, max_age=turnover.TURN_INTERVAL) if codes else ({}, {})
+            for c, q in qs.items():
+                if q.get("open") and q.get("price") and (q["price"] / q["open"] - 1) * 100 >= now_rise_pct():
+                    put(c, q.get("name"), "현재상승")   # 셈에 안 듦 — 이름만(_live_calc 가 그 바퀴 시세로 다시 봄)
+        except Exception:
+            missing.append("현재상승")
     return _cap_keep(hit, small), missing, cap, mkt
 
 
@@ -783,7 +793,7 @@ def _live_calc(proxy, cfg):
             _live.update(at=time.time(), pre=pre, data=data)
         return data
     hit, missing, cap, mkt = chips_now(proxy, cfg, pre=pre)
-    ov = {c: g for c, g in hit.items() if g["chips"] & set(ov_chips())}
+    ov = {c: g for c, g in hit.items() if g["chips"] & (set(ov_chips()) | {"현재상승", "볼린저"})}   # 현재상승 · 볼린저 혼자 붙은 종목도 목록에(n 은 0 · 11-25 「각 칩은 독자로」)
     prices, _ = proxy.fetch_quotes_multi(cfg, list(ov), max_age=proxy.PRICE_CACHE_TTL) if ov else ({}, {})   # 30종목씩 묶음 · 시세 캐시 함께
     sec = company_profile.sectors()
     out = [c for c in ov if cap.get(c) is None]            # 순위 목록 밖 — 시가총액은 단건 시세(그날 한 번) · 업종은 회사 정보 채우기에 맡긴다(11-19 「응 해줘」)
@@ -795,8 +805,12 @@ def _live_calc(proxy, cfg):
     for code, g in ov.items():
         p = prices.get(code) or {}
         chips = set(g["chips"])
-        if p.get("open") and p.get("price") and (p["price"] / p["open"] - 1) * 100 >= now_rise_pct():
-            chips.add("현재상승")
+        if p.get("open") and p.get("price"):                   # 그 바퀴 시세로 다시 가름(chips_now 의 현재상승은 묶음 캐시 값) · 시세를 못 받았으면 chips_now 것 그대로
+            chips.discard("현재상승")
+            if (p["price"] / p["open"] - 1) * 100 >= now_rise_pct():
+                chips.add("현재상승")
+        if not chips:
+            continue                                           # 혼자 붙었던 현재상승이 이 바퀴 시세로 빠짐
         rows.append({"code": code, "name": g["name"] or p.get("name") or "", "market": mkt.get(code), "cap": cap.get(code), "sector": sec.get(code),
                      "chips": [c for c in ov_chips() + ("현재상승", "볼린저") if c in chips], "subs": g["subs"], "n": len(chips & set(ov_chips())),
                      "price": p.get("price"), "open": p.get("open"), "pct": p.get("pct"), "rise": g.get("rise"),
