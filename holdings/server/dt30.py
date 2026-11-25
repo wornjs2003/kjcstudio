@@ -1206,8 +1206,8 @@ def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
     o = open_min if open_min is not None else OPEN_AT[0] * 60 + OPEN_AT[1]
     p1_ = _hm4(at.get("1")) or _hhmm(o + 1).replace(":", "")
     cpx = (r.get("chipPx") or {}).get("%s:%s" % (T[:2], T[2:])) if r.get("chipPx") is not None else None
-    if r.get("chipPx") is not None and not cpx and T > p1_ and (b.get("meta") or {}).get("chipPx", {}).get("ok") and (b.get("meta") or {}).get("chipPx", {}).get("settledTo") is None:
-        return None                                    # 다 굳은 판(지난 날)인데 그 분 1분봉이 없음 — 어림으로 안 삼(화면과 같게 · 시황분석1 · 재권님 「산값은 정확해야」) · 장중 굳는 중 3분은 재권님 답 대기라 아직 예전 셈
+    if r.get("chipPx") is not None and not cpx and T > p1_ and (b.get("meta") or {}).get("chipPx", {}).get("ok"):
+        return None                                    # 그 분 1분봉 값이 없음 — 어림으로 안 삼(화면과 같게 · 재권님 「산값은 정확해야」) · 장중이면 굳는 1분 남짓을 기다렸다 삼(재권님 「가인데 1분으로 해줘」 11-25)
     if cpx and T > p1_:                                # 칩 N개가 함께 붙은 그 분 1분봉 종가(chipPx) — 어림(30분 칸 · 든 때) 대신(11-25 재권님 「산값은 정확해야」 · 들어온 때 모드도 · 개념정의 덧)
         return {"px": cpx, "at": "%s:%s" % (T[:2], T[2:]), "chipAt": "%s:%s" % (T[:2], T[2:]), "need": need, "src": "칩 찬 분 1분봉 종가"}
     if mode == "open":                                 # 「들어온 때」 — 판에 든 때 값 · 시각(r.buy · buyAt) · 칩 N개 문턱 · 차례는 그대로
@@ -1298,8 +1298,9 @@ def buy930_fill(proxy, b):
     return b
 
 
-_cpx = {}                      # (날, 종목, 「HHMM」) → 1분봉 종가 — 끝난 지 M1_SETTLE_MIN 분 지난 봉만 들고 있음(그 뒤로는 안 바뀜)
-M1_SETTLE_MIN = 3              # 1분봉 받기 바퀴(60초) 두 번이 지나도록 — 진행 중 봉 값이 굳지 않게
+_cpx = {}                      # (날, 종목, 「HHMM」) → 1분봉 종가 — 굳은 봉만 들고 있음(그 뒤로는 안 바뀜)
+# 굳은 봉 — 그 종목 다음 분 봉이 DB 에 있으면(그 분이 끝난 뒤 받은 것) 앞 봉은 끝 값이다. 칩 1분봉 받기가 매 분 1초에 돌아(chip_live)
+# 봉이 끝나고 1분 남짓이면 굳는다 — 재권님 「가인데 1분으로 해줘」(11-25 17:4x · 그 전에는 고정 3분 · 셈 탓에 실제 3~4분)
 
 
 def _chip_px_fill(proxy, day, rows, o):
@@ -1307,7 +1308,7 @@ def _chip_px_fill(proxy, day, rows, o):
     1분봉이 없는 분은 열쇠를 뺀다(0 안 넣음) · 재권님 「산값은 정확해야 할거같은데. 서버에 해당종목의 분봉을 읽어서 셈해야해」(11-25 14:3x) → 개발2 창 「응」."""
     import market_hours
     now = _now()
-    cut = day + (now - timedelta(minutes=M1_SETTLE_MIN)).strftime("%H%M") if day == now.strftime("%Y%m%d") else day + "2359"   # 끝난 지 M1_SETTLE_MIN 분 지난 봉만 — 1분봉 받기(60초 바퀴 · upsert)가 진행 중 봉을 적었다 끝 값으로 다시 쓸 틈(개념정의 덧 11-25)
+    live = day == now.strftime("%Y%m%d")              # 오늘 — 종목마다 다음 분 봉이 들어온 봉만(진행 중 봉을 받기가 끝 값으로 다시 쓸 틈 · 개념정의 덧 11-25)
     rc = market_hours.today(proxy, day=day)["reg"][1]   # 그날 정규장 끝 — 늦게 여는 날도 그날 표(개념정의 덧 · 「장 시각으로 셈하는 코드는 늦게 여는 날 그만큼 옮긴다」)
     close = int(rc[:2]) * 60 + int(rc[2:])
     want = {}
@@ -1325,7 +1326,11 @@ def _chip_px_fill(proxy, day, rows, o):
     with proxy.db_conn() as conn:
         for hm, codes in want.items():
             need = [c for c in codes if (day, c, hm) not in _cpx]
-            if need and day + hm < cut:            # 아직 안 끝난 분은 안 읽음
+            if need and live:                      # 그 뒤 분 봉이 아직 없는 종목은 굳는 중 — 안 읽음
+                q = ",".join("?" * len(need))
+                need = [c for (c,) in conn.execute("SELECT DISTINCT code FROM candles WHERE period = '1m' AND ts > ? AND ts LIKE ? AND code IN (%s)" % q,
+                                                    [day + hm, day + "%"] + need)]
+            if need:
                 px = _m1_px(conn, day, need, day + hm, "close")
                 for c, v in px.items():
                     _cpx[(day, c, hm)] = v
@@ -1335,7 +1340,7 @@ def _chip_px_fill(proxy, day, rows, o):
                     got.setdefault(c, {})["%s:%s" % (hm[:2], hm[2:])] = v
     for r in rows:
         r["chipPx"] = got.get(r["code"], {})
-    return None if cut.endswith("2359") else "%s:%s" % (cut[8:10], cut[10:12])   # 굳은 끝 — 이 분보다 앞 봉만 실림(그 뒤는 굳는 중)
+    return (now - timedelta(minutes=1)).strftime("%H:%M") if live else None   # 장중 표시 — 이 분 언저리부터는 굳는 중일 수 있음(종목마다 다음 분 봉이 들어오면 굳음) · 지난 날은 null(다 굳음)
 
 
 def _out_px(proxy, b, outs):
