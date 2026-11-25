@@ -224,8 +224,11 @@ def chips_now(proxy, cfg, early=True, pre=False):
         for by, ko in (("sector", "업종"), ("theme", "테마")):
             data, _m = us_kr.board(proxy, by)
             d0 = next((d for d in data.get("days") or [] if d["kr"] == today), None)
-            if not d0:
-                continue
+            prev_wd = _now() - timedelta(days=3 if _now().weekday() == 0 else 1)
+            if not d0 or d0["us"] < prev_wd.strftime("%Y%m%d"):
+                continue                                   # 어젯밤 미국 일봉이 아직 없음 — 그저께 값으로 조용히 붙이지 않음(미국이 쉰 날도 못 받음으로 · 개념정의 덧 11-25)
+            if not any((r.get("us") or {}).get(d0["us"]) is not None for r in data.get("rows") or []):
+                continue                                   # 미국 값이 다 빔 — 「칩 0」 이 아니라 못 받음
             got_day = True
             ups = sorted(((r["us"].get(d0["us"]), r["name"]) for r in data.get("rows") or [] if (r["us"].get(d0["us"]) or 0) > 0), reverse=True)[:n_top]
             top = {n for _v, n in ups}
