@@ -2963,7 +2963,7 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
             except Exception as e:
                 print("  [단타 30] %s 거래 값 못 채움 — %s" % (d, proxy.safe_message(e, 120)), flush=True)
         if (got and not m.get("rebuilt") and d >= MONEY_SINCE and m.get("moneyFill") != MONEY_VER
-                and (d < today or _now().strftime("%H%M") >= __import__("sector_flow").END)):   # 오늘은 섹터 수급 마지막 칸이 닫힌 뒤(sector_flow.END 한 곳 · 개념정의 덧 11-25)
+                and (d < today or _now().strftime("%H%M") > __import__("sector_flow").END)):   # 오늘은 섹터 수급 마지막 칸이 닫힌 뒤(sector_flow.END 한 곳 · 개념정의 덧 11-25)
             try:
                 if money_log_fill(proxy, d, got[0]) is not None:
                     got[0]["meta"]["moneyFill"] = MONEY_VER
