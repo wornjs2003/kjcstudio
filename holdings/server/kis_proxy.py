@@ -94,6 +94,7 @@ import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
 import day_top_fill     # 등락 상위 — 지난 거래일 판을 다시 세어 채움(장 쉬는 때 · 쓰는 서버만 · 2026-11-11 · server/day_top_fill.py)
 import day_top          # 등락 상위와 걸린 필터 — 날마다 장 뒤 한 번 쌓음 · /api/kis/day-top(2026-11-11 · server/day_top.py)
+import inv_est          # 종목별 외국인 · 기관 장중 가집계 — 감시 목록 전부를 입력 시각 + 5분마다 쌓음 · /api/kis/inv-est(2026-11-25 · server/inv_est.py)
 import sector_flow      # 섹터수급 — 프리장 08:00~정규장 09:30 업종 · 테마별 10분 거래대금 · /api/kis/sector-flow(2026-11-18 · server/sector_flow.py)
 import us_kr             # 미국이 움직인 다음 날 국내 섹터 · 테마 — /api/kis/us-kr-groups(2026-11-25 · server/us_kr.py)
 import trade_signal     # 매수 목록 슬랙 보내기 · 매매일지 — 단타 판 첫 굳힘 위 종목 · 매도 결과 받아 적음 · /api/kis/trade-journal(2026-11-23 · server/trade_signal.py)
@@ -10575,6 +10576,21 @@ class Handler(SimpleHTTPRequestHandler):
                                           "cacheTtl": flow_board.CACHE_TTL}})
                 return
 
+            if route == "inv-est":
+                # 종목별 외국인 · 기관 장중 가집계 쌓은 것 (2026-11-25 · server/inv_est.py) — KIS 를 새로 부르지 않고 market.db inv_est 를 읽는다
+                day = (qs.get("day") or [""])[0] or None
+                if day is not None and not (day.isdigit() and len(day) == 8):
+                    self._send_json({"ok": False, "error": "day 는 YYYYMMDD 입니다."}, 400)
+                    return
+                codes = [c for c in ((qs.get("codes") or [""])[0]).split(",") if c.isdigit() and len(c) == 6][:1000] or None
+                self._send_json({"ok": True, "data": inv_est.board(sys.modules[__name__], day, codes),
+                                 "meta": {"qtyUnit": "주", "amt": "없음 — KIS 가집계는 수량만 준다",
+                                          "seq": "회차 번호(bsop_hour_gb) · 큰 것이 최신 · 응답에 시각이 없어 firstAt(처음 받은 때)을 함께",
+                                          "input": "외국인 09:30 · 11:20 · 13:20 · 14:30 / 기관 10:00 · 11:20 · 13:20 · 14:30(KIS 문서 · ±10분)",
+                                          "days": inv_est.days(sys.modules[__name__]),
+                                          "status": inv_est.status(sys.modules[__name__])}})
+                return
+
             # 홈 실시간 순위 「매수」 칩 — 외국인 · 기관 · 프로그램이 함께 사는 종목 (2026-11-05 · `fetch_joint_buy`)
             # 실시간 순위 모달 「전일비」 — 지금 시간대(프리장 · 정규장 · 애프터)끼리 오늘 ÷ 어제 (2026-11-05 · server/session_volume.py)
             if route == "vol-ratio":
@@ -11801,6 +11817,9 @@ def main():
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and flow_rank.start(sys.modules[__name__]):
         print("  투자자 매매 동향 : 평일 %02d:%02d 뒤 외국인 · 기관 순위 판을 market.db flow_rank 에 남김 · %02d:%02d 뒤 순위 · 감시 종목 주체 확정치 쌓음"
               % (flow_rank.SAVE_AT + flow_rank.COLLECT_AT))
+    if (not SLOW and is_sender(args.port) or os.environ.get("KJC_INV_EST_COLLECT") == "1") and inv_est.start(sys.modules[__name__]):
+        print("  장중 가집계 : 평일 %s(늦게 여는 날은 그만큼 뒤) 감시 목록 전부의 외국인 · 기관 가집계를 market.db inv_est 에 쌓음 · /api/kis/inv-est"
+              % " · ".join("%02d:%02d" % s for s in inv_est.SLOTS_USUAL))
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and session_volume.start(sys.modules[__name__]):
         print("  시간대 거래량 : 평일 %s 에 순위 종목 누적 거래량 저장(전일비)" % " · ".join(b[3][:2] + ":" + b[3][2:] for b in session_volume.BOUNDS))
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and intraday_flow.start(sys.modules[__name__]):
