@@ -1,0 +1,4062 @@
+{
+"_읽는법": "시황분석1 11-25 안 · 재권님 「응 넘기고 … 단타쪽에 있어야 할 정보 · 매일매일 쌓여야」 · sector: 미국 GICS 하부산업 → 국내 업종(네이버 WICS) 이름 · 그 업종 미국 값 = S&P 500 중 그 하부산업 종목 일봉 등락률 평균 · loose = 이름이 딱 맞지 않아 가까운 업종에 넣은 것 · subKo = 하부산업 우리말 · themeEtf: 국내 테마 → 미국 테마 ETF 하나 · theme3: 국내 테마 → 미국 종목 셋(평균) · weak = 짝 약함 · why = 고른 까닭 · 미국 하루 → 다음 한국 장날로 짝 · 출처 S&P 500 목록 = 위키백과 List_of_S&P_500_companies(GICS 칸) · 서버로 옮김 2026-11-25 개발2(us_kr.py 가 읽음) — 고칠 때는 이 파일 한 곳",
+"sector": {
+"Advertising": "광고",
+"Aerospace & Defense": "우주항공과국방",
+"Agricultural & Farm Machinery": "기계",
+"Agricultural Products & Services": "식품",
+"Air Freight & Logistics": "항공화물운송과물류",
+"Apparel Retail": "전문소매",
+"Apparel, Accessories & Luxury Goods": "섬유,의류,신발,호화품",
+"Application Software": "소프트웨어",
+"Asset Management & Custody Banks": "기타금융",
+"Automobile Manufacturers": "자동차",
+"Automotive Parts & Equipment": "자동차부품",
+"Automotive Retail": "전문소매",
+"Biotechnology": "생물공학",
+"Broadcasting": "방송과엔터테인먼트",
+"Broadline Retail": "인터넷과카탈로그소매",
+"Building Products": "건축제품",
+"Cable & Satellite": "방송과엔터테인먼트",
+"Cargo Ground Transportation": "도로와철도운송",
+"Casinos & Gaming": "호텔,레스토랑,레저",
+"Commodity Chemicals": "화학",
+"Communications Equipment": "통신장비",
+"Computer & Electronics Retail": "전문소매",
+"Construction & Engineering": "건설",
+"Construction Machinery & Heavy Transportation Equipment": "기계",
+"Construction Materials": "건축자재",
+"Consumer Electronics": "가정용기기와용품",
+"Consumer Finance": "카드",
+"Consumer Staples Merchandise Retail": "식품과기본식료품소매",
+"Copper": "비철금속",
+"Data Center REITs": "부동산",
+"Data Processing & Outsourced Services": "상업서비스와공급품",
+"Distillers & Vintners": "음료",
+"Distributors": "판매업체",
+"Diversified Banks": "은행",
+"Diversified Support Services": "상업서비스와공급품",
+"Electric Utilities": "전기유틸리티",
+"Electrical Components & Equipment": "전기장비",
+"Electronic Components": "전자장비와기기",
+"Electronic Equipment & Instruments": "전자장비와기기",
+"Electronic Manufacturing Services": "전자장비와기기",
+"Environmental & Facilities Services": "상업서비스와공급품",
+"Fertilizers & Agricultural Chemicals": "화학",
+"Financial Exchanges & Data": "기타금융",
+"Food Distributors": "식품과기본식료품소매",
+"Food Retail": "식품과기본식료품소매",
+"Footwear": "섬유,의류,신발,호화품",
+"Gas Utilities": "가스유틸리티",
+"Gold": "비철금속",
+"Health Care Distributors": "건강관리업체및서비스",
+"Health Care Equipment": "건강관리장비와용품",
+"Health Care Facilities": "건강관리업체및서비스",
+"Health Care REITs": "부동산",
+"Health Care Services": "건강관리업체및서비스",
+"Health Care Supplies": "건강관리장비와용품",
+"Health Care Technology": "건강관리기술",
+"Heavy Electrical Equipment": "전기장비",
+"Home Improvement Retail": "전문소매",
+"Homebuilding": "건설",
+"Homefurnishing Retail": "전문소매",
+"Hotel & Resort REITs": "부동산",
+"Hotels, Resorts & Cruise Lines": "호텔,레스토랑,레저",
+"Household Products": "가정용기기와용품",
+"Human Resource & Employment Services": "상업서비스와공급품",
+"IT Consulting & Other Services": "IT서비스",
+"Independent Power Producers & Energy Traders": "전기유틸리티",
+"Industrial Conglomerates": "복합기업",
+"Industrial Gases": "화학",
+"Industrial Machinery & Supplies & Components": "기계",
+"Industrial REITs": "부동산",
+"Insurance Brokers": "손해보험",
+"Integrated Oil & Gas": "석유와가스",
+"Integrated Telecommunication Services": "다각화된통신서비스",
+"Interactive Home Entertainment": "게임엔터테인먼트",
+"Interactive Media & Services": "양방향미디어와서비스",
+"Internet Services & Infrastructure": "IT서비스",
+"Investment Banking & Brokerage": "증권",
+"Leisure Products": "레저용장비와제품",
+"Life & Health Insurance": "생명보험",
+"Life Sciences Tools & Services": "생명과학도구및서비스",
+"Managed Health Care": "건강관리업체및서비스",
+"Metal, Glass & Plastic Containers": "포장재",
+"Movies & Entertainment": "방송과엔터테인먼트",
+"Multi-Family Residential REITs": "부동산",
+"Multi-Sector Holdings": "기타금융",
+"Multi-Utilities": "복합유틸리티",
+"Multi-line Insurance": "손해보험",
+"Office REITs": "부동산",
+"Oil & Gas Equipment & Services": "에너지장비및서비스",
+"Oil & Gas Exploration & Production": "석유와가스",
+"Oil & Gas Refining & Marketing": "석유와가스",
+"Oil & Gas Storage & Transportation": "석유와가스",
+"Other Specialized REITs": "부동산",
+"Other Specialty Retail": "전문소매",
+"Packaged Foods & Meats": "식품",
+"Paper & Plastic Packaging Products & Materials": "포장재",
+"Passenger Airlines": "항공사",
+"Passenger Ground Transportation": "도로와철도운송",
+"Personal Care Products": "화장품",
+"Pharmaceuticals": "제약",
+"Property & Casualty Insurance": "손해보험",
+"Publishing": "출판",
+"Rail Transportation": "도로와철도운송",
+"Real Estate Services": "부동산",
+"Regional Banks": "은행",
+"Reinsurance": "손해보험",
+"Research & Consulting Services": "상업서비스와공급품",
+"Restaurants": "호텔,레스토랑,레저",
+"Retail REITs": "부동산",
+"Self-Storage REITs": "부동산",
+"Semiconductor Materials & Equipment": "반도체와반도체장비",
+"Semiconductors": "반도체와반도체장비",
+"Single-Family Residential REITs": "부동산",
+"Soft Drinks & Non-alcoholic Beverages": "음료",
+"Specialized Consumer Services": "교육서비스",
+"Specialty Chemicals": "화학",
+"Steel": "철강",
+"Systems Software": "소프트웨어",
+"Technology Distributors": "전자장비와기기",
+"Technology Hardware, Storage & Peripherals": "컴퓨터와주변기기",
+"Telecom Tower REITs": "부동산",
+"Timber REITs": "부동산",
+"Tobacco": "담배",
+"Trading Companies & Distributors": "무역회사와판매업체",
+"Transaction & Payment Processing Services": "IT서비스",
+"Water Utilities": "전기유틸리티",
+"Wireless Telecommunication Services": "무선통신서비스"
+},
+"loose": [
+"Agricultural Products & Services",
+"Consumer Electronics",
+"Data Processing & Outsourced Services",
+"Gold",
+"Insurance Brokers",
+"Multi-Sector Holdings",
+"Specialized Consumer Services",
+"Technology Distributors",
+"Transaction & Payment Processing Services",
+"Water Utilities"
+],
+"subKo": {
+"Advertising": "광고",
+"Aerospace & Defense": "항공우주 · 방산",
+"Agricultural & Farm Machinery": "농기계",
+"Agricultural Products & Services": "농산물",
+"Air Freight & Logistics": "항공 화물 · 물류",
+"Apparel Retail": "의류 소매",
+"Apparel, Accessories & Luxury Goods": "의류 · 잡화 · 명품",
+"Application Software": "응용 소프트웨어",
+"Asset Management & Custody Banks": "자산운용 · 수탁은행",
+"Automobile Manufacturers": "완성차",
+"Automotive Parts & Equipment": "자동차 부품",
+"Automotive Retail": "자동차 소매",
+"Biotechnology": "바이오",
+"Broadcasting": "방송",
+"Broadline Retail": "종합 온라인 · 소매",
+"Building Products": "건축 제품",
+"Cable & Satellite": "케이블 · 위성 방송",
+"Cargo Ground Transportation": "육상 화물",
+"Casinos & Gaming": "카지노",
+"Commodity Chemicals": "범용 화학",
+"Communications Equipment": "통신 장비",
+"Computer & Electronics Retail": "전자제품 소매",
+"Construction & Engineering": "건설 · 엔지니어링",
+"Construction Machinery & Heavy Transportation Equipment": "건설기계 · 대형 운송장비",
+"Construction Materials": "건설 자재",
+"Consumer Electronics": "가전",
+"Consumer Finance": "소비자 금융 · 카드",
+"Consumer Staples Merchandise Retail": "생필품 대형 소매",
+"Copper": "구리",
+"Data Center REITs": "데이터센터 리츠",
+"Data Processing & Outsourced Services": "데이터 처리 · 아웃소싱",
+"Distillers & Vintners": "주류",
+"Distributors": "유통 도매",
+"Diversified Banks": "대형 은행",
+"Diversified Support Services": "사업 지원 서비스",
+"Electric Utilities": "전력 회사",
+"Electrical Components & Equipment": "전기 부품 · 장비",
+"Electronic Components": "전자 부품",
+"Electronic Equipment & Instruments": "전자 장비 · 계측기",
+"Electronic Manufacturing Services": "전자 위탁생산",
+"Environmental & Facilities Services": "환경 · 시설 관리",
+"Fertilizers & Agricultural Chemicals": "비료 · 농약",
+"Financial Exchanges & Data": "거래소 · 금융 데이터",
+"Food Distributors": "식품 유통",
+"Food Retail": "식품 소매",
+"Footwear": "신발",
+"Gas Utilities": "가스 회사",
+"Gold": "금",
+"Health Care Distributors": "의약품 유통",
+"Health Care Equipment": "의료 장비",
+"Health Care Facilities": "병원 · 의료시설",
+"Health Care REITs": "의료 리츠",
+"Health Care Services": "의료 서비스",
+"Health Care Supplies": "의료 소모품",
+"Health Care Technology": "의료 IT",
+"Heavy Electrical Equipment": "중전기(대형 전력기기)",
+"Home Improvement Retail": "집수리 용품 소매",
+"Homebuilding": "주택 건설",
+"Homefurnishing Retail": "가구 · 인테리어 소매",
+"Hotel & Resort REITs": "호텔 리츠",
+"Hotels, Resorts & Cruise Lines": "호텔 · 리조트 · 크루즈",
+"Household Products": "생활용품",
+"Human Resource & Employment Services": "인력 · 채용 서비스",
+"IT Consulting & Other Services": "IT 컨설팅 · 서비스",
+"Independent Power Producers & Energy Traders": "민자 발전 · 전력 거래",
+"Industrial Conglomerates": "복합 산업 기업",
+"Industrial Gases": "산업용 가스",
+"Industrial Machinery & Supplies & Components": "산업 기계 · 부품",
+"Industrial REITs": "물류창고 리츠",
+"Insurance Brokers": "보험 중개",
+"Integrated Oil & Gas": "종합 석유 · 가스",
+"Integrated Telecommunication Services": "종합 통신",
+"Interactive Home Entertainment": "게임",
+"Interactive Media & Services": "인터넷 플랫폼",
+"Internet Services & Infrastructure": "인터넷 인프라",
+"Investment Banking & Brokerage": "투자은행 · 증권",
+"Leisure Products": "레저 용품",
+"Life & Health Insurance": "생명 · 건강 보험",
+"Life Sciences Tools & Services": "생명과학 도구 · 서비스",
+"Managed Health Care": "건강보험(관리의료)",
+"Metal, Glass & Plastic Containers": "금속 · 유리 · 플라스틱 용기",
+"Movies & Entertainment": "영화 · 엔터",
+"Multi-Family Residential REITs": "아파트 리츠",
+"Multi-Sector Holdings": "지주 회사",
+"Multi-Utilities": "복합 유틸리티",
+"Multi-line Insurance": "종합 보험",
+"Office REITs": "오피스 리츠",
+"Oil & Gas Equipment & Services": "석유 · 가스 장비 · 서비스",
+"Oil & Gas Exploration & Production": "석유 · 가스 탐사 · 생산",
+"Oil & Gas Refining & Marketing": "정유 · 판매",
+"Oil & Gas Storage & Transportation": "석유 · 가스 저장 · 수송",
+"Other Specialized REITs": "기타 특수 리츠",
+"Other Specialty Retail": "기타 전문 소매",
+"Packaged Foods & Meats": "가공식품 · 육가공",
+"Paper & Plastic Packaging Products & Materials": "종이 · 플라스틱 포장",
+"Passenger Airlines": "항공사",
+"Passenger Ground Transportation": "여객 육상 운송",
+"Personal Care Products": "개인 위생 · 화장품",
+"Pharmaceuticals": "제약",
+"Property & Casualty Insurance": "손해보험",
+"Publishing": "출판",
+"Rail Transportation": "철도",
+"Real Estate Services": "부동산 서비스",
+"Regional Banks": "지역 은행",
+"Reinsurance": "재보험",
+"Research & Consulting Services": "조사 · 컨설팅",
+"Restaurants": "외식",
+"Retail REITs": "상가 리츠",
+"Self-Storage REITs": "창고 임대 리츠",
+"Semiconductor Materials & Equipment": "반도체 소재 · 장비",
+"Semiconductors": "반도체",
+"Single-Family Residential REITs": "단독주택 리츠",
+"Soft Drinks & Non-alcoholic Beverages": "음료(비주류)",
+"Specialized Consumer Services": "생활 서비스(교육 등)",
+"Specialty Chemicals": "특수 화학",
+"Steel": "철강",
+"Systems Software": "시스템 소프트웨어",
+"Technology Distributors": "IT 기기 유통",
+"Technology Hardware, Storage & Peripherals": "컴퓨터 · 저장장치 · 주변기기",
+"Telecom Tower REITs": "통신탑 리츠",
+"Timber REITs": "산림 리츠",
+"Tobacco": "담배",
+"Trading Companies & Distributors": "무역 · 판매",
+"Transaction & Payment Processing Services": "결제 처리",
+"Water Utilities": "수도 회사",
+"Wireless Telecommunication Services": "무선 통신"
+},
+"themeEtf": {
+"2차전지": "LIT",
+"리튬": "LIT",
+"2차전지(소재/부품)": "LIT",
+"폐배터리": "BATT",
+"반도체 장비": "SMH",
+"반도체 재료/부품": "SMH",
+"HBM(고대역폭메모리)": "SMH",
+"시스템반도체": "SMH",
+"전력반도체": "SMH",
+"원자력발전": "NLR",
+"방위산업/전쟁 및 테러": "ITA",
+"우주항공산업(누리호/인공위성 등)": "UFO",
+"로봇(산업용/협동로봇 등)": "BOTZ",
+"피지컬 AI/휴머노이드 로봇": "BOTZ",
+"지능형로봇/인공지능(AI)": "AIQ",
+"AI 챗봇(챗GPT 등)": "AIQ",
+"온디바이스 AI": "AIQ",
+"클라우드 컴퓨팅": "SKYY",
+"데이터센터": "SRVR",
+"보안주(정보)": "CIBR",
+"태양광에너지": "TAN",
+"풍력에너지": "FAN",
+"전기차": "DRIV",
+"자율주행차": "DRIV",
+"블록체인": "BLOK",
+"가상화폐(비트코인 등)": "BITQ",
+"게임": "ESPO",
+"핀테크(FinTech)": "FINX",
+"유전자 치료제/분석": "ARKG",
+"의료기기": "IHI",
+"제약업체": "XPH",
+"은행": "KBE",
+"증권": "IAI",
+"손해보험": "KIE",
+"생명보험": "KIE",
+"해운": "BOAT",
+"철강 주요종목": "SLX",
+"귀금속(금/은)": "GDX",
+"희귀금속(희토류 등)": "REMX",
+"비철금속": "COPX",
+"정유": "CRAK",
+"스마트그리드(지능형전력망)": "GRID",
+"전력설비": "GRID",
+"전선": "GRID",
+"양자암호/양자컴퓨팅": "QTUM",
+"소매유통": "XRT",
+"항공/저가 항공사(LCC)": "JETS",
+"음식료업종": "PBJ",
+"건설 중소형": "PKB",
+"농업": "MOO",
+"수자원(양적/질적 개선)": "PHO",
+"온실가스(탄소배출권)/탄소 포집·활용·저장(CCUS)": "KRBN",
+"비만치료제": "XPH",
+"백신/진단시약/방역(신종플루, AI 등)": "XBI",
+"면역항암제": "XBI",
+"줄기세포": "XBI",
+"바이오시밀러(복제 바이오의약품)": "XBI",
+"드론(Drone)": "UFO",
+"메타버스(Metaverse)": "METV",
+"석유화학": "CRAK",
+"자원개발": "XOP",
+"LNG(액화천연가스)": "XOP",
+"셰일가스(Shale Gas)": "XOP"
+},
+"theme3": {
+"2차전지(LFP/리튬인산철)": {
+"tickers": [
+"ALB",
+"SQM",
+"TSLA"
+],
+"why": "리튬 소재 · 리튬인산철 배터리를 쓰는 차",
+"weak": false
+},
+"2차전지(나트륨이온)": {
+"tickers": [
+"ALB",
+"QS",
+"ENVX"
+],
+"why": "차세대 배터리 개발사",
+"weak": true
+},
+"2차전지(생산)": {
+"tickers": [
+"TSLA",
+"ENVX",
+"QS"
+],
+"why": "배터리 만드는 곳",
+"weak": false
+},
+"2차전지(장비)": {
+"tickers": [
+"AMAT",
+"ROK",
+"ETN"
+],
+"why": "공정 장비 · 공장 자동화",
+"weak": true
+},
+"2차전지(전고체)": {
+"tickers": [
+"QS",
+"SLDP",
+"ENVX"
+],
+"why": "전고체 · 차세대 배터리",
+"weak": false
+},
+"3D 프린터": {
+"tickers": [
+"DDD",
+"SSYS",
+"PRLB"
+],
+"why": "3D 프린터 회사",
+"weak": false
+},
+"5G(5세대 이동통신)": {
+"tickers": [
+"QCOM",
+"ERIC",
+"NOK"
+],
+"why": "5G 칩 · 통신 장비",
+"weak": false
+},
+"CCTV＆DVR": {
+"tickers": [
+"MSI",
+"ALRM",
+"ADT"
+],
+"why": "영상 감시 · 보안 장비",
+"weak": false
+},
+"CXL(컴퓨트익스프레스링크)": {
+"tickers": [
+"MU",
+"MRVL",
+"ALAB"
+],
+"why": "메모리 연결 칩",
+"weak": false
+},
+"DMZ 평화공원": {
+"tickers": [
+"CAT",
+"VMC",
+"MLM"
+],
+"why": "건설 · 토목 자재",
+"weak": true
+},
+"GTX(수도권 광역급행철도)": {
+"tickers": [
+"WAB",
+"VMC",
+"PWR"
+],
+"why": "철도 차량 · 토목",
+"weak": true
+},
+"LED": {
+"tickers": [
+"WOLF",
+"AMS",
+"DAKT"
+],
+"why": "LED 칩",
+"weak": true
+},
+"LED장비": {
+"tickers": [
+"AMAT",
+"VECO",
+"AEIS"
+],
+"why": "증착 장비",
+"weak": false
+},
+"LPG(액화석유가스)": {
+"tickers": [
+"SPH",
+"UGI",
+"ET"
+],
+"why": "LPG · 가스 유통",
+"weak": false
+},
+"MLCC(적층세라믹콘덴서)": {
+"tickers": [
+"APH",
+"AVX",
+"VSH"
+],
+"why": "콘덴서 · 수동 부품",
+"weak": true
+},
+"NFT(대체불가토큰)": {
+"tickers": [
+"COIN",
+"RBLX",
+"HOOD"
+],
+"why": "가상자산 거래 · 디지털 아이템",
+"weak": true
+},
+"NI(네트워크통합)": {
+"tickers": [
+"CSCO",
+"ANET",
+"HPE"
+],
+"why": "네트워크 장비",
+"weak": false
+},
+"OLED(유기 발광 다이오드)": {
+"tickers": [
+"OLED",
+"AAPL",
+"KOPN"
+],
+"why": "OLED 소재 · 패널 쓰는 곳",
+"weak": false
+},
+"PCB(FPCB 등)": {
+"tickers": [
+"TTMI",
+"SANM",
+"FLEX"
+],
+"why": "인쇄회로기판 · 전자 위탁생산",
+"weak": false
+},
+"S7(삼성전자/SK하이닉스 등)": {
+"tickers": [
+"MU",
+"WDC",
+"STX"
+],
+"why": "메모리 · 저장장치",
+"weak": false
+},
+"SI(시스템통합)": {
+"tickers": [
+"ACN",
+"IBM",
+"CTSH"
+],
+"why": "IT 서비스 · 시스템 구축",
+"weak": false
+},
+"SNS(소셜네트워크서비스)": {
+"tickers": [
+"META",
+"SNAP",
+"PINS"
+],
+"why": "SNS",
+"weak": false
+},
+"STO(토큰증권 발행)": {
+"tickers": [
+"COIN",
+"HOOD",
+"SCHW"
+],
+"why": "증권 · 가상자산 거래",
+"weak": true
+},
+"UAM(도심항공모빌리티)": {
+"tickers": [
+"JOBY",
+"ACHR",
+"EH"
+],
+"why": "도심 항공 기체",
+"weak": false
+},
+"mRNA(메신저 리보핵산)": {
+"tickers": [
+"MRNA",
+"BNTX",
+"PFE"
+],
+"why": "mRNA 백신",
+"weak": false
+},
+"日 수출 규제(국산화 등)": {
+"tickers": [
+"AMAT",
+"LRCX",
+"ENTG"
+],
+"why": "반도체 소재 · 장비",
+"weak": true
+},
+"日제품 불매운동(수혜)": {
+"tickers": [
+"NKE",
+"KO",
+"WMT"
+],
+"why": "소비재",
+"weak": true
+},
+"가상현실(VR)": {
+"tickers": [
+"META",
+"SONY",
+"U"
+],
+"why": "VR 기기 · 엔진",
+"weak": false
+},
+"강관업체(Steel pipe)": {
+"tickers": [
+"TS",
+"NUE",
+"CMC"
+],
+"why": "강관 · 철강",
+"weak": false
+},
+"갤럭시 부품주": {
+"tickers": [
+"QCOM",
+"SWKS",
+"AVGO"
+],
+"why": "스마트폰 부품",
+"weak": true
+},
+"건강기능식품": {
+"tickers": [
+"HLF",
+"USNA",
+"BYND"
+],
+"why": "건강기능식품",
+"weak": false
+},
+"건설기계": {
+"tickers": [
+"CAT",
+"DE",
+"TEX"
+],
+"why": "건설기계",
+"weak": false
+},
+"겨울": {
+"tickers": [
+"COLM",
+"VFC",
+"UGI"
+],
+"why": "겨울 옷 · 난방",
+"weak": true
+},
+"고령화 사회(노인복지)": {
+"tickers": [
+"WELL",
+"ENSG",
+"BKD"
+],
+"why": "요양 · 노인 돌봄",
+"weak": false
+},
+"고체산화물 연료전지(SOFC)": {
+"tickers": [
+"BE",
+"FCEL",
+"PLUG"
+],
+"why": "연료전지",
+"weak": false
+},
+"골판지 제조": {
+"tickers": [
+"IP",
+"PKG",
+"SW"
+],
+"why": "골판지 · 포장",
+"weak": false
+},
+"골프": {
+"tickers": [
+"GOLF",
+"TOST",
+"DKS"
+],
+"why": "골프 용품",
+"weak": true
+},
+"공기청정기": {
+"tickers": [
+"WHR",
+"CARR",
+"DCI"
+],
+"why": "공기 정화 · 필터",
+"weak": true
+},
+"공작기계": {
+"tickers": [
+"HURC",
+"KMT",
+"ROK"
+],
+"why": "공작기계 · 공구",
+"weak": false
+},
+"광고": {
+"tickers": [
+"OMC",
+"MGNI",
+"TTD"
+],
+"why": "광고",
+"weak": false
+},
+"광통신(광케이블/광섬유 등)": {
+"tickers": [
+"GLW",
+"COHR",
+"LITE"
+],
+"why": "광섬유 · 광부품",
+"weak": false
+},
+"교육/온라인 교육": {
+"tickers": [
+"CHGG",
+"COUR",
+"DUOL"
+],
+"why": "온라인 교육",
+"weak": false
+},
+"구제역/광우병 수혜": {
+"tickers": [
+"ZTS",
+"ELAN",
+"TSN"
+],
+"why": "동물 약 · 육류",
+"weak": true
+},
+"국내 상장 중국기업": {
+"tickers": [
+"BABA",
+"JD",
+"PDD"
+],
+"why": "중국 기업",
+"weak": true
+},
+"그래핀": {
+"tickers": [
+"CBT",
+"ATI",
+"GLW"
+],
+"why": "첨단 소재",
+"weak": true
+},
+"기업인수목적회사(SPAC)": {
+"tickers": [
+"GS",
+"MS",
+"LAZ"
+],
+"why": "인수합병 주선",
+"weak": true
+},
+"김밥(냉동김밥 등)": {
+"tickers": [
+"CAG",
+"KHC",
+"GIS"
+],
+"why": "냉동 · 가공식품",
+"weak": true
+},
+"남-북-러 가스관사업": {
+"tickers": [
+"KMI",
+"WMB",
+"ET"
+],
+"why": "가스관",
+"weak": true
+},
+"남북경협": {
+"tickers": [
+"CAT",
+"DE",
+"VMC"
+],
+"why": "건설 · 인프라",
+"weak": true
+},
+"냉각시스템(액침냉각 등)": {
+"tickers": [
+"VRT",
+"MOD",
+"ETN"
+],
+"why": "데이터센터 냉각",
+"weak": false
+},
+"뉴로모픽 반도체": {
+"tickers": [
+"NVDA",
+"INTC",
+"AMD"
+],
+"why": "AI 칩",
+"weak": true
+},
+"니켈": {
+"tickers": [
+"VALE",
+"BHP",
+"FCX"
+],
+"why": "니켈 · 광산",
+"weak": false
+},
+"도시가스": {
+"tickers": [
+"ATO",
+"OKE",
+"NJR"
+],
+"why": "도시가스",
+"weak": false
+},
+"두나무(Dunamu)": {
+"tickers": [
+"COIN",
+"HOOD",
+"MSTR"
+],
+"why": "가상자산 거래",
+"weak": false
+},
+"딥페이크(deepfake)": {
+"tickers": [
+"ADBE",
+"CRWD",
+"OKTA"
+],
+"why": "영상 생성 · 위조 탐지 보안",
+"weak": true
+},
+"렌터카": {
+"tickers": [
+"HTZ",
+"CAR",
+"UBER"
+],
+"why": "렌터카",
+"weak": false
+},
+"리모델링/인테리어": {
+"tickers": [
+"HD",
+"LOW",
+"SHW"
+],
+"why": "인테리어",
+"weak": false
+},
+"리비안(RIVIAN)": {
+"tickers": [
+"RIVN",
+"LCID",
+"TSLA"
+],
+"why": "전기차",
+"weak": false
+},
+"마스크": {
+"tickers": [
+"MMM",
+"HON",
+"KMB"
+],
+"why": "마스크 · 위생",
+"weak": false
+},
+"마이데이터": {
+"tickers": [
+"INTU",
+"FICO",
+"EFX"
+],
+"why": "금융 데이터",
+"weak": true
+},
+"마이코플라스마 폐렴": {
+"tickers": [
+"PFE",
+"ABT",
+"QDEL"
+],
+"why": "항생제 · 진단",
+"weak": true
+},
+"마이크로 LED": {
+"tickers": [
+"AAPL",
+"AMAT",
+"KOPN"
+],
+"why": "차세대 화면",
+"weak": true
+},
+"마이크로바이옴": {
+"tickers": [
+"MCRB",
+"ABT",
+"GIS"
+],
+"why": "장내 미생물 · 유산균",
+"weak": true
+},
+"마켓컬리(kurly)": {
+"tickers": [
+"CART",
+"DASH",
+"AMZN"
+],
+"why": "식료품 배달",
+"weak": false
+},
+"면세점": {
+"tickers": [
+"RL",
+"TPR",
+"EL"
+],
+"why": "명품 · 화장품",
+"weak": true
+},
+"모더나(MODERNA)": {
+"tickers": [
+"MRNA",
+"BNTX",
+"NVAX"
+],
+"why": "mRNA 백신",
+"weak": false
+},
+"모듈러주택": {
+"tickers": [
+"CVCO",
+"SKY",
+"LGIH"
+],
+"why": "조립식 주택",
+"weak": false
+},
+"모바일게임(스마트폰)": {
+"tickers": [
+"TTWO",
+"RBLX",
+"PLTK"
+],
+"why": "게임",
+"weak": false
+},
+"모바일솔루션(스마트폰)": {
+"tickers": [
+"APP",
+"U",
+"TWLO"
+],
+"why": "모바일 앱 솔루션",
+"weak": false
+},
+"모바일콘텐츠(스마트폰/태블릿PC)": {
+"tickers": [
+"NFLX",
+"SPOT",
+"RBLX"
+],
+"why": "모바일 콘텐츠",
+"weak": false
+},
+"무선충전기술": {
+"tickers": [
+"ENPH",
+"QCOM",
+"POWI"
+],
+"why": "충전 칩",
+"weak": true
+},
+"미디어(방송/신문)": {
+"tickers": [
+"PARA",
+"NYT",
+"FOXA"
+],
+"why": "방송 · 신문",
+"weak": false
+},
+"미용기기": {
+"tickers": [
+"ELF",
+"INMD",
+"BBWI"
+],
+"why": "미용 기기",
+"weak": true
+},
+"바이오인식(생체인식)": {
+"tickers": [
+"PANW",
+"OKTA",
+"SYNA"
+],
+"why": "지문 · 인증",
+"weak": true
+},
+"반도체 기판(FC-BGA/PCB/MLB 등)": {
+"tickers": [
+"TTMI",
+"AMKR",
+"ONTO"
+],
+"why": "반도체 기판 · 후공정",
+"weak": false
+},
+"백화점": {
+"tickers": [
+"M",
+"KSS",
+"DDS"
+],
+"why": "백화점",
+"weak": false
+},
+"보안주(물리)": {
+"tickers": [
+"ADT",
+"ALRM",
+"ALLE"
+],
+"why": "경비 · 출입 보안",
+"weak": false
+},
+"보톡스(보툴리눔톡신)": {
+"tickers": [
+"ABBV",
+"EOLS",
+"AEON"
+],
+"why": "보톡스",
+"weak": false
+},
+"부동산 보유 자산주": {
+"tickers": [
+"BLK",
+"SPG",
+"O"
+],
+"why": "자산 많이 가진 회사",
+"weak": true
+},
+"비료": {
+"tickers": [
+"NTR",
+"MOS",
+"CF"
+],
+"why": "비료",
+"weak": false
+},
+"사료": {
+"tickers": [
+"ADM",
+"BG",
+"ZTS"
+],
+"why": "곡물 · 사료",
+"weak": false
+},
+"삼성페이": {
+"tickers": [
+"PYPL",
+"AXP",
+"V"
+],
+"why": "간편 결제",
+"weak": false
+},
+"서울고속버스터미널 재개발 수혜": {
+"tickers": [
+"SPG",
+"CBRE",
+"O"
+],
+"why": "부동산 개발",
+"weak": true
+},
+"소캠(SOCAMM)": {
+"tickers": [
+"MU",
+"NVDA",
+"RMBS"
+],
+"why": "AI 서버 메모리",
+"weak": false
+},
+"수산": {
+"tickers": [
+"HRL",
+"CALM",
+"TSN"
+],
+"why": "수산 · 단백질 식품",
+"weak": true
+},
+"수소에너지(수소차/연료전지 등)": {
+"tickers": [
+"PLUG",
+"BE",
+"APD"
+],
+"why": "수소 · 연료전지",
+"weak": false
+},
+"스마트카(SMART CAR)": {
+"tickers": [
+"MBLY",
+"APTV",
+"QCOM"
+],
+"why": "차량 전장",
+"weak": false
+},
+"스마트팩토리(스마트공장)": {
+"tickers": [
+"ROK",
+"EMR",
+"PTC"
+],
+"why": "공장 자동화",
+"weak": false
+},
+"스마트폰": {
+"tickers": [
+"AAPL",
+"QCOM",
+"SWKS"
+],
+"why": "스마트폰",
+"weak": false
+},
+"스마트홈(홈네트워크)": {
+"tickers": [
+"ALRM",
+"GOOGL",
+"ADT"
+],
+"why": "스마트홈",
+"weak": true
+},
+"스테이블코인": {
+"tickers": [
+"CRCL",
+"COIN",
+"V"
+],
+"why": "스테이블코인 발행 · 거래",
+"weak": false
+},
+"스페이스X(SpaceX)": {
+"tickers": [
+"RKLB",
+"ASTS",
+"LMT"
+],
+"why": "우주 발사 · 위성",
+"weak": false
+},
+"스포츠행사 수혜(올림픽, 월드컵 등)": {
+"tickers": [
+"NKE",
+"DKNG",
+"CMCSA"
+],
+"why": "스포츠 용품 · 중계",
+"weak": false
+},
+"시멘트/레미콘": {
+"tickers": [
+"VMC",
+"MLM",
+"EXP"
+],
+"why": "시멘트 · 골재",
+"weak": false
+},
+"아스콘(아스팔트 콘크리트)": {
+"tickers": [
+"VMC",
+"MLM",
+"GVA"
+],
+"why": "도로 포장 자재",
+"weak": false
+},
+"아이폰": {
+"tickers": [
+"AAPL",
+"SWKS",
+"CRUS"
+],
+"why": "아이폰 · 부품",
+"weak": false
+},
+"아프리카 돼지열병(ASF)": {
+"tickers": [
+"ZTS",
+"TSN",
+"HRL"
+],
+"why": "동물 약 · 육류",
+"weak": true
+},
+"애플페이": {
+"tickers": [
+"AAPL",
+"V",
+"MA"
+],
+"why": "애플 결제",
+"weak": false
+},
+"야놀자(Yanolja)": {
+"tickers": [
+"BKNG",
+"EXPE",
+"ABNB"
+],
+"why": "여행 · 숙박 예약",
+"weak": false
+},
+"엔젤산업": {
+"tickers": [
+"MAT",
+"HAS",
+"CRI"
+],
+"why": "아동 용품",
+"weak": false
+},
+"엔터테인먼트": {
+"tickers": [
+"LYV",
+"WMG",
+"SPHR"
+],
+"why": "공연 · 음반",
+"weak": false
+},
+"여름": {
+"tickers": [
+"CARR",
+"LII",
+"COLM"
+],
+"why": "에어컨 · 여름 옷",
+"weak": true
+},
+"여행": {
+"tickers": [
+"BKNG",
+"EXPE",
+"RCL"
+],
+"why": "여행",
+"weak": false
+},
+"영상콘텐츠": {
+"tickers": [
+"NFLX",
+"ROKU",
+"DIS"
+],
+"why": "영상 콘텐츠",
+"weak": false
+},
+"영화": {
+"tickers": [
+"DIS",
+"AMC",
+"IMAX"
+],
+"why": "영화",
+"weak": false
+},
+"오가노이드": {
+"tickers": [
+"TMO",
+"DHR",
+"RGEN"
+],
+"why": "바이오 연구 도구",
+"weak": true
+},
+"요소수": {
+"tickers": [
+"CF",
+"LYB",
+"CMI"
+],
+"why": "요소 · 디젤 엔진",
+"weak": true
+},
+"우주태양광(페로브스카이트 등)": {
+"tickers": [
+"FSLR",
+"ENPH",
+"RUN"
+],
+"why": "태양광",
+"weak": true
+},
+"원격진료/비대면진료(U-Healthcare)": {
+"tickers": [
+"TDOC",
+"HIMS",
+"DOCS"
+],
+"why": "원격 진료",
+"weak": false
+},
+"원자력발전소 해체": {
+"tickers": [
+"BWXT",
+"J",
+"FLR"
+],
+"why": "원전 정비 · 해체 공사",
+"weak": true
+},
+"웹툰": {
+"tickers": [
+"WBTN",
+"DIS",
+"RBLX"
+],
+"why": "웹툰 · 캐릭터 콘텐츠",
+"weak": false
+},
+"유리 기판": {
+"tickers": [
+"GLW",
+"AMAT",
+"INTC"
+],
+"why": "유리 소재 · 기판",
+"weak": false
+},
+"유심(USIM)": {
+"tickers": [
+"TMUS",
+"VZ",
+"T"
+],
+"why": "통신사",
+"weak": true
+},
+"육계": {
+"tickers": [
+"TSN",
+"PPC",
+"CALM"
+],
+"why": "닭고기 · 계란",
+"weak": false
+},
+"윤활유": {
+"tickers": [
+"VVV",
+"XOM",
+"CVX"
+],
+"why": "윤활유 · 정유",
+"weak": false
+},
+"음성인식": {
+"tickers": [
+"SOUN",
+"MSFT",
+"GOOGL"
+],
+"why": "음성 인식",
+"weak": true
+},
+"음원/음반": {
+"tickers": [
+"SPOT",
+"WMG",
+"LYV"
+],
+"why": "음원 · 음반",
+"weak": false
+},
+"의료AI": {
+"tickers": [
+"TEM",
+"ISRG",
+"GEHC"
+],
+"why": "의료 AI · 영상",
+"weak": false
+},
+"인터넷은행": {
+"tickers": [
+"SOFI",
+"NU",
+"ALLY"
+],
+"why": "인터넷 은행",
+"weak": false
+},
+"일자리(취업)": {
+"tickers": [
+"RHI",
+"KFRC",
+"MAN"
+],
+"why": "취업 · 인력 회사",
+"weak": false
+},
+"자동차부품": {
+"tickers": [
+"APTV",
+"BWA",
+"LEA"
+],
+"why": "자동차 부품",
+"weak": false
+},
+"자전거": {
+"tickers": [
+"FOXF",
+"THO",
+"HOG"
+],
+"why": "자전거 · 레저 탈것",
+"weak": true
+},
+"재난/안전(지진/화재 등)": {
+"tickers": [
+"CARR",
+"MSA",
+"JCI"
+],
+"why": "안전 장비 · 소방",
+"weak": false
+},
+"재택근무/스마트워크": {
+"tickers": [
+"ZM",
+"MSFT",
+"DOCU"
+],
+"why": "원격 근무 도구",
+"weak": false
+},
+"전기차 화재 방지(배터리 열폭주 등)": {
+"tickers": [
+"ASPN",
+"CARR",
+"MSA"
+],
+"why": "단열 · 화재 방지 소재",
+"weak": true
+},
+"전기차(충전소/충전기)": {
+"tickers": [
+"CHPT",
+"EVGO",
+"BLNK"
+],
+"why": "충전소",
+"weak": false
+},
+"전력저장장치(ESS)": {
+"tickers": [
+"FLNC",
+"TSLA",
+"ENPH"
+],
+"why": "ESS",
+"weak": false
+},
+"전자결제(전자화폐)": {
+"tickers": [
+"PYPL",
+"V",
+"FISV"
+],
+"why": "전자 결제",
+"weak": false
+},
+"전자파": {
+"tickers": [
+"AMPH",
+"APH",
+"LFUS"
+],
+"why": "전자파 차폐 · 부품",
+"weak": true
+},
+"전후 재건(우크라/중동 전쟁 등)": {
+"tickers": [
+"CAT",
+"FLR",
+"VMC"
+],
+"why": "건설 · 기계",
+"weak": true
+},
+"제대혈": {
+"tickers": [
+"VCEL",
+"TMO",
+"CRL"
+],
+"why": "세포 치료 · 보관",
+"weak": true
+},
+"제습기": {
+"tickers": [
+"WHR",
+"CARR",
+"LII"
+],
+"why": "가전 · 공조",
+"weak": true
+},
+"제지": {
+"tickers": [
+"IP",
+"SLVM",
+"CLW"
+],
+"why": "제지",
+"weak": false
+},
+"조림사업": {
+"tickers": [
+"WY",
+"RYN",
+"UFPI"
+],
+"why": "산림",
+"weak": false
+},
+"조선": {
+"tickers": [
+"HII",
+"GD",
+"TDW"
+],
+"why": "조선 · 선박",
+"weak": true
+},
+"조선기자재": {
+"tickers": [
+"HII",
+"PH",
+"CW"
+],
+"why": "선박 부품 · 방산 조선",
+"weak": true
+},
+"종합 물류": {
+"tickers": [
+"UPS",
+"FDX",
+"EXPD"
+],
+"why": "물류",
+"weak": false
+},
+"종합상사": {
+"tickers": [
+"MSM",
+"BLK",
+"GWW"
+],
+"why": "상사 · 유통",
+"weak": true
+},
+"주류업(주정, 에탄올 등)": {
+"tickers": [
+"STZ",
+"MGPI",
+"REX"
+],
+"why": "주류 · 에탄올",
+"weak": false
+},
+"주유소": {
+"tickers": [
+"MUSA",
+"CASY",
+"PSX"
+],
+"why": "주유소",
+"weak": false
+},
+"증강현실(AR)": {
+"tickers": [
+"META",
+"AAPL",
+"SNAP"
+],
+"why": "AR 기기",
+"weak": false
+},
+"지역화폐": {
+"tickers": [
+"PYPL",
+"FISV",
+"GPN"
+],
+"why": "결제 · 상품권",
+"weak": true
+},
+"창투사": {
+"tickers": [
+"KKR",
+"BX",
+"ARCC"
+],
+"why": "투자 회사",
+"weak": false
+},
+"철강 중소형": {
+"tickers": [
+"STLD",
+"CMC",
+"CLF"
+],
+"why": "철강",
+"weak": false
+},
+"철도": {
+"tickers": [
+"WAB",
+"UNP",
+"GBX"
+],
+"why": "철도 차량 · 철도",
+"weak": false
+},
+"초전도체": {
+"tickers": [
+"AMSC",
+"QUBT",
+"IBM"
+],
+"why": "초전도 · 양자",
+"weak": true
+},
+"출산장려정책": {
+"tickers": [
+"CRI",
+"KMB",
+"PG"
+],
+"why": "유아 용품",
+"weak": true
+},
+"치매": {
+"tickers": [
+"BIIB",
+"LLY",
+"ACAD"
+],
+"why": "치매 약",
+"weak": false
+},
+"치아 치료(임플란트 등)": {
+"tickers": [
+"ALGN",
+"XRAY",
+"HSIC"
+],
+"why": "치과",
+"weak": false
+},
+"카메라모듈/부품": {
+"tickers": [
+"ONTO",
+"APH",
+"SONY"
+],
+"why": "카메라 센서 · 부품",
+"weak": true
+},
+"카지노": {
+"tickers": [
+"LVS",
+"WYNN",
+"MGM"
+],
+"why": "카지노",
+"weak": false
+},
+"카카오뱅크(kakao BANK)": {
+"tickers": [
+"SOFI",
+"NU",
+"ALLY"
+],
+"why": "인터넷 은행",
+"weak": false
+},
+"캐릭터상품": {
+"tickers": [
+"HAS",
+"MAT",
+"FUN"
+],
+"why": "캐릭터 · 장난감",
+"weak": false
+},
+"코로나19(음압병실/음압구급차)": {
+"tickers": [
+"MMM",
+"STE",
+"HON"
+],
+"why": "방역 · 의료 설비",
+"weak": true
+},
+"코로나19(진단/치료제/백신 개발 등)": {
+"tickers": [
+"PFE",
+"MRNA",
+"ABT"
+],
+"why": "백신 · 치료제 · 진단",
+"weak": false
+},
+"코로나19(진단키트)": {
+"tickers": [
+"ABT",
+"QDEL",
+"DGX"
+],
+"why": "진단 키트",
+"weak": false
+},
+"코로나19(치료제/백신 개발 등)": {
+"tickers": [
+"PFE",
+"MRNA",
+"GILD"
+],
+"why": "치료제 · 백신",
+"weak": false
+},
+"콜드체인(저온 유통)": {
+"tickers": [
+"LINE",
+"CARR",
+"SYY"
+],
+"why": "냉장 창고 · 식품 유통",
+"weak": false
+},
+"콩/대두": {
+"tickers": [
+"ADM",
+"BG",
+"DAR"
+],
+"why": "곡물",
+"weak": false
+},
+"쿠팡(coupang)": {
+"tickers": [
+"CPNG",
+"AMZN",
+"MELI"
+],
+"why": "온라인 쇼핑",
+"weak": false
+},
+"키오스크(KIOSK)": {
+"tickers": [
+"VYX",
+"TOST",
+"PAR"
+],
+"why": "무인 주문 · 결제기",
+"weak": false
+},
+"타이어": {
+"tickers": [
+"GT",
+"MNRO",
+"AZO"
+],
+"why": "타이어",
+"weak": true
+},
+"탄소나노튜브(CNT)": {
+"tickers": [
+"CBT",
+"ALB",
+"TSLA"
+],
+"why": "전도 소재 · 배터리",
+"weak": true
+},
+"탈 플라스틱(친환경/생분해성 등)": {
+"tickers": [
+"SON",
+"BALL",
+"IP"
+],
+"why": "친환경 포장",
+"weak": true
+},
+"탈모 치료": {
+"tickers": [
+"HIMS",
+"LLY",
+"PFE"
+],
+"why": "탈모 치료",
+"weak": true
+},
+"태풍 및 장마": {
+"tickers": [
+"GNRC",
+"HD",
+"LOW"
+],
+"why": "발전기 · 수리 자재",
+"weak": true
+},
+"테마파크": {
+"tickers": [
+"DIS",
+"SIX",
+"FUN"
+],
+"why": "테마파크",
+"weak": false
+},
+"토스(toss)": {
+"tickers": [
+"SOFI",
+"HOOD",
+"PYPL"
+],
+"why": "핀테크 앱",
+"weak": false
+},
+"통신": {
+"tickers": [
+"VZ",
+"T",
+"TMUS"
+],
+"why": "통신사",
+"weak": false
+},
+"통신장비": {
+"tickers": [
+"CSCO",
+"CIEN",
+"ERIC"
+],
+"why": "통신 장비",
+"weak": false
+},
+"패션/의류": {
+"tickers": [
+"NKE",
+"LULU",
+"TPR"
+],
+"why": "패션",
+"weak": false
+},
+"페라이트": {
+"tickers": [
+"MP",
+"VSH",
+"AMPH"
+],
+"why": "자성 소재 · 부품",
+"weak": true
+},
+"페인트": {
+"tickers": [
+"SHW",
+"PPG",
+"RPM"
+],
+"why": "페인트",
+"weak": false
+},
+"편의점": {
+"tickers": [
+"CASY",
+"MUSA",
+"DG"
+],
+"why": "편의점 · 소형 매장",
+"weak": false
+},
+"폐기물처리": {
+"tickers": [
+"WM",
+"RSG",
+"CLH"
+],
+"why": "폐기물",
+"weak": false
+},
+"폴더블폰": {
+"tickers": [
+"GLW",
+"QCOM",
+"AAPL"
+],
+"why": "접는 폰 소재 · 칩",
+"weak": true
+},
+"퓨리오사AI": {
+"tickers": [
+"NVDA",
+"AMD",
+"AVGO"
+],
+"why": "AI 칩",
+"weak": true
+},
+"플렉서블 디스플레이": {
+"tickers": [
+"OLED",
+"GLW",
+"KOPN"
+],
+"why": "휘는 화면 소재",
+"weak": true
+},
+"피팅(관이음쇠)/밸브": {
+"tickers": [
+"WTS",
+"MWA",
+"FLS"
+],
+"why": "밸브 · 배관",
+"weak": false
+},
+"항공기부품": {
+"tickers": [
+"HWM",
+"TDG",
+"HXL"
+],
+"why": "항공기 부품",
+"weak": false
+},
+"해저터널(지하화/지하도로 등)": {
+"tickers": [
+"VMC",
+"PWR",
+"FLR"
+],
+"why": "토목 공사",
+"weak": true
+},
+"핵융합에너지": {
+"tickers": [
+"OKLO",
+"NNE",
+"CEG"
+],
+"why": "차세대 원전",
+"weak": true
+},
+"호텔/리조트": {
+"tickers": [
+"MAR",
+"HLT",
+"H"
+],
+"why": "호텔",
+"weak": false
+},
+"홈쇼핑": {
+"tickers": [
+"W",
+"AMZN",
+"ETSY"
+],
+"why": "홈쇼핑 · 온라인 쇼핑",
+"weak": false
+},
+"화이자(PFIZER)": {
+"tickers": [
+"PFE",
+"MRK",
+"BMY"
+],
+"why": "화이자 · 대형 제약",
+"weak": false
+},
+"화장품": {
+"tickers": [
+"EL",
+"ELF",
+"COTY"
+],
+"why": "화장품",
+"weak": false
+},
+"화폐/금융자동화기기(디지털화폐 등)": {
+"tickers": [
+"VYX",
+"DBD",
+"GPN"
+],
+"why": "ATM · 결제기",
+"weak": false
+},
+"화학섬유": {
+"tickers": [
+"CE",
+"DD",
+"HUN"
+],
+"why": "화학 소재",
+"weak": true
+},
+"환율하락 수혜": {
+"tickers": [
+"DAL",
+"UAL",
+"COST"
+],
+"why": "항공 · 수입 소비",
+"weak": true
+},
+"황사/미세먼지": {
+"tickers": [
+"DCI",
+"MMM",
+"CARR"
+],
+"why": "공기 필터 · 마스크",
+"weak": true
+}
+},
+"sp500": [
+[
+"MMM",
+"Industrial Conglomerates"
+],
+[
+"AOS",
+"Building Products"
+],
+[
+"ABT",
+"Health Care Equipment"
+],
+[
+"ABBV",
+"Biotechnology"
+],
+[
+"ACN",
+"IT Consulting & Other Services"
+],
+[
+"ADBE",
+"Application Software"
+],
+[
+"AMD",
+"Semiconductors"
+],
+[
+"AES",
+"Independent Power Producers & Energy Traders"
+],
+[
+"AFL",
+"Life & Health Insurance"
+],
+[
+"A",
+"Life Sciences Tools & Services"
+],
+[
+"APD",
+"Industrial Gases"
+],
+[
+"ABNB",
+"Hotels, Resorts & Cruise Lines"
+],
+[
+"AKAM",
+"Internet Services & Infrastructure"
+],
+[
+"ALB",
+"Specialty Chemicals"
+],
+[
+"ARE",
+"Office REITs"
+],
+[
+"ALGN",
+"Health Care Supplies"
+],
+[
+"ALLE",
+"Building Products"
+],
+[
+"LNT",
+"Electric Utilities"
+],
+[
+"ALL",
+"Property & Casualty Insurance"
+],
+[
+"GOOGL",
+"Interactive Media & Services"
+],
+[
+"GOOG",
+"Interactive Media & Services"
+],
+[
+"MO",
+"Tobacco"
+],
+[
+"AMZN",
+"Broadline Retail"
+],
+[
+"AMCR",
+"Paper & Plastic Packaging Products & Materials"
+],
+[
+"AEE",
+"Multi-Utilities"
+],
+[
+"AEP",
+"Electric Utilities"
+],
+[
+"AXP",
+"Consumer Finance"
+],
+[
+"AIG",
+"Multi-line Insurance"
+],
+[
+"AMT",
+"Telecom Tower REITs"
+],
+[
+"AWK",
+"Water Utilities"
+],
+[
+"AMP",
+"Asset Management & Custody Banks"
+],
+[
+"AME",
+"Electrical Components & Equipment"
+],
+[
+"AMGN",
+"Biotechnology"
+],
+[
+"APH",
+"Electronic Components"
+],
+[
+"ADI",
+"Semiconductors"
+],
+[
+"AON",
+"Insurance Brokers"
+],
+[
+"APA",
+"Oil & Gas Exploration & Production"
+],
+[
+"APO",
+"Asset Management & Custody Banks"
+],
+[
+"AAPL",
+"Technology Hardware, Storage & Peripherals"
+],
+[
+"AMAT",
+"Semiconductor Materials & Equipment"
+],
+[
+"APP",
+"Advertising"
+],
+[
+"APTV",
+"Automotive Parts & Equipment"
+],
+[
+"ACGL",
+"Property & Casualty Insurance"
+],
+[
+"ADM",
+"Agricultural Products & Services"
+],
+[
+"ARES",
+"Asset Management & Custody Banks"
+],
+[
+"ANET",
+"Communications Equipment"
+],
+[
+"AJG",
+"Insurance Brokers"
+],
+[
+"AIZ",
+"Multi-line Insurance"
+],
+[
+"T",
+"Integrated Telecommunication Services"
+],
+[
+"ATO",
+"Gas Utilities"
+],
+[
+"ADSK",
+"Application Software"
+],
+[
+"ADP",
+"Human Resource & Employment Services"
+],
+[
+"AZO",
+"Automotive Retail"
+],
+[
+"AVY",
+"Paper & Plastic Packaging Products & Materials"
+],
+[
+"AXON",
+"Aerospace & Defense"
+],
+[
+"BKR",
+"Oil & Gas Equipment & Services"
+],
+[
+"BALL",
+"Metal, Glass & Plastic Containers"
+],
+[
+"BAC",
+"Diversified Banks"
+],
+[
+"BAX",
+"Health Care Equipment"
+],
+[
+"BDX",
+"Health Care Equipment"
+],
+[
+"BRK.B",
+"Multi-Sector Holdings"
+],
+[
+"BBY",
+"Computer & Electronics Retail"
+],
+[
+"TECH",
+"Life Sciences Tools & Services"
+],
+[
+"BIIB",
+"Biotechnology"
+],
+[
+"BLK",
+"Asset Management & Custody Banks"
+],
+[
+"BX",
+"Asset Management & Custody Banks"
+],
+[
+"XYZ",
+"Transaction & Payment Processing Services"
+],
+[
+"BE",
+"Electrical Components & Equipment"
+],
+[
+"BNY",
+"Asset Management & Custody Banks"
+],
+[
+"BA",
+"Aerospace & Defense"
+],
+[
+"BKNG",
+"Hotels, Resorts & Cruise Lines"
+],
+[
+"BSX",
+"Health Care Equipment"
+],
+[
+"BMY",
+"Pharmaceuticals"
+],
+[
+"AVGO",
+"Semiconductors"
+],
+[
+"BR",
+"Data Processing & Outsourced Services"
+],
+[
+"BRO",
+"Insurance Brokers"
+],
+[
+"BF.B",
+"Distillers & Vintners"
+],
+[
+"BG",
+"Agricultural Products & Services"
+],
+[
+"BXP",
+"Office REITs"
+],
+[
+"CHRW",
+"Air Freight & Logistics"
+],
+[
+"CDNS",
+"Application Software"
+],
+[
+"CPT",
+"Multi-Family Residential REITs"
+],
+[
+"COF",
+"Consumer Finance"
+],
+[
+"CAH",
+"Health Care Distributors"
+],
+[
+"CCL",
+"Hotels, Resorts & Cruise Lines"
+],
+[
+"CARR",
+"Building Products"
+],
+[
+"CVNA",
+"Automotive Retail"
+],
+[
+"CASY",
+"Food Retail"
+],
+[
+"CAT",
+"Construction Machinery & Heavy Transportation Equipment"
+],
+[
+"CBOE",
+"Financial Exchanges & Data"
+],
+[
+"CBRE",
+"Real Estate Services"
+],
+[
+"CDW",
+"Technology Distributors"
+],
+[
+"COR",
+"Health Care Distributors"
+],
+[
+"CNC",
+"Managed Health Care"
+],
+[
+"CNP",
+"Multi-Utilities"
+],
+[
+"CF",
+"Fertilizers & Agricultural Chemicals"
+],
+[
+"CRL",
+"Life Sciences Tools & Services"
+],
+[
+"SCHW",
+"Investment Banking & Brokerage"
+],
+[
+"CHTR",
+"Cable & Satellite"
+],
+[
+"CVX",
+"Integrated Oil & Gas"
+],
+[
+"CMG",
+"Restaurants"
+],
+[
+"CB",
+"Property & Casualty Insurance"
+],
+[
+"CHD",
+"Household Products"
+],
+[
+"CIEN",
+"Communications Equipment"
+],
+[
+"CI",
+"Health Care Services"
+],
+[
+"CINF",
+"Property & Casualty Insurance"
+],
+[
+"CTAS",
+"Diversified Support Services"
+],
+[
+"CSCO",
+"Communications Equipment"
+],
+[
+"C",
+"Diversified Banks"
+],
+[
+"CFG",
+"Regional Banks"
+],
+[
+"CLX",
+"Household Products"
+],
+[
+"CME",
+"Financial Exchanges & Data"
+],
+[
+"CMS",
+"Multi-Utilities"
+],
+[
+"KO",
+"Soft Drinks & Non-alcoholic Beverages"
+],
+[
+"CTSH",
+"IT Consulting & Other Services"
+],
+[
+"COHR",
+"Electronic Components"
+],
+[
+"COIN",
+"Financial Exchanges & Data"
+],
+[
+"CL",
+"Household Products"
+],
+[
+"CMCSA",
+"Cable & Satellite"
+],
+[
+"FIX",
+"Construction & Engineering"
+],
+[
+"COP",
+"Oil & Gas Exploration & Production"
+],
+[
+"ED",
+"Multi-Utilities"
+],
+[
+"STZ",
+"Distillers & Vintners"
+],
+[
+"CEG",
+"Electric Utilities"
+],
+[
+"COO",
+"Health Care Supplies"
+],
+[
+"CPRT",
+"Diversified Support Services"
+],
+[
+"GLW",
+"Electronic Components"
+],
+[
+"CPAY",
+"Transaction & Payment Processing Services"
+],
+[
+"CSGP",
+"Real Estate Services"
+],
+[
+"COST",
+"Consumer Staples Merchandise Retail"
+],
+[
+"CRH",
+"Construction Materials"
+],
+[
+"CRWD",
+"Systems Software"
+],
+[
+"CCI",
+"Telecom Tower REITs"
+],
+[
+"CSX",
+"Rail Transportation"
+],
+[
+"CMI",
+"Construction Machinery & Heavy Transportation Equipment"
+],
+[
+"CVS",
+"Health Care Services"
+],
+[
+"DHR",
+"Life Sciences Tools & Services"
+],
+[
+"DRI",
+"Restaurants"
+],
+[
+"DDOG",
+"Application Software"
+],
+[
+"DVA",
+"Health Care Services"
+],
+[
+"DECK",
+"Footwear"
+],
+[
+"DE",
+"Agricultural & Farm Machinery"
+],
+[
+"DELL",
+"Technology Hardware, Storage & Peripherals"
+],
+[
+"DAL",
+"Passenger Airlines"
+],
+[
+"DVN",
+"Oil & Gas Exploration & Production"
+],
+[
+"DXCM",
+"Health Care Equipment"
+],
+[
+"FANG",
+"Oil & Gas Exploration & Production"
+],
+[
+"DLR",
+"Data Center REITs"
+],
+[
+"DG",
+"Consumer Staples Merchandise Retail"
+],
+[
+"DLTR",
+"Consumer Staples Merchandise Retail"
+],
+[
+"D",
+"Multi-Utilities"
+],
+[
+"DPZ",
+"Restaurants"
+],
+[
+"DASH",
+"Specialized Consumer Services"
+],
+[
+"DOV",
+"Industrial Machinery & Supplies & Components"
+],
+[
+"DOW",
+"Commodity Chemicals"
+],
+[
+"DHI",
+"Homebuilding"
+],
+[
+"DTE",
+"Multi-Utilities"
+],
+[
+"DUK",
+"Electric Utilities"
+],
+[
+"DD",
+"Industrial Conglomerates"
+],
+[
+"ETN",
+"Electrical Components & Equipment"
+],
+[
+"EBAY",
+"Broadline Retail"
+],
+[
+"ECHO",
+"Wireless Telecommunication Services"
+],
+[
+"ECL",
+"Specialty Chemicals"
+],
+[
+"EIX",
+"Electric Utilities"
+],
+[
+"EW",
+"Health Care Equipment"
+],
+[
+"ELV",
+"Managed Health Care"
+],
+[
+"EME",
+"Construction & Engineering"
+],
+[
+"EMR",
+"Electrical Components & Equipment"
+],
+[
+"ETR",
+"Electric Utilities"
+],
+[
+"EOG",
+"Oil & Gas Exploration & Production"
+],
+[
+"EQT",
+"Oil & Gas Exploration & Production"
+],
+[
+"EFX",
+"Research & Consulting Services"
+],
+[
+"EQIX",
+"Data Center REITs"
+],
+[
+"ERIE",
+"Insurance Brokers"
+],
+[
+"ESS",
+"Multi-Family Residential REITs"
+],
+[
+"EL",
+"Personal Care Products"
+],
+[
+"EG",
+"Reinsurance"
+],
+[
+"EVRG",
+"Electric Utilities"
+],
+[
+"P",
+"Technology Hardware, Storage & Peripherals"
+],
+[
+"ES",
+"Electric Utilities"
+],
+[
+"EXC",
+"Electric Utilities"
+],
+[
+"EXE",
+"Oil & Gas Exploration & Production"
+],
+[
+"EXPE",
+"Hotels, Resorts & Cruise Lines"
+],
+[
+"EXPD",
+"Air Freight & Logistics"
+],
+[
+"EXR",
+"Self-Storage REITs"
+],
+[
+"XOM",
+"Integrated Oil & Gas"
+],
+[
+"FFIV",
+"Communications Equipment"
+],
+[
+"FDS",
+"Financial Exchanges & Data"
+],
+[
+"FICO",
+"Application Software"
+],
+[
+"FAST",
+"Trading Companies & Distributors"
+],
+[
+"FRT",
+"Retail REITs"
+],
+[
+"FDX",
+"Air Freight & Logistics"
+],
+[
+"FDXF",
+"Cargo Ground Transportation"
+],
+[
+"FERG",
+"Trading Companies & Distributors"
+],
+[
+"FIS",
+"Transaction & Payment Processing Services"
+],
+[
+"FITB",
+"Regional Banks"
+],
+[
+"FSLR",
+"Semiconductors"
+],
+[
+"FE",
+"Electric Utilities"
+],
+[
+"FISV",
+"Transaction & Payment Processing Services"
+],
+[
+"FLEX",
+"Electronic Manufacturing Services"
+],
+[
+"F",
+"Automobile Manufacturers"
+],
+[
+"FTNT",
+"Systems Software"
+],
+[
+"FTV",
+"Industrial Machinery & Supplies & Components"
+],
+[
+"FOXA",
+"Broadcasting"
+],
+[
+"FOX",
+"Broadcasting"
+],
+[
+"BEN",
+"Asset Management & Custody Banks"
+],
+[
+"FCX",
+"Copper"
+],
+[
+"GRMN",
+"Consumer Electronics"
+],
+[
+"IT",
+"IT Consulting & Other Services"
+],
+[
+"GE",
+"Aerospace & Defense"
+],
+[
+"GEHC",
+"Health Care Equipment"
+],
+[
+"GEV",
+"Heavy Electrical Equipment"
+],
+[
+"GEN",
+"Systems Software"
+],
+[
+"GNRC",
+"Heavy Electrical Equipment"
+],
+[
+"GD",
+"Aerospace & Defense"
+],
+[
+"GIS",
+"Packaged Foods & Meats"
+],
+[
+"GM",
+"Automobile Manufacturers"
+],
+[
+"GPC",
+"Distributors"
+],
+[
+"GILD",
+"Biotechnology"
+],
+[
+"GPN",
+"Transaction & Payment Processing Services"
+],
+[
+"GL",
+"Life & Health Insurance"
+],
+[
+"GDDY",
+"Internet Services & Infrastructure"
+],
+[
+"GS",
+"Investment Banking & Brokerage"
+],
+[
+"HAL",
+"Oil & Gas Equipment & Services"
+],
+[
+"HIG",
+"Property & Casualty Insurance"
+],
+[
+"HAS",
+"Leisure Products"
+],
+[
+"HCA",
+"Health Care Facilities"
+],
+[
+"DOC",
+"Health Care REITs"
+],
+[
+"HSIC",
+"Health Care Distributors"
+],
+[
+"HSY",
+"Packaged Foods & Meats"
+],
+[
+"HPE",
+"Technology Hardware, Storage & Peripherals"
+],
+[
+"HLT",
+"Hotels, Resorts & Cruise Lines"
+],
+[
+"HD",
+"Home Improvement Retail"
+],
+[
+"HONA",
+"Aerospace & Defense"
+],
+[
+"HON",
+"Industrial Conglomerates"
+],
+[
+"HRL",
+"Packaged Foods & Meats"
+],
+[
+"HST",
+"Hotel & Resort REITs"
+],
+[
+"HWM",
+"Aerospace & Defense"
+],
+[
+"HPQ",
+"Technology Hardware, Storage & Peripherals"
+],
+[
+"HUBB",
+"Industrial Machinery & Supplies & Components"
+],
+[
+"HUM",
+"Managed Health Care"
+],
+[
+"HBAN",
+"Regional Banks"
+],
+[
+"HII",
+"Aerospace & Defense"
+],
+[
+"IBM",
+"IT Consulting & Other Services"
+],
+[
+"IEX",
+"Industrial Machinery & Supplies & Components"
+],
+[
+"IDXX",
+"Health Care Equipment"
+],
+[
+"ITW",
+"Industrial Machinery & Supplies & Components"
+],
+[
+"ILMN",
+"Life Sciences Tools & Services"
+],
+[
+"INCY",
+"Biotechnology"
+],
+[
+"IR",
+"Industrial Machinery & Supplies & Components"
+],
+[
+"PODD",
+"Health Care Equipment"
+],
+[
+"INTC",
+"Semiconductors"
+],
+[
+"IBKR",
+"Investment Banking & Brokerage"
+],
+[
+"ICE",
+"Financial Exchanges & Data"
+],
+[
+"IFF",
+"Specialty Chemicals"
+],
+[
+"IP",
+"Paper & Plastic Packaging Products & Materials"
+],
+[
+"INTU",
+"Application Software"
+],
+[
+"ISRG",
+"Health Care Equipment"
+],
+[
+"IVZ",
+"Asset Management & Custody Banks"
+],
+[
+"INVH",
+"Single-Family Residential REITs"
+],
+[
+"IQV",
+"Life Sciences Tools & Services"
+],
+[
+"IRM",
+"Other Specialized REITs"
+],
+[
+"JBHT",
+"Cargo Ground Transportation"
+],
+[
+"JBL",
+"Electronic Manufacturing Services"
+],
+[
+"JKHY",
+"Transaction & Payment Processing Services"
+],
+[
+"J",
+"Construction & Engineering"
+],
+[
+"JNJ",
+"Pharmaceuticals"
+],
+[
+"JCI",
+"Building Products"
+],
+[
+"JPM",
+"Diversified Banks"
+],
+[
+"KDP",
+"Soft Drinks & Non-alcoholic Beverages"
+],
+[
+"KEY",
+"Regional Banks"
+],
+[
+"KEYS",
+"Electronic Equipment & Instruments"
+],
+[
+"KMB",
+"Household Products"
+],
+[
+"KIM",
+"Retail REITs"
+],
+[
+"KMI",
+"Oil & Gas Storage & Transportation"
+],
+[
+"KKR",
+"Asset Management & Custody Banks"
+],
+[
+"KLAC",
+"Semiconductor Materials & Equipment"
+],
+[
+"KHC",
+"Packaged Foods & Meats"
+],
+[
+"KR",
+"Food Retail"
+],
+[
+"LHX",
+"Aerospace & Defense"
+],
+[
+"LH",
+"Health Care Services"
+],
+[
+"LRCX",
+"Semiconductor Materials & Equipment"
+],
+[
+"LVS",
+"Casinos & Gaming"
+],
+[
+"LDOS",
+"Diversified Support Services"
+],
+[
+"LEN",
+"Homebuilding"
+],
+[
+"LII",
+"Building Products"
+],
+[
+"LLY",
+"Pharmaceuticals"
+],
+[
+"LIN",
+"Industrial Gases"
+],
+[
+"LYV",
+"Movies & Entertainment"
+],
+[
+"LMT",
+"Aerospace & Defense"
+],
+[
+"L",
+"Multi-line Insurance"
+],
+[
+"LOW",
+"Home Improvement Retail"
+],
+[
+"LULU",
+"Apparel, Accessories & Luxury Goods"
+],
+[
+"LITE",
+"Communications Equipment"
+],
+[
+"LYB",
+"Specialty Chemicals"
+],
+[
+"MTB",
+"Regional Banks"
+],
+[
+"MPC",
+"Oil & Gas Refining & Marketing"
+],
+[
+"MAR",
+"Hotels, Resorts & Cruise Lines"
+],
+[
+"MRSH",
+"Insurance Brokers"
+],
+[
+"MLM",
+"Construction Materials"
+],
+[
+"MRVL",
+"Semiconductors"
+],
+[
+"MAS",
+"Building Products"
+],
+[
+"MA",
+"Transaction & Payment Processing Services"
+],
+[
+"MKC",
+"Packaged Foods & Meats"
+],
+[
+"MCD",
+"Restaurants"
+],
+[
+"MCK",
+"Health Care Distributors"
+],
+[
+"MDT",
+"Health Care Equipment"
+],
+[
+"MRK",
+"Pharmaceuticals"
+],
+[
+"META",
+"Interactive Media & Services"
+],
+[
+"MET",
+"Life & Health Insurance"
+],
+[
+"MTD",
+"Life Sciences Tools & Services"
+],
+[
+"MGM",
+"Casinos & Gaming"
+],
+[
+"MCHP",
+"Semiconductors"
+],
+[
+"MU",
+"Semiconductors"
+],
+[
+"MSFT",
+"Systems Software"
+],
+[
+"MAA",
+"Multi-Family Residential REITs"
+],
+[
+"MRNA",
+"Biotechnology"
+],
+[
+"MDLZ",
+"Packaged Foods & Meats"
+],
+[
+"MPWR",
+"Semiconductors"
+],
+[
+"MNST",
+"Soft Drinks & Non-alcoholic Beverages"
+],
+[
+"MCO",
+"Financial Exchanges & Data"
+],
+[
+"MS",
+"Investment Banking & Brokerage"
+],
+[
+"MOS",
+"Fertilizers & Agricultural Chemicals"
+],
+[
+"MSI",
+"Communications Equipment"
+],
+[
+"MSCI",
+"Financial Exchanges & Data"
+],
+[
+"NDAQ",
+"Financial Exchanges & Data"
+],
+[
+"NTAP",
+"Technology Hardware, Storage & Peripherals"
+],
+[
+"NFLX",
+"Movies & Entertainment"
+],
+[
+"NEM",
+"Gold"
+],
+[
+"NWSA",
+"Publishing"
+],
+[
+"NWS",
+"Publishing"
+],
+[
+"NEE",
+"Multi-Utilities"
+],
+[
+"NKE",
+"Apparel, Accessories & Luxury Goods"
+],
+[
+"NI",
+"Multi-Utilities"
+],
+[
+"NDSN",
+"Industrial Machinery & Supplies & Components"
+],
+[
+"NSC",
+"Rail Transportation"
+],
+[
+"NTRS",
+"Asset Management & Custody Banks"
+],
+[
+"NOC",
+"Aerospace & Defense"
+],
+[
+"NCLH",
+"Hotels, Resorts & Cruise Lines"
+],
+[
+"NRG",
+"Independent Power Producers & Energy Traders"
+],
+[
+"NUE",
+"Steel"
+],
+[
+"NVDA",
+"Semiconductors"
+],
+[
+"NVR",
+"Homebuilding"
+],
+[
+"NXPI",
+"Semiconductors"
+],
+[
+"ORLY",
+"Automotive Retail"
+],
+[
+"OXY",
+"Oil & Gas Exploration & Production"
+],
+[
+"OKTA",
+"Application Software"
+],
+[
+"ODFL",
+"Cargo Ground Transportation"
+],
+[
+"OMC",
+"Advertising"
+],
+[
+"ON",
+"Semiconductors"
+],
+[
+"OKE",
+"Oil & Gas Storage & Transportation"
+],
+[
+"ORCL",
+"Application Software"
+],
+[
+"OTIS",
+"Industrial Machinery & Supplies & Components"
+],
+[
+"PCAR",
+"Construction Machinery & Heavy Transportation Equipment"
+],
+[
+"PKG",
+"Paper & Plastic Packaging Products & Materials"
+],
+[
+"PLTR",
+"Application Software"
+],
+[
+"PANW",
+"Systems Software"
+],
+[
+"PH",
+"Industrial Machinery & Supplies & Components"
+],
+[
+"PAYX",
+"Human Resource & Employment Services"
+],
+[
+"PYPL",
+"Transaction & Payment Processing Services"
+],
+[
+"PNR",
+"Industrial Machinery & Supplies & Components"
+],
+[
+"PEP",
+"Soft Drinks & Non-alcoholic Beverages"
+],
+[
+"PFE",
+"Pharmaceuticals"
+],
+[
+"PCG",
+"Multi-Utilities"
+],
+[
+"PM",
+"Tobacco"
+],
+[
+"PSX",
+"Oil & Gas Refining & Marketing"
+],
+[
+"PNW",
+"Multi-Utilities"
+],
+[
+"PNC",
+"Diversified Banks"
+],
+[
+"PPG",
+"Specialty Chemicals"
+],
+[
+"PPL",
+"Electric Utilities"
+],
+[
+"PFG",
+"Life & Health Insurance"
+],
+[
+"PG",
+"Personal Care Products"
+],
+[
+"PGR",
+"Property & Casualty Insurance"
+],
+[
+"PLD",
+"Industrial REITs"
+],
+[
+"PRU",
+"Life & Health Insurance"
+],
+[
+"PTC",
+"Application Software"
+],
+[
+"PEG",
+"Electric Utilities"
+],
+[
+"PSA",
+"Self-Storage REITs"
+],
+[
+"PHM",
+"Homebuilding"
+],
+[
+"Q",
+"Semiconductor Materials & Equipment"
+],
+[
+"QCOM",
+"Semiconductors"
+],
+[
+"PWR",
+"Construction & Engineering"
+],
+[
+"DGX",
+"Health Care Services"
+],
+[
+"RL",
+"Apparel, Accessories & Luxury Goods"
+],
+[
+"RJF",
+"Investment Banking & Brokerage"
+],
+[
+"RDDT",
+"Interactive Media & Services"
+],
+[
+"O",
+"Retail REITs"
+],
+[
+"REG",
+"Retail REITs"
+],
+[
+"REGN",
+"Biotechnology"
+],
+[
+"RF",
+"Regional Banks"
+],
+[
+"RSG",
+"Environmental & Facilities Services"
+],
+[
+"RMD",
+"Health Care Equipment"
+],
+[
+"RVTY",
+"Health Care Equipment"
+],
+[
+"HOOD",
+"Investment Banking & Brokerage"
+],
+[
+"ROK",
+"Electrical Components & Equipment"
+],
+[
+"ROL",
+"Environmental & Facilities Services"
+],
+[
+"ROP",
+"Electronic Equipment & Instruments"
+],
+[
+"ROST",
+"Apparel Retail"
+],
+[
+"RCL",
+"Hotels, Resorts & Cruise Lines"
+],
+[
+"RTX",
+"Aerospace & Defense"
+],
+[
+"SPGI",
+"Financial Exchanges & Data"
+],
+[
+"CRM",
+"Application Software"
+],
+[
+"SNDK",
+"Technology Hardware, Storage & Peripherals"
+],
+[
+"SBAC",
+"Telecom Tower REITs"
+],
+[
+"SLB",
+"Oil & Gas Equipment & Services"
+],
+[
+"STX",
+"Technology Hardware, Storage & Peripherals"
+],
+[
+"SRE",
+"Multi-Utilities"
+],
+[
+"NOW",
+"Systems Software"
+],
+[
+"SHW",
+"Specialty Chemicals"
+],
+[
+"SPG",
+"Retail REITs"
+],
+[
+"SKYD",
+"Movies & Entertainment"
+],
+[
+"SWKS",
+"Semiconductors"
+],
+[
+"SJM",
+"Packaged Foods & Meats"
+],
+[
+"SW",
+"Paper & Plastic Packaging Products & Materials"
+],
+[
+"SNA",
+"Industrial Machinery & Supplies & Components"
+],
+[
+"SOLV",
+"Health Care Technology"
+],
+[
+"SO",
+"Electric Utilities"
+],
+[
+"LUV",
+"Passenger Airlines"
+],
+[
+"SWK",
+"Industrial Machinery & Supplies & Components"
+],
+[
+"SBUX",
+"Restaurants"
+],
+[
+"STT",
+"Asset Management & Custody Banks"
+],
+[
+"STLD",
+"Steel"
+],
+[
+"STE",
+"Health Care Equipment"
+],
+[
+"SYK",
+"Health Care Equipment"
+],
+[
+"SMCI",
+"Technology Hardware, Storage & Peripherals"
+],
+[
+"SYF",
+"Consumer Finance"
+],
+[
+"SNPS",
+"Application Software"
+],
+[
+"SYY",
+"Food Distributors"
+],
+[
+"TMUS",
+"Wireless Telecommunication Services"
+],
+[
+"TROW",
+"Asset Management & Custody Banks"
+],
+[
+"TTWO",
+"Interactive Home Entertainment"
+],
+[
+"TPR",
+"Apparel, Accessories & Luxury Goods"
+],
+[
+"TRGP",
+"Oil & Gas Storage & Transportation"
+],
+[
+"TGT",
+"Consumer Staples Merchandise Retail"
+],
+[
+"TEL",
+"Electronic Manufacturing Services"
+],
+[
+"TDY",
+"Electronic Equipment & Instruments"
+],
+[
+"TER",
+"Semiconductor Materials & Equipment"
+],
+[
+"TSLA",
+"Automobile Manufacturers"
+],
+[
+"TXN",
+"Semiconductors"
+],
+[
+"TPL",
+"Oil & Gas Exploration & Production"
+],
+[
+"TXT",
+"Aerospace & Defense"
+],
+[
+"TMO",
+"Life Sciences Tools & Services"
+],
+[
+"TJX",
+"Apparel Retail"
+],
+[
+"TKO",
+"Movies & Entertainment"
+],
+[
+"TSCO",
+"Other Specialty Retail"
+],
+[
+"TT",
+"Building Products"
+],
+[
+"TDG",
+"Aerospace & Defense"
+],
+[
+"TRV",
+"Property & Casualty Insurance"
+],
+[
+"TRMB",
+"Application Software"
+],
+[
+"TFC",
+"Diversified Banks"
+],
+[
+"TWLO",
+"Systems Software"
+],
+[
+"TYL",
+"Application Software"
+],
+[
+"TSN",
+"Packaged Foods & Meats"
+],
+[
+"USB",
+"Diversified Banks"
+],
+[
+"UBER",
+"Passenger Ground Transportation"
+],
+[
+"UDR",
+"Multi-Family Residential REITs"
+],
+[
+"ULTA",
+"Other Specialty Retail"
+],
+[
+"UNP",
+"Rail Transportation"
+],
+[
+"UAL",
+"Passenger Airlines"
+],
+[
+"UPS",
+"Air Freight & Logistics"
+],
+[
+"URI",
+"Trading Companies & Distributors"
+],
+[
+"UNH",
+"Managed Health Care"
+],
+[
+"UHS",
+"Health Care Facilities"
+],
+[
+"VLO",
+"Oil & Gas Refining & Marketing"
+],
+[
+"VEEV",
+"Health Care Technology"
+],
+[
+"VTR",
+"Health Care REITs"
+],
+[
+"VLTO",
+"Environmental & Facilities Services"
+],
+[
+"VRSN",
+"Internet Services & Infrastructure"
+],
+[
+"VRSK",
+"Research & Consulting Services"
+],
+[
+"VZ",
+"Integrated Telecommunication Services"
+],
+[
+"VRTX",
+"Biotechnology"
+],
+[
+"VRT",
+"Electrical Components & Equipment"
+],
+[
+"VTRS",
+"Pharmaceuticals"
+],
+[
+"VICI",
+"Hotel & Resort REITs"
+],
+[
+"V",
+"Transaction & Payment Processing Services"
+],
+[
+"VST",
+"Electric Utilities"
+],
+[
+"VMRK",
+"Multi-Family Residential REITs"
+],
+[
+"VMC",
+"Construction Materials"
+],
+[
+"VYLR",
+"Agricultural Products & Services"
+],
+[
+"WRB",
+"Property & Casualty Insurance"
+],
+[
+"GWW",
+"Industrial Machinery & Supplies & Components"
+],
+[
+"WAB",
+"Construction Machinery & Heavy Transportation Equipment"
+],
+[
+"WMT",
+"Consumer Staples Merchandise Retail"
+],
+[
+"DIS",
+"Movies & Entertainment"
+],
+[
+"WM",
+"Environmental & Facilities Services"
+],
+[
+"WAT",
+"Life Sciences Tools & Services"
+],
+[
+"WEC",
+"Electric Utilities"
+],
+[
+"WFC",
+"Diversified Banks"
+],
+[
+"WELL",
+"Health Care REITs"
+],
+[
+"WST",
+"Health Care Supplies"
+],
+[
+"WDC",
+"Technology Hardware, Storage & Peripherals"
+],
+[
+"WY",
+"Timber REITs"
+],
+[
+"WSM",
+"Homefurnishing Retail"
+],
+[
+"WMB",
+"Oil & Gas Storage & Transportation"
+],
+[
+"WTW",
+"Insurance Brokers"
+],
+[
+"WDAY",
+"Application Software"
+],
+[
+"WYNN",
+"Casinos & Gaming"
+],
+[
+"XEL",
+"Multi-Utilities"
+],
+[
+"XYL",
+"Industrial Machinery & Supplies & Components"
+],
+[
+"YUM",
+"Restaurants"
+],
+[
+"ZBRA",
+"Electronic Equipment & Instruments"
+],
+[
+"ZBH",
+"Health Care Equipment"
+],
+[
+"ZTS",
+"Pharmaceuticals"
+]
+]
+}

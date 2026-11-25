@@ -144,7 +144,7 @@ def fetch_one(key, code, corp_code):
 
 def _mark_stale(now=None):
     """받은 뒤 주식 수가 바뀌는 공시가 들어왔거나 KIS 상장주식수가 달라진 회사를 stale 로 → 그 수."""
-    have = {r["stock_code"]: r for r in _rows("SELECT stock_code, issued, fetched_at, status FROM float_shares")}
+    have = {r["stock_code"]: r for r in _rows("SELECT stock_code, issued, listed, fetched_at, status FROM float_shares")}
     if not have:
         return 0
     marks = {}
@@ -155,7 +155,8 @@ def _mark_stale(now=None):
             marks[r["stock_code"]] = "공시 " + (r["report_nm"] or "")[:40]
     for c, ls in list(_listed.items()):
         h = have.get(c)
-        if h and h["status"] == "ok" and h["issued"] and ls and abs(ls / h["issued"] - 1) * 100 > LISTED_GAP_PCT:
+        if h and h["status"] == "ok" and h["issued"] and ls and abs(ls / h["issued"] - 1) * 100 > LISTED_GAP_PCT \
+                and h["listed"] != ls:                  # 받은 때 본 상장주식수와 같으면 다시 안 받음 — 같은 보고서라 차이가 안 풀려 밤새 되풀이(qa 11-25 · 000660 135번 · 밤 몫을 다 씀) · 상장주식수가 또 바뀌었을 때만
             marks.setdefault(c, "상장주식수 %d ↔ 발행 %d" % (ls, h["issued"]))
     if marks:
         with dart.db_conn() as conn:
