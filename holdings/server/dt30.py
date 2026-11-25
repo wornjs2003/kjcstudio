@@ -269,6 +269,16 @@ def chips_now(proxy, cfg, early=True, pre=False):
     except Exception:
         pass
     if not pre:
+        try:                               # 「돈몰림」 — 돈이 몰리는 업종 · 테마 묶음의 종목(셈은 money_chip · 값 칸은 chip_rules 「돈몰림」 · 11-25 재권님 「처음부터 셈이되도록 켜줘」)
+            import money_chip
+            mh, why = money_chip.hits(proxy, [c for c in cap if not small(c)])
+            for c, subs in mh.items():
+                for sb in subs:
+                    put(c, None, money_chip.CHIP, sb)
+            if why:
+                missing.append(money_chip.CHIP)
+        except Exception:
+            missing.append("돈몰림")
         try:                               # 「현재상승」 — 감시 목록(3천억 이상) 전부의 시가 대비 % · 다른 칩 없어도 혼자 붙음(11-25 · 위와 같은 말씀)
             import turnover                # 시세는 turnover 장중 바퀴(TURN_INTERVAL)가 받아 둔 묶음 캐시를 그 나이 안에서 그대로 씀 — 새 호출은 캐시에 없는 종목만
             codes = [c for c in cap if c.isdigit() and len(c) == 6 and not small(c)]
