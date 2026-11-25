@@ -316,7 +316,9 @@ function buyOf(r) {   // → { px, at(HHMM), src } | null
   if ((n === 1 || k === 'open') && curD() && curD().flat930) { const T = nthChipAt(r); if (T == null) return null;
     if (T > chipUntil().replace(':', '') && !st.set.buyLate930) return null;   // 09:30 뒤에 칩이 찬 종목 — 셈 칸 「삼 / 안 삼」(set.buyLate930 · 기본 안 삼 = 서버 buy930 · 승률 표와 같음) · 재권님 「살지말지 내가 정할수 있어야해」(11-23 19:4x)
     // 9시 1분 · 1~5분 값이 없는 날(1분봉은 11-12 부터 쌓임)은 안 사지 않고 아래 「든 때 → 다음 30분 칸」 으로 — 서버 buy930 과 같은 차례(11-23 재권님 「누락된 이유가 뭐지? 코드가 뭔가 일괄적이지 않은거 같은데」 → 「응」)
-    const p1 = minHM(1); if (T <= p1) { const o = minVal(r, 1); if (o && Number(o.px) > 0) return { px: Number(o.px), at: p1, src: `${hmS(p1)} 값 · 칩 ${chipNeed(r)}개 찬 때 ${hmS(T)}` }; }
+    // 9시 1분 이하에 찬 줄 — 들어온 때(open) 모드는 r.buy(든 순간 현재가 · 장 전부터 있던 줄은 여는 시각+1분 직후 현재가) · 칩 찬 때(p1) 모드는 9시 1분 값 — 서버 buy930 과 같은 셈(개발2 buy_point · 11-25 qa 제일기획 19,210 ↔ 19,200)
+    const p1 = minHM(1); if (T <= p1 && k === 'open' && Number(r.buy) > 0) { const e1 = inTs(r); return { px: Number(r.buy), at: (e1 || `${p1}00`).slice(0, 4), src: `${r.buySrc || '들어온 때 값'} · 칩 ${chipNeed(r)}개 찬 때 ${hmS(T)}` }; }
+    if (T <= p1) { const o = minVal(r, 1); if (o && Number(o.px) > 0) return { px: Number(o.px), at: p1, src: `${hmS(p1)} 값 · 칩 ${chipNeed(r)}개 찬 때 ${hmS(T)}` }; }
     const CPM = (curD().meta || {}).chipPx;   // 서버 칩 찬 분 1분봉 값 — {ok} 인 판만 쓴다 · {ok:false} 면 아래 옛 셈(어림)
     if ((CPM && CPM.ok !== false) || r.chipPx) { const v = Number((r.chipPx || {})[hmS(T)]); if (v > 0) return { px: v, at: T, src: `${hmS(T)} 1분봉 · 칩 ${chipNeed(r)}개 찬 때` }; NOPX.set(r, hmS(T)); return null; }   // 9시 1분 뒤는 서버 buy930 과 같은 값(개발2 df182ad · 분 1분봉 종가)
     for (const k of PMIN) { const h = minHM(k); if (T <= h) { const o = minVal(r, k); if (o && Number(o.px) > 0) return { px: Number(o.px), at: h, src: `${hmS(h)} 값 · 칩 ${chipNeed(r)}개 찬 때` }; break; } }
