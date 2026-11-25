@@ -1,5 +1,5 @@
 // 미국 → 다음 날 국내 섹터 · 테마 (11-25 재권님 「미국섹터와 테마를 국내와 동일하게」 → 표 → 「단타에 섹터 수급과 옵션 만기 사이로 이거 넣어주고 잘 동작하는지 체크해줘」)
-//   값  서버 /api/kis/us-kr-groups?by=sector|theme&month=YYYYMM (주식페이지_개발 · 날마다 쌓음) — days [{us, kr}] 최근 먼저 · rows [{name, pair, us{날:%}, kr{날:%}}] · meta.months
+//   값  서버 /api/kis/us-kr-groups?by=sector|theme&month=YYYYMM (개발2 · 날마다 쌓음 · 짝 표는 서버 us_kr_map.json) — days [{us, kr}] 최근 먼저 · rows [{name, pair, us{날:%}, kr{날:%}}] · meta.months
 //       오늘 한국 칸은 진행 중이라 /api/kis/sector-flow?by= 의 지금 값으로 덮고 서버가 준 meta.refreshMs 마다 다시 받음(주기를 화면이 정하지 않음)
 //   짝  미국 하루 → 그다음 한국 장날 · 오르내림 방향이 같으면 빨강 바탕 · 다르면 파랑 · 한쪽 값 없으면 바탕 없음
 //   위  날마다 미국에서 가장 많이 오른 다섯(그 묶음 안) · 오늘 칸에서 미국 오름과 한국 오름이 맞으면 숫자가 깜박임
@@ -15,7 +15,9 @@ const WD = '일월화수목금토';
 const md = (s) => { const d = new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6)); return `${+s.slice(4, 6)}/${+s.slice(6)}(${WD[d.getDay()]})`; };
 const hm = (t) => (t ? `${t.slice(0, 2)}:${t.slice(2, 4)}` : '');
 const has = (v) => v != null && Number.isFinite(Number(v));
-const pairCls = (a, b) => (has(a) && has(b) ? ((Number(a) > 0) === (Number(b) > 0) ? ' same' : ' diff') : '');
+// 짝 색(11-25 재권님 — 둘 다 내린 날 빨강 바탕에 파랑 숫자였던 것을 고침 · 「짝이 안맞는 한국은 노란색」 → 「응」) — 같은 쪽은 방향 색(둘 다 오름 빨강 · 둘 다 내림 파랑) · 반대로 간 날은 한국 칸만 노랑
+const pairCls = (a, b) => (has(a) && has(b) ? ((Number(a) > 0) === (Number(b) > 0) ? (Number(a) > 0 ? ' same up' : ' same dn') : ' diff') : '');
+const usCls = (c) => c.replace(' diff', '');   // 미국 칸은 반대인 날 색 없음
 async function getJson(u) { try { const r = await fetch(u, { cache: 'no-store' }); return { st: r.status, j: r.ok ? await r.json() : null }; } catch (e) { return { st: 0, j: null }; } }
 
 const st = { kind: 'sector', month: '', data: {}, live: {}, liveAt: {}, timer: null, months: [] };
@@ -44,7 +46,7 @@ function draw() {
   for (let i = 0; i < TOP_N; i++) {
     h += `<tr><td class="uk-rk">${i + 1}</td>` + days.map((d, k) => { const r = top[k][i]; if (!r) return '<td></td>';
       const a = r.us[d.us], b = krOf(r, d), hit = isLive(d) && Number(a) > 0 && has(b) && Number(b) > 0;
-      return `<td class="${pairCls(a, b).trim()}${hit ? ' uk-hit' : ''}"><span class="uk-nm">${esc(r.name)}</span><span class="uk-us">${num(a)}</span><span class="uk-kr"><i>${isLive(d) ? '한국 진행중' : '한국'}</i><span class="${isLive(d) ? 'uk-blink' : ''}">${num(b)}</span></span></td>`; }).join('') + '</tr>';
+      const pc = pairCls(a, b); return `<td class="${usCls(pc).trim()}${hit ? ' uk-hit' : ''}"><span class="uk-nm">${esc(r.name)}</span><span class="uk-us">${num(a)}</span><span class="uk-kr${pc.includes('diff') ? ' diff' : ''}"><i>${isLive(d) ? '한국 진행중' : '한국'}</i><span class="${isLive(d) ? 'uk-blink' : ''}">${num(b)}</span></span></td>`; }).join('') + '</tr>';
   }
   h += '</table></div>';
   // 아래 — 국내 묶음마다 두 줄(미국 · 한국) · 그 달 맞은 몫 높은 순
@@ -56,7 +58,7 @@ function draw() {
   rs.forEach(({ r, hit, tot }) => {
     const us = [], kr = [];
     days.forEach((d) => { const a = (r.us || {})[d.us], b = krOf(r, d), c = pairCls(a, b) + (isLive(d) ? ' uk-now' : '');
-      us.push(`<td class="uk-d${c}">${num(a)}</td>`); kr.push(`<td class="uk-d${c}"><span class="${isLive(d) ? 'uk-blink' : ''}">${num(b)}</span></td>`); });
+      us.push(`<td class="uk-d${usCls(c)}">${num(a)}</td>`); kr.push(`<td class="uk-d${c}"><span class="${isLive(d) ? 'uk-blink' : ''}">${num(b)}</span></td>`); });
     h += `<tr class="uk-us-r"><td class="uk-k" rowspan="2">${esc(r.name)}</td><td class="uk-pr" rowspan="2">${pairTxt(r.pair)}</td><td class="uk-c" rowspan="2">${tot ? `<b>${hit}/${tot}</b><small>${Math.round(hit / tot * 100)}%</small>` : '<small>짝 없음</small>'}</td><td class="uk-who">미국</td>${us.join('')}</tr>`
       + `<tr class="uk-kr-r"><td class="uk-who">한국</td>${kr.join('')}</tr>`;
   });
@@ -73,7 +75,7 @@ async function load() {
   if (!st.data[key]) {
     draw();
     const { st: code, j } = await getJson(`${API}?by=${kind}${month ? `&month=${month}` : ''}`);
-    if (!j || !j.ok) { st.data[key] = { err: code === 404 ? '서버 값이 아직 없음 — 미국 섹터 · 테마 날마다 쌓기(주식페이지_개발) 준비 중' : `못 받음(${code || '연결 안 됨'})` }; }
+    if (!j || !j.ok) { st.data[key] = { err: code === 404 ? '서버 값이 아직 없음 — 미국 섹터 · 테마 날마다 쌓기 준비 중' : `못 받음(${code || '연결 안 됨'})` }; }
     else {
       const d = j.data || {}, m = j.meta || {};
       if (m.months) st.months = m.months;

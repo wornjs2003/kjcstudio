@@ -60,6 +60,32 @@ const RULES = {
     rows: (m) => [['고르는 조건', `거래 비율이 전날 같은 시각보다 ${v(m.turnPrevPct ?? m.prevSamePct)}% 이상인 종목(전날 같은 시각 거래 비율 = 100%) · ETF 뺌`], ['시가총액', `${v(m.capMinEok == null ? null : num(m.capMinEok))}억원 이상`], ['줄 세우기', '등락률 큰 순']],
     list: (j) => volList(j, '전일 현시간 대비 급증', (x) => (x.by || []).includes('prev')),
   },
+  // 돈몰림(11-25 개발2 0fd1035 · 재권님 「돈이 몰리는 섹터나 테마에 속한 종목들 단타에 칩하나」 → (가) → 「시간과 배수는 ()로 빼서 내가 조절하게」) — 셈은 서버 섹터수급 5분 칸 · 문턱은 서버 칩 룰 한 곳
+  //   목록은 서버 단타 목록(/api/kis/dt-list)에서 그 칩이 붙은 줄 · 걸린 묶음은 서버 subs.돈몰림 그대로 · 고치는 값은 시간 · 배수 둘(재권님 지시 온 칸)
+  money: {
+    name: '돈몰림', url: '/api/kis/dt-list', alt: '/api/kis/dt30', metaOf: (j) => ({ ...(j.meta || {}), ...((j.data && j.data.meta) || {}) }),
+    rows: () => { const c = (k) => { const x = (crCache || []).find((y) => y.chip === '돈몰림' && y.key === k); return x ? num(x.value, Number(x.value) % 1 ? 1 : 0) : null; };
+      return [['고르는 조건', `업종 · 테마 묶음의 최근 ${v(c('winMin'))}분 거래대금이 전날 같은 때의 ${v(c('mult'))}배 이상 · 그 시간 대금 ${v(c('minEok'))}억 이상 · 정규장은 산 금액 비중 ${v(c('buyShare'))}% 이상(프리장은 그 사이 묶음 등락 오름)인지 5분 칸마다 셈해 최근 ${v(c('holdMin'))}분 동안 맞은 칸이 안 맞은 칸보다 많으면 그 묶음의 종목에 붙임(다수결) · 아니면 뗌`],   // 다수결 — 개발2 78f9178 · 재권님 「응 해」(11-25 15:0x) · 창 길이 holdMin 은 서버 칩 룰 한 곳
+        ['값', '서버 섹터수급(업종 · 테마 5분 칸) — 매수 · 매도는 체결강도로 나눈 어림 · 정규장만'], ['장 전', '셈 안 함']]; },
+    list: (j) => {
+      const all = Array.isArray(j.data) ? j.data : (j.data && Array.isArray(j.data.rows) ? j.data.rows : []), d = all.filter((x) => (x.chips || []).includes('돈몰림'));
+      const grp = (x) => ((x.subs || {})['돈몰림'] || []).join(' · ') || '—';
+      return { cap: `${Array.isArray(j.data) ? '지금' : '그날 단타 판'} · 돈몰림 칩이 붙은 ${num(d.length)}종목`,
+        html: d.length ? tb(['종목', '걸린 묶음', '등락률(전일 종가 대비)', '시가총액'], d.map((x) => `<tr>${nm(x)}<td>${esc(grp(x))}</td><td>${pct(x.pct)}</td><td>${capTxt(x.cap)}</td></tr>`)) : null };
+    },
+  },
+  // 미국강세(11-25 개발2 d0ecebb · 재권님 「미국장 상승 섹터나 테마에 속한 종목은 단타에 칩하나」) — 어제 미국 오른 묶음 상위 ( ) 의 국내 짝(서버 us-kr-groups · 짝 표는 서버 한 곳) · 문턱은 서버 칩 룰
+  usup: {
+    name: '미국강세', url: '/api/kis/dt-list', alt: '/api/kis/dt30', metaOf: (j) => ({ ...(j.meta || {}), ...((j.data && j.data.meta) || {}) }),
+    rows: () => { const x = (crCache || []).find((y) => y.chip === '미국강세' && y.key === 'topN');
+      return [['고르는 조건', `어제 미국장에서 오른 섹터 · 테마 묶음 중 등락 상위 ${v(x ? num(x.value) : null)}개의 국내 짝 업종 · 테마에 속한 종목`], ['값', '서버 「미국 → 다음 날 국내」 칸과 같은 값(us-kr-groups) — 짝 표는 서버 한 곳'], ['장 전', '붙음(어제 미국 값이라)']]; },
+    list: (j) => {
+      const all = Array.isArray(j.data) ? j.data : (j.data && Array.isArray(j.data.rows) ? j.data.rows : []), d = all.filter((x) => (x.chips || []).includes('미국강세'));
+      const grp = (x) => ((x.subs || {})['미국강세'] || []).join(' · ') || '—';
+      return { cap: `${Array.isArray(j.data) ? '지금' : '그날 단타 판'} · 미국강세 칩이 붙은 ${num(d.length)}종목`,
+        html: d.length ? tb(['종목', '걸린 묶음', '등락률(전일 종가 대비)', '시가총액'], d.map((x) => `<tr>${nm(x)}<td>${esc(grp(x))}</td><td>${pct(x.pct)}</td><td>${capTxt(x.cap)}</td></tr>`)) : null };
+    },
+  },
   // 관심 탭은 뺐다(11-12 재권님 「관심을 없애고 수급으로 대처한다」) — 같은 종목 · 같은 룰이 「자동(전일 거래량 급등)」 칩에 있다(11-18 「수급」 에서 바꿈 · 실시간 순위 이름)
   pre: {
     name: '프리장', url: '/api/kis/pre-flow',
@@ -123,13 +149,14 @@ function volList(j, chip, old) {
 // 고치는 값 (11-23 재권님 「초반급상승에 들어간 2가지 룰 수정할수있는 ()%는 아직 안만들었나?」 · 「유통주식대비 현재거래대금 비교와 전날대비 현시간 거래대금 비교 룰이 어디에 들어가지?」)
 //   · 문턱은 서버 칩 룰 한 곳(/api/kis/chip-rules — 값 · 기본 · 범위 · 룰 문서 자리 docPath) · 넣은 값은 그 자리(rules.chips.<칩>.<열쇠>)에 저장 → 서버가 다음 셈부터 씀
 //   · 빈칸으로 두면 넣은 값을 지워 서버 기본으로 · 범위 밖은 되돌림 · 칸은 이 칩들만(지시 온 자리)
-const EDIT = { rise: ['초반상승'], turn: ['현시간 유통회전'], turnup: ['전일 현시간 대비 급증'] };   // 화면 이름(chipName 을 거쳐 견줌)
+const EDIT = { rise: ['초반상승'], turn: ['현시간 유통회전'], turnup: ['전일 현시간 대비 급증'], money: ['돈몰림'], usup: ['미국강세'] };
+const EDIT_KEYS = { money: ['winMin', 'mult', 'holdMin'] };   // 칩 중 고치는 칸만 — 돈몰림은 시간 · 배수 둘(재권님 「시간과 배수는 ()로 빼서」 11-25) · 나머지는 서버 기본   // 화면 이름(chipName 을 거쳐 견줌)
 let crCache = null, crMsg = '';   // crMsg — 저장 알림 글 · 칸을 다시 그려도 남게(qa 11-23)
 async function crLoad() { const { j } = await getJson('/api/kis/chip-rules'); crCache = j && j.ok && Array.isArray(j.data) ? j.data : null; return crCache; }
 const crRow = (id) => {
   const cs = EDIT[id]; if (!cs) return null;
   if (!crCache) return ['고치는 값', '<span class="st-err">— 서버 칩 룰을 못 받음</span>'];
-  const xs = crCache.filter((x) => cs.includes(chipName(x.chip)) && x.docPath && x.unit !== '목록');
+  const xs = crCache.filter((x) => cs.includes(chipName(x.chip)) && x.docPath && x.unit !== '목록' && (!EDIT_KEYS[id] || EDIT_KEYS[id].includes(x.key)));
   if (!xs.length) return ['고치는 값', '<span class="st-err">— 서버 칩 룰에 이 칩 칸이 없음(서버를 합치기 전)</span>'];
   return ['고치는 값', `<span class="rl-cr">${xs.map((x) => `<label class="dt-fee">${esc(x.name)} <input data-cr="${esc(x.docPath)}" data-lo="${esc((x.range || [])[0] ?? '')}" data-hi="${esc((x.range || [])[1] ?? '')}" class="rl-in rl-num" inputmode="decimal" placeholder="( )" value="${x.source === 'default' ? '' : esc(x.value)}" aria-label="${esc(x.name)}">${esc(x.unit || '')} <span class="rl-sug">${x.source === 'default' ? `빈칸 = 서버 기본 ${esc(num(x.default, 2).replace(/\.?0+$/, ''))}${esc(x.unit || '')}` : `기본 ${esc(num(x.default, 2).replace(/\.?0+$/, ''))}${esc(x.unit || '')}`}</span></label>`).join(' ')} <span id="rl-cr-msg" class="rl-sug">${esc(crMsg)}</span></span>`];
 };
