@@ -19,7 +19,8 @@ import time
 from datetime import datetime, timedelta, timezone
 
 KST = timezone(timedelta(hours=9))
-CHIP_M1_INTERVAL = 60         # 칩 종목 1분봉 한 바퀴 간격(초) — 1분봉이라 1분
+CHIP_M1_INTERVAL = 60         # 칩 종목 1분봉 한 바퀴 간격(초) — 1분봉이라 1분 · 분이 바뀐 뒤 CHIP_M1_AT_SEC 초에 돈다(끝난 봉을 바로 받게)
+CHIP_M1_AT_SEC = 1            # 매 분 이 초 뒤에 바퀴 — 앞 분 봉이 끝난 직후 · dt30 산 값이 1분 남짓에 굳는다(재권님 「가인데 1분으로 해줘」 11-25)
 CHIP_M1_LIMIT = 30            # 한 번에 읽어 오는 봉 수(DB 에서 · 받는 양은 get_chart 가 정함)
 
 DAY_FILL_AT = (20, 10)        # 감시 목록 하루치 쌓기 시각 — 넥스트레이드 끝(20:00) 뒤 · 단타 되채우기 쉬는 때(dt30.QUIET) 끝과 같은 때
@@ -97,7 +98,7 @@ def start(proxy):
 
     def loop():
         time.sleep(45)
-        last = 0.0
+        last = None                                    # 마지막으로 돈 분(「HHMM」)
         while True:
             try:
                 now = _now()
@@ -105,13 +106,14 @@ def start(proxy):
                 hm = now.hour * 60 + now.minute
                 if now.weekday() < 5 and market_hours.today(proxy, day=day, now=now).get("open") is not False:
                     o = dt30.OPEN_AT[0] * 60 + dt30.OPEN_AT[1] + dt30.late_min(proxy, now)
-                    if o <= hm <= dt30._close_min(proxy, now) and time.time() - last >= CHIP_M1_INTERVAL:
-                        last = time.time()
+                    key = now.strftime("%H%M")
+                    if o <= hm <= dt30._close_min(proxy, now) and key != last and now.second >= CHIP_M1_AT_SEC:
+                        last = key
                         round_once(proxy, proxy.load_secrets())
             except Exception as e:
                 _status["error"] = type(e).__name__
                 print("  [칩 1분봉] 멈춤 — %s" % proxy.safe_message(e, 120), flush=True)
-            time.sleep(5)
+            time.sleep(1)
 
     def fill_loop():
         proxy._prio.low = True                         # 여유분으로 — 화면이 막 불렀으면 비켜선다
