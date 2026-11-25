@@ -216,6 +216,27 @@ def chips_now(proxy, cfg, early=True, pre=False):
         pre_vi_surge(proxy, cfg, _now().strftime("%Y%m%d"), put, pre)
     except Exception:
         missing.append("VI·급등")
+    try:                                   # 「미국강세」 — 어제 미국 상위 묶음의 국내 짝 업종 · 테마 종목(셈은 us_kr · 장 전에도 셈 — 미국 값은 밤에 이미 있음 · KIS 안 부름)
+        import sector_flow, us_kr
+        n_top, today = chip_rules.get("미국강세", "topN"), _now().strftime("%Y%m%d")
+        codes = [c for c in cap if not small(c)]
+        got_day = False
+        for by, ko in (("sector", "업종"), ("theme", "테마")):
+            data, _m = us_kr.board(proxy, by)
+            d0 = next((d for d in data.get("days") or [] if d["kr"] == today), None)
+            if not d0:
+                continue
+            got_day = True
+            ups = sorted(((r["us"].get(d0["us"]), r["name"]) for r in data.get("rows") or [] if (r["us"].get(d0["us"]) or 0) > 0), reverse=True)[:n_top]
+            top = {n for _v, n in ups}
+            for name, cs in sector_flow._groups(proxy, by, codes).items():
+                if name in top:
+                    for c in cs:
+                        put(c, None, "미국강세", "%s %s" % (ko, name))
+        if not got_day:
+            missing.append("미국강세")                   # 오늘 한국 장날 짝이 없음(쉬는 날 · 미국 일봉 못 받음) — 0 이 아니라 못 받음
+    except Exception:
+        missing.append("미국강세")
     if pre:
         if early and early_buy(proxy, cfg, [c for c in hit if not small(c)], put, pre=True) is not None:
             missing.append("매수어림")                 # build 가 meta.early · approx 로
