@@ -65,7 +65,7 @@ const RULES = {
   money: {
     name: '돈몰림', url: '/api/kis/dt-list', alt: '/api/kis/dt30', metaOf: (j) => ({ ...(j.meta || {}), ...((j.data && j.data.meta) || {}) }),
     rows: () => { const c = (k) => { const x = (crCache || []).find((y) => y.chip === '돈몰림' && y.key === k); return x ? num(x.value, Number(x.value) % 1 ? 1 : 0) : null; };
-      return [['고르는 조건', `업종 · 테마 묶음의 최근 ${v(c('winMin'))}분 거래대금이 전날 같은 때의 ${v(c('mult'))}배 이상 · 그 시간 대금 ${v(c('minEok'))}억 이상 · 정규장은 산 금액 비중 ${v(c('buyShare'))}% 이상(프리장은 그 사이 묶음 등락 오름)인 묶음의 종목 · 조건에서 빠지면 칩을 뗌`],
+      return [['고르는 조건', `업종 · 테마 묶음의 최근 ${v(c('winMin'))}분 거래대금이 전날 같은 때의 ${v(c('mult'))}배 이상 · 그 시간 대금 ${v(c('minEok'))}억 이상 · 정규장은 산 금액 비중 ${v(c('buyShare'))}% 이상(프리장은 그 사이 묶음 등락 오름)인지 5분 칸마다 셈해 최근 ${v(c('holdMin'))}분 동안 맞은 칸이 안 맞은 칸보다 많으면 그 묶음의 종목에 붙임(다수결) · 아니면 뗌`],   // 다수결 — 개발2 78f9178 · 재권님 「응 해」(11-25 15:0x) · 창 길이 holdMin 은 서버 칩 룰 한 곳
         ['값', '서버 섹터수급(업종 · 테마 5분 칸) — 매수 · 매도는 체결강도로 나눈 어림 · 정규장만'], ['장 전', '셈 안 함']]; },
     list: (j) => {
       const all = Array.isArray(j.data) ? j.data : (j.data && Array.isArray(j.data.rows) ? j.data.rows : []), d = all.filter((x) => (x.chips || []).includes('돈몰림'));
@@ -150,7 +150,7 @@ function volList(j, chip, old) {
 //   · 문턱은 서버 칩 룰 한 곳(/api/kis/chip-rules — 값 · 기본 · 범위 · 룰 문서 자리 docPath) · 넣은 값은 그 자리(rules.chips.<칩>.<열쇠>)에 저장 → 서버가 다음 셈부터 씀
 //   · 빈칸으로 두면 넣은 값을 지워 서버 기본으로 · 범위 밖은 되돌림 · 칸은 이 칩들만(지시 온 자리)
 const EDIT = { rise: ['초반상승'], turn: ['현시간 유통회전'], turnup: ['전일 현시간 대비 급증'], money: ['돈몰림'], usup: ['미국강세'] };
-const EDIT_KEYS = { money: ['winMin', 'mult'] };   // 칩 중 고치는 칸만 — 돈몰림은 시간 · 배수 둘(재권님 「시간과 배수는 ()로 빼서」 11-25) · 나머지는 서버 기본   // 화면 이름(chipName 을 거쳐 견줌)
+const EDIT_KEYS = { money: ['winMin', 'mult', 'holdMin'] };   // 칩 중 고치는 칸만 — 돈몰림은 시간 · 배수 둘(재권님 「시간과 배수는 ()로 빼서」 11-25) · 나머지는 서버 기본   // 화면 이름(chipName 을 거쳐 견줌)
 let crCache = null, crMsg = '';   // crMsg — 저장 알림 글 · 칸을 다시 그려도 남게(qa 11-23)
 async function crLoad() { const { j } = await getJson('/api/kis/chip-rules'); crCache = j && j.ok && Array.isArray(j.data) ? j.data : null; return crCache; }
 const crRow = (id) => {
