@@ -453,6 +453,7 @@ def pre_log_put(proxy, hit, pf_rows, now=None):
         if _pl_pruned["day"] != day:                   # 하루 한 번 — 남기는 날 수를 넘은 앞 날 지움
             _log_prune(conn, "dt30_pre_log")
             _pl_pruned["day"] = day
+    _status["preLogHm"] = day + hm                     # 이 분은 적었음 — 고리가 분마다 빈 분을 채우게(11-25)
     return len(out)
 
 
@@ -3749,6 +3750,11 @@ def start(proxy):
                                 if SELL_SEND:
                                     ok, why = dart.telegram_send(sell_text(r))
                                     print("  [단타 30] 팔 때 %s %s" % (r["code"], "보냄" if ok else "못 보냄 — " + str(why)), flush=True)
+                        if PRE_LOG_FROM[0] * 60 + PRE_LOG_FROM[1] <= hm <= PRE_LOG_TO[0] * 60 + PRE_LOG_TO[1] and _status.get("preLogHm") != now.strftime("%Y%m%d%H%M"):
+                            try:                                  # 프리장 기록 — 분마다 한 번은 센다(화면이 부를 때만 세면 캐시 60초 + 셈 시간이 겹쳐 한 분씩 빠졌다 · 개념정의 11-25 08:02 빠짐)
+                                live(proxy, proxy.load_secrets(), force=True)
+                            except Exception as e:
+                                print("  [단타 프리장 기록] 분마다 셈 못 함 — %s" % proxy.safe_message(e, 120), flush=True)
                         if OPEN_AT[0] * 60 + OPEN_AT[1] + off <= hm < _close_min(proxy, now) and time.time() - _status.get("cfLive", 0) >= LIVE_TTL:
                             _status["cfLive"] = time.time()       # 정규장 끝까지 단타 목록을 세어 칩 처음 시각을 남긴다 — 09:30 · 굳힘 뒤 붙는 칩도(재권님 「9시 30분 이후에 붙는 칩들도 다 기록되어야해」 11-23 19:0x)
                             try:                                  # 화면이 안 열려 있어도 돈다 · 캐시(LIVE_TTL) 안이면 셈을 다시 안 함
