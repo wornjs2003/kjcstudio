@@ -119,6 +119,14 @@
          탭 「단타 · 종가배팅」 은 두 판 카드 위에 붙고 고른 판만 보인다 · 후보는 서버(/api/nxt/closing-bet · 주식 레인) · 그리기는 js/strategy-jb.js -->
     <section class="st jb" id="jb-host" hidden></section>
 
+    <!-- 미국 → 다음 날 국내 섹터 · 테마(11-25 재권님 「단타에 섹터 수급과 옵션 만기 사이로 이거 넣어주고」) — 값은 서버 /api/kis/us-kr-groups(날마다 쌓음) · 오늘 한국은 섹터수급 지금 값 · 그리기는 js/strategy-uskr.js -->
+    <section class="st uk" id="uk">
+      <h2 class="st-sec">미국이 움직인 다음 날, 국내 섹터 · 테마도 같은 쪽으로 갔나</h2>
+      <div class="st-meta">한 묶음 = 두 줄 · 미국 줄(그 미국 날 종가) 아래 한국 줄(그다음 한국 장날) · 최근 날이 왼쪽 · 미국 섹터 = S&amp;P 500 같은 업종 종목 평균 · 미국 테마 = ETF 또는 비슷한 종목 셋 평균 · 한국 = 섹터수급 묶음 평균(지난 날은 14:00 무렵) · <span class="uk-key same">같은 쪽</span> <span class="uk-key diff">반대 쪽</span> · 맞은 수 = 그 달 같은 쪽 날 / 둘 다 값 있는 날</div>
+      <div class="uk-bar"></div>
+      <div class="st-card uk-body"><div class="st-err">받는 중…</div></div>
+    </section>
+
     <!-- 옵션 만기일 (11-12 배분 → 시안 temp/시황분석1-expiry-1142 에 재권님 「응 해」 11-13) — 올해 만기일과 다음 거래일 코스피 · 값은 서버 둘(/api/kis/opt-expiry · index-daily) · 그리기는 js/strategy-expiry.js -->
     <section class="st mx" id="mx">
       <div class="st-meta">값을 받는 중…</div>
@@ -164,6 +172,7 @@
 <script type="module" src="js/strategy-log.js"></script>
 <script type="module" src="/assets/js/glossary.js"></script>   <!-- 설명 풍선 — 마우스를 1초 올려 두면 뜨는 공용 풍선(data-tip) · 「설명 풍선은 … 1초 올려 두면 뜬다」(2026-11-07) -->
 <script type="module" src="js/strategy-expiry.js"></script>
+<script type="module" src="js/strategy-uskr.js"></script>
 <script type="module" src="js/strategy-jb.js"></script>
 <script type="module" src="js/fit.js"></script>   <!-- 틀을 홀딩스 첫 화면과 같은 넓이로 (2026-11-07) -->
 <script type="module">import { mountClaudeRail } from '/assets/js/claude-rail.js'; if (self === top) mountClaudeRail(); /* 틀(iframe) 안에 들어간 화면에는 안 붙인다 */</script>
