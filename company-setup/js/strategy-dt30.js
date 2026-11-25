@@ -150,7 +150,15 @@ const nLive = (r) => colsOf().reduce((a, c) => a + (liveChip(r, c) ? 1 : 0), 0);
 //   이수스페셜티케미컬(프리장 칩) · 하이젠알앤엠(매수 칩)이 빠지자 칩 5개에 못 미쳐 판에서 사라지던 것 · 09:30 전에 산 종목은 굳음)
 //   빠진 칩의 하위 칩(외 · 기 · 프 · 어림)은 기록에 없어 하위 끄기를 못 가름 — 칩이 켜져 있으면 셈 · 다시 붙은 칩의 「나중 시각」 은 서버 칩 쌓임 기록(개발2)이 오면
 const everChip = (r, c) => { if (st.off.has(c)) return false; if ((r.chips || []).includes(c)) return liveChip(r, c); return !!((r.chipTime || {})[c]); };
-const nEver = (r) => colsOf().reduce((a, c) => a + (everChip(r, c) ? 1 : 0), 0);
+// 칩 붙음 · 빠짐 구간(11-25 재권님 「칩 빠진 시각도 넣어줘」 · 서버 개발2 rows[].chipSpans {칩: [[붙음, 빠짐 | null] …]} HH:MM · 끝 null = 지금도 붙음)
+//   있는 줄은 「같은 시각에 함께 붙어 있던 칩」 으로 셈(서버 매수 셈과 같게 — 칩 N개가 동시에 붙어 있던 첫 순간) · 없는 줄(11-24 전 판)은 한 번 붙은 칩(everChip) 그대로
+//   구간 기록이 없는 칩 — 지금 붙어 있으면 처음 붙은 때부터 지금까지 · 빠졌으면 언제까지인지 몰라 안 셈 · 끄기 · 하위 끄기는 everChip 과 같게
+const spanRow = (r) => !!(r && r.chipSpans && typeof r.chipSpans === 'object');
+const spansOf = (r, c) => { const s = r.chipSpans[c]; if (Array.isArray(s) && s.length) return s; if (!(r.chips || []).includes(c)) return []; const t = (r.chipTime || {})[c] || (r.chipAt || {})[c]; return t ? [[t, null]] : []; };
+const chipAtT = (r, c, t) => everChip(r, c) && spansOf(r, c).some(([a, b]) => hm4(a) && hm4(a) <= t && (b == null || t < hm4(b)));
+const nAtT = (r, t) => colsOf().reduce((a, c) => a + (chipAtT(r, c, t) ? 1 : 0), 0);
+const spanTs = (r) => [...new Set(colsOf().filter((c) => everChip(r, c)).flatMap((c) => spansOf(r, c).map((x) => hm4(x[0])).filter(Boolean)))].sort();
+const nEver = (r) => (spanRow(r) ? spanTs(r).reduce((m, t) => Math.max(m, nAtT(r, t)), 0) : colsOf().reduce((a, c) => a + (everChip(r, c) ? 1 : 0), 0));   // 구간이 있으면 가장 많이 함께 붙어 있던 수
 const riseOf = (r) => (r.rise == null || !Number.isFinite(Number(r.rise)) ? -Infinity : Number(r.rise));   // 초반상승 % — 안 든 종목은 null → 맨 뒤
 // 조건별 점수 (11-18 재권님 「여기도 내가 조건들 넣을수 있게 해줘. 있는조건이면 고르면 되고 조건별로 점수를 매겨서 우선순위 정할거야」 → 홈 「단타」 도 같은 차례로 「응」)
 //   · 점수표는 룰 문서 rules.dt30.score 한 곳 — { 칩: 점수 · 'VI·급등|09:25 전': 점수 … } · 「룰 — 단타」 칸(strategy-chips.js)에서 넣음 · 홈 차례는 서버(개발2)가 같은 표로 셈
@@ -285,7 +293,8 @@ let FILL = new WeakSet();   // 그 날 셈에서 칩 N−1개로 채운 줄(11-2
 const chipNeed = (r) => Math.max(1, (Number(st.set.minChip) || 1) - (r && FILL.has(r) ? 1 : 0));   // r — 채운 줄이면 N−1(그 줄의 사는 순간 · 찬 시각도 N−1 번째 칩으로)
 // 켜진 칩이 붙은 시각을 세워 N번째(칩 수 기준) — HHMM · 시각 모르는 칩은 그 줄이 판에 처음 든 때로 봄(칩은 든 때보다 앞설 수 없음 · 든 때도 모르면 장 시작 전) · 칩이 모자라면 null
 // 칩 시각은 서버 rows[].chipTime(칩마다 처음 붙은 시각 · 한 번 붙었다 빠져도 남음 · 개발2 a3ea7ff)이 있으면 그것 먼저
-const nthChipAt = (r) => { const at = { ...(r.chipAt || {}), ...(r.chipTime || {}) }; const ts = colsOf().filter((c) => everChip(r, c)).map((c) => String(at[c] || (c === 'VI·급등' ? r.viAt || '' : '')).replace(/:/g, '').slice(0, 4) || inTs(r).slice(0, 4) || '0000').sort(); const N = chipNeed(r); return ts.length >= N ? ts[N - 1] : null; };
+const nthChipAt = (r) => { if (spanRow(r)) { const N = chipNeed(r); return spanTs(r).find((t) => nAtT(r, t) >= N) || null; }   // 구간이 있으면 칩 N개가 함께 붙어 있던 첫 시각
+  const at = { ...(r.chipAt || {}), ...(r.chipTime || {}) }; const ts = colsOf().filter((c) => everChip(r, c)).map((c) => String(at[c] || (c === 'VI·급등' ? r.viAt || '' : '')).replace(/:/g, '').slice(0, 4) || inTs(r).slice(0, 4) || '0000').sort(); const N = chipNeed(r); return ts.length >= N ? ts[N - 1] : null; };
 // 보기만 줄의 가정 매수 — 판에 들어올 때 값(서버 r.buy)으로 샀다고 치고 셈만 보임(11-24 재권님 「들어올때 샀다는 전제로 셈을 하도록 하고 진짜 산건 아닌거처럼 해줘」) · 합계 · 평균 · 상위 N 에는 안 듦
 let HYPO = new WeakMap();   // calcDay 를 돌 때마다 새로 — 판 줄 객체가 다시 그릴 때 그대로 쓰여, 셈 칸을 바꿔 본 표로 든 줄에 가정 값이 남지 않게(개념정의 검수 11-24)
 function buyOf(r) {   // → { px, at(HHMM), src } | null
@@ -876,7 +885,7 @@ function paint0(d) {
     const g = (nm, t) => `<span class="dt-chg"><i class="dt-chs">${nm}</i>${t ? `<small>${t}</small>` : ''}</span>`;   // 칩 이름 알약 + 그 아래 시각 한 묶음
     const each = raw.length ? raw.map((x) => g(esc(subName(c, x)), at[x] ? esc(String(at[x])) : '')).join('') : '';
     const v = has ? `<span class="dt-cg" data-i="${colorOf(c)}">${each ? `${each}${vt ? `<small class="dt-vt">${esc(vt)}</small>` : ''}` : sb.length ? g(esc(subTxt(c, sb)), vt ? esc(vt) : '') : `<b class="dt-dot" aria-label="걸림"></b>${vt ? `<small class="dt-vt">${esc(vt)}</small>` : ct ? `<small class="dt-vt">${esc(ct)}</small>` : ''}`}</span>`
-      : (r.chipTime || {})[c] && everChip(r, c) ? `<span class="dt-cg dt-gone" data-i="${colorOf(c)}" data-tip="붙었다 빠진 칩 — 적힌 시각은 처음 붙은 때(빠진 때 아님) · 겹침 셈(칩 N개 거르기 · 산 때)에 듦 · 빠진 시각은 서버 기록이 아직 없음"><b class="dt-dot" aria-label="붙었다 빠짐"></b><small class="dt-vt">${esc(String(r.chipTime[c]).slice(0, 5))} 붙음 · 빠짐</small></span>`   // 11-25 재권님 「나로 해」 — 거르기가 세는 칩이 칸에 안 보여 「안 걸린 것을 산 것처럼」 보였음
+      : (r.chipTime || {})[c] && everChip(r, c) ? `<span class="dt-cg dt-gone" data-i="${colorOf(c)}" data-tip="붙었다 빠진 칩 — 적힌 시각은 처음 붙은 때(빠진 때 아님) · 겹침 셈(칩 N개 거르기 · 산 때)에 듦 · 빠진 시각은 서버 기록이 아직 없음"><b class="dt-dot" aria-label="붙었다 빠짐"></b><small class="dt-vt">${(() => { const sp = spanRow(r) && Array.isArray(r.chipSpans[c]) ? r.chipSpans[c] : null, l = sp && sp[sp.length - 1]; return l ? (l[1] ? `${esc(String(l[0]).slice(0, 5))} 붙음 · ${esc(String(l[1]).slice(0, 5))} 빠짐` : `${esc(String(l[0]).slice(0, 5))} 붙음 · 빠짐 모름`) : `${esc(String(r.chipTime[c]).slice(0, 5))} 붙음 · 빠짐`; })()}</small></span>`   // 11-25 재권님 「나로 해」 — 거르기가 세는 칩이 칸에 안 보여 「안 걸린 것을 산 것처럼」 보였음
       : st.miss.has(c) ? `<span class="dt-chq" data-tip="${esc(`그날 판에 ${c} 값을 ${missWord()} — 이 종목이 걸렸는지 모름`)}">—</span>`
       : st.wait.has(c) ? `<span class="dt-chq" data-tip="${esc(`아직 때가 아님 — ${c} 은 정규장${st.openAt ? `(${st.openAt})` : ''} 뒤에 셈`)}">·</span>` : '';
     return `<td class="dt-chc${on ? '' : ' is-off'}">${v}</td>`; };
