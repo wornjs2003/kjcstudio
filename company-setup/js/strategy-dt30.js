@@ -48,7 +48,7 @@ const dayTxt = (d) => { const m = String(d || '').match(/^(\d{4})(\d{2})(\d{2})$
 const hmTxt = (t) => (/^\d{4}$/.test(String(t)) ? `${String(t).slice(0, 2)}:${String(t).slice(2)}` : esc(t || '—'));
 
 // 이벤트 칸 — 그 종목이 걸린 홀딩스 「관심」 아래 룰(칩) 이름을 홀딩스 칩 줄 차례로 · 이름은 서버 rows[].chips 그대로(재권님 11-11 「종목과 매수가 사이에 이벤트를 추가하고 이벤트가 뭐뭐 걸렸는지 넣어줘 vi 초반급등 긍 관심하위의 룰들」)
-const EV_ORDER = ['관심', '현시간 유통회전', '전일 현시간 대비 급증', '프리장', '초반상승', '현재상승', 'VI·급등', '볼린저', '장외', '매수', '자동'];
+const EV_ORDER = ['관심', '현시간 유통회전', '전일 현시간 대비 급증', '돈몰림', '미국강세', '프리장', '초반상승', '현재상승', 'VI·급등', '볼린저', '장외', '매수', '자동'];
 const evHtml = (c, r) => evChips(c, r, r ? [...st.miss].filter((x) => !(c || []).includes(x)) : []);   // 못 받은 칩은 종목마다 이름만 회색으로 붙임 · 「못 받음」 글씨 없음 · 늦게 채워 이미 붙은 칩은 뺌(11-12 재권님 「못받음 이라는 글씨만 빼주고 비활성화 된거같이 회색으로」 → 「각 종목에도 넣어줘」)
 const evChips = (c, r, miss = []) => { const a = [...(Array.isArray(c) ? c : []), ...miss]; if (!a.length) return '<span class="st-err">—</span>'; a.sort((x, y) => (EV_ORDER.indexOf(x) + 99) % 99 - (EV_ORDER.indexOf(y) + 99) % 99); return a.map((x) => { const sb = r ? subsOf(r, x) : []; const dim = r && colsOf().includes(x) && !liveChip(r, x); if (miss.includes(x)) return `<span class="dt-evc is-miss" data-tip="${esc(`그날 판에 ${x} 값을 ${missWord()} — 이 종목이 걸렸는지 모름`)}">${esc(x)}</span>`; const vt = r && x === 'VI·급등' ? viTxt(r) : ''; return `<span class="dt-evc${dim ? ' is-off' : ''}">${esc(x)}${sb.length ? `<small>${esc(subTxt(x, sb))}</small>` : ''}${vt ? `<small>${esc(vt)}</small>` : ''}</span>`; }).join(''); };
 
@@ -109,7 +109,7 @@ function addNewChips(list) {
 const CHIP_SEEN = [];   // 칩 색 차례 — 서버 단타 칩 차례(loadDtChips 가 채움) 뒤로 처음 본 차례(색 변수는 일곱이라 돌려 씀)
 const HOT = { '현시간 유통회전': 'vol', '전일 현시간 대비 급증': 'vol2', 'VI·급등': 'vi', 매수: 'buy' };   // 튀는 색 칩 — 진한 바탕 · 하위 단추마다 다른 색(strategy.css · 11-23 재권님 「색은 완전히 튀는 색으로 해주고 각각 버튼 색 다르게」 → 「vi 랑 매수도 이렇게 각각 색이랑 튀도록 해줘」)
 const colorOf = (c) => { if (HOT[c]) return HOT[c];   /* 거래 칩 · VI · 매수는 서로 안 겹치는 따로 색(strategy.css data-i) */ if (!CHIP_SEEN.includes(c)) CHIP_SEEN.push(c); return CHIP_SEEN.indexOf(c) % 7; };
-const RULE_OF = { 프리장: 'pre', 초반상승: 'rise', 현재상승: 'nowup', 'VI·급등': 'vi', 볼린저: 'bb', 장외: 'after', 자동: 'volsurge' };   // 「종목 고르는 룰」 칩(data-rule) — 없는 칩은 룰 칸 없음
+const RULE_OF = { 돈몰림: 'money', 미국강세: 'usup', 프리장: 'pre', 초반상승: 'rise', 현재상승: 'nowup', 'VI·급등': 'vi', 볼린저: 'bb', 장외: 'after', 자동: 'volsurge' };   // 「종목 고르는 룰」 칩(data-rule) — 없는 칩은 룰 칸 없음
 const subsRaw = (r, c) => { const v = r.subs && r.subs[c]; return Array.isArray(v) ? v : (v ? [v] : []); };
 // VI·급등 하위는 겹치지 않게 둘로 (11-11 재권님 「그중 6개는 따로 분류가 가능하게 해줘」 → 「vi급등칩에 하위에 칩이 2개 있게 해줘」 — VI 43 · 급등 6 이 겹쳐 헷갈림)
 //   서버 subs 의 VI · 급등을 읽어 급등이 들었으면 「VI 급등」(VI 도 함께 걸린 것 포함), VI 만이면 「VI 급상승」 — 둘을 더하면 상위 칩 숫자 · 서버 이름이 둘이 아니면 그대로 둠
@@ -1262,7 +1262,7 @@ function autoSaveArm(d) {
 }
 // chipCols 는 「자동」 칸을 늘 뺀다 — 서버 장중 판은 늘 watchRule 「자동」 이라 화면이 그 칸을 안 셈(colsOf · wAuto) · 옛 날 판(자동 아님)을 보다 저장해도 서버가 「자동」 칩을 세지 않게(개념정의 덧 11-24)
 // 저장은 서버 이름으로(11-25 qa — 서버 매수 셈이 「거래비율」 · 「거래비율급증」 으로 읽는데 화면 이름 「현시간 유통회전」 · 「전일 현시간 대비 급증」 이 들어가 칸 밖으로 셌음) · 비교 값(chipSig)도 같은 셈이라 함께 바뀜
-function chipSave() { return { chipOff: [...st.off].map(serverChip), subOff: [...st.subOff].map((k) => { const i = k.indexOf('|'); return i < 0 ? serverChip(k) : `${serverChip(k.slice(0, i))}${k.slice(i)}`; }), chipCols: (st.cols || DT_CHIPS).filter((c) => c !== '자동').map(serverChip) }; }   // 함수 선언 — loadFee 가 이 줄보다 먼저 돌아도 쓰이게
+function chipSave() { return { chipOff: [...st.off].map(serverChip), subOff: [...st.subOff].map((k) => { const i = k.indexOf('|'); return i < 0 ? serverChip(k) : `${serverChip(k.slice(0, i))}${k.slice(i)}`; }), chipCols: (st.cols || DT_CHIPS).filter((c) => c !== '자동').map(serverChip), chipKnown: [...new Set([...DT_CHIPS, ...(st.cols || [])])].filter((c) => c !== '자동').map(serverChip) }; }   // chipKnown — 저장할 때 화면이 알던 서버 칩 전부 · 서버는 그 밖 칩(저장 뒤 새로 생긴 칩)을 켬으로 셈(11-25 개발2 · 재권님 「처음부터 셈이되도록 켜줘」) · chipCols 밖이면서 여기 있는 칩은 칸에서 지운 것 = 안 셈   // 함수 선언 — loadFee 가 이 줄보다 먼저 돌아도 쓰이게
 function chipSig() { return JSON.stringify(chipSave()); }
 async function setSave() {
   const msg = $('dt-set-msg'); msg.textContent = '저장하는 중…';
