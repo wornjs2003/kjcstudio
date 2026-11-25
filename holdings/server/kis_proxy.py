@@ -94,6 +94,7 @@ import pre_flow         # 프리장 프로그램 몰리는 종목 — 실시간 
 import flow_rank        # 투자자 매매 동향 — 외국인 · 기관 순매수 순위(가집계) · 「특이 매수」 전일 순매도 → 오늘 순매수 · /api/kis/flow-rank(2026-11-06 · server/flow_rank.py)
 import day_top_fill     # 등락 상위 — 지난 거래일 판을 다시 세어 채움(장 쉬는 때 · 쓰는 서버만 · 2026-11-11 · server/day_top_fill.py)
 import day_top          # 등락 상위와 걸린 필터 — 날마다 장 뒤 한 번 쌓음 · /api/kis/day-top(2026-11-11 · server/day_top.py)
+import idx_day          # 코스피 1분 · 5분봉을 날마다 쌓음(화면 안 열린 날도) · /api/kis/index-day(2026-11-25 · server/idx_day.py)
 import inv_est          # 종목별 외국인 · 기관 장중 가집계 — 감시 목록 전부를 입력 시각 + 5분마다 쌓음 · /api/kis/inv-est(2026-11-25 · server/inv_est.py)
 import sector_flow      # 섹터수급 — 프리장 08:00~정규장 09:30 업종 · 테마별 10분 거래대금 · /api/kis/sector-flow(2026-11-18 · server/sector_flow.py)
 import us_kr             # 미국이 움직인 다음 날 국내 섹터 · 테마 — /api/kis/us-kr-groups(2026-11-25 · server/us_kr.py)
@@ -2428,12 +2429,12 @@ def fetch_index_minutes(cfg, code):
     return rows
 
 
-def _index_minutes_from_kis(cfg, code):
-    """한 번 받아 온다. 100건쯤 온다."""
+def _index_minutes_from_kis(cfg, code, step=INDEX_MINUTE_STEP):
+    """한 번 받아 온다. 100건쯤 온다 — step "60" 이면 1분봉 최근 101분(2026-11-25 15:59 잼 · server/idx_day.py)."""
     data = kis_get(cfg, "/uapi/domestic-stock/v1/quotations/inquire-time-indexchartprice", {
         "FID_COND_MRKT_DIV_CODE": "U",
         "FID_INPUT_ISCD": code,
-        "FID_INPUT_HOUR_1": INDEX_MINUTE_STEP,
+        "FID_INPUT_HOUR_1": step,
         "FID_PW_DATA_INCU_YN": "Y",
         "FID_ETC_CLS_CODE": "0",
     }, "FHKUP03500200")
@@ -10576,6 +10577,25 @@ class Handler(SimpleHTTPRequestHandler):
                                           "cacheTtl": flow_board.CACHE_TTL}})
                 return
 
+            if route == "index-day":
+                # 지수 그날 1분 · 5분봉 (2026-11-25 · server/idx_day.py) — KIS 를 새로 부르지 않고 쌓인 candles 를 읽는다
+                name = (qs.get("code") or ["KOSPI"])[0].strip().upper()
+                period = (qs.get("period") or ["5m"])[0]
+                day = (qs.get("day") or [""])[0] or datetime.now(KST).strftime("%Y%m%d")
+                if period not in idx_day.STEP or not (day.isdigit() and len(day) == 8):
+                    self._send_json({"ok": False, "error": "period 는 1m · 5m · day 는 YYYYMMDD 입니다."}, 400)
+                    return
+                b = idx_day.bars(sys.modules[__name__], name, period, day)
+                if b is None:
+                    self._send_json({"ok": False, "error": "code 는 %s 중 하나입니다." % " · ".join(n for _, n in idx_day.CODES)}, 400)
+                    return
+                self._send_json({"ok": True, "data": b,
+                                 "meta": {"count": len(b["bars"]), "order": "과거→최신", "ts": "YYYYMMDDHHMM(봉 시작 시각)",
+                                          "full": "정규장 하루 1분 390봉 · 5분 79봉(보통 날) — 적으면 그 사이를 못 받은 것",
+                                          "days": idx_day.days(sys.modules[__name__], name, period),
+                                          "status": idx_day.status(sys.modules[__name__])}})
+                return
+
             if route == "inv-est":
                 # 종목별 외국인 · 기관 장중 가집계 쌓은 것 (2026-11-25 · server/inv_est.py) — KIS 를 새로 부르지 않고 market.db inv_est 를 읽는다
                 day = (qs.get("day") or [""])[0] or None
@@ -11820,6 +11840,9 @@ def main():
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_INV_EST_COLLECT") == "1") and inv_est.start(sys.modules[__name__]):
         print("  장중 가집계 : 평일 %s(늦게 여는 날은 그만큼 뒤) 감시 목록 전부의 외국인 · 기관 가집계를 market.db inv_est 에 쌓음 · /api/kis/inv-est"
               % " · ".join("%02d:%02d" % s for s in inv_est.SLOTS_USUAL))
+    if (not SLOW and is_sender(args.port) or os.environ.get("KJC_IDX_DAY_COLLECT") == "1") and idx_day.start(sys.modules[__name__]):
+        print("  지수 날 봉 : 평일 1분봉 %s · 5분봉 %02d:%02d(늦게 여는 날은 그만큼 뒤) 코스피를 candles 에 쌓음 · /api/kis/index-day"
+              % ((" · ".join("%02d:%02d" % s for s in idx_day.SLOTS_1M_USUAL),) + idx_day.AT_5M_USUAL))
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and session_volume.start(sys.modules[__name__]):
         print("  시간대 거래량 : 평일 %s 에 순위 종목 누적 거래량 저장(전일비)" % " · ".join(b[3][:2] + ":" + b[3][2:] for b in session_volume.BOUNDS))
     if (not SLOW and is_sender(args.port) or os.environ.get("KJC_FLOW_COLLECT") == "1") and intraday_flow.start(sys.modules[__name__]):
