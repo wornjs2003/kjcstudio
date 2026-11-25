@@ -216,6 +216,27 @@ def chips_now(proxy, cfg, early=True, pre=False):
         pre_vi_surge(proxy, cfg, _now().strftime("%Y%m%d"), put, pre)
     except Exception:
         missing.append("VI·급등")
+    try:                                   # 「미국강세」 — 어제 미국 상위 묶음의 국내 짝 업종 · 테마 종목(셈은 us_kr · 장 전에도 셈 — 미국 값은 밤에 이미 있음 · KIS 안 부름)
+        import sector_flow, us_kr
+        n_top, today = chip_rules.get("미국강세", "topN"), _now().strftime("%Y%m%d")
+        codes = [c for c in cap if not small(c)]
+        got_day = False
+        for by, ko in (("sector", "업종"), ("theme", "테마")):
+            data, _m = us_kr.board(proxy, by)
+            d0 = next((d for d in data.get("days") or [] if d["kr"] == today), None)
+            if not d0:
+                continue
+            got_day = True
+            ups = sorted(((r["us"].get(d0["us"]), r["name"]) for r in data.get("rows") or [] if (r["us"].get(d0["us"]) or 0) > 0), reverse=True)[:n_top]
+            top = {n for _v, n in ups}
+            for name, cs in sector_flow._groups(proxy, by, codes).items():
+                if name in top:
+                    for c in cs:
+                        put(c, None, "미국강세", "%s %s" % (ko, name))
+        if not got_day:
+            missing.append("미국강세")                   # 오늘 한국 장날 짝이 없음(쉬는 날 · 미국 일봉 못 받음) — 0 이 아니라 못 받음
+    except Exception:
+        missing.append("미국강세")
     if pre:
         if early and early_buy(proxy, cfg, [c for c in hit if not small(c)], put, pre=True) is not None:
             missing.append("매수어림")                 # build 가 meta.early · approx 로
@@ -3271,7 +3292,11 @@ def chip_filter():
     """화면에서 끈 칩 · 칩 칸 — 셈 칸 chipOff [칩] · subOff [「칩|하위」] · chipCols [칩] (화면 「저장」 · 여는 시각 + 4분 자동 저장이 넣음 · 11-24 재권님 「카드에 있것들 해」).
     칸이 없으면 다 켠 것 · 칸 목록이 없으면 단타 셈 칩 전부(전과 같음)."""
     lst = lambda k: [str(x) for x in _set_val(k)] if isinstance(_set_val(k), list) else None
-    return set(lst("chipOff") or []), set(lst("subOff") or []), (set(lst("chipCols")) if lst("chipCols") else None)
+    cols = set(lst("chipCols")) if lst("chipCols") else None
+    known = lst("chipKnown")
+    if cols is not None and known:                     # 저장 뒤 새로 생긴 칩(그때 화면이 몰랐던 칩)은 칸 밖이어도 켬 — 칸 메뉴 「지우기」 로 뺀 칩은 known 안이라 그대로 빠짐(시황분석1 chipKnown · 11-25 재권님 「처음부터 셈이되도록 켜줘」)
+        cols |= {c for c in ov_chips() if c not in set(known)}
+    return set(lst("chipOff") or []), set(lst("subOff") or []), cols
 
 
 def _subs_of(r, c, split):
