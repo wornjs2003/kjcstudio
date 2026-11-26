@@ -134,7 +134,12 @@ const hmS = (t) => `${t.slice(0, 2)}:${t.slice(2)}`;
 // 조합이 된 종목 — 이름 밑 「조합 HH:MM」 옆에 그 조합을 이룬 칩(위 칩 칸 색) · 그 밖 칩은 다음 줄에 붙은 시각과 함께(11-26 재권님 「처음 조합의 조건에 걸린 칩들을 조합 옆으로 나열해주고 그이후에 들어온 칩들은 줄바꿔서 시간까지 해서 나열해줘」)
 const chipFirst = (r, c) => { if (spanRow(r)) { const t = spansOf(r, c).map(([a]) => hm4(a)).filter(Boolean).sort()[0]; if (t) return t; } return chipTsOf(r)[c] || ''; };   // 그 칩이 처음 붙은 때(HHMM)
 const cbPill = (c, t) => `<span class="dt-cg dt-ovc" data-i="${colorOf(c)}">${esc(c)}${t ? ` <small class="dt-ovt">${t === '0000' ? '장 전' : hmS(t)}</small>` : ''}</span>`;
-const nameB = (r) => { const h = comboHit(r); if (!h) return `<b>${esc(r.name || '—')}</b>`; const ks = h.key.split(' + '); return `<b class="dt-cbn">${esc(r.name || '—')}</b><small class="dt-cbt" data-tip="${esc(`고른 조합 ${h.key} — ${hmS(h.t)} 에 됨`)}"><span class="dt-cbt-t">조합 ${hmS(h.t)}</span>${ks.map((c) => cbPill(c)).join('')}</small>`; };   // 풍선은 아래 작은 글에 — 이름에 달면 이름을 눌러도 종목 창이 안 뜸(openCo 가 풍선 칸은 넘김 · 11-26)
+// 조합이 된 뒤 다른 고른 조합을 마저 채운 칩 — 조합 줄에 그 칩이 들어온 시각과 함께(11-26 재권님 「칩조합조건이 겹치는 칩이 추가되면 그칩이 들어온 시간을 나열한다 · 칩조합 조건이 걸리지 않은 칩이 추가되는건 가로로 줄을 그어서 그아래로」)
+const comboAdds = (r, h) => { const S = [...comboSel()].map((k) => k.split(' + ')), have = new Set(h.key.split(' + ')), out = [];
+  comboEvents(r).forEach(([t, cs]) => { if (t <= h.t) return; const on = new Set(cs);
+    S.forEach((ks) => { if (ks.every((c) => on.has(c))) ks.forEach((c) => { if (!have.has(c)) { have.add(c); out.push(c); } }); }); });
+  return out.map((c) => [c, chipFirst(r, c)]).sort((a, b) => (a[1] || '9999').localeCompare(b[1] || '9999')); };
+const nameB = (r) => { const h = comboHit(r); if (!h) return `<b>${esc(r.name || '—')}</b>`; const ks = h.key.split(' + '); return `<b class="dt-cbn">${esc(r.name || '—')}</b><small class="dt-cbt" data-tip="${esc(`고른 조합 ${h.key} — ${hmS(h.t)} 에 됨`)}"><span class="dt-cbt-t">조합 ${hmS(h.t)}</span>${ks.map((c) => cbPill(c)).join('')}${comboAdds(r, h).map(([c, t]) => cbPill(c, t || null)).join('')}</small>`; };   // 풍선은 아래 작은 글에 — 이름에 달면 이름을 눌러도 종목 창이 안 뜸(openCo 가 풍선 칸은 넘김 · 11-26)
 const p1HM = () => { const o = String(DM().px1At || '').replace(':', ''); return /^\d{4}$/.test(o) && o > openHM() ? o : addHM(openHM(), 1); };   // 여는 시각보다 앞이면(늦게 연 날 옛 서버가 09:01 을 줌) 여는 시각 + 1분
 export const VI_SUBS = ['09:25 전', '09:25 이후', '시각 모름'];   // 점수표 열쇠(「VI·급등|09:25 전」)도 이 이름 — strategy-chips.js 가 가져다 씀
 const hm4 = (t) => String(t || '').replace(/:/g, '').slice(0, 4);   // 이 칩 셈만으로 돌게 — 아래 매수 타이밍의 hhmm 에 기대지 않음(11-18 메인에 이 커밋만 먼저 가 hhmm 없음으로 단타 판이 멈췄음)
@@ -1011,7 +1016,7 @@ function paint0(d) {
   const ovB = (r) => { const n = nEver(r), nl = nLive(r), k = CS.filter((c) => !st.off.has(c) && st.miss.has(c) && !(r.chips || []).includes(c)).length;
     // 겹친 칩 이름(11-26 재권님 「겹침 숫자로 하지말고 어떤칩이 겹쳤는지 종목믿으로 써주먼 좋을거같아」) — 가장 많이 함께 붙어 있던 때의 칩(구간 없는 판은 한 번 붙은 칩 전부) · 지금 빠진 칩은 흐리게
     //   돈몰림 · 미국강세는 이름 옆 알약(grpBadge)에 따로 있어 여기서는 뺌 · 수는 안 씀(셈 · 줄 세우기는 그대로 nEver) · 색은 위 칩 칸 색 그대로(colorOf · 재권님 「칩색은 왜 맘대로 바꾸지? 위에 있는거 가져오면 되잖아」)
-    const hh = comboHit(r); if (hh) { const ks = new Set(hh.key.split(' + ')), ex = colsOf().filter((c) => everChip(r, c) && !ks.has(c) && !GRP_CHIPS.includes(c)).map((c) => [c, chipFirst(r, c)]).sort((a, b) => (a[1] || '9999').localeCompare(b[1] || '9999'));
+    const hh = comboHit(r); if (hh) { const ks = new Set([...hh.key.split(' + '), ...comboAdds(r, hh).map(([c]) => c)]), ex = colsOf().filter((c) => everChip(r, c) && !ks.has(c) && !GRP_CHIPS.includes(c)).map((c) => [c, chipFirst(r, c)]).sort((a, b) => (a[1] || '9999').localeCompare(b[1] || '9999'));
       return `${ex.length ? `<span class="dt-ovl dt-ovx" data-tip="조합 밖 칩 — 붙은 시각 차례">${ex.map(([c, t]) => cbPill(c, t || null)).join('')}</span>` : ''}${hasScore() ? `<small class="dt-ovm">점수 ${num(scoreOf(r), 1)}</small>` : ''}`; }   // 조합 칩은 이름 밑 「조합」 줄에(11-26)
     const cs = ovSet(r).filter((c) => !GRP_CHIPS.includes(c)), lv = (c) => (r.chips || []).includes(c);
     return `<span class="dt-ovl" data-n="${n >= 5 ? 5 : n >= 3 ? n : 0}" data-tip="함께 붙어 있던 칩(켜진 칩 · 붙었다 빠진 칩도 셈 — 칩 N개 거르기 · 산 때와 같은 셈 · 흐린 칩은 지금 빠짐) — 순위가 이 칩 수로 정해짐">${cs.length ? cs.map((c) => `<span class="dt-cg dt-ovc${lv(c) ? '' : ' is-gone'}" data-i="${colorOf(c)}">${esc(c)}</span>`).join('') : '—'}</span>${hasScore() ? `<small class="dt-ovm">점수 ${num(scoreOf(r), 1)}</small>` : ''}${k ? `<small class="dt-ovm">못 받은 칩 ${k}</small>` : ''}`; };
