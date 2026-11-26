@@ -1809,7 +1809,7 @@ def combo_table_calc(proxy):
     return _ct_out(M, used, untimed, rows_n)
 
 
-CT_SUB_MAX = 6                          # 부분 묶음 칩 수 끝 — 화면 CB_SUB_MAX 와 같은 값(11-26 시황분석1 2d877ad)
+CT_SUB_MAX = 6                          # 부분 묶음 칩 수 끝 한 곳 — /api/kis/dt30-combo meta.comboDef.subMax 로 화면에 냄(화면 CB_SUB_MAX 는 서버 값이 없을 때만 · 개념정의 덧 11-26)
 
 
 def _ct_subs(cs):
@@ -1892,7 +1892,7 @@ def combo_table(proxy):
                 _ctab["busy"] = True
                 threading.Thread(target=_ct_run, args=(proxy, key), daemon=True, name="dt30-combo").start()
     v = _ctab["val"] or {"rows": [], "used": [], "untimed": 0, "rowsN": 0, "sig": None, "at": None}
-    meta = {"sig": v.get("sig"), "at": v.get("at"), "busy": bool(stale), "comboDef": {"n": COMBO_N, "tp": list(COMBO_TP), "sl": list(COMBO_SL)},
+    meta = {"sig": v.get("sig"), "at": v.get("at"), "busy": bool(stale), "comboDef": {"n": COMBO_N, "tp": list(COMBO_TP), "sl": list(COMBO_SL), "subMax": CT_SUB_MAX, "ver": COMBO_VER},
             "note": "굳은 판 전부로 조합마다 건수(cnt) · 날 수 · 오른 비율(upPct · 판 마지막 시각 값 ÷ 산 값) · 평균(avg %) · 익절 × 손절 평균 수익률(res) · 오른 비율(resUp)(1분봉 있는 건만 · resN) · "
                     "조합은 화면 comboLoad 와 같은 셈 · chips 는 서버 칩 이름(화면이 이름 바꾸고 제 칸 차례로 key 다시 지음) · sig 는 셈 칸(chipOff · subOff · chipCols · chipKnown) 글자 — 화면 chipSig 와 다르면 화면이 셈 · "
                     "busy 면 다시 세는 중이고 지금 값은 지난 셈"}
