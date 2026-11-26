@@ -348,7 +348,7 @@ const nthChipAt = (r) => { const T = chipOnlyAt(r); return T == null ? null : co
 // 칩이 다 찬 순간의 값 — 서버 dt30._moment_px 와 같은 갈래(개발2 8a0e2af · qa 11-26 「시계 칩은 T:ss 에 앎 · T:00 값은 앞당김」)
 //   그 분(T)에 붙은 켜진 칩 중 가장 늦게 안 초(rows[].chipSec{칩: {HH:MM: HH:MM:SS}}) → 그 순간 본 값(rows[].seenPx[초]) · 없으면 정각(00초)이면 앞 분 1분봉 종가 · 그 밖은 그 분 1분봉 종가(chipPx[T])
 //   서버는 「조합이 다 찬 칩」 중 가장 늦은 초 · 화면은 그 분에 새로 붙은 켜진 칩 전부 중 가장 늦은 초(같은 분 다른 칩이 더 늦으면 조금 늦은 값 · 미래는 안 봄) · 서버가 주면 안 씀(buy930 · comboBuy)
-const momentPx = (r, T) => { const hm = hmS(T), CS = r.chipSec || {}, SP = r.seenPx || {}, on = new Set(colsOf()); let sec = null; const newOn = spanRow(r) ? colsOf().filter((c) => everChip(r, c) && spansOf(r, c).some(([a]) => hm4(a) === T)) : [];
+const momentPx = (r, T) => { const hm = hmS(T), CS = r.chipSec || {}, SP = r.seenPx || {}, on = new Set(colsOf()); let sec = null; const newOn = spanRow(r) ? colsOf().filter((c) => everChip(r, c) && spansOf(r, c).some(([a]) => hm4(a) === T)) : (() => { const o = chipTsOf(r); return Object.keys(o).filter((c) => o[c] === T); })();   // 구간 없는 줄은 처음 시각으로(서버 done 과 같게 · 개념정의 덧 11-26)
   Object.entries(CS).forEach(([c, o]) => { const cn = chipName(c); if (!on.has(cn) || !everChip(r, cn)) return; if (spanRow(r) && !spansOf(r, cn).some(([a]) => hm4(a) === T)) return; const s = o && o[hm]; if (s && (!sec || s > sec)) sec = s; });   // 그 분에 새로 붙은 칩만(이미 붙어 있던 칩의 다시 본 초는 안 셈)
   if (sec && Number(SP[sec]) > 0) return { px: Number(SP[sec]), how: `${sec} 본 값` };
   const prev = hmS(addHM(T, -1)), C = r.chipPx || {};
