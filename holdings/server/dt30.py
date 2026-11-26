@@ -2992,11 +2992,20 @@ def _bar_close(proxy, day, code, hhmm):
     return r[0] if r else None
 
 
-def _load(proxy, day):
+class LoadFail(Exception):
+    """판 DB 를 못 읽음 — 「판 없음」 이 아님(새 판으로 덮지 않게 · 단타 리뷰 ② 11-26)."""
+
+
+def _load(proxy, day, strict=False):
+    """(판, 저장 시각) | None(그날 판 없음). DB 를 못 읽으면 strict 면 LoadFail · 아니면 None(읽기만 하는 자리 — 건너뜀).
+    판을 새로 짓거나 덮는 자리(장중 고리 · 되채우기)는 strict — 못 읽음을 「판 없음」 으로 읽어 tgTop · 매도 기록을 덮고 알림이 다시 나가지 않게(단타 리뷰 ② 11-26)."""
     try:
         with proxy.db_conn() as conn:
             got = conn.execute("SELECT board, saved_at FROM dt30 WHERE day = ?", (day,)).fetchone()
-    except Exception:
+    except Exception as e:
+        if strict:
+            raise LoadFail("%s 판 못 읽음 — %s" % (day, type(e).__name__))
+        print("  [단타 30] %s 판 못 읽음 — %s" % (day, type(e).__name__), flush=True)
         return None
     if not got:
         return None
@@ -3970,7 +3979,7 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
     have, keep_live, redo, base = set(), {}, {}, []
     sig = rule_sig(proxy)                              # 못 읽으면 None — 룰로는 다시 세지 않는다
     for d in days(proxy):                              # 관심 없이 세어 둔 되채운 날(watchSrc 칸 전)은 한 번 다시 센다(11-12 「응」)
-        got = _load(proxy, d)
+        got = _load(proxy, d, strict=True)            # 못 읽으면 되채우기 통째 멈춤 — 판 없음으로 보고 다시 지어 덮지 않게(단타 리뷰 ②)
         m = (got[0].get("meta") or {}) if got else {}
         stale = got and (m.get("capMinEok") != cap_min_eok() or (not m.get("allRows") and d < ALL_ROWS_SINCE))   # 문턱이 바뀐 판 · 줄을 자르던 옛 판(라이브로 굳힌 날 포함)은 한 번 다시 센다
                                                        # — 그 뒤 라이브 판(allRows 없음)은 날마다 다시 짓지 않는다(개념정의 덧 11-23 · 장중 기록을 어림 판으로 덮지 않게)
@@ -4848,8 +4857,9 @@ def board(proxy, day=None, cfg=None):
             pm = r.setdefault("pxMin", {})
             for n in PX_MIN:
                 pm.setdefault(str(n), None)                # 못 잼 — 0 아님
-    except Exception:
-        pass
+    except Exception as e:
+        print("  [단타 30] %s 여는 시각 + N분 값 못 채움 — %s" % (b.get("day"), proxy.safe_message(e, 120)), flush=True)   # 조용히 빠지지 않게(단타 리뷰 ② 11-26)
+        b.setdefault("meta", {})["pxMinFail"] = type(e).__name__
     try:
         buy930_fill(proxy, b)                          # 사는 셈 한 곳 — 칩 시각 · 09:30 까지 칩 · N번째 칩 찬 때 값(rows[].buy930 · 화면은 받기만) · 아래 봉 줄은 이 값을 씀
         try:
@@ -5026,7 +5036,7 @@ def start(proxy):
                 hm = now.hour * 60 + now.minute
                 off = late_min(proxy, now)                 # 늦게 여는 날(수능) — 정규장 시각들을 그만큼 뒤로(재권님 「가로 해줘」 11-19)
                 if now.weekday() < 5 and market_hours.today(proxy, day=day, now=now).get("open") is not False:
-                    got = _load(proxy, day)
+                    got = _load(proxy, day, strict=True)   # 못 읽으면 LoadFail — 이 바퀴는 안 짓고 안 덮음(아래 except)
                     if got is None and BUY_AT[0] * 60 + BUY_AT[1] <= hm < BUY_LATE[0] * 60 + BUY_LATE[1] and _status["frozen"] != day:
                         b = build(proxy, proxy.load_secrets(), day)
                         for r in b["rows"]:
@@ -5089,6 +5099,7 @@ def start(proxy):
                             flow_now = True
                         if b["rows"] and not b.get("closed") and buy_send(proxy, b, hm):   # 매수 — 칩 N개 찬 시각별로 · 여는 시각 + 3분부터 · 찰 때마다 한 종목씩(11-24) · 「팔 때」 대상도 이것
                             flow_now = True
+                            _store(proxy, b)               # 알림을 보낸 기록부터 바로 저장 — 뒤 단계가 터져도 같은 알림이 다음 바퀴에 또 안 나가게(단타 리뷰 ② 11-26)
                         if pre_fill(proxy, proxy.load_secrets(), b, hm):   # 오늘 프리장 끝 값 — 08:50 뒤 · 새로 든 줄은 다음 바퀴에
                             flow_now = True
                         if (b.get("closed") or hm >= BUY_LATE[0] * 60 + BUY_LATE[1]) and b.get("rows") and hm < _close_min(proxy, now) \
@@ -5101,6 +5112,7 @@ def start(proxy):
                                 if SELL_SEND:
                                     ok, why = dart.telegram_send(sell_text(r))
                                     print("  [단타 30] 팔 때 %s %s" % (r["code"], "보냄" if ok else "못 보냄 — " + str(why)), flush=True)
+                                _store(proxy, b)           # 팔 때 기록부터 바로 저장(단타 리뷰 ② 11-26)
                         if PRE_LOG_FROM[0] * 60 + PRE_LOG_FROM[1] <= hm <= PRE_LOG_TO[0] * 60 + PRE_LOG_TO[1] and _status.get("preLogHm") != now.strftime("%Y%m%d%H%M"):
                             try:                                  # 프리장 기록 — 분마다 한 번은 센다(화면이 부를 때만 세면 캐시 60초 + 셈 시간이 겹쳐 한 분씩 빠졌다 · 개념정의 11-25 08:02 빠짐)
                                 live(proxy, proxy.load_secrets(), force=True)
