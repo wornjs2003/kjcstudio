@@ -1737,16 +1737,17 @@ def _ct_row(r, b, cf, split, dc, wr_auto):
 
 
 def _ct_px(r, b, t, o):
+    """→ (산 값 | None, 그 뒤 봉을 셀 첫 분 「HHMM」) — 9시 1분 값은 여는 분 봉 종가라 9시 1분 봉부터 · 칩 찬 분 1분봉 종가는 다음 분 봉부터 · N분 값은 그 분 봉부터(qa 덧 — 산 앞 봉이 익절 · 손절에 섞임)."""
     pm, at = r.get("pxMin") or {}, (b.get("meta") or {}).get("pxMinAt") or {}
     mh = lambda n: _hm4(at.get(str(n))) or _hhmm(o + n).replace(":", "")
     v1 = lambda x: x.get("px") if isinstance(x, dict) and isinstance(x.get("px"), (int, float)) and x["px"] > 0 else None
     if t <= mh(1):
-        return v1(pm.get("1")) or (v1(r.get("px1")) if isinstance(r.get("px1"), dict) else None)
+        return v1(pm.get("1")) or (v1(r.get("px1")) if isinstance(r.get("px1"), dict) else None), mh(1)
     v = (r.get("chipPx") or {}).get("%s:%s" % (t[:2], t[2:]))
     if isinstance(v, (int, float)) and v > 0:
-        return v
+        return v, _hhmm(int(t[:2]) * 60 + int(t[2:]) + 1).replace(":", "")
     k = next((n for n in range(1, 6) if mh(n) == t), None)
-    return v1(pm.get(str(k))) if k else None
+    return (v1(pm.get(str(k))) if k else None), t
 
 
 def combo_table_calc(proxy):
@@ -1799,7 +1800,7 @@ def combo_table_calc(proxy):
                 if key in seen:
                     continue
                 seen.add(key)
-                p = _ct_px(r, b, t, o)
+                p, cut = _ct_px(r, b, t, o)
                 if not p:
                     continue
                 g = M.setdefault(key, {"key": key, "chips": list(cs), "n": len(cs), "cnt": 0, "up": 0, "sum": 0.0, "days": set(),
@@ -1809,7 +1810,7 @@ def combo_table_calc(proxy):
                 g["up"] += ret > 0
                 g["sum"] += ret
                 g["days"].add(d)
-                after = [x for x in bars.get(code, []) if x[0] > t]
+                after = [x for x in bars.get(code, []) if x[0] >= cut]
                 if after:
                     res = _combo_res(p, after + [[end, ex, ex, ex, ex]])   # 끝까지 안 닿으면 판 값(판 마지막 시각 값)
                     g["rn"] += 1
