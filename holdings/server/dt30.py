@@ -3590,6 +3590,7 @@ def _redo_gone(proxy, day, b):
     b["meta"]["redoGone"] = hist
 
 
+M1_FILL_TRIES = 3             # 지난 판 1분봉 되받기가 빈 답이면 다시 묻는 끝 번 수(밤 바퀴마다 한 번) — 정지 종목(금양 11-24)처럼 정말 없는 것은 그만 묻게
 M1_FILL_SPAN = 40             # 지난 판 1분봉 되받기 — 여는 시각 + 이 분까지(120줄 한 번이면 그 앞 두 시간) · 여는 값(PX_MIN) · 지난 날 VI 창(PAST_LATE)을 덮음
 
 
@@ -3616,14 +3617,18 @@ def m1_fill(proxy, cfg, limit=BACKFILL_DAYS):
                                                 % ",".join("?" * len(codes)), [lo, hi] + codes)}
         for c in codes:
             mk = "m1fill:%s:%s" % (c, day)
-            if c in have or proxy._meta_get(mk):
+            if c in have:
+                continue
+            v = str(proxy._meta_get(mk) or "")
+            tries = int(v[2:]) if v.startswith("빈:") and v[2:].isdigit() else (1 if v else 0)   # 옛 표시(날짜)는 빈 답이어도 남겼음 — 한 번 친 것으로 셈
+            if tries >= M1_FILL_TRIES:
                 continue
             raw = proxy._kr_past_chunk(cfg, c, day, _hhmm(o + M1_FILL_SPAN).replace(":", "") + "00")
             time.sleep(proxy.BAR_FILL_CALL_GAP)
             mine = [x for x in raw if x["ts"][:8] == day and int(x["ts"][8:10]) * 60 + int(x["ts"][10:12]) >= proxy.MINUTE_DAY_START]
             if mine:
                 proxy.save_candles(c, "1m", proxy.aggregate_minutes(mine, 1))
-            proxy._meta_set(mk, today)
+            proxy._meta_set(mk, today if mine else "빈:%d" % (tries + 1))   # 빈 답(물음 실패 · 정지)은 다음 바퀴에 다시 — M1_FILL_TRIES 번까지(11-18 지니언스 · 025980 이 한 번 빈 답에 영영 안 물림 · 재권님 「지니언스는 확인해」 → 「응 그래」 11-26)
             n += 1
         vi0 = [bool(r.get("viPx")) for r in b["rows"]]
         got_px = _pxmin_fill(proxy, b)                 # 쌓인 1분봉(방금 받은 것 · 이미 있던 것)으로 판 줄을 채워 저장 — 1분봉이 지워져도 남게
