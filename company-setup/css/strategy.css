@@ -461,3 +461,8 @@
 /* 종목 칸 넓이 한 벌(11-26 재권님 「평균의 칸 종목이 있는곳 가로 넓이가 달라. 기준을 83이미지에 맞춰서」 — 겹친 칩 이름 · 돈몰림 테마 이름이 한 줄로 길어 날마다 칸이 넓어졌음) · 넓이는 고정 · 칸 안 글은 줄을 바꿈 */
 .dt .dt-2row td.st-name { width: 26em; min-width: 26em; max-width: 26em; white-space: normal; }
 .dt .dt-2row td.st-name * { white-space: normal; }
+/* 조합 줄 — 「조합 HH:MM」 옆에 조합을 이룬 칩 · 조합 밖 칩은 다음 줄에 붙은 시각과 함께(11-26 재권님 「처음 조합의 조건에 걸린 칩들을 조합 옆으로 … 그이후에 들어온 칩들은 줄바꿔서 시간까지」) */
+.dt .st-name small.dt-cbt { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; white-space: normal; }
+.dt .st-name small.dt-cbt .dt-ovc { display: inline-block; padding: 0 6px; border-radius: 99px; font-size: 11px; font-weight: 700; background: var(--cd); color: var(--c); }
+.dt .dt-ovc .dt-ovt { font-weight: 400; opacity: .75; }
+.dt .dt-ovl.dt-ovx { border-top: 1px solid var(--kh-border); padding-top: 3px; margin-top: 3px; }   /* 조합 칩 줄과 그 밖 칩 줄을 가로줄로 가름(11-26 재권님 「조합칩과 그이와의 조합은 가로줄로 해서 구분이 되게」) */
