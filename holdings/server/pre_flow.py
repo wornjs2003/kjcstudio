@@ -118,8 +118,22 @@ def _vol_log(proxy, day, hm, vols):
         print("  [프리장] 분마다 거래량 못 씀 (%s)" % type(e).__name__, flush=True)
 
 
+def _pre_open_min(proxy, day):
+    """그날 프리장 여는 분(자정부터) — market_hours 그날 pre(옮겨진 날 · 없는 날) · 못 읽으면 08:00."""
+    try:
+        import market_hours
+        o = (market_hours.today(proxy, day=day) or {}).get("pre")
+        if o and o[0]:
+            t = str(o[0]).replace(":", "")
+            return int(t[:2]) * 60 + int(t[2:4])
+    except Exception:
+        pass
+    return 8 * 60
+
+
 def prev_vols_at(proxy, day, hm):
-    """(앞 거래일 「YYYYMMDD」 | None, {code: 그날 hm 이하 마지막 누적 거래량}) — 그 날 표에 hm 이하 기록이 없으면 {}(못 잼 · 0 아님)."""
+    """(앞 거래일 「YYYYMMDD」 | None, {code: 그날 「프리장 연 뒤 같은 분째」 이하 마지막 누적 거래량}) — 그 날 표에 그 시각 이하 기록이 없으면 {}(못 잼 · 0 아님).
+    시계 시각이 아니라 연 뒤 몇 분째끼리 견준다 — 어느 한 날 프리장이 옮겨진 날에도 맞게(개념정의 덧 11-26)."""
     try:
         with proxy.db_conn() as conn:
             if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'pre_vol_min'").fetchone():
@@ -128,6 +142,8 @@ def prev_vols_at(proxy, day, hm):
             pd = r[0] if r else None
             if not pd:
                 return None, {}
+            m = int(hm[:2]) * 60 + int(hm[2:4]) - _pre_open_min(proxy, day) + _pre_open_min(proxy, pd)
+            hm = "%02d%02d" % divmod(max(0, m), 60)
             h = conn.execute("SELECT MAX(hm) FROM pre_vol_min WHERE day = ? AND hm <= ?", (pd, hm)).fetchone()[0]
             if not h:
                 return pd, {}
