@@ -4766,7 +4766,7 @@ def _buy_combo(proxy, bb, o, R, now_m, on, tmin):
     지금 붙은 칩 수는 안 씀(뒤에 칩이 붙어도 차례 고정). 사는 때 = 조합 된 때 · 유통 대비 거래가 문턱을 그 뒤에 넘었으면 넘은 분(못 넘었으면 조합 된 때 · 화면 「어림」 과 같게).
     9시 30분(여는 시각 + COMBO_UNTIL_MIN) 전에 된 것만 · 산 값(rows[].comboBuy.px)이 안 나오면 BUY_WAIT_MIN 분 기다렸다 「매수값 미확인」(px null · pxWhy)으로 삼(재권님 「산값을 못 잰 종목이 나와야 사야되는데」 11-26 · 화면 ecd26ab 와 같게 · qa 덧).
     고른 조합은 서버 고르기(meta.comboPick · 전날까지 표 · 문턱) — 표가 없으면 아무것도 안 보냄(화면 comboPending 과 같게) · 전일 거래량 칸(volOn)은 화면만 셈(어림)."""
-    rows = (bb.get("rows") or []) + ((bb.get("meta") or {}).get("outRows") or [])
+    rows = bb.get("rows") or []                        # 판에 남아 있는 종목만 — 빠진 줄(outRows)은 화면이 안 그려 차례가 갈렸음(재권님 「판에 남아있는 종목만」 11-27 08:4x · qa 덧)
     if _set_val("comboAuto") is False:                 # 손으로 고른 조합은 화면 이름(칩 이름 다리 표가 화면에만)이라 서버가 아직 못 셈 — 안 보내고 까닭만(재권님께 알림 · 11-26)
         bb.setdefault("meta", {})["comboPick"] = {"why": "손으로 고른 조합 — 서버 알림 아직 못 셈"}
         return []
