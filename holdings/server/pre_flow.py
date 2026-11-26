@@ -99,6 +99,43 @@ def _prev_pre_vol(proxy, day):
         return {}
 
 
+_VM_SCHEMA = "CREATE TABLE IF NOT EXISTS pre_vol_min (day TEXT NOT NULL, hm TEXT NOT NULL, code TEXT NOT NULL, vol INTEGER NOT NULL, PRIMARY KEY (day, hm, code))"
+
+
+def _vol_log(proxy, day, hm, vols):
+    """프리장 누적 거래량을 지을 때마다(FLOW_TTL) 남긴다 — 다음 거래일 「거래비율급증」 프리장 셈의 앞 날 같은 시각 값(11-26 재권님 「단타창이 8시 프리장 시작되면 그때부터 동작하도록」 → 「응」).
+    쓰는 서버만(_make) · 감시 종목 전부 · 남기는 날 수는 dt30_pre_log 와 같은 셈(market_hours.KEEP_TRADE_DAYS)."""
+    if not vols or not proxy.marketdb.writable():
+        return
+    try:
+        import market_hours
+        with proxy._db_lock, proxy.db_conn() as conn:
+            conn.execute(_VM_SCHEMA)
+            conn.executemany("INSERT OR REPLACE INTO pre_vol_min (day, hm, code, vol) VALUES (?,?,?,?)", [(day, hm, c, int(v)) for c, v in vols.items()])
+            conn.execute("DELETE FROM pre_vol_min WHERE day < (SELECT day FROM (SELECT DISTINCT day FROM pre_vol_min ORDER BY day DESC LIMIT 1 OFFSET ?))",
+                         (market_hours.KEEP_TRADE_DAYS - 1,))
+    except Exception as e:
+        print("  [프리장] 분마다 거래량 못 씀 (%s)" % type(e).__name__, flush=True)
+
+
+def prev_vols_at(proxy, day, hm):
+    """(앞 거래일 「YYYYMMDD」 | None, {code: 그날 hm 이하 마지막 누적 거래량}) — 그 날 표에 hm 이하 기록이 없으면 {}(못 잼 · 0 아님)."""
+    try:
+        with proxy.db_conn() as conn:
+            if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'pre_vol_min'").fetchone():
+                return None, {}
+            r = conn.execute("SELECT MAX(day) FROM pre_vol_min WHERE day < ?", (day,)).fetchone()
+            pd = r[0] if r else None
+            if not pd:
+                return None, {}
+            h = conn.execute("SELECT MAX(hm) FROM pre_vol_min WHERE day = ? AND hm <= ?", (pd, hm)).fetchone()[0]
+            if not h:
+                return pd, {}
+            return pd, {c: v for c, v in conn.execute("SELECT code, vol FROM pre_vol_min WHERE day = ? AND hm = ?", (pd, h)).fetchall()}
+    except Exception:
+        return None, {}
+
+
 def _disclosures(proxy, codes, now):
     """앞 평일 15:30 뒤 받은 공시 {code: [제목 …]} — dart_disclosures(받은 시각 received_at)."""
     since = "%sT15:30" % _prev_weekday(now).isoformat()
@@ -185,8 +222,17 @@ def _make(proxy, cfg):
                      "program": pg, "disc": disc.get(c) or []})
     rows.sort(key=lambda x: -(x["pct"] if x["pct"] is not None else -999))   # 보이는 차례는 등락률 큰 순 — 고르기(pick)는 거래대금 순 그대로
     #   (2026-11-13 재권님 「프리장에 순위는 등락이 높은거 순으로 정열해줘」)
+    vols = {c: r["vol"] for c, r in nx.items() if (r.get("vol") or 0) > 0}
+    turn = {}                                          # 프리장 거래 비율 % = 넥스트레이드 누적 거래량 ÷ 풀린 주식수 × 100(= 거래대금 어림 ÷ 유통 시가총액) — 단타 판 「거래비율」 장 전 셈
+    try:
+        import company_profile
+        fl = company_profile.floats()
+        turn = {c: round(v / fl[c] * 100, 3) for c, v in vols.items() if fl.get(c)}
+    except Exception:
+        turn = None                                    # 못 잼 — 단타 판이 「거래비율」 을 못 받음으로
+    _vol_log(proxy, day, now.strftime("%H%M"), vols)
     return {"rows": rows, "sectors": _sectors(nx), "noTrade": False, "programMissing": missing, "candidates": len(cand),
-            "day": day, "hm": now.strftime("%H:%M")}
+            "day": day, "hm": now.strftime("%H:%M"), "turn": turn, "vols": vols}
 
 
 def _save(proxy, m, final):
