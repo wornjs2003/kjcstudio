@@ -10810,6 +10810,17 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": True, "data": trade_signal.journal(sys.modules[__name__], nd), "meta": trade_signal.status(sys.modules[__name__])})
                 return
 
+            if route == "dt30-combo":
+                # 단타 칩 조합 표(dt30.combo_table · 2026-11-26) — 서버가 굳은 판 전부로 한 번 셈해 저장 · 셈 칸 · 판이 바뀌면 뒤에서 다시 셈(meta.busy)
+                # 재권님 「칩조합은 한번 셈해놓고 저장해놓으면 그냥 볼러오면 되잖아」(12:12) → 「응 이게 맞아」(13:3x)
+                try:
+                    d, m = dt30.combo_table(sys.modules[__name__])
+                except Exception as e:
+                    self._send_json({"ok": False, "error": "칩 조합 표를 못 셈(%s)" % safe_message(e, 120), "data": None}, 500)
+                    return
+                self._send_json({"ok": True, "data": d, "meta": m})
+                return
+
             if route == "dt30-chiplog":
                 # 단타 칩 붙음 · 빠짐 기록(dt30.chip_log_put · 2026-11-24) — 셈은 화면 · ?day=YYYYMMDD(없으면 오늘) · &codes=코드,코드(없으면 전부) · KIS 안 부름
                 day = (qs.get("day") or [datetime.now(KST).strftime("%Y%m%d")])[0]
