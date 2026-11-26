@@ -245,7 +245,7 @@ const tipAt = (k) => { const t = tipOf(k); return t ? ` data-tip="${esc(t)}"` : 
 function chipPanel(all) {
   return colsOf().map((c) => { const i = colorOf(c);
     const n = all.filter((r) => (r.chips || []).includes(c)).length;
-    const subs = subOrder(c, [...new Set(all.flatMap((r) => subsOf(r, c)))]);
+    const subs = ['돈몰림', '미국강세'].includes(c) ? [] : subOrder(c, [...new Set(all.flatMap((r) => subsOf(r, c)))]);   // 묶음 칩은 좁은 폭에서도 업종 · 테마 목록 없이 단추만(11-26 재권님 「돈몰림 미국장 여기아래로 목록 나올필요는 없어 종목옆에만 있으면되」 · 넓은 폭 grpHead 와 같게)
     const on = !st.off.has(c);
     // data-i — 칩마다 색(strategy.css 의 .dt-cg[data-i] · theme.css 변수) · 하위 칩은 상위 칩 색을 물려받음
     const ms = st.miss.has(c), tip = ms ? ` data-tip="${esc(`그날 판에 ${c} 값을 ${missWord()} — 걸린 종목이 있어도 0 으로 셈됨${tipOf(c) ? `\n${tipOf(c)}` : ''}`)}"` : tipAt(c);
