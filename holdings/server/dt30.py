@@ -1698,6 +1698,7 @@ COMBO_N = 5
 COMBO_TP = (None, 1.5, 2, 3, 4, 5)       # 익절 % — None 은 「없음」
 COMBO_SL = (None, -1, -1.5, -2, -3)      # 손절 %
 COMBO_LIVE_SEC = 60                      # 그날 판(안 끝남) 셈을 다시 쓰는 초 — 1분봉이 1분마다 늘어서
+COMBO_UNTIL_MIN = 30                     # 「조합으로 사기」 날 상위 ( )종목을 채우는 끝 — 여는 시각 + 이 분(9시 30분 · 늦게 연 날은 그만큼 뒤) · 기준 시각(ruleMin)과 따로 — 재권님 「개수가 부족하면 부족한것 먼저 메세지가 나가고 9시 30분까지 칩조건이 들어오는 순서대로 갯수를 채운다」(11-26)
 CT_PRE_MIN = 60                          # 「조합으로 사기」 날 장 전 이 분 앞부터 여는 시각까지 — 조합 표를 한 번 새로 셈(셈이 30초 남짓 · 11-26 8765 잼)
 COMBO_MEMO_DAYS = 60                     # 메모리에 두는 판 수 — 화면이 판을 열 때 지난 판을 다 받아서(끝난 판은 저장 시각 · 셈 칸이 같으면 다시 안 셈 · 개념정의 덧 ③)
 _combo_memo = {}
@@ -4762,34 +4763,37 @@ def _buy_combo(proxy, bb, o, R, now_m, on, tmin):
     """「조합으로 사기」(셈 칸 comboOn) 날의 매수 차례 — [(줄, info)] · 화면 단타 판(4af569c · 4e8b448 · 75096f9)과 같은 셈.
     차례 = 조합 된 분(여는 시각 + 1분 앞이면 그 분으로 · 9시 1분에 이미 된 종목이 먼저) → 그 분 산 값의 시가 대비 상승률 → 초반상승 % → 시가총액.
     지금 붙은 칩 수는 안 씀(뒤에 칩이 붙어도 차례 고정). 사는 때 = 조합 된 때 · 유통 대비 거래가 문턱을 그 뒤에 넘었으면 넘은 분(못 넘었으면 조합 된 때 · 화면 「어림」 과 같게).
-    기준 시각(R) 전에 된 것만 · 산 값(rows[].comboBuy.px)이 있는 종목만 — 없으면 건너뛰고 다음 차례로 채움(재권님 「응 그렇게해」 11-26 19:1x · 개발2 「응 그래」 19:30).
+    9시 30분(여는 시각 + COMBO_UNTIL_MIN) 전에 된 것만 · 산 값(rows[].comboBuy.px)이 안 나오면 BUY_WAIT_MIN 분 기다렸다 「매수값 미확인」(px null · pxWhy)으로 삼(재권님 「산값을 못 잰 종목이 나와야 사야되는데」 11-26 · 화면 ecd26ab 와 같게 · qa 덧).
     고른 조합은 서버 고르기(meta.comboPick · 전날까지 표 · 문턱) — 표가 없으면 아무것도 안 보냄(화면 comboPending 과 같게) · 전일 거래량 칸(volOn)은 화면만 셈(어림)."""
     rows = (bb.get("rows") or []) + ((bb.get("meta") or {}).get("outRows") or [])
     if _set_val("comboAuto") is False:                 # 손으로 고른 조합은 화면 이름(칩 이름 다리 표가 화면에만)이라 서버가 아직 못 셈 — 안 보내고 까닭만(재권님께 알림 · 11-26)
         bb.setdefault("meta", {})["comboPick"] = {"why": "손으로 고른 조합 — 서버 알림 아직 못 셈"}
         return []
     combo_buy_fill(proxy, bb)
-    p1 = o + 1
+    p1, Rc = o + 1, o + COMBO_UNTIL_MIN
     got = []
     for r in rows:
         B = r.get("comboBuy") or {}
         t = str(B.get("buyAt") or "").replace(":", "")
-        if len(t) != 4 or not B.get("px"):
-            continue                                   # 조합 안 됨 · 산 값 못 잼(그 분 1분봉이 아직 안 굳었으면 다음 바퀴에 다시)
+        if len(t) != 4:
+            continue                                   # 조합 안 됨
         tm_ = int(t[:2]) * 60 + int(t[2:])
+        if not B.get("px") and now_m < max(tm_, p1) + 1 + BUY_WAIT_MIN:
+            continue                                   # 산 값이 아직 안 나옴(그 분 1분봉이 안 굳음) — 기다리다 안 나오면 「매수값 미확인」 으로 삼(아래)
         at = max(tm_, p1)
         if on:
             c = _turn_cross(r, tmin)
             if c and int(c[:2]) * 60 + int(c[2:]) > at:
                 at = int(c[:2]) * 60 + int(c[2:])
-        if at >= R or now_m < at + 1:
-            continue                                   # 기준 시각 뒤 · 아직 그 분이 안 끝남
+        if at >= Rc or now_m < at + 1:
+            continue                                   # 9시 30분(여는 시각 + COMBO_UNTIL_MIN) 뒤 · 아직 그 분이 안 끝남
         op = r.get("open") if isinstance(r.get("open"), (int, float)) and r.get("open") > 0 else None
         src = str(B.get("src") or "")
-        rise = (B["px"] / op - 1) * 100 if op and not ("어림" in src or "대체" in src) else None
+        rise = (B["px"] / op - 1) * 100 if op and B.get("px") and not ("어림" in src or "대체" in src) else None
         got.append(((at, -(rise if rise is not None else -1e9), -(r.get("rise") if isinstance(r.get("rise"), (int, float)) else -1e9), -(r.get("cap") or 0)),
                     r, {"kind": "조합", "at": _hhmm(at), "chipAt": str(B.get("at") or "")[:5] or _hhmm(tm_), "turn": _turn_at(r, max(1, at - o)),
-                        "rise": round(rise, 2) if rise is not None else None, "px": B["px"], "combo": B.get("key")}))
+                        "rise": round(rise, 2) if rise is not None else None, "px": B.get("px"), "combo": B.get("key"),
+                        "pxWhy": None if B.get("px") else "매수값 미확인"}))
     got.sort(key=lambda x: x[0])
     return [(x[1], x[2]) for x in got]
 
@@ -4811,7 +4815,7 @@ def _buy_rule_meta(proxy, b):
                             "turnOn": on, "turnMin": tmin, "chipOff": sorted(cf[0]), "subOff": sorted(cf[1]), "chipCols": sorted(cf[2]) if cf[2] is not None else None, "def": {"ruleMin": RULE_MIN_DEF, "turnOn": TURN_ON_DEF, "turnMin": TURN_MIN_DEF, "top": TOP_DEF},
                             "order": [{"code": r["code"], "name": r.get("name"), **r["buyRule"]} for r in rows],
                             "sent": (b["meta"].get("tgBuy") or {}), "combo": _set_val("comboOn") is True,
-                            "comboNote": "조합으로 사기(combo true) 날은 위 칩 N개 차례 대신 — 고른 조합이 된 분(9시 1분 앞이면 9시 1분) → 그 분 산 값의 시가 대비 상승률 → 초반상승 % → 시가총액 · 기준 시각 전 · 산 값 있는 종목만 · 유통 대비 거래 문턱은 넘은 분으로 미룸(못 넘었으면 조합 된 때) · 고른 조합은 meta.comboPick(표가 없으면 안 보냄)",
+                            "comboNote": "조합으로 사기(combo true) 날은 위 칩 N개 차례 대신 — 고른 조합이 된 분(9시 1분 앞이면 9시 1분) → 그 분 산 값의 시가 대비 상승률 → 초반상승 % → 시가총액 · 9시 30분 전 · 산 값이 안 나오면 「매수값 미확인」 으로 삼 · 유통 대비 거래 문턱은 넘은 분으로 미룸(못 넘었으면 조합 된 때) · 고른 조합은 meta.comboPick(표가 없으면 안 보냄)",
                             "note": "서버가 보내는 차례(order) — 기준 시각 전 칩 N개 찬 순(그 분 유통 대비 거래 조건) · 기준 시각에 모자라면 칩 N−1 종목 상승률 순 · 위에서 상위 top 종목까지만 · 끈 칩은 셈 칸 chipOff · subOff · chipCols 대로 · sent 는 실제로 보낸 것"}
 
 
@@ -4824,7 +4828,7 @@ def buy_send(proxy, b, hm):
     """여는 시각부터 기준 시각 + BUY_SEND_LATE 분까지 — 매수 룰(buy_order)로 새로 정해진 종목을 meta.tgTop 에 더하고(meta.tgBuy 에 차례 · 시각 · 찬/채움) 텔레그램 한 통씩 → 더한 수."""
     fz = buy_set_freeze(proxy, b, hm)                         # 보내기 창 시작에 셈 칸을 굳힘 — 그날은 그 값으로만(재권님 「가」 11-26)
     with _frozen_set(b):
-        late = rule_min() + BUY_SEND_LATE
+        late = (max(rule_min(), COMBO_UNTIL_MIN) if _set_val("comboOn") is True else rule_min()) + BUY_SEND_LATE   # 조합으로 사는 날은 9시 30분까지 채움
     o = _open_min(proxy, b["day"], b)
     if hm < o + 1 or hm > o + late:
         return 1 if fz else 0                          # 굳힌 것도 저장되게(바뀐 것으로 셈)
@@ -4835,13 +4839,18 @@ def buy_send(proxy, b, hm):
     cap = buy_top()
     for r in rows:
         if r["code"] in top:
+            sb = m.setdefault("tgBuy", {}).get(r["code"]) or {}
+            if sb and sb.get("px") is None and r["buyRule"].get("px"):
+                sb["px"], sb["pxAt"] = r["buyRule"]["px"], _now().strftime("%H:%M:%S")   # 「매수값 미확인」 으로 보낸 종목 — 값이 들어오는 대로 채움(재권님 「이값은 들어오는대로 넣어줘야해」 11-26 19:23)
+                n += 1
             continue
         if len(top) >= cap:                            # 이미 보낸 것으로 상위 ( )종목이 찼음 — 늦게 정해진(거래 값을 기다린) 종목이 앞 차례여도 더 안 보냄(보낸 것은 못 거둠)
             break
         top.append(r["code"])
         info = r["buyRule"]
         m.setdefault("tgBuy", {})[r["code"]] = {"px": info.get("px"), "at": info.get("at"), "chipAt": info.get("chipAt"), "sentAt": _now().strftime("%H:%M:%S"),
-                                                "kind": info["kind"], "order": len(top), "turn": info.get("turn"), "rise": info.get("rise")}
+                                                "kind": info["kind"], "order": len(top), "turn": info.get("turn"), "rise": info.get("rise"),
+                                                "pxWhy": info.get("pxWhy")}
         m["tgTopAt"] = _now().strftime("%H:%M")
         n += 1
         fz = False
