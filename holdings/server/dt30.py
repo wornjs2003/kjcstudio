@@ -2132,18 +2132,20 @@ def combo_table(proxy):
 
 
 def bars_fill(proxy, b):
-    """산 줄(buy930)마다 rows[].bars [[「HH:MM」, 시가, 고가, 저가, 종가], …] · barSrc 「1m」 · 「5m」 · null — 산 분부터 판 끝(times 마지막) 앞까지(bars_get).
+    """판 줄마다(빠진 줄도) rows[].bars [[「HH:MM」, 시가, 고가, 저가, 종가], …] · barSrc 「1m」 · 「5m」 · null — 산 줄(buy930)은 산 분부터 · 그 밖은 여는 시각부터 판 끝(times 마지막) 앞까지(bars_get).
     매도 타점을 30분 칸이 아니라 봉으로 — 재권님 「매도에서 해당룰이 적용안되는거 같은데. 3%나 4%를 맞으면 안되는데 이거 왜이래? 매도타점 정확히 계산해」(11-23 19:1x) ·
     「손절이 2%가 넘는건 이유가 뭐지?」(19:4x). 읽을 때만(저장 안 함)."""
-    rows = [r for r in (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or []) if r.get("buy930")]
+    rows = (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or [])
     if not rows:
         return 0
-    lo = min(r["buy930"]["at"].replace(":", "") for r in rows)
+    o = _hhmm(_open_min(proxy, b["day"], b))          # 산 줄이 없는 종목은 여는 시각부터 — 판에 든 종목 전부(조합으로 산 종목이 비어 화면이 30분 칸으로 팔던 것 · 재권님 「이미 서버에 있는걸 굳이 따로 있을 이유를 물어본건데」 19:13 → 「응 그래」 11-26)
+    at_of = lambda r: (r.get("buy930") or {}).get("at") or o
+    lo = min(at_of(r) for r in rows).replace(":", "")
     got = bars_get(proxy, b["day"], [r["code"] for r in rows], lo, (b.get("times") or ["1400"])[-1])
     n = 0
     for r in rows:
         per, bs = got.get(r["code"], (None, []))
-        r["bars"] = bars_after(per, bs, r["buy930"]["at"])
+        r["bars"] = bars_after(per, bs, at_of(r))
         r["barSrc"] = per if r["bars"] else None
         n += bool(r["bars"])
     return n
