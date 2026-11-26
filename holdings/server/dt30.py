@@ -234,6 +234,10 @@ def chips_now(proxy, cfg, early=True, pre=False):
             pre_log_put(proxy, hit, (pf or {}).get("rows") or [])
         except Exception as e:
             print("  [단타 프리장 기록] 못 씀 — %s" % type(e).__name__, flush=True)
+        try:
+            hit = _day_fix(proxy, hit, missing)       # 장 전 — 하루 고정 칩을 바퀴마다 적어 둠(프리장은 08:50 뒤 그 값으로)
+        except Exception as e:
+            print("  [단타 30] 하루 고정 칩 못 적음 — %s" % proxy.safe_message(e, 120), flush=True)
         return _cap_keep(hit, small), missing, cap, mkt
     try:
         for it in intraday_alerts.today().get("items") or []:
@@ -299,6 +303,10 @@ def chips_now(proxy, cfg, early=True, pre=False):
                     put(c, q.get("name"), "현재상승")   # 셈에 안 듦 — 이름만(_live_calc 가 그 바퀴 시세로 다시 봄)
         except Exception:
             missing.append("현재상승")
+    try:
+        hit = _day_fix(proxy, hit, missing)           # 하루 고정 칩 — 여는 시각에 굳힌 목록으로(재권님 「응」 11-26)
+    except Exception as e:
+        print("  [단타 30] 하루 고정 칩 못 굳힘 — %s" % proxy.safe_message(e, 120), flush=True)
     return _cap_keep(hit, small), missing, cap, mkt
 
 
@@ -958,11 +966,108 @@ def _cl_keys(r):
     return out
 
 
+_DC_SCHEMA = ("CREATE TABLE IF NOT EXISTS dt30_day_chip (day TEXT NOT NULL, chip TEXT NOT NULL, code TEXT NOT NULL, subs TEXT, at TEXT, "
+              "PRIMARY KEY (day, chip, code))")      # code '' 줄 = 그 칩을 그날 굳혔다는 표시(종목이 0 이어도)
+
+
+CHIP_ONCE = ("초반상승", "VI·급등", "볼린저")   # 한 번 붙으면 그날 안 빠지는 칩 — 처음 시각만 알면 정확(11-26 칩 기록: 빠짐 0)
+
+
+def chip_prec(b, log_ok):
+    """{칩: 「정확 — 하루 고정」 · 「정확 — 한 번 붙으면 그대로」 · 「기록 — 장중 붙음 · 빠짐」 · 「5분 어림 — 섹터 수급 판」 · 「처음 시각만」} — 판 meta.chipPrec.
+    log_ok 는 그날 칩 붙음 · 빠짐 기록을 쓸 수 있나(chip_spans_get) · 다시 지은 판의 돈몰림은 섹터 수급 판 5분 칸으로 다시 셈한 구간."""
+    dc, out = set(day_chips()), {}
+    money = any(((r.get("chipSpans") or {}).get("돈몰림")) for r in (b.get("rows") or []))
+    for ch in ov_chips() + ("현재상승", "볼린저"):
+        if ch in dc:
+            out[ch] = "정확 — 하루 고정"
+        elif ch in CHIP_ONCE:
+            out[ch] = "정확 — 한 번 붙으면 그대로"
+        elif log_ok:
+            out[ch] = "기록 — 장중 붙음 · 빠짐"
+        elif ch == "돈몰림" and money:
+            out[ch] = "5분 어림 — 섹터 수급 판"
+        else:
+            out[ch] = "처음 시각만"
+    return out
+
+
+def day_chips():
+    """하루 고정 칩(chip_rules 「단타」 dayChips 한 곳) — 장 여는 시각에 붙어 있던 종목을 그날 끝까지."""
+    try:
+        return tuple(chip_rules.get("단타", "dayChips"))
+    except Exception:
+        return ()
+
+
+def day_fix_at(proxy, day, ch):
+    """하루 고정 칩을 굳히는 때(분) — 그 앞 마지막 바퀴 값이 그날 값. 프리장은 프리장 끝(pre_flow.PRE_CLOSE · 08:50 끝 값으로 고름 · 11-25 는 08:50 에 다 빠졌다) · 그 밖은 정규장 여는 시각."""
+    if ch == "프리장":
+        import pre_flow
+        return pre_flow.PRE_CLOSE[0] * 60 + pre_flow.PRE_CLOSE[1]
+    return _open_min(proxy, day)
+
+
+def _day_fix(proxy, hit, missing, now=None):
+    """chips_now 끝 — 하루 고정 칩(day_chips)을 굳히는 때(day_fix_at) 앞에는 바퀴마다 그 값을 dt30_day_chip 에 덮어 적고(쓰는 서버만),
+    그 뒤에는 적힌 값(그 앞 마지막 바퀴)으로 바꾼다 — 서버가 다시 떠도 같은 목록(11-26 미국강세가 낮에 미국 일봉이 더 들어와 상위 묶음이 바뀜).
+    못 받은 칩(missing)은 그 바퀴 적지 않음 · 굳힐 때까지 한 번도 못 적었으면 그 뒤 처음 받은 바퀴가 적음. code '' 줄 = 그 칩을 그날 적었다는 표시."""
+    now = now or _now()
+    day, hm = now.strftime("%Y%m%d"), now.hour * 60 + now.minute
+    chs = day_chips()
+    if not chs:
+        return hit
+    stored = {}
+    try:
+        with proxy.db_conn() as conn:
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dt30_day_chip'").fetchone():
+                for ch, code, subs in conn.execute("SELECT chip, code, subs FROM dt30_day_chip WHERE day = ?", (day,)):
+                    m = stored.setdefault(ch, {})
+                    if code:
+                        m[code] = json.loads(subs or "[]")
+    except Exception as e:
+        print("  [단타 30] 하루 고정 칩 못 읽음 — %s" % proxy.safe_message(e, 120), flush=True)
+        return hit
+    put, apply = {}, {}
+    for ch in chs:
+        live = {code: list(g["subs"].get(ch) or []) for code, g in hit.items() if ch in g["chips"]}
+        if hm < day_fix_at(proxy, day, ch):
+            if ch not in missing:
+                put[ch] = live                         # 굳히기 전 — 바퀴마다 덮어 적고 판은 지금 값 그대로
+        elif ch in stored:
+            apply[ch] = stored[ch]
+        elif ch not in missing:
+            put[ch] = apply[ch] = live                 # 굳힐 때가 지나 처음 받은 바퀴(그 앞에 서버가 안 떠 있었음)
+    if put and proxy.marketdb.writable():
+        at = now.strftime("%H:%M:%S")
+        with proxy._db_lock, proxy.db_conn() as conn:
+            conn.execute(_DC_SCHEMA)
+            for ch, m in put.items():
+                conn.execute("DELETE FROM dt30_day_chip WHERE day = ? AND chip = ?", (day, ch))
+                conn.executemany("INSERT INTO dt30_day_chip (day, chip, code, subs, at) VALUES (?,?,?,?,?)",
+                                 [(day, ch, "", None, at)] + [(day, ch, code, json.dumps(sb, ensure_ascii=False), at) for code, sb in m.items()])
+    for ch, m in apply.items():
+        for code, g in hit.items():
+            if ch in g["chips"] and code not in m:
+                g["chips"].discard(ch)
+                g["subs"].pop(ch, None)
+        for code, sb in m.items():
+            g = hit.setdefault(code, {"name": "", "chips": set(), "subs": {}})
+            g["chips"].add(ch)
+            if sb:
+                g["subs"][ch] = list(sb)
+        if ch in missing:
+            missing.remove(ch)                         # 굳힌 값이 있음 — 못 받음 아님
+    return {c: g for c, g in hit.items() if g["chips"]}
+
+
 def chip_log_put(proxy, now, rows, missing=()):
     """한 바퀴의 칩 붙음 · 빠짐을 dt30_chip_log 에 — 쓰는 서버만 · 적은 건수."""
     if not proxy.marketdb.writable():
         return 0
     day, at = now.strftime("%Y%m%d"), now.strftime("%H:%M:%S")
+    if now.hour * 60 + now.minute >= _close_min(proxy, now):
+        return 0                                       # 정규장 끝 뒤는 안 적음 — 장 끝 뒤 셈이 바뀌어 한꺼번에 「빠짐」 이 적혔다(11-25 20:52 · 재권님 「응」 11-26)
     if _cl["day"] != day:
         _cl.update(day=day, state=_cl_replay(proxy, day))
     prev, cur, px = _cl["state"], {}, {}
@@ -1043,12 +1148,20 @@ def chip_spans_get(proxy, day, codes=None, since=None):
     first = min(e["at"] for v in log.values() for e in v)[:5]
     if since and first > since:
         return {}, "그날 기록이 %s 부터 — 그 앞 붙음 · 빠짐 못 잼" % first   # 칩 기록을 만든 날(11-24 14:33 부터)처럼 장 앞이 빈 날
+    dt = datetime.strptime(day, "%Y%m%d").replace(hour=12, tzinfo=KST)
+    c = _hhmm(_close_min(proxy, dt))
+    dc = set(day_chips())
+    fx = {ch: _hhmm(day_fix_at(proxy, day, ch)) for ch in dc}
     out = {}
     for code, evs in log.items():
         m = {}
         for e in evs:
             if e["sub"]:
                 continue
+            if e["at"][:5] >= c:
+                continue                               # 장 끝 뒤 기록(11-25 20:52 한꺼번에 빠짐) — 안 셈
+            if e["chip"] in dc and e["at"][:5] >= fx[e["chip"]]:
+                continue                               # 하루 고정 칩 — 굳히는 때(day_fix_at) 앞 마지막 상태를 그날 끝까지(그 뒤 붙음 · 빠짐은 안 셈)
             sp, t = m.setdefault(e["chip"], []), e["at"][:5]
             if e["kind"] == "on":
                 if not sp or sp[-1][1] is not None:
@@ -1261,6 +1374,7 @@ def buy930_fill(proxy, b):
     if why and "칩 붙음·빠짐" not in b["meta"]["noData"]:
         b["meta"]["noData"].append("칩 붙음·빠짐")       # 그 판에서 못 쓴 까닭은 meta.chipSpans.why
     b["meta"]["chipSpans"] = {"ok": True} if not why else {"ok": False, "why": why}   # 못 잼이면 줄에 chipSpans 를 안 싣고 매수 셈은 예전대로(한 번 붙은 칩)
+    b["meta"]["chipPrec"] = chip_prec(b, not why)     # 칩마다 붙음 · 빠짐을 얼마나 정확히 아나(재권님 「지난칩들의 등락이 언제인지 정확히 알수있는건지」 11-26)
     for r in rows:
         c = ct.get(r["code"]) or {}
         r["chipTime"] = {k: "%s:%s" % (v[:2], v[2:]) for k, v in c.items()}
