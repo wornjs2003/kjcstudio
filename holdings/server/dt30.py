@@ -1698,6 +1698,7 @@ COMBO_N = 5
 COMBO_TP = (None, 1.5, 2, 3, 4, 5)       # 익절 % — None 은 「없음」
 COMBO_SL = (None, -1, -1.5, -2, -3)      # 손절 %
 COMBO_LIVE_SEC = 60                      # 그날 판(안 끝남) 셈을 다시 쓰는 초 — 1분봉이 1분마다 늘어서
+CT_PRE_MIN = 60                          # 「조합으로 사기」 날 장 전 이 분 앞부터 여는 시각까지 — 조합 표를 한 번 새로 셈(셈이 30초 남짓 · 11-26 8765 잼)
 COMBO_MEMO_DAYS = 60                     # 메모리에 두는 판 수 — 화면이 판을 열 때 지난 판을 다 받아서(끝난 판은 저장 시각 · 셈 칸이 같으면 다시 안 셈 · 개념정의 덧 ③)
 _combo_memo = {}
 _combo_lock = threading.Lock()   # 메모 읽고 넣고 오래된 것 빼기 — 여러 물음이 함께 넣고 빼다 없는 열쇠를 빼는 드문 오류(개념정의 덧 · 단타 리뷰 ④ 11-26)
@@ -2131,18 +2132,20 @@ def combo_table(proxy):
 
 
 def bars_fill(proxy, b):
-    """산 줄(buy930)마다 rows[].bars [[「HH:MM」, 시가, 고가, 저가, 종가], …] · barSrc 「1m」 · 「5m」 · null — 산 분부터 판 끝(times 마지막) 앞까지(bars_get).
+    """판 줄마다(빠진 줄도) rows[].bars [[「HH:MM」, 시가, 고가, 저가, 종가], …] · barSrc 「1m」 · 「5m」 · null — 산 줄(buy930)은 산 분부터 · 그 밖은 여는 시각부터 판 끝(times 마지막) 앞까지(bars_get).
     매도 타점을 30분 칸이 아니라 봉으로 — 재권님 「매도에서 해당룰이 적용안되는거 같은데. 3%나 4%를 맞으면 안되는데 이거 왜이래? 매도타점 정확히 계산해」(11-23 19:1x) ·
     「손절이 2%가 넘는건 이유가 뭐지?」(19:4x). 읽을 때만(저장 안 함)."""
-    rows = [r for r in (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or []) if r.get("buy930")]
+    rows = (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or [])
     if not rows:
         return 0
-    lo = min(r["buy930"]["at"].replace(":", "") for r in rows)
+    o = _hhmm(_open_min(proxy, b["day"], b))          # 산 줄이 없는 종목은 여는 시각부터 — 판에 든 종목 전부(조합으로 산 종목이 비어 화면이 30분 칸으로 팔던 것 · 재권님 「이미 서버에 있는걸 굳이 따로 있을 이유를 물어본건데」 19:13 → 「응 그래」 11-26)
+    at_of = lambda r: (r.get("buy930") or {}).get("at") or o
+    lo = min(at_of(r) for r in rows).replace(":", "")
     got = bars_get(proxy, b["day"], [r["code"] for r in rows], lo, (b.get("times") or ["1400"])[-1])
     n = 0
     for r in rows:
         per, bs = got.get(r["code"], (None, []))
-        r["bars"] = bars_after(per, bs, r["buy930"]["at"])
+        r["bars"] = bars_after(per, bs, at_of(r))
         r["barSrc"] = per if r["bars"] else None
         n += bool(r["bars"])
     return n
@@ -3589,6 +3592,7 @@ def _redo_gone(proxy, day, b):
     b["meta"]["redoGone"] = hist
 
 
+M1_FILL_TRIES = 3             # 지난 판 1분봉 되받기가 빈 답이면 다시 묻는 끝 번 수(밤 바퀴마다 한 번) — 정지 종목(금양 11-24)처럼 정말 없는 것은 그만 묻게
 M1_FILL_SPAN = 40             # 지난 판 1분봉 되받기 — 여는 시각 + 이 분까지(120줄 한 번이면 그 앞 두 시간) · 여는 값(PX_MIN) · 지난 날 VI 창(PAST_LATE)을 덮음
 
 
@@ -3615,14 +3619,18 @@ def m1_fill(proxy, cfg, limit=BACKFILL_DAYS):
                                                 % ",".join("?" * len(codes)), [lo, hi] + codes)}
         for c in codes:
             mk = "m1fill:%s:%s" % (c, day)
-            if c in have or proxy._meta_get(mk):
+            if c in have:
+                continue
+            v = str(proxy._meta_get(mk) or "")
+            tries = int(v[2:]) if v.startswith("빈:") and v[2:].isdigit() else (1 if v else 0)   # 옛 표시(날짜)는 빈 답이어도 남겼음 — 한 번 친 것으로 셈
+            if tries >= M1_FILL_TRIES:
                 continue
             raw = proxy._kr_past_chunk(cfg, c, day, _hhmm(o + M1_FILL_SPAN).replace(":", "") + "00")
             time.sleep(proxy.BAR_FILL_CALL_GAP)
             mine = [x for x in raw if x["ts"][:8] == day and int(x["ts"][8:10]) * 60 + int(x["ts"][10:12]) >= proxy.MINUTE_DAY_START]
             if mine:
                 proxy.save_candles(c, "1m", proxy.aggregate_minutes(mine, 1))
-            proxy._meta_set(mk, today)
+            proxy._meta_set(mk, today if mine else "빈:%d" % (tries + 1))   # 빈 답(물음 실패 · 정지)은 다음 바퀴에 다시 — M1_FILL_TRIES 번까지(11-18 지니언스 · 025980 이 한 번 빈 답에 영영 안 물림 · 재권님 「지니언스는 확인해」 → 「응 그래」 11-26)
             n += 1
         vi0 = [bool(r.get("viPx")) for r in b["rows"]]
         got_px = _pxmin_fill(proxy, b)                 # 쌓인 1분봉(방금 받은 것 · 이미 있던 것)으로 판 줄을 채워 저장 — 1분봉이 지워져도 남게
@@ -4666,6 +4674,8 @@ def _buy_order(proxy, b, hm=None, inplace=False):
     ct_of = lambda r: {k: str(v).replace(":", "") for k, v in (r.get("chipTime") or {}).items()}
 
     cf, split = chip_filter(), ((bb.get("meta") or {}).get("viSplit") or vi_split(o - OPEN_AT[0] * 60 - OPEN_AT[1])).replace(":", "")
+    if _set_val("comboOn") is True:                    # 「조합으로 사기」 — 칩 N개 대신 고른 조합이 된 차례(아래 _buy_combo)
+        return _buy_cap(_buy_combo(proxy, bb, o, R, now_m, on, tmin)), R
 
     def nth(r, lim):
         ct = ct_of(r)
@@ -4728,12 +4738,60 @@ def _buy_order(proxy, b, hm=None, inplace=False):
                               "turn": tv, "rise": rise, "px": p}))
             pick.sort(key=lambda x: x[:3])
             out += [(x[3], x[4]) for x in pick[:fn - len(out)]]
+    return _buy_cap(out), R
+
+
+def _buy_cap(out):
+    """[(줄, info)] → 줄들 — 차례대로 상위 ( )종목까지만(5번) · 줄마다 buyRule(order 붙임)."""
     res = []
-    for i, (r, info) in enumerate(out[:buy_top()], 1):   # 차례대로 상위 ( )종목까지만(5번)
+    for i, (r, info) in enumerate(out[:buy_top()], 1):
         info["order"] = i
         r["buyRule"] = info
         res.append(r)
-    return res, R
+    return res
+
+
+def _turn_cross(r, tmin):
+    """유통 대비 거래(rows[].turnMin)가 문턱을 처음 넘은 분 「HHMM」 | None — 화면 condAt 의 crossAt 과 같은 셈."""
+    ser = sorted((str(v.get("at") or "").replace(":", "")[:4], v.get("turn")) for v in (r.get("turnMin") or {}).values()
+                 if isinstance(v, dict) and v.get("at") and isinstance(v.get("turn"), (int, float)))
+    return next((t for t, v in ser if v >= tmin), None)
+
+
+def _buy_combo(proxy, bb, o, R, now_m, on, tmin):
+    """「조합으로 사기」(셈 칸 comboOn) 날의 매수 차례 — [(줄, info)] · 화면 단타 판(4af569c · 4e8b448 · 75096f9)과 같은 셈.
+    차례 = 조합 된 분(여는 시각 + 1분 앞이면 그 분으로 · 9시 1분에 이미 된 종목이 먼저) → 그 분 산 값의 시가 대비 상승률 → 초반상승 % → 시가총액.
+    지금 붙은 칩 수는 안 씀(뒤에 칩이 붙어도 차례 고정). 사는 때 = 조합 된 때 · 유통 대비 거래가 문턱을 그 뒤에 넘었으면 넘은 분(못 넘었으면 조합 된 때 · 화면 「어림」 과 같게).
+    기준 시각(R) 전에 된 것만 · 산 값(rows[].comboBuy.px)이 있는 종목만 — 없으면 건너뛰고 다음 차례로 채움(재권님 「응 그렇게해」 11-26 19:1x · 개발2 「응 그래」 19:30).
+    고른 조합은 서버 고르기(meta.comboPick · 전날까지 표 · 문턱) — 표가 없으면 아무것도 안 보냄(화면 comboPending 과 같게) · 전일 거래량 칸(volOn)은 화면만 셈(어림)."""
+    rows = (bb.get("rows") or []) + ((bb.get("meta") or {}).get("outRows") or [])
+    if _set_val("comboAuto") is False:                 # 손으로 고른 조합은 화면 이름(칩 이름 다리 표가 화면에만)이라 서버가 아직 못 셈 — 안 보내고 까닭만(재권님께 알림 · 11-26)
+        bb.setdefault("meta", {})["comboPick"] = {"why": "손으로 고른 조합 — 서버 알림 아직 못 셈"}
+        return []
+    combo_buy_fill(proxy, bb)
+    p1 = o + 1
+    got = []
+    for r in rows:
+        B = r.get("comboBuy") or {}
+        t = str(B.get("buyAt") or "").replace(":", "")
+        if len(t) != 4 or not B.get("px"):
+            continue                                   # 조합 안 됨 · 산 값 못 잼(그 분 1분봉이 아직 안 굳었으면 다음 바퀴에 다시)
+        tm_ = int(t[:2]) * 60 + int(t[2:])
+        at = max(tm_, p1)
+        if on:
+            c = _turn_cross(r, tmin)
+            if c and int(c[:2]) * 60 + int(c[2:]) > at:
+                at = int(c[:2]) * 60 + int(c[2:])
+        if at >= R or now_m < at + 1:
+            continue                                   # 기준 시각 뒤 · 아직 그 분이 안 끝남
+        op = r.get("open") if isinstance(r.get("open"), (int, float)) and r.get("open") > 0 else None
+        src = str(B.get("src") or "")
+        rise = (B["px"] / op - 1) * 100 if op and not ("어림" in src or "대체" in src) else None
+        got.append(((at, -(rise if rise is not None else -1e9), -(r.get("rise") if isinstance(r.get("rise"), (int, float)) else -1e9), -(r.get("cap") or 0)),
+                    r, {"kind": "조합", "at": _hhmm(at), "chipAt": str(B.get("at") or "")[:5] or _hhmm(tm_), "turn": _turn_at(r, max(1, at - o)),
+                        "rise": round(rise, 2) if rise is not None else None, "px": B["px"], "combo": B.get("key")}))
+    got.sort(key=lambda x: x[0])
+    return [(x[1], x[2]) for x in got]
 
 
 def buy_rule_meta(proxy, b):
@@ -4752,7 +4810,8 @@ def _buy_rule_meta(proxy, b):
     b["meta"]["buyRule"] = {"ruleAt": _hhmm(R), "ruleMin": rule_min(), "need": buy_need(), "top": buy_top(), "fill": _set_val("fill") is True,
                             "turnOn": on, "turnMin": tmin, "chipOff": sorted(cf[0]), "subOff": sorted(cf[1]), "chipCols": sorted(cf[2]) if cf[2] is not None else None, "def": {"ruleMin": RULE_MIN_DEF, "turnOn": TURN_ON_DEF, "turnMin": TURN_MIN_DEF, "top": TOP_DEF},
                             "order": [{"code": r["code"], "name": r.get("name"), **r["buyRule"]} for r in rows],
-                            "sent": (b["meta"].get("tgBuy") or {}),
+                            "sent": (b["meta"].get("tgBuy") or {}), "combo": _set_val("comboOn") is True,
+                            "comboNote": "조합으로 사기(combo true) 날은 위 칩 N개 차례 대신 — 고른 조합이 된 분(9시 1분 앞이면 9시 1분) → 그 분 산 값의 시가 대비 상승률 → 초반상승 % → 시가총액 · 기준 시각 전 · 산 값 있는 종목만 · 유통 대비 거래 문턱은 넘은 분으로 미룸(못 넘었으면 조합 된 때) · 고른 조합은 meta.comboPick(표가 없으면 안 보냄)",
                             "note": "서버가 보내는 차례(order) — 기준 시각 전 칩 N개 찬 순(그 분 유통 대비 거래 조건) · 기준 시각에 모자라면 칩 N−1 종목 상승률 순 · 위에서 상위 top 종목까지만 · 끈 칩은 셈 칸 chipOff · subOff · chipCols 대로 · sent 는 실제로 보낸 것"}
 
 
@@ -5152,6 +5211,12 @@ def start(proxy):
                         if hm >= o_min + VOL_DAY_MIN + 1 and any("volDay" not in r or (r["volDay"] is None and hm <= o_min + VOL_DAY_MIN + 1 + VOL_SLOT_LOOK) for r in b["rows"]):   # 전일대비 거래량 — 여는 시각 + 25분이 끝난 뒤 · 못 잰 줄은 VOL_SLOT_LOOK 분 더 다시(11-24)
                             _trade_min_fill(proxy, b)
                             flow_now = True
+                        if o_min - CT_PRE_MIN <= hm < o_min and _status.get("ctDay") != day and _set_val("comboOn") is True:
+                            _status["ctDay"] = day                 # 「조합으로 사기」 날 — 장 전 한 번 조합 표를 새로 셈(전날 판까지 · dt30_combo_day 에 남음) · 화면이 조합 표를 안 열어도 그날 고르기가 서게(11-26 19:3x — 재시작 뒤 아무도 안 열어 표가 비었었음)
+                            try:
+                                combo_table(proxy)
+                            except Exception as e:
+                                print("  [단타 30] 장 전 조합 표 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
                         if b["rows"] and not b.get("closed") and buy_send(proxy, b, hm):   # 매수 — 칩 N개 찬 시각별로 · 여는 시각 + 3분부터 · 찰 때마다 한 종목씩(11-24) · 「팔 때」 대상도 이것
                             flow_now = True
                             _store(proxy, b)               # 알림을 보낸 기록부터 바로 저장 — 뒤 단계가 터져도 같은 알림이 다음 바퀴에 또 안 나가게(단타 리뷰 ② 11-26)
