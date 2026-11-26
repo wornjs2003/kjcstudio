@@ -400,7 +400,7 @@ function buyOf(r) {   // → { px, at(HHMM), src } | null
     // 9시 1분 이하에 찬 줄은 「들어온 때」 모드도 9시 1분 값(11-26 재권님 「칩을 바꾸면 바꾼칩갯수가 다찬시간에 매수가 되야하는데」 → 「응」 — 판에 든 때 값(r.buy)으로 사던 것 걷음 · RFHIC 08:05 찬 줄을 09:45 값으로 샀음) · 서버 buy930 은 아직 든 때 값(개발2 에 알림)
     const p1 = minHM(1);
     // 저장된 셈 칸 · 칩 N개로 살 때는 서버가 줄마다 정한 산 값(rows[].buy930 · 개발2 _moment_px)을 그대로(11-26 재권님 「서버값과 항상 동기화 되야돼 엄청 중요한거야」 → 「가」) · 저장 전 · 칩조합 · 서버 값 없음만 아래 화면 셈(같은 갈래)
-    if (comboMode() && svPick()) { const B = r.comboBuy; return B && Number(B.px) > 0 ? { px: Number(B.px), at: hm4(B.at), src: `${B.at} ${B.src || ''} · 조합 된 때 · 서버 값` } : null; }   // 칩조합 — 서버 조합 산 값 그대로
+    if (comboMode() && svPick()) { const B = r.comboBuy; if (B && Number(B.px) > 0) return { px: Number(B.px), at: hm4(B.at), src: `${B.at} ${B.src || ''} · 조합 된 때 · 서버 값` }; if (B && B.at) NOPX.set(r, `${hmS(hm4(B.at))} 서버 값 없음`); return null; }   // 조합은 됐는데 서버 산 값이 없으면 「매수값 미확인」(qa ecd26ab 검수 ① · 재권님 「못 잰 종목이 나와야 사야되는데」)   // 칩조합 — 서버 조합 산 값 그대로
     // 서버가 저장된 셈 칸 · 같은 사는 때(meta.buy930.mode)로 셈한 판이면 두 사는 때 다 서버 산 값만 — 없는 종목은 서버가 안 산 것 · 화면이 따로 셈하지 않음(11-26 재권님 「서버값은 없으면 안되는건데」 → 「응 맞아」 · 단타 리뷰 ① ⑵) · 저장 전 고침 · 칩 바꿈만 아래 화면 셈
     const B9 = (curD().meta || {}).buy930;
     if (!st.setDirty && chipsSaved() && !comboMode() && B9 && B9.mode === k) { const b9 = r.buy930; if (b9 && Number(b9.px) > 0) { const a9 = String(b9.atSec || b9.at || ''); return { px: Number(b9.px), at: hm4(a9), src: `${a9} ${b9.src || ''} · ${needTxt(r)} · 서버 값` }; } SVNO.add(r); return null; }
