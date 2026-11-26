@@ -4823,6 +4823,28 @@ def _buy_rule_meta(proxy, b):
                             "note": "서버가 보내는 차례(order) — 기준 시각 전 칩 N개 찬 순(그 분 유통 대비 거래 조건) · 기준 시각에 모자라면 칩 N−1 종목 상승률 순 · 위에서 상위 top 종목까지만 · 끈 칩은 셈 칸 chipOff · subOff · chipCols 대로 · sent 는 실제로 보낸 것"}
 
 
+def _buy_px_fill(proxy, b):
+    """「매수값 미확인」(tgBuy px null)으로 보낸 종목의 값을 그 종목 조합 산 값(comboBuy.px)으로 채움 → 채운 수.
+    매수 차례(상위 ( )종목)를 거치지 않고 종목마다 읽는다 — 값이 생겨 상승률이 붙으면 차례 밖으로 밀려 안 채워지던 것(qa 덧 11-26)."""
+    import copy
+    tb = (b.get("meta") or {}).get("tgBuy") or {}
+    want = {c for c, v in tb.items() if v.get("px") is None}
+    if not want:
+        return 0
+    with _frozen_set(b):
+        bb = copy.deepcopy(b)
+        buy930_fill(proxy, bb)
+        combo_buy_fill(proxy, bb)
+    got = 0
+    for r in (bb.get("rows") or []) + ((bb.get("meta") or {}).get("outRows") or []):
+        px = (r.get("comboBuy") or {}).get("px")
+        if r["code"] in want and px:
+            tb[r["code"]]["px"], tb[r["code"]]["pxAt"] = px, _now().strftime("%H:%M:%S")
+            want.discard(r["code"])
+            got += 1
+    return got
+
+
 def buy_text(r):
     """「매수」 텔레그램 글 — 「종목명 매수하세요」 한 줄(「팔 때」 글과 같은 꼴 · 재권님 「가로해줘」 11-24)."""
     return "%s 매수하세요" % (r.get("name") or r["code"])
@@ -4836,26 +4858,17 @@ def buy_send(proxy, b, hm):
     o = _open_min(proxy, b["day"], b)
     m = b.setdefault("meta", {})
     if o + late < hm <= o + late + BUY_PX_FILL_MIN and any(v.get("px") is None for v in (m.get("tgBuy") or {}).values()):
-        rows, _ = buy_order(proxy, b, hm)              # 보내기 창 뒤 — 「매수값 미확인」 으로 보낸 종목 값만 들어오는 대로 채움(새로 보내지는 않음 · 개념정의 덧 11-26)
-        got = 0
-        for r in rows:
-            sb = m["tgBuy"].get(r["code"]) or {}
-            if sb and sb.get("px") is None and r["buyRule"].get("px"):
-                sb["px"], sb["pxAt"] = r["buyRule"]["px"], _now().strftime("%H:%M:%S")
-                got += 1
-        return got or (1 if fz else 0)
+        return _buy_px_fill(proxy, b) or (1 if fz else 0)   # 보내기 창 뒤 — 「매수값 미확인」 으로 보낸 종목 값만 들어오는 대로 채움(새로 보내지는 않음 · 개념정의 덧 11-26)
     if hm < o + 1 or hm > o + late:
         return 1 if fz else 0                          # 굳힌 것도 저장되게(바뀐 것으로 셈)
     top = m.setdefault("tgTop", [])
     rows, _ = buy_order(proxy, b, hm)
     n = 0
     cap = buy_top()
+    if any(v.get("px") is None for v in (m.get("tgBuy") or {}).values()):
+        n += _buy_px_fill(proxy, b)                    # 「매수값 미확인」 으로 보낸 종목 — 값이 들어오는 대로 채움(재권님 「이값은 들어오는대로 넣어줘야해」 11-26 19:23)
     for r in rows:
         if r["code"] in top:
-            sb = m.setdefault("tgBuy", {}).get(r["code"]) or {}
-            if sb and sb.get("px") is None and r["buyRule"].get("px"):
-                sb["px"], sb["pxAt"] = r["buyRule"]["px"], _now().strftime("%H:%M:%S")   # 「매수값 미확인」 으로 보낸 종목 — 값이 들어오는 대로 채움(재권님 「이값은 들어오는대로 넣어줘야해」 11-26 19:23)
-                n += 1
             continue
         if len(top) >= cap:                            # 이미 보낸 것으로 상위 ( )종목이 찼음 — 늦게 정해진(거래 값을 기다린) 종목이 앞 차례여도 더 안 보냄(보낸 것은 못 거둠)
             break
