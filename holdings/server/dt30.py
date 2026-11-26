@@ -217,27 +217,12 @@ def chips_now(proxy, cfg, early=True, pre=False):
     except Exception:
         missing.append("VI·급등")
     try:                                   # 「미국강세」 — 어제 미국 상위 묶음의 국내 짝 업종 · 테마 종목(셈은 us_kr · 장 전에도 셈 — 미국 값은 밤에 이미 있음 · KIS 안 부름)
-        import sector_flow, us_kr
-        n_top, today = chip_rules.get("미국강세", "topN"), _now().strftime("%Y%m%d")
-        codes = [c for c in cap if not small(c)]
-        got_day = False
-        for by, ko in (("sector", "업종"), ("theme", "테마")):
-            data, _m = us_kr.board(proxy, by)
-            d0 = next((d for d in data.get("days") or [] if d["kr"] == today), None)
-            prev_wd = _now() - timedelta(days=3 if _now().weekday() == 0 else 1)
-            if not d0 or d0["us"] < prev_wd.strftime("%Y%m%d"):
-                continue                                   # 어젯밤 미국 일봉이 아직 없음 — 그저께 값으로 조용히 붙이지 않음(미국이 쉰 날도 못 받음으로 · 개념정의 덧 11-25)
-            if not any((r.get("us") or {}).get(d0["us"]) is not None for r in data.get("rows") or []):
-                continue                                   # 미국 값이 다 빔 — 「칩 0」 이 아니라 못 받음
-            got_day = True
-            ups = sorted(((r["us"].get(d0["us"]), r["name"]) for r in data.get("rows") or [] if (r["us"].get(d0["us"]) or 0) > 0), reverse=True)[:n_top]
-            top = {n for _v, n in ups}
-            for name, cs in sector_flow._groups(proxy, by, codes).items():
-                if name in top:
-                    for c in cs:
-                        put(c, None, "미국강세", "%s %s" % (ko, name))
-        if not got_day:
-            missing.append("미국강세")                   # 오늘 한국 장날 짝이 없음(쉬는 날 · 미국 일봉 못 받음) — 0 이 아니라 못 받음
+        uh, uwhy = us_strong(proxy, _now().strftime("%Y%m%d"), [c for c in cap if not small(c)])
+        for c, subs in uh.items():
+            for sb in subs:
+                put(c, None, US_CHIP, sb)
+        if uwhy:
+            missing.append(US_CHIP)                      # 오늘 한국 장날 짝이 없음(쉬는 날 · 미국 일봉 못 받음) — 0 이 아니라 못 받음
     except Exception:
         missing.append("미국강세")
     if pre:
@@ -1498,6 +1483,8 @@ def chip_first_backfill(proxy, day, b):
             items.append((r["code"], "VI·급등", _hms(vi[r["code"]]), "VI 기록"))
         if "초반상승" in ch:
             items.append((r["code"], "초반상승", o_end, "첫 봉 끝"))
+        if US_CHIP in ch and (b.get("meta") or {}).get("rebuilt"):
+            items.append((r["code"], US_CHIP, "%02d:%02d:00" % BUY_AT, US_SRC))   # 전날 밤 미국 값으로 장 전에 정해지는 칩 — 판 짓기 시작(장중 판과 같은 때)
         for c in ("거래비율", "거래비율급증"):
             t = (r.get("chipAt") or {}).get(c)
             if c in ch and t and (r.get("volAt") or b["meta"].get(VOL_MARK)):
@@ -2722,6 +2709,14 @@ def rebuild(proxy, day, prev, cfg=None):
         (missing if mwhy else approx).append(money_chip.CHIP)   # 묶음 종목은 지금 목록(그날 목록은 안 남음)
     except Exception:
         missing.append("돈몰림")                        # money_chip 을 못 불러온 때라 이름을 글자로(그 밖 자리는 money_chip.CHIP)
+    try:                                                   # 미국강세 — 그날 앞 미국 장날 값으로 장중과 같은 셈(us_strong) · 처음 시각은 판 짓기 시작(chip_first_backfill)
+        uh, uwhy = us_strong(proxy, day, [c for c in cap if not small(c)])   # (재권님 「응」 11-26 11:4x — 지난 판 11-02 ~ 11-25 미국강세 채우기)
+        for c, subs in uh.items():
+            for sb in subs:
+                put(c, US_CHIP, sb)
+        (missing if uwhy else approx).append(US_CHIP)   # 묶음 종목은 지금 목록(그날 목록은 안 남음)
+    except Exception:
+        missing.append(US_CHIP)
     for c in bb:
         if c in hit:
             hit[c]["chips"].add("볼린저")
@@ -2769,7 +2764,7 @@ def rebuild(proxy, day, prev, cfg=None):
             "meta": {"rebuilt": True, "lateMin": off if market_hours.doc_ok() is not False else None,
                      # openAt — 장 시각 못 잼이면 여는 시각도 null(보통 날 09:00 으로 둔갑시키지 않음 · qa 덧 11-24)
                      "openAt": "%02d:%02d" % _sh(OPEN_AT, off) if market_hours.doc_ok() is not False else None, "viSplit": vi_split(off), "missing": missing, "approx": approx, "prevDay": prev, "candidates": len(hit), "topN": TOP_N, "dropDown": down, "dropBelowPct": drop_below_pct(),
-                     "watchSrc": watch_src, "moneyVer": MONEY_VER, "moneyNote": "돈몰림은 그날 섹터 수급 판으로 다시 셈(5분 칸이 끝나는 때 · 다수결 · 묶음 종목은 지금 목록)", "rules": rules_meta(proxy, merged=False), "viUntil": "%02d:%02d" % _sh(PAST_LATE, off), "volUntil": "%02d:%02d" % PAST_VOL_UNTIL, "approxBase": approx_base,
+                     "watchSrc": watch_src, "moneyVer": MONEY_VER, "usVer": US_VER, "moneyNote": "돈몰림은 그날 섹터 수급 판으로 다시 셈(5분 칸이 끝나는 때 · 다수결 · 묶음 종목은 지금 목록)", "rules": rules_meta(proxy, merged=False), "viUntil": "%02d:%02d" % _sh(PAST_LATE, off), "volUntil": "%02d:%02d" % PAST_VOL_UNTIL, "approxBase": approx_base,
                      "capMinEok": cap_min_eok(), "allRows": True, "tradeVer": TRADE_VER, "order": order, "score": tab, "scoreConflict": score_conflicts(tab),
                      "note": "쌓인 값으로 다시 셈(VI 만 KIS) · 관심 · 수급은 그날 09:01 직전 관심 목록(watchSrc 기록 · 없으면 관심 못 받음 · 수급 어림) · 프리장 · 매수는 어림(dt30.py 「지난 날 되채우기」) · "
                              "buy 는 09:05 봉 시가(늦게 연 날은 그만큼 뒤 · meta.lateMin) · 시가총액 · 섹터 · 시장은 지금 값"}}
@@ -2945,7 +2940,77 @@ def data_since(proxy):
 
 MONEY_SINCE = "20261102"     # 지난 판 돈몰림을 다시 세는 첫날(재권님 「돈몰림 11월 2일부터 지금까지 적용해줘」 11-25 21:33)
 MONEY_VER = 1                 # 판 meta.moneyVer · moneyFill — 이 값이 아니면 한 번 다시 셈
+US_CHIP = "미국강세"
+US_VER = 1                    # 판 meta.usVer(다시 지은 판) · usFill(장중 판) — 이 값이 아니면 한 번 다시 셈 · 채움
+US_LIVE_SINCE = "20261126"    # 이 날부터는 장중 판이 아침부터 미국강세를 셈 — 그 앞 장중 판(11-24 · 11-25)만 채움
+US_SRC = "미국강세 되채움"
 ALL_ROWS_SINCE = "20261124"   # 이 날 앞 판 중 줄을 자르던 것만 한 번 다시 짓는다 — 「3천억 이상 칩 든 종목 전부」 가 들어온 날(11-23 재권님 · 되채움 카드 ⑨)
+
+
+def us_strong(proxy, day, codes):
+    """미국강세 한 곳 — day(한국 장날) 앞 마지막 미국 장날에 오른 묶음 상위(chip_rules 「미국강세」 topN · 업종 · 테마 따로)의 국내 짝 종목.
+    → ({code: [「업종 이름」 …]}, 못 받은 까닭 | None). 장중 판(chips_now)과 지난 판(rebuild · us_live_fill)이 같이 쓴다.
+    앞 평일 미국 일봉이 없으면(미국이 쉰 날 · 아직 안 받음) 그저께 값으로 조용히 붙이지 않고 못 받음(개념정의 덧 11-25)."""
+    import sector_flow, us_kr
+    n_top = chip_rules.get(US_CHIP, "topN")
+    dt = datetime.strptime(day, "%Y%m%d")
+    prev_wd = (dt - timedelta(days=3 if dt.weekday() == 0 else 1)).strftime("%Y%m%d")
+    out, got = {}, False
+    for by, ko in (("sector", "업종"), ("theme", "테마")):
+        data, _m = us_kr.board(proxy, by, day[:6])
+        d0 = next((d for d in data.get("days") or [] if d["kr"] == day), None)
+        if not d0 or d0["us"] < prev_wd:
+            continue
+        if not any((r.get("us") or {}).get(d0["us"]) is not None for r in data.get("rows") or []):
+            continue                                   # 미국 값이 다 빔 — 「칩 0」 이 아니라 못 받음
+        got = True
+        ups = sorted(((r["us"].get(d0["us"]), r["name"]) for r in data.get("rows") or [] if (r["us"].get(d0["us"]) or 0) > 0), reverse=True)[:n_top]
+        top = {n for _v, n in ups}
+        for name, cs in sector_flow._groups(proxy, by, list(codes)).items():
+            if name in top:
+                for c in cs:
+                    out.setdefault(c, []).append("%s %s" % (ko, name))
+    return out, (None if got else "그날 짝 미국 값 없음")
+
+
+def us_live_fill(proxy, day, b):
+    """장중에 굳힌 판(rebuilt 아님 · US_LIVE_SINCE 앞)의 미국강세를 그날 값으로 채운다(us_strong) — 넣은 수 · 못 셈이면 None.
+    판 줄(rows · outRows)에 칩 · 하위 · 칩 수 · 처음 시각(chip_first · 판 짓기 시작) · 그날 칩 기록이 여는 시각부터 있으면 붙음 한 줄(빠짐 없음 — 하루 내내).
+    판 밖 종목(미국강세로 칩 수가 찬 종목)은 줄을 새로 만들지 않는다 — money_log_fill 과 같은 꼴(장중 기록을 덮지 않게)."""
+    import dart
+    if not proxy.marketdb.writable():
+        return None
+    cap = {r["stock_code"]: r["market_cap"] for r in dart.universe_rows(None)}
+    if not cap:
+        return None
+    uh, why = us_strong(proxy, day, [c for c, v in cap.items() if v is not None and v >= cap_min_eok()])
+    if why:
+        return None
+    at = "%02d:%02d:00" % BUY_AT
+    o = _hhmm(_open_min(proxy, day, b))
+    o = "%s:%s" % (o[:2], o[2:])
+    with proxy._db_lock, proxy.db_conn() as conn:
+        conn.execute(_CL_SCHEMA)
+        first = conn.execute("SELECT MIN(at) FROM dt30_chip_log WHERE day = ? AND n IS NOT NULL", (day,)).fetchone()[0]
+    log_ok = bool(first) and first[:5] <= o
+    ovs = set(ov_chips())
+    cf, log = [], []
+    for r in (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or []):
+        subs = uh.get(r.get("code"))
+        if not subs or US_CHIP in (r.get("chips") or []):
+            continue
+        r["chips"] = [x for x in ov_chips() + ("현재상승", "볼린저") if x in set(r.get("chips") or []) | {US_CHIP}]
+        r.setdefault("subs", {})[US_CHIP] = list(subs)
+        r["n"] = len(set(r["chips"]) & ovs)
+        cf.append((r["code"], US_CHIP, at, US_SRC))
+        log.append((day, at, r["code"], US_CHIP, "", "on", None, None))
+    if log_ok and log:
+        with proxy._db_lock, proxy.db_conn() as conn:
+            conn.executemany("INSERT OR IGNORE INTO dt30_chip_log (day, at, code, chip, sub, kind, n, px) VALUES (?,?,?,?,?,?,?,?)", log)
+    chip_first_put(proxy, day, cf)
+    b["meta"]["missing"] = [c for c in b["meta"].get("missing") or [] if c != US_CHIP]
+    b["meta"]["usNote"] = "미국강세는 그날 앞 미국 장날 값으로 다시 셈(판 짓기 시작에 붙음 · 묶음 종목은 지금 목록 · 판 밖 종목은 줄을 안 만듦)"
+    return len(cf)
 
 
 def money_log_fill(proxy, day, b):
@@ -3026,6 +3091,7 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
         late_old = m.get("rebuilt") and not isinstance(m.get("lateMin"), int) and late_min(proxy, day=d) > 0   # 늦게 연 날을 09:00 기준으로 다시 지은 판(11-24 전) — 한 번 다시 센다
         old_watch = m.get("rebuilt") and m.get("watchSrc") != "지금 룰"   # 관심을 하트 · 그날 문서로 센 옛 판(11-25 전) — 한 번 다시 센다(재권님 「관심은 지금룰로만」)
         old_watch = old_watch or (m.get("rebuilt") and d >= MONEY_SINCE and m.get("moneyVer") != MONEY_VER)   # 돈몰림 없이 지은 판 — 한 번 다시(11-25 21:4x 「진행해」)
+        old_watch = old_watch or (m.get("rebuilt") and d >= MONEY_SINCE and m.get("usVer") != US_VER)   # 미국강세 없이 지은 판 — 한 번 다시(11-26 11:4x 「응」)
         if got and sig and d < today:                  # 칩 룰 값이 판을 지은 때와 다르면 다시 셈 — 장중 판도 장중 기록은 남기고(재권님 「나」 11-26)
             if not m.get("ruleSig"):
                 base.append(d)                         # 지문이 생기기 전 판 — 지금 룰로 지은 것으로 보고 지문만 찍음(한꺼번에 다 다시 짓지 않게)
@@ -3092,6 +3158,13 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
                     _store(proxy, got[0])
             except Exception as e:
                 print("  [단타 30] %s 돈몰림 못 채움 — %s" % (d, proxy.safe_message(e, 120)), flush=True)
+        if got and not m.get("rebuilt") and MONEY_SINCE <= d < US_LIVE_SINCE and m.get("usFill") != US_VER:   # 미국강세 전에 장중에 지은 판(11-24 · 11-25)
+            try:
+                if us_live_fill(proxy, d, got[0]) is not None:
+                    got[0]["meta"]["usFill"] = US_VER
+                    _store(proxy, got[0])
+            except Exception as e:
+                print("  [단타 30] %s 미국강세 못 채움 — %s" % (d, proxy.safe_message(e, 120)), flush=True)
         if got and got[0].get("closed", True) and (got[0].get("meta") or {}).get("cfVer") != CF_VER:
             try:
                 chip_first_backfill(proxy, d, got[0])
