@@ -93,29 +93,74 @@ export function mountClaudeRail() {
   const panel = document.createElement('aside');
   panel.className = 'kh-rail-panel';
   panel.hidden = true;
-  panel.innerHTML = `<div class="kh-rail-hd"><b>Claude</b><span class="kh-rail-st">준비</span>
-      <button type="button" class="kh-rail-clr" data-tip="이 브라우저에 남은 대화를 지웁니다">대화 지우기</button>
-      <button type="button" class="kh-rail-x" data-tip="닫기" aria-label="닫기">×</button></div>
+  panel.innerHTML = `<div class="kh-rail-grab" aria-hidden="true"></div>
+    <div class="kh-rail-hd"><button type="button" class="kh-rail-x" data-tip="닫기" aria-label="닫기"><span class="kh-rail-x-n">← 닫기</span><span class="kh-rail-x-w">×</span></button>
+      <b>Claude</b><span class="kh-rail-st">준비</span>
+      <button type="button" class="kh-rail-clr" data-tip="이 브라우저에 남은 대화를 지웁니다">대화 지우기</button></div>
     <div class="kh-rail-ctx">보고 있는 것 — <b class="kh-rail-now"></b><br>보내면 이 화면과 서버가 받은 시세를 함께 보냅니다</div>
     <div class="kh-rail-body" aria-live="polite"></div>
     <div class="kh-rail-quick">${QUICK.map((q) => `<button type="button">${q}</button>`).join('')}</div>
     <div class="kh-rail-in"><button type="button" class="kh-rail-ord" aria-pressed="false" data-tip="켜고 보낸 글은 작업우선순위 창에 「[홈페이지 지시]」 로 들어가고, 그 창의 답이 여기 옵니다">업무지시</button><input type="text" placeholder="Claude 에게 물어보기…" maxlength="2000"><button type="button" class="kh-rail-send">보내기</button></div>`;
 
-  document.body.append(panel, bar, fab);
+  /* 좁은 폭 덮개 — 판 위로 보이는 본문을 흐리게 · 누르면 아래 「창 밖 누르면 접힘」 이 닫는다(덮개가 받아 본문은 안 눌린다) ·
+     넓은 폭은 CSS 가 숨긴다(2026-11-26 재권님 「응」 — 모바일 AI 창 닫기 시안) */
+  const dim = document.createElement('div');
+  dim.className = 'kh-rail-dim';
+  dim.hidden = true;
+  document.body.append(dim, panel, bar, fab);
   document.body.classList.add('has-kh-rail');
   const ic = bar.querySelector('.kh-rail-ic');
   let open = load();
 
   function apply() {
     panel.hidden = !open;
+    dim.hidden = !open;
     fab.hidden = open;
+    panel.style.transform = '';
     ic.classList.toggle('is-on', open);
     if (open) panel.querySelector('.kh-rail-now').textContent = contextLabel(context());
     const css = getComputedStyle(root);
     const w = wide.matches ? parseFloat(css.getPropertyValue('--kh-rail-bar')) || 0 : 0;   // 열린 창은 덮으므로 폭에 안 넣는다
     root.style.setProperty('--kh-rail-w', w + 'px');
   }
-  function set(v) { open = v; save(v); apply(); }
+  /* 좁은 폭은 뒤로 가기(밀기)가 창만 닫는다 — 열 때 주소 기록 한 칸을 쌓고, 뒤로 가면 그 칸만 빠지며 닫힌다.
+     다른 길(닫기 단추 · 덮개 · 끌기)로 닫으면 쌓은 칸을 스스로 뺀다 — 안 빼면 다음 뒤로 가기가 헛돈다 */
+  const RAIL_STATE = 'khRail';
+  function pushBack() {
+    if (wide.matches || history.state?.[RAIL_STATE]) return;
+    history.pushState({ [RAIL_STATE]: 1 }, '');
+  }
+  function set(v) {
+    if (v === open) return apply();
+    open = v; save(v); apply();
+    if (v) pushBack();
+    else if (history.state?.[RAIL_STATE]) history.back();
+  }
+  addEventListener('popstate', () => {
+    if (open && !wide.matches && !history.state?.[RAIL_STATE]) { open = false; save(false); apply(); }
+  });
+  if (open) pushBack();
+
+  /* 손잡이를 아래로 끌면 닫힌다 — 놓을 때 DRAG_CLOSE_PX 넘게 내렸으면 닫고 아니면 제자리 */
+  const DRAG_CLOSE_PX = 80;
+  const grab = panel.querySelector('.kh-rail-grab');
+  let dragY = null;
+  grab.addEventListener('pointerdown', (e) => {
+    dragY = e.clientY;
+    try { grab.setPointerCapture(e.pointerId); } catch { /* 못 잡아도 손잡이 위에서 움직이면 그대로 끌린다 */ }
+  });
+  grab.addEventListener('pointermove', (e) => {
+    if (dragY == null) return;
+    panel.style.transform = `translateY(${Math.max(0, e.clientY - dragY)}px)`;
+  });
+  const drop = (e) => {
+    if (dragY == null) return;
+    const dy = e.clientY - dragY;
+    dragY = null;
+    if (dy > DRAG_CLOSE_PX) set(false); else panel.style.transform = '';
+  };
+  grab.addEventListener('pointerup', drop);
+  grab.addEventListener('pointercancel', () => { dragY = null; panel.style.transform = ''; });
 
   /* ── 대화 ── */
   const body = panel.querySelector('.kh-rail-body');
