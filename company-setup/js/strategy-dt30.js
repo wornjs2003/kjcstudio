@@ -302,6 +302,7 @@ const chipNeed = (r) => Math.max(1, (Number(st.set.minChip) || 1) - (r && FILL.h
 const chipTsOf = (r) => { const at = { ...(r.chipAt || {}), ...(r.chipTime || {}) }, o = {}; colsOf().filter((c) => everChip(r, c)).forEach((c) => { o[c] = String(at[c] || (c === 'VI·급등' ? r.viAt || '' : '')).replace(/:/g, '').slice(0, 4) || inTs(r).slice(0, 4) || '0000'; }); return o; };
 const comboEvents = (r) => { if (spanRow(r)) return spanTs(r).map((t) => [t, colsOf().filter((c) => chipAtT(r, c, t))]); const o = chipTsOf(r); return [...new Set(Object.values(o))].sort().map((t) => [t, colsOf().filter((c) => o[c] != null && o[c] <= t)]); };
 const comboKey = (cs) => cs.join(' + ');
+// 고른 조합은 화면 칩 이름으로 저장(set.combos) — 칩 이름 다리 표(strategy-chipname.js)를 걷는 날 저장된 조합 이름도 함께 옮김(개념정의 덧 11-26)
 const comboSel = () => new Set(Array.isArray(st.set.combos) ? st.set.combos : []);
 const comboMode = () => !!st.set.comboOn && comboSel().size > 0;
 const comboHit = (r) => { const S = comboSel(); if (!S.size) return null; for (const [t, cs] of comboEvents(r)) { if (cs.length && S.has(comboKey(cs))) return { t, key: comboKey(cs) }; } return null; };
@@ -1401,6 +1402,7 @@ const WIN_DAYS = 30, WIN_BIG = 3, WIN_TOP = 5;   // 볼 거래일 · 「크게 �
 // 칩 조합 셈(11-26) — 굳힌 지난 판마다 종목이 처음 그 조합이 된 분 값에 샀다면 판 마지막 시각 값(보통 14:00)에 얼마 · 세금 · 수수료 빼기 전
 //   조합이 된 분 값 — 09:01 이하면 9시 1분 값 · 그 뒤는 서버 칩 찬 분 1분봉(rows[].chipPx) · 1~5분 값 · 없으면 그 조합은 그 종목에서 셈 안 함(어림 안 함)
 //   손절 · 익절을 넣은 셈은 1분봉이 판에 거의 없어 서버(개발2 · 「단타 판 칩 조합 셈 값」 카드)가 주면 씀 — 그 전은 「서버 값 기다림」
+//   서버 조합 셈 값이 오면 이 화면 셈과 두 곳이 됨 — 그때 이 셈은 서버 값이 없는 판에서만 쓰고 이 줄에 「서버가 주면 안 씀」 을 적음(개념정의 덧 11-26)
 const comboPx = (r, t) => { const v1 = (o) => (o && Number(o.px) > 0 ? Number(o.px) : null); if (t <= minHM(1)) return v1(minVal(r, 1));
   const v = Number((r.chipPx || {})[hmS(t)]); if (v > 0) return v; const k = PMIN.find((n) => minHM(n) === t); return k ? v1(minVal(r, k)) : null; };
 async function comboLoad(onStep) {
@@ -1424,11 +1426,11 @@ function comboPaint() {
   root.querySelectorAll('.dt-cb-on').forEach((e) => { e.textContent = comboMode() ? ' · 조합으로 사는 중' : ''; });
   const C = st.cbStat; if (!C) return;
   if (C.busy) { box.textContent = `지난 판 받는 중… ${C.busy}`; return; }
-  const up = Number(S.comboUp) || 0, nn = Number(S.comboN) || 0;
+  const up = S.comboUp == null ? Infinity : Number(S.comboUp), nn = S.comboN == null ? Infinity : Number(S.comboN);   // 빈칸 = 문턱 없음(옅은 빨강 안 칠함)
   const list = C.rows.filter((o) => sel.has(o.key) || o.cnt >= CB_SHOW_MIN).sort((a, b) => (sel.has(b.key) - sel.has(a.key)) || b.upPct - a.upPct || b.cnt - a.cnt).slice(0, Math.max(CB_SHOW_MAX, sel.size));
   const gone = [...sel].filter((k) => !C.rows.some((o) => o.key === k));   // 고른 조합인데 지난 판에 한 번도 없던 것(칩을 끄면 생김)
   box.innerHTML = `<label class="dt-fee"><input type="checkbox" data-cbon${S.comboOn ? ' checked' : ''}> 조합으로 사기 <span class="rl-sug">켜면 「칩 ( )개 이상」 대신 고른 조합이 된 때 삼 · 된 시각이 빠른 순 · 상위 종목 수 · 금액 · 파는 룰은 위 칸 그대로</span></label>
-    <div class="dt-fee">오른 비율 <input data-cbset="comboUp" class="rl-in rl-num" inputmode="decimal" value="${esc(String(S.comboUp ?? ''))}" aria-label="오른 비율 몇 % 이상">% 이상 · <input data-cbset="comboN" class="rl-in rl-num" inputmode="numeric" value="${esc(String(S.comboN ?? ''))}" aria-label="몇 건 이상">건 이상 <button type="button" class="kh-chip" data-cbpick>문턱 넘는 조합 고르기</button> <button type="button" class="kh-chip" data-cbclear>다 빼기</button> <button type="button" class="kh-chip" data-cbredo>다시 셈</button></div>
+    <div class="dt-fee">오른 비율 <input data-cbset="comboUp" class="rl-in rl-num" inputmode="decimal" value="${esc(String(S.comboUp ?? ''))}" aria-label="오른 비율 몇 % 이상">% 이상 · <input data-cbset="comboN" class="rl-in rl-num" inputmode="numeric" value="${esc(String(S.comboN ?? ''))}" aria-label="몇 건 이상">건 이상 <button type="button" class="kh-chip" data-cbpick>문턱 넘는 조합 고르기</button> <button type="button" class="kh-chip" data-cbclear>다 빼기</button> <button type="button" class="kh-chip" data-cbredo>다시 셈</button> <span id="dt-cb-msg" class="rl-sug"></span></div>
     <span class="rl-sug">지난 판 ${C.used.length}날(${C.used.length ? `${dayTxt(C.used[C.used.length - 1])} ~ ${dayTxt(C.used[0])}` : '—'}) · 종목이 처음 그 조합이 된 분 값에 사서 판 마지막 시각 값에 판다고 셈 · 세금 · 수수료 빼기 전 · 켜진 칩만 · 손절 · 익절 넣은 셈은 서버 값 기다림 · ${CB_SHOW_MIN}건 넘는 조합만 보임</span>
     ${gone.length ? `<span class="rl-sug">고른 조합 중 지난 판에 없는 것 — ${esc(gone.join(' · '))}</span>` : ''}
     <table class="st dt-cbt-tb"><thead><tr><th>고름</th><th>칩 수</th><th>조합</th><th>건수</th><th>날</th><th>오른 비율</th><th>평균</th></tr></thead><tbody>${list.map((o) => `<tr${o.upPct >= up && o.cnt >= nn ? ' class="dt-cb-ok"' : ''}><td><input type="checkbox" data-cb="${esc(o.key)}"${sel.has(o.key) ? ' checked' : ''} aria-label="${esc(o.key)} 고름"></td><td>${o.n}</td><td>${esc(o.key)}</td><td>${num(o.cnt)}</td><td>${o.days}</td><td>${num(o.upPct, 0)}%</td><td class="${signClass(o.avg, NUM) || ''}">${o.avg > 0 ? '+' : ''}${num(o.avg, 2)}%</td></tr>`).join('')}</tbody></table>`;
@@ -1448,7 +1450,7 @@ BIND.push(() => {
     const v = e.target.closest('[data-cbset]'); if (v) { const x = v.value.trim() === '' ? null : Number(v.value); if (x != null && (!Number.isFinite(x) || x < 0)) { v.value = String(st.set[v.dataset.cbset] ?? ''); return; } setChange({ ...st.set, [v.dataset.cbset]: x }); }
   });
   d.addEventListener('click', (e) => {
-    if (e.target.closest('[data-cbpick]')) { e.preventDefault(); const C = st.cbStat; if (!C || C.busy) return; const up = Number(st.set.comboUp) || 0, nn = Number(st.set.comboN) || 0; setChange({ ...st.set, combos: C.rows.filter((o) => o.upPct >= up && o.cnt >= nn).map((o) => o.key) }); return; }
+    if (e.target.closest('[data-cbpick]')) { e.preventDefault(); const C = st.cbStat; if (!C || C.busy) return; if (st.set.comboUp == null || st.set.comboN == null) { const m = $('dt-cb-msg'); if (m) m.textContent = '오른 비율 · 건수 칸이 비어 있어 고르지 않음 — 둘 다 넣으십시오'; return; }   /* 빈칸을 0 으로 셈하면 전부 골라짐(개념정의 덧 11-26) */ const up = Number(st.set.comboUp), nn = Number(st.set.comboN); setChange({ ...st.set, combos: C.rows.filter((o) => o.upPct >= up && o.cnt >= nn).map((o) => o.key) }); return; }
     if (e.target.closest('[data-cbclear]')) { e.preventDefault(); setChange({ ...st.set, combos: [], comboOn: false }); return; }
     if (e.target.closest('[data-cbredo]')) { e.preventDefault(); comboOpen(true); }
   });
