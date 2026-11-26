@@ -119,16 +119,16 @@ def _vol_log(proxy, day, hm, vols):
 
 
 def _pre_open_min(proxy, day):
-    """그날 프리장 여는 분(자정부터) — market_hours 그날 pre(옮겨진 날 · 없는 날) · 못 읽으면 08:00."""
+    """그날 프리장 여는 분(자정부터) — market_hours 그날 pre(옮겨진 날 · 없는 날) · 못 읽으면 보통 날 시각(market_hours.PRE_OPEN 한 곳)."""
+    import market_hours
+    m = lambda t: int(str(t).replace(":", "")[:2]) * 60 + int(str(t).replace(":", "")[2:4])
     try:
-        import market_hours
         o = (market_hours.today(proxy, day=day) or {}).get("pre")
         if o and o[0]:
-            t = str(o[0]).replace(":", "")
-            return int(t[:2]) * 60 + int(t[2:4])
+            return m(o[0])
     except Exception:
         pass
-    return 8 * 60
+    return m(market_hours.PRE_OPEN)
 
 
 def prev_vols_at(proxy, day, hm):
