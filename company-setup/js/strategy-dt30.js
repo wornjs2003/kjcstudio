@@ -315,8 +315,8 @@ const comboAutoSel = () => { const C = st.cbStat, S = st.set; if (!C || C.busy |
   const k = `${C.sig}|${C.used.length}|${S.comboUp}|${S.comboN}`; if (cbAutoMemo.k !== k) cbAutoMemo = { k, v: new Set(C.rows.filter((o) => o.upPct >= Number(S.comboUp) && o.cnt >= Number(S.comboN)).map((o) => o.key)) }; return cbAutoMemo.v; };
 // 서버가 고른 조합 · 줄마다 조합 산 값(개발2 143916b · 재권님 「칩 조합 된것들도 서버에 있어야 할거같은데 하루하루 칩조합 승률을 갱신하고 그것중 70%이상만 단타창에서 적용한다」 → 「가」 11-26)
 //   판 meta.comboPick{up · n · sig · keys · from · why} · rows[].comboBuy{key · chips · at 초 · buyAt · px · src} | null — 저장된 셈 칸(저장 전 아님 · 자동 · 문턱 · 켠 칩이 같음)일 때만 그대로 · 아니면 화면 셈
-const sigEq = (a, b) => { try { const A = typeof a === 'string' ? JSON.parse(a) : a, B = typeof b === 'string' ? JSON.parse(b) : b; return ['chipOff', 'subOff', 'chipCols', 'chipKnown'].every((k) => JSON.stringify([...(A[k] || [])].sort()) === JSON.stringify([...(B[k] || [])].sort())); } catch (e) { return false; } };   // 차례는 안 봄
-const svPick = () => { const P = ((curD() || {}).meta || {}).comboPick, S = st.set; return !st.setDirty && S.comboAuto !== false && P && Array.isArray(P.keys) && P.keys.length && Number(S.comboUp) === Number(P.up) && Number(S.comboN) === Number(P.n) && sigEq(P.sig, chipSig()) ? P : null; };
+const chipsSaved = () => st.chipSig == null || chipSig() === st.chipSig;   // 켠 칩 · 하위 칩이 불러온(저장된) 그대로인가 — 서버 sig 글자와 견주면 칩 목록(장외 · 수급 등) 차이로 늘 갈렸음(qa 11-26 d58efb2 크로스 검수 · 서버 고르기는 저장 문서로 셈)
+const svPick = () => { const P = ((curD() || {}).meta || {}).comboPick, S = st.set; return !st.setDirty && S.comboAuto !== false && P && Array.isArray(P.keys) && P.keys.length && Number(S.comboUp) === Number(P.up) && Number(S.comboN) === Number(P.n) && chipsSaved() ? P : null; };
 const svKey = (k) => String(k || '').split(' + ').map(chipName).join(' + ');   // 서버 칩 이름 → 화면 이름
 const comboSel = () => { const P = svPick(); if (P) return new Set(P.keys.map(svKey)); return st.set.comboAuto !== false ? comboAutoSel() : new Set(Array.isArray(st.set.combos) ? st.set.combos : []); };
 const comboPending = () => !!st.set.comboOn && st.set.comboAuto !== false && (!st.cbStat || !!st.cbStat.busy);   // 자동 조합으로 사는데 지난 판 셈이 아직 — 그동안은 아무것도 안 삼(칩 N개로 샀다가 바뀌어 보이지 않게 · 개념정의 덧 11-26)
@@ -1521,7 +1521,7 @@ async function comboOpen(force) {
   st.cbStat = { busy: '…', rows: [], used: [] }; comboPaint();
   // 서버 조합 표(/api/kis/dt30-combo · 날마다 셈 · 개발2)를 먼저 — 켠 칩이 저장값과 같고 서버가 셈을 마쳤을 때만 · 아니면 화면 셈(서버가 주면 안 씀)
   try { const res = await fetch(CB_API, { cache: 'no-store' }), j = res.ok ? await res.json() : null, M = (j && j.meta) || {}, D = (j && (j.data || j)) || {};
-    if (Array.isArray(D.rows) && D.rows.length && !M.busy && sigEq(M.sig, chipSig())) {
+    if (Array.isArray(D.rows) && D.rows.length && !M.busy && chipsSaved()) {
       st.cbStat = { rows: D.rows.map((o) => ({ key: (o.chips || String(o.key).split(' + ')).map(chipName).join(' + '), n: o.n, cnt: o.cnt, days: o.days, upPct: o.upPct, avg: o.avg })), used: D.used || [], untimed: D.untimed, rowsN: D.rowsN, sig: chipSig(), server: M.at || true };
       comboPaint(); if (st.data) paint(st.data); return; } } catch (e) { /* 서버 표 못 받음 — 화면 셈 */ }
   const C = await comboLoad((k, n) => { if (st.cbStat && st.cbStat.busy) { st.cbStat.busy = `(${k}/${n})`; comboPaint(); } });
