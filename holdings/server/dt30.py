@@ -3752,11 +3752,11 @@ class _frozen_set:
         return False
 
 
-def buy_set_freeze(b, hm):
+def buy_set_freeze(proxy, b, hm):
     """여는 시각 + 1분(보내기 창 시작)이 되면 그날 판에 지금 셈 칸을 한 번 굳힌다(meta.buySet · buySetAt) → 새로 굳혔으면 True."""
     import dt30_win
     m = b.setdefault("meta", {})
-    if m.get("buySet") is not None or hm < _open_min(None, b["day"], b) + 1:
+    if m.get("buySet") is not None or hm < _open_min(proxy, b["day"], b) + 1:
         return False
     m["buySet"], m["buySetAt"] = dict(dt30_win._set()), _now().strftime("%H:%M:%S")
     return True
@@ -3955,7 +3955,7 @@ def buy_text(r):
 
 def buy_send(proxy, b, hm):
     """여는 시각부터 기준 시각 + BUY_SEND_LATE 분까지 — 매수 룰(buy_order)로 새로 정해진 종목을 meta.tgTop 에 더하고(meta.tgBuy 에 차례 · 시각 · 찬/채움) 텔레그램 한 통씩 → 더한 수."""
-    fz = buy_set_freeze(b, hm)                         # 보내기 창 시작에 셈 칸을 굳힘 — 그날은 그 값으로만(재권님 「가」 11-26)
+    fz = buy_set_freeze(proxy, b, hm)                         # 보내기 창 시작에 셈 칸을 굳힘 — 그날은 그 값으로만(재권님 「가」 11-26)
     with _frozen_set(b):
         late = rule_min() + BUY_SEND_LATE
     o = _open_min(proxy, b["day"], b)
