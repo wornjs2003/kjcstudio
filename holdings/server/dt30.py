@@ -3592,15 +3592,16 @@ def money_log_fill(proxy, day, b):
     return len(cf)
 
 
-SPAN_VER = 1                  # 판 meta.spanFill.ver — 이 값이 아니면 한 번 다시 셈
-SPAN_CHIPS = ("현재상승", "거래비율급증")   # 칩 기록 전 판에서 봉으로 붙음 · 빠짐을 다시 셀 수 있는 칩(재권님 「다시 셀 수 있는 것은 다시 세고」 11-26)
+SPAN_VER = 2                  # 판 meta.spanFill.ver — 이 값이 아니면 한 번 다시 셈 · 2: 거래비율 더함(11-26 재권님 「셀수있는 값들부터 계산해서 만들어서 채워놔」 → 안에 「응」)
+SPAN_CHIPS = ("현재상승", "거래비율급증", "거래비율")   # 칩 기록 전 판에서 봉으로 붙음 · 빠짐을 다시 셀 수 있는 칩(재권님 「다시 셀 수 있는 것은 다시 세고」 11-26)
 
 
 def past_span_fill(proxy, day, b):
-    """칩 기록 전에 다시 지은 판(rebuilt)의 줄 — 이미 붙은 현재상승 · 거래비율급증만 처음 붙은 때부터 장 끝까지 봉으로 붙음 · 빠짐을 다시 셈해 rows[].chipSpans 에.
+    """칩 기록 전에 다시 지은 판(rebuilt)의 줄 — 이미 붙은 현재상승 · 거래비율급증 · 거래비율만 처음 붙은 때부터 장 끝까지 봉으로 붙음 · 빠짐을 다시 셈해 rows[].chipSpans 에.
     칩 목록 · 종목은 안 바꿈(판에 드는 종목이 바뀌지 않게) · 재권님 「지난칩들의 등락이 언제인지 정확히 알수있는건지 … 다시 셀 수 있는 것은 다시 세고」(11-26 13:4x).
         현재상승      봉 끝마다 종가 ÷ 그날 시가(여는 분 첫 봉 시가) − 1 ≥ 칩 룰 현재상승.nowRisePct — 1분봉이 있는 종목은 1분 · 없으면 5분봉(어림)
         거래비율급증  5분봉 끝마다 그날 누적 거래량 ÷ 앞 거래일 같은 분까지 누적 × 100 ≥ 칩 룰 거래비율급증.turnPrevPct(past_vol_chip 과 같은 어림) · 앞 날 봉이 빠진 칸부터는 그대로 둠
+        거래비율      5분봉 끝마다 그날 누적 거래대금(봉 종가 × 거래량 어림) ÷ (풀린 주식수 지금 값 × 그 봉 종가) × 100 ≥ 칩 룰 거래비율.turnPct(past_vol_chip 과 같은 어림)
         시각          봉 끝(그 값을 처음 알 수 있는 때) · 처음 붙은 때(chip_first · chipAt 중 이른 것)부터
     → 셈한 줄 수 · 못 셈이면 None. meta.spanFill {ver, src {칩: {1분봉 · 5분 어림: 종목 수}}}"""
     import chip_rules as _cr
@@ -3611,7 +3612,9 @@ def past_span_fill(proxy, day, b):
         b["meta"]["spanFill"] = {"ver": SPAN_VER, "src": {}}
         return 0
     try:
-        pct, p_pct = now_rise_pct(), float(_cr.get("거래비율급증", "turnPrevPct"))
+        pct, p_pct, t_pct = now_rise_pct(), float(_cr.get("거래비율급증", "turnPrevPct")), float(_cr.get("거래비율", "turnPct"))
+        import company_profile
+        fl = company_profile.floats() or {}
     except Exception:
         return None
     codes = [r["code"] for r in want]
@@ -3667,6 +3670,14 @@ def past_span_fill(proxy, day, b):
                     continue
                 op0 = bs[0][1]
                 seq = [(m + ln, (cl / op0 - 1) * 100 >= pct) for m, _o, cl, _v in bs]
+            elif ch == "거래비율":
+                bs, f_, per = b5.get(code) or [], fl.get(code), "5분 어림"
+                if not bs or not f_:
+                    continue                           # 봉 · 풀린 주식수가 없음 — 처음 시각만 남김(짐작 안 함)
+                amt, seq = 0, []
+                for m, _o, cl, v in bs:
+                    amt += cl * v
+                    seq.append((m + BAR_MIN, amt / (f_ * cl) * 100 >= t_pct))
             else:
                 bs, pv, per = b5.get(code) or [], p5.get(code), "5분 어림"
                 if not bs or not pv:
@@ -3687,7 +3698,7 @@ def past_span_fill(proxy, day, b):
             src[ch][per] += 1
             n += 1
     b["meta"]["spanFill"] = {"ver": SPAN_VER, "src": src,
-                             "note": "칩 기록 전 판 — 이미 붙은 현재상승 · 거래비율급증만 처음 붙은 때부터 장 끝까지 봉 끝마다 다시 셈(종목 · 칩 목록은 그대로) · src 는 칩마다 1분봉 · 5분 어림 종목 수"}
+                             "note": "칩 기록 전 판 — 이미 붙은 현재상승 · 거래비율급증 · 거래비율만 처음 붙은 때부터 장 끝까지 봉 끝마다 다시 셈(종목 · 칩 목록은 그대로) · src 는 칩마다 1분봉 · 5분 어림 종목 수"}
     return n
 
 
