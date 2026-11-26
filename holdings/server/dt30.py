@@ -1320,18 +1320,17 @@ def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
         return None                                    # 그 분 1분봉 값이 없음 — 어림으로 안 삼(화면과 같게 · 재권님 「산값은 정확해야」) · 장중이면 굳는 1분 남짓을 기다렸다 삼(재권님 「가인데 1분으로 해줘」 11-25)
     if cpx and T > p1_:                                # 칩 N개가 함께 붙은 그 분 1분봉 종가(chipPx) — 어림(30분 칸 · 든 때) 대신(11-25 재권님 「산값은 정확해야」 · 들어온 때 모드도 · 개념정의 덧)
         return {"px": cpx, "at": "%s:%s" % (T[:2], T[2:]), "chipAt": "%s:%s" % (T[:2], T[2:]), "need": need, "src": "칩 찬 분 1분봉 종가"}
-    if mode == "open":                                 # 「들어온 때」 — 판에 든 때 값 · 시각(r.buy · buyAt) · 칩 N개 문턱 · 차례는 그대로
-        if e and isinstance(r.get("buy"), (int, float)) and r["buy"] > 0:
-            return {"px": r["buy"], "at": "%s:%s" % (e[:2], e[2:]), "chipAt": "%s:%s" % (T[:2], T[2:]), "need": need, "src": "들어온 때 값"}
-        return None
-    at = (b.get("meta") or {}).get("pxMinAt") or {}
-    o = open_min if open_min is not None else OPEN_AT[0] * 60 + OPEN_AT[1]
     mh = lambda k: _hm4(at.get(str(k))) or _hhmm(o + k).replace(":", "")
 
     def mv(k):
         v = (r.get("pxMin") or {}).get(str(k)) or (r.get("px1") if k == 1 else None)
         v = v.get("px") if isinstance(v, dict) else v
         return v if isinstance(v, (int, float)) and v > 0 else None
+
+    if mode == "open" and not (T <= mh(1) and mv(1)):   # 「들어온 때」 — 판에 든 때 값 · 시각(r.buy · buyAt) · 칩 N개 문턱 · 차례는 그대로
+        if e and isinstance(r.get("buy"), (int, float)) and r["buy"] > 0:   # 9시 1분 이하에 찬 줄은 아래 9시 1분 값(11-26 재권님 「응 만들어」 · 화면 feced18 과 같게 · RFHIC 08:05 찬 줄을 09:45 든 때 값으로 샀음)
+            return {"px": r["buy"], "at": "%s:%s" % (e[:2], e[2:]), "chipAt": "%s:%s" % (T[:2], T[2:]), "need": need, "src": "들어온 때 값"}
+        return None
 
     hm = lambda x: "%s:%s" % (x[:2], x[2:])
     out = lambda px, a, src: {"px": px, "at": hm(a), "chipAt": hm(T), "need": need, "src": src}
@@ -3322,6 +3321,7 @@ def m1_fill(proxy, cfg, limit=BACKFILL_DAYS):
     return n
 
 
+SIG_SKIP = {("단타", "dayChips")}   # 판을 읽을 때만 쓰는 칸(하루 고정 칩 — chip_prec · 들고 남 읽기) — 판 짓기를 안 바꾸므로 지문에서 뺌(넣으면 「단타」 바뀜 → 지난 판 전부 다시 지음 · qa 11-26)
 RULE_GLOBAL = ("순위", "단타")   # 이 칸이 바뀌면 모든 칩이 바뀐 것으로 본다(시가총액 문턱 · 단타가 세는 칩 목록 · 하락 뺌)
 RULE_SETTLE_SEC = 600         # 룰 값이 바뀐 뒤 이만큼 더 안 바뀌면 지난 판을 다시 셈 — 룰 탭에서 값을 이어 고치실 때 판마다 여러 번 다시 짓지 않게(장중 · 넥장은 QUIET 로 미룸)
 
@@ -3334,7 +3334,7 @@ def rule_sig(proxy):
     try:
         if not chip_rules.rules_doc():
             return None
-        out = {ch: json.dumps({k: chip_rules.get(ch, k) for k in keys}, sort_keys=True, ensure_ascii=False)
+        out = {ch: json.dumps({k: chip_rules.get(ch, k) for k in keys if (ch, k) not in SIG_SKIP}, sort_keys=True, ensure_ascii=False)
                for ch, keys in chip_rules.RULES.items()}
         import auto_watch
         w, src = auto_watch.rules(proxy)
