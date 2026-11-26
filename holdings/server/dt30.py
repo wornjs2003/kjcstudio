@@ -1408,6 +1408,7 @@ COMBO_N = 5
 COMBO_TP = (None, 1.5, 2, 3, 4, 5)       # 익절 % — None 은 「없음」
 COMBO_SL = (None, -1, -1.5, -2, -3)      # 손절 %
 COMBO_LIVE_SEC = 60                      # 그날 판(안 끝남) 셈을 다시 쓰는 초 — 1분봉이 1분마다 늘어서
+COMBO_MEMO_DAYS = 60                     # 메모리에 두는 판 수 — 화면이 판을 열 때 지난 판을 다 받아서(끝난 판은 저장 시각 · 셈 칸이 같으면 다시 안 셈 · 개념정의 덧 ③)
 _combo_memo = {}
 
 
@@ -1503,8 +1504,10 @@ def combo_fill(proxy, b):
                 out[n] = {"at": "%s:%s" % (t[:2], t[2:]), "buyAt": "%s:%s" % (m[:2], m[2:]), "chips": on, "px": p,
                           "res": _combo_res(p, after) if p else None, "why": why or (None if after else "산 뒤 1분봉 없음")}
             vals[c] = out
-        _combo_memo.clear()
+        _combo_memo.pop(day, None)
         _combo_memo[day] = (key, time.time(), vals)
+        while len(_combo_memo) > COMBO_MEMO_DAYS:
+            _combo_memo.pop(next(iter(_combo_memo)))   # 가장 먼저 넣은 판부터
     for r in rows:
         r["combo"] = vals.get(r["code"])
     b["meta"]["comboDef"] = {"n": COMBO_N, "tp": list(COMBO_TP), "sl": list(COMBO_SL),
