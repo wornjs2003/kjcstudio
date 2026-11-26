@@ -163,6 +163,9 @@ def fee_pct():
 
 def _set():
     """단타 판 셈 칸 — 룰 문서 strategy-rules rules.dt30.set(화면과 같은 칸 한 곳) · 비거나 못 읽으면 {}."""
+    fz = getattr(dt30._SET_TL, "v", None)              # 그날 판에 굳힌 셈 칸(dt30._frozen_set · 매수 알림 창 · 재권님 「가」 11-26)
+    if isinstance(fz, dict):
+        return fz
     try:
         d = dt30.chip_rules.rules_doc() or {}           # 상류(8765) 문서 한 곳 — 넘기는 서버도 같은 셈 칸(개념정의 덧 ① 11-23)
         d = d.get("data", d) if isinstance(d, dict) else {}
