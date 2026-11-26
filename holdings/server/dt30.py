@@ -1676,7 +1676,7 @@ def combo_fill(proxy, b):
 
 # ── 칩 조합 표 — 서버가 지난 판 전부로 한 번 셈해 저장 (2026-11-26) ──────────────────
 # 재권님 「칩조합은 한번 셈해놓고 저장해놓으면 그냥 볼러오면 되잖아」(12:12 · 시황분석1 창) → 개발2 안에 「응 이게 맞아」(13:3x · 칩 들고 남 체크 뒤)
-#     셈      화면 strategy-dt30.js comboLoad 그대로 — 굳은 판(closed)마다 줄마다 나온 조합 전부 · 같은 조합은 처음 나온 때 한 번(comboEvents · seen)
+#     셈      화면 strategy-dt30.js comboLoad 그대로 — 굳은 판(closed)마다 줄마다 그 시각 붙은 칩 묶음의 부분 묶음(칩 6개까지 · subKeys) 전부 · 같은 조합은 처음 품은 때 한 번(comboEvents · seen · 11-26 「품음」)
 #             구간 있는 줄은 칩이 붙은 시각마다 그때 함께 붙어 있던 켜진 칩 · 없는 줄은 그 시각까지 처음 붙은 켜진 칩
 #             켜진 칩 = 저장된 셈 칸(chip_filter · _chip_on) · 「수급」(화면 「자동」)은 판이 자동 관심(watchRule 「자동」)이 아니면 셈(화면 colsOf 와 같게)
 #             시각 없는 켜진 칩이 하나라도 있는 줄은 뺌(untimed · 하루 고정 칩 · 「수급」 은 시각 없어도 됨)
@@ -1684,6 +1684,7 @@ def combo_fill(proxy, b):
 #             판 값 = 판 마지막 시각 값(px[times 끝]) · 없으면 그 줄 안 셈 · 세금 · 수수료 빼기 전
 #             익절 × 손절(COMBO_TP × COMBO_SL) = 산 다음 분부터 판 끝 앞까지 1분봉 · 먼저 닿은 쪽 · 한 봉에 둘이면 손절 · 끝까지 안 닿으면 판 값 · 1분봉 없는 건은 그 칸 셈에서 뺌(resN)
 #     저장    dt30_combo(열쇠 sig + 판 저장 시각들) 한 줄 · 열쇠가 바뀌면(셈 칸 저장 · 판이 새로 굳음 · 되채움) 뒤에서 다시 셈 · 그동안은 지난 값(busy)
+COMBO_VER = 2                           # 조합 셈 판 — 2: 부분 묶음마다 처음 품은 때(11-26 화면 2d877ad 와 같게)
 COMBO_DAYS = 60                         # 셈에 드는 굳은 판 수(최근부터) — 화면이 받던 지난 판(st.days)과 같은 범위
 _ctab = {"key": None, "val": None, "busy": False, "lock": threading.Lock()}
 _CT_SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_combo (id INTEGER PRIMARY KEY CHECK (id = 1), key TEXT, body TEXT, at TEXT)"
@@ -1699,7 +1700,7 @@ def _ct_key(proxy):
     ds = [d for d in days(proxy)[:COMBO_DAYS]]
     with proxy.db_conn() as conn:
         sv = dict(conn.execute("SELECT day, saved_at FROM dt30 WHERE day IN (%s)" % ",".join("?" * len(ds)), ds).fetchall()) if ds else {}
-    return combo_sig() + "|" + ",".join("%s@%s" % (d, sv.get(d)) for d in ds)
+    return "v%d|" % COMBO_VER + combo_sig() + "|" + ",".join("%s@%s" % (d, sv.get(d)) for d in ds)   # 셈이 바뀌면 COMBO_VER 를 올려 저장한 표를 다시 셈
 
 
 def _ct_row(r, b, cf, split, dc, wr_auto):
@@ -1796,29 +1797,56 @@ def combo_table_calc(proxy):
             for t, cs in ev:
                 if not cs:
                     continue
-                key = " + ".join(cs)
-                if key in seen:
-                    continue
-                seen.add(key)
                 p, cut = _ct_px(r, b, t, o)
-                if not p:
-                    continue
-                g = M.setdefault(key, {"key": key, "chips": list(cs), "n": len(cs), "cnt": 0, "up": 0, "sum": 0.0, "days": set(),
-                                       "rs": [[0.0] * len(COMBO_SL) for _ in COMBO_TP], "ru": [[0] * len(COMBO_SL) for _ in COMBO_TP], "rn": 0})
-                ret = (ex / p - 1) * 100
-                g["cnt"] += 1
-                g["up"] += ret > 0
-                g["sum"] += ret
-                g["days"].add(d)
-                after = [x for x in bars.get(code, []) if x[0] >= cut]
-                if after:
-                    res = _combo_res(p, after + [[end, ex, ex, ex, ex]])   # 끝까지 안 닿으면 판 값(판 마지막 시각 값)
-                    g["rn"] += 1
-                    for i, line in enumerate(res):
-                        for j, v in enumerate(line):
-                            if v is not None:
-                                g["rs"][i][j] += v
-                                g["ru"][i][j] += v > 0
+                for sub in _ct_subs(cs):           # 그 시각 붙은 칩의 부분 묶음마다 · 같은 조합은 처음 품은 때 한 번(화면 subKeys · 11-26 재권님 「고른 조합을 다 품으면 됨」 → 「응 그렇게 해」)
+                    key = " + ".join(sub)
+                    if key in seen:
+                        continue
+                    seen.add(key)                  # 처음 품은 때 산 값이 없으면 그 조합은 이 줄에서 안 셈(화면과 같게)
+                    if not p:
+                        continue
+                    _ct_add(M, key, sub, d, ex, p, cut, bars.get(code, []), end)
+    return _ct_out(M, used, untimed, rows_n)
+
+
+CT_SUB_MAX = 6                          # 부분 묶음 칩 수 끝 — 화면 CB_SUB_MAX 와 같은 값(11-26 시황분석1 2d877ad)
+
+
+def _ct_subs(cs):
+    """칩 묶음의 부분 묶음(차례는 cs 그대로 · 칩 CT_SUB_MAX 개까지) — 화면 subKeys 와 같은 차례."""
+    out = []
+    def go(i, pick):
+        if pick:
+            out.append(list(pick))
+        if len(pick) >= CT_SUB_MAX:
+            return
+        for j in range(i, len(cs)):
+            go(j + 1, pick + [cs[j]])
+    go(0, [])
+    return out
+
+
+def _ct_add(M, key, cs, d, ex, p, cut, bars, end):
+    """조합 하나에 한 건 더함 — 판 값에 판 셈 + 산 뒤 1분봉으로 익절 × 손절(끝까지 안 닿으면 판 값)."""
+    g = M.setdefault(key, {"key": key, "chips": list(cs), "n": len(cs), "cnt": 0, "up": 0, "sum": 0.0, "days": set(),
+                           "rs": [[0.0] * len(COMBO_SL) for _ in COMBO_TP], "ru": [[0] * len(COMBO_SL) for _ in COMBO_TP], "rn": 0})
+    ret = (ex / p - 1) * 100
+    g["cnt"] += 1
+    g["up"] += ret > 0
+    g["sum"] += ret
+    g["days"].add(d)
+    after = [x for x in bars if x[0] >= cut]
+    if after:
+        res = _combo_res(p, after + [[end, ex, ex, ex, ex]])
+        g["rn"] += 1
+        for i, line in enumerate(res):
+            for j, v in enumerate(line):
+                if v is not None:
+                    g["rs"][i][j] += v
+                    g["ru"][i][j] += v > 0
+
+
+def _ct_out(M, used, untimed, rows_n):
     out = []
     for g in M.values():
         rn = g["rn"]
