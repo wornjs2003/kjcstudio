@@ -1320,18 +1320,17 @@ def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
         return None                                    # 그 분 1분봉 값이 없음 — 어림으로 안 삼(화면과 같게 · 재권님 「산값은 정확해야」) · 장중이면 굳는 1분 남짓을 기다렸다 삼(재권님 「가인데 1분으로 해줘」 11-25)
     if cpx and T > p1_:                                # 칩 N개가 함께 붙은 그 분 1분봉 종가(chipPx) — 어림(30분 칸 · 든 때) 대신(11-25 재권님 「산값은 정확해야」 · 들어온 때 모드도 · 개념정의 덧)
         return {"px": cpx, "at": "%s:%s" % (T[:2], T[2:]), "chipAt": "%s:%s" % (T[:2], T[2:]), "need": need, "src": "칩 찬 분 1분봉 종가"}
-    if mode == "open":                                 # 「들어온 때」 — 판에 든 때 값 · 시각(r.buy · buyAt) · 칩 N개 문턱 · 차례는 그대로
-        if e and isinstance(r.get("buy"), (int, float)) and r["buy"] > 0:
-            return {"px": r["buy"], "at": "%s:%s" % (e[:2], e[2:]), "chipAt": "%s:%s" % (T[:2], T[2:]), "need": need, "src": "들어온 때 값"}
-        return None
-    at = (b.get("meta") or {}).get("pxMinAt") or {}
-    o = open_min if open_min is not None else OPEN_AT[0] * 60 + OPEN_AT[1]
     mh = lambda k: _hm4(at.get(str(k))) or _hhmm(o + k).replace(":", "")
 
     def mv(k):
         v = (r.get("pxMin") or {}).get(str(k)) or (r.get("px1") if k == 1 else None)
         v = v.get("px") if isinstance(v, dict) else v
         return v if isinstance(v, (int, float)) and v > 0 else None
+
+    if mode == "open" and not (T <= mh(1) and mv(1)):   # 「들어온 때」 — 판에 든 때 값 · 시각(r.buy · buyAt) · 칩 N개 문턱 · 차례는 그대로
+        if e and isinstance(r.get("buy"), (int, float)) and r["buy"] > 0:   # 9시 1분 이하에 찬 줄은 아래 9시 1분 값(11-26 재권님 「응 만들어」 · 화면 feced18 과 같게 · RFHIC 08:05 찬 줄을 09:45 든 때 값으로 샀음)
+            return {"px": r["buy"], "at": "%s:%s" % (e[:2], e[2:]), "chipAt": "%s:%s" % (T[:2], T[2:]), "need": need, "src": "들어온 때 값"}
+        return None
 
     hm = lambda x: "%s:%s" % (x[:2], x[2:])
     out = lambda px, a, src: {"px": px, "at": hm(a), "chipAt": hm(T), "need": need, "src": src}
