@@ -1451,8 +1451,9 @@ def combo_fill(proxy, b):
     rows = (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or [])
     day = b["day"]
     cf = chip_filter()
-    split = ((b.get("meta") or {}).get("viSplit") or "09:25").replace(":", "")
-    end = (b.get("times") or ["1400"])[-1]
+    o = _open_min(proxy, day, b)
+    split = ((b.get("meta") or {}).get("viSplit") or vi_split(o - OPEN_AT[0] * 60 - OPEN_AT[1])).replace(":", "")   # 늦게 여는 날은 그만큼 뒤(buy_order 와 같은 셈 · 창구 기계 검사 덧)
+    end = (b.get("times") or times(o - OPEN_AT[0] * 60 - OPEN_AT[1]))[-1]
     key = (day, (b.get("meta") or {}).get("savedAt"), _j.dumps([sorted(cf[0]), sorted(cf[1]), sorted(cf[2]) if cf[2] is not None else None], ensure_ascii=False),
            len(rows), end)
     hit = _combo_memo.get(day)
@@ -1460,7 +1461,6 @@ def combo_fill(proxy, b):
     if hit and hit[0] == key and (not live or time.time() - hit[1] < COMBO_LIVE_SEC):
         vals = hit[2]
     else:
-        o = _open_min(proxy, day, b)
         o4 = _hhmm(o).replace(":", "")
         pool = ov_chips() + ("현재상승", "볼린저")
         plan = {}
