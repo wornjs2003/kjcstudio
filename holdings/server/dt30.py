@@ -3721,6 +3721,37 @@ def _set_int(key, dflt, lo, hi):
     return v if v is not None and lo <= v <= hi else dflt
 
 
+_SET_TL = threading.local()     # 굳힌 셈 칸 — dt30_win._set 이 먼저 본다(그 스레드 · 그 셈 동안만)
+
+
+class _frozen_set:
+    """그날 판 meta.buySet(보내기 시작 때 굳힌 셈 칸)이 있으면 그 셈 동안 셈 칸을 그 값으로 — 재권님 「가」(11-26 12:0x · 매수 알림 창 안에서
+    화면 자동 저장(09:03:40)이 셈 칸을 바꿔 알림 차례가 뒤집힘). 지난 날 판(그날 아님)은 안 굳힘 — 지난 판은 지금 룰로 다시 셈(재권님 「나」 11-26)."""
+    def __init__(self, b):
+        m = (b or {}).get("meta") or {}
+        self.v = m.get("buySet") if isinstance(m.get("buySet"), dict) and (b or {}).get("day") == _now().strftime("%Y%m%d") else None
+
+    def __enter__(self):
+        self.prev = getattr(_SET_TL, "v", None)
+        if self.v is not None:
+            _SET_TL.v = self.v
+        return self
+
+    def __exit__(self, *a):
+        _SET_TL.v = self.prev
+        return False
+
+
+def buy_set_freeze(b, hm):
+    """여는 시각 + 1분(보내기 창 시작)이 되면 그날 판에 지금 셈 칸을 한 번 굳힌다(meta.buySet · buySetAt) → 새로 굳혔으면 True."""
+    import dt30_win
+    m = b.setdefault("meta", {})
+    if m.get("buySet") is not None or hm < _open_min(None, b["day"], b) + 1:
+        return False
+    m["buySet"], m["buySetAt"] = dict(dt30_win._set()), _now().strftime("%H:%M:%S")
+    return True
+
+
 def _set_val(key):
     try:
         import dt30_win
@@ -3793,6 +3824,12 @@ def _turn_at(r, n):
 
 
 def buy_order(proxy, b, hm=None, inplace=False):
+    """그날 판에 굳힌 셈 칸(meta.buySet)이 있으면 그 값으로 — 아래 _buy_order."""
+    with _frozen_set(b):
+        return _buy_order(proxy, b, hm, inplace)
+
+
+def _buy_order(proxy, b, hm=None, inplace=False):
     """→ (줄들 · 기준 시각 분) — 위 「매수 룰」 한 곳. hm(분)을 주면 그때까지 정해진 것만(그날 판 · 고리) · 없으면 그날 끝까지(지난 판 · 읽기).
     줄마다 r["buyRule"] {order, kind 「찬」·「채움」, at 정한 시각, chipAt, turn, rise, px} · 판(b)은 안 바꿈(inplace 면 그 판 줄에 적음 — 읽기 길)."""
     import copy
@@ -3882,7 +3919,13 @@ def buy_order(proxy, b, hm=None, inplace=False):
 
 
 def buy_rule_meta(proxy, b):
-    """읽기 길 — 판 meta.buyRule(룰 값 · 기본 · 서버 차례)과 줄마다 rows[].buyRule. 그날 판은 지금까지 정해진 것만."""
+    """읽기 길 — 판 meta.buyRule(룰 값 · 기본 · 서버 차례)과 줄마다 rows[].buyRule. 그날 판은 지금까지 정해진 것만 · 굳힌 셈 칸이 있으면 그 값(frozenAt)."""
+    with _frozen_set(b):
+        _buy_rule_meta(proxy, b)
+        b["meta"]["buyRule"]["frozenAt"] = b["meta"].get("buySetAt") if (b.get("day") == _now().strftime("%Y%m%d") and b["meta"].get("buySet") is not None) else None
+
+
+def _buy_rule_meta(proxy, b):
     now = _now()
     hm = now.hour * 60 + now.minute if b.get("day") == now.strftime("%Y%m%d") else None
     rows, R = buy_order(proxy, b, hm, inplace=True)
@@ -3902,9 +3945,12 @@ def buy_text(r):
 
 def buy_send(proxy, b, hm):
     """여는 시각부터 기준 시각 + BUY_SEND_LATE 분까지 — 매수 룰(buy_order)로 새로 정해진 종목을 meta.tgTop 에 더하고(meta.tgBuy 에 차례 · 시각 · 찬/채움) 텔레그램 한 통씩 → 더한 수."""
+    fz = buy_set_freeze(b, hm)                         # 보내기 창 시작에 셈 칸을 굳힘 — 그날은 그 값으로만(재권님 「가」 11-26)
+    with _frozen_set(b):
+        late = rule_min() + BUY_SEND_LATE
     o = _open_min(proxy, b["day"], b)
-    if hm < o + 1 or hm > o + rule_min() + BUY_SEND_LATE:
-        return 0
+    if hm < o + 1 or hm > o + late:
+        return 1 if fz else 0                          # 굳힌 것도 저장되게(바뀐 것으로 셈)
     m = b.setdefault("meta", {})
     top = m.setdefault("tgTop", [])
     rows, _ = buy_order(proxy, b, hm)
@@ -3921,10 +3967,11 @@ def buy_send(proxy, b, hm):
                                                 "kind": info["kind"], "order": len(top), "turn": info.get("turn"), "rise": info.get("rise")}
         m["tgTopAt"] = _now().strftime("%H:%M")
         n += 1
+        fz = False
         if TG_SEND:
             ok, why = dart.telegram_send(buy_text(r))
             print("  [단타 30] 매수 %s %s(%s) %s" % (r["code"], info["kind"], info.get("chipAt"), "보냄" if ok else "못 보냄 — " + str(why)), flush=True)
-    return n
+    return n or (1 if fz else 0)                       # 굳히기만 한 바퀴도 저장되게
 
 SELL_SEND = True             # 켜기 — 아침 상위 TG_TOP 이 꺾이면 「팔 때」 한 통씩(종목마다 한 번 · 하루 9~10통 — 11-12~19 엿새 셈) · 재권님 「응 해줘」(11-19 14:4x · 시험 한 통 보신 뒤) · 보내는 서버(8765)만
 SELL_DROP_PCT = 2.0          # 고점 대비 이만큼 내려오면 — 재권님 「30분단위로 대비했을때 가격이 하락한상황이거나 고점대비 2% 하락시로 해줘」(11-19 14:3x)
