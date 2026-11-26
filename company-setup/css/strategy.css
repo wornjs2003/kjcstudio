@@ -403,6 +403,9 @@
 .dt .dt-years { margin-right: 8px; }
 .dt .dt-rrk { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
 .dt .dt-rrk input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.dt .dt-rrk.is-off { opacity: .45; cursor: default; }   /* 칩 조합으로 살 때 — 같은 분 차례는 늘 그 분 상승률(11-26 재권님 「나」) */
+.dt .dt-rrk.is-off input { cursor: default; }
+.dt .dt-cbrule { display: block; margin: 4px 0 0; line-height: 1.6; }   /* 고른 조합 칸 머리줄 밑 룰 글(11-26) */
 .dt .dt-setf > summary { cursor: pointer; margin: 6px 0; }   /* 셈 칸 접기 · 펴기 */
 
 /* 미국 → 다음 날 국내 섹터 · 테마(11-25 · js/strategy-uskr.js) — 짝 색: 같은 쪽은 방향 색(둘 다 오름 빨강 · 둘 다 내림 파랑) · 반대로 간 날은 한국 칸만 노랑(재권님 「짝이 안맞는 한국은 노란색」 → 「응」) */
