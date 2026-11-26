@@ -20,19 +20,27 @@
 }
 .kh-rail-bar { display: none; }
 
+/* 폰은 아래에서 올라오는 판 — 위 15% 는 덮개 너머로 본문이 흐리게 보이고 누르면 닫힌다 · 손잡이를 끌거나 뒤로 가기로도 닫힌다
+   (2026-11-26 재권님 「모바일에서 페이지에 붇은 ai열면 닫기가 너무 힘든데」 → 그림 「응」 · 그 전에는 화면 전체를 덮고 닫기 × 가 구석에 작았다) */
 .kh-rail-panel {
-  position: fixed; inset: 0; z-index: 90;   /* 폰은 화면 전체 — 메뉴 줄(80)도 덮는다 · 모달(200)보다 아래 */
+  position: fixed; inset: 15vh 0 0 0; z-index: 90;   /* 메뉴 줄(80)도 덮는다 · 모달(200)보다 아래 */
   display: flex; flex-direction: column; background: var(--kh-bg-card);
+  border-radius: var(--kh-radius-lg) var(--kh-radius-lg) 0 0; box-shadow: var(--kh-shadow-lg);
 }
-.kh-rail-panel[hidden], .kh-rail-fab[hidden] { display: none; }
+.kh-rail-dim { position: fixed; inset: 0; z-index: 89; background: var(--kh-scrim); }
+.kh-rail-panel[hidden], .kh-rail-fab[hidden], .kh-rail-dim[hidden] { display: none; }
+.kh-rail-grab { flex: none; height: 22px; touch-action: none; cursor: grab; display: flex; justify-content: center; align-items: center; }
+.kh-rail-grab::before { content: ''; width: 40px; height: 5px; border-radius: 3px; background: var(--kh-border); }
 
-.kh-rail-hd { display: flex; align-items: center; gap: 8px; padding: 18px 18px 12px; }
+.kh-rail-hd { display: flex; align-items: center; gap: 8px; padding: 2px 18px 12px; }
 .kh-rail-hd b { font-size: 1.1rem; color: var(--kh-text-primary); }
 .kh-rail-st { font-size: 0.75rem; color: var(--kh-text-secondary); background: var(--kh-bg); padding: 3px 8px; border-radius: 999px; }
-.kh-rail-x {
-  border: 0; background: none; cursor: pointer;
-  color: var(--kh-text-secondary); font-size: 1.2rem; line-height: 1; padding: 4px;
+.kh-rail-x {   /* 폰 — 왼쪽 「← 닫기」 · 높이 44(손가락 한 마디) · 「대화 지우기」 와 반대 끝 */
+  border: 0; cursor: pointer; font: inherit; font-weight: 700; font-size: 0.95rem;
+  min-height: 44px; padding: 0 14px; border-radius: 10px;
+  background: var(--kh-bg); color: var(--kh-text-primary);
 }
+.kh-rail-x-w { display: none; }
 .kh-rail-ctx { margin: 0 18px; padding: 10px 12px; background: var(--kh-bg); border-radius: 12px; font-size: 0.82rem; color: var(--kh-text-secondary); }
 .kh-rail-ctx b { color: var(--kh-text-primary); }
 /* 대화 자리 — 2026-11-03 연동(server/claude_chat.py)을 붙여 빨간 바탕(미정)을 지웠다 */
@@ -89,8 +97,17 @@
     background: var(--kh-accent-dim); color: var(--kh-accent);
   }
   .kh-rail-ic.is-on { background: var(--kh-accent); color: var(--kh-text-on-fill); }
+  /* 넓은 폭은 전과 같다 — 덮개 · 손잡이 없음 · 닫기 × 오른쪽 끝 */
+  .kh-rail-dim, .kh-rail-grab { display: none; }
+  .kh-rail-hd { padding-top: 18px; }
+  .kh-rail-x {
+    order: 1; min-height: 0; border-radius: 0; background: none; font-weight: 400;
+    color: var(--kh-text-secondary); font-size: 1.2rem; line-height: 1; padding: 4px;
+  }
+  .kh-rail-x-n { display: none; }
+  .kh-rail-x-w { display: inline; }
   .kh-rail-panel {
     inset: auto; top: var(--nav-height, 0px); bottom: 0; right: var(--kh-rail-bar); width: var(--kh-rail-panel); z-index: 70;
-    border-left: 1px solid var(--kh-border); box-shadow: var(--kh-shadow-lg);
+    border-left: 1px solid var(--kh-border); box-shadow: var(--kh-shadow-lg); border-radius: 0;
   }
 }
