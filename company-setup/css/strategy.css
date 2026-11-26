@@ -405,8 +405,8 @@
 .dt .dt-rrk input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 .dt .dt-rrk.is-off { opacity: .45; cursor: default; }   /* 칩 조합으로 살 때 — 같은 분 차례는 늘 그 분 상승률(11-26 재권님 「나」) */
 .dt .dt-rrk.is-off input { cursor: default; }
-.dt .dt-cbrule { display: block; margin: 4px 0 0; line-height: 1.6; }
-.dt .dt-nobuy { background: var(--kh-danger-faint); color: var(--kh-danger); padding: 0 4px; border-radius: var(--kh-radius-sm); }   /* 매수값 미확인 — 그 분 1분봉이 서버에 아직 없음(11-26 재권님 「매수값미확인 이라고 하고」 · 나오면 서버를 볼 자리) */   /* 고른 조합 칸 머리줄 밑 룰 글(11-26) */
+.dt .dt-cbrule { display: block; margin: 4px 0 0; line-height: 1.6; }   /* 고른 조합 칸 머리줄 밑 룰 글(11-26) */
+.dt .dt-nobuy { background: var(--kh-danger-faint); color: var(--kh-danger); padding: 0 4px; border-radius: var(--kh-radius-sm); }   /* 매수값 미확인 — 그 분 1분봉이 서버에 아직 없음(11-26 재권님 「매수값미확인 이라고 하고」 · 나오면 서버를 볼 자리) */
 .dt .dt-setf > summary { cursor: pointer; margin: 6px 0; }   /* 셈 칸 접기 · 펴기 */
 
 /* 미국 → 다음 날 국내 섹터 · 테마(11-25 · js/strategy-uskr.js) — 짝 색: 같은 쪽은 방향 색(둘 다 오름 빨강 · 둘 다 내림 파랑) · 반대로 간 날은 한국 칸만 노랑(재권님 「짝이 안맞는 한국은 노란색」 → 「응」) */
