@@ -1371,15 +1371,15 @@ def _moment_px(r, ct, cs, T, need=None):
     done = [c for c in cs if T in _starts(r, ct, c)]
     secs = sorted(x for x in ((r.get("chipSec") or {}).get(c, {}).get(hm) for c in done) if x)
     k = len(done) if need is None else max(1, need - (len(cs) - len(done)))   # 그 분에 붙은 칩 중 몇 번째가 N개(조합)를 채웠나 — 앞서 붙어 있던 칩을 빼고
-    last = secs[min(k, len(secs)) - 1] if secs else None
+    last = secs[k - 1] if len(secs) >= k else None    # N개(조합)를 채운 칩의 초를 모르면 앞 칩의 순간 값으로 사지 않고 그 분 종가로(단타 리뷰 ③ 11-26)
     cpx = r.get("chipPx") or {}
     if last and (r.get("seenPx") or {}).get(last):
         return r["seenPx"][last], last, "칩 찬 순간 본 값" + (" · 봉 없어 못 가름" if last in (r.get("seenNoBar") or []) else "")
     if last and last.endswith(":00") and len(secs) >= min(k, len(done)):
         m = int(T[:2]) * 60 + int(T[2:]) - 1
         v = cpx.get("%02d:%02d" % divmod(m, 60))
-        return v, last, "칩 찬 시각 값(앞 분 1분봉 종가)"
-    return cpx.get(hm), last, "칩 찬 분 1분봉 종가"
+        return v, last, "칩 찬 시각 값(앞 분 1분봉 종가)" + (" · 첫 체결가" if "%02d:%02d" % divmod(m, 60) in (r.get("chipPxFirst") or []) else "")
+    return cpx.get(hm), last, "칩 찬 분 1분봉 종가" + (" · 첫 체결가" if hm in (r.get("chipPxFirst") or []) else "")
 
 
 def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
@@ -1416,7 +1416,7 @@ def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
     p1 = mh(1)
     v1 = mv(1) if T <= p1 else None
     if v1:
-        return out(v1, p1, "9시 1분 값")
+        return out(v1, p1, "9시 1분 값" + (" · 첫 체결가" if r.get("px1First") else ""))   # 거래 없는 분이면 다음 첫 체결가(값은 맞음 · 이름만 · 단타 리뷰 ③ 11-26)
     for k in PX_MIN:                                   # 9시 1분 값이 없는 날(1분봉 11-12 전)은 아래로 흘림 — 든 때 → 다음 30분 칸(화면 0a9603c 와 같게 · 재권님 「응」 20:2x)
         if k == 1 and T <= p1:
             break
@@ -1464,6 +1464,8 @@ def buy930_fill(proxy, b):
     if why and "칩 붙음·빠짐" not in b["meta"]["noData"]:
         b["meta"]["noData"].append("칩 붙음·빠짐")       # 그 판에서 못 쓴 까닭은 meta.chipSpans.why
     b["meta"]["chipSpans"] = {"ok": True} if not why else {"ok": False, "why": why}   # 못 잼이면 줄에 chipSpans 를 안 싣고 매수 셈은 예전대로(한 번 붙은 칩)
+    if (_status.get("closeMiss") or {}).get(b["day"]):
+        b["meta"]["closeMiss"] = "장 시각 못 읽음 — 정규장 끝을 보통 날(%s)로 셈 · %s" % (__import__("market_hours").REG_CLOSE, _status["closeMiss"][b["day"]])   # 개념정의 덧 11-26
     b["meta"]["chipPrec"] = chip_prec(b, not why)     # 칩마다 붙음 · 빠짐을 얼마나 정확히 아나(재권님 「지난칩들의 등락이 언제인지 정확히 알수있는건지」 11-26)
     for r in rows:
         c = ct.get(r["code"]) or {}
@@ -1503,10 +1505,13 @@ def buy930_fill(proxy, b):
         r["chipSec"], r["seenPx"] = sec, seen
     try:                                               # 9시 1분 값을 지금 DB 의 여는 분 1분봉 종가로(rows[].px1Db · 판에 적힌 pxMin 과 다를 수 있음 · 지난 판 · 오늘 09:02 뒤)
         nw = _now()
-        p1d = {} if (b["day"] == nw.strftime("%Y%m%d") and nw.hour * 60 + nw.minute < o + 2) else _px1_of(proxy, b["day"], [r["code"] for r in rows], o)   # 오늘 여는 분 봉이 아직 굳기 전(+2분 앞)은 판 값 그대로
+        f1 = set()
+        p1d = {} if (b["day"] == nw.strftime("%Y%m%d") and nw.hour * 60 + nw.minute < o + 2) else _px1_of(proxy, b["day"], [r["code"] for r in rows], o, f1)   # 오늘 여는 분 봉이 아직 굳기 전(+2분 앞)은 판 값 그대로
         for r in rows:
             if p1d.get(r["code"]):
                 r["px1Db"] = p1d[r["code"]]
+                if r["code"] in f1:
+                    r["px1First"] = True               # 여는 분 봉이 거래 없는 채움 봉 — 값은 다음 첫 체결가
     except Exception:
         pass
     try:                                               # 본 값이 그 분 1분봉 고가 ~ 저가 밖이면 버림(시세 캐시가 묵은 값 · qa 11-26 — 3,035 중 158) → 그 분 1분봉 종가로
@@ -1552,7 +1557,8 @@ def buy930_fill(proxy, b):
     return b
 
 
-_cpx = {}                      # (날, 종목, 「HHMM」) → 1분봉 종가 — 굳은 봉만 들고 있음(그 뒤로는 안 바뀜)
+_cpx = {}
+_cpx_first = set()                     # 칩 찬 분 값 중 그 분이 채움 봉이라 다음 첫 체결가인 것(day, code, HHMM)                      # (날, 종목, 「HHMM」) → 1분봉 종가 — 굳은 봉만 들고 있음(그 뒤로는 안 바뀜)
 # 굳은 봉 — 그 종목 다음 분 봉이 DB 에 있으면(그 분이 끝난 뒤 받은 것) 앞 봉은 끝 값이다. 칩 1분봉 받기가 매 분 1초에 돌아(chip_live)
 # 봉이 끝나고 1분 남짓이면 굳는다 — 재권님 「가인데 1분으로 해줘」(11-25 17:4x · 그 전에는 고정 3분 · 셈 탓에 실제 3~4분)
 
@@ -1585,15 +1591,19 @@ def _chip_px_fill(proxy, day, rows, o):
                 need = [c for (c,) in conn.execute("SELECT DISTINCT code FROM candles WHERE period = '1m' AND ts > ? AND ts LIKE ? AND code IN (%s)" % q,
                                                     [day + hm, day + "%"] + need)]
             if need:
-                px = _m1_px(conn, day, need, day + hm, "close")
+                fs = set()
+                px = _m1_px(conn, day, need, day + hm, "close", fs)
                 for c, v in px.items():
                     _cpx[(day, c, hm)] = v
+                    if c in fs:
+                        _cpx_first.add((day, c, hm))  # 그 분이 채움 봉 — 다음 첫 체결가(이름 가름)
             for c in codes:
                 v = _cpx.get((day, c, hm))
                 if v:
                     got.setdefault(c, {})["%s:%s" % (hm[:2], hm[2:])] = v
     for r in rows:
         r["chipPx"] = got.get(r["code"], {})
+        r["chipPxFirst"] = sorted(k for k in r["chipPx"] if (day, r["code"], k.replace(":", "")) in _cpx_first) or None
     return (now - timedelta(minutes=1)).strftime("%H:%M") if live else None   # 장중 표시 — 이 분 언저리부터는 굳는 중일 수 있음(종목마다 다음 분 봉이 들어오면 굳음) · 지난 날은 null(다 굳음)
 
 
@@ -1653,7 +1663,7 @@ def bars_after(per, bs, at):
 #     n개 된 분  묶음이 처음 n개(1~COMBO_N) 이상이 된 시각 — 한꺼번에 둘이 붙으면 1 · 2 가 같은 분
 #     산 값     그 분(여는 시각 앞이면 여는 분) 1분봉 종가(_m1_px · 거래량 0 채움 봉은 건너뜀) — 1분봉이 없으면 산 값 · 결과 null(「1분봉 없음」 · 0 아님)
 #     결과      산 다음 분부터 판 끝(times 마지막) 앞까지 1분봉 — 익절 COMBO_TP × 손절 COMBO_SL 칸마다 수익률(%)
-#               먼저 닿은 쪽 · 한 봉에 둘 다 닿으면 손절 · 봉 시가가 이미 넘었으면 시가(화면 매도 셈과 같은 꼴) · 끝까지 안 닿으면 마지막 봉 종가
+#               먼저 닿은 쪽 · 한 봉에 둘 다 닿으면 손절 · 봉 시가가 이미 넘었으면 시가(화면 매도 셈과 같은 꼴) · 끝까지 안 닿으면 판 끝 값(판 마지막 시각 값)
 #               세금 · 수수료는 안 뺌(화면이 meta.tax 로)
 #     실음      rows[] · outRows[] 의 combo {「n」: {at 「HH:MM」, chips [..], px, res [[익절 칸마다 손절 칸 값] …] | null, why}} · meta.comboDef {tp, sl, note}
 #               읽을 때만(저장 안 함) · 지난 판은 같은 판 · 같은 셈 칸이면 메모리에 둠
@@ -1769,7 +1779,7 @@ def combo_fill(proxy, b):
     b["meta"]["comboDef"] = {"n": COMBO_N, "tp": list(COMBO_TP), "sl": list(COMBO_SL),
                              "note": "combo[「n」] — 칩 n개 이상이 된 첫 시각(at) · 그때 칩 묶음(chips · 켜진 칩만 · 셈 칸 chipOff · subOff · chipCols) · 산 시각 buyAt(여는 시각 앞이면 여는 분) · "
                                      "산 값 px(칩 찬 순간 값 — buy930 과 같은 셈 · 없으면 그 분 1분봉 종가) · res[익절 칸][손절 칸] 수익률 %(산 다음 분부터 판 끝 앞까지 1분봉 · 먼저 닿은 쪽 · 한 봉에 둘이면 손절 · 봉 시가가 넘었으면 시가 · "
-                                     "끝까지 안 닿으면 마지막 봉 종가 · 세금 · 수수료 안 뺌) · tp · sl 의 null 은 「없음」 · 1분봉이 없으면 px · res null(why)"}
+                                     "끝까지 안 닿으면 판 끝 값(판 마지막 시각 값 — 조합 표와 같게) · 세금 · 수수료 안 뺌) · tp · sl 의 null 은 「없음」 · 1분봉이 없으면 px · res null(why)"}
     return len(vals)
 
 
@@ -2221,9 +2231,9 @@ def _cf_formula(proxy, day, b, lm=0):
                     h = _hm4((v or {}).get("first"))
                     if h:
                         joint[c] = "%s:%s:00" % (h[:2], h[2:])
-            for c, ts, h, cl in conn.execute("SELECT code, ts, high, close FROM candles WHERE period = '5m' AND ts >= ? AND ts < ? AND code IN (%s) ORDER BY ts" % q,
-                                             [day + "0900", day + "1530"] + codes):
-                bars.setdefault(c, []).append((ts[8:12], h, cl))
+            for c, ts, op5, h, cl in conn.execute("SELECT code, ts, open, high, close FROM candles WHERE period = '5m' AND ts >= ? AND ts < ? AND code IN (%s) ORDER BY ts" % q,
+                                                  [day + "0900", day + "1530"] + codes):
+                bars.setdefault(c, []).append((ts[8:12], h, cl, op5))
             prev = (b.get("meta") or {}).get("prevDay")
             if prev:
                 base = {c: v for c, v in conn.execute("SELECT code, close FROM auto_watch_day WHERE day = ? AND code IN (%s)" % q, [prev] + codes)}
@@ -2243,12 +2253,12 @@ def _cf_formula(proxy, day, b, lm=0):
             items.append((c, "볼린저", bb[c], "신호 보낸 때"))
         bs = bars.get(c) or []
         if "VI·급등" in ch and base.get(c) and not r.get("viAt"):
-            hit = next((t for t, h, _ in bs if h and (h / base[c] - 1) * 100 >= intraday_alerts.SURGE_PCT), None)
+            hit = next((t for t, h, _, _o in bs if h and (h / base[c] - 1) * 100 >= intraday_alerts.SURGE_PCT), None)
             if hit:
                 items.append((c, "VI·급등", end5(hit), "5분봉 공식"))
         if "현재상승" in ch and bs:
-            op = (r.get("open") or (bs[0][2] if bs else None))
-            hit = next((t for t, _, cl in bs if op and cl and (cl / op - 1) * 100 >= now_rise_pct()), None) if op else None
+            op = (r.get("open") or (bs[0][3] if bs else None))   # 줄에 시가가 없으면 첫 5분봉 「시가」(전에는 종가를 시가로 씀 · 단타 리뷰 ③ 11-26)
+            hit = next((t for t, _, cl, _o in bs if op and cl and (cl / op - 1) * 100 >= now_rise_pct()), None) if op else None
             if hit:
                 items.append((c, "현재상승", end5(hit), "5분봉 공식"))
     return items
@@ -2585,7 +2595,7 @@ def intraday_add(proxy, cfg, b, hm):
     if hm >= int(end[:2]) * 60 + int(end[2:]) or time.time() - _status.get("intra", 0) < RESCAN_SEC:
         return 0
     _status["intra"] = time.time()
-    cap_n, min_c = (lock_cfg() + [(LOCK_N, 0)] * (INTRA_LOCK))[INTRA_LOCK - 1]
+    cap_n, min_c = lock_cfg()[len(LOCK_AT)]           # 「장중」 칸 = lock_cfg 넷째(굳힘 셋 다음) — 전에는 창 번호(INTRA_LOCK 6)로 찾아 늘 기본값(단타 리뷰 ③ 11-26)
     have = {r["code"] for r in b.get("rows") or []}
     room = cap_n - sum(1 for r in b.get("rows") or [] if r.get("lock") == INTRA_LOCK)
     if room <= 0:
@@ -2740,8 +2750,11 @@ def _close_min(proxy, now=None):
     import market_hours
     now = now or _now()
     try:
-        c = (market_hours.today(proxy, day=now.strftime("%Y%m%d"), now=now).get("reg") or ["", ""])[1] or market_hours.REG_CLOSE
+        c = (market_hours.today(proxy, day=now.strftime("%Y%m%d"), now=now).get("reg") or ["", ""])[1]
     except Exception:
+        c = None
+    if not c:                                          # 장 시각 표를 못 읽음 — 보통 날 끝으로 셈하되 조용히 안 넘어감(장 시각 룰 4번 꼴 · 개념정의 덧 11-26)
+        _status.setdefault("closeMiss", {})[now.strftime("%Y%m%d")] = _now().strftime("%H:%M:%S")
         c = market_hours.REG_CLOSE
     return int(c[:2]) * 60 + int(c[2:4])
 
@@ -2808,7 +2821,7 @@ def _gone(old_rows, new_rows, at):
 FAKE_LOOK_MIN = 10           # 거래량 0 1분봉(체결 없이 앞 값으로 채운 봉)을 건너뛰고 첫 체결 봉을 찾는 폭(분) — 넘으면 못 잼(null)
 
 
-def _m1_px(conn, day, codes, ts, field):
+def _m1_px(conn, day, codes, ts, field, firsts=None):
     """그 분(ts · YYYYMMDDHHMM) 1분봉 값 {code: 값} — field 「close」 · 「open」. 그 봉이 거래량 0 이면(채움 봉 · 옛 값) 건너뛰고
     FAKE_LOOK_MIN 분 안 첫 체결 봉의 시가를 쓴다(첫 체결가). 거래량을 모르는(None) 옛 봉은 그대로 믿는다.
     qa 11-20 찾음 — 11-19(10:00 개장) 여섯 종목 10:00 · 10:01 봉이 거래량 0 · 옛 값(스튜디오드래곤 23,700 ↔ 첫 체결 30,750)이라 매수가가 틀렸다."""
@@ -2825,16 +2838,18 @@ def _m1_px(conn, day, codes, ts, field):
             out[c] = cl if field == "close" else o
         elif v != 0 and t > ts:
             out[c] = o                                  # 그 분이 채움 봉이었다 — 첫 체결 봉 시가
+            if firsts is not None:
+                firsts.add(c)                           # 「그 분 값」 이 아니라 다음 첫 체결가 — 이름을 가르려고(단타 리뷰 ③ 11-26)
     return {c: v for c, v in out.items() if v}
 
 
-def _px1_of(proxy, day, codes, om):
-    """그날 「9시 1분 값」 — 여는 시각(om · 분) 1분봉 종가(= 여는 시각 + 1분의 값 · pxMin "1" 과 같은 셈) · {code: 값} · 없으면 빠짐."""
+def _px1_of(proxy, day, codes, om, first=None):
+    """그날 「9시 1분 값」 — 여는 시각(om · 분) 1분봉 종가(= 여는 시각 + 1분의 값 · pxMin "1" 과 같은 셈) · {code: 값} · 없으면 빠짐 · first 에 첫 체결가로 채운 종목."""
     if not codes:
         return {}
     ts = day + "%02d%02d" % divmod(om, 60)
     with proxy.db_conn() as conn:
-        return _m1_px(conn, day, list(codes), ts, "close")      # 거래량 0 채움 봉은 건너뜀(_m1_px)
+        return _m1_px(conn, day, list(codes), ts, "close", first)      # 거래량 0 채움 봉은 건너뜀(_m1_px)
 
 
 def _buy_now(proxy, cfg, rows):
@@ -4978,12 +4993,20 @@ def start(proxy):
                 hm = now.hour * 60 + now.minute
                 if recent != day and not (RECENT_SKIP[0][0] * 60 + RECENT_SKIP[0][1] <= hm < RECENT_SKIP[1][0] * 60 + RECENT_SKIP[1][1]):
                     recent = day
-                    n = backfill(proxy, day, BACKFILL_DAYS, since=(now - timedelta(days=now.weekday())).strftime("%Y%m%d"), today_too=True)
+                    try:
+                        n = backfill(proxy, day, BACKFILL_DAYS, since=(now - timedelta(days=now.weekday())).strftime("%Y%m%d"), today_too=True)
+                    except LoadFail:
+                        recent = None                # 판 DB 를 잠깐 못 읽음 — 다음 바퀴에 다시(qa 11-26)
+                        raise
                     if n:
                         print("  [단타 30] 이번 주 %d일 먼저 다시 세어 남김" % n, flush=True)
                 if filled != day and not (QUIET[0][0] * 60 + QUIET[0][1] <= hm < QUIET[1][0] * 60 + QUIET[1][1]):
-                    filled = day                 # 멈춰도 그날은 다시 안 돈다(20초마다 무거운 셈을 되풀이하지 않게)
-                    n = backfill(proxy, day)
+                    filled = day                 # 멈춰도 그날은 다시 안 돈다(20초마다 무거운 셈을 되풀이하지 않게) — 판 DB 를 잠깐 못 읽은 것(LoadFail)만 아래에서 되돌려 다음 바퀴에 다시
+                    try:
+                        n = backfill(proxy, day)
+                    except LoadFail:
+                        filled = None
+                        raise
                     if n:
                         print("  [단타 30] 지난 날 %d일 다시 세어 남김" % n, flush=True)
                     n = m1_fill(proxy, proxy.load_secrets())   # 장 끝난 뒤(QUIET 밖) — 지난 판 여는 시각 1분봉 빈 것 되받기
