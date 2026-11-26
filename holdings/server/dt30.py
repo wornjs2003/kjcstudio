@@ -1502,8 +1502,8 @@ def combo_fill(proxy, b):
                 after = [x for x in bars.get(c, []) if x[0] > m]
                 why = None if p else ("1분봉 못 읽음" if px is None else "그 분 1분봉 없음")
                 out[n] = {"at": "%s:%s" % (t[:2], t[2:]), "buyAt": "%s:%s" % (m[:2], m[2:]), "chips": on, "px": p,
-                          "res": _combo_res(p, after) if p else None, "why": why or (None if after else "산 뒤 1분봉 없음")}
-            vals[c] = out
+                          "res": _combo_res(p, after) if p and after else None, "why": why or (None if after else "산 뒤 1분봉 없음")}
+            vals[c] = out                              # 산 뒤 봉이 없으면 res 는 표 대신 null(다른 없음 줄과 같은 꼴 · qa 덧 ③)
         _combo_memo.pop(day, None)
         _combo_memo[day] = (key, time.time(), vals)
         while len(_combo_memo) > COMBO_MEMO_DAYS:
