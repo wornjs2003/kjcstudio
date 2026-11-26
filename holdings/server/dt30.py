@@ -1684,7 +1684,7 @@ def combo_fill(proxy, b):
 #             판 값 = 판 마지막 시각 값(px[times 끝]) · 없으면 그 줄 안 셈 · 세금 · 수수료 빼기 전
 #             익절 × 손절(COMBO_TP × COMBO_SL) = 산 다음 분부터 판 끝 앞까지 1분봉 · 먼저 닿은 쪽 · 한 봉에 둘이면 손절 · 끝까지 안 닿으면 판 값 · 1분봉 없는 건은 그 칸 셈에서 뺌(resN)
 #     저장    dt30_combo(열쇠 sig + 판 저장 시각들) 한 줄 · 열쇠가 바뀌면(셈 칸 저장 · 판이 새로 굳음 · 되채움) 뒤에서 다시 셈 · 그동안은 지난 값(busy)
-COMBO_VER = 2                           # 조합 셈 판 — 2: 부분 묶음마다 처음 품은 때(11-26 화면 2d877ad 와 같게)
+COMBO_VER = 3                           # 조합 셈 판 — 2: 부분 묶음마다 처음 품은 때(11-26 화면 2d877ad 와 같게) · 3: 「수급」 도 저장된 칩 칸을 따름(qa 대조 11-26)
 COMBO_DAYS = 60                         # 셈에 드는 굳은 판 수(최근부터) — 화면이 받던 지난 판(st.days)과 같은 범위
 _ctab = {"key": None, "val": None, "busy": False, "lock": threading.Lock()}
 _CT_SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_combo (id INTEGER PRIMARY KEY CHECK (id = 1), key TEXT, body TEXT, at TEXT)"
@@ -1708,7 +1708,9 @@ def _ct_row(r, b, cf, split, dc, wr_auto):
     pool = ov_chips() + ("현재상승", "볼린저")
     off, sub_off, _cols = cf
     def on(c):
-        if c == "수급" and not wr_auto and c not in off:   # 화면 「자동」 — 자동 관심 판이 아니면 칸에 듦(colsOf)
+        if c == "수급" and not wr_auto and c not in off:   # 화면 「자동」 — 자동 관심 판이 아니면 칸에 듦(colsOf) · 다만 저장된 칩 칸(chipCols)에 없으면 안 셈(화면 chipSave 가 「자동」 을 칸에서 빼 · qa 대조 11-26 — 갈린 59 조합 전부 이 자리)
+            if _cols is not None and c not in _cols:
+                return False
             return c in (r.get("chips") or []) or bool((r.get("chipTime") or {}).get(c))
         return _chip_on(r, c, cf, split)
     cs = [c for c in pool if (c in (r.get("chips") or []) or (r.get("chipTime") or {}).get(c)) and on(c)]
