@@ -446,3 +446,10 @@
 .uk .uk-us-r .uk-who, .uk .uk-us-r .uk-d { color: var(--kh-text-secondary); }
 .uk .uk-kr-r .uk-d { font-weight: 600; }
 .uk .uk-d { text-align: right; min-width: 52px; }
+/* 칩 조합(11-26 재권님 「해당 조합이 되면 종목의 이름색이 빨간색으로 바뀌게」) — 고른 조합이 된 종목 이름 · 된 시각 · 조합 목록 칸 */
+.dt .st-name b.dt-cbn { color: var(--kh-up); }
+.dt .st-name small.dt-cbt { display: block; color: var(--kh-up); font-size: 11px; }
+.dt .dt-cbf .dw-body { display: flex; flex-direction: column; gap: 6px; }
+.dt .dt-cbt-tb { max-height: 360px; overflow: auto; display: block; font-size: 12px; }
+.dt .dt-cbt-tb td, .dt .dt-cbt-tb th { padding: 3px 8px; white-space: nowrap; }
+.dt .dt-cbt-tb tr.dt-cb-ok td { background: var(--kh-up-dim); }
