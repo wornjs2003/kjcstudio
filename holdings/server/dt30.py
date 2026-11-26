@@ -1022,6 +1022,8 @@ def chip_prec(b, log_ok):
             out[ch] = "5분 어림 — 섹터 수급 판"
         elif sf.get(ch):
             out[ch] = "다시 셈 — " + " · ".join("%s %d종목" % (k, v) for k, v in sorted(sf[ch].items()))
+        elif ch == "관심" and (b.get("meta") or {}).get("watchSrc") == "지금 룰":
+            out[ch] = "어림 — 그날 관심 목록 하루 고정(장중 바뀜 기록 없음)"   # 다시 지은 판 — 그날 자료에 지금 자동 관심 룰 · 목록은 장 뒤에 한 번 바뀜(auto_watch_add) · 11-26 「셀수 있는정보들 다 세서」 → 안에 「응」
         else:
             out[ch] = "처음 시각만"
     return out
