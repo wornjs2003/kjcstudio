@@ -3037,12 +3037,22 @@ DATA_SRC = (
     ("칩 붙음·빠짐", "SELECT MIN(day) FROM (SELECT day, MIN(at) a FROM dt30_chip_log WHERE n IS NOT NULL GROUP BY day) WHERE a <= '09:05'",
      "칩이 빠진 시각 — 그 전 날(또는 룰이 바뀌어 다시 셈한 칩)은 한 번 붙으면 그날 끝까지 붙은 것으로 셈 · 돈몰림은 섹터 수급 판으로 다시 셈"),
     ("프리장 분마다", "SELECT MIN(day) FROM dt30_pre_log", "08:00~09:00 분마다 단타 목록 — 그 전 날은 09:01 판만"),
-    ("1분봉", "SELECT MIN(substr(ts, 1, 8)) FROM candles WHERE period = '1m'",
+    ("1분봉", None,                                    # 표를 통째로 훑으면 16초(색인이 종목 · 주기 · 시각 차례) — 감시 목록 종목마다 색인으로 첫 봉(_m1_since · 0.3초)
      "칩 찬 분 산 값 — 받은 종목만(날마다 수가 다름 · meta.chipPx.have) · 없는 종목은 5분봉 어림"),
     ("섹터 수급 5분 칸", "SELECT MIN(day) FROM sector_flow_day", "돈몰림 칩 — 그 전 날은 돈몰림 없음"),
     ("VI 기록", "SELECT MIN(day) FROM vi_day", "VI·급등 칩 시각"),
 )
 _ds = {"day": None, "val": None}
+
+
+def _m1_since(conn):
+    """1분봉 첫날 「YYYYMMDD」 | None — 감시 목록(dart_universe) 종목마다 색인(code, period, ts)으로 첫 봉 · 감시 목록 밖 종목 1분봉은 안 셈(단타 판은 감시 목록만)."""
+    m = None
+    for (c,) in conn.execute("SELECT stock_code FROM dart_universe").fetchall():
+        v = conn.execute("SELECT MIN(ts) FROM candles WHERE code = ? AND period = '1m'", (c,)).fetchone()[0]
+        if v and (m is None or v < m):
+            m = v
+    return m[:8] if m else None
 
 
 def data_since(proxy):
@@ -3055,7 +3065,7 @@ def data_since(proxy):
         with proxy.db_conn() as conn:
             for name, q, what in DATA_SRC:
                 try:
-                    d = conn.execute(q).fetchone()[0]
+                    d = conn.execute(q).fetchone()[0] if q else _m1_since(conn)
                 except Exception:
                     d = None
                 if name == "섹터 수급 5분 칸" and d:
