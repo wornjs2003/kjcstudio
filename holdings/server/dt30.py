@@ -1361,7 +1361,7 @@ def _moment_px(r, ct, cs, T):
     last = max(secs) if secs else None
     cpx = r.get("chipPx") or {}
     if last and (r.get("seenPx") or {}).get(last):
-        return r["seenPx"][last], last, "칩 찬 순간 본 값"
+        return r["seenPx"][last], last, "칩 찬 순간 본 값" + (" · 봉 없어 못 가름" if last in (r.get("seenNoBar") or []) else "")
     if last and last.endswith(":00") and len(secs) == len(done):
         m = int(T[:2]) * 60 + int(T[2:]) - 1
         v = cpx.get("%02d:%02d" % divmod(m, 60))
@@ -1500,6 +1500,8 @@ def buy930_fill(proxy, b):
                     lo, hi = rng.get((r["code"], b["day"] + h[:2] + h[3:5]), (None, None))
                     if lo and hi and not (lo <= r["seenPx"][h] <= hi):
                         r["seenPx"].pop(h)
+                    elif not (lo and hi):
+                        r.setdefault("seenNoBar", []).append(h)   # 그 분 봉이 없어 묵은 값인지 못 가름 — 산 값 src 에 남김(개념정의 덧 11-26)
     except Exception:
         pass                                           # 봉을 못 읽으면 본 값 그대로
     if True:                                           # 구간이 없는 판(11-25 전)도 칩 처음 붙은 분(chipTime)으로 — 산 값 어림(30분 칸)을 없앰(qa 덧 · 재권님 「산값은 정확해야」)
