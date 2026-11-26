@@ -316,7 +316,14 @@ const comboAutoSel = () => { const C = st.cbStat, S = st.set; if (!C || C.busy |
 const comboSel = () => (st.set.comboAuto !== false ? comboAutoSel() : new Set(Array.isArray(st.set.combos) ? st.set.combos : []));
 const comboPending = () => !!st.set.comboOn && st.set.comboAuto !== false && (!st.cbStat || !!st.cbStat.busy);   // 자동 조합으로 사는데 지난 판 셈이 아직 — 그동안은 아무것도 안 삼(칩 N개로 샀다가 바뀌어 보이지 않게 · 개념정의 덧 11-26)
 const comboMode = () => !!st.set.comboOn && (comboSel().size > 0 || comboPending());
-const comboHit = (r) => { const S = comboSel(); if (!S.size) return null; for (const [t, cs] of comboEvents(r)) { if (cs.length && S.has(comboKey(cs))) return { t, key: comboKey(cs) }; } return null; };
+// 조합이 됐다 = 그 시각 붙어 있던 켜진 칩이 고른 조합의 칩을 다 품음 — 칩이 더 있어도 됨(11-26 재권님 「「고른 조합을 다 품으면 됨(칩이 더 있어도 됨)」당연히 이렇게 되야할거같은데」 · 11-03 한진칼이 09:00 에 셋이 한꺼번에 붙어 둘짜리 조합을 안 거쳤음)
+//   여럿을 품으면 가장 먼저 품은 시각 · 같은 시각이면 칩이 많은 조합 이름
+let cbSelMemo = { s: null, v: [] };
+const comboSelArr = (S) => { if (cbSelMemo.s !== S) cbSelMemo = { s: S, v: [...S].map((k) => [k, k.split(' + ')]).sort((a, b) => b[1].length - a[1].length) }; return cbSelMemo.v; };
+const comboHit = (r) => { const S = comboSel(); if (!S.size) return null; const A = comboSelArr(S); for (const [t, cs] of comboEvents(r)) { if (!cs.length) continue; const has = new Set(cs), h = A.find(([, ks]) => ks.every((c) => has.has(c))); if (h) return { t, key: h[0] }; } return null; };
+// 칩 묶음의 부분 묶음 열쇠(차례는 cs 그대로 · 칩 CB_SUB_MAX 개까지) — 조합 셈이 「그 조합을 처음 품은 때」 로 세게
+const CB_SUB_MAX = 6;
+const subKeys = (cs) => { const out = []; const go = (i, pick) => { if (pick.length) out.push(comboKey(pick)); if (pick.length >= CB_SUB_MAX) return; for (let j = i; j < cs.length; j++) go(j + 1, [...pick, cs[j]]); }; go(0, []); return out; };
 const needTxt = (r) => { const X = CONDX.get(r) || { why: [] }, w = X.why.length ? ` · ${X.why.map((k) => (k === '유통' ? '유통 대비 거래' : '전일 대비 거래량')).join(' · ')} 넘은 때` : ''; return `${comboMode() ? '조합 된 때' : `칩 ${chipNeed(r)}개 찬 때`}${w}${X.approx ? ' · 거래 칸 어림' : ''}`; };   // 매수가 글 — 조합으로 살 때는 「조합 된 때」
 const chipOnlyAt = (r) => { if (comboMode()) { const h = comboHit(r); return h ? h.t : null; }
   if (spanRow(r)) { const N = chipNeed(r); return spanTs(r).find((t) => nAtT(r, t) >= N) || null; }   // 구간이 있으면 칩 N개가 함께 붙어 있던 첫 시각
@@ -842,7 +849,7 @@ function paint0(d) {
   // 대기 줄(아직 안 굳은 종목) — 「안 삼」 대신 굳으면 살 값(처음 든 때 가격)을 흐리게(qa 11-23 — 10:00 에 살 줄이 「안 삼」 으로 읽힘)
   const waitTd = (r) => { if (!(pmOf(buyKey()) === 1 && !(Number(r.lock) > 0) && (d.rows || []).some((x) => Number(x.lock) > 0) && Number(r.buy) > 0)) return ''; const e = inTs(r);
     return `<td class="dt-buy">${num(Number(r.buy))}<small>${lkNext && lkNext.live ? '장중' : '대기'}${e ? ` · ${e.slice(0, 2)}:${e.slice(2, 4)}:${e.slice(4, 6)} 든 때` : ''}</small></td>`; };   // 11-23 「보이는 종목들은 다 셈해」 — 대기 줄도 이 값에 산 것으로 셈
-  const buyTd = (r) => (fbDays.has(d.day) ? (() => { const B = buyOf(r); return B ? buyCell(B, r) : '<td class="dt-buy"><span class="dt-nxm">대체 값도 없음 · 안 삼</span></td>'; })() : buyKey() !== 'open' || d.flat930 ? (() => { const B = buyOf(r); if (waitTd(r)) return waitTd(r); return B ? buyCell(B, r) : NOPX.has(r) ? `<td class="dt-buy"><span class="dt-nxm" data-tip="칩이 찬 분의 1분봉 값이 서버에 없어 산 값을 어림하지 않음 · 손익 셈 밖">산 값 못 잼 · ${esc(NOPX.get(r))}</span></td>` : `<td class="dt-buy"><span class="dt-nxm">${notYetIn(r, buyKey() === 'vi' ? (r.viPx || {}).at : ((minVal(r, pmOf(buyKey())) || {}).at || minHM(pmOf(buyKey())))) ? `안 삼 · ${esc(notYetIn(r, buyKey() === 'vi' ? (r.viPx || {}).at : ((minVal(r, pmOf(buyKey())) || {}).at || minHM(pmOf(buyKey())))))} 뒤 듦` : buyKey() === 'vi' ? (r.viAt ? 'VI 값 못 받음 · 안 삼' : 'VI 없음 · 안 삼') : minVal(r, pmOf(buyKey())) === undefined ? '서버 값 아직 · 안 삼' : `${hmS(minHM(pmOf(buyKey())))} 값 없음 · 안 삼`}</span></td>`; })()
+  const buyTd = (r) => (fbDays.has(d.day) ? (() => { const B = buyOf(r); return B ? buyCell(B, r) : '<td class="dt-buy"><span class="dt-nxm">대체 값도 없음 · 안 삼</span></td>'; })() : buyKey() !== 'open' || d.flat930 ? (() => { const B = buyOf(r); if (waitTd(r)) return waitTd(r); return B ? buyCell(B, r) : NOPX.has(r) ? `<td class="dt-buy"><span class="dt-nxm" data-tip="칩이 찬 분의 1분봉 값이 서버에 없어 산 값을 어림하지 않음 · 손익 셈 밖">산 값 못 잼 · ${esc(NOPX.get(r))}</span></td>` : `<td class="dt-buy"><span class="dt-nxm">${d.flat930 && nthChipAt(r) == null ? (comboMode() ? '고른 조합 안 됨 · 안 삼' : `칩 ${num(chipNeed(r))}개 안 참 · 안 삼`) : notYetIn(r, buyKey() === 'vi' ? (r.viPx || {}).at : ((minVal(r, pmOf(buyKey())) || {}).at || minHM(pmOf(buyKey())))) ? `안 삼 · ${esc(notYetIn(r, buyKey() === 'vi' ? (r.viPx || {}).at : ((minVal(r, pmOf(buyKey())) || {}).at || minHM(pmOf(buyKey())))))} 뒤 듦` : buyKey() === 'vi' ? (r.viAt ? 'VI 값 못 받음 · 안 삼' : 'VI 없음 · 안 삼') : minVal(r, pmOf(buyKey())) === undefined ? '서버 값 아직 · 안 삼' : `${hmS(minHM(pmOf(buyKey())))} 값 없음 · 안 삼`}</span></td>`; })()
     : r.buy == null && r.buyWait ? `<td class="dt-buy"><span class="dt-nxm">${st.openAt ? hmTxt(String(st.openAt).replace(':', '')) : '정규장'} 시가 기다림</span></td>`
     : `<td class="dt-buy">${num(r.buy)}${r.buySrc ? `<small>${r.buyAt ? `${hmTxt(String(r.buyAt).replace(':', ''))} ` : ''}${esc(r.buySrc)}</small>` : ''}</td>`);
   // 09:01 값 (11-18 재권님 「9시 1분 등락도 넣어줘 이쯤 살거니깐」 → 「응 그렇게 해」) — 서버 rows[].px1(개발2 · 첫 1분봉 종가 「1m」 · 없으면 그때 현재가 「now」) · 시각은 meta.px1At
@@ -1458,8 +1465,8 @@ async function comboLoad(onStep) {
   ds.forEach((d) => { const D = get(d); if (!D || D.closed !== true) return; used.push(d); const keep = calcD; calcD = flat930(D);
     try { const T = D.times || [], last = T.length ? T[T.length - 1] : null;
       (D.rows || []).forEach((r) => { if (!colsOf().some((c) => everChip(r, c))) return; rowsN++; if (!chipTimed(r)) { untimed++; return; } const ex = last ? Number((r.px || {})[last]) : 0; if (!(ex > 0)) return; const seen = new Set();
-        comboEvents(r).forEach(([t, cs]) => { if (!cs.length) return; const key = comboKey(cs); if (seen.has(key)) return; seen.add(key); const p = comboPx(r, t); if (!(p > 0)) return;
-          const o = M.get(key) || { key, n: cs.length, cnt: 0, up: 0, sum: 0, days: new Set() }, ret = (ex / p - 1) * 100; o.cnt++; if (ret > 0) o.up++; o.sum += ret; o.days.add(d); M.set(key, o); }); }); }
+        comboEvents(r).forEach(([t, cs]) => { if (!cs.length) return; const p = comboPx(r, t); subKeys(cs).forEach((key) => { if (seen.has(key)) return; seen.add(key); if (!(p > 0)) return;   // 그 시각 붙은 칩의 부분 묶음마다 · 같은 조합은 처음 품은 때 한 번(11-26 품음)
+          const o = M.get(key) || { key, n: key.split(' + ').length, cnt: 0, up: 0, sum: 0, days: new Set() }, ret = (ex / p - 1) * 100; o.cnt++; if (ret > 0) o.up++; o.sum += ret; o.days.add(d); M.set(key, o); }); }); }); }
     finally { calcD = keep; } });
   return { rows: [...M.values()].map((o) => ({ key: o.key, n: o.n, cnt: o.cnt, days: o.days.size, upPct: o.up / o.cnt * 100, avg: o.sum / o.cnt })), used, untimed, rowsN, sig: chipSig() };
 }
