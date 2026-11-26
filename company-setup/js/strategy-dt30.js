@@ -478,7 +478,7 @@ function sellBars(r, B, times, bars, step, oo = {}) {   // o — sellAt 과 같�
 const PNL_TOP = 30, PNL_WON = 10_000_000, SHOW_MAX = 30;   // SHOW_MAX — 칩 N개 칸을 넣었을 때 판에 보이는 종목 수 합(11-26 재권님 「보여져야 하는 총 개수는 30개로」)   // 기본값 — 재권님이 칸에 넣으면 st.set 이 이김
 // 셈 칸 기본값 (11-18) — minChip 칩 N개 이상만(0 = 전체) · top 상위 몇 종목 · 돈은 전체 금액 dayWon 을 그 종목 수로 똑같이 나눔
 //   11-18 재권님 「금액은 전체 금액으로 해주고 종목만큼 나눈다 라는 룰로 해줘 금액을 맨앞으로」 — 종목마다(each) 갈래는 걷음 · 기본 전체 금액 = 지금까지의 기본(상위 30 × 1,000만원)과 같은 3억
-const DEF_SET = { comboOn: false, combos: [], comboUp: 70, comboN: 10, minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, pyr: false, buy: 'open', turnOn: true, turnMin: 1 };   // 유통 대비 거래 거르기 — 기본 켬 · 1% 이상(11-24 재권님 「유통거래대비 1%가 기본으로 해주고 이걸 내가 조절할수 있게」) · 칸에서 바꾸면 저장값이 이김   // 매도 셈 열한 칸은 서버 SELL_DEF   // buy — 매수 타이밍 open(09:00 시가 · 지금까지 셈) · p1(09:01) · vi(VI 발동)   // pyr — 불타기(손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삼) · 기본 끔
+const DEF_SET = { comboOn: false, combos: [], comboUp: 70, comboN: 2, minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, pyr: false, buy: 'open', turnOn: true, turnMin: 1 };   // 유통 대비 거래 거르기 — 기본 켬 · 1% 이상(11-24 재권님 「유통거래대비 1%가 기본으로 해주고 이걸 내가 조절할수 있게」) · 칸에서 바꾸면 저장값이 이김   // 매도 셈 열한 칸은 서버 SELL_DEF   // buy — 매수 타이밍 open(09:00 시가 · 지금까지 셈) · p1(09:01) · vi(VI 발동)   // pyr — 불타기(손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삼) · 기본 끔
 Object.assign(DEF_SET, { endAt: '', sellBar: '5m', mk: {}, riseRank: true });   // riseRank — 상승률 순위(11-24 · 끄면 단타 순)   // mk — 코스피 조건 줄 둘(11-24 · mkLine)   // sellBar — 매도 봉 1m · 5m · 30m(11-23 재권님 「매도타이밍은 5분봉으로 하자」 → 고르기 · 기본 5분)   // endAt — 매도 시각(HHMM · 빈칸이면 판 끝 칸까지 · 11-20) · 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 기본값은 서버 SELL_DEF
 st.set = { ...DEF_SET };
 // 「· 어림」 — 서버 rows[].turnApprox(개발2 abf96b9) · 재권님 「응」 11-23 · 풍선은 어림 방법만(코드 이름은 이 주석에)
@@ -1419,7 +1419,7 @@ async function comboLoad(onStep) {
     finally { calcD = keep; } });
   return { rows: [...M.values()].map((o) => ({ key: o.key, n: o.n, cnt: o.cnt, days: o.days.size, upPct: o.up / o.cnt * 100, avg: o.sum / o.cnt })), used, sig: chipSig() };
 }
-const CB_SHOW_MIN = 3, CB_SHOW_MAX = 80;   // 목록에 보일 조합 — 3건 이상 · 많아야 80줄(고른 조합은 늘 보임)
+const CB_SHOW_MIN = 2, CB_SHOW_MAX = 80;   // 목록에 보일 조합 — 2건 이상(11-26 재권님 「건수가 2건이여도 승률이 높은건 적용되야 할거같은데」 · 고르기 문턱 기본도 2건) · 많아야 80줄(고른 조합은 늘 보임)
 function comboPaint() {
   if (!root) return; const box = $('dt-cb'), S = st.set, sel = comboSel(); if (!box) return;
   root.querySelectorAll('.dt-cb-n').forEach((e) => { e.textContent = String(sel.size); });
