@@ -313,14 +313,20 @@ const comboKey = (cs) => cs.join(' + ');
 let cbAutoMemo = { k: '', v: new Set() };
 const comboAutoSel = () => { const C = st.cbStat, S = st.set; if (!C || C.busy || S.comboUp == null || S.comboN == null) return new Set();
   const k = `${C.sig}|${C.used.length}|${S.comboUp}|${S.comboN}`; if (cbAutoMemo.k !== k) cbAutoMemo = { k, v: new Set(C.rows.filter((o) => o.upPct >= Number(S.comboUp) && o.cnt >= Number(S.comboN)).map((o) => o.key)) }; return cbAutoMemo.v; };
-const comboSel = () => (st.set.comboAuto !== false ? comboAutoSel() : new Set(Array.isArray(st.set.combos) ? st.set.combos : []));
+// 서버가 고른 조합 · 줄마다 조합 산 값(개발2 143916b · 재권님 「칩 조합 된것들도 서버에 있어야 할거같은데 하루하루 칩조합 승률을 갱신하고 그것중 70%이상만 단타창에서 적용한다」 → 「가」 11-26)
+//   판 meta.comboPick{up · n · sig · keys · from · why} · rows[].comboBuy{key · chips · at 초 · buyAt · px · src} | null — 저장된 셈 칸(저장 전 아님 · 자동 · 문턱 · 켠 칩이 같음)일 때만 그대로 · 아니면 화면 셈
+const sigEq = (a, b) => { try { const A = typeof a === 'string' ? JSON.parse(a) : a, B = typeof b === 'string' ? JSON.parse(b) : b; return ['chipOff', 'subOff', 'chipCols', 'chipKnown'].every((k) => JSON.stringify([...(A[k] || [])].sort()) === JSON.stringify([...(B[k] || [])].sort())); } catch (e) { return false; } };   // 차례는 안 봄
+const svPick = () => { const P = ((curD() || {}).meta || {}).comboPick, S = st.set; return !st.setDirty && S.comboAuto !== false && P && Array.isArray(P.keys) && P.keys.length && Number(S.comboUp) === Number(P.up) && Number(S.comboN) === Number(P.n) && sigEq(P.sig, chipSig()) ? P : null; };
+const svKey = (k) => String(k || '').split(' + ').map(chipName).join(' + ');   // 서버 칩 이름 → 화면 이름
+const comboSel = () => { const P = svPick(); if (P) return new Set(P.keys.map(svKey)); return st.set.comboAuto !== false ? comboAutoSel() : new Set(Array.isArray(st.set.combos) ? st.set.combos : []); };
 const comboPending = () => !!st.set.comboOn && st.set.comboAuto !== false && (!st.cbStat || !!st.cbStat.busy);   // 자동 조합으로 사는데 지난 판 셈이 아직 — 그동안은 아무것도 안 삼(칩 N개로 샀다가 바뀌어 보이지 않게 · 개념정의 덧 11-26)
 const comboMode = () => !!st.set.comboOn && (comboSel().size > 0 || comboPending());
 // 조합이 됐다 = 그 시각 붙어 있던 켜진 칩이 고른 조합의 칩을 다 품음 — 칩이 더 있어도 됨(11-26 재권님 「「고른 조합을 다 품으면 됨(칩이 더 있어도 됨)」당연히 이렇게 되야할거같은데」 · 11-03 한진칼이 09:00 에 셋이 한꺼번에 붙어 둘짜리 조합을 안 거쳤음)
 //   여럿을 품으면 가장 먼저 품은 시각 · 같은 시각이면 칩이 많은 조합 이름
 let cbSelMemo = { s: null, v: [] };
 const comboSelArr = (S) => { if (cbSelMemo.s !== S) cbSelMemo = { s: S, v: [...S].map((k) => [k, k.split(' + ')]).sort((a, b) => b[1].length - a[1].length) }; return cbSelMemo.v; };
-const comboHit = (r) => { const S = comboSel(); if (!S.size) return null; const A = comboSelArr(S); for (const [t, cs] of comboEvents(r)) { if (!cs.length) continue; const has = new Set(cs), h = A.find(([, ks]) => ks.every((c) => has.has(c))); if (h) return { t, key: h[0] }; } return null; };
+const comboHit = (r) => { if (svPick()) { const B = r.comboBuy; return B && B.at ? { t: hm4(B.at), key: svKey(B.key) } : null; }   // 서버가 고른 판이면 서버 조합 시각 그대로
+  const S = comboSel(); if (!S.size) return null; const A = comboSelArr(S); for (const [t, cs] of comboEvents(r)) { if (!cs.length) continue; const has = new Set(cs), h = A.find(([, ks]) => ks.every((c) => has.has(c))); if (h) return { t, key: h[0] }; } return null; };
 // 칩 묶음의 부분 묶음 열쇠(차례는 cs 그대로 · 칩 CB_SUB_MAX 개까지) — 조합 셈이 「그 조합을 처음 품은 때」 로 세게
 const CB_SUB_MAX = 6;
 const subKeys = (cs) => { const out = []; const go = (i, pick) => { if (pick.length) out.push(comboKey(pick)); if (pick.length >= CB_SUB_MAX) return; for (let j = i; j < cs.length; j++) go(j + 1, [...pick, cs[j]]); }; go(0, []); return out; };
@@ -348,11 +354,15 @@ const nthChipAt = (r) => { const T = chipOnlyAt(r); return T == null ? null : co
 // 칩이 다 찬 순간의 값 — 서버 dt30._moment_px 와 같은 갈래(개발2 8a0e2af · qa 11-26 「시계 칩은 T:ss 에 앎 · T:00 값은 앞당김」)
 //   그 분(T)에 붙은 켜진 칩 중 가장 늦게 안 초(rows[].chipSec{칩: {HH:MM: HH:MM:SS}}) → 그 순간 본 값(rows[].seenPx[초]) · 없으면 정각(00초)이면 앞 분 1분봉 종가 · 그 밖은 그 분 1분봉 종가(chipPx[T])
 //   서버는 「조합이 다 찬 칩」 중 가장 늦은 초 · 화면은 그 분에 새로 붙은 켜진 칩 전부 중 가장 늦은 초(같은 분 다른 칩이 더 늦으면 조금 늦은 값 · 미래는 안 봄) · 서버가 주면 안 씀(buy930 · comboBuy)
-const momentPx = (r, T) => { const hm = hmS(T), CS = r.chipSec || {}, SP = r.seenPx || {}, on = new Set(colsOf()); let sec = null; const newOn = spanRow(r) ? colsOf().filter((c) => everChip(r, c) && spansOf(r, c).some(([a]) => hm4(a) === T)) : (() => { const o = chipTsOf(r); return Object.keys(o).filter((c) => o[c] === T); })();   // 구간 없는 줄은 처음 시각으로(서버 done 과 같게 · 개념정의 덧 11-26)
-  Object.entries(CS).forEach(([c, o]) => { const cn = chipName(c); if (!on.has(cn) || !everChip(r, cn)) return; if (spanRow(r) && !spansOf(r, cn).some(([a]) => hm4(a) === T)) return; const s = o && o[hm]; if (s && (!sec || s > sec)) sec = s; });   // 그 분에 새로 붙은 칩만(이미 붙어 있던 칩의 다시 본 초는 안 셈)
+const momentPx = (r, T, only, need) => {   // only — 조합 칩(화면 이름 배열) · 주면 그 칩만으로 가름(서버 143916b 「조합 · 칩 N개를 채운 칩만으로」 · 칩 N개는 그 분에 새로 붙은 칩이 곧 채운 칩)
+  const hm = hmS(T), CS = r.chipSec || {}, SP = r.seenPx || {}, on = new Set(colsOf()); let sec = null; const onlyS = only ? new Set(only) : null; const newOn0 = spanRow(r) ? colsOf().filter((c) => everChip(r, c) && spansOf(r, c).some(([a]) => hm4(a) === T)) : (() => { const o = chipTsOf(r); return Object.keys(o).filter((c) => o[c] === T); })(); const newOn = onlyS ? newOn0.filter((c) => onlyS.has(c)) : newOn0;   // 구간 없는 줄은 처음 시각으로(서버 done 과 같게 · 개념정의 덧 11-26)
+  Object.entries(CS).forEach(([c, o]) => { const cn = chipName(c); if (!on.has(cn) || !everChip(r, cn) || (onlyS && !onlyS.has(cn))) return; if (spanRow(r) && !spansOf(r, cn).some(([a]) => hm4(a) === T)) return; const s = o && o[hm]; if (s && (!sec || s > sec)) sec = s; });   // 그 분에 새로 붙은 칩만(이미 붙어 있던 칩의 다시 본 초는 안 셈)
+  const secs = newOn.map((c) => { const o = CS[serverChip(c)] || CS[c]; return o && o[hm]; }).filter(Boolean).sort();
+  const prior = need ? (onlyS ? [...onlyS] : colsOf()).filter((c) => everChip(r, c) && !newOn.includes(c) && (spanRow(r) ? chipAtT(r, c, T) : (chipTsOf(r)[c] || '9999') < T)).length : 0;
+  const kth = need ? Math.max(1, need - prior) : 0; if (kth && secs[kth - 1]) sec = secs[kth - 1];   // 서버 _moment_px need 셈(개발2 11-26 — 그 분 칩 초를 차례로 세워 need − 앞서 붙어 있던 칩 수 번째가 순간)
   if (sec && Number(SP[sec]) > 0) return { px: Number(SP[sec]), how: `${sec} 본 값` };
   const prev = hmS(addHM(T, -1)), C = r.chipPx || {};
-  const allSec = newOn.length > 0 && newOn.every((c) => { const o = CS[serverChip(c)] || CS[c]; return !!(o && o[hm]); });   // 그 분에 새로 붙은 칩이 모두 초를 알 때만 정각 값(서버 len(secs) == len(done) 과 같게 · 개념정의 덧 11-26)
+  const allSec = newOn.length > 0 && secs.length >= (kth ? Math.min(kth, newOn.length) : newOn.length);   // 그 분에 새로 붙은 칩이 모두 초를 알 때만 정각 값(서버 len(secs) == len(done) 과 같게 · 개념정의 덧 11-26)
   if (sec && allSec && /:00$/.test(sec) && Number(C[prev]) > 0) return { px: Number(C[prev]), how: `${sec} 정각 값` };
   const v = Number(C[hm]); return v > 0 ? { px: v, how: `${hm} 1분봉` } : null; };
 let NOPX = new WeakMap();   // 칩 찬 분의 1분봉 값이 서버에 없는 줄 → 그 시각(HH:MM) · 매수가 칸 「산 값 못 잼」 · calcDay 마다 새로
@@ -379,11 +389,12 @@ function buyOf(r) {   // → { px, at(HHMM), src } | null
     // 9시 1분 이하에 찬 줄은 「들어온 때」 모드도 9시 1분 값(11-26 재권님 「칩을 바꾸면 바꾼칩갯수가 다찬시간에 매수가 되야하는데」 → 「응」 — 판에 든 때 값(r.buy)으로 사던 것 걷음 · RFHIC 08:05 찬 줄을 09:45 값으로 샀음) · 서버 buy930 은 아직 든 때 값(개발2 에 알림)
     const p1 = minHM(1);
     // 저장된 셈 칸 · 칩 N개로 살 때는 서버가 줄마다 정한 산 값(rows[].buy930 · 개발2 _moment_px)을 그대로(11-26 재권님 「서버값과 항상 동기화 되야돼 엄청 중요한거야」 → 「가」) · 저장 전 · 칩조합 · 서버 값 없음만 아래 화면 셈(같은 갈래)
+    if (comboMode() && svPick()) { const B = r.comboBuy; return B && Number(B.px) > 0 ? { px: Number(B.px), at: hm4(B.at), src: `${B.at} ${B.src || ''} · 조합 된 때 · 서버 값` } : null; }   // 칩조합 — 서버 조합 산 값 그대로
     if (!st.setDirty && k === 'open' && !comboMode() && r.buy930 && Number(r.buy930.px) > 0) { const b9 = r.buy930, a9 = String(b9.atSec || b9.at || ''); return { px: Number(b9.px), at: hm4(a9), src: `${a9} ${b9.src || ''} · ${needTxt(r)} · 서버 값` }; }
     // 9시 1분 전에 찬 줄만 9시 1분 값 · 9시 1분 분에 찬 줄은 아래 순간 값(서버 _moment_px 와 같게 · 정각이면 같은 9시 1분 값)
     if (T < p1) { const o = minVal(r, 1); if (o && Number(o.px) > 0) return { px: Number(o.px), at: p1, src: `${hmS(p1)} 값 · ${needTxt(r)} ${hmS(T)}` }; }
     const CPM = (curD().meta || {}).chipPx;   // 서버 칩 찬 분 1분봉 값 — {ok} 인 판만 쓴다 · {ok:false} 면 아래 옛 셈(어림)
-    if ((CPM && CPM.ok !== false) || r.chipPx) { const M = momentPx(r, T); if (M) return { px: M.px, at: T, src: `${M.how} · ${needTxt(r)}` };
+    if ((CPM && CPM.ok !== false) || r.chipPx) { const ck = comboMode() ? ((comboHit(r) || {}).key || '').split(' + ').filter(Boolean) : null; const M = momentPx(r, T, ck, ck ? ck.length : chipNeed(r)); if (M) return { px: M.px, at: T, src: `${M.how} · ${needTxt(r)}` };
       if ((CONDX.get(r) || { why: [] }).why.length) { const bc = (Array.isArray(r.bars) ? r.bars : []).find((b) => Array.isArray(b) && hm4(b[0]) === T), bv = bc && Number(bc[4]); if (bv > 0) return { px: bv, at: T, src: `${hmS(T)} 1분봉 · ${needTxt(r)}` }; const t2 = ((curD().times) || []).find((x) => hhmm(x) >= T), v2 = t2 && Number((r.px || {})[t2]); if (v2 > 0) return { px: v2, at: hhmm(t2), src: `${hmS(hhmm(t2))} 칸 값 · ${needTxt(r)} ${hmS(T)} · 어림` }; }   // 거래 칸이 넘은 분은 칩 찬 분이 아니라 chipPx 에 없음 — 그 분 1분봉(rows[].bars) · 없으면 다음 30분 칸 값 · 어림(서버 분마다 값이 오면 정확히)
       NOPX.set(r, CPM && CPM.settledTo && hmS(T) >= String(CPM.settledTo) ? `${hmS(T)} 분봉 굳는 중` : `${hmS(T)} 분봉 없음`); return null; }   /* 1분봉이 있는 판에서 그 분 값이 없으면 어림하지 않고 안 삼 — 옛 판도(서버 같은 셈 · 개발2 11-25) · 그날 1분봉이 아예 없으면 서버가 meta.chipPx {ok:false} 로 내 아래 어림 */   /* settledTo — 이 분부터 굳는 중(서버 _chip_px_fill 은 그 앞 분만 실음 · 개발2 1719020) */   // 9시 1분 뒤는 서버 buy930 과 같은 값(개발2 df182ad · 분 1분봉 종가)
     for (const k of PMIN) { const h = minHM(k); if (T <= h) { const o = minVal(r, k); if (o && Number(o.px) > 0) return { px: Number(o.px), at: h, src: `${hmS(h)} 값 · ${needTxt(r)}` }; break; } }
@@ -528,7 +539,7 @@ function sellBars(r, B, times, bars, step, oo = {}) {   // o — sellAt 과 같�
 const PNL_TOP = 30, PNL_WON = 10_000_000, SHOW_MAX = 30;   // SHOW_MAX — 칩 N개 칸을 넣었을 때 판에 보이는 종목 수 합(11-26 재권님 「보여져야 하는 총 개수는 30개로」)   // 기본값 — 재권님이 칸에 넣으면 st.set 이 이김
 // 셈 칸 기본값 (11-18) — minChip 칩 N개 이상만(0 = 전체) · top 상위 몇 종목 · 돈은 전체 금액 dayWon 을 그 종목 수로 똑같이 나눔
 //   11-18 재권님 「금액은 전체 금액으로 해주고 종목만큼 나눈다 라는 룰로 해줘 금액을 맨앞으로」 — 종목마다(each) 갈래는 걷음 · 기본 전체 금액 = 지금까지의 기본(상위 30 × 1,000만원)과 같은 3억
-const DEF_SET = { comboAuto: true, comboOn: false, combos: [], comboUp: 70, comboN: 2, minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, pyr: false, buy: 'open', turnOn: true, turnMin: 1 };   // 유통 대비 거래 거르기 — 기본 켬 · 1% 이상(11-24 재권님 「유통거래대비 1%가 기본으로 해주고 이걸 내가 조절할수 있게」) · 칸에서 바꾸면 저장값이 이김   // 매도 셈 열한 칸은 서버 SELL_DEF   // buy — 매수 타이밍 open(09:00 시가 · 지금까지 셈) · p1(09:01) · vi(VI 발동)   // pyr — 불타기(손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삼) · 기본 끔
+const DEF_SET = { comboAuto: true, comboOn: false, combos: [], comboUp: 70, comboN: 2, minChip: 0,   /* comboUp · comboN 기본은 서버 chip-rules meta.sellDef 가 덮음(SELL_DEF · 개발2 11-26 — 칸 없음 = 기본 · 비워 저장 = 안 고름) · 여기 값은 서버 못 받을 때만 */ top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, pyr: false, buy: 'open', turnOn: true, turnMin: 1 };   // 유통 대비 거래 거르기 — 기본 켬 · 1% 이상(11-24 재권님 「유통거래대비 1%가 기본으로 해주고 이걸 내가 조절할수 있게」) · 칸에서 바꾸면 저장값이 이김   // 매도 셈 열한 칸은 서버 SELL_DEF   // buy — 매수 타이밍 open(09:00 시가 · 지금까지 셈) · p1(09:01) · vi(VI 발동)   // pyr — 불타기(손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삼) · 기본 끔
 Object.assign(DEF_SET, { endAt: '', sellBar: '5m', mk: {}, riseRank: true });   // riseRank — 상승률 순위(11-24 · 끄면 단타 순)   // mk — 코스피 조건 줄 둘(11-24 · mkLine)   // sellBar — 매도 봉 1m · 5m · 30m(11-23 재권님 「매도타이밍은 5분봉으로 하자」 → 고르기 · 기본 5분)   // endAt — 매도 시각(HHMM · 빈칸이면 판 끝 칸까지 · 11-20) · 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 기본값은 서버 SELL_DEF
 st.set = { ...DEF_SET };
 // 「· 어림」 — 서버 rows[].turnApprox(개발2 abf96b9) · 재권님 「응」 11-23 · 풍선은 어림 방법만(코드 이름은 이 주석에)
@@ -1468,8 +1479,8 @@ const WIN_DAYS = 30, WIN_BIG = 3, WIN_TOP = 5;   // 볼 거래일 · 「크게 �
 // 칩 시각이 다 있나 — 켜진 칩 중 붙은 시각(구간 · chipTime · chipAt · VI 는 viAt)이 없는 칩이 하나라도 있으면 그 종목은 조합 셈에서 뺌
 //   (11-26 재권님 「칩이 들어온 시간이 정확히 기입된게 있고 제대로 안된게 있는데 이거 고려되서 승률이 나온건가?」 → 「응 그렇게 다시해서」) — 시각 없는 칩을 판에 든 때로 치면 조합이 된 때가 앞당겨져 산 값이 틀림
 const chipTimed = (r) => { const at = { ...(r.chipAt || {}), ...(r.chipTime || {}) }; return colsOf().filter((c) => everChip(r, c)).every((c) => NO_TIME_OK.includes(c) || (spanRow(r) && Array.isArray(r.chipSpans[c]) && r.chipSpans[c].length) || at[c] || (c === 'VI·급등' && r.viAt)); };
-const comboPx = (r, t) => { const v1 = (o) => (o && Number(o.px) > 0 ? Number(o.px) : null); if (t < minHM(1)) return v1(minVal(r, 1));
-  const M = momentPx(r, t); if (M) return M.px; const k = PMIN.find((n) => minHM(n) === t); return k ? v1(minVal(r, k)) : null; };
+const comboPx = (r, t, ks) => { const v1 = (o) => (o && Number(o.px) > 0 ? Number(o.px) : null); if (t < minHM(1)) return v1(minVal(r, 1));
+  const M = momentPx(r, t, ks, ks ? ks.length : 0); if (M) return M.px; const k = PMIN.find((n) => minHM(n) === t); return k ? v1(minVal(r, k)) : null; };
 async function comboLoad(onStep) {
   const ds = st.days.slice().sort().reverse();
   const get = (d) => (st.data && st.data.day === d && st.data.closed !== true ? st.data : dayData[d]);
@@ -1479,11 +1490,12 @@ async function comboLoad(onStep) {
   ds.forEach((d) => { const D = get(d); if (!D || D.closed !== true) return; used.push(d); const keep = calcD; calcD = flat930(D);
     try { const T = D.times || [], last = T.length ? T[T.length - 1] : null;
       (D.rows || []).forEach((r) => { if (!colsOf().some((c) => everChip(r, c))) return; rowsN++; if (!chipTimed(r)) { untimed++; return; } const ex = last ? Number((r.px || {})[last]) : 0; if (!(ex > 0)) return; const seen = new Set();
-        comboEvents(r).forEach(([t, cs]) => { if (!cs.length) return; const p = comboPx(r, t); subKeys(cs).forEach((key) => { if (seen.has(key)) return; seen.add(key); if (!(p > 0)) return;   // 그 시각 붙은 칩의 부분 묶음마다 · 같은 조합은 처음 품은 때 한 번(11-26 품음)
+        comboEvents(r).forEach(([t, cs]) => { if (!cs.length) return; subKeys(cs).forEach((key) => { if (seen.has(key)) return; seen.add(key); const p = comboPx(r, t, key.split(' + ')); if (!(p > 0)) return;   // 그 시각 붙은 칩의 부분 묶음마다 · 같은 조합은 처음 품은 때 한 번(11-26 품음)
           const o = M.get(key) || { key, n: key.split(' + ').length, cnt: 0, up: 0, sum: 0, days: new Set() }, ret = (ex / p - 1) * 100; o.cnt++; if (ret > 0) o.up++; o.sum += ret; o.days.add(d); M.set(key, o); }); }); }); }
     finally { calcD = keep; } });
   return { rows: [...M.values()].map((o) => ({ key: o.key, n: o.n, cnt: o.cnt, days: o.days.size, upPct: o.up / o.cnt * 100, avg: o.sum / o.cnt })), used, untimed, rowsN, sig: chipSig() };
 }
+const CB_API = '/api/kis/dt30-combo';   // 서버 조합 표(개발2)
 const CB_FETCH = 3;   // 지난 판을 한 번에 받는 수
 const CB_SHOW_MIN = 2, CB_SHOW_MAX = 80;   // 목록에 보일 조합 — 2건 이상(11-26 재권님 「건수가 2건이여도 승률이 높은건 적용되야 할거같은데」 · 고르기 문턱 기본도 2건) · 많아야 80줄(고른 조합은 늘 보임)
 function comboPaint() {
@@ -1507,6 +1519,11 @@ function comboPaint() {
 async function comboOpen(force) {
   if (st.cbStat && !st.cbStat.busy && !force && st.cbStat.sig === chipSig()) { comboPaint(); return; }
   st.cbStat = { busy: '…', rows: [], used: [] }; comboPaint();
+  // 서버 조합 표(/api/kis/dt30-combo · 날마다 셈 · 개발2)를 먼저 — 켠 칩이 저장값과 같고 서버가 셈을 마쳤을 때만 · 아니면 화면 셈(서버가 주면 안 씀)
+  try { const res = await fetch(CB_API, { cache: 'no-store' }), j = res.ok ? await res.json() : null, M = (j && j.meta) || {}, D = (j && (j.data || j)) || {};
+    if (Array.isArray(D.rows) && D.rows.length && !M.busy && sigEq(M.sig, chipSig())) {
+      st.cbStat = { rows: D.rows.map((o) => ({ key: (o.chips || String(o.key).split(' + ')).map(chipName).join(' + '), n: o.n, cnt: o.cnt, days: o.days, upPct: o.upPct, avg: o.avg })), used: D.used || [], untimed: D.untimed, rowsN: D.rowsN, sig: chipSig(), server: M.at || true };
+      comboPaint(); if (st.data) paint(st.data); return; } } catch (e) { /* 서버 표 못 받음 — 화면 셈 */ }
   const C = await comboLoad((k, n) => { if (st.cbStat && st.cbStat.busy) { st.cbStat.busy = `(${k}/${n})`; comboPaint(); } });
   st.cbStat = C; comboPaint(); if (st.data) paint(st.data);   // 이름 빨강이 셈 뒤에 바로(11-26)
 }
