@@ -1572,8 +1572,9 @@ def buy930_fill(proxy, b):
 _cpx = {}                              # (날, 종목, 「HHMM」) → 1분봉 종가 — 굳은 봉만 들고 있음(그 뒤로는 안 바뀜)
 _cpx_first = set()                     # 칩 찬 분 값 중 그 분이 채움 봉이라 다음 첫 체결가인 것(day, code, HHMM)
 _cpx_lock = threading.Lock()
-# 메모는 오늘 · 지금 읽는 날 몫만 — 지난 날 몫은 다음 읽기에 지움(날마다 늘지 않게). 끄고 재 보니 오늘 판 다시 받기 0.30 → 0.5~0.6초라 두었다
-# (8772 · 11-26 19:05 · 지난 날 판은 차이 없음 — 단타 리뷰 ④ · 재권님 「응」 19:00)
+_cpx_days = {}                         # 최근 읽은 날 차례(오래된 것 먼저) — 메모는 이 날 수(COMBO_MEMO_DAYS · 조합 메모와 같은 수)만 · 넘으면 가장 오래 안 읽은 날 몫부터 지움
+# 끄고 재 보니 오늘 판 다시 받기 0.30 → 0.5~0.6초라 메모는 두었다(8772 · 11-26 19:05 · 단타 리뷰 ④ · 재권님 「응」 19:00)
+# 처음 판은 「오늘 · 읽는 날 몫만」 이었는데 여러 날 판을 함께 읽으면 서로 상대 날 몫을 지워 매번 DB 를 다시 읽었다 — 요청 20개 동시 40 → 56초(qa 11-26 19:2x)
 # 굳은 봉 — 그 종목 다음 분 봉이 DB 에 있으면(그 분이 끝난 뒤 받은 것) 앞 봉은 끝 값이다. 칩 1분봉 받기가 매 분 1초에 돌아(chip_live)
 # 봉이 끝나고 1분 남짓이면 굳는다 — 재권님 「가인데 1분으로 해줘」(11-25 17:4x · 그 전에는 고정 3분 · 셈 탓에 실제 3~4분)
 
@@ -1598,11 +1599,16 @@ def _chip_px_fill(proxy, day, rows, o):
                             if o <= mm < close:
                                 want.setdefault("%02d%02d" % divmod(mm, 60), set()).add(r["code"])
     got = {}
-    keep = (day, now.strftime("%Y%m%d"))
     with _cpx_lock:
-        for k in [k for k in _cpx if k[0] not in keep]:
-            del _cpx[k]
-        _cpx_first.intersection_update({k for k in _cpx_first if k[0] in keep})
+        _cpx_days.pop(day, None)
+        _cpx_days[day] = True
+        if len(_cpx_days) > COMBO_MEMO_DAYS:
+            drop = set(list(_cpx_days)[:len(_cpx_days) - COMBO_MEMO_DAYS])
+            for d in drop:
+                del _cpx_days[d]
+            for k in [k for k in _cpx if k[0] in drop]:
+                del _cpx[k]
+            _cpx_first.difference_update({k for k in _cpx_first if k[0] in drop})
     with proxy.db_conn() as conn:
         for hm, codes in want.items():
             need = [c for c in codes if (day, c, hm) not in _cpx]
