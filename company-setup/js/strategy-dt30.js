@@ -303,7 +303,12 @@ const chipTsOf = (r) => { const at = { ...(r.chipAt || {}), ...(r.chipTime || {}
 const comboEvents = (r) => { if (spanRow(r)) return spanTs(r).map((t) => [t, colsOf().filter((c) => chipAtT(r, c, t))]); const o = chipTsOf(r); return [...new Set(Object.values(o))].sort().map((t) => [t, colsOf().filter((c) => o[c] != null && o[c] <= t)]); };
 const comboKey = (cs) => cs.join(' + ');
 // 고른 조합은 화면 칩 이름으로 저장(set.combos) — 칩 이름 다리 표(strategy-chipname.js)를 걷는 날 저장된 조합 이름도 함께 옮김(개념정의 덧 11-26)
-const comboSel = () => new Set(Array.isArray(st.set.combos) ? st.set.combos : []);
+//   자동(set.comboAuto · 기본) — 지난 판 셈(st.cbStat)에서 문턱(오른 비율 · 건수)을 넘는 조합 전부 · 판을 열면 뒤에서 셈해 이름에 바로 적용(11-26 재권님 「이것도 단타판 종목이름에 적용되어야해」)
+//   체크를 손으로 넣고 빼면 「직접 고름」(set.combos) · 「문턱 넘는 조합 고르기」 를 누르면 다시 자동
+let cbAutoMemo = { k: '', v: new Set() };
+const comboAutoSel = () => { const C = st.cbStat, S = st.set; if (!C || C.busy || S.comboUp == null || S.comboN == null) return new Set();
+  const k = `${C.sig}|${C.used.length}|${S.comboUp}|${S.comboN}`; if (cbAutoMemo.k !== k) cbAutoMemo = { k, v: new Set(C.rows.filter((o) => o.upPct >= Number(S.comboUp) && o.cnt >= Number(S.comboN)).map((o) => o.key)) }; return cbAutoMemo.v; };
+const comboSel = () => (st.set.comboAuto !== false ? comboAutoSel() : new Set(Array.isArray(st.set.combos) ? st.set.combos : []));
 const comboMode = () => !!st.set.comboOn && comboSel().size > 0;
 const comboHit = (r) => { const S = comboSel(); if (!S.size) return null; for (const [t, cs] of comboEvents(r)) { if (cs.length && S.has(comboKey(cs))) return { t, key: comboKey(cs) }; } return null; };
 const needTxt = (r) => (comboMode() ? '조합 된 때' : `칩 ${chipNeed(r)}개 찬 때`);   // 매수가 글 — 조합으로 살 때는 「조합 된 때」
@@ -478,7 +483,7 @@ function sellBars(r, B, times, bars, step, oo = {}) {   // o — sellAt 과 같�
 const PNL_TOP = 30, PNL_WON = 10_000_000, SHOW_MAX = 30;   // SHOW_MAX — 칩 N개 칸을 넣었을 때 판에 보이는 종목 수 합(11-26 재권님 「보여져야 하는 총 개수는 30개로」)   // 기본값 — 재권님이 칸에 넣으면 st.set 이 이김
 // 셈 칸 기본값 (11-18) — minChip 칩 N개 이상만(0 = 전체) · top 상위 몇 종목 · 돈은 전체 금액 dayWon 을 그 종목 수로 똑같이 나눔
 //   11-18 재권님 「금액은 전체 금액으로 해주고 종목만큼 나눈다 라는 룰로 해줘 금액을 맨앞으로」 — 종목마다(each) 갈래는 걷음 · 기본 전체 금액 = 지금까지의 기본(상위 30 × 1,000만원)과 같은 3억
-const DEF_SET = { comboOn: false, combos: [], comboUp: 70, comboN: 2, minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, pyr: false, buy: 'open', turnOn: true, turnMin: 1 };   // 유통 대비 거래 거르기 — 기본 켬 · 1% 이상(11-24 재권님 「유통거래대비 1%가 기본으로 해주고 이걸 내가 조절할수 있게」) · 칸에서 바꾸면 저장값이 이김   // 매도 셈 열한 칸은 서버 SELL_DEF   // buy — 매수 타이밍 open(09:00 시가 · 지금까지 셈) · p1(09:01) · vi(VI 발동)   // pyr — 불타기(손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삼) · 기본 끔
+const DEF_SET = { comboAuto: true, comboOn: false, combos: [], comboUp: 70, comboN: 2, minChip: 0, top: PNL_TOP, mode: 'day', perWon: PNL_WON, dayWon: PNL_TOP * PNL_WON, pyr: false, buy: 'open', turnOn: true, turnMin: 1 };   // 유통 대비 거래 거르기 — 기본 켬 · 1% 이상(11-24 재권님 「유통거래대비 1%가 기본으로 해주고 이걸 내가 조절할수 있게」) · 칸에서 바꾸면 저장값이 이김   // 매도 셈 열한 칸은 서버 SELL_DEF   // buy — 매수 타이밍 open(09:00 시가 · 지금까지 셈) · p1(09:01) · vi(VI 발동)   // pyr — 불타기(손절로 판 돈을 그 시각 가장 많이 오른 종목에 더 삼) · 기본 끔
 Object.assign(DEF_SET, { endAt: '', sellBar: '5m', mk: {}, riseRank: true });   // riseRank — 상승률 순위(11-24 · 끄면 단타 순)   // mk — 코스피 조건 줄 둘(11-24 · mkLine)   // sellBar — 매도 봉 1m · 5m · 30m(11-23 재권님 「매도타이밍은 5분봉으로 하자」 → 고르기 · 기본 5분)   // endAt — 매도 시각(HHMM · 빈칸이면 판 끝 칸까지 · 11-20) · 손절 · 꺾임 · 고점 · 시각 미달 · 횡보 기본값은 서버 SELL_DEF
 st.set = { ...DEF_SET };
 // 「· 어림」 — 서버 rows[].turnApprox(개발2 abf96b9) · 재권님 「응」 11-23 · 풍선은 어림 방법만(코드 이름은 이 주석에)
@@ -1117,6 +1122,7 @@ async function load(day, quiet) {
   if (d.day === st.days[0] && !wx.data && !wx.timer) wxLoad();   // 지금 바깥 값 — 처음 한 번 · 그 뒤는 서버 ttlSec 대로
   if (st.vdDay !== d.day) { st.vdDay = d.day; vdLoad(d.day); }   // 그날 VI 목록 — 날을 바꿀 때만(지난 날은 굳은 값 · 오늘은 판을 다시 열 때)
   paint(d);
+  if (st.set.comboAuto !== false && !st.cbStat) comboOpen();   // 칩 조합 자동 — 판을 처음 열 때 지난 판으로 뒤에서 셈해 이름에 적용(11-26)
   chips();
   const ms = Number(m.refreshMs ?? (d.meta && d.meta.refreshMs)); st.ms = ms > 0 ? ms : 0;   // 서버는 판 안 meta(data.meta)에 둔다(개발2 2단계 · 11-12 09:07 잼) — 바깥 meta 도 읽음
   // 오늘 판이면 굳기(closed) 전까지 서버 주기로 다시 받음 — 장 전(08:00~09:00) 줄에 now 가 없어도 칩이 바뀌므로 now 로 가르지 않음(11-20 재권님 「8시되면 갱신되야 되는거지? 실시간으로?」 → 「응 고쳐」)
@@ -1423,14 +1429,14 @@ const CB_SHOW_MIN = 2, CB_SHOW_MAX = 80;   // 목록에 보일 조합 — 2건 �
 function comboPaint() {
   if (!root) return; const box = $('dt-cb'), S = st.set, sel = comboSel(); if (!box) return;
   root.querySelectorAll('.dt-cb-n').forEach((e) => { e.textContent = String(sel.size); });
-  root.querySelectorAll('.dt-cb-on').forEach((e) => { e.textContent = comboMode() ? ' · 조합으로 사는 중' : ''; });
+  root.querySelectorAll('.dt-cb-on').forEach((e) => { e.textContent = `${S.comboAuto !== false ? ' · 자동(문턱 넘는 조합)' : ' · 직접 고름'}${comboMode() ? ' · 조합으로 사는 중' : ''}${st.cbStat && st.cbStat.busy ? ' · 셈하는 중' : ''}`; });
   const C = st.cbStat; if (!C) return;
   if (C.busy) { box.textContent = `지난 판 받는 중… ${C.busy}`; return; }
   const up = S.comboUp == null ? Infinity : Number(S.comboUp), nn = S.comboN == null ? Infinity : Number(S.comboN);   // 빈칸 = 문턱 없음(옅은 빨강 안 칠함)
   const list = C.rows.filter((o) => sel.has(o.key) || o.cnt >= CB_SHOW_MIN).sort((a, b) => (sel.has(b.key) - sel.has(a.key)) || b.upPct - a.upPct || b.cnt - a.cnt).slice(0, Math.max(CB_SHOW_MAX, sel.size));
   const gone = [...sel].filter((k) => !C.rows.some((o) => o.key === k));   // 고른 조합인데 지난 판에 한 번도 없던 것(칩을 끄면 생김)
   box.innerHTML = `<label class="dt-fee"><input type="checkbox" data-cbon${S.comboOn ? ' checked' : ''}> 조합으로 사기 <span class="rl-sug">켜면 「칩 ( )개 이상」 대신 고른 조합이 된 때 삼 · 된 시각이 빠른 순 · 상위 종목 수 · 금액 · 파는 룰은 위 칸 그대로</span></label>
-    <div class="dt-fee">오른 비율 <input data-cbset="comboUp" class="rl-in rl-num" inputmode="decimal" value="${esc(String(S.comboUp ?? ''))}" aria-label="오른 비율 몇 % 이상">% 이상 · <input data-cbset="comboN" class="rl-in rl-num" inputmode="numeric" value="${esc(String(S.comboN ?? ''))}" aria-label="몇 건 이상">건 이상 <button type="button" class="kh-chip" data-cbpick>문턱 넘는 조합 고르기</button> <button type="button" class="kh-chip" data-cbclear>다 빼기</button> <button type="button" class="kh-chip" data-cbredo>다시 셈</button> <span id="dt-cb-msg" class="rl-sug"></span></div>
+    <div class="dt-fee">오른 비율 <input data-cbset="comboUp" class="rl-in rl-num" inputmode="decimal" value="${esc(String(S.comboUp ?? ''))}" aria-label="오른 비율 몇 % 이상">% 이상 · <input data-cbset="comboN" class="rl-in rl-num" inputmode="numeric" value="${esc(String(S.comboN ?? ''))}" aria-label="몇 건 이상">건 이상 <button type="button" class="kh-chip${S.comboAuto !== false ? ' is-active' : ''}" data-cbpick>문턱 넘는 조합 고르기${S.comboAuto !== false ? '(자동)' : ''}</button> <button type="button" class="kh-chip" data-cbclear>다 빼기</button> <button type="button" class="kh-chip" data-cbredo>다시 셈</button> <span id="dt-cb-msg" class="rl-sug"></span></div>
     <span class="rl-sug">지난 판 ${C.used.length}날(${C.used.length ? `${dayTxt(C.used[C.used.length - 1])} ~ ${dayTxt(C.used[0])}` : '—'}) · 종목이 처음 그 조합이 된 분 값에 사서 판 마지막 시각 값에 판다고 셈 · 세금 · 수수료 빼기 전 · 켜진 칩만 · 손절 · 익절 넣은 셈은 서버 값 기다림 · ${CB_SHOW_MIN}건 이상인 조합만 보임</span>
     ${gone.length ? `<span class="rl-sug">고른 조합 중 지난 판에 없는 것 — ${esc(gone.join(' · '))}</span>` : ''}
     <table class="st dt-cbt-tb"><thead><tr><th>고름</th><th>칩 수</th><th>조합</th><th>건수</th><th>날</th><th>오른 비율</th><th>평균</th></tr></thead><tbody>${list.map((o) => `<tr${o.upPct >= up && o.cnt >= nn ? ' class="dt-cb-ok"' : ''}><td><input type="checkbox" data-cb="${esc(o.key)}"${sel.has(o.key) ? ' checked' : ''} aria-label="${esc(o.key)} 고름"></td><td>${o.n}</td><td>${esc(o.key)}</td><td>${num(o.cnt)}</td><td>${o.days}</td><td>${num(o.upPct, 0)}%</td><td class="${signClass(o.avg, NUM) || ''}">${o.avg > 0 ? '+' : ''}${num(o.avg, 2)}%</td></tr>`).join('')}</tbody></table>`;
@@ -1439,19 +1445,19 @@ async function comboOpen(force) {
   if (st.cbStat && !st.cbStat.busy && !force && st.cbStat.sig === chipSig()) { comboPaint(); return; }
   st.cbStat = { busy: '…', rows: [], used: [] }; comboPaint();
   const C = await comboLoad((k, n) => { if (st.cbStat && st.cbStat.busy) { st.cbStat.busy = `(${k}/${n})`; comboPaint(); } });
-  st.cbStat = C; comboPaint();
+  st.cbStat = C; comboPaint(); if (st.data) paint(st.data);   // 이름 빨강이 셈 뒤에 바로(11-26)
 }
 BIND.push(() => {
   const d = $('dt-cbf'); if (!d) return;
   d.addEventListener('toggle', () => { if (d.open) comboOpen(); });
   d.addEventListener('change', (e) => {
-    const c = e.target.closest('[data-cb]'); if (c) { const A = new Set(comboSel()); if (c.checked) A.add(c.dataset.cb); else A.delete(c.dataset.cb); setChange({ ...st.set, combos: [...A] }); return; }
+    const c = e.target.closest('[data-cb]'); if (c) { const A = new Set(comboSel()); if (c.checked) A.add(c.dataset.cb); else A.delete(c.dataset.cb); setChange({ ...st.set, comboAuto: false, combos: [...A] }); return; }   // 손으로 넣고 빼면 직접 고름
     if (e.target.closest('[data-cbon]')) { setChange({ ...st.set, comboOn: !!e.target.checked }); return; }
     const v = e.target.closest('[data-cbset]'); if (v) { const x = v.value.trim() === '' ? null : Number(v.value); if (x != null && (!Number.isFinite(x) || x < 0)) { v.value = String(st.set[v.dataset.cbset] ?? ''); return; } setChange({ ...st.set, [v.dataset.cbset]: x }); }
   });
   d.addEventListener('click', (e) => {
-    if (e.target.closest('[data-cbpick]')) { e.preventDefault(); const C = st.cbStat; if (!C || C.busy) return; if (st.set.comboUp == null || st.set.comboN == null) { const m = $('dt-cb-msg'); if (m) m.textContent = '오른 비율 · 건수 칸이 비어 있어 고르지 않음 — 둘 다 넣으십시오'; return; }   /* 빈칸을 0 으로 셈하면 전부 골라짐(개념정의 덧 11-26) */ const up = Number(st.set.comboUp), nn = Number(st.set.comboN); setChange({ ...st.set, combos: C.rows.filter((o) => o.upPct >= up && o.cnt >= nn).map((o) => o.key) }); return; }
-    if (e.target.closest('[data-cbclear]')) { e.preventDefault(); setChange({ ...st.set, combos: [], comboOn: false }); return; }
+    if (e.target.closest('[data-cbpick]')) { e.preventDefault(); const C = st.cbStat; if (!C || C.busy) return; if (st.set.comboUp == null || st.set.comboN == null) { const m = $('dt-cb-msg'); if (m) m.textContent = '오른 비율 · 건수 칸이 비어 있어 고르지 않음 — 둘 다 넣으십시오'; return; }   /* 빈칸을 0 으로 셈하면 전부 골라짐(개념정의 덧 11-26) */ setChange({ ...st.set, comboAuto: true }); return; }   // 다시 자동 — 문턱 넘는 조합 전부(셈이 바뀌면 따라감)
+    if (e.target.closest('[data-cbclear]')) { e.preventDefault(); setChange({ ...st.set, comboAuto: false, combos: [], comboOn: false }); return; }
     if (e.target.closest('[data-cbredo]')) { e.preventDefault(); comboOpen(true); }
   });
 });
