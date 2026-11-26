@@ -223,6 +223,16 @@ def chips_now(proxy, cfg, early=True, pre=False):
                     put(c, None, "거래비율급증", "프리장")
         except Exception:
             missing.append("거래비율급증")
+        try:                               # 「돈몰림」 장 전 — 섹터 수급 판 프리장 칸(08:00~08:45 · 넥스트레이드)으로 같은 셈 · 프리장 칸은 매수 · 매도가 없어 묶음 등락 오름으로(money_chip 한 곳)
+            import money_chip              # (재권님 「단타창이 8시 프리장 시작되면 그때부터 동작하도록」 → 「응」 11-26 · 지난 날 셈 08:45 에 0~12 묶음 · 08:15 에 많게 59)
+            mh, why = money_chip.hits(proxy, [c for c in cap if not small(c)])
+            for c, subs in mh.items():
+                for sb in subs:
+                    put(c, None, money_chip.CHIP, sb)
+            if why:
+                missing.append(money_chip.CHIP)
+        except Exception:
+            missing.append("돈몰림")
     try:                                   # 장외 — 홈 「장외」 칩과 같은 값(순위 목록 시세의 regPct · 정규장 종가 대비) · 오른 것만 · 시가총액 문턱 아래 뺌
         # 재권님 「한곳에서 받는건데 이미 받은값은 그걸 가져와야 하고」(11-18 17:3x · 시황분석1 경유) — 시세 캐시를 함께 탄다(PRICE_CACHE_TTL)
         # 서버가 평일 07:30~15:30 장외 값을 비우므로(kis_proxy after_cleared) 08:00 ~ 10:30 판에는 보통 안 든다
