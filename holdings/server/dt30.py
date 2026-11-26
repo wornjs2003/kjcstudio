@@ -3710,7 +3710,7 @@ MIN_CODES_MAX = 40            # 분마다 값 주소 한 번에 받는 종목 �
 def min_series(proxy, day, codes):
     """그날 08:00 ~ 정규장 끝 분마다 값 — 1분봉(candles 1m · 08:00 ~ 20:00 을 이미 쌓음)에서 셈 · 따로 쌓지 않음(같은 값 두 곳 안 됨).
     → {code: {t [「HHMM」 봉 끝], px [종가], vol [누적 거래량], turn [누적 거래대금 어림 ÷ (풀린 주식수 × 종가) × 100 | None], prevVol [앞 거래일 같은 분째 누적 | None]}} ·
-    봉이 없는 종목은 빠짐(0 으로 안 채움) · 프리장 분은 넥스트레이드 · 누적은 08:00 부터(프리장 + 정규장) · 같은 분째는 그날 · 앞 날 여는 시각 기준(늦게 연 날).
+    봉이 없는 종목은 빠짐(0 으로 안 채움) · 프리장 분은 넥스트레이드 · 누적은 08:00 부터(프리장 + 정규장) · 같은 분째는 프리장 분은 프리장 연 때 · 정규장 분은 정규장 연 때 기준(늦게 연 날).
     재권님 「프리장부터 종가까지 칩에 필요한 모든 정보는 쌓아지게 해줘」(11-26 14:38) · 「셀수 있는정보들 다 세서 서버에 남겨놔」 → 안에 「응」(15:2x)."""
     import company_profile, market_hours
     fl = company_profile.floats() or {}
@@ -3729,8 +3729,11 @@ def min_series(proxy, day, codes):
             if cl:
                 cur.setdefault(code, []).append((m4(ts[8:12]), cl, v or 0))
         if prev:
+            import pre_flow
+            pp, pt = pre_flow._pre_open_min(proxy, prev), pre_flow._pre_open_min(proxy, day)   # 프리장 분은 프리장 연 뒤 몇 분째 · 정규장 분은 정규장 연 뒤 몇 분째(prev_vols_at 과 한 셈 · 개념정의 덧 11-26)
             for code, ts, _cl, v in conn.execute(q, [prev + hm(pre0), prev + hm(po + c - o)] + list(codes)):
-                pv.setdefault(code, []).append((m4(ts[8:12]) - po + o, v or 0))   # 앞 날 분을 그날 여는 시각 기준으로 옮김
+                pm = m4(ts[8:12])
+                pv.setdefault(code, []).append((pm - pp + pt if pm < po else pm - po + o, v or 0))
     out = {}
     for code, bars in cur.items():
         f, acc = fl.get(code), 0
