@@ -1386,6 +1386,8 @@ def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
     mh = lambda k: _hm4(at.get(str(k))) or _hhmm(o + k).replace(":", "")
 
     def mv(k):
+        if k == 1 and isinstance(r.get("px1Db"), (int, float)) and r["px1Db"] > 0:
+            return r["px1Db"]                          # 9시 1분 값 = 여는 분 1분봉 종가(지금 DB 값 · chipPx 와 한 셈) — 판에 적힌 pxMin 은 장중에 덜 쌓인 봉으로 적혔을 수 있음(시황분석1 11-26 대주전자재료 86,900 ↔ 87,900)
         v = (r.get("pxMin") or {}).get(str(k)) or (r.get("px1") if k == 1 else None)
         v = v.get("px") if isinstance(v, dict) else v
         return v if isinstance(v, (int, float)) and v > 0 else None
@@ -1485,6 +1487,14 @@ def buy930_fill(proxy, b):
             if isinstance(e.get("px"), (int, float)) and e["px"] > 0:
                 seen.setdefault(h, e["px"])
         r["chipSec"], r["seenPx"] = sec, seen
+    try:                                               # 9시 1분 값을 지금 DB 의 여는 분 1분봉 종가로(rows[].px1Db · 판에 적힌 pxMin 과 다를 수 있음 · 지난 판 · 오늘 09:02 뒤)
+        nw = _now()
+        p1d = {} if (b["day"] == nw.strftime("%Y%m%d") and nw.hour * 60 + nw.minute < o + 2) else _px1_of(proxy, b["day"], [r["code"] for r in rows], o)   # 오늘 여는 분 봉이 아직 굳기 전(+2분 앞)은 판 값 그대로
+        for r in rows:
+            if p1d.get(r["code"]):
+                r["px1Db"] = p1d[r["code"]]
+    except Exception:
+        pass
     try:                                               # 본 값이 그 분 1분봉 고가 ~ 저가 밖이면 버림(시세 캐시가 묵은 값 · qa 11-26 — 3,035 중 158) → 그 분 1분봉 종가로
         want = {(r["code"], b["day"] + h[:2] + h[3:5]) for r in rows for h in (r.get("seenPx") or {})}
         if want:
@@ -1829,7 +1839,8 @@ def _ct_px(r, b, t, o, cs=()):
     pm, at = r.get("pxMin") or {}, (b.get("meta") or {}).get("pxMinAt") or {}
     mh = lambda n: _hm4(at.get(str(n))) or _hhmm(o + n).replace(":", "")
     v1 = lambda x: x.get("px") if isinstance(x, dict) and isinstance(x.get("px"), (int, float)) and x["px"] > 0 else None
-    p9 = lambda: (v1(pm.get("1")) or (v1(r.get("px1")) if isinstance(r.get("px1"), dict) else None), mh(1))
+    p9 = lambda: ((r["px1Db"] if isinstance(r.get("px1Db"), (int, float)) and r["px1Db"] > 0 else None)
+                  or v1(pm.get("1")) or (v1(r.get("px1")) if isinstance(r.get("px1"), dict) else None), mh(1))   # 9시 1분 값 = 여는 분 1분봉 종가(DB · buy_point 와 한 셈)
     if t < mh(1):
         return p9()
     ct = {c: _hm4(v) for c, v in (r.get("chipTime") or {}).items()}
