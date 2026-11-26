@@ -2331,6 +2331,7 @@ def refresh(proxy, cfg, b):
     nb = build(proxy, cfg, b["day"])                   # 빠졌던 종목도 다시 셈에 든다(「한 번 빠지면 다시 안 넣음」 없앰 · 11-20)
     _lock_keep(b["rows"], nb["rows"])                  # 굳힌 줄은 새 셈에서 빠져도 그대로(세 번 굳히기)
     old = {r["code"]: r for r in b["rows"]}
+    old_out = {o["code"]: o for o in (b.get("meta") or {}).get("outRows") or []}   # 판에서 빠졌다 다시 든 종목 — 매도 기록은 빠진 줄(outRows)에 있다
     now = _now()
     nm = now.hour * 60 + now.minute
     off = late_min(proxy, now)
@@ -2341,6 +2342,10 @@ def refresh(proxy, cfg, b):
     for r in nb["rows"]:
         o = old.get(r["code"])
         _sub_keep(r, o, hms)                           # 하위(매수 ①~④)는 바뀌어도 앞 것을 남기고 붙은 시각을 적는다
+        if o is None and r["code"] in old_out:         # 다시 든 줄은 「팔 때」 기록만 빠진 줄에서 옮긴다 — 안 옮기면 같은 종목 「팔 때」 가 또 감
+            for k in SELL_KEEP:                        # (11-26 RFHIC 09:24 · 09:41 빠졌다 다시 들어 세 통 · 재권님 「응」 12:0x)
+                if k in old_out[r["code"]]:
+                    r.setdefault(k, old_out[r["code"]][k])
         if o is not None:
             for k, v in o.items():                     # 다시 세어도 그 줄에 적어 둔 것(팔 때 sell · N분 값 pxMin · 프리장 nx 등)은 옮긴다 — 새 셈이 내는 칸만 새 값
                 r.setdefault(k, v)                     # (qa 걸림 11-20 — sell 이 지워져 같은 종목 「팔 때」 가 여러 통 · tgTop 이 빈칸)
@@ -3928,6 +3933,9 @@ SELL_UNTIL_MIN = 10          # 정규장 끝 이 분 전까지만 본다
 _sell = {"day": None, "hi": {}, "chk": {}}   # 「팔 때」 고점 · 30분 칸 값 — 고리가 20초마다 판을 새로 읽어서 판에 두면 저장한 때 값만 남는다(개념정의 걸림 11-19) · 메모리에 두고 새로 걸린 때만 판에 적음
 
 
+SELL_KEEP = ("sell", "sellHi", "sellChk")   # 판 줄에 적는 「팔 때」 칸 — 다시 세기에서 빠졌다 든 줄도 옮김
+
+
 def sell_watch(proxy, cfg, b, now=None):
     """아침 상위(meta.tgTop) 종목이 꺾였나 — 고점(산 뒤 본 현재가 중 최고) 대비 SELL_DROP_PCT % 아래 · 또는 30분 칸 값이 전 칸보다 낮음.
     종목마다 처음 걸린 때 한 번 rows[].sell {at, px, why, hi, ref, buy} 를 적고 → 새로 걸린 줄 목록. 산 값이 없는 종목(개장 1분 값 못 잼)은 안 본다.
@@ -3941,7 +3949,8 @@ def sell_watch(proxy, cfg, b, now=None):
     top = set((b.get("meta") or {}).get("tgTop") or [])
     tb = (b.get("meta") or {}).get("tgBuy") or {}
     bpx = lambda r: (tb.get(r["code"]) or {}).get("px") or ((r.get("pxMin") or {}).get("1") or {}).get("px")   # 보낸 매수 값(찬 때) · 옛 판은 개장 1분 값
-    rows = [r for r in (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or []) if r["code"] in top and not r.get("sell") and bpx(r)]
+    sent = (b.get("meta") or {}).get("sellSent") or {}   # 보낸 종목 — 줄의 sell 이 어떤 길로 지워져도 한 번만(한 겹 더)
+    rows = [r for r in (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or []) if r["code"] in top and not r.get("sell") and r["code"] not in sent and bpx(r)]
     if not rows or hm < o + 2 or hm >= close - SELL_UNTIL_MIN:
         return []
     q, _ = proxy.fetch_quotes_multi(cfg, [r["code"] for r in rows], max_age=proxy.PRICE_CACHE_TTL)
@@ -4274,6 +4283,7 @@ def start(proxy):
                         if b["meta"].get("tgTop"):           # 판이 굳은 뒤(14:00)에도 정규장 끝 SELL_UNTIL_MIN 분 전까지 본다(sell_watch 가 시각을 가름 · 개념정의 걸림 11-19)
                             for r in sell_watch(proxy, proxy.load_secrets(), b):
                                 flow_now = True
+                                b["meta"].setdefault("sellSent", {})[r["code"]] = r["sell"]["at"]   # 다시 세기 · 빠졌다 든 줄에도 안 지워지는 meta 에(refresh 가 meta 칸은 옮김)
                                 if SELL_SEND:
                                     ok, why = dart.telegram_send(sell_text(r))
                                     print("  [단타 30] 팔 때 %s %s" % (r["code"], "보냄" if ok else "못 보냄 — " + str(why)), flush=True)
