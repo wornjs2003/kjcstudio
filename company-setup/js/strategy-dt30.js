@@ -283,7 +283,7 @@ const inUntil = () => { let v = String(st.set.inUntil || SELL_DEF.inUntil || '')
   const o = openHM(), late = (+o.slice(0, 2) * 60 + +o.slice(2)) - 540; return late > 0 ? addHM(v, late) : v; };
 const pmOf = (k) => (/^p[1-5]$/.test(k || '') ? +k.slice(1) : 0);
 const minHM = (n) => { const o = String((DM().pxMinAt || {})[n] || '').replace(':', ''); return /^\d{4}$/.test(o) ? o : n === 1 ? p1HM() : addHM(openHM(), n); };
-const minVal = (r, n) => (r.pxMin && typeof r.pxMin === 'object' ? r.pxMin[n] : n === 1 ? r.px1 : undefined);   // undefined = 서버가 이 칸을 아직 안 줌 · null = 못 잼
+const minVal = (r, n) => (Number(n) === 1 && Number(r.px1Db) > 0 ? { px: Number(r.px1Db), at: hmS(minHM(1)), src: 'db' } : r.pxMin && typeof r.pxMin === 'object' ? r.pxMin[n] : n === 1 ? r.px1 : undefined);   // 9시 1분 값은 서버 rows[].px1Db(여는 분 1분봉 종가 · chipPx 와 같은 셈) 먼저 — 판 pxMin[1] 은 장중 덜 쌓인 봉으로 적혀 갈린 줄이 있었음(대주전자재료 86,900 ↔ 87,900 · 개발2 62875e4 · 11-26)   // undefined = 서버가 이 칸을 아직 안 줌 · null = 못 잼
 // 새 매수가 규칙(11-20 · 서버 개발2)으로 지은 판 — 줄에 buyTs · buySrc 「9시 1분 값」 이 있으면 기본 매수가는 「들어온 때」 가격 · 옛 판(11-19 까지)은 시가
 const newBuyOf = (d) => ((d && d.rows) || []).some((r) => r.buyTs || /9시 1분/.test(String(r.buySrc || '')));
 const buyName = (k, t) => (k === 'open' ? (st.data && st.data.flat930 ? `칩 ${num(chipNeed())}개 찬 때` : newBuyOf(st.data) ? '들어온 때' : `${hmS(openHM())} 시가`) : t);   // 「들어온 때」 — 11-20 재권님 「응 그렇게 해」(옛 판만 「09:00 시가」)
@@ -345,6 +345,15 @@ const condAt = (r, T) => { const S = st.set, X = { why: [], approx: false }; let
   CONDX.set(r, X); return at; };
 const nthChipAt = (r) => { const T = chipOnlyAt(r); return T == null ? null : condAt(r, T); };
 // 보기만 줄의 가정 매수 — 판에 들어올 때 값(서버 r.buy)으로 샀다고 치고 셈만 보임(11-24 재권님 「들어올때 샀다는 전제로 셈을 하도록 하고 진짜 산건 아닌거처럼 해줘」) · 합계 · 평균 · 상위 N 에는 안 듦
+// 칩이 다 찬 순간의 값 — 서버 dt30._moment_px 와 같은 갈래(개발2 8a0e2af · qa 11-26 「시계 칩은 T:ss 에 앎 · T:00 값은 앞당김」)
+//   그 분(T)에 붙은 켜진 칩 중 가장 늦게 안 초(rows[].chipSec{칩: {HH:MM: HH:MM:SS}}) → 그 순간 본 값(rows[].seenPx[초]) · 없으면 정각(00초)이면 앞 분 1분봉 종가 · 그 밖은 그 분 1분봉 종가(chipPx[T])
+//   서버는 「조합이 다 찬 칩」 중 가장 늦은 초 · 화면은 그 분에 새로 붙은 켜진 칩 전부 중 가장 늦은 초(같은 분 다른 칩이 더 늦으면 조금 늦은 값 · 미래는 안 봄) · 서버가 주면 안 씀(buy930 · comboBuy)
+const momentPx = (r, T) => { const hm = hmS(T), CS = r.chipSec || {}, SP = r.seenPx || {}, on = new Set(colsOf()); let sec = null;
+  Object.entries(CS).forEach(([c, o]) => { const cn = chipName(c); if (!on.has(cn) || !everChip(r, cn)) return; if (spanRow(r) && !spansOf(r, cn).some(([a]) => hm4(a) === T)) return; const s = o && o[hm]; if (s && (!sec || s > sec)) sec = s; });   // 그 분에 새로 붙은 칩만(이미 붙어 있던 칩의 다시 본 초는 안 셈)
+  if (sec && Number(SP[sec]) > 0) return { px: Number(SP[sec]), how: `${sec} 본 값` };
+  const prev = hmS(addHM(T, -1)), C = r.chipPx || {};
+  if (sec && /:00$/.test(sec) && Number(C[prev]) > 0) return { px: Number(C[prev]), how: `${sec} 정각 값` };
+  const v = Number(C[hm]); return v > 0 ? { px: v, how: `${hm} 1분봉` } : null; };
 let NOPX = new WeakMap();   // 칩 찬 분의 1분봉 값이 서버에 없는 줄 → 그 시각(HH:MM) · 매수가 칸 「산 값 못 잼」 · calcDay 마다 새로
 let HYPO = new WeakMap();   // calcDay 를 돌 때마다 새로 — 판 줄 객체가 다시 그릴 때 그대로 쓰여, 셈 칸을 바꿔 본 표로 든 줄에 가정 값이 남지 않게(개념정의 검수 11-24)
 function buyOf(r) {   // → { px, at(HHMM), src } | null
@@ -368,9 +377,12 @@ function buyOf(r) {   // → { px, at(HHMM), src } | null
     // 9시 1분 이하에 찬 줄 — 들어온 때(open) 모드는 r.buy(든 순간 현재가 · 장 전부터 있던 줄은 여는 시각+1분 직후 현재가) · 칩 찬 때(p1) 모드는 9시 1분 값 — 서버 buy930 과 같은 셈(개발2 buy_point · 11-25 qa 제일기획 19,210 ↔ 19,200)
     // 9시 1분 이하에 찬 줄은 「들어온 때」 모드도 9시 1분 값(11-26 재권님 「칩을 바꾸면 바꾼칩갯수가 다찬시간에 매수가 되야하는데」 → 「응」 — 판에 든 때 값(r.buy)으로 사던 것 걷음 · RFHIC 08:05 찬 줄을 09:45 값으로 샀음) · 서버 buy930 은 아직 든 때 값(개발2 에 알림)
     const p1 = minHM(1);
-    if (T <= p1) { const o = minVal(r, 1); if (o && Number(o.px) > 0) return { px: Number(o.px), at: p1, src: `${hmS(p1)} 값 · ${needTxt(r)} ${hmS(T)}` }; }
+    // 저장된 셈 칸 · 칩 N개로 살 때는 서버가 줄마다 정한 산 값(rows[].buy930 · 개발2 _moment_px)을 그대로(11-26 재권님 「서버값과 항상 동기화 되야돼 엄청 중요한거야」 → 「가」) · 저장 전 · 칩조합 · 서버 값 없음만 아래 화면 셈(같은 갈래)
+    if (!st.setDirty && k === 'open' && !comboMode() && r.buy930 && Number(r.buy930.px) > 0) { const b9 = r.buy930, a9 = String(b9.atSec || b9.at || ''); return { px: Number(b9.px), at: hm4(a9), src: `${a9} ${b9.src || ''} · ${needTxt(r)} · 서버 값` }; }
+    // 9시 1분 전에 찬 줄만 9시 1분 값 · 9시 1분 분에 찬 줄은 아래 순간 값(서버 _moment_px 와 같게 · 정각이면 같은 9시 1분 값)
+    if (T < p1) { const o = minVal(r, 1); if (o && Number(o.px) > 0) return { px: Number(o.px), at: p1, src: `${hmS(p1)} 값 · ${needTxt(r)} ${hmS(T)}` }; }
     const CPM = (curD().meta || {}).chipPx;   // 서버 칩 찬 분 1분봉 값 — {ok} 인 판만 쓴다 · {ok:false} 면 아래 옛 셈(어림)
-    if ((CPM && CPM.ok !== false) || r.chipPx) { const v = Number((r.chipPx || {})[hmS(T)]); if (v > 0) return { px: v, at: T, src: `${hmS(T)} 1분봉 · ${needTxt(r)}` };
+    if ((CPM && CPM.ok !== false) || r.chipPx) { const M = momentPx(r, T); if (M) return { px: M.px, at: T, src: `${M.how} · ${needTxt(r)}` };
       if ((CONDX.get(r) || { why: [] }).why.length) { const bc = (Array.isArray(r.bars) ? r.bars : []).find((b) => Array.isArray(b) && hm4(b[0]) === T), bv = bc && Number(bc[4]); if (bv > 0) return { px: bv, at: T, src: `${hmS(T)} 1분봉 · ${needTxt(r)}` }; const t2 = ((curD().times) || []).find((x) => hhmm(x) >= T), v2 = t2 && Number((r.px || {})[t2]); if (v2 > 0) return { px: v2, at: hhmm(t2), src: `${hmS(hhmm(t2))} 칸 값 · ${needTxt(r)} ${hmS(T)} · 어림` }; }   // 거래 칸이 넘은 분은 칩 찬 분이 아니라 chipPx 에 없음 — 그 분 1분봉(rows[].bars) · 없으면 다음 30분 칸 값 · 어림(서버 분마다 값이 오면 정확히)
       NOPX.set(r, CPM && CPM.settledTo && hmS(T) >= String(CPM.settledTo) ? `${hmS(T)} 분봉 굳는 중` : `${hmS(T)} 분봉 없음`); return null; }   /* 1분봉이 있는 판에서 그 분 값이 없으면 어림하지 않고 안 삼 — 옛 판도(서버 같은 셈 · 개발2 11-25) · 그날 1분봉이 아예 없으면 서버가 meta.chipPx {ok:false} 로 내 아래 어림 */   /* settledTo — 이 분부터 굳는 중(서버 _chip_px_fill 은 그 앞 분만 실음 · 개발2 1719020) */   // 9시 1분 뒤는 서버 buy930 과 같은 값(개발2 df182ad · 분 1분봉 종가)
     for (const k of PMIN) { const h = minHM(k); if (T <= h) { const o = minVal(r, k); if (o && Number(o.px) > 0) return { px: Number(o.px), at: h, src: `${hmS(h)} 값 · ${needTxt(r)}` }; break; } }
@@ -1205,7 +1217,7 @@ const orTip = (d) => { const m = (d && d.meta) || {}, raw = String(m.openRiseAt 
 // 상승률 — 09:05 까지 1분봉(11-24 재권님 「상승률은 9시 5분까지 분봉으로 바뀌고 높은순으로 실시간으로 순위 적용되게」 → 「응 맞아」)
 //   오늘 시가(서버 r.open) 대비 그때까지 받은 마지막 1분 값(서버 r.pxMin 1~5 · 여는 시각 + 1~5분) — 09:05 값이 오면 그 값으로 굳음 · 1분 값이 없는 지난 판은 서버 openRise(지난 판은 개장 5분 값) · 장중 판에 1분 값이 없으면 「—」
 const rise5 = (r) => { const o = Number(r.open), M = r.pxMin || {};
-  if (o > 0) for (const k of ['5', '4', '3', '2', '1']) { const v = M[k]; if (v && Number(v.px) > 0) return { v: (Number(v.px) / o - 1) * 100, at: v.at || '' }; }
+  if (o > 0) for (const k of ['5', '4', '3', '2', '1']) { const v = minVal(r, k);   /* 9시 1분 값은 서버 px1Db 먼저(minVal · 개념정의 덧 11-26) */ if (v && Number(v.px) > 0) return { v: (Number(v.px) / o - 1) * 100, at: v.at || '' }; }
   const D = curD(); if (D && D.closed === true && r.openRise != null && Number.isFinite(Number(r.openRise))) return { v: Number(r.openRise), at: '' };
   return null; };
 const orV = (r) => { const x = rise5(r); return x ? x.v : -Infinity; };
@@ -1455,8 +1467,8 @@ const WIN_DAYS = 30, WIN_BIG = 3, WIN_TOP = 5;   // 볼 거래일 · 「크게 �
 // 칩 시각이 다 있나 — 켜진 칩 중 붙은 시각(구간 · chipTime · chipAt · VI 는 viAt)이 없는 칩이 하나라도 있으면 그 종목은 조합 셈에서 뺌
 //   (11-26 재권님 「칩이 들어온 시간이 정확히 기입된게 있고 제대로 안된게 있는데 이거 고려되서 승률이 나온건가?」 → 「응 그렇게 다시해서」) — 시각 없는 칩을 판에 든 때로 치면 조합이 된 때가 앞당겨져 산 값이 틀림
 const chipTimed = (r) => { const at = { ...(r.chipAt || {}), ...(r.chipTime || {}) }; return colsOf().filter((c) => everChip(r, c)).every((c) => NO_TIME_OK.includes(c) || (spanRow(r) && Array.isArray(r.chipSpans[c]) && r.chipSpans[c].length) || at[c] || (c === 'VI·급등' && r.viAt)); };
-const comboPx = (r, t) => { const v1 = (o) => (o && Number(o.px) > 0 ? Number(o.px) : null); if (t <= minHM(1)) return v1(minVal(r, 1));
-  const v = Number((r.chipPx || {})[hmS(t)]); if (v > 0) return v; const k = PMIN.find((n) => minHM(n) === t); return k ? v1(minVal(r, k)) : null; };
+const comboPx = (r, t) => { const v1 = (o) => (o && Number(o.px) > 0 ? Number(o.px) : null); if (t < minHM(1)) return v1(minVal(r, 1));
+  const M = momentPx(r, t); if (M) return M.px; const k = PMIN.find((n) => minHM(n) === t); return k ? v1(minVal(r, k)) : null; };
 async function comboLoad(onStep) {
   const ds = st.days.slice().sort().reverse();
   const get = (d) => (st.data && st.data.day === d && st.data.closed !== true ? st.data : dayData[d]);
