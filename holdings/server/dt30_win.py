@@ -59,17 +59,11 @@ def day_rows(b, proxy=None):
     """판(dict) → 종목마다 {code · name · chips · n · buy · sell · ret(% · 못 잼이면 None) · chipAt · subAt · buyAt · lockAt(붙은 · 든 · 굳힌 시각)} · 11-18 전 판은 칩 이름을 지금 룰로(_chips_now_rule)."""
     out = []
     cf, om = {}, None
-    try:
-        dt30.live_merge(b)                             # 다시 지은 라이브 판 — 장중 값으로(판과 같게)
-    except Exception:
-        pass
-    if proxy is not None:
-        try:
-            dt30._pxmin_fill(proxy, b)                 # 여는 시각 + N분 값 — 사는 값 재료(쌓인 1분봉 · DB 만)
-            cf = dt30.chip_first_get(proxy, b["day"], [r["code"] for r in (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or [])])
-            om = dt30._open_min(proxy, b["day"], b)
-        except Exception as e:
-            print("  [단타 승률] %s 칩 시각 · 여는 시각 못 읽음 — 공식 · 장 전으로 셈 · %s" % (b.get("day"), proxy.safe_message(e, 120)), flush=True)   # 개념정의 덧 ③
+    dt30.live_merge(b)                                 # 다시 지은 라이브 판 — 장중 값으로(판과 같게) · 못 하면 터뜨려 저장 안 함(fill 이 다음에 다시 · 단타 리뷰 ② 11-26)
+    if proxy is not None:                              # 칩 시각 · 여는 시각 · N분 값을 못 읽으면 터뜨림 — 보통 날 · 장 전으로 셈한 줄을 저장해 영영 다시 안 세던 것(단타 리뷰 ② 11-26)
+        dt30._pxmin_fill(proxy, b)                     # 여는 시각 + N분 값 — 사는 값 재료(쌓인 1분봉 · DB 만)
+        cf = dt30.chip_first_get(proxy, b["day"], [r["code"] for r in (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or [])])
+        om = dt30._open_min(proxy, b["day"], b)
     outs = [dict(o) for o in (b.get("meta") or {}).get("outRows") or []]   # 판에서 빠진 종목 — 빠진 뒤 값 칸은 5분봉으로 채움(dt30._out_px)
     if outs and proxy is not None:
         try:
@@ -138,7 +132,11 @@ def fill(proxy):
         got = dt30._load(proxy, day)
         if not got or not got[0].get("closed", True):
             continue                                   # 안 끝난 그날 판 — 14:00 칸을 다 적은 뒤
-        rows = day_rows(got[0], proxy)
+        try:
+            rows = day_rows(got[0], proxy)
+        except Exception as e:                         # 재료를 못 읽은 날 — 저장 안 하고 다음 바퀴에 다시(단타 리뷰 ② 11-26)
+            print("  [단타 승률] %s 못 셈 — 저장 안 하고 다음에 다시 · %s" % (day, proxy.safe_message(e, 120)), flush=True)
+            continue
         with proxy._db_lock, proxy.db_conn() as conn:
             conn.execute("INSERT OR REPLACE INTO dt30_win VALUES (?,?,?,?)",
                          (day, "%s|%s" % (got[1], VER), json.dumps(rows, ensure_ascii=False), _now().strftime("%Y-%m-%d %H:%M:%S")))
