@@ -55,6 +55,7 @@ from secrets_guard import safe_message
 KST = timezone(timedelta(hours=9))
 
 END = market_hours.REG_CLOSE           # 마지막 칸이 끝나는 때 — 정규장 마감(장 시각 표 한 곳 · 재권님 「만들어」 11-26 15:3x · 그 전 「2시까지」 1400)
+TAIL_RETRY_DAYS = 7                    # 뒤 칸을 못 채운 날을 다시 보는 끝(날) — 봉이 늦게 들어오는 가까운 날만
 OLD_END_LAST = "1355"                  # 끝을 늘리기 전(14:00) 판의 마지막 칸 — 이 칸까지만 있는 판은 뒤 칸만 덧붙임(tail_fill)
 STEP = 5                               # 칸 길이(분) — 11-19 재권님 「5분에 한번씩」(그 전 10)
 BS_TOP = 300                           # 매수 · 매도로 나눌 종목 — 사진마다 KRX 누적 거래대금 상위 이만큼(체결 한 번씩)
@@ -437,9 +438,11 @@ def backfill_missing(proxy):
             # 봉이 모자라 못 채우면 옛 판 그대로 남는다(backfill 이 안 덮는다)
             first = next(iter((json.loads(body) or {}).values()), None) if body else None
             amt0 = (first or {}).get("amt") or {}
-            if first and ((SLOTS[-1] in amt0 and SLOTS[1] in amt0) or "tail5m" in (src or "")):   # 뒤 칸 덧붙이기를 한 번 해 본 판도 끝난 것으로(봉이 모자라 못 채운 날 · qa 11-26)
+            miss = (src or "").split("+tail5m-miss@")[1][:8] if "+tail5m-miss@" in (src or "") else None
+            retry = miss and miss != today and (datetime.strptime(today, "%Y%m%d") - datetime.strptime(d, "%Y%m%d")).days <= TAIL_RETRY_DAYS
+            if first and ((SLOTS[-1] in amt0 and SLOTS[1] in amt0) or ("tail5m" in (src or "") and not retry)):   # 뒤 칸 덧붙이기를 해 본 판도 끝난 것으로(못 채운 날은 가까운 날만 하루 한 번 다시 · qa · 개념정의 덧 11-26)
                 have.add(d)
-            elif first and SLOTS[1] in amt0 and OLD_END_LAST in amt0:   # 끝 시각을 늘리기 전(14:00 까지) 판 — 뒤 칸만 덧붙임(통째로 다시 지으면 사진 판 매수 몫이 지워짐)
+            elif first and SLOTS[1] in amt0 and (OLD_END_LAST in amt0 or retry):   # 끝 시각을 늘리기 전(14:00 까지) 판 — 뒤 칸만 덧붙임(통째로 다시 지으면 사진 판 매수 몫이 지워짐)
                 tail.setdefault(d, {})[by] = (json.loads(body), src, codes)
         have -= set(tail)
         ds = [r[0] for r in conn.execute("SELECT DISTINCT substr(ts, 1, 8) FROM candles WHERE period = '5m' AND substr(ts, 9, 4) = '0800'")]
@@ -460,8 +463,9 @@ def tail_fill(proxy, day, olds):
     n = 0
     for by, (old, src, codes) in olds.items():
         v, _c = build_5m(proxy, day, by)
-        if v is None:                                  # 봉이 모자란 날 — 판은 그대로 두되 「덧붙이기 해 봄」 을 남겨 서버가 뜰 때마다 다시 안 돌게(qa 11-26 · 그날 6날 105초씩)
-            _store(proxy, day, by, old, (src or "") + "+tail5m" if "tail5m" not in (src or "") else src, codes)
+        if v is None:                                  # 봉이 모자란 날 — 판은 그대로 두되 「해 봄 · 못 채움 · 해 본 날」 을 남겨 서버가 뜰 때마다 다시 안 돌게(qa 11-26 · 그날 6날 105초씩)
+            base = (src or "").split("+tail5m")[0]     # 봉이 뒤에 들어올 수 있으니 해 본 날이 오늘이 아니고 그날이 TAIL_RETRY_DAYS 안이면 다시 봄(개념정의 덧 11-26)
+            _store(proxy, day, by, old, "%s+tail5m-miss@%s" % (base, _now().strftime("%Y%m%d")), codes)
             continue
         for name, row in old.items():
             nv = v.get(name)
@@ -473,7 +477,7 @@ def tail_fill(proxy, day, olds):
                     if sl not in dst and sl in srcv:
                         dst[sl] = srcv[sl]
             n += 1
-        _store(proxy, day, by, old, (src or "") + "+tail5m" if "tail5m" not in (src or "") else src, codes)
+        _store(proxy, day, by, old, (src or "").split("+tail5m")[0] + "+tail5m", codes)
     _cache.clear()
     return n
 
