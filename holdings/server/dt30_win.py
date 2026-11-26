@@ -179,7 +179,8 @@ def _set():
 #   /api/kis/chip-rules meta.sellDef 로 내주고 화면 단타 판은 받기만(11-20 재권님 「가」 · 두 벌 합치기 — 화면 DEF_SET 의 같은 칸은 시황분석이 지움)
 SET_DEF = {"stop": -1, "turn": True, "turnBy": "both", "turnPct": 0, "trail": None,
            "cut": False, "cutMin": 90, "cutPct": 2, "flat": False, "flatMin": None, "flatPct": None,
-           "inUntil": "0905"}
+           "inUntil": "0905", "comboUp": 70, "comboN": 2}
+# comboUp · comboN — 칩 조합 고르는 문턱(오른 비율 % · 건수) 칸이 아예 없을 때 · 비워 저장하면 안 고름(dt30.combo_pick · 재권님 「70%이상만」 11-26)
 # inUntil — 매수 「9시 1분 값」 일 때 여는 시각 + 1분 뒤 판에 든 줄을 든 때 가격으로 사는 끝 시각(그 분 59초까지 · HHMM) · 그 뒤 든 줄은 안 삼 —
 #   재권님 「매수 시각을 9시 5분까지로 수정해」(11-23 09:11) → 「나」 → 「9시 1분부터 5분까지는 들어올때 산다 라는룰로」(09:1x) · 셈은 화면(단타 판 buyOf)
 

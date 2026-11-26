@@ -1785,18 +1785,26 @@ COMBO_DAYS = 60                         # 셈에 드는 굳은 판 수(최근부
 _ctab = {"key": None, "val": None, "busy": False, "lock": threading.Lock()}
 _CT_SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_combo (id INTEGER PRIMARY KEY CHECK (id = 1), key TEXT, body TEXT, at TEXT)"
 _CTD_SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_combo_day (day TEXT PRIMARY KEY, sig TEXT, at TEXT, used TEXT, body TEXT)"   # 날마다 조합 승률 — day 는 셈에 든 마지막 굳은 판
-COMBO_UP_DEF, COMBO_N_DEF = 70.0, 2     # 고르는 문턱 기본 — 오른 비율 % · 건수(셈 칸 comboUp · comboN 이 비면 · 재권님 「70%이상만」 16:45 · 화면 기본 2건 11-26)
 
 
 def combo_pick():
-    """(오른 비율 문턱 %, 건수 문턱) — 셈 칸 rules.dt30.set.comboUp · comboN(화면과 같은 칸) · 비거나 못 읽으면 기본."""
+    """(오른 비율 문턱 % | None, 건수 문턱 | None) — 셈 칸 rules.dt30.set.comboUp · comboN(화면과 같은 칸).
+    칸이 아예 없으면(한 번도 저장 안 함) 기본 · 칸을 비워 저장했으면 None = 문턱 없음 · 안 고름(화면 19e5a5d 와 같은 뜻 · 개념정의 덧 11-26) · 못 읽으면 기본."""
+    import dt30_win                                    # 기본값은 셈 칸 기본 한 곳(dt30_win.SET_DEF · /api/kis/chip-rules meta.sellDef 로 화면에 감)
+    dfu, dfn = dt30_win.SET_DEF["comboUp"], dt30_win.SET_DEF["comboN"]
+    try:
+        st = dt30_win._set() or {}
+    except Exception:
+        st = {}
     def num(k, d, f):
-        try:
-            v = _set_val(k)
-            return f(v) if v not in (None, "") else d
-        except (TypeError, ValueError):
+        if k not in st:
             return d
-    return num("comboUp", COMBO_UP_DEF, float), num("comboN", COMBO_N_DEF, int)
+        v = st.get(k)
+        try:
+            return f(v) if v not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+    return num("comboUp", float(dfu), float), num("comboN", int(dfn), int)
 
 
 def combo_day_get(proxy, before):
@@ -1819,8 +1827,10 @@ def combo_buy_fill(proxy, b):
     cur = combo_sig()
     pk = {"up": up, "n": nn, "from": fday, "sig": cur}
     b["meta"]["comboSig"], b["meta"]["comboPick"] = cur, pk
-    if tab is None or sig != cur:
-        pk["why"] = "전날까지 조합 표 없음" if tab is None else "셈 칸이 표를 셈한 때와 다름"
+    if tab is None or sig != cur or up is None or nn is None:
+        pk["why"] = "전날까지 조합 표 없음" if tab is None else "셈 칸이 표를 셈한 때와 다름" if sig != cur else "문턱 칸이 빔 — 안 고름"
+        for r in (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or []):
+            r["comboBuy"] = None
         return 0
     sel = [(t["key"], t["chips"]) for t in tab if t.get("upPct", 0) >= up and t.get("cnt", 0) >= nn]
     sel.sort(key=lambda x: -len(x[1]))
@@ -2070,7 +2080,7 @@ def combo_table(proxy):
                 threading.Thread(target=_ct_run, args=(proxy, key), daemon=True, name="dt30-combo").start()
     v = _ctab["val"] or {"rows": [], "used": [], "untimed": 0, "rowsN": 0, "sig": None, "at": None}
     up, nn = combo_pick()
-    rows = [dict(x, sel=bool(x.get("upPct", 0) >= up and x.get("cnt", 0) >= nn)) for x in (v.get("rows") or [])]   # 서버가 고른 조합(문턱 넘음 · 11-26 「70%이상만」)
+    rows = [dict(x, sel=bool(up is not None and nn is not None and x.get("upPct", 0) >= up and x.get("cnt", 0) >= nn)) for x in (v.get("rows") or [])]   # 서버가 고른 조합(문턱 넘음 · 11-26 「70%이상만」 · 칸이 비면 안 고름)
     meta = {"sig": v.get("sig"), "at": v.get("at"), "busy": bool(stale), "comboDef": {"n": COMBO_N, "tp": list(COMBO_TP), "sl": list(COMBO_SL), "subMax": CT_SUB_MAX, "ver": COMBO_VER, "up": up, "pickN": nn},
             "note": "굳은 판 전부로 조합마다 건수(cnt) · 날 수 · 오른 비율(upPct · 판 마지막 시각 값 ÷ 산 값) · 평균(avg %) · 익절 × 손절 평균 수익률(res) · 오른 비율(resUp)(1분봉 있는 건만 · resN) · "
                     "조합은 화면 comboLoad 와 같은 셈 · chips 는 서버 칩 이름(화면이 이름 바꾸고 제 칸 차례로 key 다시 지음) · sig 는 셈 칸(chipOff · subOff · chipCols · chipKnown) 글자 — 화면 chipSig 와 다르면 화면이 셈 · "
