@@ -4771,8 +4771,11 @@ def _buy_combo(proxy, bb, o, R, now_m, on, tmin):
         return []
     combo_buy_fill(proxy, bb)
     p1, Rc = o + 1, o + COMBO_UNTIL_MIN
-    got = []
+    got, seen = [], set()
     for r in rows:
+        if r["code"] in seen:
+            continue                                   # 판 줄과 빠진 줄(outRows) 둘 다에 있는 종목 — 판 줄 하나만(두 번 들면 상위 ( )종목 한 자리를 같은 종목이 먹음 · qa 11-26 코스메카코리아 · 코스맥스)
+        seen.add(r["code"])
         B = r.get("comboBuy") or {}
         t = str(B.get("buyAt") or "").replace(":", "")
         if len(t) != 4:
