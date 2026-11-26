@@ -1352,7 +1352,7 @@ def _starts(r, ct, c):
 def _moment_px(r, ct, cs, T):
     """칩 조합이 T 분에 다 찬 순간의 산 값 → (값 | None, 「HH:MM:SS」 | None, 셈 이름) — 화면 · 서버 · 조합 표 한 셈.
     그 분에 붙은 칩 중 가장 늦게 안 칩(초까지 · rows[].chipSec)으로 가름(재권님 「칩조합이 들어온시간이 가장 중요 … 들어온 시각에 산다」 16:4x → 안에 「응 만들어」 11-26):
-        장중 기록에 그 순간 본 값이 있음(rows[].seenPx)  → 그 값(가장 정확)
+        장중 기록에 그 순간 본 값이 있음(rows[].seenPx · 그 분 1분봉 고가 ~ 저가 안만)  → 그 값(가장 정확)
         정각에 안 칩(초 00 — 봉 끝 · 첫 봉 끝 · 5분봉)    → 그 시각 값 = 앞 분 1분봉 종가(chipPx[T-1])
         그 밖(초 모름 · 59초 · 본 값 없음)                → 그 분 1분봉 종가(chipPx[T] — 늦지만 앞당기지 않음 · qa 11-26)"""
     hm = "%s:%s" % (T[:2], T[2:])
@@ -1485,6 +1485,23 @@ def buy930_fill(proxy, b):
             if isinstance(e.get("px"), (int, float)) and e["px"] > 0:
                 seen.setdefault(h, e["px"])
         r["chipSec"], r["seenPx"] = sec, seen
+    try:                                               # 본 값이 그 분 1분봉 고가 ~ 저가 밖이면 버림(시세 캐시가 묵은 값 · qa 11-26 — 3,035 중 158) → 그 분 1분봉 종가로
+        want = {(r["code"], b["day"] + h[:2] + h[3:5]) for r in rows for h in (r.get("seenPx") or {})}
+        if want:
+            with proxy.db_conn() as conn:
+                rng = {}
+                cs_, ts_ = sorted({c for c, _ in want}), sorted({t for _, t in want})
+                for code, ts, hi, lo in conn.execute("SELECT code, ts, high, low FROM candles WHERE period = '1m' AND ts IN (%s) AND code IN (%s)"
+                                                     % (",".join("?" * len(ts_)), ",".join("?" * len(cs_))), ts_ + cs_):
+                    if (code, ts) in want:
+                        rng[(code, ts)] = (lo, hi)
+            for r in rows:
+                for h in list(r.get("seenPx") or {}):
+                    lo, hi = rng.get((r["code"], b["day"] + h[:2] + h[3:5]), (None, None))
+                    if lo and hi and not (lo <= r["seenPx"][h] <= hi):
+                        r["seenPx"].pop(h)
+    except Exception:
+        pass                                           # 봉을 못 읽으면 본 값 그대로
     if True:                                           # 구간이 없는 판(11-25 전)도 칩 처음 붙은 분(chipTime)으로 — 산 값 어림(30분 칸)을 없앰(qa 덧 · 재권님 「산값은 정확해야」)
         try:
             st = _chip_px_fill(proxy, b["day"], rows, o)
