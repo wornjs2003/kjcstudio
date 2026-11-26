@@ -3125,6 +3125,7 @@ def m1_fill(proxy, cfg, limit=BACKFILL_DAYS):
     return n
 
 
+SIG_SKIP = {("단타", "dayChips")}   # 판을 읽을 때만 쓰는 칸(하루 고정 칩 — chip_prec · 들고 남 읽기) — 판 짓기를 안 바꾸므로 지문에서 뺌(넣으면 「단타」 바뀜 → 지난 판 전부 다시 지음 · qa 11-26)
 RULE_GLOBAL = ("순위", "단타")   # 이 칸이 바뀌면 모든 칩이 바뀐 것으로 본다(시가총액 문턱 · 단타가 세는 칩 목록 · 하락 뺌)
 RULE_SETTLE_SEC = 600         # 룰 값이 바뀐 뒤 이만큼 더 안 바뀌면 지난 판을 다시 셈 — 룰 탭에서 값을 이어 고치실 때 판마다 여러 번 다시 짓지 않게(장중 · 넥장은 QUIET 로 미룸)
 
@@ -3137,7 +3138,7 @@ def rule_sig(proxy):
     try:
         if not chip_rules.rules_doc():
             return None
-        out = {ch: json.dumps({k: chip_rules.get(ch, k) for k in keys}, sort_keys=True, ensure_ascii=False)
+        out = {ch: json.dumps({k: chip_rules.get(ch, k) for k in keys if (ch, k) not in SIG_SKIP}, sort_keys=True, ensure_ascii=False)
                for ch, keys in chip_rules.RULES.items()}
         import auto_watch
         w, src = auto_watch.rules(proxy)
