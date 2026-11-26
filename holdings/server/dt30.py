@@ -3742,6 +3742,7 @@ def min_series(proxy, day, codes):
         for t, v in pv.get(code, []):
             s += v
             pc.append((t, s))
+        pc.sort(key=lambda x: x[0])                    # 프리장만 더 옮겨진 날 옮긴 분 차례가 뒤섞임 — 고르는 줄이 차례대로 훑게(개념정의 덧 11-26)
         T, P, V, R, PV = [], [], [], [], []
         amt, j, last = 0, 0, None
         for t, cl, v in bars:
