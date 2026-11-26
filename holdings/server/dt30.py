@@ -1349,7 +1349,7 @@ def _starts(r, ct, c):
     return {t} if t else set()
 
 
-def _moment_px(r, ct, cs, T):
+def _moment_px(r, ct, cs, T, need=None):
     """칩 조합이 T 분에 다 찬 순간의 산 값 → (값 | None, 「HH:MM:SS」 | None, 셈 이름) — 화면 · 서버 · 조합 표 한 셈.
     그 분에 붙은 칩 중 가장 늦게 안 칩(초까지 · rows[].chipSec)으로 가름(재권님 「칩조합이 들어온시간이 가장 중요 … 들어온 시각에 산다」 16:4x → 안에 「응 만들어」 11-26):
         장중 기록에 그 순간 본 값이 있음(rows[].seenPx · 그 분 1분봉 고가 ~ 저가 안만)  → 그 값(가장 정확)
@@ -1357,12 +1357,13 @@ def _moment_px(r, ct, cs, T):
         그 밖(초 모름 · 59초 · 본 값 없음)                → 그 분 1분봉 종가(chipPx[T] — 늦지만 앞당기지 않음 · qa 11-26)"""
     hm = "%s:%s" % (T[:2], T[2:])
     done = [c for c in cs if T in _starts(r, ct, c)]
-    secs = [x for x in ((r.get("chipSec") or {}).get(c, {}).get(hm) for c in done) if x]
-    last = max(secs) if secs else None
+    secs = sorted(x for x in ((r.get("chipSec") or {}).get(c, {}).get(hm) for c in done) if x)
+    k = len(done) if need is None else max(1, need - (len(cs) - len(done)))   # 그 분에 붙은 칩 중 몇 번째가 N개(조합)를 채웠나 — 앞서 붙어 있던 칩을 빼고
+    last = secs[min(k, len(secs)) - 1] if secs else None
     cpx = r.get("chipPx") or {}
     if last and (r.get("seenPx") or {}).get(last):
         return r["seenPx"][last], last, "칩 찬 순간 본 값" + (" · 봉 없어 못 가름" if last in (r.get("seenNoBar") or []) else "")
-    if last and last.endswith(":00") and len(secs) == len(done):
+    if last and last.endswith(":00") and len(secs) >= min(k, len(done)):
         m = int(T[:2]) * 60 + int(T[2:]) - 1
         v = cpx.get("%02d:%02d" % divmod(m, 60))
         return v, last, "칩 찬 시각 값(앞 분 1분봉 종가)"
@@ -1378,7 +1379,8 @@ def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
     at = (b.get("meta") or {}).get("pxMinAt") or {}
     o = open_min if open_min is not None else OPEN_AT[0] * 60 + OPEN_AT[1]
     p1_ = _hm4(at.get("1")) or _hhmm(o + 1).replace(":", "")
-    cpx, csec, csrc = _moment_px(r, ct, chips930(r, ct, until), T) if r.get("chipPx") is not None and T >= p1_ else (None, None, None)
+    lv = [c for c in chips930(r, ct, until) if any(a <= T and (z is None or z > T) for a, z in _spans4(r, ct, [c]))] if r.get("chipSpans") is not None else chips930(r, ct, until)
+    cpx, csec, csrc = _moment_px(r, ct, lv, T, need) if r.get("chipPx") is not None and T >= p1_ else (None, None, None)
     if r.get("chipPx") is not None and not cpx and T > p1_ and (b.get("meta") or {}).get("chipPx", {}).get("ok"):
         return None                                    # 그 분 1분봉 값이 없음 — 어림으로 안 삼(화면과 같게 · 재권님 「산값은 정확해야」) · 장중이면 굳는 1분 남짓을 기다렸다 삼(재권님 「가인데 1분으로 해줘」 11-25)
     if cpx:                                            # 칩 N개가 다 찬 순간의 값(_moment_px) — 9시 1분 분에 찬 줄도(초까지 가름 · 9시 1분 0초 값으로 앞당기지 않게 · qa 11-26)
@@ -1745,7 +1747,7 @@ def combo_fill(proxy, b):
                 p = px.get((c, m)) if px is not None else None
                 cut = m                                # 이 분 봉 뒤부터 익절 · 손절
                 if t >= p1 and r.get("chipPx") is not None:   # 칩 찬 순간 값(_moment_px — 매수 셈 · 조합 표와 한 셈 · 11-26 「들어온 시각에 산다」)
-                    mv, _sec, src = _moment_px(r, ct4, on, t)
+                    mv, _sec, src = _moment_px(r, ct4, on, t, int(n))   # 칩 n개째를 채운 순간
                     if mv:
                         p = mv
                         if src.startswith("칩 찬 시각 값"):
@@ -1778,10 +1780,78 @@ def combo_fill(proxy, b):
 #             판 값 = 판 마지막 시각 값(px[times 끝]) · 없으면 그 줄 안 셈 · 세금 · 수수료 빼기 전
 #             익절 × 손절(COMBO_TP × COMBO_SL) = 산 다음 분부터 판 끝 앞까지 1분봉 · 먼저 닿은 쪽 · 한 봉에 둘이면 손절 · 끝까지 안 닿으면 판 값 · 1분봉 없는 건은 그 칸 셈에서 뺌(resN)
 #     저장    dt30_combo(열쇠 sig + 판 저장 시각들) 한 줄 · 열쇠가 바뀌면(셈 칸 저장 · 판이 새로 굳음 · 되채움) 뒤에서 다시 셈 · 그동안은 지난 값(busy)
-COMBO_VER = 4                           # 조합 셈 판 — 2: 부분 묶음마다 처음 품은 때(11-26 화면 2d877ad 와 같게) · 3: 「수급」 도 저장된 칩 칸을 따름(qa 대조 11-26) · 4: 산 값을 칩 찬 순간 값으로(_moment_px · 11-26)
+COMBO_VER = 5                           # 조합 셈 판 — 2: 부분 묶음마다 처음 품은 때(11-26 화면 2d877ad 와 같게) · 3: 「수급」 도 저장된 칩 칸을 따름(qa 대조 11-26) · 4: 산 값을 칩 찬 순간 값으로(_moment_px · 11-26) · 5: 조합마다 그 조합 칩만으로 순간을 가름
 COMBO_DAYS = 60                         # 셈에 드는 굳은 판 수(최근부터) — 화면이 받던 지난 판(st.days)과 같은 범위
 _ctab = {"key": None, "val": None, "busy": False, "lock": threading.Lock()}
 _CT_SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_combo (id INTEGER PRIMARY KEY CHECK (id = 1), key TEXT, body TEXT, at TEXT)"
+_CTD_SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_combo_day (day TEXT PRIMARY KEY, sig TEXT, at TEXT, used TEXT, body TEXT)"   # 날마다 조합 승률 — day 는 셈에 든 마지막 굳은 판
+COMBO_UP_DEF, COMBO_N_DEF = 70.0, 2     # 고르는 문턱 기본 — 오른 비율 % · 건수(셈 칸 comboUp · comboN 이 비면 · 재권님 「70%이상만」 16:45 · 화면 기본 2건 11-26)
+
+
+def combo_pick():
+    """(오른 비율 문턱 %, 건수 문턱) — 셈 칸 rules.dt30.set.comboUp · comboN(화면과 같은 칸) · 비거나 못 읽으면 기본."""
+    def num(k, d, f):
+        try:
+            v = _set_val(k)
+            return f(v) if v not in (None, "") else d
+        except (TypeError, ValueError):
+            return d
+    return num("comboUp", COMBO_UP_DEF, float), num("comboN", COMBO_N_DEF, int)
+
+
+def combo_day_get(proxy, before):
+    """(그 날 앞 마지막 날의 조합 표 rows | None, 그 날 「YYYYMMDD」 | None, sig) — 그날 고르기는 전날까지 셈한 표로(그날 결과를 미리 보지 않게)."""
+    try:
+        with proxy.db_conn() as conn:
+            if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dt30_combo_day'").fetchone():
+                return None, None, None
+            r = conn.execute("SELECT day, sig, body FROM dt30_combo_day WHERE day < ? ORDER BY day DESC LIMIT 1", (before,)).fetchone()
+    except Exception:
+        return None, None, None
+    return (json.loads(r[2]), r[0], r[1]) if r else (None, None, None)
+
+
+def combo_buy_fill(proxy, b):
+    """판 줄마다 rows[].comboBuy {key · chips · at 「HH:MM:SS」 · buyAt · px · src} | null — 고른 조합(전날까지 표 · 문턱)을 처음 품은 순간 산 값(_moment_px 한 셈).
+    표가 없거나 셈 칸이 표를 셈한 때와 다르면 싣지 않고 meta.comboPick.why — 화면이 셈."""
+    up, nn = combo_pick()
+    tab, fday, sig = combo_day_get(proxy, b["day"])
+    cur = combo_sig()
+    pk = {"up": up, "n": nn, "from": fday, "sig": cur}
+    b["meta"]["comboSig"], b["meta"]["comboPick"] = cur, pk
+    if tab is None or sig != cur:
+        pk["why"] = "전날까지 조합 표 없음" if tab is None else "셈 칸이 표를 셈한 때와 다름"
+        return 0
+    sel = [(t["key"], t["chips"]) for t in tab if t.get("upPct", 0) >= up and t.get("cnt", 0) >= nn]
+    sel.sort(key=lambda x: -len(x[1]))
+    pk["keys"] = [k for k, _ in sel]
+    rows = (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or [])
+    cf, dc = chip_filter(), day_chips()
+    o = _open_min(proxy, b["day"], b)
+    split = ((b.get("meta") or {}).get("viSplit") or vi_split(o - OPEN_AT[0] * 60 - OPEN_AT[1])).replace(":", "")
+    wr_auto = (b.get("meta") or {}).get("watchRule") == "자동"
+    n = 0
+    for r in rows:
+        r["comboBuy"] = None
+        if not sel:
+            continue
+        ev = _ct_row(r, b, cf, split, dc, wr_auto)
+        for t, cs in ev or []:
+            has = set(cs)
+            hit = next(((k, ch) for k, ch in sel if set(ch) <= has), None)
+            if not hit:
+                continue
+            p, _cut = _ct_px(r, b, t, o, hit[1])       # 고른 조합의 칩만으로 다 찬 순간(같은 분에 붙은 다른 칩 시각에 끌려가지 않게)
+            ct = {c: _hm4(v) for c, v in (r.get("chipTime") or {}).items()}
+            _v, sec, src = _moment_px(r, ct, hit[1], t) if t >= _hhmm(o + 1).replace(":", "") else (None, None, "9시 1분 값")
+            r["comboBuy"] = {"key": hit[0], "chips": hit[1], "at": sec or "%s:%s:00" % (t[:2], t[2:]), "buyAt": "%s:%s" % (t[:2], t[2:]),
+                             "px": p, "src": src if p else "산 값 없음"}
+            n += 1
+            break
+    return n
+
+
+
 
 
 def combo_sig():
@@ -1900,12 +1970,12 @@ def combo_table_calc(proxy):
             for t, cs in ev:
                 if not cs:
                     continue
-                p, cut = _ct_px(r, b, t, o, cs)
                 for sub in _ct_subs(cs):           # 그 시각 붙은 칩의 부분 묶음마다 · 같은 조합은 처음 품은 때 한 번(화면 subKeys · 11-26 재권님 「고른 조합을 다 품으면 됨」 → 「응 그렇게 해」)
                     key = " + ".join(sub)
                     if key in seen:
                         continue
                     seen.add(key)                  # 처음 품은 때 산 값이 없으면 그 조합은 이 줄에서 안 셈(화면과 같게)
+                    p, cut = _ct_px(r, b, t, o, sub)   # 그 조합의 칩만으로 다 찬 순간 값(같은 분에 붙은 다른 칩에 끌려가지 않게 · 11-26)
                     if not p:
                         continue
                     _ct_add(M, key, sub, d, ex, p, cut, bars.get(code, []), end)
@@ -1970,6 +2040,10 @@ def _ct_run(proxy, key):
             with proxy._db_lock, proxy.db_conn() as conn:
                 conn.execute(_CT_SCHEMA)
                 conn.execute("INSERT OR REPLACE INTO dt30_combo (id, key, body, at) VALUES (1, ?, ?, ?)", (key, json.dumps(val, ensure_ascii=False), val["at"]))
+                if val.get("used"):                    # 날마다 남김 — 셈에 든 마지막 굳은 판 날로(재권님 「하루하루 칩조합 승률을 갱신하고 그것중 70%이상만 단타창에서 적용」 16:45 → 안에 「응 해」 11-26)
+                    conn.execute(_CTD_SCHEMA)
+                    conn.execute("INSERT OR REPLACE INTO dt30_combo_day (day, sig, at, used, body) VALUES (?,?,?,?,?)",
+                                 (max(val["used"]), val["sig"], val["at"], json.dumps(val["used"]), json.dumps(val["rows"], ensure_ascii=False)))
     except Exception as e:
         print("  [단타 30] 칩 조합 표 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
     finally:
@@ -1995,11 +2069,13 @@ def combo_table(proxy):
                 _ctab["busy"] = True
                 threading.Thread(target=_ct_run, args=(proxy, key), daemon=True, name="dt30-combo").start()
     v = _ctab["val"] or {"rows": [], "used": [], "untimed": 0, "rowsN": 0, "sig": None, "at": None}
-    meta = {"sig": v.get("sig"), "at": v.get("at"), "busy": bool(stale), "comboDef": {"n": COMBO_N, "tp": list(COMBO_TP), "sl": list(COMBO_SL), "subMax": CT_SUB_MAX, "ver": COMBO_VER},
+    up, nn = combo_pick()
+    rows = [dict(x, sel=bool(x.get("upPct", 0) >= up and x.get("cnt", 0) >= nn)) for x in (v.get("rows") or [])]   # 서버가 고른 조합(문턱 넘음 · 11-26 「70%이상만」)
+    meta = {"sig": v.get("sig"), "at": v.get("at"), "busy": bool(stale), "comboDef": {"n": COMBO_N, "tp": list(COMBO_TP), "sl": list(COMBO_SL), "subMax": CT_SUB_MAX, "ver": COMBO_VER, "up": up, "pickN": nn},
             "note": "굳은 판 전부로 조합마다 건수(cnt) · 날 수 · 오른 비율(upPct · 판 마지막 시각 값 ÷ 산 값) · 평균(avg %) · 익절 × 손절 평균 수익률(res) · 오른 비율(resUp)(1분봉 있는 건만 · resN) · "
                     "조합은 화면 comboLoad 와 같은 셈 · chips 는 서버 칩 이름(화면이 이름 바꾸고 제 칸 차례로 key 다시 지음) · sig 는 셈 칸(chipOff · subOff · chipCols · chipKnown) 글자 — 화면 chipSig 와 다르면 화면이 셈 · "
                     "busy 면 다시 세는 중이고 지금 값은 지난 셈"}
-    return {"rows": v.get("rows") or [], "used": v.get("used") or [], "untimed": v.get("untimed", 0), "rowsN": v.get("rowsN", 0)}, meta
+    return {"rows": rows, "used": v.get("used") or [], "untimed": v.get("untimed", 0), "rowsN": v.get("rowsN", 0)}, meta
 
 
 def bars_fill(proxy, b):
@@ -4778,6 +4854,10 @@ def board(proxy, day=None, cfg=None):
             combo_fill(proxy, b)                       # 칩 조합 셈 값(rows[].combo · meta.comboDef · 11-26 「응 만들어」)
         except Exception as e:
             print("  [단타 30] 칩 조합 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
+        try:
+            combo_buy_fill(proxy, b)                   # 고른 조합으로 산 값(rows[].comboBuy · meta.comboPick · 11-26 「응 해」)
+        except Exception as e:
+            print("  [단타 30] 고른 조합 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
     b["meta"]["subNames"] = {"매수|" + "①②③④"[k - 1]: v[0] for k, v in proxy.JOINT_TIER_NAME.items()}   # 하위 이름표 — 서버 한 곳(kis_proxy.JOINT_TIER_NAME · 11-20)
     b["meta"]["subTips"] = {"매수|" + "①②③④"[k - 1]: v[1] for k, v in proxy.JOINT_TIER_NAME.items()}
     import dt30_win
