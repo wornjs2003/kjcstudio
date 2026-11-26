@@ -1674,6 +1674,201 @@ def combo_fill(proxy, b):
     return len(vals)
 
 
+# ── 칩 조합 표 — 서버가 지난 판 전부로 한 번 셈해 저장 (2026-11-26) ──────────────────
+# 재권님 「칩조합은 한번 셈해놓고 저장해놓으면 그냥 볼러오면 되잖아」(12:12 · 시황분석1 창) → 개발2 안에 「응 이게 맞아」(13:3x · 칩 들고 남 체크 뒤)
+#     셈      화면 strategy-dt30.js comboLoad 그대로 — 굳은 판(closed)마다 줄마다 나온 조합 전부 · 같은 조합은 처음 나온 때 한 번(comboEvents · seen)
+#             구간 있는 줄은 칩이 붙은 시각마다 그때 함께 붙어 있던 켜진 칩 · 없는 줄은 그 시각까지 처음 붙은 켜진 칩
+#             켜진 칩 = 저장된 셈 칸(chip_filter · _chip_on) · 「수급」(화면 「자동」)은 판이 자동 관심(watchRule 「자동」)이 아니면 셈(화면 colsOf 와 같게)
+#             시각 없는 켜진 칩이 하나라도 있는 줄은 뺌(untimed · 하루 고정 칩 · 「수급」 은 시각 없어도 됨)
+#             산 값 = 그 시각이 9시 1분 이하면 9시 1분 값 · 아니면 칩 찬 분 1분봉(chipPx) · 여는 시각 + 1~5분 값 · 없으면 그 조합은 그 줄에서 안 셈
+#             판 값 = 판 마지막 시각 값(px[times 끝]) · 없으면 그 줄 안 셈 · 세금 · 수수료 빼기 전
+#             익절 × 손절(COMBO_TP × COMBO_SL) = 산 다음 분부터 판 끝 앞까지 1분봉 · 먼저 닿은 쪽 · 한 봉에 둘이면 손절 · 끝까지 안 닿으면 판 값 · 1분봉 없는 건은 그 칸 셈에서 뺌(resN)
+#     저장    dt30_combo(열쇠 sig + 판 저장 시각들) 한 줄 · 열쇠가 바뀌면(셈 칸 저장 · 판이 새로 굳음 · 되채움) 뒤에서 다시 셈 · 그동안은 지난 값(busy)
+COMBO_DAYS = 60                         # 셈에 드는 굳은 판 수(최근부터) — 화면이 받던 지난 판(st.days)과 같은 범위
+_ctab = {"key": None, "val": None, "busy": False, "lock": threading.Lock()}
+_CT_SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_combo (id INTEGER PRIMARY KEY CHECK (id = 1), key TEXT, body TEXT, at TEXT)"
+
+
+def combo_sig():
+    """화면 chipSig() 와 같은 글자 — JSON.stringify({chipOff, subOff, chipCols, chipKnown}) · 저장된 셈 칸 값 그대로(차례까지)."""
+    v = lambda k: _set_val(k) if isinstance(_set_val(k), list) else []
+    return json.dumps({"chipOff": v("chipOff"), "subOff": v("subOff"), "chipCols": v("chipCols"), "chipKnown": v("chipKnown")}, ensure_ascii=False, separators=(",", ":"))
+
+
+def _ct_key(proxy):
+    ds = [d for d in days(proxy)[:COMBO_DAYS]]
+    with proxy.db_conn() as conn:
+        sv = dict(conn.execute("SELECT day, saved_at FROM dt30 WHERE day IN (%s)" % ",".join("?" * len(ds)), ds).fetchall()) if ds else {}
+    return combo_sig() + "|" + ",".join("%s@%s" % (d, sv.get(d)) for d in ds)
+
+
+def _ct_row(r, b, cf, split, dc, wr_auto):
+    """화면 comboEvents · chipTimed · comboPx 와 같은 셈 → (시각 없는 칩이 있어 뺌 | [(「HHMM」, [칩 …])]) — 켜진 칩만."""
+    pool = ov_chips() + ("현재상승", "볼린저")
+    off, sub_off, _cols = cf
+    def on(c):
+        if c == "수급" and not wr_auto and c not in off:   # 화면 「자동」 — 자동 관심 판이 아니면 칸에 듦(colsOf)
+            return c in (r.get("chips") or []) or bool((r.get("chipTime") or {}).get(c))
+        return _chip_on(r, c, cf, split)
+    cs = [c for c in pool if (c in (r.get("chips") or []) or (r.get("chipTime") or {}).get(c)) and on(c)]
+    at = dict(r.get("chipAt") or {}, **(r.get("chipTime") or {}))
+    span = isinstance(r.get("chipSpans"), dict)
+    no_time = set(dc) | {"수급"}
+    for c in cs:
+        if not (c in no_time or (span and r["chipSpans"].get(c)) or at.get(c) or (c == "VI·급등" and r.get("viAt"))):
+            return None
+    if span:
+        def sps(c):
+            s = r["chipSpans"].get(c)
+            if s:
+                return s
+            if c not in (r.get("chips") or []):
+                return []
+            t = (r.get("chipTime") or {}).get(c) or (r.get("chipAt") or {}).get(c)
+            return [[t, None]] if t else []
+        iv = {c: [(_hm4(a), _hm4(z) if z else None) for a, z in sps(c) if _hm4(a)] for c in cs}
+        ts = sorted({a for v in iv.values() for a, _z in v})
+        return [(t, [c for c in cs if any(a <= t and (z is None or t < z) for a, z in iv[c])]) for t in ts]
+    e = _in4(r)
+    tm = {}
+    for c in cs:
+        tm[c] = _hm4(at.get(c) or (r.get("viAt") if c == "VI·급등" else "")) or ("0000" if c in no_time else (e or "0000"))
+    return [(t, [c for c in cs if tm[c] <= t]) for t in sorted(set(tm.values()))]
+
+
+def _ct_px(r, b, t, o):
+    pm, at = r.get("pxMin") or {}, (b.get("meta") or {}).get("pxMinAt") or {}
+    mh = lambda n: _hm4(at.get(str(n))) or _hhmm(o + n).replace(":", "")
+    v1 = lambda x: x.get("px") if isinstance(x, dict) and isinstance(x.get("px"), (int, float)) and x["px"] > 0 else None
+    if t <= mh(1):
+        return v1(pm.get("1")) or (v1(r.get("px1")) if isinstance(r.get("px1"), dict) else None)
+    v = (r.get("chipPx") or {}).get("%s:%s" % (t[:2], t[2:]))
+    if isinstance(v, (int, float)) and v > 0:
+        return v
+    k = next((n for n in range(1, 6) if mh(n) == t), None)
+    return v1(pm.get(str(k))) if k else None
+
+
+def combo_table_calc(proxy):
+    """굳은 판 전부로 조합 표 — 위 「칩 조합 표」 한 곳. → {rows, used, untimed, rowsN}."""
+    cf = chip_filter()
+    dc = day_chips()
+    M, used, untimed, rows_n = {}, [], 0, 0
+    for d in days(proxy)[:COMBO_DAYS]:
+        b = board(proxy, d)
+        if not b or b.get("closed") is not True:
+            continue
+        used.append(d)
+        o = _open_min(proxy, d, b)
+        split = ((b.get("meta") or {}).get("viSplit") or vi_split(o - OPEN_AT[0] * 60 - OPEN_AT[1])).replace(":", "")
+        wr_auto = (b.get("meta") or {}).get("watchRule") == "자동"
+        T = b.get("times") or []
+        last = T[-1] if T else None
+        end = last or "1400"
+        evs = {}
+        for r in (b.get("rows") or []):
+            ev = _ct_row(r, b, cf, split, dc, wr_auto)
+            if ev is None:
+                if any((c in (r.get("chips") or [])) for c in ov_chips()):
+                    rows_n += 1
+                    untimed += 1
+                continue
+            if not any(cs for _t, cs in ev):
+                continue
+            rows_n += 1
+            ex = (r.get("px") or {}).get(last) if last else None
+            if not (isinstance(ex, (int, float)) and ex > 0):
+                continue
+            evs[r["code"]] = (r, ex, ev)
+        bars = {}
+        if evs:
+            codes = list(evs)
+            with proxy.db_conn() as conn:
+                for c, ts, op, h, l, cl, v in conn.execute(
+                        "SELECT code, ts, open, high, low, close, volume FROM candles WHERE period = '1m' AND ts >= ? AND ts < ? AND code IN (%s) ORDER BY ts"
+                        % ",".join("?" * len(codes)), [d + _hhmm(o).replace(":", ""), d + end] + codes):
+                    if v and op and h and l and cl:
+                        bars.setdefault(c, []).append([ts[8:12], op, h, l, cl])
+        for code, (r, ex, ev) in evs.items():
+            seen = set()
+            for t, cs in ev:
+                if not cs:
+                    continue
+                key = " + ".join(cs)
+                if key in seen:
+                    continue
+                seen.add(key)
+                p = _ct_px(r, b, t, o)
+                if not p:
+                    continue
+                g = M.setdefault(key, {"key": key, "chips": list(cs), "n": len(cs), "cnt": 0, "up": 0, "sum": 0.0, "days": set(),
+                                       "rs": [[0.0] * len(COMBO_SL) for _ in COMBO_TP], "ru": [[0] * len(COMBO_SL) for _ in COMBO_TP], "rn": 0})
+                ret = (ex / p - 1) * 100
+                g["cnt"] += 1
+                g["up"] += ret > 0
+                g["sum"] += ret
+                g["days"].add(d)
+                after = [x for x in bars.get(code, []) if x[0] > t]
+                if after:
+                    res = _combo_res(p, after + [[end, ex, ex, ex, ex]])   # 끝까지 안 닿으면 판 값(판 마지막 시각 값)
+                    g["rn"] += 1
+                    for i, line in enumerate(res):
+                        for j, v in enumerate(line):
+                            if v is not None:
+                                g["rs"][i][j] += v
+                                g["ru"][i][j] += v > 0
+    out = []
+    for g in M.values():
+        rn = g["rn"]
+        out.append({"key": g["key"], "chips": g["chips"], "n": g["n"], "cnt": g["cnt"], "days": len(g["days"]),
+                    "upPct": round(g["up"] / g["cnt"] * 100, 2), "avg": round(g["sum"] / g["cnt"], 3), "resN": rn,
+                    "res": [[round(v / rn, 3) for v in line] for line in g["rs"]] if rn else None,
+                    "resUp": [[round(v / rn * 100, 2) for v in line] for line in g["ru"]] if rn else None})
+    out.sort(key=lambda x: (-x["cnt"], x["key"]))
+    return {"rows": out, "used": used, "untimed": untimed, "rowsN": rows_n}
+
+
+def _ct_run(proxy, key):
+    try:
+        val = combo_table_calc(proxy)
+        val["sig"], val["at"] = combo_sig(), _now().strftime("%Y-%m-%d %H:%M:%S")
+        _ctab.update(key=key, val=val)
+        if proxy.marketdb.writable():
+            with proxy._db_lock, proxy.db_conn() as conn:
+                conn.execute(_CT_SCHEMA)
+                conn.execute("INSERT OR REPLACE INTO dt30_combo (id, key, body, at) VALUES (1, ?, ?, ?)", (key, json.dumps(val, ensure_ascii=False), val["at"]))
+    except Exception as e:
+        print("  [단타 30] 칩 조합 표 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
+    finally:
+        _ctab["busy"] = False
+
+
+def combo_table(proxy):
+    """주소 /api/kis/dt30-combo — (data, meta). 열쇠가 같으면 저장된 값 · 다르면 뒤에서 다시 셈하고 그동안 지난 값(busy True)."""
+    key = _ct_key(proxy)
+    if _ctab["val"] is None:
+        try:
+            with proxy.db_conn() as conn:
+                if conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dt30_combo'").fetchone():
+                    row = conn.execute("SELECT key, body FROM dt30_combo WHERE id = 1").fetchone()
+                    if row:
+                        _ctab.update(key=row[0], val=json.loads(row[1]))
+        except Exception:
+            pass
+    stale = _ctab["key"] != key
+    if stale:
+        with _ctab["lock"]:
+            if not _ctab["busy"]:
+                _ctab["busy"] = True
+                threading.Thread(target=_ct_run, args=(proxy, key), daemon=True, name="dt30-combo").start()
+    v = _ctab["val"] or {"rows": [], "used": [], "untimed": 0, "rowsN": 0, "sig": None, "at": None}
+    meta = {"sig": v.get("sig"), "at": v.get("at"), "busy": bool(stale), "comboDef": {"n": COMBO_N, "tp": list(COMBO_TP), "sl": list(COMBO_SL)},
+            "note": "굳은 판 전부로 조합마다 건수(cnt) · 날 수 · 오른 비율(upPct · 판 마지막 시각 값 ÷ 산 값) · 평균(avg %) · 익절 × 손절 평균 수익률(res) · 오른 비율(resUp)(1분봉 있는 건만 · resN) · "
+                    "조합은 화면 comboLoad 와 같은 셈 · chips 는 서버 칩 이름(화면이 이름 바꾸고 제 칸 차례로 key 다시 지음) · sig 는 셈 칸(chipOff · subOff · chipCols · chipKnown) 글자 — 화면 chipSig 와 다르면 화면이 셈 · "
+                    "busy 면 다시 세는 중이고 지금 값은 지난 셈"}
+    return {"rows": v.get("rows") or [], "used": v.get("used") or [], "untimed": v.get("untimed", 0), "rowsN": v.get("rowsN", 0)}, meta
+
+
 def bars_fill(proxy, b):
     """산 줄(buy930)마다 rows[].bars [[「HH:MM」, 시가, 고가, 저가, 종가], …] · barSrc 「1m」 · 「5m」 · null — 산 분부터 판 끝(times 마지막) 앞까지(bars_get).
     매도 타점을 30분 칸이 아니라 봉으로 — 재권님 「매도에서 해당룰이 적용안되는거 같은데. 3%나 4%를 맞으면 안되는데 이거 왜이래? 매도타점 정확히 계산해」(11-23 19:1x) ·
