@@ -1207,7 +1207,6 @@ async function load(day, quiet) {
   // 오늘 판이면 굳기(closed) 전까지 서버 주기로 다시 받음 — 장 전(08:00~09:00) 줄에 now 가 없어도 칩이 바뀌므로 now 로 가르지 않음(11-20 재권님 「8시되면 갱신되야 되는거지? 실시간으로?」 → 「응 고쳐」)
   const t0 = new Date(), today = `${t0.getFullYear()}${String(t0.getMonth() + 1).padStart(2, '0')}${String(t0.getDate()).padStart(2, '0')}`;
   if (d.day === today) preLoad(d);
-  if (d.day === today) autoSaveArm(d);   // 여는 시각 + 4분 직전 자동 저장(11-24)
   if (d.closed !== true && ms > 0 && d.day === st.days[0] && d.day === today) again = setTimeout(() => { if (st.day === d.day) load(d.day, true); }, ms);
   // 어제 판을 보는 채로 열어 둔 화면 — 오늘 판이 생기는 서버 매수 시각(meta.buyAt)의 다음 분에 한 번 맨 앞 날을 다시 받음(주기로 묻지 않음 · 빈 화면 때와 같은 셈)
   const bm = String(m.buyAt || d.buyAt || '').match(/^(\d{2}):?(\d{2})$/);
@@ -1378,19 +1377,12 @@ async function setChange(next) {
   catch (e) { msg.textContent = `차례 점수 저장 못 함(${e.message || '연결 안 됨'})`; }
   load(st.day, true);   // 차례 점수는 서버가 셈 — 저장 뒤 판을 다시 받아 새 차례(11-23)
 }
-const setDirtyMark = () => { const msg = $('dt-set-msg'); if (msg) msg.textContent = st.setDirty ? '고침 — 화면만 다시 셈 · 「저장」 을 눌러야 남음' : ''; document.querySelectorAll('[data-setsave]').forEach((b) => b.classList.toggle('is-active', !!st.setDirty)); };
+// 저장 안 한 고침 — 서버는 그날 여는 시각 + 1분에 저장된 셈 칸을 굳혀 알림을 보냄(dt30.buy_set_freeze) · 그 전 · 뒤를 함께 적음(11-26 재권님 「화면이 셈칸을 저절로 저장하는걸 없애면?」 → 「응」)
+const freezeTxt = () => { const t0 = new Date(), today = `${t0.getFullYear()}${String(t0.getMonth() + 1).padStart(2, '0')}${String(t0.getDate()).padStart(2, '0')}`; if ((curD() || {}).day !== today) return ''; const fz = addHM(openHM(), 1), now = `${String(t0.getHours()).padStart(2, '0')}${String(t0.getMinutes()).padStart(2, '0')}`; return now < fz ? ` · ${hmS(fz)} 전에 저장해야 오늘 알림에 듦` : ` · 오늘 알림은 ${hmS(fz)} 에 굳은 셈 칸 — 이 고침은 내일부터`; };
+const setDirtyMark = () => { const msg = $('dt-set-msg'); if (msg) msg.textContent = st.setDirty ? `고침 — 화면만 다시 셈 · 「저장」 을 눌러야 남음${freezeTxt()}` : ''; document.querySelectorAll('[data-setsave]').forEach((b) => b.classList.toggle('is-active', !!st.setDirty)); };
 // 저장 안 하고 떠나면 브라우저가 묻게(개념정의 덧 11-23)
 window.addEventListener('beforeunload', (e) => { if (st.setDirty) { e.preventDefault(); e.returnValue = ''; } });
-// 자동 저장(11-24 재권님 「카드에 있것들 해 다만 3분이 아니고 4분으로 하자」 · 개발2 카드) — 저장 안 한 고침(셈 칸 · 끈 칩)이 있으면 그날 여는 시각 + 4분 직전에 저절로 「저장」
-//   서버가 그 분에 매수 알림 룰을 읽어서 · 여는 시각은 openHM()(서버 meta.openAt · 늦게 연 날 밀림) · 화면이 그 시각에 열려 있을 때만(닫혀 있으면 마지막 저장값) · 하루 한 번
-const AUTO_SAVE_MIN = 4, AUTO_SAVE_LEAD_SEC = 20;   // 재권님 값(4분) · 직전 = 그 분 20초 전(서버가 그 분에 읽기 전에 닿게)
-let autoSave = { day: '', timer: null };
-function autoSaveArm(d) {
-  if (autoSave.day === d.day) return; autoSave.day = d.day; clearTimeout(autoSave.timer);
-  const t = addHM(openHM(), AUTO_SAVE_MIN), at = new Date(); at.setHours(+t.slice(0, 2), +t.slice(2), 0, 0); const wait = at - Date.now() - AUTO_SAVE_LEAD_SEC * 1000;
-  if (wait <= 0) return;   // 이미 지남 — 그날은 안 함
-  autoSave.timer = setTimeout(() => { if (!root) return; if (st.setDirty || (st.chipSig != null && chipSig() !== st.chipSig)) setSave(); }, wait);
-}
+// 자동 저장(11-24 · 여는 시각 + 4분 직전)은 걷음 — 서버가 여는 시각 + 1분에 셈 칸을 굳히게 된 뒤(11-26 1f5e96e) 그날 알림에 안 들고 장중 셈 칸만 바꿨음 · 재권님 「화면이 셈칸을 저절로 저장하는걸 없애면?」 → 「응」(11-26) · 저장은 「저장」 단추로만
 // chipCols 는 「자동」 칸을 늘 뺀다 — 서버 장중 판은 늘 watchRule 「자동」 이라 화면이 그 칸을 안 셈(colsOf · wAuto) · 옛 날 판(자동 아님)을 보다 저장해도 서버가 「자동」 칩을 세지 않게(개념정의 덧 11-24)
 // 저장은 서버 이름으로(11-25 qa — 서버 매수 셈이 「거래비율」 · 「거래비율급증」 으로 읽는데 화면 이름 「현시간 유통회전」 · 「전일 현시간 대비 급증」 이 들어가 칸 밖으로 셌음) · 비교 값(chipSig)도 같은 셈이라 함께 바뀜
 function chipSave() { return { chipOff: [...st.off].map(serverChip), subOff: [...st.subOff].map((k) => { const i = k.indexOf('|'); return i < 0 ? serverChip(k) : `${serverChip(k.slice(0, i))}${k.slice(i)}`; }), chipCols: (st.cols || DT_CHIPS).filter((c) => c !== '자동').map(serverChip), chipKnown: [...new Set([...DT_CHIPS, ...(st.cols || []), '자동'])].map(serverChip) }; }   // chipKnown — 저장할 때 화면이 알던 서버 칩 전부 · 서버는 그 밖 칩(저장 뒤 새로 생긴 칩)을 켬으로 셈(11-25 개발2 · 재권님 「처음부터 셈이되도록 켜줘」) · chipCols 밖이면서 여기 있는 칩은 칸에서 지운 것 = 안 셈 · 「자동」 은 넣는다(chipCols 에서만 뺌 — 빼면 서버가 새 칩으로 읽어 다시 셈 · 개념정의 검수 덧 11-25)   // 함수 선언 — loadFee 가 이 줄보다 먼저 돌아도 쓰이게
