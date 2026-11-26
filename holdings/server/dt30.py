@@ -978,6 +978,7 @@ def chip_prec(b, log_ok):
     log_ok 는 그날 칩 붙음 · 빠짐 기록을 쓸 수 있나(chip_spans_get) · 다시 지은 판의 돈몰림은 섹터 수급 판 5분 칸으로 다시 셈한 구간."""
     dc, out = set(day_chips()), {}
     money = any(((r.get("chipSpans") or {}).get("돈몰림")) for r in (b.get("rows") or []))
+    sf = ((b.get("meta") or {}).get("spanFill") or {}).get("src") or {}
     for ch in ov_chips() + ("현재상승", "볼린저"):
         if ch in dc:
             out[ch] = "정확 — 하루 고정"
@@ -987,6 +988,8 @@ def chip_prec(b, log_ok):
             out[ch] = "기록 — 장중 붙음 · 빠짐"
         elif ch == "돈몰림" and money:
             out[ch] = "5분 어림 — 섹터 수급 판"
+        elif sf.get(ch):
+            out[ch] = "다시 셈 — " + " · ".join("%s %d종목" % (k, v) for k, v in sorted(sf[ch].items()))
         else:
             out[ch] = "처음 시각만"
     return out
@@ -1002,7 +1005,16 @@ def day_chips():
 
 def day_fix_at(proxy, day, ch):
     """하루 고정 칩을 굳히는 때(분) — 그 앞 마지막 바퀴 값이 그날 값. 프리장은 프리장 끝(pre_flow.PRE_CLOSE · 08:50 끝 값으로 고름 · 11-25 는 08:50 에 다 빠졌다) · 그 밖은 정규장 여는 시각."""
-    if ch == "프리장":
+    if ch == "프리장":                                 # 그날 프리마켓 끝은 장 시각 표 한 곳(market_hours · 장 시각 룰 1번) · 프리마켓 없는 날(11-19)은 여는 시각 · 못 읽으면 보통 날 값(개념정의 덧)
+        try:
+            import market_hours
+            pre = market_hours.today(proxy, day=day).get("pre")
+            if pre is None:
+                return _open_min(proxy, day)
+            if pre and pre[1]:
+                return int(pre[1][:2]) * 60 + int(pre[1][2:4])
+        except Exception:
+            pass
         import pre_flow
         return pre_flow.PRE_CLOSE[0] * 60 + pre_flow.PRE_CLOSE[1]
     return _open_min(proxy, day)
@@ -3321,6 +3333,105 @@ def money_log_fill(proxy, day, b):
     return len(cf)
 
 
+SPAN_VER = 1                  # 판 meta.spanFill.ver — 이 값이 아니면 한 번 다시 셈
+SPAN_CHIPS = ("현재상승", "거래비율급증")   # 칩 기록 전 판에서 봉으로 붙음 · 빠짐을 다시 셀 수 있는 칩(재권님 「다시 셀 수 있는 것은 다시 세고」 11-26)
+
+
+def past_span_fill(proxy, day, b):
+    """칩 기록 전에 다시 지은 판(rebuilt)의 줄 — 이미 붙은 현재상승 · 거래비율급증만 처음 붙은 때부터 장 끝까지 봉으로 붙음 · 빠짐을 다시 셈해 rows[].chipSpans 에.
+    칩 목록 · 종목은 안 바꿈(판에 드는 종목이 바뀌지 않게) · 재권님 「지난칩들의 등락이 언제인지 정확히 알수있는건지 … 다시 셀 수 있는 것은 다시 세고」(11-26 13:4x).
+        현재상승      봉 끝마다 종가 ÷ 그날 시가(여는 분 첫 봉 시가) − 1 ≥ 칩 룰 현재상승.nowRisePct — 1분봉이 있는 종목은 1분 · 없으면 5분봉(어림)
+        거래비율급증  5분봉 끝마다 그날 누적 거래량 ÷ 앞 거래일 같은 분까지 누적 × 100 ≥ 칩 룰 거래비율급증.turnPrevPct(past_vol_chip 과 같은 어림) · 앞 날 봉이 빠진 칸부터는 그대로 둠
+        시각          봉 끝(그 값을 처음 알 수 있는 때) · 처음 붙은 때(chip_first · chipAt 중 이른 것)부터
+    → 셈한 줄 수 · 못 셈이면 None. meta.spanFill {ver, src {칩: {1분봉 · 5분 어림: 종목 수}}}"""
+    import chip_rules as _cr
+    rows = (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or [])
+    want = [r for r in rows if set(r.get("chips") or []) & set(SPAN_CHIPS)]
+    prev = (b.get("meta") or {}).get("prevDay")
+    if not want:
+        b["meta"]["spanFill"] = {"ver": SPAN_VER, "src": {}}
+        return 0
+    try:
+        pct, p_pct = now_rise_pct(), float(_cr.get("거래비율급증", "turnPrevPct"))
+    except Exception:
+        return None
+    codes = [r["code"] for r in want]
+    cf = chip_first_get(proxy, day, codes)
+    o = _open_min(proxy, day, b)
+    dt = datetime.strptime(day, "%Y%m%d").replace(hour=12, tzinfo=KST)
+    c = _close_min(proxy, dt)
+    o4, c4 = _hhmm(o).replace(":", ""), _hhmm(c).replace(":", "")
+    b1, b5, p5 = {}, {}, {}
+    q = "SELECT code, ts, open, close, volume FROM candles WHERE period = ? AND ts >= ? AND ts < ? AND code IN (%s) ORDER BY ts" % ",".join("?" * len(codes))
+    with proxy.db_conn() as conn:
+        for code, ts, op, cl, v in conn.execute(q, ["1m", day + o4, day + c4] + codes):
+            if v and op and cl:
+                b1.setdefault(code, []).append((int(ts[8:10]) * 60 + int(ts[10:12]), op, cl, v))
+        for code, ts, op, cl, v in conn.execute(q, ["5m", day + o4, day + c4] + codes):
+            if op and cl:
+                b5.setdefault(code, []).append((int(ts[8:10]) * 60 + int(ts[10:12]), op, cl, v or 0))
+        if prev:
+            po = OPEN_AT[0] * 60 + OPEN_AT[1] + late_min(proxy, day=prev)
+            for code, ts, op, cl, v in conn.execute(q, ["5m", prev + _hhmm(po).replace(":", ""), prev + _hhmm(po + c - o).replace(":", "")] + codes):
+                p5.setdefault(code, {})[int(ts[8:10]) * 60 + int(ts[10:12]) - po + o] = v or 0
+    hh = lambda m: _hhmm(m)
+    src = {}
+
+    def spans(t0, seq):
+        """seq [(끝 분, 참 | 거짓 | None)] · t0 분에 붙어 있음 → [[붙음, 빠짐 | None] …]."""
+        out, on = [[hh(t0), None]], True
+        for t, ok in seq:
+            if t <= t0 or ok is None:
+                continue
+            if on and not ok:
+                out[-1][1], on = hh(t), False
+            elif not on and ok:
+                out.append([hh(t), None])
+                on = True
+        return out
+
+    n = 0
+    for r in want:
+        code = r["code"]
+        f = cf.get(code) or {}
+        sp = r.setdefault("chipSpans", {})
+        for ch in SPAN_CHIPS:
+            if ch not in (r.get("chips") or []):
+                continue
+            ts = [x for x in (_hm4((r.get("chipAt") or {}).get(ch)), _hm4(f.get(ch))) if x]
+            if not ts:
+                continue                               # 처음 붙은 때를 모름 — 구간을 안 만듦(짐작 안 함)
+            t0 = int(min(ts)[:2]) * 60 + int(min(ts)[2:])
+            if ch == "현재상승":
+                bs, per, ln = (b1[code], "1분봉", 1) if b1.get(code) else (b5.get(code) or [], "5분 어림", BAR_MIN)
+                if not bs:
+                    continue
+                op0 = bs[0][1]
+                seq = [(m + ln, (cl / op0 - 1) * 100 >= pct) for m, _o, cl, _v in bs]
+            else:
+                bs, pv, per = b5.get(code) or [], p5.get(code), "5분 어림"
+                if not bs or not pv:
+                    continue
+                vc = pc = 0
+                seq, gap = [], False
+                for m, _o, _cl, v in bs:
+                    vc += v
+                    if m in pv and not gap:
+                        pc += pv[m]
+                    else:
+                        gap = True
+                    seq.append((m + BAR_MIN, None if gap or pc <= 0 else vc / pc * 100 >= p_pct))
+            sp[ch] = spans(t0, seq)
+            if ch not in (r.get("spanChips") or []):
+                r["spanChips"] = list(r.get("spanChips") or []) + [ch]
+            src.setdefault(ch, {}).setdefault(per, 0)
+            src[ch][per] += 1
+            n += 1
+    b["meta"]["spanFill"] = {"ver": SPAN_VER, "src": src,
+                             "note": "칩 기록 전 판 — 이미 붙은 현재상승 · 거래비율급증만 처음 붙은 때부터 장 끝까지 봉 끝마다 다시 셈(종목 · 칩 목록은 그대로) · src 는 칩마다 1분봉 · 5분 어림 종목 수"}
+    return n
+
+
 def _cf_clear(proxy, day, chips):
     """칩 처음 시각 표에서 그날 룰이 바뀐 칩 줄을 지움(["*"] 면 그날 전부) — 옛 룰로 붙은 시각이 「한 번 붙은 칩」 으로 살아나지 않게. 장중 기록은 dt30_chip_log 에 그대로."""
     with proxy._db_lock, proxy.db_conn() as conn:
@@ -3412,6 +3523,13 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
                     _store(proxy, got[0])
             except Exception as e:
                 print("  [단타 30] %s 돈몰림 못 채움 — %s" % (d, proxy.safe_message(e, 120)), flush=True)
+        ls = (data_since(proxy).get("칩 붙음·빠짐") or {}).get("since")
+        if got and m.get("rebuilt") and ls and d < ls and m.get("cfVer") == CF_VER and (m.get("spanFill") or {}).get("ver") != SPAN_VER:
+            try:                                       # 칩 기록 전 판 — 붙은 현재상승 · 거래비율급증 들고 남을 봉으로(재권님 11-26 「다시 셀 수 있는 것은 다시 세고」)
+                if past_span_fill(proxy, d, got[0]) is not None:
+                    _store(proxy, got[0])
+            except Exception as e:
+                print("  [단타 30] %s 칩 구간 다시 못 셈 — %s" % (d, proxy.safe_message(e, 120)), flush=True)
         if got and not m.get("rebuilt") and US_SINCE <= d < US_LIVE_SINCE and m.get("usFill") != US_VER:   # 미국강세 전에 장중에 지은 판(11-24 · 11-25)
             try:
                 if us_live_fill(proxy, d, got[0]) is not None:
