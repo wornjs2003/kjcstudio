@@ -224,7 +224,7 @@ def chips_now(proxy, cfg, early=True, pre=False):
         if uwhy:
             missing.append(US_CHIP)                      # 오늘 한국 장날 짝이 없음(쉬는 날 · 미국 일봉 못 받음) — 0 이 아니라 못 받음
     except Exception:
-        missing.append("미국강세")
+        missing.append(US_CHIP)
     if pre:
         if early and early_buy(proxy, cfg, [c for c in hit if not small(c)], put, pre=True) is not None:
             missing.append("매수어림")                 # build 가 meta.early · approx 로
@@ -2941,6 +2941,7 @@ def data_since(proxy):
 MONEY_SINCE = "20261102"     # 지난 판 돈몰림을 다시 세는 첫날(재권님 「돈몰림 11월 2일부터 지금까지 적용해줘」 11-25 21:33)
 MONEY_VER = 1                 # 판 meta.moneyVer · moneyFill — 이 값이 아니면 한 번 다시 셈
 US_CHIP = "미국강세"
+US_SINCE = "20261102"         # 지난 판 미국강세를 채우는 첫날 — us_kr.FROM_DAY(11-01) 뒤 첫 한국 장날(재권님 「응」 11-26 11:4x · 11-02 ~ 11-25) · 돈몰림 첫날과 값만 같음(개념정의 덧)
 US_VER = 1                    # 판 meta.usVer(다시 지은 판) · usFill(장중 판) — 이 값이 아니면 한 번 다시 셈 · 채움
 US_LIVE_SINCE = "20261126"    # 이 날부터는 장중 판이 아침부터 미국강세를 셈 — 그 앞 장중 판(11-24 · 11-25)만 채움
 US_SRC = "미국강세 되채움"
@@ -3091,7 +3092,7 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
         late_old = m.get("rebuilt") and not isinstance(m.get("lateMin"), int) and late_min(proxy, day=d) > 0   # 늦게 연 날을 09:00 기준으로 다시 지은 판(11-24 전) — 한 번 다시 센다
         old_watch = m.get("rebuilt") and m.get("watchSrc") != "지금 룰"   # 관심을 하트 · 그날 문서로 센 옛 판(11-25 전) — 한 번 다시 센다(재권님 「관심은 지금룰로만」)
         old_watch = old_watch or (m.get("rebuilt") and d >= MONEY_SINCE and m.get("moneyVer") != MONEY_VER)   # 돈몰림 없이 지은 판 — 한 번 다시(11-25 21:4x 「진행해」)
-        old_watch = old_watch or (m.get("rebuilt") and d >= MONEY_SINCE and m.get("usVer") != US_VER)   # 미국강세 없이 지은 판 — 한 번 다시(11-26 11:4x 「응」)
+        old_watch = old_watch or (m.get("rebuilt") and d >= US_SINCE and m.get("usVer") != US_VER)   # 미국강세 없이 지은 판 — 한 번 다시(11-26 11:4x 「응」)
         if got and sig and d < today:                  # 칩 룰 값이 판을 지은 때와 다르면 다시 셈 — 장중 판도 장중 기록은 남기고(재권님 「나」 11-26)
             if not m.get("ruleSig"):
                 base.append(d)                         # 지문이 생기기 전 판 — 지금 룰로 지은 것으로 보고 지문만 찍음(한꺼번에 다 다시 짓지 않게)
@@ -3158,7 +3159,7 @@ def backfill(proxy, today, limit=BACKFILL_DAYS, since=None, today_too=False):
                     _store(proxy, got[0])
             except Exception as e:
                 print("  [단타 30] %s 돈몰림 못 채움 — %s" % (d, proxy.safe_message(e, 120)), flush=True)
-        if got and not m.get("rebuilt") and MONEY_SINCE <= d < US_LIVE_SINCE and m.get("usFill") != US_VER:   # 미국강세 전에 장중에 지은 판(11-24 · 11-25)
+        if got and not m.get("rebuilt") and US_SINCE <= d < US_LIVE_SINCE and m.get("usFill") != US_VER:   # 미국강세 전에 장중에 지은 판(11-24 · 11-25)
             try:
                 if us_live_fill(proxy, d, got[0]) is not None:
                     got[0]["meta"]["usFill"] = US_VER
