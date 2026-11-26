@@ -1022,6 +1022,8 @@ def chip_prec(b, log_ok):
             out[ch] = "5분 어림 — 섹터 수급 판"
         elif sf.get(ch):
             out[ch] = "다시 셈 — " + " · ".join("%s %d종목" % (k, v) for k, v in sorted(sf[ch].items()))
+        elif ch == "관심" and (b.get("meta") or {}).get("watchSrc") == "지금 룰":
+            out[ch] = "어림 — 그날 관심 목록 하루 고정(장중 바뀜 기록 없음)"   # 다시 지은 판 — 그날 자료에 지금 자동 관심 룰 · 목록은 장 뒤에 한 번 바뀜(auto_watch_add) · 11-26 「셀수 있는정보들 다 세서」 → 안에 「응」
         else:
             out[ch] = "처음 시각만"
     return out
@@ -3700,6 +3702,58 @@ def past_span_fill(proxy, day, b):
     b["meta"]["spanFill"] = {"ver": SPAN_VER, "src": src,
                              "note": "칩 기록 전 판 — 이미 붙은 현재상승 · 거래비율급증 · 거래비율만 처음 붙은 때부터 장 끝까지 봉 끝마다 다시 셈(종목 · 칩 목록은 그대로) · src 는 칩마다 1분봉 · 5분 어림 종목 수"}
     return n
+
+
+MIN_CODES_MAX = 40            # 분마다 값 주소 한 번에 받는 종목 수 끝
+
+
+def min_series(proxy, day, codes):
+    """그날 08:00 ~ 정규장 끝 분마다 값 — 1분봉(candles 1m · 08:00 ~ 20:00 을 이미 쌓음)에서 셈 · 따로 쌓지 않음(같은 값 두 곳 안 됨).
+    → {code: {t [「HHMM」 봉 끝], px [종가], vol [누적 거래량], turn [누적 거래대금 어림 ÷ (풀린 주식수 × 종가) × 100 | None], prevVol [앞 거래일 같은 분째 누적 | None]}} ·
+    봉이 없는 종목은 빠짐(0 으로 안 채움) · 프리장 분은 넥스트레이드 · 누적은 08:00 부터(프리장 + 정규장) · 같은 분째는 그날 · 앞 날 여는 시각 기준(늦게 연 날).
+    재권님 「프리장부터 종가까지 칩에 필요한 모든 정보는 쌓아지게 해줘」(11-26 14:38) · 「셀수 있는정보들 다 세서 서버에 남겨놔」 → 안에 「응」(15:2x)."""
+    import company_profile, market_hours
+    fl = company_profile.floats() or {}
+    m4 = lambda t: int(t[:2]) * 60 + int(t[2:4])
+    pre0 = m4(market_hours.PRE_OPEN)
+    o, dt = _open_min(proxy, day), datetime.strptime(day, "%Y%m%d").replace(hour=12, tzinfo=KST)
+    c = _close_min(proxy, dt)
+    b = board(proxy, day) or {}
+    prev = (b.get("meta") or {}).get("prevDay")
+    po = (OPEN_AT[0] * 60 + OPEN_AT[1] + late_min(proxy, day=prev)) if prev else None
+    q = "SELECT code, ts, close, volume FROM candles WHERE period = '1m' AND ts >= ? AND ts < ? AND code IN (%s) ORDER BY ts" % ",".join("?" * len(codes))
+    hm = lambda m: "%02d%02d" % divmod(m, 60)
+    cur, pv = {}, {}
+    with proxy.db_conn() as conn:
+        for code, ts, cl, v in conn.execute(q, [day + hm(pre0), day + hm(c)] + list(codes)):
+            if cl:
+                cur.setdefault(code, []).append((m4(ts[8:12]), cl, v or 0))
+        if prev:
+            for code, ts, _cl, v in conn.execute(q, [prev + hm(pre0), prev + hm(po + c - o)] + list(codes)):
+                pv.setdefault(code, []).append((m4(ts[8:12]) - po + o, v or 0))   # 앞 날 분을 그날 여는 시각 기준으로 옮김
+    out = {}
+    for code, bars in cur.items():
+        f, acc = fl.get(code), 0
+        pc = []
+        s = 0
+        for t, v in pv.get(code, []):
+            s += v
+            pc.append((t, s))
+        T, P, V, R, PV = [], [], [], [], []
+        amt, j, last = 0, 0, None
+        for t, cl, v in bars:
+            acc += v
+            amt += cl * v
+            while j < len(pc) and pc[j][0] <= t:
+                last = pc[j][1]
+                j += 1
+            T.append(hm(t + 1))
+            P.append(cl)
+            V.append(acc)
+            R.append(round(amt / (f * cl) * 100, 3) if f else None)
+            PV.append(last if pc else None)
+        out[code] = {"t": T, "px": P, "vol": V, "turn": R, "prevVol": PV}
+    return {"day": day, "prevDay": prev, "from": hm(pre0), "to": hm(c), "floatKnown": bool(fl), "rows": out}
 
 
 def _cf_clear(proxy, day, chips):

@@ -10821,6 +10821,21 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": True, "data": d, "meta": m})
                 return
 
+            if route == "dt30-min":
+                # 단타 분마다 값(dt30.min_series · 2026-11-26) — ?day=YYYYMMDD(없으면 오늘) · &codes=코드,코드(dt30.MIN_CODES_MAX 개까지) · 1분봉에서 셈 · KIS 안 부름
+                day = (qs.get("day") or [datetime.now(KST).strftime("%Y%m%d")])[0]
+                codes = [c for c in ((qs.get("codes") or [""])[0]).split(",") if len(c) == 6 and c.isdigit()]
+                if not (len(day) == 8 and day.isdigit()) or not codes or len(codes) > dt30.MIN_CODES_MAX:
+                    self._send_json({"ok": False, "error": "day 는 YYYYMMDD · codes 는 종목 코드 1~%d 개입니다." % dt30.MIN_CODES_MAX}, 400)
+                    return
+                try:
+                    d = dt30.min_series(sys.modules[__name__], day, codes)
+                except Exception as e:
+                    self._send_json({"ok": False, "error": "분마다 값을 못 셈(%s)" % safe_message(e, 120), "data": None}, 500)
+                    return
+                self._send_json({"ok": True, "data": d})
+                return
+
             if route == "dt30-chiplog":
                 # 단타 칩 붙음 · 빠짐 기록(dt30.chip_log_put · 2026-11-24) — 셈은 화면 · ?day=YYYYMMDD(없으면 오늘) · &codes=코드,코드(없으면 전부) · KIS 안 부름
                 day = (qs.get("day") or [datetime.now(KST).strftime("%Y%m%d")])[0]
