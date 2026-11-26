@@ -375,6 +375,7 @@ const momentPx = (r, T, only, need) => {   // only — 조합 칩(화면 이름 
   const v = Number(C[hm]); return v > 0 ? { px: v, how: `${hm} 1분봉` } : null; };
 // 조합 된 분의 상승률 — 그 분 산 값(buyOf · 서버 comboBuy 가 있으면 그 값) ÷ 시가 · 지나간 분 값이라 한 번 정해지면 안 바뀜 · 어림 · 대체 값이면 못 잼(null · 0 으로 안 봄 → 같은 분 맨 뒤)
 const comboRise = (r) => { const B = buyOf(r), o = Number(r.open); return B && Number(B.px) > 0 && o > 0 && !/어림|대체/.test(B.src || '') ? (Number(B.px) / o - 1) * 100 : null; };
+let SVNO = new WeakSet();   // 서버 산 값이 없는 줄(저장된 셈 칸으로 서버가 안 삼) · 매수가 칸 「서버 산 값 없음 · 안 삼」 · calcDay 마다 새로
 let NOPX = new WeakMap();   // 칩 찬 분의 1분봉 값이 서버에 없는 줄 → 그 시각(HH:MM) · 매수가 칸 「매수값 미확인」 · calcDay 마다 새로
 let HYPO = new WeakMap();   // calcDay 를 돌 때마다 새로 — 판 줄 객체가 다시 그릴 때 그대로 쓰여, 셈 칸을 바꿔 본 표로 든 줄에 가정 값이 남지 않게(개념정의 검수 11-24)
 function buyOf(r) {   // → { px, at(HHMM), src } | null
@@ -400,7 +401,10 @@ function buyOf(r) {   // → { px, at(HHMM), src } | null
     const p1 = minHM(1);
     // 저장된 셈 칸 · 칩 N개로 살 때는 서버가 줄마다 정한 산 값(rows[].buy930 · 개발2 _moment_px)을 그대로(11-26 재권님 「서버값과 항상 동기화 되야돼 엄청 중요한거야」 → 「가」) · 저장 전 · 칩조합 · 서버 값 없음만 아래 화면 셈(같은 갈래)
     if (comboMode() && svPick()) { const B = r.comboBuy; return B && Number(B.px) > 0 ? { px: Number(B.px), at: hm4(B.at), src: `${B.at} ${B.src || ''} · 조합 된 때 · 서버 값` } : null; }   // 칩조합 — 서버 조합 산 값 그대로
-    if (!st.setDirty && k === 'open' && !comboMode() && r.buy930 && Number(r.buy930.px) > 0) { const b9 = r.buy930, a9 = String(b9.atSec || b9.at || ''); return { px: Number(b9.px), at: hm4(a9), src: `${a9} ${b9.src || ''} · ${needTxt(r)} · 서버 값` }; }
+    // 서버가 저장된 셈 칸 · 같은 사는 때(meta.buy930.mode)로 셈한 판이면 두 사는 때 다 서버 산 값만 — 없는 종목은 서버가 안 산 것 · 화면이 따로 셈하지 않음(11-26 재권님 「서버값은 없으면 안되는건데」 → 「응 맞아」 · 단타 리뷰 ① ⑵) · 저장 전 고침 · 칩 바꿈만 아래 화면 셈
+    const B9 = (curD().meta || {}).buy930;
+    if (!st.setDirty && chipsSaved() && !comboMode() && B9 && B9.mode === k) { const b9 = r.buy930; if (b9 && Number(b9.px) > 0) { const a9 = String(b9.atSec || b9.at || ''); return { px: Number(b9.px), at: hm4(a9), src: `${a9} ${b9.src || ''} · ${needTxt(r)} · 서버 값` }; } SVNO.add(r); return null; }
+    if (!st.setDirty && k === 'open' && !comboMode() && r.buy930 && Number(r.buy930.px) > 0) { const b9 = r.buy930, a9 = String(b9.atSec || b9.at || ''); return { px: Number(b9.px), at: hm4(a9), src: `${a9} ${b9.src || ''} · ${needTxt(r)} · 서버 값` }; }   // 사는 때 기록이 없는 옛 판
     // 9시 1분 전에 찬 줄만 9시 1분 값 · 9시 1분 분에 찬 줄은 아래 순간 값(서버 _moment_px 와 같게 · 정각이면 같은 9시 1분 값)
     if (T < p1) { const o = minVal(r, 1); if (o && Number(o.px) > 0) return { px: Number(o.px), at: p1, src: `${hmS(p1)} 값 · ${needTxt(r)} ${hmS(T)}` }; }
     const CPM = (curD().meta || {}).chipPx;   // 서버 칩 찬 분 1분봉 값 — {ok} 인 판만 쓴다 · {ok:false} 면 아래 옛 셈(어림)
@@ -653,7 +657,7 @@ const fb905Of = (r) => { const o = r.pxMin && r.pxMin['5']; if (o && Number(o.px
 // 서버가 실제로 보낸 종목의 차례(판 meta.buyRule.sent · 없으면 meta.tgBuy — {code: {order, sentAt, kind}}) · 안 보냈으면 null — 셈 · 그리기 두 곳이 함께 씀(11-24)
 const sentOrdOf = (d, r) => { const m = (d && d.meta) || {}, x = (m.buyRule && m.buyRule.sent) || m.tgBuy, o = x && typeof x === 'object' ? x[r.code] : null; return o && Number.isFinite(Number(o.order)) ? Number(o.order) : null; };
 function calcDay(d) {
-  HYPO = new WeakMap(); NOPX = new WeakMap(); CONDX = new WeakMap();   // 보기만 줄 가정 매수 · 분봉 값 없음 표시는 이번 셈에서만
+  HYPO = new WeakMap(); NOPX = new WeakMap(); SVNO = new WeakSet(); CONDX = new WeakMap();   // 보기만 줄 가정 매수 · 분봉 값 없음 표시는 이번 셈에서만
   const S = st.set;
   // 매도 시각보다 늦게(같은 때 포함) 든 종목은 안 산 것으로 — 셈 · 돈 나누기에서 뺌(11-20 qa 덧 → 재권님 「가」)
   const boughtOf = (r) => { const B = buyOf(r); return B && S.endAt && B.at >= S.endAt ? null : B; };
@@ -887,7 +891,7 @@ function paint0(d) {
   // 대기 줄(아직 안 굳은 종목) — 「안 삼」 대신 굳으면 살 값(처음 든 때 가격)을 흐리게(qa 11-23 — 10:00 에 살 줄이 「안 삼」 으로 읽힘)
   const waitTd = (r) => { if (!(pmOf(buyKey()) === 1 && !(Number(r.lock) > 0) && (d.rows || []).some((x) => Number(x.lock) > 0) && Number(r.buy) > 0)) return ''; const e = inTs(r);
     return `<td class="dt-buy">${num(Number(r.buy))}<small>${lkNext && lkNext.live ? '장중' : '대기'}${e ? ` · ${e.slice(0, 2)}:${e.slice(2, 4)}:${e.slice(4, 6)} 든 때` : ''}</small></td>`; };   // 11-23 「보이는 종목들은 다 셈해」 — 대기 줄도 이 값에 산 것으로 셈
-  const buyTd = (r) => (fbDays.has(d.day) ? (() => { const B = buyOf(r); return B ? buyCell(B, r) : '<td class="dt-buy"><span class="dt-nxm">대체 값도 없음 · 안 삼</span></td>'; })() : buyKey() !== 'open' || d.flat930 ? (() => { const B = buyOf(r); if (waitTd(r)) return waitTd(r); return B ? buyCell(B, r) : NOPX.has(r) ? `<td class="dt-buy"><span class="dt-nxm dt-nobuy" data-tip="칩이 찬 분의 1분봉 값이 서버에 아직 없어 산 값을 어림하지 않음 · 손익 셈 밖 · 서버에 들어오면 다시 받을 때 채움">매수값 미확인 · ${esc(NOPX.get(r))}</span></td>` : `<td class="dt-buy"><span class="dt-nxm">${d.flat930 && nthChipAt(r) == null ? (comboMode() ? '고른 조합 안 됨 · 안 삼' : `칩 ${num(chipNeed(r))}개 안 참 · 안 삼`) : notYetIn(r, buyKey() === 'vi' ? (r.viPx || {}).at : ((minVal(r, pmOf(buyKey())) || {}).at || minHM(pmOf(buyKey())))) ? `안 삼 · ${esc(notYetIn(r, buyKey() === 'vi' ? (r.viPx || {}).at : ((minVal(r, pmOf(buyKey())) || {}).at || minHM(pmOf(buyKey())))))} 뒤 듦` : buyKey() === 'vi' ? (r.viAt ? 'VI 값 못 받음 · 안 삼' : 'VI 없음 · 안 삼') : minVal(r, pmOf(buyKey())) === undefined ? '서버 값 아직 · 안 삼' : `${hmS(minHM(pmOf(buyKey())))} 값 없음 · 안 삼`}</span></td>`; })()
+  const buyTd = (r) => (fbDays.has(d.day) ? (() => { const B = buyOf(r); return B ? buyCell(B, r) : '<td class="dt-buy"><span class="dt-nxm">대체 값도 없음 · 안 삼</span></td>'; })() : buyKey() !== 'open' || d.flat930 ? (() => { const B = buyOf(r); if (waitTd(r)) return waitTd(r); return B ? buyCell(B, r) : NOPX.has(r) ? `<td class="dt-buy"><span class="dt-nxm dt-nobuy" data-tip="칩이 찬 분의 1분봉 값이 서버에 아직 없어 산 값을 어림하지 않음 · 손익 셈 밖 · 서버에 들어오면 다시 받을 때 채움">매수값 미확인 · ${esc(NOPX.get(r))}</span></td>` : SVNO.has(r) ? '<td class="dt-buy"><span class="dt-nxm" data-tip="저장된 셈 칸으로 서버가 사지 않은 종목 — 화면이 따로 셈하지 않음">서버 산 값 없음 · 안 삼</span></td>' : `<td class="dt-buy"><span class="dt-nxm">${d.flat930 && nthChipAt(r) == null ? (comboMode() ? '고른 조합 안 됨 · 안 삼' : `칩 ${num(chipNeed(r))}개 안 참 · 안 삼`) : notYetIn(r, buyKey() === 'vi' ? (r.viPx || {}).at : ((minVal(r, pmOf(buyKey())) || {}).at || minHM(pmOf(buyKey())))) ? `안 삼 · ${esc(notYetIn(r, buyKey() === 'vi' ? (r.viPx || {}).at : ((minVal(r, pmOf(buyKey())) || {}).at || minHM(pmOf(buyKey())))))} 뒤 듦` : buyKey() === 'vi' ? (r.viAt ? 'VI 값 못 받음 · 안 삼' : 'VI 없음 · 안 삼') : minVal(r, pmOf(buyKey())) === undefined ? '서버 값 아직 · 안 삼' : `${hmS(minHM(pmOf(buyKey())))} 값 없음 · 안 삼`}</span></td>`; })()
     : r.buy == null && r.buyWait ? `<td class="dt-buy"><span class="dt-nxm">${st.openAt ? hmTxt(String(st.openAt).replace(':', '')) : '정규장'} 시가 기다림</span></td>`
     : `<td class="dt-buy">${num(r.buy)}${r.buySrc ? `<small>${r.buyAt ? `${hmTxt(String(r.buyAt).replace(':', ''))} ` : ''}${esc(r.buySrc)}</small>` : ''}</td>`);
   // 09:01 값 (11-18 재권님 「9시 1분 등락도 넣어줘 이쯤 살거니깐」 → 「응 그렇게 해」) — 서버 rows[].px1(개발2 · 첫 1분봉 종가 「1m」 · 없으면 그때 현재가 「now」) · 시각은 meta.px1At
