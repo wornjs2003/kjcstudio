@@ -4828,7 +4828,7 @@ def _buy_px_fill(proxy, b):
     매수 차례(상위 ( )종목)를 거치지 않고 종목마다 읽는다 — 값이 생겨 상승률이 붙으면 차례 밖으로 밀려 안 채워지던 것(qa 덧 11-26)."""
     import copy
     tb = (b.get("meta") or {}).get("tgBuy") or {}
-    want = {c for c, v in tb.items() if v.get("px") is None}
+    want = {c for c, v in tb.items() if v.get("px") is None and v.get("kind") == "조합"}   # 조합으로 보낸 것만(칩 N개 날 항목에 조합 값이 들지 않게 · 개념정의 덧 11-26)
     if not want:
         return 0
     with _frozen_set(b):
@@ -4857,7 +4857,7 @@ def buy_send(proxy, b, hm):
         late = (max(rule_min(), COMBO_UNTIL_MIN) if _set_val("comboOn") is True else rule_min()) + BUY_SEND_LATE   # 조합으로 사는 날은 9시 30분까지 채움
     o = _open_min(proxy, b["day"], b)
     m = b.setdefault("meta", {})
-    if o + late < hm <= o + late + BUY_PX_FILL_MIN and any(v.get("px") is None for v in (m.get("tgBuy") or {}).values()):
+    if o + late < hm <= o + late + BUY_PX_FILL_MIN and any(v.get("px") is None and v.get("kind") == "조합" for v in (m.get("tgBuy") or {}).values()):
         return _buy_px_fill(proxy, b) or (1 if fz else 0)   # 보내기 창 뒤 — 「매수값 미확인」 으로 보낸 종목 값만 들어오는 대로 채움(새로 보내지는 않음 · 개념정의 덧 11-26)
     if hm < o + 1 or hm > o + late:
         return 1 if fz else 0                          # 굳힌 것도 저장되게(바뀐 것으로 셈)
@@ -4865,7 +4865,7 @@ def buy_send(proxy, b, hm):
     rows, _ = buy_order(proxy, b, hm)
     n = 0
     cap = buy_top()
-    if any(v.get("px") is None for v in (m.get("tgBuy") or {}).values()):
+    if any(v.get("px") is None and v.get("kind") == "조합" for v in (m.get("tgBuy") or {}).values()):
         n += _buy_px_fill(proxy, b)                    # 「매수값 미확인」 으로 보낸 종목 — 값이 들어오는 대로 채움(재권님 「이값은 들어오는대로 넣어줘야해」 11-26 19:23)
     for r in rows:
         if r["code"] in top:
