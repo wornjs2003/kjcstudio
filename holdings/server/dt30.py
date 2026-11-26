@@ -1340,6 +1340,18 @@ def buy_mode():
         return "p1"
 
 
+def _p9(r):
+    """줄의 「9시 1분 값」 한 곳 — DB 의 여는 분 1분봉 종가(px1Db) · 없으면 판에 적힌 pxMin["1"] · px1 · 없으면 None(단타 리뷰 ① 11-26 — 매수 · 조합 표 · 줄 조합 값이 같이 씀)."""
+    v = r.get("px1Db")
+    if isinstance(v, (int, float)) and v > 0:
+        return v
+    for x in ((r.get("pxMin") or {}).get("1"), r.get("px1")):
+        x = x.get("px") if isinstance(x, dict) else x
+        if isinstance(x, (int, float)) and x > 0:
+            return x
+    return None
+
+
 def _starts(r, ct, c):
     """칩 c 의 붙은 분들 「HHMM」 — 구간이 있으면 구간 시작 · 없으면 처음 붙은 시각."""
     s = (r.get("chipSpans") or {}).get(c)
@@ -1388,9 +1400,9 @@ def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
     mh = lambda k: _hm4(at.get(str(k))) or _hhmm(o + k).replace(":", "")
 
     def mv(k):
-        if k == 1 and isinstance(r.get("px1Db"), (int, float)) and r["px1Db"] > 0:
-            return r["px1Db"]                          # 9시 1분 값 = 여는 분 1분봉 종가(지금 DB 값 · chipPx 와 한 셈) — 판에 적힌 pxMin 은 장중에 덜 쌓인 봉으로 적혔을 수 있음(시황분석1 11-26 대주전자재료 86,900 ↔ 87,900)
-        v = (r.get("pxMin") or {}).get(str(k)) or (r.get("px1") if k == 1 else None)
+        if k == 1:
+            return _p9(r)                              # 9시 1분 값 한 곳(_p9 · DB 여는 분 1분봉 종가 먼저 — 대주전자재료 86,900 ↔ 87,900)
+        v = (r.get("pxMin") or {}).get(str(k))
         v = v.get("px") if isinstance(v, dict) else v
         return v if isinstance(v, (int, float)) and v > 0 else None
 
@@ -1551,8 +1563,7 @@ def _chip_px_fill(proxy, day, rows, o):
     import market_hours
     now = _now()
     live = day == now.strftime("%Y%m%d")              # 오늘 — 종목마다 다음 분 봉이 들어온 봉만(진행 중 봉을 받기가 끝 값으로 다시 쓸 틈 · 개념정의 덧 11-25)
-    rc = market_hours.today(proxy, day=day)["reg"][1]   # 그날 정규장 끝 — 늦게 여는 날도 그날 표(개념정의 덧 · 「장 시각으로 셈하는 코드는 늦게 여는 날 그만큼 옮긴다」)
-    close = int(rc[:2]) * 60 + int(rc[2:])
+    close = _close_min(proxy, datetime.strptime(day, "%Y%m%d").replace(hour=12, tzinfo=KST))   # 그날 정규장 끝 — 한 곳(_close_min · 늦게 여는 날도 그날 표)
     want = {}
     def times_of(r):
         if r.get("chipSpans") is not None:             # 구간이 일부 칩만 있는 줄(다시 지은 판의 돈몰림)은 다른 칩 처음 시각도 — _spans4 와 같게
@@ -1654,17 +1665,6 @@ COMBO_MEMO_DAYS = 60                     # 메모리에 두는 판 수 — 화�
 _combo_memo = {}
 
 
-def _combo_events(r, ct, cs):
-    """[(「HHMM」, [칩 …])] — 그 시각에 켜져 셈 되는 칩 묶음(화면 comboEvents 와 같게)."""
-    if r.get("chipSpans") is None:
-        e = _in4(r)
-        tm = {c: (ct or {}).get(c) or e or "0000" for c in cs}
-        return [(t, [c for c in cs if tm[c] <= t]) for t in sorted(set(tm.values()))]
-    iv = {c: _spans4(r, ct, [c]) for c in cs}
-    ts = sorted({x for v in iv.values() for a, z in v for x in (a, z) if x})
-    return [(t, [c for c in cs if any(a <= t and (z is None or z > t) for a, z in iv[c])]) for t in ts]
-
-
 def _combo_res(px, bars):
     """익절 × 손절 칸 수익률(%) — bars [[HHMM, 시가, 고가, 저가, 종가] …] 산 다음 분부터."""
     out = []
@@ -1705,13 +1705,11 @@ def combo_fill(proxy, b):
         vals = hit[2]
     else:
         o4 = _hhmm(o).replace(":", "")
-        pool = ov_chips() + ("현재상승", "볼린저")
+        dc, wr_auto = day_chips(), (b.get("meta") or {}).get("watchRule") == "자동"
         plan = {}
         for r in rows:
-            ct = {k: str(v).replace(":", "") for k, v in (r.get("chipTime") or {}).items()}
-            cs = [c for c in pool if (c in (r.get("chips") or []) or ct.get(c)) and _chip_on(r, c, cf, split)]
             got = {}
-            for t, on in _combo_events(r, ct, cs):
+            for t, on in _ct_row(r, b, cf, split, dc, wr_auto) or []:   # 조합 사건 셈 한 곳(_ct_row — 조합 표 · comboBuy 와 같게 · 시각 없는 켜진 칩 줄은 뺌 · 단타 리뷰 ① 11-26)
                 for n in range(1, COMBO_N + 1):
                     if str(n) not in got and len(on) >= n:
                         got[str(n)] = (t, list(on))
@@ -1745,6 +1743,8 @@ def combo_fill(proxy, b):
             for n, (t, on) in g.items():
                 m = max(t, o4)
                 p = px.get((c, m)) if px is not None else None
+                if t < p1:
+                    p = _p9(r) or p                    # 9시 1분 값 한 곳(_p9 · 단타 리뷰 ① 11-26)
                 cut = m                                # 이 분 봉 뒤부터 익절 · 손절
                 if t >= p1 and r.get("chipPx") is not None:   # 칩 찬 순간 값(_moment_px — 매수 셈 · 조합 표와 한 셈 · 11-26 「들어온 시각에 산다」)
                     mv, _sec, src = _moment_px(r, ct4, on, t, int(n))   # 칩 n개째를 채운 순간
@@ -1753,6 +1753,9 @@ def combo_fill(proxy, b):
                         if src.startswith("칩 찬 시각 값"):
                             cut = _hhmm(int(t[:2]) * 60 + int(t[2:]) - 1).replace(":", "")   # 정각 값 — 그 분 봉부터
                 after = [x for x in bars.get(c, []) if x[0] > cut]
+                ex = (r.get("px") or {}).get(end)
+                if after and isinstance(ex, (int, float)) and ex > 0:
+                    after = after + [[end, ex, ex, ex, ex]]   # 끝까지 안 닿으면 판 값(판 마지막 시각 값) — 조합 표 _ct_add 와 한 셈(단타 리뷰 ① 11-26)
                 why = None if p else ("1분봉 못 읽음" if px is None else "그 분 1분봉 없음")
                 out[n] = {"at": "%s:%s" % (t[:2], t[2:]), "buyAt": "%s:%s" % (m[:2], m[2:]), "chips": on, "px": p,
                           "res": _combo_res(p, after) if p and after else None, "why": why or (None if after else "산 뒤 1분봉 없음")}
@@ -1919,8 +1922,7 @@ def _ct_px(r, b, t, o, cs=()):
     pm, at = r.get("pxMin") or {}, (b.get("meta") or {}).get("pxMinAt") or {}
     mh = lambda n: _hm4(at.get(str(n))) or _hhmm(o + n).replace(":", "")
     v1 = lambda x: x.get("px") if isinstance(x, dict) and isinstance(x.get("px"), (int, float)) and x["px"] > 0 else None
-    p9 = lambda: ((r["px1Db"] if isinstance(r.get("px1Db"), (int, float)) and r["px1Db"] > 0 else None)
-                  or v1(pm.get("1")) or (v1(r.get("px1")) if isinstance(r.get("px1"), dict) else None), mh(1))   # 9시 1분 값 = 여는 분 1분봉 종가(DB · buy_point 와 한 셈)
+    p9 = lambda: (_p9(r), mh(1))                       # 9시 1분 값 한 곳(_p9)
     if t < mh(1):
         return p9()
     ct = {c: _hm4(v) for c, v in (r.get("chipTime") or {}).items()}
@@ -2728,8 +2730,13 @@ def _lock_due(b, nm):
     return did
 
 
+def _close_hhmm(proxy, day):
+    """그날 정규장 끝 「HHMM」 — _close_min 한 곳(단타 리뷰 ① · 11-26 · 늦게 연 날은 그날 표)."""
+    return _hhmm(_close_min(proxy, datetime.strptime(day, "%Y%m%d").replace(hour=12, tzinfo=KST))).replace(":", "")
+
+
 def _close_min(proxy, now=None):
-    """그날 정규장 끝(분) — 장 시각 표(market_hours) · 못 읽으면 REG_CLOSE."""
+    """그날 정규장 끝(분) — 장 시각 표(market_hours) · 못 읽으면 REG_CLOSE · 서버 단타 셈의 정규장 끝은 이 한 곳(단타 리뷰 ① 11-26)."""
     import market_hours
     now = now or _now()
     try:
@@ -3861,10 +3868,12 @@ def past_span_fill(proxy, day, b):
                 bs, f_, per = b5.get(code) or [], fl.get(code), "5분 어림"
                 if not bs or not f_:
                     continue                           # 봉 · 풀린 주식수가 없음 — 처음 시각만 남김(짐작 안 함)
+                import turnover
                 amt, seq = 0, []
                 for m, _o, cl, v in bs:
                     amt += cl * v
-                    seq.append((m + BAR_MIN, amt / (f_ * cl) * 100 >= t_pct))
+                    tv = turnover.calc(cl, amt, f_)[1]   # 거래 비율 셈 한 곳(turnover.calc · 단타 리뷰 ① 11-26)
+                    seq.append((m + BAR_MIN, None if tv is None else tv >= t_pct))
             else:
                 bs, pv, per = b5.get(code) or [], p5.get(code), "5분 어림"
                 if not bs or not pv:
@@ -3897,7 +3906,7 @@ def min_series(proxy, day, codes):
     → {code: {t [「HHMM」 봉 끝], px [종가], vol [누적 거래량], turn [누적 거래대금 어림 ÷ (풀린 주식수 × 종가) × 100 | None], prevVol [앞 거래일 같은 분째 누적 | None]}} ·
     봉이 없는 종목은 빠짐(0 으로 안 채움) · 프리장 분은 넥스트레이드 · 누적은 08:00 부터(프리장 + 정규장) · 같은 분째는 프리장 분은 프리장 연 때 · 정규장 분은 정규장 연 때 기준(늦게 연 날).
     재권님 「프리장부터 종가까지 칩에 필요한 모든 정보는 쌓아지게 해줘」(11-26 14:38) · 「셀수 있는정보들 다 세서 서버에 남겨놔」 → 안에 「응」(15:2x)."""
-    import company_profile, market_hours
+    import company_profile, market_hours, turnover
     fl = company_profile.floats() or {}
     m4 = lambda t: int(t[:2]) * 60 + int(t[2:4])
     pre0 = m4(market_hours.PRE_OPEN)
@@ -3939,7 +3948,7 @@ def min_series(proxy, day, codes):
             T.append(hm(t + 1))
             P.append(cl)
             V.append(acc)
-            R.append(round(amt / (f * cl) * 100, 3) if f else None)
+            R.append(turnover.calc(cl, amt, f)[1] if f else None)   # 거래 비율 셈 한 곳(turnover.calc · 단타 리뷰 ① 11-26)
             PV.append(last if pc else None)
         out[code] = {"t": T, "px": P, "vol": V, "turn": R, "prevVol": PV}
     return {"day": day, "prevDay": prev, "from": hm(pre0), "to": hm(c), "floatKnown": bool(fl), "rows": out}
@@ -4396,7 +4405,7 @@ def _trade_min_fill(proxy, b, now=None):
             if val <= 0:                               # 거래량 0 봉뿐 — 채움 봉(옛 값 · qa 11-20 11-19 10:00 봉)일 수 있어 0 이 아니라 못 잼
                 tm[k] = None
                 continue
-            tm[k] = {"at": _hhmm(o + n), "turn": round(val / (f * last) * 100, 2), "src": "1m"}
+            tm[k] = {"at": _hhmm(o + n), "turn": turnover.calc(last, val, f)[1], "src": "1m"}   # 거래 비율 셈 한 곳(turnover.calc · 단타 리뷰 ① 11-26)
             n_got += 1
         if ("volDay" not in r or (r["volDay"] is None and today)) and hm >= o + VOL_DAY_MIN:   # 못 잰(None) 칸은 다시 셈 — 그 시각 칸이 늦게 적힌 날(개념정의 덧 11-24 · 고리는 VOL_SLOT_LOOK 분까지만 다시 봄)
             a, p = upto.get(c), prev.get(c)
@@ -4745,8 +4754,7 @@ def sell_watch(proxy, cfg, b, now=None):
     import market_hours
     now = now or _now()
     o = _open_min(proxy, b["day"], b)
-    close = int(market_hours.today(proxy, day=b["day"]).get("reg", ["", market_hours.REG_CLOSE])[1] or market_hours.REG_CLOSE)
-    close = close // 100 * 60 + close % 100
+    close = _close_min(proxy, datetime.strptime(b["day"], "%Y%m%d").replace(hour=12, tzinfo=KST))   # 그날 정규장 끝 — 한 곳(_close_min)
     hm = now.hour * 60 + now.minute
     top = set((b.get("meta") or {}).get("tgTop") or [])
     tb = (b.get("meta") or {}).get("tgBuy") or {}
@@ -4877,7 +4885,7 @@ def board(proxy, day=None, cfg=None):
     if b["day"] == _now().strftime("%Y%m%d"):
         try:
             import market_hours
-            rc = ((market_hours.today(proxy, day=b["day"]).get("reg") or [None, None])[1] or market_hours.REG_CLOSE).replace(":", "")[:4]   # 늦게 연 날은 닫는 시각도 그날 값
+            rc = _close_hhmm(proxy, b["day"])           # 늦게 연 날은 닫는 시각도 그날 값(_close_min 한 곳)
             open_today = _now().strftime("%H%M") < rc        # 판이 2시에 닫혀도 정규장 끝까지는 상승률(지금 값 ÷ 시가)이 바뀐다 — 재권님 (가) 11-24 11:4x
         except Exception:
             open_today = False
