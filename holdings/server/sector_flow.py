@@ -54,7 +54,8 @@ from secrets_guard import safe_message
 
 KST = timezone(timedelta(hours=9))
 
-END = "1530"                           # 마지막 칸이 끝나는 때 — 장 마감(재권님 「만들어」 11-26 15:3x · 그 전 「2시까지」 1400)
+END = market_hours.REG_CLOSE           # 마지막 칸이 끝나는 때 — 정규장 마감(장 시각 표 한 곳 · 재권님 「만들어」 11-26 15:3x · 그 전 「2시까지」 1400)
+OLD_END_LAST = "1355"                  # 끝을 늘리기 전(14:00) 판의 마지막 칸 — 이 칸까지만 있는 판은 뒤 칸만 덧붙임(tail_fill)
 STEP = 5                               # 칸 길이(분) — 11-19 재권님 「5분에 한번씩」(그 전 10)
 BS_TOP = 300                           # 매수 · 매도로 나눌 종목 — 사진마다 KRX 누적 거래대금 상위 이만큼(체결 한 번씩)
 
@@ -438,7 +439,7 @@ def backfill_missing(proxy):
             amt0 = (first or {}).get("amt") or {}
             if first and SLOTS[-1] in amt0 and SLOTS[1] in amt0:
                 have.add(d)
-            elif first and SLOTS[1] in amt0 and "1355" in amt0:   # 끝 시각을 늘리기 전(14:00 까지) 판 — 뒤 칸만 덧붙임(통째로 다시 지으면 사진 판 매수 몫이 지워짐)
+            elif first and SLOTS[1] in amt0 and OLD_END_LAST in amt0:   # 끝 시각을 늘리기 전(14:00 까지) 판 — 뒤 칸만 덧붙임(통째로 다시 지으면 사진 판 매수 몫이 지워짐)
                 tail.setdefault(d, {})[by] = (json.loads(body), src, codes)
         have -= set(tail)
         ds = [r[0] for r in conn.execute("SELECT DISTINCT substr(ts, 1, 8) FROM candles WHERE period = '5m' AND substr(ts, 9, 4) = '0800'")]
