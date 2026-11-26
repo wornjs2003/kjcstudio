@@ -764,7 +764,6 @@ LIVE_STALE_SEC = 300         # 가진 목록이 이만큼 넘게 묵었으면 �
                              # 셈이 수십 초라(11-18 49초) 넘기는 서버의 시간 한도(60초) 안이다
 
 _ext = {"cap": {}, "q": [], "busy": False}   # 순위 목록 밖 종목 시가총액(억원) — {코드: (날, 값 | None)} · 그날 한 번 단건 시세(hts_avls)
-_ext_lock = threading.Lock()  # 대기열 · busy 를 셈(물음마다 스레드)과 받는 스레드가 함께 만짐 — 같은 종목 두 번 넣기 · 받는 스레드 둘 뜨기 막음(단타 리뷰 ④ 11-26)
 EXT_CAP_GAP_SEC = 0.5        # 한 종목 받고 다음까지 — KIS 예산을 몰아 쓰지 않게
 
 
@@ -772,38 +771,27 @@ def _ext_cap_want(proxy, cfg, codes):
     """순위 목록 밖 종목의 시가총액 {코드: 억원 | None} — 쥔 것만 바로 내고, 그날 아직 안 받은 것은 뒤에서 받는다(다음 셈부터 보임).
     못 받으면 그날은 None(「못 잼」 · 0 아님)."""
     day = _now().strftime("%Y%m%d")
-    with _ext_lock:
-        got = {c: _ext["cap"][c][1] for c in codes if (_ext["cap"].get(c) or (None,))[0] == day}
-        need = [c for c in codes if c not in got and c not in _ext["q"]]
-        start = False
-        if need:
-            _ext["q"].extend(need)
-            if not _ext["busy"]:
-                _ext["busy"] = start = True
-    if start:
-        def run():
-            try:
-                while True:
-                    with _ext_lock:
-                        if not _ext["q"]:
-                            _ext["busy"] = False   # 비었음을 보고 내리는 것을 한 잠금 안에서 — 그 사이 들어온 종목이 안 받히고 남지 않게
-                            break
-                        c = _ext["q"][0]
-                    try:
-                        v = (proxy.fetch_price(cfg, c) or {}).get("marketCap")
-                    except Exception:
-                        v = None
-                    with _ext_lock:
-                        _ext["cap"][c] = (_now().strftime("%Y%m%d"), v)
-                        if _ext["q"] and _ext["q"][0] == c:
-                            _ext["q"].pop(0)       # 받은 뒤에 뺌 — 받는 동안 같은 종목을 또 넣지 않게
-                    time.sleep(EXT_CAP_GAP_SEC)
-            except Exception:
-                with _ext_lock:
-                    _ext["busy"] = False
-                raise
+    got = {c: _ext["cap"][c][1] for c in codes if (_ext["cap"].get(c) or (None,))[0] == day}
+    need = [c for c in codes if c not in got and c not in _ext["q"]]
+    if need:
+        _ext["q"].extend(need)
+        if not _ext["busy"]:
+            _ext["busy"] = True
 
-        threading.Thread(target=run, daemon=True, name="dt-ext-cap").start()
+            def run():
+                try:
+                    while _ext["q"]:
+                        c = _ext["q"].pop(0)
+                        try:
+                            v = (proxy.fetch_price(cfg, c) or {}).get("marketCap")
+                        except Exception:
+                            v = None
+                        _ext["cap"][c] = (_now().strftime("%Y%m%d"), v)
+                        time.sleep(EXT_CAP_GAP_SEC)
+                finally:
+                    _ext["busy"] = False
+
+            threading.Thread(target=run, daemon=True, name="dt-ext-cap").start()
     return got
 
 _live_lock = threading.Lock()
@@ -1569,11 +1557,8 @@ def buy930_fill(proxy, b):
     return b
 
 
-_cpx = {}                              # (날, 종목, 「HHMM」) → 1분봉 종가 — 굳은 봉만 들고 있음(그 뒤로는 안 바뀜)
-_cpx_first = set()                     # 칩 찬 분 값 중 그 분이 채움 봉이라 다음 첫 체결가인 것(day, code, HHMM)
-_cpx_lock = threading.Lock()
-# 메모는 오늘 · 지금 읽는 날 몫만 — 지난 날 몫은 다음 읽기에 지움(날마다 늘지 않게). 끄고 재 보니 오늘 판 다시 받기 0.30 → 0.5~0.6초라 두었다
-# (8772 · 11-26 19:05 · 지난 날 판은 차이 없음 — 단타 리뷰 ④ · 재권님 「응」 19:00)
+_cpx = {}
+_cpx_first = set()                     # 칩 찬 분 값 중 그 분이 채움 봉이라 다음 첫 체결가인 것(day, code, HHMM)                      # (날, 종목, 「HHMM」) → 1분봉 종가 — 굳은 봉만 들고 있음(그 뒤로는 안 바뀜)
 # 굳은 봉 — 그 종목 다음 분 봉이 DB 에 있으면(그 분이 끝난 뒤 받은 것) 앞 봉은 끝 값이다. 칩 1분봉 받기가 매 분 1초에 돌아(chip_live)
 # 봉이 끝나고 1분 남짓이면 굳는다 — 재권님 「가인데 1분으로 해줘」(11-25 17:4x · 그 전에는 고정 3분 · 셈 탓에 실제 3~4분)
 
@@ -1598,11 +1583,6 @@ def _chip_px_fill(proxy, day, rows, o):
                             if o <= mm < close:
                                 want.setdefault("%02d%02d" % divmod(mm, 60), set()).add(r["code"])
     got = {}
-    keep = (day, now.strftime("%Y%m%d"))
-    with _cpx_lock:
-        for k in [k for k in _cpx if k[0] not in keep]:
-            del _cpx[k]
-        _cpx_first.intersection_update({k for k in _cpx_first if k[0] in keep})
     with proxy.db_conn() as conn:
         for hm, codes in want.items():
             need = [c for c in codes if (day, c, hm) not in _cpx]
@@ -1693,7 +1673,6 @@ COMBO_SL = (None, -1, -1.5, -2, -3)      # 손절 %
 COMBO_LIVE_SEC = 60                      # 그날 판(안 끝남) 셈을 다시 쓰는 초 — 1분봉이 1분마다 늘어서
 COMBO_MEMO_DAYS = 60                     # 메모리에 두는 판 수 — 화면이 판을 열 때 지난 판을 다 받아서(끝난 판은 저장 시각 · 셈 칸이 같으면 다시 안 셈 · 개념정의 덧 ③)
 _combo_memo = {}
-_combo_lock = threading.Lock()   # 메모 읽고 넣고 오래된 것 빼기 — 여러 물음이 함께 넣고 빼다 없는 열쇠를 빼는 드문 오류(개념정의 덧 · 단타 리뷰 ④ 11-26)
 
 
 def _combo_res(px, bars):
@@ -1730,8 +1709,7 @@ def combo_fill(proxy, b):
     end = (b.get("times") or times(o - OPEN_AT[0] * 60 - OPEN_AT[1]))[-1]
     key = (day, (b.get("meta") or {}).get("savedAt"), _j.dumps([sorted(cf[0]), sorted(cf[1]), sorted(cf[2]) if cf[2] is not None else None], ensure_ascii=False),
            len(rows), end)
-    with _combo_lock:
-        hit = _combo_memo.get(day)
+    hit = _combo_memo.get(day)
     live = b.get("closed") is False
     if hit and hit[0] == key and (not live or time.time() - hit[1] < COMBO_LIVE_SEC):
         vals = hit[2]
@@ -1792,11 +1770,10 @@ def combo_fill(proxy, b):
                 out[n] = {"at": "%s:%s" % (t[:2], t[2:]), "buyAt": "%s:%s" % (m[:2], m[2:]), "chips": on, "px": p,
                           "res": _combo_res(p, after) if p and after else None, "why": why or (None if after else "산 뒤 1분봉 없음")}
             vals[c] = out                              # 산 뒤 봉이 없으면 res 는 표 대신 null(다른 없음 줄과 같은 꼴 · qa 덧 ③)
-        with _combo_lock:
-            _combo_memo.pop(day, None)
-            _combo_memo[day] = (key, time.time(), vals)
-            while len(_combo_memo) > COMBO_MEMO_DAYS:
-                _combo_memo.pop(next(iter(_combo_memo)))   # 가장 먼저 넣은 판부터
+        _combo_memo.pop(day, None)
+        _combo_memo[day] = (key, time.time(), vals)
+        while len(_combo_memo) > COMBO_MEMO_DAYS:
+            _combo_memo.pop(next(iter(_combo_memo)))   # 가장 먼저 넣은 판부터
     for r in rows:
         r["combo"] = vals.get(r["code"])
     b["meta"]["comboDef"] = {"n": COMBO_N, "tp": list(COMBO_TP), "sl": list(COMBO_SL),
@@ -4962,7 +4939,6 @@ def board(proxy, day=None, cfg=None):
     return b
 
 
-_or_last_lock = threading.Lock()   # 날 바뀜 지우기 · 값 넣기를 물음마다 함께 함(단타 리뷰 ④ 11-26)
 _or_last = {}                 # {날: {code: (상승률, 셈한 시각)}} — 정규장 중 마지막으로 센 상승률(장 뒤 · 시세가 통합으로 넘어간 뒤 읽을 때 씀 · 서버 메모리)
 
 
@@ -4973,15 +4949,14 @@ def open_rise_now(proxy, cfg, b):
     rows = (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or [])
     if not rows:
         return 0
-    with _or_last_lock:
-        for d in [d for d in _or_last if d != b["day"]]:
-            del _or_last[d]                            # 오늘 아닌 날은 지움 — 날마다 늘지 않게(개념정의 덧)
-        last = _or_last.setdefault(b["day"], {})
+    for d in [d for d in _or_last if d != b["day"]]:
+        del _or_last[d]                                # 오늘 아닌 날은 지움 — 날마다 늘지 않게(개념정의 덧)
+    last = _or_last.setdefault(b["day"], {})
     if proxy.quote_market_div() != "J":            # 정규장 밖 — 시세가 통합(UN)으로 넘어가 시가가 08:00 프리장 첫 값이 됨 → 정규장 중 마지막 셈 값(없으면 저장값)
         for r in rows:
             if r["code"] in last:
                 r["openRise"] = last[r["code"]][0]
-        at = max((v[1] for v in list(last.values())), default=None)
+        at = max((v[1] for v in last.values()), default=None)
         b["meta"]["openRiseAt"] = at
         return 0
     q, _ = proxy.fetch_quotes_multi(cfg, [r["code"] for r in rows], max_age=proxy.PRICE_CACHE_TTL)

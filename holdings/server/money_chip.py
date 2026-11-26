@@ -19,8 +19,6 @@
             (재권님 「지난 섹터 테마를 바탕으로 돈몰림 11월 2일부터 지금까지 적용해줘」 11-25 21:33 → 안에 「5분에 끝나면 그시간에 되야」 · 「진행해」 21:4x)
             묶음에 든 종목은 지금 목록(그날 목록은 안 남음 — 어림)
 """
-import threading
-
 import chip_rules
 
 CHIP = "돈몰림"
@@ -63,7 +61,6 @@ def group_hit(row, slots, w, mult, min_eok, share):
 
 
 _memo = {"key": None, "val": None}
-_memo_lock = threading.Lock()   # 셈은 한 번에 하나 — 겹쳐 온 물음이 같은 무거운 판 셈(20초 넘게)을 둘 다 돌리지 않게 · 메모 읽고 쓰기도 그 안(단타 리뷰 ④ 11-26)
 
 
 def _hold():
@@ -97,15 +94,9 @@ def hits(proxy, codes):
     w, h, mult = _win(), _hold(), chip_rules.get(CHIP, "mult")
     min_eok, share = chip_rules.get(CHIP, "minEok"), chip_rules.get(CHIP, "buyShare")
     st = sector_flow.status() if hasattr(sector_flow, "status") else {}
-    key = (st.get("lastSnap"), st.get("lastSnapAt"), st.get("frozenDay"), w, h, mult, min_eok, share, tuple(sorted(codes)))   # 종목 목록 자체 — 수만 같고 종목이 바뀌면 옛 값이 나가던 것(단타 리뷰 ④ 11-26)
-    with _memo_lock:
-        if key[0] and _memo["key"] == key:
-            return _memo["val"]
-        return _hits(proxy, codes, key, w, h, mult, min_eok, share)
-
-
-def _hits(proxy, codes, key, w, h, mult, min_eok, share):
-    import sector_flow
+    key = (st.get("lastSnap"), st.get("lastSnapAt"), st.get("frozenDay"), w, h, mult, min_eok, share, len(codes))
+    if key[0] and _memo["key"] == key:
+        return _memo["val"]
     out, why = {}, []
     for by, ko in BYS:
         try:

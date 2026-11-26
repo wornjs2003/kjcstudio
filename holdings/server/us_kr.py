@@ -32,7 +32,7 @@ BYS = ("sector", "theme")
 
 _lock = threading.Lock()
 _map = {"mtime": None, "val": None}
-_kr_memo = {}                  # (day, by) → (저장 시각, {묶음: %}) — 뒤 칸 덧붙이기(tail_fill)가 지난 날 판을 다시 쓰면 저장 시각이 바뀌어 다시 읽음(단타 리뷰 ④ 11-26)
+_kr_memo = {}                  # (day, by) → {묶음: %} — 굳힌 지난 날은 안 바뀜
 _memo = {}                     # (by, month) → (시각, 열쇠, 값)
 
 
@@ -69,12 +69,9 @@ def _us_pct(conn, tickers, since):
 
 def _kr_day(conn, day, by):
     key = (day, by)
-    r = conn.execute("SELECT saved_at, body FROM sector_flow_day WHERE day = ? AND by = ?", (day, by)).fetchone()
-    hit = _kr_memo.get(key)
-    if hit and r and hit[0] == r[0]:
-        return hit[1]
-    saved = r[0] if r else None
-    r = r[1:] if r else None
+    if key in _kr_memo:
+        return _kr_memo[key]
+    r = conn.execute("SELECT body FROM sector_flow_day WHERE day = ? AND by = ?", (day, by)).fetchone()
     v = {}
     if r and r[0]:
         for name, g in (json.loads(r[0]) or {}).items():
@@ -82,7 +79,7 @@ def _kr_day(conn, day, by):
             if p:
                 v[name] = p[max(p)]
     if v:
-        _kr_memo[key] = (saved, v)                     # 굳힌 날만 들고 있음 — 아직 안 굳힌 오늘은 다음에 다시 읽음
+        _kr_memo[key] = v                              # 굳힌 날만 들고 있음 — 아직 안 굳힌 오늘은 다음에 다시 읽음
     return v
 
 
@@ -125,8 +122,7 @@ def board(proxy, by="sector", month=None):
     with proxy._db_lock, proxy.db_conn() as conn:
         kr_days = [d for (d,) in conn.execute("SELECT DISTINCT day FROM sector_flow_day WHERE by = ? AND day >= ? ORDER BY day", (by, FROM_DAY))]
         last_us = (conn.execute("SELECT MAX(ts) FROM candles WHERE period = 'D' AND code = 'SPY'").fetchone() or [None])[0]
-        saved = (conn.execute("SELECT MAX(saved_at) FROM sector_flow_day WHERE by = ?", (by,)).fetchone() or [None])[0]   # 지난 날 판이 다시 쓰여도(뒤 칸 덧붙이기) 다시 셈(단타 리뷰 ④ 11-26)
-        key = (tuple(kr_days[-1:]), last_us, today, _map["mtime"], saved)
+        key = (tuple(kr_days[-1:]), last_us, today, _map["mtime"])
         hit = _memo.get((by, month))
         if hit and hit[1] == key and time.time() - hit[0] < CACHE_SEC:
             return hit[2]
