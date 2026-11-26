@@ -109,6 +109,7 @@ function addNewChips(list) {
 const CHIP_SEEN = [];   // 칩 색 차례 — 서버 단타 칩 차례(loadDtChips 가 채움) 뒤로 처음 본 차례(색 변수는 일곱이라 돌려 씀)
 const HOT = { '현시간 유통회전': 'vol', '전일 현시간 대비 급증': 'vol2', 'VI·급등': 'vi', 매수: 'buy' };   // 튀는 색 칩 — 진한 바탕 · 하위 단추마다 다른 색(strategy.css · 11-23 재권님 「색은 완전히 튀는 색으로 해주고 각각 버튼 색 다르게」 → 「vi 랑 매수도 이렇게 각각 색이랑 튀도록 해줘」)
 const colorOf = (c) => { if (HOT[c]) return HOT[c];   /* 거래 칩 · VI · 매수는 서로 안 겹치는 따로 색(strategy.css data-i) */ if (!CHIP_SEEN.includes(c)) CHIP_SEEN.push(c); return CHIP_SEEN.indexOf(c) % 7; };
+const GRP_CHIPS = ['돈몰림', '미국강세'];   // 묶음 칩 — 칩 칸 줄 대신 종목 이름 옆에 · 머리 · 좁은 폭 칩 줄 둘 다 업종 · 테마 목록 없이(11-26 한 곳으로 · 개념정의 검수 덧)
 const RULE_OF = { 돈몰림: 'money', 미국강세: 'usup', 프리장: 'pre', 초반상승: 'rise', 현재상승: 'nowup', 'VI·급등': 'vi', 볼린저: 'bb', 장외: 'after', 자동: 'volsurge' };   // 「종목 고르는 룰」 칩(data-rule) — 없는 칩은 룰 칸 없음
 const subsRaw = (r, c) => { const v = r.subs && r.subs[c]; return Array.isArray(v) ? v : (v ? [v] : []); };
 // VI·급등 하위는 겹치지 않게 둘로 (11-11 재권님 「그중 6개는 따로 분류가 가능하게 해줘」 → 「vi급등칩에 하위에 칩이 2개 있게 해줘」 — VI 43 · 급등 6 이 겹쳐 헷갈림)
@@ -245,7 +246,7 @@ const tipAt = (k) => { const t = tipOf(k); return t ? ` data-tip="${esc(t)}"` : 
 function chipPanel(all) {
   return colsOf().map((c) => { const i = colorOf(c);
     const n = all.filter((r) => (r.chips || []).includes(c)).length;
-    const subs = ['돈몰림', '미국강세'].includes(c) ? [] : subOrder(c, [...new Set(all.flatMap((r) => subsOf(r, c)))]);   // 묶음 칩은 좁은 폭에서도 업종 · 테마 목록 없이 단추만(11-26 재권님 「돈몰림 미국장 여기아래로 목록 나올필요는 없어 종목옆에만 있으면되」 · 넓은 폭 grpHead 와 같게)
+    const subs = GRP_CHIPS.includes(c) ? [] : subOrder(c, [...new Set(all.flatMap((r) => subsOf(r, c)))]);   // 묶음 칩은 좁은 폭에서도 업종 · 테마 목록 없이 단추만(11-26 재권님 「돈몰림 미국장 여기아래로 목록 나올필요는 없어 종목옆에만 있으면되」 · 넓은 폭 grpHead 와 같게)
     const on = !st.off.has(c);
     // data-i — 칩마다 색(strategy.css 의 .dt-cg[data-i] · theme.css 변수) · 하위 칩은 상위 칩 색을 물려받음
     const ms = st.miss.has(c), tip = ms ? ` data-tip="${esc(`그날 판에 ${c} 값을 ${missWord()} — 걸린 종목이 있어도 0 으로 셈됨${tipOf(c) ? `\n${tipOf(c)}` : ''}`)}"` : tipAt(c);
@@ -898,7 +899,7 @@ function paint0(d) {
   //   좁은 창에선 순번 ~ 들어온 가격 · 결과 ~ 손익은 붙고 시각 칸만 옆으로 밀림(「해상도가 낮아지면 든시각 옆에서 2시까지가 가로로 스크롤」 · fitSticky)
   const DS = (() => { const a = CS.filter((c) => c !== '초반상승'), p = a.indexOf('프리장'); if (a.length < CS.length) a.splice(p >= 0 ? p + 1 : a.length, 0, '초반상승'); return a; })();   // 보이는 차례만 바꿈 — 칸 목록(colsOf) 차례는 그대로
   // 묶음 칩(업종 · 테마에 붙는 칩) — 칩 칸 줄에서 빼고 머리는 「종목」 칸에, 줄마다 종목 이름 옆에(11-25 재권님 「이거 왼쪽 종목위에 있어야대고 종목 이름 옆으로 칩이 붙으면 좋을거같은데」 · 「요기 종목 옆에 있고 칩은 그아래 종목이름 옆으로」)
-  const GRP = ['돈몰림', '미국강세'], DSC = DS.filter((c) => !GRP.includes(c)), DSG = DS.filter((c) => GRP.includes(c));
+  const GRP = GRP_CHIPS, DSC = DS.filter((c) => !GRP.includes(c)), DSG = DS.filter((c) => GRP.includes(c));
   const grpHead = () => (DSG.length ? `<div class="dt-grph">${DSG.map((c) => box(chHead(c, true))).join('')}</div>` : '');
   const grpBadge = (r) => { const h = DSG.map((c) => [c, chCell(r, c).replace(/^<td[^>]*>/, '').replace(/<\/td>$/, '')]).filter(([, v]) => v).map(([c, v]) => `<span class="dt-grpb${st.off.has(c) ? ' is-off' : ''}"><span class="dt-cg" data-i="${colorOf(c)}"${(subsOf(r, c) || []).length ? ` data-tip="${esc(`걸린 묶음 — ${subsOf(r, c).join(' · ')}`)}"` : ''}><i class="dt-chs">${esc(c)}</i></span>${v}</span>`).join(''); return h ? `<span class="dt-grpw">${h}</span>` : ''; };
   const NB = times.length + 7;   // 아랫줄 칸 수 — 매수가 · 9시1분 · 들어온 가격 · 시각들 · 결과 · 다음 날 프리장 · 세금 · 손익
