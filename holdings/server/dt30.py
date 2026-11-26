@@ -201,6 +201,18 @@ def chips_now(proxy, cfg, early=True, pre=False):
                 put(r.get("code"), r.get("name"), "프리장")
     except Exception:
         missing.append("프리장")
+    if pre:                                # 「거래비율」 장 전 — 넥스트레이드 프리장 거래로(재권님 「단타창이 8시 프리장 시작되면 그때부터 동작하도록」 → 「응」 11-26)
+        try:                               # 프리장 누적 거래량 ÷ 풀린 주식수 × 100 ≥ 칩 룰 거래비율.turnPct(장중과 같은 문턱 · 11-18~26 셈으로 하루 3~7 종목)
+            t_pct = float(chip_rules.get("거래비율", "turnPct"))
+            tn = (pf or {}).get("turn")
+            if tn is None:
+                missing.append("거래비율")
+            for c, t in (tn or {}).items():
+                if t >= t_pct and not small(c):
+                    put(c, None, "거래비율", "프리장")
+            # 거래비율급증 장 전 셈은 아직 안 붙임 — 앞 날 프리장 거래량 대비 250% 가 하루 12~111 종목(11-18~26 셈)이라 문턱을 재권님께 여쭌 뒤 · 앞 날 값은 pre_flow.pre_vol_min 에 11-27 부터 쌓임
+        except Exception:
+            missing.append("거래비율")
     try:                                   # 장외 — 홈 「장외」 칩과 같은 값(순위 목록 시세의 regPct · 정규장 종가 대비) · 오른 것만 · 시가총액 문턱 아래 뺌
         # 재권님 「한곳에서 받는건데 이미 받은값은 그걸 가져와야 하고」(11-18 17:3x · 시황분석1 경유) — 시세 캐시를 함께 탄다(PRICE_CACHE_TTL)
         # 서버가 평일 07:30~15:30 장외 값을 비우므로(kis_proxy after_cleared) 08:00 ~ 10:30 판에는 보통 안 든다
