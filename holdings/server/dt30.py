@@ -1780,7 +1780,7 @@ def combo_fill(proxy, b):
 #             판 값 = 판 마지막 시각 값(px[times 끝]) · 없으면 그 줄 안 셈 · 세금 · 수수료 빼기 전
 #             익절 × 손절(COMBO_TP × COMBO_SL) = 산 다음 분부터 판 끝 앞까지 1분봉 · 먼저 닿은 쪽 · 한 봉에 둘이면 손절 · 끝까지 안 닿으면 판 값 · 1분봉 없는 건은 그 칸 셈에서 뺌(resN)
 #     저장    dt30_combo(열쇠 sig + 판 저장 시각들) 한 줄 · 열쇠가 바뀌면(셈 칸 저장 · 판이 새로 굳음 · 되채움) 뒤에서 다시 셈 · 그동안은 지난 값(busy)
-COMBO_VER = 5                           # 조합 셈 판 — 2: 부분 묶음마다 처음 품은 때(11-26 화면 2d877ad 와 같게) · 3: 「수급」 도 저장된 칩 칸을 따름(qa 대조 11-26) · 4: 산 값을 칩 찬 순간 값으로(_moment_px · 11-26) · 5: 조합마다 그 조합 칩만으로 순간을 가름
+COMBO_VER = 6                           # 조합 셈 판 — 2: 부분 묶음마다 처음 품은 때(11-26 화면 2d877ad 와 같게) · 3: 「수급」 도 저장된 칩 칸을 따름(qa 대조 11-26) · 4: 산 값을 칩 찬 순간 값으로(_moment_px · 11-26) · 5: 조합마다 그 조합 칩만으로 순간을 가름 · 6: 판에서 빠진 줄(outRows)도 셈
 COMBO_DAYS = 60                         # 셈에 드는 굳은 판 수(최근부터) — 화면이 받던 지난 판(st.days)과 같은 범위
 _ctab = {"key": None, "val": None, "busy": False, "lock": threading.Lock()}
 _CT_SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_combo (id INTEGER PRIMARY KEY CHECK (id = 1), key TEXT, body TEXT, at TEXT)"
@@ -1952,7 +1952,7 @@ def combo_table_calc(proxy):
             continue                                   # 값 적는 시각이 없는 판 — 판 값을 못 셈(그 판은 안 씀)
         last = end = T[-1]
         evs = {}
-        for r in (b.get("rows") or []):
+        for r in (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or []):   # 판에서 빠진 줄도 — 산 셈(buy930 · 승률 표 · comboBuy)이 빠진 줄도 세므로 같은 범위(qa 11-26)
             ev = _ct_row(r, b, cf, split, dc, wr_auto)
             if ev is None:
                 if any((c in (r.get("chips") or [])) for c in ov_chips()):
