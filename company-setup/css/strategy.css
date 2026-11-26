@@ -458,3 +458,6 @@
 .dt .dt-ovl .dt-ovc { display: inline-block; padding: 0 6px; border-radius: 99px; font-size: 11px; font-weight: 700; background: var(--cd); color: var(--c); }
 .dt .dt-ovl .dt-ovc:is([data-i="vol"], [data-i="vol2"]) { color: var(--kh-up); }   /* 위 칩 칸처럼 거래 칩 둘은 빨간 글씨 */
 .dt .dt-ovl .dt-ovc.is-gone { opacity: .45; }
+/* 종목 칸 넓이 한 벌(11-26 재권님 「평균의 칸 종목이 있는곳 가로 넓이가 달라. 기준을 83이미지에 맞춰서」 — 겹친 칩 이름 · 돈몰림 테마 이름이 한 줄로 길어 날마다 칸이 넓어졌음) · 넓이는 고정 · 칸 안 글은 줄을 바꿈 */
+.dt .dt-2row td.st-name { width: 26em; min-width: 26em; max-width: 26em; white-space: normal; }
+.dt .dt-2row td.st-name * { white-space: normal; }
