@@ -1340,6 +1340,35 @@ def buy_mode():
         return "p1"
 
 
+def _starts(r, ct, c):
+    """칩 c 의 붙은 분들 「HHMM」 — 구간이 있으면 구간 시작 · 없으면 처음 붙은 시각."""
+    s = (r.get("chipSpans") or {}).get(c)
+    if s:
+        return {a.replace(":", "")[:4] for a, _z in s if a}
+    t = (ct or {}).get(c)
+    return {t} if t else set()
+
+
+def _moment_px(r, ct, cs, T):
+    """칩 조합이 T 분에 다 찬 순간의 산 값 → (값 | None, 「HH:MM:SS」 | None, 셈 이름) — 화면 · 서버 · 조합 표 한 셈.
+    그 분에 붙은 칩 중 가장 늦게 안 칩(초까지 · rows[].chipSec)으로 가름(재권님 「칩조합이 들어온시간이 가장 중요 … 들어온 시각에 산다」 16:4x → 안에 「응 만들어」 11-26):
+        장중 기록에 그 순간 본 값이 있음(rows[].seenPx)  → 그 값(가장 정확)
+        정각에 안 칩(초 00 — 봉 끝 · 첫 봉 끝 · 5분봉)    → 그 시각 값 = 앞 분 1분봉 종가(chipPx[T-1])
+        그 밖(초 모름 · 59초 · 본 값 없음)                → 그 분 1분봉 종가(chipPx[T] — 늦지만 앞당기지 않음 · qa 11-26)"""
+    hm = "%s:%s" % (T[:2], T[2:])
+    done = [c for c in cs if T in _starts(r, ct, c)]
+    secs = [x for x in ((r.get("chipSec") or {}).get(c, {}).get(hm) for c in done) if x]
+    last = max(secs) if secs else None
+    cpx = r.get("chipPx") or {}
+    if last and (r.get("seenPx") or {}).get(last):
+        return r["seenPx"][last], last, "칩 찬 순간 본 값"
+    if last and last.endswith(":00") and len(secs) == len(done):
+        m = int(T[:2]) * 60 + int(T[2:]) - 1
+        v = cpx.get("%02d:%02d" % divmod(m, 60))
+        return v, last, "칩 찬 시각 값(앞 분 1분봉 종가)"
+    return cpx.get(hm), last, "칩 찬 분 1분봉 종가"
+
+
 def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
     """→ {px, at 「HH:MM」, chipAt 「HH:MM」(N번째 칩 시각), need, src} | None — 위 「사는 셈」 한 곳."""
     e = _in4(r)
@@ -1349,11 +1378,11 @@ def buy_point(b, r, ct, need, open_min=None, until=CHIP_UNTIL, mode="p1"):
     at = (b.get("meta") or {}).get("pxMinAt") or {}
     o = open_min if open_min is not None else OPEN_AT[0] * 60 + OPEN_AT[1]
     p1_ = _hm4(at.get("1")) or _hhmm(o + 1).replace(":", "")
-    cpx = (r.get("chipPx") or {}).get("%s:%s" % (T[:2], T[2:])) if r.get("chipPx") is not None else None
+    cpx, csec, csrc = _moment_px(r, ct, chips930(r, ct, until), T) if r.get("chipPx") is not None and T >= p1_ else (None, None, None)
     if r.get("chipPx") is not None and not cpx and T > p1_ and (b.get("meta") or {}).get("chipPx", {}).get("ok"):
         return None                                    # 그 분 1분봉 값이 없음 — 어림으로 안 삼(화면과 같게 · 재권님 「산값은 정확해야」) · 장중이면 굳는 1분 남짓을 기다렸다 삼(재권님 「가인데 1분으로 해줘」 11-25)
-    if cpx and T > p1_:                                # 칩 N개가 함께 붙은 그 분 1분봉 종가(chipPx) — 어림(30분 칸 · 든 때) 대신(11-25 재권님 「산값은 정확해야」 · 들어온 때 모드도 · 개념정의 덧)
-        return {"px": cpx, "at": "%s:%s" % (T[:2], T[2:]), "chipAt": "%s:%s" % (T[:2], T[2:]), "need": need, "src": "칩 찬 분 1분봉 종가"}
+    if cpx:                                            # 칩 N개가 다 찬 순간의 값(_moment_px) — 9시 1분 분에 찬 줄도(초까지 가름 · 9시 1분 0초 값으로 앞당기지 않게 · qa 11-26)
+        return {"px": cpx, "at": "%s:%s" % (T[:2], T[2:]), "atSec": csec, "chipAt": "%s:%s" % (T[:2], T[2:]), "need": need, "src": csrc}
     mh = lambda k: _hm4(at.get(str(k))) or _hhmm(o + k).replace(":", "")
 
     def mv(k):
@@ -1434,6 +1463,28 @@ def buy930_fill(proxy, b):
                 if v[0][0] is None or (t0 and t0 < v[0][0]):
                     v[0][0] = t0 or v[0][0] or "00:00"   # 기록 전부터 붙어 있었거나 처음 붙은 시각이 기록보다 이름 — 첫 구간을 처음 붙은 시각부터
             r["chipSpans"] = dict(r.get("chipSpans") or {}, **s) if r.get("spanChips") else s   # 다시 지은 구간(돈몰림 · 기록을 안 쓴 칩)은 남기고 기록이 있는 칩만 기록으로 · {칩: [[붙음, 빠짐 | None] …]} — 칩 빠진 시각(11-25 재권님 「칩 빠진 시각도 넣어줘」)
+    try:                                               # 칩마다 붙은 순간(초까지) · 그 순간 본 값 — 산 값 가름(_moment_px · 11-26 「들어온 시각에 산다」)
+        lg, _w = chip_log_get(proxy, b["day"], [r["code"] for r in rows])
+    except Exception:
+        lg = {}
+    for r in rows:
+        sec, seen = {}, {}
+        for ch, at in (cf.get(r["code"]) or {}).items():
+            h = _hms(at)
+            if h:
+                sec.setdefault(ch, {})[h[:5]] = h
+        for e in lg.get(r["code"]) or []:
+            if e["sub"] or e["kind"] != "on":
+                continue
+            h = _hms(e["at"])
+            if not h:
+                continue
+            d = sec.setdefault(e["chip"], {})
+            if h[:5] not in d or h < d[h[:5]]:
+                d[h[:5]] = h
+            if isinstance(e.get("px"), (int, float)) and e["px"] > 0:
+                seen.setdefault(h, e["px"])
+        r["chipSec"], r["seenPx"] = sec, seen
     if True:                                           # 구간이 없는 판(11-25 전)도 칩 처음 붙은 분(chipTime)으로 — 산 값 어림(30분 칸)을 없앰(qa 덧 · 재권님 「산값은 정확해야」)
         try:
             st = _chip_px_fill(proxy, b["day"], rows, o)
@@ -1480,8 +1531,9 @@ def _chip_px_fill(proxy, day, rows, o):
         for t in times_of(r):
                     if t:
                         m = int(t[:2]) * 60 + int(t[3:5])
-                        if o <= m < close:
-                            want.setdefault("%02d%02d" % divmod(m, 60), set()).add(r["code"])
+                        for mm in (m, m - 1):          # 앞 분 봉 종가도 — 정각에 안 칩은 그 시각 값(_moment_px · 11-26)
+                            if o <= mm < close:
+                                want.setdefault("%02d%02d" % divmod(mm, 60), set()).add(r["code"])
     got = {}
     with proxy.db_conn() as conn:
         for hm, codes in want.items():
@@ -1653,12 +1705,23 @@ def combo_fill(proxy, b):
             print("  [단타 30] 칩 조합 1분봉 못 읽음 — %s" % proxy.safe_message(e, 120), flush=True)
             px, bars = None, {}
         vals = {}
+        byc = {r["code"]: r for r in rows}
+        p1 = _hhmm(o + 1).replace(":", "")
         for c, g in plan.items():
             out = {}
+            r = byc.get(c) or {}
+            ct4 = {k: _hm4(v) for k, v in (r.get("chipTime") or {}).items()}
             for n, (t, on) in g.items():
                 m = max(t, o4)
                 p = px.get((c, m)) if px is not None else None
-                after = [x for x in bars.get(c, []) if x[0] > m]
+                cut = m                                # 이 분 봉 뒤부터 익절 · 손절
+                if t >= p1 and r.get("chipPx") is not None:   # 칩 찬 순간 값(_moment_px — 매수 셈 · 조합 표와 한 셈 · 11-26 「들어온 시각에 산다」)
+                    mv, _sec, src = _moment_px(r, ct4, on, t)
+                    if mv:
+                        p = mv
+                        if src.startswith("칩 찬 시각 값"):
+                            cut = _hhmm(int(t[:2]) * 60 + int(t[2:]) - 1).replace(":", "")   # 정각 값 — 그 분 봉부터
+                after = [x for x in bars.get(c, []) if x[0] > cut]
                 why = None if p else ("1분봉 못 읽음" if px is None else "그 분 1분봉 없음")
                 out[n] = {"at": "%s:%s" % (t[:2], t[2:]), "buyAt": "%s:%s" % (m[:2], m[2:]), "chips": on, "px": p,
                           "res": _combo_res(p, after) if p and after else None, "why": why or (None if after else "산 뒤 1분봉 없음")}
@@ -1671,7 +1734,7 @@ def combo_fill(proxy, b):
         r["combo"] = vals.get(r["code"])
     b["meta"]["comboDef"] = {"n": COMBO_N, "tp": list(COMBO_TP), "sl": list(COMBO_SL),
                              "note": "combo[「n」] — 칩 n개 이상이 된 첫 시각(at) · 그때 칩 묶음(chips · 켜진 칩만 · 셈 칸 chipOff · subOff · chipCols) · 산 시각 buyAt(여는 시각 앞이면 여는 분) · "
-                                     "산 값 px(그 분 1분봉 종가) · res[익절 칸][손절 칸] 수익률 %(산 다음 분부터 판 끝 앞까지 1분봉 · 먼저 닿은 쪽 · 한 봉에 둘이면 손절 · 봉 시가가 넘었으면 시가 · "
+                                     "산 값 px(칩 찬 순간 값 — buy930 과 같은 셈 · 없으면 그 분 1분봉 종가) · res[익절 칸][손절 칸] 수익률 %(산 다음 분부터 판 끝 앞까지 1분봉 · 먼저 닿은 쪽 · 한 봉에 둘이면 손절 · 봉 시가가 넘었으면 시가 · "
                                      "끝까지 안 닿으면 마지막 봉 종가 · 세금 · 수수료 안 뺌) · tp · sl 의 null 은 「없음」 · 1분봉이 없으면 px · res null(why)"}
     return len(vals)
 
@@ -1686,7 +1749,7 @@ def combo_fill(proxy, b):
 #             판 값 = 판 마지막 시각 값(px[times 끝]) · 없으면 그 줄 안 셈 · 세금 · 수수료 빼기 전
 #             익절 × 손절(COMBO_TP × COMBO_SL) = 산 다음 분부터 판 끝 앞까지 1분봉 · 먼저 닿은 쪽 · 한 봉에 둘이면 손절 · 끝까지 안 닿으면 판 값 · 1분봉 없는 건은 그 칸 셈에서 뺌(resN)
 #     저장    dt30_combo(열쇠 sig + 판 저장 시각들) 한 줄 · 열쇠가 바뀌면(셈 칸 저장 · 판이 새로 굳음 · 되채움) 뒤에서 다시 셈 · 그동안은 지난 값(busy)
-COMBO_VER = 3                           # 조합 셈 판 — 2: 부분 묶음마다 처음 품은 때(11-26 화면 2d877ad 와 같게) · 3: 「수급」 도 저장된 칩 칸을 따름(qa 대조 11-26)
+COMBO_VER = 4                           # 조합 셈 판 — 2: 부분 묶음마다 처음 품은 때(11-26 화면 2d877ad 와 같게) · 3: 「수급」 도 저장된 칩 칸을 따름(qa 대조 11-26) · 4: 산 값을 칩 찬 순간 값으로(_moment_px · 11-26)
 COMBO_DAYS = 60                         # 셈에 드는 굳은 판 수(최근부터) — 화면이 받던 지난 판(st.days)과 같은 범위
 _ctab = {"key": None, "val": None, "busy": False, "lock": threading.Lock()}
 _CT_SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_combo (id INTEGER PRIMARY KEY CHECK (id = 1), key TEXT, body TEXT, at TEXT)"
@@ -1741,16 +1804,22 @@ def _ct_row(r, b, cf, split, dc, wr_auto):
     return [(t, [c for c in cs if tm[c] <= t]) for t in sorted(set(tm.values()))]
 
 
-def _ct_px(r, b, t, o):
-    """→ (산 값 | None, 그 뒤 봉을 셀 첫 분 「HHMM」) — 9시 1분 값은 여는 분 봉 종가라 9시 1분 봉부터 · 칩 찬 분 1분봉 종가는 다음 분 봉부터 · N분 값은 그 분 봉부터(qa 덧 — 산 앞 봉이 익절 · 손절에 섞임)."""
+def _ct_px(r, b, t, o, cs=()):
+    """→ (산 값 | None, 그 뒤 봉을 셀 첫 분 「HHMM」) — 9시 1분 값은 여는 분 봉 종가라 9시 1분 봉부터 · 칩 찬 분 1분봉 종가는 다음 분 봉부터 · N분 값은 그 분 봉부터(qa 덧 — 산 앞 봉이 익절 · 손절에 섞임).
+    9시 1분 분부터는 칩 찬 순간 값(_moment_px — 매수 셈과 한 셈 · 11-26) · 정각 값이면 그 분 봉부터."""
     pm, at = r.get("pxMin") or {}, (b.get("meta") or {}).get("pxMinAt") or {}
     mh = lambda n: _hm4(at.get(str(n))) or _hhmm(o + n).replace(":", "")
     v1 = lambda x: x.get("px") if isinstance(x, dict) and isinstance(x.get("px"), (int, float)) and x["px"] > 0 else None
-    if t <= mh(1):
-        return v1(pm.get("1")) or (v1(r.get("px1")) if isinstance(r.get("px1"), dict) else None), mh(1)
-    v = (r.get("chipPx") or {}).get("%s:%s" % (t[:2], t[2:]))
+    p9 = lambda: (v1(pm.get("1")) or (v1(r.get("px1")) if isinstance(r.get("px1"), dict) else None), mh(1))
+    if t < mh(1):
+        return p9()
+    ct = {c: _hm4(v) for c, v in (r.get("chipTime") or {}).items()}
+    v, _sec, src = _moment_px(r, ct, list(cs), t)
     if isinstance(v, (int, float)) and v > 0:
-        return v, _hhmm(int(t[:2]) * 60 + int(t[2:]) + 1).replace(":", "")
+        nx = _hhmm(int(t[:2]) * 60 + int(t[2:]) + 1).replace(":", "")
+        return v, (t if src.startswith("칩 찬 시각 값") else nx)
+    if t == mh(1):
+        return p9()                                    # 9시 1분 분인데 그 분 값이 없는 판 — 예전처럼 9시 1분 값
     k = next((n for n in range(1, 6) if mh(n) == t), None)
     return (v1(pm.get(str(k))) if k else None), t
 
@@ -1801,7 +1870,7 @@ def combo_table_calc(proxy):
             for t, cs in ev:
                 if not cs:
                     continue
-                p, cut = _ct_px(r, b, t, o)
+                p, cut = _ct_px(r, b, t, o, cs)
                 for sub in _ct_subs(cs):           # 그 시각 붙은 칩의 부분 묶음마다 · 같은 조합은 처음 품은 때 한 번(화면 subKeys · 11-26 재권님 「고른 조합을 다 품으면 됨」 → 「응 그렇게 해」)
                     key = " + ".join(sub)
                     if key in seen:
