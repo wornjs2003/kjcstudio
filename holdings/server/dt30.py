@@ -1393,6 +1393,127 @@ def bars_after(per, bs, at):
     return out
 
 
+# ── 칩 조합 셈 값 (2026-11-26) ─────────────────────────────────────────────────
+# 재권님 「응 해」(11-24 · 시황분석1 창 · 시황분석1 부탁) → 개발2 안에 「응 만들어」(11-26 11:5x).
+#     칩 묶음   화면 strategy-dt30.js comboEvents 와 같은 셈 — 구간 있는 줄은 그 시각에 함께 붙어 있던 켜진 칩 · 없는 줄은 그 시각까지 처음 붙은 켜진 칩
+#               켜진 칩 = 저장된 셈 칸(chipOff · subOff · chipCols — 매수 룰과 같은 chip_filter · _chip_on) · 칩 = 단타 셈 칩 + 현재상승 · 볼린저(화면 칸과 같게)
+#     n개 된 분  묶음이 처음 n개(1~COMBO_N) 이상이 된 시각 — 한꺼번에 둘이 붙으면 1 · 2 가 같은 분
+#     산 값     그 분(여는 시각 앞이면 여는 분) 1분봉 종가(_m1_px · 거래량 0 채움 봉은 건너뜀) — 1분봉이 없으면 산 값 · 결과 null(「1분봉 없음」 · 0 아님)
+#     결과      산 다음 분부터 판 끝(times 마지막) 앞까지 1분봉 — 익절 COMBO_TP × 손절 COMBO_SL 칸마다 수익률(%)
+#               먼저 닿은 쪽 · 한 봉에 둘 다 닿으면 손절 · 봉 시가가 이미 넘었으면 시가(화면 매도 셈과 같은 꼴) · 끝까지 안 닿으면 마지막 봉 종가
+#               세금 · 수수료는 안 뺌(화면이 meta.tax 로)
+#     실음      rows[] · outRows[] 의 combo {「n」: {at 「HH:MM」, chips [..], px, res [[익절 칸마다 손절 칸 값] …] | null, why}} · meta.comboDef {tp, sl, note}
+#               읽을 때만(저장 안 함) · 지난 판은 같은 판 · 같은 셈 칸이면 메모리에 둠
+COMBO_N = 5
+COMBO_TP = (None, 1.5, 2, 3, 4, 5)       # 익절 % — None 은 「없음」
+COMBO_SL = (None, -1, -1.5, -2, -3)      # 손절 %
+COMBO_LIVE_SEC = 60                      # 그날 판(안 끝남) 셈을 다시 쓰는 초 — 1분봉이 1분마다 늘어서
+_combo_memo = {}
+
+
+def _combo_events(r, ct, cs):
+    """[(「HHMM」, [칩 …])] — 그 시각에 켜져 셈 되는 칩 묶음(화면 comboEvents 와 같게)."""
+    if r.get("chipSpans") is None:
+        e = _in4(r)
+        tm = {c: (ct or {}).get(c) or e or "0000" for c in cs}
+        return [(t, [c for c in cs if tm[c] <= t]) for t in sorted(set(tm.values()))]
+    iv = {c: _spans4(r, ct, [c]) for c in cs}
+    ts = sorted({x for v in iv.values() for a, z in v for x in (a, z) if x})
+    return [(t, [c for c in cs if any(a <= t and (z is None or z > t) for a, z in iv[c])]) for t in ts]
+
+
+def _combo_res(px, bars):
+    """익절 × 손절 칸 수익률(%) — bars [[HHMM, 시가, 고가, 저가, 종가] …] 산 다음 분부터."""
+    out = []
+    for tp in COMBO_TP:
+        line = []
+        for sl in COMBO_SL:
+            up = px * (1 + tp / 100) if tp is not None else None
+            dn = px * (1 + sl / 100) if sl is not None else None
+            v = None
+            for _t, o, h, l, c in bars:
+                if dn is not None and l <= dn:
+                    v = o if o < dn else dn            # 손절 먼저(한 봉에 둘 다면 손절)
+                    break
+                if up is not None and h >= up:
+                    v = o if o > up else up
+                    break
+            if v is None and bars:
+                v = bars[-1][4]
+            line.append(round((v / px - 1) * 100, 2) if v else None)
+        out.append(line)
+    return out
+
+
+def combo_fill(proxy, b):
+    """판 줄마다 combo — 위 「칩 조합 셈 값」 한 곳. 읽을 때만 · 셈한 줄 수."""
+    import json as _j
+    rows = (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or [])
+    day = b["day"]
+    cf = chip_filter()
+    split = ((b.get("meta") or {}).get("viSplit") or "09:25").replace(":", "")
+    end = (b.get("times") or ["1400"])[-1]
+    key = (day, (b.get("meta") or {}).get("savedAt"), _j.dumps([sorted(cf[0]), sorted(cf[1]), sorted(cf[2]) if cf[2] is not None else None], ensure_ascii=False),
+           len(rows), end)
+    hit = _combo_memo.get(day)
+    live = b.get("closed") is False
+    if hit and hit[0] == key and (not live or time.time() - hit[1] < COMBO_LIVE_SEC):
+        vals = hit[2]
+    else:
+        o = _open_min(proxy, day, b)
+        o4 = _hhmm(o).replace(":", "")
+        pool = ov_chips() + ("현재상승", "볼린저")
+        plan = {}
+        for r in rows:
+            ct = {k: str(v).replace(":", "") for k, v in (r.get("chipTime") or {}).items()}
+            cs = [c for c in pool if (c in (r.get("chips") or []) or ct.get(c)) and _chip_on(r, c, cf, split)]
+            got = {}
+            for t, on in _combo_events(r, ct, cs):
+                for n in range(1, COMBO_N + 1):
+                    if str(n) not in got and len(on) >= n:
+                        got[str(n)] = (t, list(on))
+            if got:
+                plan[r["code"]] = got
+        mins = {max(t, o4) for g in plan.values() for t, _ in g.values()}
+        px, bars = {}, {}
+        codes = list(plan)
+        try:
+            with proxy.db_conn() as conn:
+                for m in mins:
+                    want = [c for c in codes if any(max(t, o4) == m for t, _ in plan[c].values())]
+                    for c, v in _m1_px(conn, day, want, day + m, "close").items():
+                        px[(c, m)] = v
+                if codes:
+                    for c, ts, op, h, l, cl, v in conn.execute(
+                            "SELECT code, ts, open, high, low, close, volume FROM candles WHERE period = '1m' AND ts >= ? AND ts < ? AND code IN (%s) ORDER BY ts"
+                            % ",".join("?" * len(codes)), [day + o4, day + end] + codes):
+                        if v and op and h and l and cl:
+                            bars.setdefault(c, []).append([ts[8:12], op, h, l, cl])
+        except Exception as e:
+            print("  [단타 30] 칩 조합 1분봉 못 읽음 — %s" % proxy.safe_message(e, 120), flush=True)
+            px, bars = None, {}
+        vals = {}
+        for c, g in plan.items():
+            out = {}
+            for n, (t, on) in g.items():
+                m = max(t, o4)
+                p = px.get((c, m)) if px is not None else None
+                after = [x for x in bars.get(c, []) if x[0] > m]
+                why = None if p else ("1분봉 못 읽음" if px is None else "그 분 1분봉 없음")
+                out[n] = {"at": "%s:%s" % (t[:2], t[2:]), "buyAt": "%s:%s" % (m[:2], m[2:]), "chips": on, "px": p,
+                          "res": _combo_res(p, after) if p else None, "why": why or (None if after else "산 뒤 1분봉 없음")}
+            vals[c] = out
+        _combo_memo.clear()
+        _combo_memo[day] = (key, time.time(), vals)
+    for r in rows:
+        r["combo"] = vals.get(r["code"])
+    b["meta"]["comboDef"] = {"n": COMBO_N, "tp": list(COMBO_TP), "sl": list(COMBO_SL),
+                             "note": "combo[「n」] — 칩 n개 이상이 된 첫 시각(at) · 그때 칩 묶음(chips · 켜진 칩만 · 셈 칸 chipOff · subOff · chipCols) · 산 시각 buyAt(여는 시각 앞이면 여는 분) · "
+                                     "산 값 px(그 분 1분봉 종가) · res[익절 칸][손절 칸] 수익률 %(산 다음 분부터 판 끝 앞까지 1분봉 · 먼저 닿은 쪽 · 한 봉에 둘이면 손절 · 봉 시가가 넘었으면 시가 · "
+                                     "끝까지 안 닿으면 마지막 봉 종가 · 세금 · 수수료 안 뺌) · tp · sl 의 null 은 「없음」 · 1분봉이 없으면 px · res null(why)"}
+    return len(vals)
+
+
 def bars_fill(proxy, b):
     """산 줄(buy930)마다 rows[].bars [[「HH:MM」, 시가, 고가, 저가, 종가], …] · barSrc 「1m」 · 「5m」 · null — 산 분부터 판 끝(times 마지막) 앞까지(bars_get).
     매도 타점을 30분 칸이 아니라 봉으로 — 재권님 「매도에서 해당룰이 적용안되는거 같은데. 3%나 4%를 맞으면 안되는데 이거 왜이래? 매도타점 정확히 계산해」(11-23 19:1x) ·
@@ -3925,6 +4046,10 @@ def board(proxy, day=None, cfg=None):
             bars_fill(proxy, b)                        # 산 때~판 끝 봉 줄(매도 타점 재료 · 화면 · 승률 표 같은 봉)
         except Exception as e:
             print("  [단타 30] 봉 줄 못 붙임 — %s" % proxy.safe_message(e, 120), flush=True)
+        try:
+            combo_fill(proxy, b)                       # 칩 조합 셈 값(rows[].combo · meta.comboDef · 11-26 「응 만들어」)
+        except Exception as e:
+            print("  [단타 30] 칩 조합 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
     b["meta"]["subNames"] = {"매수|" + "①②③④"[k - 1]: v[0] for k, v in proxy.JOINT_TIER_NAME.items()}   # 하위 이름표 — 서버 한 곳(kis_proxy.JOINT_TIER_NAME · 11-20)
     b["meta"]["subTips"] = {"매수|" + "①②③④"[k - 1]: v[1] for k, v in proxy.JOINT_TIER_NAME.items()}
     import dt30_win
