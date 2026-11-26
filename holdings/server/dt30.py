@@ -4535,6 +4535,7 @@ RULE_MIN_DEF, RULE_MIN_LO, RULE_MIN_HI = 5, 5, 30   # 화면 strategy-dt30.js RU
 TOP_DEF = 30                 # 「상위 ( )종목」 칸이 비었을 때 — 화면 DEF_SET top(PNL_TOP)과 같은 값 · 〃
 TURN_ON_DEF, TURN_MIN_DEF = True, 1.0   # 저장값에 칸이 없을 때 — 화면 DEF_SET turnOn · turnMin(시황분석1 0d0e60f · 재권님 「유통거래대비 1%가 기본」)과 같은 값 · 〃
 BUY_WAIT_MIN = 3             # 그 분 유통 대비 거래 값이 아직 없으면 이 분까지 기다렸다 셈(1분봉 받기가 1분마다) · 그 뒤에도 없으면 못 잼 → 안 삼
+BUY_PX_FILL_MIN = 60         # 보내기 창 뒤 「매수값 미확인」 값을 더 기다리는 분 — 그 뒤로는 안 셈(판 셈을 바퀴마다 돌리지 않게)
 BUY_SEND_LATE = 5            # R + 이 분이 지나면 더 안 보냄(서버가 늦게 뜬 날 묵은 종목을 보내지 않게)
 
 
@@ -4833,9 +4834,18 @@ def buy_send(proxy, b, hm):
     with _frozen_set(b):
         late = (max(rule_min(), COMBO_UNTIL_MIN) if _set_val("comboOn") is True else rule_min()) + BUY_SEND_LATE   # 조합으로 사는 날은 9시 30분까지 채움
     o = _open_min(proxy, b["day"], b)
+    m = b.setdefault("meta", {})
+    if o + late < hm <= o + late + BUY_PX_FILL_MIN and any(v.get("px") is None for v in (m.get("tgBuy") or {}).values()):
+        rows, _ = buy_order(proxy, b, hm)              # 보내기 창 뒤 — 「매수값 미확인」 으로 보낸 종목 값만 들어오는 대로 채움(새로 보내지는 않음 · 개념정의 덧 11-26)
+        got = 0
+        for r in rows:
+            sb = m["tgBuy"].get(r["code"]) or {}
+            if sb and sb.get("px") is None and r["buyRule"].get("px"):
+                sb["px"], sb["pxAt"] = r["buyRule"]["px"], _now().strftime("%H:%M:%S")
+                got += 1
+        return got or (1 if fz else 0)
     if hm < o + 1 or hm > o + late:
         return 1 if fz else 0                          # 굳힌 것도 저장되게(바뀐 것으로 셈)
-    m = b.setdefault("meta", {})
     top = m.setdefault("tgTop", [])
     rows, _ = buy_order(proxy, b, hm)
     n = 0
