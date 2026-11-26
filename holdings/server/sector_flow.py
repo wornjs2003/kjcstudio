@@ -437,7 +437,7 @@ def backfill_missing(proxy):
             # 봉이 모자라 못 채우면 옛 판 그대로 남는다(backfill 이 안 덮는다)
             first = next(iter((json.loads(body) or {}).values()), None) if body else None
             amt0 = (first or {}).get("amt") or {}
-            if first and SLOTS[-1] in amt0 and SLOTS[1] in amt0:
+            if first and ((SLOTS[-1] in amt0 and SLOTS[1] in amt0) or "tail5m" in (src or "")):   # 뒤 칸 덧붙이기를 한 번 해 본 판도 끝난 것으로(봉이 모자라 못 채운 날 · qa 11-26)
                 have.add(d)
             elif first and SLOTS[1] in amt0 and OLD_END_LAST in amt0:   # 끝 시각을 늘리기 전(14:00 까지) 판 — 뒤 칸만 덧붙임(통째로 다시 지으면 사진 판 매수 몫이 지워짐)
                 tail.setdefault(d, {})[by] = (json.loads(body), src, codes)
@@ -460,7 +460,8 @@ def tail_fill(proxy, day, olds):
     n = 0
     for by, (old, src, codes) in olds.items():
         v, _c = build_5m(proxy, day, by)
-        if v is None:
+        if v is None:                                  # 봉이 모자란 날 — 판은 그대로 두되 「덧붙이기 해 봄」 을 남겨 서버가 뜰 때마다 다시 안 돌게(qa 11-26 · 그날 6날 105초씩)
+            _store(proxy, day, by, old, (src or "") + "+tail5m" if "tail5m" not in (src or "") else src, codes)
             continue
         for name, row in old.items():
             nv = v.get(name)
