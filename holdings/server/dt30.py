@@ -1613,10 +1613,11 @@ def _chip_px_fill(proxy, day, rows, o):
             if need:
                 fs = set()
                 px = _m1_px(conn, day, need, day + hm, "close", fs)
-                for c, v in px.items():
-                    _cpx[(day, c, hm)] = v
-                    if c in fs:
-                        _cpx_first.add((day, c, hm))  # 그 분이 채움 봉 — 다음 첫 체결가(이름 가름)
+                with _cpx_lock:                    # 넣기도 지우기와 한 잠금 — 겹친 물음의 지우기 훑기가 크기 바뀜으로 터지지 않게(개념정의 덧 11-26)
+                    for c, v in px.items():
+                        _cpx[(day, c, hm)] = v
+                        if c in fs:
+                            _cpx_first.add((day, c, hm))  # 그 분이 채움 봉 — 다음 첫 체결가(이름 가름)
             for c in codes:
                 v = _cpx.get((day, c, hm))
                 if v:
