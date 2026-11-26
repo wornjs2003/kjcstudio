@@ -243,7 +243,8 @@ def _make(proxy, cfg):
     try:
         import company_profile
         fl = company_profile.floats()
-        turn = {c: round(v / fl[c] * 100, 3) for c, v in vols.items() if fl.get(c)} if fl else None   # 풀린 주식수 표가 비면 못 잼(빈 판으로 칩 0 이 되지 않게 · 개념정의 덧 11-26)
+        import turnover                                # 거래 비율 셈 한 곳(turnover.calc · 단타 리뷰 ① 11-26)
+        turn = {c: turnover.calc(nx[c]["price"], nx[c]["price"] * v, fl[c])[1] for c, v in vols.items() if fl.get(c) and nx[c].get("price")} if fl else None   # 풀린 주식수 표가 비면 못 잼(빈 판으로 칩 0 이 되지 않게 · 개념정의 덧 11-26)
     except Exception:
         turn = None                                    # 못 잼 — 단타 판이 「거래비율」 을 못 받음으로
     _vol_log(proxy, day, now.strftime("%H%M"), vols)
