@@ -343,7 +343,8 @@ function buyOf(r) {   // → { px, at(HHMM), src } | null
     if (T > chipUntil().replace(':', '') && !st.set.buyLate930) return null;   // 09:30 뒤에 칩이 찬 종목 — 셈 칸 「삼 / 안 삼」(set.buyLate930 · 기본 안 삼 = 서버 buy930 · 승률 표와 같음) · 재권님 「살지말지 내가 정할수 있어야해」(11-23 19:4x)
     // 9시 1분 · 1~5분 값이 없는 날(1분봉은 11-12 부터 쌓임)은 안 사지 않고 아래 「든 때 → 다음 30분 칸」 으로 — 서버 buy930 과 같은 차례(11-23 재권님 「누락된 이유가 뭐지? 코드가 뭔가 일괄적이지 않은거 같은데」 → 「응」)
     // 9시 1분 이하에 찬 줄 — 들어온 때(open) 모드는 r.buy(든 순간 현재가 · 장 전부터 있던 줄은 여는 시각+1분 직후 현재가) · 칩 찬 때(p1) 모드는 9시 1분 값 — 서버 buy930 과 같은 셈(개발2 buy_point · 11-25 qa 제일기획 19,210 ↔ 19,200)
-    const p1 = minHM(1); if (T <= p1 && k === 'open') { const e1 = inTs(r); if (!e1 || !(Number(r.buy) > 0)) return null;   /* 든 시각을 모르면 안 삼 — 서버 buy_point None 과 같게(개념정의 덧 16:04) */ return { px: Number(r.buy), at: e1.slice(0, 4), src: `${r.buySrc || '들어온 때 값'} · ${needTxt(r)} ${hmS(T)}` }; }
+    // 9시 1분 이하에 찬 줄은 「들어온 때」 모드도 9시 1분 값(11-26 재권님 「칩을 바꾸면 바꾼칩갯수가 다찬시간에 매수가 되야하는데」 → 「응」 — 판에 든 때 값(r.buy)으로 사던 것 걷음 · RFHIC 08:05 찬 줄을 09:45 값으로 샀음) · 서버 buy930 은 아직 든 때 값(개발2 에 알림)
+    const p1 = minHM(1);
     if (T <= p1) { const o = minVal(r, 1); if (o && Number(o.px) > 0) return { px: Number(o.px), at: p1, src: `${hmS(p1)} 값 · ${needTxt(r)} ${hmS(T)}` }; }
     const CPM = (curD().meta || {}).chipPx;   // 서버 칩 찬 분 1분봉 값 — {ok} 인 판만 쓴다 · {ok:false} 면 아래 옛 셈(어림)
     if ((CPM && CPM.ok !== false) || r.chipPx) { const v = Number((r.chipPx || {})[hmS(T)]); if (v > 0) return { px: v, at: T, src: `${hmS(T)} 1분봉 · ${needTxt(r)}` }; NOPX.set(r, CPM && CPM.settledTo && hmS(T) >= String(CPM.settledTo) ? `${hmS(T)} 분봉 굳는 중` : `${hmS(T)} 분봉 없음`); return null; }   /* 1분봉이 있는 판에서 그 분 값이 없으면 어림하지 않고 안 삼 — 옛 판도(서버 같은 셈 · 개발2 11-25) · 그날 1분봉이 아예 없으면 서버가 meta.chipPx {ok:false} 로 내 아래 어림 */   /* settledTo — 이 분부터 굳는 중(서버 _chip_px_fill 은 그 앞 분만 실음 · 개발2 1719020) */   // 9시 1분 뒤는 서버 buy930 과 같은 값(개발2 df182ad · 분 1분봉 종가)
