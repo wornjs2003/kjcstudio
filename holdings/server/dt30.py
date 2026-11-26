@@ -1763,8 +1763,9 @@ def combo_table_calc(proxy):
         split = ((b.get("meta") or {}).get("viSplit") or vi_split(o - OPEN_AT[0] * 60 - OPEN_AT[1])).replace(":", "")
         wr_auto = (b.get("meta") or {}).get("watchRule") == "자동"
         T = b.get("times") or []
-        last = T[-1] if T else None
-        end = last or "1400"
+        if not T:
+            continue                                   # 값 적는 시각이 없는 판 — 판 값을 못 셈(그 판은 안 씀)
+        last = end = T[-1]
         evs = {}
         for r in (b.get("rows") or []):
             ev = _ct_row(r, b, cf, split, dc, wr_auto)
