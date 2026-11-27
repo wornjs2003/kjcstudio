@@ -762,7 +762,8 @@ const live = d.flat930 || comboMode() ? live0.map((r, i) => [r, nthChipAt(r) || 
   //   유통 대비 거래 · 섹터 · 테마 거름은 위와 같게 · 본 표 + 장중 창 보기만 + 이 줄 합이 SHOW_MAX 까지
   const RVs = new Set(RV.map((x) => x.r));
   const RB = S.minChip > 0 || comboMode() ? rows1.map((r, i) => [r, nEver(r), i]).filter(([r]) => !rows.includes(r) && !RVs.has(r) && fOk(r) && !(st.grp && grpOn && !grpHas(r, st.grp)))
-    .sort((a, b) => b[1] - a[1] || a[2] - b[2]).slice(0, Math.max(0, SHOW_MAX - rows.length - RV.length)).map(([r]) => { const x = mkR(r); x.below = true; return x; }) : [];
+    .sort((a, b) => b[1] - a[1] || a[2] - b[2]).slice(0, Math.max(0, SHOW_MAX - rows.length - RV.length)).map(([r]) => { const t = inTs(r); if (Number(r.buy) > 0) HYPO.set(r, { px: Number(r.buy), at: t.slice(0, 4), src: `${t.length >= 6 ? `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}` : '—'} 든 때 · 가정(산 것 아님)` });   // 보기만 줄도 셈은 다 함 — 장중 창 보기만 줄(RV)과 같게 든 때 값으로 가정 매수 · 상위 N · 손익 합 · 평균에는 안 듦(11-27 재권님 「단타창에 있는 종목들은 계산은 다하라고 몇번을 말했는데」)
+      const x = mkR(r); x.below = true; x.hypo = true; return x; }) : [];
   return { fillAdd, times, all, live, rows1, rowsF, rows, L, LIVE, R, n, nb, per, top, noMkt, P, lkMode, lkWon, lkCnt, G, RV, IX, RB };
 }
 
