@@ -1314,6 +1314,8 @@ async function loadFee() {
   if (!DT_CHIPS.length || st.chipFail || st.sellFail !== false) await loadDtChips();   // 매도 기본값(SELL_DEF)이 셈 칸보다 먼저
   try { const r = await fetch(DOC, { cache: 'no-store' }); const j = r.ok ? await r.json() : null; const R0 = j && j.data && j.data.rules && j.data.rules.dt30 ? j.data.rules.dt30 : {}; const v = R0.feePct; st.fee = v == null || v === '' ? null : Number(v);
     st.set = { ...DEF_SET, ...SELL_DEF, ...(R0.set && typeof R0.set === 'object' ? R0.set : {}), mode: 'day' }; st.setSaved = { ...st.set }; st.setDirty = false; st.chipSig = chipSig();   // chipSig — 이 화면을 연 때의 끈 칩(자동 저장은 이 화면에서 칩을 바꿨을 때만 · 다른 브라우저가 열려 있다 저장값을 덮지 않게 · 11-24)   // 저장된 값 — 차례 점수만 바로 저장할 때 안 누른 고침을 섞지 않으려고(개념정의 덧 11-23)
+    // 칩 칸 · 끈 칩 · 하위 칩은 서버에 저장된 값으로 시작 — 브라우저마다 따로 든 칸(localStorage)이 저장값과 갈려 서버 조합 표를 못 쓰고 지난 판을 다 받아 「조합 셈하는 중」 이 1분 넘게 갔음(11-27 재권님 「아직도 안대잖아」 · 서버 매수 알림도 저장값으로 셈) · 화면에서 바꾸면 저장 전까지 그 브라우저만
+    { const Sv = R0.set || {}; if (Array.isArray(Sv.chipCols) && Sv.chipCols.length) { st.cols = Sv.chipCols.map(String).map(chipName); st.off = new Set((Sv.chipOff || []).map(String).map(chipName)); st.subOff = new Set((Sv.subOff || []).map(String).map((k) => { const i = k.indexOf('|'); return i < 0 ? chipName(k) : `${chipName(k.slice(0, i))}${k.slice(i)}`; })); colsSave(); st.chipSig = chipSig(); } }
     st.score = R0.score && typeof R0.score === 'object' ? R0.score : {};   // 돈은 늘 전체 금액 ÷ 종목 수
     if (R0.set && R0.set.mode === 'each' && R0.set.perWon) st.set.dayWon = R0.set.perWon * (st.set.top || PNL_TOP); }   // 옛 저장값(종목마다)은 같은 돈이 되게 옮김
   catch (e) { st.fee = null; st.set = { ...DEF_SET, ...SELL_DEF }; }
