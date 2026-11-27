@@ -4984,7 +4984,7 @@ TURN_NOTE = ("floatCap 풀린 시총(억원) = 발행주식수 × 유동비율(�
              "그날 판은 지금 값 · 굳힌 판은 그날 쌓인 마지막 값(turnover_day) · 못 잰 칸은 null · 우선주는 유동비율 출처가 없어 null")
 
 
-QUOTES_UP_TIMEOUT = 8          # 상류 시세 묻기 끝 초 — 넘으면 이 서버 길(fetch_quotes_multi)로
+QUOTES_UP_TIMEOUT = 8          # 상류 시세 묻기 끝 초(묶음 전체) — 넘으면 이 서버 길(fetch_quotes_multi)로
 
 
 def _quotes_up(proxy, cfg, codes):
@@ -4994,10 +4994,13 @@ def _quotes_up(proxy, cfg, codes):
     up = proxy.upstream_base() if hasattr(proxy, "upstream_base") and not getattr(proxy, "KIS_UPSTREAM_SERVE", False) else None
     if up and codes:
         try:
-            got = {}
+            got, t_end = {}, time.time() + QUOTES_UP_TIMEOUT   # 끝 시간은 묶음마다가 아니라 전체(개념정의 덧 11-27)
             for i in range(0, len(codes), 120):           # 상류 시세 주소가 한 번에 받는 끝(멀티 4묶음)
+                left = t_end - time.time()
+                if left <= 0.5:
+                    raise TimeoutError("상류 시세 %d초 넘음" % QUOTES_UP_TIMEOUT)
                 req = urllib.request.Request(up + "/api/kis/quotes?codes=" + ",".join(codes[i:i + 120]))
-                with urllib.request.urlopen(req, timeout=QUOTES_UP_TIMEOUT) as r:
+                with urllib.request.urlopen(req, timeout=left) as r:
                     got.update((json.loads(r.read().decode("utf-8")) or {}).get("data") or {})
             if got:
                 return got
