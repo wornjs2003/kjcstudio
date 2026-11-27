@@ -1877,12 +1877,20 @@ def combo_buy_fill(proxy, b):
         for r in (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or []):
             r["comboBuy"] = None
         return 0
-    sel = [(t["key"], t["chips"]) for t in tab if t.get("upPct", 0) >= up and t.get("cnt", 0) >= nn]
-    sel.sort(key=lambda x: -len(x[1]))
-    pk["keys"] = [k for k, _ in sel]
     rows = (b.get("rows") or []) + ((b.get("meta") or {}).get("outRows") or [])
     cf, dc = chip_filter(), day_chips()
     o = _open_min(proxy, b["day"], b)
+    now = _now()
+    opened = b["day"] < now.strftime("%Y%m%d") or now.hour * 60 + now.minute >= o + 1
+    miss = set((b.get("meta") or {}).get("missing") or [])   # 그날 못 받은 칩(미국 휴장 날 미국강세 — us_strong 「그날 짝 미국 값 없음」)
+    dead = sorted(c for c in dc if (c in miss) or (opened and rows and not any(c in (r.get("chips") or []) or (r.get("chipTime") or {}).get(c) for r in rows)))
+    # 그날 생길 수 없는 칩 — 하루 고정 칩(dayChips · 여는 시각에 정해짐) 중 여는 시각 뒤 판에 한 줄도 없는 것(미국 휴장 날 미국강세처럼) · 그 칩이 든 조합은 그날 고르지 않음(재권님 「가」 11-27 09:3x)
+    sel = [(t["key"], t["chips"]) for t in tab if t.get("upPct", 0) >= up and t.get("cnt", 0) >= nn and not set(t["chips"]) & set(dead)]
+    sel.sort(key=lambda x: -len(x[1]))
+    pk["keys"] = [k for k, _ in sel]
+    if dead:
+        pk["dead"] = dead
+        pk["deadNote"] = "그날 판에 한 줄도 없는 하루 고정 칩 — 그 칩이 든 조합은 고르지 않음"
     split = ((b.get("meta") or {}).get("viSplit") or vi_split(o - OPEN_AT[0] * 60 - OPEN_AT[1])).replace(":", "")
     wr_auto = (b.get("meta") or {}).get("watchRule") == "자동"
     n = 0
