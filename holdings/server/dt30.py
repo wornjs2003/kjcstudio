@@ -1825,7 +1825,7 @@ def combo_fill(proxy, b):
 #             판 값 = 판 마지막 시각 값(px[times 끝]) · 없으면 그 줄 안 셈 · 세금 · 수수료 빼기 전
 #             익절 × 손절(COMBO_TP × COMBO_SL) = 산 다음 분부터 판 끝 앞까지 1분봉 · 먼저 닿은 쪽 · 한 봉에 둘이면 손절 · 끝까지 안 닿으면 판 값 · 1분봉 없는 건은 그 칸 셈에서 뺌(resN)
 #     저장    dt30_combo(열쇠 sig + 판 저장 시각들) 한 줄 · 열쇠가 바뀌면(셈 칸 저장 · 판이 새로 굳음 · 되채움) 뒤에서 다시 셈 · 그동안은 지난 값(busy)
-COMBO_VER = 6                           # 조합 셈 판 — 2: 부분 묶음마다 처음 품은 때(11-26 화면 2d877ad 와 같게) · 3: 「수급」 도 저장된 칩 칸을 따름(qa 대조 11-26) · 4: 산 값을 칩 찬 순간 값으로(_moment_px · 11-26) · 5: 조합마다 그 조합 칩만으로 순간을 가름 · 6: 판에서 빠진 줄(outRows)도 셈
+COMBO_VER = 7                           # 조합 셈 판 — 2: 부분 묶음마다 처음 품은 때(11-26 화면 2d877ad 와 같게) · 3: 「수급」 도 저장된 칩 칸을 따름(qa 대조 11-26) · 4: 산 값을 칩 찬 순간 값으로(_moment_px · 11-26) · 5: 조합마다 그 조합 칩만으로 순간을 가름 · 6: 판에서 빠진 줄(outRows)도 셈 · 7 — 날마다 「그날까지」 표를 남기려 한 번 다시 셈(11-27)
 COMBO_DAYS = 60                         # 셈에 드는 굳은 판 수(최근부터) — 화면이 받던 지난 판(st.days)과 같은 범위
 _ctab = {"key": None, "val": None, "busy": False, "lock": threading.Lock()}
 _CT_SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_combo (id INTEGER PRIMARY KEY CHECK (id = 1), key TEXT, body TEXT, at TEXT)"
@@ -1988,12 +1988,13 @@ def _ct_px(r, b, t, o, cs=()):
     return (v1(pm.get(str(k))) if k else None), t
 
 
-def combo_table_calc(proxy):
-    """굳은 판 전부로 조합 표 — 위 「칩 조합 표」 한 곳. → {rows, used, untimed, rowsN}."""
+def combo_table_calc(proxy, snaps=None):
+    """굳은 판 전부로 조합 표 — 위 「칩 조합 표」 한 곳. → {rows, used, untimed, rowsN}.
+    snaps 를 주면 오래된 날부터 쌓아 가며 날마다 「그날까지」 표를 [(날, 표 rows, used)] 로 남긴다 — 지난 판도 그날 앞까지 표로 고르게(재권님 「응」 11-27 10:0x)."""
     cf = chip_filter()
     dc = day_chips()
     M, used, untimed, rows_n = {}, [], 0, 0
-    for d in days(proxy)[:COMBO_DAYS]:
+    for d in sorted(days(proxy)[:COMBO_DAYS]):
         b = board(proxy, d)
         if not b or b.get("closed") is not True:
             continue
@@ -2043,6 +2044,8 @@ def combo_table_calc(proxy):
                     if not p:
                         continue
                     _ct_add(M, key, sub, d, ex, p, cut, bars.get(code, []), end)
+        if snaps is not None:
+            snaps.append((d, _ct_out(M, list(used), untimed, rows_n)["rows"], list(used)))
     return _ct_out(M, used, untimed, rows_n)
 
 
@@ -2097,7 +2100,8 @@ def _ct_out(M, used, untimed, rows_n):
 
 def _ct_run(proxy, key):
     try:
-        val = combo_table_calc(proxy)
+        snaps = []
+        val = combo_table_calc(proxy, snaps)
         val["sig"], val["at"] = combo_sig(), _now().strftime("%Y-%m-%d %H:%M:%S")
         _ctab.update(key=key, val=val)
         if proxy.marketdb.writable():
@@ -2105,9 +2109,9 @@ def _ct_run(proxy, key):
                 conn.execute(_CT_SCHEMA)
                 conn.execute("INSERT OR REPLACE INTO dt30_combo (id, key, body, at) VALUES (1, ?, ?, ?)", (key, json.dumps(val, ensure_ascii=False), val["at"]))
                 if val.get("used"):                    # 날마다 남김 — 셈에 든 마지막 굳은 판 날로(재권님 「하루하루 칩조합 승률을 갱신하고 그것중 70%이상만 단타창에서 적용」 16:45 → 안에 「응 해」 11-26)
-                    conn.execute(_CTD_SCHEMA)
-                    conn.execute("INSERT OR REPLACE INTO dt30_combo_day (day, sig, at, used, body) VALUES (?,?,?,?,?)",
-                                 (max(val["used"]), val["sig"], val["at"], json.dumps(val["used"]), json.dumps(val["rows"], ensure_ascii=False)))
+                    conn.execute(_CTD_SCHEMA)          # 날마다 「그날까지」 표도 — 지난 판(그 다음 날)이 그 표로 고름(11-27 · 오늘 고른 조합을 지난 날에 쓰던 것)
+                    conn.executemany("INSERT OR REPLACE INTO dt30_combo_day (day, sig, at, used, body) VALUES (?,?,?,?,?)",
+                                     [(d, val["sig"], val["at"], json.dumps(u), json.dumps(rws, ensure_ascii=False)) for d, rws, u in snaps if u])
     except Exception as e:
         print("  [단타 30] 칩 조합 표 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
     finally:
