@@ -139,7 +139,7 @@ const comboAdds = (r, h) => { const S = [...comboSel()].map((k) => k.split(' + '
   comboEvents(r).forEach(([t, cs]) => { if (t <= h.t) return; const on = new Set(cs);
     S.forEach((ks) => { if (ks.every((c) => on.has(c))) ks.forEach((c) => { if (!have.has(c)) { have.add(c); out.push(c); } }); }); });
   return out.map((c) => [c, chipFirst(r, c)]).sort((a, b) => (a[1] || '9999').localeCompare(b[1] || '9999')); };
-const nameB = (r) => { const h = comboHit(r); if (!h) return `<b>${esc(r.name || '—')}</b>`; const ks = h.key.split(' + '), lo = cbLow(h.key) ? ' is-low' : ''; return `<b class="dt-cbn${lo}">${esc(r.name || '—')}</b><small class="dt-cbt${lo}" data-tip="${esc(`고른 조합 ${h.key} — ${hmS(h.t)} 에 됨${lo ? ` · 오른 비율이 기본 문턱 ${cbBase()}% 아래(낮춘 문턱으로 들어옴)` : ''}`)}"><span class="dt-cbt-t">조합 ${hmS(h.t)}</span>${ks.map((c) => cbPill(c)).join('')}${comboAdds(r, h).map(([c, t]) => cbPill(c, t || null)).join('')}</small>`; };   // 풍선은 아래 작은 글에 — 이름에 달면 이름을 눌러도 종목 창이 안 뜸(openCo 가 풍선 칸은 넘김 · 11-26)
+const nameB = (r) => { const h = comboHit(r); if (!h) return `<b>${esc(r.name || '—')}</b>`; const ks = h.key.split(' + '), lo = cbLow(h.key) ? ' is-low' : ''; return `<b class="dt-cbn${lo}">${esc(r.name || '—')}</b><small class="dt-cbt${lo}" data-tip="${esc(`고른 조합 ${h.key} — ${hmS(h.t)} 에 됨${lo ? ` · 오른 비율 ${cbBase()}% 아래(낮춘 문턱으로 들어옴)` : ''}`)}"><span class="dt-cbt-t">조합 ${hmS(h.t)}</span>${ks.map((c) => cbPill(c)).join('')}${comboAdds(r, h).map(([c, t]) => cbPill(c, t || null)).join('')}</small>`; };   // 풍선은 아래 작은 글에 — 이름에 달면 이름을 눌러도 종목 창이 안 뜸(openCo 가 풍선 칸은 넘김 · 11-26)
 const p1HM = () => { const o = String(DM().px1At || '').replace(':', ''); return /^\d{4}$/.test(o) && o > openHM() ? o : addHM(openHM(), 1); };   // 여는 시각보다 앞이면(늦게 연 날 옛 서버가 09:01 을 줌) 여는 시각 + 1분
 export const VI_SUBS = ['09:25 전', '09:25 이후', '시각 모름'];   // 점수표 열쇠(「VI·급등|09:25 전」)도 이 이름 — strategy-chips.js 가 가져다 씀
 const hm4 = (t) => String(t || '').replace(/:/g, '').slice(0, 4);   // 이 칩 셈만으로 돌게 — 아래 매수 타이밍의 hhmm 에 기대지 않음(11-18 메인에 이 커밋만 먼저 가 hhmm 없음으로 단타 판이 멈췄음)
@@ -328,8 +328,9 @@ const comboAutoSel = () => { const C = st.cbStat, S = st.set; if (!C || C.busy |
 const chipsSaved = () => { const D = st.setSaved; if (!D || !Array.isArray(D.chipCols)) return st.chipSig == null || chipSig() === st.chipSig; const C = chipSave(), k = (x) => JSON.stringify([...(x || [])].map(String).sort()); return k(C.chipOff) === k(D.chipOff) && k(C.subOff) === k(D.subOff) && k(C.chipCols) === k(D.chipCols); };   // 켠 칩 · 하위 칩이 불러온(저장된) 그대로인가 — 서버 sig 글자와 견주면 칩 목록(장외 · 수급 등) 차이로 늘 갈렸음(qa 11-26 d58efb2 크로스 검수 · 서버 고르기는 저장 문서로 셈)
 const svPick = () => { const P = ((curD() || {}).meta || {}).comboPick, S = st.set; return !st.setDirty && S.comboAuto !== false && P && Array.isArray(P.keys) && P.keys.length && Number(S.comboUp) === Number(P.up) && Number(S.comboN) === Number(P.n) && chipsSaved() ? P : null; };
 const svKey = (k) => String(k || '').split(' + ').map(chipName).join(' + ');   // 서버 칩 이름 → 화면 이름
-// 기본 문턱(서버 chip-rules meta.sellDef.comboUp) 아래로 들어온 조합 — 노랑(11-27 재권님 「가랑 나도 포함해주고 다만 색을 노랑으로 해」 · 오늘 고르는 문턱 65) · 서버 값을 못 받으면 칠하지 않음
-const cbBase = () => { const v = SELL_DEF.comboUp == null || SELL_DEF.comboUp === '' ? NaN : Number(SELL_DEF.comboUp); return Number.isFinite(v) ? v : null; };
+// 오른 비율이 이 % 아래인 고른 조합 — 노랑 · 이상은 조합 색(빨강) 그대로(11-27 재권님 「가랑 나도 포함해주고 다만 색을 노랑으로 해」 → 「69%까지는 빨강으로 하라해」 09:42 · 고르는 문턱은 서버 셈 칸 65 — 이 값은 색 가름만)
+const CB_RED_MIN = 69;
+const cbBase = () => CB_RED_MIN;
 const cbLow = (key) => { const b = cbBase(), C = st.cbStat; if (b == null || !C || !Array.isArray(C.rows)) return false; const o = C.rows.find((x) => x.key === key); return !!o && o.upPct < b; };
 const comboSel = () => { const P = svPick(); if (P) return new Set(P.keys.map(svKey)); return st.set.comboAuto !== false ? comboAutoSel() : new Set(Array.isArray(st.set.combos) ? st.set.combos : []); };
 const comboPending = () => !!st.set.comboOn && st.set.comboAuto !== false && (!st.cbStat || !!st.cbStat.busy);   // 자동 조합으로 사는데 지난 판 셈이 아직 — 그동안은 아무것도 안 삼(칩 N개로 샀다가 바뀌어 보이지 않게 · 개념정의 덧 11-26)
