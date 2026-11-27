@@ -119,3 +119,6 @@ company-setup/data/trade-flash.json
 # .tmp 는 바꿔 끼우는 중간 파일이다.
 company-setup/data/*-live.json
 company-setup/data/*-live.json.tmp
+
+# 단타 판 09:01 기록(tools/dt30-snap.py · 날마다 쌓임 · 저장소에 안 올림 · 2026-11-27)
+snaps/
