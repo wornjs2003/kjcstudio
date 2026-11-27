@@ -1210,7 +1210,7 @@ async function load(day, quiet) {
   if (st.vdDay !== d.day) { st.vdDay = d.day; vdLoad(d.day); }   // 그날 VI 목록 — 날을 바꿀 때만(지난 날은 굳은 값 · 오늘은 판을 다시 열 때)
   paint(d);
   if (!st.modalPre) { st.modalPre = true; (window.requestIdleCallback || ((f) => setTimeout(f, 1)))(() => { import('/holdings/js/components/stock-modal.js').catch(() => {}); }); }   // 종목 창 부품 — 판을 그린 뒤 한가할 때 미리 받아 둠(처음 누를 때도 바로 뜨게 · 11-26)
-  if (st.set.comboAuto !== false && !st.cbStat) comboOpen();   // 칩 조합 자동 — 판을 처음 열 때 지난 판으로 뒤에서 셈해 이름에 적용(11-26)
+  if (st.set.comboAuto !== false && (!st.cbStat || (st.cbStat.serverBusy && !st.cbStat.busy && st.cbRef !== d))) { st.cbRef = d; comboOpen(!!st.cbStat); }   // 서버가 다시 세는 중에 받은 표는 판을 새로 받을 때(서버 주기) 한 번만 더 — 그리기마다 받지 않게 판(d)으로 가름   // 칩 조합 자동 — 판을 처음 열 때 지난 판으로 뒤에서 셈해 이름에 적용(11-26)
   chips();
   const ms = Number(m.refreshMs ?? (d.meta && d.meta.refreshMs)); st.ms = ms > 0 ? ms : 0;   // 서버는 판 안 meta(data.meta)에 둔다(개발2 2단계 · 11-12 09:07 잼) — 바깥 meta 도 읽음
   // 오늘 판이면 굳기(closed) 전까지 서버 주기로 다시 받음 — 장 전(08:00~09:00) 줄에 now 가 없어도 칩이 바뀌므로 now 로 가르지 않음(11-20 재권님 「8시되면 갱신되야 되는거지? 실시간으로?」 → 「응 고쳐」)
@@ -1531,12 +1531,17 @@ function comboPaint() {
 }
 async function comboOpen(force) {
   if (st.cbStat && !st.cbStat.busy && !force && st.cbStat.sig === chipSig()) { comboPaint(); return; }
-  st.cbStat = { busy: '…', rows: [], used: [] }; comboPaint();
+  const prevSv = st.cbStat && !st.cbStat.busy && st.cbStat.serverBusy;   // 서버가 다시 세는 중에 받은 표를 판을 다시 받을 때 새로 — 그동안 「셈하는 중」 으로 돌리지 않음(qa 2ffc997 덧)
+  if (!prevSv) { st.cbStat = { busy: '…', rows: [], used: [] }; comboPaint(); }
   // 서버 조합 표(/api/kis/dt30-combo · 날마다 셈 · 개발2)를 먼저 — 켠 칩이 저장값과 같고 서버가 셈을 마쳤을 때만 · 아니면 화면 셈(서버가 주면 안 씀)
   try { const res = await fetch(CB_API, { cache: 'no-store' }), j = res.ok ? await res.json() : null, M = (j && j.meta) || {}, D = (j && (j.data || j)) || {};
-    if (Array.isArray(D.rows) && D.rows.length && chipsSaved()) {   // 서버가 다시 세는 중(busy)이어도 바로 앞 셈 값을 씀 — 장중 칩 기록이 바뀔 때마다 busy 라 그동안 지난 판 35날을 다 받아 1분 넘게 「셈하는 중」 이었음(11-27 재권님 「이거 왜 또 바뀐거지?」 → 「응 해」)
+    // 서버 표가 센 칩 칸(meta.sig — chipOff · subOff · chipCols)이 저장값과 같을 때만 · busy 여도 같은 칩 칸이면 앞 셈 값(칩 칸을 저장한 직후 busy 인 옛 칩 칸 표는 안 씀 · qa 2ffc997 덧)
+    const svSig = (() => { try { return JSON.parse(M.sig || 'null'); } catch (e) { return null; } })(), k = (x) => JSON.stringify([...(x || [])].map(String).sort()), Sv = st.setSaved || {};
+    const sameCols = svSig && Array.isArray(Sv.chipCols) ? k(svSig.chipOff) === k(Sv.chipOff) && k(svSig.subOff) === k(Sv.subOff) && k(svSig.chipCols) === k(Sv.chipCols) : !M.busy;
+    if (Array.isArray(D.rows) && D.rows.length && chipsSaved() && sameCols) {   // 서버가 다시 세는 중(busy)이어도 바로 앞 셈 값을 씀 — 장중 칩 기록이 바뀔 때마다 busy 라 그동안 지난 판 35날을 다 받아 1분 넘게 「셈하는 중」 이었음(11-27 재권님 「이거 왜 또 바뀐거지?」 → 「응 해」)
       st.cbStat = { rows: D.rows.map((o) => ({ key: (o.chips || String(o.key).split(' + ')).map(chipName).join(' + '), n: o.n, cnt: o.cnt, days: o.days, upPct: o.upPct, avg: o.avg })), used: D.used || [], untimed: D.untimed, rowsN: D.rowsN, sig: chipSig(), server: M.at || true, serverBusy: !!M.busy };
       comboPaint(); if (st.data) paint(st.data); return; } } catch (e) { /* 서버 표 못 받음 — 화면 셈 */ }
+  if (prevSv) { st.cbStat = { busy: '…', rows: [], used: [] }; comboPaint(); }
   const C = await comboLoad((k, n) => { if (st.cbStat && st.cbStat.busy) { st.cbStat.busy = `(${k}/${n})`; comboPaint(); } });
   st.cbStat = C; comboPaint(); if (st.data) paint(st.data);   // 이름 빨강이 셈 뒤에 바로(11-26)
 }
