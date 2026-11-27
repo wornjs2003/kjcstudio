@@ -39,6 +39,11 @@ TAX = {"KOSPI": {"tx": 0.05, "rural": 0.15}, "KOSDAQ": {"tx": 0.20, "rural": 0.0
 VER = "v11"                  # 쌓는 줄 모양이 바뀌면 올린다 — 옛 줄을 다시 쌓는다(v2 · 시장 칸 · v3 · 11-18 전 판 칩 이름 옮김 · v4 · 칩 둘 이상만 · v5 · 칩 붙은 시각 chipAt · subAt · buyAt · lockAt 11-20 · v6 · buyTs · lockTs 실제 시각 11-20 · v7 · 시각 칸 값 px — 매도 시각을 부를 때 셈 11-20 · v8 · 굳힘 차례 lock — 「사지 않음」 묶음 가름 11-23 · v9 · 굳힌 뒤 붙은 칩 거래비율 · 거래비율급증을 다시 쌓음(개념정의 덧 ② 11-23) · v10 · 굳힘 → 시간 창(lock 이 창 번호 1~6 · 11-23 17:2x) · v11 · 사는 셈 한 곳(dt30.buy_point) 재료 — chipTime · pxMin · 여는 시각 · 칩 하나 이상 줄 다(11-23 19:0x))
 _SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_win (day TEXT PRIMARY KEY, src_saved TEXT, rows TEXT NOT NULL, at TEXT)"
 _status = {"error": None, "filled": 0, "at": None}
+_bars_memo = {}               # (날, 종목 튜플, 끝) → 그날 봉 — 지난 날만(봉이 안 바뀜) · 부를 때마다 30날 1분봉을 다시 읽어 5~19초 걸리던 것(11-27 09:2x 잼)
+_sum_memo = {"key": None, "val": None, "at": 0.0}   # 들어간 것(쌓인 줄 · 셈 칸 · 수수료 · 문턱)이 같고 오늘 줄이 없으면 지난 셈 그대로
+_memo_lock = threading.Lock()
+BARS_MEMO_DAYS = 60
+SUM_LIVE_SEC = 60             # 오늘 줄이 든 셈은 이 초만 그대로(오늘 봉이 늘어서)
 
 
 def _now():
@@ -364,6 +369,38 @@ def summary(proxy, days=DAYS_DEFAULT):
             got = conn.execute("SELECT day, rows FROM dt30_win ORDER BY day DESC LIMIT ?", (days,)).fetchall()
         except Exception:
             got = []
+    import zlib
+    import dart
+    caps = {r["stock_code"]: r["market_cap"] for r in dart.universe_rows(None)}
+    today = _now().strftime("%Y%m%d")
+    key = (tuple((d, zlib.crc32(raw.encode("utf-8"))) for d, raw in got), fee, json.dumps(rule, sort_keys=True, default=str), end,
+           dt30.buy_need(), dt30.buy_until(), dt30.buy_mode(), dt30.cap_min_eok(), tuple(dt30.ov_chips()),
+           zlib.crc32(json.dumps(sorted(caps.items()), default=str).encode()), _status["at"], _status["error"])
+    with _memo_lock:
+        if _sum_memo["key"] == key and (not any(d >= today for d, _ in got) or time.time() - _sum_memo["at"] < SUM_LIVE_SEC):
+            return _sum_memo["val"]
+    val = _summary(proxy, got, fee, rule, end, caps, today)
+    with _memo_lock:
+        _sum_memo.update(key=key, val=val, at=time.time())
+    return val
+
+
+def _day_bars(proxy, day, codes, end, today):
+    k = (day, tuple(codes), end)
+    with _memo_lock:
+        hit = _bars_memo.get(k)
+    if hit is not None:
+        return hit
+    bars = dt30.bars_get(proxy, day, codes, "0900", end)
+    if day < today:
+        with _memo_lock:
+            _bars_memo[k] = bars
+            while len(_bars_memo) > BARS_MEMO_DAYS:
+                _bars_memo.pop(next(iter(_bars_memo)))
+    return bars
+
+
+def _summary(proxy, got, fee, rule, end, caps, today):
     groups = {"chip": {}, "pair": {}, "triple": {}, "count": {}, "countRise": {}, "chipLate": {}, "buySrc": {}}
 
     def add(kind, key, v):
@@ -373,8 +410,6 @@ def summary(proxy, days=DAYS_DEFAULT):
         else:
             g[0].append(v)
 
-    import dart
-    caps = {r["stock_code"]: r["market_cap"] for r in dart.universe_rows(None)}
     small = lambda c: bool(caps) and (caps.get(c) is None or caps[c] < dt30.cap_min_eok())   # 감시 목록을 못 읽으면 안 거름
     need, until, mode = dt30.buy_need(), dt30.buy_until(), dt30.buy_mode()
     skipped = 0
@@ -382,7 +417,7 @@ def summary(proxy, days=DAYS_DEFAULT):
     for day, raw in got:
         rows = json.loads(raw)
         try:                                           # 그날 봉(1m · 없으면 5m) — 산 줄의 매도 셈 재료(봉 줄 · 화면과 같은 셈)
-            bars = dt30.bars_get(proxy, day, [r["code"] for r in rows], "0900", end)
+            bars = _day_bars(proxy, day, [r["code"] for r in rows], end, today)
         except Exception as e:
             bars = {}
             print("  [단타 승률] %s 봉 못 읽음 — 30분 칸으로 셈 · %s" % (day, proxy.safe_message(e, 120)), flush=True)
