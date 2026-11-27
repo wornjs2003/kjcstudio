@@ -1886,6 +1886,7 @@ def combo_buy_fill(proxy, b):
     miss = set((b.get("meta") or {}).get("missing") or [])   # 그날 못 받은 칩(미국 휴장 날 미국강세 — us_strong 「그날 짝 미국 값 없음」)
     dead = sorted(c for c in dc if (c in miss) or (opened and rows and not any(c in (r.get("chips") or []) or (r.get("chipTime") or {}).get(c) for r in rows)))
     # 그날 생길 수 없는 칩 — 하루 고정 칩(dayChips · 여는 시각에 정해짐) 중 여는 시각 뒤 판에 한 줄도 없는 것(미국 휴장 날 미국강세처럼) · 그 칩이 든 조합은 그날 고르지 않음(재권님 「가」 11-27 09:3x)
+    ups = {t["key"]: t.get("upPct") for t in tab}
     sel = [(t["key"], t["chips"]) for t in tab if t.get("upPct", 0) >= up and t.get("cnt", 0) >= nn and not set(t["chips"]) & set(dead)]
     sel.sort(key=lambda x: -len(x[1]))
     pk["keys"] = [k for k, _ in sel]
@@ -1911,7 +1912,7 @@ def combo_buy_fill(proxy, b):
             ct = {c: _hm4(v) for c, v in (r.get("chipTime") or {}).items()}
             _v, sec, src = _moment_px(r, ct, hit[1], t) if t >= _hhmm(o + 1).replace(":", "") else (None, None, "9시 1분 값")
             r["comboBuy"] = {"key": hit[0], "chips": hit[1], "at": sec or "%s:%s:00" % (t[:2], t[2:]), "buyAt": "%s:%s" % (t[:2], t[2:]),
-                             "px": p, "src": src if p else "산 값 없음"}
+                             "px": p, "src": src if p else "산 값 없음", "upPct": ups.get(hit[0])}   # upPct — 맞은 조합 오른 비율(같은 분이면 높은 것 위 · 재권님 「고쳐」 11-27 12:0x)
             n += 1
             break
     return n
@@ -4787,7 +4788,7 @@ def _turn_cross(r, tmin):
 
 def _buy_combo(proxy, bb, o, R, now_m, on, tmin):
     """「조합으로 사기」(셈 칸 comboOn) 날의 매수 차례 — [(줄, info)] · 화면 단타 판(4af569c · 4e8b448 · 75096f9)과 같은 셈.
-    차례 = 조합 된 분(여는 시각 + 1분 앞이면 그 분으로 · 9시 1분에 이미 된 종목이 먼저) → 그 분 산 값의 시가 대비 상승률 → 초반상승 % → 시가총액.
+    차례 = 조합 된 분(여는 시각 + 1분 앞이면 그 분으로 · 9시 1분에 이미 된 종목이 먼저) → 같은 분이면 맞은 조합 승률(comboBuy.upPct) 높은 것 → 그 분 산 값의 시가 대비 상승률 → 초반상승 % → 시가총액(화면 05bfceb 와 같게 · 재권님 「고쳐」 11-27 12:0x).
     지금 붙은 칩 수는 안 씀(뒤에 칩이 붙어도 차례 고정). 사는 때 = 조합 된 때 · 유통 대비 거래가 문턱을 그 뒤에 넘었으면 넘은 분(못 넘었으면 조합 된 때 · 화면 「어림」 과 같게).
     9시 30분(여는 시각 + COMBO_UNTIL_MIN) 전에 된 것만 · 산 값(rows[].comboBuy.px)이 안 나오면 BUY_WAIT_MIN 분 기다렸다 「매수값 미확인」(px null · pxWhy)으로 삼(재권님 「산값을 못 잰 종목이 나와야 사야되는데」 11-26 · 화면 ecd26ab 와 같게 · qa 덧).
     고른 조합은 서버 고르기(meta.comboPick · 전날까지 표 · 문턱) — 표가 없으면 아무것도 안 보냄(화면 comboPending 과 같게) · 전일 거래량 칸(volOn)은 화면만 셈(어림)."""
@@ -4819,7 +4820,7 @@ def _buy_combo(proxy, bb, o, R, now_m, on, tmin):
         op = r.get("open") if isinstance(r.get("open"), (int, float)) and r.get("open") > 0 else None
         src = str(B.get("src") or "")
         rise = (B["px"] / op - 1) * 100 if op and B.get("px") and not ("어림" in src or "대체" in src) else None
-        got.append(((at, -(rise if rise is not None else -1e9), -(r.get("rise") if isinstance(r.get("rise"), (int, float)) else -1e9), -(r.get("cap") or 0)),
+        got.append(((at, -(B.get("upPct") if isinstance(B.get("upPct"), (int, float)) else -1e9), -(rise if rise is not None else -1e9), -(r.get("rise") if isinstance(r.get("rise"), (int, float)) else -1e9), -(r.get("cap") or 0)),
                     r, {"kind": "조합", "at": _hhmm(at), "chipAt": str(B.get("at") or "")[:5] or _hhmm(tm_), "turn": _turn_at(r, max(1, at - o)),
                         "rise": round(rise, 2) if rise is not None else None, "px": B.get("px"), "combo": B.get("key"),
                         "pxWhy": None if B.get("px") else "매수값 미확인"}))
@@ -4844,7 +4845,7 @@ def _buy_rule_meta(proxy, b):
                             "turnOn": on, "turnMin": tmin, "chipOff": sorted(cf[0]), "subOff": sorted(cf[1]), "chipCols": sorted(cf[2]) if cf[2] is not None else None, "def": {"ruleMin": RULE_MIN_DEF, "turnOn": TURN_ON_DEF, "turnMin": TURN_MIN_DEF, "top": TOP_DEF},
                             "order": [{"code": r["code"], "name": r.get("name"), **r["buyRule"]} for r in rows],
                             "sent": (b["meta"].get("tgBuy") or {}), "combo": _set_val("comboOn") is True,
-                            "comboNote": "조합으로 사기(combo true) 날은 위 칩 N개 차례 대신 — 고른 조합이 된 분(9시 1분 앞이면 9시 1분) → 그 분 산 값의 시가 대비 상승률 → 초반상승 % → 시가총액 · 9시 30분 전 · 산 값이 안 나오면 「매수값 미확인」 으로 삼 · 유통 대비 거래 문턱은 넘은 분으로 미룸(못 넘었으면 조합 된 때) · 고른 조합은 meta.comboPick(표가 없으면 안 보냄)",
+                            "comboNote": "조합으로 사기(combo true) 날은 위 칩 N개 차례 대신 — 고른 조합이 된 분(9시 1분 앞이면 9시 1분) → 같은 분이면 맞은 조합 승률(upPct) 높은 것 → 그 분 산 값의 시가 대비 상승률 → 초반상승 % → 시가총액 · 9시 30분 전 · 산 값이 안 나오면 「매수값 미확인」 으로 삼 · 유통 대비 거래 문턱은 넘은 분으로 미룸(못 넘었으면 조합 된 때) · 고른 조합은 meta.comboPick(표가 없으면 안 보냄)",
                             "note": "서버가 보내는 차례(order) — 기준 시각 전 칩 N개 찬 순(그 분 유통 대비 거래 조건) · 기준 시각에 모자라면 칩 N−1 종목 상승률 순 · 위에서 상위 top 종목까지만 · 끈 칩은 셈 칸 chipOff · subOff · chipCols 대로 · sent 는 실제로 보낸 것"}
 
 
