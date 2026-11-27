@@ -2045,8 +2045,8 @@ def combo_table_calc(proxy, snaps=None):
                         continue
                     _ct_add(M, key, sub, d, ex, p, cut, bars.get(code, []), end)
         if snaps is not None:
-            snaps.append((d, _ct_out(M, list(used), untimed, rows_n)["rows"], list(used)))
-    return _ct_out(M, used, untimed, rows_n)
+            snaps.append((d, _ct_out(M, used[::-1], untimed, rows_n)["rows"], used[::-1]))
+    return _ct_out(M, used[::-1], untimed, rows_n)   # used 는 최근 먼저(전과 같게 · 오래된 날부터 돌아 뒤집힌 것을 되돌림 · qa 덧 11-27)
 
 
 CT_SUB_MAX = 6                          # 부분 묶음 칩 수 끝 한 곳 — /api/kis/dt30-combo meta.comboDef.subMax 로 화면에 냄(화면 CB_SUB_MAX 는 서버 값이 없을 때만 · 개념정의 덧 11-26)
