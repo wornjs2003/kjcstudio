@@ -460,12 +460,11 @@
 .dt .dt-cbt-tb tr.dt-cb-ok td { background: var(--kh-up-dim); }
 /* 기본 문턱 아래로 들어온 조합(낮춘 문턱) — 노랑(11-27 재권님 「다만 색을 노랑으로 해」) · 색은 theme.css 노랑(--kh-fav) */
 .dt .dt-cbt-tb tr.dt-cb-low td { background: color-mix(in srgb, var(--kh-fav) 28%, transparent); }
-.dt .st-name b.dt-cbn.is-low { background: color-mix(in srgb, var(--kh-fav) 28%, transparent); border-radius: 4px; padding: 0 3px; }
+.dt .st-name b.dt-cbn.is-low, .dt .st-name small.dt-cbt.is-low .dt-cbt-t { color: var(--kh-fav); }   /* 조합 승률 색은 종목 이름 글자색 — 보라 100% · 빨강 69% 이상(그대로 --kh-up) · 노랑 65~69%(11-27 재권님 「외각 네모색이 달라졌네. 보라 빨강 노랑으로 종목이름의 색을 바꿔야해」) */
 /* 오른 비율 100% 조합 — 보라(11-27 재권님 「조합 100 는 보라색으로 해줘」) · 색은 theme.css 보라(--kh-cat-violet) */
 .dt .dt-cbt-tb small.dt-cbmiss { display: block; }   /* 그날 못 받은 칩 한 마디 — 조합 이름 아래 줄(표가 넓어지지 않게) */
 .dt .dt-cbt-tb tr.dt-cb-top td { background: color-mix(in srgb, var(--kh-cat-violet) 18%, transparent); }
-.dt .st-name b.dt-cbn.is-top, .dt .st-name small.dt-cbt.is-top .dt-cbt-t { background: color-mix(in srgb, var(--kh-cat-violet) 18%, transparent); border-radius: 4px; padding: 0 3px; }
-.dt .st-name small.dt-cbt.is-low .dt-cbt-t { background: color-mix(in srgb, var(--kh-fav) 28%, transparent); border-radius: 4px; padding: 0 3px; }
+.dt .st-name b.dt-cbn.is-top, .dt .st-name small.dt-cbt.is-top .dt-cbt-t { color: var(--kh-cat-violet); }
 /* 겹친 칩 이름 — 종목 이름 밑(11-26 재권님 「겹침 숫자로 하지말고 어떤칩이 겹쳤는지 종목믿으로」) · 색은 위 칩 칸과 같은 칩 색(.dt-cg data-i · 재권님 「칩색은 왜 맘대로 바꾸지? 위에 있는거 가져오면 되잖아」) · 지금 빠진 칩은 흐림 */
 .dt .dt-ovl { display: flex; flex-wrap: wrap; gap: 2px 4px; margin: 2px 0 1px; white-space: normal; }
 .dt .dt-ovl .dt-ovc { display: inline-block; padding: 0 6px; border-radius: 99px; font-size: 11px; font-weight: 700; background: var(--cd); color: var(--c); }
