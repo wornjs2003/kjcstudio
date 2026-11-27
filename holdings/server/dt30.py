@@ -5052,7 +5052,9 @@ def board(proxy, day=None, cfg=None):
     if not b["closed"] and cfg is not None:
         # 그날 판은 14:00 마지막 칸 전까지 지금 값을 붙인다 — 재권님 「그날은 변동에 맞춰서 실시간으로 적용되야 하고 그날 2시가 지나면 값이 저장되도록」(19:3x)
         # 다시 받을 주기는 서버 값(refreshMs · 시세 캐시와 같은 PRICE_CACHE_TTL) — 화면은 그 값으로 돈다 · 시세는 그 나이 안이면 캐시
-        q, _ = proxy.fetch_quotes_multi(cfg, [r["code"] for r in b["rows"]], max_age=proxy.PRICE_CACHE_TTL)
+        allc = [r["code"] for r in b["rows"]] + [r["code"] for r in (b.get("meta") or {}).get("outRows") or [] if r["code"] not in {x["code"] for x in b["rows"]}]
+        q, _ = proxy.fetch_quotes_multi(cfg, allc, max_age=proxy.PRICE_CACHE_TTL)   # 판 줄 · 빠진 줄 한 번에 — 시가 대비 등락률(open_rise_now)이 따로 다시 받던 것을 이 값으로(11-27 판 첫 읽기 느림 · 재권님 「응」)
+        b["_q"] = q
         for r in b["rows"]:
             r["now"] = (q.get(r["code"]) or {}).get("price")
         b["nowAt"] = _now().strftime("%H:%M:%S")
@@ -5061,6 +5063,7 @@ def board(proxy, day=None, cfg=None):
             open_rise_now(proxy, cfg, b)
         except Exception as e:
             print("  [단타 30] 시가 대비 등락률 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
+    b.pop("_q", None)                                  # 판 응답에 안 실음(시세 묶음은 셈 재료)
     try:
         import turnover
         if not b["closed"] and cfg is not None:
@@ -5095,7 +5098,9 @@ def open_rise_now(proxy, cfg, b):
         at = max((v[1] for v in list(last.values())), default=None)
         b["meta"]["openRiseAt"] = at
         return 0
-    q, _ = proxy.fetch_quotes_multi(cfg, [r["code"] for r in rows], max_age=proxy.PRICE_CACHE_TTL)
+    q = b.pop("_q", None)                             # 판 읽기가 방금 받은 시세(판 줄 · 빠진 줄) — 없으면 여기서
+    if q is None or any(r["code"] not in q for r in rows):
+        q, _ = proxy.fetch_quotes_multi(cfg, [r["code"] for r in rows], max_age=proxy.PRICE_CACHE_TTL)
     n, now_s = 0, _now().strftime("%H:%M:%S")
     for r in rows:
         v = q.get(r["code"]) or {}
