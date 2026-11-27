@@ -740,7 +740,10 @@ const live = d.flat930 || comboMode() ? live0.map((r, i) => [r, nthChipAt(r) || 
   // 09:30 뒤에 찬 종목(셈 칸 「안 삼」) — 장중 창 보기만 줄과 같은 룰: 판에 든 때 값으로 샀다고 친 가정 셈 · 매도 룰 그대로 · 상위 N · 손익 · 평균 · 합계에는 안 듦
   //   (11-25 재권님 「9시 30분 뒤에 찬 종목도 셈은 해야해」 → 「산다라는 룰은 아니고 셈에서만 빠지는거야」 → 「장중 창과 같은룰로 해야지」) · 몫(nb · lkCnt)을 다 센 뒤에 가정 값을 넣어 돈 나누기에 안 섞임
   const late = new Set(d.flat930 && !S.buyLate930 ? rows.filter((r) => !buyOf(r) && Number(r.buy) > 0 && (nthChipAt(r) || '') > chipUntil().replace(':', '')) : []);
-  late.forEach((r) => { const t = inTs(r); HYPO.set(r, { px: Number(r.buy), at: t.slice(0, 4), src: `${t.length >= 6 ? `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}` : '—'} 든 때 · 가정(산 것 아님)` }); });
+  // 09:30 뒤에 찬 가정 줄도 사는 셈 그대로(조합 된 분 · 칩 N개 찬 분 값) — 「09:30 뒤에 찬 종목 삼」 으로 켠 것처럼 셈하고 가정으로만 붙임(11-27 재권님 「칩조합이 든시간과 든시각이 다른데 이유가 뭐지?」 → 「가정이여도 계산은 제대로 되야지」) · 그 값이 없을 때만 단타 목록에 든 때 값
+  late.forEach((r) => { const keep = S.buyLate930; let B = null; try { S.buyLate930 = true; B = buyOf(r); } finally { S.buyLate930 = keep; }
+    if (B && Number(B.px) > 0) { HYPO.set(r, { ...B, src: `${B.src} · 가정(산 것 아님)` }); return; }
+    NOPX.delete(r); const t = inTs(r); HYPO.set(r, { px: Number(r.buy), at: t.slice(0, 4), src: `${t.length >= 6 ? `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}` : '—'} 든 때 · 가정(산 것 아님) · 찬 분 값 없음` }); });
   const R = rows.map((r) => { const x = mkR(r); if (late.has(r)) x.hypo = true; return x; });
   const inv = (lkMode ? R.filter((x) => Number(x.r.lock) > 0) : cbPick ? R.filter((x) => cbPick.has(x.r)) : R.slice(0, n)).filter((x) => !x.hypo);   // 돈을 넣은 줄 — 굳힌 판은 굳힌 종목 전부 · 아니면 상위 N · 가정 줄은 뺌
   inv.forEach((x) => { x.inv = true; });
@@ -895,7 +898,7 @@ function paint0(d) {
   const resTd = (x) => { const nt = nowTxt(x.r), top = x.s.k >= 0 ? `${hmTxt(x.s.at || times[x.s.k])} ${x.s.why}` : x.now ? `지금 ${esc(String(d.nowAt || '').slice(0, 5))}` : `${hmTxt(times[times.length - 1])} 끝까지`;
     return `<td class="dt-res"><small style="${WHEN}">${top}</small>${Number.isFinite(Number(x.sellPx)) && Number(x.sellPx) > 0 ? `<span class="${signClass(x.res, NUM) || ''}" style="display: block; line-height: 1.25;">${num(Number(x.sellPx))}</span>` : ''}${pct(x.res)}${x.s.k >= 0 && nt ? `<small>${nt}</small>` : ''}</td>`; };
   // 산 때를 산 가격 위에(같은 말씀 「매수를 시간으로 하거나 칩이 들어온때로」) — 위 줄 산 시각 · 아래 출처 글은 그대로
-  const buyCell = (B, r) => `<td class="dt-buy">${/^\d{4}$/.test(String(B.at || '')) ? `<small style="${WHEN}">${hmS(String(B.at))} ${HYPO.has(r) ? '든 때(가정)' : '삼'}</small>` : ''}${num(B.px)}<small>${esc(B.src)}</small></td>`;
+  const buyCell = (B, r) => `<td class="dt-buy">${/^\d{4}$/.test(String(B.at || '')) ? `<small style="${WHEN}">${hmS(String(B.at))} ${HYPO.has(r) ? (/든 때/.test(String(HYPO.get(r).src || '')) ? '든 때(가정)' : `${comboMode() ? '조합 된 때' : '칩 찬 때'}(가정)`) : '삼'}</small>` : ''}${num(B.px)}<small>${esc(B.src)}</small></td>`;
   const rk = (r, i) => `<td class="dt-rk">${i + 1}</td>`;
   // 매수가 (11-18 서버 바뀜) — 정규장 전에 든 종목은 buy null + buyWait → 「09:00 시가 기다림」 · 채워지면 buySrc(시가 · 지금 값) · 그 시각
   const NM0 = d.meta || {};
