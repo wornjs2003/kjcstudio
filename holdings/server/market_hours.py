@@ -112,7 +112,22 @@ def doc_ok():
     return _md["ok"]
 
 
+_kd = {}                     # 날 → (읽은 시각, open_yn) — 판 읽기 한 번에 860번 넘게 불려 그때마다 DB 를 읽던 것(11-27 · 재권님 「응」) · KIS_DAY_SEC 동안 그대로
+KIS_DAY_SEC = 60
+
+
 def _kis_day(proxy, day):
+    hit = _kd.get(day)
+    if hit and time.time() - hit[0] < KIS_DAY_SEC:
+        return hit[1]
+    v = _kis_day_read(proxy, day)
+    _kd[day] = (time.time(), v)
+    if len(_kd) > 400:
+        _kd.clear()
+    return v
+
+
+def _kis_day_read(proxy, day):
     try:
         with proxy.db_conn() as conn:
             r = conn.execute("SELECT open_yn FROM market_day WHERE day = ?", (day,)).fetchone()
