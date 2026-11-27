@@ -462,6 +462,7 @@
 .dt .dt-cbt-tb tr.dt-cb-low td { background: color-mix(in srgb, var(--kh-fav) 28%, transparent); }
 .dt .st-name b.dt-cbn.is-low { background: color-mix(in srgb, var(--kh-fav) 28%, transparent); border-radius: 4px; padding: 0 3px; }
 /* 오른 비율 100% 조합 — 보라(11-27 재권님 「조합 100 는 보라색으로 해줘」) · 색은 theme.css 보라(--kh-cat-violet) */
+.dt .dt-cbt-tb small.dt-cbmiss { display: block; }   /* 그날 못 받은 칩 한 마디 — 조합 이름 아래 줄(표가 넓어지지 않게) */
 .dt .dt-cbt-tb tr.dt-cb-top td { background: color-mix(in srgb, var(--kh-cat-violet) 18%, transparent); }
 .dt .st-name b.dt-cbn.is-top, .dt .st-name small.dt-cbt.is-top .dt-cbt-t { background: color-mix(in srgb, var(--kh-cat-violet) 18%, transparent); border-radius: 4px; padding: 0 3px; }
 .dt .st-name small.dt-cbt.is-low .dt-cbt-t { background: color-mix(in srgb, var(--kh-fav) 28%, transparent); border-radius: 4px; padding: 0 3px; }

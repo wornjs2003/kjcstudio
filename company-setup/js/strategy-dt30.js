@@ -135,7 +135,7 @@ const hmS = (t) => `${t.slice(0, 2)}:${t.slice(2)}`;
 const chipFirst = (r, c) => { if (spanRow(r)) { const t = spansOf(r, c).map(([a]) => hm4(a)).filter(Boolean).sort()[0]; if (t) return t; } return chipTsOf(r)[c] || ''; };   // 그 칩이 처음 붙은 때(HHMM)
 const cbPill = (c, t) => `<span class="dt-cg dt-ovc" data-i="${colorOf(c)}">${esc(c)}${t ? ` <small class="dt-ovt">${t === '0000' ? '장 전' : hmS(t)}</small>` : ''}</span>`;
 // 조합이 된 뒤 다른 고른 조합을 마저 채운 칩 — 조합 줄에 그 칩이 들어온 시각과 함께(11-26 재권님 「칩조합조건이 겹치는 칩이 추가되면 그칩이 들어온 시간을 나열한다 · 칩조합 조건이 걸리지 않은 칩이 추가되는건 가로로 줄을 그어서 그아래로」)
-const comboAdds = (r, h) => { const S = [...comboSel()].map((k) => k.split(' + ')), have = new Set(h.key.split(' + ')), out = [];
+const comboAdds = (r, h) => { const M = dayMiss(), S = [...comboSel()].map((k) => k.split(' + ')).filter((ks) => !ks.some((c) => M.has(c))), have = new Set(h.key.split(' + ')), out = [];
   comboEvents(r).forEach(([t, cs]) => { if (t <= h.t) return; const on = new Set(cs);
     S.forEach((ks) => { if (ks.every((c) => on.has(c))) ks.forEach((c) => { if (!have.has(c)) { have.add(c); out.push(c); } }); }); });
   return out.map((c) => [c, chipFirst(r, c)]).sort((a, b) => (a[1] || '9999').localeCompare(b[1] || '9999')); };
@@ -341,8 +341,10 @@ const comboMode = () => !!st.set.comboOn && (comboSel().size > 0 || comboPending
 //   여럿을 품으면 가장 먼저 품은 시각 · 같은 시각이면 칩이 많은 조합 이름
 let cbSelMemo = { s: null, v: [] };
 const comboSelArr = (S) => { if (cbSelMemo.s !== S) cbSelMemo = { s: S, v: [...S].map((k) => [k, k.split(' + ')]).sort((a, b) => b[1].length - a[1].length) }; return cbSelMemo.v; };
+// 그날 못 받은 칩(그날 판 meta.missing) — 그 칩이 든 고른 조합은 고른 목록에 그대로 두고 그날 판에서만 안 씀(11-27 재권님 「그칩이 든 칩조합은 빼고사」 → 「그날 적용만 안되는거고 빼는건 아닌데」 → 「응 그렇게 해」 · 서버 고르기와 같은 뜻) · 지난 판도 그 날짜 값으로
+const dayMiss = () => new Set(names(DM().missing).map(chipName));
 const comboHit = (r) => { if (svPick()) { const B = r.comboBuy; return B && B.at ? { t: hm4(B.at), key: svKey(B.key) } : null; }   // 서버가 고른 판이면 서버 조합 시각 그대로
-  const S = comboSel(); if (!S.size) return null; const A = comboSelArr(S); for (const [t, cs] of comboEvents(r)) { if (!cs.length) continue; const has = new Set(cs), h = A.find(([, ks]) => ks.every((c) => has.has(c))); if (h) return { t, key: h[0] }; } return null; };
+  const S = comboSel(); if (!S.size) return null; const A = comboSelArr(S), M = dayMiss(); for (const [t, cs] of comboEvents(r)) { if (!cs.length) continue; const has = new Set(cs), h = A.find(([, ks]) => ks.every((c) => has.has(c)) && !ks.some((c) => M.has(c))); if (h) return { t, key: h[0] }; } return null; };
 // 칩 묶음의 부분 묶음 열쇠(차례는 cs 그대로 · 칩 CB_SUB_MAX 개까지) — 조합 셈이 「그 조합을 처음 품은 때」 로 세게
 const CB_SUB_MAX = 6;
 const subKeys = (cs) => { const out = []; const go = (i, pick) => { if (pick.length) out.push(comboKey(pick)); if (pick.length >= CB_SUB_MAX) return; for (let j = i; j < cs.length; j++) go(j + 1, [...pick, cs[j]]); }; go(0, []); return out; };
@@ -1530,12 +1532,13 @@ function comboPaint() {
   if (C.busy) { box.textContent = `지난 판 받는 중… ${C.busy}`; return; }
   const up = S.comboUp == null ? Infinity : Number(S.comboUp), nn = S.comboN == null ? Infinity : Number(S.comboN);   // 빈칸 = 문턱 없음(옅은 빨강 안 칠함)
   const list = C.rows.filter((o) => sel.has(o.key) || o.cnt >= CB_SHOW_MIN).sort((a, b) => (sel.has(b.key) - sel.has(a.key)) || b.upPct - a.upPct || b.cnt - a.cnt).slice(0, Math.max(CB_SHOW_MAX, sel.size));
+  const dayM = dayMiss(), selAuto = S.comboAuto !== false ? comboAutoSel() : new Set();   // selAuto — 서버가 그날 못 받은 칩으로 그날 고르기에서 뺀 조합도 고른 목록에는 그대로(체크 유지 · 11-27 「빼는건 아닌데」)   // 보고 있는 날 못 받은 칩 — 그 칩이 든 줄에 한 마디(고름은 그대로)
   const gone = [...sel].filter((k) => !C.rows.some((o) => o.key === k));   // 고른 조합인데 지난 판에 한 번도 없던 것(칩을 끄면 생김)
   box.innerHTML = `<label class="dt-fee"><input type="checkbox" data-cbon${S.comboOn ? ' checked' : ''}> 조합으로 사기 <span class="rl-sug">켜면 「칩 ( )개 이상」 대신 고른 조합이 된 때 삼 · 된 시각이 빠른 순 · 상위 종목 수 · 금액 · 파는 룰은 위 칸 그대로</span></label>
     <div class="dt-fee">오른 비율 <input data-cbset="comboUp" class="rl-in rl-num" inputmode="decimal" value="${esc(String(S.comboUp ?? ''))}" aria-label="오른 비율 몇 % 이상">% 이상 · <input data-cbset="comboN" class="rl-in rl-num" inputmode="numeric" value="${esc(String(S.comboN ?? ''))}" aria-label="몇 건 이상">건 이상 <button type="button" class="kh-chip${S.comboAuto !== false ? ' is-active' : ''}" data-cbpick>문턱 넘는 조합 고르기${S.comboAuto !== false ? '(자동)' : ''}</button> <button type="button" class="kh-chip" data-cbclear>다 빼기</button> <button type="button" class="kh-chip" data-cbredo>다시 셈</button> <span id="dt-cb-msg" class="rl-sug"></span></div>
     <span class="rl-sug">지난 판 ${C.used.length}날(${C.used.length ? `${dayTxt(C.used[C.used.length - 1])} ~ ${dayTxt(C.used[0])}` : '—'}) · 종목이 처음 그 조합이 된 분 값에 사서 판 마지막 시각 값에 판다고 셈 · 세금 · 수수료 빼기 전 · 켜진 칩만 · 장중 칩인데 붙은 시각이 없는 종목 ${num(C.untimed || 0)}건 뺌(전체 ${num(C.rowsN || 0)}건 · 자동 · 프리장 · 미국강세는 시각 없으면 장 전으로 봄) · 손절 · 익절 넣은 셈은 서버 값 기다림 · ${CB_SHOW_MIN}건 이상인 조합만 보임</span>
     ${gone.length ? `<span class="rl-sug">고른 조합 중 지난 판에 없는 것 — ${esc(gone.join(' · '))}</span>` : ''}
-    <table class="st dt-cbt-tb"><thead><tr><th>고름</th><th>칩 수</th><th>오른 비율</th><th>조합</th><th>건수</th><th>날</th><th>평균</th></tr></thead><tbody>${list.map((o) => `<tr${o.upPct >= up && o.cnt >= nn ? (cbBase() != null && o.upPct < cbBase() ? ' class="dt-cb-ok dt-cb-low"' : o.upPct >= CB_TOP ? ' class="dt-cb-ok dt-cb-top"' : ' class="dt-cb-ok"') : ''}><td><input type="checkbox" data-cb="${esc(o.key)}"${sel.has(o.key) ? ' checked' : ''} aria-label="${esc(o.key)} 고름"></td><td>${o.n}</td><td>${num(o.upPct, 0)}%</td><td class="dt-cbk">${esc(o.key)}</td><td>${num(o.cnt)}</td><td>${o.days}</td><td class="${signClass(o.avg, NUM) || ''}">${o.avg > 0 ? '+' : ''}${num(o.avg, 2)}%</td></tr>`).join('')}</tbody></table>`;
+    <table class="st dt-cbt-tb"><thead><tr><th>고름</th><th>칩 수</th><th>오른 비율</th><th>조합</th><th>건수</th><th>날</th><th>평균</th></tr></thead><tbody>${list.map((o) => `<tr${o.upPct >= up && o.cnt >= nn ? (cbBase() != null && o.upPct < cbBase() ? ' class="dt-cb-ok dt-cb-low"' : o.upPct >= CB_TOP ? ' class="dt-cb-ok dt-cb-top"' : ' class="dt-cb-ok"') : ''}><td><input type="checkbox" data-cb="${esc(o.key)}"${sel.has(o.key) || selAuto.has(o.key) ? ' checked' : ''} aria-label="${esc(o.key)} 고름"></td><td>${o.n}</td><td>${num(o.upPct, 0)}%</td><td class="dt-cbk">${esc(o.key)}${(() => { const m = o.key.split(' + ').filter((c) => dayM.has(c)); return m.length ? `<small class="rl-sug dt-cbmiss">이 날 못 받음 ${esc(m.join(' · '))} — 이 날만 안 씀</small>` : ''; })()}</td><td>${num(o.cnt)}</td><td>${o.days}</td><td class="${signClass(o.avg, NUM) || ''}">${o.avg > 0 ? '+' : ''}${num(o.avg, 2)}%</td></tr>`).join('')}</tbody></table>`;
 }
 async function comboOpen(force) {
   if (st.cbStat && !st.cbStat.busy && !force && st.cbStat.sig === chipSig()) { comboPaint(); return; }
