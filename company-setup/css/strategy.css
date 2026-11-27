@@ -461,6 +461,9 @@
 /* 기본 문턱 아래로 들어온 조합(낮춘 문턱) — 노랑(11-27 재권님 「다만 색을 노랑으로 해」) · 색은 theme.css 노랑(--kh-fav) */
 .dt .dt-cbt-tb tr.dt-cb-low td { background: color-mix(in srgb, var(--kh-fav) 28%, transparent); }
 .dt .st-name b.dt-cbn.is-low { background: color-mix(in srgb, var(--kh-fav) 28%, transparent); border-radius: 4px; padding: 0 3px; }
+/* 오른 비율 100% 조합 — 보라(11-27 재권님 「조합 100 는 보라색으로 해줘」) · 색은 theme.css 보라(--kh-cat-violet) */
+.dt .dt-cbt-tb tr.dt-cb-top td { background: color-mix(in srgb, var(--kh-cat-violet) 18%, transparent); }
+.dt .st-name b.dt-cbn.is-top, .dt .st-name small.dt-cbt.is-top .dt-cbt-t { background: color-mix(in srgb, var(--kh-cat-violet) 18%, transparent); border-radius: 4px; padding: 0 3px; }
 .dt .st-name small.dt-cbt.is-low .dt-cbt-t { background: color-mix(in srgb, var(--kh-fav) 28%, transparent); border-radius: 4px; padding: 0 3px; }
 /* 겹친 칩 이름 — 종목 이름 밑(11-26 재권님 「겹침 숫자로 하지말고 어떤칩이 겹쳤는지 종목믿으로」) · 색은 위 칩 칸과 같은 칩 색(.dt-cg data-i · 재권님 「칩색은 왜 맘대로 바꾸지? 위에 있는거 가져오면 되잖아」) · 지금 빠진 칩은 흐림 */
 .dt .dt-ovl { display: flex; flex-wrap: wrap; gap: 2px 4px; margin: 2px 0 1px; white-space: normal; }
