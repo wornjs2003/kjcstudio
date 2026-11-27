@@ -1825,7 +1825,7 @@ def combo_fill(proxy, b):
 #             판 값 = 판 마지막 시각 값(px[times 끝]) · 없으면 그 줄 안 셈 · 세금 · 수수료 빼기 전
 #             익절 × 손절(COMBO_TP × COMBO_SL) = 산 다음 분부터 판 끝 앞까지 1분봉 · 먼저 닿은 쪽 · 한 봉에 둘이면 손절 · 끝까지 안 닿으면 판 값 · 1분봉 없는 건은 그 칸 셈에서 뺌(resN)
 #     저장    dt30_combo(열쇠 sig + 판 저장 시각들) 한 줄 · 열쇠가 바뀌면(셈 칸 저장 · 판이 새로 굳음 · 되채움) 뒤에서 다시 셈 · 그동안은 지난 값(busy)
-COMBO_VER = 6                           # 조합 셈 판 — 2: 부분 묶음마다 처음 품은 때(11-26 화면 2d877ad 와 같게) · 3: 「수급」 도 저장된 칩 칸을 따름(qa 대조 11-26) · 4: 산 값을 칩 찬 순간 값으로(_moment_px · 11-26) · 5: 조합마다 그 조합 칩만으로 순간을 가름 · 6: 판에서 빠진 줄(outRows)도 셈
+COMBO_VER = 7                           # 조합 셈 판 — 2: 부분 묶음마다 처음 품은 때(11-26 화면 2d877ad 와 같게) · 3: 「수급」 도 저장된 칩 칸을 따름(qa 대조 11-26) · 4: 산 값을 칩 찬 순간 값으로(_moment_px · 11-26) · 5: 조합마다 그 조합 칩만으로 순간을 가름 · 6: 판에서 빠진 줄(outRows)도 셈 · 7 — 날마다 「그날까지」 표를 남기려 한 번 다시 셈(11-27)
 COMBO_DAYS = 60                         # 셈에 드는 굳은 판 수(최근부터) — 화면이 받던 지난 판(st.days)과 같은 범위
 _ctab = {"key": None, "val": None, "busy": False, "lock": threading.Lock()}
 _CT_SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_combo (id INTEGER PRIMARY KEY CHECK (id = 1), key TEXT, body TEXT, at TEXT)"
@@ -1988,12 +1988,13 @@ def _ct_px(r, b, t, o, cs=()):
     return (v1(pm.get(str(k))) if k else None), t
 
 
-def combo_table_calc(proxy):
-    """굳은 판 전부로 조합 표 — 위 「칩 조합 표」 한 곳. → {rows, used, untimed, rowsN}."""
+def combo_table_calc(proxy, snaps=None):
+    """굳은 판 전부로 조합 표 — 위 「칩 조합 표」 한 곳. → {rows, used, untimed, rowsN}.
+    snaps 를 주면 오래된 날부터 쌓아 가며 날마다 「그날까지」 표를 [(날, 표 rows, used)] 로 남긴다 — 지난 판도 그날 앞까지 표로 고르게(재권님 「응」 11-27 10:0x)."""
     cf = chip_filter()
     dc = day_chips()
     M, used, untimed, rows_n = {}, [], 0, 0
-    for d in days(proxy)[:COMBO_DAYS]:
+    for d in sorted(days(proxy)[:COMBO_DAYS]):
         b = board(proxy, d)
         if not b or b.get("closed") is not True:
             continue
@@ -2043,6 +2044,8 @@ def combo_table_calc(proxy):
                     if not p:
                         continue
                     _ct_add(M, key, sub, d, ex, p, cut, bars.get(code, []), end)
+        if snaps is not None:
+            snaps.append((d, _ct_out(M, list(used), untimed, rows_n)["rows"], list(used)))
     return _ct_out(M, used, untimed, rows_n)
 
 
@@ -2097,7 +2100,8 @@ def _ct_out(M, used, untimed, rows_n):
 
 def _ct_run(proxy, key):
     try:
-        val = combo_table_calc(proxy)
+        snaps = []
+        val = combo_table_calc(proxy, snaps)
         val["sig"], val["at"] = combo_sig(), _now().strftime("%Y-%m-%d %H:%M:%S")
         _ctab.update(key=key, val=val)
         if proxy.marketdb.writable():
@@ -2105,9 +2109,9 @@ def _ct_run(proxy, key):
                 conn.execute(_CT_SCHEMA)
                 conn.execute("INSERT OR REPLACE INTO dt30_combo (id, key, body, at) VALUES (1, ?, ?, ?)", (key, json.dumps(val, ensure_ascii=False), val["at"]))
                 if val.get("used"):                    # 날마다 남김 — 셈에 든 마지막 굳은 판 날로(재권님 「하루하루 칩조합 승률을 갱신하고 그것중 70%이상만 단타창에서 적용」 16:45 → 안에 「응 해」 11-26)
-                    conn.execute(_CTD_SCHEMA)
-                    conn.execute("INSERT OR REPLACE INTO dt30_combo_day (day, sig, at, used, body) VALUES (?,?,?,?,?)",
-                                 (max(val["used"]), val["sig"], val["at"], json.dumps(val["used"]), json.dumps(val["rows"], ensure_ascii=False)))
+                    conn.execute(_CTD_SCHEMA)          # 날마다 「그날까지」 표도 — 지난 판(그 다음 날)이 그 표로 고름(11-27 · 오늘 고른 조합을 지난 날에 쓰던 것)
+                    conn.executemany("INSERT OR REPLACE INTO dt30_combo_day (day, sig, at, used, body) VALUES (?,?,?,?,?)",
+                                     [(d, val["sig"], val["at"], json.dumps(u), json.dumps(rws, ensure_ascii=False)) for d, rws, u in snaps if u])
     except Exception as e:
         print("  [단타 30] 칩 조합 표 못 셈 — %s" % proxy.safe_message(e, 120), flush=True)
     finally:
@@ -3232,19 +3236,19 @@ def past_vol_chip(proxy, day, prev, bars, cap, small, put):
             if "거래비율급증" not in got and pd and not pgap and pc > 0 and vc / pc * 100 >= p_pct:
                 got.add("거래비율급증")
                 out.setdefault(code, at)
-                put(code, "거래비율급증", volAt=out[code])
+                put(code, "거래비율급증", volAt=out[code], vat=at)   # vat — 이 칩이 넘은 시각(volAt 은 두 칩 중 이른 것 · 칩마다 든 시각이 비던 것 11-27)
             _c, turn = turnover.calc(b[2] if b else None, val, fl.get(code))
             if "거래비율" not in got and turn is not None and turn >= t_pct:
                 got.add("거래비율")
                 out.setdefault(code, at)
-                put(code, "거래비율", volAt=out[code])
+                put(code, "거래비율", volAt=out[code], vat=at)
             if len(got) == 2:
                 break
     return out
 
 
 VOL_CHIPS = ("거래비율", "거래비율급증")
-VOL_MARK = "volChips2"         # 판 meta 표시 — 두 칩을 붙여 본 판(같은 판을 두 번 안 셈)
+VOL_MARK = "volChips3"         # 판 meta 표시 — 두 칩을 붙여 본 판(같은 판을 두 번 안 셈) · 3 — 칩마다 든 시각을 채우려 한 번 다시(11-27 · 2 는 칩마다 시각을 안 남김)
 CF_MARK = "chipFirst1"         # 판 meta 표시 — 지난 판 칩 처음 시각을 표(chip_first)에 채워 본 판
 
 
@@ -3254,6 +3258,9 @@ def _vol_put(b, code, chip, at):
     for r in b.get("rows") or []:
         if r.get("code") == code:
             if chip in r.get("chips") or []:
+                if at and not (r.get("chipAt") or {}).get(chip):
+                    r.setdefault("chipAt", {})[chip] = at   # 붙어 있는데 시각이 빈 칩 — 시각만 채움(다시 지은 판 · 11-27)
+                    return True
                 return False
             r.setdefault("chips", []).append(chip)
             r.setdefault("chipAt", {}).setdefault(chip, at)
@@ -3303,8 +3310,8 @@ def vol_past_attach(proxy, day, b):
             (r.get("subs") or {}).pop("거래량급증", None)
             (r.get("chipAt") or {}).pop("거래량급증", None)
 
-    def put(code, chip, sub=None, volAt=None, **kw):
-        n[0] += _vol_put(b, code, chip, volAt)
+    def put(code, chip, sub=None, volAt=None, vat=None, **kw):
+        n[0] += _vol_put(b, code, chip, vat or volAt)
 
     if past_vol_chip(proxy, day, prev, bars, cap, lambda c: False, put) is None:
         return None
@@ -3330,6 +3337,8 @@ def vol_past_sweep(proxy, today):
         did = False
         if VOL_MARK not in m and vol_past_attach(proxy, d, b) is not None:
             did = True
+            if CF_MARK in m and d < today:
+                chip_first_backfill(proxy, d, b)       # 시각을 새로 채웠으면 칩 처음 시각 표에도(11-27)
         if CF_MARK not in m and d < today:             # 지난 판 칩 처음 시각(셀 수 있는 것만 · 11-23 「응」) — 표에 남기고 판에 표시
             chip_first_backfill(proxy, d, b)
             b.setdefault("meta", {})[CF_MARK] = _now().strftime("%Y-%m-%d %H:%M")
@@ -3378,6 +3387,9 @@ def rebuild(proxy, day, prev, cfg=None):
     def put(code, chip, sub=None, **kw):
         g = hit.setdefault(code, {"name": names.get(code, ""), "chips": set(), "subs": {}})
         g["chips"].add(chip)
+        vat = kw.pop("vat", None)
+        if vat:
+            g.setdefault("chipAtOf", {}).setdefault(chip, vat)   # 칩마다 처음 넘은 시각 — 줄 chipAt 으로(chip_first 가 읽음 · 11-27)
         g.update(kw)
         if sub and sub not in g["subs"].setdefault(chip, []):
             g["subs"][chip].append(sub)
@@ -3524,11 +3536,13 @@ def rebuild(proxy, day, prev, cfg=None):
                      "openRise": round((buy / o9 - 1) * 100, 2) if buy and o9 else None,   # 시가 대비 등락률 — 09:05 봉 시가 ÷ 09:00 봉 시가(되채움 · 차례 열쇠)
                      "viAt": g.get("viAt"), "surgeAt": g.get("surgeAt"), "volAt": g.get("volAt"), "surgeApprox": g.get("surgeApprox"), "viPx": g.get("viPx"),
                      "px": px, "pxSrc": src})
+        if g.get("chipAtOf"):
+            rows[-1]["chipAt"] = dict(g["chipAtOf"])
         if g.get("moneySpans"):                        # 돈몰림 붙음 · 빠짐(다른 칩은 구간 기록이 없어 처음 붙은 시각 셈 그대로 — _spans4)
             import money_chip                          # 칩 이름은 money_chip.CHIP 한 곳(개념정의 덧 11-25)
             rows[-1]["chipSpans"] = {money_chip.CHIP: g["moneySpans"]}
             rows[-1]["spanChips"] = [money_chip.CHIP]   # 구간 기록이 있는 칩 — 그 밖 칩은 예전 셈(_spans4 · buy930_fill 이 열린 구간으로 채움)
-            rows[-1]["chipAt"] = {money_chip.CHIP: g["moneySpans"][0][0]}
+            rows[-1].setdefault("chipAt", {})[money_chip.CHIP] = g["moneySpans"][0][0]
     tab = score_table(proxy)
     order = sort_rows(rows, tab, off)                  # off — 그날 늦게 열었으면 VI·급등 나누는 시각도 그만큼 뒤(개념정의 덧 11-19 — 그날 판과 같게)
     for i, r in enumerate(rows):                       # 지난 판은 자르지 않는다 — 문턱 이상 · 칩 하나라도 든 종목 전부(굳힘 문턱 밑은 lock 없이 · 화면이 칩 · 룰을 바꿔 다시 셀 수 있게)
