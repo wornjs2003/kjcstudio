@@ -164,9 +164,10 @@ def fee_pct():
         return None
 
 
-def _set():
-    """단타 판 셈 칸 — 룰 문서 strategy-rules rules.dt30.set(화면과 같은 칸 한 곳) · 비거나 못 읽으면 {}."""
-    fz = getattr(dt30._SET_TL, "v", None)              # 그날 판에 굳힌 셈 칸(dt30._frozen_set · 매수 알림 창 · 재권님 「가」 11-26)
+def _set(live=False):
+    """단타 판 셈 칸 — 룰 문서 strategy-rules rules.dt30.set(화면과 같은 칸 한 곳) · 비거나 못 읽으면 {}.
+    live=True 면 그날 굳힌 셈 칸을 건너뛰고 지금 저장값 — 조합 문턱(comboUp · comboN · dt30.combo_pick)이 쓴다(재권님 「아니 내가 문턱을 조정하면 다 되도록 해야해」 → 「응」 11-27 12:1x)."""
+    fz = None if live else getattr(dt30._SET_TL, "v", None)   # 그날 판에 굳힌 셈 칸(dt30._frozen_set · 매수 알림 창 · 재권님 「가」 11-26)
     if isinstance(fz, dict):
         return fz
     try:
