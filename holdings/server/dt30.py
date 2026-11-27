@@ -1835,11 +1835,12 @@ _CTD_SCHEMA = "CREATE TABLE IF NOT EXISTS dt30_combo_day (day TEXT PRIMARY KEY, 
 
 def combo_pick():
     """(오른 비율 문턱 % | None, 건수 문턱 | None) — 셈 칸 rules.dt30.set.comboUp · comboN(화면과 같은 칸).
-    칸이 아예 없으면(한 번도 저장 안 함) 기본 · 칸을 비워 저장했으면 None = 문턱 없음 · 안 고름(화면 19e5a5d 와 같은 뜻 · 개념정의 덧 11-26) · 못 읽으면 기본."""
+    칸이 아예 없으면(한 번도 저장 안 함) 기본 · 칸을 비워 저장했으면 None = 문턱 없음 · 안 고름(화면 19e5a5d 와 같은 뜻 · 개념정의 덧 11-26) · 못 읽으면 기본.
+    그날 굳힌 셈 칸(meta.buySet)은 안 씀 — 늘 지금 저장값이라 문턱을 바꾸면 판 읽기 · 지난 판 · 오늘 매수 알림이 다음 바퀴부터 함께 따라감(재권님 「아니 내가 문턱을 조정하면 다 되도록 해야해」 → 「응」 11-27 12:1x)."""
     import dt30_win                                    # 기본값은 셈 칸 기본 한 곳(dt30_win.SET_DEF · /api/kis/chip-rules meta.sellDef 로 화면에 감)
     dfu, dfn = dt30_win.SET_DEF["comboUp"], dt30_win.SET_DEF["comboN"]
     try:
-        st = dt30_win._set() or {}
+        st = dt30_win._set(live=True) or {}
     except Exception:
         st = {}
     def num(k, d, f):
