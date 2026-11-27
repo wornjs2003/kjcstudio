@@ -50,6 +50,7 @@ import json
 import re
 import threading
 import time
+import urllib.request
 from datetime import datetime, timedelta, timezone
 
 import chip_rules      # 칩 목록 · 문턱 한 곳(11-20)
@@ -4983,6 +4984,29 @@ TURN_NOTE = ("floatCap 풀린 시총(억원) = 발행주식수 × 유동비율(�
              "그날 판은 지금 값 · 굳힌 판은 그날 쌓인 마지막 값(turnover_day) · 못 잰 칸은 null · 우선주는 유동비율 출처가 없어 null")
 
 
+QUOTES_UP_TIMEOUT = 8          # 상류 시세 묻기 끝 초 — 넘으면 이 서버 길(fetch_quotes_multi)로
+
+
+def _quotes_up(proxy, cfg, codes):
+    """판 읽기 시세 {code: 줄} — KIS 를 상류(개발 서버 8765)에 맡기는 서버면 상류의 시세 주소(/api/kis/quotes · 상류가 장중 내내 데워 둔 캐시)에서 받는다.
+    전에는 메인 8764 가 시세 캐시(25초)가 식으면 판 종목 200개 남짓을 KIS 로 다시 물었고, 그 물음이 상류 KIS 줄(한도 96% · 11-27 10:12)에 서서 쉬었다 연 첫 읽기가 1.5~11.5초였다
+    (재권님 「가」 11-27 10:2x). 상류가 없거나 못 받으면 이 서버 길 그대로."""
+    up = proxy.upstream_base() if hasattr(proxy, "upstream_base") and not getattr(proxy, "KIS_UPSTREAM_SERVE", False) else None
+    if up and codes:
+        try:
+            got = {}
+            for i in range(0, len(codes), 120):           # 상류 시세 주소가 한 번에 받는 끝(멀티 4묶음)
+                req = urllib.request.Request(up + "/api/kis/quotes?codes=" + ",".join(codes[i:i + 120]))
+                with urllib.request.urlopen(req, timeout=QUOTES_UP_TIMEOUT) as r:
+                    got.update((json.loads(r.read().decode("utf-8")) or {}).get("data") or {})
+            if got:
+                return got
+        except Exception as e:
+            print("  [단타 30] 상류 시세 못 받음 — 이 서버 길로 · %s" % proxy.safe_message(e, 120), flush=True)
+    q, _ = proxy.fetch_quotes_multi(cfg, codes, max_age=proxy.PRICE_CACHE_TTL)
+    return q
+
+
 def board(proxy, day=None, cfg=None):
     """주소 /api/kis/dt30 의 data — 남긴 날만(없으면 None). 안 끝난 그날 판이면 rows[].now · nowAt 을 붙인다(cfg 를 줄 때)."""
     ds = days(proxy)
@@ -5067,7 +5091,7 @@ def board(proxy, day=None, cfg=None):
         # 그날 판은 14:00 마지막 칸 전까지 지금 값을 붙인다 — 재권님 「그날은 변동에 맞춰서 실시간으로 적용되야 하고 그날 2시가 지나면 값이 저장되도록」(19:3x)
         # 다시 받을 주기는 서버 값(refreshMs · 시세 캐시와 같은 PRICE_CACHE_TTL) — 화면은 그 값으로 돈다 · 시세는 그 나이 안이면 캐시
         allc = [r["code"] for r in b["rows"]] + [r["code"] for r in (b.get("meta") or {}).get("outRows") or [] if r["code"] not in {x["code"] for x in b["rows"]}]
-        q, _ = proxy.fetch_quotes_multi(cfg, allc, max_age=proxy.PRICE_CACHE_TTL)   # 판 줄 · 빠진 줄 한 번에 — 시가 대비 등락률(open_rise_now)이 따로 다시 받던 것을 이 값으로(11-27 판 첫 읽기 느림 · 재권님 「응」)
+        q = _quotes_up(proxy, cfg, allc)              # 판 줄 · 빠진 줄 한 번에 — 시가 대비 등락률(open_rise_now)이 따로 다시 받던 것을 이 값으로(11-27 판 첫 읽기 느림 · 재권님 「응」)
         b["_q"] = q
         for r in b["rows"]:
             r["now"] = (q.get(r["code"]) or {}).get("price")
@@ -5113,8 +5137,8 @@ def open_rise_now(proxy, cfg, b):
         b["meta"]["openRiseAt"] = at
         return 0
     q = b.pop("_q", None)                             # 판 읽기가 방금 받은 시세(판 줄 · 빠진 줄) — 없으면 여기서
-    if q is None or any(r["code"] not in q for r in rows):
-        q, _ = proxy.fetch_quotes_multi(cfg, [r["code"] for r in rows], max_age=proxy.PRICE_CACHE_TTL)
+    if q is None:
+        q = _quotes_up(proxy, cfg, [r["code"] for r in rows])   # 판 읽기가 넘긴 것이 없을 때만(못 받은 종목은 상승률 null — 다시 묻지 않음)
     n, now_s = 0, _now().strftime("%H:%M:%S")
     for r in rows:
         v = q.get(r["code"]) or {}
