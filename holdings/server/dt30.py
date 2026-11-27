@@ -1891,6 +1891,8 @@ def combo_buy_fill(proxy, b):
     if dead:
         pk["dead"] = dead
         pk["deadNote"] = "그날 판에 한 줄도 없는 하루 고정 칩 — 그 칩이 든 조합은 고르지 않음"
+    if not sel:                                        # 다 빠져 고를 조합 0 — 조용히 0 으로 두지 않음(개념정의 덧 11-27)
+        pk["why"] = "고를 조합 없음 — 문턱(%s%% · %s건) 넘는 조합이 없음%s" % (up, nn, " · 그날 없는 칩(%s)이 든 조합 뺌" % " · ".join(dead) if dead else "")
     split = ((b.get("meta") or {}).get("viSplit") or vi_split(o - OPEN_AT[0] * 60 - OPEN_AT[1])).replace(":", "")
     wr_auto = (b.get("meta") or {}).get("watchRule") == "자동"
     n = 0
