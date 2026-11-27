@@ -677,7 +677,9 @@ function calcDay(d) {
   const live0 = ordSort(all.filter((r) => nEver(r) > 0));
   // 굳힘 없앤 판 — 켠 칩으로 N번째 칩이 먼저 찬 순(같으면 지금 차례) · 칩 수 · 켠 칩을 바꾸면 다시 세움(19:3x 재권님 「칩이 들어오는 순서를 기억하고 칩의 개수를 조절하면 순위가 소팅되어야함」) · 못 찬 줄은 뒤
 // 칩조합으로 살 때 조합 된 분이 같은 종목끼리는 그 분 1분 값(산 값)의 시가 대비 상승률 높은 순 → 초반상승 % → 시가총액 — 지금 붙은 칩 수는 안 씀(뒤에 칩이 붙어도 순위 고정 · 11-26 재권님 「칩조합의 조건이 처음걸리는 순간 고정이여야」 → 「응 해줘」) · 「상승률 순위」 체크는 안 봄(11-26 재권님 「9시1분에 들어왔는데 5분을 쓰면 안되는데 상승률 순위는 1분단위로」 · 「나 로 해주고」 — 그 전에는 체크면 09:05 까지 상승률)
-const live = d.flat930 || comboMode() ? live0.map((r, i) => [r, nthChipAt(r) || '9999', i, comboMode() ? comboRise(r) : null]).sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : (comboMode() ? (b[3] ?? -Infinity) - (a[3] ?? -Infinity) || (riseOf(b[0]) - riseOf(a[0]) || 0) || (Number(b[0].cap) || 0) - (Number(a[0].cap) || 0) : 0) || a[2] - b[2])).map((x) => x[0]) : live0;   // 켜진 칩으로 다시 셈한 단타 차례 · 차례 점수를 넣었으면 그 합으로(11-23)
+// 같은 분이면 조합 승률(조합 표 오른 비율) 높은 줄 먼저 → 그다음 위 차례 · 분이 다르면 승률보다 조합 된 분이 먼저(11-27 재권님 「동시간대이면 칩조합의 승률이 높은게 상위여야하고 그 이후에는 정한 룰에 맞게 … 칩찬시간이 가장우선시 되어야 한다」)
+const cbUpOf = (r) => { const h = comboHit(r), C = st.cbStat; if (!h || !C || !Array.isArray(C.rows)) return null; const o = C.rows.find((x) => x.key === h.key); return o ? o.upPct : null; };
+const live = d.flat930 || comboMode() ? live0.map((r, i) => [r, nthChipAt(r) || '9999', i, comboMode() ? comboRise(r) : null, comboMode() ? cbUpOf(r) : null]).sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : (comboMode() ? (b[4] ?? -Infinity) - (a[4] ?? -Infinity) || (b[3] ?? -Infinity) - (a[3] ?? -Infinity) || (riseOf(b[0]) - riseOf(a[0]) || 0) || (Number(b[0].cap) || 0) - (Number(a[0].cap) || 0) : 0) || a[2] - b[2])).map((x) => x[0]) : live0;   // 켜진 칩으로 다시 셈한 단타 차례 · 차례 점수를 넣었으면 그 합으로(11-23)
   // 장중 줄 먼저 · 다시 지으며 더한 줄은 아래(11-24 재권님 「나」 — 장중 종목은 장중 값 · 3천억 이상 칩 하나라도 든 종목은 아래에 더함) — 서버 rows[].live 가 있는 판만 · 각 묶음 안 차례는 그대로
   const liveP = all.some((r) => r.live) ? [...live.filter((r) => r.live), ...live.filter((r) => !r.live)] : live;
   const rows1 = st.only ? liveP.filter((r) => liveChip(r, st.only)) : liveP;   // 거르고 나서 순번 · 상위 N · 평균을 다시 셈
